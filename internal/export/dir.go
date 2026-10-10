@@ -1,0 +1,147 @@
+package export
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/IliaSA101/sosninaalbums/internal/render"
+)
+
+var (
+	oldSpreadRe = regexp.MustCompile(`(?i)^spread_(\d+)\.jpg$`)                 // экспорт v0.2: наш, метки в нём нет
+	numberedRe  = regexp.MustCompile(`(?i)^(\d{2,})(?:-([12]))?\.jpg$`)         // 01.jpg, 01-1.jpg…, 0001.jpg: наш только с COM-меткой
+	tmpRe       = regexp.MustCompile(`(?i)^(\d{2,})(?:-[12])?\.jpg\.\d+\.tmp$`) // остаток WriteFileAtomic: 05.jpg.<число>.tmp
+)
+
+// DirFile — файл папки экспорта: Spread — номер разворота из имени (с 1, ширина не важна),
+// Page — 0 (разворот целиком), 1 или 2 (страница).
+type DirFile struct {
+	Name         string
+	Spread, Page int
+}
+
+// PlanDir разбирает папку экспорта: ours — файлы прежнего экспорта программы
+// (их можно заменить), foreign — NN.jpg / NN-1.jpg без метки (под них экспорт отказывает).
+// 00.jpg/000.jpg (обложка из шаблона типографии) и прочие файлы не трогаем никогда.
+func PlanDir(dir string) (ours, foreign []DirFile, err error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !e.Type().IsRegular() {
+			continue
+		}
+		if m := oldSpreadRe.FindStringSubmatch(name); m != nil {
+			n, _ := strconv.Atoi(m[1])
+			ours = append(ours, DirFile{Name: name, Spread: n})
+			continue
+		}
+		m := numberedRe.FindStringSubmatch(name)
+		if m == nil || strings.Trim(m[1], "0") == "" {
+			continue // не номер разворота или обложка
+		}
+		n, _ := strconv.Atoi(m[1]) // огромный номер → MaxInt (Atoi при переполнении): ни одной цели не совпадёт, но файл учтён
+		page, _ := strconv.Atoi(m[2])
+		f := DirFile{Name: name, Spread: n, Page: page}
+		if IsOurs(filepath.Join(dir, name)) {
+			ours = append(ours, f)
+		} else {
+			foreign = append(foreign, f)
+		}
+	}
+	return ours, foreign, nil
+}
+
+// HitFiles — файлы из списка, которые задевает план.
+func HitFiles(pl Plan, files []DirFile) []DirFile {
+	var out []DirFile
+	for _, f := range files {
+		if pl.hitsFile(f) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// removeFiles удаляет перечисленные файлы папки (имена из PlanDir): иначе при меньшем
+// числе разворотов остались бы «хвосты» старого экспорта. Возвращает ошибку первого сбоя.
+// Метка проверяется заново: пока шёл рендер, под нашим именем мог появиться чужой файл.
+func removeFiles(dir string, names []string) error {
+	for _, n := range names {
+		if n != filepath.Base(n) {
+			return fmt.Errorf("недопустимое имя файла %q", n)
+		}
+		p := filepath.Join(dir, n)
+		if !oldSpreadRe.MatchString(n) && !IsOurs(p) { // spread_NN.jpg (v0.2) метки не имеет
+			continue
+		}
+		if err := os.Remove(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// StaleNames — имена из hit, которых новый экспорт не перезапишет. Имена сравниваются без
+// учёта регистра: на Windows 01.JPG и 01.jpg — один файл, и удалить его значило бы стереть новый.
+func StaleNames(hit []DirFile, written []string) []string {
+	var out []string
+	for _, f := range hit {
+		keep := false
+		for _, w := range written {
+			if strings.EqualFold(f.Name, w) {
+				keep = true
+				break
+			}
+		}
+		if !keep {
+			out = append(out, f.Name)
+		}
+	}
+	return out
+}
+
+// RunPlan пишет файлы плана и только после успеха удаляет заменённые старые (stale):
+// сбой посреди выгрузки не должен стоить прежнего экспорта.
+func RunPlan(ctx context.Context, spreads []render.Spread, pl Plan, opt render.Options, dir string,
+	stale []string, progress func(done, total int)) error {
+	removeStaleTmp(dir, time.Now())
+	if err := RunJobs(ctx, spreads, pl.Jobs, opt, dir, progress); err != nil {
+		return err
+	}
+	if err := removeFiles(dir, stale); err != nil {
+		return fmt.Errorf("не удалось удалить прежние файлы экспорта: %w", err)
+	}
+	return nil
+}
+
+// tmpMaxAge — возраст, после которого .tmp экспорта считается остатком сбоя, а не записью,
+// которая идёт сейчас (другой копией программы).
+const tmpMaxAge = time.Hour
+
+// removeStaleTmp убирает остатки WriteFileAtomic (05.jpg.<число>.tmp) старше tmpMaxAge:
+// имя случайное, поэтому после сбоев они копились бы в папке. Ошибки не мешают экспорту.
+// Обложку (00.jpg) экспорт не пишет — её .tmp не наш.
+func removeStaleTmp(dir string, now time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		m := tmpRe.FindStringSubmatch(e.Name())
+		if m == nil || strings.Trim(m[1], "0") == "" || !e.Type().IsRegular() {
+			continue
+		}
+		if info, err := e.Info(); err == nil && now.Sub(info.ModTime()) > tmpMaxAge {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}

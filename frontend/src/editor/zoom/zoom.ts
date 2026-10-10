@@ -1,0 +1,130 @@
+// Зум холста (спека 008, design §6.1). Состояние хранится в мм разворота: ресайз окна и
+// смена вида его не трогают, только пересчитывают пиксели. Чистые функции, без Svelte.
+export const MIN_ZOOM = 1
+export const MAX_ZOOM = 8
+export const HOLD_MS = 400 // Пробел дольше этого — не «короткое нажатие»
+
+export interface ZoomState {
+  z: number // масштаб относительно «вписать» (1 = 100 %)
+  cx: number // мм разворота в центре окна
+  cy: number
+}
+
+// Окно: px области Stage под полосой раскладок; k0 — px на мм при z = 1; sw, ph — разворот в мм.
+// pad — px у левого и правого края под боковыми панелями (inspector/panels.ts), по умолчанию 0.
+export interface Viewport {
+  w: number
+  h: number
+  k0: number
+  sw: number
+  ph: number
+  pad?: number
+}
+
+const fin = (n: number, d: number) => (Number.isFinite(n) ? n : d)
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
+// Вписанный разворот: масштаб 1, центр — центр разворота.
+export const fit = (sw: number, ph: number): ZoomState => ({ z: MIN_ZOOM, cx: sw / 2, cy: ph / 2 })
+
+// Центр вдоль одной оси (мм). Свободная зона — окно без pad у краёв. Разворот уже неё — лежит
+// внутри, шире — закрывает её целиком (край выводится из-под панели). Уход от центра не больше
+// (z − 1)/z половины разворота: при z = 1 разворот по центру, а от 100 % точка под курсором
+// стоит и по горизонтали. На границе «уже/шире» диапазон стягивается в центр — без скачка.
+function clampAxis(c: number, size: number, win: number, k: number, pad: number, z: number): number {
+  const mid = size / 2
+  const p = clamp(fin(pad, 0), 0, win / 2) / k
+  const a = win / (2 * k) - p // левая граница центра у широкого, правая — у узкого
+  const b = size - a
+  const off = ((z - 1) / z) * mid
+  return clamp(c, Math.max(Math.min(a, b), mid - off), Math.min(Math.max(a, b), mid + off))
+}
+
+// Масштаб в пределах; разворот не уходит из окна, у широкого пустых полей у краёв нет.
+export function clampZoom(s: ZoomState, v: Viewport): ZoomState {
+  const z = clamp(fin(s.z, MIN_ZOOM), MIN_ZOOM, MAX_ZOOM)
+  if (!(v.k0 > 0) || !(v.w > 0) || !(v.h > 0)) return { z, cx: fin(s.cx, v.sw / 2), cy: fin(s.cy, v.ph / 2) }
+  const k = v.k0 * z
+  return {
+    z,
+    cx: clampAxis(fin(s.cx, v.sw / 2), v.sw, v.w, k, v.pad ?? 0, z),
+    cy: clampAxis(fin(s.cy, v.ph / 2), v.ph, v.h, k, 0, z),
+  }
+}
+
+// Шаг клавиш Ctrl+= / Ctrl+− (меню «Вид»): к центру окна.
+export const ZOOM_STEP = 1.25
+
+// Масштаб к курсору: мм под (x, y) остаётся под ним. x, y — px от угла окна.
+export function zoomAt(s: ZoomState, v: Viewport, factor: number, x: number, y: number): ZoomState {
+  const cur = clampZoom(s, v)
+  if (!(v.k0 > 0) || !Number.isFinite(factor) || !(factor > 0) || !Number.isFinite(x) || !Number.isFinite(y)) return cur
+  const k = v.k0 * cur.z
+  const dx = x - v.w / 2
+  const dy = y - v.h / 2
+  const mx = cur.cx + dx / k
+  const my = cur.cy + dy / k
+  const z = clamp(cur.z * factor, MIN_ZOOM, MAX_ZOOM)
+  const k2 = v.k0 * z
+  return clampZoom({ z, cx: mx - dx / k2, cy: my - dy / k2 }, v)
+}
+
+// Панорама на (dx, dy) px: содержимое едет за курсором, значит центр уходит в обратную сторону.
+export function panBy(s: ZoomState, v: Viewport, dx: number, dy: number): ZoomState {
+  const cur = clampZoom(s, v)
+  if (!(v.k0 > 0) || !Number.isFinite(dx) || !Number.isFinite(dy)) return cur
+  const k = v.k0 * cur.z
+  return clampZoom({ z: cur.z, cx: cur.cx - dx / k, cy: cur.cy - dy / k }, v)
+}
+
+// Ctrl+колесо мыши и щипок тачпада (Chromium шлёт его как wheel с ctrlKey): один множитель на оба.
+// Строки (deltaMode 1) — по 40 px, страницы (2) — по 800; шаг ≤ 100. Щелчок мыши (100) ≈ ×1,5, щипок (1–10) — плавно.
+export function wheelFactor(deltaY: number, deltaMode: number): number {
+  const unit = deltaMode === 1 ? 40 : deltaMode === 2 ? 800 : 1
+  const d = clamp(fin(deltaY, 0) * unit, -100, 100)
+  return Math.exp(-d * 0.004)
+}
+
+// Где стоит разворот в окне, целые px (чтобы фото не «дрожали» на дробных границах).
+export function placement(s: ZoomState, v: Viewport): { left: number; top: number; width: number; height: number } {
+  const k = v.k0 * s.z
+  return {
+    left: Math.round(v.w / 2 - s.cx * k),
+    top: Math.round(v.h / 2 - s.cy * k),
+    width: Math.round(v.sw * k),
+    height: Math.round(v.ph * k),
+  }
+}
+
+// Короткий Пробел без панорамы — листание раскладки; удержание или панорама — нет.
+export const spaceTap = (heldMs: number, panned: boolean): boolean => !panned && heldMs >= 0 && heldMs < HOLD_MS
+
+export const percent = (z: number): number => Math.round(z * 100)
+
+// Бегунок масштаба (спека 016): позиция 0..1 на логарифмической шкале 100–800 %, равные доли — равные кратности.
+// Формула верна, пока MIN_ZOOM = 1 (log2 1 = 0); при меньшем минимуме — (log z − log min) / (log max − log min).
+const SPAN = Math.log(MAX_ZOOM / MIN_ZOOM)
+export const zoomPos = (z: number): number => clamp(Math.log(clamp(fin(z, MIN_ZOOM), MIN_ZOOM, MAX_ZOOM) / MIN_ZOOM) / SPAN, 0, 1)
+// Края отдаём точно: exp(log 8) не обязан быть ровно 8.
+export function posZoom(t: number): number {
+  const u = clamp(fin(t, 0), 0, 1)
+  return u === 0 ? MIN_ZOOM : u === 1 ? MAX_ZOOM : MIN_ZOOM * Math.exp(u * SPAN)
+}
+
+// Колесо над холстом (решение владельца 2026-10-08, как в SmartAlbums): с Ctrl/Cmd (и щипок тачпада) — зум к курсору;
+// без них при 100 % — ряд разворотов (spreadrow), в зуме — сдвиг листа (wheelPan). Эвристики мышь/тачпад здесь нет.
+export interface WheelLike {
+  deltaX: number
+  deltaY: number
+  deltaMode: number
+  ctrlKey: boolean
+  metaKey?: boolean
+}
+
+export const isZoomWheel = (e: WheelLike): boolean => e.ctrlKey || !!e.metaKey
+
+// Сдвиг листа в зуме, px: колесо — по Y, Shift+колесо (Chromium шлёт deltaX) — по X, тачпад — по обеим; строки — по 40 px; содержимое едет против прокрутки.
+export function wheelPan(e: WheelLike): { dx: number; dy: number } {
+  const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 800 : 1
+  return { dx: (0 - fin(e.deltaX, 0)) * unit, dy: (0 - fin(e.deltaY, 0)) * unit } // 0 - x: без «−0»
+}

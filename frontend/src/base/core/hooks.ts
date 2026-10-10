@@ -1,0 +1,49 @@
+// Точки, куда верхние группы (editor/, panels/, shell/) подключают себя при старте: основа их не
+// импортирует (docs/STRUCTURE.md, правило 9). Подключение — shell/boot/wire.ts (wire() в main.ts и в
+// тестах, которым нужен верх). Без него store работает «голым»: хуки пустые, ленты не фильтруются.
+import type { FontFamily, MarkView, Photo, View } from './types'
+
+export type MarkMap = Readonly<Record<string, MarkView>>
+
+export interface StoreHooks {
+  // --- события жизни: верх сбрасывает и обрезает свои состояния ---
+  // После каждой смены альбома (apply): отметки по marksRev, выделения и окна по новым разворотам.
+  applied(view: View): void
+  // Переход на другой разворот: снять выделение места, отменить авто, закрыть галерею.
+  went(): void
+  // Состояние заменено целиком (запуск, открытие/создание альбома): отметки прошлого альбома не показывать.
+  reloaded(): void
+  // Выделение разворотов в ленте больше не к чему (группа удалена, альбом заменён).
+  spreadsCleared(): void
+  // Шрифты из GetState: зарегистрировать в document.fonts.
+  fontsLoaded(fonts: FontFamily[]): void
+
+  // --- данные верха, из которых store строит ленту ---
+  // Свои отметки фото (ID -> поля, поставленные в программе).
+  marks(): MarkMap
+  // Лента после фильтра по отметкам.
+  visible(photos: Photo[]): Photo[]
+  // Фото не в местах и не на фоне (автосборка, фильтр «Неиспользованные»).
+  free(photos: Photo[], used: ReadonlySet<string>, backdrop: ReadonlySet<string>): Photo[]
+  // Что отдать автосборке / «Заполнить пустые места»; пусто — тост с причиной уже показан.
+  pick(moveUsed: boolean): { ids: string[]; skipped: number }
+
+  // --- выделение на холсте ---
+  selectedRefs(): readonly string[]
+  select(ids: string[]): void
+}
+
+// Пустые хуки: основа без верха.
+export const noHooks: StoreHooks = {
+  applied: () => {},
+  went: () => {},
+  reloaded: () => {},
+  spreadsCleared: () => {},
+  fontsLoaded: () => {},
+  marks: () => ({}),
+  visible: (photos) => photos,
+  free: (photos, used, backdrop) => photos.filter((p) => !used.has(p.id) && !backdrop.has(p.id)),
+  pick: () => ({ ids: [], skipped: 0 }),
+  selectedRefs: () => [],
+  select: () => {},
+}

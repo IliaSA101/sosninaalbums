@@ -1,0 +1,67 @@
+// Вызовы Go для галереи сеток и копирования (спека 007, U9): ответ — в store.apply, ошибка — тост.
+import { store, Api } from '../../base/core/store.svelte'
+import { errText } from '../../base/core/errtext'
+import { plural } from '../../base/core/plural'
+import { tplError } from './gridgallery'
+import type { GridChoice, GridPlan, GridResult, GridTarget, LayoutScope } from '../../base/core/types'
+
+// Тост с «Вернуть» (= Undo): безопасен, только пока после правки ничего не менялось.
+export function notifyUndo(text: string) {
+  store.undoToast(text)
+}
+
+const leftText = (n: number) => `${n} ${plural(n, ['фото вернулось', 'фото вернулись', 'фото вернулись'])} в ленту`
+
+// Клик по карточке: сетка встаёт на область scope.
+export async function applyChoice(spread: string, scope: LayoutScope, ch: GridChoice) {
+  try {
+    const r = (await Api.ApplyGrid(spread, scope, ch.scope, ch.boxes)) as unknown as GridResult
+    store.apply(r.view)
+    if (r.left > 0) notifyUndo(leftText(r.left))
+  } catch (e) {
+    store.notify(errText(e), 'error')
+  }
+}
+
+// Правка шаблонов: true — выполнено. Ошибка «новее программы» объясняется понятным текстом.
+export async function tplCall(p: Promise<unknown>): Promise<boolean> {
+  try {
+    await p
+    return true
+  } catch (e) {
+    store.notify(tplError(errText(e)), 'error')
+    return false
+  }
+}
+
+export const planCopy = (src: string, from: LayoutScope, to: GridTarget[], design: boolean, mirror: boolean) =>
+  Api.PlanCopyGrid(src, from, to, design, mirror) as unknown as Promise<GridPlan>
+
+// Копирование: итог — тост; left > 0 — «N фото вернулись в ленту» с «Вернуть».
+export async function runCopy(
+  src: string,
+  from: LayoutScope,
+  to: GridTarget[],
+  design: boolean,
+  mirror: boolean,
+  n: number,
+): Promise<boolean> {
+  try {
+    const r = (await Api.CopyGrid(src, from, to, design, mirror)) as unknown as GridResult
+    store.apply(r.view)
+    const head = `Раскладка скопирована на ${n} ${plural(n, ['разворот', 'разворота', 'разворотов'])}`
+    if (r.left > 0) notifyUndo(`${head}. ${leftText(r.left)}`)
+    else store.notify(head)
+    return true
+  } catch (e) {
+    store.notify(errText(e), 'error')
+    return false
+  }
+}
+
+// Новые пустые развороты с местами источника после него.
+export async function runDuplicate(src: string, count: number, design: boolean): Promise<boolean> {
+  const ok = await store.run(Api.DuplicateGrid(src, count, design))
+  if (ok) store.notify(`Добавлено ${count} ${plural(count, ['разворот', 'разворота', 'разворотов'])} с такой раскладкой`)
+  return ok
+}

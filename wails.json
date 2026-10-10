@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "sosninaalbums",
+  "outputfilename": "sosninaalbums",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Ilya"
+  },
+  "info": {
+    "productName": "Sosnina Albums",
+    "productVersion": "0.9.0"
+  }
+}

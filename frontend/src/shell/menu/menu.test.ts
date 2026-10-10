@@ -1,0 +1,328 @@
+import { describe, expect, it } from 'vitest'
+import { HOTKEYS } from './hotkeys'
+import { can, type Custom, type Level } from '../../base/prefs/levels'
+import { features } from '../../base/prefs/levelcustom'
+import { buildMenu, keysOf, type Menu, type MenuCtx, type MenuItem } from './menu'
+
+const base: MenuCtx = {
+  spreads: 3,
+  hasSpread: true,
+  canUndo: true,
+  canRedo: true,
+  zone: 'canvas',
+  libraryPhotos: 10,
+  anySelection: true,
+  deletable: true,
+  flippable: true,
+  layerable: true,
+  missing: 2,
+  exporting: false,
+  big: false,
+  details: false,
+  safe: false,
+  rulers: true,
+  snap: true,
+}
+const ctx = (o: Partial<MenuCtx> = {}): MenuCtx => ({ ...base, ...o })
+
+const flat = (items: MenuItem[]): MenuItem[] => items.flatMap((i) => [i, ...(i.sub ? flat(i.sub) : [])])
+const find = (menus: Menu[], id: string): MenuItem | undefined => menus.flatMap((m) => flat(m.items)).find((i) => i.id === id)
+const ids = (menus: Menu[], menu: string) => flat(menus.find((m) => m.id === menu)!.items).map((i) => i.id)
+
+describe('buildMenu', () => {
+  it('четыре меню по порядку', () => {
+    expect(buildMenu(ctx()).map((m) => m.label)).toEqual(['Файл', 'Правка', 'Вид', 'Справка'])
+  })
+
+  it('состав «Файл» и клавиши берутся из таблицы', () => {
+    const m = buildMenu(ctx())
+    expect(ids(m, 'file')).toEqual([
+      'new',
+      'open',
+      'recent',
+      'save',
+      'saveAs',
+      'backups',
+      'addFolder',
+      'relink',
+      'export',
+      'showExport',
+      'settings',
+    ])
+    expect(find(m, 'new')?.keys).toBe('Ctrl+N')
+    expect(find(m, 'saveAs')?.keys).toBe('Ctrl+Shift+S')
+    expect(find(m, 'export')?.keys).toBe('Ctrl+E')
+    expect(find(m, 'redo')?.keys).toBe('Ctrl+Y')
+  })
+
+  it('каждая клавиша пункта есть в HOTKEYS', () => {
+    const shows = new Set(HOTKEYS.flatMap((h) => [h.show, h.menu].filter(Boolean)))
+    for (const it of buildMenu(ctx()).flatMap((m) => flat(m.items))) if (it.keys) expect(shows.has(it.keys), it.id).toBe(true)
+  })
+
+  it('«Последние»: пункты по списку, пропавший серый, путь — в arg; пусто — пункт серый', () => {
+    const recent = [
+      { path: 'D:\\a\\Один.salbum', name: 'Один', exists: true, modified: 1 },
+      { path: 'D:\\a\\Два.salbum', name: 'Два', exists: false, modified: 0 },
+    ]
+    const m = buildMenu(ctx({ recent }))
+    const top = find(m, 'recent')!
+    expect(top.disabled).toBeFalsy()
+    expect(top.sub?.map((i) => i.id)).toEqual(['recent-0', 'recent-1', 'clearRecent'])
+    expect(find(m, 'recent-0')).toMatchObject({ label: 'Один', cmd: 'openRecent', arg: 'D:\\a\\Один.salbum' })
+    expect(find(m, 'recent-0')?.disabled).toBeFalsy()
+    expect(find(m, 'recent-1')?.disabled).toBe(true)
+    expect(find(m, 'clearRecent')).toMatchObject({ cmd: 'clearRecent', sep: true })
+    const empty = find(buildMenu(ctx()), 'recent')!
+    expect(empty.disabled).toBe(true)
+    expect(empty.sub).toEqual([])
+  })
+
+  it('«Справка ▸ Стартовое окно» есть на любом уровне', () => {
+    expect(find(buildMenu(ctx({ can: () => false })), 'startWindow')?.cmd).toBe('startWindow')
+  })
+
+  it('«Найти пропавшие» серый без пропавших', () => {
+    expect(find(buildMenu(ctx({ missing: 0 })), 'relink')?.disabled).toBe(true)
+    expect(find(buildMenu(ctx()), 'relink')?.disabled).toBeFalsy()
+  })
+
+  it('экспорт серый при пустом альбоме и пока идёт экспорт', () => {
+    expect(find(buildMenu(ctx({ spreads: 0 })), 'export')?.disabled).toBe(true)
+    expect(find(buildMenu(ctx({ exporting: true })), 'export')?.disabled).toBe(true)
+    expect(find(buildMenu(ctx()), 'export')?.disabled).toBeFalsy()
+  })
+
+  it('«Отменить / Повторить» следуют за историей', () => {
+    const m = buildMenu(ctx({ canUndo: false, canRedo: false }))
+    expect(find(m, 'undo')?.disabled).toBe(true)
+    expect(find(m, 'redo')?.disabled).toBe(true)
+  })
+
+  it('«Выделить всё» по зоне: холст — разворот, библиотека — лента', () => {
+    expect(find(buildMenu(ctx({ zone: 'canvas' })), 'selectAll')?.cmd).toBe('selectSpread')
+    const lib = buildMenu(ctx({ zone: 'library', libraryPhotos: 0 }))
+    expect(find(lib, 'selectAll')?.cmd).toBe('selectAll')
+    expect(find(lib, 'selectAll')?.disabled).toBe(true)
+  })
+
+  it('выделение и удаление серые, когда нечего', () => {
+    const m = buildMenu(ctx({ anySelection: false, deletable: false, flippable: false }))
+    expect(find(m, 'clearSelection')?.disabled).toBe(true)
+    expect(find(m, 'removeCell')?.disabled).toBe(true)
+    expect(find(m, 'flip')?.disabled).toBe(true)
+  })
+
+  it('«Зеркало» — подменю из двух команд', () => {
+    const flip = find(buildMenu(ctx()), 'flip')
+    expect(flip?.cmd).toBeUndefined()
+    expect(flip?.sub?.map((i) => i.cmd)).toEqual(['flipH', 'flipV'])
+  })
+
+  it('переключатели вида показывают состояние', () => {
+    const m = buildMenu(ctx({ big: true, safe: true, details: false, snap: false }))
+    expect(find(m, 'big')?.checked).toBe(true)
+    expect(find(m, 'safe')?.checked).toBe(true)
+    expect(find(m, 'details')?.checked).toBe(false)
+    expect(find(m, 'snap')?.checked).toBe(false)
+    expect(find(m, 'fit')?.checked).toBeUndefined()
+  })
+
+  it('без разворота масштаб серый', () => {
+    const m = buildMenu(ctx({ hasSpread: false }))
+    for (const id of ['fit', 'zoomIn', 'zoomOut', 'addText']) expect(find(m, id)?.disabled, id).toBe(true)
+  })
+
+  it('черта никогда не стоит первой', () => {
+    for (const m of buildMenu(ctx())) {
+      expect(m.items.length).toBeGreaterThan(0)
+      expect(m.items[0].sep).toBeFalsy()
+    }
+  })
+})
+
+describe('уровень: точка расширения can()', () => {
+  const only = (...allowed: string[]) => ctx({ can: (f) => allowed.includes(f) })
+
+  it('пункт с недоступной функцией скрыт, остальные на месте', () => {
+    const m = buildMenu(only())
+    for (const id of ['selectAll', 'addText', 'flip', 'snap', 'zoomIn', 'zoomOut', 'allSpreads', 'big'])
+      expect(find(m, id), id).toBeUndefined()
+    for (const id of ['new', 'undo', 'removeCell', 'fit', 'help']) expect(find(m, id), id).toBeDefined()
+  })
+
+  it('функция разрешена — пункт возвращается', () => {
+    const m = buildMenu(only('text', 'flip', 'zoom'))
+    for (const id of ['addText', 'flip', 'flipH', 'zoomIn', 'zoomOut']) expect(find(m, id), id).toBeDefined()
+    expect(find(m, 'snap')).toBeUndefined()
+  })
+
+  it('когда скрыта вся группа, её черты нет', () => {
+    const m = buildMenu(only())
+    const edit = m.find((x) => x.id === 'edit')!
+    // Группа «текст/зеркало» скрыта целиком, «Выделить всё» — из средней группы; черта одна.
+    expect(edit.items.map((i) => i.id)).toEqual(['undo', 'redo', 'clearSelection', 'removeCell'])
+    expect(edit.items.filter((i) => i.sep)).toHaveLength(1)
+    const view = m.find((x) => x.id === 'view')!
+    // Группы «Уровень», «Крупный просмотр…» и «Вписать» — две черты.
+    expect(view.items.filter((i) => i.sep)).toHaveLength(2)
+  })
+})
+
+describe('уровень в меню (спека 010 U1)', () => {
+  const at = (level: Level) => ctx({ level, can: (f) => can(f, level) })
+  const viewIds = (level: Level) => ids(buildMenu(at(level)), 'view')
+
+  it('«Вид ▸ Уровень» — четыре уровня, текущий с галочкой, и «Уровни и функции…»', () => {
+    const m = buildMenu(at('standard'))
+    const sub = find(m, 'level')!.sub!
+    expect(sub.map((i) => i.cmd)).toEqual(['levelSimple', 'levelStandard', 'levelFull', 'levelCustom'])
+    expect(sub.map((i) => i.checked)).toEqual([false, true, false, false])
+    expect(find(m, 'compareLevels')).toMatchObject({ cmd: 'compareLevels', label: 'Уровни и функции…' })
+  })
+  it('«Простой»: без зума, «Все развороты», привязки; «Вписать» остаётся', () => {
+    const v = viewIds('simple')
+    for (const id of ['zoomIn', 'zoomOut', 'allSpreads', 'snap']) expect(v, id).not.toContain(id)
+    for (const id of ['big', 'details', 'safe', 'fit', 'level']) expect(v, id).toContain(id)
+  })
+  it('«Стандартный»: зум и «Все развороты» есть, привязки нет', () => {
+    const v = viewIds('standard')
+    for (const id of ['zoomIn', 'zoomOut', 'allSpreads']) expect(v, id).toContain(id)
+    expect(v).not.toContain('snap')
+  })
+  it('«Полный»: привязка и линейки на месте, у линеек галочка и Ctrl+R', () => {
+    expect(viewIds('full')).toContain('snap')
+    const m = buildMenu(at('full'))
+    expect(find(m, 'rulers')).toMatchObject({ cmd: 'toggleRulers', keys: 'Ctrl+R', checked: true })
+    expect(find(buildMenu({ ...at('full'), rulers: false }), 'rulers')?.checked).toBe(false)
+  })
+  it('линеек нет в «Простом» и «Стандартном»', () => {
+    for (const l of ['simple', 'standard'] as const) expect(viewIds(l), l).not.toContain('rulers')
+  })
+  it('«Правка»: «Простой» без текста, зеркала и выделения всего на холсте; «Стандартный» с ними', () => {
+    const simple = ids(buildMenu(at('simple')), 'edit')
+    for (const id of ['addText', 'flip', 'selectAll']) expect(simple, id).not.toContain(id)
+    const std = ids(buildMenu(at('standard')), 'edit')
+    for (const id of ['addText', 'flip', 'selectAll']) expect(std, id).toContain(id)
+  })
+  it('«Выделить всё» в ленте есть и в «Простом»', () => {
+    expect(find(buildMenu(ctx({ ...at('simple'), zone: 'library' })), 'selectAll')?.cmd).toBe('selectAll')
+  })
+  it('без level галочка на «Полном»', () => {
+    const sub = find(buildMenu(ctx()), 'level')!.sub!
+    expect(sub.map((i) => i.checked)).toEqual([false, false, true, false])
+  })
+})
+
+describe('«Свой» в меню (спека 011 U2)', () => {
+  const at = (custom: Custom) => ctx({ level: 'custom', can: (f) => features('custom', custom).has(f) })
+  const simpleOff: Custom = { base: 'simple', on: [], off: ['timeline', 'turn'] }
+
+  it('галочка на «Своём»', () => {
+    const sub = find(buildMenu(at(simpleOff)), 'level')!.sub!
+    expect(sub.map((i) => i.checked)).toEqual([false, false, false, true])
+  })
+  it('без «Разреза и склейки» нет «Крупного просмотра», на «Простом» он есть', () => {
+    expect(find(buildMenu(at(simpleOff)), 'big')).toBeUndefined()
+    expect(find(buildMenu(ctx({ level: 'simple', can: (f) => can(f, 'simple') })), 'big')).toBeDefined()
+  })
+  it('без «Поворота фото» нет пункта «Повернуть», панель деталей и уровень остаются', () => {
+    const m = buildMenu(at(simpleOff))
+    expect(find(m, 'turn')).toBeUndefined()
+    for (const id of ['details', 'level', 'compareLevels']) expect(find(m, id), id).toBeDefined()
+  })
+  it('«Правка» без функций не пустеет: отмена и «Удалить» всегда', () => {
+    const none: Custom = { base: 'simple', on: [], off: ['variants', 'timeline', 'captions', 'turn'] }
+    expect(ids(buildMenu(at(none)), 'edit')).toEqual(expect.arrayContaining(['undo', 'redo', 'removeCell']))
+  })
+  it('«Справка ▸ Что нового» — команда whatsNew', () => {
+    expect(find(buildMenu(ctx()), 'whatsNew')?.cmd).toBe('whatsNew')
+  })
+})
+
+describe('keysOf', () => {
+  it('команда без клавиши — undefined', () => {
+    expect(keysOf('addFolder')).toBeUndefined()
+    expect(keysOf('zoomIn')).toBe('Ctrl+=')
+  })
+})
+
+describe('«Правка ▸ Выровнять» (спека 010 U7)', () => {
+  const full = (o: Partial<MenuCtx> = {}) => ctx({ level: 'full', can: (f) => can(f, 'full'), ...o })
+  const sub = (o: Partial<MenuCtx> = {}) => find(buildMenu(full(o)), 'align')!.sub!
+  const off = (o: Partial<MenuCtx>) =>
+    sub(o)
+      .filter((i) => i.cmd === 'align' && i.disabled)
+      .map((i) => i.arg)
+
+  it('только «Полный»', () => {
+    for (const l of ['simple', 'standard'] as const)
+      expect(find(buildMenu(ctx({ level: l, can: (f) => can(f, l) })), 'align'), l).toBeUndefined()
+    expect(find(buildMenu(full({ alignCount: 2 })), 'align')).toBeDefined()
+  })
+  it('8 действий, черта перед распределением и перед опорой; у опоры галочка', () => {
+    const s = sub({ alignCount: 3, alignTo: 'page' })
+    expect(s.map((i) => i.arg)).toEqual(['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom', 'distH', 'distV', 'sel', 'page', 'spread'])
+    expect(s.filter((i) => i.sep).map((i) => i.arg)).toEqual(['distH', 'sel'])
+    expect(s.filter((i) => i.checked).map((i) => i.arg)).toEqual(['page'])
+    expect(s.every((i) => i.cmd === 'align' || i.cmd === 'alignTo')).toBe(true)
+  })
+  it('ничего не выделено — пункт серый', () => {
+    expect(find(buildMenu(full({ alignCount: 0 })), 'align')?.disabled).toBe(true)
+    expect(find(buildMenu(full()), 'align')?.disabled).toBe(true)
+  })
+  it('пункты по числу выделенных: к выделению 2 и 3', () => {
+    const all = ['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom', 'distH', 'distV']
+    expect(off({ alignCount: 1, alignTo: 'sel' })).toEqual(all)
+    expect(off({ alignCount: 2, alignTo: 'sel' })).toEqual(['distH', 'distV'])
+    expect(off({ alignCount: 3, alignTo: 'sel' })).toEqual([])
+  })
+  it('к странице и развороту: одно — выравнивание, два — и распределение', () => {
+    for (const alignTo of ['page', 'spread'] as const) {
+      expect(off({ alignCount: 1, alignTo }), alignTo).toEqual(['distH', 'distV'])
+      expect(off({ alignCount: 2, alignTo }), alignTo).toEqual([])
+    }
+  })
+  it('опора не серая и при одном выделенном', () => {
+    expect(
+      sub({ alignCount: 1 })
+        .filter((i) => i.cmd === 'alignTo')
+        .every((i) => !i.disabled),
+    ).toBe(true)
+  })
+})
+
+describe('«Повернуть» (010 U5)', () => {
+  it('подменю из ↻ и ↺, серое без выделенного фото, есть на любом уровне', () => {
+    const turn = find(buildMenu(ctx()), 'turn')
+    expect(turn?.cmd).toBeUndefined()
+    expect(turn?.sub?.map((i) => i.cmd)).toEqual(['turnCw', 'turnCcw'])
+    expect(find(buildMenu(ctx({ flippable: false })), 'turn')?.disabled).toBe(true)
+    for (const l of ['simple', 'standard', 'full'] as const)
+      expect(find(buildMenu(ctx({ can: (f) => can(f, l) })), 'turn'), l).toBeDefined()
+  })
+  it('стоит перед «Зеркало»', () => {
+    const edit = ids(buildMenu(ctx()), 'edit')
+    expect(edit.indexOf('turn')).toBeLessThan(edit.indexOf('flip'))
+  })
+})
+
+describe('«Слой» (010 U6)', () => {
+  it('подменю из четырёх действий с клавишами из таблицы', () => {
+    const layer = find(buildMenu(ctx()), 'layer')
+    expect(layer?.cmd).toBeUndefined()
+    expect(layer?.sub?.map((i) => i.cmd)).toEqual(['layerFront', 'layerUp', 'layerDown', 'layerBack'])
+    expect(layer?.sub?.map((i) => i.keys)).toEqual(['Ctrl+Shift+]', 'Ctrl+]', 'Ctrl+[', 'Ctrl+Shift+['])
+  })
+  it('серое, когда двигать нечего (не «Ручная» или ничего не выделено)', () => {
+    expect(find(buildMenu(ctx({ layerable: false })), 'layer')?.disabled).toBe(true)
+    expect(find(buildMenu(ctx({ layerable: undefined })), 'layer')?.disabled).toBe(true)
+    expect(find(buildMenu(ctx()), 'layer')?.disabled).toBeUndefined()
+  })
+  it('есть с уровня, где есть слои, и стоит в «Правка» перед «Повернуть»', () => {
+    for (const l of ['simple', 'standard', 'full'] as const)
+      expect(!!find(buildMenu(ctx({ can: (f) => can(f, l) })), 'layer'), l).toBe(can('layers', l))
+    const edit = ids(buildMenu(ctx()), 'edit')
+    expect(edit.indexOf('layer')).toBeLessThan(edit.indexOf('turn'))
+  })
+})

@@ -1,0 +1,89 @@
+#!/bin/sh
+# Pre-commit: не пускает в репозиторий личные и рабочие файлы.
+# Подключение (один раз): git config core.hooksPath scripts/git-hooks
+
+bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -E \
+  '(^|/)CLAUDE\.md$|^\.claude/|^docs/(private|refs)/|\.salbum$|^\.testphotos/|(^|/)\.env' )
+if [ -n "$bad" ]; then
+  echo "pre-commit: эти файлы не должны попадать в git (инструкции агентов, личные данные, референсы):" >&2
+  echo "$bad" | sed 's/^/  /' >&2
+  echo "Убрать из индекса: git rm --cached <файл>" >&2
+  exit 1
+fi
+
+# Крупные бинарники (> 2 МБ) — почти наверняка случайность
+big=$(git diff --cached --name-only --diff-filter=ACMR | while read -r f; do
+  [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 2097152 ] && echo "$f"
+done)
+if [ -n "$big" ]; then
+  echo "pre-commit: файлы больше 2 МБ:" >&2
+  echo "$big" | sed 's/^/  /' >&2
+  exit 1
+fi
+
+# Порог по уровням (022, design.md §4): то же, что CheckFolders в check.ps1, но только для папок, куда коммит
+# добавляет или переносит файлы (A и R: git mv в полную папку тоже считается). Файлов кода прямо в папке ≤ 20,
+# подпапок у любой папки ≤ 20, код фронта — frontend/src/<файл> или frontend/src/<группа>/<область>/<файл>.
+# Исключения - scripts/folder-exceptions.txt: «<папка> N» - файлы, «<папка>/ N» - подпапки.
+folder_skip='(^|/)(wailsjs|testdata|node_modules)/|\.d\.ts$'
+limit() { # $1 - ключ строки исключения («папка» или «папка/»)
+  l=$(awk -v k="$1" '$1 == k && $2 ~ /^[0-9]+$/ { print $2; exit }' scripts/folder-exceptions.txt 2>/dev/null)
+  echo "${l:-20}"
+}
+moved=$(git diff --cached --name-only --diff-filter=AR)
+over=""
+if [ -n "$moved" ]; then
+  index=$(git ls-files --cached)
+  code=$(echo "$index" | grep -E '\.(go|ts|svelte)$' | grep -vE "$folder_skip")
+  newcode=$(echo "$moved" | grep -E '\.(go|ts|svelte)$' | grep -vE "$folder_skip")
+  # 1) файлы кода прямо в папке
+  for d in $(echo "$newcode" | awk -F/ '{ if (NF > 1) { NF--; print } else print "." }' OFS=/ | sort -u); do
+    n=$(echo "$code" | awk -F/ -v d="$d" '{ if (NF > 1) { NF--; p = $0 } else p = "."; if (p == d) c++ } END { print c + 0 }' OFS=/)
+    lim=$(limit "$d")
+    [ "$n" -gt "$lim" ] && over="$over  $d: файлов кода $n (макс. $lim)
+"
+  done
+  # 2) подпапки у каждого предка добавленных файлов
+  for p in $(echo "$moved" | awk -F/ '{ print "."; s = ""; for (i = 1; i < NF - 1; i++) { s = (i == 1 ? $1 : s "/" $i); print s } }' | sort -u); do
+    n=$(echo "$index" | awk -v p="$p" '
+      { s = (p == ".") ? $0 : (index($0, p "/") == 1 ? substr($0, length(p) + 2) : "") ; i = index(s, "/"); if (i) print substr(s, 1, i - 1) }' | sort -u | wc -l)
+    lim=$(limit "$p/")
+    [ "$n" -gt "$lim" ] && over="$over  $p: подпапок $n (макс. $lim)
+"
+  done
+  # 3) глубина кода фронта
+  deep=$(echo "$newcode" | grep -E '^frontend/src/' | awk -F/ 'NF != 3 && NF != 5')
+  [ -n "$deep" ] && over="$over$(echo "$deep" | sed 's/^/  не на месте (frontend\/src\/<группа>\/<область>\/файл): /')
+"
+fi
+if [ -n "$over" ]; then
+  echo "pre-commit: порог папок (docs/STRUCTURE.md «Правила»):" >&2
+  printf '%s' "$over" >&2
+  echo "Делить по смыслу (022); исключение - только с согласия владельца (scripts/folder-exceptions.txt)." >&2
+  exit 1
+fi
+
+# Быстрые проверки только файлов коммита (секунды); полный прогон — scripts/check.ps1.
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+gofiles=$(echo "$staged" | grep -E '\.go$')
+if [ -n "$gofiles" ]; then
+  unformatted=$(echo "$gofiles" | xargs -n 50 gofmt -l)
+  if [ -n "$unformatted" ]; then
+    echo "pre-commit: не отформатировано gofmt:" >&2
+    echo "$unformatted" | sed 's/^/  /' >&2
+    exit 1
+  fi
+fi
+fefiles=$(echo "$staged" | grep -E '^frontend/' | grep -vE '^frontend/(wailsjs|dist)/|package(-lock)?\.json$' | grep -E '\.(ts|js|svelte|css|html|json)$' | sed 's|^frontend/||')
+if [ -n "$fefiles" ]; then
+  # xargs: при переносе сотен файлов командная строка Windows переполняется (npx — это .cmd, у cmd.exe предел 8 тыс. символов)
+  (cd frontend && echo "$fefiles" | xargs -n 50 npx prettier --check --log-level warn) || {
+    echo "pre-commit: prettier — запусти: cd frontend && npm run format" >&2
+    exit 1
+  }
+  lintfiles=$(echo "$fefiles" | grep -E '\.(ts|js|svelte)$')
+  if [ -n "$lintfiles" ]; then
+    (cd frontend && echo "$lintfiles" | xargs -n 50 npx eslint --max-warnings 0) || exit 1
+  fi
+fi
+exit 0

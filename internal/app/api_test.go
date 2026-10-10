@@ -1,0 +1,468 @@
+package app
+
+import (
+	"errors"
+	"fmt"
+	"image/color"
+	"io"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
+)
+
+// Размер файла из ленты доезжает до PhotoRef: по нему сверяются пути при переносе проекта.
+func TestAddPhotosKeepsSize(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	a.emit = func(string, ...any) {}
+	dir := testkit.TempDir(t)
+	path := testkit.JPEG(t, dir, "a.jpg", 40, 30)
+	if _, err := a.editor().AddFolder(dir); err != nil {
+		t.Fatal(err)
+	}
+	a.rescan()
+	waitScan(t, a)
+	photos := a.GetState().Photos
+	if len(photos) != 1 || photos[0].Size == 0 {
+		t.Fatalf("лента: %+v", photos)
+	}
+	v, err := a.NewSpread(0, []string{photos[0].ID})
+	if err != nil || len(v.Spreads) != 1 {
+		t.Fatalf("NewSpread: %v %+v", err, v)
+	}
+	ref, ok := a.editor().Ref(photos[0].ID)
+	st, _ := os.Stat(path)
+	if !ok || ref.Size == 0 || ref.Size != st.Size() {
+		t.Fatalf("Size в PhotoRef = %d, ждали %d", ref.Size, st.Size())
+	}
+}
+
+// Список папок читается под тем же замком, что и выдача поколения: rescan, ждущий замок,
+// видит папки, добавленные за время ожидания (иначе устаревший список победил бы новый).
+func TestRescanReadsFoldersUnderLock(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	a.emit = func(string, ...any) {}
+	dirA, dirB := testkit.TempDir(t), testkit.TempDir(t)
+	testkit.JPEG(t, dirA, "a.jpg", 20, 10)
+	testkit.JPEG(t, dirB, "b.jpg", 20, 10)
+	ed := a.editor()
+	if _, err := ed.AddFolder(dirA); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	done := make(chan struct{})
+	go func() { a.rescan(); close(done) }()
+	time.Sleep(50 * time.Millisecond) // rescan упёрся в замок
+	if _, err := ed.AddFolder(dirB); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Unlock()
+	<-done
+	waitScan(t, a)
+	if n := len(a.GetState().Photos); n != 2 {
+		t.Fatalf("в ленте %d фото, ждали 2 (a и b)", n)
+	}
+}
+
+// После смены папок во время прогрева лента получает сброс (thumbs 0/0), а хвост
+// отменённого прогрева молчит: иначе «Готовлю миниатюры 39 / 1476» остаётся навсегда.
+func TestRescanResetsThumbs(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	c, err := library.NewCache(testkit.TempDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.cache = c
+	var mu sync.Mutex
+	var thumbs [][2]int
+	a.emit = func(name string, data ...any) {
+		if name == "thumbs" {
+			mu.Lock()
+			thumbs = append(thumbs, [2]int{data[0].(int), data[1].(int)})
+			mu.Unlock()
+		}
+	}
+	dir := testkit.TempDir(t)
+	for i := range 120 {
+		testkit.JPEG(t, dir, fmt.Sprintf("p%03d.jpg", i), 600, 400)
+	}
+	ed := a.editor()
+	if _, err := ed.AddFolder(dir); err != nil {
+		t.Fatal(err)
+	}
+	a.rescan()
+	deadline := time.Now().Add(10 * time.Second)
+	for { // ждём, когда прогрев запущен
+		a.mu.Lock()
+		warming := a.warm != nil
+		a.mu.Unlock()
+		if warming {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("прогрев не начался")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	ed.RemoveFolder(dir)
+	a.rescan() // как после NewProject/смены папок
+	mu.Lock()
+	mark := len(thumbs)
+	mu.Unlock()
+	waitScan(t, a)
+	time.Sleep(300 * time.Millisecond) // воркеры отменённого прогрева дорабатывают текущие фото
+
+	mu.Lock()
+	defer mu.Unlock()
+	if mark == 0 || thumbs[mark-1] != [2]int{0, 0} {
+		t.Fatalf("сразу после rescan ждали сброс 0/0, события: %v (mark %d)", thumbs, mark)
+	}
+	if len(thumbs) != mark {
+		t.Fatalf("после сброса пришли события устаревшего прогрева: %v", thumbs[mark:])
+	}
+}
+
+// Старый черновик (v1) перед первой записью копируется в <черновик>.v1.bak, один раз.
+func TestDraftV1BackedUp(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	v1 := []byte(`{"version":1,"folders":[],"settings":{"pageW":300,"pageH":300,"margin":12,"gap":3,"layflat":true,"dpi":300},"spreads":[],"photos":{}}`)
+	if err := os.WriteFile(a.draftPath(), v1, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, path, _ := a.loadStartup("")
+	if p == nil || path != "" {
+		t.Fatalf("черновик не открылся: %v %q", p, path)
+	}
+	a.ed.Store(mustEditor(t, p, path))
+	a.flushSave()
+	bak := a.draftPath() + ".v1.bak"
+	if got, _ := os.ReadFile(bak); string(got) != string(v1) {
+		t.Fatalf("в .v1.bak не исходный черновик: %q", got)
+	}
+	if got, _ := os.ReadFile(a.draftPath()); string(got) == string(v1) {
+		t.Fatal("черновик не записан в новой версии")
+	}
+	// Повторная запись копию не трогает.
+	if err := os.WriteFile(bak, []byte("метка"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.flushSave()
+	if got, _ := os.ReadFile(bak); string(got) != "метка" {
+		t.Fatal("копия перезаписана")
+	}
+	// Новый проект копию не делает.
+	b := newApp(t)
+	b.cfgDir = testkit.TempDir(t)
+	b.flushSave()
+	if _, err := os.Stat(b.draftPath() + ".v1.bak"); err == nil {
+		t.Fatal("лишняя копия у нового проекта")
+	}
+}
+
+type emitted struct {
+	name string
+	data []any
+}
+
+// Два rescan подряд: итог по второму, устаревшее поколение после запуска второго ничего не шлёт
+// и не меняет реестр фото; убранная папка исчезает из ленты сразу. Под -race — без гонок.
+func TestRescanGeneration(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	var mu sync.Mutex
+	var events []emitted
+	a.emit = func(name string, data ...any) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, emitted{name, data})
+	}
+
+	dirA, dirB := testkit.TempDir(t), testkit.TempDir(t)
+	for i := range 150 {
+		testkit.JPEG(t, dirA, fmt.Sprintf("a%03d.jpg", i), 20, 10)
+	}
+	for i := range 5 {
+		testkit.JPEG(t, dirB, fmt.Sprintf("b%d.jpg", i), 20, 10)
+	}
+	ed := a.editor()
+	if _, err := ed.AddFolder(dirA); err != nil {
+		t.Fatal(err)
+	}
+	a.rescan() // первое сканирование ещё идёт, когда начнётся второе
+	ed.RemoveFolder(dirA)
+	if _, err := ed.AddFolder(dirB); err != nil {
+		t.Fatal(err)
+	}
+	a.rescan()
+	mu.Lock()
+	mark := len(events)
+	mu.Unlock()
+
+	// сразу после возврата в ленте нет фото убранной папки
+	for _, p := range a.GetState().Photos {
+		if !library.Under(p.Path, dirB) {
+			t.Fatalf("фото убранной папки осталось в ленте: %s", p.Path)
+		}
+	}
+	if !a.GetState().Scan.Active {
+		t.Fatal("после rescan сканирование должно быть активным")
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for a.GetState().Scan.Active {
+		if time.Now().After(deadline) {
+			t.Fatal("сканирование не закончилось")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	st := a.GetState()
+	if len(st.Photos) != 5 || st.Scan.Found != 5 || st.Scan.Read != 5 || st.Scan.Walking {
+		t.Fatalf("итог: фото %d, ход %+v", len(st.Photos), st.Scan)
+	}
+	for _, p := range st.Photos {
+		if !library.Under(p.Path, dirB) {
+			t.Fatalf("в итоге чужое фото: %s", p.Path)
+		}
+	}
+	a.mu.Lock()
+	gen, byID := a.scanGen, len(a.byID)
+	a.mu.Unlock()
+	if gen != 2 || byID != 5 {
+		t.Fatalf("поколение %d, реестр %d фото", gen, byID)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	var lastScan library.ScanProgress
+	for i, e := range events {
+		switch e.name {
+		case "library":
+			if i < mark {
+				continue
+			}
+			for _, p := range e.data[0].([]library.Photo) {
+				if !library.Under(p.Path, dirB) {
+					t.Fatalf("после второго rescan пришло фото устаревшего поколения: %s", p.Path)
+				}
+			}
+		case "scan":
+			lastScan = e.data[0].(library.ScanProgress)
+		}
+	}
+	if lastScan.Active || lastScan.Found != 5 {
+		t.Fatalf("последнее событие scan: %+v", lastScan)
+	}
+}
+
+// /media отдаёт верный Content-Type: прозрачный PNG — image/png, фото — image/jpeg.
+func TestMediaContentType(t *testing.T) {
+	dir := testkit.TempDir(t)
+	a := newApp(t)
+	cache, err := library.NewCache(testkit.TempDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.cache = cache
+	logo := testkit.PNG(t, dir, "logo.png", 40, 20, color.NRGBA{200, 30, 30, 255})
+	pic := testkit.JPEG(t, dir, "a.jpg", 40, 30)
+	a.byID["logo"] = library.Photo{ID: "logo", Path: logo, Name: "logo.png"}
+	a.byID["pic"] = library.Photo{ID: "pic", Path: pic, Name: "a.jpg"}
+	h := a.media(http.NotFoundHandler())
+	for _, c := range []struct{ url, want string }{
+		{"/media/t/logo", "image/png"}, {"/media/p/logo", "image/png"},
+		{"/media/t/pic", "image/jpeg"}, {"/media/p/pic", "image/jpeg"},
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", c.url, nil))
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != c.want {
+			t.Errorf("%s: %d, %q, ждали %q", c.url, rec.Code, rec.Header().Get("Content-Type"), c.want)
+		}
+	}
+}
+
+// DeleteSpreads: одно событие view на весь набор, один шаг отмены.
+func TestAppDeleteSpreads(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	var mu sync.Mutex
+	views := 0
+	a.emit = func(name string, _ ...any) {
+		if name == "view" {
+			mu.Lock()
+			views++
+			mu.Unlock()
+		}
+	}
+	ed := a.editor()
+	var v model.View
+	for range 4 {
+		var err error
+		if v, err = ed.NewSpread(-1, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ids := []string{v.Spreads[0].ID, v.Spreads[2].ID, "нет"}
+	v = a.DeleteSpreads(ids)
+	if len(v.Spreads) != 2 {
+		t.Fatalf("осталось разворотов %d, ждали 2", len(v.Spreads))
+	}
+	mu.Lock()
+	n := views
+	mu.Unlock()
+	if n != 1 {
+		t.Errorf("событий view %d, ждали одно", n)
+	}
+	if v = a.Undo(); len(v.Spreads) != 4 {
+		t.Errorf("отмена вернула %d разворотов, ждали 4", len(v.Spreads))
+	}
+}
+
+// Паника в методе с ошибкой — errInternal, а не nil: интерфейс не сочтёт операцию успешной.
+func TestGuardErr(t *testing.T) {
+	log.SetOutput(io.Discard)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	f := func() (err error) {
+		defer guardErr("тест", &err)
+		panic("сбой")
+	}
+	if err := f(); !errors.Is(err, errInternal) {
+		t.Fatalf("ждали errInternal, получили %v", err)
+	}
+	ok := func() (err error) {
+		defer guardErr("тест", &err)
+		return errors.New("обычная")
+	}
+	if err := ok(); err == nil || errors.Is(err, errInternal) {
+		t.Fatalf("обычная ошибка должна дойти как есть: %v", err)
+	}
+}
+
+// guard глотает панику и пишет её в лог с именем места; без паники молчит.
+func TestGuardRecovers(t *testing.T) {
+	var buf strings.Builder
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	func() { defer guard("тихо") }()
+	if buf.Len() != 0 {
+		t.Fatalf("без паники в логе: %q", buf.String())
+	}
+	func() {
+		defer guard("место сбоя")
+		panic("сбой")
+	}()
+	if out := buf.String(); !strings.Contains(out, "ПАНИКА в место сбоя: сбой") {
+		t.Fatalf("паника не записана: %q", out)
+	}
+}
+
+// publish устаревшего поколения (и «из будущего») молчит: ни событий, ни изменений реестра и хода;
+// актуальное поколение обновляет реестр и шлёт library и scan, список nil — только scan.
+func TestPublishStaleGeneration(t *testing.T) {
+	a := newApp(t)
+	var mu sync.Mutex
+	var events []emitted
+	a.emit = func(name string, data ...any) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, emitted{name, data})
+	}
+	names := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]string, len(events))
+		for i, e := range events {
+			out[i] = e.name
+		}
+		return out
+	}
+	old := library.Photo{ID: "old", Path: `C:\old.jpg`}
+	fresh := []library.Photo{{ID: "n1", Path: `C:\n1.jpg`}, {ID: "n2", Path: `C:\n2.jpg`}}
+	a.mu.Lock()
+	a.scanGen = 5
+	a.photos, a.byID = []library.Photo{old}, byIDMap([]library.Photo{old})
+	a.scan = library.ScanProgress{Found: 1}
+	a.mu.Unlock()
+
+	for _, gen := range []int{4, 0, 6} {
+		a.publish(gen, fresh, library.ScanProgress{Active: true, Found: 2})
+	}
+	if n := names(); len(n) != 0 {
+		t.Fatalf("чужое поколение прислало события: %v", n)
+	}
+	a.mu.Lock()
+	if len(a.photos) != 1 || a.photos[0].ID != "old" || len(a.byID) != 1 || a.scan.Found != 1 || a.scan.Active {
+		t.Fatalf("реестр изменился: фото %v, ход %+v", a.photos, a.scan)
+	}
+	a.mu.Unlock()
+
+	// Актуальное поколение: реестр, ход и оба события.
+	a.publish(5, fresh, library.ScanProgress{Active: true, Found: 2})
+	if n := names(); !slices.Equal(n, []string{"library", "scan"}) {
+		t.Fatalf("события: %v", n)
+	}
+	a.mu.Lock()
+	if len(a.photos) != 2 || len(a.byID) != 2 || a.scan.Found != 2 || !a.scan.Active {
+		t.Fatalf("реестр не обновился: %v, ход %+v", a.photos, a.scan)
+	}
+	a.mu.Unlock()
+
+	// Список nil (ход без списка): реестр остаётся, уходит только scan.
+	a.publish(5, nil, library.ScanProgress{Found: 2})
+	if n := names(); !slices.Equal(n, []string{"library", "scan", "scan"}) {
+		t.Fatalf("события после хода: %v", n)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.photos) != 2 || a.scan.Active {
+		t.Fatalf("ход без списка: фото %d, %+v", len(a.photos), a.scan)
+	}
+}
+
+// App.NewSpread: фото пропали из ленты при пересканировании во время переноса — правки нет,
+// пустой разворот вместо них не создаётся (спека 013).
+func TestNewSpreadUnknownIDsNoop(t *testing.T) {
+	a := newApp(t)
+	a.emit = func(string, ...any) {}
+	p := model.New()
+	p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}})
+	a.ed.Store(mustEditor(t, p, ""))
+	before := a.editor().View()
+	v, err := a.NewSpread(-1, []string{"нет-такого"})
+	if err != nil || v.Rev != before.Rev || len(v.Spreads) != 1 {
+		t.Fatalf("NewSpread с пропавшими фото: %v, rev %d→%d, разворотов %d", err, before.Rev, v.Rev, len(v.Spreads))
+	}
+	if got := a.editor().View(); got.Rev != before.Rev || got.Dirty {
+		t.Fatalf("проект изменился: rev %d, dirty %v", got.Rev, got.Dirty)
+	}
+}
+
+// App.AutoBuild: сверх MaxSpreads — ошибка с причиной, текущий вид и проект не меняются.
+func TestAutoBuildSpreadLimit(t *testing.T) {
+	a := newApp(t)
+	p := model.New()
+	for range model.MaxSpreads {
+		p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}})
+	}
+	a.ed.Store(mustEditor(t, p, ""))
+	a.byID["a"] = library.Photo{ID: "a", Path: `C:\a.jpg`, W: 300, H: 200}
+	v, err := a.AutoBuild([]string{"a"}, -1, 2)
+	if err == nil || !strings.Contains(err.Error(), "1000 разворотов") {
+		t.Fatalf("ждали ошибку про 1000 разворотов, получили %v", err)
+	}
+	if len(v.Spreads) != model.MaxSpreads {
+		t.Fatalf("вид изменился: %d разворотов", len(v.Spreads))
+	}
+}

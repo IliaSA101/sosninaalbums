@@ -1,0 +1,360 @@
+method AddFolderPath(arg1:string):Promise<model.View>
+method AddPhotos(arg1:string,arg2:Array<string>,arg3:number):Promise<model.View>
+method AddPlace(arg1:string,arg2:number):Promise<model.View>
+method AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
+method AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>
+method AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<boolean>
+method ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<APP.GridResult>
+method ArrangeLayers(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>
+method ArrangePlaces(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>
+method AutoBuild(arg1:Array<string>,arg2:number,arg3:number):Promise<model.View>
+method Backups():Promise<Array<APP.BackupInfo>>
+method ChooseFolder():Promise<model.View>
+method ClearBackdrop(arg1:string,arg2:string):Promise<model.View>
+method ClearRecent():Promise<Array<prefs.RecentProject>>
+method CopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<APP.GridResult>
+method DeleteGridTemplate(arg1:string):Promise<void>
+method DeletePlaces(arg1:string,arg2:Array<string>):Promise<model.View>
+method DeleteSelection(arg1:string,arg2:Array<string>,arg3:Array<string>,arg4:Array<string>):Promise<model.View>
+method DeleteSpread(arg1:string):Promise<model.View>
+method DeleteSpreads(arg1:Array<string>):Promise<model.View>
+method DeleteText(arg1:string):Promise<model.View>
+method DuplicateGrid(arg1:string,arg2:number,arg3:boolean):Promise<model.View>
+method Export(arg1:APP.ExportOptions):Promise<boolean>
+method FillPlaces(arg1:Array<string>,arg2:string):Promise<APP.GridResult>
+method FitBackdrop(arg1:string,arg2:string):Promise<model.View>
+method FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method ForgetRecent(arg1:string):Promise<Array<prefs.RecentProject>>
+method GetState():Promise<APP.State>
+method GridChoices(arg1:string,arg2:number,arg3:string):Promise<model.GridChoices>
+method LayoutChoices(arg1:string):Promise<model.Choices>
+method Marks():Promise<Record<string, model.MarkView>>
+method MergeSpreads(arg1:string):Promise<model.View>
+method MirrorGrid(arg1:string,arg2:string):Promise<model.View>
+method MovePhoto(arg1:string,arg2:string,arg3:number):Promise<model.View>
+method MoveSpread(arg1:string,arg2:number):Promise<model.View>
+method NewProject(arg1:string):Promise<APP.State>
+method NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>
+method OpenProject():Promise<APP.State>
+method OpenRecent(arg1:string):Promise<APP.State>
+method PickBackdropFile(arg1:string,arg2:string):Promise<model.View>
+method PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<APP.GridResult>
+method PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
+method Recent():Promise<Array<prefs.RecentProject>>
+method Redo():Promise<model.View>
+method RelinkDrive(arg1:string,arg2:string):Promise<model.View>
+method RelinkFolder():Promise<APP.RelinkResult>
+method RelinkFolderPath(arg1:string):Promise<APP.RelinkResult>
+method RemoveFolder(arg1:string):Promise<model.View>
+method RemovePhotos(arg1:Array<string>):Promise<model.View>
+method RenameGridTemplate(arg1:string,arg2:string):Promise<void>
+method Rescan():Promise<void>
+method ResetFrame(arg1:string):Promise<model.View>
+method ResetMarks(arg1:Array<string>):Promise<model.View>
+method RestoreBackup(arg1:string):Promise<model.View>
+method RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>
+method SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<void>
+method SaveProject():Promise<model.View>
+method SaveProjectAs():Promise<model.View>
+method ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>
+method SetBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method SetBackdropBox(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>
+method SetBackdropFade(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>
+method SetBackdropFrame(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number):Promise<model.View>
+method SetBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method SetCaption(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method SetCaptionStyle(arg1:string,arg2:text.Style,arg3:boolean):Promise<model.View>
+method SetCustom(arg1:prefs.CustomLevel):Promise<prefs.Prefs>
+method SetFlip(arg1:Array<string>,arg2:string):Promise<model.View>
+method SetFrame(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>
+method SetFrameAngle(arg1:string,arg2:number):Promise<model.View>
+method SetGrid(arg1:string,arg2:boolean):Promise<model.View>
+method SetLayout(arg1:string,arg2:string):Promise<model.View>
+method SetLevel(arg1:string):Promise<prefs.Prefs>
+method SetMarks(arg1:Array<string>,arg2:model.MarkPatch):Promise<model.View>
+method SetPlaceAngle(arg1:string,arg2:string,arg3:number):Promise<model.View>
+method SetPlaceFit(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
+method SetPlaces(arg1:string,arg2:Array<model.PlaceBox>,arg3:string):Promise<model.View>
+method SetSettings(arg1:model.Settings):Promise<model.View>
+method SetShowStart(arg1:boolean):Promise<prefs.Prefs>
+method SetSpreadName(arg1:string,arg2:string):Promise<model.View>
+method SetText(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method SetTextAngle(arg1:string,arg2:number):Promise<model.View>
+method SetTextAuto(arg1:string):Promise<model.View>
+method SetTextBox(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>
+method SetTextScale(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>
+method SetTextStyle(arg1:string,arg2:text.Style):Promise<model.View>
+method ShowBackups():Promise<void>
+method ShowInExplorer():Promise<void>
+method ShowPhotoInExplorer(arg1:string):Promise<void>
+method SplitSpread(arg1:string,arg2:number):Promise<model.View>
+method StepLayout(arg1:string,arg2:string,arg3:number):Promise<model.View>
+method SuggestDrive():Promise<APP.DriveHint>
+method SwapPhotos(arg1:string,arg2:string):Promise<model.View>
+method TransformGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>
+method TurnPhotos(arg1:Array<string>,arg2:number):Promise<model.View>
+method Undo():Promise<model.View>
+type APP.BackupInfo
+  name: string
+  time: number
+  size: number
+  spreads: number
+  photos: number
+type APP.DriveHint
+  from: string
+  to: string
+  found: number
+  total: number
+type APP.ExportOptions
+  range: string
+  quality: number
+  dpi: number
+  pages: boolean
+type APP.GridResult
+  view: model.View
+  left: number
+type APP.RelinkResult
+  view: model.View
+  found: number
+  missing: number
+  ambiguous: number
+type APP.State
+  view: model.View
+  photos: library.Photo[]
+  scan: library.ScanProgress
+  notice?: string
+  missing: string[]
+  version: string
+  fonts: text.Family[]
+  prefs: prefs.Prefs
+  recent: prefs.RecentProject[]
+type layout.Rect
+  x: number
+  y: number
+  w: number
+  h: number
+type library.Marks
+  rating?: number
+  label?: string
+  labelText?: string
+  flag?: number
+type library.Photo
+  id: string
+  path: string
+  name: string
+  w: number
+  h: number
+  size?: number
+  color?: string
+  profile?: string
+  xmp?: Marks
+type library.ScanProgress
+  active: boolean
+  walking: boolean
+  found: number
+  read: number
+type model.BackdropBox
+  x: number
+  y: number
+  w: number
+  h: number
+  rot: number
+type model.BackdropView
+  scope: string
+  photo: string
+  area: layout.Rect
+  box: BackdropBox
+  img: layout.Rect
+  frame: Frame
+  flipH: boolean
+  flipV: boolean
+  dpi: number
+  fade: number
+type model.Box
+  x: number
+  y: number
+  w: number
+  h: number
+  rot?: number
+type model.CaptionView
+  photo: string
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  text: string
+  style: text.Style
+  lines: text.Line[]
+  rot: number
+  auto: boolean
+  z: number
+  over: boolean
+  overflow: number
+type model.Choice
+  key: string
+  rects: layout.Rect[]
+type model.ChoiceRows
+  inOrder: Choice[]
+  rearranged: Choice[]
+  block: string
+type model.Choices
+  spread: string
+  rev: number
+  whole: ChoiceRows
+  left?: ChoiceRows
+  right?: ChoiceRows
+type model.Frame
+  s: number
+  x: number
+  y: number
+  r?: number
+type model.FrameView
+  img: layout.Rect
+  s: number
+  x: number
+  y: number
+  r: number
+  turn: number
+  tilt: number
+  dpi: number
+  flipH: boolean
+  flipV: boolean
+  cellRot: number
+  z: number
+type model.GridChoice
+  id: string
+  name: string
+  scope: string
+  boxes: Box[]
+  drop: number
+type model.GridChoices
+  n: number
+  builtin: GridChoice[]
+  mine: GridChoice[]
+type model.GridPlan
+  frozen: number
+  left: number
+  texts: number
+type model.GridTarget
+  spread: string
+  scope: string
+type model.MarkPatch
+  rating?: number
+  step?: number
+  label?: string
+  toggle?: boolean
+  flag?: number
+type model.PageView
+  photos: number
+  variant: number
+  variants: number
+  rearranged: boolean
+type model.PlaceBox
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+type model.PlaceView
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  photo: string
+  fit: string
+  spine: boolean
+  rot: number
+  z: number
+type model.Settings
+  pageW: number
+  pageH: number
+  margin: number
+  gap: number
+  layflat: boolean
+  dpi: number
+  bg: string
+type model.SpreadView
+  id: string
+  photos: string[]
+  rects: layout.Rect[]
+  layout: string
+  variant: number
+  variants: number
+  rearranged: boolean
+  pages: PageView[]
+  frames: FrameView[]
+  texts: TextView[]
+  captions: CaptionView[]
+  bg: string[]
+  bgSet: string[]
+  grid: boolean
+  places: PlaceView[]
+  name: string
+  backdrops: BackdropView[]
+type model.TextView
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  text: string
+  style: text.Style
+  lines: text.Line[]
+  rot: number
+  auto: boolean
+  z: number
+type model.View
+  product: string
+  spreads: SpreadView[]
+  settings: Settings
+  folders: string[]
+  path: string
+  dirty: boolean
+  canUndo: boolean
+  canRedo: boolean
+  rev: number
+  maxSpreadPhotos: number
+  safe: layout.Rect[]
+  minDPI: number
+  lowDPI: number
+  emptyPlaces: number
+  textMaxW: number
+  backdropUsed: string[]
+  marksRev: number
+type prefs.CustomLevel
+  base: string
+  on: string[]
+  off: string[]
+type prefs.Prefs
+  level: string
+  showStart: boolean
+  first: boolean
+  custom?: CustomLevel
+type prefs.RecentProject
+  path: string
+  name: string
+  exists: boolean
+  modified: number
+type text.Face
+  file: string
+  bold: boolean
+  italic: boolean
+type text.Family
+  id: string
+  name: string
+  css: string
+  faces: Face[]
+type text.Line
+  text: string
+  x: number
+  y: number
+  w: number
+type text.Style
+  font: string
+  size: number
+  color: string
+  align: string
+  bold?: boolean
+  italic?: boolean
