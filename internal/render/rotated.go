@@ -381,10 +381,15 @@ func padEdge(im *image.NRGBA, n int) *image.NRGBA {
 // на пиксель) на всех потоках вместе не больше ~20 МБ, а не целая страница.
 const stripPx = 1 << 18
 
-// strips делит r на полосы по высоте не больше stripPx и хотя бы по одной на поток:
-// Transform однопоточный, а полосы независимы (каждая пишет свои строки холста).
-func strips(r image.Rectangle, workers int) []image.Rectangle {
-	rows := max(1, min(stripPx/max(r.Dx(), 1), (r.Dy()+workers-1)/workers))
+// stripRows — высота полосы в строках. Не зависит от числа потоков: маска vector строится
+// в координатах полосы, и от границ полос зависят хеши — результат не должен меняться
+// с GOMAXPROCS.
+const stripRows = 32
+
+// strips делит r на полосы высотой не больше stripRows и stripPx: Transform однопоточный,
+// а полосы независимы (каждая пишет свои строки холста).
+func strips(r image.Rectangle) []image.Rectangle {
+	rows := max(1, min(stripPx/max(r.Dx(), 1), stripRows))
 	var out []image.Rectangle
 	for y := r.Min.Y; y < r.Max.Y; y += rows {
 		out = append(out, image.Rect(r.Min.X, y, r.Max.X, min(y+rows, r.Max.Y)))
@@ -424,12 +429,12 @@ func (j *rotJob) draw(canvas *image.RGBA) error {
 		if j.im.Opaque() {
 			op = draw.Src
 		}
-		return inParallel(strips(j.cell, workers), workers, func(_ int, r image.Rectangle) {
+		return inParallel(strips(j.cell), workers, func(_ int, r image.Rectangle) {
 			dst, _ := canvas.SubImage(r).(*image.RGBA)
 			xdraw.BiLinear.Transform(dst, j.m, j.im, j.im.Bounds(), op, nil)
 		})
 	}
-	parts := strips(j.bb, workers)
+	parts := strips(j.bb)
 	w, rows := j.bb.Dx(), parts[0].Dy()
 	type bufs struct {
 		pix, alpha []uint8

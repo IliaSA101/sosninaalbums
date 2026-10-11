@@ -291,7 +291,7 @@ func TestRenderContainTiltMask(t *testing.T) {
 
 // Паника в потоке полосы — ошибка наружу, остальные полосы не падают вместе с процессом.
 func TestInParallelPanicBecomesError(t *testing.T) {
-	parts := strips(image.Rect(0, 0, 10, 100), 4)
+	parts := strips(image.Rect(0, 0, 10, 100))
 	err := inParallel(parts, 4, func(_ int, r image.Rectangle) {
 		if r.Min.Y == parts[1].Min.Y {
 			panic("полоса")

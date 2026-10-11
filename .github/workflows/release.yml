@@ -1,0 +1,284 @@
+# Сборка выпуска (спека 025): метка vX.Y.Z на main → exe Windows и zip macOS → ЧЕРНОВИК релиза.
+# Публикует владелец руками (Publish) после проверки скачанных файлов. Ручной запуск — пересборка
+# существующей метки исправленным workflow из main (метку не перевешиваем).
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Метка, например v0.9.1"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# bash и на Windows (Git Bash): один язык шагов; явный shell даёт -eo pipefail
+defaults:
+  run:
+    shell: bash
+
+# Два прогона сразу (метка + ручной) создали бы два черновика
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Метка, версия, текст релиза
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - name: Метка и её формат
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then tag="$INPUT_TAG"; else tag="$REF_NAME"; fi
+          if ! [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Метка должна быть вида vX.Y.Z, получено: '$tag'"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Метка есть, релиз ещё не опубликован
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --silent; then
+            echo "::error::Метки $TAG нет на GitHub"
+            exit 1
+          fi
+          # releases/tags/<метка> видит только опубликованные релизы, черновики — нет
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --silent 2> "$RUNNER_TEMP/err.txt"; then
+            echo "::error::Релиз $TAG уже опубликован — его файлы не трогаем. Исправление выпускать новой версией."
+            exit 1
+          fi
+          if ! grep -q "HTTP 404" "$RUNNER_TEMP/err.txt"; then cat "$RUNNER_TEMP/err.txt"; exit 1; fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ steps.tag.outputs.tag }}
+          persist-credentials: false
+
+      - name: Коммит метки
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: productVersion в wails.json совпадает с меткой
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          got="$(jq -r .info.productVersion wails.json)"
+          if [ "$got" != "$VERSION" ]; then
+            echo "::error::wails.json → info.productVersion = '$got', а метка — v$VERSION"
+            exit 1
+          fi
+
+      - name: Текст релиза из шаблона и CHANGELOG
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          mkdir out
+          # Раздел «## X.Y.Z …» до следующего «## »; пустые строки по краям срезаем
+          awk -v h="## $VERSION" '
+            /^## / { if (on) exit; on = ($0 == h || index($0, h " ") == 1); next }
+            on { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' | sed -e ':a' -e '/^\n*$/{$d;N;ba' -e '}' > changes.md
+          # Без раздела не валим: метку не перевесить, а текст черновика владелец допишет руками
+          if ! grep -q '[^[:space:]]' changes.md; then
+            echo "::warning::В CHANGELOG.md нет раздела «## $VERSION» — в тексте заглушка, допишите в черновике"
+            echo "_Раздел CHANGELOG для $VERSION не найден — дописать перед публикацией._" > changes.md
+          fi
+          awk -v ver="$VERSION" '
+            $0 == "{{CHANGES}}" { while ((getline line < "changes.md") > 0) print line; next }
+            { gsub(/\{\{VERSION\}\}/, ver); print }
+          ' .github/release-notes.md > out/notes.md
+          if grep -q '{{' out/notes.md; then
+            echo "::error::В тексте релиза осталась неподставленная метка {{…}}"
+            exit 1
+          fi
+          test -s THIRD_PARTY_NOTICES.txt
+          cp THIRD_PARTY_NOTICES.txt out/
+          cat out/notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notes
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    name: Сборка Windows x64
+    needs: prepare
+    timeout-minutes: 30
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+
+      # Без кешей: выпуск собирается с нуля, чужой кеш в него не попадает
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.9"
+          cache: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+
+      - name: Wails CLI (версия из go.mod)
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci
+
+      - name: wails build
+        run: wails build -clean -trimpath
+
+      - name: Имя файла с версией
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir out
+          mv build/bin/sosninaalbums.exe "out/SosninaAlbums-$VERSION-windows-x64.exe"
+          ls -l out
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    name: Сборка macOS universal
+    needs: prepare
+    timeout-minutes: 40
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.9"
+          cache: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+
+      - name: Wails CLI (версия из go.mod)
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci
+
+      - name: wails build
+        run: wails build -platform darwin/universal -clean -trimpath
+
+      - name: Подпись ad-hoc, проверка архитектур, zip
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          shopt -s nullglob
+          apps=(build/bin/*.app)
+          if [ "${#apps[@]}" -ne 1 ]; then
+            echo "::error::Ожидалось одно .app в build/bin, найдено: ${#apps[@]}"
+            exit 1
+          fi
+          app="${apps[0]}"
+          # Без подписи пакета macOS на Apple Silicon чаще пишет «повреждено»; ad-hoc — не сертификат Apple
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          bin=("$app"/Contents/MacOS/*)
+          archs="$(lipo -archs "${bin[0]}")"
+          echo "архитектуры: $archs"
+          case "$archs" in *x86_64*arm64* | *arm64*x86_64*) ;; *)
+            echo "::error::Сборка не universal: $archs"
+            exit 1
+            ;;
+          esac
+          mkdir out
+          ditto -c -k --keepParent "$app" "out/SosninaAlbums-$VERSION-macos-universal.zip"
+          ls -l out
+
+      # zip уже сжат и хранит права файлов внутри .app — артефакт только переносит его
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  release:
+    name: Черновик релиза
+    needs: [prepare, windows, macos]
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    # Право на запись — только здесь: в этом задании не выполняется код из репозитория и npm
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Создать или обновить черновик
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Плохая метка '$TAG'"; exit 1; }
+          files=(
+            "dist/SosninaAlbums-$VERSION-windows-x64.exe"
+            "dist/SosninaAlbums-$VERSION-macos-universal.zip"
+            "dist/THIRD_PARTY_NOTICES.txt"
+          )
+          ls -l dist
+          for f in "${files[@]}" dist/notes.md; do test -s "$f" || { echo "::error::Нет файла $f"; exit 1; }; done
+          title="Sosnina Albums $VERSION"
+
+          # Список релизов с правом записи включает черновики (по метке API черновик не отдаёт)
+          found="$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq '.[] | select(.tag_name == "'"$TAG"'") | (.draft | tostring)')"
+          published="$(grep -c '^false$' <<< "$found" || true)"
+          drafts="$(grep -c '^true$' <<< "$found" || true)"
+          if [ "$published" -gt 0 ]; then
+            echo "::error::Релиз $TAG уже опубликован — его файлы не трогаем. Исправление выпускать новой версией."
+            exit 1
+          fi
+          if [ "$drafts" -gt 1 ]; then
+            echo "::error::Черновиков с меткой $TAG несколько ($drafts) — удалите лишние на странице Releases и запустите заново"
+            exit 1
+          fi
+          if [ "$drafts" -eq 1 ]; then
+            gh release edit "$TAG" --title "$title" --notes-file dist/notes.md
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            gh release create "$TAG" --draft --verify-tag --title "$title" --notes-file dist/notes.md "${files[@]}"
+          fi
+          url="$(gh release view "$TAG" --json url --jq .url)"
+          echo "Черновик: $url" | tee -a "$GITHUB_STEP_SUMMARY"

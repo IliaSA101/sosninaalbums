@@ -187,7 +187,9 @@ func TestBackdropFileRejects(t *testing.T) {
 		t.Logf("ссылки недоступны: %v", err)
 		return
 	}
-	if v, err := a.setBackdropFile("s1", "right", link); err != nil || v.Spreads[0].Backdrops[1].Photo != library.IDFor(ok) {
+	// Путь приводится через EvalSymlinks (на раннере temp — в 8.3), ждём ID цели, не link.jpg.
+	resolved, _ := filepath.EvalSymlinks(ok)
+	if v, err := a.setBackdropFile("s1", "right", link); err != nil || v.Spreads[0].Backdrops[1].Photo != library.IDFor(resolved) {
 		t.Errorf("ссылка на локальный файл: %v", err)
 	}
 	dlink := filepath.Join(dir, "dlink.jpg")

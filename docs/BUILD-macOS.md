@@ -1,5 +1,7 @@
 # Сборка для macOS
 
+С версии 0.9.1 сборка для Mac делается автоматически (GitHub Actions) при выпуске каждой версии: готовый `SosninaAlbums-X.Y.Z-macos-universal.zip` лежит на странице [Releases](https://github.com/IliaSA101/sosninaalbums/releases) — скачать, распаковать, первый запуск — как в шаге 4. Ручная сборка ниже — запасной путь: автосборка упала, нужна версия, которой нет в Releases, или своя правка.
+
 Основная платформа программы — Windows, сборку для Mac делают на самом Mac: Wails под macOS собирается только там (нужны системные библиотеки Apple). Ниже — шаги для MacBook (Apple Silicon или Intel), примерно 30–40 минут в первый раз.
 
 ## 1. Что поставить один раз
@@ -36,17 +38,17 @@ git checkout v0.9.0
 
 ```bash
 cd frontend && npm ci && cd ..
-wails build -platform darwin/universal -clean
+wails build -platform darwin/universal -clean -trimpath
 ```
 
-`darwin/universal` — одно приложение и для Apple Silicon (M1–M4), и для Intel. Результат: `build/bin/Sosnina Albums.app`.
+`-trimpath` убирает из бинарника пути домашней папки сборщика. `darwin/universal` — одно приложение и для Apple Silicon (M1–M4), и для Intel. Результат: `build/bin/sosninaalbums.app`.
 
 ## 4. Проверить
 
-Приложение не подписано сертификатом Apple, поэтому при первом запуске: правый щелчок по `Sosnina Albums.app` → «Открыть» → «Открыть». Если macOS пишет «повреждено» — снять метку карантина:
+Приложение не подписано сертификатом Apple, поэтому при первом запуске: правый щелчок по `sosninaalbums.app` → «Открыть» → «Открыть». Если macOS пишет «повреждено» — снять метку карантина:
 
 ```bash
-xattr -dr com.apple.quarantine "build/bin/Sosnina Albums.app"
+xattr -dr com.apple.quarantine "build/bin/sosninaalbums.app"
 ```
 
 Проверка за 2 минуты: окно открылось и в шапке версия; добавить папку с фото — миниатюры видны; «Автосборка»; экспорт одного разворота в пустую папку; закрыть и открыть — альбом на месте.
@@ -56,7 +58,7 @@ xattr -dr com.apple.quarantine "build/bin/Sosnina Albums.app"
 `ditto` сохраняет внутреннее устройство `.app` (обычный zip из Finder тоже подходит):
 
 ```bash
-ditto -c -k --keepParent "build/bin/Sosnina Albums.app" SosninaAlbums-0.9.0-macos-universal.zip
+ditto -c -k --keepParent "build/bin/sosninaalbums.app" SosninaAlbums-0.9.0-macos-universal.zip
 ```
 
 Файл `SosninaAlbums-0.9.0-macos-universal.zip` передать владельцу репозитория (или, если вас добавили соавтором, выложить самому — шаг 6).

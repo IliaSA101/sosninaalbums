@@ -19,3 +19,9 @@ updates:
       # Vite закреплён на 7: vite-plugin-svelte 6 не поддерживает Vite 8 (см. README)
       - dependency-name: vite
         update-types: ["version-update:semver-major"]
+      # vite-plugin-svelte 7 требует Vite 8, а Vite закреплён на 7
+      - dependency-name: "@sveltejs/vite-plugin-svelte"
+        update-types: ["version-update:semver-major"]
+      # TypeScript 7 (новый компилятор) пока не поддерживают svelte-check и typescript-eslint, CI падает
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]

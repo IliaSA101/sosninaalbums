@@ -64,7 +64,8 @@ function add(name, ver, lic, text) {
 const section = { go: [], npm: [] }
 for (const line of glReport.split('\n').filter(Boolean)) {
   const [pkg, , lic] = line.trim().split(',')
-  if (pkg === 'github.com/IliaSA101/sosninaalbums') continue
+  // Свой модуль, включая чужой Go-код внутри frontend/node_modules (flatted кладёт пакет golang/): в exe не входит.
+  if (pkg === 'github.com/IliaSA101/sosninaalbums' || pkg.startsWith('github.com/IliaSA101/sosninaalbums/')) continue
   const modName = Object.keys(mods)
     .filter((k) => pkg === k || pkg.startsWith(k + '/'))
     .sort((a, b) => b.length - a.length)[0]
