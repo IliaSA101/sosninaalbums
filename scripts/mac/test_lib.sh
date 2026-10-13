@@ -22,6 +22,14 @@ no "12.1 > 12.0" ver_le 12.1 12.0
 no "13.0 > 12.0" ver_le 13.0 12.0
 no "10.13 > 10.9" ver_le 10.13 10.9
 
+ok "universal x86_64 arm64" is_universal "x86_64 arm64"
+ok "universal arm64 x86_64" is_universal "arm64 x86_64"
+ok "universal с переводом строки" is_universal "$(printf 'arm64\nx86_64\n')"
+no "только arm64" is_universal "arm64"
+no "только x86_64" is_universal "x86_64"
+no "arm64e не arm64" is_universal "x86_64 arm64e"
+no "пусто" is_universal ""
+
 build='Load command 10
       cmd LC_BUILD_VERSION
   cmdsize 32

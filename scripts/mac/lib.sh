@@ -18,6 +18,20 @@ ver_le() {
     exit 0 }'
 }
 
+# is_universal <вывод lipo -archs> — есть и x86_64, и arm64, в любом порядке (прогон 1: сравнение
+# шаблоном «*" x86_64 "*" arm64 "*» не находило общий пробел между словами)
+is_universal() {
+  local w x=0 a=0
+  # shellcheck disable=SC2086 # список архитектур — отдельными словами
+  for w in $1; do
+    case "$w" in
+      x86_64) x=1 ;;
+      arm64) a=1 ;;
+    esac
+  done
+  [ "$x" = 1 ] && [ "$a" = 1 ]
+}
+
 # parse_minos — minos из вывода `vtool -show-build` / `otool -l` (stdin):
 # LC_BUILD_VERSION → «minos X», старые бинари — LC_VERSION_MIN_MACOSX → «version X»
 parse_minos() {
@@ -196,6 +210,29 @@ quarantine() {
   q="$(quarantine_value "$(date +%s)" "$(uuidgen)")"
   find "$1" -print0 | xargs -0 xattr -w com.apple.quarantine "$q" 2>/dev/null
   xattr -p com.apple.quarantine "$1" >/dev/null 2>&1
+}
+
+# Окна Gatekeeper рисуют агенты с именем длиннее 16 знаков: killall и pgrep -x по усечённому имени
+# их не видят (прогон 1: CoreServicesUIAgent с pid 317 пережил все killall) — ищем по пути
+GK_AGENTS_RE='/(CoreServicesUIAgent|UserNotificationCenter)[.]app/Contents/MacOS/'
+
+# gk_pids — pid агентов окон Gatekeeper
+gk_pids() {
+  pgrep -f "$GK_AGENTS_RE" 2>/dev/null | tr '\n' ' '
+}
+
+# kill_gk_agents — закрыть окна Gatekeeper; launchd поднимет агентов заново при следующем запросе
+kill_gk_agents() {
+  pkill -f "$GK_AGENTS_RE" 2>/dev/null
+  sudo -n pkill -f "$GK_AGENTS_RE" 2>/dev/null
+  return 0
+}
+
+# open_bg <app> — open с меткой карантина ждёт ответа окна Gatekeeper (прогон 1: шаг висел до
+# тайм-аута) — в фоне; печатает pid процесса open
+open_bg() {
+  open "$1" </dev/null >/dev/null 2>>"$OUT/logs/open.txt" &
+  printf '%s' "$!"
 }
 
 # ---------- окна и снимки ----------

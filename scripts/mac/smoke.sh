@@ -123,7 +123,7 @@ pass "1 распаковка" "$(basename "$APP"), $EXE, id $(plist_get "$APP" C
 
 # ---------- 2. Архитектуры и minos ----------
 ARCHS="$(lipo -archs "$BIN" 2>&1)"
-case " $ARCHS " in *" x86_64 "*" arm64 "* | *" arm64 "*" x86_64 "*) ;; *) fail "2 архитектуры" "не universal: $ARCHS" ;; esac
+is_universal "$ARCHS" || fail "2 архитектуры" "не universal: $ARCHS"
 mins=""
 for a in x86_64 arm64; do
   m="$( (vtool -arch "$a" -show-build "$BIN" 2>/dev/null || otool -arch "$a" -l "$BIN") | parse_minos)"
@@ -186,7 +186,9 @@ rm -rf "$DST"
 ditto "$APP" "$DST"
 quarantine "$DST" || echo "::warning::Метка карантина не записалась"
 xattr -l "$DST" >"$OUT/logs/smoke-xattr.txt" 2>&1
-open "$DST" 2>"$OUT/logs/smoke-gk.err"
+# open ждёт ответа окна Gatekeeper — без фона проверка висела бы до тайм-аута задания
+open "$DST" </dev/null >/dev/null 2>"$OUT/logs/smoke-gk.err" &
+gk_open=$!
 sleep 5
 # По имени процесса, не по пути: с меткой карантина macOS запускает копию из AppTranslocation
 if pgrep -x "$EXE" >/dev/null; then
@@ -197,7 +199,9 @@ fi
 pkill -x "$EXE" 2>/dev/null
 sleep 1
 pkill -KILL -x "$EXE" 2>/dev/null
-killall CoreServicesUIAgent 2>/dev/null
+kill_gk_agents
+kill "$gk_open" 2>/dev/null
+wait "$gk_open" 2>/dev/null
 xattr -dr com.apple.quarantine "$DST"
 open "$DST" 2>"$OUT/logs/smoke-xattr.err"
 alive_app "xattr" "$DST" || fail "7 после xattr -dr" "не открылось после снятия метки" "$OUT/logs/smoke-xattr.err"

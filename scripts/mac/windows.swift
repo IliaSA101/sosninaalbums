@@ -2,8 +2,30 @@
 // рамка в точках (верх-лево главного экрана). Порядок — спереди назад, как отдаёт CGWindowList.
 // Сборка один раз: swiftc -O windows.swift -o windows; запасной путь — swift windows.swift.
 // Имя окна без права записи экрана пустое, владелец и рамка есть всегда — по ним и ищем.
+// Режим «windows scroll <x> <y> <шагов>»: курсор в точку и колесо вниз — запасная прокрутка панели
+// «Настроек», если полосу прокрутки не сдвинуть через доступность (axfind.applescript scroll).
 import CoreGraphics
 import Foundation
+
+let args = CommandLine.arguments
+if args.count == 5, args[1] == "scroll", let x = Double(args[2]), let y = Double(args[3]),
+    let n = Int(args[4])
+{
+    let p = CGPoint(x: x, y: y)
+    CGEvent(
+        mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left
+    )?.post(tap: .cghidEventTap)
+    usleep(300_000)
+    // Отрицательное значение колеса — содержимое едет вверх, то есть прокрутка вниз
+    for _ in 0..<max(1, n) {
+        CGEvent(
+            scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -5, wheel2: 0,
+            wheel3: 0
+        )?.post(tap: .cghidEventTap)
+        usleep(60_000)
+    }
+    exit(0)
+}
 
 func num(_ v: Any?) -> Double { (v as? NSNumber)?.doubleValue ?? 0 }
 

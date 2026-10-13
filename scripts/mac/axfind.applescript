@@ -3,7 +3,8 @@
 --   find     — кнопка с одной из надписей: прокрутить к ней (AXScrollToVisible), вернуть рамку;
 --   click    — то же и нажать;
 --   selected — первый выделенный элемент, в имени которого есть одна из надписей (значок в Finder);
---   menu     — то же и открыть его контекстное меню (AXShowMenu).
+--   menu     — то же и открыть его контекстное меню (AXShowMenu);
+--   scroll   — правую вертикальную полосу прокрутки окна в конец; вывод — «scroll <x>» или пусто.
 -- Вывод: «x y w h<TAB>надпись» в точках экрана (верх-лево), пусто — не нашли.
 -- Надписи сравниваются без учёта регистра; «ё» и «е» — разные буквы, вызывающий даёт оба варианта.
 
@@ -20,6 +21,7 @@ on run argv
 			if (count of windows of p) is 0 then return ""
 			set els to entire contents of window 1 of p
 		end tell
+		if act is "scroll" then return my scroll_down(els)
 		repeat with el in els
 			set res to my probe(el, act, wanted)
 			if res is not "" then return res
@@ -71,6 +73,41 @@ on probe(el, act, wanted)
 		return ""
 	end try
 end probe
+
+-- SwiftUI строит нижние строки «Настроек» только при прокрутке: до неё кнопки «Открыть всё равно»
+-- в дереве доступности нет (прогон 1). Правая полоса — панель раздела, левая — боковое меню.
+-- Сдвиг дважды: после первого подгружаются строки и низ уезжает.
+on scroll_down(els)
+	set best to missing value
+	set bestX to -100000
+	repeat with el in els
+		try
+			tell application "System Events"
+				if role of el is "AXScrollBar" then
+					if (value of attribute "AXOrientation" of el) is "AXVerticalOrientation" then
+						set sx to item 1 of (get position of el)
+						if sx > bestX then
+							set bestX to sx
+							set best to el
+						end if
+					end if
+				end if
+			end tell
+		end try
+	end repeat
+	if best is missing value then return ""
+	repeat 2 times
+		try
+			tell application "System Events" to set value of attribute "AXValue" of best to 1.0
+		on error
+			try
+				tell application "System Events" to set value of best to 1.0
+			end try
+		end try
+		delay 1
+	end repeat
+	return "scroll " & ((round bestX) as text)
+end scroll_down
 
 -- Надпись кнопки: SwiftUI кладёт её то в name, то в description, то в AXTitle
 on label_of(el)

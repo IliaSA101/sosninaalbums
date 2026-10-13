@@ -38,6 +38,10 @@ MAJOR="${MACOS%%.*}"
 SETTINGS_ID="com.apple.systempreferences"
 # Надписи кнопки на 15+: какая из русских — покажет снимок (открытый вопрос спеки)
 OPEN_ANYWAY=("Open Anyway" "Открыть всё равно" "Открыть все равно" "Всё равно открыть" "Все равно открыть")
+# Владельцы окна Gatekeeper в списке окон (на 14 бывает и UserNotificationCenter)
+GK_OWNERS='CoreServicesUIAgent|UserNotificationCenter'
+# Кнопки окна отказа, которые ничего не удаляют («В Корзину» не нажимаем)
+GK_DONE=("Done" "Готово" "OK" "ОК" "Cancel" "Отменить" "Отмена")
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ENV_HINTS=1
 
 summary_head
@@ -46,7 +50,8 @@ section "Снимки (shots.sh, язык $LANG_UI)"
 # ---------- подготовка ----------
 
 pids_of() { pgrep -x "$1" 2>/dev/null | tr '\n' ' '; }
-settings_pids() { echo "$(pids_of "System Settings") $(pids_of "System Preferences")"; }
+# «System Preferences» длиннее 16 знаков — pgrep -x его не видит, ищем по пути
+settings_pids() { pgrep -f '/System (Settings|Preferences)[.]app/Contents/MacOS/' 2>/dev/null | tr '\n' ' '; }
 terminal_pids() { pids_of Terminal; }
 
 # wait_win_fn <функция, печатающая pid-ы> <сек> — процесс мог ещё не стартовать, pid-ы берём заново
@@ -116,9 +121,35 @@ set_lang() {
   # shellcheck disable=SC2086
   sudo -n defaults write /Library/Preferences/.GlobalPreferences AppleLanguages -array $langs >>"$OUT/logs/lang.txt" 2>&1
   sudo -n defaults write /Library/Preferences/.GlobalPreferences AppleLocale "$loc" >>"$OUT/logs/lang.txt" 2>&1
-  for p in cfprefsd SystemUIServer Dock Finder CoreServicesUIAgent ControlCenter; do killall "$p" 2>/dev/null; done
+  for p in cfprefsd SystemUIServer Dock Finder ControlCenter; do killall "$p" 2>/dev/null; done
+  restart_gk_agents
   sleep 4
-  row "язык" "да" "AppleLanguages: $(defaults read -g AppleLanguages 2>/dev/null | tr -d ' \n'); итог — глазами по снимкам"
+  row "язык" "да" "AppleLanguages: $(defaults read -g AppleLanguages 2>/dev/null | tr -d ' \n'); агенты окон Gatekeeper перезапущены (logs/lang.txt); итог — глазами по снимкам"
+}
+
+# agents_ps — агенты окон Gatekeeper и пароля: pid, владелец, время старта
+agents_ps() {
+  local p
+  p="$(pgrep -f 'CoreServicesUIAgent|UserNotificationCenter|SecurityAgent' 2>/dev/null | tr '\n' ',')"
+  [ -n "$p" ] && ps -o pid=,user=,lstart=,command= -p "${p%,}"
+}
+
+# restart_gk_agents — прогон 1: CoreServicesUIAgent запущен при загрузке на en-US и пережил killall,
+# окно Gatekeeper вышло английским. Агент читает язык при старте — перезапуск до первой попытки открыть
+restart_gk_agents() {
+  local f="$OUT/logs/lang.txt"
+  {
+    echo "== агенты до перезапуска"
+    agents_ps
+    launchctl kickstart -k "gui/$(id -u)/com.apple.coreservices.uiagent" 2>&1
+  } >>"$f"
+  kill_gk_agents
+  sudo -n pkill -f '/SecurityAgent[.]bundle/Contents/MacOS/' 2>/dev/null
+  sleep 2
+  {
+    echo "== агенты после (новые pid — перезапуск прошёл)"
+    agents_ps
+  } >>"$f"
 }
 
 set_wallpaper() {
@@ -141,7 +172,10 @@ set_wallpaper() {
 reset_all() {
   pkill -x "$EXE" 2>/dev/null
   osascript -e "quit app id \"$SETTINGS_ID\"" >/dev/null 2>&1
-  killall CoreServicesUIAgent Terminal 2>/dev/null
+  kill_gk_agents
+  killall Terminal 2>/dev/null
+  # open из прошлого шага ещё ждёт ответа окна Gatekeeper
+  pkill -f "^open $DST" 2>/dev/null
   sleep 1
   pkill -KILL -x "$EXE" 2>/dev/null
   pkill -x "System Settings" 2>/dev/null
@@ -216,9 +250,27 @@ step_gatekeeper() {
       why="Gatekeeper был выключен; после spctl: $st"
       ;;
   esac
-  open "$DST" 2>>"$OUT/logs/open.txt"
-  sleep 4
-  shot 03-gatekeeper "$(pids_of CoreServicesUIAgent)" "CoreServicesUIAgent" front -- "spctl: $st${why:+; $why}"
+  # open ждёт ответа окна — в фоне; окно остаётся до step_privacy («Готово» — часть инструкции)
+  open_bg "$DST" >/dev/null
+  wait_win_fn gk_pids 20 || why="${why:+$why; }окна агентов Gatekeeper нет за 20 с"
+  sleep 1
+  # Владелец — запасной путь: на 14 окно бывает у UserNotificationCenter, pid мог смениться
+  shot 03-gatekeeper "$(gk_pids)" "$GK_OWNERS" front -- "spctl: $st${why:+; $why}"
+}
+
+# dismiss_gk — «Готово» (15+) или «OK»/«Отменить» в окне Gatekeeper, курсор к кнопке — для видео
+dismiss_gk() {
+  local b res
+  for b in com.apple.coreservices.uiagent com.apple.UserNotificationCenter; do
+    res="$(axfind "$b" find "${GK_DONE[@]}")"
+    [ -n "$res" ] || continue
+    cursor_to "${res%%"$TAB"*}"
+    sleep 1
+    axfind "$b" click "${GK_DONE[@]}" >/dev/null
+    printf '%s' "${res#*"$TAB"}"
+    return 0
+  done
+  return 1
 }
 
 open_privacy() {
@@ -234,51 +286,84 @@ open_privacy() {
 }
 
 step_privacy() {
-  local why
+  local why b
   # «Готово» в окне отказа: на 15+ после него в «Настройках» появляется «Открыть всё равно»
-  axfind com.apple.coreservices.uiagent click "Done" "Готово" "OK" "Cancel" "Отменить" >/dev/null
+  if b="$(dismiss_gk)"; then
+    why="в окне Gatekeeper нажата «$b»"
+  else
+    why="кнопки в окне Gatekeeper не нашлось"
+  fi
   sleep 1
-  killall CoreServicesUIAgent 2>/dev/null
-  why="$(open_privacy)"
-  shot 04-privacy "$(settings_pids)" "" largest -- "$why"
+  kill_gk_agents
+  b="$(open_privacy)"
+  shot 04-privacy "$(settings_pids)" "" largest -- "$why${b:+; $b}"
 }
 
-# find_open_anyway [click] — рамка и надпись кнопки; без находки — End / Page Down и ещё раз
-find_open_anyway() {
-  local act="${1:-find}" res i
-  res="$(axfind "$SETTINGS_ID" "$act" "${OPEN_ANYWAY[@]}")"
-  if [ -z "$res" ]; then
-    key_code 119
-    for i in 1 2 3; do key_code 121; done
-    sleep 1
-    res="$(axfind "$SETTINGS_ID" "$act" "${OPEN_ANYWAY[@]}")"
+# wheel_settings — колесо мыши над правой частью окна «Настроек» (windows.swift scroll)
+wheel_settings() {
+  local line b
+  line="$(find_window "$(settings_pids)" "" largest)" || return 1
+  # shellcheck disable=SC2086 # «id x y w h» → пять чисел
+  set -- $line
+  [ "$#" -eq 5 ] || return 1
+  if b="$(windows_bin)"; then
+    "$b" scroll "$(($2 + $4 * 7 / 10))" "$(($3 + $5 / 2))" 60 2>>"$OUT/logs/windows-err.txt"
+  else
+    swift "$MAC_DIR/windows.swift" scroll "$(($2 + $4 * 7 / 10))" "$(($3 + $5 / 2))" 60 2>>"$OUT/logs/windows-err.txt"
   fi
-  printf '%s' "$res"
+}
+
+# find_open_anyway [click] — рамка и надпись кнопки. Кнопка внизу панели, в разделе «Безопасность»;
+# SwiftUI строит его только при прокрутке (прогон 1: End/Page Down не помогли — фокус в боковом меню).
+# Порядок: как есть → полоса прокрутки через доступность → колесо мыши → адрес раздела ?Security
+find_open_anyway() {
+  local act="${1:-find}" res how
+  for how in none ax wheel url; do
+    case "$how" in
+      ax) note "Open Anyway: прокрутка AX — $(axfind "$SETTINGS_ID" scroll)" ;;
+      wheel) wheel_settings && note "Open Anyway: колесо мыши" ;;
+      url)
+        open "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Security" 2>>"$OUT/logs/open.txt"
+        sleep 2
+        axfind "$SETTINGS_ID" scroll >/dev/null
+        ;;
+    esac
+    [ "$how" = none ] || sleep 1
+    res="$(axfind "$SETTINGS_ID" "$act" "${OPEN_ANYWAY[@]}")"
+    if [ -n "$res" ]; then
+      note "Open Anyway: найдена ($how)"
+      printf '%s' "$res"
+      return 0
+    fi
+  done
+  return 1
 }
 
 step_open_anyway() {
   local res why=""
   [ -n "$(settings_pids | tr -d ' ')" ] || why="$(open_privacy)"
-  res="$(find_open_anyway find)"
-  if [ -z "$res" ]; then
-    shot 05-open-anyway "$(settings_pids)" "" largest "Open Anyway" "" -- "${why:+$why; }в тексте — «прокрутите вниз»"
+  if ! res="$(find_open_anyway find)"; then
+    shot 05-open-anyway "$(settings_pids)" "" largest "Open Anyway" "" -- \
+      "${why:+$why; }нет ни после прокрутки (AX, колесо), ни по адресу ?Security — была ли попытка открыть (03)?"
     return 1
   fi
+  cursor_to "${res%%"$TAB"*}"
   shot 05-open-anyway "$(settings_pids)" "" largest "${res#*"$TAB"}" "${res%%"$TAB"*}" -- "$why"
 }
 
 step_confirm() {
   local res pids
-  res="$(find_open_anyway click)"
+  # Панель уже прокручена в 05 — одна попытка; цепочка прокруток здесь съела бы тайм-аут шага
+  res="$(axfind "$SETTINGS_ID" click "${OPEN_ANYWAY[@]}")"
   [ -n "$res" ] || { row 06-confirm нет "кнопки «Открыть всё равно» нет — нажимать нечего"; return 1; }
   sleep 3
-  pids="$(pids_of SecurityAgent) $(pids_of CoreServicesUIAgent)"
+  pids="$(pids_of SecurityAgent) $(gk_pids)"
   [ -n "${pids// /}" ] || pids="$(settings_pids)"
-  shot 06-confirm "$pids" "SecurityAgent|CoreServicesUIAgent" front -- "нажата «${res#*"$TAB"}»; пароль раннера неизвестен — дальше не идём"
+  shot 06-confirm "$pids" "SecurityAgent|$GK_OWNERS" front -- "нажата «${res#*"$TAB"}»; пароль раннера неизвестен — дальше не идём"
   local rc=$?
   key_code 53
   sleep 1
-  killall CoreServicesUIAgent 2>/dev/null
+  kill_gk_agents
   return "$rc"
 }
 
@@ -361,10 +446,11 @@ step_context() {
   # первый пункт меню Finder — «Открыть»
   key_code 125
   key_code 36
-  sleep 4
-  shot 11-open-dialog "$(pids_of CoreServicesUIAgent)" "CoreServicesUIAgent" front
+  wait_win_fn gk_pids 15
+  sleep 1
+  shot 11-open-dialog "$(gk_pids)" "$GK_OWNERS" front
   key_code 53
-  killall CoreServicesUIAgent 2>/dev/null
+  kill_gk_agents
   [ -n "$mpid" ] && kill "$mpid" 2>/dev/null
   return 0
 }
@@ -392,6 +478,13 @@ setup_tools
 set_lang
 reset_all
 set_wallpaper
+# Видео пишется параллельно со снимками: в прогоне 1 отдельный сценарий висел на open, ролик
+# вышел застывшим (движение 0,02). Запись — до 01, остановка — после 08/11
+if [ "$VIDEO" = 1 ]; then
+  video_start
+else
+  row "видео" "пропуск" "без --video"
+fi
 run_step 60 step_desktop
 
 run_step 90 step_app
@@ -410,18 +503,13 @@ fi
 
 run_step 60 step_gatekeeper
 run_step 90 step_privacy
-run_step 150 step_open_anyway
-run_step 150 step_confirm
+run_step 240 step_open_anyway
+run_step 60 step_confirm
 run_step 90 step_terminal
 run_step 60 step_after_xattr
 run_step 120 step_context
 reset_all
-
-if [ "$VIDEO" = 1 ]; then
-  video_all
-else
-  row "видео" "пропуск" "без --video"
-fi
+[ "$VIDEO" = 1 ] && video_stop
 
 reset_all
 note "готово: $OUT"
