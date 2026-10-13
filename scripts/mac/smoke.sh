@@ -168,10 +168,10 @@ pass "4 запуск $HOST" "жил $ALIVE с"
 
 want="запуск, версия ${VERSION}"
 if [ -f "$LOGFILE" ] && tail -n "+$((before + 1))" "$LOGFILE" | grep -aqF "$want"; then
-  pass "5 log.txt" "есть «$want»"
+  pass "5 log.txt" "есть «${want}»"
 else
   cp "$LOGFILE" "$OUT/logs/smoke-app-log.txt" 2>/dev/null
-  fail "5 log.txt" "нет новой строки «$want» в $LOGFILE" "$LAST_ERR"
+  fail "5 log.txt" "нет новой строки «${want}» в $LOGFILE" "$LAST_ERR"
 fi
 
 # ---------- 6. Через LaunchServices ----------

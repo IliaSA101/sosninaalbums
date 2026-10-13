@@ -257,6 +257,30 @@ windows_json() {
   swift "$MAC_DIR/windows.swift" >"$1" 2>>"$OUT/logs/windows-err.txt"
 }
 
+# ocr_run <аргументы ocr.swift> — собранный один раз ocr, иначе swift-скриптом
+ocr_run() {
+  local b="$WORK/ocr"
+  if [ ! -x "$b" ]; then
+    swiftc -O "$MAC_DIR/ocr.swift" -o "$b" >"$OUT/logs/swiftc-ocr.txt" 2>&1 || b=""
+  fi
+  if [ -n "$b" ]; then "$b" "$@" 2>>"$OUT/logs/ocr-err.txt"; else swift "$MAC_DIR/ocr.swift" "$@" 2>>"$OUT/logs/ocr-err.txt"; fi
+}
+
+# ocr_find <надпись>… — текст на снимке экрана; «x y w h<TAB>строка» (точки) самой короткой строки или пусто
+ocr_find() {
+  local png="$WORK/ocr.png"
+  screencapture -x "$png" 2>>"$OUT/logs/screencapture.txt" || return 1
+  ocr_run find "$png" "$@" | tee -a "$OUT/logs/ocr-hits.txt" | head -n 1
+}
+
+# ocr_click «x y w h» — щелчок мыши (CGEvent) в центр рамки
+ocr_click() {
+  # shellcheck disable=SC2086 # «x y w h» → четыре числа
+  set -- $1
+  [ "$#" -eq 4 ] || return 1
+  ocr_run click "$(($1 + $3 / 2))" "$(($2 + $4 / 2))"
+}
+
 # find_window <pid-ы через пробел> <рег. выражение владельца> <front|largest> — «id x y w h» в точках
 find_window() {
   local f="$WORK/win-probe.json"

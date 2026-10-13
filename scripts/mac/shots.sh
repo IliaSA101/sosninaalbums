@@ -37,7 +37,7 @@ MACOS="$(sw_vers -productVersion 2>/dev/null)"
 MAJOR="${MACOS%%.*}"
 SETTINGS_ID="com.apple.systempreferences"
 # Надписи кнопки на 15+: какая из русских — покажет снимок (открытый вопрос спеки)
-OPEN_ANYWAY=("Open Anyway" "Открыть всё равно" "Открыть все равно" "Всё равно открыть" "Все равно открыть")
+OPEN_ANYWAY=("Open Anyway" "Все равно открыть" "Всё равно открыть" "Открыть всё равно" "Открыть все равно")
 # Владельцы окна Gatekeeper в списке окон (на 14 бывает и UserNotificationCenter)
 GK_OWNERS='CoreServicesUIAgent|UserNotificationCenter'
 # Кнопки окна отказа, которые ничего не удаляют («В Корзину» не нажимаем)
@@ -289,7 +289,7 @@ step_privacy() {
   local why b
   # «Готово» в окне отказа: на 15+ после него в «Настройках» появляется «Открыть всё равно»
   if b="$(dismiss_gk)"; then
-    why="в окне Gatekeeper нажата «$b»"
+    why="в окне Gatekeeper нажата «${b}»"
   else
     why="кнопки в окне Gatekeeper не нашлось"
   fi
@@ -313,11 +313,24 @@ wheel_settings() {
   fi
 }
 
-# find_open_anyway [click] — рамка и надпись кнопки. Кнопка внизу панели, в разделе «Безопасность»;
-# SwiftUI строит его только при прокрутке (прогон 1: End/Page Down не помогли — фокус в боковом меню).
-# Порядок: как есть → полоса прокрутки через доступность → колесо мыши → адрес раздела ?Security
+# open_anyway_ocr [click] — запасной путь без доступности: текст на снимке экрана (Vision, ocr.swift);
+# click — щелчок CGEvent в центр найденной подписи. Печатает «x y w h<TAB>строка»
+open_anyway_ocr() {
+  local res
+  res="$(ocr_find "${OPEN_ANYWAY[@]}")"
+  [ -n "$res" ] || return 1
+  if [ "${1:-}" = click ]; then ocr_click "${res%%"$TAB"*}" || return 1; fi
+  printf '%s' "$res"
+}
+
+# find_open_anyway — рамка и надпись кнопки; каким путём найдена — в $WORK/open-anyway-via.
+# Кнопка внизу панели, в разделе «Безопасность»; SwiftUI строит его только при прокрутке
+# (прогон 1: End/Page Down не помогли — фокус в боковом меню). Прогон 2: AX кнопку не нашёл, хотя она на
+# снимке — после неудачи AX дерево окна уходит в logs/ax-security.txt, а текст ищем на снимке (OCR).
+# Порядок: как есть → полоса прокрутки через доступность → колесо мыши → адрес раздела ?Security;
+# после каждой прокрутки — AX, затем OCR
 find_open_anyway() {
-  local act="${1:-find}" res how
+  local res how
   for how in none ax wheel url; do
     case "$how" in
       ax) note "Open Anyway: прокрутка AX — $(axfind "$SETTINGS_ID" scroll)" ;;
@@ -329,14 +342,31 @@ find_open_anyway() {
         ;;
     esac
     [ "$how" = none ] || sleep 1
-    res="$(axfind "$SETTINGS_ID" "$act" "${OPEN_ANYWAY[@]}")"
+    res="$(axfind "$SETTINGS_ID" find "${OPEN_ANYWAY[@]}")"
     if [ -n "$res" ]; then
-      note "Open Anyway: найдена ($how)"
+      note "Open Anyway: найдена через AX ($how)"
+      printf 'ax (%s)' "$how" >"$WORK/open-anyway-via"
+      printf '%s' "$res"
+      return 0
+    fi
+    # дерево — один раз, после первой прокрутки: нужно понять, как «Настройки» называют кнопку
+    if [ "$how" = ax ] && [ ! -s "$OUT/logs/ax-security.txt" ]; then
+      with_timeout 120 ax_dump_security
+    fi
+    res="$(open_anyway_ocr)"
+    if [ -n "$res" ]; then
+      note "Open Anyway: AX не нашёл, найдена по тексту на снимке — OCR ($how)"
+      printf 'ocr (%s)' "$how" >"$WORK/open-anyway-via"
       printf '%s' "$res"
       return 0
     fi
   done
   return 1
+}
+
+# ax_dump_security — дерево доступности окна «Настроек» в logs/ax-security.txt
+ax_dump_security() {
+  axfind "$SETTINGS_ID" dump >"$OUT/logs/ax-security.txt"
 }
 
 step_open_anyway() {
@@ -348,18 +378,30 @@ step_open_anyway() {
     return 1
   fi
   cursor_to "${res%%"$TAB"*}"
+  why="${why:+$why; }найдена: $(cat "$WORK/open-anyway-via" 2>/dev/null)"
   shot 05-open-anyway "$(settings_pids)" "" largest "${res#*"$TAB"}" "${res%%"$TAB"*}" -- "$why"
 }
 
 step_confirm() {
-  local res pids
+  local res pids via=ax
   # Панель уже прокручена в 05 — одна попытка; цепочка прокруток здесь съела бы тайм-аут шага
   res="$(axfind "$SETTINGS_ID" click "${OPEN_ANYWAY[@]}")"
-  [ -n "$res" ] || { row 06-confirm нет "кнопки «Открыть всё равно» нет — нажимать нечего"; return 1; }
+  if [ -z "$res" ]; then
+    via=ocr
+    res="$(open_anyway_ocr click)"
+  fi
+  [ -n "$res" ] || { row 06-confirm нет "кнопки «Open Anyway» / «Все равно открыть» нет ни в AX, ни на снимке (OCR) — нажимать нечего"; return 1; }
   sleep 3
+  # AX мог «нажать» без последствий — окна подтверждения нет: щёлкаем по подписи на снимке
+  if [ "$via" = ax ] && [ -z "$(pids_of SecurityAgent | tr -d ' ')" ] && [ -z "$(gk_pids | tr -d ' ')" ]; then
+    if open_anyway_ocr click >/dev/null; then
+      via="ax, затем ocr"
+      sleep 3
+    fi
+  fi
   pids="$(pids_of SecurityAgent) $(gk_pids)"
   [ -n "${pids// /}" ] || pids="$(settings_pids)"
-  shot 06-confirm "$pids" "SecurityAgent|$GK_OWNERS" front -- "нажата «${res#*"$TAB"}»; пароль раннера неизвестен — дальше не идём"
+  shot 06-confirm "$pids" "SecurityAgent|$GK_OWNERS" front -- "нажата «${res#*"$TAB"}» (путь: $via); пароль раннера неизвестен — дальше не идём"
   local rc=$?
   key_code 53
   sleep 1
