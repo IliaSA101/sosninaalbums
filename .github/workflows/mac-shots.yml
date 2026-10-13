@@ -1,0 +1,174 @@
+# Проверка Mac-сборки и снимки для инструкции по кнопке (спека 029, design §3.7).
+# Берёт zip опубликованного релиза (tag) или артефакт «macos» прогона Release (run_id, для черновика).
+# Скрипты — из того же коммита, что этот файл: итерация = правка scripts/mac → коммит в main → новый прогон.
+name: "Mac: снимки и проверка"
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Метка опубликованного релиза, например v0.9.1 (или run_id)"
+        required: false
+        type: string
+        default: ""
+      run_id:
+        description: "Номер прогона Release с артефактом macos (или tag)"
+        required: false
+        type: string
+        default: ""
+      runners:
+        description: "Раннеры"
+        required: true
+        type: choice
+        default: "macos-26,macos-15"
+        options:
+          - "macos-26,macos-15"
+          - "macos-26"
+          - "macos-15"
+          - "macos-14"
+          - "macos-26-intel"
+      lang:
+        description: "Язык интерфейса Mac"
+        required: true
+        type: choice
+        default: ru
+        options: [ru, en]
+      video:
+        description: "Пробовать видео"
+        required: true
+        type: boolean
+        default: true
+      selftest:
+        description: "crash — испортить бинарь и убедиться, что проверка падает"
+        required: true
+        type: choice
+        default: none
+        options: [none, crash]
+
+# Только чтение: релиз и артефакты; секретов нет
+permissions:
+  contents: read
+  actions: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  pick:
+    name: Входы
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      run_id: ${{ steps.pick.outputs.run_id }}
+      runners: ${{ steps.pick.outputs.runners }}
+    steps:
+      - name: Ровно один источник zip, список раннеров
+        id: pick
+        env:
+          TAG: ${{ inputs.tag }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUNNERS: ${{ inputs.runners }}
+        run: |
+          if [ -n "$TAG" ] && [ -n "$RUN_ID" ]; then
+            echo "::error::Задайте tag или run_id, не оба"
+            exit 1
+          fi
+          if [ -n "$TAG" ]; then
+            [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag должен быть vX.Y.Z, получено '$TAG'"; exit 1; }
+          elif [ -n "$RUN_ID" ]; then
+            [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::run_id — число, получено '$RUN_ID'"; exit 1; }
+          else
+            echo "::error::Нужен tag (опубликованный релиз) или run_id (прогон Release)"
+            exit 1
+          fi
+          IFS=, read -ra list <<< "$RUNNERS"
+          for r in "${list[@]}"; do
+            [[ "$r" =~ ^macos-(26|15|14|26-intel)$ ]] || { echo "::error::Неизвестный раннер '$r'"; exit 1; }
+          done
+          {
+            echo "tag=$TAG"
+            echo "run_id=$RUN_ID"
+            echo "runners=$(printf '%s\n' "${list[@]}" | jq -R . | jq -sc .)"
+          } >> "$GITHUB_OUTPUT"
+
+  check:
+    name: Mac ${{ matrix.runner }}
+    needs: pick
+    strategy:
+      # macos-14 выводят из работы (с 16.10.2026 бывает недоступен) — остальные раннеры идут дальше
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(needs.pick.outputs.runners) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Тесты помощников (bash 3.2 системы, Python)
+        continue-on-error: true
+        run: |
+          /bin/bash scripts/mac/test_lib.sh
+          python3 -m unittest discover -s scripts/mac -v
+
+      - name: zip программы
+        id: zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.pick.outputs.tag }}
+          RUN_ID: ${{ needs.pick.outputs.run_id }}
+        run: |
+          d="$RUNNER_TEMP/zip"
+          mkdir -p "$d"
+          if [ -n "$TAG" ]; then
+            gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p '*-macos-universal.zip' -D "$d"
+          else
+            gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n macos -D "$d"
+          fi
+          shopt -s nullglob
+          zips=("$d"/*-macos-universal.zip)
+          if [ "${#zips[@]}" -ne 1 ]; then
+            echo "::error::Ожидался один *-macos-universal.zip, найдено: ${#zips[@]}"
+            ls -l "$d"
+            exit 1
+          fi
+          echo "zip=${zips[0]}" >> "$GITHUB_OUTPUT"
+          ls -l "$d"
+
+      # Провал валит задание — так selftest проверяет, что сломанный бинарь не пройдёт
+      - name: Проверка запуска (smoke.sh)
+        env:
+          ZIP: ${{ steps.zip.outputs.zip }}
+          MAC_SMOKE_SELFTEST: ${{ inputs.selftest }}
+        run: |
+          [ "$MAC_SMOKE_SELFTEST" = "crash" ] || unset MAC_SMOKE_SELFTEST
+          /bin/bash scripts/mac/smoke.sh "$ZIP" "$RUNNER_TEMP/mac-out"
+
+      - name: Снимки и видео (shots.sh)
+        if: always() && steps.zip.outcome == 'success'
+        env:
+          ZIP: ${{ steps.zip.outputs.zip }}
+          LANG_UI: ${{ inputs.lang }}
+          VIDEO: ${{ inputs.video }}
+        run: |
+          args=(--lang "$LANG_UI")
+          [ "$VIDEO" = "true" ] && args+=(--video)
+          /bin/bash scripts/mac/shots.sh "$ZIP" "$RUNNER_TEMP/mac-out" "${args[@]}"
+
+      - name: Сводка
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/mac-out/summary.md"
+          if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; else echo "summary.md нет" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mac-shots-${{ matrix.runner }}
+          path: ${{ runner.temp }}/mac-out/
+          if-no-files-found: warn
+          retention-days: 14
