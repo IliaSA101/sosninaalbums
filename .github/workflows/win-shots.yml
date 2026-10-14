@@ -140,9 +140,9 @@ jobs:
           } else {
             gh run download $env:RUN_ID -R $env:GITHUB_REPOSITORY -n windows -D $d
           }
-          if ($LASTEXITCODE -ne 0) { throw 'не удалось скачать exe' }
+          if ($LASTEXITCODE -ne 0) { throw 'failed to download exe' }
           $f = @(Get-ChildItem -LiteralPath $d -Filter '*-windows-x64.exe' -File -Recurse)
-          if ($f.Count -ne 1) { throw "Ожидался один *-windows-x64.exe, найдено: $($f.Count)" }
+          if ($f.Count -ne 1) { throw "Expected one *-windows-x64.exe, found: $($f.Count)" }
           Get-FileHash -Algorithm SHA256 -LiteralPath $f[0].FullName | Format-List
           "exe=$($f[0].FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding ascii -Append
 
@@ -171,13 +171,13 @@ jobs:
             tar -xf $zip -C $dir
             $ff = Join-Path $dir ([IO.Path]::GetFileNameWithoutExtension($name) + '\bin\ffmpeg.exe')
           } else {
-            Write-Host "::warning::ffmpeg BtbN не скачался или sha256 не сошёлся - ставлю через choco"
+            Write-Host "::warning::ffmpeg BtbN download or sha256 failed - installing via choco"
           }
           if (-not $ff -or -not (Test-Path -LiteralPath $ff)) {
             choco install ffmpeg -y --no-progress
             $ff = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
           }
-          if (-not $ff) { throw 'ffmpeg не установился' }
+          if (-not $ff) { throw 'ffmpeg not installed' }
           & $ff -version | Select-Object -First 1
           "WIN_FFMPEG=$ff" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
 
@@ -217,7 +217,7 @@ jobs:
         run: |
           $f = Join-Path $env:RUNNER_TEMP 'win-out\summary.md'
           if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
-          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'summary.md нет' }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'summary.md missing' }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
