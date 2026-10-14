@@ -1,7 +1,7 @@
 #!/bin/bash
 # shellcheck source-path=SCRIPTDIR
 # Снимки и видео для инструкции (029 design §3.2–3.6):
-#   shots.sh <app или zip> <папка вывода> [--lang ru|en] [--video]
+#   shots.sh <app или zip> <папка вывода> [--lang ru|en] [--video] [--display auto|ШxВ[:hidpi]…]
 # Всегда код 0: каждый вариант пишет строку в summary.md и запись в shots.json, неудача шага
 # не мешает следующим. zip распаковывается заново — selftest в smoke.sh портит только свою копию.
 # Шаги зовутся по имени через run_step (SC2329); журналы — файлы пользователя, sudo нужен только команде (SC2024)
@@ -12,17 +12,25 @@ set -u
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 # shellcheck source=video.sh
 . "$MAC_DIR/video.sh"
+# shellcheck source=screenrec.sh
+. "$MAC_DIR/screenrec.sh"
+# shellcheck source=display.sh
+. "$MAC_DIR/display.sh"
+# shellcheck source=targets.sh
+. "$MAC_DIR/targets.sh"
 
 SRC="${1:-}"
 DIR="${2:-}"
-[ -n "$SRC" ] && [ -n "$DIR" ] || { echo "использование: shots.sh <app|zip> <папка> [--lang ru|en] [--video]" >&2; exit 0; }
+[ -n "$SRC" ] && [ -n "$DIR" ] || { echo "использование: shots.sh <app|zip> <папка> [--lang ru|en] [--video] [--display auto|ШxВ[:hidpi]…]" >&2; exit 0; }
 shift 2
 LANG_UI=ru
 VIDEO=0
+DISPLAY_SPEC=auto
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --lang) LANG_UI="${2:-ru}"; shift ;;
     --video) VIDEO=1 ;;
+    --display) DISPLAY_SPEC="${2:-auto}"; shift ;;
     *) echo "::warning::shots.sh: неизвестный ключ $1" ;;
   esac
   shift
@@ -191,26 +199,6 @@ fresh_download() {
   ditto "$APP" "$DST" && quarantine "$DST"
 }
 
-# tcc_fix — §3.4: снимки — одни обои; права записи экрана реальным клиентам в обе TCC.db
-tcc_fix() {
-  local ts db n c v ok=1 ff
-  ts="$(date +%s)"
-  ff="$(command -v ffmpeg 2>/dev/null)"
-  [ -n "$ff" ] && ff="$("$PY" -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$ff")"
-  for db in "/Library/Application Support/com.apple.TCC/TCC.db" "$HOME/Library/Application Support/com.apple.TCC/TCC.db"; do
-    n="$(sudo -n sqlite3 "$db" "SELECT COUNT(*) FROM pragma_table_info('access');" 2>>"$OUT/logs/tcc.txt")"
-    for c in /usr/sbin/screencapture /usr/bin/osascript /bin/bash "$ff"; do
-      [ -n "$c" ] || continue
-      if ! v="$(tcc_values "$n" kTCCServiceScreenCapture "$c" 1 "$ts")"; then
-        echo "схема $db: столбцов '$n'" >>"$OUT/logs/tcc.txt"
-        break
-      fi
-      sudo -n sqlite3 "$db" "INSERT OR REPLACE INTO access VALUES($v);" >>"$OUT/logs/tcc.txt" 2>&1 && ok=0
-    done
-  done
-  return "$ok"
-}
-
 enable_gatekeeper() {
   sudo -n spctl --global-enable >>"$OUT/logs/gatekeeper.txt" 2>&1 ||
     sudo -n spctl --master-enable >>"$OUT/logs/gatekeeper.txt" 2>&1
@@ -255,7 +243,7 @@ step_gatekeeper() {
   wait_win_fn gk_pids 20 || why="${why:+$why; }окна агентов Gatekeeper нет за 20 с"
   sleep 1
   # Владелец — запасной путь: на 14 окно бывает у UserNotificationCenter, pid мог смениться
-  shot 03-gatekeeper "$(gk_pids)" "$GK_OWNERS" front -- "spctl: $st${why:+; $why}"
+  shot_t 03-gatekeeper "$(gk_pids)" "$GK_OWNERS" front "$(gk_button_rect)" "spctl: $st${why:+; $why}"
 }
 
 # dismiss_gk — «Готово» (15+) или «OK»/«Отменить» в окне Gatekeeper, курсор к кнопке — для видео
@@ -285,18 +273,34 @@ open_privacy() {
   printf '%s' "$why"
 }
 
-step_privacy() {
-  local why b
-  # «Готово» в окне отказа: на 15+ после него в «Настройках» появляется «Открыть всё равно»
+# 04a: меню Apple → «Системные настройки…» — первое в пути инструкции. Окно отказа закрывается здесь:
+# «Готово» на 15+ нужно, чтобы в «Настройках» появилась кнопка «Все равно открыть»
+step_apple_menu() {
+  local b why res rc
   if b="$(dismiss_gk)"; then
     why="в окне Gatekeeper нажата «${b}»"
   else
     why="кнопки в окне Gatekeeper не нашлось"
   fi
+  printf '%s' "$why" >"$WORK/dismiss-why"
   sleep 1
   kill_gk_agents
+  command -v cliclick >/dev/null 2>&1 || { row 04a-apple-menu нет "нет cliclick — меню Apple не открыть"; return 1; }
+  cliclick "c:24,12" # значок Apple в строке меню
+  sleep 2
+  res="$(apple_menu_rect)"
+  shot_t 04a-apple-menu "" "" front "$res" "$why"
+  rc=$?
+  key_code 53
+  return "$rc"
+}
+
+step_privacy() {
+  local why b
+  why="$(cat "$WORK/dismiss-why" 2>/dev/null)"
+  kill_gk_agents
   b="$(open_privacy)"
-  shot 04-privacy "$(settings_pids)" "" largest -- "$why${b:+; $b}"
+  shot_t 04-privacy "$(settings_pids)" "" largest "$(privacy_rect)" "$why${b:+; $b}"
 }
 
 # wheel_settings — колесо мыши над правой частью окна «Настроек» (windows.swift scroll)
@@ -401,7 +405,8 @@ step_confirm() {
   fi
   pids="$(pids_of SecurityAgent) $(gk_pids)"
   [ -n "${pids// /}" ] || pids="$(settings_pids)"
-  shot 06-confirm "$pids" "SecurityAgent|$GK_OWNERS" front -- "нажата «${res#*"$TAB"}» (путь: $via); пароль раннера неизвестен — дальше не идём"
+  shot_t 06-confirm "$pids" "SecurityAgent|$GK_OWNERS" front "$(confirm_button_rect "$pids")" \
+    "нажата «${res#*"$TAB"}» (путь: $via); пароль раннера неизвестен — дальше не идём"
   local rc=$?
   key_code 53
   sleep 1
@@ -409,31 +414,27 @@ step_confirm() {
   return "$rc"
 }
 
-# terminal_xattr — команда из инструкции в окне «Терминала»; печатает примечание
+# terminal_xattr — команда из инструкции в окне «Терминала». Только файл .command: AppleEvents к «Терминалу»
+# (do script) на раннере остаются без ответа — запрос «hosted-compute-agent» повисал поверх всего экрана
+# и закрывал снимок 07 (прогоны 2–3). exec zsh оставляет в окне приглашение, а не «Deleting expired sessions»
 terminal_xattr() {
   local f="$WORK/xattr.command"
-  # do script — AppleEvents к Terminal; если права нет (osascript ждёт согласия) — файл .command
-  if ! with_timeout 20 osascript -e 'on run argv' -e 'tell application "Terminal"' -e 'activate' \
-    -e 'do script (item 1 of argv)' -e 'try' -e 'set font size of window 1 to 18' -e 'end try' \
-    -e 'end tell' -e 'end run' "$XATTR_CMD" >>"$OUT/logs/terminal.txt" 2>&1; then
-    printf '#!/bin/bash\nclear\necho "$ %s"\n%s\n' "$XATTR_CMD" "$XATTR_CMD" >"$f"
-    chmod 755 "$f"
-    open -a Terminal "$f"
-    printf '%s' "AppleEvents к Terminal не прошли — файл .command"
-  fi
+  printf '#!/bin/bash\nclear\necho "$ %s"\n%s\nexec /bin/zsh -l\n' "$XATTR_CMD" "$XATTR_CMD" >"$f"
+  chmod 755 "$f"
+  open -a Terminal "$f"
   wait_win_fn terminal_pids 15
 }
 
 step_terminal() {
-  local why
+  local why=""
   reset_all
   fresh_download || { row 07-terminal-xattr нет "копия с меткой карантина не создалась"; return 1; }
-  why="$(terminal_xattr)"
+  terminal_xattr
   sleep 3
   if xattr -p com.apple.quarantine "$DST" >/dev/null 2>&1; then
-    why="${why:+$why; }метка осталась — команда не выполнилась"
+    why="метка осталась — команда не выполнилась"
   fi
-  shot 07-terminal-xattr "$(terminal_pids)" "" largest -- "команда: $XATTR_CMD${why:+; $why}"
+  shot_t 07-terminal-xattr "$(terminal_pids)" "" largest "$(terminal_cmd_rect)" "команда: $XATTR_CMD${why:+; $why}"
 }
 
 step_after_xattr() {
@@ -490,7 +491,7 @@ step_context() {
   key_code 36
   wait_win_fn gk_pids 15
   sleep 1
-  shot 11-open-dialog "$(gk_pids)" "$GK_OWNERS" front
+  shot_t 11-open-dialog "$(gk_pids)" "$GK_OWNERS" front "$(open_button_rect)" ""
   key_code 53
   kill_gk_agents
   [ -n "$mpid" ] && kill "$mpid" 2>/dev/null
@@ -518,6 +519,8 @@ XATTR_CMD="xattr -dr com.apple.quarantine ~/Downloads/$(basename "$APP")"
 note "программа: $APP ($EXE), macOS $MACOS"
 setup_tools
 set_lang
+# Экран крупнее — снимки чётче: прогоны 1–3 шли на 1024×768, в docx окна размыты
+set_display "$DISPLAY_SPEC"
 reset_all
 set_wallpaper
 # Видео пишется параллельно со снимками: в прогоне 1 отдельный сценарий висел на open, ролик
@@ -528,6 +531,7 @@ else
   row "видео" "пропуск" "без --video"
 fi
 run_step 60 step_desktop
+report_screen
 
 run_step 90 step_app
 # §3.4: окно в списке есть, а снимок не отличается от стола — нет права записи экрана
@@ -544,6 +548,7 @@ if [ "$("$PY" "$MAC_DIR/macshots.py" get --out "$OUT" --name 02-app-window --fie
 fi
 
 run_step 60 step_gatekeeper
+run_step 60 step_apple_menu
 run_step 90 step_privacy
 run_step 240 step_open_anyway
 run_step 60 step_confirm
@@ -552,6 +557,8 @@ run_step 60 step_after_xattr
 run_step 120 step_context
 reset_all
 [ "$VIDEO" = 1 ] && video_stop
+# Пробы прав записи экрана — в конце: «Калькулятор» остаётся в Dock и испортил бы снимки
+[ "$VIDEO" = 1 ] && video_probe
 
 reset_all
 note "готово: $OUT"

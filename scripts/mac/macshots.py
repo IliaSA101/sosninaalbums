@@ -7,7 +7,11 @@ Pillow необязателен: без него changed = null, а ok реша�
                                                                        -> "да|нет<TAB>почему"
   get     --out D --name N --field F                                   -> поле записи shots.json
   diff    A B                                                          -> доля изменённых пикселей
-  motion  DIR                                                          -> доля разных соседних кадров
+  motion  DIR [--with-count]                                           -> доля разных соседних кадров
+                                                                          (+ их число: «0.099 24»)
+  screen  --windows F [--png P]                                        -> фактический экран: точки, масштаб, пиксели снимка
+  inrect  --rect "x y w h" [--leftmost]  (stdin: строки «x y w h<TAB>текст» от ocr)
+                                                                       -> первая строка с центром внутри рамки
 """
 
 import argparse
@@ -100,11 +104,32 @@ def upsert(shots, rec):
     return out
 
 
+def rect_contains_centre(rect, box):
+    """Центр рамки box [x, y, w, h] внутри rect [x, y, w, h] (границы включены)."""
+    cx, cy = box[0] + box[2] / 2, box[1] + box[3] / 2
+    return rect[0] <= cx <= rect[0] + rect[2] and rect[1] <= cy <= rect[1] + rect[3]
+
+
+def screen_line(screen, scale, png_size=None):
+    """Одна строка для отчёта: «1920×1080 точек, масштаб 2, снимок 3840×2160 px»."""
+    if not screen or not screen[0]:
+        return ""
+    line = f"{int(round(screen[0]))}×{int(round(screen[1]))} точек, масштаб {scale:g}"
+    if png_size:
+        line += f", снимок {png_size[0]}×{png_size[1]} px"
+    return line
+
+
+def moved_count(fractions):
+    """Сколько пар соседних кадров изменились: ролик, где мало движения, но оно есть (ожидание на шагах)."""
+    return sum(1 for f in fractions if f > FRAME_MOVED)
+
+
 def moved_share(fractions):
     """Доля пар соседних кадров, где картинка изменилась."""
     if not fractions:
         return 0.0
-    return sum(1 for f in fractions if f > FRAME_MOVED) / len(fractions)
+    return moved_count(fractions) / len(fractions)
 
 
 # ---------- Pillow ----------
@@ -223,6 +248,8 @@ def cmd_record(a):
         "screen": size,
         "scale": round(scale, 3),
         "target": target,
+        # рамка окна в пикселях снимка: по ней рамка цели переводится в координаты крупного плана (-win)
+        "window": scale_rect(w["rect"], scale) if w is not None else None,
         "changed": changed,
     }
     path = os.path.join(a.out, "shots.json")
@@ -272,7 +299,33 @@ def cmd_motion(a):
         prev = cur
     if not fr:
         return 1
-    print(f"{moved_share(fr):.3f}")
+    print(f"{moved_share(fr):.3f}" + (f" {moved_count(fr)}" if a.with_count else ""))
+    return 0
+
+
+def cmd_screen(a):
+    doc = load_windows(a.windows)
+    img = _open(a.png) if a.png else None
+    line = screen_line(doc.get("screen"), doc.get("scale") or 1.0, list(img.size) if img else None)
+    if not line:
+        return 1
+    print(line)
+    return 0
+
+
+def cmd_inrect(a):
+    rect = parse_rect(a.rect)
+    if rect is None:
+        return 1
+    found = []
+    for line in sys.stdin.read().splitlines():
+        box = parse_rect(line.split("\t", 1)[0])
+        if box is not None and rect_contains_centre(rect, box):
+            found.append((box[0], line))
+    if not found:
+        return 1
+    # --leftmost: строка боковой колонки, а не заголовок окна с тем же текстом
+    print(min(found, key=lambda f: f[0])[1] if a.leftmost else found[0][1])
     return 0
 
 
@@ -316,7 +369,18 @@ def main(argv=None):
 
     m = sub.add_parser("motion")
     m.add_argument("dir")
+    m.add_argument("--with-count", action="store_true", help="после доли — число изменившихся пар")
     m.set_defaults(fn=cmd_motion)
+
+    sc = sub.add_parser("screen")
+    sc.add_argument("--windows", required=True)
+    sc.add_argument("--png", default="")
+    sc.set_defaults(fn=cmd_screen)
+
+    i = sub.add_parser("inrect")
+    i.add_argument("--rect", required=True)
+    i.add_argument("--leftmost", action="store_true", help="из подходящих — самая левая, а не первая")
+    i.set_defaults(fn=cmd_inrect)
 
     a = p.parse_args(argv)
     # bash читает ответ как UTF-8 при любой локали раннера

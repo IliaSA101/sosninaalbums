@@ -2,8 +2,10 @@
 # Видео для инструкции (029 design §3.5): подключается из shots.sh. Запись идёт параллельно со всеми
 # снимками (video_start до 01, video_stop после 08/11): в прогоне 1 отдельный сценарий висел на open,
 # и ролики вышли застывшими. Основной вариант — v2 (ffmpeg avfoundation), запасной — v1 (кадры
-# screencapture); screencapture -v (v3) в прогоне 1 файла не дал ни на одной версии — убран.
-# Годность — ffprobe и доля движения (video_verdict в lib.sh). Обрезка — вручную у оркестратора.
+# screencapture). Прогон 3: v2 писал живой экран (242 с, 14,7 кадр/с, в кадре курсор и «Настройки»), а
+# вердикт «застыл» дала доля движения 0,099 — шаги в основном ждут. Прогон 4: screencapture -v (v3) и
+# короткие пробы после выдачи прав записи экрана — screenrec.sh; из v2 вырезаются простои (v2-cut).
+# Годность — ffprobe и движение (video_verdict в lib.sh). Обрезка до 20 с — вручную у оркестратора.
 # Функции зовутся из shots.sh по имени
 # shellcheck disable=SC2329
 
@@ -43,7 +45,7 @@ stop_rec() {
 
 # video_check <k> <файл> <описание> [<кадр/с съёмки>] — ffprobe, кадр из середины, доля движения
 video_check() {
-  local k="$1" f="$2" desc="$3" info dur fps motion mb d="$WORK/vf$1" res w
+  local k="$1" f="$2" desc="$3" info dur fps motion mcount mb d="$WORK/vf$1" res w
   if [ ! -s "$f" ]; then
     row "видео v$k" "нет" "$desc: файла нет"
     return 1
@@ -57,11 +59,13 @@ video_check() {
   rm -rf "$d"
   mkdir -p "$d"
   ffmpeg -nostdin -loglevel error -i "$f" -vf "fps=1,scale=480:-2" "$d/%04d.png" 2>>"$OUT/logs/ffmpeg-motion.txt"
-  motion="$("$PY" "$MAC_DIR/macshots.py" motion "$d" 2>/dev/null)"
+  motion="$("$PY" "$MAC_DIR/macshots.py" motion "$d" --with-count 2>/dev/null)"
+  mcount="${motion#* }"
+  motion="${motion%% *}"
   mb=$(($(stat -f %z "$f") / 1048576))
-  res="$(video_verdict "${dur:-0}" "${fps:-0}" "$motion" "$mb")"
+  res="$(video_verdict "${dur:-0}" "${fps:-0}" "$motion" "$mb" "$mcount" "${VIDEO_MIN:-20}")"
   w="${res#*"$TAB"}"
-  row "видео v$k" "${res%%"$TAB"*}" "$desc: ${dur:-?} с, ${fps:-?} кадр/с, движение ${motion:-?}, $mb МБ${w:+; $w}"
+  row "видео v$k" "${res%%"$TAB"*}" "$desc: ${dur:-?} с, ${fps:-?} кадр/с, движение ${motion:-?} (смен кадра ${mcount:-?}), $mb МБ${w:+; $w}"
   rm -rf "$d"
 }
 
@@ -158,11 +162,24 @@ video_start() {
   note "видео: пишется v1 (кадры screencapture)"
 }
 
+# video_cut <файл> <метка> — v<метка>-cut.mp4: кадры без изменений (ожидание шагов) выброшены, остаётся
+# ход действий; кадр/с на выходе 15. mpdecimate роняет кадр, у которого почти все блоки 8×8 как в прошлом,
+# курсор один блок не сдвинет, а окно или меню — сдвинет
+video_cut() {
+  local out="$OUT/video/v$2-cut.mp4"
+  [ -s "$1" ] && command -v ffmpeg >/dev/null 2>&1 || return 0
+  with_timeout 240 ffmpeg -nostdin -y -loglevel error -i "$1" \
+    -vf "mpdecimate=hi=768:lo=320:frac=0.002,setpts=N/15/TB" -r 15 \
+    -c:v libx264 -preset veryfast -crf 26 -pix_fmt yuv420p "$out" 2>>"$OUT/logs/ffmpeg-cut.txt"
+  video_check "$2-cut" "$out" "v$2 без простоев (mpdecimate)" 15
+}
+
 video_stop() {
   case "$REC_MODE" in
     2)
       stop_rec "$REC_PID"
       video_check 2 "$OUT/video/v2.mp4" "$REC_DESC, параллельно со снимками"
+      video_cut "$OUT/video/v2.mp4" 2
       ;;
     1) frames_stop ;;
   esac

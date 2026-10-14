@@ -4,6 +4,8 @@
 set -u
 # shellcheck source=lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+# shellcheck source=display.sh
+. "$MAC_DIR/display.sh"
 
 fails=0
 eq() {
@@ -78,6 +80,29 @@ v="$(video_verdict 42 15 0.05 5)"
 eq "видео застыло" "${v%%"$TAB"*}" "нет"
 v="$(video_verdict 42 15 "" 5)"
 eq "движение не измерено — не провал" "${v%%"$TAB"*}" "да"
+v="$(video_verdict 242 14.7 0.099 20 24)"
+eq "прогон 3: доля 0,099, но 24 смены кадра — не застыло" "${v%%"$TAB"*}" "да"
+v="$(video_verdict 42 15 0.05 5 3)"
+eq "три смены кадра — застыло" "${v%%"$TAB"*}" "нет"
+v="$(video_verdict 8 15 0.5 1 7 5)"
+eq "проба 8 с при минимуме 5 с — годна" "${v%%"$TAB"*}" "да"
+v="$(video_verdict 3 15 0.5 1 7 5)"
+eq "проба 3 с при минимуме 5 с — коротка" "${v%%"$TAB"*}" "нет"
+case "$v" in *"короче 5 с"*) ;; *) eq "причина: короче 5 с" "$v" "…короче 5 с…" ;; esac
+v="$(video_verdict 42 15 0.05 5 0)"
+eq "ноль смен кадра — застыло" "${v%%"$TAB"*}" "нет"
+
+eq "экран: auto" "$(display_candidates auto)" "1440x900:hidpi 1920x1080 1680x1050 1440x900"
+eq "экран: пусто = auto" "$(display_candidates "")" "1440x900:hidpi 1920x1080 1680x1050 1440x900"
+eq "экран: свой список" "$(display_candidates "1920x1080, 1280x720:hidpi")" "1920x1080 1280x720:hidpi"
+eq "экран: ошибка в списке = auto" "$(display_candidates "1920x1080 большой")" "1440x900:hidpi 1920x1080 1680x1050 1440x900"
+eq "экран: ш в режим hidpi" "$(display_wh 1440x900:hidpi)" "1440 900 hidpi"
+eq "экран: ш в режим обычный" "$(display_wh 1920x1080)" "1920 1080 any"
+ok "экран: режим совпал" display_matches "1920 1080 1920 1080 60 -" 1920 1080 any
+ok "экран: hidpi совпал" display_matches "1440 900 2880 1800 60 hidpi" 1440 900 hidpi
+no "экран: просили hidpi, стал обычный" display_matches "1440 900 1440 900 60 -" 1440 900 hidpi
+no "экран: другой размер" display_matches "1024 768 1024 768 60 -" 1920 1080 any
+no "экран: пустой вывод" display_matches "" 1920 1080 any
 
 if [ "$fails" -gt 0 ]; then
   echo "test_lib.sh: провалов $fails"

@@ -73,6 +73,51 @@ class TestPure(unittest.TestCase):
         self.assertEqual(m.moved_share([]), 0)
         self.assertAlmostEqual(m.moved_share([0.0, 0.2, 0.001, 0.05]), 0.5)
 
+    def test_moved_count(self):
+        self.assertEqual(m.moved_count([]), 0)
+        self.assertEqual(m.moved_count([0.0, 0.2, 0.001, 0.05]), 2)
+
+    def test_rect_contains_centre(self):
+        dialog = [360, 100, 300, 300]
+        self.assertTrue(m.rect_contains_centre(dialog, [376, 372, 272, 28]))  # кнопка в окне
+        self.assertFalse(m.rect_contains_centre(dialog, [830, 430, 124, 14]))  # та же подпись под окном
+
+    def test_screen_line(self):
+        self.assertEqual(m.screen_line([1440, 900], 2.0, [2880, 1800]), "1440×900 точек, масштаб 2, снимок 2880×1800 px")
+        self.assertEqual(m.screen_line([1920, 1080], 1, None), "1920×1080 точек, масштаб 1")
+        self.assertEqual(m.screen_line(None, 1, None), "")
+
+    def test_inrect_leftmost(self):
+        # «Конфиденциальность и безопасность» — и в боковой колонке, и в заголовке окна
+        hits = "495 68 284 20\tКонфиденциальность и безопасность\n170 560 250 18\tКонфиденциальность и безопасность\n"
+        stdin, buf = sys.stdin, io.StringIO()
+        sys.stdin = io.StringIO(hits)
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = m.main(["inrect", "--rect", "154 53 835 625", "--leftmost"])
+        finally:
+            sys.stdin = stdin
+        self.assertEqual(rc, 0)
+        self.assertTrue(buf.getvalue().startswith("170 560"))
+
+    def test_inrect_picks_hit_inside_window(self):
+        # OCR видит «Все равно открыть» дважды: в окне подтверждения и в «Настройках» за ним
+        hits = "830 430 124 14\tВсе равно открыть\n376 372 272 28\tВсе равно открыть\n"
+        stdin, buf = sys.stdin, io.StringIO()
+        sys.stdin = io.StringIO(hits)
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = m.main(["inrect", "--rect", "360 100 300 300"])
+        finally:
+            sys.stdin = stdin
+        self.assertEqual(rc, 0)
+        self.assertTrue(buf.getvalue().startswith("376 372 272 28"))
+        sys.stdin = io.StringIO(hits)
+        try:
+            self.assertEqual(m.main(["inrect", "--rect", "0 0 10 10"]), 1)
+        finally:
+            sys.stdin = stdin
+
 
 @unittest.skipIf(Image is None, "нет Pillow")
 class TestImages(unittest.TestCase):
@@ -118,6 +163,17 @@ class TestImages(unittest.TestCase):
         self.assertLess(m.changed_fraction(a, a), 0.001)
         self.assertGreater(m.changed_fraction(a, b), 0.3)
 
+    def test_motion_with_count(self):
+        d = os.path.join(self.out, "frames")
+        os.makedirs(d)
+        # четыре кадра: стол, стол, окно, окно — изменилась одна пара из трёх
+        for i, win in enumerate((False, False, True, True)):
+            self.desk(win).save(os.path.join(d, f"{i:04d}.png"))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(m.main(["motion", d, "--with-count"]), 0)
+        self.assertEqual(buf.getvalue().split(), ["0.333", "1"])
+
     def test_is_uniform(self):
         self.assertTrue(m.is_uniform(Image.new("RGB", (50, 50), (0, 0, 0))))
         self.assertFalse(m.is_uniform(self.desk(True)))
@@ -131,6 +187,7 @@ class TestImages(unittest.TestCase):
         self.assertGreater(s["changed"], 0.3)
         self.assertEqual(s["screen"], [1920, 1080])
         self.assertEqual(s["target"]["rect"], [200, 100, 1280, 760])
+        self.assertEqual(s["window"], [200, 100, 1280, 760])
         # снимка окна не было — вырезан из полного
         self.assertEqual(s["win"], "png/02-app-window-win.png")
         with Image.open(os.path.join(self.out, s["win"])) as w:
@@ -152,6 +209,8 @@ class TestImages(unittest.TestCase):
         s = self.shots()["05-open-anyway"]
         self.assertEqual(s["scale"], 2)
         self.assertEqual(s["target"], {"label": "Открыть всё равно", "rect": [1624, 1280, 320, 56]})
+        # кнопка — цель, окно записано отдельно (крупный план считается по нему)
+        self.assertEqual(s["window"], [400, 200, 2560, 1520])
 
     def test_record_need_rect_and_get(self):
         self.desk(False).save(os.path.join(self.out, "png", "01-desktop.png"))

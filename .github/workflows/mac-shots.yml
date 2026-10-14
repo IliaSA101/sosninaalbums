@@ -1,5 +1,7 @@
 # Проверка Mac-сборки и снимки для инструкции по кнопке (спека 029, design §3.7).
 # Берёт zip опубликованного релиза (tag) или артефакт «macos» прогона Release (run_id, для черновика).
+# Раннеры по умолчанию — все три версии macOS, для каждой свой файл инструкции: 26 (Tahoe), 15 (Sequoia),
+# 14 (Sonoma; его шаги верны и для 12 Monterey, 13 Ventura). Intel-образы не нужны: экраны те же.
 # Скрипты — из того же коммита, что этот файл: итерация = правка scripts/mac → коммит в main → новый прогон.
 name: "Mac: снимки и проверка"
 
@@ -7,12 +9,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Метка опубликованного релиза, например v0.9.1 (или run_id)"
+        description: "Метка опубликованного релиза, например v0.9.1 (пусто — последний релиз, иначе последний прогон Release)"
         required: false
         type: string
         default: ""
       run_id:
-        description: "Номер прогона Release с артефактом macos (или tag)"
+        description: "Номер прогона Release с артефактом macos (пусто — см. tag)"
         required: false
         type: string
         default: ""
@@ -20,8 +22,9 @@ on:
         description: "Раннеры"
         required: true
         type: choice
-        default: "macos-26,macos-15"
+        default: "macos-26,macos-15,macos-14"
         options:
+          - "macos-26,macos-15,macos-14"
           - "macos-26,macos-15"
           - "macos-26"
           - "macos-15"
@@ -38,6 +41,11 @@ on:
         required: true
         type: boolean
         default: true
+      display:
+        description: "Экран раннера: auto (1440x900:hidpi, 1920x1080, 1680x1050, 1440x900) или свой список ШxВ[:hidpi]"
+        required: false
+        type: string
+        default: auto
       selftest:
         description: "crash — испортить бинарь и убедиться, что проверка падает"
         required: true
@@ -67,6 +75,7 @@ jobs:
       - name: Ровно один источник zip, список раннеров
         id: pick
         env:
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           RUN_ID: ${{ inputs.run_id }}
           RUNNERS: ${{ inputs.runners }}
@@ -74,6 +83,14 @@ jobs:
           if [ -n "$TAG" ] && [ -n "$RUN_ID" ]; then
             echo "::error::Задайте tag или run_id, не оба"
             exit 1
+          fi
+          # Входы по умолчанию (пустые): последний опубликованный релиз, иначе последний успешный прогон Release
+          if [ -z "$TAG" ] && [ -z "$RUN_ID" ]; then
+            TAG="$(gh release list -R "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty' || true)"
+            if [ -z "$TAG" ]; then
+              RUN_ID="$(gh run list -R "$GITHUB_REPOSITORY" --workflow release.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)"
+            fi
+            echo "Вход по умолчанию: tag='$TAG' run_id='$RUN_ID'"
           fi
           if [ -n "$TAG" ]; then
             [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag должен быть vX.Y.Z, получено '$TAG'"; exit 1; }
@@ -154,8 +171,9 @@ jobs:
           ZIP: ${{ steps.zip.outputs.zip }}
           LANG_UI: ${{ inputs.lang }}
           VIDEO: ${{ inputs.video }}
+          DISPLAY_SPEC: ${{ inputs.display }}
         run: |
-          args=(--lang "$LANG_UI")
+          args=(--lang "$LANG_UI" --display "${DISPLAY_SPEC:-auto}")
           [ "$VIDEO" = "true" ] && args+=(--video)
           /bin/bash scripts/mac/shots.sh "$ZIP" "$RUNNER_TEMP/mac-out" "${args[@]}"
 
