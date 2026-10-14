@@ -34,6 +34,38 @@ gv_centre() {
   awk -v x="$1" -v y="$2" -v w="$3" -v h="$4" 'BEGIN { printf "%d %d", x + w / 2, y + h / 2 }'
 }
 
+# gv_target_rect <«x y w h» или «x y»> — рамка стрелки: четыре числа как есть; точка — квадрат 40×40 вокруг неё
+# (цель нашлась только по координатам щелчка); иначе код 1
+gv_target_rect() {
+  # shellcheck disable=SC2086 # «x y [w h]» → слова
+  set -- $1
+  case "$#" in
+    4) printf '%s %s %s %s' "$1" "$2" "$3" "$4" ;;
+    2) awk -v x="$1" -v y="$2" 'BEGIN { printf "%d %d 40 40", x - 20, y - 20 }' ;;
+    *) return 1 ;;
+  esac
+}
+
+# gv_click_point <«x y w h» или «x y»> — «x y» щелчка: центр рамки или сама точка
+gv_click_point() {
+  # shellcheck disable=SC2086
+  set -- $1
+  case "$#" in
+    4) gv_centre "$1 $2 $3 $4" ;;
+    2) printf '%d %d' "$1" "$2" ;;
+    *) return 1 ;;
+  esac
+}
+
+# gv_field_rect <«id x y w h» окна Spotlight> — «x y w h» поля ввода: верх окна, не выше 64; узкое окно
+# (значок Spotlight в строке меню, 31 pt) — не поле, код 1
+gv_field_rect() {
+  # shellcheck disable=SC2086
+  set -- $1
+  [ "$#" -eq 5 ] && [ "$4" -ge 200 ] || return 1
+  printf '%s %s %s %s' "$2" "$3" "$4" "$(($5 > 64 ? 64 : $5))"
+}
+
 # gv_second_row — stdin: строки «x y w h<TAB>текст» от ocr; печатает вторую сверху: первая — поле ввода Spotlight
 # с тем же текстом, вторая — найденный пункт. Одна строка — пусто (пункт не появился)
 gv_second_row() {
@@ -41,6 +73,22 @@ gv_second_row() {
     awk -F'\t' '
       NR == 1 { split($1, a, " "); y0 = a[2]; next }
       { split($1, a, " "); if (a[2] > y0 + 20) { print; exit } }'
+}
+
+# gv_find_retry <попыток> <команда…> — первый непустой ответ искалки цели: после перехода окно и текст на нём
+# появляются не сразу, а стрелка без рамки пропадает из ролика. Между попытками — секунда
+gv_find_retry() {
+  local n="$1" i out
+  shift
+  for ((i = 1; i <= n; i++)); do
+    out="$("$@")"
+    if [ -n "$out" ]; then
+      printf '%s' "$out"
+      return 0
+    fi
+    [ "$i" -lt "$n" ] && sleep "${GV_RETRY_PAUSE:-1}"
+  done
+  return 1
 }
 
 # ---------- журнал ----------
@@ -114,22 +162,25 @@ gv_hold() {
 
 # ---------- примитивы действий ----------
 
-# gv_cursor_to <рамка> — курсор плавно к центру (cliclick -e 200: путь виден, но не 8 с, как при 600), в журнале move
+# gv_cursor_to <рамка или точка> — курсор плавно к центру (cliclick -e 200: путь виден, но не 8 с, как при 600),
+# в журнале move
 gv_cursor_to() {
   local c
-  c="$(gv_centre "$1")" || return 0
+  c="$(gv_click_point "$1")" || return 0
   cliclick -e 200 "m:${c% *},${c#* }" 2>>"$OUT/logs/cliclick-err.txt"
   gv_jl move t0=@end t1=@now
 }
 
-# act_click <рамка или пусто> <подпись> <c|dc|rc> [запасная команда…] — цель не найдена: стоп-кадр без стрелки
-# и запасной путь (по адресу, клавишами)
+# act_click <рамка, точка или пусто> <подпись> <c|dc|rc> [запасная команда…] — рамка цели пишется в hold до щелчка
+# (точка — квадратом вокруг неё, щелчок точно в точку); цель не найдена: стоп-кадр без стрелки и запасной путь
+# (по адресу, клавишами)
 act_click() {
-  local rect="$1" cap="$2" mode="$3" c
+  local target="$1" cap="$2" mode="$3" c rect
   shift 3
+  rect="$(gv_target_rect "$target")"
   gv_hold "$rect" "$cap"
-  if [ -n "$rect" ] && c="$(gv_centre "$rect")"; then
-    gv_cursor_to "$rect"
+  if [ -n "$rect" ] && c="$(gv_click_point "$target")"; then
+    gv_cursor_to "$target"
     cliclick "$mode:${c% *},${c#* }" 2>>"$OUT/logs/cliclick-err.txt"
   elif [ "$#" -gt 0 ]; then
     # запасной путь долгий и без видимого действия — это простой, он ускоряется
@@ -185,13 +236,20 @@ gv_spotlight_hit() {
   ocr_hits "Терминал" "Terminal" | gv_second_row
 }
 
-# act_type <подпись> <текст> — набор в Spotlight. Сразу английское имя («Terminal»): Spotlight находит по нему и
+# gv_spotlight_field — рамка поля ввода Spotlight (окно уже открыто ⌘ + Пробел) или пусто
+gv_spotlight_field() {
+  local line
+  line="$(find_window "" "Spotlight" largest)" || return 0
+  gv_field_rect "$line" || return 0
+}
+
+# act_type <подпись> <текст> — набор в Spotlight; hold с рамкой поля ввода. Сразу английское имя («Terminal»): Spotlight находит по нему и
 # русский «Терминал», а кириллица по знаку у раннера (раскладка US) не набирается. Не набралось (пункта нет) —
 # второй раз через System Events. Неудачная попытка в журнал шагом не идёт: простой (ускоряется) и заметка;
 # событие type — только последняя попытка
 act_type() {
   local cap="$1" text="$2" try t0
-  gv_hold "" "$cap"
+  gv_hold "$(gv_spotlight_field)" "$cap"
   for try in 1 2; do
     t0="$(gv_now)"
     if [ "$try" = 1 ]; then
@@ -331,6 +389,14 @@ gv_fb_context() { cliclick "rc:$1,$2" 2>>"$OUT/logs/cliclick-err.txt"; }
 
 gv_confirm_pids() { printf '%s %s' "$(pids_of SecurityAgent)" "$(gk_pids)"; }
 gv_have_privacy() { [ -n "$(privacy_rect)" ]; }
+
+# gv_privacy_rect — пункт «Конфиденциальность…» для стрелки: текст на снимке с повторами, затем доступность
+# (один раз: обход дерева «Настроек» долгий, в прокрутке gv_have_privacy его не зовём)
+gv_privacy_rect() {
+  local res
+  res="$(gv_find_retry 3 privacy_rect)" || res="$(axfind "$SETTINGS_ID" find "${PRIVACY_LABELS[@]}")"
+  printf '%s' "$res"
+}
 gv_have_open_anyway() { [ -n "$(open_anyway_ocr)" ]; }
 
 # ---------- сценарии ----------
@@ -359,7 +425,7 @@ gv_scene_gatekeeper() {
   if p="$(gv_win_point "$(settings_pids)" 12 60)"; then
     act_scroll_until "${p% *}" "${p#* }" gv_have_privacy
   fi
-  act_click "$(gv_rect_of "$(privacy_rect)")" "Выберите «Конфиденциальность и безопасность»" c gv_fb_privacy
+  act_click "$(gv_rect_of "$(gv_privacy_rect)")" "Выберите «Конфиденциальность и безопасность»" c gv_fb_privacy
   sleep 2
 
   gv_step 5 6 "Разрешите запуск"
@@ -377,7 +443,7 @@ gv_scene_gatekeeper() {
   wait_win_fn gv_confirm_pids 15
   pids="$(gv_confirm_pids)"
   act_info "Если спросит — введите пароль от Mac"
-  act_click "$(gv_rect_of "$(confirm_button_rect "$pids")")" "Нажмите «Все равно открыть» в этом окне" c gv_fb_confirm
+  act_click "$(gv_rect_of "$(gv_find_retry 3 confirm_button_rect "$pids")")" "Нажмите «Все равно открыть» в этом окне" c gv_fb_confirm
 
   gv_step 6 6 "Готово"
   gv_app_open || gv_note "программа не открылась за 25 с"

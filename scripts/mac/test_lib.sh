@@ -122,6 +122,29 @@ eq "Spotlight: строка вплотную к полю — не пункт" "$
 eq "Spotlight: порядок на входе не важен" "$(printf '900 175 120 20\tТерминал — Утилиты\n420 80 140 30\tТерминал\n' | gv_second_row)" "$(printf '900 175 120 20\tТерминал — Утилиты')"
 eq "Spotlight: пустой вход" "$(printf '' | gv_second_row)" ""
 
+# Рамка цели для стрелки (036): точка — квадрат вокруг неё; щелчок — центр рамки или сама точка
+eq "цель: рамка как есть" "$(gv_target_rect "612 388 96 110")" "612 388 96 110"
+eq "цель: точка — квадрат 40×40 вокруг" "$(gv_target_rect "700 400")" "680 380 40 40"
+no "цель: три числа" gv_target_rect "1 2 3"
+no "цель: пусто" gv_target_rect ""
+eq "щелчок: центр рамки" "$(gv_click_point "612 388 96 110")" "660 443"
+eq "щелчок: сама точка" "$(gv_click_point "700 400")" "700 400"
+no "щелчок: пусто" gv_click_point ""
+# поле Spotlight: «id x y w h» окна; узкое окно — значок в строке меню, не поле
+eq "поле Spotlight: верх окна не выше 64" "$(gv_field_rect "81 480 200 960 540")" "480 200 960 64"
+eq "поле Spotlight: низкое окно как есть" "$(gv_field_rect "81 480 200 960 50")" "480 200 960 50"
+no "поле Spotlight: значок меню 31 pt" gv_field_rect "22 1717 0 31 24"
+no "поле Spotlight: окна нет" gv_field_rect ""
+# повторы искалки цели: пусто, пусто, найдено — берём третий ответ; всегда пусто — код 1
+GV_RETRY_PAUSE=0
+n_try="$(mktemp)"
+gv_flaky() { echo x >>"$n_try"; [ "$(wc -l <"$n_try")" -ge 3 ] && printf '1 2 3 4'; return 0; }
+eq "повторы: найдено на третьей" "$(gv_find_retry 3 gv_flaky; echo "/$?")" "1 2 3 4/0"
+rm -f "$n_try"
+gv_never() { return 0; }
+no "повторы: так и не нашлось" gv_find_retry 3 gv_never
+eq "повторы: пусто без вывода" "$(gv_find_retry 2 gv_never)" ""
+
 # Журнал ролика: note внутри простоя и запасной путь act_click (036). Нужны python и macshots.py; время настоящее
 OUT="$(mktemp -d)"
 mkdir -p "$OUT/logs"
@@ -151,6 +174,24 @@ gv_flush
 rows="$(jsum | tail -n +4)"
 eq "act_click: запасной путь — есть hold и note" "$(printf '%s\n' "$rows" | cut -d' ' -f1 | grep -c -E '^(hold|note)$')" "2"
 eq "act_click: простоя хватает на запасной путь" "$(printf '%s\n' "$rows" | awk '$1 == "idle" { s += $3 - $2 } END { print (s >= 1.4) ? "ok" : "короткий" }')" "ok"
+# hold перед щелчком несёт рамку цели, а щелчок идёт в её центр / в точку (036: без рамки нет стрелки в ролике)
+cliclick() { printf '%s\n' "$*" >>"$OUT/clicks"; }
+jholds() {
+  "$PY" -I -c 'import json,sys
+for l in open(sys.argv[1], encoding="utf-8").read().splitlines()[1:]:
+    o = json.loads(l)
+    if o["ev"] == "hold": print(" ".join(map(str, o["rect"])) if o["rect"] else "-")' "$GV_JOURNAL" | tr -d '\r'
+}
+GV_IDLE0=""
+gv_jl meta os=macos ver=15.0 lang=ru recorder=avfoundation
+: >"$OUT/clicks"
+act_click "612 388 96 110" "Дважды щёлкните по значку" dc >/dev/null 2>&1
+act_click "700 400" "Нажмите точку" c >/dev/null 2>&1
+act_click "" "Нет цели" c >/dev/null 2>&1
+gv_flush
+eq "act_click: рамка в hold — как найдена, точка — квадратом, нет цели — без рамки" "$(jholds | tr '\n' '|')" "612 388 96 110|680 380 40 40|-|"
+eq "act_click: щелчки — центр рамки и сама точка, без цели щелчка нет" "$(grep -E '^(dc|c):' "$OUT/clicks" | tr '\n' ' ')" "dc:660,443 c:700,400 "
+unset -f cliclick
 rm -rf "$OUT"
 
 # bash 3.2 под set -u склеивает имя переменной с соседним не-ASCII символом («cands…: unbound
