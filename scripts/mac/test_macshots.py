@@ -303,6 +303,36 @@ class TestJournal(unittest.TestCase):
         got = self.lines()[1:]
         self.assertEqual([(x["ev"], x["t0"], x["t1"]) for x in got], [("idle", 4.5, 9.1)])
 
+    def test_note_inside_idle_keeps_idle_start(self):
+        # заметка записана раньше, чем закрыт простой, внутри которого стоит: idle встаёт перед ней, начало цело
+        self.assertEqual(self.jl("hold", "t=1", "caption=Шаг"), 0)
+        self.assertEqual(self.jl("note", "t=5", "text=внутри простоя"), 0)
+        self.assertEqual(self.jl("idle", "t0:=3", "t1:=9"), 0)
+        got = self.lines()[1:]
+        self.assertEqual([x["ev"] for x in got], ["hold", "idle", "note"])
+        self.assertEqual((got[1]["t0"], got[1]["t1"]), (3, 9))
+        self.assertEqual(got[2]["t"], 5)
+        # время ключей не убывает: контракт с overlay_plan
+        keys = [x.get("t", x.get("t0")) for x in got]
+        self.assertEqual(keys, sorted(keys))
+
+    def test_idle_after_notes_before_it_keeps_order(self):
+        # несколько заметок: те, что раньше начала простоя, остаются до него; позже — после
+        self.assertEqual(self.jl("note", "t=2", "text=до"), 0)
+        self.assertEqual(self.jl("note", "t=6", "text=внутри"), 0)
+        self.assertEqual(self.jl("note", "t=7", "text=ещё внутри"), 0)
+        self.assertEqual(self.jl("idle", "t0:=4", "t1:=9"), 0)
+        got = self.lines()[1:]
+        self.assertEqual([(x["ev"], x.get("t", x.get("t0"))) for x in got], [("note", 2), ("idle", 4), ("note", 6), ("note", 7)])
+
+    def test_short_idle_with_notes_leaves_file_untouched(self):
+        self.assertEqual(self.jl("note", "t=5", "text=x"), 0)
+        with open(self.file, encoding="utf-8") as f:
+            before = f.read()
+        self.assertEqual(self.jl("idle", "t0:=4.0", "t1:=4.2"), 0)
+        with open(self.file, encoding="utf-8") as f:
+            self.assertEqual(f.read(), before)
+
     def test_hold_caption_limit_and_rect_clamp(self):
         self.assertEqual(self.jl("hold", "t=1", "rect:=[1400,880,200,100]", "caption=" + "я" * 120), 0)
         h = self.lines()[1]

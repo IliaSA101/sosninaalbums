@@ -122,6 +122,37 @@ eq "Spotlight: строка вплотную к полю — не пункт" "$
 eq "Spotlight: порядок на входе не важен" "$(printf '900 175 120 20\tТерминал — Утилиты\n420 80 140 30\tТерминал\n' | gv_second_row)" "$(printf '900 175 120 20\tТерминал — Утилиты')"
 eq "Spotlight: пустой вход" "$(printf '' | gv_second_row)" ""
 
+# Журнал ролика: note внутри простоя и запасной путь act_click (036). Нужны python и macshots.py; время настоящее
+OUT="$(mktemp -d)"
+mkdir -p "$OUT/logs"
+PY="$(command -v python3 >/dev/null 2>&1 && python3 -c 1 >/dev/null 2>&1 && echo python3 || echo python)"
+GV_JOURNAL="$OUT/steps.jsonl"
+GV_CLOCK="$OUT/clock"
+gv_jl meta os=macos ver=15.0 lang=ru recorder=avfoundation
+# «событие t0 t1» по строкам журнала без meta
+jsum() {
+  "$PY" -I -c 'import json,sys
+for l in open(sys.argv[1], encoding="utf-8").read().splitlines()[1:]:
+    o = json.loads(l); print(o["ev"], o.get("t0", o.get("t")), o.get("t1", ""))' "$GV_JOURNAL"
+}
+GV_IDLE0="$(gv_now)"
+sleep 0.6
+gv_note "заметка внутри простоя" >/dev/null 2>&1
+sleep 0.6
+gv_flush
+rows="$(jsum)"
+eq "note в простое: idle, note, idle" "$(printf '%s\n' "$rows" | cut -d' ' -f1 | tr '\n' ' ')" "idle note idle "
+eq "note в простое: первый idle не срезан" "$(printf '%s\n' "$rows" | awk 'NR == 1 { e = $3; d = $3 - $2 } NR == 2 { n = $2 } END { print (e <= n && d >= 0.4) ? "ok" : "срезан" }')" "ok"
+eq "note в простое: второй idle с момента note" "$(printf '%s\n' "$rows" | awk 'NR == 2 { n = $2 } NR == 3 { print ($2 >= n) ? "ok" : "сдвинут" }')" "ok"
+# запасной путь без цели — простой с начала запасного пути
+gv_fb_slow() { sleep 1.5; }
+act_click "" "Нажмите" c gv_fb_slow >/dev/null 2>&1
+gv_flush
+rows="$(jsum | tail -n +4)"
+eq "act_click: запасной путь — есть hold и note" "$(printf '%s\n' "$rows" | cut -d' ' -f1 | grep -c -E '^(hold|note)$')" "2"
+eq "act_click: простоя хватает на запасной путь" "$(printf '%s\n' "$rows" | awk '$1 == "idle" { s += $3 - $2 } END { print (s >= 1.4) ? "ok" : "короткий" }')" "ok"
+rm -rf "$OUT"
+
 # bash 3.2 под set -u склеивает имя переменной с соседним не-ASCII символом («cands…: unbound
 # variable», прогон 38524239739, строка с «ни один из»): рядом с не-ASCII пишем ${имя}. Байты ≥ 0x80 ловит локаль C
 bad="$(cd "$MAC_DIR" && LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^ -~[:space:]]' ./*.sh)"

@@ -177,6 +177,42 @@ try {
     Check 'shots.json: цели нет - null' ($null -eq $sj[1].target)
     Check 'shots.json: ok=false' ($sj[1].ok -eq $false)
 
+    Section 'Способ записи (method.txt)'
+    $mf = Join-Path $tmp 'method.txt'
+    $def = @('gdigrab', 'ddagrab', 'frames')
+    Same 'файла нет - порядок по умолчанию' ((Get-RecMethods $mf $def) -join ',') 'gdigrab,ddagrab,frames'
+    Same 'путь $null - по умолчанию, не падает' ((Get-RecMethods $null $def) -join ',') 'gdigrab,ddagrab,frames'
+    Same 'путь пустой - по умолчанию' ((Get-RecMethods '' @('frames')) -join ',') 'frames'
+    Same 'нет ни файла, ни умолчания - пусто' (@(Get-RecMethods $mf)).Count 0
+    [IO.File]::WriteAllText($mf, '')
+    Same 'пустой файл (0 байт, как на ARM) - записи нет, не падает' (@(Get-RecMethods $mf $def)).Count 0
+    [IO.File]::WriteAllText($mf, "  `r`n `n")
+    Same 'только пробелы и переводы строк - записи нет' (@(Get-RecMethods $mf $def)).Count 0
+    [IO.File]::WriteAllText($mf, 'frames')
+    Same 'один способ без перевода строки' ((Get-RecMethods $mf $def) -join ',') 'frames'
+    [IO.File]::WriteAllText($mf, "ddagrab`r`n")
+    Same 'способ с CRLF в конце' ((Get-RecMethods $mf $def) -join ',') 'ddagrab'
+    [IO.File]::WriteAllText($mf, "`r`n gdigrab `r`nframes")
+    Same 'несколько строк - первая непустая, без пробелов' ((Get-RecMethods $mf $def) -join ',') 'gdigrab'
+    [IO.File]::WriteAllText($mf, 'frames', (New-Object System.Text.UTF8Encoding($true)))
+    Same 'BOM в файле не попадает в имя' ((Get-RecMethods $mf $def) -join ',') 'frames'
+    Same 'результат - ровно один способ' (@(Get-RecMethods $mf $def)).Count 1
+
+    Section 'Запуск exe: «canceled by the user» = окно SmartScreen'
+    Check 'Win32Exception 1223' (Test-LaunchCanceled (New-Object System.ComponentModel.Win32Exception 1223))
+    $inv = New-Object System.InvalidOperationException 'This command cannot be run due to the error: The operation was canceled by the user.'
+    Check 'сообщение Start-Process (английское)' (Test-LaunchCanceled $inv)
+    $rec = New-Object System.Management.Automation.ErrorRecord $inv, 'InvalidOperationException', ([System.Management.Automation.ErrorCategory]::InvalidOperation), $null
+    Check 'ErrorRecord (как $_ в catch)' (Test-LaunchCanceled $rec)
+    $wrapped = New-Object System.InvalidOperationException 'Не удалось запустить', (New-Object System.ComponentModel.Win32Exception 1223)
+    Check 'код 1223 во вложенном исключении' (Test-LaunchCanceled $wrapped)
+    Check 'русское сообщение' (Test-LaunchCanceled (New-Object System.Exception 'Операция была отменена пользователем.'))
+    Check 'cancelled с двумя l' (Test-LaunchCanceled (New-Object System.Exception 'The operation was cancelled by the user.'))
+    Check 'null - не отмена, не падает' (-not (Test-LaunchCanceled $null))
+    Check 'другая ошибка Win32 (5) - не отмена' (-not (Test-LaunchCanceled (New-Object System.ComponentModel.Win32Exception 5)))
+    Check 'файл не найден - не отмена' (-not (Test-LaunchCanceled (New-Object System.InvalidOperationException 'The system cannot find the file specified')))
+    Check 'ErrorRecord с другой ошибкой - не отмена' (-not (Test-LaunchCanceled (New-Object System.Management.Automation.ErrorRecord (New-Object System.Exception 'boom'), 'x', ([System.Management.Automation.ErrorCategory]::NotSpecified), $null)))
+
     Section 'Входы workflow'
     Check 'tag vX.Y.Z' ((Test-TagInput 'v0.9.1') -and -not (Test-TagInput 'v0.9') -and -not (Test-TagInput 'v0.9.1; calc') -and -not (Test-TagInput 'V0.9.1') -and -not (Test-TagInput ''))
     Check 'tag: перевод строки не проходит' (-not (Test-TagInput "v1.2.3`nx"))
@@ -211,6 +247,11 @@ try {
             Check "нет Invoke-Expression и загрузки кода из сети: $($f.Name)" ($text -notmatch 'Invoke-Expression|\biex\b|DownloadString|Invoke-WebRequest|Invoke-RestMethod')
         }
     }
+    # регрессии прогона 38538798248: пустой method.txt на ARM и ожидание ответа SmartScreen в Start-Process
+    $shotsText = [IO.File]::ReadAllText((Join-Path $here 'shots.ps1'), [Text.Encoding]::UTF8)
+    Check 'shots.ps1: нет Get-Content -Raw с .Trim() ($null на пустом файле)' ($shotsText -notmatch 'Get-Content[^\r\n]*-Raw[^\r\n]*\)\.Trim\(\)')
+    Check 'shots.ps1: способ записи читает Get-RecMethods' ($shotsText.Contains('Get-RecMethods'))
+    Check 'shots.ps1: exe запускается через Start-ExeNoWait, а не Start-Process -FilePath $Exe' ($shotsText.Contains('Start-ExeNoWait $Exe') -and -not $shotsText.Contains('Start-Process -FilePath $Exe'))
     Check 'в папке <= 20 файлов кода' ((Get-ChildItem -LiteralPath $here -File).Count -le 20)
 
     Section 'Структура DEVMODE и OCR (на этой машине)'

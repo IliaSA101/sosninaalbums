@@ -53,10 +53,24 @@ gv_now() {
   gv_jl now
 }
 
-# gv_note <текст> — строка note в журнале и в steps.txt
+# gv_close_idle — открытый простой (с GV_IDLE0 до сейчас) в журнал; после этого простоя нет
+gv_close_idle() {
+  if [ -n "$GV_IDLE0" ]; then
+    gv_jl idle "t0=$GV_IDLE0" t1=@now
+  fi
+  GV_IDLE0=""
+}
+
+# gv_note <текст> — строка note в журнале и в steps.txt. Открытый простой закрывается до заметки и
+# продолжается после неё: иначе note внутри простоя срезает его начало (время в журнале не убывает)
 gv_note() {
+  local was="$GV_IDLE0"
+  gv_close_idle
   gv_jl note t=@now "text=$*"
   note "ролик: $*"
+  if [ -n "$was" ]; then
+    GV_IDLE0="$(gv_now)"
+  fi
 }
 
 # Глава и шаг пишутся при первом действии: перед ними стоит простой с конца прошлого действия
@@ -66,8 +80,7 @@ gv_step() { GV_PEND_STEP="$1${TAB}$2${TAB}$3"; }
 # gv_flush — idle (с конца прошлого действия), глава, шаг: всё в порядке времени, затем hold
 gv_flush() {
   local n of title rest
-  [ -n "$GV_IDLE0" ] && gv_jl idle "t0=$GV_IDLE0" t1=@now
-  GV_IDLE0=""
+  gv_close_idle
   if [ -n "$GV_PEND_CHAPTER" ]; then
     gv_jl chapter t=@now "title=$GV_PEND_CHAPTER"
     GV_PEND_CHAPTER=""
@@ -101,11 +114,11 @@ gv_hold() {
 
 # ---------- примитивы действий ----------
 
-# gv_cursor_to <рамка> — курсор плавно к центру (cliclick -e 600), в журнале move
+# gv_cursor_to <рамка> — курсор плавно к центру (cliclick -e 200: путь виден, но не 8 с, как при 600), в журнале move
 gv_cursor_to() {
   local c
   c="$(gv_centre "$1")" || return 0
-  cliclick -e 600 "m:${c% *},${c#* }" 2>>"$OUT/logs/cliclick-err.txt"
+  cliclick -e 200 "m:${c% *},${c#* }" 2>>"$OUT/logs/cliclick-err.txt"
   gv_jl move t0=@end t1=@now
 }
 
@@ -119,8 +132,11 @@ act_click() {
     gv_cursor_to "$rect"
     cliclick "$mode:${c% *},${c#* }" 2>>"$OUT/logs/cliclick-err.txt"
   elif [ "$#" -gt 0 ]; then
+    # запасной путь долгий и без видимого действия — это простой, он ускоряется
+    GV_IDLE0="$(gv_now)"
     gv_note "запасной путь для «${cap}»"
     "$@"
+    gv_close_idle
   fi
   gv_settle 1.2
 }
@@ -169,28 +185,28 @@ gv_spotlight_hit() {
   ocr_hits "Терминал" "Terminal" | gv_second_row
 }
 
-# act_type <подпись> <текст> — набор в Spotlight. Не набралось (пункта нет): System Events, затем английское
-# «Terminal» с новым стоп-кадром — подпись в журнале меняется вместе с текстом
+# act_type <подпись> <текст> — набор в Spotlight. Сразу английское имя («Terminal»): Spotlight находит по нему и
+# русский «Терминал», а кириллица по знаку у раннера (раскладка US) не набирается. Не набралось (пункта нет) —
+# второй раз через System Events. Неудачная попытка в журнал шагом не идёт: простой (ускоряется) и заметка;
+# событие type — только последняя попытка
 act_type() {
-  local cap="$1" text="$2"
+  local cap="$1" text="$2" try t0
   gv_hold "" "$cap"
-  gv_type_slow "$text"
-  sleep 1
-  if [ -z "$(gv_spotlight_hit)" ]; then
+  for try in 1 2; do
+    t0="$(gv_now)"
+    if [ "$try" = 1 ]; then
+      gv_type_slow "$text"
+    else
+      osascript -e "tell application \"System Events\" to keystroke \"${text}\"" >/dev/null 2>&1
+    fi
+    sleep 1
+    [ -n "$(gv_spotlight_hit)" ] && break
+    [ "$try" = 2 ] && break
+    gv_clear_field
+    gv_jl idle "t0=$t0" t1=@now
     gv_note "Spotlight: «${text}» не набралось через cliclick — System Events"
-    gv_clear_field
-    osascript -e "tell application \"System Events\" to keystroke \"${text}\"" >/dev/null 2>&1
-    sleep 1
-  fi
-  if [ -z "$(gv_spotlight_hit)" ]; then
-    gv_note "Spotlight: «${text}» не набралось — английское «Terminal»"
-    gv_clear_field
-    text="Terminal"
-    gv_hold "" "Введите: Terminal (английское название)"
-    gv_type_slow "$text"
-    sleep 1
-  fi
-  gv_jl type t0=@end t1=@now "text=$text"
+  done
+  gv_jl type "t0=$t0" t1=@now "text=$text"
   gv_settle 1.0
 }
 
@@ -407,7 +423,7 @@ gv_scene_terminal() {
 
   gv_step 1 3 "Откройте «Терминал»"
   act_keys "" "Нажмите ⌘ + Пробел" '["⌘","Пробел"]' gv_key_spotlight
-  act_type "Введите: Терминал" "Терминал"
+  act_type "Введите: Терминал (Terminal)" "Terminal"
   rect="$(gv_rect_of "$(gv_spotlight_hit)")"
   act_keys "$rect" "Нажмите Return" '["Return"]' gv_key_return
   if ! wait_win_fn terminal_pids 15; then

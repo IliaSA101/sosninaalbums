@@ -223,7 +223,8 @@ function Invoke-EdgeKeep {
     while ($sw.Elapsed.TotalSeconds -lt 75 -and -not $opened) {
         $hits = Find-UiaOnce -Names $all -Procs @('msedge') -All
         if (-not $hits -or $hits.Count -eq 0) {
-            if ($clicked.Count -gt 0 -and (Find-Downloaded) -and $sw.Elapsed.TotalSeconds -gt 10) { break }
+            # файл уже скачан: предупреждения может не быть (у файла есть репутация) - ждать нечего
+            if ((Find-Downloaded) -and $sw.Elapsed.TotalSeconds -gt 10) { break }
             Start-Sleep -Milliseconds 700
             continue
         }
@@ -252,27 +253,55 @@ function Invoke-EdgeKeep {
             'open' { $script:OpenHit = $pick; $opened = $true }
         }
     }
-    if (-not $snappedWarn) { Add-MissingShot 'win-02-edge-warning' 'предупреждение Edge не появилось (нет репутации? файл скачан без вопросов)' }
-    if (-not $clicked.ContainsKey('anyway')) { Add-MissingShot 'win-03-edge-keep' 'кнопка «Всё равно сохранить» не найдена' }
-    Add-SummaryRow 'Edge: предупреждение' $(if ($snappedWarn) { 'да' } else { 'нет' }) ("нажато: " + (($clicked.Keys | Sort-Object) -join ', '))
+    # предупреждение Edge необязательно: нет окна - «нет предупреждения браузера», сценарий идёт дальше без провала
+    $noWarn = 'нет предупреждения браузера'
+    if (-not $snappedWarn) { Add-MissingShot 'win-02-edge-warning' $noWarn }
+    if (-not $clicked.ContainsKey('anyway')) { Add-MissingShot 'win-03-edge-keep' $noWarn }
+    $res = 'пропуск'
+    if ($snappedWarn) { $res = 'да' } elseif (-not (Find-Downloaded)) { $res = 'нет' }
+    Add-SummaryRow 'Edge: предупреждение' $res ("нажато: " + (($clicked.Keys | Sort-Object) -join ', ') + $(if (-not $snappedWarn) { "; $noWarn" } else { '' }))
     return $opened
+}
+
+# Запуск exe без ожидания. Для файла с меткой «из интернета» ShellExecute показывает окно SmartScreen и может вернуть
+# «The operation was canceled by the user» - это признак окна, а не сбой. Через explorer.exe вызов не ждёт ответа
+# и не бросает; прямой Start-Process - запасной. Результат: explorer | direct | canceled (окно, по версии системы) | failed
+function Start-ExeNoWait([string]$Path) {
+    try {
+        Start-Process -FilePath explorer.exe -ArgumentList @("`"$Path`"") -ErrorAction Stop
+        return 'explorer'
+    } catch { Write-Log "explorer.exe не запустил exe: $($_.Exception.Message)" }
+    try {
+        Start-Process -FilePath $Path -ErrorAction Stop
+        return 'direct'
+    } catch {
+        if (Test-LaunchCanceled $_) { Write-Log 'запуск отменён системой - считаю, что окно SmartScreen показано'; return 'canceled' }
+        Write-Log "запуск exe: $($_.Exception.Message)"
+        return 'failed'
+    }
 }
 
 # Шаг 3: открыть файл (или запустить его из Загрузок) и пройти окно SmartScreen
 function Invoke-RunExe([string]$Exe, [bool]$ViaEdgeOpen, [int]$StepN, [int]$Of) {
     Add-JStep $StepN $Of 'Запустите программу'
     Reset-IdleStart
+    $launch = ''
     if ($ViaEdgeOpen -and $script:OpenHit) {
         Invoke-Act $script:OpenHit (Get-Caption 'Открыть файл' $script:OpenHit.Name) 'click' '' 0.5 'Открыть файл'
     } else {
         Write-Log "запуск $Exe"
-        Start-Process -FilePath $Exe -ErrorAction SilentlyContinue
+        $launch = Start-ExeNoWait $Exe
+        Write-Log "запуск: $launch"
     }
-    $info = Wait-Target -Names $namesInfo -Timeout 30 -Ocr @('More info', 'Подробнее') -Tmp $ocrTmp -Skip @('msedge')
+    $info = Wait-Target -Names $namesInfo -Timeout 45 -Ocr @('More info', 'Подробнее') -Tmp $ocrTmp -Skip @('msedge')
     if (-not $info) {
-        $started = [bool](Get-Process | Where-Object { $_.ProcessName -like 'SosninaAlbums*' -or $_.ProcessName -eq 'sosninaalbums' })
-        $why = 'окно SmartScreen не появилось'
+        $started = (Get-AppProcess).Count -gt 0
+        $ssProc = [bool](Get-Process -Name smartscreen -ErrorAction SilentlyContinue)
+        $why = 'SmartScreen не появился'
+        if ($launch -eq 'canceled') { $why = 'запуск вернул «отменено пользователем», но окно SmartScreen не найдено (UIA и OCR)' }
         if ($started) { $why += '; программа запустилась сразу (у файла есть репутация или SmartScreen выключен)' } else { $why += '; программа тоже не запустилась' }
+        if (-not $ssProc) { $why += '; smartscreen.exe не запущен' }
+        try { Save-Screen (Join-Path $OutDir 'logs\smartscreen-miss.png') } catch { }
         Add-MissingShot 'win-04-smartscreen' $why
         Add-MissingShot 'win-05-smartscreen-more' $why
         Add-SummaryRow 'SmartScreen' 'нет' $why
@@ -373,15 +402,18 @@ try {
     Save-Shot 'win-00-desktop' $null ''
 
     # способ записи: выбрал probe.ps1 (video/method.txt), иначе по порядку
-    $methods = @('gdigrab', 'ddagrab', 'frames')
-    $mf = Join-Path $OutDir 'video\method.txt'
-    if ((Test-Path -LiteralPath $mf) -and ((Get-Content -LiteralPath $mf -Raw).Trim())) { $methods = @((Get-Content -LiteralPath $mf -Raw).Trim()) }
+    # method.txt пуст - проба не нашла рабочего способа (так на ARM): запись пропускаем, сценарий идёт дальше
+    $methods = @(Get-RecMethods (Join-Path $OutDir 'video\method.txt') @('gdigrab', 'ddagrab', 'frames'))
     $rawMp4 = Join-Path $OutDir 'video\raw.mp4'
     if ($Video) {
         foreach ($m in $methods) {
             try { $rec = Start-Rec $rawMp4 $m 15; $script:Recorder = $m; break } catch { Write-Log "запись $m не стартовала: $($_.Exception.Message)" }
         }
-        if (-not $rec) { Add-SummaryRow 'Запись экрана' 'нет' 'ни один способ не стартовал' }
+        if (-not $rec) {
+            $why = 'ни один способ не стартовал'
+            if ($methods.Count -eq 0) { $why = 'проба не нашла рабочего способа записи (method.txt пуст)' }
+            Add-SummaryRow 'Запись экрана' 'нет' $why
+        }
     }
     $lang = (Get-UICulture).TwoLetterISOLanguageName
     Start-Journal (Join-Path $OutDir 'video\steps.jsonl') ([ordered]@{

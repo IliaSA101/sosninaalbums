@@ -74,6 +74,34 @@ function Test-TagInput([string]$Value) { return ($Value -cmatch '^v\d+\.\d+\.\d+
 function Test-RunIdInput([string]$Value) { return ($Value -cmatch '^\d+\z') }
 function Test-RunnerInput([string]$Value) { return ($Value -cmatch '^windows-(11-arm|2025)\z') }
 
+# Способы записи экрана из video/method.txt (его пишет probe.ps1). Файла нет - порядок по умолчанию;
+# файл пуст - проба не нашла рабочего способа, записи нет (@()). Get-Content -Raw на пустом файле в 5.1 даёт $null
+# (так сценарий падал на ARM), поэтому читаем напрямую.
+function Get-RecMethods([string]$Path, [string[]]$Default = @()) {
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return @($Default) }
+    $text = [IO.File]::ReadAllText($Path)
+    if ($null -eq $text) { return @() }
+    foreach ($line in ($text -split '\r?\n')) {
+        $t = ([string]$line).Trim()
+        if ($t) { return @($t) }
+    }
+    return @()
+}
+
+# Запуск exe с меткой «из интернета»: ShellExecute отвечает «The operation was canceled by the user» (Win32 1223),
+# когда SmartScreen показал своё окно, - это не сбой, а признак окна
+function Test-LaunchCanceled($Err) {
+    if ($null -eq $Err) { return $false }
+    $e = $Err
+    if ($Err -is [System.Management.Automation.ErrorRecord]) { $e = $Err.Exception }
+    while ($null -ne $e) {
+        if ($e -is [System.ComponentModel.Win32Exception] -and $e.NativeErrorCode -eq 1223) { return $true }
+        if (([string]$e.Message) -match 'cancel+ed by the user|отмен\S* пользовател') { return $true }
+        $e = $e.InnerException
+    }
+    return $false
+}
+
 # ---------- журнал и сводка ----------
 
 function Write-Log([string]$Message) {

@@ -178,7 +178,9 @@ jobs:
             $ff = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
           }
           if (-not $ff) { throw 'ffmpeg not installed' }
-          & $ff -version | Select-Object -First 1
+          $ver = & $ff -version
+          if ($LASTEXITCODE -ne 0) { throw "ffmpeg -version exit $LASTEXITCODE" }
+          $ver[0]
           "WIN_FFMPEG=$ff" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
 
       - name: Пробы среды (probe.ps1)

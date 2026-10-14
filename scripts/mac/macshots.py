@@ -23,16 +23,16 @@ import argparse
 import json
 import os
 import re
-import struct
 import sys
 import time
-import zlib
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from pixels import changed_fraction, is_uniform, open_image, png_solid  # noqa: E402
 
 MIN_CHANGED = 0.02  # меньше — на снимке одни обои (нет права записи экрана, issue #8782)
-PIX_DELTA = 24  # разница яркости 0–255 ниже — шум сжатия, часы в строке меню
 MIN_WIN = 40  # окна уже 40 точек — полоски и тени, не окна
 FRAME_MOVED = 0.005  # соседние кадры видео «разные», если изменилось больше 0,5 % пикселей
-CMP_WIDTH = 480  # сравнение на уменьшенной копии: быстрее, курсор и сглаживание не мешают
 
 
 # ---------- чистые функции ----------
@@ -140,47 +140,6 @@ def moved_share(fractions):
     return moved_count(fractions) / len(fractions)
 
 
-# ---------- Pillow ----------
-
-
-def _pil():
-    try:
-        from PIL import Image, ImageChops  # noqa: PLC0415 — Pillow может не поставиться
-
-        return Image, ImageChops
-    except ImportError:
-        return None, None
-
-
-def changed_fraction(a, b):
-    """Доля пикселей, где яркость отличается больше PIX_DELTA (на копии шириной CMP_WIDTH)."""
-    _, chops = _pil()
-    w = min(CMP_WIDTH, a.size[0])
-    h = max(1, round(a.size[1] * w / a.size[0]))
-    a2 = a.convert("L").resize((w, h))
-    b2 = b.convert("L").resize((w, h))
-    d = chops.difference(a2, b2).point(lambda v: 255 if v > PIX_DELTA else 0)
-    return d.histogram()[255] / (w * h)
-
-
-def is_uniform(img):
-    """Снимок окна без права записи — одна заливка."""
-    lo, hi = img.convert("L").getextrema()
-    return hi - lo <= 2
-
-
-def _open(path):
-    image, _ = _pil()
-    if image is None or not os.path.isfile(path):
-        return None
-    try:
-        im = image.open(path)
-        im.load()
-        return im
-    except OSError:
-        return None
-
-
 # ---------- команды ----------
 
 
@@ -212,7 +171,7 @@ def cmd_record(a):
     want = bool(a.pid.strip() or a.owner)
     w = pick_window(doc.get("windows", []), parse_pids(a.pid), a.owner, a.pick) if want else None
 
-    full = _open(full_path)
+    full = open_image(full_path)
     file_ok = os.path.isfile(full_path) and os.path.getsize(full_path) > 0
     size = list(full.size) if full is not None else None
     screen = doc.get("screen") or [0, 0]
@@ -221,7 +180,7 @@ def cmd_record(a):
     changed = None
     base_path = os.path.join(a.out, a.base)
     if full is not None and os.path.abspath(base_path) != os.path.abspath(full_path):
-        base = _open(base_path)
+        base = open_image(base_path)
         if base is not None:
             changed = round(changed_fraction(base, full), 4)
 
@@ -234,7 +193,7 @@ def cmd_record(a):
         target = {"label": a.label or w.get("owner", ""), "rect": scale_rect(w["rect"], scale)}
 
     # Окно отдельно: screencapture -l без права даёт заливку — тогда вырезаем из полного снимка
-    win = _open(win_path)
+    win = open_image(win_path)
     if w is not None and full is not None and (win is None or is_uniform(win)):
         box = clamp_rect(scale_rect(w["rect"], scale), full.size)
         if box is not None:
@@ -288,7 +247,7 @@ def cmd_get(a):
 
 
 def cmd_diff(a):
-    x, y = _open(a.a), _open(a.b)
+    x, y = open_image(a.a), open_image(a.b)
     if x is None or y is None:
         return 1
     print(f"{changed_fraction(x, y):.4f}")
@@ -299,7 +258,7 @@ def cmd_motion(a):
     files = sorted(f for f in os.listdir(a.dir) if f.lower().endswith((".png", ".jpg")))
     prev, fr = None, []
     for f in files:
-        cur = _open(os.path.join(a.dir, f))
+        cur = open_image(os.path.join(a.dir, f))
         if cur is None:
             continue
         if prev is not None:
@@ -313,7 +272,7 @@ def cmd_motion(a):
 
 def cmd_screen(a):
     doc = load_windows(a.windows)
-    img = _open(a.png) if a.png else None
+    img = open_image(a.png) if a.png else None
     line = screen_line(doc.get("screen"), doc.get("scale") or 1.0, list(img.size) if img else None)
     if not line:
         return 1
@@ -405,21 +364,23 @@ def journal_record(ev, fields, now, last_key=0.0, last_end=0.0, screen=None):
     return obj
 
 
-def journal_state(path):
-    """(meta, ключ последней строки, конец последнего события) по файлу журнала."""
-    meta, last_key, last_end = None, 0.0, 0.0
+def journal_read(path):
+    """Строки журнала (dict) по файлу; нет файла — пусто."""
     if not os.path.isfile(path):
-        return meta, last_key, last_end
+        return []
     with open(path, encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            o = json.loads(line)
-            if o.get("ev") == "meta":
-                meta = o
-                continue
-            last_key = o.get("t", o.get("t0", last_key))
-            last_end = max(o.get("t", 0), o.get("t1", 0), last_end)
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def journal_state(objs):
+    """(meta, ключ последней строки, конец последнего события) по строкам журнала."""
+    meta, last_key, last_end = None, 0.0, 0.0
+    for o in objs:
+        if o.get("ev") == "meta":
+            meta = o
+            continue
+        last_key = o.get("t", o.get("t0", last_key))
+        last_end = max(o.get("t", 0), o.get("t1", 0), last_end)
     return meta, last_key, last_end
 
 
@@ -430,6 +391,12 @@ def journal_now(clock):
             return time.time() - float(f.read().strip())
     except (OSError, ValueError):
         raise ValueError(f"нет часов журнала {clock}: сначала событие meta") from None
+
+
+def _journal_write(path, objs, mode):
+    with open(path, mode, encoding="utf-8", newline="\n") as f:
+        for o in objs:
+            f.write(json.dumps(o, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
 def cmd_journal(a):
@@ -449,10 +416,21 @@ def cmd_journal(a):
                 f.write("")
             obj = journal_record("meta", fields, 0.0)
         else:
-            meta, last_key, last_end = journal_state(a.file)
+            objs = journal_read(a.file)
+            tail = []
+            if a.ev == "idle":
+                # note внутри простоя не должен срезать его начало: строки note в хвосте идут после idle
+                while len(objs) > 1 and objs[-1].get("ev") == "note":
+                    tail.insert(0, objs.pop())
+            meta, last_key, last_end = journal_state(objs)
             if meta is None:
                 raise ValueError("в журнале нет первой строки meta")
             obj = journal_record(a.ev, fields, journal_now(a.clock), last_key, last_end, meta.get("screen"))
+            if tail and obj is not None:
+                before = [t for t in tail if t.get("t", 0) < obj["t0"]]
+                after = tail[len(before) :]
+                _journal_write(a.file, objs + before + [obj] + after, "w")
+                return 0
     except ValueError as e:
         print(f"journal: {e}", file=sys.stderr)
         return 2
@@ -475,22 +453,6 @@ def cmd_jstat(a):
         return 1
     print(f"шагов {holds}, со стрелкой {arrows}")
     return 0
-
-
-def png_solid(width, height, rgb):
-    """PNG одного цвета без Pillow: метка синхронизации для обоев рабочего стола."""
-
-    def chunk(kind, data):
-        body = kind + data
-        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
-
-    row = b"\x00" + bytes(rgb) * width
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-        + chunk(b"IDAT", zlib.compress(row * height, 6))
-        + chunk(b"IEND", b"")
-    )
 
 
 def cmd_solid(a):
