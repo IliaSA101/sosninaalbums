@@ -9,6 +9,7 @@ import io
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -411,6 +412,8 @@ class TestRender(unittest.TestCase):
             self.skipTest("нет шрифта символов (Segoe UI Symbol / DejaVu Sans / Apple Symbols)")
         sym = overlay_draw.load_font(path, 40)
         main = overlay_draw.load_font(annotate.find_font(), 40)
+        if LINUX:
+            self.skipTest(NO_MIX)
         self.assertTrue(overlay_draw.has_glyph(sym, "⌘"))  # ⌘ есть в шрифте символов
         self.assertFalse(overlay_draw.has_glyph(main, "⌘"))  # а в основном (Arial) — нет
         self.assertFalse(overlay_draw.has_glyph(sym, "￿"))
@@ -422,6 +425,12 @@ class TestRender(unittest.TestCase):
         layer, rects = overlay_draw.Painter(1920, 1080).plates_layer((op.Plate("keys", "⌘ + V", "bc"),))
         self.assertEqual(len(rects), 1)
         self.assertIsNotNone(layer.getchannel("A").getbbox())
+
+
+# На Linux основной шрифт (DejaVu Sans Bold) сам содержит «⌘»: смены шрифта нет, проверять нечего.
+# Монтаж overlay.py идёт у владельца на Windows (Arial без «⌘»), в CI ролик не монтируется (решение 75).
+LINUX = sys.platform.startswith("linux")
+NO_MIX = "основной шрифт уже содержит «⌘» (DejaVu): смена шрифта не нужна"
 
 
 class TestCaptionGlyphs(unittest.TestCase):
@@ -440,10 +449,14 @@ class TestCaptionGlyphs(unittest.TestCase):
         return painter.hold_frame(self.base, seg, [])
 
     def test_symbol_caption_uses_symbol_font(self):
+        if LINUX:
+            self.skipTest(NO_MIX)
         self.assertTrue(self.p.needs_sym(self.CMD))
         self.assertFalse(self.p.needs_sym("Нажмите «Готово»"))
 
     def test_target_caption_has_no_tofu(self):
+        if LINUX:
+            self.skipTest(NO_MIX)
         with_sym = self.frame(self.p, self.CMD)
         # тот же кадр без шрифта символов: draw_target рисует «квадратик» вместо ⌘
         bare = overlay_draw.Painter(1920, 1080)
