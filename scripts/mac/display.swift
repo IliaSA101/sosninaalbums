@@ -20,8 +20,18 @@ func describe(_ m: CGDisplayMode) -> String {
 }
 
 let id = CGMainDisplayID()
-let opts = [kCGDisplayShowDuplicateLowResolutionModes: kCFBooleanTrue] as CFDictionary
-let all: [CGDisplayMode] = CGDisplayCopyAllDisplayModes(id, opts) ?? []
+let opts = [kCGDisplayShowDuplicateLowResolutionModes as String: true] as CFDictionary
+// CFArray? без приведений типов: «?? []» и «as? [CGDisplayMode]» в разных SDK (Swift 5.10–6.x) ведут себя по-разному
+func allModes() -> [CGDisplayMode] {
+    guard let arr = CGDisplayCopyAllDisplayModes(id, opts) else { return [] }
+    var out: [CGDisplayMode] = []
+    for i in 0..<CFArrayGetCount(arr) {
+        guard let p = CFArrayGetValueAtIndex(arr, i) else { continue }
+        out.append(unsafeBitCast(p, to: CGDisplayMode.self))
+    }
+    return out
+}
+let all = allModes()
 let args = CommandLine.arguments
 
 guard args.count >= 2 else {

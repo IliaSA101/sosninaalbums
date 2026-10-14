@@ -39,7 +39,8 @@ display_wh() {
   printf '%s %s %s' "$w" "$h" "$m"
 }
 
-# display_run <аргументы display.swift> — собранный один раз display, иначе swift-скриптом
+# display_run <аргументы display.swift> — собранный один раз display, иначе swift-скриптом;
+# код возврата — display (ошибка компиляции тоже ненулевая)
 display_run() {
   local b="$WORK/display"
   if [ ! -x "$b" ]; then
@@ -90,8 +91,14 @@ displayplacer_try() {
 set_display() {
   local spec="${1:-auto}" cands c w h m before got="" via=""
   cands="$(display_candidates "$spec")"
-  display_run list >"$OUT/logs/display-modes.txt"
-  before="$(display_run cur)"
+  # Не собралось или не запустилось — экран не трогаем, снимки идут на текущем (прогон не валим)
+  if ! display_run list >"$OUT/logs/display-modes.txt"; then
+    note "ПРЕДУПРЕЖДЕНИЕ: display.swift не работает, экран не меняю: $(head -c 300 "$OUT/logs/display-modes.txt" | tr '
+' ' ')"
+    row "экран: режим" "нет" "display.swift не собрался или упал (logs/swiftc-display.txt, logs/display-modes.txt); снимки на текущем экране"
+    return 0
+  fi
+  before="$(display_run cur)" || before="не определён"
   note "экран до: $before; кандидаты: $cands; режимов у раннера: $(wc -l <"$OUT/logs/display-modes.txt" | tr -d ' ')"
   for c in $cands; do
     # shellcheck disable=SC2046 # «ш в режим» → три слова
@@ -116,7 +123,7 @@ set_display() {
   if [ -n "$got" ]; then
     row "экран: режим" "да" "$got через $via; было: $before; стало: $(display_run cur)"
   else
-    row "экран: режим" "нет" "ни один из «$cands» не выставился (logs/display-modes.txt — что есть у раннера, logs/display.txt); остался: $before"
+    row "экран: режим" "нет" "ни один из «${cands}» не выставился (logs/display-modes.txt — что есть у раннера, logs/display.txt); остался: ${before}"
   fi
   sleep 2
   return 0

@@ -104,6 +104,20 @@ no "экран: просили hidpi, стал обычный" display_matches "
 no "экран: другой размер" display_matches "1024 768 1024 768 60 -" 1920 1080 any
 no "экран: пустой вывод" display_matches "" 1920 1080 any
 
+# bash 3.2 под set -u склеивает имя переменной с соседним не-ASCII символом («cands…: unbound
+# variable», прогон 38524239739, строка с «ни один из»): рядом с не-ASCII пишем ${имя}. Байты ≥ 0x80 ловит локаль C
+bad="$(cd "$MAC_DIR" && LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^ -~[:space:]]' ./*.sh)"
+eq "нет \$имя вплотную к не-ASCII в scripts/mac/*.sh" "$bad" ""
+
+# Сбой display.swift (не собрался) не валит шаг: код 0, строка «нет» в summary.md, снимки на текущем экране
+OUT="$(mktemp -d)"
+mkdir -p "$OUT/logs"
+display_run() { echo "error: cannot convert value"; return 1; }
+set_display auto >/dev/null 2>&1
+eq "экран: сбой display.swift — код 0" "$?" "0"
+case "$(cat "$OUT/summary.md")" in *"экран: режим | нет |"*"текущем экране"*) ;; *) eq "экран: сбой попал в summary.md" "$(cat "$OUT/summary.md")" "…нет…текущем экране…" ;; esac
+rm -rf "$OUT"
+
 if [ "$fails" -gt 0 ]; then
   echo "test_lib.sh: провалов $fails"
   exit 1
