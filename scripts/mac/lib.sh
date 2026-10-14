@@ -8,6 +8,10 @@ MAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY="${PY:-python3}"
 TAB="$(printf '\t')"
 
+# install_allowed — можно ли ставить чужой код (brew, pip). В выпуске (release.yml) нельзя:
+# shots.sh --no-install или MAC_NO_INSTALL=1; нужного инструмента нет — шаг пропускается с пометкой
+install_allowed() { [ "${MAC_NO_INSTALL:-0}" != 1 ]; }
+
 # ---------- чистые функции (проверяет test_lib.sh) ----------
 
 # ver_le A B — версия A ≤ B; части через точку, недостающие = 0. Пустую строку отсекает вызывающий.
@@ -50,6 +54,21 @@ version_from_zip() {
 # md_cell <текст> — одна ячейка таблицы Markdown: без «|» и переводов строк
 md_cell() {
   printf '%s' "$1" | tr '\n|' ' /'
+}
+
+# find_app <папка> — путь к единственному .app: в самой папке (выпуск 0.10) или на уровень глубже
+# (выпуск 0.11: «Sosnina Albums X.Y.Z/sosninaalbums.app»). Ноль или несколько — код 1.
+# __MACOSX (остатки AppleDouble) не считается
+find_app() {
+  local a n=0 found=""
+  for a in "$1"/*.app "$1"/*/*.app; do
+    [ -d "$a" ] || continue
+    case "$a" in */__MACOSX/*) continue ;; esac
+    n=$((n + 1))
+    found="$a"
+  done
+  [ "$n" -eq 1 ] || return 1
+  printf '%s' "$found"
 }
 
 # quarantine_value <unix-время> <uuid> — метка «скачано Safari», как у браузера

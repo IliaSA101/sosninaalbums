@@ -6,6 +6,8 @@ set -u
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 # shellcheck source=display.sh
 . "$MAC_DIR/display.sh"
+# shellcheck source=video.sh
+. "$MAC_DIR/video.sh"
 
 fails=0
 eq() {
@@ -145,6 +147,71 @@ gv_never() { return 0; }
 no "повторы: так и не нашлось" gv_find_retry 3 gv_never
 eq "повторы: пусто без вывода" "$(gv_find_retry 2 gv_never)" ""
 
+# find_app (039): .app в корне (выпуск 0.10) и в папке выпуска (0.11); ноль и несколько — отказ
+# shellcheck source=gvzip.sh
+. "$MAC_DIR/gvzip.sh"
+FA="$(mktemp -d)"
+mkdir -p "$FA/root/x.app/Contents" "$FA/nested/Sosnina Albums 0.11.0/sosninaalbums.app/Contents" \
+  "$FA/empty" "$FA/two/a.app" "$FA/two/b.app" "$FA/mixed/a.app" "$FA/mixed/dir/b.app" "$FA/mac/__MACOSX/c.app" \
+  "$FA/mac/Sosnina Albums 0.11.0/sosninaalbums.app"
+eq "find_app: .app в корне" "$(find_app "$FA/root")" "$FA/root/x.app"
+eq "find_app: .app в папке выпуска" "$(find_app "$FA/nested")" "$FA/nested/Sosnina Albums 0.11.0/sosninaalbums.app"
+eq "find_app: __MACOSX не считается" "$(find_app "$FA/mac")" "$FA/mac/Sosnina Albums 0.11.0/sosninaalbums.app"
+no "find_app: пустая папка" find_app "$FA/empty"
+no "find_app: нет такой папки" find_app "$FA/нет"
+no "find_app: два в корне" find_app "$FA/two"
+no "find_app: корень и вложенная" find_app "$FA/mixed"
+eq "find_app: пусто — ничего не печатает" "$(find_app "$FA/empty")" ""
+# gz_extracted: папка первого уровня «Загрузок» с программой; сама .app в «Загрузках» (копия шагов снимков) не считается
+mkdir -p "$FA/dl-bare/sosninaalbums.app" "$FA/dl/Sosnina Albums 0.11.0/sosninaalbums.app" "$FA/dl/sosninaalbums.app" "$FA/dl/пусто"
+eq "gz_extracted: папка выпуска" "$(gz_extracted "$FA/dl")" "$FA/dl/Sosnina Albums 0.11.0"
+no "gz_extracted: архив без папки" gz_extracted "$FA/dl-bare"
+no "gz_extracted: нет Загрузок" gz_extracted "$FA/нет"
+rm -rf "$FA"
+# какие главы снимать: у .app архива нет — classic; мусор — all
+eq "scenes: all по умолчанию" "$(gv_scenes_norm all /x/a.zip)" "all"
+eq "scenes: unzip" "$(gv_scenes_norm unzip /x/a.zip)" "unzip"
+eq "scenes: classic" "$(gv_scenes_norm classic /x/a.zip)" "classic"
+eq "scenes: мусор — all" "$(gv_scenes_norm "" /x/a.zip)" "all"
+eq "scenes: незнакомое — all" "$(gv_scenes_norm разное /x/a.zip)" "all"
+eq "scenes: .app — всегда classic" "$(gv_scenes_norm all /x/sosninaalbums.app)" "classic"
+eq "scenes: пустой источник — classic" "$(gv_scenes_norm unzip "")" "classic"
+# строка «Программы» — только в боковой панели (левая треть окна Finder 100 200 900 600)
+ok "боковая панель: строка у левого края" gz_in_sidebar "110 300 120 24" "100 200 900 600"
+ok "боковая панель: граница трети" gz_in_sidebar "250 300 100 24" "100 200 900 600"
+no "боковая панель: папка в списке справа" gz_in_sidebar "600 300 120 24" "100 200 900 600"
+no "боковая панель: цель левее окна" gz_in_sidebar "10 300 40 24" "100 200 900 600"
+no "боковая панель: не четыре числа" gz_in_sidebar "110 300" "100 200 900 600"
+no "боковая панель: нет окна" gz_in_sidebar "110 300 120 24" ""
+# путь перетаскивания: пять точек от источника к цели, последняя — цель
+eq "перетаскивание: пять шагов" "$(gz_steps 100 200 300 100 5 | tr '\n' '|')" "140 180|180 160|220 140|260 120|300 100|"
+eq "перетаскивание: источник и цель в одной точке" "$(gz_steps 50 50 50 50 2 | tr '\n' '|')" "50 50|50 50|"
+# gv_prepare_copy: classic делает копию (ditto подменён), остальные сцены только очищают «Программы»
+PC="$(mktemp -d)"
+OUT="$PC/out"
+mkdir -p "$OUT/logs" "$PC/apps/old.app" "$PC/src.app"
+VDST="$PC/apps/old.app"
+APP="$PC/src.app"
+quarantine() { :; }
+ditto() { cp -R "$1" "$2"; }
+GV_SCENES=unzip
+ok "prepare_copy: unzip — код 0" gv_prepare_copy
+eq "prepare_copy: unzip — «Программы» очищены" "$(test -d "$VDST" && echo есть || echo нет)" "нет"
+mkdir -p "$VDST"
+GV_SCENES=all
+gv_prepare_copy
+eq "prepare_copy: all — копия не создаётся" "$(test -d "$VDST" && echo есть || echo нет)" "нет"
+GV_SCENES=classic
+gv_prepare_copy
+eq "prepare_copy: classic — копия сделана" "$(test -d "$VDST" && echo есть || echo нет)" "есть"
+rm -rf "$VDST"
+ditto() { return 1; }
+sudo() { return 1; }
+no "prepare_copy: classic — копия не создалась, код 1" gv_prepare_copy
+unset -f ditto sudo quarantine
+rm -rf "$PC"
+GV_SCENES=all
+
 # Журнал ролика: note внутри простоя и запасной путь act_click (036). Нужны python и macshots.py; время настоящее
 OUT="$(mktemp -d)"
 mkdir -p "$OUT/logs"
@@ -206,6 +273,25 @@ display_run() { echo "error: cannot convert value"; return 1; }
 set_display auto >/dev/null 2>&1
 eq "экран: сбой display.swift — код 0" "$?" "0"
 case "$(cat "$OUT/summary.md")" in *"экран: режим | нет |"*"текущем экране"*) ;; *) eq "экран: сбой попал в summary.md" "$(cat "$OUT/summary.md")" "…нет…текущем экране…" ;; esac
+rm -rf "$OUT"
+
+# --no-install (выпуск): brew и pip не зовутся, нужного инструмента нет — отказ, а не установка
+ok "установки: по умолчанию разрешены" install_allowed
+MAC_NO_INSTALL=1
+no "установки: MAC_NO_INSTALL=1 запрещает" install_allowed
+OUT="$(mktemp -d)"
+mkdir -p "$OUT/logs"
+brew() { echo "brew $*" >>"$OUT/brewed"; }
+with_timeout() { shift; "$@"; }
+PATH_SAVE="$PATH"
+PATH="$OUT/nobin"
+no "установки: ffmpeg не ставится" ensure_ffmpeg
+no "установки: displayplacer не ставится" displayplacer_try "1920x1080"
+PATH="$PATH_SAVE"
+eq "установки: brew не вызывался" "$(cat "$OUT/brewed" 2>/dev/null)" ""
+unset -f brew with_timeout
+MAC_NO_INSTALL=0
+ok "установки: MAC_NO_INSTALL=0 разрешает" install_allowed
 rm -rf "$OUT"
 
 if [ "$fails" -gt 0 ]; then

@@ -18,6 +18,7 @@ HAVE_FFMPEG=0
 
 ensure_ffmpeg() {
   command -v ffmpeg >/dev/null 2>&1 && return 0
+  install_allowed || return 1
   with_timeout 420 brew install ffmpeg >>"$OUT/logs/brew.txt" 2>&1
   command -v ffmpeg >/dev/null 2>&1
 }

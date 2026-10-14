@@ -1,8 +1,10 @@
 #!/bin/bash
 # shellcheck source-path=SCRIPTDIR
 # Снимки и видео для инструкции (029 design §3.2–3.6):
-#   shots.sh <app или zip> <папка вывода> [--lang ru|en] [--video] [--guide-video] [--display auto|ШxВ[:hidpi]…]
-# --guide-video — ролик-инструкция для монтажа (036): video/raw.mp4 и video/steps.jsonl, сценарий — guidevid.sh
+#   shots.sh <app или zip> <папка вывода> [--lang ru|en] [--video] [--guide-video] [--scenes all|unzip|classic] [--display auto|ШxВ[:hidpi]…] [--no-install]
+# --no-install — ничего не ставить (brew, pip): выпуск не запускает чужой код; нет инструмента — шаг пропускается с пометкой
+# --guide-video — ролик-инструкция для монтажа (036): video/raw.mp4 и video/steps.jsonl, сценарий — guidevid.sh,
+# gvzip.sh; --scenes (039): all — «Распакуйте архив» + главы 0.10, unzip — только распаковка, classic — как 0.10
 # Всегда код 0: каждый вариант пишет строку в summary.md и запись в shots.json, неудача шага
 # не мешает следующим. zip распаковывается заново — selftest в smoke.sh портит только свою копию.
 # Шаги зовутся по имени через run_step (SC2329); журналы — файлы пользователя, sudo нужен только команде (SC2024)
@@ -19,23 +21,28 @@ set -u
 . "$MAC_DIR/display.sh"
 # shellcheck source=guidevid.sh
 . "$MAC_DIR/guidevid.sh"
+# shellcheck source=gvzip.sh
+. "$MAC_DIR/gvzip.sh"
 # shellcheck source=targets.sh
 . "$MAC_DIR/targets.sh"
 
 SRC="${1:-}"
 DIR="${2:-}"
-[ -n "$SRC" ] && [ -n "$DIR" ] || { echo "использование: shots.sh <app|zip> <папка> [--lang ru|en] [--video] [--guide-video] [--display auto|ШxВ[:hidpi]…]" >&2; exit 0; }
+[ -n "$SRC" ] && [ -n "$DIR" ] || { echo "использование: shots.sh <app|zip> <папка> [--lang ru|en] [--video] [--guide-video] [--scenes all|unzip|classic] [--display auto|ШxВ[:hidpi]…] [--no-install]" >&2; exit 0; }
 shift 2
 LANG_UI=ru
 VIDEO=0
 GUIDE_VIDEO=0
+SCENES=all
 DISPLAY_SPEC=auto
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --lang) LANG_UI="${2:-ru}"; shift ;;
     --video) VIDEO=1 ;;
     --guide-video) GUIDE_VIDEO=1 ;;
+    --scenes) SCENES="${2:-all}"; shift ;;
     --display) DISPLAY_SPEC="${2:-auto}"; shift ;;
+    --no-install) MAC_NO_INSTALL=1 ;;
     *) echo "::warning::shots.sh: неизвестный ключ $1" ;;
   esac
   shift
@@ -80,13 +87,12 @@ wait_win_fn() {
 }
 
 prepare_app() {
-  local a n=0
   case "$SRC" in
     *.zip)
       mkdir -p "$WORK/app"
       ditto -x -k "$SRC" "$WORK/app" 2>>"$OUT/logs/shots-unzip.txt" || return 1
-      for a in "$WORK"/app/*.app; do [ -d "$a" ] && n=$((n + 1)) && APP="$a"; done
-      [ "$n" -eq 1 ] || return 1
+      # .app в корне (0.10) или в папке «Sosnina Albums X.Y.Z» (0.11)
+      APP="$(find_app "$WORK/app")" || return 1
       ;;
     *.app) APP="$SRC" ;;
     *) return 1 ;;
@@ -102,20 +108,29 @@ setup_tools() {
     uname -a
   } >"$OUT/logs/sw_vers.txt" 2>&1
   system_profiler SPDisplaysDataType >"$OUT/logs/system_profiler.txt" 2>&1
-  # Pillow — в своём venv: системный python3 из brew не даёт ставить пакеты (PEP 668)
+  # Pillow — в своём venv: системный python3 из brew не даёт ставить пакеты (PEP 668).
+  # Версия закреплена, только готовые колёса: сборка из исходников запустила бы чужой setup.py
   local v="$WORK/venv" ver
-  if python3 -m venv "$v" >>"$OUT/logs/pip.txt" 2>&1; then
+  if ! install_allowed; then
+    row "Pillow" "пропуск" "--no-install: changed = null, ok — по списку окон"
+  elif python3 -m venv "$v" >>"$OUT/logs/pip.txt" 2>&1; then
     for ver in 12.0.0 11.3.0; do
-      if with_timeout 180 "$v/bin/python" -m pip install -q --disable-pip-version-check "pillow==$ver" >>"$OUT/logs/pip.txt" 2>&1; then
+      if with_timeout 180 "$v/bin/python" -m pip install -q --disable-pip-version-check --only-binary=:all: "pillow==$ver" >>"$OUT/logs/pip.txt" 2>&1; then
         PY="$v/bin/python"
         row "Pillow" "да" "pillow==$ver"
         break
       fi
     done
   fi
-  [ "$PY" = python3 ] && row "Pillow" "нет" "не поставился (logs/pip.txt): changed = null, ok — по списку окон"
+  if install_allowed && [ "$PY" = python3 ]; then
+    row "Pillow" "нет" "не поставился (logs/pip.txt): changed = null, ok — по списку окон"
+  fi
   if ! command -v cliclick >/dev/null 2>&1; then
-    with_timeout 180 brew install cliclick >>"$OUT/logs/brew.txt" 2>&1
+    if install_allowed; then
+      with_timeout 180 brew install cliclick >>"$OUT/logs/brew.txt" 2>&1
+    else
+      row "cliclick" "пропуск" "--no-install: снимки с щелчками (04a, 10) идут без него или пропускаются"
+    fi
   fi
   if windows_bin >/dev/null; then
     row "windows.swift" "да" "собран swiftc"

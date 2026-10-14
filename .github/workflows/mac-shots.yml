@@ -46,6 +46,12 @@ on:
         required: true
         type: boolean
         default: true
+      scenes:
+        description: "Главы ролика (039): all — «Распакуйте архив», «Первый запуск», «Если пишет «повреждено»»; unzip — только распаковка; classic — как 0.10 (программа сразу в «Программах»)"
+        required: true
+        type: choice
+        default: all
+        options: [all, unzip, classic]
       display:
         description: "Экран раннера: auto (1440x900:hidpi, 1920x1080, 1680x1050, 1440x900) или свой список ШxВ[:hidpi]"
         required: false
@@ -101,6 +107,17 @@ jobs:
             [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag должен быть vX.Y.Z, получено '$TAG'"; exit 1; }
           elif [ -n "$RUN_ID" ]; then
             [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::run_id — число, получено '$RUN_ID'"; exit 1; }
+            # Артефакт «macos»/«windows» берём только из прогона Release по метке или ручному запуску:
+            # чужой workflow мог бы выложить под этим именем что угодно
+            info="$(gh run view "$RUN_ID" -R "$GITHUB_REPOSITORY" --json workflowName,event,headBranch --jq '.workflowName + "|" + .event + "|" + .headBranch')" ||
+              { echo "::error::Прогон $RUN_ID не найден"; exit 1; }
+            case "$info" in
+              "Release|workflow_dispatch|main") ;;
+              "Release|push|"*)
+                [[ "${info#Release|push|}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+                  { echo "::error::Прогон $RUN_ID — ветка не метка версии: '$info'"; exit 1; } ;;
+              *) echo "::error::Прогон $RUN_ID — '$info', нужен Release (push по метке или workflow_dispatch с main)"; exit 1 ;;
+            esac
           else
             echo "::error::Нужен tag (опубликованный релиз) или run_id (прогон Release)"
             exit 1
@@ -137,6 +154,9 @@ jobs:
           /bin/bash scripts/mac/test_lib.sh
           python3 -m unittest discover -s scripts/mac -v
 
+      # Архив выпуска (039 design §5.1): упакован по раскладке «Sosnina Albums X.Y.Z/…» — берём как есть (check = 0);
+      # «голый» zip выпуска 0.10 (.app в корне, check = 3) пакуем сами через pack.py — на нём снимается глава
+      # «Распакуйте архив». pack.py пишет Т1 (scripts/win), вызов — по контракту design §2.1
       - name: zip программы
         id: zip
         env:
@@ -149,17 +169,50 @@ jobs:
           if [ -n "$TAG" ]; then
             gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p '*-macos-universal.zip' -D "$d"
           else
-            gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n macos -D "$d"
+            gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n packages -D "$d" ||
+              gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n macos -D "$d"
           fi
           shopt -s nullglob
-          zips=("$d"/*-macos-universal.zip)
+          zips=("$d"/*-macos-universal.zip "$d"/*-macos-app.zip)
           if [ "${#zips[@]}" -ne 1 ]; then
-            echo "::error::Ожидался один *-macos-universal.zip, найдено: ${#zips[@]}"
+            echo "::error::Ожидался один архив macOS (*-macos-universal.zip), найдено: ${#zips[@]}"
             ls -l "$d"
             exit 1
           fi
-          echo "zip=${zips[0]}" >> "$GITHUB_OUTPUT"
-          ls -l "$d"
+          zip="${zips[0]}"
+          rc=0
+          python3 -I scripts/win/pack.py check "$zip" --os macos || rc=$?
+          if [ "$rc" = 3 ]; then
+            ver="$(basename "$zip" | sed -n 's/^SosninaAlbums-\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)-macos.*\.zip$/\1/p')"
+            [ -n "$ver" ] || ver="${TAG#v}"
+            [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Версию не определить: zip '$zip', tag '$TAG'"; exit 1; }
+            # Инструкция: pdf выпуска, иначе docx, иначе заглушка (в архиве снимков важна раскладка, не текст)
+            g="$RUNNER_TEMP/guide"
+            mkdir -p "$g"
+            if [ -n "$TAG" ]; then
+              gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p '*-install-guide-ru.pdf' -D "$g" 2>/dev/null ||
+                gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p '*-install-guide-ru.docx' -D "$g" 2>/dev/null || true
+            fi
+            guides=("$g"/*.pdf "$g"/*.docx)
+            if [ "${#guides[@]}" -eq 0 ]; then
+              echo "::warning::Инструкции выпуска нет — в архив снимков кладётся заглушка"
+              echo "Заглушка инструкции для снимков." > "$g/install-guide-ru.docx"
+              guides=("$g/install-guide-ru.docx")
+            fi
+            out="$RUNNER_TEMP/packed"
+            mkdir -p "$out"
+            python3 -I scripts/win/pack.py macos --app-zip "$zip" --version "$ver" --guide "${guides[0]}" \
+              --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --out "$out" | tee "$RUNNER_TEMP/pack.log"
+            zip="$(tail -n 1 "$RUNNER_TEMP/pack.log")"
+            [ -f "$zip" ] || { echo "::error::pack.py не назвал архив: '$zip'"; exit 1; }
+            python3 -I scripts/win/pack.py check "$zip" --os macos --version "$ver"
+            echo "Архив упакован для снимков: $(basename "$zip")"
+          elif [ "$rc" != 0 ]; then
+            echo "::error::pack.py check: код $rc — архив не годится"
+            exit 1
+          fi
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          ls -l "$(dirname "$zip")"
 
       # Провал валит задание — так selftest проверяет, что сломанный бинарь не пройдёт
       - name: Проверка запуска (smoke.sh)
@@ -177,11 +230,12 @@ jobs:
           LANG_UI: ${{ inputs.lang }}
           VIDEO: ${{ inputs.video }}
           GUIDE_VIDEO: ${{ inputs.guide_video }}
+          SCENES: ${{ inputs.scenes }}
           DISPLAY_SPEC: ${{ inputs.display }}
         run: |
           args=(--lang "$LANG_UI" --display "${DISPLAY_SPEC:-auto}")
           [ "$VIDEO" = "true" ] && args+=(--video)
-          [ "$GUIDE_VIDEO" = "true" ] && args+=(--guide-video)
+          [ "$GUIDE_VIDEO" = "true" ] && args+=(--guide-video --scenes "${SCENES:-all}")
           /bin/bash scripts/mac/shots.sh "$ZIP" "$RUNNER_TEMP/mac-out" "${args[@]}"
 
       - name: Сводка

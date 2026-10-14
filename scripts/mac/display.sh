@@ -61,7 +61,8 @@ display_matches() {
 # displayplacer_try <кандидаты> — запасной путь: displayplacer из brew; печатает «ок <кандидат>» или ничего
 displayplacer_try() {
   local id c w h m sc
-  if ! command -v displayplacer >/dev/null 2>&1; then
+  # tap стороннего автора — чужой код: при --no-install не ставим, режим экрана остаётся как есть
+  if ! command -v displayplacer >/dev/null 2>&1 && install_allowed; then
     with_timeout 240 brew install jakehilborn/jakehilborn/displayplacer >>"$OUT/logs/brew.txt" 2>&1
   fi
   command -v displayplacer >/dev/null 2>&1 || return 1

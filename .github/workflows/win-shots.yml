@@ -1,6 +1,7 @@
-# Снимки и видео для инструкции Windows (спека 036, design §5): страница релиза в Edge -> предупреждение Edge ->
-# окно SmartScreen -> программа; запись экрана и журнал шагов для монтажа scripts/guide/overlay.py.
-# Берёт exe опубликованного релиза (tag) или артефакт «windows» прогона Release (run_id, для черновика).
+# Снимки и видео для инструкции Windows (спеки 036 и 039): [страница релиза в Edge] -> распаковка архива в Проводнике
+# -> окно SmartScreen -> программа -> запуск прямо из архива -> «Разблокировать»; запись экрана и журнал шагов для
+# монтажа scripts/guide/overlay.py. Берёт архив (или exe выпуска 0.10, его пакует scripts/win/pack.py) опубликованного
+# релиза (tag) или артефакт «packages»/«windows» прогона Release (run_id, для черновика).
 # Раннеры: windows-11-arm (Windows 11, как у фотографа) и windows-2025 (для сравнения).
 # Скрипты - из того же коммита, что этот файл: итерация = правка scripts/win -> коммит в main -> новый прогон.
 name: "Windows: снимки и видео"
@@ -14,7 +15,7 @@ on:
         type: string
         default: ""
       run_id:
-        description: "Номер прогона Release с артефактом windows (пусто - см. tag; без Edge: артефакт скачивается только через токен)"
+        description: "Номер прогона Release с артефактом packages или windows (пусто - см. tag; без Edge: артефакт скачивается только через токен)"
         required: false
         type: string
         default: ""
@@ -85,6 +86,17 @@ jobs:
             [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag должен быть vX.Y.Z, получено '$TAG'"; exit 1; }
           elif [ -n "$RUN_ID" ]; then
             [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::run_id - число, получено '$RUN_ID'"; exit 1; }
+            # Артефакт «macos»/«windows» берём только из прогона Release по метке или ручному запуску:
+            # чужой workflow мог бы выложить под этим именем что угодно
+            info="$(gh run view "$RUN_ID" -R "$GITHUB_REPOSITORY" --json workflowName,event,headBranch --jq '.workflowName + "|" + .event + "|" + .headBranch')" ||
+              { echo "::error::Прогон $RUN_ID не найден"; exit 1; }
+            case "$info" in
+              "Release|workflow_dispatch|main") ;;
+              "Release|push|"*)
+                [[ "${info#Release|push|}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+                  { echo "::error::Прогон $RUN_ID — ветка не метка версии: '$info'"; exit 1; } ;;
+              *) echo "::error::Прогон $RUN_ID — '$info', нужен Release (push по метке или workflow_dispatch с main)"; exit 1 ;;
+            esac
           else
             echo "::error::Нужен tag (опубликованный релиз) или run_id (прогон Release)"
             exit 1
@@ -124,27 +136,71 @@ jobs:
         run: |
           Set-ExecutionPolicy Bypass -Scope Process -Force
           & "$env:GITHUB_WORKSPACE\scripts\win\test_winlib.ps1"
+          $code = $LASTEXITCODE
+          & "$env:GITHUB_WORKSPACE\scripts\win\test_winzip.ps1"
+          if ($code -ne 0) { exit $code }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: exe программы
-        id: exe
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # Готовый архив выпуска (0.11+) берётся как есть; «голый» exe (0.10) пакует pack.py, как release.yml.
+      # Run-блоки этого задания только ASCII: Windows PowerShell 5.1 читает файл без BOM как ANSI
+      - name: Архив программы
+        id: zip
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.pick.outputs.tag }}
           RUN_ID: ${{ needs.pick.outputs.run_id }}
+          PYTHONUTF8: "1"
         run: |
-          $d = Join-Path $env:RUNNER_TEMP 'exe'
-          New-Item -ItemType Directory -Force -Path $d | Out-Null
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          $ErrorActionPreference = 'Continue'
+          $ws = $env:GITHUB_WORKSPACE
+          $repo = $env:GITHUB_REPOSITORY
+          Import-Module "$ws\scripts\win\winzip.psm1" -DisableNameChecking
+          $d = Join-Path $env:RUNNER_TEMP 'zip'
+          $g = Join-Path $env:RUNNER_TEMP 'guide'
+          New-Item -ItemType Directory -Force -Path $d, $g | Out-Null
+          $names = @()
           if ($env:TAG) {
-            gh release download $env:TAG -R $env:GITHUB_REPOSITORY -p '*-windows-x64.exe' -D $d
+            $names = @(gh release view $env:TAG -R $repo --json assets --jq '.assets[].name')
+            if ($LASTEXITCODE -ne 0) { throw 'gh release view failed' }
+            $pick = Select-ReleaseAsset $names
+            if (-not $pick.Name) { throw 'no windows-x64 zip or exe in the release' }
+            gh release download $env:TAG -R $repo -p $pick.Name -D $d --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'failed to download the release asset' }
+            $guide = Select-GuideAsset $names
+            if ($pick.Kind -eq 'exe' -and $guide) { gh release download $env:TAG -R $repo -p $guide -D $g --clobber }
           } else {
-            gh run download $env:RUN_ID -R $env:GITHUB_REPOSITORY -n windows -D $d
+            gh run download $env:RUN_ID -R $repo -n packages -D $d
+            if ($LASTEXITCODE -ne 0) { gh run download $env:RUN_ID -R $repo -n windows -D $d }
+            if ($LASTEXITCODE -ne 0) { throw 'failed to download the artifact' }
+            gh run download $env:RUN_ID -R $repo -n guide -D $g
           }
-          if ($LASTEXITCODE -ne 0) { throw 'failed to download exe' }
-          $f = @(Get-ChildItem -LiteralPath $d -Filter '*-windows-x64.exe' -File -Recurse)
-          if ($f.Count -ne 1) { throw "Expected one *-windows-x64.exe, found: $($f.Count)" }
-          Get-FileHash -Algorithm SHA256 -LiteralPath $f[0].FullName | Format-List
-          "exe=$($f[0].FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding ascii -Append
+          $all = @(Get-ChildItem -LiteralPath $d -Recurse -File)
+          $z = @($all | Where-Object { $_.Name -cmatch '^SosninaAlbums-\d+\.\d+\.\d+-windows-x64\.zip$' })
+          $e = @($all | Where-Object { $_.Name -cmatch '^SosninaAlbums-\d+\.\d+\.\d+-windows-x64\.exe$' })
+          if ($z.Count -eq 1) {
+            python -I "$ws\scripts\win\pack.py" check $z[0].FullName --os windows
+            if ($LASTEXITCODE -ne 0) { throw "pack.py check exit $LASTEXITCODE" }
+            $zip = $z[0].FullName
+          } elseif ($z.Count -eq 0 -and $e.Count -eq 1) {
+            $ver = [regex]::Match($e[0].Name, '^SosninaAlbums-(\d+\.\d+\.\d+)-').Groups[1].Value
+            $gn = Select-GuideAsset @(Get-ChildItem -LiteralPath $g -File | ForEach-Object { $_.Name })
+            if (-not $ver -or -not $gn) { throw "no version or guide for packing (ver='$ver' guide='$gn')" }
+            $out = Join-Path $env:RUNNER_TEMP 'packed'
+            $lines = @(python -I "$ws\scripts\win\pack.py" windows --exe $e[0].FullName --version $ver --guide (Join-Path $g $gn) --changelog "$ws\CHANGELOG.md" --notices "$ws\THIRD_PARTY_NOTICES.txt" --out $out)
+            $lines | ForEach-Object { Write-Host $_ }
+            if ($LASTEXITCODE -ne 0) { throw "pack.py windows exit $LASTEXITCODE" }
+            $zip = [string]$lines[-1]
+          } else {
+            throw "Expected one windows-x64 zip or one exe, found zip=$($z.Count) exe=$($e.Count)"
+          }
+          if (-not (Test-Path -LiteralPath $zip)) { throw "archive not found: $zip" }
+          Get-FileHash -Algorithm SHA256 -LiteralPath $zip | Format-List
+          "zip=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding ascii -Append
 
       # ffmpeg BtbN: закреплённый выпуск и sha256 (сверяется до распаковки). Старые выпуски BtbN удаляет - тогда choco
       - name: ffmpeg
@@ -199,7 +255,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.pick.outputs.tag }}
-          EXE: ${{ steps.exe.outputs.exe }}
+          ZIP: ${{ steps.zip.outputs.zip }}
           VIDEO: ${{ inputs.video }}
           EDGE: ${{ inputs.edge }}
         run: |
@@ -208,7 +264,7 @@ jobs:
             OutDir = (Join-Path $env:RUNNER_TEMP 'win-out')
             Tag = $env:TAG
             Repo = $env:GITHUB_REPOSITORY
-            ExePath = $env:EXE
+            ZipPath = $env:ZIP
             Edge = ($env:EDGE -eq 'true')
             Video = ($env:VIDEO -eq 'true')
           }

@@ -383,5 +383,55 @@ class TestJournal(unittest.TestCase):
         self.assertEqual(m.main(["solid", "--color", "#d81f26", "--size", "0x4", "--out", out]), 2)
 
 
+class TestWorkflow(unittest.TestCase):
+    """039: mac-shots.yml и сценарии связаны по контракту (имена, ключи, пределы размера)."""
+
+    HERE = os.path.dirname(os.path.abspath(__file__))
+    ROOT = os.path.dirname(os.path.dirname(HERE))
+
+    def read(self, *parts):
+        with open(os.path.join(self.ROOT, *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_scenes_input_reaches_shots(self):
+        yml = self.read(".github", "workflows", "mac-shots.yml")
+        # вход scenes: три значения, по умолчанию all; передаётся в shots.sh и разбирается там же
+        self.assertIn("options: [all, unzip, classic]", yml)
+        self.assertIn("SCENES: ${{ inputs.scenes }}", yml)
+        self.assertIn('--scenes "${SCENES:-all}"', yml)
+        shots = self.read("scripts", "mac", "shots.sh")
+        self.assertIn("--scenes) SCENES=", shots)
+        self.assertIn("gv_scenes_norm", self.read("scripts", "mac", "guidevid.sh"))
+
+    def test_zip_packed_through_pack_py_contract(self):
+        yml = self.read(".github", "workflows", "mac-shots.yml")
+        # design 039 §2.1: check (0 — как есть, 3 — пакуем сами), затем macos, затем check с версией
+        self.assertIn("python3 -I scripts/win/pack.py check", yml)
+        self.assertIn('[ "$rc" = 3 ]', yml)
+        self.assertIn("python3 -I scripts/win/pack.py macos --app-zip", yml)
+        self.assertIn("--changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt", yml)
+        self.assertIn('--os macos --version "$ver"', yml)
+        # дальше по цепочке идёт упакованный архив, не исходный
+        self.assertIn('echo "zip=$zip" >> "$GITHUB_OUTPUT"', yml)
+
+    def test_chapter_and_shot_names(self):
+        src = self.read("scripts", "mac", "gvzip.sh")
+        self.assertIn('gv_chapter "Распакуйте архив"', src)
+        for name in ("mac-01-zip-downloads", "mac-01-zip-folder", "mac-01-drag-applications"):
+            self.assertIn(name, src)
+        self.assertIn("карантин после Архиватора", src)
+
+    def test_folder_limits(self):
+        files = [f for f in os.listdir(self.HERE) if os.path.isfile(os.path.join(self.HERE, f)) and not f.startswith("__")]
+        code = [f for f in files if f.endswith((".sh", ".py", ".swift", ".applescript"))]
+        self.assertLessEqual(len(code), 20, code)
+        for f in code:
+            path = os.path.join(self.HERE, f)
+            with open(path, "rb") as fh:
+                data = fh.read()
+            self.assertLessEqual(len(data.splitlines()), 600, f)
+            self.assertLessEqual(len(data), 30 * 1024, f)
+
+
 if __name__ == "__main__":
     unittest.main()

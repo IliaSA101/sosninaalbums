@@ -1,13 +1,14 @@
-﻿# shots.ps1 - сценарий первого запуска на Windows 11 (спека 036, design §5.6): страница релиза в Edge ->
-# предупреждение Edge -> «Сохранить» -> окно SmartScreen -> «Подробнее» -> «Выполнить в любом случае» -> программа;
-# глава 2 - «Свойства» -> «Разблокировать». Пишет снимки png/win-NN-*.png, shots.json, журнал video/steps.jsonl
-# (контракт design §2, его монтирует scripts/guide/overlay.py) и raw.mp4. Всегда выходит с кодом 0.
+﻿# shots.ps1 - сценарий установки на Windows 11 (спеки 036 и 039): [Edge: страница выпуска -> «Сохранить»] -> главы
+# «Распакуйте архив» (Проводник, «Извлечь все»), «Первый запуск» (SmartScreen -> программа), «Если запустили прямо из
+# архива» (окно «Сжатые ZIP-папки»), «Если кнопки нет» («Свойства» -> «Разблокировать»). Главы Проводника - winzip.psm1.
+# Пишет снимки png/win-NN-*.png, shots.json, журнал video/steps.jsonl (контракт design §2, его монтирует
+# scripts/guide/overlay.py) и raw.mp4. Всегда выходит с кодом 0.
 # Файл в UTF-8 с BOM (Windows PowerShell 5.1).
 param(
     [Parameter(Mandatory)][string]$OutDir,
     [string]$Tag = '',
     [string]$Repo = '',
-    [string]$ExePath = '',
+    [string]$ZipPath = '',
     [switch]$Edge,
     [switch]$Video
 )
@@ -15,6 +16,7 @@ $ErrorActionPreference = 'Continue'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Import-Module (Join-Path $here 'winlib.psm1') -Force -DisableNameChecking
 Import-Module (Join-Path $here 'winui.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $here 'winzip.psm1') -Force -DisableNameChecking
 . (Join-Path $here 'record.ps1')
 
 foreach ($d in 'png', 'video', 'logs') { New-Item -ItemType Directory -Force -Path (Join-Path $OutDir $d) | Out-Null }
@@ -33,8 +35,8 @@ $build = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -
 $winVer = '{0}.{1}' -f $build.CurrentBuild, $build.UBR
 $script:LastEnd = 0.0
 $script:Recorder = 'none'
-$assetRe = 'windows-x64\.exe'   # регулярка для имён UIA
-$assetGlob = '*windows-x64.exe'   # маска для файлов и gh
+$assetRe = 'windows-x64\.zip'   # регулярка для имён UIA
+$assetGlob = '*windows-x64.zip'   # маска для файлов и gh
 
 # ---------- снимки и действия ----------
 
@@ -117,6 +119,13 @@ function Invoke-ScrollTo([scriptblock]$Find, [int]$MaxTries = 14) {
 # Результат функции с побочным выводом: булевым считается последнее значение
 function Get-LastBool($Out) { $a = @($Out); return ($a.Count -gt 0 -and $a[-1] -eq $true) }
 
+function Invoke-Chapter([string]$Name, [scriptblock]$Body) {
+    try { & $Body } catch {
+        Write-Log "глава «$Name»: $($_.Exception.Message)`n$($_.ScriptStackTrace)"
+        Add-SummaryRow "Глава «$Name»" 'нет' $_.Exception.Message
+    }
+}
+
 # ---------- Edge, загрузка, запуск ----------
 
 function Set-EdgePolicies {
@@ -146,25 +155,20 @@ function Start-EdgePage([string]$Url) {
     Start-Process -FilePath $exe -ArgumentList @('--no-first-run', '--no-default-browser-check', '--force-renderer-accessibility', '--start-maximized', $Url)
 }
 
-# Метка «скачано из интернета» (ZoneId=3): то же, что ставит браузер, - по ней SmartScreen и ругается
-function Set-Zone([string]$Path, [string]$Url) {
-    Set-Content -LiteralPath $Path -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3`r`nHostUrl=$Url`r`nReferrerUrl=$Url"
-}
-
 function Find-Downloaded {
     $f = Get-ChildItem -LiteralPath $downloads -Filter $assetGlob -File -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($f) { return $f.FullName }
     return $null
 }
 
-# Запасной путь: файл из артефакта/релиза и метка вручную
-function Get-ExeFallback {
-    $exe = Find-Downloaded
-    if ($exe) { return $exe }
-    $src = $ExePath
+# Запасной путь: архив из артефакта/релиза и метка вручную (Set-Zone - в winzip.psm1)
+function Get-ZipFallback {
+    $zip = Find-Downloaded
+    if ($zip) { return $zip }
+    $src = $ZipPath
     if (-not $src -or -not (Test-Path -LiteralPath $src)) {
         if ($Tag -and $Repo) {
-            $tmp = Join-Path $env:TEMP 'sa-exe'
+            $tmp = Join-Path $env:TEMP 'sa-zip'
             New-Item -ItemType Directory -Force -Path $tmp | Out-Null
             & gh release download $Tag -R $Repo -p $assetGlob -D $tmp --clobber 2>&1 | ForEach-Object { Write-Log "gh: $_" }
             $got = Get-ChildItem -LiteralPath $tmp -Filter $assetGlob -File | Select-Object -First 1
@@ -188,20 +192,23 @@ $namesOpen = @('Открыть файл', 'Open file')
 $namesInfo = @('Подробнее', 'More info')
 $namesRun = @('Выполнить в любом случае', 'Run anyway')
 
-# Шаг 1: страница релиза, щелчок по exe
+# Глава «Скачайте архив», шаг 1: страница релиза, щелчок по архиву. Главу и шаг пишем, когда ссылка найдена:
+# на странице выпуска 0.10 архива ещё нет, и пустая глава сдвинула бы номера остальных
 function Invoke-EdgeDownload {
-    Add-JStep 1 4 'Скачайте программу'
     Reset-IdleStart
     Start-EdgePage "https://github.com/$Repo/releases/tag/$Tag"
     $find = { Find-UiaOnce -Procs @('msedge') -NameRegex $assetRe -Type 'Hyperlink' }
     $hit = Wait-Target -Names @() -Procs @('msedge') -Timeout 60 -NameRegex $assetRe -Type 'Hyperlink'
     if (-not $hit) {
-        Write-Log 'ссылка на exe не найдена на странице релиза - пробую список файлов (expanded_assets)'
+        Write-Log 'ссылка на архив не найдена на странице релиза - пробую список файлов (expanded_assets)'
         Start-EdgePage "https://github.com/$Repo/releases/expanded_assets/$Tag"
         $hit = Wait-Target -Names @() -Procs @('msedge') -Timeout 40 -NameRegex $assetRe -Type 'Hyperlink'
     }
     if ($hit) { $hit = Invoke-ScrollTo $find }
-    if (-not $hit) { Add-SummaryRow 'Edge: страница релиза' 'нет' 'ссылка на exe не найдена (UIA)'; return $false }
+    if (-not $hit) { Add-SummaryRow 'Edge: страница релиза' 'нет' 'ссылка на архив не найдена (UIA)'; return $false }
+    Add-JChapter 'Скачайте архив'
+    Add-JStep 1 2 'Скачайте программу'
+    Reset-IdleStart
     $cap = 'Нажмите на файл ' + ($hit.Name -replace '\s.*$', '')
     if ($cap.Length -gt 80) { $cap = $cap.Substring(0, 80) }
     Invoke-Act $hit $cap 'click' 'win-01-release' 0.5 $hit.Name
@@ -212,7 +219,7 @@ function Invoke-EdgeDownload {
 # Шаг 2: предупреждение Edge. Порядок кнопок на разных версиях Edge разный, поэтому цикл по приоритету:
 # «Открыть файл» > «Всё равно сохранить» > «Показать больше» > «Сохранить» > «…»
 function Invoke-EdgeKeep {
-    Add-JStep 2 4 'Сохраните файл'
+    Add-JStep 2 2 'Сохраните файл'
     Reset-IdleStart
     $all = $namesMore + $namesKeep + $namesShow + $namesAnyway + $namesOpen
     $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -250,7 +257,7 @@ function Invoke-EdgeKeep {
             }
             'show' { Invoke-Act $pick (Get-Caption 'Показать больше' $pick.Name) 'click' '' 1.0 'Показать больше' }
             'anyway' { Invoke-Act $pick (Get-Caption 'Всё равно сохранить' $pick.Name) 'click' 'win-03-edge-keep' 1.5 'Всё равно сохранить' }
-            'open' { $script:OpenHit = $pick; $opened = $true }
+            'open' { $opened = $true }   # архив открываем сами в «Загрузках», кнопка Edge не нужна
         }
     }
     # предупреждение Edge необязательно: нет окна - «нет предупреждения браузера», сценарий идёт дальше без провала
@@ -281,13 +288,16 @@ function Start-ExeNoWait([string]$Path) {
     }
 }
 
-# Шаг 3: открыть файл (или запустить его из Загрузок) и пройти окно SmartScreen
-function Invoke-RunExe([string]$Exe, [bool]$ViaEdgeOpen, [int]$StepN, [int]$Of) {
+# Пройти окно SmartScreen. Clicked - exe уже открыт двойным щелчком в Проводнике; окна нет за 20 с - запускаем сами
+function Invoke-RunExe([string]$Exe, [int]$StepN, [int]$Of, [bool]$Clicked = $false) {
     Add-JStep $StepN $Of 'Запустите программу'
     Reset-IdleStart
     $launch = ''
-    if ($ViaEdgeOpen -and $script:OpenHit) {
-        Invoke-Act $script:OpenHit (Get-Caption 'Открыть файл' $script:OpenHit.Name) 'click' '' 0.5 'Открыть файл'
+    if ($Clicked) {
+        if (-not (Wait-Target -Names $namesInfo -Timeout 20 -Skip @('msedge'))) {
+            Add-JNote 'двойной щелчок не дал окна SmartScreen - запуск через Start-ExeNoWait'
+            $launch = Start-ExeNoWait $Exe
+        }
     } else {
         Write-Log "запуск $Exe"
         $launch = Start-ExeNoWait $Exe
@@ -388,7 +398,6 @@ function Invoke-Unblock([string]$Exe) {
 # ---------- основной ход ----------
 
 $rec = $null
-$exe = $null
 $journalOpen = $false
 try {
     Set-EdgePolicies
@@ -425,33 +434,45 @@ try {
     Show-Flash '#d81f26' 0.8 { Add-JSync '#d81f26' 0.8 }
     Start-Sleep -Milliseconds 600
     [void][SaWin.Native]::SetCursorPos([int]($sz[0] * 0.7), [int]($sz[1] * 0.8))
-    Add-JChapter 'Первый запуск на Windows 11'
     Reset-IdleStart
 
-    $viaEdge = $false
-    $stepsTotal = 2
+    # Edge-глава «Скачайте архив» пишется, только если ссылка нашлась; иначе главы 1-4 идут с первой (--chapter N в overlay.py)
+    $zip = $null
     if ($Edge) {
-        $stepsTotal = 4
         $got = $false
         try { $got = Get-LastBool (Invoke-EdgeDownload) } catch { Write-Log "Edge, шаг 1: $($_.Exception.Message)" }
-        if ($got) { try { $viaEdge = Get-LastBool (Invoke-EdgeKeep) } catch { Write-Log "Edge, шаг 2: $($_.Exception.Message)" } }
+        if ($got) { try { [void](Invoke-EdgeKeep) } catch { Write-Log "Edge, шаг 2: $($_.Exception.Message)" } }
+        Get-Process -Name msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
-        $exe = Find-Downloaded
-        if (-not $exe) { Add-SummaryRow 'Edge: файл в Загрузках' 'нет' 'exe не скачался - иду запасным путём (Zone.Identifier)' }
-        else { Add-SummaryRow 'Edge: файл в Загрузках' 'да' $exe }
+        $zip = Find-Downloaded
+        if (-not $zip) { Add-SummaryRow 'Edge: архив в Загрузках' 'нет' 'архив не скачался - иду запасным путём (Zone.Identifier)' }
+        else { Add-SummaryRow 'Edge: архив в Загрузках' 'да' $zip }
     }
-    if (-not $exe) {
-        $exe = Get-ExeFallback
-        if ($exe) { Add-JNote 'запасной путь: файл скопирован, метка Zone.Identifier поставлена вручную' }
-        if ($Edge) { $stepsTotal = 4 }
+    if (-not $zip) {
+        $zip = Get-ZipFallback
+        if ($zip) { Add-JNote 'запасной путь: архив скопирован, метка Zone.Identifier поставлена вручную' }
     }
-    if (-not $exe) {
-        Add-SummaryRow 'Файл программы' 'нет' 'exe не найден ни в Edge, ни по tag/run_id'
+    if (-not $zip) {
+        Add-SummaryRow 'Архив программы' 'нет' 'архив не найден ни в Edge, ни по tag/run_id'
     } else {
-        $stepN = $stepsTotal - 1
-        Invoke-RunExe $exe $viaEdge $stepN $stepsTotal
-        Invoke-AppShot $stepsTotal $stepsTotal
-        Invoke-Unblock $exe
+        $zc = @{
+            Downloads = $downloads; OcrTmp = $ocrTmp; Unpacked = $null
+            Act = { param($h, $cap, $m, $s, $p, $l) Invoke-Act $h $cap $m $s $p $l }
+            Idle = { Reset-IdleStart }
+            Missing = { param($n, $why) Add-MissingShot $n $why }
+            Procs = { Get-AppProcess }
+            RunExe = { param($e, $n, $of, $clicked) Invoke-RunExe $e $n $of $clicked }
+            AppShot = { param($n, $of) Invoke-AppShot $n $of }
+        }
+        # глава не должна ронять следующие: сбой - строка в summary.md
+        Invoke-Chapter 'Распакуйте архив' { Invoke-ZipUnpack $zc $zip }
+        if ($zc.Unpacked) {
+            Invoke-Chapter 'Первый запуск' { Invoke-ZipFirstRun $zc }
+            Invoke-Chapter 'Запуск из архива' { Invoke-ZipFromArchive $zc $zip }
+            Invoke-Chapter 'Если кнопки нет' { Invoke-Unblock $zc.Unpacked.Exe }
+        } else {
+            Add-SummaryRow 'Главы 2-4' 'нет' 'архив не распакован'
+        }
     }
 } catch {
     Write-Log "сбой сценария: $($_.Exception.Message)`n$($_.ScriptStackTrace)"

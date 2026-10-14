@@ -522,21 +522,8 @@ gv_scene_terminal() {
   sleep 0.5
 }
 
-# Сценарий целиком — под with_timeout (подоболочка): запись запущена снаружи. Время 0 журнала — meta
-gv_scenario() {
-  sleep 2
-  gv_flash || gv_note "метка синхронизации не поставилась — монтаж откажет"
-  gv_finder_show
-  GV_IDLE0="$(gv_now)"
-  gv_chapter "Первый запуск на macOS $MAJOR"
-  if [ "${MAJOR:-0}" -ge 15 ]; then gv_scene_gatekeeper; else gv_scene_context; fi
-  stop_app "$VDST"
-  gv_scene_terminal
-  gv_jl end t=@now
-  stop_app "$VDST"
-}
-
-# guide_video_run — после снимков (shots.sh --guide-video): копия в «Программах», запись, сценарий, итог в summary.md
+# guide_video_run — после снимков (shots.sh --guide-video): копия в «Программах» (при главе «Распакуйте архив» её
+# кладёт перетаскивание), запись, сценарий gv_scenario (gvzip.sh), итог в summary.md
 guide_video_run() {
   local f="$OUT/video/raw.mp4" info dur mb stats syncs
   section "Ролик-инструкция (guidevid.sh)"
@@ -548,6 +535,7 @@ guide_video_run() {
     row "ролик" "нет" "нет cliclick — щелчки и курсор невозможны"
     return 0
   fi
+  GV_SCENES="$(gv_scenes_norm "$SCENES" "$SRC")"
   GV_JOURNAL="$OUT/video/steps.jsonl"
   GV_CLOCK="$WORK/jclock"
   GV_WIN="$WORK/gv-windows.json"
@@ -560,20 +548,19 @@ guide_video_run() {
   VXATTR="xattr -dr com.apple.quarantine $VDST"
   reset_all
   set_wallpaper
-  gv_install_copy
-  if [ ! -d "$VDST" ]; then
+  if ! gv_prepare_copy; then
     row "ролик: копия" "нет" "не создалась (logs/guidevid-err.txt)"
     return 0
   fi
   windows_json "$GV_WIN"
   "$PY" "$MAC_DIR/macshots.py" journal --file "$GV_JOURNAL" --clock "$GV_CLOCK" --windows "$GV_WIN" meta \
-    os=macos "ver=$MACOS" "lang=$LANG_UI" recorder=avfoundation "script=guidevid 1" 2>>"$OUT/logs/journal-err.txt"
+    os=macos "ver=$MACOS" "lang=$LANG_UI" recorder=avfoundation "script=guidevid 2 scenes=$GV_SCENES" 2>>"$OUT/logs/journal-err.txt"
   if ! avf_start "$f" hq; then
     row "ролик" "нет" "запись не началась: $REC_WHY"
     rm -rf "$VDST"
     return 0
   fi
-  run_step 600 gv_scenario
+  run_step 900 gv_scenario
   stop_rec "$REC_PID"
   reset_all
   [ "$VDST" = "$DST" ] || rm -rf "$VDST" 2>/dev/null

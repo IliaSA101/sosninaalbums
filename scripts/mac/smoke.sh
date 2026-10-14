@@ -108,9 +108,8 @@ log_lines() { if [ -f "$LOGFILE" ]; then wc -l <"$LOGFILE" | tr -d ' '; else ech
 rm -rf "$WORK"
 mkdir -p "$WORK/app"
 ditto -x -k "$ZIP" "$WORK/app" 2>"$OUT/logs/smoke-unzip.txt" || fail "1 распаковка" "ditto не распаковал $(basename "$ZIP")"
-n=0
-for a in "$WORK"/app/*.app; do [ -d "$a" ] && n=$((n + 1)) && APP="$a"; done
-[ "$n" -eq 1 ] || fail "1 распаковка" "в zip должно быть ровно одно .app, найдено $n"
+# .app в корне (0.10) или в папке «Sosnina Albums X.Y.Z» (0.11)
+APP="$(find_app "$WORK/app")" || fail "1 распаковка" "в zip должно быть ровно одно .app (в корне или в папке выпуска)"
 PLIST="$APP/Contents/Info.plist"
 plutil -lint "$PLIST" >"$OUT/logs/smoke-plist.txt" 2>&1 || fail "1 распаковка" "Info.plist не читается"
 EXE="$(plist_get "$APP" CFBundleExecutable)"
