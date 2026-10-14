@@ -258,6 +258,41 @@ act_click "" "Нет цели" c >/dev/null 2>&1
 gv_flush
 eq "act_click: рамка в hold — как найдена, точка — квадратом, нет цели — без рамки" "$(jholds | tr '\n' '|')" "612 388 96 110|680 380 40 40|-|"
 eq "act_click: щелчки — центр рамки и сама точка, без цели щелчка нет" "$(grep -E '^(dc|c):' "$OUT/clicks" | tr '\n' ' ')" "dc:660,443 c:700,400 "
+# перетаскивание (039, прогон 1): dd → толчок в сторону → шаги → du, а не щелчок на месте; без толчка Finder видит двойной щелчок
+sleep() { :; }
+: >"$OUT/clicks"
+act_drag "612 388 96 110" "100 300 130 28" "Перетащите" "в «Программы»" true >/dev/null 2>&1
+eq "перетаскивание: dd на значке, толчок +6 +6, пять шагов, шаг над целью, du на цели"   "$(grep -E '^(dd|dm|du):' "$OUT/clicks" | tr '
+' ' ')"   "dd:660,443 dm:666,449 dm:561,417 dm:462,391 dm:363,365 dm:264,339 dm:165,314 dm:166,314 du:165,314 "
+# окно Gatekeeper в кадре: закрыть до стоп-кадра и записать предупреждение (прогон 1: висело с первого кадра записи)
+saved_fns="$(declare -f row gv_note key_code kill_gk_agents)"
+GK_LEFT=2
+gz_gk_window() { [ "$GK_LEFT" -gt 0 ] && echo "7 100 100 300 200"; return 0; }
+dismiss_gk() { GK_LEFT=$((GK_LEFT - 1)); echo "dismiss" >>"$OUT/gk-calls"; return 0; }
+kill_gk_agents() { echo "kill" >>"$OUT/gk-calls"; }
+key_code() { :; }
+row() { printf '%s|%s|%s
+' "$1" "$2" "$3" >>"$OUT/gk-rows"; }
+gv_note() { printf '%s
+' "$*" >>"$OUT/gk-notes"; }
+: >"$OUT/gk-calls"
+: >"$OUT/gk-rows"
+: >"$OUT/gk-notes"
+ok "окно Gatekeeper: закрыто за два круга, код 0" gz_clear_gk "перед переносом" j
+eq "окно Gatekeeper: «Готово» дважды" "$(grep -c dismiss "$OUT/gk-calls")" "2"
+eq "окно Gatekeeper: предупреждение в summary и в журнале" "$(cat "$OUT/gk-rows" "$OUT/gk-notes" | tr '
+' '#')"   "ролик: окно Gatekeeper|предупреждение|окно Gatekeeper было на экране перед переносом — закрыто (круг 2)#окно Gatekeeper было на экране перед переносом — закрыто (круг 2)#"
+: >"$OUT/gk-calls"
+: >"$OUT/gk-rows"
+: >"$OUT/gk-notes"
+ok "окно Gatekeeper: экран чист — код 0" gz_clear_gk "до записи"
+eq "окно Gatekeeper: чистый экран — ни кликов, ни строк" "$(cat "$OUT/gk-calls" "$OUT/gk-rows" "$OUT/gk-notes")" ""
+GK_LEFT=99
+no "окно Gatekeeper: не закрылось — код 1" gz_clear_gk "после переноса"
+eq "окно Gatekeeper: три круга" "$(grep -c dismiss "$OUT/gk-calls")" "3"
+eq "окно Gatekeeper: без j журнал не трогаем" "$(cat "$OUT/gk-notes")" ""
+unset -f sleep gz_gk_window dismiss_gk
+eval "$saved_fns" # подмены выше затирали настоящие row/gv_note/key_code/kill_gk_agents
 unset -f cliclick
 rm -rf "$OUT"
 

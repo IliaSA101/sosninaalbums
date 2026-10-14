@@ -85,6 +85,41 @@ gz_reveal() {
   sleep 1
 }
 
+# gz_gk_window — «id x y w h» окна Gatekeeper, если оно сейчас на экране; иначе пусто
+gz_gk_window() {
+  local pids
+  pids="$(gk_pids)"
+  [ -n "$pids" ] || return 0
+  find_window "$pids" "${GK_OWNERS:-CoreServicesUIAgent|UserNotificationCenter}" front 2>/dev/null
+  return 0
+}
+
+# gz_clear_gk <где> [j] — в кадре главы не должно быть окна «Открыть файл «sosninaalbums»?». Прогон 1 (0.11, macOS
+# 15 и 26): окно висело с первого кадра записи — осталось от снимков и мешало Finder, перетаскивание не удавалось.
+# Окно есть: до трёх кругов «Готово» → убить агентов → Esc; находка идёт в summary.md предупреждением (с 2-м
+# аргументом j — ещё и заметкой в журнал: запись уже в главе). Код 0 — экран чист
+gz_clear_gk() {
+  local where="$1" i msg
+  [ -n "$(gz_gk_window)" ] || return 0
+  for i in 1 2 3; do
+    dismiss_gk >/dev/null 2>&1
+    sleep 1
+    kill_gk_agents
+    key_code 53
+    sleep 1
+    if [ -z "$(gz_gk_window)" ]; then
+      msg="окно Gatekeeper было на экране ${where} — закрыто (круг ${i})"
+      [ "${2:-}" = j ] && gv_note "$msg"
+      row "ролик: окно Gatekeeper" "предупреждение" "$msg"
+      return 0
+    fi
+  done
+  msg="окно Gatekeeper на экране ${where} не закрылось за три круга — кадр с ним"
+  [ "${2:-}" = j ] && gv_note "$msg"
+  row "ролик: окно Gatekeeper" "предупреждение" "$msg"
+  return 1
+}
+
 # gz_copy_app <откуда> <куда> — свежая копия .app; без прав на «Программы» — через sudo
 gz_copy_app() {
   rm -rf "$2" 2>/dev/null || sudo -n rm -rf "$2"
@@ -133,8 +168,9 @@ gz_sidebar_rect() {
 }
 
 # act_drag <рамка источника> <рамка цели> <подпись 1> <подпись 2> <запасная команда…> — два стоп-кадра со стрелкой,
-# затем живое перетаскивание: dd, пять шагов dm по 0,7 с (путь виден в ролике), du. Нет любой из рамок — запасной
-# путь (копия без перетаскивания), стрелки у такого кадра нет
+# затем живое перетаскивание: курсор на значок, пауза дольше интервала двойного щелчка, dd, толчок в сторону
+# (без смещения Finder считает нажатие щелчком), пять шагов dm по 0,7 с (путь виден в ролике), пауза над целью, du.
+# Нет любой из рамок — запасной путь (копия без перетаскивания), стрелки у такого кадра нет
 act_drag() {
   local src="$1" dst="$2" cap1="$3" cap2="$4" a b
   shift 4
@@ -142,12 +178,18 @@ act_drag() {
   gv_hold "$(gv_target_rect "$dst")" "$cap2"
   if a="$(gv_click_point "$src")" && b="$(gv_click_point "$dst")"; then
     gv_cursor_to "$src"
+    sleep 0.8
     cliclick "dd:${a% *},${a#* }" 2>>"$OUT/logs/cliclick-err.txt"
+    sleep 0.4
+    cliclick "dm:$((${a% *} + 6)),$((${a#* } + 6))" 2>>"$OUT/logs/cliclick-err.txt"
     while IFS=' ' read -r px py; do
       sleep 0.7
       cliclick "dm:${px},${py}" 2>>"$OUT/logs/cliclick-err.txt"
     done < <(gz_steps "${a% *}" "${a#* }" "${b% *}" "${b#* }" 5)
+    # над боковой панелью Finder подсвечивает цель не сразу
     sleep 0.7
+    cliclick "dm:$((${b% *} + 1)),${b#* }" 2>>"$OUT/logs/cliclick-err.txt"
+    sleep 0.5
     cliclick "du:${b% *},${b#* }" 2>>"$OUT/logs/cliclick-err.txt"
     gv_jl move t0=@end t1=@now
   else
@@ -177,6 +219,7 @@ gz_prepare() {
   cp "$SRC" "$GZ_ZIP"
   quarantine "$GZ_ZIP" || gv_note "метка карантина на архив не записалась"
   gz_finder_zip
+  gz_clear_gk "перед главой"
 }
 
 # gz_extract_check — после Архивации: папка и .app найдены; метка карантина у распакованного .app — в summary.md
@@ -226,6 +269,7 @@ gv_scene_unzip() {
     act_info "Программа распакована"
   fi
   name="$(basename "${GZ_APP:-sosninaalbums.app}" .app)"
+  gz_clear_gk "перед снимком папки" j
   sb="$(finder_item_rect "$name")"
   shot_t mac-01-zip-folder "" Finder front "${sb:+$sb$TAB$name}" "внутри папки выпуска: программа, инструкция, «Что нового»"
 
@@ -240,6 +284,7 @@ gv_scene_unzip() {
       shot_t mac-01-drag-applications "" Finder front "$dst" "цель перетаскивания — «Программы» в боковой панели"
       act_drag "$sb" "$(gv_rect_of "$dst")" "Перетащите ${name} ..." "... в «Программы» слева" gz_fb_install
       gz_wait 10 test -d "$VDST"
+      gz_clear_gk "после переноса" j
       ;;
     *)
       gv_note "в «Программы» не записать — копия без перетаскивания"
