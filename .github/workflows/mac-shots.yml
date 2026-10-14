@@ -41,6 +41,11 @@ on:
         required: true
         type: boolean
         default: true
+      guide_video:
+        description: "Ролик-инструкция (036): сырая запись video/raw.mp4 и журнал video/steps.jsonl для монтажа overlay.py; +3–4 мин на раннер"
+        required: true
+        type: boolean
+        default: true
       display:
         description: "Экран раннера: auto (1440x900:hidpi, 1920x1080, 1680x1050, 1440x900) или свой список ШxВ[:hidpi]"
         required: false
@@ -119,7 +124,7 @@ jobs:
       matrix:
         runner: ${{ fromJSON(needs.pick.outputs.runners) }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -171,10 +176,12 @@ jobs:
           ZIP: ${{ steps.zip.outputs.zip }}
           LANG_UI: ${{ inputs.lang }}
           VIDEO: ${{ inputs.video }}
+          GUIDE_VIDEO: ${{ inputs.guide_video }}
           DISPLAY_SPEC: ${{ inputs.display }}
         run: |
           args=(--lang "$LANG_UI" --display "${DISPLAY_SPEC:-auto}")
           [ "$VIDEO" = "true" ] && args+=(--video)
+          [ "$GUIDE_VIDEO" = "true" ] && args+=(--guide-video)
           /bin/bash scripts/mac/shots.sh "$ZIP" "$RUNNER_TEMP/mac-out" "${args[@]}"
 
       - name: Сводка

@@ -69,11 +69,14 @@ video_check() {
   rm -rf "$d"
 }
 
-# avf_start — v2: ffmpeg avfoundation с курсором и щелчками. Кодер videotoolbox с -allow_sw
-# (на 14 аппаратный не открылся: -12903), не поднялся — libx264
+# avf_start [файл [hq]] — v2: ffmpeg avfoundation с курсором и щелчками. Кодер videotoolbox с -allow_sw
+# (на 14 аппаратный не открылся: -12903), не поднялся — libx264. hq — сырая запись для монтажа (036): стоп-кадры
+# берутся из неё, поэтому битрейт выше; без аргументов — v2.mp4
 avf_start() {
-  local idx enc
+  local idx enc f="${1:-$OUT/video/v2.mp4}" vt=4M crf=28 log
   local -a codec
+  log="$OUT/logs/ffmpeg-$(basename "$f" .mp4).txt"
+  [ "${2:-}" = hq ] && vt=6M && crf=20
   idx="$(ffmpeg -hide_banner -f avfoundation -list_devices true -i "" 2>&1 | tee "$OUT/logs/avf-devices.txt" | avf_screen_index)"
   if [ -z "$idx" ]; then
     REC_WHY="avfoundation: нет «Capture screen 0» (logs/avf-devices.txt)"
@@ -81,15 +84,15 @@ avf_start() {
   fi
   for enc in videotoolbox libx264; do
     if [ "$enc" = videotoolbox ]; then
-      codec=(-c:v h264_videotoolbox -allow_sw 1 -b:v 4M)
+      codec=(-c:v h264_videotoolbox -allow_sw 1 -b:v "$vt")
     else
-      codec=(-c:v libx264 -preset ultrafast -crf 28)
+      codec=(-c:v libx264 -preset ultrafast -crf "$crf")
     fi
-    echo "== $enc" >>"$OUT/logs/ffmpeg-v2.txt"
+    echo "== $enc" >>"$log"
     # -t — страховка: запись останавливает video_stop
     ffmpeg -nostdin -y -loglevel warning -f avfoundation -capture_cursor 1 -capture_mouse_clicks 1 \
       -framerate 15 -i "$idx:none" -t 1200 -vf "scale='min(1920,iw)':-2" "${codec[@]}" \
-      -pix_fmt yuv420p "$OUT/video/v2.mp4" 2>>"$OUT/logs/ffmpeg-v2.txt" &
+      -pix_fmt yuv420p "$f" 2>>"$log" &
     REC_PID=$!
     sleep 3
     if alive "$REC_PID"; then
@@ -98,7 +101,7 @@ avf_start() {
     fi
     wait "$REC_PID" 2>/dev/null
   done
-  REC_WHY="ffmpeg avfoundation вышел сразу и с videotoolbox, и с libx264 (logs/ffmpeg-v2.txt)"
+  REC_WHY="ffmpeg avfoundation вышел сразу и с videotoolbox, и с libx264 (${log#"$OUT/"})"
   return 1
 }
 

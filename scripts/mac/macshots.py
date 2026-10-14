@@ -12,13 +12,21 @@ Pillow необязателен: без него changed = null, а ok реша�
   screen  --windows F [--png P]                                        -> фактический экран: точки, масштаб, пиксели снимка
   inrect  --rect "x y w h" [--leftmost]  (stdin: строки «x y w h<TAB>текст» от ocr)
                                                                        -> первая строка с центром внутри рамки
+  journal --file F --clock C [--windows W] EV [ключ=текст | ключ:=json …]
+                                                                       -> строка в video/steps.jsonl (036 design §2);
+                                                                          EV=now печатает текущее t; значения @now, @end
+  jstat   --file F                                                     -> «шагов N, со стрелкой M»
+  solid   --color #rrggbb (--size ШxВ | --windows W) --out F.png       -> заливка для метки синхронизации
 """
 
 import argparse
 import json
 import os
 import re
+import struct
 import sys
+import time
+import zlib
 
 MIN_CHANGED = 0.02  # меньше — на снимке одни обои (нет права записи экрана, issue #8782)
 PIX_DELTA = 24  # разница яркости 0–255 ниже — шум сжатия, часы в строке меню
@@ -329,6 +337,180 @@ def cmd_inrect(a):
     return 0
 
 
+# ---------- журнал ролика (036 design §2) ----------
+
+JOURNAL_EVENTS = {"meta", "sync", "chapter", "step", "hold", "move", "idle", "note", "keys", "type", "end"}
+CAPTION_MAX = 80  # длиннее не пропустит разбор в overlay_plan
+IDLE_MIN = 0.4  # простой короче не пишем: ускорять нечего
+
+
+def parse_field(arg):
+    """«ключ=текст» или «ключ:=json» -> (ключ, значение)."""
+    key, sep, val = arg.partition("=")
+    if not sep or not key or key == ":":
+        raise ValueError(f"поле журнала: ждали ключ=значение, получили «{arg}»")
+    if key.endswith(":"):
+        try:
+            return key[:-1], json.loads(val)
+        except ValueError as e:
+            raise ValueError(f"поле {key[:-1]}: не JSON ({e})") from None
+    return key, val
+
+
+def short_caption(text):
+    text = " ".join(str(text).split())
+    return text if len(text) <= CAPTION_MAX else text[: CAPTION_MAX - 1].rstrip() + "…"
+
+
+def journal_rect(v, screen):
+    """Рамка цели: строка «x y w h» или список -> целые точки внутри экрана; нет цели или вне экрана -> None."""
+    if isinstance(v, str):
+        v = parse_rect(v)
+    if not v or len(v) != 4:
+        return None
+    r = [int(round(float(x))) for x in v]
+    if screen and screen[0] and screen[1]:
+        return clamp_rect(r, (screen[0], screen[1]))
+    return r
+
+
+def journal_record(ev, fields, now, last_key=0.0, last_end=0.0, screen=None):
+    """Строка журнала (dict) или None (короткий простой). ValueError — вход не по контракту."""
+    if ev not in JOURNAL_EVENTS:
+        raise ValueError(f"неизвестное событие «{ev}»")
+    obj = {"ev": ev}
+    for k, v in fields:
+        obj[k] = now if v == "@now" else last_end if v == "@end" else v
+    for k in ("t", "t0", "t1"):
+        if k in obj:
+            try:
+                obj[k] = round(float(obj[k]), 3)
+            except (TypeError, ValueError):
+                raise ValueError(f"поле {k}: не число") from None
+    # порядок строк — по t (у отрезков по t0), время не убывает: запись из подоболочки не должна пятиться
+    key = "t" if "t" in obj else "t0"
+    if key in obj and obj[key] < last_key:
+        obj[key] = round(last_key, 3)
+    if "t0" in obj and "t1" in obj and obj["t1"] < obj["t0"]:
+        obj["t1"] = obj["t0"]
+    if ev == "idle" and obj.get("t1", 0) - obj.get("t0", 0) < IDLE_MIN:
+        return None
+    if ev == "hold":
+        cap = short_caption(obj.get("caption", ""))
+        if not cap:
+            raise ValueError("hold без подписи")
+        obj["caption"] = cap
+        obj["rect"] = journal_rect(obj.get("rect"), screen)
+        obj.setdefault("keys", None)
+    return obj
+
+
+def journal_state(path):
+    """(meta, ключ последней строки, конец последнего события) по файлу журнала."""
+    meta, last_key, last_end = None, 0.0, 0.0
+    if not os.path.isfile(path):
+        return meta, last_key, last_end
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            o = json.loads(line)
+            if o.get("ev") == "meta":
+                meta = o
+                continue
+            last_key = o.get("t", o.get("t0", last_key))
+            last_end = max(o.get("t", 0), o.get("t1", 0), last_end)
+    return meta, last_key, last_end
+
+
+def journal_now(clock):
+    """Секунды стенных часов от начала журнала (файл часов пишет meta)."""
+    try:
+        with open(clock, encoding="utf-8") as f:
+            return time.time() - float(f.read().strip())
+    except (OSError, ValueError):
+        raise ValueError(f"нет часов журнала {clock}: сначала событие meta") from None
+
+
+def cmd_journal(a):
+    try:
+        if a.ev == "now":
+            print(f"{journal_now(a.clock):.3f}")
+            return 0
+        fields = [parse_field(x) for x in a.fields]
+        if a.ev == "meta":
+            fields = [f for f in fields if f[0] not in ("screen", "scale", "space")]
+            doc = load_windows(a.windows) if a.windows else {}
+            if doc.get("screen"):
+                fields += [("space", "points"), ("screen", doc["screen"]), ("scale", doc.get("scale") or 1)]
+            with open(a.clock, "w", encoding="utf-8") as f:
+                f.write(repr(time.time()))
+            with open(a.file, "w", encoding="utf-8", newline="\n") as f:
+                f.write("")
+            obj = journal_record("meta", fields, 0.0)
+        else:
+            meta, last_key, last_end = journal_state(a.file)
+            if meta is None:
+                raise ValueError("в журнале нет первой строки meta")
+            obj = journal_record(a.ev, fields, journal_now(a.clock), last_key, last_end, meta.get("screen"))
+    except ValueError as e:
+        print(f"journal: {e}", file=sys.stderr)
+        return 2
+    if obj is not None:
+        with open(a.file, "a", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps(obj, ensure_ascii=False, separators=(",", ":")) + "\n")
+    return 0
+
+
+def cmd_jstat(a):
+    holds = arrows = 0
+    try:
+        with open(a.file, encoding="utf-8") as f:
+            for line in f:
+                o = json.loads(line) if line.strip() else {}
+                if o.get("ev") == "hold":
+                    holds += 1
+                    arrows += 1 if o.get("rect") else 0
+    except (OSError, ValueError):
+        return 1
+    print(f"шагов {holds}, со стрелкой {arrows}")
+    return 0
+
+
+def png_solid(width, height, rgb):
+    """PNG одного цвета без Pillow: метка синхронизации для обоев рабочего стола."""
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+    row = b"\x00" + bytes(rgb) * width
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(row * height, 6))
+        + chunk(b"IEND", b"")
+    )
+
+
+def cmd_solid(a):
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})", a.color)
+    if not m:
+        return 2
+    rgb = tuple(int(m.group(1)[i : i + 2], 16) for i in (0, 2, 4))
+    if a.size:
+        dims = re.fullmatch(r"(\d+)x(\d+)", a.size)
+        w, h = (int(dims.group(1)), int(dims.group(2))) if dims else (0, 0)
+    else:
+        scr = load_windows(a.windows).get("screen") or [0, 0]
+        w, h = int(scr[0]), int(scr[1])
+    if not 0 < w <= 8192 or not 0 < h <= 8192:
+        return 2
+    with open(a.out, "wb") as f:
+        f.write(png_solid(w, h, rgb))
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -381,6 +563,25 @@ def main(argv=None):
     i.add_argument("--rect", required=True)
     i.add_argument("--leftmost", action="store_true", help="из подходящих — самая левая, а не первая")
     i.set_defaults(fn=cmd_inrect)
+
+    j = sub.add_parser("journal")
+    j.add_argument("--file", required=True)
+    j.add_argument("--clock", required=True)
+    j.add_argument("--windows", default="", help="для meta: экран и масштаб из списка окон")
+    j.add_argument("ev")
+    j.add_argument("fields", nargs="*", help="ключ=текст или ключ:=json; значения @now, @end")
+    j.set_defaults(fn=cmd_journal)
+
+    js = sub.add_parser("jstat")
+    js.add_argument("--file", required=True)
+    js.set_defaults(fn=cmd_jstat)
+
+    so = sub.add_parser("solid")
+    so.add_argument("--color", required=True)
+    so.add_argument("--size", default="")
+    so.add_argument("--windows", default="")
+    so.add_argument("--out", required=True)
+    so.set_defaults(fn=cmd_solid)
 
     a = p.parse_args(argv)
     # bash читает ответ как UTF-8 при любой локали раннера

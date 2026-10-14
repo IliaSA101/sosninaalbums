@@ -5,8 +5,11 @@ import io
 import json
 import os
 import sys
+import struct
 import tempfile
+import time
 import unittest
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import macshots as m  # noqa: E402
@@ -223,6 +226,131 @@ class TestImages(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             m.main(["get", "--out", self.out, "--name", "05-open-anyway", "--field", "ok"])
         self.assertEqual(buf.getvalue().strip(), "false")
+
+
+class TestJournal(unittest.TestCase):
+    """video/steps.jsonl — контракт с overlay.py (036 design §2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.file = os.path.join(self.tmp.name, "steps.jsonl")
+        self.clock = os.path.join(self.tmp.name, "clock")
+        win = os.path.join(self.tmp.name, "w.json")
+        with open(win, "w", encoding="utf-8") as f:
+            json.dump({"screen": [1440, 900], "scale": 2.0, "windows": []}, f)
+        self.jl("meta", "os=macos", "ver=15.7", "lang=ru", "recorder=avfoundation", windows=win)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def jl(self, ev, *fields, windows=""):
+        argv = ["journal", "--file", self.file, "--clock", self.clock]
+        if windows:
+            argv += ["--windows", windows]
+        with contextlib.redirect_stderr(io.StringIO()):
+            return m.main(argv + [ev, *fields])
+
+    def lines(self):
+        with open(self.file, encoding="utf-8") as f:
+            return [json.loads(x) for x in f.read().splitlines()]
+
+    def test_meta_first_with_screen_from_windows(self):
+        meta = self.lines()[0]
+        self.assertEqual(meta["ev"], "meta")
+        self.assertEqual((meta["space"], meta["screen"], meta["scale"]), ("points", [1440, 900], 2.0))
+        self.assertEqual(meta["lang"], "ru")
+
+    def test_append_escapes_and_cyrillic(self):
+        cap = 'Нажмите «Готово» — не "Корзину"\\ \nвторая строка'
+        self.assertEqual(self.jl("hold", "t=1.5", "rect=612 388 96 110", "caption=" + cap, 'keys:=["⌘","Пробел"]'), 0)
+        with open(self.file, encoding="utf-8") as f:
+            raw = f.read().splitlines()
+        # одна строка на событие; кириллица не превращается в \uXXXX
+        self.assertEqual(len(raw), 2)
+        self.assertIn("«Готово»", raw[1])
+        self.assertNotIn("\\u04", raw[1])
+        hold = json.loads(raw[1])
+        self.assertEqual(hold["caption"], 'Нажмите «Готово» — не "Корзину"\\ вторая строка')
+        self.assertEqual(hold["rect"], [612, 388, 96, 110])
+        self.assertEqual(hold["keys"], ["⌘", "Пробел"])
+        self.assertEqual(list(hold)[:2], ["ev", "t"])
+
+    def test_times_monotonic(self):
+        self.assertEqual(self.jl("hold", "t=5", "caption=Первый"), 0)
+        # запись «из прошлого» и отрезок с t1 < t0 не должны пятить время
+        self.assertEqual(self.jl("hold", "t=3", "caption=Второй"), 0)
+        self.assertEqual(self.jl("move", "t0:=2", "t1:=1"), 0)
+        self.assertEqual(self.jl("keys", "t0:=6", "t1:=6.25", 'keys:=["Return"]'), 0)
+        got = self.lines()[1:]
+        keys = [x.get("t", x.get("t0")) for x in got]
+        self.assertEqual(keys, [5, 5, 5, 6])
+        self.assertLessEqual(got[2]["t0"], got[2]["t1"])
+
+    def test_now_and_end_tokens(self):
+        with open(self.clock, "w", encoding="utf-8") as f:
+            f.write(repr(time.time() - 10))
+        self.assertEqual(self.jl("hold", "t=@now", "caption=Сейчас"), 0)
+        t = self.lines()[1]["t"]
+        self.assertAlmostEqual(t, 10, delta=2)
+        self.assertEqual(self.jl("move", "t0=@end", "t1=@now"), 0)
+        mv = self.lines()[2]
+        self.assertEqual(mv["t0"], t)
+        self.assertGreaterEqual(mv["t1"], mv["t0"])
+
+    def test_short_idle_dropped_long_kept(self):
+        self.assertEqual(self.jl("idle", "t0:=4.0", "t1:=4.3"), 0)
+        self.assertEqual(self.jl("idle", "t0:=4.5", "t1:=9.1"), 0)
+        got = self.lines()[1:]
+        self.assertEqual([(x["ev"], x["t0"], x["t1"]) for x in got], [("idle", 4.5, 9.1)])
+
+    def test_hold_caption_limit_and_rect_clamp(self):
+        self.assertEqual(self.jl("hold", "t=1", "rect:=[1400,880,200,100]", "caption=" + "я" * 120), 0)
+        h = self.lines()[1]
+        self.assertEqual(len(h["caption"]), 80)
+        self.assertTrue(h["caption"].endswith("…"))
+        self.assertEqual(h["rect"], [1400, 880, 40, 20])
+        # цель вне экрана или не найдена — без стрелки, но стоп-кадр есть
+        self.assertEqual(self.jl("hold", "t=2", "rect:=[3000,10,5,5]", "caption=Вне экрана"), 0)
+        self.assertEqual(self.jl("hold", "t=3", "rect=", "caption=Нет цели"), 0)
+        self.assertEqual([x["rect"] for x in self.lines()[2:]], [None, None])
+        self.assertIsNone(self.lines()[3]["keys"])
+
+    def test_rejects_bad_input(self):
+        self.assertEqual(self.jl("hold", "t=1", "caption=   "), 2)
+        self.assertEqual(self.jl("лишнее", "t=1"), 2)
+        self.assertEqual(self.jl("step", "t=abc"), 2)
+        self.assertEqual(self.jl("hold", "t=1", "без_равно"), 2)
+        self.assertEqual(len(self.lines()), 1)  # одна meta: плохие строки не записаны
+
+    def test_requires_meta_and_clock(self):
+        os.remove(self.file)
+        os.remove(self.clock)
+        self.assertEqual(self.jl("note", "t=1", "text=x"), 2)
+        self.assertEqual(self.jl("now"), 2)
+
+    def test_stats(self):
+        self.jl("hold", "t=1", "rect:=[10,10,50,20]", "caption=Со стрелкой")
+        self.jl("hold", "t=2", "caption=Без стрелки")
+        self.jl("hold", "t=3", "rect:=[20,20,50,20]", "caption=Ещё со стрелкой")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(m.main(["jstat", "--file", self.file]), 0)
+        self.assertEqual(buf.getvalue().strip(), "шагов 3, со стрелкой 2")
+
+    def test_solid_png(self):
+        out = os.path.join(self.tmp.name, "red.png")
+        self.assertEqual(m.main(["solid", "--color", "#d81f26", "--size", "6x4", "--out", out]), 0)
+        with open(out, "rb") as f:
+            data = f.read()
+        self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(struct.unpack(">II", data[16:24]), (6, 4))
+        # IDAT: 4 строки по (фильтр + 6 пикселей RGB)
+        i = data.index(b"IDAT")
+        n = struct.unpack(">I", data[i - 4 : i])[0]
+        raw = zlib.decompress(data[i + 4 : i + 4 + n])
+        self.assertEqual(raw, (b"\x00" + bytes([0xD8, 0x1F, 0x26]) * 6) * 4)
+        self.assertEqual(m.main(["solid", "--color", "красный", "--size", "6x4", "--out", out]), 2)
+        self.assertEqual(m.main(["solid", "--color", "#d81f26", "--size", "0x4", "--out", out]), 2)
 
 
 if __name__ == "__main__":

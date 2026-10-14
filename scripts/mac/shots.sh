@@ -1,7 +1,8 @@
 #!/bin/bash
 # shellcheck source-path=SCRIPTDIR
 # Снимки и видео для инструкции (029 design §3.2–3.6):
-#   shots.sh <app или zip> <папка вывода> [--lang ru|en] [--video] [--display auto|ШxВ[:hidpi]…]
+#   shots.sh <app или zip> <папка вывода> [--lang ru|en] [--video] [--guide-video] [--display auto|ШxВ[:hidpi]…]
+# --guide-video — ролик-инструкция для монтажа (036): video/raw.mp4 и video/steps.jsonl, сценарий — guidevid.sh
 # Всегда код 0: каждый вариант пишет строку в summary.md и запись в shots.json, неудача шага
 # не мешает следующим. zip распаковывается заново — selftest в smoke.sh портит только свою копию.
 # Шаги зовутся по имени через run_step (SC2329); журналы — файлы пользователя, sudo нужен только команде (SC2024)
@@ -16,20 +17,24 @@ set -u
 . "$MAC_DIR/screenrec.sh"
 # shellcheck source=display.sh
 . "$MAC_DIR/display.sh"
+# shellcheck source=guidevid.sh
+. "$MAC_DIR/guidevid.sh"
 # shellcheck source=targets.sh
 . "$MAC_DIR/targets.sh"
 
 SRC="${1:-}"
 DIR="${2:-}"
-[ -n "$SRC" ] && [ -n "$DIR" ] || { echo "использование: shots.sh <app|zip> <папка> [--lang ru|en] [--video] [--display auto|ШxВ[:hidpi]…]" >&2; exit 0; }
+[ -n "$SRC" ] && [ -n "$DIR" ] || { echo "использование: shots.sh <app|zip> <папка> [--lang ru|en] [--video] [--guide-video] [--display auto|ШxВ[:hidpi]…]" >&2; exit 0; }
 shift 2
 LANG_UI=ru
 VIDEO=0
+GUIDE_VIDEO=0
 DISPLAY_SPEC=auto
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --lang) LANG_UI="${2:-ru}"; shift ;;
     --video) VIDEO=1 ;;
+    --guide-video) GUIDE_VIDEO=1 ;;
     --display) DISPLAY_SPEC="${2:-auto}"; shift ;;
     *) echo "::warning::shots.sh: неизвестный ключ $1" ;;
   esac
@@ -557,6 +562,8 @@ run_step 60 step_after_xattr
 run_step 120 step_context
 reset_all
 [ "$VIDEO" = 1 ] && video_stop
+# Ролик-инструкция идёт после снимков: сценарий щёлкает сам и сбрасывает состояние (036)
+[ "$GUIDE_VIDEO" = 1 ] && guide_video_run
 # Пробы прав записи экрана — в конце: «Калькулятор» остаётся в Dock и испортил бы снимки
 [ "$VIDEO" = 1 ] && video_probe
 
