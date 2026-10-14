@@ -2,6 +2,8 @@
   import type { LayoutScope } from '../../base/core/types'
   import { tip, tipped } from '../../base/ui/tip.svelte'
   import Icon, { type IconName } from '../../base/ui/Icon.svelte'
+  import { store } from '../../base/core/store.svelte'
+  import { isSheet } from '../../base/geom/sheet'
 
   // Меню «Отразить»: страница или весь разворот. side: 'down' — кнопка текстом в LayoutBar, список
   // под ней; 'right' — значок в ленте правки (EditRail даёт ему стиль через класс rb), список справа;
@@ -27,6 +29,8 @@
   }
 
   function toggle() {
+    // У листа виньетки страниц нет (Go отказывает left/right): зеркалит сразу весь лист, без меню.
+    if (isSheet(store.view.settings)) return pick('spread')
     if (!open) {
       const r = btn!.getBoundingClientRect()
       at = side === 'right' ? { x: r.right + 4, y: r.top } : { x: r.left, y: r.bottom + 2 }
@@ -59,6 +63,7 @@
   <button
     bind:this={btn}
     class="rb"
+    data-guide="mirror"
     onpointerdown={stop}
     onclick={toggle}
     use:tipped={{ text: open ? '' : 'Отразить раскладку ▸', side: 'right' }}
@@ -71,6 +76,7 @@
   <button
     bind:this={btn}
     class="text"
+    data-guide="mirror"
     onpointerdown={stop}
     onclick={toggle}
     aria-haspopup="menu"

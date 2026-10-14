@@ -3,10 +3,14 @@ package app
 import (
 	"bytes"
 	"errors"
+	"image/jpeg"
+	"log"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -14,7 +18,10 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/backup"
+	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
+	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
 
 // mustEditor — album.NewEditor для тестов: отказ проверки проекта — Fatal.
@@ -196,6 +203,58 @@ func TestNewProjectKeepsLockedDraft(t *testing.T) {
 	}
 }
 
+// TestNewSheetProject — «Виньетка (лист)» (031): проект-лист без корешка — Settings.Sheet,
+// pageW = ширина листа, одна страница во весь лист, layflat, один лист-виньетка без фото; тип изделия
+// album (иначе NormProduct пишет в log.txt). SetSettings лист в альбом не превращает.
+func TestNewSheetProject(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	v := a.NewVignetteSheet(204, 304).View
+	s := v.Settings
+	if !s.Sheet || s.PageW != 204 || s.PageH != 304 || !s.Layflat || s.Margin != 8 || s.Gap != 3 || s.Safe != 5 || s.DPI != 300 {
+		t.Fatalf("настройки листа %+v", s)
+	}
+	if v.Product != model.ProductAlbum || len(v.Spreads) != 1 || len(v.Spreads[0].Photos) != 0 || v.Spreads[0].Kind != model.KindVignette {
+		t.Fatalf("изделие %q, листов %d", v.Product, len(v.Spreads))
+	}
+	p, _ := a.editor().Snapshot()
+	g := p.Geo(p.Spreads[0])
+	if g.W != 204 || g.H != 304 || g.Mid != 0 || len(g.Pages) != 1 || g.Pages[0].W != 204 || !g.Layflat {
+		t.Fatalf("геометрия листа %+v", g)
+	}
+	if prm := p.Params(); prm.PageW != 102 || !prm.Sheet || !prm.Layflat {
+		t.Fatalf("layout получил %+v, ждали половину листа и Sheet", prm)
+	}
+	if len(v.Safe) != 1 || v.Safe[0].X+v.Safe[0].W > 204 {
+		t.Fatalf("безопасная зона %+v вне листа", v.Safe)
+	}
+
+	// Новый формат из настроек: Sheet из проекта, layflat — всегда.
+	s.PageW, s.PageH, s.Layflat, s.Sheet = 304, 404, false, false
+	if got := a.SetSettings(s).Settings; !got.Sheet || !got.Layflat || got.PageW != 304 {
+		t.Fatalf("после SetSettings %+v", got)
+	}
+	// И обратно: альбом листом не становится.
+	a.NewProject("album")
+	al := a.GetState().View.Settings
+	al.Sheet = true
+	if a.SetSettings(al).Settings.Sheet {
+		t.Fatal("альбом стал листом")
+	}
+	// Итог чтения папок (rescan в фоне) — обычная строка; остального быть не должно. Буфер
+	// читается после конца фоновых rescan: иначе их log.Printf пишет в него одновременно (гонка).
+	a.bg.Wait()
+	for line := range strings.Lines(buf.String()) {
+		if !strings.Contains(line, "папок 0: 0 фото") {
+			t.Errorf("в log.txt: %s", line)
+		}
+	}
+}
+
 // Консоль без дескриптора (собранный exe) не должна мешать записи в файл.
 func TestLogWriterConsoleFails(t *testing.T) {
 	const line = "запуск"
@@ -339,5 +398,202 @@ func TestGetStateStopReleases(t *testing.T) {
 	case <-got:
 	case <-time.After(5 * time.Second):
 		t.Fatal("GetState не вернулся после остановки")
+	}
+}
+
+// coverEnv — альбом из n разворотов с обложкой: фото p0 на лицевой, плашка корешка красная.
+func coverEnv(t *testing.T, n int, photo string) *exportEnv {
+	t.Helper()
+	e := newExportEnv(t, n)
+	if _, err := e.a.CreateCover("", photo); err != nil {
+		t.Fatal(err)
+	}
+	if v := e.a.SetCoverSpineBg("#ff0000"); v.Cover.SpineBg != "#ff0000" {
+		t.Fatalf("плашка %q", v.Cover.SpineBg)
+	}
+	return e
+}
+
+// jpegAt читает 00.jpg и возвращает размер и цвет точки (x, y) мм листа при dpi.
+func jpegAt(t *testing.T, path string, dpi int, x, y float64) (w, h int, c [3]uint8) {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	img, err := jpeg.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, g, b, _ := img.At(int(math.Round(x/25.4*float64(dpi))), int(math.Round(y/25.4*float64(dpi)))).RGBA()
+	return img.Bounds().Dx(), img.Bounds().Dy(), [3]uint8{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)}
+}
+
+// 00.jpg: размер листа обложки при dpi (как pxW×pxH вида), плашка корешка видна, развороты рядом.
+func TestExportCoverFile(t *testing.T) {
+	e := coverEnv(t, 3, "p0")
+	v := e.a.editor().View()
+	var spine model.CoverZone
+	for _, z := range v.Cover.Zones {
+		if z.Kind == "spine" {
+			spine = z
+		}
+	}
+	// dpi 0 — из настроек альбома: размер файла совпадает с pxW×pxH из вида.
+	ok, err := e.a.Export(ExportOptions{Cover: true})
+	if err != nil || !ok {
+		t.Fatalf("Export: %v %v", ok, err)
+	}
+	if msg := <-e.done; msg != "" {
+		t.Fatal(msg)
+	}
+	if want := []string{"00.jpg", "01.jpg", "02.jpg", "03.jpg"}; !slices.Equal(e.names(t), want) {
+		t.Fatalf("файлы %v", e.names(t))
+	}
+	dpi := v.Settings.DPI
+	w, h, c := jpegAt(t, filepath.Join(e.dir, "00.jpg"), dpi, spine.Rect.X+spine.Rect.W/2, 5)
+	if w != v.Cover.PxW || h != v.Cover.PxH {
+		t.Errorf("00.jpg %d×%d px, ждали %d×%d", w, h, v.Cover.PxW, v.Cover.PxH)
+	}
+	if c[0] < 230 || c[1] > 25 || c[2] > 25 {
+		t.Errorf("плашка корешка не видна: %v", c)
+	}
+	// Повтор: наш 00.jpg заменяется после вопроса.
+	e.asked = nil
+	if msg := e.export(t, ExportOptions{Cover: true, Range: "2"}); msg != "" {
+		t.Fatal(msg)
+	}
+	if len(e.asked) != 1 || !strings.Contains(e.asked[0], "Заменить обложку и файлы разворота 2 (2 шт.)?") {
+		t.Fatalf("вопрос: %q", e.asked)
+	}
+}
+
+// «Только обложка» — один файл; развороты, Range и хвосты прежнего экспорта не трогаются.
+func TestExportCoverOnly(t *testing.T) {
+	e := coverEnv(t, 3, "p0")
+	e.export(t, ExportOptions{})
+	e.oldify(t)
+	e.asked = nil
+	if msg := e.export(t, ExportOptions{CoverOnly: true, Range: "garbage"}); msg != "" {
+		t.Fatal(msg)
+	}
+	if want := []string{"00.jpg", "01.jpg", "02.jpg", "03.jpg"}; !slices.Equal(e.names(t), want) {
+		t.Fatalf("файлы %v", e.names(t))
+	}
+	if !e.rewritten(t, "00.jpg") || e.rewritten(t, "01.jpg") || e.rewritten(t, "03.jpg") || len(e.asked) != 0 {
+		t.Fatalf("тронуты развороты или вопрос %q", e.asked)
+	}
+	// Чистая папка: только 00.jpg; без Cover «только обложка» тоже включает обложку.
+	e.dir = filepath.Join(e.dir, "only")
+	if msg := e.export(t, ExportOptions{CoverOnly: true}); msg != "" {
+		t.Fatal(msg)
+	}
+	if want := []string{"00.jpg"}; !slices.Equal(e.names(t), want) {
+		t.Fatalf("файлы %v", e.names(t))
+	}
+	// Альбом без разворотов, но с обложкой, выгружается.
+	e0 := coverEnv(t, 0, "")
+	if msg := e0.export(t, ExportOptions{Cover: true}); msg != "" || !slices.Equal(e0.names(t), []string{"00.jpg"}) {
+		t.Fatalf("без разворотов: %q %v", msg, e0.names(t))
+	}
+}
+
+// Обложки нет — флаги игнорируются и выгружаются развороты; чужой 00.jpg при выгрузке
+// обложки — отказ без вопроса; без обложки в плане он не задевается.
+func TestExportCoverIgnoredAndForeign(t *testing.T) {
+	e := newExportEnv(t, 2)
+	if msg := e.export(t, ExportOptions{Cover: true, CoverOnly: true}); msg != "" {
+		t.Fatal(msg)
+	}
+	if want := []string{"01.jpg", "02.jpg"}; !slices.Equal(e.names(t), want) {
+		t.Fatalf("без обложки: %v", e.names(t))
+	}
+	c := coverEnv(t, 2, "p0")
+	if err := os.MkdirAll(c.dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testkit.JPEG(t, c.dir, "00.jpg", 10, 10)
+	ok, err := c.a.Export(ExportOptions{DPI: 72, Cover: true})
+	if ok || err == nil || !strings.Contains(err.Error(), "00.jpg") || len(c.asked) != 0 {
+		t.Fatalf("чужой 00.jpg: %v, %v, вопросы %q", ok, err, c.asked)
+	}
+	if msg := c.export(t, ExportOptions{}); msg != "" {
+		t.Fatal(msg)
+	}
+	if st, err := os.Stat(filepath.Join(c.dir, "00.jpg")); err != nil || st.Size() > 5000 {
+		t.Fatalf("чужой 00.jpg тронут: %v", err)
+	}
+}
+
+// Пустая обложка — то же предупреждение, что о пустых разворотах, до выбора папки.
+func TestExportCoverBlankAsks(t *testing.T) {
+	e := coverEnv(t, 1, "")
+	e.a.SetCoverSpineBg("") // плашка — тоже печать
+	e.answer = false
+	picked := 0
+	pick := pickExportDir
+	pickExportDir = func(a *App) (string, error) { picked++; return pick(a) }
+	ok, err := e.a.Export(ExportOptions{DPI: 72, Cover: true})
+	if ok || err != nil || picked != 0 || len(e.asked) != 1 || !strings.Contains(e.asked[0], "Обложка пустая") {
+		t.Fatalf("Export = %v, %v; папка %d; вопросы %q", ok, err, picked, e.asked)
+	}
+	// Без галочки обложки о ней не спрашиваем.
+	e.asked = nil
+	if msg := e.export(t, ExportOptions{}); msg != "" || len(e.asked) != 0 {
+		t.Fatalf("без обложки: %q, вопросы %q", msg, e.asked)
+	}
+}
+
+// Подстановки (030) в тексте обложки: на холсте «[Заголовок]» (прежнее {Школа} — синоним), в печати — пусто.
+func TestCoverTextExpands(t *testing.T) {
+	e := coverEnv(t, 1, "p0")
+	ed := e.a.editor()
+	v, err := ed.AddText("cover", 0, "")
+	if err != nil || len(v.Cover.Sheet.Texts) != 1 {
+		t.Fatalf("текст обложки: %v %+v", err, v.Cover)
+	}
+	v = ed.SetText(v.Cover.Sheet.Texts[0].ID, "{Школа}", "")
+	if got := v.Cover.Sheet.Texts[0].Text; got != "[Заголовок]" {
+		t.Errorf("на холсте %q", got)
+	}
+	p, pv := ed.Snapshot()
+	if got := pv.Cover.Sheet.Texts[0]; got.Text != "" || printed(got.Lines) != "" {
+		t.Errorf("в печати %q, строки %q", got.Text, printed(got.Lines))
+	}
+	job := export.NewCoverJob(p, pv, 72, 95)
+	if job == nil || len(job.Spread.Texts) != 1 || printed(job.Spread.Texts[0].Box.Lines) != "" {
+		t.Errorf("задание обложки: %+v", job)
+	}
+}
+
+// printed — текст всех строк блока подряд.
+func printed(lines []text.Line) (out string) {
+	for _, l := range lines {
+		out += l.Text
+	}
+	return out
+}
+
+// «Сохранить как» в папку копий — отказ, файл не создан.
+func TestSaveAsIntoBackupsRefused(t *testing.T) {
+	a, _, _ := backupApp(t, 1)
+	target := filepath.Join(a.backups.Root, "свой"+projectExt)
+	if _, err := a.saveAs(a.editor(), target); err == nil {
+		t.Fatal("сохранение в папку копий принято")
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("файл создан: %v", err)
+	}
+	// Поверх чужого файла — сначала его копия.
+	other := filepath.Join(testkit.TempDir(t), "чужой"+projectExt)
+	if err := os.WriteFile(other, []byte(`{"spreads":[{},{},{}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.saveAs(a.editor(), other); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := a.backups.List(backup.Key(other)); len(list) != 1 || list[0].Spreads != 3 {
+		t.Fatalf("копия перезаписанного файла: %+v", list)
 	}
 }

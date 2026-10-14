@@ -33,7 +33,7 @@ func TestSpreadPhotoLimit(t *testing.T) {
 	// Лишнее фото — отказ с текстом, проект не меняется.
 	rev := e.View().Rev
 	v, err = e.AddPhotos(id, edtest.Photos("extra"), -1)
-	if err == nil || !strings.Contains(err.Error(), "16") || v.Rev != rev {
+	if err == nil || !strings.Contains(err.Error(), "64") || v.Rev != rev {
 		t.Fatalf("ждали отказ без правки: err=%v rev=%d/%d", err, v.Rev, rev)
 	}
 	// Переставить своё же фото на пределе можно.
@@ -47,10 +47,13 @@ func TestSpreadPhotoLimit(t *testing.T) {
 	if _, err = e.MovePhoto("x", id, -1); err == nil {
 		t.Fatal("MovePhoto сверх предела должен отказать")
 	}
-	// Автосборка режет по MaxSpreadPhotos.
-	v, _ = edtest.Open(t, model.New(), "").AutoBuild(manyPhotos(40), -1, 20)
+	// Автосборка: 1 разворот на 100 фото зажимается до ⌈100/64⌉ = 2, в каждом ≤ MaxPhotos.
+	v, _ = edtest.Open(t, model.New(), "").AutoBuild(manyPhotos(100), -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
+	if len(v.Spreads) != 2 {
+		t.Fatalf("автосборка 100 фото: %d разворотов", len(v.Spreads))
+	}
 	for _, s := range v.Spreads {
-		if len(s.Photos) > model.MaxSpreadPhotos {
+		if len(s.Photos) > model.MaxPhotos {
 			t.Fatalf("разворот из %d фото", len(s.Photos))
 		}
 	}
@@ -98,11 +101,11 @@ func TestAutoBuildSpreadLimitError(t *testing.T) {
 	e := edtest.Open(t, model.New(), "")
 	edtest.Change(e, func(p *model.Project) {
 		for range model.MaxSpreads {
-			p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}})
+			p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}, BgL: "#ffffff"}) // не пустые: пустой хвост сборка заняла бы (035)
 		}
 	})
 	rev := edtest.Rev(e)
-	v, err := e.AutoBuild(edtest.Photos("a", "b"), -1, 2)
+	v, err := e.AutoBuild(edtest.Photos("a", "b"), -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
 	if err == nil || !strings.Contains(err.Error(), strconv.Itoa(model.MaxSpreads)) || !strings.Contains(err.Error(), "разворотов") {
 		t.Fatalf("ждали ошибку про %d разворотов, получили %v", model.MaxSpreads, err)
 	}
@@ -111,7 +114,7 @@ func TestAutoBuildSpreadLimitError(t *testing.T) {
 	}
 	// Без переполнения — ошибки нет.
 	e2 := edtest.Open(t, model.New(), "")
-	if v, err := e2.AutoBuild(edtest.Photos("a", "b"), -1, 2); err != nil || len(v.Spreads) != 1 {
+	if v, err := e2.AutoBuild(edtest.Photos("a", "b"), -1, model.AutoOpts{Spreads: 1, MaxPer: 64}); err != nil || len(v.Spreads) != 1 {
 		t.Fatalf("обычная автосборка: err=%v", err)
 	}
 }
@@ -150,5 +153,50 @@ func TestAddFolderBodyChecksPath(t *testing.T) {
 	dir := testkit.TempDir(t)
 	if err := spreads.AddFolder(p, dir); err != nil || len(p.Folders) != 1 {
 		t.Fatalf("локальная папка: %v, папок %d", err, len(p.Folders))
+	}
+}
+
+// TestAddPhotos64: 64-е фото на разворот проходит, 65-е — ошибка с числом 64, проект не меняется.
+func TestAddPhotos64(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	ph := manyPhotos(65)
+	id := edtest.NewSpread(e, -1, ph[:63]).Spreads[0].ID
+	if v, err := e.AddPhotos(id, ph[63:64], -1); err != nil || len(v.Spreads[0].Photos) != 64 {
+		t.Fatalf("64-е фото: %v", err)
+	}
+	before, rev := string(model.Marshal(edtest.P(e))), edtest.Rev(e)
+	v, err := e.AddPhotos(id, ph[64:], -1)
+	if err == nil || !strings.Contains(err.Error(), "64") || v.Rev != rev || string(model.Marshal(edtest.P(e))) != before {
+		t.Fatalf("65-е фото: err=%v, rev %d→%d", err, rev, v.Rev)
+	}
+}
+
+// Склейка: стиль подписей листа (030) и поля шапки (031) — первого разворота, без них —
+// второго; не теряются. Отмена возвращает оба листа со своими полями.
+func TestMergeSpreadsCaps(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	edtest.NewSpread(e, -1, edtest.Photos("a"))
+	v := edtest.NewSpread(e, -1, edtest.Photos("b"))
+	edtest.NewSpread(e, -1, edtest.Photos("c"))
+	caps := model.SheetCaps{Style: model.DefaultCaptionStyle(), Pad: 3, Text: "{Фамилия}"}
+	vars, mine := model.Vars{Title: "Лицей", Year: "2026"}, model.Vars{Subtitle: "свои"}
+	edtest.Change(e, func(p *model.Project) {
+		c, v, m := caps, vars, mine
+		p.Spreads[1].Caps, p.Spreads[1].Vars, p.Spreads[2].Vars = &c, &v, &m
+	})
+	e.MergeSpreads(v.Spreads[0].ID)
+	if s := edtest.P(e).Spreads; len(s) != 2 || s[0].Caps == nil || *s[0].Caps != caps || s[0].Vars == nil || *s[0].Vars != vars {
+		t.Fatalf("после склейки: %+v", s)
+	}
+	// У первого свои поля — второго не берёт.
+	s0 := edtest.P(e).Spreads[0].ID
+	e.MergeSpreads(s0)
+	if s := edtest.P(e).Spreads; len(s) != 1 || s[0].Vars == nil || *s[0].Vars != vars {
+		t.Fatalf("свои поля первого: %+v", s[0].Vars)
+	}
+	e.Undo()
+	e.Undo()
+	if s := edtest.P(e).Spreads; len(s) != 3 || s[0].Vars != nil || s[1].Vars == nil || *s[1].Vars != vars || *s[2].Vars != mine {
+		t.Fatalf("отмена склеек: %+v", s)
 	}
 }

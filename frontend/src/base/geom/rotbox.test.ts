@@ -97,7 +97,7 @@ describe('перенос повёрнутого', () => {
     const a = aabbOf(base)
     const snap = {
       others: [{ x: 400, y: 0, w: 50, h: 50 }],
-      params: { pageW: 281, pageH: PH, margin: 0, gap: 0, rects: [] },
+      params: { w: 562, h: PH, mid: 281, margin: 0, gap: 0, rects: [] },
       thr: 5,
     }
     const dx = 400 - (a.x + a.w) - 2 // правый край aabb в 2 мм от края соседа

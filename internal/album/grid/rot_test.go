@@ -106,7 +106,7 @@ func TestRotPlaceArea(t *testing.T) {
 	e := rotEd(t, []*model.Place{edtest.Gp(250, 100, 100, 60, "a"), edtest.Gp(270, 200, 100, 20, "")}, 90, 90)
 	p, s := edtest.P(e), edtest.P(e).Spreads[0]
 	pl := s.Grid[0]
-	if !grid.InArea(p, pl.X, pl.W, model.ScopeRight) || grid.InArea(p, pl.X, pl.W, model.ScopeLeft) || len(grid.AreaFrac(p, s, model.ScopeRight)) != 2 {
+	if !grid.InArea(p, s, pl.X, pl.W, model.ScopeRight) || grid.InArea(p, s, pl.X, pl.W, model.ScopeLeft) || len(grid.AreaFrac(p, s, model.ScopeRight)) != 2 {
 		t.Fatal("место под 90° с центром справа — не «правая»")
 	}
 	p.Settings.Layflat = false
@@ -249,7 +249,7 @@ func TestCopyGridRotEdge(t *testing.T) {
 	edtest.Change(e, func(p *model.Project) {
 		pl := p.Spreads[0].Grid[0]
 		pl.X, pl.Rot = -20, 30 // hold: r = 30, центр (30, 30) — у левого и верхнего края
-		p.ClampPlace(pl)
+		p.ClampPlace(p.Spreads[0], pl)
 	})
 	pl := edtest.P(e).Spreads[0].Grid[0]
 	if pl.X != -20 || pl.Y != 0 || pl.Rot != 30 {
@@ -310,7 +310,7 @@ func TestGridChoicesRot(t *testing.T) {
 	}
 	var rots []float64
 	for _, pl := range edtest.P(e).Spreads[0].Grid {
-		if grid.InArea(edtest.P(e), pl.X, pl.W, model.ScopeLeft) {
+		if grid.InArea(edtest.P(e), nil, pl.X, pl.W, model.ScopeLeft) {
 			rots = append(rots, pl.Rot)
 		}
 	}

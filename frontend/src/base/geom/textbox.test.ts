@@ -203,12 +203,12 @@ describe('angleAt', () => {
 
 describe('resizeLocal', () => {
   it('0°: правая — только ширина, левая — ширина и x', () => {
-    expect(resizeLocal(box(), 'r', 20, 99, 300)).toEqual({ x: 100, y: 50, w: 60 })
-    expect(resizeLocal(box(), 'l', -20, 99, 300)).toEqual({ x: 80, y: 50, w: 60 })
+    expect(resizeLocal(box(), 'r', 20, 99, 600)).toEqual({ x: 100, y: 50, w: 60 })
+    expect(resizeLocal(box(), 'l', -20, 99, 600)).toEqual({ x: 80, y: 50, w: 60 })
   })
   it('90°: ось строки — вниз, берётся dy', () => {
-    expect(resizeLocal(box({ rot: 90 }), 'r', 99, 15, 300)).toEqual({ x: 100, y: 50, w: 55 })
-    const l = resizeLocal(box({ rot: 90 }), 'l', 99, 15, 300)
+    expect(resizeLocal(box({ rot: 90 }), 'r', 99, 15, 600)).toEqual({ x: 100, y: 50, w: 55 })
+    const l = resizeLocal(box({ rot: 90 }), 'l', 99, 15, 600)
     expect(l.w).toBe(25)
     close({ x: l.x, y: l.y }, { x: 100, y: 65 })
   })
@@ -216,22 +216,22 @@ describe('resizeLocal', () => {
     for (const rot of [0, 30, 90, -135, 180]) {
       const t = box({ rot })
       const edge = toSpread(t, t.w, 0)
-      const r = resizeLocal(t, 'l', 7, -4, 300)
+      const r = resizeLocal(t, 'l', 7, -4, 600)
       close(toSpread({ ...t, x: r.x, y: r.y, w: r.w }, r.w, 0), edge)
     }
   })
   it('проекция: движение поперёк строки ширину не меняет', () => {
     const t = box({ rot: 30 })
     // (−sin, cos)·k — перпендикуляр к оси строки
-    const r = resizeLocal(t, 'r', -0.5 * 10, 0.866025403784 * 10, 300)
+    const r = resizeLocal(t, 'r', -0.5 * 10, 0.866025403784 * 10, 600)
     expect(r.w).toBeCloseTo(t.w, 6)
   })
-  it('ширина 10..2·pageW', () => {
-    expect(resizeLocal(box(), 'r', -500, 0, 300).w).toBe(10)
-    expect(resizeLocal(box(), 'r', 5000, 0, 300).w).toBe(600)
-    const l = resizeLocal(box(), 'l', 500, 0, 300)
+  it('ширина 10..ширина листа', () => {
+    expect(resizeLocal(box(), 'r', -500, 0, 600).w).toBe(10)
+    expect(resizeLocal(box(), 'r', 5000, 0, 600).w).toBe(600)
+    const l = resizeLocal(box(), 'l', 500, 0, 600)
     expect(l).toEqual({ x: 130, y: 50, w: 10 })
-    expect(resizeLocal(box(), 'l', -5000, 0, 300).w).toBe(600)
+    expect(resizeLocal(box(), 'l', -5000, 0, 600).w).toBe(600)
   })
 })
 

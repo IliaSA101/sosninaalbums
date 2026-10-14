@@ -5,8 +5,9 @@ import { actualAspect } from '../../base/geom/frame'
 import type { IconName } from '../../base/ui/Icon.svelte'
 import type { FeatureId } from '../../base/prefs/levels'
 import type { Rect, SpreadView } from '../../base/core/types'
+import { whoOf } from '../captions/nametarget'
 
-export type MiniId = 'flipH' | 'flipV' | 'turn' | 'fit' | 'fitPhoto' | 'caption' | 'layer' | 'swap' | 'same' | 'delete'
+export type MiniId = 'flipH' | 'flipV' | 'turn' | 'fit' | 'fitPhoto' | 'caption' | 'name' | 'layer' | 'swap' | 'same' | 'delete'
 
 export interface MiniItem {
   id: MiniId
@@ -27,6 +28,7 @@ export interface MiniCtx {
   allContain: boolean
   flipH: boolean // зеркало ↔ включено у всех выделенных фото
   flipV: boolean
+  name?: boolean // у единственного фото подпись идёт по шаблону с полями имени (037)
 }
 
 export function miniContext(s: SpreadView | undefined, sel: SelBox[], texts = 0): MiniCtx {
@@ -41,6 +43,7 @@ export function miniContext(s: SpreadView | undefined, sel: SelBox[], texts = 0)
     allContain: withPhoto.length > 0 && withPhoto.every((b) => b.fit === 'contain'),
     flipH: frames.length > 0 && frames.every(({ fv }) => !!fv?.flipH),
     flipV: frames.length > 0 && frames.every(({ fv }) => !!fv?.flipV),
+    name: withPhoto.length === 1 && whoOf(s, withPhoto[0].photo).length > 0,
   }
 }
 
@@ -53,6 +56,7 @@ const FEATURE: Partial<Record<MiniId, FeatureId>> = {
   fit: 'frame',
   fitPhoto: 'frame',
   caption: 'captions',
+  name: 'captions',
   same: 'manual',
   layer: 'layers',
   swap: 'manual',
@@ -87,7 +91,11 @@ function photoGroups(c: MiniCtx, solo: boolean): MiniItem[][] {
     },
   ]
   if (c.differ) fit.push({ id: 'fitPhoto', label: 'Подогнать место под пропорции фото', icon: 'fit-photo' })
-  return [flips, fit, [{ id: 'caption', label: 'Подпись к фото', icon: 'caption' }, TURN]]
+  // Подпись по шаблону листа — кнопка ведёт к имени, а не создаёт свою подпись (037).
+  const cap: MiniItem = c.name
+    ? { id: 'name', label: 'Имя под фото', icon: 'caption' }
+    : { id: 'caption', label: 'Подпись к фото', icon: 'caption' }
+  return [flips, fit, [cap, TURN]]
 }
 
 // Значки слева направо по таблице gestures.md; группы разделяет линия. can — уровень интерфейса
@@ -137,7 +145,8 @@ export const ROT_KEEP = 18 // px вокруг центра ⟳, куда пол�
 
 // Где стоит полоса (px от угла разворота): под рамкой, иначе над ней, иначе внутри у верхнего края;
 // по горизонтали — по центру рамки, не выходя за разворот. w — ширина полосы, px.
-// avoid — центр ⟳ (px): полоса его не закрывает. Сначала пробуем те же места по порядку; если ⟳
+// avoid — центр ⟳ (px): полоса его не закрывает. capBottom — низ подписи или заглушки выделенного, мм (037):
+// «под рамкой» значит под этой полосой, иначе щелчки по подписи попадают в кнопки. Сначала пробуем те же места по порядку; если ⟳
 // мешает — полоса сдвигается вбок вдоль рамки (ближайший к центру свободный сдвиг), иначе встаёт внутри.
 export function miniPlace(
   box: Rect,
@@ -146,9 +155,10 @@ export function miniPlace(
   height: number,
   w: number,
   avoid?: { x: number; y: number },
+  capBottom = 0,
 ): { top: number; left: number } {
   const by = box.y * ppm
-  const bh = box.h * ppm
+  const bh = Math.max(box.y + box.h, capBottom) * ppm - by
   const half = w / 2
   const cx = Math.max(half, Math.min((box.x + box.w / 2) * ppm, width - half))
   const hits = (top: number, left: number) =>

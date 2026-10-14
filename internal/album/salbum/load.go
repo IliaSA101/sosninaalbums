@@ -30,6 +30,10 @@ type FileProject struct {
 	Spreads  []*model.Spread      `json:"spreads"`
 	Photos   map[string]FilePhoto `json:"photos"`
 	Marks    markList             `json:"marks,omitempty"` // свои отметки (v5, 004)
+	// Vars — поля альбома из dev-сборок v6 (030): только чтение, Load переносит их в листы
+	// (moveAlbumVars), Save не пишет — поля шапки живут в Spread.Vars (решение 125).
+	Vars  *albumVars `json:"vars,omitempty"`
+	Cover *FileCover `json:"cover,omitempty"` // обложка (v6, 032; cover.go)
 }
 
 // FileFolder — папка: path (относительный или абсолютный) и запасной abs.
@@ -134,6 +138,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	if err := loadFolders(p, f.Folders, base, v1); err != nil {
 		return nil, err
 	}
+	fixCover(p, f.Cover, base, v1)
 	for id, fp := range f.Photos {
 		ref, err := resolvePhoto(fp, base, v1)
 		if err != nil {
@@ -153,6 +158,8 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 		return nil, fmt.Errorf("слишком много разворотов в проекте (больше %d)", model.MaxSpreads)
 	}
 	p.Settings = model.ClampSettings(p.Settings)
+	p.FoldPages()
+	moveAlbumVars(p, f.Vars) // до ClampDesign: запас знаков — уже по листам
 	p.ClampDesign()
 	p.PruneRefs() // фон, выброшенный зажимом (взаимоисключение), не оставляет фото без дела
 	p.ClampGrid()
@@ -160,6 +167,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	if err := p.SyncGrid(true); err != nil {
 		return nil, err
 	}
+	coverNoAuto(p)
 	p.FitTexts()
 	p.LoadOrder()
 	p.SetLoaded(decodeMarks(f.Marks, base, p.Folders))
@@ -229,7 +237,7 @@ func candidates(path, abs, base string, v1 bool) (primary, alt string, err error
 		if base == "" || paths.CheckLocalPath(primary) != nil {
 			// Альбом открыт не с локального диска (UNC): остаётся только запасной путь.
 			if alt == "" {
-				return "", "", fmt.Errorf("относительный путь у альбома не на локальном диске: %s", path)
+				return "", "", fmt.Errorf("относительный путь у альбома не на локальном диске: %s", paths.LogQ(path))
 			}
 			return alt, "", nil
 		}
@@ -355,7 +363,7 @@ func isDir(path string) bool {
 // остальное — обычные имена (filepath.IsLocal отсекает NUL, CON и прочие устройства).
 // Сам «.» — папка альбома.
 func CheckRel(r string) error {
-	bad := fmt.Errorf("файл проекта повреждён: недопустимый относительный путь %q", r)
+	bad := fmt.Errorf("файл проекта повреждён: недопустимый относительный путь %s", paths.LogQ(r))
 	if r == "." {
 		return nil
 	}
@@ -424,6 +432,9 @@ func Check(p *model.Project) error {
 			return err
 		}
 	}
+	if p.Cover != nil && p.Cover.Guide != "" {
+		return checkPair("разметка обложки", p.Cover.Guide, p.Cover.GuideAlt)
+	}
 	return nil
 }
 
@@ -452,6 +463,7 @@ func encodeWith(p *model.Project, base string, marks map[string]model.Mark) ([]b
 		Settings: p.Settings,
 		Spreads:  p.Spreads,
 		Photos:   make(map[string]FilePhoto, len(p.Photos)),
+		Cover:    encodeCover(p.Cover, base),
 	}
 	if f.Spreads == nil {
 		f.Spreads = []*model.Spread{}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image/color"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -293,43 +295,6 @@ func TestMediaContentType(t *testing.T) {
 	}
 }
 
-// DeleteSpreads: одно событие view на весь набор, один шаг отмены.
-func TestAppDeleteSpreads(t *testing.T) {
-	a := newApp(t)
-	a.cfgDir = testkit.TempDir(t)
-	var mu sync.Mutex
-	views := 0
-	a.emit = func(name string, _ ...any) {
-		if name == "view" {
-			mu.Lock()
-			views++
-			mu.Unlock()
-		}
-	}
-	ed := a.editor()
-	var v model.View
-	for range 4 {
-		var err error
-		if v, err = ed.NewSpread(-1, nil); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ids := []string{v.Spreads[0].ID, v.Spreads[2].ID, "нет"}
-	v = a.DeleteSpreads(ids)
-	if len(v.Spreads) != 2 {
-		t.Fatalf("осталось разворотов %d, ждали 2", len(v.Spreads))
-	}
-	mu.Lock()
-	n := views
-	mu.Unlock()
-	if n != 1 {
-		t.Errorf("событий view %d, ждали одно", n)
-	}
-	if v = a.Undo(); len(v.Spreads) != 4 {
-		t.Errorf("отмена вернула %d разворотов, ждали 4", len(v.Spreads))
-	}
-}
-
 // Паника в методе с ошибкой — errInternal, а не nil: интерфейс не сочтёт операцию успешной.
 func TestGuardErr(t *testing.T) {
 	log.SetOutput(io.Discard)
@@ -431,38 +396,201 @@ func TestPublishStaleGeneration(t *testing.T) {
 	}
 }
 
-// App.NewSpread: фото пропали из ленты при пересканировании во время переноса — правки нет,
-// пустой разворот вместо них не создаётся (спека 013).
-func TestNewSpreadUnknownIDsNoop(t *testing.T) {
-	a := newApp(t)
-	a.emit = func(string, ...any) {}
-	p := model.New()
-	p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}})
-	a.ed.Store(mustEditor(t, p, ""))
-	before := a.editor().View()
-	v, err := a.NewSpread(-1, []string{"нет-такого"})
-	if err != nil || v.Rev != before.Rev || len(v.Spreads) != 1 {
-		t.Fatalf("NewSpread с пропавшими фото: %v, rev %d→%d, разворотов %d", err, before.Rev, v.Rev, len(v.Spreads))
-	}
-	if got := a.editor().View(); got.Rev != before.Rev || got.Dirty {
-		t.Fatalf("проект изменился: rev %d, dirty %v", got.Rev, got.Dirty)
-	}
-}
-
 // App.AutoBuild: сверх MaxSpreads — ошибка с причиной, текущий вид и проект не меняются.
 func TestAutoBuildSpreadLimit(t *testing.T) {
 	a := newApp(t)
 	p := model.New()
 	for range model.MaxSpreads {
-		p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}})
+		p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}, BgL: "#ffffff"}) // не пустые: пустой хвост сборка заняла бы (035)
 	}
 	a.ed.Store(mustEditor(t, p, ""))
 	a.byID["a"] = library.Photo{ID: "a", Path: `C:\a.jpg`, W: 300, H: 200}
-	v, err := a.AutoBuild([]string{"a"}, -1, 2)
+	v, err := a.AutoBuild([]string{"a"}, -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
 	if err == nil || !strings.Contains(err.Error(), "1000 разворотов") {
 		t.Fatalf("ждали ошибку про 1000 разворотов, получили %v", err)
 	}
 	if len(v.Spreads) != model.MaxSpreads {
 		t.Fatalf("вид изменился: %d разворотов", len(v.Spreads))
+	}
+}
+
+// AutoOpts (041): поля приходят из UI по именам JSON; Variety вне 0…2 не ломает сборку
+// (зажим). VaryLayouts: ничего подходящего — холостая (rev тот же: по нему UI показывает тост
+// «менять нечего»); правка — один шаг отмены поверх сборки.
+func TestAutoBuildOpts(t *testing.T) {
+	var o model.AutoOpts
+	if err := json.Unmarshal([]byte(`{"spreads":2,"maxPer":3,"variety":2}`), &o); err != nil || o != (model.AutoOpts{Spreads: 2, MaxPer: 3, Variety: model.VarietyMore}) {
+		t.Fatalf("AutoOpts из JSON: %+v %v", o, err)
+	}
+	a := newApp(t)
+	a.ed.Store(mustEditor(t, model.New(), ""))
+	ids := []string{"a", "b", "c", "d", "e"}
+	for _, id := range ids {
+		a.byID[id] = library.Photo{ID: id, Path: `C:\` + id + `.jpg`, W: 300, H: 200}
+	}
+	if ap, err := a.AutoPlan(ids, model.AutoOpts{Spreads: 2, MaxPer: 3, Variety: -7}); err != nil || ap.Spreads != 2 {
+		t.Fatalf("AutoPlan: %+v %v", ap, err)
+	}
+	v, err := a.AutoBuild(ids, -1, model.AutoOpts{Spreads: 2, MaxPer: 3, Variety: 99})
+	if err != nil || len(v.Spreads) != 2 || !v.CanUndo {
+		t.Fatalf("AutoBuild: %v, разворотов %d", err, len(v.Spreads))
+	}
+	for _, sel := range [][]string{nil, {}, {"нет"}} {
+		if got, err := a.VaryLayouts(sel, 1); err != nil || got.Rev != v.Rev {
+			t.Fatalf("VaryLayouts(%v): %v, rev %d → %d", sel, err, v.Rev, got.Rev)
+		}
+	}
+	all := []string{v.Spreads[0].ID, v.Spreads[1].ID, "нет"}
+	got, err := a.VaryLayouts(all, -1)
+	if err != nil || got.Rev != v.Rev+1 || len(got.Spreads) != 2 {
+		t.Fatalf("VaryLayouts: %v, rev %d → %d", err, v.Rev, got.Rev)
+	}
+	// Отмена: сначала «Разнообразить», затем сборка — по шагу.
+	if u := a.Undo(); u.Spreads[0].Layout != v.Spreads[0].Layout || u.Spreads[1].Layout != v.Spreads[1].Layout {
+		t.Fatalf("отмена «Разнообразить»: %s %s", u.Spreads[0].Layout, u.Spreads[1].Layout)
+	}
+	if u := a.Undo(); len(u.Spreads) != 0 || u.CanUndo {
+		t.Fatalf("после отмены: разворотов %d, canUndo %v", len(u.Spreads), u.CanUndo)
+	}
+}
+
+// TestVaryLayoutsXmp: App берёт оценки из XMP сканера (не от UI) и для сборки, и для
+// «Разнообразить»: 5★ у последнего из 4 горизонтальных — главное фото (у лучшей раскладки
+// главное — первое, так что без звезды тест падает).
+func TestVaryLayoutsXmp(t *testing.T) {
+	a := newApp(t)
+	a.ed.Store(mustEditor(t, model.New(), ""))
+	ids := []string{"a", "b", "c", "d"}
+	for _, id := range ids {
+		a.byID[id] = library.Photo{ID: id, Path: `C:\` + id + `.jpg`, W: 300, H: 200}
+	}
+	a.byID["d"] = library.Photo{ID: "d", Path: `C:\d.jpg`, W: 300, H: 200, Xmp: &library.Marks{Rating: 5}}
+	big := func(v model.View) float64 {
+		r, other := v.Spreads[0].Rects, 0.0
+		for _, x := range r[:3] {
+			other = max(other, x.W*x.H)
+		}
+		return r[3].W * r[3].H / other
+	}
+	v, err := a.AutoBuild(ids, -1, model.AutoOpts{Spreads: 1, MaxPer: 64, Variety: model.VarietyNormal})
+	if err != nil || big(v) < 1.6 {
+		t.Fatalf("сборка: %v, фото d больше других в %.2f раза", err, big(v))
+	}
+	a.Undo()
+	if v, err = a.AutoBuild(ids, -1, model.AutoOpts{Spreads: 1, MaxPer: 64}); err != nil || big(v) >= 1.6 {
+		t.Fatalf("«Меньше»: %v, %.2f — звезда не должна влиять", err, big(v))
+	}
+	if v, err = a.VaryLayouts([]string{v.Spreads[0].ID}, 0); err != nil || big(v) < 1.6 {
+		t.Fatalf("«Разнообразить»: %v, фото d больше других в %.2f раза", err, big(v))
+	}
+}
+
+// Поля подписей (030): имя фото альбома и фото ленты, вставка списка, ошибка вставки.
+func TestNamesMethods(t *testing.T) {
+	a := newApp(t)
+	p := model.New()
+	p.Photos["a"] = model.PhotoRef{Path: `C:\Иванов Петя.jpg`, W: 300, H: 200}
+	p.Photos["b"] = model.PhotoRef{Path: `C:\b.jpg`, W: 300, H: 200}
+	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a", "b"}}}
+	a.ed.Store(mustEditor(t, p, ""))
+	a.byID["lib"] = library.Photo{ID: "lib", Path: `C:\Петрова Анна Сергеевна.jpg`}
+	if pv := a.Person("a"); pv.Last != "Иванов" || pv.First != "Петя" || !pv.FromFile {
+		t.Fatalf("из имени файла: %+v", pv)
+	}
+	if pv := a.Person("lib"); pv.Middle != "Сергеевна" || !pv.FromFile {
+		t.Fatalf("фото ленты: %+v", pv)
+	}
+	if pv := a.Person("нет"); pv != (model.PersonView{}) {
+		t.Fatalf("чужое фото: %+v", pv)
+	}
+	r, err := a.PasteNames("s1", "Сидоров Иван\nКозлов Пётр\nЛишний", false)
+	if err != nil || r.Extra != 1 || r.Missing != 0 || r.View.Rev == 0 {
+		t.Fatalf("вставка: %+v, %v", r, err)
+	}
+	if pv := a.Person("a"); pv.Last != "Сидоров" || pv.FromFile {
+		t.Fatalf("после вставки: %+v", pv)
+	}
+	if _, err := a.PasteNames("s1", strings.Repeat("А Б\n", 1001), false); err == nil {
+		t.Fatal("длинный список принят")
+	}
+}
+
+// missSetApp — разворот из фото x, y (файлов нет) и ok (есть: exists подменён), недостающие
+// уже посчитаны; events — события missing по порядку.
+func missSetApp(t *testing.T) (a *App, x, y string, events func() [][]string) {
+	t.Helper()
+	a = newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	events = collected[[]string](a, "missing")
+	a.exists = func(p string) bool { return filepath.Base(p) == "ok.jpg" }
+	infos, ids := missInfos(a, "x.jpg", "y.jpg", "ok.jpg")
+	if _, err := a.editor().NewSpread(-1, infos); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshMissing()
+	waitMissing(t, a)
+	x, y = ids[0], ids[1]
+	if m := a.GetState().Missing; !slices.Equal(m, sorted(x, y)) {
+		t.Fatalf("недостающие при загрузке %v", m)
+	}
+	return a, x, y, events
+}
+
+// Убрали битое фото — полоса «Не найдено» уходит без переоткрытия альбома; отмена её возвращает.
+func TestMissingFollowsEdits(t *testing.T) {
+	a, x, y, events := missSetApp(t)
+	check := func(step string, want []string, n int) {
+		t.Helper()
+		waitMissing(t, a)
+		evs := events()
+		if len(evs) != n {
+			t.Fatalf("%s: событий missing %d, ждали %d: %v", step, len(evs), n, evs)
+		}
+		if last := evs[n-1]; last == nil || !slices.Equal(last, want) {
+			t.Fatalf("%s: событие %#v, ждали %v", step, last, want)
+		}
+		if m := a.GetState().Missing; !slices.Equal(m, want) {
+			t.Fatalf("%s: GetState %v, ждали %v", step, m, want)
+		}
+	}
+	a.RemovePhotos([]string{x})
+	if a.missPending.Load() != 0 {
+		t.Fatal("убрали фото: пересчёт с os.Stat не нужен")
+	}
+	check("убрали x", []string{y}, 2)
+	a.RemovePhotos([]string{y})
+	check("убрали y", []string{}, 3)
+	a.Undo()
+	check("отмена y", []string{y}, 4)
+	a.Undo()
+	check("отмена x", sorted(x, y), 5)
+
+	// Набор фото прежний, убыло только целое фото, холостая правка — событий нет.
+	rev := a.editor().View().Rev
+	a.RemovePhotos([]string{"нет-такого"})
+	if a.editor().View().Rev != rev {
+		t.Fatal("холостая правка дала шаг")
+	}
+	if _, err := a.NewSpread(-1, nil); err != nil {
+		t.Fatal(err)
+	}
+	a.RemovePhotos([]string{library.IDFor(filepath.Join(a.cfgDir, "ok.jpg"))})
+	check("без смены недостающих", sorted(x, y), 5)
+}
+
+// collected подменяет a.emit: копит данные событий name (тип T) по порядку; результат — их копия.
+func collected[T any](a *App, name string) func() []T {
+	mu, got := new(sync.Mutex), []T(nil)
+	a.emit = func(n string, data ...any) {
+		mu.Lock()
+		defer mu.Unlock()
+		if n == name {
+			got = append(got, data[0].(T))
+		}
+	}
+	return func() []T {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(got)
 	}
 }

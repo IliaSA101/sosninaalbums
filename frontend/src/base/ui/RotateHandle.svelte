@@ -7,6 +7,7 @@
 
 <div
   class="rot"
+  data-guide="rotate-handle"
   class:in={rotIn}
   role="presentation"
   title="Повернуть (Shift — шаг 15°, Alt — без привязки). Двойной щелчок — 0°"

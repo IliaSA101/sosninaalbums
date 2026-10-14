@@ -156,10 +156,9 @@ func (a *App) RestoreBackup(name string) (v model.View, err error) {
 		return v, err
 	}
 	v = a.changed(v)
+	// Недостающие при смене набора фото без смены папок пересчитывает changed.
 	if !slices.Equal(before, v.Folders) {
 		a.rescan()
-	} else {
-		a.refreshMissing()
 	}
 	return v, nil
 }

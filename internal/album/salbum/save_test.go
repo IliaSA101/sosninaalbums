@@ -19,8 +19,8 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
-// Golden v4 (testdata/v4-dev.salbum.json) открывается как v5: первая запись делает
-// .v4.bak с исходными байтами и пишет версию 5; данные те же, поля fade нет.
+// Golden v4 (testdata/v4-dev.salbum.json) открывается как текущая версия (6): первая
+// запись делает .v4.bak с исходными байтами и пишет версию 6; данные те же, поля fade нет.
 func TestMigrateV4ToV5(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "v4-dev.salbum.json"))
 	if err != nil {
@@ -35,7 +35,7 @@ func TestMigrateV4ToV5(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != 5 || edtest.From(p) != 4 {
+	if p.Version != model.FormatVersion || edtest.From(p) != 4 {
 		t.Fatalf("версия %d, from %d", p.Version, edtest.From(p))
 	}
 	e := edtest.Open(t, p, path)
@@ -50,7 +50,7 @@ func TestMigrateV4ToV5(t *testing.T) {
 	if err != nil || !bytes.Equal(bak, data) {
 		t.Fatalf(".v4.bak: %v, совпадает с исходником: %v", err, bytes.Equal(bak, data))
 	}
-	if f := fileJSON(t, path); f.Version != 5 {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion {
 		t.Fatalf("версия в файле %d", f.Version)
 	}
 	if saved, _ := os.ReadFile(path); bytes.Contains(saved, []byte(`"fade"`)) {
@@ -61,9 +61,9 @@ func TestMigrateV4ToV5(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(before, model.Marshal(q)) {
-		t.Fatalf("потери при v4 → v5:\n%s\n%s", before, model.Marshal(q))
+		t.Fatalf("потери при v4 → v6:\n%s\n%s", before, model.Marshal(q))
 	}
-	// Вторая запись копию не трогает: она уже есть, а файл уже v5.
+	// Вторая запись копию не трогает: она уже есть, а файл уже v6.
 	if err := os.WriteFile(path+".v4.bak", []byte("старое"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -251,6 +251,26 @@ func FuzzLoad(f *testing.F) {
 {"path":"C:\\b\\..\\c\\2.jpg","rating":9,"label":"pink","flag":2},{"path":"3.jpg"},null,{"path":"Отбор/4.jpg","label":"other","rating":-1}]}`))
 	f.Add([]byte(`{"version":5,"marks":{"path":"a.jpg"}}`))
 	f.Add([]byte(`{"version":5,"folders":["a","a",{"path":5}],"marks":[{"path":"1.jpg","rating":"5"},{"path":5},3.5,{"path":"2.jpg","rating":2}]}`))
+	// 032: обложка — чужой ID листа, nil-места, повторы, огромные числа, UNC разметки, null.
+	f.Add([]byte(`{"version":6,"spreads":[{"id":"cover","photos":["p"]}],"cover":{"sheet":{"id":"x","photos":["p","q"],"name":"x","layout":"y",
+"grid":[null,{"id":"c0ffee000001","x":1e308,"w":-1,"h":1e9,"photo":"p"},{"id":"c0ffee000001","photo":"q"}],"texts":[{"x":1e308,"text":"т","rot":1e308}],
+"bgPhoto":{"photo":"p","w":1e308,"h":1},"bgPhotoR":{"photo":"q"}},"spec":{"preset":"x","w":1e308,"wrap":-1,"steps":[{"upto":5,"mm":1e308},{"upto":5},{"upto":-1}]},
+"layout":"x","spineBg":"#FFF","guide":"\\\\srv\\s\\a.png","guideAbs":"C:\\a\\b.jpg"},"photos":{"p":{"path":"a.jpg"},"q":{"path":"b.jpg"}}}`))
+	f.Add([]byte(`{"version":6,"cover":{"sheet":null,"spec":null,"guide":"../a.png"}}`))
+	// v6 (030–032, аудит 0.10): шаблон листа с полями при длинных переменных, имя и подпись фото,
+	// виньетка с чужими ролями и числами, подписи на обложке у линии обреза.
+	long := strings.Repeat("я", 200)
+	f.Add([]byte(`{"version":6,"vars":{"school":"` + long + `","year":"` + long + `","class":"\n","teacher":"\u0000x"},
+"spreads":[{"id":"s","photos":["p","q"],"caps":{"style":{"size":1e9,"font":"../x"},"pad":-5,"wrap":true,"text":"` + strings.Repeat("{Год}", 80) + `"},
+"grid":[{"id":"c0ffee000001","x":1,"y":1,"w":50,"h":50,"photo":"p"},{"id":"c0ffee000002","x":60,"y":1,"w":50,"h":50},{"id":"c0ffee000003","x":1,"y":60,"w":5,"h":5}]}],
+"photos":{"p":{"path":"Иванов Пётр.jpg","person":{"last":"` + long + `","first":"\n","middle":"\t"}},"q":{"path":"b.jpg","caption":{"text":"{Отчество}{Школа}","pad":1e308}}}}`))
+	f.Add([]byte(`{"version":6,"spreads":[{"id":"v","kind":"vignette","vig":{"tpl":"x","teachers":99,"pupils":-1,"ratio":"9:1","ttext":"{Фамилия}{Год}","head":"nope"},
+"caps":{"text":"{Фамилия}"},"texts":[{"id":"0123456789ab","text":"{Школа}","style":{}}],
+"grid":[{"id":"c0ffee000004","x":1,"y":1,"w":20,"h":30,"role":"teacher"},{"id":"c0ffee000005","role":"pupil"},{"role":"group"},{"role":"x"}]},
+{"id":"w","kind":"calendar","vig":{"tpl":"grid"}},{"id":"x","vig":{"ttext":"т"}}]}`))
+	f.Add([]byte(`{"version":6,"spreads":[{"id":"s"}],"vars":{"year":"2026"},"cover":{"sheet":{"id":"cover","caps":{"text":"{Год}"},
+"grid":[{"id":"c0ffee000006","x":300,"y":250,"w":60,"h":50},{"id":"c0ffee000007","x":300,"y":320,"w":60,"h":50,"role":"teacher"}]},
+"spec":{"preset":"fsfera-thin"},"layout":"front"}}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := testkit.TempDir(t)
 		path := filepath.Join(dir, "f.salbum")
@@ -269,7 +289,10 @@ func FuzzLoad(f *testing.F) {
 		}
 		marks := edtest.Loaded(p)
 		fuzzMarks(t, marks)
-		for _, s := range p.Spreads {
+		if c := p.Cover; c != nil && (c.Sheet == nil || !reflect.DeepEqual(model.ClampCoverSpec(c.Spec), c.Spec) || !model.ValidCoverLayout(c.Layout)) {
+			t.Fatalf("обложка: %+v", c)
+		}
+		for _, s := range p.Sheets() {
 			if len(s.Photos) > model.MaxPhotos || len(s.Texts) > model.MaxTexts {
 				t.Fatalf("лимит: %d фото, %d текстов", len(s.Photos), len(s.Texts))
 			}
@@ -293,8 +316,20 @@ func FuzzLoad(f *testing.F) {
 				t.Fatalf("кадр: %+v", fr)
 			}
 		}
-		if _, err := json.Marshal(edtest.Open(t, p, "").View()); err != nil {
+		// Load оставляет то, что пропустит CheckTotals: иначе открытый проект «замёрз» бы (79).
+		if err := p.CheckTotals(p); err != nil {
+			t.Fatalf("после Load запас превышен: %v", err)
+		}
+		e := edtest.Open(t, p, "")
+		v := e.View()
+		if _, err := json.Marshal(v); err != nil {
 			t.Fatalf("View не сериализуется: %v", err)
+		}
+		fuzzCaptions(t, v)
+		if _, pv := e.Snapshot(); pv.Spreads == nil {
+			t.Fatal("вид печати пуст")
+		} else if _, err := json.Marshal(pv); err != nil {
+			t.Fatalf("вид печати не сериализуется: %v", err)
 		}
 		_ = p.Clone() // не паникует: NaN после Load не бывает
 		if err := salbum.SaveWith(p, path, marks); err != nil {
@@ -311,6 +346,28 @@ func FuzzLoad(f *testing.F) {
 			t.Fatalf("после записи и чтения: %v", err)
 		}
 	})
+}
+
+// fuzzCaptions — подписи и заглушки вида (с обложкой) не длиннее подписи: шаблон листа
+// размножается по местам, раскрытие режется (decisions 79).
+func fuzzCaptions(t *testing.T, v model.View) {
+	t.Helper()
+	sheets := v.Spreads
+	if v.Cover != nil {
+		sheets = append(slices.Clone(sheets), v.Cover.Sheet)
+	}
+	for _, sv := range sheets {
+		for _, c := range sv.Captions {
+			if n := utf8.RuneCountInString(c.Text); n > model.MaxCaptionRunes {
+				t.Fatalf("подпись %d знаков", n)
+			}
+		}
+		for _, s := range sv.Stubs {
+			if n := utf8.RuneCountInString(s.Text); n > model.MaxCaptionRunes {
+				t.Fatalf("заглушка %d знаков", n)
+			}
+		}
+	}
 }
 
 // golden — testdata/v1.salbum.json (файл v1; .salbum в git не пускает хук) с подставленной папкой (пути v1 абсолютные).

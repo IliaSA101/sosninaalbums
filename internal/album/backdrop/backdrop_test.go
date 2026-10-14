@@ -286,7 +286,7 @@ func TestBackdropKeepsSpread(t *testing.T) {
 func TestAutoBuildSkipsBackdrop(t *testing.T) {
 	e, s1, _ := edtest.BdEd(t)
 	edtest.SetBg(t, e, s1, "spread", "bg")
-	v, err := e.AutoBuild(edtest.Photos("bg", "x", "y"), -1, 2)
+	v, err := e.AutoBuild(edtest.Photos("bg", "x", "y"), -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
 	if err != nil {
 		t.Fatal(err)
 	}

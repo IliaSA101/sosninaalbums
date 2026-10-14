@@ -41,3 +41,27 @@ describe('parseExportRange: тексты ошибок', () => {
     expect(parseExportRange(', ,', 10).error).toBeTruthy()
   })
 })
+
+describe('parseExportRange: проект-лист (031)', () => {
+  it('слова «лист», альбом не меняется', () => {
+    expect(parseExportRange('12', 10, true).error).toBe('Листа 12 нет (всего 10)')
+    expect(parseExportRange('12', 10).error).toBe('Разворота 12 нет (всего 10)')
+    expect(parseExportRange('12', 10, false).error).toBe('Разворота 12 нет (всего 10)')
+    expect(parseExportRange('1', 0, true).error).toBe('Нет листов')
+    expect(parseExportRange('', 5, true).error).toBe('Укажите лист')
+    expect(parseExportRange('', 5).error).toBe('Укажите разворот или страницу')
+    expect(parseExportRange(', ,', 5, true).error).toBe('Укажите лист')
+  })
+  it('страниц в листе нет (как Go CheckSheet)', () => {
+    expect(parseExportRange('7п', 10, true).error).toMatch(/нет страниц/)
+    expect(parseExportRange('3-5п', 10, true).error).toMatch(/нет страниц/)
+    expect(parseExportRange('6 п', 10, true).error).toMatch(/нет страниц/)
+  })
+  it('верные номера листов разбираются', () => {
+    expect(parseExportRange('3-4, 8', 10, true).units).toEqual([
+      [3, 0],
+      [4, 0],
+      [8, 0],
+    ])
+  })
+})

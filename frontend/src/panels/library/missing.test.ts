@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { albumPhotos, driveLabel, missingText, relinkSummary, showMissing } from './missing'
+import {
+  albumPhotos,
+  driveLabel,
+  isHidden,
+  missTip,
+  missingIn,
+  missingKey,
+  missingSpots,
+  missingText,
+  missingWhere,
+  relinkSummary,
+  showMissing,
+  spotLabel,
+} from './missing'
 
 describe('missing', () => {
   it('полоса видна, только если есть недостающие', () => {
@@ -29,5 +42,70 @@ describe('missing', () => {
     expect(relinkSummary({ found: 7, missing: 0, ambiguous: 0 })).toBe('Найдено 7')
     expect(relinkSummary({ found: 0, missing: 4, ambiguous: 0 })).toBe('Найдено 0, не найдено 4')
     expect(relinkSummary({ found: 0, missing: 0, ambiguous: 0 })).toBe('')
+  })
+})
+
+const U = { one: 'разворот', many: 'развороты', cap: 'Разворот' }
+const SHEETS = [
+  { id: 'cover', photos: ['c1'] },
+  { id: 's1', photos: ['a', 'b'] },
+  { id: 's2', photos: ['c'], backdrops: [{ photo: 'bg' }] },
+  { id: 's3', photos: ['d', 'e'], backdrops: null },
+  { id: 's4', photos: ['f'] },
+]
+
+describe('missing: где фото', () => {
+  it('места по порядку листов, обложка — 0, фон тоже ищется', () => {
+    expect(missingSpots(SHEETS, ['f', 'a', 'bg', 'zz'])).toEqual([
+      { sheet: 's1', no: 1, photo: 'a' },
+      { sheet: 's2', no: 2, photo: 'bg' },
+      { sheet: 's4', no: 4, photo: 'f' },
+    ])
+    expect(missingSpots(SHEETS, [])).toEqual([])
+  })
+
+  it('текст «где»: один, несколько, обложка, никуда', () => {
+    expect(missingWhere(missingSpots(SHEETS, ['f']), U)).toBe('разворот 4')
+    expect(missingWhere(missingSpots(SHEETS, ['b', 'a', 'f']), U)).toBe('развороты 1, 4')
+    expect(missingWhere(missingSpots(SHEETS, ['c1']), U)).toBe('обложка')
+    expect(missingWhere(missingSpots(SHEETS, ['c1', 'd']), U)).toBe('обложка, разворот 3')
+    expect(missingWhere(missingSpots(SHEETS, ['zz']), U)).toBe('')
+    expect(missingWhere(missingSpots(SHEETS, ['d']), { one: 'лист', many: 'листы' })).toBe('лист 3')
+  })
+
+  it('длинный список обрезается', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: 's' + i, photos: ['p' + i] }))
+    const ids = many.map((s) => s.photos[0])
+    expect(missingWhere(missingSpots(many, ids), U)).toBe('развороты 1, 2, 3, 4, 5, 6, 7, 8 и ещё 4')
+  })
+
+  it('текст полосы с местом', () => {
+    expect(missingText(1, 35, 'разворот 4')).toBe('Не найдено 1 фото из 35 — разворот 4')
+    expect(missingText(1, 35, '')).toBe('Не найдено 1 фото из 35')
+  })
+
+  it('метка на листе считает пропавшие, включая фон', () => {
+    expect(missingIn(SHEETS[2], new Set(['c', 'bg']))).toBe(2)
+    expect(missingIn(SHEETS[1], new Set(['c']))).toBe(0)
+    expect(missingIn(SHEETS[1], new Set())).toBe(0)
+  })
+
+  it('строка списка и подсказка заглушки', () => {
+    const names = { f: 'IMG_1.jpg', c1: 'cover.jpg' }
+    expect(spotLabel({ sheet: 's4', no: 4, photo: 'f' }, U, names)).toBe('Разворот 4 · IMG_1.jpg')
+    expect(spotLabel({ sheet: 'cover', no: 0, photo: 'c1' }, U, names)).toBe('Обложка · cover.jpg')
+    expect(spotLabel({ sheet: 's1', no: 1, photo: 'a' }, U, names)).toBe('Разворот 1')
+    expect(missTip('f', names)).toBe('Файл не найден: IMG_1.jpg')
+    expect(missTip('zz', names)).toBe('Файл фото не найден')
+    expect(missTip('f', {})).toBe('Файл фото не найден')
+  })
+
+  it('скрытие держится, пока набор и открытие те же', () => {
+    const k = missingKey(['b', 'a'], 1)
+    expect(missingKey(['a', 'b'], 1)).toBe(k)
+    expect(isHidden(k, k)).toBe(true)
+    expect(isHidden(k, missingKey(['a', 'b', 'c'], 1))).toBe(false)
+    expect(isHidden(k, missingKey(['a', 'b'], 2))).toBe(false)
+    expect(isHidden(k, missingKey([], 1))).toBe(false)
   })
 })

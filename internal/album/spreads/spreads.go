@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
-	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -67,8 +66,20 @@ func SwapPhotos(p *model.Project, a, b string) {
 	}
 }
 
-// RemovePhotos — операция над проектом.
-func RemovePhotos(p *model.Project, ids []string) { p.Detach(ids) }
+// RemovePhotos — «убрать из альбома»: фото уходят из мест, а фото, стоящие только фоном, — и
+// с фонов всех листов (с обложкой): иначе пропавшее фото фона не убрать и полоса «Не найдено»
+// не уйдёт. Фон фото, стоящего и в месте, остаётся: так убирают фото из мест (бросок в ленту).
+func RemovePhotos(p *model.Project, ids []string) {
+	bgOnly := slices.DeleteFunc(slices.Clone(ids), p.Placed)
+	p.Detach(ids)
+	for _, s := range p.Sheets() {
+		for _, scope := range model.BdScopes() {
+			if slot := s.Slot(scope); *slot != nil && slices.Contains(bgOnly, (*slot).Photo) {
+				*slot = nil
+			}
+		}
+	}
+}
 
 // DeleteSpread — операция над проектом.
 func DeleteSpread(p *model.Project, id string) { DeleteSpreads(p, []string{id}) }
@@ -94,8 +105,10 @@ func MoveSpread(p *model.Project, id string, to int) {
 	p.Spreads = slices.Insert(p.Spreads, to, s)
 }
 
-// SetSettings — операция над проектом: зажим размеров и цвет фона.
+// SetSettings — операция над проектом: зажим размеров и цвет фона. Режим листа (Sheet)
+// берётся из проекта, а не из аргумента: лист и альбом друг в друга не превращаются.
 func SetSettings(p *model.Project, s model.Settings) {
+	s.Sheet = p.Settings.Sheet
 	s = model.ClampSettings(s)
 	s.Bg = model.BgColor(s.Bg)
 	p.Settings = s
@@ -122,33 +135,6 @@ func RemoveFolder(p *model.Project, dir string) {
 	p.Folders = slices.DeleteFunc(p.Folders, func(f string) bool { return f == dir })
 }
 
-// AutoBuild — операция над проектом; photos уже без повторов. Возвращает число новых разворотов.
-func AutoBuild(p *model.Project, photos []model.PhotoInfo, at, perSpread int) (made int, err error) {
-	inGrid, onBg := gridPhotoSet(p), p.OnBackdrops()
-	ids := model.Remember(p, slices.DeleteFunc(slices.Clone(photos), func(ph model.PhotoInfo) bool { return inGrid[ph.ID] || onBg[ph.ID] }))
-	p.Detach(ids)
-	groups := layout.Group(p.Aspects(ids), p.Params(), min(perSpread, model.MaxSpreadPhotos))
-	if at < 0 || at > len(p.Spreads) {
-		at = len(p.Spreads)
-	}
-	var spreads []*model.Spread
-	for _, g := range groups {
-		// Group сам не даёт больше 7 на разворот; режем и здесь, чтобы склейка
-		// и автосборка держались одной границы.
-		for i := g[0]; i < g[1]; i += model.MaxSpreadPhotos {
-			spreads = append(spreads, &model.Spread{ID: model.NewID(), Photos: slices.Clone(ids[i:min(g[1], i+model.MaxSpreadPhotos)])})
-		}
-	}
-	if len(spreads) == 0 {
-		return 0, nil
-	}
-	if len(p.Spreads)+len(spreads) > model.MaxSpreads {
-		return 0, fmt.Errorf("автосборка даст больше %d разворотов: в альбоме их не может быть больше", model.MaxSpreads)
-	}
-	p.Spreads = slices.Insert(p.Spreads, at, spreads...)
-	return len(spreads), nil
-}
-
 // SplitSpread — операция над проектом.
 func SplitSpread(p *model.Project, id string, at int) {
 	i, s := p.Find(id)
@@ -169,13 +155,19 @@ func MergeSpreads(p *model.Project, id string) {
 	}
 	next := p.Spreads[i+1]
 	if len(s.Grid) > 0 || len(next.Grid) > 0 ||
-		len(s.Photos)+len(next.Photos) > model.MaxSpreadPhotos || len(s.Texts)+len(next.Texts) > model.MaxTexts {
+		len(s.Photos)+len(next.Photos) > model.MaxPhotos || len(s.Texts)+len(next.Texts) > model.MaxTexts {
 		return
 	}
 	s.Photos = append(slices.Clone(s.Photos), next.Photos...)
 	s.Texts = append(s.Texts, next.Texts...)
 	if s.Name == "" {
 		s.Name = next.Name
+	}
+	if s.Caps == nil { // стиль подписей листа (030): свой, без него — второго
+		s.Caps = next.Caps
+	}
+	if s.Vars == nil { // поля шапки (031) — так же: надписи второго их подставляют
+		s.Vars = next.Vars
 	}
 	// Фон по сторонам: нет своего цвета у первого — берётся второго.
 	if s.BgL == "" {
@@ -208,10 +200,10 @@ func addToGrid(p *model.Project, s *model.Spread, ids []string) error {
 	return nil
 }
 
-// gridPhotoSet — фото, стоящие в сетках: автосборка их не трогает.
+// gridPhotoSet — фото, стоящие в сетках (и в местах обложки): автосборка их не трогает.
 func gridPhotoSet(p *model.Project) map[string]bool {
 	out := map[string]bool{}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		for _, pl := range s.Grid {
 			if pl.Photo != "" {
 				out[pl.Photo] = true

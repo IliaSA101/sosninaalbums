@@ -29,7 +29,7 @@ export const LEVEL_TITLE: Record<Level, string> = {
 
 // Подсказка уровня в значке шапки.
 export const LEVEL_HINT: Record<Level, string> = {
-  simple: 'Папки, автосборка, варианты раскладки, отметки, подписи, цвет фона, экспорт',
+  simple: 'Папки, автосборка, варианты раскладки, отметки, подписи, цвет фона, обложка, экспорт',
   standard: 'Плюс текст, кадр фото, зеркало, зум, группа, фото на фоне, меню правой кнопки',
   full: 'Плюс ручная раскладка, шаблоны, поворот мест, слои, выравнивание, линейки, плавающие панели',
   custom: 'Ваш набор функций; основа — любой из уровней',
@@ -41,8 +41,8 @@ export const customHint = (base: Base): string => `Ваш набор, основ
 // Пункты карточек (design §5.2), каждый ≤ 26 знаков: в карточке без переноса. У «Своего» четвёртая
 // строка зависит от основы — customPoints.
 export const LEVEL_POINTS: Record<Level, readonly string[]> = {
-  simple: ['Папки и автосборка', 'Варианты раскладки', 'Подписи и цвет фона', 'Поворот фото на 90°', 'Экспорт в JPEG'],
-  standard: ['Всё из Простого', 'Текст на развороте', 'Кадр, зеркало, наклон', 'Зум и группа фото', 'Фото на фоне'],
+  simple: ['Папки и автосборка', 'Варианты раскладки', 'Подписи и цвет фона', 'Обложка', 'Экспорт в JPEG'],
+  standard: ['Всё из Простого', 'Текст на развороте', 'Кадр, зеркало, наклон', 'Виньетка в альбоме', 'Фото на фоне'],
   full: ['Всё из Стандартного', 'Ручная раскладка', 'Шаблоны раскладок', 'Слои и выравнивание', 'Линейки и панели'],
   custom: ['Функции на выбор', 'Основа — любой уровень', 'Нужное включится само'],
 }
@@ -90,6 +90,7 @@ export type FeatureId =
   | 'textRotate'
   | 'panels'
   | 'marks'
+  | 'vignette'
 
 // Строка матрицы = единица переключения в «Своём»; её идентификатор — главный id.
 export type RowId = FeatureId
@@ -110,7 +111,7 @@ export const FEATURES: Feature[] = [
   {
     id: 'base',
     group: 'Основа',
-    title: 'Папки, лента, перенос и обмен, автосборка, экспорт с окном, отмена, «Найти пропавшие», панель деталей',
+    title: 'Папки, лента, перенос и обмен, автосборка, обложка, экспорт с окном, отмена, «Найти пропавшие», панель деталей',
     short: 'Основа',
     min: 'simple',
   },
@@ -133,6 +134,7 @@ export const FEATURES: Feature[] = [
   { id: 'flip', group: 'Фото и текст', title: 'Зеркало фото', short: 'Зеркало фото', min: 'standard' },
   { id: 'tilt', group: 'Фото и текст', title: 'Наклон фото', short: 'Наклон фото', min: 'standard' },
   { id: 'bgPhoto', group: 'Фото и текст', title: 'Фото на фоне и режим фона', short: 'Фото на фоне', min: 'standard' },
+  { id: 'vignette', group: 'Фото и текст', title: 'Виньетка: лист учителей и учеников', short: 'Виньетка', min: 'standard' },
   {
     id: 'textRotate',
     group: 'Фото и текст',
@@ -192,6 +194,10 @@ export function featureGroups(): { title: Feature['group']; rows: Feature[] }[] 
 }
 
 const MIN = new Map<FeatureId, Base>(FEATURES.flatMap((f) => [f.id, ...(f.also ?? [])].map((id) => [id, f.min] as const)))
+
+// Строка таблицы, в которую входит id (главный или из also): единица переключения в «Своём».
+const ROW_OF = new Map<FeatureId, RowId>(FEATURES.flatMap((f) => [f.id, ...(f.also ?? [])].map((id) => [id, f.id] as const)))
+export const rowOf = (id: FeatureId): RowId => ROW_OF.get(id) ?? id
 
 // Нижний уровень, с которого функция входит в основу.
 export const minLevel = (id: FeatureId): Base => MIN.get(id) ?? 'simple'

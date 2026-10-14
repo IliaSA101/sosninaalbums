@@ -30,14 +30,15 @@ func GroupMergeKey(p *model.Project, spreadID string, ids []string, merge string
 func RotateGroup(p *model.Project, spreadID string, ids []string, deg, cx, cy float64) {
 	groupEdit(p, spreadID, ids, func(p *model.Project, s *model.Spread) {
 		pls, txs := groupMembers(s, ids)
-		in := geom.GxRotIn{SW: 2 * p.Settings.PageW, PH: p.Settings.PageH, Deg: deg, CX: cx, CY: cy}
+		g := p.Geo(s)
+		in := geom.GxRotIn{SW: g.W, PH: g.H, Deg: deg, CX: cx, CY: cy}
 		in.Places, in.Texts = gxMembers(pls, txs)
 		out := geom.GroupRot(in)
 		for i, pl := range pls {
 			np := *pl // копия целиком: поля места, которых здесь нет, не теряются
 			r := out.Places[i]
 			np.X, np.Y, np.Rot = r.X, r.Y, r.Rot
-			p.ClampPlace(&np)
+			p.ClampPlace(s, &np)
 			*pl = np
 		}
 		for i, t := range txs {
@@ -55,14 +56,15 @@ func ScaleGroupAxes(p *model.Project, spreadID string, ids []string, kx, ky, phi
 			return
 		}
 		pls, txs := groupMembers(s, ids)
-		in := geom.GxAxesIn{SW: 2 * p.Settings.PageW, PH: p.Settings.PageH, KX: kx, KY: ky, Phi: phi, AX: ax, AY: ay}
+		g := p.Geo(s)
+		in := geom.GxAxesIn{SW: g.W, PH: g.H, KX: kx, KY: ky, Phi: phi, AX: ax, AY: ay}
 		in.Places, in.Texts = gxMembers(pls, txs)
 		out := geom.GroupAxes(in)
 		for i, pl := range pls {
 			np := *pl
 			r := out.Places[i]
 			np.X, np.Y, np.W, np.H = r.X, r.Y, r.W, r.H
-			p.ClampPlace(&np)
+			p.ClampPlace(s, &np)
 			*pl = np
 		}
 		for i, t := range txs {
@@ -77,7 +79,7 @@ func ScaleGroupAxes(p *model.Project, spreadID string, ids []string, kx, ky, phi
 				t.Style = model.ClampStyle(t.Style)
 			}
 			if t.Auto { // ширина по тексту нового кегля, точка выравнивания стоит
-				p.SetAutoW(t, model.AutoW(t, model.TextMaxW(p.Settings)), false)
+				p.SetAutoW(s, t, p.SheetAutoW(s, t), false)
 			}
 		}
 	})
@@ -86,7 +88,8 @@ func ScaleGroupAxes(p *model.Project, spreadID string, ids []string, kx, ky, phi
 // transformGroup — тело TransformGroup над разворотом s (у «Авто» с фото — уже закреплённым).
 func transformGroup(p *model.Project, s *model.Spread, ids []string, k, ax, ay, dx, dy float64) {
 	pls, txs := groupMembers(s, ids)
-	in := geom.GxIn{SW: 2 * p.Settings.PageW, PH: p.Settings.PageH, K: k, AX: ax, AY: ay, DX: dx, DY: dy}
+	g := p.Geo(s)
+	in := geom.GxIn{SW: g.W, PH: g.H, K: k, AX: ax, AY: ay, DX: dx, DY: dy}
 	in.Places, in.Texts = gxMembers(pls, txs)
 	out := geom.GroupXf(in)
 	if out.K == 1 && out.DX == 0 && out.DY == 0 {
@@ -96,7 +99,7 @@ func transformGroup(p *model.Project, s *model.Spread, ids []string, k, ax, ay, 
 		np := *pl // копия целиком: поля места, которых здесь нет, не теряются
 		r := out.Places[i]
 		np.X, np.Y, np.W, np.H = r.X, r.Y, r.W, r.H
-		p.ClampPlace(&np)
+		p.ClampPlace(s, &np)
 		*pl = np
 	}
 	for i, t := range txs {
@@ -107,7 +110,7 @@ func transformGroup(p *model.Project, s *model.Spread, ids []string, k, ax, ay, 
 			t.Style = model.ClampStyle(t.Style)
 		}
 		if t.Auto {
-			t.W = model.AutoW(t, model.TextMaxW(p.Settings)) // та же ширина, что насчитает fitTexts
+			t.W = p.SheetAutoW(s, t) // та же ширина, что насчитает fitTexts
 		} else {
 			t.W = o.W
 		}
@@ -117,7 +120,7 @@ func transformGroup(p *model.Project, s *model.Spread, ids []string, k, ax, ay, 
 // groupEdit — правка группы одним шагом undo: у «Авто» с фото в группе разворот
 // закрепляется той же правкой (withGrid), одни тексты не закрепляют.
 func groupEdit(p *model.Project, spreadID string, ids []string, run func(p *model.Project, s *model.Spread)) {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return
 	}
@@ -167,6 +170,6 @@ func hasPhoto(s *model.Spread, ids []string) bool {
 
 // autoWithPhotos — разворот «Авто» и среди ids есть его фото (группа с местами).
 func autoWithPhotos(p *model.Project, spreadID string, ids []string) bool {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	return s != nil && len(s.Grid) == 0 && hasPhoto(s, ids)
 }

@@ -103,6 +103,25 @@ func GridEd(t *testing.T, places []*model.Place, extra ...[]string) *album.Edito
 	return e
 }
 
+// CoverPlace — ID места на лицевой обложки CoverEd.
+const CoverPlace = "c0ffee0000c1"
+
+// CoverEd — GridEd с обложкой «тонкие листы» (сторонка — страница 281×284): на лицевой
+// место CoverPlace с фото cover и текст; развороты — places и extra, как у GridEd.
+func CoverEd(t *testing.T, cover string, places []*model.Place, extra ...[]string) *album.Editor {
+	t.Helper()
+	e := GridEd(t, places, extra...)
+	pr, _ := model.CoverPresetOf(model.CoverDefault)
+	Change(e, func(p *model.Project) {
+		p.Photos[cover] = model.PhotoRef{Path: Abs(cover + ".jpg"), W: 300, H: 200}
+		p.Cover = &model.Cover{Spec: pr.Spec, Sheet: &model.Spread{ID: model.CoverID, Photos: []string{cover},
+			Grid:  []*model.Place{{ID: CoverPlace, X: 400, Y: 100, W: 120, H: 80, Photo: cover}},
+			Texts: []*model.TextBlock{{ID: "c0ffee0000c2", X: 350, Y: 40, W: 80, Text: "Обложка", Style: model.PlainStyle()}}}}
+	})
+	MustGrid(t, e)
+	return e
+}
+
 // PhotosOf — фото мест разворота i по порядку ("" — пустое).
 func PhotosOf(e *album.Editor, i int) []string {
 	var out []string

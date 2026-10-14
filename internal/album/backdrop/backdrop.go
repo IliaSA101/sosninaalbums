@@ -8,12 +8,12 @@ import "github.com/IliaSA101/sosninaalbums/internal/album/model"
 // SetBackdrop — тело Editor.SetBackdrop над проектом. Неизвестная область — ErrScope
 // и проект не тронут: тело зовут и мимо обёртки, проверяющей область.
 func SetBackdrop(p *model.Project, spreadID, scope string, ph model.PhotoInfo) error {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return nil
 	}
 	slot := s.Slot(scope)
-	if slot == nil {
+	if _, ok := p.AreaOf(s, scope); slot == nil || !ok { // у листа 031 страниц нет
 		return model.ErrScope
 	}
 	model.Remember(p, []model.PhotoInfo{ph})
@@ -24,7 +24,7 @@ func SetBackdrop(p *model.Project, spreadID, scope string, ph model.PhotoInfo) e
 	}
 	if *slot == nil {
 		b := &model.Backdrop{Photo: ph.ID}
-		b.FitArea(p.BdArea(scope))
+		b.FitArea(p.BdArea(s, scope))
 		*slot = b
 		return nil
 	}
@@ -34,13 +34,13 @@ func SetBackdrop(p *model.Project, spreadID, scope string, ph model.PhotoInfo) e
 	return nil
 }
 
-// changeBackdrop — правка фона области: fn меняет копию, затем фон зажимается;
-// нет фона — холостая правка.
-func changeBackdrop(p *model.Project, spreadID, scope string, fn func(p *model.Project, b *model.Backdrop)) {
+// changeBackdrop — правка фона области листа (и обложки): fn меняет копию, затем фон
+// зажимается; нет фона — холостая правка.
+func changeBackdrop(p *model.Project, spreadID, scope string, fn func(p *model.Project, s *model.Spread, b *model.Backdrop)) {
 	if !model.ValidScope(scope) {
 		return
 	}
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return
 	}
@@ -49,13 +49,13 @@ func changeBackdrop(p *model.Project, spreadID, scope string, fn func(p *model.P
 		return
 	}
 	b := (*slot).Clone()
-	fn(p, b)
-	*slot = p.ClampBackdrop(b, scope)
+	fn(p, s, b)
+	*slot = p.ClampBackdrop(s, b, scope)
 }
 
 // SetBackdropBox — тело Editor.SetBackdropBox над проектом.
 func SetBackdropBox(p *model.Project, spreadID, scope string, x, y, w, h, rot float64) {
-	changeBackdrop(p, spreadID, scope, func(_ *model.Project, b *model.Backdrop) {
+	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) {
 		b.X, b.Y, b.W, b.H, b.Rot = x, y, w, h, rot
 	})
 }
@@ -63,12 +63,12 @@ func SetBackdropBox(p *model.Project, spreadID, scope string, x, y, w, h, rot fl
 // SetBackdropFrame — тело Editor.SetBackdropFrame над проектом.
 func SetBackdropFrame(p *model.Project, spreadID, scope string, s, x, y float64) {
 	f := model.ClampFrame(&model.Frame{S: s, X: x, Y: y})
-	changeBackdrop(p, spreadID, scope, func(_ *model.Project, b *model.Backdrop) { b.Frame = f })
+	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) { b.Frame = f })
 }
 
 // FlipBackdrop — тело Editor.FlipBackdrop над проектом (axis уже проверена).
 func FlipBackdrop(p *model.Project, spreadID, scope, axis string) {
-	changeBackdrop(p, spreadID, scope, func(_ *model.Project, b *model.Backdrop) {
+	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) {
 		fr := b.FrameOrDefault()
 		if axis == "h" {
 			b.FlipH = !b.FlipH
@@ -87,17 +87,17 @@ func FlipBackdrop(p *model.Project, spreadID, scope, axis string) {
 
 // SetBackdropFade — тело Editor.SetBackdropFade над проектом (fade — число).
 func SetBackdropFade(p *model.Project, spreadID, scope string, fade float64) {
-	changeBackdrop(p, spreadID, scope, func(_ *model.Project, b *model.Backdrop) { b.Fade = fade })
+	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) { b.Fade = fade })
 }
 
 // FitBackdrop — тело Editor.FitBackdrop над проектом.
 func FitBackdrop(p *model.Project, spreadID, scope string) {
-	changeBackdrop(p, spreadID, scope, func(p *model.Project, b *model.Backdrop) { b.FitArea(p.BdArea(scope)) })
+	changeBackdrop(p, spreadID, scope, func(p *model.Project, s *model.Spread, b *model.Backdrop) { b.FitArea(p.BdArea(s, scope)) })
 }
 
 // ClearBackdrop — тело Editor.ClearBackdrop над проектом; неизвестная область — холостая правка.
 func ClearBackdrop(p *model.Project, spreadID, scope string) {
-	if _, s := p.Find(spreadID); s != nil {
+	if s := p.Sheet(spreadID); s != nil {
 		if slot := s.Slot(scope); slot != nil {
 			*slot = nil
 		}
@@ -105,10 +105,11 @@ func ClearBackdrop(p *model.Project, spreadID, scope string) {
 }
 
 // Rescale — поменялся формат страницы: рамки остаются на том же месте
-// страницы пропорционально (как места), затем зажим.
+// страницы пропорционально (как места), затем зажим. Только развороты: обложку
+// пересчитывает свой Reflow (032 §3).
 func Rescale(p *model.Project, before *model.Project) {
-	ow, oh := before.Settings.PageW, before.Settings.PageH
-	nw, nh := p.Settings.PageW, p.Settings.PageH
+	og, ng := before.Geo(nil), p.Geo(nil)
+	ow, oh, nw, nh := og.W, og.H, ng.W, ng.H
 	if ow == nw && oh == nh || !(ow > 0) || !(oh > 0) {
 		return
 	}
@@ -118,7 +119,7 @@ func Rescale(p *model.Project, before *model.Project) {
 			slot := s.Slot(scope)
 			if b := *slot; b != nil {
 				b.X, b.W, b.Y, b.H = b.X*kx, b.W*kx, b.Y*ky, b.H*ky
-				*slot = p.ClampBackdrop(b, scope)
+				*slot = p.ClampBackdrop(s, b, scope)
 			}
 		}
 	}

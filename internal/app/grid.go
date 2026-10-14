@@ -1,8 +1,8 @@
 package app
 
 import (
-	"errors"
 	"slices"
+	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -132,6 +132,41 @@ func (a *App) PlacePhotos(spreadID, placeID string, ids []string) (r GridResult,
 	return r, err
 }
 
+// DropResult — итог DropPhotos (042). Ask: правки не было (rev тот же) — UI задаёт вопрос
+// и зовёт DropPhotos ещё раз с rest "add" | "skip".
+type DropResult struct {
+	View  model.View `json:"view"`
+	Ask   bool       `json:"ask"`
+	Fit   int        `json:"fit"`   // сколько встанет (встало) в имеющиеся места, с целевым
+	Total int        `json:"total"` // сколько фото пришло на лист (без тех, что уже в его местах)
+	Fresh []string   `json:"fresh"` // ID новых мест плитки: UI выделяет их, как после «Место»
+	Grown int        `json:"grown"` // на сколько выросло «Учеников» нетронутой виньетки
+	Out   bool       `json:"out"`   // прежнее фото целевого места ушло в ленту (замена)
+	Left  int        `json:"left"`  // не встало: «Не добавлять» или обложка
+	Small bool       `json:"small"` // место плитки мельче 1/10 меньшей стороны страницы
+}
+
+// DropPhotos — бросок фото на лист spreadID (042): placeID "" — на лист, иначе на место.
+// at — доля ширины листа под курсором 0…1, < 0 — точки нет. rest: "" — спросить, если
+// 0 < Fit < Total; "add" — остальные плиткой (нетронутая виньетка — ученики); "skip" — не
+// добавлять. «Авто» — как AddPhotos в конец; обложка — как PlacePhotos. Отказ — ошибка,
+// проект прежний.
+func (a *App) DropPhotos(spreadID, placeID string, ids []string, at float64, rest string) (r DropResult, err error) {
+	defer a.guardEdit("DropPhotos", &r.View, &err)
+	v, o, err := a.editor().DropPhotos(spreadID, placeID, a.infosOrRefs(ids), at, rest)
+	if o.Ask && err == nil { // правки нет (v — нынешний вид): не рассылать, автосохранение не трогать
+		r.View = v
+	} else if r.View, err = a.changedOrErr(v, err); err != nil {
+		return r, err
+	}
+	fresh := o.Fresh
+	if fresh == nil {
+		fresh = []string{} // в JSON — [], а не null: UI не проверяет на null
+	}
+	return DropResult{View: r.View, Ask: o.Ask, Fit: o.Fit, Total: o.Total, Fresh: fresh, Grown: o.Grown,
+		Out: o.Out, Left: o.Left, Small: o.Small}, nil
+}
+
 // FillPlaces — «Заполнить пустые места» фото из ленты, начиная с разворота fromSpread.
 func (a *App) FillPlaces(ids []string, fromSpread string) (r GridResult) {
 	defer a.guardEdit("FillPlaces", &r.View, nil)
@@ -241,25 +276,67 @@ func (a *App) SaveGridTemplate(spreadID, scope, name string) (err error) {
 	return a.storeTemplates(list)
 }
 
-// RenameGridTemplate меняет имя шаблона (пустое — «Шаблон N»).
+// SaveVignetteTemplate сохраняет виньетку листа (лист или разворот) как свой шаблон (038):
+// места с ролями, шапку, пропорции и стиль подписей — без фото, имён и текста шапки. Пустое
+// имя — «Шаблон N». Не виньетка, нет мест людей, слишком много шаблонов или файл больше 1 МБ —
+// ошибка. Шаблон общий для всех альбомов этого компьютера.
+func (a *App) SaveVignetteTemplate(spreadID, name string) (err error) {
+	defer guardErr("SaveVignetteTemplate", &err)
+	t, err := a.editor().VigTemplate(spreadID)
+	if err != nil {
+		return err
+	}
+	a.tplMu.Lock()
+	defer a.tplMu.Unlock()
+	if a.tpls.Newer() {
+		return model.ErrTemplatesNewer
+	}
+	cur := a.tpls.List()
+	if len(cur) >= model.MaxTemplates {
+		return model.ErrTooManyTpl
+	}
+	t.ID, t.Name = model.NewID(), model.CleanTemplateName(name, len(cur)+1)
+	return a.storeTemplates(append(slices.Clone(cur), t))
+}
+
+// RenameGridTemplate меняет имя шаблона (пустое — «Шаблон N»). id — как у карточки: у шаблона
+// виньетки с префиксом «my:» (VigChoice.id).
 func (a *App) RenameGridTemplate(id, name string) (err error) {
 	defer guardErr("RenameGridTemplate", &err)
-	return a.editTemplates(id, func(list []model.Template, i int) []model.Template {
+	err = a.editTemplates(id, func(list []model.Template, i int) []model.Template {
 		list[i].Name = model.CleanTemplateName(name, i+1)
 		return list
 	})
+	if err == nil {
+		a.syncOwnNames()
+	}
+	return err
 }
 
-// DeleteGridTemplate удаляет шаблон; вопрос «удалить?» задаёт интерфейс.
+// DeleteGridTemplate удаляет шаблон (id — как у RenameGridTemplate); вопрос «удалить?» задаёт
+// интерфейс. Листы, где шаблон виньетки применён, остаются: геометрия не меняется (в Vig.Own),
+// имя — последнее из файла.
 func (a *App) DeleteGridTemplate(id string) (err error) {
 	defer guardErr("DeleteGridTemplate", &err)
+	// Имя копии на листах — последнее из файла: после удаления его больше неоткуда взять
+	// (альбом мог быть закрыт, когда шаблон переименовали).
+	a.syncOwnNames()
 	return a.editTemplates(id, func(list []model.Template, i int) []model.Template {
 		return slices.Delete(list, i, i+1)
 	})
 }
 
+// syncOwnNames — имена своих шаблонов виньетки на листах открытого альбома — по файлу шаблонов,
+// без шага отмены (Editor.SyncOwnNames); сменились — вид рассылается, альбом сохранится сам.
+func (a *App) syncOwnNames() {
+	if v, changed := a.editor().SyncOwnNames(a.templateList()); changed {
+		a.changed(v)
+	}
+}
+
 // editTemplates применяет fn к копии списка (i — индекс шаблона id) и записывает результат.
 func (a *App) editTemplates(id string, fn func(list []model.Template, i int) []model.Template) error {
+	id = strings.TrimPrefix(id, model.VigOwnPrefix)
 	a.tplMu.Lock()
 	defer a.tplMu.Unlock()
 	if a.tpls.Newer() {
@@ -268,7 +345,7 @@ func (a *App) editTemplates(id string, fn func(list []model.Template, i int) []m
 	cur := a.tpls.List()
 	i := slices.IndexFunc(cur, func(t model.Template) bool { return t.ID == id })
 	if i < 0 {
-		return errors.New("шаблон не найден")
+		return model.ErrTplNotFound
 	}
 	return a.storeTemplates(fn(slices.Clone(cur), i))
 }

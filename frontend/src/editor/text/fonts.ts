@@ -29,17 +29,75 @@ export function faceSpecs(fonts: FontFamily[]): FaceSpec[] {
   )
 }
 
-// Регистрирует шрифты в document.fonts и ждёт загрузки. Ошибка одного файла
-// не мешает остальным (возвращается число загруженных).
-export async function loadFonts(fonts: FontFamily[]): Promise<number> {
-  const results = await Promise.allSettled(
-    faceSpecs(fonts).map(async (s) => {
-      const ff = new FontFace(s.family, s.source, { weight: s.weight, style: s.style, featureSettings: FEATURE_SETTINGS })
-      await ff.load()
-      document.fonts.add(ff)
-    }),
-  )
-  return results.filter((r) => r.status === 'fulfilled').length
+// Регистрирует начертания в document.fonts, но не грузит: браузер возьмёт файл при первом
+// использовании (текст на холсте, образец в открытом списке). Гарнитур 18, файлов ~60 —
+// грузить всё на старте незачем. Возвращает число зарегистрированных.
+export function loadFonts(fonts: FontFamily[]): number {
+  let n = 0
+  for (const s of faceSpecs(fonts)) {
+    try {
+      document.fonts.add(new FontFace(s.family, s.source, { weight: s.weight, style: s.style, featureSettings: FEATURE_SETTINGS }))
+      n++
+    } catch {
+      // Битое описание одного файла не мешает остальным.
+    }
+  }
+  return n
+}
+
+// Группы списка шрифтов: id из Go (FontFamily.group) и подпись. Порядок — порядок в списке.
+export const GROUPS: readonly (readonly [string, string])[] = [
+  ['script', 'Рукописные'],
+  ['kids', 'Детские и округлые'],
+  ['serif', 'Антиква'],
+  ['sans', 'Гротески'],
+]
+
+export interface FontGroup {
+  id: string
+  title: string
+  fonts: FontFamily[]
+}
+
+// Гарнитуры по группам в порядке GROUPS, внутри — как пришли из Go. Пустые группы пропускаются;
+// гарнитура с незнакомой группой уходит в последнюю, чтобы её можно было выбрать.
+export function groupFonts(fonts: FontFamily[]): FontGroup[] {
+  const known = new Set(GROUPS.map(([id]) => id))
+  const last = GROUPS[GROUPS.length - 1][0]
+  return GROUPS.map(([id, title]) => ({
+    id,
+    title,
+    fonts: fonts.filter((f) => (known.has(f.group) ? f.group : last) === id),
+  })).filter((g) => g.fonts.length > 0)
+}
+
+// Образец в списке шрифтов.
+export const SAMPLE = 'Анна и Павел'
+
+// Клавиши навигации по списку: новая активная строка или null, если клавиша не навигационная.
+export function moveActive(key: string, active: number, n: number): number | null {
+  if (n <= 0) return null
+  switch (key) {
+    case 'ArrowDown':
+      return (active + 1) % n
+    case 'ArrowUp':
+      return (active - 1 + n) % n
+    case 'Home':
+      return 0
+    case 'End':
+      return n - 1
+    default:
+      return null
+  }
+}
+
+// Переход по набранным буквам: индекс первой гарнитуры, чьё имя начинается с query (без регистра).
+// Если текущая уже подходит — остаётся на ней. Нет совпадения — -1.
+export function findByPrefix(names: string[], query: string, from: number): number {
+  const q = query.toLowerCase()
+  if (!q) return -1
+  const hit = (i: number) => names[i]?.toLowerCase().startsWith(q) ?? false
+  return hit(from) ? from : names.findIndex((_, i) => hit(i))
 }
 
 export interface FontCss {

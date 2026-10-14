@@ -383,7 +383,7 @@ func TestLoadDeadVolumeFast(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d := time.Since(start); d > 3*time.Second {
+	if d := time.Since(start); d > testkit.Limit(3*time.Second) {
 		t.Fatalf("Load %v: ждал мёртвый том", d)
 	}
 	if got := probes.Load(); got != 1 {

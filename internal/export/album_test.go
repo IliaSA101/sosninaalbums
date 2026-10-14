@@ -3,9 +3,11 @@ package export
 import (
 	"context"
 	"image/color"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -189,5 +191,76 @@ func TestColorWarning(t *testing.T) {
 	}
 	if ColorNote(0) != "" || ColorNote(3) != "Пересчитано из Adobe RGB в sRGB: 3 фото." {
 		t.Errorf("note: %q %q", ColorNote(0), ColorNote(3))
+	}
+}
+
+// BenchmarkExport64Texts — экспорт разворота 300 dpi с 64 надписями (спека 026) против
+// пустого: View → FromView → Render. Разница — цена надписей.
+func BenchmarkExport64Texts(b *testing.B) {
+	for _, n := range []int{0, model.MaxTexts} {
+		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			p := model.New()
+			s := &model.Spread{ID: "s1"}
+			for i := range n {
+				s.Texts = append(s.Texts, &model.TextBlock{ID: model.NewID(), X: float64(10 + i%8*65), Y: float64(10 + i/8*33), W: 60,
+					Rot: float64(i % 3 * 15), Text: "Иван и Мария\nглава " + strconv.Itoa(i), Style: model.PlainStyle()})
+			}
+			p.Spreads = []*model.Spread{s}
+			e := mustEditor(b, p, "")
+			opt := render.Options{PageW: p.Settings.PageW, PageH: p.Settings.PageH, DPI: 300, Quality: 95}
+			for b.Loop() {
+				pp, v := e.Snapshot()
+				if _, err := render.Render(FromView(pp, v)[0], opt); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// TestExport64Photos: разворот на 64 фото (предел 027) выгружается, все 64 ячейки нарисованы
+// (в центре каждой — фото, а не белый фон). Память держит прежний семафор на 3 оригинала.
+func TestExport64Photos(t *testing.T) {
+	dir := testkit.TempDir(t)
+	p := model.New()
+	p.Settings.Bg = "#ffffff"
+	s := &model.Spread{ID: "s1"}
+	for i := range 64 {
+		id := "p" + strconv.Itoa(i)
+		w, h := 30, 20
+		if i%3 == 0 {
+			w, h = 20, 30
+		}
+		p.Photos[id] = model.PhotoRef{Path: testkit.JPEG(t, dir, id+".jpg", w, h), W: w, H: h}
+		s.Photos = append(s.Photos, id)
+	}
+	p.Spreads = []*model.Spread{s}
+	pp, v := mustEditor(t, p, "").Snapshot()
+	spreads := FromView(pp, v)
+	if len(spreads) != 1 || len(spreads[0].Photos) != 64 {
+		t.Fatalf("в задании %d фото", len(spreads[0].Photos))
+	}
+	out := filepath.Join(dir, "out")
+	const dpi = 60
+	opt := render.Options{PageW: pp.Settings.PageW, PageH: pp.Settings.PageH, DPI: dpi, Quality: 95}
+	if err := Run(context.Background(), spreads, opt, out, func(int, int) {}); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(filepath.Join(out, FileName(0, 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, err := jpeg.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, ph := range spreads[0].Photos {
+		x := int((ph.Cell.X + ph.Cell.W/2) / 25.4 * dpi)
+		y := int((ph.Cell.Y + ph.Cell.H/2) / 25.4 * dpi)
+		r, _, b, _ := img.At(x, y).RGBA()
+		if r>>8 > 200 || b>>8 < 90 || b>>8 > 170 { // у тестового JPEG в центре ~(127, 127, 128)
+			t.Fatalf("ячейка %d (%d, %d) не нарисована: r=%d b=%d", i, x, y, r>>8, b>>8)
+		}
 	}
 }

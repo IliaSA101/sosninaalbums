@@ -16,7 +16,7 @@
 </script>
 
 <div class="lbl" title="Alt+щелчок по холсту — выбрать объект под верхним">Расположение</div>
-<div class="seg" role="group" aria-label="Расположение">
+<div class="seg" role="group" aria-label="Расположение" data-guide="layer-row">
   {#each OPS as o (o.op)}
     <button title={o.title} onmousedown={(e) => e.preventDefault()} onclick={() => onpick(o.op)}
       ><Icon name={o.icon} size={16} />{o.label}</button

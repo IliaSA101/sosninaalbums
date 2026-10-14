@@ -1,0 +1,294 @@
+package spreads
+
+// Разнообразие раскладок (спека 041, design §7): выбор раскладки собранных разворотов с учётом
+// соседей, «Разнообразить раскладки» и поля подборки (семейство, похожие, «Другие варианты»).
+// Ключи строит и выбирает internal/layout/variety; здесь — соседи из альбома и запись ключа.
+
+import (
+	"slices"
+
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/variety"
+)
+
+// Rating — действующая оценка фото по ID (своя отметка поверх XMP); nil — оценок нет.
+type Rating func(id string) int
+
+const (
+	// sinceCap — дальше этого ритм воздуха назад не считаем: самый длинный период — 5.
+	sinceCap = 8
+)
+
+// level — уровень ручки для variety (зажим 0…2: чужое число не включает несуществующий режим).
+func level(v model.Variety) variety.Level { return variety.Level(v.Clamp()) }
+
+// Prep — автосборка до замка Editor (design §7): снимок входа, план и пулы групп.
+// Под замком план и пулы берутся отсюда, если вход тот же (иначе — заново).
+type Prep struct {
+	photos []model.PhotoInfo
+	o      model.AutoOpts
+	job    PlanJob
+	pl     layout.Plan
+	err    error
+	pools  [][]variety.Cand // по группам плана; nil — считать под замком
+}
+
+// Prepare — план и пулы групп параллельно вне замка; job снят под замком (PlanOf).
+// «Меньше» пулов не считает (выбора нет, как в 0.10), но «Другие варианты» греет: счётчик «i / N»
+// в View берёт их под замком, а холодный ряд — десятки мс на разворот.
+func Prepare(job PlanJob, photos []model.PhotoInfo, o model.AutoOpts) Prep {
+	w := Prep{photos: photos, o: o, job: job}
+	_, w.pl, w.err = job.plan(o.Spreads, o.MaxPer)
+	if w.err == nil {
+		asps := make([][]float64, len(w.pl.Groups))
+		for i, g := range w.pl.Groups {
+			asps[i] = job.asp[g[0]:g[1]]
+		}
+		w.pools = pools(asps, job.prm, level(o.Variety))
+	}
+	return w
+}
+
+// Photos — сколько фото пришло в сборку (журнал медленных операций).
+func (w Prep) Photos() int { return len(w.photos) }
+
+// planFor — план для входа j и пулы его групп: посчитанные до замка, если вход тот же, иначе
+// план заново, а пулы (nil) — при выборе.
+func (w Prep) planFor(j PlanJob) (layout.Plan, [][]variety.Cand, error) {
+	if j.same(w.job) {
+		return w.pl, w.pools, w.err
+	}
+	_, pl, err := j.plan(w.o.Spreads, w.o.MaxPer)
+	return pl, nil, err
+}
+
+// same — тот же вход плана: пропорции, геометрия, разворотов и пустой хвост.
+func (j PlanJob) same(k PlanJob) bool {
+	return j.prm == k.prm && j.have == k.have && j.tail == k.tail && slices.Equal(j.asp, k.asp)
+}
+
+// poolLevel — пул разворота из n фото: с ManyFrom — только ряд «Авто», как у ExtraRow: выбранный
+// ключ всегда виден в листании и счётчике.
+func poolLevel(n int, lv variety.Level) variety.Level {
+	if n >= layout.ManyFrom {
+		return variety.Less
+	}
+	return lv
+}
+
+// poolOf — пул выбора: ряд «Авто» и «Другие варианты» (model.ExtraRow) — ровно то, что видят
+// подборка, листание и счётчик: выбранный ключ всегда есть в ряду «i / N».
+func poolOf(asp []float64, prm layout.Params, lv variety.Level) []variety.Cand {
+	extra := model.ExtraRow(asp, prm)
+	return slices.DeleteFunc(variety.Pool(asp, prm, model.RowLen(len(asp)), poolLevel(len(asp), lv)), func(c variety.Cand) bool {
+		return !c.InRow && model.IndexOf(extra, c.Key) < 0
+	})
+}
+
+// pools считает пулы параллельно вне замка (nil — выключено тестом). На «Меньше» пулов нет —
+// только прогрев «Других вариантов» (ExtraRow), результат nil. Паника — только в лог, пул остаётся
+// nil: тот же счёт повторится под замком и поведёт себя как раньше.
+func pools(asps [][]float64, prm layout.Params, lv variety.Level) [][]variety.Cand {
+	if !model.ParallelLayouts() || len(asps) == 0 {
+		return nil
+	}
+	out := make([][]variety.Cand, len(asps))
+	var pl model.PanicLog
+	model.Each(len(asps), func(i int) {
+		pl.Safely("", func() {
+			if lv > variety.Less {
+				out[i] = poolOf(asps[i], prm, lv)
+			} else {
+				model.ExtraRow(asps[i], prm)
+			}
+		})
+	})
+	pl.Summary()
+	if lv == variety.Less {
+		return nil
+	}
+	return out
+}
+
+// shown — свойства действующей раскладки разворота; ok=false — не «Авто» с фото (сетка,
+// виньетка, пустой): у такого соседа вида нет.
+func shown(p *model.Project, s *model.Spread) (variety.Info, bool) {
+	if !varies(s) {
+		return variety.Info{}, false
+	}
+	r, _, ok := p.Layout(s)
+	if !ok {
+		return variety.Info{}, false
+	}
+	return variety.Describe(r, p.Params()), true
+}
+
+// varies — раскладку разворота выбирает «Авто»: фото есть, сетки и виньетки нет.
+func varies(s *model.Spread) bool { return len(s.Photos) > 0 && len(s.Grid) == 0 && s.Kind == "" }
+
+// ctxOf — соседи цепочки p.Spreads[first..last]: виды двух перед ней, семейство ближнего и есть ли
+// у него главное фото, вид следующего и сколько разворотов перед ней без воздуха и без главного
+// (не «Авто» ритм прерывает).
+// dead — развороты, которые правка уже опустошила и Normalize удалит: соседями они не считаются.
+func ctxOf(p *model.Project, first, last int, dead func(*model.Spread) bool) variety.Ctx {
+	var c variety.Ctx
+	alive := func(s *model.Spread) bool { return dead == nil || !dead(s) }
+	var before []*model.Spread // живые перед цепочкой, ближний первым
+	for i := first - 1; i >= 0; i-- {
+		if s := p.Spreads[i]; alive(s) {
+			before = append(before, s)
+		}
+	}
+	for k := min(2, len(before)) - 1; k >= 0; k-- {
+		in, _ := shown(p, before[k])
+		c.Prev = append(c.Prev, in.Look)
+		c.Family, c.Hero = in.Family, in.Heroes > 0
+	}
+	if len(before) > 0 && varies(before[0]) {
+		if r, _, ok := p.Layout(before[0]); ok {
+			c.PrevKey = r.Key
+		}
+	}
+	for _, s := range p.Spreads[last+1:] {
+		if alive(s) {
+			in, _ := shown(p, s)
+			c.Next = in.Look
+			break
+		}
+	}
+	// Оба ритма — одним проходом: вид соседа (Describe) считается раз, счёт каждого рвётся сам.
+	air, hero := true, true
+	for _, s := range before {
+		in, ok := shown(p, s)
+		air = air && ok && in.Family != variety.Air && c.Since < sinceCap
+		hero = hero && ok && in.Heroes == 0 && c.SinceHero < sinceCap
+		if !air && !hero {
+			break
+		}
+		if air {
+			c.Since++
+		}
+		if hero {
+			c.SinceHero++
+		}
+	}
+	return c
+}
+
+// starOf — звезда разворота: единственное фото с наибольшей оценкой ≥ 4 (variety.Star).
+func starOf(photos []string, rate Rating) int {
+	if rate == nil {
+		return -1
+	}
+	r := make([]int, len(photos))
+	for i, id := range photos {
+		r[i] = rate(id)
+	}
+	return variety.Star(r)
+}
+
+// pickRun выбирает раскладки цепочки p.Spreads[first..last] (все varies) и пишет ключи.
+// cur — текущий вид тоже повтор («Разнообразить»): разворот меняется, если есть другой.
+// ready — пулы цепочки, посчитанные вне замка (nil или nil-пул — считать здесь); dead — см. ctxOf.
+// Выбранный вид совпал с текущим — ключ не пишется: смена ключа без видимой перемены дала бы
+// rev, шаг отмены и тост «Раскладки изменены» впустую.
+func pickRun(p *model.Project, first, last int, lv variety.Level, rate Rating, cur bool, ready [][]variety.Cand, dead func(*model.Spread) bool) {
+	c, prm := ctxOf(p, first, last, dead), p.Params()
+	in := make([]variety.Spread, last-first+1)
+	for k := range in {
+		s := p.Spreads[first+k]
+		pool := []variety.Cand(nil)
+		if k < len(ready) {
+			pool = ready[k]
+		}
+		if pool == nil {
+			pool = poolOf(p.Aspects(s.Photos), prm, lv)
+		}
+		in[k] = variety.Spread{Pool: pool, Star: starOf(s.Photos, rate)}
+		if cur {
+			info, _ := shown(p, s)
+			c.Cur = append(c.Cur, info.Look)
+		}
+	}
+	for k, x := range variety.Pick(in, prm, lv, c) {
+		if x >= 0 && (!cur || in[k].Pool[x].Look != c.Cur[k]) {
+			p.SetLayout(p.Spreads[first+k], in[k].Pool[x].Key)
+		}
+	}
+}
+
+// varyBuilt — раскладки n собранных разворотов с позиции at по уровню ручки; «Меньше» —
+// ничего (лучшая, Layout ""), ровно как 0.10.
+func varyBuilt(p *model.Project, at, n int, o model.AutoOpts, rate Rating, ready [][]variety.Cand, dead func(*model.Spread) bool) {
+	if lv := level(o.Variety); lv > variety.Less && n > 0 {
+		pickRun(p, at, at+n-1, lv, rate, false, ready, dead)
+	}
+}
+
+// runs — цепочки подряд идущих выделенных разворотов «Авто» с фото, по порядку альбома.
+func runs(p *model.Project, ids []string) [][2]int {
+	sel := make(map[string]bool, min(len(ids), model.MaxSpreads))
+	for _, id := range ids[:min(len(ids), model.MaxSpreads)] {
+		sel[id] = true
+	}
+	var out [][2]int
+	for i := 0; i < len(p.Spreads); i++ {
+		if s := p.Spreads[i]; !sel[s.ID] || !varies(s) {
+			continue
+		}
+		j := i
+		for j+1 < len(p.Spreads) && sel[p.Spreads[j+1].ID] && varies(p.Spreads[j+1]) {
+			j++
+		}
+		out = append(out, [2]int{i, j})
+		i = j
+	}
+	return out
+}
+
+// VaryWarm — снимок под замком для прогрева пулов «Разнообразить» вне его (как Prepare).
+func VaryWarm(p *model.Project, ids []string, v model.Variety) func() {
+	lv, prm := max(variety.Normal, level(v)), p.Params()
+	var asps [][]float64
+	for _, r := range runs(p, ids) {
+		for _, s := range p.Spreads[r[0] : r[1]+1] {
+			asps = append(asps, p.Aspects(s.Photos))
+		}
+	}
+	return func() { pools(asps, prm, lv) } // только прогрев кэша: позиции под замком могут сдвинуться
+}
+
+// VaryLayouts — «Разнообразить раскладки» (041): выделенные развороты «Авто» с фото по
+// порядку альбома, каждая цепочка подряд идущих — с соседями по краям и своим текущим видом.
+// Сетки, виньетки и обложка не трогаются; «Меньше» считается «Обычным». Нечего менять —
+// проект тот же (холостая правка у Editor).
+func VaryLayouts(p *model.Project, ids []string, v model.Variety, rate Rating) {
+	lv := max(variety.Normal, level(v))
+	for _, r := range runs(p, ids) {
+		pickRun(p, r[0], r[1], lv, rate, true, nil, nil)
+	}
+}
+
+// describeRows — семейство и похожие (Twin) у плиток ряда: подборка фильтрует и сворачивает.
+func describeRows(rows []model.Choice, prm layout.Params) {
+	looks := make([]string, len(rows))
+	for i := range rows {
+		in := variety.Describe(layout.Result{Key: rows[i].Key, Rects: rows[i].Rects}, prm)
+		rows[i].Family, looks[i] = string(in.Family), in.Look
+	}
+	for i, t := range variety.Twins(looks) {
+		rows[i].Twin = t
+	}
+}
+
+// extraChoices — «Другие варианты» (model.ExtraRow): тот же порядок, что у листания и счётчика.
+func extraChoices(asp []float64, prm layout.Params) []model.Choice {
+	rs := model.ExtraRow(asp, prm)
+	out := make([]model.Choice, len(rs))
+	for i, r := range rs {
+		out[i] = model.Choice{Key: r.Key, Rects: r.Rects}
+	}
+	describeRows(out, prm)
+	return out
+}

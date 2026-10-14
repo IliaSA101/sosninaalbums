@@ -27,7 +27,8 @@ type DirFile struct {
 }
 
 // PlanDir разбирает папку экспорта: ours — файлы прежнего экспорта программы
-// (их можно заменить), foreign — NN.jpg / NN-1.jpg без метки (под них экспорт отказывает).
+// (их можно заменить), foreign — NN.jpg / NN-1.jpg без метки, а также папка или ссылка
+// с таким именем (под них экспорт отказывает).
 // 00.jpg/000.jpg (обложка из шаблона типографии) и прочие файлы не трогаем никогда.
 func PlanDir(dir string) (ours, foreign []DirFile, err error) {
 	entries, err := os.ReadDir(dir)
@@ -36,12 +37,15 @@ func PlanDir(dir string) (ours, foreign []DirFile, err error) {
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || !e.Type().IsRegular() {
-			continue
-		}
+		regular := e.Type().IsRegular() // папка и ссылка — не файл экспорта, но и не пустое место
 		if m := oldSpreadRe.FindStringSubmatch(name); m != nil {
 			n, _ := strconv.Atoi(m[1])
-			ours = append(ours, DirFile{Name: name, Spread: n})
+			f := DirFile{Name: name, Spread: n}
+			if regular {
+				ours = append(ours, f)
+			} else {
+				foreign = append(foreign, f)
+			}
 			continue
 		}
 		m := numberedRe.FindStringSubmatch(name)
@@ -51,7 +55,7 @@ func PlanDir(dir string) (ours, foreign []DirFile, err error) {
 		n, _ := strconv.Atoi(m[1]) // огромный номер → MaxInt (Atoi при переполнении): ни одной цели не совпадёт, но файл учтён
 		page, _ := strconv.Atoi(m[2])
 		f := DirFile{Name: name, Spread: n, Page: page}
-		if IsOurs(filepath.Join(dir, name)) {
+		if regular && IsOurs(filepath.Join(dir, name)) {
 			ours = append(ours, f)
 		} else {
 			foreign = append(foreign, f)
@@ -114,7 +118,7 @@ func StaleNames(hit []DirFile, written []string) []string {
 func RunPlan(ctx context.Context, spreads []render.Spread, pl Plan, opt render.Options, dir string,
 	stale []string, progress func(done, total int)) error {
 	removeStaleTmp(dir, time.Now())
-	if err := RunJobs(ctx, spreads, pl.Jobs, opt, dir, progress); err != nil {
+	if err := runCoverPlan(ctx, spreads, pl, opt, dir, progress); err != nil {
 		return err
 	}
 	if err := removeFiles(dir, stale); err != nil {
@@ -129,7 +133,7 @@ const tmpMaxAge = time.Hour
 
 // removeStaleTmp убирает остатки WriteFileAtomic (05.jpg.<число>.tmp) старше tmpMaxAge:
 // имя случайное, поэтому после сбоев они копились бы в папке. Ошибки не мешают экспорту.
-// Обложку (00.jpg) экспорт не пишет — её .tmp не наш.
+// Остаток записи обложки (00.jpg.<число>.tmp) не трогаем: он не отличим от чужого файла типографии.
 func removeStaleTmp(dir string, now time.Time) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

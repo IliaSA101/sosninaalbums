@@ -2,6 +2,7 @@ package grid_test
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"slices"
 	"testing"
@@ -140,7 +141,7 @@ func TestSwapAcrossGridAndAuto(t *testing.T) {
 
 func TestAutoBuildSkipsGrid(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 127, 127, "a")})
-	e.AutoBuild(edtest.Photos("a", "x", "y"), -1, 2)
+	e.AutoBuild(edtest.Photos("a", "x", "y"), -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
 	edtest.MustGrid(t, e)
 	if !slices.Equal(edtest.PhotosOf(e, 0), []string{"a"}) {
 		t.Fatalf("сетка %v", edtest.PhotosOf(e, 0))
@@ -380,5 +381,51 @@ func TestContainFrame(t *testing.T) {
 	e.SetPlaceFit("s1", []string{edtest.P(e).Spreads[0].Grid[0].ID}, "stretch")
 	if edtest.Rev(e) != rev {
 		t.Fatal("неизвестный fit поменял проект")
+	}
+}
+
+// TestPlaces64: «Авто» на 64 фото закрепляется в сетку из 64 мест (предел MaxPlaces, 027);
+// 65-е место — ошибка без правки; «Вернуть авто» с 64 мест работает.
+func TestPlaces64(t *testing.T) {
+	ids := make([]string, 64)
+	for i := range ids {
+		ids[i] = fmt.Sprint("p", i)
+	}
+	e := edtest.Open(t, model.New(), "")
+	sid := edtest.NewSpread(e, -1, edtest.Photos(ids...)).Spreads[0].ID
+	edtest.FreezeAt(t, e, 0)
+	if n := len(edtest.P(e).Spreads[0].Grid); n != 64 {
+		t.Fatalf("мест после закрепления: %d", n)
+	}
+	rev := e.View().Rev
+	if v, err := e.AddPlace(sid, 1); err == nil || v.Rev != rev || len(edtest.P(e).Spreads[0].Grid) != 64 {
+		t.Fatalf("65-е место: ошибка %v, мест %d", err, len(edtest.P(e).Spreads[0].Grid))
+	}
+	v := e.SetGrid(sid, false)
+	if v.Spreads[0].Grid || len(v.Spreads[0].Rects) != 64 || !slices.Equal(v.Spreads[0].Photos, ids) {
+		t.Fatalf("«Вернуть авто»: сетка %v, ячеек %d", v.Spreads[0].Grid, len(v.Spreads[0].Rects))
+	}
+	if err := edtest.GridInvariants(edtest.P(e)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Пропорции нового места не число, ≤ 0 или бесконечность — 1:1, как у образца.
+func TestAddPlaceBadAspect(t *testing.T) {
+	p := model.New()
+	p.Spreads = []*model.Spread{{ID: "s1"}}
+	s := p.Spreads[0]
+	ref, err := p.AddPlace(s, 0, 1, p.PlaceIDs())
+	if err != nil || ref.W != ref.H {
+		t.Fatalf("образец 1:1: %v, %+v", err, ref)
+	}
+	for _, a := range []float64{0, -2, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		pl, err := p.AddPlace(s, 0, a, p.PlaceIDs())
+		if err != nil || pl.W != ref.W || pl.H != ref.H {
+			t.Fatalf("aspect %v: %v, %+v, ждали сторону %v", a, err, pl, ref.W)
+		}
+	}
+	if len(s.Grid) != 6 {
+		t.Fatalf("мест %d, ждали 6", len(s.Grid))
 	}
 }

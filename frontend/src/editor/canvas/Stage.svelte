@@ -11,8 +11,9 @@
   import { drag } from '../../base/drag/drag.svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import { canvas } from './canvas.svelte'
+  import { newSheetSize, sheetSize } from '../../base/geom/sheet'
   import { row } from '../spread/spreadrow.svelte'
-  import { GAP, pitch, slotLeft } from '../spread/spreadrow'
+  import { GAP, pitch, rowScale, slotCenters, slotLeft } from '../spread/spreadrow'
   import { bgmode } from '../backdrop/bgmode.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { emptyField } from './field'
@@ -26,40 +27,48 @@
   let marq = $state<ReturnType<typeof Marquee>>()
 
   const s = $derived(store.view.settings)
-  const sw = $derived(s.pageW * 2)
-  const aspect = $derived(sw / s.pageH)
+  // Размер листа — из Go (sheet.ts): у текущего листа; нет листа (пустой альбом) — по настройкам.
+  const sheet = $derived(store.spread ? sheetSize(store.spread) : newSheetSize(s))
+  const sw = $derived(sheet.w)
+  const sh = $derived(sheet.h)
   // В крупном просмотре отступы уже — разворот крупнее. side — минимум видимого соседа при узком запасе.
   const side = $derived(modes.big ? 56 : 110)
   const edge = $derived(modes.big ? 8 : 16) // минимальный отступ ряда от краёв окна
   // Полоса над холстом (BAR = 32) — LayoutBar.
   // Запас по бокам под ленту и карточку (inspector/panels.ts): постоянный, от режима правки не зависит.
   const reserve = $derived(sideReserve(side, GAP, modes.details || !prefs.can('panels'), railCols(h - BAR)))
-  // Ширина вписанного разворота (100 %). Без нижнего предела: он выталкивал разворот за Stage,
-  // когда высоту отнимала галерея.
-  const width = $derived(Math.max(0, Math.min(w - 2 * reserve - 2 * edge, (h - BAR - 32) * aspect)))
-  const total = $derived(store.view.spreads.length)
+  // Масштаб ряда, px на мм: от обычного разворота, один на все листы — обложка (032) рисуется в нём же;
+  // зазор между краями листов — GAP при любой ширине (slotCenters). Без нижнего предела: он выталкивал разворот
+  // за Stage, когда высоту отнимала галерея.
+  const base = $derived(newSheetSize(s))
+  const k = $derived(rowScale(w - 2 * reserve - 2 * edge, h - BAR - 32, base))
+  // Ширина текущего листа при 100 % (у разворота — вписанная).
+  const width = $derived(k * sw)
+  const total = $derived(store.sheets.length) // листы ряда: обложка (032) и развороты
 
   // Окно холста — Stage под полосой; при 100 % центр окна = центр прежнего ряда, вход в зум не дёргает.
   $effect.pre(() => {
-    canvas.vp = { w, h: Math.max(0, h - BAR), k0: sw > 0 ? width / sw : 0, sw, ph: s.pageH, pad: reserve }
+    canvas.vp = { w, h: Math.max(0, h - BAR), k0: k, sw, ph: sh, pad: reserve }
   })
   // Режим холста: соседей нет, полоса прижата к верху во всю ширину.
   const zoomed = $derived(canvas.zoomed && !!store.spread)
-  const fitPlace = $derived(placement({ z: 1, cx: sw / 2, cy: s.pageH / 2 }, canvas.vp))
+  const fitPlace = $derived(placement({ z: 1, cx: sw / 2, cy: sh / 2 }, canvas.vp))
   const place = $derived(zoomed ? placement(canvas.cur, canvas.vp) : fitPlace)
   // Разворот получает ширину в px с зумом: перевод px ↔ мм во всех жестах идёт через неё.
   const spreadW = $derived(zoomed ? width * canvas.cur.z : width)
 
   // Ряд разворотов (спека 012): шаг, число слотов и зум — в ряд; сам он следует за store.current.
-  const P = $derived(pitch(fitPlace.width))
-  $effect.pre(() => row.geo(P, total, zoomed))
+  const P = $derived(pitch(k * base.w))
+  // Центры слотов: обложка шире разворота, зазор между краями всё равно GAP (слот «новый» — обычного размера).
+  const centers = $derived(slotCenters([...store.sheets.map((sp) => k * sp.w), k * base.w]))
+  $effect.pre(() => row.geo(P, total, zoomed, centers))
   $effect.pre(() => {
     void store.navSeq // go() на тот же разворот (со слота «новый» назад) тоже возвращает ряд
-    row.follow(store.current)
+    row.follow(store.sheetIndex)
   })
   // Левый край текущего в окне: полоса и линейки едут за ним; в движении полоса гаснет.
-  const curLeft = $derived(zoomed ? place.left : slotLeft(store.current, row.pos, fitPlace.left, P))
-  const away = $derived(row.moving && Math.abs(row.pos - store.current) > 0.01)
+  const curLeft = $derived(zoomed ? place.left : slotLeft(store.sheetIndex, row.pos, fitPlace.left, centers))
+  const away = $derived(row.moving && Math.abs(row.pos - store.sheetIndex) > 0.01)
 
   // Курсор над разворотом или полосой — показываем значки раскладок.
   let hovSpread = $state(false)
@@ -232,8 +241,8 @@
     </div>
 
     <!-- Окно холста под полосой: ряд разворотов обрезается им и не заходит на полосу -->
-    <div class="viewport">
-      <SpreadSlots settings={s} {width} {spreadW} {w} {aspect} fit={fitPlace} {place} {zoomed} onhover={(on) => (hovSpread = on)} />
+    <div class="viewport" data-guide="canvas">
+      <SpreadSlots settings={s} {k} {base} {centers} {spreadW} {w} fit={fitPlace} {place} {zoomed} onhover={(on) => (hovSpread = on)} />
     </div>
 
     {#if store.spread && modes.rulers && prefs.can('rulers')}

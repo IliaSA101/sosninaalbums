@@ -3,6 +3,7 @@ import * as Api from '../../../wailsjs/go/app/App'
 import { backdropOf } from './backdrop'
 import { bgmode } from './bgmode.svelte'
 import { store } from '../../base/core/store.svelte'
+import { sheetIn } from '../../base/geom/sheet'
 import type { BackdropScope } from '../../base/core/types'
 
 // После правки с постановкой фото: фон появился или сменился (rev вырос) — сразу в режим фона
@@ -11,13 +12,7 @@ async function putThenEdit(spread: string, scope: BackdropScope, op: () => Promi
   const rev = store.view.rev
   if (!(await store.run(op()))) return
   if (store.view.rev === rev) return
-  if (
-    backdropOf(
-      store.view.spreads.find((s) => s.id === spread),
-      scope,
-    )
-  )
-    bgmode.enter(spread, scope)
+  if (backdropOf(sheetIn(store.view, spread), scope)) bgmode.enter(spread, scope)
 }
 
 export const setBackdrop = (spread: string, scope: BackdropScope, photo: string) =>

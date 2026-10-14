@@ -74,13 +74,12 @@ function compute(e: PointerEvent): Ctx | null {
   if (!a) return null
   const { p, s, root } = a
   const rect = root.getBoundingClientRect()
-  const st = store.view.settings
-  const sw = st.pageW * 2
+  const sw = s.w
   if (rect.width <= 0) return null
   // Обе оси через ширину (как toSpreadMM в marquee.ts): разворот не растягивается неравномерно.
   const k = sw / rect.width
   const pt = { x: (e.clientX - rect.left) * k, y: (e.clientY - rect.top) * k }
-  const stack = stackAt(s, pt, sw, st.pageH, (kind) => kind === 'photo' || !prefs.locked(kind))
+  const stack = stackAt(s, pt, sw, s.h, (kind) => kind === 'photo' || !prefs.locked(kind))
   const sel = selection(s)
   const cur = (sel && stack.find((it) => it.kind === sel.kind && it.ref === sel.ref)) || null
   const pk = picked && picked.sig === sigOf(s.id) ? picked.item : null

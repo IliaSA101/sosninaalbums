@@ -1,10 +1,12 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -51,22 +53,34 @@ func (a *App) colorReport(p *model.Project) (adobe int, other map[string]int) {
 	return adobe, other
 }
 
+// askOptions — окно вопроса «Да / Нет». На Mac Wails рисует кнопки строками Buttons как есть
+// (и возвращает нажатую), на Windows — системные кнопки на языке ОС с ответом "Yes"/"No".
+// Первая кнопка — «да», вторая (и по умолчанию, и по Esc) — «нет».
+func askOptions(goos, msg string) wr.MessageDialogOptions {
+	yes, no := "Yes", "No"
+	if goos == "darwin" {
+		yes, no = "Да", "Нет"
+	}
+	return wr.MessageDialogOptions{
+		Type:          wr.QuestionDialog,
+		Title:         "Экспорт",
+		Message:       msg,
+		Buttons:       []string{yes, no},
+		DefaultButton: no,
+		CancelButton:  no,
+	}
+}
+
 // Диалоги экспорта — переменные, чтобы тесты подменяли нативные окна.
 var (
 	askYes = func(a *App, msg string) (bool, error) {
-		ans, err := wr.MessageDialog(a.ctx, wr.MessageDialogOptions{
-			Type:          wr.QuestionDialog,
-			Title:         "Экспорт",
-			Message:       msg,
-			Buttons:       []string{"Yes", "No"},
-			DefaultButton: "No",
-			CancelButton:  "No",
-		})
-		return err == nil && ans == "Yes", err
+		opts := askOptions(runtime.GOOS, msg)
+		ans, err := wr.MessageDialog(a.ctx, opts)
+		return err == nil && ans == opts.Buttons[0], err
 	}
 	pickExportDir = func(a *App) (string, error) {
 		return wr.OpenDirectoryDialog(a.ctx, wr.OpenDialogOptions{
-			Title:            "Куда сохранить развороты",
+			Title:            "Куда выгрузить",
 			DefaultDirectory: a.dialogDir(prefs.DirExport),
 		})
 	}
@@ -96,20 +110,34 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 	p, v := a.editor().Snapshot()
 	o.Quality, o.DPI = export.ClampOptions(o.Quality, o.DPI, p.Settings.DPI)
 	n := len(v.Spreads)
-	if n == 0 {
+	// Обложка (032): нет её или проект-лист — флаги игнорируются; «только обложка» включает обложку.
+	cover := export.NewCoverJob(p, v, o.DPI, o.Quality)
+	if p.Settings.Sheet || (!o.Cover && !o.CoverOnly) {
+		cover = nil
+	}
+	o.Cover, o.CoverOnly = cover != nil, o.CoverOnly && cover != nil
+	if n == 0 && cover == nil {
 		return false, fmt.Errorf("в альбоме нечего экспортировать")
 	}
-	var units []export.Unit // nil — все развороты
-	if strings.TrimSpace(o.Range) != "" {
-		var err error
-		if units, err = export.ParseRange(o.Range, n); err != nil {
+	o.Pages = o.Pages && !p.Settings.Sheet // у листа 031 «отдельными страницами» нет: один файл на лист
+	g := p.Geo(nil)                        // холст — половина листа (032 §7): у разворота страница, у листа 031 — W/2
+	opt := render.Options{PageW: g.W / 2, PageH: g.H, DPI: o.DPI, Quality: o.Quality}
+	var pl export.Plan // «только обложка»: пустой план, не Full — хвосты разворотов не удаляются
+	if !o.CoverOnly {
+		units, err := exportUnits(o.Range, n, p.Settings.Sheet)
+		if err != nil {
+			return false, err
+		}
+		pl = export.NewPlan(units, n, o.Pages)
+		if err := export.CheckCanvases(opt, o.Pages); err != nil {
 			return false, err
 		}
 	}
-	pl := export.NewPlan(units, n, o.Pages)
-	opt := render.Options{PageW: p.Settings.PageW, PageH: p.Settings.PageH, DPI: o.DPI, Quality: o.Quality}
-	if err := export.CheckCanvases(opt, o.Pages); err != nil {
-		return false, err
+	if cover != nil {
+		if err := export.CheckCanvas(cover.Opt); err != nil {
+			return false, err
+		}
+		pl = pl.WithCover(cover)
 	}
 	sel := pl.SelectedPhotos(v, opt.PageW)
 	if err := export.MissingPhotos(p, sel, a.exists); err != nil {
@@ -124,7 +152,14 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 	}
 	// Пустые развороты — тоже до папки, по тому же доводу (спека 013).
 	white := p.Settings.Bg == "" || p.Settings.Bg == "#ffffff"
-	if text := export.BlankWarning(export.BlankSpreads(v, &pl), white); text != "" {
+	blankCover := cover != nil && export.BlankCover(v)
+	if text := export.BlankWarningCover(export.BlankSpreads(v, &pl), blankCover, white); text != "" {
+		if ok, err := askYes(a, text); !ok {
+			return false, err
+		}
+	}
+	// Пустые поля подписей (030) — тоже до папки: в печати они пусты. Только листы плана.
+	if text := export.FieldsWarning(export.PlanFields(v, &pl)); text != "" {
 		if ok, err := askYes(a, text); !ok {
 			return false, err
 		}
@@ -145,8 +180,9 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("не удалось прочитать папку экспорта: %w", err)
 	}
+	ours, foreign = export.AddCoverFile(pl, dir, ours, foreign) // 00.jpg: наш заменяется, чужой — отказ
 	if foreign = export.HitFiles(pl, foreign); len(foreign) > 0 {
-		return false, fmt.Errorf("В папке есть файлы с номерами разворотов не из Sosnina Albums (%d шт., например %s). Выберите другую папку или уберите их.", len(foreign), foreign[0].Name) //nolint:revive,staticcheck // текст уходит пользователю тостом как есть
+		return false, fmt.Errorf("В папке есть файлы с номерами разворотов (или 00.jpg) не из Sosnina Albums (%d шт., например %s). Выберите другую папку или уберите их.", len(foreign), foreign[0].Name) //nolint:revive,staticcheck // текст уходит пользователю тостом как есть
 	}
 	var stale []string
 	if hit := export.HitFiles(pl, ours); len(hit) > 0 {
@@ -187,6 +223,22 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 	return true, nil
 }
 
+// exportUnits — цели диапазона окна экспорта; "" — nil (все развороты). У листа 031 «л»/«п» — ошибка.
+func exportUnits(rng string, n int, sheet bool) ([]export.Unit, error) {
+	if strings.TrimSpace(rng) == "" {
+		return nil, nil
+	}
+	units, err := export.ParseRange(rng, n)
+	switch {
+	case err != nil && sheet:
+		// ParseRange общий с альбомом и говорит «разворота 7 нет»; у листа 031 единица — лист.
+		err = errors.New(strings.Replace(err.Error(), "разворота", "листа", 1))
+	case err == nil && sheet:
+		err = export.CheckSheet(units)
+	}
+	return units, err
+}
+
 // ShowInExplorer открывает папку последнего экспорта. Путь от интерфейса не принимаем:
 // иначе любая страница в окне смогла бы запускать explorer с произвольным аргументом.
 func (a *App) ShowInExplorer() {
@@ -206,4 +258,8 @@ type ExportOptions struct {
 	Quality int    `json:"quality"` // 100 | 95 | 80; другое — 95
 	DPI     int    `json:"dpi"`     // 72..1200; 0 — из настроек альбома
 	Pages   bool   `json:"pages"`   // по страницам: левая и правая отдельными файлами
+	// Cover — выгрузить обложку 00.jpg (спека 032); обложки нет или проект-лист — игнорируется.
+	// CoverOnly — только обложка, развороты и Range не выгружаются (включает Cover).
+	Cover     bool `json:"cover"`
+	CoverOnly bool `json:"coverOnly"`
 }

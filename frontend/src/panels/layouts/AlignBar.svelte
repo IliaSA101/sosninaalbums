@@ -10,7 +10,7 @@
   const stop = (e: PointerEvent) => e.stopPropagation()
 </script>
 
-<div class="group" role="toolbar" aria-label="Выравнивание" data-text-ui>
+<div class="group" role="toolbar" aria-label="Выравнивание" data-text-ui data-guide="align-bar">
   <span class="tag">Выровнять:</span>
   {#each ALIGN_OPS as a (a.op)}
     {@const why = alignBlock(a.op, align.to, n)}

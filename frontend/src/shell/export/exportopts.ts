@@ -1,9 +1,12 @@
 // Настройки окна экспорта (спека 009 U8, design §6.4): сборка ExportOptions, оценка размера файла,
 // последний выбор в localStorage (свойство программы, не проекта — как view.svelte.ts).
-import type { ExportOpts, Settings } from '../../base/core/types'
+import type { ExportOpts, Settings, View } from '../../base/core/types'
+import type { ExportUnit } from './exportrange'
+import { newSheetSize, type SheetSettings } from '../../base/geom/sheet'
 
 // Тип лежит в основе (store.runExport), здесь — для окна и тестов.
 export type { ExportOpts }
+export { exportDoneText } from '../../base/core/errtext'
 
 export type Quality = 100 | 95 | 80
 export const QUALITIES: { v: Quality; label: string }[] = [
@@ -22,10 +25,12 @@ export interface ExportPrefs {
   quality: Quality
   dpi: number
   pages: boolean
+  cover: boolean // выгружать обложку (00.jpg)
+  coverOnly: boolean // только обложка
 }
 export type ExportScope = 'all' | 'current' | 'range'
 
-export const DEFAULT_PREFS: ExportPrefs = { quality: 95, dpi: 0, pages: false }
+export const DEFAULT_PREFS: ExportPrefs = { quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false }
 
 // Байт на пиксель по качеству. ГИПОТЕЗА по типичным JPEG фотокамер: сверить на настоящих фото при QA.
 const BYTES_PER_PX: Record<Quality, number> = { 100: 0.9, 95: 0.45, 80: 0.2 }
@@ -33,10 +38,12 @@ const BYTES_PER_PX: Record<Quality, number> = { 100: 0.9, 95: 0.45, 80: 0.2 }
 const px = (mm: number, dpi: number) => Math.round((mm / 25.4) * dpi)
 
 // Примерный размер одного файла: разворот (или страница при pages) по числу пикселей.
-export function estimateBytes(s: Pick<Settings, 'pageW' | 'pageH' | 'dpi'>, dpi: number, quality: Quality, pages: boolean): number {
+export function estimateBytes(s: SheetSettings & Pick<Settings, 'dpi'>, dpi: number, quality: Quality, pages: boolean): number {
   const d = dpi > 0 ? dpi : s.dpi
-  const w = pages ? px(s.pageW, d) : 2 * px(s.pageW, d)
-  return w * px(s.pageH, d) * (BYTES_PER_PX[quality] ?? BYTES_PER_PX[95])
+  const sh = newSheetSize(s)
+  // Лист без шва — один файл; у разворота «по страницам» — половина.
+  const w = sh.mid > 0 ? (pages ? 1 : 2) * px(sh.mid, d) : px(sh.w, d)
+  return w * px(sh.h, d) * (BYTES_PER_PX[quality] ?? BYTES_PER_PX[95])
 }
 
 // «≈ 25 МБ»: до 10 МБ — один знак.
@@ -46,10 +53,67 @@ export function formatSize(bytes: number): string {
   return `≈ ${mb < 10 ? mb.toFixed(1).replace('.', ',') : Math.round(mb)} МБ`
 }
 
+// Строка «Перед выгрузкой: …» (035 U8): только то, что есть; нечего сказать — пусто (строки в окне нет).
+export function exportWarnings(v: Pick<View, 'emptyPlaces' | 'lowDPI'>, missing: number): string {
+  const parts = [
+    v.emptyPlaces > 0 ? `пустые места: ${v.emptyPlaces}` : '',
+    v.lowDPI > 0 ? `мало разрешения: ${v.lowDPI} фото` : '',
+    missing > 0 ? `не найдено фото: ${missing}` : '',
+  ].filter(Boolean)
+  return parts.length ? `Перед выгрузкой: ${parts.join(', ')}` : ''
+}
+
+// Что попадёт в выгрузку — для итога по объёму (035 U22). Обложка считается как один разворот.
+export interface SizeScope {
+  scope: ExportScope
+  spreads: number // всего разворотов (для «Все»)
+  units: ExportUnit[] | null // разобранный диапазон; null — ввод неверен
+  cover: boolean // обложка уйдёт в выгрузку (в том числе «только обложка»)
+  only: boolean // только обложка
+}
+
+// «≈ X на разворот, всего ≈ Y»; «всего» — если файлов больше одного, неверный диапазон — без итога.
+export function sizeSummary(
+  s: SheetSettings & Pick<Settings, 'dpi'>,
+  dpi: number,
+  quality: Quality,
+  pages: boolean,
+  unit: string,
+  w: SizeScope,
+): string {
+  const one = estimateBytes(s, dpi, quality, pages)
+  const spread = estimateBytes(s, dpi, quality, false)
+  const page = estimateBytes(s, dpi, quality, true)
+  let total: number | null = w.cover ? spread : 0
+  if (!w.only) {
+    if (w.scope === 'all') total += w.spreads * spread
+    else if (w.scope === 'current') total += spread
+    else if (w.units) total += w.units.reduce((sum, [, p]) => sum + (p === 0 ? spread : page), 0)
+    else total = null
+  }
+  const head = `${formatSize(one)} на ${unit}`
+  return total !== null && total > one ? `${head}, всего ${formatSize(total)}` : head
+}
+
+// Пункты обложки показываются, если она есть и проект не лист-виньетка (Go в этих случаях флаги игнорирует).
+export function coverAvailable(v: Pick<View, 'cover' | 'settings'>): boolean {
+  return !!v.cover && !v.settings.sheet
+}
+
 // Сборка опций. current — номер текущего разворота с 1. «Все» — пустой диапазон.
-export function buildOptions(scope: ExportScope, current: number, rangeText: string, p: ExportPrefs): ExportOpts {
-  const range = scope === 'all' ? '' : scope === 'current' ? String(current) : rangeText.trim()
-  return { range, quality: p.quality, dpi: p.dpi, pages: p.pages }
+// hasCover — есть ли что выгружать: без обложки флаги уходят false. «Только обложка» включает обложку и гасит диапазон.
+// onCover — открыта обложка: «Текущий» тогда значит обложку, а не разворот с номером, на котором стояли до неё.
+export function buildOptions(
+  scope: ExportScope,
+  current: number,
+  rangeText: string,
+  p: ExportPrefs,
+  hasCover = false,
+  onCover = false,
+): ExportOpts {
+  const only = hasCover && (p.coverOnly || (scope === 'current' && onCover))
+  const range = only || scope === 'all' ? '' : scope === 'current' ? String(current) : rangeText.trim()
+  return { range, quality: p.quality, dpi: p.dpi, pages: p.pages, cover: hasCover && (p.cover || only), coverOnly: only }
 }
 
 // Образец имени файла для окна: номер разворота с нулями до ширины Go (internal/export: max(2, цифр в total)).
@@ -69,6 +133,8 @@ export function loadPrefs(): ExportPrefs {
       if (v.quality === 100 || v.quality === 95 || v.quality === 80) o.quality = v.quality
       if (Number.isInteger(v.dpi) && v.dpi >= 72 && v.dpi <= 1200) o.dpi = v.dpi
       if (typeof v.pages === 'boolean') o.pages = v.pages
+      if (typeof v.cover === 'boolean') o.cover = v.cover
+      if (typeof v.coverOnly === 'boolean') o.coverOnly = v.coverOnly
     }
   } catch {
     // Без хранилища или с порченым значением — по умолчанию.

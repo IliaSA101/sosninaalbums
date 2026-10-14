@@ -70,7 +70,7 @@ func TestGridChoicesDrop(t *testing.T) {
 	cells, _ := grid.TplCells(edtest.P(e), edtest.P(e).Spreads[0])
 	left := 0
 	for _, r := range cells {
-		if grid.InArea(edtest.P(e), r.X, r.W, model.ScopeLeft) {
+		if grid.InArea(edtest.P(e), nil, r.X, r.W, model.ScopeLeft) {
 			left++
 		}
 	}
@@ -200,7 +200,7 @@ func tplOf(scope string, n int) model.Template {
 // fracMM — доли шаблона в мм через fracBoxes (то, чем пользуется ApplyGrid).
 func fracMM(t *testing.T, p *model.Project, frac []model.Box, tplScope, scope string) []layout.Rect {
 	t.Helper()
-	out, err := grid.FracBoxes(p, tplScope, scope, frac)
+	out, err := grid.FracBoxes(p, nil, tplScope, scope, frac)
 	if err != nil {
 		t.Fatalf("fracBoxes(%s, %s): %v", tplScope, scope, err)
 	}

@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -240,6 +241,8 @@ func replayScenario(t *testing.T) *replay {
 	}
 	q := replayAlbum(r, ph)
 	replayGrid(r, ph)
+	replayCover(r, ph)
+	replayVignette(r, ph)
 	replayTail(r, ph, q)
 	return r
 }
@@ -253,7 +256,12 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.ve("AddFolder:относительный")(e.AddFolder(`Банкет`))
 	r.ve("NewSpread")(e.NewSpread(-1, ph[1:4]))
 	r.ve("NewSpread:второй")(e.NewSpread(-1, ph[4:6]))
-	r.ve("AutoBuild")(e.AutoBuild(ph[6:12], -1, 3))
+	if ap, err := e.AutoPlan(ph[6:12], model.AutoOpts{Spreads: 2, MaxPer: 64}); err != nil || ap.Spreads != 2 {
+		r.t.Fatalf("AutoPlan: %+v %v", ap, err)
+	} else {
+		r.read("AutoPlan", ap)
+	}
+	r.ve("AutoBuild")(e.AutoBuild(ph[6:12], -1, model.AutoOpts{Spreads: 2, MaxPer: 64}))
 	s0 := r.spreadOf(id(1))
 	r.ve("AddPhotos")(e.AddPhotos(s0, ph[12:13], 1))
 	r.ve("MovePhoto")(e.MovePhoto(id(5), s0, 0))
@@ -264,6 +272,7 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 
 	ch := e.LayoutChoices(s0)
 	r.read("LayoutChoices", ch)
+	r.read("MoreLayouts", e.MoreLayouts(s0, len(ch.Whole.InOrder)))
 	if n := len(ch.Whole.InOrder); n > 1 {
 		r.do("SetLayout", e.SetLayout(s0, ch.Whole.InOrder[n-1].Key))
 	} else {
@@ -294,8 +303,16 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.do("SetCaption", e.SetCaption(id(3), "Кольца", "c1"))
 	cs := model.NewCaptionStyle(r.v.Settings.PageH)
 	cs.Bold, cs.Align = true, "right"
-	r.do("SetCaptionStyle", e.SetCaptionStyle(id(3), cs, true))
+	r.do("SetCaptionStyle", e.SetCaptionStyle(id(3), cs, true, 1))
 	r.do("SetCaption:соседняя", e.SetCaption(id(4), "Утро", "c2"))
+	// Поля подписей (030): поле шапки, имя, список, стиль листа с шаблоном.
+	r.do("SetCaption:поле", e.SetCaption(id(4), "Утро {Школа}, {Класс}", "c3"))
+	r.do("SetPerson", e.SetPerson(id(3), model.Person{Last: "Иванов", First: "Петя"}, "n1"))
+	pv, _ := e.Person(id(3))
+	r.read("Person", pv)
+	v, extra, missing, err := e.PasteNames(s0, "1. Сидоров Иван\nПетрова Анна Сергеевна", false)
+	r.edit("PasteNames", v, []int{extra, missing}, err)
+	r.do("SetSheetCaps", e.SetSheetCaps(s0, true, model.SheetCaps{Style: cs, Pad: 2, Text: "{Фамилия}\n{Имя}"}))
 
 	r.ve("SetMarks")(e.SetMarks(ph[1:3], model.MarkPatch{Rating: edtest.Ip(4)}))
 	r.ve("SetMarks:метка")(e.SetMarks(ph[1:2], model.MarkPatch{Label: edtest.Sp("red"), Toggle: true}))
@@ -372,6 +389,67 @@ func replayGrid(r *replay, ph []model.PhotoInfo) {
 	r.do("Undo:авто", e.Undo())
 }
 
+// replayCover — обложка (032): создание с фото на лицевой, пресет, свои числа, раскладки,
+// надпись на корешке, разметка, место с фото. Обложка остаётся до конца: хвост (перепривязка,
+// удаление разворотов — Reflow, восстановление) идёт с ней.
+func replayCover(r *replay, ph []model.PhotoInfo) {
+	e := r.e
+	r.ve("CreateCover")(e.CreateCover("", &ph[16]))
+	r.ve("CreateCover:повтор")(e.CreateCover("", nil))
+	r.ve("ApplyCoverPreset")(e.ApplyCoverPreset("netprint-premium"))
+	r.ve("ApplyCoverPreset:неизвестный")(e.ApplyCoverPreset("nope"))
+	spec := r.v.Cover.Spec
+	spec.W, spec.Hinge = 290, 6
+	r.ve("SetCoverSpec")(e.SetCoverSpec(spec))
+	r.ve("SetCoverLayout")(e.SetCoverLayout("wrap"))
+	r.ve("SetCoverLayout:обе")(e.SetCoverLayout("both"))
+	r.ve("SetBackdrop:задняя")(e.SetBackdrop(model.CoverID, model.ScopeLeft, ph[17]))
+	r.ve("CoverSpineText")(e.CoverSpineText())
+	r.ve("CoverSpineText:повтор")(e.CoverSpineText())
+	r.do("SetCoverSpineBg", e.SetCoverSpineBg("#203040"))
+	r.ve("SetCoverGuide")(e.SetCoverGuide(`Q:\Разметка\cover.png`))
+	r.read("CoverGuidePath", e.CoverGuidePath())
+	r.ve("SetCoverGuide:UNC")(e.SetCoverGuide(`\\server\share\cover.png`))
+	r.do("ClearCoverGuide", e.ClearCoverGuide())
+	r.ve("AddPlace:обложка")(e.AddPlace(model.CoverID, 1))
+	r.vne("PlacePhotos:обложка")(e.PlacePhotos(model.CoverID, r.v.Cover.Sheet.Places[0].ID, ph[18:19]))
+	r.do("DeleteCover", e.DeleteCover())
+	r.do("Undo:обложка", e.Undo())
+}
+
+// replayVignette — виньетка (031): новая по умолчанию, превью, «Применить» с фото и сверх
+// предела, сортировка, «Обычный разворот» и его отмена (виньетка идёт в хвост).
+func replayVignette(r *replay, ph []model.PhotoInfo) {
+	e := r.e
+	r.ve("AddVignette")(e.AddVignette(-1))
+	sid := r.v.Spreads[len(r.v.Spreads)-1].ID
+	r.read("VignetteChoices", e.VignetteChoices(sid, 2, 10, "4:5", nil))
+	r.vne("SetVignette")(e.SetVignette(sid, model.Vignette{Tpl: "g-top", Teachers: 2, Pupils: 10, Ratio: "4:5"}, nil))
+	r.vn("FillPlaces:виньетка")(e.FillPlaces(ph[17:19], sid))
+	r.vne("SetVignette:предел")(e.SetVignette(sid, model.Vignette{Tpl: "grid", Teachers: 18, Pupils: 64}, nil))
+	// Окно «Настроить виньетку»: сухой прогон (чтение) и «Применить» с полями шапки.
+	setup := model.VigSetup{Vig: model.Vignette{Tpl: "head-g-top", Teachers: 1, Pupils: 12, Ratio: "3:4"},
+		Vars: model.Vars{Title: "Гимназия № 1", Year: "2026"}}
+	pr, err := e.PreviewVignette(sid, setup, nil)
+	if err != nil {
+		r.t.Fatalf("PreviewVignette: %v", err)
+	}
+	r.read("PreviewVignette", pr)
+	r.vne("SetupVignette")(e.SetupVignette(sid, setup, nil))
+	// Свой шаблон (038): лист → шаблон → «Применить» своего, «Вернуть авто».
+	tpl, err := e.VigTemplate(sid)
+	if err != nil {
+		r.t.Fatalf("VigTemplate: %v", err)
+	}
+	tpl.ID, tpl.Name = "tpl001", "Мой"
+	r.read("VigTemplate", tpl)
+	r.vne("SetVignette:свой")(e.SetVignette(sid, model.Vignette{Tpl: "my:tpl001", Teachers: 1, Pupils: 14}, []model.Template{tpl}))
+	r.vne("ResetVignette")(e.ResetVignette(sid))
+	r.do("SortVignette", e.SortVignette(sid))
+	r.do("ClearVignette", e.ClearVignette(sid))
+	r.do("Undo:виньетка", e.Undo())
+}
+
 // replayTail — развороты, папки, перепривязка, восстановление, удаление, запись копий.
 func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	e, id := r.e, func(i int) string { return ph[i].ID }
@@ -407,6 +485,31 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	r.write("WriteCopy", e.WriteCopy(cp), cp)
 	dr := filepath.Join(r.dir, "draft.salbum")
 	r.write("WriteDraft", e.WriteDraft(dr), dr)
+	r.read("PhotosOf", e.PhotosOf([]string{s0, "нет"}))
+	// «Разнообразить» — на развороте «Авто» с оценкой (развороты сценария — сетки, там шаг холостой):
+	// 5★ у третьего фото (XMP) делает его главным, раскладка должна смениться.
+	r.ve("NewSpread:авто")(e.NewSpread(-1, ph[6:10]))
+	last := func() model.SpreadView { return r.v.Spreads[len(r.v.Spreads)-1] }
+	sid, was := last().ID, last().Layout
+	rated := slices.Clone(ph[6:10])
+	rated[2].Xmp.Rating = 5
+	r.do("VaryLayouts", e.VaryLayouts([]string{sid}, model.VarietyNormal, rated))
+	if last().ID != sid || last().Layout == was {
+		r.t.Fatalf("VaryLayouts: раскладка %q не сменилась", was)
+	}
+	// Бросок 042 (в конце: прежние шаги эталона не сдвигаются): у закреплённого разворота одно
+	// пустое место, три новых фото — вопрос без шага, ответ «add» — место и плитка одним шагом.
+	// ID новых мест случайны: в out — только числа.
+	r.ve("AddPlace:042")(e.AddPlace(sid, 1))
+	more := []model.PhotoInfo{replayPhoto(19, 'h', model.XmpMarks{}), replayPhoto(20, 'v', model.XmpMarks{}), replayPhoto(21, 'h', model.XmpMarks{})}
+	for _, rest := range []string{"", "add"} {
+		v, o, err := e.DropPhotos(sid, "", more, 0.75, rest)
+		r.edit("DropPhotos:"+rest, v, fmt.Sprintf("ask=%v fit=%d total=%d fresh=%d grown=%d out=%v left=%d small=%v",
+			o.Ask, o.Fit, o.Total, len(o.Fresh), o.Grown, o.Out, o.Left, o.Small), err)
+	}
+	// Имена своих шаблонов (QA 038): своих шаблонов на листах нет — холостая, без шага и rev.
+	v, changed := e.SyncOwnNames([]model.Template{{ID: "0123456789ab", Name: "Свой", Kind: model.TplVignette}})
+	r.edit("SyncOwnNames", v, changed, nil)
 }
 
 func TestEditorReplay(t *testing.T) {

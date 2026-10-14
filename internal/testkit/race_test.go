@@ -12,6 +12,13 @@ func TestRaceSlowdown(t *testing.T) {
 	}
 }
 
+// Race согласован с RaceSlowdown: под -race запас больше 1, без него — ровно 1.
+func TestRaceConst(t *testing.T) {
+	if Race != (RaceSlowdown > 1) {
+		t.Fatalf("Race = %t при RaceSlowdown = %d", Race, RaceSlowdown)
+	}
+}
+
 // Limit масштабируется по SA_TEST_SLOW и не сжимается от значения меньше 1 или мусора.
 func TestLimit(t *testing.T) {
 	base := 100 * time.Millisecond

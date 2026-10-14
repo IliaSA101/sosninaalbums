@@ -16,10 +16,22 @@
   import PlaceLayer from '../places/PlaceLayer.svelte'
   import SelFrame from '../places/SelFrame.svelte'
   import TextLayer from '../text/TextLayer.svelte'
+  import NameEditor from '../captions/NameEditor.svelte'
+  import { nameEdit } from '../captions/nameedit.svelte'
+  import { nameTargetAt, takesNameTarget, type NameTarget } from '../captions/nametarget'
+  import { edit } from '../text/edit.svelte'
+  import { emptyField } from '../canvas/field'
+  import { prefs } from '../../base/prefs/prefs.svelte'
+  import { tip } from '../../base/ui/tip.svelte'
   import TextOverlay from '../text/TextOverlay.svelte'
   import { TextGestures } from '../text/textgesture.svelte'
   import { layerIndex } from '../places/layers'
+  import { hasSeam, isCover, pageAt } from '../../base/geom/sheet'
   import { pickUnder } from '../canvas/pickunder.svelte'
+  import CoverDrop from '../cover/CoverDrop.svelte'
+  import CoverGuides from '../cover/CoverGuides.svelte'
+  import CoverPlate from '../cover/CoverPlate.svelte'
+  import CoverUnderlay from '../cover/CoverUnderlay.svelte'
 
   // peer — сосед в ряду разворотов (спека 012): рисуется как mini (лёгкий, без жестов), но с тенью и обводкой
   // листа — тот же экземпляр становится текущим сменой mini, без перемонтирования.
@@ -35,10 +47,16 @@
   let root = $state<HTMLElement>()
   const tg = new TextGestures(() => ({ spread, settings, width, root }))
 
-  const sw = $derived(settings.pageW * 2)
-  const height = $derived((width * settings.pageH) / sw)
-  // Безопасная зона (мм из Go): только на большом развороте и в крупном просмотре.
-  const safe = $derived(!mini && modes.safe ? (store.view.safe ?? []) : [])
+  // Размер и шов листа приходят из Go (sheet.ts): у листа виньетки шва нет.
+  const sw = $derived(spread.w)
+  const sh = $derived(spread.h)
+  const seam = $derived(hasSeam(spread))
+  const midPct = $derived(seam ? (spread.mid / sw) * 100 : 0)
+  const height = $derived((width * sh) / sw)
+  // Обложка (032): плашка корешка, зоны броска и направляющие; шов у неё — центр корешка, сгиба и «Авто» нет.
+  const cover = $derived(isCover(spread) ? store.cover : null)
+  // Безопасная зона (мм из Go): только на большом развороте и в крупном просмотре; у обложки её рисуют направляющие.
+  const safe = $derived(!mini && !cover && modes.safe ? (store.view.safe ?? []) : [])
   // Предпросмотр карточки галереи — только на большом развороте.
   const preview = $derived(!mini && gallery.preview?.spread === spread.id)
   const rects: RotRect[] = $derived(preview && gallery.preview ? gallery.preview.rects : spread.rects)
@@ -46,7 +64,7 @@
   const bg = $derived(spread.bg ?? ['#ffffff', '#ffffff'])
   // Страница, с которой работают (группа в полосе или галерея страницы): вторая притемняется.
   const focus = $derived.by(() => {
-    if (mini || drag.active || store.spread?.id !== spread.id) return null
+    if (!seam || cover || mini || drag.active || store.spread?.id !== spread.id) return null
     const g = gallery.cur
     const f = store.hoverPage ?? (g?.spread === spread.id && g.scope !== 'spread' ? g.scope : null)
     if (!f || !pageSwitchable(spread.pages?.[f === 'left' ? 0 : 1])) return null
@@ -75,15 +93,50 @@
   // Рамка группы — тот же набор условий, плюс выделено 2 и больше объектов (в том числе тексты).
   const grouped = $derived(!mini && !preview && !drag.active && !bgEdit && store.spread?.id === spread.id && placesel.isGroup)
 
-  // Есть ли у листа сгиб (разворот из двух страниц). Сейчас он у всех; когда появятся листы без разворота,
-  // выключить здесь: от этого зависит белый уголок под листом.
-  const hasFold = $derived(true)
+  // Сгиб есть только у листа со швом; от него зависит белый уголок под листом.
+  const hasFold = $derived(seam && !cover)
 
-  // Страница под курсором: «+ Место» встаёт на неё.
+  // Подпись или заглушка с полями имени под курсором (037): курсор text и подсказка. Заглушки мышь не ловят,
+  // поэтому цель ищем по точке (мм), а не по элементу. hint — невидимая рамка цели, от неё встаёт подсказка.
+  let named = $state<NameTarget | null>(null)
+  let hint = $state<HTMLElement>()
+  $effect(() => {
+    const el = hint
+    if (!el) return
+    tip.showAt(el, 'Двойной щелчок — ввести имя')
+    return () => tip.hideFor(el)
+  })
+
+  // Цель по точке не знает, что выше (свободный текст, фото) и открыт ли редактор: решают признаки элемента.
+  function takes(target: EventTarget | null): boolean {
+    const el = target as Element | null
+    return takesNameTarget({
+      can: prefs.can('captions'),
+      bgEdit,
+      editing: edit.editing,
+      empty: emptyField(el),
+      onNamed: !!el?.closest?.('.hit.caption.named'),
+    })
+  }
+
+  // Страница под курсором: «+ Место» встаёт на неё; заодно — цель ввода имени.
   function track(e: PointerEvent) {
     if (mini || store.spread?.id !== spread.id) return
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    placesel.page = e.clientX - r.left < r.width / 2 ? 0 : 1
+    const x = ((e.clientX - r.left) / r.width) * sw
+    placesel.page = pageAt(spread, x)
+    const t = drag.active || nameEdit.cur || !takes(e.target) ? null : nameTargetAt(spread, x, ((e.clientY - r.top) / r.height) * sh)
+    const next = t?.who.length ? t : null
+    if (next?.photo !== named?.photo) named = next
+  }
+
+  // Двойной щелчок по подписи по шаблону или заглушке: ввод имени вместо «вписать» (Stage.dbl его не увидит).
+  function dbl(e: MouseEvent) {
+    if (mini || store.spread?.id !== spread.id || !root || !takes(e.target)) return
+    if (nameEdit.dbl(spread, e, root)) {
+      e.stopPropagation()
+      named = null
+    }
   }
 
   // Щелчок по полю (и сквозь фото на фоне) только снимает выделение; с Shift/Ctrl — ничего (gestures.md);
@@ -118,16 +171,24 @@
   class:over={!mini && drag.over === `spread:${spread.id}`}
   style:width="{width}px"
   style:height="{height}px"
-  data-drop={mini ? undefined : 'spread'}
+  style:--mid="{midPct}%"
+  data-drop={mini || cover ? undefined : 'spread'}
   data-spread={spread.id}
   role="presentation"
   onclick={bgClick}
   onpointermove={track}
+  onpointerleave={() => (named = null)}
+  ondblclick={dbl}
+  style:cursor={named ? 'text' : undefined}
 >
-  <div class="page" style:background={bg[0]}></div>
-  <div class="page right" style:background={bg[1]}></div>
-  <BackdropLayer {spread} {settings} {mini} />
-  {#if spread.grid}<div class="spine"></div>{/if}
+  <div class="page" class:whole={!seam} style:background={bg[0]}></div>
+  {#if seam}<div class="page right" style:background={bg[1]}></div>{/if}
+  <BackdropLayer {spread} {mini} />
+  {#if cover}
+    <CoverPlate {cover} />
+    {#if !mini}<CoverDrop {cover} />{/if}
+  {/if}
+  {#if spread.grid && seam && !cover}<div class="spine"></div>{/if}
   <!-- Белый уголок под листом по центру сгиба (как в SmartAlbums); только на большом развороте -->
   {#if !mini && hasFold}<div class="notch"></div>{/if}
   <!-- Один контекст наложения: слоты, пустые места, подписи и тексты с z-index = 10 + z (текст бывает под фото) -->
@@ -143,9 +204,9 @@
           title={!mini && spineOf.has(id) ? 'Место пересекает корешок, а альбом не раскрывается плоско' : undefined}
           style:z-index={layerIndex(spread.frames?.[i]?.z)}
           style:left="{(r.x / sw) * 100}%"
-          style:top="{(r.y / settings.pageH) * 100}%"
+          style:top="{(r.y / sh) * 100}%"
           style:width="{(r.w / sw) * 100}%"
-          style:height="{(r.h / settings.pageH) * 100}%"
+          style:height="{(r.h / sh) * 100}%"
           style:transform={rot ? `rotate(${rot}deg)` : undefined}
           in:appear={rot}
           out:vanish
@@ -154,31 +215,59 @@
         </div>
       {/if}
     {/each}
-    {#if spread.grid && !preview}<PlaceLayer {spread} {settings} {mini} />{/if}
-    <TextLayer {spread} {settings} {mini} {tg} />
+    {#if spread.grid && !preview}<PlaceLayer {spread} {mini} />{/if}
+    <TextLayer {spread} {mini} {tg} />
     <!-- В «Авто» корешок виден над фото (как до 0.5.0), но под текстами: z верхнего фото, позже слотов в DOM -->
-    {#if !spread.grid}<div class="spine front" style:z-index={photoTop}></div>{/if}
+    {#if !spread.grid && seam && !cover}<div class="spine front" style:z-index={photoTop}></div>{/if}
   </div>
-  {#if !mini}<TextOverlay {spread} {settings} {width} {tg} />{/if}
-  {#if cellUi}<CellOverlay {spread} {settings} {width} />{/if}
-  {#if framed}<SelFrame {spread} {settings} {width} />{/if}
-  {#if grouped}<GroupFrame {spread} {settings} {width} />{/if}
-  {#if bgEdit}<BackdropEditor {spread} {settings} {width} />{/if}
-  {#if !mini}
-    <div class="dim" class:on={focus} style:left={side === 'left' ? '50%' : '0'}></div>
-    <div class="focus" class:on={focus} style:left={side === 'right' ? '50%' : '0'}></div>
+  {#if !mini}<TextOverlay {spread} {width} {tg} />{/if}
+  {#if named}
+    <!-- key: при переходе на соседнюю подпись без зазора подсказка переставляется заново -->
+    {#key named.photo}
+      <div
+        bind:this={hint}
+        class="namehint"
+        style:left="{(named.box.x / sw) * 100}%"
+        style:top="{(named.box.y / sh) * 100}%"
+        style:width="{(named.box.w / sw) * 100}%"
+        style:height="{(named.box.h / sh) * 100}%"
+      ></div>
+    {/key}
+  {/if}
+  {#if !mini}<NameEditor {spread} {width} />{/if}
+  {#if cellUi}<CellOverlay {spread} {width} />{/if}
+  {#if framed}<SelFrame {spread} {width} />{/if}
+  {#if grouped}<GroupFrame {spread} {width} />{/if}
+  {#if bgEdit}<BackdropEditor {spread} {width} />{/if}
+  {#if !mini && seam}
+    <div
+      class="dim"
+      class:on={focus}
+      style:left={side === 'left' ? 'var(--mid)' : '0'}
+      style:width={side === 'left' ? 'calc(100% - var(--mid))' : 'var(--mid)'}
+    ></div>
+    <div
+      class="focus"
+      class:on={focus}
+      style:left={side === 'right' ? 'var(--mid)' : '0'}
+      style:width={side === 'right' ? 'calc(100% - var(--mid))' : 'var(--mid)'}
+    ></div>
   {/if}
   {#each safe as r, i (i)}
     <div
       class="safe"
       style:left="{(r.x / sw) * 100}%"
-      style:top="{(r.y / settings.pageH) * 100}%"
+      style:top="{(r.y / sh) * 100}%"
       style:width="{(r.w / sw) * 100}%"
-      style:height="{(r.h / settings.pageH) * 100}%"
+      style:height="{(r.h / sh) * 100}%"
     ></div>
   {/each}
+  {#if cover && !mini}
+    <CoverUnderlay {cover} />
+    <CoverGuides {cover} />
+  {/if}
   <!-- На сетке с местами у каждого пустого места своя метка «+ фото» — общая подсказка её перекрывает -->
-  {#if spread.photos.length === 0 && !mini && !spread.places?.length}
+  {#if spread.photos.length === 0 && !mini && !spread.places?.length && !cover}
     <div class="empty">Перетащите сюда фото из ленты</div>
   {/if}
 </div>
@@ -212,7 +301,7 @@
   }
   .spine {
     position: absolute;
-    left: 50%;
+    left: var(--mid);
     top: 0;
     bottom: 0;
     width: 1px;
@@ -221,11 +310,11 @@
     pointer-events: none;
   }
   /* Уголок острием вниз — пара серому язычку ленты (Timeline .pointer, тот же размер), в px экрана:
-     не растёт с зумом. top: 100% и left: 50% держат его на сгибе при любом зуме. */
+     не растёт с зумом. top: 100% и left: var(--mid) держат его на сгибе при любом зуме. */
   .notch {
     position: absolute;
     top: 100%;
-    left: 50%;
+    left: var(--mid);
     margin-left: -9px;
     width: 0;
     height: 0;
@@ -242,11 +331,16 @@
     left: 0;
     top: 0;
     bottom: 0;
-    width: 50%;
+    width: var(--mid);
     pointer-events: none;
   }
+  .page.whole {
+    width: 100%;
+  }
   .page.right {
-    left: 50%;
+    left: var(--mid);
+    width: auto;
+    right: 0;
   }
   /* Один контекст наложения: слоты, пустые места, подписи и тексты лежат в нём по z из Go (10 + z). Выше него
      и вне обрезки — рамки, ручки, мини-панель, направляющие, затемнение, безопасная зона. */
@@ -301,7 +395,6 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 50%;
     z-index: 5;
     pointer-events: none;
     opacity: 0;
@@ -316,6 +409,10 @@
   .dim.on,
   .focus.on {
     opacity: 1;
+  }
+  .namehint {
+    position: absolute;
+    pointer-events: none;
   }
   .empty {
     position: absolute;

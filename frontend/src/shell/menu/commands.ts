@@ -9,16 +9,23 @@ import { edit } from '../../editor/text/edit.svelte'
 import { ownMarks } from '../../panels/marks/ownmarks.svelte'
 import { gallery } from '../../panels/layouts/gallery.svelte'
 import { help } from './help.svelte'
+import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
+import { namesUi } from '../../panels/names/names.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { modes } from '../../base/prefs/view.svelte'
+import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
+import { makeVignette } from '../../panels/vignette/vigact'
+import { vigDialog } from '../../panels/vignette/vigsession.svelte'
 import { relinkFolder } from '../../panels/library/relink'
+import { anyVaries, varyTargets } from '../../panels/layouts/variants'
 import { align } from '../../panels/layouts/align.svelte'
 import { isAlignOp, normAlignTo } from '../../panels/layouts/align'
 import { errText } from '../../base/core/errtext'
 import { ZOOM_STEP } from '../../editor/zoom/zoom'
+import { newDoc } from '../newdoc/newdoc.svelte'
 import type { KeyAction } from './hotkeys'
 import type { Label, MarkPatch, RecentProject } from '../../base/core/types'
 
@@ -30,6 +37,7 @@ export type MenuCommand =
   | 'showExport'
   | 'settings'
   | 'addText'
+  | 'pasteNames'
   | 'flipH'
   | 'flipV'
   | 'align'
@@ -47,6 +55,10 @@ export type MenuCommand =
   | 'clearRecent'
   | 'startWindow'
   | 'whatsNew'
+  | 'newSheet'
+  | 'makeVignette'
+  | 'vigSetup'
+  | 'varyLayouts'
 export type Command = KeyAction | MenuCommand
 
 // ev — клавиатурное событие, если команду вызвала клавиша: сдвиг стрелкой и Пробел берут из него клавишу.
@@ -56,9 +68,12 @@ type Handler = (ev?: KeyboardEvent, arg?: string) => unknown
 // Откат, сохранение и экспорт ждут, пока набранное в тексте запишется.
 const afterEdit = (op: () => Promise<unknown>) => edit.idle().then(() => store.run(op()))
 
-// Листание раскладок Пробелом: у сетки и в режиме фона раскладок нет.
+// Листание раскладок Пробелом: у сетки и в режиме фона раскладок нет. У виньетки (сетка по сути) листаются
+// её шаблоны (решение 80).
 function layoutStep(delta: number) {
-  if (prefs.can('variants') && store.spread && !store.spread.grid && !bgmode.cur) gallery.step('spread', delta)
+  const s = store.spread
+  if (!prefs.can('variants') || !s || store.onCover || bgmode.cur) return
+  if (isVignette(s) || !s.grid) gallery.step('spread', delta)
 }
 
 // Зум клавишами — к центру окна холста; посреди жеста масштаб не меняется (как у колеса).
@@ -106,7 +121,7 @@ function mark(ev: KeyboardEvent | undefined, patch: (key: string) => MarkPatch |
 
 export const COMMANDS: Record<Command, Handler> = {
   // Файл
-  new: () => store.replaceState(Api.NewProject('album')),
+  new: () => newDoc.replace(Api.NewProject('album')),
   open: () => store.replaceState(Api.OpenProject()),
   openRecent: (_e, path) => path && openRecent(path),
   clearRecent: () => clearRecent(),
@@ -120,8 +135,8 @@ export const COMMANDS: Record<Command, Handler> = {
   settings: () => modes.openSection('settings'),
 
   // Правка
-  undo: () => afterEdit(() => Api.Undo()),
-  redo: () => afterEdit(() => Api.Redo()),
+  undo: () => edit.idle().then(() => store.runHistory(Api.Undo())),
+  redo: () => edit.idle().then(() => store.runHistory(Api.Redo())),
   selectAll: () => {
     for (const p of store.visible) store.selected.add(p.id)
   },
@@ -138,6 +153,24 @@ export const COMMANDS: Record<Command, Handler> = {
   // Выделен блок текста или подпись — убираем их, иначе выбранное фото или место (placesel.deleteSelected).
   removeCell: () => (edit.sel ? edit.removeSelected() : placesel.deleteSelected()),
   addText: () => edit.addText(),
+  pasteNames: () => namesUi.show(),
+  // Как кнопка в карточке разворота: один шаг SetVignette, тост с «Вернуть». Обложка и виньетка — мимо.
+  makeVignette: () => {
+    const s = store.spread
+    if (s && canMakeVignette(s, prefs.can)) return makeVignette(s)
+  },
+  // Окно «Настроить виньетку» для текущего листа; не виньетка или функции нет на уровне — молчим.
+  vigSetup: () => {
+    const s = store.spread
+    if (isVignette(s) && prefs.can('vignette')) vigDialog.open(s.id)
+  },
+  // 041: выделенные в ленте развороты, иначе текущий; уровень — запомненный в окне автосборки.
+  varyLayouts: () => {
+    if (!prefs.can('variants')) return
+    const ids = varyTargets(spreadsel.ordered(store.view.spreads.map((s) => s.id)), store.spread?.id)
+    if (!anyVaries(store.view.spreads, ids)) return // как серый пункт меню: сетки, виньетки, пустые — молча
+    return store.varyLayouts(ids, modes.varyLevel)
+  },
   flipH: () => placesel.flip('h'),
   flipV: () => placesel.flip('v'),
   align: (_e, op) => isAlignOp(op) && align.run(op),
@@ -168,7 +201,13 @@ export const COMMANDS: Record<Command, Handler> = {
   zoomOut: () => zoomBy(1 / ZOOM_STEP),
   allSpreads: () => modes.openSection('grid'),
   help: () => (help.open = true),
+  guide: () => guide.openFresh(),
   startWindow: () => (prefs.startOpen = true),
+  // «Файл ▸ Новый проект: виньетка-лист…»: стартовое окно сразу на выборе листа (размер и «Создать» — там).
+  newSheet: () => {
+    newDoc.showSheet()
+    prefs.startOpen = true
+  },
   // Стартовое окно с раскрытым «Что нового» (StartDialog читает prefs.news).
   whatsNew: () => {
     prefs.news = true
@@ -190,8 +229,8 @@ export const COMMANDS: Record<Command, Handler> = {
   layerBack: () => placesel.layer('back'),
   spaceDown: (e) => {
     if (!e) return
-    // Иначе кнопка в фокусе (например, ⊞) нажмётся пробелом ещё раз.
-    ;(e.target as HTMLElement | null)?.closest<HTMLElement>('button')?.blur()
+    // Иначе кнопка в фокусе (например, ⊞) нажмётся пробелом ещё раз. Цель бывает document/window — без closest.
+    if (e.target instanceof Element) e.target.closest<HTMLElement>('button')?.blur()
     canvas.spaceDown(e.shiftKey)
   },
   bgExit: () => bgmode.exit(),

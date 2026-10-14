@@ -5,7 +5,6 @@ import (
 	"math"
 	"strings"
 	"testing"
-	"time"
 )
 
 var album30 = Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true}
@@ -524,51 +523,61 @@ func BenchmarkLayouts16(b *testing.B) {
 	}
 }
 
-// BenchmarkGroup600 — автосборка свадьбы на 600 фото, холодный кэш:
-// 3:2 — 65 %, 2:3 — 30 %, 1:1 и 16:9 — по 2,5 %.
-func BenchmarkGroup600(b *testing.B) {
-	rng := splitmix64(600)
-	asp := make([]float64, 600)
-	for i := range asp {
-		switch x := rng.unit(); {
-		case x < 0.65:
-			asp[i] = L
-		case x < 0.95:
-			asp[i] = P
-		case x < 0.975:
-			asp[i] = S
-		default:
-			asp[i] = 16.0 / 9
+// TestLayoutSheetNoSpine — лист 031 (Sheet): ширина 2·PageW без корешка. Постраничных
+// вариантов нет ни в одном ряду (и в 17–64, и в перестановках, и в автосборке), Build их
+// отвергает, штрафа за сгиб нет; инварианты и round-trip — как у разворота.
+func TestLayoutSheetNoSpine(t *testing.T) {
+	sheet := Params{PageW: 102, PageH: 304, Margin: 8, Gap: 3, Layflat: true, Sheet: true}
+	if g := newGeom(sheet); g.spine != 0 {
+		t.Fatalf("у листа корешок %v", g.spine)
+	}
+	many := func(n int) []float64 {
+		a := make([]float64, n)
+		for i := range a {
+			a[i] = []float64{P, L, S}[i%3]
+		}
+		return a
+	}
+	cases := append(append([][]float64{}, invariantCases...), many(17), many(25), many(64))
+	for _, asp := range cases {
+		all := rows(asp, sheet)
+		if len(all["layouts"]) == 0 {
+			t.Fatalf("нет раскладок листа для %d фото", len(asp))
+		}
+		for name, rs := range all {
+			for _, r := range rs {
+				if IsPaged(r.Key) {
+					t.Errorf("%d фото %s: постраничный ключ %s у листа", len(asp), name, r.Key)
+				}
+				checkResult(t, asp, sheet, r)
+				checkRoundTrip(t, asp, sheet, name, r)
+			}
+		}
+		if _, _, _, ok := PageChoices(all["layouts"][0].Key, asp, sheet, 0, 24); ok {
+			t.Errorf("%d фото: у листа есть ряды страницы", len(asp))
 		}
 	}
-	for b.Loop() {
-		resetCache()
-		Group(asp, album30, 4)
-	}
-}
-
-func TestGroup(t *testing.T) {
-	var asp []float64
-	for i := range 300 {
-		if i%3 == 0 {
-			asp = append(asp, P)
-		} else {
-			asp = append(asp, L)
+	// Ключи страниц, которые разворот строит, лист отвергает.
+	flat := sheet
+	flat.Sheet = false
+	for _, asp := range [][]float64{{L}, {L, P}, {P, P, L}} {
+		for _, r := range Layouts(asp, flat, 0) {
+			if _, ok := Build(r.Key, asp, sheet); IsPaged(r.Key) == ok {
+				t.Errorf("%s: Build листа ok=%v", r.Key, ok)
+			}
 		}
 	}
-	start := time.Now()
-	g := Group(asp, album30, 4)
-	took := time.Since(start)
-	pos, counts := 0, map[int]int{}
-	for _, r := range g {
-		if r[0] != pos || r[1] <= r[0] || r[1]-r[0] > maxGroup {
-			t.Fatalf("плохая группа %v после %d", r, pos)
-		}
-		pos = r[1]
-		counts[r[1]-r[0]]++
+	// Широкое фото через середину: у листа без штрафа сгиба, у разворота — со штрафом.
+	asp := []float64{1.2}
+	r := Layouts(asp, sheet, 1)[0]
+	if b, ok := Build(r.Key, asp, flat); !ok || b.Score >= r.Score {
+		t.Errorf("%s: лист %.4f, разворот %.4f — штраф корешка у листа не снят", r.Key, r.Score, b.Score)
 	}
-	if pos != len(asp) {
-		t.Fatalf("покрыто %d из %d", pos, len(asp))
+	if res := Cached(asp, sheet, 1); res[0].Score != r.Score {
+		t.Errorf("кэш смешал лист и разворот: %.4f вместо %.4f", res[0].Score, r.Score)
 	}
-	t.Logf("300 фото → %d разворотов за %v, размеры групп: %v", len(g), took, counts)
+	// Автосборка листа: окна 17+ без страниц не падают и покрывают все фото.
+	if pl := PlanGroups(many(40), sheet, 2, 32); len(pl.Groups) != 2 || pl.Groups[1][1] != 40 {
+		t.Errorf("автосборка листа: %+v", pl)
+	}
 }

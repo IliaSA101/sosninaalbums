@@ -1,11 +1,14 @@
 package app
 
 import (
+	"errors"
 	"fmt"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -302,6 +305,122 @@ func TestExportAsksBlank(t *testing.T) {
 	}
 }
 
+// Пустые поля подписей (030): вопрос до выбора папки; «нет» — ничего не записано.
+func TestExportFieldsWarning(t *testing.T) {
+	e := newExportEnv(t, 2)
+	e.a.SetCaption("p0", "{Школа}", "")
+	e.a.SetSheetCaps("s1", true, model.SheetCaps{Style: model.DefaultCaptionStyle(), Pad: 1, Text: "{Фамилия}"})
+	picked := 0
+	pick := pickExportDir
+	pickExportDir = func(a *App) (string, error) { picked++; return pick(a) }
+
+	e.answer = false
+	ok, err := e.a.Export(ExportOptions{DPI: 72})
+	want := "Не заполнены поля: Заголовок; фото без имени: 1. В выгрузке они будут пустыми. Продолжить?"
+	if ok || err != nil || picked != 0 || len(e.asked) != 1 || e.asked[0] != want {
+		t.Fatalf("«нет»: Export = %v, %v; выбор папки %d раз; вопросы %q", ok, err, picked, e.asked)
+	}
+	if ents, _ := os.ReadDir(e.dir); len(ents) != 0 {
+		t.Fatalf("после «нет» записано %d файлов", len(ents))
+	}
+	// Заполнили — вопроса нет. Поля шапки листа правит окно виньетки (031 Т2): до него —
+	// проект с полями у листа фото p0.
+	p, _ := e.a.editor().Snapshot()
+	p.Spreads[0].Vars = &model.Vars{Title: "Школа №5"}
+	e.a.ed.Store(mustEditor(t, p, ""))
+	e.a.SetPerson("p1", model.Person{Last: "Иванов"}, "")
+	e.answer, e.asked = true, nil
+	if msg := e.export(t, ExportOptions{}); msg != "" || len(e.asked) != 0 || picked != 1 {
+		t.Fatalf("заполнено: %q, вопросы %q", msg, e.asked)
+	}
+}
+
+// Вопрос о пустых полях — только по листам плана: диапазон и «Только обложка» не спрашивают
+// о листах, которые не выгружаются (итоговое ревью 0.10).
+func TestExportFieldsWarningPlan(t *testing.T) {
+	e := coverEnv(t, 3, "p0")
+	e.a.SetCaption("p1", "{Школа}", "") // лист 2: пустой «Заголовок»
+	e.a.SetSheetCaps("s2", true, model.SheetCaps{Style: model.DefaultCaptionStyle(), Pad: 1, Text: "{Фамилия}"})
+	v, err := e.a.AddText(model.CoverID, 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.a.SetText(v.Cover.Sheet.Texts[0].ID, "{Год}", "") // обложка: пустой «Год»
+	pick := pickExportDir
+	t.Cleanup(func() { pickExportDir = pick })
+	pickExportDir = func(*App) (string, error) { return "", nil } // отмена выбора папки: ничего не пишется
+	for _, c := range []struct {
+		o        ExportOptions
+		unfilled []string
+		unnamed  int
+	}{
+		{ExportOptions{Range: "1"}, nil, 0},
+		{ExportOptions{Range: "2"}, []string{"Заголовок"}, 0},
+		{ExportOptions{Range: "3"}, nil, 1},
+		{ExportOptions{Range: "2-3"}, []string{"Заголовок"}, 1},
+		{ExportOptions{CoverOnly: true}, []string{"Год"}, 0},
+		{ExportOptions{CoverOnly: true, Range: "2"}, []string{"Год"}, 0},
+		{ExportOptions{Cover: true, Range: "1"}, []string{"Год"}, 0},
+		{ExportOptions{Cover: true}, []string{"Год", "Заголовок"}, 1},
+		{ExportOptions{}, []string{"Заголовок"}, 1},
+	} {
+		e.asked = nil
+		c.o.DPI = 72
+		if ok, err := e.a.Export(c.o); ok || err != nil {
+			t.Fatalf("%+v: Export = %v, %v", c.o, ok, err)
+		}
+		var want []string
+		if w := export.FieldsWarning(c.unfilled, c.unnamed); w != "" {
+			want = []string{w}
+		}
+		if !slices.Equal(e.asked, want) {
+			t.Errorf("%+v: вопросы %q, ждали %q", c.o, e.asked, want)
+		}
+	}
+}
+
+// TestExportSheetOneFile — проект-лист 031: файл на лист размером листа (204×304 мм при
+// 300 dpi — 2409×3591 px), «отдельными страницами» лист не делит, «1п» — ошибка до диалога.
+func TestExportSheetOneFile(t *testing.T) {
+	e := newExportEnv(t, 2)
+	p := model.NewSheet(204, 304)
+	p.Spreads = nil
+	for i, path := range e.photos {
+		id := fmt.Sprintf("p%d", i)
+		p.Photos[id] = model.PhotoRef{Path: path, W: 60, H: 40}
+		p.Spreads = append(p.Spreads, &model.Spread{ID: fmt.Sprintf("s%d", i), Photos: []string{id}})
+	}
+	e.a.ed.Store(mustEditor(t, p, ""))
+	if ok, err := e.a.Export(ExportOptions{Range: "7", DPI: 300}); ok || err == nil || !strings.Contains(err.Error(), "листа 7 нет") {
+		t.Fatalf("лист вне диапазона: %v %v", ok, err)
+	}
+	if ok, err := e.a.Export(ExportOptions{Range: "1п", DPI: 300}); ok || !errors.Is(err, export.ErrSheetPages) {
+		t.Fatalf("«1п» в листе: %v, %v", ok, err)
+	}
+	if ok, err := e.a.Export(ExportOptions{Range: "1", Pages: true, DPI: 300, Quality: 80}); !ok || err != nil {
+		t.Fatalf("Export = %v, %v", ok, err)
+	}
+	if msg := <-e.done; msg != "" {
+		t.Fatal(msg)
+	}
+	if got := e.names(t); !slices.Equal(got, []string{"01.jpg"}) {
+		t.Fatalf("файлы %v, ждали один 01.jpg", got)
+	}
+	f, err := os.Open(filepath.Join(e.dir, "01.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := jpeg.DecodeConfig(f)
+	f.Close() // открытый файл Windows не даст переписать ниже
+	if err != nil || c.Width != 2409 || c.Height != 3591 {
+		t.Fatalf("размер %dx%d (%v), ждали 2409x3591", c.Width, c.Height, err)
+	}
+	// Все листы — файл на каждый.
+	if msg := e.export(t, ExportOptions{Pages: true}); msg != "" || !slices.Equal(e.names(t), []string{"01.jpg", "02.jpg"}) {
+		t.Fatalf("все листы: %q, файлы %v", msg, e.names(t))
+	}
+}
+
 // Фото из реестра берут цвет оттуда, остальные — из заголовка файла; нечитаемые пропускаются.
 func TestColorReport(t *testing.T) {
 	dir := testkit.TempDir(t)
@@ -324,5 +443,148 @@ func TestColorReport(t *testing.T) {
 	ad, other := a.colorReport(pr)
 	if ad != 1 || len(other) != 2 || other["Display P3"] != 1 || other["ProPhoto RGB"] != 1 {
 		t.Errorf("adobe=%d other=%v", ad, other)
+	}
+}
+
+// Отказы Export до записи: диапазон за альбомом, мусорный диапазон, отмена выбора папки,
+// пустой альбом — ничего не пишут и без вопросов; флаг «идёт экспорт» снимается.
+func TestExportRefusals(t *testing.T) {
+	e := newExportEnv(t, 2)
+	ok, err := e.a.Export(ExportOptions{DPI: 72, Range: "9"})
+	if ok || err == nil {
+		t.Fatalf("диапазон за альбомом: %v, %v", ok, err)
+	}
+	if ok, err = e.a.Export(ExportOptions{DPI: 72, Range: "x"}); ok || err == nil {
+		t.Fatalf("мусорный диапазон: %v, %v", ok, err)
+	}
+	pickExportDir = func(*App) (string, error) { return "", nil }
+	if ok, err = e.a.Export(ExportOptions{DPI: 72}); ok || err != nil {
+		t.Fatalf("отмена выбора папки: %v, %v", ok, err)
+	}
+	empty := newExportEnv(t, 0)
+	if ok, err = empty.a.Export(ExportOptions{DPI: 72}); ok || err == nil {
+		t.Fatalf("пустой альбом: %v, %v", ok, err)
+	}
+	if len(e.asked) != 0 {
+		t.Fatalf("вопросы без причины: %q", e.asked)
+	}
+}
+
+// Чужие файлы с номерами разворотов в папке экспорта — отказ без перезаписи и без вопроса.
+func TestExportForeignFilesRefuse(t *testing.T) {
+	e := newExportEnv(t, 1)
+	if err := os.MkdirAll(e.dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testkit.JPEG(t, e.dir, "01.jpg", 10, 10)
+	ok, err := e.a.Export(ExportOptions{DPI: 72})
+	if ok || err == nil || !strings.Contains(err.Error(), "не из Sosnina Albums") {
+		t.Fatalf("Export = %v, %v", ok, err)
+	}
+	if len(e.asked) != 0 {
+		t.Fatalf("вопросы: %q", e.asked)
+	}
+}
+
+// Фото с чужим профилем: вопрос до выбора папки, «нет» — папка не выбирается.
+// Профиль без имени в реестре называется «неизвестный профиль».
+func TestExportColorDecline(t *testing.T) {
+	e := newExportEnv(t, 1)
+	e.a.byID["reg"] = library.Photo{ID: "reg", Color: imgfile.ColorOther}
+	if _, other := e.a.colorReport(&model.Project{Photos: map[string]model.PhotoRef{"reg": {Path: "x.jpg"}}}); other["неизвестный профиль"] != 1 {
+		t.Fatalf("профиль без имени: %v", other)
+	}
+	p3 := testkit.ICCSegment(1, 1, testkit.MatrixProfile(testkit.XYZP3, 2.2, testkit.DescV2("Display P3")))
+	src := testkit.JPEGSegments(t, testkit.TempDir(t), "p3.jpg", 60, 40, p3)
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(e.photos[0], data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	picked := 0
+	pickExportDir = func(*App) (string, error) { picked++; return e.dir, nil }
+	e.answer = false
+	ok, err := e.a.Export(ExportOptions{DPI: 72})
+	if ok || err != nil || picked != 0 || len(e.asked) != 1 || !strings.Contains(e.asked[0], "Display P3") {
+		t.Fatalf("«нет»: %v, %v; выбор папки %d; вопросы %q", ok, err, picked, e.asked)
+	}
+}
+
+// Кнопки вопроса: на Mac — «Да / Нет» строками, иначе системные "Yes"/"No"; по умолчанию и Esc — «нет».
+func TestAskYesButtons(t *testing.T) {
+	cases := []struct{ goos, yes, no string }{
+		{"darwin", "Да", "Нет"},
+		{"windows", "Yes", "No"},
+		{"linux", "Yes", "No"},
+		{"", "Yes", "No"},
+	}
+	for _, c := range cases {
+		o := askOptions(c.goos, "вопрос?")
+		if len(o.Buttons) != 2 || o.Buttons[0] != c.yes || o.Buttons[1] != c.no {
+			t.Errorf("%q: кнопки %v, ждали %s/%s", c.goos, o.Buttons, c.yes, c.no)
+		}
+		if o.DefaultButton != c.no || o.CancelButton != c.no {
+			t.Errorf("%q: по умолчанию %q, Esc %q, ждали %q", c.goos, o.DefaultButton, o.CancelButton, c.no)
+		}
+		if o.Message != "вопрос?" || o.Title == "" {
+			t.Errorf("%q: текст/заголовок: %+v", c.goos, o)
+		}
+	}
+}
+
+// DeleteSpreads: одно событие view на весь набор, один шаг отмены.
+func TestAppDeleteSpreads(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	var mu sync.Mutex
+	views := 0
+	a.emit = func(name string, _ ...any) {
+		if name == "view" {
+			mu.Lock()
+			views++
+			mu.Unlock()
+		}
+	}
+	ed := a.editor()
+	var v model.View
+	for range 4 {
+		var err error
+		if v, err = ed.NewSpread(-1, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ids := []string{v.Spreads[0].ID, v.Spreads[2].ID, "нет"}
+	v = a.DeleteSpreads(ids)
+	if len(v.Spreads) != 2 {
+		t.Fatalf("осталось разворотов %d, ждали 2", len(v.Spreads))
+	}
+	mu.Lock()
+	n := views
+	mu.Unlock()
+	if n != 1 {
+		t.Errorf("событий view %d, ждали одно", n)
+	}
+	if v = a.Undo(); len(v.Spreads) != 4 {
+		t.Errorf("отмена вернула %d разворотов, ждали 4", len(v.Spreads))
+	}
+}
+
+// App.NewSpread: фото пропали из ленты при пересканировании во время переноса — правки нет,
+// пустой разворот вместо них не создаётся (спека 013).
+func TestNewSpreadUnknownIDsNoop(t *testing.T) {
+	a := newApp(t)
+	a.emit = func(string, ...any) {}
+	p := model.New()
+	p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}})
+	a.ed.Store(mustEditor(t, p, ""))
+	before := a.editor().View()
+	v, err := a.NewSpread(-1, []string{"нет-такого"})
+	if err != nil || v.Rev != before.Rev || len(v.Spreads) != 1 {
+		t.Fatalf("NewSpread с пропавшими фото: %v, rev %d→%d, разворотов %d", err, before.Rev, v.Rev, len(v.Spreads))
+	}
+	if got := a.editor().View(); got.Rev != before.Rev || got.Dirty {
+		t.Fatalf("проект изменился: rev %d, dirty %v", got.Rev, got.Dirty)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -192,7 +193,7 @@ func TestViewWorkerPanic(t *testing.T) {
 	if !bytes.Equal(want, got) {
 		t.Fatalf("View после паники воркера отличается")
 	}
-	if !strings.Contains(buf.String(), "ПАНИКА в раскладке разворота "+bad) {
+	if !strings.Contains(buf.String(), "ПАНИКА в раскладке разворота "+strconv.Quote(bad)) { // ID из файла — в кавычках (paths.LogQ)
 		t.Fatalf("паники нет в логе: %q", buf.String())
 	}
 	if strings.Contains(buf.String(), "ещё") {
@@ -308,6 +309,9 @@ func TestViewZUnique(t *testing.T) {
 		for _, x := range sv.Texts {
 			out = append(out, x.Z)
 		}
+		for _, x := range sv.Stubs { // заглушки подписей (030) — в том же стеке
+			out = append(out, x.Z)
+		}
 		slices.Sort(out)
 		return out
 	}
@@ -333,13 +337,19 @@ func TestViewZUnique(t *testing.T) {
 	if got := zs(sv); !slices.Equal(got, want(7)) {
 		t.Fatalf("сетка: z %v", got)
 	}
+	// Шаблон листа: заглушка пустого места — сразу над ним.
+	sv = e.SetSheetCaps("s1", true, model.SheetCaps{Style: model.DefaultCaptionStyle(), Pad: 1, Text: "{Фамилия}"}).Spreads[0]
+	if got := zs(sv); len(sv.Stubs) != 1 || !slices.Equal(got, want(8)) {
+		t.Fatalf("сетка с заглушкой: заглушек %d, z %v", len(sv.Stubs), got)
+	}
+	stubAbovePlace(t, sv)
 
 	ea, id := edtest.AutoEd(t)
 	ea.SetCaption("b", "Подпись", "")
 	edtest.AddText(t, ea, id, 0)
-	av := ea.View().Spreads[0]
-	if got := zs(av); !slices.Equal(got, want(len(av.Frames)+len(av.Captions)+len(av.Texts))) {
-		t.Fatalf("«Авто»: z %v", got)
+	av := ea.SetSheetCaps(id, true, model.SheetCaps{Style: model.DefaultCaptionStyle(), Pad: 1, Text: "{Фамилия}"}).Spreads[0]
+	if got := zs(av); len(av.Stubs) != 2 || !slices.Equal(got, want(len(av.Frames)+len(av.Captions)+len(av.Texts)+len(av.Stubs))) {
+		t.Fatalf("«Авто»: заглушек %d, z %v", len(av.Stubs), got)
 	}
 	maxCell := 0
 	for _, f := range av.Frames {
@@ -348,6 +358,16 @@ func TestViewZUnique(t *testing.T) {
 	for _, x := range av.Texts {
 		if x.Z <= maxCell {
 			t.Fatalf("«Авто»: текст z=%d не выше ячеек (до %d)", x.Z, maxCell)
+		}
+	}
+}
+
+// stubAbovePlace — заглушка пустого места сетки лежит сразу над ним.
+func stubAbovePlace(t *testing.T, sv model.SpreadView) {
+	t.Helper()
+	for _, pv := range sv.Places {
+		if pv.ID == sv.Stubs[0].Place && sv.Stubs[0].Z != pv.Z+1 {
+			t.Fatalf("заглушка z=%d, место z=%d", sv.Stubs[0].Z, pv.Z)
 		}
 	}
 }
@@ -369,6 +389,55 @@ func TestViewSafeZone(t *testing.T) {
 	// Пустой проект тоже отдаёт зону: UI рисует её, не дожидаясь фото.
 	if got := edtest.Open(t, model.New(), "").View().Safe; len(got) != 1 {
 		t.Fatalf("новый проект: %+v", got)
+	}
+}
+
+// Зона и предел «по тексту» — от Settings.Safe, а не от константы (028 А).
+func TestSafeZoneFromSettings(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	st := edtest.P(e).Settings
+	st.PageW, st.PageH, st.Layflat, st.Safe = 281, 284, true, 12
+	v := e.SetSettings(st)
+	if len(v.Safe) != 1 || v.Safe[0] != (layout.Rect{X: 12, Y: 12, W: 2*281 - 24, H: 284 - 24}) {
+		t.Fatalf("layflat: %+v", v.Safe)
+	}
+	if v.TextMaxW != 281-24 || v.Settings.Safe != 12 {
+		t.Fatalf("TextMaxW %v, safe %v", v.TextMaxW, v.Settings.Safe)
+	}
+	st.Layflat = false
+	v = e.SetSettings(st)
+	want := []layout.Rect{{X: 12, Y: 12, W: 257, H: 260}, {X: 293, Y: 12, W: 257, H: 260}}
+	if len(v.Safe) != 2 || v.Safe[0] != want[0] || v.Safe[1] != want[1] || v.TextMaxW != 281-24 {
+		t.Fatalf("без layflat: %+v, TextMaxW %v", v.Safe, v.TextMaxW)
+	}
+	// 0 — без зоны: контур по краю страниц, «по тексту» — вся страница.
+	st.Safe = 0
+	v = e.SetSettings(st)
+	if len(v.Safe) != 2 || v.Safe[0] != (layout.Rect{W: 281, H: 284}) || v.TextMaxW != 281 {
+		t.Fatalf("без зоны: %+v, TextMaxW %v", v.Safe, v.TextMaxW)
+	}
+}
+
+// LowDPI по разворотам (028 В): мыльный кадр и мыльный фон дают 2, у соседнего
+// (резкие кадр и фон, фото без размера) — 0, у View — сумма.
+func TestViewLowDPIPerSpread(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	sharp := func(id string) model.PhotoInfo {
+		return model.PhotoInfo{ID: id, Path: edtest.Abs(id + ".jpg"), W: 30000, H: 20000}
+	}
+	edtest.NewSpread(e, -1, []model.PhotoInfo{sharp("a"), edtest.Photo("soft")})
+	v := edtest.NewSpread(e, -1, []model.PhotoInfo{sharp("b"), {ID: "z", Path: edtest.Abs("z.jpg")}})
+	s0, s1 := v.Spreads[0].ID, v.Spreads[1].ID
+	edtest.SetBg(t, e, s0, model.ScopeLeft, "bg") // 300×200 px на страницу — мыльный
+	v, err := e.SetBackdrop(s1, model.ScopeSpread, sharp("bgsharp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Spreads[0].LowDPI != 2 || v.Spreads[1].LowDPI != 0 || v.LowDPI != 2 {
+		t.Fatalf("развороты %d и %d, всего %d", v.Spreads[0].LowDPI, v.Spreads[1].LowDPI, v.LowDPI)
+	}
+	if b := v.Spreads[1].Backdrops[0]; b.DPI < v.MinDPI {
+		t.Fatalf("резкий фон: %d dpi при пороге %d", b.DPI, v.MinDPI)
 	}
 }
 
@@ -427,6 +496,9 @@ func benchViewCold(b *testing.B, n, k int) {
 
 func BenchmarkViewCold40x16(b *testing.B) { benchViewCold(b, 40, 16) }
 
+// BenchmarkViewCold40x64 — 40 разворотов по 64 фото (быстрые раскладки, спека 027): цель ≤ 1 с.
+func BenchmarkViewCold40x64(b *testing.B) { benchViewCold(b, 40, 64) }
+
 func BenchmarkViewCold90x7(b *testing.B) { benchViewCold(b, 90, 7) }
 
 // BenchmarkViewWarm40x16 — тот же альбом, кэш тёплый: цена View на каждую правку.
@@ -463,7 +535,10 @@ func BenchmarkSetSettingsCold(b *testing.B) {
 func TestCaptionPlacement(t *testing.T) {
 	c := &model.Caption{Text: "Первый танец", Style: model.DefaultCaptionStyle()}
 	rects := []layout.Rect{{X: 10, Y: 10, W: 100, H: 100}, {X: 60, Y: 115, W: 100, H: 100}, {X: 200, Y: 10, W: 50, H: 50}}
-	cv := view.CaptionViewOf("a", c, rects, 0, 300)
+	capOf := func(id string, c *model.Caption, rects []layout.Rect, i int, pageH float64) model.CaptionView {
+		return view.CaptionViewOf(view.CaptionIn{Photo: id, Text: c.Text, Look: view.LookOf(c, nil), Rects: rects, I: i, PageH: pageH})
+	}
+	cv := capOf("a", c, rects, 0, 300)
 	if cv.X != 10 || cv.W != 100 || cv.Y != 111 || cv.H <= 0 || cv.Photo != "a" || cv.ID != "" {
 		t.Fatalf("под фото: %+v", cv)
 	}
@@ -475,19 +550,19 @@ func TestCaptionPlacement(t *testing.T) {
 		t.Fatalf("строки: %+v", cv.Lines)
 	}
 	// Справа ничего ниже нет — до края страницы без обрезной зоны.
-	if cv = view.CaptionViewOf("c", c, rects, 2, 300); cv.Overflow != 0 || cv.Y != 61 {
+	if cv = capOf("c", c, rects, 2, 300); cv.Overflow != 0 || cv.Y != 61 {
 		t.Fatalf("свободное место: %+v", cv)
 	}
-	if cv = view.CaptionViewOf("c", c, rects, 2, 62); cv.Overflow <= 0 {
+	if cv = capOf("c", c, rects, 2, 62); cv.Overflow <= 0 {
 		t.Fatalf("у края страницы: %+v", cv)
 	}
 	// На фото: у нижнего края внутри ячейки; в низкой ячейке — нехватка.
 	c.Over = true
-	if cv = view.CaptionViewOf("a", c, rects, 0, 300); cv.Overflow != 0 || math.Abs(cv.Y+cv.H-(110-3*view.CaptionPad)) > 1e-6 || !cv.Over {
+	if cv = capOf("a", c, rects, 0, 300); cv.Overflow != 0 || math.Abs(cv.Y+cv.H-(110-3*view.CaptionPad)) > 1e-6 || !cv.Over {
 		t.Fatalf("на фото: %+v", cv)
 	}
 	short := []layout.Rect{{X: 0, Y: 0, W: 100, H: 4}}
-	if cv = view.CaptionViewOf("a", c, short, 0, 300); cv.Overflow <= 0 {
+	if cv = capOf("a", c, short, 0, 300); cv.Overflow <= 0 {
 		t.Fatalf("на низком фото: %+v", cv)
 	}
 	// Через Editor: подпись видна в View, стиль по умолчанию.
@@ -496,12 +571,12 @@ func TestCaptionPlacement(t *testing.T) {
 	if cs := v.Spreads[0].Captions; len(cs) != 1 || cs[0].Photo != "a" || cs[0].Style != model.DefaultCaptionStyle() || cs[0].Text != "Подпись" {
 		t.Fatalf("подписи: %+v", cs)
 	}
-	v = e.SetCaptionStyle("a", model.TextStyle{Font: "ptserif", Size: math.NaN(), Align: "x"}, true)
+	v = e.SetCaptionStyle("a", model.TextStyle{Font: "ptserif", Size: math.NaN(), Align: "x"}, true, 1)
 	if cs := v.Spreads[0].Captions[0]; !cs.Over || cs.Style.Font != "ptserif" || cs.Style.Size != 14 || cs.Style.Align != "center" {
 		t.Fatalf("стиль подписи: %+v", cs)
 	}
 	rev := v.Rev
-	if v = e.SetCaptionStyle("b", model.DefaultCaptionStyle(), false); v.Rev != rev {
+	if v = e.SetCaptionStyle("b", model.DefaultCaptionStyle(), false, 1); v.Rev != rev {
 		t.Fatal("стиль без подписи — холостая правка")
 	}
 }

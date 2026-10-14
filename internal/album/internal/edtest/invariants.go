@@ -1,9 +1,11 @@
 package edtest
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
@@ -11,19 +13,26 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 )
 
-// GridInvariants — инварианты сетки (design 007 §1): после Load и после каждой правки.
+// GridInvariants — инварианты сетки (design 007 §1) по всем листам (обложка — лист «-1»):
+// после Load и после каждой правки. Фото стоит в одном месте на весь проект, место — в листе.
 func GridInvariants(p *model.Project) error {
-	sw, ph := 2*p.Settings.PageW, p.Settings.PageH
 	placeIDs, inAlbum := map[string]bool{}, map[string]bool{}
 	on2 := func(v float64) bool { return math.Abs(v*100-math.Round(v*100)) < 1e-6 }
-	for i, s := range p.Spreads {
+	off := len(p.Sheets()) - len(p.Spreads)
+	for k, s := range p.Sheets() {
+		i := k - off
+		g := p.Geo(s)
+		sw, ph := g.W, g.H
+		if p.Cover != nil && s == p.Cover.Sheet && (s.ID != model.CoverID || len(s.Grid) == 0 && len(s.Photos) > 0) {
+			return fmt.Errorf("обложка: ID %q, «Авто» с фото %v", s.ID, s.Photos)
+		}
 		for _, id := range s.Photos {
 			if inAlbum[id] {
 				return fmt.Errorf("разворот %d: фото %s стоит дважды", i, id)
 			}
 			inAlbum[id] = true
 		}
-		if err := OrderInvariant(s); err != nil {
+		if err := errors.Join(OrderInvariant(s), VigInvariant(s)); err != nil {
 			return fmt.Errorf("разворот %d: %w", i, err)
 		}
 		if s.Grid == nil {
@@ -51,6 +60,29 @@ func GridInvariants(p *model.Project) error {
 				return fmt.Errorf("разворот %d: место не округлено %+v", i, *pl)
 			}
 			placeIDs[pl.ID] = true
+		}
+	}
+	return nil
+}
+
+// VigInvariant — виньетка (031): Kind — "" или vignette, Vig ровно у виньетки, мест по
+// параметрам ≤ MaxPlaces, шапка — надпись этого листа; роли мест известные и только у виньетки;
+// своя форма (Own, 038) — ровно у шаблона "my:…".
+func VigInvariant(s *model.Spread) error {
+	if s.Kind != "" && s.Kind != model.KindVignette || (s.Kind == "") != (s.Vig == nil) {
+		return fmt.Errorf("вид %q, параметры %+v", s.Kind, s.Vig)
+	}
+	if v := s.Vig; v != nil {
+		head := v.Head == "" || slices.ContainsFunc(s.Texts, func(t *model.TextBlock) bool { return t.ID == v.Head })
+		own := strings.HasPrefix(v.Tpl, model.VigOwnPrefix)
+		if model.VigPlaces(*v) > model.MaxPlaces || v.Teachers > model.MaxTeachers || v.Pupils < 0 || !head || own != (v.Own != nil) {
+			return fmt.Errorf("виньетка %+v", *v)
+		}
+	}
+	for _, pl := range s.Grid {
+		known := pl.Role == "" || pl.Role == model.RolePupil || pl.Role == model.RoleTeacher || pl.Role == model.RoleGroup
+		if !known || s.Kind == "" && pl.Role != "" {
+			return fmt.Errorf("роль места %q у вида %q", pl.Role, s.Kind)
 		}
 	}
 	return nil

@@ -111,6 +111,17 @@ func parseToken(tok string, n int) ([]Unit, error) {
 	return out, nil
 }
 
+// ErrSheetPages — «л»/«п» в диапазоне проекта-листа (031): у листа страниц нет.
+var ErrSheetPages = errors.New("в листе нет страниц: укажите номера листов без «л» и «п»")
+
+// CheckSheet — цели проекта-листа: страница («7п») — ErrSheetPages.
+func CheckSheet(units []Unit) error {
+	if slices.ContainsFunc(units, func(u Unit) bool { return u.Page != 0 }) {
+		return ErrSheetPages
+	}
+	return nil
+}
+
 // pageIndex: «л»/«l» — левая страница (1), «п»/«r» — правая (2).
 func pageIndex(letter string) int {
 	if letter == "л" || letter == "l" {

@@ -20,8 +20,9 @@ import (
 const (
 	// BuiltinLimit — сколько встроенных сеток отдаёт GridChoices (длина ряда «Из раскладок»).
 	BuiltinLimit = 24
-	// maxBuiltinN — «7+»: больше MaxSpreadPhotos раскладка «Авто» не собирает.
-	maxBuiltinN = model.MaxSpreadPhotos
+	// maxBuiltinN — вкладка «7+»: встроенные сетки — до 7 мест (027: предел склейки
+	// поднят до MaxPhotos, а вкладки «1…7+» не меняются; виньетка — 0.11).
+	maxBuiltinN = 7
 )
 
 // TplCells — ячейки разворота в порядке мест: у сетки — места (пустые тоже), у
@@ -54,19 +55,19 @@ func PlaceBoxes(p *model.Project, spreadID, scope string) ([]model.Box, string, 
 	if s == nil {
 		return nil, "", errors.New("разворот не найден")
 	}
-	pw, ph := p.Settings.PageW, p.Settings.PageH
+	a, ok := p.AreaOf(s, scope)
+	if !ok {
+		return nil, "", errors.New("неизвестная область") // страница листа 031
+	}
 	cells, _ := TplCells(p, s)
-	area, side, tplScope := 2*pw, 0.0, model.TplSpread
+	tplScope := model.TplSpread
 	if scope != model.ScopeSpread {
-		area, tplScope = pw, model.TplPage
-		if scope == model.ScopeRight {
-			side = pw
-		}
+		tplScope = model.TplPage
 	}
 	var boxes []model.Box
 	for _, r := range cells {
-		if InArea(p, r.X, r.W, scope) {
-			boxes = append(boxes, model.Box{X: (r.X - side) / area, Y: r.Y / ph, W: r.W / area, H: r.H / ph, Rot: r.Rot})
+		if InArea(p, s, r.X, r.W, scope) {
+			boxes = append(boxes, model.Box{X: (r.X - a.X) / a.W, Y: (r.Y - a.Y) / a.H, W: r.W / a.W, H: r.H / a.H, Rot: r.Rot})
 		}
 	}
 	if boxes = model.ClampBoxes(boxes); len(boxes) == 0 {
@@ -116,7 +117,7 @@ func scopePhotos(p *model.Project, s *model.Spread, scope string) int {
 	cells, filled := TplCells(p, s)
 	cnt := 0
 	for i, r := range cells {
-		if filled[i] && InArea(p, r.X, r.W, scope) {
+		if filled[i] && InArea(p, s, r.X, r.W, scope) {
 			cnt++
 		}
 	}
@@ -138,6 +139,9 @@ func GridChoicesOf(in GridSource, scope string, tpls []model.Template) model.Gri
 		c.Builtin = append(c.Builtin, g)
 	}
 	for _, t := range tpls {
+		if t.Scope == model.TplPage && in.prm.Sheet || t.Kind == model.TplVignette {
+			continue // у листа 031 страниц нет; шаблоны виньетки — в её окне и галерее (038)
+		}
 		if len(t.Boxes) == n || (n == maxBuiltinN && len(t.Boxes) > n) {
 			c.Mine = append(c.Mine, model.GridChoice{ID: t.ID, Name: t.Name, Scope: t.Scope, Boxes: t.Boxes,
 				Drop: dropCount(in.inScope, len(t.Boxes), t.Scope, scope)})

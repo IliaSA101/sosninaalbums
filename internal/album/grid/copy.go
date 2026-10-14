@@ -24,7 +24,7 @@ func ApplyGrid(p *model.Project, spreadID, scope, tplScope string, frac []model.
 	if s == nil {
 		return 0, nil
 	}
-	boxes, err := FracBoxes(p, tplScope, scope, frac)
+	boxes, err := FracBoxes(p, s, tplScope, scope, frac)
 	if err != nil {
 		return 0, err
 	}
@@ -57,10 +57,11 @@ func copyGrid(p *model.Project, srcID, from string, targets []model.GridTarget, 
 	if src == nil {
 		return plan, nil
 	}
-	a0, _, ok := p.Area(from)
+	fa, ok := p.AreaOf(src, from)
 	if !ok {
 		return plan, model.ErrScope
 	}
+	a0 := fa.X
 	if len(targets) > 3*model.MaxSpreads {
 		return plan, errTargets
 	}
@@ -97,7 +98,7 @@ func copyGrid(p *model.Project, srcID, from string, targets []model.GridTarget, 
 		if mirror && from != model.ScopeSpread && t.Scope != from {
 			f = mirrorFrac(frac)
 		}
-		boxes, err := FracBoxes(p, tpl, t.Scope, f)
+		boxes, err := FracBoxes(p, s, tpl, t.Scope, f)
 		if err != nil {
 			return plan, err
 		}
@@ -162,7 +163,7 @@ func designOf(p *model.Project, s *model.Spread, scope string, x0 float64) srcDe
 		sd.bgL, sd.photoL = s.BgR, s.BgPhotoR.Clone()
 	}
 	for _, t := range s.Texts {
-		if a := model.BoxOf(t).AABB(); InArea(p, a.X, a.W, scope) {
+		if a := model.BoxOf(t).AABB(); InArea(p, s, a.X, a.W, scope) {
 			sd.texts = append(sd.texts, *t)
 		}
 	}
@@ -173,11 +174,11 @@ func designOf(p *model.Project, s *model.Spread, scope string, x0 float64) srcDe
 // (новые ID, сдвиг на страницу). n — сколько блоков цели заменено. Больше
 // MaxTexts на развороте — ошибка всей правки.
 func putDesign(p *model.Project, s *model.Spread, scope string, sd srcDesign) (n int, err error) {
-	x0, _, _ := p.Area(scope)
+	x0 := p.BdArea(s, scope).X
 	before := len(s.Texts)
 	s.Texts = slices.DeleteFunc(s.Texts, func(t *model.TextBlock) bool {
 		a := model.BoxOf(t).AABB()
-		return InArea(p, a.X, a.W, scope)
+		return InArea(p, s, a.X, a.W, scope)
 	})
 	n = before - len(s.Texts)
 	for _, t := range sd.texts {
@@ -192,14 +193,14 @@ func putDesign(p *model.Project, s *model.Spread, scope string, sd srcDesign) (n
 	switch scope {
 	case model.ScopeLeft:
 		s.BgL = sd.bgL
-		s.BgPhotoL = shifted(p, sd.photoL, dx, scope)
+		s.BgPhotoL = shifted(p, s, sd.photoL, dx, scope)
 	case model.ScopeRight:
 		s.BgR = sd.bgL
-		s.BgPhotoR = shifted(p, sd.photoL, dx, scope)
+		s.BgPhotoR = shifted(p, s, sd.photoL, dx, scope)
 	default:
 		s.BgL, s.BgR = sd.bgL, sd.bgR
-		s.BgPhoto = shifted(p, sd.photo, dx, scope)
-		s.BgPhotoL, s.BgPhotoR = shifted(p, sd.photoL, dx, model.ScopeLeft), shifted(p, sd.photoR, dx, model.ScopeRight)
+		s.BgPhoto = shifted(p, s, sd.photo, dx, scope)
+		s.BgPhotoL, s.BgPhotoR = shifted(p, s, sd.photoL, dx, model.ScopeLeft), shifted(p, s, sd.photoR, dx, model.ScopeRight)
 	}
 	if scope != model.ScopeSpread && (s.BgPhotoL != nil || s.BgPhotoR != nil) {
 		s.BgPhoto = nil // фоны страниц и всего разворота взаимоисключающие
@@ -239,12 +240,25 @@ func DuplicateGrid(p *model.Project, src string, count int, design bool) error {
 		if design {
 			ns.BgL, ns.BgR = s.BgL, s.BgR
 			ns.BgPhoto, ns.BgPhotoL, ns.BgPhotoR = s.BgPhoto.Clone(), s.BgPhotoL.Clone(), s.BgPhotoR.Clone()
+			if s.Caps != nil { // стиль подписей листа (030) — часть оформления
+				c := *s.Caps
+				ns.Caps = &c
+			}
+			if s.Vars != nil { // поля шапки (031) — вместе с шапкой-надписью
+				v := *s.Vars
+				ns.Vars = &v
+			}
 			for _, t := range s.Texts {
 				c := *t
 				c.ID = model.NewID()
 				ns.Texts = append(ns.Texts, &c)
 				newID[t.ID] = c.ID
 			}
+		}
+		if s.IsVignette() { // копия виньетки — виньетка с теми же ролями мест (031); шапка — своя копия
+			v := *s.Vig
+			v.Head = newID[v.Head]
+			ns.Kind, ns.Vig = s.Kind, &v
 		}
 		// Порядок слоёв — по карте ID (текст под фото остаётся под ним); без
 		// design тексты не копируются и выпадают, лишнее syncOrder сведёт к nil.
@@ -273,7 +287,7 @@ func areaStack(p *model.Project, src *model.Spread, from string, texts []model.T
 	for _, id := range src.Stack() {
 		switch {
 		case kind[id] == model.LayerPlace:
-			if _, pl := src.FindPlace(id); InArea(p, pl.X, pl.W, from) {
+			if _, pl := src.FindPlace(id); InArea(p, src, pl.X, pl.W, from) {
 				seq = append(seq, model.LayerPlace)
 			}
 		case inText[id]:
@@ -326,12 +340,12 @@ func putOrder(s *model.Spread, old map[string]string, seq []string) {
 	s.SetStack(slices.Insert(rest, at, chunk...))
 }
 
-// shifted — копия фона, сдвинутая по x на dx (перенос на другую страницу).
-func shifted(p *model.Project, b *model.Backdrop, dx float64, scope string) *model.Backdrop {
+// shifted — копия фона, сдвинутая по x на dx (перенос на другую страницу листа s).
+func shifted(p *model.Project, s *model.Spread, b *model.Backdrop, dx float64, scope string) *model.Backdrop {
 	if b == nil {
 		return nil
 	}
 	c := b.Clone()
 	c.X += dx
-	return p.ClampBackdrop(c, scope)
+	return p.ClampBackdrop(s, c, scope)
 }

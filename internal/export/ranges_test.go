@@ -8,6 +8,18 @@ import (
 	"testing"
 )
 
+// Проект-лист (031): страниц нет, «7п» — отказ с понятным текстом.
+func TestCheckSheet(t *testing.T) {
+	units, err := ParseRange("1, 3-4", 5)
+	if err != nil || CheckSheet(units) != nil {
+		t.Fatalf("листы без страниц: %v, %v", units, err)
+	}
+	units, err = ParseRange("2, 3п", 5)
+	if err != nil || CheckSheet(units) != ErrSheetPages {
+		t.Fatalf("страница в проекте-листе: %v, %v", units, err)
+	}
+}
+
 func TestParseRange(t *testing.T) {
 	got, err := ParseRange("3-5, 7п, 3", 10)
 	want := []Unit{{3, 0}, {4, 0}, {5, 0}, {7, 2}}

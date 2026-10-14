@@ -17,6 +17,9 @@ export const MAX_SIZE = 200
 export const clampSize = (n: number, fallback = 14) =>
   Number.isFinite(n) ? Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(n))) : fallback
 
+// Что открывать в редакторе: шаблон с полями ({Фамилия}…), если он есть, а не подставленный текст (030).
+export const editText = (t: { text: string; src?: string }): string => t.src ?? t.text
+
 // Текст из редактора: переводы строк к \n, без нулевых знаков.
 export const cleanInput = (s: string) => s.replace(/\r\n?/g, '\n').replaceAll('\0', '')
 
@@ -35,7 +38,7 @@ export function moveBox(start: Rect, dx: number, dy: number, lines: SnapLines, t
   return { x: k.x, y: k.y, guideX: s.guideX, guideY: s.guideY }
 }
 
-export const MIN_BOX_W = 10 // как в Go (W 10..2·pageW)
+export const MIN_BOX_W = 10 // как в Go (W 10..ширина листа)
 
 export interface ResizeResult {
   x: number

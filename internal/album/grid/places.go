@@ -23,19 +23,21 @@ var (
 // rectBox — прямоугольник раскладки без угла («Авто», встроенные сетки).
 func rectBox(r layout.Rect) model.Box { return model.Box{X: r.X, Y: r.Y, W: r.W, H: r.H} }
 
-// InArea — место относится к области: у разворота — любое, у страницы — центр
-// места на ней (applyGrid, копирование, тексты с design).
-func InArea(p *model.Project, x, w float64, scope string) bool {
+// InArea — место листа s относится к области: у разворота — любое, у страницы — центр
+// места на ней (applyGrid, копирование, тексты с design). У обложки центр на корешке
+// не относится ни к одной сторонке.
+func InArea(p *model.Project, s *model.Spread, x, w float64, scope string) bool {
 	c := x + w/2
-	switch scope {
-	case model.ScopeSpread:
+	a, ok := p.AreaOf(s, scope)
+	switch {
+	case !ok:
+		return false
+	case scope == model.ScopeSpread:
 		return true
-	case model.ScopeLeft:
-		return c < p.Settings.PageW
-	case model.ScopeRight:
-		return c >= p.Settings.PageW
+	case scope == model.ScopeLeft:
+		return c < a.X+a.W
 	}
-	return false
+	return c >= a.X
 }
 
 // applyGrid — общая постановка сетки (копирование, шаблон, встроенные; design §3):
@@ -45,7 +47,7 @@ func InArea(p *model.Project, x, w float64, scope string) bool {
 // новые, лишние уходят из альбома. left — сколько фото ушло. Тексты и фон не
 // трогаются. Больше MaxPlaces в итоге — ошибка (try откатывает).
 func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Box) (left int, err error) {
-	if _, _, ok := p.Area(scope); !ok {
+	if _, ok := p.AreaOf(s, scope); !ok {
 		return 0, model.ErrScope
 	}
 	p.Freeze(s)
@@ -53,7 +55,7 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 	at, kept := -1, make([]*model.Place, 0, len(s.Grid)+len(boxes))
 	var q []string
 	for _, pl := range s.Grid {
-		if !InArea(p, pl.X, pl.W, scope) {
+		if !InArea(p, s, pl.X, pl.W, scope) {
 			kept = append(kept, pl)
 			continue
 		}
@@ -74,7 +76,7 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 	fresh := make([]*model.Place, len(boxes))
 	for i, b := range boxes {
 		fresh[i] = &model.Place{ID: model.NewPlaceID(taken), X: b.X, Y: b.Y, W: b.W, H: b.H, Rot: b.Rot}
-		p.ClampPlace(fresh[i])
+		p.ClampPlace(s, fresh[i])
 	}
 	s.Grid = slices.Insert(kept, at, fresh...)
 	for i, id := range q[:min(len(q), len(fresh))] {
@@ -85,41 +87,41 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 }
 
 // FracBoxes переводит доли области шаблона tplScope (TplPage | TplSpread) в мм
-// области scope разворота. Шаблон страницы на разворот ставится на обе страницы.
-func FracBoxes(p *model.Project, tplScope, scope string, frac []model.Box) ([]model.Box, error) {
-	pw, ph := p.Settings.PageW, p.Settings.PageH
-	conv := func(out []model.Box, x0, w float64) []model.Box {
+// области scope листа s. Шаблон страницы на разворот ставится на обе страницы.
+func FracBoxes(p *model.Project, s *model.Spread, tplScope, scope string, frac []model.Box) ([]model.Box, error) {
+	conv := func(out []model.Box, a layout.Rect) []model.Box {
 		for _, f := range frac {
-			out = append(out, model.Box{X: x0 + f.X*w, Y: f.Y * ph, W: f.W * w, H: f.H * ph, Rot: f.Rot})
+			out = append(out, model.Box{X: a.X + f.X*a.W, Y: a.Y + f.Y*a.H, W: f.W * a.W, H: f.H * a.H, Rot: f.Rot})
 		}
 		return out
 	}
+	area := func(sc string) layout.Rect { a, _ := p.AreaOf(s, sc); return a }
+	if _, ok := p.AreaOf(s, model.ScopeLeft); !ok && (tplScope == model.TplPage || scope != model.ScopeSpread) {
+		return nil, model.ErrScope // лист 031: ни страниц, ни шаблонов страницы
+	}
 	switch {
 	case tplScope == model.TplSpread && scope == model.ScopeSpread:
-		return conv(nil, 0, 2*pw), nil
-	case tplScope == model.TplPage && scope == model.ScopeLeft:
-		return conv(nil, 0, pw), nil
-	case tplScope == model.TplPage && scope == model.ScopeRight:
-		return conv(nil, pw, pw), nil
+		return conv(nil, area(scope)), nil
+	case tplScope == model.TplPage && (scope == model.ScopeLeft || scope == model.ScopeRight):
+		return conv(nil, area(scope)), nil
 	case tplScope == model.TplPage && scope == model.ScopeSpread:
-		return conv(conv(nil, 0, pw), pw, pw), nil
+		return conv(conv(nil, area(model.ScopeLeft)), area(model.ScopeRight)), nil
 	case tplScope == model.TplSpread:
 		return nil, ErrTplScope
 	}
 	return nil, model.ErrScope
 }
 
-// AreaFrac — места области scope разворота s в долях этой области (порядок мест).
+// AreaFrac — места области scope листа s в долях этой области (порядок мест).
 func AreaFrac(p *model.Project, s *model.Spread, scope string) []model.Box {
-	a0, a1, ok := p.Area(scope)
+	a, ok := p.AreaOf(s, scope)
 	if !ok {
 		return nil
 	}
-	w, h := a1-a0, p.Settings.PageH
 	var out []model.Box
 	for _, pl := range s.Grid {
-		if InArea(p, pl.X, pl.W, scope) {
-			out = append(out, model.Box{X: (pl.X - a0) / w, Y: pl.Y / h, W: pl.W / w, H: pl.H / h, Rot: pl.Rot})
+		if InArea(p, s, pl.X, pl.W, scope) {
+			out = append(out, model.Box{X: (pl.X - a.X) / a.W, Y: (pl.Y - a.Y) / a.H, W: pl.W / a.W, H: pl.H / a.H, Rot: pl.Rot})
 		}
 	}
 	return model.ClampBoxes(out) // то же правило, что у PlaceBoxes и шаблонов
@@ -153,22 +155,51 @@ func mirrorSet(grid []*model.Place, scope string, a0, a1 float64) []*model.Place
 
 // mirrorGrid отражает места области scope разворота-сетки s: x' = A0 + A1 − x − w,
 // угол −Rot (центр отражается, описанный прямоугольник — тоже); y, w, h, ID, фото,
-// Fit, слой и кадр фото (Frame.R) те же: зеркалится раскладка, а не фото; кадр, тексты и фон не трогаются (design §3
+// Fit, слой и кадр фото (Frame.R) те же: зеркалится раскладка, а не фото; кадр, тексты (кроме шапки виньетки — mirrorHead) и фон не трогаются (design §3
 // «Отражение»). false — отражать нечего: неизвестная область, нет мест или
 // сетка симметрична (иначе в симметричной паре фото поменялись бы местами).
 func mirrorGrid(p *model.Project, s *model.Spread, scope string) bool {
-	a0, a1, ok := p.Area(scope)
+	a, ok := p.AreaOf(s, scope)
 	if !ok {
 		return false
 	}
+	a0, a1 := a.X, a.X+a.W
 	set := mirrorSet(s.Grid, scope, a0, a1)
 	if len(set) == 0 || symmetric(set, a0+a1) {
 		return false
 	}
 	for _, pl := range set {
 		pl.X, pl.Rot = geom.Round2(a0+a1-pl.X-pl.W), geom.NormDeg(-pl.Rot)
-		p.ClampPlace(pl) // область отражается в себя; зажим — только от шума округления
+		p.ClampPlace(s, pl) // область отражается в себя; зажим — только от шума округления
 	}
+	return true
+}
+
+// mirrorHead отражает надпись-шапку виньетки s в области scope (при странице — шапку, целиком
+// лежащую на ней): без неё «Отразить» разворота уводил учеников под шапку, а она оставалась.
+// Как у мест: центр отражается, угол −Rot; текст и стиль те же. false — шапки нет, она в
+// другой области или симметрична.
+func mirrorHead(p *model.Project, s *model.Spread, scope string) bool {
+	a, ok := p.AreaOf(s, scope)
+	if !ok || !s.IsVignette() {
+		return false
+	}
+	h := vigHead(s, s.Vig.Head)
+	if h == nil {
+		return false
+	}
+	b := model.BoxOf(h)
+	if bb := b.AABB(); scope != model.ScopeSpread && (bb.X < a.X-model.SpineEps || bb.X+bb.W > a.X+a.W+model.SpineEps) {
+		return false
+	}
+	cx, cy := b.Center()
+	rot := geom.NormDeg(-b.Rot)
+	dx, dy := geom.Rotate(rot, b.W/2, b.H/2)
+	x, y := geom.Round2(2*a.X+a.W-cx-dx), geom.Round2(cy-dy)
+	if cents(x) == cents(h.X) && cents(y) == cents(h.Y) && rot == geom.NormDeg(h.Rot) {
+		return false
+	}
+	h.X, h.Y, h.Rot = x, y, rot
 	return true
 }
 
@@ -210,10 +241,11 @@ func symmetric(set []*model.Place, axis2 float64) bool {
 // страницы пропорционально (x, w — по ширине, y, h — по высоте), затем зажим.
 // У повёрнутого центр — по kx, ky, угол стоит, стороны — длины образов осей места
 // (иначе под 90° при kx ≠ ky ширина места тянулась бы по высоте страницы).
-// Поля и промежуток места не трогают.
+// Поля и промежуток места не трогают. Только развороты: обложку пересчитывает свой
+// Reflow (032 §3).
 func Rescale(p *model.Project, before *model.Project) {
-	ow, oh := before.Settings.PageW, before.Settings.PageH
-	nw, nh := p.Settings.PageW, p.Settings.PageH
+	og, ng := before.Geo(nil), p.Geo(nil)
+	ow, oh, nw, nh := og.W, og.H, ng.W, ng.H
 	if ow == nw && oh == nh || !(ow > 0) || !(oh > 0) {
 		return
 	}
@@ -228,7 +260,7 @@ func Rescale(p *model.Project, before *model.Project) {
 				pl.W, pl.H = pl.W*math.Hypot(kx*c, ky*sn), pl.H*math.Hypot(kx*sn, ky*c)
 				pl.X, pl.Y = cx-pl.W/2, cy-pl.H/2
 			}
-			p.ClampPlace(pl)
+			p.ClampPlace(s, pl)
 		}
 	}
 }

@@ -10,10 +10,18 @@
   import SnapToggle from '../inspector/SnapToggle.svelte'
   import LayerRow from '../inspector/LayerRow.svelte'
   import TextGeomFields from './TextGeomFields.svelte'
+  import FontPicker from './FontPicker.svelte'
+  import FieldMenu from '../captions/FieldMenu.svelte'
+  import { fieldsOf } from '../captions/fields'
+  import CaptionSheet from '../captions/CaptionSheet.svelte'
+  import { MAX_PAD, PAD_STEP, padOf } from '../captions/sheetcaps'
 
   // Карточка выделенного блока или подписи (спека 008, из TextToolbar): шрифт, кегль, цвет,
-  // выравнивание, Ж/К; у блока — угол, «По тексту», «Привязка»; у подписи — «Под фото / На фото».
+  // выравнивание, Ж/К; у блока — угол, «По тексту», «Привязка»; у подписи — «Под фото / На фото», отступ
+  // и «Один стиль на лист» (030). Поля {Фамилия}… вставляет меню «Вставить поле» (в блок и в подпись).
   // Правки идут в Go по одной (шаг undo на действие); цвет — на change, не на каждое движение в палитре.
+  // head=false — заголовок рисует сама карточка (docked, cardTitle): сворачиваемая шапка.
+  let { head = true }: { head?: boolean } = $props()
   const st = $derived(edit.style)
   const cap = $derived(edit.caption)
   const blk = $derived(edit.text)
@@ -30,12 +38,8 @@
 </script>
 
 {#if st}
-  <div class="head">{cap ? 'Подпись' : 'Текст'}</div>
-  <select title="Шрифт" aria-label="Шрифт" value={st.font} onchange={(e) => edit.setStyle({ font: e.currentTarget.value })}>
-    {#each store.fonts as f (f.id)}
-      <option value={f.id}>{f.name}</option>
-    {/each}
-  </select>
+  {#if head}<div class="head">{cap ? 'Подпись' : 'Текст'}</div>{/if}
+  <FontPicker value={st.font} fonts={store.fonts} onpick={(id) => edit.setStyle({ font: id })} />
 
   <div class="row">
     <div class="size" title="Кегль, pt">
@@ -120,10 +124,30 @@
       <LayerRow onpick={(op) => placesel.layer(op)} />
     {/if}
   {/if}
+  <FieldMenu onpick={(f) => edit.insertField(f)} fields={fieldsOf(edit.spread)} />
   {#if cap}
     <button class="txt" title="Подпись стоит под фото или на самом фото" onmousedown={keepFocus} onclick={() => edit.setOver(!cap.over)}>
       {cap.over ? 'На фото' : 'Под фото'}
     </button>
+    <div class="row">
+      <label for="cap-pad" title="Расстояние от фото до подписи; на фото — от нижнего края">Отступ, мм</label>
+      <input
+        id="cap-pad"
+        class="pad"
+        type="number"
+        min="0"
+        max={MAX_PAD}
+        step={PAD_STEP}
+        value={padOf(cap)}
+        onchange={async (e) => {
+          const el = e.currentTarget
+          // Недонабранное или зажатое Go значение возвращаем в поле после ответа.
+          await edit.setPad(el.valueAsNumber)
+          el.value = String(padOf(edit.caption))
+        }}
+      />
+    </div>
+    {#if edit.spread}<CaptionSheet sp={edit.spread} />{/if}
   {/if}
 
   <button class="del" onmousedown={keepFocus} onclick={() => edit.removeSelected()} title="Удалить (Delete / Backspace)"
@@ -136,12 +160,6 @@
     font-size: 13px;
     font-weight: 600;
     margin-bottom: 8px;
-  }
-  select {
-    width: 100%;
-    height: 24px;
-    padding: 0 6px;
-    font-size: 12px;
   }
   .row {
     display: flex;
@@ -161,6 +179,18 @@
     padding: 0 2px;
     font-size: 12px;
     text-align: center;
+  }
+  .row label {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .pad {
+    width: 64px;
+    height: 24px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    text-align: right;
+    font-size: 12px;
   }
   .seg {
     display: flex;

@@ -14,6 +14,14 @@ describe('bdLines', () => {
     expect(l.v).toEqual([300, 450, 600])
     expect(l.h).toEqual([0, 150, 300])
   })
+  it('обложка: вместо шва — края и центры сторонок', () => {
+    const l = bdLines({ x: 0, y: 0, w: 600, h: 300 }, 300, [
+      [0, 293],
+      [307, 600],
+    ])
+    expect(l.v).toEqual([0, 146.5, 293, 300, 307, 453.5, 600])
+    expect(l.v).toContain(300) // центр области остаётся
+  })
 })
 
 describe('moveFrame', () => {

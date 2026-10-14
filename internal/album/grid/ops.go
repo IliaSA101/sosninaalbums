@@ -30,7 +30,7 @@ func SetGrid(p *model.Project, spreadID string, on bool) {
 // У «Авто» сначала закрепление в той же правке: так сетку начинают с нуля, в
 // том числе на развороте только с текстом. Больше MaxPlaces — ошибка.
 func AddPlace(p *model.Project, spreadID string, page int) error {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return nil
 	}
@@ -45,10 +45,11 @@ func AddPlace(p *model.Project, spreadID string, page int) error {
 // NaN/Inf не меняется. merge — сессия выделения: серия стрелок — один шаг
 // отмены; у «Авто» не действует (закрепление не должно влипнуть в чужую серию).
 func SetPlaces(p *model.Project, spreadID string, boxes []model.PlaceBox) {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return
 	}
+	g := p.Geo(s)
 	_ = p.WithGrid(s, func() error {
 		for _, b := range boxes {
 			pl := s.PlaceRef(b.ID)
@@ -57,7 +58,7 @@ func SetPlaces(p *model.Project, spreadID string, boxes []model.PlaceBox) {
 			}
 			prev := *pl
 			pl.X, pl.Y, pl.W, pl.H = b.X, b.Y, b.W, b.H // угол стоит: PlaceBox его не несёт
-			model.ClampMoveIn(pl, prev, 2*p.Settings.PageW, p.Settings.PageH)
+			model.ClampMoveIn(pl, prev, g.W, g.H)
 		}
 		return nil
 	})
@@ -65,7 +66,7 @@ func SetPlaces(p *model.Project, spreadID string, boxes []model.PlaceBox) {
 
 // GridIsAuto — разворот есть и он в режиме «Авто» (бывший isAuto).
 func GridIsAuto(p *model.Project, spreadID string) bool {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	return s != nil && len(s.Grid) == 0
 }
 
@@ -78,7 +79,7 @@ func DeletePlaces(p *model.Project, spreadID string, ids []string) { p.DeletePla
 // ссылки (placeRef). Иное — холостая правка. У «Авто» FitContain закрепляет
 // разворот, "" ничего не меняет.
 func SetPlaceFit(p *model.Project, spreadID string, ids []string, fit string) {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil || fit != "" && fit != model.FitContain || fit == "" && len(s.Grid) == 0 {
 		return
 	}
@@ -100,7 +101,7 @@ func SetPlaceFit(p *model.Project, spreadID string, ids []string, fit string) {
 // перекрывается — холостая). Неизвестный op — холостая правка; половина меньше
 // geom.MinPlace или мест больше MaxPlaces — ошибка.
 func ArrangePlaces(p *model.Project, spreadID, op string, ids []string) error {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil || len(s.Grid) == 0 && (op == "front" || op == "back") {
 		return nil
 	}
@@ -128,17 +129,17 @@ func arrange(p *model.Project, s *model.Spread, op string, ids []string) error {
 			if op != "sameW" {
 				h = sel[0].H
 			}
-			resize(p, pl, w, h)
+			resize(p, s, pl, w, h)
 		}
 	case "fitPhoto":
 		for _, pl := range sel {
 			if pl.Photo != "" {
 				a := p.Aspects([]string{pl.Photo})[0]
 				w, h := pl.W, pl.W/a
-				if h > p.Settings.PageH {
-					h, w = p.Settings.PageH, p.Settings.PageH*a
+				if ph := p.Geo(s).H; h > ph {
+					h, w = ph, ph*a
 				}
-				resize(p, pl, w, h)
+				resize(p, s, pl, w, h)
 			}
 		}
 	case "splitH", "splitV":
@@ -154,12 +155,12 @@ func arrange(p *model.Project, s *model.Spread, op string, ids []string) error {
 	return nil
 }
 
-// resize — новый размер места с прежним центром, затем зажим.
-func resize(p *model.Project, pl *model.Place, w, h float64) {
+// resize — новый размер места листа s с прежним центром, затем зажим.
+func resize(p *model.Project, s *model.Spread, pl *model.Place, w, h float64) {
 	cx, cy := pl.X+pl.W/2, pl.Y+pl.H/2
 	pl.W, pl.H = w, h
 	pl.X, pl.Y = cx-w/2, cy-h/2
-	p.ClampPlace(pl)
+	p.ClampPlace(s, pl)
 }
 
 // splitPlaces делит места на два равных с промежутком Gap: horiz — рядом
@@ -184,13 +185,13 @@ func splitPlaces(p *model.Project, s *model.Spread, sel []*model.Place, horiz bo
 		switch {
 		case pl.Rot != 0:
 			splitRotated(pl, nw, half, gap, horiz)
-			p.ClampPlace(pl)
+			p.ClampPlace(s, pl)
 		case horiz:
 			pl.W, nw.W, nw.X = half, half, pl.X+half+gap
 		default:
 			pl.H, nw.H, nw.Y = half, half, pl.Y+half+gap
 		}
-		p.ClampPlace(nw)
+		p.ClampPlace(s, nw)
 		i, _ := s.FindPlace(pl.ID)
 		s.Grid = slices.Insert(s.Grid, i+1, nw)
 	}
@@ -228,15 +229,17 @@ func splitRotated(pl, nw *model.Place, half, gap float64, horiz bool) {
 // MirrorGrid отражает места области scope (left | right | spread) — design §3
 // «Отражение». Симметричная сетка, нет мест, неизвестная область — холостая
 // правка. «Авто» проверяется на симметрию по своей раскладке, иначе
-// закрепляется и отражается одной правкой (Ctrl+Z вернёт «Авто»).
+// закрепляется и отражается одной правкой (Ctrl+Z вернёт «Авто»). У виньетки
+// с местами отражается и шапка (mirrorHead).
 func MirrorGrid(p *model.Project, spreadID, scope string) {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return
 	}
 	auto := len(s.Grid) == 0
 	p.Freeze(s)
-	if !mirrorGrid(p, s, scope) && auto {
+	moved := mirrorGrid(p, s, scope)
+	if moved = mirrorHead(p, s, scope) || moved; !moved && auto {
 		s.Grid = nil // freeze меняет только Grid: откат — холостая правка, без закрепления
 	}
 }
@@ -258,21 +261,14 @@ func PlacePhotos(p *model.Project, spreadID, placeID string, photos []model.Phot
 	}
 	inAlbum := p.Placed(photos[0].ID)
 	ids := model.Remember(p, photos)
-	switch f := ids[0]; {
-	case pl.Photo == f:
-	case pl.Photo != "" && inAlbum:
-		p.Swap(f, pl.Photo)
-	default:
-		if pl.Photo != "" {
-			left++ // замена: прежний хозяин места возвращается в ленту
-		}
-		p.Put(s, pl, f)
+	if p.DropOn(s, pl, ids[0], inAlbum) {
+		left++ // замена: прежний хозяин места возвращается в ленту
 	}
 	for _, id := range ids[1:] {
 		if slices.Contains(model.GridPhotos(s), id) {
 			continue // уже в этой сетке: порядок задают места
 		}
-		dst := nextEmpty(s, at)
+		dst := s.NextEmpty(at)
 		if dst == nil {
 			left++
 			continue
@@ -280,17 +276,6 @@ func PlacePhotos(p *model.Project, spreadID, placeID string, photos []model.Phot
 		p.Put(s, dst, id)
 	}
 	return left, nil
-}
-
-// nextEmpty — первое пустое место после позиции at, потом с начала.
-func nextEmpty(s *model.Spread, at int) *model.Place {
-	n := len(s.Grid)
-	for k := 1; k <= n; k++ {
-		if pl := s.Grid[(at+k)%n]; pl.Photo == "" {
-			return pl
-		}
-	}
-	return nil
 }
 
 // FillPlaces — «Заполнить пустые места»: фото не из альбома по порядку садятся в

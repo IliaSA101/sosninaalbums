@@ -292,12 +292,12 @@ func TestBackdropRawAspectTurned(t *testing.T) {
 func TestBackdropIgnoresFrameR(t *testing.T) {
 	e, _, _ := edtest.BdEd(t)
 	b := &model.Backdrop{Photo: "a", X: 0, Y: 0, W: 100, H: 100, Frame: &model.Frame{S: 2, X: 0.5, R: 30}}
-	got := edtest.P(e).ClampBackdrop(b, "spread")
+	got := edtest.P(e).ClampBackdrop(nil, b, "spread")
 	if got == nil || got.Frame == nil || got.Frame.R != 0 || got.Frame.S != 2 || got.Frame.X != 0.5 {
 		t.Fatalf("кадр фона: %+v", got)
 	}
 	b.Frame = &model.Frame{S: 1, R: 30}
-	if got := edtest.P(e).ClampBackdrop(b, "spread"); got.Frame != nil {
+	if got := edtest.P(e).ClampBackdrop(nil, b, "spread"); got.Frame != nil {
 		t.Fatalf("кадр по умолчанию → nil: %+v", got.Frame)
 	}
 	// ↻ фото на месте фон не трогает: у фона R остаётся 0.

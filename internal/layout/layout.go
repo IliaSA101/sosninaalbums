@@ -31,6 +31,9 @@ type Params struct {
 	Margin  float64 // поле по краю страницы, мм
 	Gap     float64 // промежуток между фото, мм
 	Layflat bool    // фото может идти через корешок
+	// Sheet — отдельный лист шириной 2·PageW без корешка (виньетка 031): штрафа корешка
+	// нет, постраничных вариантов (P[…], B[right…], B[pages…]) нет. Требует Layflat.
+	Sheet bool
 }
 
 // Result — один вариант раскладки. Rects идут в порядке входных фото.
@@ -44,18 +47,58 @@ type Result struct {
 // растёт слишком быстро, и используем только ряды и колонки.
 const maxFullTree = 7
 
-// MaxPhotos — больше фото на один разворот не раскладываем: Layouts на 16 фото
-// ≈ 35 мс (худший набор, холодный кэш; до 020 — 100–125), на 20 до 020 было ≈ 350 мс, дальше растёт
-// быстро, а View считает раскладку каждого разворота. Выше предела Layouts,
-// Rearranged, PageChoices и Build отказывают сразу, без счёта.
-const MaxPhotos = 16
+// MaxPhotos — больше фото на один разворот не раскладываем (предел данных, спека 027).
+// Перебор идёт до 16 фото (≈ 35 мс на худшем наборе), дальше — быстрые генераторы
+// (many.go). Выше предела Layouts, Rearranged, PageChoices и Build отказывают сразу.
+const MaxPhotos = 64
 
 // Layouts возвращает до limit лучших раскладок в порядке ленты, лучшая первая.
-// aspects — отношение ширины к высоте каждого фото.
+// aspects — отношение ширины к высоте каждого фото. С ManyFrom фото — быстрые
+// генераторы (manyLayouts): ряд не длиннее ManyCap, меньший limit — его префикс.
 func Layouts(aspects []float64, p Params, limit int) []Result {
+	return layouts(aspects, p, limit, tieOrder)
+}
+
+// LegacyLayouts — Layouts в порядке до 0.10: равные оценки по точным битам и порядку
+// перебора. Только для миграции старых альбомов: их «Авто» остаётся тем, что было на
+// этой машине (решение 95). С ManyFrom — то же, что Layouts (таких альбомов до 0.10 не было).
+func LegacyLayouts(aspects []float64, p Params, limit int) []Result {
+	return layouts(aspects, p, limit, legacyOrder)
+}
+
+// order — порядок равных оценок. tieOrder (с 0.10): оценки с точностью tieEps, в выдаче
+// при равенстве — ключ, одинаково на любой архитектуре (FMA на arm64 меняет последние биты).
+// legacyOrder — прежний: точные биты, ничьи — порядок перебора.
+type order bool
+
+const (
+	tieOrder    order = false
+	legacyOrder order = true
+)
+
+// q — оценка для сравнения в порядке o.
+func (o order) q(s float64) float64 {
+	if o == legacyOrder {
+		return s
+	}
+	return tieQ(s)
+}
+
+// cmp — сравнение раскладок по убыванию оценки; в tieOrder ничью решает ключ.
+func (o order) cmp(a, b Result) int {
+	if c := desc(o.q(a.Score), o.q(b.Score)); c != 0 || o == legacyOrder {
+		return c
+	}
+	return strings.Compare(a.Key, b.Key)
+}
+
+func layouts(aspects []float64, p Params, limit int, o order) []Result {
 	n := len(aspects)
 	if n == 0 || n > MaxPhotos || p.PageW <= 0 || p.PageH <= 0 {
 		return nil
+	}
+	if n >= ManyFrom {
+		return manyLayouts(aspects, p, limit)
 	}
 	g := newGeom(p)
 	var all []Result
@@ -70,7 +113,7 @@ func Layouts(aspects []float64, p Params, limit int) []Result {
 		if keep <= 0 {
 			keep = -1 // topUnique при limit 0 отдаёт все
 		}
-		cs, _ := bestBlocks(aspects, g.spread, p.Gap, g.spine, keep, true)
+		cs, _ := bestBlocksIn(o, aspects, g.spread, p.Gap, g.spine, keep, true)
 		slices.SortFunc(cs, func(a, b candidate) int { return cmp.Compare(a.tree, b.tree) })
 		for _, c := range cs {
 			all = append(all, c.Result)
@@ -78,9 +121,10 @@ func Layouts(aspects []float64, p Params, limit int) []Result {
 	}
 
 	// 2. Отдельно левая и правая страница: первые k фото слева, остальные справа.
-	for k := 0; k <= n; k++ {
-		ls := topBlocks(aspects[:k], g.pages[0], p.Gap, perSide)
-		rs := topBlocks(aspects[k:], g.pages[1], p.Gap, perSide)
+	// У листа страниц нет.
+	for k := 0; k <= n && !p.Sheet; k++ {
+		ls := topBlocks(o, aspects[:k], g.pages[0], p.Gap, perSide)
+		rs := topBlocks(o, aspects[k:], g.pages[1], p.Gap, perSide)
 		for i := range rs {
 			// Позиции в ключе сквозные по развороту.
 			rs[i].Key = mapLeaves(rs[i].Key, func(j int) string { return strconv.Itoa(j + k) })
@@ -99,20 +143,22 @@ func Layouts(aspects []float64, p Params, limit int) []Result {
 		if p.Layflat {
 			all = appendBleed(all, aspects, []Rect{g.full}, g, "B[full:0]")
 		}
-		all = appendBleed(all, aspects, []Rect{g.bleed[1]}, g, "B[right:0]")
+		if !p.Sheet {
+			all = appendBleed(all, aspects, []Rect{g.bleed[1]}, g, "B[right:0]")
+		}
 	}
-	if n == 2 {
+	if n == 2 && !p.Sheet {
 		all = appendBleed(all, aspects, []Rect{g.bleed[0], g.bleed[1]}, g, "B[pages:0,1]")
 	}
-	return topUnique(all, limit)
+	return topUnique(all, limit, o)
 }
 
 // perSide — сколько лучших блоков каждой страницы идёт в пары.
 const perSide = 4
 
-// topUnique сортирует по оценке и оставляет limit лучших без повторов ключа.
-func topUnique(all []Result, limit int) []Result {
-	slices.SortStableFunc(all, func(a, b Result) int { return desc(a.Score, b.Score) })
+// topUnique сортирует по оценке (порядок o) и оставляет limit лучших без повторов ключа.
+func topUnique(all []Result, limit int, o order) []Result {
+	slices.SortStableFunc(all, o.cmp)
 	seen := map[string]bool{}
 	out := make([]Result, 0, limit)
 	for _, r := range all {
@@ -144,11 +190,11 @@ type candidate struct {
 }
 
 // topBlocks — лучшие блоки для одной страницы. Пустая страница — один пустой вариант.
-func topBlocks(aspects []float64, box Rect, gap float64, limit int) []candidate {
+func topBlocks(o order, aspects []float64, box Rect, gap float64, limit int) []candidate {
 	if len(aspects) == 0 {
 		return []candidate{{Result: Result{Key: "-"}}}
 	}
-	cs, _ := bestBlocks(aspects, box, gap, -1, limit, false)
+	cs, _ := bestBlocksIn(o, aspects, box, gap, -1, limit, false)
 	return cs[:min(len(cs), limit)]
 }
 
@@ -170,13 +216,20 @@ func desc(a, b float64) int {
 // (keep < 0 — у всех; unique — первых keep различных ключей). Деревья перебора
 // десятки тысяч, а нужны первые 4–24. Числа те же: fitTree и score те же.
 // При NaN в оценке отдаёт все: порядок сортировки с NaN зависит от всего списка,
-// и отсекать нельзя (из настоящих пропорций NaN не бывает).
+// и отсекать нельзя (из настоящих пропорций NaN не бывает). Ничьи (tieQ) — по номеру дерева.
 func bestBlocks(aspects []float64, box Rect, gap, spine float64, keep int, unique bool) (out []candidate, trees int) {
+	return bestBlocksIn(tieOrder, aspects, box, gap, spine, keep, unique)
+}
+
+// bestBlocksIn — bestBlocks в порядке o. В tieOrder с unique после первых keep идут и все
+// равные последнему: выдачу (topUnique) при ничьей упорядочивает ключ, и отсечённый по
+// номеру дерева блок с меньшим ключом иначе пропал бы из первых limit.
+func bestBlocksIn(o order, aspects []float64, box Rect, gap, spine float64, keep int, unique bool) (out []candidate, trees int) {
 	n := len(aspects)
 	roots := newEnum(aspects, gap).roots(n)
 	type scored struct { // без указателей: сортировка дешёвая
-		s, h float64
-		i    int
+		s, q, h float64
+		i       int
 	}
 	buf := make([]Rect, n)
 	list := make([]scored, 0, len(roots))
@@ -189,15 +242,16 @@ func bestBlocks(aspects []float64, box Rect, gap, spine float64, keep int, uniqu
 		if math.IsNaN(s) {
 			keep, unique = -1, false
 		}
-		list = append(list, scored{s, h, i})
+		list = append(list, scored{s, o.q(s), h, i})
 	}
-	slices.SortStableFunc(list, func(a, b scored) int { return desc(a.s, b.s) })
+	slices.SortStableFunc(list, func(a, b scored) int { return desc(a.q, b.q) })
 	var seen map[string]bool
 	if unique {
 		seen = map[string]bool{}
 	}
+	tail := unique && o == tieOrder
 	for _, x := range list {
-		if len(out) == keep {
+		if keep >= 0 && len(out) >= keep && (!tail || len(out) == 0 || o.q(out[len(out)-1].Score) != x.q) {
 			break
 		}
 		t := roots[x.i]
@@ -348,6 +402,7 @@ type enumerator struct {
 	leaves []*node
 	gap    float64
 	memo   map[[3]int][]*node
+	breaks map[breakKey]*breakTable // таблицы разреза на ряды (many.go), nil — без них
 }
 
 // trees возвращает все деревья над фото [i, j) с корнем заданной ориентации.

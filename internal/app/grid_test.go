@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -144,8 +145,8 @@ func TestTemplatesRoundTrip(t *testing.T) {
 	if err := b.DeleteGridTemplate(id); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.DeleteGridTemplate(id); err == nil {
-		t.Fatal("удалён дважды")
+	if err := b.DeleteGridTemplate(id); err == nil || err.Error() != "Шаблон не найден" {
+		t.Fatalf("удалён дважды: %v", err)
 	}
 	b.loadTemplates()
 	for _, tp := range b.templateList() {
@@ -218,7 +219,7 @@ func TestTemplatesBadRenameFails(t *testing.T) {
 // Файл новой версии читается, но не пишется ни одним методом.
 func TestTemplatesNewerReadOnly(t *testing.T) {
 	a, sid := tplApp(t)
-	content := []byte(`{"version":3,"templates":[{"id":"0123456789ab","name":"Н","scope":"spread","boxes":[{"x":0,"y":0,"w":0.5,"h":0.5},{"x":0.5,"y":0.5,"w":0.5,"h":0.5}]}]}`)
+	content := []byte(`{"version":5,"templates":[{"id":"0123456789ab","name":"Н","scope":"spread","boxes":[{"x":0,"y":0,"w":0.5,"h":0.5},{"x":0.5,"y":0.5,"w":0.5,"h":0.5}]}]}`)
 	if err := os.WriteFile(prefs.TemplatesPath(a.cfgDir), content, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -360,5 +361,237 @@ func TestAppGridSurface(t *testing.T) {
 	grew("DeleteSelection", r, v)
 	if slices.ContainsFunc(places(v), func(p model.PlaceView) bool { return p.ID == pb }) {
 		t.Error("выделенное место не удалено")
+	}
+}
+
+// vigTplApp — App с листом-виньеткой 204×304 (1 учитель, 24 ученика) и папкой настроек.
+func vigTplApp(t *testing.T) (*App, string) {
+	t.Helper()
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	a.emit = func(string, ...any) {}
+	e := mustEditor(t, album.NewVignetteSheet(204, 304), "")
+	a.ed.Store(e)
+	return a, e.View().Spreads[0].ID
+}
+
+// Свои шаблоны виньетки (038): сохранить, пережить «перезапуск», применить по "my:", переименовать
+// и удалить по VigChoice.id; лист после удаления шаблона продолжает работать.
+func TestSaveVignetteTemplate(t *testing.T) {
+	a, sid := vigTplApp(t)
+	if err := a.SaveVignetteTemplate(sid, " Мой\n класс "); err != nil {
+		t.Fatal(err)
+	}
+	got := a.templateList()
+	if len(got) != 1 || got[0].Name != "Мой класс" || got[0].Kind != model.TplVignette || got[0].Vig == nil ||
+		len(got[0].Boxes) != 25 || len(got[0].Vig.Roles) != 25 || got[0].Scope != model.TplSpread {
+		t.Fatalf("шаблон: %+v", got)
+	}
+	if raw := readTpl(t, a); !bytes.Contains(raw, []byte(`"version":4`)) || !bytes.Contains(raw, []byte(`"kind":"vignette"`)) {
+		t.Fatalf("файл: %.80s", raw)
+	}
+	b := newApp(t) // «перезапуск»
+	b.cfgDir, b.emit = a.cfgDir, func(string, ...any) {}
+	b.ed.Store(a.editor())
+	b.loadTemplates()
+	if l := b.templateList(); len(l) != 1 || l[0].ID != got[0].ID || *l[0].Vig.Style.Caps != *got[0].Vig.Style.Caps {
+		t.Fatalf("после перезапуска: %+v", l)
+	}
+	// В «Моих шаблонах» сетки его нет.
+	if c := b.GridChoices(sid, 25, "spread"); len(c.Mine) != 0 {
+		t.Fatalf("Mine: %+v", c.Mine)
+	}
+	id := model.VigOwnPrefix + got[0].ID
+	cs := b.VignetteChoices(sid, 1, 24, "3:4")
+	if last := cs[len(cs)-1]; len(cs) != 18 || last.ID != id || !last.Own || last.Gone || last.Name != "Мой класс" {
+		t.Fatalf("VignetteChoices: %d, %+v", len(cs), cs[len(cs)-1])
+	}
+	r, err := b.SetVignette(sid, model.Vignette{Tpl: id, Teachers: 1, Pupils: 20})
+	if err != nil || r.Left != 0 || r.View.Spreads[0].Vig.OwnName != "Мой класс" || r.View.Spreads[0].Vig.Manual {
+		t.Fatalf("SetVignette: %v, %+v", err, r.View.Spreads[0].Vig)
+	}
+	if _, err := b.PreviewVignette(sid, model.VigSetup{Vig: model.Vignette{Tpl: id, Teachers: 1, Pupils: 18}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.SetupVignette(sid, model.VigSetup{Vig: model.Vignette{Tpl: id, Teachers: 1, Pupils: 22}}); err != nil {
+		t.Fatal(err)
+	}
+	// Переименование и удаление — по id карточки как есть («my:…»).
+	if err := b.RenameGridTemplate(id, "Новый"); err != nil {
+		t.Fatal(err)
+	}
+	if cs = b.VignetteChoices(sid, 1, 22, "3:4"); cs[len(cs)-1].Name != "Новый" {
+		t.Fatalf("имя после переименования: %+v", cs[len(cs)-1])
+	}
+	if err := b.DeleteGridTemplate(id); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.templateList()) != 0 {
+		t.Fatal("шаблон не удалился")
+	}
+	if cs = b.VignetteChoices(sid, 1, 22, "3:4"); len(cs) != 18 || !cs[17].Gone {
+		t.Fatalf("после удаления: %d, %+v", len(cs), cs[len(cs)-1])
+	}
+	if r, err = b.SetVignette(sid, model.Vignette{Tpl: id, Teachers: 1, Pupils: 19}); err != nil || r.Left != 0 || len(r.View.Spreads[0].Places) != 20 {
+		t.Fatalf("лист без шаблона: %v, left %d, мест %d", err, r.Left, len(r.View.Spreads[0].Places))
+	}
+	if _, err := b.SetVignette(sid, model.Vignette{Tpl: "my:чужой", Teachers: 1, Pupils: 19}); err == nil || err.Error() != "Шаблон не найден" {
+		t.Fatalf("чужой шаблон: %v", err)
+	}
+	if err := b.DeleteGridTemplate(id); err == nil {
+		t.Fatal("удалён дважды")
+	}
+}
+
+// Сохранение: не виньетка и лист без мест — ошибка без записи; новее файл — ErrTemplatesNewer.
+func TestSaveVignetteTemplateRefusals(t *testing.T) {
+	a, sid := vigTplApp(t)
+	a.editor().ClearVignette(sid)
+	if err := a.SaveVignetteTemplate(sid, "x"); err == nil || err.Error() != "Это не виньетка" {
+		t.Fatalf("обычный разворот: %v", err)
+	}
+	if err := a.SaveVignetteTemplate("нет", "x"); err == nil {
+		t.Fatal("неизвестный лист")
+	}
+	if _, err := a.SetVignette(sid, model.Vignette{Tpl: "grid"}); err != nil { // виньетка без людей
+		t.Fatal(err)
+	}
+	if err := a.SaveVignetteTemplate(sid, "x"); !errors.Is(err, model.ErrNoPlaces) {
+		t.Fatalf("без мест: %v", err)
+	}
+	if _, err := os.Stat(prefs.TemplatesPath(a.cfgDir)); err == nil || len(a.templateList()) != 0 {
+		t.Fatal("отказ оставил шаблон или файл")
+	}
+	if _, err := a.SetVignette(sid, model.Vignette{Tpl: "grid", Pupils: 10}); err != nil {
+		t.Fatal(err)
+	}
+	content := []byte(`{"version":5,"templates":[]}`)
+	if err := os.WriteFile(prefs.TemplatesPath(a.cfgDir), content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.loadTemplates()
+	if err := a.SaveVignetteTemplate(sid, "x"); !errors.Is(err, model.ErrTemplatesNewer) || !bytes.Equal(readTpl(t, a), content) {
+		t.Fatalf("новая версия: %v", err)
+	}
+}
+
+// Предел файла 1 МБ: сохранение, дающее файл больше, отказывает ErrTemplatesFull — файл и список прежние.
+func TestSaveVignetteTemplateFull(t *testing.T) {
+	a, sid := vigTplApp(t)
+	long := strings.Repeat("я", model.MaxCaptionRunes)
+	if _, err := a.SetVignette(sid, model.Vignette{Tpl: "grid", Pupils: 64, TText: long}); err != nil {
+		t.Fatal(err)
+	}
+	caps := *a.editor().View().Spreads[0].Caps
+	caps.Text = long // длинные шаблоны подписей раздувают шаблон: ~1,2 КБ сверх мест
+	if v := a.SetSheetCaps(sid, true, caps); v.Spreads[0].Caps.Text != long {
+		t.Fatal("шаблон подписей не встал")
+	}
+	var err error
+	n := 0
+	for n < model.MaxTemplates {
+		if err = a.SaveVignetteTemplate(sid, ""); err != nil {
+			break
+		}
+		n++
+	}
+	if !errors.Is(err, model.ErrTemplatesFull) || n == 0 || n == model.MaxTemplates {
+		t.Fatalf("после %d шаблонов: %v", n, err)
+	}
+	if len(a.templateList()) != n || len(readTpl(t, a)) > model.MaxTemplatesFile || len(badFiles(t, a)) != 0 {
+		t.Fatalf("после отказа: шаблонов %d из %d, файл %d байт", len(a.templateList()), n, len(readTpl(t, a)))
+	}
+	before := readTpl(t, a)
+	if err := a.SaveVignetteTemplate(sid, "ещё"); !errors.Is(err, model.ErrTemplatesFull) || !bytes.Equal(readTpl(t, a), before) {
+		t.Fatalf("повторный отказ: %v", err)
+	}
+	// Удаление освобождает место: после него сохранение снова проходит.
+	if err := a.DeleteGridTemplate(model.VigOwnPrefix + a.templateList()[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SaveVignetteTemplate(sid, "ещё"); err != nil {
+		t.Fatalf("после удаления: %v", err)
+	}
+}
+
+// «Вернуть авто» из App: один шаг отмены, Left, холостая на нетронутой.
+func TestAppResetVignette(t *testing.T) {
+	a, sid := vigTplApp(t)
+	rev := a.editor().View().Rev
+	if r, err := a.ResetVignette(sid); err != nil || r.View.Rev != rev || r.Left != 0 {
+		t.Fatalf("нетронутая: %v, %+v", err, r.Left)
+	}
+	pl := a.editor().View().Spreads[0].Places[0]
+	v := a.SetPlaces(sid, []model.PlaceBox{{ID: pl.ID, X: pl.X + 2, Y: pl.Y, W: pl.W, H: pl.H}}, "")
+	if !v.Spreads[0].Vig.Manual {
+		t.Fatal("сдвиг не сделал виньетку ручной")
+	}
+	r, err := a.ResetVignette(sid)
+	if err != nil || r.View.Spreads[0].Vig.Manual || r.View.Rev != v.Rev+1 {
+		t.Fatalf("Reset: %v, manual %v, rev %d→%d", err, r.View.Spreads[0].Vig.Manual, v.Rev, r.View.Rev)
+	}
+	if v = a.editor().Undo(); !v.Spreads[0].Vig.Manual {
+		t.Fatal("одна отмена не вернула сдвиг")
+	}
+	if _, err := a.ResetVignette("нет"); err == nil {
+		t.Fatal("неизвестный лист")
+	}
+}
+
+// Свой шаблон на развороте с другим числом фото: ряд «Мои» берётся по числу мест, лишние фото
+// уходят в ленту (Drop, Left), пустые места остаются; отмена — один шаг; холостая правка.
+func TestTemplateGridOtherCounts(t *testing.T) {
+	a, ids, sp, lf, rt := gridSaved(t)
+	d4b, d2, d6, d6b := ids[2], ids[3], ids[4], ids[5]
+	if c := a.GridChoices(d2, 0, "spread"); c.N != 2 || len(c.Mine) != 2 || c.Mine[0].ID != lf.id || c.Mine[1].ID != rt.id {
+		t.Fatalf("2 фото: %+v", c.Mine)
+	}
+	c := a.GridChoices(d2, 4, "spread")
+	if len(c.Mine) != 1 || c.Mine[0].ID != sp.id || c.Mine[0].Drop != 0 {
+		t.Fatalf("на 4 места при 2 фото: %+v", c.Mine)
+	}
+	r, err := a.ApplyGrid(d2, "spread", "spread", c.Mine[0].Boxes)
+	if err != nil || r.Left != 0 {
+		t.Fatalf("%v, left %d", err, r.Left)
+	}
+	if v := spreadView(a, d2); len(v.Places) != 4 || len(v.Photos) != 2 {
+		t.Fatalf("2 фото в 4 местах: мест %d, фото %d", len(v.Places), len(v.Photos))
+	}
+	a.editor().Undo()
+	if c = a.GridChoices(d6, 4, "spread"); len(c.Mine) != 1 || c.Mine[0].Drop != 2 {
+		t.Fatalf("6 фото на 4 места: %+v", c.Mine)
+	}
+	if r, err = a.ApplyGrid(d6, "spread", "spread", c.Mine[0].Boxes); err != nil || r.Left != 2 {
+		t.Fatalf("%v, left %d", err, r.Left)
+	}
+	if v := spreadView(a, d6); len(v.Photos) != 4 {
+		t.Fatalf("фото осталось %d, ждали 4", len(v.Photos))
+	}
+	samePlaces(t, "6 фото", areaPlaces(spreadPlaces(a, d6), "spread"), sp.src, 0)
+	a.editor().Undo()
+	if v := spreadView(a, d6); len(v.Photos) != 6 || v.Grid {
+		t.Fatalf("отмена: фото %d, сетка %v", len(v.Photos), v.Grid)
+	}
+	if c = a.GridChoices(d6, 0, "spread"); c.N != 6 || len(c.Mine) != 0 {
+		t.Fatalf("на 6 мест шаблонов нет: %+v", c.Mine)
+	}
+	// Шаблон страницы на разворот — места на обе страницы, фото сверх мест уходят в ленту.
+	if c = a.GridChoices(d6b, 2, "spread"); len(c.Mine) != 2 || c.Mine[0].Drop != 2 {
+		t.Fatalf("страница на разворот: %+v", c.Mine)
+	}
+	if r, err = a.ApplyGrid(d6b, "spread", "page", c.Mine[0].Boxes); err != nil || r.Left != 2 {
+		t.Fatalf("%v, left %d", err, r.Left)
+	}
+	got := areaPlaces(spreadPlaces(a, d6b), "spread")
+	samePlaces(t, "страница: левая", got[:2], lf.src, 0)
+	samePlaces(t, "страница: правая", got[2:], lf.src, 300)
+
+	// Холостая правка: пустые и неверные доли — отказ без шага и rev.
+	a.editor().Undo()
+	rev := a.editor().View().Rev
+	for _, bad := range [][]model.Box{nil, {{X: math.NaN(), Y: 0, W: 0.5, H: 0.5}}} {
+		if r, err = a.ApplyGrid(d4b, "spread", "spread", bad); err == nil || r.View.Rev != rev || a.editor().View().Rev != rev {
+			t.Fatalf("неверные доли: %v, rev %d→%d", err, rev, a.editor().View().Rev)
+		}
 	}
 }

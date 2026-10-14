@@ -8,20 +8,26 @@ export interface SnapLines {
 }
 
 export interface SnapParams {
-  pageW: number
-  pageH: number
+  w: number // ширина листа, мм
+  h: number // высота листа
+  mid: number // шов, 0 — нет
   margin: number
   rects: Rect[] // ячейки фото разворота
+  // Сторонки обложки (032) по X, мм: [левый край, правый]. Заданы — линии прилипания идут по ним (края, центры, поля),
+  // а не по шву: у обложки mid — центр корешка, а страницы — задняя и лицевая.
+  sides?: readonly (readonly [number, number])[]
 }
 
 export const SNAP_PX = 6
 
 const uniq = (a: number[]) => [...new Set(a.map((n) => Math.round(n * 1000) / 1000))].sort((x, y) => x - y)
 
-// Линии прилипания: края и центры страниц, поля, корешок (= край левой и правой страницы),
-// края и центры фото.
-export function snapLines({ pageW, pageH, margin, rects }: SnapParams): SnapLines {
-  const v = [0, pageW / 2, pageW, pageW * 1.5, pageW * 2, margin, pageW - margin, pageW + margin, pageW * 2 - margin]
+// Линии прилипания: края и центры страниц, поля, шов (= край левой и правой страницы),
+// края и центры фото. Без шва (лист виньетки) страница одна — весь лист.
+export function snapLines({ w, h: pageH, mid, margin, rects, sides }: SnapParams): SnapLines {
+  let v: number[]
+  if (sides?.length) v = [0, w, ...sides.flatMap(([a, b]) => [a, (a + b) / 2, b, a + margin, b - margin])]
+  else v = mid > 0 ? [0, mid / 2, mid, (mid + w) / 2, w, margin, mid - margin, mid + margin, w - margin] : [0, w / 2, w, margin, w - margin]
   const h = [0, pageH / 2, pageH, margin, pageH - margin]
   for (const r of rects) {
     v.push(r.x, r.x + r.w / 2, r.x + r.w)
@@ -30,10 +36,10 @@ export function snapLines({ pageW, pageH, margin, rects }: SnapParams): SnapLine
   return { v: uniq(v), h: uniq(h) }
 }
 
-// Порог в мм: px экрана × мм на пиксель. spreadPx — ширина разворота на экране в пикселях.
-export function snapThreshold(spreadPx: number, pageW: number, px = SNAP_PX): number {
+// Порог в мм: px экрана × мм на пиксель. spreadPx — ширина листа на экране в пикселях, sheetW — в мм.
+export function snapThreshold(spreadPx: number, sheetW: number, px = SNAP_PX): number {
   if (!(spreadPx > 0)) return 0
-  return (px * pageW * 2) / spreadPx
+  return (px * sheetW) / spreadPx
 }
 
 export interface Snapped {

@@ -1,0 +1,315 @@
+package variety
+
+import (
+	"math"
+	"slices"
+
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
+)
+
+// Spread — разворот для выбора: пул кандидатов (Pool; [0] — лучшая раскладка «Авто») и звезда.
+type Spread struct {
+	Pool []Cand
+	Star int // индекс фото-звезды группы; −1 — нет (см. Star)
+}
+
+// Ctx — соседи цепочки разворотов. Виды — строки Look.
+type Ctx struct {
+	Prev []string // виды 1–2 разворотов перед первым (последний — ближний)
+	// PrevKey — ключ разворота перед первым: тот же ключ на чуть других пропорциях — другой вид,
+	// но та же схема, и рядом она читается повтором (QA 0.11 на 127 живых фото).
+	PrevKey string
+	Family  Family   // семейство разворота перед первым ("" — нет): штраф семейства и у первого цепочки
+	Next    string   // вид разворота после последнего ("" — нет)
+	Cur     []string // VaryLayouts: текущий вид каждого разворота цепочки (nil — нет); тоже считается повтором
+	Since   int      // разворотов без воздуха перед первым
+	// Hero — у разворота перед первым главное фото (Info.Heroes > 0); SinceHero — разворотов без
+	// главного перед первым (ритм главного, решение 0.11 №34).
+	Hero      bool
+	SinceHero int
+}
+
+// tuning — пороги уровня (спека 041, design §5, §10). Меняются только с прогоном
+// TestVarietyMetrics -v и записью в decisions: подобраны на синтетическом корпусе.
+type tuning struct {
+	delta      float64 // допуск потери у ряда «Авто»: ничьи и почти-ничьи, дальше — заметно хуже
+	deltaStar  float64 // допуск потери у раскладки, где звезда — главное (замер: теряет 0.06–0.21)
+	period     int     // каждый period-й разворот — воздух (15–20 % разворотов; у SmartAlbums чаще)
+	airMaxK    int     // воздух только до стольких фото: у 13+ он делает фото мелкими
+	airMinSide float64 // мельчайшая сторона воздуха / высота страницы (51 / 42 мм на 30 см)
+	airFloor   float64 // пол заполнения воздуха: «Обычное» — одна страница поменьше, «Больше» — и обе
+	airLoss    float64 // допуск воздуха по оценке без заполнения (rest): по общей он проигрывает 0.3–0.6
+	heroPeriod int     // каждый heroPeriod-й разворот — с главным фото из featured, если допустимо (№34)
+	deltaHero  float64 // допуск featured по Fair от min(лучшая, heroCap) (решение №30)
+}
+
+var tunings = [...]tuning{
+	Less: {},
+	Normal: {delta: 0.04, deltaStar: 0.10, period: 5, airMaxK: 12, airMinSide: 0.17, airFloor: 0.40, airLoss: 0.08,
+		heroPeriod: 4, deltaHero: 0.08},
+	More: {delta: 0.08, deltaStar: 0.15, period: 3, airMaxK: 16, airMinSide: 0.14, airFloor: 0.28, airLoss: 0.12,
+		heroPeriod: 3, deltaHero: 0.12},
+}
+
+// Бонусы и штрафы выбора (меньше — лучше). Звезда перекрывает любые штрафы соседей.
+const (
+	bonusStar     = -10.0
+	bonusAir      = -3.0
+	bonusHero     = -2.0 // слабее воздуха: оба по ритму — воздух, главное достанется следующему…
+	bonusHeroLate = -4.0 // …если главное ждёт не дольше воздуха; иначе главное (периоды «Больше» равны)
+	penSame1      = 2.0  // вид как у предыдущего (и у следующего, и у текущего)
+	penSame2      = 1.0  // вид как у позапрошлого
+	penSameFamily = 0.5
+	penAirOffBeat = 1.0  // воздух не по ритму
+	penSameKind   = 0.5  // семейство featured как у прошлого разворота с главным: семейства чередуются
+	penSeen       = 0.25 // вид уже был в цепочке раньше позапрошлого: из равных берётся невиданный
+	penSameKey    = 1.0  // ключ как у предыдущего при другом виде: та же схема на других пропорциях
+)
+
+// heroFree — featured вне ритма берётся «даром», только если сырая оценка не хуже лучшей на
+// столько (решение №34: по Fair «через корешок» бывает выше лучшей, и ритм перестал бы управлять).
+const heroFree = 0.02
+
+// tieEps — как в layout: оценки сравниваются в квантах, чтобы FMA на arm64 не менял выбор у порогов.
+const tieEps = 1e-9
+
+func quanta(x float64) float64 { return math.Round(x / tieEps) }
+
+// Star — индекс единственной звезды: фото с наибольшей оценкой, если она ≥ 4 и такое одно
+// (два 5★ — звезды нет). ratings — действующие оценки группы по порядку фото.
+func Star(ratings []int) int {
+	best, at, n := 3, -1, 0
+	for i, r := range ratings {
+		switch {
+		case r > best:
+			best, at, n = r, i, 1
+		case r == best && at >= 0:
+			n++
+		}
+	}
+	if n != 1 {
+		return -1
+	}
+	return at
+}
+
+// Pick — индекс выбранного кандидата в Pool каждого разворота (−1 — пул пуст, разворот
+// пропускается и историю не меняет). Less — везде лучшая (0). Жадно слева направо,
+// детерминированно: ряд «Авто» в пределах δ, звезда-главное, воздух по ритму; среди допустимых
+// минимум штрафа за повтор вида соседей, затем потери, затем ключа.
+func Pick(in []Spread, p layout.Params, lv Level, c Ctx) []int {
+	out := make([]int, len(in))
+	lv = lv.clamp()
+	if lv == Less {
+		for i, s := range in {
+			if len(s.Pool) == 0 {
+				out[i] = -1
+			}
+		}
+		return out
+	}
+	t := tunings[lv]
+	st := newChain(c)
+	for i, s := range in {
+		if len(s.Pool) == 0 {
+			out[i] = -1
+			continue
+		}
+		n := st.neighbors(t, s)
+		if i == len(in)-1 {
+			n.next = c.Next
+		}
+		if i < len(c.Cur) {
+			n.cur = c.Cur[i]
+		}
+		out[i] = t.one(s, p, &n)
+		st.push(&s.Pool[out[i]])
+	}
+	return out
+}
+
+// chain — история цепочки слева направо: виды, ритмы воздуха и главного, прошлые ключ и семейства.
+type chain struct {
+	hist      []string        // виды выбранных (и Ctx.Prev), последний — ближний
+	histID    []uint64        // их LookID
+	older     map[uint64]bool // виды раньше позапрошлого
+	prevKey   string
+	prevFam   Family
+	since     int // разворотов без воздуха
+	sinceHero int // разворотов без главного
+	prevHero  bool
+	prevKind  Kind // семейство featured последнего разворота с главным
+}
+
+func newChain(c Ctx) *chain {
+	st := &chain{hist: slices.Clone(c.Prev[max(0, len(c.Prev)-2):]), older: map[uint64]bool{}, prevKey: c.PrevKey,
+		prevFam: c.Family, since: c.Since, sinceHero: c.SinceHero, prevHero: c.Hero}
+	for _, l := range st.hist {
+		st.histID = append(st.histID, lookID(l))
+	}
+	return st
+}
+
+// neighbors — соседи и ритмы для очередного разворота s (next и cur заполняет Pick).
+func (st *chain) neighbors(t tuning, s Spread) neighbors {
+	n := neighbors{prevFam: st.prevFam, prevHero: st.prevHero, prevKind: st.prevKind, older: st.older, prevKey: st.prevKey,
+		heroDue: st.sinceHero+1 >= t.heroPeriod && s.Star < 0,
+		airDue:  st.since+1 >= t.period && s.Star < 0 && len(s.Pool[0].Rects) <= t.airMaxK}
+	n.heroLate = n.heroDue && st.sinceHero > st.since
+	if h := len(st.hist); h >= 1 {
+		n.prev1 = st.hist[h-1]
+		if h >= 2 {
+			n.prev2 = st.hist[h-2]
+		}
+	}
+	return n
+}
+
+// push — выбран x: он становится ближним соседом, ритмы сдвигаются.
+func (st *chain) push(x *Cand) {
+	if h := len(st.histID); h >= 2 {
+		st.older[st.histID[h-2]] = true // уходит из окна соседей — в «уже были»
+	}
+	st.hist, st.histID = append(st.hist, x.Look), append(st.histID, x.LookID)
+	st.prevFam, st.prevKey = x.Family, x.Key
+	if x.Family == Air {
+		st.since = 0
+	} else {
+		st.since++
+	}
+	if st.prevHero = x.Heroes > 0; st.prevHero {
+		st.sinceHero = 0
+		if x.Kind != NoKind {
+			st.prevKind = x.Kind
+		}
+	} else {
+		st.sinceHero++
+	}
+}
+
+// neighbors — что учитывает выбор одного разворота.
+type neighbors struct {
+	prev1, prev2, next, cur string
+	prevFam                 Family
+	airDue                  bool
+	prevHero, heroDue       bool            // у предыдущего главное; пора главного (звезды нет)
+	heroLate                bool            // главное ждёт дольше воздуха: при обоих по ритму — оно
+	older                   map[uint64]bool // виды цепочки раньше позапрошлого (LookID)
+	prevKey                 string          // ключ предыдущего
+	prevKind                Kind            // семейство featured последнего разворота с главным
+}
+
+// one — выбор одного разворота: допустимые кандидаты, среди них минимум (штраф, потеря, ключ).
+func (t tuning) one(s Spread, p layout.Params, n *neighbors) int {
+	best := &s.Pool[0]
+	bestQ := quanta(best.Score)
+	lim := limits{
+		bestRest: quanta(best.Score - best.Fill), capQ: quanta(min(best.Score, heroCap)),
+		delta: quanta(t.delta), star: quanta(t.deltaStar), air: quanta(t.airLoss), hero: quanta(t.deltaHero),
+		free: quanta(heroFree),
+	}
+	at, atPen, atLoss := -1, 0.0, 0.0
+	for i := range s.Pool {
+		x := &s.Pool[i]
+		loss := bestQ - quanta(x.Score)
+		var bonus float64
+		var ok bool
+		if x.Kind != NoKind {
+			bonus, ok = lim.feat(x, s.Star, loss, n)
+		} else {
+			bonus, ok = t.admit(x, s.Star, loss, &lim, p, n)
+		}
+		if !ok {
+			continue
+		}
+		pen := bonus + n.penalty(x)
+		if at < 0 || pen < atPen || pen == atPen && (loss < atLoss || loss == atLoss && x.Key < s.Pool[at].Key) {
+			at, atPen, atLoss = i, pen, loss
+		}
+	}
+	return max(at, 0) // [0] допустим всегда: ряд, потеря 0
+}
+
+// limits — пороги разворота в квантах tieEps (считаются раз на разворот, а не на кандидата).
+type limits struct {
+	bestRest, capQ               float64 // лучшая без заполнения; min(лучшая, heroCap)
+	delta, star, air, hero, free float64 // δ, δ★, δ_air, δ_hero, heroFree
+}
+
+// admit — допустим ли кандидат (не featured) и какой у него бонус. loss — сырая потеря в квантах.
+// На 8–16 фото звезда-главное судится по Fair, как featured (решение №30): штраф разброса за
+// главное там и есть то, что мешает ему быть крупным. Fair ≥ Score, потолок ≤ лучшей — допуск
+// только шире прежнего.
+func (t tuning) admit(x *Cand, star int, loss float64, lim *limits, p layout.Params, n *neighbors) (bonus float64, ok bool) {
+	if x.InRow && loss <= lim.delta {
+		ok = true
+	}
+	if star >= 0 && x.Big == star {
+		starLoss := loss
+		if len(x.Rects) >= FeatMin {
+			starLoss = min(loss, lim.capQ-quanta(x.Fair))
+		}
+		if starLoss <= lim.star {
+			ok, bonus = true, bonusStar
+		}
+	}
+	if n.airDue && x.Family == Air && x.MinSide >= t.airMinSide*p.PageH && x.Fill >= t.airFloor &&
+		lim.bestRest-quanta(x.Score-x.Fill) <= lim.air {
+		ok, bonus = true, min(bonus, bonusAir)
+	}
+	return bonus, ok
+}
+
+// feat — допуск раскладки с главным фото (featured, решения №30, №34): потеря судится по Fair
+// от min(лучшая, heroCap). Звезда — только если главное она, и тогда без оглядки на соседа; без
+// звезды — не после разворота с главным: по ритму с бонусом или «даром» (сырая потеря ≤ heroFree).
+// Вид соседа не повторяет никогда: два одинаковых разворота с главным подряд (одна звезда на
+// одинаковых сериях) заметнее, чем звезда не крупно.
+func (lim *limits) feat(x *Cand, star int, loss float64, n *neighbors) (bonus float64, ok bool) {
+	fairLoss := lim.capQ - quanta(x.Fair)
+	switch {
+	case x.Look == n.prev1 || x.Look == n.next:
+	case star >= 0:
+		if x.Big == star && fairLoss <= lim.star {
+			return bonusStar, true
+		}
+	case n.prevHero:
+	case n.heroDue && fairLoss <= lim.hero:
+		if n.heroLate {
+			return bonusHeroLate, true
+		}
+		return bonusHero, true
+	case loss <= lim.free:
+		return 0, true
+	}
+	return 0, false
+}
+
+// penalty — штраф за повтор вида и семейства соседей и за воздух не по ритму.
+func (n *neighbors) penalty(x *Cand) float64 {
+	pen := 0.0
+	for _, v := range [...]struct {
+		look string
+		pen  float64
+	}{{n.prev1, penSame1}, {n.prev2, penSame2}, {n.next, penSame1}, {n.cur, penSame1}} {
+		if v.look != "" && x.Look == v.look {
+			pen += v.pen
+		}
+	}
+	if n.prevFam != "" && x.Family == n.prevFam {
+		pen += penSameFamily
+	}
+	if len(n.older) > 0 && n.older[x.LookID] {
+		pen += penSeen
+	}
+	if n.prevKey != "" && x.Key == n.prevKey && x.Look != n.prev1 {
+		pen += penSameKey
+	}
+	if x.Family == Air && !n.airDue {
+		pen += penAirOffBeat
+	}
+	if x.Kind != NoKind && x.Kind == n.prevKind {
+		pen += penSameKind
+	}
+	return pen
+}

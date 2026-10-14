@@ -1,17 +1,19 @@
 <script lang="ts">
-  import { gridAct } from '../../panels/layouts/gridact.svelte'
+  import { autoAskText, gridAct } from '../../panels/layouts/gridact.svelte'
   import Modal from '../../base/ui/Modal.svelte'
 
   // Вопрос перед возвратом сетки к «Авто» (спека 008): места сбросятся. По умолчанию — «Отмена».
   // Открыт, пока gridAct.autoAsk не null; ответ — gridAct.confirmAuto / cancelAuto.
+  // Тот же вопрос у ручной виньетки (смена шаблона, «Вернуть авто»): тексты — autoAskText.
+  const t = $derived(autoAskText(gridAct.autoAsk?.vig))
 </script>
 
 {#if gridAct.autoAsk}
-  <Modal title="Вернуть авто?" onclose={() => gridAct.cancelAuto()}>
-    <p class="ask">Ваши правки мест сбросятся. Вернуть авто?</p>
+  <Modal title={t.title} onclose={() => gridAct.cancelAuto()}>
+    <p class="ask">{t.ask}</p>
     <div class="actions">
       <button class="ghost" data-autofocus onclick={() => gridAct.cancelAuto()}>Отмена</button>
-      <button class="primary" onclick={() => gridAct.confirmAuto()}>Вернуть авто</button>
+      <button class="primary" onclick={() => gridAct.confirmAuto()}>{t.ok}</button>
     </div>
   </Modal>
 {/if}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { store } from '../../base/core/store.svelte'
   import { placesel } from '../../editor/places/placesel.svelte'
   import { edit } from '../../editor/text/edit.svelte'
@@ -8,6 +8,9 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { align } from '../../panels/layouts/align.svelte'
   import { run } from './commands'
+  import { menuUi } from './menuui.svelte'
+  import { anyVaries, varyTargets } from '../../panels/layouts/variants'
+  import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
   import { buildMenu, type MenuCtx, type MenuId, type MenuItem } from './menu'
   import { placePopover, placeSubmenu, type Box } from '../../base/ui/popover'
 
@@ -17,7 +20,7 @@
     can: prefs.can,
     level: prefs.level,
     recent: store.recent,
-    spreads: store.view.spreads.length,
+    spreads: store.sheets.length, // лист обложки (032) тоже можно выгрузить
     hasSpread: !!store.spread,
     canUndo: store.view.canUndo,
     canRedo: store.view.canRedo,
@@ -26,6 +29,9 @@
     anySelection: store.selected.size > 0 || spreadsel.size > 0 || placesel.refs.length > 0 || placesel.texts.length > 0 || !!edit.sel,
     deletable: placesel.refs.length > 0 || placesel.texts.length > 0 || !!edit.sel,
     flippable: placesel.selected.some((b) => b.photo),
+    varyable: anyVaries(store.view.spreads, varyTargets(spreadsel.ordered(store.view.spreads.map((s) => s.id)), store.spread?.id)),
+    vigable: canMakeVignette(store.spread, prefs.can),
+    vigSetup: isVignette(store.spread),
     layerable: placesel.canLayer,
     missing: store.missing.length,
     exporting: !!store.exporting,
@@ -42,7 +48,7 @@
   let root = $state<HTMLElement>()
   let drop = $state<HTMLElement>()
   let subDrop = $state<HTMLElement>()
-  let openId = $state<MenuId | null>(null)
+  const openId = $derived(menuUi.openId)
   let anchor = $state<Box>({ left: 0, top: 0, width: 0, height: 0 })
   let sub = $state<{ id: string; anchor: Box } | null>(null)
   let w = $state(0)
@@ -62,7 +68,7 @@
   }
 
   function close() {
-    openId = null
+    menuUi.openId = null
     sub = null
     w = h = sw = sh = 0
   }
@@ -75,10 +81,21 @@
     anchor = box(btn)
     sub = null
     w = h = 0
-    openId = id
+    menuUi.openId = id
     if (id === 'file') void store.refreshRecent()
     if (focus) focusFirst(() => drop)
   }
+
+  // Справочник просит раскрыть меню (спека 033): как щелчком, но без фокуса на пункте.
+  $effect(() => {
+    const r = menuUi.req
+    if (!r) return
+    untrack(() => {
+      const btn = root?.querySelectorAll('.bar > button')[menus.findIndex((m) => m.id === r.id)]
+      if (btn) openMenu(r.id, btn, false)
+    })
+    menuUi.req = null
+  })
 
   function toggle(id: MenuId, btn: Element) {
     if (openId === id) close()
@@ -194,6 +211,7 @@
       aria-expanded={it.sub ? sub?.id === it.id : undefined}
       data-item={it.id}
       disabled={it.disabled}
+      title={it.hint}
       onpointerenter={(e) => enter(it, e.currentTarget, nested)}
       onclick={(e) => pick(it, e.currentTarget, e.detail === 0)}
     >

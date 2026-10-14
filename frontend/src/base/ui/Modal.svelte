@@ -1,21 +1,47 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte'
+  import { untrack, type Snippet } from 'svelte'
   import Icon from './Icon.svelte'
+  import { modalStack } from './modalstack.svelte'
 
   // Окно поверх интерфейса (не нативное — работает и в браузере dev). Esc и клик по фону закрывают;
-  // Esc не доходит до хоткеев App (не закрывает галерею и не снимает выделение).
-  let { title, onclose, wide = false, children }: { title: string; onclose: () => void; wide?: boolean; children: Snippet } = $props()
+  // Esc не доходит до хоткеев App (не закрывает галерею и не снимает выделение). width — своя ширина, если 380/460 мало.
+  // size: 'large' — окно с предпросмотром (до 1280 px по ширине экрана, 031 «Настроить виньетку»: сетка шаблонов в 4–5 колонок).
+  let {
+    title,
+    onclose,
+    wide = false,
+    size,
+    width,
+    children,
+  }: {
+    title: string
+    onclose: () => void
+    wide?: boolean
+    size?: 'large'
+    width?: number
+    children: Snippet
+  } = $props()
 
   let box = $state<HTMLElement>()
-  // Фокус в окне: Esc и Enter ловит оно, а не страница под ним. Поле с data-autofocus получает его первым.
+  // Порядок окон — modalstack (справочник поверх стартового: Esc и фокус только верхнему).
+  let me = $state(0)
+  const top = $derived(me > 0 && modalStack.isTop(me))
   $effect(() => {
-    if (box) (box.querySelector<HTMLElement>('[data-autofocus]') ?? box).focus()
+    const id = untrack(() => modalStack.push())
+    me = id
+    return () => modalStack.remove(id)
+  })
+  // Фокус в окне: Esc и Enter ловит оно, а не страница под ним. Поле с data-autofocus получает его первым.
+  // Окно под закрывшимся верхним забирает фокус обратно.
+  $effect(() => {
+    if (box && top) (box.querySelector<HTMLElement>('[data-autofocus]') ?? box).focus()
   })
 </script>
 
 <!-- Захват на window: кнопка, на которой стоял фокус, могла исчезнуть (смена содержимого окна), и клавиши ушли бы в страницу под ним -->
 <svelte:window
   onkeydowncapture={(e) => {
+    if (!top) return
     if (e.key === 'Escape') {
       e.stopPropagation()
       e.preventDefault()
@@ -28,7 +54,17 @@
 />
 
 <div class="back" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && onclose()}>
-  <div class="box" class:wide role="dialog" aria-modal="true" aria-label={title} tabindex="-1" bind:this={box}>
+  <div
+    class="box"
+    class:wide
+    class:large={size === 'large'}
+    style:width={width ? `${width}px` : undefined}
+    role="dialog"
+    aria-modal="true"
+    aria-label={title}
+    tabindex="-1"
+    bind:this={box}
+  >
     <header>
       <span>{title}</span>
       <button class="x" onclick={onclose} title="Закрыть (Esc)" aria-label="Закрыть"><Icon name="x" size={14} /></button>
@@ -61,6 +97,9 @@
   }
   .box.wide {
     width: 460px;
+  }
+  .box.large {
+    width: min(1280px, calc(100vw - 64px));
   }
   header {
     display: flex;

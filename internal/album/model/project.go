@@ -9,29 +9,42 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/variety"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
 
 // FormatVersion — версия формата файла. 2: относительные пути, кадр, подписи,
 // тексты и фон (спека 006); 3: места сетки `grid` (спека 007); 4: зеркало фото
 // `flipH/flipV` и фото на фоне `bgPhoto*` (спека 009); 5: прозрачность фото фона
-// `fade` (спека 017) и свои отметки `marks` (спека 004, тот же выпуск 0.7.0).
+// `fade` (спека 017) и свои отметки `marks` (спека 004, тот же выпуск 0.7.0);
+// 6: до 64 текстов на развороте (спека 026) — 0.9.1 файл не откроет и не обрежет до 20;
+// в v6 до выпуска 0.10 легли и поля подписей 030 (`vars`, `person`, `pad`, `caps`, все omitempty)
+// обложка 032 (`cover`, omitempty) и виньетка 031 (`sheet`, `kind`, `vig`, `role`, omitempty);
+// 7: форма своего шаблона виньетки `vig.own` (спека 038, 0.11) — 0.10 файл не откроет и не
+// затрёт форму автосохранением.
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 5
+const FormatVersion = 7
 
 type Settings struct {
-	PageW   float64 `json:"pageW"`   // мм, одна страница
+	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
 	PageH   float64 `json:"pageH"`   // мм
 	Margin  float64 `json:"margin"`  // мм
 	Gap     float64 `json:"gap"`     // мм
 	Layflat bool    `json:"layflat"` // фото может идти через корешок
 	DPI     int     `json:"dpi"`
 	Bg      string  `json:"bg"` // цвет страниц альбома #rrggbb; "" — белый
+	// Safe — безопасная зона от края, мм; 0 — без зоны. Без omitempty: 0 допустим,
+	// а отсутствующее в файле поле Load заполняет DefaultSafe (028).
+	Safe float64 `json:"safe"`
+	// Sheet — проект из отдельных листов без корешка (виньетка 031): лист — одна страница
+	// PageW×PageH (Geo), layflat всегда. Задаётся при создании и не меняется (SetSettings).
+	Sheet bool `json:"sheet,omitempty"`
 }
 
 func DefaultSettings() Settings {
-	return Settings{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true, DPI: 300}
+	return Settings{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true, DPI: 300, Safe: DefaultSafe}
 }
 
 type Spread struct {
@@ -57,6 +70,14 @@ type Spread struct {
 	BgPhoto  *Backdrop `json:"bgPhoto,omitempty"`
 	BgPhotoL *Backdrop `json:"bgPhotoL,omitempty"`
 	BgPhotoR *Backdrop `json:"bgPhotoR,omitempty"`
+	// Caps — общий стиль подписей листа (030, fields.go); nil — у каждой подписи свой.
+	Caps *SheetCaps `json:"caps,omitempty"`
+	// Kind — вид разворота (031): "" — обычный, KindVignette — виньетка; Vig — её параметры
+	// (sheet.go). Места виньетки — та же сетка с ролями (Place.Role).
+	Kind string    `json:"kind,omitempty"`
+	Vig  *Vignette `json:"vig,omitempty"`
+	// Vars — поля шапки листа (031 dialog §4, fields.go); nil — свои пусты (VarsOf).
+	Vars *Vars `json:"vars,omitempty"`
 }
 
 // TextStyle — оформление текста; тип живёт в internal/text, проект его хранит.
@@ -77,6 +98,8 @@ type Caption struct {
 	Text  string    `json:"text"`
 	Style TextStyle `json:"style"`
 	Over  bool      `json:"over,omitempty"` // на фото у нижнего края, а не под ним
+	// Pad — отступ от фото, мм (030); nil — DefaultPad, как в прежних файлах.
+	Pad *float64 `json:"pad,omitempty"`
 }
 
 // TextBlock — свободный текст на развороте.
@@ -107,6 +130,8 @@ type PhotoRef struct {
 	// FlipH/FlipV — зеркало картинки внутри её прямоугольника; едут с фото, как Frame.
 	FlipH bool `json:"flipH,omitempty"`
 	FlipV bool `json:"flipV,omitempty"`
+	// Person — имя на фото (030): своё или из вставки; едет с фото. nil — из имени файла.
+	Person *Person `json:"person,omitempty"`
 }
 
 // Project — альбом в памяти. Пути абсолютные; относительными они становятся
@@ -123,6 +148,8 @@ type Project struct {
 	// FolderAlt — запасной путь папки, которой не нашлось ни там, ни там (как PhotoRef.Alt):
 	// encode пишет его обратно как был. Ключ — путь из Folders.
 	FolderAlt map[string]string `json:"folderAlt,omitempty"`
+	// Cover — обложка (032, cover.go): лист вне Spreads, в нумерацию не входит; nil — нет.
+	Cover *Cover `json:"cover,omitempty"`
 	// from — версия файла, из которого прочитан проект (0 — новый): по ней
 	// Editor решает, нужен ли бэкап перед первой записью.
 	from int
@@ -149,8 +176,13 @@ func New() *Project {
 	return &Project{Version: FormatVersion, Product: ProductAlbum, Settings: DefaultSettings(), Photos: map[string]PhotoRef{}}
 }
 
+// Params — геометрия для layout. Раскладка считает лист шириной 2·PageW, поэтому листу
+// (Sheet) отдаётся половина ширины и признак Sheet: без корешка и постраничных вариантов.
 func (p *Project) Params() layout.Params {
 	s := p.Settings
+	if s.Sheet {
+		return layout.Params{PageW: s.PageW / 2, PageH: s.PageH, Margin: s.Margin, Gap: s.Gap, Layflat: true, Sheet: true}
+	}
 	return layout.Params{PageW: s.PageW, PageH: s.PageH, Margin: s.Margin, Gap: s.Gap, Layflat: s.Layflat}
 }
 
@@ -184,7 +216,7 @@ func (p *Project) aspectOf(id string, raw bool) float64 {
 // в порядке ленты. best — ряд «в порядке ленты» (не пуст, если в развороте есть фото).
 func (p *Project) Layout(s *Spread) (r layout.Result, best []layout.Result, ok bool) {
 	asp, prm := p.Aspects(s.Photos), p.Params()
-	best = layout.Cached(asp, prm, VariantLimit)
+	best = layout.Cached(asp, prm, RowLen(len(asp)))
 	if s.Layout != "" {
 		if r, ok := layout.Build(s.Layout, asp, prm); ok {
 			return r, best, true
@@ -199,7 +231,7 @@ func (p *Project) Layout(s *Spread) (r layout.Result, best []layout.Result, ok b
 // SetLayout ставит раскладку; лучшую в порядке ленты храним как "", чтобы выбор
 // уже стоящей раскладки был холостой правкой.
 func (p *Project) SetLayout(s *Spread, key string) {
-	if best := layout.Cached(p.Aspects(s.Photos), p.Params(), VariantLimit); len(best) > 0 && best[0].Key == key {
+	if best := layout.Cached(p.Aspects(s.Photos), p.Params(), RowLen(len(s.Photos))); len(best) > 0 && best[0].Key == key {
 		key = ""
 	}
 	s.Layout = key
@@ -294,7 +326,7 @@ func (p *Project) Find(id string) (int, *Spread) {
 	return -1, nil
 }
 
-// Detach убирает фото из всех разворотов: одно фото стоит в альбоме один раз.
+// Detach убирает фото из всех листов (с обложкой): одно фото стоит в альбоме один раз.
 // Место сетки при этом пустеет, но остаётся (design 007 §0.3: места правит тот,
 // кто убирает фото, — syncGrid не знает, куда фото ушло).
 func (p *Project) Detach(ids []string) {
@@ -302,7 +334,7 @@ func (p *Project) Detach(ids []string) {
 	for _, id := range ids {
 		gone[id] = true
 	}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		s.Photos = slices.DeleteFunc(s.Photos, func(id string) bool { return gone[id] })
 		for _, pl := range s.Grid {
 			if gone[pl.Photo] {
@@ -345,12 +377,13 @@ func (p *Project) Normalize(before *Project) {
 func (s *Spread) Empty() bool {
 	return len(s.Photos) == 0 && len(s.Texts) == 0 && len(s.Grid) == 0 &&
 		s.BgL == "" && s.BgR == "" && s.Name == "" &&
-		s.BgPhoto == nil && s.BgPhotoL == nil && s.BgPhotoR == nil
+		s.BgPhoto == nil && s.BgPhotoL == nil && s.BgPhotoR == nil && s.Caps == nil &&
+		s.Kind == "" && s.Vig == nil && s.Vars == nil
 }
 
-// Placed — фото стоит в каком-нибудь развороте.
+// Placed — фото стоит в каком-нибудь листе (месте обложки тоже).
 func (p *Project) Placed(id string) bool {
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		if slices.Contains(s.Photos, id) {
 			return true
 		}
@@ -360,10 +393,10 @@ func (p *Project) Placed(id string) bool {
 
 // PruneRefs оставляет в Photos только используемые фото: стоящие в местах и на фонах.
 // Фото, оставшееся только на фоне, теряет свойства места (кадр, подпись, зеркало):
-// они не переживают уход из мест.
+// они не переживают уход из мест. Имя (Person) — свойство фото, а не места: остаётся.
 func (p *Project) PruneRefs() {
 	used, onBg := map[string]bool{}, map[string]bool{}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		for _, id := range s.Photos {
 			used[id] = true
 		}
@@ -402,8 +435,61 @@ func Remember(p *Project, photos []PhotoInfo) []string {
 	return ids
 }
 
-// VariantLimit — длина ряда раскладок (и круга листания).
+// VariantLimit — длина ряда раскладок (и круга листания) до 16 фото.
 const VariantLimit = 24
+
+// RowLen — длина первого ряда «Авто» для n фото: до 16 — VariantLimit, с layout.ManyFrom —
+// первая порция (layout.ManyBatch), следующие досчитываются по требованию (AutoRow).
+func RowLen(n int) int {
+	if n >= layout.ManyFrom {
+		return layout.ManyBatch
+	}
+	return VariantLimit
+}
+
+// AutoRow — ряд «Авто» в порядке ленты, где стоит key, и его место в ряду (−1 — нет).
+// До 16 фото — весь ряд VariantLimit. С ManyFrom — наименьший префикс из порций по
+// ManyBatch (до ManyCap), где key есть; нет нигде — первая порция. more — ряд можно
+// досчитать: он полный и короче ManyCap.
+func AutoRow(asp []float64, prm layout.Params, key string) (row []layout.Result, i int, more bool) {
+	if len(asp) < layout.ManyFrom {
+		row = layout.Cached(asp, prm, VariantLimit)
+		return row, IndexOf(row, key), false
+	}
+	for n := layout.ManyBatch; n <= layout.ManyCap; n += layout.ManyBatch {
+		row = layout.Cached(asp, prm, n)
+		if i = IndexOf(row, key); i >= 0 {
+			return row, i, len(row) == n && n < layout.ManyCap
+		}
+		if len(row) < n {
+			break // дальше ряд не растёт
+		}
+	}
+	row = layout.Cached(asp, prm, layout.ManyBatch)
+	return row, -1, len(row) == layout.ManyBatch
+}
+
+// MoreRow — ряд «Авто» на n ≥ ManyFrom фото, досчитанный ещё на порцию после have вариантов
+// (не длиннее ManyCap). До 16 фото — весь ряд.
+func MoreRow(asp []float64, prm layout.Params, have int) (row []layout.Result, more bool) {
+	if len(asp) < layout.ManyFrom {
+		return layout.Cached(asp, prm, VariantLimit), false
+	}
+	n := min((max(have, 0)/layout.ManyBatch+1)*layout.ManyBatch, layout.ManyCap)
+	row = layout.Cached(asp, prm, n)
+	return row, len(row) == n && n < layout.ManyCap
+}
+
+// ExtraRow — «Другие варианты» разворота (041): в подборке третьим рядом, в листании и счётчике
+// «i / N» — сразу после ряда «Авто» (решение 0.11 №36). Ключи строит layout: SetLayout их примет.
+// С ManyFrom фото — пусто: ряд «Авто» там растёт порциями («+»), а страница поменьше делает
+// фото мельче порога воздуха (k_air ≤ 16, design 041 §5).
+func ExtraRow(asp []float64, prm layout.Params) []layout.Result {
+	if len(asp) >= layout.ManyFrom {
+		return nil
+	}
+	return variety.Extra(asp, prm, RowLen(len(asp)))
+}
 
 func IndexOf(rs []layout.Result, key string) int {
 	for i, r := range rs {
@@ -414,9 +500,10 @@ func IndexOf(rs []layout.Result, key string) int {
 	return -1
 }
 
-// ProductAlbum — тип изделия «Альбом»: единственный в 0.5.0. Календарь и Виньетка
-// получат свои значения вместе с новой FormatVersion (design 010 §1): 0.5.0 читает
-// чужое как album и при сохранении перезаписала бы его.
+// ProductAlbum — тип изделия «Альбом»: единственный. Лист виньетки (031) — тоже album,
+// режим листа задаёт Settings.Sheet. Новый тип изделия (календарь) — только с новой
+// FormatVersion (design 010 §1): прежняя программа читает чужое как album и при сохранении
+// перезаписала бы его.
 const ProductAlbum = "album"
 
 // NormProduct приводит тип изделия к известному: пусто (файл до 0.5.0) — album молча,
@@ -428,6 +515,6 @@ func NormProduct(s string) string {
 	case "":
 		return ProductAlbum
 	}
-	log.Printf("неизвестный тип изделия %q, открыт как %s", s, ProductAlbum)
+	log.Printf("неизвестный тип изделия %s, открыт как %s", paths.LogQ(s), ProductAlbum)
 	return ProductAlbum
 }

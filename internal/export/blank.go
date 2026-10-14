@@ -2,6 +2,7 @@ package export
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -42,6 +43,19 @@ func BlankWarning(nums []int, white bool) string {
 	if len(nums) == 0 {
 		return ""
 	}
+	list := numList(nums)
+	head, tail := "Развороты %s пустые — выгрузить %s?", "белыми"
+	if len(nums) == 1 {
+		head, tail = "Разворот %s пустой — выгрузить %s?", "белым"
+	}
+	if !white {
+		tail = "с фоном альбома"
+	}
+	return fmt.Sprintf(head, list, tail)
+}
+
+// numList — номера через запятую, не больше 10, остальные — «…и ещё K».
+func numList(nums []int) string {
 	const maxShown = 10
 	parts := make([]string, 0, maxShown)
 	for _, n := range nums[:min(len(nums), maxShown)] {
@@ -51,12 +65,46 @@ func BlankWarning(nums []int, white bool) string {
 	if len(nums) > maxShown {
 		list += fmt.Sprintf(" …и ещё %d", len(nums)-maxShown)
 	}
-	head, tail := "Развороты %s пустые — выгрузить %s?", "белыми"
-	if len(nums) == 1 {
-		head, tail = "Разворот %s пустой — выгрузить %s?", "белым"
+	return list
+}
+
+// PlanFields — пустые поля (по алфавиту) и фото без имени на листах, которые пишет план:
+// развороты из pl.mask и обложка, если она в плане. По всему альбому (View.Unfilled) нельзя —
+// «Только обложка» или диапазон спросили бы о листах, которые не выгружаются. При выгрузке
+// одной страницы разворота вопрос учитывает поля всего разворота: лишний вопрос, данные целы.
+func PlanFields(v model.View, pl *Plan) (unfilled []string, unnamed int) {
+	add := func(s model.SpreadView) {
+		unfilled = append(unfilled, s.Unfilled...)
+		unnamed += s.Unnamed
 	}
-	if !white {
-		tail = "с фоном альбома"
+	if pl.Cover != nil && v.Cover != nil {
+		add(v.Cover.Sheet)
 	}
-	return fmt.Sprintf(head, list, tail)
+	for i, s := range v.Spreads {
+		if pl.mask[i+1] != 0 {
+			add(s)
+		}
+	}
+	slices.Sort(unfilled)
+	return slices.Compact(unfilled), unnamed
+}
+
+// FieldsWarning — вопрос перед экспортом о пустых полях подписей (030): unfilled —
+// имена полей, unnamed — фото без имени (оба — из PlanFields); "" — всё заполнено.
+func FieldsWarning(unfilled []string, unnamed int) string {
+	var parts []string
+	if len(unfilled) > 0 {
+		parts = append(parts, "Не заполнены поля: "+strings.Join(unfilled, ", "))
+	}
+	if unnamed > 0 {
+		head := "фото без имени"
+		if len(parts) == 0 {
+			head = "Фото без имени"
+		}
+		parts = append(parts, fmt.Sprintf("%s: %d", head, unnamed))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "; ") + ". В выгрузке они будут пустыми. Продолжить?"
 }

@@ -47,8 +47,10 @@
       if (!sp) return
       const r = sp.getBoundingClientRect()
       const area = rectOf(origin, { x: ev.clientX, y: ev.clientY })
-      const mm = toSpreadMM(area, r, store.view.settings.pageW * 2)
-      placesel.pickHit(marqueeHits(store.spread, mm), additive(ev))
+      const cur = store.spread
+      if (!cur) return
+      const mm = toSpreadMM(area, r, cur.w)
+      placesel.pickHit(marqueeHits(cur, mm), additive(ev))
     }
     const esc = (ev: KeyboardEvent) => {
       if (ev.key !== 'Escape') return

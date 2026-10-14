@@ -49,6 +49,8 @@ export const KEY_ACTIONS = [
   'zoomIn',
   'zoomOut',
   'help',
+  // Справочник функций (спека 033): F1; «?» остался за справкой по клавишам.
+  'guide',
   // Режим фона (спека 009, design-backdrop §6.3): выход, рамка стрелками, убрать фото фона.
   'bgExit',
   'bgNudge',
@@ -292,7 +294,8 @@ export const HOTKEYS: Hotkey[] = [
   },
   { action: 'zoomIn', feature: 'zoom', combos: [{ keys: ['=', '+'], ctrl: true }], show: 'Ctrl+=', label: 'Увеличить', group: 'canvas' },
   { action: 'zoomOut', feature: 'zoom', combos: [{ keys: ['-'], ctrl: true }], show: 'Ctrl+−', label: 'Уменьшить', group: 'canvas' },
-  { action: 'help', combos: [{ keys: ['f1', '?'], plain: true }], show: 'F1 / ?', menu: 'F1', label: 'Справка по клавишам', group: 'view' },
+  { action: 'guide', combos: [{ keys: ['f1'], plain: true }], show: 'F1', label: 'Справочник функций', group: 'view' },
+  { action: 'help', combos: [{ keys: ['?'], plain: true }], show: '?', label: 'Горячие клавиши', group: 'view' },
 
   // Режим фона: свои Esc, стрелки и Del — раньше листания, выделения и удаления
   {

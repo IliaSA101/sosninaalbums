@@ -11,7 +11,7 @@ import (
 
 // AlignItems — тело Editor.AlignItems над проектом (op и to уже проверены).
 func AlignItems(p *model.Project, spreadID string, ids []string, op, to string) {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return
 	}
@@ -24,13 +24,13 @@ func AlignItems(p *model.Project, spreadID string, ids []string, op, to string) 
 
 // AlignOverlap — тело Editor.AlignOverlap над проектом (op и to уже проверены); p не меняет.
 func AlignOverlap(p *model.Project, spreadID string, ids []string, op, to string) bool {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return false
 	}
 	if len(s.Grid) == 0 && hasPhoto(s, ids) {
 		p = p.Clone()
-		_, s = p.Find(spreadID)
+		s = p.Sheet(spreadID)
 		p.Freeze(s)
 	}
 	_, _, over := alignPlan(p, s, ids, op, to)
@@ -71,7 +71,7 @@ func alignPlan(p *model.Project, s *model.Spread, ids []string, op, to string) (
 	for i, it := range sel {
 		rects[i] = it.Box.AABB()
 	}
-	d, over = geom.AlignShifts(model.Page(p.Settings), rects, op, to)
+	d, over = geom.AlignShifts(p.AlignSheet(s), rects, op, to)
 	return sel, d, over
 }
 
@@ -97,7 +97,7 @@ func shiftItem(s *model.Spread, p *model.Project, it model.LayerItem, dx, dy flo
 		if _, pl := s.FindPlace(it.ID); pl != nil {
 			pl.X += dx
 			pl.Y += dy
-			p.ClampPlace(pl)
+			p.ClampPlace(s, pl)
 		}
 	case model.LayerText:
 		for _, t := range s.Texts {

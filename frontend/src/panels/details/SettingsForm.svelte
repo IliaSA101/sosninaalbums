@@ -3,9 +3,10 @@
   import { store } from '../../base/core/store.svelte'
   import type { Settings } from '../../base/core/types'
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
+  import { SHEET_PRESETS, isSheet, newSheetSize } from '../../base/geom/sheet'
   import { presets, presetActive, presetFields, exportPx, type Preset } from './presets'
 
-  const NUMS = ['pageW', 'pageH', 'margin', 'gap', 'dpi'] as const
+  const NUMS = ['pageW', 'pageH', 'margin', 'gap', 'dpi', 'safe'] as const
 
   // Поле number при пустом вводе даёт null — приводим к числу при сравнении и сохранении.
   const norm = (x: Settings): Settings => ({
@@ -14,8 +15,10 @@
     margin: Number(x.margin),
     gap: Number(x.gap),
     dpi: Number(x.dpi),
+    safe: Number(x.safe),
     layflat: !!x.layflat,
     bg: x.bg ?? '', // "" — белый
+    sheet: x.sheet, // Go режим не меняет: лист остаётся листом
   })
   const same = (a: Settings, b: Settings) => {
     const x = norm(a)
@@ -31,7 +34,7 @@
   const differs = $derived(!same(s, store.view.settings))
   const valid = $derived.by(() => {
     const n = norm(s)
-    return n.pageW > 0 && n.pageH > 0 && n.dpi > 0 && n.margin >= 0 && n.gap >= 0 && NUMS.every((k) => Number.isFinite(n[k]))
+    return n.pageW > 0 && n.pageH > 0 && n.dpi > 0 && n.margin >= 0 && n.gap >= 0 && n.safe >= 0 && NUMS.every((k) => Number.isFinite(n[k]))
   })
 
   // Настройки сменились не отсюда (Undo, второе окно): без своих правок форма подтягивает их.
@@ -56,6 +59,10 @@
     s = { ...s, ...presetFields(p) }
   }
 
+  // Лист виньетки (031): размер листа вместо страницы, пресеты 20×30 и 30×40, layflat и «Свой» не нужны.
+  const sheet = $derived(isSheet(store.view.settings))
+  const list = $derived(sheet ? SHEET_PRESETS : presets)
+
   const activeHint = $derived(presets.find((p) => p.hint && presetActive(p, s))?.hint)
 
   function reset() {
@@ -65,31 +72,47 @@
 </script>
 
 <div class="presets">
-  {#each presets as p (p.label)}
+  {#each list as p (p.label)}
     <button class:active={presetActive(p, s)} onclick={() => pick(p)}>{p.label}</button>
   {/each}
 </div>
 
-<div class="form">
-  <label>Ширина страницы, мм <input type="number" min="100" max="600" bind:value={s.pageW} /></label>
-  <label>Высота страницы, мм <input type="number" min="100" max="600" bind:value={s.pageH} /></label>
+<div class="form" data-guide="settings-form">
+  {#if sheet}
+    <label
+      >Лист, мм: Ш × В
+      <span class="pair"
+        ><input type="number" min="50" max="1000" aria-label="Ширина листа, мм" bind:value={s.pageW} /> ×
+        <input type="number" min="50" max="1000" aria-label="Высота листа, мм" bind:value={s.pageH} /></span
+      ></label
+    >
+  {:else}
+    <label>Ширина страницы, мм <input type="number" min="100" max="600" bind:value={s.pageW} /></label>
+    <label>Высота страницы, мм <input type="number" min="100" max="600" bind:value={s.pageH} /></label>
+  {/if}
   <label>Поля, мм <input type="number" min="0" max="60" step="0.5" bind:value={s.margin} /></label>
+  <label title="Значимое — не ближе к краю; пунктир — Вид → Безопасная зона"
+    >Безопасная зона, мм <input type="number" min="0" max="30" step="0.5" bind:value={s.safe} /></label
+  >
   <label>Промежуток между фото, мм <input type="number" min="0" max="30" step="0.5" bind:value={s.gap} /></label>
   <label>Разрешение экспорта, dpi <input type="number" min="150" max="600" step="50" bind:value={s.dpi} /></label>
   <label>
-    Цвет страниц альбома
+    {sheet ? 'Цвет листов' : 'Цвет страниц альбома'}
     <!-- цвет попадает в форму при выборе; применяет «Применить» -->
-    <ColorPicker value={s.bg || '#ffffff'} label="Цвет страниц альбома" onpick={(c) => (s.bg = c)} />
+    <ColorPicker value={s.bg || '#ffffff'} label={sheet ? 'Цвет листов' : 'Цвет страниц альбома'} onpick={(c) => (s.bg = c)} />
   </label>
-  <label class="check">
-    <input type="checkbox" bind:checked={s.layflat} />
-    Фото может проходить через корешок (layflat-альбом)
-  </label>
+  {#if !sheet}
+    <label class="check">
+      <input type="checkbox" bind:checked={s.layflat} />
+      Фото может проходить через корешок (layflat-альбом)
+    </label>
+  {/if}
 </div>
 {#if valid}
+  {@const sh = newSheetSize({ pageW: +s.pageW, pageH: +s.pageH, sheet: s.sheet })}
   <p class="note">
-    Разворот = две страницы: {(+s.pageW * 2) / 10} × {+s.pageH / 10} см, при экспорте {exportPx(+s.pageW * 2, +s.dpi)} ×
-    {exportPx(+s.pageH, +s.dpi)} px.
+    {sh.mid > 0 ? 'Разворот = две страницы' : 'Лист'}: {sh.w / 10} × {sh.h / 10} см, при экспорте {exportPx(sh.w, +s.dpi)} ×
+    {exportPx(sh.h, +s.dpi)} px.
   </p>
   {#if activeHint}<p class="note">{activeHint}</p>{/if}
 {:else}
@@ -129,6 +152,14 @@
   }
   label input[type='number'] {
     width: 90px;
+  }
+  .pair {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pair input[type='number'] {
+    width: 70px;
   }
   .check {
     justify-content: flex-start;

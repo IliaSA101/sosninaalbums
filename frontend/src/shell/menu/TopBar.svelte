@@ -3,11 +3,17 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import { run } from './commands'
+  import { countLabel } from './topbar'
   import MenuBar from './MenuBar.svelte'
   import LevelBadge from './LevelBadge.svelte'
   import logo from '../../assets/logo.png'
+  import { hasSeam, isSheet, pageSize } from '../../base/geom/sheet'
 
-  const pages = $derived(store.view.spreads.length * 2)
+  // Страниц: у листа со швом две, у отдельного листа (шва нет) одна.
+  const pages = $derived(store.view.spreads.reduce((n, sp) => n + (hasSeam(sp) ? 2 : 1), 0))
+  const page = $derived(pageSize(store.view.settings))
+  // Сводка: у листа виньетки страниц нет, считаем листы.
+  const count = $derived(countLabel(store.view.spreads.length, pages, store.view.settings))
   const usedCount = $derived(store.photos.filter((p) => store.used.has(p.id)).length)
 </script>
 
@@ -21,22 +27,26 @@
       {store.projectName}{#if store.view.dirty && store.view.path}<span class="dot" title="Есть несохранённые изменения">•</span>{/if}
     </span>
     <div class="sep"></div>
-    <button class="icon" disabled={!store.view.canUndo} onclick={() => run('undo')} title="Отменить (Ctrl+Z)">↶</button>
-    <button class="icon" disabled={!store.view.canRedo} onclick={() => run('redo')} title="Повторить (Ctrl+Y)">↷</button>
+    <span class="pair" data-guide="topbar-undo">
+      <button class="icon" disabled={!store.view.canUndo} onclick={() => run('undo')} title="Отменить (Ctrl+Z)">↶</button>
+      <button class="icon" disabled={!store.view.canRedo} onclick={() => run('redo')} title="Повторить (Ctrl+Y)">↷</button>
+    </span>
   </div>
 
-  <div class="info" title="{store.view.spreads.length} разворотов ({pages} стр.) · {usedCount} / {store.photos.length} фото в альбоме">
-    {store.view.spreads.length} разворотов ({pages} стр.) · {usedCount} / {store.photos.length} фото в альбоме
+  <div class="info" title="{count} · {usedCount} / {store.photos.length} фото в альбоме">
+    {count} · {usedCount} / {store.photos.length} фото в альбоме
   </div>
 
   <div class="group right">
     <LevelBadge />
     <button class="ghost" onclick={() => modes.openSection('settings')} title="Настройки альбома в панели деталей">
-      Формат {store.view.settings.pageW / 10}×{store.view.settings.pageH / 10} см
+      {isSheet(store.view.settings) ? 'Лист' : 'Формат'}
+      {page.w / 10}×{page.h / 10} см
     </button>
     {#if prefs.can('timeline')}
       <button
         class="mode"
+        data-guide="topbar-big"
         class:on={modes.big}
         aria-pressed={modes.big}
         onclick={() => modes.toggleBig()}
@@ -50,6 +60,7 @@
     {/if}
     <button
       class="mode"
+      data-guide="topbar-details"
       class:on={modes.details}
       aria-pressed={modes.details}
       onclick={() => modes.toggleDetails()}
@@ -61,7 +72,7 @@
         <path d="M12 3.5v13M14 7h1.5M14 10h1.5" />
       </svg>
     </button>
-    <button class="accent" disabled={!!store.exporting || store.view.spreads.length === 0} onclick={() => run('export')}>
+    <button class="accent" disabled={!!store.exporting || store.sheets.length === 0} onclick={() => run('export')}>
       {#if store.exporting && store.exporting.total > 0}
         Экспорт {store.exporting.done} / {store.exporting.total}
       {:else if store.exporting}
@@ -89,6 +100,10 @@
     flex: none;
     display: flex;
     align-items: center;
+    gap: 4px;
+  }
+  .pair {
+    display: flex;
     gap: 4px;
   }
   .title {

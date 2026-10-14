@@ -25,6 +25,8 @@ type Plan struct {
 	Full bool          // все развороты: хвосты прежнего экспорта удаляются
 	Jobs []Job         // по возрастанию разворота
 	mask map[int]uint8 // номер разворота с 1 → маска целей
+	// Cover — обложка (00.jpg, 032); nil — не пишется. Задаётся WithCover.
+	Cover *CoverJob
 }
 
 // NewPlan строит план: units — цели из ParseRange, nil — все n разворотов; pages — вид
@@ -63,6 +65,9 @@ func NewPlan(units []Unit, n int, pages bool) Plan {
 // Names — имена файлов, которые запишет план, для альбома из total разворотов.
 func (pl Plan) Names(total int) []string {
 	var out []string
+	if pl.Cover != nil {
+		out = append(out, CoverName)
+	}
 	for _, j := range pl.Jobs {
 		out = append(out, j.Names(total)...)
 	}
@@ -72,6 +77,9 @@ func (pl Plan) Names(total int) []string {
 // hitsFile — задевает ли файл папки цель плана: цель-разворот — любой файл с этим номером
 // (NN.jpg, NN-1.jpg, NN-2.jpg, любой ширины), цель-страница — только файл этой страницы.
 func (pl Plan) hitsFile(f DirFile) bool {
+	if f.Spread == 0 { // обложка: PlanDir её не отдаёт, AddCoverFile — только при обложке в плане
+		return pl.Cover != nil
+	}
 	if pl.Full {
 		return true
 	}
@@ -91,6 +99,9 @@ func (pl Plan) wants(spread int, r layout.Rect, pageW float64) bool {
 // фон с Fade ≥ 1 не печатается и файл не читается — его пропажа экспорт не держит.
 func (pl Plan) SelectedPhotos(v model.View, pageW float64) map[string]bool {
 	out := map[string]bool{}
+	if pl.Cover != nil && v.Cover != nil {
+		coverPhotos(v.Cover.Sheet, out)
+	}
 	for i, s := range v.Spreads {
 		for k, id := range s.Photos {
 			if k >= len(s.Rects) || pl.wants(i+1, s.Rects[k], pageW) {
@@ -109,16 +120,41 @@ func (pl Plan) SelectedPhotos(v model.View, pageW float64) map[string]bool {
 	return out
 }
 
-// ReplaceQuestion — вопрос о замене найденных файлов прежнего экспорта.
-func ReplaceQuestion(pl Plan, hit []DirFile) string {
-	if pl.Full {
-		return fmt.Sprintf("В папке уже есть развороты прежнего экспорта: %d. Заменить?", len(hit))
+// coverPhotos — фото обложки, которые попадут в печать: места и видимые фоны.
+func coverPhotos(s model.SpreadView, out map[string]bool) {
+	for _, id := range s.Photos {
+		out[id] = true
 	}
+	for _, b := range s.Backdrops {
+		if b.Fade < 1 {
+			out[b.Photo] = true
+		}
+	}
+}
+
+// ReplaceQuestion — вопрос о замене найденных файлов прежнего экспорта; обложка (00.jpg) — в тексте отдельно.
+func ReplaceQuestion(pl Plan, hit []DirFile) string {
 	var nums []int
+	cover := false
 	for _, f := range hit {
-		if !slices.Contains(nums, f.Spread) {
+		if f.Spread == 0 {
+			cover = true
+		} else if !slices.Contains(nums, f.Spread) {
 			nums = append(nums, f.Spread)
 		}
+	}
+	files := len(hit)
+	if cover {
+		files--
+	}
+	if files == 0 { // только обложка
+		return "В папке уже есть обложка прежнего экспорта (" + CoverName + "). Заменить?"
+	}
+	if pl.Full {
+		if cover {
+			return fmt.Sprintf("В папке уже есть обложка и развороты прежнего экспорта: %d. Заменить?", len(hit))
+		}
+		return fmt.Sprintf("В папке уже есть развороты прежнего экспорта: %d. Заменить?", len(hit))
 	}
 	slices.Sort(nums)
 	shown := make([]string, 0, 10)
@@ -132,6 +168,9 @@ func ReplaceQuestion(pl Plan, hit []DirFile) string {
 	word := "разворотов"
 	if len(nums) == 1 {
 		word = "разворота"
+	}
+	if cover {
+		return fmt.Sprintf("Заменить обложку и файлы %s %s (%d шт.)?", word, list, len(hit))
 	}
 	return fmt.Sprintf("Заменить файлы %s %s (%d шт.)?", word, list, len(hit))
 }
@@ -189,5 +228,5 @@ func MissingPhotos(p *model.Project, ids map[string]bool, exists func(string) bo
 	if len(gone) > len(names) {
 		list += fmt.Sprintf(" …и ещё %d", len(gone)-len(names))
 	}
-	return fmt.Errorf("не найдены файлы фото: %d (%s); найдите их через «Недостающие фото» и повторите экспорт", len(gone), list)
+	return fmt.Errorf("не найдены файлы фото: %d (%s); найдите их: Файл ▸ Найти пропавшие фото… — и повторите выгрузку", len(gone), list)
 }

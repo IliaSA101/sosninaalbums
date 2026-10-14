@@ -37,12 +37,13 @@
 </script>
 
 {#if folders.length === 0}
-  <button type="button" onclick={add}>+ Папка с фото</button>
+  <button type="button" data-guide="folders" onclick={add}>+ Папка с фото</button>
 {:else}
   <button
     bind:this={btn}
     type="button"
     class="fbtn"
+    data-guide="folders"
     title="Папки с фото: добавить, убрать, перечитать"
     aria-haspopup="dialog"
     aria-expanded={open}
@@ -69,8 +70,8 @@
           <button
             type="button"
             class="ghost x"
-            title="Убрать папку из проекта"
-            aria-label="Убрать папку «{folderName(f)}» из проекта"
+            title="Убрать папку"
+            aria-label="Убрать папку «{folderName(f)}»"
             onpointerdown={stop}
             onclick={() => store.run(Api.RemoveFolder(f))}><Icon name="x" size={12} stroke={2.4} /></button
           >

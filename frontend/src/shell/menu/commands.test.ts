@@ -1,8 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
 import { COMMANDS } from './commands'
+import { canvas } from '../../editor/canvas/canvas.svelte'
 import { ownMarks } from '../../panels/marks/ownmarks.svelte'
 import { HOTKEYS, KEY_ACTIONS } from './hotkeys'
 import { buildMenu, type MenuCtx, type MenuItem } from './menu'
+import { store } from '../../base/core/store.svelte'
+import { prefs } from '../../base/prefs/prefs.svelte'
+import { modes } from '../../base/prefs/view.svelte'
+import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
+import { makeVignette } from '../../panels/vignette/vigact'
+import { vigDialog } from '../../panels/vignette/vigsession.svelte'
+import type { SpreadView } from '../../base/core/types'
+
+// Go не зовём: «Сделать виньеткой» проверяем по вызову действия vigact.
+vi.mock('../../panels/vignette/vigact', async (orig) => ({
+  ...(await orig<typeof import('../../panels/vignette/vigact')>()),
+  makeVignette: vi.fn(async () => true),
+}))
 
 const full: MenuCtx = {
   spreads: 1,
@@ -77,5 +91,120 @@ describe('команды', () => {
     COMMANDS.markLabel(key('1'))
     expect(set).not.toHaveBeenCalled()
     set.mockRestore()
+  })
+
+  it('«Настроить виньетку…»: на виньетке открывает окно этого листа; на обычном листе и на «Простом» — молчит', () => {
+    const was = { view: store.view, current: store.current, level: prefs.level }
+    const vig = { id: 'v', kind: 'vignette', vig: {}, photos: [] } as unknown as SpreadView
+    try {
+      store.view = { ...store.view, spreads: [{ id: 'a', photos: [] } as unknown as SpreadView, vig] }
+      store.current = 0
+      prefs.level = 'standard'
+      COMMANDS.vigSetup()
+      expect(vigDialog.id).toBeNull()
+      store.current = 1
+      prefs.level = 'simple'
+      COMMANDS.vigSetup()
+      expect(vigDialog.id).toBeNull()
+      prefs.level = 'standard'
+      COMMANDS.vigSetup()
+      expect(vigDialog.id).toBe('v')
+    } finally {
+      vigDialog.close()
+      store.view = was.view
+      store.current = was.current
+      prefs.level = was.level
+    }
+  })
+
+  it('«Разнообразить раскладки» (041): выделенные в ленте, иначе текущий; уровень из окна автосборки; на «Простом» тоже', async () => {
+    const was = { view: store.view, current: store.current, level: prefs.level, variety: modes.autoVariety }
+    const vary = vi.spyOn(store, 'varyLayouts').mockResolvedValue(true)
+    const sp = (id: string, o: Partial<SpreadView> = {}) => ({ id, photos: ['p'], grid: false, kind: '', ...o }) as unknown as SpreadView
+    try {
+      store.view = { ...store.view, spreads: [sp('a'), sp('b'), sp('c')] }
+      store.current = 1
+      prefs.level = 'simple'
+      await COMMANDS.varyLayouts()
+      expect(vary).toHaveBeenLastCalledWith(['b'], 1)
+      spreadsel.toggle('c')
+      spreadsel.toggle('a')
+      modes.autoVariety = 0 // «Меньше» считается «Обычным»
+      await COMMANDS.varyLayouts()
+      expect(vary).toHaveBeenLastCalledWith(['a', 'c'], 1)
+      modes.autoVariety = 2
+      await COMMANDS.varyLayouts()
+      expect(vary).toHaveBeenLastCalledWith(['a', 'c'], 2)
+      // Все цели — сетка или виньетка: молча, Go не зовём (пункт меню серый, тоста нет)
+      vary.mockClear()
+      store.view = { ...store.view, spreads: [sp('a', { grid: true }), sp('b'), sp('c', { kind: 'vignette' })] }
+      await COMMANDS.varyLayouts()
+      expect(vary).not.toHaveBeenCalled()
+    } finally {
+      spreadsel.clear()
+      vary.mockRestore()
+      store.view = was.view
+      store.current = was.current
+      prefs.level = was.level
+      modes.autoVariety = was.variety
+    }
+  })
+
+  it('«Сделать разворот виньеткой»: обычный текущий разворот на «Стандартном» — makeVignette; иначе ничего', async () => {
+    const was = { view: store.view, current: store.current, level: prefs.level }
+    const sp = { id: 'a', photos: ['1'] } as unknown as SpreadView
+    try {
+      store.view = { ...store.view, spreads: [sp] }
+      store.current = 0
+      prefs.level = 'simple'
+      await COMMANDS.makeVignette()
+      expect(makeVignette).not.toHaveBeenCalled()
+      prefs.level = 'standard'
+      await COMMANDS.makeVignette()
+      expect(makeVignette).toHaveBeenCalledWith(store.view.spreads[0])
+      vi.mocked(makeVignette).mockClear()
+      store.view = { ...store.view, spreads: [{ ...sp, kind: 'vignette', vig: {} } as unknown as SpreadView] }
+      await COMMANDS.makeVignette()
+      expect(makeVignette).not.toHaveBeenCalled()
+    } finally {
+      store.view = was.view
+      store.current = was.current
+      prefs.level = was.level
+    }
+  })
+
+  // Цель keydown бывает document/window (синтетическое событие, фокус на документе): у неё нет closest.
+  // Тесты идут без DOM — Element подменяем заглушкой, у которой closest есть.
+  describe('Пробел', () => {
+    class FakeEl {
+      blurred = false
+      closest = () => ({ blur: () => (this.blurred = true) })
+    }
+    const press = (target: unknown, shiftKey = false) => ({ key: ' ', shiftKey, target }) as unknown as KeyboardEvent
+
+    it('с целью-документом не бросает и листает как обычно', () => {
+      vi.stubGlobal('Element', FakeEl)
+      try {
+        for (const target of [{}, { closest: undefined }, null]) {
+          expect(() => COMMANDS.spaceDown(press(target))).not.toThrow()
+          expect(canvas.space).toBe(true)
+          expect(canvas.spaceUp()).toBe(1)
+        }
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('снимает фокус с кнопки', () => {
+      vi.stubGlobal('Element', FakeEl)
+      try {
+        const el = new FakeEl()
+        COMMANDS.spaceDown(press(el))
+        expect(el.blurred).toBe(true)
+        canvas.spaceUp()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
   })
 })

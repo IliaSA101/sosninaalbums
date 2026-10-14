@@ -9,15 +9,19 @@ export interface ExportRange {
 
 export const MAX_RANGE_LEN = 1000
 
+// Как Go export.ErrSheetPages (без заглавной: errText тут не нужен).
+const SHEET_PAGES = 'В листе нет страниц: укажите номера листов без «л» и «п»'
+
 const fail = (error: string): ExportRange => ({ units: [], error })
 
 // Один разобранный элемент («3-5», «8», «7п») в набор seen; ошибка — текстом, успех — null.
-function addToken(seen: Set<number>, m: RegExpExecArray, raw: string, n: number): string | null {
+function addToken(seen: Set<number>, m: RegExpExecArray, raw: string, n: number, sheet: boolean): string | null {
   const a = +m[1]
   const b = m[2] === undefined ? a : +m[2]
   if (a < 1 || b < 1) return 'Номера начинаются с 1'
   if (a > b) return `Диапазон «${raw}» задан наоборот`
-  if (b > n) return `Разворота ${b} нет (всего ${n})`
+  if (b > n) return `${sheet ? 'Листа' : 'Разворота'} ${b} нет (всего ${n})`
+  if (sheet && m[3] !== undefined) return SHEET_PAGES
   if (m[3] !== undefined) {
     seen.add(a * 4 + (m[3] === 'л' || m[3] === 'l' ? 1 : 2))
   } else {
@@ -26,20 +30,22 @@ function addToken(seen: Set<number>, m: RegExpExecArray, raw: string, n: number)
   return null
 }
 
-export function parseExportRange(text: string, n: number): ExportRange {
-  if (!(n >= 1)) return fail('Нет разворотов')
+// sheet — проект-лист (031): слова «лист», страниц нет. Альбом (по умолчанию) говорит «разворот».
+export function parseExportRange(text: string, n: number, sheet = false): ExportRange {
+  const empty = sheet ? 'Укажите лист' : 'Укажите разворот или страницу'
+  if (!(n >= 1)) return fail(sheet ? 'Нет листов' : 'Нет разворотов')
   if (text.length > MAX_RANGE_LEN) return fail('Слишком длинная строка')
   const src = text.replace(/\s*[-–—]\s*/g, '-').trim()
-  if (src === '') return fail('Укажите разворот или страницу')
+  if (src === '') return fail(empty)
   const seen = new Set<number>() // spread*4 + page
   for (const raw of src.split(/[,;\s]+/)) {
     if (raw === '') continue // хвостовая запятая
     const m = /^(\d{1,6})(?:-(\d{1,6})|([лпlr]))?$/.exec(raw.toLowerCase())
-    if (!m) return fail(badToken(raw, src))
-    const err = addToken(seen, m, raw, n)
+    if (!m) return fail(sheet && /[лпlr]/i.test(raw) ? SHEET_PAGES : badToken(raw, src))
+    const err = addToken(seen, m, raw, n, sheet)
     if (err) return fail(err)
   }
-  if (seen.size === 0) return fail('Укажите разворот или страницу') // одни запятые
+  if (seen.size === 0) return fail(empty) // одни запятые
   const units = [...seen].sort((x, y) => x - y).map((v): ExportUnit => [v >> 2, (v & 3) as 0 | 1 | 2])
   return { units, error: null }
 }

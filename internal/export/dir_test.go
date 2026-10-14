@@ -105,8 +105,8 @@ func TestPlanExportDir(t *testing.T) {
 	if want := []string{"002.jpg", "01.JPG", "spread_01.jpg"}; !slices.Equal(ours, want) {
 		t.Fatalf("ours = %v, ждали %v", ours, want)
 	}
-	if !slices.Equal(foreign, []string{"02.jpg"}) {
-		t.Fatalf("foreign = %v, ждали [02.jpg]", foreign)
+	if !slices.Equal(foreign, []string{"02.jpg", "04.jpg"}) { // папка 04.jpg — тоже чужая
+		t.Fatalf("foreign = %v, ждали [02.jpg 04.jpg]", foreign)
 	}
 
 	// removeFiles удаляет только перечисленное; чужое и обложка остаются.
@@ -152,5 +152,61 @@ func TestPlanExportDirFourDigits(t *testing.T) {
 	}
 	if !slices.Equal(foreign, []string{"0002.jpg"}) {
 		t.Fatalf("foreign = %v, ждали [0002.jpg]", foreign)
+	}
+}
+
+// Папка под именем разворота (05.jpg, spread_07.jpg) — чужая: не пропускается молча,
+// экспорт под неё откажет, а не заменит; обычный файл с меткой по-прежнему наш, 00.jpg не отдаётся.
+func TestPlanExportDirFolderIsForeign(t *testing.T) {
+	dir := testkit.TempDir(t)
+	ourData := append([]byte{0xFF, 0xD8, 0xFF, 0xFE, 0, 16}, Marker...)
+	if err := os.WriteFile(filepath.Join(dir, "01.jpg"), ourData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{"05.jpg", "06-1.jpg", "spread_07.jpg", "00.jpg"} {
+		if err := os.Mkdir(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ours, foreign, err := PlanDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(fileNames(ours), []string{"01.jpg"}) {
+		t.Fatalf("ours = %v, ждали [01.jpg]", fileNames(ours))
+	}
+	if want := []string{"05.jpg", "06-1.jpg", "spread_07.jpg"}; !slices.Equal(fileNames(foreign), want) {
+		t.Fatalf("foreign = %v, ждали %v", fileNames(foreign), want)
+	}
+	for _, f := range foreign {
+		if f.Name == "06-1.jpg" && (f.Spread != 6 || f.Page != 1) {
+			t.Errorf("06-1.jpg разобран как %+v", f)
+		}
+	}
+	// Цель-разворот задевает свою папку: экспорт откажет.
+	if got := fileNames(HitFiles(NewPlan([]Unit{{5, 0}}, 10, true), foreign)); !slices.Equal(got, []string{"05.jpg"}) {
+		t.Errorf("разворот 5 задел %v", got)
+	}
+}
+
+// Ссылка под именем разворота — чужая, даже если указывает на наш файл: запись по ней не делаем.
+func TestPlanExportDirSymlinkIsForeign(t *testing.T) {
+	dir := testkit.TempDir(t)
+	ourData := append([]byte{0xFF, 0xD8, 0xFF, 0xFE, 0, 16}, Marker...)
+	target := filepath.Join(dir, "01.jpg")
+	if err := os.WriteFile(target, ourData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"05.jpg", "spread_07.jpg"} {
+		if err := os.Symlink(target, filepath.Join(dir, n)); err != nil {
+			t.Skipf("ссылки недоступны: %v", err)
+		}
+	}
+	ours, foreign, err := PlanDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(fileNames(ours), []string{"01.jpg"}) || !slices.Equal(fileNames(foreign), []string{"05.jpg", "spread_07.jpg"}) {
+		t.Fatalf("ours = %v, foreign = %v", fileNames(ours), fileNames(foreign))
 	}
 }

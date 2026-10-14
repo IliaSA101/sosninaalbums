@@ -53,6 +53,29 @@ export function groupTitle(places: number, texts: number): string {
   return parts.join(', ')
 }
 
+// Заголовок сворачиваемой карточки в панели деталей: тот же, что был у тела («Разворот N», «Текст», «Подпись»…).
+export interface CardCtx {
+  spreadNo: number // номер текущего разворота с 1
+  caption: boolean // выделена подпись, а не блок текста
+  group: boolean // места/тексты группой
+  places: number
+  texts: number
+  cover?: boolean // текущий лист — обложка (032): «Обложка» вместо номера
+  unit?: string // «Разворот» (по умолчанию) или «Лист» в режиме виньетки (031)
+}
+export function cardTitle(mode: PanelMode, c: CardCtx): string {
+  switch (mode) {
+    case 'text':
+      return c.caption ? 'Подпись' : 'Текст'
+    case 'photo':
+      return 'Фото'
+    case 'places':
+      return c.group ? groupTitle(c.places, c.texts) : 'Место'
+    default:
+      return c.cover ? 'Обложка' : `${c.unit ?? 'Разворот'} ${c.spreadNo}`
+  }
+}
+
 // Высота группы из n кнопок: подпись и кнопки через зазор STEP − BTN.
 export const groupHeight = (n: number): number => HEAD + Math.max(0, n) * STEP - (STEP - BTN)
 

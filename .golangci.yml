@@ -314,6 +314,44 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/album$
             - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
             - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # 0.10 (разрешение владельца 2026-10-14): генератор виньетки — чистая геометрия без проекта (031 design §4).
+        "album/vignette: только стандартная библиотека":
+          files:
+            - "**/internal/album/vignette/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/vignette
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Разбор и вставка имён (030) — над моделью, без раскладки и ввода-вывода.
+        "album/names: только model":
+          files:
+            - "**/internal/album/names/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/names
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Правки обложки (032) — область дерева album, как grid и view.
+        "album/cover: только model":
+          files:
+            - "**/internal/album/cover/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/cover
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
         "album/salbum: model и ввод-вывод":
           files:
             - "**/internal/album/salbum/**"

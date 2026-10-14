@@ -3,6 +3,15 @@
 // тестах, которым нужен верх). Без него store работает «голым»: хуки пустые, ленты не фильтруются.
 import type { FontFamily, MarkView, Photo, View } from './types'
 
+// Что выбрано для автосборки (034): откуда фото и сколько из них уже в альбоме — для строки окна.
+export interface PickResult {
+  ids: string[]
+  skipped: number
+  from: 'selected' | 'free'
+  inAlbum: number
+  filtered: boolean
+}
+
 export type MarkMap = Readonly<Record<string, MarkView>>
 
 export interface StoreHooks {
@@ -26,11 +35,15 @@ export interface StoreHooks {
   // Фото не в местах и не на фоне (автосборка, фильтр «Неиспользованные»).
   free(photos: Photo[], used: ReadonlySet<string>, backdrop: ReadonlySet<string>): Photo[]
   // Что отдать автосборке / «Заполнить пустые места»; пусто — тост с причиной уже показан.
-  pick(moveUsed: boolean): { ids: string[]; skipped: number }
+  pick(moveUsed: boolean): PickResult
 
   // --- выделение на холсте ---
   selectedRefs(): readonly string[]
   select(ids: string[]): void
+
+  // --- бросок на ручной разворот (042) ---
+  // Фото из ленты на лист-сетку (Enter, двойной щелчок): места, плитка, вопрос. true — обработано.
+  dropGrid(spread: string, ids: string[]): Promise<boolean>
 }
 
 // Пустые хуки: основа без верха.
@@ -43,7 +56,8 @@ export const noHooks: StoreHooks = {
   marks: () => ({}),
   visible: (photos) => photos,
   free: (photos, used, backdrop) => photos.filter((p) => !used.has(p.id) && !backdrop.has(p.id)),
-  pick: () => ({ ids: [], skipped: 0 }),
+  pick: () => ({ ids: [], skipped: 0, from: 'free', inAlbum: 0, filtered: false }),
   selectedRefs: () => [],
   select: () => {},
+  dropGrid: async () => false,
 }

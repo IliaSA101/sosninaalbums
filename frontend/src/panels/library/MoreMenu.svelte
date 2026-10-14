@@ -6,7 +6,8 @@
   import { gallery } from '../layouts/gallery.svelte'
 
   // «⋯» в конце строки панели: группы, которым не хватило места (спека 024). Ушедшие группы рисует вызывающий.
-  let { ids, item }: { ids: readonly string[]; item: Snippet<[string]> } = $props()
+  // hold — id справочника (033) ушедших групп: кнопка мигает вместо них.
+  let { ids, item, hold = '' }: { ids: readonly string[]; item: Snippet<[string]>; hold?: string } = $props()
 
   let open = $state(false)
   let btn = $state<HTMLButtonElement>()
@@ -24,6 +25,7 @@
   type="button"
   class="more"
   data-more
+  data-guide-hold={hold || null}
   title="Ещё: то, что не поместилось"
   aria-label="Ещё: то, что не поместилось"
   aria-haspopup="dialog"

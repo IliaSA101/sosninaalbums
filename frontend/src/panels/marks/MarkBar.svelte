@@ -26,7 +26,7 @@
   const keep = (e: MouseEvent) => e.preventDefault()
 </script>
 
-<div class="markbar" role="toolbar" aria-label="Выделенные фото">
+<div class="markbar" role="toolbar" aria-label="Выделенные фото" data-guide="mark-bar">
   <button
     class="ghost clear"
     title="Выделено: {n}. Снять выделение (Esc)"
@@ -92,7 +92,7 @@
         aria-label="Отклонено"
         onpointerdown={stop}
         onmousedown={keep}
-        onclick={() => ownMarks.setMarks(store, { flag: flagClick(-1, shared.flag) })}><Icon name="ban" size={16} /></button
+        onclick={() => ownMarks.setMarks(store, { flag: flagClick(-1, shared.flag) })}><Icon name="flag-off" size={16} /></button
       >
     </div>
 

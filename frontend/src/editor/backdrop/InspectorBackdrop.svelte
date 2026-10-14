@@ -4,6 +4,8 @@
   import { store } from '../../base/core/store.svelte'
   import { backdropAccepts } from '../../base/drag/drop'
   import { backdropOf, SCOPE_LABEL, zoneScopes } from './backdrop'
+  import { COVER_SCOPE_LABEL, layoutScopes } from '../cover/cover'
+  import { isCover } from '../../base/geom/sheet'
   import { clearBackdrop, editBackdrop, pickBackdropFile } from './backdropact'
   import { thumbUrl } from '../../base/core/media'
   import { bgmode } from './bgmode.svelte'
@@ -14,13 +16,16 @@
   // «Свой файл…», «Править» (входит в режим фона) и «Убрать». split — цвета показаны по страницам.
   let { sp, split }: { sp: SpreadView; split: boolean } = $props()
 
-  const scopes = $derived(zoneScopes(sp.backdrops, split))
+  // Обложка (032): зоны броска задаёт её раскладка, а не цвета страниц; названия — сторонки.
+  const cover = $derived(isCover(sp))
+  const scopes = $derived(cover ? layoutScopes(store.cover?.layout) : zoneScopes(sp.backdrops, split))
+  const names = $derived(cover ? COVER_SCOPE_LABEL : SCOPE_LABEL)
   // Эта область правится в режиме фона: вместо «Править» — поля режима и «Готово».
   const editing = (scope: BackdropScope) => bgmode.cur?.spread === sp.id && bgmode.cur.scope === scope
-  const label = (scope: BackdropScope) => (scopes.length > 1 ? SCOPE_LABEL[scope] : 'Фото фона')
+  const label = (scope: BackdropScope) => (cover || scopes.length > 1 ? names[scope] : 'Фото фона')
 </script>
 
-<div class="zones" role="group" aria-label="Фото фона">
+<div class="zones" role="group" aria-label="Фото фона" data-guide="bg-photo">
   {#each scopes as scope (scope)}
     {@const b = backdropOf(sp, scope)}
     <div

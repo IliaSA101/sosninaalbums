@@ -74,7 +74,7 @@
 <svelte:window onpointerdowncapture={outside} onkeydowncapture={esc} />
 
 <!-- Масштаб холста виден всегда; щелчок — бегунок, двойной щелчок — вписать (без зума щелчок вписывает) -->
-<div class="zoomctl" data-chrome>
+<div class="zoomctl" data-chrome data-guide="zoom-badge">
   {#if can}<ZoomSlider bind:this={slider} />{/if}
   <button
     bind:this={badge}

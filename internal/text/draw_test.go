@@ -26,7 +26,7 @@ func inkBounds(img *image.RGBA) (r image.Rectangle) {
 func TestDrawMatchesLayout(t *testing.T) {
 	const dpi = 300
 	mmpx := func(mm float64) float64 { return mm / 25.4 * dpi }
-	for _, fam := range []string{"montserrat", "cormorant", "ptserif", "marck"} {
+	for _, fam := range FamilyIDs() {
 		st := Style{Font: fam, Size: 20, Color: "#000000", Align: "center"}
 		bw, x0, y0 := 80.0, 20.0, 15.0
 		b := Layout("Иван и Мария\nприглашают вас на свою свадьбу в субботу", st, bw)

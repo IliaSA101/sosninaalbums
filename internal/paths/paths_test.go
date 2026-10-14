@@ -2,10 +2,29 @@ package paths
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
+
+// LogQ режет строку из файла по знакам (не байтам) и помечает обрезку.
+func TestLogQ(t *testing.T) {
+	ya := func(n int) string { return strings.Repeat("я", n) }
+	for in, want := range map[string]string{
+		"":                               `""`,
+		"vignette":                       `"vignette"`,
+		"a\nb":                           `"a\nb"`,
+		ya(LogRunes):                     `"` + ya(LogRunes) + `"`,
+		ya(LogRunes + 1):                 `"` + ya(LogRunes) + `"…`,
+		ya(1 << 20):                      `"` + ya(LogRunes) + `"…`,
+		"\xff" + strings.Repeat("x", 50): `"\xff` + strings.Repeat("x", LogRunes-1) + `"…`,
+	} {
+		if got := LogQ(in); got != want {
+			t.Errorf("LogQ(%.20q) = %.60s, ждали %.60s", in, got, want)
+		}
+	}
+}
 
 func skipNotWindows(t *testing.T) {
 	t.Helper()

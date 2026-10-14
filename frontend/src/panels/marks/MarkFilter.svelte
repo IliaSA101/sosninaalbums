@@ -45,7 +45,7 @@
   })
 </script>
 
-<span class="filter">
+<span class="filter" data-guide="mark-filter">
   <button
     bind:this={btn}
     class="fbtn"

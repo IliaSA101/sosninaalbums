@@ -6,7 +6,7 @@
   const n = $derived(placesel.selected.length)
 </script>
 
-<div class="seg" role="group" aria-label="Фото в месте">
+<div class="seg" role="group" aria-label="Фото в месте" data-guide="fit-toggle">
   <button
     class:on={placesel.allContain}
     disabled={n === 0}

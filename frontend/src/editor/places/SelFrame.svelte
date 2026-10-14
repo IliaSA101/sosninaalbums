@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Handle, Settings, SpreadView } from '../../base/core/types'
+  import type { Handle, SpreadView } from '../../base/core/types'
   import { placesel } from './placesel.svelte'
   import { startMove, startResize, startRotate, zeroAngle } from './placegesture'
   import { aabbOf, angleOf, resizeCursor, rotHandleAt, rotHandleIn } from '../../base/geom/rotbox'
@@ -12,10 +12,10 @@
   // рамки полоса 10 px — перенос места; тело под рамкой остаётся фото (обмен, ✥, ползунок — в Cell).
   // Повёрнутое место — рамка крутится вокруг центра вместе с ручками и ⟳. Лежит над слоем текста. Жесты — places/placegesture.ts; предпросмотр — placesel.live (сама рамка
   // едет за курсором, фото встаёт на место после ответа Go).
-  let { spread, settings, width }: { spread: SpreadView; settings: Settings; width: number } = $props()
+  let { spread, width }: { spread: SpreadView; width: number } = $props()
 
-  const sw = $derived(settings.pageW * 2)
-  const ph = $derived(settings.pageH)
+  const sw = $derived(spread.w)
+  const ph = $derived(spread.h)
   const ppm = $derived(width / sw) // px на мм
   const handles: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
   const corners: Handle[] = ['nw', 'ne', 'se', 'sw']

@@ -28,25 +28,27 @@ func SetCaption(p *model.Project, photoID, txt string) {
 	p.Photos[photoID] = r
 }
 
-// SetCaptionStyle — оформление подписи (st — уже зажатый, ClampStyle) и её место
-// (over — на фото). Без подписи — холостая правка.
-func SetCaptionStyle(p *model.Project, photoID string, st model.TextStyle, over bool) {
+// SetCaptionStyle — оформление подписи (st — уже зажатый, ClampStyle), её место
+// (over — на фото) и отступ pad (030; уже зажат ClampCaptionPad, nil — 1 мм, свой
+// указатель). Без подписи — холостая правка.
+func SetCaptionStyle(p *model.Project, photoID string, st model.TextStyle, over bool, pad *float64) {
 	r, ok := p.Photos[photoID]
 	if !ok || r.Caption == nil {
 		return
 	}
-	r.Caption = &model.Caption{Text: r.Caption.Text, Style: st, Over: over}
+	r.Caption = &model.Caption{Text: r.Caption.Text, Style: st, Over: over, Pad: pad}
 	p.Photos[photoID] = r
 }
 
 // newCaption — подпись к фото id: оформление (стиль и «на фото») берёт у подписи
-// на том же развороте, иначе у ближайшей по ленте, иначе — стиль по формату.
+// на том же развороте, иначе у ближайшей по ленте, иначе — стиль по формату. Отступ (030) — тоже.
 // Так поправленный размер не повторяют на каждом фото. Стиль хранится в подписи
 // целиком, поэтому формат файла и старые подписи не меняются.
 func newCaption(p *model.Project, id, txt string) *model.Caption {
 	c := &model.Caption{Text: txt, Style: model.NewCaptionStyle(p.Settings.PageH)}
 	if src := captionSource(p, id); src != nil {
 		c.Style, c.Over = src.Style, src.Over
+		c.Pad = model.ClampCaptionPad(src.Pad) // своя копия: указатель не общий
 	}
 	return c
 }
@@ -61,7 +63,7 @@ func captionSource(p *model.Project, id string) *model.Caption {
 	}
 	var ribbon []slot
 	at := -1
-	for i, s := range p.Spreads {
+	for i, s := range p.Sheets() {
 		for _, pid := range s.Photos {
 			if pid == id {
 				at = len(ribbon)

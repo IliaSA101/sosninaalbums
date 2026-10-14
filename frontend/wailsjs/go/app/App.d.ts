@@ -13,9 +13,13 @@ export function AddPlace(arg1:string,arg2:number):Promise<model.View>;
 
 export function AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>;
 
+export function AddVignette(arg1:number):Promise<model.View>;
+
 export function AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>;
 
 export function AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<boolean>;
+
+export function ApplyCoverPreset(arg1:string):Promise<model.View>;
 
 export function ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<app.GridResult>;
 
@@ -23,7 +27,9 @@ export function ArrangeLayers(arg1:string,arg2:string,arg3:Array<string>):Promis
 
 export function ArrangePlaces(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>;
 
-export function AutoBuild(arg1:Array<string>,arg2:number,arg3:number):Promise<model.View>;
+export function AutoBuild(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.View>;
+
+export function AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>;
 
 export function Backups():Promise<Array<app.BackupInfo>>;
 
@@ -31,9 +37,21 @@ export function ChooseFolder():Promise<model.View>;
 
 export function ClearBackdrop(arg1:string,arg2:string):Promise<model.View>;
 
+export function ClearCoverGuide():Promise<model.View>;
+
 export function ClearRecent():Promise<Array<prefs.RecentProject>>;
 
+export function ClearVignette(arg1:string):Promise<model.View>;
+
 export function CopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<app.GridResult>;
+
+export function CoverPresets():Promise<Array<model.CoverPreset>>;
+
+export function CoverSpineText():Promise<model.View>;
+
+export function CreateCover(arg1:string,arg2:string):Promise<model.View>;
+
+export function DeleteCover():Promise<model.View>;
 
 export function DeleteGridTemplate(arg1:string):Promise<void>;
 
@@ -46,6 +64,8 @@ export function DeleteSpread(arg1:string):Promise<model.View>;
 export function DeleteSpreads(arg1:Array<string>):Promise<model.View>;
 
 export function DeleteText(arg1:string):Promise<model.View>;
+
+export function DropPhotos(arg1:string,arg2:string,arg3:Array<string>,arg4:number,arg5:string):Promise<app.DropResult>;
 
 export function DuplicateGrid(arg1:string,arg2:number,arg3:boolean):Promise<model.View>;
 
@@ -71,6 +91,10 @@ export function MergeSpreads(arg1:string):Promise<model.View>;
 
 export function MirrorGrid(arg1:string,arg2:string):Promise<model.View>;
 
+export function MissingNames():Promise<Record<string, string>>;
+
+export function MoreLayouts(arg1:string,arg2:number):Promise<model.Choices>;
+
 export function MovePhoto(arg1:string,arg2:string,arg3:number):Promise<model.View>;
 
 export function MoveSpread(arg1:string,arg2:number):Promise<model.View>;
@@ -79,15 +103,25 @@ export function NewProject(arg1:string):Promise<app.State>;
 
 export function NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>;
 
+export function NewVignetteSheet(arg1:number,arg2:number):Promise<app.State>;
+
 export function OpenProject():Promise<app.State>;
 
 export function OpenRecent(arg1:string):Promise<app.State>;
 
+export function PasteNames(arg1:string,arg2:string,arg3:boolean):Promise<app.NamesResult>;
+
+export function Person(arg1:string):Promise<model.PersonView>;
+
 export function PickBackdropFile(arg1:string,arg2:string):Promise<model.View>;
+
+export function PickCoverGuide():Promise<model.View>;
 
 export function PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<app.GridResult>;
 
 export function PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>;
+
+export function PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>;
 
 export function Recent():Promise<Array<prefs.RecentProject>>;
 
@@ -111,6 +145,8 @@ export function ResetFrame(arg1:string):Promise<model.View>;
 
 export function ResetMarks(arg1:Array<string>):Promise<model.View>;
 
+export function ResetVignette(arg1:string):Promise<app.GridResult>;
+
 export function RestoreBackup(arg1:string):Promise<model.View>;
 
 export function RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>;
@@ -120,6 +156,8 @@ export function SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<vo
 export function SaveProject():Promise<model.View>;
 
 export function SaveProjectAs():Promise<model.View>;
+
+export function SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>;
 
 export function ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>;
 
@@ -135,7 +173,13 @@ export function SetBackground(arg1:string,arg2:string,arg3:string):Promise<model
 
 export function SetCaption(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
-export function SetCaptionStyle(arg1:string,arg2:text.Style,arg3:boolean):Promise<model.View>;
+export function SetCaptionStyle(arg1:string,arg2:text.Style,arg3:boolean,arg4:number):Promise<model.View>;
+
+export function SetCoverLayout(arg1:string):Promise<model.View>;
+
+export function SetCoverSpec(arg1:model.CoverSpec):Promise<model.View>;
+
+export function SetCoverSpineBg(arg1:string):Promise<model.View>;
 
 export function SetCustom(arg1:prefs.CustomLevel):Promise<prefs.Prefs>;
 
@@ -153,6 +197,8 @@ export function SetLevel(arg1:string):Promise<prefs.Prefs>;
 
 export function SetMarks(arg1:Array<string>,arg2:model.MarkPatch):Promise<model.View>;
 
+export function SetPerson(arg1:string,arg2:model.Person,arg3:string):Promise<model.View>;
+
 export function SetPlaceAngle(arg1:string,arg2:string,arg3:number):Promise<model.View>;
 
 export function SetPlaceFit(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>;
@@ -160,6 +206,8 @@ export function SetPlaceFit(arg1:string,arg2:Array<string>,arg3:string):Promise<
 export function SetPlaces(arg1:string,arg2:Array<model.PlaceBox>,arg3:string):Promise<model.View>;
 
 export function SetSettings(arg1:model.Settings):Promise<model.View>;
+
+export function SetSheetCaps(arg1:string,arg2:boolean,arg3:model.SheetCaps):Promise<model.View>;
 
 export function SetShowStart(arg1:boolean):Promise<prefs.Prefs>;
 
@@ -177,11 +225,17 @@ export function SetTextScale(arg1:string,arg2:number,arg3:number,arg4:number):Pr
 
 export function SetTextStyle(arg1:string,arg2:text.Style):Promise<model.View>;
 
+export function SetVignette(arg1:string,arg2:model.Vignette):Promise<app.GridResult>;
+
+export function SetupVignette(arg1:string,arg2:model.VigSetup):Promise<app.GridResult>;
+
 export function ShowBackups():Promise<void>;
 
 export function ShowInExplorer():Promise<void>;
 
 export function ShowPhotoInExplorer(arg1:string):Promise<void>;
+
+export function SortVignette(arg1:string):Promise<model.View>;
 
 export function SplitSpread(arg1:string,arg2:number):Promise<model.View>;
 
@@ -196,3 +250,7 @@ export function TransformGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:n
 export function TurnPhotos(arg1:Array<string>,arg2:number):Promise<model.View>;
 
 export function Undo():Promise<model.View>;
+
+export function VaryLayouts(arg1:Array<string>,arg2:number):Promise<model.View>;
+
+export function VignetteChoices(arg1:string,arg2:number,arg3:number,arg4:string):Promise<Array<model.VigChoice>>;

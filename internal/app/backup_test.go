@@ -2,19 +2,17 @@ package app
 
 import (
 	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
-	"strings"
-	"sync"
 	"testing"
+	"weak"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
-	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -25,15 +23,7 @@ func backupApp(t *testing.T, n int) (a *App, file string, notices func() []strin
 	a = newApp(t)
 	a.cfgDir = testkit.TempDir(t)
 	a.backups = backup.New(filepath.Join(testkit.TempDir(t), "backups"))
-	var mu sync.Mutex
-	var got []string
-	a.emit = func(name string, data ...any) {
-		if name == "notice" {
-			mu.Lock()
-			got = append(got, data[0].(string))
-			mu.Unlock()
-		}
-	}
+	notices = collected[string](a, "notice")
 	file = filepath.Join(testkit.TempDir(t), "Ивановы"+projectExt)
 	ed := mustEditor(t, model.New(), "")
 	for range n {
@@ -45,11 +35,7 @@ func backupApp(t *testing.T, n int) (a *App, file string, notices func() []strin
 		t.Fatal(err)
 	}
 	a.ed.Store(ed)
-	return a, file, func() []string {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]string(nil), got...)
-	}
+	return a, file, notices
 }
 
 func addSpread(t *testing.T, a *App) {
@@ -205,29 +191,6 @@ func TestOpenFromBackupsIsUnsaved(t *testing.T) {
 	}
 }
 
-// «Сохранить как» в папку копий — отказ, файл не создан.
-func TestSaveAsIntoBackupsRefused(t *testing.T) {
-	a, _, _ := backupApp(t, 1)
-	target := filepath.Join(a.backups.Root, "свой"+projectExt)
-	if _, err := a.saveAs(a.editor(), target); err == nil {
-		t.Fatal("сохранение в папку копий принято")
-	}
-	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("файл создан: %v", err)
-	}
-	// Поверх чужого файла — сначала его копия.
-	other := filepath.Join(testkit.TempDir(t), "чужой"+projectExt)
-	if err := os.WriteFile(other, []byte(`{"spreads":[{},{},{}]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := a.saveAs(a.editor(), other); err != nil {
-		t.Fatal(err)
-	}
-	if list, _ := a.backups.List(backup.Key(other)); len(list) != 1 || list[0].Spreads != 3 {
-		t.Fatalf("копия перезаписанного файла: %+v", list)
-	}
-}
-
 // «Новый» удаляет черновик — сначала его копия; пустой черновик не копируется.
 func TestDraftBackedUpBeforeRemove(t *testing.T) {
 	a := newApp(t)
@@ -343,27 +306,96 @@ func TestSaveWithoutEditsBacksUp(t *testing.T) {
 	}
 }
 
-// Пропавший диск: копия не пытается читать файл.
-func TestBackupSkipsUnreachable(t *testing.T) {
+// «Восстановить» копию с другим набором фото: список пропавших следует за ним (новое проверено,
+// убывшее ушло), имена — из копии; отмена возвращает прежний список.
+func TestRestoreBackupMissing(t *testing.T) {
 	a, file, _ := backupApp(t, 1)
-	old := reachable
-	reachable = func(string) bool { return false }
-	t.Cleanup(func() { reachable = old })
-	a.backupBefore(file, backup.Key(file), true)
-	if list := backups(t, a); len(list) != 0 {
-		t.Fatalf("копия с недоступного диска: %+v", list)
+	a.exists = func(p string) bool { return filepath.Base(p) == "ok.jpg" }
+	infos, ids := missInfos(a, "x.jpg", "ok.jpg")
+	x := ids[0]
+	missAdd(a, infos)
+	if err := a.editor().Save(""); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.backups.Force(file, backup.Key(file)); err != nil {
+		t.Fatal(err)
+	}
+	a.RemovePhotos([]string{x})
+	infos, ids = missInfos(a, "y.jpg")
+	y := ids[0]
+	missAdd(a, infos)
+	waitMissing(t, a)
+	if m := a.GetState().Missing; !slices.Equal(m, []string{y}) {
+		t.Fatalf("до восстановления недостающие %v", m)
+	}
+	list := backups(t, a)
+	if len(list) != 1 {
+		t.Fatalf("копии: %+v", list)
+	}
+	if _, err := a.RestoreBackup(list[0].Name); err != nil {
+		t.Fatal(err)
+	}
+	waitMissing(t, a)
+	if m, n := a.GetState().Missing, a.MissingNames(); !slices.Equal(m, []string{x}) || len(n) != 1 || n[x] != "x.jpg" {
+		t.Fatalf("после восстановления недостающие %v, имена %v", m, n)
+	}
+	a.Undo()
+	waitMissing(t, a)
+	if m := a.GetState().Missing; !slices.Equal(m, []string{y}) {
+		t.Fatalf("отмена восстановления: недостающие %v", m)
 	}
 }
 
-// В лог — без путей пользователя.
-func TestBackupErrHidesPaths(t *testing.T) {
-	const secret = `C:\Users\Имя\Альбомы\Ивановы.salbum`
-	for _, err := range []error{
-		&fs.PathError{Op: "open", Path: secret, Err: fs.ErrPermission},
-		&os.LinkError{Op: "rename", Old: secret + ".1.tmp", New: secret, Err: fs.ErrExist},
+// Смена альбома: прежний редактор со стеком отмены ради списка пропавших не держится; первая
+// правка нового альбома даёт его список и без полного пересчёта при открытии.
+func TestMissingAfterAlbumSwitch(t *testing.T) {
+	a, x, _, events := missSetApp(t)
+	if _, err := a.NewSpread(-1, nil); err != nil { // правку прежнего альбома syncMissing видел
+		t.Fatal(err)
+	}
+	old := weak.Make(a.editor())
+	ed := mustEditor(t, model.New(), "")
+	infos, ids := missInfos(a, "x.jpg", "z.jpg", "ok.jpg") // x — тот же файл, что в прежнем альбоме
+	if _, err := ed.NewSpread(-1, infos); err != nil {
+		t.Fatal(err)
+	}
+	a.ed.Store(ed)
+	for i := 0; i < 5 && old.Value() != nil; i++ {
+		runtime.GC()
+	}
+	if old.Value() != nil {
+		t.Fatal("прежний редактор не освобождён")
+	}
+	if _, err := a.NewSpread(-1, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitMissing(t, a)
+	want := sorted(x, ids[1])
+	if m, n := a.GetState().Missing, a.MissingNames(); !slices.Equal(m, want) || len(n) != 2 || n[ids[1]] != "z.jpg" {
+		t.Fatalf("первая правка нового альбома: недостающие %v, имена %v", m, n)
+	}
+	if evs := events(); !slices.Equal(evs[len(evs)-1], want) {
+		t.Fatalf("последнее событие %v", evs[len(evs)-1])
+	}
+}
+
+// Слияние итога проверки: убранное и переехавшее за время проверки фото не возвращается,
+// непроверенные остаются, нашедшиеся уходят; пустые входы — пустой список, не nil.
+func TestMergeMissing(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		cur, gone    []string
+		now, checked map[string]string
+		want         []string
+	}{
+		{"пусто", nil, nil, nil, nil, []string{}},
+		{"убрано во время проверки", nil, []string{"a"}, map[string]string{}, map[string]string{"a": "p"}, []string{}},
+		{"переехало во время проверки", []string{"a"}, []string{"a"}, map[string]string{"a": "q"}, map[string]string{"a": "p"}, []string{"a"}},
+		{"нашлось", []string{"a", "b"}, nil, map[string]string{"a": "p", "b": "r"}, map[string]string{"a": "p"}, []string{"b"}},
+		{"слияние", []string{"d"}, []string{"c", "a"}, map[string]string{"a": "p", "c": "s", "d": "t"}, map[string]string{"a": "p", "c": "s"}, []string{"a", "c", "d"}},
 	} {
-		if got := paths.NoPath(err).Error(); strings.Contains(got, "Имя") || !strings.Contains(got, err.(interface{ Unwrap() error }).Unwrap().Error()) {
-			t.Errorf("лог: %q", got)
+		if got := mergeMissing(tc.cur, tc.now, tc.checked, tc.gone); got == nil || !slices.Equal(got, tc.want) {
+			t.Errorf("%s: %#v, ждали %v", tc.name, got, tc.want)
 		}
 	}
 }

@@ -10,7 +10,7 @@
 </script>
 
 <div class="lbl">Зеркало</div>
-<div class="seg" role="group" aria-label="Зеркало">
+<div class="seg" role="group" aria-label="Зеркало" data-guide="flip-toggle">
   <button class:on={c.flipH} aria-pressed={c.flipH} title="Отразить по горизонтали" onclick={() => placesel.flip('h')}
     ><Icon name="flip-h" size={14} />↔</button
   >

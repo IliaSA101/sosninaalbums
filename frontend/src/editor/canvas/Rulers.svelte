@@ -17,8 +17,8 @@
   }: { stage: HTMLElement | undefined; left: number; top: number; width: number; w: number; h: number } = $props()
 
   const T = 18 // толщина полосы, px
-  const sw = $derived(store.view.settings.pageW * 2)
-  const ph = $derived(store.view.settings.pageH)
+  const sw = $derived(store.spread?.w ?? 0)
+  const ph = $derived(store.spread?.h ?? 0)
   const ppm = $derived(sw > 0 ? width / sw : 0) // px на мм
   const height = $derived(ppm * ph)
   const sy = $derived(top + BAR) // верх разворота в координатах Stage
@@ -64,7 +64,7 @@
 {#if ppm > 0}
   <div class="rulers" data-chrome>
     {#if tx1 > tx0}
-      <div class="strip h" style:left="{tx0}px" style:top="{ty}px" style:width="{tx1 - tx0}px">
+      <div class="strip h" data-guide="rulers" style:left="{tx0}px" style:top="{ty}px" style:width="{tx1 - tx0}px">
         {#if selX}<i class="sel" style:left="{left + selX[0] * ppm - tx0}px" style:width="{(selX[1] - selX[0]) * ppm}px"></i>{/if}
         {#each topTicks as t (t.at)}
           <i class="t" class:major={t.major} style:left="{left + t.at * ppm - tx0}px"
@@ -75,7 +75,7 @@
       </div>
     {/if}
     {#if ly1 > ly0}
-      <div class="strip v" style:left="{lx}px" style:top="{ly0}px" style:height="{ly1 - ly0}px">
+      <div class="strip v" data-guide="rulers" style:left="{lx}px" style:top="{ly0}px" style:height="{ly1 - ly0}px">
         {#if selY}<i class="sel" style:top="{sy + selY[0] * ppm - ly0}px" style:height="{(selY[1] - selY[0]) * ppm}px"></i>{/if}
         {#each leftTicks as t (t.at)}
           <i class="t" class:major={t.major} style:top="{sy + t.at * ppm - ly0}px"

@@ -16,6 +16,7 @@ import { frameAngle, groupOBB, mixedAngles, reduce90, type Turn } from '../../ba
 import { normDeg } from '../../base/geom/textbox'
 import { marqueePick, type Hit } from '../canvas/marquee'
 import { layerTargets } from './layers'
+import { sheetIn } from '../../base/geom/sheet'
 import type { LayerOp } from './minipanel'
 import type { Rect, RotRect } from '../../base/core/types'
 
@@ -252,7 +253,7 @@ class PlaceSel {
     const refs = [...this.refs]
     const texts = [...this.texts]
     this.chain = this.chain.then(async () => {
-      const s = store.view.spreads.find((x) => x.id === sid)
+      const s = sheetIn(store.view, sid)
       const cur = refsBoxes(s, refs)
       if (!s?.grid) return
       if (cur.length + texts.length > 1) {
@@ -266,7 +267,7 @@ class PlaceSel {
       const { dx, dy } = arrowDelta(key, shift)
       const moved = cur[0].rot
         ? [{ x: cur[0].x + dx, y: cur[0].y + dy, w: cur[0].w, h: cur[0].h }]
-        : nudge(cur, key, shift, { w: store.view.settings.pageW * 2, h: store.view.settings.pageH })
+        : nudge(cur, key, shift, { w: s.w, h: s.h })
       await gridAct.placeEdit(
         sid,
         Api.SetPlaces(
@@ -293,7 +294,8 @@ class PlaceSel {
     const places = photos.size > 0 ? [] : empties
     if (texts.length === 0 && photos.size === 0 && places.length === 0) return
     const freed = photos.size > 0 && s?.grid ? items.filter((i) => i.photo).map((i) => i.id) : []
-    if (!(await store.run(Api.DeleteSelection(s?.id ?? '', [...photos], places, texts)))) return
+    const sid = s?.id ?? ''
+    if (!(await gridAct.placeEdit(sid, Api.DeleteSelection(sid, [...photos], places, texts), false))) return
     // Удалённые тексты и места выпадают из выделения сами (apply → prune).
     if (photos.size > 0) this.select([...freed, ...empties])
   }

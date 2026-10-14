@@ -5,6 +5,7 @@
   import { drag } from '../../base/drag/drag.svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import { scanText } from './scan'
+  import { allInAlbum } from './freephotos'
   import { libfilter } from '../marks/libfilter.svelte'
   import LibraryBar from './LibraryBar.svelte'
   import Thumb from './Thumb.svelte'
@@ -69,7 +70,7 @@
     title="Потяните, чтобы изменить высоту ленты фото"
     onpointerdown={split}
   ></div>
-  <div class="library" class:over={drag.over === 'library'} style:height="{eff}px" data-drop="library">
+  <div class="library" class:over={drag.over === 'library'} style:height="{eff}px" data-drop="library" data-guide="library">
     <LibraryBar />
 
     <div class="grid" style:--size="{store.thumbSize}px">
@@ -82,6 +83,9 @@
               {scanText(store.scan)}
             {:else if store.view.folders.length === 0}
               Нажмите «+ Папка с фото» или перетащите папку прямо в окно программы
+            {:else if allInAlbum(store.filter, store.free.length, store.photos.length)}
+              Все фото уже в альбоме
+              <button class="reset" onclick={() => (store.filter = 'all')}>Показать все</button>
             {:else if prefs.can('marks') && libfilter.active && store.photos.length > 0}
               Ни одно фото не подходит под фильтр
               <button class="reset" onclick={() => libfilter.reset()}>Сбросить фильтр</button>

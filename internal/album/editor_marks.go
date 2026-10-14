@@ -149,6 +149,17 @@ func (e *Editor) Marks() map[string]model.MarkView {
 	return out
 }
 
+// rating — действующая оценка фото (своя отметка поверх XMP из infos; фото не из ленты —
+// только своя): звезда разворота в автосборке и «Разнообразить» (041). Зовётся и читает
+// e.marks только под e.mu (внутри правки).
+func (e *Editor) rating(infos []model.PhotoInfo) func(id string) int {
+	xmp := make(map[string]model.XmpMarks, len(infos))
+	for _, ph := range infos {
+		xmp[ph.ID] = ph.Xmp
+	}
+	return func(id string) int { return model.Effective(e.marks[id], xmp[id]).Rating }
+}
+
 // relinkMarks — дельта переноса отметок по перепривязке: файл из files — точная пара,
 // иначе первая папка из dirs, в которой лежит отметка, — замена префикса. ID — по новому пути.
 // У нового пути уже есть своя отметка — старая остаётся на месте (не затираем ни одну).

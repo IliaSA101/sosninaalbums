@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import type { CaptionView, Settings, SpreadView, TextView } from '../../base/core/types'
+  import type { CaptionView, SpreadView, TextView } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
   import { edit } from './edit.svelte'
   import { placesel } from '../places/placesel.svelte'
@@ -17,10 +17,10 @@
   // с z-index = 10 + z из Go, поэтому текст может лежать под фото. Внутри — SVG строк (уже перенесены
   // в Go, поворот — Rot; блок крутится целиком вокруг своего угла x, y) и, на большом развороте, прозрачная
   // рамка для выделения и переноса. Ручки, редактор и подсказки жестов — выше стека (TextOverlay).
-  let { spread, settings, mini = false, tg }: { spread: SpreadView; settings: Settings; mini?: boolean; tg: TextGestures } = $props()
+  let { spread, mini = false, tg }: { spread: SpreadView; mini?: boolean; tg: TextGestures } = $props()
 
-  const sw = $derived(settings.pageW * 2)
-  const ph = $derived(settings.pageH)
+  const sw = $derived(spread.w)
+  const ph = $derived(spread.h)
   const pctX = (v: number) => `${(v / sw) * 100}%`
   const pctY = (v: number) => `${(v / ph) * 100}%`
 
@@ -122,6 +122,7 @@
         <!-- Обводку выделенной подписи и метку «!» рисует TextOverlay: в стеке их перекрыло бы фото выше -->
         <div
           class="hit caption"
+          class:named={!!c.who?.length}
           style:left={pctX(c.x)}
           style:top={pctY(c.y)}
           style:width={pctX(c.w)}
@@ -131,11 +132,24 @@
           data-through
           role="presentation"
           onpointerdown={(e) => downCaption(e, c)}
-          ondblclick={() => edit.startEdit()}
+          ondblclick={() => (c.who?.length ? undefined : edit.startEdit())}
         ></div>
       {/if}
     </div>
   {/if}
+{/each}
+
+<!-- Заглушки подписей (030): серые, только на холсте; мышь не ловят и в стек выбора не входят -->
+{#each spread.stubs ?? [] as s (s.place + '|' + s.photo)}
+  <div class="blk stub" style:z-index={layerIndex(s.z)}>
+    <svg viewBox="0 0 {sw} {ph}" preserveAspectRatio="none" aria-hidden="true">
+      <g transform={s.rot ? 'rotate(' + s.rot + ' ' + s.x + ' ' + s.y + ')' : undefined}>
+        {#each s.lines as l, i (i)}
+          {#if l.text}<text x={l.x} y={l.y} style={svgTextCss(s.style, store.fonts)}>{l.text}</text>{/if}
+        {/each}
+      </g>
+    </svg>
+  </div>
 {/each}
 
 {#each spread.texts as t (t.id)}
@@ -184,6 +198,11 @@
     inset: 0;
     pointer-events: none;
   }
+  /* Заглушка бледнее подписи: видно, что это место под имя, а не готовый текст */
+  .stub {
+    opacity: 0.45;
+    filter: grayscale(1);
+  }
   svg {
     position: absolute;
     inset: 0;
@@ -201,6 +220,10 @@
   }
   .hit.caption {
     cursor: pointer;
+  }
+  /* Подпись по шаблону: двойной щелчок вводит имя (037) */
+  .hit.caption.named {
+    cursor: text;
   }
   .hit:hover {
     outline: 1px dashed rgba(245, 217, 10, 0.7);

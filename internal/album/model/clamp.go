@@ -32,12 +32,13 @@ func FinitePlace(pl *Place) bool {
 	return true
 }
 
-// ClampPlace держит место внутри разворота: W, H — geom.MinPlace..2·pageW / pageH,
+// ClampPlace держит место внутри листа s (Geo): W, H — geom.MinPlace..ширина / высота листа,
 // Rot — geom.NormDeg; без поворота X, Y внутрь, с поворотом — внутри hold (вписанный
 // круг: от угла не зависит, поэтому поворот место не сдвигает). Шаг 0.01 мм.
 // Идемпотентна. Значения должны быть конечными.
-func (p *Project) ClampPlace(pl *Place) {
-	clampPlaceIn(pl, 2*p.Settings.PageW, p.Settings.PageH)
+func (p *Project) ClampPlace(s *Spread, pl *Place) {
+	g := p.Geo(s)
+	clampPlaceIn(pl, g.W, g.H)
 }
 
 // ClampGrid — зажим мест прочитанного проекта (design 007 §2); файл не
@@ -49,12 +50,12 @@ func (p *Project) ClampGrid() {
 	// ID мест и текстов — общие (clampDesign раньше): совпавший с текстом ID места
 	// новый, иначе Order и стек слоёв неоднозначны.
 	seenID, seenPhoto := map[string]bool{}, map[string]bool{}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		for _, t := range s.Texts {
 			seenID[t.ID] = true
 		}
 	}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		if len(s.Grid) == 0 {
 			s.Grid = nil
 			continue
@@ -81,7 +82,7 @@ func (p *Project) ClampGrid() {
 			if pl.Photo != "" {
 				seenPhoto[pl.Photo] = true
 			}
-			p.ClampPlace(pl)
+			p.ClampPlace(s, pl)
 			out = append(out, pl)
 		}
 		clear(s.Grid[len(out):])
@@ -90,6 +91,7 @@ func (p *Project) ClampGrid() {
 			s.Grid = nil
 		}
 	}
+	p.FixVignettes() // роли и числа виньетки — по уже зажатым местам и текстам (031)
 }
 
 // trimPlaces оставляет не больше MaxPlaces мест: сначала уходят пустые с конца,
@@ -138,8 +140,9 @@ const (
 	// MaxScale — предел увеличения кадра: при 4× кадр 24 Мп в ячейке 100 мм
 	// даёт ≈ 150 dpi, дальше только мыло.
 	MaxScale = 4.0
-	// MaxTexts — блоков текста на разворот.
-	MaxTexts = 20
+	// MaxTexts — блоков текста на разворот. Load лишние отбрасывает: поднимать —
+	// только с новой FormatVersion (64 — с v6, спека 026).
+	MaxTexts = 64
 	// MaxTotalTexts и MaxTotalRunes — общий запас на все тексты и подписи проекта при открытии файла.
 	MaxTotalTexts   = 2000
 	MaxTotalRunes   = 200_000
@@ -250,60 +253,158 @@ func CleanText(s string, maxRunes int) string {
 
 // CleanName — название разворота: одна строка без управляющих и bidi-знаков,
 // без пробелов по краям, не больше maxNameRunes знаков.
-func CleanName(s string) string {
+func CleanName(s string) string { return cleanLine(s, MaxNameRunes) }
+
+// cleanLine — то же правило со своим пределом n (переменные и имена 030).
+func cleanLine(s string, n int) string {
 	s = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\t", " ", "\u2028", " ", "\u2029", " ").Replace(s)
 	s = strings.TrimSpace(text.CleanText(s))
-	if utf8.RuneCountInString(s) > MaxNameRunes {
-		s = strings.TrimSpace(string([]rune(s)[:MaxNameRunes]))
+	if utf8.RuneCountInString(s) > n {
+		s = strings.TrimSpace(string([]rune(s)[:n]))
 	}
 	return s
 }
 
 // ClampDesign — зажим оформления прочитанного проекта: кадры, подписи, фон,
 // блоки текста (лишние и пустые отбрасываются, плохой или повторный ID — новый).
-// Координаты блоков и ширину «по тексту» потом держит FitTexts.
+// Координаты блоков и ширину «по тексту» потом держит FitTexts. Запас текста — spendTexts.
 func (p *Project) ClampDesign() {
 	p.Settings.Bg = BgColor(p.Settings.Bg)
-	b := textBudget{blocks: MaxTotalTexts, runes: MaxTotalRunes}
-	seen := map[string]bool{}
-	sw := 2 * p.Settings.PageW
-	lim := 2 * math.Max(sw, p.Settings.PageH)
-	for _, s := range p.Spreads {
-		s.BgL, s.BgR = BgColor(s.BgL), BgColor(s.BgR)
-		s.Name = CleanName(s.Name)
-		p.clampBackdrops(s)
-		out := s.Texts[:0]
-		for _, t := range s.Texts {
-			if t == nil || len(out) >= MaxTexts {
-				continue
-			}
-			t.Text = CleanText(t.Text, MaxTextRunes)
-			if strings.TrimSpace(t.Text) == "" || !b.take(t.Text) {
-				continue
-			}
-			if !IsTextID(t.ID) || seen[t.ID] {
-				t.ID = NewID()
-			}
-			seen[t.ID] = true
-			t.Style = ClampStyle(t.Style)
-			// Величины зажаты от размера разворота: гигантские x/y/w дали бы Inf в FitTexts.
-			t.W = geom.ClampF(Finite(t.W, 0.4*p.Settings.PageW), 0, sw)
-			t.X, t.Y = geom.ClampF(Finite(t.X, 0), -lim, lim), geom.ClampF(Finite(t.Y, 0), -lim, lim)
-			t.Rot = geom.NormDeg(t.Rot)
-			out = append(out, t)
+	p.spendTexts(true)
+}
+
+// clampSheetTexts — блоки листа s при Load: лишние и не влезшие в запас отбрасываются,
+// величины зажимаются от размера листа (гигантские x/y/w дали бы Inf в FitTexts).
+func (p *Project) clampSheetTexts(s *Spread, b *textBudget, seen map[string]bool) {
+	g := p.Geo(s)
+	lim := 2 * math.Max(g.W, g.H)
+	out := s.Texts[:0]
+	for _, t := range s.Texts {
+		if t == nil || len(out) >= MaxTexts {
+			continue
 		}
-		clear(s.Texts[len(out):])
-		s.Texts = out
-		if len(s.Texts) == 0 {
-			s.Texts = nil
+		t.Text = CleanText(t.Text, MaxTextRunes)
+		if strings.TrimSpace(t.Text) == "" || !b.take(t.Text) {
+			continue
+		}
+		if !IsTextID(t.ID) || seen[t.ID] {
+			t.ID = NewID()
+		}
+		seen[t.ID] = true
+		t.Style = ClampStyle(t.Style)
+		t.W = geom.ClampF(Finite(t.W, 0.2*g.W), 0, g.W)
+		t.X, t.Y = geom.ClampF(Finite(t.X, 0), -lim, lim), geom.ClampF(Finite(t.Y, 0), -lim, lim)
+		t.Rot = geom.NormDeg(t.Rot)
+		out = append(out, t)
+	}
+	clear(s.Texts[len(out):])
+	s.Texts = out
+	if len(s.Texts) == 0 {
+		s.Texts = nil
+	}
+}
+
+// spendTexts — единый обход общего запаса текста для ClampDesign (fix: лишнее отбрасывается,
+// поля зажимаются) и CheckTotals (!fix: false — запас превышен). Порядок один — поля шапки
+// всех листов (Spread.Vars), листы (обложка первой: шаблон подписей листа, подпись учителя
+// виньетки, блоки), подписи и имена фото в порядке ленты; поля шапки и имена — только знаки
+// (решение 61). Поля шапки — отдельным первым проходом: шаблон обложки раскрывается полями
+// первой виньетки (VarsOf), и её поля должны быть уже зажаты. Разный счёт дал бы правку,
+// которую Load молча обрежет (TestTotalsMatchLoad). Шаблоны листа списываются столько раз,
+// сколько показываются, по раскрытой длине (tplCost; decisions 79): иначе шаблон на 64 местах
+// тысячи листов раздул бы вид до сотен МБ.
+func (p *Project) spendTexts(fix bool) bool {
+	b := textBudget{blocks: MaxTotalTexts, runes: MaxTotalRunes}
+	sheets := p.Sheets()
+	for _, s := range sheets {
+		if fix {
+			s.Vars = clampVarsIn(s.Vars, &b)
+		} else if s.Vars != nil && !b.takeRunes(s.Vars.runes()) {
+			return false
 		}
 	}
-	// Подписи — в порядке ленты, чтобы лишнее отбрасывалось предсказуемо.
-	var ids []string
-	done := map[string]bool{}
-	for _, s := range p.Spreads {
+	seen, varsOf := map[string]bool{}, p.SheetVars() // поля уже зажаты: дальше не меняются
+	for _, s := range sheets {
+		v := varsOf(s)
+		if fix {
+			s.BgL, s.BgR = BgColor(s.BgL), BgColor(s.BgR)
+			s.Name = CleanName(s.Name)
+			p.clampBackdrops(s)
+			s.Caps = clampCapsIn(s.Caps, func(t string) int { return tplCost(v, t, capShows(s)) }, &b)
+			s.Vig = clampVigIn(s, func(t string) int { return tplCost(v, t, teacherShows(s)) }, &b)
+			p.clampSheetTexts(s, &b, seen)
+			continue
+		}
+		if s.Caps != nil && !b.takeRunes(tplCost(v, s.Caps.Text, capShows(s))) {
+			return false
+		}
+		if s.Kind == KindVignette && s.Vig != nil && !b.takeRunes(tplCost(v, s.Vig.TText, teacherShows(s))) {
+			return false
+		}
+		for _, t := range s.Texts {
+			if t != nil && strings.TrimSpace(t.Text) != "" && !b.take(t.Text) {
+				return false
+			}
+		}
+	}
+	for _, id := range p.ribbonPhotos() {
+		r := p.Photos[id]
+		if fix {
+			r.Frame = ClampFrame(r.Frame)
+			r.Caption = clampCaption(r.Caption, &b)
+			r.Person = clampPersonIn(r.Person, &b)
+			p.Photos[id] = r
+			continue
+		}
+		if c := r.Caption; c != nil && strings.TrimSpace(c.Text) != "" && !b.take(c.Text) {
+			return false
+		}
+		if r.Person != nil && !b.takeRunes(r.Person.runes()) {
+			return false
+		}
+	}
+	return true
+}
+
+// tplCost — знаков запаса на шаблон листа tpl, показанный shows раз: на каждый показ — длина
+// исходника или раскрытого с полями листа v (VarsOf, как у заглушки, ShownCaption), что больше.
+// Иначе «{Год}» (5 знаков) при годе в 120 знаков у каждого места дал бы вид в 24 раза больше
+// списанного. Поля шапки Load зажимает раньше (первый проход spendTexts), поэтому счёт при
+// Load и в CheckTotals один.
+func tplCost(v *Vars, tpl string, shows int) int {
+	if tpl == "" {
+		return 0
+	}
+	shown, _ := ShownCaption(v, tpl, nil, FieldStub)
+	return max(runes(tpl), runes(shown)) * shows
+}
+
+// capShows — сколько раз шаблон подписей листа s может показаться: у каждого фото и у пустого
+// места (заглушка). С сеткой фото сидят в местах, поэтому показов ≤ max(фото, мест); не меньше
+// одного (как до 0.10). После ClampDesign Load фото и мест не добавляет сверх этого (ClampGrid
+// режет, SyncGrid сажает фото в пустые места или ставит место на фото без места) — счёт
+// CheckTotals после Load не больше списанного при Load.
+func capShows(s *Spread) int { return max(1, len(s.Photos), len(s.Grid)) }
+
+// teacherShows — мест учителя у виньетки s (подпись Vig.TText), не меньше одного.
+func teacherShows(s *Spread) int {
+	n := 0
+	for _, pl := range s.Grid {
+		if pl != nil && pl.Role == RoleTeacher {
+			n++
+		}
+	}
+	return max(1, n)
+}
+
+// ribbonPhotos — ID фото проекта: сначала в порядке листов (обложка первой), затем
+// остальные по возрастанию — лишнее отбрасывается предсказуемо.
+func (p *Project) ribbonPhotos() []string {
+	ids := make([]string, 0, len(p.Photos))
+	done := make(map[string]bool, len(p.Photos))
+	for _, s := range p.Sheets() {
 		for _, id := range s.Photos {
-			if !done[id] {
+			if _, ok := p.Photos[id]; ok && !done[id] {
 				done[id] = true
 				ids = append(ids, id)
 			}
@@ -314,20 +415,22 @@ func (p *Project) ClampDesign() {
 			ids = append(ids, id)
 		}
 	}
-	for _, id := range ids {
-		r, ok := p.Photos[id]
-		if !ok {
-			continue
-		}
-		r.Frame = ClampFrame(r.Frame)
-		r.Caption = clampCaption(r.Caption, &b)
-		p.Photos[id] = r
-	}
+	return ids
 }
 
 // textBudget — общий запас на тексты и подписи проекта: файл с тысячами блоков
 // не должен раздувать раскладку текста и экспорт.
 type textBudget struct{ blocks, runes int }
+
+// takeRunes списывает только знаки (поля 030: переменные, имена, шаблон листа —
+// не блоки текста); false — запас знаков кончился.
+func (b *textBudget) takeRunes(n int) bool {
+	if n > b.runes {
+		return false
+	}
+	b.runes -= n
+	return true
+}
 
 // take списывает блок из s; false — запас кончился, блок надо отбросить.
 func (b *textBudget) take(s string) bool {
@@ -348,18 +451,8 @@ func (p *Project) CheckTotals(before *Project) error {
 	if len(p.Spreads) > MaxSpreads && len(p.Spreads) > len(before.Spreads) {
 		return fmt.Errorf("в альбоме не может быть больше %d разворотов", MaxSpreads)
 	}
-	b := textBudget{blocks: MaxTotalTexts, runes: MaxTotalRunes}
-	for _, s := range p.Spreads {
-		for _, t := range s.Texts {
-			if t != nil && strings.TrimSpace(t.Text) != "" && !b.take(t.Text) {
-				return errTextBudget()
-			}
-		}
-	}
-	for _, r := range p.Photos {
-		if c := r.Caption; c != nil && strings.TrimSpace(c.Text) != "" && !b.take(c.Text) {
-			return errTextBudget()
-		}
+	if !p.spendTexts(false) {
+		return errTextBudget()
 	}
 	return nil
 }
@@ -376,7 +469,7 @@ func clampCaption(c *Caption, b *textBudget) *Caption {
 	if strings.TrimSpace(t) == "" || !b.take(t) {
 		return nil
 	}
-	return &Caption{Text: t, Style: ClampStyle(c.Style), Over: c.Over}
+	return &Caption{Text: t, Style: ClampStyle(c.Style), Over: c.Over, Pad: ClampCaptionPad(c.Pad)}
 }
 
 // IsTextID — 12 знаков в нижнем hex, как у NewID.
@@ -394,18 +487,18 @@ const (
 	maxBackdropK = 3.0  // во сколько раз рамка может быть больше области
 )
 
-// ClampBackdrop приводит фон области scope к допустимому: неизвестное фото — фон
+// ClampBackdrop приводит фон области scope листа s к допустимому: неизвестное фото — фон
 // выбрасывается; W или H не число / ≤ 0 — рамка по области без поворота; иначе размер
 // 10 мм..3× области, поворот geom.NormDeg, центр рамки внутри области (X, Y сдвигаются):
 // так фон нельзя потерять за краем. Шаг 0.01 мм. Прозрачность 0..1, шаг 0.01. Возвращает копию.
-func (p *Project) ClampBackdrop(b *Backdrop, scope string) *Backdrop {
+func (p *Project) ClampBackdrop(s *Spread, b *Backdrop, scope string) *Backdrop {
 	if b == nil {
 		return nil
 	}
 	if _, ok := p.Photos[b.Photo]; !ok {
 		return nil
 	}
-	a := p.BdArea(scope)
+	a := p.BdArea(s, scope)
 	c := *b
 	c.Frame = ClampFrame(b.Frame)
 	if c.Frame != nil && c.Frame.R != 0 { // рамку фона и так крутят: R не нужен
@@ -438,7 +531,7 @@ func (p *Project) ClampBackdrop(b *Backdrop, scope string) *Backdrop {
 func (p *Project) clampBackdrops(s *Spread) {
 	for _, scope := range bdScopes {
 		slot := s.Slot(scope)
-		*slot = p.ClampBackdrop(*slot, scope)
+		*slot = p.ClampBackdrop(s, *slot, scope)
 	}
 	if s.BgPhoto != nil {
 		s.BgPhotoL, s.BgPhotoR = nil, nil

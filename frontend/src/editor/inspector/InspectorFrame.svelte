@@ -12,6 +12,7 @@
   import LayerRow from './LayerRow.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
+  import PersonFields from '../../panels/names/PersonFields.svelte'
 
   // Карточка выделенного фото (спека 006 → 008): имя файла, рамка места X/Y/Ш/В с замком, масштаб кадра
   // 100–400 % с ⊗ сброса, «Целиком / С обрезкой», dpi и размер в px, профиль (не sRGB). Ползунок ведёт предпросмотр в Cell через framelive, SetFrame — при отпускании.
@@ -114,7 +115,7 @@
   </div>
 {/if}
 {#if prefs.can('tilt')}
-  <div class="row tilt">
+  <div class="row tilt" data-guide="tilt">
     <label class="lbl" for="tilt-num">Наклон, °</label>
     <input
       id="tilt-num"
@@ -160,6 +161,10 @@
   >
     {[dpi > 0 ? `≈ ${dpi} dpi` : '', px].filter(Boolean).join(' · ')}
   </div>
+{/if}
+{#if prefs.can('captions') && id}
+  <!-- Имя для полей {Фамилия}… в подписях (030); по фото пересоздаётся: набранное уходит на своё фото -->
+  {#key id}<PersonFields photo={id} />{/key}
 {/if}
 {#if profile}
   <div class="profile" class:warn={profile.level === 'warn'} title={profile.title}>{profile.text}</div>

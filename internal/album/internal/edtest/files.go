@@ -3,6 +3,7 @@ package edtest
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -81,3 +82,21 @@ func NewRelinkSetup(t *testing.T) RelinkSetup {
 }
 
 var Update = flag.Bool("update", false, "перезаписать голдены: testdata/parity/marks.json, testdata/replay.json")
+
+// Reopen — повторное открытие не меняет альбом: Decode(Encode(p)) даёт тот же JSON (пути
+// абсолютные, base ""). Иначе альбом «сам» меняется при каждом открытии, а автосохранение
+// это закрепляет. Ошибка — с обоими JSON.
+func Reopen(p *model.Project) error {
+	data, err := salbum.Encode(p, "")
+	if err != nil {
+		return fmt.Errorf("запись: %w", err)
+	}
+	q, err := salbum.Decode(data, "")
+	if err != nil {
+		return fmt.Errorf("чтение: %w", err)
+	}
+	if a, b := model.Marshal(p), model.Marshal(q); !bytes.Equal(a, b) {
+		return fmt.Errorf("после записи и чтения альбом другой:\n%s\n%s", a, b)
+	}
+	return nil
+}

@@ -14,6 +14,7 @@ const base: MenuCtx = {
   anySelection: true,
   deletable: true,
   flippable: true,
+  varyable: true,
   layerable: true,
   missing: 2,
   exporting: false,
@@ -38,6 +39,7 @@ describe('buildMenu', () => {
     const m = buildMenu(ctx())
     expect(ids(m, 'file')).toEqual([
       'new',
+      'newSheet',
       'open',
       'recent',
       'save',
@@ -133,6 +135,12 @@ describe('buildMenu', () => {
     for (const id of ['fit', 'zoomIn', 'zoomOut', 'addText']) expect(find(m, id)?.disabled, id).toBe(true)
   })
 
+  it('«Имена из списка…» (030): в «Правке», серое без разворота', () => {
+    expect(find(buildMenu(ctx()), 'pasteNames')).toMatchObject({ label: 'Имена из списка…', cmd: 'pasteNames' })
+    expect(find(buildMenu(ctx()), 'pasteNames')?.disabled).toBeFalsy()
+    expect(find(buildMenu(ctx({ hasSpread: false })), 'pasteNames')?.disabled).toBe(true)
+  })
+
   it('черта никогда не стоит первой', () => {
     for (const m of buildMenu(ctx())) {
       expect(m.items.length).toBeGreaterThan(0)
@@ -179,6 +187,37 @@ describe('уровень в меню (спека 010 U1)', () => {
     expect(sub.map((i) => i.cmd)).toEqual(['levelSimple', 'levelStandard', 'levelFull', 'levelCustom'])
     expect(sub.map((i) => i.checked)).toEqual([false, true, false, false])
     expect(find(m, 'compareLevels')).toMatchObject({ cmd: 'compareLevels', label: 'Уровни и функции…' })
+  })
+  it('«Новый проект: виньетка-лист…» — со «Стандартного» (решение 80), рядом с «Новый альбом»', () => {
+    expect(ids(buildMenu(at('simple')), 'file')).not.toContain('newSheet')
+    const file = ids(buildMenu(at('standard')), 'file')
+    expect(file.indexOf('newSheet')).toBe(file.indexOf('new') + 1)
+    expect(find(buildMenu(at('standard')), 'newSheet')).toMatchObject({
+      label: 'Новый проект: виньетка-лист…',
+      cmd: 'newSheet',
+      hint: 'Отдельный плакат класса 20×30 или 30×40 — без альбома',
+    })
+  })
+  it('«Правка ▸ Сделать разворот виньеткой» — со «Стандартного», серое без обычного разворота (отзыв 14.10)', () => {
+    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('makeVignette')
+    const std = buildMenu({ ...at('standard'), vigable: true })
+    expect(find(std, 'makeVignette')).toMatchObject({ label: 'Сделать разворот виньеткой', cmd: 'makeVignette' })
+    expect(find(std, 'makeVignette')?.disabled).toBeUndefined()
+    expect(find(buildMenu(at('standard')), 'makeVignette')?.disabled).toBe(true)
+    expect(find(buildMenu({ ...at('full'), vigable: false }), 'makeVignette')?.disabled).toBe(true)
+  })
+  it('«Правка ▸ Разнообразить раскладки» (041) — с уровня «Простой», серое, когда менять нечего', () => {
+    expect(find(buildMenu(at('simple')), 'varyLayouts')).toMatchObject({ label: 'Разнообразить раскладки', cmd: 'varyLayouts' })
+    expect(find(buildMenu(at('full')), 'varyLayouts')?.disabled).toBeUndefined()
+    expect(find(buildMenu({ ...at('full'), varyable: false }), 'varyLayouts')?.disabled).toBe(true)
+    expect(ids(buildMenu(at('full')), 'edit')).toContain('varyLayouts')
+  })
+  it('«Правка ▸ Настроить виньетку…» — со «Стандартного», серое, пока лист не виньетка', () => {
+    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('vigSetup')
+    const on = buildMenu({ ...at('standard'), vigSetup: true })
+    expect(find(on, 'vigSetup')).toMatchObject({ label: 'Настроить виньетку…', cmd: 'vigSetup' })
+    expect(find(on, 'vigSetup')?.disabled).toBeUndefined()
+    expect(find(buildMenu(at('standard')), 'vigSetup')?.disabled).toBe(true)
   })
   it('«Простой»: без зума, «Все развороты», привязки; «Вписать» остаётся', () => {
     const v = viewIds('simple')
@@ -234,6 +273,13 @@ describe('«Свой» в меню (спека 011 U2)', () => {
   it('«Правка» без функций не пустеет: отмена и «Удалить» всегда', () => {
     const none: Custom = { base: 'simple', on: [], off: ['variants', 'timeline', 'captions', 'turn'] }
     expect(ids(buildMenu(at(none)), 'edit')).toEqual(expect.arrayContaining(['undo', 'redo', 'removeCell']))
+  })
+  it('«Справка»: «Справочник функций…» первым, с клавишей F1; «Горячие клавиши» — «?»', () => {
+    const help = buildMenu(ctx()).find((x) => x.id === 'help')!.items
+    expect(help[0]).toMatchObject({ id: 'guide', label: 'Справочник функций…', cmd: 'guide' })
+    expect(keysOf('guide')).toBe('F1')
+    expect(find(buildMenu(ctx()), 'help')?.cmd).toBe('help')
+    expect(keysOf('help')).toBe('?')
   })
   it('«Справка ▸ Что нового» — команда whatsNew', () => {
     expect(find(buildMenu(ctx()), 'whatsNew')?.cmd).toBe('whatsNew')

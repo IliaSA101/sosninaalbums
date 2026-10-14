@@ -4,7 +4,8 @@ import type { BackdropScope, Payload, Target } from '../core/types'
 export type DropPlan =
   | { op: 'moveSpread'; id: string; at: number }
   // at = -1 — в конец; fromSpread — фото уже в развороте (иначе из ленты: снять выделение, тост о переносе).
-  | { op: 'add'; spread: string; ids: string[]; at: number; fromSpread: boolean; go: boolean }
+  // frac — доля ширины листа под курсором (042): ручному листу она выбирает страницу для новых мест; нет — без точки.
+  | { op: 'add'; spread: string; ids: string[]; at: number; fromSpread: boolean; go: boolean; frac?: number }
   | { op: 'swap'; a: string; b: string }
   | { op: 'newSpread'; at: number; ids: string[]; strip: boolean }
   | { op: 'remove'; ids: string[] }
@@ -12,10 +13,13 @@ export type DropPlan =
   | { op: 'place'; spread: string; place: string; ids: string[]; fromSpread: boolean }
   // Фото на фон области (Api.SetBackdrop): само остаётся там, где было.
   | { op: 'backdrop'; spread: string; scope: BackdropScope; photo: string }
+  // Фото на плитку обложки (032): обложка создаётся с ним на лицевой.
+  | { op: 'cover'; photo: string }
   // Бросок, который не выполняется, но о причине надо сказать (тост).
   | { op: 'reject'; text: string }
 
 export const BACKDROP_ONE = 'На фон — только одно фото'
+export const COVER_ONE = 'На обложку — только одно фото'
 
 // Зона фона принимает ровно одно фото; несколько — не подсвечиваем, но при броске объясняем.
 export const backdropAccepts = (p: Payload | null): boolean => p?.kind === 'photos' && p.ids.length === 1
@@ -59,6 +63,15 @@ function backdropPlan(p: PhotoPayload, t: Extract<Target, { kind: 'backdrop' }>)
   return ids.length === 1 ? { op: 'backdrop', spread: t.spread, scope: t.scope, photo: ids[0] } : { op: 'reject', text: BACKDROP_ONE }
 }
 
+// Фото на весь лист (фон листа, соседний разворот, миниатюра): в конец; mini ещё и открывает лист.
+function wholePlan(p: PhotoPayload, t: Extract<Target, { kind: 'spread' | 'mini' }>): DropPlan | null {
+  if (p.fromSpread === t.spread) return null
+  const plan: DropPlan = { op: 'add', spread: t.spread, ids: p.ids, at: -1, fromSpread: !!p.fromSpread, go: t.kind === 'mini' }
+  // Доля ширины листа выбирает страницу для новых мест ручного листа (042).
+  if (t.kind === 'spread' && t.at !== undefined) plan.frac = t.at
+  return plan
+}
+
 export function dropPlan(p: Payload, t: Target): DropPlan | null {
   if (p.kind === 'spread') return spreadPlan(p, t)
   const ids = p.ids
@@ -70,14 +83,16 @@ export function dropPlan(p: Payload, t: Target): DropPlan | null {
       return cellPlan(p, t)
     case 'spread':
     case 'mini':
-      if (p.fromSpread === t.spread) return null
-      return { op: 'add', spread: t.spread, ids, at: -1, fromSpread, go: t.kind === 'mini' }
+      return wholePlan(p, t)
     case 'new':
       return { op: 'newSpread', at: t.at, ids, strip: !fromSpread }
     case 'place':
       return placePlan(p, t)
     case 'backdrop':
       return backdropPlan(p, t)
+    case 'cover':
+      if (ids.length === 0) return null
+      return ids.length === 1 ? { op: 'cover', photo: ids[0] } : { op: 'reject', text: COVER_ONE }
     case 'library':
       return fromSpread ? { op: 'remove', ids } : null
   }

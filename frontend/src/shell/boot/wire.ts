@@ -4,6 +4,7 @@
 import { store } from '../../base/core/store.svelte'
 import { dropHooks } from '../../base/drag/dropact'
 import { drag } from '../../base/drag/drag.svelte'
+import { dropAsk, dropGrid } from '../../base/drag/dropgrid.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { setBackdrop } from '../../editor/backdrop/backdropact'
 import { placesel } from '../../editor/places/placesel.svelte'
@@ -15,6 +16,7 @@ import { libfilter } from '../../panels/marks/libfilter.svelte'
 import { filterPhotos } from '../../panels/marks/marks'
 import { ownMarks } from '../../panels/marks/ownmarks.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
+import { spineNote } from '../../editor/cover/spinenote.svelte'
 import { narrow } from './narrow'
 
 let wired = false
@@ -28,14 +30,21 @@ export function wire() {
       placesel.prune()
       spreadsel.prune(v.spreads.map((s) => s.id))
       gridAct.prune(v.spreads)
+      dropAsk.prune(v)
       gallery.sync()
+      // Корешок обложки пересчитывается от числа разворотов: отметка «X → Y», пока обложку не открыли (032).
+      spineNote.see(v.cover?.spine ?? null, store.onCover)
     },
     went: () => {
+      if (store.onCover) spineNote.dismiss()
       placesel.clear()
       gridAct.cancelAuto()
       gallery.close()
     },
-    reloaded: () => ownMarks.invalidate(),
+    reloaded: () => {
+      ownMarks.invalidate()
+      spineNote.reset()
+    },
     spreadsCleared: () => spreadsel.clear(),
     // Не ждём: ошибка шрифта не должна мешать старту, текст пока рисуется запасным.
     fontsLoaded: (fonts) => void loadFonts(fonts),
@@ -45,6 +54,11 @@ export function wire() {
     pick: (moveUsed) => pickFor(store, moveUsed, libfilter.active),
     selectedRefs: () => placesel.refs,
     select: (ids) => placesel.select(ids),
+    // Enter и двойной щелчок по фото в ленте: на ручной разворот — как бросок на лист, точки под курсором нет (042).
+    dropGrid: async (spread, ids) => {
+      await dropGrid(spread, '', ids, -1, false)
+      return true
+    },
   })
   prefs.narrowed = narrow
   // Предпросмотр галереи мешал бы целиться: раскладка на экране не та, что в проекте.

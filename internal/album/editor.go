@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/backdrop"
+	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
 	"github.com/IliaSA101/sosninaalbums/internal/album/design"
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -41,6 +42,8 @@ type Editor struct {
 	// marks — свои отметки (ID фото → отметка), не nil; marksRev — из общего счётчика процесса.
 	marks    map[string]model.Mark
 	marksRev int
+	// guide — размер файла-разметки обложки для вида (guideFor): не данные проекта.
+	guide guideState
 }
 
 // NewEditor открывает проект p (из salbum.Load или model.New). Editor держит свою копию, p
@@ -111,24 +114,9 @@ func (e *Editor) edit(merge string, whole bool, fn func(p *model.Project) error,
 	before := model.Unmarshal(data)
 	err := fn(e.p)
 	if err == nil {
-		err = e.p.SyncGrid(false) // страховка инвариантов сетки; без пустого места — отказ
+		err = settle(e.p, before, whole)
 	}
 	if err != nil {
-		e.p = before
-		return e.view(), err
-	}
-	e.p.PruneRefs()
-	if !whole {
-		e.p.Normalize(before)
-		e.p.KeepLayouts(before)
-		// Смена формата страницы: тексты, места и фоны остаются на своих местах страницы.
-		design.Rescale(e.p, before)
-		grid.Rescale(e.p, before)
-		backdrop.Rescale(e.p, before)
-	}
-	e.p.FitTexts()
-	e.p.SyncOrder()
-	if err := e.p.CheckTotals(before); err != nil {
 		e.p = before
 		return e.view(), err
 	}
@@ -169,6 +157,34 @@ func (e *Editor) edit(merge string, whole bool, fn func(p *model.Project) error,
 	e.dirty = true
 	e.rev++
 	return e.view(), nil
+}
+
+// settle — хвост конвейера правки после fn: p приводится к инвариантам относительно before.
+// Общий для edit и сухого прогона (PreviewVignette): предпросмотр по построению равен итогу
+// правки. Ошибка — правку не применять (SyncGrid без пустого места, сверх запаса знаков).
+func settle(p, before *model.Project, whole bool) error {
+	if err := p.SyncGrid(false); err != nil { // страховка инвариантов сетки
+		return err
+	}
+	p.PruneRefs()
+	if !whole {
+		p.Normalize(before)
+		p.KeepLayouts(before)
+		// Смена формата страницы: тексты, места и фоны остаются на своих местах страницы.
+		design.Rescale(p, before)
+		grid.Rescale(p, before)
+		backdrop.Rescale(p, before)
+		// Обложка: зоны сменились (разворотов, Spec, страница) — содержимое едет по зонам (032 §3).
+		cover.Reflow(p, before)
+		// Виньетки (031): инварианты вида и ролей, затем пересборка нетронутых при смене
+		// настроек или стиля подписей — после всех пересчётов формата, иначе места
+		// масштабировались бы второй раз (critic §2).
+		p.FixVignettes()
+		grid.Relay(p, before, vigPlan)
+	}
+	p.FitTexts()
+	p.SyncOrder()
+	return p.CheckTotals(before)
 }
 
 // Save сохраняет проект; пустой path — в текущий файл.
@@ -215,11 +231,12 @@ func (e *Editor) Folders() (dirs []string) {
 	return dirs
 }
 
-// Snapshot — копия проекта для экспорта в фоне.
+// Snapshot — копия проекта и вид печати для экспорта в фоне: поля подставлены, пустые —
+// пусто, заглушек нет (030; строки переложены по реальному тексту).
 func (e *Editor) Snapshot() (*model.Project, model.View) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.p.Clone(), e.view()
+	return e.p.Clone(), e.printView()
 }
 
 // WriteCopy пишет проект в файл, не делая его текущим (черновик). Пути —

@@ -1,53 +1,22 @@
 import * as Api from '../../../wailsjs/go/app/App'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { SvelteSet } from 'svelte/reactivity'
-import { capFirst, errText, withSkipped } from './errtext'
-import { noHooks, type MarkMap, type StoreHooks } from './hooks'
+import { capFirst, errText, exportDoneText, withSkipped } from './errtext'
+import { Nav } from './nav.svelte'
+import type { MarkMap, PickResult } from './hooks'
 import { backdropLost, pickCurrent } from './undo'
 import { mergeSnapshot, noEvents } from './startstate'
+import { movedFrom, movedText, type Moved } from './strip'
 import { prefs } from '../prefs/prefs.svelte'
-import type {
-  ExportOpts,
-  FontFamily,
-  GridResult,
-  Photo,
-  RecentProject,
-  ScanProgress,
-  Settings,
-  SpreadView,
-  State,
-  View,
-  Zone,
-} from './types'
-
-const emptyView: View = {
-  spreads: [],
-  settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, dpi: 300, bg: '' },
-  folders: [],
-  path: '',
-  dirty: false,
-  canUndo: false,
-  canRedo: false,
-  rev: 0,
-  maxSpreadPhotos: 7,
-  safe: [],
-  minDPI: 200,
-  lowDPI: 0,
-  emptyPlaces: 0,
-  textMaxW: 284,
-  backdropUsed: [],
-  marksRev: 0,
-}
+import { COVER_ID, unitOf } from '../geom/sheet'
+import { model } from '../../../wailsjs/go/models'
+import type { ExportOpts, FontFamily, GridResult, Photo, RecentProject, ScanProgress, Settings, State, Variety, View, Zone } from './types'
 
 // rev — ревизия альбома, на которую рассчитан тост с «Вернуть»: другая ревизия (Ctrl+Z, любая правка) гасит тост.
 type Toast = { text: string; kind: 'info' | 'error'; action?: { label: string; run: () => void }; rev?: number }
 
-class Store {
-  view = $state<View>(emptyView)
+class Store extends Nav {
   photos = $state<Photo[]>([])
-  current = $state(0)
-  // id текущего разворота: индекс «следует» за ним при перестановках/удалениях.
-  currentId = ''
   // Текущий разворот, исчезнувший при правке (см. apply).
   private lostId = ''
   loaded = $state(false)
@@ -59,15 +28,15 @@ class Store {
   recent = $state<RecentProject[]>([])
   // ID фото, которых нет на диске (State.missing и событие missing).
   missing = $state<string[]>([])
+  // Имена файлов пропавших фото (ID → имя): в ленте их нет, берём у Go при смене missing (setMissing).
+  missingNames = $state<Record<string, string>>({})
+  private namesReq = 0
+  // Номер открытия альбома (растёт на каждом Open/New): «Скрыть» полосы пропавших живёт до следующего открытия.
+  openSeq = $state(0)
   selected = new SvelteSet<string>()
   // Зона последнего нажатия мыши: Ctrl+A и Del действуют по ней (App ставит по pointerdown).
   zone = $state<Zone>('library')
   anchor: string | null = null
-  // Подключённый верх (hooks.ts): ставит shell/boot/wire.ts. Реактивно — ленты пересчитаются после подключения.
-  hooks = $state.raw<StoreHooks>(noHooks)
-  plug(h: StoreHooks) {
-    this.hooks = h
-  }
   // Выделенное фото — первый ref выделения (places/placesel.svelte.ts); пустое место фотографией не считается.
   get selectedCell(): string | null {
     const r = this.hooks.selectedRefs()[0]
@@ -83,22 +52,11 @@ class Store {
   toast = $state<Toast | null>(null)
   filter = $state<'all' | 'unused'>('all')
   thumbSize = $state(110)
-  perSpread = $state(4)
+  // Окно автосборки (027): открыто, пока не null; фото уже выбраны (выделенные или свободные без отклонённых).
+  autoDraft = $state<PickResult | null>(null)
   busy = $state(false)
-  // Когда был переход: ряд разворотов (spread/spreadrow.svelte.ts) едет только сразу после go(),
-  // а не при загрузке или удалении. navSeq растёт на каждый go() — ряд видит и переход на тот же разворот
-  // (со слота «новый» назад).
-  navAt = 0
-  navSeq = $state(0)
-
-  // Над группой какой страницы курсор в полосе над разворотом.
-  hoverPage = $state<'left' | 'right' | null>(null)
-
   // Окно «Экспорт» (009 U8) открыто.
   exportOpen = $state(false)
-
-  used = $derived(new Set(this.view.spreads.flatMap((s) => s.photos)))
-  spread = $derived<SpreadView | undefined>(this.view.spreads[this.current])
   byId = $derived(new Map(this.photos.map((p) => [p.id, p])))
   // Фото на фоне: в used не входят (не «в альбоме»), но автосборка и фильтр их не берут (freephotos.ts).
   backdropUsed = $derived(new Set(this.view.backdropUsed ?? []))
@@ -144,17 +102,18 @@ class Store {
     EventsOn('saved', (v: View) => (this.view = { ...this.view, dirty: v.dirty, path: v.path }))
     EventsOn('missing', (ids: string[] | null) => {
       this.seen.missing = true
-      this.missing = ids ?? []
+      this.setMissing(ids ?? [])
     })
     EventsOn('export:progress', (done: number, total: number) => (this.exporting = { done, total }))
     // Ошибки, которые Go находит сам (перетащенная папка и т.п.)
     EventsOn('notice', (text: string) => this.notify(text, 'error'))
     // note — сводка Go о пересчёте цвета (может быть пустой или отсутствовать у старого Go).
     EventsOn('export:done', (_dir: string, err: string, note?: string) => {
+      const total = this.exporting?.total
       this.exporting = null
       if (err) this.notify('Экспорт не удался: ' + errText(err), 'error')
       else
-        this.notify(note ? `Развороты сохранены. ${note}` : 'Развороты сохранены', 'info', {
+        this.notify(exportDoneText(total, note), 'info', {
           label: 'Открыть папку',
           run: () => Api.ShowInExplorer(),
         })
@@ -168,7 +127,7 @@ class Store {
       const m = mergeSnapshot(cur, { photos: st.photos ?? [], scan: st.scan, missing: st.missing ?? [] }, this.seen)
       this.photos = m.photos
       this.scan = m.scan
-      this.missing = m.missing
+      this.setMissing(m.missing)
       this.version = st.version ?? ''
       this.fonts = st.fonts ?? []
       prefs.load(st.prefs)
@@ -210,12 +169,25 @@ class Store {
     }
   }
 
+  // Ctrl+Z / Ctrl+Y: обложка (032) могла появиться или исчезнуть. Появилась — открываем её; исчезла —
+  // встаём на разворот, где были до неё. Явный переход заодно ставит ряд на место (индексы сдвигаются на lead).
+  async runHistory(p: Promise<unknown>): Promise<boolean> {
+    const had = !!this.cover
+    if (!(await this.run(p))) return false
+    if (!had && this.cover) this.goCover()
+    else if (had && !this.cover) this.go(this.current)
+    return true
+  }
+
   apply(v: View) {
     if (!v) return
     this.view = { ...v, folders: v.folders ?? [], spreads: v.spreads ?? [] }
     // «Вернуть» отменяет последнюю правку: после любой другой смены ревизии он уже не про то.
     if (this.toast?.rev !== undefined && v.rev !== this.toast.rev) this.toast = null
     const sp = this.view.spreads
+    // Обложку удалили (или Undo её убрал) — возвращаемся на разворот; остались одни обложки — стоим на ней.
+    if (this.onCover && !this.cover) this.onCover = false
+    if (!this.onCover && sp.length === 0 && this.cover) this.onCover = true
     // Удалённый текущий запоминается: если Undo его вернёт, текущим станет он (pickCurrent).
     const pick = pickCurrent(
       sp.map((s) => s.id),
@@ -228,21 +200,6 @@ class Store {
     this.lostId = pick.lost
     if (pick.back >= 0 && pick.back !== this.current) this.go(pick.back)
     this.hooks.applied(this.view)
-  }
-
-  go(i: number) {
-    const next = Math.max(0, Math.min(i, this.view.spreads.length - 1))
-    this.navAt = performance.now()
-    this.navSeq++
-    this.current = next
-    this.currentId = this.view.spreads[this.current]?.id ?? ''
-    this.hoverPage = null
-    this.hooks.went()
-  }
-
-  goId(id: string) {
-    const i = this.view.spreads.findIndex((s) => s.id === id)
-    if (i >= 0) this.go(i)
   }
 
   // Перейти на разворот, которого не было среди ids (только что созданный).
@@ -286,20 +243,35 @@ class Store {
   // ---------- действия ----------
 
   // Добавление фото из ленты: после успеха снимает выделение и сообщает
-  // о фото, которые были в других разворотах (into — целевой разворот, null — новый).
+  // о фото, которые были в других листах (into — целевой лист, null — новый). Источник ищется среди всех
+  // листов ряда, в том числе в обложке (032).
   async fromStrip(ids: string[], into: string | null, op: () => Promise<unknown>): Promise<boolean> {
-    const moved = ids.map((id) => this.view.spreads.findIndex((s) => s.id !== into && s.photos.includes(id))).filter((i) => i >= 0)
+    const moved = this.movedFrom(ids, into)
     if (!(await this.run(op()))) return false
-    this.selected.clear()
-    if (moved.length === 1) this.notify(`Фото перенесено из разворота ${moved[0] + 1}`)
-    else if (moved.length > 1) this.notify(`Перенесено фото из других разворотов: ${moved.length}`)
+    this.stripDone(moved)
     return true
+  }
+
+  // «До» правки: из каких листов (кроме into) пришли фото; разбор — strip.ts.
+  movedFrom(ids: string[], into: string | null): Moved[] {
+    return movedFrom(this.sheets, ids, into)
+  }
+
+  // «После» правки: снять выделение в ленте и сказать, откуда перенесены фото.
+  stripDone(moved: Moved[]) {
+    this.selected.clear()
+    const text = movedText(moved, this.view)
+    if (text) this.notify(text)
   }
 
   async addToCurrent(ids: string[]) {
     if (!ids.length) return
     const s = this.spread
     if (!s) return this.newSpread(this.view.spreads.length, ids)
+    // У обложки нет ленты фото: их бросают на зону или в место.
+    if (s.id === COVER_ID) return this.notify('На обложку фото бросают на зону или в место')
+    // Ручной разворот: места, плитка и вопрос (042) — верх подключает хук; без него прежний путь.
+    if (s.grid && (await this.hooks.dropGrid(s.id, ids))) return
     await this.fromStrip(ids, s.id, () => Api.AddPhotos(s.id, ids, -1))
   }
 
@@ -320,6 +292,28 @@ class Store {
     } finally {
       this.creating = false
     }
+  }
+
+  // Обложка (032): бросок фото на плитку создаёт её с этим фото на лицевой (photoID '' — пустая) — один шаг отмены.
+  // Пока запрос идёт, повторный щелчок по «+ Обложка» ничего не делает (иначе второй вызов — холостая правка с ошибкой).
+  private coverMaking = false
+  async createCover(photoID: string): Promise<boolean> {
+    if (this.cover || this.view.settings?.sheet || this.busy || this.coverMaking) return false
+    this.coverMaking = true
+    try {
+      if (!(await this.run(Api.CreateCover('', photoID)))) return false
+    } finally {
+      this.coverMaking = false
+    }
+    this.goCover()
+    return true
+  }
+
+  // «Удалить обложку»: тост с «Вернуть», как у разворотов. Холостая правка (rev тот же) тоста не даёт.
+  async deleteCover() {
+    const before = this.view.rev
+    if (!(await this.run(Api.DeleteCover())) || this.view.rev === before) return
+    this.undoToast('Обложка удалена', COVER_ID)
   }
 
   // Тост с кнопкой «Вернуть» = Undo, как у разреза: безопасно, только если после правки ничего не менялось.
@@ -352,23 +346,54 @@ class Store {
     }
   }
 
-  async autoBuild() {
+  // «Автосборка»: выбрать фото и открыть окно; пусто — тост с причиной уже показан.
+  openAuto() {
+    if (this.busy) return
+    const p = this.hooks.pick(true)
+    if (p.ids.length > 0) this.autoDraft = p
+  }
+
+  // «Собрать» в окне: ровно `spreads` разворотов, не больше `maxPer` фото на каждом, разнообразие раскладок — variety (041).
+  async autoBuild(spreads: number, maxPer: number, variety: Variety = 1): Promise<boolean> {
     // Выделенные — как есть: Go переносит уже стоящие в альбоме фото в новые развороты.
-    const { ids, skipped } = this.hooks.pick(true)
-    if (ids.length === 0) return
+    const d = this.autoDraft
+    this.autoDraft = null
+    if (!d || d.ids.length === 0) return false
     const at = this.view.spreads.length
     const before = new Set(this.view.spreads.map((s) => s.id))
     this.busy = true
     let ok: boolean
     try {
-      ok = await this.run(Api.AutoBuild(ids, at, this.perSpread))
+      ok = await this.run(Api.AutoBuild([...d.ids], at, model.AutoOpts.createFrom({ spreads, maxPer, variety })))
     } finally {
       this.busy = false
     }
-    if (!ok) return
+    if (!ok) return false
     this.selected.clear()
     this.goNew(before, at)
-    this.notify(withSkipped(`Собрано разворотов: ${this.view.spreads.filter((s) => !before.has(s.id)).length}`, skipped))
+    this.notify(
+      withSkipped(
+        `Собрано ${unitOf(this.view.settings).plural[2]}: ${this.view.spreads.filter((s) => !before.has(s.id)).length}`,
+        d.skipped,
+      ),
+    )
+    return true
+  }
+
+  // «Разнообразить раскладки» (041): Go меняет раскладки выбранных разворотов с учётом соседей, один шаг отмены.
+  // Вид без изменений (rev тот же) — тост вместо немого ничего; иначе — тост с «Вернуть».
+  async varyLayouts(ids: readonly string[], variety: Variety): Promise<boolean> {
+    if (ids.length === 0 || this.busy) return false
+    const was = new Map(this.view.spreads.map((s) => [s.id, s.layout]))
+    const before = this.view.rev
+    if (!(await this.run(Api.VaryLayouts([...ids], variety)))) return false
+    if (this.view.rev === before) {
+      this.notify('Раскладки уже разные — менять нечего')
+      return false
+    }
+    const n = this.view.spreads.filter((s) => was.has(s.id) && was.get(s.id) !== s.layout).length
+    this.undoToast(`Раскладки изменены: ${n}`)
+    return true
   }
 
   // ---------- раскладки ----------
@@ -404,6 +429,8 @@ class Store {
   }
 
   private async deleteNow(id?: string) {
+    // На обложке «Удалить разворот» — это удаление обложки (Go отвечает отказом на разворот с её id).
+    if (id === COVER_ID || (!id && this.onCover)) return this.deleteCover()
     const s = id ? this.view.spreads.find((x) => x.id === id) : this.spread
     if (!s) return
     const before = this.view.rev
@@ -445,7 +472,7 @@ class Store {
 
   // «Экспорт» открывает окно настроек (ExportDialog); сам запуск — runExport.
   exportAll() {
-    if (this.exporting || this.view.spreads.length === 0) return
+    if (this.exporting || this.sheets.length === 0) return
     this.exportOpen = true
   }
 
@@ -462,12 +489,32 @@ class Store {
     }
   }
 
-  // true — состояние заменено; false — ошибка (тост уже показан).
+  // Список пропавших и их имена. Номер запроса отсекает запоздавший ответ.
+  private setMissing(ids: string[]) {
+    this.missing = ids
+    const my = ++this.namesReq
+    if (ids.length === 0) {
+      this.missingNames = {}
+      return
+    }
+    Api.MissingNames()
+      .then((n) => {
+        if (my === this.namesReq) this.missingNames = n ?? {}
+      })
+      .catch(() => {
+        if (my === this.namesReq) this.missingNames = {}
+      })
+  }
+
+  // true — состояние заменено (или диалог отменён, ничего не менялось); false — ошибка (тост уже показан).
+  // Отмену диалога «Открыть» Go помечает явно (State.cancelled): событие view приходит раньше ответа,
+  // так что сравнением path/rev её не отличить от удачного открытия.
   async replaceState(p: Promise<unknown>): Promise<boolean> {
     // События, пришедшие до ответа (rescan после Open/New), свежее снимка.
     this.seen = noEvents()
     try {
       const st = (await p) as State
+      if (st.cancelled === true) return true
       this.hooks.reloaded() // другой альбом: отметки перечитать, даже если marksRev тот же
       this.apply(st.view)
       const cur = { photos: this.photos, scan: this.scan, missing: this.missing }
@@ -475,6 +522,7 @@ class Store {
       if (st.recent) this.recent = st.recent
       this.selected.clear()
       this.hooks.spreadsCleared()
+      this.openSeq++
       this.go(0)
       return true
     } catch (e) {

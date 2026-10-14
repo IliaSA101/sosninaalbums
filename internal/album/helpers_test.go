@@ -1,11 +1,72 @@
 package album
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
+
+// Разметки обложки не было (диск не подключён): свежая неудача не перечитывается, через
+// guideRetry файл перечитывается в фоне без e.mu, и появившийся файл показывает следующий вид.
+func TestGuideRetry(t *testing.T) {
+	path := filepath.Join(testkit.TempDir(t), "разметка.png")
+	p := model.New()
+	pr, _ := model.CoverPresetOf(model.CoverDefault)
+	p.Spreads = []*model.Spread{{ID: "0123456789ab", Photos: []string{}}}
+	p.Cover = &model.Cover{Spec: pr.Spec, Sheet: &model.Spread{ID: model.CoverID}, Guide: path}
+	e, err := NewEditor(p, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := e.View(); v.Cover == nil || v.Cover.GuideOK {
+		t.Fatalf("разметки нет, а вид её показывает: %+v", v.Cover)
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 4, 3))); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if v := e.View(); v.Cover.GuideOK {
+		t.Fatal("свежая неудача перечитана сразу")
+	}
+	e.mu.Lock()
+	busy := e.guide.busy
+	e.guide.at = time.Now().Add(-guideRetry)
+	e.mu.Unlock()
+	if busy {
+		t.Fatal("перечитывание до guideRetry")
+	}
+	e.View() // запускает фоновое перечитывание
+	for deadline := time.Now().Add(testkit.Limit(5 * time.Second)); ; time.Sleep(5 * time.Millisecond) {
+		e.mu.Lock()
+		ok, busy := e.guide.OK, e.guide.busy
+		e.mu.Unlock()
+		if ok && !busy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("разметка не перечитана")
+		}
+	}
+	if v := e.View(); !v.Cover.GuideOK || !v.Cover.GuideWarn { // 4×3 — не пропорции листа
+		t.Fatalf("после перечитывания: ok=%v warn=%v", v.Cover.GuideOK, v.Cover.GuideWarn)
+	}
+}
 
 func ip(v int) *int { return &v }
 
@@ -85,4 +146,113 @@ func newTwo(t *testing.T) (*Editor, string, string) {
 		t.Fatalf("развороты: %d", len(v.Spreads))
 	}
 	return e, v.Spreads[0].ID, v.Spreads[1].ID
+}
+
+// guideAltEditor — Editor с обложкой, у которой разметка не нашлась на месте: основной и
+// запасной (GuideAlt) пути прочитаны из файла так же, как при Load.
+func guideAltEditor(t *testing.T) (e *Editor, dir, alt string) {
+	t.Helper()
+	dir = testkit.TempDir(t)
+	alt = filepath.Join(dir, "Старая", "c.png")
+	data := fmt.Appendf(nil, `{"version":6,"settings":{"pageW":281,"pageH":284},"spreads":[],"photos":{},`+
+		`"cover":{"spec":{},"guide":"Нет/c.png","guideAbs":%q}}`, alt)
+	p, err := salbum.Decode(data, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Cover.Guide != filepath.Join(dir, "Нет", "c.png") || p.Cover.GuideAlt != alt {
+		t.Fatalf("подготовка: разметка %q, запасной %q", p.Cover.Guide, p.Cover.GuideAlt)
+	}
+	return newEditor(t, p, ""), dir, alt
+}
+
+// guideAbsOf — guideAbs и наличие "guideAlt" в записанном файле проекта.
+func guideAbsOf(t *testing.T, e *Editor, dir string) (abs string, hasAlt bool) {
+	t.Helper()
+	out, err := salbum.Encode(e.p, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f salbum.FileProject
+	if err := json.Unmarshal(out, &f); err != nil {
+		t.Fatal(err)
+	}
+	return f.Cover.GuideAbs, bytes.Contains(out, []byte("guideAlt"))
+}
+
+// SetCoverGuide: другой файл разметки — запасной путь прежнего не годится, в файл уходит
+// только новый guideAbs, отмена возвращает прежний запасной; неверный путь и тот же путь
+// заново — холостые правки без шага, запасной цел.
+func TestSetCoverGuideResetsAlt(t *testing.T) {
+	e, dir, alt := guideAltEditor(t)
+	old := e.p.Cover.Guide
+	rev, undo := e.rev, len(e.undo)
+	if _, err := e.SetCoverGuide(`\\server\share\guide.png`); err == nil {
+		t.Fatal("UNC принят")
+	}
+	if _, err := e.SetCoverGuide(old); err != nil {
+		t.Fatal(err)
+	}
+	if e.rev != rev || len(e.undo) != undo || e.p.Cover.GuideAlt != alt {
+		t.Fatalf("холостые правки: rev %d → %d, шагов %d → %d, запасной %q", rev, e.rev, undo, len(e.undo), e.p.Cover.GuideAlt)
+	}
+
+	fresh := filepath.Join(dir, "Новая", "c.png")
+	if _, err := e.SetCoverGuide(fresh); err != nil {
+		t.Fatal(err)
+	}
+	if c := e.p.Cover; c.Guide != fresh || c.GuideAlt != "" {
+		t.Fatalf("после смены: разметка %q, запасной %q", c.Guide, c.GuideAlt)
+	}
+	if abs, hasAlt := guideAbsOf(t, e, dir); abs != fresh || hasAlt {
+		t.Fatalf("в файле guideAbs %q (ждали %q), guideAlt есть: %v", abs, fresh, hasAlt)
+	}
+	e.Undo()
+	if c := e.p.Cover; c.Guide != old || c.GuideAlt != alt {
+		t.Fatalf("после отмены: разметка %q, запасной %q", c.Guide, c.GuideAlt)
+	}
+	if abs, _ := guideAbsOf(t, e, dir); abs != alt {
+		t.Fatalf("после отмены guideAbs %q, ждали %q", abs, alt)
+	}
+}
+
+// RelinkDrive нашёл разметку на новом диске: путь новый, запасной сброшен, в файле один
+// guideAbs; файла на новом диске нет — оба пути на месте; отмена возвращает оба.
+func TestRelinkDriveGuideResetsAlt(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("пути с буквами дисков")
+	}
+	root := testkit.TempDir(t)
+	vol := filepath.VolumeName(root)
+	to, _ := paths.DriveLetter(vol)
+	from := "Q"
+	if to == from {
+		from = "P"
+	}
+	onDisk := filepath.Join(root, "Разметка", "c.png")
+	lost := from + ":" + onDisk[len(vol):]
+	e, dir, alt := guideAltEditor(t)
+	e.change(func(p *model.Project) { p.Cover.Guide = lost })
+
+	e.RelinkDrive(from, to) // на новом диске файла нет — разметка не трогается
+	if c := e.p.Cover; c.Guide != lost || c.GuideAlt != alt {
+		t.Fatalf("файла нет: разметка %q, запасной %q", c.Guide, c.GuideAlt)
+	}
+	if err := os.MkdirAll(filepath.Dir(onDisk), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(onDisk, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.RelinkDrive(from, to)
+	if c := e.p.Cover; c.Guide != onDisk || c.GuideAlt != "" {
+		t.Fatalf("файл найден: разметка %q (ждали %q), запасной %q", c.Guide, onDisk, c.GuideAlt)
+	}
+	if abs, hasAlt := guideAbsOf(t, e, dir); abs != onDisk || hasAlt {
+		t.Fatalf("в файле guideAbs %q (ждали %q), guideAlt есть: %v", abs, onDisk, hasAlt)
+	}
+	e.Undo()
+	if c := e.p.Cover; c.Guide != lost || c.GuideAlt != alt {
+		t.Fatalf("после отмены: разметка %q, запасной %q", c.Guide, c.GuideAlt)
+	}
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { SvelteMap } from 'svelte/reactivity'
   import { store } from '../../base/core/store.svelte'
+  import { unitOf } from '../../base/geom/sheet'
   import { scanText, scanFraction } from './scan'
   import { fitGroups, type RowGroup } from '../../base/ui/fitrow'
   import MarkBar from '../marks/MarkBar.svelte'
@@ -11,6 +12,7 @@
   // Верхняя полоса ленты фото (спека 024): всегда одна строка. Что не поместилось — уходит в «⋯» по приоритету
   // (prio: меньше — раньше; «Автосборка» не уходит никогда). «Не в альбоме» = не в местах и не на фоне.
   const frac = $derived(scanFraction(store.scan))
+  const unit = $derived(unitOf(store.view.settings))
   const loading = $derived(store.thumbs.total > 0 && store.thumbs.done < store.thumbs.total)
 
   // GAP и PAD уходят в CSS полосы через style: (одна правда с расчётом fitGroups)
@@ -20,9 +22,9 @@
   const SPACER = 2 * GAP // зазоры вокруг растяжки между левой и правой частью
 
   // Порядок слева направо: до растяжки и после неё.
-  const LEFT = ['folders', 'auto', 'per', 'fill']
+  const LEFT = ['folders', 'auto', 'fill']
   const RIGHT = ['status', 'marks', 'filter', 'size']
-  const PRIO: Record<string, number> = { folders: 60, auto: Infinity, per: 30, fill: 40, status: 20, marks: 70, filter: 50, size: 10 }
+  const PRIO: Record<string, number> = { folders: 60, auto: Infinity, fill: 40, status: 20, marks: 70, filter: 50, size: 10 }
 
   // Какие группы есть сейчас (пустые не занимают места).
   const present = $derived(
@@ -52,6 +54,20 @@
     return fitGroups(groups, barW - PAD - SPACER, GAP, MORE_W)
   })
   const inMore = $derived(present.filter((id) => hidden.has(id)))
+  // Якоря справочника (033) групп, что ушли в «⋯»: кнопка «⋯» мигает вместо них.
+  const GUIDE_OF: Record<string, string> = {
+    folders: 'folders',
+    fill: 'fill-empty',
+    marks: 'mark-bar',
+    filter: 'mark-filter',
+    size: 'thumb-size',
+  }
+  const hold = $derived(
+    inMore
+      .map((id) => GUIDE_OF[id])
+      .filter(Boolean)
+      .join(' '),
+  )
   const shown = (ids: string[]) => ids.filter((id) => present.includes(id) && !hidden.has(id))
 
   // Фокус остаётся где был: иначе Enter (хоткей «добавить выделенные») нажмёт кнопку повторно.
@@ -64,32 +80,27 @@
   {:else if id === 'auto'}
     <button
       class="primary"
+      data-guide="autobuild"
       disabled={store.busy || store.photos.length === 0}
-      title="Разложить выделенные фото (или все, что ещё не в альбоме) по новым разворотам. Без выделения отклонённые пропускаются"
+      title="Собрать из выделенных фото (или из всех, что ещё не в альбоме) заданное число {unit
+        .plural[2]}. Без выделения отклонённые пропускаются"
       onmousedown={keep}
-      onclick={() => store.autoBuild()}
+      onclick={() => store.openAuto()}
     >
       {store.busy ? 'Собираю…' : 'Автосборка'}
     </button>
-  {:else if id === 'per'}
-    <select
-      bind:value={store.perSpread}
-      title="Сколько фото в среднем на разворот при автосборке"
-      aria-label="Сколько фото в среднем на разворот при автосборке"
-      onchange={(e) => e.currentTarget.blur()}
-    >
-      {#each [2, 3, 4, 5, 6] as n (n)}<option value={n}>по {n}</option>{/each}
-    </select>
   {:else if id === 'fill'}
     <button
+      data-guide="fill-empty"
       disabled={store.photos.length === 0}
       aria-label="Заполнить пустые места: {store.view.emptyPlaces}"
       title="Заполнить пустые места ({store.view
-        .emptyPlaces}): положить выделенные фото (или все, что ещё не в альбоме) в пустые места разворотов-сеток, начиная с этого разворота. Без выделения отклонённые пропускаются"
+        .emptyPlaces}): положить выделенные фото (или все, что ещё не в альбоме) в пустые места {unit
+        .plural[2]}-сеток, начиная с этого {unit.of}. Без выделения отклонённые пропускаются"
       onmousedown={keep}
       onclick={() => store.fillPlaces()}
     >
-      Заполнить {store.view.emptyPlaces}
+      Заполнить места: {store.view.emptyPlaces}
     </button>
   {:else if id === 'status'}
     {#if store.scan.active}
@@ -104,6 +115,7 @@
   {:else if id === 'size'}
     <input
       class="size"
+      data-guide="thumb-size"
       type="range"
       min="70"
       max="220"
@@ -126,7 +138,7 @@
     <span class="g" use:measure={id}>{@render grp(id)}</span>
   {/each}
   {#if inMore.length > 0}
-    <MoreMenu ids={inMore} item={grp} />
+    <MoreMenu ids={inMore} item={grp} {hold} />
   {/if}
   {#if store.scan.active}
     <div class="progress" class:indeterminate={frac === null}>

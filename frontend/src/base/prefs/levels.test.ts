@@ -3,6 +3,7 @@ import {
   ALL_LEVELS,
   FEATURES,
   LEVELS,
+  LEVEL_HINT,
   LEVEL_POINTS,
   LEVEL_TITLE,
   customPoints,
@@ -46,6 +47,7 @@ const LEGACY_MIN: Record<FeatureId, 'simple' | 'standard' | 'full'> = {
   textRotate: 'full',
   panels: 'full',
   marks: 'simple', // спека 004
+  vignette: 'standard', // 031: на «Простом» пунктов виньетки нет (решение 80)
 }
 
 describe('featureGroups', () => {
@@ -64,8 +66,8 @@ describe('таблица уровней', () => {
       for (const l of LEVELS) expect(can(id, l), `${id}@${l}`).toBe(LEVELS.indexOf(l) >= LEVELS.indexOf(LEGACY_MIN[id]))
     }
   })
-  it('24 строки, у каждой краткое имя без повторов', () => {
-    expect(FEATURES).toHaveLength(24)
+  it('25 строк, у каждой краткое имя без повторов', () => {
+    expect(FEATURES).toHaveLength(25)
     const shorts = FEATURES.map((f) => f.short)
     expect(new Set(shorts).size).toBe(shorts.length)
     for (const s of shorts) expect(s.trim(), s).not.toBe('')
@@ -108,6 +110,14 @@ describe('таблица уровней', () => {
     for (const b of LEVELS) for (const p of customPoints(b)) expect(p.length, p).toBeLessThanOrEqual(26)
     expect(customPoints('standard').at(-1)).toBe('Основа сейчас: Стандартный')
   })
+  it('обложка и виньетка названы в карточках, подсказке и строке «Основа» (035 U10)', () => {
+    expect(LEVEL_POINTS.simple).toContain('Обложка')
+    expect(LEVEL_POINTS.simple).not.toContain('Поворот фото на 90°')
+    expect(LEVEL_POINTS.standard).toContain('Виньетка в альбоме')
+    expect(LEVEL_POINTS.standard).not.toContain('Зум и группа фото')
+    expect(LEVEL_HINT.simple).toContain('обложка')
+    expect(FEATURES.find((f) => f.id === 'base')?.title).toContain('обложка')
+  })
   it('у каждой функции один главный id и нет повторов среди всех', () => {
     expect(new Set(ALL).size).toBe(ALL.length)
   })
@@ -123,7 +133,19 @@ describe('таблица уровней', () => {
       expect(can(id, 'simple'), id).toBe(true)
   })
   it('«Стандартный» добавляет текст, кадр, зеркало, зум, группу, фото фона и меню правой кнопки', () => {
-    for (const id of ['text', 'photoMenu', 'frame', 'flip', 'tilt', 'zoom', 'names', 'allSpreads', 'groupSelect', 'bgPhoto'] as const) {
+    for (const id of [
+      'text',
+      'photoMenu',
+      'frame',
+      'flip',
+      'tilt',
+      'zoom',
+      'names',
+      'allSpreads',
+      'groupSelect',
+      'bgPhoto',
+      'vignette',
+    ] as const) {
       expect(can(id, 'simple'), id).toBe(false)
       expect(can(id, 'standard'), id).toBe(true)
     }

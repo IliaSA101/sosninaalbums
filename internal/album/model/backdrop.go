@@ -72,21 +72,15 @@ func (s *Spread) PhotoIDs() []string {
 	return ids
 }
 
-// OnBackdrops — ID фото, стоящих на фонах любого разворота.
+// OnBackdrops — ID фото, стоящих на фонах любого листа (с обложкой).
 func (p *Project) OnBackdrops() map[string]bool {
 	out := map[string]bool{}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		for _, b := range s.Backdrops() {
 			out[b.Photo] = true
 		}
 	}
 	return out
-}
-
-// BdArea — область фона в мм разворота.
-func (p *Project) BdArea(scope string) layout.Rect {
-	a0, a1, _ := p.Area(scope)
-	return layout.Rect{X: a0, Y: 0, W: a1 - a0, H: p.Settings.PageH}
 }
 
 func (b *Backdrop) TBox() geom.TextBox {

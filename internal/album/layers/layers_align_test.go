@@ -7,7 +7,6 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
-	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
@@ -334,7 +333,7 @@ func TestDistributeWideIdempotent(t *testing.T) {
 			t.Fatalf("%s: повторное распределение не холостое: %+v → %+v", c.name, was, alignRects(e))
 		}
 		for i, r := range alignRects(e) {
-			if geom.OnRight(model.Page(edtest.P(e).Settings), r) {
+			if edtest.P(e).AlignSheet(nil).PageAt(r.X+r.W/2) == 1 {
 				t.Fatalf("%s: место %d ушло на правую страницу: %+v", c.name, i, r)
 			}
 		}

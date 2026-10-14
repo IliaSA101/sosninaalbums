@@ -28,7 +28,7 @@
   }
 
   function outside(e: PointerEvent) {
-    if (open && !(e.target as Element).closest('[data-level-badge]')) open = false
+    if (open && !(e.target instanceof Element && e.target.closest('[data-level-badge]'))) open = false
   }
   function key(e: KeyboardEvent) {
     if (open && e.key === 'Escape') {
@@ -40,7 +40,7 @@
 
 <svelte:window onpointerdowncapture={outside} onkeydowncapture={key} onresize={() => (open = false)} onblur={() => (open = false)} />
 
-<span class="wrap" data-level-badge data-chrome data-text-ui>
+<span class="wrap" data-level-badge data-guide="level-badge" data-chrome data-text-ui>
   <button
     class="ghost"
     bind:this={btn}

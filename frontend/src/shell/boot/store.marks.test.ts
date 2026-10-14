@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Go подменён: Marks отвечает по очереди (можно задержать ответ), SetMarks/ResetMarks записывают вызов.
 const calls: { name: string; ids: string[]; patch?: unknown }[] = []
 let marksCalls = 0
+let buildArgs: unknown = null
 let marksAnswer: () => Promise<unknown> = async () => ({})
 const view = (rev: number, marksRev: number, extra: object = {}) => ({ rev, marksRev, folders: [], spreads: [], ...extra })
 
@@ -17,7 +18,8 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
     if ((patch as { rating?: number }).rating === 99) throw 'слишком много своих отметок (больше 100 000)'
     return view(5, 2)
   },
-  AutoBuild: async (ids: string[]) => {
+  AutoBuild: async (ids: string[], at: number, o: { spreads: number; maxPer: number; variety: number }) => {
+    buildArgs = { at, spreads: o.spreads, maxPer: o.maxPer, variety: o.variety }
     calls.push({ name: 'build', ids })
     return view(7, 1, {
       spreads: [
@@ -185,14 +187,18 @@ describe('автосборка и заполнение мест: что уход
     await setup()
     store.selected.add('a')
     store.selected.add('b')
-    await store.autoBuild()
+    store.openAuto()
+    await store.autoBuild(1, 64)
     expect(calls).toEqual([{ name: 'build', ids: ['a', 'b'] }])
+    // Контракт 041: (ids, at, AutoOpts{spreads, maxPer, variety}), at — конец альбома; по умолчанию «Обычное»
+    expect(buildArgs).toEqual({ at: 1, spreads: 1, maxPer: 64, variety: 1 })
     expect(store.toast?.text).toBe('Собрано разворотов: 1')
   })
 
   it('автосборка без выделения — свободные без отклонённых, тост «Отклонённые не взяты»', async () => {
     await setup()
-    await store.autoBuild()
+    store.openAuto()
+    await store.autoBuild(1, 64)
     expect(calls).toEqual([{ name: 'build', ids: ['c', 'd'] }])
     expect(store.toast?.text).toBe('Собрано разворотов: 1. Отклонённые не взяты: 1')
   })
@@ -214,7 +220,8 @@ describe('автосборка и заполнение мест: что уход
 
   it('нечего брать: все свободные отклонены — Go не зовём, тост с причиной', async () => {
     await setup({ rejected: ['b', 'c', 'd'] })
-    await store.autoBuild()
+    store.openAuto()
+    await store.autoBuild(1, 64)
     expect(calls).toEqual([])
     expect(store.toast?.text).toBe('Отклонённые не взяты: 3')
   })

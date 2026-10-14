@@ -1,5 +1,7 @@
 <script lang="ts">
   import { gridAct } from '../../panels/layouts/gridact.svelte'
+  import { store } from '../../base/core/store.svelte'
+  import { isSheet } from '../../base/geom/sheet'
   import { edit } from '../text/edit.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { panels } from './panelmode.svelte'
@@ -33,12 +35,14 @@
   // Разделять есть что, только когда выделено место (или фото в нём).
   const noPlace = $derived(placesel.selected.length === 0)
   const splitOff = 'Выделите место'
+  // В виньетке страниц нет — только лист (031).
+  const page = $derived(isSheet(store.view.settings) ? 'лист' : 'страницу')
   const full = $derived<Group[]>([
     {
       title: 'Добавить',
       items: [
-        { icon: 'text', label: 'Текст на страницу', short: 'Текст', feature: 'text', run: () => edit.addText() },
-        { icon: 'place-add', label: 'Новое место на странице', short: 'Место', feature: 'manual', run: () => placesel.addPlace() },
+        { icon: 'text', label: `Текст на ${page}`, short: 'Текст', feature: 'text', run: () => edit.addText() },
+        { icon: 'place-add', label: `Новое место на ${page}`, short: 'Место', feature: 'manual', run: () => placesel.addPlace() },
       ],
     },
     {
@@ -65,7 +69,12 @@
     },
   ])
   // Пункты по функциям «Своего»; пустая группа не рисуется (design §2.2, §2.3).
-  const all = $derived(full.map((g) => ({ ...g, items: g.items.filter((i) => prefs.can(i.feature)) })).filter((g) => g.items.length > 0))
+  // У обложки (032) нет быстрых раскладок и шаблонов: «Отразить раскладку» там скрыто.
+  const all = $derived(
+    full
+      .map((g) => ({ ...g, items: g.items.filter((i) => prefs.can(i.feature) && !(store.onCover && i.icon === 'mirror-menu')) }))
+      .filter((g) => g.items.length > 0),
+  )
   // Режим фона: лента неактивна целиком, подсказка объясняет почему.
   const bgOff = 'Выйдите из режима фона'
   const groups = $derived(bgmode.cur ? all.map((g) => ({ ...g, items: g.items.map((i) => ({ ...i, label: bgOff, off: true })) })) : all)
@@ -82,6 +91,24 @@
   // Кнопки не забирают фокус у редактора текста: курсор остаётся в нём.
   const keepFocus = (e: MouseEvent) => e.preventDefault()
 </script>
+
+{#snippet rbtn(it: Item)}
+  <button
+    class="rb"
+    class:off={it.off}
+    aria-disabled={it.off ? 'true' : undefined}
+    aria-label={it.label}
+    onmousedown={keepFocus}
+    onpointerdown={(e) => e.stopPropagation()}
+    use:tipped={{ text: it.label, side: 'right' }}
+    onclick={() => {
+      tip.hide()
+      if (!it.off) it.run?.()
+    }}
+    ><Icon name={it.icon === 'mirror-menu' ? 'mirror-layout' : it.icon} size={ICON} />{#if wide}<span class="rl">{it.short}</span
+      >{/if}</button
+  >
+{/snippet}
 
 <!-- Плавающие панели — уровень «Полный» (вопрос 11); ниже карточка живёт в панели деталей -->
 {#if panels.mode && prefs.can('panels') && groups.length > 0}
@@ -100,6 +127,7 @@
     aria-label="Действия"
     data-chrome
     data-text-ui
+    data-guide="rail"
   >
     {#each cols as col, c (c)}
       <div class="col">
@@ -110,23 +138,14 @@
             {#each g.items as it (it.icon)}
               {#if it.icon === 'mirror-menu' && !it.off}
                 <MirrorMenu side="right" label={wide ? it.short : ''} onpick={(scope) => gridAct.mirrorGrid(scope)} />
+              {:else if it.icon === 'text'}
+                <div data-guide="rail-text">{@render rbtn(it)}</div>
+              {:else if it.icon === 'place-add'}
+                <div data-guide="rail-place">{@render rbtn(it)}</div>
+              {:else if it.icon === 'split-h' || it.icon === 'split-v'}
+                <div data-guide="rail-split">{@render rbtn(it)}</div>
               {:else}
-                <button
-                  class="rb"
-                  class:off={it.off}
-                  aria-disabled={it.off ? 'true' : undefined}
-                  aria-label={it.label}
-                  onmousedown={keepFocus}
-                  onpointerdown={(e) => e.stopPropagation()}
-                  use:tipped={{ text: it.label, side: 'right' }}
-                  onclick={() => {
-                    tip.hide()
-                    if (!it.off) it.run?.()
-                  }}
-                  ><Icon name={it.icon === 'mirror-menu' ? 'mirror-layout' : it.icon} size={ICON} />{#if wide}<span class="rl"
-                      >{it.short}</span
-                    >{/if}</button
-                >
+                {@render rbtn(it)}
               {/if}
             {/each}
           </div>

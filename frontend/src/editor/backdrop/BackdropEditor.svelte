@@ -1,5 +1,7 @@
 <script lang="ts">
-  import type { Settings, SpreadView } from '../../base/core/types'
+  import type { SpreadView } from '../../base/core/types'
+  import { store } from '../../base/core/store.svelte'
+  import { coverSides } from '../cover/cover'
   import { bgmode } from './bgmode.svelte'
   import { backdropAt, modeClick, type BgLive } from './bgmode'
   import { bdAngle, bdLines, moveFrame, panBox, resizeSide, scaleFrame, type Side } from '../../base/geom/bdbox'
@@ -15,15 +17,15 @@
   // Режим фона (спека 009, design-backdrop §6): над приглушённым разворотом — область пунктиром,
   // рамка фона с ручками, ✥ и ползунок кадра. Предпросмотр жеста — bgmode.live (его рисует и
   // BackdropLayer), в Go — один вызов на отпускании. Сам слой — цель броска: фото заменит фон области.
-  let { spread, settings, width }: { spread: SpreadView; settings: Settings; width: number } = $props()
+  let { spread, width }: { spread: SpreadView; width: number } = $props()
 
   let root = $state<HTMLElement>()
-  const sw = $derived(settings.pageW * 2)
+  const sw = $derived(spread.w)
   const b = $derived(bgmode.view)
   const t = $derived(bgmode.live?.box ?? b?.box)
   const fr = $derived(bgmode.live?.frame ?? b?.frame)
   const px = (v: number) => `${(v / sw) * 100}%`
-  const py = (v: number) => `${(v / settings.pageH) * 100}%`
+  const py = (v: number) => `${(v / spread.h) * 100}%`
   // ✥ — только когда фото больше рамки: иначе двигать нечего.
   const movable = $derived(!!b && hasSlack({ x: 0, y: 0, w: b.box.w, h: b.box.h }, b.img))
   let panning = $state(false)
@@ -31,7 +33,7 @@
   const rotIn = $derived.by(() => {
     if (!t || !(width > 0)) return false
     const p = toSpread(t, t.w / 2, -30 * (sw / width))
-    return p.y < 0 || p.y > settings.pageH || p.x < 0 || p.x > sw
+    return p.y < 0 || p.y > spread.h || p.x < 0 || p.x > sw
   })
 
   type Step = (dx: number, dy: number, ev: PointerEvent, p: Pt) => BgLive
@@ -88,8 +90,8 @@
 
   function startMove(e: PointerEvent) {
     const base = b!
-    const lines = bdLines(base.area, settings.pageW)
-    const thr = snapThreshold(root?.getBoundingClientRect().width ?? 0, settings.pageW)
+    const lines = bdLines(base.area, spread.mid, coverSides(spread, store.view.cover))
+    const thr = snapThreshold(root?.getBoundingClientRect().width ?? 0, spread.w)
     gesture(
       e,
       (dx0, dy0, ev) => {

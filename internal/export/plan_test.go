@@ -169,3 +169,22 @@ func TestMissingPhotos(t *testing.T) {
 		t.Errorf("пропавшее вне выбора: %v", err)
 	}
 }
+
+// Ошибка пропавших фото называет реальный пункт меню (U21).
+func TestMissingPhotosNamesMenu(t *testing.T) {
+	p := selectProject()
+	all := map[string]bool{"a": true, "b": true}
+	err := MissingPhotos(p, all, func(string) bool { return false })
+	if err == nil {
+		t.Fatal("ожидалась ошибка")
+	}
+	// Подписи — как пункт «Файл» → «Найти пропавшие фото…» в frontend/src/shell/menu/menu.ts.
+	for _, want := range []string{"Файл ▸ Найти пропавшие фото…", "повторите выгрузку"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("в ошибке нет %q: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "Недостающие") {
+		t.Errorf("устаревший пункт меню: %v", err)
+	}
+}

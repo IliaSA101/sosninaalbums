@@ -5,6 +5,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/design"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/names"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 )
 
@@ -88,10 +89,53 @@ func (e *Editor) SetCaption(photoID, txt, session string) model.View {
 	return e.apply(textMerge(session), func(p *model.Project) { design.SetCaption(p, photoID, txt) })
 }
 
-// Договор: стиль зажат ClampStyle; подписи нет — холостая правка (тело).
-func (e *Editor) SetCaptionStyle(photoID string, st model.TextStyle, over bool) model.View {
-	st = model.ClampStyle(st)
-	return e.change(func(p *model.Project) { design.SetCaptionStyle(p, photoID, st, over) })
+// Договор: стиль зажат ClampStyle, отступ — ClampCaptionPad (0..20 мм, шаг 0,1; NaN/Inf и
+// 1 мм — nil); подписи нет — холостая правка (тело).
+func (e *Editor) SetCaptionStyle(photoID string, st model.TextStyle, over bool, pad float64) model.View {
+	st, pp := model.ClampStyle(st), model.ClampCaptionPad(&pad)
+	return e.change(func(p *model.Project) { design.SetCaptionStyle(p, photoID, st, over, pp) })
+}
+
+// Поля подписей (030, тела — names).
+
+// Договор: имя зажато ClampPerson (все пусты — nil: снова из имени файла); session — как у
+// SetText: набор в поле — один шаг отмены.
+func (e *Editor) SetPerson(photoID string, who model.Person, session string) model.View {
+	pp := model.ClampPerson(who)
+	return e.apply(textMerge(session), func(p *model.Project) { names.SetPerson(p, photoID, pp) })
+}
+
+// Person — имя фото для карточки (своё или из имени файла); ok = false — фото не в альбоме.
+func (e *Editor) Person(photoID string) (pv model.PersonView, ok bool) {
+	e.read(func(p *model.Project) {
+		var r model.PhotoRef
+		if r, ok = p.Photos[photoID]; ok {
+			pv = model.NameView(r)
+		}
+	})
+	return pv, ok
+}
+
+// PasteNames раскладывает вставленный список имён по фото листа одним шагом отмены.
+// extra — лишних строк, missing — фото без имени после вставки.
+// Договор: список разобран и ограничен names.Parse (64 КБ, 1000 строк) до правки.
+func (e *Editor) PasteNames(spreadID, list string, firstFirst bool) (v model.View, extra, missing int, err error) {
+	people, err := names.Parse(list, firstFirst)
+	if err != nil {
+		return e.View(), 0, 0, err
+	}
+	v, err = e.try("", func(p *model.Project) (err error) {
+		extra, missing, err = names.Paste(p, spreadID, people)
+		return err
+	})
+	return v, extra, missing, err
+}
+
+// Договор: стиль листа зажат ClampSheetCaps (стиль, отступ 0..20, NaN — 1 мм; шаблон —
+// CleanText); off — c не смотрится.
+func (e *Editor) SetSheetCaps(spreadID string, on bool, c model.SheetCaps) model.View {
+	c = model.ClampSheetCaps(c)
+	return e.change(func(p *model.Project) { names.SetSheetCaps(p, spreadID, on, c) })
 }
 
 // AddText добавляет блок «Текст» на страницу page; session — сессия ввода: добавление

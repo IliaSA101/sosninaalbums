@@ -41,6 +41,9 @@ func Render(s Spread, opt Options) (*image.RGBA, error) {
 			items = append(items, item{ph: ph, clip: clip, backdrop: true})
 		}
 	}
+	for i := range s.Plates { // плашки лежат поверх фонов и под всем остальным
+		items = append(items, item{plate: &s.Plates[i]})
+	}
 	nb := len(items)
 	for _, ph := range s.Photos {
 		items = append(items, item{ph: ph, z: ph.Z})
@@ -62,6 +65,7 @@ type item struct {
 	clip     image.Rectangle // путь 3 у фона: его область в px; пусто — весь холст
 	backdrop bool
 	text     *TextDraw
+	plate    *Plate
 	z        int
 }
 
@@ -105,7 +109,7 @@ func drawItems(canvas *image.RGBA, items []item, dpi int) error {
 	var wg sync.WaitGroup
 	var failed atomic.Bool // после первой ошибки новые фото не запускаем: результат всё равно отброшен
 	for i, it := range items {
-		photo := it.text == nil
+		photo := it.text == nil && it.plate == nil
 		if photo {
 			sem <- struct{}{}
 		}
@@ -122,9 +126,17 @@ func drawItems(canvas *image.RGBA, items []item, dpi int) error {
 			defer close(done[i]) // и при ошибке: иначе следующий ждал бы вечно
 			var paint func(*image.RGBA) error
 			var err error
-			if photo {
+			switch {
+			case photo:
 				paint, err = prepareSafe(it, canvas.Bounds(), dpi)
-			} else {
+			case it.plate != nil:
+				pl := *it.plate
+				paint = func(c *image.RGBA) error {
+					r := image.Rect(px(pl.Rect.X, dpi), px(pl.Rect.Y, dpi), px(pl.Rect.X+pl.Rect.W, dpi), px(pl.Rect.Y+pl.Rect.H, dpi))
+					fill(c, r.Intersect(c.Bounds()), pl.Color)
+					return nil
+				}
+			default:
 				t := *it.text
 				paint = func(c *image.RGBA) error {
 					text.Draw(c, t.Box, t.Style, t.X, t.Y, t.Rot, dpi)

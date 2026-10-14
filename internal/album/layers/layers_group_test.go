@@ -209,7 +209,7 @@ func TestScaleGroupAxesAutoText(t *testing.T) {
 	if want := math.Round(size*0.5*10) / 10; tb.Style.Size != want || !tb.Auto {
 		t.Fatalf("кегль %v, ждали %v; %+v", tb.Style.Size, want, *tb)
 	}
-	if tb.W != model.AutoW(tb, model.TextMaxW(edtest.P(e).Settings)) {
+	if tb.W != edtest.P(e).SheetAutoW(nil, tb) {
 		t.Fatalf("ширина %v не по тексту", tb.W)
 	}
 	ax, ay := model.BoxOf(tb).Anchor(tb.Style.Align)
@@ -359,7 +359,7 @@ func TestTransformGroupTextsOnlyNoFreeze(t *testing.T) {
 		t.Fatalf("кегль %v, был %v", got, was)
 	}
 	// Блок «по тексту» остаётся таким, ширину пересчитал fitTexts.
-	if !s.Texts[0].Auto || s.Texts[0].W != model.AutoW(s.Texts[0], model.TextMaxW(edtest.P(e).Settings)) {
+	if !s.Texts[0].Auto || s.Texts[0].W != edtest.P(e).SheetAutoW(nil, s.Texts[0]) {
 		t.Fatalf("ширина: %+v", *s.Texts[0])
 	}
 }

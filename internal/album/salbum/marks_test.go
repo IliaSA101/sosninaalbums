@@ -28,7 +28,7 @@ func loadEditor(t *testing.T, path string) *album.Editor {
 	return edtest.Open(t, p, path)
 }
 
-// v4 без отметок открывается, первая запись — v5 без поля marks.
+// v4 без отметок открывается, первая запись — v6 без поля marks.
 func TestLoadV4NoMarks(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "v4-dev.salbum.json"))
 	if err != nil {
@@ -46,7 +46,7 @@ func TestLoadV4NoMarks(t *testing.T) {
 		t.Fatal(err)
 	}
 	saved, _ := os.ReadFile(path)
-	if f := fileJSON(t, path); f.Version != 5 || bytes.Contains(saved, []byte(`"marks"`)) {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || bytes.Contains(saved, []byte(`"marks"`)) {
 		t.Fatalf("версия %d, marks в файле без отметок: %v", f.Version, bytes.Contains(saved, []byte(`"marks"`)))
 	}
 	if _, err := os.Stat(path + ".v4.bak"); err != nil {

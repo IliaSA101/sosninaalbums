@@ -10,7 +10,7 @@ import (
 
 // ArrangeLayers — тело Editor.ArrangeLayers над проектом.
 func ArrangeLayers(p *model.Project, spreadID, op string, ids []string) {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return
 	}

@@ -2,6 +2,7 @@
 // «Неиспользованные»): не в местах альбома и не на фоне. Фото фона в used не входит (спека 009,
 // решение владельца), но раскладка не должна снова ставить его в места.
 import { withSkipped } from '../../base/core/errtext'
+import type { PickResult } from '../../base/core/hooks'
 import type { Photo } from '../../base/core/types'
 import { markOf, type OwnMarks } from '../marks/marks'
 
@@ -29,6 +30,11 @@ export function autoPick(
   return { ids: kept.map((p) => p.id), skipped: free.length - kept.length }
 }
 
+// Фильтр «Не в альбоме» пуст потому, что все фото уже разложены: лента говорит об этом и даёт «Показать все» (035 U11).
+export function allInAlbum(filter: 'all' | 'unused', freeCount: number, total: number): boolean {
+  return filter === 'unused' && freeCount === 0 && total > 0
+}
+
 // Тост, когда автосборке нечего брать.
 export function emptyReason(selected: boolean, skipped: number, filtered: boolean): string {
   if (skipped > 0) return withSkipped('', skipped)
@@ -47,8 +53,9 @@ export interface PickHost {
 }
 
 // autoPick для store: пусто — тост с причиной (ids пуст, вызывающий выходит).
-export function pickFor(h: PickHost, moveUsed: boolean, filtered: boolean): { ids: string[]; skipped: number } {
+export function pickFor(h: PickHost, moveUsed: boolean, filtered: boolean): PickResult {
   const r = autoPick(h.visible, h.selectedIds, h.used, h.backdropUsed, h.marks, moveUsed)
   if (r.ids.length === 0) h.notify(emptyReason(h.selectedIds.length > 0, r.skipped, filtered))
-  return r
+  const sel = h.selectedIds.length > 0
+  return { ...r, from: sel ? 'selected' : 'free', inAlbum: sel ? r.ids.filter((id) => h.used.has(id)).length : 0, filtered }
 }

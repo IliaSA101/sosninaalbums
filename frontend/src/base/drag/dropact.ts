@@ -1,6 +1,8 @@
 // Исполнение броска: что делать решает чистый dropPlan (drag/drop.ts), здесь только вызовы Go.
 import * as Api from '../../../wailsjs/go/app/App'
-import { dropPlan } from './drop'
+import { dropPlan, type DropPlan } from './drop'
+import { dropGrid } from './dropgrid.svelte'
+import { COVER_ID } from '../geom/sheet'
 import { store } from '../core/store.svelte'
 import type { BackdropScope, GridResult, Payload, Target } from '../core/types'
 
@@ -17,13 +19,9 @@ export async function dropOn(p: Payload, t: Target) {
       // Текущий разворот следует за своим id сам (см. store.apply).
       await store.run(Api.MoveSpread(plan.id, plan.at))
       return
-    case 'add': {
-      // Из ленты — со снятием выделения и тостом о переносе; из разворота — просто правка.
-      const op = () => Api.AddPhotos(plan.spread, plan.ids, plan.at)
-      const ok = plan.fromSpread ? await store.run(op()) : await store.fromStrip(plan.ids, plan.spread, op)
-      if (ok && plan.go) store.goId(plan.spread)
+    case 'add':
+      await addPhotos(plan)
       return
-    }
     case 'swap':
       await store.run(Api.SwapPhotos(plan.a, plan.b))
       return
@@ -42,12 +40,29 @@ export async function dropOn(p: Payload, t: Target) {
     case 'backdrop':
       await dropHooks.setBackdrop(plan.spread, plan.scope, plan.photo)
       return
+    case 'cover':
+      if (await store.createCover(plan.photo)) store.selected.clear()
+      return
   }
 }
 
-// Бросок фото на место сетки. Замена занятого места фото из ленты выгоняет прежнее фото в ленту.
+// Лист с местами, кроме обложки: у неё бросок на место остаётся прежним (PlacePhotos, без вопроса и плитки).
+const isGrid = (id: string) => id !== COVER_ID && !!store.sheet(id)?.grid
+
+// Фото на лист или на фото ленты альбома.
+async function addPhotos(plan: Extract<DropPlan, { op: 'add' }>) {
+  // Ручной разворот (042): места, плитка, вопрос об остальных — решает Go, не AddPhotos.
+  if (isGrid(plan.spread)) return dropGrid(plan.spread, '', plan.ids, plan.frac ?? -1, plan.fromSpread, plan.go)
+  // Из ленты — со снятием выделения и тостом о переносе; из разворота — просто правка.
+  const op = () => Api.AddPhotos(plan.spread, plan.ids, plan.at)
+  const ok = plan.fromSpread ? await store.run(op()) : await store.fromStrip(plan.ids, plan.spread, op)
+  if (ok && plan.go) store.goId(plan.spread)
+}
+
+// Бросок на место: ручной лист — dropGrid, обложка — PlacePhotos. Замена занятого места фото из ленты выгоняет прежнее фото в ленту.
 async function placePhotos(spread: string, place: string, ids: string[], fromSpread: boolean) {
-  const owner = store.view.spreads.find((s) => s.id === spread)?.places?.find((p) => p.id === place)?.photo
+  if (isGrid(spread)) return dropGrid(spread, place, ids, -1, fromSpread)
+  const owner = store.sheet(spread)?.places?.find((p) => p.id === place)?.photo
   // Go считает в left и вытесненного хозяина места (замена фото из ленты), и фото, не нашедшие места.
   const replaced = !!owner && !store.used.has(ids[0])
   let left = 0

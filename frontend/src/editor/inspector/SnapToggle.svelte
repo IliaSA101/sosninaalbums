@@ -9,7 +9,12 @@
 
 <!-- mousedown лишь держит фокус в редакторе текста, действие — на флажке -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<label class="snap" title="Прилипание к краям, центрам и промежутку (Alt при переносе — без привязки)" onmousedown={keepFocus}>
+<label
+  class="snap"
+  data-guide="snap"
+  title="Прилипание к краям, центрам и промежутку (Alt при переносе — без привязки)"
+  onmousedown={keepFocus}
+>
   <input type="checkbox" checked={placesel.snap} onchange={() => placesel.toggleSnap()} />Привязка
 </label>
 

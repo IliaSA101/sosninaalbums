@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/rand/v2"
 	"slices"
 	"testing"
 
@@ -248,12 +247,19 @@ func TestCopyGridDesign(t *testing.T) {
 		t.Fatal("сверх MaxTexts без ошибки")
 	}
 	edtest.Same(t, e, rev, undo, "MaxTexts")
+	// Ровно 64 после копии (спека 026) — проходит: у цели 63, один заменится, два придут.
+	edtest.Change(e, func(p *model.Project) { p.Spreads[1].Texts = p.Spreads[1].Texts[:model.MaxTexts-1] })
+	if _, _, err := e.CopyGrid("s1", model.ScopeLeft, []model.GridTarget{{Spread: "s2", Scope: model.ScopeRight}}, true, false); err != nil || len(edtest.P(e).Spreads[1].Texts) != 64 {
+		t.Fatalf("ровно 64: %v, блоков %d", err, len(edtest.P(e).Spreads[1].Texts))
+	}
 }
 
 func TestDuplicateGrid(t *testing.T) {
 	e := edtest.GridEd(t, edtest.Calendar(), []string{"d"})
 	e.AddText("s1", 0, "")
 	e.SetBackground("s1", "spread", "#010203")
+	caps, vars := model.SheetCaps{Style: model.DefaultCaptionStyle(), Pad: 2, Text: "{Имя}"}, model.Vars{Title: "Лицей", Lead: "И. И."}
+	edtest.Change(e, func(p *model.Project) { c, v := caps, vars; p.Spreads[0].Caps, p.Spreads[0].Vars = &c, &v })
 	undo := edtest.UndoLen(e)
 	if _, err := e.DuplicateGrid("s1", 2, true); err != nil {
 		t.Fatal(err)
@@ -267,6 +273,9 @@ func TestDuplicateGrid(t *testing.T) {
 		wantRects(t, rectsOf(e, i), rectsOf(e, 0))
 		if len(s.Photos) != 0 || len(s.Texts) != 1 || s.Texts[0].ID == edtest.P(e).Spreads[0].Texts[0].ID || s.BgL != "#010203" {
 			t.Fatalf("копия %d: фото %v, тексты %d, фон %q", i, s.Photos, len(s.Texts), s.BgL)
+		}
+		if s.Caps == nil || *s.Caps != caps || s.Caps == edtest.P(e).Spreads[0].Caps || s.Vars == nil || *s.Vars != vars || s.Vars == edtest.P(e).Spreads[0].Vars {
+			t.Fatalf("копия %d: стиль подписей листа %+v, поля шапки %+v", i, s.Caps, s.Vars)
 		}
 	}
 	rev := edtest.Rev(e)
@@ -370,182 +379,4 @@ func TestCopyGridMirror(t *testing.T) {
 	// Источник-разворот: флажок ничего не делает.
 	e.CopyGrid("s1", model.ScopeSpread, []model.GridTarget{{Spread: "s2", Scope: model.ScopeSpread}}, false, true)
 	wantRects(t, rectsOf(e, 1), rectsOf(e, 0))
-}
-
-// TestGridInvariants — инварианты сетки (design §1) после случайных правок,
-// отмен и возвратов: фото не дважды, Photos по местам, места внутри разворота.
-func TestGridInvariants(t *testing.T) {
-	r := rand.New(rand.NewPCG(7, 2026))
-	e := edtest.Open(t, model.New(), "")
-	pool := make([]model.PhotoInfo, 14)
-	for i := range pool {
-		pool[i] = model.PhotoInfo{ID: fmt.Sprintf("p%02d", i), Path: fmt.Sprintf("/p%02d.jpg", i), W: 200 + 50*(i%4), H: 300 - 40*(i%3)}
-	}
-	pick := func(n int) []model.PhotoInfo {
-		out := make([]model.PhotoInfo, 0, n)
-		for range n {
-			out = append(out, pool[r.IntN(len(pool))])
-		}
-		return out
-	}
-	edtest.NewSpread(e, -1, pool[:3])
-	scopes := []string{model.ScopeLeft, model.ScopeRight, model.ScopeSpread}
-	ops := []string{"set", "add", "move", "swap", "remove", "new", "place", "fill", "addPlace", "setPlaces", "delete",
-		"arrange", "layers", "group", "fit", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes"}
-	arr := []string{"same", "sameW", "fitPhoto", "splitH", "splitV", "front", "back"}
-	withGrid, seated, turned, ordered := 0, 0, 0, 0 // тест не должен выродиться в прогон одного «Авто»
-	for step := range 1500 {
-		n := len(edtest.P(e).Spreads)
-		if n == 0 {
-			edtest.NewSpread(e, -1, pick(2))
-			continue
-		}
-		s := edtest.P(e).Spreads[r.IntN(n)]
-		id := s.ID
-		var places []string
-		for _, pl := range s.Grid {
-			places = append(places, pl.ID)
-		}
-		place := ""
-		if len(places) > 0 {
-			place = places[r.IntN(len(places))]
-		}
-		// ref — ID места, ID фото разворота или мусор; у «Авто» мест нет, только фото.
-		refs := slices.Clone(places)
-		refs = append(refs, s.Photos...)
-		ref := "нет такого"
-		if len(refs) > 0 && r.IntN(8) > 0 {
-			ref = refs[r.IntN(len(refs))]
-		}
-		op := ops[r.IntN(len(ops))]
-		switch op {
-		case "set":
-			e.SetGrid(id, r.IntN(3) > 0)
-		case "add":
-			e.AddPhotos(id, pick(1+r.IntN(3)), r.IntN(4)-1)
-		case "move":
-			e.MovePhoto(pool[r.IntN(len(pool))].ID, id, r.IntN(3)-1)
-		case "swap":
-			e.SwapPhotos(pool[r.IntN(len(pool))].ID, pool[r.IntN(len(pool))].ID)
-		case "remove":
-			e.RemovePhotos([]string{pool[r.IntN(len(pool))].ID})
-		case "new":
-			e.NewSpread(r.IntN(n+1), pick(r.IntN(3)))
-		case "place":
-			e.PlacePhotos(id, place, pick(1+r.IntN(3)))
-		case "fill":
-			e.FillPlaces(pick(3), id)
-		case "addPlace":
-			e.AddPlace(id, r.IntN(2))
-		case "setPlaces":
-			e.SetPlaces(id, []model.PlaceBox{{ID: place, X: r.Float64()*700 - 50, Y: r.Float64()*350 - 20, W: r.Float64() * 300, H: r.Float64() * 300}}, "m")
-			e.SetPlaces(id, []model.PlaceBox{{ID: ref, X: r.Float64() * 400, Y: r.Float64() * 200, W: 20 + r.Float64()*200, H: 20 + r.Float64()*200}}, "")
-		case "delete":
-			e.DeletePlaces(id, []string{place, ref})
-		case "arrange":
-			e.ArrangePlaces(id, arr[r.IntN(len(arr))], refs)
-		case "layers":
-			if len(s.Texts) < 3 {
-				e.AddText(id, r.IntN(2), "")
-			}
-			lr := slices.Clone(refs)
-			for _, tb := range s.Texts {
-				lr = append(lr, tb.ID)
-			}
-			r.Shuffle(len(lr), func(i, j int) { lr[i], lr[j] = lr[j], lr[i] })
-			e.ArrangeLayers(id, []string{"front", "up", "down", "back"}[r.IntN(4)], lr[:r.IntN(len(lr)+1)])
-		case "group":
-			if len(s.Texts) < 2 {
-				e.AddText(id, r.IntN(2), "")
-			}
-			gr := slices.Clone(refs)
-			for _, tb := range s.Texts {
-				gr = append(gr, tb.ID)
-			}
-			r.Shuffle(len(gr), func(i, j int) { gr[i], gr[j] = gr[j], gr[i] })
-			e.TransformGroup(id, gr[:r.IntN(len(gr)+1)], 0.2+r.Float64()*2.5, r.Float64()*562, r.Float64()*284,
-				r.Float64()*200-100, r.Float64()*200-100, []string{"", "g"}[r.IntN(2)])
-		case "grot", "gaxes": // спека 018: поворот группы и масштаб по осям
-			gr := slices.Clone(refs)
-			for _, tb := range s.Texts {
-				gr = append(gr, tb.ID)
-			}
-			r.Shuffle(len(gr), func(i, j int) { gr[i], gr[j] = gr[j], gr[i] })
-			gr = gr[:r.IntN(len(gr)+1)]
-			if op == "grot" {
-				e.RotateGroup(id, gr, r.Float64()*720-360, r.Float64()*600-20, r.Float64()*320-20)
-			} else {
-				e.ScaleGroupAxes(id, gr, 0.1+r.Float64()*3, 0.1+r.Float64()*3, r.Float64()*360-180, r.Float64()*562, r.Float64()*284)
-			}
-		case "angle":
-			e.SetPlaceAngle(id, ref, []float64{0, 1, 30, 90, -45, 145, 180, r.Float64()*800 - 400}[r.IntN(8)])
-		case "align":
-			if len(s.Texts) < 2 {
-				e.AddText(id, r.IntN(2), "")
-			}
-			ar := slices.Clone(refs)
-			for _, tb := range s.Texts {
-				ar = append(ar, tb.ID)
-			}
-			r.Shuffle(len(ar), func(i, j int) { ar[i], ar[j] = ar[j], ar[i] })
-			e.AlignItems(id, ar[:r.IntN(len(ar)+1)], edtest.AlignOps[r.IntN(len(edtest.AlignOps))], edtest.AlignTo[r.IntN(len(edtest.AlignTo))])
-		case "fit":
-			e.SetPlaceFit(id, []string{ref}, []string{"", model.FitContain}[r.IntN(2)])
-		case "mirror":
-			e.MirrorGrid(id, scopes[r.IntN(3)])
-		case "copy":
-			to := edtest.P(e).Spreads[r.IntN(n)].ID
-			e.CopyGrid(id, scopes[r.IntN(3)], []model.GridTarget{{Spread: to, Scope: scopes[r.IntN(3)]}}, r.IntN(2) == 0, r.IntN(2) == 0)
-		case "apply":
-			e.ApplyGrid(id, scopes[r.IntN(3)], []string{model.TplPage, model.TplSpread}[r.IntN(2)],
-				[]model.Box{{X: r.Float64(), Y: r.Float64(), W: r.Float64(), H: r.Float64(), Rot: float64(r.IntN(3)-1) * 35}, {X: 0.5, Y: 0, W: 0.5, H: 0.5}})
-		case "dup":
-			if n < 12 {
-				e.DuplicateGrid(id, 1, r.IntN(2) == 0)
-			}
-		case "settings":
-			st := edtest.P(e).Settings
-			st.PageW, st.PageH, st.Layflat = 200+float64(r.IntN(200)), 200+float64(r.IntN(200)), r.IntN(2) == 0
-			e.SetSettings(st)
-		case "layout":
-			if rows := layout.Cached(edtest.P(e).Aspects(s.Photos), edtest.P(e).Params(), model.VariantLimit); len(rows) > 0 {
-				e.SetLayout(id, rows[r.IntN(len(rows))].Key)
-			}
-		case "split":
-			e.SplitSpread(id, 1)
-		case "merge":
-			e.MergeSpreads(id)
-		case "auto":
-			e.AutoBuild(pick(4), -1, 3)
-		case "undo":
-			e.Undo()
-		case "redo":
-			e.Redo()
-		}
-		if err := edtest.GridInvariants(edtest.P(e)); err != nil {
-			t.Fatalf("шаг %d (%s): %v", step, op, err)
-		}
-		for _, sp := range edtest.P(e).Spreads {
-			if sp.Order != nil {
-				ordered++
-			}
-		}
-		v := e.View() // вид строится без паники
-		for _, sv := range v.Spreads {
-			if sv.Grid {
-				withGrid++
-				seated += len(sv.Photos)
-			}
-			for _, pv := range sv.Places {
-				if pv.Rot != 0 {
-					turned++
-				}
-			}
-		}
-	}
-	if withGrid < 500 || seated < 500 || turned < 500 || ordered < 500 {
-		t.Fatalf("сеток мало: %d разворотов-сеток по шагам, %d фото в местах, %d повёрнутых мест, %d с общим порядком",
-			withGrid, seated, turned, ordered)
-	}
-	t.Logf("сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, разворотов %d", withGrid, seated, turned, ordered, len(edtest.P(e).Spreads))
 }

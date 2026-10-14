@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Settings, SpreadView } from '../../base/core/types'
+  import type { SpreadView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
@@ -13,10 +13,10 @@
   // лежит под другим слоем, — ✥ сдвига кадра, ползунок масштаба и «!» dpi выделенной ячейки, а также подсветка
   // принимающего бросок фото (обмен, черта вставки). Внутри `.content` их перекрывал бы верхний слой, а у повёрнутых
   // `overflow: clip` резал бы у края разворота. Обёртка повторяет слот (место, поворот), поэтому оси те же, что у Cell.
-  let { spread, settings, width }: { spread: SpreadView; settings: Settings; width: number } = $props()
+  let { spread, width }: { spread: SpreadView; width: number } = $props()
 
-  const sw = $derived(settings.pageW * 2)
-  const ph = $derived(settings.pageH)
+  const sw = $derived(spread.w)
+  const ph = $derived(spread.h)
   const ppm = $derived(width / sw) // px на мм
 
   type Mark = 'swap' | 'before' | 'after' | null

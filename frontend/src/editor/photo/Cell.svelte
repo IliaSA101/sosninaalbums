@@ -2,7 +2,7 @@
   import type { Frame, Rect, SpreadView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
   import { store } from '../../base/core/store.svelte'
-  import { thumbUrl, previewUrl } from '../../base/core/media'
+  import { thumbUrl, previewUrl, wantPreview } from '../../base/core/media'
   import { colorBadge } from './color'
   import { DEFAULT_FRAME, photoCss, placeImage } from '../../base/geom/frame'
   import { framelive } from './framelive.svelte'
@@ -15,6 +15,7 @@
   import { additive, bodyAction } from '../places/gesture'
   import Icon from '../../base/ui/Icon.svelte'
   import DpiMark from './DpiMark.svelte'
+  import { missTip } from '../../panels/library/missing'
 
   // Ячейка фото: рамка из раскладки Go, внутри кадр (спека 006). Геометрию картинки
   // присылает Go (frames[i].img); локально считаем только предпросмотр до отпускания.
@@ -55,6 +56,11 @@
   const missing = $derived(store.missing.includes(id))
 
   let el = $state<HTMLDivElement>()
+  // Размер ячейки на экране (CSS px, с учётом зума холста): на 17+ фото крупное превью — только крупным ячейкам.
+  let cw = $state(0)
+  let ch = $state(0)
+  const longSide = $derived(Math.max((img.w / r.w) * cw, (img.h / r.h) * ch))
+  const hiRes = $derived(!mini && wantPreview(spread.photos.length, longSide, globalThis.devicePixelRatio || 1))
 
   // Тело (спека 009, gestures.md): «Авто» — перенос фото (обмен, вставка, другой разворот, лента);
   // «Ручная» — перенос места: выделяет фото и двигает рамку, у члена группы — всю группу. Кадр двигает ✥.
@@ -88,6 +94,8 @@
 
 <div
   bind:this={el}
+  bind:clientWidth={cw}
+  bind:clientHeight={ch}
   class="cell"
   class:selected
   class:missing
@@ -104,7 +112,7 @@
 >
   <div class="clip" class:contain>
     {#if missing}
-      <div class="miss" title="Файл не найден"><Icon name="photo-minus" size={mini ? 12 : 28} stroke={1.8} /></div>
+      <div class="miss" title={missTip(id, store.missingNames)}><Icon name="photo-minus" size={mini ? 12 : 28} stroke={1.8} /></div>
     {:else}
       {@const pos = `left:${pct(img.x - r.x, r.w)};top:${pct(img.y - r.y, r.h)};width:${pct(img.w, r.w)};height:${pct(img.h, r.h)}`}
       <img
@@ -116,7 +124,7 @@
         alt=""
         draggable="false"
       />
-      {#if !mini}<img
+      {#if hiRes}<img
           class="ph"
           style={pos}
           style:transform={photoCss(fv)}

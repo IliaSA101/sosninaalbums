@@ -10,13 +10,14 @@
 {#if dpi > 0 && dpi < minDPI}
   <span
     class="dpi"
+    data-guide="dpi"
     class:upright={!!at}
     style:left={at?.left}
     style:top={at?.top}
     style:transform={at ? `rotate(${at.rot}deg)` : undefined}
     role="img"
     aria-label="Мало точек"
-    use:tipped={{ text: `≈ ${dpi} dpi при печати, нужно от ${minDPI}` }}>!</span
+    use:tipped={{ text: `≈ ${dpi} dpi при печати, нужно от ${minDPI}. Уменьшите фото на развороте или замените снимок` }}>!</span
   >
 {/if}
 

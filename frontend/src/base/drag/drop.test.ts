@@ -53,6 +53,12 @@ describe('dropPlan: фото', () => {
     })
     expect(dropPlan(inSpread, { kind: 'spread', spread: 's3' })).toMatchObject({ at: -1, fromSpread: true, go: false })
   })
+  it('spread с точкой (042): доля ширины идёт в план; у mini и соседа её нет', () => {
+    expect(dropPlan(strip, { kind: 'spread', spread: 's2', at: 0.75 })).toMatchObject({ op: 'add', at: -1, frac: 0.75 })
+    expect(dropPlan(strip, { kind: 'spread', spread: 's2', at: 0 })).toMatchObject({ frac: 0 })
+    expect(dropPlan(strip, { kind: 'spread', spread: 's2' })).not.toHaveProperty('frac')
+    expect(dropPlan(strip, { kind: 'mini', spread: 's2', index: 0, side: 'after' })).not.toHaveProperty('frac')
+  })
   it('new: из ленты со снятием, из разворота без', () => {
     expect(dropPlan(strip, { kind: 'new', at: 4 })).toEqual({ op: 'newSpread', at: 4, ids: ['a', 'b'], strip: true })
     expect(dropPlan(inSpread, { kind: 'new', at: 0 })).toMatchObject({ strip: false })
@@ -124,5 +130,27 @@ describe('dropPlan: фото фона', () => {
   it('пустой набор и группа-разворот — ничего', () => {
     expect(dropPlan({ kind: 'photos', ids: [] }, t)).toBeNull()
     expect(dropPlan(group, t)).toBeNull()
+  })
+})
+
+describe('dropPlan: плитка обложки', () => {
+  const t: Target = { kind: 'cover' }
+  it('одно фото создаёт обложку', () => {
+    expect(dropPlan({ kind: 'photos', ids: ['a'] }, t)).toEqual({ op: 'cover', photo: 'a' })
+    expect(dropPlan({ kind: 'photos', ids: ['a'], fromSpread: 's1' }, t)).toEqual({ op: 'cover', photo: 'a' })
+  })
+  it('несколько фото — тост «только одно»', () => {
+    expect(dropPlan(strip, t)).toEqual({ op: 'reject', text: 'На обложку — только одно фото' })
+  })
+  it('пустой набор и группа-разворот — ничего', () => {
+    expect(dropPlan({ kind: 'photos', ids: [] }, t)).toBeNull()
+    expect(dropPlan(group, t)).toBeNull()
+  })
+})
+
+describe('dropPlan: зона фона обложки', () => {
+  it('фото на сторонку — фон области, как у разворота (id листа «cover»)', () => {
+    const t: Target = { kind: 'backdrop', spread: 'cover', scope: 'right' }
+    expect(dropPlan({ kind: 'photos', ids: ['a'] }, t)).toEqual({ op: 'backdrop', spread: 'cover', scope: 'right', photo: 'a' })
   })
 })

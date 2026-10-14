@@ -17,7 +17,7 @@ import {
 import type { Rect, SpreadView } from '../core/types'
 
 const B = { w: 560, h: 280 }
-const params = { pageW: 280, pageH: 280, margin: 12, rects: [], gap: 4 }
+const params = { w: 560, h: 280, mid: 280, margin: 12, rects: [], gap: 4 }
 const ctx = (others: Rect[], thr = 3): SnapCtx => ({ others, params, thr })
 
 describe('axisLock', () => {

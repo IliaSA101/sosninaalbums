@@ -3,6 +3,7 @@ package album_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -199,19 +200,27 @@ func TestLoadKeepsEmptySpread(t *testing.T) {
 	}
 }
 
-// Автосборка пустой разворот не заполняет и не удаляет; новые встают на at (после него).
+// Автосборка в середину (at до пустого хвоста) пустой разворот не заполняет и не удаляет;
+// в конец — занимает его вместо нового (035 U1, подробно — spreads/blanktail_test.go).
 func TestAutoBuildKeepsEmptySpread(t *testing.T) {
-	e, _, _, x := emptyOnEnd(t)
-	v, err := e.AutoBuild(edtest.Photos("a", "b", "c", "d"), 3, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(v.Spreads) < 2 || v.Spreads[0].ID != x || len(v.Spreads[0].Photos) != 0 {
-		t.Fatalf("развороты после автосборки: %v", edtest.SpreadIDs(v))
-	}
-	for _, s := range v.Spreads[1:] {
-		if len(s.Photos) == 0 {
-			t.Fatalf("собранный разворот без фото: %v", edtest.SpreadIDs(v))
+	for _, tc := range []struct {
+		at   int
+		keep bool
+	}{{1, true}, {3, false}} {
+		e, _, _, x := emptyOnEnd(t)
+		v, err := e.AutoBuild(edtest.Photos("a", "b", "c", "d"), tc.at, model.AutoOpts{Spreads: 2, MaxPer: 64})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := edtest.SpreadIDs(v)
+		if tc.keep && (len(ids) != 3 || ids[2] != x || len(v.Spreads[2].Photos) != 0) ||
+			!tc.keep && (len(ids) != 2 || slices.Contains(ids, x)) {
+			t.Fatalf("at=%d: развороты после автосборки %v, пустой %s", tc.at, ids, x)
+		}
+		for _, s := range v.Spreads[:2] {
+			if len(s.Photos) == 0 {
+				t.Fatalf("at=%d: собранный разворот без фото: %v", tc.at, ids)
+			}
 		}
 	}
 }
@@ -284,7 +293,7 @@ func TestSlowLog(t *testing.T) {
 		photos[i] = model.PhotoInfo{ID: fmt.Sprintf("p%d", i), Path: fmt.Sprintf("/секрет/p%d.jpg", i), W: 300, H: 200}
 	}
 	run := func(e *album.Editor) {
-		if _, err := e.AutoBuild(photos, -1, 3); err != nil {
+		if _, err := e.AutoBuild(photos, -1, model.AutoOpts{Spreads: 2, MaxPer: 64}); err != nil {
 			t.Fatal(err)
 		}
 		st := e.View().Settings
@@ -540,5 +549,26 @@ func TestRefsDeepCopy(t *testing.T) {
 	refs["a"].Frame.X, refs["a"].Caption.Style.Size = -1, 99
 	if !bytes.Equal(model.Marshal(edtest.P(e)), before) {
 		t.Fatal("правка копии из Ref/Refs дошла до проекта")
+	}
+}
+
+// TestEditSyncGridRollsBack — правка оставила фото сетки без места (SyncGrid в settle): отказ
+// ErrNoPlace, проект целиком как был (и правка соседнего разворота тоже), ни шага, ни rev.
+func TestEditSyncGridRollsBack(t *testing.T) {
+	e := edtest.GridEd(t, []*model.Place{edtest.Gp(10, 10, 100, 100, "a"), edtest.Gp(120, 10, 100, 100, "b")}, []string{"c"})
+	before := model.Marshal(edtest.P(e))
+	rev, undo, dirty := edtest.Rev(e), edtest.UndoLen(e), edtest.Dirty(e)
+	_, err := edtest.Try(e, "", func(p *model.Project) error {
+		p.Spreads[1].Name = "Соседний"
+		p.Photos["z"] = model.PhotoRef{Path: edtest.Abs("z.jpg"), W: 300, H: 200}
+		p.Spreads[0].Photos = append(p.Spreads[0].Photos, "z") // мест два, оба заняты
+		return nil
+	})
+	if !errors.Is(err, model.ErrNoPlace) {
+		t.Fatalf("ошибка %v, хочу ErrNoPlace", err)
+	}
+	edtest.Same(t, e, rev, undo, "отказ SyncGrid")
+	if !bytes.Equal(model.Marshal(edtest.P(e)), before) || edtest.Dirty(e) != dirty {
+		t.Fatal("отказ SyncGrid изменил проект")
 	}
 }

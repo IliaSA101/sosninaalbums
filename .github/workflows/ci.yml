@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: lts/*
+          node-version: "24.11.1"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -71,3 +71,73 @@ jobs:
 
       - name: bindings contract
         run: node scripts/bindings-contract.mjs --check
+
+  # Проверка самих workflow: синтаксис, выражения, типы входов; на ubuntu есть shellcheck — им же и run:
+  workflows:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.9"
+          cache: false
+
+      - name: actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+
+  # Движок инструкции по установке (029): тесты и пробная сборка docx без pdf
+  guide:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: зависимости (по хешам)
+        run: python -m pip install --require-hashes -r scripts/guide/requirements.txt
+
+      # ffmpeg нужен TestRender, иначе тест пропускается
+      - name: ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: тесты
+        run: python -I -m unittest discover -s scripts/guide -v
+
+      # Упаковка архивов выпуска (039): stdlib, синтетические exe и .app-zip
+      - name: тесты упаковки выпуска
+        run: python -I -m unittest discover -s scripts/win -v
+
+      - name: пробная сборка docx
+        run: |
+          for v in "" win macos; do
+            python -I scripts/guide/build_docx.py docs/install/guide.md ${v:+--variant "$v"} --out "$RUNNER_TEMP/guide"
+          done
+
+  # Помощники снимков для Mac (029/036): чистые функции без macOS; bash — тот же язык, что на раннере Mac
+  mac-scripts:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # Pillow не ставим: тесты, которым он нужен, пропускаются сами
+      - name: тесты macshots.py
+        run: python -I -m unittest discover -s scripts/mac -v
+
+      - name: тесты lib.sh
+        run: bash scripts/mac/test_lib.sh

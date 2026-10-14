@@ -362,7 +362,7 @@ func TestPlacesLimit(t *testing.T) {
 		return err
 	})
 	if err == nil || len(edtest.P(e).Spreads[0].Grid) != 1 || v.Rev != rev {
-		t.Fatalf("17-е место: ошибка %v, мест %d, rev %d", err, len(edtest.P(e).Spreads[0].Grid), v.Rev)
+		t.Fatalf("место сверх MaxPlaces: ошибка %v, мест %d, rev %d", err, len(edtest.P(e).Spreads[0].Grid), v.Rev)
 	}
 	// Лесенка: новые места не ложатся друг на друга и стоят на своей странице.
 	edtest.Change(e, func(p *model.Project) {

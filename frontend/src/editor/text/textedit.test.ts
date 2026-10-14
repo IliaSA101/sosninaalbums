@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { snapLines } from '../../base/geom/snap'
-import { clampSize, cleanInput, isBlank, moveBox, resizeBox, sessionId } from './textedit'
+import { clampSize, cleanInput, editText, isBlank, moveBox, resizeBox, sessionId } from './textedit'
 
-const lines = snapLines({ pageW: 280, pageH: 280, margin: 12, rects: [] })
+const lines = snapLines({ w: 560, h: 280, mid: 280, margin: 12, rects: [] })
 const box = { x: 100, y: 100, w: 60, h: 20 }
 
 describe('sessionId', () => {
@@ -66,5 +66,14 @@ describe('resizeBox', () => {
     const r = resizeBox(box, 'r', 119, lines, 2, 560) // край 279 → 280
     expect(r.w).toBe(180)
     expect(r.guide).toBe(280)
+  })
+})
+
+describe('editText', () => {
+  it('в редактор идёт шаблон, а не подставленный текст', () => {
+    expect(editText({ text: 'Иванов Петя', src: '{Фамилия} {Имя}' })).toBe('{Фамилия} {Имя}')
+  })
+  it('без шаблона — сам текст', () => {
+    expect(editText({ text: 'Свадьба' })).toBe('Свадьба')
   })
 })

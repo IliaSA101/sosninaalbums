@@ -17,8 +17,8 @@ func (r PhotoRef) FrameOrDefault() Frame {
 	return *r.Frame
 }
 
-// Copy — копия без общих указателей: Frame и Caption, отданные наружу (Ref, Refs),
-// не ведут внутрь проекта — правка копии не обходит Editor.change.
+// Copy — копия без общих указателей: Frame, Caption (с Pad) и Person, отданные наружу
+// (Ref, Refs), не ведут внутрь проекта — правка копии не обходит Editor.change.
 func (r PhotoRef) Copy() PhotoRef {
 	if r.Frame != nil {
 		f := *r.Frame
@@ -26,57 +26,60 @@ func (r PhotoRef) Copy() PhotoRef {
 	}
 	if r.Caption != nil {
 		c := *r.Caption
+		if c.Pad != nil {
+			v := *c.Pad
+			c.Pad = &v
+		}
 		r.Caption = &c
+	}
+	if r.Person != nil {
+		n := *r.Person
+		r.Person = &n
 	}
 	return r
 }
 
-// FitTexts держит блоки текста на развороте (design 008 §2.3). Ширина: «по тексту» —
-// autoW, при смене стоит точка выравнивания (anchor); закреплённая — 10..2·pageW.
-// Положение: блок целиком внутри разворота (высота — по тексту), повёрнутый — по
+// FitTexts держит блоки текста на листах (design 008 §2.3). Ширина: «по тексту» —
+// autoW, при смене стоит точка выравнивания (anchor); закреплённая — 10..ширина листа.
+// Положение: блок целиком внутри листа (высота — по тексту), повёрнутый — по
 // описанному прямоугольнику. Идемпотентна: холостая правка остаётся холостой.
 func (p *Project) FitTexts() {
-	sw, ph := 2*p.Settings.PageW, p.Settings.PageH
-	maxW := TextMaxW(p.Settings)
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
+		g := p.Geo(s)
 		for _, t := range s.Texts {
 			if t.Auto {
-				p.SetAutoW(t, AutoW(t, maxW), false)
+				p.SetAutoW(s, t, p.SheetAutoW(s, t), false)
 			} else {
-				t.W = geom.ClampF(t.W, MinTextW, sw)
+				t.W = geom.ClampF(t.W, MinTextW, g.W)
 			}
-			t.X, t.Y = BoxOf(t).FitIn(sw, ph) // то же у geom.GroupRot
+			t.X, t.Y = BoxOf(t).FitIn(g.W, g.H) // то же у geom.GroupRot
 		}
 	}
 }
 
-// SetAutoW — ширина «по тексту» стала w: блок сдвигается по точке выравнивания
+// SetAutoW — ширина «по тексту» блока листа s стала w: блок сдвигается по точке выравнивания
 // (повёрнутый — вдоль своей оси). pageFit держит его на странице (pageFitX) и нужен
 // только при явной смене (возврат к авто-ширине, стиль, кегль): при вводе текста
 // рамку растит редактор от якоря, и зажим у поля заставлял бы её отскакивать.
-func (p *Project) SetAutoW(t *TextBlock, w float64, pageFit bool) {
+func (p *Project) SetAutoW(s *Spread, t *TextBlock, w float64, pageFit bool) {
 	if w != geom.Round2(t.W) {
 		ox := t.X
 		dx, dy := geom.Rotate(t.Rot, (t.W-w)*geom.AlignX(t.Style.Align), 0)
 		t.X, t.Y = t.X+dx, t.Y+dy
 		if pageFit && t.Rot == 0 {
-			t.X = p.pageFitX(ox, t.W, t.X, w, geom.AlignX(t.Style.Align))
+			t.X = pageFitX(p.Geo(s), ox, t.W, t.X, w, geom.AlignX(t.Style.Align), p.Settings.Safe)
 		}
 	}
 	t.W = w
 }
 
 // pageFitX — у блока «по тексту» сменилась ширина (ox, ow → x, w). Если старый блок
-// целиком стоял на одной странице (в её безопасном поле или хотя бы на ней), новый
+// целиком стоял на одной странице листа g (в её безопасном поле m или хотя бы на ней), новый
 // тоже держим там: сдвиг по точке выравнивания может вытолкнуть его за край страницы
-// или разворота, и ширина, вернувшаяся «по тексту», прыгала бы. Иначе — x как есть.
-func (p *Project) pageFitX(ox, ow, x, w, ax float64) float64 {
-	pw, m := p.Settings.PageW, SafeMargin
-	page := 0.0
-	if ox+ow*ax >= pw {
-		page = 1
-	}
-	l, r := page*pw, (page+1)*pw
+// или листа, и ширина, вернувшаяся «по тексту», прыгала бы. Иначе — x как есть.
+func pageFitX(g Geo, ox, ow, x, w, ax, m float64) float64 {
+	pg := g.Page(g.PageOf(ox + ow*ax))
+	l, r := pg.X, pg.X+pg.W
 	for _, in := range []float64{m, 0} { // сначала безопасное поле, потом вся страница
 		lo, hi := l+in, r-in-w
 		if ox >= lo-1e-6 && ox+ow <= r-in+1e-6 && hi >= lo {
@@ -93,17 +96,13 @@ func BoxOf(t *TextBlock) geom.TextBox {
 	return geom.TextBox{X: t.X, Y: t.Y, W: t.W, H: text.Cached(t.Text, t.Style, t.W).H, Rot: t.Rot}
 }
 
-// TextMaxW — предел ширины «по тексту»: страница без безопасных полей;
-// дальше перенос по словам.
-func TextMaxW(s Settings) float64 {
-	return math.Max(MinTextW, s.PageW-2*SafeMargin)
-}
-
 // AutoW — ширина блока «по тексту»: естественная, округлённая вверх до 0.01
 // и ещё +0.01 (Cached округляет ширину, впритык последнее слово ушло бы на
-// новую строку), не меньше 1 мм и не больше maxW.
-func AutoW(t *TextBlock, maxW float64) float64 {
-	n := text.NaturalWidth(t.Text, t.Style)
+// новую строку), не меньше 1 мм и не больше maxW. Меряется текст холста (Shown,
+// поля листа v; nil — пустые): в печати рамка та же, короче — только строка.
+func AutoW(v *Vars, t *TextBlock, maxW float64) float64 {
+	s, _ := Shown(v, t.Text, nil, FieldCanvas)
+	n := text.NaturalWidth(s, t.Style)
 	return geom.Round2(math.Min(math.Max(math.Ceil(n*100-1e-6)/100+0.01, 1), maxW))
 }
 
@@ -149,9 +148,9 @@ func ValidSession(session string) bool {
 	return true
 }
 
-// FindText — блок по ID и разворот, где он стоит.
+// FindText — блок по ID и лист (с обложкой), где он стоит.
 func (p *Project) FindText(id string) (*Spread, int) {
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		for i, t := range s.Texts {
 			if t.ID == id {
 				return s, i

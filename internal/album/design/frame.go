@@ -104,10 +104,13 @@ func SetFlip(p *model.Project, ids []string, axis string) {
 
 // SetBackground — цвет страниц разворота: scope "spread" (обе), "left", "right".
 // c — уже зажатый цвет (ClampColor); "" — снять свой (действует цвет альбома).
-// Неверный цвет или scope — холостая правка.
+// Неверный цвет или scope — холостая правка; у листа 031 страниц нет — только "spread".
 func SetBackground(p *model.Project, spreadID, scope, c string) {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
+		return
+	}
+	if _, ok := p.AreaOf(s, scope); !ok {
 		return
 	}
 	switch scope {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -505,5 +506,90 @@ func TestAppSuggestDriveNothingMissing(t *testing.T) {
 	a.cfgDir = testkit.TempDir(t)
 	if h := a.SuggestDrive(); h != (DriveHint{}) {
 		t.Fatalf("в пустом альбоме подсказка %+v", h)
+	}
+}
+
+// Фото убрали, пока шёл пересчёт по старому набору: его отчёт фото не возвращает.
+func TestMissingRemovedDuringRefresh(t *testing.T) {
+	a, x, y, events := missSetApp(t)
+	gate, entered := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	a.exists = func(p string) bool {
+		once.Do(func() { close(entered); <-gate })
+		return filepath.Base(p) == "ok.jpg"
+	}
+	a.refreshMissing()
+	<-entered
+	a.RemovePhotos([]string{x})
+	close(gate)
+	waitMissing(t, a)
+	if m := a.GetState().Missing; !slices.Equal(m, []string{y}) {
+		t.Fatalf("недостающие %v: вернулось убранное фото", m)
+	}
+	if evs := events(); !slices.Equal(evs[len(evs)-1], []string{y}) {
+		t.Fatalf("последнее событие %v", evs[len(evs)-1])
+	}
+}
+
+// Пропавшее фото стоит только фоном: «Убрать из альбома» снимает и фон — полоса уходит; отмена возвращает.
+func TestMissingBackdropRemoved(t *testing.T) {
+	a, x, y, events := missSetApp(t)
+	bg := filepath.Join(a.cfgDir, "фон.jpg")
+	bid := library.IDFor(bg)
+	sp := a.editor().View().Spreads[0].ID
+	if _, err := a.editor().SetBackdrop(sp, model.ScopeSpread, model.PhotoInfo{ID: bid, Path: bg, W: 30, H: 20}); err != nil {
+		t.Fatal(err)
+	}
+	a.refreshMissing()
+	waitMissing(t, a)
+	all := sorted(x, y, bid)
+	if m := a.GetState().Missing; !slices.Equal(m, all) {
+		t.Fatalf("недостающие с фоном %v", m)
+	}
+	v := a.RemovePhotos(all)
+	if len(v.Spreads) != 1 || len(v.Spreads[0].Backdrops) != 0 {
+		t.Fatalf("фон не снят: %+v", v.Spreads)
+	}
+	evs := events()
+	if m := a.GetState().Missing; len(m) != 0 || len(evs[len(evs)-1]) != 0 {
+		t.Fatalf("после «Убрать из альбома» недостающие %v, событие %v", m, evs[len(evs)-1])
+	}
+	a.Undo()
+	waitMissing(t, a)
+	if m := a.GetState().Missing; !slices.Equal(m, all) {
+		t.Fatalf("отмена: недостающие %v", m)
+	}
+}
+
+// Имена пропавших — из путей проекта (пропавшего файла нет в ленте), без os.Stat; убранное фото
+// уходит из имён, без пропавших — пустая карта (в JSON «{}», не null).
+func TestMissingNames(t *testing.T) {
+	a, x, y, _ := missSetApp(t)
+	a.exists = func(string) bool { t.Error("MissingNames проверяет файлы"); return false }
+	if n := a.MissingNames(); len(n) != 2 || n[x] != "x.jpg" || n[y] != "y.jpg" {
+		t.Fatalf("имена %v", n)
+	}
+	a.RemovePhotos([]string{x})
+	if n := a.MissingNames(); len(n) != 1 || n[y] != "y.jpg" {
+		t.Fatalf("убрали x: имена %v", n)
+	}
+	a.RemovePhotos([]string{y})
+	if n := a.MissingNames(); n == nil || len(n) != 0 {
+		t.Fatalf("без пропавших: имена %#v", n)
+	}
+	if n := newApp(t).MissingNames(); n == nil || len(n) != 0 {
+		t.Fatalf("пустой альбом: имена %#v", n)
+	}
+}
+
+// Пропавший диск: копия не пытается читать файл.
+func TestBackupSkipsUnreachable(t *testing.T) {
+	a, file, _ := backupApp(t, 1)
+	old := reachable
+	reachable = func(string) bool { return false }
+	t.Cleanup(func() { reachable = old })
+	a.backupBefore(file, backup.Key(file), true)
+	if list := backups(t, a); len(list) != 0 {
+		t.Fatalf("копия с недоступного диска: %+v", list)
 	}
 }

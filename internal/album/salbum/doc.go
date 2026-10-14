@@ -8,7 +8,9 @@
 //
 // Карта: load.go (Load, Decode, Encode, Save, пути и CheckRel; Check — пути проекта из памяти
 // для NewEditor/Restore), fix.go (migrate и
-// починки при чтении: dedupe, Rekey, dropNilPlaces, unionGrid), write.go (атомарная
-// запись, копия файла старой версии), marks.go (секция отметок), relink.go (перепривязка).
-// Голдены старых версий — testdata/.
+// починки при чтении: dedupe, Rekey, dropNilPlaces, unionGrid; перенос vars альбома
+// (moveAlbumVars)), write.go (атомарная
+// запись, копия файла старой версии), marks.go (секция отметок), relink.go (перепривязка),
+// cover.go (обложка 032: FileCover, зажим при чтении, путь разметки).
+// Голдены старых версий — testdata/ (v1, v3, v4-dev, v5; альбом 0.10.0 — golden-0.10, заморожен: только чтение v6).
 package salbum

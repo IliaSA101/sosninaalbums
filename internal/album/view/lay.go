@@ -10,16 +10,25 @@ import (
 // lay — действующая раскладка разворота «Авто», её место в ряду и листание страниц.
 // Только чтение p и кэша layout — можно звать из воркеров.
 func lay(p *model.Project, s *model.Spread) Laid {
-	cur, best, ok := p.Layout(s)
+	cur, _, ok := p.Layout(s)
 	if !ok {
 		return Laid{done: true}
 	}
-	l := Laid{cur: cur, variant: model.IndexOf(best, cur.Key), variants: len(best), ok: true, done: true}
 	asp, prm := p.Aspects(s.Photos), p.Params()
+	// 17+ фото: ряд — до порции с текущей раскладкой, more — его можно досчитать.
+	row, i, more := model.AutoRow(asp, prm, cur.Key)
+	// Счётчик — по ряду «Авто» и «Другим вариантам» за ним (решение 0.11 №36), как листание.
+	extra := model.ExtraRow(asp, prm)
+	if i < 0 {
+		if j := model.IndexOf(extra, cur.Key); j >= 0 {
+			i = len(row) + j
+		}
+	}
+	l := Laid{cur: cur, variant: i, variants: len(row) + len(extra), more: more, ok: true, done: true}
 	// Ряды с перестановкой считаются, только если текущая раскладка из них.
 	if l.variant < 0 && layout.IsRearranged(cur.Key) {
 		if rr, _ := layout.CachedRearranged(asp, prm, model.VariantLimit); model.IndexOf(rr, cur.Key) >= 0 {
-			l.variant, l.variants, l.rearranged = model.IndexOf(rr, cur.Key), len(rr), true
+			l.variant, l.variants, l.more, l.rearranged = model.IndexOf(rr, cur.Key), len(rr), false, true
 		}
 	}
 	if !layout.IsPaged(cur.Key) {
@@ -55,10 +64,10 @@ func PagePermuted(key string, side int) bool {
 // Laid — раскладочная часть вида разворота «Авто», посчитанная заранее.
 // done = false — не считалась (сетка, пусто, паника): spreadView посчитает сам.
 type Laid struct {
-	cur                  layout.Result
-	variant, variants    int
-	rearranged, ok, done bool
-	pages                []model.PageView
+	cur                        layout.Result
+	variant, variants          int
+	more, rearranged, ok, done bool
+	pages                      []model.PageView
 }
 
 // layWorker — счёт разворота в воркере; тест подменяет его, чтобы имитировать панику.

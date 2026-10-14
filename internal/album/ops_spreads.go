@@ -5,8 +5,10 @@ package album
 // операторов; строка «Договор» называет то, что проверено до правки (остальное проверяет операция).
 
 import (
+	"math"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/spreads"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -19,6 +21,31 @@ import (
 func (e *Editor) AddPhotos(spreadID string, photos []model.PhotoInfo, index int) (model.View, error) {
 	photos = model.DedupePhotos(photos)
 	return e.try("", func(p *model.Project) error { return spreads.AddPhotos(p, spreadID, photos, index) })
+}
+
+// DropPhotos — бросок фото на ручной разворот (042): placeID "" — на лист, иначе на место; at —
+// доля ширины листа под курсором (< 0 — точки нет; NaN/Inf — как −1); rest "" — спросить,
+// spreads.RestAdd / RestSkip — ответ. Ask — правки не было (rev и шаг отмены те же). Всё
+// остальное — один шаг отмены; отказ (64 места, мелкая плитка, предел учеников) — откат.
+// Договор: at — NaN/Inf как −1, остальное зажимает PageAt; прочее проверяет операция.
+func (e *Editor) DropPhotos(spreadID, placeID string, photos []model.PhotoInfo, at float64, rest string) (v model.View, out spreads.DropOut, err error) {
+	r := spreads.DropReq{Spread: spreadID, Place: placeID, Photos: photos, At: dropAt(at), Rest: rest}
+	v, err = e.try("", func(p *model.Project) (err error) { out, err = spreads.Drop(p, r, dropVig); return err })
+	return v, out, err
+}
+
+// dropAt — доля под курсором: не число — точки нет (−1).
+func dropAt(at float64) float64 {
+	if math.IsNaN(at) || math.IsInf(at, 0) {
+		return -1
+	}
+	return at
+}
+
+// dropVig — виньетка для броска: spreads не импортирует grid (depguard), план знает ядро.
+var dropVig = spreads.VigHooks{
+	Untouched: func(p *model.Project, s *model.Spread) bool { return grid.Untouched(p, s, vigPlan) },
+	Grow:      func(p *model.Project, s *model.Spread, k int) error { return grid.GrowVignette(p, s, k, vigPlan) },
 }
 
 // NewSpread создаёт разворот с фото на позиции at (-1 — в конец).
@@ -42,7 +69,7 @@ func (e *Editor) SwapPhotos(a, b string) model.View {
 	return e.change(func(p *model.Project) { spreads.SwapPhotos(p, a, b) })
 }
 
-// RemovePhotos убирает фото из альбома. Договор: нет — неизвестные ID пропускаются.
+// RemovePhotos убирает фото из мест, а стоящие только фоном — с фонов. Договор: нет — неизвестные ID пропускаются.
 func (e *Editor) RemovePhotos(ids []string) model.View {
 	return e.change(func(p *model.Project) { spreads.RemovePhotos(p, ids) })
 }
@@ -88,13 +115,71 @@ func (e *Editor) RemoveFolder(dir string) model.View {
 	return e.change(func(p *model.Project) { spreads.RemoveFolder(p, dir) })
 }
 
-// AutoBuild раскладывает фото по новым разворотам, начиная с позиции at.
-// perSpread — сколько фото в среднем на разворот. Фото из сеток автосборка не трогает.
+// AutoPlan — подсказка окна автосборки: как фото лягут ровно на o.Spreads разворотов (не больше
+// o.MaxPer на разворот; оба зажимаются; o.Variety не влияет — группы те же). Только чтение: вход снимается под замком, матрица
+// оценок и DP считаются вне его (на тысячах фото — секунды при первом вызове).
+// Пустой хвост альбома (развороты без фото, названия, цвета, сетки) — свободное место:
+// верх ползунка считает его, AutoPlan.Reuse — сколько из него займёт сборка в конец.
 // Договор: photos без повторов (DedupePhotos).
-func (e *Editor) AutoBuild(photos []model.PhotoInfo, at, perSpread int) (model.View, error) {
-	photos, t0, made := model.DedupePhotos(photos), time.Now(), 0
-	defer func() { slow(t0, "автосборка: %d фото → %d разворотов", len(photos), made) }()
-	return e.try("", func(p *model.Project) (err error) { made, err = spreads.AutoBuild(p, photos, at, perSpread); return })
+func (e *Editor) AutoPlan(photos []model.PhotoInfo, o model.AutoOpts) (model.AutoPlan, error) {
+	var job spreads.PlanJob
+	e.read(func(p *model.Project) { job = spreads.PlanOf(p, model.DedupePhotos(photos)) })
+	return job.Plan(o.Spreads, o.MaxPer)
+}
+
+// AutoBuild раскладывает фото ровно на o.Spreads новых разворотов (как AutoPlan с теми же
+// аргументами), начиная с позиции at. Фото из сеток и с фонов автосборка не трогает.
+// Сборка в конец (at < 0 или за непустыми) встаёт на место пустого хвоста, а не после него.
+// Раскладки — по o.Variety с учётом соседей (041), звёзды — из оценок photos и своих отметок.
+// План и пулы раскладок считаются вне замка (autoPrep): под замком — только выбор и запись.
+// Договор: photos без повторов (DedupePhotos).
+func (e *Editor) AutoBuild(photos []model.PhotoInfo, at int, o model.AutoOpts) (model.View, error) {
+	t0, made, pre := time.Now(), 0, e.autoPrep(model.DedupePhotos(photos), o)
+	defer func() { slow(t0, "автосборка: %d фото → %d разворотов", pre.Photos(), made) }()
+	return e.try("", func(p *model.Project) (err error) {
+		made, err = spreads.AutoBuild(p, pre, at, e.rating(photos))
+		return
+	})
+}
+
+// autoPrep — вход сборки снимается под замком, план и прогрев пулов — вне его (design 041 §7):
+// холодный разворот 16 фото — десятки мс, сотня разворотов держала бы замок секунды.
+func (e *Editor) autoPrep(photos []model.PhotoInfo, o model.AutoOpts) spreads.Prep {
+	var job spreads.PlanJob
+	e.read(func(p *model.Project) { job = spreads.PlanOf(p, photos) })
+	return spreads.Prepare(job, photos, o)
+}
+
+// PhotosOf — ID фото разворотов ids по порядку ids (чтение): App по ним берёт оценки из XMP
+// вне замка Editor. Неизвестные развороты пропускаются; дальше MaxSpreads ID не разбираем
+// (как DeleteSpreads: огромный список от UI не должен раздуть ответ).
+func (e *Editor) PhotosOf(ids []string) []string {
+	out := []string{}
+	e.read(func(p *model.Project) {
+		for _, id := range ids[:min(len(ids), model.MaxSpreads)] {
+			if _, s := p.Find(id); s != nil {
+				out = append(out, s.Photos...)
+			}
+		}
+	})
+	return out
+}
+
+// VaryLayouts — «Разнообразить раскладки» (041) для разворотов ids с уровнем v («Меньше» —
+// как «Обычное»): раскладки «Авто» с учётом соседей и текущего вида, звёзды — из XMP в infos
+// и своих отметок. Сетки, виньетки и обложка не трогаются. Один шаг отмены; нечего менять —
+// холостая (rev тот же). Пулы греются вне замка.
+// Договор: нет — неизвестные и неподходящие развороты пропускает операция.
+func (e *Editor) VaryLayouts(ids []string, v model.Variety, infos []model.PhotoInfo) model.View {
+	e.outside(func(p *model.Project) func() { return spreads.VaryWarm(p, ids, v) })
+	return e.change(func(p *model.Project) { spreads.VaryLayouts(p, ids, v, e.rating(infos)) })
+}
+
+// outside — снимок под замком (snap), его счёт — вне замка: прогрев кэша раскладок перед правкой.
+func (e *Editor) outside(snap func(p *model.Project) func()) {
+	var run func()
+	e.read(func(p *model.Project) { run = snap(p) })
+	run()
 }
 
 // SplitSpread делит разворот id на два: фото [0:at] остаются, фото [at:] уходят
@@ -108,7 +193,7 @@ func (e *Editor) SplitSpread(id string, at int) model.View {
 
 // MergeSpreads клеит разворот id со следующим: фото следующего встают в конец,
 // следующий удаляется, его тексты дописываются (координаты те же), цвет фона каждой
-// стороны, фото фона и название — первого, без них — второго. Нет следующего, один из двух — сетка, вместе больше MaxSpreadPhotos
+// стороны, фото фона и название — первого, без них — второго. Нет следующего, один из двух — сетка, вместе больше MaxPhotos
 // фото или MaxTexts текстов — ничего не делает (без ошибки: интерфейс отключает кнопку заранее,
 // а второй клиент мог поменять проект).
 // Договор: нет — пределы проверяет операция.
@@ -143,6 +228,14 @@ func (e *Editor) StepLayout(spreadID, scope string, delta int) model.View {
 // Договор: под замком; Rev берётся здесь, у операции его нет.
 func (e *Editor) LayoutChoices(spreadID string) (c model.Choices) {
 	e.read(func(p *model.Project) { c = spreads.LayoutChoices(p, spreadID); c.Rev = e.rev })
+	return c
+}
+
+// MoreLayouts — то же, что LayoutChoices, но ряд «Авто» (17+ фото) досчитан на порцию
+// после have вариантов: плитка «Ещё» галереи. Только чтение.
+// Договор: под замком; Rev берётся здесь.
+func (e *Editor) MoreLayouts(spreadID string, have int) (c model.Choices) {
+	e.read(func(p *model.Project) { c = spreads.MoreLayouts(p, spreadID, have); c.Rev = e.rev })
 	return c
 }
 

@@ -134,7 +134,7 @@ func (s *Spread) Kinds() map[string]string {
 // чинится (stack) и приводится к nil, если совпал с порядком по умолчанию.
 // Идемпотентна.
 func (p *Project) SyncOrder() {
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		if len(s.Grid) == 0 {
 			s.Order = nil
 			continue
@@ -147,7 +147,7 @@ func (p *Project) SyncOrder() {
 // SyncOrder. Вызывается последним в Load: после SplitBig (копирует Order в первую
 // часть) и syncGrid(true) (добавляет места), иначе первая правка не холостая.
 func (p *Project) LoadOrder() {
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		if n := MaxPlaces + MaxTexts; len(s.Order) > n {
 			s.Order = s.Order[:n]
 		}

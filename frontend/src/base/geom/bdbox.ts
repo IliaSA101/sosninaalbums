@@ -15,10 +15,12 @@ export type Side = 't' | 'r' | 'b' | 'l'
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const uniq = (a: number[]) => [...new Set(a.map((n) => Math.round(n * 1000) / 1000))].sort((x, y) => x - y)
 
-// Линии прилипания рамки: края и центр области, корешок.
-export function bdLines(area: Rect, pageW: number): SnapLines {
+// Линии прилипания рамки: края и центр области, шов (mid > 0). У обложки (032) шва нет: вместо него — края
+// и центры сторонок (sides, см. coverSides): рамка прилипает к корешку с обеих сторон, а не к его середине.
+export function bdLines(area: Rect, mid: number, sides?: readonly (readonly [number, number])[]): SnapLines {
+  const seam = sides?.length ? sides.flatMap(([a, b]) => [a, (a + b) / 2, b]) : mid > 0 ? [mid] : []
   return {
-    v: uniq([area.x, area.x + area.w / 2, area.x + area.w, pageW]),
+    v: uniq([area.x, area.x + area.w / 2, area.x + area.w, ...seam]),
     h: uniq([area.y, area.y + area.h / 2, area.y + area.h]),
   }
 }

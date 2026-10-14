@@ -2,6 +2,7 @@
 // Геометрию считает Go; здесь только перевод долей области в мм разворота для предпросмотра
 // и в доли карточки для рисунка, а также тексты вопросов.
 import { plural } from '../../base/core/plural'
+import type { SheetSize } from '../../base/geom/sheet'
 import type { Box, GridChoice, GridPlan, GridTarget, LayoutScope, PlaceView, Rect, RotRect } from '../../base/core/types'
 
 export const MAX_N = 7 // фильтр «7+»
@@ -15,11 +16,11 @@ export function fits(ch: GridChoice, scope: LayoutScope): boolean {
 }
 
 // Фильтр по умолчанию: число мест (у сетки) или фото (у «Авто») в области, 1..7.
-export function defaultN(spread: { rects: Rect[]; places: PlaceView[] | null }, pageW: number, scope: LayoutScope): number {
+export function defaultN(spread: { rects: Rect[]; places: PlaceView[] | null }, mid: number, scope: LayoutScope): number {
   const cells: Rect[] = spread.places && spread.places.length > 0 ? spread.places : spread.rects
   const inScope = cells.filter((r) => {
     const c = r.x + r.w / 2
-    return scope === 'spread' || (scope === 'left' ? c < pageW : c >= pageW)
+    return scope === 'spread' || (scope === 'left' ? c < mid : c >= mid)
   })
   return clampN(inScope.length)
 }
@@ -38,12 +39,12 @@ export function cardBoxes(ch: GridChoice, scope: LayoutScope): Box[] {
 
 // Прямоугольники карточки в мм разворота — для предпросмотра на большом развороте
 // (store.previewChoice). Те же правила перевода, что у Go в applyGrid.
-export function previewRects(ch: GridChoice, scope: LayoutScope, pageW: number, pageH: number): RotRect[] {
+export function previewRects(ch: GridChoice, scope: LayoutScope, sheet: SheetSize): RotRect[] {
   return cardBoxes(ch, scope).map((b) => {
-    // cardBoxes даёт доли разворота (scope = spread) или страницы (left/right).
-    const w = scope === 'spread' ? pageW * 2 : pageW
-    const off = scope === 'right' ? pageW : 0
-    return withRot({ x: off + b.x * w, y: b.y * pageH, w: b.w * w, h: b.h * pageH }, b)
+    // cardBoxes даёт доли листа (scope = spread) или страницы (left/right).
+    const w = scope === 'spread' ? sheet.w : sheet.mid
+    const off = scope === 'right' ? sheet.mid : 0
+    return withRot({ x: off + b.x * w, y: b.y * sheet.h, w: b.w * w, h: b.h * sheet.h }, b)
   })
 }
 
@@ -51,6 +52,9 @@ export function previewRects(ch: GridChoice, scope: LayoutScope, pageW: number, 
 export function dropTitle(n: number): string {
   return `${n} ${plural(n, ['фото вернётся', 'фото вернутся', 'фото вернутся'])} в ленту`
 }
+
+// Предупреждение перед сбросом ручных мест: вопрос «Вернуть авто?» страницы, ручная виньетка и окно «Настроить виньетку».
+export const RESET_WARN = 'Ваши правки мест сбросятся.'
 
 // Ошибки шаблонов: «сохранены более новой версией» — понятным текстом.
 export function tplError(msg: string): string {

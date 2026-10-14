@@ -31,8 +31,11 @@ func TestFontsEmbedded(t *testing.T) {
 			}
 		}
 	}
-	if n != 13 {
-		t.Errorf("начертаний %d, ждали 13", n)
+	if n != 43 {
+		t.Errorf("начертаний %d, ждали 43", n)
+	}
+	if len(Families()) != 18 {
+		t.Errorf("гарнитур %d, ждали 18", len(Families()))
 	}
 	if _, ok := FontFile("../fonts.go"); ok {
 		t.Error("FontFile пропустил путь вне белого списка")
@@ -47,6 +50,19 @@ func TestStyleClamped(t *testing.T) {
 	m := Style{Font: "marck", Size: 1000, Color: "#abcdef", Align: "left", Bold: true, Italic: true}.Clamped()
 	if m.Bold || m.Italic || m.Size != MaxSize || m.Color != "#abcdef" {
 		t.Errorf("%+v", m)
+	}
+	// Начертания, которых нет у гарнитуры, сбрасываются; те, что есть, остаются.
+	if g := (Style{Font: "greatvibes", Bold: true}).Clamped(); g.Bold || g.Font != "greatvibes" {
+		t.Errorf("Great Vibes: %+v", g)
+	}
+	if c := (Style{Font: "caveat", Bold: true, Italic: true}).Clamped(); !c.Bold || c.Italic {
+		t.Errorf("Caveat: %+v", c)
+	}
+	if n := (Style{Font: "nunito", Bold: true, Italic: true}).Clamped(); !n.Bold || !n.Italic {
+		t.Errorf("Nunito: %+v", n)
+	}
+	if x := (Style{Font: "xx", Bold: true}).Clamped(); x.Font != DefaultFont || !x.Bold {
+		t.Errorf("неизвестный id: %+v", x)
 	}
 	if (Style{Size: -5}).Clamped().Size != MinSize {
 		t.Error("нижний зажим")

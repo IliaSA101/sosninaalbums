@@ -1,8 +1,6 @@
 package view
 
 import (
-	"math"
-
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
@@ -12,13 +10,15 @@ import (
 // gridView заполняет вид разворота-сетки: фото — по местам (Rects[i] — место
 // фото i), кадр cover или contain; ряда раскладок нет. Поэтому Cell, кадр,
 // подпись и «!» по dpi рисуют сетку без изменений.
-func gridView(p *model.Project, sv *model.SpreadView, s *model.Spread) {
+func gridView(f *fields, sv *model.SpreadView, s *model.Spread) {
+	p := f.p
 	sv.Grid, sv.Layout, sv.Variant = true, "", -1
 	sv.Photos = model.GridPhotos(s)
 	sv.Places = make([]model.PlaceView, len(s.Grid))
+	flat := p.Geo(s).Layflat // обложка — всегда: место через корешок законно
 	for i, pl := range s.Grid {
 		sv.Places[i] = model.PlaceView{ID: pl.ID, X: pl.X, Y: pl.Y, W: pl.W, H: pl.H, Photo: pl.Photo, Fit: pl.Fit,
-			Spine: !p.Settings.Layflat && p.CrossesSpine(pl), Rot: pl.Rot}
+			Spine: !flat && p.CrossesSpine(s, pl), Rot: pl.Rot, Role: pl.Role}
 		if pl.Photo == "" {
 			continue
 		}
@@ -37,69 +37,20 @@ func gridView(p *model.Project, sv *model.SpreadView, s *model.Spread) {
 		sv.Rects = append(sv.Rects, r)
 		sv.Frames = append(sv.Frames, fv)
 	}
-	sv.Captions = captionViews(p, sv.Photos, sv.Rects)
+	sv.Captions, sv.Stubs = captionViews(f, s, sv.Photos, sv.Rects)
 	for i := range sv.Captions {
 		if pl := s.PlaceRef(sv.Captions[i].Photo); pl != nil {
 			turnCaption(&sv.Captions[i], pl)
 		}
 	}
-}
-
-const (
-	// CaptionPad — зазор между фото и подписью, мм.
-	CaptionPad = 1.0
-	// trimZone — обрезная зона типографии у нижнего края страницы (fsfera 2–3 мм):
-	// подпись в неё не заходит.
-	trimZone = 3.0
-)
-
-// captionViews — подписи фото разворота в порядке ленты. Раскладку подпись не
-// раздвигает: не хватило места — Overflow > 0, интерфейс показывает «!».
-func captionViews(p *model.Project, ids []string, rects []layout.Rect) []model.CaptionView {
-	out := []model.CaptionView{}
-	for i := range rects {
-		c := p.Photos[ids[i]].Caption
-		if c == nil {
-			continue
+	for i := range sv.Stubs {
+		if pl := s.PlaceRef(sv.Stubs[i].Photo); pl != nil {
+			cv := model.CaptionView{TextView: sv.Stubs[i].TextView}
+			turnCaption(&cv, pl)
+			sv.Stubs[i].Place, sv.Stubs[i].TextView = pl.ID, cv.TextView
 		}
-		out = append(out, CaptionViewOf(ids[i], c, rects, i, p.Settings.PageH))
 	}
-	return out
-}
-
-// CaptionViewOf — место подписи к фото в ячейке rects[i] шириной в ячейку.
-// Под фото: до края страницы без обрезной зоны и до ячейки, стоящей ниже
-// с перекрытием по горизонтали. На фото: у нижнего края ячейки внутри неё.
-// Свободные блоки текста препятствием не считаются.
-func CaptionViewOf(id string, c *model.Caption, rects []layout.Rect, i int, pageH float64) model.CaptionView {
-	r := rects[i]
-	tv := placeText("", c.Text, c.Style, r.X, 0, r.W) // по вертикали сдвигается ниже
-	h := tv.H
-	var top, over float64
-	if c.Over {
-		top = r.Y + r.H - 3*CaptionPad - h
-		over = r.Y + CaptionPad - top
-	} else {
-		top = r.Y + r.H + CaptionPad
-		limit := pageH - trimZone
-		for j, o := range rects {
-			below := o.Y >= r.Y+r.H-1e-6
-			if j != i && below && o.X < r.X+r.W && o.X+o.W > r.X {
-				limit = math.Min(limit, o.Y-CaptionPad)
-			}
-		}
-		over = top + h - limit
-	}
-	tv.Y = top
-	for k := range tv.Lines {
-		tv.Lines[k].Y += top
-	}
-	return model.CaptionView{
-		Photo:    id,
-		TextView: tv,
-		Over:     c.Over,
-		Overflow: math.Max(0, math.Round(over*10)/10),
-	}
+	placeStubs(f, sv, s)
 }
 
 // turnCaption — подпись повёрнутого места pl: посчитана для неповёрнутой рамки,
@@ -119,8 +70,8 @@ func turnCaption(cv *model.CaptionView, pl *model.Place) {
 	cv.X, cv.Y, cv.Rot, cv.Overflow = cv.X+mx, cv.Y+my, pl.Rot, 0
 }
 
-// zView — Z у ячеек, мест, подписей и текстов: проход стека снизу вверх с 1,
-// подпись — сразу над своим фото. «Авто» — ячейки по порядку, затем тексты.
+// zView — Z у ячеек, мест, подписей, заглушек и текстов: проход стека снизу вверх с 1,
+// подпись и заглушка — сразу над своим местом. «Авто» — ячейки по порядку, затем тексты.
 // Подпись нижнего места, легшая на верхнее, теперь под ним (в 0.4.0 подписи
 // лежали над всеми фото).
 func zView(sv *model.SpreadView, s *model.Spread) {
@@ -128,13 +79,25 @@ func zView(sv *model.SpreadView, s *model.Spread) {
 	for i, c := range sv.Captions {
 		capOf[c.Photo] = i
 	}
+	stubOf := make(map[string]int, len(sv.Stubs)) // ключ — место в сетке, фото в «Авто»
+	for i, st := range sv.Stubs {
+		if sv.Grid {
+			stubOf[st.Place] = i
+		} else {
+			stubOf[st.Photo] = i
+		}
+	}
 	z := 0
-	cell := func(photo string) int {
+	cell := func(photo, key string) int {
 		z++
 		at := z
 		if i, ok := capOf[photo]; ok && photo != "" {
 			z++
 			sv.Captions[i].Z = z
+		}
+		if i, ok := stubOf[key]; ok && key != "" {
+			z++
+			sv.Stubs[i].Z = z
 		}
 		return at
 	}
@@ -144,7 +107,7 @@ func zView(sv *model.SpreadView, s *model.Spread) {
 	}
 	if !sv.Grid {
 		for i := range sv.Frames {
-			sv.Frames[i].Z = cell(sv.Photos[i])
+			sv.Frames[i].Z = cell(sv.Photos[i], sv.Photos[i])
 		}
 		for i := range sv.Texts {
 			z++
@@ -163,7 +126,7 @@ func zView(sv *model.SpreadView, s *model.Spread) {
 	for _, id := range s.Stack() {
 		if i, ok := placeAt[id]; ok {
 			pv := &sv.Places[i]
-			pv.Z = cell(pv.Photo)
+			pv.Z = cell(pv.Photo, pv.ID)
 			if f, ok := frameOf[pv.Photo]; ok && pv.Photo != "" {
 				sv.Frames[f].Z = pv.Z
 			}
@@ -175,7 +138,7 @@ func zView(sv *model.SpreadView, s *model.Spread) {
 }
 
 // backdropViews — фоны разворота с рамкой и фото в осях рамки; dpi считается по ширине
-// фото в пикселях и размеру Img (lowDPI фон не считает: размытый фон часто намеренный).
+// фото в пикселях и размеру Img (входит в счёт lowDPI, 028 В).
 func backdropViews(p *model.Project, s *model.Spread) []model.BackdropView {
 	out := []model.BackdropView{}
 	for _, scope := range model.BdScopes() {
@@ -186,7 +149,7 @@ func backdropViews(p *model.Project, s *model.Spread) []model.BackdropView {
 		ref := p.Photos[b.Photo]
 		fr := b.FrameOrDefault()
 		img := model.PlaceImage(layout.Rect{W: b.W, H: b.H}, p.RawAspect(b.Photo), fr)
-		out = append(out, model.BackdropView{Scope: scope, Photo: b.Photo, Area: p.BdArea(scope),
+		out = append(out, model.BackdropView{Scope: scope, Photo: b.Photo, Area: p.BdArea(s, scope),
 			Box: model.BackdropBox{X: b.X, Y: b.Y, W: b.W, H: b.H, Rot: b.Rot}, Img: img, Frame: fr,
 			FlipH: b.FlipH, FlipV: b.FlipV, DPI: geom.FrameDPI(ref.W, img), Fade: b.Fade})
 	}
@@ -214,12 +177,14 @@ func newFrameView(img layout.Rect, f model.Frame) model.FrameView {
 	return model.FrameView{Img: img, S: f.S, X: f.X, Y: f.Y, R: f.R, Turn: turn, Tilt: tilt}
 }
 
-// textViews — блоки разворота с рамкой и строками (переносы — из кэша text).
-func textViews(p *model.Project, s *model.Spread) []model.TextView {
+// textViews — блоки разворота с рамкой и строками (переносы — из кэша text); поля
+// подставлены (030), исходник — в Src.
+func textViews(f *fields, s *model.Spread) []model.TextView {
 	out := make([]model.TextView, len(s.Texts))
 	for i, t := range s.Texts {
-		out[i] = placeText(t.ID, t.Text, t.Style, t.X, t.Y, t.W)
-		out[i].Rot, out[i].Auto = t.Rot, t.Auto
+		shown, src := f.text(t.Text)
+		out[i] = placeText(t.ID, shown, t.Style, t.X, t.Y, t.W)
+		out[i].Rot, out[i].Auto, out[i].Src = t.Rot, t.Auto, src
 	}
 	return out
 }

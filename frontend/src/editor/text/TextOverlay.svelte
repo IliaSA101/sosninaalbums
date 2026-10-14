@@ -1,19 +1,20 @@
 <script lang="ts">
-  import type { CaptionView, Settings, SpreadView } from '../../base/core/types'
+  import type { CaptionView, SpreadView } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
   import { edit } from './edit.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { boxOf, toSpread } from '../../base/geom/textbox'
+  import { editText } from './textedit'
   import type { TextGestures } from './textgesture.svelte'
   import TextEditor from './TextEditor.svelte'
   import TextHandles from './TextHandles.svelte'
 
   // Над стеком разворота (спека 010 U6): редактор текста, рамка выделенного блока с ручками и подсказки
   // жеста. Блок может лежать под фото, а ручки и редактор обязаны быть доступны — поэтому они вне `.content`.
-  let { spread, settings, width, tg }: { spread: SpreadView; settings: Settings; width: number; tg: TextGestures } = $props()
+  let { spread, width, tg }: { spread: SpreadView; width: number; tg: TextGestures } = $props()
 
-  const sw = $derived(settings.pageW * 2)
-  const ph = $derived(settings.pageH)
+  const sw = $derived(spread.w)
+  const ph = $derived(spread.h)
   const k = $derived(width / sw) // пикселей на мм
   const pctX = (v: number) => `${(v / sw) * 100}%`
   const pctY = (v: number) => `${(v / ph) * 100}%`
@@ -24,7 +25,7 @@
 <div class="tover">
   {#each spread.captions as c (c.photo)}
     {#if tg.editing('caption', c.photo)}
-      <TextEditor box={boxOf(c)} auto={false} maxW={store.view.textMaxW} text={c.text} style={c.style} {sw} {ph} {k} />
+      <TextEditor box={boxOf(c)} auto={false} maxW={store.view.textMaxW} text={editText(c)} style={c.style} {sw} {ph} {k} />
     {:else}
       <!-- Подпись не слой (она при фото), но обводка и «!» должны быть видны, даже если выше лежит фото -->
       {#if tg.selected('caption', c.photo)}
@@ -57,7 +58,7 @@
 
   {#each spread.texts as t (t.id)}
     {#if tg.editing('text', t.id)}
-      <TextEditor box={boxOf(t)} auto={t.auto} maxW={store.view.textMaxW} text={t.text} style={t.style} {sw} {ph} {k} />
+      <TextEditor box={boxOf(t)} auto={t.auto} maxW={store.view.textMaxW} text={editText(t)} style={t.style} {sw} {ph} {k} />
     {:else if tg.selected('text', t.id)}
       {@const e = tg.eff(t)}
       <div

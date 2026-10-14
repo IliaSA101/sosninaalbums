@@ -7,6 +7,9 @@
   import { tick } from 'svelte'
   import LevelCards from './LevelCards.svelte'
   import LevelMatrix from './LevelMatrix.svelte'
+  import NewProduct from '../newdoc/NewProduct.svelte'
+  import { newDoc } from '../newdoc/newdoc.svelte'
+  import { guide } from '../guide/guidestate.svelte'
   import { recentRows } from './recent'
   import { WHATS_NEW, WHATS_NEW_VERSION } from './whatsnew'
 
@@ -33,6 +36,7 @@
     if (!prefs.startOpen) {
       all = false
       newsOpen = false
+      newDoc.kind = 'album' // окно снова открывается на альбоме
     }
   })
 
@@ -50,16 +54,11 @@
     if (l === 'custom') all = true
   }
 
-  function newAlbum() {
-    close()
-    void store.replaceState(Api.NewProject('album'))
-  }
-
-  // Диалог выбора файла нативный: окно остаётся, пока он открыт, и закрывается, только если альбом сменился.
+  // Диалог выбора файла нативный: окно остаётся, пока он открыт, и закрывается, только если альбом открылся (не отмена).
   async function open() {
-    const before = store.view.path
+    const seq = store.openSeq
     await store.replaceState(Api.OpenProject())
-    if (store.view.path !== before) close()
+    if (store.openSeq !== seq) close()
   }
 
   async function recent(path: string) {
@@ -105,17 +104,17 @@
       {/if}
 
       <h3>Новое изделие</h3>
-      <div class="products">
-        <button onclick={newAlbum}>Новый альбом</button>
-        <button disabled title="Скоро">Календарь — скоро</button>
-        <button disabled title="Скоро">Виньетка — скоро</button>
-      </div>
+      <NewProduct oncreated={close} />
 
       <div class="foot">
-        <button class="link" aria-expanded={newsOpen} onclick={() => (newsOpen = !newsOpen)}>
-          Что нового в {store.version || WHATS_NEW_VERSION}
-          {newsOpen ? '▾' : '▸'}
-        </button>
+        <span class="links">
+          <button class="link" aria-expanded={newsOpen} onclick={() => (newsOpen = !newsOpen)}>
+            Что нового в {store.version || WHATS_NEW_VERSION}
+            {newsOpen ? '▾' : '▸'}
+          </button>
+          <!-- Справочник открывается поверх этого окна (стек Modal) -->
+          <button class="link" onclick={() => guide.openFresh()}>Справочник функций · F1</button>
+        </span>
         <label class="show">
           <input type="checkbox" checked={prefs.showStart} onchange={(e) => prefs.setShowStart(e.currentTarget.checked)} />
           Показывать при запуске
@@ -171,16 +170,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .products {
-    display: flex;
-    gap: 8px;
-  }
-  .products button {
-    flex: 1;
-  }
-  .products button:disabled {
-    opacity: 0.45;
   }
   .recent {
     margin: 0;
@@ -250,6 +239,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+  .links {
+    display: flex;
+    gap: 16px;
   }
   .show {
     display: flex;

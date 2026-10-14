@@ -29,7 +29,7 @@ const fire = (type: string, props: Record<string, unknown> = {}) =>
 
 function gestures() {
   const settings = { pageW: 200, pageH: 200, margin: 5, gap: 2, layflat: false, dpi: 300, bg: '' }
-  const spread = { id: 's1', rects: [], photos: [], texts: [text], captions: [] }
+  const spread = { id: 's1', w: 400, h: 200, mid: 200, rects: [], photos: [], texts: [text], captions: [] }
   return new TextGestures(() => ({ spread, settings, width: 800, root: undefined }) as never)
 }
 const down = { clientX: 0, clientY: 0 } as PointerEvent

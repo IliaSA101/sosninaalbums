@@ -65,8 +65,8 @@ func goldenSets(n int) []int {
 	return []int{n % 3}
 }
 
-// goldenAutoN — фото в проверке Group (корпус укладывается в секунды).
-const goldenAutoN = 24
+// goldenMaxN — до стольких фото эталон layouts.sha (перебор); 17…64 — many.sha (TestGoldenMany).
+const goldenMaxN = ManyFrom - 1
 
 // dump накапливает побитовое представление результатов.
 type dump struct{ buf []byte }
@@ -151,37 +151,16 @@ func goldenN(g, n int) []goldenGroup {
 	return groups
 }
 
-// goldenGroupAuto считает автосборку Group на 24 фото при target 3, 5, 7.
-func goldenGroupAuto(g int) []goldenGroup {
-	p := goldenGeoms[g]
-	var out []goldenGroup
-	for _, target := range []int{3, 5, 7} {
-		gr := goldenGroup{name: fmt.Sprintf("p%d/G/t%d", g, target)}
-		for _, set := range []int{0, 2} {
-			asp := goldenAspects(uint64(g)+1, goldenAutoN, set)
-			var d dump
-			for _, pr := range Group(asp, p, target) {
-				d.u64(uint64(pr[0]))
-				d.u64(uint64(pr[1]))
-			}
-			gr.cases = append(gr.cases, goldenCase{fmt.Sprintf("набор %d, %d фото", set, goldenAutoN), d.sum()})
-		}
-		out = append(out, gr)
-	}
-	return out
-}
-
 // goldenCorpus считает весь корпус параллельно; порядок групп фиксирован по имени.
 func goldenCorpus() []goldenGroup {
 	var jobs []func() []goldenGroup
 	for g := range goldenGeoms {
-		for n := 1; n <= MaxPhotos; n++ {
-			if g > 0 && n >= 13 && n < MaxPhotos {
+		for n := 1; n <= goldenMaxN; n++ {
+			if g > 0 && n >= 13 && n < goldenMaxN {
 				continue // 13…15 дороги; на 2-й и 3-й геометрии берём только предел
 			}
 			jobs = append(jobs, func() []goldenGroup { return goldenN(g, n) })
 		}
-		jobs = append(jobs, func() []goldenGroup { return goldenGroupAuto(g) })
 	}
 	res := make([][]goldenGroup, len(jobs))
 	var wg sync.WaitGroup

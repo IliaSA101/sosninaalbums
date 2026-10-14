@@ -1,6 +1,9 @@
 <script lang="ts">
   import Spread from '../../editor/spread/Spread.svelte'
+  import LowDpiBadge from '../../base/ui/LowDpiBadge.svelte'
+  import VigMark from '../vignette/VigMark.svelte'
   import { store } from '../../base/core/store.svelte'
+  import { newSheetSize, sheetSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import { labelTitle, spreadLabel } from '../timeline/spreadname'
 
@@ -12,7 +15,10 @@
   const PAD = 4
   const MINI = TILE - 2 * PAD
   const s = $derived(store.view.settings)
-  const tileH = $derived((MINI * s.pageH) / (s.pageW * 2))
+  // Все плитки одного размера: берём размер листа у первого (Go: sv.w × sv.h); альбом пуст — по настройкам.
+  const sheet = $derived(store.view.spreads[0] ? sheetSize(store.view.spreads[0]) : newSheetSize(s))
+  const unit = $derived(unitOf(s))
+  const tileH = $derived((MINI * sheet.h) / sheet.w)
 
   let box = $state<HTMLDivElement>()
 
@@ -32,7 +38,15 @@
 </script>
 
 {#if store.view.spreads.length}
-  <div class="grid" bind:this={box} style:--tile="{TILE}px" style:--gap="{GAP}px" style:--pad="{PAD}px" style:--tile-h="{tileH}px">
+  <div
+    class="grid"
+    data-guide="spread-grid"
+    bind:this={box}
+    style:--tile="{TILE}px"
+    style:--gap="{GAP}px"
+    style:--pad="{PAD}px"
+    style:--tile-h="{tileH}px"
+  >
     {#each store.view.spreads as sp, i (sp.id)}
       <div
         class="tile"
@@ -40,19 +54,21 @@
         data-tile={i}
         role="button"
         tabindex="-1"
-        title={labelTitle(i, sp.name) ?? `Разворот ${i + 1}`}
+        title={labelTitle(i, sp.name) ?? `${unit.cap} ${i + 1}`}
         onclick={() => store.go(i)}
         onkeydown={() => {}}
       >
         <div class="frame">
           <Spread spread={sp} settings={s} width={MINI} mini />
         </div>
+        <LowDpiBadge count={sp.lowDPI} min={store.view.minDPI} />
+        <VigMark kind={sp.kind} />
         <div class="num">{spreadLabel(i, sp.name)}</div>
       </div>
     {/each}
   </div>
 {:else}
-  <div class="empty">Разворотов пока нет</div>
+  <div class="empty">{unit.none}</div>
 {/if}
 
 <style>
@@ -62,6 +78,7 @@
     gap: 4px var(--gap);
   }
   .tile {
+    position: relative;
     padding: var(--pad);
     cursor: pointer;
     /* Большие альбомы: плитки вне вида не рисуются */

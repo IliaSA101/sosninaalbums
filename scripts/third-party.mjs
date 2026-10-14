@@ -106,12 +106,30 @@ Copyright (c) ${au}
   add(name, pj.version, lic, fs.readFileSync(dir + '/' + f, 'utf8'))
 }
 const fontsDir = W + '/internal/text/fonts/'
+// Гарнитуры: [имя, файл лицензии, автор, зарезервированное имя, изменения]. Число гарнитур и файлов
+// в заголовке раздела 3 считается ниже по этому массиву и по *.ttf в папке.
 const fonts = [
-  ['Montserrat', 'OFL-montserrat.txt', 'The Montserrat Project Authors', 'нет', 'урезан набор знаков'],
+  ['Bad Script', 'OFL-badscript.txt', 'The Bad Script Project Authors', 'нет', 'урезан набор знаков'],
+  ['Caveat', 'OFL-caveat.txt', 'The Caveat Project Authors', 'нет', 'урезан набор знаков'],
+  ['Great Vibes', 'OFL-greatvibes.txt', 'The Great Vibes Pro Project Authors', 'нет', 'урезан набор знаков'],
+  ['Marck Script', 'OFL-marck.txt', 'Denis Masharov и Marck Fogel', 'ДА: "Marck Script"', 'без изменений'],
+  ['Pacifico', 'OFL-pacifico.txt', 'The Pacifico Project Authors', 'нет', 'урезан набор знаков'],
+  ['Amatic SC', 'OFL-amaticsc.txt', 'The Amatic SC Project Authors', 'нет', 'урезан набор знаков'],
+  ['Comfortaa', 'OFL-comfortaa.txt', 'The Comfortaa Project Authors', 'ДА: "Comfortaa"', 'без изменений'],
+  ['Neucha', 'OFL-neucha.txt', 'Jovanny Lemonad', 'нет', 'урезан набор знаков'],
+  ['Nunito', 'OFL-nunito.txt', 'The Nunito Project Authors', 'нет', 'урезан набор знаков'],
   ['Cormorant Garamond', 'OFL-cormorant.txt', 'The Cormorant Project Authors', 'нет', 'урезан набор знаков'],
+  ['Forum', 'OFL-forum.txt', 'Denis Masharov', 'ДА: "Forum"', 'без изменений'],
+  ['Lora', 'OFL-lora.txt', 'The Lora Project Authors', 'ДА: "Lora"', 'без изменений'],
+  ['Playfair Display', 'OFL-playfair.txt', 'The Playfair Display Project Authors', 'ДА: "Playfair Display"', 'без изменений'],
   ['PT Serif', 'OFL-ptserif.txt', 'ParaType Ltd.', 'ДА: "PT Sans", "PT Serif", "ParaType"', 'без изменений'],
-  ['Marck Script', 'OFL-marckscript.txt', 'Denis Masharov и Marck Fogel', 'ДА: "Marck Script"', 'без изменений'],
+  ['Yeseva One', 'OFL-yeseva.txt', 'The Yeseva One Project Authors', 'ДА: "Yeseva"', 'без изменений'],
+  ['Montserrat', 'OFL-montserrat.txt', 'The Montserrat Project Authors', 'нет', 'урезан набор знаков'],
+  ['Oswald', 'OFL-oswald.txt', 'The Oswald Project Authors', 'нет', 'урезан набор знаков'],
+  ['Raleway', 'OFL-raleway.txt', 'The Raleway Project Authors', 'ДА: "Raleway"', 'без изменений'],
 ]
+const fontFiles = fs.readdirSync(fontsDir).filter((x) => x.endsWith('.ttf')).length
+const reserved = fonts.filter((x) => x[3] !== 'нет').map((x) => x[0])
 const out = []
 out.push(`THIRD_PARTY_NOTICES
 ===================
@@ -140,16 +158,16 @@ ${section.go.join('\n')}
 Prettier, Vitest и др.) в программу не входят.
 ${section.npm.join('\n')}
 
-3. Шрифты (4 гарнитуры, 13 файлов; внутри программы: internal/text/fonts)
--------------------------------------------------------------------
+3. Шрифты (${fonts.length} гарнитур, ${fontFiles} файлов; внутри программы: internal/text/fonts)
+${'-'.repeat(40)}
 Все — SIL Open Font License, Version 1.1 (текст — в разделе 5). Шрифты вшиты в программу
 и без изменений лицензии распространяются вместе с ней.
 `)
 for (const [n, , a, rfn, ch] of fonts) out.push(`  ${n} — автор: ${a}\n    Reserved Font Name: ${rfn}; изменения: ${ch}`)
 out.push(`
-Montserrat и Cormorant Garamond урезаны по набору знаков (subset); оригинальное имя
-гарнитуры в них не зарезервировано. PT Serif и Marck Script не изменялись, так как их
-лицензии резервируют имя шрифта (Reserved Font Name).
+Гарнитуры без Reserved Font Name урезаны по набору знаков (subset). Гарнитуры с зарезервированным
+именем (${reserved.join(', ')}) не изменялись: изменённый файл под тем же именем
+распространять нельзя.
 
 Заголовки авторских прав шрифтов:
 `)

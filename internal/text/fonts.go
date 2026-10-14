@@ -28,7 +28,7 @@ const (
 
 // Style — оформление текста; хранится в проекте (JSON) и приходит из интерфейса.
 type Style struct {
-	Font   string  `json:"font"`  // montserrat | ptserif | cormorant | marck
+	Font   string  `json:"font"`  // id из families
 	Size   float64 `json:"size"`  // pt
 	Color  string  `json:"color"` // #rrggbb
 	Align  string  `json:"align"` // left | center | right
@@ -43,26 +43,14 @@ type Face struct {
 	Italic bool   `json:"italic"`
 }
 
-// Family — гарнитура: css — имя для font-family в интерфейсе.
+// Family — гарнитура: css — имя для font-family в интерфейсе, group — раздел
+// списка (script | kids | serif | sans).
 type Family struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	CSS   string `json:"css"`
+	Group string `json:"group"`
 	Faces []Face `json:"faces"`
-}
-
-var families = []Family{
-	{ID: "montserrat", Name: "Montserrat", CSS: "SA Montserrat", Faces: []Face{
-		{"Montserrat-Regular.ttf", false, false}, {"Montserrat-Bold.ttf", true, false},
-		{"Montserrat-Italic.ttf", false, true}, {"Montserrat-BoldItalic.ttf", true, true}}},
-	{ID: "ptserif", Name: "PT Serif", CSS: "SA PT Serif", Faces: []Face{
-		{"PT_Serif-Web-Regular.ttf", false, false}, {"PT_Serif-Web-Bold.ttf", true, false},
-		{"PT_Serif-Web-Italic.ttf", false, true}, {"PT_Serif-Web-BoldItalic.ttf", true, true}}},
-	{ID: "cormorant", Name: "Cormorant Garamond", CSS: "SA Cormorant Garamond", Faces: []Face{
-		{"CormorantGaramond-Regular.ttf", false, false}, {"CormorantGaramond-Bold.ttf", true, false},
-		{"CormorantGaramond-Italic.ttf", false, true}, {"CormorantGaramond-BoldItalic.ttf", true, true}}},
-	{ID: "marck", Name: "Marck Script", CSS: "SA Marck Script", Faces: []Face{
-		{"MarckScript-Regular.ttf", false, false}}},
 }
 
 // Families возвращает копию списка гарнитур.
@@ -118,20 +106,39 @@ func loadFonts() (map[string]*sfnt.Font, error) {
 	return parsed, parseErr
 }
 
+// family ищет гарнитуру по id; неизвестный id — гарнитура по умолчанию.
+func family(id string) Family {
+	def := Family{}
+	for _, f := range families {
+		if f.ID == id {
+			return f
+		}
+		if f.ID == DefaultFont {
+			def = f
+		}
+	}
+	return def
+}
+
+// has сообщает, есть ли у гарнитуры начертание с такими признаками.
+func (f Family) has(bold, italic bool) bool {
+	for _, fc := range f.Faces {
+		if fc.Bold == bold && fc.Italic == italic {
+			return true
+		}
+	}
+	return false
+}
+
 // faceFile выбирает файл начертания; нужного нет — обычное начертание гарнитуры.
 func faceFile(st Style) string {
-	for _, f := range families {
-		if f.ID != st.Font {
-			continue
+	f := family(st.Font)
+	for _, fc := range f.Faces {
+		if fc.Bold == st.Bold && fc.Italic == st.Italic {
+			return fc.File
 		}
-		for _, fc := range f.Faces {
-			if fc.Bold == st.Bold && fc.Italic == st.Italic {
-				return fc.File
-			}
-		}
-		return f.Faces[0].File
 	}
-	return families[0].Faces[0].File
+	return f.Faces[0].File
 }
 
 // font возвращает разобранный шрифт стиля и имя его файла.
@@ -145,7 +152,7 @@ func font(st Style) (*sfnt.Font, string) {
 }
 
 // Clamped приводит стиль к допустимому: неизвестная гарнитура — Montserrat,
-// у Marck Script одно начертание, размер в 6..200 pt (NaN/Inf — по умолчанию),
+// жирный и курсив сбрасываются, если у гарнитуры нет такого начертания, размер в 6..200 pt (NaN/Inf — по умолчанию),
 // выравнивание и цвет вне формата — по умолчанию.
 func (s Style) Clamped() Style {
 	known := false
@@ -157,7 +164,10 @@ func (s Style) Clamped() Style {
 	if !known {
 		s.Font = DefaultFont
 	}
-	if s.Font == "marck" {
+	f := family(s.Font)
+	s.Bold = s.Bold && f.has(true, false)
+	s.Italic = s.Italic && f.has(false, true)
+	if !f.has(s.Bold, s.Italic) { // пара без своего файла (жирный курсив при неполном наборе)
 		s.Bold, s.Italic = false, false
 	}
 	if math.IsNaN(s.Size) || math.IsInf(s.Size, 0) {

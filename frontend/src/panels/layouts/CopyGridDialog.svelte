@@ -4,6 +4,7 @@
   import { gridAct } from './gridact.svelte'
   import { parseRanges } from './ranges'
   import { plural } from '../../base/core/plural'
+  import { isSheet, unitOf } from '../../base/geom/sheet'
   import { errText } from '../../base/core/errtext'
   import { copyTargets, loadCopyOpts, planQuestion, saveCopyOpts, touched, type CopySide, type CopyWhere } from './gridgallery'
   import { planCopy, runCopy, runDuplicate } from './gridactions'
@@ -14,6 +15,8 @@
   // и вопрос, если копирование что-то разрушит. Окно открыто, пока gridAct.copyGrid не null.
   const cg = $derived(gridAct.copyGrid)
   const spreads = $derived(store.view.spreads)
+  const sheet = $derived(isSheet(store.view.settings))
+  const unit = $derived(unitOf(store.view.settings))
 
   let from = $state<LayoutScope>('spread')
   let where = $state<CopyWhere>('spreads')
@@ -94,11 +97,16 @@
       void go()
     }
   }
-  const froms: { scope: LayoutScope; label: string }[] = [
-    { scope: 'left', label: 'Левая страница' },
-    { scope: 'right', label: 'Правая страница' },
-    { scope: 'spread', label: 'Разворот' },
-  ]
+  // У листа виньетки страниц нет: источник один — весь лист.
+  const froms = $derived<{ scope: LayoutScope; label: string }[]>(
+    sheet
+      ? [{ scope: 'spread', label: 'Лист' }]
+      : [
+          { scope: 'left', label: 'Левая страница' },
+          { scope: 'right', label: 'Правая страница' },
+          { scope: 'spread', label: 'Разворот' },
+        ],
+  )
   const sides: { v: CopySide; label: string }[] = [
     { v: 'left', label: 'левые' },
     { v: 'right', label: 'правые' },
@@ -132,29 +140,31 @@
           >
         {/if}
         <label class="inline"
-          ><input type="radio" name="cg-where" value="spreads" bind:group={where} />на развороты:
+          ><input type="radio" name="cg-where" value="spreads" bind:group={where} />на {sheet ? 'листы' : 'развороты'}:
           <input
             type="text"
             class="ranges"
             class:bad={!!ranges?.error && text.trim() !== ''}
             placeholder="3, 5-8"
-            aria-label="Номера разворотов"
+            aria-label="Номера {sheet ? 'листов' : 'разворотов'}"
             bind:value={text}
             onfocus={() => (where = 'spreads')}
             onkeydown={enter}
           /></label
         >
         {#if ranges?.error && text.trim() !== ''}<span class="err">{ranges.error}</span>{/if}
-        <label><input type="radio" name="cg-where" value="all" bind:group={where} />на все развороты ({spreads.length})</label>
+        <label
+          ><input type="radio" name="cg-where" value="all" bind:group={where} />на все {sheet ? 'листы' : 'развороты'} ({spreads.length})</label
+        >
         {#if !page}
           <label class="inline"
-            ><input type="radio" name="cg-where" value="new" bind:group={where} />создать новые развороты после этого:
+            ><input type="radio" name="cg-where" value="new" bind:group={where} />создать новые {sheet ? 'листы' : 'развороты'} после этого:
             <input
               type="number"
               class="num"
               min="1"
               max="100"
-              aria-label="Сколько новых разворотов"
+              aria-label="Сколько новых {sheet ? 'листов' : 'разворотов'}"
               bind:value={count}
               onfocus={() => (where = 'new')}
               onkeydown={enter}
@@ -186,7 +196,7 @@
       </div>
 
       {#if where !== 'new' && n > 0}
-        <p class="hint">Затронет {n} {plural(n, ['разворот', 'разворота', 'разворотов'])}.</p>
+        <p class="hint">Затронет {n} {plural(n, unit.plural)}.</p>
       {/if}
       <div class="actions">
         <button class="ghost" onclick={close}>Отмена</button>

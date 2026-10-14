@@ -2,6 +2,7 @@
   import { prefs, type LevelState } from '../../base/prefs/prefs.svelte'
   import { LEVELS, LEVEL_TITLE, can, featureGroups, normBase, type Base, type Level, type RowId } from '../../base/prefs/levels'
   import { fromBase, locked, rows } from '../../base/prefs/levelcustom'
+  import { guide } from '../guide/guidestate.svelte'
   import { resetText, rowTip, togetherText } from './matrix'
 
   // Матрица функций (спека 011, п. 2, 9–13): функции строками по группам, три готовых уровня с ✓ и колонка
@@ -64,7 +65,15 @@
       <tr class="grp"><th colspan="5" scope="colgroup">{g.title}</th></tr>
       {#each g.rows as f (f.id)}
         <tr>
-          <td class="fn">{f.title}</td>
+          <td class="fn">
+            {f.title}
+            <button
+              class="help"
+              title="Что это и где найти — справочник функций"
+              aria-label="Справочник: {f.short}"
+              onclick={() => guide.openRow(f.id)}>?</button
+            >
+          </td>
           {#each LEVELS as l (l)}
             <td class="mark" class:cur={prefs.level === l}>{can(f.id, l) ? '✓' : ''}</td>
           {/each}
@@ -119,6 +128,24 @@
   }
   .fn {
     text-align: left;
+  }
+  /* «?» у строки: справочник по её функциям. Круг мельче строки, чтобы не раздувать таблицу */
+  .help {
+    width: 18px;
+    height: 18px;
+    margin-left: 6px;
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1;
+    vertical-align: middle;
+  }
+  .help:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   /* Заголовки на одной линии сверху: у «Свой» шапка выше за счёт списка основы. */
   thead th {

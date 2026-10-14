@@ -12,15 +12,26 @@
   import CopyGridDialog from './panels/layouts/CopyGridDialog.svelte'
   import ExportDialog from './shell/export/ExportDialog.svelte'
   import AutoAskDialog from './shell/dialogs/AutoAskDialog.svelte'
+  import DropAskDialog from './shell/dialogs/DropAskDialog.svelte'
+  import AutoBuildDialog from './shell/dialogs/AutoBuildDialog.svelte'
   import HotkeysHelp from './shell/menu/HotkeysHelp.svelte'
+  import Guide from './shell/guide/Guide.svelte'
+  import Spot from './shell/guide/Spot.svelte'
+  import { guide } from './shell/guide/guidestate.svelte'
   import StartDialog from './shell/dialogs/StartDialog.svelte'
   import LevelsDialog from './shell/dialogs/LevelsDialog.svelte'
   import BackupsDialog from './shell/dialogs/BackupsDialog.svelte'
   import { backupsUi } from './shell/dialogs/backups.svelte'
+  import NamesDialog from './panels/names/NamesDialog.svelte'
+  import VigDialog from './panels/vignette/VigDialog.svelte'
+  import VigTplSave from './panels/vignette/VigTplSave.svelte'
+  import { vigDialog } from './panels/vignette/vigsession.svelte'
+  import { namesUi } from './panels/names/names.svelte'
   import PhotoMenu from './editor/photo/PhotoMenu.svelte'
   import PhotoPreview from './editor/photo/PhotoPreview.svelte'
   import { store } from './base/core/store.svelte'
   import { gridAct } from './panels/layouts/gridact.svelte'
+  import { dropAsk } from './base/drag/dropgrid.svelte'
   import { gallery } from './panels/layouts/gallery.svelte'
   import { placesel } from './editor/places/placesel.svelte'
   import { canvas } from './editor/canvas/canvas.svelte'
@@ -38,33 +49,56 @@
 
   // Зона последнего нажатия: Ctrl+A и Del действуют по ней (библиотека или холст с лентой альбома).
   function zonePress(e: PointerEvent) {
-    const z = zoneOf(e.target as Element | null)
+    const z = zoneOf(e.target instanceof Element ? e.target : null)
     if (z) store.zone = z
   }
 
+  // Пробел листает раскладки «Авто»: у сетки их нет, у обложки (032) тоже.
+  const noAutoLayouts = () => !!store.spread?.grid || store.onCover
+
+  // Открыт вопрос ручного листа (автораскладка, броски, копия сетки): под ним F1 и Ctrl+N/O/E молчат.
+  const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!gridAct.copyGrid
+
+  // F1 — справочник функций (033). В WebView2 он открыл бы справку браузера, поэтому гасится всегда.
+  // Поверх стартового окна и окна уровней справочник открывается; под другими окнами и сам справочник — нет.
+  function f1(e: KeyboardEvent): boolean {
+    if (e.key !== 'F1' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false
+    e.preventDefault()
+    const other = help.open || backupsUi.open || namesUi.open || !!vigDialog.id || !!store.autoDraft || store.exportOpen || askOpen()
+    if (!guide.open && !other) guide.openFresh()
+    return true
+  }
+
+  // Окна, под которыми клавиши приложения молчат (Esc закрывает само окно).
+  const underDialog = () =>
+    guide.open || prefs.startOpen || prefs.compare || backupsUi.open || namesUi.open || !!vigDialog.id || !!store.autoDraft
+  // Цель события бывает не Element (document/window, синтетическое событие) — тогда null.
+  const targetEl = (e: Event) => (e.target instanceof Element ? e.target : null)
+  const isCheckbox = (t: Element | null) => !!t?.matches("input[type='checkbox']")
+
   function keys(e: KeyboardEvent) {
-    const t = e.target as HTMLElement
+    const t = targetEl(e)
+    if (f1(e)) return
     // Пока открыта справка, клавиши не работают; Esc её закрывает (если фокус ушёл из окна).
     if (help.open) {
       if (e.key === 'Escape') help.open = false
-      if (e.key === 'F1') e.preventDefault()
       return
     }
     // Стартовое окно и окно уровней: клавиши под ними молчат (Esc закрывает само окно).
-    if (prefs.startOpen || prefs.compare || backupsUi.open) return
+    if (underDialog()) return
     // Хоткеи глушим только при вводе текста/чисел (в том числе в contenteditable); select и ползунок их не блокируют.
     const act = keyAction(e, {
       inTextField: isTextField(t),
-      onCheckbox: t.matches("input[type='checkbox']"),
+      onCheckbox: isCheckbox(t),
       galleryOpen: !!gallery.cur,
       hasSelection: store.selectedIds.length > 0,
-      gridSpread: !!store.spread?.grid,
+      gridSpread: noAutoLayouts(),
       placeSelected: placesel.selected.length > 0 || placesel.texts.length > 0,
       layerable: placesel.canLayer,
       zone: store.zone,
       bgMode: !!bgmode.cur,
       big: modes.big,
-      modal: store.exportOpen || !!gridAct.autoAsk || !!gridAct.copyGrid,
+      modal: store.exportOpen || askOpen(),
       can: prefs.can,
     })
     if (!act) return
@@ -103,12 +137,19 @@
 <CopyGridDialog />
 <ExportDialog />
 <AutoAskDialog />
-<HotkeysHelp />
+<DropAskDialog />
+<AutoBuildDialog />
 <StartDialog />
+<Guide />
+<HotkeysHelp />
 <LevelsDialog />
 <BackupsDialog />
+<NamesDialog />
+<VigDialog />
+<VigTplSave />
 <PhotoMenu />
 <PhotoPreview />
+<Spot />
 
 <style>
   main {

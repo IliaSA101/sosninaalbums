@@ -1,6 +1,7 @@
 package prefs
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 type Templates struct {
 	list   []model.Template
 	bad    bool // файл есть, но не разобран: перед первой записью уходит в .bad-<время>
+	cut    bool // файл прочитан не целиком (зажим отбросил шаблоны): перед первой записью — тоже в .bad
 	unread bool // файл есть, но не открылся (замок антивируса): перед записью перечитать
 	newer  bool // файл новее программы: читаем, но не пишем
 }
@@ -32,8 +34,9 @@ func TemplatesPath(dir string) string { return filepath.Join(dir, "templates.jso
 var openTplFile = os.Open
 
 // LoadTemplates читает templates.json при старте. Большой или битый файл — пустой
-// список и отметка bad (его не затрут, а уберут в .bad); версия новее — только чтение;
-// не открылся или не прочитался — пустой список, файл перечитает Store.
+// список и отметка bad (его не затрут, а уберут в .bad); прочитан не целиком — отметка
+// cut (то же); версия новее — только чтение; не открылся или не прочитался — пустой
+// список, файл перечитает Store.
 func LoadTemplates(dir string) Templates {
 	var t Templates
 	if err := t.read(dir); err != nil {
@@ -65,6 +68,10 @@ func (t *Templates) read(dir string) error {
 		return nil
 	}
 	t.list = list
+	if n := inFile(data); len(list) < n {
+		t.cut = true
+		log.Printf("templates.json: прочитано шаблонов %d из %d, файл будет сохранён как .bad перед первой записью", len(list), n)
+	}
 	if ver > model.TemplatesVersion {
 		t.newer = true
 		log.Printf("templates.json версии %d новее программы: шаблоны только для чтения", ver)
@@ -80,7 +87,9 @@ func (t *Templates) Newer() bool { return t.newer }
 
 // Store пишет новый список в templates.json папки dir и только потом принимает его в
 // память. Файл новее программы не трогается; не разобранный сначала уходит в
-// templates.bad-<время>.json (через rename) — без этого запись не делается.
+// templates.bad-<время>.json (через rename) — без этого запись не делается; так же
+// прочитанный не целиком (cut): иначе отброшенные зажимом шаблоны пропали бы молча. Данные
+// больше MaxTemplatesFile не пишутся (model.ErrTemplatesFull): файл и память прежние.
 func (t *Templates) Store(dir string, list []model.Template, rename func(from, to string) error) error {
 	if t.unread {
 		var err error
@@ -91,15 +100,22 @@ func (t *Templates) Store(dir string, list []model.Template, rename func(from, t
 	if t.newer {
 		return model.ErrTemplatesNewer
 	}
+	// В памяти — то, что ляжет в файл: после перезапуска шаблоны те же до бита.
+	list = model.RoundTemplates(list)
 	data, err := model.MarshalTemplates(list)
 	if err != nil {
 		return err
 	}
-	if t.bad {
+	if len(data) > model.MaxTemplatesFile {
+		// Такой файл при следующем чтении ушёл бы в .bad: не пишем, память прежняя.
+		log.Printf("templates.json: %d байт больше предела, запись отменена", len(data))
+		return model.ErrTemplatesFull
+	}
+	if t.bad || t.cut {
 		if err := moveBad(dir, rename); err != nil {
 			return fmt.Errorf("не удалось убрать повреждённый templates.json: %w", err)
 		}
-		t.bad = false
+		t.bad, t.cut = false, false
 	}
 	if err := library.WriteFileAtomic(TemplatesPath(dir), data); err != nil {
 		log.Printf("templates.json: %v", paths.NoPath(err))
@@ -124,6 +140,17 @@ func (t *Templates) reread(dir string, list []model.Template) ([]model.Template,
 		return nil, model.ErrTooManyTpl
 	}
 	return merged, nil
+}
+
+// inFile — шаблонов в файле до зажима; не разобрать — 0.
+func inFile(data []byte) int {
+	var f struct {
+		Templates []json.RawMessage `json:"templates"`
+	}
+	if json.Unmarshal(data, &f) != nil {
+		return 0
+	}
+	return len(f.Templates)
 }
 
 // moveBad переименовывает templates.json в templates.bad-<время>.json (при занятом

@@ -91,17 +91,17 @@ func BenchmarkFitTexts2000(b *testing.B) {
 // Ширина «по тексту» — наименьшая, при которой текст встаёт одной строкой.
 func TestAutoW(t *testing.T) {
 	tb := &TextBlock{Text: "Анна и Пётр AVATAR", Style: plainStyle}
-	w := AutoW(tb, 1000)
+	w := AutoW(nil, tb, 1000)
 	if n := len(text.Cached(tb.Text, tb.Style, w).Lines); n != 1 {
 		t.Fatalf("в ширину %v — %d строк", w, n)
 	}
 	if nat := text.NaturalWidth(tb.Text, tb.Style); w < nat || w > nat+0.02+1e-9 {
 		t.Fatalf("ширина %v при естественной %v", w, nat)
 	}
-	if w = AutoW(tb, 20); w != 20 {
+	if w = AutoW(nil, tb, 20); w != 20 {
 		t.Fatalf("предел: %v", w)
 	}
-	if got := TextMaxW(DefaultSettings()); got != 284 {
+	if got := New().TextMaxW(nil); got != 284 {
 		t.Fatalf("textMaxW %v", got)
 	}
 }

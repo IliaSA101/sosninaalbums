@@ -102,25 +102,30 @@ func ColorNote(adobe int) string {
 func FromView(p *model.Project, v model.View) []render.Spread {
 	out := make([]render.Spread, 0, len(v.Spreads))
 	for _, s := range v.Spreads {
-		es := render.Spread{Bg: [2]color.RGBA{render.ParseHex(s.Bg[0]), render.ParseHex(s.Bg[1])},
-			Backdrops: backdrops(p, s)}
-		for i, id := range s.Photos {
-			if i >= len(s.Rects) || i >= len(s.Frames) {
-				break // раскладки нет: фото без ячейки не рисуем
-			}
-			f := s.Frames[i]
-			es.Photos = append(es.Photos, render.Photo{Cell: s.Rects[i], Img: f.Img, Path: p.Photos[id].Path,
-				FlipH: f.FlipH, FlipV: f.FlipV, Rot: f.CellRot, ImgRot: f.R, Z: f.Z})
-		}
-		for _, c := range s.Captions {
-			es.Texts = append(es.Texts, textDraw(c.TextView))
-		}
-		for _, t := range s.Texts {
-			es.Texts = append(es.Texts, textDraw(t))
-		}
-		out = append(out, es)
+		out = append(out, fromSheet(p, s))
 	}
 	return out
+}
+
+// fromSheet — задание рендера одного листа (разворота или обложки) из его вида.
+func fromSheet(p *model.Project, s model.SpreadView) render.Spread {
+	es := render.Spread{Bg: [2]color.RGBA{render.ParseHex(s.Bg[0]), render.ParseHex(s.Bg[1])},
+		Backdrops: backdrops(p, s)}
+	for i, id := range s.Photos {
+		if i >= len(s.Rects) || i >= len(s.Frames) {
+			break // раскладки нет: фото без ячейки не рисуем
+		}
+		f := s.Frames[i]
+		es.Photos = append(es.Photos, render.Photo{Cell: s.Rects[i], Img: f.Img, Path: p.Photos[id].Path,
+			FlipH: f.FlipH, FlipV: f.FlipV, Rot: f.CellRot, ImgRot: f.R, Z: f.Z})
+	}
+	for _, c := range s.Captions {
+		es.Texts = append(es.Texts, textDraw(c.TextView))
+	}
+	for _, t := range s.Texts {
+		es.Texts = append(es.Texts, textDraw(t))
+	}
+	return es
 }
 
 // textDraw переводит блок из View (строки в мм разворота) в блок экспорта (строки от угла блока).

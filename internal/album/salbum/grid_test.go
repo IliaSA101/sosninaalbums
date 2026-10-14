@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -19,11 +20,18 @@ import (
 )
 
 // gridInvariants — инварианты сетки (design 007 §1): после Load и после каждой правки.
+// Листы — по Sheets (обложка первой, номер −1): фото стоит в одном месте на весь проект.
 func gridInvariants(p *model.Project) error {
-	sw, ph := 2*p.Settings.PageW, p.Settings.PageH
 	placeIDs, inAlbum := map[string]bool{}, map[string]bool{}
 	on2 := func(v float64) bool { return math.Abs(v*100-math.Round(v*100)) < 1e-6 }
-	for i, s := range p.Spreads {
+	off := len(p.Sheets()) - len(p.Spreads)
+	for k, s := range p.Sheets() {
+		i := k - off
+		g := p.Geo(s)
+		sw, ph := g.W, g.H
+		if p.Cover != nil && s == p.Cover.Sheet && (s.ID != model.CoverID || len(s.Grid) == 0 && len(s.Photos) > 0) {
+			return fmt.Errorf("обложка: ID %q, «Авто» с фото %v", s.ID, s.Photos)
+		}
 		for _, id := range s.Photos {
 			if inAlbum[id] {
 				return fmt.Errorf("разворот %d: фото %s стоит дважды", i, id)
@@ -479,5 +487,59 @@ func TestDedupeKeepsBackdropSpread(t *testing.T) {
 		if s.ID != "k"+strconv.Itoa(i) || len(s.Photos) != 0 {
 			t.Fatalf("разворот %d: %+v", i, s)
 		}
+	}
+}
+
+// TestLoadClampsVignette — поля виньетки (031) из чужого файла: неизвестный вид — обычный
+// разворот (строка в log.txt), числа зажаты (сумма ≤ 64 за счёт учеников), чужая роль и роль
+// вне виньетки — "", vig без шапки этого листа — без неё, kind без vig — числа по ролям мест.
+func TestLoadClampsVignette(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	dir := testkit.TempDir(t)
+	_, ids := gridFile(t, dir, []string{"a", "b"}, nil)
+	role := func(id, r, photo string) *model.Place {
+		pl := box(id, 20+float64(len(r))*30, 20, 25, 30, photo)
+		pl.Role = r
+		return pl
+	}
+	data, _ := gridFile(t, dir, []string{"a", "b"}, []*model.Spread{
+		{ID: "aaaaaaaaaaa1", Photos: []string{ids["a"]}, Kind: "x", Vig: &model.Vignette{Teachers: 1},
+			Grid: []*model.Place{role("c0ffee000001", model.RoleTeacher, ids["a"])}},
+		{ID: "aaaaaaaaaaa2", Photos: []string{ids["b"]}, Kind: model.KindVignette,
+			Vig:  &model.Vignette{Tpl: "grid", Teachers: 99, Pupils: 99, Ratio: "7:3", Head: "nope", TText: "  "},
+			Grid: []*model.Place{role("c0ffee000002", "x", ids["b"]), role("c0ffee000003", model.RoleTeacher, "")}},
+		{ID: "aaaaaaaaaaa3", Photos: []string{}, Kind: model.KindVignette, Grid: []*model.Place{
+			role("c0ffee000004", model.RoleTeacher, ""), role("c0ffee000005", model.RolePupil, ""),
+			role("c0ffee000006", "", ""), role("c0ffee000007", model.RoleGroup, "")}},
+		{ID: "aaaaaaaaaaa4", Photos: []string{}, Grid: []*model.Place{role("c0ffee000008", model.RoleTeacher, "")}},
+	})
+	p := mustDecode(t, data, dir)
+	if len(p.Spreads) != 4 {
+		t.Fatalf("разворотов %d", len(p.Spreads))
+	}
+	s1, s2, s3, s4 := p.Spreads[0], p.Spreads[1], p.Spreads[2], p.Spreads[3]
+	if s1.Kind != "" || s1.Vig != nil || s1.Grid[0].Role != "" || !strings.Contains(buf.String(), `неизвестный вид разворота "x"`) {
+		t.Fatalf("неизвестный вид: %q %+v роль %q, лог %q", s1.Kind, s1.Vig, s1.Grid[0].Role, buf.String())
+	}
+	want := model.Vignette{Tpl: "grid", Teachers: model.MaxTeachers, Pupils: model.MaxPlaces - model.MaxTeachers, Ratio: model.VigRatio}
+	if s2.Vig == nil || *s2.Vig != want || s2.Grid[0].Role != "" || s2.Grid[1].Role != model.RoleTeacher {
+		t.Fatalf("зажим vig: %+v, роли %q %q", s2.Vig, s2.Grid[0].Role, s2.Grid[1].Role)
+	}
+	def := model.DefaultVignette()
+	def.Teachers, def.Pupils = 1, 2
+	if s3.Vig == nil || *s3.Vig != def || s3.Grid[3].Role != model.RoleGroup {
+		t.Fatalf("vig по ролям: %+v", s3.Vig)
+	}
+	if s4.Kind != "" || s4.Grid[0].Role != "" {
+		t.Fatalf("роль вне виньетки: %q", s4.Grid[0].Role)
+	}
+	out, err := Encode(p, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q := mustDecode(t, out, dir); !bytes.Equal(model.Marshal(p), model.Marshal(q)) {
+		t.Fatalf("потери при круге:\n%s\n%s", model.Marshal(p), model.Marshal(q))
 	}
 }

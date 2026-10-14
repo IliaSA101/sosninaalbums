@@ -13,14 +13,14 @@ import (
 // центра; X, Y, W, H стоят (hold от угла не зависит). У «Авто» — закрепление той же
 // правкой (withGrid). NaN/Inf и тот же угол — холостая.
 func SetPlaceAngle(p *model.Project, spreadID, ref string, deg float64) {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return
 	}
 	_ = p.WithGrid(s, func() error {
 		if pl := s.PlaceRef(ref); pl != nil {
 			pl.Rot = geom.NormDeg(deg)
-			p.ClampPlace(pl)
+			p.ClampPlace(s, pl)
 		}
 		return nil
 	})

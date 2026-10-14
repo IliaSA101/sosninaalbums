@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Settings, SpreadView } from '../../base/core/types'
+  import type { SpreadView } from '../../base/core/types'
   import { previewUrl, thumbUrl } from '../../base/core/media'
   import { bgmode } from './bgmode.svelte'
   import { liveImg } from './bgmode'
@@ -10,9 +10,9 @@
   // -> img. Прозрачность (017) — opacity на рамке, не на img: миниатюра под превью иначе просвечивала бы.
   // Всё в процентах от Go-шных мм, без расчётов. Мышь не ловит никогда: вне режима фона фон
   // не объект, щелчки и жесты проходят по полю.
-  let { spread, settings, mini = false }: { spread: SpreadView; settings: Settings; mini?: boolean } = $props()
+  let { spread, mini = false }: { spread: SpreadView; mini?: boolean } = $props()
 
-  const sw = $derived(settings.pageW * 2)
+  const sw = $derived(spread.w)
   const pct = (v: number, of: number) => (of > 0 ? `${(v / of) * 100}%` : '0%')
   const flip = (h: boolean, v: boolean) => (h || v ? `scale(${h ? -1 : 1}, ${v ? -1 : 1})` : undefined)
   // Режим фона: пока тянут рамку или кадр, фон рисуется по предпросмотру (bgmode.live), не по View.
@@ -28,9 +28,9 @@
     class="area"
     data-backdrop={b.scope}
     style:left={pct(b.area.x, sw)}
-    style:top={pct(b.area.y, settings.pageH)}
+    style:top={pct(b.area.y, spread.h)}
     style:width={pct(b.area.w, sw)}
-    style:height={pct(b.area.h, settings.pageH)}
+    style:height={pct(b.area.h, spread.h)}
   >
     <div
       class="box"

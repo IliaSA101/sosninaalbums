@@ -90,7 +90,7 @@ func TestSpreadNameMoveSplitMerge(t *testing.T) {
 		t.Fatalf("склейка без своего: %+v", v.Spreads)
 	}
 	// Автосборка: новые без названия, прежние — с ним.
-	v, _ = e.AutoBuild(edtest.Photos("x", "y", "z"), -1, 3)
+	v, _ = e.AutoBuild(edtest.Photos("x", "y", "z"), -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
 	if v.Spreads[0].Name != "Загс" || v.Spreads[len(v.Spreads)-1].Name != "" {
 		t.Fatalf("автосборка: %q %q", v.Spreads[0].Name, v.Spreads[len(v.Spreads)-1].Name)
 	}
@@ -177,7 +177,7 @@ func TestAutoWidthStyle(t *testing.T) {
 	st.Size, st.Font = 90, "cormorant"
 	e.SetTextStyle(id, st)
 	tb := edtest.Block(t, e, id)
-	if want := model.AutoW(tb, model.TextMaxW(edtest.P(e).Settings)); tb.W != want || tb.W <= before.W {
+	if want := edtest.P(e).SheetAutoW(nil, tb); tb.W != want || tb.W <= before.W {
 		t.Fatalf("ширина %.2f, ждали %.2f (была %.2f)", tb.W, want, before.W)
 	}
 	if x, y := model.BoxOf(tb).Anchor("center"); math.Abs(x-cx) > 0.01 || math.Abs(y-cy) > 0.01 {
@@ -211,7 +211,7 @@ func TestSetTextAuto(t *testing.T) {
 	undo := edtest.UndoLen(e)
 	e.SetTextAuto(id)
 	tb := edtest.Block(t, e, id)
-	if !tb.Auto || tb.W != model.AutoW(tb, model.TextMaxW(edtest.P(e).Settings)) || edtest.UndoLen(e) != undo+1 {
+	if !tb.Auto || tb.W != edtest.P(e).SheetAutoW(nil, tb) || edtest.UndoLen(e) != undo+1 {
 		t.Fatalf("по тексту: %+v", *tb)
 	}
 	rev := e.View().Rev
@@ -328,7 +328,7 @@ func TestSetTextScaleAuto(t *testing.T) {
 	x0, y0, w0 := b.X, b.Y, b.W
 	e.SetTextScale(id, b.Style.Size+10, x0, y0)
 	b = edtest.Block(t, e, id)
-	if !b.Auto || b.W <= w0 || b.W != model.AutoW(b, model.TextMaxW(edtest.P(e).Settings)) || b.X != x0 || b.Y != y0 {
+	if !b.Auto || b.W <= w0 || b.W != edtest.P(e).SheetAutoW(nil, b) || b.X != x0 || b.Y != y0 {
 		t.Fatalf("auto: %+v (было w %v)", b, w0)
 	}
 }
@@ -388,7 +388,7 @@ func TestSetTextAutoBackToPage(t *testing.T) {
 		id := edtest.AddText(t, e, s1, page)
 		e.SetText(id, long, "")
 		b := edtest.Block(t, e, id)
-		maxW := model.TextMaxW(edtest.P(e).Settings)
+		maxW := edtest.P(e).TextMaxW(nil)
 		if b.W != maxW {
 			t.Fatalf("p%d: ширина %v, ждали %v", page, b.W, maxW)
 		}
@@ -411,8 +411,8 @@ func TestSetTextAutoPageFitTable(t *testing.T) {
 			id := edtest.AddText(t, e, s1, page)
 			e.SetText(id, long, "")
 			edtest.StyleAlign(t, e, id, align)
-			pw, maxW := edtest.P(e).Settings.PageW, model.TextMaxW(edtest.P(e).Settings)
-			l := float64(page)*pw + model.SafeMargin
+			pw, maxW := edtest.P(e).Settings.PageW, edtest.P(e).TextMaxW(nil)
+			l := float64(page)*pw + model.DefaultSafe
 			e.SetTextBox(id, l, 20, maxW-90)
 			e.SetTextAuto(id)
 			b := edtest.Block(t, e, id)
@@ -430,7 +430,7 @@ func TestSetTextStylePageFit(t *testing.T) {
 		id := edtest.AddText(t, e, s1, page)
 		e.SetText(id, "Привет, мир", "")
 		edtest.StyleAlign(t, e, id, "center")
-		l := float64(page)*edtest.P(e).Settings.PageW + model.SafeMargin
+		l := float64(page)*edtest.P(e).Settings.PageW + model.DefaultSafe
 		e.SetTextBox(id, l, 20, 30)
 		e.SetTextAuto(id)
 		st := edtest.Block(t, e, id).Style
@@ -471,7 +471,7 @@ func TestSetTextKeepsAnchorAtMargin(t *testing.T) {
 	e.SetText(id, "Привет, друг", "")
 	b = edtest.Block(t, e, id)
 	want := x0 + (w0-b.W)/2
-	if b.W <= w0 || math.Abs(b.X-want) > 0.02 || b.X >= model.SafeMargin {
+	if b.W <= w0 || math.Abs(b.X-want) > 0.02 || b.X >= model.DefaultSafe {
 		t.Fatalf("x %v, ждали %v у поля (w %v → %v)", b.X, want, w0, b.W)
 	}
 	// Левое выравнивание: x не меняется совсем.

@@ -3,10 +3,12 @@ package osx
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 func TestWebviewDataDir(t *testing.T) {
-	base := t.TempDir()
+	base := testkit.TempDir(t)
 	t.Setenv("LOCALAPPDATA", base)
 	if got, want := WebViewDir(), filepath.Join(base, "SosninaAlbums", "WebView2"); got != want {
 		t.Fatalf("WebViewDir() = %q, ждали %q", got, want)

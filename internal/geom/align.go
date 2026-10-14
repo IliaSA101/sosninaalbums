@@ -9,9 +9,30 @@ import (
 
 // Выравнивание и распределение рамок (спека 010, AlignItems): чистая геометрия.
 
-// Page — страница для опор page/spread: размеры и поле, мм (model.Settings:
-// PageW, PageH, Margin).
-type Page struct{ W, H, Margin float64 }
+// Sheet — лист для опор page/spread, мм (model.Geo): размер листа, поле и страницы.
+// Разворот — две страницы, обложка — сторонки, лист виньетки — одна.
+type Sheet struct {
+	W, H, Margin float64
+	Pages        []layout.Rect
+}
+
+// PageAt — номер страницы, где лежит x (правый край страницы — уже следующая); вне страниц
+// (корешок обложки, край листа) — ближайшая. Без страниц — 0.
+func (st Sheet) PageAt(x float64) int {
+	best, bd := 0, math.Inf(1)
+	for i, r := range st.Pages {
+		if x >= r.X && x < r.X+r.W {
+			return i
+		}
+		if d := math.Min(math.Abs(x-r.X), math.Abs(x-r.X-r.W)); d < bd {
+			best, bd = i, d
+		}
+	}
+	return best
+}
+
+// pageOf — страница листа, где центр рамки r.
+func (st Sheet) pageOf(r layout.Rect) int { return st.PageAt(r.X + r.W/2) }
 
 // Опоры (to) AlignItems.
 const (
@@ -22,22 +43,22 @@ const (
 
 // AlignShifts — сдвиги (dx, dy) рамок rects (снизу вверх по слоям): чистая геометрия.
 // over — распределение хотя бы в одной группе не поместилось без наложения.
-func AlignShifts(st Page, rects []layout.Rect, op, to string) (out [][2]float64, over bool) {
+func AlignShifts(st Sheet, rects []layout.Rect, op, to string) (out [][2]float64, over bool) {
 	out = make([][2]float64, len(rects))
 	horiz := op == "left" || op == "hcenter" || op == "right" || op == "distH"
 	whole := unionRect(rects)
 	if op == "distH" || op == "distV" {
 		// Опора page — у каждой страницы своё поле, как у выравнивания: объекты
-		// левой страницы распределяются в её поле, правой — в своём.
-		var left, right []int
+		// каждой страницы распределяются в её поле.
+		groups := make([][]int, max(len(st.Pages), 1))
 		for i, r := range rects {
-			if to == AlignPage && OnRight(st, r) {
-				right = append(right, i)
-			} else {
-				left = append(left, i)
+			k := 0
+			if to == AlignPage {
+				k = st.pageOf(r)
 			}
+			groups[k] = append(groups[k], i)
 		}
-		for _, g := range [][]int{left, right} {
+		for _, g := range groups {
 			if len(g) > 1 && distribute(out, rects, g, horiz, to, alignField(st, to, whole, rects[g[0]])) {
 				over = true
 			}
@@ -75,24 +96,21 @@ func axisOf(r layout.Rect, horiz bool) span {
 }
 
 // alignField — опора: выделение целиком (sel), поле страницы, где стоит центр
-// рамки at (правая — со сдвигом PageW), или поле разворота.
-func alignField(st Page, to string, whole, at layout.Rect) layout.Rect {
+// рамки at, или поле листа.
+func alignField(st Sheet, to string, whole, at layout.Rect) layout.Rect {
 	m := st.Margin
 	switch to {
 	case AlignSpread:
-		return layout.Rect{X: m, Y: m, W: 2*st.W - 2*m, H: st.H - 2*m}
+		return layout.Rect{X: m, Y: m, W: st.W - 2*m, H: st.H - 2*m}
 	case AlignPage:
-		x := m
-		if OnRight(st, at) {
-			x += st.W
+		pg := layout.Rect{W: st.W, H: st.H}
+		if len(st.Pages) > 0 {
+			pg = st.Pages[st.pageOf(at)]
 		}
-		return layout.Rect{X: x, Y: m, W: st.W - 2*m, H: st.H - 2*m}
+		return layout.Rect{X: pg.X + m, Y: pg.Y + m, W: pg.W - 2*m, H: pg.H - 2*m}
 	}
 	return whole
 }
-
-// OnRight — центр рамки на правой странице.
-func OnRight(st Page, r layout.Rect) bool { return r.X+r.W/2 >= st.W }
 
 // unionRect — описанный прямоугольник набора рамок.
 func unionRect(rs []layout.Rect) layout.Rect {

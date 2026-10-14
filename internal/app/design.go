@@ -137,10 +137,60 @@ func (a *App) SetCaption(photoID, text, session string) (v model.View) {
 	return a.changed(a.editor().SetCaption(photoID, text, session))
 }
 
-// SetCaptionStyle: over — подпись на фото у нижнего края, а не под ним.
-func (a *App) SetCaptionStyle(photoID string, st model.TextStyle, over bool) (v model.View) {
+// SetCaptionStyle: over — подпись на фото у нижнего края, а не под ним; pad — отступ от
+// фото, мм (0..20, шаг 0,1; на фото — от нижнего края).
+func (a *App) SetCaptionStyle(photoID string, st model.TextStyle, over bool, pad float64) (v model.View) {
 	defer a.guardEdit("SetCaptionStyle", &v, nil)
-	return a.changed(a.editor().SetCaptionStyle(photoID, st, over))
+	return a.changed(a.editor().SetCaptionStyle(photoID, st, over, pad))
+}
+
+// Поля подписей (спека 030): переменные альбома, имя на фото, список имён, стиль листа.
+
+// NamesResult — вид после вставки списка имён: Extra — лишних строк, Missing — фото листа
+// без имени (окно «Имена» показывает «строк лишних: N / фото без имени: M»).
+type NamesResult struct {
+	View    model.View `json:"view"`
+	Extra   int        `json:"extra"`
+	Missing int        `json:"missing"`
+}
+
+// SetPerson — имя на фото; все поля пусты — снова из имени файла. Одна session — один шаг.
+func (a *App) SetPerson(photoID string, p model.Person, session string) (v model.View) {
+	defer a.guardEdit("SetPerson", &v, nil)
+	return a.changed(a.editor().SetPerson(photoID, p, session))
+}
+
+// Person — имя фото для карточки: своё или из имени файла (fromFile). Фото ещё не в
+// альбоме — из имени файла ленты.
+func (a *App) Person(photoID string) model.PersonView {
+	defer guard("Person")
+	if pv, ok := a.editor().Person(photoID); ok {
+		return pv
+	}
+	a.mu.Lock()
+	ph, ok := a.byID[photoID]
+	a.mu.Unlock()
+	if !ok {
+		return model.PersonView{}
+	}
+	return model.NameView(model.PhotoRef{Path: ph.Path})
+}
+
+// PasteNames — окно «Имена»: строки «Фамилия Имя [Отчество]» по порядку фото листа
+// (firstFirst — «Имя Фамилия»), один шаг отмены. Список больше 1000 строк — ошибка.
+func (a *App) PasteNames(spreadID, text string, firstFirst bool) (r NamesResult, err error) {
+	defer a.guardEdit("PasteNames", &r.View, &err)
+	v, extra, missing, err := a.editor().PasteNames(spreadID, text, firstFirst)
+	r.View, err = a.changedOrErr(v, err)
+	r.Extra, r.Missing = extra, missing
+	return r, err
+}
+
+// SetSheetCaps — «Один стиль на лист»: on — стиль c у всех подписей листа (свои не
+// стираются), off — свои снова действуют. c.text — шаблон подписи к каждому фото.
+func (a *App) SetSheetCaps(spreadID string, on bool, c model.SheetCaps) (v model.View) {
+	defer a.guardEdit("SetSheetCaps", &v, nil)
+	return a.changed(a.editor().SetSheetCaps(spreadID, on, c))
 }
 
 // Фото на фоне разворота или страницы (спека 009, design-backdrop §5, §7).

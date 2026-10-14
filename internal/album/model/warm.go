@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // Раскладки разворотов независимы, а холодный перебор на 8–16 фото — десятки мс:
@@ -27,9 +28,9 @@ func SetParallelLayouts(on bool) { parallelLayouts = on }
 // maxWorkers — больше воркеров раскладке почти не помогает, а пик памяти растёт.
 const maxWorkers = 8
 
-// WarmLayouts прогревает ряд «в порядке ленты» (layout.Cached) у разворотов параллельно:
-// следующий за ним последовательный код попадает в кэш. Паника — только в лог:
-// тот же счёт повторится последовательно и поведёт себя как раньше.
+// WarmLayouts прогревает ряд «в порядке ленты» (layout.Cached) и «Другие варианты» (ExtraRow:
+// счётчик «i / N» в View) у разворотов параллельно: следующий за ним последовательный код попадает
+// в кэш. Паника — только в лог: тот же счёт повторится последовательно и поведёт себя как раньше.
 func (p *Project) WarmLayouts(spreads []*Spread) {
 	if !parallelLayouts {
 		return
@@ -38,7 +39,11 @@ func (p *Project) WarmLayouts(spreads []*Spread) {
 	var pl PanicLog
 	Each(len(spreads), func(i int) {
 		s := spreads[i]
-		pl.Safely(s.ID, func() { layout.Cached(p.Aspects(s.Photos), prm, VariantLimit) })
+		pl.Safely(s.ID, func() {
+			asp := p.Aspects(s.Photos)
+			layout.Cached(asp, prm, RowLen(len(s.Photos)))
+			ExtraRow(asp, prm)
+		})
 	})
 	pl.Summary()
 }
@@ -74,7 +79,7 @@ func (l *PanicLog) Safely(spreadID string, f func()) {
 	defer func() {
 		if r := recover(); r != nil {
 			if l.n.Add(1) == 1 {
-				log.Printf("ПАНИКА в раскладке разворота %s: %v\n%s", spreadID, r, debug.Stack())
+				log.Printf("ПАНИКА в раскладке разворота %s: %v\n%s", paths.LogQ(spreadID), r, debug.Stack())
 			}
 		}
 	}()

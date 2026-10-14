@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"weak"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -46,12 +47,22 @@ type App struct {
 	byID   map[string]library.Photo
 	warm   context.CancelFunc
 
-	// missing — ID фото альбома, чьих файлов нет на диске (см. refreshMissing); под mu, как и
-	// missGen — поколение пересчёта. missPending — сколько пересчётов в фоне (ждут тесты).
+	// missing — ID фото альбома, чьих файлов нет на диске (см. refreshMissing), по порядку; под mu,
+	// как и missGen — поколение полного пересчёта, и missRefs — ID → путь фото альбома, за которым
+	// следит missing. missPending — сколько пересчётов в фоне (ждут тесты).
+	// missSyncMu — снимок refs и его запись в missRefs одним куском (порядок: missSyncMu → emitMu → mu):
+	// снимок старше не ляжет поверх нового. missEd и missRev — последняя правка, которую видел
+	// syncMissing, под missSyncMu; редактор слабой ссылкой — не держит прежний альбом со стеком отмены.
 	missing     []string
 	missGen     int
 	missPending atomic.Int32
+	missRefs    map[string]string
+	missSyncMu  sync.Mutex
+	missEd      weak.Pointer[album.Editor]
+	missRev     int
 	exists      func(path string) bool // файл фото на месте; подменяется в тестах
+	// snapRefs — ID → путь фото редактора; подменяется в тестах (порядок снимков).
+	snapRefs func(ed *album.Editor) map[string]string
 
 	// Сканирование папок (см. rescan): поколение растёт с каждым запуском, отчёты устаревших
 	// поколений отбрасываются. scan и scanGen — под mu.
@@ -70,7 +81,7 @@ type App struct {
 	// альбом раньше загрузки проекта.
 	ready chan struct{}
 
-	tplMu sync.Mutex // шаблоны сеток и templates.json (templates.go, internal/prefs)
+	tplMu sync.Mutex // шаблоны сеток и templates.json (grid.go, internal/prefs)
 	tpls  prefs.Templates
 
 	// draftLocked — черновик не удалось убрать в .bad: писать в него нельзя, иначе затрём.
@@ -115,11 +126,14 @@ type State struct {
 	// Prefs — уровень интерфейса и стартовое окно (config.json); Recent — последние альбомы.
 	Prefs  prefs.Prefs           `json:"prefs"`
 	Recent []prefs.RecentProject `json:"recent"`
+	// Cancelled — пользователь закрыл нативный диалог, проект прежний. Сравнение path+rev
+	// на фронте отмену не отличит: удачное открытие шлёт `view` раньше ответа метода.
+	Cancelled bool `json:"cancelled,omitempty"`
 }
 
 func NewApp() *App {
 	a := &App{byID: map[string]library.Photo{}, rename: os.Rename, scanner: library.NewScanner(),
-		ready: make(chan struct{}), exists: fileExists}
+		ready: make(chan struct{}), exists: fileExists, snapRefs: editorPaths}
 	a.stopCtx, a.stopCancel = context.WithCancel(context.Background())
 	a.emit = func(name string, data ...any) {
 		if a.ctx != nil {
@@ -159,6 +173,7 @@ func (a *App) startup(ctx context.Context) {
 	// Открываем последний проект, а если его нет — черновик.
 	path, notice := a.startEditor(a.loadStartup(a.loadConfig().LastProject))
 	a.rememberRecent(path)
+	notice = joinLaunchNotice(notice, launchPlace())
 	a.mu.Lock()
 	a.startNotice = notice
 	a.mu.Unlock()
@@ -177,6 +192,29 @@ func (a *App) startup(ctx context.Context) {
 		}
 		a.rescan()
 	})
+}
+
+// launchPlace — где лежит запущенный exe; ошибка os.Executable — молча «обычное место».
+func launchPlace() osx.Place {
+	exe, err := os.Executable()
+	if err != nil {
+		return osx.PlaceNormal
+	}
+	return osx.LaunchPlace(exe, os.TempDir())
+}
+
+// joinLaunchNotice дописывает к тосту старта подсказку о месте запуска (через пустую строку,
+// если текст уже есть) и пишет её в log.txt; для обычного места возвращает notice как есть.
+func joinLaunchNotice(notice string, place osx.Place) string {
+	extra := place.Notice()
+	if extra == "" {
+		return notice
+	}
+	log.Printf("запуск не из установленного места: %s", place)
+	if notice == "" {
+		return extra
+	}
+	return notice + "\n\n" + extra
 }
 
 func (a *App) shutdown(ctx context.Context) {

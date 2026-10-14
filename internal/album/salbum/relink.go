@@ -56,6 +56,7 @@ func RelinkDrive(p *model.Project, from, to string) (files, dirs []model.PathPai
 		}
 	}
 	p.Folders = uniquePaths(p.Folders)
+	relinkGuide(p, from, to)
 	return files, dirs
 }
 
@@ -67,7 +68,7 @@ func relink(p *model.Project, moves map[string]string) []model.PathPair {
 		used[strings.ToLower(filepath.Clean(r.Path))] = id
 	}
 	placed := map[string]bool{}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		for _, id := range s.Photos {
 			placed[id] = true
 		}

@@ -3,6 +3,8 @@
   import { store } from '../../base/core/store.svelte'
   import { placesel } from './placesel.svelte'
   import { edit } from '../text/edit.svelte'
+  import { nameEdit } from '../captions/nameedit.svelte'
+  import { captionBottom } from '../captions/nametarget'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { tip, tipped } from '../../base/ui/tip.svelte'
@@ -11,7 +13,7 @@
   import LayerMenu from './LayerMenu.svelte'
 
   // Мини-панель выделенного (спека 009, gestures.md «Мини-панель»): полоса значков с подсказками,
-  // вместо текстовой полоски 0.3.0. Состав — places/minipanel.ts. Стоит под рамкой, иначе над ней,
+  // вместо текстовой полоски 0.3.0. Состав — places/minipanel.ts. Стоит под рамкой (и под её подписью, 037), иначе над ней,
   // иначе внутри у верхнего края. box — рамка всего выделенного (у группы описанная).
   // avoid — центр ⟳ (px): полоса его не закрывает.
   let {
@@ -27,7 +29,7 @@
   const photo = $derived(placesel.selected.find((i) => i.photo)?.photo ?? '')
 
   let w = $state(0) // ширина полосы, px (замер)
-  const place = $derived(miniPlace(box, ppm, width, height, w, avoid))
+  const place = $derived(miniPlace(box, ppm, width, height, w, avoid, captionBottom(spread, placesel.selected)))
 
   const stop = (e: Event) => e.stopPropagation()
 
@@ -51,6 +53,8 @@
         return placesel.arrange('same')
       case 'caption':
         return edit.editCaption(photo)
+      case 'name':
+        return nameEdit.openFor(spread, photo)
       case 'delete':
         return placesel.deleteSelected()
       case 'swap':
@@ -81,6 +85,7 @@
   role="toolbar"
   tabindex="-1"
   aria-label="Действия с выделенным"
+  data-guide="mini-panel"
   data-chrome
   data-text-ui
   onpointerdown={stop}

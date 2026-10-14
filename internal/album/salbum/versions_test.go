@@ -3,6 +3,8 @@ package salbum_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +14,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -69,6 +72,154 @@ func TestLoadV3AsV4(t *testing.T) {
 	}
 	if !bytes.Equal(before, model.Marshal(q)) {
 		t.Fatalf("потери при v3 → текущая:\n%s\n%s", before, model.Marshal(q))
+	}
+}
+
+// Golden v5 (testdata/v5.salbum.json: fade, отметки, два текста) открывается как текущая версия (026: v6, 038: v7):
+// меняется только номер; первая запись делает .v5.bak с байтами исходника и пишет FormatVersion.
+func TestMigrateV5ToV6(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "v5.salbum.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(testkit.TempDir(t), "a.salbum")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := salbum.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Version != model.FormatVersion || edtest.From(p) != 5 || len(p.Spreads[0].Texts) != 2 || p.Spreads[0].BgPhotoR == nil || p.Spreads[0].BgPhotoR.Fade != 0.35 {
+		t.Fatalf("версия %d, from %d, разворот %+v", p.Version, edtest.From(p), p.Spreads[0])
+	}
+	e := edtest.Open(t, p, path)
+	if !edtest.Backup(e) || len(e.Marks()) != 2 {
+		t.Fatalf("бэкап %v, отметок %d", edtest.Backup(e), len(e.Marks()))
+	}
+	before := model.Marshal(p)
+	if err := e.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if bak, err := os.ReadFile(path + ".v5.bak"); err != nil || !bytes.Equal(bak, data) {
+		t.Fatalf(".v5.bak: %v, совпадает с исходником: %v", err, bytes.Equal(bak, data))
+	}
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || len(f.Marks) != 2 {
+		t.Fatalf("в файле версия %d, отметок %d", f.Version, len(f.Marks))
+	}
+	q, err := salbum.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, model.Marshal(q)) || edtest.From(q) != model.FormatVersion {
+		t.Fatalf("потери при v5 → v6:\n%s\n%s", before, model.Marshal(q))
+	}
+}
+
+// tieFile — файл версии v: по развороту «Авто» (Layout "") на каждый набор размеров фото.
+func tieFile(t *testing.T, dir string, v int, sets [][][2]int) []byte {
+	t.Helper()
+	f := salbum.FileProject{Version: v, Settings: model.DefaultSettings(), Folders: []salbum.FileFolder{},
+		Photos: map[string]salbum.FilePhoto{}}
+	for si, set := range sets {
+		s := &model.Spread{ID: fmt.Sprintf("5e1f0a2b%04d", si)}
+		for i, wh := range set {
+			path := filepath.Join(dir, fmt.Sprintf("s%d-%d.jpg", si, i))
+			id := library.IDFor(path)
+			f.Photos[id] = salbum.FilePhoto{PhotoRef: model.PhotoRef{Path: path, W: wh[0], H: wh[1]}}
+			s.Photos = append(s.Photos, id)
+		}
+		f.Spreads = append(f.Spreads, s)
+	}
+	data, err := json.Marshal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+// tieCase — первый набор фото (горизонтальные, вертикальные, квадраты), где прежний порядок
+// ничьих (LegacyLayouts) выбирает другую лучшую раскладку, чем нынешний, и оба ключа.
+func tieCase(t *testing.T, prm layout.Params) (set [][2]int, legacy, now string) {
+	t.Helper()
+	kinds := [][2]int{{300, 200}, {200, 300}, {200, 200}}
+	for n := 2; n <= 6; n++ {
+		for code := range int(math.Pow(3, float64(n))) {
+			set = set[:0]
+			asp := make([]float64, n)
+			for i, c := 0, code; i < n; i, c = i+1, c/3 {
+				wh := kinds[c%3]
+				set = append(set, wh)
+				asp[i] = float64(wh[0]) / float64(wh[1])
+			}
+			a, b := layout.LegacyLayouts(asp, prm, model.VariantLimit), layout.Layouts(asp, prm, model.VariantLimit)
+			if a[0].Key != b[0].Key {
+				return set, a[0].Key, b[0].Key
+			}
+		}
+	}
+	t.Fatal("нет набора, где прежний порядок ничьих выбирает другую раскладку")
+	return nil, "", ""
+}
+
+// Альбом до 0.10 (v5): у «Авто» с Layout "" Load записывает ключ раскладки, которую выбирал
+// прежний порядок ничьих (решение 95), если он отличается от нынешней лучшей; где совпадает —
+// остаётся "". Файл v6 не мигрирует. Save → Load ничего не меняет.
+func TestLoadV5KeepsTieLayout(t *testing.T) {
+	dir := testkit.TempDir(t)
+	prm := edtest.MustDecode(t, tieFile(t, dir, 5, nil), dir).Params()
+	set, legacy, now := tieCase(t, prm)
+	same := [][2]int{{300, 200}}
+	path := filepath.Join(dir, "a.salbum")
+	if err := os.WriteFile(path, tieFile(t, dir, 5, [][][2]int{set, same}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := salbum.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Spreads[0].Layout; got != legacy {
+		t.Fatalf("v5: Layout %q, ждали прежний %q (нынешний %q)", got, legacy, now)
+	}
+	if r, _, ok := p.Layout(p.Spreads[0]); !ok || r.Key != legacy {
+		t.Fatalf("v5: действует %q, ждали %q", r.Key, legacy)
+	}
+	if got := p.Spreads[1].Layout; got != "" {
+		t.Fatalf("v5 без ничьей: Layout %q, ждали \"\"", got)
+	}
+	if q := edtest.MustDecode(t, tieFile(t, dir, 6, [][][2]int{set}), dir); q.Spreads[0].Layout != "" {
+		t.Fatalf("v6 мигрировал: Layout %q", q.Spreads[0].Layout)
+	}
+	e := edtest.Open(t, p, path)
+	before := model.Marshal(p)
+	if err := e.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	q, err := salbum.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, model.Marshal(q)) || edtest.From(q) != model.FormatVersion || q.Spreads[0].Layout != legacy {
+		t.Fatalf("Save → Load изменил альбом: Layout %q\n%s\n%s", q.Spreads[0].Layout, before, model.Marshal(q))
+	}
+}
+
+// «Авто» с "variant": -1 в файле v4 и v5 открывается (номер зажимается к первому варианту ряда),
+// а не падает на индексе ряда; прежний выбор при ничьей тот же, что у variant 0.
+func TestLoadNegativeVariant(t *testing.T) {
+	dir := testkit.TempDir(t)
+	prm := edtest.MustDecode(t, tieFile(t, dir, 5, nil), dir).Params()
+	set, legacy, _ := tieCase(t, prm)
+	for _, v := range []int{4, 5} {
+		data := tieFile(t, dir, v, [][][2]int{set})
+		data = bytes.Replace(data, []byte(`"id":"5e1f0a2b0000"`), []byte(`"id":"5e1f0a2b0000","variant":-1`), 1)
+		if !bytes.Contains(data, []byte(`"variant":-1`)) {
+			t.Fatal("variant -1 не попал в файл")
+		}
+		p := edtest.MustDecode(t, data, dir)
+		if got := p.Spreads[0].Layout; got != legacy || p.Spreads[0].Variant != 0 {
+			t.Fatalf("v%d: Layout %q, variant %d, ждали %q и 0", v, got, p.Spreads[0].Variant, legacy)
+		}
 	}
 }
 
@@ -276,7 +427,7 @@ func TestSaveLoadV3Names(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != model.FormatVersion || model.FormatVersion != 5 {
+	if p.Version != model.FormatVersion || model.FormatVersion != 7 {
 		t.Fatalf("версия %d", p.Version)
 	}
 	ta, tb := *edtest.P(e).Spreads[0].Texts[0], *edtest.P(e).Spreads[0].Texts[1]
@@ -325,5 +476,67 @@ func TestLoadOrderRepair(t *testing.T) {
 	}
 	if q := edtest.MustDecode(t, again, dir); !bytes.Equal(model.Marshal(p), model.Marshal(q)) {
 		t.Fatalf("второй круг:\n%s\n%s", model.Marshal(p), model.Marshal(q))
+	}
+}
+
+// Безопасная зона (028 А) — в v6 без нового номера: файл без поля (v5 и ранние v6)
+// открывается с 8 благодаря заполнению DefaultSettings() до разбора; 12 и 0 («без зоны»)
+// переживают запись и чтение.
+func TestLoadSafeDefault(t *testing.T) {
+	if model.FormatVersion != 7 {
+		t.Fatalf("FormatVersion %d: безопасная зона — с v6 (decisions 0.10, запись 2), v7 — vig.own (038)", model.FormatVersion)
+	}
+	data, err := os.ReadFile(filepath.Join("testdata", "v5.salbum.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v6 := bytes.Replace(data, []byte(`"version": 5`), []byte(`"version": 6`), 1)
+	if bytes.Contains(data, []byte(`"safe"`)) || bytes.Equal(v6, data) {
+		t.Fatal("голден v5: есть safe или нет номера версии")
+	}
+	dir := testkit.TempDir(t)
+	for name, raw := range map[string][]byte{"v5": data, "v6 без safe": v6} {
+		if p := edtest.MustDecode(t, raw, dir); p.Settings.Safe != model.DefaultSafe || p.Settings.PageW != 281 {
+			t.Fatalf("%s: safe %v, pageW %v", name, p.Settings.Safe, p.Settings.PageW)
+		}
+	}
+	path := filepath.Join(dir, "safe.salbum")
+	for _, safe := range []float64{12, 0} {
+		e := edtest.Open(t, edtest.MustDecode(t, v6, dir), "")
+		st := e.View().Settings
+		st.Safe = safe
+		e.SetSettings(st)
+		if err := e.Save(path); err != nil {
+			t.Fatal(err)
+		}
+		if raw, err := os.ReadFile(path); err != nil || !bytes.Contains(raw, []byte(`"safe"`)) {
+			t.Fatalf("safe %v не записан в файл: %v", safe, err)
+		}
+		q, err := salbum.Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if q.Settings.Safe != safe || q.Version != model.FormatVersion {
+			t.Fatalf("после круга safe %v (ждали %v), версия %d", q.Settings.Safe, safe, q.Version)
+		}
+	}
+}
+
+// Миграция v5 при последовательном счёте раскладок (без параллели) даёт те же ключи,
+// что и параллельная: ветка migRows без model.Each.
+func TestLoadV5KeepsTieLayoutSequential(t *testing.T) {
+	dir := testkit.TempDir(t)
+	prm := edtest.MustDecode(t, tieFile(t, dir, 5, nil), dir).Params()
+	set, legacy, _ := tieCase(t, prm)
+	data := tieFile(t, dir, 5, [][][2]int{set, {{300, 200}}})
+	par := edtest.MustDecode(t, data, dir)
+	model.SetParallelLayouts(false)
+	t.Cleanup(func() { model.SetParallelLayouts(true) })
+	seq := edtest.MustDecode(t, data, dir)
+	if got := seq.Spreads[0].Layout; got != legacy || seq.Spreads[1].Layout != "" {
+		t.Fatalf("последовательно: Layout %q и %q, ждали %q и \"\"", got, seq.Spreads[1].Layout, legacy)
+	}
+	if !bytes.Equal(model.Marshal(par), model.Marshal(seq)) {
+		t.Fatalf("параллельно и последовательно разные результаты:\n%s\n%s", model.Marshal(par), model.Marshal(seq))
 	}
 }

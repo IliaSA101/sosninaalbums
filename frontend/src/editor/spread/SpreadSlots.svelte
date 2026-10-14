@@ -4,46 +4,66 @@
   import { store } from '../../base/core/store.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { modes } from '../../base/prefs/view.svelte'
+  import { prefs } from '../../base/prefs/prefs.svelte'
+  import { addVignette } from '../../panels/vignette/vigact'
   import { row } from './spreadrow.svelte'
-  import { pitch, renderRange } from './spreadrow'
+  import { AUTO_LABEL, emptyCanvas } from './emptycanvas'
+  import { centerAt, pitch, renderRange, slotBox, type SlotBox } from './spreadrow'
   import { labelTitle } from '../../panels/timeline/spreadname'
+  import { COVER_ID, unitOf, type SheetSize } from '../../base/geom/sheet'
   import type { Settings } from '../../base/core/types'
 
-  type Box = { left: number; top: number; width: number; height: number }
+  type Box = SlotBox
 
   // Содержимое окна холста: слоты ряда (развороты и «новый»), пустой альбом. fit — вписанный разворот
-  // (px окна), place — действующий (в зуме отличается), width/spreadW — ширина рисунка соседа/текущего.
+  // (px окна, текущий лист), place — действующий (в зуме отличается), k — px на мм, общий для всего ряда,
+  // base — размер обычного разворота (слот «новый»), centers — центры слотов (зазор GAP между краями любых листов), spreadW — ширина рисунка текущего.
   let {
     settings,
-    width,
+    k,
+    base,
+    centers,
     spreadW,
     w,
-    aspect,
     fit,
     place,
     zoomed,
     onhover,
   }: {
     settings: Settings
-    width: number
+    k: number
+    base: SheetSize
+    centers: number[]
     spreadW: number
     w: number
-    aspect: number
     fit: Box
     place: Box
     zoomed: boolean
     onhover: (on: boolean) => void
   } = $props()
 
-  const spreads = $derived(store.view.spreads)
-  const n = $derived(spreads.length)
-  const cur = $derived(store.current)
-  const P = $derived(pitch(fit.width))
-  const range = $derived(renderRange(row.pos, n, row.max, w, fit.width, P, zoomed, cur))
+  // Листы ряда (032): [обложка?] + развороты. «Новый» разворот встаёт после последнего — его индекс в альбоме
+  // (data-at) считается без обложки.
+  const sheets = $derived(store.sheets)
+  const n = $derived(sheets.length)
+  const lead = $derived(store.lead)
+  const spreadsN = $derived(store.view.spreads.length)
+  const unit = $derived(unitOf(settings))
+  const cur = $derived(store.sheetIndex)
+  const rowW = $derived(k * base.w)
+  const P = $derived(pitch(rowW))
+  const range = $derived(renderRange(row.pos, n, row.max, w, rowW, P, zoomed, cur))
   // Ряд едет transform'ом (композитор); в покое transform нет — у position: fixed внутри нет лишнего контейнера.
-  const shift = $derived(!zoomed && row.pos !== cur ? `translate3d(${(cur - row.pos) * P}px, 0, 0)` : undefined)
-  // Слот i: от текущего на шаг P; в зуме текущий стоит по placement.
-  const box = (i: number): Box => (zoomed ? place : { ...fit, left: fit.left + (i - cur) * P })
+  const shift = $derived(
+    !zoomed && row.pos !== cur ? `translate3d(${centerAt(centers, cur) - centerAt(centers, row.pos)}px, 0, 0)` : undefined,
+  )
+  // Слот i: от текущего по центрам слотов, размер листа в общем масштабе; в зуме текущий стоит по placement.
+  const box = (i: number, size: { w: number; h: number }): Box => (zoomed ? place : slotBox(fit, i, cur, centers, k, size))
+  // Подсказка и главная кнопка пустого альбома (U2).
+  const empty = $derived(emptyCanvas(modes.big, store.photos.length))
+  // Слот «новый» соседом справа уходит под плавающую карточку (запас ряда = её зона): виден лишь левый край,
+  // текст по центру обрезался бы — там только «+» у ближнего края, полный текст — когда ряд стоит на слоте.
+  const peek = $derived(!row.atNew && !modes.details && prefs.can('panels'))
 </script>
 
 {#if n === 0}
@@ -52,21 +72,38 @@
     class:over={drag.over === 'new:0'}
     style:left="{fit.left}px"
     style:top="{fit.top}px"
-    style:width="{width}px"
-    style:height="{width / aspect}px"
+    style:width="{rowW}px"
+    style:height="{k * base.h}px"
     data-drop="new"
     data-at="0"
   >
     {#if store.loaded}
       <div>
         <div class="big">Альбом пуст</div>
-        {#if modes.big}
-          Выключите крупный просмотр (F), чтобы добавить фото
-        {:else if store.photos.length}
-          Выделите фото в ленте и перетащите сюда<br />или нажмите «Автосборка»
-        {:else}
-          Сначала добавьте папку с фотографиями (кнопка внизу)<br />или перетащите папку в окно
-        {/if}
+        {#each empty.hint as line, i (i)}
+          {#if i > 0}<br />{/if}{line}
+        {/each}
+        <!-- С фото главное — автосборка, пустой разворот и виньетка ссылками; без фото первый разворот одним
+             щелчком, как слот «новый» в ряду (бросок фото на рамку тоже создаёт его) -->
+        <div class="mk">
+          {#if empty.primary === 'auto'}
+            <button type="button" class="first-add" title="Собрать альбом из фото ленты" onclick={() => store.openAuto()}
+              >{AUTO_LABEL}</button
+            >
+            <button type="button" class="first-vig" title="Новый пустой {unit.one}" onclick={(e) => e.detail < 2 && store.addEmptySpread(0)}
+              >или пустой {unit.one}</button
+            >
+          {:else}
+            <button type="button" class="first-add" title="Новый пустой {unit.one}" onclick={(e) => e.detail < 2 && store.addEmptySpread(0)}
+              >+ {unit.new}</button
+            >
+          {/if}
+          {#if prefs.can('vignette')}
+            <button type="button" class="first-vig" title="Лист с учителями и учениками" onclick={() => addVignette(0)}
+              >или новая виньетка</button
+            >
+          {/if}
+        </div>
       </div>
     {/if}
   </div>
@@ -74,9 +111,9 @@
   <div class="row" class:moving={row.moving} style:transform={shift}>
     <!-- Ключ — id разворота: один и тот же экземпляр Spread у слота при смене текущего (mini ↔ полный), без
          перемонтирования и мерцания. Не заменять на {#if i === cur} с двумя компонентами или ключ по cur. -->
-    {#each range as i (spreads[i]?.id ?? 'new')}
-      {@const sp = spreads[i]}
-      {@const b = box(i)}
+    {#each range as i (sheets[i]?.id ?? 'new')}
+      {@const sp = sheets[i]}
+      {@const b = box(i, sp ?? base)}
       {#if sp}
         {@const isCur = i === cur}
         <div
@@ -90,18 +127,18 @@
           onmouseenter={isCur ? () => onhover(true) : undefined}
           onmouseleave={isCur ? () => onhover(false) : undefined}
         >
-          <Spread spread={sp} {settings} width={isCur ? spreadW : width} mini={!isCur} peer={!isCur} />
+          <Spread spread={sp} {settings} width={isCur ? spreadW : k * sp.w} mini={!isCur} peer={!isCur} />
           {#if !isCur}
             <!-- Слой соседа: щелчок, перетаскивание ряда и бросок фото «на весь разворот» -->
             <div
               class="peer"
               class:over={drag.over === `spread:${sp.id}`}
               data-peer
-              data-drop="spread"
+              data-drop={sp.id === COVER_ID ? undefined : 'spread'}
               data-spread={sp.id}
-              data-index={i}
+              data-index={i - lead}
               role="presentation"
-              title={labelTitle(i, sp.name) ?? `Разворот ${i + 1}`}
+              title={sp.id === COVER_ID ? 'Обложка' : (labelTitle(i - lead, sp.name) ?? `${unit.cap} ${i - lead + 1}`)}
               onclick={() => drag.clickAllowed() && row.to(i)}
             ></div>
           {/if}
@@ -111,16 +148,17 @@
           <button
             type="button"
             class="new"
-            class:over={drag.over === `new:${n}`}
+            class:peek
+            class:over={drag.over === `new:${spreadsN}`}
             data-drop="new"
-            data-at={n}
-            title="Щёлкните — новый пустой разворот; или перетащите сюда фото"
-            onclick={(e) => e.detail < 2 && drag.clickAllowed() && store.addEmptySpread(n)}
+            data-at={spreadsN}
+            title="Щёлкните — новый пустой {unit.one}; или перетащите сюда фото"
+            onclick={(e) => e.detail < 2 && drag.clickAllowed() && store.addEmptySpread(spreadsN)}
           >
-            {#if modes.big}
+            {#if modes.big || peek}
               <Icon name="plus" size={24} />
             {:else}
-              <span>+ Новый разворот<br />перетащите фото сюда</span>
+              <span>+ {unit.new}<br />перетащите фото сюда</span>
             {/if}
           </button>
         </div>
@@ -177,6 +215,10 @@
       border-color 0.15s,
       background 0.15s;
   }
+  .new.peek {
+    justify-content: flex-start;
+    padding-left: 14px;
+  }
   .new.over,
   .first.over {
     border-color: var(--accent);
@@ -191,6 +233,32 @@
     text-align: center;
     color: #9a9aa0;
     line-height: 1.6;
+  }
+  .mk {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+  }
+  .first-add {
+    height: 32px;
+    padding: 0 18px;
+    font-size: 14px;
+  }
+  .first-vig {
+    all: unset;
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .first-vig:hover {
+    color: var(--text);
+  }
+  .first-vig:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .big {
     font-size: 22px;

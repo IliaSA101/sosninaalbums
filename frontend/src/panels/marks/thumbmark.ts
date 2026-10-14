@@ -26,7 +26,7 @@ export function markTitle(name: string, m: Mark): string {
   if (m.rating > 0) parts.push(stars(m.rating))
   const label = labelText(m)
   if (label) parts.push(`метка: ${label}`)
-  if (m.flag !== 0) parts.push(FLAG_NAME[m.flag])
+  if (m.flag !== 0) parts.push(m.flag === -1 ? `${FLAG_NAME[-1]} (снять: выделите и нажмите U)` : FLAG_NAME[m.flag])
   if (m.lr) {
     const d: string[] = []
     if (m.lr.rating !== m.rating) d.push(m.lr.rating > 0 ? stars(m.lr.rating) : 'без оценки')

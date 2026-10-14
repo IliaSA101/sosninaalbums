@@ -7,13 +7,14 @@ export interface Preset {
   h: number
   dpi?: number
   layflat?: boolean
+  safe?: number
   hint?: string
 }
 
 export const FSFERA_HINT = 'Как требует fsfera.ru: 6638×3354 px, sRGB, файлы 01.jpg…; важное — не ближе 8 мм к краю'
 
 export const presets: Preset[] = [
-  { label: 'Фотосфера 30×30', w: 281, h: 284, dpi: 300, layflat: true, hint: FSFERA_HINT },
+  { label: 'Фотосфера 30×30', w: 281, h: 284, dpi: 300, layflat: true, safe: 8, hint: FSFERA_HINT },
   { label: '30×30 (квадрат)', w: 300, h: 300 },
   { label: '25×25', w: 250, h: 250 },
   { label: '20×20', w: 200, h: 200 },
@@ -25,13 +26,14 @@ export const presets: Preset[] = [
 // Та же формула, что px() в internal/export.
 export const exportPx = (mm: number, dpi: number) => Math.round((mm / 25.4) * dpi)
 
-type Form = Pick<Settings, 'pageW' | 'pageH' | 'dpi' | 'layflat'>
+type Form = Pick<Settings, 'pageW' | 'pageH' | 'dpi' | 'layflat' | 'safe'>
 
 // Пресет подсвечен, когда совпадают все заданные в нём поля.
 export function presetActive(p: Preset, s: Form): boolean {
   if (+s.pageW !== p.w || +s.pageH !== p.h) return false
   if (p.dpi !== undefined && +s.dpi !== p.dpi) return false
   if (p.layflat !== undefined && !!s.layflat !== p.layflat) return false
+  if (p.safe !== undefined && +s.safe !== p.safe) return false
   return true
 }
 
@@ -40,5 +42,6 @@ export function presetFields(p: Preset): Partial<Settings> {
   const f: Partial<Settings> = { pageW: p.w, pageH: p.h }
   if (p.dpi !== undefined) f.dpi = p.dpi
   if (p.layflat !== undefined) f.layflat = p.layflat
+  if (p.safe !== undefined) f.safe = p.safe
   return f
 }

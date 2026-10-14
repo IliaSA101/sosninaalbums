@@ -52,6 +52,7 @@
 {#if rotate}
   <div
     class="rot"
+    data-guide="text-rotate"
     title="Повернуть (Shift — шаг 15°)"
     data-text-ui
     role="presentation"

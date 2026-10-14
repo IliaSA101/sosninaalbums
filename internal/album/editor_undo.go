@@ -6,6 +6,7 @@ package album
 import (
 	"slices"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 )
 
@@ -118,4 +119,38 @@ func (e *Editor) swap(s Snap, back bool) Snap {
 		e.setMarks(s.Marks, back)
 	}
 	return r
+}
+
+// SyncOwnNames — имена своих шаблонов виньетки на листах (Vig.Own.Name) по файлу шаблонов tpls,
+// в проекте и во всех снимках отмены и возврата, без шага отмены. Имя шаблона — не правка
+// альбома (переименование отмены не имеет); иначе Ctrl+Z после «Применить» возвращал листу
+// старое имя, и оно всплывало, когда шаблон удаляли (QA 038). changed — проект изменился
+// (rev, dirty): вызывающий рассылает вид.
+func (e *Editor) SyncOwnNames(tpls []model.Template) (v model.View, changed bool) {
+	names := grid.OwnNames(tpls)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(names) == 0 {
+		return e.view(), false
+	}
+	if n, grow := grid.RenameOwn(e.p, names); n > 0 {
+		e.size += grow
+		e.dirty = true
+		e.rev++
+		changed = true
+	}
+	for i := range e.undo {
+		if e.undo[i].P != nil {
+			_, grow := grid.RenameOwn(e.undo[i].P, names)
+			e.undo[i].N += grow
+			e.undoBytes += grow
+		}
+	}
+	for i := range e.redo {
+		if e.redo[i].P != nil {
+			_, grow := grid.RenameOwn(e.redo[i].P, names)
+			e.redo[i].N += grow
+		}
+	}
+	return e.view(), changed
 }

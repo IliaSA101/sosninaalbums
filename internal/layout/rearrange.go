@@ -189,15 +189,19 @@ func rearranged(aspects []float64, p Params, limit int) ([]Result, Block, *permS
 	run := newPermRun(ps, p, cls, len(rep))
 
 	// Порядок важен для бюджета: сначала страницы, потом блок на весь разворот.
-	subs := leftSets(run.cnt)
-	run.full = run.searchPages(subs)
-	all := run.paged(subs)
+	// У листа 031 страниц нет: только блок на весь лист.
+	var all []Result
+	if !p.Sheet {
+		subs := leftSets(run.cnt)
+		run.full = run.searchPages(subs)
+		all = run.paged(subs)
+	}
 	if p.Layflat && n <= maxPermSpread {
 		all = append(all, run.spread()...)
 	}
 
 	// В край: два фото разных пропорций меняются страницами.
-	if n == 2 {
+	if n == 2 && !p.Sheet {
 		g := ps.g
 		all = appendBleed(all, aspects, []Rect{g.bleed[1], g.bleed[0]}, g, "B[pages:1,0]")
 	}
@@ -293,7 +297,7 @@ func (r *permRun) pageTop(m []int, picks [][]int) []pageBlock {
 		seq[i] = r.cls[id]
 	}
 	acc := append(slices.Clone(r.full[seqKey(m)]), r.ps.top(seq)...)
-	slices.SortStableFunc(acc, func(a, b pageBlock) int { return desc(a.score, b.score) })
+	slices.SortStableFunc(acc, func(a, b pageBlock) int { return desc(tieQ(a.score), tieQ(b.score)) })
 	var out []pageBlock
 	seen := map[string]bool{}
 	for _, b := range acc {
@@ -430,7 +434,7 @@ func finish(all, base []Result, aspects []float64, p Params, limit int, by func(
 		}
 		inv := inversions(r.Key)
 		if i, ok := byShape[sh]; ok {
-			if inv < picks[i].inv || inv == picks[i].inv && by(r) > by(picks[i].r) {
+			if inv < picks[i].inv || inv == picks[i].inv && tieQ(by(r)) > tieQ(by(picks[i].r)) {
 				picks[i] = pick{r, inv}
 			}
 			continue
@@ -448,7 +452,13 @@ func finish(all, base []Result, aspects []float64, p Params, limit int, by func(
 			out = append(out, r)
 		}
 	}
-	slices.SortStableFunc(out, func(a, b Result) int { return desc(by(a), by(b)) })
+	// Ничьи (tieQ) — по ключу: последние биты оценки зависят от архитектуры (решение 95).
+	slices.SortStableFunc(out, func(a, b Result) int {
+		if c := desc(tieQ(by(a)), tieQ(by(b))); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Key, b.Key)
+	})
 	if len(out) > limit {
 		out = out[:limit]
 	}

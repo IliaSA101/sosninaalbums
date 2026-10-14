@@ -1,6 +1,14 @@
 package app
 
 import (
+	"bytes"
+	"cmp"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,8 +17,10 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
+	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func TestPrefsCustomRoundTrip(t *testing.T) {
@@ -235,6 +245,65 @@ func TestOpenRecentOnlyListed(t *testing.T) {
 	}
 }
 
+// «Открыть»: отмена диалога — Cancelled и прежний проект; сбой диалога и удачное
+// открытие — без Cancelled (фронт по нему не отличит отмену от открытия сравнением вида).
+func TestOpenProjectCancelled(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	a.emit = func(string, ...any) {}
+	dir := testkit.TempDir(t)
+	first, second := filepath.Join(dir, "a"+projectExt), filepath.Join(dir, "b"+projectExt)
+	for _, p := range []string{first, second} {
+		if err := salbum.Save(model.New(), p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := openFileDialog
+	t.Cleanup(func() { openFileDialog = old })
+	pick, fail := "", error(nil)
+	openFileDialog = func(context.Context, wr.OpenDialogOptions) (string, error) { return pick, fail }
+
+	before := a.editor()
+	st, err := a.OpenProject()
+	if err != nil || !st.Cancelled || a.editor() != before {
+		t.Fatalf("отмена на пустом: err %v, cancelled %v", err, st.Cancelled)
+	}
+	if b, _ := json.Marshal(st); !strings.Contains(string(b), `"cancelled":true`) {
+		t.Fatalf("в JSON нет cancelled: %s", b)
+	}
+	// Открываем два альбома подряд: каждый раз без признака отмены.
+	for _, p := range []string{first, second} {
+		pick = p
+		st, err = a.OpenProject()
+		if err != nil || st.Cancelled || !strings.EqualFold(st.View.Path, p) {
+			t.Fatalf("открытие %s: err %v, cancelled %v, path %q", filepath.Base(p), err, st.Cancelled, st.View.Path)
+		}
+		if b, _ := json.Marshal(st); strings.Contains(string(b), "cancelled") {
+			t.Fatalf("cancelled в JSON удачного открытия: %s", b)
+		}
+	}
+	// Отмена после открытия: тот же альбом и тот же rev, признак есть.
+	opened, rev := a.editor(), st.View.Rev
+	pick = ""
+	if st, err = a.OpenProject(); err != nil || !st.Cancelled || a.editor() != opened || st.View.Rev != rev ||
+		!strings.EqualFold(st.View.Path, second) {
+		t.Fatalf("отмена после открытия: err %v, cancelled %v, path %q", err, st.Cancelled, st.View.Path)
+	}
+	// Сбой диалога — ошибка, не отмена.
+	fail = errors.New("диалог не открылся")
+	if st, err = a.OpenProject(); err == nil || st.Cancelled || a.editor() != opened {
+		t.Fatalf("сбой диалога: err %v, cancelled %v", err, st.Cancelled)
+	}
+	// Остальные пути, отдающие State, признак не ставят: в них нет диалога.
+	a.updateConfig(func(c *prefs.Config) { c.Recent = []string{first} })
+	if st, err = a.OpenRecent(first); err != nil || st.Cancelled {
+		t.Fatalf("OpenRecent: err %v, cancelled %v", err, st.Cancelled)
+	}
+	if st = a.NewProject(""); st.Cancelled {
+		t.Fatal("NewProject с Cancelled")
+	}
+}
+
 // Байты файла: encode копирует поля руками, круговой тест прошёл бы и без записи.
 func TestNewProjectProduct(t *testing.T) {
 	a := newApp(t)
@@ -255,4 +324,264 @@ func TestNewProjectProduct(t *testing.T) {
 			t.Fatalf("в файле нет product: %s", data)
 		}
 	}
+}
+
+// Подсказка о месте запуска объединяется с тостом старта и не теряет его; в обычном месте тост не меняется.
+func TestStartNoticeJoinsLaunch(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	for _, place := range []osx.Place{osx.PlaceTemp, osx.PlaceTranslocated} {
+		extra := place.Notice()
+		if extra == "" {
+			t.Fatalf("%q: нет текста", place)
+		}
+		if got := joinLaunchNotice("", place); got != extra {
+			t.Errorf("%q без прежнего тоста: %q", place, got)
+		}
+		got := joinLaunchNotice("не открылся", place)
+		if want := "не открылся\n\n" + extra; got != want {
+			t.Errorf("%q с прежним тостом: %q, ждали %q", place, got, want)
+		}
+	}
+	if got := joinLaunchNotice("не открылся", osx.PlaceNormal); got != "не открылся" {
+		t.Errorf("обычное место изменило тост: %q", got)
+	}
+	if got := joinLaunchNotice("", osx.PlaceNormal); got != "" {
+		t.Errorf("обычное место без тоста: %q", got)
+	}
+	if !strings.Contains(buf.String(), "запуск не из установленного места") {
+		t.Errorf("в log.txt нет записи: %q", buf.String())
+	}
+}
+
+// Сквозной путь своих шаблонов сетки (шаблон → плитка «Мои» → применение → перезапуск):
+// то, что применили, совпадает с тем, что сохраняли. Общие помощники нужны и тестам виньетки.
+
+const tplTol = 1e-5 // допуск округления долей (templates.json пишет до 1e-5)
+
+// rtLayouts — несимметричные раскладки четырёх мест на развороте 600×300 мм: два места на каждой
+// странице, разные размеры и отступы, одно смещено; у раскладки 0 третье место наклонено.
+var rtLayouts = [][4][4]float64{
+	{{10, 15, 170, 260}, {190, 15, 100, 120}, {330, 40, 120, 120}, {470, 20, 100, 200}},
+	{{20, 20, 120, 120}, {150, 60, 130, 200}, {320, 10, 260, 90}, {320, 110, 100, 180}},
+	{{12, 12, 276, 130}, {12, 150, 100, 138}, {312, 12, 120, 276}, {440, 40, 148, 200}},
+}
+
+// rtApp — App с разворотами «Авто» по counts[i] фото; возвращает ID разворотов.
+func rtApp(t *testing.T, counts ...int) (*App, []string) {
+	t.Helper()
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	a.emit = func(string, ...any) {}
+	ids := make([]string, len(counts))
+	for i, n := range counts {
+		ph := make([]model.PhotoInfo, n)
+		for k := range ph {
+			id := fmt.Sprintf("p%d_%d", i, k)
+			ph[k] = model.PhotoInfo{ID: id, Path: "/" + id + ".jpg", W: 300, H: 200}
+		}
+		v, err := a.editor().NewSpread(-1, ph)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[i] = v.Spreads[len(v.Spreads)-1].ID
+	}
+	return a, ids
+}
+
+// restartApp — «перезапуск»: новый App с теми же настройками и проектом, шаблоны читаются из файла.
+func restartApp(t *testing.T, a *App) *App {
+	t.Helper()
+	b := newApp(t)
+	b.cfgDir, b.emit = a.cfgDir, func(string, ...any) {}
+	b.ed.Store(a.editor())
+	b.loadTemplates()
+	return b
+}
+
+func spreadView(a *App, id string) model.SpreadView {
+	for _, s := range a.editor().View().Spreads {
+		if s.ID == id {
+			return s
+		}
+	}
+	return model.SpreadView{}
+}
+
+func spreadPlaces(a *App, id string) []model.PlaceView { return spreadView(a, id).Places }
+
+// areaPlaces — места области (left | right | spread) по возрастанию X, затем Y.
+func areaPlaces(ps []model.PlaceView, scope string) []model.PlaceView {
+	var out []model.PlaceView
+	for _, p := range ps {
+		if scope == model.ScopeSpread || (scope == model.ScopeLeft) == (p.X+p.W/2 < 300) {
+			out = append(out, p)
+		}
+	}
+	slices.SortFunc(out, func(a, b model.PlaceView) int { return cmp.Or(cmp.Compare(a.X, b.X), cmp.Compare(a.Y, b.Y)) })
+	return out
+}
+
+// samePlaces — места got = want, сдвинутые на dx по X (мм, допуск округления 1e-5 доли), по порядку.
+func samePlaces(t *testing.T, tag string, got, want []model.PlaceView, dx float64) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%s: мест %d, ждали %d", tag, len(got), len(want))
+	}
+	const tol = tplTol * 600
+	for i, g := range got {
+		w := want[i]
+		if math.Abs(g.X-w.X-dx) > tol || math.Abs(g.Y-w.Y) > tol || math.Abs(g.W-w.W) > tol || math.Abs(g.H-w.H) > tol ||
+			math.Abs(g.Rot-w.Rot) > 1e-3 || g.Role != w.Role {
+			t.Fatalf("%s: место %d: %+v, ждали %+v (dx %v)", tag, i, g, w, dx)
+		}
+	}
+}
+
+// fracOf — места в долях области с левым краем x0 и размером w×h.
+func fracOf(ps []model.PlaceView, x0, w, h float64) []model.Box {
+	out := make([]model.Box, len(ps))
+	for i, p := range ps {
+		out[i] = model.Box{X: (p.X - x0) / w, Y: p.Y / h, W: p.W / w, H: p.H / h, Rot: p.Rot}
+	}
+	return out
+}
+
+func sameBoxes(t *testing.T, tag string, got, want []model.Box) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%s: долей %d, ждали %d", tag, len(got), len(want))
+	}
+	for i, g := range got {
+		w := want[i]
+		if math.Abs(g.X-w.X) > tplTol || math.Abs(g.Y-w.Y) > tplTol || math.Abs(g.W-w.W) > tplTol || math.Abs(g.H-w.H) > tplTol || math.Abs(g.Rot-w.Rot) > 1e-3 {
+			t.Fatalf("%s: доля %d: %+v, ждали %+v", tag, i, g, w)
+		}
+	}
+}
+
+// setLayout ставит на закреплённом развороте sid раскладку rtLayouts[l] (места — по порядку вида).
+func setLayout(t *testing.T, a *App, sid string, l int) {
+	t.Helper()
+	ps := spreadPlaces(a, sid)
+	if len(ps) != 4 {
+		t.Fatalf("мест %d, ждали 4", len(ps))
+	}
+	bs := make([]model.PlaceBox, 4)
+	for i, c := range rtLayouts[l] {
+		bs[i] = model.PlaceBox{ID: ps[i].ID, X: c[0], Y: c[1], W: c[2], H: c[3]}
+	}
+	a.SetPlaces(sid, bs, "")
+	for i := range ps {
+		ang := 0.0
+		if l == 0 && i == 2 {
+			ang = 7
+		}
+		a.SetPlaceAngle(sid, ps[i].ID, ang)
+	}
+}
+
+// tplWant — что ждём от сохранённого шаблона: id, имя, область (spread | page), места источника
+// (мм, по возрастанию X) и левый край области источника.
+type tplWant struct {
+	id, name, tpl string
+	src           []model.PlaceView
+	x0            float64
+}
+
+// saveTpl сохраняет область sc разворота src; шаблон встаёт в конец списка.
+func saveTpl(t *testing.T, a *App, src, sc, name, wantName string) tplWant {
+	t.Helper()
+	n := len(a.templateList())
+	if err := a.SaveGridTemplate(src, sc, name); err != nil {
+		t.Fatal(err)
+	}
+	list := a.templateList()
+	if len(list) != n+1 {
+		t.Fatalf("шаблонов %d, ждали %d", len(list), n+1)
+	}
+	w := tplWant{id: list[n].ID, name: wantName, tpl: model.TplSpread, src: areaPlaces(spreadPlaces(a, src), sc)}
+	if sc != model.ScopeSpread {
+		w.tpl = model.TplPage
+	}
+	if sc == model.ScopeRight {
+		w.x0 = 300
+	}
+	return w
+}
+
+// checkMine: плитки «Мои» разворота dst на n мест идут в порядке want, с их id, именем и долями;
+// применение каждой (на область scope) даёт места своего шаблона; Undo возвращает «Авто».
+func checkMine(t *testing.T, a *App, dst string, n int, scope string, want []tplWant) {
+	t.Helper()
+	c := a.GridChoices(dst, n, scope)
+	if len(c.Mine) != len(want) {
+		t.Fatalf("«Мои» (%d мест, %s): плиток %d, ждали %d", n, scope, len(c.Mine), len(want))
+	}
+	for i, w := range want {
+		m, tag, aw := c.Mine[i], fmt.Sprintf("%s #%d", w.name, i), 300.0
+		if w.tpl == model.TplSpread {
+			aw = 600
+		}
+		if m.ID != w.id || m.Name != w.name || m.Scope != w.tpl {
+			t.Fatalf("%s: плитка %+v, ждали %+v", tag, m, w)
+		}
+		sameBoxes(t, tag+": превью", m.Boxes, fracOf(w.src, w.x0, aw, 300))
+		if _, err := a.ApplyGrid(dst, scope, m.Scope, m.Boxes); err != nil {
+			t.Fatalf("%s: %v", tag, err)
+		}
+		off := 0.0
+		if scope == model.ScopeRight {
+			off = 300
+		}
+		samePlaces(t, tag+": применение", areaPlaces(spreadPlaces(a, dst), scope), w.src, off-w.x0)
+		if a.editor().Undo(); spreadView(a, dst).Grid {
+			t.Fatalf("%s: отмена не вернула «Авто»", tag)
+		}
+	}
+}
+
+// gridSaved — App с источником из четырёх мест (раскладка 0) и тремя шаблонами с него: разворот,
+// левая и правая страница; цели — развороты «Авто» на 4, 4, 4, 2, 6 и 6 фото.
+func gridSaved(t *testing.T) (a *App, ids []string, sp, lf, rt tplWant) {
+	t.Helper()
+	a, ids = rtApp(t, 4, 4, 4, 2, 6, 6)
+	a.SetGrid(ids[0], true)
+	setLayout(t, a, ids[0], 0)
+	sp = saveTpl(t, a, ids[0], "spread", "Моя сетка", "Моя сетка")
+	lf = saveTpl(t, a, ids[0], "left", "Левая", "Левая")
+	rt = saveTpl(t, a, ids[0], "right", "Правая", "Правая")
+	if len(sp.src) != 4 || len(lf.src) != 2 || len(rt.src) != 2 || sp.src[2].Rot != 7 {
+		t.Fatalf("источник: %d/%d/%d мест", len(sp.src), len(lf.src), len(rt.src))
+	}
+	return a, ids, sp, lf, rt
+}
+
+// Один сохранённый шаблон на разворот и на страницы: превью в «Мои», применение, перезапуск.
+func TestTemplateGridEndToEnd(t *testing.T) {
+	a, ids, sp, lf, rt := gridSaved(t)
+	d4, d4b, d2 := ids[1], ids[2], ids[3]
+	checkMine(t, a, d4, 4, "spread", []tplWant{sp})
+	c := a.GridChoices(d4, 4, "spread")
+	if c.Mine[0].Drop != 0 || c.N != 4 {
+		t.Fatalf("Drop %d, N %d", c.Mine[0].Drop, c.N)
+	}
+	r, err := a.ApplyGrid(d4, "spread", "spread", c.Mine[0].Boxes)
+	if err != nil || r.Left != 0 {
+		t.Fatalf("%v, left %d", err, r.Left)
+	}
+	samePlaces(t, "разворот", areaPlaces(spreadPlaces(a, d4), "spread"), sp.src, 0)
+	for _, p := range spreadPlaces(a, d4) {
+		if p.Photo == "" {
+			t.Fatal("фото не встало на место шаблона")
+		}
+	}
+
+	// «Перезапуск»: плитки и применение те же.
+	b := restartApp(t, a)
+	checkMine(t, b, d4b, 4, "spread", []tplWant{sp})
+	checkMine(t, b, d2, 2, "left", []tplWant{lf, rt})  // страницы: правая на левую страницу, со сдвигом
+	checkMine(t, b, d2, 2, "right", []tplWant{lf, rt}) // и левая на правую
 }

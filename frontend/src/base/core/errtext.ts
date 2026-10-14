@@ -13,3 +13,10 @@ export function capFirst(s: string): string {
 export function withSkipped(text: string, skipped: number): string {
   return [text, skipped > 0 ? `Отклонённые не взяты: ${skipped}` : ''].filter(Boolean).join('. ')
 }
+
+// Тост после выгрузки (035 U9): число файлов — последний total из export:progress (0/нет — Go не сообщил),
+// сводка цвета от Go — через точку.
+export function exportDoneText(total: number | undefined, note?: string): string {
+  const head = total && total > 0 ? `Выгружено файлов: ${total}` : 'Выгрузка готова'
+  return note ? `${head}. ${note}` : head
+}

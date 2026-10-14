@@ -23,6 +23,9 @@ type Place struct {
 	// Rot — градусы по часовой вокруг центра места, (−180, 180], шаг 0.1; X, Y, W, H —
 	// неповёрнутый прямоугольник (design-rotation §2.1): поворот меняет одно поле.
 	Rot float64 `json:"rot,omitempty"`
+	// Role — роль места виньетки (031): RolePupil | RoleTeacher | RoleGroup; "" — ученик.
+	// Едет с местом (деление, слои); вне виньетки всегда "" (FixVignettes).
+	Role string `json:"role,omitempty"`
 }
 
 // ClonePlace — копия места целиком (новые поля Place переезжают сами) с новым ID
@@ -64,6 +67,32 @@ func (p *Project) Put(s *Spread, pl *Place, id string) {
 	s.Photos = GridPhotos(s)
 }
 
+// DropOn — первое брошенное фото id на место pl листа s (design 007 §3, 042): то же фото —
+// ничего; занятое место и фото из альбома (inAlbum — до Remember) — обмен; иначе перенос, а
+// прежний хозяин занятого места уходит в ленту (out). Общее у PlacePhotos и броска 042.
+func (p *Project) DropOn(s *Spread, pl *Place, id string, inAlbum bool) (out bool) {
+	switch {
+	case pl.Photo == id:
+	case pl.Photo != "" && inAlbum:
+		p.Swap(id, pl.Photo)
+	default:
+		out = pl.Photo != ""
+		p.Put(s, pl, id)
+	}
+	return out
+}
+
+// NextEmpty — первое пустое место после позиции at, потом с начала; нет — nil.
+func (s *Spread) NextEmpty(at int) *Place {
+	n := len(s.Grid)
+	for k := 1; k <= n; k++ {
+		if pl := s.Grid[((at+k)%n+n)%n]; pl.Photo == "" {
+			return pl
+		}
+	}
+	return nil
+}
+
 // SyncGrid — страховка после правки, а не механизм переноса (design 007 §0.3):
 // место с фото не из Photos пустеет (и второе место того же фото), фото без
 // места садится в первое пустое; Photos = непустые места по порядку. Пустых нет:
@@ -74,7 +103,7 @@ func (p *Project) SyncGrid(repair bool) error {
 	if repair {
 		taken = p.PlaceIDs()
 	}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		if len(s.Grid) == 0 {
 			s.Grid = nil
 			continue
@@ -82,6 +111,11 @@ func (p *Project) SyncGrid(repair bool) error {
 		if err := p.syncSpread(s, repair, taken); err != nil {
 			return err
 		}
+	}
+	// Пустые Photos обложки — nil, как их читает FixCoverSheet: иначе "photos":[] после
+	// Save → Load стал бы null и правка, круг записи, не совпала бы по JSON.
+	if c := p.Cover; c != nil && c.Sheet != nil && len(c.Sheet.Photos) == 0 {
+		c.Sheet.Photos = nil
 	}
 	return nil
 }
@@ -135,7 +169,7 @@ func (p *Project) syncSpread(s *Spread, repair bool, taken map[string]bool) erro
 // PlaceIDs — ID всех мест проекта: новое место не должно совпасть с чужим.
 func (p *Project) PlaceIDs() map[string]bool {
 	ids := map[string]bool{}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		for _, pl := range s.Grid {
 			ids[pl.ID] = true
 		}
@@ -153,7 +187,7 @@ func NewPlaceID(taken map[string]bool) string {
 	}
 }
 
-// AddPlace добавляет пустое место на страницу page (0 — левая, 1 — правая):
+// AddPlace добавляет пустое место на страницу page листа (0 — левая, 1 — правая; Geo.Pages):
 // по центру, сторона 1/3 меньшей стороны страницы, пропорции aspect (не > 0 — 1:1);
 // каждое следующее сдвинуто на 5 мм вниз-вправо (лесенка), чтобы новые места не
 // ложились друг на друга. Больше MaxPlaces — ошибка. taken — ID мест проекта
@@ -165,7 +199,8 @@ func (p *Project) AddPlace(s *Spread, page int, aspect float64, taken map[string
 	if !(aspect > 0) || math.IsInf(aspect, 0) {
 		aspect = 1
 	}
-	pw, ph := p.Settings.PageW, p.Settings.PageH
+	pg := p.Geo(s).Page(page)
+	pw, ph := pg.W, pg.H
 	side := min(pw, ph) / 3
 	w, h := side, side/aspect
 	if aspect < 1 {
@@ -175,9 +210,8 @@ func (p *Project) AddPlace(s *Spread, page int, aspect float64, taken map[string
 	room := min((pw-w)/2, (ph-h)/2)
 	steps := max(1, int(room/ladderStep)+1)
 	d := float64(len(s.Grid)%steps) * ladderStep
-	pl := &Place{ID: NewPlaceID(taken), W: w, H: h,
-		X: float64(min(max(page, 0), 1))*pw + (pw-w)/2 + d, Y: (ph-h)/2 + d}
-	p.ClampPlace(pl)
+	pl := &Place{ID: NewPlaceID(taken), W: w, H: h, X: pg.X + (pw-w)/2 + d, Y: pg.Y + (ph-h)/2 + d}
+	p.ClampPlace(s, pl)
 	s.Grid = append(s.Grid, pl)
 	return pl, nil
 }
@@ -201,7 +235,7 @@ func (p *Project) Freeze(s *Spread) {
 	grid := make([]*Place, len(cur.Rects))
 	for i, r := range cur.Rects {
 		grid[i] = &Place{ID: NewPlaceID(taken), X: r.X, Y: r.Y, W: r.W, H: r.H, Photo: s.Photos[i]}
-		p.ClampPlace(grid[i])
+		p.ClampPlace(s, grid[i])
 	}
 	s.Grid = grid
 }
@@ -242,13 +276,13 @@ func EmptyGridDupes(s *Spread) {
 	}
 }
 
-// RenameRefs переводит ID фото по карте «старый → новый» и в Photos разворотов,
+// RenameRefs переводит ID фото по карте «старый → новый» и в Photos листов (с обложкой),
 // и в местах: одной картой, иначе syncGrid пересадил бы фото по первым пустым местам.
 func (p *Project) RenameRefs(moved map[string]string) {
 	if len(moved) == 0 {
 		return
 	}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		for i, id := range s.Photos {
 			if nid, ok := moved[id]; ok {
 				s.Photos[i] = nid
@@ -356,25 +390,12 @@ var (
 // SpineEps — место, лишь касающееся корешка, его не пересекает (как в layout).
 const SpineEps = 0.01
 
-// Area — область scope по ширине разворота, мм: [a0, a1]; ok=false — неизвестная.
-func (p *Project) Area(scope string) (a0, a1 float64, ok bool) {
-	w := p.Settings.PageW
-	switch scope {
-	case ScopeLeft:
-		return 0, w, true
-	case ScopeRight:
-		return w, 2 * w, true
-	case ScopeSpread:
-		return 0, 2 * w, true
-	}
-	return 0, 0, false
-}
-
-// CrossesSpine — место пересекает корешок (для «!» в интерфейсе при выключенном
+// CrossesSpine — место листа s пересекает шов (для «!» в интерфейсе при выключенном
 // layflat). У повёрнутого — по описанному прямоугольнику: для вертикали он точен.
-func (p *Project) CrossesSpine(pl *Place) bool {
-	w, a := p.Settings.PageW, PlaceAABB(pl)
-	return a.X < w-SpineEps && a.X+a.W > w+SpineEps
+// Нет шва (лист 031) — false.
+func (p *Project) CrossesSpine(s *Spread, pl *Place) bool {
+	w, a := p.Geo(s).Mid, PlaceAABB(pl)
+	return w > 0 && a.X < w-SpineEps && a.X+a.W > w+SpineEps
 }
 
 // FindPlace — место разворота по ID.
@@ -387,20 +408,20 @@ func (s *Spread) FindPlace(id string) (int, *Place) {
 	return -1, nil
 }
 
-// GridSpread — разворот в режиме «Сетка» по ID; «Авто» и неизвестный — nil
+// GridSpread — лист (и обложка) в режиме «Сетка» по ID; «Авто» и неизвестный — nil
 // (правки мест у «Авто» холостые: ID мест неоткуда взять).
 func (p *Project) GridSpread(id string) *Spread {
-	if _, s := p.Find(id); s != nil && len(s.Grid) > 0 {
+	if s := p.Sheet(id); s != nil && len(s.Grid) > 0 {
 		return s
 	}
 	return nil
 }
 
-// Swap меняет два фото местами во всех разворотах — и в Photos, и в местах
+// Swap меняет два фото местами во всех листах (с обложкой) — и в Photos, и в местах
 // (сетка ↔ «Авто» тоже).
 func (p *Project) Swap(a, b string) {
 	other := map[string]string{a: b, b: a}
-	for _, s := range p.Spreads {
+	for _, s := range p.Sheets() {
 		for i, id := range s.Photos {
 			if o, ok := other[id]; ok {
 				s.Photos[i] = o
@@ -449,6 +470,3 @@ func ClampMoveIn(pl *Place, prev Place, sw, ph float64) {
 func PlaceImage(cell layout.Rect, aspect float64, f Frame) layout.Rect {
 	return geom.PlaceImage(cell, aspect, geom.Crop{S: f.S, X: f.X, Y: f.Y, R: f.R})
 }
-
-// Page — страница проекта для опор выравнивания.
-func Page(s Settings) geom.Page { return geom.Page{W: s.PageW, H: s.PageH, Margin: s.Margin} }

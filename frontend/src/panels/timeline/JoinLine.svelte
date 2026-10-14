@@ -2,6 +2,7 @@
   import { store } from '../../base/core/store.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { tip, tipped } from '../../base/ui/tip.svelte'
+  import { unitOf } from '../../base/geom/sheet'
 
   // Черта между группами ленты: в покое — «Склеить», при перетаскивании — новый разворот здесь.
   // Склейка и разрез — функция «Разрез и склейка» (спека 011); без неё черта остаётся только целью переноса.
@@ -21,6 +22,7 @@
     max: number
   } = $props()
 
+  const unit = $derived(unitOf(store.view.settings))
   const blocked = $derived(cuts && (gridJoin || cnt > max))
   const joinTip = $derived(
     gridJoin ? 'Сначала «Вернуть авто»' : cnt > max ? `Нельзя склеить: вместе ${cnt} фото, максимум ${max}` : 'Склеить',
@@ -35,13 +37,14 @@
 
 <button
   class="join"
+  data-guide="join-line"
   class:blocked
   class:still={!cuts}
   tabindex={cuts ? 0 : -1}
   class:over={drag.over === `new:${i + 1}`}
   aria-disabled={blocked}
   aria-hidden={!cuts}
-  aria-label={gridJoin || cnt > max ? `Нельзя склеить развороты ${i + 1} и ${i + 2}` : `Склеить развороты ${i + 1} и ${i + 2}`}
+  aria-label={gridJoin || cnt > max ? `Нельзя склеить ${unit.many} ${i + 1} и ${i + 2}` : `Склеить ${unit.many} ${i + 1} и ${i + 2}`}
   data-drop="new"
   data-at={i + 1}
   onpointerdown={(e) => e.stopPropagation()}

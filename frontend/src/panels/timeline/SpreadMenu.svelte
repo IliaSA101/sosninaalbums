@@ -1,10 +1,45 @@
 <script lang="ts">
   import Icon from '../../base/ui/Icon.svelte'
-  import { deleteLabel, menuPos } from './spreadmenu'
+  import { canVary, deleteLabel, menuPos, setupItem, varyLabel, vignetteItem } from './spreadmenu'
+  import { store } from '../../base/core/store.svelte'
+  import { isSheet } from '../../base/geom/sheet'
+  import { prefs } from '../../base/prefs/prefs.svelte'
 
-  // Меню правого щелчка по группе ленты (пока один пункт). Esc и щелчок мимо закрывают;
+  // Меню правого щелчка по группе ленты: виньетка (031) и удаление. Esc и щелчок мимо закрывают;
   // окно держится внутри экрана. Устройство — как у PhotoMenu. count > 1 — выделено несколько групп.
-  let { x, y, count = 1, onDelete, onclose }: { x: number; y: number; count?: number; onDelete: () => void; onclose: () => void } = $props()
+  // label — свой текст пункта удаления (плитка обложки: «Удалить обложку»); у неё пункта виньетки нет.
+  let {
+    x,
+    y,
+    count = 1,
+    label,
+    kind,
+    onVignette,
+    onNewVignette,
+    onVary,
+    varies = true,
+    onDelete,
+    onclose,
+  }: {
+    x: number
+    y: number
+    count?: number
+    label?: string
+    kind?: string // вид листа под курсором (SpreadView.kind)
+    onVignette?: (act: 'make' | 'clear' | 'setup') => void
+    onNewVignette?: () => void // плитка «+»: новая виньетка вместо пунктов группы
+    onVary?: () => void // «Разнообразить раскладки» (041); нет — пункта нет (плитка обложки)
+    varies?: boolean // среди целей есть разворот «Авто» с фото (anyVaries); нет — пункт серый
+    onDelete?: () => void
+    onclose: () => void
+  } = $props()
+  const vig = $derived(onVignette ? vignetteItem(count, kind, isSheet(store.view.settings), prefs.can('vignette')) : null)
+
+  // Пункт показан, если функция есть на уровне; серым — когда менять нечего (сетки, виньетки, пустые).
+  const showVary = $derived(!!onVary && !isSheet(store.view.settings) && prefs.can('variants'))
+  const vary = $derived(canVary(varies, isSheet(store.view.settings), prefs.can('variants')))
+
+  const setup = $derived(onVignette ? setupItem(count, kind, prefs.can('vignette')) : null)
 
   let box = $state<HTMLElement>()
   let w = $state(0)
@@ -13,7 +48,7 @@
 
   // Фокус на пункт: Enter работает сразу.
   $effect(() => {
-    box?.querySelector<HTMLElement>('button')?.focus()
+    box?.querySelector<HTMLElement>('button:not(:disabled)')?.focus()
   })
 
   function key(e: KeyboardEvent) {
@@ -46,9 +81,31 @@
   data-text-ui
   oncontextmenu={(e) => e.preventDefault()}
 >
-  <button class="danger" role="menuitem" onclick={onDelete}>
-    <Icon name="spread-delete" size={16} stroke={1.8} /><span>{deleteLabel(count)}</span>
-  </button>
+  {#if setup}
+    <button role="menuitem" onclick={() => onVignette?.(setup.act)}>
+      <Icon name="vignette" size={16} stroke={1.8} /><span>{setup.label}</span>
+    </button>
+  {/if}
+  {#if vig}
+    <button role="menuitem" onclick={() => onVignette?.(vig.act)}>
+      <Icon name="vignette" size={16} stroke={1.8} /><span>{vig.label}</span>
+    </button>
+  {/if}
+  {#if onNewVignette}
+    <button role="menuitem" onclick={onNewVignette}>
+      <Icon name="vignette" size={16} stroke={1.8} /><span>Новая виньетка</span>
+    </button>
+  {/if}
+  {#if showVary}
+    <button role="menuitem" disabled={!vary} onclick={onVary}>
+      <Icon name="shuffle" size={16} stroke={1.8} /><span>{varyLabel(count)}</span>
+    </button>
+  {/if}
+  {#if onDelete}
+    <button class="danger" role="menuitem" onclick={onDelete}>
+      <Icon name="spread-delete" size={16} stroke={1.8} /><span>{label ?? deleteLabel(count, isSheet(store.view.settings))}</span>
+    </button>
+  {/if}
 </div>
 
 <style>
@@ -78,7 +135,11 @@
     color: var(--text);
     border-radius: 4px;
   }
-  button:hover,
+  button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  button:hover:not(:disabled),
   button:focus-visible {
     background: #38383c;
     color: #fff;

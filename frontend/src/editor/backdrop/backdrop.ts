@@ -11,6 +11,10 @@ export const SCOPE_LABEL: Record<BackdropScope, string> = {
   right: 'Правая страница',
 }
 
+// Области фона, доступные в режиме: у листа виньетки страниц нет — только весь лист.
+export const scopesFor = (sheet: boolean): readonly BackdropScope[] => (sheet ? ['spread'] : ['spread', 'left', 'right'])
+export const scopeLabel = (scope: BackdropScope, sheet: boolean): string => (sheet && scope === 'spread' ? 'Весь лист' : SCOPE_LABEL[scope])
+
 export const PAGE_SCOPES: readonly BackdropScope[] = ['left', 'right']
 
 export const backdropOf = (s: SpreadView | undefined, scope: BackdropScope): BackdropView | undefined =>

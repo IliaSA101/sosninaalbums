@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Payload } from '../core/types'
-import { backdropTarget, cellSide, halfSide, isNoopMove, placeTarget } from './hit'
+import { backdropTarget, cellSide, coverTarget, halfSide, isNoopMove, placeTarget, sheetFrac } from './hit'
 
 describe('backdropTarget', () => {
   const one: Payload = { kind: 'photos', ids: ['a'] }
@@ -73,5 +73,27 @@ describe('placeTarget', () => {
     expect(placeTarget(d, { kind: 'spread', id: 's2', index: 1 })).toBeNull()
     expect(placeTarget({ spread: 's1' }, { kind: 'photos', ids: ['b'] })).toBeNull()
     expect(placeTarget({ place: 'p1' }, { kind: 'photos', ids: ['b'] })).toBeNull()
+  })
+})
+
+describe('coverTarget', () => {
+  it('одно фото — цель «плитка обложки»', () => {
+    expect(coverTarget({ kind: 'photos', ids: ['a'] })).toEqual({ kind: 'cover' })
+  })
+  it('несколько фото — цель с many (без подсветки, бросок объяснит тостом)', () => {
+    expect(coverTarget({ kind: 'photos', ids: ['a', 'b'] })).toEqual({ kind: 'cover', many: true })
+  })
+  it('разворот-группа и пустой набор — не цель', () => {
+    expect(coverTarget({ kind: 'spread', id: 's1', index: 0 })).toBeNull()
+    expect(coverTarget({ kind: 'photos', ids: [] })).toBeNull()
+  })
+})
+
+describe('sheetFrac', () => {
+  it('доля зажимается в 0..1', () => {
+    expect([-0.2, 0, 0.4, 1, 1.3].map(sheetFrac)).toEqual([0, 0, 0.4, 1, 1])
+  })
+  it('нулевая ширина листа (NaN, ±Infinity) — точки нет, -1', () => {
+    expect([NaN, Infinity, -Infinity].map(sheetFrac)).toEqual([-1, -1, -1])
   })
 })

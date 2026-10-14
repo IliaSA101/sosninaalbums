@@ -109,11 +109,11 @@ export interface LocalResize {
 }
 
 // Боковая ручка повёрнутого блока: дельта мыши (dx, dy) проецируется на ось строки, без прилипания.
-// Правая двигает правый край (P стоит), левая — левый (P уходит вдоль оси). Ширина 10..2·pageW.
-export function resizeLocal(t: TextBox, side: 'l' | 'r', dx: number, dy: number, pageW: number): LocalResize {
+// Правая двигает правый край (P стоит), левая — левый (P уходит вдоль оси). Ширина 10..sheetW (ширина листа, мм).
+export function resizeLocal(t: TextBox, side: 'l' | 'r', dx: number, dy: number, sheetW: number): LocalResize {
   const [s, c] = sincos(t.rot)
   const du = dx * c + dy * s
-  const max = 2 * pageW
+  const max = sheetW
   if (side === 'r') {
     return { x: t.x, y: t.y, w: Math.min(max, Math.max(MIN_BOX_W, t.w + du)) }
   }

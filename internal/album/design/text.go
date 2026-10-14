@@ -35,38 +35,39 @@ func SetTextStyle(p *model.Project, textID string, st model.TextStyle) {
 		t := s.Texts[i]
 		t.Style = st
 		if t.Auto {
-			p.SetAutoW(t, model.AutoW(t, model.TextMaxW(p.Settings)), true)
+			p.SetAutoW(s, t, p.SheetAutoW(s, t), true)
 		}
 	}
 }
 
 func DeleteText(p *model.Project, textID string) { p.DeleteText(textID) }
 
-// AddText добавляет блок «Текст» по центру страницы page (0 — левая, 1 — правая;
-// уже зажата), ширина — по тексту. Новый блок — последний в SpreadView.Texts.
-// Больше MaxTexts — ошибка.
+// AddText добавляет блок «Текст» по центру страницы page листа (0 — левая, 1 — правая;
+// уже зажата; у обложки — сторонки), ширина — по тексту. Новый блок — последний в
+// SpreadView.Texts. Больше MaxTexts — ошибка.
 func AddText(p *model.Project, spreadID string, page int) error {
-	_, s := p.Find(spreadID)
+	s := p.Sheet(spreadID)
 	if s == nil {
 		return nil
 	}
 	if len(s.Texts) >= model.MaxTexts {
 		return fmt.Errorf("на развороте не может быть больше %d текстов", model.MaxTexts)
 	}
-	s.Texts = append(s.Texts, newText(p, page))
+	s.Texts = append(s.Texts, newText(p, s, page))
 	return nil
 }
 
-// newText — блок-заготовка по центру страницы page.
-func newText(p *model.Project, page int) *model.TextBlock {
-	st := p.Settings
+// newText — блок-заготовка по центру страницы page листа s (Geo.Pages). Кегль — от высоты
+// страницы альбома: на обложке текст того же размера, что внутри.
+func newText(p *model.Project, s *model.Spread, page int) *model.TextBlock {
+	pg := p.Geo(s).Page(page)
 	t := &model.TextBlock{ID: model.NewID(), Auto: true, Text: "Текст", Style: model.PlainStyle()}
-	t.Style.Size = model.StartSize(st.PageH)
+	t.Style.Size = model.StartSize(p.Settings.PageH)
 	t.Style = model.ClampStyle(t.Style)
-	t.W = model.AutoW(t, model.TextMaxW(st))
+	t.W = p.SheetAutoW(s, t)
 	h := text.Cached(t.Text, t.Style, t.W).H
-	t.X = geom.Round2(float64(page)*st.PageW + (st.PageW-t.W)/2)
-	t.Y = geom.Round2(math.Max(0, (st.PageH-h)/2))
+	t.X = geom.Round2(pg.X + (pg.W-t.W)/2)
+	t.Y = geom.Round2(pg.Y + math.Max(0, (pg.H-h)/2))
 	return t
 }
 
@@ -124,7 +125,7 @@ func SetTextScale(p *model.Project, textID string, size, x, y float64) {
 	}
 	t.Style = st
 	if t.Auto {
-		t.W = model.AutoW(t, model.TextMaxW(p.Settings)) // та же ширина, что насчитает fitTexts
+		t.W = p.SheetAutoW(s, t) // та же ширина, что насчитает fitTexts
 	} else {
 		t.W = geom.Round2(t.W * st.Size / old)
 	}
@@ -135,7 +136,7 @@ func SetTextAuto(p *model.Project, textID string) {
 	if s, i := p.FindText(textID); s != nil {
 		t := s.Texts[i]
 		t.Auto = true
-		p.SetAutoW(t, model.AutoW(t, model.TextMaxW(p.Settings)), true)
+		p.SetAutoW(s, t, p.SheetAutoW(s, t), true)
 	}
 }
 
@@ -148,10 +149,11 @@ func SetSpreadName(p *model.Project, spreadID, name string) {
 }
 
 // Rescale — шаг конвейера edit: поменялся формат страницы: блоки остаются на том же месте
-// страницы пропорционально (x и w — по ширине, y — по высоте).
+// страницы пропорционально (x и w — по ширине, y — по высоте). Только развороты: обложку
+// пересчитывает свой Reflow (032 §3).
 func Rescale(p *model.Project, before *model.Project) {
-	ow, oh := before.Settings.PageW, before.Settings.PageH
-	nw, nh := p.Settings.PageW, p.Settings.PageH
+	og, ng := before.Geo(nil), p.Geo(nil)
+	ow, oh, nw, nh := og.W, og.H, ng.W, ng.H
 	if ow == nw && oh == nh || !(ow > 0) || !(oh > 0) {
 		return
 	}

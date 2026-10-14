@@ -8,11 +8,17 @@
   import { LAYER_OPS, type LayerOp } from '../places/minipanel'
   import { relinkFolder } from '../../panels/library/relink'
   import { errText } from '../../base/core/errtext'
-  import { SCOPE_LABEL } from '../backdrop/backdrop'
+  import { scopeLabel, scopesFor } from '../backdrop/backdrop'
   import { setBackdrop } from '../backdrop/backdropact'
+  import { COVER_SCOPE_LABEL, layoutScopes } from '../cover/cover'
+  import { isCover, isSheet } from '../../base/geom/sheet'
   import type { BackdropScope } from '../../base/core/types'
 
-  const SCOPES: BackdropScope[] = ['spread', 'left', 'right']
+  const sheet = $derived(isSheet(store.view.settings))
+  // На обложке (032) фон ставят в области её раскладки, названия — сторонки; в листе (031) — только «Весь лист».
+  const cover = $derived(isCover(store.spread))
+  const scopes = $derived(cover ? layoutScopes(store.cover?.layout) : scopesFor(sheet))
+  const label = (sc: BackdropScope) => (cover ? COVER_SCOPE_LABEL[sc] : scopeLabel(sc, sheet))
 
   // Меню правого щелчка по фото (спека 008): своё, работает и в браузере. Пункты — photo/photomenu.ts.
   // Esc и щелчок мимо закрывают; окно держится внутри экрана.
@@ -168,8 +174,8 @@
           <button class="sub" role="menuitem" onclick={() => layer(lo.op)}><span>{lo.label}</span></button>
         {/each}
       {:else if it.sub && it.id === 'backdrop' && subOpen === 'backdrop'}
-        {#each SCOPES as sc (sc)}
-          <button class="sub" role="menuitem" onclick={() => toBackdrop(sc)}><span>{SCOPE_LABEL[sc]}</span></button>
+        {#each scopes as sc (sc)}
+          <button class="sub" role="menuitem" onclick={() => toBackdrop(sc)}><span>{label(sc)}</span></button>
         {/each}
       {/if}
     {/each}

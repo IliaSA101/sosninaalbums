@@ -6,6 +6,8 @@ import { placesel } from '../places/placesel.svelte'
 import { canvas } from '../canvas/canvas.svelte'
 import { axisLock } from '../../base/geom/gridedit'
 import { snapLines, snapThreshold } from '../../base/geom/snap'
+import { coverSides } from '../cover/cover'
+import { store } from '../../base/core/store.svelte'
 import { MAX_SIZE, MIN_SIZE, resizeBox } from './textedit'
 import {
   boxOf,
@@ -130,14 +132,21 @@ export class TextGestures {
   // Перенос блока и боковые ручки ширины.
   start(e: PointerEvent, t: TextView, mode: 'move' | 'l' | 'r', click?: () => void) {
     const { spread, settings, width } = this.ctx()
-    const sw = settings.pageW * 2
-    const ph = settings.pageH
+    const sw = spread.w
+    const ph = spread.h
     const k = width / sw
     const sx = e.clientX
     const sy = e.clientY
     const box = boxOf(t)
-    const all = snapLines({ pageW: settings.pageW, pageH: ph, margin: settings.margin, rects: spread.rects })
-    const thr = snapThreshold(width, settings.pageW)
+    const all = snapLines({
+      w: sw,
+      h: ph,
+      mid: spread.mid,
+      margin: settings.margin,
+      rects: spread.rects,
+      sides: coverSides(spread, store.view.cover),
+    })
+    const thr = snapThreshold(width, sw)
     const base = this.base(t)
     let last: Gesture | null = null
     this.track(
@@ -162,7 +171,7 @@ export class TextGestures {
           last = { ...base, mode: 'resize', x: r.x, w: r.w, guideX: r.guide }
         } else {
           // Повёрнутый: проекция на ось строки, без прилипания (design §6.4).
-          const r = resizeLocal(box, mode, dx, dy, settings.pageW)
+          const r = resizeLocal(box, mode, dx, dy, sw)
           last = { ...base, mode: 'resize', x: r.x, y: r.y, w: r.w }
         }
         this.gesture = last
@@ -179,9 +188,9 @@ export class TextGestures {
   rotate(e: PointerEvent, t: TextView) {
     const rect0 = this.rect()
     if (!rect0) return
-    const { settings } = this.ctx()
-    const sw = settings.pageW * 2
-    const ph = settings.pageH
+    const { spread } = this.ctx()
+    const sw = spread.w
+    const ph = spread.h
     const box = boxOf(t)
     const cm = center(box)
     const c = { x: rect0.left + (cm.x / sw) * rect0.width, y: rect0.top + (cm.y / ph) * rect0.height }
@@ -215,9 +224,9 @@ export class TextGestures {
   // Угловая ручка: кегль и рамка растут вместе от (x, y) — так держит Go; подсказка «36 пт» у курсора,
   // на отпускании один SetTextScale.
   scale(e: PointerEvent, t: TextView, corner: Corner) {
-    const { settings, width } = this.ctx()
+    const { spread, width } = this.ctx()
     if (!this.ctx().root) return
-    const k = width / (settings.pageW * 2)
+    const k = width / spread.w
     const box = boxOf(t)
     const size0 = t.style.size
     const sx = e.clientX

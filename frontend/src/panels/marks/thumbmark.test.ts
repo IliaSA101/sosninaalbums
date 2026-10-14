@@ -19,7 +19,11 @@ describe('markTitle', () => {
   })
   it('оценка, метка, флажок', () => {
     expect(markTitle('a.jpg', { rating: 4, label: 'red', flag: 1 })).toBe('a.jpg · ★★★★ · метка: красная · отобрано')
-    expect(markTitle('a.jpg', { ...none, flag: -1 })).toBe('a.jpg · отклонено')
+    expect(markTitle('a.jpg', { ...none, flag: -1 })).toBe('a.jpg · отклонено (снять: выделите и нажмите U)')
+  })
+  it('отклонено в Lightroom — без подсказки про U', () => {
+    const lr: Mark = { rating: 0, label: '', flag: -1 }
+    expect(markTitle('a.jpg', { ...none, lr })).toBe('a.jpg · в Lightroom: отклонено')
   })
   it('незнакомая метка — её текст в одну строку', () => {
     const m: Mark = { ...none, label: 'other', labelText: 'Клиенту\n <b>x</b>' }

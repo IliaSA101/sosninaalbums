@@ -13,5 +13,9 @@
 // text.go (кадр, рамки текстов, ширина «по тексту», кегль подписи, PhotoRef.Copy), order.go (стек
 // слоёв), marks.go (типы отметок), viewtypes.go (View, выбор сеток, PathPair),
 // templates.go (шаблоны сеток), warm.go (параллельный счёт раскладок), limits.go (пределы
-// и ошибки), clamp.go (зажимы сетки и оформления, CheckTotals).
+// и ошибки), clamp.go (зажимы сетки и оформления, CheckTotals), fields.go (поля подписей 030:
+// Vars — поля шапки листа и VarsOf, Person, SheetCaps, их зажим, Expand, PersonFromFile), cover.go (обложка 032: Cover, CoverSpec,
+// пресеты, зажим), sheet.go (геометрия листа Geo, Sheet, Sheets, CoverGeo, AreaOf, проект-лист 031
+// NewSheet и FoldPages; Settings.PageW — только здесь, ClampSettings и Params; виньетка 031:
+// Vignette, роли мест, зажим и FixVignettes).
 package model

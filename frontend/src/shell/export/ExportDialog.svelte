@@ -7,20 +7,26 @@
     DPI_PRESETS,
     QUALITIES,
     buildOptions,
+    coverAvailable,
     estimateBytes,
+    exportWarnings,
     formatSize,
     loadPrefs,
     sampleName,
     savePrefs,
+    sizeSummary,
     type ExportPrefs,
     type ExportScope,
   } from './exportopts'
   import Modal from '../../base/ui/Modal.svelte'
+  import { isSheet } from '../../base/geom/sheet'
 
   // Окно «Экспорт» (спека 009 U8, design §6.4): что выгрузить, как резать, качество и dpi.
   // Открыто, пока store.exportOpen; дальше всё ведёт Go (вопросы, диалог папки, прогресс).
   const spreads = $derived(store.view.spreads)
   const settings = $derived(store.view.settings)
+  // Лист виньетки (031): страниц нет — «По страницам» и «л/п» не предлагаются, файл на лист.
+  const sheet = $derived(isSheet(settings))
 
   let scope = $state<ExportScope>('all')
   let text = $state('')
@@ -40,15 +46,29 @@
   })
 
   const current = $derived(store.current + 1)
-  const parsed = $derived(parseExportRange(text, spreads.length))
-  const bad = $derived(scope === 'range' && !!parsed.error)
+  const parsed = $derived(parseExportRange(text, spreads.length, sheet))
+  // Пункты обложки — только если она есть (и это не лист-виньетка); «только обложка» гасит выбор разворотов.
+  const hasCover = $derived(coverAvailable(store.view))
+  const only = $derived(hasCover && prefs.coverOnly)
+  const bad = $derived(!only && scope === 'range' && !!parsed.error)
   const can = $derived(!busy && !bad)
 
   const album = $derived(settings.dpi)
   const albumIsPreset = $derived(DPI_PRESETS.some((d) => d.v === album))
   // Выбранное dpi в числе; 0 в выборе — «как в альбоме».
   const dpiNow = $derived(prefs.dpi > 0 ? prefs.dpi : album)
-  const unit = $derived(prefs.pages ? 'страницу' : 'разворот')
+  const unit = $derived(sheet ? 'лист' : prefs.pages ? 'страницу' : 'разворот')
+  // Итог по выбранному объёму (U22) и предупреждения из данных альбома (U8).
+  const summary = $derived(
+    sizeSummary(settings, dpiNow, prefs.quality, prefs.pages, unit, {
+      scope,
+      spreads: spreads.length,
+      units: parsed.error ? null : parsed.units,
+      cover: hasCover && (prefs.cover || only),
+      only,
+    }),
+  )
+  const warn = $derived(exportWarnings(store.view, store.missing.length))
 
   function setPrefs(p: Partial<ExportPrefs>) {
     prefs = { ...prefs, ...p }
@@ -70,7 +90,9 @@
     if (!can) return
     busy = true
     await edit.idle() // набранное в тексте должно попасть в файл
-    const ok = await store.runExport(buildOptions(scope, current, text, prefs))
+    const ok = await store.runExport(
+      buildOptions(scope, current, text, sheet ? { ...prefs, pages: false } : prefs, hasCover, store.onCover),
+    )
     busy = false
     if (ok) close()
   }
@@ -84,22 +106,48 @@
 
 {#if store.exportOpen}
   <Modal title="Экспорт" onclose={close} wide>
-    <div class="group" role="radiogroup" aria-label="Что выгрузить">
-      <span class="cap">Развороты</span>
+    {#if hasCover}
+      <div class="group">
+        <span class="cap">Обложка</span>
+        <div class="opts">
+          <label
+            ><input
+              type="checkbox"
+              checked={prefs.cover || only}
+              disabled={only}
+              onchange={(e) => setPrefs({ cover: e.currentTarget.checked })}
+            />Обложка <span class="hint">(00.jpg)</span></label
+          >
+          <label
+            ><input type="checkbox" checked={prefs.coverOnly} onchange={(e) => setPrefs({ coverOnly: e.currentTarget.checked })} />Только
+            обложка</label
+          >
+        </div>
+      </div>
+    {/if}
+
+    <div class="group" class:off={only} role="radiogroup" aria-label="Что выгрузить">
+      <span class="cap">{sheet ? 'Листы' : 'Развороты'}</span>
       <div class="opts">
-        <label><input type="radio" name="ex-scope" checked={scope === 'all'} onchange={() => pick('all')} />Все ({spreads.length})</label>
         <label
-          ><input type="radio" name="ex-scope" checked={scope === 'current'} onchange={() => pick('current')} />Текущий ({current})</label
+          ><input type="radio" name="ex-scope" disabled={only} checked={scope === 'all'} onchange={() => pick('all')} />Все ({spreads.length})</label
+        >
+        <label
+          ><input type="radio" name="ex-scope" disabled={only} checked={scope === 'current'} onchange={() => pick('current')} />Текущий ({store.onCover &&
+          hasCover
+            ? 'обложка'
+            : current})</label
         >
         <label class="inline"
-          ><input type="radio" name="ex-scope" checked={scope === 'range'} onchange={() => pick('range')} />Диапазон:
+          ><input type="radio" name="ex-scope" disabled={only} checked={scope === 'range'} onchange={() => pick('range')} />Диапазон:
           <input
             type="text"
             class="ranges"
             class:bad
-            placeholder="3-5, 8, 7п"
+            placeholder={sheet ? '3-5, 8' : '3-5, 8, 7п'}
             aria-label="Диапазон экспорта"
             aria-invalid={bad}
+            disabled={only}
             bind:this={field}
             bind:value={text}
             onfocus={() => (scope = 'range')}
@@ -108,24 +156,28 @@
         >
       </div>
     </div>
-    {#if scope === 'range'}
+    {#if scope === 'range' && !only}
       {#if parsed.error}<p class="err">{parsed.error}</p>{/if}
-      <p class="hint">3-5, 8 — развороты; 7л, 7п — левая или правая страница.</p>
+      <p class="hint">
+        {sheet ? '3-5, 8 — номера листов.' : '3-5, 8 — развороты; 7л, 7п — левая или правая страница.'}
+      </p>
     {/if}
 
-    <div class="group" role="radiogroup" aria-label="Вид">
-      <span class="cap">Вид</span>
-      <div class="opts">
-        <label
-          ><input type="radio" name="ex-pages" checked={!prefs.pages} onchange={() => setPrefs({ pages: false })} />Разворотами
-          <span class="hint">{sampleName(current, spreads.length, false)}</span></label
-        >
-        <label
-          ><input type="radio" name="ex-pages" checked={prefs.pages} onchange={() => setPrefs({ pages: true })} />По страницам
-          <span class="hint">{sampleName(current, spreads.length, true)}</span></label
-        >
+    {#if !sheet}
+      <div class="group" role="radiogroup" aria-label="Вид">
+        <span class="cap">Вид</span>
+        <div class="opts">
+          <label
+            ><input type="radio" name="ex-pages" checked={!prefs.pages} onchange={() => setPrefs({ pages: false })} />Разворотами
+            <span class="hint">{sampleName(current, spreads.length, false)}</span></label
+          >
+          <label
+            ><input type="radio" name="ex-pages" checked={prefs.pages} onchange={() => setPrefs({ pages: true })} />По страницам
+            <span class="hint">{sampleName(current, spreads.length, true)}</span></label
+          >
+        </div>
       </div>
-    </div>
+    {/if}
 
     <div class="group" role="radiogroup" aria-label="Качество">
       <span class="cap">Качество</span>
@@ -163,7 +215,8 @@
         {/each}
       </div>
     </div>
-    <p class="hint size">{formatSize(estimateBytes(settings, dpiNow, prefs.quality, prefs.pages))} на {unit}.</p>
+    <p class="hint size">{summary}.</p>
+    {#if warn}<p class="warn">{warn}.</p>{/if}
 
     <div class="actions">
       <button class="ghost" onclick={close}>Отмена</button>
@@ -202,9 +255,13 @@
     gap: 6px;
     cursor: pointer;
   }
-  input[type='radio'] {
+  input[type='radio'],
+  input[type='checkbox'] {
     accent-color: var(--accent);
     margin: 0;
+  }
+  .group.off {
+    opacity: 0.5;
   }
   .inline {
     flex-wrap: wrap;
@@ -238,6 +295,11 @@
   }
   p.hint.size {
     margin: -4px 0 0;
+  }
+  p.warn {
+    margin: 8px 0 0;
+    color: var(--text);
+    font-size: 12px;
   }
   .chip {
     display: inline-flex;

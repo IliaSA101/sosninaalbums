@@ -45,13 +45,13 @@ describe('cardBoxes и previewRects', () => {
     expect(b).toEqual([r(0.05, 0.2, 0.25, 0.4), r(0.55, 0.2, 0.25, 0.4)])
   })
   it('мм: разворот', () => {
-    expect(previewRects(whole(), 'spread', 200, 100)).toEqual([r(40, 20, 120, 40)])
+    expect(previewRects(whole(), 'spread', { w: 400, h: 100, mid: 200 })).toEqual([r(40, 20, 120, 40)])
   })
   it('мм: правая страница сдвинута на страницу', () => {
-    expect(previewRects(page(), 'right', 200, 100)).toEqual([r(220, 20, 100, 40)])
+    expect(previewRects(page(), 'right', { w: 400, h: 100, mid: 200 })).toEqual([r(220, 20, 100, 40)])
   })
   it('мм: шаблон страницы на разворот — две копии', () => {
-    const [a, b] = previewRects(page(), 'spread', 200, 100)
+    const [a, b] = previewRects(page(), 'spread', { w: 400, h: 100, mid: 200 })
     expect(a).toEqual(r(20, 20, 100, 40))
     expect(b.x).toBeCloseTo(220)
     expect([b.y, b.w, b.h]).toEqual([20, 100, 40])
@@ -73,12 +73,12 @@ describe('угол коробки', () => {
     expect(cardBoxes(ch, 'left')).toBe(ch.boxes)
   })
   it('previewRects: угол сохраняется, центр не меняется', () => {
-    const [a, b] = previewRects(turned(), 'right', 200, 100)
+    const [a, b] = previewRects(turned(), 'right', { w: 400, h: 100, mid: 200 })
     expect(a).toEqual({ x: 180, y: 20, w: 100, h: 40, rot: 30 })
     expect('rot' in b).toBe(false)
   })
   it('previewRects: шаблон страницы на разворот — угол на обеих страницах', () => {
-    const rects = previewRects(turned(), 'spread', 200, 100)
+    const rects = previewRects(turned(), 'spread', { w: 400, h: 100, mid: 200 })
     expect(rects.map((x) => x.rot)).toEqual([30, undefined, 30, undefined])
     expect(rects[2].x).toBeCloseTo(180)
   })

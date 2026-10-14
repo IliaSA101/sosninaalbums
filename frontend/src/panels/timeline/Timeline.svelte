@@ -1,30 +1,49 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { store } from '../../base/core/store.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { canvas } from '../../editor/canvas/canvas.svelte'
-  import { tip, tipped } from '../../base/ui/tip.svelte'
-  import { thumbUrl } from '../../base/core/media'
-  import { flipCss, photoCss, thumbBox } from '../../base/geom/frame'
-  import { H, PAD, cellW, chipW, emptyPlaces, groupW, isBlank, mergeCount } from './timeline'
+  import { tip } from '../../base/ui/tip.svelte'
+  import { H, PAD, mergeCount } from './timeline'
+  import { afterNav, isHidden, shownW } from './chips'
   import { row } from '../../editor/spread/spreadrow.svelte'
   import { rowScroll } from '../../editor/spread/spreadrow'
-  import { shouldScroll } from './stripscroll'
+  import { CENTER_SEL, StripFollow } from './stripscroll'
   import { labelTitle, spreadLabel } from './spreadname'
   import FixedTip from '../../base/ui/FixedTip.svelte'
   import SpreadName from './SpreadName.svelte'
   import SpreadMenu from './SpreadMenu.svelte'
+  import SpreadChips from './SpreadChips.svelte'
+  import LowDpiBadge from '../../base/ui/LowDpiBadge.svelte'
+  import MissingMark from '../../base/ui/MissingMark.svelte'
+  import { missingIn } from '../library/missing'
+  import VigMark from '../vignette/VigMark.svelte'
   import JoinLine from './JoinLine.svelte'
   import AddColumn from './AddColumn.svelte'
+  import CoverTile from '../cover/CoverTile.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { spreadsel } from './spreadsel.svelte'
+  import { COVER_ID, isSheet, sheetIn, unitOf } from '../../base/geom/sheet'
   import { isSelectClick } from './spreadsel'
+  import { anyVaries } from '../layouts/variants'
+  import { clearVignette, makeVignette } from '../vignette/vigact'
+  import { vigDialog } from '../vignette/vigsession.svelte'
+  import { modes } from '../../base/prefs/view.svelte'
 
   // Лента альбома (спека 003): миниатюры фото, сгруппированные по разворотам.
   // Расчёты размеров — timeline/timeline.ts, подсказка — FixedTip. Поля по краям ленты — полширины окна:
   // и первая, и последняя группа встают по центру, под разворотом.
   const spreads = $derived(store.view.spreads)
   const n = $derived(spreads.length)
-  const max = $derived(store.view.maxSpreadPhotos || 7)
+  const unit = $derived(unitOf(store.view.settings))
+  // Обложка (032) — первый слот ряда, плитка стоит перед разворотами; слотов в ряду столько же, сколько центров в ленте.
+  const lead = $derived(store.lead)
+  const slots = $derived(n + lead)
+  // Плитка есть всегда, когда есть что ей предшествовать: обложка или развороты (пустая «перетащите фото»).
+  const coverTile = $derived(slots > 0 && !store.view.settings.sheet)
+  const max = $derived(store.view.maxSpreadPhotos || 64)
+  // Пропавшие фото — для метки в плитке разворота.
+  const missSet = $derived(new Set(store.missing))
 
   let box: HTMLDivElement
   let bw = $state(0) // видимая ширина ленты
@@ -36,27 +55,28 @@
   // пересчёт при правке, смене числа групп, ширины ленты, названия в правке и в начале движения.
   let centers: number[] = []
   let centersKey = ''
-  let wasMoving = false
-  let lastPos = NaN
-  let written: number | null = null // scrollLeft после нашей последней записи
+  const follow = new StripFollow()
   function measure() {
-    centers = Array.from(box.querySelectorAll<HTMLElement>('[data-drop="mini"], .addcol'), (el) => el.offsetLeft + el.offsetWidth / 2)
+    centers = Array.from(box.querySelectorAll<HTMLElement>(CENTER_SEL), (el) => el.offsetLeft + el.offsetWidth / 2)
   }
   $effect(() => {
-    const key = `${store.view.rev}|${n}|${bw}|${renaming}`
+    const key = `${store.view.rev}|${slots}|${bw}|${renaming}`
     const moving = row.moving
     const pos = row.pos
-    if (!box || n === 0 || bw === 0) return
-    if (key !== centersKey || centers.length !== n + 1 || (moving && !wasMoving)) {
+    if (!box || slots === 0 || bw === 0) {
+      // Пустая лента: прокрутку обнулил браузер, своя запись устарела (первый лист после пустой — 0 → 1).
+      follow.reset()
+      centersKey = ''
+      return
+    }
+    if (key !== centersKey || centers.length !== slots + 1 || follow.starting(moving)) {
       measure()
       centersKey = key
     }
-    const go = shouldScroll({ posChanged: pos !== lastPos, movingStarted: moving && !wasMoving, scrollLeft: box.scrollLeft, written })
-    wasMoving = moving
-    lastPos = pos
-    if (!go) return // пользователь прокрутил ленту сам — не отбираем до следующего хода ряда
+    // false — пользователь прокрутил ленту сам: не отбираем до следующего хода ряда
+    if (!follow.next(pos, moving, box.scrollLeft)) return
     box.scrollLeft = rowScroll(centers, pos, bw)
-    written = box.scrollLeft
+    follow.wrote(box.scrollLeft)
   })
 
   function wheel(e: WheelEvent) {
@@ -69,15 +89,35 @@
   // Разрез и склейка — функция «Разрез и склейка» (спека 011); без неё черта остаётся только целью переноса.
   const cuts = $derived(prefs.can('timeline'))
 
+  // Раскрытая длинная группа (027): одна на ленту. Сворачивается при смене текущего разворота;
+  // выбор на холсте фото, спрятанного под «+N», раскрывает группу текущего разворота.
+  let expanded = $state<string | null>(null)
+  // Переход на обложку (032) currentId не меняет — ключ учитывает onCover.
+  const navKey = () => (store.onCover ? COVER_ID : store.currentId)
+  let prevCur = navKey()
+  $effect(() => {
+    const cur = navKey()
+    expanded = afterNav(
+      untrack(() => expanded),
+      prevCur,
+      cur,
+    )
+    prevCur = cur
+  })
+  // Реагирует только на смену выделения и разворота: правка проекта не должна раскрывать свёрнутое заново.
+  $effect(() => {
+    const id = store.selectedCell
+    const cur = store.currentId
+    const onCover = store.onCover
+    untrack(() => {
+      if (onCover) return
+      const sp = spreads.find((s) => s.id === cur)
+      if (id && sp && isHidden(sp, id, expanded)) expanded = sp.id
+    })
+  })
+
   // Склейка и разрез у сетки закрыты: сначала «Вернуть авто» (спека 007).
   const gridAt = (i: number) => !!(spreads[i]?.grid || spreads[i + 1]?.grid)
-
-  function split(e: MouseEvent, id: string, at: number) {
-    e.stopPropagation()
-    if (!drag.clickAllowed()) return
-    tip.hide()
-    store.split(id, at)
-  }
 
   function pickCell(e: MouseEvent, i: number, id: string, sid: string) {
     e.stopPropagation()
@@ -88,8 +128,6 @@
     store.go(i)
     store.selectedCell = id
   }
-
-  const stop = (e: PointerEvent) => e.stopPropagation()
 
   // Меню правого щелчка по группе: удалить именно её, а по выделенной (две и больше) — все выделенные.
   let menu = $state<{ x: number; y: number; ids: string[] } | null>(null)
@@ -121,6 +159,23 @@
     menu = { x: e.clientX, y: e.clientY, ids }
   }
 
+  // «Сделать виньеткой» / «Обычный разворот» для группы под курсором (031).
+  function vignetteFromMenu(act: 'make' | 'clear' | 'setup') {
+    const sp = menu && sheetIn(store.view, menu.ids[0])
+    menu = null
+    if (!sp) return
+    if (act === 'setup') vigDialog.open(sp.id)
+    else if (act === 'make') void makeVignette(sp)
+    else void clearVignette(sp.id)
+  }
+
+  // «Разнообразить раскладки» (041) — для выделенных групп или той, по которой щёлкнули.
+  function varyFromMenu() {
+    const ids = menu?.ids ?? []
+    menu = null
+    void store.varyLayouts(ids, modes.varyLevel)
+  }
+
   function deleteFromMenu() {
     const ids = menu?.ids ?? []
     menu = null
@@ -129,11 +184,11 @@
   }
 </script>
 
-<div class="tl">
+<div class="tl" data-guide="timeline">
   <div
     class="timeline"
     class:dragging={drag.active}
-    class:empty={n === 0}
+    class:empty={slots === 0}
     bind:this={box}
     bind:clientWidth={bw}
     onwheel={wheel}
@@ -144,7 +199,8 @@
     style:--h="{H}px"
     style:--pad="{PAD}px"
   >
-    {#if n > 0}<div class="edge" style:width="{bw / 2}px"></div>{/if}
+    {#if slots > 0}<div class="edge" style:width="{bw / 2}px"></div>{/if}
+    {#if coverTile}<CoverTile />{/if}
     {#if n > 0}
       <!-- Узкая зона нового разворота в начало -->
       <div
@@ -152,7 +208,7 @@
         class:over={drag.over === 'new:0'}
         data-drop="new"
         data-at="0"
-        title="Перетащите фото сюда — новый разворот в начале"
+        title="Перетащите фото сюда — новый {unit.one} в начале"
       ></div>
     {/if}
 
@@ -161,92 +217,37 @@
       {@const gridJoin = gridAt(i)}
       <div
         class="group"
-        class:current={i === row.near}
+        class:current={i + lead === row.near}
         class:over={drag.over.startsWith(`mini:${sp.id}:`) && drag.payload?.kind === 'photos'}
         class:ins-before={drag.over === `mini:${sp.id}:before` && drag.payload?.kind === 'spread'}
         class:ins-after={drag.over === `mini:${sp.id}:after` && drag.payload?.kind === 'spread'}
         class:lifted={drag.active && drag.payload?.kind === 'spread' && drag.payload.id === sp.id}
         class:renaming={renaming === sp.id}
         class:picked={spreadsel.has(sp.id)}
-        style:contain-intrinsic-size="auto {groupW(sp)}px auto {H + 2 * PAD + 17}px"
+        style:contain-intrinsic-size="auto {shownW(sp, expanded)}px auto {H + 2 * PAD + 17}px"
         data-drop="mini"
         data-spread={sp.id}
         data-index={i}
         role="button"
         tabindex="-1"
-        aria-label="Разворот {i + 1}"
+        aria-label="{unit.cap} {i + 1}"
         onpointerdown={(e) => drag.start(e, () => ({ kind: 'spread', id: sp.id, index: i }))}
         onclick={(e) => pickGroup(e, i, sp.id)}
         oncontextmenu={(e) => openMenu(e, sp.id)}
         onkeydown={() => {}}
       >
-        <div class="chips">
-          {#each sp.photos as id, j (id)}
-            <div
-              class="chip"
-              class:selected={store.selectedCell === id}
-              class:ins-before={drag.over === `chip:${id}:before`}
-              class:ins-after={drag.over === `chip:${id}:after`}
-              class:lifted={drag.active &&
-                drag.payload?.kind === 'photos' &&
-                drag.payload.fromSpread === sp.id &&
-                drag.payload.ids[0] === id}
-              style:width="{cellW(sp.rects[j])}px"
-              data-drop="chip"
-              data-spread={sp.id}
-              data-index={j}
-              data-photo={id}
-              role="button"
-              tabindex="-1"
-              onpointerdown={(e) => {
-                e.stopPropagation()
-                drag.start(e, () => ({ kind: 'photos', ids: [id], fromSpread: sp.id }))
-              }}
-              onclick={(e) => pickCell(e, i, id, sp.id)}
-              onkeydown={() => {}}
-            >
-              {#if sp.frames?.[j]?.r}
-                <!-- Повёрнутое фото: целиком в своей рамке, лишнее обрезано (как на развороте) -->
-                <span class="rot"
-                  ><img
-                    src={thumbUrl(id)}
-                    alt=""
-                    loading="lazy"
-                    draggable="false"
-                    style={thumbBox(sp.rects[j], sp.frames[j].img.w / sp.frames[j].img.h, sp.frames[j].r)}
-                    style:transform={photoCss(sp.frames[j])}
-                  /></span
-                >
-              {:else}
-                <img src={thumbUrl(id)} alt="" loading="lazy" draggable="false" style:transform={flipCss(sp.frames?.[j])} />
-              {/if}
-              {#if j > 0 && !sp.grid && cuts}
-                <!-- Разрез перед этим фото -->
-                <button
-                  class="cut"
-                  aria-label="Разрезать разворот {i + 1} перед фото {j + 1}"
-                  onpointerdown={stop}
-                  use:tipped={{ text: 'Разрезать' }}
-                  onclick={(e) => split(e, sp.id, j)}
-                ></button>
-              {/if}
-            </div>
-          {/each}
-          {#if isBlank(sp)}
-            <!-- Пустой разворот: квадратная заглушка, без пунктира (пунктир — признак «+») -->
-            <div class="chip empty" style:width="{chipW(1)}px"></div>
-          {/if}
-          {#each emptyPlaces(sp) as pl (pl.id)}
-            <!-- Пустое место сетки: светло-серый прямоугольник -->
-            <div class="chip empty" style:width="{cellW(pl)}px"></div>
-          {/each}
-        </div>
+        <SpreadChips {sp} {i} {expanded} {cuts} onpick={pickCell} onexpand={() => (expanded = sp.id)} onfold={() => (expanded = null)} />
+        <LowDpiBadge count={sp.lowDPI} min={store.view.minDPI} />
+        <MissingMark count={missingIn(sp, missSet)} />
+        <VigMark kind={sp.kind} />
         {#if renaming === sp.id}
           <SpreadName id={sp.id} name={sp.name} onclose={() => (renaming = null)} />
         {:else}
+          <!-- Якорь справочника — только у номера текущего разворота: иначе подсветится самый широкий из всех -->
           <div
             class="num"
-            title={labelTitle(i, sp.name, true)}
+            {...i + lead === row.near ? { 'data-guide': 'spread-num' } : {}}
+            title={labelTitle(i, sp.name, true, isSheet(store.view.settings))}
             ondblclick={() => prefs.can('names') && (renaming = sp.id)}
             role="presentation"
           >
@@ -260,14 +261,26 @@
 
     <AddColumn />
 
-    {#if n > 0}<div class="edge" style:width="{bw / 2}px"></div>{/if}
+    {#if slots > 0}<div class="edge" style:width="{bw / 2}px"></div>{/if}
   </div>
   <!-- Уголок от разворота к текущей группе: центр ленты = центр разворота -->
-  {#if n > 0 && !canvas.zoomed}<div class="pointer"></div>{/if}
+  {#if slots > 0 && !canvas.zoomed}<div class="pointer"></div>{/if}
 </div>
 
 <FixedTip />
-{#if menu}<SpreadMenu x={menu.x} y={menu.y} count={menu.ids.length} onDelete={deleteFromMenu} onclose={() => (menu = null)} />{/if}
+{#if menu}
+  <SpreadMenu
+    x={menu.x}
+    y={menu.y}
+    count={menu.ids.length}
+    kind={sheetIn(store.view, menu.ids[0])?.kind}
+    onVignette={vignetteFromMenu}
+    onVary={varyFromMenu}
+    varies={anyVaries(store.view.spreads, menu.ids)}
+    onDelete={deleteFromMenu}
+    onclose={() => (menu = null)}
+  />
+{/if}
 
 <style>
   .tl {
@@ -365,95 +378,6 @@
   }
   .group.ins-after::before {
     right: 0;
-  }
-  .chips {
-    display: flex;
-    gap: 2px; /* = GAP */
-    height: var(--h);
-  }
-  .chip {
-    position: relative;
-    flex: none;
-    height: var(--h);
-    border: 2px solid #fff; /* = B */
-    background: #333;
-    cursor: grab;
-  }
-  .chip img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    pointer-events: none;
-    user-select: none;
-  }
-  /* Повёрнутое фото: картинка лежит по своим размерам, рамка обрезает */
-  .chip .rot {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-  }
-  .chip .rot img {
-    position: absolute;
-    width: auto;
-    height: auto;
-    max-width: none;
-    object-fit: fill;
-  }
-  .chip.empty {
-    background: #d4d4d8;
-    cursor: inherit;
-  }
-  .chip.selected {
-    border-color: var(--accent);
-  }
-  .chip.lifted {
-    opacity: 0.35;
-  }
-  .chip.ins-before::before,
-  .chip.ins-after::before {
-    content: '';
-    position: absolute;
-    top: -4px;
-    bottom: -4px;
-    width: 3px;
-    border-radius: 2px;
-    background: var(--accent);
-    z-index: 3;
-  }
-  .chip.ins-before::before {
-    left: -6px;
-  }
-  .chip.ins-after::before {
-    right: -6px;
-  }
-  /* Зона разреза: по центру зазора перед фото, захватывает края соседних миниатюр */
-  .cut {
-    all: unset;
-    position: absolute;
-    top: -4px;
-    bottom: -4px;
-    left: -8px; /* позиция от внутреннего края рамки: центр зазора на -3px */
-    width: 10px;
-    cursor: pointer;
-    z-index: 2;
-  }
-  .cut::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 4px;
-    border-left: 2px dashed var(--accent);
-    opacity: 0;
-    transition: opacity 0.1s;
-  }
-  .cut:hover::before,
-  .cut:focus-visible::before {
-    opacity: 1;
-  }
-  .dragging .cut {
-    display: none;
   }
   .num {
     text-align: center;

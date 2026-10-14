@@ -3,7 +3,7 @@
 import type { Payload, Target } from '../core/types'
 import { store } from '../core/store.svelte'
 import { dropOn } from './dropact'
-import { backdropTarget, cellSide, halfSide, isNoopMove, placeTarget } from './hit'
+import { backdropTarget, cellSide, coverTarget, halfSide, isNoopMove, placeTarget, sheetFrac } from './hit'
 
 const THRESHOLD = 5
 
@@ -106,7 +106,7 @@ function chipTarget(d: Data, p: PhotoPayload, fx: number): Target | null {
   const index = +d.index!
   if (p.ids.length === 1 && p.fromSpread === d.spread) {
     // Бросок на себя или на соседнюю позицию ничего не меняет — не подсвечиваем.
-    const from = store.view.spreads.find((s) => s.id === d.spread)?.photos.indexOf(p.ids[0]) ?? -1
+    const from = store.sheet(d.spread!)?.photos.indexOf(p.ids[0]) ?? -1
     if (isNoopMove(from, index, side)) return null
   }
   return { kind: 'chip', spread: d.spread!, index, photo: d.photo!, side }
@@ -122,7 +122,9 @@ function hit(x: number, y: number, p: Payload): Target | null {
     case 'cell':
       return cellTarget(d, p, fx)
     case 'spread':
-      return p.kind === 'photos' ? { kind: 'spread', spread: d.spread! } : null
+      if (p.kind !== 'photos') return null
+      // Доля ширины листа выбирает страницу для новых мест (042); у соседа в ряду точки нет — там «свободнее».
+      return 'peer' in d ? { kind: 'spread', spread: d.spread! } : { kind: 'spread', spread: d.spread!, at: sheetFrac(fx) }
     case 'chip':
       // Группу (разворот) тащат над её миниатюрами — цель та же, что у подложки группы.
       if (p.kind === 'spread') return mini(el.closest<HTMLElement>('[data-drop="mini"]'), x)
@@ -133,10 +135,19 @@ function hit(x: number, y: number, p: Payload): Target | null {
       return p.kind === 'photos' ? { kind: 'new', at: +d.at! } : null
     case 'library':
       return p.kind === 'photos' && p.fromSpread ? { kind: 'library' } : null
+  }
+  return zoneTarget(d, p)
+}
+
+// Цели-зоны карточки и плитки: место сетки, фон области, плитка обложки.
+function zoneTarget(d: Data, p: Payload): Target | null {
+  switch (d.drop) {
     case 'place':
       return placeTarget(d, p)
     case 'backdrop':
       return backdropTarget(d, p)
+    case 'cover':
+      return coverTarget(p)
   }
   return null
 }
@@ -167,6 +178,8 @@ function keyOf(t: Target | null): string {
       return `place:${t.place}`
     case 'backdrop':
       return t.many ? '' : `backdrop:${t.scope}`
+    case 'cover':
+      return t.many ? '' : 'cover'
   }
 }
 

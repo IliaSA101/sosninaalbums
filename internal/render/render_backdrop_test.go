@@ -141,3 +141,28 @@ func BenchmarkRenderBackdropRot(b *testing.B) {
 		}
 	}
 }
+
+// Плашка (корешок обложки, 032) лежит над фоном и цветом страниц, под местами; за край холста
+// не выходит, цвет страниц вне плашки виден.
+func TestRenderPlate(t *testing.T) {
+	c := flipCols
+	q := quadsBd(t)
+	area := layout.Rect{W: 200, H: 100}
+	bd := Backdrop{Area: area, Box: area, Img: layout.Rect{Y: -50, W: 200, H: 200}, Path: q}
+	solid := quadrants(t, testkit.TempDir(t), [4]color.RGBA{bdCream, bdCream, bdCream, bdCream})
+	cell := layout.Rect{X: 90, Y: 30, W: 20, H: 20}
+	plate := Plate{Rect: layout.Rect{X: 80, W: 40, H: 100}, Color: color.RGBA{10, 20, 30, 255}}
+	edge := Plate{Rect: layout.Rect{X: 180, Y: 90, W: 60, H: 30}, Color: color.RGBA{200, 0, 200, 255}} // выходит за холст
+	s := Spread{Bg: [2]color.RGBA{bdGray, bdGray}, Backdrops: []Backdrop{bd}, Plates: []Plate{plate, edge},
+		Photos: []Photo{coverPhoto(cell, 1, solid)}}
+	img := renderBd(t, s, 127)
+	wantAt(t, "фон левее плашки", img, 127, 50, 25, c.red)
+	wantAt(t, "фон правее плашки", img, 127, 150, 25, c.grn)
+	wantAt(t, "плашка поверх фона", img, 127, 85, 25, plate.Color)
+	wantAt(t, "плашка внизу", img, 127, 115, 75, plate.Color)
+	wantAt(t, "место поверх плашки", img, 127, 100, 40, bdCream)
+	wantAt(t, "плашка у края", img, 127, 195, 95, edge.Color)
+	// Без фона вокруг плашки — цвет страницы.
+	s.Backdrops = nil
+	wantAt(t, "цвет страницы", renderBd(t, s, 127), 127, 50, 25, bdGray)
+}

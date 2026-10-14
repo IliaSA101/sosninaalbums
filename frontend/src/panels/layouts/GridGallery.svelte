@@ -6,8 +6,10 @@
   import { applyChoice, tplCall } from './gridactions'
   import { cardBoxes, defaultN, dropTitle, fits, MAX_N, previewRects } from './gridgallery'
   import type { GridChoice, GridChoices, LayoutScope } from '../../base/core/types'
-  import Icon from '../../base/ui/Icon.svelte'
+  import { isSheet, newSheetSize, sheetSize, unitOf } from '../../base/geom/sheet'
   import Modal from '../../base/ui/Modal.svelte'
+  import TplRow from '../../base/ui/TplRow.svelte'
+  import TplItem from '../../base/ui/TplItem.svelte'
 
   // Вкладка «Сетки» галереи (спека 007): встроенные сетки на n фото и «Мои шаблоны».
   // Доли boxes от Go — проценты карточки; интерфейс ничего не считает, кроме перевода в мм для предпросмотра.
@@ -15,13 +17,16 @@
   // g приходит от LayoutGallery: пока галерея уезжает, gallery.cur уже null.
   let { g }: { g: { spread: string; scope: LayoutScope } } = $props()
   const s = $derived(store.view.settings)
+  const unit = $derived(unitOf(s))
   const sp = $derived(store.view.spreads.find((x) => x.id === g.spread))
   const scope = $derived(g.scope)
-  const cardW = $derived((H * (scope === 'spread' ? s.pageW * 2 : s.pageW)) / s.pageH)
+  // Размер листа и шов — из Go (sheet.ts); нет листа — по настройкам альбома.
+  const sheet = $derived(sp ? sheetSize(sp) : newSheetSize(s))
+  const cardW = $derived((H * (scope === 'spread' ? sheet.w : sheet.mid)) / sheet.h)
 
   // Фильтр: пока не выбран руками — по умолчанию (число фото или мест в области).
   let nPick = $state<number | null>(null)
-  const nWant = $derived(nPick ?? (sp ? defaultN(sp, s.pageW, scope) : 1))
+  const nWant = $derived(nPick ?? (sp ? defaultN(sp, sheet.mid, scope) : 1))
   $effect(() => {
     void scope // другая область — снова фильтр по умолчанию
     nPick = null
@@ -53,31 +58,27 @@
   const builtin = $derived(scope === 'spread' ? (res?.builtin ?? []) : [])
   const mine = $derived((res?.mine ?? []).filter((x) => fits(x, scope)))
 
-  const pages: { scope: LayoutScope; label: string }[] = [
-    { scope: 'spread', label: 'Разворот' },
-    { scope: 'left', label: 'Левая' },
-    { scope: 'right', label: 'Правая' },
-  ]
+  // У листа виньетки страниц нет (Go отказывает шаблонам по страницам): область одна, выбор прячется.
+  const pages = $derived<{ scope: LayoutScope; label: string }[]>(
+    isSheet(s)
+      ? [{ scope: 'spread', label: 'Лист' }]
+      : [
+          { scope: 'spread', label: 'Разворот' },
+          { scope: 'left', label: 'Левая' },
+          { scope: 'right', label: 'Правая' },
+        ],
+  )
   function setScope(next: LayoutScope) {
     if (next !== scope) gallery.open(next, 'grids')
   }
 
   function hover(ch: GridChoice | null) {
-    gallery.previewChoice(ch ? { key: ch.id, rects: previewRects(ch, scope, s.pageW, s.pageH) } : null)
+    gallery.previewChoice(ch ? { key: ch.id, rects: previewRects(ch, scope, sheet) } : null)
   }
   function pick(ch: GridChoice) {
     const { spread } = g
     gallery.close()
     void applyChoice(spread, scope, ch)
-  }
-
-  function scrollBy(e: MouseEvent, dir: number) {
-    const sc = (e.currentTarget as HTMLElement).parentElement!.querySelector<HTMLElement>('.scroll')!
-    sc.scrollBy({ left: dir * sc.clientWidth * 0.8, behavior: 'smooth' })
-  }
-  function wheel(e: WheelEvent) {
-    const sc = e.currentTarget as HTMLElement
-    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) sc.scrollLeft += e.deltaY
   }
 
   // ---------- шаблоны: переименовать, удалить, сохранить ----------
@@ -121,11 +122,13 @@
 </script>
 
 <div class="bar">
-  <div class="seg" role="group" aria-label="Область">
-    {#each pages as p (p.scope)}
-      <button class:on={scope === p.scope} onclick={() => setScope(p.scope)}>{p.label}</button>
-    {/each}
-  </div>
+  {#if pages.length > 1}
+    <div class="seg" role="group" aria-label="Область">
+      {#each pages as p (p.scope)}
+        <button class:on={scope === p.scope} onclick={() => setScope(p.scope)}>{p.label}</button>
+      {/each}
+    </div>
+  {/if}
   <div class="seg" role="group" aria-label="Число мест">
     {#each Array.from({ length: MAX_N }, (_, i) => i + 1) as n (n)}
       <button
@@ -137,75 +140,54 @@
     {/each}
   </div>
   {#if loading}<span class="busy">Считаю…</span>{/if}
-  <button class="text" onclick={() => ((saveName = ''), (save = { scope }))} title="Запомнить места этого разворота или страницы как шаблон"
+  <button
+    class="text"
+    onclick={() => ((saveName = ''), (save = { scope }))}
+    title={isSheet(s) ? 'Запомнить места этого листа как шаблон' : 'Запомнить места этого разворота или страницы как шаблон'}
     >Сохранить как шаблон…</button
   >
 </div>
 
 {#snippet row(label: string, list: GridChoice[], empty: string, own: boolean)}
-  <div class="line">
-    <div class="label">{label}</div>
-    <div class="track" class:own={own && list.length > 0}>
-      {#if list.length === 0}
-        <div class="empty">{loading && !res ? '' : empty}</div>
-      {:else}
-        <button class="nav" onclick={(e) => scrollBy(e, -1)} title="Прокрутить влево" aria-label="Прокрутить влево"
-          ><Icon name="chevron-left" size={18} /></button
+  <TplRow {label} count={list.length} empty={loading && !res ? '' : empty} tall={own && list.length > 0} inert={loading}>
+    {#each list as ch (ch.id)}
+      <TplItem
+        name={own ? ch.name : undefined}
+        onrename={own ? () => ((rename = ch), (renameName = ch.name), hover(null)) : undefined}
+        ondelete={own ? () => ((del = ch), hover(null)) : undefined}
+      >
+        <button
+          class="card"
+          class:dim={loading}
+          style:width="{cardW}px"
+          style:height="{H}px"
+          title={ch.name || undefined}
+          onmouseenter={() => hover(ch)}
+          onmouseleave={() => hover(null)}
+          onclick={() => pick(ch)}
         >
-        <div class="scroll" onwheel={wheel} inert={loading}>
-          {#each list as ch (ch.id)}
-            <div class="item">
-              <button
-                class="card"
-                class:dim={loading}
-                style:width="{cardW}px"
-                style:height="{H}px"
-                title={ch.name || undefined}
-                onmouseenter={() => hover(ch)}
-                onmouseleave={() => hover(null)}
-                onclick={() => pick(ch)}
-              >
-                {#each cardBoxes(ch, scope) as r, i (i)}
-                  <span
-                    class="cell"
-                    style:left="{r.x * 100}%"
-                    style:top="{r.y * 100}%"
-                    style:width="{r.w * 100}%"
-                    style:height="{r.h * 100}%"
-                    style:transform={r.rot ? `rotate(${r.rot}deg)` : undefined}
-                  ></span>
-                {/each}
-                <span class="spine"></span>
-                {#if ch.drop > 0}<span class="drop" title={dropTitle(ch.drop)}>−{ch.drop}</span>{/if}
-              </button>
-              {#if own}
-                <div class="tools">
-                  <button
-                    onclick={() => ((rename = ch), (renameName = ch.name), hover(null))}
-                    title="Переименовать"
-                    aria-label="Переименовать шаблон">✎</button
-                  >
-                  <button onclick={() => ((del = ch), hover(null))} title="Удалить шаблон" aria-label="Удалить шаблон"
-                    ><Icon name="x" size={12} /></button
-                  >
-                </div>
-                <div class="name">{ch.name}</div>
-              {/if}
-            </div>
+          {#each cardBoxes(ch, scope) as r, i (i)}
+            <span
+              class="cell"
+              style:left="{r.x * 100}%"
+              style:top="{r.y * 100}%"
+              style:width="{r.w * 100}%"
+              style:height="{r.h * 100}%"
+              style:transform={r.rot ? `rotate(${r.rot}deg)` : undefined}
+            ></span>
           {/each}
-        </div>
-        <button class="nav" onclick={(e) => scrollBy(e, 1)} title="Прокрутить вправо" aria-label="Прокрутить вправо"
-          ><Icon name="chevron-right" size={18} /></button
-        >
-      {/if}
-    </div>
-  </div>
+          <span class="spine"></span>
+          {#if ch.drop > 0}<span class="drop" title={dropTitle(ch.drop)}>−{ch.drop}</span>{/if}
+        </button>
+      </TplItem>
+    {/each}
+  </TplRow>
 {/snippet}
 
 {@render row(
   'Встроенные',
   builtin,
-  scope === 'spread' ? 'Нет шаблонов на такое число мест' : 'Встроенные шаблоны ставятся только на весь разворот',
+  scope === 'spread' ? 'Нет шаблонов на такое число мест' : `Встроенные шаблоны ставятся только на весь ${unit.one}`,
   false,
 )}
 {@render row(
@@ -227,7 +209,7 @@
 
 {#if del}
   <Modal title="Удалить шаблон?" onclose={() => (del = null)}>
-    <p>Шаблон «{del.name}» будет удалён из списка. Развороты, где он уже применён, не изменятся.</p>
+    <p>Шаблон «{del.name}» будет удалён из списка. {unit.cap === 'Лист' ? 'Листы' : 'Развороты'}, где он уже применён, не изменятся.</p>
     <div class="actions">
       <button class="ghost" onclick={() => (del = null)}>Отмена</button>
       <button class="primary" onclick={doDelete}>Удалить</button>
@@ -241,15 +223,19 @@
       >Название
       <input type="text" maxlength="60" data-autofocus placeholder="Шаблон N" bind:value={saveName} onkeydown={enter(doSave)} /></label
     >
-    <div class="field">
-      Область
-      <div class="seg" role="group" aria-label="Область шаблона">
-        {#each pages as p (p.scope)}
-          <button class:on={save.scope === p.scope} onclick={() => save && (save.scope = p.scope)}>{p.label}</button>
-        {/each}
+    {#if pages.length > 1}
+      <div class="field">
+        Область
+        <div class="seg" role="group" aria-label="Область шаблона">
+          {#each pages as p (p.scope)}
+            <button class:on={save.scope === p.scope} onclick={() => save && (save.scope = p.scope)}>{p.label}</button>
+          {/each}
+        </div>
       </div>
-    </div>
-    <p class="hint">Запоминаются только места, без фото. «Левая» и «Правая» дают шаблон страницы.</p>
+    {/if}
+    <p class="hint">
+      Запоминаются только места, без фото.{pages.length > 1 ? ' «Левая» и «Правая» дают шаблон страницы.' : ''}
+    </p>
     <div class="actions">
       <button class="ghost" onclick={() => (save = null)}>Отмена</button>
       <button class="primary" onclick={doSave}>Сохранить</button>
@@ -293,52 +279,6 @@
     height: 26px;
     font-size: 12px;
     padding: 0 10px;
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 4px;
-  }
-  .label {
-    flex: none;
-    width: 110px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-  .track {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    height: 68px; /* карточка + рамка при наведении */
-  }
-  .track.own {
-    height: 84px; /* + подпись шаблона */
-  }
-  .scroll {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    gap: 10px;
-    padding: 4px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-  }
-  .nav {
-    flex: none;
-    width: 24px;
-    height: 56px;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    background: transparent;
-  }
-  .item {
-    position: relative;
-    flex: none;
   }
   .card {
     all: unset;
@@ -384,42 +324,6 @@
     font-size: 11px;
     font-weight: 700;
     line-height: 16px;
-  }
-  .tools {
-    position: absolute;
-    left: 2px;
-    top: 2px;
-    display: none;
-    gap: 2px;
-  }
-  .item:hover .tools,
-  .item:focus-within .tools {
-    display: flex;
-  }
-  .tools button {
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    border-radius: 4px;
-    background: rgba(17, 17, 17, 0.8);
-  }
-  .name {
-    margin-top: 4px;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 11px;
-    color: var(--muted);
-    width: 0;
-    min-width: 100%;
-  }
-  .empty {
-    color: var(--muted);
-    font-size: 13px;
-    padding-left: 28px;
   }
   /* Окна */
   input[type='text'] {

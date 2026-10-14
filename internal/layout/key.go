@@ -21,12 +21,16 @@ func newGeom(p Params) geom {
 	left := Rect{p.Margin, p.Margin, p.PageW - 2*p.Margin, p.PageH - 2*p.Margin}
 	right := left
 	right.X += p.PageW
+	spine := p.PageW
+	if p.Sheet {
+		spine = 0 // у листа корешка нет: score без штрафа за сгиб
+	}
 	return geom{
 		spread: Rect{p.Margin, p.Margin, 2*p.PageW - 2*p.Margin, p.PageH - 2*p.Margin},
 		pages:  [2]Rect{left, right},
 		full:   Rect{0, 0, 2 * p.PageW, p.PageH},
 		bleed:  [2]Rect{{0, 0, p.PageW, p.PageH}, {p.PageW, 0, p.PageW, p.PageH}},
-		spine:  p.PageW,
+		spine:  spine,
 		gap:    p.Gap,
 	}
 }
@@ -153,7 +157,7 @@ func Build(key string, aspects []float64, p Params) (Result, bool) {
 		}
 	}
 	k, ok := parseKey(key)
-	if !ok || !leavesOK(k.leaves(), n) {
+	if !ok || !leavesOK(k.leaves(), n) || p.Sheet && IsPaged(key) {
 		return Result{}, false
 	}
 	g := newGeom(p)

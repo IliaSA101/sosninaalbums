@@ -6,6 +6,16 @@ const store = vi.hoisted(() => ({
   navSeq: 0,
   view: { spreads: [] as { id: string; photos: string[] }[] },
   go: (_i: number) => {},
+  // Ряд идёт по листам (обложка 032 + развороты); без обложки лист = разворот.
+  get sheetIndex() {
+    return this.current
+  },
+  get sheets() {
+    return this.view.spreads
+  },
+  goSheet(i: number) {
+    this.go(i)
+  },
 }))
 vi.mock('../../base/core/store.svelte', () => ({ store }))
 vi.mock('../../base/drag/drag.svelte', () => ({ drag: { active: false, rehit: () => {} } }))
@@ -91,6 +101,15 @@ describe('SpreadRow', () => {
     expect(row.pos).toBe(7)
     ride()
     expect(row.pos).toBe(8)
+  })
+
+  it('shown: пока ряд едет — цель перехода, а не слот на кадре (счётчик не отстаёт)', () => {
+    store.go(8)
+    expect(row.near).toBe(7)
+    expect(row.shown).toBe(8)
+    ride()
+    expect(row.shown).toBe(8)
+    expect(row.near).toBe(8)
   })
 
   it('step до слота «новый» и обратно: current не меняется', () => {

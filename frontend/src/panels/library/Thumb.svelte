@@ -2,6 +2,7 @@
   import { store } from '../../base/core/store.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import type { Photo } from '../../base/core/types'
+  import Icon from '../../base/ui/Icon.svelte'
   import { thumbUrl } from '../../base/core/media'
   import { colorBadge } from '../../editor/photo/color'
   import { markOf } from '../marks/marks'
@@ -35,7 +36,9 @@
     {#if badge}<span class="badge {badge.level}" title={badge.title}>{badge.label}</span>{/if}
     {#if mark.label !== ''}<span class="strip {mark.label}"></span>{/if}
     {#if mark.rating > 0}<span class="stars">{stars(mark.rating)}</span>{/if}
-    {#if mark.flag === 1}<span class="flag pick">⚑</span>{:else if rejected}<span class="flag rej">✕</span>{/if}
+    {#if mark.flag === 1}<span class="flag"><Icon name="flag" size={14} /></span>{:else if rejected}<span class="flag"
+        ><Icon name="flag-off" size={14} /></span
+      >{/if}
   </div>
 </div>
 
@@ -141,19 +144,15 @@
       bottom: 26px;
     }
   }
-  /* Флажок слева вверху: ⚑ — отобрано, ✕ — отклонено */
+  /* Флажок слева вверху: флажок — отобрано, перечёркнутый — отклонено. Не кнопка: курсор
+     и наведение — от самой миниатюры (pointer-events: none выше) */
   .flag {
-    left: 6px;
-    top: 6px;
-    font-size: 13px;
-    line-height: 14px;
+    left: 5px;
+    top: 5px;
+    display: block;
+    line-height: 0;
     color: #fff;
-    text-shadow:
-      0 0 2px rgb(0 0 0 / 0.9),
-      0 1px 2px rgb(0 0 0 / 0.9);
-  }
-  .flag.rej {
-    font-weight: 700;
+    filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 0.9)) drop-shadow(0 1px 1px rgb(0 0 0 / 0.9));
   }
   .check {
     position: absolute;

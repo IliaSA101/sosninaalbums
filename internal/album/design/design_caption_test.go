@@ -37,6 +37,25 @@ func TestCaptionSizeByFormat(t *testing.T) {
 	}
 }
 
+// Отступ подписи (030) переживает смену стиля (UI шлёт его со стилем) и переходит к новой подписи вместе со стилем.
+func TestCaptionPadKept(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	edtest.NewSpread(e, -1, edtest.Photos("a", "b"))
+	e.SetCaption("a", "А", "")
+	edtest.Change(e, func(p *model.Project) {
+		r, pad := p.Photos["a"], 4.0
+		c := *r.Caption
+		c.Pad, r.Caption = &pad, &c
+		p.Photos["a"] = r
+	})
+	e.SetCaptionStyle("a", model.ClampStyle(model.TextStyle{Size: 20}), true, 4) // UI шлёт текущий отступ вместе со стилем
+	e.SetCaption("b", "Б", "")
+	a, b := edtest.P(e).Photos["a"].Caption, edtest.P(e).Photos["b"].Caption
+	if a.PadOf() != 4 || b.PadOf() != 4 || a.Pad == b.Pad {
+		t.Fatalf("отступ: a %+v, b %+v", a, b)
+	}
+}
+
 func TestCaptionInheritsStyle(t *testing.T) {
 	e := edtest.Open(t, model.New(), "")
 	edtest.NewSpread(e, -1, edtest.Photos("a", "b"))
@@ -49,7 +68,7 @@ func TestCaptionInheritsStyle(t *testing.T) {
 	}
 	// Поправленное оформление: 20 пт, слева, на фото.
 	mine := model.ClampStyle(model.TextStyle{Font: "ptserif", Size: 20, Color: "#112233", Align: "left", Italic: true})
-	e.SetCaptionStyle("a", mine, true)
+	e.SetCaptionStyle("a", mine, true, 1)
 	// Тот же разворот.
 	e.SetCaption("b", "Б", "")
 	if c := edtest.P(e).Photos["b"].Caption; c.Style != mine || !c.Over {
@@ -57,13 +76,13 @@ func TestCaptionInheritsStyle(t *testing.T) {
 	}
 	// Другой разворот без подписей: ближайшая по ленте (до d ближе b, чем a).
 	other := model.ClampStyle(model.TextStyle{Font: "ptserif", Size: 16, Color: "#112233", Align: "right"})
-	e.SetCaptionStyle("b", other, false)
+	e.SetCaptionStyle("b", other, false, 1)
 	e.SetCaption("d", "Д", "")
 	if c := edtest.P(e).Photos["d"].Caption; c.Style != other || c.Over {
 		t.Fatalf("ближайшая: %+v", c)
 	}
 	// На своём развороте подпись есть — берём её, а не ближайшую по ленте.
-	e.SetCaptionStyle("d", mine, true)
+	e.SetCaptionStyle("d", mine, true, 1)
 	e.SetCaption("f", "Ф", "")
 	if c := edtest.P(e).Photos["f"].Caption; c.Style != mine || !c.Over {
 		t.Fatalf("тот же разворот: %+v", c)
@@ -87,9 +106,9 @@ func TestCaptionInheritsStyle(t *testing.T) {
 	edtest.NewSpread(e, -1, edtest.Photos("q"))
 	edtest.NewSpread(e, -1, edtest.Photos("r"))
 	e.SetCaption("p", "П", "")
-	e.SetCaptionStyle("p", other, false)
+	e.SetCaptionStyle("p", other, false, 1)
 	e.SetCaption("r", "Р", "")
-	e.SetCaptionStyle("r", mine, true)
+	e.SetCaptionStyle("r", mine, true, 1)
 	e.SetCaption("q", "К", "")
 	if c := edtest.P(e).Photos["q"].Caption; c.Style != other || c.Over {
 		t.Fatalf("ничья: %+v", c)
@@ -108,7 +127,7 @@ func TestCaptionNoopAndUndo(t *testing.T) {
 		t.Fatal("пустая подпись без подписи — холостая правка")
 	}
 	e.SetCaption("a", "Первая", "")
-	e.SetCaptionStyle("a", model.ClampStyle(model.TextStyle{Size: 18}), false)
+	e.SetCaptionStyle("a", model.ClampStyle(model.TextStyle{Size: 18}), false, 1)
 	rev = e.View().Rev
 	if v := e.SetCaption("a", "Первая", ""); v.Rev != rev {
 		t.Fatal("тот же текст — холостая правка")

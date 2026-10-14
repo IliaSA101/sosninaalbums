@@ -5,7 +5,10 @@ import { store, Api } from '../../base/core/store.svelte'
 import { styleSupport } from './fonts'
 import { clampSize, isBlank, sessionId } from './textedit'
 import { normDeg } from '../../base/geom/textbox'
-import type { CaptionView, SpreadView, TextStyle, TextView } from '../../base/core/types'
+import { clampPad, padOf, sampleCaption, startCaps } from '../captions/sheetcaps'
+import { token, type Field } from '../captions/fields'
+import { sheetIn, sheetsOf } from '../../base/geom/sheet'
+import type { CaptionView, SheetCaps, SpreadView, TextStyle, TextView } from '../../base/core/types'
 
 // Что выделено: свободный блок (id) или подпись к фото (id фото).
 export interface TextSel {
@@ -13,6 +16,10 @@ export interface TextSel {
   spread: string
   id: string
 }
+
+// SetSheetCaps: структура вида (SheetCaps) уходит в Go как есть; тип биндинга — класс с методами.
+const sheetCall = (spread: string, on: boolean, c: SheetCaps) =>
+  Api.SetSheetCaps(spread, on, c as unknown as Parameters<typeof Api.SetSheetCaps>[2])
 
 // Пауза после последней клавиши, после которой набранное уходит в Go.
 export const SEND_DELAY = 700
@@ -41,7 +48,7 @@ class Edit {
 
   get spread(): SpreadView | undefined {
     const s = this.sel
-    return s ? store.view.spreads.find((x) => x.id === s.spread) : undefined
+    return s ? sheetIn(store.view, s.spread) : undefined
   }
 
   get text(): TextView | undefined {
@@ -52,6 +59,11 @@ class Edit {
   get caption(): CaptionView | undefined {
     const s = this.sel
     return s?.kind === 'caption' ? this.spread?.captions.find((c) => c.photo === s.id) : undefined
+  }
+
+  // Общий стиль подписей текущего листа выделения (030); нет — у каждой подписи свой.
+  get caps(): SheetCaps | undefined {
+    return this.spread?.caps
   }
 
   get style(): TextStyle | undefined {
@@ -161,7 +173,7 @@ class Edit {
     await this.finish()
     const session = this.newSession()
     if (!(await store.run(Api.AddText(sp.id, this.lastPage, session)))) return
-    const t = store.view.spreads.find((s) => s.id === sp.id)?.texts.at(-1)
+    const t = sheetIn(store.view, sp.id)?.texts.at(-1)
     if (!t) return
     this.sel = { kind: 'text', spread: sp.id, id: t.id }
     store.selectedCell = null
@@ -170,7 +182,7 @@ class Edit {
 
   // Подпись к фото (кнопка «Подпись» в ленте EditRail): нет подписи — ставим заготовку, как у блока.
   async editCaption(photo: string) {
-    const sp = store.view.spreads.find((s) => s.photos.includes(photo))
+    const sp = sheetsOf(store.view).find((s) => s.photos.includes(photo))
     if (!sp) return
     await this.finish()
     const session = this.newSession()
@@ -193,15 +205,61 @@ class Edit {
     next.bold = !!next.bold && sup.bold
     next.italic = !!next.italic && sup.italic
     if (s.kind === 'text') store.run(Api.SetTextStyle(s.id, next))
-    else store.run(Api.SetCaptionStyle(s.id, next, !!this.caption?.over))
+    else this.putCaption(next, !!this.caption?.over, padOf(this.caption))
   }
 
   // Подпись под фото / на фото.
   setOver(over: boolean) {
     const st = this.style
+    if (!st || this.sel?.kind !== 'caption') return
+    this.putCaption(st, over, padOf(this.caption))
+  }
+
+  // Отступ подписи от фото, мм (на фото — от нижнего края).
+  setPad(v: number): Promise<unknown> | undefined {
+    const st = this.style
+    if (!st || this.sel?.kind !== 'caption') return
+    return this.putCaption(st, !!this.caption?.over, clampPad(v, padOf(this.caption)))
+  }
+
+  // Оформление подписи: при общем стиле листа правится он (разом у всех подписей листа), иначе своя подпись.
+  private putCaption(st: TextStyle, over: boolean, pad: number): Promise<unknown> | undefined {
     const s = this.sel
-    if (!st || s?.kind !== 'caption') return
-    store.run(Api.SetCaptionStyle(s.id, st, over))
+    const caps = this.caps
+    if (!s || s.kind !== 'caption') return
+    if (caps) return store.run(sheetCall(s.spread, true, { ...caps, style: st, over, pad }))
+    return store.run(Api.SetCaptionStyle(s.id, st, over, pad))
+  }
+
+  // «Один стиль на лист» (спека 030): включить со стилем образца или снять.
+  setSheet(spreadId: string, on: boolean) {
+    const sp = sheetIn(store.view, spreadId)
+    if (!sp) return
+    if (!on) return sp.caps ? store.run(sheetCall(spreadId, false, sp.caps)) : undefined
+    const sample = sampleCaption(sp, sp.id === this.sel?.spread ? this.caption : undefined)
+    if (sample) return store.run(sheetCall(spreadId, true, startCaps(sample)))
+  }
+
+  // Шаблон подписи фото без своей и «ужимать» — поля стиля листа.
+  setSheetPart(spreadId: string, patch: Partial<Pick<SheetCaps, 'text' | 'wrap'>>) {
+    const caps = sheetIn(store.view, spreadId)?.caps
+    if (caps) return store.run(sheetCall(spreadId, true, { ...caps, ...patch }))
+  }
+
+  // Поле в позицию курсора: в открытом редакторе — вставкой текста (курсор остаётся, набор уходит обычным путём),
+  // иначе в конец шаблона выделенного блока или подписи.
+  async insertField(f: Field) {
+    const s = this.sel
+    if (!s) return
+    const t = token(f)
+    if (this.target && !this.closing && document.execCommand('insertText', false, t)) return
+    // Недосланный набор уйдёт первым: иначе SetText с шаблоном затёр бы только что набранное.
+    await this.idle()
+    const cur = this.text ?? this.caption
+    if (!cur) return
+    const text = (cur.src ?? cur.text) + t
+    const session = this.newSession()
+    await store.run(s.kind === 'text' ? Api.SetText(s.id, text, session) : Api.SetCaption(s.id, text, session))
   }
 
   // Delete на выделенном: набранное не отправляем, блок или подпись уходят.

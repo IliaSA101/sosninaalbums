@@ -22,6 +22,7 @@ export interface MenuItem {
   checked?: boolean // пункт-переключатель: галочка слева
   sub?: MenuItem[]
   sep?: boolean // линия перед пунктом
+  hint?: string // подсказка при наведении (title)
 }
 
 export type MenuId = 'file' | 'edit' | 'view' | 'help'
@@ -45,6 +46,9 @@ export interface MenuCtx {
   anySelection: boolean // выделено что угодно (фото в ленте, место, текст)
   deletable: boolean // есть что удалять с разворота (место, фото, текст)
   flippable: boolean // выделено фото на развороте (зеркалить, повернуть)
+  varyable?: boolean // у «Разнообразить раскладки» есть цель: развороты «Авто» с фото среди выделенных, без выделения — текущий; нет — серое
+  vigable?: boolean // текущий лист можно сделать виньеткой (обычный разворот, не обложка); нет — серое
+  vigSetup?: boolean // текущий лист — виньетка: «Настроить виньетку…» доступна; нет — серое
   layerable?: boolean // «Ручная» и выделено место, фото или текст: слои двигать есть что; нет — серое
   missing: number // пропавших фото
   exporting: boolean // экспорт уже идёт
@@ -68,6 +72,16 @@ interface Spec extends Omit<MenuItem, 'keys' | 'sub'> {
   sub?: Spec[]
 }
 
+// Необязательные поля пункта, что копируются как есть (задан — копируем; disabled только true).
+function plain(spec: Spec): Partial<MenuItem> {
+  const o: Partial<MenuItem> = {}
+  if (spec.arg !== undefined) o.arg = spec.arg
+  if (spec.hint) o.hint = spec.hint
+  if (spec.disabled) o.disabled = true
+  if (spec.checked !== undefined) o.checked = spec.checked
+  return o
+}
+
 // Группа без пунктов (все скрыты уровнем) пропадает вместе со своей чертой.
 function build(groups: Spec[][], can: (f: Feature) => boolean): MenuItem[] {
   const out: MenuItem[] = []
@@ -75,14 +89,11 @@ function build(groups: Spec[][], can: (f: Feature) => boolean): MenuItem[] {
     let first = true
     for (const spec of g) {
       if (spec.feature && !can(spec.feature)) continue
-      const it: MenuItem = { id: spec.id, label: spec.label }
+      const it: MenuItem = { id: spec.id, label: spec.label, ...plain(spec) }
       if (spec.cmd) {
         it.cmd = spec.cmd
         it.keys = keysOf(spec.cmd)
       }
-      if (spec.arg !== undefined) it.arg = spec.arg
-      if (spec.disabled) it.disabled = true
-      if (spec.checked !== undefined) it.checked = spec.checked
       if (spec.sub) {
         it.sub = build([spec.sub], can)
         if (it.sub.length === 0 && !spec.disabled) continue
@@ -133,6 +144,14 @@ function fileSpecs(c: MenuCtx): Spec[][] {
   return [
     [
       { id: 'new', label: 'Новый альбом', cmd: 'new' },
+      // Отдельный проект-лист, не виньетка в альбоме (отзыв 14.10): та — «Правка ▸ Сделать разворот виньеткой».
+      {
+        id: 'newSheet',
+        label: 'Новый проект: виньетка-лист…',
+        cmd: 'newSheet',
+        feature: 'vignette',
+        hint: 'Отдельный плакат класса 20×30 или 30×40 — без альбома',
+      },
       { id: 'open', label: 'Открыть…', cmd: 'open' },
       {
         id: 'recent',
@@ -185,6 +204,11 @@ function editSpecs(c: MenuCtx): Spec[][] {
     ],
     [
       { id: 'addText', label: 'Добавить текст', cmd: 'addText', feature: 'text', disabled: !c.hasSpread },
+      { id: 'pasteNames', label: 'Имена из списка…', cmd: 'pasteNames', feature: 'captions', disabled: !c.hasSpread },
+      { id: 'makeVignette', label: 'Сделать разворот виньеткой', cmd: 'makeVignette', feature: 'vignette', disabled: !c.vigable },
+      { id: 'vigSetup', label: 'Настроить виньетку…', cmd: 'vigSetup', feature: 'vignette', disabled: !c.vigSetup },
+      // 041: выделенные развороты ленты, нет выделения — текущий; серое, если менять нечего (сетки, виньетки, пустые)
+      { id: 'varyLayouts', label: 'Разнообразить раскладки', cmd: 'varyLayouts', feature: 'variants', disabled: !c.varyable },
       {
         id: 'layer',
         label: 'Слой',
@@ -252,6 +276,7 @@ function viewSpecs(c: MenuCtx): Spec[][] {
 function helpSpecs(): Spec[][] {
   return [
     [
+      { id: 'guide', label: 'Справочник функций…', cmd: 'guide' },
       { id: 'help', label: 'Горячие клавиши', cmd: 'help' },
       { id: 'startWindow', label: 'Стартовое окно', cmd: 'startWindow' },
       { id: 'whatsNew', label: 'Что нового', cmd: 'whatsNew' },

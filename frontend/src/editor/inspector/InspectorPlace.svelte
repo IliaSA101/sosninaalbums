@@ -10,10 +10,12 @@
   // Карточка пустого места или группы (спеки 008, 014). Место: X/Y/Ш/В образца, замок, привязка (общая с текстом),
   // «Целиком / С обрезкой». Группа (2+ объекта, в том числе тексты): состав в заголовке и X/Y/Ш/В общей рамки.
   // Удалить — в ленте и по Delete.
+  // head=false — заголовок рисует сама карточка (docked, cardTitle): сворачиваемая шапка.
+  let { head = true }: { head?: boolean } = $props()
   const title = $derived(placesel.isGroup ? groupTitle(placesel.selected.length, placesel.texts.length) : 'Место')
 </script>
 
-<div class="head">{title}</div>
+{#if head}<div class="head">{title}</div>{/if}
 {#if prefs.can('manual')}
   {#if placesel.isGroup}<GroupFields />{:else}<PlaceFields />{/if}
   <SnapToggle />

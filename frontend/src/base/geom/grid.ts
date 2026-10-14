@@ -4,7 +4,7 @@
 import { clampBox } from './snap'
 import type { Handle, Rect } from '../core/types'
 
-// Размер разворота: w = 2·pageW, h = pageH.
+// Размер листа: sv.w × sv.h (разворот — 2·pageW × pageH).
 export interface Bounds {
   w: number
   h: number

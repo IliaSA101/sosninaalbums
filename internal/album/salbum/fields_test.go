@@ -71,7 +71,8 @@ func TestLoadPlaceRotClamp(t *testing.T) {
 func TestPlaceFieldsRoundTrip(t *testing.T) {
 	dir := testkit.TempDir(t)
 	_, ids := gridFile(t, dir, []string{"a"}, nil)
-	full := model.Place{ID: "c0ffee000001", X: 20.5, Y: 30.25, W: 100, H: 60, Photo: ids["a"], Fit: model.FitContain, Rot: 30}
+	full := model.Place{ID: "c0ffee000001", X: 20.5, Y: 30.25, W: 100, H: 60, Photo: ids["a"], Fit: model.FitContain, Rot: 30,
+		Role: model.RoleTeacher}
 	v := reflect.ValueOf(full)
 	for i := range v.NumField() {
 		if v.Field(i).IsZero() {
@@ -79,7 +80,9 @@ func TestPlaceFieldsRoundTrip(t *testing.T) {
 		}
 	}
 	pl := full
-	data, _ := gridFile(t, dir, []string{"a"}, []*model.Spread{{ID: "aaaaaaaaaaaa", Photos: []string{ids["a"]}, Grid: []*model.Place{&pl}}})
+	// Роль живёт только у виньетки (031): разворот — виньетка с одним учителем.
+	data, _ := gridFile(t, dir, []string{"a"}, []*model.Spread{{ID: "aaaaaaaaaaaa", Photos: []string{ids["a"]}, Grid: []*model.Place{&pl},
+		Kind: model.KindVignette, Vig: &model.Vignette{Tpl: "t-left", Teachers: 1, Ratio: model.VigRatio}}})
 	p := mustDecode(t, data, dir)
 	if got := *p.Spreads[0].Grid[0]; got != full {
 		t.Fatalf("круг: %+v, ждали %+v", got, full)
@@ -296,6 +299,25 @@ func TestBackdropFileRoundTrip(t *testing.T) {
 	}
 }
 
+// Load: разворот с 64 текстами (спека 026) открывается целиком, с 65 — остаются первые 64.
+func TestLoadTexts64(t *testing.T) {
+	dir := testkit.TempDir(t)
+	blocks := func(n int) []*model.TextBlock {
+		out := make([]*model.TextBlock, n)
+		for i := range out {
+			out[i] = &model.TextBlock{ID: model.NewID(), X: float64(i % 8 * 60), Y: float64(i / 8 * 30), W: 50, Text: "т", Style: model.PlainStyle()}
+		}
+		return out
+	}
+	full, over := blocks(64), blocks(65)
+	q := mustDecode(t, bdFile(t, dir, nil, []*model.Spread{{ID: "s0", Texts: full}, {ID: "s1", Texts: over}}), dir)
+	for i, s := range q.Spreads {
+		if len(s.Texts) != 64 || s.Texts[63].ID != []string{full[63].ID, over[63].ID}[i] {
+			t.Fatalf("разворот %d: блоков %d", i, len(s.Texts))
+		}
+	}
+}
+
 // Файл: 0 не пишется, 0.4 переживает круг, мусор при чтении зажат, версия — текущая.
 func TestBackdropFadeFile(t *testing.T) {
 	dir := testkit.TempDir(t)
@@ -320,7 +342,7 @@ func TestBackdropFadeFile(t *testing.T) {
 	if bytes.Count(saved, []byte(`"fade"`)) != 3 || !bytes.Contains(saved, []byte(`"fade": 0.4`)) {
 		t.Fatalf("поле fade в файле:\n%s", saved)
 	}
-	if f := fileJSON(t, path); f.Version != 5 {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion {
 		t.Fatalf("версия %d", f.Version)
 	}
 	r, err := Load(path)

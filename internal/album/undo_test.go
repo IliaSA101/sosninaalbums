@@ -242,3 +242,92 @@ func TestEditPanicReleasesLock(t *testing.T) {
 		t.Fatal("e.mu остался занятым после паники в edit")
 	}
 }
+
+// dropEditor — разворот-сетка s1: n мест 50×33 рядами по 10, первые full заняты f0…; «Авто»
+// s2 с x1. Собран правкой и без шагов отмены: пути «/f0.jpg» NewEditor не пропустил бы.
+func dropEditor(t *testing.T, n, full int) *Editor {
+	e := newEditor(t, model.New(), "")
+	e.change(func(p *model.Project) {
+		s := &model.Spread{ID: "s1", Photos: []string{}}
+		for i := range n {
+			pl := &model.Place{ID: fmt.Sprintf("%012x", i+1), X: 5 + float64(i%10)*55, Y: 5 + float64(i/10)*45, W: 50, H: 33}
+			if i < full {
+				pl.Photo = fmt.Sprintf("f%d", i)
+				s.Photos = append(s.Photos, pl.Photo)
+				model.Remember(p, photos(pl.Photo))
+			}
+			s.Grid = append(s.Grid, pl)
+		}
+		model.Remember(p, photos("x1"))
+		p.Spreads = []*model.Spread{s, {ID: "s2", Photos: []string{"x1"}}}
+	})
+	e.undo, e.undoAlbum, e.undoBytes = nil, 0, 0
+	return e
+}
+
+// TestDropPhotosOneUndo — каждый исход броска 042 — один шаг отмены до байта (Undo, затем
+// Redo); вопрос и отказ — без шага и без rev.
+func TestDropPhotosOneUndo(t *testing.T) {
+	vig := func(t *testing.T) *Editor {
+		e := newEditor(t, NewVignetteSheet(204, 304), "")
+		var ids []string
+		for i := range 25 {
+			ids = append(ids, fmt.Sprintf("v%d", i))
+		}
+		e.FillPlaces(photos(ids...), e.p.Spreads[0].ID)
+		e.undo, e.undoAlbum, e.undoBytes = nil, 0, 0
+		return e
+	}
+	for _, c := range []struct {
+		name         string
+		e            func(t *testing.T) *Editor
+		place        string
+		ph           []string
+		rest         string
+		step, failed bool
+	}{
+		{name: "места", e: func(t *testing.T) *Editor { return dropEditor(t, 4, 1) }, ph: []string{"n1", "n2"}, step: true},
+		{name: "плитка", e: func(t *testing.T) *Editor { return dropEditor(t, 2, 2) }, ph: []string{"n1", "n2", "x1"}, step: true},
+		{name: "вопрос", e: func(t *testing.T) *Editor { return dropEditor(t, 3, 1) }, ph: []string{"n1", "n2", "n3"}},
+		{name: "вставить", e: func(t *testing.T) *Editor { return dropEditor(t, 3, 1) }, ph: []string{"n1", "n2", "n3"}, rest: "add", step: true},
+		{name: "не добавлять", e: func(t *testing.T) *Editor { return dropEditor(t, 3, 1) }, ph: []string{"n1", "n2", "n3"}, rest: "skip", step: true},
+		{name: "замена на месте", e: func(t *testing.T) *Editor { return dropEditor(t, 2, 2) }, place: "000000000001", ph: []string{"n1", "n2"}, rest: "add", step: true},
+		{name: "обмен на месте", e: func(t *testing.T) *Editor { return dropEditor(t, 2, 2) }, place: "000000000002", ph: []string{"x1"}, step: true},
+		{name: "«Авто»", e: func(t *testing.T) *Editor { return dropEditor(t, 2, 2) }, ph: []string{"n1"}, step: true},
+		{name: "виньетка растёт", e: vig, ph: []string{"n1", "n2"}, step: true},
+		{name: "64 места — отказ", e: func(t *testing.T) *Editor { return dropEditor(t, 62, 62) }, ph: []string{"n1", "n2", "n3"}, failed: true},
+		{name: "холостой", e: func(t *testing.T) *Editor { return dropEditor(t, 2, 2) }, ph: []string{"f0"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := c.e(t)
+			sid := e.p.Spreads[0].ID
+			if c.name == "«Авто»" {
+				sid = "s2"
+			}
+			before, rev := model.Marshal(e.p), e.rev
+			_, out, err := e.DropPhotos(sid, c.place, photos(c.ph...), -1, c.rest)
+			after := model.Marshal(e.p)
+			undoInvariants(t, e)
+			if (err != nil) != c.failed {
+				t.Fatalf("ошибка %v", err)
+			}
+			if !c.step {
+				if len(e.undo) != 0 || e.rev != rev || !bytes.Equal(after, before) {
+					t.Fatalf("без шага: шагов %d, rev %d → %d, %+v", len(e.undo), rev, e.rev, out)
+				}
+				return
+			}
+			if len(e.undo) != 1 || bytes.Equal(after, before) {
+				t.Fatalf("шагов %d, ждали 1; %+v", len(e.undo), out)
+			}
+			e.Undo()
+			if !bytes.Equal(model.Marshal(e.p), before) {
+				t.Fatal("Undo — не байт в байт")
+			}
+			e.Redo()
+			if !bytes.Equal(model.Marshal(e.p), after) {
+				t.Fatal("Redo — не байт в байт")
+			}
+		})
+	}
+}

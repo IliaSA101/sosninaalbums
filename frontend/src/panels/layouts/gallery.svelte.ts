@@ -4,12 +4,21 @@ import * as Api from '../../../wailsjs/go/app/App'
 import { errText } from '../../base/core/errtext'
 import { store } from '../../base/core/store.svelte'
 import { gridAct } from './gridact.svelte'
-import type { Choice, Choices, GalleryTab, LayoutScope, PageView, RotRect } from '../../base/core/types'
+import { hasSeam, isCover } from '../../base/geom/sheet'
+import type { FamilyFilter } from './variants'
+import { stepVignette } from '../vignette/vigact'
+import { isVignette } from '../vignette/vignette'
+import type { Choice, Choices, GalleryTab, LayoutScope, PageView, RotRect, SpreadView } from '../../base/core/types'
 
 // У страницы есть что выбирать: ⊞, листание и галерея страницы. Раскладка вне рядов
 // (variant −1) при ≥ 2 фото тоже считается — листание вернёт её в ряд.
 export function pageSwitchable(p: PageView | undefined): boolean {
   return !!p && (p.variants >= 2 || (p.variant < 0 && p.photos >= 2))
+}
+
+// Страница, на которую открыта галерея, пропала: у листа нет шва (одна страница) или выбирать на ней нечего.
+function pageGone(s: SpreadView, scope: LayoutScope): boolean {
+  return scope !== 'spread' && !(hasSeam(s) && pageSwitchable(s.pages?.[scope === 'left' ? 0 : 1]))
 }
 
 class Gallery {
@@ -20,13 +29,24 @@ class Gallery {
   choices = $state<Choices | null>(null)
   preview = $state<{ spread: string; rects: RotRect[] } | null>(null) // rot — у шаблонов с углом
 
+  moreBusy = $state(false) // плитка «Ещё» ждёт ответа Go
+
+  // 041: фильтр семейств и ряды, где похожие раскрыты (по подписи ряда). Живут, пока галерея открыта.
+  family = $state<FamilyFilter>('all')
+  openTwins = $state<readonly string[]>([])
+
   private choicesReq = 0
   private choicesWant = ''
 
   // Листание по кругу: всего разворота или одной страницы (вторая не двигается).
   async step(scope: LayoutScope, delta: number) {
     const s = store.spread
-    if (!s || !s.layout) return
+    // Виньетка: листаются шаблоны виньетки, а не раскладки «Авто» (решение 80).
+    if (isVignette(s)) {
+      await stepVignette(s, delta)
+      return
+    }
+    if (!s || !s.layout || isCover(s)) return
     await store.run(Api.StepLayout(s.id, scope, delta))
   }
 
@@ -36,17 +56,39 @@ class Gallery {
   open(scope: LayoutScope, tab: GalleryTab = 'layouts') {
     const s = store.spread
     // На сетке раскладки открываются тоже: выбор спросит «Вернуть авто?» (backToAuto).
-    if (!s || (tab === 'layouts' && !s.layout && !s.grid)) return
+    // У обложки (032) раскладок «Авто», шаблонов и копирования сетки нет.
+    if (!s || isCover(s) || (tab === 'layouts' && !s.layout && !s.grid)) return
+    // У виньетки одна галерея — шаблоны виньетки (LayoutGallery подменяет содержимое); шаблонов сетки нет.
+    if (isVignette(s)) {
+      if (tab !== 'layouts') return
+      scope = 'spread'
+    }
     const g = this.cur
     if (g?.spread === s.id && g.scope === scope && g.tab === tab) return this.close()
     this.cur = { spread: s.id, scope, tab }
     this.preview = null
+    this.resetView()
     this.sync()
   }
 
   close() {
     this.cur = null
     this.preview = null
+    this.resetView()
+  }
+
+  private resetView() {
+    this.family = 'all'
+    this.openTwins = []
+  }
+
+  setFamily(f: FamilyFilter) {
+    this.family = f
+  }
+
+  // Плитка «Похожие: N»: раскрыть ряд на месте и обратно.
+  toggleTwins(row: string) {
+    this.openTwins = this.openTwins.includes(row) ? this.openTwins.filter((r) => r !== row) : [...this.openTwins, row]
   }
 
   previewChoice(c: Choice | null) {
@@ -58,8 +100,29 @@ class Gallery {
     const g = this.cur
     if (!g) return
     this.close()
+    // Виньетка не возвращается в «Авто» обычной раскладкой — выход только «Обычный разворот».
+    if (isVignette(store.view.spreads.find((x) => x.id === g.spread))) return
     // На сетке выбор раскладки сбрасывает места — сначала вопрос.
     await gridAct.backToAuto(g.spread, key)
+  }
+
+  // Плитка «Ещё» (027): Go досчитывает ряд «Авто» на порцию. Ответ годится, если проект не менялся
+  // и галерея всё ещё на этом развороте; иначе его выбрасываем (sync уже запросил свежие варианты).
+  async loadMore() {
+    const g = this.cur
+    const c = this.choices
+    if (!g || !c || c.spread !== g.spread || this.moreBusy) return
+    const have = c.whole.inOrder.length
+    this.moreBusy = true
+    try {
+      const res = (await Api.MoreLayouts(g.spread, have)) as unknown as Choices
+      const cur = this.cur
+      if (cur?.spread === g.spread && res.spread === g.spread && res.rev === store.view.rev) this.choices = res
+    } catch (e) {
+      store.notify(errText(e), 'error')
+    } finally {
+      this.moreBusy = false
+    }
   }
 
   // Галерея следует за проектом: разворот исчез или страница больше не своя — закрыть;
@@ -68,10 +131,11 @@ class Gallery {
     const g = this.cur
     if (!g) return
     const s = store.view.spreads.find((x) => x.id === g.spread)
+    // Шаблоны виньетки галерея запрашивает сама (VigGallery): тут только следим, чтобы лист был на месте.
+    if (isVignette(s)) return
     // Вкладке сеток варианты не нужны (GridChoices запрашивает она сама): только следим, чтобы разворот был на месте.
     if (g.tab === 'grids') return s ? undefined : this.close()
-    const page = g.scope === 'left' ? 0 : 1
-    if (!s || (!s.layout && !s.grid) || (g.scope !== 'spread' && !pageSwitchable(s.pages?.[page]))) return this.close()
+    if (!s || (!s.layout && !s.grid) || pageGone(s, g.scope)) return this.close()
     const c = this.choices
     if (c?.spread === g.spread && c.rev === store.view.rev) return
     // Старые прямоугольники к новому составу не подходят.

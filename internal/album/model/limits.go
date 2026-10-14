@@ -8,8 +8,9 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
-// MaxPhotos — предел фото на разворот (определяется скоростью раскладки).
-// MaxSpreadPhotos (склейка и автосборка) меньше и от него не зависит.
+// MaxPhotos — предел фото на разворот (спека 027: 64, с формата v6). Load режет
+// больший разворот на части — поэтому поднимается только со сменой FormatVersion.
+// Склейка и автосборка держатся той же границы.
 const MaxPhotos = layout.MaxPhotos
 
 // MaxFileSize — больше файл проекта не читаем: нормальный проект на тысячи
@@ -47,7 +48,8 @@ const (
 )
 
 // ClampSettings приводит настройки к допустимым: NaN/Inf — значение по умолчанию,
-// остальное зажимается в пределы. Поля и промежуток не больше четверти меньшей стороны страницы.
+// остальное зажимается в пределы. Поля, промежуток и безопасная зона не больше четверти
+// меньшей стороны страницы. Лист (Sheet) — всегда layflat: шва у него нет.
 func ClampSettings(s Settings) Settings {
 	d := DefaultSettings()
 	fix := func(v, def, lo, hi float64) float64 {
@@ -61,11 +63,13 @@ func ClampSettings(s Settings) Settings {
 	top := min(s.PageW, s.PageH) / 4
 	s.Margin = fix(s.Margin, d.Margin, 0, top)
 	s.Gap = fix(s.Gap, d.Gap, 0, top)
+	s.Safe = fix(s.Safe, d.Safe, 0, top)
 	if s.DPI == 0 {
 		s.DPI = d.DPI
 	}
 	s.DPI = max(minDPI, min(maxDPI, s.DPI))
 	s.Bg = BgColor(s.Bg)
+	s.Layflat = s.Layflat || s.Sheet
 	return s
 }
 

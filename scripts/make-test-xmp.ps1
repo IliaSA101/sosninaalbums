@@ -1,8 +1,14 @@
 # Генерирует JPEG с отметками Lightroom (XMP) в .testphotos/xmp/ для QA спеки 004.
-# ffmpeg не нужен: картинки рисует System.Drawing, XMP-пакет вставляется в APP1 вручную.
-# Повторный запуск перезаписывает только свои файлы (img-*.jpg, img-*.xmp, img-*.jpg.xmp в xmp/).
+# ffmpeg не нужен: XMP-пакет вставляется в APP1 вручную.
+# Картинки: без -Src рисует System.Drawing (600x400); с -Src <папка> берутся её *.jpg
+# (по кругу, если кейсов больше, чем файлов), из копий вырезаются их собственные XMP-пакеты
+# (у Pexels они есть), чтобы отметки кейса были единственными.
+# С -Src делается ещё rotated-6.jpg: копия первого файла с EXIF Orientation=6 (проверка
+# поворота; у файлов stock тег есть, но равен 1).
+# Повторный запуск перезаписывает только свои файлы (img-*.jpg, img-*.xmp, img-*.jpg.xmp, rotated-6.jpg в xmp/).
 param(
-  [string]$Dir = ''
+  [string]$Dir = '',
+  [string]$Src = ''
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -11,7 +17,13 @@ $out = if ($Dir) { $Dir } else { Join-Path $PSScriptRoot '..\.testphotos\xmp' }
 New-Item -ItemType Directory -Force $out | Out-Null
 $out = (Resolve-Path $out).Path
 Get-ChildItem -LiteralPath $out -File |
-  Where-Object { $_.Name -match '^img-\d+.*\.(jpg|xmp)$' } | Remove-Item -Force
+  Where-Object { $_.Name -match '^img-\d+.*\.(jpg|xmp)$' -or $_.Name -eq 'rotated-6.jpg' } | Remove-Item -Force
+
+$srcFiles = @()
+if ($Src) {
+  $srcFiles = @(Get-ChildItem -LiteralPath $Src -Filter *.jpg -File | Sort-Object Name)
+  if ($srcFiles.Count -eq 0) { throw "No *.jpg in -Src: $Src" }
+}
 
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 # Кириллица в строках — кодами: Windows PowerShell 5.1 читает .ps1 без BOM как ANSI.
@@ -56,6 +68,45 @@ function New-Jpeg($path, $n) {
   $g.Dispose(); $font.Dispose()
   $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Jpeg)
   $bmp.Dispose()
+}
+
+# Копирует исходный JPEG, вырезая из копии APP1 с XMP (Exif и прочие сегменты остаются).
+function Copy-WithoutXmp($from, $to) {
+  $b = [IO.File]::ReadAllBytes($from)
+  $sig = [Text.Encoding]::ASCII.GetBytes('http://ns.adobe.com/xap/1.0/')
+  $res = New-Object System.Collections.Generic.List[byte]
+  $res.AddRange([byte[]]$b[0..1])
+  $p = 2
+  while ($p + 4 -le $b.Length -and $b[$p] -eq 0xFF -and $b[$p + 1] -ne 0xDA) {
+    $len = $b[$p + 2] * 256 + $b[$p + 3]
+    $isXmp = $false
+    if ($b[$p + 1] -eq 0xE1 -and $len -gt (2 + $sig.Length)) {
+      $isXmp = $true
+      for ($k = 0; $k -lt $sig.Length; $k++) { if ($b[$p + 4 + $k] -ne $sig[$k]) { $isXmp = $false; break } }
+    }
+    if (-not $isXmp) { $res.AddRange([byte[]]$b[$p..($p + 1 + $len)]) }
+    $p += 2 + $len
+  }
+  $res.AddRange([byte[]]$b[$p..($b.Length - 1)])
+  [IO.File]::WriteAllBytes($to, $res.ToArray())
+}
+
+# Копия с EXIF Orientation=6 (показывать повёрнутой на 90 градусов по часовой). Тег правится
+# в PropertyItem: у stock-файлов он есть (=1); если нет — PropertyItem создаётся через рефлексию
+# (публичного конструктора у класса нет). Картинка перекодируется GDI+, XMP при этом не сохраняется.
+function New-RotatedJpeg($from, $to) {
+  $img = [System.Drawing.Image]::FromFile($from)
+  try {
+    $item = $img.PropertyItems | Where-Object { $_.Id -eq 0x0112 } | Select-Object -First 1
+    if (-not $item) {
+      $ctor = [System.Drawing.Imaging.PropertyItem].GetConstructor([Reflection.BindingFlags]'NonPublic,Instance', $null, [Type[]]@(), $null)
+      $item = $ctor.Invoke(@())
+      $item.Id = 0x0112; $item.Type = 3; $item.Len = 2
+    }
+    $item.Value = [byte[]](6, 0)
+    $img.SetPropertyItem($item)
+    $img.Save($to, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+  } finally { $img.Dispose() }
 }
 
 # Вставляет APP1 с XMP после SOI (и после APP0/JFIF, если он есть).
@@ -111,7 +162,7 @@ foreach ($c in $cases) {
   $i++
   $name = 'img-{0:D3}-{1}' -f $i, $c.N
   $jpg = Join-Path $out "$name.jpg"
-  New-Jpeg $jpg $i
+  if ($srcFiles.Count -gt 0) { Copy-WithoutXmp $srcFiles[($i - 1) % $srcFiles.Count].FullName $jpg } else { New-Jpeg $jpg $i }
   if ($c.Emb) { Add-EmbeddedXmp $jpg (New-Xmp $c.Emb) }
   $side = $null
   if ($c.Raw) { $side = $c.Raw } elseif ($c.Side) { $side = New-Xmp $c.Side ([int]$c.PadKb) }
@@ -122,5 +173,9 @@ foreach ($c in $cases) {
   if ($c.Side2) {
     [IO.File]::WriteAllText("$jpg.xmp", (New-Xmp $c.Side2), $utf8)
   }
+}
+if ($srcFiles.Count -gt 0) {
+  New-RotatedJpeg $srcFiles[0].FullName (Join-Path $out 'rotated-6.jpg')
+  Write-Host 'rotated-6.jpg: EXIF Orientation=6'
 }
 Write-Host "Done: $i JPEG in $out"

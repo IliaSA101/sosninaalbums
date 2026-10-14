@@ -103,10 +103,12 @@ describe('keyAction: действия спеки 008', () => {
     expect(keyAction(ev('0', { repeat: true }), ctx())).toBeNull()
     expect(keyAction(ev('0'), ctx({ inTextField: true }))).toBeNull()
   })
-  it('F1 и «?» — справка', () => {
-    expect(keyAction(ev('F1'), ctx())).toBe('help')
+  it('F1 — справочник функций, «?» — горячие клавиши (033)', () => {
+    expect(keyAction(ev('F1'), ctx())).toBe('guide')
     expect(keyAction(ev('?', { shiftKey: true }), ctx())).toBe('help')
     expect(keyAction(ev('F1'), ctx({ inTextField: true }))).toBeNull()
+    // F1 в WebView2 открыл бы справку браузера
+    expect(preventsDefault('guide')).toBe(true)
   })
   it('nextLayout/prevLayout — только строки справки: клавишей их не получить', () => {
     for (const k of [' ', 'Enter', 'ArrowRight']) {

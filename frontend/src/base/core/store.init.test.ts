@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Обработчики событий Go, которые store.init() кладёт в EventsOn.
 const handlers: Record<string, (...a: unknown[]) => void> = {}
 let resolveState: (st: unknown) => void = () => {}
+// Ответы MissingNames по порядку вызовов.
+const namesCalls: ((n: Record<string, string>) => void)[] = []
 
 vi.mock('../../../wailsjs/runtime/runtime', () => ({
   EventsOn: (name: string, fn: (...a: unknown[]) => void) => {
@@ -12,6 +14,7 @@ vi.mock('../../../wailsjs/runtime/runtime', () => ({
 }))
 vi.mock('../../../wailsjs/go/app/App', () => ({
   GetState: () => new Promise((r) => (resolveState = r)),
+  MissingNames: () => new Promise<Record<string, string>>((r) => namesCalls.push(r)),
 }))
 
 const { store } = await import('./store.svelte')
@@ -22,6 +25,7 @@ const view = { spreads: [], folders: [] }
 
 beforeEach(() => {
   for (const k of Object.keys(handlers)) delete handlers[k]
+  namesCalls.length = 0
 })
 
 describe('store.init: события раньше ответа GetState', () => {
@@ -51,5 +55,66 @@ describe('store.init: события раньше ответа GetState', () => 
     expect(store.photos.length).toBe(3)
     expect(store.scan.active).toBe(true)
     expect(store.missing).toEqual(['p0'])
+  })
+})
+
+describe('store: имена пропавших', () => {
+  it('берёт имена у Go при смене missing, запоздавший ответ отбрасывается', async () => {
+    const done = store.init()
+    resolveState({ view, photos: [], missing: [] })
+    await done
+    handlers.missing(['a'])
+    handlers.missing(['a', 'b'])
+    expect(namesCalls.length).toBe(2)
+    namesCalls[1]({ a: 'a.jpg', b: 'b.jpg' })
+    await Promise.resolve()
+    namesCalls[0]({ a: 'старый.jpg' })
+    await Promise.resolve()
+    expect(store.missingNames).toEqual({ a: 'a.jpg', b: 'b.jpg' })
+    handlers.missing([])
+    expect(store.missingNames).toEqual({})
+    expect(namesCalls.length).toBe(2)
+  })
+})
+
+describe('store.replaceState: отмена диалога «Открыть»', () => {
+  const v = (path: string, rev: number) => ({ spreads: [], folders: [], path, rev })
+
+  it('cancelled: true ничего не сбрасывает', async () => {
+    store.apply(v('a.salbum', 3) as never)
+    const seq = store.openSeq
+    const nav = store.navSeq
+    store.selected.add('p1')
+    expect(await store.replaceState(Promise.resolve({ view: v('a.salbum', 3), photos: [], cancelled: true }))).toBe(true)
+    expect(store.openSeq).toBe(seq)
+    expect(store.navSeq).toBe(nav)
+    expect(store.selected.has('p1')).toBe(true)
+  })
+
+  it('удачное открытие: view пришёл раньше ответа — состояние всё равно сбрасывается', async () => {
+    const done0 = store.init() // регистрирует handlers.view
+    resolveState({ view: v('a.salbum', 3), photos: [] })
+    await done0
+    const seq = store.openSeq
+    const nav = store.navSeq
+    store.selected.add('p1')
+    let resolve: (st: unknown) => void = () => {}
+    const done = store.replaceState(new Promise((r) => (resolve = r)))
+    const next = v('b.salbum', 0)
+    handlers.view(next) // как Go: emitState до ответа метода
+    resolve({ view: next, photos: [] })
+    expect(await done).toBe(true)
+    expect(store.openSeq).toBe(seq + 1)
+    expect(store.navSeq).toBe(nav + 1) // go(0)
+    expect(store.selected.size).toBe(0)
+  })
+
+  it('повторное открытие того же файла без правок — открытие, не отмена', async () => {
+    store.apply(v('a.salbum', 3) as never)
+    const seq = store.openSeq
+    store.selected.add('p1')
+    await store.replaceState(Promise.resolve({ view: v('a.salbum', 3), photos: [] }))
+    expect(store.openSeq).toBe(seq + 1)
+    expect(store.selected.size).toBe(0)
   })
 })

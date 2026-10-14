@@ -5,5 +5,7 @@
 // выбор момента — у Editor.view (ops_view.go ядра). Типы вида (View, SpreadView…) живут в model.
 //
 // Карта: view.go (State, BuildView, spreadView, safeZone), lay.go (lay, Laid, layAll, воркеры),
-// parts.go (сетка, подписи, z, кадры, тексты, фоны, цвет страниц).
+// parts.go (сетка, z, кадры, тексты, фоны, цвет страниц), captions.go (подписи 030: текст
+// своей подписи или шаблона листа, стиль листа, поля через model.Shown, ужимание, отступ,
+// заглушки; State.Print — вид печати для экспорта без заглушек и «[Школа]»).
 package view

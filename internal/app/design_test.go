@@ -10,17 +10,20 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"io"
+	"io/fs"
 	"log"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
@@ -553,7 +556,7 @@ func TestAppDesignSurface(t *testing.T) {
 		t.Fatalf("подпись: %+v", v.Spreads[1].Captions)
 	}
 	r = rev()
-	v = a.SetCaptionStyle("b", v.Spreads[1].Captions[0].Style, true)
+	v = a.SetCaptionStyle("b", v.Spreads[1].Captions[0].Style, true, 1)
 	grew("SetCaptionStyle", r, v)
 	if !v.Spreads[1].Captions[0].Over {
 		t.Error("подпись не на фото")
@@ -579,4 +582,17 @@ func textOf(t *testing.T, sv model.SpreadView, id string) model.TextView {
 	}
 	t.Fatal("текст пропал")
 	return model.TextView{}
+}
+
+// В лог — без путей пользователя.
+func TestBackupErrHidesPaths(t *testing.T) {
+	const secret = `C:\Users\Имя\Альбомы\Ивановы.salbum`
+	for _, err := range []error{
+		&fs.PathError{Op: "open", Path: secret, Err: fs.ErrPermission},
+		&os.LinkError{Op: "rename", Old: secret + ".1.tmp", New: secret, Err: fs.ErrExist},
+	} {
+		if got := paths.NoPath(err).Error(); strings.Contains(got, "Имя") || !strings.Contains(got, err.(interface{ Unwrap() error }).Unwrap().Error()) {
+			t.Errorf("лог: %q", got)
+		}
+	}
 }

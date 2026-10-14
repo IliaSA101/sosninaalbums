@@ -88,7 +88,7 @@ const sel = (photo: string, o: Partial<SelBox> = {}): SelBox => ({
   h: 50,
   ...o,
 })
-const sp = (frames: FrameView[], photos: string[], grid = true) => ({ grid, photos, frames }) as unknown as SpreadView
+const sp = (frames: FrameView[], photos: string[], grid = true) => ({ grid, photos, frames, captions: [] }) as unknown as SpreadView
 
 describe('miniContext', () => {
   it('зеркало «у всех» — только если включено у каждого фото', () => {
@@ -115,6 +115,23 @@ describe('miniContext', () => {
   })
 })
 
+describe('имя под фото (037)', () => {
+  it('подпись по шаблону с полями имени — «Имя под фото» вместо «Подпись к фото»', () => {
+    const m = miniItems({ ...base, name: true })
+    expect(m.map((i) => i.id)).toEqual(['flipH', 'flipV', 'fit', 'name', 'turn', 'delete'])
+    expect(m.find((i) => i.id === 'name')?.label).toBe('Имя под фото')
+  })
+  it('miniContext: name — у единственного фото с who в подписи или заглушке', () => {
+    const cap = { photo: 'a', who: ['last'] }
+    const stub = { photo: 'b', place: 'p', who: ['last', 'first'] }
+    const s = { ...sp([fv({}), fv({}), fv({})], ['a', 'b', 'c']), captions: [cap], stubs: [stub] } as unknown as SpreadView
+    expect(miniContext(s, [sel('a')]).name).toBe(true)
+    expect(miniContext(s, [sel('b')]).name).toBe(true)
+    expect(miniContext(s, [sel('c')]).name).toBe(false)
+    expect(miniContext(s, [sel('a'), sel('b')]).name).toBe(false)
+  })
+})
+
 describe('нечётный turn: пропорции фото меняются местами', () => {
   it('место 50×100 при фото 100×50 с turn=1 — differ нет, с turn=0 — есть', () => {
     const box = sel('a', { w: 50, h: 100 })
@@ -138,6 +155,23 @@ describe('miniPlace', () => {
   it('полоса не выходит за разворот по бокам', () => {
     expect(miniPlace({ x: 0, y: 0, w: 4, h: 4 }, 2, 600, 300, 100).left).toBe(50)
     expect(miniPlace({ x: 290, y: 0, w: 10, h: 4 }, 2, 600, 300, 100).left).toBe(550)
+  })
+})
+
+describe('miniPlace и подпись под фото', () => {
+  const box = { x: 10, y: 10, w: 40, h: 30 } // низ рамки 40 мм
+  it('полоса не закрывает подпись под рамкой', () => {
+    // Подпись под рамкой до 52 мм: верх полосы не выше низа подписи (раньше — низ рамки + 8).
+    const p = miniPlace(box, 2, 600, 300, 100, undefined, 52)
+    expect(p.top).toBeGreaterThanOrEqual(52 * 2)
+    expect(p.top).toBe(52 * 2 + 8)
+  })
+  it('подписи нет или она внутри рамки — как раньше', () => {
+    expect(miniPlace(box, 2, 600, 300, 100, undefined, 0).top).toBe(20 + 60 + 8)
+    expect(miniPlace(box, 2, 600, 300, 100, undefined, 35).top).toBe(20 + 60 + 8)
+  })
+  it('под подписью места нет — над рамкой', () => {
+    expect(miniPlace({ ...box, y: 40 }, 2, 600, 160, 100, undefined, 100).top).toBe(80 - 8 - 30)
   })
 })
 

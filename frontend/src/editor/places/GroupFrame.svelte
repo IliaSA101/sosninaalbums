@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Settings, SpreadView } from '../../base/core/types'
+  import type { SpreadView } from '../../base/core/types'
   import { placesel } from './placesel.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { startGroupMove, startGroupRotate, startGroupScale, startGroupSide, straightenGroup } from './groupgesture'
@@ -15,10 +15,10 @@
   // (transform), поэтому ручки и полосы идут вместе с ней. Внутрь полоса не заходит: она легла бы на крайних
   // членов, а в «Авто» от этого зависит обмен или закрепление. Обводки членов рисуют SelFrame и TextLayer.
   // Предпросмотр — placesel.live / liveTexts / liveTurn, итог — один вызов Go на отпускании.
-  let { spread, settings, width }: { spread: SpreadView; settings: Settings; width: number } = $props()
+  let { spread, width }: { spread: SpreadView; width: number } = $props()
 
-  const sw = $derived(settings.pageW * 2)
-  const ph = $derived(settings.pageH)
+  const sw = $derived(spread.w)
+  const ph = $derived(spread.h)
   const ppm = $derived(width / sw) // px на мм
   const corners: GroupCorner[] = ['nw', 'ne', 'se', 'sw']
   const sides: GroupSide[] = ['n', 'e', 's', 'w']

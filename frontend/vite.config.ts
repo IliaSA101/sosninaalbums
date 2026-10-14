@@ -14,4 +14,7 @@ export default defineConfig({
     // Vite очищает dist при сборке, а go:embed нужен хотя бы один файл в чистом клоне.
     { name: 'keep-dist', closeBundle: () => writeFileSync('dist/gitkeep', '') },
   ],
+  // Один бандл грузится из exe (go:embed), не по сети: порог 500 КБ для сайтов здесь ни о чём,
+  // а предупреждение роняет check.ps1. Поднято с 0.10 (503 КБ после 034).
+  build: { chunkSizeWarningLimit: 1000 },
 })

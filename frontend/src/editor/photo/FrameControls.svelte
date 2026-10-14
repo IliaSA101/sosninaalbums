@@ -90,6 +90,7 @@
 {#if movable && !panning}
   <button
     class="handle"
+    data-guide="frame"
     title="Сдвинуть кадр"
     aria-label="Сдвинуть кадр"
     onpointerdown={(e) => {
@@ -102,6 +103,7 @@
 {#if zoomable && !panning}
   <input
     class="zoom"
+    data-guide="frame"
     type="range"
     min="100"
     max="400"

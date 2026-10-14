@@ -17,6 +17,7 @@ import {
   sideReserve,
   type PanelCtx,
   groupTitle,
+  cardTitle,
 } from './panels'
 
 const ctx = (p: Partial<PanelCtx> = {}): PanelCtx => ({
@@ -137,5 +138,28 @@ describe('groupTitle', () => {
     expect(groupTitle(2, 1)).toBe('2 места, 1 текст')
     expect(groupTitle(0, 2)).toBe('2 текста')
     expect(groupTitle(5, 5)).toBe('5 мест, 5 текстов')
+  })
+})
+
+describe('cardTitle', () => {
+  const c = { spreadNo: 18, caption: false, group: false, places: 1, texts: 0 }
+  it('заголовок по режиму', () => {
+    expect(cardTitle('idle', c)).toBe('Разворот 18')
+    expect(cardTitle(null, c)).toBe('Разворот 18')
+    expect(cardTitle('photo', c)).toBe('Фото')
+    expect(cardTitle('text', c)).toBe('Текст')
+    expect(cardTitle('text', { ...c, caption: true })).toBe('Подпись')
+    expect(cardTitle('places', c)).toBe('Место')
+    expect(cardTitle('places', { ...c, group: true, places: 2, texts: 1 })).toBe('2 места, 1 текст')
+  })
+  it('в листе (031) — «Лист N», обложка и прочее не меняются', () => {
+    expect(cardTitle('idle', { ...c, unit: 'Лист' })).toBe('Лист 18')
+    expect(cardTitle('idle', { ...c, unit: 'Разворот' })).toBe('Разворот 18')
+    expect(cardTitle('idle', { ...c, unit: 'Лист', cover: true })).toBe('Обложка')
+    expect(cardTitle('photo', { ...c, unit: 'Лист' })).toBe('Фото')
+  })
+  it('на обложке без выделения — «Обложка», с выделением — как у разворота', () => {
+    expect(cardTitle('idle', { ...c, cover: true })).toBe('Обложка')
+    expect(cardTitle('text', { ...c, cover: true })).toBe('Текст')
   })
 })

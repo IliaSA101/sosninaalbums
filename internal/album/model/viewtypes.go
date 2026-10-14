@@ -20,14 +20,54 @@ func (b BackdropView) Shown() (r layout.Rect, ok bool) {
 
 // Choice — вариант раскладки для галереи.
 type Choice struct {
-	Key   string        `json:"key"`
-	Rects []layout.Rect `json:"rects"` // весь разворот, в порядке Spread.Photos
+	Key    string        `json:"key"`
+	Rects  []layout.Rect `json:"rects"`  // весь разворот, в порядке Spread.Photos
+	Family string        `json:"family"` // dense | hero | air | bleed (041); "" — не размечено
+	Twin   int           `json:"twin"`   // индекс более раннего с тем же видом в этом ряду; −1 — нет
 }
 
 type ChoiceRows struct {
 	InOrder    []Choice `json:"inOrder"`
 	Rearranged []Choice `json:"rearranged"`
 	Block      string   `json:"block"` // почему ряд с перестановкой пуст: "same" | "many" | "" (нет лучших)
+	// More — ряд «Авто» на многих фото можно досчитать (MoreLayouts); у страниц всегда false.
+	More bool `json:"more"`
+	// Extra — «Другие варианты» (041): пул вне ряда «Авто»; только у разворота, у страниц пусто.
+	Extra []Choice `json:"extra"`
+}
+
+// Variety — ручка «Разнообразие раскладок» (041). Нулевое значение — «Меньше», ровно
+// поведение 0.10: вызов без поля безопасен. UI по умолчанию шлёт «Обычное».
+type Variety int
+
+const (
+	VarietyLess   Variety = iota // лучшая раскладка каждому развороту, как 0.10
+	VarietyNormal                // соседи не повторяются, иногда воздух и главное фото
+	VarietyMore                  // чаще воздух, крупные фото и смена вида
+)
+
+// Clamp — уровень из UI в 0…2: чужое число не должно включать несуществующий режим.
+func (v Variety) Clamp() Variety { return min(max(v, VarietyLess), VarietyMore) }
+
+// AutoOpts — настройки окна автосборки (AutoPlan/AutoBuild). Новые настройки (группы по
+// папкам) ложатся полями сюда: сигнатура методов App второй раз не меняется (041 №16).
+type AutoOpts struct {
+	Spreads int     `json:"spreads"` // N разворотов; зажим — в плане
+	MaxPer  int     `json:"maxPer"`  // не больше фото на разворот, 1…MaxPhotos
+	Variety Variety `json:"variety"` // в AutoPlan не влияет: группы те же
+}
+
+// AutoPlan — подсказка окна автосборки: сколько фото и как они лягут на N разворотов.
+// AutoBuild с теми же фото, N и m делает ровно эти развороты.
+type AutoPlan struct {
+	Photos     int     `json:"photos"`     // фото в сборку (без сеток и фонов)
+	Spreads    int     `json:"spreads"`    // N после зажима
+	MinSpreads int     `json:"minSpreads"` // низ ползунка: ⌈photos/maxPer⌉
+	MaxSpreads int     `json:"maxSpreads"` // верх: min(photos, MaxSpreads − непустых; пустой хвост — свободен)
+	Avg        float64 `json:"avg"`
+	Min        int     `json:"min"`   // фото в самом маленьком развороте
+	Max        int     `json:"max"`   // и в самом большом
+	Reuse      int     `json:"reuse"` // сколько пустых разворотов из хвоста займёт сборка
 }
 
 // Choices — всё для галереи раскладок одного разворота. В View не кладётся:
@@ -39,10 +79,6 @@ type Choices struct {
 	Left   *ChoiceRows `json:"left"` // nil — у раскладки нет страниц или страница пуста
 	Right  *ChoiceRows `json:"right"`
 }
-
-// MaxSpreadPhotos — больше фото на развороте не собираем: совпадает с полным
-// перебором деревьев в layout и верхом Group. Одна константа на AutoBuild и MergeSpreads.
-const MaxSpreadPhotos = 7
 
 // PhotoInfo — что редактору нужно знать о добавляемом фото.
 type PhotoInfo struct {
@@ -124,12 +160,18 @@ type GridChoices struct {
 // SpreadView. Z мест/ячеек, подписей и текстов уникальны в развороте и задают порядок
 // наложения: на этом строится стек под курсором во фронте (спека 015, TestViewZUnique).
 type SpreadView struct {
-	ID         string        `json:"id"`
-	Photos     []string      `json:"photos"`
+	ID     string   `json:"id"`
+	Photos []string `json:"photos"`
+	// W, H, Mid — лист из Geo, мм (032 §6): UI считает проценты от них, а не от settings.
+	// Разворот — 2·pageW × pageH, шов pageW; обложка — шов в центре корешка; лист 031 — Mid 0.
+	W          float64       `json:"w"`
+	H          float64       `json:"h"`
+	Mid        float64       `json:"mid"`
 	Rects      []layout.Rect `json:"rects"`      // по действующему ключу
 	Layout     string        `json:"layout"`     // действующий ключ (не пустой, если есть фото)
 	Variant    int           `json:"variant"`    // позиция в ряду листания; -1 — нет в ряду
 	Variants   int           `json:"variants"`   // длина этого ряда
+	More       bool          `json:"more"`       // ряд «Авто» можно досчитать (17+ фото): «+» в счётчике
 	Rearranged bool          `json:"rearranged"` // ряд листания — «С перестановкой порядка»
 	Pages      []PageView    `json:"pages"`      // nil — у раскладки нет страниц (не layout.IsPaged); иначе [левая, правая]
 	// Frames — кадр каждого фото, по одному на Rects (пусто, если раскладки нет).
@@ -145,6 +187,90 @@ type SpreadView struct {
 	Name   string      `json:"name"` // название разворота; "" — без названия
 	// Backdrops — фото на фоне (0–2): весь разворот, левая, правая. В Photos их нет.
 	Backdrops []BackdropView `json:"backdrops"`
+	// LowDPI — кадров и фото фона с 0 < dpi < View.MinDPI: «!» на плитке разворота.
+	LowDPI int `json:"lowDPI"`
+	// Stubs — заглушки подписей (030): пустое место листа с шаблоном и фото без имени.
+	// Только холст: в виде печати пусто, в Captions их нет — экспорт их не видит.
+	Stubs []StubView `json:"stubs"`
+	// Caps — копия общего стиля подписей листа для панели; nil — у подписей свой стиль.
+	Caps *SheetCaps `json:"caps,omitempty"`
+	// Kind — вид разворота ("" | KindVignette); Vig — параметры виньетки для панели (031).
+	Kind string        `json:"kind"`
+	Vig  *VignetteView `json:"vig,omitempty"`
+	// Vars — свои поля шапки листа (Spread.Vars) для формы окна виньетки; пустые — нет ключа.
+	Vars Vars `json:"vars"`
+	// Fields — имена для меню «Вставить поле» на этом листе (model.FieldsOf): 3 или 7.
+	Fields []string `json:"fields"`
+	// Unfilled, Unnamed — то же, что у View, но по одному листу: вопрос перед экспортом
+	// считается по листам плана выгрузки (диапазон, «Только обложка»). Интерфейсу не нужны.
+	Unfilled []string `json:"-"`
+	Unnamed  int      `json:"-"`
+}
+
+// VignetteView — виньетка для панели: параметры, сколько мест они дают (с групповым)
+// и предел на лист. Group — у шаблона есть групповое фото (UI считает «Всего мест»).
+// Геометрию своего шаблона вид не таскает: Own всегда nil, вместо него OwnName (038).
+type VignetteView struct {
+	Vignette
+	Places  int    `json:"places"`
+	Max     int    `json:"max"`
+	Group   bool   `json:"group"`
+	OwnName string `json:"ownName,omitempty"`
+	// TplName — имя текущего шаблона для строки раскладки: каталога или своего; Manual — места
+	// отличаются от плана шаблона (сдвинуты руками, 038 №14: «Ручная · Вернуть авто»). Оба
+	// ставит Editor при сборке вида (план знает он), в NewVignetteView их нет.
+	TplName string `json:"tplName"`
+	Manual  bool   `json:"manual"`
+}
+
+// NewVignetteView — вид параметров v для панели.
+func NewVignetteView(v Vignette) VignetteView {
+	vv := VignetteView{Vignette: v, Places: VigPlaces(v), Max: MaxPlaces, Group: VigGroup(v.Tpl)}
+	if v.Own != nil {
+		vv.OwnName, vv.Group, vv.Own = v.Own.Name, v.Own.Groups() > 0, nil
+	}
+	return vv
+}
+
+// VigSetup — форма окна «Настроить виньетку» (031 dialog §5): параметры и поля шапки листа.
+type VigSetup struct {
+	Vig  Vignette `json:"vig"`
+	Vars Vars     `json:"vars"`
+}
+
+// VigPreview — сухой прогон окна (PreviewVignette): лист после «Применить» с тем же
+// VigSetup (ID прежний) и сколько фото уйдёт в ленту.
+type VigPreview struct {
+	Spread SpreadView `json:"spread"`
+	Left   int        `json:"left"`
+}
+
+// VigChoice — превью шаблона виньетки (VignetteChoices): места в долях листа и их роли,
+// портрет ученика в мм, Small — мельче 15 мм, Over — мест больше MaxPlaces.
+type VigChoice struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Boxes  []Box    `json:"boxes"`
+	Roles  []string `json:"roles"`
+	PupilW float64  `json:"pupilW"`
+	Small  bool     `json:"small"`
+	Over   bool     `json:"over"`
+	// Own — свой шаблон (id "my:<id>"); Ratio — его портрет (у каталога ""); Gone — шаблона нет
+	// в templates.json, он только на этом листе: выбрать можно, переименовать и удалить нет.
+	Own   bool   `json:"own"`
+	Ratio string `json:"ratio"`
+	Gone  bool   `json:"gone"`
+}
+
+// StubView — заглушка подписи: серый текст «[Фамилия]» под местом; выделить нельзя.
+// Place — место сетки ("" в «Авто»), Photo — фото без имени ("" у пустого места).
+type StubView struct {
+	Place string `json:"place"`
+	Photo string `json:"photo"`
+	TextView
+	// Who — поля имени шаблона по порядку (last, first, middle) у заглушки фото (037);
+	// у заглушки пустого места пусто.
+	Who []string `json:"who,omitempty"`
 }
 
 // BackdropBox — рамка фона: угол до поворота и поворот вокруг него, мм разворота.
@@ -215,6 +341,9 @@ type TextView struct {
 	Lines []text.Line `json:"lines"`
 	Rot   float64     `json:"rot"`  // градусы по часовой
 	Auto  bool        `json:"auto"` // ширина по тексту
+	// Src — исходный текст с полями ({Школа}…), если он отличается от Text (030):
+	// поле правки показывает его, холст — Text.
+	Src string `json:"src,omitempty"`
 	// Z — слой в общем стеке разворота (zView); у подписи — сразу над её фото.
 	Z int `json:"z"`
 }
@@ -225,6 +354,14 @@ type CaptionView struct {
 	TextView
 	Over     bool    `json:"over"`
 	Overflow float64 `json:"overflow"` // мм, которых не хватает; 0 — помещается
+	// Sheet — оформление от общего стиля листа (Spread.Caps), а не своё (030).
+	Sheet bool `json:"sheet"`
+	// Pad — действующий отступ от фото, мм: свой, по умолчанию 1, у подписи под стилем
+	// листа — из Spread.Caps. UI шлёт его в каждой правке стиля, чтобы не сбросить.
+	Pad float64 `json:"pad"`
+	// Who — поля имени шаблона листа по порядку (last, first, middle), если подпись идёт
+	// по шаблону (037); своя подпись и шаблон без имени — пусто.
+	Who []string `json:"who,omitempty"`
 }
 
 type View struct {
@@ -238,12 +375,14 @@ type View struct {
 	CanUndo  bool         `json:"canUndo"`
 	CanRedo  bool         `json:"canRedo"`
 	Rev      int          `json:"rev"`
-	// MaxSpreadPhotos — интерфейс по нему заранее отключает склейку.
+	// MaxSpreadPhotos — интерфейс по нему заранее отключает склейку (= MaxPhotos;
+	// имя прежнее — контракт UI).
 	MaxSpreadPhotos int `json:"maxSpreadPhotos"`
-	// Safe — безопасная зона (мм, в координатах разворота): значимое не ближе SafeMargin к краю.
+	// Safe — безопасная зона (мм, в координатах разворота): значимое не ближе Settings.Safe к краю.
 	// Считается всегда; показывать или нет, решает интерфейс.
 	Safe []layout.Rect `json:"safe"`
-	// MinDPI — порог «!» у фото: min(lowDPILimit, settings.dpi). LowDPI — сколько фото ниже него.
+	// MinDPI — порог «!» у фото: min(lowDPILimit, settings.dpi). LowDPI — сколько фото ниже него
+	// (кадры и фоны, сумма SpreadView.LowDPI).
 	MinDPI int `json:"minDPI"`
 	LowDPI int `json:"lowDPI"`
 	// EmptyPlaces — пустых мест сетки во всём альбоме.
@@ -256,10 +395,17 @@ type View struct {
 	// MarksRev — номер состояния своих отметок: сменился — UI перечитывает Marks (сами отметки
 	// в View не кладутся: на тысячах фото это сотни КБ на каждое событие).
 	MarksRev int `json:"marksRev"`
+	// Unfilled — пустые переменные и поля, встреченные в печатаемом тексте всех листов (по
+	// алфавиту); Unnamed — фото, у подписи которых поля имени есть, а имени нет. По ним —
+	// вопрос перед экспортом (export.FieldsWarning).
+	Unfilled []string `json:"unfilled"`
+	Unnamed  int      `json:"unnamed"`
+	// Cover — обложка (032); nil — её нет. В Spreads её нет: в счёт и нумерацию не входит.
+	Cover *CoverView `json:"cover"`
 }
 
-// SafeMargin — отступ безопасной зоны от края, мм (требование fsfera: значимое не ближе 8 мм).
-const SafeMargin = 8.0
+// DefaultSafe — безопасная зона по умолчанию, мм (требование fsfera: значимое не ближе 8 мм).
+const DefaultSafe = 8.0
 
 // PlaceView — место сетки для интерфейса, мм разворота. Порядок в
 // SpreadView.Places = порядок мест в слоях; Z — слой в общем стеке с текстами:
@@ -275,4 +421,5 @@ type PlaceView struct {
 	Spine bool    `json:"spine"` // пересекает корешок при выключенном layflat
 	Rot   float64 `json:"rot"`   // градусы по часовой вокруг центра; x, y, w, h — до поворота
 	Z     int     `json:"z"`     // слой в общем стеке разворота (zView)
+	Role  string  `json:"role"`  // роль места виньетки (031): pupil | teacher | group; "" — ученик
 }

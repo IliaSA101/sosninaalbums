@@ -192,7 +192,7 @@ func TestMergeSpreadsLimit(t *testing.T) {
 	edtest.NewSpread(e, -1, edtest.Photos("e", "f", "g"))
 	v := edtest.NewSpread(e, -1, edtest.Photos("h", "i", "j", "k"))
 	s1, s3 := v.Spreads[0].ID, v.Spreads[2].ID
-	if v.MaxSpreadPhotos != 7 || model.MaxSpreadPhotos != 7 {
+	if v.MaxSpreadPhotos != 64 || model.MaxPhotos != 64 {
 		t.Fatalf("MaxSpreadPhotos = %d", v.MaxSpreadPhotos)
 	}
 
@@ -200,18 +200,37 @@ func TestMergeSpreadsLimit(t *testing.T) {
 	if len(v.Spreads) != 2 || len(v.Spreads[0].Photos) != 7 {
 		t.Fatalf("4 + 3 не склеились: %+v", v.Spreads)
 	}
-	rev, undo := v.Rev, edtest.UndoLen(e)
-	for _, id := range []string{s1, s3, "нет"} { // 7 + 4 = 11; последний; неизвестный
+	edtest.AddPhotos(e, s3, manyPhotos(54), -1) // 7 + 58 = 65
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	for _, id := range []string{s1, s3, "нет"} { // сверх 64; последний; неизвестный
 		if v := e.MergeSpreads(id); v.Rev != rev || edtest.UndoLen(e) != undo {
 			t.Fatalf("MergeSpreads(%q) не холостой", id)
 		}
 	}
 
 	e = edtest.Open(t, model.New(), "")
-	edtest.NewSpread(e, -1, edtest.Photos("a", "b", "c", "d"))
+	edtest.NewSpread(e, -1, manyPhotos(32))
 	v = edtest.NewSpread(e, -1, edtest.Photos("e", "f", "g", "h"))
-	if v2 := e.MergeSpreads(v.Spreads[0].ID); v2.Rev != v.Rev || len(v2.Spreads) != 2 {
-		t.Fatalf("4 + 4 склеились")
+	edtest.AddPhotos(e, v.Spreads[1].ID, manyPhotos(60)[32:], -1) // 32 + 32 = 64 — ровно предел
+	if v2 := e.MergeSpreads(v.Spreads[0].ID); len(v2.Spreads) != 1 || len(v2.Spreads[0].Photos) != 64 {
+		t.Fatalf("32 + 32 не склеились: %d разворотов", len(v2.Spreads))
+	}
+}
+
+// TestMerge64: склейка держится предела MaxPhotos = 64 (было 7): 7 + 9 склеиваются, 40 + 30 нет.
+func TestMerge64(t *testing.T) {
+	for _, c := range []struct {
+		a, b int
+		ok   bool
+	}{{7, 9, true}, {40, 30, false}} {
+		e := edtest.Open(t, model.New(), "")
+		ph := manyPhotos(c.a + c.b)
+		edtest.NewSpread(e, -1, ph[:c.a])
+		v := edtest.NewSpread(e, -1, ph[c.a:])
+		v2 := e.MergeSpreads(v.Spreads[0].ID)
+		if got := len(v2.Spreads) == 1; got != c.ok || (!c.ok && v2.Rev != v.Rev) {
+			t.Fatalf("%d + %d: склеились %v, ждали %v", c.a, c.b, got, c.ok)
+		}
 	}
 }
 
@@ -221,9 +240,13 @@ func TestAutoBuildLimit(t *testing.T) {
 	for i := range 30 {
 		ids = append(ids, string(rune('A'+i)))
 	}
-	v, _ := e.AutoBuild(edtest.Photos(ids...), -1, 20)
+	// Один разворот при «не больше 20» зажимается до ⌈30/20⌉ = 2.
+	v, _ := e.AutoBuild(edtest.Photos(ids...), -1, model.AutoOpts{Spreads: 1, MaxPer: 20})
+	if len(v.Spreads) != 2 {
+		t.Fatalf("разворотов %d, ждали 2", len(v.Spreads))
+	}
 	for _, s := range v.Spreads {
-		if len(s.Photos) > model.MaxSpreadPhotos {
+		if len(s.Photos) > 20 {
 			t.Fatalf("автосборка дала %d фото на разворот", len(s.Photos))
 		}
 	}
@@ -497,7 +520,7 @@ func TestRememberKeepsFrameAndCaption(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("перенос")
-	e.AutoBuild(edtest.Photos("a", "b", "c"), -1, 3)
+	e.AutoBuild(edtest.Photos("a", "b", "c"), -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
 	check("автосборка")
 	edtest.AddPhotos(e, s2, []model.PhotoInfo{{ID: "a", Path: "/a.jpg", W: 300, H: 200, Size: 42}}, -1)
 	check("добавление")

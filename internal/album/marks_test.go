@@ -227,7 +227,7 @@ func TestMarksSurviveAlbumEdits(t *testing.T) {
 	e.RemovePhotos([]string{"a"})
 	e.RemoveFolder(edtest.P(e).Folders[0])
 	e.DeleteSpread(v.Spreads[0].ID)
-	if _, err := e.AutoBuild(edtest.Photos("a", "b", "c"), -1, 2); err != nil {
+	if _, err := e.AutoBuild(edtest.Photos("a", "b", "c"), -1, model.AutoOpts{Spreads: 2, MaxPer: 64}); err != nil {
 		t.Fatal(err)
 	}
 	edtest.Change(e, func(p *model.Project) { p.PruneRefs() })

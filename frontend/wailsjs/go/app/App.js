@@ -18,12 +18,20 @@ export function AddText(arg1, arg2, arg3) {
   return window['go']['app']['App']['AddText'](arg1, arg2, arg3);
 }
 
+export function AddVignette(arg1) {
+  return window['go']['app']['App']['AddVignette'](arg1);
+}
+
 export function AlignItems(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['AlignItems'](arg1, arg2, arg3, arg4);
 }
 
 export function AlignOverlap(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['AlignOverlap'](arg1, arg2, arg3, arg4);
+}
+
+export function ApplyCoverPreset(arg1) {
+  return window['go']['app']['App']['ApplyCoverPreset'](arg1);
 }
 
 export function ApplyGrid(arg1, arg2, arg3, arg4) {
@@ -42,6 +50,10 @@ export function AutoBuild(arg1, arg2, arg3) {
   return window['go']['app']['App']['AutoBuild'](arg1, arg2, arg3);
 }
 
+export function AutoPlan(arg1, arg2) {
+  return window['go']['app']['App']['AutoPlan'](arg1, arg2);
+}
+
 export function Backups() {
   return window['go']['app']['App']['Backups']();
 }
@@ -54,12 +66,36 @@ export function ClearBackdrop(arg1, arg2) {
   return window['go']['app']['App']['ClearBackdrop'](arg1, arg2);
 }
 
+export function ClearCoverGuide() {
+  return window['go']['app']['App']['ClearCoverGuide']();
+}
+
 export function ClearRecent() {
   return window['go']['app']['App']['ClearRecent']();
 }
 
+export function ClearVignette(arg1) {
+  return window['go']['app']['App']['ClearVignette'](arg1);
+}
+
 export function CopyGrid(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['App']['CopyGrid'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function CoverPresets() {
+  return window['go']['app']['App']['CoverPresets']();
+}
+
+export function CoverSpineText() {
+  return window['go']['app']['App']['CoverSpineText']();
+}
+
+export function CreateCover(arg1, arg2) {
+  return window['go']['app']['App']['CreateCover'](arg1, arg2);
+}
+
+export function DeleteCover() {
+  return window['go']['app']['App']['DeleteCover']();
 }
 
 export function DeleteGridTemplate(arg1) {
@@ -84,6 +120,10 @@ export function DeleteSpreads(arg1) {
 
 export function DeleteText(arg1) {
   return window['go']['app']['App']['DeleteText'](arg1);
+}
+
+export function DropPhotos(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['app']['App']['DropPhotos'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function DuplicateGrid(arg1, arg2, arg3) {
@@ -134,6 +174,14 @@ export function MirrorGrid(arg1, arg2) {
   return window['go']['app']['App']['MirrorGrid'](arg1, arg2);
 }
 
+export function MissingNames() {
+  return window['go']['app']['App']['MissingNames']();
+}
+
+export function MoreLayouts(arg1, arg2) {
+  return window['go']['app']['App']['MoreLayouts'](arg1, arg2);
+}
+
 export function MovePhoto(arg1, arg2, arg3) {
   return window['go']['app']['App']['MovePhoto'](arg1, arg2, arg3);
 }
@@ -150,6 +198,10 @@ export function NewSpread(arg1, arg2) {
   return window['go']['app']['App']['NewSpread'](arg1, arg2);
 }
 
+export function NewVignetteSheet(arg1, arg2) {
+  return window['go']['app']['App']['NewVignetteSheet'](arg1, arg2);
+}
+
 export function OpenProject() {
   return window['go']['app']['App']['OpenProject']();
 }
@@ -158,8 +210,20 @@ export function OpenRecent(arg1) {
   return window['go']['app']['App']['OpenRecent'](arg1);
 }
 
+export function PasteNames(arg1, arg2, arg3) {
+  return window['go']['app']['App']['PasteNames'](arg1, arg2, arg3);
+}
+
+export function Person(arg1) {
+  return window['go']['app']['App']['Person'](arg1);
+}
+
 export function PickBackdropFile(arg1, arg2) {
   return window['go']['app']['App']['PickBackdropFile'](arg1, arg2);
+}
+
+export function PickCoverGuide() {
+  return window['go']['app']['App']['PickCoverGuide']();
 }
 
 export function PlacePhotos(arg1, arg2, arg3) {
@@ -168,6 +232,10 @@ export function PlacePhotos(arg1, arg2, arg3) {
 
 export function PlanCopyGrid(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['App']['PlanCopyGrid'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function PreviewVignette(arg1, arg2) {
+  return window['go']['app']['App']['PreviewVignette'](arg1, arg2);
 }
 
 export function Recent() {
@@ -214,6 +282,10 @@ export function ResetMarks(arg1) {
   return window['go']['app']['App']['ResetMarks'](arg1);
 }
 
+export function ResetVignette(arg1) {
+  return window['go']['app']['App']['ResetVignette'](arg1);
+}
+
 export function RestoreBackup(arg1) {
   return window['go']['app']['App']['RestoreBackup'](arg1);
 }
@@ -232,6 +304,10 @@ export function SaveProject() {
 
 export function SaveProjectAs() {
   return window['go']['app']['App']['SaveProjectAs']();
+}
+
+export function SaveVignetteTemplate(arg1, arg2) {
+  return window['go']['app']['App']['SaveVignetteTemplate'](arg1, arg2);
 }
 
 export function ScaleGroupAxes(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
@@ -262,8 +338,20 @@ export function SetCaption(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetCaption'](arg1, arg2, arg3);
 }
 
-export function SetCaptionStyle(arg1, arg2, arg3) {
-  return window['go']['app']['App']['SetCaptionStyle'](arg1, arg2, arg3);
+export function SetCaptionStyle(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['App']['SetCaptionStyle'](arg1, arg2, arg3, arg4);
+}
+
+export function SetCoverLayout(arg1) {
+  return window['go']['app']['App']['SetCoverLayout'](arg1);
+}
+
+export function SetCoverSpec(arg1) {
+  return window['go']['app']['App']['SetCoverSpec'](arg1);
+}
+
+export function SetCoverSpineBg(arg1) {
+  return window['go']['app']['App']['SetCoverSpineBg'](arg1);
 }
 
 export function SetCustom(arg1) {
@@ -298,6 +386,10 @@ export function SetMarks(arg1, arg2) {
   return window['go']['app']['App']['SetMarks'](arg1, arg2);
 }
 
+export function SetPerson(arg1, arg2, arg3) {
+  return window['go']['app']['App']['SetPerson'](arg1, arg2, arg3);
+}
+
 export function SetPlaceAngle(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetPlaceAngle'](arg1, arg2, arg3);
 }
@@ -312,6 +404,10 @@ export function SetPlaces(arg1, arg2, arg3) {
 
 export function SetSettings(arg1) {
   return window['go']['app']['App']['SetSettings'](arg1);
+}
+
+export function SetSheetCaps(arg1, arg2, arg3) {
+  return window['go']['app']['App']['SetSheetCaps'](arg1, arg2, arg3);
 }
 
 export function SetShowStart(arg1) {
@@ -346,6 +442,14 @@ export function SetTextStyle(arg1, arg2) {
   return window['go']['app']['App']['SetTextStyle'](arg1, arg2);
 }
 
+export function SetVignette(arg1, arg2) {
+  return window['go']['app']['App']['SetVignette'](arg1, arg2);
+}
+
+export function SetupVignette(arg1, arg2) {
+  return window['go']['app']['App']['SetupVignette'](arg1, arg2);
+}
+
 export function ShowBackups() {
   return window['go']['app']['App']['ShowBackups']();
 }
@@ -356,6 +460,10 @@ export function ShowInExplorer() {
 
 export function ShowPhotoInExplorer(arg1) {
   return window['go']['app']['App']['ShowPhotoInExplorer'](arg1);
+}
+
+export function SortVignette(arg1) {
+  return window['go']['app']['App']['SortVignette'](arg1);
 }
 
 export function SplitSpread(arg1, arg2) {
@@ -384,4 +492,12 @@ export function TurnPhotos(arg1, arg2) {
 
 export function Undo() {
   return window['go']['app']['App']['Undo']();
+}
+
+export function VaryLayouts(arg1, arg2) {
+  return window['go']['app']['App']['VaryLayouts'](arg1, arg2);
+}
+
+export function VignetteChoices(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['App']['VignetteChoices'](arg1, arg2, arg3, arg4);
 }

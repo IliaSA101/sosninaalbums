@@ -37,11 +37,10 @@ type Base = Omit<GxIn, 'k' | 'ax' | 'ay' | 'dx' | 'dy'>
 export function groupMembers(s: SpreadView): { in: Base; ids: string[]; textIds: string[] } {
   const items = placesel.selected
   const texts = s.texts.filter((t) => placesel.texts.includes(t.id))
-  const st = store.view.settings
   return {
     in: {
-      sw: st.pageW * 2,
-      ph: st.pageH,
+      sw: s.w,
+      ph: s.h,
       places: items.map((i) => ({ x: i.x, y: i.y, w: i.w, h: i.h, rot: i.rot })),
       texts: texts.map((t) => ({ x: t.x, y: t.y, w: t.w, h: t.h, rot: t.rot, size: t.style.size, al: ALIGN_X[alignOf(t.style.align)] })),
     },
@@ -192,9 +191,10 @@ export async function rotateGroup(theta: number, cx: number, cy: number, phi = p
 // 0/±90/180); предпросмотр — groupRot, на отпускании — один RotateGroup на разность углов.
 export function startGroupRotate(e: PointerEvent, root: HTMLElement) {
   const f = placesel.frame
-  if (!f) return
+  const sp = store.spread
+  if (!f || !sp) return
   const r = root.getBoundingClientRect()
-  const k = (store.view.settings.pageW * 2) / r.width
+  const k = sp.w / r.width
   const c = { x: f.x + f.w / 2, y: f.y + f.h / 2 }
   const p0 = { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k }
   const grab = cursorDeg(c, p0)

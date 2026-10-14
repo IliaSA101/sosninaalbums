@@ -10,8 +10,7 @@
 
   // Поля X/Y/Ш/В образца (первое выделенное) и замок пропорций — общие для карточек «Место» и «Фото»
   // (спека 008). Без выделения — серые.
-  const s = $derived(store.view.settings)
-  const bounds = $derived({ w: s.pageW * 2, h: s.pageH })
+  const bounds = $derived({ w: store.spread?.w ?? 0, h: store.spread?.h ?? 0 })
   const sample = $derived(placesel.selected[0])
 
   // Enter или уход из поля: число уходит в SetPlaces одной правкой, мусор возвращает прежнее значение.
@@ -70,7 +69,7 @@
   </label>
 {/snippet}
 
-<div class="grid" class:off={!sample}>
+<div class="grid" class:off={!sample} data-guide="place-fields">
   {@render field('x', 'X', 'X, мм от левого края разворота')}
   <span></span>
   {@render field('y', 'Y', 'Y, мм от верхнего края разворота')}

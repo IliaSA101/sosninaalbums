@@ -27,10 +27,13 @@ export function orientation(w: number, h: number): Orientation {
   return r > 1 ? 'h' : 'v'
 }
 
-export function albumStats(spreads: SpreadView[], byId: Map<string, Photo>, total: number): AlbumStats {
+// sheets — листы ряда: [обложка?] + развороты, lead — сколько в начале обложек (0 или 1). Фото обложки считаются,
+// а в развороты, страницы и раскладки она не входит (032).
+export function albumStats(sheets: SpreadView[], byId: Map<string, Photo>, total: number, lead = 0): AlbumStats {
+  const spreads = sheets.length - lead
   const st: AlbumStats = {
-    spreads: spreads.length,
-    pages: spreads.length * 2,
+    spreads,
+    pages: spreads * 2,
     layouts: 0,
     photos: 0,
     total,
@@ -41,8 +44,8 @@ export function albumStats(spreads: SpreadView[], byId: Map<string, Photo>, tota
     other: 0,
   }
   const keys = new Set<string>()
-  for (const s of spreads) {
-    if (s.layout) keys.add(s.layout)
+  for (const [n, s] of sheets.entries()) {
+    if (n >= lead && s.layout) keys.add(s.layout)
     s.photos.forEach((id, i) => {
       st.photos++
       // Фото из недоступной папки в библиотеке нет — берём аспект его ячейки.
@@ -63,4 +66,15 @@ export function colorLine(st: Pick<AlbumStats, 'adobe' | 'other'>): string | nul
   if (st.adobe > 0) parts.push(`Adobe RGB — ${st.adobe} (будут пересчитаны)`)
   if (st.other > 0) parts.push(`другой профиль — ${st.other}`)
   return parts.length ? 'Цвет: ' + parts.join(', ') : null
+}
+
+// Следующий после cur лист с малым разрешением (по кругу: после последнего — с первого); лист — обложка (032, первая) или разворот.
+// −1 — таких нет. Если он один и это cur, вернёт cur.
+export function nextLowSheet(sheets: Pick<SpreadView, 'lowDPI'>[], cur: number): number {
+  const n = sheets.length
+  for (let k = 1; k <= n; k++) {
+    const i = (((cur + k) % n) + n) % n
+    if (sheets[i].lowDPI > 0) return i
+  }
+  return -1
 }

@@ -10,6 +10,7 @@ import { additive } from './gesture'
 import { axisLock, moveSel, resizeSel, type SnapCtx } from '../../base/geom/gridedit'
 import { roundBox } from '../../base/geom/grid'
 import { snapThreshold } from '../../base/geom/snap'
+import { coverSides } from '../cover/cover'
 import { aabbOf, moveRotated, resizeRotated } from '../../base/geom/rotbox'
 import { bdAngle } from '../../base/geom/bdbox'
 import { cursorDeg } from '../../base/geom/textbox'
@@ -56,7 +57,8 @@ export function drive<T>(
   onClick?: () => void,
 ) {
   if (e.button !== 0 || running || canvas.space || canvas.panning) return
-  const sw = store.view.settings.pageW * 2
+  const sw = store.spread?.w ?? 0
+  if (!(sw > 0)) return
   const mmPx = sw / root.getBoundingClientRect().width
   const sx = e.clientX
   const sy = e.clientY
@@ -133,8 +135,8 @@ export function snapCtx(ev: PointerEvent, root: HTMLElement, s: SpreadView, skip
   const st = store.view.settings
   return {
     others: othersOf(s, skip),
-    params: { pageW: st.pageW, pageH: st.pageH, margin: st.margin, gap: st.gap, rects: [] },
-    thr: snapThreshold(root.getBoundingClientRect().width, st.pageW),
+    params: { w: s.w, h: s.h, mid: s.mid, margin: st.margin, gap: st.gap, rects: [], sides: coverSides(s, store.view.cover) },
+    thr: snapThreshold(root.getBoundingClientRect().width, s.w),
   }
 }
 
@@ -143,8 +145,7 @@ export function startMove(e: PointerEvent, root: HTMLElement, solo?: string) {
   const s = store.spread
   const items = placesel.selected
   if (!s || items.length === 0) return
-  const { pageW, pageH } = store.view.settings
-  const bounds = { w: pageW * 2, h: pageH }
+  const bounds = { w: s.w, h: s.h }
   const bases: Rect[] = items.map((i) => ({ x: i.x, y: i.y, w: i.w, h: i.h }))
   const skip = new Set(items.map((i) => i.id))
   const turned = items.length === 1 && items[0].rot !== 0 ? { ...bases[0], rot: items[0].rot } : null
@@ -175,8 +176,7 @@ export function startResize(e: PointerEvent, root: HTMLElement, handle: Handle) 
   const s = store.spread
   const sample = placesel.selected[0]
   if (!s || !sample) return
-  const { pageW, pageH } = store.view.settings
-  const bounds = { w: pageW * 2, h: pageH }
+  const bounds = { w: s.w, h: s.h }
   const base: Rect = { x: sample.x, y: sample.y, w: sample.w, h: sample.h }
   const skip = new Set([sample.id])
   gesture(e, root, s.id, (dx, dy, ev) => {
@@ -200,7 +200,7 @@ export function startRotate(e: PointerEvent, root: HTMLElement) {
   const sample = placesel.selected[0]
   if (!s || !sample) return
   const r = root.getBoundingClientRect()
-  const k = (store.view.settings.pageW * 2) / r.width
+  const k = s.w / r.width
   const c = { x: sample.x + sample.w / 2, y: sample.y + sample.h / 2 }
   const p0 = { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k }
   const grab = cursorDeg(c, p0)

@@ -45,6 +45,34 @@ func TestRelinkRekeys(t *testing.T) {
 	}
 }
 
+// Фото только на месте обложки — в альбоме, а не «только на фоне» (BgOnly): папка
+// переезжает по его паре путей, место обложки получает новый ID (032 §1).
+func TestRelinkCoverPhoto(t *testing.T) {
+	edtest.SkipNotWindows(t)
+	s := edtest.NewRelinkSetup(t)
+	pr, _ := model.CoverPresetOf(model.CoverDefault)
+	edtest.Change(s.E, func(p *model.Project) {
+		p.Cover = &model.Cover{Spec: pr.Spec, Sheet: &model.Spread{ID: model.CoverID}}
+		cv := p.Cover.Sheet
+		pl, err := p.AddPlace(cv, 1, 1, p.PlaceIDs())
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.Put(cv, pl, s.IdA)
+	})
+	if slices.Contains(edtest.P(s.E).Spreads[0].Photos, s.IdA) {
+		t.Fatal("фото осталось в развороте")
+	}
+	v := s.E.Relink(map[string]string{s.IdA: s.NewA}, "")
+	if !slices.Equal(v.Folders, []string{s.NewFd}) {
+		t.Fatalf("папка не переехала за фото обложки: %v", v.Folders)
+	}
+	if got := edtest.P(s.E).Cover.Sheet.Grid[0].Photo; got != library.IDFor(s.NewA) {
+		t.Fatalf("место обложки: %q", got)
+	}
+	edtest.MustGrid(t, s.E)
+}
+
 func TestRelinkAddFolderAndGuards(t *testing.T) {
 	edtest.SkipNotWindows(t)
 	s := edtest.NewRelinkSetup(t)

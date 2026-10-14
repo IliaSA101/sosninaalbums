@@ -20,6 +20,9 @@ const view = (): View =>
     spreads: [
       {
         id: 's1',
+        w: 600,
+        h: 300,
+        mid: 300,
         grid: true,
         photos: [],
         rects: [],

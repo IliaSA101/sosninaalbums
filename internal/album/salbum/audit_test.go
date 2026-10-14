@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -89,7 +91,7 @@ func TestLoadTooManySpreads(t *testing.T) {
 // Общий запас: блоки и знаки считаются по всему проекту, подписи тоже.
 func TestClampTextBudget(t *testing.T) {
 	p := model.New()
-	for range 150 { // 150 × 20 = 3000 блоков
+	for range 150 { // 150 × MaxTexts > MaxTotalTexts блоков
 		s := &model.Spread{ID: model.NewID()}
 		for range model.MaxTexts {
 			s.Texts = append(s.Texts, &model.TextBlock{ID: model.NewID(), Text: "t", W: 50})
@@ -112,7 +114,7 @@ func TestClampTextBudget(t *testing.T) {
 
 	q := model.New()
 	long := strings.Repeat("я", model.MaxTextRunes)
-	for range 30 { // 30 × 20 × 1000 знаков
+	for range 30 { // 30 × MaxTexts × 1000 знаков > MaxTotalRunes
 		s := &model.Spread{ID: model.NewID()}
 		for range model.MaxTexts {
 			s.Texts = append(s.Texts, &model.TextBlock{ID: model.NewID(), Text: long, W: 50})
@@ -179,6 +181,51 @@ func TestDecodePanicIsError(t *testing.T) {
 	p, err := Decode([]byte(`{"version":2}`), testkit.TempDir(t))
 	if p != nil || err == nil || !strings.Contains(err.Error(), "файл проекта повреждён") {
 		t.Fatalf("проект %v, ошибка %v", p, err)
+	}
+}
+
+// Паника в раскладке при миграции v5 (нынешний или прежний ряд) — запись в лог и Layout ""
+// у этого разворота; альбом открывается, соседний разворот мигрирует как обычно.
+func TestMigratePanicKeepsAuto(t *testing.T) {
+	orig := migRowImpl
+	t.Cleanup(func() { migRowImpl = orig })
+	migRowImpl = func(asp []float64, prm layout.Params, legacy bool) migRow {
+		if len(asp) == 2 {
+			panic("сбой раскладки")
+		}
+		return orig(asp, prm, legacy)
+	}
+	var buf strings.Builder
+	prev := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	dir := testkit.TempDir(t)
+	f := FileProject{Version: 5, Settings: model.DefaultSettings(), Folders: []FileFolder{},
+		Photos: map[string]FilePhoto{}}
+	for si, n := range []int{2, 3} {
+		s := &model.Spread{ID: fmt.Sprintf("s%d", si), Variant: 1}
+		for i := range n {
+			path := filepath.Join(dir, fmt.Sprintf("s%d-%d.jpg", si, i))
+			id := library.IDFor(path)
+			f.Photos[id] = FilePhoto{PhotoRef: model.PhotoRef{Path: path, W: 300, H: 200 + 100*i}}
+			s.Photos = append(s.Photos, id)
+		}
+		f.Spreads = append(f.Spreads, s)
+	}
+	data, err := json.Marshal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Decode(data, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Spreads[0].Layout != "" || p.Spreads[1].Layout == "" {
+		t.Fatalf("Layout %q и %q, ждали \"\" у сбойного и ключ второго варианта у соседа", p.Spreads[0].Layout, p.Spreads[1].Layout)
+	}
+	if !strings.Contains(buf.String(), "ПАНИКА в раскладке разворота") {
+		t.Fatalf("паники нет в логе: %.300q", buf.String())
 	}
 }
 

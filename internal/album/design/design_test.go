@@ -3,6 +3,7 @@ package design_test
 import (
 	"math"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
@@ -287,6 +288,43 @@ func TestMergeSpreadsTexts(t *testing.T) {
 	}
 }
 
+// Предел 64 надписи (спека 026): AddText до 64 проходит, 65-я — отказ с числом в тексте;
+// склейка 32 + 32 проходит, 33 + 32 — нет.
+func TestTexts64(t *testing.T) {
+	if model.MaxTexts != 64 {
+		t.Fatalf("MaxTexts = %d, спека 026 — 64", model.MaxTexts)
+	}
+	e, s1, _ := edtest.NewTwo(t)
+	for i := range 64 {
+		if _, err := e.AddText(s1, 0, ""); err != nil {
+			t.Fatalf("блок %d: %v", i+1, err)
+		}
+	}
+	rev := e.View().Rev
+	_, err := e.AddText(s1, 0, "")
+	if err == nil || !strings.Contains(err.Error(), "больше 64 текстов") || e.View().Rev != rev {
+		t.Fatalf("65-й блок: %v", err)
+	}
+	if v := e.View(); len(v.Spreads[0].Texts) != 64 {
+		t.Fatalf("в виде %d блоков", len(v.Spreads[0].Texts))
+	}
+	merge := func(n1, n2 int) model.View {
+		edtest.Change(e, func(p *model.Project) {
+			p.Spreads[0].Texts, p.Spreads[1].Texts = p.Spreads[0].Texts[:n1], nil
+			for range n2 {
+				p.Spreads[1].Texts = append(p.Spreads[1].Texts, &model.TextBlock{ID: model.NewID(), X: 300, Y: 20, W: 50, Text: "т", Style: model.PlainStyle()})
+			}
+		})
+		return e.MergeSpreads(s1)
+	}
+	if v := merge(33, 32); len(v.Spreads) != 2 {
+		t.Fatal("склейка 33 + 32 прошла")
+	}
+	if v := merge(32, 32); len(v.Spreads) != 1 || len(v.Spreads[0].Texts) != 64 {
+		t.Fatalf("склейка 32 + 32: %d разворотов", len(v.Spreads))
+	}
+}
+
 func TestSplitKeepsTexts(t *testing.T) {
 	e, s1, _ := edtest.NewTwo(t)
 	e.AddText(s1, 0, "")
@@ -355,7 +393,7 @@ func TestBackground(t *testing.T) {
 
 func TestAutoBuildDedupe(t *testing.T) {
 	e := edtest.Open(t, model.New(), "")
-	v, _ := e.AutoBuild(edtest.Photos("x", "y", "x", "y", "z"), -1, 3)
+	v, _ := e.AutoBuild(edtest.Photos("x", "y", "x", "y", "z"), -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
 	var all []string
 	for _, s := range v.Spreads {
 		all = append(all, s.Photos...)
@@ -388,7 +426,7 @@ func TestSettersRejectNaN(t *testing.T) {
 	e.SetFrame("b", inf, nan, 0.5)
 	e.SetTextBox(id, nan, inf, nan)
 	e.SetTextStyle(id, model.TextStyle{Font: "montserrat", Size: inf, Color: "#zzzzzz"})
-	e.SetCaptionStyle("a", model.TextStyle{Size: nan}, false)
+	e.SetCaptionStyle("a", model.TextStyle{Size: nan}, false, 1)
 	st := e.View().Settings
 	st.PageW, st.Margin = nan, inf
 	e.SetSettings(st)
@@ -435,6 +473,24 @@ func BenchmarkView300(b *testing.B) {
 	e.View()
 	b.ResetTimer()
 	for b.Loop() {
+		e.View()
+	}
+}
+
+// BenchmarkView64Texts — View разворота с 64 надписями (спека 026) после правки
+// текста: кэш вёрстки тёплый, стек и рамки считаются заново.
+func BenchmarkView64Texts(b *testing.B) {
+	e := edtest.Open(b, model.New(), "")
+	s1 := edtest.NewSpread(e, -1, edtest.Photos("a", "b")).Spreads[0].ID
+	for range 64 {
+		if _, err := e.AddText(s1, 0, ""); err != nil {
+			b.Fatal(err)
+		}
+	}
+	id := e.View().Spreads[0].Texts[0].ID
+	b.ResetTimer()
+	for i := 0; b.Loop(); i++ {
+		e.SetTextBox(id, float64(10+i%2), 10, 120)
 		e.View()
 	}
 }

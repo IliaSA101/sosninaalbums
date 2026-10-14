@@ -1,12 +1,12 @@
 // Ряд разворотов на холсте (спека 012, design §3): позиция `pos` в слотах, анимация (rAF), жесты.
-// Источник правды о текущем — store.current: ряд двигает картинку и зовёт store.go, сам current не трогает.
-// Слоты 0..n-1 — развороты, слот n — «новый» (точка остановки; текущим остаётся последний).
+// Источник правды о текущем — store.sheetIndex: ряд двигает картинку и зовёт store.goSheet, сам текущий не трогает.
+// Слоты 0..n-1 — листы (обложка 032, если есть, и развороты), слот n — «новый» (точка остановки; текущим остаётся последний).
 import { tick, untrack } from 'svelte'
 import { bgmode } from '../backdrop/bgmode.svelte'
-import { previewUrl } from '../../base/core/media'
+import { previewUrl, warmable } from '../../base/core/media'
 import { store } from '../../base/core/store.svelte'
 import { drag } from '../../base/drag/drag.svelte'
-import { IDLE, dur, easeOut, jumpFrom, nearSlot, rowMax, rowWheel, rubber, snapTarget, stepTarget } from './spreadrow'
+import { IDLE, dur, easeOut, jumpFrom, movePos, nearSlot, rowMax, rowWheel, rubber, snapTarget, stepTarget } from './spreadrow'
 
 const THRESHOLD = 5 // px: меньше — это щелчок по соседу, не перетаскивание
 const FRESH = 200 // мс после store.go переход считается навигацией (едем), позже — правкой (встаём)
@@ -20,17 +20,21 @@ type Anim = { from: number; to: number; t0: number; d: number }
 type Gesture = { start: number; raw: number; hist: [number, number][] }
 
 class SpreadRow {
-  pos = $state(0) // слоты, дробная; в покое = store.current (или n на слоте «новый»)
+  pos = $state(0) // слоты, дробная; в покое = store.sheetIndex (или n на слоте «новый»)
   moving = $state(false) // жест или анимация: Stage гасит полосу, зум молчит
   private n = $state(0)
   private P = $state(0)
+  private C: readonly number[] = [] // центры слотов: px → слоты по местному шагу (обложка шире разворота)
   private zoomed = $state(false)
 
   max = $derived(rowMax(this.n))
   near = $derived(nearSlot(this.pos, this.max))
   atNew = $derived(this.n >= 1 && this.near === this.n)
 
-  private tgt: number | null = null // куда едет анимация
+  private tgt = $state<number | null>(null) // куда едет анимация
+  // Слот для счётчика «Разворот N из M»: пока ряд едет, это цель, а не промежуточный кадр (дальний переход
+  // стартует за слот до цели, а без кадров анимации — например, в фоновой вкладке — pos застрял бы на нём).
+  shown = $derived(this.tgt ?? this.near)
   private a: Anim | null = null
   private raf = 0
   private g: Gesture | null = null
@@ -44,9 +48,10 @@ class SpreadRow {
   }
 
   // Размеры от Stage: шаг ряда P, число разворотов n, зум. Вызывается из эффекта при каждой смене.
-  geo(P: number, n: number, zoomed: boolean) {
+  geo(P: number, n: number, zoomed: boolean, centers: readonly number[] = []) {
     untrack(() => {
       this.P = P
+      this.C = centers
       this.n = n
       this.zoomed = zoomed
       if (n < 1) {
@@ -55,7 +60,7 @@ class SpreadRow {
       } else if (zoomed) {
         // В зуме pos ≡ cur, соседей нет
         this.halt()
-        this.pos = store.current
+        this.pos = store.sheetIndex
       } else if (!this.moving) {
         this.pos = clamp(this.pos, 0, rowMax(n))
       }
@@ -91,7 +96,7 @@ class SpreadRow {
   // Шаг от цели, если едем, иначе от ближайшего слота; через слот n тоже.
   step(d: -1 | 1) {
     if (this.n < 1) return
-    if (this.zoomed) return store.go(clamp(store.current + d, 0, this.n - 1))
+    if (this.zoomed) return store.goSheet(clamp(store.sheetIndex + d, 0, this.n - 1))
     this.to(stepTarget(this.tgt ?? this.near, d, this.pos, this.max))
   }
 
@@ -100,10 +105,10 @@ class SpreadRow {
     if (this.n < 1) return
     // Режим фона: слота «новый» нет (спека 012 п. 15), дальше последнего разворота не едем
     const t = clamp(Math.round(i), 0, this.zoomed || bgmode.cur ? this.n - 1 : this.max)
-    if (t < this.n && t !== store.current) {
+    if (t < this.n && t !== store.sheetIndex) {
       // Шаги колеса копятся до 3 слотов от вида: это не дальний переход, вид не телепортируем
       this.stepTo = t
-      return store.go(t)
+      return store.goSheet(t)
     }
     if (!this.zoomed) this.animate(t)
   }
@@ -134,7 +139,7 @@ class SpreadRow {
   private wheelPx(px: number) {
     if (!this.g) this.begin()
     else clearTimeout(this.idle)
-    this.feed(this.g!.raw + px / this.P)
+    this.feed(movePos(this.C, this.g!.raw, px, this.P))
     this.idle = setTimeout(() => this.release(true), IDLE)
   }
 
@@ -162,7 +167,7 @@ class SpreadRow {
         if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < THRESHOLD) return
         begin()
       }
-      if (this.g) this.feed(raw0 - (ev.clientX - x0) / this.P)
+      if (this.g) this.feed(movePos(this.C, raw0, x0 - ev.clientX, this.P))
     }
     const up = () => (moved ? this.release(true) : this.endGesture())
     const cancel = () => (moved ? this.release(false) : this.endGesture())
@@ -267,7 +272,7 @@ class SpreadRow {
     this.stop()
     this.moving = false
     const near = this.near
-    if (!this.zoomed && near < this.n && near !== store.current) store.go(near)
+    if (!this.zoomed && near < this.n && near !== store.sheetIndex) store.goSheet(near)
     this.after()
     this.warm()
   }
@@ -290,10 +295,13 @@ class SpreadRow {
     if (drag.active) void tick().then(() => drag.rehit())
   }
 
-  // Прогрев превью соседей ±1: при шаге они уже в кэше WebView2 (сами соседи рисуют миниатюры).
+  // Прогрев превью соседей ±1: при шаге они уже в кэше WebView2 (сами соседи рисуют миниатюры). Развороты на 17+ фото не греем (027).
   private warm() {
     if (typeof Image === 'undefined') return
-    for (const d of [-1, 1]) for (const id of store.view.spreads[store.current + d]?.photos ?? []) new Image().src = previewUrl(id)
+    for (const d of [-1, 1]) {
+      const ids = store.sheets[store.sheetIndex + d]?.photos ?? []
+      if (warmable(ids.length)) for (const id of ids) new Image().src = previewUrl(id)
+    }
   }
 }
 

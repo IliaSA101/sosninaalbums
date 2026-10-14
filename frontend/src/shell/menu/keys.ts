@@ -36,6 +36,7 @@ const PREVENT = new Set<KeyAction>([
   'layerBack',
   'spaceDown',
   'help',
+  'guide',
   'bgNudge',
 ])
 export const preventsDefault = (a: KeyAction) => PREVENT.has(a)

@@ -1,13 +1,19 @@
 <script lang="ts">
-  import type { LayoutScope, SpreadView } from '../../base/core/types'
+  import type { LayoutScope, SpreadView, VigChoice } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
   import { gridAct } from './gridact.svelte'
+  import { hasSeam, isCover, unitOf } from '../../base/geom/sheet'
   import { gallery, pageSwitchable } from './gallery.svelte'
+  import { stillSpread } from './variants'
   import Icon from '../../base/ui/Icon.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { align } from './align.svelte'
   import AlignBar from './AlignBar.svelte'
+  import { formOf, isVignette } from '../vignette/vignette'
+  import { isOwnTpl, resetVignette, tplLabel } from '../vignette/vigown'
+  import { vigOwn } from '../vignette/vigown.svelte'
+  import { vigChoices } from '../vignette/vigact'
 
   // show — курсор над разворотом или над полосой (следит Stage). Рамку (ширина разворота при 100 %,
   // всё окно при зуме) задаёт Stage; «Текст» — в ленте EditRail, оформление текста — в карточке InspectorText.
@@ -19,14 +25,43 @@
   const aligning = $derived(
     !drag.active && prefs.can('align') && align.ids.length > 0 && spread.id === store.spread?.id && gallery.cur?.spread !== spread.id,
   )
+  // Обложка (032): раскладок «Авто», шаблонов и копирования сетки у неё нет — только выравнивание выделенного.
+  const cover = $derived(isCover(spread))
+  // Виньетка (решение 80): стрелки и ⊞ листают шаблоны виньетки; «Авто», «Ручная» и копирование сетки тут не нужны.
+  const vig = $derived(isVignette(spread))
+  // Имя шаблона в строке — из того же списка Go, что карточка справа (переименование видно сразу). Запрос только
+  // для своего шаблона: имена каталожных не меняются, там хватает tplName листа.
+  let vigItems = $state<VigChoice[]>([])
+  let vigReq = 0
+  $effect(() => {
+    const v = spread.vig
+    void store.view.rev
+    void vigOwn.rev
+    const my = ++vigReq // до раннего выхода: старый ответ не должен перезаписать новое состояние
+    if (!isVignette(spread) || !v || !isOwnTpl(v.tpl)) {
+      vigItems = []
+      return
+    }
+    vigChoices(spread.id, formOf(v))
+      .then((list) => {
+        if (my === vigReq) vigItems = list
+      })
+      .catch(() => {
+        // Имя останется из tplName; ошибку Go покажет карточка справа
+      })
+  })
+  const vigName = $derived(spread.vig ? tplLabel(vigItems, spread.vig.tpl, spread.vig.tplName) : '')
   // Без «Вариантов» (спека 011) листать и выбирать раскладки нечем: остаётся подпись «Раскладка: Авто».
+  const unit = $derived(unitOf(store.view.settings))
   const variants = $derived(prefs.can('variants'))
   const pages = $derived(
-    compact || aligning || !variants
+    compact || aligning || cover || !variants || !hasSeam(spread)
       ? []
       : (['left', 'right'] as const).map((side, i) => ({ side, page: spread.pages?.[i] })).filter((p) => pageSwitchable(p.page)),
   )
-  const visible = $derived(!drag.active && (!!spread.layout || spread.grid) && (show || gallery.cur?.spread === spread.id))
+  const visible = $derived(
+    !drag.active && (cover ? aligning : !!spread.layout || spread.grid) && (show || gallery.cur?.spread === spread.id),
+  )
   // Листать нечего: в ряду одна раскладка, и она уже стоит.
   const still = (variant: number, variants: number) => variant >= 0 && variants <= 1
 
@@ -46,7 +81,7 @@
   })
 </script>
 
-<div class="bar layout-bar" class:visible>
+<div class="bar layout-bar" class:visible data-guide="layout-bar" data-guide-reveal>
   {#each pages as { side, page } (side)}
     {@const who = side === 'left' ? 'левой' : 'правой'}
     <div
@@ -87,6 +122,60 @@
 
   {#if aligning}
     <AlignBar />
+  {:else if cover}
+    <!-- без пунктов -->
+  {:else if vig}
+    <!-- Как у страницы: «‹ Виньетка: имя ▦ ›», у ручной — «‹ Виньетка: имя · Ручная · Вернуть авто › ▦» -->
+    {@const manual = !!spread.vig?.manual}
+    <div class="group spine" style:left="50%">
+      {#if variants}
+        <button
+          class="arrow"
+          onpointerdown={stop}
+          onclick={() => gallery.step('spread', -1)}
+          title="Предыдущий шаблон виньетки (Shift+пробел)"
+          aria-label="Предыдущий шаблон виньетки"><Icon name="chevron-left" /></button
+        >
+      {/if}
+      <span class="tag name" title="Параметры и шаблоны — в карточке справа">{vigName ? `Виньетка: ${vigName}` : 'Виньетка'}</span>
+      {#if manual}
+        <span class="tag" title="Места сдвинуты вручную и отличаются от шаблона">· Ручная ·</span>
+        <button
+          class="text auto"
+          onpointerdown={stop}
+          onclick={() => gridAct.vigGate(spread.id, 'reset', () => resetVignette(spread.id))}
+          title="Вернуть авто: места снова по шаблону; фото и подписи остаются (один шаг отмены)">Вернуть авто</button
+        >
+      {/if}
+      {#if variants}
+        {#snippet vigGrid()}
+          <button
+            class="grid"
+            class:active={isOpen('spread')}
+            onpointerdown={stop}
+            onclick={() => open('spread')}
+            data-guide="layout-all"
+            title="Все шаблоны виньетки"
+            aria-label="Все шаблоны виньетки"
+            aria-pressed={isOpen('spread')}><Icon name="grid" size={14} /></button
+          >
+        {/snippet}
+        {#snippet vigNext()}
+          <button
+            class="arrow"
+            onpointerdown={stop}
+            onclick={() => gallery.step('spread', 1)}
+            title="Следующий шаблон виньетки (пробел)"
+            aria-label="Следующий шаблон виньетки"><Icon name="chevron-right" /></button
+          >
+        {/snippet}
+        {#if manual}
+          {@render vigNext()}{@render vigGrid()}
+        {:else}
+          {@render vigGrid()}{@render vigNext()}
+        {/if}
+      {/if}
+    </div>
   {:else if spread.grid}
     <div class="group spine" style:left="50%">
       <button
@@ -117,14 +206,16 @@
           onpointerdown={stop}
           onclick={() => gallery.open('spread', 'grids')}
           title="Галерея шаблонов"
+          data-guide="grid-gallery"
           aria-label="Галерея шаблонов"
           aria-pressed={gridsOpen}><Icon name="grid" size={14} /></button
         >
         <button
           class="text"
+          data-guide="copy-grid"
           onpointerdown={stop}
           onclick={() => (gridAct.copyGrid = { spread: spread.id, from: 'spread' })}
-          title="Поставить такую же раскладку на другие развороты">Копировать раскладку…</button
+          title="Поставить такую же раскладку на другие {unit.many}">Копировать раскладку…</button
         >
       {/if}
     </div>
@@ -133,7 +224,7 @@
       {#if variants}
         <button
           class="arrow"
-          disabled={still(spread.variant, spread.variants)}
+          disabled={stillSpread(spread)}
           onpointerdown={stop}
           onclick={() => gallery.step('spread', -1)}
           title="Предыдущая раскладка (Shift+пробел)"
@@ -147,13 +238,14 @@
           class:active={isOpen('spread')}
           onpointerdown={stop}
           onclick={() => open('spread')}
+          data-guide="layout-all"
           title="Все раскладки разворота"
           aria-label="Все раскладки разворота"
           aria-pressed={isOpen('spread')}><Icon name="grid" size={14} /></button
         >
         <button
           class="arrow"
-          disabled={still(spread.variant, spread.variants)}
+          disabled={stillSpread(spread)}
           onpointerdown={stop}
           onclick={() => gallery.step('spread', 1)}
           title="Следующая раскладка (пробел)"
@@ -196,7 +288,8 @@
       opacity 0.15s,
       visibility 0s linear 0.15s;
   }
-  .visible .group {
+  .visible .group,
+  .bar:global([data-spot]) .group {
     opacity: 1;
     visibility: visible;
     transition:
@@ -218,6 +311,12 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--accent);
+  }
+  /* Имя шаблона длинное — обрезается, полное в подсказке карточки справа */
+  .tag.name {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .arrow {
     width: 22px;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { clampBox, gapTargets, snapAxis, snapBox, snapEdge, snapLines, snapPlaceMove, snapPlaceResize, snapThreshold } from './snap'
 import type { Rect } from '../core/types'
 
-const P = { pageW: 280, pageH: 280, margin: 12, rects: [{ x: 20, y: 40, w: 100, h: 60 }] }
+const P = { w: 560, h: 280, mid: 280, margin: 12, rects: [{ x: 20, y: 40, w: 100, h: 60 }] }
 
 describe('snapLines', () => {
   const l = snapLines(P)
@@ -20,9 +20,32 @@ describe('snapLines', () => {
   })
 })
 
+describe('snapLines: сторонки обложки', () => {
+  // Лист 623 × 331: заворот 23,5, задняя 23,5…304,5, корешок 14, лицевая 318,5…599,5; mid — центр корешка.
+  const sides = [
+    [23.5, 304.5],
+    [318.5, 599.5],
+  ] as const
+  const l = snapLines({ w: 623, h: 331, mid: 311.5, margin: 12, rects: [], sides })
+  it('края и центры сторонок вместо mid/2', () => {
+    for (const x of [0, 623, 23.5, 164, 304.5, 318.5, 459, 599.5]) expect(l.v).toContain(x)
+    expect(l.v).not.toContain(311.5 / 2)
+    expect(l.v).not.toContain(311.5)
+  })
+  it('поля — внутрь от краёв сторонки', () => {
+    for (const x of [35.5, 292.5, 330.5, 587.5]) expect(l.v).toContain(x)
+  })
+  it('по высоте линии те же, что у разворота', () => {
+    for (const y of [0, 165.5, 331, 12, 319]) expect(l.h).toContain(y)
+  })
+  it('без sides — прежний расчёт по шву', () => {
+    expect(snapLines({ w: 560, h: 280, mid: 280, margin: 12, rects: [] }).v).toContain(140)
+  })
+})
+
 describe('snapThreshold', () => {
-  it('6 px экрана в мм', () => expect(snapThreshold(1120, 280)).toBeCloseTo(3)) // 560 мм на 1120 px: 0.5 мм/px
-  it('нулевая ширина — порога нет', () => expect(snapThreshold(0, 280)).toBe(0))
+  it('6 px экрана в мм', () => expect(snapThreshold(1120, 560)).toBeCloseTo(3)) // 560 мм на 1120 px: 0.5 мм/px
+  it('нулевая ширина — порога нет', () => expect(snapThreshold(0, 560)).toBe(0))
 })
 
 describe('snapAxis', () => {
@@ -98,7 +121,7 @@ describe('gapTargets', () => {
 })
 
 describe('snapPlaceMove', () => {
-  const P2 = { pageW: 280, pageH: 280, margin: 0, gap: 4, rects: [] as Rect[] }
+  const P2 = { w: 560, h: 280, mid: 280, margin: 0, gap: 4, rects: [] as Rect[] }
   const other: Rect = { x: 20, y: 40, w: 100, h: 60 }
   it('край к краю соседнего места', () => {
     const r = snapPlaceMove({ x: 20.5, y: 150, w: 50, h: 50 }, [other], P2, 3)
@@ -136,7 +159,7 @@ describe('snapPlaceMove', () => {
 })
 
 describe('snapPlaceResize', () => {
-  const P2 = { pageW: 280, pageH: 280, margin: 0, gap: 4, rects: [] as Rect[] }
+  const P2 = { w: 560, h: 280, mid: 280, margin: 0, gap: 4, rects: [] as Rect[] }
   const other: Rect = { x: 200, y: 40, w: 60, h: 60 }
   it('правый край ручки e прилипает к краю соседа', () => {
     const r = snapPlaceResize({ x: 50, y: 50, w: 149, h: 30 }, 'e', [other], P2, 3, 5)

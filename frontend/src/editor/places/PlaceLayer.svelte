@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Settings, SpreadView } from '../../base/core/types'
+  import type { SpreadView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
   import { placesel } from './placesel.svelte'
   import { moveSelected } from './groupgesture'
@@ -11,9 +11,9 @@
   // Пустые места сетки (спека 007). Занятые рисует Cell. Пустое место без режима (спека 008):
   // щелчок выделяет (Shift/Ctrl — добавляет), тело переносит место; рамку и ручки рисует SelFrame. Лежат в той же обёртке, что и ячейки:
   // z-index = 10 + z из Go, чтобы бросок и экран совпадали с порядком слоёв при экспорте.
-  let { spread, settings, mini = false }: { spread: SpreadView; settings: Settings; mini?: boolean } = $props()
+  let { spread, mini = false }: { spread: SpreadView; mini?: boolean } = $props()
 
-  const sw = $derived(settings.pageW * 2)
+  const sw = $derived(spread.w)
   // Выделение — на нажатии: перенос начинается с того же жеста.
   function down(e: PointerEvent, id: string) {
     if (mini || e.button !== 0) return
@@ -38,9 +38,9 @@
     class:spine={p.spine}
     class:over={!mini && drag.over === `place:${p.id}`}
     style:left="{(p.x / sw) * 100}%"
-    style:top="{(p.y / settings.pageH) * 100}%"
+    style:top="{(p.y / spread.h) * 100}%"
     style:width="{(p.w / sw) * 100}%"
-    style:height="{(p.h / settings.pageH) * 100}%"
+    style:height="{(p.h / spread.h) * 100}%"
     style:z-index={layerIndex(p.z)}
     style:transform={p.rot ? `rotate(${p.rot}deg)` : undefined}
     data-drop={mini ? undefined : 'place'}

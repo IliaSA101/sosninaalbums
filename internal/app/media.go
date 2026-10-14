@@ -190,6 +190,10 @@ func (a *App) media(next http.Handler) http.Handler {
 			serveFont(w, r, name)
 			return
 		}
+		if r.URL.Path == "/media/cover-guide" {
+			a.serveCoverGuide(w, r)
+			return
+		}
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/media/"), "/")
 		if len(parts) != 2 || a.cache == nil {
 			http.NotFound(w, r)

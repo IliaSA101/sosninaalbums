@@ -15,18 +15,19 @@ type pageCtx struct {
 	rects []Rect // прямоугольники второй страницы (остальные нули)
 	og    pageGeo
 	empty bool // вторая страница пуста
+	many  bool // на развороте ManyFrom+ фото: его страницы из рядов (как в manyLayouts)
 }
 
 func newPageCtx(key string, aspects []float64, p Params, side int) (*pageCtx, bool) {
 	n := len(aspects)
-	if side != 0 && side != 1 || n == 0 || n > MaxPhotos || p.PageW <= 0 || p.PageH <= 0 {
+	if side != 0 && side != 1 || n == 0 || n > MaxPhotos || p.PageW <= 0 || p.PageH <= 0 || p.Sheet {
 		return nil, false
 	}
 	k, ok := pageForm(key)
 	if !ok || !leavesOK(k.leaves(), n) {
 		return nil, false
 	}
-	pc := &pageCtx{g: newGeom(p), p: p, side: side, rects: make([]Rect, n)}
+	pc := &pageCtx{g: newGeom(p), p: p, side: side, rects: make([]Rect, n), many: n >= ManyFrom}
 	pc.own = k.pages[side].leaves(nil)
 	if len(pc.own) == 0 {
 		return nil, false
@@ -71,15 +72,52 @@ type pageRow struct {
 }
 
 // rows — блоки страницы для одной последовательности её фото, по убыванию оценки
-// страницы; первые keep (keep < 0 — все).
+// страницы; первые keep (keep < 0 — все). На развороте из многих фото страница больше
+// maxFullTree — ряды и столбцы manyBlocks: в них есть блок, который поставил manyLayouts
+// (у перебора lines рядов не больше 4), а страница > 16 фото перебором не считается.
+// Страница поменьше — mixBlocks: в первых keep перебора блока manyLayouts может не быть.
 func (pc *pageCtx) rows(asp []float64, idx []int, keep int) ([]pageRow, int) {
-	cs, trees := bestBlocks(asp, pc.g.pages[pc.side], pc.g.gap, -1, keep, false)
+	box := pc.g.pages[pc.side]
+	var cs []candidate
+	var trees int
+	switch {
+	case pc.many && len(asp) > maxFullTree:
+		cs, trees = manyBlocks(asp, box, pc.g.gap, keep)
+	case pc.many && len(asp) > 1 && keep >= 0:
+		cs, trees = mixBlocks(asp, box, pc.g.gap, keep)
+	default:
+		cs, trees = bestBlocks(asp, box, pc.g.gap, -1, keep, false)
+	}
 	out := make([]pageRow, len(cs))
 	for i, c := range cs {
 		own := relabel(c.Key, idx)
 		out[i] = pageRow{pc.result(c, idx), own, c.Score, IsRearranged(own)}
 	}
 	return out, trees
+}
+
+// mixBlocks — страница до maxFullTree фото на развороте из многих: все ряды и столбцы
+// manyBlocks (среди них блок, который поставил manyLayouts) и лучшие деревья перебора, всего
+// keep − 1: одно место — «поменьше» из variants, иначе он вытеснил бы из ряда блок manyLayouts.
+// Перебор оставлен ради разнообразия: рядов и столбцов на странице 2–7 фото меньше 14.
+func mixBlocks(asp []float64, box Rect, gap float64, keep int) ([]candidate, int) {
+	out, _ := manyBlocks(asp, box, gap, -1)
+	room := max(keep-1, len(out))
+	has := make(map[string]bool, room)
+	for _, c := range out {
+		has[c.Key] = true
+	}
+	full, trees := bestBlocks(asp, box, gap, -1, room, false)
+	for _, c := range full {
+		if len(out) >= room {
+			break
+		}
+		if !has[c.Key] {
+			out = append(out, c)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b candidate) int { return desc(tieQ(a.Score), tieQ(b.Score)) })
+	return out[:min(len(out), keep)], trees
 }
 
 // smallRank — насколько «поменьше» в ряду страницы ниже своего блока. По честной
@@ -159,7 +197,8 @@ func (pc *pageCtx) inOrder(aspects []float64, limit int) []pageRow {
 	rows, _ := pc.rows(asp, pc.own, keep)
 	if len(rows) > 0 {
 		rows = append(rows, pc.variants(aspects, rows[0])...)
-		slices.SortStableFunc(rows, func(a, b pageRow) int { return desc(a.score, b.score) })
+		// Ничьи (tieQ) — порядок построения, а не последние биты (решение 95).
+		slices.SortStableFunc(rows, func(a, b pageRow) int { return desc(tieQ(a.score), tieQ(b.score)) })
 	}
 	return rows[:min(len(rows), limit)]
 }

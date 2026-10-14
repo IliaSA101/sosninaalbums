@@ -1,11 +1,44 @@
+<script lang="ts" module>
+  // «Скрыть»: ключ набора пропавших (missingKey). Только в памяти: новое пропавшее фото или новое открытие — полоса снова.
+  let hidden = $state('')
+</script>
+
 <script lang="ts">
   import { slide } from 'svelte/transition'
   import { store, Api } from '../../base/core/store.svelte'
+  import { unitOf } from '../../base/geom/sheet'
+  import Icon from '../../base/ui/Icon.svelte'
+  import Popover from '../../base/ui/Popover.svelte'
   import { relinkFolder } from './relink'
-  import { albumPhotos, driveLabel, missingText, showMissing, type DriveHint } from './missing'
+  import {
+    albumPhotos,
+    driveLabel,
+    isHidden,
+    missingKey,
+    missingSpots,
+    missingText,
+    missingWhere,
+    showMissing,
+    spotLabel,
+    type DriveHint,
+    type Spot,
+  } from './missing'
 
   const count = $derived(store.missing.length)
-  const total = $derived(albumPhotos(store.view.spreads))
+  const total = $derived(albumPhotos(store.sheets))
+  const unit = $derived(unitOf(store.view.settings))
+  const spots = $derived(missingSpots(store.sheets, store.missing))
+  const text = $derived(missingText(count, total, missingWhere(spots, unit)))
+  const key = $derived(missingKey(store.missing, store.openSeq))
+
+  // Список «Показать»: переход к листу и выделение фото; окно закрывается.
+  let listOpen = $state(false)
+  let listBtn = $state<HTMLButtonElement>()
+  function show(s: Spot) {
+    listOpen = false
+    store.goId(s.sheet)
+    store.selectedCell = s.photo
+  }
 
   // Подсказка смены диска: список недостающих меняется — спрашиваем Go заново.
   // Номер запроса отсекает запоздавший ответ.
@@ -40,6 +73,18 @@
     }
   }
 
+  // Убрать из альбома все пропавшие фото: места остаются пустыми, Undo возвращает.
+  async function removeAll() {
+    if (busy || spots.length === 0) return
+    busy = true
+    try {
+      const n = spots.length
+      if (await store.run(Api.RemovePhotos(spots.map((s) => s.photo)))) store.notify(`Убрано фото: ${n}`)
+    } finally {
+      busy = false
+    }
+  }
+
   async function findFolder() {
     if (busy) return
     busy = true
@@ -51,14 +96,39 @@
   }
 </script>
 
-{#if showMissing(count)}
-  <div class="bar" role="status" transition:slide={{ duration: 150 }}>
-    <span class="msg"><i aria-hidden="true">!</i>{missingText(count, total)}</span>
+{#if showMissing(count) && !isHidden(hidden, key)}
+  <div class="bar" role="status" data-guide="missing-bar" transition:slide={{ duration: 150 }}>
+    <span class="msg" title={text}><i aria-hidden="true">!</i><span class="txt">{text}</span></span>
     {#if drive}
       <button class="accent" disabled={busy} onclick={relinkDrive} title="Заменить букву диска у недостающих фото">{drive}</button>
     {/if}
+    {#if spots.length > 0}
+      <button
+        bind:this={listBtn}
+        aria-haspopup="dialog"
+        aria-expanded={listOpen}
+        onclick={() => (listOpen = !listOpen)}
+        title="Список пропавших фото: выбрать — перейти к фото">Показать ▾</button
+      >
+    {/if}
     <button disabled={busy} onclick={findFolder} title="Выбрать папку, где лежат эти фото">Найти…</button>
+    {#if spots.length > 0}
+      <button disabled={busy} onclick={removeAll} title="Убрать пропавшие фото из альбома: места останутся пустыми, Ctrl+Z вернёт"
+        >Убрать из альбома</button
+      >
+    {/if}
+    <button class="x ghost" onclick={() => (hidden = key)} title="Скрыть до следующего открытия" aria-label="Скрыть до следующего открытия"
+      ><Icon name="x" size={14} /></button
+    >
   </div>
+  <Popover anchor={listBtn} bind:open={listOpen} label="Пропавшие фото" kind="missing">
+    <ul class="list">
+      {#each spots as s (s.photo)}
+        {@const label = spotLabel(s, unit, store.missingNames)}
+        <li><button class="ghost row" title={label} onclick={() => show(s)}>{label}</button></li>
+      {/each}
+    </ul>
+  </Popover>
 {/if}
 
 <style>
@@ -78,10 +148,42 @@
     overflow: hidden;
   }
   .msg {
+    min-width: 0;
     display: inline-flex;
     align-items: center;
     gap: 6px;
     color: var(--accent);
+  }
+  .txt {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .x {
+    width: 26px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+  /* Не больше 10 строк на виду, дальше прокрутка. */
+  .list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 280px;
+    overflow-y: auto;
+    min-width: 220px;
+  }
+  .row {
+    width: 100%;
+    max-width: 420px;
+    height: 28px;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   /* Значок «!» без Icon.svelte: общий набор значков правят параллельно. */
   i {
@@ -95,8 +197,10 @@
       sans-serif;
     text-align: center;
   }
-  button {
+  .bar button {
     height: 26px;
     padding: 0 10px;
+    flex: none;
+    white-space: nowrap;
   }
 </style>
