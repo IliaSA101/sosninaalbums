@@ -3,10 +3,13 @@
   import { placesel } from '../places/placesel.svelte'
   import { edit } from '../text/edit.svelte'
   import { photoui } from './photoui.svelte'
+  import { straighten } from './straighten.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { menuContext, photoMenu, type MenuId } from './photomenu'
   import { LAYER_OPS, type LayerOp } from '../places/minipanel'
   import { relinkFolder } from '../../panels/library/relink'
+  import { decor } from '../../panels/decor/decor.svelte'
+  import { sticker } from '../sticker/sticker.svelte'
   import { errText } from '../../base/core/errtext'
   import { scopeLabel, scopesFor } from '../backdrop/backdrop'
   import { setBackdrop } from '../backdrop/backdropact'
@@ -22,7 +25,13 @@
 
   // Меню правого щелчка по фото (спека 008): своё, работает и в браузере. Пункты — photo/photomenu.ts.
   // Esc и щелчок мимо закрывают; окно держится внутри экрана.
-  const items = $derived(photoMenu(menuContext(store.spread, placesel.selected, store.missing, placesel.texts.length), prefs.can))
+  // Выделены одни стикеры (048) — меню стикера: «Заменить…», «Зеркало», «Слой», «Удалить».
+  const items = $derived(
+    photoMenu(
+      menuContext(store.spread, placesel.selected, store.missing, placesel.texts.length, placesel.selectedStickers.length),
+      prefs.can,
+    ),
+  )
   const GAP = 8 // отступ от края окна, px
 
   // «Слой ▸» и «На фон ▸» раскрываются списком под пунктом (не боковым окном: не упирается в край экрана).
@@ -120,6 +129,12 @@
     ACTIONS[id]?.(first)
   }
 
+  // «Заменить…» у стикера: то же окно «Стикеры», что и в карточке.
+  function replaceSticker() {
+    const t = sticker.target()
+    if (t) decor.show('sticker', t.spread, 'spread', t.id)
+  }
+
   // Действие пункта; first — первое выделенное фото (у части пунктов оно не нужно).
   const ACTIONS: Partial<Record<MenuId, (first: string) => void>> = {
     preview: (first) => (photoui.preview = first),
@@ -129,12 +144,16 @@
     fitPhoto: () => placesel.arrange('fitPhoto'),
     turnCw: () => placesel.turn(1),
     turnCcw: () => placesel.turn(-1),
+    straighten: (first) => straighten.startPhoto(first),
     flipH: () => placesel.flip('h'),
     flipV: () => placesel.flip('v'),
     contain: () => placesel.setFit(true),
     cover: () => placesel.setFit(false),
+    round: () => placesel.setShape(true),
+    rect: () => placesel.setShape(false),
     resetFrame: (first) => void store.run(Api.ResetFrame(first)),
     caption: (first) => edit.editCaption(first),
+    replace: replaceSticker,
     delete: () => placesel.deleteSelected(),
   }
 </script>

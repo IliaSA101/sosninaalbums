@@ -133,8 +133,12 @@ func checkPlan(t *testing.T, tp Tpl, in Input, p Plan) {
 		t.Fatalf("шапка %v у шаблона %q", p.Head != nil, tp.Head)
 	}
 	var full []Rect
+	nt := 0
 	for i, s := range p.Slots {
-		checkSlot(t, s, in, p)
+		checkSlot(t, s, in, p, nt)
+		if s.Role == RoleTeacher {
+			nt++
+		}
 		r := withCaption(s, in)
 		if !inAny(r, in.Regions) {
 			t.Fatalf("место %d %s %+v вне областей", i, s.Role, r)
@@ -156,7 +160,9 @@ func checkPlan(t *testing.T, tp Tpl, in Input, p Plan) {
 	}
 }
 
-func checkSlot(t *testing.T, s Slot, in Input, p Plan) {
+// checkSlot — рамка места; nt — сколько учителей было до него (у PosLead первый — руководитель
+// шириной LeadW, остальные — в общей сетке с учениками).
+func checkSlot(t *testing.T, s Slot, in Input, p Plan, nt int) {
 	t.Helper()
 	b := s.Box
 	if b.W <= 0 || b.H <= 0 {
@@ -171,6 +177,12 @@ func checkSlot(t *testing.T, s Slot, in Input, p Plan) {
 			t.Fatalf("ученик %.3f ≠ PupilW %.3f", b.W, p.PupilW)
 		}
 	case RoleTeacher:
+		if p.LeadW > 0 && nt > 0 {
+			if p.PupilW > 0 && math.Abs(b.W-p.PupilW) > tol {
+				t.Fatalf("учитель %d в общей сетке %.3f ≠ PupilW %.3f", nt, b.W, p.PupilW)
+			}
+			break
+		}
 		if math.Abs(b.W-p.TeacherW) > tol {
 			t.Fatalf("учитель %.3f ≠ TeacherW %.3f", b.W, p.TeacherW)
 		}
@@ -199,12 +211,13 @@ func TestVignetteTemplatesGeometry(t *testing.T) {
 	}{
 		{"204x304", sheetRegions(204, 304)},
 		{"304x404", sheetRegions(304, 404)},
+		{"304x204", sheetRegions(304, 204)},
 		{"spread300", spreadRegions()},
 	}
 	for _, f := range formats {
 		for _, tp := range Catalog(false) {
 			for _, ratio := range []string{"2:3", "3:4", "4:5", "1:1"} {
-				for _, nt := range []int{0, 1, 2, 3, 5, 18} {
+				for _, nt := range []int{0, 1, 2, 3, 5, 18, 32} {
 					for _, np := range []int{0, 1, 6, 25, 33, 64} {
 						if nt+np > 64 {
 							continue
@@ -236,13 +249,21 @@ func checkSpine(t *testing.T, tp Tpl, in Input, p Plan, spread bool) {
 			t.Fatalf("%s на сгибе: %+v", s.Role, s.Box)
 		}
 	}
-	leftBusy := (tp.Teach == PosPage && in.Teachers > 0) || tp.Group == PosPage
+	leftBusy := (tp.Teach == PosPage || tp.Teach == PosLead) && in.Teachers > 0 || tp.Group == PosPage
 	if !tp.Split || !leftBusy {
 		return
 	}
 	for _, b := range boxes(p, RolePupil) {
 		if b.X < 300 {
 			t.Fatalf("Split: ученик на левой странице %+v", b)
+		}
+	}
+	if tp.Teach != PosLead {
+		return
+	}
+	for i, b := range boxes(p, RoleTeacher) {
+		if (i == 0) != (b.X < 300) {
+			t.Fatalf("Split: учитель %d %+v — руководитель слева, остальные справа", i, b)
 		}
 	}
 }
@@ -320,8 +341,22 @@ func TestVignetteSplit(t *testing.T) {
 
 func TestVignetteCatalog(t *testing.T) {
 	all, sheet := Catalog(false), Catalog(true)
-	if len(all) != 20 || len(sheet) != 17 {
-		t.Fatalf("шаблонов %d / %d в листе, want 20 / 17", len(all), len(sheet))
+	if len(all) != 33 || len(sheet) != 29 {
+		t.Fatalf("шаблонов %d / %d в листе, want 33 / 29", len(all), len(sheet))
+	}
+	// Первые 20 (031) заморожены: ID лежат в файлах, имена и порядок видны в галерее.
+	old := []string{"grid Сетка", "head Шапка и сетка", "t-left Учителя слева", "head-t-left Шапка, учителя слева",
+		"t-right Учителя справа", "head-t-right Шапка, учителя справа", "t-top Учителя сверху",
+		"head-t-top Шапка, учителя сверху", "t-bottom Учителя снизу", "head-t-bottom Шапка, учителя снизу",
+		"head-low Сетка, шапка снизу", "g-top Групповое сверху", "head-g-top Шапка, групповое сверху",
+		"g-bottom Групповое снизу", "head-g-bottom Шапка, групповое снизу",
+		"head-t-left-g Шапка, учителя слева, групповое снизу", "t-top-g Учителя сверху, групповое снизу",
+		"split-t Учителя и шапка слева, класс справа", "split-g Групповое слева, класс справа",
+		"split-tg Шапка, учителя и групповое слева"}
+	for i, want := range old {
+		if got := all[i].ID + " " + all[i].Name; got != want {
+			t.Fatalf("шаблон %d: %q, want %q", i, got, want)
+		}
 	}
 	seen := map[string]bool{}
 	for _, tp := range all {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
   import { modes } from '../../base/prefs/view.svelte'
-  import { gallery } from '../layouts/gallery.svelte'
+  import { gallery } from '../gallery/gallery.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import Popover from '../../base/ui/Popover.svelte'

@@ -110,6 +110,8 @@ export interface SelBox extends Rect {
   photo: string // "" — пустое место
   fit: '' | 'contain'
   rot: number // угол вокруг центра (спека 010); в «Авто» 0
+  shape?: string // форма места (044): '' / нет — прямоугольник, 'oval'
+  round?: number // скругление углов, % меньшей стороны; в «Авто» нет
 }
 
 // Рамка ref: сетка — место по ID, затем по фото; «Авто» — ячейка фото. Чужой ref — null.
@@ -117,7 +119,21 @@ export function refBox(s: SpreadView | undefined, ref: string): SelBox | null {
   if (!s || !ref) return null
   if (s.grid) {
     const p = s.places?.find((x) => x.id === ref) ?? s.places?.find((x) => x.photo === ref)
-    return p ? { x: p.x, y: p.y, w: p.w, h: p.h, ref, id: p.id, photo: p.photo, fit: p.fit, rot: p.rot ?? 0 } : null
+    return p
+      ? {
+          x: p.x,
+          y: p.y,
+          w: p.w,
+          h: p.h,
+          ref,
+          id: p.id,
+          photo: p.photo,
+          fit: p.fit,
+          rot: p.rot ?? 0,
+          shape: p.shape ?? '',
+          round: p.round ?? 0,
+        }
+      : null
   }
   const i = s.photos.indexOf(ref)
   const r = i >= 0 ? s.rects[i] : undefined

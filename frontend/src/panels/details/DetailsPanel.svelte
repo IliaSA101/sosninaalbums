@@ -66,7 +66,7 @@
 
   // Новое выделение, а заголовок карточки выше видимой части — к началу панели. Снятие выделения не в счёт:
   // смену разворота ведёт «Все развороты» (SpreadGrid), им не мешаем.
-  const selKey = $derived(`${panels.mode}|${placesel.refs.join(',')}|${placesel.texts.join(',')}`)
+  const selKey = $derived(`${panels.mode}|${placesel.refs.join(',')}|${placesel.texts.join(',')}|${placesel.stickers.join(',')}`)
   let lastKey = ''
   $effect(() => {
     const k = selKey

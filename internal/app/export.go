@@ -12,6 +12,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
+	"github.com/IliaSA101/sosninaalbums/internal/export/fsfera"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
@@ -78,13 +79,76 @@ var (
 		ans, err := wr.MessageDialog(a.ctx, opts)
 		return err == nil && ans == opts.Buttons[0], err
 	}
-	pickExportDir = func(a *App) (string, error) {
+	pickExportDir = func(a *App, title string) (string, error) {
 		return wr.OpenDirectoryDialog(a.ctx, wr.OpenDialogOptions{
-			Title:            "Куда выгрузить",
+			Title:            title,
 			DefaultDirectory: a.dialogDir(prefs.DirExport),
 		})
 	}
+	// openURL — открыть адрес в браузере (подмена в тестах).
+	openURL = func(a *App, url string) { wr.BrowserOpenURL(a.ctx, url) }
 )
+
+// fsferaURL — калькулятор Pro Фотосферы для «Открыть Фотосферу» (047): адрес только отсюда.
+const fsferaURL = "https://fsfera.ru/order_pro/calculator/"
+
+// OpenFsfera открывает калькулятор Pro в браузере. Адрес от интерфейса не принимаем — как
+// ShowInExplorer: иначе страница в окне открывала бы что угодно.
+func (a *App) OpenFsfera() { openURL(a, fsferaURL) }
+
+// FsferaPlan — готовность альбома к выгрузке для Фотосферы Pro (047): окно экспорта
+// запрашивает её при открытии и при смене rev. Проект не меняется.
+func (a *App) FsferaPlan() fsfera.Plan {
+	p, _ := a.editor().Snapshot()
+	return fsfera.Check(p, a.editor().Path())
+}
+
+// fsferaOptions — режим «Для Фотосферы Pro» (047 §4.1): запрет — ошибка до всех вопросов,
+// иначе настройки окна заменяются заданными: все развороты целиком, 300 dpi, с обложкой.
+func fsferaOptions(p *model.Project, path string, o *ExportOptions) (fsfera.Plan, error) {
+	pl := fsfera.Check(p, path)
+	if len(pl.Block) > 0 {
+		return pl, errors.New(strings.Join(pl.Block, ". "))
+	}
+	o.Range, o.Pages, o.DPI, o.Cover, o.CoverOnly = "", false, 300, true, false
+	return pl, nil
+}
+
+// coverQuestion — вопрос об обложке до выбора папки (047): в режиме Фотосферы её нет,
+// в обычном — обложка «Фотосферы» не по шаблону (CoverView.Fix).
+func coverQuestion(fs bool, cover *export.CoverJob, v model.View) string {
+	switch {
+	case fs && cover == nil:
+		return "Обложки нет: в папке будут только развороты, а для фотообложки нужен 00.jpg. Выгрузить без обложки?"
+	case !fs && cover != nil && v.Cover != nil && v.Cover.Fix != "":
+		return fsfera.CoverFixQuestion(v.Cover.Fix)
+	}
+	return ""
+}
+
+// bookDir — папка книги в выбранной dir (режим Фотосферы): mk — путь, если её надо создать
+// (os.Mkdir после всех вопросов). Без режима — dir как есть.
+func bookDir(fs *fsfera.Plan, dir string) (book, mk string, err error) {
+	if fs == nil {
+		return dir, "", nil
+	}
+	book, exists, err := fsfera.BookDir(dir, fs.Folder)
+	if err != nil || exists {
+		return book, "", err
+	}
+	return book, book, nil
+}
+
+// extraQuestion — вопрос о посторонних файлах в уже существующей папке книги: загрузчик
+// Фотосферы возьмёт их вместе с альбомом (решение 59).
+func extraQuestion(dir string, written []string) string {
+	n, first := fsfera.Extra(dir, written)
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("В папке «%s» есть посторонние файлы (%d шт., например %s): Фотосфера загрузит их вместе с альбомом. Продолжить?",
+		filepath.Base(dir), n, first)
+}
 
 // Export собирает развороты по настройкам окна экспорта: спрашивает папку и пишет в фоне.
 // Ход работы приходит событиями export:progress и export:done.
@@ -108,6 +172,14 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 
 	// Всё, что может отказать, — до диалога папки и удаления прежних файлов: иначе отказ пришёл бы после потерь.
 	p, v := a.editor().Snapshot()
+	var fs *fsfera.Plan // режим «Для Фотосферы Pro» (047): папка книги и памятка
+	if o.Fsfera {
+		pl, err := fsferaOptions(p, a.editor().Path(), &o)
+		if err != nil {
+			return false, err
+		}
+		fs = &pl
+	}
 	o.Quality, o.DPI = export.ClampOptions(o.Quality, o.DPI, p.Settings.DPI)
 	n := len(v.Spreads)
 	// Обложка (032): нет её или проект-лист — флаги игнорируются; «только обложка» включает обложку.
@@ -164,11 +236,24 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 			return false, err
 		}
 	}
-	dir, err := pickExportDir(a)
+	if text := coverQuestion(fs != nil, cover, v); text != "" {
+		if ok, err := askYes(a, text); !ok {
+			return false, err
+		}
+	}
+	title := "Куда выгрузить"
+	if fs != nil {
+		title = "Куда выгрузить — папка книги будет внутри"
+	}
+	dir, err := pickExportDir(a, title)
 	if err != nil || dir == "" {
 		return false, err
 	}
 	a.rememberDir(prefs.DirExport, dir)
+	dir, mkBook, err := bookDir(fs, dir) // дальше dir — папка книги; mkBook — создать её
+	if err != nil {
+		return false, err
+	}
 	// Пустые места после выбора папки, до вопроса о перезаписи: «нет» ничего не удаляет.
 	if text := export.EmptyWarning(export.EmptySummaryFor(v, &pl, opt.PageW)); text != "" {
 		if ok, err := askYes(a, text); !ok {
@@ -176,9 +261,11 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 		}
 	}
 
-	ours, foreign, err := export.PlanDir(dir)
-	if err != nil {
-		return false, fmt.Errorf("не удалось прочитать папку экспорта: %w", err)
+	var ours, foreign []export.DirFile
+	if mkBook == "" { // новой папки книги ещё нет: читать нечего
+		if ours, foreign, err = export.PlanDir(dir); err != nil {
+			return false, fmt.Errorf("не удалось прочитать папку экспорта: %w", err)
+		}
 	}
 	ours, foreign = export.AddCoverFile(pl, dir, ours, foreign) // 00.jpg: наш заменяется, чужой — отказ
 	if foreign = export.HitFiles(pl, foreign); len(foreign) > 0 {
@@ -190,6 +277,26 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 			return false, err
 		}
 		stale = export.StaleNames(hit, pl.Names(n)) // удалятся после записи новых
+	}
+	if fs != nil && cover == nil && mkBook == "" { // свой старый 00.jpg: загрузчик взял бы прежнюю обложку
+		stale = append(stale, fsfera.OldCover(dir)...)
+	}
+	if fs != nil && mkBook == "" {
+		if text := extraQuestion(dir, pl.Names(n)); text != "" {
+			if ok, err := askYes(a, text); !ok {
+				return false, err
+			}
+		}
+	}
+	if mkBook != "" { // после всех вопросов: «нет» не оставляет пустой папки
+		if err := os.Mkdir(mkBook, 0o755); err != nil {
+			log.Printf("экспорт: папка книги: %v", paths.NoPath(err))
+			return false, fmt.Errorf("не удалось создать папку книги: %w", err)
+		}
+	}
+	var memo []string // памятка окна «Готово для Фотосферы»; nil — обычный тост
+	if fs != nil {
+		memo = fs.Memo
 	}
 
 	spreads := export.FromView(p, v)
@@ -207,18 +314,18 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 		start := time.Now()
 		err := export.RunPlan(a.stopCtx, spreads, pl, opt, dir, stale,
 			func(done, total int) { a.emit("export:progress", done, total) })
-		msg, note := "", ""
+		msg, note, done := "", "", []string(nil)
 		if err != nil {
 			msg = err.Error()
 			log.Printf("экспорт: %v", paths.NoPath(err))
 		} else {
-			note = export.ColorNote(adobe)
-			log.Printf("экспорт: %d разворотов в %s за %v", len(pl.Jobs), filepath.Base(dir), time.Since(start).Round(time.Second))
+			note, done = export.ColorNote(adobe), memo
+			log.Printf("экспорт: %d разворотов в %s за %v", len(pl.Jobs), paths.LogQ(filepath.Base(dir)), time.Since(start).Round(time.Second))
 			if note != "" {
 				log.Print(note)
 			}
 		}
-		a.emit("export:done", dir, msg, note)
+		a.emit("export:done", dir, msg, note, done)
 	})
 	return true, nil
 }
@@ -262,4 +369,7 @@ type ExportOptions struct {
 	// CoverOnly — только обложка, развороты и Range не выгружаются (включает Cover).
 	Cover     bool `json:"cover"`
 	CoverOnly bool `json:"coverOnly"`
+	// Fsfera — «Для Фотосферы Pro» (047): папка книги, все развороты, 300 dpi, с обложкой;
+	// Range, Pages, DPI, Cover и CoverOnly игнорируются, запреты fsfera.Check — ошибка.
+	Fsfera bool `json:"fsfera"`
 }

@@ -11,7 +11,7 @@ import (
 // едет кусочно-линейно по зонам: что в сторонке — сдвигается и масштабируется с ней, что на
 // корешке — остаётся по его центру того же размера. Зоны те же — ничего (холостая правка
 // остаётся холостой). Обложку создали или сняли в этой правке — тоже ничего. Restore шаг
-// пропускает, как Rescale. Стоимость — O(места + тексты + фоны) и только при смене зон.
+// пропускает, как Rescale. Стоимость — O(места + тексты + стикеры + фоны) и только при смене зон.
 func Reflow(p, before *model.Project) {
 	if p.Cover == nil || before.Cover == nil {
 		return
@@ -37,6 +37,20 @@ func Reflow(p, before *model.Project) {
 	for _, t := range s.Texts {
 		moveText(t, mx, my) // в лист текст вернёт FitTexts дальше в конвейере
 	}
+	for _, st := range s.Stickers {
+		moveSticker(st, mx, my)
+		if c := p.ClampSticker(s, st); c != nil {
+			*st = *c
+		}
+	}
+}
+
+// moveSticker — как повёрнутый текст: центр едет по зонам, размер — по зоне центра (048 design
+// §3.2); пропорцию своего рисунка вернёт FitStickers.
+func moveSticker(st *model.Sticker, mx, my axis) {
+	cx, cy := st.X+st.W/2, st.Y+st.H/2
+	st.W, st.H = st.W*mx.size(cx), st.H*my.size(cy)
+	st.X, st.Y = mx.at(cx)-st.W/2, my.at(cy)-st.H/2
 }
 
 // axis — кусочно-линейная карта одной оси: границы зон до и после; panel — зоны, где

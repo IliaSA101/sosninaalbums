@@ -47,11 +47,11 @@ describe('подписи', () => {
     expect(spreadsLabel(3, u)).toBe('3 листа')
     expect(spreadsLabel(5, u)).toBe('5 листов')
     expect(planHint(plan({ avg: 4, min: 4, max: 4 }), u)).toBe('по 4 фото на лист')
-    expect(planHint(plan({ avg: 4.3333, min: 3, max: 6 }), u)).toBe('≈ 4,3 фото на лист, от 3 до 6')
+    expect(planHint(plan({ avg: 4.3333, min: 3, max: 6 }), u)).toBe('от 3 до 6 фото на лист')
   })
-  it('подсказка: среднее с запятой и границы', () => {
-    expect(planHint(plan({ avg: 4.3333, min: 3, max: 6 }))).toBe('≈ 4,3 фото на разворот, от 3 до 6')
-    expect(planHint(plan({ avg: 4.04, min: 4, max: 5 }))).toBe('≈ 4 фото на разворот, от 4 до 5')
+  it('подсказка: только границы, без дроби', () => {
+    expect(planHint(plan({ avg: 4.3333, min: 3, max: 6 }))).toBe('от 3 до 6 фото на разворот')
+    expect(planHint(plan({ avg: 4.04, min: 4, max: 5 }))).toBe('от 4 до 5 фото на разворот')
   })
   it('a = b — «по N», нет фото — своя фраза', () => {
     expect(planHint(plan({ avg: 4, min: 4, max: 4 }))).toBe('по 4 фото на разворот')
@@ -61,8 +61,9 @@ describe('подписи', () => {
 
 describe('подписи 034', () => {
   it('среднее в поле: одна цифра, запятая', () => {
-    expect(perText(642, 30)).toBe('21,4')
-    expect(perText(42, 10)).toBe('4,2')
+    expect(perText(642, 30)).toBe('21')
+    expect(perText(42, 10)).toBe('4')
+    expect(perText(91, 10)).toBe('9')
     expect(perText(12, 3)).toBe('4')
     expect(perText(0, 0)).toBe('')
   })
@@ -131,11 +132,32 @@ describe('зажимы 034', () => {
   it('шаг среднего меняет N хотя бы на 1', () => {
     const l = { min: 1, max: 642 }
     expect(perStep(642, 30, 1, l)).toBe(29)
-    expect(perStep(642, 30, -1, l)).toBe(31)
+    expect(perStep(642, 30, -1, l)).toBe(32) // N=31 даёт то же целое 21
     expect(perStep(42, 10, 1, { min: 1, max: 42 })).toBe(9)
-    expect(perStep(42, 10, -1, { min: 1, max: 42 })).toBe(11)
+    expect(perStep(42, 10, -1, { min: 1, max: 42 })).toBe(13) // 11 и 12 дают то же 4
     expect(perStep(642, 400, 1, l)).toBeLessThan(400)
     expect(perStep(642, 400, -1, l)).toBeGreaterThan(400)
+  })
+  it('показанное целое меняется ровно на 1, N — хотя бы на 1', () => {
+    const l = { min: 1, max: 642 }
+    for (const [n, N] of [
+      [642, 30],
+      [642, 400],
+      [91, 10],
+      [42, 10],
+      [9, 4],
+    ] as const) {
+      for (const dir of [1, -1] as const) {
+        const next = perStep(n, N, dir, l)
+        expect(next).not.toBe(N)
+        expect(Math.sign(N - next)).toBe(dir)
+        expect(Math.round(n / next) - Math.round(n / N)).toBe(dir)
+      }
+    }
+  })
+  it('когда целого с шагом 1 нет (N крупный шаг), берётся ближайший сдвиг', () => {
+    // 100/7 → 14, 100/6 → 17: пропуск неизбежен, N всё равно сдвигается
+    expect(perStep(100, 7, 1, { min: 1, max: 100 })).toBe(6)
   })
   it('на краю пределов N не выходит за них', () => {
     expect(perStep(642, 642, -1, { min: 1, max: 642 })).toBe(642)
@@ -359,7 +381,7 @@ describe('AutoDialog', () => {
     await go.release()
     d.stepPer(-1)
     d.stepPer(-1)
-    expect(d.n).toBe(31)
+    expect(d.n).toBe(32) // 29 → 30 (21 вместо 22) → 32 (20: N=31 даёт то же 21)
   })
 
   it('«не больше» при якоре X: N заново из X в новых пределах', async () => {

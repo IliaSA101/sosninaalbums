@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/namesfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
@@ -80,125 +82,12 @@ func (a *App) RemoveFolder(dir string) (v model.View) {
 
 func (a *App) Rescan() { a.rescan() }
 
-// AddPhotos, NewSpread, MovePhoto: отказ (лимит фото на развороте) — ошибка, проект не меняется.
-func (a *App) AddPhotos(spreadID string, ids []string, index int) (v model.View, err error) {
-	defer a.guardEdit("AddPhotos", &v, &err)
-	return a.changedOrErr(a.editor().AddPhotos(spreadID, a.infos(ids), index))
-}
-
-func (a *App) NewSpread(at int, ids []string) (v model.View, err error) {
-	defer a.guardEdit("NewSpread", &v, &err)
-	infos := a.infos(ids)
-	if len(ids) > 0 && len(infos) == 0 {
-		// Фото пропали при пересканировании во время переноса: пустой разворот здесь не просили.
-		return a.editor().View(), nil
-	}
-	return a.changedOrErr(a.editor().NewSpread(at, infos))
-}
-
-func (a *App) MovePhoto(photoID, toSpread string, index int) (v model.View, err error) {
-	defer a.guardEdit("MovePhoto", &v, &err)
-	return a.changedOrErr(a.editor().MovePhoto(photoID, toSpread, index))
-}
-
 // changedOrErr рассылает вид, только если правка прошла.
 func (a *App) changedOrErr(v model.View, err error) (model.View, error) {
 	if err != nil {
 		return v, err
 	}
 	return a.changed(v), nil
-}
-
-func (a *App) SwapPhotos(x, y string) (v model.View) {
-	defer a.guardEdit("SwapPhotos", &v, nil)
-	return a.changed(a.editor().SwapPhotos(x, y))
-}
-
-func (a *App) RemovePhotos(ids []string) (v model.View) {
-	defer a.guardEdit("RemovePhotos", &v, nil)
-	return a.changed(a.editor().RemovePhotos(ids))
-}
-
-func (a *App) DeleteSpread(id string) (v model.View) {
-	defer a.guardEdit("DeleteSpread", &v, nil)
-	return a.changed(a.editor().DeleteSpread(id))
-}
-
-// DeleteSpreads удаляет выделенные развороты одним шагом отмены; неизвестные ID пропускаются.
-func (a *App) DeleteSpreads(ids []string) (v model.View) {
-	defer a.guardEdit("DeleteSpreads", &v, nil)
-	return a.changed(a.editor().DeleteSpreads(ids))
-}
-
-func (a *App) MoveSpread(id string, to int) (v model.View) {
-	defer a.guardEdit("MoveSpread", &v, nil)
-	return a.changed(a.editor().MoveSpread(id, to))
-}
-
-func (a *App) SplitSpread(id string, at int) (v model.View) {
-	defer a.guardEdit("SplitSpread", &v, nil)
-	return a.changed(a.editor().SplitSpread(id, at))
-}
-
-// MergeSpreads: больше MaxPhotos фото или MaxTexts текстов вместе — ничего не меняет.
-func (a *App) MergeSpreads(id string) (v model.View) {
-	defer a.guardEdit("MergeSpreads", &v, nil)
-	return a.changed(a.editor().MergeSpreads(id))
-}
-
-// SetLayout ставит раскладку из галереи; битый или уже стоящий ключ — ничего не меняет.
-func (a *App) SetLayout(spreadID, key string) (v model.View) {
-	defer a.guardEdit("SetLayout", &v, nil)
-	return a.changed(a.editor().SetLayout(spreadID, key))
-}
-
-// StepLayout листает раскладки: scope "spread" | "left" | "right".
-func (a *App) StepLayout(spreadID, scope string, delta int) (v model.View) {
-	defer a.guardEdit("StepLayout", &v, nil)
-	return a.changed(a.editor().StepLayout(spreadID, scope, delta))
-}
-
-// LayoutChoices — варианты для галереи. Только чтение: без правки и без события.
-func (a *App) LayoutChoices(spreadID string) model.Choices {
-	defer guard("LayoutChoices")
-	return a.editor().LayoutChoices(spreadID)
-}
-
-// MoreLayouts — плитка «Ещё» галереи: ряд «Авто» (17+ фото) на порцию длиннее have. Только чтение.
-func (a *App) MoreLayouts(spreadID string, have int) model.Choices {
-	defer guard("MoreLayouts")
-	return a.editor().MoreLayouts(spreadID, have)
-}
-
-func (a *App) SetSettings(s model.Settings) (v model.View) {
-	defer a.guardEdit("SetSettings", &v, nil)
-	return a.changed(a.editor().SetSettings(s))
-}
-
-// AutoPlan — подсказка окна автосборки на o.Spreads разворотов по не больше o.MaxPer фото
-// (оба зажимаются; MaxPer — в 1…64; Variety не влияет). Только чтение. Фото нет — пустой
-// план; альбом почти полон (MaxSpreads) — ошибка.
-func (a *App) AutoPlan(ids []string, o model.AutoOpts) (pl model.AutoPlan, err error) {
-	defer guardErr("AutoPlan", &err)
-	return a.editor().AutoPlan(a.infos(ids), o)
-}
-
-// AutoBuild собирает ровно те развороты, что показал AutoPlan с теми же аргументами.
-// Сверх MaxSpreads разворотов — ошибка, проект не меняется. Variety зажимается в 0…2.
-func (a *App) AutoBuild(ids []string, at int, o model.AutoOpts) (v model.View, err error) {
-	defer a.guardEdit("AutoBuild", &v, &err)
-	o.Variety = o.Variety.Clamp()
-	return a.changedOrErr(a.editor().AutoBuild(a.infos(ids), at, o))
-}
-
-// VaryLayouts — «Разнообразить раскладки» (041) для выделенных разворотов, одним шагом
-// отмены; variety зажимается в 0…2. Нечего менять — холостая: rev тот же, UI покажет тост.
-// Оценки из XMP берутся до замка Editor: замки не вкладываются.
-func (a *App) VaryLayouts(spreadIDs []string, variety int) (v model.View, err error) {
-	defer a.guardEdit("VaryLayouts", &v, &err)
-	ed := a.editor()
-	infos := a.infos(ed.PhotosOf(spreadIDs))
-	return a.changed(ed.VaryLayouts(spreadIDs, model.Variety(variety).Clamp(), infos)), nil
 }
 
 func (a *App) Undo() model.View { return a.step((*album.Editor).Undo) }
@@ -220,25 +109,6 @@ func (a *App) step(do func(*album.Editor) model.View) (v model.View) {
 // Свои отметки фото (спека 004). Путь и отметки из файла — из реестра сканера по ID, не от UI:
 // Editor.SetMarks путь не проверяет, а чужой (например, UNC) попал бы в .salbum.
 
-// SetMarks ставит свои отметки фото ленты; ID, которых нет в ленте, пропускаются.
-// Ошибка — сверх MaxMarks своих отметок; отметки тогда прежние.
-func (a *App) SetMarks(ids []string, patch model.MarkPatch) (v model.View, err error) {
-	defer a.guardEdit("SetMarks", &v, &err)
-	return a.changedOrErr(a.editor().SetMarks(a.infos(ids), patch))
-}
-
-// ResetMarks — «Как в Lightroom»: у этих фото снова действуют отметки из файлов.
-func (a *App) ResetMarks(ids []string) (v model.View) {
-	defer a.guardEdit("ResetMarks", &v, nil)
-	return a.changed(a.editor().ResetMarks(ids))
-}
-
-// Marks — свои отметки проекта (ID → заданные поля); UI перечитывает при смене View.marksRev и после state.
-func (a *App) Marks() map[string]model.MarkView {
-	defer guard("Marks")
-	return a.editor().Marks()
-}
-
 // Листы особого вида: виньетка (031) и обложка (032). Методы App над ними — здесь,
 // чтобы в папке не плодить файлы по спекам (decisions 0.10 №63).
 
@@ -254,61 +124,6 @@ func (a *App) NewVignetteSheet(w, h float64) State {
 
 // dirCoverGuide — своя последняя папка у диалога «Разметка типографии».
 const dirCoverGuide = "coverGuide"
-
-// CoverPresets — пресеты типографий для списка «Типография» (статично).
-func (a *App) CoverPresets() []model.CoverPreset { return model.CoverPresets() }
-
-// CreateCover создаёт обложку: preset "" — пресет по умолчанию. photoID непуст — фото из
-// библиотеки или альбома встаёт фоном лицевой (бросок на плитку «Обложка»), тем же шагом
-// отмены; фото остаётся в своём развороте. Обложка уже есть или проект-лист — ошибка.
-func (a *App) CreateCover(preset, photoID string) (v model.View, err error) {
-	defer a.guardEdit("CreateCover", &v, &err)
-	var ph *model.PhotoInfo
-	if photoID != "" {
-		infos := a.infosOrRefs([]string{photoID})
-		if len(infos) == 0 {
-			return a.editor().View(), errNoPhoto
-		}
-		ph = &infos[0]
-	}
-	return a.changedOrErr(a.editor().CreateCover(preset, ph))
-}
-
-// DeleteCover снимает обложку; фото её мест уходят из альбома, как при удалении разворота.
-func (a *App) DeleteCover() (v model.View) {
-	defer a.guardEdit("DeleteCover", &v, nil)
-	return a.changed(a.editor().DeleteCover())
-}
-
-// ApplyCoverPreset — числа пресета типографии; сторонка пользователя остаётся.
-func (a *App) ApplyCoverPreset(id string) (v model.View, err error) {
-	defer a.guardEdit("ApplyCoverPreset", &v, &err)
-	return a.changedOrErr(a.editor().ApplyCoverPreset(id))
-}
-
-// SetCoverSpec — свои числа обложки (зажим в Go); не совпали с пресетом — «Свои размеры».
-func (a *App) SetCoverSpec(s model.CoverSpec) (v model.View, err error) {
-	defer a.guardEdit("SetCoverSpec", &v, &err)
-	return a.changedOrErr(a.editor().SetCoverSpec(s))
-}
-
-// SetCoverLayout — раскладка обложки: front | both | wrap.
-func (a *App) SetCoverLayout(kind string) (v model.View, err error) {
-	defer a.guardEdit("SetCoverLayout", &v, &err)
-	return a.changedOrErr(a.editor().SetCoverLayout(kind))
-}
-
-// CoverSpineText — «Надпись на корешке» с плашкой; уже есть — без изменений.
-func (a *App) CoverSpineText() (v model.View, err error) {
-	defer a.guardEdit("CoverSpineText", &v, &err)
-	return a.changedOrErr(a.editor().CoverSpineText())
-}
-
-// SetCoverSpineBg — цвет плашки корешка #rrggbb; "" — без плашки.
-func (a *App) SetCoverSpineBg(color string) (v model.View) {
-	defer a.guardEdit("SetCoverSpineBg", &v, nil)
-	return a.changed(a.editor().SetCoverSpineBg(color))
-}
 
 // PickCoverGuide — «Выбрать файл…» разметки: диалог в Go, путь от интерфейса не принимается;
 // файл проверяется так же строго, как свой фон. Отказ от диалога — вид без изменений.
@@ -336,12 +151,6 @@ func (a *App) setCoverGuide(path string) (model.View, error) {
 		a.rememberDir(dirCoverGuide, filepath.Dir(ph.Path))
 	}
 	return v, err
-}
-
-// ClearCoverGuide убирает разметку обложки.
-func (a *App) ClearCoverGuide() (v model.View) {
-	defer a.guardEdit("ClearCoverGuide", &v, nil)
-	return a.changed(a.editor().ClearCoverGuide())
 }
 
 // maxGuideBytes — предел файла разметки для раздачи: WebView декодирует его сам.
@@ -372,12 +181,6 @@ func (a *App) serveCoverGuide(w http.ResponseWriter, r *http.Request) {
 
 // Виньетка (031 G5): панель, лента и меню «Разворот».
 
-// VignetteChoices — превью шаблонов виньетки для чисел и пропорции панели (без правки).
-func (a *App) VignetteChoices(spreadID string, teachers, pupils int, ratio string) []model.VigChoice {
-	defer guard("VignetteChoices")
-	return a.editor().VignetteChoices(spreadID, teachers, pupils, ratio, a.templateList())
-}
-
 // SetVignette — «Сделать виньеткой» и «Применить»; Left — фото, ушедшие в ленту (тост).
 func (a *App) SetVignette(spreadID string, v model.Vignette) (r GridResult, err error) {
 	defer a.guardEdit("SetVignette", &r.View, &err)
@@ -385,13 +188,6 @@ func (a *App) SetVignette(spreadID string, v model.Vignette) (r GridResult, err 
 	r.View, err = a.changedOrErr(view, err)
 	r.Left = left
 	return r, err
-}
-
-// PreviewVignette — предпросмотр окна «Настроить виньетку»: лист после «Применить» с теми же
-// параметрами и полями и сколько фото уйдёт в ленту. Проект не меняется, события нет.
-func (a *App) PreviewVignette(spreadID string, s model.VigSetup) (pr model.VigPreview, err error) {
-	defer guardErr("PreviewVignette", &err)
-	return a.editor().PreviewVignette(spreadID, s, a.templateList())
 }
 
 // SetupVignette — «Применить» окна: параметры и поля шапки одним шагом отмены; Left — тост.
@@ -413,20 +209,306 @@ func (a *App) ResetVignette(spreadID string) (r GridResult, err error) {
 	return r, err
 }
 
-// AddVignette — «Виньетка» в колонке «+ Новый разворот» и меню: разворот по умолчанию на at.
-func (a *App) AddVignette(at int) (v model.View, err error) {
-	defer a.guardEdit("AddVignette", &v, &err)
-	return a.changedOrErr(a.editor().AddVignette(at))
+// Поля подписей (спека 030): переменные альбома, имя на фото, список имён, стиль листа.
+
+// NamesResult — вид после вставки имён: Extra — лишних строк, Missing — фото листа без имени,
+// Named из Seats — подписано мест (окно и тост: «Подписано: 23 из 25, лишних строк: 1»).
+type NamesResult struct {
+	View    model.View `json:"view"`
+	Extra   int        `json:"extra"`
+	Missing int        `json:"missing"`
+	Named   int        `json:"named"`
+	Seats   int        `json:"seats"`
 }
 
-// ClearVignette — «Обычный разворот»: места и фото остаются.
-func (a *App) ClearVignette(spreadID string) (v model.View) {
-	defer a.guardEdit("ClearVignette", &v, nil)
-	return a.changed(a.editor().ClearVignette(spreadID))
+// Person — имя фото для карточки: своё или из имени файла (fromFile). Фото ещё не в
+// альбоме — из имени файла ленты.
+func (a *App) Person(photoID string) model.PersonView {
+	defer guard("Person")
+	if pv, ok := a.editor().Person(photoID); ok {
+		return pv
+	}
+	a.mu.Lock()
+	ph, ok := a.byID[photoID]
+	a.mu.Unlock()
+	if !ok {
+		return model.PersonView{}
+	}
+	return model.NameView(model.PhotoRef{Path: ph.Path})
 }
 
-// SortVignette — «Сортировать по фамилии».
-func (a *App) SortVignette(spreadID string) (v model.View) {
-	defer a.guardEdit("SortVignette", &v, nil)
-	return a.changed(a.editor().SortVignette(spreadID))
+// PasteNames — окно «Имена» (043): имена из списка (строка таблицы — человек; заголовки,
+// учителя, столбец «Файл») или из названий фото (o.From = "files") на фото листа, один шаг
+// отмены; повтор того же — без шага. Список больше 1000 строк — ошибка без правки.
+func (a *App) PasteNames(spreadID string, o model.NamesOpts) (r NamesResult, err error) {
+	defer a.guardEdit("PasteNames", &r.View, &err)
+	v, plan, err := a.editor().PasteNames(spreadID, o)
+	r.View, err = a.changedOrErr(v, err)
+	r.Extra, r.Missing, r.Named, r.Seats = plan.Extra, plan.Missing, plan.Named, plan.Seats
+	return r, err
+}
+
+// NamesFile — загруженная таблица: Text кладётся в поле списка, остальное — строка сведений
+// «Класс.xlsx, лист «Класс» (листов: 2), строк: 26».
+type NamesFile struct {
+	Text      string `json:"text"`
+	File      string `json:"file"`   // имя файла без пути
+	Sheet     string `json:"sheet"`  // лист xlsx; "" — csv/txt
+	Sheets    int    `json:"sheets"` // листов в книге; 0 — csv/txt
+	Rows      int    `json:"rows"`   // непустых строк, с заголовком
+	Cancelled bool   `json:"cancelled"`
+}
+
+// dirNames — своя последняя папка у диалога «Таблица с именами».
+const dirNames = "names"
+
+// PickNamesFile — «Загрузить таблицу…»: диалог в Go (путь от интерфейса не принимается),
+// таблица (.xlsx, CSV, «Текст Юникод») становится текстом поля списка. Проект не меняется.
+// Отказ от диалога — Cancelled без ошибки.
+func (a *App) PickNamesFile() (f NamesFile, err error) {
+	defer guardErr("PickNamesFile", &err)
+	path, err := openFileDialog(a.ctx, wr.OpenDialogOptions{
+		Title:            "Таблица с именами",
+		DefaultDirectory: a.dialogDir(dirNames),
+		Filters:          []wr.FileFilter{{DisplayName: "Таблица (*.xlsx, *.csv, *.txt)", Pattern: "*.xlsx;*.csv;*.txt"}},
+	})
+	if err != nil || path == "" {
+		return NamesFile{Cancelled: err == nil}, err // сбой диалога — не отмена: окно покажет ошибку
+	}
+	if !reachable(path) {
+		// Отключённый сетевой диск: чтение ждало бы таймаута SMB.
+		return NamesFile{}, fmt.Errorf("диск %s недоступен", filepath.VolumeName(path))
+	}
+	f0, err := namesfile.Read(path)
+	if err != nil {
+		return NamesFile{}, err
+	}
+	a.rememberDir(dirNames, filepath.Dir(path))
+	return NamesFile{Text: f0.Text, File: f0.Name, Sheet: f0.Sheet, Sheets: f0.Sheets, Rows: f0.Rows}, nil
+}
+
+// Режим «Сетка» (спека 007, design §4.2): правки мест под guardEdit.
+
+// GridResult — вид после правки и сколько фото не встало или ушло в ленту
+// (интерфейс показывает тост с «Вернуть» = Undo).
+type GridResult struct {
+	View model.View `json:"view"`
+	Left int        `json:"left"`
+}
+
+// PlacePhotos — бросок фото (из ленты или альбома) на место.
+func (a *App) PlacePhotos(spreadID, placeID string, ids []string) (r GridResult, err error) {
+	defer a.guardEdit("PlacePhotos", &r.View, &err)
+	v, left, err := a.editor().PlacePhotos(spreadID, placeID, a.infosOrRefs(ids))
+	r.View, err = a.changedOrErr(v, err)
+	r.Left = left
+	return r, err
+}
+
+// DropResult — итог DropPhotos (042). Ask: правки не было (rev тот же) — UI задаёт вопрос
+// и зовёт DropPhotos ещё раз с rest "add" | "skip".
+type DropResult struct {
+	View  model.View `json:"view"`
+	Ask   bool       `json:"ask"`
+	Fit   int        `json:"fit"`   // сколько встанет (встало) в имеющиеся места, с целевым
+	Total int        `json:"total"` // сколько фото пришло на лист (без тех, что уже в его местах)
+	Fresh []string   `json:"fresh"` // ID новых мест плитки: UI выделяет их, как после «Место»
+	Grown int        `json:"grown"` // на сколько выросло «Учеников» нетронутой виньетки
+	Out   bool       `json:"out"`   // прежнее фото целевого места ушло в ленту (замена)
+	Left  int        `json:"left"`  // не встало: «Не добавлять» или обложка
+	Small bool       `json:"small"` // место плитки мельче 1/10 меньшей стороны страницы
+}
+
+// DropPhotos — бросок фото на лист spreadID (042): placeID "" — на лист, иначе на место.
+// at — доля ширины листа под курсором 0…1, < 0 — точки нет. rest: "" — спросить, если
+// 0 < Fit < Total; "add" — остальные плиткой (нетронутая виньетка — ученики); "skip" — не
+// добавлять. «Авто» — как AddPhotos в конец; обложка — как PlacePhotos. Отказ — ошибка,
+// проект прежний.
+func (a *App) DropPhotos(spreadID, placeID string, ids []string, at float64, rest string) (r DropResult, err error) {
+	defer a.guardEdit("DropPhotos", &r.View, &err)
+	v, o, err := a.editor().DropPhotos(spreadID, placeID, a.infosOrRefs(ids), at, rest)
+	if o.Ask && err == nil { // правки нет (v — нынешний вид): не рассылать, автосохранение не трогать
+		r.View = v
+	} else if r.View, err = a.changedOrErr(v, err); err != nil {
+		return r, err
+	}
+	fresh := o.Fresh
+	if fresh == nil {
+		fresh = []string{} // в JSON — [], а не null: UI не проверяет на null
+	}
+	return DropResult{View: r.View, Ask: o.Ask, Fit: o.Fit, Total: o.Total, Fresh: fresh, Grown: o.Grown,
+		Out: o.Out, Left: o.Left, Small: o.Small}, nil
+}
+
+// FillPlaces — «Заполнить пустые места» фото из ленты, начиная с разворота fromSpread.
+func (a *App) FillPlaces(ids []string, fromSpread string) (r GridResult) {
+	defer a.guardEdit("FillPlaces", &r.View, nil)
+	v, left := a.editor().FillPlaces(a.infos(ids), fromSpread)
+	return GridResult{View: a.changed(v), Left: left}
+}
+
+// CopyGrid копирует места области from на цели; design — с текстом и фоном,
+// mirror — на страницы другой стороны зеркально.
+func (a *App) CopyGrid(spreadID, from string, to []model.GridTarget, design, mirror bool) (r GridResult, err error) {
+	defer a.guardEdit("CopyGrid", &r.View, &err)
+	v, left, err := a.editor().CopyGrid(spreadID, from, to, design, mirror)
+	r.View, err = a.changedOrErr(v, err)
+	r.Left = left
+	return r, err
+}
+
+// CopyDecor — «Копировать оформление» (049 Ф2): фон, узор, фото фона и стикеры области from
+// (texts — и надписи) на цели; места и фото не трогаются; mirror — стикеры на странице другой
+// стороны отражаются. Left всегда 0: тип результата — как у CopyGrid (одно окно копирования).
+func (a *App) CopyDecor(spreadID, from string, to []model.GridTarget, texts, mirror bool) (r GridResult, err error) {
+	defer a.guardEdit("CopyDecor", &r.View, &err)
+	v, err := a.editor().CopyDecor(spreadID, from, to, texts, mirror)
+	r.View, err = a.changedOrErr(v, err)
+	return r, err
+}
+
+// ApplyGrid ставит сетку шаблона или встроенную: boxes — доли области tplScope
+// (page | spread) с углом места, scope — куда ставить (left | right | spread).
+func (a *App) ApplyGrid(spreadID, scope, tplScope string, boxes []model.Box) (r GridResult, err error) {
+	defer a.guardEdit("ApplyGrid", &r.View, &err)
+	v, left, err := a.editor().ApplyGrid(spreadID, scope, tplScope, boxes)
+	r.View, err = a.changedOrErr(v, err)
+	r.Left = left
+	return r, err
+}
+
+// infosOrRefs — сведения о фото из ленты, а для фото альбома, чьей папки нет в
+// ленте, — из проекта (как MovePhoto).
+func (a *App) infosOrRefs(ids []string) []model.PhotoInfo {
+	known := a.infos(ids)
+	byID := make(map[string]model.PhotoInfo, len(known))
+	for _, p := range known {
+		byID[p.ID] = p
+	}
+	out := make([]model.PhotoInfo, 0, len(ids))
+	ed := a.editor()
+	for _, id := range ids {
+		if p, ok := byID[id]; ok {
+			out = append(out, p)
+		} else if r, ok := ed.Ref(id); ok {
+			out = append(out, model.PhotoInfo{ID: id, Path: r.Path, W: r.W, H: r.H, Size: r.Size})
+		}
+	}
+	return out
+}
+
+// loadTemplates читает templates.json при старте (хранилище — internal/prefs).
+func (a *App) loadTemplates() {
+	a.tplMu.Lock()
+	defer a.tplMu.Unlock()
+	a.tpls = prefs.LoadTemplates(a.cfgDir)
+}
+
+// templateList — копия текущего списка шаблонов.
+func (a *App) templateList() []model.Template {
+	a.tplMu.Lock()
+	defer a.tplMu.Unlock()
+	return slices.Clone(a.tpls.List())
+}
+
+// storeTemplates пишет новый список в templates.json и принимает его в память. Вызывать под tplMu.
+func (a *App) storeTemplates(list []model.Template) error {
+	return a.tpls.Store(a.cfgDir, list, a.rename)
+}
+
+// SaveGridTemplate сохраняет места области scope ("left"/"right"/"spread") разворота
+// как шаблон (страницы или разворота). Пустое имя — «Шаблон N». Нет мест — ошибка.
+func (a *App) SaveGridTemplate(spreadID, scope, name string) (err error) {
+	defer guardErr("SaveGridTemplate", &err)
+	boxes, tplScope, err := a.editor().PlaceBoxes(spreadID, scope)
+	if err != nil {
+		return err
+	}
+	a.tplMu.Lock()
+	defer a.tplMu.Unlock()
+	if a.tpls.Newer() {
+		return model.ErrTemplatesNewer
+	}
+	cur := a.tpls.List()
+	if len(cur) >= model.MaxTemplates {
+		return model.ErrTooManyTpl
+	}
+	list := append(slices.Clone(cur), model.Template{
+		ID: model.NewID(), Name: model.CleanTemplateName(name, len(cur)+1), Scope: tplScope, Boxes: boxes,
+	})
+	return a.storeTemplates(list)
+}
+
+// SaveVignetteTemplate сохраняет виньетку листа (лист или разворот) как свой шаблон (038):
+// места с ролями, шапку, пропорции и стиль подписей — без фото, имён и текста шапки. Пустое
+// имя — «Шаблон N». Не виньетка, нет мест людей, слишком много шаблонов или файл больше 1 МБ —
+// ошибка. Шаблон общий для всех альбомов этого компьютера.
+func (a *App) SaveVignetteTemplate(spreadID, name string) (err error) {
+	defer guardErr("SaveVignetteTemplate", &err)
+	t, err := a.editor().VigTemplate(spreadID)
+	if err != nil {
+		return err
+	}
+	a.tplMu.Lock()
+	defer a.tplMu.Unlock()
+	if a.tpls.Newer() {
+		return model.ErrTemplatesNewer
+	}
+	cur := a.tpls.List()
+	if len(cur) >= model.MaxTemplates {
+		return model.ErrTooManyTpl
+	}
+	t.ID, t.Name = model.NewID(), model.CleanTemplateName(name, len(cur)+1)
+	return a.storeTemplates(append(slices.Clone(cur), t))
+}
+
+// RenameGridTemplate меняет имя шаблона (пустое — «Шаблон N»). id — как у карточки: у шаблона
+// виньетки с префиксом «my:» (VigChoice.id).
+func (a *App) RenameGridTemplate(id, name string) (err error) {
+	defer guardErr("RenameGridTemplate", &err)
+	err = a.editTemplates(id, func(list []model.Template, i int) []model.Template {
+		list[i].Name = model.CleanTemplateName(name, i+1)
+		return list
+	})
+	if err == nil {
+		a.syncOwnNames()
+	}
+	return err
+}
+
+// DeleteGridTemplate удаляет шаблон (id — как у RenameGridTemplate); вопрос «удалить?» задаёт
+// интерфейс. Листы, где шаблон виньетки применён, остаются: геометрия не меняется (в Vig.Own),
+// имя — последнее из файла.
+func (a *App) DeleteGridTemplate(id string) (err error) {
+	defer guardErr("DeleteGridTemplate", &err)
+	// Имя копии на листах — последнее из файла: после удаления его больше неоткуда взять
+	// (альбом мог быть закрыт, когда шаблон переименовали).
+	a.syncOwnNames()
+	return a.editTemplates(id, func(list []model.Template, i int) []model.Template {
+		return slices.Delete(list, i, i+1)
+	})
+}
+
+// syncOwnNames — имена своих шаблонов виньетки на листах открытого альбома — по файлу шаблонов,
+// без шага отмены (Editor.SyncOwnNames); сменились — вид рассылается, альбом сохранится сам.
+func (a *App) syncOwnNames() {
+	if v, changed := a.editor().SyncOwnNames(a.templateList()); changed {
+		a.changed(v)
+	}
+}
+
+// editTemplates применяет fn к копии списка (i — индекс шаблона id) и записывает результат.
+func (a *App) editTemplates(id string, fn func(list []model.Template, i int) []model.Template) error {
+	id = strings.TrimPrefix(id, model.VigOwnPrefix)
+	a.tplMu.Lock()
+	defer a.tplMu.Unlock()
+	if a.tpls.Newer() {
+		return model.ErrTemplatesNewer
+	}
+	cur := a.tpls.List()
+	i := slices.IndexFunc(cur, func(t model.Template) bool { return t.ID == id })
+	if i < 0 {
+		return model.ErrTplNotFound
+	}
+	return a.storeTemplates(fn(slices.Clone(cur), i))
 }

@@ -149,8 +149,9 @@ func SetSpreadName(p *model.Project, spreadID, name string) {
 }
 
 // Rescale — шаг конвейера edit: поменялся формат страницы: блоки остаются на том же месте
-// страницы пропорционально (x и w — по ширине, y — по высоте). Только развороты: обложку
-// пересчитывает свой Reflow (032 §3).
+// страницы пропорционально (x и w — по ширине, y — по высоте); стикеры (048) — центр так же,
+// ширина — по ширине, высота — по высоте (пропорцию вернёт FitStickers). Только развороты:
+// обложку пересчитывает свой Reflow (032 §3).
 func Rescale(p *model.Project, before *model.Project) {
 	og, ng := before.Geo(nil), p.Geo(nil)
 	ow, oh, nw, nh := og.W, og.H, ng.W, ng.H
@@ -161,6 +162,11 @@ func Rescale(p *model.Project, before *model.Project) {
 	for _, s := range p.Spreads {
 		for _, t := range s.Texts {
 			t.X, t.W, t.Y = t.X*kx, t.W*kx, t.Y*ky
+		}
+		for _, st := range s.Stickers {
+			cx, cy := (st.X+st.W/2)*kx, (st.Y+st.H/2)*ky
+			st.W, st.H = geom.Round2(st.W*kx), geom.Round2(st.H*ky)
+			st.X, st.Y = geom.Round2(cx-st.W/2), geom.Round2(cy-st.H/2)
 		}
 	}
 }

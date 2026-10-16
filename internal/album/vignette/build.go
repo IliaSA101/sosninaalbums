@@ -14,14 +14,20 @@ const (
 	groupA    = 1.5  // групповое — 3:2
 	teachMore = 1.3  // учитель желательно в 1,3 раза крупнее ученика
 	teachMax  = 2.0  // учителя на своей странице — не больше 2 портретов ученика
+	teachBig  = 2.2  // 049: учитель крупно (Big, руководитель) — в 2,2 раза крупнее ученика
+	cellsMin  = 2    // 049: шапке в ряду — не меньше двух ячеек
 )
 
 // teachParts — перебор доли зоны учителей; выбор — по min(pwT/1,3, pwP).
 func teachParts() []float64 { return []float64{0.18, 0.22, 0.26, 0.30, 0.35} }
 
+// bigParts — доли зоны крупного учителя: при 0,35 учитель ×2,2 на листе 3:2 не помещается.
+func bigParts() []float64 { return []float64{0.30, 0.35, 0.40, 0.45, 0.50} }
+
 // builder собирает Plan; gx и gy — промежутки по горизонтали и вертикали.
 type builder struct {
 	in             Input
+	t              Tpl
 	gx, gy         float64
 	pupils, teachs []Rect
 	group          *Rect
@@ -36,29 +42,66 @@ func Build(t Tpl, in Input) Plan {
 		return Plan{}
 	}
 	t = adapt(t, len(in.Regions))
-	b := &builder{in: in, gx: math.Max(in.Gap, 2), gy: math.Max(in.Gap, in.Pad)}
+	if t.Head == PosCell {
+		b := newBuilder(t, in)
+		b.build(t)
+		if b.plan.Head != nil {
+			b.plan.HeadCell = true
+			return b.finish(t)
+		}
+		t.Head = PosTop // людей нет или им негде встать — полоса сверху
+	}
+	b := newBuilder(t, in)
 	b.build(t)
 	return b.finish(t)
+}
+
+func newBuilder(t Tpl, in Input) *builder {
+	return &builder{in: in, t: t, gx: math.Max(in.Gap, 2), gy: math.Max(in.Gap, in.Pad)}
 }
 
 func (b *builder) grid(hs float64) grid {
 	return grid{gx: b.gx, gy: b.gy, a: b.in.Ratio, hs: hs}
 }
 
+// pgrid — сетка учеников (и общая сетка inline): у шаблона-шахматки — шахматкой, у шапки в
+// ряду — с местом под неё.
+func (b *builder) pgrid(hs float64) grid {
+	g := b.grid(hs)
+	g.stagger, g.cell = b.t.Stagger, b.t.Head == PosCell
+	return g
+}
+
+// placeAll — n мест сеткой g по областям; при шапке в ряду ставит и её (cellPlace). Не
+// встала — мест нет, Build строит шаблон с полосой сверху.
+func (b *builder) placeAll(g grid, n int, rs []Rect, pw float64) []Rect {
+	if !g.cell {
+		return g.place(n, rs, pw)
+	}
+	cells, head := g.cellPlace(n, rs, pw)
+	if head == nil {
+		return nil
+	}
+	b.plan.Head = head
+	return cells
+}
+
 func (b *builder) build(t Tpl) {
 	rs := slices.Clone(b.in.Regions)
-	zi := 0 // область зон: у листа единственная, у разворота левая (учителя справа — правая)
+	// Область зон: у листа единственная, у разворота левая (учителя справа — правая). Центр —
+	// тоже левая, вместе с шапкой (решение №114).
+	zi := 0
 	if t.Teach == PosRight && len(rs) > 1 {
 		zi = 1
 	}
 	z, full := rs[zi], rs[zi].H
-	if t.Head != PosNone {
+	if t.Head != PosNone && t.Head != PosCell {
 		h := math.Min(math.Max(headPart*full, headMin), headMax)
 		var head Rect
 		head, z = cutV(z, h, t.Head == PosBottom, b.gy)
 		b.plan.Head = &head
 	}
-	if t.Split {
+	if t.Split && t.Teach != PosLead {
 		b.split(t, z, full, rs)
 		return
 	}
@@ -73,9 +116,20 @@ func (b *builder) build(t Tpl) {
 
 // people ставит учителей в их зону области zi и учеников во все области (без зоны).
 func (b *builder) people(teach string, zi int, rs []Rect) {
-	if b.in.Teachers == 0 || b.in.Pupils == 0 || teach == PosInline {
+	switch {
+	case teach == PosLead && b.in.Teachers > 0:
+		b.lead(zi, rs)
+		return
+	case b.in.Teachers == 0 || b.in.Pupils == 0 || teach == PosInline || teach == PosLead:
 		b.inline(rs)
 		return
+	case teach == PosCenter:
+		b.center(zi, rs)
+		return
+	}
+	more, parts := teachMore, teachParts()
+	if b.t.Big {
+		more, parts = teachBig, bigParts()
 	}
 	type try struct {
 		zone     []Rect
@@ -84,18 +138,18 @@ func (b *builder) people(teach string, zi int, rs []Rect) {
 		pwT, pwP float64
 	}
 	best, score := try{}, -1.0
-	for _, f := range teachParts() {
+	for _, f := range parts {
 		zone, rest := cutZone(rs[zi], teach, f, b.gx, b.gy)
 		c := try{zone: []Rect{zone}, prs: slices.Clone(rs)}
 		c.prs[zi] = rest
 		c.tg, c.pwT = b.grid(b.in.HST).fit(b.in.Teachers, c.zone)
-		c.pg, c.pwP = b.grid(b.in.HS).fit(b.in.Pupils, c.prs)
-		if s := math.Min(c.pwT/teachMore, c.pwP); s > score+eps {
+		c.pg, c.pwP = b.pgrid(b.in.HS).fit(b.in.Pupils, c.prs)
+		if s := math.Min(c.pwT/more, c.pwP); s > score+eps {
 			best, score = c, s
 		}
 	}
 	b.teachs = best.tg.place(b.in.Teachers, best.zone, best.pwT)
-	b.pupils = best.pg.place(b.in.Pupils, best.prs, best.pwP)
+	b.pupils = b.placeAll(best.pg, b.in.Pupils, best.prs, best.pwP)
 	b.plan.TeacherW, b.plan.PupilW = best.pwT, best.pwP
 }
 
@@ -106,8 +160,8 @@ func (b *builder) inline(rs []Rect) {
 	if t > 0 {
 		hs = math.Max(hs, b.in.HST)
 	}
-	g, pw := b.grid(hs).fit(t+p, rs)
-	cells := g.place(t+p, rs, pw)
+	g, pw := b.pgrid(hs).fit(t+p, rs)
+	cells := b.placeAll(g, t+p, rs, pw)
 	if len(cells) < t+p {
 		return // не поместились (пустые области) — finish поставит заглушки
 	}

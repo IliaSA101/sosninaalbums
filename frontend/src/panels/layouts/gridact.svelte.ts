@@ -3,7 +3,8 @@
 import * as Api from '../../../wailsjs/go/app/App'
 import { store } from '../../base/core/store.svelte'
 import type { LayoutScope, SpreadView } from '../../base/core/types'
-import { RESET_WARN } from './gridgallery'
+import { COVER_ID } from '../../base/geom/sheet'
+import { RESET_WARN } from '../gallery/gridgallery'
 
 // Вопрос на ручной виньетке: tpl — смена шаблона (‹ ›, Пробел, плитка в ▦), reset — «Вернуть авто».
 // run — само действие (вызов Go), его выполнит confirmAuto; текст окна — vigAskText.
@@ -24,14 +25,22 @@ class GridActions {
   autoAsk = $state<{ spread: string; key: string; vig?: VigAsk } | null>(null)
   // «Копировать сетку…» (U9): разворот-источник и область, окно CopyGridDialog открыто, пока не null.
   // Окно закрывает себя само; prune сбрасывает флаг, если источник пропал или перестал быть сеткой.
-  copyGrid = $state<{ spread: string; from: LayoutScope } | null>(null)
+  // mode 'decor' (049 Ф2) — «Копировать оформление…»: то же окно; источнику сетка не нужна.
+  copyGrid = $state<{ spread: string; from: LayoutScope; mode?: 'decor' } | null>(null)
+
+  // Окно «Копировать оформление…» для листа spread; обложка не источник (её сторонки другого размера).
+  openDecor(spread: string) {
+    if (spread && spread !== COVER_ID) this.copyGrid = { spread, from: 'spread', mode: 'decor' }
+  }
 
   // Вопрос и копирование сетки не переживают разворот, который исчез или вернулся в «Авто» (store.apply).
   prune(spreads: readonly SpreadView[]) {
     const a = this.autoAsk
     // Вопрос виньетки живёт, пока лист остаётся ручной виньеткой (после «Отменить» вопрос не нужен)
     if (a && !spreads.some((s) => s.id === a.spread && (a.vig ? s.vig?.manual : s.grid))) this.autoAsk = null
-    if (this.copyGrid && !spreads.some((s) => s.id === this.copyGrid!.spread && s.grid)) this.copyGrid = null
+    const c = this.copyGrid
+    // Оформлению сетка не нужна: окно живёт, пока жив сам лист-источник
+    if (c && !spreads.some((s) => s.id === c.spread && (c.mode === 'decor' || s.grid))) this.copyGrid = null
   }
 
   // «Закрепить сетку» / «Вернуть авто» (без вопроса; к «Авто» из интерфейса — через backToAuto).

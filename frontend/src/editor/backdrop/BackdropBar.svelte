@@ -34,8 +34,10 @@
         onclick={() => flipBackdrop(c.spread, c.scope, 'v')}
         title="Зеркало по вертикали"><Icon name="flip-v" size={14} />↕</button
       >
-      <button onpointerdown={stop} onclick={() => fitBackdrop(c.spread, c.scope)} title="Рамка во всю область, без поворота, кадр сброшен"
-        >По области</button
+      <button
+        onpointerdown={stop}
+        onclick={() => fitBackdrop(c.spread, c.scope)}
+        title="Рамка во всю область, без поворота, кадр сброшен, наклон сохраняется">По области</button
       >
       <button onpointerdown={stop} onclick={() => bgmode.remove()} title="Убрать фото фона (Del)">Убрать</button>
       <button class="done" onpointerdown={stop} onclick={() => bgmode.exit()} title="Выйти из режима фона">Готово (Esc)</button>

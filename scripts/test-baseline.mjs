@@ -152,7 +152,8 @@ function summary(parsed, stderr) {
 
 function runGo() {
   const out = opt('--out') || defaultFile('go-test.json')
-  const goArgs = ['test', '-cover', '-json', ...(flag('--race') ? ['-race'] : []), './...']
+  // -race на загруженной машине тянет пакет layout дольше 10 мин по умолчанию (16.10: 600 с — обрыв, отдельно 73 с); да владельца 16.10.
+  const goArgs = ['test', '-cover', '-json', ...(flag('--race') ? ['-race', '-timeout', '1200s'] : []), './...']
   const r = runToFile('go', goArgs, root, out)
   const parsed = parseGo(out)
   const n = Object.values(parsed.pkgs).reduce((s, g) => s + total(g.names), 0)

@@ -1,3 +1,6 @@
+import type { model } from '../../../wailsjs/go/models'
+import type { CoverView } from './types-print'
+
 export interface Photo {
   id: string
   path: string
@@ -65,7 +68,8 @@ export interface RotRect extends Rect {
 
 // Коробка шаблона (model.Box): доли области, rot — градусы по часовой вокруг центра; только при угле.
 // У повёрнутой коробки в области лежит центр: x может быть < 0, x + w > 1.
-export type Box = RotRect
+// shape/round (044) — форма и скругление, только когда заданы: '' / 'oval' и 0…50 % меньшей стороны.
+export type Box = RotRect & { shape?: string; round?: number }
 
 // Положение раскладки страницы в её ряду (только при постраничной раскладке P[…]).
 export interface PageView {
@@ -94,6 +98,8 @@ export interface FrameView extends Frame {
   flipV: boolean // зеркало ↕
   cellRot: number // угол ячейки (= места, вокруг его центра); в «Авто» 0
   z: number // слой в общем стеке разворота (от Go): z-index = 10 + z
+  shape?: string // форма места (044): '' / нет — прямоугольник, 'oval' — эллипс в рамке; у «Авто» нет
+  radius?: number // радиус скругления, мм (от Go); для рисования
 }
 
 // Стиль текста. font — id семейства из State.fonts.
@@ -138,7 +144,7 @@ export interface CaptionView extends TextView {
   overflow: number // мм, которых не хватает; 0 — помещается
   sheet?: boolean // стиль от листа (SpreadView.caps), а не свой
   pad?: number // действующий отступ от фото, мм (нужен от Go; нет — 1)
-  who?: ('last' | 'first' | 'middle')[] // поля имени шаблона по порядку (037); у своей подписи нет
+  who?: ('last' | 'first' | 'middle' | 'subject')[] // поля имени шаблона по порядку (037); у своей подписи нет
 }
 
 // Заглушка на пустом месте листа с шаблоном подписи (030): серый «[Фамилия]», только на холсте.
@@ -146,7 +152,7 @@ export interface CaptionView extends TextView {
 export interface StubView extends TextView {
   place: string
   photo: string
-  who?: ('last' | 'first' | 'middle')[] // у заглушки фото; у пустого места нет
+  who?: ('last' | 'first' | 'middle' | 'subject')[] // у заглушки фото; у пустого места нет
 }
 
 // Поля шапки листа для {Заголовок} {Подзаголовок} {Год} {Руководитель} (031 dialog §4): свойство листа, не альбома.
@@ -163,6 +169,7 @@ export interface Person {
   last?: string
   first?: string
   middle?: string
+  subj?: string // предмет учителя (049); ключ как у Go (json:"subj")
 }
 
 // Api.Person: действующее имя; fromFile — взято из имени файла.
@@ -170,7 +177,9 @@ export interface PersonView {
   last: string
   first: string
   middle: string
+  subject: string
   fromFile: boolean
+  teacher: boolean // фото на месте учителя виньетки: карточка показывает «Предмет»
 }
 
 // Общий стиль подписей листа (SpreadView.caps). wrap: true — переносить, иначе ужимать кегль.
@@ -191,6 +200,9 @@ export interface PlaceView extends RotRect {
   rot: number // градусы по часовой вокруг центра места, (−180, 180]
   z: number // слой в общем стеке разворота (от Go)
   role?: string // роль места виньетки: 'pupil' | 'teacher' | 'group'; нет или '' — ученик (031)
+  shape?: string // форма (044): '' / нет — прямоугольник, 'oval' — эллипс, вписанный в рамку
+  round?: number // скругление углов, % меньшей стороны, 0…50; у oval 0
+  radius?: number // то же в мм (считает Go): для рисования
 }
 
 // Место для SetPlaces: только геометрия (мм разворота).
@@ -216,7 +228,37 @@ export interface BackdropView {
   flipV: boolean
   dpi: number // 0 — размер фото неизвестен
   fade: number // прозрачность фото 0…1 (0 — непрозрачное), шаг 0,01
+  lib?: string // ключ своего из библиотеки (048, `my:<16 hex>`); нет — обычное фото
 }
+
+// Узор программы на фоне области (048): параметры генератора, не файл. Рисует /media/gen по url.
+export interface PatternSpec {
+  kind: string
+  inks?: string[]
+  scale?: number // 0.25…4; нет — 1
+  seed?: number
+  fade?: number // прозрачность 0…1, как у фото фона
+}
+
+export interface PatternView {
+  scope: BackdropScope
+  area: Rect // область, мм листа
+  pat: PatternSpec // после зажима, inks дополнены цветами генератора
+  name: string // пусто — генератор новее этой версии
+  inks: number // сколько цветов показывать
+  random: boolean // есть «Перемешать»
+  known: boolean // false — «Нужна новая версия программы»: рисуется пусто
+  url: string // без px: UI дописывает &px=
+  preset?: string // плитка каталога `sa:<ключ>`, поставившая узор (№201); нет — правили руками или альбом старше поля
+}
+
+// Стикер на листе (048 Ф2, design §6): картинка поверх мест, мм листа, рамка до поворота, поворот вокруг центра.
+// Процедурный — art и url без px (UI дописывает &px=), свой из библиотеки — photo (запись в Project.Photos) и lib.
+// Тип берётся из сгенерированных биндингов (поля и регистр не расходятся с Go); без convertValues — чтобы
+// тесты и разворот из события собирались обычными объектами. rot — градусы по часовой, (−180, 180]; fade — 0…1;
+// z — слой в общем стеке листа (от Go); inks — сколько цветов показывать; gen — процедурный; dpi — у своего,
+// 0 — размер неизвестен; known=false — «Нужна новая версия программы»; stretch — плашка/волна без своей пропорции.
+export type StickerView = Omit<model.StickerView, 'convertValues'>
 
 export interface SpreadView {
   id: string
@@ -241,6 +283,8 @@ export interface SpreadView {
   grid: boolean
   places: PlaceView[] | null // null — «Авто»
   backdrops: BackdropView[] | null // 0–2 шт.; Go может прислать null
+  patterns?: PatternView[] // узоры фона (048), 0–2 шт., под фото фона; нет поля — пусто
+  stickers?: StickerView[] // стикеры (048 Ф2) в порядке слоёв; нет поля — пусто
   lowDPI: number // кадры и фоны разворота с 0 < dpi < View.minDPI
   stubs?: StubView[] // заглушки подписей (030); нет поля — пусто
   caps?: SheetCaps // общий стиль подписей листа; нет — у каждой подписи свой
@@ -258,6 +302,8 @@ export interface VignetteView {
   ratio?: string // '2:3' | '3:4' | '4:5' | '1:1'; нет — 3:4
   ttext?: string // шаблон подписи учителя; нет — как у листа
   head?: string
+  shape?: string // форма мест учеников и учителей (044): '' / 'oval'
+  round?: number // скругление этих мест, %
   places: number
   max: number
   group: boolean
@@ -268,7 +314,7 @@ export interface VignetteView {
 
 // Окно «Настроить виньетку» (031 dialog §5): параметры листа и поля шапки одним запросом.
 export interface VigSetup {
-  vig: { tpl: string; teachers: number; pupils: number; ratio: string; ttext: string; head: string }
+  vig: { tpl: string; teachers: number; pupils: number; ratio: string; ttext: string; head: string; shape?: string; round?: number }
   vars: Vars
 }
 
@@ -289,64 +335,13 @@ export interface VigChoice {
   over: boolean // мест больше предела
   own?: boolean // свой шаблон (id «my:<id>»), после каталога
   ratio?: string // портрет своего шаблона; выбор ставит его в форму
+  shape?: string // форма мест своего шаблона (044), по образцу ratio; нет — шаблон формы не задаёт
+  round?: number // скругление, %
   gone?: boolean // стоит на листе, но удалён из файла шаблонов: переименовать и удалить нельзя
-}
-
-// ---------- Обложка (спека 032): геометрию и зоны считает Go, UI переводит мм в проценты ----------
-
-// Шаг таблицы корешка: до upto разворотов включительно — mm.
-export interface SpineStep {
-  upto: number
-  mm: number
-}
-
-// Размеры обложки (CoverSpec). w/h = 0 — по странице альбома; нет steps — корешок = a + b·n.
-export interface CoverSpec {
-  preset: string // id пресета или "custom"
-  w?: number
-  h?: number
-  wrap: number
-  hinge?: number
-  steps?: SpineStep[]
-  a?: number
-  b?: number
-}
-
-// Типография в списке «Типография»: group — Фотосфера / Нетпринт / Свои размеры.
-export interface CoverPreset {
-  id: string
-  name: string
-  group: string
-  spec: CoverSpec
-}
-
-// Зона направляющих (kind: back front spine hinge wrap trim safe) или броска (back front wrap), мм листа.
-export interface CoverZone {
-  kind: string
-  rect: Rect
-  label: string
-}
-
-export type CoverLayout = 'front' | 'both' | 'wrap'
-
-export interface CoverView {
-  sheet: SpreadView // ID "cover"
-  spec: CoverSpec
-  preset: string
-  spine: number // мм при текущем числе разворотов
-  n: number
-  over: boolean // разворотов больше, чем в таблице пресета
-  layout: CoverLayout
-  spineBg: string // #rrggbb плашки корешка; "" — нет
-  zones: CoverZone[]
-  drop: CoverZone[]
-  safe: Rect[]
-  textMaxW: number
-  guide: string // имя файла разметки; "" — нет
-  guideOK: boolean
-  guideWarn: boolean // пропорции разметки не совпадают с листом
-  pxW: number
-  pxH: number
+  // 049 Ф1 (Go отдаёт с G3): вид для фильтра (side, big, inrow, group, round, staff; у своих пусто); у каталожных
+  // «кругов» ещё shape: 'oval' и ratio: '1:1' — подсказка окну
+  family?: string
+  head?: Box // шапка листа (доли листа): превью рисует её тоном заголовка
 }
 
 // Варианты для галереи раскладок (Api.LayoutChoices). Rects — весь разворот в порядке photos.
@@ -421,17 +416,11 @@ export interface View {
   emptyPlaces: number // пустых мест во всём альбоме (спека 007)
   textMaxW: number // предел ширины блока «по тексту», мм (спека 008)
   backdropUsed: string[] | null // фото, стоящие на фоне: автосборка и «Неиспользованные» их не берут
+  libPhotos?: string[] // ID записей со своим из библиотеки (048): их нет в «Найти пропавшие», пропавшие ищутся загрузкой
   marksRev: number // растёт при смене своих отметок (спека 004): тогда UI перечитывает Api.Marks()
   unfilled?: string[] // пустые переменные из текстов, по алфавиту
   unnamed?: number // фото с полями имени в подписи и без имени
   cover?: CoverView | null // обложка (032); нет — её нет в альбоме
-}
-
-// Ответ Api.PasteNames: extra — лишних строк списка, missing — фото листа без имени.
-export interface NamesResult {
-  view: View
-  extra: number
-  missing: number
 }
 
 // Результат правки сетки: left — фото, не вставшие или ушедшие в ленту.
@@ -464,6 +453,7 @@ export interface GridPlan {
   frozen: number // «Авто»-развороты станут сеткой
   left: number // фото вернутся в ленту
   texts: number // блоков текста заменится
+  stickers: number // стикеров заменится (049 Ф2, «Копировать оформление»); Go шлёт всегда
 }
 
 // Карточка галереи сеток. boxes — доли области scope шаблона, 0..1, в порядке мест.
@@ -564,12 +554,15 @@ export type GalleryTab = 'layouts' | 'grids'
 // Зона последнего нажатия мыши (store.zone): Ctrl+A и Del действуют по ней.
 export type Zone = 'canvas' | 'library'
 
-// Что уходит в App.Export (JSON-теги Go).
-export interface ExportOpts {
-  range: string
-  quality: number
-  dpi: number
-  pages: boolean
-  cover: boolean // 00.jpg (032); Go игнорирует без обложки и в листе
-  coverOnly: boolean // только обложка: диапазон игнорируется
-}
+// Обложка и печать (спека 032, 047) лежат в types-print.ts.
+export type {
+  CoverLayout,
+  CoverPreset,
+  CoverSpec,
+  CoverView,
+  CoverZone,
+  ExportOpts,
+  FsferaPlan,
+  PagePreset,
+  SpineStep,
+} from './types-print'

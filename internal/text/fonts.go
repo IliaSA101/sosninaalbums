@@ -11,7 +11,9 @@ import (
 	"strconv"
 	"sync"
 
+	xfont "golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
+	"golang.org/x/image/math/fixed"
 )
 
 //go:embed fonts/*.ttf fonts/OFL-*.txt
@@ -44,7 +46,7 @@ type Face struct {
 }
 
 // Family — гарнитура: css — имя для font-family в интерфейсе, group — раздел
-// списка (script | kids | serif | sans).
+// списка (script | kids | serif | sans | display).
 type Family struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
@@ -209,4 +211,62 @@ func parseColor(s string) (color.RGBA, bool) {
 		c[i] = uint8(v)
 	}
 	return color.RGBA{c[0], c[1], c[2], 255}, true
+}
+
+// fallback — запасной шрифт стиля (Montserrat того же начертания) и имя его
+// файла: знак, которого нет в гарнитуре, берётся из него, как в CSS
+// `"SA X", "SA Montserrat"`. st уже Clamped. У самой Montserrat запасного нет.
+func fallback(st Style) (*sfnt.Font, string) {
+	if st.Font == DefaultFont {
+		return nil, ""
+	}
+	return font(Style{Font: DefaultFont, Bold: st.Bold, Italic: st.Italic})
+}
+
+// glyphSrc — шрифт, из которого взят глиф, и его буфер.
+type glyphSrc struct {
+	f *sfnt.Font
+	b *sfnt.Buffer
+}
+
+// pickGlyph ищет знак в основном шрифте, затем в запасном (fb.f может быть nil);
+// ok=false — знака нет нигде, он пропускается. Буфер у каждого шрифта свой.
+func pickGlyph(main, fb glyphSrc, r rune) (src glyphSrc, g sfnt.GlyphIndex, ok bool) {
+	if g, err := main.f.GlyphIndex(main.b, r); err == nil && g != 0 {
+		return main, g, true
+	}
+	if fb.f != nil {
+		if g, err := fb.f.GlyphIndex(fb.b, r); err == nil && g != 0 {
+			return fb, g, true
+		}
+	}
+	return glyphSrc{}, 0, false
+}
+
+// walkGlyphs — общий обход строки для measure и Draw: глиф (из основного шрифта
+// или запасного), его позиция pos и ширина adv в масштабе unit (единицы
+// основного шрифта ×64). Кернинг только между знаками одного шрифта, как в
+// браузере; знак без глифа нигде пропускается.
+func walkGlyphs(main, alt glyphSrc, s string, unit fixed.Int26_6, fn func(r rune, src glyphSrc, g sfnt.GlyphIndex, pos, adv fixed.Int26_6)) {
+	var prev sfnt.GlyphIndex
+	var prevFont *sfnt.Font
+	var pos fixed.Int26_6
+	for _, r := range s {
+		src, g, ok := pickGlyph(main, alt, r)
+		if !ok {
+			continue
+		}
+		adv, err := src.f.GlyphAdvance(src.b, g, unit, xfont.HintingNone)
+		if err != nil {
+			continue
+		}
+		if prevFont == src.f { // nil до первого глифа
+			if k, err := src.f.Kern(src.b, prev, g, unit, xfont.HintingNone); err == nil {
+				pos += k
+			}
+		}
+		fn(r, src, g, pos, adv)
+		pos += adv
+		prev, prevFont = g, src.f
+	}
 }

@@ -40,6 +40,30 @@ describe('stackAt', () => {
     expect(stackAt(s, { x: 60, y: 100 }, SW, PH, all)).toHaveLength(0)
   })
 
+  it('стикер (048) — в общем стеке по z, рядом с местами и текстом', () => {
+    const stk = (id: string, x: number, y: number, w: number, h: number, z: number, rot = 0) => ({ id, x, y, w, h, z, rot })
+    const s = {
+      ...grid([place('p1', 'a', 0, 0, 200, 200, 1)], [text('t1', 60, 60, 50, 20, 4)]),
+      stickers: [stk('k1', 50, 50, 100, 100, 3)],
+    } as unknown as SpreadView
+    expect(refs(stackAt(s, { x: 70, y: 70 }, SW, PH, all))).toEqual(['text:t1', 'sticker:k1', 'photo:a'])
+    // Стикер под фото («Слой ▸ Назад»): выше лежит фото
+    const under = { ...s, stickers: [stk('k1', 50, 50, 100, 100, 0)] } as unknown as SpreadView
+    expect(refs(stackAt(under, { x: 140, y: 140 }, SW, PH, all))).toEqual(['photo:a', 'sticker:k1'])
+  })
+
+  it('повёрнутый стикер — поворот вокруг центра', () => {
+    // 100×20 вокруг центра (100, 100) на 90°: занимает x 90..110, y 50..150
+    const s = { ...grid([]), stickers: [{ id: 'k', x: 50, y: 90, w: 100, h: 20, z: 1, rot: 90 }] } as unknown as SpreadView
+    expect(refs(stackAt(s, { x: 100, y: 60 }, SW, PH, all))).toEqual(['sticker:k'])
+    expect(stackAt(s, { x: 60, y: 100 }, SW, PH, all)).toHaveLength(0)
+  })
+
+  it('уровень не даёт выделить стикер — can отсекает его', () => {
+    const s = { ...grid([]), stickers: [{ id: 'k', x: 0, y: 0, w: 50, h: 50, z: 1, rot: 0 }] } as unknown as SpreadView
+    expect(stackAt(s, { x: 10, y: 10 }, SW, PH, (k) => k !== 'sticker')).toHaveLength(0)
+  })
+
   it('повёрнутый текст — поворот вокруг угла x, y', () => {
     // Угол (100, 100), 100×20 на 90° по часовой: занимает x 80..100, y 100..200.
     const s = grid([], [text('t', 100, 100, 100, 20, 1, 90)])
@@ -78,6 +102,57 @@ describe('stackAt', () => {
     expect(stackAt(s, { x: -5, y: 10 }, SW, PH, all)).toEqual([])
     expect(stackAt(s, { x: 10, y: PH + 1 }, SW, PH, all)).toEqual([])
     expect(stackAt(s, { x: SW + 1, y: 10 }, SW, PH, all)).toEqual([])
+  })
+})
+
+describe('форма места (спека 044)', () => {
+  const shaped = (id: string, photo: string, shape: string, radius: number, z: number, x = 0, y = 0, w = 100, h = 100): PlaceView => ({
+    ...place(id, photo, x, y, w, h, z),
+    shape,
+    radius,
+  })
+  it('угол габарита круга не берёт место: берёт то, что под ним', () => {
+    // Круг 100×100 лежит поверх прямоугольного места 200×200.
+    const s = grid([place('under', 'u', 0, 0, 200, 200, 1), shaped('circle', 'c', 'oval', 0, 2)])
+    expect(refs(stackAt(s, { x: 50, y: 50 }, SW, PH, all))).toEqual(['photo:c', 'photo:u'])
+    expect(refs(stackAt(s, { x: 3, y: 3 }, SW, PH, all))).toEqual(['photo:u']) // угол габарита: круг не берёт
+    expect(refs(stackAt(s, { x: 85, y: 85 }, SW, PH, all))).toEqual(['photo:c', 'photo:u']) // 35;35 от центра — внутри
+  })
+  it('пустое место-круг: угол — мимо, край — внутри', () => {
+    const s = grid([shaped('c', '', 'oval', 0, 1)])
+    expect(stackAt(s, { x: 2, y: 2 }, SW, PH, all)).toHaveLength(0)
+    expect(stackAt(s, { x: 50, y: 1 }, SW, PH, all)).toHaveLength(1)
+  })
+  it('скругление: самый угол — мимо, дальше — внутри', () => {
+    const s = grid([shaped('r', '', '', 20, 1)])
+    expect(stackAt(s, { x: 1, y: 1 }, SW, PH, all)).toHaveLength(0)
+    expect(stackAt(s, { x: 8, y: 8 }, SW, PH, all)).toHaveLength(1)
+  })
+  it('повёрнутый круг: форма в осях места', () => {
+    // Овал 100×40 вокруг центра (100, 100), поворот 90°: на экране вытянут по вертикали.
+    const s = grid([{ ...shaped('o', '', 'oval', 0, 1, 50, 80, 100, 40), rot: 90 }])
+    expect(stackAt(s, { x: 100, y: 60 }, SW, PH, all)).toHaveLength(1)
+    expect(stackAt(s, { x: 118, y: 52 }, SW, PH, all)).toHaveLength(0) // угол повёрнутой рамки (x 80..120, y 50..150), вне формы
+  })
+  it('«Авто»: форма из кадра', () => {
+    const s = {
+      id: 's',
+      grid: false,
+      photos: ['a'],
+      rects: [{ x: 0, y: 0, w: 100, h: 100 }],
+      frames: [{ z: 1, cellRot: 0, shape: 'oval', radius: 0 } as FrameView],
+      texts: [],
+      captions: [],
+      places: null,
+    } as unknown as SpreadView
+    expect(stackAt(s, { x: 2, y: 2 }, SW, PH, all)).toHaveLength(0)
+    expect(stackAt(s, { x: 50, y: 50 }, SW, PH, all)).toHaveLength(1)
+  })
+  it('coveredBelow: угол нижнего вне круга сверху — не закрыт', () => {
+    const circle: PickItem = { kind: 'photo', ref: 'c', z: 2, box: { x: 0, y: 0, w: 100, h: 100, rot: 0 }, shape: 'oval' }
+    const low = item('text', 'low', 1, 0, 0, 100, 100)
+    expect(coveredBelow([circle, low])).toBe(false)
+    expect(coveredBelow([circle, item('text', 'in', 1, 40, 40, 20, 20)])).toBe(true)
   })
 })
 
@@ -165,6 +240,22 @@ describe('pressPlan', () => {
     expect(pressPlan({ ...base, cur: mid, picked: low })).toMatchObject({ press: 'pass', click: 'pass' })
     // Верхний сам — ничего особого.
     expect(pressPlan({ ...base, cur: top, picked: top })).toMatchObject({ press: 'pass', click: 'pass' })
+  })
+  it('стикер (048) в стеке ведёт себя как остальные объекты: Alt+щелчок по кругу, перенос закрытого', () => {
+    const stk = item('sticker', 'k', 2, 50, 50, 50, 20)
+    const s3 = [top, stk, low]
+    expect(pressPlan({ ...base, stack: s3, alt: true })).toEqual({ press: 'pass', click: 'select', select: stk, hint: false })
+    expect(pressPlan({ ...base, stack: s3, alt: true, cur: stk })).toEqual({
+      press: 'move',
+      move: stk,
+      click: 'select',
+      select: low,
+      hint: false,
+    })
+    expect(pressPlan({ ...base, stack: s3, cur: stk, picked: stk })).toMatchObject({ press: 'move', move: stk, select: top })
+    expect(nextBelow(s3, stk)).toBe(low)
+    expect(sameItem(stk, item('sticker', 'k', 9))).toBe(true)
+    expect(sameItem(stk, item('text', 'k', 2))).toBe(false)
   })
   it('6: обычный щелчок; подсказка, если под верхним скрыт объект', () => {
     expect(pressPlan(base).hint).toBe(true) // mid целиком под top

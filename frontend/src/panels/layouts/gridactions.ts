@@ -2,7 +2,8 @@
 import { store, Api } from '../../base/core/store.svelte'
 import { errText } from '../../base/core/errtext'
 import { plural } from '../../base/core/plural'
-import { tplError } from './gridgallery'
+import { unitOf } from '../../base/geom/sheet'
+import { tplError } from '../gallery/gridgallery'
 import type { GridChoice, GridPlan, GridResult, GridTarget, LayoutScope } from '../../base/core/types'
 
 // Тост с «Вернуть» (= Undo): безопасен, только пока после правки ничего не менялось.
@@ -49,7 +50,7 @@ export async function runCopy(
   try {
     const r = (await Api.CopyGrid(src, from, to, design, mirror)) as unknown as GridResult
     store.apply(r.view)
-    const head = `Раскладка скопирована на ${n} ${plural(n, ['разворот', 'разворота', 'разворотов'])}`
+    const head = `Раскладка скопирована на ${n} ${plural(n, unitOf(store.view.settings).plural)}`
     if (r.left > 0) notifyUndo(`${head}. ${leftText(r.left)}`)
     else store.notify(head)
     return true
@@ -64,4 +65,47 @@ export async function runDuplicate(src: string, count: number, design: boolean):
   const ok = await store.run(Api.DuplicateGrid(src, count, design))
   if (ok) store.notify(`Добавлено ${count} ${plural(count, ['разворот', 'разворота', 'разворотов'])} с такой раскладкой`)
   return ok
+}
+
+// «Копировать оформление» (049 Ф2, design §8): Api.PlanCopyDecor / Api.CopyDecor, последние аргументы — texts, mirror.
+export const planCopyDecor = (src: string, from: LayoutScope, to: GridTarget[], texts: boolean, mirror: boolean) =>
+  Api.PlanCopyDecor(src, from, to, texts, mirror) as unknown as Promise<GridPlan>
+
+// Один вызов окна «Копировать раскладку» / «Копировать оформление»: decor выбирает метод Go, остальное общее.
+export interface CopyCall {
+  decor: boolean
+  src: string
+  from: LayoutScope
+  to: GridTarget[]
+  design: boolean // «С текстом и фоном» (раскладка)
+  texts: boolean // «С надписями» (оформление)
+  mirror: boolean // уже с учётом «источник — страница»
+}
+
+export const planFor = (c: CopyCall) =>
+  c.decor ? planCopyDecor(c.src, c.from, c.to, c.texts, c.mirror) : planCopy(c.src, c.from, c.to, c.design, c.mirror)
+
+export const runFor = (c: CopyCall, n: number) =>
+  c.decor ? runCopyDecor(c.src, c.from, c.to, c.texts, c.mirror, n) : runCopy(c.src, c.from, c.to, c.design, c.mirror, n)
+
+// Итог — тост. Версия не выросла — Go ничего не менял (у всех целей уже то же оформление): шага отмены нет.
+export async function runCopyDecor(
+  src: string,
+  from: LayoutScope,
+  to: GridTarget[],
+  texts: boolean,
+  mirror: boolean,
+  n: number,
+): Promise<boolean> {
+  try {
+    const before = store.view.rev
+    const r = (await Api.CopyDecor(src, from, to, texts, mirror)) as unknown as GridResult
+    store.apply(r.view)
+    if (store.view.rev === before) store.notify('У выбранных уже такое же оформление: копировать нечего')
+    else store.notify(`Оформление скопировано на ${n} ${plural(n, unitOf(store.view.settings).plural)}`)
+    return true
+  } catch (e) {
+    store.notify(errText(e), 'error')
+    return false
+  }
 }

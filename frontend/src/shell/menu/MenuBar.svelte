@@ -9,8 +9,10 @@
   import { align } from '../../panels/layouts/align.svelte'
   import { run } from './commands'
   import { menuUi } from './menuui.svelte'
-  import { anyVaries, varyTargets } from '../../panels/layouts/variants'
+  import { anyVaries, varyTargets } from '../../panels/gallery/variants'
   import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
+  import { isCover } from '../../base/geom/sheet'
+  import { splitMissing } from '../../panels/library/missing'
   import { buildMenu, type MenuCtx, type MenuId, type MenuItem } from './menu'
   import { placePopover, placeSubmenu, type Box } from '../../base/ui/popover'
 
@@ -26,14 +28,22 @@
     canRedo: store.view.canRedo,
     zone: store.zone,
     libraryPhotos: store.visible.length,
-    anySelection: store.selected.size > 0 || spreadsel.size > 0 || placesel.refs.length > 0 || placesel.texts.length > 0 || !!edit.sel,
-    deletable: placesel.refs.length > 0 || placesel.texts.length > 0 || !!edit.sel,
+    anySelection:
+      store.selected.size > 0 ||
+      spreadsel.size > 0 ||
+      placesel.refs.length > 0 ||
+      placesel.texts.length > 0 ||
+      placesel.stickers.length > 0 ||
+      !!edit.sel,
+    deletable: placesel.refs.length > 0 || placesel.texts.length > 0 || placesel.stickers.length > 0 || !!edit.sel,
     flippable: placesel.selected.some((b) => b.photo),
+    sticker: !!placesel.soloSticker,
     varyable: anyVaries(store.view.spreads, varyTargets(spreadsel.ordered(store.view.spreads.map((s) => s.id)), store.spread?.id)),
     vigable: canMakeVignette(store.spread, prefs.can),
+    decorable: !!store.spread && !isCover(store.spread),
     vigSetup: isVignette(store.spread),
     layerable: placesel.canLayer,
-    missing: store.missing.length,
+    missing: splitMissing(store.missing, store.view.libPhotos).photos.length, // свои из библиотеки папкой не ищутся (048)
     exporting: !!store.exporting,
     big: modes.big,
     details: modes.details,

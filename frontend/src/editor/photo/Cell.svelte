@@ -7,6 +7,7 @@
   import { DEFAULT_FRAME, photoCss, placeImage } from '../../base/geom/frame'
   import { framelive } from './framelive.svelte'
   import { aabbOf, uprightAt } from '../../base/geom/rotbox'
+  import { cornerInset, markAt, outlineOf, shapeCss } from '../../base/geom/shape'
   import { placesel } from '../places/placesel.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { photoui } from './photoui.svelte'
@@ -43,14 +44,21 @@
   const frame = $derived<Frame>(fv ? { s: fv.s, x: fv.x, y: fv.y, r: fv.r } : DEFAULT_FRAME)
   // Повёрнутое место (слот в Spread крутится вокруг центра): значок dpi стоит у угла описанного прямоугольника.
   const rot = $derived(preview ? 0 : (fv?.cellRot ?? 0))
-  const dpiAt = $derived(rot ? uprightAt(r, rot, aabbOf({ ...r, rot }), 6) : undefined)
+  // Форма места (044): в галерее (preview) места не из View — формы нет. Радиус в мм приходит из Go.
+  const shape = $derived(preview ? undefined : fv?.shape)
+  const radius = $derived(preview ? 0 : placesel.liveRadius([place?.id, id], fv?.radius ?? 0, r.w, r.h))
+  const outline = $derived(outlineOf(shape, radius))
+  const radiusCss = $derived(shapeCss(shape, radius, r.w, r.h))
+  // Значки в углу вписанного прямоугольника: круг не должен их обрезать.
+  const inset = $derived(cornerInset(shape, radius, r.w, r.h))
+  const dpiAt = $derived(markAt(r, rot, shape, radius, 6) ?? (rot ? uprightAt(r, rot, aabbOf({ ...r, rot }), 6) : undefined))
   // Пропорции файла: img лежит в осях фото, поэтому и при повороте на 90° это они, а не рамки.
   const aspect = $derived(fv && fv.img.h > 0 ? fv.img.w / fv.img.h : r.w / r.h)
 
   // Кадр, который тянут (✥, ползунки на ячейке и в карточке справа — всё через framelive), до отпускания.
   const pre = $derived(mini ? null : framelive.of(id))
   const cur = $derived(pre ?? frame)
-  const img = $derived(pre || preview || !fv ? placeImage(r, aspect, cur) : fv.img)
+  const img = $derived(pre || preview || !fv ? placeImage(r, aspect, cur, outline) : fv.img)
 
   const selected = $derived(!mini && store.selectedCell === id)
   const missing = $derived(store.missing.includes(id))
@@ -97,6 +105,7 @@
   bind:clientWidth={cw}
   bind:clientHeight={ch}
   class="cell"
+  style:border-radius={radiusCss}
   class:selected
   class:missing
   class:lifted={!mini && drag.active && drag.payload?.kind === 'photos' && drag.payload.fromSpread && drag.payload.ids[0] === id}
@@ -110,7 +119,7 @@
   onclick={mini ? undefined : select}
   oncontextmenu={mini || preview ? undefined : (e) => photoui.open(e, id)}
 >
-  <div class="clip" class:contain>
+  <div class="clip" class:contain style:border-radius={radiusCss}>
     {#if missing}
       <div class="miss" title={missTip(id, store.missingNames)}><Icon name="photo-minus" size={mini ? 12 : 28} stroke={1.8} /></div>
     {:else}
@@ -144,7 +153,12 @@
     {/if}
     {#if !mini}
       {@const badge = colorBadge(store.byId.get(id))}
-      {#if badge}<span class="badge {badge.level}" title={badge.title}>{badge.label}</span>{/if}
+      {#if badge}<span
+          class="badge {badge.level}"
+          style:left={radiusCss ? `calc(6px + ${(inset.x / r.w) * 100}%)` : undefined}
+          style:bottom={radiusCss ? `calc(6px + ${(inset.y / r.h) * 100}%)` : undefined}
+          title={badge.title}>{badge.label}</span
+        >{/if}
     {/if}
   </div>
   <!-- У выделенной ячейки «!» dpi, ✥ и ползунок рисует CellOverlay (выше стека, не обрезаются) -->

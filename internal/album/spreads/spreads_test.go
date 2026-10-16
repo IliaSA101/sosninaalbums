@@ -186,6 +186,63 @@ func TestMergeSpreads(t *testing.T) {
 	}
 }
 
+// Склейка и узоры (048) — как фото фона: свои у первого, без них — второго; один шаг.
+func TestMergeSpreadsPattern(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	for _, ids := range [][]string{{"a"}, {"b"}, {"c"}, {"d"}} {
+		edtest.NewSpread(e, -1, edtest.Photos(ids...))
+	}
+	sp := e.View().Spreads
+	for _, c := range []struct{ sp, scope, kind string }{
+		{sp[1].ID, model.ScopeLeft, "dots"}, {sp[2].ID, model.ScopeSpread, "stripes"}, {sp[3].ID, model.ScopeRight, "bands"},
+	} {
+		if _, err := e.ApplyPattern(c.sp, c.scope, model.Pattern{Kind: c.kind}, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	undo := edtest.UndoLen(e)
+	e.MergeSpreads(sp[0].ID) // у первого узоров нет — берутся второго
+	e.MergeSpreads(sp[2].ID) // у обоих есть — остаются первого
+	ps := edtest.P(e).Spreads
+	if len(ps) != 2 || ps[0].PatL == nil || ps[0].PatL.Kind != "dots" || ps[0].Pat != nil ||
+		ps[1].Pat == nil || ps[1].Pat.Kind != "stripes" || ps[1].PatR != nil || edtest.UndoLen(e) != undo+2 {
+		t.Fatalf("после склеек: %+v | %+v %+v", ps[0], ps[1].Pat, ps[1].PatR)
+	}
+	e.Undo()
+	if ps = edtest.P(e).Spreads; len(ps) != 3 || ps[2].PatR == nil || ps[2].PatR.Kind != "bands" {
+		t.Fatal("отмена не вернула узор второго")
+	}
+}
+
+// Фото фона и узор — один «фон»: у первого фото фона, у второго узор — остаётся только фото
+// первого; у первого ничего — второй целиком (и фото, и узор).
+func TestMergeSpreadsBackgroundWhole(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	for _, ids := range [][]string{{"a"}, {"b"}, {"c"}, {"d"}} {
+		edtest.NewSpread(e, -1, edtest.Photos(ids...))
+	}
+	sp := e.View().Spreads
+	edtest.SetBg(t, e, sp[0].ID, model.ScopeLeft, "bg1")
+	edtest.SetBg(t, e, sp[3].ID, model.ScopeLeft, "bg2")
+	for _, c := range []struct{ sp, scope string }{{sp[1].ID, model.ScopeRight}, {sp[3].ID, model.ScopeRight}} {
+		if _, err := e.ApplyPattern(c.sp, c.scope, model.Pattern{Kind: "dots"}, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.MergeSpreads(sp[0].ID) // фото первого против узора второго
+	e.MergeSpreads(sp[2].ID) // пустой первый против фото и узора второго
+	ps := edtest.P(e).Spreads
+	if len(ps) != 2 || ps[0].BgPhotoL == nil || len(ps[0].Patterns()) != 0 {
+		t.Fatalf("смесь фонов первого и второго: фото %+v, узоры %+v", ps[0].BgPhotoL, ps[0].Patterns())
+	}
+	if ps[1].BgPhotoL == nil || ps[1].PatR == nil || ps[1].PatR.Kind != "dots" {
+		t.Fatalf("пустой первый не взял фон второго: фото %+v, узор %+v", ps[1].BgPhotoL, ps[1].PatR)
+	}
+	if err := edtest.GridInvariants(edtest.P(e)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMergeSpreadsLimit(t *testing.T) {
 	e := edtest.Open(t, model.New(), "")
 	edtest.NewSpread(e, -1, edtest.Photos("a", "b", "c", "d"))

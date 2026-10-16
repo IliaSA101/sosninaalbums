@@ -27,13 +27,17 @@ export interface ExportPrefs {
   pages: boolean
   cover: boolean // выгружать обложку (00.jpg)
   coverOnly: boolean // только обложка
+  fsfera: boolean // «Для Фотосферы Pro» (047); действует, только если страница альбома — формат Фотосферы
 }
 export type ExportScope = 'all' | 'current' | 'range'
 
-export const DEFAULT_PREFS: ExportPrefs = { quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false }
+export const DEFAULT_PREFS: ExportPrefs = { quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false, fsfera: false }
 
 // Байт на пиксель по качеству. ГИПОТЕЗА по типичным JPEG фотокамер: сверить на настоящих фото при QA.
 const BYTES_PER_PX: Record<Quality, number> = { 100: 0.9, 95: 0.45, 80: 0.2 }
+
+// Выгрузка для Фотосферы Pro всегда 300 dpi (Go принудительно ставит то же).
+export const FSFERA_DPI = 300
 
 const px = (mm: number, dpi: number) => Math.round((mm / 25.4) * dpi)
 
@@ -70,6 +74,7 @@ export interface SizeScope {
   units: ExportUnit[] | null // разобранный диапазон; null — ввод неверен
   cover: boolean // обложка уйдёт в выгрузку (в том числе «только обложка»)
   only: boolean // только обложка
+  fsfera?: boolean // для Фотосферы (047): все развороты, 300 dpi, разворотами; обложка — как в cover
 }
 
 // «≈ X на разворот, всего ≈ Y»; «всего» — если файлов больше одного, неверный диапазон — без итога.
@@ -81,6 +86,11 @@ export function sizeSummary(
   unit: string,
   w: SizeScope,
 ): string {
+  if (w.fsfera) {
+    dpi = FSFERA_DPI
+    pages = false
+    w = { ...w, scope: 'all', only: false }
+  }
   const one = estimateBytes(s, dpi, quality, pages)
   const spread = estimateBytes(s, dpi, quality, false)
   const page = estimateBytes(s, dpi, quality, true)
@@ -110,11 +120,40 @@ export function buildOptions(
   p: ExportPrefs,
   hasCover = false,
   onCover = false,
+  fsfera = false,
 ): ExportOpts {
+  // Для Фотосферы Go берёт всё сам (диапазон, страницы, dpi и «только обложка» игнорирует), но уходят честные значения.
+  if (fsfera) return { range: '', quality: p.quality, dpi: FSFERA_DPI, pages: false, cover: hasCover, coverOnly: false, fsfera: true }
   const only = hasCover && (p.coverOnly || (scope === 'current' && onCover))
   const range = only || scope === 'all' ? '' : scope === 'current' ? String(current) : rangeText.trim()
-  return { range, quality: p.quality, dpi: p.dpi, pages: p.pages, cover: hasCover && (p.cover || only), coverOnly: only }
+  return { range, quality: p.quality, dpi: p.dpi, pages: p.pages, cover: hasCover && (p.cover || only), coverOnly: only, fsfera: false }
 }
+
+// Строки памятки в окне экспорта: первые три через « · » (формат, страницы, развороты), остальное — в окне «Готово».
+export const memoLine = (memo: readonly string[]): string => memo.slice(0, 3).join(' · ')
+
+// «Исправить» стоит у строки блока с номером plan.fixAt (Go: -1 — такой строки нет); по тексту строки не ищем.
+export const hasFix = (plan: { coverFix: boolean; fixAt: number }, i: number): boolean => plan.coverFix && i === plan.fixAt
+
+// Имя папки в окне «Готово»: из плана момента запуска; пусто (старый Go) — «книги».
+export const doneFolder = (folder: string): string => folder || 'книги'
+
+// Допуск «Выгрузить» (047). Пока план не пришёл, а Фотосфера выбрана, выгружать нельзя: блок неизвестен.
+export function canExport(o: {
+  busy: boolean
+  bad: boolean
+  fsPref: boolean
+  plan: { format: string; block: readonly string[] } | null
+}): boolean {
+  if (o.busy) return false
+  if (o.fsPref && o.plan === null) return false
+  const fs = !!o.plan?.format && o.fsPref
+  if (fs) return o.plan!.block.length === 0
+  return !o.bad
+}
+
+// Запоздавший ответ плана: номер запроса уже не последний.
+export const planStale = (mine: number, last: number): boolean => mine !== last
 
 // Образец имени файла для окна: номер разворота с нулями до ширины Go (internal/export: max(2, цифр в total)).
 export function sampleName(n: number, total: number, pages: boolean): string {
@@ -135,6 +174,7 @@ export function loadPrefs(): ExportPrefs {
       if (typeof v.pages === 'boolean') o.pages = v.pages
       if (typeof v.cover === 'boolean') o.cover = v.cover
       if (typeof v.coverOnly === 'boolean') o.coverOnly = v.coverOnly
+      if (typeof v.fsfera === 'boolean') o.fsfera = v.fsfera
     }
   } catch {
     // Без хранилища или с порченым значением — по умолчанию.

@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/geom"
 )
 
 // Копирование, размножение и постановка сетки (спека 007, design §3).
@@ -31,20 +32,24 @@ func ApplyGrid(p *model.Project, spreadID, scope, tplScope string, frac []model.
 	return applyGrid(p, s, scope, boxes)
 }
 
-// srcDesign — тексты и фон области источника для копирования «с текстом и фоном».
+// srcDesign — тексты, стикеры и фон (цвет, фото, узор) области источника для копирования
+// «с текстом и фоном».
 type srcDesign struct {
-	texts []model.TextBlock // копии: координаты источника
-	x0    float64           // левый край области источника
-	bgL   string            // фон левой страницы области (у источника-страницы — её фон)
-	bgR   string
+	texts    []model.TextBlock // копии: координаты источника
+	stickers []*model.Sticker  // копии (048, решение №101): координаты источника
+	x0       float64           // левый край области источника
+	bgL      string            // фон левой страницы области (у источника-страницы — её фон)
+	bgR      string
 	// Фото фона области: весь разворот / левая (у источника-страницы — её) / правая.
 	photo, photoL, photoR *model.Backdrop
+	pat, patL, patR       *model.Pattern // узоры области (048) — по тем же слотам, что фото
+	head                  string         // ID шапки виньетки-источника среди texts ("" — нет)
 }
 
 // CopyGrid копирует места области from разворота src на цели одной правкой:
 // источник из «Авто» сначала закрепляется (эталон не разойдётся с копиями),
 // цель «та же область того же разворота» пропускается. design — ещё тексты и фон
-// области; mirror — копия со страницы на страницу другой стороны отражается.
+// области; mirror — копия со страницы на страницу другой стороны отражается (места и стикеры).
 // left — фото, ушедшие в ленту (GridPlan.Left). Неизвестный src — холостая правка.
 func CopyGrid(p *model.Project, srcID, from string, targets []model.GridTarget, design, mirror bool) (model.GridPlan, error) {
 	return copyGrid(p, srcID, from, targets, design, mirror)
@@ -75,10 +80,10 @@ func copyGrid(p *model.Project, srcID, from string, targets []model.GridTarget, 
 		return plan, model.ErrNoPlaces
 	}
 	var sd srcDesign
-	var seq []string // виды копируемых мест и текстов в стеке источника снизу вверх
+	var seq []string // виды копируемых мест, стикеров и текстов в стеке источника снизу вверх
 	if design {
 		sd = designOf(p, src, from, a0)
-		seq = areaStack(p, src, from, sd.texts)
+		seq = areaStack(p, src, from, sd)
 	}
 	seen := map[model.GridTarget]bool{}
 	for _, t := range expandTargets(targets, from) {
@@ -94,8 +99,10 @@ func copyGrid(p *model.Project, srcID, from string, targets []model.GridTarget, 
 		if from == model.ScopeSpread {
 			tpl = model.TplSpread
 		}
+		// Копия на страницу другой стороны отражается: места и (с оформлением) стикеры.
+		flip := mirror && from != model.ScopeSpread && t.Scope != from
 		f := frac
-		if mirror && from != model.ScopeSpread && t.Scope != from {
+		if flip {
 			f = mirrorFrac(frac)
 		}
 		boxes, err := FracBoxes(p, s, tpl, t.Scope, f)
@@ -109,11 +116,13 @@ func copyGrid(p *model.Project, srcID, from string, targets []model.GridTarget, 
 		}
 		plan.Left += left
 		if design {
-			n, err := putDesign(p, s, t.Scope, sd)
+			// Стикеры отражаются вместе с местами — как в «Копировать оформление».
+			n, k, err := putDesign(p, s, t.Scope, sd, putOpt{texts: true, flip: flip, own: s == src})
 			if err != nil {
 				return plan, err
 			}
 			plan.Texts += n
+			plan.Stickers += k
 			putOrder(s, old, seq)
 		}
 	}
@@ -157,58 +166,160 @@ func designOf(p *model.Project, s *model.Spread, scope string, x0 float64) srcDe
 	switch scope {
 	case model.ScopeSpread:
 		sd.photo, sd.photoL, sd.photoR = s.BgPhoto.Clone(), s.BgPhotoL.Clone(), s.BgPhotoR.Clone()
+		sd.pat, sd.patL, sd.patR = s.Pat.Clone(), s.PatL.Clone(), s.PatR.Clone()
 	case model.ScopeLeft:
-		sd.photoL = s.BgPhotoL.Clone()
+		sd.photoL, sd.patL = s.BgPhotoL.Clone(), pageOrSheet(s.PatL, s.Pat)
 	case model.ScopeRight:
-		sd.bgL, sd.photoL = s.BgR, s.BgPhotoR.Clone()
+		sd.bgL, sd.photoL, sd.patL = s.BgR, s.BgPhotoR.Clone(), pageOrSheet(s.PatR, s.Pat)
+	}
+	if scope != model.ScopeSpread {
+		// Фото всего листа лежит и на странице, но не едет (фото не разрезать): только для
+		// сверки повтора — у цели другого листа putDesign его снимает.
+		sd.photo = s.BgPhoto.Clone()
 	}
 	for _, t := range s.Texts {
 		if a := model.BoxOf(t).AABB(); InArea(p, s, a.X, a.W, scope) {
 			sd.texts = append(sd.texts, *t)
+			if s.IsVignette() && t.ID == s.Vig.Head {
+				sd.head = t.ID
+			}
+		}
+	}
+	for _, st := range s.Stickers {
+		if stickerIn(p, s, st, scope) {
+			sd.stickers = append(sd.stickers, st.Clone())
 		}
 	}
 	return sd
 }
 
-// putDesign заменяет тексты и фон области scope разворота s на источник
-// (новые ID, сдвиг на страницу). n — сколько блоков цели заменено. Больше
-// MaxTexts на развороте — ошибка всей правки.
-func putDesign(p *model.Project, s *model.Spread, scope string, sd srcDesign) (n int, err error) {
-	x0 := p.BdArea(s, scope).X
-	before := len(s.Texts)
-	s.Texts = slices.DeleteFunc(s.Texts, func(t *model.TextBlock) bool {
-		a := model.BoxOf(t).AABB()
-		return InArea(p, s, a.X, a.W, scope)
-	})
-	n = before - len(s.Texts)
-	for _, t := range sd.texts {
-		c := t
-		c.ID, c.X = model.NewID(), t.X-sd.x0+x0
-		s.Texts = append(s.Texts, &c)
+// pageOrSheet — узор, видный на странице: её свой, иначе узор всего листа (они взаимоисключающие).
+func pageOrSheet(page, sheet *model.Pattern) *model.Pattern {
+	if page != nil {
+		return page.Clone()
 	}
-	if len(s.Texts) > model.MaxTexts {
-		return n, fmt.Errorf("на развороте не может быть больше %d текстов", model.MaxTexts)
+	return sheet.Clone()
+}
+
+// stickerIn — стикер лежит в области scope листа s (по описанному прямоугольнику, как текст).
+func stickerIn(p *model.Project, s *model.Spread, st *model.Sticker, scope string) bool {
+	a := st.Rect().AABB()
+	return InArea(p, s, a.X, a.W, scope)
+}
+
+// putOpt — что и как кладёт putDesign. texts — надписи области заменяются; flip — стикеры
+// отражаются в области цели (зеркальная копия на страницу другой стороны); decor — режим
+// «Копировать оформление» (049 Ф2): шапка виньетки цели стоит, стикеры копии зажимаются;
+// own — цель на листе-источнике: фото всего листа у неё общее с источником и остаётся.
+type putOpt struct{ texts, flip, decor, own bool }
+
+// putDesign заменяет оформление области scope разворота s на источник: фон, узоры, фото
+// фона, стикеры и (при o.texts) тексты — новые ID, сдвиг на страницу. n, k — сколько текстов
+// и стикеров цели заменено. Больше MaxTexts или MaxStickers на развороте — ошибка всей правки.
+func putDesign(p *model.Project, s *model.Spread, scope string, sd srcDesign, o putOpt) (n, k int, err error) {
+	m := placed(p, s, scope, sd, o)
+	if o.texts {
+		head := ""
+		if o.decor && s.IsVignette() {
+			head = s.Vig.Head // шапка — часть виньетки, а не оформления
+		}
+		before := len(s.Texts)
+		s.Texts = slices.DeleteFunc(s.Texts, func(t *model.TextBlock) bool {
+			a := model.BoxOf(t).AABB()
+			return t.ID != head && InArea(p, s, a.X, a.W, scope)
+		})
+		n = before - len(s.Texts)
+		for _, t := range m.texts {
+			c := t
+			c.ID = model.NewID()
+			s.Texts = append(s.Texts, &c)
+			// Шапка источника едет с раскладкой шапкой цели, как у «Дублировать»: иначе
+			// «Применить» поставит вторую. Своя шапка цели, оставшаяся вне области, — важнее.
+			if !o.decor && sd.head != "" && t.ID == sd.head && s.IsVignette() && s.VigHead(s.Vig.Head) == nil {
+				v := *s.Vig
+				v.Head = c.ID
+				s.Vig = &v
+			}
+		}
+		if len(s.Texts) > model.MaxTexts {
+			return n, k, fmt.Errorf("на развороте не может быть больше %d текстов", model.MaxTexts)
+		}
 	}
-	dx := x0 - sd.x0
+	before := len(s.Stickers)
+	s.Stickers = slices.DeleteFunc(s.Stickers, func(st *model.Sticker) bool { return stickerIn(p, s, st, scope) })
+	k = before - len(s.Stickers)
+	for _, st := range m.stickers {
+		c := st.Clone()
+		c.ID = model.NewID()
+		s.Stickers = append(s.Stickers, c)
+	}
+	if len(s.Stickers) > model.MaxStickers {
+		return n, k, model.ErrStickers
+	}
+	if len(s.Stickers) == 0 {
+		s.Stickers = nil
+	}
 	switch scope {
 	case model.ScopeLeft:
-		s.BgL = sd.bgL
-		s.BgPhotoL = shifted(p, s, sd.photoL, dx, scope)
+		s.BgL, s.BgPhotoL = m.bgL, m.photoL
+		putPattern(s, scope, m.patL)
 	case model.ScopeRight:
-		s.BgR = sd.bgL
-		s.BgPhotoR = shifted(p, s, sd.photoL, dx, scope)
+		s.BgR, s.BgPhotoR = m.bgL, m.photoL
+		putPattern(s, scope, m.patL)
 	default:
-		s.BgL, s.BgR = sd.bgL, sd.bgR
-		s.BgPhoto = shifted(p, s, sd.photo, dx, scope)
-		s.BgPhotoL, s.BgPhotoR = shifted(p, s, sd.photoL, dx, model.ScopeLeft), shifted(p, s, sd.photoR, dx, model.ScopeRight)
+		s.BgL, s.BgR = m.bgL, m.bgR
+		s.Pat, s.PatL, s.PatR = m.pat, m.patL, m.patR
+		s.BgPhoto, s.BgPhotoL, s.BgPhotoR = m.photo, m.photoL, m.photoR
 	}
-	if scope != model.ScopeSpread && (s.BgPhotoL != nil || s.BgPhotoR != nil) {
-		s.BgPhoto = nil // фоны страниц и всего разворота взаимоисключающие
+	if scope != model.ScopeSpread && (!o.own || s.BgPhotoL != nil || s.BgPhotoR != nil) {
+		// Фото чужого листа лежит и на этой странице — снимается, как у dropPhotos (048). Своё
+		// (соседняя страница источника) остаётся: оно и есть фон источника. Фото страниц и
+		// листа взаимоисключающие.
+		s.BgPhoto = nil
 	}
 	if len(s.Texts) == 0 {
 		s.Texts = nil
 	}
-	return n, nil
+	return n, k, nil
+}
+
+// placed — оформление sd в координатах области scope листа s (ID — источника): сдвиг на
+// страницу; у o.flip стикеры отражаются в области (центр, FlipH, угол −Rot). В режиме decor
+// стикеры зажимаются, как при постановке: отражённый край — новые числа, а сверка повтора
+// (sameDecor) и запись должны видеть одно и то же.
+func placed(p *model.Project, s *model.Spread, scope string, sd srcDesign, o putOpt) srcDesign {
+	a := p.BdArea(s, scope)
+	x0, dx := a.X, a.X-sd.x0
+	m := srcDesign{x0: x0, bgL: sd.bgL, bgR: sd.bgR}
+	for _, t := range sd.texts {
+		c := t
+		c.X = t.X - sd.x0 + x0
+		m.texts = append(m.texts, c)
+	}
+	for _, st := range sd.stickers {
+		c := st.Clone()
+		c.X = st.X + dx
+		if o.flip {
+			c.X, c.FlipH, c.Rot = 2*a.X+a.W-c.X-c.W, !c.FlipH, geom.NormDeg(-c.Rot)
+		}
+		if o.decor {
+			if c = p.ClampSticker(s, c); c == nil {
+				continue
+			}
+		}
+		m.stickers = append(m.stickers, c)
+	}
+	if scope == model.ScopeSpread {
+		m.photo = shifted(p, s, sd.photo, dx, scope)
+		m.photoL, m.photoR = shifted(p, s, sd.photoL, dx, model.ScopeLeft), shifted(p, s, sd.photoR, dx, model.ScopeRight)
+		m.pat, m.patL, m.patR = sd.pat.Clone(), sd.patL.Clone(), sd.patR.Clone()
+		return m
+	}
+	m.photoL, m.patL = shifted(p, s, sd.photoL, dx, scope), sd.patL.Clone()
+	if o.own && m.photoL == nil {
+		m.photo = sd.photo.Clone() // фото листа-источника остаётся у цели (putDesign)
+	}
+	return m
 }
 
 // DuplicateGrid — count (1..MaxDuplicate) новых разворотов сразу после src с
@@ -232,7 +343,7 @@ func DuplicateGrid(p *model.Project, src string, count int, design bool) error {
 	st := s.Stack()
 	for k := range fresh {
 		ns := &model.Spread{ID: model.NewID(), Photos: []string{}, Grid: make([]*model.Place, len(s.Grid))}
-		newID := make(map[string]string, len(s.Grid)+len(s.Texts)) // ID источника → ID копии
+		newID := make(map[string]string, len(s.Grid)+len(s.Stickers)+len(s.Texts)) // ID источника → ID копии
 		for j, pl := range s.Grid {
 			ns.Grid[j] = model.ClonePlace(pl, taken)
 			newID[pl.ID] = ns.Grid[j].ID
@@ -240,6 +351,7 @@ func DuplicateGrid(p *model.Project, src string, count int, design bool) error {
 		if design {
 			ns.BgL, ns.BgR = s.BgL, s.BgR
 			ns.BgPhoto, ns.BgPhotoL, ns.BgPhotoR = s.BgPhoto.Clone(), s.BgPhotoL.Clone(), s.BgPhotoR.Clone()
+			ns.Pat, ns.PatL, ns.PatR = s.Pat.Clone(), s.PatL.Clone(), s.PatR.Clone()
 			if s.Caps != nil { // стиль подписей листа (030) — часть оформления
 				c := *s.Caps
 				ns.Caps = &c
@@ -254,6 +366,12 @@ func DuplicateGrid(p *model.Project, src string, count int, design bool) error {
 				ns.Texts = append(ns.Texts, &c)
 				newID[t.ID] = c.ID
 			}
+			for _, st := range s.Stickers {
+				c := st.Clone()
+				c.ID = model.NewID()
+				ns.Stickers = append(ns.Stickers, c)
+				newID[st.ID] = c.ID
+			}
 		}
 		if s.IsVignette() { // копия виньетки — виньетка с теми же ролями мест (031); шапка — своя копия
 			v := *s.Vig
@@ -261,7 +379,7 @@ func DuplicateGrid(p *model.Project, src string, count int, design bool) error {
 			ns.Kind, ns.Vig = s.Kind, &v
 		}
 		// Порядок слоёв — по карте ID (текст под фото остаётся под ним); без
-		// design тексты не копируются и выпадают, лишнее syncOrder сведёт к nil.
+		// design тексты и стикеры не копируются и выпадают, лишнее syncOrder сведёт к nil.
 		for _, id := range st {
 			if n, ok := newID[id]; ok {
 				ns.Order = append(ns.Order, n)
@@ -273,14 +391,18 @@ func DuplicateGrid(p *model.Project, src string, count int, design bool) error {
 	return nil
 }
 
-// areaStack — виды (layerPlace | layerText) мест области from и текстов texts
+// areaStack — виды (place | sticker | text) мест области from, стикеров и текстов sd
 // (копий из designOf) в стеке источника снизу вверх: по ним putOrder ставит копии
 // в том же порядке, что у источника. Места области идут в порядке Grid — как у
-// areaFrac, тексты — как в texts.
-func areaStack(p *model.Project, src *model.Spread, from string, texts []model.TextBlock) []string {
-	inText := make(map[string]bool, len(texts))
-	for _, t := range texts {
+// areaFrac, стикеры и тексты — как в sd.
+func areaStack(p *model.Project, src *model.Spread, from string, sd srcDesign) []string {
+	inText := make(map[string]bool, len(sd.texts))
+	for _, t := range sd.texts {
 		inText[t.ID] = true
+	}
+	inSticker := make(map[string]bool, len(sd.stickers))
+	for _, st := range sd.stickers {
+		inSticker[st.ID] = true
 	}
 	kind := src.Kinds()
 	var seq []string
@@ -290,6 +412,8 @@ func areaStack(p *model.Project, src *model.Spread, from string, texts []model.T
 			if _, pl := src.FindPlace(id); InArea(p, src, pl.X, pl.W, from) {
 				seq = append(seq, model.LayerPlace)
 			}
+		case inSticker[id]:
+			seq = append(seq, model.LayerSticker)
 		case inText[id]:
 			seq = append(seq, model.LayerText)
 		}
@@ -297,35 +421,38 @@ func areaStack(p *model.Project, src *model.Spread, from string, texts []model.T
 	return seq
 }
 
-// putOrder ставит новые места и тексты копии (чьих ID нет в old) в стек цели s
+// putOrder ставит новые места, стикеры и тексты копии (чьих ID нет в old) в стек цели s
 // одним куском в порядке источника seq — на позицию первого нового места;
 // остальное — как было. Без этого текст, лежавший в источнике под фото, в копии
 // всплыл бы наверх (syncOrder кладёт недостающий текст наверх).
 func putOrder(s *model.Spread, old map[string]string, seq []string) {
-	var places, texts []string // новые, в порядке Grid / Texts — как у источника
-	for _, pl := range s.Grid {
-		if old[pl.ID] == "" {
-			places = append(places, pl.ID)
+	fresh := map[string][]string{} // вид → новые ID в порядке Grid / Stickers / Texts — как у источника
+	add := func(kind, id string) {
+		if old[id] == "" {
+			fresh[kind] = append(fresh[kind], id)
 		}
+	}
+	for _, pl := range s.Grid {
+		add(model.LayerPlace, pl.ID)
+	}
+	for _, st := range s.Stickers {
+		add(model.LayerSticker, st.ID)
 	}
 	for _, t := range s.Texts {
-		if old[t.ID] == "" {
-			texts = append(texts, t.ID)
-		}
+		add(model.LayerText, t.ID)
 	}
-	chunk := make([]string, 0, len(places)+len(texts))
-	pi, ti := 0, 0
+	places := fresh[model.LayerPlace]
+	chunk := make([]string, 0, len(fresh[model.LayerPlace])+len(fresh[model.LayerSticker])+len(fresh[model.LayerText]))
 	for _, k := range seq {
-		if k == model.LayerPlace && pi < len(places) {
-			chunk = append(chunk, places[pi])
-			pi++
-		} else if k == model.LayerText && ti < len(texts) {
-			chunk = append(chunk, texts[ti])
-			ti++
+		if ids := fresh[k]; len(ids) > 0 {
+			chunk = append(chunk, ids[0])
+			fresh[k] = ids[1:]
 		}
 	}
-	chunk = append(append(chunk, places[pi:]...), texts[ti:]...) // страховка: seq короче
-	rest := make([]string, 0, len(s.Grid)+len(s.Texts))
+	for _, k := range []string{model.LayerPlace, model.LayerSticker, model.LayerText} { // страховка: seq короче
+		chunk = append(chunk, fresh[k]...)
+	}
+	rest := make([]string, 0, len(s.Grid)+len(s.Stickers)+len(s.Texts))
 	at := -1
 	for _, id := range s.Stack() {
 		if !slices.Contains(chunk, id) {
@@ -338,6 +465,14 @@ func putOrder(s *model.Spread, old map[string]string, seq []string) {
 		at = len(rest)
 	}
 	s.SetStack(slices.Insert(rest, at, chunk...))
+}
+
+// putPattern — узор страницы scope цели из источника (nil — без узора). Узор всего листа цели
+// остаётся другой странице (SplitPat), как у dropPatterns (048): и при пустом узоре источника —
+// иначе страница цели так и осталась бы в узоре листа.
+func putPattern(s *model.Spread, scope string, pt *model.Pattern) {
+	s.SplitPat(scope)
+	*s.PatSlot(scope) = pt.Clone()
 }
 
 // shifted — копия фона, сдвинутая по x на dx (перенос на другую страницу листа s).

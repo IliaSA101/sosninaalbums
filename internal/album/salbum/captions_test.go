@@ -3,6 +3,7 @@ package salbum
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,94 @@ func TestSalbumCaptionFieldsRoundTrip(t *testing.T) {
 		if bytes.Contains(data, []byte(key)) {
 			t.Fatalf("пустое поле %s записано:\n%s", key, data)
 		}
+	}
+}
+
+// 049: предмет учителя (`person.subj`, v8, omitempty) — круг Save→Load без потерь у
+// нескольких фото сразу (с именем, только предмет, без предмета), повторная запись — байт в
+// байт; файл без предметов ключа не пишет и после Load→Save тот же; Load зажимает мусор.
+func TestSalbumPersonSubjectRoundTrip(t *testing.T) {
+	dir := testkit.TempDir(t)
+	p := model.New()
+	p.Folders = []string{filepath.Join(dir, "Отбор")}
+	people := []*model.Person{
+		{Last: "Сидорова", First: "Ольга", Middle: "Ивановна", Subject: "Математика"},
+		{Subject: "Физика"}, // имя из названия файла, предмет свой
+		{Last: "Козлов", First: "Иван"},
+		nil,
+	}
+	var ids []string
+	for i, who := range people {
+		path := filepath.Join(dir, "Отбор", fmt.Sprintf("Петров Пётр %d.jpg", i))
+		putFile(t, path, 10)
+		id := library.IDFor(path)
+		p.Photos[id] = model.PhotoRef{Path: path, W: 300, H: 200, Size: 10, Person: who}
+		ids = append(ids, id)
+	}
+	p.Spreads = []*model.Spread{{ID: "s1", Photos: ids}}
+	path := filepath.Join(dir, "a.salbum")
+	if err := Save(p, path); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || bytes.Count(data, []byte(`"subj"`)) != 2 {
+		t.Fatalf("версия %d, предметов в файле %d:\n%s", f.Version, bytes.Count(data, []byte(`"subj"`)), data)
+	}
+	q, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x, y := model.Marshal(p), model.Marshal(q); !bytes.Equal(x, y) {
+		t.Fatalf("потери при записи:\n%s\n%s", x, y)
+	}
+	if who, file := q.Photos[ids[1]].Name(); who == nil || !file || who.Last != "Петров" || who.Subject != "Физика" {
+		t.Fatalf("предмет к имени из файла после Load: %+v %v", who, file)
+	}
+	again := filepath.Join(dir, "b.salbum")
+	if err := Save(q, again); err != nil {
+		t.Fatal(err)
+	}
+	if data2, _ := os.ReadFile(again); !bytes.Equal(data, data2) {
+		t.Fatalf("повторная запись не байт в байт:\n%s\n%s", data, data2)
+	}
+
+	// Без предметов: ключа нет, Load→Save — тот же файл.
+	for _, id := range ids {
+		r := p.Photos[id]
+		if r.Person != nil {
+			who := *r.Person
+			who.Subject = ""
+			r.Person = model.ClampPerson(who)
+		}
+		p.Photos[id] = r
+	}
+	if err := Save(p, path); err != nil {
+		t.Fatal(err)
+	}
+	plain, _ := os.ReadFile(path)
+	q, err = Load(path)
+	if err != nil || bytes.Contains(plain, []byte(`"subj"`)) {
+		t.Fatalf("файл без предмета: %v\n%s", err, plain)
+	}
+	if err := Save(q, again); err != nil {
+		t.Fatal(err)
+	}
+	if data2, _ := os.ReadFile(again); !bytes.Equal(plain, data2) {
+		t.Fatalf("файл без предмета изменился:\n%s\n%s", plain, data2)
+	}
+
+	// Мусор: длинный и многострочный предмет — одна строка ≤ MaxPersonRunes, пробельный — снят.
+	raw := bytes.Replace(data, []byte(`"subj": "Математика"`), []byte(`"subj": " Мате\nматика`+strings.Repeat("я", 100)+`"`), 1)
+	raw = bytes.Replace(raw, []byte(`"subj": "Физика"`), []byte(`"subj": " \t "`), 1)
+	if bytes.Equal(raw, data) {
+		t.Fatal("подмена в файле не сработала")
+	}
+	q = mustDecode(t, raw, dir)
+	if s := q.Photos[ids[0]].Person.Subject; utf8.RuneCountInString(s) != model.MaxPersonRunes || !strings.HasPrefix(s, "Мате матика") {
+		t.Fatalf("зажим предмета: %q", s)
+	}
+	if q.Photos[ids[1]].Person != nil {
+		t.Fatalf("пробельный предмет без имени не снят: %+v", q.Photos[ids[1]].Person)
 	}
 }
 
@@ -286,5 +375,54 @@ func TestLoadAlbumVarsHugeFast(t *testing.T) {
 	}
 	if n := utf8.RuneCountInString(want.Title); n != model.MaxVarRunes-1 && n != model.MaxVarRunes {
 		t.Fatalf("заголовок %d знаков", n)
+	}
+}
+
+// Предел 64 фото и места на разворот при чтении файла (спека 027, формат v6).
+
+// TestLoadPlaces64: 65 мест в файле → 64 (лишнее пустое с конца), все 64 фото на местах.
+func TestLoadPlaces64(t *testing.T) {
+	if model.MaxPlaces != 64 || model.MaxPhotos != 64 {
+		t.Fatalf("MaxPlaces = %d, MaxPhotos = %d", model.MaxPlaces, model.MaxPhotos)
+	}
+	dir := testkit.TempDir(t)
+	var names []string
+	for i := range 64 {
+		names = append(names, fmt.Sprint("g", i))
+	}
+	_, ids := gridFile(t, dir, names, nil)
+	s := &model.Spread{ID: "s"}
+	for i := range 65 {
+		ph := ""
+		if i < 64 {
+			ph = ids[names[i]]
+			s.Photos = append(s.Photos, ph)
+		}
+		s.Grid = append(s.Grid, box(model.NewID(), float64(i%8)*30, float64(i/8)*30, 20, 20, ph))
+	}
+	data, _ := gridFile(t, dir, names, []*model.Spread{s})
+	p := mustDecode(t, data, dir)
+	if len(p.Spreads) != 1 || len(p.Spreads[0].Grid) != 64 || len(model.GridPhotos(p.Spreads[0])) != 64 {
+		t.Fatalf("мест %d, фото на местах %d", len(p.Spreads[0].Grid), len(model.GridPhotos(p.Spreads[0])))
+	}
+}
+
+// TestLoadSplitBig64: разворот из 100 фото (чужой или битый файл) режется на 64 + 36.
+func TestLoadSplitBig64(t *testing.T) {
+	p, dir := model.New(), testkit.TempDir(t)
+	ids := make([]string, 100)
+	for i := range ids {
+		path := filepath.Join(dir, fmt.Sprint("p", i, ".jpg"))
+		ids[i] = library.IDFor(path)
+		p.Photos[ids[i]] = model.PhotoRef{Path: path, W: 3, H: 2}
+	}
+	p.Spreads = []*model.Spread{{ID: "s", Photos: ids}}
+	path := filepath.Join(dir, "a.salbum")
+	if err := Save(p, path); err != nil {
+		t.Fatal(err)
+	}
+	q, err := Load(path)
+	if err != nil || len(q.Spreads) != 2 || len(q.Spreads[0].Photos) != 64 || len(q.Spreads[1].Photos) != 36 {
+		t.Fatalf("ждали 64 + 36: err=%v, разворотов %d", err, len(q.Spreads))
 	}
 }

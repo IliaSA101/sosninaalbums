@@ -18,6 +18,15 @@ class PhotoUi {
     this.menu = { x: e.clientX, y: e.clientY }
   }
 
+  // Правый щелчок по стикеру (048): выделенное остаётся, если щёлкнули по нему; иначе выделяется только он.
+  openSticker(e: MouseEvent, id: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (drag.active) return
+    if (!placesel.stickers.includes(id)) placesel.pickSticker(id, false)
+    this.menu = { x: e.clientX, y: e.clientY }
+  }
+
   // chosen — закрыто выбором пункта: щелчок, дошедший до поля под меню (второй щелчок двойного),
   // выделение снимать не должен.
   close(chosen = false) {

@@ -25,7 +25,10 @@
     avoid,
   }: { spread: SpreadView; box: Rect; width: number; height: number; ppm: number; avoid?: { x: number; y: number } } = $props()
 
-  const items = $derived(miniItems(miniContext(spread, placesel.selected, placesel.texts.length), prefs.can))
+  // Тексты и стикеры группы мини-панель считает вместе («Удалить выделенное (N)»).
+  const items = $derived(
+    miniItems(miniContext(spread, placesel.selected, placesel.texts.length + placesel.selectedStickers.length), prefs.can),
+  )
   const photo = $derived(placesel.selected.find((i) => i.photo)?.photo ?? '')
 
   let w = $state(0) // ширина полосы, px (замер)

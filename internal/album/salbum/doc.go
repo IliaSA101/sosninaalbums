@@ -11,6 +11,7 @@
 // починки при чтении: dedupe, Rekey, dropNilPlaces, unionGrid; перенос vars альбома
 // (moveAlbumVars)), write.go (атомарная
 // запись, копия файла старой версии), marks.go (секция отметок), relink.go (перепривязка),
+// lib.go (свои фоны и стикеры по ключу библиотеки 048: искатель, чтение, RelinkLib),
 // cover.go (обложка 032: FileCover, зажим при чтении, путь разметки).
 // Голдены старых версий — testdata/ (v1, v3, v4-dev, v5; альбом 0.10.0 — golden-0.10, заморожен: только чтение v6).
 package salbum

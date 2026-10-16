@@ -16,9 +16,10 @@ const { prefs } = await import('../../base/prefs/prefs.svelte')
 const { store } = await import('../../base/core/store.svelte')
 const { wire } = await import('./wire')
 const { placesel } = await import('../../editor/places/placesel.svelte')
-const { gallery } = await import('../../panels/layouts/gallery.svelte')
+const { gallery } = await import('../../panels/gallery/gallery.svelte')
 const { modes } = await import('../../base/prefs/view.svelte')
 const { libfilter } = await import('../../panels/marks/libfilter.svelte')
+const { gridAct } = await import('../../panels/layouts/gridact.svelte')
 
 wire()
 
@@ -54,6 +55,23 @@ describe('prefs: набор «Своего» (спека 011 U2)', () => {
     prefs.toggle('timeline', false)
     await tick()
     expect(modes.big).toBe(false)
+  })
+
+  it('окно «Копировать раскладку» закрывается с «Шаблонами», «Копировать оформление» — с «Фонами и стикерами»', async () => {
+    prefs.load({ level: 'full', showStart: false, first: false, custom: null }) // «Шаблоны» — с «Полного»
+    gridAct.copyGrid = { spread: 's1', from: 'spread' }
+    prefs.toggle('templates', false)
+    await tick()
+    expect(gridAct.copyGrid).toBeNull()
+    prefs.toggle('templates', true)
+    await tick()
+    gridAct.copyGrid = { spread: 's1', from: 'spread', mode: 'decor' }
+    prefs.toggle('templates', false)
+    await tick()
+    expect(gridAct.copyGrid).not.toBeNull()
+    prefs.toggle('decor', false)
+    await tick()
+    expect(gridAct.copyGrid).toBeNull()
   })
 
   it('потеря «Отметок» сбрасывает фильтр ленты, остальные выключения его не трогают', async () => {

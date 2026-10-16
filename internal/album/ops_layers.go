@@ -152,6 +152,25 @@ func (e *Editor) SetBackdropFrame(spreadID, scope string, s, x, y float64) model
 	return e.change(func(p *model.Project) { backdrop.SetBackdropFrame(p, spreadID, scope, s, x, y) })
 }
 
+// SetBackdropAngle ставит наклон фото в рамке фона: ±44,9°, шаг 0,1 (045). Рамка стоит,
+// фото закрывает её само. Один шаг на отпускание ползунка.
+// Договор: область известна, tilt — конечное число.
+func (e *Editor) SetBackdropAngle(spreadID, scope string, tilt float64) model.View {
+	if !model.ValidScope(scope) || !allFinite(tilt) {
+		return e.View()
+	}
+	return e.change(func(p *model.Project) { backdrop.SetBackdropAngle(p, spreadID, scope, tilt) })
+}
+
+// StraightenBackdrop — «Выпрямить по линии» для фона: (dx, dy) мм листа встаёт вдоль края рамки.
+// Договор: область известна, dx, dy — конечные числа.
+func (e *Editor) StraightenBackdrop(spreadID, scope string, dx, dy float64) model.View {
+	if !model.ValidScope(scope) || !allFinite(dx, dy) {
+		return e.View()
+	}
+	return e.change(func(p *model.Project) { backdrop.StraightenBackdrop(p, spreadID, scope, dx, dy) })
+}
+
 // FlipBackdrop переключает зеркало по оси axis ("h" | "v"); видимая часть кадра
 // остаётся той же, только отражённой (X → −X / Y → −Y), как у SetFlip.
 // Договор: ось "h" или "v", область известна.
@@ -172,7 +191,7 @@ func (e *Editor) SetBackdropFade(spreadID, scope string, fade float64, merge str
 	return e.apply(backdropMerge(merge), func(p *model.Project) { backdrop.SetBackdropFade(p, spreadID, scope, fade) })
 }
 
-// FitBackdrop — «По области»: рамка = область, поворот и кадр сброшены, зеркало остаётся.
+// FitBackdrop — «По области»: рамка = область, поворот рамки и кадр сброшены, наклон фото и зеркало остаются.
 // Договор: область известна.
 func (e *Editor) FitBackdrop(spreadID, scope string) model.View {
 	if !model.ValidScope(scope) {
@@ -189,4 +208,142 @@ func (e *Editor) ClearBackdrop(spreadID, scope string) model.View {
 		return e.View()
 	}
 	return e.change(func(p *model.Project) { backdrop.ClearBackdrop(p, spreadID, scope) })
+}
+
+// Узор и фон из библиотеки (спека 048): узор — параметры генератора в слотах Pat/PatL/PatR
+// под фото фона; своё — фото фона с ключом библиотеки (internal/album/backdrop, pattern.go).
+
+// patternMerge — ключ слияния серии ползунка узора в один шаг отмены.
+func patternMerge(session string) string {
+	if !model.ValidSession(session) {
+		return ""
+	}
+	return "pattern:" + session
+}
+
+// ApplyPattern — плитка программы в галерее фонов (решение №76): узор pt в область scope и
+// цвет страниц color ("" — цвет не трогать); прежний фон области — узоры и фото на ней —
+// снимается тем же шагом. Узор всего листа под страницей остаётся другой странице. Тот же
+// повторно — холостая. Неверный узор или цвет — ErrPattern, неизвестный разворот — холостая.
+// Договор: область известна (ValidScope); узор, цвет и страницу листа 031 проверяет тело.
+func (e *Editor) ApplyPattern(spreadID, scope string, pt model.Pattern, color string) (model.View, error) {
+	if !model.ValidScope(scope) {
+		return e.View(), model.ErrScope
+	}
+	return e.try("", func(p *model.Project) error { return backdrop.ApplyPattern(p, spreadID, scope, pt, color) })
+}
+
+// ApplyBackdrop — своё из библиотеки в галерее фонов (048): фото ph на фон области, как
+// SetBackdrop (ph.Lib — ключ, ph.ID = LibPhotoID), и узоры области снимаются тем же шагом.
+// Бросок фото и «Свой файл…» (SetBackdrop) узор не снимают.
+// Договор: область известна (ValidScope); ключ проверяет тело (ErrLibKey).
+func (e *Editor) ApplyBackdrop(spreadID, scope string, ph model.PhotoInfo) (model.View, error) {
+	if !model.ValidScope(scope) {
+		return e.View(), model.ErrScope
+	}
+	return e.try("", func(p *model.Project) error { return backdrop.ApplyBackdrop(p, spreadID, scope, ph) })
+}
+
+// SetPattern ставит цвета, масштаб, seed и прозрачность узора области (ключ генератора
+// стоит); зажим — ClampPattern. merge — сессия ползунка: серия — один шаг отмены. Узора нет —
+// холостая.
+// Договор: область известна, масштаб и прозрачность — конечные числа; ключ слияния — patternMerge.
+func (e *Editor) SetPattern(spreadID, scope string, pt model.Pattern, merge string) model.View {
+	if !model.ValidScope(scope) || !allFinite(pt.Scale, pt.Fade) {
+		return e.View()
+	}
+	return e.apply(patternMerge(merge), func(p *model.Project) { backdrop.SetPattern(p, spreadID, scope, pt) })
+}
+
+// ClearPattern снимает узор области; цвет страниц и фото фона остаются.
+// Договор: область известна.
+func (e *Editor) ClearPattern(spreadID, scope string) model.View {
+	if !model.ValidScope(scope) {
+		return e.View()
+	}
+	return e.change(func(p *model.Project) { backdrop.ClearPattern(p, spreadID, scope) })
+}
+
+// Стикеры (спека 048 Ф2): картинка на листе — слой между местами и текстами
+// (internal/album/layers, sticker.go). Слои, выравнивание, группа и удаление — прежние методы
+// (ID стикера там, где ID текста).
+
+// stickerMerge — ключ слияния серии рамки, ползунка или палитры стикера в один шаг отмены.
+func stickerMerge(session string) string {
+	if !model.ValidSession(session) {
+		return ""
+	}
+	return "sticker:" + session
+}
+
+// AddSticker ставит стикер src по центру страницы page листа (шириной ¼ страницы, не выше ½)
+// над местами и стикерами, под текстами; id — новый стикер (UI его выделяет). Один шаг.
+// Неверный рисунок — ErrSticker, ключ своего — ErrLibKey, больше MaxStickers — ErrStickers.
+// Неизвестный лист — холостая с пустым id: встал ли стикер, видно под тем же замком, что и
+// правка (сравнение rev снаружи — гонка с чужой правкой между чтением и правкой).
+// Договор: page зажата в 0..1, ID создан здесь; источник проверяет тело.
+func (e *Editor) AddSticker(spreadID string, page int, src model.StickerSrc) (v model.View, id string, err error) {
+	page = min(max(page, 0), 1)
+	id = model.NewID()
+	placed := false
+	v, err = e.try("", func(p *model.Project) error {
+		err := layers.AddSticker(p, spreadID, page, id, src)
+		s, _ := p.FindSticker(id)
+		placed = s != nil
+		return err
+	})
+	if err != nil || !placed {
+		id = ""
+	}
+	return v, id, err
+}
+
+// ReplaceSticker — «Заменить…»: другой рисунок или своё фото; центр, ширина и поворот стоят,
+// высота — по новой пропорции. Тот же — холостая. changed — правка встала шагом (App кладёт
+// плитку в недавние): rev до правки читается под её замком.
+// Договор: источник проверяет тело (ошибки — как у AddSticker).
+func (e *Editor) ReplaceSticker(spreadID, id string, src model.StickerSrc) (v model.View, changed bool, err error) {
+	rev := -1
+	v, err = e.try("", func(p *model.Project) error {
+		rev = e.rev
+		return layers.ReplaceSticker(p, spreadID, id, src)
+	})
+	return v, err == nil && v.Rev != rev, err
+}
+
+// SetStickerBox ставит рамку стикера: перенос, размер, поворот (мм листа, угол до поворота,
+// поворот вокруг центра). Зажим — ClampSticker, пропорция — FitStickers. merge — сессия
+// стрелок или жеста: серия — один шаг отмены.
+// Договор: числа конечны, иначе холостая правка; ключ слияния — stickerMerge.
+func (e *Editor) SetStickerBox(spreadID, id string, x, y, w, h, rot float64, merge string) model.View {
+	if !allFinite(x, y, w, h, rot) {
+		return e.View()
+	}
+	return e.apply(stickerMerge(merge), func(p *model.Project) { layers.SetStickerBox(p, spreadID, id, x, y, w, h, rot) })
+}
+
+// FlipSticker переключает зеркало стикера по оси axis ("h" | "v").
+// Договор: ось "h" или "v", иначе холостая правка.
+func (e *Editor) FlipSticker(spreadID, id, axis string) model.View {
+	if axis != "h" && axis != "v" {
+		return e.View()
+	}
+	return e.change(func(p *model.Project) { layers.FlipSticker(p, spreadID, id, axis) })
+}
+
+// SetStickerFade ставит прозрачность стикера: 0..1 (зажим, шаг 0.01). merge — сессия ползунка.
+// Договор: fade — конечное число, иначе холостая правка; ключ слияния — stickerMerge.
+func (e *Editor) SetStickerFade(spreadID, id string, fade float64, merge string) model.View {
+	if !allFinite(fade) {
+		return e.View()
+	}
+	return e.apply(stickerMerge(merge), func(p *model.Project) { layers.SetStickerFade(p, spreadID, id, fade) })
+}
+
+// SetStickerInks ставит цвета процедурного стикера (зажим — ClampArt: плохой цвет — цвет
+// генератора). merge — сессия палитры. У своего стикера — холостая.
+// Договор: проверок нет; ключ слияния — stickerMerge.
+func (e *Editor) SetStickerInks(spreadID, id string, inks []string, merge string) model.View {
+	inks = slices.Clone(inks)
+	return e.apply(stickerMerge(merge), func(p *model.Project) { layers.SetStickerInks(p, spreadID, id, inks) })
 }

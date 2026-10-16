@@ -96,6 +96,33 @@ func TestCoverRoundTrip(t *testing.T) {
 	}
 }
 
+// Безопасные линии обложки (047, v8): 8/12 переживают Save → Load; у Нетпринта (0) ключей
+// в файле нет; старый файл без них — 0 (Settings.Safe); чужие числа зажимаются в 0…30.
+func TestSalbumCoverSafeRoundTrip(t *testing.T) {
+	dir := testkit.TempDir(t)
+	p := coverAlbum(t, dir)
+	path := filepath.Join(dir, "a.salbum")
+	first, q := saveLoad(t, p, path)
+	if s := q.Cover.Spec; s.Safe != 8 || s.SpineSafe != 12 || !bytes.Contains(first, []byte(`"spineSafe"`)) {
+		t.Fatalf("линии после Save → Load: %+v", s)
+	}
+	np, _ := model.CoverPresetOf("netprint-premium")
+	q.Cover.Spec = np.Spec
+	if data, r := saveLoad(t, q, path); bytes.Contains(data, []byte(`"spineSafe"`)) || r.Cover.Spec.Safe != 0 {
+		t.Fatalf("линии 0 в файле: %s", data)
+	}
+	for in, want := range map[string][2]float64{
+		``:                               {0, 0},
+		`,"safe":99,"spineSafe":-3`:      {30, 0},
+		`,"safe":7.777,"spineSafe":12.5`: {7.78, 12.5},
+	} {
+		r := mustDecode(t, coverJSON(dir, `[{"id":"s1","photos":["p"]}]`, `,"cover":{"spec":{"preset":"fsfera-thin","wrap":23.5`+in+`}}`), dir)
+		if s := r.Cover.Spec; s.Safe != want[0] || s.SpineSafe != want[1] || s.Wrap != 23.5 {
+			t.Errorf("%q: %+v, ждали %v", in, s, want)
+		}
+	}
+}
+
 // Без обложки ключа cover в файле нет: файл тот же, что до 032 (omitempty).
 func TestCoverAbsentSame(t *testing.T) {
 	dir := testkit.TempDir(t)
@@ -323,7 +350,9 @@ func TestCoverReservedID(t *testing.T) {
 func TestCoverSheetFields(t *testing.T) {
 	allowed := map[string]bool{"Photos": true, "Texts": true, "BgL": true, "BgR": true, "Grid": true,
 		"Order": true, "BgPhoto": true, "BgPhotoL": true, "BgPhotoR": true, "Caps": true,
-		"Vars": true} // поля шапки: свои у обложки — перенос старых полей альбома (031 dialog §4)
+		// Vars — поля шапки: свои у обложки, перенос старых полей альбома (031 dialog §4);
+		// Pat* — узоры фона, как фото фона (048 design §1); стикеры — как тексты (048 сц. 15).
+		"Vars": true, "Pat": true, "PatL": true, "PatR": true, "Stickers": true}
 	zeroed := map[string]bool{"ID": true, "Layout": true, "Variant": true, "Name": true, "Kind": true, "Vig": true}
 	set := func(t *testing.T, v reflect.Value, typ reflect.Type) {
 		switch v.Kind() {

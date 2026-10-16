@@ -460,3 +460,42 @@ func textOf(e *album.Editor, id string) model.TextView {
 	}
 	return model.TextView{}
 }
+
+// Круг Save → Load после «Вставить имена» с подписью (043): имена фото и шаблон подписи листа
+// те же; фото без имени (список короче листа) остаётся без имени.
+func TestPasteNamesCaptionRoundTrip(t *testing.T) {
+	dir := testkit.TempDir(t)
+	e := edtest.Open(t, model.New(), "")
+	ph := []model.PhotoInfo{{ID: "p1", Path: filepath.Join(dir, "a.jpg"), W: 300, H: 200},
+		{ID: "p2", Path: filepath.Join(dir, "b.jpg"), W: 300, H: 200}, {ID: "p3", Path: filepath.Join(dir, "c.jpg"), W: 300, H: 200}}
+	sid := edtest.NewSpread(e, -1, ph).Spreads[0].ID
+	if _, plan, err := e.PasteNames(sid, model.NamesOpts{Text: "Сидоров Иван\nПетрова Анна Сергеевна", Caption: true}); err != nil || plan.Named != 2 || plan.Missing != 1 {
+		t.Fatalf("вставка: %+v, %v", plan, err)
+	}
+	p := edtest.P(e)
+	data, err := salbum.Encode(p, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := edtest.MustDecode(t, data, dir)
+	if len(q.Photos) != 3 || q.Spreads[0].Caps == nil || p.Spreads[0].Caps == nil || *q.Spreads[0].Caps != *p.Spreads[0].Caps || q.Spreads[0].Caps.Text == "" {
+		t.Fatalf("подпись листа после Load: %+v", q.Spreads[0].Caps)
+	}
+	byPath := map[string]*model.Person{} // Load меняет ID фото на свои: сверяем по пути
+	for _, ref := range q.Photos {
+		byPath[ref.Path] = ref.Person
+	}
+	named := 0
+	for _, want := range p.Photos {
+		got, ok := byPath[want.Path]
+		if !ok || (got == nil) != (want.Person == nil) || got != nil && *got != *want.Person {
+			t.Fatalf("%s: имя после Load %+v, было %+v", want.Path, got, want.Person)
+		}
+		if got != nil {
+			named++
+		}
+	}
+	if named != 2 {
+		t.Fatalf("с именем после Load: %d из 3", named)
+	}
+}

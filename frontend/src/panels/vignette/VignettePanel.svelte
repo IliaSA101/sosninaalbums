@@ -4,7 +4,7 @@
   import { sheetSize, unitOf } from '../../base/geom/sheet'
   import type { SpreadView, VigChoice, VignetteView } from '../../base/core/types'
   import VigCard from './VigCard.svelte'
-  import { gallery } from '../layouts/gallery.svelte'
+  import { gallery } from '../gallery/gallery.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { clearVignette, sortVignette, vigChoices } from './vigact'
   import { emptyPlaces, fitBox, summaryText } from './vigdialog'
@@ -52,7 +52,7 @@
   <div class="scheme" bind:clientWidth={boxW}>
     {#if now && dims.w > 0}
       <button type="button" class="pic" title="Настроить виньетку…" aria-label="Настроить виньетку" onclick={setup}>
-        <VigCard c={now} w={dims.w} h={dims.h} />
+        <VigCard c={now} w={dims.w} h={dims.h} form={formOf(vig)} />
       </button>
     {/if}
   </div>

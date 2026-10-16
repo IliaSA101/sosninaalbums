@@ -1,6 +1,8 @@
 // Package names — правки полей подписей (030): имя на фото, вставка
 // списка имён по местам листа, общий стиль подписей листа. Тела правок над *model.Project;
-// обёртки Editor — ops_design.go ядра (аргументы там уже зажаты). Разбор списка — parse.go.
+// обёртки Editor — ops_design.go ядра (аргументы там уже зажаты). Окно «Имена» (043): разбор
+// поля — parse.go (Read) и header.go (заголовки таблицы), кому какое имя — plan.go (Plan,
+// Apply), по столбцу «Файл» — match.go.
 package names
 
 import (
@@ -21,40 +23,6 @@ func SetPerson(p *model.Project, photoID string, who *model.Person) {
 	}
 	r.Person = who
 	p.Photos[photoID] = r
-}
-
-// Paste — имена из списка people по порядку фото листа (места сетки по порядку или лента
-// «Авто»): i-е имя — i-му фото. extra — строк больше, чем фото; missing — фото листа без
-// имени после вставки (не хватило строк и имени из файла нет). Групповое фото виньетки
-// (031) пропускается: имя одного человека ему не подходит.
-func Paste(p *model.Project, spreadID string, people []model.Person) (extra, missing int, err error) {
-	s := p.Sheet(spreadID) // и обложка (032 §1)
-	if s == nil {
-		return 0, 0, errNoSpread
-	}
-	ids := s.Photos
-	if s.IsVignette() {
-		ids = nil
-		for _, pl := range s.Grid {
-			if pl.Photo != "" && pl.Role != model.RoleGroup {
-				ids = append(ids, pl.Photo)
-			}
-		}
-	}
-	for i, id := range ids {
-		r, ok := p.Photos[id]
-		if !ok {
-			continue
-		}
-		if i < len(people) {
-			r.Person = model.ClampPerson(people[i])
-			p.Photos[id] = r
-		}
-		if who, _ := r.Name(); who == nil {
-			missing++
-		}
-	}
-	return max(0, len(people)-len(ids)), missing, nil
 }
 
 // SetSheetCaps — общий стиль подписей листа: on — c (уже зажат ClampSheetCaps), иначе

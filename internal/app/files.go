@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
-	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -154,58 +154,6 @@ func (a *App) saveAs(ed *album.Editor, path string) (model.View, error) {
 
 func (a *App) draftPath() string { return filepath.Join(a.cfgDir, "черновик"+projectExt) }
 
-// loadStartup открывает последний проект, а если его нет — черновик; иначе пустой.
-// Файл, который есть, но не открылся, не должен быть затёрт пустым проектом:
-// чужой .salbum остаётся как есть (path пуст, автосохранение пишет только черновик),
-// а сломанный черновик уходит в «черновик.bad-<время>.salbum» рядом. Черновик более новой
-// версии (ErrNewer) не сломан: его не трогаем, а автосохранение черновика на сессию выключаем.
-func (a *App) loadStartup(last string) (p *model.Project, path, notice string) {
-	var notes []string
-	for _, cand := range []string{last, a.draftPath()} {
-		if cand == "" {
-			continue
-		}
-		if cand == last && !reachable(cand) {
-			// Отключённый сетевой диск: Load ждал бы таймаута, окно — пустое. LastProject не трогаем:
-			// со следующим запуском при сети альбом откроется.
-			notes = append(notes, "Диск "+filepath.VolumeName(cand)+" с последним альбомом недоступен. Открыт черновик.")
-			continue
-		}
-		loaded, err := salbum.Load(cand)
-		if err == nil {
-			if cand == a.draftPath() {
-				cand = ""
-			}
-			return loaded, cand, strings.Join(notes, " ")
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			if cand == last {
-				notes = append(notes, "Последний проект не найден: "+cand+". Открыт черновик.")
-			}
-			continue
-		}
-		log.Printf("не открылся проект %s: %v", filepath.Base(cand), paths.NoPath(err))
-		if cand != a.draftPath() {
-			notes = append(notes, "Не открылся проект: "+err.Error()+".")
-			continue
-		}
-		if errors.Is(err, salbum.ErrNewer) {
-			a.draftNewer.Store(true)
-			notes = append(notes, "Черновик сохранён более новой версией программы, здесь он не открывается и не изменится.")
-			continue
-		}
-		bad := a.badDraftPath(time.Now())
-		if rerr := a.rename(cand, bad); rerr != nil {
-			log.Printf("черновик не удалось сохранить в %s: %v", filepath.Base(bad), paths.NoPath(rerr))
-			a.draftLocked.Store(true)
-			notes = append(notes, "Не открылся черновик ("+err.Error()+") и не сохранён отдельно: автосохранение отключено до перезапуска.")
-		} else {
-			notes = append(notes, "Не открылся черновик ("+err.Error()+"). Копия сохранена: "+bad+".")
-		}
-	}
-	return model.New(), "", strings.Join(notes, " ")
-}
-
 // blankEditor — редактор нового пустого альбома изделия product.
 func blankEditor(product string) *album.Editor {
 	p := model.New()
@@ -221,24 +169,6 @@ func freshEditor(p *model.Project) *album.Editor {
 		panic(err)
 	}
 	return ed
-}
-
-// startEditor — редактор для проекта loadStartup; возвращает путь и уведомление. Load отдаёт
-// проверенный проект, и отказ NewEditor сюда не доходит (Load ⊆ Check, FuzzLoad). Если всё же —
-// пустой альбом, а черновик до перезапуска не пишется (draftLocked). Замок ставится и когда
-// отвергнут LastProject при целом черновике: иначе автосохранение пустого альбома затёрло бы
-// черновик; «Новый» потом переименует черновик в .bad.
-// В log.txt — без текста ошибки: в нём путь.
-func (a *App) startEditor(p *model.Project, path, notice string) (string, string) {
-	ed, err := album.NewEditor(p, path)
-	if err == nil {
-		a.ed.Store(ed)
-		return path, notice
-	}
-	log.Printf("проект при запуске не прошёл проверку путей")
-	a.draftLocked.Store(true)
-	a.ed.Store(blankEditor(""))
-	return "", strings.TrimSpace(notice + " Не открылся проект: " + err.Error() + ". Автосохранение отключено до перезапуска.")
 }
 
 // badDraftPath — куда уходит сломанный черновик.
@@ -332,36 +262,6 @@ func (a *App) save() {
 	}
 }
 
-// ShowPhotoInExplorer показывает файл фото альбома в Проводнике. Путь берётся из
-// проекта по ID, от интерфейса не принимается (как ShowInExplorer). Файла нет —
-// открывается его папка; нет и её — ошибка.
-func (a *App) ShowPhotoInExplorer(id string) error {
-	r, ok := a.editor().Ref(id)
-	if !ok {
-		return errors.New("фото нет в альбоме")
-	}
-	path := filepath.Clean(r.Path)
-	if err := paths.CheckLocalPath(path); err != nil {
-		return errors.New("путь к фото недоступен")
-	}
-	if st, err := os.Stat(path); err == nil && !st.IsDir() {
-		return revealPath(path, true)
-	}
-	if dir := filepath.Dir(path); isDir(dir) {
-		return revealPath(dir, false)
-	}
-	return errors.New("файл не найден")
-}
-
-// revealPath — запуск файлового менеджера; в тестах подменяется, чтобы не стартовать процесс.
-// file — выделить файл в его папке, иначе открыть папку. Ждать завершения не нужно.
-var revealPath = osx.Reveal
-
-func isDir(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && st.IsDir()
-}
-
 // Настройки и «Последние» — рядом с открытием файлов: OpenRecent идёт через openPath.
 
 // config.json лежит в папке данных App (cfgDir); логика и замок — в internal/prefs.
@@ -450,4 +350,200 @@ func (a *App) Recent() []prefs.RecentProject {
 func (a *App) ClearRecent() []prefs.RecentProject {
 	a.updateConfig(func(c *prefs.Config) { c.Recent = nil })
 	return []prefs.RecentProject{}
+}
+
+// Резервные копии альбома (спека 019 E). a.backups == nil — копий нет, остальное работает.
+
+// BackupInfo — строка «Резервных копий». Time — unix-миллисекунды (местное время из имени).
+type BackupInfo struct {
+	Name    string `json:"name"`
+	Time    int64  `json:"time"`
+	Size    int64  `json:"size"`
+	Spreads int    `json:"spreads"`
+	Photos  int    `json:"photos"`
+}
+
+const backupNotice = "Это резервная копия — сохраните её через «Сохранить как»"
+
+// startBackups — хранилище копий и чистка старых в фоне (startup).
+func (a *App) startBackups() {
+	root := backup.DefaultRoot()
+	if root == "" {
+		return
+	}
+	a.backups = backup.New(root)
+	a.pruneBackups()
+}
+
+// pruneBackups — общая чистка копий в фоне: при старте и каждые несколько записей за сеанс.
+func (a *App) pruneBackups() {
+	if a.stopped.Load() {
+		return // выход: closeBackground уже ждёт фон
+	}
+	a.bg.Go(func() {
+		defer guard("резервные копии")
+		if err := a.backups.Prune(); err != nil {
+			log.Printf("резервные копии, чистка: %v", paths.NoPath(err))
+		}
+	})
+}
+
+// backupKey — папка копий альбома path ("" — черновик).
+func backupKey(path string) string {
+	if path == "" {
+		return backup.DraftKey
+	}
+	return backup.Key(path)
+}
+
+// backupBefore — копия прежнего файла перед его перезаписью: force — без учёта «раз в 10 минут».
+// Сбой копии не мешает сохранению: только лог (с ключом, без пути).
+func (a *App) backupBefore(path, key string, force bool) {
+	a.backupKeep(path, key, force, "")
+}
+
+// backupKeep — backupBefore, только чистка не удаляет копию keep ("" — любую).
+func (a *App) backupKeep(path, key string, force bool, keep string) {
+	// Пропавший сетевой диск: чтение ждало бы таймаута SMB, а следом его ждёт и сама запись.
+	if a.backups == nil || !reachable(path) {
+		return
+	}
+	var err error
+	switch {
+	case keep != "":
+		err = a.backups.ForceKeep(path, key, keep)
+	case force:
+		err = a.backups.Force(path, key)
+	default:
+		err = a.backups.Before(path, key)
+	}
+	if err != nil {
+		log.Printf("резервная копия %s: %s", key, paths.NoPath(err))
+	}
+	if a.backups.PruneDue() {
+		a.pruneBackups()
+	}
+}
+
+// backupDraft — копия черновика перед тем, как его удалят или затрут чужим содержимым;
+// пустой черновик не копируем.
+func (a *App) backupDraft() { a.backupDraftKeep("") }
+
+// backupDraftKeep — backupDraft, чистка не удаляет копию keep.
+func (a *App) backupDraftKeep(keep string) {
+	if a.backups == nil || a.draftNewer.Load() || !backup.HasContent(a.draftPath()) {
+		return
+	}
+	a.backupKeep(a.draftPath(), backup.DraftKey, true, keep)
+}
+
+// Backups — копии текущего альбома (или черновика), новые первыми.
+func (a *App) Backups() (list []BackupInfo, err error) {
+	defer guardErr("Backups", &err)
+	list = []BackupInfo{}
+	if a.backups == nil {
+		return list, nil
+	}
+	ents, err := a.backups.List(backupKey(a.editor().Path()))
+	if err != nil {
+		return list, err
+	}
+	for _, e := range ents {
+		list = append(list, BackupInfo{Name: e.Name, Time: e.Time.UnixMilli(), Size: e.Size, Spreads: e.Spreads, Photos: e.Photos})
+	}
+	return list, nil
+}
+
+// RestoreBackup заменяет альбом содержимым копии name одним шагом отмены. Имя — только из
+// Backups: путь строится по ключу текущего альбома. Перед заменой текущий файл уходит в копию,
+// а сама name при этой чистке не удаляется: иначе после Ctrl+Z её версии нигде не было бы.
+func (a *App) RestoreBackup(name string) (v model.View, err error) {
+	defer a.guardEdit("RestoreBackup", &v, &err)
+	ed := a.editor()
+	path := ed.Path()
+	key := backupKey(path)
+	file, ferr := a.backups.File(key, name)
+	if ferr != nil {
+		return ed.View(), backup.ErrNotFound
+	}
+	base := "" // черновик: только абсолютные пути
+	if path != "" {
+		if abs, aerr := filepath.Abs(path); aerr == nil {
+			base = filepath.Dir(abs) // альбом переехал вместе с фото — относительные пути найдут их
+		}
+	}
+	q, lerr := album.LoadBase(file, base)
+	switch {
+	case errors.Is(lerr, salbum.ErrNewer):
+		return ed.View(), errors.New("копия записана более новой версией программы")
+	case errors.Is(lerr, os.ErrNotExist):
+		return ed.View(), backup.ErrNotFound
+	case lerr != nil:
+		return ed.View(), lerr
+	}
+	if path != "" {
+		a.backupKeep(path, key, true, name)
+	} else {
+		a.backupDraftKeep(name)
+	}
+	before := ed.Folders()
+	v, err = ed.Restore(q)
+	if err != nil {
+		return v, err
+	}
+	v = a.changed(v)
+	// Недостающие при смене набора фото без смены папок пересчитывает changed.
+	if !slices.Equal(before, v.Folders) {
+		a.rescan()
+	}
+	return v, nil
+}
+
+// ShowBackups открывает папку копий текущего альбома в Проводнике; её нет — корень копий.
+func (a *App) ShowBackups() error {
+	if a.backups == nil {
+		return errors.New("папка резервных копий недоступна")
+	}
+	dir := a.backups.Dir(backupKey(a.editor().Path()))
+	if dir == "" || !isDir(dir) {
+		dir = a.backups.Root
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+	}
+	return revealPath(dir, false)
+}
+
+// openBackup открывает копию несохранённым альбомом: папку копий программа сама не перезаписывает,
+// LastProject и «Последние» не меняются. Прежний черновик — в копию: автосохранение его затрёт.
+func (a *App) openBackup(path string) (State, error) {
+	p, err := album.LoadBase(path, "")
+	if err != nil {
+		return a.GetState(), err
+	}
+	ed, err := album.NewEditor(p, "")
+	if err != nil {
+		return a.GetState(), err
+	}
+	a.flushSave()
+	a.backupDraft()
+	a.ed.Store(ed)
+	a.rescan()
+	st := a.emitState()
+	a.notice(backupNotice)
+	return st, nil
+}
+
+// checkSaveTarget — «Сохранить как» в папку копий запрещено: её чистит Prune.
+func (a *App) checkSaveTarget(path string) error {
+	if a.backups.Inside(path) {
+		return fmt.Errorf("сохраните альбом в другую папку: здесь резервные копии")
+	}
+	return nil
+}
+
+// rememberProject — альбом стал текущим файлом: в конфиг и папку диалога.
+func (a *App) rememberProject(path string) {
+	a.updateConfig(func(c *prefs.Config) { c.LastProject = path; c.Recent = prefs.PushRecent(c.Recent, path) })
+	a.rememberDir(prefs.DirProject, filepath.Dir(path))
 }

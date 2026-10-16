@@ -41,8 +41,6 @@ export function clampMaxPer(v: number): number {
   return Number.isFinite(v) ? clampInt(v, 1, MAX_PER) : MAX_PER
 }
 
-const num = (x: number) => x.toFixed(1).replace('.', ',').replace(/,0$/, '')
-
 export type Anchor = 'spreads' | 'per'
 // Куда ведёт кнопка ⇄: во второе поле — не то, что трогали последним (якорь). Фокус при щелчке уже ушёл с поля,
 // поэтому смотрим на якорь, а не на активный элемент.
@@ -55,8 +53,8 @@ export interface Lim {
   max: number
 }
 
-// Среднее в поле: одна цифра, запятая («21,4»; целое — «4»).
-export const perText = (n: number, spreads: number): string => (spreads > 0 ? num(n / spreads) : '')
+// Среднее в поле — целое round(n / N): дробь «9,1» в поле выглядит странно, дробь нигде не показываем.
+export const perText = (n: number, spreads: number): string => (spreads > 0 ? String(Math.round(n / spreads)) : '')
 
 // X («фото на разворот») → N = round(n / X) в пределах ползунка; не число или ≤ 0 — null (N не трогаем).
 export function spreadsForPer(n: number, x: number, lim: Lim): number | null {
@@ -64,14 +62,15 @@ export function spreadsForPer(n: number, x: number, lim: Lim): number | null {
   return clampInt(n / x, lim.min, lim.max)
 }
 
-// Шаг ↑↓ в поле среднего: ≈ 0,5 фото, но N меняется хотя бы на 1 (на больших n шаг N = 1 даёт меньше 0,5).
-// dir = +1 — среднее растёт, N падает.
+// Шаг ↑↓ в поле среднего: показанное целое round(n / N) меняется ровно на 1 (если N±1 даёт то же — идём дальше),
+// N меняется хотя бы на 1, в пределах ползунка. dir = +1 — среднее растёт, N падает.
 export function perStep(n: number, spreads: number, dir: 1 | -1, lim: Lim): number {
-  const avg = n / spreads
-  let next: number
-  if (dir > 0) next = Math.min(spreads - 1, Math.round(n / (avg + 0.5)))
-  else next = avg - 0.5 <= 0 ? spreads + 1 : Math.max(spreads + 1, Math.round(n / (avg - 0.5)))
-  return clampInt(next, lim.min, lim.max)
+  const shown = Math.round(n / spreads)
+  const end = dir > 0 ? Math.max(1, lim.min) : lim.max
+  for (let k = spreads + (dir > 0 ? -1 : 1); dir > 0 ? k >= end : k <= end; k -= dir) {
+    if (Math.round(n / k) !== shown) return clampInt(k, lim.min, lim.max)
+  }
+  return clampInt(end, lim.min, lim.max)
 }
 
 // «от 3 до 6»; ровные группы — «по 4».
@@ -120,9 +119,9 @@ export function albumAfter(have: number, spreads: number, unit: Unit = SPREAD, r
   return reuse > 0 ? `${s} — пустые в конце (${reuse}) займёт сборка` : s
 }
 
-// Подсказка под ползунком: «≈ 4,3 фото на разворот, от 3 до 6»; ровные группы — «по 4 фото на разворот».
+// Подсказка под ползунком: «от 3 до 6 фото на разворот»; ровные группы — «по 4 фото на разворот». Дробного среднего
+// нигде не показываем (решение владельца): в поле — целое round(n / N).
 export function planHint(p: AutoPlan, unit: Unit = SPREAD): string {
   if (p.photos === 0) return 'Нет фото для сборки'
-  if (p.min === p.max) return `по ${p.min} фото на ${unit.one}`
-  return `≈ ${num(p.avg)} фото на ${unit.one}, от ${p.min} до ${p.max}`
+  return `${rangeText(p)} фото на ${unit.one}`
 }

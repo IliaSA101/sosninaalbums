@@ -222,7 +222,7 @@ func TestAddPlaceFreezesAuto(t *testing.T) {
 	id := v.Spreads[0].ID
 	rects := v.Spreads[0].Rects
 	undo := edtest.UndoLen(e)
-	if _, err := e.AddPlace(id, 1); err != nil {
+	if _, err := e.AddPlace(id, 1, ""); err != nil {
 		t.Fatal(err)
 	}
 	edtest.MustGrid(t, e)
@@ -236,7 +236,7 @@ func TestAddPlaceFreezesAuto(t *testing.T) {
 	}
 	// Разворот без фото (только текст): сетка с нуля.
 	v, _ = e.NewSpread(-1, nil)
-	if _, err := e.AddPlace(v.Spreads[1].ID, 0); err != nil || len(edtest.P(e).Spreads[1].Grid) != 1 {
+	if _, err := e.AddPlace(v.Spreads[1].ID, 0, ""); err != nil || len(edtest.P(e).Spreads[1].Grid) != 1 {
 		t.Fatalf("пустой разворот: %v, мест %d", err, len(edtest.P(e).Spreads[1].Grid))
 	}
 }
@@ -398,7 +398,7 @@ func TestPlaces64(t *testing.T) {
 		t.Fatalf("мест после закрепления: %d", n)
 	}
 	rev := e.View().Rev
-	if v, err := e.AddPlace(sid, 1); err == nil || v.Rev != rev || len(edtest.P(e).Spreads[0].Grid) != 64 {
+	if v, err := e.AddPlace(sid, 1, ""); err == nil || v.Rev != rev || len(edtest.P(e).Spreads[0].Grid) != 64 {
 		t.Fatalf("65-е место: ошибка %v, мест %d", err, len(edtest.P(e).Spreads[0].Grid))
 	}
 	v := e.SetGrid(sid, false)

@@ -6,7 +6,7 @@ import { bgmode } from '../../editor/backdrop/bgmode.svelte'
 import { photoui } from '../../editor/photo/photoui.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { edit } from '../../editor/text/edit.svelte'
-import { gallery } from '../../panels/layouts/gallery.svelte'
+import { gallery } from '../../panels/gallery/gallery.svelte'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
 import { libfilter } from '../../panels/marks/libfilter.svelte'
 
@@ -21,8 +21,10 @@ export function narrow() {
       if (prefs.can('variants')) gallery.open('spread', 'layouts')
       else gallery.close()
     }
-    gridAct.copyGrid = null
+    if (gridAct.copyGrid?.mode !== 'decor') gridAct.copyGrid = null
   }
+  // «Копировать оформление…» держится на функции «Фоны и стикеры», а не на шаблонах
+  if (!prefs.can('decor') && gridAct.copyGrid?.mode === 'decor') gridAct.copyGrid = null
   // Без «Вариантов» вкладка раскладок «Авто» не нужна: на «Шаблоны», если они есть, иначе закрыть.
   if (!prefs.can('variants') && gallery.cur?.tab === 'layouts') {
     if (prefs.can('templates')) gallery.open('spread', 'grids')

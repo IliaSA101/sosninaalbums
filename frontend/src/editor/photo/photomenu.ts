@@ -14,13 +14,17 @@ export type MenuId =
   | 'fitPhoto'
   | 'contain'
   | 'cover'
+  | 'round'
+  | 'rect'
   | 'resetFrame'
   | 'flipH'
   | 'flipV'
   | 'turnCw'
   | 'turnCcw'
+  | 'straighten'
   | 'layer'
   | 'caption'
+  | 'replace'
   | 'delete'
 
 export interface MenuItem {
@@ -37,15 +41,18 @@ export interface MenuCtx {
   grid: boolean
   places: number // выделенных рамок (фото и пустых мест)
   texts: number // блоков текста в группе
+  stickers: number // выделенных стикеров (048); без мест и текстов меню — стикера
   photos: number // из них с фото
   missing: number // из них фото без файла на диске
   differ: boolean // у кого-то пропорции места не совпадают с фото
   allContain: boolean
   allCover: boolean
+  allOval: boolean // форма (044): у всех выделенных круг
+  allRect: boolean // у всех прямоугольник (в «Авто» всегда)
   framed: boolean // одно фото и его кадр изменён
 }
 
-export function menuContext(s: SpreadView | undefined, sel: SelBox[], missing: readonly string[], texts = 0): MenuCtx {
+export function menuContext(s: SpreadView | undefined, sel: SelBox[], missing: readonly string[], texts = 0, stickers = 0): MenuCtx {
   const withPhoto = sel.filter((b) => b.photo)
   const frameOf = (photo: string) => s?.frames?.[s.photos.indexOf(photo)]
   const differ = withPhoto.some((b) => {
@@ -57,11 +64,14 @@ export function menuContext(s: SpreadView | undefined, sel: SelBox[], missing: r
     grid: !!s?.grid,
     places: sel.length,
     texts,
+    stickers,
     photos: withPhoto.length,
     missing: withPhoto.filter((b) => missing.includes(b.photo)).length,
     differ,
     allContain: sel.length > 0 && sel.every((b) => b.fit === 'contain'),
     allCover: sel.length > 0 && sel.every((b) => b.fit !== 'contain'),
+    allOval: sel.length > 0 && sel.every((b) => b.shape === 'oval'),
+    allRect: sel.length > 0 && sel.every((b) => b.shape !== 'oval'),
     framed: !!fv && !isDefaultFrame(fv),
   }
 }
@@ -72,17 +82,22 @@ const FEATURE: Partial<Record<MenuId, FeatureId>> = {
   fitPhoto: 'frame',
   contain: 'frame',
   cover: 'frame',
+  round: 'frame',
+  rect: 'frame',
   resetFrame: 'frame',
   flipH: 'flip',
   flipV: 'flip',
   turnCw: 'turn',
   turnCcw: 'turn',
+  straighten: 'tilt',
   layer: 'layers',
   caption: 'captions',
 }
 
 // can — уровень интерфейса (не задан — всё доступно). В «Простом» меню правой кнопки нет (photoMenu).
 export function photoMenu(c: MenuCtx, can: (f: FeatureId) => boolean = () => true): MenuItem[] {
+  // Только стикеры (048): своё меню под функцией decor, а не photoMenu — стикер не фото.
+  if (c.places === 0 && c.stickers > 0) return can('decor') ? stickerMenu(c, can) : []
   if (c.places === 0 || !can('photoMenu')) return []
   // Линия стоит перед первым пунктом группы: скрыт он — линию получает следующий видимый.
   const out: MenuItem[] = []
@@ -98,6 +113,22 @@ export function photoMenu(c: MenuCtx, can: (f: FeatureId) => boolean = () => tru
 }
 
 const item = (id: MenuId, label: string, extra: Partial<MenuItem> = {}): MenuItem => ({ id, label, ...extra })
+
+// Меню стикеров (048): «Заменить…» и «Зеркало» — у одного стикера; «Слой ▸» — функция слоёв (на «Авто» тоже: мест в цели нет); «Удалить» — всегда.
+function stickerMenu(c: MenuCtx, can: (f: FeatureId) => boolean): MenuItem[] {
+  const solo = c.stickers === 1 && c.texts === 0
+  const n = c.stickers + c.texts
+  const list: (MenuItem | false)[] = [
+    solo && item('replace', 'Заменить…'),
+    solo && item('flipH', 'Зеркало ↔', { sep: true }),
+    solo && item('flipV', 'Зеркало ↕'),
+    can('layers') && item('layer', 'Слой', { sub: true, sep: true }),
+    item('delete', n > 1 ? `Удалить (${n})` : 'Удалить', { hint: 'Del', danger: true, sep: true }),
+  ]
+  const out = list.filter((it): it is MenuItem => !!it)
+  out[0] = { ...out[0], sep: undefined } // линия — только между пунктами
+  return out
+}
 
 // Просмотр, Проводник, имена и перепривязка — про файл.
 function fileItems(c: MenuCtx, one: boolean): MenuItem[] {
@@ -115,6 +146,15 @@ function fileItems(c: MenuCtx, one: boolean): MenuItem[] {
   return out
 }
 
+// Выпрямлять можно одно фото: режим привязан к выделенному фото, группа с текстом ему мешает.
+const canStraighten = (c: MenuCtx) => c.places === 1 && c.photos === 1 && c.texts === 0 && c.stickers === 0
+
+// Форма (044) — у любого места, в том числе пустого: показан пункт, которого нет у всех выделенных.
+const shapeItems = (c: MenuCtx): MenuItem[] => [
+  ...(c.allOval ? [] : [item('round', 'Круглое')]),
+  ...(c.allRect ? [] : [item('rect', 'Прямоугольное')]),
+]
+
 // Место и кадр; линия — перед первым пунктом группы.
 function frameItems(c: MenuCtx): MenuItem[] {
   // Зеркало — фото; «Слой ▸» — любое выделенное место, только «Ручная» (у «Авто» места не перекрываются).
@@ -122,11 +162,14 @@ function frameItems(c: MenuCtx): MenuItem[] {
   const list: (MenuItem | false)[] = [
     hasPhoto && item('turnCw', 'Повернуть ↻ 90°'),
     hasPhoto && item('turnCcw', 'Повернуть ↺ 90°'),
+    // Выпрямить по линии (045): одно фото, без текстов в группе — режим привязан к выделенному фото.
+    canStraighten(c) && item('straighten', 'Выпрямить по линии'),
     hasPhoto && item('flipH', 'Зеркало ↔'),
     hasPhoto && item('flipV', 'Зеркало ↕'),
     hasPhoto && c.differ && item('fitPhoto', 'Пропорции под фото'),
     hasPhoto && !c.allContain && item('contain', 'Целиком'),
     hasPhoto && !c.allCover && item('cover', 'С обрезкой'),
+    ...shapeItems(c),
     c.framed && item('resetFrame', 'Сбросить кадр'),
     c.grid && item('layer', 'Слой', { sub: true }),
   ]
@@ -137,7 +180,7 @@ function frameItems(c: MenuCtx): MenuItem[] {
 
 function build(c: MenuCtx): MenuItem[] {
   const one = c.places === 1 && c.photos === 1
-  const n = c.places + c.texts
+  const n = c.places + c.texts + c.stickers
   return [
     ...fileItems(c, one),
     ...frameItems(c),

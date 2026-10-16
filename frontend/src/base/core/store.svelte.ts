@@ -57,6 +57,10 @@ class Store extends Nav {
   busy = $state(false)
   // Окно «Экспорт» (009 U8) открыто.
   exportOpen = $state(false)
+  // Памятка после выгрузки для Фотосферы Pro (047): не null — открыто окно «Готово для Фотосферы» (shell/export/FsferaDone).
+  exportMemo = $state<string[] | null>(null)
+  exportNote = $state('') // сводка Go о пересчёте цвета к той же памятке
+  exportFolder = $state('') // имя папки книги из плана в момент запуска выгрузки (окно «Готово»)
   byId = $derived(new Map(this.photos.map((p) => [p.id, p])))
   // Фото на фоне: в used не входят (не «в альбоме»), но автосборка и фильтр их не берут (freephotos.ts).
   backdropUsed = $derived(new Set(this.view.backdropUsed ?? []))
@@ -108,11 +112,15 @@ class Store extends Nav {
     // Ошибки, которые Go находит сам (перетащенная папка и т.п.)
     EventsOn('notice', (text: string) => this.notify(text, 'error'))
     // note — сводка Go о пересчёте цвета (может быть пустой или отсутствовать у старого Go).
-    EventsOn('export:done', (_dir: string, err: string, note?: string) => {
+    // memo (047) — строки памятки для Фотосферы: вместо тоста открывается окно «Готово», тост нужен только при ошибке.
+    EventsOn('export:done', (_dir: string, err: string, note?: string, memo?: string[] | null) => {
       const total = this.exporting?.total
       this.exporting = null
       if (err) this.notify('Экспорт не удался: ' + errText(err), 'error')
-      else
+      else if (memo?.length) {
+        this.exportMemo = memo
+        this.exportNote = note ?? ''
+      } else
         this.notify(exportDoneText(total, note), 'info', {
           label: 'Открыть папку',
           run: () => Api.ShowInExplorer(),

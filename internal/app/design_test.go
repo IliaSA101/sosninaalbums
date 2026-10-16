@@ -1,29 +1,32 @@
 package app
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/gif"
 	"image/jpeg"
 	"io"
-	"io/fs"
 	"log"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/namesfile"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
-	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
@@ -86,28 +89,6 @@ func TestEditPanicKeepsView(t *testing.T) {
 	}
 	if v := a.SetBackground("s1", "spread", "#000000"); len(v.Spreads) != 1 {
 		t.Fatalf("без ошибки в ответе тоже текущий вид: %d разворотов", len(v.Spreads))
-	}
-}
-
-// SetTextScale через App: новый кегль в ответе, неизвестный блок — вид без ошибки.
-func TestSetTextScale(t *testing.T) {
-	a := newApp(t)
-	p := model.New()
-	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a"}}}
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
-	a.ed.Store(mustEditor(t, p, ""))
-	v, err := a.AddText("s1", 0, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, size := v.Spreads[0].Texts[0].ID, v.Spreads[0].Texts[0].Style.Size
-	x0, y0 := v.Spreads[0].Texts[0].X, v.Spreads[0].Texts[0].Y
-	v, err = a.SetTextScale(id, size+6, x0-3, y0-2)
-	if tv := v.Spreads[0].Texts[0]; err != nil || tv.Style.Size != size+6 || tv.X != x0-3 || tv.Y != y0-2 {
-		t.Fatalf("кегль %v, x %v y %v, ошибка %v", tv.Style.Size, tv.X, tv.Y, err)
-	}
-	if v, err = a.SetTextScale("нет", 20, 0, 0); err != nil || len(v.Spreads) != 1 {
-		t.Fatalf("неизвестный блок: %v", err)
 	}
 }
 
@@ -271,6 +252,8 @@ func TestAppBackdropEditAndExport(t *testing.T) {
 	a.SetBackdropBox("s2", "right", 320, 10, 200, 150, 30, "")
 	a.FlipBackdrop("s2", "right", "h")
 	a.SetBackdropFrame("s2", "right", 2, 0.5, 0)
+	a.SetBackdropAngle("s2", "right", 4.5)  // 045: наклон фона доходит до задания
+	a.StraightenPhoto("s2", "b", 100, 7.87) // линия под 4,5° → наклон фото −4,5
 	pp, view := a.editor().Snapshot()
 	got := export.FromView(pp, view)[1].Backdrops
 	if len(got) != 1 {
@@ -278,11 +261,11 @@ func TestAppBackdropEditAndExport(t *testing.T) {
 	}
 	b := got[0]
 	want := render.Backdrop{Area: view.Spreads[1].Backdrops[0].Area, Rot: 30, FlipH: true, Path: `C:\a.jpg`}
-	if b.Path != want.Path || b.Rot != 30 || !b.FlipH || b.Box.X != 320 || b.Box.W != 200 || b.Area != want.Area || b.Img.W <= b.Box.W {
-		t.Fatalf("фон в задании: %+v", b)
+	if b.Path != want.Path || b.Rot != 30 || !b.FlipH || b.Box.X != 320 || b.Box.W != 200 || b.Area != want.Area || b.Img.W <= b.Box.W || b.ImgRot != 4.5 || view.Spreads[1].Frames[0].Tilt != -4.5 {
+		t.Fatalf("фон в задании: %+v, наклон фото %v", b, view.Spreads[1].Frames[0].Tilt)
 	}
-	if v := a.FitBackdrop("s2", "right"); v.Spreads[1].Backdrops[0].Box.Rot != 0 {
-		t.Fatal("FitBackdrop не сбросил поворот")
+	if v := a.FitBackdrop("s2", "right"); v.Spreads[1].Backdrops[0].Box.Rot != 0 || a.StraightenBackdrop("s2", "right", 100, -7.87).Spreads[1].Backdrops[0].Frame.R != 9 {
+		t.Fatal("FitBackdrop не сбросил поворот рамки, сбросил наклон или StraightenBackdrop не выпрямил")
 	}
 	if v := a.ClearBackdrop("s2", "right"); len(v.Spreads[1].Backdrops) != 0 || len(v.BackdropUsed) != 0 {
 		t.Fatalf("ClearBackdrop: %+v", v.Spreads[1].Backdrops)
@@ -436,163 +419,172 @@ func TestAppResetMarks(t *testing.T) {
 
 func ptr[T any](v T) *T { return &v }
 
-// Методы App над кадром, текстами и подписями: каждый возвращает вид с применённой правкой
-// (ревизия растёт), а Undo откатывает её.
-func TestAppDesignSurface(t *testing.T) {
-	a := gridApp(t)
-	rev := func() int { return a.editor().View().Rev }
-	grew := func(name string, before int, v model.View) {
-		t.Helper()
-		if v.Rev <= before {
-			t.Errorf("%s: правка не применена (rev %d → %d)", name, before, v.Rev)
+// «Загрузить таблицу…»: диалог и папка — в App, чтение файла — в namesfile (его тесты). Здесь: xlsx
+// и csv дают сведения, папка запоминается; отказ — Cancelled без ошибки; сбой диалога, мёртвый диск,
+// пропавший файл — ошибка (файл не запоминается). Проект не меняется.
+func TestPickNamesFile(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	dir := testkit.TempDir(t)
+	put := func(name string, data []byte) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, data, 0o600); err != nil {
+			t.Fatal(err)
 		}
+		return p
 	}
+	oldDlg, oldReach := openFileDialog, reachable
+	t.Cleanup(func() { openFileDialog, reachable = oldDlg, oldReach })
+	var (
+		pick    string
+		pickErr error
+		opts    wr.OpenDialogOptions
+	)
+	openFileDialog = func(_ context.Context, o wr.OpenDialogOptions) (string, error) { opts = o; return pick, pickErr }
+	snap := func() []byte { p, _ := a.editor().Snapshot(); return model.Marshal(p) }
+	before := snap()
 
-	// Кадр и поворот фото b (разворот «Авто»).
-	r := rev()
-	v := a.SetFrame("b", 2, 0.5, -0.5)
-	grew("SetFrame", r, v)
-	if f := v.Spreads[1].Frames[0]; f.S != 2 || f.X != 0.5 || f.Y != -0.5 {
-		t.Errorf("кадр: %+v", f)
+	pick = put("Класс.csv", []byte("Фамилия;Имя\r\nИванов;Пётр\r\n"))
+	f, err := a.PickNamesFile()
+	if want := (NamesFile{Text: "Фамилия\tИмя\nИванов\tПётр", File: "Класс.csv", Rows: 2}); err != nil || f != want {
+		t.Fatalf("csv: %+v, %v", f, err)
 	}
-	r = rev()
-	v = a.ResetFrame("b")
-	grew("ResetFrame", r, v)
-	if f := v.Spreads[1].Frames[0]; f.S != 1 || f.X != 0 || f.Y != 0 {
-		t.Errorf("сброс кадра: %+v", f)
+	if opts.Title != "Таблица с именами" || len(opts.Filters) != 1 || opts.Filters[0].Pattern != "*.xlsx;*.csv;*.txt" ||
+		a.dialogDir(dirNames) != dir {
+		t.Fatalf("диалог %+v, папка %q", opts, a.dialogDir(dirNames))
 	}
-	r = rev()
-	v = a.SetFrameAngle("b", 10)
-	grew("SetFrameAngle", r, v)
-	if f := v.Spreads[1].Frames[0]; f.Tilt != 10 {
-		t.Errorf("наклон: %+v", f)
+	// Отказ — без ошибки; сбой диалога — ошибка, а не отказ.
+	pick = ""
+	if f, err = a.PickNamesFile(); err != nil || f != (NamesFile{Cancelled: true}) {
+		t.Fatalf("отказ: %+v, %v", f, err)
 	}
-	r = rev()
-	v = a.TurnPhotos([]string{"b"}, 1)
-	grew("TurnPhotos", r, v)
-	if f := v.Spreads[1].Frames[0]; f.Turn != 1 {
-		t.Errorf("поворот: %+v", f)
+	pickErr = errors.New("диалог не открылся")
+	if f, err = a.PickNamesFile(); err == nil || f.Cancelled {
+		t.Fatalf("сбой диалога: %+v, %v", f, err)
 	}
-	r = rev()
-	v = a.SetFlip([]string{"b"}, "h")
-	grew("SetFlip", r, v)
-	if !v.Spreads[1].Frames[0].FlipH {
-		t.Error("зеркало не включено")
+	pickErr = nil
+	// Пропавший файл: слова для пользователя без пути (остальные ошибки — в namesfile).
+	other := testkit.TempDir(t)
+	pick = filepath.Join(other, "Нет.xlsx")
+	if f, err = a.PickNamesFile(); !errors.Is(err, namesfile.ErrGone) || f != (NamesFile{}) || strings.Contains(err.Error(), other) {
+		t.Fatalf("нет файла: %+v, %v", f, err)
 	}
-	r = rev()
-	v = a.SetBackground("s2", "left", "#112233")
-	grew("SetBackground", r, v)
-	if v.Spreads[1].BgSet[0] != "#112233" {
-		t.Errorf("фон: %v", v.Spreads[1].BgSet)
+	reachable = func(string) bool { return false }
+	pick = filepath.Join(dir, "Класс.csv")
+	if _, err = a.PickNamesFile(); err == nil || !strings.Contains(err.Error(), "недоступен") {
+		t.Fatalf("мёртвый диск: %v", err)
 	}
-
-	// Название разворота.
-	r = rev()
-	v = a.SetSpreadName("s2", "Церемония")
-	grew("SetSpreadName", r, v)
-	if v.Spreads[1].Name != "Церемония" {
-		t.Errorf("название: %q", v.Spreads[1].Name)
+	// Отказ и ошибки ничего не запомнили: папка диалога — от последнего принятого файла.
+	if a.dialogDir(dirNames) != dir {
+		t.Fatalf("папка диалога %q", a.dialogDir(dirNames))
 	}
-
-	// Текстовый блок: добавить, править, двигать, повернуть, стиль, удалить.
-	r = rev()
-	v, err := a.AddText("s2", 0, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	grew("AddText", r, v)
-	tid := v.Spreads[1].Texts[len(v.Spreads[1].Texts)-1].ID
-	text := func(v model.View) model.TextView { return textOf(t, v.Spreads[1], tid) }
-	r = rev()
-	v = a.SetText(tid, "Привет", "")
-	grew("SetText", r, v)
-	if text(v).Text != "Привет" {
-		t.Errorf("текст: %q", text(v).Text)
-	}
-	r = rev()
-	v = a.SetTextBox(tid, 20, 30, 80)
-	grew("SetTextBox", r, v)
-	if tv := text(v); tv.Auto || tv.W != 80 {
-		t.Errorf("рамка: %+v", tv)
-	}
-	r = rev()
-	v = a.SetTextAngle(tid, 15)
-	grew("SetTextAngle", r, v)
-	if text(v).Rot != 15 {
-		t.Errorf("угол: %v", text(v).Rot)
-	}
-	r = rev()
-	v = a.SetTextAuto(tid)
-	grew("SetTextAuto", r, v)
-	if !text(v).Auto {
-		t.Error("ширина по тексту не включена")
-	}
-	st := text(v).Style
-	st.Size += 2
-	r = rev()
-	v = a.SetTextStyle(tid, st)
-	grew("SetTextStyle", r, v)
-	if text(v).Style.Size != st.Size {
-		t.Errorf("кегль: %v", text(v).Style.Size)
-	}
-	r = rev()
-	v, err = a.SetTextScale(tid, st.Size+4, 25, 35)
-	if err != nil {
-		t.Fatal(err)
-	}
-	grew("SetTextScale", r, v)
-	r = rev()
-	v = a.DeleteText(tid)
-	grew("DeleteText", r, v)
-	if len(v.Spreads[1].Texts) != 0 {
-		t.Errorf("тексты после удаления: %d", len(v.Spreads[1].Texts))
-	}
-
-	// Подпись к фото.
-	r = rev()
-	v = a.SetCaption("b", "Под снимком", "")
-	grew("SetCaption", r, v)
-	if len(v.Spreads[1].Captions) == 0 || v.Spreads[1].Captions[0].Text != "Под снимком" {
-		t.Fatalf("подпись: %+v", v.Spreads[1].Captions)
-	}
-	r = rev()
-	v = a.SetCaptionStyle("b", v.Spreads[1].Captions[0].Style, true, 1)
-	grew("SetCaptionStyle", r, v)
-	if !v.Spreads[1].Captions[0].Over {
-		t.Error("подпись не на фото")
-	}
-
-	// Каждая правка — шаг отмены: после всех Undo имя разворота и кадр вернулись.
-	for a.editor().View().CanUndo {
-		a.Undo()
-	}
-	v = a.editor().View()
-	if v.Spreads[1].Name != "" || len(v.Spreads[1].Captions) != 0 || v.Spreads[1].Frames[0].S != 1 {
-		t.Errorf("после отмены всего: %+v", v.Spreads[1])
+	if !bytes.Equal(snap(), before) {
+		t.Fatal("загрузка таблицы изменила проект")
 	}
 }
 
-// textOf — текстовый блок разворота по ID; пропал — провал теста.
-func textOf(t *testing.T, sv model.SpreadView, id string) model.TextView {
+// rowsBook — книга .xlsx из одного листа: rows как есть, пустая строка — пустая ячейка (inlineStr).
+func rowsBook(t *testing.T, rows [][]string) []byte {
 	t.Helper()
-	for _, tv := range sv.Texts {
-		if tv.ID == id {
-			return tv
+	const main = `xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"`
+	const rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+	var sheet strings.Builder
+	for i, row := range rows {
+		sheet.WriteString(`<row>`)
+		for j, s := range row {
+			fmt.Fprintf(&sheet, `<c r="%c%d" t="inlineStr"><is><t>%s</t></is></c>`, 'A'+j, i+1, s)
+		}
+		sheet.WriteString(`</row>`)
+	}
+	var b bytes.Buffer
+	w := zip.NewWriter(&b)
+	for _, p := range [][2]string{
+		{"xl/workbook.xml", `<workbook ` + main + ` xmlns:r="` + rel + `"><sheets><sheet name="Класс" sheetId="1" r:id="rId1"/></sheets></workbook>`},
+		{"xl/_rels/workbook.xml.rels", `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+			`<Relationship Id="rId1" Type="` + rel + `/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`},
+		{"xl/worksheets/sheet1.xml", `<worksheet ` + main + `><sheetData>` + sheet.String() + `</sheetData></worksheet>`},
+	} {
+		f, err := w.Create(p[0])
+		if err == nil {
+			_, err = f.Write([]byte(p[1]))
+		}
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
-	t.Fatal("текст пропал")
-	return model.TextView{}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
 }
 
-// В лог — без путей пользователя.
-func TestBackupErrHidesPaths(t *testing.T) {
-	const secret = `C:\Users\Имя\Альбомы\Ивановы.salbum`
-	for _, err := range []error{
-		&fs.PathError{Op: "open", Path: secret, Err: fs.ErrPermission},
-		&os.LinkError{Op: "rename", Old: secret + ".1.tmp", New: secret, Err: fs.ErrExist},
-	} {
-		if got := paths.NoPath(err).Error(); strings.Contains(got, "Имя") || !strings.Contains(got, err.(interface{ Unwrap() error }).Unwrap().Error()) {
-			t.Errorf("лог: %q", got)
+// Сквозной путь: таблица (CSV «;» и xlsx) → PickNamesFile (table.Read, Sheet.Text) → PreviewNames
+// (names.Read). Sheet.Text снимает пустые хвостовые ячейки, и ученик без предмета не должен
+// превратиться в учителя или остаться без имени: роли и имена те же из обоих форматов.
+func TestPickNamesFileToPreview(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	dir := testkit.TempDir(t)
+	oldDlg := openFileDialog
+	t.Cleanup(func() { openFileDialog = oldDlg })
+	var pick string
+	openFileDialog = func(context.Context, wr.OpenDialogOptions) (string, error) { return pick, nil }
+	p := model.New()
+	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a", "b", "c"}}}
+	for _, id := range []string{"a", "b", "c"} {
+		p.Photos[id] = model.PhotoRef{Path: filepath.Join(dir, "DSC_"+id+".jpg"), W: 300, H: 200}
+	}
+	a.ed.Store(mustEditor(t, p, ""))
+	rows := [][]string{{"ФИО", "Предмет"}, {"Сидорова Ольга Петровна", "Математика"}, {"Иванов Пётр Сергеевич", ""}, {"Козлова Мария", ""}}
+	csv := "ФИО;Предмет\r\nСидорова Ольга Петровна;Математика\r\nИванов Пётр Сергеевич;\r\nКозлова Мария;\r\n"
+	for name, data := range map[string][]byte{"Класс.csv": []byte(csv), "Класс.xlsx": rowsBook(t, rows)} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
 		}
+		pick = path
+		f, err := a.PickNamesFile()
+		if err != nil || f.Rows != 4 {
+			t.Fatalf("%s: %+v, %v", name, f, err)
+		}
+		plan, err := a.PreviewNames("s1", model.NamesOpts{Text: f.Text})
+		if err != nil || plan.Teachers != 1 || plan.Pupils != 2 || plan.Seats != 3 || plan.Named != 3 || plan.Missing != 0 || plan.Extra != 0 ||
+			!slices.Equal(plan.Cols, []string{"ФИО", "Предмет"}) || len(plan.Rows) != 3 {
+			t.Fatalf("%s: предпросмотр %+v, %v", name, plan, err)
+		}
+		for i, want := range []model.Person{{Last: "Сидорова", First: "Ольга", Middle: "Петровна", Subject: "Математика"}, // 049
+			{Last: "Иванов", First: "Пётр", Middle: "Сергеевич"}, {Last: "Козлова", First: "Мария"}} {
+			if who := plan.Rows[i].Who; who == nil || *who != want {
+				t.Errorf("%s: место %d — %+v, ждали %+v", name, i+1, who, want)
+			}
+		}
+	}
+}
+
+// PreviewNames и PasteNames через App: предпросмотр без события и rev, вставка — с итогом
+// «подписано N из M»; ошибка разбора — без правки.
+func TestAppPreviewNames(t *testing.T) {
+	a := newApp(t)
+	a.cfgDir = testkit.TempDir(t)
+	p := model.New()
+	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a", "b"}}}
+	p.Photos["a"] = model.PhotoRef{Path: filepath.Join(testkit.TempDir(t), "01_иванов_петя.jpg"), W: 300, H: 200}
+	p.Photos["b"] = model.PhotoRef{Path: filepath.Join(testkit.TempDir(t), "DSC_0012.jpg"), W: 300, H: 200}
+	a.ed.Store(mustEditor(t, p, ""))
+	events := 0
+	a.emit = func(string, ...any) { events++ }
+	rev := a.editor().View().Rev
+	plan, err := a.PreviewNames("s1", model.NamesOpts{From: "files"})
+	if err != nil || len(plan.Rows) != 2 || plan.Rows[0].Who == nil || plan.Rows[0].Who.Last != "Иванов" || plan.Rows[1].Who != nil ||
+		a.editor().View().Rev != rev || events != 0 {
+		t.Fatalf("предпросмотр: %+v, %v, событий %d", plan, err, events)
+	}
+	r, err := a.PasteNames("s1", model.NamesOpts{From: "files", Caption: true})
+	if err != nil || r.Named != 1 || r.Seats != 2 || r.Missing != 1 || r.Extra != 0 || r.View.Rev == rev ||
+		r.View.Spreads[0].Caps == nil || r.View.Spreads[0].Caps.Text != "{Фамилия} {Имя}" {
+		t.Fatalf("вставка: %+v, %v", r, err)
+	}
+	if _, err := a.PreviewNames("нет", model.NamesOpts{Text: "А"}); err == nil {
+		t.Fatal("чужой разворот принят")
 	}
 }

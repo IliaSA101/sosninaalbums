@@ -8,18 +8,51 @@ const eps = 1e-9
 // grid — параметры сетки портретов: промежутки, пропорция, полоса подписи.
 type grid struct {
 	gx, gy, a, hs float64
+	// stagger — шахматка (049 §1.3.5): «ряды» — полуряды с шагом hp, полуряд i занимает
+	// столбцы j ≡ i (mod 2). Соседи по вертикали — в разных столбцах, в одном столбце шаг
+	// cellH + gy: подписи не налезают на портреты.
+	stagger bool
+	cell    bool // шапка в ряду (049 §1.3.4): вместимость и раскладка — cellFits и cellPlace
+}
+
+// fits — n мест портретом pw встают в rs.
+func (g grid) fits(n int, rs []Rect, pw float64) bool {
+	if g.cell {
+		g.stagger = false // как в cellPlace
+		_, _, _, ok := g.cellSplit(n, rs, pw)
+		return ok
+	}
+	return g.capacity(rs, pw) >= n
 }
 
 // cellH — высота ячейки: портрет и полоса подписи под ним.
 func (g grid) cellH(pw float64) float64 { return pw/g.a + g.hs }
 
-// dims — сколько столбцов и рядов портрета шириной pw входит в r.
+// hp — шаг полуряда шахматки.
+func (g grid) hp(pw float64) float64 { return (g.cellH(pw) + g.gy) / 2 }
+
+// capOf — мест в сетке cols×rows (у шахматки rows — полуряды): чётные полуряды берут
+// ⌈cols/2⌉ столбцов, нечётные — ⌊cols/2⌋.
+func (g grid) capOf(cols, rows int) int {
+	if !g.stagger {
+		return cols * rows
+	}
+	return (cols+1)/2*((rows+1)/2) + cols/2*(rows/2)
+}
+
+// dims — сколько столбцов и рядов (у шахматки — полурядов) портрета шириной pw входит в r.
 func (g grid) dims(r Rect, pw float64) (cols, rows int) {
 	if r.W <= 0 || r.H <= 0 || pw <= 0 {
 		return 0, 0
 	}
 	cols = int(math.Floor((r.W+g.gx)/(pw+g.gx) + eps))
 	rows = int(math.Floor((r.H+g.gy)/(g.cellH(pw)+g.gy) + eps))
+	if g.stagger {
+		rows = 0
+		if r.H+eps >= g.cellH(pw) {
+			rows = int(math.Floor((r.H-g.cellH(pw))/g.hp(pw)+eps)) + 1
+		}
+	}
 	return max(cols, 0), max(rows, 0)
 }
 
@@ -28,7 +61,7 @@ func (g grid) capacity(rs []Rect, pw float64) int {
 	n := 0
 	for _, r := range rs {
 		c, k := g.dims(r, pw)
-		n += c * k
+		n += g.capOf(c, k)
 	}
 	return n
 }
@@ -44,15 +77,15 @@ func (g grid) maxPW(n int, rs []Rect) float64 {
 		return 0
 	}
 	lo := hi * 1e-4
-	if g.capacity(rs, lo) < n {
+	if !g.fits(n, rs, lo) {
 		return 0
 	}
-	if g.capacity(rs, hi) >= n {
+	if g.fits(n, rs, hi) {
 		return hi
 	}
 	for range 40 {
 		mid := (lo + hi) / 2
-		if g.capacity(rs, mid) >= n {
+		if g.fits(n, rs, mid) {
 			lo = mid
 		} else {
 			hi = mid
@@ -112,7 +145,7 @@ func (g grid) place(n int, rs []Rect, pw float64) []Rect {
 	cols := make([]int, len(rs))
 	for i, r := range rs {
 		c, k := g.dims(r, pw)
-		caps[i], cols[i] = c*k, c
+		caps[i], cols[i] = g.capOf(c, k), c
 	}
 	ks := share(n, caps)
 	out := make([]Rect, 0, n)
@@ -126,6 +159,9 @@ func (g grid) place(n int, rs []Rect, pw float64) []Rect {
 func (g grid) block(k, cols int, r Rect, pw float64) []Rect {
 	if k <= 0 || cols <= 0 {
 		return nil
+	}
+	if g.stagger {
+		return g.blockStagger(k, cols, r, pw)
 	}
 	rows := (k + cols - 1) / cols
 	cols = (k + rows - 1) / rows
@@ -141,6 +177,30 @@ func (g grid) block(k, cols int, r Rect, pw float64) []Rect {
 			out = append(out, Rect{x + float64(c)*(pw+g.gx), y, pw, ph})
 		}
 		y += ch + g.gy
+	}
+	return out
+}
+
+// blockStagger — k мест шахматкой при вместимости cols столбцов: наименьшее число полурядов,
+// затем столбцов (как у block — ряды полные, блок узкий), блок по центру области. k не больше
+// capOf(cols, полурядов области), поэтому блок не выходит за r.
+func (g grid) blockStagger(k, cols int, r Rect, pw float64) []Rect {
+	rows := 1
+	for g.capOf(cols, rows) < k {
+		rows++
+	}
+	for cols > 1 && g.capOf(cols-1, rows) >= k {
+		cols--
+	}
+	hp, ph := g.hp(pw), pw/g.a
+	blockW := float64(cols)*pw + float64(cols-1)*g.gx
+	blockH := float64(rows-1)*hp + g.cellH(pw)
+	x0, y0 := r.X+(r.W-blockW)/2, r.Y+(r.H-blockH)/2
+	out := make([]Rect, 0, k)
+	for i := 0; i < rows && len(out) < k; i++ {
+		for j := i % 2; j < cols && len(out) < k; j += 2 {
+			out = append(out, Rect{x0 + float64(j)*(pw+g.gx), y0 + float64(i)*hp, pw, ph})
+		}
 	}
 	return out
 }

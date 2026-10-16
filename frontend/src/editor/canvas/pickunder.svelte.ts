@@ -5,12 +5,13 @@ import { store } from '../../base/core/store.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { edit } from '../text/edit.svelte'
 import { placesel } from '../places/placesel.svelte'
+import { sticker } from '../sticker/sticker.svelte'
 import { moveSelected } from '../places/groupgesture'
 import { additive } from '../places/gesture'
-import { gestureClickAllowed, markDone } from '../places/placegesture'
+import { markDone } from '../places/placegesture'
 import { bgmode } from '../backdrop/bgmode.svelte'
 import { drag } from '../../base/drag/drag.svelte'
-import { gallery } from '../../panels/layouts/gallery.svelte'
+import { gallery } from '../../panels/gallery/gallery.svelte'
 import { canvas } from './canvas.svelte'
 import { pressPlan, stackAt, type PickItem, type PickKind, type PressPlan } from './pickunder'
 import type { SpreadView } from '../../base/core/types'
@@ -34,11 +35,14 @@ let picked: { item: PickItem; sig: string } | null = null
 // Подпись выделения: меняется при любом другом выделении, в том числе на другом развороте.
 function sigOf(sid: string): string {
   const e = edit.sel
-  return `${sid}|${placesel.refs.join(',')}|${placesel.texts.join(',')}|${e ? e.kind + ':' + e.id : ''}`
+  return `${sid}|${placesel.refs.join(',')}|${placesel.texts.join(',')}|${placesel.stickers.join(',')}|${e ? e.kind + ':' + e.id : ''}`
 }
 
 // Одиночное выделение текущего разворота; группа — null.
 function selection(s: SpreadView): { kind: PickKind; ref: string } | null {
+  const solo = placesel.soloSticker
+  if (solo) return { kind: 'sticker', ref: solo.id }
+  if (placesel.stickers.length > 0) return null
   const e = edit.sel
   if (e) return e.spread === s.id && placesel.refs.length + placesel.texts.length === 0 ? { kind: e.kind, ref: e.id } : null
   if (placesel.texts.length > 0 || placesel.refs.length !== 1) return null
@@ -99,6 +103,7 @@ export const pickOwns = (e: PointerEvent): boolean => planOf(e)?.press === 'move
 
 function selectItem(item: PickItem, sid: string) {
   if (item.kind === 'text' || item.kind === 'caption') edit.select({ kind: item.kind, spread: sid, id: item.ref })
+  else if (item.kind === 'sticker') placesel.pickSticker(item.ref, false)
   else {
     if (edit.sel) edit.clear()
     placesel.pick(item.ref, false)
@@ -113,6 +118,9 @@ function startMove(e: PointerEvent, item: PickItem, p: PickParams) {
   if (item.kind === 'text') {
     const t = s.texts.find((x) => x.id === item.ref)
     if (t) p.tg.start(e, t, 'move')
+  } else if (item.kind === 'sticker') {
+    const st = s.stickers?.find((x) => x.id === item.ref)
+    if (st) sticker.move(e, root, st)
   } else if (item.kind === 'photo' || item.kind === 'place') {
     if (s.grid && prefs.can('manual')) moveSelected(e, root)
     else if (item.kind === 'photo') drag.start(e, () => ({ kind: 'photos', ids: [item.ref], fromSpread: s.id }))
@@ -156,22 +164,67 @@ function markUsed() {
   if (!h.used) saveHint({ ...h, used: true })
 }
 
+// Нажатие, на которое ждём щелчок.
+interface Press {
+  x: number
+  y: number
+  ctx: Ctx
+  sid: string
+  far: boolean
+}
+
+// Слежение за нажатием до отпускания: уход дальше порога (far) и Esc (cancel); после pointerup press
+// сбрасывается (щелчок идёт сразу за ним), без щелчка — следующим нажатием. Возвращает снятие слушателей.
+function watchPress(cur: Press, cancel: () => void, done: () => void): () => void {
+  const onMove = (m: PointerEvent) => {
+    if (Math.hypot(m.clientX - cur.x, m.clientY - cur.y) > CLICK_SLOP) cur.far = true
+  }
+  const onKey = (k: KeyboardEvent) => {
+    if (k.key === 'Escape') cancel()
+  }
+  const off = () => {
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('keydown', onKey, true)
+    window.removeEventListener('pointerup', onUp)
+    done()
+  }
+  const onUp = () => {
+    off()
+    setTimeout(cancel, 0)
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('keydown', onKey, true)
+  window.addEventListener('pointerup', onUp)
+  return off
+}
+
 // ---------- action ----------
 
 export function pickUnder(node: HTMLElement, init: PickParams) {
   params.set(node, init)
   // Нажатие, на которое ждём щелчок: координаты и план.
-  let press: { x: number; y: number; ctx: Ctx; sid: string } | null = null
+  // far — нажатие уходило дальше порога (перенос), даже если вернулось: это не щелчок.
+  let press: Press | null = null
+  let unwatch: (() => void) | null = null
 
   function down(e: PointerEvent) {
+    unwatch?.()
     press = null
     const ctx = ctxOf(e)
     if (!ctx) return
     const { plan } = ctx
     if (plan.press === 'pass' && plan.click === 'pass') picked = null
-    press = { x: e.clientX, y: e.clientY, ctx, sid: ctx.params.spread().id }
-    // press сбрасывается после щелчка (он идёт сразу за pointerup); без щелчка — следующим нажатием.
-    window.addEventListener('pointerup', () => setTimeout(() => (press = null), 0), { once: true })
+    const cur: Press = { x: e.clientX, y: e.clientY, ctx, sid: ctx.params.spread().id, far: false }
+    press = cur
+    // Свои слушатели вместо флага жеста: drive.up поднимает его на каждом отпускании,
+    // и щелчок после Alt-нажатия на стикер/фото терялся.
+    unwatch = watchPress(
+      cur,
+      () => {
+        if (press === cur) press = null
+      },
+      () => (unwatch = null),
+    )
     if (plan.press !== 'move' || !plan.move) return
     e.stopPropagation()
     // Щелчок после переноса не должен снять выделение с поля.
@@ -183,9 +236,9 @@ export function pickUnder(node: HTMLElement, init: PickParams) {
     const pr = press
     if (!pr) return
     const { plan, top } = pr.ctx
-    const still = Math.hypot(e.clientX - pr.x, e.clientY - pr.y) <= CLICK_SLOP
+    const still = !pr.far && Math.hypot(e.clientX - pr.x, e.clientY - pr.y) <= CLICK_SLOP
     if (plan.press === 'move') e.stopPropagation() // нажатие было наше
-    if (plan.click === 'select' && plan.select && still && drag.clickAllowed() && gestureClickAllowed()) {
+    if (plan.click === 'select' && plan.select && still && drag.clickAllowed()) {
       e.stopPropagation()
       const before = sigOf(pr.sid)
       selectItem(plan.select, pr.sid)
@@ -220,6 +273,7 @@ export function pickUnder(node: HTMLElement, init: PickParams) {
       node.removeEventListener('pointerdown', down, true)
       node.removeEventListener('click', click, true)
       node.removeEventListener('dblclick', dbl, true)
+      unwatch?.()
       params.delete(node)
     },
   }

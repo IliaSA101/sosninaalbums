@@ -36,6 +36,9 @@ func Relink(p *model.Project, moves map[string]string, addFolder string) (files,
 func RelinkDrive(p *model.Project, from, to string) (files, dirs []model.PathPair) {
 	moves := map[string]string{}
 	for id, r := range p.Photos {
+		if r.Lib != "" { // своё из библиотеки не лежит на диске фотографа (RelinkLib)
+			continue
+		}
 		if _, here := fileSize(r.Path); here {
 			continue
 		}
@@ -60,8 +63,8 @@ func RelinkDrive(p *model.Project, from, to string) (files, dirs []model.PathPai
 	return files, dirs
 }
 
-// relink меняет пути фото из moves и пересчитывает ID. Пропускает: неизвестный ID,
-// нелокальный путь, путь, уже занятый другим фото (повтор файла в альбоме).
+// relink меняет пути фото из moves и пересчитывает ID. Пропускает: неизвестный ID, своё из
+// библиотеки (путь от искателя, RelinkLib), нелокальный путь, путь, уже занятый другим фото (повтор файла в альбоме).
 func relink(p *model.Project, moves map[string]string) []model.PathPair {
 	used := make(map[string]string, len(p.Photos))
 	for id, r := range p.Photos {
@@ -76,7 +79,7 @@ func relink(p *model.Project, moves map[string]string) []model.PathPair {
 	var pairs []model.PathPair
 	for _, id := range slices.Sorted(maps.Keys(moves)) {
 		ref, ok := p.Photos[id]
-		if !ok || paths.CheckLocalPath(moves[id]) != nil {
+		if !ok || ref.Lib != "" || paths.CheckLocalPath(moves[id]) != nil {
 			continue
 		}
 		np := filepath.Clean(moves[id])

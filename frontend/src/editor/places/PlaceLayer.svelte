@@ -7,6 +7,7 @@
   import { photoui } from '../photo/photoui.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { layerIndex } from './layers'
+  import { shapeCss } from '../../base/geom/shape'
 
   // Пустые места сетки (спека 007). Занятые рисует Cell. Пустое место без режима (спека 008):
   // щелчок выделяет (Shift/Ctrl — добавляет), тело переносит место; рамку и ручки рисует SelFrame. Лежат в той же обёртке, что и ячейки:
@@ -42,6 +43,7 @@
     style:width="{(p.w / sw) * 100}%"
     style:height="{(p.h / spread.h) * 100}%"
     style:z-index={layerIndex(p.z)}
+    style:border-radius={shapeCss(p.shape, placesel.liveRadius([p.id], p.radius ?? 0, p.w, p.h), p.w, p.h)}
     style:transform={p.rot ? `rotate(${p.rot}deg)` : undefined}
     data-drop={mini ? undefined : 'place'}
     data-spread={spread.id}

@@ -17,9 +17,10 @@ func (e *Editor) SetGrid(spreadID string, on bool) model.View {
 	return e.change(func(p *model.Project) { grid.SetGrid(p, spreadID, on) })
 }
 
-// AddPlace. Договор: до правки ничего; лимит мест — ошибка try, откат без шага.
-func (e *Editor) AddPlace(spreadID string, page int) (model.View, error) {
-	return e.try("", func(p *model.Project) error { return grid.AddPlace(p, spreadID, page) })
+// AddPlace. Договор: до правки ничего; лимит мест — ошибка try, откат без шага; чужая
+// форма — прямоугольник внутри.
+func (e *Editor) AddPlace(spreadID string, page int, shape string) (model.View, error) {
+	return e.try("", func(p *model.Project) error { return grid.AddPlace(p, spreadID, page, shape) })
 }
 
 // SetPlaces. Договор: у «Авто» merge сбрасывается до правки (закрепление не должно
@@ -41,6 +42,19 @@ func (e *Editor) DeletePlaces(spreadID string, ids []string) model.View {
 // SetPlaceFit. Договор: до правки ничего; режим вне ""/FitContain — холостая внутри.
 func (e *Editor) SetPlaceFit(spreadID string, ids []string, fit string) model.View {
 	return e.change(func(p *model.Project) { grid.SetPlaceFit(p, spreadID, ids, fit) })
+}
+
+// SetPlaceShape. Договор: до правки ничего; форма вне ""/ShapeOval — холостая внутри.
+func (e *Editor) SetPlaceShape(spreadID string, ids []string, shape string) model.View {
+	return e.change(func(p *model.Project) { grid.SetPlaceShape(p, spreadID, ids, shape) })
+}
+
+// SetPlaceRound. Договор: NaN/Inf — холостая до правки (текущий View); предел — внутри.
+func (e *Editor) SetPlaceRound(spreadID string, ids []string, round float64) model.View {
+	if math.IsNaN(round) || math.IsInf(round, 0) {
+		return e.View()
+	}
+	return e.change(func(p *model.Project) { grid.SetPlaceRound(p, spreadID, ids, round) })
 }
 
 // ArrangePlaces. Договор: до правки ничего; неизвестный op — холостая, слишком
@@ -103,6 +117,22 @@ func (e *Editor) PlanCopyGrid(src, from string, targets []model.GridTarget, desi
 	var c *model.Project
 	e.read(func(p *model.Project) { c = p.Clone() })
 	return grid.PlanCopyGrid(c, src, from, targets, design, mirror)
+}
+
+// CopyDecor (049 Ф2). Договор: до правки ничего; область и цели — ошибка try; все цели с тем
+// же оформлением — холостая (без шага).
+func (e *Editor) CopyDecor(src, from string, targets []model.GridTarget, texts, mirror bool) (model.View, error) {
+	return e.try("", func(p *model.Project) error {
+		_, err := grid.CopyDecor(p, src, from, targets, texts, mirror)
+		return err
+	})
+}
+
+// PlanCopyDecor. Договор: как PlanCopyGrid — сухой прогон на копии, снятой под замком.
+func (e *Editor) PlanCopyDecor(src, from string, targets []model.GridTarget, texts, mirror bool) model.GridPlan {
+	var c *model.Project
+	e.read(func(p *model.Project) { c = p.Clone() })
+	return grid.PlanCopyDecor(c, src, from, targets, texts, mirror)
 }
 
 // DuplicateGrid. Договор: count < 1 — холостая до правки (текущий View).

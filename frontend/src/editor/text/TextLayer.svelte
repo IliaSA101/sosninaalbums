@@ -61,7 +61,7 @@
     const el = e.target as Element | null
     if (el?.closest?.('[data-text-ui]')) return true
     if (!additive(e)) return false
-    return !!(el?.closest?.('[data-photo], [data-place]') || (el?.closest?.('.stage') && emptyField(el)))
+    return !!(el?.closest?.('[data-photo], [data-place], [data-sticker]') || (el?.closest?.('.stage') && emptyField(el)))
   }
 
   // Глобальные слушатели — только у большого разворота.

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   albumPhotos,
   driveLabel,
+  LIB_MISSING_TEXT,
   isHidden,
+  libMissingText,
   missTip,
   missingIn,
   missingKey,
@@ -11,6 +13,7 @@ import {
   missingWhere,
   relinkSummary,
   showMissing,
+  splitMissing,
   spotLabel,
 } from './missing'
 
@@ -107,5 +110,41 @@ describe('missing: где фото', () => {
     expect(isHidden(k, missingKey(['a', 'b', 'c'], 1))).toBe(false)
     expect(isHidden(k, missingKey(['a', 'b'], 2))).toBe(false)
     expect(isHidden(k, missingKey([], 1))).toBe(false)
+  })
+})
+
+describe('missing: свои из библиотеки (048)', () => {
+  it('свои — не в «Найти»: пропавшие делятся по View.libPhotos', () => {
+    expect(splitMissing(['a', 'lib1', 'b', 'lib2'], ['lib1', 'lib2', 'lib3'])).toEqual({ photos: ['a', 'b'], own: ['lib1', 'lib2'] })
+    expect(splitMissing(['a', 'b'], [])).toEqual({ photos: ['a', 'b'], own: [] })
+    expect(splitMissing(['a'], undefined)).toEqual({ photos: ['a'], own: [] })
+    expect(splitMissing(['a'], null)).toEqual({ photos: ['a'], own: [] })
+    expect(splitMissing([], ['lib1'])).toEqual({ photos: [], own: [] })
+  })
+
+  it('строка полосы про свои: сколько, где и без слова «Найти»', () => {
+    expect(libMissingText(2)).toBe('Нет в библиотеке этого компьютера: 2 — загрузите те же файлы, они найдутся сами')
+    expect(libMissingText(1, 'разворот 4')).toBe(
+      'Нет в библиотеке этого компьютера: 1 (разворот 4) — загрузите те же файлы, они найдутся сами',
+    )
+    expect(libMissingText(2)).not.toMatch(/найти/i)
+  })
+
+  it('текст карточки фона — как в спеке', () => {
+    expect(LIB_MISSING_TEXT).toBe('Нет в библиотеке этого компьютера. Загрузите тот же файл — он найдётся сам')
+  })
+
+  it('стикер с фото из библиотеки считается и ищется по листу; процедурный (без фото) — нет', () => {
+    const sheets = [
+      { id: 's1', photos: ['a'], stickers: [{ photo: 'stk1' }, {}] },
+      { id: 's2', photos: [], stickers: null },
+    ]
+    expect(missingIn(sheets[0], new Set(['stk1']))).toBe(1)
+    expect(missingIn(sheets[0], new Set())).toBe(0)
+    expect(missingWhere(missingSpots(sheets, ['stk1']), U)).toBe('разворот 1')
+  })
+
+  it('где стоят свои: ищется и среди фонов листа', () => {
+    expect(missingWhere(missingSpots(SHEETS, ['bg']), U)).toBe('разворот 2')
   })
 })

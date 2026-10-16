@@ -140,6 +140,12 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	}
 	fixCover(p, f.Cover, base, v1)
 	for id, fp := range f.Photos {
+		if fp.Lib != "" { // своё из библиотеки: путь — от искателя (lib.go)
+			if ref, ok := resolveLib(fp); ok {
+				p.Photos[id] = ref
+			}
+			continue
+		}
 		ref, err := resolvePhoto(fp, base, v1)
 		if err != nil {
 			return nil, fmt.Errorf("фото в проекте: %w", err)
@@ -169,6 +175,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	}
 	coverNoAuto(p)
 	p.FitTexts()
+	p.FitStickers()
 	p.LoadOrder()
 	p.SetLoaded(decodeMarks(f.Marks, base, p.Folders))
 	return p, nil
@@ -324,7 +331,7 @@ func refresh(ref *model.PhotoRef, size int64) {
 // probeDims читает размеры из заголовка с учётом поворота EXIF: пересохранённое
 // фото могли и повернуть, а пропорции нужны раскладке точные.
 func probeDims(path string) (w, h int, ok bool) {
-	if !reachable(path) {
+	if path == "" || !reachable(path) {
 		return 0, 0, false
 	}
 	ph, err := library.ReadInfo(path)
@@ -408,7 +415,8 @@ func RelPath(base, path string) (string, bool) {
 }
 
 // Check — пути проекта из памяти (NewEditor, Restore) по правилам Load: после decodeFile
-// каждый путь — абсолютный локальный (candidates), поэтому CheckLocalPath и только он; CheckRel
+// каждый путь — абсолютный локальный (candidates), поэтому CheckLocalPath и только он (у
+// своего из библиотеки путь бывает пуст, ключ — по грамматике); CheckRel
 // здесь не нужен — относительный путь CheckLocalPath не пропустит. Без диска: Load уже стучался
 // к файлам, второй обход тысяч фото открытие только замедлит. Отметки — из p.Loaded().
 func Check(p *model.Project) error {
@@ -423,6 +431,12 @@ func Check(p *model.Project) error {
 		}
 	}
 	for _, r := range p.Photos {
+		if r.Lib != "" && !model.ValidLibKey(r.Lib) {
+			return fmt.Errorf("фото в проекте: недопустимый ключ библиотеки %s", paths.LogQ(r.Lib))
+		}
+		if r.Lib != "" && r.Path == "" && r.Alt == "" {
+			continue // своё, которого нет в библиотеке этого компьютера
+		}
 		if err := checkPair("фото", r.Path, r.Alt); err != nil {
 			return err
 		}
@@ -481,6 +495,11 @@ func encodeWith(p *model.Project, base string, marks map[string]model.Mark) ([]b
 	for id, ref := range p.Photos {
 		fp := FilePhoto{PhotoRef: ref}
 		fp.Alt = ""
+		if ref.Lib != "" {
+			fp.Path = "" // своё — по ключу: путей к библиотеке и личных путей в альбоме нет
+			f.Photos[id] = fp
+			continue
+		}
 		if r, ok := RelPath(base, ref.Path); ok {
 			fp.Path, fp.Abs = r, ref.Path
 		}

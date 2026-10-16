@@ -1,6 +1,7 @@
 package export
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -186,5 +187,112 @@ func TestMissingPhotosNamesMenu(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "Недостающие") {
 		t.Errorf("устаревший пункт меню: %v", err)
+	}
+}
+
+// Свои из библиотеки (048): «Найти пропавшие фото…» их не ищет — отдельная строка без имени
+// файла (путь пуст), с подсказкой загрузить те же файлы; вместе с обычными — обе строки.
+func TestMissingPhotosLib(t *testing.T) {
+	p := selectProject()
+	p.Photos["k1"] = model.PhotoRef{Lib: "my:0123456789abcdef", W: 4, H: 3}
+	p.Photos["k2"] = model.PhotoRef{Lib: "my:fedcba9876543210", Path: "/lib/k2.jpg", W: 4, H: 3}
+	// exists("") — true: пустой путь своего пропавшим делает MissingPhotos, а не проверка файла.
+	gone := func(paths ...string) func(string) bool {
+		return func(path string) bool { return !slices.Contains(paths, path) }
+	}
+
+	err := MissingPhotos(p, map[string]bool{"a": true, "k1": true}, gone())
+	if err == nil || !strings.Contains(err.Error(), "нет в библиотеке этого компьютера: 1 (свой фон)") ||
+		strings.Contains(err.Error(), "не найдены файлы") || strings.Contains(err.Error(), "Найти пропавшие") ||
+		!strings.HasSuffix(err.Error(), "повторите выгрузку") {
+		t.Fatalf("один свой: %v", err)
+	}
+	err = MissingPhotos(p, map[string]bool{"b": true, "k1": true, "k2": true}, gone("/x/b.jpg", "/lib/k2.jpg"))
+	if err == nil || !strings.Contains(err.Error(), "не найдены файлы фото: 1 (b.jpg); найдите их: Файл ▸ Найти пропавшие фото…") ||
+		!strings.Contains(err.Error(), "нет в библиотеке этого компьютера: 2 (свои фоны)") || strings.Contains(err.Error(), "k2.jpg") {
+		t.Fatalf("обычное и два своих: %v", err)
+	}
+	if err := MissingPhotos(p, map[string]bool{"a": true, "k2": true}, gone()); err != nil {
+		t.Fatalf("свой на месте: %v", err)
+	}
+}
+
+// Свои стикеры (048) — в выгрузке, как фото фона: страница — если описанная рамка заходит на
+// неё (поворот вокруг центра), прозрачный на 100 % не в счёт, процедурный фото не даёт;
+// обложка — только при обложке в плане.
+func TestSelectedPhotosStickers(t *testing.T) {
+	const pageW = 300.0
+	own := func(id string, x, w, rot, fade float64) model.StickerView {
+		return model.StickerView{ID: "k" + id, Photo: id, X: x, Y: 10, W: w, H: 40, Rot: rot, Fade: fade, Known: true}
+	}
+	v := model.View{Spreads: []model.SpreadView{
+		{Stickers: []model.StickerView{own("left", 10, 50, 0, 0), own("hidden", 400, 50, 0, 1),
+			{ID: "art", Art: &model.Art{Kind: "star"}, Gen: true, Known: true, X: 400, W: 50, H: 50}}},
+		{Stickers: []model.StickerView{own("cross", 280, 40, 0, 0)}}, // 280..320 — через шов
+		// Рамка 280..330 через шов, под 90° вокруг центра (305) описанная — 285..325: обе страницы;
+		// рамка 250..299 под 90° — 254,5..294,5: только левая.
+		{Stickers: []model.StickerView{own("rot", 280, 50, 90, 0), own("rotl", 250, 49, 90, 0)}},
+	}, Cover: &model.CoverView{Sheet: model.SpreadView{Stickers: []model.StickerView{own("cv", 10, 20, 0, 0), own("cvh", 10, 20, 0, 1)}}}}
+	pl := func(spec string) Plan {
+		u, err := ParseRange(spec, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return NewPlan(u, 3, true)
+	}
+	keys := func(m map[string]bool) []string {
+		var out []string
+		for k := range m {
+			out = append(out, k)
+		}
+		slices.Sort(out)
+		return out
+	}
+	for _, c := range []struct {
+		name string
+		plan Plan
+		want []string
+	}{
+		{"все", NewPlan(nil, 3, false), []string{"cross", "left", "rot", "rotl"}},
+		{"1п", pl("1п"), nil},
+		{"1л", pl("1л"), []string{"left"}},
+		{"2л", pl("2л"), []string{"cross"}},
+		{"2п", pl("2п"), []string{"cross"}},
+		{"3л", pl("3л"), []string{"rot", "rotl"}},
+		{"3п", pl("3п"), []string{"rot"}},
+		{"с обложкой", NewPlan(nil, 3, false).WithCover(&CoverJob{}), []string{"cross", "cv", "left", "rot", "rotl"}},
+	} {
+		if got := keys(c.plan.SelectedPhotos(v, pageW)); !slices.Equal(got, c.want) {
+			t.Errorf("%s: %v, ждали %v", c.name, got, c.want)
+		}
+	}
+}
+
+// Пропавший свой стикер: строка про библиотеку называет стикер и галерею стикеров; со своим
+// фоном — оба вида и обе галереи; стикер обложки — тоже стикер.
+func TestMissingPhotosLibSticker(t *testing.T) {
+	p := selectProject()
+	p.Photos["k1"] = model.PhotoRef{Lib: "my:0123456789abcdef", W: 4, H: 3}
+	p.Photos["k2"] = model.PhotoRef{Lib: "my:fedcba9876543210", W: 4, H: 3}
+	p.Photos["k3"] = model.PhotoRef{Lib: "my:00000000000000aa", W: 4, H: 3}
+	p.Spreads = []*model.Spread{{ID: "s1", BgPhoto: &model.Backdrop{Photo: "k1"},
+		Stickers: []*model.Sticker{{ID: "st1", Photo: "k2"}, {ID: "st2", Art: &model.Art{Kind: "star"}}}}}
+	p.Cover = &model.Cover{Sheet: &model.Spread{ID: model.CoverID, Stickers: []*model.Sticker{{ID: "st3", Photo: "k3"}}}}
+	for _, c := range []struct {
+		ids  []string
+		want string
+	}{
+		{[]string{"k2"}, "нет в библиотеке этого компьютера: 1 (свой стикер); загрузите те же файлы в галерею стикеров, они найдутся сами"},
+		{[]string{"k2", "k3"}, "нет в библиотеке этого компьютера: 2 (свои стикеры); загрузите те же файлы в галерею стикеров"},
+		{[]string{"k1", "k2", "a"}, "нет в библиотеке этого компьютера: 2 (свои фоны и стикеры); загрузите те же файлы в галереи фонов и стикеров"},
+		{[]string{"k1"}, "нет в библиотеке этого компьютера: 1 (свой фон); загрузите те же файлы в галерею фонов"},
+	} {
+		sel := map[string]bool{}
+		for _, id := range c.ids {
+			sel[id] = true
+		}
+		if err := MissingPhotos(p, sel, func(string) bool { return true }); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%v: %v", c.ids, err)
+		}
 	}
 }

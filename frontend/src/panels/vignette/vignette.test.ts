@@ -5,6 +5,7 @@ import {
   canMakeVignette,
   clampCount,
   formOf,
+  MAX_TEACHERS,
   groupCount,
   isVignette,
   leftText,
@@ -51,6 +52,11 @@ describe('totalPlaces', () => {
 })
 
 describe('clampCount', () => {
+  it('учителей до 32 (049, MaxTeachers)', () => {
+    expect(MAX_TEACHERS).toBe(32)
+    expect(clampCount(100, MAX_TEACHERS)).toBe(32)
+    expect(clampCount('25', MAX_TEACHERS)).toBe(25)
+  })
   it('пусто, мусор и минус — 0; дробное вниз; сверху предел', () => {
     expect(clampCount('', 18)).toBe(0)
     expect(clampCount('abc', 18)).toBe(0)

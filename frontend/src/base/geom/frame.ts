@@ -2,6 +2,7 @@
 // (internal/geom/frame.go, geom.PlaceImage): геометрию считает Go, это только предпросмотр сдвига, масштаба и наклона,
 // пока не отпущена кнопка. Паритет держат общие векторы testdata/parity/frames.json.
 import type { Frame, Rect } from '../core/types'
+import type { Outline } from './shape'
 
 export const MIN_SCALE = 1
 export const MAX_SCALE = 4
@@ -46,18 +47,35 @@ export function sinCosDeg(deg: number): [number, number] {
   return [Math.sin(t), Math.cos(t)]
 }
 
+// Габарит формы w×h в осях фото, повёрнутого на θ (c = |cos θ|, s = |sin θ|); зеркало Outline.bound в Go
+// (044 design §2.1). Форма выпукла, поэтому внутри фото она ⇔ внутри её габарит. При θ = 0 у всех форм — w×h.
+function boundOf(w: number, h: number, c: number, s: number, o?: Outline): { w: number; h: number } {
+  if (o?.oval) {
+    const a = w / 2
+    const b = h / 2
+    return { w: 2 * Math.sqrt(a * a * c * c + b * b * s * s), h: 2 * Math.sqrt(a * a * s * s + b * b * c * c) }
+  }
+  const rad = o?.radius && o.radius > 0 ? Math.min(o.radius, Math.min(w, h) / 2) : 0
+  if (rad > 0) {
+    const iw = w - 2 * rad
+    const ih = h - 2 * rad
+    return { w: iw * c + ih * s + 2 * rad, h: iw * s + ih * c + 2 * rad }
+  }
+  return { w: w * c + h * s, h: w * s + h * c }
+}
+
 // Рамка в осях повёрнутого на r фото: описанный прямоугольник (w, h) и знаковые sin, cos угла.
-function boundIn(cell: Rect, r: number): { w: number; h: number; sn: number; cs: number } {
+function boundIn(cell: Rect, r: number, o?: Outline): { w: number; h: number; sn: number; cs: number } {
   const [sn, cs] = sinCosDeg(r)
-  const s = Math.abs(sn)
-  const c = Math.abs(cs)
-  return { w: cell.w * c + cell.h * s, h: cell.w * s + cell.h * c, sn, cs }
+  const b = boundOf(cell.w, cell.h, Math.abs(cs), Math.abs(sn), o)
+  return { ...b, sn, cs }
 }
 
 // Фото целиком (мм) для ячейки: cover × S, сдвиг — доля свободного хода. При r ≠ 0 фото повёрнуто
-// вокруг своего центра и закрывает рамку; результат — прямоугольник в осях самого фото.
-export function placeImage(cell: Rect, aspect: number, f: Frame): Rect {
-  if (f.r) return placeImageRot(cell, aspect, f, f.r)
+// вокруг своего центра и закрывает рамку (или её форму o — круг, скругление); результат — прямоугольник
+// в осях самого фото. Без наклона форма не влияет: габарит любой формы — рамка.
+export function placeImage(cell: Rect, aspect: number, f: Frame, o?: Outline): Rect {
+  if (f.r) return placeImageRot(cell, aspect, f, f.r, o)
   // Без поворота — прежняя формула дословно: иной порядок сложений меняет последний бит (как и в Go).
   let w = cell.w
   let h = cell.w / aspect
@@ -72,8 +90,8 @@ export function placeImage(cell: Rect, aspect: number, f: Frame): Rect {
   return { x: cell.x - (fx * (1 + f.x)) / 2, y: cell.y - (fy * (1 + f.y)) / 2, w, h }
 }
 
-function placeImageRot(cell: Rect, aspect: number, f: Frame, r: number): Rect {
-  const b = boundIn(cell, r)
+function placeImageRot(cell: Rect, aspect: number, f: Frame, r: number, o?: Outline): Rect {
+  const b = boundIn(cell, r, o)
   let w = b.w
   let h = b.w / aspect
   if (h < b.h) {
@@ -100,21 +118,21 @@ export function effectiveDPI(px: number, img: Rect): number {
 
 // Есть ли куда двигать кадр: тогда выделенное фото тянется как кадр, а переносится за ✥.
 // img — фото в своих осях, r — его угол: ход считается от рамки в осях фото.
-export function hasSlack(cell: Rect, img: Rect, r = 0): boolean {
-  const b = r ? boundIn(cell, r) : cell
+export function hasSlack(cell: Rect, img: Rect, r = 0, o?: Outline): boolean {
+  const b = r ? boundIn(cell, r, o) : cell
   return img.w - b.w > SLACK_MM || img.h - b.h > SLACK_MM
 }
 
 // Сдвиг кадра рукой: dx, dy — смещение курсора в мм в осях рамки. Фото едет за курсором,
 // поэтому доля хода уменьшается. При нулевом ходе по оси значение не меняется.
 // У повёрнутого фото сдвиг переводится в его оси (−r), ход — рамка в осях фото.
-export function panFrame(f: Frame, cell: Rect, img: Rect, dxMM: number, dyMM: number): Frame {
+export function panFrame(f: Frame, cell: Rect, img: Rect, dxMM: number, dyMM: number, o?: Outline): Frame {
   let dx = dxMM
   let dy = dyMM
   let bw = cell.w
   let bh = cell.h
   if (f.r) {
-    const b = boundIn(cell, f.r)
+    const b = boundIn(cell, f.r, o)
     bw = b.w
     bh = b.h
     dx = dxMM * b.cs + dyMM * b.sn
@@ -166,8 +184,8 @@ export function photoCss(f?: { r?: number; flipH?: boolean; flipV?: boolean }): 
 
 // Положение повёрнутого фото на миниатюре ленты (в процентах ячейки): фото целиком (s=1, без сдвига).
 // aspect — пропорции файла (fv.img.w / fv.img.h).
-export function thumbBox(cell: Rect, aspect: number, r: number): string {
-  const img = placeImage(cell, aspect, { s: 1, x: 0, y: 0, r })
+export function thumbBox(cell: Rect, aspect: number, r: number, o?: Outline): string {
+  const img = placeImage(cell, aspect, { s: 1, x: 0, y: 0, r }, o)
   const pct = (v: number, of: number) => `${(v / of) * 100}%`
   return `left:${pct(img.x - cell.x, cell.w)};top:${pct(img.y - cell.y, cell.h)};width:${pct(img.w, cell.w)};height:${pct(img.h, cell.h)}`
 }

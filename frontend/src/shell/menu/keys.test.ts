@@ -236,6 +236,12 @@ describe('keyAction: слои (010 U6)', () => {
     expect(keyAction(ev(']', ctrl), { ...g, bgMode: true })).toBeNull()
     expect(keyAction(ev(']', ctrl), { ...g, inTextField: true })).toBeNull()
   })
+  it('«Авто», выделен стикер (layerable из canLayer): Ctrl+] / Ctrl+[ работают, без layerable — молчат', () => {
+    const a = ctx({ gridSpread: false, stickerSelected: true, layerable: true })
+    expect(keyAction(ev(']', ctrl), a)).toBe('layerUp')
+    expect(keyAction(ev('[', ctrl), a)).toBe('layerDown')
+    expect(keyAction(ev(']', ctrl), { ...a, layerable: false })).toBeNull()
+  })
   it('под открытым диалогом молчат (слои не переставляются за окном)', () => {
     expect(keyAction(ev(']', ctrl), { ...g, modal: true })).toBeNull()
     expect(keyAction(ev('х', { ctrlKey: true, shiftKey: true }), { ...g, modal: true })).toBeNull()

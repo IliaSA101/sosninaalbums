@@ -1,7 +1,7 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import { gallery } from '../layouts/gallery.svelte'
+  import { gallery } from '../gallery/gallery.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import { scanText } from './scan'

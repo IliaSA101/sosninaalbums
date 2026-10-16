@@ -2,8 +2,11 @@ package export
 
 import (
 	"context"
+	"image"
 	"image/color"
+	"image/draw"
 	"image/jpeg"
+	"image/png"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
@@ -261,6 +265,134 @@ func TestExport64Photos(t *testing.T) {
 		r, _, b, _ := img.At(x, y).RGBA()
 		if r>>8 > 200 || b>>8 < 90 || b>>8 > 170 { // у тестового JPEG в центре ~(127, 127, 128)
 			t.Fatalf("ячейка %d (%d, %d) не нарисована: r=%d b=%d", i, x, y, r>>8, b>>8)
+		}
+	}
+}
+
+// Узор (048) едет в задание из View, как у холста: область, цвета с цветами генератора,
+// масштаб 1, прозрачность; неизвестный генератор передаётся и рисуется пусто. В рендере узор
+// правой страницы виден только на ней.
+func TestExportPatterns(t *testing.T) {
+	p := model.New()
+	p.Spreads = []*model.Spread{{ID: "s1"}, {ID: "s2"}}
+	e := mustEditor(t, p, "")
+	for _, c := range []struct {
+		sp, scope string
+		pt        model.Pattern
+	}{
+		{"s1", "right", model.Pattern{Kind: "stripes", Inks: []string{"#203040"}, Fade: 0.3}},
+		{"s2", "spread", model.Pattern{Kind: "future-kind", Scale: 2}},
+	} {
+		if _, err := e.ApplyPattern(c.sp, c.scope, c.pt, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pp, v := e.Snapshot()
+	got := FromView(pp, v)
+	if len(got) != 2 || len(got[0].Patterns) != 1 || len(got[1].Patterns) != 1 {
+		t.Fatalf("узоры в задании: %+v", got)
+	}
+	pd, pv := got[0].Patterns[0], v.Spreads[0].Patterns[0]
+	if pd.Area != pv.Area || pd.Kind != "stripes" || !slices.Equal(pd.Inks, pv.Pat.Inks) || pd.Scale != 1 || pd.Fade != 0.3 ||
+		pd.Area.X != pp.Settings.PageW {
+		t.Fatalf("узор правой: %+v, в View %+v", pd, pv)
+	}
+	if u := got[1].Patterns[0]; u.Kind != "future-kind" || u.Scale != 2 || u.Area.W != 2*pp.Settings.PageW {
+		t.Fatalf("неизвестный: %+v", u)
+	}
+
+	opt := render.Options{PageW: pp.Settings.PageW, PageH: pp.Settings.PageH, DPI: 20}
+	with, err := render.Render(got[0], opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bare := got[0]
+	bare.Patterns = nil
+	without, err := render.Render(bare, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mid, differ := with.Rect.Dx()/2, 0
+	for y := range with.Rect.Dy() {
+		for x := range with.Rect.Dx() {
+			if with.RGBAAt(x, y) != without.RGBAAt(x, y) {
+				if x < mid {
+					t.Fatalf("узор правой страницы на левой: (%d, %d)", x, y)
+				}
+				differ++
+			}
+		}
+	}
+	if differ == 0 {
+		t.Fatal("узор не нарисован")
+	}
+	if img, err := render.Render(got[1], opt); err != nil || string(img.Pix) != string(without.Pix) {
+		t.Fatalf("неизвестный генератор нарисован: %v", err)
+	}
+}
+
+// Стикеры (048) едут в задание из View: свой — фото целиком в рамке (путь из Photos), поворот,
+// зеркало, прозрачность и Z; процедурный — цвета с цветами генератора; неизвестный передаётся и
+// рисуется пусто; прозрачный на 100 % файл не читает. В рендере стикеры видны.
+func TestExportStickers(t *testing.T) {
+	file := filepath.Join(testkit.TempDir(t), "my.png")
+	im := image.NewNRGBA(image.Rect(0, 0, 40, 20))
+	draw.Draw(im, image.Rect(0, 0, 20, 20), image.NewUniform(color.NRGBA{200, 30, 40, 255}), image.Point{}, draw.Src)
+	f, err := os.Create(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, im); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	p := model.New()
+	p.Spreads = []*model.Spread{{ID: "s1"}, {ID: "s2"}}
+	e := mustEditor(t, p, "")
+	add := func(sp string, src model.StickerSrc) string {
+		_, id, err := e.AddSticker(sp, 0, src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	own := model.StickerSrc{Photo: model.PhotoInfo{ID: model.LibPhotoID("my:0123456789abcdef"), Path: file, Lib: "my:0123456789abcdef", W: 40, H: 20}}
+	k1 := add("s1", own)
+	e.SetStickerBox("s1", k1, 10, 10, 40, 20, 30, "")
+	e.FlipSticker("s1", k1, "h")
+	e.SetStickerFade("s1", k1, 0.2, "")
+	add("s1", model.StickerSrc{Art: &model.Art{Kind: "heart", Inks: []string{"#203040"}}})
+	add("s1", model.StickerSrc{Art: &model.Art{Kind: "zz-future"}})
+	k4 := add("s2", own)
+	e.SetStickerFade("s2", k4, 1, "")
+	pp, v := e.Snapshot()
+	got := FromView(pp, v)
+	if len(got) != 2 || len(got[0].Stickers) != 1 || len(got[0].Arts) != 2 || len(got[1].Stickers) != 1 || len(got[1].Arts) != 0 {
+		t.Fatalf("стикеры в задании: %+v", got)
+	}
+	sv := v.Spreads[0].Stickers
+	box := layout.Rect{X: sv[0].X, Y: sv[0].Y, W: sv[0].W, H: sv[0].H}
+	if ph := got[0].Stickers[0]; ph.Path != file || ph.Cell != box || ph.Img != box || ph.Rot != 30 || !ph.FlipH || ph.FlipV ||
+		ph.Fade != 0.2 || ph.Z != sv[0].Z || ph.Z == 0 {
+		t.Fatalf("свой: %+v, в View %+v", ph, sv[0])
+	}
+	if a := got[0].Arts[0]; a.Kind != "heart" || !slices.Equal(a.Inks, sv[1].Art.Inks) || len(a.Inks) != 2 || a.Z != sv[1].Z ||
+		a.Box != (layout.Rect{X: sv[1].X, Y: sv[1].Y, W: sv[1].W, H: sv[1].H}) || got[0].Arts[1].Kind != "zz-future" {
+		t.Fatalf("процедурные: %+v, в View %+v", got[0].Arts, sv[1:])
+	}
+
+	opt := render.Options{PageW: pp.Settings.PageW, PageH: pp.Settings.PageH, DPI: 20}
+	bare := render.Spread{Bg: got[0].Bg}
+	without, err := render.Render(bare, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []bool{true, false} {
+		img, err := render.Render(got[i], opt)
+		if err != nil || (string(img.Pix) != string(without.Pix)) != want {
+			t.Errorf("лист %d: нарисовано %v, ждали %v (%v)", i+1, string(img.Pix) != string(without.Pix), want, err)
 		}
 	}
 }

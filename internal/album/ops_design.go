@@ -35,6 +35,14 @@ func (e *Editor) SetFrameAngle(photoID string, tilt float64) model.View {
 	return e.change(func(p *model.Project) { design.SetFrameAngle(p, photoID, tilt) })
 }
 
+// Договор: NaN/Inf в линии — холостая правка; фото должно быть на листе spreadID (обложка тоже).
+func (e *Editor) StraightenPhoto(spreadID, photoID string, dx, dy float64) model.View {
+	if !allFinite(dx, dy) {
+		return e.View()
+	}
+	return e.change(func(p *model.Project) { design.StraightenPhoto(p, spreadID, photoID, dx, dy) })
+}
+
 // Договор: quarters ∈ {−1, 1, 2}, иначе холостая правка; чужие ID пропускает тело.
 func (e *Editor) TurnPhotos(ids []string, quarters int) model.View {
 	if quarters != -1 && quarters != 1 && quarters != 2 {
@@ -98,37 +106,54 @@ func (e *Editor) SetCaptionStyle(photoID string, st model.TextStyle, over bool, 
 
 // Поля подписей (030, тела — names).
 
-// Договор: имя зажато ClampPerson (все пусты — nil: снова из имени файла); session — как у
+// Договор: имя и предмет зажаты ClampPerson (все пусты — nil: снова из имени файла); session — как у
 // SetText: набор в поле — один шаг отмены.
 func (e *Editor) SetPerson(photoID string, who model.Person, session string) model.View {
 	pp := model.ClampPerson(who)
 	return e.apply(textMerge(session), func(p *model.Project) { names.SetPerson(p, photoID, pp) })
 }
 
-// Person — имя фото для карточки (своё или из имени файла); ok = false — фото не в альбоме.
+// Person — имя фото для карточки (своё или из имени файла) и стоит ли оно на месте
+// учителя виньетки; ok = false — фото не в альбоме.
 func (e *Editor) Person(photoID string) (pv model.PersonView, ok bool) {
 	e.read(func(p *model.Project) {
 		var r model.PhotoRef
 		if r, ok = p.Photos[photoID]; ok {
 			pv = model.NameView(r)
+			pv.Teacher = p.TeacherSeat(photoID)
 		}
 	})
 	return pv, ok
 }
 
-// PasteNames раскладывает вставленный список имён по фото листа одним шагом отмены.
-// extra — лишних строк, missing — фото без имени после вставки.
-// Договор: список разобран и ограничен names.Parse (64 КБ, 1000 строк) до правки.
-func (e *Editor) PasteNames(spreadID, list string, firstFirst bool) (v model.View, extra, missing int, err error) {
-	people, err := names.Parse(list, firstFirst)
+// PreviewNames — предпросмотр окна «Имена» (043): тот же план, что ляжет при PasteNames;
+// только чтение — ни шага отмены, ни rev.
+// Договор: поле разобрано и ограничено names.Read (256 КБ, 1000 строк и заголовок) до замка.
+func (e *Editor) PreviewNames(spreadID string, o model.NamesOpts) (plan model.NamesPlan, err error) {
+	r, err := names.Read(o)
 	if err != nil {
-		return e.View(), 0, 0, err
+		return model.NamesPlan{}, err
+	}
+	e.read(func(p *model.Project) { plan, err = names.Plan(p, spreadID, r) })
+	return plan, err
+}
+
+// PasteNames раскладывает имена из окна «Имена» по фото листа одним шагом отмены; plan —
+// что легло (Extra, Missing, Named, Seats для итога). Повтор того же — холостая правка.
+// Договор: поле разобрано и ограничено names.Read до правки; план считается под замком
+// на том же проекте, что и правка.
+func (e *Editor) PasteNames(spreadID string, o model.NamesOpts) (v model.View, plan model.NamesPlan, err error) {
+	r, err := names.Read(o)
+	if err != nil {
+		return e.View(), model.NamesPlan{}, err
 	}
 	v, err = e.try("", func(p *model.Project) (err error) {
-		extra, missing, err = names.Paste(p, spreadID, people)
+		if plan, err = names.Plan(p, spreadID, r); err == nil {
+			names.Apply(p, spreadID, plan, o.Caption)
+		}
 		return err
 	})
-	return v, extra, missing, err
+	return v, plan, err
 }
 
 // Договор: стиль листа зажат ClampSheetCaps (стиль, отступ 0..20, NaN — 1 мм; шаблон —

@@ -106,9 +106,9 @@ func TestLayoutAlign(t *testing.T) {
 
 func TestLayoutMissingGlyphsSkipped(t *testing.T) {
 	st := Style{Font: "marck", Size: 14, Align: "left"}
-	b := Layout("5₽", st, 100)
+	b := Layout("5中", st, 100) // нет ни в Marck, ни в запасном Montserrat
 	if b.Lines[0].Text != "5" {
-		t.Errorf("текст %q, ждали «5» (₽ нет в Marck Script)", b.Lines[0].Text)
+		t.Errorf("текст %q, ждали «5» (中 нет ни в одном шрифте)", b.Lines[0].Text)
 	}
 	if ref := Layout("5", st, 100); math.Abs(ref.Lines[0].W-b.Lines[0].W) > 1e-9 {
 		t.Error("пропущенный знак измерен")

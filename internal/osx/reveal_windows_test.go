@@ -10,3 +10,12 @@ func TestExplorerSelectAttr(t *testing.T) {
 		t.Fatalf("CmdLine %q, ждали %q", attr.CmdLine, want)
 	}
 }
+
+// «Открыть папку»: путь в кавычках, запятая без пробела («Иванов,Петрова») не режет его.
+func TestExplorerOpenAttr(t *testing.T) {
+	for _, dir := range []string{`D:\Альбомы\Иванов,Петрова`, `C:\a b`, `D:\`} {
+		if attr, want := explorerOpenAttr(dir), `explorer "`+dir+`"`; attr.CmdLine != want {
+			t.Errorf("CmdLine %q, ждали %q", attr.CmdLine, want)
+		}
+	}
+}

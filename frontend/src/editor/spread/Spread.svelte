@@ -3,19 +3,27 @@
   import type { RotRect, Settings, SpreadView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
   import { store } from '../../base/core/store.svelte'
-  import { gallery, pageSwitchable } from '../../panels/layouts/gallery.svelte'
+  import { gallery, pageSwitchable } from '../../panels/gallery/gallery.svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { fieldClick } from '../places/placegesture'
   import { bgmode } from '../backdrop/bgmode.svelte'
   import BackdropLayer from '../backdrop/BackdropLayer.svelte'
+  import PatternLayer from '../backdrop/PatternLayer.svelte'
   import BackdropEditor from '../backdrop/BackdropEditor.svelte'
   import Cell from '../photo/Cell.svelte'
   import CellOverlay from '../photo/CellOverlay.svelte'
+  import StraightenLayer from '../photo/StraightenLayer.svelte'
+  import { straighten } from '../photo/straighten.svelte'
   import GroupFrame from '../places/GroupFrame.svelte'
   import PlaceLayer from '../places/PlaceLayer.svelte'
+  import { shapeCss } from '../../base/geom/shape'
   import SelFrame from '../places/SelFrame.svelte'
   import TextLayer from '../text/TextLayer.svelte'
+  import StickerLayer from '../sticker/StickerLayer.svelte'
+  import { sticker } from '../sticker/sticker.svelte'
+  import { stickerOverflow } from '../sticker/sticker'
+  import StickerOverlay from '../sticker/StickerOverlay.svelte'
   import NameEditor from '../captions/NameEditor.svelte'
   import { nameEdit } from '../captions/nameedit.svelte'
   import { nameTargetAt, takesNameTarget, type NameTarget } from '../captions/nametarget'
@@ -80,7 +88,18 @@
 
   // Повёрнутые места вылетают за разворот (hold внутри): `.content` обрезает вылет, а ручки, SelFrame
   // и рамка текста лежат вне него. Без поворота обрезки нет — не режем выделение и подсветку у края.
-  const turned = $derived(preview ? rects.some((r) => r.rot) : !!spread.grid && (spread.places ?? []).some((p) => p.rot))
+  // Стикер может вылезать за лист (центр на листе, 048): печатается только лист, поэтому и на холсте обрезаем —
+  // но только когда какой-то стикер реально вылез (с живой рамкой жеста), иначе режется подсветка у края.
+  const turned = $derived(
+    preview
+      ? rects.some((r) => r.rot)
+      : (!!spread.grid && (spread.places ?? []).some((p) => p.rot)) ||
+          stickerOverflow(
+            (spread.stickers ?? []).map((st) => sticker.boxOf(st)),
+            sw,
+            sh,
+          ),
+  )
 
   // Режим фона на этом развороте: места и тексты приглушены, сверху — рамка фона (BackdropEditor).
   const bgEdit = $derived(!mini && bgmode.cur?.spread === spread.id && store.spread?.id === spread.id)
@@ -89,6 +108,11 @@
   // Контролы выделенной ячейки (✥, ползунок, «!») и подсветка цели броска — над стеком, вне обрезки (CellOverlay).
   const cellUi = $derived(!mini && !preview && !bgEdit)
   const framed = $derived(!mini && !preview && !drag.active && !bgEdit && store.spread?.id === spread.id && placesel.selected.length > 0)
+
+  // Рамка выделенных стикеров (048): те же условия, что у рамки места. Один — с ручками, в группе — обводки членов.
+  const stickerFramed = $derived(
+    !mini && !preview && !drag.active && !bgEdit && store.spread?.id === spread.id && placesel.selectedStickers.length > 0,
+  )
 
   // Рамка группы — тот же набор условий, плюс выделено 2 и больше объектов (в том числе тексты).
   const grouped = $derived(!mini && !preview && !drag.active && !bgEdit && store.spread?.id === spread.id && placesel.isGroup)
@@ -183,6 +207,7 @@
 >
   <div class="page" class:whole={!seam} style:background={bg[0]}></div>
   {#if seam}<div class="page right" style:background={bg[1]}></div>{/if}
+  <PatternLayer {spread} {width} />
   <BackdropLayer {spread} {mini} />
   {#if cover}
     <CoverPlate {cover} />
@@ -197,7 +222,8 @@
       {@const r = rects[i]}
       {@const rot = preview ? (r?.rot ?? 0) : (spread.frames?.[i]?.cellRot ?? 0)}
       {#if r}
-        <!-- Обёртка держит место и переезд при смене раскладки; Cell заполняет её -->
+        <!-- Обёртка держит место и переезд при смене раскладки; Cell заполняет её. border-radius и у неё:
+             иначе угол габарита круга ловил бы щелчок, а не отдавал его тому, что лежит ниже. -->
         <div
           class="slot"
           class:spine={!mini && spineOf.has(id)}
@@ -208,6 +234,7 @@
           style:width="{(r.w / sw) * 100}%"
           style:height="{(r.h / sh) * 100}%"
           style:transform={rot ? `rotate(${rot}deg)` : undefined}
+          style:border-radius={preview ? undefined : shapeCss(spread.frames?.[i]?.shape, spread.frames?.[i]?.radius, r.w, r.h)}
           in:appear={rot}
           out:vanish
         >
@@ -217,6 +244,7 @@
     {/each}
     {#if spread.grid && !preview}<PlaceLayer {spread} {mini} />{/if}
     <TextLayer {spread} {mini} {tg} />
+    <StickerLayer {spread} {mini} {width} />
     <!-- В «Авто» корешок виден над фото (как до 0.5.0), но под текстами: z верхнего фото, позже слотов в DOM -->
     {#if !spread.grid && seam && !cover}<div class="spine front" style:z-index={photoTop}></div>{/if}
   </div>
@@ -237,8 +265,11 @@
   {#if !mini}<NameEditor {spread} {width} />{/if}
   {#if cellUi}<CellOverlay {spread} {width} />{/if}
   {#if framed}<SelFrame {spread} {width} />{/if}
+  {#if stickerFramed}<StickerOverlay {spread} {width} />{/if}
   {#if grouped}<GroupFrame {spread} {width} />{/if}
   {#if bgEdit}<BackdropEditor {spread} {width} />{/if}
+  <!-- Режим «Выпрямить по линии» (045): слой ловит мышь над рамками выделения и фона -->
+  {#if !mini && !preview && straighten.cur?.spread === spread.id && store.spread?.id === spread.id}<StraightenLayer {spread} />{/if}
   {#if !mini && seam}
     <div
       class="dim"

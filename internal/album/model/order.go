@@ -7,16 +7,29 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
-// Общий порядок слоёв (спека 010, design §4): места и тексты разворота-сетки —
-// один стек, текст может лечь под фото. Spread.Order хранит его, только если он
-// отличается от порядка по умолчанию (места по Grid, затем тексты): файл без
-// «текста под фото» поля не несёт, холостая правка остаётся холостой.
+// Общий порядок слоёв (спека 010, design §4; стикеры — 048 design §3.1): места, стикеры и
+// тексты листа — один стек, текст может лечь под фото. Spread.Order хранит его, только если
+// он отличается от порядка по умолчанию (места по Grid, затем стикеры, затем тексты): файл без
+// «текста под фото» поля не несёт, холостая правка остаётся холостой. У «Авто» мест в стеке
+// нет, Order живёт, если есть стикеры (фото раскладки всегда под ними).
 
 // Виды элементов стека; новый вид (календарь, виньетка) — ветка в layerItems.
 const (
-	LayerPlace = "place"
-	LayerText  = "text"
+	LayerPlace   = "place"
+	LayerSticker = "sticker"
+	LayerText    = "text"
 )
+
+// layerRank — место вида в порядке по умолчанию.
+func layerRank(kind string) int {
+	switch kind {
+	case LayerPlace:
+		return 0
+	case LayerSticker:
+		return 1
+	}
+	return 2
+}
 
 // LayerItem — элемент стека слоёв. Box — рамка в форме «угол до поворота + rot»
 // (у места через placeBox): одна геометрия для слоёв и выравнивания.
@@ -28,13 +41,20 @@ type LayerItem struct {
 
 // LayerItems — стек разворота снизу вверх (stack) с рамками.
 func (s *Spread) LayerItems() []LayerItem {
-	byID := make(map[string]LayerItem, len(s.Grid)+len(s.Texts))
+	byID := make(map[string]LayerItem, len(s.Grid)+len(s.Stickers)+len(s.Texts))
 	for _, pl := range s.Grid {
 		b := geom.TextBox{X: pl.X, Y: pl.Y, W: pl.W, H: pl.H} // ровное — без шума сложений placeBox
 		if pl.Rot != 0 {
 			b = PlaceBoxOf(pl)
 		}
 		byID[pl.ID] = LayerItem{ID: pl.ID, Kind: LayerPlace, Box: b}
+	}
+	for _, st := range s.Stickers {
+		b := geom.TextBox{X: st.X, Y: st.Y, W: st.W, H: st.H}
+		if st.Rot != 0 {
+			b = st.Rect().Box()
+		}
+		byID[st.ID] = LayerItem{ID: st.ID, Kind: LayerSticker, Box: b}
 	}
 	for _, t := range s.Texts {
 		byID[t.ID] = LayerItem{ID: t.ID, Kind: LayerText, Box: BoxOf(t)}
@@ -47,16 +67,20 @@ func (s *Spread) LayerItems() []LayerItem {
 	return out
 }
 
-// Stack — ID мест и текстов снизу вверх, Order с починкой (шаги 1–3 SyncOrder):
-// у «Авто» — только тексты; чужие ID и повторы выбрасываются; недостающее место
-// встаёт сразу над предшествующим ему в Grid (первое — под первым местом стека,
-// мест нет — вниз), недостающий текст — наверх. Так applyGrid, AddPlace, деление
-// и AddText ведут себя как в 0.4.0.
+// Stack — ID мест, стикеров и текстов снизу вверх, Order с починкой (шаги 1–3 SyncOrder):
+// у «Авто» мест нет; чужие ID и повторы выбрасываются; недостающее место встаёт сразу над
+// предшествующим ему в Grid (первое — под первым местом стека, мест нет — вниз), недостающий
+// стикер — над самым верхним местом или стикером (их нет — вниз), недостающий текст — наверх.
+// Так applyGrid, AddPlace, деление и AddText ведут себя как в 0.4.0, а новый стикер ложится
+// над местами и стикерами, под текстами.
 func (s *Spread) Stack() []string {
-	out := make([]string, 0, len(s.Grid)+len(s.Texts))
-	if len(s.Grid) == 0 || s.Order == nil {
+	out := make([]string, 0, len(s.Grid)+len(s.Stickers)+len(s.Texts))
+	if s.Order == nil {
 		for _, pl := range s.Grid {
 			out = append(out, pl.ID)
+		}
+		for _, st := range s.Stickers {
+			out = append(out, st.ID)
 		}
 		for _, t := range s.Texts {
 			out = append(out, t.ID)
@@ -85,6 +109,20 @@ func (s *Spread) Stack() []string {
 		out = slices.Insert(out, at, pl.ID)
 		in[pl.ID] = true
 	}
+	for _, st := range s.Stickers {
+		if in[st.ID] {
+			continue
+		}
+		at := 0
+		for j := len(out) - 1; j >= 0; j-- {
+			if kind[out[j]] != LayerText {
+				at = j + 1
+				break
+			}
+		}
+		out = slices.Insert(out, at, st.ID)
+		in[st.ID] = true
+	}
 	for _, t := range s.Texts {
 		if !in[t.ID] {
 			in[t.ID] = true
@@ -94,7 +132,7 @@ func (s *Spread) Stack() []string {
 	return out
 }
 
-// SetStack ставит порядок st (перестановка stack): Grid и Texts — в его
+// SetStack ставит порядок st (перестановка stack): Grid, Stickers и Texts — в его
 // относительном порядке (код, читающий порядок мест из Grid, не меняется),
 // Photos сетки — по местам, Order — st или nil, если st — порядок по умолчанию.
 func (s *Spread) SetStack(st []string) {
@@ -107,22 +145,31 @@ func (s *Spread) SetStack(st []string) {
 		s.Grid = grid
 		s.Photos = GridPhotos(s)
 	}
+	if sts := slices.SortedStableFunc(slices.Values(s.Stickers), func(a, b *Sticker) int { return pos[a.ID] - pos[b.ID] }); !slices.Equal(sts, s.Stickers) {
+		s.Stickers = sts
+	}
 	if texts := slices.SortedStableFunc(slices.Values(s.Texts), func(a, b *TextBlock) int { return pos[a.ID] - pos[b.ID] }); !slices.Equal(texts, s.Texts) {
 		s.Texts = texts
 	}
-	// По умолчанию — все места ниже всех текстов: st — перестановка мест и текстов.
+	// По умолчанию — места, стикеры, тексты: ранги видов вдоль st не убывают.
 	s.Order = nil
 	kind := s.Kinds()
-	if len(s.Grid) > 0 && slices.ContainsFunc(st[:min(len(s.Grid), len(st))], func(id string) bool { return kind[id] != LayerPlace }) {
-		s.Order = slices.Clone(st)
+	for i := 1; i < len(st); i++ {
+		if layerRank(kind[st[i]]) < layerRank(kind[st[i-1]]) {
+			s.Order = slices.Clone(st)
+			return
+		}
 	}
 }
 
 // Kinds — вид элемента стека по ID.
 func (s *Spread) Kinds() map[string]string {
-	kind := make(map[string]string, len(s.Grid)+len(s.Texts))
+	kind := make(map[string]string, len(s.Grid)+len(s.Stickers)+len(s.Texts))
 	for _, pl := range s.Grid {
 		kind[pl.ID] = LayerPlace
+	}
+	for _, st := range s.Stickers {
+		kind[st.ID] = LayerSticker
 	}
 	for _, t := range s.Texts {
 		kind[t.ID] = LayerText
@@ -131,11 +178,11 @@ func (s *Spread) Kinds() map[string]string {
 }
 
 // SyncOrder — шаг конвейера change после FitTexts и последний шаг Load: Order
-// чинится (stack) и приводится к nil, если совпал с порядком по умолчанию.
-// Идемпотентна.
+// чинится (stack) и приводится к nil, если совпал с порядком по умолчанию; без мест
+// и стикеров (у «Авто» только тексты) — nil. Идемпотентна.
 func (p *Project) SyncOrder() {
 	for _, s := range p.Sheets() {
-		if len(s.Grid) == 0 {
+		if len(s.Grid)+len(s.Stickers) == 0 {
 			s.Order = nil
 			continue
 		}
@@ -148,7 +195,7 @@ func (p *Project) SyncOrder() {
 // часть) и syncGrid(true) (добавляет места), иначе первая правка не холостая.
 func (p *Project) LoadOrder() {
 	for _, s := range p.Sheets() {
-		if n := MaxPlaces + MaxTexts; len(s.Order) > n {
+		if n := MaxPlaces + MaxTexts + MaxStickers; len(s.Order) > n {
 			s.Order = s.Order[:n]
 		}
 	}

@@ -43,6 +43,7 @@
   onkeydowncapture={(e) => {
     if (!top) return
     if (e.key === 'Escape') {
+      if (e.defaultPrevented) return // Esc уже закрыл вложенное окно (Popover внутри окна)
       e.stopPropagation()
       e.preventDefault()
       onclose()
@@ -53,7 +54,12 @@
   }}
 />
 
-<div class="back" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && onclose()}>
+<div
+  class="back"
+  style:z-index={80 + Math.max(modalStack.depth(me), 0)}
+  role="presentation"
+  onpointerdown={(e) => e.target === e.currentTarget && onclose()}
+>
   <div
     class="box"
     class:wide

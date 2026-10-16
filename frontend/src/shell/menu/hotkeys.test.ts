@@ -144,6 +144,18 @@ describe('клавиши по уровням (спека 010 U1)', () => {
     expect(findAction(ev('ArrowRight'), { ...at('full'), ...grid })).toBe('nudgePlace')
     expect(findAction(ev('ArrowRight'), { ...at('standard'), ...grid })).toBe('nextSpread')
   })
+  it('стрелки двигают стикер и на «Стандартном» (048): ниже «Стандартного» — листают, место без стикера — по-прежнему «Полный»', () => {
+    const sticker = { gridSpread: false, stickerSelected: true }
+    expect(findAction(ev('ArrowRight'), { ...at('standard'), ...sticker })).toBe('nudgePlace')
+    expect(findAction(ev('ArrowRight'), { ...at('full'), ...sticker })).toBe('nudgePlace')
+    expect(findAction(ev('ArrowRight'), { ...at('simple'), ...sticker })).toBe('nextSpread')
+    expect(findAction(ev('ArrowRight'), { ...at('standard'), gridSpread: false })).toBe('nextSpread')
+  })
+  it('вторая строка стрелок для стикера скрыта из справки: «Двигать выделенное» одна', () => {
+    const rows = HOTKEYS.filter((h) => h.action === 'nudgePlace')
+    expect(rows.length).toBeGreaterThan(1)
+    expect(rows.filter((h) => !h.hidden)).toHaveLength(1)
+  })
   it('клавиши основы живут на любом уровне', () => {
     for (const k of ['f', 'i', 'g', '0', 'f1']) expect(findAction(ev(k), at('simple')), k).not.toBeNull()
     expect(findAction(ev('z', ctrl), at('simple'))).toBe('undo')

@@ -20,6 +20,7 @@ func Reveal(path string, file bool) error {
 		cmd.SysProcAttr = explorerSelectAttr(path)
 	default:
 		cmd = exec.Command("explorer", path) //nolint:gosec // см. выше
+		cmd.SysProcAttr = explorerOpenAttr(path)
 	}
 	return cmd.Start()
 }

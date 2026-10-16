@@ -5,6 +5,9 @@
   import { normDeg, rotateAbout } from '../../base/geom/textbox'
   import { MAX_SCALE, MIN_SCALE, zoomFrame } from '../../base/geom/frame'
   import Icon from '../../base/ui/Icon.svelte'
+  import TiltRow from '../inspector/TiltRow.svelte'
+  import { prefs } from '../../base/prefs/prefs.svelte'
+  import { straighten } from '../photo/straighten.svelte'
 
   // Карточка в режиме фона (design-backdrop §6.2): масштаб фото в рамке, поворот рамки вокруг центра,
   // зеркало, «По области», «Убрать», «Готово». Поле применяется по Enter или уходу из поля.
@@ -37,6 +40,11 @@
     el.value = String(deg)
     if (deg !== b.box.rot) bgmode.setBox(rotateAbout(b.box, deg))
   }
+  // Наклон фото внутри рамки (045): предпросмотр — тот же live, что у масштаба; рамка стоит на месте.
+  // Телом, а не `=> (x = …)`: значение присваивания не нужно, Svelte ругается на assignment_value_stale.
+  const tiltLive = (t: number) => {
+    bgmode.live = { box: b.box, frame: { ...b.frame, r: t } }
+  }
   const enter = (e: KeyboardEvent) => {
     if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur()
   }
@@ -52,6 +60,15 @@
     <input type="number" min="-180" max="180" step="1" value={b.box.rot} onchange={(e) => commitRot(e.currentTarget)} onkeydown={enter} />
   </label>
 </div>
+{#if prefs.can('tilt')}
+  <TiltRow
+    tilt={b.frame.r ?? 0}
+    onlive={tiltLive}
+    oncommit={(t) => bgmode.setAngle(t)}
+    onend={() => (bgmode.live = null)}
+    onstraighten={() => straighten.startBackdrop()}
+  />
+{/if}
 <div class="btns">
   <button class:on={b.flipH} aria-pressed={b.flipH} title="Зеркало по горизонтали" onclick={() => flipBackdrop(spread, b.scope, 'h')}
     ><Icon name="flip-h" size={14} />↔</button
@@ -59,7 +76,9 @@
   <button class:on={b.flipV} aria-pressed={b.flipV} title="Зеркало по вертикали" onclick={() => flipBackdrop(spread, b.scope, 'v')}
     ><Icon name="flip-v" size={14} />↕</button
   >
-  <button title="Рамка во всю область, без поворота, кадр сброшен" onclick={() => fitBackdrop(spread, b.scope)}>По области</button>
+  <button title="Рамка во всю область, без поворота, кадр сброшен, наклон сохраняется" onclick={() => fitBackdrop(spread, b.scope)}
+    >По области</button
+  >
 </div>
 <div class="btns">
   <button class="done" onclick={() => bgmode.exit()}>Готово</button>
@@ -90,11 +109,13 @@
   }
   .btns {
     display: flex;
+    flex-wrap: wrap; /* узкая колонка: кнопки переносятся, а не сжимаются */
     gap: 6px;
     margin-top: 6px;
   }
   .btns button {
-    flex: 1;
+    flex: 1 0 auto;
+    white-space: nowrap;
     height: 24px;
     padding: 0 6px;
     display: flex;

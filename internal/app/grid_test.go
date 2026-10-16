@@ -66,6 +66,10 @@ func TestAppGridErrors(t *testing.T) {
 	if plan := a.PlanCopyGrid("s1", "left", []model.GridTarget{{Spread: "s2", Scope: "left"}}, false, false); plan.Frozen != 0 {
 		t.Fatalf("план: %+v", plan)
 	}
+	// Заполнение пустых мест фото из ленты: фото a и b уже в альбоме — у ленты только неизвестные.
+	if res := a.FillPlaces([]string{"zz"}, "s1"); res.Left != 0 {
+		t.Errorf("FillPlaces неизвестного: %+v", res)
+	}
 }
 
 // tplApp — App с папкой настроек во временной папке и разворотом из двух фото.
@@ -219,7 +223,7 @@ func TestTemplatesBadRenameFails(t *testing.T) {
 // Файл новой версии читается, но не пишется ни одним методом.
 func TestTemplatesNewerReadOnly(t *testing.T) {
 	a, sid := tplApp(t)
-	content := []byte(`{"version":5,"templates":[{"id":"0123456789ab","name":"Н","scope":"spread","boxes":[{"x":0,"y":0,"w":0.5,"h":0.5},{"x":0.5,"y":0.5,"w":0.5,"h":0.5}]}]}`)
+	content := []byte(`{"version":6,"templates":[{"id":"0123456789ab","name":"Н","scope":"spread","boxes":[{"x":0,"y":0,"w":0.5,"h":0.5},{"x":0.5,"y":0.5,"w":0.5,"h":0.5}]}]}`)
 	if err := os.WriteFile(prefs.TemplatesPath(a.cfgDir), content, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -238,129 +242,6 @@ func TestTemplatesNewerReadOnly(t *testing.T) {
 	}
 	if !bytes.Equal(readTpl(t, a), content) || len(badFiles(t, a)) != 0 {
 		t.Fatal("файл новой версии изменён")
-	}
-}
-
-// Методы App над сеткой: места, слои, выравнивание, зеркало, копии — вид меняется как задумано.
-func TestAppGridSurface(t *testing.T) {
-	a := gridApp(t)
-	const pa, pb = "00000000000a", "00000000000b"
-	rev := func() int { return a.editor().View().Rev }
-	places := func(v model.View) []model.PlaceView { return v.Spreads[0].Places }
-	grew := func(name string, before int, v model.View) {
-		t.Helper()
-		if v.Rev <= before {
-			t.Errorf("%s: правка не применена (rev %d → %d)", name, before, v.Rev)
-		}
-	}
-
-	r := rev()
-	v, err := a.AddPlace("s1", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	grew("AddPlace", r, v)
-	if len(places(v)) != 3 {
-		t.Fatalf("мест после AddPlace: %d", len(places(v)))
-	}
-	newID := places(v)[2].ID
-
-	r = rev()
-	v = a.SetPlaces("s1", []model.PlaceBox{{ID: pb, X: 300, Y: 20, W: 90, H: 80}}, "")
-	grew("SetPlaces", r, v)
-	if p := places(v)[1]; p.X != 300 || p.W != 90 || p.H != 80 {
-		t.Errorf("место: %+v", p)
-	}
-	r = rev()
-	v = a.SetPlaceAngle("s1", pb, 20)
-	grew("SetPlaceAngle", r, v)
-	if places(v)[1].Rot != 20 {
-		t.Errorf("угол места: %v", places(v)[1].Rot)
-	}
-	r = rev()
-	v = a.SetPlaceFit("s1", []string{pa}, "contain")
-	grew("SetPlaceFit", r, v)
-	if places(v)[0].Fit != "contain" {
-		t.Errorf("fit: %q", places(v)[0].Fit)
-	}
-	r = rev()
-	v = a.ArrangeLayers("s1", "front", []string{pa})
-	grew("ArrangeLayers", r, v)
-
-	// Выравнивание и распределение: два места, op влево.
-	r = rev()
-	v = a.AlignItems("s1", []string{pa, pb}, "left", "sel")
-	grew("AlignItems", r, v)
-	// место b повёрнуто: выравнивается его описанная рамка, поэтому сравниваем сдвиг, а не X.
-	if places(v)[1].X >= 300 {
-		t.Errorf("выравнивание влево не сдвинуло место: X %v", places(v)[1].X)
-	}
-	// Два места по всему развороту помещаются без наложения, три в рамке выделения — нет.
-	if a.AlignOverlap("s1", []string{pa, pb}, "distH", "spread") {
-		t.Error("AlignOverlap: два места по развороту не должны перекрываться")
-	}
-	if !a.AlignOverlap("s1", []string{pa, pb, newID}, "distH", "sel") {
-		t.Error("AlignOverlap: три места в рамке выделения должны перекрываться")
-	}
-
-	// Группа: перенос, поворот, масштаб по осям.
-	r = rev()
-	v = a.TransformGroup("s1", []string{pa, pb}, 1, 0, 0, 5, 0, "")
-	grew("TransformGroup", r, v)
-	r = rev()
-	v = a.RotateGroup("s1", []string{pa, pb}, 5, 210, 148)
-	grew("RotateGroup", r, v)
-	r = rev()
-	v = a.ScaleGroupAxes("s1", []string{pa, pb}, 0.9, 0.9, 0, 210, 148)
-	grew("ScaleGroupAxes", r, v)
-
-	// Зеркало сетки и закрепление «Авто».
-	before := places(a.editor().View())[1] // newID: X 110, W 100, без поворота
-	if before.ID != newID {
-		t.Fatalf("порядок мест изменился: %+v", before)
-	}
-	r = rev()
-	v = a.MirrorGrid("s1", "spread")
-	grew("MirrorGrid", r, v)
-	// Отражение по ширине разворота (600 мм): X' = 600 − X − W.
-	if p := places(v)[1]; math.Abs(p.X-(600-before.X-before.W)) > 0.01 {
-		t.Errorf("MirrorGrid: X %v, ждали %v", p.X, 600-before.X-before.W)
-	}
-	r = rev()
-	v = a.SetGrid("s2", true)
-	grew("SetGrid", r, v)
-	if !v.Spreads[1].Grid {
-		t.Error("разворот s2 не закреплён")
-	}
-
-	// Заполнение пустых мест фото из ленты: фото a и b уже в альбоме — у ленты только неизвестные.
-	if res := a.FillPlaces([]string{"zz"}, "s1"); res.Left != 0 {
-		t.Errorf("FillPlaces неизвестного: %+v", res)
-	}
-
-	// Дубликат: новый разворот с теми же местами без фото.
-	r = rev()
-	v, err = a.DuplicateGrid("s1", 1, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	grew("DuplicateGrid", r, v)
-	if len(v.Spreads) != 3 {
-		t.Errorf("разворотов после дубликата: %d", len(v.Spreads))
-	}
-
-	// Удаление мест и выделения: пустое место уходит, фото остаётся в ленте разворота.
-	r = rev()
-	v = a.DeletePlaces("s1", []string{newID})
-	grew("DeletePlaces", r, v)
-	if slices.ContainsFunc(places(v), func(p model.PlaceView) bool { return p.ID == newID }) {
-		t.Error("место не удалено")
-	}
-	r = rev()
-	v = a.DeleteSelection("s1", nil, []string{pb}, nil)
-	grew("DeleteSelection", r, v)
-	if slices.ContainsFunc(places(v), func(p model.PlaceView) bool { return p.ID == pb }) {
-		t.Error("выделенное место не удалено")
 	}
 }
 
@@ -403,7 +284,7 @@ func TestSaveVignetteTemplate(t *testing.T) {
 	}
 	id := model.VigOwnPrefix + got[0].ID
 	cs := b.VignetteChoices(sid, 1, 24, "3:4")
-	if last := cs[len(cs)-1]; len(cs) != 18 || last.ID != id || !last.Own || last.Gone || last.Name != "Мой класс" {
+	if last := cs[len(cs)-1]; len(cs) != 30 || last.ID != id || !last.Own || last.Gone || last.Name != "Мой класс" {
 		t.Fatalf("VignetteChoices: %d, %+v", len(cs), cs[len(cs)-1])
 	}
 	r, err := b.SetVignette(sid, model.Vignette{Tpl: id, Teachers: 1, Pupils: 20})
@@ -429,7 +310,7 @@ func TestSaveVignetteTemplate(t *testing.T) {
 	if len(b.templateList()) != 0 {
 		t.Fatal("шаблон не удалился")
 	}
-	if cs = b.VignetteChoices(sid, 1, 22, "3:4"); len(cs) != 18 || !cs[17].Gone {
+	if cs = b.VignetteChoices(sid, 1, 22, "3:4"); len(cs) != 30 || !cs[29].Gone {
 		t.Fatalf("после удаления: %d, %+v", len(cs), cs[len(cs)-1])
 	}
 	if r, err = b.SetVignette(sid, model.Vignette{Tpl: id, Teachers: 1, Pupils: 19}); err != nil || r.Left != 0 || len(r.View.Spreads[0].Places) != 20 {
@@ -465,7 +346,7 @@ func TestSaveVignetteTemplateRefusals(t *testing.T) {
 	if _, err := a.SetVignette(sid, model.Vignette{Tpl: "grid", Pupils: 10}); err != nil {
 		t.Fatal(err)
 	}
-	content := []byte(`{"version":5,"templates":[]}`)
+	content := []byte(`{"version":6,"templates":[]}`)
 	if err := os.WriteFile(prefs.TemplatesPath(a.cfgDir), content, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +360,8 @@ func TestSaveVignetteTemplateRefusals(t *testing.T) {
 func TestSaveVignetteTemplateFull(t *testing.T) {
 	a, sid := vigTplApp(t)
 	long := strings.Repeat("я", model.MaxCaptionRunes)
-	if _, err := a.SetVignette(sid, model.Vignette{Tpl: "grid", Pupils: 64, TText: long}); err != nil {
+	// Шаблон с шапкой: её рамка и стиль тоже в шаблоне (у «grid» шаблонная шапка снимается, 049).
+	if _, err := a.SetVignette(sid, model.Vignette{Tpl: "head", Pupils: 64, TText: long}); err != nil {
 		t.Fatal(err)
 	}
 	caps := *a.editor().View().Spreads[0].Caps
@@ -593,5 +475,80 @@ func TestTemplateGridOtherCounts(t *testing.T) {
 		if r, err = a.ApplyGrid(d4b, "spread", "spread", bad); err == nil || r.View.Rev != rev || a.editor().View().Rev != rev {
 			t.Fatalf("неверные доли: %v, rev %d→%d", err, rev, a.editor().View().Rev)
 		}
+	}
+}
+
+// TestAppVignette — методы виньетки (031 G5): лист с виньеткой по умолчанию без шага отмены,
+// превью листа без Split, «Применить» с тостом, новая виньетка, сортировка, «Обычный разворот».
+func TestAppVignette(t *testing.T) {
+	a, views := spreadsApp(t, []string{"a", "b", "c"})
+	st := a.NewVignetteSheet(204, 304)
+	sv := st.View.Spreads[0]
+	if st.View.CanUndo || sv.Kind != model.KindVignette || sv.Vig == nil || sv.Vig.Places != 25 || len(sv.Places) != 25 {
+		t.Fatalf("лист-виньетка: undo %v, %q %+v", st.View.CanUndo, sv.Kind, sv.Vig)
+	}
+	if cs := a.VignetteChoices(sv.ID, 1, 24, "3:4"); len(cs) != 29 {
+		t.Fatalf("превью листа %d", len(cs))
+	}
+	r, err := a.SetVignette(sv.ID, model.Vignette{Tpl: "grid", Pupils: 10})
+	if err != nil || r.Left != 0 || len(r.View.Spreads[0].Places) != 10 || !r.View.CanUndo {
+		t.Fatalf("применить: %v, %+v", err, r.View.Spreads[0].Vig)
+	}
+	if _, err := a.SetVignette(sv.ID, model.Vignette{Tpl: "grid", Teachers: 18, Pupils: 64}); err == nil {
+		t.Fatal("больше 64 мест принято")
+	}
+	// Окно «Настроить виньетку»: предпросмотр без правки и события, «Применить» — с событием.
+	setup := model.VigSetup{Vig: model.Vignette{Tpl: "grid", Pupils: 12}, Vars: model.Vars{Title: "Лицей"}}
+	events := len(views())
+	pr, err := a.PreviewVignette(sv.ID, setup)
+	if err != nil || len(pr.Spread.Places) != 12 || pr.Spread.Vars.Title != "Лицей" || len(views()) != events || a.editor().View().Rev != r.View.Rev {
+		t.Fatalf("предпросмотр: %v, мест %d, событий %d", err, len(pr.Spread.Places), len(views())-events)
+	}
+	if _, err := a.PreviewVignette(sv.ID, model.VigSetup{Vig: model.Vignette{Tpl: "grid", Teachers: 18, Pupils: 64}}); err == nil {
+		t.Fatal("предпросмотр больше 64 мест без ошибки")
+	}
+	r, err = a.SetupVignette(sv.ID, setup)
+	if err != nil || len(r.View.Spreads[0].Places) != 12 || r.View.Spreads[0].Vars.Title != "Лицей" || len(views()) != events+1 {
+		t.Fatalf("применить из окна: %v, событий %d", err, len(views())-events)
+	}
+	v, err := a.AddVignette(-1)
+	if err != nil || len(v.Spreads) != 2 || v.Spreads[1].Kind != model.KindVignette {
+		t.Fatalf("новая виньетка: %v, разворотов %d", err, len(v.Spreads))
+	}
+	rev := a.SortVignette(sv.ID).Rev // мест с фото нет — холостая
+	if v = a.ClearVignette(sv.ID); v.Spreads[0].Kind != "" || v.Spreads[0].Vig != nil || v.Rev != rev+1 {
+		t.Fatalf("обычный разворот: %q, rev %d → %d", v.Spreads[0].Kind, rev, v.Rev)
+	}
+}
+
+// Отмена и возврат шага со сменой списка папок перечитывают библиотеку (rescan): ход сканирования
+// становится активным и приходит к концу.
+func TestAppUndoRedoFoldersRescan(t *testing.T) {
+	a, _ := spreadsApp(t, []string{"a"})
+	dir := testkit.TempDir(t)
+	testkit.JPEG(t, dir, "x.jpg", 20, 10)
+	if _, err := a.editor().AddFolder(dir); err != nil {
+		t.Fatal(err)
+	}
+	a.rescan()
+	waitScan(t, a)
+	if n := len(a.GetState().Photos); n != 1 {
+		t.Fatalf("после rescan фото %d", n)
+	}
+	v := a.Undo() // папка уходит из проекта — и фото из ленты
+	if len(v.Folders) != 0 {
+		t.Fatalf("папки после Undo: %v", v.Folders)
+	}
+	waitScan(t, a)
+	if n := len(a.GetState().Photos); n != 0 {
+		t.Fatalf("после Undo в ленте осталось %d фото", n)
+	}
+	v = a.Redo()
+	if len(v.Folders) != 1 {
+		t.Fatalf("папки после Redo: %v", v.Folders)
+	}
+	waitScan(t, a)
+	if n := len(a.GetState().Photos); n != 1 {
+		t.Fatalf("после Redo фото %d", n)
 	}
 }

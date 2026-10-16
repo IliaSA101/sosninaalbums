@@ -5,7 +5,7 @@ import { aabb, rotate, type Pt } from '../../base/geom/textbox'
 import { PERSON_FIELDS } from './fields'
 import type { CaptionView, Rect, SpreadView, StubView } from '../../base/core/types'
 
-export type Who = 'last' | 'first' | 'middle'
+export type Who = 'last' | 'first' | 'middle' | 'subject'
 
 // photo === '' — заглушка пустого места: имени у неё нет (имя — свойство фото).
 export interface NameTarget {
@@ -23,11 +23,13 @@ function inside(t: Item, p: Pt): boolean {
   return l.x >= -EPS && l.x <= t.w + EPS && l.y >= -EPS && l.y <= t.h + EPS
 }
 
-const whoOfItem = (t: Item): Who[] => (t.who ?? []).filter((w): w is Who => w === 'last' || w === 'first' || w === 'middle')
+const WHO: readonly string[] = ['last', 'first', 'middle', 'subject']
+const whoOfItem = (t: Item): Who[] => (t.who ?? []).filter((w): w is Who => WHO.includes(w))
 
-// Шаблон подписи ждёт имя: в нём есть {Фамилия}, {Имя} или {Отчество} (регистр не важен).
+// Шаблон подписи ждёт имя: в нём есть {Фамилия}, {Имя}, {Отчество} или {Предмет} (регистр не важен).
+// «Предмет» не в PERSON_FIELDS: оттуда берётся меню свадебного листа (решение 173).
 const hasPersonField = (t: string | undefined): boolean =>
-  !!t && PERSON_FIELDS.some((f) => t.toLowerCase().includes(`{${f.toLowerCase()}}`))
+  !!t && [...PERSON_FIELDS, 'Предмет'].some((f) => t.toLowerCase().includes(`{${f.toLowerCase()}}`))
 
 // В листе есть поля имени: у какой-либо подписи или заглушки есть who, либо шаблон листа (подписи к каждому
 // фото, подпись учителя виньетки) содержит поле имени — тогда пустое место тоже ждёт имя, тост уместен.

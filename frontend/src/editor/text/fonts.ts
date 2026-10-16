@@ -30,7 +30,7 @@ export function faceSpecs(fonts: FontFamily[]): FaceSpec[] {
 }
 
 // Регистрирует начертания в document.fonts, но не грузит: браузер возьмёт файл при первом
-// использовании (текст на холсте, образец в открытом списке). Гарнитур 18, файлов ~60 —
+// использовании (текст на холсте, образец в открытом списке). Гарнитур 33, файлов 62 —
 // грузить всё на старте незачем. Возвращает число зарегистрированных.
 export function loadFonts(fonts: FontFamily[]): number {
   let n = 0
@@ -49,8 +49,9 @@ export function loadFonts(fonts: FontFamily[]): number {
 export const GROUPS: readonly (readonly [string, string])[] = [
   ['script', 'Рукописные'],
   ['kids', 'Детские и округлые'],
-  ['serif', 'Антиква'],
-  ['sans', 'Гротески'],
+  ['serif', 'С засечками'],
+  ['sans', 'Без засечек'],
+  ['display', 'Декоративные'],
 ]
 
 export interface FontGroup {
@@ -100,6 +101,9 @@ export function findByPrefix(names: string[], query: string, from: number): numb
   return hit(from) ? from : names.findIndex((_, i) => hit(i))
 }
 
+// = text.DefaultFont в Go: запасная гарнитура для знака, которого нет в выбранной (решение №66).
+export const DEFAULT_FONT = 'montserrat'
+
 export interface FontCss {
   family: string // значение font-family (с запасным семейством)
   weight: 400 | 700
@@ -108,13 +112,17 @@ export interface FontCss {
 
 // CSS-шрифт для стиля блока. font берётся только из таблицы State.fonts (текст из файла
 // проекта недоверенный); неизвестный id — запасной шрифт. Жирный и курсив — только если
-// у семейства есть такое начертание (у Marck Script их нет).
+// у семейства есть такое начертание (у Marck Script их нет). Следом — Montserrat: браузер
+// берёт знак, которого нет в шрифте (№, ₽), оттуда же, откуда Go в JPEG, а не из системного.
 export function fontCss(st: Pick<TextStyle, 'font' | 'bold' | 'italic'>, fonts: FontFamily[]): FontCss {
   const f = fonts.find((x) => x.id === st.font)
   if (!f) return { family: 'sans-serif', weight: 400, style: 'normal' }
   const bold = !!st.bold && f.faces.some((x) => x.bold)
   const italic = !!st.italic && f.faces.some((x) => x.italic)
-  return { family: `"${f.css.replace(/["\\]/g, '')}", sans-serif`, weight: bold ? 700 : 400, style: italic ? 'italic' : 'normal' }
+  const name = (x: FontFamily) => `"${x.css.replace(/["\\]/g, '')}"`
+  const fb = f.id !== DEFAULT_FONT ? fonts.find((x) => x.id === DEFAULT_FONT) : undefined
+  const family = [name(f), ...(fb ? [name(fb)] : []), 'sans-serif'].join(', ')
+  return { family, weight: bold ? 700 : 400, style: italic ? 'italic' : 'normal' }
 }
 
 // Доступны ли Ж и К (у гарнитуры есть такое начертание).

@@ -75,7 +75,7 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 	taken := p.PlaceIDs()
 	fresh := make([]*model.Place, len(boxes))
 	for i, b := range boxes {
-		fresh[i] = &model.Place{ID: model.NewPlaceID(taken), X: b.X, Y: b.Y, W: b.W, H: b.H, Rot: b.Rot}
+		fresh[i] = &model.Place{ID: model.NewPlaceID(taken), X: b.X, Y: b.Y, W: b.W, H: b.H, Rot: b.Rot, Shape: b.Shape, Round: b.Round}
 		p.ClampPlace(s, fresh[i])
 	}
 	s.Grid = slices.Insert(kept, at, fresh...)
@@ -91,7 +91,7 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 func FracBoxes(p *model.Project, s *model.Spread, tplScope, scope string, frac []model.Box) ([]model.Box, error) {
 	conv := func(out []model.Box, a layout.Rect) []model.Box {
 		for _, f := range frac {
-			out = append(out, model.Box{X: a.X + f.X*a.W, Y: a.Y + f.Y*a.H, W: f.W * a.W, H: f.H * a.H, Rot: f.Rot})
+			out = append(out, model.Box{X: a.X + f.X*a.W, Y: a.Y + f.Y*a.H, W: f.W * a.W, H: f.H * a.H, Rot: f.Rot, Shape: f.Shape, Round: f.Round})
 		}
 		return out
 	}
@@ -121,7 +121,7 @@ func AreaFrac(p *model.Project, s *model.Spread, scope string) []model.Box {
 	var out []model.Box
 	for _, pl := range s.Grid {
 		if InArea(p, s, pl.X, pl.W, scope) {
-			out = append(out, model.Box{X: (pl.X - a.X) / a.W, Y: (pl.Y - a.Y) / a.H, W: pl.W / a.W, H: pl.H / a.H, Rot: pl.Rot})
+			out = append(out, model.Box{X: (pl.X - a.X) / a.W, Y: (pl.Y - a.Y) / a.H, W: pl.W / a.W, H: pl.H / a.H, Rot: pl.Rot, Shape: pl.Shape, Round: pl.Round})
 		}
 	}
 	return model.ClampBoxes(out) // то же правило, что у PlaceBoxes и шаблонов
@@ -184,7 +184,7 @@ func mirrorHead(p *model.Project, s *model.Spread, scope string) bool {
 	if !ok || !s.IsVignette() {
 		return false
 	}
-	h := vigHead(s, s.Vig.Head)
+	h := s.VigHead(s.Vig.Head)
 	if h == nil {
 		return false
 	}

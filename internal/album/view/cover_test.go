@@ -9,6 +9,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/view"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
 // TestSpreadViewSize — размер листа в виде из Geo (032 §6): разворот — 2·pageW × pageH со
@@ -42,15 +43,15 @@ func TestCoverView(t *testing.T) {
 		t.Fatalf("обложка %v, разворотов %d", v.Cover, len(v.Spreads))
 	}
 	c := v.Cover
-	// Тонкие листы, 2 разворота: корешок 6; лист 23,5 + 281 + 6 + 281 + 23,5 × 284 + 47.
-	if s := c.Sheet; s.ID != model.CoverID || s.W != 615 || s.H != 331 || s.Mid != 307.5 || !s.Grid || len(s.Places) != 1 {
+	// Тонкие листы, 2 разворота: корешок 6; лист 20 + 281 + 6 + 281 + 20 × 284 + 40 (заворот 20, 047).
+	if s := c.Sheet; s.ID != model.CoverID || s.W != 608 || s.H != 324 || s.Mid != 304 || !s.Grid || len(s.Places) != 1 {
 		t.Fatalf("лист обложки %s %v×%v шов %v, мест %d", s.ID, s.W, s.H, s.Mid, len(s.Places))
 	}
 	if c.Spine != 6 || c.N != 2 || c.Over || c.Layout != "front" || c.Preset != model.CoverDefault {
 		t.Fatalf("числа обложки %+v", *c)
 	}
 	dpi := float64(v.Settings.DPI)
-	if c.PxW != int(math.Round(615/25.4*dpi)) || c.PxH != int(math.Round(331/25.4*dpi)) {
+	if c.PxW != int(math.Round(608/25.4*dpi)) || c.PxH != int(math.Round(324/25.4*dpi)) {
 		t.Fatalf("00.jpg %d×%d при %v dpi", c.PxW, c.PxH, dpi)
 	}
 	labels := map[string]string{}
@@ -66,14 +67,47 @@ func TestCoverView(t *testing.T) {
 	if _, ok := labels["hinge"]; ok {
 		t.Error("расстав 0 — зоны расстава нет")
 	}
-	if len(c.Drop) != 1 || c.Drop[0].Kind != "front" || c.Drop[0].Rect.X != 307.5+3 || c.Drop[0].Rect.W != 615-310.5 {
+	if len(c.Drop) != 1 || c.Drop[0].Kind != "front" || c.Drop[0].Rect.X != 304+3 || c.Drop[0].Rect.W != 608-307 {
 		t.Fatalf("пустая зона броска %+v", c.Drop)
 	}
-	if len(c.Safe) != 2 || c.TextMaxW != 304.5-2*v.Settings.Safe {
+	if len(c.Safe) != 2 || c.TextMaxW != 301-2*v.Settings.Safe {
 		t.Fatalf("безопасная зона %+v, предел ширины %v", c.Safe, c.TextMaxW)
 	}
 	if v.EmptyPlaces != 1 || slices.Contains(v.BackdropUsed, "k") {
 		t.Fatalf("итоги вида: пустых мест %d, фоны %v", v.EmptyPlaces, v.BackdropUsed)
+	}
+}
+
+// TestCoverZonesSpineSafe — безопасные линии обложки (047): Safe от линии загиба, SpineSafe от
+// края корешка (у Нетпринта — от края расстава); 0 — Settings.Safe со всех сторон, как до 047.
+func TestCoverZonesSpineSafe(t *testing.T) {
+	e := edtest.CoverEd(t, "k", edtest.Calendar(), []string{"x"})
+	safe := func() []layout.Rect { return e.View().Cover.Safe }
+	// Тонкие листы, 2 разворота: X 0 20 301 301 307 307 588 608, Y 0 20 304 324; линии 8 и 12.
+	if got := safe(); !slices.Equal(got, []layout.Rect{{X: 28, Y: 28, W: 261, H: 268}, {X: 319, Y: 28, W: 261, H: 268}}) {
+		t.Fatalf("линии 8/12: %+v", got)
+	}
+	st := edtest.P(e).Settings.Safe
+	edtest.Change(e, func(p *model.Project) { p.Cover.Spec.Safe, p.Cover.Spec.SpineSafe = 0, 0 })
+	if got := safe(); !slices.Equal(got, []layout.Rect{{X: 20 + st, Y: 20 + st, W: 281 - 2*st, H: 284 - 2*st}, {X: 307 + st, Y: 20 + st, W: 281 - 2*st, H: 284 - 2*st}}) {
+		t.Fatalf("0 — зона альбома %v: %+v", st, got)
+	}
+	// Нетпринт Премиум: расстав 9 по обе стороны корешка, линия корешка — от края расстава.
+	if _, err := e.ApplyCoverPreset("netprint-premium"); err != nil {
+		t.Fatal(err)
+	}
+	edtest.Change(e, func(p *model.Project) { p.Cover.Spec.Safe, p.Cover.Spec.SpineSafe = 5, 10 })
+	cg := edtest.P(e).CoverGeo()
+	x, y := cg.X, cg.Y
+	want := []layout.Rect{
+		{X: x[1] + 5, Y: y[1] + 5, W: x[2] - 10 - x[1] - 5, H: y[2] - y[1] - 10},
+		{X: x[5] + 10, Y: y[1] + 5, W: x[6] - 5 - x[5] - 10, H: y[2] - y[1] - 10},
+	}
+	near := func(a, b layout.Rect) bool {
+		return math.Abs(a.X-b.X)+math.Abs(a.Y-b.Y)+math.Abs(a.W-b.W)+math.Abs(a.H-b.H) < 1e-9
+	}
+	if got := safe(); x[3]-x[2] != 9 || len(got) != 2 || !near(got[0], want[0]) || !near(got[1], want[1]) {
+		t.Fatalf("расстав: %+v, ждали %+v (X %v)", got, want, x)
 	}
 }
 
@@ -118,7 +152,7 @@ func TestCoverTextExpands(t *testing.T) {
 		t.Fatal(err)
 	}
 	v = edtest.Change(e, func(p *model.Project) { p.Spreads[len(p.Spreads)-1].Vars = &model.Vars{Title: "Школа №5"} })
-	if got := v.Cover.Sheet; got.Texts[0].Text != "Школа №5" || got.Vars != (model.Vars{}) || len(got.Fields) != 7 {
+	if got := v.Cover.Sheet; got.Texts[0].Text != "Школа №5" || got.Vars != (model.Vars{}) || len(got.Fields) != 8 { // 8: с «Предметом» (049)
 		t.Fatalf("с полями виньетки: %q, свои %+v, меню %v", got.Texts[0].Text, got.Vars, got.Fields)
 	}
 	if slices.Contains(v.Unfilled, "Заголовок") {

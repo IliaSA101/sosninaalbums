@@ -2,6 +2,7 @@ package text
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"golang.org/x/image/font/sfnt"
@@ -31,14 +32,49 @@ func TestFontsEmbedded(t *testing.T) {
 			}
 		}
 	}
-	if n != 43 {
-		t.Errorf("начертаний %d, ждали 43", n)
+	if n != 62 {
+		t.Errorf("начертаний %d, ждали 62", n)
 	}
-	if len(Families()) != 18 {
-		t.Errorf("гарнитур %d, ждали 18", len(Families()))
+	if len(Families()) != 33 {
+		t.Errorf("гарнитур %d, ждали 33", len(Families()))
 	}
 	if _, ok := FontFile("../fonts.go"); ok {
 		t.Error("FontFile пропустил путь вне белого списка")
+	}
+}
+
+// id гарнитур хранятся в .salbum навсегда: переименование молча заменит шрифт на Montserrat.
+func TestFamilyIDsStable(t *testing.T) {
+	want := "badscript caveat comforter greatvibes lobster marck pacifico " +
+		"amaticsc comfortaa marmelad neucha nunito pangolin rubik " +
+		"alice cormorant forum kurale lora oldstandard playfair prata ptserif yeseva " +
+		"golos montserrat oswald raleway robotocondensed tenorsans " +
+		"poiretone ruslan underdog"
+	var got []string
+	for _, f := range Families() {
+		got = append(got, f.ID)
+	}
+	if g := strings.Join(got, " "); g != want {
+		t.Errorf("порядок или id гарнитур изменились:\n%s\nждали:\n%s", g, want)
+	}
+}
+
+// Вшитые файлы растут с каждой гарнитурой: предел папки 8 МБ (спека 046) — вес exe.
+func TestFontsFolderSize(t *testing.T) {
+	ents, err := fontFS.ReadDir("fonts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var total int64
+	for _, e := range ents {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		total += info.Size()
+	}
+	if total > 8_000_000 {
+		t.Errorf("вшитых шрифтов %d байт, предел 8 000 000", total)
 	}
 }
 
@@ -60,6 +96,13 @@ func TestStyleClamped(t *testing.T) {
 	}
 	if n := (Style{Font: "nunito", Bold: true, Italic: true}).Clamped(); !n.Bold || !n.Italic {
 		t.Errorf("Nunito: %+v", n)
+	}
+	// Новые гарнитуры: у Rubik есть жирный, но нет курсива; у Lobster нет ни того ни другого.
+	if r := (Style{Font: "rubik", Bold: true, Italic: true}).Clamped(); !r.Bold || r.Italic {
+		t.Errorf("Rubik: %+v", r)
+	}
+	if l := (Style{Font: "lobster", Bold: true, Italic: true}).Clamped(); l.Bold || l.Italic || l.Font != "lobster" {
+		t.Errorf("Lobster: %+v", l)
 	}
 	if x := (Style{Font: "xx", Bold: true}).Clamped(); x.Font != DefaultFont || !x.Bold {
 		t.Errorf("неизвестный id: %+v", x)

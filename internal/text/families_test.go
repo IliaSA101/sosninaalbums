@@ -13,7 +13,7 @@ import (
 
 // Знаки, которых нет в отдельных гарнитурах (как ₽ у Marck Script): id → знаки.
 // Тот же список — в fonts/README.md.
-var noGlyph = map[string]string{}
+var noGlyph = map[string]string{"alice": "№", "prata": "№"}
 
 const needRunes = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя" +
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?«»—–№"
@@ -28,6 +28,10 @@ func TestFontsCyrillic(t *testing.T) {
 		for _, fc := range f.Faces {
 			for _, r := range needRunes {
 				if strings.ContainsRune(noGlyph[f.ID], r) {
+					// исключение не должно устареть: знак действительно отсутствует
+					if g, _ := m[fc.File].GlyphIndex(&b, r); g != 0 {
+						t.Errorf("%s: знак %q есть, уберите из noGlyph", fc.File, r)
+					}
 					continue
 				}
 				if g, err := m[fc.File].GlyphIndex(&b, r); err != nil || g == 0 {
@@ -63,7 +67,7 @@ func TestFamiliesGroups(t *testing.T) {
 	files := map[string]bool{}
 	for _, f := range Families() {
 		switch f.Group {
-		case "script", "kids", "serif", "sans":
+		case "script", "kids", "serif", "sans", "display":
 		default:
 			t.Errorf("%s: группа %q", f.ID, f.Group)
 		}

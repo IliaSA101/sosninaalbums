@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
@@ -93,5 +94,51 @@ func TestExportSpreadsRotZ(t *testing.T) {
 	}
 	if tz := got.Texts[0].Z; tz != sv.Texts[0].Z || tz >= got.Photos[0].Z {
 		t.Fatalf("Z текста %d, фото %d, во View %d", tz, got.Photos[0].Z, sv.Texts[0].Z)
+	}
+}
+
+// Наклон фото фона (045) доходит до экспорта из View: ImgRot = Frame.R, Img — уже увеличенный
+// кадр View; фон без наклона — ImgRot 0 (прежний путь рендера).
+func TestExportBackdropTilt(t *testing.T) {
+	p := model.New()
+	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
+	p.Photos["l"] = model.PhotoRef{Path: `C:\l.jpg`, W: 6000, H: 4000}
+	p.Photos["r"] = model.PhotoRef{Path: `C:\r.jpg`, W: 6000, H: 4000}
+	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a"},
+		BgPhotoL: &model.Backdrop{Photo: "l", W: 300, H: 300, Rot: 10, Frame: &model.Frame{S: 1, R: 4.5}},
+		BgPhotoR: &model.Backdrop{Photo: "r", X: 300, W: 300, H: 300, Frame: &model.Frame{S: 1.5}}}}
+	pp, v := mustEditor(t, p, "").Snapshot()
+	sv := v.Spreads[0]
+	got := FromView(pp, v)[0].Backdrops
+	if len(got) != 2 || len(sv.Backdrops) != 2 {
+		t.Fatalf("фоны: %+v", got)
+	}
+	for i, b := range got {
+		bv := sv.Backdrops[i]
+		if b.ImgRot != bv.Frame.R || b.Img != bv.Img || b.Rot != bv.Box.Rot {
+			t.Fatalf("фон %d: %+v, во View %+v", i, b, bv)
+		}
+	}
+	if got[0].ImgRot != 4.5 || got[0].Rot != 10 || got[1].ImgRot != 0 {
+		t.Fatalf("наклон фонов: %v, %v; рамка %v", got[0].ImgRot, got[1].ImgRot, got[0].Rot)
+	}
+}
+
+// Форма места (044) из View доходит до задания: круг, скругление в мм, прямоугольник — нулевая.
+func TestExportSpreadsShape(t *testing.T) {
+	p := model.New()
+	for _, id := range []string{"a", "b", "c"} {
+		p.Photos[id] = model.PhotoRef{Path: `C:\` + id + `.jpg`, W: 300, H: 200}
+	}
+	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a", "b", "c"}, Grid: []*model.Place{
+		{ID: "000000000001", X: 10, Y: 10, W: 80, H: 80, Photo: "a", Shape: model.ShapeOval},
+		{ID: "000000000002", X: 100, Y: 10, W: 100, H: 60, Photo: "b", Round: 10},
+		{ID: "000000000003", X: 210, Y: 10, W: 60, H: 60, Photo: "c"},
+	}}}
+	pp, v := mustEditor(t, p, "").Snapshot()
+	got := FromView(pp, v)[0].Photos
+	if len(got) != 3 || !got[0].Outline.Oval || got[0].Outline.Radius != 0 ||
+		got[1].Outline.Oval || got[1].Outline.Radius != 6 || got[2].Outline != (geom.Outline{}) {
+		t.Fatalf("формы в задании: %+v", got)
 	}
 }

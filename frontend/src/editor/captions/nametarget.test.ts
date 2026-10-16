@@ -100,6 +100,13 @@ describe('пустая виньетка', () => {
   it('поле имени только в шаблоне учителя (ttext) — тоже', () => {
     expect(hasNameFields(vig('', '{имя} {Отчество}'))).toBe(true)
   })
+  it('«Предмет» (049): поле имени — шаблон учителя с {Предмет} ждёт ввода, who пропускает subject', () => {
+    expect(hasNameFields(vig('', '{Фамилия}\n{Предмет}'))).toBe(true)
+    expect(hasNameFields(vig('{предмет}'))).toBe(true)
+    const s = sheet([cap('a', 10, 100, 60, 12, ['last', 'subject'])])
+    expect(nameTargetAt(s, 40, 105)?.who).toEqual(['last', 'subject'])
+    expect(whoOf(s, 'a')).toEqual(['last', 'subject'])
+  })
   it('без шаблона подписи или без полей имени — как обычный лист', () => {
     expect(hasNameFields(vig(''))).toBe(false)
     expect(hasNameFields(vig('Класс 11А', '{Заголовок}'))).toBe(false)

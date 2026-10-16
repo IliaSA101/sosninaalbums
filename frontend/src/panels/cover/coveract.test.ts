@@ -49,6 +49,12 @@ describe('coverAct.applyPreset', () => {
     expect(calls).toEqual([])
   })
 
+  it('«Исправить» (047): тот же пресет, что стоит, — ApplyCoverPreset(cv.preset)', async () => {
+    withCover('fsfera-thin')
+    await coverAct.applyPreset(store.cover!.preset)
+    expect(calls).toEqual(['ApplyCoverPreset:fsfera-thin'])
+  })
+
   it('обычный пресет — ApplyCoverPreset', async () => {
     withCover('custom')
     await coverAct.applyPreset('double')

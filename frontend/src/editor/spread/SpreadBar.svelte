@@ -1,8 +1,8 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
   import { placesel } from '../places/placesel.svelte'
-  import { gallery } from '../../panels/layouts/gallery.svelte'
-  import { stillSpread, variantCounter } from '../../panels/layouts/variants'
+  import { gallery } from '../../panels/gallery/gallery.svelte'
+  import { stillSpread, variantCounter } from '../../panels/gallery/variants'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import { canvas } from '../canvas/canvas.svelte'

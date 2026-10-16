@@ -15,4 +15,10 @@ export const modalStack = {
     ids = ids.filter((x) => x !== id)
   },
   isTop: (id: number): boolean => ids.length > 0 && ids[ids.length - 1] === id,
+  // Место окна в стеке (0 — нижнее, -1 — нет): z-index окна = 80 + depth, чтобы последнее открытое
+  // было сверху при любом порядке в DOM (<Guide /> в App стоит раньше окна уровней). Выше 9 не растёт:
+  // тосты и всплывающие меню сидят на 90.
+  depth: (id: number): number => Math.min(ids.indexOf(id), 9),
+  // Открыто хоть одно окно: режимы холста под ним (045) не должны забирать Esc.
+  any: (): boolean => ids.length > 0,
 }

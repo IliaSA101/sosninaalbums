@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"math"
 
+	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
@@ -23,9 +24,12 @@ type Photo struct {
 	// Img задан в осях фото относительно неповёрнутой ячейки, как во View. Градусы по часовой.
 	Rot, ImgRot float64
 	Z           int // слой в общем стеке разворота (с текстами)
-	// Fade — прозрачность 0..1 (только у фона, спека 017): фото смешивается с уже
-	// залитым цветом страниц. У фото мест всегда 0.
+	// Fade — прозрачность 0..1 (фон, спека 017; свой стикер, 048): картинка смешивается с
+	// тем, что под ней. У фото мест всегда 0.
 	Fade float64
+	// Outline — форма места (044): эллипс, вписанный в Cell, или скругление, мм; нулевая —
+	// прямоугольник (прежний путь дословно). Поворачивается вместе с ячейкой.
+	Outline geom.Outline
 }
 
 // TextDraw — блок текста: (X, Y) — левый верхний угол в мм разворота,
@@ -39,6 +43,18 @@ type TextDraw struct {
 	Z     int // слой в общем стеке разворота (с фото)
 }
 
+// PatternDraw — узор области (048): Area — мм листа, как у фото фона; Kind, Inks, Scale, Seed —
+// параметры gen (рисует тот же код, что превью /media/gen; поля, а не gen.Spec: export собирает
+// задание без импорта decor/gen, depguard); Fade — прозрачность 0..1, 1 — не рисуется.
+type PatternDraw struct {
+	Area  layout.Rect
+	Kind  string
+	Inks  []string
+	Scale float64
+	Seed  uint32
+	Fade  float64
+}
+
 // Plate — плашка: прямоугольник сплошного цвета (мм листа), например корешок обложки (032).
 type Plate struct {
 	Rect  layout.Rect
@@ -46,13 +62,18 @@ type Plate struct {
 }
 
 // Spread — всё, что нужно для рисования разворота. Bg — цвет левой и правой страницы;
-// фото и тексты рисуются одним стеком по Z (больший сверху), при равных — фото, затем тексты по порядку.
+// фото, стикеры и тексты рисуются одним стеком по Z (больший сверху), при равных — фото,
+// свои стикеры, процедурные, затем тексты по порядку.
 type Spread struct {
 	Bg        [2]color.RGBA
-	Backdrops []Backdrop // фото на фоне: поверх цвета страниц, под местами
-	Plates    []Plate    // плашки: поверх фонов, под местами и текстами
+	Patterns  []PatternDraw // узоры (048): поверх цвета страниц, под фото фона
+	Backdrops []Backdrop    // фото на фоне: поверх цвета страниц и узоров, под местами
+	Plates    []Plate       // плашки: поверх фонов, под местами и текстами
 	Photos    []Photo
-	Texts     []TextDraw
+	// Stickers — свои стикеры (048): Cell = Img = рамка, Rot — вокруг её центра; Fade ≥ 1 не рисуется.
+	Stickers []Photo
+	Arts     []ArtDraw // процедурные стикеры (048)
+	Texts    []TextDraw
 }
 
 type Options struct {

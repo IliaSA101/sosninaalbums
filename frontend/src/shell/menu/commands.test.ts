@@ -10,6 +10,8 @@ import { modes } from '../../base/prefs/view.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
 import { makeVignette } from '../../panels/vignette/vigact'
 import { vigDialog } from '../../panels/vignette/vigsession.svelte'
+import { decor } from '../../panels/decor/decor.svelte'
+import { gridAct } from '../../panels/layouts/gridact.svelte'
 import type { SpreadView } from '../../base/core/types'
 
 // Go не зовём: «Сделать виньеткой» проверяем по вызову действия vigact.
@@ -111,6 +113,85 @@ describe('команды', () => {
       expect(vigDialog.id).toBe('v')
     } finally {
       vigDialog.close()
+      store.view = was.view
+      store.current = was.current
+      prefs.level = was.level
+    }
+  })
+
+  it('«Галерея фонов…» (048): открывает окно текущего листа на весь лист; на «Простом» и без листа — молчит', () => {
+    const was = { view: store.view, current: store.current, level: prefs.level }
+    const show = vi.spyOn(decor, 'show').mockImplementation(() => {})
+    try {
+      store.view = { ...store.view, spreads: [{ id: 'a', photos: [] } as unknown as SpreadView] }
+      store.current = 0
+      prefs.level = 'simple'
+      COMMANDS.bgGallery()
+      expect(show).not.toHaveBeenCalled()
+      prefs.level = 'standard'
+      COMMANDS.bgGallery()
+      expect(show).toHaveBeenCalledWith('bg', 'a', 'spread')
+    } finally {
+      show.mockRestore()
+      store.view = was.view
+      store.current = was.current
+      prefs.level = was.level
+    }
+  })
+
+  it('«Копировать оформление…» (049 Ф2): открывает окно режима decor для текущего листа; обложка, «Простой» и без листа — молчит', () => {
+    const was = { view: store.view, current: store.current, level: prefs.level, onCover: store.onCover }
+    try {
+      store.view = { ...store.view, spreads: [{ id: 'a', photos: [] } as unknown as SpreadView] }
+      store.current = 0
+      prefs.level = 'simple'
+      COMMANDS.copyDecor()
+      expect(gridAct.copyGrid).toBeNull()
+      prefs.level = 'standard'
+      COMMANDS.copyDecor()
+      expect(gridAct.copyGrid).toEqual({ spread: 'a', from: 'spread', mode: 'decor' })
+      // повторный вызов — то же окно, без второго
+      COMMANDS.copyDecor()
+      expect(gridAct.copyGrid).toEqual({ spread: 'a', from: 'spread', mode: 'decor' })
+      gridAct.copyGrid = null
+      store.view = { ...store.view, spreads: [] }
+      COMMANDS.copyDecor()
+      expect(gridAct.copyGrid).toBeNull()
+      store.view = {
+        ...store.view,
+        spreads: [{ id: 'a', photos: [] } as unknown as SpreadView],
+        cover: { sheet: { id: 'cover', photos: [] } } as never,
+      }
+      store.onCover = true
+      COMMANDS.copyDecor()
+      expect(gridAct.copyGrid).toBeNull()
+    } finally {
+      gridAct.copyGrid = null
+      store.view = was.view
+      store.current = was.current
+      store.onCover = was.onCover
+      prefs.level = was.level
+    }
+  })
+
+  it('«Добавить стикер…» (048): открывает окно стикеров текущего листа; на «Простом» и без листа — молчит', () => {
+    const was = { view: store.view, current: store.current, level: prefs.level }
+    const show = vi.spyOn(decor, 'show').mockImplementation(() => {})
+    try {
+      store.view = { ...store.view, spreads: [{ id: 'a', photos: [] } as unknown as SpreadView] }
+      store.current = 0
+      prefs.level = 'simple'
+      COMMANDS.addSticker()
+      expect(show).not.toHaveBeenCalled()
+      prefs.level = 'standard'
+      COMMANDS.addSticker()
+      expect(show).toHaveBeenCalledWith('sticker', 'a', 'spread')
+      show.mockClear()
+      store.view = { ...store.view, spreads: [] }
+      COMMANDS.addSticker()
+      expect(show).not.toHaveBeenCalled()
+    } finally {
+      show.mockRestore()
       store.view = was.view
       store.current = was.current
       prefs.level = was.level

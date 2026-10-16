@@ -83,6 +83,29 @@ linters:
         # internal/app (слой окна Wails) импортирует любые пакеты internal, кроме testkit
         # (его закрывает правило выше); app не импортирует никто, кроме main.go — это
         # следует из белых списков ниже: app там нигде не назван.
+        # Разрез app (№202): edit — тонкие правки только через Editor и Host.Changed, иначе обход
+        # автосохранения и syncMissing; namesfile — чтение таблицы имён. Да владельца 2026-10-16 (№206).
+        "app/edit: только album и model":
+          files:
+            - "**/internal/app/edit/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/app/edit
+        "app/namesfile: model, paths, table":
+          files:
+            - "**/internal/app/namesfile/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/table
+            - github.com/IliaSA101/sosninaalbums/internal/app/namesfile
         "paths: ничего из internal":
           files:
             - "**/internal/paths/**"
@@ -91,6 +114,40 @@ linters:
             - $gostd
             - github.com/IliaSA101/sosninaalbums/internal/paths
             - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Чтение таблиц Excel/CSV (043) — чистый разбор файла; да владельца 15.10.
+        "table: ничего из internal":
+          files:
+            - "**/internal/table/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/table
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/text/encoding # CSV из Excel в cp1251
+        # Рисовалка фонов и стикеров (048) — только stdlib и x/image; да владельца 15.10 (№143).
+        "decor/gen: только x/image":
+          files:
+            - "**/internal/decor/gen/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/image
+        "decor: gen, model, library, imgfile, paths":
+          files:
+            - "**/internal/decor/*.go"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/disintegration/imaging
         "colorspace: ничего из internal":
           files:
             - "**/internal/colorspace/**"
@@ -167,6 +224,7 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/imgfile
             - github.com/IliaSA101/sosninaalbums/internal/layout
             - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
         "library: только colorspace, imgfile, paths":
           files:
             - "**/internal/library/**"
@@ -218,6 +276,7 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/paths
             - github.com/IliaSA101/sosninaalbums/internal/text
             - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
         "album/design: только model":
           files:
             - "**/internal/album/design/**"
@@ -282,6 +341,20 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/album$
             - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
             - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Виньетка листа (разрез 0.12) — область дерева album, как grid; да владельца 15.10.
+        "album/vigsheet: только model":
+          files:
+            - "**/internal/album/vigsheet/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/vigsheet
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
         "album/spreads: только model":
           files:
             - "**/internal/album/spreads/**"
@@ -314,6 +387,7 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/album$
             - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
             - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
         # 0.10 (разрешение владельца 2026-10-14): генератор виньетки — чистая геометрия без проекта (031 design §4).
         "album/vignette: только стандартная библиотека":
           files:
@@ -439,6 +513,8 @@ linters:
               desc: тело правки без проверок обёртки Editor (023)
             - pkg: github.com/IliaSA101/sosninaalbums/internal/album/view
               desc: сборка вида — через Editor.View (023)
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/vigsheet
+              desc: тело правки без проверок обёртки Editor (разрез 0.12)
         "prefs: только library, osx, paths, album":
           files:
             - "**/internal/prefs/**"

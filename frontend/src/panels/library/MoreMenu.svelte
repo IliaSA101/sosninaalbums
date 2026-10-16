@@ -3,7 +3,7 @@
   import { modes } from '../../base/prefs/view.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import Popover from '../../base/ui/Popover.svelte'
-  import { gallery } from '../layouts/gallery.svelte'
+  import { gallery } from '../gallery/gallery.svelte'
 
   // «⋯» в конце строки панели: группы, которым не хватило места (спека 024). Ушедшие группы рисует вызывающий.
   // hold — id справочника (033) ушедших групп: кнопка мигает вместо них.

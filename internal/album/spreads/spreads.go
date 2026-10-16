@@ -155,11 +155,17 @@ func MergeSpreads(p *model.Project, id string) {
 	}
 	next := p.Spreads[i+1]
 	if len(s.Grid) > 0 || len(next.Grid) > 0 ||
-		len(s.Photos)+len(next.Photos) > model.MaxPhotos || len(s.Texts)+len(next.Texts) > model.MaxTexts {
+		len(s.Photos)+len(next.Photos) > model.MaxPhotos || len(s.Texts)+len(next.Texts) > model.MaxTexts ||
+		len(s.Stickers)+len(next.Stickers) > model.MaxStickers {
 		return
+	}
+	// Стек «Авто» (стикеры и тексты, 048): слои второго — над слоями первого, как и сами списки.
+	if s.Order != nil || next.Order != nil {
+		s.Order = append(s.Stack(), next.Stack()...)
 	}
 	s.Photos = append(slices.Clone(s.Photos), next.Photos...)
 	s.Texts = append(s.Texts, next.Texts...)
+	s.Stickers = append(s.Stickers, next.Stickers...)
 	if s.Name == "" {
 		s.Name = next.Name
 	}
@@ -176,8 +182,11 @@ func MergeSpreads(p *model.Project, id string) {
 	if s.BgR == "" {
 		s.BgR = next.BgR
 	}
-	if len(s.Backdrops()) == 0 { // фоны первого; без них — второго
+	// Фото фона и узоры (048) — один «фон»: есть что-то у первого — весь его, иначе весь
+	// второго; по отдельности вышла бы смесь, которой не было ни на одном листе.
+	if len(s.Backdrops()) == 0 && len(s.Patterns()) == 0 {
 		s.BgPhoto, s.BgPhotoL, s.BgPhotoR = next.BgPhoto, next.BgPhotoL, next.BgPhotoR
+		s.Pat, s.PatL, s.PatR = next.Pat, next.PatL, next.PatR
 	}
 	s.Layout = ""
 	p.Spreads = slices.Delete(p.Spreads, i+1, i+2)
@@ -214,9 +223,11 @@ func gridPhotoSet(p *model.Project) map[string]bool {
 }
 
 // DeleteSelection — операция над проектом (Editor.DeleteSelection; порядок описан там).
+// texts — ID текстов и стикеров (048, решение №97: сигнатура прежняя).
 func DeleteSelection(p *model.Project, spreadID string, photos, places, texts []string) {
 	for _, id := range texts {
 		p.DeleteText(id)
+		p.DeleteSticker(id)
 	}
 	p.Detach(photos)
 	p.DeletePlaces(spreadID, places)

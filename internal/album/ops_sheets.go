@@ -3,16 +3,18 @@ package album
 import (
 	"cmp"
 	"fmt"
+	"math"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/backdrop"
 	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
-	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/album/view"
 	"github.com/IliaSA101/sosninaalbums/internal/album/vignette"
+	"github.com/IliaSA101/sosninaalbums/internal/album/vigsheet"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
@@ -139,36 +141,87 @@ func (e *Editor) CoverGuidePath() (path string) {
 	return path
 }
 
-// Виньетка (031 G5): тела правок — grid/vignette.go, план мест — пакет vignette (vigPlan).
+// Виньетка (031 G5): тела правок — vigsheet/vignette.go, план мест — пакет vignette (vigPlan).
 
 // SetVignette — «Сделать виньеткой» и «Применить»; left — фото, ушедшие в ленту.
 // Договор: v зажимается здесь (ClampVignette); мест больше MaxPlaces — ошибка try без правки.
 // Свой шаблон ("my:<id>") берётся из tpls (виньеточные шаблоны templates.json) или с самого
 // листа; поле v.Own от интерфейса отбрасывается, нет шаблона — «Шаблон не найден» без правки.
+// Форму мест (044, 049 §3.3) выводит vigForm: форма листа, смена шаблона (▦, ‹ ›, Пробел) меняет
+// её, как выбор в окне; форма от интерфейса у листа-виньетки отбрасывается. Свой шаблон с
+// формой приносит её при первом применении (vigsheet).
 func (e *Editor) SetVignette(spreadID string, v model.Vignette, tpls []model.Template) (model.View, int, error) {
 	v.Own = nil
 	v = model.ClampVignette(v)
 	return e.gridTry(func(p *model.Project) (int, error) {
-		own, err := grid.ResolveOwn(p, spreadID, v.Tpl, tpls)
+		v = vigForm(p, spreadID, v, tpls)
+		own, err := vigsheet.ResolveOwn(p, spreadID, v.Tpl, tpls)
 		if err != nil {
 			return 0, err
 		}
-		return grid.SetVignette(p, spreadID, v, vigPlan, own)
+		return vigsheet.SetVignette(p, spreadID, v, vigPlan, own, tplText)
 	})
+}
+
+// vigForm — форма мест для SetVignette (049 §3.3, как pickedForm окна): у листа-виньетки — его
+// форма; смена на каталожный «круг» ставит Круг и портрет 1:1, уход с шаблона-круга на шаблон без
+// подсказки при Круге — прямоугольник; иначе ручная форма стоит.
+// Не виньетка — форма, что прислали («Сделать виньеткой»), с той же подсказкой «круга».
+func vigForm(p *model.Project, spreadID string, v model.Vignette, tpls []model.Template) model.Vignette {
+	_, s := p.Find(spreadID)
+	if s == nil {
+		return v
+	}
+	prev := ""
+	if s.IsVignette() {
+		v.Shape, v.Round = s.Vig.Shape, s.Vig.Round
+		if s.Vig.Tpl == v.Tpl {
+			return v
+		}
+		prev = s.Vig.Tpl
+	}
+	next := vigHint(s, v.Tpl, tpls)
+	switch {
+	case next == vignette.ShapeOval && !strings.HasPrefix(v.Tpl, model.VigOwnPrefix):
+		v.Shape, v.Round, v.Ratio = model.ShapeOval, 0, "1:1"
+	case v.Shape == model.ShapeOval && prev != "" && next != vignette.ShapeOval && vigHint(s, prev, tpls) == vignette.ShapeOval:
+		v.Shape = ""
+	}
+	return v
+}
+
+// vigHint — подсказка формы шаблона tpl, как у превью ▦ (vigChoices): каталог — его Shape, свой —
+// форма его стиля, удалённый свой на листе s — форма листа.
+func vigHint(s *model.Spread, tpl string, tpls []model.Template) string {
+	id, own := strings.CutPrefix(tpl, model.VigOwnPrefix)
+	if !own {
+		return vignette.Find(tpl).Shape
+	}
+	for _, t := range tpls {
+		if t.ID == id && t.Kind == model.TplVignette && t.Vig != nil {
+			return t.Vig.Style.Shape
+		}
+	}
+	if s.IsVignette() && s.Vig.Tpl == tpl {
+		return s.Vig.Shape
+	}
+	return ""
 }
 
 // SetupVignette — «Применить» окна «Настроить виньетку»: параметры и поля шапки одним шагом
 // отмены; left — фото, ушедшие в ленту. Договор: зажим и разбор "my:" внутри
-// grid.SetupVignette; мест больше MaxPlaces — ошибка try без правки.
+// vigsheet.SetupVignette; мест больше MaxPlaces — ошибка try без правки.
 func (e *Editor) SetupVignette(spreadID string, s model.VigSetup, tpls []model.Template) (model.View, int, error) {
-	return e.gridTry(func(p *model.Project) (int, error) { return grid.SetupVignette(p, spreadID, s, vigPlan, tpls) })
+	return e.gridTry(func(p *model.Project) (int, error) {
+		return vigsheet.SetupVignette(p, spreadID, s, vigPlan, tpls, tplText)
+	})
 }
 
 // ResetVignette — «Вернуть авто» на виньетке (038, решение 14): места по плану текущего
 // шаблона одним шагом отмены, фото и имена остаются; left — фото, ушедшие в ленту. Не виньетка
 // и нетронутая — холостая правка.
 func (e *Editor) ResetVignette(spreadID string) (model.View, int, error) {
-	return e.gridTry(func(p *model.Project) (int, error) { return grid.ResetVignette(p, spreadID, vigPlan) })
+	return e.gridTry(func(p *model.Project) (int, error) { return vigsheet.ResetVignette(p, spreadID, vigPlan) })
 }
 
 // VigTemplate — шаблон виньетки листа для «Сохранить как шаблон» (ID и имя — на вызывающем).
@@ -178,7 +231,7 @@ func (e *Editor) VigTemplate(spreadID string) (t model.Template, err error) {
 		var boxes []model.Box
 		var geo model.VigGeo
 		var st model.VigStyle
-		if boxes, geo, st, err = grid.VigTemplateOf(p, spreadID); err == nil {
+		if boxes, geo, st, err = vigsheet.VigTemplateOf(p, spreadID); err == nil {
 			t = model.Template{Scope: model.TplSpread, Boxes: boxes, Kind: model.TplVignette, Vig: &model.VigTpl{VigGeo: geo, Style: st}}
 		}
 	})
@@ -193,7 +246,7 @@ func (e *Editor) PreviewVignette(spreadID string, s model.VigSetup, tpls []model
 	var data []byte
 	e.read(func(p *model.Project) { data = model.Marshal(p) })
 	before, c := model.Unmarshal(data), model.Unmarshal(data)
-	left, err := grid.SetupVignette(c, spreadID, s, vigPlan, tpls)
+	left, err := vigsheet.SetupVignette(c, spreadID, s, vigPlan, tpls, tplText)
 	if err == nil {
 		err = settle(c, before, false)
 	}
@@ -210,23 +263,24 @@ func (e *Editor) PreviewVignette(spreadID string, s model.VigSetup, tpls []model
 
 // AddVignette — новый разворот-виньетка по умолчанию на позиции at (-1 — в конец).
 func (e *Editor) AddVignette(at int) (model.View, error) {
-	return e.try("", func(p *model.Project) error { return grid.AddVignette(p, at, vigPlan) })
+	return e.try("", func(p *model.Project) error { return vigsheet.AddVignette(p, at, vigPlan) })
 }
 
 // ClearVignette — «Обычный разворот»: места, фото и подписи остаются. Не виньетка — холостая.
 func (e *Editor) ClearVignette(spreadID string) model.View {
-	return e.change(func(p *model.Project) { grid.ClearVignette(p, spreadID) })
+	return e.change(func(p *model.Project) { vigsheet.ClearVignette(p, spreadID) })
 }
 
 // SortVignette — «Сортировать по фамилии» (ученики). Не виньетка — холостая.
 func (e *Editor) SortVignette(spreadID string) model.View {
-	return e.change(func(p *model.Project) { grid.SortVignette(p, spreadID) })
+	return e.change(func(p *model.Project) { vigsheet.SortVignette(p, spreadID) })
 }
 
 // VignetteChoices — превью шаблонов каталога (на листе 031 — без Split), затем своих из tpls
 // (виньеточные шаблоны templates.json с числом страниц листа, 038) для чисел и пропорции
 // панели (у своих — портрет шаблона), без правки. Свой шаблон, стоящий на листе, но удалённый из файла, идёт последним с
-// Gone. Стиль подписей — листа, нет — тот, что включит «Применить». Неизвестный разворот — nil.
+// Gone. Стиль подписей — листа, нет — тот, что включит «Применить»; подпись учителя — та, что
+// поставит выбор (SwapTText: у «Руководитель…» три строки). Неизвестный разворот — nil.
 func (e *Editor) VignetteChoices(spreadID string, teachers, pupils int, ratio string, tpls []model.Template) []model.VigChoice {
 	var out []model.VigChoice
 	e.read(func(p *model.Project) { out = vigChoices(p, spreadID, teachers, pupils, ratio, tpls) })
@@ -251,21 +305,19 @@ func vigChoices(p *model.Project, spreadID string, teachers, pupils int, ratio s
 	g := p.Geo(s)
 	cat := vignette.Catalog(p.Settings.Sheet)
 	out := make([]model.VigChoice, 0, len(cat)+len(tpls)+1)
-	// choice — превью шаблона v на листе sp (стиль подписей — его).
-	choice := func(sp *model.Spread, v model.Vignette, name string) model.VigChoice {
-		pl := vigPlan(p, sp, v)
-		c := model.VigChoice{ID: v.Tpl, Name: name, Boxes: make([]model.Box, len(pl.Slots)), Roles: make([]string, len(pl.Slots)),
-			PupilW: geom.Round2(pl.PupilW), Small: pl.PupilW > 0 && pl.PupilW < vigSmallW, Over: model.VigPlaces(v) > model.MaxPlaces}
-		for k, sl := range pl.Slots {
-			b := sl.Box
-			c.Boxes[k] = model.Box{X: b.X / g.W, Y: b.Y / g.H, W: b.W / g.W, H: b.H / g.H}
-			c.Roles[k] = sl.Role
-		}
-		return c
-	}
 	for _, t := range cat {
-		v := model.ClampVignette(model.Vignette{Tpl: t.ID, Teachers: teachers, Pupils: pupils, Ratio: ratio, TText: tt})
-		out = append(out, choice(&sc, v, t.Name))
+		ttext := tt
+		if !s.IsVignette() || s.Vig.Tpl != t.ID {
+			ttext = vigsheet.SwapTText(tt, t.TText)
+		}
+		v := model.ClampVignette(model.Vignette{Tpl: t.ID, Teachers: teachers, Pupils: pupils, Ratio: ratio, TText: ttext,
+			Shape: t.Shape})
+		c := vigChoice(p, &sc, g, v, t.Name)
+		c.Family = t.Family
+		if t.Shape == vignette.ShapeOval { // подсказка: «Круг» и портрет 1:1 ставят окно и vigForm (049 §3.3)
+			c.Ratio = "1:1"
+		}
+		out = append(out, c)
 	}
 	inFile := map[string]bool{}
 	for _, t := range tpls {
@@ -285,20 +337,47 @@ func vigChoices(p *model.Project, spreadID string, teachers, pupils int, ratio s
 		}
 		// Шаблоны файла уже зажаты (ClampTemplates): повторный зажим геометрии на 64 местах не нужен.
 		// Портрет — шаблона: выбор своего шаблона ставит его (точный режим BuildOwn требует того же).
-		v := model.ClampVignette(model.Vignette{Tpl: id, Teachers: teachers, Pupils: pupils, Ratio: t.Vig.Ratio, TText: ttext})
+		v := model.ClampVignette(model.Vignette{Tpl: id, Teachers: teachers, Pupils: pupils, Ratio: t.Vig.Ratio, TText: ttext,
+			Shape: t.Vig.Style.Shape, Round: t.Vig.Style.Round})
 		v.Own = &model.VigShape{Name: t.Name, Boxes: t.Boxes, VigGeo: t.Vig.VigGeo}
-		c := choice(sp, v, t.Name)
+		c := vigChoice(p, sp, g, v, t.Name)
 		c.Own, c.Ratio = true, t.Vig.Ratio
 		out = append(out, c)
 	}
 	if s.IsVignette() && s.Vig.Own != nil && !inFile[s.Vig.Tpl] { // шаблон удалён или с другого компьютера
-		v := model.ClampVignette(model.Vignette{Tpl: s.Vig.Tpl, Teachers: teachers, Pupils: pupils, Ratio: s.Vig.Own.Ratio, TText: tt})
+		v := model.ClampVignette(model.Vignette{Tpl: s.Vig.Tpl, Teachers: teachers, Pupils: pupils, Ratio: s.Vig.Own.Ratio, TText: tt,
+			Shape: s.Vig.Shape, Round: s.Vig.Round}) // стиля у шаблона листа нет — форма та, что стоит
 		v.Own = s.Vig.Own
-		c := choice(&sc, v, s.Vig.Own.Name)
+		c := vigChoice(p, &sc, g, v, s.Vig.Own.Name)
 		c.Own, c.Ratio, c.Gone = true, s.Vig.Own.Ratio, true
 		out = append(out, c)
 	}
 	return out
+}
+
+// vigChoice — превью шаблона v на листе sp (стиль подписей — его); g — геометрия листа.
+// Места людей — с формой v, групповое — прямоугольник, как на листе.
+func vigChoice(p *model.Project, sp *model.Spread, g model.Geo, v model.Vignette, name string) model.VigChoice {
+	pl := vigPlan(p, sp, v)
+	c := model.VigChoice{ID: v.Tpl, Name: name, Boxes: make([]model.Box, len(pl.Slots)), Roles: make([]string, len(pl.Slots)),
+		PupilW: geom.Round2(pl.PupilW), Small: pl.PupilW > 0 && pl.PupilW < vigSmallW, Over: model.VigPlaces(v) > model.MaxPlaces,
+		Shape: v.Shape, Round: v.Round, Head: fracBox(pl.Head, g)}
+	for k, sl := range pl.Slots {
+		c.Boxes[k] = *fracBox(&sl.Box, g)
+		if sl.Role != model.RoleGroup {
+			c.Boxes[k].Shape, c.Boxes[k].Round = v.Shape, v.Round
+		}
+		c.Roles[k] = sl.Role
+	}
+	return c
+}
+
+// fracBox — рамка b мм в долях листа g, как коробки превью; nil — nil.
+func fracBox(b *layout.Rect, g model.Geo) *model.Box {
+	if b == nil {
+		return nil
+	}
+	return &model.Box{X: b.X / g.W, Y: b.Y / g.H, W: b.W / g.W, H: b.H / g.H}
 }
 
 // markVigs — поля вида виньеток, которые знает только Editor (план мест): имя шаблона и
@@ -318,16 +397,16 @@ func markVig(p *model.Project, sv *model.SpreadView) {
 		return
 	}
 	sv.Vig.TplName = cmp.Or(sv.Vig.OwnName, vignette.Find(s.Vig.Tpl).Name)
-	sv.Vig.Manual = !grid.Untouched(p, s, vigPlan)
+	sv.Vig.Manual = !vigsheet.Untouched(p, s, vigPlan)
 }
 
 // vigSmallW — портрет мельче, мм, превью помечает (031 design §1: на 200×200 при 64 — 13 мм).
 const vigSmallW = 15
 
-// vigPlan — план виньетки листа s (grid.VigPlanner): области — страницы Geo без max(поля,
+// vigPlan — план виньетки листа s (vigsheet.VigPlanner): области — страницы Geo без max(поля,
 // безопасная зона) со всех сторон, у корешка тоже; полоса подписи — отступ и строки шаблона
 // в стиле листа (реальные метрики шрифта), подпись на фото — без полосы.
-func vigPlan(p *model.Project, s *model.Spread, v model.Vignette) grid.VigPlan {
+func vigPlan(p *model.Project, s *model.Spread, v model.Vignette) vigsheet.VigPlan {
 	g := p.Geo(s)
 	m := max(g.Margin, p.Settings.Safe)
 	rs := make([]vignette.Rect, len(g.Pages))
@@ -346,16 +425,45 @@ func vigPlan(p *model.Project, s *model.Spread, v model.Vignette) grid.VigPlan {
 	} else {
 		pl = vignette.Build(vignette.Find(v.Tpl), in)
 	}
-	out := grid.VigPlan{Slots: make([]grid.VigSlot, len(pl.Slots)), PupilW: pl.PupilW}
+	out := vigsheet.VigPlan{Slots: make([]vigsheet.VigSlot, len(pl.Slots)), PupilW: pl.PupilW, HeadCell: pl.HeadCell}
 	for i, sl := range pl.Slots {
 		b := sl.Box
-		out.Slots[i] = grid.VigSlot{Box: layout.Rect{X: b.X, Y: b.Y, W: b.W, H: b.H}, Role: sl.Role}
+		out.Slots[i] = vigsheet.VigSlot{Box: layout.Rect{X: b.X, Y: b.Y, W: b.W, H: b.H}, Role: sl.Role}
 	}
 	if h := pl.Head; h != nil {
 		out.Head = &layout.Rect{X: h.X, Y: h.Y, W: h.W, H: h.H}
+		if pl.HeadCell {
+			st := model.PlainStyle() // гарнитура шапки листа: кегль «по полосе» и её прежний — одной меркой
+			if t := s.VigHead(v.Head); t != nil {
+				st.Font, st.Bold, st.Italic = t.Style.Font, t.Style.Bold, t.Style.Italic
+			}
+			out.HeadFit = headFit(*out.Head, st)
+		}
 	}
 	return out
 }
+
+// headFit — кегль шапки в ряду (049 §3.2) по замеру: наибольший целый от 12 до min(48, полоса
+// на две строки), при котором шаблонный текст шапки в стиле st по ширине полосы band
+// влезает в её высоту и не рвёт слова. Не влезает и 12 — 12 (нижний предел кегля шапки).
+func headFit(band layout.Rect, st model.TextStyle) float64 {
+	words := strings.Fields(model.VigHeadText)
+	for pt := math.Round(geom.ClampF(band.H/2.6/0.3528, 12, 48)); pt > 12; pt-- {
+		st.Size = pt
+		b := text.Cached(model.VigHeadText, st, band.W)
+		var got []string
+		for _, l := range b.Lines {
+			got = append(got, strings.Fields(l.Text)...)
+		}
+		if b.H <= band.H && slices.Equal(got, words) {
+			return pt
+		}
+	}
+	return 12
+}
+
+// tplText — подпись учителя шаблона каталога (vigsheet.TplText): у «Руководитель…» — StaffText.
+func tplText(id string) string { return vignette.Find(id).TText }
 
 // shapeOf — геометрия своего шаблона для vignette.BuildOwn (доли, роли, шапка, пропорции).
 func shapeOf(o *model.VigShape) vignette.Shape {
@@ -381,7 +489,7 @@ func capBand(tpl string, st model.TextStyle) float64 {
 // «Виньетка (лист)» на стартовом окне. Собирается до Editor: шаг отмены создания не нужен.
 func NewVignetteSheet(w, h float64) *model.Project {
 	p := model.NewSheet(w, h)
-	if _, err := grid.SetVignette(p, p.Spreads[0].ID, model.DefaultVignette(), vigPlan, nil); err != nil {
+	if _, err := vigsheet.SetVignette(p, p.Spreads[0].ID, model.DefaultVignette(), vigPlan, nil, tplText); err != nil {
 		panic(fmt.Sprintf("виньетка по умолчанию не встала: %v", err)) // 25 мест < MaxPlaces: ошибка кода
 	}
 	p.FitTexts()

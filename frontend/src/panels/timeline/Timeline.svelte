@@ -25,7 +25,7 @@
   import { spreadsel } from './spreadsel.svelte'
   import { COVER_ID, isSheet, sheetIn, unitOf } from '../../base/geom/sheet'
   import { isSelectClick } from './spreadsel'
-  import { anyVaries } from '../layouts/variants'
+  import { anyVaries } from '../gallery/variants'
   import { clearVignette, makeVignette } from '../vignette/vigact'
   import { vigDialog } from '../vignette/vigsession.svelte'
   import { modes } from '../../base/prefs/view.svelte'

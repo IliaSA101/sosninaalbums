@@ -103,6 +103,21 @@ func (p *Project) CoverGeo() CoverGeo {
 	return g
 }
 
+// FsferaFormatOf — формат Фотосферы по точному размеру страницы (047; ClampSettings округляет
+// до 0,01, размеры таблицы целые). Лист 031 — не фотокнига: false. Здесь, а не в cover.go:
+// страницу читает только геометрия листа (TestPageWReaders).
+func FsferaFormatOf(s Settings) (PrintFormat, bool) {
+	if s.Sheet {
+		return PrintFormat{}, false
+	}
+	for _, f := range FsferaFormats() {
+		if f.PageW == s.PageW && f.PageH == s.PageH {
+			return f, true
+		}
+	}
+	return PrintFormat{}, false
+}
+
 // AreaOf — область scope листа s (left | right | spread), мм; ok=false — неизвестная.
 // Страницы — Geo.Pages: у обложки left — задняя с заворотом и расставом, right — лицевая.
 // У листа 031 страниц нет: left и right — неизвестные (места, фон, шаблон страницы — ErrScope).
@@ -168,7 +183,7 @@ func NewSheet(w, h float64) *Project {
 }
 
 // FoldPages — Load листа: страниц у него нет, поэтому свой цвет и фото фона страниц
-// переходят на весь лист (левая важнее), а не теряются. Не лист — ничего.
+// и узор (048) переходят на весь лист (левая важнее), а не теряются. Не лист — ничего.
 func (p *Project) FoldPages() {
 	if !p.Settings.Sheet {
 		return
@@ -182,6 +197,7 @@ func (p *Project) FoldPages() {
 			s.BgPhoto = cmp.Or(s.BgPhotoL, s.BgPhotoR)
 		}
 		s.BgPhotoL, s.BgPhotoR = nil, nil
+		foldPatterns(s)
 	}
 }
 
@@ -200,13 +216,16 @@ const (
 
 // Пределы и умолчания виньетки (решения 46, 47).
 const (
-	MaxTeachers = 18
+	MaxTeachers = 32 // страница предметников 9–11 класса (049, решение 119)
 	MaxPupils   = 64
 	VigRatio    = "3:4"
 	maxTplID    = 32
 	// PupilCaption, TeacherCaption — шаблоны подписей, которые ставит «Применить» (031 §5).
 	PupilCaption   = "{Фамилия}\n{Имя}"
 	TeacherCaption = "{Фамилия}\n{Имя} {Отчество}"
+	// StaffCaption — подпись учителя у шаблонов «Руководитель…» (049 §3.1); равна
+	// vignette.StaffText (страж TestStaffCaption в ядре).
+	StaffCaption = "{Фамилия}\n{Имя} {Отчество}\n{Предмет}"
 	// VigHeadText — текст новой шапки; «класс» — в значении подзаголовка (решение 124).
 	VigHeadText = "{Заголовок}\n{Подзаголовок} · {Год}"
 )
@@ -223,6 +242,10 @@ type Vignette struct {
 	// компьютере и после удаления шаблона. nil — шаблон каталога. Только при Tpl с
 	// VigOwnPrefix (FixVignettes). Не меняется на месте: копии разворота делят указатель.
 	Own *VigShape `json:"own,omitempty"`
+	// Shape, Round — форма мест учеников и учителей (044, как Place.Shape/Round);
+	// групповое фото — всегда прямоугольник.
+	Shape string  `json:"shape,omitempty"`
+	Round float64 `json:"round,omitempty"`
 }
 
 // VigOwnPrefix — Vignette.Tpl своего шаблона: "my:" + ID шаблона в templates.json.
@@ -310,6 +333,7 @@ func ClampVignette(v Vignette) Vignette {
 	v.Teachers = max(0, min(v.Teachers, MaxTeachers))
 	v.Pupils = max(0, min(v.Pupils, MaxPupils))
 	v.Ratio = clampRatio(v.Ratio)
+	v.Shape, v.Round = ClampShape(v.Shape, v.Round)
 	v.Tpl = cleanLine(v.Tpl, maxTplID)
 	v.TText = CleanText(v.TText, MaxCaptionRunes)
 	if strings.TrimSpace(v.TText) == "" {
@@ -334,12 +358,41 @@ func VigCaps(pageH float64) SheetCaps {
 // IsVignette — лист — виньетка с параметрами.
 func (s *Spread) IsVignette() bool { return s.Kind == KindVignette && s.Vig != nil }
 
+// VigHead — надпись-шапка листа по ID; "" или нет такой — nil.
+func (s *Spread) VigHead(id string) *TextBlock {
+	if id == "" {
+		return nil
+	}
+	for _, t := range s.Texts {
+		if t.ID == id {
+			return t
+		}
+	}
+	return nil
+}
+
 // RoleOf — роль места виньетки: "" и чужая — ученик.
 func RoleOf(pl *Place) string {
 	if pl.Role == RoleTeacher || pl.Role == RoleGroup {
 		return pl.Role
 	}
 	return RolePupil
+}
+
+// TeacherSeat — фото стоит на месте учителя какой-нибудь виньетки (049: карточка показывает
+// «Предмет»). Фото — не больше чем в одном месте проекта; обложка виньеткой не бывает.
+func (p *Project) TeacherSeat(photoID string) bool {
+	for _, s := range p.Spreads {
+		if !s.IsVignette() {
+			continue
+		}
+		for _, pl := range s.Grid {
+			if pl.Photo == photoID && photoID != "" {
+				return pl.Role == RoleTeacher
+			}
+		}
+	}
+	return false
 }
 
 // FixVignettes — инварианты виньеток всех листов (Load и конвейер правки): Kind — "" или

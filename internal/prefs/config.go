@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 
@@ -31,6 +32,8 @@ type Config struct {
 	HideStart   bool              `json:"hideStart,omitempty"`
 	Recent      []string          `json:"recent,omitempty"` // последние альбомы, новые первыми, ≤ maxRecent
 	Custom      *CustomLevel      `json:"custom,omitempty"` // набор «Своего»; остаётся при смене уровня
+	// RecentDecor — недавние плитки библиотеки (048): вид (bg, sticker) → ID, новые первыми.
+	RecentDecor map[string][]string `json:"recentDecor,omitempty"`
 }
 
 // configKeys — ключи config.json, которыми владеет эта версия (по тегам Config).
@@ -138,4 +141,62 @@ func PickDir(last, fallback string) string {
 func isDir(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && st.IsDir()
+}
+
+// maxRecentDecor — недавних плиток на вид (решение 0.12 №98).
+const maxRecentDecor = 12
+
+// PushRecentDecor ставит id наверх без повторов; неверные ID (файл правили руками) отбрасываются,
+// список режется до maxRecentDecor.
+func PushRecentDecor(list []string, id string) []string {
+	out := make([]string, 0, maxRecentDecor)
+	if validDecorID(id) {
+		out = append(out, id)
+	}
+	for _, v := range list {
+		if len(out) == maxRecentDecor {
+			break
+		}
+		if validDecorID(v) && !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// RememberDecor — поставленную плитку вида kind в недавние (пишет App после правки).
+func RememberDecor(dir, kind, id string) {
+	if !validDecorKind(kind) || !validDecorID(id) {
+		return
+	}
+	UpdateConfig(dir, func(c *Config) {
+		if c.RecentDecor == nil {
+			c.RecentDecor = map[string][]string{}
+		}
+		c.RecentDecor[kind] = PushRecentDecor(c.RecentDecor[kind], id)
+	})
+}
+
+// RecentDecor — недавние вида kind после проверки (файл мог править человек).
+func RecentDecor(dir, kind string) []string {
+	if !validDecorKind(kind) {
+		return []string{}
+	}
+	return PushRecentDecor(LoadConfig(dir).RecentDecor[kind], "")
+}
+
+// validDecorKind — вид библиотеки [a-z]{1,16}, как в реестре decor.
+func validDecorKind(k string) bool {
+	return k != "" && len(k) <= 16 && strings.Trim(k, "abcdefghijklmnopqrstuvwxyz") == ""
+}
+
+// validDecorID — sa:<пресет> ([a-z0-9-]{1,48}) или my:<16 hex>; prefs не знает decor (граница пакетов).
+func validDecorID(id string) bool {
+	if rest, ok := strings.CutPrefix(id, "sa:"); ok {
+		return rest != "" && len(rest) <= 48 && strings.Trim(rest, "abcdefghijklmnopqrstuvwxyz0123456789-") == ""
+	}
+	if rest, ok := strings.CutPrefix(id, "my:"); ok {
+		return len(rest) == 16 && strings.Trim(rest, "0123456789abcdef") == ""
+	}
+	return false
 }

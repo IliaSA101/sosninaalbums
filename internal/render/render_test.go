@@ -345,7 +345,7 @@ func TestParseHex(t *testing.T) {
 func TestDrawItemsPanicBecomesError(t *testing.T) {
 	old := prepareFn
 	t.Cleanup(func() { prepareFn = old })
-	prepareFn = func(Photo, int) (*image.NRGBA, image.Rectangle, error) { panic("декодер") }
+	prepareFn = func(Photo, int, image.Rectangle) (*image.NRGBA, image.Rectangle, error) { panic("декодер") }
 	err := drawItems(image.NewRGBA(image.Rect(0, 0, 10, 10)), []item{{ph: Photo{Path: "a.jpg"}}}, 100)
 	if err == nil || !strings.Contains(err.Error(), "декодер") {
 		t.Fatalf("ждали ошибку с причиной паники, получили %v", err)
@@ -357,7 +357,7 @@ func TestDrawItemsStopsAfterError(t *testing.T) {
 	old := prepareFn
 	t.Cleanup(func() { prepareFn = old })
 	var calls atomic.Int32
-	prepareFn = func(ph Photo, _ int) (*image.NRGBA, image.Rectangle, error) {
+	prepareFn = func(ph Photo, _ int, _ image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
 		calls.Add(1)
 		if ph.Path == "0" {
 			return nil, image.Rectangle{}, errors.New("не открылось")

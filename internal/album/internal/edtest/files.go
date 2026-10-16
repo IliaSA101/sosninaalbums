@@ -81,6 +81,31 @@ func NewRelinkSetup(t *testing.T) RelinkSetup {
 	return s
 }
 
+// LibFinder ставит искатель библиотеки (salbum.SetLibFinder) по карте ключ → путь до конца
+// теста. Карта читается при каждом поиске: тест добавляет «загруженное» по ходу.
+func LibFinder(t testing.TB, files map[string]string) {
+	t.Helper()
+	salbum.SetLibFinder(func(key string) (string, bool) {
+		p, ok := files[key]
+		return p, ok
+	})
+	t.Cleanup(func() { salbum.SetLibFinder(nil) })
+}
+
+// SaveLoad — круг Save → Load: альбом из записанного файла (области не импортируют salbum).
+func SaveLoad(t testing.TB, e *album.Editor) *model.Project {
+	t.Helper()
+	path := filepath.Join(testkit.TempDir(t), "a.salbum")
+	if err := e.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	q, err := salbum.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return q
+}
+
 var Update = flag.Bool("update", false, "перезаписать голдены: testdata/parity/marks.json, testdata/replay.json")
 
 // Reopen — повторное открытие не меняет альбом: Decode(Encode(p)) даёт тот же JSON (пути

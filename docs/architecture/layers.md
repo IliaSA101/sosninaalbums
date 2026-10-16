@@ -10,9 +10,10 @@ App (internal/app) — тонкий слой: диалоги, автосохра
    ├─ internal/album    — ядро: Editor (правки, undo/redo, отметки, Restore, View), ops_<область>.go — обёртки над функциями областей
    │     ├─ album/model   — Project, Spread, View, шаблоны, инварианты (нижний слой, типы биндингов)
    │     ├─ album/salbum  — формат .salbum: Load, Save, migrate, перепривязка
-   │     ├─ album/grid, design, layers, backdrop, spreads, view — операции областей (функции над *model.Project)
+   │     ├─ album/grid, vigsheet, design, layers, backdrop, spreads, view — операции областей (функции над *model.Project)
    │     └─ album/internal/inside, edtest — доступ к ядру для тестов (только из _test.go)
    │     └─ internal/layout  — раскладка и автосборка (чистые функции)
+   ├─ internal/decor    — библиотека фонов и стикеров: встроенные (decor/gen — узоры и рисунки), свои файлы, импорт, проверка SVG, /media/gen и /media/lib
    ├─ internal/library  — сканирование папок, XMP, перепривязка, кэш миниатюр
    │     └─ internal/imgfile  — один файл фото: заголовок JPEG (EXIF, ICC, XMP), пределы, декод с бюджетом памяти
    │           └─ internal/colorspace  — Adobe RGB → sRGB, встроенный профиль sRGB

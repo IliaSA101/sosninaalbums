@@ -57,8 +57,8 @@ func ownFile(t *testing.T, spreads ...*model.Spread) []byte {
 // обычным разворотом; вид отдаёт имя вместо формы; первая правка после открытия холостая.
 func TestSaveLoadVigOwn(t *testing.T) {
 	dir := testkit.TempDir(t)
-	own := model.Vignette{Tpl: ownTpl, Teachers: 1, Pupils: 2, Ratio: "4:5", Own: ownShape()}
-	cat := model.Vignette{Tpl: "g-top", Teachers: 1, Pupils: 2, Ratio: model.VigRatio}
+	own := model.Vignette{Tpl: ownTpl, Teachers: 1, Pupils: 2, Ratio: "4:5", Own: ownShape(), Shape: model.ShapeOval}
+	cat := model.Vignette{Tpl: "g-top", Teachers: 1, Pupils: 2, Ratio: model.VigRatio, Round: 10}
 	data := ownFile(t, vigSpread("aaaaaaaa0001", own), vigSpread("aaaaaaaa0002", cat), &model.Spread{ID: "aaaaaaaa0003", Photos: []string{}, Name: "Просто"})
 	p := edtest.MustDecode(t, data, dir)
 	s1, s2 := p.Spreads[0], p.Spreads[1]
@@ -110,6 +110,9 @@ func TestSaveLoadVigOwn(t *testing.T) {
 	}
 	if !bytes.Equal(model.Marshal(edtest.P(e)), model.Marshal(q)) || !q.Spreads[0].Vig.Own.Equal(ownShape()) {
 		t.Fatalf("потери при круге:\n%s\n%s", model.Marshal(edtest.P(e)), model.Marshal(q))
+	}
+	if q0, q1 := q.Spreads[0].Vig, q.Spreads[1].Vig; q0.Shape != model.ShapeOval || q0.Round != 0 || q1.Shape != "" || q1.Round != 10 {
+		t.Fatalf("форма виньетки после круга: %+v, %+v", q0, q1)
 	}
 }
 
@@ -244,7 +247,7 @@ func TestClampVignetteOwnNaN(t *testing.T) {
 }
 
 // Golden v6 (testdata/v6.salbum.json: виньетка с подписями, шапкой и полями) открывается как
-// v7 (038): меняется только номер; первая запись делает .v6.bak с байтами исходника.
+// текущая версия (038: v7, 045: v8): меняется только номер; первая запись делает .v6.bak с байтами исходника.
 func TestMigrateV6ToV7(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "v6.salbum.json"))
 	if err != nil {
@@ -259,7 +262,7 @@ func TestMigrateV6ToV7(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := p.Spreads[1]
-	if p.Version != 7 || edtest.From(p) != 6 || s.Kind != model.KindVignette || s.Vig == nil || s.Vig.Own != nil ||
+	if p.Version != model.FormatVersion || edtest.From(p) != 6 || s.Kind != model.KindVignette || s.Vig == nil || s.Vig.Own != nil ||
 		s.Vig.Head != "c0ffee0000a1" || s.Caps == nil || s.Vars == nil || s.Vars.Title != "Школа № 5" || len(s.Grid) != 3 {
 		t.Fatalf("версия %d, from %d, виньетка %+v %+v", p.Version, edtest.From(p), s, s.Vig)
 	}
@@ -275,14 +278,14 @@ func TestMigrateV6ToV7(t *testing.T) {
 		t.Fatalf(".v6.bak: %v, совпадает с исходником: %v", err, bytes.Equal(bak, data))
 	}
 	saved, _ := os.ReadFile(path)
-	if f := fileJSON(t, path); f.Version != 7 || strings.Contains(string(saved), `"own"`) {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || strings.Contains(string(saved), `"own"`) {
 		t.Fatalf("в файле версия %d, own: %v", f.Version, strings.Contains(string(saved), `"own"`))
 	}
 	q, err := salbum.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(before, model.Marshal(q)) || edtest.From(q) != 7 {
-		t.Fatalf("потери при v6 → v7:\n%s\n%s", before, model.Marshal(q))
+	if !bytes.Equal(before, model.Marshal(q)) || edtest.From(q) != model.FormatVersion {
+		t.Fatalf("потери при v6 → текущей:\n%s\n%s", before, model.Marshal(q))
 	}
 }

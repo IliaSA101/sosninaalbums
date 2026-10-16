@@ -1,6 +1,7 @@
 package library
 
 import (
+	"errors"
 	"image/color"
 	"os"
 	"path/filepath"
@@ -54,6 +55,38 @@ func TestBackdropFile(t *testing.T) {
 	}
 	if _, err := BackdropFile(filepath.Join(dir, "нет.jpg")); err == nil || strings.Contains(err.Error(), "JPEG и PNG") {
 		t.Errorf("нет файла: ждали ошибку ОС, а не про формат: %v", err)
+	}
+}
+
+// PlainFile: расширение из списка в любом регистре, размер возвращается; чужое расширение — ErrExt,
+// остальное — прежние отказы (UNC, «..», папка, нет файла).
+func TestPlainFile(t *testing.T) {
+	dir := testkit.TempDir(t)
+	svg := filepath.Join(dir, "A.SVG")
+	if err := os.WriteFile(svg, []byte("<svg/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "d.svg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p, size, err := PlainFile(svg, ".png", ".svg")
+	if err != nil || p != svg || size != 6 {
+		t.Errorf("svg: %q %d %v", p, size, err)
+	}
+	if _, _, err := PlainFile(svg, ".png"); !errors.Is(err, ErrExt) {
+		t.Errorf("чужое расширение: %v", err)
+	}
+	if _, _, err := PlainFile(svg); !errors.Is(err, ErrExt) {
+		t.Errorf("пустой список расширений: %v", err)
+	}
+	sep := string(filepath.Separator)
+	for name, path := range map[string]string{
+		"UNC": `\\srv\share\a.svg`, "относительный": "A.SVG", "..": dir + sep + ".." + sep + filepath.Base(dir) + sep + "A.SVG",
+		"папка": filepath.Join(dir, "d.svg"), "нет файла": filepath.Join(dir, "нет.svg"),
+	} {
+		if p, _, err := PlainFile(path, ".svg"); err == nil || errors.Is(err, ErrExt) || p != "" {
+			t.Errorf("%s: %q %v", name, p, err)
+		}
 	}
 }
 

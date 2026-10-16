@@ -2,17 +2,24 @@ package app
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 	"weak"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -396,6 +403,128 @@ func TestMergeMissing(t *testing.T) {
 	} {
 		if got := mergeMissing(tc.cur, tc.now, tc.checked, tc.gone); got == nil || !slices.Equal(got, tc.want) {
 			t.Errorf("%s: %#v, ждали %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// missInfos — фото names в папке cfgDir (файлов нет, наличие решает a.exists) и их ID.
+func missInfos(a *App, names ...string) (infos []model.PhotoInfo, ids []string) {
+	for _, n := range names {
+		p := filepath.Join(a.cfgDir, n)
+		infos = append(infos, model.PhotoInfo{ID: library.IDFor(p), Path: p, W: 30, H: 20})
+		ids = append(ids, library.IDFor(p))
+	}
+	return infos, ids
+}
+
+// missAdd — правка, как у методов App (через changed): новый разворот из фото infos.
+func missAdd(a *App, infos []model.PhotoInfo) {
+	v, _ := a.editor().NewSpread(-1, infos) // отказ — прежний вид, тест увидит по списку
+	a.changed(v)
+}
+
+func sorted(ids ...string) []string {
+	slices.Sort(ids)
+	return ids
+}
+
+// Две правки из разных горутин: первая прочитала набор фото и стоит, вторая уже в проекте.
+// Снимок первой не ложится поверх снимка второй — ни фантома в списке, ни спрятанного пропавшего.
+func TestMissingSnapshotOrder(t *testing.T) {
+	for _, tc := range []struct{ name, add string }{{"убрали второе", ""}, {"добавили новое", "w.jpg"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, x, y, _ := missSetApp(t)
+			gate, read := make(chan struct{}), make(chan struct{})
+			var calls atomic.Int32
+			a.snapRefs = func(ed *album.Editor) map[string]string {
+				m := editorPaths(ed)
+				if calls.Add(1) == 1 {
+					close(read)
+					<-gate
+				}
+				return m
+			}
+			want := []string{}
+			second := func() { a.RemovePhotos([]string{y}) }
+			if tc.add != "" {
+				infos, ids := missInfos(a, tc.add)
+				want = sorted(ids[0], y)
+				second = func() { missAdd(a, infos) }
+			}
+			rev := a.editor().View().Rev
+			var wg sync.WaitGroup
+			wg.Go(func() { a.RemovePhotos([]string{x}) })
+			<-read
+			wg.Go(second)
+			// Вторая правка в проекте: её syncMissing ждёт первую (без замка — обгонял бы).
+			for deadline := time.Now().Add(10 * time.Second); a.editor().View().Rev < rev+2; time.Sleep(time.Millisecond) {
+				if time.Now().After(deadline) {
+					t.Fatal("вторая правка не дошла до проекта")
+				}
+			}
+			close(gate)
+			wg.Wait()
+			waitMissing(t, a)
+			if m := a.GetState().Missing; !slices.Equal(m, want) {
+				t.Fatalf("недостающие %v, ждали %v", m, want)
+			}
+		})
+	}
+}
+
+// После правки фон проверяет только новые фото и фото с новым путём, а не весь альбом, и
+// сливает итог с уже известными; правка без новых фото файлы не проверяет и событий не шлёт.
+func TestMissingChecksOnlyNew(t *testing.T) {
+	a, x, y, events := missSetApp(t)
+	var mu sync.Mutex
+	var stat []string
+	a.exists = func(p string) bool {
+		mu.Lock()
+		stat = append(stat, filepath.Base(p))
+		mu.Unlock()
+		return strings.HasPrefix(filepath.Base(p), "ok")
+	}
+	check := func(step string, wantStat []string, want []string) {
+		t.Helper()
+		waitMissing(t, a)
+		mu.Lock()
+		got := slices.Sorted(slices.Values(stat))
+		stat = nil
+		mu.Unlock()
+		if !slices.Equal(got, wantStat) {
+			t.Fatalf("%s: проверены %v, ждали %v", step, got, wantStat)
+		}
+		if m := a.GetState().Missing; !slices.Equal(m, want) {
+			t.Fatalf("%s: недостающие %v, ждали %v", step, m, want)
+		}
+	}
+	infos, ids := missInfos(a, "w.jpg", "ok2.jpg")
+	w := ids[0]
+	missAdd(a, infos)
+	check("добавили w и ok2", []string{"ok2.jpg", "w.jpg"}, sorted(w, x, y))
+	a.changed(a.editor().Relink(map[string]string{w: filepath.Join(a.cfgDir, "ok3.jpg")}, ""))
+	check("w нашлось", []string{"ok3.jpg"}, sorted(x, y))
+	a.Undo()
+	check("отмена перепривязки", []string{"w.jpg"}, sorted(w, x, y))
+	n := len(events())
+	if _, err := a.NewSpread(-1, nil); err != nil {
+		t.Fatal(err)
+	}
+	check("пустой разворот", nil, sorted(w, x, y))
+	if len(events()) != n {
+		t.Fatalf("правка без новых фото: событий missing %d", len(events())-n)
+	}
+}
+
+// В лог — без путей пользователя.
+func TestBackupErrHidesPaths(t *testing.T) {
+	const secret = `C:\Users\Имя\Альбомы\Ивановы.salbum`
+	for _, err := range []error{
+		&fs.PathError{Op: "open", Path: secret, Err: fs.ErrPermission},
+		&os.LinkError{Op: "rename", Old: secret + ".1.tmp", New: secret, Err: fs.ErrExist},
+	} {
+		if got := paths.NoPath(err).Error(); strings.Contains(got, "Имя") || !strings.Contains(got, err.(interface{ Unwrap() error }).Unwrap().Error()) {
+			t.Errorf("лог: %q", got)
 		}
 	}
 }

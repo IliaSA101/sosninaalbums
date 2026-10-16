@@ -79,7 +79,7 @@ func TestCoverBackdropKeepsSpread(t *testing.T) {
 // уходит из разворота.
 func TestCoverPlaceTakesPhoto(t *testing.T) {
 	e := coverAlbum(t, 6)
-	if _, err := e.AddPlace(model.CoverID, 1); err != nil {
+	if _, err := e.AddPlace(model.CoverID, 1, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := e.PlacePhotos(model.CoverID, sheet(e).Grid[0].ID, []model.PhotoInfo{info(pid(5))}); err != nil {
@@ -126,17 +126,28 @@ func TestCoverCreateErrors(t *testing.T) {
 	}
 }
 
-// TestCoverSpecPreset — пресет остаётся подписью, пока числа его (сторонка не в счёт);
-// любое своё число — «Свои размеры» с теми же числами. ApplyCoverPreset сторонку не трогает.
+// TestCoverSpecPreset — пресет остаётся подписью, пока числа его; любое своё число —
+// «Свои размеры» с теми же числами. Сторонка в счёт, только если её задаёт шаблон (Фотосфера
+// на формате из таблицы, 047); вне таблицы ApplyCoverPreset сторонку не трогает.
 func TestCoverSpecPreset(t *testing.T) {
 	e := coverAlbum(t, 2)
 	sp := edtest.P(e).Cover.Spec
 	sp.W, sp.H = 300, 290
+	if _, err := e.SetCoverSpec(sp); err != nil || edtest.P(e).Cover.Spec.Preset != model.CoverCustom || edtest.P(e).Cover.Spec.W != 300 {
+		t.Fatalf("своя сторонка на формате Фотосферы: %v %+v", err, edtest.P(e).Cover.Spec)
+	}
+	// Страница не из таблицы: сторонка шаблона — страница (0), своя сторонка пресет не меняет.
+	st := edtest.P(e).Settings
+	st.PageW, st.PageH = 300, 300
+	e.SetSettings(st)
+	if _, err := e.ApplyCoverPreset(model.CoverDefault); err != nil || edtest.P(e).Cover.Spec.W != 300 || edtest.P(e).Cover.Spec.H != 290 {
+		t.Fatalf("пресет вне таблицы тронул сторонку: %v %+v", err, edtest.P(e).Cover.Spec)
+	}
 	if _, err := e.SetCoverSpec(sp); err != nil || edtest.P(e).Cover.Spec.Preset != model.CoverDefault {
 		t.Fatalf("сторонка сменила пресет: %v %+v", err, edtest.P(e).Cover.Spec)
 	}
-	sp.Wrap = 20
-	if _, _ = e.SetCoverSpec(sp); edtest.P(e).Cover.Spec.Preset != model.CoverCustom || edtest.P(e).Cover.Spec.Wrap != 20 {
+	sp.Wrap = 21
+	if _, _ = e.SetCoverSpec(sp); edtest.P(e).Cover.Spec.Preset != model.CoverCustom || edtest.P(e).Cover.Spec.Wrap != 21 {
 		t.Fatalf("свой заворот: %+v", edtest.P(e).Cover.Spec)
 	}
 	if _, err := e.ApplyCoverPreset("netprint-premium"); err != nil {
@@ -274,7 +285,7 @@ func TestCoverEmptyPhotosRoundTrip(t *testing.T) {
 			t.Fatalf("%s: лист после Save → Load другой:\n%s\n%s", what, a, b)
 		}
 	}
-	if _, err := e.AddPlace(model.CoverID, 1); err != nil {
+	if _, err := e.AddPlace(model.CoverID, 1, ""); err != nil {
 		t.Fatal(err)
 	}
 	if sheet(e).Photos != nil {

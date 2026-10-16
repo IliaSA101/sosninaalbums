@@ -55,10 +55,15 @@ func TestBackdropSetKeepsBox(t *testing.T) {
 	edtest.SetBg(t, e, s1, "left", "bg")
 	e.SetBackdropBox(s1, "left", 20, 30, 200, 150, 15, "")
 	e.SetBackdropFrame(s1, "left", 2, 0.5, -0.5)
+	e.SetBackdropAngle(s1, "left", 4.5)
 	e.FlipBackdrop(s1, "left", "h")
+	e.FlipBackdrop(s1, "left", "v")
+	if b := edtest.BdOf(e, s1, "left"); b.Frame == nil || b.Frame.R == 0 {
+		t.Fatalf("до замены наклона нет: %+v", b)
+	}
 	edtest.SetBg(t, e, s1, "left", "bg2")
 	b := edtest.BdOf(e, s1, "left")
-	if b.Photo != "bg2" || b.Frame != nil || !b.FlipH || b.X != 20 || b.W != 200 || b.H != 150 || b.Rot != 15 {
+	if b.Photo != "bg2" || b.Frame != nil || !b.FlipH || !b.FlipV || b.X != 20 || b.W != 200 || b.H != 150 || b.Rot != 15 {
 		t.Fatalf("после замены: %+v", b)
 	}
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
@@ -307,5 +312,24 @@ func TestFillPlacesSkipsBackdrop(t *testing.T) {
 	_, left := e.FillPlaces(edtest.Photos("bg", "c"), "s1")
 	if left != 0 || !slices.Equal(edtest.PhotosOf(e, 0), []string{"c", ""}) {
 		t.Fatalf("left %d, места %v", left, edtest.PhotosOf(e, 0))
+	}
+}
+
+// Тот же снимок на том же фоне — холостая правка: кадр и наклон не сбрасываются (045).
+func TestBackdropSameKeepsFrameTilt(t *testing.T) {
+	e, s1, _ := edtest.BdEd(t)
+	edtest.SetBg(t, e, s1, "left", "bg")
+	edtest.SetBg(t, e, s1, "right", "bg")
+	e.SetBackdropFrame(s1, "left", 2, 0.5, -0.5)
+	e.SetBackdropAngle(s1, "left", 4.5)
+	e.SetBackdropAngle(s1, "right", -4.5)
+	before := edtest.BdOf(e, s1, "left")
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	edtest.SetBg(t, e, s1, "left", "bg")
+	edtest.Same(t, e, rev, undo, "то же фото с кадром и наклоном")
+	edtest.SetBg(t, e, s1, "right", "bg")
+	edtest.Same(t, e, rev, undo, "то же фото на другой области")
+	if b := edtest.BdOf(e, s1, "left"); b.Frame == nil || b.Frame.R != before.Frame.R || b.Frame.S != 2 {
+		t.Fatalf("кадр изменился: %+v", b)
 	}
 }

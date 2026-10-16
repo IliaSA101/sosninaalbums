@@ -37,6 +37,27 @@ func SetFrameAngle(p *model.Project, photoID string, tilt float64) {
 	p.Photos[photoID] = r
 }
 
+// StraightenPhoto — «Выпрямить по линии» (045): линия (dx, dy) мм листа встаёт параллельно
+// краю места (у «Авто» — краю листа). Четверти стоят, наклон упирается в ±44,9 — пропорции
+// те же, «Авто» не закрепляется и не пересобирается. Фото не на листе, нет линии или она
+// уже ровная — холостая правка.
+func StraightenPhoto(p *model.Project, spreadID, photoID string, dx, dy float64) {
+	s := p.Sheet(spreadID)
+	if s == nil || !slices.Contains(s.Photos, photoID) {
+		return
+	}
+	rot := 0.0
+	if pl := s.PlaceRef(photoID); pl != nil {
+		rot = pl.Rot
+	}
+	d, ok := geom.StraightenDelta(dx, dy, rot)
+	if !ok {
+		return
+	}
+	_, tilt := model.SplitR(p.Photos[photoID].FrameOrDefault().R)
+	SetFrameAngle(p, photoID, tilt+d)
+}
+
 // TurnPhotos поворачивает фото ids на quarters·90° (quarters ∈ {−1, 1, 2}, иначе
 // холостая правка), одной правкой. Наклон сохраняется; чужие и повторные ID
 // пропускаются. Действующие пропорции меняются — раскладку «Авто» пересоберёт keepLayouts.

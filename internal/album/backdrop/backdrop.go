@@ -1,13 +1,23 @@
 package backdrop
 
-import "github.com/IliaSA101/sosninaalbums/internal/album/model"
+import (
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/geom"
+)
 
 // Фото на фоне разворота или страницы (спека 009, design-backdrop). Рамка — как у
-// места, поворот — как у текста (geom.TextBox); кадр и зеркало свои, из PhotoRef не берутся.
+// места, поворот — как у текста (geom.TextBox); кадр, наклон (045) и зеркало свои, из
+// PhotoRef не берутся.
 
 // SetBackdrop — тело Editor.SetBackdrop над проектом. Неизвестная область — ErrScope
-// и проект не тронут: тело зовут и мимо обёртки, проверяющей область.
+// и проект не тронут: тело зовут и мимо обёртки, проверяющей область. То же фото на
+// том же фоне — холостая правка; другое фото сбрасывает кадр и наклон (у снимка свой
+// горизонт), рамка и зеркало остаются. Своё из библиотеки (ph.Lib, 048): ключ не по
+// грамматике или ID не от ключа — ErrLibKey (иначе Rekey при открытии разведёт запись и фон).
 func SetBackdrop(p *model.Project, spreadID, scope string, ph model.PhotoInfo) error {
+	if ph.Lib != "" && (!model.ValidLibKey(ph.Lib) || ph.ID != model.LibPhotoID(ph.Lib)) {
+		return model.ErrLibKey
+	}
 	s := p.Sheet(spreadID)
 	if s == nil {
 		return nil
@@ -15,6 +25,9 @@ func SetBackdrop(p *model.Project, spreadID, scope string, ph model.PhotoInfo) e
 	slot := s.Slot(scope)
 	if _, ok := p.AreaOf(s, scope); slot == nil || !ok { // у листа 031 страниц нет
 		return model.ErrScope
+	}
+	if *slot != nil && (*slot).Photo == ph.ID { // то же фото — холостая: кадр и наклон не сбрасываем
+		return nil
 	}
 	model.Remember(p, []model.PhotoInfo{ph})
 	if scope == model.ScopeSpread {
@@ -60,16 +73,45 @@ func SetBackdropBox(p *model.Project, spreadID, scope string, x, y, w, h, rot fl
 	})
 }
 
-// SetBackdropFrame — тело Editor.SetBackdropFrame над проектом.
+// SetBackdropFrame — тело Editor.SetBackdropFrame над проектом. Наклон прежнего кадра
+// остаётся (как design.SetFrame).
 func SetBackdropFrame(p *model.Project, spreadID, scope string, s, x, y float64) {
-	f := model.ClampFrame(&model.Frame{S: s, X: x, Y: y})
-	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) { b.Frame = f })
+	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) {
+		b.Frame = model.ClampFrame(&model.Frame{S: s, X: x, Y: y, R: b.FrameOrDefault().R})
+	})
+}
+
+// SetBackdropAngle — тело Editor.SetBackdropAngle: наклон фото в рамке фона tilt, градусы
+// (±44,9, шаг 0,1; четвертей у фона нет — 90° даёт «Поворот» рамки). Рамка стоит, фото
+// само увеличивается и закрывает её (045). Масштаб и сдвиг кадра стоят.
+func SetBackdropAngle(p *model.Project, spreadID, scope string, tilt float64) {
+	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) { setTilt(b, tilt) })
+}
+
+// StraightenBackdrop — тело Editor.StraightenBackdrop: линия (dx, dy) мм листа встаёт
+// параллельно краю рамки фона. Нет линии или она уже ровная — холостая правка.
+func StraightenBackdrop(p *model.Project, spreadID, scope string, dx, dy float64) {
+	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) {
+		if d, ok := geom.StraightenDelta(dx, dy, b.Rot); ok {
+			setTilt(b, b.FrameOrDefault().R+d)
+		}
+	})
+}
+
+// setTilt — наклон кадра фона: зажим ±44,9 и шаг 0,1 (ClampBackdrop потом его не меняет).
+func setTilt(b *model.Backdrop, tilt float64) {
+	f := b.FrameOrDefault()
+	f.R = geom.ClampF(model.Round1(tilt), -model.MaxTilt, model.MaxTilt)
+	b.Frame = model.ClampFrame(&f)
 }
 
 // FlipBackdrop — тело Editor.FlipBackdrop над проектом (axis уже проверена).
 func FlipBackdrop(p *model.Project, spreadID, scope, axis string) {
 	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) {
 		fr := b.FrameOrDefault()
+		if fr.R != 0 { // наклон меняет знак: горизонт остаётся ровным (как design.SetFlip)
+			fr.R = -fr.R
+		}
 		if axis == "h" {
 			b.FlipH = !b.FlipH
 			if fr.X != 0 { // нулевой ход не трогаем: иначе в JSON попал бы «-0»

@@ -75,7 +75,8 @@ export interface KeyContext {
   hasSelection: boolean // есть выделенные видимые фото
   gridSpread?: boolean // текущий разворот — «Ручная» (Пробел у неё раскладки не листает — решает App при отпускании)
   placeSelected?: boolean // выделено фото, место или текст группы текущего разворота
-  layerable?: boolean // «Ручная» и выделено место, фото или текст: слои двигать есть что
+  stickerSelected?: boolean // выделены только стикеры (048): стрелки двигают их на любом листе, и на «Авто»
+  layerable?: boolean // «Ручная» и выделено место, фото, текст или стикер; «Авто» — стикер (с текстом или без) без мест: слои двигать есть что
   zone?: Zone // где было последнее нажатие мыши; не задано — библиотека (прежнее поведение)
   bgMode?: boolean // включён режим фона: Esc, стрелки и Del — его
   modal?: boolean // открыто окно вопроса или настроек: Ctrl+N/O/E под ним не действуют
@@ -130,6 +131,8 @@ const del = ['delete', 'backspace']
 // поэтому там ← → листают развороты, как обычно.
 // На уровне без ручной раскладки сдвига нет — стрелки листают развороты.
 const nudging = (c: KeyContext) => !c.bgMode && !!c.gridSpread && !!c.placeSelected && (!c.can || c.can('manual'))
+// Стикеры (048) раскладку не закрепляют, поэтому стрелки двигают их и на «Авто».
+const stickerNudging = (c: KeyContext) => !c.bgMode && !!c.stickerSelected
 const bg = (c: KeyContext) => !!c.bgMode
 const free = (c: KeyContext) => !c.modal
 // Отметки фото (004): только в ленте — не после щелчка по холсту, не под окном, не в крупном просмотре
@@ -335,6 +338,17 @@ export const HOTKEYS: Hotkey[] = [
     show: '← ↑ ↓ → (ручная)',
     label: 'Сдвинуть выделенное место на 1 мм, с Shift — на 10 мм',
     group: 'grid',
+  },
+  // То же для стикеров на любом листе (справка про них — в строке выше)
+  {
+    action: 'nudgePlace',
+    feature: 'decor',
+    combos: [{ keys: arrows, plain: true, repeatOk: true }],
+    when: stickerNudging,
+    show: '← ↑ ↓ → (стикер)',
+    label: 'Сдвинуть выделенный стикер на 1 мм, с Shift — на 10 мм',
+    group: 'grid',
+    hidden: true,
   },
 
   // Слои: [ вниз, ] вверх; с Shift — на задний/передний план. Русские х и ъ стоят на тех же клавишах.

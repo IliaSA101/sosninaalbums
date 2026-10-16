@@ -5,6 +5,7 @@
   import { tip, tipped } from '../../base/ui/tip.svelte'
   import { thumbUrl } from '../../base/core/media'
   import { flipCss, photoCss, thumbBox } from '../../base/geom/frame'
+  import { outlineOf } from '../../base/geom/shape'
   import type { SpreadView } from '../../base/core/types'
   import { B, cellW, chipW, emptyPlaces, isBlank } from './timeline'
   import { HOLD_MS, asSheet, sheetThumbW, visibleChips } from './chips'
@@ -98,7 +99,12 @@
               alt=""
               loading="lazy"
               draggable="false"
-              style={thumbBox(sp.rects[j], sp.frames[j].img.w / sp.frames[j].img.h, sp.frames[j].r)}
+              style={thumbBox(
+                sp.rects[j],
+                sp.frames[j].img.w / sp.frames[j].img.h,
+                sp.frames[j].r,
+                outlineOf(sp.frames[j].shape, sp.frames[j].radius),
+              )}
               style:transform={photoCss(sp.frames[j])}
             /></span
           >

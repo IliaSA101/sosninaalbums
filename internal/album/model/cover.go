@@ -2,8 +2,11 @@ package model
 
 import (
 	"cmp"
+	"fmt"
 	"math"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
@@ -50,6 +53,10 @@ type CoverSpec struct {
 	Steps  []SpineStep `json:"steps,omitempty"` // таблица корешка; пусто — формула A + B·n
 	A      float64     `json:"a,omitempty"`
 	B      float64     `json:"b,omitempty"`
+	// Safe — безопасная линия сторонки от линии загиба, SpineSafe — от края корешка (у расстава —
+	// от его края), мм; 0 — Settings.Safe, как до 047. Направляющие, не геометрия (v8, решение 51).
+	Safe      float64 `json:"safe,omitempty"`
+	SpineSafe float64 `json:"spineSafe,omitempty"`
 }
 
 // SpineStep — строка таблицы: до Upto разворотов включительно корешок Mm.
@@ -76,11 +83,12 @@ func steps(pairs ...float64) []SpineStep {
 }
 
 // CoverPresets — пресеты (design 032 §1; таблицы Фотосферы сверены с fsfera.ru 2026-10-13,
-// заворот и расстав Нетпринта Премиум/Royal/мягкой — гипотеза). Функция, а не переменная:
+// заворот 20 — по PSD и JSON калькулятора, 047 решение 48; заворот и расстав Нетпринта
+// Премиум/Royal/мягкой — гипотеза). У Фотосферы сторонку по формату страницы даёт CoverPresetFor. Функция, а не переменная:
 // снаружи таблицу не подменить. id после выпуска не меняются.
 func CoverPresets() []CoverPreset {
 	fs := func(id, name string, st []SpineStep) CoverPreset {
-		return CoverPreset{ID: id, Name: name, Group: "Фотосфера", Spec: CoverSpec{Preset: id, Wrap: 23.5, Steps: st}}
+		return CoverPreset{ID: id, Name: name, Group: CoverGroupFsfera, Spec: CoverSpec{Preset: id, Wrap: fsferaWrap, Steps: st, Safe: fsferaCoverSafe, SpineSafe: fsferaSpineSafe}}
 	}
 	np := func(id, name string, wrap, hinge, a, b float64) CoverPreset {
 		return CoverPreset{ID: id, Name: name, Group: "Нетпринт", Spec: CoverSpec{Preset: id, Wrap: wrap, Hinge: hinge, A: a, B: b}}
@@ -96,13 +104,149 @@ func CoverPresets() []CoverPreset {
 	}
 }
 
-// CoverPresetOf — пресет по id; ok=false — неизвестный.
+// CoverPresetOf — пресет по id; ok=false — неизвестный. Для новой обложки и правок — CoverPresetFor.
 func CoverPresetOf(id string) (CoverPreset, bool) {
 	all := CoverPresets()
 	if i := slices.IndexFunc(all, func(c CoverPreset) bool { return c.ID == id }); i >= 0 {
 		return all[i], true
 	}
 	return CoverPreset{}, false
+}
+
+// Фотосфера Pro (047): таблица форматов фотокниги, шаблон обложки по формату и пресеты страницы.
+
+// CoverGroupFsfera — группа пресетов обложки и ряд пресетов страницы Фотосферы.
+const CoverGroupFsfera = "Фотосфера"
+
+// Шаблон обложки Фотосферы (PSD): заворот вне таблицы форматов (решение 48) и безопасные
+// линии — от линии загиба и от края корешка.
+const (
+	fsferaWrap                       = 20.0
+	fsferaCoverSafe, fsferaSpineSafe = 8.0, 12.0
+)
+
+// PrintFormat — формат изделия типографии: страница альбома и шаблон обложки, мм.
+type PrintFormat struct {
+	ID           string  // "fsfera-30x30"; после выпуска не меняется
+	Name         string  // "30×30"
+	PageW, PageH float64 // страница с вылетом (половина файла разворота)
+	Safe         float64 // безопасная зона разворота от края файла
+	SideW, SideH float64 // сторонка обложки
+	Wrap         float64 // заворот
+}
+
+// FsferaFormats — форматы фотокниги Фотосферы в порядке калькулятора (research §2; Safe — по PSD,
+// решение 50; 30×20 — по PSD, решение 49). Функция, а не переменная, как CoverPresets.
+func FsferaFormats() []PrintFormat {
+	f := func(name string, pw, ph, safe, sw, sh, wrap float64) PrintFormat {
+		return PrintFormat{ID: "fsfera-" + strings.ReplaceAll(name, "×", "x"), Name: name,
+			PageW: pw, PageH: ph, Safe: safe, SideW: sw, SideH: sh, Wrap: wrap}
+	}
+	return []PrintFormat{
+		f("20×15", 201, 152, 10, 206, 156, 20),
+		f("20×20", 201, 203, 10, 206, 206, 20),
+		f("20×30", 201, 273, 10, 206, 276, 20),
+		f("30×20", 286, 203, 10, 289, 206, 20),
+		f("25×25", 251, 254, 8, 256, 256, 20),
+		f("30×30", 281, 284, 10, 286, 286, 20),
+		f("21×30", 208, 296, 8, 211, 296, 16),
+	}
+}
+
+// PagePreset — кнопка размера страницы в «Настройках альбома». 0/false — поле пресет не задаёт.
+type PagePreset struct {
+	Label   string  `json:"label"` // "30×30" в ряду «Фотосфера», "30×30 (квадрат)" в общем
+	Group   string  `json:"group"` // "" — общий ряд; CoverGroupFsfera
+	W       float64 `json:"w"`
+	H       float64 `json:"h"`
+	DPI     int     `json:"dpi,omitempty"`
+	Layflat bool    `json:"layflat,omitempty"` // true — ставит layflat; пресетов с false нет
+	Safe    float64 `json:"safe,omitempty"`
+	Hint    string  `json:"hint,omitempty"`
+}
+
+// PagePresets — общий ряд (прежние кнопки presets.ts без «Фотосфера 30×30») и ряд Фотосферы
+// из FsferaFormats (решение 54: один источник — Go).
+func PagePresets() []PagePreset {
+	out := []PagePreset{
+		{Label: "30×30 (квадрат)", W: 300, H: 300},
+		{Label: "25×25", W: 250, H: 250},
+		{Label: "20×20", W: 200, H: 200},
+		{Label: "30×20 (альбомный)", W: 300, H: 200},
+		{Label: "20×30 (книжный)", W: 200, H: 300},
+		{Label: "40×30", W: 400, H: 300},
+	}
+	for _, f := range FsferaFormats() {
+		out = append(out, PagePreset{Label: f.Name, Group: CoverGroupFsfera, W: f.PageW, H: f.PageH, DPI: 300, Layflat: true, Safe: f.Safe,
+			Hint: "Фотосфера Pro: JPEG sRGB 300 dpi, 00.jpg — обложка, 01.jpg… — развороты; важное — не ближе " + MmText(f.Safe) + " мм к краю"})
+	}
+	return out
+}
+
+// CoverPresetFor — пресет id для страницы s. У группы «Фотосфера» на формате из таблицы —
+// сторонка и заворот шаблона; на прочей странице — W/H 0 (страница) и заворот 20. Остальные
+// пресеты — как CoverPresetOf.
+func CoverPresetFor(id string, s Settings) (CoverPreset, bool) {
+	pr, ok := CoverPresetOf(id)
+	if !ok || pr.Group != CoverGroupFsfera {
+		return pr, ok
+	}
+	if f, ok := FsferaFormatOf(s); ok {
+		pr.Spec.W, pr.Spec.H, pr.Spec.Wrap = f.SideW, f.SideH, f.Wrap
+	}
+	return pr, true
+}
+
+// CoverOffTemplate — обложка «Фотосферы» не совпадает с шаблоном для текущей страницы:
+// have/want — размер листа обложки, мм (при текущем числе разворотов). Сравниваются действующая
+// сторонка (только если страница из таблицы), Wrap, Hinge, Steps; A, B и безопасные линии — нет.
+// Пресет не «Фотосфера» или обложки нет — off=false.
+func (p *Project) CoverOffTemplate() (have, want [2]float64, format PrintFormat, off bool) {
+	if p.Cover == nil {
+		return have, want, format, false
+	}
+	c := p.Cover.Spec
+	pr, ok := CoverPresetFor(c.Preset, p.Settings)
+	if !ok || pr.Group != CoverGroupFsfera {
+		return have, want, format, false
+	}
+	format, inTable := FsferaFormatOf(p.Settings)
+	d := pr.Spec
+	// Шаблон считает та же CoverGeo: числа строки и «Итог» карточки сходятся до 0,01.
+	cg := p.CoverGeo()
+	tpl := (&Project{Settings: p.Settings, Spreads: p.Spreads, Cover: &Cover{Spec: d}}).CoverGeo()
+	have, want = [2]float64{cg.X[7], cg.Y[3]}, [2]float64{tpl.X[7], tpl.Y[3]}
+	sideOK := !inTable || (cg.X[2]-cg.X[1] == tpl.X[2]-tpl.X[1] && cg.Y[2]-cg.Y[1] == tpl.Y[2]-tpl.Y[1])
+	off = !sideOK || c.Wrap != d.Wrap || c.Hinge != d.Hinge || !slices.Equal(c.Steps, d.Steps)
+	return have, want, format, off
+}
+
+// CoverFixText — строка «Не по шаблону Фотосферы 30×30: 623 × 331 мм, нужно 626 × 326» для
+// карточки обложки и проверки выгрузки; "" — по шаблону или не Фотосфера. Страница не из таблицы
+// или размер листа совпал (другая таблица корешка) — называется заворот, иначе корешок и расстав.
+func CoverFixText(p *Project) string {
+	have, want, f, off := p.CoverOffTemplate()
+	if !off {
+		return ""
+	}
+	head := "Не по шаблону Фотосферы"
+	if f.Name != "" {
+		head += " " + f.Name
+		if have != want {
+			return fmt.Sprintf("%s: %s × %s мм, нужно %s × %s", head, MmText(have[0]), MmText(have[1]), MmText(want[0]), MmText(want[1]))
+		}
+	}
+	c := p.Cover.Spec
+	pr, _ := CoverPresetFor(c.Preset, p.Settings)
+	if c.Wrap != pr.Spec.Wrap {
+		return fmt.Sprintf("%s: заворот %s мм, нужно %s", head, MmText(c.Wrap), MmText(pr.Spec.Wrap))
+	}
+	return head + ": корешок или расстав не по таблице"
+}
+
+// MmText — миллиметры для подписи: «14», «13,2», «23,5» (десятые, запятая).
+func MmText(v float64) string {
+	return strings.Replace(strconv.FormatFloat(math.Round(v*10)/10, 'f', -1, 64), ".", ",", 1)
 }
 
 // Пределы чисел обложки, мм (design 032 §4).
@@ -113,6 +257,7 @@ const (
 	coverMaxA                  = 100.0
 	coverMaxB                  = 5.0
 	coverMaxMm                 = 100.0
+	coverMaxSafe               = 30.0
 	// MaxSpineSteps — строк в таблице корешка: больше Load отбрасывает.
 	MaxSpineSteps = 64
 )
@@ -139,6 +284,9 @@ func ClampCoverSpec(c CoverSpec) CoverSpec {
 		Hinge:  fix(c.Hinge, d.Hinge, coverMaxHinge),
 		A:      fix(c.A, d.A, coverMaxA),
 		B:      math.Round(geom.ClampF(Finite(c.B, d.B), 0, coverMaxB)*1000) / 1000,
+		// Линии безопасности: NaN/Inf — 0 (как до 047, Settings.Safe).
+		Safe:      fix(c.Safe, 0, coverMaxSafe),
+		SpineSafe: fix(c.SpineSafe, 0, coverMaxSafe),
 	}
 	if _, ok := CoverPresetOf(out.Preset); !ok {
 		out.Preset = CoverCustom
@@ -225,6 +373,8 @@ type CoverView struct {
 	GuideWarn bool   `json:"guideWarn"`
 	PxW       int    `json:"pxW"` // 00.jpg при dpi альбома
 	PxH       int    `json:"pxH"`
+	// Fix — «Не по шаблону Фотосферы 30×30: …» (CoverFixText, 047); "" — по шаблону или не Фотосфера.
+	Fix string `json:"fix"`
 }
 
 // CoverZone — направляющая или зона броска, мм листа обложки.

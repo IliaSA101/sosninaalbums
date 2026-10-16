@@ -86,7 +86,7 @@
     key.startsWith('Page') ? 5 : 1,
   ]
 
-  // ↑↓ в полях — шаг 1 (в «среднем» — ≈ 0,5 фото, N хотя бы на 1), PgUp/PgDn — 5; на ползунке — только PgUp/PgDn.
+  // ↑↓ в полях — шаг 1 (в «среднем» — показанное целое на 1, N хотя бы на 1), PgUp/PgDn — 5; на ползунке — только PgUp/PgDn.
   function step(t: HTMLElement, d: number, k: number): boolean {
     if (!ui || !d) return false
     if (t.id === 'auto-per') {

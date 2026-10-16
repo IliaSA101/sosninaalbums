@@ -7,20 +7,24 @@ import { canvas } from '../../editor/canvas/canvas.svelte'
 import { row } from '../../editor/spread/spreadrow.svelte'
 import { edit } from '../../editor/text/edit.svelte'
 import { ownMarks } from '../../panels/marks/ownmarks.svelte'
-import { gallery } from '../../panels/layouts/gallery.svelte'
+import { gallery } from '../../panels/gallery/gallery.svelte'
 import { help } from './help.svelte'
 import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
 import { namesUi } from '../../panels/names/names.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
+import { straighten } from '../../editor/photo/straighten.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { modes } from '../../base/prefs/view.svelte'
 import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
 import { makeVignette } from '../../panels/vignette/vigact'
 import { vigDialog } from '../../panels/vignette/vigsession.svelte'
+import { decor } from '../../panels/decor/decor.svelte'
+import { defaultScope } from '../../panels/decor/decor'
 import { relinkFolder } from '../../panels/library/relink'
-import { anyVaries, varyTargets } from '../../panels/layouts/variants'
+import { anyVaries, varyTargets } from '../../panels/gallery/variants'
+import { gridAct } from '../../panels/layouts/gridact.svelte'
 import { align } from '../../panels/layouts/align.svelte'
 import { isAlignOp, normAlignTo } from '../../panels/layouts/align'
 import { errText } from '../../base/core/errtext'
@@ -44,6 +48,7 @@ export type MenuCommand =
   | 'alignTo'
   | 'turnCw'
   | 'turnCcw'
+  | 'straighten'
   | 'toggleSnap'
   | 'allSpreads'
   | 'levelSimple'
@@ -59,6 +64,9 @@ export type MenuCommand =
   | 'makeVignette'
   | 'vigSetup'
   | 'varyLayouts'
+  | 'bgGallery'
+  | 'addSticker'
+  | 'copyDecor'
 export type Command = KeyAction | MenuCommand
 
 // ev — клавиатурное событие, если команду вызвала клавиша: сдвиг стрелкой и Пробел берут из него клавишу.
@@ -171,12 +179,28 @@ export const COMMANDS: Record<Command, Handler> = {
     if (!anyVaries(store.view.spreads, ids)) return // как серый пункт меню: сетки, виньетки, пустые — молча
     return store.varyLayouts(ids, modes.varyLevel)
   },
+  // 048: окно «Фоны»; нет листа или функции на уровне — молчим, как серый пункт меню
+  bgGallery: () => {
+    const s = store.spread
+    if (s && prefs.can('decor')) decor.show('bg', s.id, defaultScope(s, store.cover?.layout))
+  },
+  // 048 Ф2: окно «Стикеры»; щелчок по плитке ставит стикер в центр страницы. Нет листа или функции на уровне — молчим
+  addSticker: () => {
+    const s = store.spread
+    if (s && prefs.can('decor')) decor.show('sticker', s.id, 'spread')
+  },
+  // 049 Ф2: окно «Копировать оформление» с текущего листа; обложка (не источник) или функции нет на уровне — молчим
+  copyDecor: () => {
+    const s = store.spread
+    if (s && prefs.can('decor')) gridAct.openDecor(s.id)
+  },
   flipH: () => placesel.flip('h'),
   flipV: () => placesel.flip('v'),
   align: (_e, op) => isAlignOp(op) && align.run(op),
   alignTo: (_e, to) => align.setTo(normAlignTo(to)),
   turnCw: () => placesel.turn(1),
   turnCcw: () => placesel.turn(-1),
+  straighten: () => straighten.startPhoto(),
 
   // Вид
   toggleBig: () => modes.toggleBig(),

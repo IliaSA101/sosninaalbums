@@ -380,3 +380,96 @@ func TestCopyGridMirror(t *testing.T) {
 	e.CopyGrid("s1", model.ScopeSpread, []model.GridTarget{{Spread: "s2", Scope: model.ScopeSpread}}, false, true)
 	wantRects(t, rectsOf(e, 1), rectsOf(e, 0))
 }
+
+// patKinds — ключи узоров листа i: весь лист, левая, правая ("" — нет).
+func patKinds(e *album.Editor, i int) [3]string { return kindsOf(edtest.P(e).Spreads[i]) }
+
+func kindsOf(s *model.Spread) [3]string {
+	var out [3]string
+	for k, pt := range []*model.Pattern{s.Pat, s.PatL, s.PatR} {
+		if pt != nil {
+			out[k] = pt.Kind
+		}
+	}
+	return out
+}
+
+func mustPattern(t *testing.T, e *album.Editor, sp, scope, kind string) {
+	t.Helper()
+	if _, err := e.ApplyPattern(sp, scope, model.Pattern{Kind: kind}, ""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Копия «с текстом и фоном» несёт узоры (048) по слотам, как фото фона: страница → страница
+// (узор листа цели остаётся другой странице), лист → лист; копии не делят узор с источником;
+// без оформления узоры не едут; один шаг, отмена возвращает.
+func TestCopyGridPattern(t *testing.T) {
+	e := edtest.GridEd(t, edtest.Calendar()[:2], []string{"d"}, []string{"g"})
+	mustPattern(t, e, "s1", model.ScopeLeft, "dots")
+	mustPattern(t, e, "s1", model.ScopeRight, "stripes")
+	mustPattern(t, e, "s2", model.ScopeSpread, "bands")
+	undo := edtest.UndoLen(e)
+
+	tg := []model.GridTarget{{Spread: "s2", Scope: model.ScopeRight}, {Spread: "s3", Scope: model.ScopeLeft}}
+	if _, _, err := e.CopyGrid("s1", model.ScopeLeft, tg, true, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := patKinds(e, 1); got != [3]string{"", "bands", "dots"} {
+		t.Fatalf("s2 после копии левой на правую: %v", got)
+	}
+	if got := patKinds(e, 2); got != [3]string{"", "dots", ""} {
+		t.Fatalf("s3: %v", got)
+	}
+	ps := edtest.P(e).Spreads
+	if ps[1].PatR == ps[0].PatL || ps[2].PatL == ps[0].PatL || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("узор общий с источником или шагов %d", edtest.UndoLen(e))
+	}
+	e.Undo()
+	if got := patKinds(e, 1); got != [3]string{"bands", "", ""} {
+		t.Fatalf("отмена: %v", got)
+	}
+
+	// Лист → лист: узоры страниц источника встают, узор листа цели снят.
+	if _, _, err := e.CopyGrid("s1", model.ScopeSpread, []model.GridTarget{{Spread: "s2", Scope: model.ScopeSpread}}, true, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := patKinds(e, 1); got != [3]string{"", "dots", "stripes"} {
+		t.Fatalf("лист → лист: %v", got)
+	}
+	// Без оформления узоры не едут.
+	if _, _, err := e.CopyGrid("s1", model.ScopeLeft, []model.GridTarget{{Spread: "s3", Scope: model.ScopeRight}}, false, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := patKinds(e, 2); got != [3]string{} {
+		t.Fatalf("без оформления: %v", got)
+	}
+	// Круг Save → Load: ID фото тут не от путей (Rekey их сменит) — сверяются только узоры.
+	q := edtest.SaveLoad(t, e)
+	for i, s := range q.Spreads {
+		if got, want := kindsOf(s), patKinds(e, i); got != want {
+			t.Fatalf("лист %d после записи и чтения: %v, ждали %v", i, got, want)
+		}
+	}
+}
+
+// «Размножить» с оформлением — узоры своими копиями; без оформления — нет.
+func TestDuplicateGridPattern(t *testing.T) {
+	e := edtest.GridEd(t, edtest.Calendar())
+	mustPattern(t, e, "s1", model.ScopeSpread, "dots")
+	if _, err := e.DuplicateGrid("s1", 2, true); err != nil {
+		t.Fatal(err)
+	}
+	ps := edtest.P(e).Spreads
+	for i := 1; i <= 2; i++ {
+		if patKinds(e, i) != [3]string{"dots", "", ""} || ps[i].Pat == ps[0].Pat {
+			t.Fatalf("копия %d: %v", i, patKinds(e, i))
+		}
+	}
+	if _, err := e.DuplicateGrid("s1", 1, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := patKinds(e, 1); got != [3]string{} {
+		t.Fatalf("без оформления: %v", got)
+	}
+}

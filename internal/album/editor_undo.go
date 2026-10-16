@@ -6,8 +6,8 @@ package album
 import (
 	"slices"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/vigsheet"
 )
 
 // maxUndo — шагов отмены со снимком альбома; maxMarkUndo — шагов только отметок (решение
@@ -127,13 +127,13 @@ func (e *Editor) swap(s Snap, back bool) Snap {
 // старое имя, и оно всплывало, когда шаблон удаляли (QA 038). changed — проект изменился
 // (rev, dirty): вызывающий рассылает вид.
 func (e *Editor) SyncOwnNames(tpls []model.Template) (v model.View, changed bool) {
-	names := grid.OwnNames(tpls)
+	names := vigsheet.OwnNames(tpls)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if len(names) == 0 {
 		return e.view(), false
 	}
-	if n, grow := grid.RenameOwn(e.p, names); n > 0 {
+	if n, grow := vigsheet.RenameOwn(e.p, names); n > 0 {
 		e.size += grow
 		e.dirty = true
 		e.rev++
@@ -141,14 +141,14 @@ func (e *Editor) SyncOwnNames(tpls []model.Template) (v model.View, changed bool
 	}
 	for i := range e.undo {
 		if e.undo[i].P != nil {
-			_, grow := grid.RenameOwn(e.undo[i].P, names)
+			_, grow := vigsheet.RenameOwn(e.undo[i].P, names)
 			e.undo[i].N += grow
 			e.undoBytes += grow
 		}
 	}
 	for i := range e.redo {
 		if e.redo[i].P != nil {
-			_, grow := grid.RenameOwn(e.redo[i].P, names)
+			_, grow := vigsheet.RenameOwn(e.redo[i].P, names)
 			e.redo[i].N += grow
 		}
 	}

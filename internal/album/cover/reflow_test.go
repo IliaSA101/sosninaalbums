@@ -19,7 +19,7 @@ func near(a, b float64) bool { return math.Abs(a-b) < 0.011 }
 // frontPlace — место обложки на лицевой: x от левого края лицевой, y от верха сторонки.
 func frontPlace(t *testing.T, e *album.Editor, dx, dy, w, h float64) string {
 	t.Helper()
-	if _, err := e.AddPlace(model.CoverID, 1); err != nil {
+	if _, err := e.AddPlace(model.CoverID, 1, ""); err != nil {
 		t.Fatal(err)
 	}
 	pl := sheet(e).Grid[len(sheet(e).Grid)-1]
@@ -214,4 +214,59 @@ func TestEditorReplayCover(t *testing.T) {
 	if coverPhoto() != "k" || len(sheet(e).Texts) != 1 || len(edtest.P(e).Spreads) != 2 {
 		t.Fatalf("после отмены: место %q, текстов %d, разворотов %d", coverPhoto(), len(sheet(e).Texts), len(edtest.P(e).Spreads))
 	}
+}
+
+// coverSticker — стикер src на обложке рамкой (x, y, w, h), его ID.
+func coverSticker(t *testing.T, e *album.Editor, src model.StickerSrc, x, y, w, h float64) string {
+	t.Helper()
+	_, id, err := e.AddSticker(model.CoverID, 1, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.SetStickerBox(model.CoverID, id, x, y, w, h, 0, "")
+	return id
+}
+
+func stickerOf(e *album.Editor, id string) model.Sticker {
+	s, i := edtest.P(e).FindSticker(id)
+	return *s.Stickers[i]
+}
+
+// TestStickerCoverReflow — стикеры обложки (048 design §3.2): на лицевой — сдвиг с ней, на
+// корешке — по центру того же размера, на задней — на месте; сторонка уже — свой стикер
+// меньше, пропорция та же (FitStickers).
+func TestStickerCoverReflow(t *testing.T) {
+	e, _ := reflowAlbum(t)
+	cg := edtest.P(e).CoverGeo()
+	plate := model.StickerSrc{Art: &model.Art{Kind: "plate"}}
+	own := model.StickerSrc{Photo: model.PhotoInfo{ID: model.LibPhotoID("my:0123456789abcdef"),
+		Path: edtest.Abs("k.png"), Lib: "my:0123456789abcdef", W: 400, H: 200}}
+	front := coverSticker(t, e, own, cg.X[5]+40, cg.Y[1]+30, 80, 40)
+	mid := (cg.X[3] + cg.X[4]) / 2
+	spine := coverSticker(t, e, plate, mid-5, cg.Y[1]+60, 10, 60)
+	back := coverSticker(t, e, plate, cg.X[1]+20, cg.Y[1]+30, 60, 20)
+	f, sp, b := stickerOf(e, front), stickerOf(e, spine), stickerOf(e, back)
+	edtest.NewSpread(e, -1, []model.PhotoInfo{info("x")}) // корешок 14 → 16
+	ng := edtest.P(e).CoverGeo()
+	if got := stickerOf(e, front); !near(got.X, f.X+2) || got.W != f.W || got.H != f.H || got.Y != f.Y {
+		t.Fatalf("лицевая: %+v, было %+v", got, f)
+	}
+	if got := stickerOf(e, spine); !near(got.X+got.W/2, (ng.X[3]+ng.X[4])/2) || got.W != sp.W || got.H != sp.H {
+		t.Fatalf("корешок: %+v, было %+v", got, sp)
+	}
+	if got := stickerOf(e, back); got.X != b.X || got.Y != b.Y || got.W != b.W || got.H != b.H {
+		t.Fatalf("задняя: %+v, было %+v", got, b)
+	}
+	edtest.MustGrid(t, e)
+	spec := edtest.P(e).Cover.Spec
+	k := (spec.W - 20) / spec.W
+	spec.W -= 20
+	if _, err := e.SetCoverSpec(spec); err != nil {
+		t.Fatal(err)
+	}
+	f = stickerOf(e, front)
+	if !near(f.W, 80*k) || !near(f.W/f.H, 2) {
+		t.Fatalf("сторонка уже: %+v, k %v", f, k)
+	}
+	edtest.MustGrid(t, e)
 }

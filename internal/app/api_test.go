@@ -503,14 +503,14 @@ func TestNamesMethods(t *testing.T) {
 	if pv := a.Person("нет"); pv != (model.PersonView{}) {
 		t.Fatalf("чужое фото: %+v", pv)
 	}
-	r, err := a.PasteNames("s1", "Сидоров Иван\nКозлов Пётр\nЛишний", false)
-	if err != nil || r.Extra != 1 || r.Missing != 0 || r.View.Rev == 0 {
+	r, err := a.PasteNames("s1", model.NamesOpts{Text: "Сидоров Иван\nКозлов Пётр\nЛишний"})
+	if err != nil || r.Extra != 1 || r.Missing != 0 || r.View.Rev == 0 || r.Named != r.Seats || r.Seats == 0 {
 		t.Fatalf("вставка: %+v, %v", r, err)
 	}
 	if pv := a.Person("a"); pv.Last != "Сидоров" || pv.FromFile {
 		t.Fatalf("после вставки: %+v", pv)
 	}
-	if _, err := a.PasteNames("s1", strings.Repeat("А Б\n", 1001), false); err == nil {
+	if _, err := a.PasteNames("s1", model.NamesOpts{Text: strings.Repeat("А Б\n", 1001)}); err == nil {
 		t.Fatal("длинный список принят")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
@@ -85,7 +86,7 @@ func coverProject(t *testing.T, n int, id string) *Project {
 	for range n {
 		p.Spreads = append(p.Spreads, &Spread{ID: NewID()})
 	}
-	pr, ok := CoverPresetOf(id)
+	pr, ok := CoverPresetFor(id, p.Settings)
 	if !ok {
 		t.Fatalf("нет пресета %s", id)
 	}
@@ -93,37 +94,42 @@ func coverProject(t *testing.T, n int, id string) *Project {
 	return p
 }
 
-// Тонкие листы Фотосферы, 20 разворотов: корешок 14 мм, лист 623 × 331 (032, критерий 1).
+// Тонкие листы Фотосферы 30×30 (281×284), 20 разворотов: шаблон 047 — сторонка 286×286,
+// заворот 20, корешок 14 мм, лист 626 × 326 (CoverPresetFor; 7394 × 3850 px при 300 dpi).
 func TestCoverGeoFsferaThin(t *testing.T) {
 	p := coverProject(t, 20, "fsfera-thin")
 	cg := p.CoverGeo()
 	if cg.Spine != 14 || cg.Over || cg.N != 20 {
 		t.Fatalf("корешок %v over %v n %d", cg.Spine, cg.Over, cg.N)
 	}
-	if cg.X != [8]float64{0, 23.5, 304.5, 304.5, 318.5, 318.5, 599.5, 623} || cg.Y != [4]float64{0, 23.5, 307.5, 331} {
+	if cg.X != [8]float64{0, 20, 306, 306, 320, 320, 606, 626} || cg.Y != [4]float64{0, 20, 306, 326} {
 		t.Fatalf("зоны X %v Y %v", cg.X, cg.Y)
 	}
 	g := p.Geo(p.Cover.Sheet)
-	if g.W != 623 || g.H != 331 || g.Mid != 311.5 || !g.Layflat || len(g.Pages) != 2 {
+	if g.W != 626 || g.H != 326 || g.Mid != 313 || !g.Layflat || len(g.Pages) != 2 {
 		t.Fatalf("Geo обложки %+v", g)
 	}
-	if l, _ := p.AreaOf(p.Cover.Sheet, ScopeLeft); l != (layout.Rect{W: 304.5, H: 331}) {
+	if l, _ := p.AreaOf(p.Cover.Sheet, ScopeLeft); l != (layout.Rect{W: 306, H: 326}) {
 		t.Fatalf("задняя %+v", l)
 	}
-	if r, _ := p.AreaOf(p.Cover.Sheet, ScopeRight); r != (layout.Rect{X: 318.5, W: 304.5, H: 331}) {
+	if r, _ := p.AreaOf(p.Cover.Sheet, ScopeRight); r != (layout.Rect{X: 320, W: 306, H: 326}) {
 		t.Fatalf("лицевая %+v", r)
 	}
-	if s, _ := p.AreaOf(p.Cover.Sheet, ScopeSpread); s != (layout.Rect{W: 623, H: 331}) {
+	if s, _ := p.AreaOf(p.Cover.Sheet, ScopeSpread); s != (layout.Rect{W: 626, H: 326}) {
 		t.Fatalf("весь лист %+v", s)
 	}
 	// Разворот — как раньше: 2·pageW, шов посередине.
 	if g := p.Geo(p.Spreads[0]); g.W != 562 || g.H != 284 || g.Mid != 281 || len(g.Pages) != 2 || g.Pages[1].X != 281 {
 		t.Fatalf("Geo разворота %+v", g)
 	}
-	// Своя сторонка — вместо страницы.
+	// Своя сторонка — вместо шаблона; 0 — страница.
 	p.Cover.Spec.W, p.Cover.Spec.H = 300, 200
-	if g := p.Geo(p.Cover.Sheet); g.W != 23.5*2+300*2+14 || g.H != 247 {
+	if g := p.Geo(p.Cover.Sheet); g.W != 20*2+300*2+14 || g.H != 240 {
 		t.Fatalf("сторонка 300×200: %+v", g)
+	}
+	p.Cover.Spec.W, p.Cover.Spec.H = 0, 0
+	if g := p.Geo(p.Cover.Sheet); g.W != 20*2+281*2+14 || g.H != 324 {
+		t.Fatalf("сторонка — страница: %+v", g)
 	}
 }
 
@@ -178,8 +184,8 @@ func TestCoverSheetsWalks(t *testing.T) {
 	if _, s := p.Find(CoverID); s != nil {
 		t.Fatal("Find нашёл обложку: операции над порядком альбома её не видят")
 	}
-	if !p.Placed("c") || !p.OnBackdrops()["bg"] || !p.PlaceIDs()[cv.Grid[0].ID] {
-		t.Fatal("Placed/OnBackdrops/PlaceIDs без обложки")
+	if !p.Placed("c") || !p.OnDecor()["bg"] || !p.PlaceIDs()[cv.Grid[0].ID] {
+		t.Fatal("Placed/OnDecor/PlaceIDs без обложки")
 	}
 	if s, i := p.FindText(cv.Texts[0].ID); s != cv || i != 0 {
 		t.Fatal("FindText без обложки")
@@ -255,4 +261,307 @@ func TestWarmLayoutsExtra(t *testing.T) {
 		}
 	}
 	p.WarmLayouts(nil) // пусто — не падает
+}
+
+// VigHead: пустой ID и ссылка на несуществующую надпись — nil, своя надпись — именно она, не первая.
+func TestVigHeadLookup(t *testing.T) {
+	a, b := &TextBlock{ID: "aaaaaaaaaaaa"}, &TextBlock{ID: "bbbbbbbbbbbb"}
+	s := &Spread{Texts: []*TextBlock{a, b}}
+	// Надпись без ID (старый файл) не должна находиться по пустой ссылке на шапку.
+	noID := &Spread{Texts: []*TextBlock{{}, a}}
+	if noID.VigHead("") != nil || noID.VigHead(a.ID) != a {
+		t.Fatal("пустая ссылка нашла надпись без ID")
+	}
+	if s.VigHead("") != nil || s.VigHead("cccccccccccc") != nil || (&Spread{}).VigHead(a.ID) != nil {
+		t.Fatal("пустой ID или чужая ссылка дали надпись")
+	}
+	if s.VigHead(a.ID) != a || s.VigHead(b.ID) != b {
+		t.Fatal("надпись найдена не по ID")
+	}
+}
+
+// fsferaProject — альбом на странице w×h с n пустыми разворотами и обложкой spec.
+func fsferaProject(w, h float64, n int, spec CoverSpec) *Project {
+	p := New()
+	p.Settings.PageW, p.Settings.PageH = w, h
+	for range n {
+		p.Spreads = append(p.Spreads, &Spread{ID: NewID()})
+	}
+	p.Cover = &Cover{Sheet: &Spread{ID: CoverID}, Spec: spec}
+	return p
+}
+
+// Семь форматов Фотосферы (047): файл разворота и обложка «Тонкие листы» при корешке 6 мм
+// в px при 300 dpi совпадают с PSD (fsfera-pro-research.md §2); ID уникальны, зона
+// безопасности 10 (у 25×25 и 21×30 — 8) и не больше четверти меньшей стороны (ClampSettings).
+func TestFsferaFormats(t *testing.T) {
+	px := func(mm float64) int { return int(math.Round(mm / 25.4 * 300)) }
+	want := map[string][4]int{
+		"20×15": {4748, 1795, 5409, 2315}, "20×20": {4748, 2398, 5409, 2906}, "20×30": {4748, 3224, 5409, 3732},
+		"30×20": {6756, 2398, 7370, 2906}, "25×25": {5929, 3000, 6591, 3496}, "30×30": {6638, 3354, 7299, 3850},
+		"21×30": {4913, 3496, 5433, 3874},
+	}
+	all := FsferaFormats()
+	if len(all) != len(want) {
+		t.Fatalf("форматов %d", len(all))
+	}
+	ids := map[string]bool{}
+	for _, f := range all {
+		w, ok := want[f.Name]
+		if !ok || ids[f.ID] {
+			t.Fatalf("лишний формат или повтор ID: %+v", f)
+		}
+		ids[f.ID] = true
+		pr, _ := CoverPresetFor("fsfera-thin", Settings{PageW: f.PageW, PageH: f.PageH})
+		p := fsferaProject(f.PageW, f.PageH, 1, pr.Spec)
+		sg, cg := p.Geo(p.Spreads[0]), p.Geo(p.Cover.Sheet)
+		if got := [4]int{px(sg.W), px(sg.H), px(cg.W), px(cg.H)}; got != w {
+			t.Errorf("%s: разворот и обложка %v px, ждали %v", f.Name, got, w)
+		}
+		safe := 10.0
+		if f.Name == "25×25" || f.Name == "21×30" {
+			safe = 8
+		}
+		if f.Safe != safe || f.Safe > min(f.PageW, f.PageH)/4 {
+			t.Errorf("%s: безопасная зона %v", f.Name, f.Safe)
+		}
+		if got, ok := FsferaFormatOf(ClampSettings(Settings{PageW: f.PageW, PageH: f.PageH})); !ok || got != f {
+			t.Errorf("%s: формат по странице не найден: %+v", f.Name, got)
+		}
+	}
+	// Лист 031 того же размера и страница не из таблицы — не формат.
+	if _, ok := FsferaFormatOf(Settings{PageW: 281, PageH: 284, Sheet: true}); ok {
+		t.Error("лист 031 принят за фотокнигу")
+	}
+	if _, ok := FsferaFormatOf(Settings{PageW: 281.01, PageH: 284}); ok {
+		t.Error("281,01 × 284 принят за 30×30")
+	}
+}
+
+// Пресеты страницы (047, решение 54): общий ряд без «Фотосферы» и ряд Фотосферы из таблицы —
+// 300 dpi, layflat, зона формата, подсказка с числом зоны.
+func TestPagePresets(t *testing.T) {
+	all, fs := PagePresets(), FsferaFormats()
+	if len(all) != 6+len(fs) {
+		t.Fatalf("пресетов %d", len(all))
+	}
+	for i, f := range fs {
+		pp := all[6+i]
+		if pp.Label != f.Name || pp.Group != CoverGroupFsfera || pp.W != f.PageW || pp.H != f.PageH || pp.DPI != 300 || !pp.Layflat || pp.Safe != f.Safe {
+			t.Errorf("пресет %d: %+v", i, pp)
+		}
+	}
+	if h := all[6+4].Hint; h != "Фотосфера Pro: JPEG sRGB 300 dpi, 00.jpg — обложка, 01.jpg… — развороты; важное — не ближе 8 мм к краю" {
+		t.Errorf("подсказка 25×25: %q", h)
+	}
+	for _, pp := range all[:6] {
+		if pp.Group != "" || pp.DPI != 0 || pp.Layflat || pp.Safe != 0 || pp.Hint != "" {
+			t.Errorf("общий пресет задаёт лишнее: %+v", pp)
+		}
+	}
+}
+
+// CoverPresetFor (047): Фотосфера на формате из таблицы — сторонка и заворот шаблона, вне
+// таблицы и на листе 031 — страница (0) и заворот 20; безопасные линии 8/12; прочие пресеты —
+// как CoverPresetOf; неизвестный — false.
+func TestCoverPresetFor(t *testing.T) {
+	for _, c := range []struct {
+		st         Settings
+		w, h, wrap float64
+	}{
+		{Settings{PageW: 281, PageH: 284}, 286, 286, 20},
+		{Settings{PageW: 208, PageH: 296}, 211, 296, 16},
+		{Settings{PageW: 300, PageH: 300}, 0, 0, 20},
+		{Settings{PageW: 281, PageH: 284, Sheet: true}, 0, 0, 20},
+	} {
+		for _, id := range []string{"fsfera-thin", "fsfera-card", "fsfera-double"} {
+			pr, ok := CoverPresetFor(id, c.st)
+			if sp := pr.Spec; !ok || sp.Preset != id || sp.W != c.w || sp.H != c.h || sp.Wrap != c.wrap || sp.Safe != 8 || sp.SpineSafe != 12 {
+				t.Errorf("%s на %v×%v (лист %v): %+v", id, c.st.PageW, c.st.PageH, c.st.Sheet, sp)
+			}
+		}
+	}
+	np, _ := CoverPresetOf("netprint-premium")
+	if got, ok := CoverPresetFor("netprint-premium", Settings{PageW: 281, PageH: 284}); !ok || !reflect.DeepEqual(got, np) {
+		t.Errorf("Нетпринт на 30×30 изменился: %+v", got)
+	}
+	if _, ok := CoverPresetFor("нет такого", Settings{PageW: 281, PageH: 284}); ok {
+		t.Error("неизвестный пресет найден")
+	}
+}
+
+// CoverOffTemplate и CoverFixText (047): старая обложка (заворот 23,5, сторонка — страница)
+// на 30×30 — размеры листа; вне таблицы — заворот; другая таблица корешка при том же листе —
+// «корешок или расстав»; шаблон, Нетпринт, своя и нет обложки — "".
+func TestCoverFixText(t *testing.T) {
+	thin, _ := CoverPresetOf("fsfera-thin")
+	old := thin.Spec
+	old.Wrap, old.Safe, old.SpineSafe = 23.5, 0, 0
+	tpl, _ := CoverPresetFor("fsfera-thin", Settings{PageW: 281, PageH: 284})
+	steps := tpl.Spec
+	steps.Steps = slices.Clone(steps.Steps)
+	steps.Steps[len(steps.Steps)-1].Mm = 31
+	np, _ := CoverPresetOf("netprint-premium")
+	cu, _ := CoverPresetOf(CoverCustom)
+	for _, c := range []struct {
+		w, h float64
+		spec CoverSpec
+		want string
+	}{
+		{281, 284, old, "Не по шаблону Фотосферы 30×30: 623 × 331 мм, нужно 626 × 326"},
+		{300, 300, old, "Не по шаблону Фотосферы: заворот 23,5 мм, нужно 20"},
+		{281, 284, steps, "Не по шаблону Фотосферы 30×30: корешок или расстав не по таблице"},
+		{281, 284, tpl.Spec, ""},
+		{300, 300, thin.Spec, ""},
+		{281, 284, np.Spec, ""},
+		{281, 284, cu.Spec, ""},
+	} {
+		p := fsferaProject(c.w, c.h, 20, c.spec)
+		if got := CoverFixText(p); got != c.want {
+			t.Errorf("%v×%v %+v: %q, ждали %q", c.w, c.h, c.spec, got, c.want)
+		}
+	}
+	p := fsferaProject(281, 284, 20, old)
+	if have, want, f, off := p.CoverOffTemplate(); !off || have != [2]float64{623, 331} || want != [2]float64{626, 326} || f.Name != "30×30" {
+		t.Errorf("CoverOffTemplate: %v %v %+v %v", have, want, f, off)
+	}
+	p.Cover = nil
+	if CoverFixText(p) != "" {
+		t.Error("без обложки есть строка")
+	}
+}
+
+// Узоры фона (048). Лист 031: узор страницы переходит на весь лист, левая важнее; узор листа
+// остаётся, страницы снимаются. Не лист — узоры страниц как были.
+func TestFoldPagesPattern(t *testing.T) {
+	pat := func(k string) *Pattern { return &Pattern{Kind: k} }
+	kind := func(pt *Pattern) string {
+		if pt == nil {
+			return ""
+		}
+		return pt.Kind
+	}
+	p := NewSheet(200, 300)
+	p.Spreads = []*Spread{
+		{ID: "l", PatL: pat("left")},
+		{ID: "r", PatR: pat("right")},
+		{ID: "lr", PatL: pat("left"), PatR: pat("right")},
+		{ID: "all", Pat: pat("sheet"), PatL: pat("left"), PatR: pat("right")},
+		{ID: "none"},
+	}
+	p.FoldPages()
+	want := []string{"left", "right", "left", "sheet", ""}
+	for i, s := range p.Spreads {
+		if kind(s.Pat) != want[i] || s.PatL != nil || s.PatR != nil {
+			t.Errorf("%s: pat %q, patL %v, patR %v; ждали %q и пустые страницы", s.ID, kind(s.Pat), s.PatL, s.PatR, want[i])
+		}
+	}
+	a := New()
+	a.Spreads = []*Spread{{ID: "a", PatL: pat("left"), PatR: pat("right")}}
+	a.FoldPages()
+	if s := a.Spreads[0]; s.Pat != nil || kind(s.PatL) != "left" || kind(s.PatR) != "right" {
+		t.Fatalf("альбом: узоры страниц сведены: %+v", s)
+	}
+}
+
+// Слоты узора: области spread/left/right, чужая — nil; Patterns — по порядку, без пустых.
+func TestPatSlot(t *testing.T) {
+	s := &Spread{}
+	for _, scope := range BdScopes() {
+		*s.PatSlot(scope) = &Pattern{Kind: scope}
+	}
+	if s.Pat.Kind != ScopeSpread || s.PatL.Kind != ScopeLeft || s.PatR.Kind != ScopeRight || s.PatSlot("cover") != nil {
+		t.Fatalf("слоты: %+v %+v %+v", s.Pat, s.PatL, s.PatR)
+	}
+	s.PatL = nil
+	if got := s.Patterns(); len(got) != 2 || got[0] != s.Pat || got[1] != s.PatR {
+		t.Fatalf("Patterns: %v", got)
+	}
+	if (&Spread{}).Patterns() != nil {
+		t.Fatal("Patterns пустого листа не nil")
+	}
+}
+
+// Ключ своего: грамматика my:<16 hex> нижним регистром; ID записи — 16 hex от ключа, разный
+// у разных ключей и не равный самому hex ключа.
+func TestLibPhotoID(t *testing.T) {
+	good := "my:0123456789abcdef"
+	for key, want := range map[string]bool{
+		good: true, "my:ffffffffffffffff": true,
+		"": false, "my:": false, "my:0123456789ABCDEF": false, "my:0123456789abcde": false,
+		"my:0123456789abcdef0": false, "sa:0123456789abcdef": false, "my:0123456789abcdeg": false,
+		"My:0123456789abcdef": false, "my:0123456789abc/ef": false,
+	} {
+		if ValidLibKey(key) != want {
+			t.Errorf("ValidLibKey(%q) = %v", key, !want)
+		}
+	}
+	id := LibPhotoID(good)
+	if len(id) != 16 || strings.Trim(id, "0123456789abcdef") != "" || id == good[3:] {
+		t.Fatalf("ID %q", id)
+	}
+	if LibPhotoID(good) != id || LibPhotoID("my:ffffffffffffffff") == id {
+		t.Fatal("ID не от ключа")
+	}
+}
+
+// TeacherSeat — только место учителя виньетки; ученик, групповое, обычный лист и пустой ID — нет.
+func TestTeacherSeat(t *testing.T) {
+	p := New()
+	vig := &Spread{ID: "v", Kind: KindVignette, Vig: &Vignette{Teachers: 2, Pupils: 1}, Grid: []*Place{
+		{ID: "1", Role: RoleTeacher, Photo: "t1"}, {ID: "2", Role: RoleTeacher, Photo: "t2"},
+		{ID: "3", Role: RolePupil, Photo: "u"}, {ID: "4", Role: RoleGroup, Photo: "g"}, {ID: "5", Role: RoleTeacher}}}
+	plain := &Spread{ID: "s", Grid: []*Place{{ID: "6", Role: RoleTeacher, Photo: "x"}}}
+	p.Spreads = []*Spread{plain, vig}
+	for id, want := range map[string]bool{"t1": true, "t2": true, "u": false, "g": false, "x": false, "": false, "нет": false} {
+		if p.TeacherSeat(id) != want {
+			t.Errorf("%q: %v, ждали %v", id, !want, want)
+		}
+	}
+}
+
+// Индексы полей: каждое имя — свой индекс, прежние имена шапки (030) — синонимы полей шапки,
+// а не имени; «Предмет» — поле имени, а не шапки; ключи UI — по полям имени.
+func TestFieldIndexSynonyms(t *testing.T) {
+	for i, n := range fieldNames {
+		if fieldIndex(n) != i {
+			t.Errorf("%s: индекс %d, ждали %d", n, fieldIndex(n), i)
+		}
+	}
+	for syn, want := range map[string]string{"Школа": "Заголовок", "класс": "Подзаголовок", "УЧИТЕЛЬ": "Руководитель"} {
+		if i := fieldIndex(syn); i < 0 || fieldNames[i] != want || IsNameField(syn) {
+			t.Errorf("%s → %d, ждали %s", syn, i, want)
+		}
+	}
+	if fieldNames[fSubject] != "Предмет" || fieldNames[fTitle] != "Заголовок" || fieldNames[fSubtitle] != "Подзаголовок" || fieldNames[fLead] != "Руководитель" {
+		t.Fatal("именованные индексы разошлись с fieldNames")
+	}
+	if !IsNameField("предмет") || IsNameField("Год") || HasHeadFields("{Предмет}") || !HasHeadFields("{Предмет}{Год}") {
+		t.Fatal("Предмет — поле имени, Год — шапки")
+	}
+	if len(nameKeys) != nameFields || nameKeys[fSubject] != "subject" {
+		t.Fatalf("ключи UI: %v", nameKeys)
+	}
+}
+
+// Поля имени шаблона с предметом: ключ subject по порядку появления, без повторов.
+func TestNameFieldsOfSubject(t *testing.T) {
+	for in, want := range map[string][]string{
+		StaffCaption:               {"last", "first", "middle", "subject"},
+		"{Предмет} {Фамилия}":      {"subject", "last"},
+		"{предмет}{ПРЕДМЕТ} {Год}": {"subject"},
+		TeacherCaption:             {"last", "first", "middle"},
+	} {
+		if got := NameFieldsOf(in); !slices.Equal(got, want) {
+			t.Errorf("%q: %v, ждали %v", in, got, want)
+		}
+	}
+	// Меню «Вставить поле»: предмет — у виньетки и листа с полями, свадебному листу — нет.
+	vig := &Spread{Kind: KindVignette, Vig: &Vignette{}}
+	if got := FieldsOf(vig, nil); len(got) != len(fieldNames) || got[3] != "Предмет" {
+		t.Fatalf("виньетка: %v", got)
+	}
+	if got := FieldsOf(&Spread{}, nil); slices.Contains(got, "Предмет") {
+		t.Fatalf("свадебный лист: %v", got)
+	}
 }

@@ -13,6 +13,7 @@
   import InspectorPlace from './InspectorPlace.svelte'
   import InspectorFrame from './InspectorFrame.svelte'
   import InspectorText from '../text/InspectorText.svelte'
+  import InspectorSticker from '../sticker/InspectorSticker.svelte'
   import InspectorSpread from './InspectorSpread.svelte'
 
   // Карточка свойств выделенного (спека 008, panels.md): справа на холсте или, при открытой
@@ -25,6 +26,7 @@
     idle: InspectorSpread,
     places: InspectorPlace,
     text: InspectorText,
+    sticker: InspectorSticker,
     photo: InspectorFrame as Component<{ head?: boolean }>, // своего заголовка нет: имя файла остаётся в теле
   }
   const Body = $derived(panels.mode ? BODIES[panels.mode] : undefined)
@@ -54,6 +56,7 @@
       group: placesel.isGroup,
       places: placesel.selected.length,
       texts: placesel.texts.length,
+      stickers: placesel.selectedStickers.length,
     }),
   )
   // Пока карточка раскрывается (аккордеон ~0,45 с), зона едет вниз: подводим её в поле зрения каждый кадр.

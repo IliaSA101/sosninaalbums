@@ -523,7 +523,7 @@ func TestLoadClampsVignette(t *testing.T) {
 	if s1.Kind != "" || s1.Vig != nil || s1.Grid[0].Role != "" || !strings.Contains(buf.String(), `неизвестный вид разворота "x"`) {
 		t.Fatalf("неизвестный вид: %q %+v роль %q, лог %q", s1.Kind, s1.Vig, s1.Grid[0].Role, buf.String())
 	}
-	want := model.Vignette{Tpl: "grid", Teachers: model.MaxTeachers, Pupils: model.MaxPlaces - model.MaxTeachers, Ratio: model.VigRatio}
+	want := model.Vignette{Tpl: "grid", Teachers: 32, Pupils: model.MaxPlaces - 32, Ratio: model.VigRatio} // 049: учителей до 32
 	if s2.Vig == nil || *s2.Vig != want || s2.Grid[0].Role != "" || s2.Grid[1].Role != model.RoleTeacher {
 		t.Fatalf("зажим vig: %+v, роли %q %q", s2.Vig, s2.Grid[0].Role, s2.Grid[1].Role)
 	}

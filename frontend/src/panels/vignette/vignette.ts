@@ -9,7 +9,7 @@ export type Ratio = (typeof RATIOS)[number]
 
 export const DEFAULT_RATIO: Ratio = '3:4'
 export const DEFAULT_TPL = 'head-t-left' // «Шапка, учителя слева» — как у Go (DefaultVignette)
-export const MAX_TEACHERS = 18
+export const MAX_TEACHERS = 32 // model.MaxTeachers (049, решение №119)
 export const MAX_PUPILS = 64
 export const MAX_PLACES = 64 // запасное значение: настоящее приходит в VignetteView.max
 
@@ -20,6 +20,8 @@ export interface VigForm {
   pupils: number
   ratio: Ratio
   ttext: string
+  shape?: Shape // форма мест людей (044); нет — прямоугольник
+  round?: number // скругление этих мест, %
 }
 
 // Параметры, которые уходят в Api.SetVignette (model.Vignette).
@@ -30,13 +32,26 @@ export interface VigParams {
   ratio: string
   ttext: string
   head: string
+  shape?: Shape
+  round?: number
 }
+
+// Форма мест учеников и учителей в окне (044): '' — прямоугольник, 'oval' — круг/овал; групповое фото всегда прямоугольное.
+export type Shape = '' | 'oval'
 
 const isRatio = (r: string | undefined): r is Ratio => RATIOS.includes(r as Ratio)
 
 // Форма по виду листа. Пропорция неизвестная или не пришла — 3:4, как зажимает Go.
 export function formOf(v: VignetteView): VigForm {
-  return { tpl: v.tpl, teachers: v.teachers, pupils: v.pupils, ratio: isRatio(v.ratio) ? v.ratio : DEFAULT_RATIO, ttext: v.ttext ?? '' }
+  return {
+    tpl: v.tpl,
+    teachers: v.teachers,
+    pupils: v.pupils,
+    ratio: isRatio(v.ratio) ? v.ratio : DEFAULT_RATIO,
+    ttext: v.ttext ?? '',
+    shape: v.shape === 'oval' ? 'oval' : '',
+    round: v.round ?? 0,
+  }
 }
 
 // «Сделать виньеткой» обычный разворот: фото садятся в места учеников, поэтому учеников столько, сколько фото
@@ -48,7 +63,17 @@ export function startForm(photos: number, max = MAX_PLACES): VigForm {
 }
 
 export function paramsOf(f: VigForm): VigParams {
-  return { tpl: f.tpl, teachers: f.teachers, pupils: f.pupils, ratio: f.ratio, ttext: f.ttext, head: '' }
+  // Форма уходит, только когда задана: Go читает отсутствие как прямоугольник без скругления (omitempty).
+  return {
+    tpl: f.tpl,
+    teachers: f.teachers,
+    pupils: f.pupils,
+    ratio: f.ratio,
+    ttext: f.ttext,
+    head: '',
+    ...(f.shape ? { shape: f.shape } : {}),
+    ...(f.round ? { round: f.round } : {}),
+  }
 }
 
 // Число из поля: пусто и мусор — 0, дробное округляется вниз, в пределах 0…max.
@@ -75,7 +100,15 @@ export const totalPlaces = (f: Pick<VigForm, 'teachers' | 'pupils'>, groups: num
 // Форма совпадает с тем, что уже стоит на листе: «Применить» вернёт только геометрию шаблона.
 export function sameAsSheet(f: VigForm, v: VignetteView): boolean {
   const g = formOf(v)
-  return f.tpl === g.tpl && f.teachers === g.teachers && f.pupils === g.pupils && f.ratio === g.ratio && f.ttext === g.ttext
+  return (
+    f.tpl === g.tpl &&
+    f.teachers === g.teachers &&
+    f.pupils === g.pupils &&
+    f.ratio === g.ratio &&
+    f.ttext === g.ttext &&
+    (f.shape ?? '') === (g.shape ?? '') &&
+    (f.round ?? 0) === (g.round ?? 0)
+  )
 }
 
 export const leftText = (n: number): string => `Убрано в ленту: ${n}`

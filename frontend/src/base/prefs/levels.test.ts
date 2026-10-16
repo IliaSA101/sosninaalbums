@@ -48,6 +48,7 @@ const LEGACY_MIN: Record<FeatureId, 'simple' | 'standard' | 'full'> = {
   panels: 'full',
   marks: 'simple', // спека 004
   vignette: 'standard', // 031: на «Простом» пунктов виньетки нет (решение 80)
+  decor: 'standard', // 048: галерея фонов и стикеров; опора — фото на фоне
 }
 
 describe('featureGroups', () => {
@@ -66,8 +67,8 @@ describe('таблица уровней', () => {
       for (const l of LEVELS) expect(can(id, l), `${id}@${l}`).toBe(LEVELS.indexOf(l) >= LEVELS.indexOf(LEGACY_MIN[id]))
     }
   })
-  it('25 строк, у каждой краткое имя без повторов', () => {
-    expect(FEATURES).toHaveLength(25)
+  it('26 строк, у каждой краткое имя без повторов', () => {
+    expect(FEATURES).toHaveLength(26)
     const shorts = FEATURES.map((f) => f.short)
     expect(new Set(shorts).size).toBe(shorts.length)
     for (const s of shorts) expect(s.trim(), s).not.toBe('')
@@ -145,6 +146,7 @@ describe('таблица уровней', () => {
       'groupSelect',
       'bgPhoto',
       'vignette',
+      'decor',
     ] as const) {
       expect(can(id, 'simple'), id).toBe(false)
       expect(can(id, 'standard'), id).toBe(true)
@@ -189,6 +191,11 @@ describe('blocker (вопрос 5)', () => {
     expect(blocker('place', 'simple')).toBe('full')
     expect(blocker('place', 'standard')).toBe('full')
     expect(blocker('place', 'full')).toBeNull()
+  })
+  it('стикер (048) — как текст: ниже «Стандартного» требует «Стандартный»', () => {
+    expect(blocker('sticker', 'simple')).toBe('standard')
+    expect(blocker('sticker', 'standard')).toBeNull()
+    expect(blocker('sticker', 'full')).toBeNull()
   })
   it('готовая подпись правится на всех готовых уровнях', () => {
     for (const l of LEVELS) expect(blocker('caption', l)).toBeNull()

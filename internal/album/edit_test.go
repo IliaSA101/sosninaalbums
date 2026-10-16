@@ -76,14 +76,14 @@ func TestEmptySpreadSurvivesEdits(t *testing.T) {
 			e.SetSpreadName(x, "")
 		}},
 		{"AddPlace и DeletePlaces", func(t *testing.T, e *album.Editor, _, x string) {
-			v, err := e.AddPlace(x, 0)
+			v, err := e.AddPlace(x, 0, "")
 			if err != nil {
 				t.Fatal(err)
 			}
 			e.DeletePlaces(x, []string{v.Spreads[2].Places[0].ID})
 		}},
 		{"AddPlace и SetGrid(false)", func(t *testing.T, e *album.Editor, _, x string) {
-			if _, err := e.AddPlace(x, 1); err != nil {
+			if _, err := e.AddPlace(x, 1, ""); err != nil {
 				t.Fatal(err)
 			}
 			e.SetGrid(x, false)

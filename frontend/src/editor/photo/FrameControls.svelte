@@ -2,6 +2,7 @@
   import type { Frame, FrameView, Rect } from '../../base/core/types'
   import { store, Api } from '../../base/core/store.svelte'
   import { panFrame, sinCosDeg, zoomFrame } from '../../base/geom/frame'
+  import { outlineOf } from '../../base/geom/shape'
   import { framelive } from './framelive.svelte'
   import { canvas } from '../canvas/canvas.svelte'
   import { markDone } from '../places/placegesture'
@@ -56,7 +57,7 @@
       const dx = (ev.clientX - sx) * mm
       const dy = (ev.clientY - sy) * mm
       // Дальше panFrame переводит сдвиг в оси фото (−r).
-      framelive.set(id, panFrame(base, r, baseImg, dx * cs + dy * sn, -dx * sn + dy * cs), false, true)
+      framelive.set(id, panFrame(base, r, baseImg, dx * cs + dy * sn, -dx * sn + dy * cs, outlineOf(fv.shape, fv.radius)), false, true)
     }
     const up = async () => {
       stop()
@@ -103,6 +104,7 @@
 {#if zoomable && !panning}
   <input
     class="zoom"
+    class:shaped={!!outlineOf(fv?.shape, fv?.radius)}
     data-guide="frame"
     type="range"
     min="100"
@@ -148,6 +150,11 @@
     z-index: 4;
     pointer-events: auto;
     accent-color: var(--accent);
+  }
+  /* У круга и скругления нижний угол срезан: ползунок выше и уже */
+  .zoom.shaped {
+    bottom: calc(16px + 8%);
+    width: min(50%, 170px);
   }
   :global(body.dragging) .zoom,
   :global(body.dragging) .handle {

@@ -5,26 +5,41 @@
   import { backdropAccepts } from '../../base/drag/drop'
   import { backdropOf, SCOPE_LABEL, zoneScopes } from './backdrop'
   import { COVER_SCOPE_LABEL, layoutScopes } from '../cover/cover'
-  import { isCover } from '../../base/geom/sheet'
+  import { isCover, unitOf } from '../../base/geom/sheet'
+  import { gridAct } from '../../panels/layouts/gridact.svelte'
   import { clearBackdrop, editBackdrop, pickBackdropFile } from './backdropact'
   import { thumbUrl } from '../../base/core/media'
+  import { prefs } from '../../base/prefs/prefs.svelte'
+  import { decor } from '../../panels/decor/decor.svelte'
   import { bgmode } from './bgmode.svelte'
+  import { LIB_MISSING_TEXT } from '../../panels/library/missing'
   import BackdropFade from './BackdropFade.svelte'
   import BackdropFields from './BackdropFields.svelte'
+  import InspectorPattern from './InspectorPattern.svelte'
 
   // «Фото фона» в разделе «Фон» карточки разворота (спека 009): зона броска на каждую область,
-  // «Свой файл…», «Править» (входит в режим фона) и «Убрать». split — цвета показаны по страницам.
+  // «Галерея фонов…» и «Свой файл…», «Править» (входит в режим фона) и «Убрать». split — цвета показаны по страницам.
+  // Узор программы (048) — строкой «Узор» над зонами: он лежит под фото фона и от областей зон не зависит.
   let { sp, split }: { sp: SpreadView; split: boolean } = $props()
 
   // Обложка (032): зоны броска задаёт её раскладка, а не цвета страниц; названия — сторонки.
   const cover = $derived(isCover(sp))
+  const unit = $derived(unitOf(store.view.settings))
   const scopes = $derived(cover ? layoutScopes(store.cover?.layout) : zoneScopes(sp.backdrops, split))
   const names = $derived(cover ? COVER_SCOPE_LABEL : SCOPE_LABEL)
   // Эта область правится в режиме фона: вместо «Править» — поля режима и «Готово».
   const editing = (scope: BackdropScope) => bgmode.cur?.spread === sp.id && bgmode.cur.scope === scope
   const label = (scope: BackdropScope) => (cover || scopes.length > 1 ? names[scope] : 'Фото фона')
+
+  // Свой из библиотеки (048): имя — из каталога, пропавший файл — подсказка «загрузите тот же».
+  const missing = (photo: string) => store.missing.includes(photo)
+  const ownName = (lib: string) => decor.nameOf(lib) ?? 'Свой фон'
+  $effect(() => {
+    if (sp.backdrops?.some((b) => b.lib) || sp.patterns?.length) void decor.ensureNames()
+  })
 </script>
 
+<InspectorPattern {sp} />
 <div class="zones" role="group" aria-label="Фото фона" data-guide="bg-photo">
   {#each scopes as scope (scope)}
     {@const b = backdropOf(sp, scope)}
@@ -38,13 +53,19 @@
     >
       <div class="cap">{label(scope)}</div>
       {#if b}
+        {@const lost = !!b.lib && missing(b.photo)}
         <div class="have">
-          <img src={thumbUrl(b.photo)} alt="" draggable="false" />
+          {#if lost}<span class="ph" aria-hidden="true"></span>{:else}<img src={thumbUrl(b.photo)} alt="" draggable="false" />{/if}
           <div class="info">
-            <span class="name" title={store.byId.get(b.photo)?.name}>{store.byId.get(b.photo)?.name ?? 'Фото'}</span>
+            {#if b.lib}
+              <span class="name" title={ownName(b.lib)}>{ownName(b.lib)}</span>
+            {:else}
+              <span class="name" title={store.byId.get(b.photo)?.name}>{store.byId.get(b.photo)?.name ?? 'Фото'}</span>
+            {/if}
             {#if b.dpi > 0}<span class="dpi">{Math.round(b.dpi)} dpi</span>{/if}
           </div>
         </div>
+        {#if lost}<div class="lost" role="status">{LIB_MISSING_TEXT}</div>{/if}
         <BackdropFade {b} spread={sp.id} />
         {#if editing(scope)}
           <BackdropFields {b} spread={sp.id} />
@@ -54,14 +75,29 @@
             <button class="ghost" onclick={() => clearBackdrop(sp.id, scope)}>Убрать</button>
           </div>
         {/if}
-        <button class="ghost file" onclick={() => pickBackdropFile(sp.id, scope)}>Свой файл…</button>
       {:else}
         <div class="hint">Перетащите фото сюда</div>
-        <button class="ghost file" onclick={() => pickBackdropFile(sp.id, scope)}>Свой файл…</button>
       {/if}
+      <div class="files">
+        {#if prefs.can('decor')}
+          <button class="ghost" data-guide="bg-gallery" title="Узоры и фоны из библиотеки" onclick={() => decor.show('bg', sp.id, scope)}
+            >Галерея фонов…</button
+          >
+        {/if}
+        <button class="ghost" onclick={() => pickBackdropFile(sp.id, scope)}>Свой файл…</button>
+      </div>
     </div>
   {/each}
 </div>
+{#if prefs.can('decor') && !cover}
+  <!-- 049 Ф2: одно окно на лист, а не на область фона; открывается тем же путём, что «Правка ▸ Копировать оформление…» -->
+  <button
+    class="ghost copy"
+    data-guide="copy-decor"
+    title="Поставить такое же оформление на другие {unit.many}"
+    onclick={() => gridAct.openDecor(sp.id)}>Копировать оформление…</button
+  >
+{/if}
 
 <style>
   .zones {
@@ -123,20 +159,47 @@
   }
   .btns {
     display: flex;
+    flex-wrap: wrap; /* узкая колонка: кнопки переносятся, а не сжимаются */
     gap: 6px;
     margin-top: 6px;
   }
   .btns button {
-    flex: 1;
+    flex: 1 0 auto;
+    white-space: nowrap;
     height: 24px;
     padding: 0 6px;
     font-size: 12px;
   }
-  .file {
+  .files {
+    display: flex;
+    flex-wrap: wrap; /* узкая колонка: кнопки переносятся, а не сжимаются */
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .files button {
+    flex: 1 0 auto;
+    white-space: nowrap;
+    height: 24px;
+    padding: 0 6px;
+    font-size: 12px;
+  }
+  .copy {
     width: 100%;
     height: 24px;
     margin-top: 6px;
     padding: 0 6px;
     font-size: 12px;
+  }
+  .ph {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+  }
+  .lost {
+    margin-top: 6px;
+    color: var(--accent);
+    line-height: 1.35;
   }
 </style>

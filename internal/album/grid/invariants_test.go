@@ -2,6 +2,7 @@ package grid_test
 
 import (
 	"fmt"
+	"math"
 	"math/rand/v2"
 	"path/filepath"
 	"slices"
@@ -36,7 +37,7 @@ func TestGridInvariants(t *testing.T) {
 	edtest.NewSpread(e, -1, pool[:3])
 	scopes := []string{model.ScopeLeft, model.ScopeRight, model.ScopeSpread}
 	ops := []string{"set", "add", "move", "swap", "remove", "new", "place", "fill", "addPlace", "setPlaces", "delete",
-		"arrange", "layers", "group", "fit", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop"}
+		"arrange", "layers", "group", "fit", "shape", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop"}
 	arr := []string{"same", "sameW", "fitPhoto", "splitH", "splitV", "front", "back"}
 	vigTpls := []string{"grid", "head-t-left", "g-top", "t-top-g", "split-tg", "нет такого"}
 	withGrid, seated, turned, ordered := 0, 0, 0, 0 // тест не должен выродиться в прогон одного «Авто»
@@ -89,7 +90,7 @@ func TestGridInvariants(t *testing.T) {
 		case "drop": // 042: бросок на лист или место, с вопросом и любым ответом
 			_, _, _ = e.DropPhotos(id, []string{"", place}[r.IntN(2)], pick(1+r.IntN(5)), r.Float64()*1.4-0.2, []string{"", "add", "skip"}[r.IntN(3)])
 		case "addPlace":
-			e.AddPlace(id, r.IntN(2))
+			e.AddPlace(id, r.IntN(2), []string{"", model.ShapeOval, "нет такой"}[r.IntN(3)])
 		case "setPlaces":
 			e.SetPlaces(id, []model.PlaceBox{{ID: place, X: r.Float64()*700 - 50, Y: r.Float64()*350 - 20, W: r.Float64() * 300, H: r.Float64() * 300}}, "m")
 			e.SetPlaces(id, []model.PlaceBox{{ID: ref, X: r.Float64() * 400, Y: r.Float64() * 200, W: 20 + r.Float64()*200, H: 20 + r.Float64()*200}}, "")
@@ -144,10 +145,20 @@ func TestGridInvariants(t *testing.T) {
 			e.AlignItems(id, ar[:r.IntN(len(ar)+1)], edtest.AlignOps[r.IntN(len(edtest.AlignOps))], edtest.AlignTo[r.IntN(len(edtest.AlignTo))])
 		case "fit":
 			e.SetPlaceFit(id, []string{ref}, []string{"", model.FitContain}[r.IntN(2)])
+		case "shape": // 044: форма и скругление, и у «Авто»
+			if r.IntN(2) == 0 {
+				e.SetPlaceShape(id, []string{ref, place}, []string{"", model.ShapeOval, "нет такой"}[r.IntN(3)])
+			} else {
+				e.SetPlaceRound(id, []string{ref, place}, []float64{0, 10, 12.4, 50, 70, -5, math.NaN()}[r.IntN(7)])
+			}
 		case "mirror":
 			e.MirrorGrid(id, scopes[r.IntN(3)])
 		case "copy":
 			to := edtest.P(e).Spreads[r.IntN(n)].ID
+			if r.IntN(4) == 0 { // 049 Ф2: оформление без мест (шапка виньетки цели стоит)
+				_, _ = e.CopyDecor(id, scopes[r.IntN(3)], []model.GridTarget{{Spread: to, Scope: scopes[r.IntN(3)]}}, r.IntN(2) == 0, r.IntN(2) == 0)
+				break
+			}
 			e.CopyGrid(id, scopes[r.IntN(3)], []model.GridTarget{{Spread: to, Scope: scopes[r.IntN(3)]}}, r.IntN(2) == 0, r.IntN(2) == 0)
 		case "apply":
 			e.ApplyGrid(id, scopes[r.IntN(3)], []string{model.TplPage, model.TplSpread}[r.IntN(2)],
@@ -175,7 +186,7 @@ func TestGridInvariants(t *testing.T) {
 				_, _ = e.CreateCover("", nil)
 				break
 			}
-			_, _ = e.AddPlace(model.CoverID, r.IntN(2))
+			_, _ = e.AddPlace(model.CoverID, r.IntN(2), "")
 			sp := edtest.P(e).Cover.Spec
 			sp.W, sp.Hinge = float64(r.IntN(2)*(150+r.IntN(300))), float64(r.IntN(10))
 			_, _ = e.SetCoverSpec(sp)

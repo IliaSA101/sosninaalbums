@@ -81,33 +81,19 @@ func (p *para) width(a, b int) fixed.Int26_6 {
 	return p.x[b-1] + p.adv[b-1] - p.x[a]
 }
 
-// measure строит para; знаки без глифа в шрифте выпадают.
-func measure(sf *sfnt.Font, s string) *para {
-	var buf sfnt.Buffer
-	ppem := fixed.Int26_6(sf.UnitsPerEm()) << 6
+// measure строит para; знак без глифа в шрифте берётся из запасного fb (может
+// быть nil), нет и там — выпадает. Ширина запасного знака — в единицах основного
+// шрифта ×64 (ppem основного), кернинг только между знаками одного шрифта,
+// как в браузере.
+func measure(sf, fb *sfnt.Font, s string) *para {
+	var buf, fbBuf sfnt.Buffer
+	main, alt := glyphSrc{sf, &buf}, glyphSrc{fb, &fbBuf}
 	p := &para{}
-	var prev sfnt.GlyphIndex
-	var pos fixed.Int26_6
-	for _, r := range s {
-		g, err := sf.GlyphIndex(&buf, r)
-		if err != nil || g == 0 {
-			continue
-		}
-		adv, err := sf.GlyphAdvance(&buf, g, ppem, xfont.HintingNone)
-		if err != nil {
-			continue
-		}
-		if len(p.r) > 0 {
-			if k, err := sf.Kern(&buf, prev, g, ppem, xfont.HintingNone); err == nil {
-				pos += k
-			}
-		}
+	walkGlyphs(main, alt, s, fixed.Int26_6(sf.UnitsPerEm())<<6, func(r rune, _ glyphSrc, _ sfnt.GlyphIndex, pos, adv fixed.Int26_6) {
 		p.r = append(p.r, r)
 		p.x = append(p.x, pos)
 		p.adv = append(p.adv, adv)
-		pos += adv
-		prev = g
-	}
+	})
 	return p
 }
 
@@ -118,6 +104,7 @@ func Layout(s string, st Style, w float64) Box {
 	size := st.Size * 25.4 / 72
 	box := Box{W: w, Size: size}
 	sf, _ := font(st)
+	fb, _ := fallback(st)
 	if sf == nil || !(w > 0) || math.IsInf(w, 0) {
 		return box
 	}
@@ -130,7 +117,7 @@ func Layout(s string, st Style, w float64) Box {
 	}
 	lh := lineHeight * size
 	for _, par := range strings.Split(CleanText(s), "\n") {
-		box.Lines = append(box.Lines, wrap(measure(sf, par), mm, w)...)
+		box.Lines = append(box.Lines, wrap(measure(sf, fb, par), mm, w)...)
 	}
 	n := len(box.Lines)
 	for i := range box.Lines {

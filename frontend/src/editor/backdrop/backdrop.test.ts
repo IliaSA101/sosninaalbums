@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { backdropLost, backdropOf, zoneScopes } from './backdrop'
+import { backdropCss, backdropLost, backdropOf, zoneScopes } from './backdrop'
 import type { BackdropView, SpreadView } from '../../base/core/types'
 
 const bd = (scope: BackdropView['scope']) => ({ scope, photo: 'p' }) as BackdropView
@@ -31,5 +31,20 @@ describe('backdropLost', () => {
     expect(backdropLost(sp(), sp(bd('left')))).toBe(false)
     expect(backdropLost(sp(bd('spread')), sp())).toBe(false)
     expect(backdropLost(undefined, undefined)).toBe(false)
+  })
+})
+
+describe('backdropCss (спека 045): transform картинки фона', () => {
+  const css = (b: Partial<BackdropView>) => backdropCss({ frame: { s: 1, x: 0, y: 0 }, flipH: false, flipV: false, ...b } as BackdropView)
+  it('без наклона и зеркала — transform не задан', () => {
+    expect(css({})).toBeUndefined()
+  })
+  it('наклон и зеркало: поворот идёт до зеркала', () => {
+    expect(css({ frame: { s: 1, x: 0, y: 0, r: 4.5 } })).toBe('rotate(4.5deg)')
+    expect(css({ frame: { s: 1, x: 0, y: 0, r: 4.5 }, flipH: true })).toBe('rotate(4.5deg) scale(-1, 1)')
+    expect(css({ frame: { s: 1, x: 0, y: 0, r: -3 }, flipV: true })).toBe('rotate(-3deg) scale(1, -1)')
+  })
+  it('только зеркало — как до 0.12', () => {
+    expect(css({ flipH: true, flipV: true })).toBe('scale(-1, -1)')
   })
 })

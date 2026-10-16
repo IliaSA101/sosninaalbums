@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import TopBar from './shell/menu/TopBar.svelte'
   import SpreadBar from './editor/spread/SpreadBar.svelte'
-  import LayoutGallery from './panels/layouts/LayoutGallery.svelte'
+  import LayoutGallery from './panels/gallery/LayoutGallery.svelte'
   import MissingBar from './panels/library/MissingBar.svelte'
   import Stage from './editor/canvas/Stage.svelte'
   import Timeline from './panels/timeline/Timeline.svelte'
@@ -11,8 +11,9 @@
   import Overlay from './base/drag/Overlay.svelte'
   import CopyGridDialog from './panels/layouts/CopyGridDialog.svelte'
   import ExportDialog from './shell/export/ExportDialog.svelte'
-  import AutoAskDialog from './shell/dialogs/AutoAskDialog.svelte'
-  import DropAskDialog from './shell/dialogs/DropAskDialog.svelte'
+  import FsferaDone from './shell/export/FsferaDone.svelte'
+  import AutoAskDialog from './shell/ask/AutoAskDialog.svelte'
+  import DropAskDialog from './shell/ask/DropAskDialog.svelte'
   import AutoBuildDialog from './shell/dialogs/AutoBuildDialog.svelte'
   import HotkeysHelp from './shell/menu/HotkeysHelp.svelte'
   import Guide from './shell/guide/Guide.svelte'
@@ -25,6 +26,7 @@
   import NamesDialog from './panels/names/NamesDialog.svelte'
   import VigDialog from './panels/vignette/VigDialog.svelte'
   import VigTplSave from './panels/vignette/VigTplSave.svelte'
+  import DecorDialog from './panels/decor/DecorDialog.svelte'
   import { vigDialog } from './panels/vignette/vigsession.svelte'
   import { namesUi } from './panels/names/names.svelte'
   import PhotoMenu from './editor/photo/PhotoMenu.svelte'
@@ -32,7 +34,7 @@
   import { store } from './base/core/store.svelte'
   import { gridAct } from './panels/layouts/gridact.svelte'
   import { dropAsk } from './base/drag/dropgrid.svelte'
-  import { gallery } from './panels/layouts/gallery.svelte'
+  import { gallery } from './panels/gallery/gallery.svelte'
   import { placesel } from './editor/places/placesel.svelte'
   import { canvas } from './editor/canvas/canvas.svelte'
   import { run } from './shell/menu/commands'
@@ -64,7 +66,15 @@
   function f1(e: KeyboardEvent): boolean {
     if (e.key !== 'F1' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false
     e.preventDefault()
-    const other = help.open || backupsUi.open || namesUi.open || !!vigDialog.id || !!store.autoDraft || store.exportOpen || askOpen()
+    const other =
+      help.open ||
+      backupsUi.open ||
+      namesUi.open ||
+      !!vigDialog.id ||
+      !!store.autoDraft ||
+      store.exportOpen ||
+      !!store.exportMemo ||
+      askOpen()
     if (!guide.open && !other) guide.openFresh()
     return true
   }
@@ -94,11 +104,12 @@
       hasSelection: store.selectedIds.length > 0,
       gridSpread: noAutoLayouts(),
       placeSelected: placesel.selected.length > 0 || placesel.texts.length > 0,
+      stickerSelected: placesel.selected.length === 0 && placesel.texts.length === 0 && placesel.stickers.length > 0,
       layerable: placesel.canLayer,
       zone: store.zone,
       bgMode: !!bgmode.cur,
       big: modes.big,
-      modal: store.exportOpen || askOpen(),
+      modal: store.exportOpen || !!store.exportMemo || askOpen(),
       can: prefs.can,
     })
     if (!act) return
@@ -136,6 +147,7 @@
 <Overlay />
 <CopyGridDialog />
 <ExportDialog />
+<FsferaDone />
 <AutoAskDialog />
 <DropAskDialog />
 <AutoBuildDialog />
@@ -147,6 +159,7 @@
 <NamesDialog />
 <VigDialog />
 <VigTplSave />
+<DecorDialog />
 <PhotoMenu />
 <PhotoPreview />
 <Spot />

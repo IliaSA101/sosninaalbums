@@ -274,6 +274,84 @@ func nearBox(t *testing.T, g, b model.Box, i, j int) {
 			t.Fatalf("шаблон %d место %d поле %d: %+v ≠ %+v", i, j, k, g, b)
 		}
 	}
+	if g.Shape != b.Shape || g.Round != b.Round {
+		t.Fatalf("шаблон %d место %d: форма %q %v ≠ %q %v", i, j, g.Shape, g.Round, b.Shape, b.Round)
+	}
+}
+
+// templates.json с формой (044): v5 только при форме места или стиля виньетки — без форм
+// версия прежняя и 0.11 продолжает писать файл; 200 шаблонов × 64 места с формой и углом
+// — меньше 1 МБ и читаются обратно без потерь.
+func TestTemplatesShape(t *testing.T) {
+	plain := testTpl("a")
+	oval, round := testTpl("b"), testTpl("c")
+	oval.Boxes[1].Shape = model.ShapeOval
+	round.Boxes[0].Round = 25
+	vig := bigVigTemplates(1, 4)[0]
+	shapedVig := bigVigTemplates(1, 4)[0]
+	shapedVig.Vig.Style.Shape = model.ShapeOval
+	for _, c := range []struct {
+		name string
+		list []model.Template
+		ver  string
+	}{
+		{"без форм", []model.Template{plain}, `{"version":1,`},
+		{"виньетка без форм", []model.Template{plain, vig}, `{"version":4,`},
+		{"круг", []model.Template{plain, oval}, `{"version":5,`},
+		{"скругление", []model.Template{round}, `{"version":5,`},
+		{"форма виньетки", []model.Template{shapedVig}, `{"version":5,`},
+	} {
+		data, err := model.MarshalTemplates(model.ClampTemplates(c.list))
+		if err != nil || !bytes.HasPrefix(data, []byte(c.ver)) {
+			t.Fatalf("%s: %v %.20s", c.name, err, data)
+		}
+		back, ver, err := model.ParseTemplates(data)
+		if err != nil || ver > model.TemplatesVersion || len(back) != len(c.list) {
+			t.Fatalf("%s: круг %v v%d", c.name, err, ver)
+		}
+		for i := range back {
+			nearTpl(t, i, back[i], model.ClampTemplates(c.list)[i])
+		}
+	}
+	// Предел: у каждого места форма "oval" (самое длинное поле формы) и угол; у виньеток —
+	// у мест людей (групповое — прямоугольник) и в стиле, при ролях, шапке и стилях подписей.
+	shapeLimit(t, "сетки", bigTemplates(model.MaxTemplates, model.MaxPlaces))
+	shapeLimit(t, "виньетки", bigVigTemplates(model.MaxTemplates, model.MaxPlaces))
+}
+
+// shapeLimit — худший случай файла шаблонов с формой: список gen (200 × 64) с овалом у мест
+// людей и в стиле виньетки пишется в предел 1 МБ (v5) и читается обратно без потерь.
+func shapeLimit(t *testing.T, name string, gen []model.Template) {
+	t.Helper()
+	dir := testkit.TempDir(t)
+	list := model.ClampTemplates(gen)
+	for i := range list {
+		for j := range list[i].Boxes {
+			if list[i].Vig == nil || list[i].Vig.Roles[j] != model.RoleGroup {
+				list[i].Boxes[j].Shape = model.ShapeOval
+			}
+		}
+		if list[i].Vig != nil {
+			list[i].Vig.Style.Shape = model.ShapeOval
+		}
+	}
+	var tp Templates
+	if err := tp.Store(dir, list, os.Rename); err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	data, err := os.ReadFile(TemplatesPath(dir))
+	if err != nil || len(data) > model.MaxTemplatesFile || !bytes.HasPrefix(data, []byte(`{"version":5,`)) {
+		t.Fatalf("%s: файл %d байт (предел %d): %v", name, len(data), model.MaxTemplatesFile, err)
+	}
+	t.Logf("%s 200 × 64 с формой: %d байт", name, len(data))
+	re := LoadTemplates(dir)
+	back := re.List()
+	if len(back) != len(list) {
+		t.Fatalf("%s: прочитано %d из %d", name, len(back), len(list))
+	}
+	for i := range list {
+		nearTpl(t, i, back[i], list[i])
+	}
 }
 
 // Данные больше 1 МБ не пишутся: понятная ошибка, файл и память прежние; битый файл

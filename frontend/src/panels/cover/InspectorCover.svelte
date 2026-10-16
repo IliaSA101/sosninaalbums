@@ -117,6 +117,12 @@
     <div class="total">{totalLine(cv, store.view.settings.dpi)}</div>
     <div class="total">{spineLine(cv)}</div>
     {#if over}<div class="warn">{over}</div>{/if}
+    {#if cv.fix}
+      <div class="warn">{cv.fix}</div>
+      <div class="btns">
+        <button onclick={() => coverAct.applyPreset(cv.preset)}>Исправить</button>
+      </div>
+    {/if}
 
     <div class="cap sub">Раскладка обложки</div>
     <div class="layouts" role="group" aria-label="Раскладка обложки">
@@ -282,10 +288,12 @@
   }
   .btns {
     display: flex;
+    flex-wrap: wrap; /* узкая колонка: кнопки переносятся, а не сжимаются */
     gap: 6px;
   }
   .btns button {
-    flex: 1;
+    flex: 1 0 auto;
+    white-space: nowrap;
     height: 24px;
     padding: 0 6px;
     font-size: 12px;

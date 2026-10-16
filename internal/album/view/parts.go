@@ -2,6 +2,7 @@ package view
 
 import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/decor/gen"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
@@ -15,10 +16,12 @@ func gridView(f *fields, sv *model.SpreadView, s *model.Spread) {
 	sv.Grid, sv.Layout, sv.Variant = true, "", -1
 	sv.Photos = model.GridPhotos(s)
 	sv.Places = make([]model.PlaceView, len(s.Grid))
-	flat := p.Geo(s).Layflat // обложка — всегда: место через корешок законно
+	flat := p.Geo(s).Layflat    // обложка — всегда: место через корешок законно
+	var outlines []geom.Outline // формы ячеек с фото, рядом с Rects (подписи «на фото»)
 	for i, pl := range s.Grid {
+		o := pl.Outline()
 		sv.Places[i] = model.PlaceView{ID: pl.ID, X: pl.X, Y: pl.Y, W: pl.W, H: pl.H, Photo: pl.Photo, Fit: pl.Fit,
-			Spine: !flat && p.CrossesSpine(s, pl), Rot: pl.Rot, Role: pl.Role}
+			Spine: !flat && p.CrossesSpine(s, pl), Rot: pl.Rot, Role: pl.Role, Shape: pl.Shape, Round: pl.Round, Radius: o.Radius}
 		if pl.Photo == "" {
 			continue
 		}
@@ -28,16 +31,19 @@ func gridView(f *fields, sv *model.SpreadView, s *model.Spread) {
 		var fv model.FrameView
 		if pl.Fit == model.FitContain {
 			// Целиком, без S/X/Y: ползунка у такого места нет; поворот фото действует.
-			fv = newFrameView(geom.ContainImage(r, a, f.R), model.Frame{S: 1, R: f.R})
+			fv = newFrameView(geom.ContainImageIn(r, a, f.R, o), model.Frame{S: 1, R: f.R})
 		} else {
-			fv = newFrameView(model.PlaceImage(r, a, f), f)
+			// Фото закрывает форму, а не рамку (044): у круга наклон его не увеличивает.
+			fv = newFrameView(model.PlaceImageIn(r, a, f, o), f)
 		}
 		fv.FlipH, fv.FlipV, fv.CellRot = ref.FlipH, ref.FlipV, pl.Rot
+		fv.Shape, fv.Radius = pl.Shape, o.Radius
 		fv.DPI = geom.FrameDPI(ref.W, fv.Img)
 		sv.Rects = append(sv.Rects, r)
 		sv.Frames = append(sv.Frames, fv)
+		outlines = append(outlines, o)
 	}
-	sv.Captions, sv.Stubs = captionViews(f, s, sv.Photos, sv.Rects)
+	sv.Captions, sv.Stubs = captionViews(f, s, sv.Photos, sv.Rects, outlines)
 	for i := range sv.Captions {
 		if pl := s.PlaceRef(sv.Captions[i].Photo); pl != nil {
 			turnCaption(&sv.Captions[i], pl)
@@ -70,8 +76,9 @@ func turnCaption(cv *model.CaptionView, pl *model.Place) {
 	cv.X, cv.Y, cv.Rot, cv.Overflow = cv.X+mx, cv.Y+my, pl.Rot, 0
 }
 
-// zView — Z у ячеек, мест, подписей, заглушек и текстов: проход стека снизу вверх с 1,
-// подпись и заглушка — сразу над своим местом. «Авто» — ячейки по порядку, затем тексты.
+// zView — Z у ячеек, мест, подписей, заглушек, стикеров и текстов: проход стека снизу вверх
+// с 1, подпись и заглушка — сразу над своим местом. «Авто» — ячейки по порядку, затем стек
+// стикеров и текстов (Stack: мест в нём нет).
 // Подпись нижнего места, легшая на верхнее, теперь под ним (в 0.4.0 подписи
 // лежали над всеми фото).
 func zView(sv *model.SpreadView, s *model.Spread) {
@@ -105,15 +112,9 @@ func zView(sv *model.SpreadView, s *model.Spread) {
 	for i, t := range sv.Texts {
 		textAt[t.ID] = i
 	}
-	if !sv.Grid {
-		for i := range sv.Frames {
-			sv.Frames[i].Z = cell(sv.Photos[i], sv.Photos[i])
-		}
-		for i := range sv.Texts {
-			z++
-			sv.Texts[i].Z = z
-		}
-		return
+	stickAt := make(map[string]int, len(sv.Stickers))
+	for i, st := range sv.Stickers {
+		stickAt[st.ID] = i
 	}
 	placeAt := make(map[string]int, len(sv.Places))
 	for i, pv := range sv.Places {
@@ -121,7 +122,11 @@ func zView(sv *model.SpreadView, s *model.Spread) {
 	}
 	frameOf := make(map[string]int, len(sv.Frames)) // в сетке Frames[i] — фото Photos[i]
 	for i := range sv.Frames {
-		frameOf[sv.Photos[i]] = i
+		if sv.Grid {
+			frameOf[sv.Photos[i]] = i
+		} else {
+			sv.Frames[i].Z = cell(sv.Photos[i], sv.Photos[i])
+		}
 	}
 	for _, id := range s.Stack() {
 		if i, ok := placeAt[id]; ok {
@@ -130,6 +135,9 @@ func zView(sv *model.SpreadView, s *model.Spread) {
 			if f, ok := frameOf[pv.Photo]; ok && pv.Photo != "" {
 				sv.Frames[f].Z = pv.Z
 			}
+		} else if i, ok := stickAt[id]; ok {
+			z++
+			sv.Stickers[i].Z = z
 		} else if i, ok := textAt[id]; ok {
 			z++
 			sv.Texts[i].Z = z
@@ -151,7 +159,32 @@ func backdropViews(p *model.Project, s *model.Spread) []model.BackdropView {
 		img := model.PlaceImage(layout.Rect{W: b.W, H: b.H}, p.RawAspect(b.Photo), fr)
 		out = append(out, model.BackdropView{Scope: scope, Photo: b.Photo, Area: p.BdArea(s, scope),
 			Box: model.BackdropBox{X: b.X, Y: b.Y, W: b.W, H: b.H, Rot: b.Rot}, Img: img, Frame: fr,
-			FlipH: b.FlipH, FlipV: b.FlipV, DPI: geom.FrameDPI(ref.W, img), Fade: b.Fade})
+			FlipH: b.FlipH, FlipV: b.FlipV, DPI: geom.FrameDPI(ref.W, img), Fade: b.Fade, Lib: ref.Lib})
+	}
+	return out
+}
+
+// patternViews — узоры листа по областям (048): геометрия области — та же, что у фото фона,
+// поэтому холст и экспорт кладут узор в одно место. Цвета и масштаб — как их нарисует gen.
+func patternViews(p *model.Project, s *model.Spread) []model.PatternView {
+	out := []model.PatternView{}
+	for _, scope := range model.BdScopes() {
+		pt := *s.PatSlot(scope)
+		if pt == nil {
+			continue
+		}
+		area := p.BdArea(s, scope)
+		spec, known := gen.Resolve(gen.Spec{Kind: pt.Kind, Inks: pt.Inks, Scale: pt.Scale, Seed: pt.Seed})
+		if spec.Scale == 0 { // неизвестный генератор Resolve не дополняет
+			spec.Scale = 1
+		}
+		pv := model.PatternView{Scope: scope, Area: area, Known: known, Preset: pt.Preset,
+			Pat: model.Pattern{Kind: pt.Kind, Inks: spec.Inks, Scale: spec.Scale, Seed: spec.Seed, Fade: pt.Fade}}
+		if m, ok := gen.Lookup(pt.Kind); ok {
+			pv.Name, pv.Inks, pv.Random = m.Name, len(m.Inks), m.Random
+			pv.URL = gen.Query(spec, area.W, area.H)
+		}
+		out = append(out, pv)
 	}
 	return out
 }

@@ -4,7 +4,7 @@
   import { sessionId } from '../../editor/text/textedit'
   import { personOf } from './names'
 
-  // Имя на фото (спека 030) в карточке фото: Фамилия, Имя, Отчество. Пока своего имени нет, значения берутся
+  // Имя на фото (спека 030) в карточке фото: Фамилия, Имя, Отчество, у учителя виньетки ещё Предмет (049). Пока своего имени нет, значения берутся
   // из имени файла и видны серым («из имени файла»); все три поля очищены — снова имя из файла. Набор уходит в Go
   // с паузой, одной сессией на фокус (один шаг отмены), и при смене фото досылается.
   // inline — окошко имени на холсте (037): без заголовка, показаны только поля из only, фокус — в первом,
@@ -12,14 +12,18 @@
   let { photo, only, inline = false, ondone }: { photo: string; only?: readonly string[]; inline?: boolean; ondone?: () => void } = $props()
 
   const DELAY = 500
+  // k — ключ Person, w — имя поля в who шаблона (у предмета они разные: subj / subject).
   const ALL = [
-    { k: 'last', label: 'Фамилия' },
-    { k: 'first', label: 'Имя' },
-    { k: 'middle', label: 'Отчество' },
+    { k: 'last', w: 'last', label: 'Фамилия' },
+    { k: 'first', w: 'first', label: 'Имя' },
+    { k: 'middle', w: 'middle', label: 'Отчество' },
+    { k: 'subj', w: 'subject', label: 'Предмет' },
   ] as const
-  const FIELDS = $derived(only ? ALL.filter((f) => only.includes(f.k)) : ALL)
+  // Предмет в карточке — у учителя виньетки или если он уже задан; раз показанное поле не пропадает под курсором.
+  let subjectShown = $state(false)
+  const FIELDS = $derived(only ? ALL.filter((f) => only.includes(f.w)) : ALL.filter((f) => f.k !== 'subj' || subjectShown))
 
-  let draft = $state({ last: '', first: '', middle: '' })
+  let draft = $state({ last: '', first: '', middle: '', subj: '' })
   let fromFile = $state(false)
   let dirty = $state(false)
   let session = ''
@@ -38,7 +42,8 @@
     Api.Person(id).then(
       (pv) => {
         if (n !== seq || dirty) return
-        draft = { last: pv.last, first: pv.first, middle: pv.middle }
+        draft = { last: pv.last, first: pv.first, middle: pv.middle, subj: pv.subject }
+        if (pv.teacher || pv.subject) subjectShown = true
         fromFile = pv.fromFile
         if (selectFirst) {
           selectFirst = false
@@ -53,7 +58,8 @@
     clearTimeout(timer)
     timer = 0
     if (!dirty) return
-    const p = personOf(draft)
+    // Имя ещё из файла, набран только предмет: имена не шлём — Go оставит имя из файла (решение 174).
+    const p = personOf(fromFile ? { subj: draft.subj } : draft)
     const s = session
     dirty = false // дальше свежий ответ Go (имя из файла после очистки) можно показывать
     queued = queued.then(() => store.run(Api.SetPerson(id, p, s)))
@@ -102,7 +108,7 @@
     selectFirst = false
     draft[k] = v
     dirty = true
-    fromFile = false
+    if (k !== 'subj') fromFile = false
     clearTimeout(timer)
     const id = photo
     timer = window.setTimeout(() => send(id), DELAY)
@@ -114,7 +120,7 @@
   {#each FIELDS as f (f.k)}
     <input
       type="text"
-      class:file={fromFile}
+      class:file={fromFile && f.k !== 'subj'}
       maxlength="60"
       placeholder={f.label}
       aria-label={f.label}

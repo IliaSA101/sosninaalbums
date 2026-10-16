@@ -10,17 +10,17 @@ import (
 )
 
 // BlankSpreads — номера (с 1) разворотов из плана, где печатать нечего: ни фото, ни текстов,
-// ни подписей, ни фото на фоне, ни мест, ни своего цвета страниц. Название не печатается,
-// поэтому разворот с одним названием тоже пустой (Spread.empty тут не подходит).
-// Фон с Fade ≥ 1 не печатается — не считается.
+// ни подписей, ни фото на фоне, ни узора, ни стикера, ни мест, ни своего цвета страниц. Название
+// не печатается, поэтому разворот с одним названием тоже пустой (Spread.empty тут не подходит).
+// Фон, узор и стикер с Fade ≥ 1, узор и стикер неизвестного генератора не печатаются — не считаются.
 func BlankSpreads(v model.View, pl *Plan) []int {
 	var out []int
 	for i, s := range v.Spreads {
 		if pl.mask[i+1] == 0 {
 			continue
 		}
-		if len(s.Photos) == 0 && len(s.Texts) == 0 && len(s.Captions) == 0 && !shownBackdrop(s) &&
-			len(s.Places) == 0 && s.BgSet == [2]string{} {
+		if len(s.Photos) == 0 && len(s.Texts) == 0 && len(s.Captions) == 0 && !shownBackdrop(s) && !shownPattern(s) &&
+			!shownSticker(s) && len(s.Places) == 0 && s.BgSet == [2]string{} {
 			out = append(out, i+1)
 		}
 	}
@@ -31,6 +31,27 @@ func BlankSpreads(v model.View, pl *Plan) []int {
 func shownBackdrop(s model.SpreadView) bool {
 	for _, b := range s.Backdrops {
 		if b.Fade < 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// shownPattern — на листе есть узор, который попадёт в печать (048): видимый и известный.
+func shownPattern(s model.SpreadView) bool {
+	for _, pv := range s.Patterns {
+		if pv.Known && pv.Pat.Fade < 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// shownSticker — на листе есть стикер, который попадёт в печать (048): видимый, свой или
+// известного генератора.
+func shownSticker(s model.SpreadView) bool {
+	for _, st := range s.Stickers {
+		if st.Known && st.Fade < 1 {
 			return true
 		}
 	}

@@ -1,5 +1,6 @@
 // Фото на фоне (спека 009, design-backdrop): чистые решения для карточки, меню и склейки.
 import { backdropLost } from '../../base/core/undo'
+import { photoCss } from '../../base/geom/frame'
 import type { BackdropScope, BackdropView, SpreadView } from '../../base/core/types'
 
 // Решение живёт в основе (store.merge); здесь — для остальных.
@@ -26,3 +27,6 @@ export function zoneScopes(backdrops: readonly BackdropView[] | null | undefined
   const pages = !!backdrops?.some((b) => b.scope !== 'spread')
   return pages || split ? PAGE_SCOPES : ['spread']
 }
+
+// transform картинки фона (045): сначала зеркало, потом наклон frame.r — как в экспорте. Нет ни того ни другого — undefined.
+export const backdropCss = (b: BackdropView): string | undefined => photoCss({ r: b.frame.r, flipH: b.flipH, flipV: b.flipV })

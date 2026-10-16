@@ -3,14 +3,15 @@ package app
 import (
 	"bytes"
 	"errors"
-	"image/jpeg"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"log"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -18,10 +19,9 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
-	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
-	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
 
 // mustEditor — album.NewEditor для тестов: отказ проверки проекта — Fatal.
@@ -401,180 +401,6 @@ func TestGetStateStopReleases(t *testing.T) {
 	}
 }
 
-// coverEnv — альбом из n разворотов с обложкой: фото p0 на лицевой, плашка корешка красная.
-func coverEnv(t *testing.T, n int, photo string) *exportEnv {
-	t.Helper()
-	e := newExportEnv(t, n)
-	if _, err := e.a.CreateCover("", photo); err != nil {
-		t.Fatal(err)
-	}
-	if v := e.a.SetCoverSpineBg("#ff0000"); v.Cover.SpineBg != "#ff0000" {
-		t.Fatalf("плашка %q", v.Cover.SpineBg)
-	}
-	return e
-}
-
-// jpegAt читает 00.jpg и возвращает размер и цвет точки (x, y) мм листа при dpi.
-func jpegAt(t *testing.T, path string, dpi int, x, y float64) (w, h int, c [3]uint8) {
-	t.Helper()
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = f.Close() }()
-	img, err := jpeg.Decode(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, g, b, _ := img.At(int(math.Round(x/25.4*float64(dpi))), int(math.Round(y/25.4*float64(dpi)))).RGBA()
-	return img.Bounds().Dx(), img.Bounds().Dy(), [3]uint8{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)}
-}
-
-// 00.jpg: размер листа обложки при dpi (как pxW×pxH вида), плашка корешка видна, развороты рядом.
-func TestExportCoverFile(t *testing.T) {
-	e := coverEnv(t, 3, "p0")
-	v := e.a.editor().View()
-	var spine model.CoverZone
-	for _, z := range v.Cover.Zones {
-		if z.Kind == "spine" {
-			spine = z
-		}
-	}
-	// dpi 0 — из настроек альбома: размер файла совпадает с pxW×pxH из вида.
-	ok, err := e.a.Export(ExportOptions{Cover: true})
-	if err != nil || !ok {
-		t.Fatalf("Export: %v %v", ok, err)
-	}
-	if msg := <-e.done; msg != "" {
-		t.Fatal(msg)
-	}
-	if want := []string{"00.jpg", "01.jpg", "02.jpg", "03.jpg"}; !slices.Equal(e.names(t), want) {
-		t.Fatalf("файлы %v", e.names(t))
-	}
-	dpi := v.Settings.DPI
-	w, h, c := jpegAt(t, filepath.Join(e.dir, "00.jpg"), dpi, spine.Rect.X+spine.Rect.W/2, 5)
-	if w != v.Cover.PxW || h != v.Cover.PxH {
-		t.Errorf("00.jpg %d×%d px, ждали %d×%d", w, h, v.Cover.PxW, v.Cover.PxH)
-	}
-	if c[0] < 230 || c[1] > 25 || c[2] > 25 {
-		t.Errorf("плашка корешка не видна: %v", c)
-	}
-	// Повтор: наш 00.jpg заменяется после вопроса.
-	e.asked = nil
-	if msg := e.export(t, ExportOptions{Cover: true, Range: "2"}); msg != "" {
-		t.Fatal(msg)
-	}
-	if len(e.asked) != 1 || !strings.Contains(e.asked[0], "Заменить обложку и файлы разворота 2 (2 шт.)?") {
-		t.Fatalf("вопрос: %q", e.asked)
-	}
-}
-
-// «Только обложка» — один файл; развороты, Range и хвосты прежнего экспорта не трогаются.
-func TestExportCoverOnly(t *testing.T) {
-	e := coverEnv(t, 3, "p0")
-	e.export(t, ExportOptions{})
-	e.oldify(t)
-	e.asked = nil
-	if msg := e.export(t, ExportOptions{CoverOnly: true, Range: "garbage"}); msg != "" {
-		t.Fatal(msg)
-	}
-	if want := []string{"00.jpg", "01.jpg", "02.jpg", "03.jpg"}; !slices.Equal(e.names(t), want) {
-		t.Fatalf("файлы %v", e.names(t))
-	}
-	if !e.rewritten(t, "00.jpg") || e.rewritten(t, "01.jpg") || e.rewritten(t, "03.jpg") || len(e.asked) != 0 {
-		t.Fatalf("тронуты развороты или вопрос %q", e.asked)
-	}
-	// Чистая папка: только 00.jpg; без Cover «только обложка» тоже включает обложку.
-	e.dir = filepath.Join(e.dir, "only")
-	if msg := e.export(t, ExportOptions{CoverOnly: true}); msg != "" {
-		t.Fatal(msg)
-	}
-	if want := []string{"00.jpg"}; !slices.Equal(e.names(t), want) {
-		t.Fatalf("файлы %v", e.names(t))
-	}
-	// Альбом без разворотов, но с обложкой, выгружается.
-	e0 := coverEnv(t, 0, "")
-	if msg := e0.export(t, ExportOptions{Cover: true}); msg != "" || !slices.Equal(e0.names(t), []string{"00.jpg"}) {
-		t.Fatalf("без разворотов: %q %v", msg, e0.names(t))
-	}
-}
-
-// Обложки нет — флаги игнорируются и выгружаются развороты; чужой 00.jpg при выгрузке
-// обложки — отказ без вопроса; без обложки в плане он не задевается.
-func TestExportCoverIgnoredAndForeign(t *testing.T) {
-	e := newExportEnv(t, 2)
-	if msg := e.export(t, ExportOptions{Cover: true, CoverOnly: true}); msg != "" {
-		t.Fatal(msg)
-	}
-	if want := []string{"01.jpg", "02.jpg"}; !slices.Equal(e.names(t), want) {
-		t.Fatalf("без обложки: %v", e.names(t))
-	}
-	c := coverEnv(t, 2, "p0")
-	if err := os.MkdirAll(c.dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	testkit.JPEG(t, c.dir, "00.jpg", 10, 10)
-	ok, err := c.a.Export(ExportOptions{DPI: 72, Cover: true})
-	if ok || err == nil || !strings.Contains(err.Error(), "00.jpg") || len(c.asked) != 0 {
-		t.Fatalf("чужой 00.jpg: %v, %v, вопросы %q", ok, err, c.asked)
-	}
-	if msg := c.export(t, ExportOptions{}); msg != "" {
-		t.Fatal(msg)
-	}
-	if st, err := os.Stat(filepath.Join(c.dir, "00.jpg")); err != nil || st.Size() > 5000 {
-		t.Fatalf("чужой 00.jpg тронут: %v", err)
-	}
-}
-
-// Пустая обложка — то же предупреждение, что о пустых разворотах, до выбора папки.
-func TestExportCoverBlankAsks(t *testing.T) {
-	e := coverEnv(t, 1, "")
-	e.a.SetCoverSpineBg("") // плашка — тоже печать
-	e.answer = false
-	picked := 0
-	pick := pickExportDir
-	pickExportDir = func(a *App) (string, error) { picked++; return pick(a) }
-	ok, err := e.a.Export(ExportOptions{DPI: 72, Cover: true})
-	if ok || err != nil || picked != 0 || len(e.asked) != 1 || !strings.Contains(e.asked[0], "Обложка пустая") {
-		t.Fatalf("Export = %v, %v; папка %d; вопросы %q", ok, err, picked, e.asked)
-	}
-	// Без галочки обложки о ней не спрашиваем.
-	e.asked = nil
-	if msg := e.export(t, ExportOptions{}); msg != "" || len(e.asked) != 0 {
-		t.Fatalf("без обложки: %q, вопросы %q", msg, e.asked)
-	}
-}
-
-// Подстановки (030) в тексте обложки: на холсте «[Заголовок]» (прежнее {Школа} — синоним), в печати — пусто.
-func TestCoverTextExpands(t *testing.T) {
-	e := coverEnv(t, 1, "p0")
-	ed := e.a.editor()
-	v, err := ed.AddText("cover", 0, "")
-	if err != nil || len(v.Cover.Sheet.Texts) != 1 {
-		t.Fatalf("текст обложки: %v %+v", err, v.Cover)
-	}
-	v = ed.SetText(v.Cover.Sheet.Texts[0].ID, "{Школа}", "")
-	if got := v.Cover.Sheet.Texts[0].Text; got != "[Заголовок]" {
-		t.Errorf("на холсте %q", got)
-	}
-	p, pv := ed.Snapshot()
-	if got := pv.Cover.Sheet.Texts[0]; got.Text != "" || printed(got.Lines) != "" {
-		t.Errorf("в печати %q, строки %q", got.Text, printed(got.Lines))
-	}
-	job := export.NewCoverJob(p, pv, 72, 95)
-	if job == nil || len(job.Spread.Texts) != 1 || printed(job.Spread.Texts[0].Box.Lines) != "" {
-		t.Errorf("задание обложки: %+v", job)
-	}
-}
-
-// printed — текст всех строк блока подряд.
-func printed(lines []text.Line) (out string) {
-	for _, l := range lines {
-		out += l.Text
-	}
-	return out
-}
-
 // «Сохранить как» в папку копий — отказ, файл не создан.
 func TestSaveAsIntoBackupsRefused(t *testing.T) {
 	a, _, _ := backupApp(t, 1)
@@ -595,5 +421,93 @@ func TestSaveAsIntoBackupsRefused(t *testing.T) {
 	}
 	if list, _ := a.backups.List(backup.Key(other)); len(list) != 1 || list[0].Spreads != 3 {
 		t.Fatalf("копия перезаписанного файла: %+v", list)
+	}
+}
+
+// Wails привязывает к JS все экспортируемые методы App, в том числе взятые у встроенного
+// *edit.Methods: набор должен совпадать с контрактом биндингов (testdata/bindings-contract.txt).
+func TestBoundMethodsMatchContract(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "bindings-contract.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if rest, ok := strings.CutPrefix(line, "method "); ok {
+			want[rest[:strings.IndexByte(rest, '(')]] = true
+		}
+	}
+	typ := reflect.TypeOf(&App{})
+	have := map[string]bool{}
+	for i := range typ.NumMethod() {
+		have[typ.Method(i).Name] = true
+	}
+	for name := range want {
+		if !have[name] {
+			t.Errorf("метода %s нет у App, а в контракте он есть", name)
+		}
+	}
+	for name := range have {
+		if !want[name] {
+			t.Errorf("метод %s есть у App, но не в контракте (Wails отдаст его интерфейсу)", name)
+		}
+	}
+	if len(want) < 100 {
+		t.Fatalf("в контракте только %d методов: файл прочитан не так", len(want))
+	}
+}
+
+// Метод, объявленный у *App, перекрывает одноимённый встроенный из *edit.Methods: Wails и
+// сторож выше увидели бы тот же набор имён, а правка пошла бы другим телом. Имена не пересекаются.
+func TestAppMethodsDoNotShadowEdit(t *testing.T) {
+	embedded := map[string]bool{}
+	typ := reflect.TypeOf(&edit.Methods{})
+	for i := range typ.NumMethod() {
+		embedded[typ.Method(i).Name] = true
+	}
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, en := range entries {
+		if en.IsDir() || !strings.HasSuffix(en.Name(), ".go") || strings.HasSuffix(en.Name(), "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), en.Name(), nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range f.Decls {
+			fn, ok := d.(*ast.FuncDecl)
+			if !ok || fn.Recv == nil || len(fn.Recv.List) != 1 || !fn.Name.IsExported() {
+				continue
+			}
+			recv := fn.Recv.List[0].Type
+			if star, ok := recv.(*ast.StarExpr); ok {
+				recv = star.X
+			}
+			if id, ok := recv.(*ast.Ident); !ok || id.Name != "App" {
+				continue
+			}
+			seen++
+			if embedded[fn.Name.Name] {
+				t.Errorf("(*App).%s перекрывает метод edit.Methods с тем же именем", fn.Name.Name)
+			}
+		}
+	}
+	if seen < 50 || len(embedded) < 50 {
+		t.Fatalf("разобрано мало методов (App %d, edit %d): сторож смотрит не туда", seen, len(embedded))
+	}
+}
+
+// editHost отдаёт все поля Host: пустое поле — nil-вызов посреди правки пользователя
+// (edit.New тоже отказывается от такого Host паникой с именем поля).
+func TestEditHostComplete(t *testing.T) {
+	h := reflect.ValueOf(newApp(t).editHost())
+	for i := range h.NumField() {
+		if h.Field(i).IsNil() {
+			t.Errorf("поле Host.%s не задано", h.Type().Field(i).Name)
+		}
 	}
 }

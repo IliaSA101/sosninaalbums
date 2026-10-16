@@ -1,10 +1,13 @@
+method AddDecorPNG(arg1:string,arg2:string):Promise<APP.DecorItem>
 method AddFolderPath(arg1:string):Promise<model.View>
 method AddPhotos(arg1:string,arg2:Array<string>,arg3:number):Promise<model.View>
-method AddPlace(arg1:string,arg2:number):Promise<model.View>
+method AddPlace(arg1:string,arg2:number,arg3:string):Promise<model.View>
+method AddSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResult>
 method AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
 method AddVignette(arg1:number):Promise<model.View>
 method AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>
 method AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<boolean>
+method ApplyBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method ApplyCoverPreset(arg1:string):Promise<model.View>
 method ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<APP.GridResult>
 method ArrangeLayers(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>
@@ -15,12 +18,15 @@ method Backups():Promise<Array<APP.BackupInfo>>
 method ChooseFolder():Promise<model.View>
 method ClearBackdrop(arg1:string,arg2:string):Promise<model.View>
 method ClearCoverGuide():Promise<model.View>
+method ClearPattern(arg1:string,arg2:string):Promise<model.View>
 method ClearRecent():Promise<Array<prefs.RecentProject>>
 method ClearVignette(arg1:string):Promise<model.View>
+method CopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<APP.GridResult>
 method CopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<APP.GridResult>
 method CoverPresets():Promise<Array<model.CoverPreset>>
 method CoverSpineText():Promise<model.View>
 method CreateCover(arg1:string,arg2:string):Promise<model.View>
+method DecorCatalog(arg1:string):Promise<APP.DecorCatalog>
 method DeleteCover():Promise<model.View>
 method DeleteGridTemplate(arg1:string):Promise<void>
 method DeletePlaces(arg1:string,arg2:Array<string>):Promise<model.View>
@@ -34,9 +40,14 @@ method Export(arg1:APP.ExportOptions):Promise<boolean>
 method FillPlaces(arg1:Array<string>,arg2:string):Promise<APP.GridResult>
 method FitBackdrop(arg1:string,arg2:string):Promise<model.View>
 method FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method FlipSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method ForgetRecent(arg1:string):Promise<Array<prefs.RecentProject>>
+method FsferaPlan():Promise<fsfera.Plan>
 method GetState():Promise<APP.State>
 method GridChoices(arg1:string,arg2:number,arg3:string):Promise<model.GridChoices>
+method HideDecor(arg1:string,arg2:string):Promise<void>
+method ImportDecor(arg1:string,arg2:string):Promise<APP.DecorImport>
+method ImportDecorPaths(arg1:string,arg2:string,arg3:Array<string>):Promise<APP.DecorImport>
 method LayoutChoices(arg1:string):Promise<model.Choices>
 method Marks():Promise<Record<string, model.MarkView>>
 method MergeSpreads(arg1:string):Promise<model.View>
@@ -48,14 +59,19 @@ method MoveSpread(arg1:string,arg2:number):Promise<model.View>
 method NewProject(arg1:string):Promise<APP.State>
 method NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>
 method NewVignetteSheet(arg1:number,arg2:number):Promise<APP.State>
+method OpenFsfera():Promise<void>
 method OpenProject():Promise<APP.State>
 method OpenRecent(arg1:string):Promise<APP.State>
-method PasteNames(arg1:string,arg2:string,arg3:boolean):Promise<APP.NamesResult>
+method PagePresets():Promise<Array<model.PagePreset>>
+method PasteNames(arg1:string,arg2:model.NamesOpts):Promise<APP.NamesResult>
 method Person(arg1:string):Promise<model.PersonView>
 method PickBackdropFile(arg1:string,arg2:string):Promise<model.View>
 method PickCoverGuide():Promise<model.View>
+method PickNamesFile():Promise<APP.NamesFile>
 method PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<APP.GridResult>
+method PlanCopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
 method PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
+method PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.NamesPlan>
 method PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>
 method Recent():Promise<Array<prefs.RecentProject>>
 method Redo():Promise<model.View>
@@ -64,7 +80,9 @@ method RelinkFolder():Promise<APP.RelinkResult>
 method RelinkFolderPath(arg1:string):Promise<APP.RelinkResult>
 method RemoveFolder(arg1:string):Promise<model.View>
 method RemovePhotos(arg1:Array<string>):Promise<model.View>
+method RenameDecor(arg1:string,arg2:string,arg3:string):Promise<void>
 method RenameGridTemplate(arg1:string,arg2:string):Promise<void>
+method ReplaceSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method Rescan():Promise<void>
 method ResetFrame(arg1:string):Promise<model.View>
 method ResetMarks(arg1:Array<string>):Promise<model.View>
@@ -77,6 +95,7 @@ method SaveProjectAs():Promise<model.View>
 method SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>
 method ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>
 method SetBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method SetBackdropAngle(arg1:string,arg2:string,arg3:number):Promise<model.View>
 method SetBackdropBox(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>
 method SetBackdropFade(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>
 method SetBackdropFrame(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number):Promise<model.View>
@@ -94,14 +113,20 @@ method SetGrid(arg1:string,arg2:boolean):Promise<model.View>
 method SetLayout(arg1:string,arg2:string):Promise<model.View>
 method SetLevel(arg1:string):Promise<prefs.Prefs>
 method SetMarks(arg1:Array<string>,arg2:model.MarkPatch):Promise<model.View>
+method SetPattern(arg1:string,arg2:string,arg3:model.Pattern,arg4:string):Promise<model.View>
 method SetPerson(arg1:string,arg2:model.Person,arg3:string):Promise<model.View>
 method SetPlaceAngle(arg1:string,arg2:string,arg3:number):Promise<model.View>
 method SetPlaceFit(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
+method SetPlaceRound(arg1:string,arg2:Array<string>,arg3:number):Promise<model.View>
+method SetPlaceShape(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
 method SetPlaces(arg1:string,arg2:Array<model.PlaceBox>,arg3:string):Promise<model.View>
 method SetSettings(arg1:model.Settings):Promise<model.View>
 method SetSheetCaps(arg1:string,arg2:boolean,arg3:model.SheetCaps):Promise<model.View>
 method SetShowStart(arg1:boolean):Promise<prefs.Prefs>
 method SetSpreadName(arg1:string,arg2:string):Promise<model.View>
+method SetStickerBox(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>
+method SetStickerFade(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>
+method SetStickerInks(arg1:string,arg2:string,arg3:Array<string>,arg4:string):Promise<model.View>
 method SetText(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method SetTextAngle(arg1:string,arg2:number):Promise<model.View>
 method SetTextAuto(arg1:string):Promise<model.View>
@@ -116,6 +141,8 @@ method ShowPhotoInExplorer(arg1:string):Promise<void>
 method SortVignette(arg1:string):Promise<model.View>
 method SplitSpread(arg1:string,arg2:number):Promise<model.View>
 method StepLayout(arg1:string,arg2:string,arg3:number):Promise<model.View>
+method StraightenBackdrop(arg1:string,arg2:string,arg3:number,arg4:number):Promise<model.View>
+method StraightenPhoto(arg1:string,arg2:string,arg3:number,arg4:number):Promise<model.View>
 method SuggestDrive():Promise<APP.DriveHint>
 method SwapPhotos(arg1:string,arg2:string):Promise<model.View>
 method TransformGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>
@@ -129,6 +156,39 @@ type APP.BackupInfo
   size: number
   spreads: number
   photos: number
+type APP.DecorCatalog
+  kind: string
+  themes: DecorTheme[]
+  items: DecorItem[]
+  recent: string[]
+  readOnly: boolean
+type APP.DecorImport
+  added: DecorItem[]
+  skipped: DecorSkip[]
+  svg: DecorSvg[]
+type APP.DecorItem
+  id: string
+  theme: string
+  name: string
+  url: string
+  own: boolean
+  aspect: number
+  w: number
+  h: number
+  color?: string
+type APP.DecorSkip
+  name: string
+  why: string
+type APP.DecorSvg
+  token: string
+  name: string
+  data: string
+  w: number
+  h: number
+type APP.DecorTheme
+  id: string
+  name: string
+  count: number
 type APP.DriveHint
   from: string
   to: string
@@ -151,13 +211,23 @@ type APP.ExportOptions
   pages: boolean
   cover: boolean
   coverOnly: boolean
+  fsfera: boolean
 type APP.GridResult
   view: model.View
   left: number
+type APP.NamesFile
+  text: string
+  file: string
+  sheet: string
+  sheets: number
+  rows: number
+  cancelled: boolean
 type APP.NamesResult
   view: model.View
   extra: number
   missing: number
+  named: number
+  seats: number
 type APP.RelinkResult
   view: model.View
   found: number
@@ -174,6 +244,21 @@ type APP.State
   prefs: prefs.Prefs
   recent: prefs.RecentProject[]
   cancelled?: boolean
+type APP.StickerResult
+  view: model.View
+  id: string
+type fsfera.Plan
+  format: string
+  pages: string
+  spreads: number
+  spine: number
+  max: number
+  folder: string
+  block: string[]
+  coverFix: boolean
+  fixAt: number
+  warn: string[]
+  memo: string[]
 type layout.Rect
   x: number
   y: number
@@ -199,6 +284,10 @@ type library.ScanProgress
   walking: boolean
   found: number
   read: number
+type model.Art
+  kind: string
+  inks?: string[]
+  seed?: number
 type model.AutoOpts
   spreads: number
   maxPer: number
@@ -229,12 +318,15 @@ type model.BackdropView
   flipV: boolean
   dpi: number
   fade: number
+  lib?: string
 type model.Box
   x: number
   y: number
   w: number
   h: number
   rot?: number
+  shape?: string
+  round?: number
 type model.CaptionView
   photo: string
   id: string
@@ -285,6 +377,8 @@ type model.CoverSpec
   steps?: SpineStep[]
   a?: number
   b?: number
+  safe?: number
+  spineSafe?: number
 type model.CoverView
   sheet: SpreadView
   spec: CoverSpec
@@ -303,6 +397,7 @@ type model.CoverView
   guideWarn: boolean
   pxW: number
   pxH: number
+  fix: string
 type model.CoverZone
   kind: string
   rect: layout.Rect
@@ -325,6 +420,8 @@ type model.FrameView
   flipV: boolean
   cellRot: number
   z: number
+  shape: string
+  radius: number
 type model.GridChoice
   id: string
   name: string
@@ -339,6 +436,7 @@ type model.GridPlan
   frozen: number
   left: number
   texts: number
+  stickers: number
 type model.GridTarget
   spread: string
   scope: string
@@ -348,20 +446,81 @@ type model.MarkPatch
   label?: string
   toggle?: boolean
   flag?: number
+type model.NamesLeft
+  line: number
+  who: Person
+  reason: string
+  file: string
+type model.NamesOpts
+  from: string
+  text: string
+  firstFirst: boolean
+  caption: boolean
+type model.NamesPlan
+  rows: NamesRow[]
+  left: NamesLeft[]
+  extra: number
+  seats: number
+  named: number
+  missing: number
+  cols: string[]
+  ignored: string[]
+  byFile: boolean
+  order: boolean
+  teachers: number
+  pupils: number
+  teacherSeats: number
+  pupilSeats: number
+  needCaption: boolean
+type model.NamesRow
+  photo: string
+  tag: string
+  no: number
+  line: number
+  who?: Person
+type model.PagePreset
+  label: string
+  group: string
+  w: number
+  h: number
+  dpi?: number
+  layflat?: boolean
+  safe?: number
+  hint?: string
 type model.PageView
   photos: number
   variant: number
   variants: number
   rearranged: boolean
+type model.Pattern
+  kind: string
+  inks?: string[]
+  scale?: number
+  seed?: number
+  fade?: number
+  preset?: string
+type model.PatternView
+  scope: string
+  area: layout.Rect
+  pat: Pattern
+  name: string
+  inks: number
+  random: boolean
+  known: boolean
+  url: string
+  preset?: string
 type model.Person
   last?: string
   first?: string
   middle?: string
+  subj?: string
 type model.PersonView
   last: string
   first: string
   middle: string
+  subject: string
   fromFile: boolean
+  teacher: boolean
 type model.PlaceBox
   id: string
   x: number
@@ -380,6 +539,9 @@ type model.PlaceView
   rot: number
   z: number
   role: string
+  shape: string
+  round: number
+  radius: number
 type model.Settings
   pageW: number
   pageH: number
@@ -421,6 +583,8 @@ type model.SpreadView
   places: PlaceView[]
   name: string
   backdrops: BackdropView[]
+  patterns: PatternView[]
+  stickers: StickerView[]
   lowDPI: number
   stubs: StubView[]
   caps?: SheetCaps
@@ -428,6 +592,28 @@ type model.SpreadView
   vig?: VignetteView
   vars: Vars
   fields: string[]
+type model.StickerView
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  rot: number
+  flipH: boolean
+  flipV: boolean
+  fade: number
+  z: number
+  photo: string
+  lib?: string
+  art?: Art
+  name: string
+  inks: number
+  url: string
+  gen: boolean
+  stretch: boolean
+  aspect: number
+  dpi: number
+  known: boolean
 type model.StubView
   place: string
   photo: string
@@ -479,6 +665,7 @@ type model.View
   emptyPlaces: number
   textMaxW: number
   backdropUsed: string[]
+  libPhotos: string[]
   marksRev: number
   unfilled: string[]
   unnamed: number
@@ -494,6 +681,10 @@ type model.VigChoice
   own: boolean
   ratio: string
   gone: boolean
+  shape?: string
+  round?: number
+  family: string
+  head?: Box
 type model.VigPreview
   spread: SpreadView
   left: number
@@ -518,6 +709,8 @@ type model.Vignette
   ttext?: string
   head?: string
   own?: VigShape
+  shape?: string
+  round?: number
 type model.VignetteView
   tpl: string
   teachers: number
@@ -526,6 +719,8 @@ type model.VignetteView
   ttext?: string
   head?: string
   own?: VigShape
+  shape?: string
+  round?: number
   places: number
   max: number
   group: boolean

@@ -52,7 +52,7 @@ func newExportEnv(t *testing.T, n int) *exportEnv {
 	e.a.ed.Store(mustEditor(t, p, ""))
 	oldAsk, oldPick := askYes, pickExportDir
 	askYes = func(_ *App, msg string) (bool, error) { e.asked = append(e.asked, msg); return e.answer, nil }
-	pickExportDir = func(*App) (string, error) { return e.dir, os.MkdirAll(e.dir, 0o755) }
+	pickExportDir = func(*App, string) (string, error) { return e.dir, os.MkdirAll(e.dir, 0o755) }
 	t.Cleanup(func() { askYes, pickExportDir = oldAsk, oldPick })
 	return e
 }
@@ -210,7 +210,7 @@ func TestExportMissingPhotoRefuses(t *testing.T) {
 	if err := os.Remove(e.photos[2]); err != nil {
 		t.Fatal(err)
 	}
-	pickExportDir = func(*App) (string, error) {
+	pickExportDir = func(*App, string) (string, error) {
 		t.Fatal("диалог папки до проверки пропавших фото")
 		return "", nil
 	}
@@ -219,7 +219,7 @@ func TestExportMissingPhotoRefuses(t *testing.T) {
 		t.Fatalf("ждали отказ со списком, получили %v", err)
 	}
 	// Пропавшее фото вне выбранного не мешает.
-	pickExportDir = func(*App) (string, error) { return e.dir, os.MkdirAll(e.dir, 0o755) }
+	pickExportDir = func(*App, string) (string, error) { return e.dir, os.MkdirAll(e.dir, 0o755) }
 	if msg := e.export(t, ExportOptions{Range: "1-2"}); msg != "" {
 		t.Fatal(msg)
 	}
@@ -282,7 +282,7 @@ func TestExportAsksBlank(t *testing.T) {
 	}
 	picked := 0
 	pick := pickExportDir
-	pickExportDir = func(a *App) (string, error) { picked++; return pick(a) }
+	pickExportDir = func(a *App, title string) (string, error) { picked++; return pick(a, title) }
 
 	e.answer = false
 	ok, err := e.a.Export(ExportOptions{DPI: 72})
@@ -312,7 +312,7 @@ func TestExportFieldsWarning(t *testing.T) {
 	e.a.SetSheetCaps("s1", true, model.SheetCaps{Style: model.DefaultCaptionStyle(), Pad: 1, Text: "{Фамилия}"})
 	picked := 0
 	pick := pickExportDir
-	pickExportDir = func(a *App) (string, error) { picked++; return pick(a) }
+	pickExportDir = func(a *App, title string) (string, error) { picked++; return pick(a, title) }
 
 	e.answer = false
 	ok, err := e.a.Export(ExportOptions{DPI: 72})
@@ -348,7 +348,7 @@ func TestExportFieldsWarningPlan(t *testing.T) {
 	e.a.SetText(v.Cover.Sheet.Texts[0].ID, "{Год}", "") // обложка: пустой «Год»
 	pick := pickExportDir
 	t.Cleanup(func() { pickExportDir = pick })
-	pickExportDir = func(*App) (string, error) { return "", nil } // отмена выбора папки: ничего не пишется
+	pickExportDir = func(*App, string) (string, error) { return "", nil } // отмена выбора папки: ничего не пишется
 	for _, c := range []struct {
 		o        ExportOptions
 		unfilled []string
@@ -457,7 +457,7 @@ func TestExportRefusals(t *testing.T) {
 	if ok, err = e.a.Export(ExportOptions{DPI: 72, Range: "x"}); ok || err == nil {
 		t.Fatalf("мусорный диапазон: %v, %v", ok, err)
 	}
-	pickExportDir = func(*App) (string, error) { return "", nil }
+	pickExportDir = func(*App, string) (string, error) { return "", nil }
 	if ok, err = e.a.Export(ExportOptions{DPI: 72}); ok || err != nil {
 		t.Fatalf("отмена выбора папки: %v, %v", ok, err)
 	}
@@ -504,7 +504,7 @@ func TestExportColorDecline(t *testing.T) {
 		t.Fatal(err)
 	}
 	picked := 0
-	pickExportDir = func(*App) (string, error) { picked++; return e.dir, nil }
+	pickExportDir = func(*App, string) (string, error) { picked++; return e.dir, nil }
 	e.answer = false
 	ok, err := e.a.Export(ExportOptions{DPI: 72})
 	if ok || err != nil || picked != 0 || len(e.asked) != 1 || !strings.Contains(e.asked[0], "Display P3") {

@@ -7,7 +7,12 @@ import {
   exportDoneText,
   exportWarnings,
   formatSize,
+  hasFix,
+  doneFolder,
+  canExport,
+  planStale,
   loadPrefs,
+  memoLine,
   sampleName,
   savePrefs,
   sizeSummary,
@@ -54,9 +59,17 @@ describe('coverAvailable', () => {
 })
 
 describe('buildOptions', () => {
-  const p = { quality: 80 as const, dpi: 150, pages: true, cover: true, coverOnly: false }
+  const p = { quality: 80 as const, dpi: 150, pages: true, cover: true, coverOnly: false, fsfera: false }
   it('«Все» — пустой диапазон', () => {
-    expect(buildOptions('all', 3, '1-2', p)).toEqual({ range: '', quality: 80, dpi: 150, pages: true, cover: false, coverOnly: false })
+    expect(buildOptions('all', 3, '1-2', p)).toEqual({
+      range: '',
+      quality: 80,
+      dpi: 150,
+      pages: true,
+      cover: false,
+      coverOnly: false,
+      fsfera: false,
+    })
   })
   it('«Текущий» — номер с 1', () => {
     expect(buildOptions('current', 4, '', DEFAULT_PREFS)).toEqual({
@@ -66,6 +79,7 @@ describe('buildOptions', () => {
       pages: false,
       cover: false,
       coverOnly: false,
+      fsfera: false,
     })
   })
   it('«Диапазон» — текст без пробелов по краям', () => {
@@ -78,11 +92,11 @@ describe('buildOptions', () => {
   })
   it('«только обложка» включает обложку сам и гасит диапазон', () => {
     const o = buildOptions('range', 2, '3-5', { ...p, cover: false, coverOnly: true }, true)
-    expect(o).toEqual({ range: '', quality: 80, dpi: 150, pages: true, cover: true, coverOnly: true })
+    expect(o).toEqual({ range: '', quality: 80, dpi: 150, pages: true, cover: true, coverOnly: true, fsfera: false })
   })
   it('«Текущий» на обложке — только обложка, а не разворот с номером до неё', () => {
     const o = buildOptions('current', 4, '', p, true, true)
-    expect(o).toEqual({ range: '', quality: 80, dpi: 150, pages: true, cover: true, coverOnly: true })
+    expect(o).toEqual({ range: '', quality: 80, dpi: 150, pages: true, cover: true, coverOnly: true, fsfera: false })
     expect(buildOptions('current', 4, '', p, true, false).range).toBe('4')
     expect(buildOptions('all', 4, '', p, true, true).coverOnly).toBe(false)
   })
@@ -107,14 +121,14 @@ function useStorage(broken = false) {
 describe('prefs в localStorage', () => {
   beforeEach(() => useStorage())
   it('по умолчанию 95, из альбома, разворотами', () => {
-    expect(loadPrefs()).toEqual({ quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false })
+    expect(loadPrefs()).toEqual({ quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false, fsfera: false })
   })
   it('сохранённое читается', () => {
-    savePrefs({ quality: 100, dpi: 150, pages: true, cover: false, coverOnly: true })
-    expect(loadPrefs()).toEqual({ quality: 100, dpi: 150, pages: true, cover: false, coverOnly: true })
+    savePrefs({ quality: 100, dpi: 150, pages: true, cover: false, coverOnly: true, fsfera: true })
+    expect(loadPrefs()).toEqual({ quality: 100, dpi: 150, pages: true, cover: false, coverOnly: true, fsfera: true })
   })
   it('порченое и чужое отбрасывается', () => {
-    localStorage.setItem('exportOpts', JSON.stringify({ quality: 50, dpi: 5, pages: 'да', cover: 1, coverOnly: 'да' }))
+    localStorage.setItem('exportOpts', JSON.stringify({ quality: 50, dpi: 5, pages: 'да', cover: 1, coverOnly: 'да', fsfera: 1 }))
     expect(loadPrefs()).toEqual(DEFAULT_PREFS)
     localStorage.setItem('exportOpts', '{не json')
     expect(loadPrefs()).toEqual(DEFAULT_PREFS)
@@ -179,6 +193,62 @@ describe('итог по объёму', () => {
   })
   it('по страницам — размер страницы', () => {
     expect(sizeSummary(album, 300, 95, true, 'страницу', base)).toBe(`${formatSize(one / 2)} на страницу, всего ${formatSize(4 * one)}`)
+  })
+})
+
+describe('для Фотосферы Pro (047)', () => {
+  const p = { quality: 80 as const, dpi: 150, pages: true, cover: false, coverOnly: true, fsfera: true }
+  it('buildOptions: прочие выборы игнорируются, обложка — если она есть', () => {
+    const want = { range: '', quality: 80, dpi: 300, pages: false, coverOnly: false, fsfera: true }
+    expect(buildOptions('range', 2, '3-5', p, true, true, true)).toEqual({ ...want, cover: true })
+    expect(buildOptions('range', 2, '3-5', p, false, false, true)).toEqual({ ...want, cover: false })
+  })
+  it('без флага — fsfera false, как раньше', () => {
+    expect(buildOptions('all', 1, '', p, true).fsfera).toBe(false)
+  })
+  it('sizeSummary: все развороты и обложка при 300 dpi, как ни выбрано в окне', () => {
+    const one = estimateBytes(album, 300, 95, false)
+    const w = { scope: 'current' as const, spreads: 4, units: null, cover: true, only: true, fsfera: true }
+    expect(sizeSummary(album, 150, 95, true, 'разворот', w)).toBe(`${formatSize(one)} на разворот, всего ${formatSize(5 * one)}`)
+  })
+  it('памятка: первые три строки', () => {
+    const memo = [
+      'Фотокнига 30×30, обложка «Фото»',
+      'Страницы: Тонкие',
+      'Разворотов: 20 (корешок 14 мм)',
+      'Папка: Иванов — Петрова — 00.jpg и 01…20.jpg',
+    ]
+    expect(memoLine(memo)).toBe('Фотокнига 30×30, обложка «Фото» · Страницы: Тонкие · Разворотов: 20 (корешок 14 мм)')
+  })
+  it('имя папки в «Готово» — из плана, « — » в имени не режется', () => {
+    expect(doneFolder('Иванов — Петрова')).toBe('Иванов — Петрова')
+    expect(doneFolder('')).toBe('книги')
+  })
+  it('«Исправить» — у строки с номером fixAt, не по тексту', () => {
+    const plan = { coverFix: true, fixAt: 1 }
+    expect([0, 1, 2].map((i) => hasFix(plan, i))).toEqual([false, true, false])
+    expect(hasFix({ coverFix: true, fixAt: -1 }, 0)).toBe(false)
+    expect(hasFix({ coverFix: false, fixAt: 0 }, 0)).toBe(false)
+  })
+  it('допуск «Выгрузить»: занято, диапазон, блок, план не пришёл', () => {
+    const ok = { format: '30×30', block: [] as string[] }
+    const blocked = { format: '30×30', block: ['Разворотов 60'] }
+    const base = { busy: false, bad: false, fsPref: false, plan: null }
+    expect(canExport(base)).toBe(true)
+    expect(canExport({ ...base, busy: true })).toBe(false)
+    expect(canExport({ ...base, bad: true })).toBe(false)
+    // без флажка блок плана не мешает обычному экспорту
+    expect(canExport({ ...base, plan: blocked })).toBe(true)
+    expect(canExport({ ...base, fsPref: true, plan: ok })).toBe(true)
+    expect(canExport({ ...base, fsPref: true, plan: blocked })).toBe(false)
+    // Фотосфера выбрана, плана ещё нет (только что открыли окно) — закрыто
+    expect(canExport({ ...base, fsPref: true, plan: null })).toBe(false)
+    // формат не Фотосферы (флажка нет): режим не включён, план не мешает
+    expect(canExport({ ...base, fsPref: true, plan: { format: '', block: ['x'] } })).toBe(true)
+  })
+  it('запоздавший ответ плана отсекается по номеру запроса', () => {
+    expect(planStale(2, 2)).toBe(false)
+    expect(planStale(1, 2)).toBe(true)
   })
 })
 

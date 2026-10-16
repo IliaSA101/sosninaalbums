@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
@@ -110,15 +111,17 @@ func FromView(p *model.Project, v model.View) []render.Spread {
 // fromSheet — задание рендера одного листа (разворота или обложки) из его вида.
 func fromSheet(p *model.Project, s model.SpreadView) render.Spread {
 	es := render.Spread{Bg: [2]color.RGBA{render.ParseHex(s.Bg[0]), render.ParseHex(s.Bg[1])},
-		Backdrops: backdrops(p, s)}
+		Patterns: patterns(s), Backdrops: backdrops(p, s)}
 	for i, id := range s.Photos {
 		if i >= len(s.Rects) || i >= len(s.Frames) {
 			break // раскладки нет: фото без ячейки не рисуем
 		}
 		f := s.Frames[i]
 		es.Photos = append(es.Photos, render.Photo{Cell: s.Rects[i], Img: f.Img, Path: p.Photos[id].Path,
-			FlipH: f.FlipH, FlipV: f.FlipV, Rot: f.CellRot, ImgRot: f.R, Z: f.Z})
+			FlipH: f.FlipH, FlipV: f.FlipV, Rot: f.CellRot, ImgRot: f.R, Z: f.Z,
+			Outline: geom.Outline{Oval: f.Shape == model.ShapeOval, Radius: f.Radius}})
 	}
+	stickers(p, s, &es)
 	for _, c := range s.Captions {
 		es.Texts = append(es.Texts, textDraw(c.TextView))
 	}
@@ -139,14 +142,42 @@ func textDraw(t model.TextView) render.TextDraw {
 	return render.TextDraw{X: t.X, Y: t.Y, Rot: t.Rot, Box: text.Box{W: t.W, H: t.H, Lines: lines}, Style: t.Style, Z: t.Z}
 }
 
-// backdrops — фоны разворота для экспорта: рамка, область и фото в осях рамки из View.
+// backdrops — фоны разворота для экспорта: рамка, область, фото в осях рамки и его наклон из View.
 func backdrops(p *model.Project, s model.SpreadView) []render.Backdrop {
 	var out []render.Backdrop
 	for _, b := range s.Backdrops {
 		out = append(out, render.Backdrop{
 			Area: b.Area, Box: layout.Rect{X: b.Box.X, Y: b.Box.Y, W: b.Box.W, H: b.Box.H}, Rot: b.Box.Rot,
-			Img: b.Img, FlipH: b.FlipH, FlipV: b.FlipV, Path: p.Photos[b.Photo].Path, Fade: b.Fade,
+			ImgRot: b.Frame.R, Img: b.Img, FlipH: b.FlipH, FlipV: b.FlipV, Path: p.Photos[b.Photo].Path, Fade: b.Fade,
 		})
 	}
 	return out
+}
+
+// patterns — узоры листа для экспорта: область и параметры из View, как у холста (048).
+// Неизвестный генератор не рисуется (gen.DrawPattern его пропускает) — передаём как есть.
+func patterns(s model.SpreadView) []render.PatternDraw {
+	var out []render.PatternDraw
+	for _, pv := range s.Patterns {
+		pt := pv.Pat
+		out = append(out, render.PatternDraw{Area: pv.Area, Kind: pt.Kind, Inks: pt.Inks, Scale: pt.Scale,
+			Seed: pt.Seed, Fade: pt.Fade})
+	}
+	return out
+}
+
+// stickers — стикеры листа для экспорта (048): свой — фото целиком в рамке (путь — из Photos,
+// у своего его ставит искатель библиотеки), процедурный — параметры как у холста. Неизвестный
+// генератор не рисуется (gen.DrawArt его пропускает) — передаём как есть.
+func stickers(p *model.Project, s model.SpreadView, es *render.Spread) {
+	for _, st := range s.Stickers {
+		box := layout.Rect{X: st.X, Y: st.Y, W: st.W, H: st.H}
+		if st.Art != nil {
+			es.Arts = append(es.Arts, render.ArtDraw{Box: box, Rot: st.Rot, FlipH: st.FlipH, FlipV: st.FlipV,
+				Kind: st.Art.Kind, Inks: st.Art.Inks, Seed: st.Art.Seed, Fade: st.Fade, Z: st.Z})
+			continue
+		}
+		es.Stickers = append(es.Stickers, render.Photo{Cell: box, Img: box, Path: p.Photos[st.Photo].Path,
+			FlipH: st.FlipH, FlipV: st.FlipV, Rot: st.Rot, Z: st.Z, Fade: st.Fade})
+	}
 }

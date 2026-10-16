@@ -180,7 +180,7 @@ func TestOrderSyncAddDelete(t *testing.T) {
 		t.Fatalf("back текста: %v", got)
 	}
 	// Новое место — над предшествующим ему в Grid (AddPlace — в конец).
-	if _, err := e.AddPlace("s1", 1); err != nil {
+	if _, err := e.AddPlace("s1", 1, ""); err != nil {
 		t.Fatal(err)
 	}
 	c := edtest.PlaceIDsOf(e)[2]

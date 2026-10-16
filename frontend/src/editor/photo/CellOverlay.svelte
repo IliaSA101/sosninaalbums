@@ -6,6 +6,7 @@
   import { framelive } from './framelive.svelte'
   import { DEFAULT_FRAME, hasSlack } from '../../base/geom/frame'
   import { aabbOf, uprightAt } from '../../base/geom/rotbox'
+  import { markAt, outlineOf } from '../../base/geom/shape'
   import DpiMark from './DpiMark.svelte'
   import FrameControls from './FrameControls.svelte'
 
@@ -55,7 +56,7 @@
   {@const missing = store.missing.includes(it.id)}
   <!-- Мелкая ячейка (< 48 px на экране): ✥ и ползунок не помещаются, они есть в карточке справа -->
   {@const ok = it.selected && !missing && Math.min(r.w, r.h) * ppm >= 48 && prefs.can('frame')}
-  {@const slack = !!fv && !contain && hasSlack(r, fv.img, fv.r)}
+  {@const slack = !!fv && !contain && hasSlack(r, fv.img, fv.r, outlineOf(fv.shape, fv.radius))}
   <div
     class="cov"
     data-cov
@@ -70,7 +71,11 @@
     {#if it.selected}
       <FrameControls id={it.id} {r} {fv} {frame} {cur} movable={ok && slack} zoomable={ok && !contain} />
       {#if !missing}
-        <DpiMark dpi={fv?.dpi ?? 0} minDPI={store.view.minDPI} at={rot ? uprightAt(r, rot, aabbOf({ ...r, rot }), 6) : undefined} />
+        <DpiMark
+          dpi={fv?.dpi ?? 0}
+          minDPI={store.view.minDPI}
+          at={markAt(r, rot, fv?.shape, fv?.radius, 6) ?? (rot ? uprightAt(r, rot, aabbOf({ ...r, rot }), 6) : undefined)}
+        />
       {/if}
     {/if}
   </div>

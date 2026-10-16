@@ -15,12 +15,14 @@ import {
   zoomFrame,
 } from './frame'
 import type { Frame, Rect } from '../core/types'
+import type { Outline } from './shape'
 
 interface Vector {
   cell: Rect
   aspect: number
   frame: Frame
   px: number
+  outline?: Outline // форма места (044); нет — прямоугольник
   img: Rect
   dpi: number
 }
@@ -29,9 +31,13 @@ describe('общие векторы с Go (frames.json)', () => {
   const list = vectors as Vector[]
   it('векторы прочитаны', () => expect(list.length).toBeGreaterThan(0))
   it('есть векторы с поворотом', () => expect(list.some((v) => v.frame.r)).toBe(true))
+  it('есть векторы с формой: овал и скругление', () => {
+    expect(list.some((v) => v.outline?.oval)).toBe(true)
+    expect(list.some((v) => (v.outline?.radius ?? 0) > 0)).toBe(true)
+  })
   list.forEach((v, i) => {
     it(`вектор ${i}: img и dpi`, () => {
-      const img = placeImage(v.cell, v.aspect, v.frame)
+      const img = placeImage(v.cell, v.aspect, v.frame, v.outline)
       expect(img.x).toBeCloseTo(v.img.x, 6)
       expect(img.y).toBeCloseTo(v.img.y, 6)
       expect(img.w).toBeCloseTo(v.img.w, 6)

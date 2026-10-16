@@ -32,26 +32,32 @@ export const touches = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w 
 export interface Hit {
   refs: string[] // фото и места (ref, как в placesel)
   texts: string[]
+  stickers?: string[] // стикеры (048); поле есть, только если рамка что-то задела
 }
 
 // Что коснулась рамка r (мм). «Ручная» — места (занятое по фото, пустое по ID, порядок мест), «Авто» —
-// ячейки фото; тексты — по описанному прямоугольнику (у повёрнутого). Подписи не входят.
+// ячейки фото; тексты и стикеры — по описанному прямоугольнику (у повёрнутого). Подписи не входят.
 export function marqueeHits(s: SpreadView | undefined, r: Rect): Hit {
   if (!s) return { refs: [], texts: [] }
   const refs = s.grid
     ? (s.places ?? []).filter((p) => touches(r, aabbOf(p))).map((p) => p.photo || p.id)
     : s.photos.filter((_, i) => s.rects[i] && touches(r, s.rects[i]))
   const texts = s.texts.filter((t) => touches(r, aabb(t))).map((t) => t.id)
-  return { refs, texts }
+  const stickers = (s.stickers ?? []).filter((t) => touches(r, aabbOf(t))).map((t) => t.id)
+  return stickers.length > 0 ? { refs, texts, stickers } : { refs, texts }
 }
 
 // Итог выделения: Shift/Ctrl добавляют найденное к текущему, иначе заменяют его.
 export function marqueePick(cur: GroupSel, hit: Hit, additive: boolean): GroupSel {
-  if (!additive) return normalize({ refs: hit.refs, texts: hit.texts, text: null })
+  const found = hit.stickers ?? []
+  if (!additive) return normalize({ refs: hit.refs, texts: hit.texts, text: null, ...(found.length > 0 ? { stickers: found } : {}) })
   const texts = cur.text ? [cur.text, ...cur.texts] : cur.texts
+  const had = cur.stickers ?? []
+  const stickers = [...had, ...found.filter((x) => !had.includes(x))]
   return normalize({
     refs: [...cur.refs, ...hit.refs.filter((x) => !cur.refs.includes(x))],
     texts: [...texts, ...hit.texts.filter((x) => !texts.includes(x))],
     text: null,
+    ...(stickers.length > 0 ? { stickers } : {}),
   })
 }

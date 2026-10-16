@@ -17,6 +17,10 @@ const MaxPhotos = layout.MaxPhotos
 // фото занимает единицы мегабайт.
 const MaxFileSize = 50 << 20
 
+// MaxNamesBytes — предел поля списка имён (043): и вставка (names.MaxPasteBytes), и текст,
+// который App отдаёт окну из таблицы. Лежит здесь, потому что app не импортирует album/names.
+const MaxNamesBytes = 256 << 10
+
 // MaxSpreads — разворотов в проекте при открытии файла. Нормальный альбом — десятки;
 // предел защищает от файла, который раздул бы раскладку и экспорт.
 const MaxSpreads = 1000

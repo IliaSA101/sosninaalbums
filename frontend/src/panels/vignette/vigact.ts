@@ -6,7 +6,8 @@ import { model } from '../../../wailsjs/go/models'
 import { unitOf } from '../../base/geom/sheet'
 import { gridAct } from '../layouts/gridact.svelte'
 import type { GridResult, SpreadView, VigChoice, VigPreview, VigSetup } from '../../base/core/types'
-import { pickedRatio } from './vigown'
+import { visibleTpls, type VigFamilyFilter } from '../../base/tpl/tplfilter'
+import { pickedForm } from './vigown'
 import { formOf, isVignette, leftText, paramsOf, startForm, stepTpl, type VigForm } from './vignette'
 
 // Карточки шаблонов для чисел и пропорции (превью считает Go). Ошибку Go отдаёт вызывающему.
@@ -73,27 +74,28 @@ export async function addVignette(at: number): Promise<void> {
 // «Обычный разворот»: места, фото, подписи и шапка остаются, уходят только роли и параметры.
 export const clearVignette = (spreadId: string): Promise<boolean> => store.run(Api.ClearVignette(spreadId))
 
-// Смена шаблона на листе (‹ ›, Пробел, плитка в ▦): свой шаблон ставит и свой портрет — как в окне и галерее.
+// Смена шаблона на листе (‹ ›, Пробел, плитка в ▦): свой шаблон ставит и свой портрет, «круги» — форму и 1:1 (pickedForm) — как в окне.
 // Ручная виньетка сначала спрашивает «Ваши правки мест сбросятся…» (gridAct.vigGate), как страница; false —
 // отказано Go или ждёт ответа.
 export async function changeTpl(spreadId: string, f: VigForm, list: readonly VigChoice[], tpl: string): Promise<boolean> {
   let ok = false
   await gridAct.vigGate(spreadId, 'tpl', async () => {
-    ok = await applyVignette(spreadId, { ...f, tpl, ratio: pickedRatio(list, tpl, f.ratio) ?? f.ratio })
+    ok = await applyVignette(spreadId, { ...f, ...pickedForm(list, f.tpl, tpl, f), tpl })
   })
   return ok
 }
 
 // Пробел и стрелки вариантов на виньетке: следующий / предыдущий шаблон с числами, что стоят на листе
 // (не из формы панели: несохранённая форма на лист не влияет). Пока идёт шаг, новые нажатия пропускаются.
+// family — фильтр видов открытого ▦: листаем только видимые шаблоны, как стрелки в окне «Настроить виньетку».
 let stepping = false
-export async function stepVignette(sp: SpreadView, delta: number): Promise<boolean> {
+export async function stepVignette(sp: SpreadView, delta: number, family: VigFamilyFilter = 'all'): Promise<boolean> {
   if (stepping || !isVignette(sp)) return false
   stepping = true
   try {
     const f = formOf(sp.vig)
     const list = await vigChoices(sp.id, f)
-    const tpl = stepTpl(list, f.tpl, delta)
+    const tpl = stepTpl(visibleTpls(list, family, f.tpl), f.tpl, delta)
     if (!tpl) {
       store.notify('Других шаблонов для этих чисел нет')
       return false

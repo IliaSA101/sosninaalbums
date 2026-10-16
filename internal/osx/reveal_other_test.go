@@ -6,7 +6,7 @@ import "testing"
 
 // Вне Windows проводника нет — атрибутов командной строки быть не должно.
 func TestExplorerSelectAttr(t *testing.T) {
-	if attr := explorerSelectAttr(`/a, b/c.jpg`); attr != nil {
+	if attr := explorerSelectAttr(`/a, b/c.jpg`); attr != nil || explorerOpenAttr(`/a,b`) != nil {
 		t.Fatal("вне Windows атрибутов быть не должно")
 	}
 }

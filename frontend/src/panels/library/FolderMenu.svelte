@@ -4,7 +4,7 @@
   import { errText } from '../../base/core/errtext'
   import Icon from '../../base/ui/Icon.svelte'
   import Popover from '../../base/ui/Popover.svelte'
-  import { gallery } from '../layouts/gallery.svelte'
+  import { gallery } from '../gallery/gallery.svelte'
   import { folderName } from './names'
   import { folderCounts } from './folders'
 

@@ -3,6 +3,7 @@ package model
 import (
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -87,8 +88,26 @@ func TestExpandHostile(t *testing.T) {
 }
 
 // Имя из имени файла: 2–3 слова из букв с заглавной; номера и подписи кадров — не имена.
+// Номер в начале и отметка копии в конце снимаются (043 сц. 7): «(2)» с 043 — имя.
 func TestPersonFromFile(t *testing.T) {
+	ivanov := &Person{Last: "Иванов", First: "Петя"}
 	cases := map[string]*Person{
+		`D:\x\01_Иванов_Петя.jpg`:                ivanov,
+		`D:\x\1. Иванов Петя.jpg`:                ivanov,
+		`D:\x\12) Иванов Петя.jpg`:               ivanov,
+		`D:\x\3-Иванов Петя.jpg`:                 ivanov,
+		`D:\x\Иванов Петя 2.jpg`:                 ivanov,
+		`D:\x\Иванов_Петя_2.jpg`:                 ivanov,
+		`D:\x\Иванов Петя-2.jpg`:                 ivanov,
+		`D:\x\01_Иванов_Петя (12).jpg`:           ivanov,
+		`D:\x\Иванова-Петрова Анна (2).jpg`:      {Last: "Иванова-Петрова", First: "Анна"},
+		`D:\x\Иванов Петя 2025.jpg`:              nil, // 4 цифры — не отметка копии
+		`D:\x\12345 Иванов Петя.jpg`:             nil, // 5 цифр — не номер
+		`D:\x\01_иванов_петя.jpg`:                nil, // строчные — только «Имена файлов»
+		`D:\x\Иванов.Петя.jpg`:                   nil,
+		`D:\x\Иванов Петя (2)(3).jpg`:            nil,
+		`D:\x\(2).jpg`:                           nil,
+		`D:\x\1.jpg`:                             nil,
 		`C:\Фото\Иванов Петя.jpg`:                {Last: "Иванов", First: "Петя"},
 		"/фото/Петрова Анна Сергеевна.JPEG":      {Last: "Петрова", First: "Анна", Middle: "Сергеевна"},
 		`D:\x\Иванова-Петрова_Мария.jpg`:         {Last: "Иванова-Петрова", First: "Мария"},
@@ -102,7 +121,7 @@ func TestPersonFromFile(t *testing.T) {
 		`D:\x\Иванов Петя Сергеевич Младший.jpg`: nil,
 		`D:\x\Иванов- Петя.jpg`:                  nil,
 		`D:\x\Иванов--Петров Петя.jpg`:           nil,
-		`D:\x\Иванов Петя (2).jpg`:               nil,
+		`D:\x\Иванов Петя (2).jpg`:               ivanov,
 		"":                                       nil,
 	}
 	for path, want := range cases {
@@ -219,10 +238,10 @@ func TestVarsOfSheet(t *testing.T) {
 			t.Errorf("SheetVars, %s: %+v, ждали %+v", name, got, c.want)
 		}
 	}
-	if got := FieldsOf(plain, p.VarsOf(plain)); len(got) != 7 || got[3] != "Заголовок" || got[6] != "Руководитель" {
+	if got := FieldsOf(plain, p.VarsOf(plain)); len(got) != 8 || got[3] != "Предмет" || got[4] != "Заголовок" || got[7] != "Руководитель" {
 		t.Fatalf("меню полей с полями: %v", got)
 	}
-	if got := FieldsOf(empty, p.VarsOf(empty)); len(got) != 7 {
+	if got := FieldsOf(empty, p.VarsOf(empty)); len(got) != 8 {
 		t.Fatalf("у виньетки без полей меню шапки есть: %v", got)
 	}
 	// Свадебный альбом без виньеток: полей нет, меню — только имя, пустое поле — «[Заголовок]».
@@ -321,5 +340,177 @@ func TestNameFieldsOf(t *testing.T) {
 		if got := NameFieldsOf(in); !slices.Equal(got, want) || (want == nil && got != nil) {
 			t.Errorf("%q: %v, ждали %v", in, got, want)
 		}
+	}
+}
+
+// Без «{» Expand отдаёт текст как есть и ничего не считает пустым.
+func TestExpandNoBraces(t *testing.T) {
+	out, missing := Expand("Просто текст", FieldCtx{})
+	if out != "Просто текст" || missing != nil {
+		t.Fatalf("%q %v", out, missing)
+	}
+	if HasFields("без скобок") || !HasFields("{") {
+		t.Fatal("HasFields")
+	}
+	if out, miss := Shown(nil, "{Год}", nil, FieldPrint); out != "" || !slices.Equal(miss, []string{"Год"}) {
+		t.Fatalf("Shown без проекта: %q %v", out, miss)
+	}
+}
+
+// Обычный текст длиннее предела обрывает подстановку до первого поля.
+func TestExpandPlainOverflow(t *testing.T) {
+	in := strings.Repeat("я", MaxTextRunes+10) + "{Год}"
+	out, missing := Expand(in, FieldCtx{Vars: Vars{Year: "2026"}})
+	if []rune(out)[MaxTextRunes-1] != 'я' || len([]rune(out)) != MaxTextRunes || len(missing) != 0 {
+		t.Fatalf("длина %d, пустых %v", len([]rune(out)), missing)
+	}
+}
+
+// Вольное правило «Имён файлов» (043 сц. 6): регистр, «.» и дефис между словами, «Имя первым».
+func TestPersonFromFileLoose(t *testing.T) {
+	ivanov := &Person{Last: "Иванов", First: "Петя"}
+	cases := []struct {
+		path       string
+		firstFirst bool
+		want       *Person
+	}{
+		{`D:\x\иванов_петя.jpg`, false, ivanov},
+		{`D:\x\ИВАНОВ ПЕТЯ.JPG`, false, ivanov},
+		{`D:\x\Иванов-Петя.jpg`, false, ivanov},
+		{`D:\x\Иванов.Петя.jpg`, false, ivanov},
+		{`D:\x\01_иванов.петя (2).jpg`, false, ivanov},
+		{`D:\x\петя иванов.jpg`, true, ivanov},
+		{`D:\x\Petya Ivanov.jpg`, true, &Person{Last: "Ivanov", First: "Petya"}},
+		{`D:\x\анна сергеевна петрова.jpg`, true, &Person{Last: "Петрова", First: "Анна", Middle: "Сергеевна"}},
+		{`D:\x\Пётр Иванович Сидоров.jpg`, true, &Person{Last: "Сидоров", First: "Пётр", Middle: "Иванович"}}, // 3 слова, «Имя первым»
+		{`D:\x\Петя-Иванов.jpg`, true, ivanov}, // через дефис, «Имя первым»
+		{`D:\x\пётр-иванович-сидоров.jpg`, true, &Person{Last: "Сидоров", First: "Пётр", Middle: "Иванович"}},
+		{`D:\x\Иванов-Пётр-Сергеевич.jpg`, false, &Person{Last: "Иванов", First: "Пётр", Middle: "Сергеевич"}},
+		{`D:\x\иванова-петрова анна.jpg`, false, &Person{Last: "Иванова-Петрова", First: "Анна"}},
+		{`D:\x\МакКартни Пол.jpg`, false, &Person{Last: "МакКартни", First: "Пол"}},
+		{`D:\x\Иванов-Петров-Сидоров-Козлов.jpg`, false, nil}, // 4 части — не делится
+		{`D:\x\DSC_0012.jpg`, false, nil},
+		{`D:\x\iPhone фото.jpg`, false, nil},
+		{`D:\x\Свадьба 2025.jpg`, false, nil},
+		{"", true, nil},
+	}
+	for _, c := range cases {
+		got := PersonFromFileLoose(c.path, c.firstFirst)
+		if (got == nil) != (c.want == nil) || got != nil && *got != *c.want {
+			t.Errorf("%q (%v) → %+v, ждали %+v", c.path, c.firstFirst, got, c.want)
+		}
+	}
+	// Строгое правило вольные случаи не принимает: имя без окна не появляется само.
+	for _, path := range []string{`D:\x\иванов_петя.jpg`, `D:\x\Иванов.Петя.jpg`, `D:\x\Иванов-Петя.jpg`} {
+		if p := PersonFromFile(path); p != nil {
+			t.Errorf("строгое %q → %+v", path, p)
+		}
+	}
+}
+
+// Слово имени с цифрой или знаком — не имя; слишком длинное имя файла — тоже.
+func TestPersonFromFileRejects(t *testing.T) {
+	for _, path := range []string{
+		`D:\x\Иван1 Петя.jpg`,
+		`D:\x\Иванов Пе#я.jpg`,
+		`D:\x\` + strings.Repeat("Ы", 3*MaxPersonRunes+3) + ` Петя.jpg`,
+		"D:\\x\\Иванов \xff\xfe.jpg",
+	} {
+		if p := PersonFromFile(path); p != nil {
+			t.Errorf("%q → %+v, ждали nil", path, p)
+		}
+	}
+	if p := PersonFromFile(`D:\x\Д’Артаньян Шарль.jpg`); p == nil || p.Last != "Д’Артаньян" {
+		t.Fatalf("типографский апостроф: %+v", p)
+	}
+}
+
+// NameView: имени нет вовсе — пустая карточка; своё и из файла различаются.
+func TestNameView(t *testing.T) {
+	if v := NameView(PhotoRef{Path: `D:\x\DSC_0001.jpg`}); v != (PersonView{}) {
+		t.Fatalf("без имени: %+v", v)
+	}
+	if v := NameView(PhotoRef{Path: `D:\x\Иванов Петя.jpg`}); !v.FromFile || v.Last != "Иванов" {
+		t.Fatalf("из файла: %+v", v)
+	}
+	if v := NameView(PhotoRef{Person: &Person{First: "Пётр"}}); v.FromFile || v.First != "Пётр" {
+		t.Fatalf("своё: %+v", v)
+	}
+}
+
+// Зажим при Load без запаса знаков: переменные и имя пропадают, у стиля листа теряется шаблон.
+func TestClampFieldsNoBudget(t *testing.T) {
+	b := textBudget{runes: 3}
+	if clampVarsIn(&Vars{Title: "Школа № 5"}, &b) != nil || clampPersonIn(&Person{Last: "Иванов"}, &b) != nil {
+		t.Fatal("сверх запаса переменные и имя должны пропасть")
+	}
+	if clampVarsIn(&Vars{}, &b) != nil || clampPersonIn(&Person{}, &b) != nil {
+		t.Fatal("пустые — nil")
+	}
+	c := clampCapsIn(&SheetCaps{Text: "Шаблон {Фамилия}", Pad: 3}, func(s string) int { return runes(s) }, &b)
+	if c == nil || c.Text != "" || c.Pad != 3 {
+		t.Fatalf("стиль листа без запаса: %+v", c)
+	}
+	if clampCapsIn(nil, func(string) int { return 0 }, &b) != nil {
+		t.Fatal("nil остаётся nil")
+	}
+}
+
+// ClampArt: nil остаётся nil; ключ не по грамматике и ключ узора — nil; неизвестный, но верный
+// ключ хранится; цвета копируются (правка копии не трогает исходный рисунок).
+func TestClampArtEdges(t *testing.T) {
+	if ClampArt(nil) != nil {
+		t.Fatal("nil → nil")
+	}
+	for _, k := range []string{"", "BAD!", "dots"} {
+		if ClampArt(&Art{Kind: k}) != nil {
+			t.Errorf("ключ %q не рисунок", k)
+		}
+	}
+	src := &Art{Kind: "zz-future", Inks: []string{"#ABCDEF"}}
+	got := ClampArt(src)
+	if got == nil || got.Kind != "zz-future" || got.Inks[0] != "#abcdef" || src.Inks[0] != "#ABCDEF" {
+		t.Fatalf("неизвестный ключ: %+v, исходный %+v", got, src)
+	}
+}
+
+// checkStickers: предел листа — отказ всегда (и у обложки), предел проекта — только если стало
+// больше, чем было; переполненный файл не «замерзает». Несколько листов сразу.
+func TestCheckStickersLimits(t *testing.T) {
+	fill := func(s *Spread, n int) {
+		for range n {
+			s.Stickers = append(s.Stickers, &Sticker{ID: NewID(), Art: &Art{Kind: "plate"}})
+		}
+	}
+	p := New()
+	p.Spreads = []*Spread{{ID: "a"}, {ID: "b"}}
+	fill(p.Spreads[0], MaxStickers)
+	fill(p.Spreads[1], MaxStickers)
+	if err := p.checkStickers(New()); err != nil {
+		t.Fatalf("ровно предел на листе: %v", err)
+	}
+	fill(p.Spreads[1], 1)
+	if err := p.checkStickers(New()); err != ErrStickers {
+		t.Fatalf("лист сверх предела: %v", err)
+	}
+	p.Spreads[1].Stickers = p.Spreads[1].Stickers[:MaxStickers]
+	p.Cover = &Cover{Sheet: &Spread{ID: "cover"}}
+	fill(p.Cover.Sheet, MaxStickers+1)
+	if err := p.checkStickers(New()); err != ErrStickers {
+		t.Fatalf("обложка сверх предела: %v", err)
+	}
+
+	// Предел проекта: у каждого листа ≤ MaxStickers, всего > MaxTotalStickers.
+	q := New()
+	for i := 0; i <= MaxTotalStickers/MaxStickers; i++ {
+		s := &Spread{ID: strconv.Itoa(i)}
+		fill(s, MaxStickers)
+		q.Spreads = append(q.Spreads, s)
+	}
+	if err := q.checkStickers(New()); err == nil || err == ErrStickers {
+		t.Fatalf("сверх проекта: %v", err)
+	}
+	if err := q.checkStickers(q); err != nil {
+		t.Fatalf("не больше, чем было: %v", err)
 	}
 }

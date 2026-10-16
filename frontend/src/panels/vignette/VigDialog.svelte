@@ -8,8 +8,22 @@
   import VigStrip from './VigStrip.svelte'
   import { VigSession, vigDialog } from './vigsession.svelte'
   import { vigOwn } from './vigown.svelte'
-  import { ownLabel, pickedRatio } from './vigown'
-  import { PREVIEW_RESERVE, VAR_FIELDS, VAR_MAX, leftLine, placesLine, previewBox, resetWarning, stripMax } from './vigdialog'
+  import { ownLabel, pickedForm, pickedShape } from './vigown'
+  import Seg from '../../base/tpl/Seg.svelte'
+  import { activeFamily, familiesIn, shownTpls, type VigFamilyFilter } from '../../base/tpl/tplfilter'
+  import {
+    PREVIEW_RESERVE,
+    SHAPE_KEYS,
+    VAR_FIELDS,
+    VAR_MAX,
+    leftLine,
+    placesLine,
+    previewBox,
+    resetWarning,
+    shapeKey,
+    shapePatch,
+    stripMax,
+  } from './vigdialog'
   import { MAX_PUPILS, MAX_TEACHERS, RATIOS, clampCount, isVignette, portraitText } from './vignette'
 
   // Окно «Настроить виньетку» (031 dialog §3): большой предпросмотр листа, сетка шаблонов, числа, подпись учителя
@@ -64,6 +78,12 @@
   let colW = $state(560)
   let winH = $state(760)
   const sheet = $derived(ses ? sheetIn(store.view, ses.id) : undefined)
+
+  // Фильтр видов (049): сетка и стрелки в ней идут по видимым; выбранный шаблон виден всегда, свои не фильтруются
+  const families = $derived(familiesIn(ses?.items ?? []))
+  const fam = $derived(activeFamily(ses?.family ?? 'all', families))
+  const famItems = $derived<{ id: VigFamilyFilter; label: string }[]>([{ id: 'all', label: 'Все' }, ...families])
+  const tplShown = $derived(shownTpls(ses?.items ?? [], fam, ses?.form.tpl))
   // Ручная виньетка: «Применить» пересоберёт места и сбросит ручные — предупреждаем до нажатия
   const resetWarn = $derived(resetWarning(isVignette(sheet) && sheet.vig.manual, ses?.unchanged ?? true))
   const shown = $derived(ses?.preview.value?.spread ?? sheet)
@@ -92,9 +112,11 @@
   // Свой шаблон ставит и свой портрет (точный режим требует того же); числа не трогает.
   function pick(id: string) {
     if (!ses) return
-    const ratio = pickedRatio(ses.items, id, ses.form.ratio)
+    const form = pickedForm(ses.items, ses.form.tpl, id, ses.form)
     ses.form.tpl = id
-    if (ratio) ses.form.ratio = ratio
+    if (form) Object.assign(ses.form, form)
+    const shape = pickedShape(ses.items, id, ses.form)
+    if (shape) Object.assign(ses.form, shape)
   }
 </script>
 
@@ -112,14 +134,18 @@
             {/if}
           </div>
 
+          {#if families.length > 0}
+            <div class="fam"><Seg items={famItems} value={fam} onpick={(f) => (s.family = f)} label="Вид шаблонов" /></div>
+          {/if}
           <VigStrip
-            items={s.items}
+            items={tplShown}
             cur={s.form.tpl}
             sheetW={sheet?.w ?? 1}
             sheetH={sheet?.h ?? 1}
-            maxH={stripMax(winH, box.h)}
+            maxH={stripMax(winH, box.h + (families.length > 0 ? 38 : 0))}
             onpick={pick}
             onapply={apply}
+            form={s.form}
           />
         </div>
 
@@ -155,6 +181,20 @@
               {#each RATIOS as r (r)}
                 <button type="button" class:on={s.form.ratio === r} aria-pressed={s.form.ratio === r} onclick={() => (s.form.ratio = r)}
                   >{r}</button
+                >
+              {/each}
+            </div>
+          </div>
+          <div class="row stack">
+            Форма
+            <div class="seg" role="group" aria-label="Форма мест">
+              {#each SHAPE_KEYS as sk (sk.k)}
+                <button
+                  type="button"
+                  class:on={shapeKey(s.form) === sk.k}
+                  aria-pressed={shapeKey(s.form) === sk.k}
+                  title={sk.hint}
+                  onclick={() => Object.assign(s.form, shapePatch(sk.k))}>{sk.label}</button
                 >
               {/each}
             </div>
@@ -228,6 +268,13 @@
     flex-direction: column;
     gap: 10px;
   }
+  /* Сегменты видов — по своей ширине, не на всю колонку */
+  .fam {
+    align-self: flex-start;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
   .pv {
     display: flex;
     align-items: center;
@@ -253,6 +300,11 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
+  }
+  .row.stack {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
   }
   label.col {
     flex-direction: column;

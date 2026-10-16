@@ -165,6 +165,21 @@ describe('stepVignette', () => {
     expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'd', ratio: '4:5' }))
   })
 
+  it('фильтр видов ▦: Пробел идёт по видимым, скрытые вид пропускает', async () => {
+    vi.mocked(Api.VignetteChoices).mockResolvedValue([
+      { id: 'a', over: false, family: 'side' },
+      { id: 'b', over: false, family: 'side' },
+      { id: 'c', over: false, family: 'big' },
+      { id: 'd', over: false, family: 'side' },
+    ] as never)
+    await stepVignette(sp('b'), 1, 'side')
+    expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'd' }))
+    await stepVignette(sp('d'), 1, 'side')
+    expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'a' }))
+    await stepVignette(sp('b'), 1, 'all')
+    expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'c' }))
+  })
+
   it('назад по кругу; фото, не вставшие в места, — тост «Убрано в ленту»', async () => {
     vi.mocked(Api.SetVignette).mockResolvedValue({ view: {}, left: 2 } as never)
     await stepVignette(sp('a'), -1)

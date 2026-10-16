@@ -76,6 +76,7 @@ func (p *Project) ClampGrid() {
 			if pl.Fit != FitContain {
 				pl.Fit = ""
 			}
+			pl.Shape, pl.Round = ClampShape(pl.Shape, pl.Round)
 			if _, ok := p.Photos[pl.Photo]; pl.Photo != "" && (!ok || !in[pl.Photo] || seenPhoto[pl.Photo]) {
 				pl.Photo = ""
 			}
@@ -255,9 +256,13 @@ func CleanText(s string, maxRunes int) string {
 // без пробелов по краям, не больше maxNameRunes знаков.
 func CleanName(s string) string { return cleanLine(s, MaxNameRunes) }
 
+// oneLine — переводы строк и Tab в пробел. Один на пакет: сборка Replacer дороже самой замены,
+// а cleanLine зовётся на каждое имя (1000 строк таблицы в окне «Имена» — 3000 раз, 043).
+var oneLine = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\t", " ", "\u2028", " ", "\u2029", " ")
+
 // cleanLine — то же правило со своим пределом n (переменные и имена 030).
 func cleanLine(s string, n int) string {
-	s = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\t", " ", "\u2028", " ", "\u2029", " ").Replace(s)
+	s = oneLine.Replace(s)
 	s = strings.TrimSpace(text.CleanText(s))
 	if utf8.RuneCountInString(s) > n {
 		s = strings.TrimSpace(string([]rune(s)[:n]))
@@ -268,9 +273,11 @@ func cleanLine(s string, n int) string {
 // ClampDesign — зажим оформления прочитанного проекта: кадры, подписи, фон,
 // блоки текста (лишние и пустые отбрасываются, плохой или повторный ID — новый).
 // Координаты блоков и ширину «по тексту» потом держит FitTexts. Запас текста — spendTexts.
+// Стикеры (048) — после текстов: их ID не совпадают с ID текстов и мест.
 func (p *Project) ClampDesign() {
 	p.Settings.Bg = BgColor(p.Settings.Bg)
 	p.spendTexts(true)
+	p.clampStickers()
 }
 
 // clampSheetTexts — блоки листа s при Load: лишние и не влезшие в запас отбрасываются,
@@ -330,6 +337,7 @@ func (p *Project) spendTexts(fix bool) bool {
 			s.BgL, s.BgR = BgColor(s.BgL), BgColor(s.BgR)
 			s.Name = CleanName(s.Name)
 			p.clampBackdrops(s)
+			clampPatterns(s)
 			s.Caps = clampCapsIn(s.Caps, func(t string) int { return tplCost(v, t, capShows(s)) }, &b)
 			s.Vig = clampVigIn(s, func(t string) int { return tplCost(v, t, teacherShows(s)) }, &b)
 			p.clampSheetTexts(s, &b, seen)
@@ -444,7 +452,7 @@ func (b *textBudget) take(s string) bool {
 }
 
 // CheckTotals — итог правки не должен превышать то, что Load оставит: общий запас
-// текстов и подписей и MaxSpreads. Иначе после Save+Load лишнее молча пропало бы.
+// текстов и подписей, MaxSpreads и стикеры (048). Иначе после Save+Load лишнее молча пропало бы.
 // Развороты — отказ, только если их стало больше, чем в before: иначе переполненный
 // проект «замёрз» бы, не проходила бы даже правка с удалением.
 func (p *Project) CheckTotals(before *Project) error {
@@ -454,7 +462,7 @@ func (p *Project) CheckTotals(before *Project) error {
 	if !p.spendTexts(false) {
 		return errTextBudget()
 	}
-	return nil
+	return p.checkStickers(before)
 }
 
 func errTextBudget() error {
@@ -490,7 +498,8 @@ const (
 // ClampBackdrop приводит фон области scope листа s к допустимому: неизвестное фото — фон
 // выбрасывается; W или H не число / ≤ 0 — рамка по области без поворота; иначе размер
 // 10 мм..3× области, поворот geom.NormDeg, центр рамки внутри области (X, Y сдвигаются):
-// так фон нельзя потерять за краем. Шаг 0.01 мм. Прозрачность 0..1, шаг 0.01. Возвращает копию.
+// так фон нельзя потерять за краем. Шаг 0.01 мм. Прозрачность 0..1, шаг 0.01. Кадр —
+// ClampFrame, у Frame.R четверть отбрасывается: остаётся наклон ±44,9 (045). Возвращает копию.
 func (p *Project) ClampBackdrop(s *Spread, b *Backdrop, scope string) *Backdrop {
 	if b == nil {
 		return nil
@@ -501,9 +510,9 @@ func (p *Project) ClampBackdrop(s *Spread, b *Backdrop, scope string) *Backdrop 
 	a := p.BdArea(s, scope)
 	c := *b
 	c.Frame = ClampFrame(b.Frame)
-	if c.Frame != nil && c.Frame.R != 0 { // рамку фона и так крутят: R не нужен
+	if c.Frame != nil && c.Frame.R != 0 { // у фона только наклон (045): 90° — «Поворот» рамки
 		f := *c.Frame
-		f.R = 0
+		_, f.R = SplitR(f.R)
 		c.Frame = ClampFrame(&f)
 	}
 	c.Fade = geom.Round2(geom.ClampF(Finite(c.Fade, 0), 0, 1))

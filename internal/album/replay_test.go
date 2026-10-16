@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 
@@ -310,8 +309,8 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.do("SetPerson", e.SetPerson(id(3), model.Person{Last: "Иванов", First: "Петя"}, "n1"))
 	pv, _ := e.Person(id(3))
 	r.read("Person", pv)
-	v, extra, missing, err := e.PasteNames(s0, "1. Сидоров Иван\nПетрова Анна Сергеевна", false)
-	r.edit("PasteNames", v, []int{extra, missing}, err)
+	v, plan, err := e.PasteNames(s0, model.NamesOpts{Text: "1. Сидоров Иван\nПетрова Анна Сергеевна"})
+	r.edit("PasteNames", v, []int{plan.Extra, plan.Missing}, err)
 	r.do("SetSheetCaps", e.SetSheetCaps(s0, true, model.SheetCaps{Style: cs, Pad: 2, Text: "{Фамилия}\n{Имя}"}))
 
 	r.ve("SetMarks")(e.SetMarks(ph[1:3], model.MarkPatch{Rating: edtest.Ip(4)}))
@@ -338,178 +337,11 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.do("ClearBackdrop", e.ClearBackdrop(sc, model.ScopeLeft))
 	r.do("Undo:фон", e.Undo())
 
+	sw, sh := e.SheetSize()
+	r.read("SheetSize", [2]float64{sw, sh})
 	q, _ := e.Snapshot()
 	r.read("Snapshot", q)
 	return q
-}
-
-// replayGrid — сетка: места, группа, выравнивание, шаблоны, копия и размножение.
-func replayGrid(r *replay, ph []model.PhotoInfo) {
-	e, id := r.e, func(i int) string { return ph[i].ID }
-	sb := r.spreadOf(id(1))
-	r.do("SetGrid", e.SetGrid(sb, true))
-	r.ve("AddPlace")(e.AddPlace(sb, 1))
-	r.ve("AddPlace:левая")(e.AddPlace(sb, 0))
-	r.do("SetPlaces", e.SetPlaces(sb, []model.PlaceBox{{ID: id(1), X: 20, Y: 30, W: 200, H: 150}}, "g1"))
-	r.do("SetPlaces:слияние", e.SetPlaces(sb, []model.PlaceBox{{ID: id(1), X: 25, Y: 30, W: 200, H: 150}}, "g1"))
-	r.do("SetPlaceAngle", e.SetPlaceAngle(sb, id(1), 12))
-	r.do("SetPlaceFit", e.SetPlaceFit(sb, []string{id(1)}, model.FitContain))
-	r.ve("ArrangePlaces")(e.ArrangePlaces(sb, "splitH", []string{r.emptyPlace(sb)}))
-	r.do("ArrangeLayers", e.ArrangeLayers(sb, "front", []string{id(1)}))
-	r.ve("AddText:сетка")(e.AddText(sb, 1, "t2"))
-	t2 := r.lastText(sb).ID
-	r.vne("PlacePhotos")(e.PlacePhotos(sb, r.emptyPlace(sb), ph[15:17]))
-	r.vn("FillPlaces")(e.FillPlaces(ph[16:18], sb))
-
-	group := []string{id(1), id(15), t2}
-	r.read("AlignOverlap", e.AlignOverlap(sb, group, "distH", "spread"))
-	r.do("AlignItems", e.AlignItems(sb, group, "top", "page"))
-	r.do("TransformGroup", e.TransformGroup(sb, group, 0.9, 20, 20, 3, 2, ""))
-	pw, phh := r.v.Settings.PageW, r.v.Settings.PageH
-	r.do("RotateGroup", e.RotateGroup(sb, group, 10, pw, phh/2))
-	r.do("ScaleGroupAxes", e.ScaleGroupAxes(sb, group, 1.1, 0.9, 0, 20, 20))
-	r.do("MirrorGrid", e.MirrorGrid(sb, model.ScopeSpread))
-	r.do("DeletePlaces", e.DeletePlaces(sb, []string{id(16)}))
-
-	s0 := r.spreadOf(id(2))
-	boxes, mode, err := e.PlaceBoxes(s0, model.ScopeLeft)
-	r.read("PlaceBoxes", []any{boxes, mode, fmt.Sprint(err)})
-	tpls := []model.Template{{ID: "tpl", Name: "Два", Scope: model.TplPage, Boxes: []model.Box{{X: 0, Y: 0, W: 1, H: 0.5}, {X: 0, Y: 0.5, W: 1, H: 0.5}}}}
-	r.read("GridChoices", e.GridChoices(s0, 0, model.ScopeSpread, tpls))
-
-	sc := r.spreadOf(id(6))
-	r.vne("ApplyGrid")(e.ApplyGrid(sc, model.ScopeLeft, model.TplPage, tpls[0].Boxes))
-	r.vne("ApplyGrid:отказ")(e.ApplyGrid(sc, model.ScopeLeft, model.TplSpread, tpls[0].Boxes))
-	targets := []model.GridTarget{{Spread: sc, Scope: model.ScopeRight}}
-	r.read("PlanCopyGrid", e.PlanCopyGrid(sb, model.ScopeLeft, targets, true, true))
-	r.vne("CopyGrid")(e.CopyGrid(sb, model.ScopeLeft, targets, true, true))
-	r.ve("DuplicateGrid")(e.DuplicateGrid(sb, 2, true))
-	r.do("DeleteSelection", e.DeleteSelection(sb, []string{id(15)}, []string{r.spread(sb).Places[1].ID}, []string{t2}))
-	r.do("SetGrid:авто", e.SetGrid(sb, false))
-	r.do("Undo:авто", e.Undo())
-}
-
-// replayCover — обложка (032): создание с фото на лицевой, пресет, свои числа, раскладки,
-// надпись на корешке, разметка, место с фото. Обложка остаётся до конца: хвост (перепривязка,
-// удаление разворотов — Reflow, восстановление) идёт с ней.
-func replayCover(r *replay, ph []model.PhotoInfo) {
-	e := r.e
-	r.ve("CreateCover")(e.CreateCover("", &ph[16]))
-	r.ve("CreateCover:повтор")(e.CreateCover("", nil))
-	r.ve("ApplyCoverPreset")(e.ApplyCoverPreset("netprint-premium"))
-	r.ve("ApplyCoverPreset:неизвестный")(e.ApplyCoverPreset("nope"))
-	spec := r.v.Cover.Spec
-	spec.W, spec.Hinge = 290, 6
-	r.ve("SetCoverSpec")(e.SetCoverSpec(spec))
-	r.ve("SetCoverLayout")(e.SetCoverLayout("wrap"))
-	r.ve("SetCoverLayout:обе")(e.SetCoverLayout("both"))
-	r.ve("SetBackdrop:задняя")(e.SetBackdrop(model.CoverID, model.ScopeLeft, ph[17]))
-	r.ve("CoverSpineText")(e.CoverSpineText())
-	r.ve("CoverSpineText:повтор")(e.CoverSpineText())
-	r.do("SetCoverSpineBg", e.SetCoverSpineBg("#203040"))
-	r.ve("SetCoverGuide")(e.SetCoverGuide(`Q:\Разметка\cover.png`))
-	r.read("CoverGuidePath", e.CoverGuidePath())
-	r.ve("SetCoverGuide:UNC")(e.SetCoverGuide(`\\server\share\cover.png`))
-	r.do("ClearCoverGuide", e.ClearCoverGuide())
-	r.ve("AddPlace:обложка")(e.AddPlace(model.CoverID, 1))
-	r.vne("PlacePhotos:обложка")(e.PlacePhotos(model.CoverID, r.v.Cover.Sheet.Places[0].ID, ph[18:19]))
-	r.do("DeleteCover", e.DeleteCover())
-	r.do("Undo:обложка", e.Undo())
-}
-
-// replayVignette — виньетка (031): новая по умолчанию, превью, «Применить» с фото и сверх
-// предела, сортировка, «Обычный разворот» и его отмена (виньетка идёт в хвост).
-func replayVignette(r *replay, ph []model.PhotoInfo) {
-	e := r.e
-	r.ve("AddVignette")(e.AddVignette(-1))
-	sid := r.v.Spreads[len(r.v.Spreads)-1].ID
-	r.read("VignetteChoices", e.VignetteChoices(sid, 2, 10, "4:5", nil))
-	r.vne("SetVignette")(e.SetVignette(sid, model.Vignette{Tpl: "g-top", Teachers: 2, Pupils: 10, Ratio: "4:5"}, nil))
-	r.vn("FillPlaces:виньетка")(e.FillPlaces(ph[17:19], sid))
-	r.vne("SetVignette:предел")(e.SetVignette(sid, model.Vignette{Tpl: "grid", Teachers: 18, Pupils: 64}, nil))
-	// Окно «Настроить виньетку»: сухой прогон (чтение) и «Применить» с полями шапки.
-	setup := model.VigSetup{Vig: model.Vignette{Tpl: "head-g-top", Teachers: 1, Pupils: 12, Ratio: "3:4"},
-		Vars: model.Vars{Title: "Гимназия № 1", Year: "2026"}}
-	pr, err := e.PreviewVignette(sid, setup, nil)
-	if err != nil {
-		r.t.Fatalf("PreviewVignette: %v", err)
-	}
-	r.read("PreviewVignette", pr)
-	r.vne("SetupVignette")(e.SetupVignette(sid, setup, nil))
-	// Свой шаблон (038): лист → шаблон → «Применить» своего, «Вернуть авто».
-	tpl, err := e.VigTemplate(sid)
-	if err != nil {
-		r.t.Fatalf("VigTemplate: %v", err)
-	}
-	tpl.ID, tpl.Name = "tpl001", "Мой"
-	r.read("VigTemplate", tpl)
-	r.vne("SetVignette:свой")(e.SetVignette(sid, model.Vignette{Tpl: "my:tpl001", Teachers: 1, Pupils: 14}, []model.Template{tpl}))
-	r.vne("ResetVignette")(e.ResetVignette(sid))
-	r.do("SortVignette", e.SortVignette(sid))
-	r.do("ClearVignette", e.ClearVignette(sid))
-	r.do("Undo:виньетка", e.Undo())
-}
-
-// replayTail — развороты, папки, перепривязка, восстановление, удаление, запись копий.
-func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
-	e, id := r.e, func(i int) string { return ph[i].ID }
-	s0 := r.spreadOf(id(2))
-	r.do("SplitSpread", e.SplitSpread(s0, 2))
-	r.do("MergeSpreads", e.MergeSpreads(s0))
-	r.do("MoveSpread", e.MoveSpread(r.v.Spreads[len(r.v.Spreads)-1].ID, 0))
-	r.do("RemovePhotos", e.RemovePhotos([]string{id(12)}))
-	r.do("DeleteText", e.DeleteText(r.lastText(s0).ID))
-
-	r.read("Refs", e.Refs())
-	ref, ok := e.Ref(id(2))
-	r.read("Ref", []any{ref, ok})
-	r.read("Folders", e.Folders())
-	r.read("Path", strings.Replace(e.Path(), r.file, "<album>", 1))
-	r.do("Relink", e.Relink(map[string]string{id(7): `Q:\Перенос\07.jpg`}, `Q:\Перенос`))
-	// Сменить букву по-настоящему можно только с файлами на двух дисках
-	// (editor_relink_test.go): здесь на R: ничего нет — холостая.
-	r.do("RelinkDrive", e.RelinkDrive("Q", "R"))
-	r.do("RemoveFolder", e.RemoveFolder(`Q:\Банкет`))
-	r.ve("Restore")(e.Restore(q))
-	r.do("Undo:восстановление", e.Undo())
-
-	r.do("DeleteSpread", e.DeleteSpread(r.spreadOf(id(9))))
-	r.do("DeleteSpreads", e.DeleteSpreads([]string{r.v.Spreads[0].ID, r.v.Spreads[1].ID}))
-	r.do("Undo:удаление", e.Undo())
-	r.do("Undo:ещё", e.Undo())
-	r.do("Redo:удаление", e.Redo())
-	r.do("Redo:второй", e.Redo())
-	r.do("Redo:холостой", e.Redo())
-
-	cp := filepath.Join(r.dir, "copy.salbum")
-	r.write("WriteCopy", e.WriteCopy(cp), cp)
-	dr := filepath.Join(r.dir, "draft.salbum")
-	r.write("WriteDraft", e.WriteDraft(dr), dr)
-	r.read("PhotosOf", e.PhotosOf([]string{s0, "нет"}))
-	// «Разнообразить» — на развороте «Авто» с оценкой (развороты сценария — сетки, там шаг холостой):
-	// 5★ у третьего фото (XMP) делает его главным, раскладка должна смениться.
-	r.ve("NewSpread:авто")(e.NewSpread(-1, ph[6:10]))
-	last := func() model.SpreadView { return r.v.Spreads[len(r.v.Spreads)-1] }
-	sid, was := last().ID, last().Layout
-	rated := slices.Clone(ph[6:10])
-	rated[2].Xmp.Rating = 5
-	r.do("VaryLayouts", e.VaryLayouts([]string{sid}, model.VarietyNormal, rated))
-	if last().ID != sid || last().Layout == was {
-		r.t.Fatalf("VaryLayouts: раскладка %q не сменилась", was)
-	}
-	// Бросок 042 (в конце: прежние шаги эталона не сдвигаются): у закреплённого разворота одно
-	// пустое место, три новых фото — вопрос без шага, ответ «add» — место и плитка одним шагом.
-	// ID новых мест случайны: в out — только числа.
-	r.ve("AddPlace:042")(e.AddPlace(sid, 1))
-	more := []model.PhotoInfo{replayPhoto(19, 'h', model.XmpMarks{}), replayPhoto(20, 'v', model.XmpMarks{}), replayPhoto(21, 'h', model.XmpMarks{})}
-	for _, rest := range []string{"", "add"} {
-		v, o, err := e.DropPhotos(sid, "", more, 0.75, rest)
-		r.edit("DropPhotos:"+rest, v, fmt.Sprintf("ask=%v fit=%d total=%d fresh=%d grown=%d out=%v left=%d small=%v",
-			o.Ask, o.Fit, o.Total, len(o.Fresh), o.Grown, o.Out, o.Left, o.Small), err)
-	}
-	// Имена своих шаблонов (QA 038): своих шаблонов на листах нет — холостая, без шага и rev.
-	v, changed := e.SyncOwnNames([]model.Template{{ID: "0123456789ab", Name: "Свой", Kind: model.TplVignette}})
-	r.edit("SyncOwnNames", v, changed, nil)
 }
 
 func TestEditorReplay(t *testing.T) {

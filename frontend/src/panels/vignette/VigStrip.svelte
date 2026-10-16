@@ -5,7 +5,7 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import VigCard from './VigCard.svelte'
   import { cardBox, gridStep, revealX, type ArrowKey } from './vigdialog'
-  import { OWN_TITLE, canEditOwn, firstOwn, ownLabel } from './vigown'
+  import { OWN_TITLE, canEditOwn, firstOwn, ownLabel, tileForm } from './vigown'
   import { vigOwn } from './vigown.svelte'
   import { portraitText } from './vignette'
 
@@ -20,6 +20,7 @@
     maxH,
     onpick,
     onapply,
+    form,
   }: {
     items: VigChoice[]
     cur: string
@@ -28,6 +29,7 @@
     maxH: number
     onpick: (id: string) => void
     onapply: () => void
+    form?: { ratio: string; shape?: string; round?: number } // форма окна: плитка рисует то, что станет после щелчка (tileForm)
   } = $props()
 
   const card = $derived(cardBox(sheetW, sheetH))
@@ -99,7 +101,7 @@
         onclick={() => !c.over && onpick(c.id)}
         onkeydown={(e) => onkey(e, c)}
       >
-        <VigCard {c} w={card.w} h={card.h} />
+        <VigCard {c} w={card.w} h={card.h} form={form && tileForm(items, cur, c.id, form)} />
         <span class="name">{ownLabel(c)}</span>
       </button>
       {#if canEditOwn(c, canTpl)}

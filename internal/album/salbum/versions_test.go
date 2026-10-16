@@ -75,7 +75,7 @@ func TestLoadV3AsV4(t *testing.T) {
 	}
 }
 
-// Golden v5 (testdata/v5.salbum.json: fade, отметки, два текста) открывается как текущая версия (026: v6, 038: v7):
+// Golden v5 (testdata/v5.salbum.json: fade, отметки, два текста) открывается как текущая версия (026: v6, 038: v7, 045: v8):
 // меняется только номер; первая запись делает .v5.bak с байтами исходника и пишет FormatVersion.
 func TestMigrateV5ToV6(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "v5.salbum.json"))
@@ -427,7 +427,7 @@ func TestSaveLoadV3Names(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != model.FormatVersion || model.FormatVersion != 7 {
+	if p.Version != model.FormatVersion || model.FormatVersion != 8 {
 		t.Fatalf("версия %d", p.Version)
 	}
 	ta, tb := *edtest.P(e).Spreads[0].Texts[0], *edtest.P(e).Spreads[0].Texts[1]
@@ -445,7 +445,7 @@ func TestLoadOrderRepair(t *testing.T) {
 		return &model.TextBlock{ID: id, X: 20, Y: 20, W: 60, Text: "Текст", Style: model.TextStyle{Size: 20}}
 	}
 	const p1, p2, p3, t1, t2 = "c0ffee000001", "c0ffee000002", "c0ffee000003", "c0ffee0000a1", "c0ffee0000a2"
-	junk := slices.Repeat([]string{"нет"}, model.MaxPlaces+model.MaxTexts)
+	junk := slices.Repeat([]string{"нет"}, model.MaxPlaces+model.MaxTexts+model.MaxStickers)
 	data, _ := gridFile(t, dir, []string{"a", "b", "c"}, []*model.Spread{
 		{ID: "aaaaaaaaaaa1", Photos: []string{ids["a"], ids["b"]}, Texts: []*model.TextBlock{tb(t1), tb(t2)},
 			Grid:  []*model.Place{box(p1, 10, 10, 100, 100, ids["a"]), box(p2, 60, 60, 100, 100, ids["b"]), box(p3, 300, 10, 50, 50, "")},
@@ -483,8 +483,8 @@ func TestLoadOrderRepair(t *testing.T) {
 // открывается с 8 благодаря заполнению DefaultSettings() до разбора; 12 и 0 («без зоны»)
 // переживают запись и чтение.
 func TestLoadSafeDefault(t *testing.T) {
-	if model.FormatVersion != 7 {
-		t.Fatalf("FormatVersion %d: безопасная зона — с v6 (decisions 0.10, запись 2), v7 — vig.own (038)", model.FormatVersion)
+	if model.FormatVersion != 8 {
+		t.Fatalf("FormatVersion %d: безопасная зона — с v6 (decisions 0.10, запись 2), v7 — vig.own (038), v8 — наклон фона (045)", model.FormatVersion)
 	}
 	data, err := os.ReadFile(filepath.Join("testdata", "v5.salbum.json"))
 	if err != nil {

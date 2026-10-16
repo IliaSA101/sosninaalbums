@@ -59,6 +59,38 @@ describe('marqueeHits', () => {
   it('нет разворота — пусто', () => expect(marqueeHits(undefined, { x: 0, y: 0, w: 1, h: 1 })).toEqual({ refs: [], texts: [] }))
 })
 
+describe('стикеры (048)', () => {
+  const sticker = (id: string, x: number, y: number, w: number, h: number, rot = 0) => ({ id, x, y, w, h, rot })
+  it('рамка берёт стикер по описанному прямоугольнику; без стикеров поля stickers нет', () => {
+    const s = spread({ stickers: [sticker('k1', 100, 100, 40, 20), sticker('k2', 300, 100, 40, 20)] as never })
+    expect(marqueeHits(s, { x: 90, y: 90, w: 30, h: 30 })).toEqual({ refs: [], texts: [], stickers: ['k1'] })
+    expect(marqueeHits(s, { x: 0, y: 0, w: 10, h: 10 })).toEqual({ refs: [], texts: [] })
+  })
+  it('повёрнутый стикер ловится по описанному прямоугольнику', () => {
+    // 40×20 на 90° вокруг центра (120, 110): занимает x 110..130, y 90..130
+    const s = spread({ stickers: [sticker('k1', 100, 100, 40, 20, 90)] as never })
+    expect(marqueeHits(s, { x: 111, y: 92, w: 4, h: 4 }).stickers).toEqual(['k1'])
+    expect(marqueeHits(s, { x: 101, y: 101, w: 4, h: 4 }).stickers).toBeUndefined()
+  })
+  it('marqueePick: заменяет или добавляет, один стикер — выделение из одного объекта', () => {
+    expect(marqueePick(EMPTY, { refs: [], texts: [], stickers: ['k1'] }, false)).toEqual({
+      refs: [],
+      texts: [],
+      text: null,
+      stickers: ['k1'],
+    })
+    const cur = { refs: ['a'], texts: [], text: null, stickers: ['k1'] }
+    expect(marqueePick(cur, { refs: [], texts: [], stickers: ['k1', 'k2'] }, true).stickers).toEqual(['k1', 'k2'])
+    expect(marqueePick(cur, { refs: [], texts: [] }, false)).toEqual(EMPTY)
+    expect(marqueePick(cur, { refs: [], texts: [] }, true).stickers).toEqual(['k1'])
+  })
+  it('текст и стикер вместе — группа: текст не одиночный', () => {
+    const r = marqueePick(EMPTY, { refs: [], texts: ['t'], stickers: ['k1'] }, false)
+    expect(r.text).toBeNull()
+    expect(r.texts).toEqual(['t'])
+  })
+})
+
 describe('marqueePick', () => {
   const hit = { refs: ['b'], texts: ['t2'] }
   it('без Shift заменяет выделение', () => {

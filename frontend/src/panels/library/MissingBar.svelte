@@ -1,6 +1,7 @@
 <script lang="ts" module>
   // «Скрыть»: ключ набора пропавших (missingKey). Только в памяти: новое пропавшее фото или новое открытие — полоса снова.
   let hidden = $state('')
+  let hiddenOwn = $state('') // то же для полосы про свои из библиотеки (048)
 </script>
 
 <script lang="ts">
@@ -14,22 +15,28 @@
     albumPhotos,
     driveLabel,
     isHidden,
+    libMissingText,
     missingKey,
     missingSpots,
     missingText,
     missingWhere,
     showMissing,
+    splitMissing,
     spotLabel,
     type DriveHint,
     type Spot,
   } from './missing'
 
-  const count = $derived(store.missing.length)
+  // Свои из библиотеки (048) — отдельной полосой без «Найти…»: их ищет загрузка того же файла, а не папка.
+  const split = $derived(splitMissing(store.missing, store.view.libPhotos))
+  const count = $derived(split.photos.length)
   const total = $derived(albumPhotos(store.sheets))
   const unit = $derived(unitOf(store.view.settings))
-  const spots = $derived(missingSpots(store.sheets, store.missing))
+  const spots = $derived(missingSpots(store.sheets, split.photos))
   const text = $derived(missingText(count, total, missingWhere(spots, unit)))
-  const key = $derived(missingKey(store.missing, store.openSeq))
+  const key = $derived(missingKey(split.photos, store.openSeq))
+  const ownText = $derived(libMissingText(split.own.length, missingWhere(missingSpots(store.sheets, split.own), unit)))
+  const ownKey = $derived(missingKey(split.own, store.openSeq))
 
   // Список «Показать»: переход к листу и выделение фото; окно закрывается.
   let listOpen = $state(false)
@@ -45,7 +52,7 @@
   let hint = $state<DriveHint | null>(null)
   let req = 0
   $effect(() => {
-    const n = store.missing.length
+    const n = count
     const my = ++req
     if (n === 0) {
       hint = null
@@ -129,6 +136,18 @@
       {/each}
     </ul>
   </Popover>
+{/if}
+
+{#if split.own.length > 0 && !isHidden(hiddenOwn, ownKey)}
+  <div class="bar" role="status" transition:slide={{ duration: 150 }}>
+    <span class="msg" title={ownText}><i aria-hidden="true">!</i><span class="txt">{ownText}</span></span>
+    <button
+      class="x ghost"
+      onclick={() => (hiddenOwn = ownKey)}
+      title="Скрыть до следующего открытия"
+      aria-label="Скрыть до следующего открытия"><Icon name="x" size={14} /></button
+    >
+  </div>
 {/if}
 
 <style>

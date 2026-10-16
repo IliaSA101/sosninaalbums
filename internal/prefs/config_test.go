@@ -1,8 +1,11 @@
 package prefs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -68,5 +71,48 @@ func TestRememberDir(t *testing.T) {
 	RememberDir(dir, DirExport, d2) // после битого файла запись снова работает
 	if LoadConfig(dir).LastDirs[DirExport] != d2 {
 		t.Error("запись после битого конфига не прошла")
+	}
+}
+
+// TestRecentDecor — недавние плитки библиотеки: наверх без повторов, предел 12, мусор из файла
+// отбрасывается, виды раздельно, круг записи и чтения config.json; чужие ключи целы.
+func TestRecentDecor(t *testing.T) {
+	var list []string
+	for i := range 14 {
+		list = PushRecentDecor(list, fmt.Sprintf("sa:p%d", i))
+	}
+	list = PushRecentDecor(list, "sa:p5")
+	if len(list) != maxRecentDecor || list[0] != "sa:p5" || list[1] != "sa:p13" || slices.Index(list[1:], "sa:p5") >= 0 {
+		t.Fatalf("список %v", list)
+	}
+	for _, bad := range []string{"", "sa:", "sa:Узор", "my:0123", "my:0123456789ABCDEF", `C:\x.jpg`, "sa:" + strings.Repeat("a", 49)} {
+		if got := PushRecentDecor([]string{"sa:a"}, bad); !slices.Equal(got, []string{"sa:a"}) {
+			t.Errorf("%q: %v", bad, got)
+		}
+	}
+
+	dir := testkit.TempDir(t)
+	if err := os.WriteFile(ConfigPath(dir), []byte(`{"future":1,"recentDecor":{"bg":["sa:old","мусор","sa:old"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := RecentDecor(dir, "bg"); !slices.Equal(got, []string{"sa:old"}) {
+		t.Fatalf("из файла %v", got)
+	}
+	RememberDecor(dir, "bg", "my:0123456789abcdef")
+	RememberDecor(dir, "sticker", "sa:heart")
+	RememberDecor(dir, "bg", "../x")   // мусор не пишется
+	RememberDecor(dir, "Фоны", "sa:x") // вид не по грамматике
+	if got := RecentDecor(dir, "bg"); !slices.Equal(got, []string{"my:0123456789abcdef", "sa:old"}) {
+		t.Errorf("фоны %v", got)
+	}
+	if got := RecentDecor(dir, "sticker"); !slices.Equal(got, []string{"sa:heart"}) {
+		t.Errorf("стикеры %v", got)
+	}
+	if got := RecentDecor(dir, ""); got == nil || len(got) != 0 {
+		t.Errorf("пустой вид %v", got)
+	}
+	data, _ := os.ReadFile(ConfigPath(dir))
+	if !strings.Contains(string(data), `"future": 1`) || strings.Contains(string(data), "Фоны") {
+		t.Errorf("config.json: %s", data)
 	}
 }

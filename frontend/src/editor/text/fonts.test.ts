@@ -58,6 +58,18 @@ describe('fontCss', () => {
     expect(c.weight).toBe(400)
     expect(c.style).toBe('normal')
   })
+  it('запасное семейство Montserrat — знак вне шрифта рисуется им, как в JPEG', () => {
+    expect(fontCss({ font: 'marck' }, fonts).family).toBe('"SA Marck Script", "SA Montserrat", sans-serif')
+  })
+  it('у самого Montserrat запасного нет; без Montserrat в таблице — только sans-serif', () => {
+    expect(fontCss({ font: 'montserrat' }, fonts).family).toBe('"SA Montserrat", sans-serif')
+    expect(fontCss({ font: 'marck' }, [fonts[1]]).family).toBe('"SA Marck Script", sans-serif')
+  })
+  it('запасное семейство попадает в style="" SVG и редактора', () => {
+    const st = { font: 'marck', size: 72, color: '#000000', align: 'center' as const }
+    expect(svgTextCss(st, fonts)).toContain('font-family:"SA Marck Script", "SA Montserrat", sans-serif;')
+    expect(editorCss(st, fonts, 1)).toContain('font-family:"SA Marck Script", "SA Montserrat", sans-serif;')
+  })
   it('неизвестный font — запасной, имя в CSS не попадает', () => {
     expect(fontCss({ font: 'x"; color:red' }, fonts).family).toBe('sans-serif')
   })
@@ -99,17 +111,36 @@ describe('styleSupport: два начертания', () => {
 describe('groupFonts', () => {
   const mk = (id: string, group: string): FontFamily => ({ id, name: id, css: id, group, faces: [] })
   it('группы по порядку GROUPS, внутри — как пришли', () => {
-    const list = [mk('s1', 'sans'), mk('c1', 'script'), mk('k1', 'kids'), mk('s2', 'sans'), mk('r1', 'serif'), mk('c2', 'script')]
+    const list = [
+      mk('s1', 'sans'),
+      mk('c1', 'script'),
+      mk('k1', 'kids'),
+      mk('s2', 'sans'),
+      mk('r1', 'serif'),
+      mk('c2', 'script'),
+      mk('d1', 'display'),
+    ]
     const g = groupFonts(list)
     expect(g.map((x) => x.id)).toEqual(GROUPS.map(([id]) => id))
-    expect(g.map((x) => x.title)).toEqual(['Рукописные', 'Детские и округлые', 'Антиква', 'Гротески'])
+    expect(g.map((x) => x.title)).toEqual(['Рукописные', 'Детские и округлые', 'С засечками', 'Без засечек', 'Декоративные'])
     expect(g[0].fonts.map((f) => f.id)).toEqual(['c1', 'c2'])
     expect(g[3].fonts.map((f) => f.id)).toEqual(['s1', 's2'])
   })
   it('пустые группы пропускаются, незнакомая группа уходит в последнюю', () => {
     const g = groupFonts([mk('a', 'script'), mk('b', ''), mk('c', 'нет')])
-    expect(g.map((x) => x.id)).toEqual(['script', 'sans'])
+    expect(g.map((x) => x.id)).toEqual(['script', 'display'])
     expect(g[1].fonts.map((f) => f.id)).toEqual(['b', 'c'])
+  })
+  it('пять групп в порядке спеки 046, «Декоративные» — последняя', () => {
+    expect(GROUPS.map(([id, title]) => `${id}:${title}`)).toEqual([
+      'script:Рукописные',
+      'kids:Детские и округлые',
+      'serif:С засечками',
+      'sans:Без засечек',
+      'display:Декоративные',
+    ])
+    const g = groupFonts([mk('p', 'display'), mk('s', 'sans')])
+    expect(g.map((x) => x.id)).toEqual(['sans', 'display'])
   })
 })
 

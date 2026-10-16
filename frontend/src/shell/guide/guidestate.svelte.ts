@@ -13,7 +13,7 @@ import { canvas } from '../../editor/canvas/canvas.svelte'
 import { photoui } from '../../editor/photo/photoui.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { edit } from '../../editor/text/edit.svelte'
-import { gallery } from '../../panels/layouts/gallery.svelte'
+import { gallery } from '../../panels/gallery/gallery.svelte'
 import { isVignette } from '../../panels/vignette/vignette'
 import { menuUi } from '../menu/menuui.svelte'
 import { articleById, placesOf, type Article } from './articles'
@@ -103,7 +103,7 @@ class Guide {
       onCover: store.onCover,
       selPhoto: !!sel && !!sp?.photos.includes(sel),
       selText: edit.sel?.kind === 'text' && edit.sel.spread === sp?.id,
-      selAny: placesel.refs.length > 0 || placesel.texts.length > 0 || !!edit.sel,
+      selAny: placesel.refs.length > 0 || placesel.texts.length > 0 || placesel.stickers.length > 0 || !!edit.sel,
       libPhotos: store.visible.length,
       libSel: store.selectedIds.length > 0,
       cardBody: !!sp,

@@ -168,7 +168,7 @@ func TestClampBoxesSameRule(t *testing.T) {
 
 func TestParseTemplatesNewerVersionBody(t *testing.T) {
 	// Тело новой версии устроено иначе: это «новее программы», а не битый файл.
-	for _, body := range []string{`{"version":5,"templates":{"a":1}}`, `{"version":9,"templates":"x"}`} {
+	for _, body := range []string{`{"version":6,"templates":{"a":1}}`, `{"version":9,"templates":"x"}`} {
 		list, ver, err := model.ParseTemplates([]byte(body))
 		if err != nil || ver <= model.TemplatesVersion || len(list) != 0 {
 			t.Fatalf("%s: %v %d %v", body, err, ver, list)
@@ -265,7 +265,7 @@ func TestTemplatesVersion3(t *testing.T) {
 			t.Fatalf("%d мест: круг %v %d %+v", c.n, err, ver, back)
 		}
 	}
-	if model.TemplatesVersion != 4 { // 4 — шаблон виньетки (038, TestTemplatesVignetteRoundTrip)
+	if model.TemplatesVersion != 5 { // 4 — шаблон виньетки (038, TestTemplatesVignetteRoundTrip), 5 — форма места (044)
 		t.Fatalf("TemplatesVersion = %d", model.TemplatesVersion)
 	}
 	// Прежний код: версия файла больше его TemplatesVersion = 2 — только чтение.
@@ -563,18 +563,6 @@ func TestMarshalTemplatesError(t *testing.T) {
 		if data, err := model.MarshalTemplates(list); err != nil || len(data) == 0 {
 			t.Errorf("%s: %q, %v", name, data, err)
 		}
-	}
-}
-
-// vigHead: пустой ID и ссылка на несуществующую надпись — nil, своя надпись — именно она, не первая.
-func TestVigHeadLookup(t *testing.T) {
-	a, b := &model.TextBlock{ID: "aaaaaaaaaaaa"}, &model.TextBlock{ID: "bbbbbbbbbbbb"}
-	s := &model.Spread{Texts: []*model.TextBlock{a, b}}
-	if vigHead(s, "") != nil || vigHead(s, "cccccccccccc") != nil || vigHead(&model.Spread{}, a.ID) != nil {
-		t.Fatal("пустой ID или чужая ссылка дали надпись")
-	}
-	if vigHead(s, a.ID) != a || vigHead(s, b.ID) != b {
-		t.Fatal("надпись найдена не по ID")
 	}
 }
 

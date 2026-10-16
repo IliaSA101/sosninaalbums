@@ -53,6 +53,57 @@ func TestBlankSpreads(t *testing.T) {
 	}
 }
 
+// Узор (048) — печать, если виден и известен; прозрачный на 100 % и неизвестный генератор
+// (файл из новой версии, рисуется пусто) лист не заполняют. Обложка — так же.
+func TestBlankPatterns(t *testing.T) {
+	pat := func(fade float64, known bool) model.PatternView {
+		return model.PatternView{Scope: "left", Pat: model.Pattern{Kind: "dots", Fade: fade}, Known: known}
+	}
+	v := model.View{Spreads: []model.SpreadView{
+		{Patterns: []model.PatternView{pat(0, true)}},
+		{Patterns: []model.PatternView{pat(1, true)}},                  // 2 не виден
+		{Patterns: []model.PatternView{pat(0, false)}},                 // 3 неизвестный
+		{Patterns: []model.PatternView{pat(1, true), pat(0.99, true)}}, // правая видна
+		{Patterns: []model.PatternView{}},                              // 5 пустой список
+	}}
+	pl := NewPlan(nil, len(v.Spreads), false)
+	if got := BlankSpreads(v, &pl); !slices.Equal(got, []int{2, 3, 5}) {
+		t.Fatalf("пустые: %v", got)
+	}
+	for i, sv := range v.Spreads {
+		c := model.View{Cover: &model.CoverView{Sheet: sv}}
+		if got, want := BlankCover(c), slices.Contains([]int{2, 3, 5}, i+1); got != want {
+			t.Errorf("обложка с узорами листа %d: пустая %v, ждали %v", i+1, got, want)
+		}
+	}
+}
+
+// Стикер (048) — печать, если виден и рисуется: свой или известного генератора; прозрачный на
+// 100 % и неизвестный генератор лист не заполняют. Обложка — так же.
+func TestExportStickerNotBlank(t *testing.T) {
+	st := func(fade float64, known bool, photo string) model.StickerView {
+		return model.StickerView{ID: "k", Photo: photo, Fade: fade, Known: known, W: 10, H: 10}
+	}
+	v := model.View{Spreads: []model.SpreadView{
+		{Stickers: []model.StickerView{st(0, true, "")}},
+		{Stickers: []model.StickerView{st(1, true, "")}},    // 2 не виден
+		{Stickers: []model.StickerView{st(0, false, "")}},   // 3 неизвестный
+		{Stickers: []model.StickerView{st(0.5, true, "f")}}, // свой
+		{Stickers: []model.StickerView{st(1, true, "f"), st(0, false, ""), st(0.99, true, "")}},
+		{Stickers: []model.StickerView{}}, // 6 пустой список
+	}}
+	pl := NewPlan(nil, len(v.Spreads), false)
+	if got := BlankSpreads(v, &pl); !slices.Equal(got, []int{2, 3, 6}) {
+		t.Fatalf("пустые: %v", got)
+	}
+	for i, sv := range v.Spreads {
+		c := model.View{Cover: &model.CoverView{Sheet: sv}}
+		if got, want := BlankCover(c), slices.Contains([]int{2, 3, 6}, i+1); got != want {
+			t.Errorf("обложка со стикерами листа %d: пустая %v, ждали %v", i+1, got, want)
+		}
+	}
+}
+
 func TestBlankWarning(t *testing.T) {
 	for _, tc := range []struct {
 		nums  []int

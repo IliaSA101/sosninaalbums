@@ -65,7 +65,7 @@ magic-string 0.30.21 (MIT)
 svelte 5.57.2 (MIT)
 zimmerframe 1.1.5 (MIT)
 
-3. Шрифты (18 гарнитур, 43 файлов; внутри программы: internal/text/fonts)
+3. Шрифты (33 гарнитур, 62 файлов; внутри программы: internal/text/fonts)
 ----------------------------------------
 Все — SIL Open Font License, Version 1.1 (текст — в разделе 5). Шрифты вшиты в программу
 и без изменений лицензии распространяются вместе с ней.
@@ -74,8 +74,12 @@ zimmerframe 1.1.5 (MIT)
     Reserved Font Name: нет; изменения: урезан набор знаков
   Caveat — автор: The Caveat Project Authors
     Reserved Font Name: нет; изменения: урезан набор знаков
-  Great Vibes — автор: The Great Vibes Pro Project Authors
+  Comforter — автор: The Comforter Project Authors
     Reserved Font Name: нет; изменения: урезан набор знаков
+  Great Vibes — автор: The Great Vibes Pro Project Authors
+    Reserved Font Name: нет; изменения: урезан набор знаков, кернинг кириллицы подключён к latn
+  Lobster — автор: The Lobster Project Authors
+    Reserved Font Name: ДА: "Lobster"; изменения: без изменений
   Marck Script — автор: Denis Masharov и Marck Fogel
     Reserved Font Name: ДА: "Marck Script"; изменения: без изменений
   Pacifico — автор: The Pacifico Project Authors
@@ -84,31 +88,57 @@ zimmerframe 1.1.5 (MIT)
     Reserved Font Name: нет; изменения: урезан набор знаков
   Comfortaa — автор: The Comfortaa Project Authors
     Reserved Font Name: ДА: "Comfortaa"; изменения: без изменений
+  Marmelad — автор: The Marmelad Project Authors
+    Reserved Font Name: нет; изменения: урезан набор знаков
   Neucha — автор: Jovanny Lemonad
     Reserved Font Name: нет; изменения: урезан набор знаков
   Nunito — автор: The Nunito Project Authors
+    Reserved Font Name: нет; изменения: урезан набор знаков
+  Pangolin — автор: The Pangolin Project Authors
+    Reserved Font Name: нет; изменения: урезан набор знаков
+  Rubik — автор: The Rubik Project Authors
+    Reserved Font Name: нет; изменения: экземпляры вариативного шрифта (wght 400/700), урезан набор знаков, кернинг кириллицы подключён к latn
+  Alice — автор: The Alice Project Authors
     Reserved Font Name: нет; изменения: урезан набор знаков
   Cormorant Garamond — автор: The Cormorant Project Authors
     Reserved Font Name: нет; изменения: урезан набор знаков
   Forum — автор: Denis Masharov
     Reserved Font Name: ДА: "Forum"; изменения: без изменений
+  Kurale — автор: The Kurale Project Authors
+    Reserved Font Name: нет; изменения: урезан набор знаков
   Lora — автор: The Lora Project Authors
     Reserved Font Name: ДА: "Lora"; изменения: без изменений
+  Old Standard TT — автор: The Old Standard Project Authors
+    Reserved Font Name: нет; изменения: урезан набор знаков
   Playfair Display — автор: The Playfair Display Project Authors
     Reserved Font Name: ДА: "Playfair Display"; изменения: без изменений
+  Prata — автор: The Prata Project Authors
+    Reserved Font Name: нет; изменения: урезан набор знаков
   PT Serif — автор: ParaType Ltd.
     Reserved Font Name: ДА: "PT Sans", "PT Serif", "ParaType"; изменения: без изменений
   Yeseva One — автор: The Yeseva One Project Authors
     Reserved Font Name: ДА: "Yeseva"; изменения: без изменений
+  Golos Text — автор: The Golos Text Project Authors
+    Reserved Font Name: нет; изменения: экземпляры вариативного шрифта (wght 400/700), урезан набор знаков
   Montserrat — автор: The Montserrat Project Authors
     Reserved Font Name: нет; изменения: урезан набор знаков
   Oswald — автор: The Oswald Project Authors
     Reserved Font Name: нет; изменения: урезан набор знаков
   Raleway — автор: The Raleway Project Authors
     Reserved Font Name: ДА: "Raleway"; изменения: без изменений
+  Roboto Condensed — автор: The Roboto Project Authors
+    Reserved Font Name: нет; изменения: экземпляры вариативного шрифта (wght 400/700), урезан набор знаков, кернинг кириллицы подключён к latn
+  Tenor Sans — автор: Denis Masharov
+    Reserved Font Name: ДА: "Tenor", "Tenor Sans"; изменения: без изменений
+  Poiret One — автор: The Poiret One Project Authors
+    Reserved Font Name: нет; изменения: урезан набор знаков
+  Ruslan Display — автор: Oleg Snarsky, Denis Masharov, Vladimir Rabdu
+    Reserved Font Name: ДА: "Ruslan", "Ruslan Display"; изменения: без изменений
+  Underdog — автор: Sergey Steblina, Jovanny Lemonad
+    Reserved Font Name: ДА: "Underdog"; изменения: без изменений
 
 Гарнитуры без Reserved Font Name урезаны по набору знаков (subset). Гарнитуры с зарезервированным
-именем (Marck Script, Comfortaa, Forum, Lora, Playfair Display, PT Serif, Yeseva One, Raleway) не изменялись: изменённый файл под тем же именем
+именем (Lobster, Marck Script, Comfortaa, Forum, Lora, Playfair Display, PT Serif, Yeseva One, Raleway, Tenor Sans, Ruslan Display, Underdog) не изменялись: изменённый файл под тем же именем
 распространять нельзя.
 
 Заголовки авторских прав шрифтов:
@@ -119,8 +149,14 @@ zimmerframe 1.1.5 (MIT)
   [Caveat]
     Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)
 
+  [Comforter]
+    Copyright 2015 The Comforter Project Authors (https://github.com/googlefonts/comforter)
+
   [Great Vibes]
     Copyright 2015 The Great Vibes Pro Project Authors (https://github.com/googlefonts/great-vibes)
+
+  [Lobster]
+    Copyright 2010 The Lobster Project Authors (https://github.com/impallari/The-Lobster-Font), with Reserved Font Name "Lobster".
 
   [Marck Script]
     Copyright (c) 2011, Denis Masharov <denis.masharov@gmail.com> & Marck Fogel,
@@ -135,11 +171,23 @@ zimmerframe 1.1.5 (MIT)
   [Comfortaa]
     Copyright 2011 The Comfortaa Project Authors (https://github.com/alexeiva/comfortaa), with Reserved Font Name "Comfortaa".
 
+  [Marmelad]
+    Copyright 2016 The Marmelad Project Authors (https://github.com/cyrealtype/Marmelad-Cyrillic).
+
   [Neucha]
     Copyright (c) 2008-2010 by Jovanny Lemonad (http://www.jovanny.ru)
 
   [Nunito]
     Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
+
+  [Pangolin]
+    Copyright 2016 The Pangolin Project Authors (https://github.com/googlefonts/pangolin)
+
+  [Rubik]
+    Copyright 2015 The Rubik Project Authors (https://github.com/googlefonts/rubik)
+
+  [Alice]
+    Copyright 2011 The Alice Project Authors (https://github.com/cyrealtype/Alice)
 
   [Cormorant Garamond]
     Copyright 2015 the Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)
@@ -148,11 +196,20 @@ zimmerframe 1.1.5 (MIT)
     Copyright (c) 2011, Denis Masharov <denis.masharov@gmail.com>,
     with Reserved Font Name "Forum".
 
+  [Kurale]
+    Copyright 2013 The Kurale Project Authors (edu@tipo.net.ar)
+
   [Lora]
     Copyright 2011 The Lora Project Authors (https://github.com/cyrealtype/Lora-Cyrillic), with Reserved Font Name "Lora".
 
+  [Old Standard TT]
+    Copyright 2011 The Old Standard Project Authors (amkryukov@gmail.com)
+
   [Playfair Display]
     Copyright 2017 The Playfair Display Project Authors (https://github.com/clauseggers/Playfair-Display), with Reserved Font Name "Playfair Display"
+
+  [Prata]
+    Copyright 2011 The Prata Project Authors (https://github.com/cyrealtype/Prata)
 
   [PT Serif]
     Copyright (c) 2010, ParaType Ltd. (http://www.paratype.com/public),
@@ -160,6 +217,9 @@ zimmerframe 1.1.5 (MIT)
 
   [Yeseva One]
     Copyright 2012 The Yeseva One Project Authors (lemonad@jovanny.ru), with Reserved Font Name "Yeseva".
+
+  [Golos Text]
+    Copyright 2019 The Golos Text Project Authors (https://github.com/googlefonts/golos-text)
 
   [Montserrat]
     Copyright 2024 The Montserrat.Git Project Authors (https://github.com/JulietaUla/Montserrat.git)
@@ -169,6 +229,22 @@ zimmerframe 1.1.5 (MIT)
 
   [Raleway]
     Copyright 2010 The Raleway Project Authors (impallari@gmail.com), with Reserved Font Name "Raleway".
+
+  [Roboto Condensed]
+    Copyright 2011 The Roboto Project Authors (https://github.com/googlefonts/roboto-classic)
+
+  [Tenor Sans]
+    Copyright (c) 2011, Denis Masharov <denis.masharov@gmail.com>,
+    with Reserved Font Name "Tenor", "Tenor Sans".
+
+  [Poiret One]
+    Copyright 2011 The Poiret One Project Authors (https://github.com/alexeiva/poiretone)
+
+  [Ruslan Display]
+    Copyright 2011 Oleg Snarsky, Denis Masharov, Vladimir Rabdu, with Reserved Font Name 'Ruslan', 'Ruslan Display'.
+
+  [Underdog]
+    Copyright (c) 2012, Sergey Steblina (sergey@steblina.com), Jovanny Lemonad (lemonad@jovanny.ru), with Reserved Font Name 'Underdog'
 
 4. Прочее
 ---------
@@ -1632,22 +1708,37 @@ SOFTWARE.
 Применяется к:
   - Bad Script (шрифт)
   - Caveat (шрифт)
+  - Comforter (шрифт)
   - Great Vibes (шрифт)
+  - Lobster (шрифт)
   - Marck Script (шрифт)
   - Pacifico (шрифт)
   - Amatic SC (шрифт)
   - Comfortaa (шрифт)
+  - Marmelad (шрифт)
   - Neucha (шрифт)
   - Nunito (шрифт)
+  - Pangolin (шрифт)
+  - Rubik (шрифт)
+  - Alice (шрифт)
   - Cormorant Garamond (шрифт)
   - Forum (шрифт)
+  - Kurale (шрифт)
   - Lora (шрифт)
+  - Old Standard TT (шрифт)
   - Playfair Display (шрифт)
+  - Prata (шрифт)
   - PT Serif (шрифт)
   - Yeseva One (шрифт)
+  - Golos Text (шрифт)
   - Montserrat (шрифт)
   - Oswald (шрифт)
   - Raleway (шрифт)
+  - Roboto Condensed (шрифт)
+  - Tenor Sans (шрифт)
+  - Poiret One (шрифт)
+  - Ruslan Display (шрифт)
+  - Underdog (шрифт)
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

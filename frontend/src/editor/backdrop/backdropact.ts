@@ -21,6 +21,11 @@ export const setBackdrop = (spread: string, scope: BackdropScope, photo: string)
 export const pickBackdropFile = (spread: string, scope: BackdropScope) =>
   putThenEdit(spread, scope, () => Api.PickBackdropFile(spread, scope))
 
+// Щелчок по плитке в окне «Фоны» (048): узор программы — без режима фона (фото области снято), своё — как «Свой файл…»,
+// сразу в режим фона. Тот же фон повторно Go считает холостым (rev не меняется — режим не открывается).
+export const applyBackground = (spread: string, scope: BackdropScope, id: string) =>
+  putThenEdit(spread, scope, () => Api.ApplyBackground(spread, scope, id))
+
 export const clearBackdrop = (spread: string, scope: BackdropScope) => store.run(Api.ClearBackdrop(spread, scope))
 
 // «Править» в карточке: режим включает только эта кнопка и постановка фото.

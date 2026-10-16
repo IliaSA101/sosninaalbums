@@ -8,11 +8,14 @@ const base: MenuCtx = {
   grid: false,
   places: 1,
   texts: 0,
+  stickers: 0,
   photos: 1,
   missing: 0,
   differ: false,
   allContain: false,
   allCover: true,
+  allOval: false,
+  allRect: true,
   framed: false,
 }
 const ids = (c: Partial<MenuCtx>) => photoMenu({ ...base, ...c }).map((i) => i.id)
@@ -26,9 +29,11 @@ describe('photoMenu', () => {
       'backdrop',
       'turnCw',
       'turnCcw',
+      'straighten',
       'flipH',
       'flipV',
       'contain',
+      'round',
       'caption',
       'delete',
     ])
@@ -81,12 +86,12 @@ describe('photoMenu', () => {
   })
   it('несколько: имена и «Удалить (N)», без просмотра, подписи и Проводника', () => {
     const m = photoMenu({ ...base, places: 3, photos: 3 })
-    expect(m.map((i) => i.id)).toEqual(['copy', 'turnCw', 'turnCcw', 'flipH', 'flipV', 'contain', 'delete'])
+    expect(m.map((i) => i.id)).toEqual(['copy', 'turnCw', 'turnCcw', 'flipH', 'flipV', 'contain', 'round', 'delete'])
     expect(m[0].label).toBe('Копировать имена файлов')
-    expect(m[6].label).toBe('Удалить (3)')
+    expect(m[7].label).toBe('Удалить (3)')
   })
   it('пустое место: без файловых пунктов и «Целиком»', () => {
-    expect(ids({ grid: true, photos: 0, allCover: true })).toEqual(['layer', 'delete'])
+    expect(ids({ grid: true, photos: 0, allCover: true })).toEqual(['round', 'layer', 'delete'])
   })
   it('ничего не выделено — меню нет', () => {
     expect(ids({ places: 0, photos: 0 })).toEqual([])
@@ -108,6 +113,50 @@ describe('Удалить у группы с текстами', () => {
   it('menuContext принимает число текстов', () => {
     expect(menuContext(undefined, [], [], 2).texts).toBe(2)
     expect(menuContext(undefined, [], []).texts).toBe(0)
+  })
+})
+
+describe('меню стикера (048)', () => {
+  const one = { places: 0, photos: 0, stickers: 1 }
+  const items = (c: Partial<MenuCtx>, can?: (f: FeatureId) => boolean) => photoMenu({ ...base, ...c }, can)
+  it('«Авто», один стикер: заменить, зеркало, слой, удалить', () => {
+    expect(items(one).map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'layer', 'delete'])
+    expect(items(one)[0]).toMatchObject({ label: 'Заменить…' })
+    expect(items(one).find((i) => i.id === 'layer')?.sub).toBe(true)
+  })
+  it('«Авто», стикер + текст: «Слой ▸» и «Удалить (2)»', () => {
+    expect(items({ ...one, texts: 1 }).map((i) => i.id)).toEqual(['layer', 'delete'])
+  })
+  it('«Ручная»: плюс «Слой ▸»', () => {
+    expect(items({ ...one, grid: true }).map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'layer', 'delete'])
+    expect(items({ ...one, grid: true }).find((i) => i.id === 'layer')?.sub).toBe(true)
+  })
+  it('линии: первый пункт без неё, зеркало и удаление отделены', () => {
+    const m = items({ ...one, grid: true })
+    expect(m[0].sep).toBeFalsy()
+    expect(m.filter((i) => i.sep).map((i) => i.id)).toEqual(['flipH', 'layer', 'delete'])
+  })
+  it('несколько стикеров или стикер с текстом: без «Заменить…» и зеркала, «Удалить (N)»', () => {
+    expect(items({ ...one, stickers: 3, grid: true }).map((i) => i.id)).toEqual(['layer', 'delete'])
+    expect(items({ ...one, stickers: 3 }).find((i) => i.id === 'delete')?.label).toBe('Удалить (3)')
+    expect(items({ ...one, stickers: 1, texts: 1 }).find((i) => i.id === 'delete')?.label).toBe('Удалить (2)')
+    expect(items({ ...one, stickers: 2 })[0].sep).toBeFalsy()
+  })
+  it('уровень: без decor меню нет, без слоёв нет «Слоя»; photoMenu стикеру не нужна', () => {
+    expect(items(one, (f) => f !== 'decor')).toEqual([])
+    expect(items({ ...one, grid: true }, (f) => f !== 'layers').map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'delete'])
+    expect(items(one, (f) => f !== 'layers').map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'delete'])
+    expect(items(one, (f) => f !== 'photoMenu').map((i) => i.id)).toContain('replace')
+    expect(items(one, (f) => can(f, 'simple'))).toEqual([])
+  })
+  it('стикер среди мест: обычное меню места, «Удалить (N)» считает и стикер, выпрямить нельзя', () => {
+    expect(items({ stickers: 1 }).find((i) => i.id === 'delete')?.label).toBe('Удалить (2)')
+    expect(ids({ stickers: 1 })).not.toContain('straighten')
+    expect(ids({ stickers: 1 })).not.toContain('replace')
+  })
+  it('menuContext принимает число стикеров', () => {
+    expect(menuContext(undefined, [], [], 0, 2).stickers).toBe(2)
+    expect(menuContext(undefined, [], []).stickers).toBe(0)
   })
 })
 
@@ -179,9 +228,11 @@ describe('photoMenu по уровням (спека 010 U1)', () => {
       'backdrop',
       'turnCw',
       'turnCcw',
+      'straighten',
       'flipH',
       'flipV',
       'contain',
+      'round',
       'caption',
       'delete',
     ])
@@ -194,12 +245,67 @@ describe('photoMenu по уровням (спека 010 U1)', () => {
   })
   it('линия первой не стоит и переходит к следующему пункту, когда скрыт первый пункт группы', () => {
     const items = photoMenu({ ...base, photos: 0, grid: true }, (f) => f !== 'layers')
-    expect(items.map((i) => i.id)).toEqual(['delete'])
+    expect(items.map((i) => i.id)).toEqual(['round', 'delete'])
     expect(items[0].sep).toBeFalsy()
     const all = photoMenu(base, at('standard'))
     // Зеркала и кадр скрыты (в «Простом» нет меню совсем) — проверяем «Стандартный» без зеркала.
-    const noFlip = photoMenu(base, (f) => f !== 'flip' && f !== 'turn')
+    const noFlip = photoMenu(base, (f) => f !== 'flip' && f !== 'turn' && f !== 'tilt')
     expect(noFlip.find((i) => i.id === 'contain')?.sep).toBe(true)
     expect(all[0].sep).toBeFalsy()
+  })
+})
+
+describe('«Выпрямить по линии» в меню (спека 045)', () => {
+  it('есть у одного фото сразу после «Повернуть ↺ 90°»', () => {
+    const m = photoMenu(base)
+    const at = m.findIndex((i) => i.id === 'turnCcw')
+    expect(m[at + 1]).toMatchObject({ id: 'straighten', label: 'Выпрямить по линии' })
+  })
+  it('нет у нескольких фото, пустого места и группы с текстом', () => {
+    expect(ids({ places: 3, photos: 3 })).not.toContain('straighten')
+    expect(ids({ grid: true, photos: 0 })).not.toContain('straighten')
+    expect(ids({ texts: 1 })).not.toContain('straighten')
+    expect(ids({ places: 0, photos: 0 })).not.toContain('straighten')
+  })
+  it('только при can(tilt): «Простой» меню не имеет, без tilt пункта нет', () => {
+    expect(photoMenu(base, (f) => f !== 'tilt').map((i) => i.id)).not.toContain('straighten')
+    expect(photoMenu(base, (f) => can(f, 'standard')).map((i) => i.id)).toContain('straighten')
+    expect(photoMenu(base, (f) => can(f, 'simple'))).toEqual([])
+  })
+})
+
+describe('«Круглое» / «Прямоугольное» в меню (спека 044)', () => {
+  it('как «Целиком» / «С обрезкой»: показан пункт, которого нет у всех выделенных', () => {
+    const m = ids({})
+    expect(m).toContain('round')
+    expect(m).not.toContain('rect')
+    const oval = ids({ allOval: true, allRect: false })
+    expect(oval).toContain('rect')
+    expect(oval).not.toContain('round')
+    const mix = ids({ allOval: false, allRect: false })
+    expect(mix).toEqual(expect.arrayContaining(['round', 'rect']))
+  })
+  it('есть и у пустого места (не только у фото)', () => {
+    expect(ids({ grid: true, photos: 0 })).toContain('round')
+    expect(ids({ grid: true, photos: 0, allOval: true, allRect: false })).toContain('rect')
+  })
+  it('стоят после «С обрезкой», подписи по-русски', () => {
+    const m = photoMenu({ ...base, allOval: false, allRect: false, allContain: false, allCover: false })
+    const at = m.findIndex((i) => i.id === 'cover')
+    expect(m.slice(at + 1, at + 3).map((i) => [i.id, i.label])).toEqual([
+      ['round', 'Круглое'],
+      ['rect', 'Прямоугольное'],
+    ])
+  })
+  it('только при can(frame)', () => {
+    const m = photoMenu(base, (f) => f !== 'frame').map((i) => i.id)
+    expect(m).not.toContain('round')
+    expect(m).not.toContain('rect')
+  })
+  it('menuContext: allOval / allRect по форме выделенных', () => {
+    const b = (shape: string): SelBox => ({ x: 0, y: 0, w: 50, h: 50, ref: 'p', id: 'p', photo: '', fit: '', rot: 0, shape })
+    expect(menuContext(undefined, [b('oval'), b('oval')], [])).toMatchObject({ allOval: true, allRect: false })
+    expect(menuContext(undefined, [b(''), b('oval')], [])).toMatchObject({ allOval: false, allRect: false })
+    expect(menuContext(undefined, [b('')], [])).toMatchObject({ allOval: false, allRect: true })
   })
 })

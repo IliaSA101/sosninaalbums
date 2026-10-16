@@ -1,9 +1,10 @@
-// Справочник функций (спека 033): модель статьи и общий список. Тексты — articles-a.ts и articles-b.ts;
+// Справочник функций (спека 033): модель статьи и общий список. Тексты — articles-a.ts, articles-b.ts и articles-c.ts;
 // уровни берутся из FEATURES (levels.ts), здесь они не дублируются. Правка проекта из справочника запрещена.
 import type { Base, FeatureId } from '../../base/prefs/levels'
 import type { SectionName } from '../../base/prefs/view.svelte'
 import { PART_A } from './articles-a'
 import { PART_B } from './articles-b'
+import { PART_C } from './articles-c'
 
 export type GroupId = 'start' | 'photos' | 'spreads' | 'onspread' | 'text' | 'cover' | 'view' | 'manual'
 
@@ -70,7 +71,7 @@ export interface Article {
   miss?: { spot?: `ui:${string}`; hint: string }
 }
 
-export const ARTICLES: Article[] = [...PART_A, ...PART_B]
+export const ARTICLES: Article[] = [...PART_A, ...PART_B, ...PART_C]
 
 // Места статьи в порядке показа: spots, иначе единственное spot с кнопкой «Показать»; без обоих (жест, клавиша) — пусто.
 export const placesOf = (a: Article): Place[] => a.spots ?? (a.spot ? [{ label: 'Показать', spot: a.spot }] : [])

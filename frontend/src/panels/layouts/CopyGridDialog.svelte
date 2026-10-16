@@ -6,14 +6,26 @@
   import { plural } from '../../base/core/plural'
   import { isSheet, unitOf } from '../../base/geom/sheet'
   import { errText } from '../../base/core/errtext'
-  import { copyTargets, loadCopyOpts, planQuestion, saveCopyOpts, touched, type CopySide, type CopyWhere } from './gridgallery'
-  import { planCopy, runCopy, runDuplicate } from './gridactions'
+  import {
+    copyTargets,
+    loadCopyOpts,
+    loadDecorOpts,
+    planQuestion,
+    saveCopyOpts,
+    saveDecorOpts,
+    touched,
+    type CopySide,
+    type CopyWhere,
+  } from '../gallery/gridgallery'
+  import { planFor, runDuplicate, runFor, type CopyCall } from './gridactions'
   import type { LayoutScope } from '../../base/core/types'
   import Modal from '../../base/ui/Modal.svelte'
 
   // «Копировать сетку…» (спека 007, design §6): откуда, куда, флажки; перед копированием — PlanCopyGrid
   // и вопрос, если копирование что-то разрушит. Окно открыто, пока gridAct.copyGrid не null.
+  // «Копировать оформление…» (049 Ф2) — то же окно (mode 'decor'): без новых разворотов, флажок «С надписями».
   const cg = $derived(gridAct.copyGrid)
+  const decor = $derived(cg?.mode === 'decor')
   const spreads = $derived(store.view.spreads)
   const sheet = $derived(isSheet(store.view.settings))
   const unit = $derived(unitOf(store.view.settings))
@@ -24,6 +36,7 @@
   let text = $state('')
   let count = $state(1)
   let design = $state(true)
+  let texts = $state(false) // «С надписями» (только оформление)
   let mirror = $state(false)
   let ask = $state<string | null>(null) // вопрос перед копированием
   let busy = $state(false)
@@ -40,7 +53,8 @@
       count = 1
       ask = null
       busy = false
-      ;({ design, mirror } = loadCopyOpts())
+      if (c.mode === 'decor') ({ texts, mirror } = loadDecorOpts())
+      else ({ design, mirror } = loadCopyOpts())
     })
   })
 
@@ -63,15 +77,18 @@
     gridAct.copyGrid = null
   }
   function remember() {
-    saveCopyOpts({ design, mirror })
+    if (decor) saveDecorOpts({ texts, mirror })
+    else saveCopyOpts({ design, mirror })
   }
+
+  // Зеркало осмысленно только со страницы; «С текстом и фоном» и «С надписями» — флажки разных режимов
+  const call = (src: string): CopyCall => ({ decor, src, from, to: targets, design, texts, mirror: page && mirror })
 
   async function exec() {
     const c = cg
     if (!c) return
     busy = true
-    const ok =
-      where === 'new' ? await runDuplicate(c.spread, count, design) : await runCopy(c.spread, from, targets, design, page && mirror, n)
+    const ok = where === 'new' ? await runDuplicate(c.spread, count, design) : await runFor(call(c.spread), n)
     busy = false
     if (ok) close()
   }
@@ -82,7 +99,7 @@
     if (where === 'new') return exec()
     busy = true
     try {
-      const q = planQuestion(await planCopy(c.spread, from, targets, design, page && mirror))
+      const q = planQuestion(await planFor(call(c.spread)))
       busy = false
       if (q) ask = q
       else await exec()
@@ -115,7 +132,8 @@
 </script>
 
 {#if cg}
-  <Modal title={ask ? 'Копировать раскладку?' : 'Копировать раскладку'} onclose={close} wide>
+  {@const what = decor ? 'Копировать оформление' : 'Копировать раскладку'}
+  <Modal title={ask ? `${what}?` : what} onclose={close} wide>
     {#if ask}
       <p class="ask">{ask}</p>
       <div class="actions">
@@ -156,7 +174,7 @@
         <label
           ><input type="radio" name="cg-where" value="all" bind:group={where} />на все {sheet ? 'листы' : 'развороты'} ({spreads.length})</label
         >
-        {#if !page}
+        {#if !page && !decor}
           <label class="inline"
             ><input type="radio" name="cg-where" value="new" bind:group={where} />создать новые {sheet ? 'листы' : 'развороты'} после этого:
             <input
@@ -183,10 +201,17 @@
       {/if}
 
       <div class="group col">
-        <label
-          ><input type="checkbox" bind:checked={design} onchange={remember} />С текстом и фоном
-          <span class="hint">(подпись, цвет страницы)</span></label
-        >
+        {#if decor}
+          <label
+            ><input type="checkbox" bind:checked={texts} onchange={remember} />С надписями
+            <span class="hint">(тексты на листе)</span></label
+          >
+        {:else}
+          <label
+            ><input type="checkbox" bind:checked={design} onchange={remember} />С текстом и фоном
+            <span class="hint">(подпись, цвет страницы)</span></label
+          >
+        {/if}
         {#if page}
           <label
             ><input type="checkbox" bind:checked={mirror} onchange={remember} />Зеркально на другой стороне

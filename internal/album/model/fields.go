@@ -2,7 +2,6 @@ package model
 
 import (
 	"math"
-	"path/filepath"
 	"slices"
 	"strings"
 	"unicode"
@@ -24,11 +23,16 @@ type Vars struct {
 }
 
 // Person — имя человека на фото; nil в PhotoRef — имя из имени файла (лениво, в файл не пишется).
+// Subject — предмет учителя (049, v8, omitempty): файл без предмета пишется как прежде.
 type Person struct {
-	Last   string `json:"last,omitempty"`
-	First  string `json:"first,omitempty"`
-	Middle string `json:"middle,omitempty"`
+	Last    string `json:"last,omitempty"`
+	First   string `json:"first,omitempty"`
+	Middle  string `json:"middle,omitempty"`
+	Subject string `json:"subj,omitempty"`
 }
+
+// Named — есть хоть одна часть имени (предмет без имени — не имя).
+func (p Person) Named() bool { return p.Last != "" || p.First != "" || p.Middle != "" }
 
 // SheetCaps — общий стиль подписей разворота: перекрывает стиль своих подписей фото листа.
 type SheetCaps struct {
@@ -65,12 +69,14 @@ func ClampVars(v Vars) *Vars {
 	return &c
 }
 
-// ClampPerson — имя из файла или интерфейса: три одностроечных поля ≤ MaxPersonRunes; пусто — nil.
+// ClampPerson — имя из файла или интерфейса: одностроечные поля ≤ MaxPersonRunes (и
+// предмет); пусто — nil.
 func ClampPerson(p Person) *Person {
 	c := Person{
-		Last:   cleanLine(p.Last, MaxPersonRunes),
-		First:  cleanLine(p.First, MaxPersonRunes),
-		Middle: cleanLine(p.Middle, MaxPersonRunes),
+		Last:    cleanLine(p.Last, MaxPersonRunes),
+		First:   cleanLine(p.First, MaxPersonRunes),
+		Middle:  cleanLine(p.Middle, MaxPersonRunes),
+		Subject: cleanLine(p.Subject, MaxPersonRunes),
 	}
 	if c == (Person{}) {
 		return nil
@@ -108,7 +114,7 @@ func runes(ss ...string) int {
 }
 
 func (v Vars) runes() int   { return runes(v.Title, v.Subtitle, v.Year, v.Lead) }
-func (p Person) runes() int { return runes(p.Last, p.First, p.Middle) }
+func (p Person) runes() int { return runes(p.Last, p.First, p.Middle, p.Subject) }
 
 func clampVarsIn(v *Vars, b *textBudget) *Vars {
 	if v == nil {
@@ -163,66 +169,6 @@ func ClampSheetCaps(c SheetCaps) SheetCaps {
 	return c
 }
 
-// Name — имя на фото: своё, иначе из имени файла (fromFile). nil — имени нет.
-func (r PhotoRef) Name() (p *Person, fromFile bool) {
-	if r.Person != nil {
-		return r.Person, false
-	}
-	if p = PersonFromFile(r.Path); p != nil {
-		return p, true
-	}
-	return nil, false
-}
-
-// PersonFromFile — имя из имени файла: «Иванов Петя.jpg» → Иванов / Петя, три слова —
-// с отчеством. Слово — буквы (внутри дефис и апостроф), первая заглавная; «_» — пробел.
-// Иначе nil: «DSC_0012», «001», «Свадьба 2025» именем не считаются.
-func PersonFromFile(path string) *Person {
-	base := filepath.Base(strings.ReplaceAll(path, `\`, "/"))
-	base = strings.TrimSuffix(base, filepath.Ext(base))
-	if utf8.RuneCountInString(base) > 3*MaxPersonRunes+2 || !utf8.ValidString(base) {
-		return nil
-	}
-	words := strings.Fields(strings.ReplaceAll(base, "_", " "))
-	if len(words) < 2 || len(words) > 3 {
-		return nil
-	}
-	for _, w := range words {
-		if !nameWord(w) {
-			return nil
-		}
-	}
-	p := Person{Last: words[0], First: words[1]}
-	if len(words) == 3 {
-		p.Middle = words[2]
-	}
-	return ClampPerson(p)
-}
-
-// nameWord — слово имени: заглавная буква, дальше буквы, дефис или апостроф
-// (не два знака подряд и не в конце): «Иванова-Петрова», «Д'Артаньян».
-func nameWord(w string) bool {
-	prevSep := false
-	for i, r := range w {
-		switch {
-		case i == 0:
-			if !unicode.IsUpper(r) {
-				return false
-			}
-		case unicode.IsLetter(r):
-			prevSep = false
-		case r == '-' || r == '\'' || r == '’':
-			if prevSep {
-				return false
-			}
-			prevSep = true
-		default:
-			return false
-		}
-	}
-	return !prevSep
-}
-
 // FieldMode — как показывать пустое поле.
 type FieldMode int
 
@@ -243,10 +189,18 @@ type FieldCtx struct {
 }
 
 // fieldNames — поля в порядке спеки: имя для «[…]» и предупреждения экспорта. Первые
-// nameFields — имя на фото, остальные — поля шапки листа.
-var fieldNames = [...]string{"Фамилия", "Имя", "Отчество", "Заголовок", "Подзаголовок", "Год", "Руководитель"}
+// nameFields — имя на фото (с предметом, 049), остальные — поля шапки листа. Индексы нигде
+// не хранятся (в файлах — имена в скобках), поэтому порядок можно менять.
+var fieldNames = [...]string{"Фамилия", "Имя", "Отчество", "Предмет", "Заголовок", "Подзаголовок", "Год", "Руководитель"}
 
-const nameFields = 3
+// Индексы полей fieldNames, на которые ссылается код (синонимы, меню полей).
+const (
+	fSubject   = 3
+	nameFields = 4
+	fTitle     = 4
+	fSubtitle  = 5
+	fLead      = 7
+)
 
 // fieldIndex — индекс поля по имени без регистра, «ё» = «е»; −1 — не поле. Прежние имена
 // полей шапки (030) — синонимы: набранные {Школа}, {Класс}, {Учитель} работают и дальше
@@ -260,11 +214,11 @@ func fieldIndex(name string) int {
 	}
 	switch key {
 	case "школа":
-		return 3
+		return fTitle
 	case "класс":
-		return 4
+		return fSubtitle
 	case "учитель":
-		return 6
+		return fLead
 	}
 	return -1
 }
@@ -275,7 +229,7 @@ func (c FieldCtx) value(i int) string {
 	if c.Person != nil && c.Mode != FieldStub {
 		pr = *c.Person
 	}
-	return [...]string{pr.Last, pr.First, pr.Middle, c.Vars.Title, c.Vars.Subtitle, c.Vars.Year, c.Vars.Lead}[i]
+	return [len(fieldNames)]string{pr.Last, pr.First, pr.Middle, pr.Subject, c.Vars.Title, c.Vars.Subtitle, c.Vars.Year, c.Vars.Lead}[i]
 }
 
 // HasHeadFields — в тексте s есть поле шапки листа (или прежнее имя): по нему Load решает,
@@ -410,17 +364,17 @@ func ShownCaption(v *Vars, s string, who *Person, mode FieldMode) (string, []str
 	return out, miss
 }
 
-// IsNameField — поле имени («Фамилия», «Имя», «Отчество»), а не поле шапки листа.
+// IsNameField — поле имени («Фамилия», «Имя», «Отчество», «Предмет»), а не поле шапки листа.
 func IsNameField(name string) bool {
 	i := fieldIndex(name)
 	return i >= 0 && i < nameFields
 }
 
 // nameKeys — ключи полей имени для UI (порядок fieldNames).
-var nameKeys = [nameFields]string{"last", "first", "middle"}
+var nameKeys = [nameFields]string{"last", "first", "middle", "subject"}
 
 // NameFieldsOf — поля имени шаблона s в порядке появления, без повторов: "last", "first",
-// "middle" (синонимы и регистр — как в Expand). Нет полей имени — nil. По ним окошко
+// "middle", "subject" (синонимы и регистр — как в Expand). Нет полей имени — nil. По ним окошко
 // «Имя» на холсте (037) знает, какие поля показать.
 func NameFieldsOf(s string) []string {
 	var out []string
@@ -478,28 +432,12 @@ func (p *Project) SheetVars() func(*Spread) *Vars {
 }
 
 // FieldsOf — имена для меню «Вставить поле» на листе s с полями шапки v (VarsOf): имя на
-// фото всегда, поля шапки — у виньетки и у листа, которому есть что подставить.
+// фото всегда, предмет и поля шапки — у виньетки и у листа, которому есть что подставить
+// (свадебному альбому «Предмет» ни к чему).
 func FieldsOf(s *Spread, v *Vars) []string {
-	n := nameFields
+	n := fSubject
 	if s != nil && (s.IsVignette() || v != nil) {
 		n = len(fieldNames)
 	}
 	return slices.Clone(fieldNames[:n])
-}
-
-// PersonView — имя на фото для карточки: своё или из имени файла (FromFile — подсказка серым).
-type PersonView struct {
-	Last     string `json:"last"`
-	First    string `json:"first"`
-	Middle   string `json:"middle"`
-	FromFile bool   `json:"fromFile"`
-}
-
-// NameView — имя фото r для карточки; имени нет — пустые поля.
-func NameView(r PhotoRef) PersonView {
-	who, file := r.Name()
-	if who == nil {
-		return PersonView{}
-	}
-	return PersonView{Last: who.Last, First: who.First, Middle: who.Middle, FromFile: file}
 }

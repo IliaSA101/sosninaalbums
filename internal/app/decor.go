@@ -1,0 +1,410 @@
+package app
+
+import (
+	"errors"
+	"net/http"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/decor"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/prefs"
+	wr "github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+// Библиотека фонов (спека 048 Ф1, design §8): окно «Фоны», «Загрузить своё…», ✎ и ×
+// своего, щелчок по плитке и правки узора. kind — "bg" | "sticker" (стикеры — Ф2).
+// Пути к файлам библиотеки от интерфейса не принимаются: ID плитки → индекс decor.Store.
+
+// Типы биндингов — копии decor.* (решение №178): namespace Wails = имя пакета.
+
+// DecorItem — плитка каталога (decor.Item).
+type DecorItem struct {
+	ID     string  `json:"id"` // sa:<пресет> | my:<16 hex>
+	Theme  string  `json:"theme"`
+	Name   string  `json:"name"`
+	URL    string  `json:"url"` // без px: UI дописывает &px=
+	Own    bool    `json:"own"`
+	Aspect float64 `json:"aspect"` // ширина/высота картинки; узор — 0
+	W      int     `json:"w"`
+	H      int     `json:"h"`
+	Color  string  `json:"color,omitempty"` // цвет страниц пресета: подложка плитки
+}
+
+// DecorTheme — строка списка тем слева.
+type DecorTheme struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// DecorCatalog — содержимое окна одного вида.
+type DecorCatalog struct {
+	Kind     string       `json:"kind"`
+	Themes   []DecorTheme `json:"themes"`
+	Items    []DecorItem  `json:"items"`
+	Recent   []string     `json:"recent"` // ID плиток, новые первыми
+	ReadOnly bool         `json:"readOnly"`
+}
+
+// DecorSkip — пропущенный при загрузке файл и причина.
+type DecorSkip struct {
+	Name string `json:"name"`
+	Why  string `json:"why"`
+}
+
+// DecorSvg — проверенный SVG стикера: окно рисует Data (base64) холстом W×H и присылает PNG
+// в AddDecorPNG с Token (design §5.4).
+type DecorSvg struct {
+	Token string `json:"token"`
+	Name  string `json:"name"`
+	Data  string `json:"data"`
+	W     int    `json:"w"`
+	H     int    `json:"h"`
+}
+
+// DecorImport — итог «Загрузить своё…»: добавленные (и возвращённые из скрытых), пропущенные
+// и задания окну на SVG (только стикеры).
+type DecorImport struct {
+	Added   []DecorItem `json:"added"`
+	Skipped []DecorSkip `json:"skipped"`
+	Svg     []DecorSvg  `json:"svg"`
+}
+
+// newDecorImport — пустой итог: срезы не nil, интерфейс не проверяет null.
+func newDecorImport() DecorImport {
+	return DecorImport{Added: []DecorItem{}, Skipped: []DecorSkip{}, Svg: []DecorSvg{}}
+}
+
+// errNoLibrary — библиотека не открылась (startup не дошёл до неё).
+var errNoLibrary = errors.New("библиотека фонов недоступна")
+
+// Своя последняя папка у диалога «Загрузить своё…»: фоны и стикеры обычно лежат в разных папках.
+const (
+	dirDecor   = "decor"
+	dirSticker = "sticker"
+)
+
+// openFilesDialog — нативный выбор нескольких файлов; в тестах подменяется.
+var openFilesDialog = wr.OpenMultipleFilesDialog
+
+// openDecor открывает библиотеку и ставит искатель своих для salbum — до первого Load (startup).
+func (a *App) openDecor() {
+	s := decor.Open(a.cfgDir)
+	a.decorLib.Store(s)
+	salbum.SetLibFinder(s.Find)
+}
+
+func (a *App) decorStore() (*decor.Store, error) {
+	if s := a.decorLib.Load(); s != nil {
+		return s, nil
+	}
+	return nil, errNoLibrary
+}
+
+// serveDecor — /media/gen/* и /media/lib/* (design §5.5); false — запрос не к библиотеке.
+func (a *App) serveDecor(w http.ResponseWriter, r *http.Request) bool {
+	if !strings.HasPrefix(r.URL.Path, decor.GenPath) && !strings.HasPrefix(r.URL.Path, decor.LibPath) {
+		return false
+	}
+	s := a.decorLib.Load()
+	if s == nil {
+		http.NotFound(w, r)
+		return true
+	}
+	s.Handler(a.cache).ServeHTTP(w, r)
+	return true
+}
+
+// DecorCatalog — плитки вида kind: встроенные, свои, недавние (config.json); плитки узоров —
+// в пропорции разворота альбома.
+func (a *App) DecorCatalog(kind string) (c DecorCatalog, err error) {
+	defer guardErr("DecorCatalog", &err)
+	s, err := a.decorStore()
+	if err != nil {
+		return DecorCatalog{Kind: kind, Themes: []DecorTheme{}, Items: []DecorItem{}, Recent: []string{}}, err
+	}
+	w, h := a.editor().SheetSize()
+	cat, err := s.Catalog(kind, prefs.RecentDecor(a.cfgDir, kind), w, h)
+	if err != nil {
+		return DecorCatalog{Kind: kind, Themes: []DecorTheme{}, Items: []DecorItem{}, Recent: []string{}}, err
+	}
+	c = DecorCatalog{Kind: cat.Kind, Themes: make([]DecorTheme, len(cat.Themes)), Items: decorItems(cat.Items),
+		Recent: cat.Recent, ReadOnly: cat.ReadOnly}
+	for i, t := range cat.Themes {
+		c.Themes[i] = DecorTheme(t)
+	}
+	return c, nil
+}
+
+func decorItems(in []decor.Item) []DecorItem {
+	out := make([]DecorItem, len(in))
+	for i, it := range in {
+		out[i] = DecorItem(it)
+	}
+	return out
+}
+
+// ImportDecor — «Загрузить своё…»: диалог в Go, как PickBackdropFile. Отказ от диалога —
+// пустой итог без ошибки. Добавленное сразу находит свои пропавшие в альбоме (RelinkLib).
+// SVG стикеров приходят заданиями Svg: запись появится после AddDecorPNG.
+func (a *App) ImportDecor(kind, theme string) (res DecorImport, err error) {
+	defer guardErr("ImportDecor", &err)
+	res = newDecorImport()
+	s, err := a.decorStore()
+	if err != nil {
+		return res, err
+	}
+	// Отказ — до диалога: выбранные файлы иначе пропали бы зря.
+	if kind != decor.KindBg && kind != decor.KindSticker {
+		return res, decor.ErrKind
+	}
+	if s.ReadOnly() {
+		return res, decor.ErrReadOnly
+	}
+	opts := wr.OpenDialogOptions{
+		Title:            "Свои фоны",
+		DefaultDirectory: a.dialogDir(dirDecor),
+		Filters:          []wr.FileFilter{{DisplayName: "Картинки (*.jpg, *.jpeg, *.png)", Pattern: "*.jpg;*.jpeg;*.png"}},
+	}
+	dir := dirDecor
+	if kind == decor.KindSticker {
+		dir = dirSticker
+		opts.Title, opts.DefaultDirectory = "Свои стикеры", a.dialogDir(dirSticker)
+		opts.Filters = []wr.FileFilter{{DisplayName: "Картинки (*.png, *.jpg, *.jpeg, *.svg)", Pattern: "*.png;*.jpg;*.jpeg;*.svg"}}
+	}
+	files, err := openFilesDialog(a.ctx, opts)
+	if err != nil || len(files) == 0 {
+		return res, err
+	}
+	res, err = a.ImportDecorPaths(kind, theme, files)
+	if err == nil {
+		a.rememberDir(dir, filepath.Dir(files[0]))
+	}
+	return res, err
+}
+
+// ImportDecorPaths — загрузка выбранных файлов (как AddFolderPath у ChooseFolder: путь для
+// проверки из браузера). Каждый файл проверяется строго, как «Свой файл…» (decor.Store.Import).
+func (a *App) ImportDecorPaths(kind, theme string, files []string) (res DecorImport, err error) {
+	defer guardErr("ImportDecorPaths", &err)
+	res = newDecorImport()
+	s, err := a.decorStore()
+	if err != nil {
+		return res, err
+	}
+	r, err := s.Import(kind, theme, files)
+	if err != nil {
+		return res, err
+	}
+	res.Added = decorItems(r.Added)
+	for _, k := range r.Skipped {
+		res.Skipped = append(res.Skipped, DecorSkip(k))
+	}
+	for _, j := range r.Svg {
+		res.Svg = append(res.Svg, DecorSvg(j))
+	}
+	a.relinkLib(s)
+	return res, nil
+}
+
+// AddDecorPNG — PNG, нарисованный окном из проверенного SVG (base64): запись в библиотеку под
+// ключом SVG по одноразовому токену задания. Как загрузка — находит свои пропавшие.
+func (a *App) AddDecorPNG(token, data string) (it DecorItem, err error) {
+	defer guardErr("AddDecorPNG", &err)
+	s, err := a.decorStore()
+	if err != nil {
+		return it, err
+	}
+	got, err := s.AddPNG(token, data)
+	if err != nil {
+		return it, err
+	}
+	a.relinkLib(s)
+	return DecorItem(got), nil
+}
+
+// relinkLib — после любой удачной загрузки, а не только с новыми: тот же файл «уже есть», а своё
+// альбома без пути (отменили прежний RelinkLib, альбом с чужого компьютера) — находится само;
+// нечего привязать — холостая правка без шага. Своё, чей файл стёрли и загрузили заново, путь
+// не меняет — его снимает с пропавших полный пересчёт.
+func (a *App) relinkLib(s *decor.Store) {
+	ed := a.editor()
+	a.changed(ed.RelinkLib(s.Find))
+	refs := ed.Refs()
+	a.mu.Lock()
+	own := slices.ContainsFunc(a.missing, func(id string) bool { return refs[id].Lib != "" })
+	a.mu.Unlock()
+	if own {
+		a.refreshMissing()
+	}
+}
+
+// RenameDecor — ✎ своего: новое имя для показа. Встроенные не меняются.
+func (a *App) RenameDecor(kind, id, name string) (err error) {
+	defer guardErr("RenameDecor", &err)
+	s, err := a.decorStore()
+	if err != nil {
+		return err
+	}
+	return s.Rename(kind, id, name)
+}
+
+// HideDecor — × своего: плитка скрывается, файл остаётся — альбомы, где он стоит, не меняются
+// (решение №80), поэтому RelinkLib не нужен.
+func (a *App) HideDecor(kind, id string) (err error) {
+	defer guardErr("HideDecor", &err)
+	s, err := a.decorStore()
+	if err != nil {
+		return err
+	}
+	return s.Hide(kind, id)
+}
+
+// ApplyBackground — щелчок по плитке фона: встроенный (sa:) — узор и цвет страниц пресета,
+// фото области снимается; свой (my:) — фото фона по ключу, узор области снимается. Один шаг
+// отмены; плитка — в недавние. Цвет у встроенных задан всегда (решение №170: пустой — не трогать).
+func (a *App) ApplyBackground(spreadID, scope, itemID string) (v model.View, err error) {
+	defer a.guardEdit("ApplyBackground", &v, &err)
+	ed := a.editor()
+	if !model.ValidScope(scope) {
+		return ed.View(), errBackdropScope
+	}
+	s, err := a.decorStore()
+	if err != nil {
+		return ed.View(), err
+	}
+	bg, err := s.Background(itemID)
+	if err != nil {
+		return ed.View(), err
+	}
+	if bg.Pattern != nil {
+		v, err = ed.ApplyPattern(spreadID, scope, *bg.Pattern, bg.Color)
+	} else {
+		v, err = ed.ApplyBackdrop(spreadID, scope, bg.Photo)
+	}
+	if err != nil {
+		return v, err
+	}
+	prefs.RememberDecor(a.cfgDir, decor.KindBg, itemID)
+	return a.changed(v), nil
+}
+
+// SetPattern — цвета, масштаб, seed, прозрачность узора области (ключ генератора не меняется,
+// решение №172); серия с одним merge — один шаг отмены.
+func (a *App) SetPattern(spreadID, scope string, p model.Pattern, merge string) (v model.View) {
+	defer a.guardEdit("SetPattern", &v, nil)
+	return a.changed(a.editor().SetPattern(spreadID, scope, p, merge))
+}
+
+// ClearPattern — убрать узор области.
+func (a *App) ClearPattern(spreadID, scope string) (v model.View) {
+	defer a.guardEdit("ClearPattern", &v, nil)
+	return a.changed(a.editor().ClearPattern(spreadID, scope))
+}
+
+// StickerResult — итог AddSticker: вид и ID нового стикера (интерфейс его выделяет).
+type StickerResult struct {
+	View model.View `json:"view"`
+	ID   string     `json:"id"`
+}
+
+// AddSticker — щелчок по плитке стикера: по центру страницы page листа, ширина ¼ страницы, не
+// выше ½. Встроенный (sa:st-…) — рисунок генератора, свой (my:) — фото по ключу из индекса
+// библиотеки. Один шаг отмены; плитка — в недавние. Нет листа — холостая с пустым ID.
+func (a *App) AddSticker(spreadID string, page int, itemID string) (r StickerResult, err error) {
+	defer a.guardEdit("AddSticker", &r.View, &err)
+	ed := a.editor()
+	src, err := a.stickerSrc(itemID)
+	if err != nil {
+		return StickerResult{View: ed.View()}, err
+	}
+	// Пустой ID — стикер не встал (неизвестный лист): выделять нечего, в недавние не кладём.
+	v, id, err := ed.AddSticker(spreadID, page, src)
+	if err != nil || id == "" {
+		return StickerResult{View: v}, err
+	}
+	prefs.RememberDecor(a.cfgDir, decor.KindSticker, itemID)
+	return StickerResult{View: a.changed(v), ID: id}, nil
+}
+
+// ReplaceSticker — «Заменить…»: другой рисунок или своё; центр, ширина и поворот остаются,
+// высота — по новой пропорции. Тот же — холостая без шага и без недавних. Плитка — в недавние
+// только при настоящей правке, как у AddSticker.
+func (a *App) ReplaceSticker(spreadID, id, itemID string) (v model.View, err error) {
+	defer a.guardEdit("ReplaceSticker", &v, &err)
+	ed := a.editor()
+	src, err := a.stickerSrc(itemID)
+	if err != nil {
+		return ed.View(), err
+	}
+	v, changed, err := ed.ReplaceSticker(spreadID, id, src)
+	if err != nil || !changed {
+		return v, err
+	}
+	prefs.RememberDecor(a.cfgDir, decor.KindSticker, itemID)
+	return a.changed(v), nil
+}
+
+// stickerSrc — плитка стикера → источник правки: встроенный — Art из параметров генератора
+// (пропорцию рамки считает Editor), свой — фото с ключом библиотеки.
+func (a *App) stickerSrc(itemID string) (model.StickerSrc, error) {
+	s, err := a.decorStore()
+	if err != nil {
+		return model.StickerSrc{}, err
+	}
+	st, err := s.Sticker(itemID)
+	if err != nil {
+		return model.StickerSrc{}, err
+	}
+	if st.Art != nil {
+		return model.StickerSrc{Art: &model.Art{Kind: st.Art.Kind, Inks: st.Art.Inks, Seed: st.Art.Seed}}, nil
+	}
+	return model.StickerSrc{Photo: st.Photo}, nil
+}
+
+// Фото на фоне разворота или страницы (спека 009, design-backdrop §5, §7).
+// scope: "spread" (весь разворот) | "left" | "right".
+
+// dirBackdrop — своя последняя папка у диалога «Свой файл…».
+const dirBackdrop = "backdrop"
+
+// openFileDialog — нативный диалог выбора файла; в тестах подменяется.
+var openFileDialog = wr.OpenFileDialog
+
+// PickBackdropFile — «Свой файл…»: диалог выбора в Go, путь от интерфейса не принимается.
+// Отказ от диалога — вид без изменений и без ошибки (фона не появилось).
+func (a *App) PickBackdropFile(spreadID, scope string) (v model.View, err error) {
+	defer a.guardEdit("PickBackdropFile", &v, &err)
+	if !model.ValidScope(scope) {
+		return a.editor().View(), errBackdropScope
+	}
+	path, err := openFileDialog(a.ctx, wr.OpenDialogOptions{
+		Title:            "Фото для фона",
+		DefaultDirectory: a.dialogDir(dirBackdrop),
+		Filters:          []wr.FileFilter{{DisplayName: "Фото (*.jpg, *.jpeg, *.png)", Pattern: "*.jpg;*.jpeg;*.png"}},
+	})
+	if err != nil || path == "" {
+		return a.editor().View(), err
+	}
+	v, err = a.setBackdropFile(spreadID, scope, path)
+	if err == nil {
+		a.rememberDir(dirBackdrop, filepath.Dir(path))
+	}
+	return v, err
+}
+
+// setBackdropFile проверяет выбранный файл так же строго, как фото папки, и ставит его на фон.
+func (a *App) setBackdropFile(spreadID, scope, path string) (model.View, error) {
+	if !model.ValidScope(scope) {
+		return a.editor().View(), errBackdropScope
+	}
+	ph, err := library.BackdropFile(path)
+	if err != nil {
+		return a.editor().View(), err
+	}
+	return a.changedOrErr(a.editor().SetBackdrop(spreadID, scope, model.PhotoInfo{ID: ph.ID, Path: ph.Path, W: ph.W, H: ph.H, Size: ph.Size}))
+}

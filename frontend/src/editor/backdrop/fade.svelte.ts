@@ -1,20 +1,19 @@
 // Живой просмотр прозрачности (спека 017): пока тянут ползунок, фон на холсте, в ленте и на
 // мини-разворотах рисуется по этому значению, а не по View. Go спрашивается на отпускании.
-import type { BackdropScope } from '../../base/core/types'
-
+// scope — область фона; у стикеров (048) на его месте ID стикера: логика та же, просмотр по ключу.
 interface Live {
   spread: string
-  scope: BackdropScope
+  scope: string
   fade: number
 }
 
-class FadeLive {
+export class FadeLive {
   cur = $state<Live | null>(null)
   // Очередь коммитов: удержанная стрелка шлёт много change, порядок ответов Go иначе не гарантирован.
   private chain: Promise<unknown> = Promise.resolve()
   private pending = 0
 
-  set(spread: string, scope: BackdropScope, fade: number) {
+  set(spread: string, scope: string, fade: number) {
     this.cur = { spread, scope, fade }
   }
 
@@ -39,10 +38,15 @@ class FadeLive {
   }
 
   // Прозрачность области: просмотр, если он про неё, иначе значение из View.
-  of(spread: string, scope: BackdropScope, fade: number): number {
+  of(spread: string, scope: string, fade: number): number {
     const c = this.cur
     return c && c.spread === spread && c.scope === scope ? c.fade : fade
   }
 }
 
 export const fadeLive = new FadeLive()
+
+// Те же живые значения у узора (048): прозрачность и масштаб — отдельные экземпляры, чтобы не путаться
+// с фото фона той же области (оно лежит над узором). «fade» здесь — просто число параметра.
+export const patFadeLive = new FadeLive()
+export const patScaleLive = new FadeLive()

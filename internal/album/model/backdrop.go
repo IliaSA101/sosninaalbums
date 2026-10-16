@@ -17,7 +17,7 @@ type Backdrop struct {
 	H     float64 `json:"h"`
 	// Rot — градусы по часовой вокруг (X, Y), (−180, 180], шаг 0.1.
 	Rot   float64 `json:"rot,omitempty"`
-	Frame *Frame  `json:"frame,omitempty"` // кадр фото в рамке; nil — S=1, X=Y=0
+	Frame *Frame  `json:"frame,omitempty"` // кадр фото в рамке; nil — S=1, X=Y=0; R — наклон ±44,9 (045, v8)
 	FlipH bool    `json:"flipH,omitempty"` // зеркало фото внутри рамки
 	FlipV bool    `json:"flipV,omitempty"`
 	// Fade — прозрачность фото 0..1 (0 — непрозрачно, 1 — не видно), шаг 0.01 (спека 017).
@@ -60,24 +60,39 @@ func (s *Spread) Backdrops() []*Backdrop {
 	return out
 }
 
-// PhotoIDs — все фото разворота: в местах и на фонах. Единая точка для pruneRefs,
-// rekey и colorReport; «в альбоме» (Photos) фото фона не считается.
+// PhotoIDs — все фото разворота: в местах, на фонах и в стикерах (048). Единая точка для
+// rekey и colorReport; «в альбоме» (Photos) фото фона и стикера не считается.
 func (s *Spread) PhotoIDs() []string {
 	ids := slices.Clone(s.Photos)
-	for _, b := range s.Backdrops() {
-		if !slices.Contains(ids, b.Photo) {
-			ids = append(ids, b.Photo)
+	for _, id := range s.decorPhotos() {
+		if !slices.Contains(ids, id) {
+			ids = append(ids, id)
 		}
 	}
 	return ids
 }
 
-// OnBackdrops — ID фото, стоящих на фонах любого листа (с обложкой).
-func (p *Project) OnBackdrops() map[string]bool {
+// decorPhotos — фото оформления листа: фонов и своих стикеров (с повторами).
+func (s *Spread) decorPhotos() []string {
+	var ids []string
+	for _, b := range s.Backdrops() {
+		ids = append(ids, b.Photo)
+	}
+	for _, st := range s.Stickers {
+		if st.Photo != "" {
+			ids = append(ids, st.Photo)
+		}
+	}
+	return ids
+}
+
+// OnDecor — ID фото, стоящих на фонах и в стикерах любого листа (с обложкой): «в альбоме» они
+// не считаются — автосборка и «Заполнить пустые» их не берут.
+func (p *Project) OnDecor() map[string]bool {
 	out := map[string]bool{}
 	for _, s := range p.Sheets() {
-		for _, b := range s.Backdrops() {
-			out[b.Photo] = true
+		for _, id := range s.decorPhotos() {
+			out[id] = true
 		}
 	}
 	return out
@@ -108,7 +123,9 @@ func (b *Backdrop) Clone() *Backdrop {
 	return &c
 }
 
-// FitArea — рамка по области, без поворота и кадра; зеркало остаётся.
+// FitArea — рамка по области, без поворота; кадр сброшен, наклон фото и зеркало остаются
+// (045: кнопка ровняет рамку, а не горизонт — как «Сбросить кадр» у фото).
 func (b *Backdrop) FitArea(a layout.Rect) {
-	b.X, b.Y, b.W, b.H, b.Rot, b.Frame = a.X, a.Y, a.W, a.H, 0, nil
+	b.X, b.Y, b.W, b.H, b.Rot = a.X, a.Y, a.W, a.H, 0
+	b.Frame = ClampFrame(&Frame{S: 1, R: b.FrameOrDefault().R})
 }

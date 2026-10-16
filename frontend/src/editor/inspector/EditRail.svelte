@@ -14,6 +14,8 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import Icon, { type IconName } from '../../base/ui/Icon.svelte'
   import MirrorMenu from '../../panels/layouts/MirrorMenu.svelte'
+  import PlaceAddMenu from '../places/PlaceAddMenu.svelte'
+  import { decor } from '../../panels/decor/decor.svelte'
 
   // Лента действий слева на холсте (спека 009, п. 2): две группы, одинаковые во всех режимах, —
   // «Добавить» (Текст, Место) и «Раскладка» (Разделить ↔ ↕, Отразить). Не влезли по высоте — новый
@@ -32,6 +34,12 @@
     items: Item[]
   }
 
+  // «Стикер»: окно с плитками; сам стикер добавит щелчок по плитке (decor.pick).
+  function openStickers() {
+    const s = store.spread
+    if (s) decor.show('sticker', s.id, 'spread')
+  }
+
   // Разделять есть что, только когда выделено место (или фото в нём).
   const noPlace = $derived(placesel.selected.length === 0)
   const splitOff = 'Выделите место'
@@ -42,7 +50,9 @@
       title: 'Добавить',
       items: [
         { icon: 'text', label: `Текст на ${page}`, short: 'Текст', feature: 'text', run: () => edit.addText() },
-        { icon: 'place-add', label: `Новое место на ${page}`, short: 'Место', feature: 'manual', run: () => placesel.addPlace() },
+        { icon: 'place-add', label: `Новое место на ${page}`, short: 'Место', feature: 'manual' }, // меню «Место ▾» — PlaceAddMenu (серая кнопка в режиме фона — обычная)
+        // 048: окно «Стикеры»; щелчок по плитке ставит стикер в центр страницы под курсором
+        { icon: 'sticker', label: `Стикер на ${page}`, short: 'Стикер', feature: 'decor', run: openStickers },
       ],
     },
     {
@@ -140,6 +150,10 @@
                 <MirrorMenu side="right" label={wide ? it.short : ''} onpick={(scope) => gridAct.mirrorGrid(scope)} />
               {:else if it.icon === 'text'}
                 <div data-guide="rail-text">{@render rbtn(it)}</div>
+              {:else if it.icon === 'place-add' && !it.off}
+                <div data-guide="rail-place">
+                  <PlaceAddMenu title={it.label} label={wide ? it.short : ''} onpick={(shape) => placesel.addPlace(shape)} />
+                </div>
               {:else if it.icon === 'place-add'}
                 <div data-guide="rail-place">{@render rbtn(it)}</div>
               {:else if it.icon === 'split-h' || it.icon === 'split-v'}

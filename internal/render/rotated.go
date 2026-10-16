@@ -14,6 +14,7 @@ import (
 	"golang.org/x/image/math/f64"
 	"golang.org/x/image/vector"
 
+	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
@@ -180,6 +181,12 @@ type rotJob struct {
 	cell image.Rectangle // путь 2: ячейка в px (∩ клип); пусто — путь 3
 	poly []pt            // путь 3: маска в px холста
 	bb   image.Rectangle // путь 3: её габарит ∩ клип
+	// Путь 3 с формой места (044): маска полосы умножается на покрытие формы рамки frame,
+	// повёрнутой на rot; k — px на мм.
+	shape geom.Outline
+	frame layout.Rect
+	rot   float64
+	k     float64
 }
 
 // prepareRot готовит фото путей 2 и 3; clip — куда можно рисовать (холст или область фона).
@@ -217,7 +224,7 @@ func checkRotPhoto(ph Photo) error {
 	if ph.Img.W <= 0 || ph.Img.H <= 0 {
 		return fmt.Errorf("%s: у фото нет кадра", baseName(ph.Path))
 	}
-	for _, v := range []float64{ph.Rot, ph.ImgRot, ph.Cell.X, ph.Cell.Y, ph.Cell.W, ph.Cell.H, ph.Img.X, ph.Img.Y, ph.Img.W, ph.Img.H} {
+	for _, v := range []float64{ph.Rot, ph.ImgRot, ph.Cell.X, ph.Cell.Y, ph.Cell.W, ph.Cell.H, ph.Img.X, ph.Img.Y, ph.Img.W, ph.Img.H, ph.Outline.Radius} {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			return fmt.Errorf("%s: некорректная геометрия фото", baseName(ph.Path))
 		}
@@ -238,8 +245,8 @@ func rotShape(ph Photo, dpi int, clip image.Rectangle, g rotGeom, k float64) (jo
 			break
 		}
 	}
-	job = &rotJob{}
-	if ph.Rot == 0 && covers {
+	job = &rotJob{shape: ph.Outline, frame: ph.Cell, rot: ph.Rot, k: k}
+	if ph.Rot == 0 && covers && !hasShape(ph.Outline) {
 		// Путь 2: клип — ячейка в px, как у пути 1; окно — под её пиксели.
 		job.cell = image.Rect(px(ph.Cell.X, dpi), px(ph.Cell.Y, dpi), px(ph.Cell.X+ph.Cell.W, dpi), px(ph.Cell.Y+ph.Cell.H, dpi)).Intersect(clip)
 		if job.cell.Empty() {
@@ -437,8 +444,8 @@ func (j *rotJob) draw(canvas *image.RGBA) error {
 	parts := strips(j.bb)
 	w, rows := j.bb.Dx(), parts[0].Dy()
 	type bufs struct {
-		pix, alpha []uint8
-		z          vector.Rasterizer
+		pix, alpha, form []uint8
+		z                vector.Rasterizer
 	}
 	per := make([]*bufs, min(workers, len(parts)))
 	return inParallel(parts, workers, func(wi int, r image.Rectangle) {
@@ -465,14 +472,24 @@ func (j *rotJob) draw(canvas *image.RGBA) error {
 		}
 		b.z.ClosePath()
 		b.z.Draw(mask, mask.Rect, image.Opaque, image.Point{})
+		if hasShape(j.shape) {
+			if b.form == nil {
+				b.form = make([]uint8, w*rows)
+			}
+			form := &image.Alpha{Pix: b.form[:n], Stride: w, Rect: mask.Rect}
+			drawShape(&b.z, form, r.Min, j.frame, j.rot, j.shape, j.k)
+			mulMask(mask.Pix, form.Pix)
+		}
 		draw.DrawMask(canvas, r, tmp, r.Min, mask, image.Point{}, draw.Over)
 	})
 }
 
 // backdropPhoto — фон как фото с поворотом вокруг центра рамки (повёрнутую вокруг угла
 // рамку сдвигаем так, чтобы центр стоял там же); clip — область в px. ok = false — фона не видно.
+// Наклон фото (ImgRot, 045) — как у места: при прямой рамке путь 2 (ячейка — вся рамка, клип —
+// область), при повёрнутой fold складывает углы, и идёт путь 2 или 3.
 func backdropPhoto(b Backdrop, dpi int) (ph Photo, clip image.Rectangle, ok bool) {
-	if b.Rot == 0 {
+	if b.Rot == 0 && b.ImgRot == 0 {
 		ph, ok = b.photo() // прежний путь дословно
 		return ph, image.Rectangle{}, ok
 	}
@@ -483,12 +500,14 @@ func backdropPhoto(b Backdrop, dpi int) (ph Photo, clip image.Rectangle, ok bool
 	img := b.Img
 	img.X += cell.X
 	img.Y += cell.Y
-	ph = fold(Photo{Cell: cell, Img: img, Rot: b.Rot, Path: b.Path, FlipH: b.FlipH, FlipV: b.FlipV, Fade: b.Fade})
-	if ph.Rot == 0 {
-		// Рамка под ¼ оборота снова прямая: клип — она сама в пределах области.
+	ph = fold(Photo{Cell: cell, Img: img, Rot: b.Rot, ImgRot: b.ImgRot, Path: b.Path, FlipH: b.FlipH, FlipV: b.FlipV, Fade: b.Fade})
+	if _, quarter := quarterOf(ph.ImgRot); ph.Rot == 0 && quarter {
+		// Рамка под ¼ оборота снова прямая, наклона нет (путь 1): клип — она сама в пределах области.
 		ph.Cell = intersect(ph.Cell, b.Area)
 		return ph, image.Rectangle{}, ph.Cell.W > 0 && ph.Cell.H > 0
 	}
+	// Наклон или рамка под углом: ячейка — вся рамка (от её центра считается поворот),
+	// рисуется только в области.
 	clip = image.Rect(px(b.Area.X, dpi), px(b.Area.Y, dpi), px(b.Area.X+b.Area.W, dpi), px(b.Area.Y+b.Area.H, dpi))
 	return ph, clip, !clip.Empty()
 }

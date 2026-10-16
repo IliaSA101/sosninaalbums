@@ -288,15 +288,16 @@ func TestBackdropRawAspectTurned(t *testing.T) {
 	}
 }
 
-// Рамка фона R не носит: clampBackdrop его сбрасывает.
+// Четвертей кадр фона не носит (045): ClampBackdrop отбрасывает четверть R, наклон остаётся;
+// чистая четверть — кадр по умолчанию.
 func TestBackdropIgnoresFrameR(t *testing.T) {
 	e, _, _ := edtest.BdEd(t)
-	b := &model.Backdrop{Photo: "a", X: 0, Y: 0, W: 100, H: 100, Frame: &model.Frame{S: 2, X: 0.5, R: 30}}
+	b := &model.Backdrop{Photo: "a", X: 0, Y: 0, W: 100, H: 100, Frame: &model.Frame{S: 2, X: 0.5, R: 120}}
 	got := edtest.P(e).ClampBackdrop(nil, b, "spread")
-	if got == nil || got.Frame == nil || got.Frame.R != 0 || got.Frame.S != 2 || got.Frame.X != 0.5 {
+	if got == nil || got.Frame == nil || got.Frame.R != 30 || got.Frame.S != 2 || got.Frame.X != 0.5 {
 		t.Fatalf("кадр фона: %+v", got)
 	}
-	b.Frame = &model.Frame{S: 1, R: 30}
+	b.Frame = &model.Frame{S: 1, R: 90}
 	if got := edtest.P(e).ClampBackdrop(nil, b, "spread"); got.Frame != nil {
 		t.Fatalf("кадр по умолчанию → nil: %+v", got.Frame)
 	}

@@ -1,10 +1,15 @@
+<script lang="ts" module>
+  // Пресеты страницы статичны: Go отдаёт их списком, читаем один раз за запуск (как coverAct.loadPresets).
+  let loaded: PagePreset[] | null = null
+</script>
+
 <script lang="ts">
-  import { untrack } from 'svelte'
-  import { store } from '../../base/core/store.svelte'
-  import type { Settings } from '../../base/core/types'
+  import { onMount, untrack } from 'svelte'
+  import { Api, store } from '../../base/core/store.svelte'
+  import type { PagePreset, Settings } from '../../base/core/types'
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
   import { SHEET_PRESETS, isSheet, newSheetSize } from '../../base/geom/sheet'
-  import { presets, presetActive, presetFields, exportPx, type Preset } from './presets'
+  import { presetActive, presetFields, presetRows, exportPx, type Preset } from './presets'
 
   const NUMS = ['pageW', 'pageH', 'margin', 'gap', 'dpi', 'safe'] as const
 
@@ -61,7 +66,16 @@
 
   // Лист виньетки (031): размер листа вместо страницы, пресеты 20×30 и 30×40, layflat и «Свой» не нужны.
   const sheet = $derived(isSheet(store.view.settings))
-  const list = $derived(sheet ? SHEET_PRESETS : presets)
+  let presets = $state<PagePreset[]>(loaded ?? [])
+  const rows = $derived(sheet ? [{ group: '', items: [...SHEET_PRESETS] }] : presetRows(presets))
+
+  // Не удалось получить — формы это не мешает: остаётся ввод руками.
+  onMount(() => {
+    if (loaded) return
+    Api.PagePresets()
+      .then((l) => (presets = loaded = (l ?? []) as PagePreset[]))
+      .catch(() => {})
+  })
 
   const activeHint = $derived(presets.find((p) => p.hint && presetActive(p, s))?.hint)
 
@@ -71,11 +85,14 @@
   }
 </script>
 
-<div class="presets">
-  {#each list as p (p.label)}
-    <button class:active={presetActive(p, s)} onclick={() => pick(p)}>{p.label}</button>
-  {/each}
-</div>
+{#each rows as row (row.group)}
+  <div class="presets" class:fs={row.group} {...row.group ? { 'data-guide': 'fsfera-presets' } : {}}>
+    {#if row.group}<span class="cap">{row.group}:</span>{/if}
+    {#each row.items as p (p.label)}
+      <button class:active={presetActive(p, s)} onclick={() => pick(p)}>{p.label}</button>
+    {/each}
+  </div>
+{/each}
 
 <div class="form" data-guide="settings-form">
   {#if sheet}
@@ -130,6 +147,14 @@
     flex-wrap: wrap;
     gap: 6px;
     margin-bottom: 14px;
+  }
+  .presets.fs {
+    margin-top: -8px; /* ряд Фотосферы — продолжение общего */
+  }
+  .cap {
+    align-self: center;
+    font-size: 12px;
+    color: var(--muted);
   }
   .presets button {
     padding: 0 10px;

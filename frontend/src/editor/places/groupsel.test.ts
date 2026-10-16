@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { EMPTY, count, isGroup, normalize, pruneSel, pruneTexts, selectAll, toggleRef, toggleText, zoneOf, type GroupSel } from './groupsel'
+import {
+  EMPTY,
+  count,
+  isGroup,
+  normalize,
+  pruneSel,
+  pruneStickers,
+  pruneTexts,
+  selectAll,
+  toggleRef,
+  toggleSticker,
+  toggleText,
+  zoneOf,
+  type GroupSel,
+} from './groupsel'
 import type { SpreadView } from '../../base/core/types'
 
 const sel = (o: Partial<GroupSel>): GroupSel => ({ ...EMPTY, ...o })
@@ -97,6 +111,49 @@ describe('pruneSel', () => {
   })
   it('выпали все тексты — выделение пустеет', () => {
     expect(pruneSel({ refs: [], texts: ['a', 'b'], text: null }, spread({ texts: [] }))).toEqual(EMPTY)
+  })
+})
+
+describe('стикеры (048)', () => {
+  it('выделение без стикеров прежнего вида: поля stickers нет', () => {
+    expect(toggleRef(EMPTY, 'p1')).toEqual({ refs: ['p1'], texts: [], text: null })
+    expect(toggleSticker(toggleSticker(EMPTY, 'k1'), 'k1')).toEqual(EMPTY)
+  })
+  it('toggleSticker: добавить, убрать; один стикер — выделение из одного объекта', () => {
+    const a = toggleSticker(EMPTY, 'k1')
+    expect(a).toEqual({ refs: [], texts: [], text: null, stickers: ['k1'] })
+    expect(count(a)).toBe(1)
+    expect(isGroup(a)).toBe(false)
+    const b = toggleSticker(a, 'k2')
+    expect(b.stickers).toEqual(['k1', 'k2'])
+    expect(isGroup(b)).toBe(true)
+    expect(toggleSticker(b, 'k1').stickers).toEqual(['k2'])
+  })
+  it('одиночный текст при добавлении стикера уходит в группу, а текст со стикером не одиночный', () => {
+    expect(toggleSticker(sel({ text: 't1' }), 'k1')).toEqual({ refs: [], texts: ['t1'], text: null, stickers: ['k1'] })
+    expect(normalize({ refs: [], texts: ['t1'], text: null, stickers: ['k1'] }).text).toBeNull()
+  })
+  it('toggleRef и toggleText стикеры сохраняют', () => {
+    const g = sel({ stickers: ['k1'] })
+    expect(toggleRef(g, 'p1')).toEqual({ refs: ['p1'], texts: [], text: null, stickers: ['k1'] })
+    expect(toggleText(g, 't1')).toEqual({ refs: [], texts: ['t1'], text: null, stickers: ['k1'] })
+  })
+  it('Ctrl+A берёт и стикеры', () => {
+    const s = spread({ grid: false, photos: [], texts: [], stickers: [{ id: 'k1' }, { id: 'k2' }] })
+    expect(selectAll(s)).toEqual({ refs: [], texts: [], text: null, stickers: ['k1', 'k2'] })
+  })
+  it('pruneStickers и pruneSel: исчезнувшие выпадают, список целиком возвращается как есть', () => {
+    const s = spread({ texts: [], stickers: [{ id: 'k1' }] })
+    expect(pruneStickers(['k1', 'k2'], s)).toEqual(['k1'])
+    const same = ['k1']
+    expect(pruneStickers(same, s)).toBe(same)
+    expect(pruneSel({ refs: [], texts: [], text: null, stickers: ['k1', 'k2'] }, s)).toEqual({
+      refs: [],
+      texts: [],
+      text: null,
+      stickers: ['k1'],
+    })
+    expect(pruneSel({ refs: [], texts: [], text: null, stickers: ['k2'] }, s)).toEqual(EMPTY)
   })
 })
 

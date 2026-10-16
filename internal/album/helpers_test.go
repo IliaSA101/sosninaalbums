@@ -6,17 +6,22 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
+	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
 
 // Разметки обложки не было (диск не подключён): свежая неудача не перечитывается, через
@@ -254,5 +259,72 @@ func TestRelinkDriveGuideResetsAlt(t *testing.T) {
 	e.Undo()
 	if c := e.p.Cover; c.Guide != lost || c.GuideAlt != alt {
 		t.Fatalf("после отмены: разметка %q, запасной %q", c.Guide, c.GuideAlt)
+	}
+}
+
+// headFits — шаблонный текст шапки в стиле st кеглем pt по ширине полосы b влезает в её высоту
+// и не рвёт слова.
+func headFits(st model.TextStyle, pt float64, b layout.Rect) bool {
+	st.Size = pt
+	box := text.Cached(model.VigHeadText, st, b.W)
+	var got []string
+	for _, l := range box.Lines {
+		got = append(got, strings.Fields(l.Text)...)
+	}
+	return box.H <= b.H && slices.Equal(got, strings.Fields(model.VigHeadText))
+}
+
+// Кегль шапки в ряду (049 §3.2): наибольший целый, при котором шаблонный текст влезает в полосу
+// и не рвёт слова, 12…min(48, полоса на две строки); пустая и крошечная полоса — 12.
+func TestHeadFit(t *testing.T) {
+	plain := model.PlainStyle()
+	serif, bold := plain, plain
+	serif.Font, bold.Bold = "ptserif", true
+	bands := []layout.Rect{{}, {W: 5, H: 300}, {W: 30, H: 60}, {W: 47.1, H: 38.6}, {W: 80, H: 60}, {W: 125, H: 70}, {W: 600, H: 200}, {W: 600, H: 10}}
+	for _, st := range []model.TextStyle{plain, serif, bold} {
+		for _, b := range bands {
+			got, top := headFit(b, st), math.Round(min(max(b.H/2.6/0.3528, 12), 48))
+			if got < 12 || got > top || got > 12 && !headFits(st, got, b) {
+				t.Fatalf("%s %v: кегль %v вне 12…%v или не влезает", st.Font, b, got, top)
+			}
+			if got < top && headFits(st, got+1, b) {
+				t.Fatalf("%s %v: кегль %v не наибольший — %v тоже влезает", st.Font, b, got, got+1)
+			}
+		}
+	}
+	if headFit(layout.Rect{W: 600, H: 200}, plain) != 48 || headFit(layout.Rect{}, plain) != 12 {
+		t.Fatal("пределы кегля шапки 12 и 48 не держатся")
+	}
+}
+
+// vigPlan меряет шапку в ряду гарнитурой надписи шапки листа, а не шрифтом по умолчанию:
+// иначе кегль «по полосе» у шапки другим шрифтом выходил бы за полосу или мельче нужного.
+func TestVigPlanHeadFitFont(t *testing.T) {
+	p := NewVignetteSheet(204, 304)
+	s := p.Spreads[0]
+	v := *s.Vig
+	v.Tpl, v.Pupils = "t-left-cell", 40
+	h := s.VigHead(v.Head)
+	if h == nil {
+		t.Fatal("у листа нет шапки")
+	}
+	h.Style.Font, h.Style.Italic = "ptserif", true
+	pl := vigPlan(p, s, v)
+	if !pl.HeadCell || pl.Head == nil {
+		t.Fatalf("«t-left-cell»: шапки в ряду нет: %+v", pl.Head)
+	}
+	serif := model.PlainStyle()
+	serif.Font, serif.Italic = "ptserif", true
+	want, def := headFit(*pl.Head, serif), headFit(*pl.Head, model.PlainStyle())
+	if pl.HeadFit != want || want == def {
+		t.Fatalf("кегль %v, ждали %v гарнитурой шапки (умолчание дало бы %v)", pl.HeadFit, want, def)
+	}
+	v.Head = "" // шапки у листа нет — новая встанет шрифтом по умолчанию
+	if got := vigPlan(p, s, v).HeadFit; got != def {
+		t.Fatalf("без шапки: кегль %v, ждали %v", got, def)
+	}
+	v.Tpl = "head" // полоса сверху — без замера
+	if got := vigPlan(p, s, v).HeadFit; got != 0 {
+		t.Fatalf("полоса сверху: замер %v", got)
 	}
 }

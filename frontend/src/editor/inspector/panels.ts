@@ -11,10 +11,10 @@ export const ICON = 18 // значок в кнопке ленты
 export const INSP_W = 200 // карточка справа
 export const INSP_ZONE = INSP_W + 2 * M
 export const BADGE = 32 // место под ZoomBadge под карточкой
-// Лента одинакова во всех режимах (спека 009, п. 2): группы «Добавить» (2) и «Раскладка» (3),
+// Лента одинакова во всех режимах (спека 009, п. 2): группы «Добавить» (3: Текст, Место, Стикер — 048) и «Раскладка» (3),
 // запас слева от режима не зависит.
-export const RAIL_GROUPS = [2, 3]
-export const RAIL_MAX = 5 // кнопок в ленте
+export const RAIL_GROUPS = [3, 3]
+export const RAIL_MAX = 6 // кнопок в ленте
 export const COL_W = 60 // столбец без подписей кнопок: ширина под подпись группы («Раскладка»)
 export const COL_GAP = 4 // между столбцами
 export const HEAD = 16 // подпись группы
@@ -22,7 +22,7 @@ export const SEP = 9 // черта между группами с отступа
 
 // Режим панелей: null — панелей нет (нет разворота, открыта галерея); 'idle' — ничего не выделено.
 // text — блок текста или подпись; photo — одно фото; places — несколько выделенных или пустое место.
-export type PanelMode = 'idle' | 'photo' | 'places' | 'text' | null
+export type PanelMode = 'idle' | 'photo' | 'places' | 'text' | 'sticker' | null
 
 export interface PanelCtx {
   spread: string | null // текущий разворот
@@ -32,24 +32,27 @@ export interface PanelCtx {
   group: boolean // выделено 2 и больше объекта (места, фото, тексты)
   photo: boolean // выделено ровно одно, и это фото
   photoMissing: boolean // файла этого фото нет на диске
+  sticker?: boolean // выделен один стикер и больше ничего (048)
 }
 
-// Текст → группа → фото → места → ничего; группа раньше фото: «фото + текст» и «два текста» — карточка группы. Лента — глаголы, карточка — значения. Пропавшее фото — как «ничего»:
+// Текст → группа → стикер → фото → места → ничего; группа раньше фото: «фото + текст» и «два текста» — карточка группы. Лента — глаголы, карточка — значения. Пропавшее фото — как «ничего»:
 // кадр показать нечем.
 export function panelMode(c: PanelCtx): PanelMode {
   if (!c.spread || c.gallery) return null
   if (c.textSpread === c.spread) return 'text'
   if (c.group) return 'places'
+  if (c.sticker) return 'sticker'
   if (c.refs === 1 && c.photo) return c.photoMissing ? 'idle' : 'photo'
   if (c.refs > 0) return 'places'
   return 'idle'
 }
 
-// Заголовок карточки группы: «3 места», «2 места, 1 текст», «2 текста».
-export function groupTitle(places: number, texts: number): string {
+// Заголовок карточки группы: «3 места», «2 места, 1 текст», «2 текста», «1 текст, 2 стикера».
+export function groupTitle(places: number, texts: number, stickers = 0): string {
   const parts: string[] = []
   if (places > 0) parts.push(`${places} ${plural(places, ['место', 'места', 'мест'])}`)
   if (texts > 0) parts.push(`${texts} ${plural(texts, ['текст', 'текста', 'текстов'])}`)
+  if (stickers > 0) parts.push(`${stickers} ${plural(stickers, ['стикер', 'стикера', 'стикеров'])}`)
   return parts.join(', ')
 }
 
@@ -60,6 +63,7 @@ export interface CardCtx {
   group: boolean // места/тексты группой
   places: number
   texts: number
+  stickers?: number // стикеры группы (048)
   cover?: boolean // текущий лист — обложка (032): «Обложка» вместо номера
   unit?: string // «Разворот» (по умолчанию) или «Лист» в режиме виньетки (031)
 }
@@ -70,7 +74,9 @@ export function cardTitle(mode: PanelMode, c: CardCtx): string {
     case 'photo':
       return 'Фото'
     case 'places':
-      return c.group ? groupTitle(c.places, c.texts) : 'Место'
+      return c.group ? groupTitle(c.places, c.texts, c.stickers ?? 0) : 'Место'
+    case 'sticker':
+      return 'Стикер'
     default:
       return c.cover ? 'Обложка' : `${c.unit ?? 'Разворот'} ${c.spreadNo}`
   }

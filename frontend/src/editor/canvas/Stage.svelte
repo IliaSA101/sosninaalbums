@@ -2,6 +2,8 @@
   import SpreadSlots from '../spread/SpreadSlots.svelte'
   import LayoutBar from '../../panels/layouts/LayoutBar.svelte'
   import BackdropBar from '../backdrop/BackdropBar.svelte'
+  import StraightenBar from '../photo/StraightenBar.svelte'
+  import { straighten } from '../photo/straighten.svelte'
   import ZoomBadge from '../zoom/ZoomBadge.svelte'
   import EditRail from '../inspector/EditRail.svelte'
   import Inspector from '../inspector/Inspector.svelte'
@@ -234,8 +236,12 @@
       {#if store.spread}
         <!-- Рамка: при 100 % — над текущим (‹ ⊞ › над корешком), при зуме — всё окно; в движении ряда гаснет -->
         <div class="frame" class:away style:left={zoomed ? '0' : `${curLeft}px`} style:width={zoomed ? '100%' : `${place.width}px`}>
-          <!-- Режим фона: вместо «Раскладка: …» — полоса режима -->
-          {#if bgmode.cur}<BackdropBar />{:else}<LayoutBar spread={store.spread} show={hovered} compact={zoomed} />{/if}
+          <!-- Режим фона или «Выпрямить по линии»: вместо «Раскладка: …» — полоса режима -->
+          {#if straighten.cur}<StraightenBar />{:else if bgmode.cur}<BackdropBar />{:else}<LayoutBar
+              spread={store.spread}
+              show={hovered}
+              compact={zoomed}
+            />{/if}
         </div>
       {/if}
     </div>

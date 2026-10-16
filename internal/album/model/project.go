@@ -22,10 +22,16 @@ import (
 // в v6 до выпуска 0.10 легли и поля подписей 030 (`vars`, `person`, `pad`, `caps`, все omitempty)
 // обложка 032 (`cover`, omitempty) и виньетка 031 (`sheet`, `kind`, `vig`, `role`, omitempty);
 // 7: форма своего шаблона виньетки `vig.own` (спека 038, 0.11) — 0.10 файл не откроет и не
-// затрёт форму автосохранением.
+// затрёт форму автосохранением;
+// 8 (общий на 0.12, новые поля 0.12 до выпуска ложатся сюда же, без нового номера):
+// наклон фото фона `frame.r` у bgPhoto* (спека 045) — 0.11 его обнулил бы и затёр;
+// форма и скругление мест `shape`/`round` и формы виньетки `vig` (спека 044);
+// безопасные линии обложки `cover.spec.safe`, `spineSafe` (спека 047, omitempty);
+// узоры фона `pat/patL/patR`, стикеры `stickers` (и их ID в `order`) и ключ своего из
+// библиотеки `photos.*.lib` (спека 048, omitempty).
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 7
+const FormatVersion = 8
 
 type Settings struct {
 	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
@@ -70,6 +76,13 @@ type Spread struct {
 	BgPhoto  *Backdrop `json:"bgPhoto,omitempty"`
 	BgPhotoL *Backdrop `json:"bgPhotoL,omitempty"`
 	BgPhotoR *Backdrop `json:"bgPhotoR,omitempty"`
+	// Pat — узор на фоне всего листа; PatL/R — страницы (048, decor.go). Взаимоисключающие,
+	// как BgPhoto*; узор лежит под фото фона той же области.
+	Pat  *Pattern `json:"pat,omitempty"`
+	PatL *Pattern `json:"patL,omitempty"`
+	PatR *Pattern `json:"patR,omitempty"`
+	// Stickers — стикеры листа (048, decor.go); порядок — относительный порядок слоёв, как Texts.
+	Stickers []*Sticker `json:"stickers,omitempty"`
 	// Caps — общий стиль подписей листа (030, fields.go); nil — у каждой подписи свой.
 	Caps *SheetCaps `json:"caps,omitempty"`
 	// Kind — вид разворота (031): "" — обычный, KindVignette — виньетка; Vig — её параметры
@@ -132,6 +145,9 @@ type PhotoRef struct {
 	FlipV bool `json:"flipV,omitempty"`
 	// Person — имя на фото (030): своё или из вставки; едет с фото. nil — из имени файла.
 	Person *Person `json:"person,omitempty"`
+	// Lib — ключ своего элемента библиотеки my:<16 hex> (048): в файле вместо пути, путь в
+	// памяти — от искателя библиотеки; ID записи — LibPhotoID(Lib).
+	Lib string `json:"lib,omitempty"`
 }
 
 // Project — альбом в памяти. Пути абсолютные; относительными они становятся
@@ -378,6 +394,7 @@ func (s *Spread) Empty() bool {
 	return len(s.Photos) == 0 && len(s.Texts) == 0 && len(s.Grid) == 0 &&
 		s.BgL == "" && s.BgR == "" && s.Name == "" &&
 		s.BgPhoto == nil && s.BgPhotoL == nil && s.BgPhotoR == nil && s.Caps == nil &&
+		s.Pat == nil && s.PatL == nil && s.PatR == nil && len(s.Stickers) == 0 &&
 		s.Kind == "" && s.Vig == nil && s.Vars == nil
 }
 
@@ -391,19 +408,18 @@ func (p *Project) Placed(id string) bool {
 	return false
 }
 
-// PruneRefs оставляет в Photos только используемые фото: стоящие в местах и на фонах.
-// Фото, оставшееся только на фоне, теряет свойства места (кадр, подпись, зеркало):
-// они не переживают уход из мест. Имя (Person) — свойство фото, а не места: остаётся.
+// PruneRefs оставляет в Photos только используемые фото: стоящие в местах, на фонах и в
+// стикерах (048). Фото, оставшееся только на фоне или в стикере, теряет свойства места (кадр,
+// подпись, зеркало): они не переживают уход из мест. Имя (Person) — свойство фото, а не места:
+// остаётся.
 func (p *Project) PruneRefs() {
-	used, onBg := map[string]bool{}, map[string]bool{}
+	used := map[string]bool{}
 	for _, s := range p.Sheets() {
 		for _, id := range s.Photos {
 			used[id] = true
 		}
-		for _, b := range s.Backdrops() {
-			onBg[b.Photo] = true
-		}
 	}
+	onBg := p.OnDecor()
 	for id, r := range p.Photos {
 		switch {
 		case used[id]:
@@ -416,8 +432,9 @@ func (p *Project) PruneRefs() {
 	}
 }
 
-// Remember записывает сведения о фото. Кадр, подпись и зеркало остаются: перенос
-// (MovePhoto идёт через AddPhotos) и повторная автосборка их не стирают.
+// Remember записывает сведения о фото (и ключ своего из библиотеки, 048). Кадр, подпись
+// и зеркало остаются: перенос (MovePhoto идёт через AddPhotos) и повторная автосборка их
+// не стирают.
 func Remember(p *Project, photos []PhotoInfo) []string {
 	ids := make([]string, len(photos))
 	for i, ph := range photos {
@@ -427,6 +444,9 @@ func Remember(p *Project, photos []PhotoInfo) []string {
 			r.Alt, r.Size = "", 0 // другой файл: запасной путь и длина прежнего не годятся
 		}
 		r.Path, r.W, r.H = ph.Path, ph.W, ph.H
+		if ph.Lib != "" { // ID своего — от ключа: сведения из Refs без Lib ключ не снимают
+			r.Lib = ph.Lib
+		}
 		if ph.Size > 0 {
 			r.Size = ph.Size
 		}

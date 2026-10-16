@@ -3,7 +3,7 @@
 import { Api, store } from '../../base/core/store.svelte'
 import { edit } from '../text/edit.svelte'
 import { placesel } from '../places/placesel.svelte'
-import { gallery } from '../../panels/layouts/gallery.svelte'
+import { gallery } from '../../panels/gallery/gallery.svelte'
 import { backdropOf } from './backdrop'
 import { bdSession, keepMode, type BgCur, type BgLive } from './bgmode'
 import { nudgeBox } from '../../base/geom/bdbox'
@@ -23,7 +23,8 @@ class BgMode {
     // Выход, когда разворот сменился или фона этой области больше нет (Undo, «Убрать», чужая правка).
     $effect.root(() => {
       $effect(() => {
-        const selected = !!store.selectedCell || !!edit.sel || placesel.refs.length > 0 || placesel.texts.length > 0
+        const selected =
+          !!store.selectedCell || !!edit.sel || placesel.refs.length > 0 || placesel.texts.length > 0 || placesel.stickers.length > 0
         if (this.cur && !keepMode(this.cur, store.spread, selected)) this.exit()
       })
     })
@@ -70,6 +71,14 @@ class BgMode {
     if (!c) return
     this.session = ''
     await store.run(Api.SetBackdropFrame(c.spread, c.scope, f.s, f.x, f.y))
+  }
+
+  // Наклон фото в рамке (045): поле и ползунок «Наклон, °», один шаг undo на отпускание.
+  async setAngle(tilt: number) {
+    const c = this.cur
+    if (!c) return
+    this.session = ''
+    await store.run(Api.SetBackdropAngle(c.spread, c.scope, tilt))
   }
 
   // Стрелки: очередь, чтобы удержанная клавиша считала от актуального View.

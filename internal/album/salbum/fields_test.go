@@ -72,20 +72,23 @@ func TestPlaceFieldsRoundTrip(t *testing.T) {
 	dir := testkit.TempDir(t)
 	_, ids := gridFile(t, dir, []string{"a"}, nil)
 	full := model.Place{ID: "c0ffee000001", X: 20.5, Y: 30.25, W: 100, H: 60, Photo: ids["a"], Fit: model.FitContain, Rot: 30,
-		Role: model.RoleTeacher}
-	v := reflect.ValueOf(full)
+		Role: model.RoleTeacher, Shape: model.ShapeOval}
+	// Форма и скругление (044) у одного места не живут вместе: скругление — у второго.
+	round := full
+	round.ID, round.Photo, round.Y, round.Shape, round.Round = "c0ffee000002", "", 150, "", 12
+	v, r := reflect.ValueOf(full), reflect.ValueOf(round)
 	for i := range v.NumField() {
-		if v.Field(i).IsZero() {
+		if v.Field(i).IsZero() && r.Field(i).IsZero() {
 			t.Fatalf("поле Place.%s не задано в тесте круга", v.Type().Field(i).Name)
 		}
 	}
-	pl := full
-	// Роль живёт только у виньетки (031): разворот — виньетка с одним учителем.
-	data, _ := gridFile(t, dir, []string{"a"}, []*model.Spread{{ID: "aaaaaaaaaaaa", Photos: []string{ids["a"]}, Grid: []*model.Place{&pl},
-		Kind: model.KindVignette, Vig: &model.Vignette{Tpl: "t-left", Teachers: 1, Ratio: model.VigRatio}}})
+	pl, pr := full, round
+	// Роль живёт только у виньетки (031): разворот — виньетка с двумя учителями.
+	data, _ := gridFile(t, dir, []string{"a"}, []*model.Spread{{ID: "aaaaaaaaaaaa", Photos: []string{ids["a"]}, Grid: []*model.Place{&pl, &pr},
+		Kind: model.KindVignette, Vig: &model.Vignette{Tpl: "t-left", Teachers: 2, Ratio: model.VigRatio}}})
 	p := mustDecode(t, data, dir)
-	if got := *p.Spreads[0].Grid[0]; got != full {
-		t.Fatalf("круг: %+v, ждали %+v", got, full)
+	if g := p.Spreads[0].Grid; len(g) != 2 || *g[0] != full || *g[1] != round {
+		t.Fatalf("круг: %+v, ждали %+v и %+v", g, full, round)
 	}
 }
 

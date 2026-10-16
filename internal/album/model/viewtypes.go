@@ -87,6 +87,8 @@ type PhotoInfo struct {
 	W, H int
 	Size int64    // байты файла; 0 — неизвестен
 	Xmp  XmpMarks // отметки из файла; заполняет App (их ждёт SetMarks)
+	// Lib — ключ своего из библиотеки my:<16 hex> (048); тогда ID = LibPhotoID(Lib).
+	Lib string
 }
 
 // PlaceBox — новое положение и размер места, мм разворота.
@@ -107,9 +109,10 @@ type GridTarget struct {
 // GridPlan — итог копирования заранее (сухой прогон): вопрос до правки, чтобы
 // один клик «на все развороты» не заморозил альбом и не выкинул сотни фото.
 type GridPlan struct {
-	Frozen int `json:"frozen"` // «Авто» станут сеткой (с источником)
-	Left   int `json:"left"`   // фото уйдут в ленту
-	Texts  int `json:"texts"`  // блоков текста заменится (с design)
+	Frozen   int `json:"frozen"`   // «Авто» станут сеткой (с источником)
+	Left     int `json:"left"`     // фото уйдут в ленту
+	Texts    int `json:"texts"`    // блоков текста заменится (с design; у оформления — с надписями)
+	Stickers int `json:"stickers"` // стикеров цели заменится (с оформлением, 049 Ф2)
 }
 
 // PathPair — путь фото до и после перепривязки. BgOnly — фото стоит только на фоне:
@@ -139,6 +142,10 @@ type Box struct {
 	W   float64 `json:"w"`
 	H   float64 `json:"h"`
 	Rot float64 `json:"rot,omitempty"`
+	// Shape, Round — форма места (044, Place.Shape/Round): шаблон, копия сетки и
+	// «Мои шаблоны» переносят и рисуют её.
+	Shape string  `json:"shape,omitempty"`
+	Round float64 `json:"round,omitempty"`
 }
 
 // GridChoice — одна карточка галереи «Сетки».
@@ -187,7 +194,11 @@ type SpreadView struct {
 	Name   string      `json:"name"` // название разворота; "" — без названия
 	// Backdrops — фото на фоне (0–2): весь разворот, левая, правая. В Photos их нет.
 	Backdrops []BackdropView `json:"backdrops"`
-	// LowDPI — кадров и фото фона с 0 < dpi < View.MinDPI: «!» на плитке разворота.
+	// Patterns — узоры на фоне (0–2, 048): весь лист, левая, правая; под фото фона.
+	Patterns []PatternView `json:"patterns"`
+	// Stickers — стикеры листа (048) в порядке Spread.Stickers; слой — Z в общем стеке.
+	Stickers []StickerView `json:"stickers"`
+	// LowDPI — кадров, фото фона и своих стикеров с 0 < dpi < View.MinDPI: «!» на плитке разворота.
 	LowDPI int `json:"lowDPI"`
 	// Stubs — заглушки подписей (030): пустое место листа с шаблоном и фото без имени.
 	// Только холст: в виде печати пусто, в Captions их нет — экспорт их не видит.
@@ -255,11 +266,22 @@ type VigChoice struct {
 	PupilW float64  `json:"pupilW"`
 	Small  bool     `json:"small"`
 	Over   bool     `json:"over"`
-	// Own — свой шаблон (id "my:<id>"); Ratio — его портрет (у каталога ""); Gone — шаблона нет
-	// в templates.json, он только на этом листе: выбрать можно, переименовать и удалить нет.
+	// Own — свой шаблон (id "my:<id>"); Ratio — его портрет (у каталога — подсказка окну:
+	// "1:1" у кругов, иначе ""); Gone — шаблона нет в templates.json, он только на этом листе:
+	// выбрать можно, переименовать и удалить нет.
 	Own   bool   `json:"own"`
 	Ratio string `json:"ratio"`
 	Gone  bool   `json:"gone"`
+	// Shape, Round — форма мест людей (044): у своего шаблона — из его стиля (выбор ставит её
+	// в окне, как Ratio), у удалённого — та, что на листе; у каталога — подсказка шаблона
+	// ("oval" у кругов, 049: выбор в окне и SetVignette ставят Круг и 1:1). Коробки людей в Boxes — с
+	// этой формой, групповое — прямоугольник.
+	Shape string  `json:"shape,omitempty"`
+	Round float64 `json:"round,omitempty"`
+	// Family — вид каталожного шаблона для фильтра (side, big, inrow, group, round, staff; 049);
+	// у своих "". Head — шапка в долях листа, как Boxes (полоса или ячейки ряда); nil — нет.
+	Family string `json:"family"`
+	Head   *Box   `json:"head,omitempty"`
 }
 
 // StubView — заглушка подписи: серый текст «[Фамилия]» под местом; выделить нельзя.
@@ -268,7 +290,7 @@ type StubView struct {
 	Place string `json:"place"`
 	Photo string `json:"photo"`
 	TextView
-	// Who — поля имени шаблона по порядку (last, first, middle) у заглушки фото (037);
+	// Who — поля имени шаблона по порядку (last, first, middle, subject) у заглушки фото (037);
 	// у заглушки пустого места пусто.
 	Who []string `json:"who,omitempty"`
 }
@@ -290,11 +312,13 @@ type BackdropView struct {
 	Area  layout.Rect `json:"area"` // область, мм разворота
 	Box   BackdropBox `json:"box"`
 	Img   layout.Rect `json:"img"`
-	Frame Frame       `json:"frame"`
+	Frame Frame       `json:"frame"` // R — наклон фото в рамке ±44,9 (045), четвертей нет
 	FlipH bool        `json:"flipH"`
 	FlipV bool        `json:"flipV"`
 	DPI   int         `json:"dpi"`  // 0 — размер фото неизвестен
 	Fade  float64     `json:"fade"` // прозрачность 0..1, всегда есть
+	// Lib — ключ своего из библиотеки (048): имя UI берёт из каталога; "" — обычное фото.
+	Lib string `json:"lib,omitempty"`
 }
 
 type PageView struct {
@@ -324,6 +348,10 @@ type FrameView struct {
 	CellRot float64 `json:"cellRot"`
 	// Z — слой ячейки в общем стеке разворота (zView), как у её места.
 	Z int `json:"z"`
+	// Shape, Radius — форма места (044): "" | "oval" и радиус скругления, мм; у «Авто»
+	// "" и 0. Экспорт и Cell обрезают ими фото.
+	Shape  string  `json:"shape"`
+	Radius float64 `json:"radius"`
 }
 
 // TextView — блок текста: рамка и строки в мм разворота (у строки x — левый
@@ -359,7 +387,7 @@ type CaptionView struct {
 	// Pad — действующий отступ от фото, мм: свой, по умолчанию 1, у подписи под стилем
 	// листа — из Spread.Caps. UI шлёт его в каждой правке стиля, чтобы не сбросить.
 	Pad float64 `json:"pad"`
-	// Who — поля имени шаблона листа по порядку (last, first, middle), если подпись идёт
+	// Who — поля имени шаблона листа по порядку (last, first, middle, subject), если подпись идёт
 	// по шаблону (037); своя подпись и шаблон без имени — пусто.
 	Who []string `json:"who,omitempty"`
 }
@@ -389,9 +417,12 @@ type View struct {
 	EmptyPlaces int `json:"emptyPlaces"`
 	// TextMaxW — предел ширины блока «по тексту», мм (страница без безопасных полей).
 	TextMaxW float64 `json:"textMaxW"`
-	// BackdropUsed — ID фото, стоящих на фонах (по возрастанию): автосборка,
+	// BackdropUsed — ID фото, стоящих на фонах и в своих стикерах (по возрастанию): автосборка,
 	// «Заполнить пустые» и фильтр «Неиспользованные» их не берут.
 	BackdropUsed []string `json:"backdropUsed"`
+	// LibPhotos — ID записей Photos со своим из библиотеки (PhotoRef.Lib, 048), по возрастанию:
+	// пропавшие среди них UI считает отдельно («Нет в библиотеке этого компьютера», без «Найти…»).
+	LibPhotos []string `json:"libPhotos"`
 	// MarksRev — номер состояния своих отметок: сменился — UI перечитывает Marks (сами отметки
 	// в View не кладутся: на тысячах фото это сотни КБ на каждое событие).
 	MarksRev int `json:"marksRev"`
@@ -422,4 +453,9 @@ type PlaceView struct {
 	Rot   float64 `json:"rot"`   // градусы по часовой вокруг центра; x, y, w, h — до поворота
 	Z     int     `json:"z"`     // слой в общем стеке разворота (zView)
 	Role  string  `json:"role"`  // роль места виньетки (031): pupil | teacher | group; "" — ученик
+	// Shape, Round — форма места (044): "" | "oval" и скругление, % меньшей стороны;
+	// Radius — оно же в мм (считает Go, UI только рисует).
+	Shape  string  `json:"shape"`
+	Round  float64 `json:"round"`
+	Radius float64 `json:"radius"`
 }

@@ -414,8 +414,8 @@ func TestTemplateGridSeveralMine(t *testing.T) {
 	stage(restartApp(t, b), "перезапуск после удаления")
 }
 
-// TestAppDropPhotos — бросок 042 через App (здесь, а не в grid_test.go/spreads_test.go: те у
-// предела 600 строк): фото альбома без папки — по сведениям проекта, вопрос без правки, ответ
+// TestAppDropPhotos — бросок 042 через App (здесь, а не в grid_test.go: тот близок к пределу
+// 600 строк): фото альбома без папки — по сведениям проекта, вопрос без правки, ответ
 // «add» — плитка; поля JSON DropResult — контракт с UI (design §1).
 func TestAppDropPhotos(t *testing.T) {
 	a := gridApp(t)

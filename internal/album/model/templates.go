@@ -18,8 +18,9 @@ const (
 	// TemplatesVersion — версия templates.json; больше — только чтение. Пишется
 	// наименьшая, понимающая все поля файла (MarshalTemplates): 2 — при угле,
 	// 3 — при шаблоне больше чем на v2Places мест (027: 0.9.x режет коробки до 16),
-	// 4 — при шаблоне виньетки (038: прежние программы такой файл только читают).
-	TemplatesVersion = 4
+	// 4 — при шаблоне виньетки (038: прежние программы такой файл только читают),
+	// 5 — при форме места или виньетки (044: 0.11 читает без форм и не пишет).
+	TemplatesVersion = 5
 	// v2Places — больше мест в шаблоне программа до 0.10 не держит.
 	v2Places = 16
 	// MaxTemplates — шаблонов в файле.
@@ -92,6 +93,9 @@ type VigStyle struct {
 	Caps  *SheetCaps `json:"caps,omitempty"`  // стиль подписей листа с шаблоном имени (030)
 	TText string     `json:"ttext,omitempty"` // шаблон подписи учителя
 	Head  *TextStyle `json:"head,omitempty"`  // стиль надписи-шапки
+	// Shape, Round — форма мест учеников и учителей (044, Vignette.Shape/Round).
+	Shape string  `json:"shape,omitempty"`
+	Round float64 `json:"round,omitempty"`
 }
 
 type templatesFile struct {
@@ -157,10 +161,13 @@ func fitFile(list []Template) []Template {
 // 0.9.x откроет файл только для чтения и не потеряет места при записи. Без отступов,
 // доли и угол округлены (RoundTemplates): формат тот же, старые версии читают как раньше.
 // Шаблон виньетки — 4: прежние программы файл не пишут и не теряют роли и стиль.
+// Форма места или виньетки — 5: 0.11 видит прямоугольники и не стирает формы записью.
 func MarshalTemplates(list []Template) ([]byte, error) {
 	list = RoundTemplates(list)
 	ver := 1
 	switch {
+	case slices.ContainsFunc(list, tplShaped):
+		ver = 5
 	case slices.ContainsFunc(list, func(t Template) bool { return t.Kind == TplVignette }):
 		ver = 4
 	case slices.ContainsFunc(list, func(t Template) bool { return len(t.Boxes) > v2Places }):
@@ -179,6 +186,12 @@ func MarshalTemplates(list []Template) ([]byte, error) {
 		return nil, err
 	}
 	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+}
+
+// tplShaped — у шаблона есть форма места или формы виньетки (templates.json v5).
+func tplShaped(t Template) bool {
+	return slices.ContainsFunc(t.Boxes, func(b Box) bool { return b.Shape != "" || b.Round != 0 }) ||
+		t.Vig != nil && (t.Vig.Style.Shape != "" || t.Vig.Style.Round != 0)
 }
 
 // RoundTemplates — копия списка с долями и углом, кратными 1/tplPrec, как их пишет
@@ -209,7 +222,7 @@ func RoundTemplates(list []Template) []Template {
 }
 
 func roundBox(b Box) Box {
-	return Box{X: roundTpl(b.X), Y: roundTpl(b.Y), W: roundTpl(b.W), H: roundTpl(b.H), Rot: roundTpl(b.Rot)}
+	return Box{X: roundTpl(b.X), Y: roundTpl(b.Y), W: roundTpl(b.W), H: roundTpl(b.H), Rot: roundTpl(b.Rot), Shape: b.Shape, Round: b.Round}
 }
 
 // roundTpl — v до 1/tplPrec; -0 пишется как 0.
@@ -268,6 +281,7 @@ func clampVigTpl(in []Box, v VigTpl) ([]Box, *VigTpl) {
 		return nil, nil
 	}
 	st := VigStyle{TText: CleanText(v.Style.TText, MaxCaptionRunes)}
+	st.Shape, st.Round = ClampShape(v.Style.Shape, v.Style.Round)
 	if strings.TrimSpace(st.TText) == "" {
 		st.TText = ""
 	}
@@ -365,6 +379,7 @@ func ClampBoxes(in []Box) []Box {
 		}
 		b.W = geom.ClampF(b.W, MinBoxFrac, 1)
 		b.H = geom.ClampF(b.H, MinBoxFrac, 1)
+		b.Shape, b.Round = ClampShape(b.Shape, b.Round)
 		if b.Rot = geom.NormDeg(b.Rot); b.Rot == 0 {
 			b.X = geom.ClampF(b.X, 0, 1-b.W)
 			b.Y = geom.ClampF(b.Y, 0, 1-b.H)

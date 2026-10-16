@@ -26,6 +26,41 @@ type Place struct {
 	// Role — роль места виньетки (031): RolePupil | RoleTeacher | RoleGroup; "" — ученик.
 	// Едет с местом (деление, слои); вне виньетки всегда "" (FixVignettes).
 	Role string `json:"role,omitempty"`
+	// Shape — форма (044): "" — прямоугольник, ShapeOval — эллипс, вписанный в рамку (круг
+	// при W = H). Round — скругление углов прямоугольника, % меньшей стороны, целое 0…50;
+	// у ShapeOval всегда 0 (ClampShape). Рамка X, Y, W, H — описанный прямоугольник.
+	Shape string  `json:"shape,omitempty"`
+	Round float64 `json:"round,omitempty"`
+}
+
+// ShapeOval — Place.Shape эллипса (не "ellipse": 200 шаблонов × 64 места с ним не
+// укладываются в MaxTemplatesFile, 044 research §2).
+const ShapeOval = "oval"
+
+// MaxRound — предел скругления, % меньшей стороны: 50 — у квадрата на вид круг.
+const MaxRound = 50.0
+
+// ClampShape — форма и скругление из файла, шаблона или правки: форма не из белого
+// списка — прямоугольник; скругление NaN/Inf/< 0 — 0, > MaxRound — MaxRound, целое;
+// у эллипса скругления нет. Идемпотентна.
+func ClampShape(shape string, round float64) (string, float64) {
+	if shape != ShapeOval {
+		shape = ""
+	}
+	if shape == ShapeOval || !(round > 0) || math.IsInf(round, 1) {
+		return shape, 0
+	}
+	return shape, math.Round(min(round, MaxRound))
+}
+
+// ShapeRadius — радиус скругления, мм: round % меньшей стороны рамки w×h.
+func ShapeRadius(round, w, h float64) float64 {
+	return round / 100 * min(w, h)
+}
+
+// Outline — форма места для расчётов geom (кадр, «Целиком», подпись, маска экспорта).
+func (pl *Place) Outline() geom.Outline {
+	return geom.Outline{Oval: pl.Shape == ShapeOval, Radius: ShapeRadius(pl.Round, pl.W, pl.H)}
 }
 
 // ClonePlace — копия места целиком (новые поля Place переезжают сами) с новым ID
@@ -298,6 +333,11 @@ func (p *Project) RenameRefs(moved map[string]string) {
 				b.Photo = nid
 			}
 		}
+		for _, st := range s.Stickers {
+			if nid, ok := moved[st.Photo]; ok && st.Photo != "" {
+				st.Photo = nid
+			}
+		}
 	}
 }
 
@@ -469,4 +509,9 @@ func ClampMoveIn(pl *Place, prev Place, sw, ph float64) {
 // PlaceImage — фото целиком (мм) для ячейки cell и кадра f (geom.PlaceImage).
 func PlaceImage(cell layout.Rect, aspect float64, f Frame) layout.Rect {
 	return geom.PlaceImage(cell, aspect, geom.Crop{S: f.S, X: f.X, Y: f.Y, R: f.R})
+}
+
+// PlaceImageIn — PlaceImage для места формы o (geom.PlaceImageIn): фото закрывает форму.
+func PlaceImageIn(cell layout.Rect, aspect float64, f Frame, o geom.Outline) layout.Rect {
+	return geom.PlaceImageIn(cell, aspect, geom.Crop{S: f.S, X: f.X, Y: f.Y, R: f.R}, o)
 }

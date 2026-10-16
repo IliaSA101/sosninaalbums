@@ -3,12 +3,13 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,7 +18,10 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
+	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -34,6 +38,9 @@ const projectExt = ".salbum"
 
 // App — всё, что вызывает интерфейс. Каждый публичный метод доступен из JS.
 type App struct {
+	// Methods — методы правок без своих данных (пакет edit): Wails видит их как методы App.
+	*edit.Methods
+
 	ctx    context.Context
 	cfgDir string
 	cache  *library.Cache
@@ -81,7 +88,7 @@ type App struct {
 	// альбом раньше загрузки проекта.
 	ready chan struct{}
 
-	tplMu sync.Mutex // шаблоны сеток и templates.json (grid.go, internal/prefs)
+	tplMu sync.Mutex // шаблоны сеток и templates.json (api.go, internal/prefs)
 	tpls  prefs.Templates
 
 	// draftLocked — черновик не удалось убрать в .bad: писать в него нельзя, иначе затрём.
@@ -105,7 +112,10 @@ type App struct {
 
 	mediaMiss atomic.Int64 // промахи /media, чтобы не писать в лог каждый
 
-	backups *backup.Store // резервные копии альбома (backup.go); nil — без копий
+	backups *backup.Store // резервные копии альбома (files.go); nil — без копий
+
+	// decorLib — библиотека фонов и стикеров (decor.go); nil до startup — методы отвечают ошибкой.
+	decorLib atomic.Pointer[decor.Store]
 }
 
 // State — то, что нужно интерфейсу целиком: альбом и фото из папок.
@@ -141,6 +151,7 @@ func NewApp() *App {
 		}
 	}
 	a.ed.Store(blankEditor(""))
+	a.Methods = edit.New(a.editHost())
 	return a
 }
 
@@ -162,6 +173,7 @@ func (a *App) startup(ctx context.Context) {
 	log.Printf("запуск, версия %s", appVersion(wailsJSON))
 	a.loadTemplates()
 	a.startBackups()
+	a.openDecor() // до первого Load: свои фоны альбома находят путь по ключу
 
 	cacheDir, _ := os.UserCacheDir()
 	c, err := library.NewCache(filepath.Join(cacheDir, "SosninaAlbums", "thumbs"))
@@ -192,6 +204,76 @@ func (a *App) startup(ctx context.Context) {
 		}
 		a.rescan()
 	})
+}
+
+// loadStartup открывает последний проект, а если его нет — черновик; иначе пустой.
+// Файл, который есть, но не открылся, не должен быть затёрт пустым проектом:
+// чужой .salbum остаётся как есть (path пуст, автосохранение пишет только черновик),
+// а сломанный черновик уходит в «черновик.bad-<время>.salbum» рядом. Черновик более новой
+// версии (ErrNewer) не сломан: его не трогаем, а автосохранение черновика на сессию выключаем.
+func (a *App) loadStartup(last string) (p *model.Project, path, notice string) {
+	var notes []string
+	for _, cand := range []string{last, a.draftPath()} {
+		if cand == "" {
+			continue
+		}
+		if cand == last && !reachable(cand) {
+			// Отключённый сетевой диск: Load ждал бы таймаута, окно — пустое. LastProject не трогаем:
+			// со следующим запуском при сети альбом откроется.
+			notes = append(notes, "Диск "+filepath.VolumeName(cand)+" с последним альбомом недоступен. Открыт черновик.")
+			continue
+		}
+		loaded, err := salbum.Load(cand)
+		if err == nil {
+			if cand == a.draftPath() {
+				cand = ""
+			}
+			return loaded, cand, strings.Join(notes, " ")
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			if cand == last {
+				notes = append(notes, "Последний проект не найден: "+cand+". Открыт черновик.")
+			}
+			continue
+		}
+		log.Printf("не открылся проект %s: %v", filepath.Base(cand), paths.NoPath(err))
+		if cand != a.draftPath() {
+			notes = append(notes, "Не открылся проект: "+err.Error()+".")
+			continue
+		}
+		if errors.Is(err, salbum.ErrNewer) {
+			a.draftNewer.Store(true)
+			notes = append(notes, "Черновик сохранён более новой версией программы, здесь он не открывается и не изменится.")
+			continue
+		}
+		bad := a.badDraftPath(time.Now())
+		if rerr := a.rename(cand, bad); rerr != nil {
+			log.Printf("черновик не удалось сохранить в %s: %v", filepath.Base(bad), paths.NoPath(rerr))
+			a.draftLocked.Store(true)
+			notes = append(notes, "Не открылся черновик ("+err.Error()+") и не сохранён отдельно: автосохранение отключено до перезапуска.")
+		} else {
+			notes = append(notes, "Не открылся черновик ("+err.Error()+"). Копия сохранена: "+bad+".")
+		}
+	}
+	return model.New(), "", strings.Join(notes, " ")
+}
+
+// startEditor — редактор для проекта loadStartup; возвращает путь и уведомление. Load отдаёт
+// проверенный проект, и отказ NewEditor сюда не доходит (Load ⊆ Check, FuzzLoad). Если всё же —
+// пустой альбом, а черновик до перезапуска не пишется (draftLocked). Замок ставится и когда
+// отвергнут LastProject при целом черновике: иначе автосохранение пустого альбома затёрло бы
+// черновик; «Новый» потом переименует черновик в .bad.
+// В log.txt — без текста ошибки: в нём путь.
+func (a *App) startEditor(p *model.Project, path, notice string) (string, string) {
+	ed, err := album.NewEditor(p, path)
+	if err == nil {
+		a.ed.Store(ed)
+		return path, notice
+	}
+	log.Printf("проект при запуске не прошёл проверку путей")
+	a.draftLocked.Store(true)
+	a.ed.Store(blankEditor(""))
+	return "", strings.TrimSpace(notice + " Не открылся проект: " + err.Error() + ". Автосохранение отключено до перезапуска.")
 }
 
 // launchPlace — где лежит запущенный exe; ошибка os.Executable — молча «обычное место».
@@ -249,20 +331,26 @@ func (a *App) closeBackground() {
 	}
 }
 
-// guard превращает панику в ошибку в логе, чтобы окно не падало молча.
-func guard(name string) {
+// Общие с edit: паника в методе — в лог, а не в падение окна; ошибки правок.
+var (
+	guard            = edit.Guard
+	guardErr         = edit.GuardErr
+	errInternal      = edit.ErrInternal
+	errNoPhoto       = edit.ErrNoPhoto
+	errBackdropScope = edit.ErrBackdropScope
+)
+
+// guardEdit — guard для методов правок (см. edit.Fail): recover зовёт сам метод.
+func (a *App) guardEdit(name string, v *model.View, err *error) {
 	if r := recover(); r != nil {
-		log.Printf("ПАНИКА в %s: %v\n%s", name, r, debug.Stack())
+		edit.Fail(a.editHost(), r, name, v, err)
 	}
 }
 
-// guardErr — guard для методов с ошибкой: паника уходит в лог, а вызывающий получает
-// errInternal, а не nil (иначе интерфейс счёл бы операцию успешной).
-func guardErr(name string, err *error) {
-	if r := recover(); r != nil {
-		log.Printf("ПАНИКА в %s: %v\n%s", name, r, debug.Stack())
-		*err = errInternal
-	}
+// editHost — что пакету edit нужно от App.
+func (a *App) editHost() edit.Host {
+	return edit.Host{Editor: a.editor, Changed: a.changed, Notice: a.notice, Infos: a.infos,
+		InfosOrRefs: a.infosOrRefs, Templates: a.templateList}
 }
 
 // fitScreen: если обычный (не развёрнутый) размер окна больше экрана —
@@ -299,11 +387,24 @@ func (a *App) fitScreen(ctx context.Context) {
 // (межпроцессного замка нет сознательно, спека 019 §C). Сторож — TestInstanceIDStable.
 const instanceID = "6f1c2b7e-3a4d-4e58-9b0a-5d2e8c7f1a93"
 
+// quietTransport выключает keep-alive у транспорта. В wails dev обратный прокси к Vite идёт через
+// http.DefaultTransport (в exe прокси нет, своих HTTP-клиентов у программы нет). Vite пишет
+// «400 Bad Request» в простаивающее keep-alive соединение, и net/http сыплет в log.txt
+// «Unsolicited response received on idle HTTP channel». Без повторного использования
+// соединений простаивающих нет; WebSocket HMR не страдает: Upgrade-запросы Transport
+// и так не помечает «Connection: close».
+func quietTransport(t *http.Transport) {
+	t.DisableKeepAlives = true
+}
+
 // Run открывает окно и держит его до закрытия. Это функция, а не метод App:
 // Wails отдаёт интерфейсу все экспортируемые методы App.
 // assets — собранный фронт, wailsCfg — wails.json (оба встраивает main).
 func Run(assets fs.FS, wailsCfg []byte) error {
 	wailsJSON = wailsCfg
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		quietTransport(t)
+	}
 	app := NewApp()
 
 	return wails.Run(&options.App{

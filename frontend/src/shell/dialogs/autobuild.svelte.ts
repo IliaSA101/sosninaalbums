@@ -87,7 +87,7 @@ export class AutoDialog {
     void this.pump()
   }
 
-  // ↑↓ в поле среднего (dir = +1 — среднее больше): ≈ 0,5 фото, N меняется хотя бы на 1.
+  // ↑↓ в поле среднего (dir = +1 — среднее больше): показанное целое на 1, N меняется хотя бы на 1.
   stepPer(dir: 1 | -1) {
     if (this.photos < 1) return
     this.n = perStep(this.photos, this.n, dir, this.lim)

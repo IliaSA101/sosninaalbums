@@ -8,9 +8,10 @@ import (
 	"math"
 	"time"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
+	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/spreads"
+	"github.com/IliaSA101/sosninaalbums/internal/album/vigsheet"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -44,8 +45,8 @@ func dropAt(at float64) float64 {
 
 // dropVig — виньетка для броска: spreads не импортирует grid (depguard), план знает ядро.
 var dropVig = spreads.VigHooks{
-	Untouched: func(p *model.Project, s *model.Spread) bool { return grid.Untouched(p, s, vigPlan) },
-	Grow:      func(p *model.Project, s *model.Spread, k int) error { return grid.GrowVignette(p, s, k, vigPlan) },
+	Untouched: func(p *model.Project, s *model.Spread) bool { return vigsheet.Untouched(p, s, vigPlan) },
+	Grow:      func(p *model.Project, s *model.Spread, k int) error { return vigsheet.GrowVignette(p, s, k, vigPlan) },
 }
 
 // NewSpread создаёт разворот с фото на позиции at (-1 — в конец).
@@ -92,12 +93,20 @@ func (e *Editor) MoveSpread(id string, to int) model.View {
 	return e.change(func(p *model.Project) { spreads.MoveSpread(p, id, to) })
 }
 
-// SetSettings: смена формата страницы сдвигает тексты пропорционально (design.Rescale в Editor.edit).
+// SetSettings: смена формата страницы сдвигает тексты пропорционально (design.Rescale в Editor.edit);
+// обложка по шаблону Фотосферы переходит на шаблон нового формата тем же шагом (047, cover.FollowFormat).
 // Договор: нет — размеры и цвет зажимает операция.
 func (e *Editor) SetSettings(s model.Settings) (v model.View) {
 	t0 := time.Now()
 	defer func() { slow(t0, "настройки: %d разворотов", len(v.Spreads)) }()
-	return e.change(func(p *model.Project) { spreads.SetSettings(p, s) })
+	return e.change(func(p *model.Project) { old := p.Settings; spreads.SetSettings(p, s); cover.FollowFormat(p, old) })
+}
+
+// SheetSize — мм разворота (у проекта из листов 031 — листа): по ним каталог фонов рисует
+// плитку узора в пропорции листа (048). Только чтение, без View.
+func (e *Editor) SheetSize() (w, h float64) {
+	e.read(func(p *model.Project) { g := p.Geo(nil); w, h = g.W, g.H })
+	return w, h
 }
 
 // AddFolder добавляет папку; нелокальный путь (UNC, device, относительный) или сверх MaxFolders —
@@ -239,7 +248,8 @@ func (e *Editor) MoreLayouts(spreadID string, have int) (c model.Choices) {
 	return c
 }
 
-// DeleteSelection — «Del» по группе одним шагом undo: тексты, фото (как
+// DeleteSelection — «Del» по группе одним шагом undo: тексты и стикеры (texts — их ID,
+// 048), фото (как
 // RemovePhotos: места «Ручной» остаются пустыми) и места по ссылкам (как
 // DeletePlaces). Порядок важен: места разбирают после фото, иначе их фото
 // ушли бы в ленту вместо удаления из альбома. Неизвестные id пропускаются;

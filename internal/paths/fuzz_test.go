@@ -1,10 +1,40 @@
 package paths
 
 import (
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"unicode"
+	"unicode/utf8"
 )
+
+// FuzzFolderName: имя папки книги (047) — не пустое, локальное, без разделителей и `:`, без
+// невидимых (Cf), управляющих и U+FFFD, без точки и пробела по краям, не длиннее FolderMaxRunes,
+// без устройств Windows; повторный вызов его не меняет.
+func FuzzFolderName(f *testing.F) {
+	for _, s := range []string{"Иванов", "", "con.txt", "a/b\\c", "\u200b", "...", "COM¹", "\xff", strings.Repeat("я ", 40), "a:b", "\u202eфдп.exe", "\ufffd", " .а. ", "x\u0085y"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		got := FolderName(s, "Альбом")
+		if got == "" || !filepath.IsLocal(got) || strings.ContainsAny(got, `\/`) || utf8.RuneCountInString(got) > FolderMaxRunes {
+			t.Fatalf("FolderName(%q) = %q", s, got)
+		}
+		bad := strings.IndexFunc(got, func(r rune) bool {
+			return r == utf8.RuneError || r == ':' || unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
+		})
+		if bad >= 0 || !utf8.ValidString(got) || strings.Trim(got, ". ") != got {
+			t.Fatalf("FolderName(%q) = %q — запретный знак или край", s, got)
+		}
+		if got != "Альбом" && reservedName(got) {
+			t.Fatalf("FolderName(%q) = %q — устройство", s, got)
+		}
+		if again := FolderName(got, "Альбом"); again != got {
+			t.Fatalf("не идемпотентна: %q → %q → %q", s, got, again)
+		}
+	})
+}
 
 // FuzzCheckLocalPath: принятый на Windows путь — только `X:` + разделитель, без `:`
 // дальше второй позиции и без NUL.

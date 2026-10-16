@@ -10,3 +10,9 @@ import "syscall"
 func explorerSelectAttr(path string) *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{CmdLine: `explorer /select,"` + path + `"`}
 }
+
+// explorerOpenAttr — «explorer "папка"» целиком, как explorerSelectAttr: без пробелов Go путь
+// не кавычит, и проводник режет «Иванов,Петрова» по запятой.
+func explorerOpenAttr(path string) *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{CmdLine: `explorer "` + path + `"`}
+}

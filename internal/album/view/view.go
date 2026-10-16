@@ -60,6 +60,7 @@ func BuildView(p *model.Project, st State) model.View {
 		MinDPI:          min(lowDPILimit, p.Settings.DPI),
 		TextMaxW:        p.TextMaxW(nil),
 		BackdropUsed:    []string{},
+		LibPhotos:       libPhotos(p),
 		MarksRev:        st.MarksRev,
 	}
 	f := newFields(p, st.Print)
@@ -79,9 +80,28 @@ func BuildView(p *model.Project, st State) model.View {
 	// Обложка — тем же f до result: её поля и имена попадают в Unfilled/Unnamed.
 	v.Cover = coverView(f, st, &v)
 	v.Unfilled, v.Unnamed = f.result()
+	for _, s := range p.Sheets() { // свои стикеры (048) — как фото фона: «в альбоме» не считаются
+		for _, st := range s.Stickers {
+			if st.Photo != "" {
+				v.BackdropUsed = append(v.BackdropUsed, st.Photo)
+			}
+		}
+	}
 	slices.Sort(v.BackdropUsed)
 	v.BackdropUsed = slices.Compact(v.BackdropUsed)
 	return v
+}
+
+// libPhotos — ID записей со своим из библиотеки по возрастанию; пусто — [] (UI не проверяет null).
+func libPhotos(p *model.Project) []string {
+	out := []string{}
+	for id, r := range p.Photos {
+		if r.Lib != "" {
+			out = append(out, id)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // SpreadOf — вид одного листа id, как в BuildView для холста (заглушки видны): сухой прогон
@@ -104,7 +124,7 @@ func sheetView(f *fields, s *model.Spread, l Laid, minDPI int) model.SpreadView 
 	return sv
 }
 
-// lowDPI — кадры и фото фона разворота ниже порога min: мыльный фон печатается так же
+// lowDPI — кадры, фото фона и свои стикеры листа ниже порога min: мыльный фон печатается так же
 // мыльно, а найти его по ленте без значка нельзя (028 В). dpi 0 — размер неизвестен.
 func lowDPI(sv *model.SpreadView, minDPI int) int {
 	n := 0
@@ -115,6 +135,11 @@ func lowDPI(sv *model.SpreadView, minDPI int) int {
 	}
 	for _, b := range sv.Backdrops {
 		if b.DPI > 0 && b.DPI < minDPI {
+			n++
+		}
+	}
+	for _, st := range sv.Stickers {
+		if st.DPI > 0 && st.DPI < minDPI {
 			n++
 		}
 	}
@@ -131,8 +156,8 @@ func spreadView(f *fields, s *model.Spread, l Laid) (sv model.SpreadView) {
 	g := p.Geo(s)
 	sv = model.SpreadView{ID: s.ID, W: g.W, H: g.H, Mid: g.Mid, Photos: append([]string{}, s.Photos...), Rects: []layout.Rect{},
 		Frames: []model.FrameView{}, Captions: []model.CaptionView{}, Texts: textViews(f, s),
-		Bg: pageBg(p, s), BgSet: [2]string{s.BgL, s.BgR}, Name: s.Name, Backdrops: backdropViews(p, s),
-		Stubs: []model.StubView{}, Kind: s.Kind, Fields: model.FieldsOf(s, f.vars)}
+		Bg: pageBg(p, s), BgSet: [2]string{s.BgL, s.BgR}, Name: s.Name, Backdrops: backdropViews(p, s), Patterns: patternViews(p, s),
+		Stickers: stickerViews(p, s), Stubs: []model.StubView{}, Kind: s.Kind, Fields: model.FieldsOf(s, f.vars)}
 	if s.Vars != nil {
 		sv.Vars = *s.Vars
 	}
@@ -157,7 +182,7 @@ func spreadView(f *fields, s *model.Spread, l Laid) (sv model.SpreadView) {
 	}
 	sv.Rects, sv.Layout = l.cur.Rects, l.cur.Key
 	sv.Frames = frameViews(p, s.Photos, l.cur.Rects)
-	sv.Captions, sv.Stubs = captionViews(f, s, s.Photos, l.cur.Rects)
+	sv.Captions, sv.Stubs = captionViews(f, s, s.Photos, l.cur.Rects, nil)
 	sv.Variant, sv.Variants, sv.More, sv.Rearranged, sv.Pages = l.variant, l.variants, l.more, l.rearranged, l.pages
 	return sv
 }

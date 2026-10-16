@@ -27,7 +27,7 @@
   const px = (v: number) => `${(v / sw) * 100}%`
   const py = (v: number) => `${(v / spread.h) * 100}%`
   // ✥ — только когда фото больше рамки: иначе двигать нечего.
-  const movable = $derived(!!b && hasSlack({ x: 0, y: 0, w: b.box.w, h: b.box.h }, b.img))
+  const movable = $derived(!!b && hasSlack({ x: 0, y: 0, w: b.box.w, h: b.box.h }, b.img, b.frame.r ?? 0))
   let panning = $state(false)
   // ⟳ над верхней стороной (30 px); вышел бы за разворот (рамка по области) — прячем внутрь рамки.
   const rotIn = $derived.by(() => {

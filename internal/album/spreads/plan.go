@@ -24,7 +24,7 @@ type PlanJob struct {
 // PlanOf — вход автосборки из проекта; photos уже без повторов. Пропорции — как их увидит
 // AutoBuild после Remember: размеры из photos, поворот — у фото, уже стоящего в проекте.
 func PlanOf(p *model.Project, photos []model.PhotoInfo) PlanJob {
-	inGrid, onBg := gridPhotoSet(p), p.OnBackdrops()
+	inGrid, onBg := gridPhotoSet(p), p.OnDecor()
 	infos := slices.DeleteFunc(slices.Clone(photos), func(ph model.PhotoInfo) bool { return inGrid[ph.ID] || onBg[ph.ID] })
 	tmp := &model.Project{Photos: make(map[string]model.PhotoRef, len(infos))}
 	for _, ph := range infos {

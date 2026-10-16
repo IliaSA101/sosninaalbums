@@ -2,7 +2,7 @@
 // Места и предпросмотр считает Go; здесь тексты, поля шапки, размеры рамок и условия «Применить».
 import { plural } from '../../base/core/plural'
 import type { SpreadView, Vars, VigChoice, VigSetup, VignetteView } from '../../base/core/types'
-import { RESET_WARN } from '../layouts/gridgallery'
+import { RESET_WARN } from '../gallery/gridgallery'
 import { paramsOf, portraitText, sameAsSheet, stepTpl, type VigForm } from './vignette'
 
 // ---------- Поля шапки ----------
@@ -40,6 +40,30 @@ export function varsOf(f: VarsForm): Vars {
 export const sameVars = (a: VarsForm, b: VarsForm): boolean => VAR_FIELDS.every(({ k }) => a[k] === b[k])
 
 export const setupOf = (f: VigForm, v: VarsForm): VigSetup => ({ vig: paramsOf(f), vars: varsOf(v) })
+
+// ---------- Форма мест (044) ----------
+
+export type ShapeKey = 'rect' | 'round' | 'oval'
+
+// «Скруглённые» — 10 % меньшей стороны (решение 044 №35); «Круг» у виньетки ещё и ставит портрет 1:1.
+export const VIG_ROUND = 10
+export const SHAPE_KEYS: readonly { k: ShapeKey; label: string; hint: string }[] = [
+  { k: 'rect', label: 'Прямоугольник', hint: 'Места учеников и учителей — прямоугольные' },
+  { k: 'round', label: 'Скруглённые', hint: 'Прямоугольники со скруглёнными углами (10 %)' },
+  { k: 'oval', label: 'Круг', hint: 'Круглые портреты; пропорция портрета станет 1:1' },
+]
+
+// Какая кнопка подсвечена: круг, любое скругление (в том числе из своего шаблона) или прямоугольник.
+export function shapeKey(f: Pick<VigForm, 'shape' | 'round'>): ShapeKey {
+  if (f.shape === 'oval') return 'oval'
+  return (f.round ?? 0) > 0 ? 'round' : 'rect'
+}
+
+// Что поменять в форме при выборе кнопки. Круг — портрет 1:1 (в овале 3:4 были бы овалы; вернёте 3:4 — овалы).
+export function shapePatch(k: ShapeKey): Pick<VigForm, 'shape' | 'round'> & Partial<Pick<VigForm, 'ratio'>> {
+  if (k === 'oval') return { shape: 'oval', round: 0, ratio: '1:1' }
+  return { shape: '', round: k === 'round' ? VIG_ROUND : 0 }
+}
 
 // ---------- Тексты ----------
 

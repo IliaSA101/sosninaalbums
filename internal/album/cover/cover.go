@@ -33,7 +33,7 @@ func Create(p *model.Project, preset string) error {
 	if preset == "" {
 		preset = model.CoverDefault
 	}
-	pr, ok := model.CoverPresetOf(preset)
+	pr, ok := model.CoverPresetFor(preset, p.Settings)
 	if !ok {
 		return ErrPreset
 	}
@@ -46,47 +46,96 @@ func Create(p *model.Project, preset string) error {
 // разворота. Нет обложки — холостая правка.
 func Delete(p *model.Project) { p.Cover = nil }
 
-// ApplyPreset — числа пресета id; сторонку пользователя (W, H) пресет не трогает.
+// ApplyPreset — числа пресета id для страницы альбома (CoverPresetFor). Сторонку шаблона
+// (Фотосфера на формате из таблицы, 047 решение 52) берёт из пресета, иначе сторонку
+// пользователя (W, H) пресет не трогает. Сторонка шаблона прежнего пресета — не своя:
+// уходит в 0 (страница), иначе Нетпринт унёс бы 286×286 Фотосферы как «свою».
+// Им же работает «Исправить» старой обложки.
 func ApplyPreset(p *model.Project, id string) error {
 	if p.Cover == nil {
 		return ErrNone
 	}
-	pr, ok := model.CoverPresetOf(id)
+	pr, ok := model.CoverPresetFor(id, p.Settings)
 	if !ok {
 		return ErrPreset
 	}
 	spec := pr.Spec
-	spec.W, spec.H = p.Cover.Spec.W, p.Cover.Spec.H
+	if spec.W <= 0 && spec.H <= 0 {
+		cur := p.Cover.Spec
+		spec.W, spec.H = cur.W, cur.H
+		if was, ok := model.CoverPresetFor(cur.Preset, p.Settings); ok && (was.Spec.W > 0 || was.Spec.H > 0) &&
+			was.Spec.W == cur.W && was.Spec.H == cur.H {
+			spec.W, spec.H = 0, 0
+		}
+	}
 	p.Cover.Spec = spec
 	return nil
 }
 
 // SetSpec — свои числа обложки (зажим ClampCoverSpec). Пресет остаётся, только если числа
-// совпали с его таблицей (сторонка не в счёт); иначе — «Свои размеры» с теми же числами.
+// совпали с его шаблоном для страницы альбома (samePreset); иначе — «Свои размеры» с теми же
+// числами. Безопасные линии в карточке не правятся: остаются прежние (047).
 func SetSpec(p *model.Project, s model.CoverSpec) error {
 	if p.Cover == nil {
 		return ErrNone
 	}
 	s = model.ClampCoverSpec(s)
-	if !samePreset(s) {
+	s.Safe, s.SpineSafe = p.Cover.Spec.Safe, p.Cover.Spec.SpineSafe
+	if !samePreset(p, s) {
 		s.Preset = model.CoverCustom
 	}
 	p.Cover.Spec = s
 	return nil
 }
 
-// samePreset — числа s (без сторонки) — ровно пресет s.Preset.
-func samePreset(s model.CoverSpec) bool {
-	pr, ok := model.CoverPresetOf(s.Preset)
+// samePreset — числа s — ровно пресет s.Preset для страницы альбома (CoverPresetFor). Сторонка
+// в счёт, только если её задаёт шаблон (Фотосфера на формате из таблицы): сравнивается
+// действующая, 0 — страница. Безопасные линии — нет: это направляющие пресета.
+func samePreset(p *model.Project, s model.CoverSpec) bool {
+	pr, ok := model.CoverPresetFor(s.Preset, p.Settings)
 	if !ok {
 		return false
 	}
 	d := pr.Spec
+	if d.W > 0 || d.H > 0 {
+		page := p.Geo(nil).Pages[0]
+		side := func(v, pg float64) float64 {
+			if v <= 0 {
+				return pg
+			}
+			return v
+		}
+		if side(s.W, page.W) != side(d.W, page.W) || side(s.H, page.H) != side(d.H, page.H) {
+			return false
+		}
+	}
 	return s.Wrap == d.Wrap && s.Hinge == d.Hinge && s.A == d.A && s.B == d.B && slices.Equal(s.Steps, d.Steps)
 }
 
+// FollowFormat — смена формата страницы (old — прежние настройки): обложка ровно по шаблону
+// прежнего формата переходит на шаблон нового (047 решение 53); свои числа не трогает.
+// Зовёт обёртка Editor.SetSettings тем же шагом отмены (spreads не импортирует cover).
+func FollowFormat(p *model.Project, old model.Settings) {
+	c := p.Cover
+	if c == nil {
+		return
+	}
+	was, ok := model.CoverPresetFor(c.Spec.Preset, old)
+	if !ok || !sameSpec(c.Spec, was.Spec) {
+		return
+	}
+	now, _ := model.CoverPresetFor(c.Spec.Preset, p.Settings)
+	c.Spec = now.Spec
+}
+
+// sameSpec — те же числа обложки (id не в счёт).
+func sameSpec(a, b model.CoverSpec) bool {
+	return a.W == b.W && a.H == b.H && a.Wrap == b.Wrap && a.Hinge == b.Hinge && a.A == b.A && a.B == b.B &&
+		a.Safe == b.Safe && a.SpineSafe == b.SpineSafe && slices.Equal(a.Steps, b.Steps)
+}
+
 // SetLayout — раскладка обложки kind (front | both | wrap; "" — front): фото фона переходят
-// в новые зоны (design 032 §2). Кадр при переносе — по умолчанию: пропорции зоны другие.
+// в новые зоны (design 032 §2). Кадр при переносе — по умолчанию: пропорции зоны другие; наклон остаётся (045, FitArea).
 // Снятое с фона фото остаётся в альбоме, если стоит в месте.
 func SetLayout(p *model.Project, kind string) error {
 	if kind == "front" {

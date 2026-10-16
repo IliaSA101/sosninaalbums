@@ -6,6 +6,23 @@ export type DriveHint = { from: string; to: string; found: number; total: number
 // Итог поиска в папке (Api.RelinkFolder / RelinkFolderPath), без view.
 export type RelinkCounts = { found: number; missing: number; ambiguous: number }
 
+// Свои из библиотеки (048): в альбоме они помнятся по содержимому файла, а не по пути, поэтому на другом компьютере
+// «пропавшие» иначе — «Найти пропавшие фото…» их не ищет, а загрузка того же файла находит их сама.
+// Go отдаёт ID таких записей в View.libPhotos; в store.missing они лежат вместе с обычными (значок и экспорт общие).
+export const LIB_MISSING_TEXT = 'Нет в библиотеке этого компьютера. Загрузите тот же файл — он найдётся сам'
+
+// Пропавшие делятся на обычные фото (ищутся папкой) и свои из библиотеки (ищутся загрузкой).
+export function splitMissing(missing: readonly string[], lib: readonly string[] | null | undefined): { photos: string[]; own: string[] } {
+  const own = new Set(lib ?? [])
+  return { photos: missing.filter((id) => !own.has(id)), own: missing.filter((id) => own.has(id)) }
+}
+
+// Строка полосы про свои: сколько и где; без «Найти…», потому что искать нечего — файл надо загрузить.
+export function libMissingText(count: number, where = ''): string {
+  const base = `Нет в библиотеке этого компьютера: ${count}`
+  return `${base}${where ? ` (${where})` : ''} — загрузите те же файлы, они найдутся сами`
+}
+
 // Полоса видна, пока есть недостающие фото.
 export function showMissing(missing: number): boolean {
   return missing > 0
@@ -22,11 +39,16 @@ export function missingText(missing: number, total: number, where = ''): string 
   return where ? `${base} — ${where}` : base
 }
 
-// Лист для поиска пропавших: ID фото лежат в photos, фоны — в backdrops[].photo (кадры и места берут photos).
-type Sheet = Pick<SpreadView, 'id' | 'photos'> & { backdrops?: { photo: string }[] | null }
+// Лист для поиска пропавших: ID фото лежат в photos, фоны — в backdrops[].photo, свои стикеры (048) — в
+// stickers[].photo (у процедурного фото нет); кадры и места берут photos.
+type Sheet = Pick<SpreadView, 'id' | 'photos'> & { backdrops?: { photo: string }[] | null; stickers?: { photo?: string }[] | null }
 type Unit = { one: string; many: string; cap: string }
 
-const idsOf = (sp: Sheet): string[] => [...(sp.photos ?? []), ...(sp.backdrops ?? []).map((b) => b.photo)]
+const idsOf = (sp: Sheet): string[] => [
+  ...(sp.photos ?? []),
+  ...(sp.backdrops ?? []).map((b) => b.photo),
+  ...(sp.stickers ?? []).flatMap((s) => s.photo ?? []),
+]
 
 // Сколько пропавших фото на листе (метка в ленте).
 export function missingIn(sp: Sheet, missing: ReadonlySet<string>): number {

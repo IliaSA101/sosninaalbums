@@ -30,7 +30,7 @@ const (
 func TplCells(p *model.Project, s *model.Spread) (rs []model.Box, filled []bool) {
 	if len(s.Grid) > 0 {
 		for _, pl := range s.Grid {
-			rs = append(rs, model.Box{X: pl.X, Y: pl.Y, W: pl.W, H: pl.H, Rot: pl.Rot})
+			rs = append(rs, model.Box{X: pl.X, Y: pl.Y, W: pl.W, H: pl.H, Rot: pl.Rot, Shape: pl.Shape, Round: pl.Round})
 			filled = append(filled, pl.Photo != "")
 		}
 		return rs, filled
@@ -67,7 +67,7 @@ func PlaceBoxes(p *model.Project, spreadID, scope string) ([]model.Box, string, 
 	var boxes []model.Box
 	for _, r := range cells {
 		if InArea(p, s, r.X, r.W, scope) {
-			boxes = append(boxes, model.Box{X: (r.X - a.X) / a.W, Y: (r.Y - a.Y) / a.H, W: r.W / a.W, H: r.H / a.H, Rot: r.Rot})
+			boxes = append(boxes, model.Box{X: (r.X - a.X) / a.W, Y: (r.Y - a.Y) / a.H, W: r.W / a.W, H: r.H / a.H, Rot: r.Rot, Shape: r.Shape, Round: r.Round})
 		}
 	}
 	if boxes = model.ClampBoxes(boxes); len(boxes) == 0 {

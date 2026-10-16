@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
@@ -95,8 +96,9 @@ func (pl Plan) wants(spread int, r layout.Rect, pageW float64) bool {
 }
 
 // SelectedPhotos — фото, которые попадут в выгрузку по плану (для проверки пропавших и цвета):
-// в местах и на фонах. Фон цели-страницы считается, если его видимая часть заходит на неё;
-// фон с Fade ≥ 1 не печатается и файл не читается — его пропажа экспорт не держит.
+// в местах, на фонах и в своих стикерах. Фон цели-страницы считается, если его видимая часть
+// заходит на неё, стикер — если описанная рамка; фон и стикер с Fade ≥ 1 не печатаются и файл
+// не читается — их пропажа экспорт не держит.
 func (pl Plan) SelectedPhotos(v model.View, pageW float64) map[string]bool {
 	out := map[string]bool{}
 	if pl.Cover != nil && v.Cover != nil {
@@ -116,11 +118,24 @@ func (pl Plan) SelectedPhotos(v model.View, pageW float64) map[string]bool {
 				out[b.Photo] = true
 			}
 		}
+		for _, st := range s.Stickers {
+			if shownOwn(st) && pl.wants(i+1, stickerAABB(st), pageW) {
+				out[st.Photo] = true
+			}
+		}
 	}
 	return out
 }
 
-// coverPhotos — фото обложки, которые попадут в печать: места и видимые фоны.
+// shownOwn — свой стикер, который попадёт в печать (Fade < 1): его файл читается.
+func shownOwn(st model.StickerView) bool { return st.Photo != "" && st.Fade < 1 }
+
+// stickerAABB — описанная рамка стикера, повёрнутого вокруг центра, мм листа.
+func stickerAABB(st model.StickerView) layout.Rect {
+	return geom.RotRect{X: st.X, Y: st.Y, W: st.W, H: st.H, Rot: st.Rot}.AABB()
+}
+
+// coverPhotos — фото обложки, которые попадут в печать: места, видимые фоны и свои стикеры.
 func coverPhotos(s model.SpreadView, out map[string]bool) {
 	for _, id := range s.Photos {
 		out[id] = true
@@ -128,6 +143,11 @@ func coverPhotos(s model.SpreadView, out map[string]bool) {
 	for _, b := range s.Backdrops {
 		if b.Fade < 1 {
 			out[b.Photo] = true
+		}
+	}
+	for _, st := range s.Stickers {
+		if shownOwn(st) {
+			out[st.Photo] = true
 		}
 	}
 }
@@ -214,19 +234,85 @@ func PickPhotos(p *model.Project, ids map[string]bool) *model.Project {
 }
 
 // MissingPhotos — ошибка со списком пропавших файлов выбранных фото; nil — все на месте.
+// Своё из библиотеки (PhotoRef.Lib, 048) «Найти пропавшие фото…» не ищет: его строка — отдельно,
+// с подсказкой загрузить тот же файл (он найдётся сам, как в MissingBar). Имени у своего нет:
+// путь пуст, когда файла нет в библиотеке.
 func MissingPhotos(p *model.Project, ids map[string]bool, exists func(string) bool) error {
 	sub := PickPhotos(p, ids).Photos
-	gone := library.MissingOf(sub, func(r model.PhotoRef) string { return r.Path }, exists)
-	if len(gone) == 0 {
+	// Пустой путь (своё, которого нет в библиотеке) — пропавшее без вызова exists.
+	all := library.MissingOf(sub, func(r model.PhotoRef) string { return r.Path },
+		func(path string) bool { return path != "" && exists(path) })
+	if len(all) == 0 {
 		return nil
 	}
-	names := make([]string, 0, 3)
-	for _, id := range gone[:min(len(gone), 3)] {
-		names = append(names, filepath.Base(sub[id].Path))
+	var gone []string
+	onSticker := stickerPhotos(p)
+	bgs, sts := 0, 0
+	for _, id := range all {
+		switch {
+		case sub[id].Lib == "":
+			gone = append(gone, id)
+		case onSticker[id]:
+			sts++
+		default:
+			bgs++
+		}
 	}
-	list := strings.Join(names, ", ")
-	if len(gone) > len(names) {
-		list += fmt.Sprintf(" …и ещё %d", len(gone)-len(names))
+	var parts []string
+	if len(gone) > 0 {
+		names := make([]string, 0, 3)
+		for _, id := range gone[:min(len(gone), 3)] {
+			names = append(names, filepath.Base(sub[id].Path))
+		}
+		list := strings.Join(names, ", ")
+		if len(gone) > len(names) {
+			list += fmt.Sprintf(" …и ещё %d", len(gone)-len(names))
+		}
+		parts = append(parts, fmt.Sprintf("не найдены файлы фото: %d (%s); найдите их: Файл ▸ Найти пропавшие фото…", len(gone), list))
 	}
-	return fmt.Errorf("не найдены файлы фото: %d (%s); найдите их: Файл ▸ Найти пропавшие фото… — и повторите выгрузку", len(gone), list)
+	if bgs+sts > 0 {
+		parts = append(parts, fmt.Sprintf("нет в библиотеке этого компьютера: %d (%s); загрузите те же файлы в %s, они найдутся сами",
+			bgs+sts, libWhat(bgs, sts), libWhere(bgs, sts)))
+	}
+	return fmt.Errorf("%s — и повторите выгрузку", strings.Join(parts, "; "))
+}
+
+// stickerPhotos — ID фото в стикерах проекта (с обложкой): пропавшее своё у них называется
+// «свой стикер», остальное своё — «свой фон».
+func stickerPhotos(p *model.Project) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range p.Sheets() {
+		for _, st := range s.Stickers {
+			if st.Photo != "" {
+				out[st.Photo] = true
+			}
+		}
+	}
+	return out
+}
+
+// libWhat — что пропало из библиотеки: «свой фон», «свои стикеры», «свои фоны и стикеры».
+func libWhat(bgs, sts int) string {
+	switch {
+	case sts == 0 && bgs == 1:
+		return "свой фон"
+	case sts == 0:
+		return "свои фоны"
+	case bgs == 0 && sts == 1:
+		return "свой стикер"
+	case bgs == 0:
+		return "свои стикеры"
+	}
+	return "свои фоны и стикеры"
+}
+
+// libWhere — куда загрузить пропавшее: галерея того вида, где оно стоит.
+func libWhere(bgs, sts int) string {
+	switch {
+	case sts == 0:
+		return "галерею фонов"
+	case bgs == 0:
+		return "галерею стикеров"
+	}
+	return "галереи фонов и стикеров"
 }

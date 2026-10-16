@@ -7,9 +7,12 @@
   import Icon from '../../base/ui/Icon.svelte'
   import PlaceFields from './PlaceFields.svelte'
   import FitToggle from './FitToggle.svelte'
+  import ShapeToggle from './ShapeToggle.svelte'
   import SnapToggle from './SnapToggle.svelte'
   import FlipToggle from './FlipToggle.svelte'
   import LayerRow from './LayerRow.svelte'
+  import TiltRow from './TiltRow.svelte'
+  import { straighten } from '../photo/straighten.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import PersonFields from '../../panels/names/PersonFields.svelte'
@@ -37,29 +40,10 @@
     await store.run(Api.SetFrame(id, f.s, f.x, f.y))
     framelive.clear()
   }
-  // Наклон (010 U5): ползунок и поле ведут предпросмотр на ячейке, SetFrameAngle уходит на отпускании
-  // и по Enter / уходу из поля. Четверти и наклон разложил Go (turn, tilt); R/90 здесь не считается.
-  const MAX_TILT = 44.9
-  let draft = $state<number | null>(null) // что сейчас показано в поле, пока тянут
-  const tilt = $derived(draft ?? fv?.tilt ?? 0)
-  // Пустое поле или «-» (valueAsNumber — NaN): ввод не закончен, поле и draft не трогаем, иначе минус не набрать.
-  const tiltOf = (e: Event) => (e.currentTarget as HTMLInputElement).valueAsNumber
-  const clampTilt = (v: number) => Math.min(MAX_TILT, Math.max(-MAX_TILT, Math.round(v * 10) / 10))
-  function tiltLive(e: Event) {
-    const v = tiltOf(e)
-    if (!Number.isFinite(v) || !fv) return
-    draft = clampTilt(v)
-    framelive.set(id, rotateFrame(frame, (fv.turn ?? 0) * 90 + draft), true)
-  }
-  async function tiltCommit(e: Event) {
-    const input = e.currentTarget as HTMLInputElement
-    const v = tiltOf(e)
-    if (Number.isFinite(v) && fv && clampTilt(v) !== fv.tilt) await store.run(Api.SetFrameAngle(id, clampTilt(v)))
-    // Недонабранное («-», пусто) откатываем к значению из Go, иначе поле осталось бы пустым.
-    else if (!Number.isFinite(v)) input.value = String(fv?.tilt ?? 0)
-    draft = null // после ответа Go: иначе ползунок на миг прыгнет назад
-    framelive.clear()
-  }
+  // Наклон (010 U5 → 045): строка TiltRow ведёт предпросмотр на ячейке, SetFrameAngle уходит на отпускании.
+  // Четверти и наклон разложил Go (turn, tilt); R/90 здесь не считается.
+  const tiltLive = (t: number) => fv && framelive.set(id, rotateFrame(frame, (fv.turn ?? 0) * 90 + t), true)
+  const tiltCommit = (t: number) => store.run(Api.SetFrameAngle(id, t))
   async function turn(quarters: -1 | 1) {
     await store.run(Api.TurnPhotos([id], quarters))
   }
@@ -115,40 +99,15 @@
   </div>
 {/if}
 {#if prefs.can('tilt')}
-  <div class="row tilt" data-guide="tilt">
-    <label class="lbl" for="tilt-num">Наклон, °</label>
-    <input
-      id="tilt-num"
-      class="num"
-      type="number"
-      min={-MAX_TILT}
-      max={MAX_TILT}
-      step="0.1"
-      value={tilt}
-      aria-label="Наклон, градусы"
-      oninput={tiltLive}
-      onchange={tiltCommit}
-    />
-  </div>
-  <input
-    type="range"
-    min={-MAX_TILT}
-    max={MAX_TILT}
-    step="0.1"
-    value={tilt}
-    aria-label="Наклон"
-    title="Наклон фото в рамке; двойной щелчок — выровнять"
-    oninput={tiltLive}
-    onchange={tiltCommit}
-    ondblclick={(e) => {
-      e.currentTarget.value = '0'
-      tiltLive(e)
-      tiltCommit(e)
-    }}
-    onpointerup={(e) => e.currentTarget.blur()}
+  <TiltRow
+    tilt={fv?.tilt ?? 0}
+    onlive={tiltLive}
+    oncommit={tiltCommit}
+    onend={() => framelive.clear()}
+    onstraighten={() => straighten.startPhoto(id)}
   />
 {/if}
-{#if prefs.can('frame')}<FitToggle />{/if}
+{#if prefs.can('frame')}<FitToggle /><ShapeToggle />{/if}
 {#if prefs.can('flip')}<FlipToggle />{/if}
 {#if sp?.grid && prefs.can('layers')}
   <LayerRow onpick={(op) => placesel.layer(op)} />
@@ -198,17 +157,6 @@
   }
   .turn {
     margin-top: 8px;
-  }
-  .tilt {
-    margin-top: 8px;
-  }
-  .num {
-    width: 64px;
-    height: 24px;
-    padding: 0 4px;
-    box-sizing: border-box;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
   }
   .reset {
     width: 24px;

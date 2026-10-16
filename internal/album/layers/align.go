@@ -88,9 +88,9 @@ func alignMin(op, to string) int {
 	return 1
 }
 
-// shiftItem сдвигает место или текст на (dx, dy) мм. Место зажимается clampPlace
+// shiftItem сдвигает место, стикер или текст на (dx, dy) мм. Место зажимается clampPlace
 // (aabb внутри разворота ⇒ hold внутри, зажим не сдвигает); тексты потом
-// выравнивает fitTexts.
+// выравнивает fitTexts, стикеры — FitStickers.
 func shiftItem(s *model.Spread, p *model.Project, it model.LayerItem, dx, dy float64) {
 	switch it.Kind {
 	case model.LayerPlace:
@@ -98,6 +98,12 @@ func shiftItem(s *model.Spread, p *model.Project, it model.LayerItem, dx, dy flo
 			pl.X += dx
 			pl.Y += dy
 			p.ClampPlace(s, pl)
+		}
+	case model.LayerSticker:
+		for _, st := range s.Stickers {
+			if st.ID == it.ID {
+				st.X, st.Y = geom.Round2(st.X+dx), geom.Round2(st.Y+dy)
+			}
 		}
 	case model.LayerText:
 		for _, t := range s.Texts {

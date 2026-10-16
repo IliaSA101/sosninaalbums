@@ -26,16 +26,20 @@ func SetGrid(p *model.Project, spreadID string, on bool) {
 	}
 }
 
-// AddPlace — новое пустое место на странице page (0 — левая, 1 — правая).
+// AddPlace — новое пустое место на странице page (0 — левая, 1 — правая), квадратное;
+// shape — его форма (044: ShapeOval — круг, чужая — прямоугольник).
 // У «Авто» сначала закрепление в той же правке: так сетку начинают с нуля, в
 // том числе на развороте только с текстом. Больше MaxPlaces — ошибка.
-func AddPlace(p *model.Project, spreadID string, page int) error {
+func AddPlace(p *model.Project, spreadID string, page int, shape string) error {
 	s := p.Sheet(spreadID)
 	if s == nil {
 		return nil
 	}
 	p.Freeze(s)
-	_, err := p.AddPlace(s, page, 1, p.PlaceIDs())
+	pl, err := p.AddPlace(s, page, 1, p.PlaceIDs())
+	if err == nil {
+		pl.Shape, pl.Round = model.ClampShape(shape, 0)
+	}
 	return err
 }
 
@@ -87,6 +91,43 @@ func SetPlaceFit(p *model.Project, spreadID string, ids []string, fit string) {
 		for _, ref := range ids {
 			if pl := s.PlaceRef(ref); pl != nil {
 				pl.Fit = fit
+			}
+		}
+		return nil
+	})
+}
+
+// SetPlaceShape — форма мест ids (ссылки placeRef, 044) по образцу SetPlaceFit: рамка, фото
+// и кадр стоят; ShapeOval снимает скругление. Форма не из белого списка — холостая; у «Авто»
+// ShapeOval закрепляет разворот, "" ничего не меняет.
+func SetPlaceShape(p *model.Project, spreadID string, ids []string, shape string) {
+	s := p.Sheet(spreadID)
+	if s == nil || shape != "" && shape != model.ShapeOval || shape == "" && len(s.Grid) == 0 {
+		return
+	}
+	_ = p.WithGrid(s, func() error {
+		for _, ref := range ids {
+			if pl := s.PlaceRef(ref); pl != nil {
+				pl.Shape, pl.Round = model.ClampShape(shape, pl.Round)
+			}
+		}
+		return nil
+	})
+}
+
+// SetPlaceRound — скругление углов мест ids, % меньшей стороны (зажим ClampShape: 0…50,
+// целое). Только прямоугольные места: у круга скругления нет. Число — конечное (договор
+// обёртки). У «Авто» ненулевое закрепляет разворот, 0 — холостая (WithGrid).
+func SetPlaceRound(p *model.Project, spreadID string, ids []string, round float64) {
+	s := p.Sheet(spreadID)
+	if s == nil {
+		return
+	}
+	_, round = model.ClampShape("", round)
+	_ = p.WithGrid(s, func() error {
+		for _, ref := range ids {
+			if pl := s.PlaceRef(ref); pl != nil && pl.Shape == "" {
+				pl.Round = round
 			}
 		}
 		return nil
@@ -280,10 +321,10 @@ func PlacePhotos(p *model.Project, spreadID, placeID string, photos []model.Phot
 
 // FillPlaces — «Заполнить пустые места»: фото не из альбома по порядку садятся в
 // пустые места разворотов-сеток, начиная с fromSpread (неизвестный — с начала)
-// и дальше по альбому. Фото из альбома и с фонов пропускаются. left — сколько не встало.
+// и дальше по альбому. Фото из альбома, с фонов и стикеров пропускаются. left — сколько не встало.
 func FillPlaces(p *model.Project, photos []model.PhotoInfo, fromSpread string) (left int) {
 	photos = model.DedupePhotos(photos)
-	onBg := p.OnBackdrops()
+	onBg := p.OnDecor()
 	fresh := slices.DeleteFunc(slices.Clone(photos), func(ph model.PhotoInfo) bool { return p.Placed(ph.ID) || onBg[ph.ID] })
 	ids := model.Remember(p, fresh)
 	start, _ := p.Find(fromSpread)

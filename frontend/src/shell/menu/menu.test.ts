@@ -219,6 +219,40 @@ describe('уровень в меню (спека 010 U1)', () => {
     expect(find(on, 'vigSetup')?.disabled).toBeUndefined()
     expect(find(buildMenu(at('standard')), 'vigSetup')?.disabled).toBe(true)
   })
+  it('«Правка ▸ Галерея фонов…» (048) — после «Добавить стикер…», со «Стандартного», серое без листа', () => {
+    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('bgGallery')
+    const std = buildMenu(at('standard'))
+    expect(find(std, 'bgGallery')).toMatchObject({ label: 'Галерея фонов…', cmd: 'bgGallery' })
+    expect(find(std, 'bgGallery')?.disabled).toBeUndefined()
+    const edit = ids(std, 'edit')
+    expect(edit.indexOf('bgGallery')).toBe(edit.indexOf('addSticker') + 1)
+    expect(find(buildMenu({ ...at('full'), hasSpread: false }), 'bgGallery')?.disabled).toBe(true)
+  })
+  it('«Правка ▸ Копировать оформление…» (049 Ф2) — после «Галереи фонов…», со «Стандартного», серое на обложке и без листа', () => {
+    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('copyDecor')
+    const std = buildMenu({ ...at('standard'), decorable: true })
+    expect(find(std, 'copyDecor')).toMatchObject({ label: 'Копировать оформление…', cmd: 'copyDecor' })
+    expect(find(std, 'copyDecor')?.disabled).toBeUndefined()
+    const edit = ids(std, 'edit')
+    expect(edit.indexOf('copyDecor')).toBe(edit.indexOf('bgGallery') + 1)
+    expect(find(buildMenu(at('standard')), 'copyDecor')?.disabled).toBe(true) // обложка / нет листа: decorable не задан
+    expect(find(buildMenu({ ...at('full'), decorable: false }), 'copyDecor')?.disabled).toBe(true)
+  })
+  it('«Правка ▸ Добавить стикер…» (048 Ф2) — сразу после «Добавить текст», со «Стандартного», серое без листа', () => {
+    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('addSticker')
+    const std = buildMenu(at('standard'))
+    expect(find(std, 'addSticker')).toMatchObject({ label: 'Добавить стикер…', cmd: 'addSticker' })
+    expect(find(std, 'addSticker')?.disabled).toBeUndefined()
+    const edit = ids(std, 'edit')
+    expect(edit.indexOf('addSticker')).toBe(edit.indexOf('addText') + 1)
+    expect(find(buildMenu({ ...at('full'), hasSpread: false }), 'addSticker')?.disabled).toBe(true)
+  })
+  it('«Правка ▸ Зеркало» (048): включено при выделенном стикере и без фото', () => {
+    const base = { ...at('full'), flippable: false }
+    expect(find(buildMenu(base), 'flip')?.disabled).toBe(true)
+    expect(find(buildMenu({ ...base, sticker: true }), 'flip')?.disabled).toBeFalsy()
+    expect(find(buildMenu({ ...base, flippable: true }), 'flip')?.disabled).toBeFalsy()
+  })
   it('«Простой»: без зума, «Все развороты», привязки; «Вписать» остаётся', () => {
     const v = viewIds('simple')
     for (const id of ['zoomIn', 'zoomOut', 'allSpreads', 'snap']) expect(v, id).not.toContain(id)
@@ -342,10 +376,16 @@ describe('«Повернуть» (010 U5)', () => {
   it('подменю из ↻ и ↺, серое без выделенного фото, есть на любом уровне', () => {
     const turn = find(buildMenu(ctx()), 'turn')
     expect(turn?.cmd).toBeUndefined()
-    expect(turn?.sub?.map((i) => i.cmd)).toEqual(['turnCw', 'turnCcw'])
+    expect(turn?.sub?.map((i) => i.cmd)).toEqual(['turnCw', 'turnCcw', 'straighten'])
     expect(find(buildMenu(ctx({ flippable: false })), 'turn')?.disabled).toBe(true)
     for (const l of ['simple', 'standard', 'full'] as const)
       expect(find(buildMenu(ctx({ can: (f) => can(f, l) })), 'turn'), l).toBeDefined()
+  })
+  it('«Выпрямить по линии» (045) — через линию, только при функции «Наклон фото»', () => {
+    const sub = (l: Level) => find(buildMenu(ctx({ can: (f) => can(f, l) })), 'turn')?.sub
+    expect(sub('simple')?.map((i) => i.cmd)).toEqual(['turnCw', 'turnCcw'])
+    expect(sub('standard')?.map((i) => i.cmd)).toEqual(['turnCw', 'turnCcw', 'straighten'])
+    expect(sub('standard')?.find((i) => i.cmd === 'straighten')?.sep).toBe(true)
   })
   it('стоит перед «Зеркало»', () => {
     const edit = ids(buildMenu(ctx()), 'edit')

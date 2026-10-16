@@ -1,6 +1,7 @@
 import { capFirst, errText } from '../../base/core/errtext'
 import { store } from '../../base/core/store.svelte'
 import { sheetIn } from '../../base/geom/sheet'
+import type { VigFamilyFilter } from '../../base/tpl/tplfilter'
 import type { SpreadView, VigChoice, VigPreview, VigSetup, VignetteView } from '../../base/core/types'
 import { applySetup, previewVignette, vigChoices } from './vigact'
 import { dialogBlock, sameAsDialog, setupOf, varsFormOf, type VarsForm } from './vigdialog'
@@ -75,6 +76,7 @@ export class VigSession {
   form = $state<VigForm>({ tpl: '', teachers: 0, pupils: 0, ratio: '3:4', ttext: '' })
   vars = $state<VarsForm>(varsFormOf(undefined))
   busy = $state(false)
+  family = $state<VigFamilyFilter>('all') // фильтр видов над сеткой (049): при открытии окна «Все»
   readonly preview: Latest<VigSetup, VigPreview>
   readonly choices: Latest<Pick<VigForm, 'teachers' | 'pupils' | 'ratio'>, VigChoice[]>
 

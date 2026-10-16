@@ -26,26 +26,36 @@ import { bdAngle } from '../../base/geom/bdbox'
 import { ALIGN_X, alignOf, cursorDeg, normDeg } from '../../base/geom/textbox'
 import type { Rect, RotRect, SpreadView } from '../../base/core/types'
 
-// ID членов группы на развороте для Go: места (ID места или фото) и выделенные тексты.
+// ID членов группы на развороте для Go: места (ID места или фото), выделенные тексты и стикеры (048).
 export function groupIds(s: SpreadView): string[] {
-  return [...placesel.selected.map((i) => i.id), ...s.texts.filter((t) => placesel.texts.includes(t.id)).map((t) => t.id)]
+  return [
+    ...placesel.selected.map((i) => i.id),
+    ...s.texts.filter((t) => placesel.texts.includes(t.id)).map((t) => t.id),
+    ...placesel.selectedStickers.map((t) => t.id),
+  ]
 }
 
 type Base = Omit<GxIn, 'k' | 'ax' | 'ay' | 'dx' | 'dy'>
 
-// Члены группы на развороте: места (с рамками и углами) и тексты (с долей выравнивания для groupAxes).
-export function groupMembers(s: SpreadView): { in: Base; ids: string[]; textIds: string[] } {
+// Члены группы на развороте: места (с рамками и углами), стикеры (для геометрии — те же повёрнутые рамки,
+// после мест) и тексты (с долей выравнивания для groupAxes).
+export function groupMembers(s: SpreadView): { in: Base; ids: string[]; textIds: string[]; stickerIds: string[] } {
   const items = placesel.selected
+  const stickers = placesel.selectedStickers
   const texts = s.texts.filter((t) => placesel.texts.includes(t.id))
   return {
     in: {
       sw: s.w,
       ph: s.h,
-      places: items.map((i) => ({ x: i.x, y: i.y, w: i.w, h: i.h, rot: i.rot })),
+      places: [
+        ...items.map((i) => ({ x: i.x, y: i.y, w: i.w, h: i.h, rot: i.rot })),
+        ...stickers.map((t) => ({ x: t.x, y: t.y, w: t.w, h: t.h, rot: t.rot })),
+      ],
       texts: texts.map((t) => ({ x: t.x, y: t.y, w: t.w, h: t.h, rot: t.rot, size: t.style.size, al: ALIGN_X[alignOf(t.style.align)] })),
     },
     ids: groupIds(s),
     textIds: texts.map((t) => t.id),
+    stickerIds: stickers.map((t) => t.id),
   }
 }
 
@@ -57,15 +67,17 @@ interface Step {
   call: (sid: string, ids: string[]) => Promise<unknown>
 }
 
-// Предпросмотр: рамки мест, тексты группы, угол рамки.
-function show(s: SpreadView, textIds: string[], placeIds: string[], r: Step | null) {
+// Предпросмотр: рамки мест, стикеры (в r.places они идут после мест), тексты группы, угол рамки.
+function show(s: SpreadView, textIds: string[], placeIds: string[], stickerIds: string[], r: Step | null) {
   if (!r) {
     placesel.live = null
+    placesel.liveStickers = null
     placesel.liveTexts = null
     placesel.liveTurn = null
     return
   }
   placesel.live = { spread: s.id, boxes: new Map(placeIds.map((id, i) => [id, r.places[i]])) }
+  placesel.liveStickers = stickerIds.length > 0 ? new Map(stickerIds.map((id, i) => [id, r.places[placeIds.length + i]])) : null
   placesel.liveTurn = r.deg ?? null
   placesel.liveTexts = new Map(
     textIds.map((id, i) => {
@@ -110,7 +122,7 @@ function run(
     e,
     root,
     (dx, dy, ev) => calc(m, dx, dy, ev),
-    (r) => show(s, m.textIds, pids, r),
+    (r) => show(s, m.textIds, pids, m.stickerIds, r),
     async (r) => {
       if (store.view.rev === rev) await r.call(s.id, m.ids)
     },

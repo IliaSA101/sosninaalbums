@@ -30,7 +30,7 @@ export const LEVEL_TITLE: Record<Level, string> = {
 // Подсказка уровня в значке шапки.
 export const LEVEL_HINT: Record<Level, string> = {
   simple: 'Папки, автосборка, варианты раскладки, отметки, подписи, цвет фона, обложка, экспорт',
-  standard: 'Плюс текст, кадр фото, зеркало, зум, группа, фото на фоне, меню правой кнопки',
+  standard: 'Плюс текст, кадр фото, зеркало, зум, группа, фоны и фото на фоне, меню правой кнопки',
   full: 'Плюс ручная раскладка, шаблоны, поворот мест, слои, выравнивание, линейки, плавающие панели',
   custom: 'Ваш набор функций; основа — любой из уровней',
 }
@@ -42,7 +42,7 @@ export const customHint = (base: Base): string => `Ваш набор, основ
 // строка зависит от основы — customPoints.
 export const LEVEL_POINTS: Record<Level, readonly string[]> = {
   simple: ['Папки и автосборка', 'Варианты раскладки', 'Подписи и цвет фона', 'Обложка', 'Экспорт в JPEG'],
-  standard: ['Всё из Простого', 'Текст на развороте', 'Кадр, зеркало, наклон', 'Виньетка в альбоме', 'Фото на фоне'],
+  standard: ['Всё из Простого', 'Текст на развороте', 'Кадр, зеркало, наклон', 'Виньетка в альбоме', 'Фоны и фото на фоне'],
   full: ['Всё из Стандартного', 'Ручная раскладка', 'Шаблоны раскладок', 'Слои и выравнивание', 'Линейки и панели'],
   custom: ['Функции на выбор', 'Основа — любой уровень', 'Нужное включится само'],
 }
@@ -80,6 +80,7 @@ export type FeatureId =
   | 'allSpreads'
   | 'groupSelect'
   | 'bgPhoto'
+  | 'decor'
   | 'manual'
   | 'rotate'
   | 'groupXf'
@@ -130,10 +131,18 @@ export const FEATURES: Feature[] = [
   { id: 'turn', group: 'Фото и текст', title: 'Мини-панель: Подпись · ↻ 90° · Удалить', short: 'Поворот фото на 90°', min: 'simple' },
   { id: 'text', group: 'Фото и текст', title: 'Свободный текст', short: 'Свободный текст', min: 'standard' },
   { id: 'photoMenu', group: 'Фото и текст', title: 'Меню по правой кнопке', short: 'Меню по правой кнопке', min: 'standard' },
-  { id: 'frame', group: 'Фото и текст', title: 'Кадр (✥, ползунок), «Целиком / С обрезкой»', short: 'Кадр', min: 'standard' },
+  { id: 'frame', group: 'Фото и текст', title: 'Кадр (✥, ползунок), «Целиком / С обрезкой», форма места', short: 'Кадр', min: 'standard' },
   { id: 'flip', group: 'Фото и текст', title: 'Зеркало фото', short: 'Зеркало фото', min: 'standard' },
   { id: 'tilt', group: 'Фото и текст', title: 'Наклон фото', short: 'Наклон фото', min: 'standard' },
   { id: 'bgPhoto', group: 'Фото и текст', title: 'Фото на фоне и режим фона', short: 'Фото на фоне', min: 'standard' },
+  {
+    id: 'decor',
+    group: 'Фото и текст',
+    title: 'Фоны и стикеры из библиотеки',
+    short: 'Фоны и стикеры',
+    min: 'standard',
+    needs: ['bgPhoto'],
+  },
   { id: 'vignette', group: 'Фото и текст', title: 'Виньетка: лист учителей и учеников', short: 'Виньетка', min: 'standard' },
   {
     id: 'textRotate',
@@ -206,9 +215,9 @@ export const minLevel = (id: FeatureId): Base => MIN.get(id) ?? 'simple'
 export const can = (id: FeatureId, level: Level): boolean => RANK[level === 'custom' ? 'simple' : level] >= RANK[minLevel(id)]
 
 // Объекты, которые остаются на развороте при любом уровне (вопрос 5): текст, готовая подпись,
-// пустое место и места «Ручной».
-export type ObjectKind = 'text' | 'caption' | 'place'
-export const OBJECT_FEATURE: Record<ObjectKind, RowId> = { text: 'text', caption: 'captions', place: 'manual' }
+// пустое место и места «Ручной», стикер (048: ниже «Стандартного» виден и печатается, но не выделяется).
+export type ObjectKind = 'text' | 'caption' | 'place' | 'sticker'
+export const OBJECT_FEATURE: Record<ObjectKind, RowId> = { text: 'text', caption: 'captions', place: 'manual', sticker: 'decor' }
 
 // Какой уровень нужен, чтобы править объект; null — править можно (или уровня достаточно).
 // Для 'custom' набор не знаем — см. levelcustom.blockerOf.

@@ -55,13 +55,19 @@ describe('panelMode', () => {
     expect(panelMode(ctx({ textSpread: 's2' }))).toBe('idle')
     expect(panelMode(ctx({ refs: 1, photo: true, photoMissing: true }))).toBe('idle')
   })
+  it('один стикер (048) — карточка «Стикер»; группа и текст важнее него, галерея гасит', () => {
+    expect(panelMode(ctx({ sticker: true }))).toBe('sticker')
+    expect(panelMode(ctx({ sticker: true, group: true }))).toBe('places')
+    expect(panelMode(ctx({ sticker: true, textSpread: 's1' }))).toBe('text')
+    expect(panelMode(ctx({ sticker: true, gallery: true }))).toBe(null)
+  })
 })
 
 describe('лента', () => {
-  it('две группы, пять кнопок', () => {
-    expect(RAIL_GROUPS).toEqual([2, 3])
+  it('две группы, шесть кнопок (048: «Стикер» в «Добавить»)', () => {
+    expect(RAIL_GROUPS).toEqual([3, 3])
     expect(RAIL_GROUPS.reduce((a, b) => a + b, 0)).toBe(RAIL_MAX)
-    expect(RAIL_MAX).toBe(5)
+    expect(RAIL_MAX).toBe(6)
   })
   it('высота группы: подпись, кнопки 32 через 4', () => {
     expect(groupHeight(2)).toBe(84)
@@ -72,7 +78,7 @@ describe('лента', () => {
     expect(railCols(268)).toBe(1)
   })
   it('граница: группы подряд через черту и рамку', () => {
-    const need = groupHeight(2) + 9 + groupHeight(3) + 2 * M + 2
+    const need = groupHeight(3) + 9 + groupHeight(3) + 2 * M + 2
     expect(railCols(need)).toBe(1)
     expect(railCols(need - 1)).toBe(2)
   })
@@ -139,6 +145,11 @@ describe('groupTitle', () => {
     expect(groupTitle(0, 2)).toBe('2 текста')
     expect(groupTitle(5, 5)).toBe('5 мест, 5 текстов')
   })
+  it('со стикерами (048)', () => {
+    expect(groupTitle(0, 0, 2)).toBe('2 стикера')
+    expect(groupTitle(1, 1, 1)).toBe('1 место, 1 текст, 1 стикер')
+    expect(groupTitle(0, 0, 5)).toBe('5 стикеров')
+  })
 })
 
 describe('cardTitle', () => {
@@ -151,6 +162,8 @@ describe('cardTitle', () => {
     expect(cardTitle('text', { ...c, caption: true })).toBe('Подпись')
     expect(cardTitle('places', c)).toBe('Место')
     expect(cardTitle('places', { ...c, group: true, places: 2, texts: 1 })).toBe('2 места, 1 текст')
+    expect(cardTitle('sticker', c)).toBe('Стикер')
+    expect(cardTitle('places', { ...c, group: true, places: 0, texts: 1, stickers: 2 })).toBe('1 текст, 2 стикера')
   })
   it('в листе (031) — «Лист N», обложка и прочее не меняются', () => {
     expect(cardTitle('idle', { ...c, unit: 'Лист' })).toBe('Лист 18')

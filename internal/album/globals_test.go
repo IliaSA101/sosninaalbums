@@ -210,6 +210,27 @@ func TestVigGroupTpls(t *testing.T) {
 	}
 }
 
+// TestStaffCaption — страж 049 §2: подпись предметника в model (её узнаёт смена шаблона) та
+// же, что приносят шаблоны «Руководитель…» генератора; других подписей у каталога нет.
+func TestStaffCaption(t *testing.T) {
+	if model.StaffCaption != vignette.StaffText {
+		t.Fatalf("model %q, генератор %q", model.StaffCaption, vignette.StaffText)
+	}
+	staff := 0
+	for _, tp := range vignette.Catalog(false) {
+		switch tp.TText {
+		case model.StaffCaption:
+			staff++
+		case "":
+		default:
+			t.Errorf("шаблон %s: подпись %q", tp.ID, tp.TText)
+		}
+	}
+	if staff == 0 {
+		t.Fatal("в каталоге нет шаблонов с подписью предметника")
+	}
+}
+
 // TestSheetGeometryInside — страж 031 §3 в паре с TestPageWReaders: в листе 204×304 (страница =
 // лист, pageW = ширина листа) ряды «Авто», места, тексты, группа, фон, шаблон, выравнивание
 // «по странице», Load и View.safe — внутри листа. Пропущенное 2·PageW дало бы лист вдвое шире,
@@ -291,7 +312,7 @@ func (c sheetCheck) auto() {
 func (c sheetCheck) edits() {
 	t := c.t
 	c.e.SetGrid(c.sid, true)
-	if _, err := c.e.AddPlace(c.sid, 1); err != nil {
+	if _, err := c.e.AddPlace(c.sid, 1, ""); err != nil {
 		t.Fatal(err)
 	}
 	for page := range 2 {

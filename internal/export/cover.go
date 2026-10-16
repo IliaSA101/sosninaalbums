@@ -100,16 +100,16 @@ func AddCoverFile(pl Plan, dir string, ours, foreign []DirFile) ([]DirFile, []Di
 	return ours, append(foreign, DirFile{Name: CoverName})
 }
 
-// BlankCover — обложка в виде печати пуста: ни фото, ни мест, ни текстов, ни фото фона,
-// ни своего цвета страниц и плашки корешка.
+// BlankCover — обложка в виде печати пуста: ни фото, ни мест, ни текстов, ни фото фона, ни
+// узора, ни стикера, ни своего цвета страниц и плашки корешка.
 func BlankCover(v model.View) bool {
 	c := v.Cover
 	if c == nil {
 		return false
 	}
 	s := c.Sheet
-	return len(s.Photos) == 0 && len(s.Texts) == 0 && len(s.Captions) == 0 && !shownBackdrop(s) &&
-		len(s.Places) == 0 && s.BgSet == [2]string{} && c.SpineBg == ""
+	return len(s.Photos) == 0 && len(s.Texts) == 0 && len(s.Captions) == 0 && !shownBackdrop(s) && !shownPattern(s) &&
+		!shownSticker(s) && len(s.Places) == 0 && s.BgSet == [2]string{} && c.SpineBg == ""
 }
 
 // BlankWarningCover — вопрос о пустых разворотах и пустой обложке (cover — обложка пуста

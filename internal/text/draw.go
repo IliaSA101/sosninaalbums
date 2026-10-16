@@ -4,7 +4,6 @@ import (
 	"image"
 	"math"
 
-	xfont "golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
 )
@@ -12,7 +11,7 @@ import (
 // Draw рисует блок b на dst: (x0, y0) — левый верхний угол блока в мм от
 // верхнего левого угла dst, deg — поворот блока вокруг этого угла по часовой
 // (NaN/Inf — без поворота), dpi — разрешение холста. Строки берутся из Layout
-// с тем же стилем, а глифы ставятся с тем же кернингом, что в measure, так что
+// с тем же стилем, а глифы ставятся тем же обходом walkGlyphs, что в measure, так что
 // на бумаге строки той же ширины и с теми же переносами, что на экране.
 // opentype.Face сюда не годится: его Kern почти нулевой (design §5).
 func Draw(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int) {
@@ -36,35 +35,19 @@ func Draw(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int) {
 	o := dst.Bounds().Min
 	ox, oy := float64(o.X)+x0*pxmm, float64(o.Y)+y0*pxmm
 	p := newPen(dst, image.NewUniform(col), deg, ox, oy)
-	var buf sfnt.Buffer
+	fb, _ := fallback(st) // знак вне гарнитуры — из Montserrat, как в measure
+	var buf, fbBuf sfnt.Buffer
+	main, alt := glyphSrc{sf, &buf}, glyphSrc{fb, &fbBuf}
 	for _, l := range b.Lines {
 		if l.Text == "" {
 			continue
 		}
 		bx, by := ox+l.X*pxmm, oy+l.Y*pxmm
-		var prev sfnt.GlyphIndex
-		var pos fixed.Int26_6 // в единицах шрифта ×64, как в measure
-		first := true
-		for _, r := range l.Text {
-			g, err := sf.GlyphIndex(&buf, r)
-			if err != nil || g == 0 {
-				continue
-			}
-			adv, err := sf.GlyphAdvance(&buf, g, unit, xfont.HintingNone)
-			if err != nil {
-				continue
-			}
-			if !first {
-				if k, err := sf.Kern(&buf, prev, g, unit, xfont.HintingNone); err == nil {
-					pos += k
-				}
-			}
-			first = false
-			if segs, err := sf.LoadGlyph(&buf, g, ppem, nil); err == nil {
+		walkGlyphs(main, alt, l.Text, unit, func(_ rune, src glyphSrc, g sfnt.GlyphIndex, pos, _ fixed.Int26_6) {
+			// контур — в px кегля, позиция — в единицах основного шрифта
+			if segs, err := src.f.LoadGlyph(src.b, g, ppem, nil); err == nil {
 				p.glyph(segs, bx+float64(pos)/64/upem*ppemPx, by)
 			}
-			pos += adv
-			prev = g
-		}
+		})
 	}
 }
