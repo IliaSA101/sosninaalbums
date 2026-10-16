@@ -134,6 +134,16 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/decor/gen
             - github.com/IliaSA101/sosninaalbums/internal/testkit
             - golang.org/x/image
+        # Проверка чужого SVG (048, design §5.4) — чистый разбор, без хранилища (052; да владельца 16.10).
+        "decor/svgcheck: только imgfile":
+          files:
+            - "**/internal/decor/svgcheck/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/svgcheck
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
         "decor: gen, model, library, imgfile, paths":
           files:
             - "**/internal/decor/*.go"
@@ -142,6 +152,7 @@ linters:
             - $gostd
             - github.com/IliaSA101/sosninaalbums/internal/decor$
             - github.com/IliaSA101/sosninaalbums/internal/decor/gen
+            - github.com/IliaSA101/sosninaalbums/internal/decor/svgcheck
             - github.com/IliaSA101/sosninaalbums/internal/album/model
             - github.com/IliaSA101/sosninaalbums/internal/library
             - github.com/IliaSA101/sosninaalbums/internal/imgfile

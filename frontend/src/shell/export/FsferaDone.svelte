@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Api, store } from '../../base/core/store.svelte'
-  import { errText } from '../../base/core/errtext'
+  import { errText } from '../../base/words/errtext'
   import Modal from '../../base/ui/Modal.svelte'
   import { doneFolder } from './exportopts'
 

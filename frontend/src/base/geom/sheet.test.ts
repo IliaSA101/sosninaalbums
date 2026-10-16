@@ -74,7 +74,7 @@ describe('линии прилипания без шва', () => {
 describe('чтения pageW', () => {
   const ALLOWED = [
     '/src/base/geom/sheet.ts',
-    '/src/base/core/types.ts', // описание Settings
+    '/src/base/types/app.ts', // описание Settings
     '/src/base/core/nav.svelte.ts', // значения по умолчанию до первого ответа Go (emptyView)
     '/src/panels/details/SettingsForm.svelte', // форма правки настроек альбома
     '/src/panels/details/presets.ts', // пресеты форматов — поля той же формы

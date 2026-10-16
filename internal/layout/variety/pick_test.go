@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/plan"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -127,9 +128,9 @@ func (r *rhythm) push(x *Cand) {
 	}
 }
 
-// admitted — выбор x в своём допуске: ряд в пределах δ, звезда-главное в пределах δ★ (на 8–16 фото —
-// по Fair от потолка 0.72), воздух по ритму, featured — звезда, ритм главного не после главного
-// или «даром» (сырая потеря ≤ 0.02).
+// admitted — выбор x в своём допуске: ряд в пределах δ, форма ряда — по Q в пределах δ_form,
+// звезда-главное в пределах δ★ (на 8–16 фото — по Fair от потолка 0.72), воздух по ритму,
+// featured — звезда, ритм главного не после главного или «даром» (сырая потеря ≤ 0.02).
 func (r *rhythm) admitted(tn tuning, s Spread, x *Cand, p layout.Params) bool {
 	const eps = 1e-8
 	best := s.Pool[0]
@@ -145,7 +146,7 @@ func (r *rhythm) admitted(tn tuning, s Spread, x *Cand, p layout.Params) bool {
 		starLoss = min(loss, fairLoss)
 	}
 	due := r.since+1 >= tn.period && s.Star < 0 && len(best.Rects) <= tn.airMaxK
-	return x.InRow && loss <= tn.delta+eps ||
+	return x.InRow && loss <= tn.delta+eps || x.Formed && best.Q-x.Q <= tn.deltaForm+eps ||
 		s.Star >= 0 && x.Big == s.Star && starLoss <= tn.deltaStar+eps ||
 		due && x.Family == Air && x.MinSide >= tn.airMinSide*p.PageH && x.Fill >= tn.airFloor &&
 			(best.Score-best.Fill)-(x.Score-x.Fill) <= tn.airLoss+eps
@@ -458,7 +459,7 @@ var (
 func bigAlbum(n int) []Spread {
 	bigOnce.Do(func() {
 		asp := mixedAspects(1500, 1)
-		pl := layout.PlanGroups(asp, geomSq, 100, 16)
+		pl := plan.PlanGroups(asp, geomSq, 100, 16)
 		bigData = make([]Spread, len(pl.Groups))
 		var wg sync.WaitGroup
 		for i, g := range pl.Groups {
@@ -482,7 +483,7 @@ func BenchmarkPick(b *testing.B) {
 // последовательно: цена «Обычного» сверх «Меньше» (design §10: ≤ 1.3× холодный кэш).
 func BenchmarkPoolAlbum(b *testing.B) {
 	asp := mixedAspects(1500, 1)
-	pl := layout.PlanGroups(asp, geomSq, 100, 16)
+	pl := plan.PlanGroups(asp, geomSq, 100, 16)
 	for _, lv := range []Level{Less, Normal} {
 		b.Run([]string{"less", "normal"}[lv], func(b *testing.B) {
 			for range b.N {

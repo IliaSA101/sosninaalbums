@@ -1,7 +1,7 @@
 // Фото, которые можно раскладывать автоматически (автосборка, «Заполнить пустые места», фильтр
 // «Неиспользованные»): не в местах альбома и не на фоне. Фото фона в used не входит (спека 009,
 // решение владельца), но раскладка не должна снова ставить его в места.
-import { withSkipped } from '../../base/core/errtext'
+import { withSkipped } from '../../base/words/errtext'
 import type { PickResult } from '../../base/core/hooks'
 import type { Photo } from '../../base/core/types'
 import { markOf, type OwnMarks } from '../marks/marks'
@@ -33,6 +33,11 @@ export function autoPick(
 // Фильтр «Не в альбоме» пуст потому, что все фото уже разложены: лента говорит об этом и даёт «Показать все» (035 U11).
 export function allInAlbum(filter: 'all' | 'unused', freeCount: number, total: number): boolean {
   return filter === 'unused' && freeCount === 0 && total > 0
+}
+
+// Текст пустой ленты «Не в альбоме»: при скрытых папках речь о показанных (054).
+export function allInAlbumText(foldersFiltered: boolean): string {
+  return foldersFiltered ? 'Все фото показанных папок уже в альбоме' : 'Все фото уже в альбоме'
 }
 
 // Тост, когда автосборке нечего брать.

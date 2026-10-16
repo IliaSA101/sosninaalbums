@@ -159,6 +159,15 @@ describe('справочник функций: стражи', () => {
     expect(ARTICLES.find((x) => x.id === 'autobuild')?.where).toContain('Разнообразие раскладок')
   })
 
+  it('051: «Автосборка» — «Авто | Свой от … до …» и серии, без прежнего «не больше»; «Разнообразие» — ленты, фигуры, формы', () => {
+    const b = ARTICLES.find((x) => x.id === 'autobuild')
+    expect(b?.what).toContain('Авто')
+    for (const w of ['Фото на разворот: Авто | Свой от … до …', 'Не разрывать серии съёмки']) expect(b?.where, w).toContain(w)
+    const v = ARTICLES.find((x) => x.id === 'variety')
+    for (const w of ['Ленты', 'Фигуры', 'Лесенка']) expect(v?.where, w).toContain(w)
+    expect(v?.words).toContain('лесенка')
+  })
+
   it('у каждого раздела есть статьи; метки версии у статей нет', () => {
     for (const g of GUIDE_GROUPS)
       expect(

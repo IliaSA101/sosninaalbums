@@ -154,11 +154,11 @@ func resizeAlpha(src *image.Alpha, n int) *image.Alpha {
 // [floor(xᵢ), floor(xᵢ₊₁)) — без щелей и без двойного перекрытия (оно темнило бы шов).
 func paper(t *texture) func(c *canvas, s Spec) {
 	return func(c *canvas, _ Spec) {
-		if paperMM*c.m[0]+1 > maxMaskPx {
+		if paperMM*c.M[0]+1 > maxMaskPx {
 			// Маска плитки вышла бы сотнями МБ (превью с мелким w): рисуем слоем меньшего
 			// разрешения и растягиваем — исходник 2048 px всё равно мельче. Без рекурсии: у
 			// узкой обрезки слой может остаться того же масштаба, тогда маска просто зажата.
-			c.softAt((maxMaskPx-2)/paperMM, t.tiles)
+			c.SoftAt((maxMaskPx-2)/paperMM, t.tiles)
 			return
 		}
 		t.tiles(c)
@@ -167,20 +167,20 @@ func paper(t *texture) func(c *canvas, s Spec) {
 
 // tiles — плитки маски по обрезке c.
 func (t *texture) tiles(c *canvas) {
-	k := c.m[0]
+	k := c.M[0]
 	side := paperMM * k
 	m := t.mask(min(int(math.Ceil(side))+1, maxMaskPx))
 	if m == nil {
 		return
 	}
-	src := image.NewUniform(color.NRGBA{A: uint8(math.Round(255 * c.alpha))})
+	src := image.NewUniform(color.NRGBA{A: uint8(math.Round(255 * c.Alpha))})
 	edge := func(o float64, i int) int { return int(math.Floor(o + float64(i)*side)) }
-	for j := 0; edge(c.m[5], j) < c.clip.Max.Y; j++ {
-		for i := 0; edge(c.m[2], i) < c.clip.Max.X; i++ {
-			x0, y0 := edge(c.m[2], i), edge(c.m[5], j)
-			r := image.Rect(x0, y0, edge(c.m[2], i+1), edge(c.m[5], j+1)).Intersect(c.clip)
+	for j := 0; edge(c.M[5], j) < c.Clip.Max.Y; j++ {
+		for i := 0; edge(c.M[2], i) < c.Clip.Max.X; i++ {
+			x0, y0 := edge(c.M[2], i), edge(c.M[5], j)
+			r := image.Rect(x0, y0, edge(c.M[2], i+1), edge(c.M[5], j+1)).Intersect(c.Clip)
 			if !r.Empty() {
-				draw.DrawMask(c.dst, r, src, image.Point{}, m, r.Min.Sub(image.Pt(x0, y0)), draw.Over)
+				draw.DrawMask(c.Dst, r, src, image.Point{}, m, r.Min.Sub(image.Pt(x0, y0)), draw.Over)
 			}
 		}
 	}

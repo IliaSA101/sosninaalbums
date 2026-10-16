@@ -2,7 +2,7 @@
   import { tick } from 'svelte'
   import { store } from '../../base/core/store.svelte'
   import { gallery } from './gallery.svelte'
-  import { plural } from '../../base/core/plural'
+  import { plural } from '../../base/words/plural'
   import { newSheetSize, sheetSize } from '../../base/geom/sheet'
   import Seg from '../../base/tpl/Seg.svelte'
   import SideList from '../../base/tpl/SideList.svelte'
@@ -18,6 +18,7 @@
     galleryOrders,
     galleryRow,
     ROW,
+    tileTitle,
     twinsLabel,
     type FamilyFilter,
   } from './variants'
@@ -109,6 +110,7 @@
       <button
         class="card"
         class:current={ch.key === sp?.layout}
+        title={tileTitle(ch)}
         style:width="{cardW}px"
         style:height="{H}px"
         onmouseenter={() => gallery.previewChoice(ch)}

@@ -16,7 +16,7 @@ import {
 } from './levels'
 import { blockerOf, features, fromBase, setBase, shortOf, toggle, type Toggled } from './levelcustom'
 import { modes } from './view.svelte'
-import { errText } from '../core/errtext'
+import { errText } from '../words/errtext'
 import type { Prefs as PrefsData } from '../core/types'
 
 // Состояние уровня целиком: по нему делается «Вернуть» и откат при ошибке Go.

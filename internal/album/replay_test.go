@@ -3,7 +3,7 @@ package album_test
 // Голден-реплей поведения Editor (023 Ш0, docs/specs/0.8/023-editor-core/critic.md п.7):
 // каждый публичный метод хотя бы раз по фикстуре, после правки — View, глубина отмены
 // и возврата, rev и sha256 байтов Save. Ловит дрейф поведения при переносе ядра,
-// который точечные тесты не видят. Эталон — testdata/replay.json (строка — шаг),
+// который точечные тесты не видят. Эталон — testdata/replay.json.gz (gzip, строка — шаг),
 // перезапись: go test ./internal/album -run Replay -update (флаг общий с marks_file_test.go).
 //
 // Чтения в сценарии тоже есть (их результат — короткий хэш нормализованного JSON);
@@ -12,10 +12,12 @@ package album_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -373,24 +375,67 @@ func TestEditorReplay(t *testing.T) {
 		buf.WriteByte('\n')
 	}
 	buf.WriteString("]\n")
-	compareReplay(t, filepath.Join("testdata", "replay.json"), buf.Bytes())
+	compareReplay(t, filepath.Join("testdata", "replay.json.gz"), buf.Bytes())
+}
+
+// readReplayGz читает эталон: gzip → тот же построчный JSON.
+func readReplayGz(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(zr)
+}
+
+// writeReplayGz пишет эталон сжатым без имени и времени в заголовке (воспроизводимо).
+func writeReplayGz(path string, data []byte) error {
+	var out bytes.Buffer
+	zw, err := gzip.NewWriterLevel(&out, gzip.BestCompression)
+	if err != nil {
+		return err
+	}
+	if _, err := zw.Write(data); err != nil {
+		return err
+	}
+	if err := zw.Close(); err != nil {
+		return err
+	}
+	return os.WriteFile(path, out.Bytes(), 0o644)
 }
 
 // compareReplay сверяет с эталоном построчно (строка — шаг) и называет первый расходящийся шаг.
+// Эталон хранится сжатым (2 МБ текста не пускает pre-commit); при расхождении текущий
+// реплей лежит несжатым в $GOTMPDIR/replay-got.json — для diff руками.
 func compareReplay(t *testing.T, path string, got []byte) {
 	t.Helper()
+	want, err := readReplayGz(path)
 	if *edtest.Update {
-		if err := os.WriteFile(path, got, 0o644); err != nil {
+		// Равное не переписываем: байты gzip зависят от версии Go — лишний шум в git.
+		if err == nil && bytes.Equal(got, want) {
+			return
+		}
+		if err := writeReplayGz(path, got); err != nil {
 			t.Fatal(err)
 		}
 		return
 	}
-	want, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("%v (создать: -update)", err)
 	}
 	if bytes.Equal(got, want) {
 		return
+	}
+	dump := ""
+	if dir := os.Getenv("GOTMPDIR"); dir != "" {
+		p := filepath.Join(dir, "replay-got.json")
+		if os.WriteFile(p, got, 0o644) == nil {
+			dump = "\nтекущий реплей: " + p
+		}
 	}
 	gl, wl := strings.Split(string(got), "\n"), strings.Split(string(want), "\n")
 	for i := range max(len(gl), len(wl)) {
@@ -409,7 +454,7 @@ func compareReplay(t *testing.T, path string, got []byte) {
 			at++
 		}
 		cut := func(s string) string { return s[max(0, at-150):min(len(s), at+150)] }
-		t.Fatalf("строка %d разошлась с эталоном (символ %d):\nесть:  …%s…\nждали: …%s…", i, at, cut(g), cut(w))
+		t.Fatalf("строка %d разошлась с эталоном (символ %d):\nесть:  …%s…\nждали: …%s…%s", i, at, cut(g), cut(w), dump)
 	}
-	t.Fatal("эталон отличается (перевод строк?)")
+	t.Fatal("эталон отличается (перевод строк?)" + dump)
 }

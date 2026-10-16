@@ -1,15 +1,20 @@
 package variety
 
 // Часть 2 спеки 041 (design §8, решения 0.11 №30–36): раскладки с главным фото для разворотов
-// 8–16 фото. В ряду «Авто» их нет: оценка layout штрафует разброс площадей, и главное фото
-// проигрывает сетке 0.2–0.5. Ключи — нынешняя грамматика, в порядке ленты; геометрия и оценка —
-// layout.Build. В ряд «Авто» и в Layout "" не попадают: только выбор сборки и «Другие варианты».
+// 8–16 фото; с 051 — 5–40 (5–7: новый диапазон, 17–40: сетки G вместо рядов V(H…)). Оценка layout
+// штрафует разброс площадей, и главное фото проигрывает сетке 0.2–0.5, поэтому лучшие из них
+// вставляет в ряд «Авто» Row (051); остальные — только в «Другие варианты».
+// Ключи — нынешняя грамматика, в порядке ленты; геометрия и оценка — layout.Build. В Layout ""
+// не попадают: ключ пишет выбор сборки или подборка.
 
 import (
 	"math"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 // Kind — семейство генератора featured; NoKind — раскладка не из него (ряд «Авто», воздух).
@@ -26,8 +31,11 @@ const (
 )
 
 const (
-	// FeatMin — от стольких фото работает генератор: на меньших главное фото есть в ряду «Авто».
+	// FeatMin — от стольких фото главное фото из ряда «Авто» не бывает: от них «Другие варианты» и Pick
+	// берут featured (решения 0.11); генератор умеет и меньше — featLo.
 	FeatMin = 8
+	// featLo, featHi — на скольких фото работает генератор (051 G5: 5–7 и 17–40 — новое).
+	featLo, featHi = 5, 40
 	// heroCap — потолок лучшей оценки в допуске (решение №30): у одинаковых 12 фото сетка даёт
 	// 0.89, главное по Fair — 0.66–0.74; без потолка главного на них не бывает.
 	heroCap = 0.72
@@ -67,16 +75,17 @@ type gen struct {
 	bufA   []float64 // пропорции сетки (grids), по числу фото
 	bufP   []float64 // их префиксные суммы
 	out    []Feat
-	builds int // вызовов Build (бюджет design §8 — ≤ 150 на разворот)
+	builds int  // вызовов Build (бюджет design §8 — ≤ 150 на разворот при 8–16 фото)
+	many   bool // с ManyFrom фото страница-сетка — G (ряды одной высоты), а не V(H…)
 }
 
-// featured — раскладки с главным фото для разворота из 8–16 фото (иначе nil), прошедшие жёсткие
+// featured — раскладки с главным фото для разворота из 5–40 фото (иначе nil), прошедшие жёсткие
 // запреты (решение №31): главное — по геометрии, его доля в площади, не-главные не мельче пола и не
 // на сгибе, через сгиб — только широкое главное. Звезду не знает: «у стыка» строится для любой
 // позиции, и «Другие варианты» (кэш по пропорциям) годятся для любой звезды.
 func featured(as []float64, p layout.Params) []Feat {
 	k := len(as)
-	if k < FeatMin || k >= layout.ManyFrom || p.Sheet || p.PageW <= 2*p.Margin || p.PageH <= 2*p.Margin {
+	if k < featLo || k > featHi || p.Sheet || p.PageW <= 2*p.Margin || p.PageH <= 2*p.Margin {
 		return nil
 	}
 	for _, a := range as {
@@ -91,7 +100,7 @@ func featured(as []float64, p layout.Params) []Feat {
 
 func newGen(as []float64, p layout.Params) *gen {
 	return &gen{as: as, p: p, cw: p.PageW - 2*p.Margin, ch: p.PageH - 2*p.Margin, sw: 2*p.PageW - 2*p.Margin,
-		seen: map[string]bool{}, memo: map[gridKey][]tn{}, bufA: make([]float64, len(as)), bufP: make([]float64, len(as)+1)}
+		many: len(as) >= layout.ManyFrom, seen: map[string]bool{}, memo: map[gridKey][]tn{}, bufA: make([]float64, len(as)), bufP: make([]float64, len(as)+1)}
 }
 
 // run — все семейства по порядку (порядок выдачи — порядок генерации; подборка сортирует сама).
@@ -104,6 +113,22 @@ func (g *gen) run() {
 	}
 	g.props()
 	g.pair()
+}
+
+// root — запись сетки как корня страницы: с ManyFrom фото ряды V(H…) — G (одной высоты фото; корень G
+// бывает только у страницы целиком), иначе — как есть.
+func (g *gen) root(t tn) string {
+	if !g.many || t.h || t.leaf >= 0 || len(t.kids) < 2 {
+		return t.String()
+	}
+	rows := make([]string, len(t.kids))
+	for i, r := range t.kids {
+		if r.leaf < 0 && (!r.h || slices.ContainsFunc(r.kids, func(x tn) bool { return x.leaf < 0 })) {
+			return t.String() // не ряды из фото
+		}
+		rows[i] = r.String()
+	}
+	return "G(" + strings.Join(rows, ",") + ")"
 }
 
 // try строит ключ и берёт его, если он проходит запреты (Describe — только у прошедших: вид
@@ -123,15 +148,15 @@ func (g *gen) try(k Kind, key string) {
 // allowed — жёсткие запреты (решение №31): главное по геометрии есть и занимает свою долю площади,
 // не-главные не мельче пола и не на сгибе, через сгиб — только главное шире foldAspect.
 func (g *gen) allowed(rs []layout.Rect) bool {
-	h := heroesOf(rs)
-	if h.n == 0 {
+	h := forms.Heroes(rs)
+	if h.N == 0 {
 		return false
 	}
 	share := heroShare
-	if h.n == 2 {
+	if h.N == 2 {
 		share = pairShare
 	} else {
-		h.idx[1] = -1
+		h.Idx[1] = -1
 	}
 	sum := 0.0
 	for _, x := range rs {
@@ -142,7 +167,7 @@ func (g *gen) allowed(rs []layout.Rect) bool {
 	spine := g.p.PageW
 	for i, x := range rs {
 		fold := g.p.Layflat && x.X < spine-foldEps && x.X+x.W > spine+foldEps
-		if h.idx[0] == i || h.idx[1] == i {
+		if h.Idx[0] == i || h.Idx[1] == i {
 			if quanta(x.W*x.H/sum) < quanta(share) || fold && quanta(x.W/x.H) < quanta(foldAspect) {
 				return false
 			}
@@ -160,13 +185,13 @@ func (g *gen) allowed(rs []layout.Rect) bool {
 func (g *gen) page() {
 	k := len(g.as)
 	for _, t := range g.grids(1, k, g.cw, g.ch, 2) {
-		g.try(KindPage, paged("0", t.String()))
-		g.try(KindPage, paged("E(0)", t.String()))
+		g.try(KindPage, paged("0", g.root(t)))
+		g.try(KindPage, paged("E(0)", g.root(t)))
 	}
 	last := strconv.Itoa(k - 1)
 	for _, t := range g.grids(0, k-1, g.cw, g.ch, 2) {
-		g.try(KindPage, paged(t.String(), last))
-		g.try(KindPage, paged(t.String(), "E("+last+")"))
+		g.try(KindPage, paged(g.root(t), last))
+		g.try(KindPage, paged(g.root(t), "E("+last+")"))
 	}
 }
 
@@ -178,18 +203,18 @@ func (g *gen) joint() {
 		v, hz := g.sides(h)
 		if l := g.grid(0, h, g.cw, g.ch); l != nil {
 			if t, ok := g.under(h, h+1, k); ok && v {
-				g.try(KindJoint, paged(l.String(), node(false, lf(h), t).String()))
+				g.try(KindJoint, paged(g.root(*l), node(false, lf(h), t).String()))
 			}
 			if t, ok := g.beside(h, h+1, k); ok && hz {
-				g.try(KindJoint, paged(l.String(), node(true, lf(h), t).String()))
+				g.try(KindJoint, paged(g.root(*l), node(true, lf(h), t).String()))
 			}
 		}
 		if r := g.grid(h+1, k, g.cw, g.ch); r != nil {
 			if t, ok := g.under(h, 0, h); ok && v {
-				g.try(KindJoint, paged(node(false, t, lf(h)).String(), r.String()))
+				g.try(KindJoint, paged(node(false, t, lf(h)).String(), g.root(*r)))
 			}
 			if t, ok := g.beside(h, 0, h); ok && hz {
-				g.try(KindJoint, paged(node(true, t, lf(h)).String(), r.String()))
+				g.try(KindJoint, paged(node(true, t, lf(h)).String(), g.root(*r)))
 			}
 		}
 	}
@@ -247,9 +272,9 @@ func (g *gen) centerAt(h, m int) {
 		}
 		page := node(horiz, *b, lf(h), *a).String()
 		if h < m {
-			g.try(KindJoint, paged(page, other.String()))
+			g.try(KindJoint, paged(page, g.root(*other)))
 		} else {
-			g.try(KindJoint, paged(other.String(), page))
+			g.try(KindJoint, paged(g.root(*other), page))
 		}
 	}
 }

@@ -13,19 +13,20 @@ type Head struct {
 	Color   Color  // класс профиля
 	Profile string // имя профиля для интерфейса
 	XMP     []byte // основной пакет XMP без префикса; nil — нет. Разбирает только сканер
+	Taken   int64  // EXIF DateTimeOriginal: секунды Unix, местное время камеры как UTC; 0 — нет или мусор
 }
 
 // XMPPrefix — начало APP1 с основным пакетом XMP. Расширенный (`…/xmp/extension/`) не читаем:
 // оценка и метка лежат в основном.
 const XMPPrefix = "http://ns.adobe.com/xap/1.0/\x00"
 
-// Header читает ориентацию, цветовой профиль и XMP за один проход по сегментам
+// Header читает ориентацию, время съёмки, цветовой профиль и XMP за один проход по сегментам
 // (ICC важнее EXIF Interop: так камеры Canon/Nikon помечают Adobe RGB без профиля).
 // CMYK без ICC здесь не виден — его определяет readInfo по DecodeConfig.
 // Ошибка чтения не-JPEG и мусор дают {1, "", "", nil}.
 func Header(r io.Reader) Head {
 	s := jpegSegments(r)
-	h := Head{Orient: 1, XMP: s.xmp}
+	h := Head{Orient: 1, XMP: s.xmp, Taken: s.taken}
 	if s.orient > 0 {
 		h.Orient = s.orient
 	}
@@ -43,6 +44,7 @@ type jpegSegs struct {
 	icc     []byte // ICC-профиль, куски склеены
 	interop string // EXIF InteropIndex
 	orient  int    // EXIF Orientation, 0 — тега нет
+	taken   int64  // EXIF время съёмки, 0 — нет
 	xmp     []byte // первый APP1 XMP без префикса
 }
 
@@ -82,6 +84,7 @@ func jpegSegments(r io.Reader) jpegSegs {
 			haveExif = true
 			out.interop = exifInterop(seg[6:])
 			out.orient = exifOrientation(seg)
+			out.taken = exifTaken(seg[6:])
 		case m[1] == 0xE1 && out.xmp == nil && len(seg) >= len(XMPPrefix) && string(seg[:len(XMPPrefix)]) == XMPPrefix:
 			// Некоторые программы добивают APP1 нулями до размера: NUL в XML — ошибка разбора.
 			out.xmp = bytes.TrimRight(seg[len(XMPPrefix):], "\x00")

@@ -153,6 +153,10 @@ func inFile(data []byte) int {
 	return len(f.Templates)
 }
 
+// badStamp — метка времени в имени .bad; переменная, чтобы тест фиксировал секунду
+// (иначе ветка «имя занято» покрывается, только если оба переноса попали в одну секунду).
+var badStamp = func() string { return time.Now().Format("20060102-150405") }
+
 // moveBad переименовывает templates.json в templates.bad-<время>.json (при занятом
 // имени — с номером); нет файла — ничего не делает.
 func moveBad(dir string, rename func(from, to string) error) error {
@@ -163,7 +167,7 @@ func moveBad(dir string, rename func(from, to string) error) error {
 		}
 		return err
 	}
-	stamp := time.Now().Format("20060102-150405")
+	stamp := badStamp()
 	for i := 0; ; i++ {
 		name := "templates.bad-" + stamp
 		if i > 0 {

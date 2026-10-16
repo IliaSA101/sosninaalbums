@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 func build4(t *testing.T, key string, asp []float64, p layout.Params) layout.Result {
@@ -103,6 +104,30 @@ func TestFamily(t *testing.T) {
 	}
 	if in := Describe(layout.Result{Rects: []layout.Rect{rc(1, 1)}}, layout.Params{}); in.Fill != 0 {
 		t.Errorf("нулевой разворот: заполнение %v", in.Fill)
+	}
+}
+
+// TestFamilyOfForms: сегмент фильтра подборки есть у каждой формы; подпись мозаики пуста
+// (весь ряд «Плотно»), у остальных форм — название вида.
+func TestFamilyOfForms(t *testing.T) {
+	want := map[forms.Form]Family{
+		forms.Mosaic: Dense, forms.Strip: Strip, forms.Rows: Strip, forms.Grid: Strip,
+		forms.Ladder: Figure, forms.Contrast: Figure, forms.Frame: Figure,
+		forms.Air: Air, forms.Asym: Air,
+		forms.Spine: Hero, forms.Hero: Hero, forms.Pair: Hero,
+		forms.Bleed: Bleed,
+	}
+	for f, fam := range want {
+		if got := FamilyOf(f); got != fam {
+			t.Errorf("FamilyOf(%s) = %s, ждали %s", f, got, fam)
+		}
+		name := FormName(f)
+		if (f == forms.Mosaic) != (name == "") || (f != forms.Mosaic && name != forms.Name(f)) {
+			t.Errorf("FormName(%s) = %q", f, name)
+		}
+	}
+	if FamilyOf("неизвестная") != Dense {
+		t.Error("неизвестная форма — не «Плотно»")
 	}
 }
 

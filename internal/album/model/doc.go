@@ -11,12 +11,10 @@
 // Карта: project.go (Project, Spread, Settings, PhotoRef, Normalize, KeepLayouts, тип
 // изделия), places.go (Place, сетка, мост к internal/geom), backdrop.go (Backdrop), decor.go
 // (узор фона Pattern, его слоты и зажим, ключ своего из библиотеки 048),
-// text.go (кадр, рамки текстов, ширина «по тексту», кегль подписи, PhotoRef.Copy), order.go (стек
+// text.go (кадр, рамки текстов, ширина «по тексту», кегль подписи, PhotoRef.Copy; имя на фото 030, 043: PhotoRef.Name, PersonFromFile и вольное PersonFromFileLoose, NameView), order.go (стек
 // слоёв), marks.go (типы отметок), viewtypes.go (View, выбор сеток, PathPair, план окна «Имена» 043),
-// templates.go (шаблоны сеток), warm.go (параллельный счёт раскладок), limits.go (пределы
-// и ошибки), clamp.go (зажимы сетки и оформления, CheckTotals), fields.go (поля подписей 030:
-// Vars — поля шапки листа и VarsOf, Person, SheetCaps, их зажим, Expand), person.go (имя на фото:
-// PhotoRef.Name, PersonFromFile и вольное PersonFromFileLoose 043, NameView), cover.go (обложка 032: Cover, CoverSpec,
+// templates.go (шаблоны сеток), limits.go (пределы и ошибки; параллельный счёт раскладок), clamp.go (зажимы сетки и оформления, CheckTotals), fields.go (поля подписей 030:
+// Vars — поля шапки листа и VarsOf, Person, SheetCaps, их зажим, Expand), cover.go (обложка 032: Cover, CoverSpec,
 // пресеты, зажим; Фотосфера 047: форматы, пресеты страницы, шаблон обложки), sheet.go (геометрия листа Geo, Sheet, Sheets, CoverGeo, AreaOf, проект-лист 031
 // NewSheet и FoldPages; Settings.PageW — только здесь, ClampSettings и Params; виньетка 031:
 // Vignette, роли мест, зажим и FixVignettes).

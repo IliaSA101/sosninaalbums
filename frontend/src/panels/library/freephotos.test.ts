@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { allInAlbum, freePhotos, pickFor, type PickHost } from './freephotos'
+import { allInAlbum, allInAlbumText, freePhotos, pickFor, type PickHost } from './freephotos'
+import { filterFolders } from '../folders/folders'
 import type { Photo } from '../../base/core/types'
 
 const ph = (id: string): Photo => ({ id, path: id, name: id, w: 100, h: 100 })
@@ -33,6 +34,36 @@ describe('pickFor (034): откуда фото для окна автосбор�
   })
 })
 
+describe('folder filter (054)', () => {
+  const inA = ['a', 'b', 'c', 'd'].map((id) => ({ ...ph(id), path: `D:/${id < 'c' ? 'one' : 'two'}/${id}.jpg` }))
+  const host = (visible: Photo[], notify: (t: string) => void = () => {}): PickHost => ({
+    visible,
+    selectedIds: [],
+    used: new Set(),
+    backdropUsed: new Set(),
+    marks: {},
+    notify,
+  })
+
+  it('автосборка берёт только показанные, filtered: true', () => {
+    const shown = filterFolders(['D:/one', 'D:/two'], inA, new Set(['d:/one']))
+    expect(pickFor(host(shown), true, true)).toMatchObject({ ids: ['c', 'd'], filtered: true })
+  })
+
+  it('все папки скрыты — пусто и тост про фильтр', () => {
+    const toasts: string[] = []
+    const shown = filterFolders(['D:/one', 'D:/two'], inA, new Set(['d:/one', 'd:/two']))
+    expect(
+      pickFor(
+        host(shown, (t) => toasts.push(t)),
+        true,
+        true,
+      ).ids,
+    ).toEqual([])
+    expect(toasts).toEqual(['Под фильтр не подходит ни одно свободное фото'])
+  })
+})
+
 describe('allInAlbum (035 U11)', () => {
   it('«Не в альбоме» без свободных фото при непустой папке', () => {
     expect(allInAlbum('unused', 0, 12)).toBe(true)
@@ -41,5 +72,12 @@ describe('allInAlbum (035 U11)', () => {
     expect(allInAlbum('unused', 3, 12)).toBe(false)
     expect(allInAlbum('all', 0, 12)).toBe(false)
     expect(allInAlbum('unused', 0, 0)).toBe(false)
+  })
+})
+
+describe('allInAlbumText (054)', () => {
+  it('без скрытых папок — прежний текст, со скрытыми — про показанные', () => {
+    expect(allInAlbumText(false)).toBe('Все фото уже в альбоме')
+    expect(allInAlbumText(true)).toBe('Все фото показанных папок уже в альбоме')
   })
 })

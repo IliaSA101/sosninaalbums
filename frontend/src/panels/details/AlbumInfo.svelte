@@ -1,6 +1,6 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
-  import { plural } from '../../base/core/plural'
+  import { plural } from '../../base/words/plural'
   import { unitOf, isSheet } from '../../base/geom/sheet'
   import { albumStats, colorLine, nextLowSheet } from './stats'
 

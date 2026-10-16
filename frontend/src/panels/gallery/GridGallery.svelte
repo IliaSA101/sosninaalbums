@@ -1,8 +1,8 @@
 <script lang="ts">
   import { store, Api } from '../../base/core/store.svelte'
   import { gallery } from './gallery.svelte'
-  import { errText } from '../../base/core/errtext'
-  import { plural } from '../../base/core/plural'
+  import { errText } from '../../base/words/errtext'
+  import { plural } from '../../base/words/plural'
   import { applyChoice, tplCall } from '../layouts/gridactions'
   import { builtinOf, cardBoxes, defaultN, dropTitle, gridSourceTexts, MAX_N, mineOf, previewRects } from './gridgallery'
   import type { GridChoice, GridChoices, LayoutScope } from '../../base/core/types'

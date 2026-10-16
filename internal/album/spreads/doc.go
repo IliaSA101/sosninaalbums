@@ -6,7 +6,8 @@
 // поэтому пакет нельзя звать в обход Editor. Правка проекта идёт только через Editor.change.
 //
 // Карта: spreads.go (состав альбома, DeleteSelection), layout.go (SetLayout, StepLayout,
-// LayoutChoices, MoreLayouts), plan.go (AutoPlan и AutoBuild ровно на N разворотов),
+// LayoutChoices, MoreLayouts), plan.go (AutoPlan и AutoBuild ровно на N разворотов; диапазон, «Авто», серии — 051),
 // vary.go (разнообразие 041: выбор сборки с учётом соседей, VaryLayouts, поля подборки),
-// drop.go (бросок фото на ручной разворот 042: места, вопрос, плитка, рост виньетки).
+// drop.go (бросок фото на ручной разворот 042: места, вопрос, плитка, рост виньетки),
+// series.go (серии съёмки 051: seriesCuts — границы по смене папки и паузам EXIF).
 package spreads

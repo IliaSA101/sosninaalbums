@@ -1,7 +1,8 @@
 package spreads
 
-// Автосборка ровно на N разворотов (спека 027 §5): подсказка окна (AutoPlan) и сама
-// сборка (AutoBuild) идут через один PlanJob — иначе подсказка разошлась бы со сборкой.
+// Автосборка ровно на N разворотов (спека 027 §5, диапазон и серии — 051 §3–4): подсказка
+// окна (AutoPlan) и сама сборка (AutoBuild) идут через один PlanJob — иначе подсказка
+// разошлась бы со сборкой.
 
 import (
 	"fmt"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/plan"
 )
 
 // PlanJob — снимок входа автосборки: фото без сеток и фонов, их действующие пропорции,
@@ -50,34 +52,77 @@ func errSpreads() error {
 	return fmt.Errorf("автосборка даст больше %d разворотов: в альбоме их не может быть больше", model.MaxSpreads)
 }
 
-// Plan — подсказка окна: spreads зажимается в [⌈n/m⌉, min(n, MaxSpreads − непустых)],
-// maxPer — в 1…MaxPhotos; пустой хвост считается свободным местом (Reuse). Фото нет — пустой план без ошибки; места нет — ошибка.
-func (j PlanJob) Plan(spreads, maxPer int) (model.AutoPlan, error) {
-	ap, _, err := j.plan(spreads, maxPer)
+// Plan — подсказка окна: N зажимается в допустимое для пути (plan), верх ещё в MaxSpreads −
+// непустых; пустой хвост считается свободным местом (Reuse). Фото нет — пустой план без
+// ошибки; места нет — ошибка.
+func (j PlanJob) Plan(o model.AutoOpts) (model.AutoPlan, error) {
+	ap, _, err := j.plan(o)
 	return ap, err
 }
 
-func (j PlanJob) plan(spreads, maxPer int) (model.AutoPlan, layout.Plan, error) {
+// plan — три пути (051 §3): «Авто» — диапазон AutoPer по N, N в [⌈n/64⌉, n]; свой
+// диапазон (MinPer ≥ 1) — N в RangeSpreads; MinPer 0 — ровно, PlanGroups 0.12 побитово.
+// Серии (o.Series) тянут разрезы только с диапазоном, но счёт границ виден на любом пути.
+func (j PlanJob) plan(o model.AutoOpts) (model.AutoPlan, plan.Plan, error) {
 	n := len(j.asp)
 	if n == 0 {
-		return model.AutoPlan{}, layout.Plan{}, nil
+		return model.AutoPlan{}, plan.Plan{}, nil
 	}
-	maxPer = max(1, min(maxPer, model.MaxPhotos))
-	lo, hi := layout.SpreadRange(n, maxPer)
+	ap := model.AutoPlan{Photos: n}
+	var cuts []float64
+	if o.Series {
+		cuts = seriesCuts(j.infos)
+		ap.Cuts = strongCuts(cuts)
+	}
+	ranged := o.Auto || o.MinPer > 0
+	m := max(1, min(o.MaxPer, model.MaxPhotos))
+	var lo, hi int
+	switch {
+	case o.Auto:
+		lo, hi = plan.SpreadRange(n, model.MaxPhotos)
+	case ranged:
+		lo, hi = plan.RangeSpreads(n, o.MinPer, m)
+	default:
+		lo, hi = plan.SpreadRange(n, m)
+	}
 	hi = min(hi, model.MaxSpreads-(j.have-j.tail))
-	ap := model.AutoPlan{Photos: n, MinSpreads: lo, MaxSpreads: max(hi, 0)}
+	ap.MinSpreads, ap.MaxSpreads = lo, max(hi, 0)
 	if hi < lo {
-		return ap, layout.Plan{}, errSpreads()
+		return ap, plan.Plan{}, errSpreads()
 	}
-	pl := layout.PlanGroups(j.asp, j.prm, max(lo, min(spreads, hi)), maxPer)
+	N := max(lo, min(o.Spreads, hi))
+	var pl plan.Plan
+	if ranged {
+		from, to := o.MinPer, m
+		if o.Auto {
+			from, to = plan.AutoPer(n, N)
+		}
+		ap.From, ap.To = plan.RangePer(n, N, from, to)
+		pl = plan.PlanRange(j.asp, j.prm, plan.PlanOpts{Spreads: N, MinPer: from, MaxPer: to, Cuts: cuts})
+	} else {
+		ap.To = m
+		pl = plan.PlanGroups(j.asp, j.prm, N, m)
+	}
 	ap.Spreads, ap.Avg, ap.Min, ap.Max = pl.Spreads, pl.Avg, pl.Min, pl.Max
 	ap.Reuse = min(j.tail, ap.Spreads)
 	return ap, pl, nil
 }
 
+// strongCuts — сколько границ серий окно покажет: сила от половины (смена папки, пауза от
+// ~6 порогов T₀); слабые только подталкивают разрез.
+func strongCuts(cuts []float64) int {
+	k := 0
+	for _, c := range cuts {
+		if c >= 0.5 {
+			k++
+		}
+	}
+	return k
+}
+
 // AutoBuild — операция над проектом; pre — вход, план и прогрев до замка (Prepare), photos
-// там уже без повторов. Ровно o.Spreads разворотов (зажим — как у Plan) по не больше o.MaxPer
-// фото, начиная с позиции at. Фото из сеток и с фонов не берутся. Сборка в конец (at вне
+// там уже без повторов. Ровно o.Spreads разворотов по тем же опциям и зажиму, что у Plan
+// (диапазон, «Авто», серии), начиная с позиции at. Фото из сеток и с фонов не берутся. Сборка в конец (at вне
 // альбома или в пустом хвосте) занимает пустые развороты хвоста вместо новых, лишние пустые
 // остаются после собранных (035 U1). Раскладки — по o.Variety с учётом соседей (041);
 // «Меньше» — лучшие, как 0.10. rate — оценки фото для звезды разворота.

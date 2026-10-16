@@ -1,4 +1,4 @@
-import { capFirst, errText } from '../../base/core/errtext'
+import { capFirst, errText } from '../../base/words/errtext'
 import { store } from '../../base/core/store.svelte'
 import { sheetIn } from '../../base/geom/sheet'
 import type { VigFamilyFilter } from '../../base/tpl/tplfilter'

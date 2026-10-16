@@ -11,6 +11,7 @@ import {
   shownRow,
   startOrder,
   stillSpread,
+  tileTitle,
   twinsLabel,
   variantCounter,
   varies,
@@ -43,7 +44,9 @@ describe('stillSpread', () => {
 })
 
 // ---------- 041 ----------
-const ch = (key: string, family: Choice['family'], twin = -1): Choice => ({ key, rects: [], family, twin })
+const ch = (key: string, family: Choice['family'], twin = -1): Choice => ({ key, rects: [], family, twin, formName: '' })
+// Go шлёт все поля всегда; «без разметки» — пустые family и formName, twin −1.
+const bare = (key: string): Choice => ch(key, '')
 
 describe('familiesIn', () => {
   it('только семейства, что есть, в порядке сегментов', () => {
@@ -51,7 +54,33 @@ describe('familiesIn', () => {
     expect(familiesIn(rows).map((f) => f.label)).toEqual(['Плотно', 'Воздух', 'В край'])
   })
   it('Go не размечает (пусто или нет поля) — список пуст, фильтра нет', () => {
-    expect(familiesIn([[{ key: 'a', rects: [] }, ch('b', '')], []])).toEqual([])
+    expect(familiesIn([[bare('a'), ch('b', '')], []])).toEqual([])
+  })
+})
+
+describe('051: «Ленты» и «Фигуры»', () => {
+  it('сегменты — после «В край», пустые не показываются', () => {
+    const rows = [[ch('a', 'figure'), ch('b', 'strip'), ch('c', 'bleed'), ch('d', 'dense')]]
+    expect(familiesIn(rows).map((f) => f.label)).toEqual(['Плотно', 'В край', 'Ленты', 'Фигуры'])
+    expect(familiesIn([[ch('a', 'strip')]]).map((f) => f.id)).toEqual(['strip'])
+    expect(familiesIn([[ch('a', 'dense')]]).map((f) => f.id)).toEqual(['dense'])
+  })
+  it('фильтр «Ленты» оставляет ленты и текущую; «Фигуры» без фигур — пусто, текущая видна', () => {
+    const list = [ch('a', 'strip'), ch('b', 'figure'), ch('c', 'dense')]
+    expect(shownRow(list, { family: 'strip', open: false }).shown.map((c) => c.key)).toEqual(['a'])
+    expect(shownRow(list, { family: 'figure', current: 'c', open: false }).shown.map((c) => c.key)).toEqual(['b', 'c'])
+    expect(shownRow([ch('a', 'strip')], { family: 'figure', open: false }).shown).toEqual([])
+  })
+  it('фильтр выбран, а лент в подборке не осталось — «Все»', () => {
+    expect(activeFamily('strip', familiesIn([[ch('a', 'dense')]]))).toBe('all')
+  })
+  it('под фильтром без плиток — «Нет раскладок этого семейства»', () => {
+    const lines = galleryLines('spread', { inOrder: [ch('a', 'dense')], rearranged: [], extra: [] }, { why: '', canMore: false })
+    expect(galleryRow(lines, 'inOrder', { family: 'strip', openTwins: [] }).empty).toBe('Нет раскладок этого семейства')
+  })
+  it('подсказка плитки — название формы; у мозаики и без поля — нет', () => {
+    expect(tileTitle({ formName: 'Лесенка' })).toBe('Лесенка')
+    expect(tileTitle({ formName: '' })).toBeUndefined()
   })
 })
 
@@ -98,10 +127,7 @@ describe('shownRow', () => {
     expect(shownRow(mixed, { family: 'air', open: false }).shown.map((c) => c.key)).toEqual(['b'])
   })
   it('без разметки Go (нет twin) ряд как есть', () => {
-    const plain: Choice[] = [
-      { key: 'a', rects: [] },
-      { key: 'b', rects: [] },
-    ]
+    const plain: Choice[] = [bare('a'), bare('b')]
     expect(shownRow(plain, { family: 'all', open: false })).toEqual({ shown: plain, hidden: 0 })
   })
 })

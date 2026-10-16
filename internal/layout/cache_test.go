@@ -1,7 +1,9 @@
 package layout
 
 import (
+	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -170,4 +172,96 @@ func TestCachedPanicNoEntry(t *testing.T) {
 	if v := cached("k", func() int { return 5 }); v != 5 {
 		t.Fatalf("получили %d", v)
 	}
+}
+
+// nearSets — наборы, которые ключ с точностью 0.001 путал: 1334/2000 и 1335/2000 давали
+// один ключ «0.667», а в кэше оставалось то, что посчитано первым. Пары — один набор
+// с той и с другой пропорцией; 1, 3, 5 фото (перебор, перестановки, страницы) и 18 (many).
+func nearSets() [][2][]float64 {
+	a, b := 1334.0/2000, 1335.0/2000
+	with := func(x float64, n int) []float64 {
+		out := make([]float64, n)
+		for i := range out {
+			out[i] = [...]float64{x, 1.5, x, 0.75, 1.5, x}[i%6]
+		}
+		return out
+	}
+	var out [][2][]float64
+	for _, n := range []int{1, 3, 5, 18} {
+		out = append(out, [2][]float64{with(a, n), with(b, n)})
+	}
+	return out
+}
+
+// cachedSnap — всё, что пакет отдаёт из кэша по набору: ряды разворота и перестановок,
+// ряды страниц (первый постраничный ключ ряда, обе стороны). Матрица группировки — в layout/plan.
+func cachedSnap(asp []float64) string {
+	var b strings.Builder
+	row := Cached(asp, album30, 24)
+	rr, blk := CachedRearranged(asp, album30, 24)
+	fmt.Fprintf(&b, "L%v\nR%v %v\n", row, rr, blk)
+	for _, r := range row {
+		if !IsPaged(r.Key) {
+			continue
+		}
+		for side := range 2 {
+			in, ok := CachedPagesInOrder(r.Key, asp, album30, side, 24)
+			pin, prr, pb, pok := CachedPages(r.Key, asp, album30, side, 24)
+			fmt.Fprintf(&b, "P%d %v %v|%v %v %v %v\n", side, in, ok, pin, prr, pb, pok)
+		}
+		break
+	}
+	return b.String()
+}
+
+// TestCacheOrderFree — выдача кэша зависит только от ключа: близкие пропорции, посчитанные
+// в любом порядке, дают то же, что каждая на холодном кэше (иначе подсказка AutoPlan
+// и сборка AutoBuild могли разойтись, а эталоны — зависеть от порядка тестов).
+func TestCacheOrderFree(t *testing.T) {
+	t.Cleanup(resetCache)
+	for _, s := range nearSets() {
+		var cold [2]string
+		for i := range 2 {
+			resetCache()
+			cold[i] = cachedSnap(s[i])
+		}
+		if cold[0] == cold[1] {
+			t.Fatalf("%d фото: наборы неразличимы, тест ничего не проверяет", len(s[0]))
+		}
+		for first := range 2 {
+			resetCache()
+			var got [2]string
+			got[first] = cachedSnap(s[first])
+			got[1-first] = cachedSnap(s[1-first])
+			for i := range 2 {
+				if got[i] != cold[i] {
+					t.Errorf("%d фото, первым %d: набор %d разошёлся с холодным счётом", len(s[0]), first, i)
+				}
+			}
+		}
+	}
+}
+
+// TestCacheOrderFreeParallel — то же при параллельном счёте (как окна layout/plan): гонять с -race.
+func TestCacheOrderFreeParallel(t *testing.T) {
+	t.Cleanup(resetCache)
+	sets := nearSets()[:3] // 18 фото — в TestCacheOrderFree: под -race он долгий
+	cold := make([][2]string, len(sets))
+	for k, s := range sets {
+		for i := range 2 {
+			resetCache()
+			cold[k][i] = cachedSnap(s[i])
+		}
+	}
+	resetCache()
+	var wg sync.WaitGroup
+	for g := range 12 {
+		wg.Go(func() {
+			k, i := g%len(sets), g/len(sets)%2
+			if got := cachedSnap(sets[k][i]); got != cold[k][i] {
+				t.Errorf("горутина %d: набор %d/%d разошёлся с холодным счётом", g, k, i)
+			}
+		})
+	}
+	wg.Wait()
 }

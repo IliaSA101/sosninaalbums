@@ -6,6 +6,15 @@ import (
 	"math"
 
 	"golang.org/x/image/math/f64"
+
+	"github.com/IliaSA101/sosninaalbums/internal/decor/gen/paint"
+)
+
+// Холст, точка и ГСЧ живут в paint; псевдонимы оставляют сигнатуры рисовальщиков короткими.
+type (
+	canvas = paint.Canvas
+	pt     = paint.Pt
+	rng    = paint.Rand
 )
 
 // maxAreaMM — сторона области узора (мм), сверх которой не рисуется ничего: обложка — до
@@ -25,7 +34,7 @@ func DrawPattern(dst *image.RGBA, area image.Rectangle, s Spec, pxPerMM, fade fl
 		return
 	}
 	m := f64.Aff3{pxPerMM, 0, float64(area.Min.X), 0, pxPerMM, float64(area.Min.Y)}
-	paint(dst, area, m, w, h, fade, func(c *canvas) {
+	withCanvas(dst, area, m, w, h, fade, func(c *canvas) {
 		rs, _ := Resolve(s)
 		g.draw(c, rs)
 	})
@@ -46,48 +55,36 @@ func DrawArt(dst *image.RGBA, m f64.Aff3, s Spec, fade float64) {
 	if m[0]*m[4]-m[1]*m[3] == 0 {
 		return
 	}
-	paint(dst, dst.Rect, m, 1, 1, fade, func(c *canvas) {
+	withCanvas(dst, dst.Rect, m, 1, 1, fade, func(c *canvas) {
 		rs, _ := Resolve(s)
 		g.draw(c, rs)
 	})
 }
 
-// paint зовёт fn на холсте области. При прозрачности рисунок идёт непрозрачным в свой слой и
+// withCanvas зовёт fn на холсте области. При прозрачности рисунок идёт непрозрачным в свой слой и
 // ложится одним проходом с альфой 1 − fade — как превью /media/gen с opacity на холсте UI:
 // гаси каждая фигура отдельно, перекрытия темнели бы и печать расходилась с экраном.
-func paint(dst *image.RGBA, area image.Rectangle, m f64.Aff3, w, h, fade float64, fn func(c *canvas)) {
-	c := newCanvas(dst, area, m, w, h, fade)
+func withCanvas(dst *image.RGBA, area image.Rectangle, m f64.Aff3, w, h, fade float64, fn func(c *canvas)) {
+	c := paint.New(dst, area, m, w, h, fade)
 	if c == nil {
 		return
 	}
-	if c.alpha >= 1 {
+	if c.Alpha >= 1 {
 		fn(c)
 		return
 	}
-	a := c.alpha
-	layer := image.NewRGBA(c.clip) // те же координаты, что у холста: m не меняется
-	c.dst, c.alpha = layer, 1
+	a := c.Alpha
+	layer := image.NewRGBA(c.Clip) // те же координаты, что у холста: m не меняется
+	c.Dst, c.Alpha = layer, 1
 	fn(c)
-	overAlpha(dst, layer, a)
-}
-
-func newCanvas(dst *image.RGBA, area image.Rectangle, m f64.Aff3, w, h, fade float64) *canvas {
-	if math.IsNaN(fade) {
-		fade = 0
-	}
-	fade = min(max(fade, 0), 1)
-	clip := area.Intersect(dst.Rect)
-	if fade >= 1 || clip.Empty() {
-		return nil
-	}
-	return &canvas{dst: dst, clip: clip, m: m, w: w, h: h, alpha: 1 - fade}
+	paint.OverAlpha(dst, layer, a)
 }
 
 // inks — цвета Spec после Resolve.
 func inks(s Spec) []color.NRGBA {
 	out := make([]color.NRGBA, len(s.Inks))
 	for i, v := range s.Inks {
-		out[i] = rgb(v)
+		out[i] = paint.RGB(v)
 	}
 	return out
 }

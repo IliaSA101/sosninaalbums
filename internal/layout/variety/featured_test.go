@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -89,7 +90,8 @@ func checkFeat(t *testing.T, name string, as []float64, p layout.Params, f Feat)
 
 // TestFeaturedInvariants: все ключи генератора на наборах 8–16 фото × 3 геометрии строятся и
 // проходят инварианты; генератор что-то даёт на каждой геометрии и в каждом семействе; бюджет
-// Build ≤ 150 на разворот (design §8); вне 8–16 фото, у листа и на плохом входе — пусто.
+// Build ≤ 150 на разворот (design §8); вне 5–40 фото, у листа и на плохом входе — пусто
+// (5–7 и 17–40 — TestFeaturedWide).
 func TestFeaturedInvariants(t *testing.T) {
 	sets := featSets()
 	for _, g := range featGeoms {
@@ -120,8 +122,8 @@ func TestFeaturedInvariants(t *testing.T) {
 		as []float64
 		p  layout.Params
 	}{
-		"7 фото":        {sameAspects(7, aspL), geomSq},
-		"17 фото":       {sameAspects(17, aspL), geomSq},
+		"4 фото":        {sameAspects(4, aspL), geomSq},
+		"41 фото":       {sameAspects(41, aspL), geomSq},
 		"пусто":         {nil, geomSq},
 		"лист":          {sameAspects(12, aspL), sheet},
 		"нулевой поля":  {sameAspects(12, aspL), layout.Params{PageW: 20, PageH: 300, Margin: 12, Layflat: true}},
@@ -226,7 +228,7 @@ func TestFeaturedUniform(t *testing.T) {
 
 // TestFeaturedExtra: в «Других вариантах» featured — не больше featLimit, сначала по одному на
 // главное фото: позиций главного не меньше, чем у генератора (до предела); пул «Обычного» берёт
-// их с семейством, «Меньше» — нет.
+// их с семейством (и featured ряда «Авто» — с семейством ряда), «Меньше» — только ряд.
 func TestFeaturedExtra(t *testing.T) {
 	as := sameAspects(12, aspL)
 	e := extraOf(as, geomSq, 24)
@@ -249,26 +251,38 @@ func TestFeaturedExtra(t *testing.T) {
 	for _, f := range mine {
 		have[f.Big] = true
 	}
+	for _, c := range rowOf(as, geomSq, 24).row { // featured ряда «Авто» (051) тоже дают позицию
+		if c.Form == forms.Hero || c.Form == forms.Spine {
+			have[Describe(c.Result, geomSq).Big] = true
+		}
+	}
 	for b := range gen {
 		if !have[b] && len(mine) < featLimit {
-			t.Errorf("главное %d есть у генератора, но не в «Других вариантах»", b)
+			t.Errorf("главное %d есть у генератора, но не в ряду и не в «Других вариантах»", b)
 		}
 	}
 	kinds := 0
+	re := rowOf(as, geomSq, 24)
 	for _, c := range Pool(as, geomSq, 24, Normal) {
-		if c.Kind != NoKind {
+		if c.Kind == NoKind {
+			continue
+		}
+		want := e.kind[c.Key]
+		if c.InRow {
+			want = re.kind[c.Key] // с 051 лучшие featured по формам — в ряду «Авто»
+		} else {
 			kinds++
-			if e.kind[c.Key] != c.Kind {
-				t.Errorf("%q: семейство в пуле %d, в подборке %d", c.Key, c.Kind, e.kind[c.Key])
-			}
+		}
+		if want != c.Kind {
+			t.Errorf("%q: семейство в пуле %d, в ряду или подборке %d", c.Key, c.Kind, want)
 		}
 	}
 	if kinds != len(mine) {
-		t.Errorf("в пуле featured %d, в подборке %d", kinds, len(mine))
+		t.Errorf("в пуле featured вне ряда %d, в подборке %d", kinds, len(mine))
 	}
 	for _, c := range Pool(as, geomSq, 24, Less) {
-		if c.Kind != NoKind {
-			t.Fatalf("«Меньше»: featured %q в пуле", c.Key)
+		if !c.InRow {
+			t.Fatalf("«Меньше»: %q вне ряда «Авто» в пуле", c.Key)
 		}
 	}
 }

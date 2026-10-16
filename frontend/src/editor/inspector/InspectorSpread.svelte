@@ -5,6 +5,7 @@
   import { NAME_MAX, nameChanged, normName } from '../../panels/timeline/spreadname'
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
   import InspectorBackdrop from '../backdrop/InspectorBackdrop.svelte'
+  import InspectorPattern from '../pattern/InspectorPattern.svelte'
   import CaptionSheet from '../captions/CaptionSheet.svelte'
   import { namesUi } from '../../panels/names/names.svelte'
   import InspectorCover from '../../panels/cover/InspectorCover.svelte'
@@ -144,7 +145,8 @@
         {/if}
         <button class="ghost" disabled={!own} onclick={() => pick('spread', '')}>Как в альбоме</button>
       {/if}
-      {#if prefs.can('bgPhoto')}<div data-slot="backdrop"><InspectorBackdrop {sp} {split} /></div>{/if}
+      <!-- Узор программы (048) — строкой «Узор» над зонами: он лежит под фото фона и от областей зон не зависит -->
+      {#if prefs.can('bgPhoto')}<div data-slot="backdrop"><InspectorPattern {sp} /><InspectorBackdrop {sp} {split} /></div>{/if}
     </div>
   {/if}
   <!-- Подписи листа (030): общий стиль и шаблон «к каждому фото»; когда выделять нечего (одни заглушки) — здесь -->

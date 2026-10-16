@@ -5,6 +5,8 @@ const calls: { name: string; ids: string[]; patch?: unknown }[] = []
 let marksCalls = 0
 let buildArgs: unknown = null
 let marksAnswer: () => Promise<unknown> = async () => ({})
+// «Авто» с сериями — умолчание окна автосборки (051)
+const RANGE = { auto: true, minPer: 1, maxPer: 64, series: true }
 const view = (rev: number, marksRev: number, extra: object = {}) => ({ rev, marksRev, folders: [], spreads: [], ...extra })
 
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
@@ -18,8 +20,12 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
     if ((patch as { rating?: number }).rating === 99) throw 'слишком много своих отметок (больше 100 000)'
     return view(5, 2)
   },
-  AutoBuild: async (ids: string[], at: number, o: { spreads: number; maxPer: number; variety: number }) => {
-    buildArgs = { at, spreads: o.spreads, maxPer: o.maxPer, variety: o.variety }
+  AutoBuild: async (
+    ids: string[],
+    at: number,
+    o: { spreads: number; minPer: number; maxPer: number; auto: boolean; series: boolean; variety: number },
+  ) => {
+    buildArgs = { at, spreads: o.spreads, minPer: o.minPer, maxPer: o.maxPer, auto: o.auto, series: o.series, variety: o.variety }
     calls.push({ name: 'build', ids })
     return view(7, 1, {
       spreads: [
@@ -188,17 +194,24 @@ describe('автосборка и заполнение мест: что уход
     store.selected.add('a')
     store.selected.add('b')
     store.openAuto()
-    await store.autoBuild(1, 64)
+    await store.autoBuild(1, RANGE)
     expect(calls).toEqual([{ name: 'build', ids: ['a', 'b'] }])
-    // Контракт 041: (ids, at, AutoOpts{spreads, maxPer, variety}), at — конец альбома; по умолчанию «Обычное»
-    expect(buildArgs).toEqual({ at: 1, spreads: 1, maxPer: 64, variety: 1 })
+    // Контракт 041: (ids, at, AutoOpts{spreads, minPer, maxPer, auto, series, variety}) — 051, at — конец альбома; по умолчанию «Обычное»
+    expect(buildArgs).toEqual({ at: 1, spreads: 1, minPer: 1, maxPer: 64, auto: true, series: true, variety: 1 })
     expect(store.toast?.text).toBe('Собрано разворотов: 1')
+  })
+
+  it('«Свой» без серий: диапазон и флажок доходят до Go как набраны', async () => {
+    await setup()
+    store.openAuto()
+    await store.autoBuild(2, { auto: false, minPer: 4, maxPer: 9, series: false }, 2)
+    expect(buildArgs).toEqual({ at: 1, spreads: 2, minPer: 4, maxPer: 9, auto: false, series: false, variety: 2 })
   })
 
   it('автосборка без выделения — свободные без отклонённых, тост «Отклонённые не взяты»', async () => {
     await setup()
     store.openAuto()
-    await store.autoBuild(1, 64)
+    await store.autoBuild(1, RANGE)
     expect(calls).toEqual([{ name: 'build', ids: ['c', 'd'] }])
     expect(store.toast?.text).toBe('Собрано разворотов: 1. Отклонённые не взяты: 1')
   })
@@ -221,7 +234,7 @@ describe('автосборка и заполнение мест: что уход
   it('нечего брать: все свободные отклонены — Go не зовём, тост с причиной', async () => {
     await setup({ rejected: ['b', 'c', 'd'] })
     store.openAuto()
-    await store.autoBuild(1, 64)
+    await store.autoBuild(1, RANGE)
     expect(calls).toEqual([])
     expect(store.toast?.text).toBe('Отклонённые не взяты: 3')
   })

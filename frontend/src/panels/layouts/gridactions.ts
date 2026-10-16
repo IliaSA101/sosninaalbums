@@ -1,7 +1,7 @@
 // Вызовы Go для галереи сеток и копирования (спека 007, U9): ответ — в store.apply, ошибка — тост.
 import { store, Api } from '../../base/core/store.svelte'
-import { errText } from '../../base/core/errtext'
-import { plural } from '../../base/core/plural'
+import { errText } from '../../base/words/errtext'
+import { plural } from '../../base/words/plural'
 import { unitOf } from '../../base/geom/sheet'
 import { tplError } from '../gallery/gridgallery'
 import type { GridChoice, GridPlan, GridResult, GridTarget, LayoutScope } from '../../base/core/types'

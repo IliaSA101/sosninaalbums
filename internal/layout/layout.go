@@ -309,6 +309,7 @@ func blockCandidates(aspects []float64, box Rect, gap float64) (out []candidate,
 type node struct {
 	leaf  int // индекс фото; -1 у составного узла
 	horiz bool
+	small bool // лист m<i> ключа (051): фото kappa·h по центру своей ячейки
 	kids  []*node
 	a, b  float64 // высота при ширине w: h = a*w + b
 	depth int
@@ -377,6 +378,14 @@ func (n *node) place(x, y, w, h, gap float64, out []Rect) bool {
 		return false
 	}
 	if n.leaf >= 0 {
+		if n.small {
+			ph := h * kappa
+			if ph < 1 {
+				return false
+			}
+			out[n.leaf] = Rect{x, y + float64((h-ph)/2), w, ph}
+			return true
+		}
 		out[n.leaf] = Rect{x, y, w, h}
 		return true
 	}

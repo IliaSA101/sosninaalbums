@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/plan"
 )
 
 // Корпус спеки 041 (design §6): геометрии, наборы «серии» / «все горизонтальные» / «смесь»,
@@ -130,7 +131,7 @@ type corpusAlbum struct {
 
 // build считает PlanGroups и пулы (уровень Normal: тот же пул у Больше; Меньше берёт [0]).
 func build(name string, asp []float64, n, maxPer int, p layout.Params, seed uint64) corpusAlbum {
-	pl := layout.PlanGroups(asp, p, n, maxPer)
+	pl := plan.PlanGroups(asp, p, n, maxPer)
 	rt := ratingsOf(len(asp), seed)
 	a := corpusAlbum{name: name, p: p}
 	for _, g := range pl.Groups {
@@ -229,6 +230,10 @@ func measure(a corpusAlbum, lv Level) metrics {
 			// featured и звезда-главное на 8–16 фото судятся по Fair от потолка (решение 0.11 №30)
 			if x.Kind != NoKind || len(x.Rects) >= FeatMin && s.Star >= 0 && x.Big == s.Star {
 				l = max(0, min(s.Pool[0].Score, heroCap)-x.Fair)
+			}
+			// форма ряда «Авто» (051) судится по Q формы от Q лучшей: оценка layout штрафует её воздух
+			if x.Formed {
+				l = min(l, max(0, s.Pool[0].Q-x.Q))
 			}
 			m.loss, m.lossN, m.maxLoss = m.loss+l, m.lossN+1, math.Max(m.maxLoss, l)
 		}
@@ -338,9 +343,13 @@ func ratio2(a float64, b int) float64 {
 // главная, средняя потеря. Если реализация даёт лучше порога — порог не поднимать без решения.
 func TestVarietyMetrics(t *testing.T) {
 	var all, small [3]total // весь корпус; альбомы со средним ≤ 6 фото на развороте
+	var fs [3]formStats     // формы (051): не мозаика, соседи одной формы
 	for _, a := range corpus() {
 		for lv := Less; lv <= More; lv++ {
 			m := measure(a, lv)
+			f := formsOf(a, m.picked)
+			fs[lv].spreads, fs[lv].nonMosaic, fs[lv].sameNeighbors = fs[lv].spreads+f.spreads, fs[lv].nonMosaic+f.nonMosaic, fs[lv].sameNeighbors+f.sameNeighbors
+			fs[lv].mosaicRun = max(fs[lv].mosaicRun, f.mosaicRun)
 			all[lv].add(m)
 			if sum(a.sizes) <= 6*len(a.sizes) {
 				small[lv].add(m)
@@ -360,6 +369,10 @@ func TestVarietyMetrics(t *testing.T) {
 			100*ratio(all[lv].bigOne, all[lv].big), all[lv].bigOne, all[lv].big, 100*ratio(all[lv].bigHero, all[lv].big),
 			100*ratio(all[lv].bigStarsBig, all[lv].bigStars), all[lv].bigStarsBig, all[lv].bigStars)
 	}
+	for lv := Less; lv <= More; lv++ {
+		t.Logf("формы %d: не мозаика %.0f%% (%d/%d), соседей одной формы %d, мозаик подряд до %d",
+			lv, 100*ratio(fs[lv].nonMosaic, fs[lv].spreads), fs[lv].nonMosaic, fs[lv].spreads, fs[lv].sameNeighbors, fs[lv].mosaicRun)
+	}
 	check := func(ok bool, format string, args ...any) {
 		t.Helper()
 		if !ok {
@@ -374,6 +387,10 @@ func TestVarietyMetrics(t *testing.T) {
 	check(all[Normal].avgLoss() <= 0.02, "«Обычное»: средняя потеря %.4f > 0.02", all[Normal].avgLoss())
 	check(small[Normal].sigma() >= 0.10, "«Обычное», ≤ 6 фото: σ заполнения %.3f < 0.10", small[Normal].sigma())
 	check(all[More].sigma() >= 0.12, "«Больше»: σ заполнения %.3f < 0.12", all[More].sigma())
+	check(fs[Normal].nonMosaic > fs[Less].nonMosaic && fs[More].nonMosaic >= fs[Normal].nonMosaic,
+		"не мозаика: «Меньше» %d, «Обычное» %d, «Больше» %d", fs[Less].nonMosaic, fs[Normal].nonMosaic, fs[More].nonMosaic)
+	check(fs[Normal].sameNeighbors < fs[Less].sameNeighbors && fs[More].sameNeighbors <= fs[Normal].sameNeighbors,
+		"соседей одной формы: «Меньше» %d, «Обычное» %d, «Больше» %d", fs[Less].sameNeighbors, fs[Normal].sameNeighbors, fs[More].sameNeighbors)
 	check(all[Normal].starShare() >= 2*all[Less].starShare(), "звезда главная: «Обычное» %.2f < 2× «Меньше» %.2f",
 		all[Normal].starShare(), all[Less].starShare())
 }
@@ -393,16 +410,25 @@ var updateGolden = flag.Bool("update", false, "перезаписать testdata
 
 const goldenPath = "testdata/golden/variety.sha"
 
+// keysHash — первые 8 байт sha256 ключей по строке на ключ (строка эталона).
+func keysHash(keys []string) string {
+	h := sha256.New()
+	for _, k := range keys {
+		fmt.Fprintln(h, k)
+	}
+	return hex.EncodeToString(h.Sum(nil)[:8])
+}
+
 func goldenLines() []string {
 	var out []string
 	for _, a := range corpus() {
 		for lv := Less; lv <= More; lv++ {
-			h := sha256.New()
+			var keys []string
 			for i, k := range Pick(a.spreads, a.p, lv, Ctx{}) {
-				fmt.Fprintln(h, a.spreads[i].Pool[k].Key)
+				keys = append(keys, a.spreads[i].Pool[k].Key)
 			}
 			name := strings.ReplaceAll(a.name, " ", "_")
-			out = append(out, fmt.Sprintf("%s/%d %s", name, lv, hex.EncodeToString(h.Sum(nil)[:8])))
+			out = append(out, fmt.Sprintf("%s/%d %s", name, lv, keysHash(keys)))
 		}
 	}
 	return out

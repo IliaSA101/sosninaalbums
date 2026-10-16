@@ -1,7 +1,7 @@
 // Свои шаблоны виньетки (038): чистая логика и вызовы Go для окна «Настроить виньетку», галереи и карточки.
 // Шаблоны хранит Go (templates.json, общий для компьютера); здесь тексты, условия кнопок и тосты.
 import { Api, store } from '../../base/core/store.svelte'
-import { errText } from '../../base/core/errtext'
+import { errText } from '../../base/words/errtext'
 import type { GridResult, VigChoice } from '../../base/core/types'
 import { tplCall } from '../layouts/gridactions'
 import { tplError } from '../gallery/gridgallery'

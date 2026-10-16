@@ -2,7 +2,9 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -21,6 +23,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -509,5 +512,35 @@ func TestEditHostComplete(t *testing.T) {
 		if h.Field(i).IsNil() {
 			t.Errorf("поле Host.%s не задано", h.Type().Field(i).Name)
 		}
+	}
+}
+
+// AutoOpts 051 из UI по именам JSON; время съёмки из ленты доходит до плана: одна папка, две
+// серии с паузой в час — одна граница (без Taken в infos её бы не было), «Авто» даёт From/To.
+func TestAutoPlanSeriesFromLibrary(t *testing.T) {
+	var o model.AutoOpts
+	if err := json.Unmarshal([]byte(`{"spreads":2,"maxPer":9,"minPer":2,"auto":true,"series":true}`), &o); err != nil ||
+		o != (model.AutoOpts{Spreads: 2, MaxPer: 9, MinPer: 2, Auto: true, Series: true}) {
+		t.Fatalf("AutoOpts из JSON: %+v %v", o, err)
+	}
+	a := newApp(t)
+	a.ed.Store(mustEditor(t, model.New(), ""))
+	var ids []string
+	for i := range 12 {
+		id := fmt.Sprint("t", i)
+		at := int64(i) * 15
+		if i >= 6 {
+			at += 3600
+		}
+		a.byID[id] = library.Photo{ID: id, Path: `C:\свадьба\` + id + `.jpg`, W: 300, H: 200, Taken: 1_700_000_000 + at}
+		ids = append(ids, id)
+	}
+	ap, err := a.AutoPlan(ids, o)
+	if err != nil || ap.Cuts != 1 || ap.Spreads != 2 || ap.From < 1 || ap.To < ap.From {
+		t.Fatalf("AutoPlan с сериями: %+v %v", ap, err)
+	}
+	v, err := a.AutoBuild(ids, -1, o)
+	if err != nil || len(v.Spreads) != 2 || len(v.Spreads[0].Photos) != 6 {
+		t.Fatalf("AutoBuild с сериями: %v, %+v", err, v.Spreads)
 	}
 }

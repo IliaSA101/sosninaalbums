@@ -89,8 +89,9 @@ func (m *Methods) SetSettings(s model.Settings) (v model.View) {
 	return m.changed(m.editor().SetSettings(s))
 }
 
-// AutoPlan — подсказка окна автосборки на o.Spreads разворотов по не больше o.MaxPer фото
-// (оба зажимаются; MaxPer — в 1…64; Variety не влияет). Только чтение. Фото нет — пустой
+// AutoPlan — подсказка окна автосборки на o.Spreads разворотов по o.MinPer…o.MaxPer фото или
+// «Авто», с сериями или без (всё зажимается; MaxPer — в 1…64; Variety не влияет; нули новых
+// полей — как 0.12). Только чтение. Фото нет — пустой
 // план; альбом почти полон (MaxSpreads) — ошибка.
 func (m *Methods) AutoPlan(ids []string, o model.AutoOpts) (pl model.AutoPlan, err error) {
 	defer GuardErr("AutoPlan", &err)

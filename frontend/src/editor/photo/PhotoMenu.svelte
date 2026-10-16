@@ -10,7 +10,7 @@
   import { relinkFolder } from '../../panels/library/relink'
   import { decor } from '../../panels/decor/decor.svelte'
   import { sticker } from '../sticker/sticker.svelte'
-  import { errText } from '../../base/core/errtext'
+  import { errText } from '../../base/words/errtext'
   import { scopeLabel, scopesFor } from '../backdrop/backdrop'
   import { setBackdrop } from '../backdrop/backdropact'
   import { COVER_SCOPE_LABEL, layoutScopes } from '../cover/cover'

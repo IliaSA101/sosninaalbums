@@ -1,7 +1,7 @@
 // Галерея раскладок (спека 003/007): состояние, предпросмотр по наведению и запрос вариантов у Go.
 // Вынесено из store.svelte.ts; store зовёт sync() из apply и close() из go().
 import * as Api from '../../../wailsjs/go/app/App'
-import { errText } from '../../base/core/errtext'
+import { errText } from '../../base/words/errtext'
 import { store } from '../../base/core/store.svelte'
 import { gridAct } from '../layouts/gridact.svelte'
 import { hasSeam, isCover } from '../../base/geom/sheet'
@@ -10,7 +10,7 @@ import type { TplSource } from '../../base/tpl/tplsource'
 import type { VigFamilyFilter } from '../../base/tpl/tplfilter'
 import { stepVignette } from '../vignette/vigact'
 import { isVignette } from '../vignette/vignette'
-import type { Choice, Choices, GalleryTab, LayoutScope, PageView, RotRect, SpreadView } from '../../base/core/types'
+import type { Choices, GalleryTab, LayoutScope, PageView, RotRect, SpreadView } from '../../base/core/types'
 
 // У страницы есть что выбирать: ⊞, листание и галерея страницы. Раскладка вне рядов
 // (variant −1) при ≥ 2 фото тоже считается — листание вернёт её в ряд.
@@ -121,7 +121,8 @@ class Gallery {
     this.openTwins = this.openTwins.includes(row) ? this.openTwins.filter((r) => r !== row) : [...this.openTwins, row]
   }
 
-  previewChoice(c: Choice | null) {
+  // Нужны только rects: ими же показывают и шаблоны сетки (с углом), не целый Choice.
+  previewChoice(c: { key: string; rects: RotRect[] } | null) {
     const g = this.cur
     this.preview = c && g ? { spread: g.spread, rects: c.rects } : null
   }

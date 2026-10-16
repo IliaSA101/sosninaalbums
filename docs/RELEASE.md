@@ -5,6 +5,7 @@
 ## 1. Версия
 
 - `wails.json` → `info.productVersion`: семвер, `0.X.0` — новая функциональность, `0.X.Y` — исправления. Это единственный источник: Go встраивает его через `go:embed` в `main.go` и передаёт в `app.Run` (разбор — `internal/app/version.go`), версия видна в шапке окна и пишется в `log.txt` при запуске.
+- Строка `Status` в `README.md` (английская, в начале файла) — та же версия.
 - Строка в «Что нового» (ниже, раздел 5) — для пользователя, без технических слов.
 
 ## 2. Проверки (всё зелёное, ноль предупреждений)
@@ -46,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 - На GitHub — только `main` (один коммит на версию) и метки `vX.Y.Z`; каждый push — только после явного «да» владельца.
 - В публичный `main` идут версии с новой функциональностью (`0.X.0`) и исправления `0.X.Y`, когда они нужны пользователям или чинят CI на `main` (0.9.1 — по решению владельца).
 - Публикация версии на GitHub (с 0.9.1, сборка — `.github/workflows/release.yml`):
-  1. До метки: `wails.json` → `X.Y.Z`, раздел `## X.Y.Z — дата` в `CHANGELOG.md` пользовательским языком (он целиком идёт в текст релиза), `THIRD_PARTY_NOTICES.txt` перегенерирован, §2–4 пройдены на локальной сборке.
+  1. До метки: `wails.json` → `X.Y.Z`, раздел `## X.Y.Z — дата` в `CHANGELOG.md` пользовательским языком (он целиком идёт в текст релиза), `frontend/src/shell/dialogs/whatsnew.ts` обновлён (версия и 4–6 строк «Что нового» для стартового окна), `THIRD_PARTY_NOTICES.txt` перегенерирован, §2–4 пройдены на локальной сборке.
   2. `node scripts/publish-main.mjs <коммит dev> -m "Sosnina Albums X.Y.Z"` (без внутренних доков, список — `scripts/publish-exclude.txt`) → `git push origin main` → дождаться зелёного CI на этом коммите.
      Служебный коммит в main без выпуска (например, workflow): `node scripts/publish-main.mjs <коммит dev> --only <путь>… -m "ci: …" [--dry]` — поверх прежнего main берёт из dev только указанные пути; отказывает при расхождении с `origin/main` и при путях из `publish-exclude.txt`; `--dry` показывает `A/M/D` и статистику, ничего не меняя.
   3. `git tag vX.Y.Z main && git push origin vX.Y.Z` — Actions «Release» собирает exe Windows и `.app` macOS, задание «Архивы выпуска» (`pack`, `scripts/win/pack.py`, спека 039) пакует их в два zip с папкой `Sosnina Albums X.Y.Z` и создаёт **черновик** релиза: `SosninaAlbums-X.Y.Z-windows-x64.zip`, `SosninaAlbums-X.Y.Z-macos-universal.zip`, `THIRD_PARTY_NOTICES.txt`, инструкции (ниже) и текст (шаблон `.github/release-notes.md` + раздел CHANGELOG), ~15 мин. Голого exe на странице нет. Внутри каждого архива: программа, «Как установить (Windows|Mac).pdf» (нет pdf — docx), «Что нового.txt» (раздел CHANGELOG), `THIRD_PARTY_NOTICES.txt`.

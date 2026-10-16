@@ -455,6 +455,7 @@ export const HOTKEYS: Hotkey[] = [
   { show: 'Колесо, Shift+колесо, тачпад', label: 'Прокрутить ряд разворотов', group: 'canvas' },
   { feature: 'zoom', show: 'Колесо, Shift+колесо (в увеличении)', label: 'Двигать лист по вертикали и по горизонтали', group: 'canvas' },
   { feature: 'zoom', show: 'Ctrl+колесо, щипок тачпада', label: 'Масштаб к курсору', group: 'canvas' },
+  { show: 'Ctrl+колесо, Alt+колесо над лентой', label: 'Размер миниатюр', group: 'photos' },
   { show: 'Перетащить соседний разворот, Пробел+мышь', label: 'Прокрутить ряд разворотов', group: 'canvas' },
   { feature: 'zoom', show: 'Зажатое колёсико', label: 'Двигать увеличенный разворот', group: 'canvas' },
   { feature: 'zoom', show: 'Двойной щелчок по фону', label: 'Вписать разворот в окно', group: 'canvas' },

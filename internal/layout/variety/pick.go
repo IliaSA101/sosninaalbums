@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 // Spread — разворот для выбора: пул кандидатов (Pool; [0] — лучшая раскладка «Авто») и звезда.
@@ -27,6 +28,12 @@ type Ctx struct {
 	// главного перед первым (ритм главного, решение 0.11 №34).
 	Hero      bool
 	SinceHero int
+	// Forms — формы разворотов перед первым (последняя — ближняя, учитываются FormsWindow); NextForm —
+	// форма разворота после последнего ("" — нет). Avg — среднее фото на разворот альбома (0 — без
+	// бонуса «под размер», 051 design §7).
+	Forms    []forms.Form
+	NextForm forms.Form
+	Avg      float64
 }
 
 // tuning — пороги уровня (спека 041, design §5, §10). Меняются только с прогоном
@@ -41,14 +48,16 @@ type tuning struct {
 	airLoss    float64 // допуск воздуха по оценке без заполнения (rest): по общей он проигрывает 0.3–0.6
 	heroPeriod int     // каждый heroPeriod-й разворот — с главным фото из featured, если допустимо (№34)
 	deltaHero  float64 // допуск featured по Fair от min(лучшая, heroCap) (решение №30)
+	deltaForm  float64 // допуск формы ряда «Авто» по Q от Q лучшей (051 design §7)
+	mosaicRun  int     // мозаик подряд не больше: дальше мозаика недопустима, если есть другая
 }
 
 var tunings = [...]tuning{
 	Less: {},
 	Normal: {delta: 0.04, deltaStar: 0.10, period: 5, airMaxK: 12, airMinSide: 0.17, airFloor: 0.40, airLoss: 0.08,
-		heroPeriod: 4, deltaHero: 0.08},
+		heroPeriod: 4, deltaHero: 0.08, deltaForm: 0.12, mosaicRun: 3},
 	More: {delta: 0.08, deltaStar: 0.15, period: 3, airMaxK: 16, airMinSide: 0.14, airFloor: 0.28, airLoss: 0.12,
-		heroPeriod: 3, deltaHero: 0.12},
+		heroPeriod: 3, deltaHero: 0.12, deltaForm: 0.25, mosaicRun: 2},
 }
 
 // Бонусы и штрафы выбора (меньше — лучше). Звезда перекрывает любые штрафы соседей.
@@ -64,7 +73,41 @@ const (
 	penSameKind   = 0.5  // семейство featured как у прошлого разворота с главным: семейства чередуются
 	penSeen       = 0.25 // вид уже был в цепочке раньше позапрошлого: из равных берётся невиданный
 	penSameKey    = 1.0  // ключ как у предыдущего при другом виде: та же схема на других пропорциях
+	penForm1      = 1.5  // форма как у предыдущего (и у следующего), 051
+	penForm2      = 0.75 // форма как у позапрошлого
+	penFormOften  = 0.25 // форма уже ≥ formsOften раз в последних FormsWindow
+	bonusSize     = -0.5 // форма под размер группы (sizeForm)
+	// penHeroAgain — форма «С главным», вставленная в ряд «Авто» (Cand.Formed), сразу после разворота
+	// с главным (051, №40): featured там запрещены (limits.feat), а форма — штраф крупнее обычных
+	// штрафов соседей, но не запрет: на 3–4 фото «с главным» почти всё, и запрет оставил бы только
+	// лучшую. Лучшая раскладка (Layout "") и ключи ряда layout штрафа не получают: ритм воздуха 041
+	// остаётся как был (метрики корпуса №40). Звезда (bonusStar) штраф перекрывает.
+	penHeroAgain = 6.0
 )
+
+const (
+	// FormsWindow — сколько форм перед цепочкой знает выбор («форма ≥ 2 раз в последних 6», 051);
+	// экспорт — spreads собирает Ctx.Forms по нему же.
+	FormsWindow = 6
+	formsOften  = 2
+	// smallK, bigK — группа «редкая» при ≤ smallK·среднего фото, «плотная» при ≥ bigK·среднего.
+	smallK = 0.7
+	bigK   = 1.3
+)
+
+// sizeForm — форма под размер группы (design §7): редкому развороту — ленты, лесенка, мелкое —
+// крупное, воздух; плотному — мозаика, ряды, разные страницы, крупное; сетка — обоим.
+func sizeForm(f forms.Form, small, big bool) bool {
+	switch f {
+	case forms.Grid:
+		return small || big
+	case forms.Strip, forms.Ladder, forms.Contrast, forms.Air:
+		return small
+	case forms.Mosaic, forms.Rows, forms.Asym, forms.Hero:
+		return big
+	}
+	return false
+}
 
 // heroFree — featured вне ритма берётся «даром», только если сырая оценка не хуже лучшей на
 // столько (решение №34: по Fair «через корешок» бывает выше лучшей, и ритм перестал бы управлять).
@@ -117,7 +160,7 @@ func Pick(in []Spread, p layout.Params, lv Level, c Ctx) []int {
 		}
 		n := st.neighbors(t, s)
 		if i == len(in)-1 {
-			n.next = c.Next
+			n.next, n.nextForm = c.Next, c.NextForm
 		}
 		if i < len(c.Cur) {
 			n.cur = c.Cur[i]
@@ -138,12 +181,15 @@ type chain struct {
 	since     int // разворотов без воздуха
 	sinceHero int // разворотов без главного
 	prevHero  bool
-	prevKind  Kind // семейство featured последнего разворота с главным
+	prevKind  Kind         // семейство featured последнего разворота с главным
+	forms     []forms.Form // формы выбранных (и Ctx.Forms), последняя — ближняя
+	avg       float64
 }
 
 func newChain(c Ctx) *chain {
 	st := &chain{hist: slices.Clone(c.Prev[max(0, len(c.Prev)-2):]), older: map[uint64]bool{}, prevKey: c.PrevKey,
-		prevFam: c.Family, since: c.Since, sinceHero: c.SinceHero, prevHero: c.Hero}
+		prevFam: c.Family, since: c.Since, sinceHero: c.SinceHero, prevHero: c.Hero,
+		forms: slices.Clone(c.Forms[max(0, len(c.Forms)-FormsWindow):]), avg: c.Avg}
 	for _, l := range st.hist {
 		st.histID = append(st.histID, lookID(l))
 	}
@@ -156,6 +202,19 @@ func (st *chain) neighbors(t tuning, s Spread) neighbors {
 		heroDue: st.sinceHero+1 >= t.heroPeriod && s.Star < 0,
 		airDue:  st.since+1 >= t.period && s.Star < 0 && len(s.Pool[0].Rects) <= t.airMaxK}
 	n.heroLate = n.heroDue && st.sinceHero > st.since
+	n.recent = st.forms[max(0, len(st.forms)-FormsWindow):]
+	if f := len(st.forms); f >= 1 {
+		n.form1 = st.forms[f-1]
+		if f >= 2 {
+			n.form2 = st.forms[f-2]
+		}
+	}
+	for i := len(st.forms) - 1; i >= 0 && st.forms[i] == forms.Mosaic; i-- {
+		n.mosaics++
+	}
+	if k := float64(len(s.Pool[0].Rects)); st.avg > 0 {
+		n.small, n.big = quanta(k) <= quanta(smallK*st.avg), quanta(k) >= quanta(bigK*st.avg)
+	}
 	if h := len(st.hist); h >= 1 {
 		n.prev1 = st.hist[h-1]
 		if h >= 2 {
@@ -172,6 +231,7 @@ func (st *chain) push(x *Cand) {
 	}
 	st.hist, st.histID = append(st.hist, x.Look), append(st.histID, x.LookID)
 	st.prevFam, st.prevKey = x.Family, x.Key
+	st.forms = append(st.forms, x.Form)
 	if x.Family == Air {
 		st.since = 0
 	} else {
@@ -197,6 +257,10 @@ type neighbors struct {
 	older                   map[uint64]bool // виды цепочки раньше позапрошлого (LookID)
 	prevKey                 string          // ключ предыдущего
 	prevKind                Kind            // семейство featured последнего разворота с главным
+	form1, form2, nextForm  forms.Form      // формы предыдущего, позапрошлого и следующего ("" — нет)
+	recent                  []forms.Form    // формы последних FormsWindow разворотов
+	mosaics                 int             // мозаик подряд перед этим разворотом
+	small, big              bool            // группа редкая / плотная против среднего альбома
 }
 
 // one — выбор одного разворота: допустимые кандидаты, среди них минимум (штраф, потеря, ключ).
@@ -206,9 +270,12 @@ func (t tuning) one(s Spread, p layout.Params, n *neighbors) int {
 	lim := limits{
 		bestRest: quanta(best.Score - best.Fill), capQ: quanta(min(best.Score, heroCap)),
 		delta: quanta(t.delta), star: quanta(t.deltaStar), air: quanta(t.airLoss), hero: quanta(t.deltaHero),
-		free: quanta(heroFree),
+		free: quanta(heroFree), form: quanta(best.Q - t.deltaForm),
 	}
+	// Мозаик подряд уже предел — мозаика берётся, только если другого допустимого нет.
+	capped := n.mosaics >= t.mosaicRun
 	at, atPen, atLoss := -1, 0.0, 0.0
+	mo, moPen, moLoss := -1, 0.0, 0.0
 	for i := range s.Pool {
 		x := &s.Pool[i]
 		loss := bestQ - quanta(x.Score)
@@ -223,17 +290,32 @@ func (t tuning) one(s Spread, p layout.Params, n *neighbors) int {
 			continue
 		}
 		pen := bonus + n.penalty(x)
-		if at < 0 || pen < atPen || pen == atPen && (loss < atLoss || loss == atLoss && x.Key < s.Pool[at].Key) {
+		if capped && x.Form == forms.Mosaic {
+			if better(s.Pool, mo, moPen, moLoss, i, pen, loss) {
+				mo, moPen, moLoss = i, pen, loss
+			}
+			continue
+		}
+		if better(s.Pool, at, atPen, atLoss, i, pen, loss) {
 			at, atPen, atLoss = i, pen, loss
 		}
 	}
+	if at < 0 {
+		at = mo
+	}
 	return max(at, 0) // [0] допустим всегда: ряд, потеря 0
+}
+
+// better — кандидат i лучше стоящего at: меньше штраф, затем потеря, затем ключ.
+func better(pool []Cand, at int, atPen, atLoss float64, i int, pen, loss float64) bool {
+	return at < 0 || pen < atPen || pen == atPen && (loss < atLoss || loss == atLoss && pool[i].Key < pool[at].Key)
 }
 
 // limits — пороги разворота в квантах tieEps (считаются раз на разворот, а не на кандидата).
 type limits struct {
 	bestRest, capQ               float64 // лучшая без заполнения; min(лучшая, heroCap)
 	delta, star, air, hero, free float64 // δ, δ★, δ_air, δ_hero, heroFree
+	form                         float64 // пол Q формы: Q лучшей − δ_form
 }
 
 // admit — допустим ли кандидат (не featured) и какой у него бонус. loss — сырая потеря в квантах.
@@ -241,7 +323,7 @@ type limits struct {
 // главное там и есть то, что мешает ему быть крупным. Fair ≥ Score, потолок ≤ лучшей — допуск
 // только шире прежнего.
 func (t tuning) admit(x *Cand, star int, loss float64, lim *limits, p layout.Params, n *neighbors) (bonus float64, ok bool) {
-	if x.InRow && loss <= lim.delta {
+	if x.InRow && loss <= lim.delta || x.Formed && quanta(x.Q) >= lim.form {
 		ok = true
 	}
 	if star >= 0 && x.Big == star {
@@ -310,6 +392,36 @@ func (n *neighbors) penalty(x *Cand) float64 {
 	}
 	if x.Kind != NoKind && x.Kind == n.prevKind {
 		pen += penSameKind
+	}
+	if n.prevHero && x.Formed && FamilyOf(x.Form) == Hero {
+		pen += penHeroAgain
+	}
+	return pen + n.formPenalty(x.Form)
+}
+
+// formPenalty — 051: форма как у соседей и частая в последних разворотах, бонус формы под размер.
+func (n *neighbors) formPenalty(f forms.Form) float64 {
+	if f == "" {
+		return 0
+	}
+	pen := 0.0
+	if f == n.form1 || f == n.nextForm {
+		pen += penForm1
+	}
+	if f == n.form2 {
+		pen += penForm2
+	}
+	seen := 0
+	for _, g := range n.recent {
+		if g == f {
+			seen++
+		}
+	}
+	if seen >= formsOften {
+		pen += penFormOften
+	}
+	if sizeForm(f, n.small, n.big) {
+		pen += bonusSize
 	}
 	return pen
 }

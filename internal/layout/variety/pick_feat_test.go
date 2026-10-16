@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 // featCand — синтетическая раскладка генератора: 12 фото, главное big, сырая оценка и Fair.
@@ -130,5 +131,37 @@ func TestPickSameKey(t *testing.T) {
 	}
 	if got := Pick([]Spread{mk("a"), mk("b")}, geomSq, Less, Ctx{PrevKey: "K"}); got[0] != 0 || got[1] != 0 {
 		t.Errorf("«Меньше» соседей не смотрит: %v", got)
+	}
+}
+
+// TestPickHeroFormAfterHero (№40): штраф penHeroAgain — только форме «С главным», вставленной в ряд
+// «Авто» (Formed): после разворота с главным берётся лучшая, хотя её вид повторяет соседей; ключ
+// ряда layout с той же геометрией штрафа не получает (ритм воздуха 041 как был).
+func TestPickHeroFormAfterHero(t *testing.T) {
+	best := cand("best", "b", 1.0, true)
+	best.Form, best.Q = forms.Mosaic, 0.9
+	alt := func(formed bool, f forms.Form) Cand {
+		c := cand("alt", "alt", 1.0, true)
+		c.Formed, c.Form, c.Q, c.Family = formed, f, 0.9, FamilyOf(f)
+		return c
+	}
+	for _, c := range []struct {
+		name string
+		ctx  Ctx
+		alt  Cand
+		want int
+	}{
+		{"форма «С главным» после главного — лучшая", Ctx{Hero: true}, alt(true, forms.Hero), 0},
+		{"форма Pair — тоже", Ctx{Hero: true}, alt(true, forms.Pair), 0},
+		{"форма Spine — тоже", Ctx{Hero: true}, alt(true, forms.Spine), 0},
+		{"то же без главного перед ней — форма", Ctx{}, alt(true, forms.Hero), 1},
+		{"ключ ряда с той же геометрией — штрафа нет", Ctx{Hero: true}, alt(false, forms.Hero), 1},
+		{"форма не из семейства «С главным» — штрафа нет", Ctx{Hero: true}, alt(true, forms.Strip), 1},
+	} {
+		// вид лучшей — как у предыдущего и следующего: её штраф 4 меньше penHeroAgain
+		c.ctx.Prev, c.ctx.Next = []string{"b"}, "b"
+		if got := pickOne(More, c.ctx, Spread{Pool: []Cand{best, c.alt}, Star: -1}); got != c.want {
+			t.Errorf("%s: выбран %d, ждали %d", c.name, got, c.want)
+		}
 	}
 }

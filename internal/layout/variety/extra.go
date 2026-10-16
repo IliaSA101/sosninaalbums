@@ -2,9 +2,7 @@ package variety
 
 import (
 	"cmp"
-	"fmt"
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
@@ -42,10 +40,10 @@ var extraCache = struct {
 	m map[string]extraEntry
 }{m: map[string]extraEntry{}}
 
-// Extra — «Другие варианты» разворота вне ряда Cached(aspects, p, rowLen): воздух (≤ airLimit
-// лучших по оценке) и раскладки с главным фото (≤ featLimit, bestFeatured), вместе по убыванию
-// оценки (ничья — по ключу). Порядок — и подборки, и листания (Пробел и ‹ › после ряда «Авто»),
-// и счётчика. Результат общий: не менять.
+// Extra — «Другие варианты» разворота вне ряда «Авто» Row(aspects, p, rowLen): воздух (≤ airLimit
+// лучших по оценке) и раскладки с главным фото (≤ featLimit, bestFeatured; с 051 — от featLo фото,
+// а не 8), вместе по убыванию оценки (ничья — по ключу). Порядок — и подборки, и листания (Пробел и
+// ‹ › после ряда «Авто»), и счётчика. Результат общий: не менять.
 func Extra(aspects []float64, p layout.Params, rowLen int) []layout.Result {
 	return extraOf(aspects, p, rowLen).row
 }
@@ -58,16 +56,19 @@ func extraOf(aspects []float64, p layout.Params, rowLen int) extraEntry {
 	if ok {
 		return e
 	}
-	row := layout.Cached(aspects, p, rowLen)
-	seen := make(map[string]bool, len(row))
-	for _, x := range row {
+	re := rowOf(aspects, p, rowLen)
+	seen := make(map[string]bool, len(re.row))
+	for _, x := range re.row {
 		seen[x.Key] = true
 	}
-	air := extras(row, aspects, p, seen)
+	// Воздух — от страниц ряда layout (страницы с модификатором), featured — посчитаны рядом.
+	air := extras(layout.Cached(aspects, p, rowLen), aspects, p, seen)
 	byScore(air)
-	feats := bestFeatured(featured(aspects, p), row, seen)
-	e = extraEntry{row: air[:min(len(air), airLimit)], kind: make(map[string]Kind, len(feats))}
-	for _, f := range feats {
+	e = extraEntry{row: air[:min(len(air), airLimit)], kind: make(map[string]Kind, len(re.feats))}
+	for _, f := range re.feats {
+		if seen[f.Key] {
+			continue // ключ воздуха: featured его не строит, но ряд без повторов — обязательство
+		}
 		e.row = append(e.row, f.Result)
 		e.kind[f.Key] = f.Kind
 	}
@@ -133,19 +134,18 @@ func Cached(aspects []float64, p layout.Params, rowLen int) bool {
 	return ok
 }
 
-// ResetCache — холодный кэш «Других вариантов» для бенчмарков (вместе с layout.ResetCache).
+// ResetCache — холодный кэш ряда «Авто» и «Других вариантов» для бенчмарков (вместе с layout.ResetCache).
 func ResetCache() {
 	extraCache.Lock()
 	extraCache.m = map[string]extraEntry{}
 	extraCache.Unlock()
+	rowCache.Lock()
+	rowCache.m = map[string]rowEntry{}
+	rowCache.Unlock()
 }
 
-// extraKey — как ключ кэша layout: пропорции с точностью 0.001 (он тоже их так различает).
+// extraKey — ключ кэша layout: пропорции точно, иначе ряд зависел бы от того, какой из близких
+// наборов посчитан первым (extras и featured считаются по точным пропорциям).
 func extraKey(aspects []float64, p layout.Params, rowLen int) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%g/%g/%g/%g/%t/%t/%d:", p.PageW, p.PageH, p.Margin, p.Gap, p.Layflat, p.Sheet, rowLen)
-	for _, a := range aspects {
-		fmt.Fprintf(&b, "%.3f,", a)
-	}
-	return b.String()
+	return layout.CacheKey(aspects, p, rowLen)
 }

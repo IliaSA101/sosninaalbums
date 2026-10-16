@@ -4,6 +4,7 @@ package spreads_test
 // соседей, «Разнообразить раскладки», поля подборки (семейство, похожие, «Другие варианты»).
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 	"github.com/IliaSA101/sosninaalbums/internal/layout/variety"
 )
 
@@ -388,13 +390,18 @@ func TestAutoBuildVarietyStar(t *testing.T) {
 	}
 }
 
-// checkRow — поля плиток ряда: семейство из четырёх, Twin — более ранний с тем же видом.
+// checkRow — поля плиток ряда: семейство из шести (041 + «Ленты», «Фигуры» 051) — по форме, название
+// формы (у мозаики пусто), Twin — более ранний с тем же видом.
 func checkRow(t *testing.T, name string, rows []model.Choice, prm layout.Params) (folded int) {
 	t.Helper()
-	fams := map[string]bool{"dense": true, "hero": true, "air": true, "bleed": true}
+	fams := map[string]bool{"dense": true, "hero": true, "air": true, "bleed": true, "strip": true, "figure": true}
 	for i, c := range rows {
-		if !fams[c.Family] {
-			t.Fatalf("%s %s: семейство %q", name, c.Key, c.Family)
+		f := forms.Of(c.Key, c.Rects, prm)
+		if !fams[c.Family] || c.Family != string(variety.FamilyOf(f)) {
+			t.Fatalf("%s %s: семейство %q (форма %s)", name, c.Key, c.Family, f)
+		}
+		if want := forms.Name(f); f == forms.Mosaic && c.FormName != "" || f != forms.Mosaic && c.FormName != want || want == "" {
+			t.Fatalf("%s %s: название %q, форма %s", name, c.Key, c.FormName, f)
 		}
 		switch {
 		case c.Twin == -1:
@@ -407,7 +414,27 @@ func checkRow(t *testing.T, name string, rows []model.Choice, prm layout.Params)
 	return folded
 }
 
-// TestLayoutChoicesVariety: 12 одинаковых горизонтальных — видимых без похожих ≤ 8 из 24;
+// checkExtraOrder — «Другие варианты» строятся, их нет в ряду «Авто», по убыванию оценки.
+func checkExtraOrder(t *testing.T, name string, ex, inOrder []model.Choice, asp []float64, prm layout.Params) {
+	t.Helper()
+	last := 2.0
+	for _, x := range ex {
+		r, ok := layout.Build(x.Key, asp, prm)
+		if !ok || !slices.Equal(r.Rects, x.Rects) || slices.ContainsFunc(inOrder, func(y model.Choice) bool { return y.Key == x.Key }) {
+			t.Fatalf("%s: другой вариант %s не строится или есть в ряду «Авто»", name, x.Key)
+		}
+		if r.Score > last+1e-9 { // ничьи — в квантах, как в layout
+			t.Fatalf("%s: «Другие варианты» не по убыванию оценки", name)
+		}
+		last = r.Score
+	}
+}
+
+// newFamily — плитка из сегментов 051: «Ленты» или «Фигуры».
+func newFamily(x model.Choice) bool { return x.Family == "strip" || x.Family == "figure" }
+
+// TestLayoutChoicesVariety: 12 одинаковых горизонтальных — видимых без похожих ≤ 8 из 24; в ряду
+// «Авто» есть «Ленты» или «Фигуры» (051), у плиток — название формы;
 // смешанный набор — свёрнуто ≤ 2. «Другие варианты» — вне ряда «Авто», строятся, по убыванию
 // оценки, ≤ variety.ExtraLimit (воздух ≤ 12 + с главным фото ≤ 12, решение 0.11 №57), с теми же
 // полями; у страниц — пусто (не null).
@@ -427,7 +454,11 @@ func TestLayoutChoicesVariety(t *testing.T) {
 		ch, p := e.LayoutChoices(id), edtest.P(e)
 		prm, asp := p.Params(), p.Aspects(p.Spreads[0].Photos)
 		folded := checkRow(t, c.name, ch.Whole.InOrder, prm)
+		if !slices.ContainsFunc(ch.Whole.InOrder, newFamily) {
+			t.Errorf("%s: в ряду «Авто» нет ни лент, ни фигур", c.name)
+		}
 		checkRow(t, c.name+" перест.", ch.Whole.Rearranged, prm)
+		t.Logf("%s: в ряду «Авто» %d, свёрнуто %d", c.name, len(ch.Whole.InOrder), folded)
 		if seen := len(ch.Whole.InOrder) - folded; c.maxSeen >= 0 && seen > c.maxSeen || c.maxFold >= 0 && folded > c.maxFold {
 			t.Fatalf("%s: видимых %d, свёрнуто %d", c.name, seen, folded)
 		}
@@ -436,17 +467,7 @@ func TestLayoutChoicesVariety(t *testing.T) {
 			t.Fatalf("%s: «Других вариантов» %d", c.name, len(ex))
 		}
 		checkRow(t, c.name+" другие", ex, prm)
-		last := 2.0
-		for _, x := range ex {
-			r, ok := layout.Build(x.Key, asp, prm)
-			if !ok || !slices.Equal(r.Rects, x.Rects) || slices.ContainsFunc(ch.Whole.InOrder, func(y model.Choice) bool { return y.Key == x.Key }) {
-				t.Fatalf("%s: другой вариант %s не строится или есть в ряду «Авто»", c.name, x.Key)
-			}
-			if r.Score > last+1e-9 { // ничьи — в квантах, как в layout
-				t.Fatalf("%s: «Другие варианты» не по убыванию оценки", c.name)
-			}
-			last = r.Score
-		}
+		checkExtraOrder(t, c.name, ex, ch.Whole.InOrder, asp, prm)
 		for _, side := range []*model.ChoiceRows{ch.Left, ch.Right} {
 			if side != nil {
 				checkRow(t, c.name+" страница", side.InOrder, prm)
@@ -494,6 +515,57 @@ func TestStepLayoutExtra(t *testing.T) {
 		}
 		if key, i, all := at(e.StepLayout(sid, "spread", c.delta)); key != c.want || i != c.i || all != n {
 			t.Fatalf("%s: %s %d / %d, ждали %s %d / %d", c.name, key, i, all, c.want, c.i, n)
+		}
+	}
+}
+
+// TestKeyOutsideRow (051): старый альбом держит ключ из хвоста layout.Cached, вытесненный из ряда «Авто»
+// формами и не вошедший в «Другие варианты». Раскладка после Save → Load та же (Rects бит в бит),
+// счётчик «— / N» (variant −1), Пробел ведёт к началу ряда (Variant 0), назад — к последнему «другому»;
+// шаг один, Undo возвращает ключ байт в байт; повторная постановка ключа — холостая.
+func TestKeyOutsideRow(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	sid := edtest.SpreadIDs(build(t, e, mixedPhotos("x", 6), -1, model.AutoOpts{Spreads: 1, MaxPer: 64}))[0]
+	p := edtest.P(e)
+	asp, prm := p.Aspects(p.Spreads[0].Photos), p.Params()
+	row, _, _ := model.AutoRow(asp, prm, "")
+	ex := model.ExtraRow(asp, prm)
+	lost := ""
+	for _, r := range layout.Cached(asp, prm, model.RowLen(len(asp))) {
+		if model.IndexOf(row, r.Key) < 0 && model.IndexOf(ex, r.Key) < 0 {
+			lost = r.Key
+			break
+		}
+	}
+	if lost == "" {
+		t.Fatal("заготовка: в хвосте layout.Cached нет ключа вне ряда «Авто» и «Других вариантов»")
+	}
+	n := len(row) + len(ex)
+	v0 := e.SetLayout(sid, lost)
+	if s := v0.Spreads[0]; s.Layout != lost || s.Variant != -1 || s.Variants != n {
+		t.Fatalf("SetLayout: %q, «%d / %d», ждали %q, «-1 / %d»", s.Layout, s.Variant, s.Variants, lost, n)
+	}
+	if v := e.SetLayout(sid, lost); v.Rev != v0.Rev {
+		t.Fatalf("повторная постановка ключа — не холостая: rev %d → %d", v0.Rev, v.Rev)
+	}
+
+	old := edtest.Open(t, edtest.SaveLoad(t, e), "")
+	got := old.View().Spreads[0]
+	if got.Layout != lost || got.Variant != -1 || got.Variants != n || !slices.Equal(got.Rects, v0.Spreads[0].Rects) {
+		t.Fatalf("после Load: %q, «%d / %d», раскладка %v, ждали %q, «-1 / %d», прежнюю", got.Layout, got.Variant, got.Variants, got.Rects == nil, lost, n)
+	}
+	before, steps := model.Marshal(edtest.P(old)), edtest.UndoLen(old)
+	for _, c := range []struct {
+		delta, variant int
+	}{{1, 0}, {-1, n - 1}} {
+		if s := old.StepLayout(sid, "spread", c.delta).Spreads[0]; s.Variant != c.variant || s.Layout == lost || s.Variants != n {
+			t.Fatalf("шаг %+d: %q, «%d / %d», ждали «%d / %d»", c.delta, s.Layout, s.Variant, s.Variants, c.variant, n)
+		}
+		if edtest.UndoLen(old) != steps+1 {
+			t.Fatalf("шаг %+d: шагов отмены %d, ждали %d", c.delta, edtest.UndoLen(old), steps+1)
+		}
+		if s := old.Undo().Spreads[0]; s.Layout != lost || !bytes.Equal(model.Marshal(edtest.P(old)), before) {
+			t.Fatalf("шаг %+d: отмена не вернула ключ: %q", c.delta, s.Layout)
 		}
 	}
 }

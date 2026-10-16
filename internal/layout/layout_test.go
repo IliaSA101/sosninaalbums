@@ -576,8 +576,5 @@ func TestLayoutSheetNoSpine(t *testing.T) {
 	if res := Cached(asp, sheet, 1); res[0].Score != r.Score {
 		t.Errorf("кэш смешал лист и разворот: %.4f вместо %.4f", res[0].Score, r.Score)
 	}
-	// Автосборка листа: окна 17+ без страниц не падают и покрывают все фото.
-	if pl := PlanGroups(many(40), sheet, 2, 32); len(pl.Groups) != 2 || pl.Groups[1][1] != 40 {
-		t.Errorf("автосборка листа: %+v", pl)
-	}
+	// Автосборка листа (PlanGroups) — TestPlanSheet в layout/plan.
 }

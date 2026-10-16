@@ -1,6 +1,10 @@
 package gen
 
-import "math"
+import (
+	"math"
+
+	"github.com/IliaSA101/sosninaalbums/internal/decor/gen/paint"
+)
 
 // Мягкие узоры (акварель, мазки): рисуются в слое разрешения softK и растягиваются — в печати
 // края мягкие, а время обложки — как у экрана (research §3: акварель в полном 300 dpi — 3 с).
@@ -8,21 +12,21 @@ import "math"
 // brush — Мазки: изогнутые ленты с сужением к концам, общий наклон от сида.
 func brush(c *canvas, s Spec) {
 	ink := inks(s)
-	g := cellRand(s.Seed, s.Kind+"/угол", 0, 0)
-	tilt := g.rangeF(-0.6, 0.6)
+	g := paint.CellRand(s.Seed, s.Kind+"/угол", 0, 0)
+	tilt := g.RangeF(-0.6, 0.6)
 	step := 70 * s.Scale
-	c.soft(func(sc *canvas) {
+	c.Soft(func(sc *canvas) {
 		scatter(sc, s, step, 50*s.Scale, func(r *rng, x0, y0 float64) {
-			for range 1 + r.intn(2) {
+			for range 1 + r.Intn(2) {
 				st := brushStroke{
-					x: x0 + r.rangeF(0, step), y: y0 + r.rangeF(0, step),
-					l: r.rangeF(45, 90) * s.Scale, w: r.rangeF(10, 18) * s.Scale,
-					rot: tilt + r.rangeF(-0.35, 0.35), bend: r.rangeF(-0.15, 0.15),
-					ph1: r.rangeF(0, 2*math.Pi), ph2: r.rangeF(0, 2*math.Pi),
+					x: x0 + r.RangeF(0, step), y: y0 + r.RangeF(0, step),
+					l: r.RangeF(45, 90) * s.Scale, w: r.RangeF(10, 18) * s.Scale,
+					rot: tilt + r.RangeF(-0.35, 0.35), bend: r.RangeF(-0.15, 0.15),
+					ph1: r.RangeF(0, 2*math.Pi), ph2: r.RangeF(0, 2*math.Pi),
 				}
-				col := ink[r.intn(4)]
-				sc.poly(st.outline())
-				sc.fill(col, 0.85)
+				col := ink[r.Intn(4)]
+				sc.Poly(st.outline())
+				sc.Fill(col, 0.85)
 			}
 		})
 	})
@@ -56,22 +60,22 @@ func (st brushStroke) outline() []pt {
 func watercolor(c *canvas, s Spec) {
 	ink := inks(s)
 	step := 80 * s.Scale
-	c.soft(func(sc *canvas) {
+	c.Soft(func(sc *canvas) {
 		scatter(sc, s, step, 48*s.Scale, func(r *rng, x0, y0 float64) {
-			for range 1 + r.intn(2) {
-				x, y := x0+r.rangeF(0, step), y0+r.rangeF(0, step)
-				rad := r.rangeF(22, 40) * s.Scale
-				col := ink[r.intn(3)]
-				show := sc.visible(x, y, 1.5*rad)
+			for range 1 + r.Intn(2) {
+				x, y := x0+r.RangeF(0, step), y0+r.RangeF(0, step)
+				rad := r.RangeF(22, 40) * s.Scale
+				col := ink[r.Intn(3)]
+				show := sc.Visible(x, y, 1.5*rad)
 				for l := range 6 {
 					var amp, ph [3]float64
 					for j := range 3 {
-						amp[j] = r.rangeF(0.04, 0.12) / float64(j+1)
-						ph[j] = r.rangeF(0, 2*math.Pi)
+						amp[j] = r.RangeF(0.04, 0.12) / float64(j+1)
+						ph[j] = r.RangeF(0, 2*math.Pi)
 					}
 					if show {
-						sc.poly(blob(x, y, rad*(1-0.12*float64(l)), amp, ph))
-						sc.fill(col, 0.16)
+						sc.Poly(blob(x, y, rad*(1-0.12*float64(l)), amp, ph))
+						sc.Fill(col, 0.16)
 					}
 				}
 			}

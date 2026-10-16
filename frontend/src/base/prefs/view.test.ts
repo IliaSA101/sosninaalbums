@@ -48,9 +48,36 @@ describe('modes.auto*', () => {
 
   it('среднее и якорь запоминаются', async () => {
     const m = await fresh()
-    m.rememberAuto(30, 64, 21.4, 'per')
+    m.rememberAuto(30, 'auto', 21.4, 'per')
     const n = await fresh()
-    expect([n.autoSpreads, n.autoMaxPer, n.autoPer, n.autoBy]).toEqual([30, 64, 21.4, 'per'])
+    expect([n.autoSpreads, n.autoRange, n.autoPer, n.autoBy]).toEqual([30, 'auto', 21.4, 'per'])
+  })
+
+  it('051: «Свой» диапазон и флажок серий запоминаются', async () => {
+    const m = await fresh()
+    expect([m.autoRange, m.autoSeries]).toEqual(['auto', true]) // первое открытие — «Авто», серии включены
+    m.rememberAuto(11, [8, 10], 9, 'spreads', 1, false)
+    const n = await fresh()
+    expect([n.autoRange, n.autoSeries]).toEqual([[8, 10], false])
+  })
+
+  it('051: миграция прежнего «не больше»: 64 или нет — «Авто», меньшее m — «от min(3, m) до m»', async () => {
+    const of = async (v: object) => {
+      localStorage.setItem('viewMode', JSON.stringify(v))
+      return (await fresh()).autoRange
+    }
+    expect(await of({ autoMaxPer: 64 })).toBe('auto')
+    expect(await of({})).toBe('auto')
+    expect(await of({ autoMaxPer: 20 })).toEqual([3, 20])
+    expect(await of({ autoMaxPer: 2 })).toEqual([2, 2])
+    expect(await of({ autoMaxPer: 1 })).toEqual([1, 1])
+    expect(await of({ autoMaxPer: 'много' })).toBe('auto') // мусор
+    expect(await of({ autoMaxPer: 200 })).toBe('auto')
+    expect(await of({ autoRange: [4, 12], autoMaxPer: 20 })).toEqual([4, 12]) // новое поле главнее
+    expect(await of({ autoRange: [12, 4] })).toBe('auto') // «от» > «до» — мусор
+    expect(await of({ autoRange: 'x', autoSeries: 'да' })).toBe('auto')
+    localStorage.setItem('viewMode', JSON.stringify({ autoSeries: 'да' }))
+    expect((await fresh()).autoSeries).toBe(true)
   })
 
   it('по умолчанию — N, среднего нет', async () => {
@@ -71,20 +98,20 @@ describe('modes.auto*', () => {
 
   it('среднее при запоминании зажимается в 1…64', async () => {
     const m = await fresh()
-    m.rememberAuto(5, 64, 500, 'per')
+    m.rememberAuto(5, 'auto', 500, 'per')
     expect(m.autoPer).toBe(64)
-    m.rememberAuto(5, 64, 0.2, 'per')
+    m.rememberAuto(5, 'auto', 0.2, 'per')
     expect(m.autoPer).toBe(1)
   })
 
   it('разнообразие (041): по умолчанию «Обычное», запоминается, мусор — «Обычное»', async () => {
     const m = await fresh()
     expect(m.autoVariety).toBe(1)
-    m.rememberAuto(5, 64, 4, 'spreads', 2)
+    m.rememberAuto(5, 'auto', 4, 'spreads', 2)
     expect((await fresh()).autoVariety).toBe(2)
-    m.rememberAuto(5, 64, 4, 'spreads', 0)
+    m.rememberAuto(5, 'auto', 4, 'spreads', 0)
     expect((await fresh()).autoVariety).toBe(0)
-    m.rememberAuto(5, 64, 4, 'spreads') // без аргумента — прежнее значение
+    m.rememberAuto(5, 'auto', 4, 'spreads') // без аргумента — прежнее значение
     expect((await fresh()).autoVariety).toBe(0)
     localStorage.setItem('viewMode', JSON.stringify({ autoVariety: 7 }))
     expect((await fresh()).autoVariety).toBe(1)
@@ -98,5 +125,38 @@ describe('modes.auto*', () => {
     expect(m.varyLevel).toBe(1)
     m.autoVariety = 2
     expect(m.varyLevel).toBe(2)
+  })
+})
+
+describe('thumbSize load', () => {
+  beforeEach(useStorage)
+
+  it('по умолчанию 110', async () => {
+    expect((await fresh()).thumbSize).toBe(110)
+  })
+
+  it('setThumb округляет, зажимает и запоминается', async () => {
+    const m = await fresh()
+    m.setThumb(133.6)
+    expect(m.thumbSize).toBe(134)
+    m.setThumb(9999)
+    expect(m.thumbSize).toBe(220)
+    m.setThumb(1)
+    expect(m.thumbSize).toBe(70)
+    m.setThumb(150)
+    expect((await fresh()).thumbSize).toBe(150)
+  })
+
+  it('setThumb: NaN размер не меняет', async () => {
+    const m = await fresh()
+    m.setThumb(NaN)
+    expect(m.thumbSize).toBe(110)
+  })
+
+  it('мусор в хранилище — 110', async () => {
+    for (const bad of ['abc', 5, 500, 120.5, null, [], {}, '150']) {
+      localStorage.setItem('viewMode', JSON.stringify({ thumbSize: bad }))
+      expect((await fresh()).thumbSize).toBe(110)
+    }
   })
 })

@@ -5,6 +5,8 @@ package spreads_test
 
 import (
 	"bytes"
+	"fmt"
+	"math"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,18 +16,48 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 	"github.com/IliaSA101/sosninaalbums/internal/layout/variety"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
-// isFeatured — ключ из «Других вариантов» с главным фото по геометрии и без модификатора страницы
-// (не «воздух»): раскладка генератора части 2.
+// isFeatured — ключ с главным фото по геометрии без модификатора страницы (не «воздух»): раскладка
+// генератора части 2 из «Других вариантов» или форма Hero/Spine/Pair ряда «Авто» (051).
 func isFeatured(key string, asp []float64, prm layout.Params) bool {
-	if key == "" || model.IndexOf(model.ExtraRow(asp, prm), key) < 0 || strings.ContainsAny(key, "SOI") {
+	if key == "" || strings.ContainsAny(key, "SOI") {
 		return false
 	}
 	r, ok := layout.Build(key, asp, prm)
-	return ok && variety.Describe(r, prm).Heroes > 0
+	if !ok || variety.Describe(r, prm).Heroes == 0 {
+		return false
+	}
+	if model.IndexOf(model.ExtraRow(asp, prm), key) >= 0 {
+		return true
+	}
+	_, i, _ := model.AutoRow(asp, prm, key)
+	if i < 0 {
+		return false
+	}
+	switch variety.Describe(r, prm).Form {
+	case forms.Hero, forms.Spine, forms.Pair:
+		return true
+	}
+	return false
+}
+
+// stockPhotos — 100 фото stock (testkit.StockAspects) с длинной стороной 2000 px.
+func stockPhotos(t *testing.T) []model.PhotoInfo {
+	as := testkit.StockAspects(t)
+	out := make([]model.PhotoInfo, len(as))
+	for i, a := range as {
+		w, h := 2000, int(math.Round(2000/a))
+		if a < 1 {
+			w, h = int(math.Round(2000*a)), 2000
+		}
+		id := fmt.Sprint("s", i)
+		out[i] = model.PhotoInfo{ID: id, Path: edtest.Abs(id + ".jpg"), W: w, H: h}
+	}
+	return out
 }
 
 // featuredCount — разворотов с раскладкой генератора.
@@ -77,6 +109,43 @@ func TestAutoBuildFeatured(t *testing.T) {
 	build(t, less, horizontals("f", 120), -1, model.AutoOpts{Spreads: 10, MaxPer: 16, Variety: model.VarietyLess})
 	if featuredCount(edtest.P(less)) != 0 {
 		t.Fatal("«Меньше» поставило раскладку с главным фото")
+	}
+}
+
+// TestAutoBuildHeroForms (051): правило «два с главным подряд — нет» держится и для форм ряда «Авто»
+// (Hero/Spine/Pair), а не только для ключей «Других вариантов»: смешанные фото и stock, «Обычное» и
+// «Больше». Форма «С главным» ряда после главного — только если другого допустимого нет; на этих
+// наборах такого нет. Лучшая раскладка (Layout "") под правило не подпадает: как до 051 (№40).
+func TestAutoBuildHeroForms(t *testing.T) {
+	rowForms := 0
+	sets := map[string][]model.PhotoInfo{"смесь 60": mixedPhotos("m", 60), "смесь 100": mixedPhotos("m", 100), "stock": stockPhotos(t)}
+	for n, ph := range sets {
+		for _, v := range []model.Variety{model.VarietyNormal, model.VarietyMore} {
+			e := edtest.Open(t, model.New(), "")
+			build(t, e, ph, -1, model.AutoOpts{Spreads: 11, Auto: true, Variety: v})
+			p, prev := edtest.P(e), false
+			for i, s := range p.Spreads {
+				asp, prm := p.Aspects(s.Photos), p.Params()
+				r, _, _ := p.Layout(s)
+				in := variety.Describe(r, prm)
+				hero := in.Heroes > 0
+				if variety.FamilyOf(in.Form) == variety.Hero && prev && s.Layout != "" {
+					t.Errorf("%s, уровень %d, разворот %d: форма %s (%q) сразу после разворота с главным", n, v, i, in.Form, s.Layout)
+				}
+				if f := isFeatured(s.Layout, asp, prm); f {
+					if model.IndexOf(model.ExtraRow(asp, prm), s.Layout) < 0 {
+						rowForms++
+					}
+					if prev {
+						t.Fatalf("%s, уровень %d, разворот %d: главное фото (%q) сразу после другого с главным", n, v, i, s.Layout)
+					}
+				}
+				prev = hero
+			}
+		}
+	}
+	if rowForms == 0 {
+		t.Fatal("ни одной формы Hero/Spine/Pair ряда «Авто»: тест правила для них ничего не проверяет")
 	}
 }
 
@@ -276,4 +345,130 @@ func TestVaryThenDropAndSettings(t *testing.T) {
 			t.Fatalf("%s: отмена не вернула ключ: %q", c.name, layoutAt())
 		}
 	}
+}
+
+// TestSetLayoutFormKey (051 G6): ключ формы (Q, G, L) ставится одним шагом отмены, повтор — холостой,
+// отмена возвращает прежнюю, круг Save → Load сохраняет ключ; на листе (Sheet) ключ Q не строится —
+// отказ холостой (rev и шаги отмены стоят), а G и L на весь лист строятся.
+func TestSetLayoutFormKey(t *testing.T) {
+	for _, sheet := range []bool{false, true} {
+		p := model.New()
+		p.Settings.Sheet = sheet
+		e := edtest.Open(t, p, "")
+		id := edtest.NewSpread(e, -1, edtest.Photos("a", "b", "c", "d")).Spreads[0].ID
+		for _, key := range []string{"Q[H(0,1)|H(2,3)]", "G(H(0,1),H(2,3))", "L(0,1,2,3)"} {
+			before, rev, undo := model.Marshal(edtest.P(e)), e.View().Rev, edtest.UndoLen(e)
+			v := e.SetLayout(id, key)
+			if sheet && strings.HasPrefix(key, "Q") {
+				if v.Rev != rev || edtest.UndoLen(e) != undo || !bytes.Equal(model.Marshal(edtest.P(e)), before) {
+					t.Fatalf("лист: %q не отказ или не холостой", key)
+				}
+				continue
+			}
+			if v.Spreads[0].Layout != key || v.Rev != rev+1 || edtest.UndoLen(e) != undo+1 {
+				t.Fatalf("лист %t: %q — стоит %q, rev %d→%d, шагов %d→%d", sheet, key, v.Spreads[0].Layout, rev, v.Rev, undo, edtest.UndoLen(e))
+			}
+			if e.SetLayout(id, key).Rev != v.Rev || edtest.UndoLen(e) != undo+1 {
+				t.Fatalf("лист %t: повтор %q не холостой", sheet, key)
+			}
+			if q := edtest.SaveLoad(t, e); q.Spreads[0].Layout != key {
+				t.Fatalf("лист %t: после Save → Load %q, ждали %q", sheet, q.Spreads[0].Layout, key)
+			}
+			if e.Undo(); !bytes.Equal(model.Marshal(edtest.P(e)), before) {
+				t.Fatalf("лист %t: отмена %q не вернула прежнее", sheet, key)
+			}
+		}
+	}
+}
+
+// TestAutoBuildForms (051 G6): «Больше» на 100 смешанных фото в «Авто» ставит формы ряда «Авто»
+// (ключи вне ряда layout и «Других вариантов») на нескольких разворотах, соседних одной формы нет;
+// сборка — один шаг отмены; круг Save → Load сохраняет ключи и прямоугольники; «Меньше» — ни одной
+// формы.
+func TestAutoBuildForms(t *testing.T) {
+	formed := func(e *album.Editor) (n, same int) {
+		p, prev := edtest.P(e), forms.Form("")
+		for _, s := range p.Spreads {
+			asp, prm := p.Aspects(s.Photos), p.Params()
+			r, _, _ := p.Layout(s)
+			f := variety.Describe(r, prm).Form
+			if s.Layout != "" && model.IndexOf(layout.Cached(asp, prm, model.RowLen(len(asp))), s.Layout) < 0 &&
+				model.IndexOf(model.ExtraRow(asp, prm), s.Layout) < 0 {
+				n++
+			}
+			if f == prev {
+				same++
+			}
+			prev = f
+		}
+		return n, same
+	}
+	opts := model.AutoOpts{Spreads: 11, Auto: true, Variety: model.VarietyMore}
+	e := edtest.Open(t, model.New(), "")
+	before, undo := model.Marshal(edtest.P(e)), edtest.UndoLen(e)
+	view := build(t, e, mixedPhotos("m", 100), -1, opts)
+	if n, same := formed(e); n < 2 || same != 0 || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("«Больше»: форм ряда %d, соседей одной формы %d, шагов отмены %d", n, same, edtest.UndoLen(e)-undo)
+	}
+	got := edtest.Open(t, edtest.SaveLoad(t, e), "").View()
+	for i, w := range view.Spreads {
+		if g := got.Spreads[i]; g.Layout != w.Layout || !slices.Equal(g.Rects, w.Rects) || g.Variant != w.Variant {
+			t.Fatalf("разворот %d: после Load %q %d, было %q %d", i, g.Layout, g.Variant, w.Layout, w.Variant)
+		}
+	}
+	if e.Undo(); !bytes.Equal(model.Marshal(edtest.P(e)), before) {
+		t.Fatal("отмена сборки не вернула альбом")
+	}
+	opts.Variety = model.VarietyLess
+	less := edtest.Open(t, model.New(), "")
+	build(t, less, mixedPhotos("m", 100), -1, opts)
+	if n, _ := formed(less); n != 0 {
+		t.Fatalf("«Меньше» поставило %d форм", n)
+	}
+}
+
+// TestAutoBuildInRow (051, QA пачки 2): всё, что ставит автосборка на stock 100, видно в листании —
+// ключ в ряду «Авто» подборки (model.AutoRow) или в «Других вариантах» за ним (решение 0.11 №38), и
+// счётчик «i / N» показывает номер, а не «—»; обе геометрии, «Обычное» и «Больше», несколько N.
+func TestAutoBuildInRow(t *testing.T) {
+	ph := stockPhotos(t)
+	beyond := 0 // ключей не на первом месте ряда: иначе тест ничего не проверяет
+	for _, flat := range []bool{true, false} {
+		for _, v := range []model.Variety{model.VarietyNormal, model.VarietyMore} {
+			for _, n := range []int{8, 11, 14} {
+				p := model.New()
+				p.Settings.Layflat = flat
+				e := edtest.Open(t, p, "")
+				view := build(t, e, ph, -1, model.AutoOpts{Spreads: n, Auto: true, Variety: v})
+				name := fmt.Sprintf("layflat %t, уровень %d, N %d", flat, v, n)
+				beyond += inRow(t, name, edtest.P(e), view)
+			}
+		}
+	}
+	if beyond == 0 {
+		t.Fatal("сборка везде поставила лучшую: проверять нечего")
+	}
+}
+
+// inRow — у каждого разворота ключ в ряду «Авто» или в «Других вариантах» и номер в счётчике;
+// возвращает, сколько ключей не на первом месте.
+func inRow(t *testing.T, name string, q *model.Project, view model.View) (beyond int) {
+	t.Helper()
+	for i, s := range q.Spreads {
+		asp, prm := q.Aspects(s.Photos), q.Params()
+		row, at, _ := model.AutoRow(asp, prm, s.Layout)
+		if s.Layout == "" {
+			at = 0
+		}
+		if at < 0 {
+			at = model.IndexOf(model.ExtraRow(asp, prm), s.Layout)
+		}
+		if sv := view.Spreads[i]; at < 0 || sv.Variant < 0 {
+			t.Fatalf("%s, разворот %d: %q вне ряда (%d из %d), счётчик %d", name, i, s.Layout, at, len(row), sv.Variant)
+		}
+		if at > 0 {
+			beyond++
+		}
+	}
+	return beyond
 }

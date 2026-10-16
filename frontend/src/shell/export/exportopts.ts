@@ -6,7 +6,7 @@ import { newSheetSize, type SheetSettings } from '../../base/geom/sheet'
 
 // Тип лежит в основе (store.runExport), здесь — для окна и тестов.
 export type { ExportOpts }
-export { exportDoneText } from '../../base/core/errtext'
+export { exportDoneText } from '../../base/words/errtext'
 
 export type Quality = 100 | 95 | 80
 export const QUALITIES: { v: Quality; label: string }[] = [

@@ -1,6 +1,6 @@
 import { Api, store } from '../../base/core/store.svelte'
 import { edit } from '../../editor/text/edit.svelte'
-import { errText, capFirst } from '../../base/core/errtext'
+import { errText, capFirst } from '../../base/words/errtext'
 import type { NamesFile, NamesOpts, NamesPlan, NamesResult } from './nametypes'
 import { sheetIn } from '../../base/geom/sheet'
 

@@ -43,11 +43,13 @@ export const FAMILIES: readonly { id: Family; label: string }[] = [
   { id: 'hero', label: 'С главным фото' },
   { id: 'air', label: 'Воздух' },
   { id: 'bleed', label: 'В край' },
+  { id: 'strip', label: 'Ленты' },
+  { id: 'figure', label: 'Фигуры' },
 ]
 
 export type FamilyFilter = Family | 'all'
 
-// Семейства, что есть хотя бы в одном ряду: пустые сегменты не показываются. Go ещё не размечает — список пуст.
+// Семейства, что есть хотя бы в одном ряду: пустые сегменты не показываются.
 export function familiesIn(rows: readonly (readonly Choice[])[]): readonly { id: Family; label: string }[] {
   const have = new Set(rows.flatMap((r) => r.map((c) => c.family)))
   return FAMILIES.filter((f) => have.has(f.id))
@@ -151,6 +153,9 @@ export function galleryOrders(lines: readonly GalleryLine[], family: FamilyFilte
     },
   ]
 }
+
+// Подсказка плитки (051): название формы от Go; у мозаики его нет — подсказки нет.
+export const tileTitle = (c: Pick<Choice, 'formName'>): string | undefined => c.formName || undefined
 
 // Подпись плитки «Похожие»: свёрнуты — «Похожие: N», раскрыты — «Свернуть».
 export const twinsLabel = (hidden: number, open: boolean): string => (open ? 'Свернуть похожие' : `Похожие: ${hidden}`)

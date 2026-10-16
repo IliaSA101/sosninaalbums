@@ -1,6 +1,6 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
-  import { errText } from '../../base/core/errtext'
+  import { errText } from '../../base/words/errtext'
   import { sheetSize } from '../../base/geom/sheet'
   import type { SpreadView, VigChoice, VignetteView } from '../../base/core/types'
   import { gallery } from '../gallery/gallery.svelte'

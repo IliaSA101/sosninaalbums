@@ -2,14 +2,14 @@
 // Выделение живёт в placesel (stickers), предпросмотр жеста — placesel.liveStickers; здесь — только жесты и правки.
 // Геометрию зажимает и пишет Go (SetStickerBox): на отпускании уходит одна правка. Группа едет через groupgesture.
 import { Api, store } from '../../base/core/store.svelte'
-import { errText } from '../../base/core/errtext'
+import { errText } from '../../base/words/errtext'
 import { axisLock } from '../../base/geom/gridedit'
 import { bdAngle } from '../../base/geom/bdbox'
 import { cursorDeg } from '../../base/geom/textbox'
 import { placesel } from '../places/placesel.svelte'
 import { drive, snapCtx } from '../places/placegesture'
 import { FadeLive } from '../backdrop/fade.svelte'
-import { PatSession } from '../backdrop/pattern'
+import { PatSession } from '../pattern/pattern'
 import { boxOf, centerOf, moveBox, resizeBox, sameBox, stickerById, type StBox, type StCorner } from './sticker'
 import type { StickerView, View } from '../../base/core/types'
 

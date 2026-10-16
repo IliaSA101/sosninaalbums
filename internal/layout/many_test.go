@@ -205,16 +205,13 @@ func TestManyFill(t *testing.T) {
 }
 
 // goldenMany — регрессионный эталон many.sha: Layouts(ManyCap) и PageChoices первых
-// постраничных ключей на 17…64 фото, геометрии manyGeoms, наборы manyAspects 0–4;
-// группировка PlanGroups на 600 фото (две первые геометрии).
+// постраничных ключей на 17…64 фото, геометрии manyGeoms, наборы manyAspects 0–4.
+// Группировка на 600 фото переехала в layout/plan (testdata/golden/many.sha там).
 func goldenMany() []goldenGroup {
 	var jobs []func() []goldenGroup
 	for g := range manyGeoms {
 		for _, n := range manyNs {
 			jobs = append(jobs, func() []goldenGroup { return goldenManyN(g, n) })
-		}
-		if g < 2 {
-			jobs = append(jobs, func() []goldenGroup { return goldenPlan(g) })
 		}
 	}
 	res := make([][]goldenGroup, len(jobs))
@@ -270,24 +267,6 @@ func goldenManyN(g, n int) []goldenGroup {
 		}
 	}
 	return groups
-}
-
-// goldenPlan — PlanGroups на 600 фото свадьбы: N = 150 и 30 при m = 64, N = 130 при m = 5.
-func goldenPlan(g int) []goldenGroup {
-	p := goldenGeoms[g]
-	asp := weddingAspects(uint64(g)+1, 600)
-	var out []goldenGroup
-	for _, c := range [][2]int{{150, 64}, {30, 64}, {130, 5}} {
-		var d dump
-		pl := PlanGroups(asp, p, c[0], c[1])
-		for _, gr := range pl.Groups {
-			d.u64(uint64(gr[0]))
-			d.u64(uint64(gr[1]))
-		}
-		name := fmt.Sprintf("p%d/plan/N%d-m%d", g, c[0], c[1])
-		out = append(out, goldenGroup{name, []goldenCase{{"600 фото", d.sum()}}})
-	}
-	return out
 }
 
 const goldenManyPath = "testdata/golden/many.sha"
@@ -360,6 +339,26 @@ var manyGeoms = append(slices.Clone(goldenGeoms),
 // ориентации); имя без пробелов — оно в имени группы эталона.
 var manySetNames = []string{"свадьба", "кадрирование", "случайные", "горизонтальные",
 	"вертикальные", "чередование", "панорама"}
+
+// weddingAspects — свадьба: 3:2 — 65 %, 2:3 — 30 %, 1:1 и 16:9 — по 2,5 %. Копия
+// layout/plan (тест-хелперы двух пакетов не делятся); последовательность — часть эталона.
+func weddingAspects(seed uint64, n int) []float64 {
+	rng := splitmix64(seed*7919 + uint64(n))
+	asp := make([]float64, n)
+	for i := range asp {
+		switch x := rng.unit(); {
+		case x < 0.65:
+			asp[i] = L
+		case x < 0.95:
+			asp[i] = P
+		case x < 0.975:
+			asp[i] = S
+		default:
+			asp[i] = 16.0 / 9
+		}
+	}
+	return asp
+}
 
 // manyAspects — набор set из n пропорций (имена — manySetNames).
 func manyAspects(seed uint64, n, set int) []float64 {

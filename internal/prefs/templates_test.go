@@ -472,3 +472,34 @@ func TestTemplatesClampOverflow(t *testing.T) {
 		t.Fatal("в .bad не исходный файл")
 	}
 }
+
+// Занятое имя .bad: при зафиксированной секунде копии получают «», «-1», «-2» и не затирают друг друга.
+// Тест детерминирован: от реальных часов ветка «имя занято» зависела бы от границы секунды (плавало покрытие).
+func TestMoveBadSameSecond(t *testing.T) {
+	old := badStamp
+	t.Cleanup(func() { badStamp = old })
+	badStamp = func() string { return "20260101-000000" }
+	dir := testkit.TempDir(t)
+	if err := moveBad(dir, os.Rename); err != nil { // файла нет — не ошибка и не копия
+		t.Fatalf("нет файла: %v", err)
+	}
+	if bad, _ := filepath.Glob(filepath.Join(dir, "templates.bad-*.json")); len(bad) != 0 {
+		t.Fatalf("копия без файла: %v", bad)
+	}
+	for i, name := range []string{"", "-1", "-2"} {
+		content := []byte{byte('a' + i)}
+		if err := os.WriteFile(TemplatesPath(dir), content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := moveBad(dir, os.Rename); err != nil {
+			t.Fatalf("%d: %v", i, err)
+		}
+		got, err := os.ReadFile(filepath.Join(dir, "templates.bad-20260101-000000"+name+".json"))
+		if err != nil || !bytes.Equal(got, content) {
+			t.Fatalf("%d: копия %q (%v), ждали %q", i, got, err, content)
+		}
+		if _, err := os.Stat(TemplatesPath(dir)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%d: templates.json не убран: %v", i, err)
+		}
+	}
+}

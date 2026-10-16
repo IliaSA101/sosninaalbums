@@ -641,6 +641,9 @@ export namespace model {
 	export class AutoOpts {
 	    spreads: number;
 	    maxPer: number;
+	    minPer: number;
+	    auto: boolean;
+	    series: boolean;
 	    variety: number;
 	
 	    static createFrom(source: any = {}) {
@@ -651,6 +654,9 @@ export namespace model {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.spreads = source["spreads"];
 	        this.maxPer = source["maxPer"];
+	        this.minPer = source["minPer"];
+	        this.auto = source["auto"];
+	        this.series = source["series"];
 	        this.variety = source["variety"];
 	    }
 	}
@@ -663,6 +669,9 @@ export namespace model {
 	    min: number;
 	    max: number;
 	    reuse: number;
+	    from: number;
+	    to: number;
+	    cuts: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AutoPlan(source);
@@ -678,6 +687,9 @@ export namespace model {
 	        this.min = source["min"];
 	        this.max = source["max"];
 	        this.reuse = source["reuse"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.cuts = source["cuts"];
 	    }
 	}
 	export class BackdropBox {
@@ -861,6 +873,7 @@ export namespace model {
 	    rects: layout.Rect[];
 	    family: string;
 	    twin: number;
+	    formName: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Choice(source);
@@ -872,6 +885,7 @@ export namespace model {
 	        this.rects = this.convertValues(source["rects"], layout.Rect);
 	        this.family = source["family"];
 	        this.twin = source["twin"];
+	        this.formName = source["formName"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

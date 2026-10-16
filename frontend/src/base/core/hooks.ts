@@ -30,6 +30,8 @@ export interface StoreHooks {
   // --- данные верха, из которых store строит ленту ---
   // Свои отметки фото (ID -> поля, поставленные в программе).
   marks(): MarkMap
+  // Фото без скрытых папок (054): первый слой ленты, до «Не в альбоме» и отметок.
+  folders(photos: Photo[]): Photo[]
   // Лента после фильтра по отметкам.
   visible(photos: Photo[]): Photo[]
   // Фото не в местах и не на фоне (автосборка, фильтр «Неиспользованные»).
@@ -54,6 +56,7 @@ export const noHooks: StoreHooks = {
   spreadsCleared: () => {},
   fontsLoaded: () => {},
   marks: () => ({}),
+  folders: (photos) => photos,
   visible: (photos) => photos,
   free: (photos, used, backdrop) => photos.filter((p) => !used.has(p.id) && !backdrop.has(p.id)),
   pick: () => ({ ids: [], skipped: 0, from: 'free', inAlbum: 0, filtered: false }),

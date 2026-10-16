@@ -28,10 +28,12 @@ import (
 // форма и скругление мест `shape`/`round` и формы виньетки `vig` (спека 044);
 // безопасные линии обложки `cover.spec.safe`, `spineSafe` (спека 047, omitempty);
 // узоры фона `pat/patL/patR`, стикеры `stickers` (и их ID в `order`) и ключ своего из
-// библиотеки `photos.*.lib` (спека 048, omitempty).
+// библиотеки `photos.*.lib` (спека 048, omitempty);
+// 9 (общий на 0.13): новые значения `Spread.Layout` — ключи форм 051 (`Q[…]`, `G(…)`,
+// `L/A(…)`, `m<i>`, `S/U/D(…)`); полей нет, но 0.12 показала бы мозаику и правкой затёрла ключ.
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 8
+const FormatVersion = 9
 
 type Settings struct {
 	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
@@ -467,17 +469,17 @@ func RowLen(n int) int {
 	return VariantLimit
 }
 
-// AutoRow — ряд «Авто» в порядке ленты, где стоит key, и его место в ряду (−1 — нет).
-// До 16 фото — весь ряд VariantLimit. С ManyFrom — наименьший префикс из порций по
-// ManyBatch (до ManyCap), где key есть; нет нигде — первая порция. more — ряд можно
-// досчитать: он полный и короче ManyCap.
+// AutoRow — ряд «Авто» в порядке ленты (variety.Row: лучшая, формы и ряд layout вперемешку,
+// 051), где стоит key, и его место в ряду (−1 — нет). До 16 фото — весь ряд VariantLimit. С
+// ManyFrom — наименьший префикс из порций по ManyBatch (до ManyCap), где key есть; нет нигде —
+// первая порция. more — ряд можно досчитать: он полный и короче ManyCap.
 func AutoRow(asp []float64, prm layout.Params, key string) (row []layout.Result, i int, more bool) {
 	if len(asp) < layout.ManyFrom {
-		row = layout.Cached(asp, prm, VariantLimit)
+		row = variety.RowResults(asp, prm, VariantLimit)
 		return row, IndexOf(row, key), false
 	}
 	for n := layout.ManyBatch; n <= layout.ManyCap; n += layout.ManyBatch {
-		row = layout.Cached(asp, prm, n)
+		row = variety.RowResults(asp, prm, n)
 		if i = IndexOf(row, key); i >= 0 {
 			return row, i, len(row) == n && n < layout.ManyCap
 		}
@@ -485,7 +487,7 @@ func AutoRow(asp []float64, prm layout.Params, key string) (row []layout.Result,
 			break // дальше ряд не растёт
 		}
 	}
-	row = layout.Cached(asp, prm, layout.ManyBatch)
+	row = variety.RowResults(asp, prm, layout.ManyBatch)
 	return row, -1, len(row) == layout.ManyBatch
 }
 
@@ -493,10 +495,10 @@ func AutoRow(asp []float64, prm layout.Params, key string) (row []layout.Result,
 // (не длиннее ManyCap). До 16 фото — весь ряд.
 func MoreRow(asp []float64, prm layout.Params, have int) (row []layout.Result, more bool) {
 	if len(asp) < layout.ManyFrom {
-		return layout.Cached(asp, prm, VariantLimit), false
+		return variety.RowResults(asp, prm, VariantLimit), false
 	}
 	n := min((max(have, 0)/layout.ManyBatch+1)*layout.ManyBatch, layout.ManyCap)
-	row = layout.Cached(asp, prm, n)
+	row = variety.RowResults(asp, prm, n)
 	return row, len(row) == n && n < layout.ManyCap
 }
 

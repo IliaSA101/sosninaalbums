@@ -1,5 +1,7 @@
 package gen
 
+import "github.com/IliaSA101/sosninaalbums/internal/decor/gen/art"
+
 // Набор узоров (research §2) в порядке каталога. Ключ и рисование выпущенного генератора не
 // меняются (эталоны testdata/golden.json); новый вид — новый ключ в конце списка.
 var patternGens = []*gen{
@@ -28,4 +30,32 @@ var patternGens = []*gen{
 func paperGen(kind, name, file string) *gen {
 	t := &texture{file: file}
 	return &gen{meta: Meta{Kind: kind, Name: name, Paper: true}, draw: paper(t), ready: t.ok}
+}
+
+// artGens — стикеры программы (пакет art) в порядке каталога.
+var artGens = func() []*gen {
+	defs := art.All()
+	out := make([]*gen, len(defs))
+	for i, d := range defs {
+		out[i] = artGen(d)
+	}
+	return out
+}()
+
+// artGen — генератор стикера: Draw рисует в пространстве (0..a)×(0..1), a — пропорция рамки.
+func artGen(d art.Def) *gen {
+	meta := Meta{Kind: d.Kind, Name: d.Name, Inks: d.Inks, Aspect: d.Aspect, Random: d.Random, Stretch: d.Stretch}
+	return &gen{meta: meta, art: true, draw: func(c *canvas, s Spec) {
+		a := meta.Aspect
+		if meta.Stretch {
+			a = s.Aspect
+		}
+		if !(a > 0) {
+			a = 1
+		}
+		// Рамка (0..1)² растянута до a:1 — перевод дизайн-координат (u, v) в доли: x = u/a.
+		c.M[0], c.M[3] = c.M[0]/a, c.M[3]/a
+		c.W, c.H = a, 1
+		d.Draw(c, art.Spec{Kind: s.Kind, Seed: s.Seed}, inks(s), a)
+	}}
 }

@@ -9,7 +9,7 @@
   import { fieldClick } from '../places/placegesture'
   import { bgmode } from '../backdrop/bgmode.svelte'
   import BackdropLayer from '../backdrop/BackdropLayer.svelte'
-  import PatternLayer from '../backdrop/PatternLayer.svelte'
+  import PatternLayer from '../pattern/PatternLayer.svelte'
   import BackdropEditor from '../backdrop/BackdropEditor.svelte'
   import Cell from '../photo/Cell.svelte'
   import CellOverlay from '../photo/CellOverlay.svelte'

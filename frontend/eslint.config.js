@@ -90,7 +90,7 @@ const boundaries = [
     // Основа не зовёт верхние группы (решение владельца 2026-10-09). geom, groupgeom и ui закрыты блоками выше
     // строже; здесь — остальная основа. Блоки с одним правилом не сливаются (действует последний), поэтому
     // файлы наборов не пересекаются. Долга нет (2026-10-10): верх подключается к основе хуками в shell/boot/wire.ts.
-    files: ['src/base/{core,prefs,drag}/**/*.{ts,svelte}'],
+    files: ['src/base/{core,prefs,drag,types,words}/**/*.{ts,svelte}'],
     rules: restrict({
       regex: '^(\\.\\./){2,}(editor|panels|shell)/',
       message: 'base/ не импортирует editor/, panels/, shell/: зависимость вверх — передайте данные или колбэк (docs/STRUCTURE.md).',

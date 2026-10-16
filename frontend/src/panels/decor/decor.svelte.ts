@@ -2,7 +2,7 @@
 // Окно рисует DecorDialog; правки проекта идут через store.run (один шаг отмены у Go). Каталог, переименование
 // и скрытие — не правки проекта: отмены нет, как у «Мои шаблоны».
 import { Api, store } from '../../base/core/store.svelte'
-import { errText } from '../../base/core/errtext'
+import { errText } from '../../base/words/errtext'
 import type { BackdropScope } from '../../base/core/types'
 import { applyBackground } from '../../editor/backdrop/backdropact'
 import { currentPage, sticker } from '../../editor/sticker/sticker.svelte'

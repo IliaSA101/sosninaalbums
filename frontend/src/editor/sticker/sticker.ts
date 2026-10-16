@@ -7,7 +7,7 @@ import { snapPlaceMove } from '../../base/geom/snap'
 import { rotate } from '../../base/geom/textbox'
 import type { Axis, SnapCtx } from '../../base/geom/gridedit'
 import type { Rect, SpreadView, StickerView } from '../../base/core/types'
-import { patternPx, patternSrc } from '../backdrop/pattern'
+import { patternPx, patternSrc } from '../pattern/pattern'
 
 export interface StBox extends Rect {
   rot: number

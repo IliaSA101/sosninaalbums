@@ -1,6 +1,7 @@
 package variety
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"testing"
@@ -37,12 +38,12 @@ func TestPoolKeysBuild(t *testing.T) {
 
 // TestPoolShape: ряд «Авто» — префикс пула как есть; дальше без повторов ключей ровно «Другие
 // варианты» в их порядке: страницы с модификатором S/O/I и раскладки с главным фото (семейство
-// Kind — только у них, у 8–16 фото); Меньше — только ряд; уровень вне 0…2 зажимается.
+// Kind — у них и у featured ряда «Авто», с 5 фото); Меньше — только ряд; уровень вне 0…2 зажимается.
 func TestPoolShape(t *testing.T) {
 	for _, asp := range [][]float64{
 		sameAspects(6, aspL), sameAspects(12, aspL), mixedAspects(8, 1), mixedAspects(10, 2), {aspL},
 	} {
-		row := layout.Cached(asp, geomSq, 24)
+		row := RowResults(asp, geomSq, 24)
 		less := Pool(asp, geomSq, 24, Less)
 		if len(less) != len(row) {
 			t.Fatalf("%d фото: Меньше — %d, ряд — %d", len(asp), len(less), len(row))
@@ -56,7 +57,7 @@ func TestPoolShape(t *testing.T) {
 			t.Fatalf("%d фото: пул %d, ряд %d + других %d", len(asp), len(pool), len(row), len(extra))
 		}
 		feat := checkPoolOrder(t, asp, pool, row, extra)
-		if want := len(asp) >= FeatMin; feat != want {
+		if want := len(asp) >= featLo; feat != want {
 			t.Errorf("%d фото: featured в пуле %v, ждали %v", len(asp), feat, want)
 		}
 		if !slices.EqualFunc(Pool(asp, geomSq, 24, Level(9)), pool, func(a, b Cand) bool { return a.Key == b.Key }) {
@@ -91,9 +92,11 @@ func checkPoolOrder(t *testing.T, asp []float64, pool []Cand, row, extra []layou
 		switch {
 		case c.Kind != NoKind:
 			feat = true
-			if c.InRow || pageMod.MatchString(c.Key) || c.Heroes == 0 {
-				t.Errorf("%d фото: featured %q в ряду «Авто», с модификатором или без главного", len(asp), c.Key)
+			if pageMod.MatchString(c.Key) || c.Heroes == 0 {
+				t.Errorf("%d фото: featured %q с модификатором или без главного", len(asp), c.Key)
 			}
+		case c.Formed && !c.InRow:
+			t.Errorf("%d фото: форма %q вне ряда «Авто»", len(asp), c.Key)
 		case !c.InRow && (!layout.IsPaged(c.Key) || !pageMod.MatchString(c.Key)):
 			t.Errorf("лишний вариант не страницы с модификатором: %q", c.Key)
 		}
@@ -116,7 +119,7 @@ func TestPoolEdges(t *testing.T) {
 // в нём featured.
 func checkExtraRow(t *testing.T, asp []float64, got []layout.Result) (feat int) {
 	t.Helper()
-	row := layout.Cached(asp, geomSq, 24)
+	row := RowResults(asp, geomSq, 24)
 	seen := map[string]bool{}
 	kinds := extraOf(asp, geomSq, 24).kind
 	for i, x := range got {
@@ -145,7 +148,7 @@ func checkExtraRow(t *testing.T, asp []float64, got []layout.Result) (feat int) 
 
 // TestExtra: «Другие варианты» — вне ряда «Авто», строятся, по убыванию оценки (ничья — по ключу),
 // воздуха не больше airLimit, featured не больше featLimit (на богатых наборах оба предела
-// достигаются), featured только у 8–16 фото; второй вызов отдаёт тот же ряд из кэша; холодный
+// достигаются), featured только с featLo фото; второй вызов отдаёт тот же ряд из кэша; холодный
 // кэш считает то же; пустой вход и одно фото не падают.
 func TestExtra(t *testing.T) {
 	sameKeys := func(a, b []layout.Result) bool {
@@ -170,8 +173,8 @@ func TestExtra(t *testing.T) {
 		if len(got)-feat > airLimit || feat > featLimit || len(got) > ExtraLimit {
 			t.Fatalf("%d фото: «Других вариантов» %d (featured %d)", len(asp), len(got), feat)
 		}
-		if feat > 0 && len(asp) < FeatMin {
-			t.Fatalf("%d фото: featured %d у меньше %d фото", len(asp), feat, FeatMin)
+		if feat > 0 && len(asp) < featLo {
+			t.Fatalf("%d фото: featured %d у меньше %d фото", len(asp), feat, featLo)
 		}
 		if !sameKeys(Extra(asp, geomSq, 24), got) {
 			t.Errorf("%d фото: второй вызов дал другой ряд", len(asp))
@@ -209,5 +212,41 @@ func TestExtraCacheGen(t *testing.T) {
 	extraCache.Unlock()
 	if n != 1 || !Cached(as, geomSq, 24) || Cached(old, geomSq, 24) {
 		t.Fatalf("после предела записей %d, новая в кэше %v", n, Cached(as, geomSq, 24))
+	}
+}
+
+// TestExtraOrderFree: ряд «Других вариантов» — функция только ключа. 1334/2000 и 1335/2000
+// прежний ключ (0.001) путал, и ряд зависел от того, какой набор посчитан первым.
+func TestExtraOrderFree(t *testing.T) {
+	reset := func() { ResetCache(); layout.ResetCache() }
+	t.Cleanup(reset)
+	snap := func(asp []float64) string { return fmt.Sprint(Extra(asp, geomSq, 24)) }
+	for _, n := range []int{3, 8, 12} {
+		var s [2][]float64
+		for i, a := range [2]float64{1334.0 / 2000, 1335.0 / 2000} {
+			s[i] = mixedAspects(n, uint64(n))
+			for j := 0; j < n; j += 2 {
+				s[i][j] = a
+			}
+		}
+		var cold [2]string
+		for i := range 2 {
+			reset()
+			cold[i] = snap(s[i])
+		}
+		if cold[0] == cold[1] {
+			t.Fatalf("%d фото: наборы неразличимы, тест ничего не проверяет", n)
+		}
+		for first := range 2 {
+			reset()
+			var got [2]string
+			got[first] = snap(s[first])
+			got[1-first] = snap(s[1-first])
+			for i := range 2 {
+				if got[i] != cold[i] {
+					t.Errorf("%d фото, первым %d: набор %d разошёлся с холодным счётом", n, first, i)
+				}
+			}
+		}
 	}
 }

@@ -9,6 +9,8 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/plan"
 	"github.com/IliaSA101/sosninaalbums/internal/layout/variety"
 )
 
@@ -29,7 +31,7 @@ type Prep struct {
 	photos []model.PhotoInfo
 	o      model.AutoOpts
 	job    PlanJob
-	pl     layout.Plan
+	pl     plan.Plan
 	err    error
 	pools  [][]variety.Cand // по группам плана; nil — считать под замком
 }
@@ -39,7 +41,7 @@ type Prep struct {
 // в View берёт их под замком, а холодный ряд — десятки мс на разворот.
 func Prepare(job PlanJob, photos []model.PhotoInfo, o model.AutoOpts) Prep {
 	w := Prep{photos: photos, o: o, job: job}
-	_, w.pl, w.err = job.plan(o.Spreads, o.MaxPer)
+	_, w.pl, w.err = job.plan(o)
 	if w.err == nil {
 		asps := make([][]float64, len(w.pl.Groups))
 		for i, g := range w.pl.Groups {
@@ -55,17 +57,21 @@ func (w Prep) Photos() int { return len(w.photos) }
 
 // planFor — план для входа j и пулы его групп: посчитанные до замка, если вход тот же, иначе
 // план заново, а пулы (nil) — при выборе.
-func (w Prep) planFor(j PlanJob) (layout.Plan, [][]variety.Cand, error) {
+func (w Prep) planFor(j PlanJob) (plan.Plan, [][]variety.Cand, error) {
 	if j.same(w.job) {
 		return w.pl, w.pools, w.err
 	}
-	_, pl, err := j.plan(w.o.Spreads, w.o.MaxPer)
+	_, pl, err := j.plan(w.o)
 	return pl, nil, err
 }
 
-// same — тот же вход плана: пропорции, геометрия, разворотов и пустой хвост.
+// same — тот же вход плана: пропорции, геометрия, разворотов и пустой хвост, а для серий
+// (051) — папки и время съёмки тех же фото.
 func (j PlanJob) same(k PlanJob) bool {
-	return j.prm == k.prm && j.have == k.have && j.tail == k.tail && slices.Equal(j.asp, k.asp)
+	return j.prm == k.prm && j.have == k.have && j.tail == k.tail && slices.Equal(j.asp, k.asp) &&
+		slices.EqualFunc(j.infos, k.infos, func(a, b model.PhotoInfo) bool {
+			return a.Path == b.Path && a.Lib == b.Lib && a.Taken == b.Taken
+		})
 }
 
 // poolLevel — пул разворота из n фото: с ManyFrom — только ряд «Авто», как у ExtraRow: выбранный
@@ -129,7 +135,7 @@ func varies(s *model.Spread) bool { return len(s.Photos) > 0 && len(s.Grid) == 0
 
 // ctxOf — соседи цепочки p.Spreads[first..last]: виды двух перед ней, семейство ближнего и есть ли
 // у него главное фото, вид следующего и сколько разворотов перед ней без воздуха и без главного
-// (не «Авто» ритм прерывает).
+// (не «Авто» ритм прерывает); формы до шести перед ней и следующего, среднее фото на разворот (051).
 // dead — развороты, которые правка уже опустошила и Normalize удалит: соседями они не считаются.
 func ctxOf(p *model.Project, first, last int, dead func(*model.Spread) bool) variety.Ctx {
 	var c variety.Ctx
@@ -153,18 +159,24 @@ func ctxOf(p *model.Project, first, last int, dead func(*model.Spread) bool) var
 	for _, s := range p.Spreads[last+1:] {
 		if alive(s) {
 			in, _ := shown(p, s)
-			c.Next = in.Look
+			c.Next, c.NextForm = in.Look, in.Form
 			break
 		}
 	}
-	// Оба ритма — одним проходом: вид соседа (Describe) считается раз, счёт каждого рвётся сам.
-	air, hero := true, true
-	for _, s := range before {
+	c.Avg = avgPhotos(p, alive)
+	// Ритмы и формы — одним проходом: вид соседа (Describe) считается раз, счёт каждого рвётся сам;
+	// формы — не «Авто» (сетка, виньетка, пустой) их обрывает, как ритмы, окно — variety.FormsWindow.
+	air, hero, form := true, true, true
+	for i, s := range before {
 		in, ok := shown(p, s)
 		air = air && ok && in.Family != variety.Air && c.Since < sinceCap
 		hero = hero && ok && in.Heroes == 0 && c.SinceHero < sinceCap
-		if !air && !hero {
+		form = form && ok && i < variety.FormsWindow
+		if !air && !hero && !form {
 			break
+		}
+		if form {
+			c.Forms = append(c.Forms, in.Form)
 		}
 		if air {
 			c.Since++
@@ -173,7 +185,23 @@ func ctxOf(p *model.Project, first, last int, dead func(*model.Spread) bool) var
 			c.SinceHero++
 		}
 	}
+	slices.Reverse(c.Forms) // последняя — ближняя
 	return c
+}
+
+// avgPhotos — среднее фото на живой разворот «Авто» с фото (0 — таких нет): «редкая» и «плотная»
+// группа выбора форм меряются от него.
+func avgPhotos(p *model.Project, alive func(*model.Spread) bool) float64 {
+	n, k := 0, 0
+	for _, s := range p.Spreads {
+		if varies(s) && alive(s) {
+			n, k = n+len(s.Photos), k+1
+		}
+	}
+	if k == 0 {
+		return 0
+	}
+	return float64(n) / float64(k)
 }
 
 // starOf — звезда разворота: единственное фото с наибольшей оценкой ≥ 4 (variety.Star).
@@ -270,12 +298,14 @@ func VaryLayouts(p *model.Project, ids []string, v model.Variety, rate Rating) {
 	}
 }
 
-// describeRows — семейство и похожие (Twin) у плиток ряда: подборка фильтрует и сворачивает.
+// describeRows — семейство формы, её название и похожие (Twin) у плиток ряда: подборка фильтрует,
+// подписывает и сворачивает.
 func describeRows(rows []model.Choice, prm layout.Params) {
 	looks := make([]string, len(rows))
 	for i := range rows {
-		in := variety.Describe(layout.Result{Key: rows[i].Key, Rects: rows[i].Rects}, prm)
-		rows[i].Family, looks[i] = string(in.Family), in.Look
+		f := forms.Of(rows[i].Key, rows[i].Rects, prm)
+		rows[i].Family, rows[i].FormName = string(variety.FamilyOf(f)), variety.FormName(f)
+		looks[i] = variety.Look(rows[i].Rects, prm)
 	}
 	for i, t := range variety.Twins(looks) {
 		rows[i].Twin = t

@@ -1,7 +1,7 @@
 import * as Api from '../../../wailsjs/go/app/App'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { SvelteSet } from 'svelte/reactivity'
-import { capFirst, errText, exportDoneText, withSkipped } from './errtext'
+import { capFirst, errText, exportDoneText, withSkipped } from '../words/errtext'
 import { Nav } from './nav.svelte'
 import type { MarkMap, PickResult } from './hooks'
 import { backdropLost, pickCurrent } from './undo'
@@ -10,7 +10,20 @@ import { movedFrom, movedText, type Moved } from './strip'
 import { prefs } from '../prefs/prefs.svelte'
 import { COVER_ID, unitOf } from '../geom/sheet'
 import { model } from '../../../wailsjs/go/models'
-import type { ExportOpts, FontFamily, GridResult, Photo, RecentProject, ScanProgress, Settings, State, Variety, View, Zone } from './types'
+import type {
+  AutoRange,
+  ExportOpts,
+  FontFamily,
+  GridResult,
+  Photo,
+  RecentProject,
+  ScanProgress,
+  Settings,
+  State,
+  Variety,
+  View,
+  Zone,
+} from './types'
 
 // rev — ревизия альбома, на которую рассчитан тост с «Вернуть»: другая ревизия (Ctrl+Z, любая правка) гасит тост.
 type Toast = { text: string; kind: 'info' | 'error'; action?: { label: string; run: () => void }; rev?: number }
@@ -51,7 +64,6 @@ class Store extends Nav {
   exporting = $state<{ done: number; total: number } | null>(null)
   toast = $state<Toast | null>(null)
   filter = $state<'all' | 'unused'>('all')
-  thumbSize = $state(110)
   // Окно автосборки (027): открыто, пока не null; фото уже выбраны (выделенные или свободные без отклонённых).
   autoDraft = $state<PickResult | null>(null)
   busy = $state(false)
@@ -69,10 +81,12 @@ class Store extends Nav {
   get marks(): MarkMap {
     return this.hooks.marks()
   }
-  // Не в местах и не на фоне.
-  free = $derived(this.hooks.free(this.photos, this.used, this.backdropUsed))
+  // Фото без скрытых папок (054): без фильтра по папкам — тот же массив.
+  inFolders = $derived(this.hooks.folders(this.photos))
+  // Не в местах и не на фоне (среди показанных папок).
+  free = $derived(this.hooks.free(this.inFolders, this.used, this.backdropUsed))
   // Лента до фильтра по отметкам (длина — «из M» в MarkFilter) и после него (libfilter).
-  beforeMarks = $derived(this.filter === 'unused' ? this.free : this.photos)
+  beforeMarks = $derived(this.filter === 'unused' ? this.free : this.inFolders)
   visible = $derived(this.hooks.visible(this.beforeMarks))
   // Выделенные и при этом видимые (с учётом фильтра) фото — в порядке ленты.
   selectedIds = $derived(this.visible.filter((p) => this.selected.has(p.id)).map((p) => p.id))
@@ -361,8 +375,9 @@ class Store extends Nav {
     if (p.ids.length > 0) this.autoDraft = p
   }
 
-  // «Собрать» в окне: ровно `spreads` разворотов, не больше `maxPer` фото на каждом, разнообразие раскладок — variety (041).
-  async autoBuild(spreads: number, maxPer: number, variety: Variety = 1): Promise<boolean> {
+  // «Собрать» в окне: ровно `spreads` разворотов, фото на каждом — по `range` («Авто» или «от … до …», серии; 051),
+  // разнообразие раскладок — variety (041).
+  async autoBuild(spreads: number, range: AutoRange, variety: Variety = 1): Promise<boolean> {
     // Выделенные — как есть: Go переносит уже стоящие в альбоме фото в новые развороты.
     const d = this.autoDraft
     this.autoDraft = null
@@ -372,7 +387,8 @@ class Store extends Nav {
     this.busy = true
     let ok: boolean
     try {
-      ok = await this.run(Api.AutoBuild([...d.ids], at, model.AutoOpts.createFrom({ spreads, maxPer, variety })))
+      const opts = model.AutoOpts.createFrom({ spreads, ...range, variety })
+      ok = await this.run(Api.AutoBuild([...d.ids], at, opts))
     } finally {
       this.busy = false
     }

@@ -3,7 +3,7 @@ package layout
 import (
 	"fmt"
 	"slices"
-	"strings"
+	"strconv"
 	"sync"
 )
 
@@ -25,13 +25,17 @@ var cache = struct {
 // cacheGen — записей в поколении (переменная — чтобы тест не наполнял кэш тысячами).
 var cacheGen = 10000
 
-func cacheKey(aspects []float64, p Params, limit int) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%g/%g/%g/%g/%t/%t/%d:", p.PageW, p.PageH, p.Margin, p.Gap, p.Layflat, p.Sheet, limit)
+// CacheKey — ключ кэша по геометрии, n и пропорциям. Пропорции — точно (кратчайшая запись
+// float64), а не с точностью 0.001: иначе 1334/2000 и 1335/2000 делят запись, и выдача
+// зависит от того, кто посчитал первым (окна plan считаются параллельно — подсказка
+// и сборка расходились). Кадры одной камеры дают одинаковые float — попадания те же.
+func CacheKey(aspects []float64, p Params, n int) string {
+	b := fmt.Appendf(make([]byte, 0, 48+20*len(aspects)), "%g/%g/%g/%g/%t/%t/%d:", p.PageW, p.PageH, p.Margin, p.Gap, p.Layflat, p.Sheet, n)
 	for _, a := range aspects {
-		fmt.Fprintf(&b, "%.3f,", a)
+		b = strconv.AppendFloat(b, a, 'g', -1, 64)
+		b = append(b, ',')
 	}
-	return b.String()
+	return string(b)
 }
 
 // cacheGetLocked ищет запись в обоих поколениях; найденную в old переносит в cur. Под cache.Lock.
@@ -98,7 +102,7 @@ func resetCache() {
 	cache.Lock()
 	cache.cur, cache.old = map[string]any{}, nil
 	cache.Unlock()
-	resetPlans()
+	runResetHooks()
 }
 
 // ResetCache — то же для тестов и бенчмарков других пакетов (album/view: View на холодном кэше).
@@ -106,7 +110,7 @@ func ResetCache() { resetCache() }
 
 // Cached — то же, что Layouts, но с запоминанием результата.
 func Cached(aspects []float64, p Params, limit int) []Result {
-	return cached("L"+cacheKey(aspects, p, limit), func() []Result { return Layouts(aspects, p, limit) })
+	return cached("L"+CacheKey(aspects, p, limit), func() []Result { return Layouts(aspects, p, limit) })
 }
 
 type rearrangedEntry struct {
@@ -116,7 +120,7 @@ type rearrangedEntry struct {
 
 // CachedRearranged — то же, что Rearranged, но с запоминанием результата.
 func CachedRearranged(aspects []float64, p Params, limit int) ([]Result, Block) {
-	e := cached("R"+cacheKey(aspects, p, limit), func() rearrangedEntry {
+	e := cached("R"+CacheKey(aspects, p, limit), func() rearrangedEntry {
 		r, b := Rearranged(aspects, p, limit)
 		return rearrangedEntry{r, b}
 	})
@@ -132,7 +136,7 @@ func pagesKey(kind, key string, aspects []float64, p Params, side, limit int) (s
 	}
 	own := k.pages[side].leaves(nil)
 	slices.Sort(own)
-	return fmt.Sprintf("%s%d:%s:%v:", kind, side, pageString(k.mods[1-side], k.pages[1-side]), own) + cacheKey(aspects, p, limit), true
+	return fmt.Sprintf("%s%d:%s:%v:", kind, side, pageString(k.mods[1-side], k.pages[1-side]), own) + CacheKey(aspects, p, limit), true
 }
 
 type pagesEntry struct {

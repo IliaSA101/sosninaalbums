@@ -22,6 +22,8 @@ type Photo struct {
 	W      int    `json:"w"`
 	H      int    `json:"h"`
 	Rotate int    `json:"-"` // EXIF Orientation
+	// Taken — время съёмки (EXIF), секунды Unix, местное время камеры как UTC; 0 — нет. Для серий автосборки.
+	Taken int64 `json:"-"`
 	// Size — размер файла в байтах (из Stat при чтении).
 	Size int64 `json:"size,omitempty"`
 	// Color и Profile — класс и имя цветового профиля: от них зависят значки в интерфейсе.
@@ -97,7 +99,7 @@ func readHead(path string) (Photo, []byte, error) {
 	}
 	return Photo{
 		ID: IDFor(path), Path: path, Name: filepath.Base(path), W: w, H: h,
-		Rotate: head.Orient, Size: st.Size(), Color: col, Profile: prof,
+		Rotate: head.Orient, Taken: head.Taken, Size: st.Size(), Color: col, Profile: prof,
 	}, head.XMP, nil
 }
 

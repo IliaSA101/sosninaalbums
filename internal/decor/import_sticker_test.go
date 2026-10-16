@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/decor/gen"
+	"github.com/IliaSA101/sosninaalbums/internal/decor/svgcheck"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -243,6 +244,11 @@ func TestDecorImportStickerLimits(t *testing.T) {
 	}
 }
 
+// svgOpen и svgDoc — обёртка тестового SVG (копия помощников svgcheck: пакет отдельный).
+const svgOpen = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 50">`
+
+func svgDoc(body string) string { return svgOpen + body + `</svg>` }
+
 // svgClean — чистый SVG для тестов; ключ — от его байт.
 var svgClean = []byte(svgDoc(`<rect width="10" height="10" fill="#c00"/>`))
 
@@ -254,7 +260,7 @@ func TestDecorImportSVG(t *testing.T) {
 	s, cfg := openTemp(t)
 	good := writeFile(t, src, "Лента.svg", svgClean)
 	evil := writeFile(t, src, "вредный.svg", []byte(svgDoc(`<script>alert(1)</script>`)))
-	huge := writeFile(t, src, "огромный.SVG", append([]byte(svgDoc(`<!--`)), bytes.Repeat([]byte("x"), MaxSVGBytes)...))
+	huge := writeFile(t, src, "огромный.SVG", append([]byte(svgDoc(`<!--`)), bytes.Repeat([]byte("x"), svgcheck.MaxBytes)...))
 	res, err := s.Import(KindSticker, "wedding", []string{good, evil, huge})
 	if err != nil || len(res.Added) != 0 || len(res.Svg) != 1 || len(res.Skipped) != 2 {
 		t.Fatalf("итог %+v, %v", res, err)

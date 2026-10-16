@@ -82,11 +82,16 @@ func FuzzJPEGHead(f *testing.F) {
 	f.Add(testkit.RawJPEG(testkit.ExifColor(false, 6, 0xFFFF, "R03"), xmpSegment(xmpAttrs(`xmp:Rating="4"`)),
 		testkit.ICCSegment(1, 1, srgb)))
 	f.Add(testkit.RawJPEG(testkit.ICCSegment(1, 2, srgb[:100]), testkit.ICCSegment(2, 2, srgb[100:])))
+	f.Add(testkit.RawJPEG(testkit.ExifTaken(false, "2024:06:15 14:30:05", "2024:06:15 14:30:06"), testkit.ICCSegment(1, 1, srgb)))
+	f.Add(testkit.RawJPEG(testkit.ExifTaken(true, "", "0000:00:00 00:00:00")))
 	f.Add([]byte{0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x01})
 	f.Fuzz(func(t *testing.T, data []byte) {
 		h := Header(bytes.NewReader(data))
 		if h.Orient < 1 || h.Orient > 8 || len(h.XMP) > 65533-len(XMPPrefix) {
 			t.Fatalf("%d %d", h.Orient, len(h.XMP))
+		}
+		if h.Taken < 0 || h.Taken > unix(2200, 12, 31, 23, 59, 59) {
+			t.Fatalf("время вне пределов: %d", h.Taken)
 		}
 	})
 }

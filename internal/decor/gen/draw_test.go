@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"golang.org/x/image/math/f64"
+
+	"github.com/IliaSA101/sosninaalbums/internal/decor/gen/paint"
 )
 
 func render(kind string, seed uint32, wmm, hmm, k, fade float64) *image.RGBA {
@@ -108,21 +110,6 @@ func maxDiff(a, b color.RGBA) int {
 	return d
 }
 
-// TestGenStrips — фигура во всю область полосами равна одной маске (нет шва на стыке полос).
-func TestGenStrips(t *testing.T) {
-	old := stripPx
-	defer func() { stripPx = old }()
-	for _, kind := range []string{"waves", "grid-5", "stripes"} {
-		stripPx = 1 << 30
-		one := render(kind, 0, 200, 120, 4, 0)
-		stripPx = 1000 // десятки полос
-		many := render(kind, 0, 200, 120, 4, 0)
-		if !bytes.Equal(one.Pix, many.Pix) {
-			t.Errorf("%s: полосы ≠ одна маска", kind)
-		}
-	}
-}
-
 // TestGenFade — прозрачность 1 и больше — пусто; 0,5 — альфа сплошного узора вдвое меньше;
 // NaN — как 0.
 func TestGenFade(t *testing.T) {
@@ -169,38 +156,6 @@ func TestGenEdges(t *testing.T) {
 	DrawPattern(dst, dst.Rect, Spec{Kind: "confetti", Scale: 0.25}, 20.0/2400, 0)
 }
 
-// TestCanvasAff3 — путь стикера идёт через m: зеркало и поворот переносят фигуру; круги и
-// куски штриха одного пути сливаются, а не вычитаются.
-func TestCanvasAff3(t *testing.T) {
-	ink := color.NRGBA{200, 0, 0, 255}
-	draw1 := func(m f64.Aff3) *image.RGBA {
-		dst := image.NewRGBA(image.Rect(0, 0, 100, 100))
-		c := newCanvas(dst, dst.Rect, m, 1, 1, 0)
-		c.poly([]pt{{0, 0}, {0.5, 0}, {0.5, 1}, {0, 1}}) // левая половина рамки
-		c.fill(ink, 1)
-		return dst
-	}
-	plain := draw1(f64.Aff3{100, 0, 0, 0, 100, 0})
-	flip := draw1(f64.Aff3{-100, 0, 100, 0, 100, 0})
-	rot := draw1(f64.Aff3{0, -100, 100, 100, 0, 0}) // 90° по часовой: левая → верхняя
-	if plain.RGBAAt(10, 50).A != 255 || plain.RGBAAt(90, 50).A != 0 {
-		t.Error("без преобразования: не левая половина")
-	}
-	if flip.RGBAAt(10, 50).A != 0 || flip.RGBAAt(90, 50).A != 255 {
-		t.Error("зеркало: не правая половина")
-	}
-	if rot.RGBAAt(50, 10).A != 255 || rot.RGBAAt(50, 90).A != 0 {
-		t.Error("поворот: не верхняя половина")
-	}
-	dst := image.NewRGBA(image.Rect(0, 0, 100, 100))
-	c := newCanvas(dst, dst.Rect, f64.Aff3{1, 0, 0, 0, 1, 0}, 100, 100, 0)
-	c.stroke([]pt{{20, 50}, {80, 50}, {80, 20}}, false, 10)
-	c.fill(ink, 0.5)
-	if a, b := dst.RGBAAt(80, 50).A, dst.RGBAAt(50, 50).A; a != b || b < 126 || b > 129 {
-		t.Errorf("стык штриха %d, середина %d: куски не слились", a, b)
-	}
-}
-
 // TestPaperTiles — плитки текстуры делят область без щелей и без перекрытия: ровная маска даёт
 // ровную альфу на стыках, в том числе при дробном размере плитки.
 func TestPaperTiles(t *testing.T) {
@@ -215,7 +170,7 @@ func TestPaperTiles(t *testing.T) {
 	for _, k := range []float64{0.3, 1.37, 2} {
 		dst := image.NewRGBA(image.Rect(0, 0, int(400*k), int(310*k)))
 		area := dst.Rect.Inset(1)
-		c := newCanvas(dst, area, f64.Aff3{k, 0, float64(area.Min.X), 0, k, float64(area.Min.Y)}, 400, 310, 0)
+		c := paint.New(dst, area, f64.Aff3{k, 0, float64(area.Min.X), 0, k, float64(area.Min.Y)}, 400, 310, 0)
 		draw1(c, Spec{})
 		for y := area.Min.Y; y < area.Max.Y; y++ {
 			for x := area.Min.X; x < area.Max.X; x++ {
@@ -245,7 +200,7 @@ func TestPaperFlatDraw(t *testing.T) {
 	tx.mips = mipChain(flat)
 	dst := image.NewRGBA(image.Rect(0, 0, 40, 40))
 	draw.Draw(dst, dst.Rect, image.White, image.Point{}, draw.Src)
-	c := newCanvas(dst, dst.Rect, f64.Aff3{1, 0, 0, 0, 1, 0}, 40, 40, 0.5)
+	c := paint.New(dst, dst.Rect, f64.Aff3{1, 0, 0, 0, 1, 0}, 40, 40, 0.5)
 	paper(tx)(c, Spec{})
 	if got := dst.RGBAAt(20, 20); got.R < 228 || got.R > 231 || got.A != 255 {
 		t.Errorf("белый под плиткой 0,8 при прозрачности 0,5: %v, ждали ≈ 229", got)
@@ -289,7 +244,7 @@ func TestPaperHugeScale(t *testing.T) {
 	tx.mips = mipChain(ramp)
 	const k = 100
 	dst := image.NewRGBA(image.Rect(0, 0, 4096, 4))
-	c := newCanvas(dst, dst.Rect, f64.Aff3{k, 0, 0, 0, k, 0}, 40.96, 0.04, 0)
+	c := paint.New(dst, dst.Rect, f64.Aff3{k, 0, 0, 0, k, 0}, 40.96, 0.04, 0)
 	paper(tx)(c, Spec{})
 	if tx.lastN > maxMaskPx {
 		t.Fatalf("маска %d px — больше %d", tx.lastN, maxMaskPx)

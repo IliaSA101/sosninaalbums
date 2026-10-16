@@ -75,56 +75,6 @@ func joinICC(chunks map[int][]byte, count int) []byte {
 	return chunks[1]
 }
 
-// exifInterop идёт IFD0 → Exif IFD (0x8769) → Interop IFD (0xA005) → InteropIndex.
-// Ровно три уровня, без рекурсии; каждое смещение проверяется на границы.
-func exifInterop(t []byte) string {
-	if len(t) < 8 {
-		return ""
-	}
-	var bo binary.ByteOrder
-	switch string(t[:2]) {
-	case "II":
-		bo = binary.LittleEndian
-	case "MM":
-		bo = binary.BigEndian
-	default:
-		return ""
-	}
-	// ifd вызывает f для каждой записи; смещение — uint32, сравнивается до перевода в int.
-	ifd := func(off uint32, f func(tag uint16, e []byte)) {
-		if off < 8 || uint64(off)+2 > uint64(len(t)) {
-			return
-		}
-		n := int(bo.Uint16(t[off:]))
-		for i := range n {
-			e := int(off) + 2 + i*12
-			if e+12 > len(t) {
-				return
-			}
-			f(bo.Uint16(t[e:]), t[e:e+12])
-		}
-	}
-	var exifOff, interOff uint32
-	ifd(bo.Uint32(t[4:]), func(tag uint16, e []byte) {
-		if tag == 0x8769 {
-			exifOff = bo.Uint32(e[8:])
-		}
-	})
-	ifd(exifOff, func(tag uint16, e []byte) {
-		if tag == 0xA005 {
-			interOff = bo.Uint32(e[8:])
-		}
-	})
-	var res string
-	ifd(interOff, func(tag uint16, e []byte) {
-		// ASCII (тип 2), до 4 байт — значение лежит прямо в записи
-		if tag == iccInteropIndex && bo.Uint16(e[2:]) == 2 && bo.Uint32(e[4:]) <= 4 {
-			res = string(trimNUL(e[8:12]))
-		}
-	})
-	return res
-}
-
 func trimNUL(b []byte) []byte {
 	for len(b) > 0 && b[len(b)-1] == 0 {
 		b = b[:len(b)-1]

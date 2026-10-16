@@ -1,12 +1,13 @@
 <script lang="ts">
   import { SvelteMap } from 'svelte/reactivity'
   import { store } from '../../base/core/store.svelte'
+  import { modes, THUMB_MIN, THUMB_MAX } from '../../base/prefs/view.svelte'
   import { unitOf } from '../../base/geom/sheet'
-  import { scanText, scanFraction } from './scan'
+  import { scanText, scanFraction } from '../folders/scan'
   import { fitGroups, type RowGroup } from '../../base/ui/fitrow'
   import MarkBar from '../marks/MarkBar.svelte'
   import MarkFilter from '../marks/MarkFilter.svelte'
-  import FolderMenu from './FolderMenu.svelte'
+  import FolderMenu from '../folders/FolderMenu.svelte'
   import MoreMenu from './MoreMenu.svelte'
 
   // Верхняя полоса ленты фото (спека 024): всегда одна строка. Что не поместилось — уходит в «⋯» по приоритету
@@ -117,9 +118,10 @@
       class="size"
       data-guide="thumb-size"
       type="range"
-      min="70"
-      max="220"
-      bind:value={store.thumbSize}
+      min={THUMB_MIN}
+      max={THUMB_MAX}
+      value={modes.thumbSize}
+      oninput={(e) => modes.setThumb(Number(e.currentTarget.value))}
       title="Размер миниатюр"
       aria-label="Размер миниатюр"
       onchange={(e) => e.currentTarget.blur()}

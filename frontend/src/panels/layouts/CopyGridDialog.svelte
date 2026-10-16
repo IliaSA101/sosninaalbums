@@ -3,9 +3,9 @@
   import { store } from '../../base/core/store.svelte'
   import { gridAct } from './gridact.svelte'
   import { parseRanges } from './ranges'
-  import { plural } from '../../base/core/plural'
+  import { plural } from '../../base/words/plural'
   import { isSheet, unitOf } from '../../base/geom/sheet'
-  import { errText } from '../../base/core/errtext'
+  import { errText } from '../../base/words/errtext'
   import {
     copyTargets,
     loadCopyOpts,

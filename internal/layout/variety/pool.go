@@ -34,31 +34,33 @@ var pageMod = regexp.MustCompile(`[SOI]\(`)
 type Cand struct {
 	layout.Result
 	Info
-	InRow bool // из ряда «Авто» (Cached)
-	Kind  Kind // семейство генератора featured; NoKind — ряд «Авто» или воздух
+	InRow bool // из ряда «Авто» (Row)
+	// Formed — вставлен в ряд «Авто» формой (forms.Gen), а не из ряда layout: допускается по Q
+	// формы (δ_form), а не по оценке layout, которая штрафует воздух лент и лесенок.
+	Formed bool
+	Kind   Kind // семейство генератора featured; NoKind — ряд layout, форма Gen или воздух
 }
 
-// Pool — пул кандидатов разворота: сначала ряд Cached(aspects, p, rowLen) как есть (префикс
+// Pool — пул кандидатов разворота: сначала ряд «Авто» Row(aspects, p, rowLen) как есть (префикс
 // = ряд, порядок тот же), затем (lv ≥ Normal) «Другие варианты» (Extra) в их порядке: воздух и
 // раскладки с главным фото. Выбор сборки ставит только видимое в подборке и счётчике (решение
 // 0.11 №38). Все ключи строит layout, так что Build их разбирает. Только «в порядке ленты».
 //
 // Воздух — это варианты страниц из подборки страницы: у первых трёх постраничных ключей ряда
 // страницы с модификатором S/O/I, а у P[S(…)|…] ещё и правая страница поменьше (обе поменьше).
-// Раскладки с главным фото — генератор featured (8–16 фото).
+// Раскладки с главным фото — генератор featured (5–40 фото): лучшие по формам — в ряду, прочие —
+// в «Других вариантах».
 func Pool(aspects []float64, p layout.Params, rowLen int, lv Level) []Cand {
-	row := layout.Cached(aspects, p, rowLen)
-	if lv.clamp() < Normal {
-		out := make([]Cand, len(row))
-		for i, r := range row {
-			out[i] = Cand{Result: r, Info: Describe(r, p), InRow: true}
-		}
-		return out
+	re := rowOf(aspects, p, rowLen)
+	var e extraEntry
+	if lv.clamp() >= Normal {
+		e = extraOf(aspects, p, rowLen)
 	}
-	e := extraOf(aspects, p, rowLen)
-	out := make([]Cand, 0, len(row)+len(e.row))
-	for _, r := range row {
-		out = append(out, Cand{Result: r, Info: Describe(r, p), InRow: true})
+	out := make([]Cand, 0, len(re.row)+len(e.row))
+	for _, c := range re.row {
+		k := re.kind[c.Key]
+		out = append(out, Cand{Result: c.Result, Info: describe(c.Result, p, c.Form, c.Q), InRow: true,
+			Formed: re.gen[c.Key] && k == NoKind, Kind: k})
 	}
 	for _, r := range e.row {
 		out = append(out, Cand{Result: r, Info: Describe(r, p), Kind: e.kind[r.Key]})

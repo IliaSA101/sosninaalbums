@@ -291,6 +291,9 @@ type model.Art
 type model.AutoOpts
   spreads: number
   maxPer: number
+  minPer: number
+  auto: boolean
+  series: boolean
   variety: number
 type model.AutoPlan
   photos: number
@@ -301,6 +304,9 @@ type model.AutoPlan
   min: number
   max: number
   reuse: number
+  from: number
+  to: number
+  cuts: number
 type model.BackdropBox
   x: number
   y: number
@@ -351,6 +357,7 @@ type model.Choice
   rects: layout.Rect[]
   family: string
   twin: number
+  formName: string
 type model.ChoiceRows
   inOrder: Choice[]
   rearranged: Choice[]

@@ -18,6 +18,7 @@
 
 <div
   class="thumb"
+  data-thumb={p.id}
   class:used={store.used.has(p.id)}
   class:selected={store.selected.has(p.id)}
   class:rejected

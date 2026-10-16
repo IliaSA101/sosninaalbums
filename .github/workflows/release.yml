@@ -309,7 +309,7 @@ jobs:
         env:
           SA_GOLDEN_ANYARCH: "1"
         run: |
-          go test ./internal/layout/variety -run '^(TestGoldenFeatured|TestFeaturedTiesNoise|TestGridTopTies)$' -count=1 -timeout 3m -v ||
+          go test ./internal/layout ./internal/layout/forms ./internal/layout/plan ./internal/layout/variety -run '^(TestGoldenFeatured|TestFeaturedTiesNoise|TestGridTopTies|TestGoldenShapes|TestGoldenForms|TestGoldenPlan051|TestGoldenPlan600|TestGoldenVariety|TestGoldenFeaturedWide)$' -count=1 -timeout 3m -v ||
             { echo "::warning::Эталон featured на arm64 разошёлся (наблюдение, решение 0.11 №70)"; exit 1; }
 
       # Провал валит задание, а с ним и «Черновик релиза»

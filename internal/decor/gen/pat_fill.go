@@ -11,26 +11,26 @@ import (
 // gradH — Градиент: слева первый цвет, справа второй.
 func gradH(c *canvas, s Spec) {
 	ink := inks(s)
-	k := c.m[0]
-	cols := make([]color.NRGBA, c.clip.Dx())
+	k := c.M[0]
+	cols := make([]color.NRGBA, c.Clip.Dx())
 	for i := range cols {
-		x := (float64(c.clip.Min.X+i) + 0.5 - c.m[2]) / k / c.w
+		x := (float64(c.Clip.Min.X+i) + 0.5 - c.M[2]) / k / c.W
 		cols[i] = lerp(ink[0], ink[1], x)
 	}
-	c.shade(func(_ float64, row []color.NRGBA) { copy(row, cols) })
+	c.Shade(func(_ float64, row []color.NRGBA) { copy(row, cols) })
 }
 
 // gradD — Диагональный градиент: из левого верхнего угла в правый нижний.
 func gradD(c *canvas, s Spec) {
 	ink := inks(s)
 	rp := newRamp(ink[0], ink[1])
-	k := c.m[0]
-	xs := make([]float64, c.clip.Dx())
+	k := c.M[0]
+	xs := make([]float64, c.Clip.Dx())
 	for i := range xs {
-		xs[i] = (float64(c.clip.Min.X+i) + 0.5 - c.m[2]) / k / c.w
+		xs[i] = (float64(c.Clip.Min.X+i) + 0.5 - c.M[2]) / k / c.W
 	}
-	c.shade(func(y float64, row []color.NRGBA) {
-		ty := y / c.h
+	c.Shade(func(y float64, row []color.NRGBA) {
+		ty := y / c.H
 		for i, x := range xs {
 			row[i] = rp.at((x + ty) / 2)
 		}
@@ -41,14 +41,14 @@ func gradD(c *canvas, s Spec) {
 func glow(c *canvas, s Spec) {
 	ink := inks(s)
 	rp := newRamp(ink[0], ink[1])
-	k := c.m[0]
-	cx, cy := c.w/2, c.h/2
+	k := c.M[0]
+	cx, cy := c.W/2, c.H/2
 	r := math.Hypot(cx, cy) * s.Scale
-	xs := make([]float64, c.clip.Dx())
+	xs := make([]float64, c.Clip.Dx())
 	for i := range xs {
-		xs[i] = (float64(c.clip.Min.X+i)+0.5-c.m[2])/k - cx
+		xs[i] = (float64(c.Clip.Min.X+i)+0.5-c.M[2])/k - cx
 	}
-	c.shade(func(y float64, row []color.NRGBA) {
+	c.Shade(func(y float64, row []color.NRGBA) {
 		dy := y - cy
 		for i, dx := range xs {
 			t := min(math.Sqrt(dx*dx+dy*dy)/r, 1)
@@ -56,31 +56,6 @@ func glow(c *canvas, s Spec) {
 		}
 	})
 }
-
-// shade заполняет обрезку построчно: fn получает y центра строки в мм и пишет цвета строки.
-func (c *canvas) shade(fn func(y float64, row []color.NRGBA)) {
-	row := make([]color.NRGBA, c.clip.Dx())
-	a := uint32(math.Round(255 * c.alpha))
-	for y := c.clip.Min.Y; y < c.clip.Max.Y; y++ {
-		fn((float64(y)+0.5-c.m[5])/c.m[4], row)
-		off := c.dst.PixOffset(c.clip.Min.X, y)
-		px := c.dst.Pix[off : off+4*len(row)]
-		for i, v := range row {
-			p := px[4*i : 4*i+4 : 4*i+4]
-			if a == 255 {
-				p[0], p[1], p[2], p[3] = v.R, v.G, v.B, 255
-				continue
-			}
-			// Холст — умноженный RGBA: d = s·a + d·(1 − a).
-			p[0] = blend(uint32(v.R), uint32(p[0]), a)
-			p[1] = blend(uint32(v.G), uint32(p[1]), a)
-			p[2] = blend(uint32(v.B), uint32(p[2]), a)
-			p[3] = blend(255, uint32(p[3]), a)
-		}
-	}
-}
-
-func blend(s, d, a uint32) uint8 { return uint8((s*a + d*(255-a) + 127) / 255) } //nolint:gosec // a ≤ 255: итог 0..255
 
 // lerp — цвет между a и b в доле t (зажата в 0..1), в каналах sRGB.
 func lerp(a, b color.NRGBA, t float64) color.NRGBA {

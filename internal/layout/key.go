@@ -1,7 +1,7 @@
 package layout
 
 // Геометрия по ключу: области разворота, оценка страниц, Build. Грамматика ключа,
-// разбор и преобразования записи — keyparse.go.
+// разбор и преобразования записи — keyparse.go, корни 051 (G, L/A, Q) — shapes.go.
 
 import (
 	"math"
@@ -43,6 +43,13 @@ func fitTree(t *node, box Rect, gap float64, out []Rect) (float64, bool) {
 // fitTreeAt — то же, но по горизонтали блок стоит на доле ax свободного места:
 // 0 — у левого края box, 1 — у правого.
 func fitTreeAt(t *node, box Rect, gap float64, out []Rect, ax float64) (float64, bool) {
+	return fitTreeXY(t, box, gap, out, ax, 0.5)
+}
+
+// fitTreeXY — то же, и по вертикали блок стоит на доле ay: 0 — у верхнего края box.
+// При ay = 0.5 числа те же, что у прежнего «/2»: умножение на 0.5 точное, а явное
+// приведение не даёт сливать его со сложением (FMA на arm64).
+func fitTreeXY(t *node, box Rect, gap float64, out []Rect, ax, ay float64) (float64, bool) {
 	w := box.W
 	h := t.a*w + t.b
 	if h > box.H {
@@ -53,7 +60,7 @@ func fitTreeAt(t *node, box Rect, gap float64, out []Rect, ax float64) (float64,
 		return 0, false
 	}
 	x := box.X + (box.W-w)*ax
-	y := box.Y + (box.H-h)/2
+	y := box.Y + float64((box.H-h)*ay)
 	return h, t.place(x, y, w, h, gap, out)
 }
 
@@ -93,19 +100,27 @@ func (g geom) page(side int, mod byte, kt *keyTree, aspects []float64, out []Rec
 		out[kt.leaf] = r
 		return pageGeo{h: g.spread.H, bleed: true, crop: c}, true
 	}
-	t := kt.node(aspects, g.gap)
-	box, ax := g.pages[side], 0.5
+	box, ax, ay := g.pages[side], 0.5, 0.5
 	switch mod {
 	case 'S':
-		d := 1 - smallScale
-		box = Rect{box.X + box.W*d/2, box.Y + box.H*d/2, box.W * smallScale, box.H * smallScale}
+		box = smallBox(box)
 	case 'O': // внешний край: у левой страницы слева, у правой справа
 		ax = float64(side)
 	case 'I':
 		ax = float64(1 - side)
+	case 'U':
+		ay = 0
+	case 'D':
+		ay = 1
 	}
-	h, ok := fitTreeAt(t, box, g.gap, out, ax)
-	return pageGeo{h: h, depth: t.depth}, ok
+	h, depth, ok := g.fitRoot(kt, aspects, box, ax, ay, out)
+	return pageGeo{h: h, depth: depth}, ok
+}
+
+// smallBox — область «поменьше»: доля smallScale по каждой стороне, по центру.
+func smallBox(box Rect) Rect {
+	d := 1 - smallScale
+	return Rect{box.X + box.W*d/2, box.Y + box.H*d/2, box.W * smallScale, box.H * smallScale}
 }
 
 // pagedScore — оценка постраничного разворота с модификаторами страниц.
@@ -144,8 +159,11 @@ func bleedResult(rects []Rect, aspects []float64, g geom, key string) (Result, b
 }
 
 // Build строит раскладку по ключу. false: ключ не разобрать или он не канонический,
-// листья не 0…n−1 по разу, фото меньше 1 мм, без layflat дерево на весь разворот
-// или фото через корешок, обрезка «в край» больше 30 %. Score — та же формула, что в Layouts.
+// листья не 0…n−1 по разу, фото меньше 1 мм, без layflat блок на весь разворот
+// или фото через корешок, у листа (Sheet) страницы и Q, обрезка «в край» больше 30 %.
+// Score — та же формула, что в Layouts; у Q — как у страниц одной высоты (pairScore).
+// U/D без заметного сдвига строятся (вид как по центру, как у O/I): порог minShift —
+// дело генераторов, иначе смена формата молча сбрасывала бы выбранную раскладку.
 func Build(key string, aspects []float64, p Params) (Result, bool) {
 	n := len(aspects)
 	if n == 0 || n > MaxPhotos || p.PageW <= 0 || p.PageH <= 0 {
@@ -157,7 +175,11 @@ func Build(key string, aspects []float64, p Params) (Result, bool) {
 		}
 	}
 	k, ok := parseKey(key)
-	if !ok || !leavesOK(k.leaves(), n) || p.Sheet && IsPaged(key) {
+	if !ok || !leavesOK(k.leaves(), n) || p.Sheet && (IsPaged(key) || k.kind == 'Q') {
+		return Result{}, false
+	}
+	// Одна раскладка — один ключ (у страниц «в край» без обычной второй страницы — B[…]).
+	if k.String() != key {
 		return Result{}, false
 	}
 	g := newGeom(p)
@@ -167,16 +189,10 @@ func Build(key string, aspects []float64, p Params) (Result, bool) {
 		if !p.Layflat {
 			return Result{}, false
 		}
-		t := k.tree.node(aspects, p.Gap)
-		if _, ok := fitTree(t, g.spread, p.Gap, rects); !ok {
-			return Result{}, false
-		}
-		return Result{rects, score(rects, g.spread, g.spine, t.depth), key}, true
+		return g.whole(k, aspects, rects, key)
+	case 'Q':
+		return g.pairQ(k, aspects, rects, key)
 	case 'P':
-		// У страниц «в край» без обычной второй страницы свой ключ B[…].
-		if joinPages(pageString(k.mods[0], k.pages[0]), pageString(k.mods[1], k.pages[1])) != key {
-			return Result{}, false
-		}
 		var pg [2]pageGeo
 		empty := false
 		for side, kt := range k.pages {

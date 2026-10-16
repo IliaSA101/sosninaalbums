@@ -1,7 +1,7 @@
 // Боковые панели правки (спека 008, panels.md): размеры, запас по бокам разворота и режим.
 // Чистые функции, без Svelte.
 import { HOTKEYS, type KeyAction } from '../../shell/menu/hotkeys'
-import { plural } from '../../base/core/plural'
+import { plural } from '../../base/words/plural'
 
 export const M = 8 // отступ панелей от краёв окна холста
 export const BAR = 32 // полоса над холстом (LayoutBar) — всегда одна высота

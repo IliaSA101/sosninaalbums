@@ -1,7 +1,7 @@
 // Бросок фото на ручной разворот (спека 042): места, плитка новых мест, вопрос об остальных.
 // Решает Go (Api.DropPhotos); здесь вызов, вопрос «что с остальными» и тосты после правки.
 import * as Api from '../../../wailsjs/go/app/App'
-import { errText } from '../core/errtext'
+import { errText } from '../words/errtext'
 import { store } from '../core/store.svelte'
 import { movedText, type Moved } from '../core/strip'
 import type { DropResult, View } from '../core/types'

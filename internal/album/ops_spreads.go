@@ -124,8 +124,9 @@ func (e *Editor) RemoveFolder(dir string) model.View {
 	return e.change(func(p *model.Project) { spreads.RemoveFolder(p, dir) })
 }
 
-// AutoPlan — подсказка окна автосборки: как фото лягут ровно на o.Spreads разворотов (не больше
-// o.MaxPer на разворот; оба зажимаются; o.Variety не влияет — группы те же). Только чтение: вход снимается под замком, матрица
+// AutoPlan — подсказка окна автосборки: как фото лягут ровно на o.Spreads разворотов (от o.MinPer
+// до o.MaxPer на разворот или «Авто», серии — o.Series; всё зажимается; o.Variety не влияет —
+// группы те же). Только чтение: вход снимается под замком, матрица
 // оценок и DP считаются вне его (на тысячах фото — секунды при первом вызове).
 // Пустой хвост альбома (развороты без фото, названия, цвета, сетки) — свободное место:
 // верх ползунка считает его, AutoPlan.Reuse — сколько из него займёт сборка в конец.
@@ -133,7 +134,7 @@ func (e *Editor) RemoveFolder(dir string) model.View {
 func (e *Editor) AutoPlan(photos []model.PhotoInfo, o model.AutoOpts) (model.AutoPlan, error) {
 	var job spreads.PlanJob
 	e.read(func(p *model.Project) { job = spreads.PlanOf(p, model.DedupePhotos(photos)) })
-	return job.Plan(o.Spreads, o.MaxPer)
+	return job.Plan(o)
 }
 
 // AutoBuild раскладывает фото ровно на o.Spreads новых разворотов (как AutoPlan с теми же

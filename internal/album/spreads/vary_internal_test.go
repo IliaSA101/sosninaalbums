@@ -11,6 +11,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 	"github.com/IliaSA101/sosninaalbums/internal/layout/variety"
 )
 
@@ -110,6 +111,46 @@ func TestCtxOfSkipsDead(t *testing.T) {
 	}
 }
 
+// TestCtxOfForms: Ctx.Forms — формы не больше FormsWindow «Авто»-соседей перед цепочкой, последняя —
+// ближняя; сетка или пустой сосед счёт форм обрывает, а у начала альбома форм нет.
+func TestCtxOfForms(t *testing.T) {
+	p := model.New()
+	for i := range 9 {
+		p.Spreads = append(p.Spreads, autoSpread(p, fmt.Sprint("s", i), 2+i%5*3))
+	}
+	p.Spreads = append(p.Spreads, autoSpread(p, "target", 4))
+	at := len(p.Spreads) - 1
+	want := func(from, to int) []forms.Form { // формы соседей from..to-1, ближний последним
+		var out []forms.Form
+		for _, s := range p.Spreads[from:to] {
+			in, ok := shown(p, s)
+			if !ok {
+				t.Fatalf("заготовка: у %s нет вида", s.ID)
+			}
+			out = append(out, in.Form)
+		}
+		return out
+	}
+	all := want(at-variety.FormsWindow, at)
+	if len(slices.Compact(slices.Clone(all))) < 2 {
+		t.Fatalf("заготовка: формы соседей одинаковы %v, порядок не проверить", all)
+	}
+	if got := ctxOf(p, at, at, nil).Forms; !slices.Equal(got, all) {
+		t.Fatalf("окно: %v, ждали %v (последние %d, ближняя последней)", got, all, variety.FormsWindow)
+	}
+	grid := p.Spreads[at-3]
+	grid.Grid = []*model.Place{{ID: "pl", W: 50, H: 50}}
+	if got, w := ctxOf(p, at, at, nil).Forms, want(at-2, at); !slices.Equal(got, w) {
+		t.Fatalf("сетка рвёт счёт: %v, ждали %v", got, w)
+	}
+	if got := ctxOf(p, 0, 0, nil).Forms; len(got) != 0 {
+		t.Fatalf("начало альбома: формы %v", got)
+	}
+	if got := ctxOf(p, 2, 2, nil).Forms; len(got) != 2 {
+		t.Fatalf("два соседа слева: формы %v", got)
+	}
+}
+
 // neighborCand — кандидат пула из настоящей раскладки r с заданным видом и оценкой: «Плотно»,
 // без главного (семейство одно на всех — штраф семейства соседа выбор не решает).
 func neighborCand(r layout.Result, prm layout.Params, look string, score float64) variety.Cand {
@@ -182,5 +223,28 @@ func TestVaryAfterHeroNeighbor(t *testing.T) {
 		if got := ctxOf(p, 1, 1, nil).Hero; got != c.hero {
 			t.Errorf("%s: Ctx.Hero %v", c.name, got)
 		}
+	}
+}
+
+// TestAvgPhotos: среднее фото считается по живым разворотам «Авто» с фото; сетка, пустой и убранный
+// правкой (dead) не входят; таких нет вовсе — 0, а не деление на ноль.
+func TestAvgPhotos(t *testing.T) {
+	p := model.New()
+	a, b, c := autoSpread(p, "a", 3), autoSpread(p, "b", 4), autoSpread(p, "c", 8)
+	g := autoSpread(p, "g", 6)
+	g.Grid = []*model.Place{{}}
+	e := &model.Spread{ID: "e"}
+	p.Spreads = []*model.Spread{a, b, c, g, e}
+	if got := avgPhotos(p, func(s *model.Spread) bool { return s != c }); got != 3.5 {
+		t.Fatalf("без c: %v, ждали 3.5 (сетка и пустой не считаются)", got)
+	}
+	if got := avgPhotos(p, func(*model.Spread) bool { return true }); got != 5 {
+		t.Fatalf("все живые: %v, ждали 5", got)
+	}
+	if got := avgPhotos(p, func(s *model.Spread) bool { return s == g || s == e }); got != 0 {
+		t.Fatalf("только сетка и пустой: %v, ждали 0", got)
+	}
+	if got := avgPhotos(model.New(), func(*model.Spread) bool { return true }); got != 0 {
+		t.Fatalf("пустой проект: %v, ждали 0", got)
 	}
 }

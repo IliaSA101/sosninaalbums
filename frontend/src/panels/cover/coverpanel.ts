@@ -1,6 +1,6 @@
 // Карточка обложки (спека 032, п. 9–13): чистые решения — группы типографий, строки «Итог» и «Корешок»,
 // сборка CoverSpec из поля. Числа считает Go (View.cover); здесь только подписи и разбор ввода.
-import { plural } from '../../base/core/plural'
+import { plural } from '../../base/words/plural'
 import type { CoverPreset, CoverSpec, CoverView } from '../../base/core/types'
 import { mmText } from '../../editor/cover/cover'
 

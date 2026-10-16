@@ -1,6 +1,10 @@
 package gen
 
-import "math"
+import (
+	"math"
+
+	"github.com/IliaSA101/sosninaalbums/internal/decor/gen/paint"
+)
 
 // Дудлы: значки линией одного цвета по клеткам 34 мм, поворот и размер — от сида. Значок —
 // ломаные в квадрате (−0,5..0,5)², толщина линии — 6 % размера.
@@ -18,37 +22,27 @@ func doodle(set []icon) func(c *canvas, s Spec) {
 		ink := inks(s)
 		step := 34 * s.Scale
 		scatter(c, s, step, 12*s.Scale, func(r *rng, x0, y0 float64) {
-			if !r.chance(0.9) {
+			if !r.Chance(0.9) {
 				return
 			}
-			ic := set[r.intn(len(set))]
-			x, y := x0+r.rangeF(0.2, 0.8)*step, y0+r.rangeF(0.2, 0.8)*step
-			size := r.rangeF(13, 19) * s.Scale
-			sn, cs := math.Sincos(r.rangeF(-0.5, 0.5))
-			if !c.visible(x, y, 0.75*size) {
+			ic := set[r.Intn(len(set))]
+			x, y := x0+r.RangeF(0.2, 0.8)*step, y0+r.RangeF(0.2, 0.8)*step
+			size := r.RangeF(13, 19) * s.Scale
+			sn, cs := math.Sincos(r.RangeF(-0.5, 0.5))
+			if !c.Visible(x, y, 0.75*size) {
 				return
 			}
 			for _, l := range ic {
 				ps := make([]pt, len(l.ps))
 				for i, p := range l.ps {
-					u, v := p.x*size, p.y*size
+					u, v := p.X*size, p.Y*size
 					ps[i] = pt{x + u*cs - v*sn, y + u*sn + v*cs}
 				}
-				c.stroke(ps, l.closed, 0.06*size)
+				c.Stroke(ps, l.closed, 0.06*size)
 			}
-			c.fill(ink[0], 1)
+			c.Fill(ink[0], 1)
 		})
 	}
-}
-
-// arc — точки дуги окружности (cx, cy, rad) от a0 до a1 (градусы, по часовой при y вниз).
-func arc(cx, cy, rad, a0, a1 float64, n int) []pt {
-	ps := make([]pt, n+1)
-	for i := range ps {
-		sn, cs := math.Sincos((a0 + (a1-a0)*float64(i)/float64(n)) * math.Pi / 180)
-		ps[i] = pt{cx + rad*cs, cy + rad*sn}
-	}
-	return ps
 }
 
 // ellipsePts — замкнутый эллипс (без повтора первой точки), повёрнутый на rot (градусы).
@@ -75,7 +69,7 @@ var schoolIcons = []icon{
 	},
 	{line{ps: star(0, 0.03, 0.48, 0.2, 0), closed: true}},
 	{
-		line{ps: arc(0, 0.06, 0.36, -80, 260, 28)},
+		line{ps: paint.Arc(0, 0.06, 0.36, -80, 260, 28)},
 		open(pt{0, -0.24}, pt{0.05, -0.46}),
 		closed(pt{0.04, -0.36}, pt{0.2, -0.46}, pt{0.3, -0.38}, pt{0.14, -0.32}),
 	},
@@ -112,9 +106,9 @@ func sun() icon {
 
 func cloud() icon {
 	var ps []pt
-	ps = append(ps, arc(-0.24, 0.06, 0.14, 90, 270, 9)...)
-	ps = append(ps, arc(0, -0.04, 0.2, 200, 340, 9)...)
-	ps = append(ps, arc(0.25, 0.05, 0.15, 270, 450, 9)...)
+	ps = append(ps, paint.Arc(-0.24, 0.06, 0.14, 90, 270, 9)...)
+	ps = append(ps, paint.Arc(0, -0.04, 0.2, 200, 340, 9)...)
+	ps = append(ps, paint.Arc(0.25, 0.05, 0.15, 270, 450, 9)...)
 	return icon{line{ps: ps, closed: true}}
 }
 

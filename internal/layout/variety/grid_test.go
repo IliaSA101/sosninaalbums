@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 // Сетки генератора featured (grid.go) и жёсткие запреты allowed — на синтетических входах.
@@ -129,7 +130,7 @@ func TestAllowed(t *testing.T) {
 	} {
 		g := newGen(make([]float64, len(c.rs)), c.p)
 		if got := g.allowed(c.rs); got != c.want {
-			t.Errorf("%s: %v, ждали %v (главных %d)", c.name, got, c.want, heroesOf(c.rs).n)
+			t.Errorf("%s: %v, ждали %v (главных %d)", c.name, got, c.want, forms.Heroes(c.rs).N)
 		}
 	}
 }

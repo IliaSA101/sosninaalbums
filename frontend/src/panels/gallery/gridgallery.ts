@@ -1,7 +1,7 @@
 // Чистая логика галереи сеток и окна «Копировать сетку…» (спека 007, U9): без Svelte, под тесты.
 // Геометрию считает Go; здесь только перевод долей области в мм разворота для предпросмотра
 // и в доли карточки для рисунка, а также тексты вопросов.
-import { plural } from '../../base/core/plural'
+import { plural } from '../../base/words/plural'
 import type { SheetSize } from '../../base/geom/sheet'
 import type { TplSource } from '../../base/tpl/tplsource'
 import type { Box, GridChoice, GridChoices, GridPlan, GridTarget, LayoutScope, PlaceView, Rect, RotRect } from '../../base/core/types'

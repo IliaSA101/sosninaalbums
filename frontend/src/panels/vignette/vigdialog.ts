@@ -1,6 +1,6 @@
 // Окно «Настроить виньетку» и карточка-сводка (031 dialog §2–3): чистая логика под тесты.
 // Места и предпросмотр считает Go; здесь тексты, поля шапки, размеры рамок и условия «Применить».
-import { plural } from '../../base/core/plural'
+import { plural } from '../../base/words/plural'
 import type { SpreadView, Vars, VigChoice, VigSetup, VignetteView } from '../../base/core/types'
 import { RESET_WARN } from '../gallery/gridgallery'
 import { paramsOf, portraitText, sameAsSheet, stepTpl, type VigForm } from './vignette'

@@ -1,6 +1,6 @@
 import { Api, store } from '../../base/core/store.svelte'
 import { edit } from '../../editor/text/edit.svelte'
-import { errText, capFirst } from '../../base/core/errtext'
+import { errText, capFirst } from '../../base/words/errtext'
 import type { BackupInfo, View } from '../../base/core/types'
 import { timeLabel } from './backups'
 

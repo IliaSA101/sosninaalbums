@@ -15,13 +15,14 @@ import (
 
 	"github.com/disintegration/imaging"
 
+	"github.com/IliaSA101/sosninaalbums/internal/decor/svgcheck"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // Импорт стикеров (design §5.3, Ф2): JPEG, PNG и SVG. Растр длиннее 4096 px уменьшается в PNG;
-// SVG проверяется в Go (svg.go), а рисует его окно — запись появляется в AddPNG.
+// SVG проверяется в Go (decor/svgcheck), а рисует его окно — запись появляется в AddPNG.
 
 // Пределы стикера.
 const (
@@ -118,19 +119,19 @@ func shrinkSticker(tmp, dir string) (string, library.Photo, error) {
 // importSVG проверяет SVG и выдаёт окну задание; тот же SVG, уже стоящий в библиотеке, —
 // «уже есть», скрытый — возвращается.
 func (s *Store) importSVG(theme, name, path string, size int64) (Item, *SvgJob, bool, error) {
-	if size > MaxSVGBytes {
-		return Item{}, nil, false, fmt.Errorf("SVG больше %d МБ", MaxSVGBytes>>20)
+	if size > svgcheck.MaxBytes {
+		return Item{}, nil, false, fmt.Errorf("SVG больше %d МБ", svgcheck.MaxBytes>>20)
 	}
 	f, err := imgfile.OpenRegular(path)
 	if err != nil {
 		return Item{}, nil, false, paths.NoPath(err)
 	}
 	defer f.Close() //nolint:errcheck // чтение: ошибка закрытия ничего не теряет
-	data, err := io.ReadAll(io.LimitReader(f, MaxSVGBytes+1))
+	data, err := io.ReadAll(io.LimitReader(f, svgcheck.MaxBytes+1))
 	if err != nil {
 		return Item{}, nil, false, paths.NoPath(err)
 	}
-	sz, err := inspectSVG(data) // и размер, и «больше предела»: файл мог вырасти после Stat
+	sz, err := svgcheck.Inspect(data) // и размер, и «больше предела»: файл мог вырасти после Stat
 	if err != nil {
 		return Item{}, nil, false, err
 	}

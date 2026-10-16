@@ -15,11 +15,9 @@
   import { LIB_MISSING_TEXT } from '../../panels/library/missing'
   import BackdropFade from './BackdropFade.svelte'
   import BackdropFields from './BackdropFields.svelte'
-  import InspectorPattern from './InspectorPattern.svelte'
 
   // «Фото фона» в разделе «Фон» карточки разворота (спека 009): зона броска на каждую область,
   // «Галерея фонов…» и «Свой файл…», «Править» (входит в режим фона) и «Убрать». split — цвета показаны по страницам.
-  // Узор программы (048) — строкой «Узор» над зонами: он лежит под фото фона и от областей зон не зависит.
   let { sp, split }: { sp: SpreadView; split: boolean } = $props()
 
   // Обложка (032): зоны броска задаёт её раскладка, а не цвета страниц; названия — сторонки.
@@ -39,7 +37,6 @@
   })
 </script>
 
-<InspectorPattern {sp} />
 <div class="zones" role="group" aria-label="Фото фона" data-guide="bg-photo">
   {#each scopes as scope (scope)}
     {@const b = backdropOf(sp, scope)}

@@ -32,17 +32,28 @@ const chunks = (files, size = 40) => {
 
 let base = bi >= 0 ? argv[bi + 1] : ''
 if (!base) {
-  for (const b of ['int-0.12', 'dev']) {
+  // Интеграционная ветка текущей версии — int-* с наибольшей версией (номер версии не зашиваем: в 0.13 база int-0.12
+  // заставляла агентов гонять линтер по всему приросту версии, ~4,5 мин).
+  const ints = git('for-each-ref', '--sort=-version:refname', '--format=%(refname:short)', 'refs/heads/int-*')
+  const latest = ints.code === 0 ? ints.out.split('\n').map((l) => l.trim()).filter(Boolean) : []
+  const head = git('rev-parse', 'HEAD').out.trim()
+  for (const b of [...latest.slice(0, 1), 'dev']) {
     if (git('rev-parse', '--verify', '--quiet', b).code !== 0) continue
     const mb = git('merge-base', 'HEAD', b)
     if (mb.code === 0) {
       base = mb.out.trim()
+      // Запуск на самой int-* ветке: merge-base == HEAD, дифф пуст — берём следующую базу (dev)
+      if (base === head) continue
       break
     }
   }
+  if (!base && head) {
+    base = head
+    console.warn('precheck: дифф пуст: база = HEAD')
+  }
 }
 if (!base) {
-  console.error('precheck: не найдена база (ни int-0.12, ни dev); укажи --base <rev>')
+  console.error('precheck: не найдена база (ни int-*, ни dev); укажи --base <rev>')
   process.exit(2)
 }
 

@@ -2,7 +2,7 @@
 // в PNG и возвращает Go по токену. SVG только в <img> (режим «картинка»: скрипты и сеть закрыты), в DOM не кладётся.
 // Задания идут по очереди; сбой одного (не открылся, холст «грязный», таймаут, отказ Go) — пропуск с причиной,
 // остальные продолжаются. Итог собирается в тот же вид, что у импорта фонов, и идёт в тот же тост.
-import { errText } from '../../base/core/errtext'
+import { errText } from '../../base/words/errtext'
 import type { app } from '../../../wailsjs/go/models'
 import type { DecorImport, DecorItem, DecorSkip } from './decor'
 

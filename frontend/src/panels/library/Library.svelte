@@ -1,12 +1,15 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { gallery } from '../gallery/gallery.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { modes } from '../../base/prefs/view.svelte'
-  import { scanText } from './scan'
-  import { allInAlbum } from './freephotos'
+  import { scanText } from '../folders/scan'
+  import { allInAlbum, allInAlbumText } from './freephotos'
   import { libfilter } from '../marks/libfilter.svelte'
+  import { folderfilter } from '../folders/folderfilter.svelte'
+  import { anchorFrac, isThumbWheel, scrollFix, thumbWheelAcc } from './thumbzoom'
   import LibraryBar from './LibraryBar.svelte'
   import Thumb from './Thumb.svelte'
 
@@ -57,6 +60,59 @@
     el.addEventListener('pointerup', up)
     el.addEventListener('pointercancel', up)
   }
+
+  // Ctrl/Alt/Cmd+колесо над лентой — размер миниатюр (053). Дельты копятся до кадра, как зум холста.
+  let grid = $state<HTMLElement>()
+  const acc = thumbWheelAcc()
+  let wx = 0
+  let wy = 0
+  let raf = 0
+  function wheel(e: WheelEvent) {
+    if (!isThumbWheel(e)) return
+    e.preventDefault() // иначе масштабируется страница
+    if (drag.active) return
+    const first = acc.push(modes.thumbSize, e)
+    wx = e.clientX
+    wy = e.clientY
+    if (first && !raf) raf = requestAnimationFrame(() => void applyZoom())
+  }
+  // Ячейка-якорь: под курсором, иначе верхняя видимая (её верх остаётся на месте).
+  function anchor(g: HTMLElement): { el: HTMLElement; cy: number; fy: number } | null {
+    const under = document.elementFromPoint(wx, wy)?.closest<HTMLElement>('[data-thumb]')
+    if (under && g.contains(under)) {
+      const r = under.getBoundingClientRect()
+      return { el: under, cy: wy, fy: anchorFrac(r.top, r.height, wy) }
+    }
+    const top = g.getBoundingClientRect().top
+    for (const el of g.querySelectorAll<HTMLElement>('[data-thumb]')) {
+      const r = el.getBoundingClientRect()
+      if (r.bottom > top) return { el, cy: r.top, fy: 0 }
+    }
+    return null
+  }
+  async function applyZoom() {
+    raf = 0
+    const n = acc.take()
+    if (!grid || n === modes.thumbSize) return
+    const a = anchor(grid)
+    modes.setThumb(n)
+    await tick()
+    if (!a || !grid || !a.el.isConnected) return
+    const r = a.el.getBoundingClientRect()
+    grid.scrollTop += scrollFix(r.top, a.cy, a.fy, r.height)
+  }
+  // Свой слушатель с passive: false — иначе preventDefault у колеса не сработает.
+  function wheelOn(node: HTMLElement) {
+    node.addEventListener('wheel', wheel, { passive: false })
+    return {
+      destroy() {
+        node.removeEventListener('wheel', wheel)
+        if (raf) cancelAnimationFrame(raf)
+        raf = 0
+        acc.reset()
+      },
+    }
+  }
 </script>
 
 <svelte:window bind:innerHeight={wh} />
@@ -70,10 +126,10 @@
     title="Потяните, чтобы изменить высоту ленты фото"
     onpointerdown={split}
   ></div>
-  <div class="library" class:over={drag.over === 'library'} style:height="{eff}px" data-drop="library" data-guide="library">
+  <div class="library" use:wheelOn class:over={drag.over === 'library'} style:height="{eff}px" data-drop="library" data-guide="library">
     <LibraryBar />
 
-    <div class="grid" style:--size="{store.thumbSize}px">
+    <div class="grid" bind:this={grid} style:--size="{modes.thumbSize}px">
       {#each store.visible as p (p.id)}
         <Thumb {p} />
       {:else}
@@ -83,10 +139,13 @@
               {scanText(store.scan)}
             {:else if store.view.folders.length === 0}
               Нажмите «+ Папка с фото» или перетащите папку прямо в окно программы
-            {:else if allInAlbum(store.filter, store.free.length, store.photos.length)}
-              Все фото уже в альбоме
+            {:else if folderfilter.allHidden(store.view.folders)}
+              Все папки скрыты
+              <button class="reset" onclick={() => folderfilter.showAll()}>Показать все</button>
+            {:else if allInAlbum(store.filter, store.free.length, store.inFolders.length)}
+              {allInAlbumText(folderfilter.active)}
               <button class="reset" onclick={() => (store.filter = 'all')}>Показать все</button>
-            {:else if prefs.can('marks') && libfilter.active && store.photos.length > 0}
+            {:else if prefs.can('marks') && libfilter.active && store.inFolders.length > 0}
               Ни одно фото не подходит под фильтр
               <button class="reset" onclick={() => libfilter.reset()}>Сбросить фильтр</button>
             {:else}

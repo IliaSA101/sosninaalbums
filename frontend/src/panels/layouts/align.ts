@@ -1,7 +1,7 @@
 // Выравнивание и распределение (спека 010, design §5): состав кнопок, опоры и минимум объектов.
 // Чистая логика; вызов Go и «Относительно» — align.svelte.ts, полоса — AlignBar, меню — menu.ts.
 // Сдвигает Go (AlignItems): здесь только «сколько нужно выделить», чтобы не звать холостую правку.
-import { plural } from '../../base/core/plural'
+import { plural } from '../../base/words/plural'
 
 export type AlignOp = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'distH' | 'distV'
 export type AlignTo = 'sel' | 'page' | 'spread'

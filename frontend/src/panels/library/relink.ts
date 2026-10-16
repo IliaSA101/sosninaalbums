@@ -1,6 +1,6 @@
 // «Найти недостающие фото в папке»: полоса MissingBar и меню фото. Диалог выбора папки — в Go.
 import { store, Api } from '../../base/core/store.svelte'
-import { errText } from '../../base/core/errtext'
+import { errText } from '../../base/words/errtext'
 import { relinkSummary } from './missing'
 
 export async function relinkFolder() {

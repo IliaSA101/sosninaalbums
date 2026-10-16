@@ -20,10 +20,14 @@ func (b BackdropView) Shown() (r layout.Rect, ok bool) {
 
 // Choice — вариант раскладки для галереи.
 type Choice struct {
-	Key    string        `json:"key"`
-	Rects  []layout.Rect `json:"rects"`  // весь разворот, в порядке Spread.Photos
-	Family string        `json:"family"` // dense | hero | air | bleed (041); "" — не размечено
-	Twin   int           `json:"twin"`   // индекс более раннего с тем же видом в этом ряду; −1 — нет
+	Key   string        `json:"key"`
+	Rects []layout.Rect `json:"rects"` // весь разворот, в порядке Spread.Photos
+	// Family — сегмент фильтра по форме: dense | hero | air | bleed (041), strip | figure (051);
+	// "" — не размечено.
+	Family string `json:"family"`
+	Twin   int    `json:"twin"` // индекс более раннего с тем же видом в этом ряду; −1 — нет
+	// FormName — название формы для подсказки плитки («Лента», «Лесенка»…); "" у мозаики (051).
+	FormName string `json:"formName"`
 }
 
 type ChoiceRows struct {
@@ -51,23 +55,30 @@ func (v Variety) Clamp() Variety { return min(max(v, VarietyLess), VarietyMore) 
 
 // AutoOpts — настройки окна автосборки (AutoPlan/AutoBuild). Новые настройки (группы по
 // папкам) ложатся полями сюда: сигнатура методов App второй раз не меняется (041 №16).
+// Нули новых полей (MinPer, Auto, Series) — план 0.12 побитово (старый фронт, тесты).
 type AutoOpts struct {
 	Spreads int     `json:"spreads"` // N разворотов; зажим — в плане
-	MaxPer  int     `json:"maxPer"`  // не больше фото на разворот, 1…MaxPhotos
+	MaxPer  int     `json:"maxPer"`  // «до»: не больше фото на разворот, 1…MaxPhotos
+	MinPer  int     `json:"minPer"`  // «от» (051): 1…MaxPer, развороты нарочно разные; 0 — ровно, как 0.12
+	Auto    bool    `json:"auto"`    // «Авто» (051): диапазон от среднего по N; MinPer, MaxPer не действуют
+	Series  bool    `json:"series"`  // не разрывать серии съёмки (папки, время; 051); только с диапазоном
 	Variety Variety `json:"variety"` // в AutoPlan не влияет: группы те же
 }
 
 // AutoPlan — подсказка окна автосборки: сколько фото и как они лягут на N разворотов.
-// AutoBuild с теми же фото, N и m делает ровно эти развороты.
+// AutoBuild с теми же фото и AutoOpts делает ровно эти развороты.
 type AutoPlan struct {
 	Photos     int     `json:"photos"`     // фото в сборку (без сеток и фонов)
 	Spreads    int     `json:"spreads"`    // N после зажима
-	MinSpreads int     `json:"minSpreads"` // низ ползунка: ⌈photos/maxPer⌉
-	MaxSpreads int     `json:"maxSpreads"` // верх: min(photos, MaxSpreads − непустых; пустой хвост — свободен)
+	MinSpreads int     `json:"minSpreads"` // низ ползунка: ⌈photos/до⌉
+	MaxSpreads int     `json:"maxSpreads"` // верх: min(⌊photos/от⌋ или photos, MaxSpreads − непустых; пустой хвост — свободен)
 	Avg        float64 `json:"avg"`
 	Min        int     `json:"min"`   // фото в самом маленьком развороте
 	Max        int     `json:"max"`   // и в самом большом
 	Reuse      int     `json:"reuse"` // сколько пустых разворотов из хвоста займёт сборка
+	From       int     `json:"from"`  // действующее «от» (в «Авто» — посчитанное по N); 0 — ровно, как 0.12
+	To         int     `json:"to"`    // действующее «до»
+	Cuts       int     `json:"cuts"`  // границ серий силы ≥ 0.5; 0 — без Series или сигналов нет
 }
 
 // Choices — всё для галереи раскладок одного разворота. В View не кладётся:
@@ -89,6 +100,8 @@ type PhotoInfo struct {
 	Xmp  XmpMarks // отметки из файла; заполняет App (их ждёт SetMarks)
 	// Lib — ключ своего из библиотеки my:<16 hex> (048); тогда ID = LibPhotoID(Lib).
 	Lib string
+	// Taken — время съёмки (EXIF), секунды Unix, местное время как UTC; 0 — нет. Только для серий автосборки, в .salbum не пишется.
+	Taken int64
 }
 
 // PlaceBox — новое положение и размер места, мм разворота.

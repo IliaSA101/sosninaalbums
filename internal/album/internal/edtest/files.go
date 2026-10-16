@@ -106,7 +106,7 @@ func SaveLoad(t testing.TB, e *album.Editor) *model.Project {
 	return q
 }
 
-var Update = flag.Bool("update", false, "перезаписать голдены: testdata/parity/marks.json, testdata/replay.json")
+var Update = flag.Bool("update", false, "перезаписать голдены: testdata/parity/marks.json, testdata/replay.json.gz")
 
 // Reopen — повторное открытие не меняет альбом: Decode(Encode(p)) даёт тот же JSON (пути
 // абсолютные, base ""). Иначе альбом «сам» меняется при каждом открытии, а автосохранение

@@ -1,7 +1,7 @@
 // Действия с виньеткой (031): вызовы Go и тосты. Ответ — в store.apply, ошибка Go (в том числе «не больше
 // 64 мест») — тост. Используют панель, меню разворота, карточка, «Правка» и колонка «+ Новый …» ленты.
 import { Api, store } from '../../base/core/store.svelte'
-import { errText } from '../../base/core/errtext'
+import { errText } from '../../base/words/errtext'
 import { model } from '../../../wailsjs/go/models'
 import { unitOf } from '../../base/geom/sheet'
 import { gridAct } from '../layouts/gridact.svelte'

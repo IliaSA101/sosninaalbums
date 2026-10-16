@@ -5,13 +5,16 @@ package spreads_test
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/plan"
 )
 
 // mixedPhotos — n фото подряд: каждое третье портретное, каждое седьмое квадратное.
@@ -77,6 +80,115 @@ func TestAutoPlanMatchesBuild(t *testing.T) {
 		if !slices.Contains(v.BackdropUsed, "bg") {
 			t.Fatal("фото фона ушло в автосборку")
 		}
+	}
+}
+
+// shootPhotos — mixedPhotos по папкам sizes (пауза в час между папками, 20 с внутри): серии 051.
+func shootPhotos(sizes ...int) []model.PhotoInfo {
+	var out []model.PhotoInfo
+	for f, k := range sizes {
+		for _, ph := range mixedPhotos(fmt.Sprint("p", f, "_"), k) {
+			ph.Path = edtest.Abs(filepath.Join(fmt.Sprint("папка", f), ph.ID+".jpg"))
+			ph.Taken = 1_700_000_000 + int64(f)*3600 + int64(len(out))*20
+			out = append(out, ph)
+		}
+	}
+	return out
+}
+
+// sliderOf — ждаемые пределы ползунка для o; у «Авто» заодно сверяет From/To с AutoPer и то,
+// что те же числа, введённые как свой диапазон при том же N, дают тот же план.
+func sliderOf(t *testing.T, e *album.Editor, ph []model.PhotoInfo, o model.AutoOpts, ap model.AutoPlan) (lo, hi int) {
+	t.Helper()
+	n := len(ph)
+	if !o.Auto {
+		return plan.RangeSpreads(n, o.MinPer, o.MaxPer)
+	}
+	if a, b := plan.AutoPer(n, ap.Spreads); ap.From != a || ap.To != b {
+		t.Fatalf("%+v: «Авто» %d…%d, ждали %d…%d", o, ap.From, ap.To, a, b)
+	}
+	own := model.AutoOpts{Spreads: ap.Spreads, MinPer: ap.From, MaxPer: ap.To, Series: o.Series}
+	if back, err := e.AutoPlan(ph, own); err != nil || back.Spreads != ap.Spreads || back.Min != ap.Min || back.Max != ap.Max || back.From != ap.From || back.To != ap.To {
+		t.Fatalf("%+v: «Авто» %+v, тот же свой диапазон %+v %v", o, ap, back, err)
+	}
+	return plan.SpreadRange(n, model.MaxPhotos)
+}
+
+// TestAutoPlanRangeMatchesBuild (051): «Авто», свой диапазон, серии — AutoBuild делает ровно
+// развороты AutoPlan (число, Min, Max, Avg), каждый в [From, To]; пределы ползунка — [⌈n/64⌉, n]
+// в «Авто» (MaxPer не действует), RangeSpreads в своём; From/To «Авто», введённые как свой
+// диапазон, дают тот же план. Сборка — один шаг отмены поверх двух прежних разворотов.
+func TestAutoPlanRangeMatchesBuild(t *testing.T) {
+	ph := shootPhotos(5, 9, 4, 11, 6, 8, 3, 10, 7, 5) // 68 фото, 9 смен папок
+	n := len(ph)
+	for _, o := range []model.AutoOpts{
+		{Spreads: 10, Auto: true, MaxPer: 2}, {Spreads: 10, Auto: true, Series: true}, {Spreads: 1, Auto: true}, {Spreads: 999, Auto: true, Series: true},
+		{Spreads: 9, MinPer: 3, MaxPer: 12}, {Spreads: 9, MinPer: 3, MaxPer: 12, Series: true}, {Spreads: 999, MinPer: 8, MaxPer: 10}, {Spreads: 1, MinPer: 8, MaxPer: 10, Series: true},
+		{Spreads: 3, MinPer: 99, MaxPer: 64}, {Spreads: 5, MinPer: 12, MaxPer: 4},
+	} {
+		e := edtest.Open(t, model.New(), "")
+		edtest.NewSpread(e, -1, edtest.Photos("x"))
+		edtest.NewSpread(e, -1, edtest.Photos("y"))
+		ap, err := e.AutoPlan(ph, o)
+		if err != nil || ap.Photos != n {
+			t.Fatalf("%+v: %+v %v", o, ap, err)
+		}
+		lo, hi := sliderOf(t, e, ph, o, ap)
+		if ap.MinSpreads != lo || ap.MaxSpreads != hi || ap.Spreads != max(lo, min(o.Spreads, hi)) {
+			t.Fatalf("%+v: ползунок %d…%d N=%d, ждали %d…%d", o, ap.MinSpreads, ap.MaxSpreads, ap.Spreads, lo, hi)
+		}
+		if want := map[bool]int{false: 0, true: 9}[o.Series]; ap.Cuts != want {
+			t.Fatalf("%+v: границ серий %d, ждали %d", o, ap.Cuts, want)
+		}
+		undo, rev := edtest.UndoLen(e), edtest.Rev(e)
+		v, err := e.AutoBuild(ph, -1, o)
+		if err != nil || edtest.UndoLen(e) != undo+1 || edtest.Rev(e) != rev+1 {
+			t.Fatalf("%+v: сборка %v, шагов %d → %d, rev %d → %d", o, err, undo, edtest.UndoLen(e), rev, edtest.Rev(e))
+		}
+		var sizes []int
+		for _, s := range v.Spreads[2:] {
+			sizes = append(sizes, len(s.Photos))
+		}
+		if len(sizes) != ap.Spreads || slices.Min(sizes) != ap.Min || slices.Max(sizes) != ap.Max || float64(n)/float64(len(sizes)) != ap.Avg {
+			t.Fatalf("%+v: сборка %v, план %+v", o, sizes, ap)
+		}
+		if slices.Min(sizes) < ap.From || slices.Max(sizes) > ap.To {
+			t.Fatalf("%+v: развороты %v вне %d…%d", o, sizes, ap.From, ap.To)
+		}
+		if v = e.Undo(); len(v.Spreads) != 2 {
+			t.Fatalf("%+v: отмена сборки — %d разворотов", o, len(v.Spreads))
+		}
+	}
+}
+
+// Края 051: без фото — пустой план и холостая сборка (ни rev, ни шага); почти полный альбом
+// зажимает верх ползунка и в «Авто», а свой диапазон, которому места не хватает, — ошибка.
+func TestAutoPlanRangeEdges(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	for _, o := range []model.AutoOpts{{Spreads: 3, Auto: true, Series: true}, {Spreads: 3, MinPer: 2, MaxPer: 5, Series: true}} {
+		if ap, err := e.AutoPlan(nil, o); err != nil || ap != (model.AutoPlan{}) {
+			t.Fatalf("%+v без фото: %+v %v", o, ap, err)
+		}
+		rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+		if _, err := e.AutoBuild(nil, -1, o); err != nil || edtest.Rev(e) != rev || edtest.UndoLen(e) != undo {
+			t.Fatalf("%+v без фото: %v, rev %d → %d", o, err, rev, edtest.Rev(e))
+		}
+	}
+	edtest.Change(e, func(p *model.Project) {
+		for range model.MaxSpreads - 3 {
+			p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}, BgL: "#ffffff"})
+		}
+	})
+	ph := mixedPhotos("q", 10)
+	if ap, err := e.AutoPlan(ph, model.AutoOpts{Spreads: 10, Auto: true}); err != nil || ap.MaxSpreads != 3 || ap.Spreads != 3 || ap.MinSpreads != 1 {
+		t.Fatalf("«Авто», почти полон: %+v %v", ap, err)
+	}
+	ap, err := e.AutoPlan(ph, model.AutoOpts{Spreads: 5, MinPer: 1, MaxPer: 2})
+	if err == nil || !strings.Contains(err.Error(), "1000") || ap.MinSpreads != 5 || ap.MaxSpreads != 3 {
+		t.Fatalf("свой 1…2, почти полон: %+v %v", ap, err)
+	}
+	if _, err := e.AutoBuild(ph, -1, model.AutoOpts{Spreads: 5, MinPer: 1, MaxPer: 2}); err == nil {
+		t.Fatal("сборка сверх 1000 разворотов прошла")
 	}
 }
 

@@ -14,7 +14,7 @@
   import FsferaDone from './shell/export/FsferaDone.svelte'
   import AutoAskDialog from './shell/ask/AutoAskDialog.svelte'
   import DropAskDialog from './shell/ask/DropAskDialog.svelte'
-  import AutoBuildDialog from './shell/dialogs/AutoBuildDialog.svelte'
+  import AutoBuildDialog from './shell/autobuild/AutoBuildDialog.svelte'
   import HotkeysHelp from './shell/menu/HotkeysHelp.svelte'
   import Guide from './shell/guide/Guide.svelte'
   import Spot from './shell/guide/Spot.svelte'
