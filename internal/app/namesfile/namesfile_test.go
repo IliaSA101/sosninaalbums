@@ -82,11 +82,15 @@ func TestRead(t *testing.T) {
 		t.Fatalf("csv: %+v, %v", f, err)
 	}
 	big := putFile(t, dir, "Большой.csv", bytes.Repeat([]byte("Иванов;Петя\n"), table.MaxFile/20)) // 9 МБ
+	// Пути — заранее: длинные ключи карты gofmt разных версий выравнивает по-разному (CI 0.12 упал).
+	old := putFile(t, dir, "Старый.xls", append([]byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}, make([]byte, 512)...))
+	empty := putFile(t, dir, "Пустой.csv", []byte(" \r\n\r\n"))
+	gone := filepath.Join(dir, "Нет.xlsx")
 	cases := map[string]error{
-		big: table.ErrTooBig,
-		putFile(t, dir, "Старый.xls", append([]byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}, make([]byte, 512)...)): table.ErrOld,
-		putFile(t, dir, "Пустой.csv", []byte(" \r\n\r\n")):                                                                  table.ErrEmpty,
-		filepath.Join(dir, "Нет.xlsx"):                                                                                      ErrGone,
+		big:   table.ErrTooBig,
+		old:   table.ErrOld,
+		empty: table.ErrEmpty,
+		gone:  ErrGone,
 	}
 	for path, want := range cases {
 		if f, err = Read(path); !errors.Is(err, want) || f != (File{}) || strings.Contains(err.Error(), dir) {
