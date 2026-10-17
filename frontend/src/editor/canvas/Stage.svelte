@@ -20,7 +20,7 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { emptyField } from './field'
   import { fieldClick } from '../places/placegesture'
-  import { isZoomWheel, placement, wheelFactor, wheelPan } from '../zoom/zoom'
+  import { FIT_BOTTOM, FIT_TOP, fitH, isZoomWheel, placement, wheelFactor, wheelPan } from '../zoom/zoom'
   import { BAR, railCols, sideReserve } from '../inspector/panels'
 
   let w = $state(0)
@@ -43,14 +43,14 @@
   // зазор между краями листов — GAP при любой ширине (slotCenters). Без нижнего предела: он выталкивал разворот
   // за Stage, когда высоту отнимала галерея.
   const base = $derived(newSheetSize(s))
-  const k = $derived(rowScale(w - 2 * reserve - 2 * edge, h - BAR - 32, base))
+  const k = $derived(rowScale(w - 2 * reserve - 2 * edge, fitH(h - BAR), base))
   // Ширина текущего листа при 100 % (у разворота — вписанная).
   const width = $derived(k * sw)
   const total = $derived(store.sheets.length) // листы ряда: обложка (032) и развороты
 
   // Окно холста — Stage под полосой; при 100 % центр окна = центр прежнего ряда, вход в зум не дёргает.
   $effect.pre(() => {
-    canvas.vp = { w, h: Math.max(0, h - BAR), k0: k, sw, ph: sh, pad: reserve }
+    canvas.vp = { w, h: Math.max(0, h - BAR), k0: k, sw, ph: sh, pad: reserve, padB: FIT_BOTTOM - FIT_TOP }
   })
   // Режим холста: соседей нет, полоса прижата к верху во всю ширину.
   const zoomed = $derived(canvas.zoomed && !!store.spread)

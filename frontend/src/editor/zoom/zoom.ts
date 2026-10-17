@@ -1,5 +1,6 @@
 // Зум холста (спека 008, design §6.1). Состояние хранится в мм разворота: ресайз окна и
 // смена вида его не трогают, только пересчитывают пиксели. Чистые функции, без Svelte.
+import { MINI_GAP, MINI_H } from '../places/minipanel'
 export const MIN_ZOOM = 1
 export const MAX_ZOOM = 8
 export const HOLD_MS = 400 // Пробел дольше этого — не «короткое нажатие»
@@ -12,6 +13,7 @@ export interface ZoomState {
 
 // Окно: px области Stage под полосой раскладок; k0 — px на мм при z = 1; sw, ph — разворот в мм.
 // pad — px у левого и правого края под боковыми панелями (inspector/panels.ts), по умолчанию 0.
+// padB — px снизу окна, которые «вписанный» лист оставляет свободными сверх FIT_TOP (под мини-панель, 063).
 export interface Viewport {
   w: number
   h: number
@@ -19,7 +21,17 @@ export interface Viewport {
   sw: number
   ph: number
   pad?: number
+  padB?: number
 }
+
+// «Вписать» (владелец 2026-10-17, owner-ux §1 п. 5): сверху 16 px, снизу — полоса под мини-панель с отступом
+// (MINI_GAP 8 + MINI_H 30 + 2), чтобы панель под фото помещалась у фото у самого низа страницы.
+export const FIT_TOP = 16
+export const FIT_BOTTOM = MINI_GAP + MINI_H + 2
+// Высота под лист при «вписать» в окне высотой h.
+export const fitH = (h: number): number => h - FIT_TOP - FIT_BOTTOM
+// Высота окна для центровки: лист «по центру» стоит в части окна над padB.
+export const effH = (v: Viewport): number => v.h - Math.min(v.padB ?? 0, v.h / 2) // в низком окне (галерея) — не больше половины
 
 const fin = (n: number, d: number) => (Number.isFinite(n) ? n : d)
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -48,7 +60,7 @@ export function clampZoom(s: ZoomState, v: Viewport): ZoomState {
   return {
     z,
     cx: clampAxis(fin(s.cx, v.sw / 2), v.sw, v.w, k, v.pad ?? 0, z),
-    cy: clampAxis(fin(s.cy, v.ph / 2), v.ph, v.h, k, 0, z),
+    cy: clampAxis(fin(s.cy, v.ph / 2), v.ph, effH(v), k, 0, z),
   }
 }
 
@@ -61,7 +73,7 @@ export function zoomAt(s: ZoomState, v: Viewport, factor: number, x: number, y: 
   if (!(v.k0 > 0) || !Number.isFinite(factor) || !(factor > 0) || !Number.isFinite(x) || !Number.isFinite(y)) return cur
   const k = v.k0 * cur.z
   const dx = x - v.w / 2
-  const dy = y - v.h / 2
+  const dy = y - effH(v) / 2
   const mx = cur.cx + dx / k
   const my = cur.cy + dy / k
   const z = clamp(cur.z * factor, MIN_ZOOM, MAX_ZOOM)
@@ -90,7 +102,7 @@ export function placement(s: ZoomState, v: Viewport): { left: number; top: numbe
   const k = v.k0 * s.z
   return {
     left: Math.round(v.w / 2 - s.cx * k),
-    top: Math.round(v.h / 2 - s.cy * k),
+    top: Math.round(effH(v) / 2 - s.cy * k),
     width: Math.round(v.sw * k),
     height: Math.round(v.ph * k),
   }

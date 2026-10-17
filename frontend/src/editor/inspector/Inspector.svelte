@@ -81,6 +81,7 @@
   <!-- data-text-ui: щелчок по карточке не снимает выделение текста; data-chrome: холст не зумит и не панорамирует -->
   <section
     class="insp"
+    data-mini-edge={docked ? null : 'right'}
     {...docked ? {} : { 'data-guide': 'inspector' }}
     class:docked
     class:through

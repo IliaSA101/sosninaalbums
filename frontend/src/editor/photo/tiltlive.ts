@@ -76,5 +76,5 @@ export class TiltSession {
 export const photoTilt = new TiltSession()
 export const backdropTilt = new TiltSession()
 
-// Шкала на фото (059): своя сессия — протяжка шкалы и правка в карточке дают разные шаги отмены.
+// Дуга на фото (059, 063): своя сессия — протяжка дуги и правка в карточке дают разные шаги отмены.
 export const canvasTilt = new TiltSession()

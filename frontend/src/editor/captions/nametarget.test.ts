@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { captionBottom, hasNameFields, nameTargetAt, namePlace, takesNameTarget, whoOf, type PointCtx, type Who } from './nametarget'
+import {
+  captionBottom,
+  captionBoxes,
+  hasNameFields,
+  nameTargetAt,
+  namePlace,
+  takesNameTarget,
+  whoOf,
+  type PointCtx,
+  type Who,
+} from './nametarget'
 import type { CaptionView, SpreadView, StubView } from '../../base/core/types'
 
 const style = { font: 'f', size: 12, color: '#000', align: 'center' as const }
@@ -72,6 +82,19 @@ describe('captionBottom', () => {
     expect(captionBottom(s, [{ id: 'p1', photo: 'a' }])).toBe(112)
     expect(captionBottom(s, [{ id: 'p2', photo: '' }])).toBe(162)
     expect(captionBottom(s, [{ id: 'p3', photo: 'z' }])).toBe(0)
+  })
+})
+
+describe('captionBoxes', () => {
+  it('боксы подписей и заглушек выделенных; подписей нет — пусто', () => {
+    const s = sheet([cap('a', 10, 100, 60, 12, ['last']), cap('a', 10, 90, 60, 8)], [stub('p2', '', 10, 150, 60, 12)])
+    expect(captionBoxes(s, [{ id: 'p1', photo: 'a' }])).toEqual([
+      { x: 10, y: 100, w: 60, h: 12 },
+      { x: 10, y: 90, w: 60, h: 8 },
+    ])
+    expect(captionBoxes(s, [{ id: 'p2', photo: '' }])).toEqual([{ x: 10, y: 150, w: 60, h: 12 }])
+    expect(captionBoxes(s, [{ id: 'p3', photo: 'z' }])).toEqual([])
+    expect(captionBoxes(undefined, [{ id: 'p1', photo: 'a' }])).toEqual([])
   })
 })
 

@@ -92,19 +92,29 @@ export function whoOf(s: SpreadView | undefined, photo: string): Who[] {
   return it ? whoOfItem(it) : []
 }
 
+// Подписи и заглушки выделенных мест (мм): подпись фото и заглушка по фото, заглушка пустого места — по месту.
+function captionItems(s: SpreadView, sel: { id: string; photo: string }[]): Item[] {
+  return sel.flatMap((b) =>
+    b.photo
+      ? [...s.captions.filter((c) => c.photo === b.photo), ...(s.stubs ?? []).filter((t) => t.photo === b.photo)]
+      : (s.stubs ?? []).filter((t) => t.photo === '' && t.place === b.id),
+  )
+}
+
 // Низ подписи или заглушки выделенных мест (мм, описанный прямоугольник); 0 — подписей нет.
 // Мини-панель встаёт ниже этой полосы, иначе щелчки «по подписи» попадают в кнопки.
 export function captionBottom(s: SpreadView | undefined, sel: { id: string; photo: string }[]): number {
   if (!s) return 0
   let bottom = 0
-  for (const b of sel) {
-    const items: Item[] = b.photo
-      ? [...s.captions.filter((c) => c.photo === b.photo), ...(s.stubs ?? []).filter((t) => t.photo === b.photo)]
-      : (s.stubs ?? []).filter((t) => t.photo === '' && t.place === b.id)
-    for (const it of items) {
-      const a = aabb(it)
-      bottom = Math.max(bottom, a.y + a.h)
-    }
+  for (const it of captionItems(s, sel)) {
+    const a = aabb(it)
+    bottom = Math.max(bottom, a.y + a.h)
   }
   return bottom
+}
+
+// Боксы подписей и заглушек выделенных мест (мм, описанные прямоугольники). Внутри у низа фото мини-панель сама выбирает те,
+// что пересекают её полосу, и встаёт над ними (063).
+export function captionBoxes(s: SpreadView | undefined, sel: { id: string; photo: string }[]): Rect[] {
+  return s ? captionItems(s, sel).map(aabb) : []
 }

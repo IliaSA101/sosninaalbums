@@ -11,6 +11,8 @@
   import DpiMark from './DpiMark.svelte'
   import FrameControls from './FrameControls.svelte'
   import { tiltmode } from './tiltmode.svelte'
+  import { miniSpot } from '../places/minispot.svelte'
+  import { NO_ROOM } from '../places/minipanel'
 
   // Над стеком разворота (спека 010 U6): то, что у фото обязано быть доступно и не обрезано, даже если оно
   // лежит под другим слоем, — ✥ сдвига кадра, ползунок масштаба и «!» dpi выделенной ячейки, а также подсветка
@@ -59,8 +61,8 @@
   <!-- Мелкая ячейка (< 48 px на экране): ✥ и ползунок не помещаются, они есть в карточке справа -->
   {@const big = it.selected && !missing && Math.min(r.w, r.h) * ppm >= 48}
   {@const ok = big && prefs.can('frame')}
-  <!-- Шкала наклона (059): тот же порог ячейки, свой уровень -->
-  {@const dial = big && tiltmode.on && prefs.can('tilt')}
+  <!-- Дуга наклона (063): место ей считает мини-панель (miniSpot), порог ячейки не нужен -->
+  {@const room = it.selected && !missing && tiltmode.on && prefs.can('tilt') && miniSpot.photo === it.id ? miniSpot.arc : NO_ROOM}
   <!-- Ход кадра — по живому углу и размеру: пока тянут наклон, фото на экране уже другое (057) -->
   {@const outline = outlineOf(fv?.shape, fv?.radius)}
   {@const img = fv && framelive.of(it.id) ? liveImage(r, fv.img.h > 0 ? fv.img.w / fv.img.h : r.w / r.h, cur, contain, outline) : fv?.img}
@@ -77,7 +79,7 @@
     {#if it.mark === 'swap'}<span class="swap"></span>{/if}
     {#if it.mark === 'before' || it.mark === 'after'}<span class="ins {it.mark}"></span>{/if}
     {#if it.selected}
-      <FrameControls id={it.id} {spread} {r} {fv} {frame} {cur} movable={ok && slack} zoomable={ok && !contain} {dial} />
+      <FrameControls id={it.id} {spread} {r} {fv} {frame} {cur} movable={ok && slack} zoomable={ok && !contain} {room} />
       {#if !missing}
         <DpiMark
           dpi={fv?.dpi ?? 0}

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   clampZoom,
+  effH,
   fit,
+  FIT_BOTTOM,
+  FIT_TOP,
+  fitH,
   HOLD_MS,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -17,6 +21,7 @@ import {
   zoomPos,
   type Viewport,
 } from './zoom'
+import { MINI_GAP, MINI_H } from '../places/minipanel'
 
 // Окно 1000×600 px, разворот 600×300 мм: k0 = 1 px/мм → при z = 1 он занимает 600×300 px по центру.
 const v: Viewport = { w: 1000, h: 600, k0: 1, sw: 600, ph: 300 }
@@ -237,3 +242,73 @@ describe('zoomPos / posZoom', () => {
     expect(posZoom(NaN)).toBe(1)
   })
 })
+
+// «Вписать» оставляет под разворотом полосу под мини-панель (владелец 2026-10-17, owner-ux §1 п. 5).
+describe('вписать: полоса под панель', () => {
+  const BAR = 32
+  // Как Stage: масштаб ряда упирается в ширину (запас 16 по краям) или в fitH.
+  const vpOf = (w: number, h: number, sw = 600, ph = 300): Viewport => {
+    const k0 = Math.min((w - 32) / sw, fitH(h - BAR) / ph)
+    return { w, h: h - BAR, k0, sw, ph, padB: FIT_BOTTOM - FIT_TOP }
+  }
+
+  it('вписать: под разворотом ≥ MINI_GAP + MINI_H, сверху 16 px (владелец 2026-10-17)', () => {
+    expect(FIT_TOP).toBe(16)
+    expect(FIT_BOTTOM).toBeGreaterThanOrEqual(MINI_GAP + MINI_H)
+    // упор в высоту: широкое окно
+    const v = vpOf(2000, 700)
+    const p = placement(fit(v.sw, v.ph), v)
+    expect(p.top).toBe(FIT_TOP)
+    expect(v.h - (p.top + p.height)).toBe(FIT_BOTTOM)
+    // упор в ширину: полоса больше
+    for (const [w, h] of [
+      [400, 900],
+      [1000, 1500],
+      [700, 2000],
+    ]) {
+      const q = vpOf(w, h)
+      const pl = placement(fit(q.sw, q.ph), q)
+      expect(pl.top).toBeGreaterThanOrEqual(FIT_TOP)
+      expect(q.h - (pl.top + pl.height)).toBeGreaterThanOrEqual(MINI_GAP + MINI_H)
+    }
+  })
+
+  it('вписать: два вертикальных 182,7×274 при Y = 13 — панель под фото (владелец 2026-10-17)', () => {
+    // Фото на листе 600×300 мм: низ 13 + 274 = 287 мм; под ним должно остаться MINI_GAP + MINI_H px до низа окна.
+    // Сетка размеров окна: 400–1000 × 900–2000 px и повёрнутая (окно как у владельца — 1280×760).
+    const sizes: [number, number][] = []
+    for (let a = 400; a <= 1000; a += 100) for (let b = 900; b <= 2000; b += 100) sizes.push([a, b], [b, a])
+    for (const [w, h] of sizes) {
+      const v = vpOf(w, h)
+      const p = placement(fit(v.sw, v.ph), v)
+      const bottom = p.top + (13 + 274) * v.k0
+      expect(v.h - bottom, `окно ${w}×${h}`).toBeGreaterThanOrEqual(MINI_GAP + MINI_H)
+    }
+  })
+
+  it('padB: вход в зум без скачка', () => {
+    const v = vpOf(1200, 700)
+    const was = placement(fit(v.sw, v.ph), v)
+    const z = zoomAt(fit(v.sw, v.ph), v, 1.25, v.w / 2, effH(v) / 2)
+    expect(z.cx).toBeCloseTo(300, 6)
+    expect(z.cy).toBeCloseTo(150, 6)
+    // центр листа в окне тот же: сдвиг не больше округления
+    const now = placement(z, v)
+    expect(now.top + now.height / 2).toBeCloseTo(was.top + was.height / 2, 0)
+  })
+
+  it('в зуме лист опускается до низа окна минус полоса (24 px)', () => {
+    const v = vpOf(1200, 700)
+    const z = clampZoom({ z: 4, cx: 300, cy: 9999 }, v)
+    const p = placement(z, v)
+    expect(p.top + p.height).toBe(v.h - (FIT_BOTTOM - FIT_TOP))
+    const up = placement(clampZoom({ z: 4, cx: 300, cy: -9999 }, v), v)
+    expect(up.top).toBe(0)
+  })
+
+  it('низкое окно: полоса не больше половины высоты', () => {
+    expect(effH({ ...v0(), h: 20, padB: 24 })).toBe(10)
+    expect(effH({ ...v0(), h: 600 })).toBe(600)
+  })
+})
+const v0 = (): Viewport => ({ w: 1000, h: 600, k0: 1, sw: 600, ph: 300 })

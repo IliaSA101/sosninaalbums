@@ -28,7 +28,7 @@ import { gridAct } from '../../panels/layouts/gridact.svelte'
 import { align } from '../../panels/layouts/align.svelte'
 import { isAlignOp, normAlignTo } from '../../panels/layouts/align'
 import { errText } from '../../base/words/errtext'
-import { ZOOM_STEP } from '../../editor/zoom/zoom'
+import { effH, ZOOM_STEP } from '../../editor/zoom/zoom'
 import { newDoc } from '../newdoc/newdoc.svelte'
 import type { KeyAction } from './hotkeys'
 import type { Label, MarkPatch, RecentProject } from '../../base/core/types'
@@ -88,7 +88,7 @@ function layoutStep(delta: number) {
 function zoomBy(factor: number) {
   if (!store.spread || canvas.busy || canvas.pressed || row.atNew) return
   row.finish() // зум не начинается посреди движения ряда
-  canvas.zoomAt(factor, canvas.vp.w / 2, canvas.vp.h / 2)
+  canvas.zoomAt(factor, canvas.vp.w / 2, effH(canvas.vp) / 2)
 }
 
 async function showExportFolder() {

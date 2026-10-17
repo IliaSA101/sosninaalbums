@@ -1,6 +1,6 @@
 // Зум и панорама холста (спека 008, design §6.1). Состояние — в мм разворота и только в памяти
 // окна: после перезапуска разворот вписан. Окно (Viewport) задаёт Stage по своим размерам.
-import { clampZoom, fit, MIN_ZOOM, panBy, spaceTap, zoomAt, type Viewport, type ZoomState } from '../zoom/zoom'
+import { clampZoom, effH, fit, MIN_ZOOM, panBy, spaceTap, zoomAt, type Viewport, type ZoomState } from '../zoom/zoom'
 
 class Canvas {
   s = $state<ZoomState>({ z: 1, cx: 0, cy: 0 })
@@ -40,7 +40,7 @@ class Canvas {
   // Масштаб из бегунка: вокруг центра окна, как у Ctrl+=; левый край шкалы — «вписать».
   setZoom(z: number) {
     if (!(z > MIN_ZOOM)) return this.fit()
-    this.zoomAt(z / this.cur.z, this.vp.w / 2, this.vp.h / 2)
+    this.zoomAt(z / this.cur.z, this.vp.w / 2, effH(this.vp) / 2)
   }
   panBy(dx: number, dy: number) {
     this.s = panBy(this.cur, this.vp, dx, dy)

@@ -4,33 +4,52 @@
   import Icon from '../../base/ui/Icon.svelte'
   import { canvas } from '../canvas/canvas.svelte'
   import { markDone } from '../places/placegesture'
+  import type { ArcRoom } from '../places/minipanel'
   import { framelive } from './framelive.svelte'
   import { canvasTilt, liveTilt } from './tiltlive'
-  import { DialControl, dialTicks, fmtTilt, sameTilt, TILT_MAX } from './tiltdial'
+  import { ARC_PHI, arcAngle, arcGeom, axisDelta, DialControl, fmtTilt, knobAt, KNOB, sameTilt, TILT_ARC } from './tiltdial'
   import { straighten } from './straighten.svelte'
   import { tiltmode } from './tiltmode.svelte'
 
-  // Шкала наклона на выделенном фото (спека 059): вместо ползунка масштаба. Линейка едет под неподвижной стрелкой,
-  // 1 px = 0,1°. Рамка стоит, фото на холсте поворачивается сразу (liveTilt — зеркало Go TiltCrop); правка
-  // SetFrameAngle уходит на отпускании: одна протяжка — один шаг отмены. Решения — в tiltdial.ts.
+  // Дуга наклона сверху на выделенном фото (спека 063): вместо ползунка масштаба. Полоса и кружок — как у ползунка
+  // масштаба (8 px #3b3b3b, ⌀ 18 акцент), заливка от вершины (0°) до кружка. Вправо — плюс. Рамка стоит, фото на
+  // холсте поворачивается сразу (liveTilt — зеркало Go TiltCrop); правка SetFrameAngle уходит на отпускании:
+  // одна протяжка — один шаг отмены. Геометрия и перевод px → угол — в tiltdial.ts; место дуги даёт мини-панель (room).
   let {
     id,
     spread,
     fv,
     frame,
+    room,
     shaped,
   }: {
     id: string
     spread: SpreadView
-    fv: FrameView // место с фото: без него шкалы нет (CellOverlay)
+    fv: FrameView // место с фото: без него дуги нет (CellOverlay)
     frame: Frame // кадр из Go
-    shaped: boolean // круг и скругление: нижний угол срезан
+    room: ArcRoom // где дуга: внутри фото или над рамкой
+    shaped: boolean // круг и скругление: нижний угол срезан, дуга ниже
   } = $props()
 
   let live = $state<number | null>(null) // угол, пока тянут или жмут стрелки
   const t = $derived(live ?? fv.tilt ?? 0)
-  let rw = $state(172) // ширина линейки, px (замер)
-  const ticks = $derived(dialTicks(t, rw))
+  let rw = $state(0) // размер места в осях места, px (замер)
+  let rh = $state(0)
+  const g = $derived(arcGeom(room, rw, rh, shaped))
+  const phi = (ARC_PHI * Math.PI) / 180
+  const at = (a: number) => ({ x: g.ax + g.R * Math.sin(a), y: g.ay + g.R * (1 - Math.cos(a)) })
+  const left = $derived(at(-phi))
+  const right = $derived(at(phi))
+  const top = $derived(at(0))
+  const knob = $derived(knobAt(t, g))
+  const arcD = $derived(`M${left.x} ${left.y}A${g.R} ${g.R} 0 0 1 ${right.x} ${right.y}`)
+  const fillD = $derived(
+    Math.abs(knob.x - top.x) < 0.01
+      ? ''
+      : knob.x > top.x
+        ? `M${top.x} ${top.y}A${g.R} ${g.R} 0 0 1 ${knob.x} ${knob.y}`
+        : `M${knob.x} ${knob.y}A${g.R} ${g.R} 0 0 1 ${top.x} ${top.y}`,
+  )
 
   // Протяжка и сессия отмены ведёт ctl (tiltdial.ts); base — кадр начала, основа предпросмотра.
   const ctl = new DialControl({
@@ -39,10 +58,13 @@
     frame: () => frame,
     tilt: () => fv.tilt ?? 0,
     rev: () => store.view.rev,
+    // Кружок держится под курсором по x оси места и стоит на дуге
+    toAngle: (t0, dpx, m) => arcAngle(knobAt(t0, g).x + dpx, g, m),
     send: (angle, session) => store.run(Api.SetFrameAngle(spread.id, id, angle, session)),
   })
   let base: Frame | null = null
   let lastFrame: Frame | null = null
+  let knobEl: SVGCircleElement | undefined
 
   function preview(angle: number, from: Frame) {
     const f = liveTilt(spread, id, from, angle)
@@ -51,16 +73,29 @@
     return f
   }
 
-  function down(e: PointerEvent) {
+  function begin(e: PointerEvent, jump?: number) {
     if (e.button !== 0 || ctl.dragging) return
     e.preventDefault() // фокус не берём: стрелки холста после протяжки по-прежнему двигают место
     e.stopPropagation()
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
     canvas.busy = true
-    base = ctl.down(e.clientX, e.clientY)
+    base = ctl.down(e.clientX, e.clientY, jump, { shift: e.shiftKey, alt: e.altKey })
     lastFrame = null
     tiltmode.dialing = true
     window.addEventListener('keydown', esc, true) // фаза захвата: раньше выхода из режима и «снять выделение»
+    const a = ctl.startAngle
+    if (a !== null && base) {
+      live = a
+      lastFrame = preview(a, base)
+    }
+  }
+
+  const downKnob = (e: PointerEvent) => begin(e)
+  // Нажатие на полосу: кружок встаёт под курсор (сдвиг от центра кружка по оси места), дальше протяжка
+  function downTrack(e: PointerEvent) {
+    const r = knobEl?.getBoundingClientRect()
+    if (!r) return
+    begin(e, axisDelta(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2), fv.cellRot ?? 0))
   }
 
   function move(e: PointerEvent) {
@@ -105,7 +140,7 @@
     void up()
   }
 
-  // Esc во время протяжки: откат предпросмотра без правки, режим шкалы остаётся.
+  // Esc во время протяжки: откат предпросмотра без правки, режим наклона остаётся.
   function esc(e: KeyboardEvent) {
     if (e.key !== 'Escape' || !ctl.dragging) return
     e.stopPropagation()
@@ -115,16 +150,15 @@
     live = null
   }
 
-  // Двойной щелчок по линейке — 0° одной правкой (если уже 0 — холостого вызова нет).
+  // Двойной щелчок по кружку — 0° одной правкой (если уже 0 — холостого вызова нет).
   async function reset() {
     if (sameTilt(fv.tilt ?? 0, 0)) return
     markDone()
     await ctl.reset()
   }
 
-  // ←/→ на шкале в фокусе (Tab): 0,1°, с Shift 1°. Серия до ухода фокуса — один шаг отмены.
+  // ←/→ на кружке в фокусе (Tab): 0,1°, с Shift 1°; на дуге до ±10°. Серия до ухода фокуса — один шаг отмены.
   async function key(e: KeyboardEvent) {
-    if (e.target !== e.currentTarget) return // кнопка-уровень со своими клавишами
     const step = ctl.key(t, e.key, e.shiftKey)
     if (!step) return
     e.preventDefault()
@@ -139,18 +173,14 @@
     }
   }
 
-  // Щелчок мышью по шкале не ставит ей фокус: иначе ←/→ молча менялись бы наклон вместо сдвига места (решение 19).
-  // Фокус берётся только Tab. Кнопка-уровень внутри по-прежнему кликается.
-  function shield(e: PointerEvent) {
+  // Щелчок мышью по кнопке и дуге не ставит им фокус и не доходит до холста (решение 19): фокус берётся только Tab.
+  function shield(e: Event) {
     e.preventDefault()
     e.stopPropagation()
   }
+  const quiet = (e: Event) => e.stopPropagation()
 
-  function focusout(e: FocusEvent) {
-    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) ctl.blur()
-  }
-
-  // Шкала исчезла (смена выделения, выход из режима): незаконченная протяжка не должна оставить busy и сетку.
+  // Дуга исчезла (смена выделения, выход из режима): незаконченная протяжка не должна оставить busy и сетку.
   $effect(() => () => {
     if (ctl.dispose()) {
       stop()
@@ -159,151 +189,150 @@
   })
 </script>
 
-<!-- Клики и двойной щелчок не доходят до холста: иначе щелчок по шкале снял бы выделение -->
-<div
-  class="dial"
-  class:shaped
-  role="slider"
-  tabindex="0"
-  aria-label="Наклон фото в рамке"
-  aria-valuemin={-TILT_MAX}
-  aria-valuemax={TILT_MAX}
-  aria-valuenow={t}
-  aria-valuetext={fmtTilt(t)}
-  title="Наклон фото в рамке; двойной щелчок — 0°"
-  data-guide="tilt-mini"
-  onpointerdown={shield}
-  onmousedown={(e) => e.preventDefault()}
-  onclick={(e) => e.stopPropagation()}
-  ondblclick={(e) => e.stopPropagation()}
-  onkeydown={key}
-  onfocusout={focusout}
->
+<!-- Клики и двойной щелчок не доходят до холста: иначе щелчок по дуге снял бы выделение -->
+<div class="arc" bind:clientWidth={rw} bind:clientHeight={rh}>
+  <svg width="1" height="1" onpointermove={move} onpointerup={up} onpointercancel={abort} onlostpointercapture={abort} role="presentation">
+    <path d={arcD} class="bar" />
+    {#if fillD}<path d={fillD} class="fill" />{/if}
+    <path d={arcD} class="hit" role="presentation" onpointerdown={downTrack} onmousedown={shield} onclick={quiet} ondblclick={quiet} />
+    <g
+      class="knob"
+      class:grab={tiltmode.dialing}
+      role="slider"
+      tabindex="0"
+      aria-label="Наклон фото в рамке"
+      aria-valuemin={-TILT_ARC}
+      aria-valuemax={TILT_ARC}
+      aria-valuenow={Math.min(TILT_ARC, Math.max(-TILT_ARC, t))}
+      aria-valuetext={fmtTilt(t)}
+      data-guide="tilt-mini"
+      onpointerdown={downKnob}
+      onmousedown={shield}
+      onclick={quiet}
+      ondblclick={(e) => {
+        e.stopPropagation()
+        void reset()
+      }}
+      onkeydown={key}
+      onfocusout={() => ctl.blur()}
+    >
+      <title>Наклон фото в рамке; двойной щелчок — 0°</title>
+      <circle cx={knob.x} cy={knob.y} r="12" class="zone" />
+      <circle bind:this={knobEl} cx={knob.x} cy={knob.y} r={KNOB} class="dot" />
+    </g>
+  </svg>
   <button
     class="lvl"
     data-guide="straighten"
     aria-label="Выпрямить по линии"
     title="Выпрямить по линии: проведите линию вдоль горизонта или вертикали"
-    onclick={() => straighten.startPhoto(id)}><Icon name="level" size={16} /></button
+    style:left="{left.x - 34}px"
+    style:top="{left.y - 12}px"
+    onpointerdown={shield}
+    onclick={(e) => {
+      e.stopPropagation()
+      straighten.startPhoto(id)
+    }}><Icon name="level" size={16} /></button
   >
-  <span class="sep"></span>
-  <div
-    class="ruler"
-    role="presentation"
-    bind:clientWidth={rw}
-    onpointerdown={down}
-    onpointermove={move}
-    onpointerup={up}
-    onpointercancel={abort}
-    onlostpointercapture={abort}
-    ondblclick={reset}
-  >
-    <svg width={rw} height="36" viewBox="0 0 {rw} 36" aria-hidden="true">
-      {#each ticks as k (k.x)}
-        <line x1={k.x} x2={k.x} y1="28" y2={28 - (k.big ? 10 : 5)} class:zero={k.label === '0'} stroke-opacity={k.big ? 0.95 : 0.55} />
-        {#if k.label}<text x={k.x} y="12" text-anchor="middle">{k.label}</text>{/if}
-      {/each}
-    </svg>
-    <span class="ptr"></span>
-  </div>
-  <span class="sep"></span>
-  <span class="val">{fmtTilt(t)}</span>
+  <span class="val" style:left="{right.x + 10}px" style:top="{right.y - 11}px">{fmtTilt(t)}</span>
+  {#if tiltmode.dialing}
+    <span class="tag" style:left="{knob.x}px" style:top="{knob.y + 14}px">{fmtTilt(t)}</span>
+  {/if}
 </div>
 
 <style>
-  /* Внизу ячейки, как ползунок масштаба: подложка, порог и скрытие при переносе те же; шире него — 140…260 px */
-  .dial {
+  /* Оболочка на всё место (оси места, поворот вместе с ним); мышь ловят только дуга, кружок и боковые элементы */
+  .arc {
     position: absolute;
-    left: 50%;
-    bottom: 12px;
-    width: clamp(140px, 80%, 260px);
-    height: 36px;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    box-sizing: border-box;
-    background: rgba(20, 20, 22, 0.84);
-    border-radius: 8px;
-    color: #cfcfd4;
+    inset: 0;
     z-index: 4;
-    pointer-events: auto; /* обёртка CellOverlay мышь не ловит, а свойство наследуется */
-    outline: none;
+    pointer-events: none;
   }
-  .dial:focus-visible {
-    box-shadow: 0 0 0 2px var(--accent);
-  }
-  /* У круга и скругления нижний угол срезан: шкала выше */
-  .dial.shaped {
-    bottom: calc(12px + 8%);
-  }
-  :global(body.dragging) .dial {
+  :global(body.dragging) .arc {
     display: none;
   }
+  svg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    touch-action: none; /* тачпад и перо: протяжка, а не прокрутка */
+  }
+  path {
+    fill: none;
+    stroke-linecap: round;
+  }
+  /* Как нативный ползунок масштаба: полоса 8 px #3b3b3b, заливка акцентом до кружка */
+  .bar {
+    stroke: #3b3b3b;
+    stroke-width: 8;
+  }
+  .fill {
+    stroke: var(--accent);
+    stroke-width: 8;
+  }
+  .hit {
+    stroke: transparent;
+    stroke-width: 22;
+    pointer-events: stroke;
+    cursor: pointer;
+  }
+  .knob {
+    pointer-events: all;
+    cursor: grab;
+    outline: none;
+  }
+  .knob.grab {
+    cursor: grabbing;
+  }
+  .zone {
+    fill: transparent;
+  }
+  .dot {
+    fill: var(--accent);
+  }
+  .knob:focus-visible .dot {
+    stroke: #fff;
+    stroke-width: 2;
+  }
   .lvl {
+    position: absolute;
     width: 24px;
     height: 24px;
-    margin: 0 4px;
     padding: 0;
-    flex: none;
     display: grid;
     place-items: center;
     border-radius: 4px;
     background: #38383c;
     color: #cfcfd4;
+    pointer-events: auto; /* оболочка мышь не ловит, а свойство наследуется */
   }
   .lvl:hover {
     background: #48484d;
     color: #fff;
   }
-  .sep {
-    width: 1px;
-    height: 18px;
-    flex: none;
-    background: var(--line);
-  }
-  .ruler {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    overflow: hidden;
-    cursor: ew-resize;
-    touch-action: none; /* тачпад и перо: протяжка, а не прокрутка */
-  }
-  .ruler svg {
+  .val,
+  .tag {
     position: absolute;
-    top: 0;
-    left: 0;
-  }
-  line {
-    stroke: #cfcfd4;
-    stroke-width: 1;
-  }
-  line.zero {
-    stroke: var(--accent);
-    stroke-width: 2;
-  }
-  text {
-    font-size: 9px;
-    fill: var(--muted);
-  }
-  /* Неподвижная стрелка в середине линейки */
-  .ptr {
-    position: absolute;
-    left: 50%;
-    bottom: 0;
-    margin-left: -5px;
-    border: 5px solid transparent;
-    border-bottom: 6px solid var(--accent);
+    display: grid;
+    place-items: center;
+    border-radius: 4px;
+    background: rgba(20, 20, 22, 0.84);
+    color: #fff;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
     pointer-events: none;
   }
   .val {
-    width: 52px;
-    flex: none;
-    text-align: center;
+    height: 22px;
+    padding: 0 6px;
     font-size: 12px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    color: #fff;
+  }
+  .tag {
+    height: 18px;
+    padding: 0 5px;
+    font-size: 11px;
+    transform: translateX(-50%);
   }
 </style>

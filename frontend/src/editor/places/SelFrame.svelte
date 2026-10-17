@@ -4,6 +4,8 @@
   import { startMove, startResize, startRotate, zeroAngle } from './placegesture'
   import { aabbOf, angleOf, resizeCursor, rotHandleAt, rotHandleIn } from '../../base/geom/rotbox'
   import { photoui } from '../photo/photoui.svelte'
+  import { hidesRotate, tiltmode } from '../photo/tiltmode.svelte'
+  import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import MiniPanel from './MiniPanel.svelte'
   import RotateHandle from '../../base/ui/RotateHandle.svelte'
@@ -49,8 +51,10 @@
   })
 
   // Центр ⟳ одиночного места (px разворота): мини-панель обходит его, иначе закрывает ручку.
+  // В режиме наклона ⟳ спрятан (на его месте дуга) — обходить нечего.
+  const noRot = (photo: string | undefined) => hidesRotate(tiltmode.on, photo, store.selectedCell)
   const rotAt = $derived.by(() => {
-    if (!panelBox || !rotatable) return undefined
+    if (!panelBox || !rotatable || noRot(items[0].photo)) return undefined
     const b = items[0].box
     const p = rotHandleAt(b, (rotHandleIn(b, ROT_REACH / ppm, sw, ph) ? -ROT_MID : ROT_MID) / ppm)
     return { x: p.x * ppm, y: p.y * ppm }
@@ -109,7 +113,7 @@
           ></span>
         {/each}
       {/if}
-      {#if it.sample && !group && rotatable}
+      {#if it.sample && !group && rotatable && !noRot(it.photo)}
         <RotateHandle rotIn={rotHandleIn(it.box, ROT_REACH / ppm, sw, ph)} onrotate={rotate} onzero={zeroAngle} />
       {/if}
     </div>

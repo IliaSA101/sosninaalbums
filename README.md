@@ -6,7 +6,7 @@
 **Sosnina Albums** is a desktop application for laying out wedding photo albums, built for a working photographer. Pick folders with photos, drag frames onto spreads (or let auto-assembly do it), flip through layout variants, and export spreads as 300 dpi JPEGs for the print shop. Layouts are computed exactly and **never crop a photo**: every frame keeps its aspect ratio; margins and gaps are set in millimetres.
 
 - Platform: Windows (WebView2). Stack: Go 1.26 + [Wails](https://wails.io) v2 + Svelte 5 + TypeScript.
-- Status: version 0.14.0, actively developed; the UI is in Russian.
+- Status: version 0.14.1, actively developed; the UI is in Russian.
 - Built together with photographer Marina Sosnina ([Sosnina films](https://sosnina-films.ru)) and used in her work.
 
 ![Sosnina Albums: spread, album strip and photo library](docs/screenshot.png)
@@ -30,7 +30,7 @@ Sosnina Albums — десктопная программа для вёрстки
 
 Программу делает Илья Соснин (GitHub: IliaSA101) вместе с фотографом Мариной Сосниной ([Sosnina films](https://sosnina-films.ru)); Марина — первый пользователь и источник требований. Об упоминании и логотипе есть согласие.
 
-## Возможности (0.14.0)
+## Возможности (0.14.1)
 
 - Библиотека: несколько папок с подпапками, JPEG/PNG, поворот по EXIF, естественная сортировка (`img-9` раньше `img-10`), быстрые миниатюры с дисковым кэшем, пересчёт Adobe RGB в sRGB.
 - Автораскладка разворота: перебор деревьев «ряды/столбцы», оценка и до 12 вариантов; переключение пробелом. Режим layflat (фото через корешок) и обычный; фото «в край» (bleed).

@@ -10,7 +10,9 @@ vi.stubGlobal('window', globalThis)
 const { store } = await import('../../base/core/store.svelte')
 const { noHooks } = await import('../../base/core/hooks')
 const { prefs } = await import('../../base/prefs/prefs.svelte')
-const { tiltmode, tiltAlive } = await import('./tiltmode.svelte')
+const { tiltmode, tiltAlive, hidesRotate, tiltRow } = await import('./tiltmode.svelte')
+const { miniSpot } = await import('../places/minispot.svelte')
+const { NO_ROOM } = await import('../places/minipanel')
 const { straighten } = await import('./straighten.svelte')
 const { bgmode } = await import('../backdrop/bgmode.svelte')
 const { placesel } = await import('../places/placesel.svelte')
@@ -50,6 +52,8 @@ const setView = (s: SpreadView) => {
 beforeEach(() => {
   prefs.level = 'full'
   tiltmode.exit()
+  miniSpot.photo = ''
+  miniSpot.arc = NO_ROOM
   straighten.exit()
   bgmode.exit()
   sel.clear()
@@ -164,24 +168,119 @@ describe('alive: group, empty, text, sticker, missing, level, drag, backdrop', (
   })
 })
 
-describe('other single photo keeps mode', () => {
-  it('щелчок по другому фото: режим остаётся', () => {
+const IN = { mode: 'in', vx: 100, vy: 0, vw: 200 } as const
+
+describe('выход при смене выделения', () => {
+  it('другое фото — выход (владелец 2026-10-16)', () => {
+    store.selectedCell = 'a'
+    tiltmode.toggle()
+    flushSync()
+    expect(tiltmode.on).toBe(true)
+    store.selectedCell = 'b'
+    flushSync()
+    expect(tiltmode.on).toBe(false)
+  })
+  it('щелчок мимо (снятие выделения) — выход (владелец 2026-10-16)', () => {
+    store.selectedCell = 'a'
+    tiltmode.toggle()
+    flushSync()
+    store.selectedCell = null
+    flushSync()
+    expect(tiltmode.on).toBe(false)
+  })
+  it('повторное нажатие — выход (владелец 2026-10-16)', () => {
+    store.selectedCell = 'a'
+    tiltmode.toggle()
+    expect(tiltmode.on).toBe(true)
+    tiltmode.toggle()
+    expect(tiltmode.on).toBe(false)
+  })
+  it('серия: на следующем фото режим включают заново', () => {
     store.selectedCell = 'a'
     tiltmode.toggle()
     flushSync()
     store.selectedCell = 'b'
     flushSync()
-    expect(tiltmode.on).toBe(true)
-  })
-  it('серия: режим держится на третьем фото подряд', () => {
-    store.selectedCell = 'a'
+    expect(tiltmode.on).toBe(false)
     tiltmode.toggle()
     flushSync()
-    for (const id of ['b', 'a', 'b']) {
-      store.selectedCell = id
-      flushSync()
-    }
     expect(tiltmode.on).toBe(true)
+    store.selectedCell = 'a'
+    flushSync()
+    expect(tiltmode.on).toBe(false)
+  })
+  it('чистая проверка: same и room', () => {
+    expect(tiltAlive({ ...alive, same: false })).toBe(false)
+    expect(tiltAlive({ ...alive, room: false })).toBe(false)
+    expect(tiltAlive({ ...alive, same: true, room: true })).toBe(true)
+  })
+})
+
+describe('hidesRotate', () => {
+  it('⟳ спрятан у фото в режиме (владелец 2026-10-16)', () => {
+    expect(hidesRotate(true, 'a', 'a')).toBe(true)
+    expect(hidesRotate(false, 'a', 'a')).toBe(false) // режима нет
+    expect(hidesRotate(true, 'a', 'b')).toBe(false) // чужая рамка
+    expect(hidesRotate(true, undefined, null)).toBe(false) // место без фото
+    expect(hidesRotate(true, '', '')).toBe(false)
+  })
+})
+
+describe('место для дуги', () => {
+  it('дуге не стало места — выход; пока панель перерисовывается (photo пуст) — режим держится', () => {
+    store.selectedCell = 'a'
+    miniSpot.photo = 'a'
+    miniSpot.arc = IN
+    tiltmode.toggle()
+    flushSync()
+    expect(tiltmode.on).toBe(true)
+    miniSpot.photo = ''
+    miniSpot.arc = NO_ROOM
+    flushSync()
+    expect(tiltmode.on).toBe(true) // сведений нет
+    miniSpot.photo = 'a'
+    flushSync()
+    expect(tiltmode.on).toBe(false) // места нет — выход
+  })
+  it('сведения о другом фото режим не гасят', () => {
+    store.selectedCell = 'a'
+    miniSpot.photo = 'a'
+    miniSpot.arc = IN
+    tiltmode.toggle()
+    flushSync()
+    miniSpot.photo = 'b'
+    miniSpot.arc = NO_ROOM
+    flushSync()
+    expect(tiltmode.on).toBe(true)
+  })
+  it('мелкое фото: кнопка активна, нажатие показывает строку «Наклон» в карточке, дуга не включается (владелец 2026-10-17)', () => {
+    const show = vi.spyOn(tiltRow, 'show').mockImplementation(() => {})
+    store.selectedCell = 'a'
+    miniSpot.photo = 'a'
+    miniSpot.arc = NO_ROOM
+    tiltmode.toggle()
+    flushSync()
+    expect(show).toHaveBeenCalledTimes(1)
+    expect(tiltmode.on).toBe(false)
+    show.mockRestore()
+  })
+  it('дуге есть место — строка в карточке не показывается', () => {
+    const show = vi.spyOn(tiltRow, 'show').mockImplementation(() => {})
+    store.selectedCell = 'a'
+    miniSpot.photo = 'a'
+    miniSpot.arc = IN
+    tiltmode.toggle()
+    expect(show).not.toHaveBeenCalled()
+    expect(tiltmode.on).toBe(true)
+    show.mockRestore()
+  })
+  it('нечего выпрямлять и мелкое фото — карточка не показывается', () => {
+    const show = vi.spyOn(tiltRow, 'show').mockImplementation(() => {})
+    miniSpot.photo = 'a'
+    miniSpot.arc = NO_ROOM
+    tiltmode.toggle() // ничего не выделено
+    expect(show).not.toHaveBeenCalled()
+    show.mockRestore()
   })
 })
 
@@ -247,7 +346,7 @@ describe('esc order', () => {
     expect(tiltmode.key({ key: 'Escape', defaultPrevented: true })).toBe(false)
     expect(tiltmode.on).toBe(true)
   })
-  it('иначе — выход из режима, выделение остаётся; следующий Esc не наш', () => {
+  it('Esc — выход, выделение остаётся; следующий Esc не наш (владелец 2026-10-16)', () => {
     start()
     expect(tiltmode.key({ key: 'Escape' })).toBe(true)
     expect(tiltmode.on).toBe(false)

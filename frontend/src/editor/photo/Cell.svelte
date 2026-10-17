@@ -148,7 +148,7 @@
         />{/if}
     {/if}
     {#if framelive.tilting(id)}
-      <!-- Наклон (из шкалы и карточки): сетка 9×9, трети ярче — горизонт ровняют по частым линиям (059) -->
+      <!-- Наклон (с дуги и из карточки): сетка 9×9, трети ярче — горизонт ровняют по частым линиям (059) -->
       {#each NINTHS as k (k)}
         <span class="v" class:third={k % 3 === 0} class:ninth={k % 3 !== 0} style:left="{(k * 100) / 9}%"></span>
         <span class="h" class:third={k % 3 === 0} class:ninth={k % 3 !== 0} style:top="{(k * 100) / 9}%"></span>

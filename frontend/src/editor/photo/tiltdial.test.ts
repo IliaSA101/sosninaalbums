@@ -1,42 +1,123 @@
 import { describe, expect, it, vi } from 'vitest'
-import { axisDelta, DialControl, DialDrag, dialAngle, dialTicks, fmtTilt, keyAngle, sameTilt, TILT_MAX } from './tiltdial'
+import {
+  ARC_CMAX,
+  ARC_CMIN,
+  ARC_OUT_GAP,
+  ARC_PHI,
+  ARC_TOP,
+  arcAngle,
+  arcChord,
+  arcGeom,
+  axisDelta,
+  DialControl,
+  DialDrag,
+  fmtTilt,
+  keyAngle,
+  knobAt,
+  sameTilt,
+  TILT_ARC,
+  TILT_MAX,
+} from './tiltdial'
 import { TiltSession } from './tiltlive'
 import type { Frame } from '../../base/core/types'
+import type { ArcRoom } from '../places/minipanel'
 
 const no = { shift: false, alt: false }
+const room: ArcRoom = { mode: 'in', vx: 200, vy: 0, vw: 400 }
+const g = arcGeom(room, 400, 300)
+// Простой перевод для тестов DialDrag / DialControl: 1 px = 0,1°, влево — плюс.
+const lin = (t0: number, dpx: number) => Math.round((t0 - dpx / 10) * 10) / 10
 
 describe('tiltdial', () => {
-  it('px to degrees and direction', () => {
-    // 1 px = 0,1°; вправо — к минусу
-    expect(dialAngle(0, 50, no)).toBe(-5)
-    expect(dialAngle(0, -50, no)).toBe(5)
-    expect(dialAngle(3, 12, no)).toBe(1.8)
-    expect(dialAngle(3, 0, no)).toBe(3)
+  it('arc: chord, radius, sagitta from width', () => {
+    expect(arcChord(100)).toBe(ARC_CMIN)
+    expect(arcChord(1000)).toBe(ARC_CMAX)
+    expect(arcChord(548)).toBeCloseTo(230.2, 1) // макет владельца: 0,42 ширины
+    expect(g.c).toBeCloseTo(168)
+    expect(g.R).toBeCloseTo(168 / (2 * Math.sin((ARC_PHI * Math.PI) / 180)))
+    expect(g.s / g.c).toBeCloseTo(0.111, 3) // высота ≈ 0,11 хорды
+    expect(g.ax).toBe(200)
+    expect(g.ay).toBe(ARC_TOP)
+  })
+
+  it('arc: out — chord 140 above the frame, ends 18 px over it', () => {
+    const o = arcGeom({ mode: 'out', vx: 0, vy: 0, vw: 0 }, 90, 60)
+    expect(o.c).toBe(ARC_CMIN)
+    expect(o.ax).toBe(45)
+    expect(o.ay + o.s).toBeCloseTo(-ARC_OUT_GAP) // концы дуги выше рамки на 18 px
+    expect(knobAt(TILT_ARC, o).y).toBeCloseTo(-ARC_OUT_GAP)
+  })
+
+  it('arc: shaped shifts the arc down by 8% of height', () => {
+    expect(arcGeom(room, 400, 300, true).ay).toBeCloseTo(ARC_TOP + 24)
+  })
+
+  it('arc: circle — all knob points on one radius (владелец 2026-10-16)', () => {
+    const cx = g.ax
+    const cy = g.ay + g.R // центр окружности под вершиной
+    for (let t = -10; t <= 10; t += 2.5) {
+      const k = knobAt(t, g)
+      expect(Math.hypot(k.x - cx, k.y - cy)).toBeCloseTo(g.R, 6)
+    }
+  })
+
+  it('arc: knob in the middle at 0, ends at ±10 (владелец 2026-10-16)', () => {
+    expect(knobAt(0, g)).toEqual({ x: g.ax, y: g.ay })
+    const r = knobAt(TILT_ARC, g)
+    const l = knobAt(-TILT_ARC, g)
+    expect(r.x - g.ax).toBeCloseTo(g.c / 2) // конец дуги — на полухорде
+    expect(g.ax - l.x).toBeCloseTo(g.c / 2)
+    expect(r.y).toBeCloseTo(g.ay + g.s)
+    expect(l.y).toBeCloseTo(r.y)
+    expect(r.x).toBeGreaterThan(knobAt(5, g).x) // вправо — плюс
+  })
+
+  it('arc: beyond 10 — knob at the end, label exact (владелец 2026-10-16)', () => {
+    expect(knobAt(30, g)).toEqual(knobAt(TILT_ARC, g))
+    expect(knobAt(-44.9, g)).toEqual(knobAt(-TILT_ARC, g))
+    expect(fmtTilt(30)).toBe('+30,0°')
+    expect(fmtTilt(-44.9)).toBe('−44,9°')
+  })
+
+  it('arc: drag right — plus, knob under pointer', () => {
+    const t0 = 2
+    const x = knobAt(t0, g).x + 20
+    const a = arcAngle(x, g, no)
+    expect(a).toBeGreaterThan(t0)
+    expect(Math.abs(knobAt(a, g).x - x)).toBeLessThan(1) // с округлением до 0,1°
+    expect(arcAngle(knobAt(t0, g).x - 20, g, no)).toBeLessThan(t0)
+  })
+
+  it('arc: limit ±10 on the arc and round (владелец 2026-10-16)', () => {
+    expect(arcAngle(g.ax + 1000, g, no)).toBe(TILT_ARC)
+    expect(arcAngle(g.ax - 1000, g, no)).toBe(-TILT_ARC)
+    expect(arcAngle(g.ax + g.c / 2, g, no)).toBe(TILT_ARC)
+    expect(arcAngle(knobAt(3.33, g).x, g, no)).toBe(3.3)
+    expect(arcAngle(knobAt(-6.78, g).x, g, no)).toBe(-6.8)
+  })
+
+  it('arc: from an angle beyond 10 — the angle comes from the arc', () => {
+    // из 25° (карточка): кружок в конце, первый же ход даёт угол с дуги, не больше 10
+    expect(arcAngle(knobAt(25, g).x + 5, g, no)).toBe(TILT_ARC)
+    expect(arcAngle(knobAt(25, g).x - 60, g, no)).toBeLessThan(TILT_ARC)
   })
 
   it('snap to zero and alt', () => {
-    expect(dialAngle(0, -2, no)).toBe(0) // 0,2° — прилипло
-    expect(dialAngle(0, 2, no)).toBe(0)
-    expect(Object.is(dialAngle(0, 2, no), -0)).toBe(false) // не «−0»
-    expect(dialAngle(0, -3, no)).toBe(0.3) // граница 0,3 — уже не прилипает
-    expect(dialAngle(0, -2, { shift: false, alt: true })).toBe(0.2) // Alt снимает прилипание
-    expect(dialAngle(0, 2, { shift: false, alt: true })).toBe(-0.2)
+    const near = (t: number) => knobAt(t, g).x
+    expect(arcAngle(near(0.2), g, no)).toBe(0) // прилипло
+    expect(arcAngle(near(-0.2), g, no)).toBe(0)
+    expect(Object.is(arcAngle(near(0.2), g, no), -0)).toBe(false) // не «−0»
+    expect(arcAngle(near(0.4), g, no)).toBe(0.4) // дальше порога не прилипает
+    expect(arcAngle(near(0.2), g, { shift: false, alt: true })).toBe(0.2) // Alt снимает прилипание
+    expect(arcAngle(near(-0.2), g, { shift: false, alt: true })).toBe(-0.2)
   })
 
   it('shift whole degrees', () => {
-    expect(dialAngle(0, -34, { shift: true, alt: false })).toBe(3)
-    expect(dialAngle(0, -36, { shift: true, alt: false })).toBe(4)
-    expect(dialAngle(0.4, 0, { shift: true, alt: false })).toBe(0)
-    expect(dialAngle(2.3, 0, { shift: true, alt: false })).toBe(2)
-  })
-
-  it('clamp and round', () => {
-    expect(dialAngle(0, -1000, no)).toBe(TILT_MAX)
-    expect(dialAngle(0, 1000, no)).toBe(-TILT_MAX)
-    expect(dialAngle(0, -1000, { shift: true, alt: false })).toBe(TILT_MAX) // 100 → предел
-    expect(dialAngle(0, -12.34, no)).toBe(1.2)
-    expect(dialAngle(0, -12.36, no)).toBe(1.2)
-    expect(dialAngle(10.04, 0, no)).toBe(10)
+    const sh = { shift: true, alt: false }
+    expect(arcAngle(knobAt(3.4, g).x, g, sh)).toBe(3)
+    expect(arcAngle(knobAt(3.6, g).x, g, sh)).toBe(4)
+    expect(arcAngle(knobAt(0.4, g).x, g, sh)).toBe(0)
+    expect(arcAngle(g.ax + 1000, g, sh)).toBe(TILT_ARC)
   })
 
   it('axis of rotated place', () => {
@@ -47,7 +128,7 @@ describe('tiltdial', () => {
     expect(axisDelta(0, 10, 30)).toBeCloseTo(5)
   })
 
-  it('arrow keys', () => {
+  it('arrow keys (владелец 2026-10-16)', () => {
     expect(keyAngle(1, 'ArrowRight', false)).toBe(1.1)
     expect(keyAngle(1, 'ArrowLeft', false)).toBe(0.9)
     expect(keyAngle(1, 'ArrowRight', true)).toBe(2)
@@ -57,6 +138,9 @@ describe('tiltdial', () => {
     expect(keyAngle(-44.5, 'ArrowLeft', true)).toBe(-44.9)
     expect(keyAngle(0, 'ArrowUp', false)).toBeNull()
     expect(keyAngle(0, 'Tab', false)).toBeNull()
+    // предел дуги: на ±10° дальше не уйти
+    expect(keyAngle(9.95, 'ArrowRight', true, TILT_ARC)).toBe(TILT_ARC)
+    expect(keyAngle(-9.5, 'ArrowLeft', true, TILT_ARC)).toBe(-TILT_ARC)
   })
 
   it('format', () => {
@@ -69,34 +153,8 @@ describe('tiltdial', () => {
     expect(sameTilt(1, 1.1)).toBe(false)
   })
 
-  it('ticks in window', () => {
-    const t = dialTicks(0, 140)
-    const xs = t.map((k) => k.x)
-    expect(xs).toContain(70) // нулевое деление под стрелкой
-    expect(t.filter((k) => k.label).map((k) => k.label)).toEqual(['0'])
-    expect(t.find((k) => k.x === 70)?.big).toBe(true)
-    expect(t.every((k) => k.x >= 0 && k.x <= 140)).toBe(true)
-    // линейка едет вместе с углом: больший угол — деление «0» левее
-    const a = dialTicks(3, 140).find((k) => k.label === '0')!
-    expect(a.x).toBe(70 - 30)
-    // кратные 10 подписаны, минус — U+2212; за пределом диапазона делений нет
-    expect(
-      dialTicks(-10, 400)
-        .filter((k) => k.label)
-        .map((k) => k.label),
-    ).toEqual(['−30', '−20', '−10', '0', '10'])
-    expect(dialTicks(44, 400).some((k) => k.label === '50')).toBe(false)
-    expect(Math.max(...dialTicks(44, 400).map((k) => k.x))).toBeLessThan(400)
-    // крупные деления — кратные 5: −5, 0, 5
-    expect(
-      dialTicks(0, 100)
-        .filter((k) => k.big)
-        .map((k) => k.x),
-    ).toEqual([0, 50, 100])
-  })
-
   it('drag: one up — one commit', () => {
-    const d = new DialDrag(0)
+    const d = new DialDrag(0, lin)
     expect(d.move(1, no)).toBeNull() // меньше 3 px — ещё не протяжка
     expect(d.move(-20, no)).toBe(2)
     expect(d.move(-45, no)).toBe(4.5)
@@ -104,18 +162,18 @@ describe('tiltdial', () => {
   })
 
   it('drag: no move or same angle — none', () => {
-    const click = new DialDrag(2)
+    const click = new DialDrag(2, lin)
     expect(click.move(2, no)).toBeNull()
     expect(click.up()).toBeNull() // щелчок без хода
-    const back = new DialDrag(2)
+    const back = new DialDrag(2, lin)
     expect(back.move(-20, no)).toBe(4)
     expect(back.move(0, no)).toBe(2)
     expect(back.up()).toBeNull() // вернулись к исходному — правки нет
-    expect(new DialDrag(0).up()).toBeNull()
+    expect(new DialDrag(0, lin).up()).toBeNull()
   })
 
   it('drag: cancel — none', () => {
-    const d = new DialDrag(0)
+    const d = new DialDrag(0, lin)
     d.move(-30, no)
     d.cancel()
     expect(d.move(-60, no)).toBeNull()
@@ -123,7 +181,7 @@ describe('tiltdial', () => {
   })
 })
 
-// Сессия отмены шкалы (057/059): какие вызовы SetFrameAngle и с каким id уходят.
+// Сессия отмены дуги (057/063): какие вызовы SetFrameAngle и с каким id уходят.
 describe('DialControl: сессия отмены', () => {
   const frame = { s: 1, x: 0, y: 0 } as Frame
   const make = (tilt = 0) => {
@@ -135,7 +193,15 @@ describe('DialControl: сессия отмены', () => {
       state.rev++ // Go ответил новой ревизией
     })
     const session = new TiltSession()
-    const ctl = new DialControl({ session, key: () => 'p', frame: () => frame, tilt: () => state.tilt, rev: () => state.rev, send })
+    const ctl = new DialControl({
+      session,
+      key: () => 'p',
+      frame: () => frame,
+      tilt: () => state.tilt,
+      rev: () => state.rev,
+      toAngle: lin,
+      send,
+    })
     // протяжка на dx px влево (+dx/10 градусов), одним жестом
     const drag = async (dx: number) => {
       ctl.down(100, 0)
@@ -147,7 +213,7 @@ describe('DialControl: сессия отмены', () => {
     return { ctl, calls, send, session, state, drag }
   }
 
-  it('две протяжки подряд — два разных шага (разные id)', async () => {
+  it('две протяжки подряд — два разных шага (разные id) (владелец 2026-10-16)', async () => {
     const { calls, drag } = make()
     expect(await drag(20)).toBe(2)
     expect(await drag(30)).toBe(5)
@@ -196,7 +262,7 @@ describe('DialControl: сессия отмены', () => {
     expect(send).not.toHaveBeenCalled()
   })
 
-  it('двойной щелчок — одна правка без сессии; на нуле — без вызова', async () => {
+  it('двойной щелчок — одна правка без сессии; на нуле — без вызова (владелец 2026-10-16)', async () => {
     const { ctl, calls } = make(3)
     expect(await ctl.reset()).toBe(true)
     expect(calls).toEqual([[0, '']])
@@ -242,6 +308,45 @@ describe('DialControl: сессия отмены', () => {
     ok()
     await slow
     expect(session.id).toBe(fresh)
+  })
+
+  it('нажатие на полосу — кружок туда, одна правка без хода', async () => {
+    const { ctl, calls } = make()
+    ctl.down(0, 0, -30) // точка нажатия на 30 px правее кружка в «lin»-осях → +3°
+    expect(ctl.startAngle).toBe(3)
+    const a = ctl.release() // отпустили без движения — всё равно правка
+    expect(a).toBe(3)
+    await ctl.commit(a!)
+    expect(calls).toHaveLength(1)
+    expect(calls[0][1]).not.toBe('')
+  })
+
+  it('нажатие на полосу, а дальше протяжка — одна правка по итоговой точке', async () => {
+    const { ctl, calls } = make()
+    ctl.down(100, 0, -30)
+    ctl.move(90, 0, 0, no) // ещё +1°
+    const a = ctl.release()
+    expect(a).toBe(4)
+    await ctl.commit(a!)
+    expect(calls.map((c) => c[0])).toEqual([4])
+  })
+
+  it('нажатие на полосу в точке кружка — правки нет; на кружок — startAngle пуст', () => {
+    const { ctl, send } = make(2)
+    ctl.down(0, 0, 0)
+    expect(ctl.release()).toBeNull()
+    ctl.down(0, 0)
+    expect(ctl.startAngle).toBeNull()
+    ctl.release()
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('стрелки на дуге: из угла больше 10° — только назад', () => {
+    const { ctl } = make(12)
+    expect(ctl.key(12, 'ArrowRight', false)!.base).toBeNull() // дальше от дуги — нет
+    const back = ctl.key(12, 'ArrowLeft', false)!
+    expect(back.angle).toBe(11.9)
+    expect(back.base).not.toBeNull()
   })
 
   it('dispose: протяжка брошена без записи', () => {

@@ -124,6 +124,7 @@
 {#if panels.mode && prefs.can('panels') && groups.length > 0}
   <div
     class="rail"
+    data-mini-edge="left"
     class:wide
     style:left="{M}px"
     style:top="{BAR + M}px"

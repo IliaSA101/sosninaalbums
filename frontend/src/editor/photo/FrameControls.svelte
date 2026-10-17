@@ -7,12 +7,14 @@
   import { canvas } from '../canvas/canvas.svelte'
   import { markDone } from '../places/placegesture'
   import { tiltmode } from './tiltmode.svelte'
+  import { miniSpot } from '../places/minispot.svelte'
+  import { NO_ROOM, type ArcRoom } from '../places/minipanel'
   import TiltDial from './TiltDial.svelte'
 
   // Управление кадром на выделенной ячейке: ✥ (сдвиг кадра) и ползунок масштаба. Тело ячейки занято
   // переносом фото или места, поэтому кадр двигает только ✥. Правка уходит в Go при отпускании.
   // Лежит в CellOverlay (вместе с оболочкой `[data-cov]` в осях места), предпросмотр — через framelive.
-  // dial (059): включён режим шкалы — на месте ползунка масштаба встаёт шкала наклона.
+  // room (063): включён режим наклона и дуге есть место — вместо ползунка масштаба сверху встаёт дуга.
   let {
     id,
     spread,
@@ -22,7 +24,7 @@
     cur,
     movable,
     zoomable,
-    dial = false,
+    room = NO_ROOM,
   }: {
     id: string
     spread: SpreadView
@@ -32,12 +34,16 @@
     cur: Frame // кадр с учётом предпросмотра (для ползунка)
     movable: boolean
     zoomable: boolean
-    dial?: boolean
+    room?: ArcRoom
   } = $props()
 
   const panning = $derived(framelive.panning(id))
-  // ✥ прячется только на время протяжки: сдвига кадра или шкалы
+  const shaped = $derived(!!outlineOf(fv?.shape, fv?.radius))
+  const dial = $derived(room.mode !== 'none')
+  // ✥ прячется только на время протяжки: сдвига кадра или кружка дуги
   const hideMove = $derived(panning || (dial && tiltmode.dialing))
+  // Ползунок масштаба над мини-панелью, когда она стоит внутри у нижнего края (063)
+  const lift = $derived(miniSpot.photo === id ? Math.max(16, miniSpot.lift) : 16)
 
   function startPan(e: PointerEvent) {
     if (e.button !== 0 || !fv) return
@@ -79,7 +85,7 @@
     }
     const esc = (ev: KeyboardEvent) => {
       if (ev.key !== 'Escape') return
-      ev.stopPropagation() // Esc отменяет только сдвиг: выделение ячейки остаётся и режим шкалы тоже
+      ev.stopPropagation() // Esc отменяет только сдвиг: выделение ячейки остаётся и режим наклона тоже
       ev.preventDefault()
       stop()
       framelive.clear()
@@ -112,11 +118,12 @@
   >
 {/if}
 {#if dial && fv}
-  <TiltDial {id} {spread} {fv} {frame} shaped={!!outlineOf(fv.shape, fv.radius)} />
+  <TiltDial {id} {spread} {fv} {frame} {room} {shaped} />
 {:else if zoomable && !panning}
   <input
     class="zoom"
-    class:shaped={!!outlineOf(fv?.shape, fv?.radius)}
+    class:shaped
+    style:bottom={shaped ? `calc(${lift}px + 8%)` : `${lift}px`}
     data-guide="frame"
     type="range"
     min="100"
