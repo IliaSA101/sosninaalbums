@@ -4,6 +4,7 @@ import { dropPlan, type DropPlan } from './drop'
 import { dropGrid } from './dropgrid.svelte'
 import { COVER_ID } from '../geom/sheet'
 import { store } from '../core/store.svelte'
+import { movedText, type Moved } from '../core/strip'
 import type { BackdropScope, GridResult, Payload, Target } from '../core/types'
 
 // Фото на фон — действие редактора (editor/backdrop/backdropact.ts); подключает shell/boot/wire.ts.
@@ -59,6 +60,15 @@ async function addPhotos(plan: Extract<DropPlan, { op: 'add' }>) {
   if (ok && plan.go) store.goId(plan.spread)
 }
 
+// «Перенесено из …» — только по фото, которые реально встали на лист (как dropgrid): не поместившиеся остались на месте.
+function landedText(moved: Moved[], spread: string): string {
+  const landed = store.sheet(spread)?.photos
+  return movedText(
+    moved.filter((m) => landed?.includes(m.id)),
+    store.view,
+  )
+}
+
 // Бросок на место: ручной лист — dropGrid, обложка — PlacePhotos. Замена занятого места фото из ленты выгоняет прежнее фото в ленту.
 async function placePhotos(spread: string, place: string, ids: string[], fromSpread: boolean) {
   if (isGrid(spread)) return dropGrid(spread, place, ids, -1, fromSpread)
@@ -66,17 +76,24 @@ async function placePhotos(spread: string, place: string, ids: string[], fromSpr
   // Go считает в left и вытесненного хозяина места (замена фото из ленты), и фото, не нашедшие места.
   const replaced = !!owner && !store.used.has(ids[0])
   let left = 0
+  let named: string[] = []
   const op = async () => {
     const r = (await Api.PlacePhotos(spread, place, ids)) as unknown as GridResult
     left = r.left
+    named = r.named ?? []
     return r.view
   }
-  const ok = fromSpread ? await store.run(op()) : await store.fromStrip(ids, spread, op)
-  if (!ok) return
-  // Несколько фото разошлись по местам, как у fillPlaces: выделение в ленте больше не к чему.
-  if (ids.length > 1) store.selected.clear()
+  // «Перенесено из …» считаем до правки и отдаём в общий тост (как dropgrid): иначе stepToast перетрёт её.
+  const moved = fromSpread ? [] : store.movedFrom(ids, spread)
+  if (!(await store.run(op()))) return
+  // Из ленты выделение снимается; несколько фото разошлись по местам, как у fillPlaces: оно больше не к чему.
+  if (!fromSpread || ids.length > 1) store.selected.clear()
   const lost = left - (replaced ? 1 : 0)
   const short = lost > 0 ? `Не хватило мест: ${lost} фото остались ${fromSpread ? 'на прежних местах' : 'в ленте'}` : ''
-  if (replaced) store.undoToast(short ? `${short}. Прежнее фото вернулось в ленту` : 'Прежнее фото вернулось в ленту')
-  else if (short) store.notify(short)
+  const from = landedText(moved, spread)
+  store.stepToast(
+    replaced ? from : [from, short].filter(Boolean).join('. '),
+    replaced ? [short, 'Прежнее фото вернулось в ленту'].filter(Boolean) : [],
+    named,
+  )
 }

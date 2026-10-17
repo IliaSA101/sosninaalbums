@@ -13,15 +13,15 @@
   import { errText } from '../../base/words/errtext'
   import { scopeLabel, scopesFor } from '../backdrop/backdrop'
   import { setBackdrop } from '../backdrop/backdropact'
-  import { COVER_SCOPE_LABEL, layoutScopes } from '../cover/cover'
+  import { coverLabel, coverScopes } from '../cover/cover'
   import { isCover, isSheet } from '../../base/geom/sheet'
   import type { BackdropScope } from '../../base/core/types'
 
   const sheet = $derived(isSheet(store.view.settings))
   // На обложке (032) фон ставят в области её раскладки, названия — сторонки; в листе (031) — только «Весь лист».
   const cover = $derived(isCover(store.spread))
-  const scopes = $derived(cover ? layoutScopes(store.cover?.layout) : scopesFor(sheet))
-  const label = (sc: BackdropScope) => (cover ? COVER_SCOPE_LABEL[sc] : scopeLabel(sc, sheet))
+  const scopes = $derived(cover ? coverScopes(store.cover) : scopesFor(sheet))
+  const label = (sc: BackdropScope) => (cover ? coverLabel(store.cover, sc) : scopeLabel(sc, sheet))
 
   // Меню правого щелчка по фото (спека 008): своё, работает и в браузере. Пункты — photo/photomenu.ts.
   // Esc и щелчок мимо закрывают; окно держится внутри экрана.

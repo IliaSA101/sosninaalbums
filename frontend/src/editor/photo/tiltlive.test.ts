@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { containImage, placeImage } from '../../base/geom/frame'
 import type { SpreadView } from '../../base/core/types'
-import { liveImage, liveTilt, liveTiltBox, liveTransform, TiltSession } from './tiltlive'
+import { canvasTilt, liveImage, liveTilt, liveTiltBox, liveTransform, photoTilt, TiltSession } from './tiltlive'
 
 const cell = { x: 10, y: 20, w: 150, h: 100 }
 
@@ -114,5 +114,29 @@ describe('session', () => {
     const s = new TiltSession()
     s.settle(3)
     expect(s.base).toBeNull()
+  })
+})
+
+describe('canvas session', () => {
+  const frame = { s: 1.5, x: 0, y: 0 }
+  it('сессия шкалы отдельная от сессии карточки', () => {
+    photoTilt.end()
+    canvasTilt.end()
+    const a = photoTilt.keep('a', frame, 1)
+    const b = canvasTilt.keep('a', frame, 1)
+    expect(b.id).not.toBe(a.id)
+    photoTilt.end()
+    expect(canvasTilt.keep('a', frame, 1).id).toBe(b.id) // конец одной не рвёт другую
+    canvasTilt.end()
+  })
+  it('протяжка закрывает сессию: следующая открывает новую', () => {
+    canvasTilt.end()
+    const a = canvasTilt.keep('a', frame, 1)
+    canvasTilt.settle(2)
+    canvasTilt.end()
+    const b = canvasTilt.keep('a', { s: 1.5, x: 0, y: 0, r: 3 }, 2)
+    expect(b.id).not.toBe(a.id)
+    expect(b.base).toEqual({ s: 1.5, x: 0, y: 0, r: 3 })
+    canvasTilt.end()
   })
 })

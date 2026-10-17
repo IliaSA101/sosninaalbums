@@ -125,9 +125,9 @@ func backdropMerge(session string) string {
 // по области; был — меняется только фото (кадр сброшен, рамка, поворот и зеркало
 // остаются). Фоны другой формы (весь разворот ↔ страницы) снимаются.
 // Неизвестная область — errScope, неизвестный разворот — холостая правка.
-// Договор: область известна (ValidScope).
+// Договор: область известна (ValidBdScope).
 func (e *Editor) SetBackdrop(spreadID, scope string, ph model.PhotoInfo) (model.View, error) {
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return e.View(), model.ErrScope
 	}
 	return e.try("", func(p *model.Project) error { return backdrop.SetBackdrop(p, spreadID, scope, ph) })
@@ -137,7 +137,7 @@ func (e *Editor) SetBackdrop(spreadID, scope string, ph model.PhotoInfo) (model.
 // до поворота). Зажим — clampBackdrop. merge — сессия стрелок: серия — один шаг отмены.
 // Договор: область известна; ключ слияния — только у допустимой сессии (backdropMerge).
 func (e *Editor) SetBackdropBox(spreadID, scope string, x, y, w, h, rot float64, merge string) model.View {
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return e.View()
 	}
 	return e.apply(backdropMerge(merge), func(p *model.Project) { backdrop.SetBackdropBox(p, spreadID, scope, x, y, w, h, rot) })
@@ -146,7 +146,7 @@ func (e *Editor) SetBackdropBox(spreadID, scope string, x, y, w, h, rot float64,
 // SetBackdropFrame ставит кадр фото в рамке: s 1..4, x/y −1..1 (как SetFrame).
 // Договор: область известна; зажим кадра — в операции.
 func (e *Editor) SetBackdropFrame(spreadID, scope string, s, x, y float64) model.View {
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return e.View()
 	}
 	return e.change(func(p *model.Project) { backdrop.SetBackdropFrame(p, spreadID, scope, s, x, y) })
@@ -157,7 +157,7 @@ func (e *Editor) SetBackdropFrame(spreadID, scope string, s, x, y float64) model
 // один шаг отмены, расчёт от кадра её начала.
 // Договор: область известна, tilt — конечное число; ключ слияния — tiltMerge.
 func (e *Editor) SetBackdropAngle(spreadID, scope string, tilt float64, session string) model.View {
-	if !model.ValidScope(scope) || !allFinite(tilt) {
+	if !model.ValidBdScope(scope) || !allFinite(tilt) {
 		return e.View()
 	}
 	merge := tiltMerge("bdtilt:"+spreadID+":"+scope, session)
@@ -169,7 +169,7 @@ func (e *Editor) SetBackdropAngle(spreadID, scope string, tilt float64, session 
 // StraightenBackdrop — «Выпрямить по линии» для фона: (dx, dy) мм листа встаёт вдоль края рамки.
 // Договор: область известна, dx, dy — конечные числа.
 func (e *Editor) StraightenBackdrop(spreadID, scope string, dx, dy float64) model.View {
-	if !model.ValidScope(scope) || !allFinite(dx, dy) {
+	if !model.ValidBdScope(scope) || !allFinite(dx, dy) {
 		return e.View()
 	}
 	return e.change(func(p *model.Project) { backdrop.StraightenBackdrop(p, spreadID, scope, dx, dy) })
@@ -179,7 +179,7 @@ func (e *Editor) StraightenBackdrop(spreadID, scope string, dx, dy float64) mode
 // остаётся той же, только отражённой (X → −X / Y → −Y), как у SetFlip.
 // Договор: ось "h" или "v", область известна.
 func (e *Editor) FlipBackdrop(spreadID, scope, axis string) model.View {
-	if axis != "h" && axis != "v" || !model.ValidScope(scope) {
+	if axis != "h" && axis != "v" || !model.ValidBdScope(scope) {
 		return e.View()
 	}
 	return e.change(func(p *model.Project) { backdrop.FlipBackdrop(p, spreadID, scope, axis) })
@@ -189,7 +189,7 @@ func (e *Editor) FlipBackdrop(spreadID, scope, axis string) model.View {
 // merge — сессия ползунка: серия — один шаг отмены. Не число — холостая.
 // Договор: область известна, fade — конечное число; ключ слияния — backdropMerge.
 func (e *Editor) SetBackdropFade(spreadID, scope string, fade float64, merge string) model.View {
-	if !model.ValidScope(scope) || math.IsNaN(fade) || math.IsInf(fade, 0) {
+	if !model.ValidBdScope(scope) || math.IsNaN(fade) || math.IsInf(fade, 0) {
 		return e.View()
 	}
 	return e.apply(backdropMerge(merge), func(p *model.Project) { backdrop.SetBackdropFade(p, spreadID, scope, fade) })
@@ -198,7 +198,7 @@ func (e *Editor) SetBackdropFade(spreadID, scope string, fade float64, merge str
 // FitBackdrop — «По области»: рамка = область, поворот рамки и кадр сброшены, наклон фото и зеркало остаются.
 // Договор: область известна.
 func (e *Editor) FitBackdrop(spreadID, scope string) model.View {
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return e.View()
 	}
 	return e.change(func(p *model.Project) { backdrop.FitBackdrop(p, spreadID, scope) })
@@ -208,7 +208,7 @@ func (e *Editor) FitBackdrop(spreadID, scope string) model.View {
 // стоящее, уходит из Photos само (pruneRefs).
 // Договор: область известна.
 func (e *Editor) ClearBackdrop(spreadID, scope string) model.View {
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return e.View()
 	}
 	return e.change(func(p *model.Project) { backdrop.ClearBackdrop(p, spreadID, scope) })
@@ -240,9 +240,9 @@ func (e *Editor) ApplyPattern(spreadID, scope string, pt model.Pattern, color st
 // ApplyBackdrop — своё из библиотеки в галерее фонов (048): фото ph на фон области, как
 // SetBackdrop (ph.Lib — ключ, ph.ID = LibPhotoID), и узоры области снимаются тем же шагом.
 // Бросок фото и «Свой файл…» (SetBackdrop) узор не снимают.
-// Договор: область известна (ValidScope); ключ проверяет тело (ErrLibKey).
+// Договор: область известна (ValidBdScope); ключ проверяет тело (ErrLibKey).
 func (e *Editor) ApplyBackdrop(spreadID, scope string, ph model.PhotoInfo) (model.View, error) {
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return e.View(), model.ErrScope
 	}
 	return e.try("", func(p *model.Project) error { return backdrop.ApplyBackdrop(p, spreadID, scope, ph) })

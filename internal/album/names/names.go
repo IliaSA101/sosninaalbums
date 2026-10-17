@@ -2,7 +2,8 @@
 // списка имён по местам листа, общий стиль подписей листа. Тела правок над *model.Project;
 // обёртки Editor — ops_design.go ядра (аргументы там уже зажаты). Окно «Имена» (043): разбор
 // поля — parse.go (Read) и header.go (заголовки таблицы), кому какое имя — plan.go (Plan,
-// Apply), по столбцу «Файл» — match.go.
+// Apply), по столбцу «Файл» — match.go. Имя из названия файла при броске (060) — auto.go
+// (WithAuto, AutoFromFiles, ForgetFileNames).
 package names
 
 import (

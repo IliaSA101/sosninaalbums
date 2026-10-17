@@ -45,6 +45,7 @@
     border: 1.5px solid var(--accent);
     background: #fff;
     touch-action: none;
+    z-index: 2; /* выше ✥ и ползунка кадра в узкой рамке */
   }
   /* Область захвата шире видимой ручки. */
   .side::after,

@@ -41,6 +41,7 @@ method FillPlaces(arg1:Array<string>,arg2:string):Promise<APP.GridResult>
 method FitBackdrop(arg1:string,arg2:string):Promise<model.View>
 method FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method FlipSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method ForgetFileNames(arg1:Array<string>):Promise<model.View>
 method ForgetRecent(arg1:string):Promise<Array<prefs.RecentProject>>
 method FsferaPlan():Promise<fsfera.Plan>
 method GetState():Promise<APP.State>
@@ -204,6 +205,7 @@ type APP.DropResult
   out: boolean
   left: number
   small: boolean
+  named: string[]
 type APP.ExportOptions
   range: string
   quality: number
@@ -215,6 +217,7 @@ type APP.ExportOptions
 type APP.GridResult
   view: model.View
   left: number
+  named: string[]
 type APP.NamesFile
   text: string
   file: string
@@ -375,6 +378,9 @@ type model.CoverPreset
   name: string
   group: string
   spec: CoverSpec
+type model.CoverScope
+  scope: string
+  label: string
 type model.CoverSpec
   preset: string
   w?: number
@@ -398,6 +404,7 @@ type model.CoverView
   spineText: string
   zones: CoverZone[]
   drop: CoverZone[]
+  scopes: CoverScope[]
   safe: layout.Rect[]
   textMaxW: number
   guide: string

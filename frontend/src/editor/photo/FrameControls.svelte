@@ -1,34 +1,43 @@
 <script lang="ts">
-  import type { Frame, FrameView, Rect } from '../../base/core/types'
+  import type { Frame, FrameView, Rect, SpreadView } from '../../base/core/types'
   import { store, Api } from '../../base/core/store.svelte'
   import { panFrame, sinCosDeg, zoomFrame } from '../../base/geom/frame'
   import { outlineOf } from '../../base/geom/shape'
   import { framelive } from './framelive.svelte'
   import { canvas } from '../canvas/canvas.svelte'
   import { markDone } from '../places/placegesture'
+  import { tiltmode } from './tiltmode.svelte'
+  import TiltDial from './TiltDial.svelte'
 
   // Управление кадром на выделенной ячейке: ✥ (сдвиг кадра) и ползунок масштаба. Тело ячейки занято
   // переносом фото или места, поэтому кадр двигает только ✥. Правка уходит в Go при отпускании.
   // Лежит в CellOverlay (вместе с оболочкой `[data-cov]` в осях места), предпросмотр — через framelive.
+  // dial (059): включён режим шкалы — на месте ползунка масштаба встаёт шкала наклона.
   let {
     id,
+    spread,
     r,
     fv,
     frame,
     cur,
     movable,
     zoomable,
+    dial = false,
   }: {
     id: string
+    spread: SpreadView
     r: Rect // ячейка, мм разворота
     fv: FrameView | undefined
     frame: Frame // кадр из Go
     cur: Frame // кадр с учётом предпросмотра (для ползунка)
     movable: boolean
     zoomable: boolean
+    dial?: boolean
   } = $props()
 
   const panning = $derived(framelive.panning(id))
+  // ✥ прячется только на время протяжки: сдвига кадра или шкалы
+  const hideMove = $derived(panning || (dial && tiltmode.dialing))
 
   function startPan(e: PointerEvent) {
     if (e.button !== 0 || !fv) return
@@ -70,7 +79,8 @@
     }
     const esc = (ev: KeyboardEvent) => {
       if (ev.key !== 'Escape') return
-      ev.stopPropagation() // Esc отменяет только сдвиг: выделение ячейки остаётся
+      ev.stopPropagation() // Esc отменяет только сдвиг: выделение ячейки остаётся и режим шкалы тоже
+      ev.preventDefault()
       stop()
       framelive.clear()
     }
@@ -88,7 +98,7 @@
   }
 </script>
 
-{#if movable && !panning}
+{#if movable && !hideMove}
   <button
     class="handle"
     data-guide="frame"
@@ -101,7 +111,9 @@
     onclick={(e) => e.stopPropagation()}>✥</button
   >
 {/if}
-{#if zoomable && !panning}
+{#if dial && fv}
+  <TiltDial {id} {spread} {fv} {frame} shaped={!!outlineOf(fv.shape, fv.radius)} />
+{:else if zoomable && !panning}
   <input
     class="zoom"
     class:shaped={!!outlineOf(fv?.shape, fv?.radius)}

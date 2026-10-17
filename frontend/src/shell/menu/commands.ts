@@ -182,7 +182,7 @@ export const COMMANDS: Record<Command, Handler> = {
   // 048: окно «Фоны»; нет листа или функции на уровне — молчим, как серый пункт меню
   bgGallery: () => {
     const s = store.spread
-    if (s && prefs.can('decor')) decor.show('bg', s.id, defaultScope(s, store.cover?.layout))
+    if (s && prefs.can('decor')) decor.show('bg', s.id, defaultScope(s, store.cover))
   },
   // 048 Ф2: окно «Стикеры»; щелчок по плитке ставит стикер в центр страницы. Нет листа или функции на уровне — молчим
   addSticker: () => {

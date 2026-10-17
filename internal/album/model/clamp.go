@@ -472,9 +472,20 @@ func (p *Project) CheckTotals(before *Project) error {
 	return p.checkStickers(before)
 }
 
-func errTextBudget() error {
-	return fmt.Errorf("слишком много текста в проекте: не больше %d блоков и подписей и %d знаков", MaxTotalTexts, MaxTotalRunes)
+// ErrTextBudget — правка вышла за общий запас текстов (CheckTotals); errors.Is верно и для
+// errTextBudget(). По нему ядро повторяет бросок без автоимён (0.14 decisions 31).
+var ErrTextBudget = errors.New("слишком много текста в проекте")
+
+// textBudgetError — ErrTextBudget с пределами в тексте для пользователя.
+type textBudgetError struct{}
+
+func (textBudgetError) Error() string {
+	return fmt.Sprintf("слишком много текста в проекте: не больше %d блоков и подписей и %d знаков", MaxTotalTexts, MaxTotalRunes)
 }
+
+func (textBudgetError) Unwrap() error { return ErrTextBudget }
+
+func errTextBudget() error { return textBudgetError{} }
 
 func clampCaption(c *Caption, b *textBudget) *Caption {
 	if c == nil {
@@ -503,10 +514,11 @@ const (
 )
 
 // ClampBackdrop приводит фон области scope листа s к допустимому: неизвестное фото — фон
-// выбрасывается; W или H не число / ≤ 0 — рамка по области без поворота; иначе размер
-// 10 мм..3× области, поворот geom.NormDeg, центр рамки внутри области (X, Y сдвигаются):
-// так фон нельзя потерять за краем. Шаг 0.01 мм. Прозрачность 0..1, шаг 0.01. Кадр —
-// ClampFrame, у Frame.R четверть отбрасывается: остаётся наклон ±44,9 (045). Возвращает копию.
+// выбрасывается; W или H не число / ≤ 0 — рамка по области без поворота (у нулевой области —
+// дальше по пределам); иначе размер 10 мм..3× области (у корешка — от его ширины, если она
+// меньше 10, но не меньше MinSpine, до 3× большей стороны по обеим осям), поворот
+// geom.NormDeg, центр рамки внутри области (X, Y сдвигаются): так фон нельзя потерять за краем. Шаг 0.01 мм. Прозрачность 0..1, шаг 0.01. Кадр — ClampFrame,
+// у Frame.R четверть отбрасывается: остаётся наклон ±44,9 (045). Возвращает копию.
 func (p *Project) ClampBackdrop(s *Spread, b *Backdrop, scope string) *Backdrop {
 	if b == nil {
 		return nil
@@ -526,10 +538,19 @@ func (p *Project) ClampBackdrop(s *Spread, b *Backdrop, scope string) *Backdrop 
 	pos := func(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v > 0 }
 	if !pos(c.W) || !pos(c.H) {
 		c.X, c.Y, c.W, c.H, c.Rot = a.X, a.Y, a.W, a.H, 0
-		return &c
+		if pos(a.W) && pos(a.H) && (scope != ScopeSpine || a.W >= MinSpine) {
+			return &c
+		}
+		// Область нулевая (корешок 0 мм): рамку по ней поднимает нижний предел ниже — иначе
+		// следующий зажим снова сбросил бы её по области (decisions 31).
 	}
-	c.W = geom.Round2(geom.ClampF(c.W, minBackdrop, maxBackdropK*a.W))
-	c.H = geom.Round2(geom.ClampF(c.H, minBackdrop, maxBackdropK*a.H))
+	lo, mw, mh := minBackdrop, maxBackdropK*a.W, maxBackdropK*a.H
+	if scope == ScopeSpine { // корешок — узкая полоса (061): «Поворот» 90° не сжимает рамку,
+		mw = maxBackdropK * max(a.W, a.H)        // а рамка по области (корешок 6 мм) уже допустима;
+		mh, lo = mw, max(min(lo, a.W), MinSpine) // не ниже MinSpine: нулевая рамка не зажата повторно (decisions 31)
+	}
+	c.W = geom.Round2(geom.ClampF(c.W, lo, mw))
+	c.H = geom.Round2(geom.ClampF(c.H, lo, mh))
 	c.Rot = geom.NormDeg(c.Rot)
 	// Дикие X, Y зажимаем заранее: иначе сдвиг центра терял бы точность.
 	lim := 10 * (a.W + a.H)
@@ -540,16 +561,4 @@ func (p *Project) ClampBackdrop(s *Spread, b *Backdrop, scope string) *Backdrop 
 	c.Y += geom.ClampF(cy, a.Y, a.Y+a.H) - cy
 	c.X, c.Y = geom.Round2(c.X), geom.Round2(c.Y)
 	return &c
-}
-
-// clampBackdrops — фоны разворота при чтении файла: каждый зажат по своей области,
-// при bgPhoto и bgPhotoL/R остаётся bgPhoto.
-func (p *Project) clampBackdrops(s *Spread) {
-	for _, scope := range bdScopes {
-		slot := s.Slot(scope)
-		*slot = p.ClampBackdrop(s, *slot, scope)
-	}
-	if s.BgPhoto != nil {
-		s.BgPhotoL, s.BgPhotoR = nil, nil
-	}
 }

@@ -11,6 +11,8 @@
   import { miniContext, miniItems, miniPlace, passThrough, visibleArea, sameView, MINI_H, type MiniId, type MiniView } from './minipanel'
   import { canvas } from '../canvas/canvas.svelte'
   import { row } from '../spread/spreadrow.svelte'
+  import { tiltmode } from '../photo/tiltmode.svelte'
+  import { isTextField } from '../../shell/menu/keys'
   import Icon from '../../base/ui/Icon.svelte'
   import LayerMenu from './LayerMenu.svelte'
 
@@ -28,10 +30,17 @@
   }: { spread: SpreadView; box: Rect; width: number; height: number; ppm: number; avoid?: { x: number; y: number } } = $props()
 
   // Тексты и стикеры группы мини-панель считает вместе («Удалить выделенное (N)»).
-  const items = $derived(
-    miniItems(miniContext(spread, placesel.selected, placesel.texts.length + placesel.selectedStickers.length), prefs.can),
-  )
   const photo = $derived(placesel.selected.find((i) => i.photo)?.photo ?? '')
+  const items = $derived(
+    miniItems(
+      {
+        ...miniContext(spread, placesel.selected, placesel.texts.length + placesel.selectedStickers.length),
+        tilt: tiltmode.on,
+        missing: store.missing.includes(photo),
+      },
+      prefs.can,
+    ),
+  )
 
   let w = $state(0) // ширина полосы, px (замер)
   let el = $state<HTMLElement>()
@@ -61,6 +70,8 @@
         return placesel.flip('v')
       case 'turn':
         return placesel.turn(1)
+      case 'tilt':
+        return tiltmode.toggle()
       case 'fit':
         return placesel.setFit(!placesel.allContain)
       case 'fitPhoto':
@@ -80,6 +91,16 @@
     }
   }
 
+  // Esc на document в фазе всплытия: раньше хоткея «снять выделение» (он на window), но позже всех, кто держит Esc
+  // в захвате на window (меню фото, «Слой ▾», палитра, ✥, шкала, окна): их stopPropagation сюда не пускает, и одно
+  // нажатие — одно действие (059 п.10). Выход из режима шкалы, выделение остаётся. Панель живёт, пока выделено
+  // фото, поэтому слушает и при мелкой ячейке, где шкалы на холсте нет.
+  function esc(e: KeyboardEvent) {
+    if (isTextField(e.target as Element | null) || !tiltmode.key(e)) return // в поле ввода Esc — его (отмена правки)
+    e.stopPropagation()
+    e.preventDefault()
+  }
+
   // ⇄ — drag того же вида, что тело фото в «Авто»: все цели броска работают без изменений.
   function swapDown(e: PointerEvent) {
     tip.hide()
@@ -87,6 +108,7 @@
   }
 </script>
 
+<svelte:document onkeydown={esc} />
 <svelte:window onkeydown={mods} onkeyup={mods} onpointermove={mods} onblur={() => (through = false)} />
 
 <!-- Клики полосы не должны снимать выделение: клавиатурных аналогов у самой полосы нет, кнопки внутри фокусируются сами -->
@@ -120,6 +142,7 @@
         class:swap={it.id === 'swap'}
         aria-label={it.label}
         aria-pressed={it.on === undefined ? undefined : it.on}
+        {...it.id === 'tilt' ? { 'data-guide': 'tilt-mini' } : {}}
         use:tipped={{ text: it.label }}
         onpointerdown={it.id === 'swap' ? swapDown : undefined}
         onclick={() => run(it.id)}

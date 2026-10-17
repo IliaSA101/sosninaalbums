@@ -171,6 +171,32 @@ func TestRenderPlate(t *testing.T) {
 	wantAt(t, "цвет страницы", renderBd(t, s, 127), 127, 50, 25, bdGray)
 }
 
+// Фото корешка (061, OverPlates) лежит поверх плашки, обычный фон — под ней; место — поверх
+// всего. Несколько фонов сразу: порядок в списке слоям не мешает.
+func TestRenderSpineOverPlate(t *testing.T) {
+	c := flipCols
+	area := layout.Rect{W: 200, H: 100}
+	spine := layout.Rect{X: 90, W: 20, H: 100}
+	q := quadsBd(t)
+	solid := quadrants(t, testkit.TempDir(t), [4]color.RGBA{bdCream, bdCream, bdCream, bdCream})
+	blue := quadrants(t, testkit.TempDir(t), [4]color.RGBA{c.blu, c.blu, c.blu, c.blu})
+	sp := Backdrop{Area: spine, Box: spine, Img: layout.Rect{W: 20, H: 100}, Path: solid, OverPlates: true}
+	bd := Backdrop{Area: area, Box: area, Img: layout.Rect{Y: -50, W: 200, H: 200}, Path: q}
+	plate := Plate{Rect: layout.Rect{X: 80, W: 40, H: 100}, Color: color.RGBA{10, 20, 30, 255}}
+	cell := layout.Rect{X: 95, Y: 40, W: 10, H: 10}
+	s := Spread{Bg: [2]color.RGBA{bdGray, bdGray}, Backdrops: []Backdrop{sp, bd}, Plates: []Plate{plate},
+		Photos: []Photo{coverPhoto(cell, 1, blue)}}
+	img := renderBd(t, s, 127)
+	wantAt(t, "фото корешка над плашкой", img, 127, 100, 20, bdCream)
+	wantAt(t, "плашка вне фото корешка", img, 127, 85, 20, plate.Color)
+	wantAt(t, "фон под плашкой не виден", img, 127, 115, 80, plate.Color)
+	wantAt(t, "фон вне плашки", img, 127, 50, 25, c.red)
+	wantAt(t, "место над фото корешка", img, 127, 100, 45, c.blu)
+	// Без флага тот же фон уходит под плашку, как раньше.
+	s.Backdrops[0].OverPlates = false
+	wantAt(t, "фон без флага под плашкой", renderBd(t, s, 127), 127, 100, 20, plate.Color)
+}
+
 // Повёрнутый фон с кадром из .salbum, не совпадающим с файлом (узкая полоса 4000×10 при
 // рамке 100×2500 мм): окно оригинала нельзя растягивать до размера печати (~140 МБ), иначе
 // подделанный файл просит гигабайты. Заодно ничего не пропадает: полоса остаётся на холсте.

@@ -68,7 +68,7 @@ type Spread struct {
 	Bg        [2]color.RGBA
 	Patterns  []PatternDraw // узоры (048): поверх цвета страниц, под фото фона
 	Backdrops []Backdrop    // фото на фоне: поверх цвета страниц и узоров, под местами
-	Plates    []Plate       // плашки: поверх фонов, под местами и текстами
+	Plates    []Plate       // плашки: поверх фонов (кроме OverPlates), под местами и текстами
 	Photos    []Photo
 	// Stickers — свои стикеры (048): Cell = Img = рамка, Rot — вокруг её центра; Fade ≥ 1 не рисуется.
 	Stickers []Photo

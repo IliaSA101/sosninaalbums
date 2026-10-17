@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"math"
 	"os"
@@ -45,6 +46,34 @@ func TestAppPlacePhotosUsesRefs(t *testing.T) {
 	}
 	if r.View.EmptyPlaces != 0 || !r.View.Spreads[0].Grid {
 		t.Fatalf("пустых мест %d", r.View.EmptyPlaces)
+	}
+}
+
+// 060: named в JSON всегда список — у PlacePhotos, FillPlaces и правок сетки без броска, и при
+// ошибке: UI не проверяет на null.
+func TestAppGridResultNamed(t *testing.T) {
+	a := gridApp(t)
+	js := func(name string, r GridResult) {
+		t.Helper()
+		data, err := json.Marshal(r)
+		if err != nil || !bytes.Contains(data, []byte(`"named":[]`)) {
+			t.Errorf("%s: %v, named не []", name, err)
+		}
+	}
+	r, err := a.PlacePhotos("s1", "00000000000b", []string{"b"})
+	if err != nil || len(r.Named) != 0 {
+		t.Fatalf("PlacePhotos: %v, named %v", err, r.Named) // фото из альбома имени не берёт
+	}
+	js("PlacePhotos", r)
+	js("FillPlaces", a.FillPlaces([]string{"zz"}, "s1"))
+	r, err = a.ApplyGrid("s1", "left", "spread", []model.Box{{W: 0.5, H: 0.5}})
+	if err == nil {
+		t.Fatal("ApplyGrid: ждали отказ")
+	}
+	js("ApplyGrid:отказ", r)
+	js("пустой", GridResult{})
+	if data, _ := json.Marshal(GridResult{Named: []string{"x"}}); !bytes.Contains(data, []byte(`"named":["x"]`)) {
+		t.Fatalf("named потерян: %s", data)
 	}
 }
 

@@ -7,7 +7,7 @@ import type { Box } from './sheet'
 export type Family = 'dense' | 'hero' | 'air' | 'bleed' | 'strip' | 'figure'
 
 // Тип — прямо из биндинга (key, rects, family, twin, formName), полей не дублируем.
-// formName: «Лента», «Лесенка»…, пусто (мозаика) — без названия; twin: −1 — своя картинка.
+// formName: «Лента», «Лесенка», «Плотно»… — у каждой плитки; twin: −1 — своя картинка.
 // convertValues — служебный метод класса биндинга, в данных его нет.
 export type Choice = Omit<model.Choice, 'convertValues'>
 
@@ -44,6 +44,7 @@ export type LayoutScope = 'spread' | 'left' | 'right'
 export interface GridResult {
   view: View
   left: number
+  named: string[] // ID фото, получивших имя из названия файла этим шагом (060); Go шлёт всегда
 }
 
 // Итог броска фото на ручной разворот (042, Api.DropPhotos). ask — правки не было: нужен вопрос и второй вызов с rest.
@@ -57,6 +58,7 @@ export interface DropResult {
   out: boolean // прежнее фото целевого места ушло в ленту (замена)
   left: number // не встало: «Не добавлять» или обложка
   small: boolean // место плитки мельче 1/10 меньшей стороны страницы
+  named: string[] // ID фото, получивших имя из названия файла этим шагом (060)
 }
 
 // Куда ставить сетку: разворот или его страница.

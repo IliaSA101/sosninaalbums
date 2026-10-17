@@ -11,7 +11,7 @@
 // Карта: project.go (Project, Spread, Settings, PhotoRef, Normalize, KeepLayouts, тип
 // изделия), places.go (Place, сетка, мост к internal/geom), backdrop.go (Backdrop), decor.go
 // (узор фона Pattern, его слоты и зажим, ключ своего из библиотеки 048),
-// text.go (кадр, рамки текстов, ширина «по тексту», кегль подписи, PhotoRef.Copy; имя на фото 030, 043: PhotoRef.Name, PersonFromFile и вольное PersonFromFileLoose, NameView), order.go (стек
+// text.go (кадр, рамки текстов, ширина «по тексту», кегль подписи, PhotoRef.Copy; имя на фото 030, 043: PhotoRef.Name, PersonFromFile и вольное PersonFromFileLoose, NameView), looksname.go (LooksLikeName — имя из названия файла при броске 060 и стоп-список), order.go (стек
 // слоёв), marks.go (типы отметок), viewtypes.go (View, выбор сеток, PathPair, план окна «Имена» 043),
 // templates.go (шаблоны сеток), limits.go (пределы и ошибки; параллельный счёт раскладок), clamp.go (зажимы сетки и оформления, CheckTotals), fields.go (поля подписей 030:
 // Vars — поля шапки листа и VarsOf, Person, SheetCaps, их зажим, Expand), cover.go (обложка 032: Cover, CoverSpec,

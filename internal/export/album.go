@@ -142,13 +142,15 @@ func textDraw(t model.TextView) render.TextDraw {
 	return render.TextDraw{X: t.X, Y: t.Y, Rot: t.Rot, Box: text.Box{W: t.W, H: t.H, Lines: lines}, Style: t.Style, Z: t.Z}
 }
 
-// backdrops — фоны разворота для экспорта: рамка, область, фото в осях рамки и его наклон из View.
+// backdrops — фоны разворота для экспорта: рамка, область, фото в осях рамки и его наклон из View;
+// фото корешка обложки ложится поверх плашки (061).
 func backdrops(p *model.Project, s model.SpreadView) []render.Backdrop {
 	var out []render.Backdrop
 	for _, b := range s.Backdrops {
 		out = append(out, render.Backdrop{
 			Area: b.Area, Box: layout.Rect{X: b.Box.X, Y: b.Box.Y, W: b.Box.W, H: b.Box.H}, Rot: b.Box.Rot,
 			ImgRot: b.Frame.R, Img: b.Img, FlipH: b.FlipH, FlipV: b.FlipV, Path: p.Photos[b.Photo].Path, Fade: b.Fade,
+			OverPlates: b.Scope == model.ScopeSpine, // фото корешка — над плашкой (061)
 		})
 	}
 	return out

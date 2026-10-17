@@ -3,7 +3,7 @@
   import type { PatternSpec, PatternView, SpreadView } from '../../base/core/types'
   import { isCover } from '../../base/geom/sheet'
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
-  import { COVER_SCOPE_LABEL } from '../cover/cover'
+  import { coverLabels } from '../cover/cover'
   import { SCOPE_LABEL } from '../backdrop/backdrop'
   import { decor } from '../../panels/decor/decor.svelte'
   import { presetOfView } from '../../panels/decor/decor'
@@ -31,7 +31,7 @@
   let { sp }: { sp: SpreadView } = $props()
 
   const list = $derived(sp.patterns ?? [])
-  const labels = $derived(isCover(sp) ? COVER_SCOPE_LABEL : SCOPE_LABEL)
+  const labels = $derived(isCover(sp) ? coverLabels(store.cover) : SCOPE_LABEL)
   const dpr = $derived(globalThis.devicePixelRatio || 1)
 
   const set = (p: PatternView, patch: Partial<PatternSpec>, merge = '') =>

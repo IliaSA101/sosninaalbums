@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
@@ -93,19 +94,64 @@ func TestExtra(t *testing.T) {
 		t.Fatal(err)
 	}
 	written := []string{"00.jpg", "01.jpg"}
-	if n, first := Extra(dir, written); n != 0 || first != "" {
-		t.Fatalf("только свои и служебные: %d %q", n, first)
-	}
+	extraSettled(t, "только свои и служебные", dir, written, 0, "")
 	put("notes.txt")
 	put("99.jpg") // номер без метки — чужой
 	put("Обложка.psd")
 	put("05.jpg.123.tmp")
 	put("00.jpg.7.tmp")
-	if n, first := Extra(dir, written); n != 5 || first != "00.jpg.7.tmp" {
-		t.Fatalf("посторонние: %d %q", n, first)
-	}
+	extraSettled(t, "посторонние", dir, written, 5, "00.jpg.7.tmp")
 	if n, first := Extra(filepath.Join(dir, "нет"), nil); n != 0 || first != "" {
 		t.Fatalf("нет папки: %d %q", n, first)
+	}
+}
+
+// TestExtraTransient — чужой файл, который вскоре исчезает сам (как копия антивируса), Extra в
+// этот миг считает, а extraSettled пережидает.
+func TestExtraTransient(t *testing.T) {
+	dir := testkit.TempDir(t)
+	tmp := filepath.Join(dir, "02.JPG.tmp")
+	if err := os.WriteFile(tmp, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if n, first := Extra(dir, nil); n != 1 || first != "02.JPG.tmp" {
+		t.Fatalf("чужой временный: %d %q", n, first)
+	}
+	done := make(chan struct{})
+	time.AfterFunc(100*time.Millisecond, func() {
+		defer close(done)
+		if err := os.Remove(tmp); err != nil {
+			t.Error(err)
+		}
+	})
+	extraSettled(t, "после чужого временного", dir, nil, 0, "")
+	<-done
+}
+
+// extraSettled — Extra с ожиданием до порога: антивирус на миг кладёт рядом с только что
+// записанным JPEG свою копию (02.JPG.tmp на check 0.13.1), и Extra честно считает её
+// посторонней. Чужой файл уходит сам — ждём ожидаемый ответ; неверный Extra не дождётся его
+// и упадёт, как раньше. Правило Extra для пользователя то же.
+func extraSettled(t *testing.T, what, dir string, written []string, wantN int, wantFirst string) {
+	t.Helper()
+	deadline := time.Now().Add(testkit.Limit(2 * time.Second))
+	for logged := false; ; logged = true {
+		n, first := Extra(dir, written)
+		if n == wantN && first == wantFirst {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: %d %q, ждали %d %q", what, n, first, wantN, wantFirst)
+		}
+		if !logged {
+			ents, _ := os.ReadDir(dir)
+			names := make([]string, len(ents))
+			for i, e := range ents {
+				names[i] = e.Name()
+			}
+			t.Logf("%s: %d %q, ждём (в папке %q)", what, n, first, names)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

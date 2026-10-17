@@ -26,7 +26,7 @@ type Choice struct {
 	// "" — не размечено.
 	Family string `json:"family"`
 	Twin   int    `json:"twin"` // индекс более раннего с тем же видом в этом ряду; −1 — нет
-	// FormName — название формы для подсказки плитки («Лента», «Лесенка»…); "" у мозаики (051).
+	// FormName — название формы для подписи плитки («Лента», «Лесенка», «Плотно»…); непусто у каждой.
 	FormName string `json:"formName"`
 }
 
@@ -140,6 +140,8 @@ const (
 	ScopeLeft   = "left"
 	ScopeRight  = "right"
 	ScopeSpread = "spread"
+	// ScopeSpine — область фото корешка обложки (061): только фон-фото, у сетки и узоров её нет.
+	ScopeSpine = "spine"
 	// Области шаблона: доли страницы или разворота.
 	TplPage   = "page"
 	TplSpread = "spread"
@@ -320,7 +322,7 @@ type BackdropBox struct {
 // BackdropView — фото на фоне для интерфейса и экспорта: Img — фото целиком в осях
 // рамки (от её левого верхнего угла до поворота); зеркало внутри Img.
 type BackdropView struct {
-	Scope string      `json:"scope"` // spread | left | right
+	Scope string      `json:"scope"` // spread | left | right | spine (корешок обложки, 061)
 	Photo string      `json:"photo"`
 	Area  layout.Rect `json:"area"` // область, мм разворота
 	Box   BackdropBox `json:"box"`

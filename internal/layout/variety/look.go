@@ -45,14 +45,6 @@ func FamilyOf(f forms.Form) Family {
 	return Dense
 }
 
-// FormName — подпись формы для подсказки плитки; у мозаики пусто: «Плотно» — это и так весь ряд.
-func FormName(f forms.Form) string {
-	if f == forms.Mosaic {
-		return ""
-	}
-	return forms.Name(f)
-}
-
 const (
 	// lookQuant — квант вида в долях высоты страницы: меньше глаз не различает.
 	lookQuant = 0.03

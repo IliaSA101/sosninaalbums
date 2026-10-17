@@ -414,7 +414,7 @@ func TestStickerPhotoRefs(t *testing.T) {
 	if v := e.View(); !slices.Equal(v.BackdropUsed, []string{id}) {
 		t.Fatalf("BackdropUsed %v", v.BackdropUsed)
 	}
-	v, left := e.FillPlaces([]model.PhotoInfo{own(keyA, 400, 200).Photo, edtest.Photo("x")}, "s1")
+	v, left, _ := e.FillPlaces([]model.PhotoInfo{own(keyA, 400, 200).Photo, edtest.Photo("x")}, "s1")
 	if left != 0 || slices.Contains(edtest.PhotosOf(e, 0), id) || !slices.Contains(edtest.PhotosOf(e, 0), "x") {
 		t.Fatalf("«Заполнить пустые»: %v, осталось %d", edtest.PhotosOf(e, 0), left)
 	}

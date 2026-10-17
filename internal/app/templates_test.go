@@ -446,7 +446,7 @@ func TestAppDropPhotos(t *testing.T) {
 		if err := json.Unmarshal(data, &m); err != nil {
 			t.Fatal(err)
 		}
-		return fmt.Sprint(slices.Sorted(maps.Keys(m)), " fresh=", m["fresh"])
+		return fmt.Sprint(slices.Sorted(maps.Keys(m)), " fresh=", m["fresh"], " named=", m["named"])
 	}
 	r, err := a.DropPhotos("s1", "", []string{"b", "c", "d", "zz"}, math.NaN(), "что-то")
 	if err != nil || !r.Ask || r.Fit != 1 || r.Total != 3 || r.View.Rev != rev || len(r.View.Spreads) != 2 {
@@ -455,7 +455,7 @@ func TestAppDropPhotos(t *testing.T) {
 	if views != 0 || a.saveTimer != nil { // вопрос — не правка: ни рассылки вида, ни автосохранения
 		t.Fatalf("вопрос разослал вид (%d) или завёл автосохранение", views)
 	}
-	if got := keys(r); got != "[ask fit fresh grown left out small total view] fresh=[]" {
+	if got := keys(r); got != "[ask fit fresh grown left named out small total view] fresh=[] named=[]" {
 		t.Fatalf("поля JSON: %s", got)
 	}
 	r, err = a.DropPhotos("s1", "", []string{"b", "c", "d"}, 0.25, "add")

@@ -82,7 +82,7 @@ func TestLoadNewKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	first, _ := os.ReadFile(path)
-	if f := fileJSON(t, path); f.Version != model.FormatVersion || model.FormatVersion != 9 {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || model.FormatVersion != 10 {
 		t.Fatalf("версия в файле %d", f.Version)
 	}
 	q, err := salbum.Load(path)

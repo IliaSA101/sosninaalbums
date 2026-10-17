@@ -115,7 +115,7 @@
 {/if}
 {#if prefs.can('tilt')}
   <TiltRow
-    tilt={fv?.tilt ?? 0}
+    tilt={framelive.angleOf(id) ?? fv?.tilt ?? 0}
     onlive={tiltLive}
     oncommit={tiltCommit}
     onend={() => framelive.clear()}

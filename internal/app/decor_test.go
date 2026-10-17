@@ -206,6 +206,35 @@ func TestApplyBackgroundOwn(t *testing.T) {
 	}
 }
 
+// Корешок обложки (061) в галерее фонов: своё фото и «Свой файл…» ложатся на корешок, узор
+// программы — нет (ошибка области без шага); на развороте корешка нет.
+func TestApplyBackgroundSpine(t *testing.T) {
+	a := decorApp(t)
+	dir := testkit.TempDir(t)
+	ids := importBg(t, a, testkit.JPEG(t, dir, "свой.jpg", 50, 50))
+	if _, err := a.CreateCover("", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SetCoverLayout("both"); err != nil {
+		t.Fatal(err)
+	}
+	rev := a.editor().View().Rev
+	if v, err := a.ApplyBackground(model.CoverID, model.ScopeSpine, "sa:confetti"); !errors.Is(err, errBackdropScope) || v.Rev != rev {
+		t.Fatalf("узор на корешок: %v rev %d→%d", err, rev, v.Rev)
+	}
+	if v, err := a.ApplyBackground("s1", model.ScopeSpine, ids[0]); !errors.Is(err, model.ErrScope) || v.Rev != rev {
+		t.Fatalf("корешок у разворота: %v rev %d→%d", err, rev, v.Rev)
+	}
+	v, err := a.ApplyBackground(model.CoverID, model.ScopeSpine, ids[0])
+	if bs := v.Cover.Sheet.Backdrops; err != nil || len(bs) != 1 || bs[0].Scope != model.ScopeSpine || bs[0].Lib != ids[0] {
+		t.Fatalf("своё на корешок: %v %+v", err, bs)
+	}
+	v, err = a.setBackdropFile(model.CoverID, model.ScopeSpine, testkit.JPEG(t, dir, "файл.jpg", 40, 60))
+	if bs := v.Cover.Sheet.Backdrops; err != nil || len(bs) != 1 || bs[0].Scope != model.ScopeSpine || bs[0].Lib != "" {
+		t.Fatalf("«Свой файл…» на корешок: %v %+v", err, bs)
+	}
+}
+
 // Альбом с чужого компьютера: своего нет в библиотеке — путь пуст; загрузили тот же файл —
 // нашлось само, одним шагом отмены. Ничего не нашлось — шага нет.
 func TestImportDecorRelinks(t *testing.T) {

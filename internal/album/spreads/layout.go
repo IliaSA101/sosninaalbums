@@ -5,6 +5,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 // SetLayout — операция над проектом.
@@ -13,10 +14,27 @@ func SetLayout(p *model.Project, spreadID, key string) {
 	if s == nil {
 		return
 	}
-	if _, ok := layout.Build(key, p.Aspects(s.Photos), p.Params()); ok {
+	asp, prm := p.Aspects(s.Photos), p.Params()
+	if r, ok := layout.Build(key, asp, prm); ok && foldAllowed(r, s, asp, prm) {
 		p.Unfreeze(s)
 		p.SetLayout(s, key)
 	}
+}
+
+// foldAllowed — ключ из рядов подборки или уже стоящий берётся как есть: ряд Layouts корешок
+// только штрафует, и выбранное там должно ставиться. Ключ не из ряда (прямой вызов, decisions
+// 0.13.1 №23) — только если фото на корешке допустимы, как у генератора форм (forms.SpineOK).
+func foldAllowed(r layout.Result, s *model.Spread, asp []float64, prm layout.Params) bool {
+	if forms.SpineOK(r, prm) || r.Key == s.Layout {
+		return true
+	}
+	if _, i, _ := model.AutoRow(asp, prm, r.Key); i >= 0 {
+		return true
+	}
+	if rr, _ := layout.CachedRearranged(asp, prm, model.VariantLimit); model.IndexOf(rr, r.Key) >= 0 {
+		return true
+	}
+	return model.IndexOf(model.ExtraRow(asp, prm), r.Key) >= 0
 }
 
 // StepLayout — операция над проектом.

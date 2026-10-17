@@ -168,7 +168,7 @@ func backdropViews(p *model.Project, s *model.Spread) []model.BackdropView {
 // поэтому холст и экспорт кладут узор в одно место. Цвета и масштаб — как их нарисует gen.
 func patternViews(p *model.Project, s *model.Spread) []model.PatternView {
 	out := []model.PatternView{}
-	for _, scope := range model.BdScopes() {
+	for _, scope := range model.PatScopes() {
 		pt := *s.PatSlot(scope)
 		if pt == nil {
 			continue

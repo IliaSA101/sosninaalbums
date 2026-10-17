@@ -202,6 +202,7 @@ export namespace app {
 	    out: boolean;
 	    left: number;
 	    small: boolean;
+	    named: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new DropResult(source);
@@ -218,6 +219,7 @@ export namespace app {
 	        this.out = source["out"];
 	        this.left = source["left"];
 	        this.small = source["small"];
+	        this.named = source["named"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -265,6 +267,7 @@ export namespace app {
 	export class GridResult {
 	    view: model.View;
 	    left: number;
+	    named: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new GridResult(source);
@@ -274,6 +277,7 @@ export namespace app {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.view = this.convertValues(source["view"], model.View);
 	        this.left = source["left"];
+	        this.named = source["named"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1080,6 +1084,20 @@ export namespace model {
 		    return a;
 		}
 	}
+	export class CoverScope {
+	    scope: string;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CoverScope(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
+	        this.label = source["label"];
+	    }
+	}
 	
 	export class CoverZone {
 	    kind: string;
@@ -1735,6 +1753,7 @@ export namespace model {
 	    spineText: string;
 	    zones: CoverZone[];
 	    drop: CoverZone[];
+	    scopes: CoverScope[];
 	    safe: layout.Rect[];
 	    textMaxW: number;
 	    guide: string;
@@ -1761,6 +1780,7 @@ export namespace model {
 	        this.spineText = source["spineText"];
 	        this.zones = this.convertValues(source["zones"], CoverZone);
 	        this.drop = this.convertValues(source["drop"], CoverZone);
+	        this.scopes = this.convertValues(source["scopes"], CoverScope);
 	        this.safe = this.convertValues(source["safe"], layout.Rect);
 	        this.textMaxW = source["textMaxW"];
 	        this.guide = source["guide"];

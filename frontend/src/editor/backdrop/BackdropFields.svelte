@@ -2,7 +2,8 @@
   import type { BackdropView } from '../../base/core/types'
   import { bgmode } from './bgmode.svelte'
   import { fitBackdrop, flipBackdrop } from './backdropact'
-  import { normDeg, rotateAbout } from '../../base/geom/textbox'
+  import { turnBackdropBox } from './backdrop'
+  import { normDeg } from '../../base/geom/textbox'
   import { MAX_SCALE, MIN_SCALE, zoomFrame } from '../../base/geom/frame'
   import { store } from '../../base/core/store.svelte'
   import { backdropTilt, liveTiltBox } from '../photo/tiltlive'
@@ -42,7 +43,7 @@
     }
     const deg = normDeg(n)
     el.value = String(deg)
-    if (deg !== b.box.rot) bgmode.setBox(rotateAbout(b.box, deg))
+    if (deg !== b.box.rot) bgmode.setBox(turnBackdropBox(b.box, deg, b.scope === 'spine'))
   }
   // Наклон фото внутри рамки (045 → 057): предпросмотр — тот же live, что у масштаба; рамка стоит на месте, а наклон
   // держит приближение (расчёт от кадра начала сессии, как в Go). Телом, а не `=> (x = …)`: иначе Svelte

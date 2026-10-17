@@ -3,15 +3,16 @@
   import { store } from '../../base/core/store.svelte'
   import { coverSides } from '../cover/cover'
   import { bgmode } from './bgmode.svelte'
-  import { backdropAt, modeClick, type BgLive } from './bgmode'
+  import { backdropAt, modeClick, roomForSlider, type BgLive } from './bgmode'
   import { bdAngle, bdLines, moveFrame, panBox, resizeSide, scaleFrame, type Side } from '../../base/geom/bdbox'
-  import { center, cursorDeg, rotateAbout, toSpread, type Corner, type Pt } from '../../base/geom/textbox'
+  import { center, cursorDeg, toSpread, type Corner, type Pt } from '../../base/geom/textbox'
   import { hasSlack, zoomFrame } from '../../base/geom/frame'
   import { snapThreshold } from '../../base/geom/snap'
   import { canvas } from '../canvas/canvas.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { axisLock } from '../../base/geom/gridedit'
+  import { turnBackdropBox } from './backdrop'
   import BackdropHandles from './BackdropHandles.svelte'
 
   // Режим фона (спека 009, design-backdrop §6): над приглушённым разворотом — область пунктиром,
@@ -29,6 +30,8 @@
   // ✥ — только когда фото больше рамки: иначе двигать нечего.
   const movable = $derived(!!b && hasSlack({ x: 0, y: 0, w: b.box.w, h: b.box.h }, b.img, b.frame.r ?? 0))
   let panning = $state(false)
+  // Ползунок — только в рамке не мельче 48 px (как у фото в ячейке); иначе масштаб в карточке справа.
+  const slider = $derived(!!t && width > 0 && roomForSlider(t, width / sw))
   // ⟳ над верхней стороной (30 px); вышел бы за разворот (рамка по области) — прячем внутрь рамки.
   const rotIn = $derived.by(() => {
     if (!t || !(width > 0)) return false
@@ -119,11 +122,15 @@
     if (!root) return
     const r = root.getBoundingClientRect()
     const k = sw / r.width
+    const spine = base.scope === 'spine' // у корешка w и h меняются местами при смене ориентации (решение 33)
     const c = center(base.box)
     const grab = cursorDeg(c, { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k })
     gesture(
       e,
-      (_dx, _dy, ev, p) => ({ box: rotateAbout(base.box, bdAngle(c, p, grab, base.box.rot, ev.shiftKey, ev.altKey)), frame: base.frame }),
+      (_dx, _dy, ev, p) => ({
+        box: turnBackdropBox(base.box, bdAngle(c, p, grab, base.box.rot, ev.shiftKey, ev.altKey), spine),
+        frame: base.frame,
+      }),
       commitBox,
     )
   }
@@ -196,12 +203,12 @@
         onside={startSide}
         oncorner={startCorner}
         onrotate={startRotate}
-        onzero={() => b && bgmode.setBox(rotateAbout(b.box, 0))}
+        onzero={() => b && bgmode.setBox(turnBackdropBox(b.box, 0, b.scope === 'spine'))}
       />
       {#if movable && !panning}
         <button class="pan" title="Сдвинуть фото в рамке" aria-label="Сдвинуть фото в рамке" onpointerdown={startPan}>✥</button>
       {/if}
-      {#if !panning}
+      {#if !panning && slider}
         <input
           class="zoom"
           type="range"
@@ -275,6 +282,7 @@
     font-size: 18px;
     line-height: 1;
     cursor: move;
+    z-index: 1; /* ручки (z-index 2) всегда выше */
   }
   .zoom {
     position: absolute;
@@ -284,6 +292,7 @@
     margin: 0;
     transform: translateX(-50%);
     accent-color: var(--accent);
+    z-index: 1;
   }
   :global(body.dragging) .box > * {
     display: none;

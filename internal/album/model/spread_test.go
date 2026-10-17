@@ -497,7 +497,7 @@ func TestFoldPagesPattern(t *testing.T) {
 // Слоты узора: области spread/left/right, чужая — nil; Patterns — по порядку, без пустых.
 func TestPatSlot(t *testing.T) {
 	s := &Spread{}
-	for _, scope := range BdScopes() {
+	for _, scope := range PatScopes() {
 		*s.PatSlot(scope) = &Pattern{Kind: scope}
 	}
 	if s.Pat.Kind != ScopeSpread || s.PatL.Kind != ScopeLeft || s.PatR.Kind != ScopeRight || s.PatSlot("cover") != nil {

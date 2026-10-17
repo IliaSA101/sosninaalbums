@@ -2,7 +2,7 @@
   import type { CoverView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
   import { backdropAccepts } from '../../base/drag/drop'
-  import { boxCss, scopeOfDrop } from './cover'
+  import { COVER_Z, boxCss, scopeOfDrop } from './cover'
 
   // Пустые зоны броска (спека 032, п. 12): раскладка обложки решает, какие области принимают фото фона.
   // Слой лежит под местами и текстами, поэтому бросок в место выигрывает у зоны; ловит мышь только
@@ -20,13 +20,14 @@
       class="drop"
       class:live
       class:over={drag.over === `backdrop:${scope}` && backdropAccepts(drag.payload)}
-      style={boxCss(z.rect, sheet)}
+      class:narrow={z.kind === 'spine'}
+      style="{boxCss(z.rect, sheet)};z-index:{COVER_Z.drop}"
       data-drop="backdrop"
       data-spread={cover.sheet.id}
       data-scope={scope}
       role="presentation"
     >
-      <span class="hint">Перетащите фото</span>
+      {#if z.kind !== 'spine'}<span class="hint">Перетащите фото</span>{/if}
       {#if z.label}<span class="cap">{z.label}</span>{/if}
     </div>
   {/if}
@@ -35,7 +36,6 @@
 <style>
   .drop {
     position: absolute;
-    z-index: 2;
     box-sizing: border-box;
     display: grid;
     align-content: center;
@@ -62,5 +62,15 @@
   .cap {
     font-size: 11px;
     opacity: 0.8;
+  }
+  /* Корешок 6–30 мм = 10–50 px: подсказки нет, подпись вертикально */
+  .narrow {
+    padding: 0;
+    border-width: 1px;
+  }
+  .narrow .cap {
+    writing-mode: vertical-rl;
+    white-space: nowrap;
+    font-size: 10px;
   }
 </style>

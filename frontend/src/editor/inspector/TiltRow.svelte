@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from '../../base/ui/Icon.svelte'
   import { fieldKey, leftRow } from './tiltfocus'
+  import { TILT_MAX } from '../photo/tiltdial'
 
   // Строка «Наклон, °» (010 U5 → 045): поле, ползунок, двойной щелчок — 0, кнопка «Выпрямить по линии». Общая
   // для карточки фото (InspectorFrame) и панели фона (BackdropFields). Ползунок и поле ведут предпросмотр
@@ -19,8 +20,8 @@
     numLabel = 'Наклон, градусы',
     rangeLabel = 'Наклон',
     rangeTitle = 'Наклон фото в рамке; двойной щелчок — выровнять',
-    min = -44.9,
-    max = 44.9,
+    min = -TILT_MAX,
+    max = TILT_MAX,
     step = 0.1,
     guide = 'tilt',
     id = 'tilt',

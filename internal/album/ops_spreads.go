@@ -10,6 +10,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/names"
 	"github.com/IliaSA101/sosninaalbums/internal/album/spreads"
 	"github.com/IliaSA101/sosninaalbums/internal/album/vigsheet"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -28,11 +29,32 @@ func (e *Editor) AddPhotos(spreadID string, photos []model.PhotoInfo, index int)
 // доля ширины листа под курсором (< 0 — точки нет; NaN/Inf — как −1); rest "" — спросить,
 // spreads.RestAdd / RestSkip — ответ. Ask — правки не было (rev и шаг отмены те же). Всё
 // остальное — один шаг отмены; отказ (64 места, мелкая плитка, предел учеников) — откат.
+// Имя из названия файла (060) — тем же шагом: out.Named.
+// Имена не влезли в запас знаков — тот же бросок без них (overBudget, decisions 31).
 // Договор: at — NaN/Inf как −1, остальное зажимает PageAt; прочее проверяет операция.
 func (e *Editor) DropPhotos(spreadID, placeID string, photos []model.PhotoInfo, at float64, rest string) (v model.View, out spreads.DropOut, err error) {
 	r := spreads.DropReq{Spread: spreadID, Place: placeID, Photos: photos, At: dropAt(at), Rest: rest}
-	v, err = e.try("", func(p *model.Project) (err error) { out, err = spreads.Drop(p, r, dropVig); return err })
+	if v, out, err = e.dropTry(r, true); overBudget(err, out.Named) {
+		v, out, err = e.dropTry(r, false)
+	}
 	return v, out, err
+}
+
+// dropTry — одна попытка DropPhotos; auto = false — без автоимён.
+func (e *Editor) dropTry(r spreads.DropReq, auto bool) (v model.View, out spreads.DropOut, err error) {
+	v, err = e.try("", func(p *model.Project) (err error) { out, err = dropNamed(p, r, auto); return err })
+	return v, out, err
+}
+
+// dropNamed — бросок и автоимена новых фото (names.WithAuto) внутри одной правки; auto = false —
+// только бросок.
+func dropNamed(p *model.Project, r spreads.DropReq, auto bool) (out spreads.DropOut, err error) {
+	if !auto {
+		return spreads.Drop(p, r, dropVig)
+	}
+	named, err := names.WithAuto(p, r.Photos, func() (err error) { out, err = spreads.Drop(p, r, dropVig); return err })
+	out.Named = named
+	return out, err
 }
 
 // dropAt — доля под курсором: не число — точки нет (−1).
@@ -211,8 +233,9 @@ func (e *Editor) MergeSpreads(id string) model.View {
 	return e.change(func(p *model.Project) { spreads.MergeSpreads(p, id) })
 }
 
-// SetLayout ставит раскладку по ключу (галерея). Битый ключ или уже стоящая
-// раскладка — холостая правка. У сетки — «Вернуть авто» с этой раскладкой,
+// SetLayout ставит раскладку по ключу (галерея). Битый ключ, уже стоящая раскладка или
+// ключ не из рядов подборки с фото на корешке, которое не пустил бы генератор форм
+// (узкое или едва заходящее), — холостая правка. У сетки — «Вернуть авто» с этой раскладкой,
 // отдельным шагом отмены (не сливается с листанием).
 // Договор: ключ слияния — только у разворота «Авто»; ключ раскладки проверяет операция.
 func (e *Editor) SetLayout(spreadID, key string) model.View {

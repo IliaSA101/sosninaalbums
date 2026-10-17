@@ -8,6 +8,7 @@
   import { opacityOf } from './fade'
   import { fadeLive } from './fade.svelte'
   import { backdropCss } from './backdrop'
+  import { COVER_Z } from '../cover/cover'
 
   // Фото на фоне (спека 009, design-backdrop §8): область (обрезает) -> повёрнутая рамка (обрезает)
   // -> img. Прозрачность (017) — opacity на рамке, не на img: миниатюра под превью иначе просвечивала бы.
@@ -34,6 +35,7 @@
   <div
     class="area"
     data-backdrop={b.scope}
+    style:z-index={b.scope === 'spine' ? COVER_Z.spine : undefined}
     style:left={pct(b.area.x, sw)}
     style:top={pct(b.area.y, spread.h)}
     style:width={pct(b.area.w, sw)}

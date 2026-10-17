@@ -403,6 +403,8 @@ func TestCoverReservedID(t *testing.T) {
 func TestCoverSheetFields(t *testing.T) {
 	allowed := map[string]bool{"Photos": true, "Texts": true, "BgL": true, "BgR": true, "Grid": true,
 		"Order": true, "BgPhoto": true, "BgPhotoL": true, "BgPhotoR": true, "Caps": true,
+		// BgPhotoS — фото корешка: только у обложки (061).
+		"BgPhotoS": true,
 		// Vars — поля шапки: свои у обложки, перенос старых полей альбома (031 dialog §4);
 		// Pat* — узоры фона, как фото фона (048 design §1); стикеры — как тексты (048 сц. 15).
 		"Vars": true, "Pat": true, "PatL": true, "PatR": true, "Stickers": true}

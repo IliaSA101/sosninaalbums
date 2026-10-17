@@ -2,13 +2,14 @@
 // тянут, Cell этого фото рисует кадр отсюда; SetFrame / SetFrameAngle уходит в Go при отпускании.
 // tilt — тянут наклон, pan — двигают кадр за ✥: на ячейке показывается сетка третей (по ней выравнивают горизонт).
 // ✥ живёт в CellOverlay вне ячейки, поэтому сдвиг кадра тоже идёт через это состояние.
+// angle — живой угол шкалы наклона (059): строка «Наклон» карточки показывает его на ходу, пока тянут или жмут стрелки.
 import type { Frame } from '../../base/core/types'
 
 class FrameLive {
-  cur = $state<{ id: string; frame: Frame; tilt: boolean; pan: boolean } | null>(null)
+  cur = $state<{ id: string; frame: Frame; tilt: boolean; pan: boolean; angle: number | null } | null>(null)
 
-  set(id: string, frame: Frame, tilt = false, pan = false) {
-    this.cur = { id, frame, tilt, pan }
+  set(id: string, frame: Frame, tilt = false, pan = false, angle: number | null = null) {
+    this.cur = { id, frame, tilt, pan, angle }
   }
 
   clear() {
@@ -17,6 +18,11 @@ class FrameLive {
 
   of(id: string): Frame | null {
     return this.cur?.id === id ? this.cur.frame : null
+  }
+
+  // Живой угол шкалы этого фото (°) или null — тогда карточка берёт значение из View.
+  angleOf(id: string): number | null {
+    return this.cur?.id === id ? this.cur.angle : null
   }
 
   // Наклон этого фото тянут ползунком: нужна сетка.

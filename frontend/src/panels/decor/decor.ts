@@ -1,12 +1,12 @@
 // Окно «Фоны» (048): чистые решения — темы, плитки, «Куда», итог загрузки, тексты. Каталог и правки — у Go;
 // здесь ничего не считается, кроме отбора плиток по теме и шага размера картинки.
 import type { app } from '../../../wailsjs/go/models'
-import type { BackdropScope, PatternSpec, PatternView, SpreadView } from '../../base/core/types'
+import type { BackdropScope, CoverView, PatternSpec, PatternView, SpreadView } from '../../base/core/types'
 import { hasSeam, isCover } from '../../base/geom/sheet'
 import { backdropOf } from '../../editor/backdrop/backdrop'
 import { patternOf } from '../../editor/pattern/pattern'
 import { stickerById } from '../../editor/sticker/sticker'
-import { COVER_SCOPE_LABEL, layoutScopes } from '../../editor/cover/cover'
+import { coverLabel, coverScopes } from '../../editor/cover/cover'
 import type { SegItem } from '../../base/tpl/Seg.svelte'
 import type { SideItem } from '../../base/tpl/SideList.svelte'
 
@@ -99,14 +99,17 @@ export function tilePx(cssWidth: number, dpr: number): number {
 }
 export const tileSrc = (url: string, px: number): string => `${url}${url.includes('?') ? '&' : '?'}px=${px}`
 
-// «Куда» (сц. 1): обложка — сторонки по раскладке; лист без шва (виньетка-лист) — только весь лист;
+// Области обложки для цвета и узора: от Go по раскладке, но без корешка — его принимает только своё фото (061).
+const patternScopes = (cv: Pick<CoverView, 'scopes'> | null | undefined) => coverScopes(cv).filter((s) => s !== 'spine')
+
+// «Куда» (сц. 1): обложка — сторонки по раскладке (без корешка); лист без шва (виньетка-лист) — только весь лист;
 // разворот — весь, левая, правая. Один пункт — переключатель прячется.
 export function whereItems(
   sp: Pick<SpreadView, 'mid' | 'id'> | undefined,
-  coverLayout: string | undefined,
+  cover: Pick<CoverView, 'scopes'> | null | undefined,
   all: string,
 ): SegItem<BackdropScope>[] {
-  if (sp && isCover(sp)) return layoutScopes(coverLayout).map((s) => ({ id: s, label: COVER_SCOPE_LABEL[s] }))
+  if (sp && isCover(sp)) return patternScopes(cover).map((s) => ({ id: s, label: coverLabel(cover, s) }))
   if (!sp || !hasSeam(sp)) return [{ id: 'spread', label: all }]
   return [
     { id: 'spread', label: all },
@@ -116,8 +119,11 @@ export function whereItems(
 }
 
 // Область по умолчанию для входа из меню: у обложки — первая из доступных, иначе весь лист.
-export function defaultScope(sp: Pick<SpreadView, 'mid' | 'id'> | undefined, coverLayout: string | undefined): BackdropScope {
-  return sp && isCover(sp) ? layoutScopes(coverLayout)[0] : 'spread'
+export function defaultScope(
+  sp: Pick<SpreadView, 'mid' | 'id'> | undefined,
+  cover: Pick<CoverView, 'scopes'> | null | undefined,
+): BackdropScope {
+  return sp && isCover(sp) ? (patternScopes(cover)[0] ?? 'right') : 'spread'
 }
 
 // Выбранная область могла пропасть из списка (смена раскладки обложки): тогда первая доступная.

@@ -36,17 +36,22 @@ func Render(s Spread, opt Options) (*image.RGBA, error) {
 	}
 
 	items := make([]item, 0, len(s.Backdrops)+len(s.Plates)+len(s.Photos)+len(s.Stickers)+len(s.Arts)+len(s.Texts))
-	for _, b := range s.Backdrops {
-		if b.Fade >= 1 { // не виден: файл не открываем
-			continue
-		}
-		if ph, clip, ok := backdropPhoto(b, opt.DPI); ok {
-			items = append(items, item{ph: ph, clip: clip, backdrop: true})
+	// Фоны без OverPlates, плашки, фоны с OverPlates (фото корешка над плашкой, 061).
+	addBackdrops := func(over bool) {
+		for _, b := range s.Backdrops {
+			if b.OverPlates != over || b.Fade >= 1 { // не виден: файл не открываем
+				continue
+			}
+			if ph, clip, ok := backdropPhoto(b, opt.DPI); ok {
+				items = append(items, item{ph: ph, clip: clip, backdrop: true})
+			}
 		}
 	}
+	addBackdrops(false)
 	for i := range s.Plates { // плашки лежат поверх фонов и под всем остальным
 		items = append(items, item{plate: &s.Plates[i]})
 	}
+	addBackdrops(true)
 	nb := len(items)
 	for _, ph := range s.Photos {
 		items = append(items, item{ph: ph, z: ph.Z})

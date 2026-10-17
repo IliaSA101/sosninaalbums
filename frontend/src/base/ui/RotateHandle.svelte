@@ -39,6 +39,7 @@
     cursor: grab;
     touch-action: none;
     pointer-events: auto;
+    z-index: 2; /* выше ✥ и ползунка в узкой рамке фона */
   }
   .rot::before {
     content: '';

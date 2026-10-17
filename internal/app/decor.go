@@ -270,7 +270,7 @@ func (a *App) HideDecor(kind, id string) (err error) {
 func (a *App) ApplyBackground(spreadID, scope, itemID string) (v model.View, err error) {
 	defer a.guardEdit("ApplyBackground", &v, &err)
 	ed := a.editor()
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return ed.View(), errBackdropScope
 	}
 	s, err := a.decorStore()
@@ -280,6 +280,9 @@ func (a *App) ApplyBackground(spreadID, scope, itemID string) (v model.View, err
 	bg, err := s.Background(itemID)
 	if err != nil {
 		return ed.View(), err
+	}
+	if bg.Pattern != nil && !model.ValidScope(scope) { // на корешок — только своё фото (061)
+		return ed.View(), errBackdropScope
 	}
 	if bg.Pattern != nil {
 		v, err = ed.ApplyPattern(spreadID, scope, *bg.Pattern, bg.Color)
@@ -367,7 +370,7 @@ func (a *App) stickerSrc(itemID string) (model.StickerSrc, error) {
 }
 
 // Фото на фоне разворота или страницы (спека 009, design-backdrop §5, §7).
-// scope: "spread" (весь разворот) | "left" | "right".
+// scope: "spread" (весь разворот) | "left" | "right" | "spine" (корешок обложки, 061).
 
 // dirBackdrop — своя последняя папка у диалога «Свой файл…».
 const dirBackdrop = "backdrop"
@@ -379,7 +382,7 @@ var openFileDialog = wr.OpenFileDialog
 // Отказ от диалога — вид без изменений и без ошибки (фона не появилось).
 func (a *App) PickBackdropFile(spreadID, scope string) (v model.View, err error) {
 	defer a.guardEdit("PickBackdropFile", &v, &err)
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return a.editor().View(), errBackdropScope
 	}
 	path, err := openFileDialog(a.ctx, wr.OpenDialogOptions{
@@ -399,7 +402,7 @@ func (a *App) PickBackdropFile(spreadID, scope string) (v model.View, err error)
 
 // setBackdropFile проверяет выбранный файл так же строго, как фото папки, и ставит его на фон.
 func (a *App) setBackdropFile(spreadID, scope, path string) (model.View, error) {
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return a.editor().View(), errBackdropScope
 	}
 	ph, err := library.BackdropFile(path)

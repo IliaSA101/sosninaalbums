@@ -134,10 +134,19 @@ func FsferaFormatOf(s Settings) (PrintFormat, bool) {
 	return PrintFormat{}, false
 }
 
-// AreaOf — область scope листа s (left | right | spread), мм; ok=false — неизвестная.
+// AreaOf — область scope листа s (left | right | spread | spine), мм; ok=false — неизвестная.
 // Страницы — Geo.Pages: у обложки left — задняя с заворотом и расставом, right — лицевая.
 // У листа 031 страниц нет: left и right — неизвестные (места, фон, шаблон страницы — ErrScope).
+// spine — только у обложки (061): корешок с расставами и заворотом [X2, X5] × [0, H];
+// области сторонок с ним перекрываются на расставах — их вид у старых альбомов не меняется.
 func (p *Project) AreaOf(s *Spread, scope string) (layout.Rect, bool) {
+	if scope == ScopeSpine {
+		if !p.IsCover(s) {
+			return layout.Rect{}, false
+		}
+		cg := p.CoverGeo()
+		return layout.Rect{X: cg.X[2], Y: 0, W: geom.Round2(cg.X[5] - cg.X[2]), H: cg.Y[3]}, true
+	}
 	g := p.Geo(s)
 	if len(g.Pages) < 2 && scope != ScopeSpread {
 		return layout.Rect{}, false

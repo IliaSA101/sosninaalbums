@@ -107,6 +107,5 @@ function done(q: Query, r: DropResult) {
   if (r.out) notes.push('Прежнее фото вернулось в ленту')
   if (r.grown > 0) notes.push(`Учеников в виньетке: ${sheet?.vig?.pupils ?? ''}`)
   if (r.small) notes.push(`Места вышли мелкими — много фото удобнее бросить на «+ ${unitOf(store.view.settings).new}»`)
-  if (notes.length > 0) store.undoToast([lead, ...notes].filter(Boolean).join('. '))
-  else if (lead) store.notify(lead)
+  store.stepToast(lead, notes, r.named ?? [])
 }

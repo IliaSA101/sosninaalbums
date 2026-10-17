@@ -54,7 +54,7 @@ export class AutoDialog {
     }
     this.anchor = byPer ? 'per' : 'spreads'
     this.perTyped = byPer ? (saved.per ?? null) : null
-    this.n = firstSpreads(ids.length, saved, { min: 1, max: Math.max(1, ids.length) })
+    this.n = firstSpreads(ids.length, saved, { min: 1, max: Math.max(1, ids.length) }, this.defRange())
   }
 
   // Фото в сборку: ответ Go, пока его нет — всё, что пришло.
@@ -206,6 +206,9 @@ export class AutoDialog {
     return true
   }
 
+  // Диапазон для N по умолчанию: «Свой» — [от, до], «Авто» — null (по 4).
+  private defRange = (): [number, number] | null => (this.auto ? null : [this.minPer, this.maxPer])
+
   private key = () => `${this.auto}|${this.minPer}|${this.maxPer}|${this.series}`
 
   private async pump() {
@@ -226,9 +229,9 @@ export class AutoDialog {
           return
         }
         if (n !== this.n || k !== this.key()) continue // за время ответа значения ушли дальше
-        // Первый раз без запомненного N — round(фото / 4) по числу, которое насчитал Go; дальше зажим в пределы ответа.
+        // Первый раз без запомненного N — round(фото / 4); у «Свой» — фото / середина диапазона; число фото насчитал Go; дальше зажим в пределы ответа.
         // Якорь «среднее»: N заново из X по числу фото и пределам ответа (Go мог взять меньше фото, диапазон сдвинул низ).
-        let want = this.firstTime ? defaultSpreads(res.photos) : n
+        let want = this.firstTime ? defaultSpreads(res.photos, this.defRange()) : n
         if (!this.firstTime && this.anchor === 'per' && this.perTyped !== null && res.photos > 0) {
           want = spreadsForPer(res.photos, this.perTyped, { min: Math.max(1, res.minSpreads), max: Math.max(1, res.maxSpreads) }) ?? n
         }

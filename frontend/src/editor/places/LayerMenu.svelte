@@ -42,6 +42,7 @@
     if (open && e.key === 'Escape') {
       open = false
       e.stopPropagation()
+      e.preventDefault() // Esc занят: режим шкалы и прочие его не берут
     }
   }}
   onresize={() => (open = false)}

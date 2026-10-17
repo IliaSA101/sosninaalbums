@@ -133,12 +133,17 @@ func (r *replay) ve(name string) func(model.View, error) {
 	return func(v model.View, err error) { r.edit(name, v, nil, err) }
 }
 
-func (r *replay) vn(name string) func(model.View, int) {
-	return func(v model.View, n int) { r.edit(name, v, n, nil) }
-}
-
 func (r *replay) vne(name string) func(model.View, int, error) {
 	return func(v model.View, n int, err error) { r.edit(name, v, n, err) }
+}
+
+// vnn, vnne — FillPlaces и PlacePhotos (060: ещё и named); шаг пишется, как до 060.
+func (r *replay) vnn(name string) func(model.View, int, []string) {
+	return func(v model.View, n int, _ []string) { r.edit(name, v, n, nil) }
+}
+
+func (r *replay) vnne(name string) func(model.View, int, []string, error) {
+	return func(v model.View, n int, _ []string, err error) { r.edit(name, v, n, err) }
 }
 
 // read — шаг-чтение: короткий хэш нормализованного JSON результата.
@@ -338,6 +343,8 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.ve("SetBackdrop:левая")(e.SetBackdrop(sc, model.ScopeLeft, ph[14]))
 	r.do("ClearBackdrop", e.ClearBackdrop(sc, model.ScopeLeft))
 	r.do("Undo:фон", e.Undo())
+	// 060: имя id(3) набрано вручную, а не из названия файла — «Убрать имена» холостая.
+	r.do("ForgetFileNames", e.ForgetFileNames([]string{id(3), "нет"}))
 
 	sw, sh := e.SheetSize()
 	r.read("SheetSize", [2]float64{sw, sh})

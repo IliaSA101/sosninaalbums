@@ -354,6 +354,25 @@ class Store extends Nav {
     if (this.toast) this.toast.rev = rev
   }
 
+  // Итоговый тост правки, добавившей фото (042, 060). notes — заметки с «Вернуть» (отменяют весь шаг);
+  // named — фото, получившие имя из названия файла: с заметками имена идут в тот же тост, без них у тоста
+  // своя кнопка «Убрать имена» (снимает только имена, бросок остаётся). lead — прежний простой тост.
+  stepToast(lead: string, notes: string[], named: string[]) {
+    const names = named.length > 0 ? `Имена взяты из названий файлов: ${named.length}` : ''
+    if (notes.length > 0) return this.undoToast([lead, ...notes, names].filter(Boolean).join('. '))
+    if (!names) return lead ? this.notify(lead) : undefined
+    const rev = this.view.rev
+    this.notify([lead, names].filter(Boolean).join('. '), 'info', {
+      label: 'Убрать имена',
+      run: async () => {
+        // Как у «Вернуть»: после чужой правки кнопка уже не про этот шаг.
+        if (this.view.rev !== rev) return this.notify('Уже были другие изменения — имена не тронуты')
+        await this.run(Api.ForgetFileNames(named))
+      },
+    })
+    if (this.toast) this.toast.rev = rev
+  }
+
   // «Заполнить пустые места»: выделенные фото (иначе все не в альбоме) — в пустые места, начиная с текущего разворота.
   async fillPlaces() {
     const { ids, skipped } = this.hooks.pick(false)
@@ -362,7 +381,9 @@ class Store extends Nav {
       const r = (await Api.FillPlaces(ids, this.spread?.id ?? '')) as unknown as GridResult
       this.apply(r.view)
       this.selected.clear()
-      if (r.left > 0 || skipped > 0) this.notify(withSkipped(r.left > 0 ? `Не хватило мест: ${r.left} фото остались в ленте` : '', skipped))
+      const lead =
+        r.left > 0 || skipped > 0 ? withSkipped(r.left > 0 ? `Не хватило мест: ${r.left} фото остались в ленте` : '', skipped) : ''
+      this.stepToast(lead, [], r.named ?? [])
     } catch (e) {
       this.notify(errText(e), 'error')
     }

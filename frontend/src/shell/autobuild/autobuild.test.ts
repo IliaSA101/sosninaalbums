@@ -194,6 +194,13 @@ describe('зажимы', () => {
     expect(defaultSpreads(10)).toBe(3)
     expect(defaultSpreads(1)).toBe(1)
   })
+  it('«Свой от–до»: N от середины диапазона, не меньше 1', () => {
+    expect(defaultSpreads(100, [1, 3])).toBe(50)
+    expect(defaultSpreads(100, [3, 5])).toBe(25)
+    expect(defaultSpreads(1, [1, 64])).toBe(1)
+    expect(firstSpreads(100, { spreads: null }, { min: 1, max: 100 }, [1, 3])).toBe(50)
+    expect(firstSpreads(100, { spreads: 7 }, { min: 1, max: 100 }, [1, 3])).toBe(7) // запомненное не трогаем
+  })
   it('«не больше» — 1…64, мусор — 64', () => {
     expect(clampMaxPer(0)).toBe(1)
     expect(clampMaxPer(12)).toBe(12)
@@ -236,7 +243,7 @@ const ids = Array.from({ length: 100 }, (_, i) => String(i))
 describe('AutoDialog', () => {
   it('первый раз: «Считаю…», потом N = round(фото / 4)', async () => {
     const go = fakeGo()
-    const d = new AutoDialog(ids, go.ask, { spreads: null, range: [1, 64] })
+    const d = new AutoDialog(ids, go.ask, { spreads: null }) // «Авто»
     d.start()
     expect(d.pending).toBe(true)
     expect(d.plan).toBeNull()
@@ -245,6 +252,25 @@ describe('AutoDialog', () => {
     expect(d.n).toBe(25)
     expect(d.plan?.spreads).toBe(25)
     expect(d.canBuild).toBe(true)
+  })
+
+  it('«Свой 1–3» без запомненного N: 100 фото → 50 разворотов, не нижний предел 34', async () => {
+    const go = fakeGo()
+    const d = new AutoDialog(ids, go.ask, { spreads: null, range: [1, 3] })
+    d.start()
+    await go.release() // первый запрос уже про 50 (середина 2), нижний предел Go — 34
+    expect(go.calls).toEqual([[50, 3]])
+    expect(d.n).toBe(50)
+    expect(d.plan?.spreads).toBe(50)
+  })
+
+  it('«Свой 1–3» с запомненным N: N не трогается', async () => {
+    const go = fakeGo()
+    const d = new AutoDialog(ids, go.ask, { spreads: 40, range: [1, 3] })
+    d.start()
+    await go.release()
+    expect(d.n).toBe(40)
+    expect(go.calls).toEqual([[40, 3]])
   })
 
   it('запомненный N вне пределов зажимается, и подсказка про зажатое значение', async () => {

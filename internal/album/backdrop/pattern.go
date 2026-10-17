@@ -21,7 +21,7 @@ func ApplyPattern(p *model.Project, spreadID, scope string, pt model.Pattern, co
 	if s == nil {
 		return nil
 	}
-	if _, ok := p.AreaOf(s, scope); !ok {
+	if _, ok := p.AreaOf(s, scope); !ok || s.PatSlot(scope) == nil { // у корешка узора нет (061)
 		return model.ErrScope
 	}
 	dropPatterns(s, scope)
@@ -86,16 +86,18 @@ func dropPatterns(s *model.Spread, scope string) {
 		s.Pat, s.PatL, s.PatR = nil, nil, nil
 		return
 	}
-	s.SplitPat(scope)
-	*s.PatSlot(scope) = nil
+	if slot := s.PatSlot(scope); slot != nil { // у корешка узора нет (061)
+		s.SplitPat(scope)
+		*slot = nil
+	}
 }
 
 // dropPhotos снимает фото фона, лежащие на области scope: у страницы — её и фото всего
-// листа (как SetBackdrop на страницу), у всего листа — все.
+// листа (как SetBackdrop на страницу), у всего листа — все, с корешком (061).
 func dropPhotos(s *model.Spread, scope string) {
 	s.BgPhoto = nil
 	if scope == model.ScopeSpread {
-		s.BgPhotoL, s.BgPhotoR = nil, nil
+		s.BgPhotoL, s.BgPhotoR, s.BgPhotoS = nil, nil, nil
 		return
 	}
 	*s.Slot(scope) = nil

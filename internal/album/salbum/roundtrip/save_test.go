@@ -277,6 +277,20 @@ func FuzzLoad(f *testing.F) {
 {"id":"c","photos":["u","v"],"layout":"H(m0,m1)"},{"id":"d","photos":["w"],"layout":"` + strings.Repeat("H(", 1100) + `"}],
 "photos":{"p":{"path":"a.jpg","w":3,"h":2},"q":{"path":"b.jpg","w":2,"h":3},"r":{"path":"c.jpg"},"s":{"path":"d.jpg","w":1,"h":1},
 "t":{"path":"e.jpg","w":4,"h":1},"u":{"path":"f.jpg"},"v":{"path":"g.jpg"},"w":{"path":"h.jpg"}}}`))
+	// 061 (v10): фото корешка — дикие числа, «Поворот», корешок 0 мм, не у обложки, не в both, NaN.
+	spine := func(spec, layout, bg string) []byte {
+		return []byte(`{"version":10,"spreads":[{"id":"s","photos":["p"],"bgPhotoS":{"photo":"q","w":6,"h":300}}],"cover":{"sheet":{"id":"cover",
+"bgPhotoL":{"photo":"p","w":100,"h":100},"bgPhotoS":` + bg + `},"spec":` + spec + `,"layout":"` + layout + `"},
+"photos":{"p":{"path":"a.jpg","w":3,"h":2},"q":{"path":"b.jpg","w":2,"h":3}}}`)
+	}
+	custom0, wide := `{"preset":"custom","wrap":0,"a":0,"b":0,"hinge":0}`, `{"preset":"custom","wrap":15,"a":6,"b":0.2,"hinge":3}`
+	f.Add(spine(wide, "both", `{"photo":"q","x":1e308,"y":-1e308,"w":1e308,"h":1e-308,"rot":1e308,"frame":{"s":1e308,"r":1e308}}`))
+	f.Add(spine(wide, "both", `{"photo":"q","x":300,"y":10,"w":200,"h":6,"rot":90,"fade":0.5}`))
+	f.Add(spine(custom0, "both", `{"photo":"q","x":300,"y":0,"w":6,"h":300,"rot":90}`))
+	f.Add(spine(custom0, "both", `{"photo":"q","w":0,"h":0}`))
+	f.Add(spine(`{"preset":"custom","wrap":3,"a":0.99,"b":0,"hinge":0}`, "both", `{"photo":"q","w":1e-9,"h":1e-9,"rot":45}`))
+	f.Add(spine(wide, "front", `{"photo":"q","w":6,"h":300}`))
+	f.Add(spine(wide, "both", `{"photo":"q","w":"NaN","h":300}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := testkit.TempDir(t)
 		path := filepath.Join(dir, "f.salbum")
@@ -351,7 +365,39 @@ func FuzzLoad(f *testing.F) {
 		if err := edtest.GridInvariants(q); err != nil {
 			t.Fatalf("после записи и чтения: %v", err)
 		}
+		fuzzBackdrops(t, p, q)
 	})
+}
+
+// fuzzBackdrops — фоны после Load (decisions 31): фото корешка только там, где корешок есть
+// (SpineOK), рамка любого фона > 0, повторный зажим ничего не меняет, а Load∘Save∘Load
+// оставляет фоны как после первого Load.
+func fuzzBackdrops(t *testing.T, p, q *model.Project) {
+	t.Helper()
+	ps, qs := p.Sheets(), q.Sheets()
+	if len(ps) != len(qs) {
+		t.Fatalf("листов %d, после записи и чтения %d", len(ps), len(qs))
+	}
+	for i, s := range ps {
+		if s.BgPhotoS != nil && !p.SpineOK(s) {
+			t.Fatalf("фото корешка у %s без корешка: %+v", s.ID, s.BgPhotoS)
+		}
+		for _, sc := range model.BdScopes() {
+			b := *s.Slot(sc)
+			if b == nil {
+				continue
+			}
+			if !(b.W > 0 && b.H > 0) {
+				t.Fatalf("фон %s/%s без размера: %+v", s.ID, sc, b)
+			}
+			if c := p.ClampBackdrop(s, b, sc); !reflect.DeepEqual(c, b) {
+				t.Fatalf("зажим фона %s/%s не идемпотентен:\n%+v\n%+v", s.ID, sc, b, c)
+			}
+		}
+		if !reflect.DeepEqual(s.Backdrops(), qs[i].Backdrops()) {
+			t.Fatalf("фоны %s после записи и чтения:\n%+v\nждали\n%+v", s.ID, qs[i].Backdrops(), s.Backdrops())
+		}
+	}
 }
 
 // fuzzCaptions — подписи и заглушки вида (с обложкой) не длиннее подписи: шаблон листа

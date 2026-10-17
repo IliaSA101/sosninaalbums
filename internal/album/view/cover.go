@@ -1,6 +1,7 @@
 package view
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -32,7 +33,7 @@ func coverView(f *fields, st State, v *model.View) *model.CoverView {
 		Spine: cg.Spine, N: cg.N, Over: cg.Over, Layout: model.CoverLayoutName(c.Layout), SpineBg: c.SpineBg,
 		SpineText: p.SpineTextID(),
 		Zones:     coverZones(cg, orSafe(c.Spec.Safe, p.Settings.Safe), orSafe(c.Spec.SpineSafe, p.Settings.Safe)),
-		Drop:      dropZones(p, c), TextMaxW: p.TextMaxW(c.Sheet),
+		Drop:      dropZones(p, c), Scopes: coverScopes(p, c), TextMaxW: p.TextMaxW(c.Sheet),
 		PxW: px(g.W, p.Settings.DPI), PxH: px(g.H, p.Settings.DPI), Fix: model.CoverFixText(p),
 	}
 	for _, z := range cv.Zones {
@@ -103,25 +104,47 @@ func coverZones(cg model.CoverGeo, edge, spine float64) []model.CoverZone {
 	return z
 }
 
-// dropZones — пустые зоны броска фото фона по раскладке обложки: область фона (с заворотом
-// и расставом), у которой фото ещё нет.
-func dropZones(p *model.Project, c *model.Cover) []model.CoverZone {
-	s := c.Sheet
-	type zone struct{ kind, scope, label string }
-	var want []zone
+// coverScopes — области фото фона раскладки с подписями (061): одна точка для карточки фона,
+// меню «На фон» и зон броска (dropZones). Корешок уже model.MinSpine — без своей области
+// (decisions 31: фото на нём не видно, SetBackdrop отказывает).
+func coverScopes(p *model.Project, c *model.Cover) []model.CoverScope {
 	switch c.Layout {
 	case model.CoverWrap:
-		want = []zone{{"wrap", model.ScopeSpread, "Одно фото через корешок"}}
+		return []model.CoverScope{{Scope: model.ScopeSpread, Label: "Вся обложка"}}
 	case model.CoverBoth:
-		want = []zone{{"back", model.ScopeLeft, "Задняя"}, {"front", model.ScopeRight, "Лицевая"}}
-	default:
-		want = []zone{{"front", model.ScopeRight, "Лицевая"}}
-	}
-	out := []model.CoverZone{}
-	for _, z := range want {
-		if *s.Slot(z.scope) == nil {
-			out = append(out, model.CoverZone{Kind: z.kind, Rect: p.BdArea(s, z.scope), Label: z.label})
+		if !p.SpineOK(c.Sheet) {
+			return []model.CoverScope{{Scope: model.ScopeLeft, Label: "Задняя"}, {Scope: model.ScopeRight, Label: "Лицевая"}}
 		}
+		return []model.CoverScope{{Scope: model.ScopeLeft, Label: "Задняя"}, {Scope: model.ScopeSpine, Label: "Корешок"},
+			{Scope: model.ScopeRight, Label: "Лицевая"}}
+	}
+	return []model.CoverScope{{Scope: model.ScopeRight, Label: "Лицевая"}}
+}
+
+// dropZones — пустые зоны броска фото фона по раскладке обложки: область фона (с заворотом
+// и расставом), у которой фото ещё нет. В both зоны не перекрываются (061): задняя [0, X2],
+// корешок [X2, X5] (если он есть в coverScopes), лицевая [X5, W] — расставы отданы корешку только
+// в броске, области фона сторонок прежние.
+func dropZones(p *model.Project, c *model.Cover) []model.CoverZone {
+	s := c.Sheet
+	kinds := map[string]string{model.ScopeSpread: "wrap", model.ScopeLeft: "back", model.ScopeRight: "front", model.ScopeSpine: "spine"}
+	label := map[string]string{model.ScopeSpread: "Одно фото через корешок"}
+	out := []model.CoverZone{}
+	for _, sc := range coverScopes(p, c) {
+		if *s.Slot(sc.Scope) != nil {
+			continue
+		}
+		r := p.BdArea(s, sc.Scope)
+		if c.Layout == model.CoverBoth {
+			x := p.CoverGeo().X
+			switch sc.Scope {
+			case model.ScopeLeft:
+				r.W = x[2] - r.X
+			case model.ScopeRight:
+				r.W, r.X = r.X+r.W-x[5], x[5]
+			}
+		}
+		out = append(out, model.CoverZone{Kind: kinds[sc.Scope], Rect: r, Label: cmp.Or(label[sc.Scope], sc.Label)})
 	}
 	return out
 }

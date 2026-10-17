@@ -7,6 +7,10 @@ describe('backdropTarget', () => {
   it('одно фото и известная область — цель', () => {
     expect(backdropTarget({ spread: 's1', scope: 'right' }, one)).toEqual({ kind: 'backdrop', spread: 's1', scope: 'right' })
   })
+  it('корешок обложки (061) — тоже область фона', () => {
+    expect(backdropTarget({ spread: 'cover', scope: 'spine' }, one)).toEqual({ kind: 'backdrop', spread: 'cover', scope: 'spine' })
+    expect(backdropTarget({ spread: 'cover', scope: 'hinge' }, one)).toBeNull()
+  })
   it('несколько фото — цель с many (без подсветки, бросок объяснит тостом)', () => {
     expect(backdropTarget({ spread: 's1', scope: 'left' }, { kind: 'photos', ids: ['a', 'b'] })).toEqual({
       kind: 'backdrop',

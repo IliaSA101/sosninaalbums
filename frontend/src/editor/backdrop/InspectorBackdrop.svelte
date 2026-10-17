@@ -4,7 +4,7 @@
   import { store } from '../../base/core/store.svelte'
   import { backdropAccepts } from '../../base/drag/drop'
   import { backdropOf, SCOPE_LABEL, zoneScopes } from './backdrop'
-  import { COVER_SCOPE_LABEL, layoutScopes } from '../cover/cover'
+  import { coverLabels, coverScopes } from '../cover/cover'
   import { isCover, unitOf } from '../../base/geom/sheet'
   import { gridAct } from '../../panels/layouts/gridact.svelte'
   import { clearBackdrop, editBackdrop, pickBackdropFile } from './backdropact'
@@ -23,8 +23,8 @@
   // Обложка (032): зоны броска задаёт её раскладка, а не цвета страниц; названия — сторонки.
   const cover = $derived(isCover(sp))
   const unit = $derived(unitOf(store.view.settings))
-  const scopes = $derived(cover ? layoutScopes(store.cover?.layout) : zoneScopes(sp.backdrops, split))
-  const names = $derived(cover ? COVER_SCOPE_LABEL : SCOPE_LABEL)
+  const scopes = $derived(cover ? coverScopes(store.cover) : zoneScopes(sp.backdrops, split))
+  const names = $derived(cover ? coverLabels(store.cover) : SCOPE_LABEL)
   // Эта область правится в режиме фона: вместо «Править» — поля режима и «Готово».
   const editing = (scope: BackdropScope) => bgmode.cur?.spread === sp.id && bgmode.cur.scope === scope
   const label = (scope: BackdropScope) => (cover || scopes.length > 1 ? names[scope] : 'Фото фона')

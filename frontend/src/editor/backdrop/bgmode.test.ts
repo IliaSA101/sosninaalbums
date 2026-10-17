@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { backdropAt, bdSession, inBox, keepMode, liveImg, modeClick } from './bgmode'
+import { backdropAt, bdSession, inBox, keepMode, liveImg, modeClick, roomForSlider } from './bgmode'
 import type { BackdropView, SpreadView } from '../../base/core/types'
 
 const bd = (o: Partial<BackdropView>): BackdropView => ({
@@ -93,3 +93,21 @@ describe('liveImg', () => {
 })
 
 it('сессия стрелок подходит Go', () => expect(bdSession(1700000000000)).toMatch(/^[A-Za-z0-9-]{1,32}$/))
+
+describe('roomForSlider', () => {
+  it('корешок 6 мм при «вписать» (5–13 px) — ползунка нет, масштаб в карточке', () => {
+    expect(roomForSlider({ w: 6, h: 210 }, 0.9)).toBe(false)
+    expect(roomForSlider({ w: 210, h: 6 }, 2.2)).toBe(false) // повёрнут на 90°: меньшая сторона та же
+  })
+  it('ровно 48 px — есть, 47 — нет (порог как у ячейки)', () => {
+    expect(roomForSlider({ w: 48, h: 100 }, 1)).toBe(true)
+    expect(roomForSlider({ w: 47, h: 100 }, 1)).toBe(false)
+    expect(roomForSlider({ w: 100, h: 47 }, 1)).toBe(false)
+  })
+  it('зум делает узкую рамку широкой: 6 мм × 8 px/мм = 48', () => {
+    expect(roomForSlider({ w: 6, h: 210 }, 8)).toBe(true)
+  })
+  it('нулевой масштаб — нет', () => {
+    expect(roomForSlider({ w: 100, h: 100 }, 0)).toBe(false)
+  })
+})

@@ -136,7 +136,8 @@ func sameSpec(a, b model.CoverSpec) bool {
 
 // SetLayout — раскладка обложки kind (front | both | wrap; "" — front): фото фона переходят
 // в новые зоны (design 032 §2). Кадр при переносе — по умолчанию: пропорции зоны другие; наклон остаётся (045, FitArea).
-// Снятое с фона фото остаётся в альбоме, если стоит в месте.
+// Снятое с фона фото остаётся в альбоме, если стоит в месте. Фото корешка (061) бывает только
+// в both: при уходе из неё снимается, как задняя в front; отмена вернёт его тем же шагом.
 func SetLayout(p *model.Project, kind string) error {
 	if kind == "front" {
 		kind = model.CoverFront
@@ -153,7 +154,7 @@ func SetLayout(p *model.Project, kind string) error {
 	}
 	s := c.Sheet
 	had := map[string]*model.Backdrop{model.ScopeSpread: s.BgPhoto, model.ScopeLeft: s.BgPhotoL, model.ScopeRight: s.BgPhotoR}
-	s.BgPhoto, s.BgPhotoL, s.BgPhotoR = nil, nil, nil
+	s.BgPhoto, s.BgPhotoL, s.BgPhotoR, s.BgPhotoS = nil, nil, nil, nil // в both приходят с пустым корешком
 	// move — первый фон из областей from встаёт в область to; рамка по зоне — только при переносе.
 	move := func(to string, from ...string) {
 		for _, f := range from {
@@ -182,7 +183,8 @@ func SetLayout(p *model.Project, kind string) error {
 // SpineText — «Надпись на корешке»: текст по центру корешка, повёрнутый на −90° (снизу вверх,
 // decisions 57), ширина переноса — высота сторонки без безопасных полей, кегль — от ширины
 // корешка (строка ≈ 0,42·кегль мм ≤ 0,6 корешка). Плашки нет — ставится цвет лицевой,
-// текст — контрастный. Повёрнутый текст в корешке уже есть — холостая правка.
+// текст — контрастный; на фото корешка плашка не ставится (061): она ушла бы под фото
+// и всплыла бы, когда фото уберут. Повёрнутый текст в корешке уже есть — холостая правка.
 func SpineText(p *model.Project) error {
 	c := p.Cover
 	if c == nil {
@@ -195,7 +197,7 @@ func SpineText(p *model.Project) error {
 	if len(s.Texts) >= model.MaxTexts {
 		return fmt.Errorf("на развороте не может быть больше %d текстов", model.MaxTexts)
 	}
-	if c.SpineBg == "" {
+	if c.SpineBg == "" && s.BgPhotoS == nil {
 		c.SpineBg = frontColor(p, s)
 	}
 	t := &model.TextBlock{ID: model.NewID(), Text: "Текст", Style: model.PlainStyle(), Rot: -90}

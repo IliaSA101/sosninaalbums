@@ -82,7 +82,7 @@ func TestCoverPlaceTakesPhoto(t *testing.T) {
 	if _, err := e.AddPlace(model.CoverID, 1, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := e.PlacePhotos(model.CoverID, sheet(e).Grid[0].ID, []model.PhotoInfo{info(pid(5))}); err != nil {
+	if _, _, _, err := e.PlacePhotos(model.CoverID, sheet(e).Grid[0].ID, []model.PhotoInfo{info(pid(5))}); err != nil {
 		t.Fatal(err)
 	}
 	p := edtest.P(e)
@@ -180,7 +180,7 @@ func TestCoverLayouts(t *testing.T) {
 	if _, err := e.SetCoverLayout("both"); err != nil || s().BgPhotoR.Frame == nil || s().BgPhotoL != nil {
 		t.Fatalf("лицевая + задняя: кадр лицевой сброшен или задняя не пуста: %v %+v", err, s())
 	}
-	if d := e.View().Cover.Drop; len(d) != 1 || d[0].Kind != "back" {
+	if d := e.View().Cover.Drop; len(d) != 2 || d[0].Kind != "back" || d[1].Kind != "spine" { // корешок пуст (061)
 		t.Fatalf("пустые зоны «лицевая + задняя»: %+v", d)
 	}
 	edtest.SetBg(t, e, model.CoverID, model.ScopeLeft, pid(1))

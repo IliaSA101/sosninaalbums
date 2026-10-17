@@ -335,7 +335,7 @@ func TestFillPlaces(t *testing.T) {
 		pl.ID = "00000000000a"
 		p.Spreads = append(p.Spreads, &model.Spread{ID: "s3", Photos: []string{}, Grid: []*model.Place{pl}})
 	})
-	_, left := e.FillPlaces(edtest.Photos("x", "c", "d", "f"), "s1")
+	_, left, _ := e.FillPlaces(edtest.Photos("x", "c", "d", "f"), "s1")
 	edtest.MustGrid(t, e)
 	if left != 1 || !slices.Equal(edtest.PhotosOf(e, 1), []string{"c", "a"}) || !slices.Equal(edtest.PhotosOf(e, 2), []string{"d"}) ||
 		!slices.Equal(edtest.P(e).Spreads[0].Photos, []string{"x"}) || edtest.HasRef(edtest.P(e), "f") {

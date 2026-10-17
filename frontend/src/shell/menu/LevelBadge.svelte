@@ -33,6 +33,7 @@
   function key(e: KeyboardEvent) {
     if (open && e.key === 'Escape') {
       e.stopPropagation()
+      e.preventDefault()
       open = false
     }
   }

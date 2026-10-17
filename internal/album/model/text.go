@@ -204,7 +204,8 @@ func (r PhotoRef) Name() (p *Person, fromFile bool) {
 // PersonFromFile — имя из имени файла: «Иванов Петя.jpg» → Иванов / Петя, три слова —
 // с отчеством. Слово — буквы (внутри дефис и апостроф), первая заглавная; «_» — пробел;
 // номер в начале («01_», «1. ») и отметка копии в конце (« (2)», « 2», «-2») не мешают.
-// Иначе nil: «DSC_0012», «001», «Свадьба 2025» именем не считаются. Правило строгое:
+// Иначе nil: «DSC_0012», «001», «Свадьба 2025» именем не считаются, как и слово из
+// стоп-списка LooksLikeName («Свадьба Ивановых», 0.14 decisions 32). Правило строгое:
 // имя берётся неявно, без предпросмотра (043 Р10).
 func PersonFromFile(path string) *Person { return personFromBase(fileBase(path), false, false) }
 
@@ -216,11 +217,26 @@ func PersonFromFileLoose(path string, firstFirst bool) *Person {
 	return personFromBase(fileBase(path), true, firstFirst)
 }
 
-// fileBase — имя файла без папки и расширения; «\» — разделитель и вне Windows.
+// fileBase — имя файла без папки и расширения; «\» — разделитель и вне Windows. «й», «ё»
+// из двух кодовых точек (macOS пишет имена в NFD) собираются в одну: знак не буква, и
+// разбор имени не принял бы слово (decisions 31).
 func fileBase(path string) string {
 	base := path[strings.LastIndexAny(path, `\/`)+1:]
-	return strings.TrimSuffix(base, filepath.Ext(base))
+	base = strings.TrimSuffix(base, filepath.Ext(base))
+	if strings.ContainsAny(base, "\u0306\u0308") {
+		base = composeNames.Replace(base)
+	}
+	return base
 }
+
+// composeNames — своя таблица NFC для имён без внешнего пакета (decisions 34): у прочих букв
+// кириллицы NFD не раскладывается, латиница с диакритикой фильтр письменности и так не проходит.
+var composeNames = strings.NewReplacer(
+	"\u0438\u0306", "\u0439", "\u0418\u0306", "\u0419", // й, Й
+	"\u0435\u0308", "\u0451", "\u0415\u0308", "\u0401", // ё, Ё
+	"\u0456\u0308", "\u0457", "\u0406\u0308", "\u0407", // ї, Ї
+	"\u0443\u0306", "\u045e", "\u0423\u0306", "\u040e", // ў, Ў
+)
 
 // maxFileBase — длина имени файла до снятия номера и отметки копии; после — 3 слова и 2 пробела.
 const maxFileBase = 3*MaxPersonRunes + 12
@@ -257,7 +273,7 @@ func personFromBase(base string, loose, firstFirst bool) *Person {
 			w = fixCase(w)
 			words[i] = w
 		}
-		if !nameWord(w) {
+		if !nameWord(w) || !loose && stopWord(w) {
 			return nil
 		}
 	}

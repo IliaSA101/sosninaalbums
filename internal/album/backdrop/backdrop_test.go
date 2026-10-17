@@ -309,7 +309,7 @@ func TestAutoBuildSkipsBackdrop(t *testing.T) {
 func TestFillPlacesSkipsBackdrop(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 100, 100, ""), edtest.Gp(150, 12, 100, 100, "")})
 	edtest.SetBg(t, e, "s1", "spread", "bg")
-	_, left := e.FillPlaces(edtest.Photos("bg", "c"), "s1")
+	_, left, _ := e.FillPlaces(edtest.Photos("bg", "c"), "s1")
 	if left != 0 || !slices.Equal(edtest.PhotosOf(e, 0), []string{"c", ""}) {
 		t.Fatalf("left %d, места %v", left, edtest.PhotosOf(e, 0))
 	}

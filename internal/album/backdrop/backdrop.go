@@ -24,15 +24,20 @@ func SetBackdrop(p *model.Project, spreadID, scope string, ph model.PhotoInfo) e
 		return nil
 	}
 	slot := s.Slot(scope)
-	if _, ok := p.AreaOf(s, scope); slot == nil || !ok { // у листа 031 страниц нет
+	if _, ok := p.AreaOf(s, scope); slot == nil || !ok { // у листа 031 страниц нет, корешок — только у обложки
 		return model.ErrScope
+	}
+	if scope == model.ScopeSpine {
+		if err := p.SpineErr(s); err != nil {
+			return err
+		}
 	}
 	if *slot != nil && (*slot).Photo == ph.ID { // то же фото — холостая: кадр и наклон не сбрасываем
 		return nil
 	}
 	model.Remember(p, []model.PhotoInfo{ph})
-	if scope == model.ScopeSpread {
-		s.BgPhotoL, s.BgPhotoR = nil, nil
+	if scope == model.ScopeSpread { // одно фото через весь лист исключает остальные (061 I2)
+		s.BgPhotoL, s.BgPhotoR, s.BgPhotoS = nil, nil, nil
 	} else {
 		s.BgPhoto = nil
 	}
@@ -51,7 +56,7 @@ func SetBackdrop(p *model.Project, spreadID, scope string, ph model.PhotoInfo) e
 // changeBackdrop — правка фона области листа (и обложки): fn меняет копию, затем фон
 // зажимается; нет фона — холостая правка.
 func changeBackdrop(p *model.Project, spreadID, scope string, fn func(p *model.Project, s *model.Spread, b *model.Backdrop)) {
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return
 	}
 	s := p.Sheet(spreadID)

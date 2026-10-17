@@ -21,30 +21,42 @@ export function boxCss(r: Rect, s: SheetBox): string {
   return `left:${f(b.left)}%;top:${f(b.top)}%;width:${f(b.width)}%;height:${f(b.height)}%`
 }
 
-// Зона броска -> область фона (SetBackdrop): задняя — левая, лицевая — правая, через корешок — весь лист.
-export const DROP_SCOPE: Record<string, BackdropScope> = { back: 'left', front: 'right', wrap: 'spread' }
+// Зона броска -> область фона (SetBackdrop): задняя — левая, лицевая — правая, корешок — своя (061),
+// через корешок — весь лист.
+export const DROP_SCOPE: Record<string, BackdropScope> = { back: 'left', front: 'right', spine: 'spine', wrap: 'spread' }
 
 export const scopeOfDrop = (kind: string): BackdropScope | null => DROP_SCOPE[kind] ?? null
 
-// Подписи областей фона на обложке (в карточке вместо «Левая страница»).
-export const COVER_SCOPE_LABEL: Record<BackdropScope, string> = {
-  spread: 'Вся обложка',
-  left: 'Задняя',
-  right: 'Лицевая',
+// Слои обложки на холсте (z-index внутри .spread): плашка корешка < фото корешка (061) <= зоны броска < .content (3).
+// Фото корешка идёт в DOM раньше зон, поэтому при равном z зона сверху.
+export const COVER_Z = { plate: 1, spine: 2, drop: 2 } as const
+
+// Запасные подписи для цвета и узора: их области не зависят от раскладки (всегда сторонки и вся обложка),
+// а `cover.scopes` — только области фото фона.
+const SIDE_LABEL: Record<BackdropScope, string> = { spread: 'Вся обложка', left: 'Задняя', right: 'Лицевая', spine: 'Корешок' }
+
+// Области фото фона раскладки — от Go (CoverView.scopes), порядок слева направо; обложки нет — пусто.
+export const coverScopes = (cv: Pick<CoverView, 'scopes'> | null | undefined): readonly BackdropScope[] =>
+  (cv?.scopes ?? []).map((s) => s.scope)
+
+// Подпись области: у Go, если область в раскладке, иначе запасная.
+export function coverLabel(cv: Pick<CoverView, 'scopes'> | null | undefined, scope: BackdropScope): string {
+  return cv?.scopes?.find((s) => s.scope === scope)?.label ?? SIDE_LABEL[scope]
 }
 
+export const coverLabels = (cv: Pick<CoverView, 'scopes'> | null | undefined): Record<BackdropScope, string> => ({
+  spread: coverLabel(cv, 'spread'),
+  left: coverLabel(cv, 'left'),
+  right: coverLabel(cv, 'right'),
+  spine: coverLabel(cv, 'spine'),
+})
+
+// Кнопки раскладки обложки: порядок и подписи по спеке 061 (ключи прежние).
 export const COVER_LAYOUTS: readonly { kind: CoverLayout; label: string }[] = [
-  { kind: 'front', label: 'Фото на лицевой' },
-  { kind: 'both', label: 'Лицевая + задняя' },
+  { kind: 'front', label: 'Лицевая' },
   { kind: 'wrap', label: 'Одно фото через корешок' },
+  { kind: 'both', label: 'Задняя + корешок + лицевая' },
 ]
-
-// Какие области фона принимают фото при раскладке: front — лицевая, both — обе сторонки, wrap — весь лист.
-export function layoutScopes(layout: CoverLayout | string | undefined): readonly BackdropScope[] {
-  if (layout === 'both') return ['left', 'right']
-  if (layout === 'wrap') return ['spread']
-  return ['right']
-}
 
 export const zonesOf = (cv: Pick<CoverView, 'zones'>, kind: string): CoverZone[] => cv.zones.filter((z) => z.kind === kind)
 

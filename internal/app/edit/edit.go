@@ -48,7 +48,7 @@ var (
 	ErrInternal = errors.New("внутренняя ошибка: правка не применена, подробности в журнале")
 	// ErrNoPhoto — фото нет ни в ленте, ни в альбоме.
 	ErrNoPhoto = errors.New("фото не найдено")
-	// ErrBackdropScope — область фона не "spread" | "left" | "right".
+	// ErrBackdropScope — область фона не "spread" | "left" | "right" | "spine" (у узоров — без "spine").
 	ErrBackdropScope = errors.New("неизвестная область фона")
 )
 

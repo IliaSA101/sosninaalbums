@@ -391,7 +391,7 @@ func TestAutoBuildVarietyStar(t *testing.T) {
 }
 
 // checkRow — поля плиток ряда: семейство из шести (041 + «Ленты», «Фигуры» 051) — по форме, название
-// формы (у мозаики пусто), Twin — более ранний с тем же видом.
+// формы (непусто у каждой, у мозаики «Плотно»), Twin — более ранний с тем же видом.
 func checkRow(t *testing.T, name string, rows []model.Choice, prm layout.Params) (folded int) {
 	t.Helper()
 	fams := map[string]bool{"dense": true, "hero": true, "air": true, "bleed": true, "strip": true, "figure": true}
@@ -400,7 +400,7 @@ func checkRow(t *testing.T, name string, rows []model.Choice, prm layout.Params)
 		if !fams[c.Family] || c.Family != string(variety.FamilyOf(f)) {
 			t.Fatalf("%s %s: семейство %q (форма %s)", name, c.Key, c.Family, f)
 		}
-		if want := forms.Name(f); f == forms.Mosaic && c.FormName != "" || f != forms.Mosaic && c.FormName != want || want == "" {
+		if want := forms.Name(f); c.FormName != want || want == "" || f == forms.Mosaic && c.FormName != "Плотно" {
 			t.Fatalf("%s %s: название %q, форма %s", name, c.Key, c.FormName, f)
 		}
 		switch {

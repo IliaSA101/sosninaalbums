@@ -44,7 +44,7 @@ func TestAddToFullGridFails(t *testing.T) {
 func TestMoveBetweenPlaces(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 127, 127, "a"), edtest.Gp(142, 12, 127, 127, "")})
 	e.SetFrame("a", 2, 0.3, 0)
-	_, left, err := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[1].ID, []model.PhotoInfo{edtest.Photo("a")})
+	_, left, _, err := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[1].ID, []model.PhotoInfo{edtest.Photo("a")})
 	edtest.MustGrid(t, e)
 	if err != nil || left != 0 || !slices.Equal(edtest.PhotosOf(e, 0), []string{"", "a"}) || edtest.P(e).Photos["a"].Frame == nil {
 		t.Fatalf("места %v, left %d, err %v", edtest.PhotosOf(e, 0), left, err)
@@ -72,7 +72,7 @@ func TestRemoveEmptiesPlace(t *testing.T) {
 
 func TestPlacePhotosEmpty(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 127, 127, "a"), edtest.Gp(142, 12, 127, 127, "")})
-	_, left, _ := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[1].ID, edtest.Photos("c"))
+	_, left, _, _ := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[1].ID, edtest.Photos("c"))
 	edtest.MustGrid(t, e)
 	if left != 0 || !slices.Equal(edtest.PhotosOf(e, 0), []string{"a", "c"}) {
 		t.Fatalf("места %v, left %d", edtest.PhotosOf(e, 0), left)
@@ -82,7 +82,7 @@ func TestPlacePhotosEmpty(t *testing.T) {
 func TestPlacePhotosReplace(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 127, 127, "a")})
 	e.SetCaption("a", "подпись", "")
-	_, left, _ := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[0].ID, edtest.Photos("c"))
+	_, left, _, _ := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[0].ID, edtest.Photos("c"))
 	edtest.MustGrid(t, e)
 	if left != 1 || !slices.Equal(edtest.PhotosOf(e, 0), []string{"c"}) || edtest.HasRef(edtest.P(e), "a") {
 		t.Fatalf("места %v, left %d", edtest.PhotosOf(e, 0), left)
@@ -95,7 +95,7 @@ func TestPlacePhotosReplace(t *testing.T) {
 
 func TestPlacePhotosSwap(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 127, 127, "a"), edtest.Gp(142, 12, 127, 127, "b")})
-	_, left, _ := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[0].ID, edtest.Photos("b", "c"))
+	_, left, _, _ := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[0].ID, edtest.Photos("b", "c"))
 	edtest.MustGrid(t, e)
 	if left != 1 || !slices.Equal(edtest.PhotosOf(e, 0), []string{"b", "a"}) {
 		t.Fatalf("места %v, left %d", edtest.PhotosOf(e, 0), left)
@@ -113,7 +113,7 @@ func TestPlacePhotosSwapWithAuto(t *testing.T) {
 
 func TestPlacePhotosMulti(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 100, 100, "a"), edtest.Gp(142, 12, 100, 100, ""), edtest.Gp(12, 150, 100, 100, "")}, []string{"x"})
-	_, left, _ := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[1].ID, edtest.Photos("c", "x", "d"))
+	_, left, _, _ := e.PlacePhotos("s1", edtest.P(e).Spreads[0].Grid[1].ID, edtest.Photos("c", "x", "d"))
 	edtest.MustGrid(t, e)
 	// c — на целевое, x (из альбома) — в следующее пустое, d — мест нет: остаётся в ленте.
 	if left != 1 || !slices.Equal(edtest.PhotosOf(e, 0), []string{"a", "c", "x"}) || edtest.HasRef(edtest.P(e), "d") || len(edtest.P(e).Spreads) != 1 {

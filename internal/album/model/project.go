@@ -30,10 +30,12 @@ import (
 // узоры фона `pat/patL/patR`, стикеры `stickers` (и их ID в `order`) и ключ своего из
 // библиотеки `photos.*.lib` (спека 048, omitempty);
 // 9 (общий на 0.13): новые значения `Spread.Layout` — ключи форм 051 (`Q[…]`, `G(…)`,
-// `L/A(…)`, `m<i>`, `S/U/D(…)`); полей нет, но 0.12 показала бы мозаику и правкой затёрла ключ.
+// `L/A(…)`, `m<i>`, `S/U/D(…)`); полей нет, но 0.12 показала бы мозаику и правкой затёрла ключ;
+// 10 (0.14): фото корешка обложки `bgPhotoS` (спека 061; имя у места 060 ушло в 0.15 — decisions
+// 0.14 №12) — 0.13 файл не откроет и не затрёт его автосохранением.
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 9
+const FormatVersion = 10
 
 type Settings struct {
 	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
@@ -78,6 +80,9 @@ type Spread struct {
 	BgPhoto  *Backdrop `json:"bgPhoto,omitempty"`
 	BgPhotoL *Backdrop `json:"bgPhotoL,omitempty"`
 	BgPhotoR *Backdrop `json:"bgPhotoR,omitempty"`
+	// BgPhotoS — фото корешка (061): только у обложки в раскладке CoverBoth (backdrop.go);
+	// лежит поверх плашки корешка, BgPhoto его исключает.
+	BgPhotoS *Backdrop `json:"bgPhotoS,omitempty"`
 	// Pat — узор на фоне всего листа; PatL/R — страницы (048, decor.go). Взаимоисключающие,
 	// как BgPhoto*; узор лежит под фото фона той же области.
 	Pat  *Pattern `json:"pat,omitempty"`
@@ -395,7 +400,7 @@ func (p *Project) Normalize(before *Project) {
 func (s *Spread) Empty() bool {
 	return len(s.Photos) == 0 && len(s.Texts) == 0 && len(s.Grid) == 0 &&
 		s.BgL == "" && s.BgR == "" && s.Name == "" &&
-		s.BgPhoto == nil && s.BgPhotoL == nil && s.BgPhotoR == nil && s.Caps == nil &&
+		s.BgPhoto == nil && s.BgPhotoL == nil && s.BgPhotoR == nil && s.BgPhotoS == nil && s.Caps == nil &&
 		s.Pat == nil && s.PatL == nil && s.PatR == nil && len(s.Stickers) == 0 &&
 		s.Kind == "" && s.Vig == nil && s.Vars == nil
 }

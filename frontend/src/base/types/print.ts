@@ -1,5 +1,5 @@
 // Типы обложки и печати (спека 032, 047).
-import type { Rect, SpreadView } from './sheet'
+import type { BackdropScope, Rect, SpreadView } from './sheet'
 
 // ---------- Обложка (спека 032): геометрию и зоны считает Go, UI переводит мм в проценты ----------
 
@@ -40,6 +40,12 @@ export interface CoverZone {
 
 export type CoverLayout = 'front' | 'both' | 'wrap'
 
+// Область фото фона раскладки с подписью (061): список и порядок решает Go.
+export interface CoverScope {
+  scope: BackdropScope
+  label: string
+}
+
 export interface CoverView {
   sheet: SpreadView // ID "cover"
   spec: CoverSpec
@@ -51,7 +57,8 @@ export interface CoverView {
   spineBg: string // #rrggbb плашки корешка; "" — нет
   spineText: string // ID надписи на корешке; "" — нет (058, решение №19)
   zones: CoverZone[]
-  drop: CoverZone[]
+  drop: CoverZone[] // зоны броска; kind: back front wrap spine
+  scopes: CoverScope[] // области фона текущей раскладки: front — Лицевая; wrap — Вся обложка; both — Задняя, Корешок, Лицевая
   safe: Rect[]
   textMaxW: number
   guide: string // имя файла разметки; "" — нет

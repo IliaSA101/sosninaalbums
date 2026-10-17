@@ -174,6 +174,10 @@ export function FlipSticker(arg1, arg2, arg3) {
   return window['go']['app']['App']['FlipSticker'](arg1, arg2, arg3);
 }
 
+export function ForgetFileNames(arg1) {
+  return window['go']['app']['App']['ForgetFileNames'](arg1);
+}
+
 export function ForgetRecent(arg1) {
   return window['go']['app']['App']['ForgetRecent'](arg1);
 }

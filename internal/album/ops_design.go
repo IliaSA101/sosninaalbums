@@ -128,6 +128,13 @@ func (e *Editor) SetPerson(photoID string, who model.Person, session string) mod
 	return e.apply(textMerge(session), func(p *model.Project) { names.SetPerson(p, photoID, pp) })
 }
 
+// ForgetFileNames — «Убрать имена» тоста броска (060): снять имя у фото ids, если оно всё ещё
+// равно автоимени из названия файла. Один шаг; снимать нечего — холостая.
+// Договор: до правки ничего.
+func (e *Editor) ForgetFileNames(ids []string) model.View {
+	return e.change(func(p *model.Project) { names.ForgetFileNames(p, ids) })
+}
+
 // Person — имя фото для карточки (своё или из имени файла) и стоит ли оно на месте
 // учителя виньетки; ok = false — фото не в альбоме.
 func (e *Editor) Person(photoID string) (pv model.PersonView, ok bool) {

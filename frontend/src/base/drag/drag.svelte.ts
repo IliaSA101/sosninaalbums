@@ -41,7 +41,7 @@ class Drag {
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
-      window.removeEventListener('keydown', esc)
+      window.removeEventListener('keydown', esc, true)
       if (!this.active) return
       const p = this.payload!
       const t = this.target
@@ -52,15 +52,17 @@ class Drag {
     }
     const esc = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
+        ev.stopPropagation() // Esc отменяет только перенос: режимы и меню под ним не берут
+        ev.preventDefault()
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
-        window.removeEventListener('keydown', esc)
+        window.removeEventListener('keydown', esc, true)
         this.reset()
       }
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
-    window.addEventListener('keydown', esc)
+    window.addEventListener('keydown', esc, true) // захват: раньше слушателей режимов и меню
   }
 
   // Цель под последней точкой указателя: ряд разворотов поехал, а мышь стоит (спека 012).

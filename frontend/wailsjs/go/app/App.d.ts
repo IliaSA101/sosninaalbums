@@ -92,6 +92,8 @@ export function FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.
 
 export function FlipSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
+export function ForgetFileNames(arg1:Array<string>):Promise<model.View>;
+
 export function ForgetRecent(arg1:string):Promise<Array<prefs.RecentProject>>;
 
 export function FsferaPlan():Promise<fsfera.Plan>;

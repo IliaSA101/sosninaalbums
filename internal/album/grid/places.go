@@ -23,12 +23,21 @@ var (
 // rectBox — прямоугольник раскладки без угла («Авто», встроенные сетки).
 func rectBox(r layout.Rect) model.Box { return model.Box{X: r.X, Y: r.Y, W: r.W, H: r.H} }
 
+// pageArea — область сетки: AreaOf без корешка обложки (061) — мест, шаблонов и отражения
+// на корешке нет, у него только фото фона.
+func pageArea(p *model.Project, s *model.Spread, scope string) (layout.Rect, bool) {
+	if scope == model.ScopeSpine {
+		return layout.Rect{}, false
+	}
+	return p.AreaOf(s, scope)
+}
+
 // InArea — место листа s относится к области: у разворота — любое, у страницы — центр
 // места на ней (applyGrid, копирование, тексты с design). У обложки центр на корешке
 // не относится ни к одной сторонке.
 func InArea(p *model.Project, s *model.Spread, x, w float64, scope string) bool {
 	c := x + w/2
-	a, ok := p.AreaOf(s, scope)
+	a, ok := pageArea(p, s, scope)
 	switch {
 	case !ok:
 		return false
@@ -47,7 +56,7 @@ func InArea(p *model.Project, s *model.Spread, x, w float64, scope string) bool 
 // новые, лишние уходят из альбома. left — сколько фото ушло. Тексты и фон не
 // трогаются. Больше MaxPlaces в итоге — ошибка (try откатывает).
 func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Box) (left int, err error) {
-	if _, ok := p.AreaOf(s, scope); !ok {
+	if _, ok := pageArea(p, s, scope); !ok {
 		return 0, model.ErrScope
 	}
 	p.Freeze(s)
@@ -114,7 +123,7 @@ func FracBoxes(p *model.Project, s *model.Spread, tplScope, scope string, frac [
 
 // AreaFrac — места области scope листа s в долях этой области (порядок мест).
 func AreaFrac(p *model.Project, s *model.Spread, scope string) []model.Box {
-	a, ok := p.AreaOf(s, scope)
+	a, ok := pageArea(p, s, scope)
 	if !ok {
 		return nil
 	}
@@ -159,7 +168,7 @@ func mirrorSet(grid []*model.Place, scope string, a0, a1 float64) []*model.Place
 // «Отражение»). false — отражать нечего: неизвестная область, нет мест или
 // сетка симметрична (иначе в симметричной паре фото поменялись бы местами).
 func mirrorGrid(p *model.Project, s *model.Spread, scope string) bool {
-	a, ok := p.AreaOf(s, scope)
+	a, ok := pageArea(p, s, scope)
 	if !ok {
 		return false
 	}
@@ -180,7 +189,7 @@ func mirrorGrid(p *model.Project, s *model.Spread, scope string) bool {
 // Как у мест: центр отражается, угол −Rot; текст и стиль те же. false — шапки нет, она в
 // другой области или симметрична.
 func mirrorHead(p *model.Project, s *model.Spread, scope string) bool {
-	a, ok := p.AreaOf(s, scope)
+	a, ok := pageArea(p, s, scope)
 	if !ok || !s.IsVignette() {
 		return false
 	}

@@ -455,6 +455,64 @@ func TestPlanRangeNarrow(t *testing.T) {
 	}
 }
 
+// zigzagShare — доля троек s[i] = s[i+2] ≠ s[i+1] в размерах плана.
+func zigzagShare(s []int) float64 {
+	zig := 0
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] == s[i+2] && s[i] != s[i+1] {
+			zig++
+		}
+	}
+	return float64(zig) / float64(len(s)-2)
+}
+
+// TestPlanRangeNoZigzag — «Свой 1–3» не чередует размеры 1,2,1,2 (решение 0.14 №8): доля
+// троек s[i] = s[i+2] ≠ s[i+1] небольшая, а 1 и 3 в плане встречаются. 60 фото, N = 36 и 40
+// (среднее 1,7 и 1,5), на однородных и на серийных пропорциях, с разрезами серий и без.
+// «Авто» при малом среднем (100 фото, N = 40: AutoPer 1…4, решение №28) — тот же предел.
+func TestPlanRangeNoZigzag(t *testing.T) {
+	ser, cuts := seriesAspects(7, 60)
+	sets := []struct {
+		name      string
+		asp, cuts []float64
+	}{{"свадьба", weddingAspects(8, 60), nil}, {"серии", ser, nil}, {"серии+разрезы", ser, cuts}}
+	for _, set := range sets {
+		for _, N := range []int{36, 40} {
+			pl := PlanRange(set.asp, album30, PlanOpts{Spreads: N, MinPer: 1, MaxPer: 3, Cuts: set.cuts})
+			checkPlan(t, pl, 60, N, 3)
+			s := sizes(pl)
+			share := zigzagShare(s)
+			t.Logf("%s N=%d: зигзагов %.2f %v", set.name, N, share, s)
+			if share > 0.3 {
+				t.Errorf("%s N=%d: доля зигзагов %.2f > 0,3: %v", set.name, N, share, s)
+			}
+			if !slices.Contains(s, 1) || !slices.Contains(s, 3) {
+				t.Errorf("%s N=%d: нет и 1, и 3: %v", set.name, N, s)
+			}
+		}
+	}
+	// «Авто»: диапазон — из AutoPer, как у spreads/plan.go.
+	const n, N = 100, 40
+	from, to := AutoPer(n, N)
+	if from != 1 || to != 4 {
+		t.Fatalf("AutoPer(%d, %d) = %d…%d, ждали 1…4 — тест не проверяет малое среднее", n, N, from, to)
+	}
+	aser, acuts := seriesAspects(9, n)
+	for _, set := range []struct {
+		name      string
+		asp, cuts []float64
+	}{{"свадьба", weddingAspects(10, n), nil}, {"серии", aser, nil}, {"серии+разрезы", aser, acuts}} {
+		pl := PlanRange(set.asp, album30, PlanOpts{Spreads: N, MinPer: from, MaxPer: to, Cuts: set.cuts})
+		checkPlan(t, pl, n, N, to)
+		s := sizes(pl)
+		share := zigzagShare(s)
+		t.Logf("Авто %s: зигзагов %.2f %v", set.name, share, s)
+		if share > 0.3 {
+			t.Errorf("Авто %s: доля зигзагов %.2f > 0,3: %v", set.name, share, s)
+		}
+	}
+}
+
 // TestPlanRangeCuts — силы границ: длина не n+1 — серий нет, NaN и минус — 0, больше 1 — 1;
 // сильная граница рядом с разрезом без серий притягивает его.
 func TestPlanRangeCuts(t *testing.T) {

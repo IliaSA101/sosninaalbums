@@ -35,6 +35,8 @@
     preview?: boolean // r взят из карточки галереи: картинку считаем сами
   } = $props()
 
+  const NINTHS = [1, 2, 3, 4, 5, 6, 7, 8] // линии сетки наклона 9×9 (059)
+
   const id = $derived(spread.photos[i])
   // Место сетки этого фото (спека 007): цель drag «place» вместо «cell»; contain — картинка вписана целиком.
   const place = $derived(spread.grid ? spread.places?.find((p) => p.photo === id) : undefined)
@@ -145,8 +147,14 @@
           onload={() => (previewReady = true)}
         />{/if}
     {/if}
-    {#if framelive.panning(id) || framelive.tilting(id)}
-      <!-- Сетка третей: только пока идёт сдвиг или тянут наклон -->
+    {#if framelive.tilting(id)}
+      <!-- Наклон (из шкалы и карточки): сетка 9×9, трети ярче — горизонт ровняют по частым линиям (059) -->
+      {#each NINTHS as k (k)}
+        <span class="v" class:third={k % 3 === 0} class:ninth={k % 3 !== 0} style:left="{(k * 100) / 9}%"></span>
+        <span class="h" class:third={k % 3 === 0} class:ninth={k % 3 !== 0} style:top="{(k * 100) / 9}%"></span>
+      {/each}
+    {:else if framelive.panning(id)}
+      <!-- Сетка третей: пока идёт сдвиг кадра -->
       <span class="third v" style:left="33.333%"></span>
       <span class="third v" style:left="66.666%"></span>
       <span class="third h" style:top="33.333%"></span>
@@ -219,12 +227,21 @@
     background: rgba(255, 255, 255, 0.75);
     box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.45);
   }
-  .third.v {
+  /* Промежуточные линии сетки 9×9 — вдвое прозрачнее третей */
+  .ninth {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.38);
+    box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.22);
+  }
+  .third.v,
+  .ninth.v {
     top: 0;
     bottom: 0;
     width: 1px;
   }
-  .third.h {
+  .third.h,
+  .ninth.h {
     left: 0;
     right: 0;
     height: 1px;

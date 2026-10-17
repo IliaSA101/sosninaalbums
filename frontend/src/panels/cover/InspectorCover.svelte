@@ -252,7 +252,8 @@
   }
   .layouts {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    /* длинные подписи в две колонки не помещаются — тогда один столбец */
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 4px;
   }
   .layouts button {

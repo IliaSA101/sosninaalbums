@@ -107,8 +107,8 @@ func TestFamily(t *testing.T) {
 	}
 }
 
-// TestFamilyOfForms: сегмент фильтра подборки есть у каждой формы; подпись мозаики пуста
-// (весь ряд «Плотно»), у остальных форм — название вида.
+// TestFamilyOfForms: сегмент фильтра подборки есть у каждой формы и у каждой формы есть
+// название для подписи плитки (у мозаики — «Плотно»).
 func TestFamilyOfForms(t *testing.T) {
 	want := map[forms.Form]Family{
 		forms.Mosaic: Dense, forms.Strip: Strip, forms.Rows: Strip, forms.Grid: Strip,
@@ -121,9 +121,8 @@ func TestFamilyOfForms(t *testing.T) {
 		if got := FamilyOf(f); got != fam {
 			t.Errorf("FamilyOf(%s) = %s, ждали %s", f, got, fam)
 		}
-		name := FormName(f)
-		if (f == forms.Mosaic) != (name == "") || (f != forms.Mosaic && name != forms.Name(f)) {
-			t.Errorf("FormName(%s) = %q", f, name)
+		if name := forms.Name(f); name == "" || f == forms.Mosaic && name != "Плотно" {
+			t.Errorf("forms.Name(%s) = %q", f, name)
 		}
 	}
 	if FamilyOf("неизвестная") != Dense {

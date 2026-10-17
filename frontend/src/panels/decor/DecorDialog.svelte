@@ -30,7 +30,7 @@
   const c = $derived(decor.cur)
   const sp = $derived(c ? sheetIn(store.view, c.spread) : undefined)
   const unit = $derived(unitOf(store.view.settings))
-  const where = $derived(whereItems(sp, store.cover?.layout, unit.all))
+  const where = $derived(whereItems(sp, store.cover, unit.all))
   const scope = $derived(c ? scopeIn(where, c.scope) : 'spread')
   const items = $derived(themeItems(decor.cat, decor.theme))
   const readOnly = $derived(!!decor.cat?.readOnly)

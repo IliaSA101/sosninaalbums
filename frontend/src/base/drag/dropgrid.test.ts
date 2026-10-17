@@ -6,6 +6,8 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
   DropPhotos: vi.fn(),
   PlacePhotos: vi.fn(),
   AddPhotos: vi.fn(),
+  FillPlaces: vi.fn(),
+  ForgetFileNames: vi.fn(),
 }))
 vi.stubGlobal('window', globalThis)
 
@@ -29,7 +31,7 @@ const grid = (id: string, photos: string[], vig?: object) => ({
 const view = (rev: number, spreads: object[] = [grid('g', ['p0']), { id: 'a', photos: ['x'], grid: false }]) =>
   ({ rev, marksRev: 0, folders: [], spreads, settings: { sheet: false } }) as never
 const reply = (o: Partial<Record<string, unknown>> = {}) =>
-  ({ view: view(2), ask: false, fit: 0, total: 0, fresh: [], grown: 0, out: false, left: 0, small: false, ...o }) as never
+  ({ view: view(2), ask: false, fit: 0, total: 0, fresh: [], grown: 0, out: false, left: 0, small: false, named: [], ...o }) as never
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -262,5 +264,139 @@ describe('dropOn и Enter', () => {
     vi.mocked(Api.AddPhotos).mockResolvedValueOnce(view(2) as never)
     await store.addToCurrent(['a'])
     expect(Api.AddPhotos).toHaveBeenCalledWith('g', ['a'], -1)
+  })
+})
+
+// 060: имена из названий файлов — тост «Убрать имена» (или общий с «Вернуть», если есть свои заметки).
+describe('имена из названий файлов (060)', () => {
+  const ForgetFileNames = vi.mocked(Api.ForgetFileNames)
+  const NAMES = 'Имена взяты из названий файлов: 2'
+
+  it('named пуст — тоста нет', async () => {
+    DropPhotos.mockResolvedValueOnce(reply({ named: [] }))
+    await dropGrid('g', '', ['a'], -1, false)
+    expect(store.toast).toBeNull()
+  })
+
+  it('named без заметок — тост с числом и кнопкой «Убрать имена»', async () => {
+    DropPhotos.mockResolvedValueOnce(reply({ named: ['a', 'b'] }))
+    await dropGrid('g', '', ['a', 'b'], -1, false)
+    expect(store.toast?.text).toBe(NAMES)
+    expect(store.toast?.action?.label).toBe('Убрать имена')
+  })
+
+  it('кнопка зовёт ForgetFileNames один раз с named и применяет View', async () => {
+    DropPhotos.mockResolvedValueOnce(reply({ named: ['a', 'b'] }))
+    await dropGrid('g', '', ['a', 'b'], -1, false)
+    ForgetFileNames.mockResolvedValueOnce(view(3))
+    await store.toast!.action!.run()
+    expect(ForgetFileNames).toHaveBeenCalledOnce()
+    expect(ForgetFileNames).toHaveBeenCalledWith(['a', 'b'])
+    expect(store.view.rev).toBe(3)
+    expect(store.toast).toBeNull()
+  })
+
+  it('после чужой правки кнопка ничего не зовёт', async () => {
+    DropPhotos.mockResolvedValueOnce(reply({ named: ['a'] }))
+    await dropGrid('g', '', ['a'], -1, false)
+    const run = store.toast!.action!.run
+    store.view.rev = 5 // правка прошла, а тост ещё на экране (событие view без смены)
+    await run()
+    expect(ForgetFileNames).not.toHaveBeenCalled()
+    expect(store.toast?.text).toBe('Уже были другие изменения — имена не тронуты')
+  })
+
+  it('тост гаснет, когда ревизия сменилась (Ctrl+Z броска)', async () => {
+    DropPhotos.mockResolvedValueOnce(reply({ named: ['a'] }))
+    await dropGrid('g', '', ['a'], -1, false)
+    store.apply(view(1))
+    expect(store.toast).toBeNull()
+  })
+
+  it('с заметками — один общий тост с текстом обоих и «Вернуть»', async () => {
+    DropPhotos.mockResolvedValueOnce(reply({ out: true, small: true, named: ['a', 'b'] }))
+    await dropGrid('g', 'pl', ['a', 'b'], -1, false)
+    expect(store.toast?.text).toBe(
+      `Прежнее фото вернулось в ленту. Места вышли мелкими — много фото удобнее бросить на «+ Новый разворот». ${NAMES}`,
+    )
+    expect(store.toast?.action?.label).toBe('Вернуть')
+  })
+
+  it('из ленты: «Перенесено из …» не теряется рядом с именами', async () => {
+    store.apply(view(1, [grid('g', ['p0']), { id: 'a', photos: ['x'], grid: false }]))
+    DropPhotos.mockResolvedValueOnce(reply({ named: ['x'], view: view(2, [grid('g', ['x']), { id: 'a', photos: [], grid: false }]) }))
+    await dropGrid('g', '', ['x'], -1, false)
+    expect(store.toast?.text).toBe('Фото перенесено из разворота 2. Имена взяты из названий файлов: 1')
+    expect(store.toast?.action?.label).toBe('Убрать имена')
+  })
+
+  it('обложка: PlacePhotos с named — тот же тост', async () => {
+    store.apply({
+      rev: 1,
+      folders: [],
+      spreads: [],
+      settings: { sheet: false },
+      cover: { sheet: { id: 'cover', photos: [], grid: true, places: [] }, spine: 14 },
+    } as never)
+    vi.mocked(Api.PlacePhotos).mockResolvedValueOnce({ view: view(2), left: 0, named: ['a'] } as never)
+    await dropOn({ kind: 'photos', ids: ['a'] }, { kind: 'place', spread: 'cover', place: 'pl', photo: null })
+    expect(store.toast?.text).toBe('Имена взяты из названий файлов: 1')
+    expect(store.toast?.action?.label).toBe('Убрать имена')
+  })
+
+  describe('обложка: «Перенесено из …» не перетирается', () => {
+    const cover = { id: 'cover', photos: [], grid: true, places: [{ id: 'pl', photo: '' }] }
+    const src = (photos: string[]) => ({ id: 'a', photos, grid: false })
+    // landed — фото, которые встали на обложку после правки.
+    const withCover = (rev: number, a: string[], landed: string[] = []) =>
+      ({
+        rev,
+        folders: [],
+        spreads: [src(a)],
+        settings: { sheet: false },
+        cover: { sheet: { ...cover, photos: landed }, spine: 14 },
+      }) as never
+    const drop = () => dropOn({ kind: 'photos', ids: ['x'] }, { kind: 'place', spread: 'cover', place: 'pl', photo: null })
+
+    it('с именами', async () => {
+      store.apply(withCover(1, ['x']))
+      vi.mocked(Api.PlacePhotos).mockResolvedValueOnce({ view: withCover(2, [], ['x']), left: 0, named: ['x'] } as never)
+      await drop()
+      expect(store.toast?.text).toBe('Фото перенесено из разворота 1. Имена взяты из названий файлов: 1')
+    })
+    it('с «не хватило мест»', async () => {
+      store.apply(withCover(1, ['x']))
+      vi.mocked(Api.PlacePhotos).mockResolvedValueOnce({ view: withCover(2, ['y'], ['x']), left: 1 } as never)
+      await drop()
+      expect(store.toast?.text).toBe('Фото перенесено из разворота 1. Не хватило мест: 1 фото остались в ленте')
+    })
+    it('фото не встало на обложку — «перенесено» не пишем', async () => {
+      store.apply(withCover(1, ['x']))
+      vi.mocked(Api.PlacePhotos).mockResolvedValueOnce({ view: withCover(2, ['x']), left: 1 } as never)
+      await drop()
+      expect(store.toast?.text).toBe('Не хватило мест: 1 фото остались в ленте')
+    })
+    it('из разворота (не из ленты) — текста о переносе нет', async () => {
+      store.apply(withCover(1, ['x']))
+      store.selected.add('x')
+      vi.mocked(Api.PlacePhotos).mockResolvedValueOnce({ view: withCover(2, []), left: 0 } as never)
+      await dropOn({ kind: 'photos', ids: ['x'], fromSpread: 'a' }, { kind: 'place', spread: 'cover', place: 'pl', photo: null })
+      expect(store.toast).toBeNull()
+    })
+  })
+
+  it('«Заполнить»: named — тост, «не хватило мест» идёт в тот же текст', async () => {
+    store.plug({ ...noHooks, select, pick: () => ({ ids: ['a', 'b'], skipped: 0, from: 'free', inAlbum: 0, filtered: false }) })
+    vi.mocked(Api.FillPlaces).mockResolvedValueOnce({ view: view(2), left: 1, named: ['a'] } as never)
+    await store.fillPlaces()
+    expect(store.toast?.text).toBe('Не хватило мест: 1 фото остались в ленте. Имена взяты из названий файлов: 1')
+    expect(store.toast?.action?.label).toBe('Убрать имена')
+  })
+
+  it('«Заполнить» без named — тоста нет', async () => {
+    store.plug({ ...noHooks, select, pick: () => ({ ids: ['a'], skipped: 0, from: 'free', inAlbum: 0, filtered: false }) })
+    vi.mocked(Api.FillPlaces).mockResolvedValueOnce({ view: view(2), left: 0, named: [] } as never)
+    await store.fillPlaces()
+    expect(store.toast).toBeNull()
   })
 })

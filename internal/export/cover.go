@@ -27,7 +27,7 @@ func NewCoverJob(p *model.Project, v model.View, dpi, quality int) *CoverJob {
 		return nil
 	}
 	s := fromSheet(p, c.Sheet)
-	if c.SpineBg != "" { // плашка во весь корешок: поверх фона, под местами и текстами
+	if c.SpineBg != "" { // плашка во весь корешок: поверх фонов сторонок, под фото корешка, местами и текстами
 		for _, z := range c.Zones {
 			if z.Kind == "spine" && z.Rect.W > 0 && z.Rect.H > 0 {
 				s.Plates = append(s.Plates, render.Plate{Rect: z.Rect, Color: render.ParseHex(c.SpineBg)})

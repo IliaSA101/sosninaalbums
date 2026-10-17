@@ -42,7 +42,7 @@ export function coverTarget(p: Payload): Target | null {
 // бросок даёт тост «только одно»), иначе бросок молча не срабатывал бы. d — dataset с data-drop="backdrop".
 export function backdropTarget(d: { spread?: string; scope?: string }, p: Payload): Target | null {
   if (p.kind !== 'photos' || p.ids.length === 0 || !d.spread) return null
-  if (d.scope !== 'spread' && d.scope !== 'left' && d.scope !== 'right') return null
+  if (d.scope !== 'spread' && d.scope !== 'left' && d.scope !== 'right' && d.scope !== 'spine') return null
   if (p.ids.length > 1) return { kind: 'backdrop', spread: d.spread, scope: d.scope, many: true }
   return { kind: 'backdrop', spread: d.spread, scope: d.scope }
 }

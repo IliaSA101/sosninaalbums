@@ -128,24 +128,41 @@ describe('«Куда»', () => {
   it('лист без шва (виньетка-лист) — одна область: переключатель прячется', () => {
     expect(whereItems({ id: 's2', mid: 0 }, undefined, 'Весь лист')).toEqual([{ id: 'spread', label: 'Весь лист' }])
   })
+  // Области фото фона по раскладкам — как их отдаёт Go (CoverView.scopes, 061)
+  const front = { scopes: [{ scope: 'right' as const, label: 'Лицевая' }] }
+  const wrap = { scopes: [{ scope: 'spread' as const, label: 'Вся обложка' }] }
+  const both = {
+    scopes: [
+      { scope: 'left' as const, label: 'Задняя' },
+      { scope: 'spine' as const, label: 'Корешок' },
+      { scope: 'right' as const, label: 'Лицевая' },
+    ],
+  }
+  const cover = { id: 'cover', mid: 300 }
   it('обложка — сторонки по раскладке', () => {
-    const cover = { id: 'cover', mid: 300 }
-    expect(whereItems(cover, 'front', 'Весь разворот').map((i) => [i.id, i.label])).toEqual([['right', 'Лицевая']])
-    expect(whereItems(cover, 'both', 'Весь разворот').map((i) => i.id)).toEqual(['left', 'right'])
-    expect(whereItems(cover, 'wrap', 'Весь разворот').map((i) => [i.id, i.label])).toEqual([['spread', 'Вся обложка']])
+    expect(whereItems(cover, front, 'Весь разворот').map((i) => [i.id, i.label])).toEqual([['right', 'Лицевая']])
+    expect(whereItems(cover, wrap, 'Весь разворот').map((i) => [i.id, i.label])).toEqual([['spread', 'Вся обложка']])
+  })
+  it('узор и цвет корешок не принимают: в «Куда» его нет', () => {
+    expect(whereItems(cover, both, 'Весь разворот').map((i) => [i.id, i.label])).toEqual([
+      ['left', 'Задняя'],
+      ['right', 'Лицевая'],
+    ])
   })
   it('листа нет — безопасная одна область', () => {
     expect(whereItems(undefined, undefined, 'Весь разворот')).toHaveLength(1)
   })
-  it('область по умолчанию: разворот — весь, обложка — первая сторонка', () => {
+  it('область по умолчанию: разворот — весь, обложка — первая сторонка (не корешок)', () => {
     expect(defaultScope(sp, undefined)).toBe('spread')
-    expect(defaultScope({ id: 'cover', mid: 300 }, 'front')).toBe('right')
-    expect(defaultScope({ id: 'cover', mid: 300 }, 'both')).toBe('left')
+    expect(defaultScope(cover, front)).toBe('right')
+    expect(defaultScope(cover, both)).toBe('left')
+    expect(defaultScope(cover, wrap)).toBe('spread')
     expect(defaultScope(undefined, undefined)).toBe('spread')
   })
   it('пропавшая из списка область заменяется первой доступной', () => {
-    const items = whereItems({ id: 'cover', mid: 300 }, 'front', 'x')
+    const items = whereItems(cover, front, 'x')
     expect(scopeIn(items, 'left')).toBe('right')
+    expect(scopeIn(items, 'spine')).toBe('right')
     expect(scopeIn(items, 'right')).toBe('right')
     expect(scopeIn([], 'left')).toBe('spread')
   })

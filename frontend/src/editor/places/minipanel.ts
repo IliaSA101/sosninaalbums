@@ -7,7 +7,7 @@ import type { FeatureId } from '../../base/prefs/levels'
 import type { Rect, SpreadView } from '../../base/core/types'
 import { whoOf } from '../captions/nametarget'
 
-export type MiniId = 'flipH' | 'flipV' | 'turn' | 'fit' | 'fitPhoto' | 'caption' | 'name' | 'layer' | 'swap' | 'same' | 'delete'
+export type MiniId = 'flipH' | 'flipV' | 'turn' | 'tilt' | 'fit' | 'fitPhoto' | 'caption' | 'name' | 'layer' | 'swap' | 'same' | 'delete'
 
 export interface MiniItem {
   id: MiniId
@@ -29,6 +29,8 @@ export interface MiniCtx {
   flipH: boolean // зеркало ↔ включено у всех выделенных фото
   flipV: boolean
   name?: boolean // у единственного фото подпись идёт по шаблону с полями имени (037)
+  tilt?: boolean // режим шкалы наклона включён (059)
+  missing?: boolean // одиночное фото пропало с диска: шкала ему ни к чему
 }
 
 export function miniContext(s: SpreadView | undefined, sel: SelBox[], texts = 0): MiniCtx {
@@ -53,6 +55,7 @@ const FEATURE: Partial<Record<MiniId, FeatureId>> = {
   flipH: 'flip',
   flipV: 'flip',
   turn: 'turn',
+  tilt: 'tilt',
   fit: 'frame',
   fitPhoto: 'frame',
   caption: 'captions',
@@ -95,7 +98,11 @@ function photoGroups(c: MiniCtx, solo: boolean): MiniItem[][] {
   const cap: MiniItem = c.name
     ? { id: 'name', label: 'Имя под фото', icon: 'caption' }
     : { id: 'caption', label: 'Подпись к фото', icon: 'caption' }
-  return [flips, fit, [cap, TURN]]
+  // Шкала наклона (059): одиночному фото на месте; у пропавшего снимка выпрямлять нечего.
+  const tilt: MiniItem[] = c.missing
+    ? []
+    : [{ id: 'tilt', label: 'Наклон фото в рамке: выпрямить горизонт', icon: 'tilt', on: c.tilt ?? false }]
+  return [flips, fit, [cap, TURN, ...tilt]]
 }
 
 // Значки слева направо по таблице gestures.md; группы разделяет линия. can — уровень интерфейса

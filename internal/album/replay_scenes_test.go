@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 )
 
@@ -26,8 +27,8 @@ func replayGrid(r *replay, ph []model.PhotoInfo) {
 	r.do("ArrangeLayers", e.ArrangeLayers(sb, "front", []string{id(1)}))
 	r.ve("AddText:сетка")(e.AddText(sb, 1, "t2"))
 	t2 := r.lastText(sb).ID
-	r.vne("PlacePhotos")(e.PlacePhotos(sb, r.emptyPlace(sb), ph[15:17]))
-	r.vn("FillPlaces")(e.FillPlaces(ph[16:18], sb))
+	r.vnne("PlacePhotos")(e.PlacePhotos(sb, r.emptyPlace(sb), ph[15:17]))
+	r.vnn("FillPlaces")(e.FillPlaces(ph[16:18], sb))
 
 	group := []string{id(1), id(15), t2}
 	r.read("AlignOverlap", e.AlignOverlap(sb, group, "distH", "spread"))
@@ -71,6 +72,7 @@ func replayCover(r *replay, ph []model.PhotoInfo) {
 	r.ve("SetCoverSpec")(e.SetCoverSpec(spec))
 	r.ve("SetCoverLayout")(e.SetCoverLayout("wrap"))
 	r.ve("SetCoverLayout:обе")(e.SetCoverLayout("both"))
+	r.ve("SetBackdrop:корешок")(e.SetBackdrop(model.CoverID, model.ScopeSpine, ph[15])) // 061: надпись ниже — без плашки
 	r.ve("SetBackdrop:задняя")(e.SetBackdrop(model.CoverID, model.ScopeLeft, ph[17]))
 	r.ve("CoverSpineText")(e.CoverSpineText())
 	r.ve("CoverSpineText:повтор")(e.CoverSpineText())
@@ -80,7 +82,7 @@ func replayCover(r *replay, ph []model.PhotoInfo) {
 	r.ve("SetCoverGuide:UNC")(e.SetCoverGuide(`\\server\share\cover.png`))
 	r.do("ClearCoverGuide", e.ClearCoverGuide())
 	r.ve("AddPlace:обложка")(e.AddPlace(model.CoverID, 1, ""))
-	r.vne("PlacePhotos:обложка")(e.PlacePhotos(model.CoverID, r.v.Cover.Sheet.Places[0].ID, ph[18:19]))
+	r.vnne("PlacePhotos:обложка")(e.PlacePhotos(model.CoverID, r.v.Cover.Sheet.Places[0].ID, ph[18:19]))
 	r.do("DeleteCover", e.DeleteCover())
 	r.do("Undo:обложка", e.Undo())
 }
@@ -93,7 +95,7 @@ func replayVignette(r *replay, ph []model.PhotoInfo) {
 	sid := r.v.Spreads[len(r.v.Spreads)-1].ID
 	r.read("VignetteChoices", e.VignetteChoices(sid, 2, 10, "4:5", nil))
 	r.vne("SetVignette")(e.SetVignette(sid, model.Vignette{Tpl: "g-top", Teachers: 2, Pupils: 10, Ratio: "4:5"}, nil))
-	r.vn("FillPlaces:виньетка")(e.FillPlaces(ph[17:19], sid))
+	r.vnn("FillPlaces:виньетка")(e.FillPlaces(ph[17:19], sid))
 	r.vne("SetVignette:предел")(e.SetVignette(sid, model.Vignette{Tpl: "grid", Teachers: 18, Pupils: 64}, nil))
 	// Окно «Настроить виньетку»: сухой прогон (чтение) и «Применить» с полями шапки.
 	setup := model.VigSetup{Vig: model.Vignette{Tpl: "head-g-top", Teachers: 1, Pupils: 12, Ratio: "3:4"},
@@ -236,4 +238,13 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	// Повтор — только rev и ошибка: полный вид второй раз раздул бы эталон к пределу 2 МБ.
 	again, err := e.CopyDecor(sid, model.ScopeLeft, right, true, true)
 	r.read("CopyDecor:повтор", [2]any{again.Rev, err})
+	// Автоимя при броске (060, в конце, как 042): лист с шаблоном имени, файл-«человек» и файл со
+	// стоп-словом — имя получает только первый, тем же шагом.
+	r.do("SetSheetCaps:имя", e.SetSheetCaps(sid, true, model.SheetCaps{Style: model.NewCaptionStyle(r.v.Settings.PageH), Text: "{Фамилия} {Имя}"}))
+	who := []model.PhotoInfo{edtest.Lib(`Q:\Свадьба\иванов_петя.jpg`, model.XmpMarks{}), edtest.Lib(`Q:\Свадьба\Свадьба Ивановых.jpg`, model.XmpMarks{})}
+	for i := range who {
+		who[i].W, who[i].H = 2000, 3000
+	}
+	v, o, err := e.DropPhotos(sid, "", who, -1, "add")
+	r.edit("DropPhotos:имя", v, fmt.Sprintf("ask=%v total=%d named=%v", o.Ask, o.Total, o.Named), err)
 }

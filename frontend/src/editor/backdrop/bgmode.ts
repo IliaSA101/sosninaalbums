@@ -17,6 +17,13 @@ export interface BgLive {
 
 const EPS = 1e-6
 
+// Мелкая рамка (< 48 px на экране; у корешка 6 мм при «вписать» — 5–13 px): ползунок масштаба не помещается и лёг бы
+// поверх ручек (⟳, стороны), поэтому его нет — масштаб есть в карточке «Фото фона». Порог тот же, что у CellOverlay.
+export const MIN_SLIDER_PX = 48
+export function roomForSlider(box: { w: number; h: number }, ppm: number): boolean {
+  return Math.min(box.w, box.h) * ppm >= MIN_SLIDER_PX
+}
+
 const inRect = (r: Rect, p: Pt) => p.x >= r.x - EPS && p.x <= r.x + r.w + EPS && p.y >= r.y - EPS && p.y <= r.y + r.h + EPS
 
 // Точка внутри повёрнутой рамки: переводим в оси рамки.
@@ -61,4 +68,5 @@ export const SCOPE_BAR: Record<BackdropScope, string> = {
   spread: 'весь разворот',
   left: 'левая страница',
   right: 'правая страница',
+  spine: 'корешок',
 }

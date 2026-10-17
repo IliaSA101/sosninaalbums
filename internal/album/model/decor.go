@@ -124,7 +124,7 @@ func ClampPattern(pt *Pattern) *Pattern {
 
 // clampPatterns — узоры листа при чтении файла: при pat и patL/R остаётся pat (как фон).
 func clampPatterns(s *Spread) {
-	for _, scope := range bdScopes {
+	for _, scope := range patScopes {
 		slot := s.PatSlot(scope)
 		*slot = ClampPattern(*slot)
 	}

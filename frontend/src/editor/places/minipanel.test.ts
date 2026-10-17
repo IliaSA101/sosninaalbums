@@ -12,14 +12,14 @@ describe('miniItems', () => {
     expect(ids({ places: 0, photos: 0 })).toEqual([])
   })
   it('фото, «Авто»: зеркала, переключатель вида, подпись, ↻ 90°, удалить; без слоя и ⇄', () => {
-    expect(ids({})).toEqual(['flipH', 'flipV', 'fit', 'caption', 'turn', 'delete'])
+    expect(ids({})).toEqual(['flipH', 'flipV', 'fit', 'caption', 'turn', 'tilt', 'delete'])
   })
   it('фото, «Ручная»: плюс «Слой» и ⇄ перед «Удалить»', () => {
-    expect(ids({ grid: true })).toEqual(['flipH', 'flipV', 'fit', 'caption', 'turn', 'layer', 'swap', 'delete'])
+    expect(ids({ grid: true })).toEqual(['flipH', 'flipV', 'fit', 'caption', 'turn', 'tilt', 'layer', 'swap', 'delete'])
   })
   it('«Под фото» только при разных пропорциях, сразу после переключателя', () => {
     expect(ids({})).not.toContain('fitPhoto')
-    expect(ids({ differ: true })).toEqual(['flipH', 'flipV', 'fit', 'fitPhoto', 'caption', 'turn', 'delete'])
+    expect(ids({ differ: true })).toEqual(['flipH', 'flipV', 'fit', 'fitPhoto', 'caption', 'turn', 'tilt', 'delete'])
   })
   it('пустое место: слой и удалить', () => {
     expect(ids({ grid: true, photos: 0 })).toEqual(['layer', 'delete'])
@@ -118,7 +118,7 @@ describe('miniContext', () => {
 describe('имя под фото (037)', () => {
   it('подпись по шаблону с полями имени — «Имя под фото» вместо «Подпись к фото»', () => {
     const m = miniItems({ ...base, name: true })
-    expect(m.map((i) => i.id)).toEqual(['flipH', 'flipV', 'fit', 'name', 'turn', 'delete'])
+    expect(m.map((i) => i.id)).toEqual(['flipH', 'flipV', 'fit', 'name', 'turn', 'tilt', 'delete'])
     expect(m.find((i) => i.id === 'name')?.label).toBe('Имя под фото')
   })
   it('miniContext: name — у единственного фото с who в подписи или заглушке', () => {
@@ -282,7 +282,7 @@ describe('miniItems по уровням (спека 010 U1)', () => {
     expect(lv('simple', { grid: true })).toEqual(['caption', 'turn', 'delete'])
   })
   it('«Стандартный»: зеркала, «Целиком / С обрезкой», подпись; слоя и ⇄ нет', () => {
-    expect(lv('standard', { grid: true })).toEqual(['flipH', 'flipV', 'fit', 'caption', 'turn', 'delete'])
+    expect(lv('standard', { grid: true })).toEqual(['flipH', 'flipV', 'fit', 'caption', 'turn', 'tilt', 'delete'])
   })
   it('«Полный» — как без уровня', () => {
     expect(lv('full', { grid: true })).toEqual(ids({ grid: true }))
@@ -295,6 +295,38 @@ describe('miniItems по уровням (спека 010 U1)', () => {
   })
   it('группа в «Простом»: ↻ 90° и «Удалить (N)»', () => {
     expect(lv('simple', { places: 3, photos: 3 })).toEqual(['turn', 'delete'])
+  })
+})
+
+describe('tilt', () => {
+  const tilt = (c: Partial<MiniCtx>, can?: (f: FeatureId) => boolean) => miniItems({ ...base, ...c }, can).find((i) => i.id === 'tilt')
+  it('кнопка стоит сразу после ↻ 90°, в группе с подписью', () => {
+    const m = miniItems(base)
+    const i = m.findIndex((x) => x.id === 'turn')
+    expect(m[i + 1].id).toBe('tilt')
+    expect(m[i + 1].sep).toBeUndefined()
+    expect(tilt({})?.icon).toBe('tilt')
+  })
+  it('работает в «Авто» и в «Ручной»', () => {
+    expect(tilt({ grid: false })).toBeDefined()
+    expect(tilt({ grid: true })).toBeDefined()
+  })
+  it('нужен уровень с «Наклоном»: в «Простом» нет, в «Стандартном» есть, в «Своём» — по флажку', () => {
+    expect(tilt({}, (f) => can(f, 'simple'))).toBeUndefined()
+    expect(tilt({}, (f) => can(f, 'standard'))).toBeDefined()
+    expect(tilt({}, (f) => f !== 'tilt')).toBeUndefined()
+  })
+  it('нет у группы, пустого места, текста, стикера и пропавшего фото', () => {
+    expect(tilt({ places: 2, photos: 2 })).toBeUndefined() // группа
+    expect(tilt({ places: 1, photos: 1, texts: 1 })).toBeUndefined() // фото и текст
+    expect(tilt({ places: 0, photos: 0, texts: 1 })).toBeUndefined() // текст
+    expect(tilt({ grid: true, photos: 0 })).toBeUndefined() // пустое место
+    expect(tilt({ missing: true })).toBeUndefined() // фото пропало
+  })
+  it('on — когда режим включён, и aria-pressed у выключенного ложен, а не пропущен', () => {
+    expect(tilt({ tilt: true })?.on).toBe(true)
+    expect(tilt({ tilt: false })?.on).toBe(false)
+    expect(tilt({})?.on).toBe(false)
   })
 })
 

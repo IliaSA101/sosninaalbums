@@ -323,7 +323,7 @@ func describeRows(rows []model.Choice, prm layout.Params) {
 	looks := make([]string, len(rows))
 	for i := range rows {
 		f := forms.Of(rows[i].Key, rows[i].Rects, prm)
-		rows[i].Family, rows[i].FormName = string(variety.FamilyOf(f)), variety.FormName(f)
+		rows[i].Family, rows[i].FormName = string(variety.FamilyOf(f)), forms.Name(f)
 		looks[i] = variety.Look(rows[i].Rects, prm)
 	}
 	for i, t := range variety.Twins(looks) {

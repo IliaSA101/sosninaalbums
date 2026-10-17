@@ -154,7 +154,7 @@ export function galleryOrders(lines: readonly GalleryLine[], family: FamilyFilte
   ]
 }
 
-// Подсказка плитки (051): название формы от Go; у мозаики его нет — подсказки нет.
+// Подсказка плитки (051): название формы от Go; пусто — подсказки нет (у мозаики с 0.14 «Плотно»).
 export const tileTitle = (c: Pick<Choice, 'formName'>): string | undefined => c.formName || undefined
 
 // Подпись плитки «Похожие»: свёрнуты — «Похожие: N», раскрыты — «Свернуть».

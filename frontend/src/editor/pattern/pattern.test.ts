@@ -100,7 +100,7 @@ describe('данные узора', () => {
     expect(patched(pv({ pat: { kind: 'grid' } }), { scale: 2 })).toEqual({ kind: 'grid', scale: 2 })
   })
   it('подпись области: «Узор» или с областью, когда узоров два', () => {
-    const l = { spread: 'Весь разворот', left: 'Левая страница', right: 'Правая страница' }
+    const l = { spread: 'Весь разворот', left: 'Левая страница', right: 'Правая страница', spine: 'Корешок' }
     expect(patternCaption('spread', 1, l)).toBe('Узор')
     expect(patternCaption('left', 2, l)).toBe('Узор — левая страница')
     expect(PATTERN_NEWER).toBe('Нужна новая версия программы')

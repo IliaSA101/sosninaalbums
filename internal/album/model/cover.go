@@ -21,7 +21,7 @@ const CoverID = "cover"
 // Раскладки обложки: какие зоны принимают фото фона. После выпуска — только добавлять.
 const (
 	CoverFront = ""     // фото на лицевой
-	CoverBoth  = "both" // лицевая и задняя
+	CoverBoth  = "both" // задняя, корешок (061) и лицевая
 	CoverWrap  = "wrap" // одно фото через корешок
 )
 
@@ -386,9 +386,12 @@ type CoverView struct {
 	// «Выделить надпись» (058 №19).
 	SpineText string `json:"spineText"`
 	// Zones — направляющие (не выделяются, в экспорт не идут); Drop — пустые зоны броска
-	// фото фона по раскладке: kind back | front | wrap.
+	// фото фона по раскладке: kind back | front | wrap | spine.
 	Zones []CoverZone `json:"zones"`
 	Drop  []CoverZone `json:"drop"`
+	// Scopes — области фото фона текущей раскладки с подписями по порядку карточки (061):
+	// UI берёт их отсюда, а не решает по раскладке сам.
+	Scopes []CoverScope `json:"scopes"`
 	// Safe — безопасная зона обложки (внутри каждой сторонки), TextMaxW — предел ширины
 	// «по тексту» на обложке: у разворотов свои в View.
 	Safe     []layout.Rect `json:"safe"`
@@ -409,6 +412,12 @@ type CoverZone struct {
 	Kind  string      `json:"kind"` // back | front | spine | hinge | wrap | trim | safe
 	Rect  layout.Rect `json:"rect"`
 	Label string      `json:"label"` // «Задняя», «Корешок 14 мм»…; у trim и safe ""
+}
+
+// CoverScope — область фото фона обложки и её подпись («Задняя», «Корешок»…).
+type CoverScope struct {
+	Scope string `json:"scope"` // spread | left | right | spine
+	Label string `json:"label"`
 }
 
 // CoverLayoutName — раскладка для интерфейса: CoverFront — "front".

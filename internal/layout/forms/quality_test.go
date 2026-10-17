@@ -143,6 +143,50 @@ func TestQualityFloors(t *testing.T) {
 	}
 }
 
+// TestSpineOK (decisions 0.13.1 №23): правило корешка для ключа не из ряда — то же, что у полов Gen:
+// лесенка с фото 0.74 на корешке (2,4 мм) — нет, и Quality её не пускает; с широким через корешок
+// — да; «воздух» V(0,1) с узким на корешке — нет; мозаика с узким на корешке — да (Gen её не режет);
+// без корешка (лист, без layflat) и пустая — да; все кандидаты Gen правило проходят.
+func TestSpineOK(t *testing.T) {
+	const v, n = 200.0 / 300, 222.0 / 300
+	build := func(key string, as []float64, p layout.Params) layout.Result {
+		t.Helper()
+		r, ok := layout.Build(key, as, p)
+		if !ok {
+			t.Fatalf("%s на %v не строится", key, as)
+		}
+		return r
+	}
+	narrow := build("A(0,1,2,3)", []float64{v, n, v, v}, geomSq)
+	if _, adm := Quality(narrow, Of(narrow.Key, narrow.Rects, geomSq), geomSq); adm || SpineOK(narrow, geomSq) {
+		t.Errorf("лесенка с узким фото на корешке: Quality %v, SpineOK %v — ждали нет", adm, SpineOK(narrow, geomSq))
+	}
+	for _, c := range []struct {
+		name string
+		r    layout.Result
+		p    layout.Params
+		want bool
+	}{
+		{"лесенка: широкое через корешок", build("A(0,1,2,3)", []float64{aspL, aspL, aspL, n}, geomSq), geomSq, true},
+		{"воздух: узкое на корешке", build("V(0,1)", []float64{n, v}, geomSq), geomSq, false},
+		{"воздух на листе", build("V(0,1)", []float64{n, v}, geomSh), geomSh, true},
+		{"мозаика: узкое на корешке", build("H(0,1)", []float64{n, v}, geomSq), geomSq, true},
+		{"те же рамки без layflat", narrow, geomFlat, true},
+		{"пустая", layout.Result{}, geomSq, true},
+	} {
+		if got := SpineOK(c.r, c.p); got != c.want {
+			t.Errorf("%s (%s): %v, ждали %v", c.name, c.r.Key, got, c.want)
+		}
+	}
+	for _, as := range [][]float64{{v, n, v, v}, same(4, aspL), {aspL, v, aspL, n, v}, same(7, v)} {
+		for _, c := range Gen(as, geomSq) {
+			if !SpineOK(c.Result, geomSq) {
+				t.Errorf("%v: кандидат Gen %s не проходит SpineOK", as, c.Key)
+			}
+		}
+	}
+}
+
 // TestQualityOrder: чем плотнее блок и чем меньше разброс — тем выше Q; доля рамки вне полосы
 // вида режет оценку.
 func TestQualityOrder(t *testing.T) {

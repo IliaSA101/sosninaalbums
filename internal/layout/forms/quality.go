@@ -247,21 +247,52 @@ func admissible(rs []layout.Rect, f Form, p layout.Params, h HeroInfo, relax flo
 		sum += x.W * x.H
 	}
 	for i, x := range rs {
-		cross, wide := crosses(x, p), quanta(x.W/x.H) >= quanta(foldAspect)
-		if heroForm && h.isHero(i) {
+		hero := heroForm && h.isHero(i)
+		if !foldOK(x, heroForm, hero, p) {
+			return false
+		}
+		if hero {
 			share := heroShare
 			if h.N == 2 {
 				share = pairShare
 			}
-			if quanta(x.W*x.H/sum) < quanta(share) || cross && !wide {
+			if quanta(x.W*x.H/sum) < quanta(share) {
 				return false
 			}
 			continue
 		}
-		if cross && (heroForm || !wide || !partOK(x, p)) {
+		if quanta(math.Min(x.W, x.H)/p.PageH) < quanta(floor) {
 			return false
 		}
-		if quanta(math.Min(x.W, x.H)/p.PageH) < quanta(floor) {
+	}
+	return true
+}
+
+// foldOK — фото x может так лежать на корешке: не пересекает его, или главное у вида с главным
+// и широкое, или (у видов без главного) широкое и заходит на каждую сторону не меньше foldPart.
+func foldOK(x layout.Rect, heroForm, hero bool, p layout.Params) bool {
+	if !crosses(x, p) {
+		return true
+	}
+	wide := quanta(x.W/x.H) >= quanta(foldAspect)
+	if hero {
+		return wide
+	}
+	return !heroForm && wide && partOK(x, p)
+}
+
+// SpineOK — фото на корешке допустимы, как у Gen (foldOK по виду Of): для ключа не из ряда
+// (SetLayout прямым вызовом, decisions 0.13.1 №23). Мозаику и «в край» Gen корешком не режет —
+// их оценивает layout (корешок там только штраф), здесь тоже.
+func SpineOK(r layout.Result, p layout.Params) bool {
+	f := Of(r.Key, r.Rects, p)
+	if f == Mosaic || f == Bleed {
+		return true
+	}
+	heroForm := f == Hero || f == Pair || f == Spine
+	h := Heroes(r.Rects)
+	for i, x := range r.Rects {
+		if !foldOK(x, heroForm, heroForm && h.isHero(i), p) {
 			return false
 		}
 	}

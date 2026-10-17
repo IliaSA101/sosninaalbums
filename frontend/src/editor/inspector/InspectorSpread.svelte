@@ -9,7 +9,7 @@
   import CaptionSheet from '../captions/CaptionSheet.svelte'
   import { namesUi } from '../../panels/names/names.svelte'
   import InspectorCover from '../../panels/cover/InspectorCover.svelte'
-  import { COVER_SCOPE_LABEL } from '../cover/cover'
+  import { coverLabel } from '../cover/cover'
   import { isCover, isSheet, unitOf } from '../../base/geom/sheet'
   import { unitWords } from '../captions/unitword'
   import VignettePanel from '../../panels/vignette/VignettePanel.svelte'
@@ -34,8 +34,8 @@
   const sides = $derived(
     cover
       ? ([
-          { scope: 'left', label: COVER_SCOPE_LABEL.left, i: 0 },
-          { scope: 'right', label: COVER_SCOPE_LABEL.right, i: 1 },
+          { scope: 'left', label: coverLabel(store.cover, 'left'), i: 0 },
+          { scope: 'right', label: coverLabel(store.cover, 'right'), i: 1 },
         ] as const)
       : ([
           { scope: 'left', label: 'Левая', i: 0 },
@@ -118,7 +118,7 @@
       {#if prefs.can('bgColor')}
         {#if !split}
           <div class="row">
-            <span class="lbl">{cover ? COVER_SCOPE_LABEL.spread : unit.all}</span>
+            <span class="lbl">{cover ? coverLabel(store.cover, 'spread') : unit.all}</span>
             <ColorPicker value={sp.bg[0]} label="Цвет фона {unit.one}а" onpick={(c) => pick('spread', c)} />
           </div>
         {/if}

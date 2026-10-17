@@ -1,6 +1,7 @@
 package model
 
 import (
+	"log"
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
@@ -25,15 +26,57 @@ type Backdrop struct {
 	Fade float64 `json:"fade,omitempty"`
 }
 
-// bdScopes — области фона по порядку обхода.
-var bdScopes = []string{ScopeSpread, ScopeLeft, ScopeRight}
+// bdScopes — области фото фона по порядку обхода; корешок последним — рисуется поверх
+// сторонок (061). patScopes — области узоров: корешка у них нет.
+var (
+	bdScopes  = []string{ScopeSpread, ScopeLeft, ScopeRight, ScopeSpine}
+	patScopes = []string{ScopeSpread, ScopeLeft, ScopeRight}
+)
 
 // BdScopes — копия bdScopes: снаружи порядок обхода не подменить.
 func BdScopes() []string { return slices.Clone(bdScopes) }
 
-// ValidScope — область фона: spread | left | right.
+// PatScopes — копия patScopes (узоры: Spread.PatSlot).
+func PatScopes() []string { return slices.Clone(patScopes) }
+
+// ValidScope — область узора, цвета и сетки: spread | left | right.
 func ValidScope(scope string) bool {
 	return scope == ScopeSpread || scope == ScopeLeft || scope == ScopeRight
+}
+
+// ValidBdScope — область фото фона: ValidScope и корешок обложки (061).
+func ValidBdScope(scope string) bool { return ValidScope(scope) || scope == ScopeSpine }
+
+// ErrSpineLayout — фото на корешок не в раскладке «Задняя + корешок + лицевая» (061);
+// errors.Is(err, ErrScope) верно: для вызывающих это та же неверная область.
+var ErrSpineLayout error = scopeError("Корешок — только в раскладке «Задняя + корешок + лицевая»")
+
+// scopeError — ошибка области со своим текстом для пользователя.
+type scopeError string
+
+func (e scopeError) Error() string        { return string(e) }
+func (e scopeError) Is(target error) bool { return target == ErrScope }
+
+// ErrSpineNarrow — корешок уже MinSpine: фото на нём не видно и не выбрать (decisions 31);
+// errors.Is(err, ErrScope) верно.
+var ErrSpineNarrow error = scopeError("корешок меньше 1 мм — фото на него не поставить")
+
+// MinSpine — мм: уже этого область корешка фото не принимает (зона броска, «На фон», Load).
+const MinSpine = 1.0
+
+// SpineOK — у листа s может быть фото корешка: это обложка в раскладке CoverBoth (061)
+// с корешком не уже MinSpine (decisions 31).
+func (p *Project) SpineOK(s *Spread) bool { return p.SpineErr(s) == nil }
+
+// SpineErr — почему у листа s не бывает фото корешка: ErrSpineLayout, ErrSpineNarrow; nil — бывает.
+func (p *Project) SpineErr(s *Spread) error {
+	if !p.IsCover(s) || p.Cover.Layout != CoverBoth {
+		return ErrSpineLayout
+	}
+	if a, _ := p.AreaOf(s, ScopeSpine); a.W < MinSpine {
+		return ErrSpineNarrow
+	}
+	return nil
 }
 
 // Slot — где лежит фон области; nil — область неизвестна.
@@ -45,19 +88,38 @@ func (s *Spread) Slot(scope string) **Backdrop {
 		return &s.BgPhotoL
 	case ScopeRight:
 		return &s.BgPhotoR
+	case ScopeSpine:
+		return &s.BgPhotoS
 	}
 	return nil
 }
 
-// Backdrops — фоны разворота по порядку: весь разворот, левая, правая.
+// Backdrops — фоны разворота по порядку: весь разворот, левая, правая, корешок.
 func (s *Spread) Backdrops() []*Backdrop {
 	var out []*Backdrop
-	for _, b := range []*Backdrop{s.BgPhoto, s.BgPhotoL, s.BgPhotoR} {
+	for _, b := range []*Backdrop{s.BgPhoto, s.BgPhotoL, s.BgPhotoR, s.BgPhotoS} {
 		if b != nil {
 			out = append(out, b)
 		}
 	}
 	return out
+}
+
+// clampBackdrops — фоны листа при чтении файла: каждый зажат по своей области; при bgPhoto
+// остальные снимаются (одно фото через весь лист). Фото корешка не на обложке в CoverBoth
+// или на корешке уже MinSpine снимается со строкой в log.txt (061, decisions 31).
+func (p *Project) clampBackdrops(s *Spread) {
+	if err := p.SpineErr(s); s.BgPhotoS != nil && err != nil {
+		log.Printf("фото корешка снято: %v", err)
+		s.BgPhotoS = nil
+	}
+	for _, scope := range bdScopes {
+		slot := s.Slot(scope)
+		*slot = p.ClampBackdrop(s, *slot, scope)
+	}
+	if s.BgPhoto != nil {
+		s.BgPhotoL, s.BgPhotoR, s.BgPhotoS = nil, nil, nil
+	}
 }
 
 // PhotoIDs — все фото разворота: в местах, на фонах и в стикерах (048). Единая точка для

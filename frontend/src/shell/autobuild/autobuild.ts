@@ -26,9 +26,11 @@ export function spreadsLabel(n: number, unit: Unit = SPREAD): string {
   return unit === SPREAD ? `${base} (${2 * n} стр.)` : base
 }
 
-// Сколько фото на разворот, если N не запомнен: как прежнее «по 4».
-export function defaultSpreads(photos: number): number {
-  return Math.max(1, Math.round(photos / 4))
+// Сколько разворотов, если N не запомнен: «Авто» — как прежнее «по 4»; «Свой от–до» — от середины диапазона,
+// иначе N падает к нижнему пределу ⌈n / до⌉ и все развороты выходят по «до» (062). Пределы зажимает вызывающий.
+export function defaultSpreads(photos: number, range: readonly [number, number] | null = null): number {
+  const avg = range ? (range[0] + range[1]) / 2 : 4
+  return Math.max(1, Math.round(photos / Math.max(1, avg)))
 }
 
 // N в пределы ползунка. Пока предела нет (нет фото), N остаётся как был.
@@ -92,13 +94,19 @@ export function perStep(n: number, spreads: number, dir: 1 | -1, lim: Lim): numb
 // «от 3 до 6»; ровные группы — «по 4».
 export const rangeText = (p: Pick<AutoPlan, 'min' | 'max'>): string => (p.min === p.max ? `по ${p.min}` : `от ${p.min} до ${p.max}`)
 
-// Первое N при открытии окна: якорь «среднее» и X задан — из X; иначе запомненное N; нет ничего — round(n / 4).
-export function firstSpreads(n: number, saved: { spreads: number | null; per?: number | null; by?: Anchor }, lim: Lim): number {
+// Первое N при открытии окна: якорь «среднее» и X задан — из X; иначе запомненное N; нет ничего — round(n / 4)
+// («Свой» — round(n / середина диапазона), range).
+export function firstSpreads(
+  n: number,
+  saved: { spreads: number | null; per?: number | null; by?: Anchor },
+  lim: Lim,
+  range: readonly [number, number] | null = null,
+): number {
   if (saved.by === 'per' && saved.per != null) {
     const v = spreadsForPer(n, saved.per, lim)
     if (v !== null) return v
   }
-  return clampInt(saved.spreads ?? defaultSpreads(n), lim.min, lim.max)
+  return clampInt(saved.spreads ?? defaultSpreads(n, range), lim.min, lim.max)
 }
 
 // Откуда фото (034, решение 92). count — сколько фото ушло в запрос, photos — сколько насчитал Go (null — ответа ещё нет).

@@ -174,3 +174,28 @@ func textOf(t *testing.T, sv model.SpreadView, id string) model.TextView {
 	t.Fatal("текст пропал")
 	return model.TextView{}
 }
+
+// ForgetFileNames (060): метод App снимает автоимя одним шагом и рассылает вид; имя,
+// набранное после броска, и неизвестный ID не трогает.
+func TestForgetFileNamesMethod(t *testing.T) {
+	p := model.New()
+	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a", "b"}}}
+	auto := model.LooksLikeName(`C:\01_иванов_петя.jpg`)
+	p.Photos["a"] = model.PhotoRef{Path: `C:\01_иванов_петя.jpg`, W: 300, H: 200, Person: auto}
+	p.Photos["b"] = model.PhotoRef{Path: `C:\петров_иван.jpg`, W: 300, H: 200, Person: &model.Person{Last: "Петров", First: "Ваня"}}
+	k := newKit(t, p)
+	rev := k.rev()
+	v := k.ForgetFileNames([]string{"a", "b", "нет"})
+	if v.Rev != rev+1 || k.calls != 1 {
+		t.Fatalf("rev %d → %d, Changed %d раз", rev, v.Rev, k.calls)
+	}
+	if r, _ := k.ed.Ref("a"); r.Person != nil {
+		t.Fatalf("a: имя осталось %+v", r.Person)
+	}
+	if r, _ := k.ed.Ref("b"); r.Person == nil || r.Person.First != "Ваня" {
+		t.Fatalf("b: своё имя снято %+v", r.Person)
+	}
+	if v = k.ForgetFileNames([]string{"a"}); v.Rev != rev+1 {
+		t.Fatalf("повтор — холостая: rev %d", v.Rev)
+	}
+}

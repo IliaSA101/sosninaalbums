@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { CoverZone } from '../../base/core/types'
 import {
   COVER_LAYOUTS,
+  COVER_Z,
+  DROP_SCOPE,
   boxCss,
+  coverLabel,
+  coverLabels,
+  coverScopes,
   labeled,
-  layoutScopes,
   mmText,
   pctBox,
   scopeOfDrop,
@@ -51,21 +55,59 @@ describe('зоны броска и раскладки', () => {
     expect(scopeOfDrop('back')).toBe('left')
     expect(scopeOfDrop('front')).toBe('right')
     expect(scopeOfDrop('wrap')).toBe('spread')
-    expect(scopeOfDrop('spine')).toBeNull()
+    expect(scopeOfDrop('spine')).toBe('spine')
+    expect(scopeOfDrop('hinge')).toBeNull()
+    expect(DROP_SCOPE.spine).toBe('spine')
   })
-  it('области по раскладке; пустая раскладка = «на лицевой»', () => {
-    expect(layoutScopes('front')).toEqual(['right'])
-    expect(layoutScopes('both')).toEqual(['left', 'right'])
-    expect(layoutScopes('wrap')).toEqual(['spread'])
-    expect(layoutScopes('')).toEqual(['right'])
-    expect(layoutScopes(undefined)).toEqual(['right'])
-  })
-  it('три кнопки раскладки в порядке спеки', () => {
-    expect(COVER_LAYOUTS.map((l) => l.kind)).toEqual(['front', 'both', 'wrap'])
+  it('три кнопки раскладки в порядке и с подписями спеки 061', () => {
+    expect(COVER_LAYOUTS.map((l) => [l.kind, l.label])).toEqual([
+      ['front', 'Лицевая'],
+      ['wrap', 'Одно фото через корешок'],
+      ['both', 'Задняя + корешок + лицевая'],
+    ])
   })
   it('zonesOf отбирает по виду', () => {
     expect(zonesOf({ zones }, 'wrap')).toHaveLength(2)
     expect(zonesOf({ zones }, 'safe')).toHaveLength(0)
+  })
+})
+
+// Области фото фона раскладок — как отдаёт Go (CoverView.scopes)
+const SCOPES = {
+  front: [{ scope: 'right', label: 'Лицевая' }],
+  wrap: [{ scope: 'spread', label: 'Вся обложка' }],
+  both: [
+    { scope: 'left', label: 'Задняя' },
+    { scope: 'spine', label: 'Корешок' },
+    { scope: 'right', label: 'Лицевая' },
+  ],
+} as const
+
+describe('области фона из cover.scopes', () => {
+  it('порядок и состав — от Go, фронт ничего не добавляет', () => {
+    expect(coverScopes({ scopes: [...SCOPES.front] })).toEqual(['right'])
+    expect(coverScopes({ scopes: [...SCOPES.wrap] })).toEqual(['spread'])
+    expect(coverScopes({ scopes: [...SCOPES.both] })).toEqual(['left', 'spine', 'right'])
+  })
+  it('обложки нет — областей нет', () => {
+    expect(coverScopes(null)).toEqual([])
+    expect(coverScopes(undefined)).toEqual([])
+  })
+  it('подписи берутся у Go; область вне раскладки — запасная подпись сторонки', () => {
+    const cv = { scopes: [...SCOPES.both] }
+    expect(coverLabel(cv, 'spine')).toBe('Корешок')
+    expect(coverLabel({ scopes: [{ scope: 'left', label: 'Тыл' }] }, 'left')).toBe('Тыл')
+    expect(coverLabel({ scopes: [...SCOPES.front] }, 'left')).toBe('Задняя')
+    expect(coverLabel(null, 'spread')).toBe('Вся обложка')
+    expect(coverLabels(cv)).toEqual({ spread: 'Вся обложка', left: 'Задняя', right: 'Лицевая', spine: 'Корешок' })
+  })
+})
+
+describe('порядок слоёв обложки', () => {
+  it('плашка < фото корешка <= зоны броска < .content (z 3)', () => {
+    expect(COVER_Z.plate).toBeLessThan(COVER_Z.spine)
+    expect(COVER_Z.spine).toBeLessThanOrEqual(COVER_Z.drop)
+    expect(COVER_Z.drop).toBeLessThan(3)
   })
 })
 

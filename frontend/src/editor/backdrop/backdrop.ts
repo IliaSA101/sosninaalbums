@@ -1,6 +1,7 @@
 // Фото на фоне (спека 009, design-backdrop): чистые решения для карточки, меню и склейки.
 import { backdropLost } from '../../base/core/undo'
 import { photoCss } from '../../base/geom/frame'
+import { center, rotate, rotateAbout, type TextBox } from '../../base/geom/textbox'
 import type { BackdropScope, BackdropView, SpreadView } from '../../base/core/types'
 
 // Решение живёт в основе (store.merge); здесь — для остальных.
@@ -10,6 +11,7 @@ export const SCOPE_LABEL: Record<BackdropScope, string> = {
   spread: 'Весь разворот',
   left: 'Левая страница',
   right: 'Правая страница',
+  spine: 'Корешок', // только обложка; подписи обложки — из CoverView.scopes
 }
 
 // Области фона, доступные в режиме: у листа виньетки страниц нет — только весь лист.
@@ -30,3 +32,18 @@ export function zoneScopes(backdrops: readonly BackdropView[] | null | undefined
 
 // transform картинки фона (045): сначала зеркало, потом наклон frame.r — как в экспорте. Нет ни того ни другого — undefined.
 export const backdropCss = (b: BackdropView): string | undefined => photoCss({ r: b.frame.r, flipH: b.flipH, flipV: b.flipV })
+
+// Рамка лежит вдоль вертикали (около ±90°): для корешка это «вдоль корешка».
+const upright = (deg: number): boolean => Math.abs((((deg % 180) + 180) % 180) - 90) < 45
+
+// Поворот рамки фона через поле «Поворот, °» (QA 061-3, решение 33). У корешка при смене ориентации (около 0/180° ↔ ±90°)
+// w и h меняются местами вокруг центра: иначе горизонтальное фото лежит поперёк корешка и его не заполняет.
+// Остальные области — просто поворот вокруг центра.
+export function turnBackdropBox(box: TextBox, deg: number, spine: boolean): TextBox {
+  if (!spine || upright(box.rot) === upright(deg)) return rotateAbout(box, deg)
+  const c = center(box)
+  const w = box.h
+  const h = box.w
+  const r = rotate(deg, w / 2, h / 2)
+  return { ...box, w, h, x: c.x - r.x, y: c.y - r.y, rot: deg }
+}

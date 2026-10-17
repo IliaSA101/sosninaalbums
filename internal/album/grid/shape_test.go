@@ -268,7 +268,7 @@ func TestCoverSheetOnePhotoOnePlace(t *testing.T) {
 	e := edtest.CoverEd(t, "k", []*model.Place{edtest.Gp(20, 20, 100, 80, "a")}, []string{"b", "c"})
 	cover := func() string { _, pl := edtest.P(e).Cover.Sheet.FindPlace(edtest.CoverPlace); return pl.Photo }
 	// Фото разворота на занятое место обложки — обмен (как между разворотами).
-	if _, _, err := e.PlacePhotos(model.CoverID, edtest.CoverPlace, edtest.Photos("b")); err != nil || cover() != "b" {
+	if _, _, _, err := e.PlacePhotos(model.CoverID, edtest.CoverPlace, edtest.Photos("b")); err != nil || cover() != "b" {
 		t.Fatalf("бросок на место обложки: %v, место %q", err, cover())
 	}
 	if got := edtest.P(e).Spreads[1].Photos; !slices.Equal(got, []string{"k", "c"}) {
@@ -286,7 +286,7 @@ func TestCoverSheetOnePhotoOnePlace(t *testing.T) {
 	if cover() != "c" || slices.Contains(last, "c") || !slices.Equal(last, []string{"x", "y"}) {
 		t.Fatalf("автосборка: обложка %q, новый разворот %v", cover(), last)
 	}
-	if _, left := e.FillPlaces(edtest.Photos("c"), ""); left != 0 || cover() != "c" {
+	if _, left, _ := e.FillPlaces(edtest.Photos("c"), ""); left != 0 || cover() != "c" {
 		t.Fatalf("«Заполнить» забрал фото обложки: осталось %d, место %q", left, cover())
 	}
 	// Фото в развороте уходит с места обложки (место пустеет, остаётся).

@@ -159,8 +159,9 @@ export interface PlaceBox extends Rect {
 // Ручка рамки места: стороны света.
 export type Handle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
-// Область фото фона: весь разворот или одна страница.
-export type BackdropScope = 'spread' | 'left' | 'right'
+// Область фото фона: весь разворот, одна страница или (обложка «Задняя + корешок + лицевая», 061) корешок.
+// Узоры, цвет и сетка корешок не принимают.
+export type BackdropScope = 'spread' | 'left' | 'right' | 'spine'
 
 // Фото на фоне (спека 009, design-backdrop §4), всё в мм разворота. Геометрию считает Go.
 export interface BackdropView {

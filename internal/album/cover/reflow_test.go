@@ -192,7 +192,7 @@ func TestEditorReplayCover(t *testing.T) {
 	step("SwapPhotos", coverPhoto() == "b" && slices.Contains(edtest.P(e).Spreads[1].Photos, "k"))
 	e.SwapPhotos("k", "b")
 	step("SwapPhotos:назад", coverPhoto() == "k")
-	_, left := e.FillPlaces(edtest.Photos("k", "x"), "")
+	_, left, _ := e.FillPlaces(edtest.Photos("k", "x"), "")
 	step("FillPlaces", left == 0 && coverPhoto() == "k" && slices.Equal(edtest.PhotosOf(e, 0), []string{"a", "x"}))
 	_, err := e.AutoBuild(edtest.Photos("k", "y", "z"), -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
 	last := edtest.P(e).Spreads[len(edtest.P(e).Spreads)-1].Photos

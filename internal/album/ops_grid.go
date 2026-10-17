@@ -1,10 +1,12 @@
 package album
 
 import (
+	"errors"
 	"math"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/names"
 )
 
 // Обёртки области grid (023 Ш4): тело ≤ 3 операторов, сама правка — в пакете grid
@@ -69,8 +71,41 @@ func (e *Editor) MirrorGrid(spreadID, scope string) model.View {
 }
 
 // PlacePhotos. Договор: до правки ничего; неизвестное место и пустой список — холостая.
-func (e *Editor) PlacePhotos(spreadID, placeID string, photos []model.PhotoInfo) (model.View, int, error) {
-	return e.gridTry(func(p *model.Project) (int, error) { return grid.PlacePhotos(p, spreadID, placeID, photos) })
+// named — фото, получившие имя из названия файла тем же шагом (060).
+func (e *Editor) PlacePhotos(spreadID, placeID string, photos []model.PhotoInfo) (v model.View, left int, named []string, err error) {
+	return e.namedTry(photos, func(p *model.Project) (int, error) { return grid.PlacePhotos(p, spreadID, placeID, photos) })
+}
+
+// namedTry — gridTry с автоименами (060): тело и имена новых фото (names.WithAuto) — один шаг
+// отмены; при отказе правки (и в settle) left = 0, named = nil. Имена не влезли в запас
+// знаков — та же правка без них (overBudget).
+func (e *Editor) namedTry(photos []model.PhotoInfo, fn func(p *model.Project) (int, error)) (v model.View, left int, named []string, err error) {
+	if v, left, named, err = e.namedOnce(photos, true, fn); overBudget(err, named) {
+		v, left, named, err = e.namedOnce(photos, false, fn)
+	}
+	if err != nil {
+		named = nil
+	}
+	return v, left, named, err
+}
+
+// namedOnce — одна попытка namedTry; auto = false — без автоимён. named и при отказе — имена,
+// розданные до отказа settle: по ним namedTry решает о повторе.
+func (e *Editor) namedOnce(photos []model.PhotoInfo, auto bool, fn func(p *model.Project) (int, error)) (v model.View, left int, named []string, err error) {
+	v, left, err = e.gridTry(func(p *model.Project) (n int, err error) {
+		if !auto {
+			return fn(p)
+		}
+		named, err = names.WithAuto(p, photos, func() (err error) { n, err = fn(p); return err })
+		return n, err
+	})
+	return v, left, named, err
+}
+
+// overBudget — отказ правки из-за автоимён: они раздавались, а итог вышел за запас знаков.
+// Имена — удобство, фото кладут намеренно: правка повторяется без имён (0.14 decisions 31).
+func overBudget(err error, named []string) bool {
+	return len(named) > 0 && errors.Is(err, model.ErrTextBudget)
 }
 
 // gridTry — try для операций, что возвращают left (фото, ушедшие в ленту): при
@@ -87,10 +122,10 @@ func (e *Editor) gridTry(fn func(p *model.Project) (int, error)) (v model.View, 
 }
 
 // FillPlaces. Договор: до правки ничего; фото из альбома и с фонов пропускаются внутри.
-func (e *Editor) FillPlaces(photos []model.PhotoInfo, fromSpread string) (model.View, int) {
-	left := 0
-	v := e.change(func(p *model.Project) { left = grid.FillPlaces(p, photos, fromSpread) })
-	return v, left
+// named — как у PlacePhotos (060).
+func (e *Editor) FillPlaces(photos []model.PhotoInfo, fromSpread string) (v model.View, left int, named []string) {
+	v, left, named, _ = e.namedTry(photos, func(p *model.Project) (int, error) { return grid.FillPlaces(p, photos, fromSpread), nil })
+	return v, left, named
 }
 
 // ApplyGrid. Договор: доли зажимаются до правки (NaN или пусто — отказ без шага

@@ -128,6 +128,13 @@ func (m *Methods) SetPerson(photoID string, p model.Person, session string) (v m
 	return m.changed(m.editor().SetPerson(photoID, p, session))
 }
 
+// ForgetFileNames — «Убрать имена» тоста броска (060): у фото ids снимается имя, взятое из
+// названия файла (DropResult.named, GridResult.named), если его не правили после. Один шаг.
+func (m *Methods) ForgetFileNames(ids []string) (v model.View) {
+	defer m.guardEdit("ForgetFileNames", &v, nil)
+	return m.changed(m.editor().ForgetFileNames(ids))
+}
+
 // PreviewNames — предпросмотр окна «Имена»: что ляжет на каждое место листа при PasteNames
 // с теми же o, строки без фото, столбцы таблицы. Проект не меняется, события нет.
 func (m *Methods) PreviewNames(spreadID string, o model.NamesOpts) (plan model.NamesPlan, err error) {
@@ -146,7 +153,7 @@ func (m *Methods) SetSheetCaps(spreadID string, on bool, c model.SheetCaps) (v m
 // рамка по области; был — меняется только фото (рамка, поворот, зеркало остаются).
 func (m *Methods) SetBackdrop(spreadID, scope, photoID string) (v model.View, err error) {
 	defer m.guardEdit("SetBackdrop", &v, &err)
-	if !model.ValidScope(scope) {
+	if !model.ValidBdScope(scope) {
 		return m.editor().View(), ErrBackdropScope
 	}
 	infos := m.infosOrRefs([]string{photoID})

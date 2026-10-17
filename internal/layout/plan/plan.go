@@ -108,6 +108,11 @@ const (
 // редкий (как у SmartAlbums), соседи резко разные, период 8 — без заметного повтора.
 var rangeWave = [...]float64{-1, 0.8, -0.4, 1, -0.8, 0.4, -0.2, 0}
 
+// rangeWaveSoft — волна для узкого диапазона (до − от ≤ 3, «Свой 1–3»): знак держится 2–3
+// разворота. При знакопеременной волне rangeWave малый средний штраф перебивал оценку,
+// и размеры шли 1,2,1,2.
+var rangeWaveSoft = [...]float64{-1, -0.4, 0.6, 1, 0.3, -0.7, -0.2, 0.8, 0.4, -0.9, 0, 0.5, -0.5}
+
 // perRange — «от» и «до» в 1…layout.MaxPhotos, «от» не больше «до» и не больше n
 // (фото меньше, чем «от», — один разворот из всех).
 func perRange(n, minPer, maxPer int) (a, b int) {
@@ -173,8 +178,12 @@ func rangeTargets(n, N, a, b int) []float64 {
 	avg := float64(n) / float64(N)
 	t := make([]float64, N)
 	sum := 0.0
+	wave := rangeWave[:]
+	if b-a <= 3 {
+		wave = rangeWaveSoft[:]
+	}
 	for c := range t {
-		w := rangeWave[c%len(rangeWave)]
+		w := wave[c%len(wave)]
 		if w >= 0 {
 			t[c] = avg + w*(float64(b)-avg)
 		} else {

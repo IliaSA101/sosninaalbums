@@ -75,3 +75,6 @@ export class TiltSession {
 // По одному на карточку фото и на панель фона: живут в модуле, пересоздание компонента сессию не рвёт.
 export const photoTilt = new TiltSession()
 export const backdropTilt = new TiltSession()
+
+// Шкала на фото (059): своя сессия — протяжка шкалы и правка в карточке дают разные шаги отмены.
+export const canvasTilt = new TiltSession()
