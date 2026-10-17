@@ -27,6 +27,17 @@ export function presetFields(p: Preset): Partial<Settings> {
   return f
 }
 
+// Подпись типографии в списке: группа "" — «Общие».
+export const groupLabel = (group: string): string => group || 'Общие'
+
+// Типография для списка: у подсвеченного пресета — его группа; нет подсвеченного — последняя выбранная
+// (настройки окна), если она есть в списке; иначе «Общие» (""). Форму не меняет.
+export function presetGroupOf(list: readonly PagePreset[], form: Form, saved = ''): string {
+  const act = list.find((p) => presetActive(p, form))
+  if (act) return act.group ?? ''
+  return saved && list.some((p) => (p.group ?? '') === saved) ? saved : ''
+}
+
 // Ряды кнопок: общий (group "") первым, дальше по группам в порядке появления («Фотосфера:»).
 export interface PresetRow {
   group: string

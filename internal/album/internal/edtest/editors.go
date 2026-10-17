@@ -327,3 +327,18 @@ func SpreadIDs(v model.View) []string {
 	}
 	return ids
 }
+
+// SheetOf — ID листа (обложка или разворот), где стоит фото id; "" — нигде.
+func SheetOf(e *album.Editor, id string) string {
+	for _, s := range P(e).Sheets() {
+		if slices.Contains(s.Photos, id) {
+			return s.ID
+		}
+	}
+	return ""
+}
+
+// Tilt — SetFrameAngle без сессии на листе фото id (057: лист нужен правилу размера).
+func Tilt(e *album.Editor, id string, tilt float64) model.View {
+	return e.SetFrameAngle(SheetOf(e, id), id, tilt, "")
+}

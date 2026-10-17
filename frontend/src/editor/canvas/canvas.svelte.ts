@@ -5,6 +5,8 @@ import { clampZoom, fit, MIN_ZOOM, panBy, spaceTap, zoomAt, type Viewport, type 
 class Canvas {
   s = $state<ZoomState>({ z: 1, cx: 0, cy: 0 })
   vp = $state<Viewport>({ w: 0, h: 0, k0: 0, sw: 0, ph: 0 })
+  // Элемент окна холста (Stage ставит): мини-панель по его прямоугольнику узнаёт видимую область.
+  win = $state.raw<HTMLElement | null>(null)
   // Действующее состояние: ресайз, крупный просмотр и галерея меняют окно, мм не трогаются.
   cur = $derived(clampZoom(this.s, this.vp))
   zoomed = $derived(this.cur.z > 1)

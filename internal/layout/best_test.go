@@ -157,7 +157,7 @@ func TestBestBlocksSame(t *testing.T) {
 func TestLayoutsSameAsBefore(t *testing.T) {
 	cases := slices.Clone(bestCases)
 	few, geoms := 8, goldenGeoms
-	if testkit.Race {
+	if testkit.Lite() {
 		few, geoms = 5, goldenGeoms[:1]
 	}
 	for _, asp := range tieSets[:few] { // до 8 фото: и деревья, и ряды; больше — долго
@@ -312,7 +312,7 @@ func tieRows(asp []float64, p Params) []string {
 func TestTiesNoise(t *testing.T) {
 	sets := slices.Clone(tieSets)
 	step, geoms := 3, goldenGeoms
-	if testkit.Race {
+	if testkit.Lite() {
 		step, geoms = 6, goldenGeoms[:1] // чистый счёт: остальное — в обычном прогоне
 	}
 	for n := 1; n <= goldenMaxN; n += step {

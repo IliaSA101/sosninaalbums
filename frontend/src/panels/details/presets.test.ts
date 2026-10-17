@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PagePreset } from '../../base/core/types'
-import { exportPx, presetActive, presetFields, presetRows } from './presets'
+import { exportPx, groupLabel, presetActive, presetFields, presetGroupOf, presetRows } from './presets'
 
 // Как отдаёт Go (App.PagePresets): общий ряд без dpi/layflat, ряд Фотосферы — с ними.
 const sq: PagePreset = { label: '25×25', group: '', w: 250, h: 250 }
@@ -57,5 +57,36 @@ describe('ряды кнопок', () => {
     const s = { pageW: 251, pageH: 254, dpi: 300, layflat: true, safe: 8 }
     expect(presetActive(sq, s)).toBe(false)
     expect(presetActive(fs25, s)).toBe(true)
+  })
+})
+
+// Нетпринт (058): 20×20 — страница 200×203, 300 dpi, layflat, важное 10 мм.
+const np20: PagePreset = { label: '20×20', group: 'Нетпринт', w: 200, h: 203, dpi: 300, layflat: true, safe: 10 }
+const list = [sq, wide, fs30, fs25, np20]
+const blank = { pageW: 123, pageH: 321, dpi: 300, layflat: false, safe: 0 }
+
+describe('типография списка форматов', () => {
+  it('group of active preset: подсвеченный пресет главнее сохранённой группы', () => {
+    expect(presetGroupOf(list, { pageW: 200, pageH: 203, dpi: 300, layflat: true, safe: 10 }, 'Фотосфера')).toBe('Нетпринт')
+    expect(presetGroupOf(list, { pageW: 281, pageH: 284, dpi: 300, layflat: true, safe: 10 })).toBe('Фотосфера')
+    expect(presetGroupOf(list, { pageW: 400, pageH: 300, dpi: 150, layflat: false, safe: 0 }, 'Нетпринт')).toBe('')
+  })
+  it('нет подсвеченного: сохранённая группа, если она есть в списке, иначе общие', () => {
+    expect(presetGroupOf(list, blank, 'Нетпринт')).toBe('Нетпринт')
+    expect(presetGroupOf(list, blank, 'Чужая')).toBe('')
+    expect(presetGroupOf(list, blank)).toBe('')
+    expect(presetGroupOf([], blank, 'Нетпринт')).toBe('')
+  })
+  it('group switch keeps form: смена группы — выбор списка, форму меняет только щелчок по кнопке', () => {
+    const form = { ...blank }
+    const before = { ...form }
+    presetGroupOf(list, form, 'Фотосфера')
+    presetRows(list).filter((r) => r.group === 'Нетпринт')
+    expect(form).toEqual(before)
+    expect(presetFields(np20)).toEqual({ pageW: 200, pageH: 203, dpi: 300, layflat: true, safe: 10 })
+  })
+  it('подпись группы: пустая — «Общие»', () => {
+    expect(groupLabel('')).toBe('Общие')
+    expect(groupLabel('Нетпринт')).toBe('Нетпринт')
   })
 })

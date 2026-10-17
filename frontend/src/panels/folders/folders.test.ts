@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { cachedFilterFolders, folderCounts, filterFolders } from './folders'
+import { cachedFilterFolders, folderCounts, filterFolders, inFeedText } from './folders'
 import { folderfilter } from './folderfilter.svelte'
 
 const ph = (...paths: string[]) => paths.map((path) => ({ path }))
@@ -118,5 +118,12 @@ describe('cachedFilterFolders', () => {
 
   it('ничего не скрыто — исходный массив', () => {
     expect(cachedFilterFolders()(['D:/a'], photos, new Set())).toBe(photos)
+  })
+})
+
+describe('inFeedText', () => {
+  it('тот же вид при скрытых и нескрытых папках', () => {
+    expect(inFeedText(162, 162)).toBe('В ленте 162 из 162 фото')
+    expect(inFeedText(0, 162)).toBe('В ленте 0 из 162 фото')
   })
 })

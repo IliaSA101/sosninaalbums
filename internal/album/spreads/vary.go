@@ -135,7 +135,8 @@ func varies(s *model.Spread) bool { return len(s.Photos) > 0 && len(s.Grid) == 0
 
 // ctxOf — соседи цепочки p.Spreads[first..last]: виды двух перед ней, семейство ближнего и есть ли
 // у него главное фото, вид следующего и сколько разворотов перед ней без воздуха и без главного
-// (не «Авто» ритм прерывает); формы до шести перед ней и следующего, среднее фото на разворот (051).
+// (не «Авто» ритм прерывает); формы до шести перед ней и следующего, среднее фото на разворот (051),
+// направление ближайшей лесенки (055).
 // dead — развороты, которые правка уже опустошила и Normalize удалит: соседями они не считаются.
 func ctxOf(p *model.Project, first, last int, dead func(*model.Spread) bool) variety.Ctx {
 	var c variety.Ctx
@@ -186,7 +187,25 @@ func ctxOf(p *model.Project, first, last int, dead func(*model.Spread) bool) var
 		}
 	}
 	slices.Reverse(c.Forms) // последняя — ближняя
+	c.Ladder = lastLadder(p, before)
 	return c
+}
+
+// lastLadder — направление ближайшей лесенки среди before (ближний первым) до начала альбома,
+// 0 — нет (055: «Разнообразить» части продолжает чередование). Лучшая (Layout "") лесенкой не
+// бывает, так что Build — только у ключей с L(…)/A(…).
+func lastLadder(p *model.Project, before []*model.Spread) byte {
+	prm := p.Params()
+	for _, s := range before {
+		d := forms.LadderDir(s.Layout)
+		if d == 0 || !varies(s) {
+			continue
+		}
+		if r, ok := layout.Build(s.Layout, p.Aspects(s.Photos), prm); ok && forms.Of(r.Key, r.Rects, prm) == forms.Ladder {
+			return d
+		}
+	}
+	return 0
 }
 
 // avgPhotos — среднее фото на живой разворот «Авто» с фото (0 — таких нет): «редкая» и «плотная»

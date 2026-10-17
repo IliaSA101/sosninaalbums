@@ -4,6 +4,7 @@
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { framelive } from './framelive.svelte'
+  import { liveImage } from './tiltlive'
   import { DEFAULT_FRAME, hasSlack } from '../../base/geom/frame'
   import { aabbOf, uprightAt } from '../../base/geom/rotbox'
   import { markAt, outlineOf } from '../../base/geom/shape'
@@ -56,7 +57,10 @@
   {@const missing = store.missing.includes(it.id)}
   <!-- Мелкая ячейка (< 48 px на экране): ✥ и ползунок не помещаются, они есть в карточке справа -->
   {@const ok = it.selected && !missing && Math.min(r.w, r.h) * ppm >= 48 && prefs.can('frame')}
-  {@const slack = !!fv && !contain && hasSlack(r, fv.img, fv.r, outlineOf(fv.shape, fv.radius))}
+  <!-- Ход кадра — по живому углу и размеру: пока тянут наклон, фото на экране уже другое (057) -->
+  {@const outline = outlineOf(fv?.shape, fv?.radius)}
+  {@const img = fv && framelive.of(it.id) ? liveImage(r, fv.img.h > 0 ? fv.img.w / fv.img.h : r.w / r.h, cur, contain, outline) : fv?.img}
+  {@const slack = !!img && !contain && hasSlack(r, img, cur.r, outline)}
   <div
     class="cov"
     data-cov

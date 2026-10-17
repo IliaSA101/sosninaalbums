@@ -39,6 +39,9 @@ export function folderCounts(folders: readonly string[], photos: readonly { path
   return out
 }
 
+// Строка окна «Папки»: «В ленте 162 из 162 фото» — и при нескрытых папках, чтобы высота окна не менялась.
+export const inFeedText = (shown: number, total: number): string => `В ленте ${shown} из ${total} фото`
+
 // Лента без скрытых папок (054). hidden — ключи folderKey(); пусто — тот же массив (без копии и без новой зависимости).
 // Фото вне всех папок (быть не должно) остаётся.
 export function filterFolders<P extends { path: string }>(folders: readonly string[], photos: P[], hidden: ReadonlySet<string>): P[] {

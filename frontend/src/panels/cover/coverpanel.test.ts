@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type { CoverPreset, CoverSpec, CoverView } from '../../base/core/types'
-import { customSpec, fieldValue, hasTable, overLine, parseNum, presetGroups, sideSize, specWith, spineLine, totalLine } from './coverpanel'
+import {
+  customSpec,
+  fieldValue,
+  hasTable,
+  overLine,
+  parseNum,
+  presetGroups,
+  sideSize,
+  specWith,
+  spineAction,
+  spineLine,
+  totalLine,
+} from './coverpanel'
 
 const spec = (o: Partial<CoverSpec> = {}): CoverSpec => ({
   preset: 'fsfera-thin',
@@ -31,12 +43,23 @@ const cv = (o: Partial<CoverView> = {}) =>
 
 describe('группы типографий', () => {
   it('в порядке появления, пресеты группы вместе', () => {
-    const g = presetGroups([preset('a', 'Фотосфера'), preset('b', 'Нетпринт'), preset('c', 'Фотосфера'), preset('custom', 'Свои размеры')])
-    expect(g.map((x) => x.group)).toEqual(['Фотосфера', 'Нетпринт', 'Свои размеры'])
+    const g = presetGroups([preset('a', 'Фотосфера'), preset('b', 'Нетпринт'), preset('c', 'Фотосфера'), preset('custom', '')])
+    expect(g.map((x) => x.group)).toEqual(['Фотосфера', 'Нетпринт', ''])
     expect(g[0].items.map((p) => p.id)).toEqual(['a', 'c'])
+  })
+  it('вариант без группы — в конце, даже если пришёл раньше других', () => {
+    const g = presetGroups([preset('a', 'Фотосфера'), preset('custom', ''), preset('b', 'Нетпринт'), preset('d', '')])
+    expect(g.map((x) => x.group)).toEqual(['Фотосфера', 'Нетпринт', ''])
+    expect(g[2].items.map((p) => p.id)).toEqual(['custom', 'd'])
   })
   it('пустой список — нет групп', () => {
     expect(presetGroups([])).toEqual([])
+  })
+  it('presetGroups no empty group: пустая группа только у вариантов без группы, и она последняя', () => {
+    const g = presetGroups([preset('custom', ''), preset('a', 'Фотосфера')])
+    expect(g.filter((x) => x.group === '')).toHaveLength(1)
+    expect(g.at(-1)?.group).toBe('')
+    expect(g.slice(0, -1).every((x) => x.group !== '')).toBe(true)
   })
 })
 
@@ -105,5 +128,16 @@ describe('«Свои размеры»', () => {
   it('из формулы: числа остаются, меняется только пометка пресета', () => {
     const f = spec({ preset: 'netprint', steps: [], a: 3, b: 0.7 })
     expect(customSpec(cv({ spec: f, spine: 17 }))).toEqual({ ...f, preset: 'custom' })
+  })
+})
+
+describe('кнопка строки «Корешок»', () => {
+  it('spine button state: надписи нет — «Надпись» добавляет', () => {
+    expect(spineAction(cv({ spineText: '' }))).toEqual({ label: 'Надпись', kind: 'add' })
+    expect(spineAction(cv())).toEqual({ label: 'Надпись', kind: 'add' })
+    expect(spineAction(null)).toEqual({ label: 'Надпись', kind: 'add' })
+  })
+  it('надпись есть — «Выделить надпись» выделяет', () => {
+    expect(spineAction(cv({ spineText: 't7' }))).toEqual({ label: 'Выделить надпись', kind: 'select' })
   })
 })

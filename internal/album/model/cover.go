@@ -91,7 +91,7 @@ func CoverPresets() []CoverPreset {
 		return CoverPreset{ID: id, Name: name, Group: CoverGroupFsfera, Spec: CoverSpec{Preset: id, Wrap: fsferaWrap, Steps: st, Safe: fsferaCoverSafe, SpineSafe: fsferaSpineSafe}}
 	}
 	np := func(id, name string, wrap, hinge, a, b float64) CoverPreset {
-		return CoverPreset{ID: id, Name: name, Group: "Нетпринт", Spec: CoverSpec{Preset: id, Wrap: wrap, Hinge: hinge, A: a, B: b}}
+		return CoverPreset{ID: id, Name: name, Group: CoverGroupNetprint, Spec: CoverSpec{Preset: id, Wrap: wrap, Hinge: hinge, A: a, B: b}}
 	}
 	return []CoverPreset{
 		fs("fsfera-thin", "Тонкие листы", steps(5, 6, 9, 8, 13, 10, 17, 12, 22, 14, 26, 16, 30, 18, 34, 20, 38, 22, 42, 24, 47, 26, 52, 28, 57, 30)),
@@ -117,6 +117,9 @@ func CoverPresetOf(id string) (CoverPreset, bool) {
 
 // CoverGroupFsfera — группа пресетов обложки и ряд пресетов страницы Фотосферы.
 const CoverGroupFsfera = "Фотосфера"
+
+// CoverGroupNetprint — группа пресетов обложки и ряд пресетов страницы Нетпринта (058).
+const CoverGroupNetprint = "Нетпринт"
 
 // Шаблон обложки Фотосферы (PSD): заворот вне таблицы форматов (решение 48) и безопасные
 // линии — от линии загиба и от края корешка.
@@ -156,7 +159,7 @@ func FsferaFormats() []PrintFormat {
 // PagePreset — кнопка размера страницы в «Настройках альбома». 0/false — поле пресет не задаёт.
 type PagePreset struct {
 	Label   string  `json:"label"` // "30×30" в ряду «Фотосфера», "30×30 (квадрат)" в общем
-	Group   string  `json:"group"` // "" — общий ряд; CoverGroupFsfera
+	Group   string  `json:"group"` // "" — общий ряд; CoverGroupFsfera, CoverGroupNetprint
 	W       float64 `json:"w"`
 	H       float64 `json:"h"`
 	DPI     int     `json:"dpi,omitempty"`
@@ -165,8 +168,9 @@ type PagePreset struct {
 	Hint    string  `json:"hint,omitempty"`
 }
 
-// PagePresets — общий ряд (прежние кнопки presets.ts без «Фотосфера 30×30») и ряд Фотосферы
-// из FsferaFormats (решение 54: один источник — Go).
+// PagePresets — общий ряд (прежние кнопки presets.ts без «Фотосфера 30×30»), ряд Фотосферы
+// из FsferaFormats (решение 54: один источник — Go) и ряд Нетпринта; порядок групп — порядок
+// списка «Типография» в окне (058).
 func PagePresets() []PagePreset {
 	out := []PagePreset{
 		{Label: "30×30 (квадрат)", W: 300, H: 300},
@@ -179,6 +183,26 @@ func PagePresets() []PagePreset {
 	for _, f := range FsferaFormats() {
 		out = append(out, PagePreset{Label: f.Name, Group: CoverGroupFsfera, W: f.PageW, H: f.PageH, DPI: 300, Layflat: true, Safe: f.Safe,
 			Hint: "Фотосфера Pro: JPEG sRGB 300 dpi, 00.jpg — обложка, 01.jpg… — развороты; важное — не ближе " + MmText(f.Safe) + " мм к краю"})
+	}
+	return append(out, netprintPresets()...)
+}
+
+// netprintPresets — Нетпринт «Премиум» твёрдой обложки (058 №16, netprint.ru «Технические размеры
+// фотокниг Премиум», 17.10): страница — половина дообрезного разворота; важное — 10 мм от края
+// (3 мм обреза + 7 мм зоны возможной обрезки; гипотеза — сверить при QA).
+func netprintPresets() []PagePreset {
+	const safe = 10.0
+	rows := []struct {
+		label string
+		w, h  float64
+	}{
+		{"15×20", 153, 203}, {"20×15", 200, 156}, {"18×13", 182.5, 127}, {"20×20", 200, 203},
+		{"20×28", 200, 270}, {"28×20", 285, 203}, {"25×25", 250, 254}, {"30×30", 300, 305},
+	}
+	out := make([]PagePreset, len(rows))
+	for i, r := range rows {
+		out[i] = PagePreset{Label: r.label, Group: CoverGroupNetprint, W: r.w, H: r.h, DPI: 300, Layflat: true, Safe: safe,
+			Hint: "Нетпринт Премиум: JPEG 300 dpi, разворотами; важное — не ближе " + MmText(safe) + " мм к краю"}
 	}
 	return out
 }
@@ -358,6 +382,9 @@ type CoverView struct {
 	Over    bool       `json:"over"`   // разворотов больше, чем в таблице пресета
 	Layout  string     `json:"layout"` // front | both | wrap
 	SpineBg string     `json:"spineBg"`
+	// SpineText — ID надписи на корешке (Project.SpineTextID), "" — нет: кнопка «Надпись» /
+	// «Выделить надпись» (058 №19).
+	SpineText string `json:"spineText"`
 	// Zones — направляющие (не выделяются, в экспорт не идут); Drop — пустые зоны броска
 	// фото фона по раскладке: kind back | front | wrap.
 	Zones []CoverZone `json:"zones"`

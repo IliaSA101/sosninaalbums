@@ -390,8 +390,8 @@ export function SetBackdrop(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetBackdrop'](arg1, arg2, arg3);
 }
 
-export function SetBackdropAngle(arg1, arg2, arg3) {
-  return window['go']['app']['App']['SetBackdropAngle'](arg1, arg2, arg3);
+export function SetBackdropAngle(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['App']['SetBackdropAngle'](arg1, arg2, arg3, arg4);
 }
 
 export function SetBackdropBox(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
@@ -442,8 +442,8 @@ export function SetFrame(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['SetFrame'](arg1, arg2, arg3, arg4);
 }
 
-export function SetFrameAngle(arg1, arg2) {
-  return window['go']['app']['App']['SetFrameAngle'](arg1, arg2);
+export function SetFrameAngle(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['App']['SetFrameAngle'](arg1, arg2, arg3, arg4);
 }
 
 export function SetGrid(arg1, arg2) {

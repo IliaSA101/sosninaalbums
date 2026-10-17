@@ -9,7 +9,8 @@
   import type { PagePreset, Settings } from '../../base/core/types'
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
   import { SHEET_PRESETS, isSheet, newSheetSize } from '../../base/geom/sheet'
-  import { presetActive, presetFields, presetRows, exportPx, type Preset } from './presets'
+  import { modes } from '../../base/prefs/view.svelte'
+  import { groupLabel, presetActive, presetFields, presetGroupOf, presetRows, exportPx, type Preset } from './presets'
 
   const NUMS = ['pageW', 'pageH', 'margin', 'gap', 'dpi', 'safe'] as const
 
@@ -67,7 +68,15 @@
   // Лист виньетки (031): размер листа вместо страницы, пресеты 20×30 и 30×40, layflat и «Свой» не нужны.
   const sheet = $derived(isSheet(store.view.settings))
   let presets = $state<PagePreset[]>(loaded ?? [])
-  const rows = $derived(sheet ? [{ group: '', items: [...SHEET_PRESETS] }] : presetRows(presets))
+  const allRows = $derived(presetRows(presets))
+  // Список «Типография» (058): выбранное вручную главнее; иначе группа подсвеченного пресета или последняя выбранная.
+  let picked = $state<string | null>(null)
+  const group = $derived(picked ?? presetGroupOf(presets, s, modes.presetGroup))
+  const rows = $derived(sheet ? [{ group: '', items: [...SHEET_PRESETS] }] : allRows.filter((r) => r.group === group))
+  function pickGroup(g: string) {
+    picked = g
+    modes.setPresetGroup(g)
+  }
 
   // Не удалось получить — формы это не мешает: остаётся ввод руками.
   onMount(() => {
@@ -85,9 +94,16 @@
   }
 </script>
 
+{#if !sheet && allRows.length > 0}
+  <div class="group" data-guide="fsfera-presets">
+    <label class="cap" for="preset-group">Типография</label>
+    <select id="preset-group" value={group} onchange={(e) => pickGroup(e.currentTarget.value)}>
+      {#each allRows as r (r.group)}<option value={r.group}>{groupLabel(r.group)}</option>{/each}
+    </select>
+  </div>
+{/if}
 {#each rows as row (row.group)}
-  <div class="presets" class:fs={row.group} {...row.group ? { 'data-guide': 'fsfera-presets' } : {}}>
-    {#if row.group}<span class="cap">{row.group}:</span>{/if}
+  <div class="presets">
     {#each row.items as p (p.label)}
       <button class:active={presetActive(p, s)} onclick={() => pick(p)}>{p.label}</button>
     {/each}
@@ -148,13 +164,21 @@
     gap: 6px;
     margin-bottom: 14px;
   }
-  .presets.fs {
-    margin-top: -8px; /* ряд Фотосферы — продолжение общего */
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
   }
   .cap {
-    align-self: center;
     font-size: 12px;
-    color: var(--muted);
+    font-weight: 600;
+  }
+  .group select {
+    width: 100%;
+    height: 24px;
+    padding: 0 4px;
+    font-size: 12px;
   }
   .presets button {
     padding: 0 10px;

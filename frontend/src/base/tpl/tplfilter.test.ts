@@ -6,7 +6,7 @@ const list = [t('a', 'side'), t('b', 'side'), t('c', 'big'), t('d', 'group'), t(
 
 describe('VIG_FAMILIES', () => {
   it('шесть видов в порядке решения 123', () => {
-    expect(VIG_FAMILIES.map((f) => f.label)).toEqual(['С края', 'Крупно', 'В ряду', 'С групповым', 'Круги', 'Предметники'])
+    expect(VIG_FAMILIES.map((f) => f.label)).toEqual(['С края', 'Крупно', 'В ряду', 'С групповым', 'Россыпь', 'Предметники'])
   })
 })
 

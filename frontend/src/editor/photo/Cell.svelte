@@ -4,7 +4,8 @@
   import { store } from '../../base/core/store.svelte'
   import { thumbUrl, previewUrl, wantPreview } from '../../base/core/media'
   import { colorBadge } from './color'
-  import { DEFAULT_FRAME, photoCss, placeImage } from '../../base/geom/frame'
+  import { DEFAULT_FRAME } from '../../base/geom/frame'
+  import { liveImage, liveTransform } from './tiltlive'
   import { framelive } from './framelive.svelte'
   import { aabbOf, uprightAt } from '../../base/geom/rotbox'
   import { cornerInset, markAt, outlineOf, shapeCss } from '../../base/geom/shape'
@@ -58,7 +59,7 @@
   // Кадр, который тянут (✥, ползунки на ячейке и в карточке справа — всё через framelive), до отпускания.
   const pre = $derived(mini ? null : framelive.of(id))
   const cur = $derived(pre ?? frame)
-  const img = $derived(pre || preview || !fv ? placeImage(r, aspect, cur, outline) : fv.img)
+  const img = $derived(pre || preview || !fv ? liveImage(r, aspect, cur, contain, outline) : fv.img)
 
   const selected = $derived(!mini && store.selectedCell === id)
   const missing = $derived(store.missing.includes(id))
@@ -128,7 +129,7 @@
         class="ph"
         class:gone={contain && previewReady}
         style={pos}
-        style:transform={photoCss(fv)}
+        style:transform={liveTransform(cur, fv)}
         src={thumbUrl(id)}
         alt=""
         draggable="false"
@@ -136,7 +137,7 @@
       {#if hiRes}<img
           class="ph"
           style={pos}
-          style:transform={photoCss(fv)}
+          style:transform={liveTransform(cur, fv)}
           src={previewUrl(id)}
           alt=""
           draggable="false"

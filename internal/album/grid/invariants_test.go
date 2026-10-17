@@ -42,7 +42,9 @@ func TestGridInvariants(t *testing.T) {
 	vigTpls := []string{"grid", "head-t-left", "g-top", "t-top-g", "split-tg", "нет такого"}
 	withGrid, seated, turned, ordered := 0, 0, 0, 0 // тест не должен выродиться в прогон одного «Авто»
 	onCover, vigs := 0, 0                           // шагов над местами обложки (032), виньеток (031)
-	for step := range 1500 {
+	steps := testkit.Steps(1500, 500)               // -short: префикс той же последовательности, пороги ниже пропорционально
+	need := func(n int) int { return n * steps / 1500 }
+	for step := range steps {
 		n := len(edtest.P(e).Spreads)
 		if n == 0 {
 			edtest.NewSpread(e, -1, pick(2))
@@ -256,13 +258,13 @@ func TestGridInvariants(t *testing.T) {
 	if err := edtest.Reopen(edtest.P(e)); err != nil {
 		t.Fatalf("итог: %v", err)
 	}
-	if onCover < 100 {
+	if onCover < need(100) {
 		t.Fatalf("обложку почти не правили: %d мест по шагам", onCover)
 	}
-	if vigs < 100 {
+	if vigs < need(100) {
 		t.Fatalf("виньеток почти не было: %d по шагам", vigs)
 	}
-	if withGrid < 500 || seated < 500 || turned < 500 || ordered < 500 {
+	if withGrid < need(500) || seated < need(500) || turned < need(500) || ordered < need(500) {
 		t.Fatalf("сеток мало: %d разворотов-сеток по шагам, %d фото в местах, %d повёрнутых мест, %d с общим порядком",
 			withGrid, seated, turned, ordered)
 	}

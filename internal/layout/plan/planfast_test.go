@@ -99,7 +99,7 @@ func TestRowsSame(t *testing.T) {
 	w := newPlanWork()
 	var seg segRows
 	geoms := planGeoms
-	if testkit.Race {
+	if testkit.Lite() {
 		geoms = geoms[:1] // чистый счёт: остальные геометрии — в обычном прогоне
 	}
 	for gi, p := range geoms {
@@ -164,8 +164,8 @@ func sameCols(t *testing.T, where string, got, want [][]float64) {
 // с середины (from > 1, часть окон до maxFullTree). Прежний счёт дорогой, поэтому на
 // геометрию — два набора из четырёх, по очереди.
 func TestWindowColsSame(t *testing.T) {
-	if testkit.Race {
-		t.Skip("чистый счёт в одной горутине: под -race проверяет обычный прогон")
+	if testkit.Lite() {
+		t.Skip("чистый счёт в одной горутине: под -race и -short проверяет обычный прогон")
 	}
 	for gi, p := range planGeoms {
 		sets := planSets(uint64(gi)+1, 66)
@@ -183,8 +183,8 @@ func TestWindowColsSame(t *testing.T) {
 // TestPlanSameAsBefore — группы PlanGroups те же, что у прежнего пути (прежняя матрица
 // и прежний DP), при разных N и maxPer.
 func TestPlanSameAsBefore(t *testing.T) {
-	if testkit.Race {
-		t.Skip("чистый счёт в одной горутине: под -race проверяет обычный прогон")
+	if testkit.Lite() {
+		t.Skip("чистый счёт в одной горутине: под -race и -short проверяет обычный прогон")
 	}
 	// Прежняя матрица на сотнях фото — секунды, поэтому большие n — по одному набору.
 	for _, c := range []struct {
@@ -219,7 +219,7 @@ func TestPlanDPBound(t *testing.T) {
 	const ub = 1.2
 	same, refused := 0, 0
 	iters := 3000
-	if testkit.Race {
+	if testkit.Lite() {
 		iters = 600
 	}
 	for it := range iters {

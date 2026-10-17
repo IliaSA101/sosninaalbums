@@ -32,6 +32,14 @@ const (
 	pairShare = 0.15
 	// defaultFloor — мельчайшая сторона фото / высота страницы у видов без своего пола.
 	defaultFloor = 0.12
+
+	// ladderAirW — вес пустоты полосы ступеней лесенки s/(h+s) (055): блок лесенки засчитан
+	// заполненным, а пустые углы идут отдельным членом. Шаг h/2 зашит в формат v9, так что член
+	// равен 1/12 у любой лесенки: длинную лесенку он не наказывает за то, что она лесенка.
+	ladderAirW = 0.25
+	// emptyPageW — за каждую пустую страницу постраничного ключа (P[…|-]), всем видам (055): без
+	// него лесенка на одной странице стояла выше крупных раскладок на весь разворот.
+	emptyPageW = 0.15
 )
 
 // band — полоса доли рамки блока от разворота: вне неё вид теряет смысл (лента на весь
@@ -40,12 +48,12 @@ type band struct{ lo, hi float64 }
 
 var bands = map[Form]band{
 	Mosaic: {0.6, 1}, Strip: {0.12, 0.45}, Rows: {0.3, 0.85}, Grid: {0.3, 0.85},
-	Air: {0.25, 0.6}, Ladder: {0.25, 0.7}, Contrast: {0.3, 0.8},
+	Air: {0.25, 0.6}, Ladder: {0.25, 1}, Contrast: {0.3, 0.8},
 }
 
 // floors — пол мельчайшей стороны фото / высоты страницы по виду (таблица B, design §5).
 var floors = map[Form]float64{
-	Strip: 0.18, Rows: 0.14, Ladder: 0.25, Contrast: 0.12, Air: 0.14, Asym: 0.12, Grid: 0.12,
+	Strip: 0.18, Rows: 0.14, Ladder: 0.18, Contrast: 0.12, Air: 0.14, Asym: 0.12, Grid: 0.12,
 }
 
 // paged — у ключа блоки по страницам: рамка и заполнение считаются на каждой странице.
@@ -53,11 +61,13 @@ func paged(key string) bool {
 	return strings.HasPrefix(key, "P[") || strings.HasPrefix(key, "Q") || strings.HasPrefix(key, "B[")
 }
 
-// envelope — заполнение рамки блока фото и доля площади разворота, которую занимают рамки.
+// envelope — заполнение рамки блока фото и доля площади разворота, которую занимают рамки;
+// air — пустота полосы ступеней лесенки s/(h+s) (наибольшая по сторонам), empty — пустых страниц.
 // У разворота рамка одна, у P/Q — по странице. Лесенка по замыслу пуста в углах рамки
-// (диагональ из ступеней), поэтому её блок считается заполненным: иначе у лесенки заполнение
-// 2/(k+1) и она не бывает рядом с другими видами.
-func envelope(key string, f Form, rs []layout.Rect, p layout.Params) (env, share float64) {
+// (диагональ из ступеней), поэтому её блок считается заполненным: заполнение рамки 2/(k+1)
+// наказывало бы длинную лесенку за длину, и 4 фото на разворот уступали бы лесенке на странице.
+// Пустоту углов Quality вычитает отдельно — по полосе ступеней, одинаково при любом k (055).
+func envelope(key string, f Form, rs []layout.Rect, p layout.Params) (env, share, air float64, empty int) {
 	groups := [][]layout.Rect{rs}
 	if paged(key) {
 		var l, r []layout.Rect
@@ -74,6 +84,7 @@ func envelope(key string, f Form, rs []layout.Rect, p layout.Params) (env, share
 	var sum, box, shown float64
 	for i, g := range groups {
 		if len(g) == 0 {
+			empty++
 			continue
 		}
 		x0, y0, x1, y1 := bbox(g)
@@ -85,15 +96,30 @@ func envelope(key string, f Form, rs []layout.Rect, p layout.Params) (env, share
 		shown += (x1 - x0) * (y1 - y0)
 		if f == Ladder && i < len(sides) && isLadder(sides[i].root) {
 			box += area
+			air = max(air, stepAir(g, y1-y0))
 		} else {
 			box += (x1 - x0) * (y1 - y0)
 		}
 	}
 	all := (2*p.PageW - 2*p.Margin) * (p.PageH - 2*p.Margin)
 	if box <= 0 || all <= 0 {
-		return 0, 0
+		return 0, 0, 0, 0
 	}
-	return sum / box, shown / all
+	return sum / box, shown / all, air, empty
+}
+
+// stepAir — пустая доля полосы ступеней лесенки s/(h+s): h — высота фото, s — шаг ступени по
+// рамке (frameH − h)/(k−1); на порядок фото не опирается. Фото лесенки одной высоты (layout).
+func stepAir(g []layout.Rect, frameH float64) float64 {
+	if len(g) < 2 {
+		return 0
+	}
+	h := g[0].H
+	s := (frameH - h) / float64(len(g)-1)
+	if !(h+s > 0) || s <= 0 {
+		return 0
+	}
+	return s / (h + s)
 }
 
 func isLadder(root string) bool {
@@ -188,8 +214,10 @@ func quality(r layout.Result, f Form, p layout.Params, relax float64) (q float64
 		return r.Score, true
 	}
 	h := Heroes(rs)
-	env, share := envelope(r.Key, f, rs, p)
+	env, share, air, empty := envelope(r.Key, f, rs, p)
 	q = env - spreadTerm(rs, h) - spineTerm(rs, p) - depthW*float64(depthOf(r.Key)) - bandTerm(f, share)
+	q -= ladderAirW * air
+	q -= emptyPageW * float64(empty)
 	return q, admissible(rs, f, p, h, relax)
 }
 

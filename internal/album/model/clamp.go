@@ -139,8 +139,8 @@ var errBadBoxes = errors.New("раскладка не применена: нев
 // значения зажимаются, лишнее отбрасывается.
 const (
 	// MaxScale — предел увеличения кадра: при 4× кадр 24 Мп в ячейке 100 мм
-	// даёт ≈ 150 dpi, дальше только мыло.
-	MaxScale = 4.0
+	// даёт ≈ 150 dpi, дальше только мыло. Один с geom (правило наклона 057).
+	MaxScale = geom.MaxScale
 	// MaxTexts — блоков текста на разворот. Load лишние отбрасывает: поднимать —
 	// только с новой FormatVersion (64 — с v6, спека 026).
 	MaxTexts = 64
@@ -155,8 +155,15 @@ const (
 	MaxNameRunes = 60
 )
 
-// round3 — до 0.001: кадр, отличающийся на шум, — холостая правка.
-func round3(v float64) float64 { return math.Round(v*1000) / 1000 }
+// round3 — до 0.001: кадр, отличающийся на шум, — холостая правка. Минус ноль не
+// оставляет: сдвиг после наклона (057) бывает −0,0004, а «-0» в JSON — лишняя правка.
+func round3(v float64) float64 {
+	v = math.Round(v*1000) / 1000
+	if v == 0 {
+		return 0
+	}
+	return v
+}
 
 func Finite(v, def float64) float64 {
 	if math.IsNaN(v) || math.IsInf(v, 0) {

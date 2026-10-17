@@ -107,7 +107,7 @@ func probes() []probe {
 		// design.go
 		{"SetFrame", kView, func(m *Methods) (model.View, error) { return ok(m.SetFrame("a", 2, 0, 0)) }},
 		{"ResetFrame", kView, func(m *Methods) (model.View, error) { return ok(m.ResetFrame("a")) }},
-		{"SetFrameAngle", kView, func(m *Methods) (model.View, error) { return ok(m.SetFrameAngle("a", 5)) }},
+		{"SetFrameAngle", kView, func(m *Methods) (model.View, error) { return ok(m.SetFrameAngle("s1", "a", 5, "")) }},
 		{"StraightenPhoto", kView, func(m *Methods) (model.View, error) { return ok(m.StraightenPhoto("s1", "a", 10, 1)) }},
 		{"TurnPhotos", kView, func(m *Methods) (model.View, error) { return ok(m.TurnPhotos(ids, 1)) }},
 		{"SetFlip", kView, func(m *Methods) (model.View, error) { return ok(m.SetFlip(ids, "h")) }},
@@ -132,7 +132,7 @@ func probes() []probe {
 		{"SetBackdrop", kErr, func(m *Methods) (model.View, error) { return m.SetBackdrop("s1", "spread", "a") }},
 		{"SetBackdropBox", kView, func(m *Methods) (model.View, error) { return ok(m.SetBackdropBox("s1", "spread", 0, 0, 10, 10, 0, "")) }},
 		{"SetBackdropFrame", kView, func(m *Methods) (model.View, error) { return ok(m.SetBackdropFrame("s1", "spread", 2, 0, 0)) }},
-		{"SetBackdropAngle", kView, func(m *Methods) (model.View, error) { return ok(m.SetBackdropAngle("s1", "spread", 5)) }},
+		{"SetBackdropAngle", kView, func(m *Methods) (model.View, error) { return ok(m.SetBackdropAngle("s1", "spread", 5, "")) }},
 		{"StraightenBackdrop", kView, func(m *Methods) (model.View, error) { return ok(m.StraightenBackdrop("s1", "spread", 10, 1)) }},
 		{"SetBackdropFade", kView, func(m *Methods) (model.View, error) { return ok(m.SetBackdropFade("s1", "spread", 0.5, "")) }},
 		{"FlipBackdrop", kView, func(m *Methods) (model.View, error) { return ok(m.FlipBackdrop("s1", "spread", "h")) }},

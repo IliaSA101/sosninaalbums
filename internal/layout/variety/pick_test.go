@@ -442,6 +442,9 @@ func TestPickStarFour(t *testing.T) {
 
 // TestPickSpeed: Pick на 100 разворотах (тёплые пулы) — design §10, ≤ 50 мс.
 func TestPickSpeed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("замер на 100 разворотах с долгой подготовкой набора: полный прогон")
+	}
 	in := bigAlbum(100)
 	d := testkit.Fastest(3, func() { Pick(in, geomSq, Normal, Ctx{}) })
 	t.Logf("Pick на %d разворотах: %v", len(in), d)

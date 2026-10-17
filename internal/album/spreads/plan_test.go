@@ -184,15 +184,15 @@ func TestAutoPlanRangeEdges(t *testing.T) {
 		t.Fatalf("«Авто», почти полон: %+v %v", ap, err)
 	}
 	ap, err := e.AutoPlan(ph, model.AutoOpts{Spreads: 5, MinPer: 1, MaxPer: 2})
-	if err == nil || !strings.Contains(err.Error(), "1000") || ap.MinSpreads != 5 || ap.MaxSpreads != 3 {
+	if err == nil || !strings.Contains(err.Error(), "200 разворотов") || ap.MinSpreads != 5 || ap.MaxSpreads != 3 {
 		t.Fatalf("свой 1…2, почти полон: %+v %v", ap, err)
 	}
 	if _, err := e.AutoBuild(ph, -1, model.AutoOpts{Spreads: 5, MinPer: 1, MaxPer: 2}); err == nil {
-		t.Fatal("сборка сверх 1000 разворотов прошла")
+		t.Fatal("сборка сверх 200 разворотов прошла")
 	}
 }
 
-// AutoPlan без фото — пустой план без ошибки; альбом полон — ошибка про 1000 разворотов.
+// AutoPlan без фото — пустой план без ошибки; альбом полон — ошибка про 200 разворотов (058).
 func TestAutoPlanEdges(t *testing.T) {
 	e := edtest.Open(t, model.New(), "")
 	if ap, err := e.AutoPlan(nil, model.AutoOpts{Spreads: 5, MaxPer: 64}); err != nil || ap != (model.AutoPlan{}) {
@@ -204,7 +204,7 @@ func TestAutoPlanEdges(t *testing.T) {
 		}
 	})
 	ap, err := e.AutoPlan(edtest.Photos("a", "b"), model.AutoOpts{Spreads: 1, MaxPer: 64})
-	if err == nil || !strings.Contains(err.Error(), "1000") || ap.Photos != 2 || ap.MaxSpreads != 0 {
+	if err == nil || !strings.Contains(err.Error(), "200 разворотов") || ap.Photos != 2 || ap.MaxSpreads != 0 {
 		t.Fatalf("полный альбом: %+v %v", ap, err)
 	}
 	// Почти полон: верх ползунка — оставшееся место.

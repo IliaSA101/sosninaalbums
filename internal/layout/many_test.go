@@ -118,7 +118,7 @@ func TestManyPrefix(t *testing.T) {
 // raceParams — геометрии для тяжёлых тестов чистого счёта: под -race одна (остальные
 // считает обычный прогон), без него все.
 func raceParams() []Params {
-	if testkit.Race {
+	if testkit.Lite() {
 		return invariantParams[:1]
 	}
 	return invariantParams
@@ -387,7 +387,7 @@ func manyAspects(seed uint64, n, set int) []float64 {
 // ничьи решает порядок построения, а не последний бит оценки.
 func TestManyTiesNoise(t *testing.T) {
 	geoms, ns := manyGeoms, []int{17, 24, 33, 48, 64}
-	if testkit.Race {
+	if testkit.Lite() {
 		geoms, ns = manyGeoms[:2], []int{17, 48} // чистый счёт: остальное — в обычном прогоне
 	}
 	for _, p := range geoms {
@@ -412,7 +412,7 @@ func TestManyTiesNoise(t *testing.T) {
 // и на маленькой странице (до maxFullTree фото), где ряд — из перебора деревьев.
 func TestManyPageRowHasBlock(t *testing.T) {
 	small, step := 0, 1
-	if testkit.Race {
+	if testkit.Lite() {
 		step = 3
 	}
 	for _, p := range []Params{album30, manyGeoms[3]} {

@@ -118,7 +118,7 @@ func goldenAlbum(t *testing.T, dir string) (*model.Project, model.View) {
 	}, "")
 	e.SetPlaceAngle(s1, "c", 8)
 	e.TurnPhotos([]string{"b"}, 1)
-	e.SetFrameAngle("b", 6.5)
+	e.SetFrameAngle(s1, "b", 6.5, "")
 	e.SetFlip([]string{"a"}, "h")
 	e.SetFrame("c", 1.3, 0.4, -0.3)
 	e.ArrangeLayers(s1, "back", []string{"b"}) // b был над a — теперь под ним

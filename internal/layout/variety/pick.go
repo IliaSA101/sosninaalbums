@@ -34,6 +34,9 @@ type Ctx struct {
 	Forms    []forms.Form
 	NextForm forms.Form
 	Avg      float64
+	// Ladder — направление ближайшей лесенки перед первым ('L', 'A', 0 — нет; forms.LadderDir):
+	// «Разнообразить» части альбома продолжает чередование вниз/вверх (055).
+	Ladder byte
 }
 
 // tuning — пороги уровня (спека 041, design §5, §10). Меняются только с прогоном
@@ -83,6 +86,9 @@ const (
 	// лучшую. Лучшая раскладка (Layout "") и ключи ряда layout штрафа не получают: ритм воздуха 041
 	// остаётся как был (метрики корпуса №40). Звезда (bonusStar) штраф перекрывает.
 	penHeroAgain = 6.0
+	// penLadderDir — лесенка не того направления: ждём противоположное прошлой, без прошлой — L
+	// (по ходу чтения, 055). L и A различает только он, так что лесенок в целом не меньше и не больше.
+	penLadderDir = 0.25
 )
 
 const (
@@ -184,12 +190,13 @@ type chain struct {
 	prevKind  Kind         // семейство featured последнего разворота с главным
 	forms     []forms.Form // формы выбранных (и Ctx.Forms), последняя — ближняя
 	avg       float64
+	ladder    byte // направление последней лесенки (и Ctx.Ladder), 0 — не было
 }
 
 func newChain(c Ctx) *chain {
 	st := &chain{hist: slices.Clone(c.Prev[max(0, len(c.Prev)-2):]), older: map[uint64]bool{}, prevKey: c.PrevKey,
 		prevFam: c.Family, since: c.Since, sinceHero: c.SinceHero, prevHero: c.Hero,
-		forms: slices.Clone(c.Forms[max(0, len(c.Forms)-FormsWindow):]), avg: c.Avg}
+		forms: slices.Clone(c.Forms[max(0, len(c.Forms)-FormsWindow):]), avg: c.Avg, ladder: c.Ladder}
 	for _, l := range st.hist {
 		st.histID = append(st.histID, lookID(l))
 	}
@@ -202,6 +209,7 @@ func (st *chain) neighbors(t tuning, s Spread) neighbors {
 		heroDue: st.sinceHero+1 >= t.heroPeriod && s.Star < 0,
 		airDue:  st.since+1 >= t.period && s.Star < 0 && len(s.Pool[0].Rects) <= t.airMaxK}
 	n.heroLate = n.heroDue && st.sinceHero > st.since
+	n.ladder = st.ladder
 	n.recent = st.forms[max(0, len(st.forms)-FormsWindow):]
 	if f := len(st.forms); f >= 1 {
 		n.form1 = st.forms[f-1]
@@ -232,6 +240,9 @@ func (st *chain) push(x *Cand) {
 	st.hist, st.histID = append(st.hist, x.Look), append(st.histID, x.LookID)
 	st.prevFam, st.prevKey = x.Family, x.Key
 	st.forms = append(st.forms, x.Form)
+	if d := ladderDir(x); d != 0 {
+		st.ladder = d
+	}
 	if x.Family == Air {
 		st.since = 0
 	} else {
@@ -261,6 +272,15 @@ type neighbors struct {
 	recent                  []forms.Form    // формы последних FormsWindow разворотов
 	mosaics                 int             // мозаик подряд перед этим разворотом
 	small, big              bool            // группа редкая / плотная против среднего альбома
+	ladder                  byte            // направление последней лесенки, 0 — не было
+}
+
+// ladderDir — направление лесенки кандидата ('L', 'A'), 0 — не лесенка.
+func ladderDir(x *Cand) byte {
+	if x.Form != forms.Ladder {
+		return 0
+	}
+	return forms.LadderDir(x.Key)
 }
 
 // one — выбор одного разворота: допустимые кандидаты, среди них минимум (штраф, потеря, ключ).
@@ -367,7 +387,7 @@ func (lim *limits) feat(x *Cand, star int, loss float64, n *neighbors) (bonus fl
 	return 0, false
 }
 
-// penalty — штраф за повтор вида и семейства соседей и за воздух не по ритму.
+// penalty — штраф за повтор вида и семейства соседей, за воздух не по ритму и за направление лесенки.
 func (n *neighbors) penalty(x *Cand) float64 {
 	pen := 0.0
 	for _, v := range [...]struct {
@@ -396,7 +416,18 @@ func (n *neighbors) penalty(x *Cand) float64 {
 	if n.prevHero && x.Formed && FamilyOf(x.Form) == Hero {
 		pen += penHeroAgain
 	}
+	if d := ladderDir(x); d != 0 && d != n.wantLadder() {
+		pen += penLadderDir
+	}
 	return pen + n.formPenalty(x.Form)
+}
+
+// wantLadder — ожидаемое направление лесенки: противоположное прошлой, без прошлой — L.
+func (n *neighbors) wantLadder() byte {
+	if n.ladder == 'L' {
+		return 'A'
+	}
+	return 'L'
 }
 
 // formPenalty — 051: форма как у соседей и частая в последних разворотах, бонус формы под размер.

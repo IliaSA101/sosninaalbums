@@ -22,6 +22,9 @@ export function columnsLine(plan: Pick<NamesPlan, 'cols' | 'ignored'> | null): s
   return `Столбцы: ${parts.filter(Boolean).join(' · ')}`
 }
 
+// Пустой предпросмотр: onCap — «На развороте» / «На листе» / «На обложке» (unitWords).
+export const noPhotosLine = (onCap: string): string => `${onCap} пока нет фото. Положите фото — имена лягут на них по порядку мест`
+
 // Итог внизу окна: «Подписано: 23 из 25 · строк лишних: 1 · фото без имени: 2».
 export const summaryLine = (p: Pick<NamesPlan, 'named' | 'seats' | 'extra' | 'missing'>): string =>
   `Подписано: ${p.named} из ${p.seats} · строк лишних: ${p.extra} · фото без имени: ${p.missing}`

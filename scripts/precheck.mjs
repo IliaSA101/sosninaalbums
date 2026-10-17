@@ -1,18 +1,24 @@
 // Быстрая предпроверка для исполнителей перед отчётом: `node scripts/precheck.mjs [--base <rev>]`.
-// Ловит то, что иначе падает только на полном check.ps1 у оркестратора: gofmt, vet, golangci-lint (только новое),
-// prettier, eslint, svelte-check, vitest related, размер файлов, лимит файлов в папке. Тесты Go не гоняет —
-// исполнитель гоняет свои; test-baseline тоже не проверяется (нужен полный прогон всех тестов — шаг оркестратора).
-// Пороги: размер — как CheckSizes в check.ps1; папки — читаются из scripts/folder-exceptions.txt.
+// Ловит то, что иначе падает только на полном check.ps1 у оркестратора: gofmt, vet по всему модулю, golangci-lint
+// (только новое), go test -short изменённых пакетов, покрытие дерева album (при правке internal/album/**) против эталона,
+// prettier, eslint, svelte-check, vitest related, размер файлов, лимит файлов в папке. Полный go test и test-baseline
+// остаются шагом оркестратора (check.ps1 без -short: эталоны и большие наборы там).
+// Пределы размера и папок — scripts/limits.mjs (один источник с check.ps1, pre-commit и хуком file-size).
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
+import { checkFolders, checkSizes } from './limits.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(root)
 const gotmp = path.join(root, '.gotmp') // антивирус: exe go только сюда (как в check.ps1)
 fs.mkdirSync(gotmp, { recursive: true })
 const env = { ...process.env, GOTMPDIR: gotmp }
+
+// Пакеты модуля: не ./... — тот заходит в frontend/node_modules (flatted/golang). Один шаблон для всех скриптов и CI.
+const MODULE_PKGS = ['.', './internal/...']
 
 const argv = process.argv.slice(2)
 const bi = argv.indexOf('--base')
@@ -35,7 +41,13 @@ if (!base) {
   // Интеграционная ветка текущей версии — int-* с наибольшей версией (номер версии не зашиваем: в 0.13 база int-0.12
   // заставляла агентов гонять линтер по всему приросту версии, ~4,5 мин).
   const ints = git('for-each-ref', '--sort=-version:refname', '--format=%(refname:short)', 'refs/heads/int-*')
-  const latest = ints.code === 0 ? ints.out.split('\n').map((l) => l.trim()).filter(Boolean) : []
+  const latest =
+    ints.code === 0
+      ? ints.out
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+      : []
   const head = git('rev-parse', 'HEAD').out.trim()
   for (const b of [...latest.slice(0, 1), 'dev']) {
     if (git('rev-parse', '--verify', '--quiet', b).code !== 0) continue
@@ -100,7 +112,34 @@ if (goFiles.length) {
   const dirs = [...new Set(goFiles.map((f) => (f.includes('/') ? f.slice(0, f.lastIndexOf('/')) : '.')))]
   const pkgs = dirs.map((d) => (d === '.' ? '.' : `./${d}`))
   step('gofmt', () => res(run('gofmt', ['-l', ...goFiles]), true))
-  step('go vet', () => res(run('go', ['vet', ...pkgs])))
+  // vet по всему модулю (2–4 с): ловит чужие вызовы и тесты после смены сигнатуры, а не только изменённые пакеты
+  step('go vet', () => res(run('go', ['vet', ...MODULE_PKGS])))
+  step('go test -short', () => {
+    // Больше трёх пакетов — через очередь: go test занимает все ядра
+    const goTest = ['test', '-short', '-count=1', ...pkgs]
+    return res(pkgs.length > 3 ? run('node', ['scripts/heavy.mjs', 'go', ...goTest]) : run('go', goTest))
+  })
+  if (goFiles.some((f) => isTree(path.posix.dirname(f)))) {
+    step('покрытие дерева album', () => {
+      const baseJson = path.join(root, 'testdata', 'test-baseline.json')
+      const entry = fs.existsSync(baseJson) ? JSON.parse(fs.readFileSync(baseJson, 'utf8')).go?.[TREE_KEY] : null
+      if (!entry) return { ok: false, out: `в testdata/test-baseline.json нет записи ${TREE_KEY}` }
+      let cur
+      try {
+        cur = treeCover({ root, env, heavy: true })
+      } catch (e) {
+        return { ok: false, out: String(e.message) }
+      }
+      const errors = compareTree(entry, cur)
+      if (errors.length === 0) return { ok: true, out: '' }
+      // Где не хватает теста: непокрытые блоки изменённых файлов (остальные — наследие эталона)
+      const mine = cur.missedBlocks
+        .map((b) => b.replace(/^[^/]+\/[^/]+\/[^/]+\//, '')) // модуль github.com/<owner>/<repo>/
+        .filter((b) => goFiles.includes(b.slice(0, b.lastIndexOf(':'))) && !b.includes('_test.go'))
+      const lines = mine.length ? [`непокрытые блоки в изменённых файлах (${mine.length}):`, ...mine.slice(0, 12)] : []
+      return { ok: false, out: [...lines, ...errors].join('\n') }
+    })
+  }
   step('golangci-lint', () => {
     const gcl = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['golangci-lint'], { encoding: 'utf8' })
     let exe = gcl.status === 0 ? gcl.stdout.split('\n')[0].trim() : ''
@@ -146,64 +185,15 @@ const tracked = git('ls-files', '--cached', '--others', '--exclude-standard')
   .filter((f) => f && fs.existsSync(path.join(root, f)))
 
 step('размер файлов', () => {
-  // Как CheckSizes в check.ps1, но только по изменённым файлам
-  const skip = /(^|\/)(wailsjs|build|docs\/private|docs\/refs)\/|\.d\.ts$/
-  const bad = []
-  for (const f of changed) {
-    if (!/\.(go|ts|js|svelte|css|ps1|py)$/.test(f) || skip.test(f)) continue
-    const buf = fs.readFileSync(path.join(root, f))
-    const text = buf.toString('utf8')
-    // Get-Content считает строки без учёта хвостового перевода строки
-    const lines = text.length === 0 ? 0 : text.replace(/\r?\n$/, '').split(/\r?\n/).length
-    if (lines > 600 || buf.length > 30 * 1024) bad.push(`${f} (${lines} строк, ${(buf.length / 1024).toFixed(1)} КБ)`)
-  }
+  // Только изменённые файлы; пределы по языку — limits.mjs
+  const bad = checkSizes(changed, root)
   return { ok: bad.length === 0, out: bad.join('\n') }
 })
 
 step('folder limit', () => {
-  // Как CheckFolders в check.ps1: считаются по всему дереву, исключения — scripts/folder-exceptions.txt
-  const skip = /(^|\/)(wailsjs|testdata|node_modules)\/|\.d\.ts$/
-  const maxFiles = {}
-  const maxDirs = {}
-  const exc = path.join(root, 'scripts', 'folder-exceptions.txt')
-  if (fs.existsSync(exc)) {
-    for (const line of fs.readFileSync(exc, 'utf8').split(/\r?\n/)) {
-      let m = line.match(/^\s*([^\s#]+)\/\s+(\d+)/)
-      if (m) maxDirs[m[1]] = Number(m[2])
-      else if ((m = line.match(/^\s*([^\s#]+)\s+(\d+)/))) maxFiles[m[1]] = Number(m[2])
-    }
-  }
-  const out = []
-  const code = tracked.filter((f) => /\.(go|ts|svelte)$/.test(f) && !skip.test(f))
-  const cnt = {}
-  for (const f of code) {
-    const d = f.includes('/') ? f.slice(0, f.lastIndexOf('/')) : '.'
-    cnt[d] = (cnt[d] || 0) + 1
-  }
-  for (const [d, n] of Object.entries(cnt)) {
-    const lim = maxFiles[d] ?? 20
-    if (n > lim) out.push(`${d}: ${n} files (max ${lim})`)
-  }
-  const kids = {}
-  for (const f of tracked) {
-    const parts = f.split('/')
-    let parent = '.'
-    for (let i = 0; i < parts.length - 1; i++) {
-      ;(kids[parent] ||= new Set()).add(parts[i])
-      parent = i === 0 ? parts[0] : `${parent}/${parts[i]}`
-    }
-  }
-  for (const [p, s] of Object.entries(kids)) {
-    const lim = maxDirs[p] ?? 20
-    if (s.size > lim) out.push(`${p}: ${s.size} folders (max ${lim})`)
-  }
-  for (const f of code) {
-    const n = f.split('/').length
-    if (f.startsWith('frontend/src/') && n !== 3 && n !== 5) {
-      out.push(`${f.slice(0, f.lastIndexOf('/'))}: code outside frontend/src/<group>/<area>`)
-    }
-  }
-  return { ok: out.length === 0, out: [...new Set(out)].join('\n') }
+  // По всему дереву, как в check.ps1; исключения — scripts/folder-exceptions.txt
+  const out = checkFolders(tracked, root)
+  return { ok: out.length === 0, out: out.join('\n') }
 })
 
 const time = `${((Date.now() - total) / 1000).toFixed(1)}s`

@@ -1,0 +1,137 @@
+// Тесты release-check на маленьком макете репозитория во временной папке: `node --test scripts/`.
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import test from 'node:test'
+import { changelogSection, checkAll, checkNeeds, parseJobs } from './release-check.mjs'
+
+const YML = `name: Release
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+  windows:
+    needs: prepare
+  macos:
+    needs: prepare
+  pack:
+    needs: [prepare, windows, macos]
+  mac-check:
+    needs:
+      - prepare
+      - pack
+    steps:
+      - run: go test ./internal/layout -run '^TestGoldenFirst(16)?$' -count=1
+  release:
+    needs: [prepare, pack, mac-check]
+`
+
+const FILES = {
+  'wails.json': JSON.stringify({ info: { productVersion: '1.2.0' } }),
+  'README.md': '# X\n\n- Status: version 1.2.0, actively developed\n',
+  'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.0'\nexport const WHATS_NEW: readonly string[] = [\n  'раз',\n]\n",
+  'CHANGELOG.md': '# История\n\n## 1.2.0 — 2026-01-01\n\n### Добавлено\n\n- Новое (051)\n- Ещё (052)\n\n## 1.1.0 — 2025-12-01\n\n- Старое\n',
+  '.github/workflows/release.yml': YML,
+  'docs/specs/1.2/051-one.md': '# 051\n',
+  'docs/specs/1.2/052-two.md': '# 052\n',
+  'docs/specs/README.md': '| 051 | [один](1.2/051-one.md) | done |\n| 052 | [два](1.2/052-two.md) | done |\n',
+  'internal/layout/a_test.go': 'package layout\n\nfunc TestGoldenFirst(t *testing.T) {}\nfunc TestGoldenFirst16(t *testing.T) {}\n',
+  'internal/layout/testdata/golden/first.sha': 'abc\n',
+}
+
+// Макет с точечными правками: mod[путь] = новое содержимое (null — удалить файл).
+function repo(mod = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relcheck-'))
+  const all = { ...FILES, ...mod }
+  for (const [rel, text] of Object.entries(all)) {
+    if (text === null) continue
+    const f = path.join(root, rel)
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    fs.writeFileSync(f, text)
+  }
+  return root
+}
+const run = (mod, version = '') => {
+  const root = repo(mod)
+  try {
+    return checkAll(root, version)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+}
+
+test('макет целиком — без ошибок, версия берётся из wails.json', () => {
+  assert.deepEqual(run({}), { version: '1.2.0', errors: [] })
+  assert.deepEqual(run({}, '1.2.0').errors, [])
+})
+
+test('версия: каждое из четырёх мест отдельно', () => {
+  const bad = (mod, part) => {
+    const e = run(mod, '1.2.0').errors
+    assert.equal(e.length, 1, e.join('\n'))
+    assert.match(e[0], part)
+  }
+  bad({ 'wails.json': JSON.stringify({ info: { productVersion: '1.1.0' } }) }, /wails\.json/)
+  bad({ 'README.md': '- Status: version 1.1.0, x\n' }, /README/)
+  bad({ 'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.1.0'\nexport const WHATS_NEW: readonly string[] = ['а']\n" }, /whatsnew/)
+  bad({ 'CHANGELOG.md': '## 1.1.0\n\n- а\n' }, /нет раздела/)
+})
+
+test('версия: нет файлов и пустые значения', () => {
+  assert.ok(run({ 'wails.json': null }, '1.2.0').errors.some((e) => /wails\.json: нет файла/.test(e)))
+  assert.ok(run({ 'README.md': null }, '1.2.0').errors.some((e) => /README/.test(e)))
+  assert.ok(run({}, 'abc').errors[0].includes('X.Y.Z'))
+  assert.ok(run({ 'wails.json': '{}' }).errors[0].includes('--version'))
+  const e = run({ 'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.0'\nexport const WHATS_NEW: readonly string[] = []\n" }, '1.2.0').errors
+  assert.deepEqual(e, ['whatsnew.ts: список WHATS_NEW пуст'])
+})
+
+test('CHANGELOG: раздел без пунктов и чужой первый раздел', () => {
+  assert.ok(run({ 'CHANGELOG.md': '## 1.2.0\n\nтекст\n\n## 1.1.0\n\n- а\n' }, '1.2.0').errors.some((e) => /без пунктов/.test(e)))
+  assert.ok(run({ 'CHANGELOG.md': '## 1.3.0\n\n- б\n\n## 1.2.0\n\n- а\n' }, '1.2.0').errors.some((e) => /первым идёт раздел 1\.3\.0/.test(e)))
+  assert.equal(changelogSection('## 1.2.0\n- a\n## 1.2.1\n- b\n', '1.2.0'), '- a')
+  assert.equal(changelogSection('## 1.2.10\n- a\n', '1.2.1'), null) // 1.2.1 не равно 1.2.10
+})
+
+test('спеки: не в таблице README и не упомянутая рядом с упомянутой', () => {
+  const e = run({ 'docs/specs/README.md': '| 051 | x |\n' }, '1.2.0').errors
+  assert.deepEqual(e, ['спека 052 (docs/specs/1.2) не в таблице docs/specs/README.md'])
+  // номера в CHANGELOG уже есть (051) — значит, должны быть все
+  assert.deepEqual(run({}, '1.2.0').errors, [])
+  const no = run({ 'docs/specs/1.2/053-three.md': '#\n', 'docs/specs/README.md': FILES['docs/specs/README.md'] + '| 053 | x |\n' }, '1.2.0').errors
+  assert.deepEqual(no, ['спека 053 (docs/specs/1.2) не упомянута в CHANGELOG 1.2.0'])
+  // CHANGELOG без номеров — сверка молчит, патч без своей папки спек тоже
+  assert.deepEqual(run({ 'CHANGELOG.md': '## 1.2.0\n\n- а\n' }, '1.2.0').errors, [])
+  assert.deepEqual(run({ 'wails.json': '{"info":{"productVersion":"1.2.1"}}', 'README.md': '- Status: version 1.2.1, x\n', 'CHANGELOG.md': '## 1.2.1\n\n- а\n', 'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.1'\nexport const WHATS_NEW: readonly string[] = ['а']\n" }).errors, [])
+})
+
+test('needs: все задания в цепочке публикации', () => {
+  assert.deepEqual(checkNeeds(YML), [])
+  const lost = YML.replace('needs: [prepare, pack, mac-check]', 'needs: [prepare, pack]')
+  assert.deepEqual(checkNeeds(lost), ['release.yml: «release» не ждёт задание «mac-check» (needs, в том числе через цепочку)'])
+  // задание, которое никто не ждёт (забыли добавить в needs новой сборки)
+  const extra = YML.replace('  release:', '  linux:\n    needs: prepare\n  release:')
+  assert.deepEqual(checkNeeds(extra), ['release.yml: «release» не ждёт задание «linux» (needs, в том числе через цепочку)'])
+  assert.deepEqual(checkNeeds(YML.replace('needs: [prepare, pack, mac-check]', 'needs: [prepare, pack, mac-check, ghost]')), [
+    'release.yml: needs ссылается на несуществующее задание «ghost»',
+  ])
+  assert.deepEqual(checkNeeds('jobs:\n  a:\n    runs-on: x\n'), ['release.yml: нет задания «release»'])
+})
+
+test('parseJobs: строка, список в скобках, блочный список, без needs', () => {
+  assert.deepEqual(parseJobs(YML), {
+    prepare: [],
+    windows: ['prepare'],
+    macos: ['prepare'],
+    pack: ['prepare', 'windows', 'macos'],
+    'mac-check': ['prepare', 'pack'],
+    release: ['prepare', 'pack', 'mac-check'],
+  })
+})
+
+test('arm64: тест из release.yml должен существовать, эталон — быть непустым', () => {
+  assert.ok(run({ 'internal/layout/a_test.go': 'package layout\n\nfunc TestGoldenFirst16(t *testing.T) {}\n' }, '1.2.0').errors.some((e) => /«TestGoldenFirst»/.test(e)))
+  assert.ok(run({ 'internal/layout/testdata/golden/first.sha': '' }, '1.2.0').errors.some((e) => /пустой эталон/.test(e)))
+  assert.ok(run({ 'internal/layout/testdata/golden/first.sha': null }, '1.2.0').errors.some((e) => /нет эталонов/.test(e)))
+  assert.ok(run({ '.github/workflows/release.yml': 'jobs:\n  release:\n    needs: []\n' }, '1.2.0').errors.some((e) => /нет проверки эталонов/.test(e)))
+})

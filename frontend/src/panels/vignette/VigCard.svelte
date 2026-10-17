@@ -2,29 +2,19 @@
   import type { VigChoice } from '../../base/core/types'
   import { toneOf } from './vignette'
   import { liveRadius, shapeCss } from '../../base/geom/shape'
-  import { fitBox, type TileForm } from './vigown'
 
-  // Превью шаблона виньетки: места по долям листа, роли разным тоном (c.head, c.shape — поля 049, Go отдаёт с G3). Общее у панели в карточке и галереи
-  // раскладок; размер задаёт вызывающий, подпись и выбор — тоже его.
-  // form (044) — форма мест людей из окна или листа: плитка рисует её у учеников и учителей (только рисование);
-  // групповое фото всегда прямоугольное. Нет form — форма самой коробки шаблона (свой шаблон с формой).
-  // form.ratio/from (049): коробки Go посчитаны в портрете from, а щелчок поставит ratio — места людей вписываются в ratio
-  // (круг 1:1 в 3:4-коробку), без этого плитка «кругов» рисует эллипс, а щелчок даёт круг.
-  let { c, w, h, form }: { c: VigChoice; w: number; h: number; form?: Partial<TileForm> } = $props()
+  // Превью шаблона виньетки: места по долям листа, роли разным тоном (c.head — шапка, Go отдаёт с G3). Общее у панели в карточке
+  // и галереи раскладок; размер задаёт вызывающий, подпись и выбор — тоже его.
+  // form (044, 056) — форма мест людей: плитка рисует её у учеников и учителей (только рисование); групповое фото
+  // всегда прямоугольное. Нет form — форма самой коробки шаблона. Портрет коробок уже тот, что получится после щелчка.
+  let { c, w, h, form }: { c: VigChoice; w: number; h: number; form?: { shape?: string; round?: number } } = $props()
 
   // Скругление — % меньшей стороны, считаем по размеру места на плитке (пропорция листа та же, что у мм).
   type Box = VigChoice['boxes'][number]
-  // Коробка места на плитке: людям — с пропорцией результата, группе — как есть.
-  function placed(b: Box, role: string | undefined): Box {
-    if (toneOf(role) === 'group' || !form?.ratio || !form.from || form.ratio === form.from) return b
-    return { ...b, ...fitBox(b, w, h, form.ratio) }
-  }
 
   function radiusOf(b: Box, role: string | undefined): string | undefined {
     const g = toneOf(role) === 'group'
-    // Каталожные «круги» (049) всегда рисуют места людей кругами: подсказка шаблона важнее формы окна
-    const hint = !c.own && c.shape === 'oval'
-    const shape = g ? '' : hint ? 'oval' : form ? form.shape : b.shape
+    const shape = g ? '' : form ? form.shape : b.shape
     const round = g ? 0 : ((form ? form.round : b.round) ?? 0)
     const bw = b.w * w
     const bh = b.h * h
@@ -33,8 +23,7 @@
 </script>
 
 <span class="card" class:over={c.over} style:width="{w}px" style:height="{h}px">
-  {#each c.boxes as raw, i (i)}
-    {@const b = placed(raw, c.roles[i])}
+  {#each c.boxes as b, i (i)}
     <span
       class="cell {toneOf(c.roles[i])}"
       style:left="{b.x * 100}%"

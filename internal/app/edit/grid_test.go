@@ -141,7 +141,7 @@ func TestStraightenSurface(t *testing.T) {
 		"NaN":        a.StraightenPhoto("s2", "b", math.NaN(), 1),
 		"чужое фото": a.StraightenPhoto("s2", "a", 100, 10),
 		"фон нет":    a.StraightenBackdrop("s2", "right", 100, 10),
-		"наклон NaN": a.SetBackdropAngle("s2", "right", math.NaN()),
+		"наклон NaN": a.SetBackdropAngle("s2", "right", math.NaN(), ""),
 	} {
 		if v.Rev != r {
 			t.Errorf("%s: холостая правка подняла rev %d → %d", name, r, v.Rev)
@@ -150,7 +150,7 @@ func TestStraightenSurface(t *testing.T) {
 	if _, err := a.SetBackdrop("s2", "right", "a"); err != nil {
 		t.Fatal(err)
 	}
-	v = a.SetBackdropAngle("s2", "right", 4.5)
+	v = a.SetBackdropAngle("s2", "right", 4.5, "")
 	if b := v.Spreads[1].Backdrops[0]; b.Frame.R != 4.5 || b.DPI == 0 {
 		t.Fatalf("SetBackdropAngle: %+v", b.Frame)
 	}

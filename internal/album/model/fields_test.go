@@ -300,15 +300,18 @@ func TestTextBudgetVarsAndTeacher(t *testing.T) {
 			}
 			return p
 		}
-		if err := build(fit).CheckTotals(New()); err != nil {
+		// before = сам проект: число разворотов не растёт, и проверяется только запас знаков
+		// (fit — сотни листов, больше MaxSpreads = 200 с 058).
+		check := func(p *Project) error { return p.CheckTotals(p) }
+		if err := check(build(fit)); err != nil {
 			t.Errorf("%s: %d листов в запас не проходят: %v", name, fit, err)
 		}
 		over := build(fit + 1)
-		if err := over.CheckTotals(New()); err == nil {
-			t.Errorf("%s: %d листов сверх запаса прошли", name, fit+1)
+		if err := check(over); err == nil || err.Error() != errTextBudget().Error() {
+			t.Errorf("%s: %d листов сверх запаса: %v", name, fit+1, err)
 		}
 		over.ClampDesign()
-		if err := over.CheckTotals(New()); err != nil {
+		if err := check(over); err != nil {
 			t.Errorf("%s: после зажима CheckTotals отказывает: %v", name, err)
 		}
 		left := 0

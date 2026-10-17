@@ -406,8 +406,8 @@ func TestAutoBuildSpreadLimit(t *testing.T) {
 	a.ed.Store(mustEditor(t, p, ""))
 	a.byID["a"] = library.Photo{ID: "a", Path: `C:\a.jpg`, W: 300, H: 200}
 	v, err := a.AutoBuild([]string{"a"}, -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
-	if err == nil || !strings.Contains(err.Error(), "1000 разворотов") {
-		t.Fatalf("ждали ошибку про 1000 разворотов, получили %v", err)
+	if err == nil || !strings.Contains(err.Error(), "200 разворотов") { // 058: предел 200
+		t.Fatalf("ждали ошибку про 200 разворотов, получили %v", err)
 	}
 	if len(v.Spreads) != model.MaxSpreads {
 		t.Fatalf("вид изменился: %d разворотов", len(v.Spreads))

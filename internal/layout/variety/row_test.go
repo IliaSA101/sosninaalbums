@@ -56,7 +56,8 @@ func checkRow(t *testing.T, name string, as []float64, p layout.Params, e rowEnt
 	t.Helper()
 	keys, shown := map[string]bool{}, map[forms.Form]bool{}
 	q0 := quanta(e.row[0].Q - rowQSlack)
-	last := -1 // позиция последнего взятого из ряда layout: порядок ряда сохраняется
+	last := -1         // позиция последнего взятого из ряда layout: порядок ряда сохраняется
+	var ladders []byte // направления лесенок ряда
 	for i, c := range e.row {
 		if keys[c.Key] {
 			t.Fatalf("%s: повтор ключа %q", name, c.Key)
@@ -70,7 +71,16 @@ func checkRow(t *testing.T, name string, as []float64, p layout.Params, e rowEnt
 			t.Fatalf("%s: %q форма %s, Of — %s", name, c.Key, c.Form, f)
 		}
 		if e.gen[c.Key] {
-			if shown[c.Form] || quanta(c.Q) < q0 || c.Form == forms.Mosaic {
+			again := shown[c.Form]
+			if c.Form == forms.Ladder {
+				// 055: вторая лесенка — разрешённый повтор вида: ровно одна и другого направления
+				d := forms.LadderDir(c.Key)
+				if again && (len(ladders) != 1 || ladders[0] == d) {
+					t.Fatalf("%s: лесенка %q — третья или того же направления, что %q", name, c.Key, ladders)
+				}
+				again, ladders = false, append(ladders, d)
+			}
+			if again || quanta(c.Q) < q0 || c.Form == forms.Mosaic {
 				t.Fatalf("%s: форма %s (%q, Q %.3f) повтор или ниже допуска", name, c.Form, c.Key, c.Q)
 			}
 		} else {

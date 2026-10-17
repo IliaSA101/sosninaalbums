@@ -1,9 +1,11 @@
 package vignette
 
 import (
+	"encoding/json"
 	"math"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -25,8 +27,8 @@ func TestVignetteFamilies(t *testing.T) {
 			t.Fatalf("ID %q длиннее 32", tp.ID)
 		}
 		round, staff := tp.Family == FamRound, tp.Family == FamStaff
-		if tp.Stagger != round || (tp.Shape == ShapeOval) != round || tp.Shape != "" && tp.Shape != ShapeOval {
-			t.Fatalf("%s: шахматка %v, форма %q у вида %s", tp.ID, tp.Stagger, tp.Shape, tp.Family)
+		if tp.Stagger != round {
+			t.Fatalf("%s: шахматка %v у вида %s", tp.ID, tp.Stagger, tp.Family)
 		}
 		if (tp.TText == StaffText) != staff || tp.TText != "" && tp.TText != StaffText || (tp.Teach == PosLead) != staff {
 			t.Fatalf("%s: подпись %q, учителя %q у вида %s", tp.ID, tp.TText, tp.Teach, tp.Family)
@@ -37,6 +39,31 @@ func TestVignetteFamilies(t *testing.T) {
 	}
 	if len(seen) != 6 {
 		t.Fatalf("видов %d: %v", len(seen), seen)
+	}
+}
+
+// TestCatalogNoShapeHint — у каталога нет подсказки формы (056 №5): в JSON шаблона нет «shape»,
+// шаблоны вида «Россыпь» — с именами «…россыпью» и прежними ID (056 №7), и на листе, и на развороте.
+func TestCatalogNoShapeHint(t *testing.T) {
+	want := map[string]string{"round": "Россыпью", "head-round": "Шапка, россыпью",
+		"head-t-left-round": "Шапка, учителя слева, россыпью"}
+	for _, sheet := range []bool{false, true} {
+		got := map[string]string{}
+		for _, tp := range Catalog(sheet) {
+			b, err := json.Marshal(tp)
+			if err != nil || strings.Contains(string(b), `"shape"`) {
+				t.Fatalf("%s: %s %v", tp.ID, b, err)
+			}
+			if tp.Family == FamRound {
+				got[tp.ID] = tp.Name
+			}
+			if strings.Contains(tp.Name, "круги") {
+				t.Fatalf("%s: прежнее имя %q", tp.ID, tp.Name)
+			}
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("лист %v: «Россыпь» %v", sheet, got)
+		}
 	}
 }
 

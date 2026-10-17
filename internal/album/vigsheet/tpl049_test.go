@@ -237,9 +237,9 @@ func TestVignetteHeadRefit(t *testing.T) {
 	}
 }
 
-// Превью каталога несёт вид (таблица design §1.2; пакет генератора отсюда не виден — depguard),
-// подсказку круга (Shape oval, портрет 1:1, коробки людей кругами) и шапку в долях листа: у
-// шаблонов «head…» и «…-cell»; у своих вида нет.
+// Превью каталога несёт вид (таблица design §1.2; пакет генератора отсюда не виден — depguard)
+// и шапку в долях листа: у шаблонов «head…» и «…-cell»; у своих вида нет. Подсказки формы и
+// портрета у каталога нет (056 №5): Shape, Round, Ratio и формы коробок пустые, и у «Россыпи».
 func TestVigChoicesHints(t *testing.T) {
 	fam := map[string]string{
 		"grid": "inrow", "head": "inrow", "head-low": "inrow", "t-center": "inrow", "head-t-center": "inrow", "cell-head": "inrow",
@@ -256,16 +256,15 @@ func TestVigChoicesHints(t *testing.T) {
 		t.Fatalf("превью %d, ждали %d + свой", len(cs), len(fam))
 	}
 	for _, c := range cs[:len(fam)] {
-		round := fam[c.ID] == "round"
-		if c.Family == "" || c.Family != fam[c.ID] || (c.Shape == model.ShapeOval) != round || c.Own {
-			t.Fatalf("%s: вид %q (ждали %q), форма %q", c.ID, c.Family, fam[c.ID], c.Shape)
+		if c.Family == "" || c.Family != fam[c.ID] || c.Shape != "" || c.Round != 0 || c.Own {
+			t.Fatalf("%s: вид %q (ждали %q), форма %q %v", c.ID, c.Family, fam[c.ID], c.Shape, c.Round)
 		}
-		if (c.Ratio == "1:1") != round || c.Ratio != "" && c.Ratio != "1:1" {
+		if c.Ratio != "" {
 			t.Fatalf("%s: портрет-подсказка %q", c.ID, c.Ratio)
 		}
 		for k, b := range c.Boxes {
-			if want := c.Roles[k] != model.RoleGroup && round; (b.Shape == model.ShapeOval) != want {
-				t.Fatalf("%s: коробка %d (%s) форма %q", c.ID, k, c.Roles[k], b.Shape)
+			if b.Shape != "" || b.Round != 0 {
+				t.Fatalf("%s: коробка %d (%s) форма %q %v", c.ID, k, c.Roles[k], b.Shape, b.Round)
 			}
 		}
 		if want := strings.Contains(c.ID, "head") || strings.HasSuffix(c.ID, "-cell"); (c.Head != nil) != want {

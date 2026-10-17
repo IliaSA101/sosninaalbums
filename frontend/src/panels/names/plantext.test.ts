@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { NamesPlan, NamesRow } from './nametypes'
-import { columnsLine, fileInfo, leftList, leftLine, summaryLine, vigHint } from './plantext'
+import { columnsLine, fileInfo, leftList, leftLine, noPhotosLine, summaryLine, vigHint } from './plantext'
 
 const row = (tag: string, no = 1): NamesRow => ({ photo: tag + no, tag, no, line: no, who: { last: 'Иванов' } })
 const plan = (over: Partial<NamesPlan> = {}): NamesPlan => ({
@@ -101,5 +101,12 @@ describe('vigHint', () => {
     expect(vigHint(plan({ rows: vigRows, ...seats, teachers: 1, pupils: 25, byFile: true }))).toBe('')
     expect(vigHint(plan({ rows: vigRows }))).toBe('')
     expect(vigHint(null)).toBe('')
+  })
+})
+
+describe('пустой предпросмотр', () => {
+  it('фраза с подсказкой, слово — по единице', () => {
+    expect(noPhotosLine('На листе')).toBe('На листе пока нет фото. Положите фото — имена лягут на них по порядку мест')
+    expect(noPhotosLine('На развороте')).toMatch(/^На развороте пока нет фото\./)
   })
 })

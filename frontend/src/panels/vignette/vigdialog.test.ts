@@ -24,6 +24,7 @@ import {
   sameVars,
   setupOf,
   stripMax,
+  FILTER_ROW,
   summaryText,
   varsFormOf,
   varsOf,
@@ -151,6 +152,10 @@ describe('размеры предпросмотра', () => {
   it('высота сетки: остаток окна под предпросмотром, но не меньше STRIP_MIN', () => {
     expect(stripMax(760, 360)).toBe(238)
     expect(stripMax(400, 240)).toBe(STRIP_MIN)
+    // каждая строка сегментов фильтров (вид, форма) отнимает FILTER_ROW
+    expect(stripMax(760, 360, 1)).toBe(238 - FILTER_ROW)
+    expect(stripMax(760, 360, 2)).toBe(238 - 2 * FILTER_ROW)
+    expect(stripMax(400, 240, 2)).toBe(STRIP_MIN)
   })
   it('revealX: прокрутка только если элемент не виден', () => {
     expect(revealX(0, 100, 150, 300)).toBe(0)
@@ -249,6 +254,15 @@ describe('VigSession', () => {
       apply: vi.fn(async () => true),
     }
   }
+
+  it('фильтры вида и формы при открытии — «Все», форму мест не меняют (056)', () => {
+    const s = new VigSession('s1', sheet({ vig: vig({ shape: 'oval' }) }), deps())
+    expect(s.family).toBe('all')
+    expect(s.formFilter).toBe('all')
+    s.formFilter = 'rect'
+    expect(s.form.shape).toBe('oval')
+    expect(s.block).toBe('Ничего не изменилось')
+  })
 
   it('форма и поля берутся из листа; «Применить» закрыто, пока ничего не изменилось', () => {
     const s = new VigSession('s1', sheet({ vars: { title: 'Гимназия' } }), deps())

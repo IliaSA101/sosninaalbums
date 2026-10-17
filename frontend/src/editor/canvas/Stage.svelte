@@ -247,7 +247,7 @@
     </div>
 
     <!-- Окно холста под полосой: ряд разворотов обрезается им и не заходит на полосу -->
-    <div class="viewport" data-guide="canvas">
+    <div class="viewport" data-guide="canvas" bind:this={canvas.win}>
       <SpreadSlots settings={s} {k} {base} {centers} {spreadW} {w} fit={fitPlace} {place} {zoomed} onhover={(on) => (hovSpread = on)} />
     </div>
 

@@ -6,9 +6,9 @@ import { model } from '../../../wailsjs/go/models'
 import { unitOf } from '../../base/geom/sheet'
 import { gridAct } from '../layouts/gridact.svelte'
 import type { GridResult, SpreadView, VigChoice, VigPreview, VigSetup } from '../../base/core/types'
-import { visibleTpls, type VigFamilyFilter } from '../../base/tpl/tplfilter'
-import { pickedForm } from './vigown'
-import { formOf, isVignette, leftText, paramsOf, startForm, stepTpl, type VigForm } from './vignette'
+import type { VigFamilyFilter } from '../../base/tpl/tplfilter'
+import { stepTile, vigTiles, pickTile, type FormFilter } from './vigform'
+import { formOf, isVignette, leftText, paramsOf, startForm, type VigForm } from './vignette'
 
 // Карточки шаблонов для чисел и пропорции (превью считает Go). Ошибку Go отдаёт вызывающему.
 export async function vigChoices(spreadId: string, f: Pick<VigForm, 'teachers' | 'pupils' | 'ratio'>): Promise<VigChoice[]> {
@@ -74,33 +74,38 @@ export async function addVignette(at: number): Promise<void> {
 // «Обычный разворот»: места, фото, подписи и шапка остаются, уходят только роли и параметры.
 export const clearVignette = (spreadId: string): Promise<boolean> => store.run(Api.ClearVignette(spreadId))
 
-// Смена шаблона на листе (‹ ›, Пробел, плитка в ▦): свой шаблон ставит и свой портрет, «круги» — форму и 1:1 (pickedForm) — как в окне.
-// Ручная виньетка сначала спрашивает «Ваши правки мест сбросятся…» (gridAct.vigGate), как страница; false —
-// отказано Go или ждёт ответа.
-export async function changeTpl(spreadId: string, f: VigForm, list: readonly VigChoice[], tpl: string): Promise<boolean> {
+// Смена шаблона и формы на листе (‹ ›, Пробел, плитка в ▦): patch — что ставит плитка (pickTile: шаблон, форма, у своего
+// ещё портрет), остальное — как на листе. Ручная виньетка сначала спрашивает «Ваши правки мест сбросятся…»
+// (gridAct.vigGate), как страница; false — отказано Go или ждёт ответа.
+export async function changeTpl(spreadId: string, f: VigForm, patch: Partial<VigForm>): Promise<boolean> {
   let ok = false
   await gridAct.vigGate(spreadId, 'tpl', async () => {
-    ok = await applyVignette(spreadId, { ...f, ...pickedForm(list, f.tpl, tpl, f), tpl })
+    ok = await applyVignette(spreadId, { ...f, ...patch })
   })
   return ok
 }
 
-// Пробел и стрелки вариантов на виньетке: следующий / предыдущий шаблон с числами, что стоят на листе
-// (не из формы панели: несохранённая форма на лист не влияет). Пока идёт шаг, новые нажатия пропускаются.
-// family — фильтр видов открытого ▦: листаем только видимые шаблоны, как стрелки в окне «Настроить виньетку».
+// Пробел и стрелки вариантов на виньетке: следующая / предыдущая видимая плитка (шаблон или форма) с числами, что стоят
+// на листе (не из формы панели: несохранённая форма на лист не влияет). Пока идёт шаг, новые нажатия пропускаются.
+// family и form — фильтры открытого ▦: листаем только видимое, как стрелки в окне «Настроить виньетку».
 let stepping = false
-export async function stepVignette(sp: SpreadView, delta: number, family: VigFamilyFilter = 'all'): Promise<boolean> {
+export async function stepVignette(
+  sp: SpreadView,
+  delta: number,
+  family: VigFamilyFilter = 'all',
+  form: FormFilter = 'all',
+): Promise<boolean> {
   if (stepping || !isVignette(sp)) return false
   stepping = true
   try {
     const f = formOf(sp.vig)
     const list = await vigChoices(sp.id, f)
-    const tpl = stepTpl(visibleTpls(list, family, f.tpl), f.tpl, delta)
-    if (!tpl) {
+    const t = stepTile(vigTiles(list, family, form, f), f, delta)
+    if (!t) {
       store.notify('Других шаблонов для этих чисел нет')
       return false
     }
-    return await changeTpl(sp.id, f, list, tpl)
+    return await changeTpl(sp.id, f, pickTile(t, f.ratio))
   } catch (e) {
     store.notify(errText(e), 'error')
     return false

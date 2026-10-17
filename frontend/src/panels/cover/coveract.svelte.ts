@@ -2,7 +2,9 @@
 import { Api, store } from '../../base/core/store.svelte'
 import type { CoverLayout, CoverPreset, CoverSpec } from '../../base/core/types'
 import { coverUi } from '../../editor/cover/coverui.svelte'
-import { CUSTOM_ID, customSpec } from './coverpanel'
+import { edit } from '../../editor/text/edit.svelte'
+import { COVER_ID } from '../../base/geom/sheet'
+import { CUSTOM_ID, customSpec, spineAction } from './coverpanel'
 
 class CoverActions {
   // Пресеты типографий статичны: Go отдаёт их списком, читаем один раз.
@@ -36,9 +38,16 @@ class CoverActions {
     return store.run(Api.SetCoverLayout(kind))
   }
 
-  // «Надпись на корешке»: текст по центру корешка снизу вверх и плашка; повторный вызов Go считает холостым.
-  spineText() {
-    return store.run(Api.CoverSpineText())
+  // Строка «Корешок», кнопка (058): надписи нет — добавить (один шаг отмены), выделить и сказать тостом;
+  // есть — только выделить, без правки.
+  async spineText() {
+    if (spineAction(store.cover).kind === 'add') {
+      if (!(await store.run(Api.CoverSpineText()))) return
+      if (!store.cover?.spineText) return
+      store.notify('Надпись на корешке добавлена')
+    }
+    const id = store.cover?.spineText
+    if (id) edit.select({ kind: 'text', spread: COVER_ID, id })
   }
 
   // Цвет плашки корешка; "" — убрать плашку.

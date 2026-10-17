@@ -126,7 +126,7 @@ func TestFrameDPIOvalTilt(t *testing.T) {
 		p.Photos["a"] = r
 	})
 	flat := e.View().Spreads[0].Frames[0]
-	tilt := e.SetFrameAngle("a", 30).Spreads[0].Frames[0]
+	tilt := edtest.Tilt(e, "a", 30).Spreads[0].Frames[0]
 	oval := e.SetPlaceShape("s1", []string{"a"}, model.ShapeOval).Spreads[0].Frames[0]
 	if flat.DPI == 0 || tilt.DPI >= flat.DPI || oval.DPI != flat.DPI || oval.Img.W != flat.Img.W {
 		t.Fatalf("dpi: без наклона %d, прямоугольник 30° %d, круг 30° %d", flat.DPI, tilt.DPI, oval.DPI)

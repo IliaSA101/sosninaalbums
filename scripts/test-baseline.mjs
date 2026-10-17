@@ -24,19 +24,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { MAX_DROP, TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const target = path.join(root, 'testdata', 'test-baseline.json')
-const MAX_DROP = 0.5 // п. п. покрытия
-
-// Дерево альбома (023, решение владельца 2026-10-10): при переносе тесты уезжают в пакеты областей, а код,
-// который они проверяют, остаётся в соседних пакетах — поштучное покрытие проседало бы на бумаге. Поэтому
-// пакеты дерева сравниваются одной записью: имена суммой, покрытие — один прогон -coverpkg по всему дереву.
-const TREE_ROOTS = ['internal/album']
-const TREE_KEY = 'tree:album'
-const TREE_MIN = 96.9 // % — уровень до 023 (1b61383: 3127 из 3226)
-const TREE_MAX_MISSED = 90 // непокрытых блоков, критерий спеки 023
-const isTree = (p) => TREE_ROOTS.some((r) => p === r || p.startsWith(r + '/'))
+// Пакеты модуля: не ./... — тот заходит в frontend/node_modules (flatted/golang); один шаблон со всеми скриптами и CI
+const PKGS = ['.', './internal/...']
 
 const args = process.argv.slice(2)
 const flag = (n) => args.includes(n)
@@ -153,7 +146,7 @@ function summary(parsed, stderr) {
 function runGo() {
   const out = opt('--out') || defaultFile('go-test.json')
   // -race на загруженной машине тянет пакет layout дольше 10 мин по умолчанию (16.10: 600 с — обрыв, отдельно 73 с); да владельца 16.10.
-  const goArgs = ['test', '-cover', '-json', ...(flag('--race') ? ['-race', '-timeout', '1200s'] : []), './...']
+  const goArgs = ['test', '-cover', '-json', ...(flag('--race') ? ['-race', '-timeout', '1200s'] : []), ...PKGS]
   const r = runToFile('go', goArgs, root, out)
   const parsed = parseGo(out)
   const n = Object.values(parsed.pkgs).reduce((s, g) => s + total(g.names), 0)
@@ -168,7 +161,7 @@ function goMeasure() {
   let file = opt('--go-json')
   if (!file) {
     file = defaultFile('go-test.json')
-    runToFile('go', ['test', '-cover', '-json', './...'], root, file)
+    runToFile('go', ['test', '-cover', '-json', ...PKGS], root, file)
   }
   const parsed = parseGo(file)
   if (parsed.failedPkgs.size || parsed.failedTests.length) {
@@ -186,7 +179,12 @@ function goMeasure() {
     cur[p] = { cover: g.cover, tests: total(g.names), names: g.names }
   }
   if (Object.keys(treeNames).length) {
-    const c = treeCover()
+    let c
+    try {
+      c = treeCover({ root, env: env() })
+    } catch (e) {
+      fail(e.message)
+    }
     cur[TREE_KEY] = {
       cover: c.cover,
       tests: total(treeNames),
@@ -197,56 +195,6 @@ function goMeasure() {
     }
   }
   return sortObj(cur)
-}
-
-// Покрытие дерева: все тесты дерева против всего его кода. Профиль сливаем по блокам «файл:диапазон»
-// (блок покрыт, если покрыт в любом прогоне), операторы считаем по уникальным блокам.
-function treeCover() {
-  // На Windows go list падает целиком, если папки шаблона нет: берём только существующие корни
-  const roots = TREE_ROOTS.filter((r) => fs.existsSync(path.join(root, r)))
-  const list = spawnSync('go', ['list', ...roots.map((r) => `./${r}/...`)], { cwd: root, env: env(), encoding: 'utf8' })
-  if (list.error || list.status !== 0) fail(`go list of album tree failed:\n${list.error ?? list.stderr}`)
-  const pkgs = list.stdout
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
-  if (!pkgs.length) fail(`go list of album tree failed:\n${list.stderr}`)
-  // edtest и inside — помощники тестов (до 023 жили в _test.go и в покрытие не входили): в знаменатель не берём,
-  // иначе ветки отказа помощников (t.Fatal) выглядят непокрытым кодом альбома
-  const measured = pkgs.filter((p) => !/\/internal\/(edtest|inside)$/.test(p))
-  const prof = defaultFile('tree-cover.out')
-  const r = spawnSync('go', ['test', '-count=1', `-coverpkg=${measured.join(',')}`, `-coverprofile=${prof}`, ...pkgs], {
-    cwd: root,
-    env: env(),
-    encoding: 'utf8',
-    maxBuffer: 64 << 20,
-  })
-  if (r.status !== 0)
-    fail(`go test -coverpkg for album tree failed:\n${((r.stdout || '') + (r.stderr || '')).split('\n').slice(-30).join('\n')}`)
-  const blocks = new Map() // файл:диапазон -> {n, hit}
-  const profText = fs.readFileSync(prof, 'utf8')
-  fs.rmSync(prof, { force: true })
-  for (const line of profText.split('\n')) {
-    const m = /^(.+:\d+\.\d+,\d+\.\d+) (\d+) (\d+)$/.exec(line.trim())
-    if (!m) continue
-    const b = blocks.get(m[1]) ?? { n: +m[2], hit: false }
-    b.hit ||= +m[3] > 0
-    blocks.set(m[1], b)
-  }
-  let stmts = 0
-  let covered = 0
-  let missed = 0
-  for (const b of blocks.values()) {
-    stmts += b.n
-    if (b.hit) covered += b.n
-    else missed++
-  }
-  return {
-    stmts,
-    covered,
-    missed,
-    cover: stmts ? Math.round((covered / stmts) * 1000) / 10 : 0,
-  }
 }
 
 // ---------- vitest ----------
@@ -321,14 +269,11 @@ function check(base, cur) {
         notes.push(`go ${p}: package gone, its tests moved elsewhere`)
         continue
       }
-      if (b.cover - c.cover > MAX_DROP + 1e-9) errors.push(`go ${p}: coverage fell ${b.cover}% -> ${c.cover}% (max drop ${MAX_DROP})`)
       if (p === TREE_KEY) {
-        // Критерий 023 (решение владельца 10): дерево не ниже TREE_MIN без допуска MAX_DROP и непокрытых блоков
-        // не больше эталона (до первого --write — TREE_MAX_MISSED)
-        if (c.cover < TREE_MIN - 1e-9) errors.push(`go ${p}: coverage ${c.cover}% below ${TREE_MIN}% (023 criterion)`)
-        const maxMissed = b.missed ?? TREE_MAX_MISSED
-        if (c.missed > maxMissed) errors.push(`go ${p}: uncovered blocks ${c.missed} > ${maxMissed}`)
+        errors.push(...compareTree(b, c).map((m) => 'go ' + m))
         notes.push(`go ${p}: ${c.covered}/${c.stmts} statements = ${c.cover}%, uncovered blocks ${c.missed} (baseline ${b.cover}%)`)
+      } else if (b.cover - c.cover > MAX_DROP + 1e-9) {
+        errors.push(`go ${p}: coverage fell ${b.cover}% -> ${c.cover}% (max drop ${MAX_DROP})`)
       }
       if (c.tests > b.tests) notes.push(`go ${p}: tests ${b.tests} -> ${c.tests}`)
       else if (c.cover > b.cover + 1e-9) notes.push(`go ${p}: coverage ${b.cover}% -> ${c.cover}%`)

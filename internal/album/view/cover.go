@@ -30,8 +30,9 @@ func coverView(f *fields, st State, v *model.View) *model.CoverView {
 	cv := &model.CoverView{
 		Sheet: spreadView(f, c.Sheet, Laid{}), Spec: c.Spec, Preset: c.Spec.Preset,
 		Spine: cg.Spine, N: cg.N, Over: cg.Over, Layout: model.CoverLayoutName(c.Layout), SpineBg: c.SpineBg,
-		Zones: coverZones(cg, orSafe(c.Spec.Safe, p.Settings.Safe), orSafe(c.Spec.SpineSafe, p.Settings.Safe)),
-		Drop:  dropZones(p, c), TextMaxW: p.TextMaxW(c.Sheet),
+		SpineText: p.SpineTextID(),
+		Zones:     coverZones(cg, orSafe(c.Spec.Safe, p.Settings.Safe), orSafe(c.Spec.SpineSafe, p.Settings.Safe)),
+		Drop:      dropZones(p, c), TextMaxW: p.TextMaxW(c.Sheet),
 		PxW: px(g.W, p.Settings.DPI), PxH: px(g.H, p.Settings.DPI), Fix: model.CoverFixText(p),
 	}
 	for _, z := range cv.Zones {

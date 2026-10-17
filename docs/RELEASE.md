@@ -7,6 +7,7 @@
 - `wails.json` → `info.productVersion`: семвер, `0.X.0` — новая функциональность, `0.X.Y` — исправления. Это единственный источник: Go встраивает его через `go:embed` в `main.go` и передаёт в `app.Run` (разбор — `internal/app/version.go`), версия видна в шапке окна и пишется в `log.txt` при запуске.
 - Строка `Status` в `README.md` (английская, в начале файла) — та же версия.
 - Строка в «Что нового» (ниже, раздел 5) — для пользователя, без технических слов.
+- Сверка перед меткой: `node scripts/release-check.mjs --version X.Y.Z` — версия в `wails.json`, README «Status», `whatsnew.ts` и раздел CHANGELOG, спеки версии в таблице `docs/specs/README.md`, `needs` публикации в `release.yml`, эталоны для arm64. Код выхода ≠ 0 — не ставить метку. Тесты скрипта — `node --test "scripts/*.test.mjs"` (в CI).
 
 ## 2. Проверки (всё зелёное, ноль предупреждений)
 

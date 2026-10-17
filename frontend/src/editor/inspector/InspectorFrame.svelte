@@ -2,7 +2,8 @@
   import { Api, store } from '../../base/core/store.svelte'
   import { framelive } from '../photo/framelive.svelte'
   import { profileLine } from '../photo/color'
-  import { DEFAULT_FRAME, isDefaultFrame, rotateFrame, zoomFrame } from '../../base/geom/frame'
+  import { DEFAULT_FRAME, isDefaultFrame, zoomFrame } from '../../base/geom/frame'
+  import { liveTilt, photoTilt } from '../photo/tiltlive'
   import type { Frame } from '../../base/core/types'
   import Icon from '../../base/ui/Icon.svelte'
   import PlaceFields from './PlaceFields.svelte'
@@ -40,10 +41,24 @@
     await store.run(Api.SetFrame(id, f.s, f.x, f.y))
     framelive.clear()
   }
-  // Наклон (010 U5 → 045): строка TiltRow ведёт предпросмотр на ячейке, SetFrameAngle уходит на отпускании.
-  // Четверти и наклон разложил Go (turn, tilt); R/90 здесь не считается.
-  const tiltLive = (t: number) => fv && framelive.set(id, rotateFrame(frame, (fv.turn ?? 0) * 90 + t), true)
-  const tiltCommit = (t: number) => store.run(Api.SetFrameAngle(id, t))
+  // Наклон (010 U5 → 045 → 057): строка TiltRow ведёт предпросмотр на ячейке, SetFrameAngle уходит на отпускании.
+  // Наклон держит приближение (057): кадр считает liveTilt от кадра начала сессии — тот же расчёт, что у Go.
+  // Сессия (ключ merge в Go) живёт, пока фокус в строке: несколько протяжек — один шаг отмены. Четверти разложил Go.
+  const tiltLive = (t: number) => {
+    if (!sp) return
+    const f = liveTilt(sp, id, photoTilt.keep(id, frame, store.view.rev).base, t)
+    if (f) framelive.set(id, f, true)
+  }
+  async function tiltCommit(t: number) {
+    if (!sp) return
+    await store.run(Api.SetFrameAngle(sp.id, id, t, photoTilt.keep(id, frame, store.view.rev).id))
+    photoTilt.settle(store.view.rev)
+  }
+  // Смена фото или уход панели закрывают сессию.
+  $effect(() => {
+    void id
+    return () => photoTilt.end()
+  })
   async function turn(quarters: -1 | 1) {
     await store.run(Api.TurnPhotos([id], quarters))
   }
@@ -104,6 +119,7 @@
     onlive={tiltLive}
     oncommit={tiltCommit}
     onend={() => framelive.clear()}
+    onleave={() => photoTilt.end()}
     onstraighten={() => straighten.startPhoto(id)}
   />
 {/if}

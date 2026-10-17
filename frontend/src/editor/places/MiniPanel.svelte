@@ -8,13 +8,15 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { tip, tipped } from '../../base/ui/tip.svelte'
-  import { miniContext, miniItems, miniPlace, passThrough, MINI_H, type MiniId } from './minipanel'
+  import { miniContext, miniItems, miniPlace, passThrough, visibleArea, sameView, MINI_H, type MiniId, type MiniView } from './minipanel'
+  import { canvas } from '../canvas/canvas.svelte'
+  import { row } from '../spread/spreadrow.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import LayerMenu from './LayerMenu.svelte'
 
   // Мини-панель выделенного (спека 009, gestures.md «Мини-панель»): полоса значков с подсказками,
-  // вместо текстовой полоски 0.3.0. Состав — places/minipanel.ts. Стоит под рамкой (и под её подписью, 037), иначе над ней,
-  // иначе внутри у верхнего края. box — рамка всего выделенного (у группы описанная).
+  // вместо текстовой полоски 0.3.0. Состав — places/minipanel.ts. Границы — видимая область холста (серое поле тоже годится): под рамкой
+  // (и под её подписью, 037), иначе над ней выше ⟳, иначе внутри у верха. box — рамка всего выделенного (у группы описанная).
   // avoid — центр ⟳ (px): полоса его не закрывает.
   let {
     spread,
@@ -32,7 +34,18 @@
   const photo = $derived(placesel.selected.find((i) => i.photo)?.photo ?? '')
 
   let w = $state(0) // ширина полосы, px (замер)
-  const place = $derived(miniPlace(box, ppm, width, height, w, avoid, captionBottom(spread, placesel.selected)))
+  let el = $state<HTMLElement>()
+  // Видимая область холста в осях разворота (px). DOM не реактивен: перемеряем после раскладки при зуме, сдвиге,
+  // смене размера окна и листании ряда.
+  let view = $state.raw<MiniView>()
+  $effect(() => {
+    void [canvas.cur, canvas.vp, canvas.win, row.pos, width, height]
+    const sheet = el?.parentElement?.getBoundingClientRect()
+    const win = canvas.win?.getBoundingClientRect()
+    const v = sheet && win ? visibleArea(sheet, win, width) : undefined
+    if (!sameView(v, view)) view = v
+  })
+  const place = $derived(miniPlace(box, ppm, width, height, w, avoid, captionBottom(spread, placesel.selected), view))
 
   const stop = (e: Event) => e.stopPropagation()
 
@@ -80,6 +93,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class="minipanel"
+  bind:this={el}
   class:through
   bind:clientWidth={w}
   style:top="{place.top}px"

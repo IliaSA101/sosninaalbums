@@ -3,6 +3,7 @@ package testkit
 import (
 	"os"
 	"strconv"
+	"testing"
 	"time"
 )
 
@@ -35,4 +36,19 @@ func Fastest(n int, fn func()) time.Duration {
 		}
 	}
 	return best
+}
+
+// Lite — тяжёлый тест чистого счёта берёт урезанный набор: под -race (целиком его считает обычный
+// прогон) или под -short (быстрый уровень: precheck и цикл исполнителя; check.ps1 и CI гоняют
+// без -short, полный набор и эталоны проверяются там). Урезается объём (шаги, семена, геометрии),
+// а не классы случаев и не края.
+func Lite() bool { return Race || testing.Short() }
+
+// Steps — число шагов случайного прогона: full в полном режиме, short только под -short
+// (под -race объём не меняем: прежний прогон сохраняется).
+func Steps(full, short int) int {
+	if testing.Short() {
+		return short
+	}
+	return full
 }

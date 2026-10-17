@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from '../../base/ui/Icon.svelte'
+  import { fieldKey, leftRow } from './tiltfocus'
 
   // Строка «Наклон, °» (010 U5 → 045): поле, ползунок, двойной щелчок — 0, кнопка «Выпрямить по линии». Общая
   // для карточки фото (InspectorFrame) и панели фона (BackdropFields). Ползунок и поле ведут предпросмотр
@@ -12,6 +13,7 @@
     onlive,
     oncommit,
     onend,
+    onleave,
     onstraighten,
     label = 'Наклон, °',
     numLabel = 'Наклон, градусы',
@@ -27,6 +29,7 @@
     onlive: (t: number) => void
     oncommit: (t: number) => Promise<unknown> | unknown
     onend: () => void
+    onleave?: () => void // фокус ушёл из строки: сессия жеста (057) кончилась
     onstraighten?: () => void
     label?: string
     numLabel?: string
@@ -38,6 +41,11 @@
     guide?: 'tilt' | 'round' // якорь справочника F1 (литералами в разметке: страж ищет их текстом)
     id?: string
   } = $props()
+
+  let wrap = $state<HTMLElement>() // обёртка строки: уход фокуса ловим со всей строки (ползунок ↔ поле — не уход)
+  function focusout(e: FocusEvent) {
+    if (wrap && leftRow(wrap, e.relatedTarget)) onleave?.()
+  }
 
   let draft = $state<number | null>(null) // что сейчас показано в поле, пока тянут
   const shown = $derived(draft ?? tilt)
@@ -61,6 +69,20 @@
     draft = null // после ответа Go: иначе ползунок на миг прыгнет назад
     onend()
   }
+  // Enter применяет (change придёт при blur) и снимает фокус, как в BackdropFields; Esc — вернуть значение из Go,
+  // выделение не снимать (как в GroupFields/PlaceFields). Фокус уходит из поля, но не из строки — сессия цела.
+  function key(e: KeyboardEvent) {
+    const act = fieldKey(e.key)
+    if (!act) return
+    const input = e.currentTarget as HTMLInputElement
+    if (act === 'cancel') {
+      e.stopPropagation()
+      input.value = String(tilt)
+      draft = null
+      onend()
+    }
+    input.blur()
+  }
 </script>
 
 {#snippet head()}
@@ -74,32 +96,50 @@
       title="Выпрямить по линии: проведите линию вдоль горизонта или вертикали"><Icon name="level" size={16} /></button
     >
   {/if}
-  <input id="{id}-num" class="num" type="number" {min} {max} {step} value={shown} aria-label={numLabel} oninput={live} onchange={commit} />
+  <input
+    id="{id}-num"
+    class="num"
+    type="number"
+    {min}
+    {max}
+    {step}
+    value={shown}
+    aria-label={numLabel}
+    oninput={live}
+    onchange={commit}
+    onkeydown={key}
+  />
 {/snippet}
-{#if guide === 'round'}
-  <div class="row tilt" data-guide="round">{@render head()}</div>
-{:else}
-  <div class="row tilt" data-guide="tilt">{@render head()}</div>
-{/if}
-<input
-  type="range"
-  {min}
-  {max}
-  {step}
-  value={shown}
-  aria-label={rangeLabel}
-  title={rangeTitle}
-  oninput={live}
-  onchange={commit}
-  ondblclick={(e) => {
-    e.currentTarget.value = '0'
-    live(e)
-    commit(e)
-  }}
-  onpointerup={(e) => e.currentTarget.blur()}
-/>
+<!-- display: contents — обёртка не меняет раскладку родителя -->
+<div class="wrap" bind:this={wrap} onfocusout={focusout}>
+  {#if guide === 'round'}
+    <div class="row tilt" data-guide="round">{@render head()}</div>
+  {:else}
+    <div class="row tilt" data-guide="tilt">{@render head()}</div>
+  {/if}
+  <input
+    type="range"
+    {min}
+    {max}
+    {step}
+    value={shown}
+    aria-label={rangeLabel}
+    title={rangeTitle}
+    oninput={live}
+    onchange={commit}
+    ondblclick={(e) => {
+      e.currentTarget.value = '0'
+      live(e)
+      commit(e)
+    }}
+    onpointerup={(e) => e.currentTarget.blur()}
+  />
+</div>
 
 <style>
+  .wrap {
+    display: contents;
+  }
   .row {
     display: flex;
     align-items: center;

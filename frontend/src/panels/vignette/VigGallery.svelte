@@ -11,11 +11,12 @@
   import SideList from '../../base/tpl/SideList.svelte'
   import Seg from '../../base/tpl/Seg.svelte'
   import { tplSources } from '../../base/tpl/tplsource'
-  import { activeFamily, familiesIn, shownTpls, type VigFamilyFilter } from '../../base/tpl/tplfilter'
+  import { activeFamily, familiesIn, type VigFamilyFilter } from '../../base/tpl/tplfilter'
   import GalleryHead, { galleryName } from '../gallery/GalleryHead.svelte'
   import VigCard from './VigCard.svelte'
   import { changeTpl, vigChoices } from './vigact'
-  import { canEditOwn, ownLabel, tileForm, tileLines } from './vigown'
+  import { FORMS, FORM_FILTERS_SHORT, curKey, pickTile, tileFormOf, vigTiles, type Tile } from './vigform'
+  import { canEditOwn, ownLabel, tileLines } from './vigown'
   import { vigOwn } from './vigown.svelte'
   import { formOf, portraitText } from './vignette'
 
@@ -31,20 +32,23 @@
   const canTpl = $derived(prefs.can('templates')) // сохранить, ✎ и × — с уровня «Шаблоны»
 
   let items = $state<VigChoice[] | null>(null) // null — ответ Go ещё не пришёл
-  const allBuiltin = $derived((items ?? []).filter((c) => !c.own))
-  const mine = $derived((items ?? []).filter((c) => c.own))
-  // Фильтр видов (049): над встроенными; текущий шаблон виден всегда, свои не фильтруются. Состояние — в gallery (Пробел)
-  const families = $derived(familiesIn(allBuiltin))
+  const catalog = $derived((items ?? []).filter((c) => !c.own))
+  // Фильтры вида (049) и формы (056): над встроенными; текущая плитка видна всегда, свои вид не фильтрует. Состояние —
+  // в gallery (Пробел листает то же). Плитка = шаблон + форма; на «Мои» фильтр формы серый и свои показаны все.
+  const families = $derived(familiesIn(catalog))
   const fam = $derived(activeFamily(gallery.vigFamily, families))
   const famItems = $derived<{ id: VigFamilyFilter; label: string }[]>([{ id: 'all', label: 'Все' }, ...families])
-  const builtin = $derived(shownTpls(allBuiltin, fam, cur.tpl))
+  const all = $derived(vigTiles(items ?? [], fam, gallery.source === 'mine' ? 'all' : gallery.vigForm, cur))
+  const builtin = $derived(all.filter((t) => !t.c.own))
+  const mine = $derived(all.filter((t) => t.c.own))
+  const curK = $derived(curKey(all, cur))
   // Тексты пустого ряда и причина серого «Мои» (050)
   const TEXTS = {
     empty: { all: 'Нет шаблонов для таких чисел', builtin: 'Нет шаблонов для таких чисел', mine: 'Нет своих шаблонов виньетки' },
     off: { builtin: 'Нет шаблонов для таких чисел', mine: 'Нет своих шаблонов виньетки' },
   }
   const view = $derived(tplSources(builtin, mine, gallery.source, TEXTS))
-  const tiles = $derived(view.parts.reduce((n, p) => n + p.list.length, 0))
+  const count = $derived(view.parts.reduce((n, p) => n + p.list.length, 0))
   let req = 0
   $effect(() => {
     const f = { teachers: cur.teachers, pupils: cur.pupils, ratio: cur.ratio }
@@ -60,17 +64,18 @@
       })
   })
 
-  // Закрываем сразу, как у обычных раскладок; шаблон, что уже стоит, — просто закрытие.
-  // Уезжающая галерея inert: повторный щелчок не читает её $derived (cur) — derived_inert.
-  function pick(c: VigChoice) {
+  // Закрываем сразу, как у обычных раскладок; плитка, что уже стоит, — просто закрытие. Остальные ставят шаблон и свою
+  // форму (один шаг отмены). Уезжающая галерея inert: повторный щелчок не читает её $derived (cur) — derived_inert.
+  function pick(t: Tile) {
     if (!gallery.cur) return
     const form = cur
+    const same = t.key === curK
     gallery.close()
-    if (c.id !== form.tpl && !c.over && !c.gone) void changeTpl(sp.id, form, items ?? [], c.id)
+    if (!same && !t.c.over && !t.c.gone) void changeTpl(sp.id, form, pickTile(t, form.ratio))
   }
 
   // Портрет в мм и «мелко» — мелкой строкой под плиткой, полный текст и пояснение — в title
-  const tip = (c: VigChoice) => `${ownLabel(c)}: ${portraitText(c)}. Под превью — ширина портрета ученика`
+  const tip = (t: Tile) => `${ownLabel(t.c)}, ${FORMS[t.k].name}: ${portraitText(t.c)}. Под превью — ширина портрета ученика`
 </script>
 
 <GalleryHead
@@ -92,17 +97,30 @@
         offTitle="Свои шаблоны не делятся по видам"
       />
     {/if}
+    {#if catalog.length > 0}
+      <Seg
+        items={FORM_FILTERS_SHORT}
+        value={gallery.vigForm}
+        onpick={(f) => gallery.setVigForm(f)}
+        label="Форма мест"
+        off={gallery.source === 'mine'}
+        offTitle="Свои шаблоны показаны в своей форме"
+      />
+    {/if}
   {/snippet}
 </GalleryHead>
 
-<TplRow count={tiles} empty={items ? view.empty : ''} watch={[items, gallery.source, fam]}>
+<TplRow {count} empty={items ? view.empty : ''} watch={[items, gallery.source, fam, gallery.vigForm]}>
   {#snippet side()}
     <SideList items={view.items} value={gallery.source} onpick={(x) => gallery.setSource(x)} label="Какие шаблоны показать" />
   {/snippet}
   {#each view.parts as p, pi (pi)}
     {#if p.sep}<TplSep label={p.sep} />{/if}
-    {#each p.list as c (c.id)}
+    {#each p.list as t (t.key)}
+      {@const c = t.c}
       {@const edit = canEditOwn(c, canTpl)}
+      <!-- Группа формы — тонкая черта со значком (полное слово в подсказке); у своих черта «мои» уже есть -->
+      {#if t.sep && !c.own}<TplSep label={FORMS[t.k].glyph} title={t.sep} />{/if}
       <TplItem
         name={c.own ? ownLabel(c) : undefined}
         note={tileLines(c).join(' · ')}
@@ -112,13 +130,13 @@
       >
         <button
           class="tile"
-          class:current={c.id === cur.tpl}
+          class:current={t.key === curK}
           disabled={c.over || c.gone}
-          title={tip(c)}
-          aria-label="{ownLabel(c)}, {portraitText(c)}"
-          onclick={() => pick(c)}
+          title={tip(t)}
+          aria-label="{ownLabel(c)}, {FORMS[t.k].name}, {portraitText(c)}"
+          onclick={() => pick(t)}
         >
-          <VigCard {c} w={cardW} h={H} form={tileForm(items ?? [], cur.tpl, c.id, cur)} />
+          <VigCard {c} w={cardW} h={H} form={tileFormOf(t)} />
         </button>
       </TplItem>
     {/each}

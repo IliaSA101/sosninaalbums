@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/series"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/layout/plan"
 )
@@ -71,7 +72,7 @@ func (j PlanJob) plan(o model.AutoOpts) (model.AutoPlan, plan.Plan, error) {
 	ap := model.AutoPlan{Photos: n}
 	var cuts []float64
 	if o.Series {
-		cuts = seriesCuts(j.infos)
+		cuts = series.Cuts(j.infos)
 		ap.Cuts = strongCuts(cuts)
 	}
 	ranged := o.Auto || o.MinPer > 0

@@ -182,9 +182,12 @@
   .splitter:hover {
     background: #3a3a3e;
   }
+  /* Высота ленты задана (eff) и от содержимого не зависит: пустое состояние «Все папки скрыты» её не меняет */
   .library {
     position: relative;
     flex: none;
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     background: var(--panel);
@@ -195,6 +198,7 @@
   }
   .grid {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     display: flex;
     flex-wrap: wrap;
@@ -204,7 +208,7 @@
   }
   .hint {
     color: var(--muted);
-    padding: 30px;
+    padding: 12px 30px; /* невысокая подсказка: влезает и в минимальную ленту, прокрутки нет */
     margin: auto;
   }
   .hint .reset {

@@ -147,65 +147,18 @@ func (e *Editor) CoverGuidePath() (path string) {
 // Договор: v зажимается здесь (ClampVignette); мест больше MaxPlaces — ошибка try без правки.
 // Свой шаблон ("my:<id>") берётся из tpls (виньеточные шаблоны templates.json) или с самого
 // листа; поле v.Own от интерфейса отбрасывается, нет шаблона — «Шаблон не найден» без правки.
-// Форму мест (044, 049 §3.3) выводит vigForm: форма листа, смена шаблона (▦, ‹ ›, Пробел) меняет
-// её, как выбор в окне; форма от интерфейса у листа-виньетки отбрасывается. Свой шаблон с
-// формой приносит её при первом применении (vigsheet).
+// Форма мест (044, 056 №5) — та, что прислали: интерфейс шлёт форму плитки или листа целиком,
+// скрытых подсказок у каталога нет. Свой шаблон с формой приносит её при первом применении (vigsheet).
 func (e *Editor) SetVignette(spreadID string, v model.Vignette, tpls []model.Template) (model.View, int, error) {
 	v.Own = nil
 	v = model.ClampVignette(v)
 	return e.gridTry(func(p *model.Project) (int, error) {
-		v = vigForm(p, spreadID, v, tpls)
 		own, err := vigsheet.ResolveOwn(p, spreadID, v.Tpl, tpls)
 		if err != nil {
 			return 0, err
 		}
 		return vigsheet.SetVignette(p, spreadID, v, vigPlan, own, tplText)
 	})
-}
-
-// vigForm — форма мест для SetVignette (049 §3.3, как pickedForm окна): у листа-виньетки — его
-// форма; смена на каталожный «круг» ставит Круг и портрет 1:1, уход с шаблона-круга на шаблон без
-// подсказки при Круге — прямоугольник; иначе ручная форма стоит.
-// Не виньетка — форма, что прислали («Сделать виньеткой»), с той же подсказкой «круга».
-func vigForm(p *model.Project, spreadID string, v model.Vignette, tpls []model.Template) model.Vignette {
-	_, s := p.Find(spreadID)
-	if s == nil {
-		return v
-	}
-	prev := ""
-	if s.IsVignette() {
-		v.Shape, v.Round = s.Vig.Shape, s.Vig.Round
-		if s.Vig.Tpl == v.Tpl {
-			return v
-		}
-		prev = s.Vig.Tpl
-	}
-	next := vigHint(s, v.Tpl, tpls)
-	switch {
-	case next == vignette.ShapeOval && !strings.HasPrefix(v.Tpl, model.VigOwnPrefix):
-		v.Shape, v.Round, v.Ratio = model.ShapeOval, 0, "1:1"
-	case v.Shape == model.ShapeOval && prev != "" && next != vignette.ShapeOval && vigHint(s, prev, tpls) == vignette.ShapeOval:
-		v.Shape = ""
-	}
-	return v
-}
-
-// vigHint — подсказка формы шаблона tpl, как у превью ▦ (vigChoices): каталог — его Shape, свой —
-// форма его стиля, удалённый свой на листе s — форма листа.
-func vigHint(s *model.Spread, tpl string, tpls []model.Template) string {
-	id, own := strings.CutPrefix(tpl, model.VigOwnPrefix)
-	if !own {
-		return vignette.Find(tpl).Shape
-	}
-	for _, t := range tpls {
-		if t.ID == id && t.Kind == model.TplVignette && t.Vig != nil {
-			return t.Vig.Style.Shape
-		}
-	}
-	if s.IsVignette() && s.Vig.Tpl == tpl {
-		return s.Vig.Shape
-	}
-	return ""
 }
 
 // SetupVignette — «Применить» окна «Настроить виньетку»: параметры и поля шапки одним шагом
@@ -310,13 +263,10 @@ func vigChoices(p *model.Project, spreadID string, teachers, pupils int, ratio s
 		if !s.IsVignette() || s.Vig.Tpl != t.ID {
 			ttext = vigsheet.SwapTText(tt, t.TText)
 		}
-		v := model.ClampVignette(model.Vignette{Tpl: t.ID, Teachers: teachers, Pupils: pupils, Ratio: ratio, TText: ttext,
-			Shape: t.Shape})
+		// Каталог без формы (056 №5): форму плитки ставит интерфейс, превью — прямоугольники.
+		v := model.ClampVignette(model.Vignette{Tpl: t.ID, Teachers: teachers, Pupils: pupils, Ratio: ratio, TText: ttext})
 		c := vigChoice(p, &sc, g, v, t.Name)
 		c.Family = t.Family
-		if t.Shape == vignette.ShapeOval { // подсказка: «Круг» и портрет 1:1 ставят окно и vigForm (049 §3.3)
-			c.Ratio = "1:1"
-		}
 		out = append(out, c)
 	}
 	inFile := map[string]bool{}

@@ -110,6 +110,27 @@ func Decode(data []byte, base string) (p *model.Project, err error) {
 	return decodeImpl(data, base)
 }
 
+// errTooMany — отказ открыть альбом из n разворотов (058 №18): файл 0.13 мог держать до 1000,
+// обрезка потеряла бы данные, поэтому файл не трогаем и говорим, что делать. Строчная буква и
+// без точки в конце — правило ошибок Go; заглавную ставит окно (errText).
+func errTooMany(n int) error {
+	return fmt.Errorf("в альбоме %d %s — программа открывает не больше %d. Файл не изменён: "+
+		"откройте его в Sosnina Albums 0.13 и разделите на два альбома", n, spreadsWord(n), model.MaxSpreads)
+}
+
+// spreadsWord — «разворот» в числе n: 201 разворот, 202 разворота, 230 разворотов.
+func spreadsWord(n int) string {
+	switch {
+	case n%100 >= 11 && n%100 <= 14:
+		return "разворотов"
+	case n%10 == 1:
+		return "разворот"
+	case n%10 >= 2 && n%10 <= 4:
+		return "разворота"
+	}
+	return "разворотов"
+}
+
 // decodeFile разбирает файл: пути (с проверкой и выбором из двух), повторы,
 // ID по путям, лимиты, миграция старой версии. base — папка файла.
 // Порядок шагов сетки (design 007 §2): nil и объединение мест с Photos — до
@@ -123,7 +144,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 		return nil, ErrNewer
 	}
 	if len(f.Spreads) > model.MaxSpreads { // сырой список: до dedupe/splitBig не гонять огромный файл
-		return nil, fmt.Errorf("слишком много разворотов в проекте (больше %d)", model.MaxSpreads)
+		return nil, errTooMany(len(f.Spreads))
 	}
 	p := model.New()
 	p.SetFrom(max(f.Version, 1))
@@ -161,7 +182,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	// После splitBig: деление больших разворотов добавляет новые, а лишние
 	// после Save+Load молча пропали бы.
 	if len(p.Spreads) > model.MaxSpreads {
-		return nil, fmt.Errorf("слишком много разворотов в проекте (больше %d)", model.MaxSpreads)
+		return nil, errTooMany(len(p.Spreads))
 	}
 	p.Settings = model.ClampSettings(p.Settings)
 	p.FoldPages()

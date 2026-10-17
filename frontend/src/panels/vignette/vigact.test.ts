@@ -130,11 +130,11 @@ describe('clearVignette и sortVignette', () => {
 })
 
 describe('stepVignette', () => {
-  const sp = (tpl = 'b') =>
+  const sp = (tpl = 'b', shape = '', round = 0) =>
     ({
       id: 'a',
       kind: 'vignette',
-      vig: { tpl, teachers: 2, pupils: 20, ratio: '4:5', ttext: 'T', places: 22, max: 64, group: false },
+      vig: { tpl, teachers: 2, pupils: 20, ratio: '4:5', ttext: 'T', places: 22, max: 64, group: false, shape, round },
     }) as never
   const cards = [
     { id: 'a', over: false },
@@ -153,16 +153,40 @@ describe('stepVignette', () => {
     expect(Api.SetVignette).toHaveBeenCalledWith('a', { tpl: 'd', teachers: 2, pupils: 20, ratio: '4:5', ttext: 'T', head: '' })
   })
 
+  it('step by visible tiles: после шаблонов формы — те же шаблоны в следующей форме, «не поместится» пропускается', async () => {
+    // d|rect — последняя прямоугольная; дальше a|round (c не поместится)
+    await stepVignette(sp('d'), 1)
+    expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'a', round: 10 }))
+    expect(vi.mocked(Api.SetVignette).mock.calls.at(-1)?.[1]?.shape).toBeUndefined()
+    // d|round → a|oval: круг, портрет листа не трогается
+    await stepVignette(sp('d', '', 10), 1)
+    expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'a', shape: 'oval', ratio: '4:5' }))
+    // назад с первой плитки скруглённых — последняя прямоугольная
+    await stepVignette(sp('a', '', 10), -1)
+    expect(vi.mocked(Api.SetVignette).mock.calls.at(-1)?.[1]).toMatchObject({ tpl: 'd', ratio: '4:5' })
+    expect(vi.mocked(Api.SetVignette).mock.calls.at(-1)?.[1]?.round).toBeUndefined()
+  })
+
+  it('фильтр формы ▦: Пробел идёт по плиткам этой формы; текущая другой формы остаётся в круге', async () => {
+    await stepVignette(sp('d'), 1, 'all', 'rect') // d|rect → a|rect
+    expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'a' }))
+    expect(vi.mocked(Api.SetVignette).mock.calls.at(-1)?.[1]?.round).toBeUndefined()
+    await stepVignette(sp('a', 'oval'), 1, 'all', 'rect') // текущая a|oval видна всегда, дальше — прямоугольные с начала
+    expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'a' }))
+    expect(vi.mocked(Api.SetVignette).mock.calls.at(-1)?.[1]?.shape).toBeUndefined()
+  })
+
   it('свой шаблон с другим портретом ставит и свой портрет (как окно), каталожный — портрет листа', async () => {
     vi.mocked(Api.VignetteChoices).mockResolvedValue([
       { id: 'b', over: false },
       { id: 'my:x', over: false, own: true, ratio: '2:3' },
       { id: 'd', over: false },
     ] as never)
-    await stepVignette(sp(), 1)
+    // свои — в конце, после каталога во всех формах
+    await stepVignette(sp('d', 'oval'), 1)
     expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'my:x', ratio: '2:3', pupils: 20 }))
     await stepVignette(sp('my:x'), 1)
-    expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'd', ratio: '4:5' }))
+    expect(Api.SetVignette).toHaveBeenLastCalledWith('a', expect.objectContaining({ tpl: 'b', ratio: '4:5' }))
   })
 
   it('фильтр видов ▦: Пробел идёт по видимым, скрытые вид пропускает', async () => {
@@ -187,9 +211,9 @@ describe('stepVignette', () => {
     expect(store.undoToast).toHaveBeenCalledWith('Убрано в ленту: 2')
   })
 
-  it('других шаблонов нет — тост, Go не зовётся', async () => {
+  it('других плиток нет (один шаблон, фильтр формы) — тост, Go не зовётся', async () => {
     vi.mocked(Api.VignetteChoices).mockResolvedValue([{ id: 'b', over: false }] as never)
-    expect(await stepVignette(sp(), 1)).toBe(false)
+    expect(await stepVignette(sp(), 1, 'all', 'rect')).toBe(false)
     expect(Api.SetVignette).not.toHaveBeenCalled()
     expect(store.notify).toHaveBeenCalledWith('Других шаблонов для этих чисел нет')
   })

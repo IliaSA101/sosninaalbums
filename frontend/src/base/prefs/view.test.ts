@@ -160,3 +160,19 @@ describe('thumbSize load', () => {
     }
   })
 })
+
+describe('modes.presetGroup (058)', () => {
+  beforeEach(useStorage)
+
+  it('по умолчанию пусто («Общие»); выбор запоминается', async () => {
+    const m = await fresh()
+    expect(m.presetGroup).toBe('')
+    m.setPresetGroup('Нетпринт')
+    expect((await fresh()).presetGroup).toBe('Нетпринт')
+  })
+
+  it('мусор в хранилище — «Общие»', async () => {
+    localStorage.setItem('viewMode', JSON.stringify({ presetGroup: 5 }))
+    expect((await fresh()).presetGroup).toBe('')
+  })
+})

@@ -352,7 +352,11 @@ func TestRangeSpreads(t *testing.T) {
 func TestPlanRangeZeroIsPlanGroups(t *testing.T) {
 	stock := stockAspects(t)
 	ser, cuts := seriesAspects(3, 90)
-	for _, p := range invariantParams {
+	geoms := invariantParams
+	if testing.Short() {
+		geoms = geoms[:1] // вторая геометрия — в полном прогоне
+	}
+	for _, p := range geoms {
 		for _, set := range []struct {
 			asp, cuts []float64
 		}{{stock, nil}, {ser, cuts}, {nil, nil}} {

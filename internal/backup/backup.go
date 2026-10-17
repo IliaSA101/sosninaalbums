@@ -77,9 +77,9 @@ func New(root string) *Store {
 	return &Store{Root: root, now: time.Now, last: map[string]time.Time{}, albumMax: albumMax}
 }
 
-// DefaultRoot — %LOCALAPPDATA%\SosninaAlbums\backups (как osx.WebViewDir): копии не ездят
-// с перемещаемым профилем. "" — папки данных нет.
-func DefaultRoot() string {
+// DefaultRoot — %LOCALAPPDATA%\<name>\backups (как osx.WebViewDir; name — osx.DataName, у
+// стенда QA своя): копии не ездят с перемещаемым профилем. "" — папки данных нет.
+func DefaultRoot(name string) string {
 	base := os.Getenv("LOCALAPPDATA")
 	if base == "" {
 		base, _ = os.UserCacheDir()
@@ -87,7 +87,7 @@ func DefaultRoot() string {
 	if base == "" {
 		return ""
 	}
-	return filepath.Join(base, "SosninaAlbums", "backups")
+	return filepath.Join(base, name, "backups")
 }
 
 // Key — папка копий альбома: чистое имя файла и 8 hex от sha256 полного пути без регистра

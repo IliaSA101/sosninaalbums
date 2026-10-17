@@ -1732,6 +1732,7 @@ export namespace model {
 	    over: boolean;
 	    layout: string;
 	    spineBg: string;
+	    spineText: string;
 	    zones: CoverZone[];
 	    drop: CoverZone[];
 	    safe: layout.Rect[];
@@ -1757,6 +1758,7 @@ export namespace model {
 	        this.over = source["over"];
 	        this.layout = source["layout"];
 	        this.spineBg = source["spineBg"];
+	        this.spineText = source["spineText"];
 	        this.zones = this.convertValues(source["zones"], CoverZone);
 	        this.drop = this.convertValues(source["drop"], CoverZone);
 	        this.safe = this.convertValues(source["safe"], layout.Rect);

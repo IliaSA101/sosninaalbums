@@ -343,6 +343,9 @@ func featCorpus() []corpusAlbum {
 // главная ≥ 40 %; средняя потеря «Обычного» ≤ 0.02; на одинаковых сериях главное не реже раза
 // на период ритма; «Меньше» без главного по выбору (как 0.10).
 func TestFeaturedMetrics(t *testing.T) {
+	if testing.Short() {
+		t.Skip("метрики по всему корпусу: полный прогон (check.ps1) и CI")
+	}
 	var all [3]total
 	for _, a := range slices.Concat(featCorpus(), corpus()) {
 		for lv := Less; lv <= More; lv++ {

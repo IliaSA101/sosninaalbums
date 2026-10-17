@@ -110,6 +110,106 @@ function placeImageRot(cell: Rect, aspect: number, f: Frame, r: number, o?: Outl
   return { x: cell.x + cell.w / 2 + ox - w / 2, y: cell.y + cell.h / 2 + oy - h / 2, w, h }
 }
 
+// Точка, повёрнутая по часовой (y вниз) по готовым sin и cos (rotXY в Go).
+const rotXY = (sn: number, cs: number, x: number, y: number): [number, number] => [x * cs - y * sn, x * sn + y * cs]
+
+// Точка (x, y) от центра рамки w×h внутри формы o с допуском eps мм (Outline.contains в Go).
+function inOutline(o: Outline, w: number, h: number, px: number, py: number, eps: number): boolean {
+  const x = Math.abs(px)
+  const y = Math.abs(py)
+  if (o.oval) {
+    const a = w / 2 + eps
+    const b = h / 2 + eps
+    return (x * x) / (a * a) + (y * y) / (b * b) <= 1
+  }
+  if (x > w / 2 + eps || y > h / 2 + eps) return false
+  const r = o.radius && o.radius > 0 ? Math.min(o.radius, Math.min(w, h) / 2) : 0
+  const dx = x - (w / 2 - r)
+  const dy = y - (h / 2 - r)
+  return dx <= 0 || dy <= 0 || dx * dx + dy * dy <= (r + eps) * (r + eps)
+}
+
+// Фото целиком внутри места по центру (Fit = contain), в осях фото; зеркало ContainImage/ContainImageIn в Go
+// (паритет testdata/parity/contain.json). Эллипс — наибольший прямоугольник пропорций aspect под углом r;
+// скругление — прямоугольный ответ, уменьшенный делением пополам (60 шагов, как в Go), пока углы не войдут в форму.
+export function containImage(cell: Rect, aspect: number, r: number, o?: Outline): Rect {
+  const asp = aspect > 0 && Number.isFinite(aspect) ? aspect : 1
+  const [sn, cs] = sinCosDeg(r)
+  let w: number
+  if (r === 0) {
+    w = cell.w / asp > cell.h ? cell.h * asp : cell.w
+  } else {
+    w = Math.min(cell.w / (Math.abs(cs) + Math.abs(sn) / asp), cell.h / (Math.abs(sn) + Math.abs(cs) / asp))
+  }
+  if (o?.oval) {
+    const a2 = (cell.w * cell.w) / 4
+    const b2 = (cell.h * cell.h) / 4
+    let q = 0
+    for (const sg of [1, -1]) {
+      const x = cs / 2 - (sg * sn) / (2 * asp)
+      const y = sn / 2 + (sg * cs) / (2 * asp)
+      q = Math.max(q, (x * x) / a2 + (y * y) / b2)
+    }
+    w = 1 / Math.sqrt(q)
+  } else if (o?.radius && o.radius > 0) {
+    const iw = w
+    const ih = w / asp
+    // Форма выпукла и содержит центр: «углы внутри» монотонно по масштабу t.
+    const fits = (t: number) =>
+      [1, -1].every((v) => {
+        const [x, y] = rotXY(sn, cs, (iw * t) / 2, (v * ih * t) / 2)
+        return inOutline(o, cell.w, cell.h, x, y, 1e-9)
+      })
+    if (!fits(1)) {
+      let lo = 0
+      let hi = 1
+      for (let i = 0; i < 60; i++) {
+        const m = (lo + hi) / 2
+        if (fits(m)) lo = m
+        else hi = m
+      }
+      w = iw * lo
+    }
+  }
+  const h = w / asp
+  return { x: cell.x + (cell.w - w) / 2, y: cell.y + (cell.h - h) / 2, w, h }
+}
+
+// Габарит формы в осях фото, повёрнутого на r, и ширина фото, закрывающего её при S = 1 (tiltCover в Go).
+function tiltCover(cell: Rect, r: number, aspect: number, o?: Outline): { bw: number; bh: number; cov: number } {
+  const b = boundIn(cell, r, o)
+  return { bw: b.w, bh: b.h, cov: Math.max(b.w, b.h * aspect) }
+}
+
+// Сдвиг по одной оси: центр фото от центра места (−f·x/2) держится долей размера фото; ход почти нулевой — 0.
+function tiltShift(x: number, f0: number, w0: number, f1: number, w1: number): number {
+  if (!(f1 > 1e-9) || !(w0 > 0)) return 0
+  const u = ((-f0 * x) / 2 / w0) * w1
+  return clamp((-2 * u) / f1, -1, 1)
+}
+
+// Кадр base, повёрнутый до r (четверти + наклон), по правилу 057 «наклон держит приближение»; зеркало TiltCrop
+// в Go (паритет testdata/parity/tilt.json). S₀ ≤ 1 — S′ = 1; иначе S′ = S₀·cov(R₀)/cov(R′), зажим 1..4; точка фото
+// в центре места остаётся в центре. Тот же r — base как есть. Без округления: тысячные делает Go (для просмотра — у вызывающего).
+export function tiltFrame(cell: Rect, aspect: number, base: Frame, r: number, o?: Outline): Frame {
+  const r0 = base.r ?? 0
+  if (r === r0) return base
+  const asp = aspect > 0 && Number.isFinite(aspect) ? aspect : 1
+  const a = tiltCover(cell, r0, asp, o)
+  const b = tiltCover(cell, r, asp, o)
+  const s = base.s > 1 && b.cov > 0 ? clamp((base.s * a.cov) / b.cov, MIN_SCALE, MAX_SCALE) : 1
+  const w0 = a.cov * base.s
+  const w1 = b.cov * s
+  return withR(
+    {
+      s,
+      x: tiltShift(base.x, w0 - a.bw, w0, w1 - b.bw, w1),
+      y: tiltShift(base.y, w0 / asp - a.bh, w0 / asp, w1 / asp - b.bh, w1 / asp),
+    },
+    r,
+  )
+}
+
 // Эффективный dpi: px (ширина фото в пикселях) на ширину картинки в дюймах; 0 — размер неизвестен.
 export function effectiveDPI(px: number, img: Rect): number {
   if (!(px > 0) || !(img.w > 0)) return 0

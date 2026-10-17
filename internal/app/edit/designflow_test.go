@@ -130,7 +130,7 @@ func TestBackdropWiring(t *testing.T) {
 		t.Errorf("кадр: %+v", f)
 	}
 	r = k.rev()
-	v = k.SetBackdropAngle("s1", "left", 12)
+	v = k.SetBackdropAngle("s1", "left", 12, "")
 	grew("SetBackdropAngle", r, v)
 	r = k.rev()
 	v = k.StraightenBackdrop("s1", "left", 100, 3)

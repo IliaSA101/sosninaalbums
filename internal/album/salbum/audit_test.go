@@ -83,8 +83,69 @@ func TestLoadTooManySpreads(t *testing.T) {
 	if _, err := Decode(mk(model.MaxSpreads), testkit.TempDir(t)); err != nil {
 		t.Fatalf("ровно %d разворотов: %v", model.MaxSpreads, err)
 	}
-	if _, err := Decode(mk(model.MaxSpreads+1), testkit.TempDir(t)); err == nil || !strings.Contains(err.Error(), "слишком много разворотов") {
+	if _, err := Decode(mk(model.MaxSpreads+1), testkit.TempDir(t)); err == nil || err.Error() != errTooMany(model.MaxSpreads+1).Error() {
 		t.Fatalf("ждали отказ, получили %v", err)
+	}
+}
+
+// manySpreads — файл формата version из n пустых разворотов.
+func manySpreads(t *testing.T, version, n int) []byte {
+	t.Helper()
+	f := FileProject{Version: version, Settings: model.DefaultSettings(), Folders: []FileFolder{}, Photos: map[string]FilePhoto{}}
+	for i := range n {
+		f.Spreads = append(f.Spreads, &model.Spread{ID: fmt.Sprintf("s%d", i), Photos: []string{}})
+	}
+	data, err := json.Marshal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+// Отказ открыть больше 200 разворотов (058 №18): число файла, предел и что делать; число — в
+// своей форме слова.
+func TestLoadTooManySpreadsText(t *testing.T) {
+	if model.MaxSpreads != 200 {
+		t.Fatalf("MaxSpreads %d, по 058 — 200", model.MaxSpreads)
+	}
+	const tail = " — программа открывает не больше 200. Файл не изменён: откройте его в Sosnina Albums 0.13 и разделите на два альбома"
+	for n, w := range map[int]string{201: "201 разворот", 202: "202 разворота", 230: "230 разворотов", 211: "211 разворотов",
+		1000: "1000 разворотов"} {
+		_, err := Decode(manySpreads(t, model.FormatVersion, n), testkit.TempDir(t))
+		if err == nil || err.Error() != "в альбоме "+w+tail {
+			t.Fatalf("%d: %v", n, err)
+		}
+	}
+	for n, w := range map[int]string{0: "разворотов", 1: "разворот", 4: "разворота", 5: "разворотов", 12: "разворотов",
+		21: "разворот", 111: "разворотов", 114: "разворотов", 122: "разворота"} {
+		if g := spreadsWord(n); g != w {
+			t.Fatalf("%d: %q, ждали %q", n, g, w)
+		}
+	}
+}
+
+// Отказ не трогает файл (058 №18): байты и время те же, рядом не появилось .bak/.tmp — и у файла
+// текущей версии, и у старой (миграция пишет .bak только при сохранении).
+func TestLoadTooManyKeepsFile(t *testing.T) {
+	for _, ver := range []int{model.FormatVersion, model.FormatVersion - 1} {
+		dir := testkit.TempDir(t)
+		path := filepath.Join(dir, "big.salbum")
+		data := manySpreads(t, ver, 230)
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		st0, _ := os.Stat(path)
+		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "230 разворотов") {
+			t.Fatalf("v%d: ждали отказ, получили %v", ver, err)
+		}
+		got, err := os.ReadFile(path)
+		st1, _ := os.Stat(path)
+		if err != nil || string(got) != string(data) || !st1.ModTime().Equal(st0.ModTime()) {
+			t.Fatalf("v%d: файл изменён: %v", ver, err)
+		}
+		if es, _ := os.ReadDir(dir); len(es) != 1 {
+			t.Fatalf("v%d: рядом с файлом %d записей", ver, len(es))
+		}
 	}
 }
 
@@ -259,7 +320,7 @@ func TestLoadSpreadLimitAfterSplit(t *testing.T) {
 		}
 		return path, nil
 	}
-	// 1 большой + 998 пустых → после деления ровно 1000: проходит.
+	// 1 большой + MaxSpreads−2 пустых → после деления ровно предел: проходит.
 	path, err := save(model.MaxSpreads - 2)
 	if err != nil {
 		t.Fatal(err)
@@ -267,12 +328,12 @@ func TestLoadSpreadLimitAfterSplit(t *testing.T) {
 	if q, err := Load(path); err != nil || len(q.Spreads) != model.MaxSpreads {
 		t.Fatalf("ровно предел после деления: err=%v", err)
 	}
-	// 1 большой + 999 пустых → 1001: отказ.
+	// 1 большой + MaxSpreads−1 пустых → предел + 1: отказ с числом после деления.
 	path, err = save(model.MaxSpreads - 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "слишком много разворотов") {
+	if _, err := Load(path); err == nil || err.Error() != errTooMany(model.MaxSpreads+1).Error() {
 		t.Fatalf("ждали отказ после деления, получили %v", err)
 	}
 }

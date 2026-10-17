@@ -3,6 +3,7 @@ package variety
 // Ряд «Авто» по формам (спека 051, design §6): первая — прежняя лучшая (Layout "" и «Меньше» не
 // меняются), дальше через одну — лучшая ещё не показанной формы (forms.Gen и featured), между
 // ними — следующие из ряда layout. Подборка, счётчик «i / N» и листание берут ряд отсюда.
+// Лесенка в ряду бывает дважды (055): вторая — другого направления, встаёт после прочих форм.
 
 import (
 	"cmp"
@@ -36,7 +37,8 @@ var rowCache = struct {
 
 // Row — ряд «Авто» разворота длиной не больше rowLen: Row[0] = layout.Cached[0] всегда; на
 // позициях 1, 3, 5, … — лучшая по Q ещё не показанной формы (Q ≥ Q[0] − rowQSlack; ключ и вид не
-// повторяются), между ними — следующие из layout.Cached; кончился один источник — берётся другой.
+// повторяются; форма — кроме пары лесенки, ladderPair), между ними — следующие из layout.Cached;
+// кончился один источник — берётся другой.
 // С ManyFrom фото формы только в первой порции (ManyBatch), дальше — ряд layout без показанных:
 // Row(…, 24)[:12] == Row(…, 12). Результат общий: не менять.
 func Row(aspects []float64, p layout.Params, rowLen int) []forms.Cand {
@@ -97,6 +99,8 @@ type rowBuild struct {
 	used  []bool
 	clook []string // вид кандидата — по требованию: до порога доходят немногие
 	floor float64  // пол Q формы в квантах
+	as    []float64
+	pair  *forms.Cand // вторая лесенка: ждёт, пока кончатся прочие формы (055)
 }
 
 func (b *rowBuild) add(c forms.Cand, formed bool) {
@@ -107,11 +111,12 @@ func (b *rowBuild) add(c forms.Cand, formed bool) {
 	}
 }
 
-// nextForm — лучшая по Q ещё не показанной формы с новым ключом и видом; false — таких нет.
+// nextForm — лучшая по Q ещё не показанной формы с новым ключом и видом; таких нет — вторая
+// лесенка (takePair); false — нет и её.
 func (b *rowBuild) nextForm() bool {
 	for i, c := range b.cands {
 		if quanta(c.Q) < b.floor {
-			return false
+			break
 		}
 		if b.used[i] || b.shown[c.Form] || b.keys[c.Key] {
 			continue
@@ -127,9 +132,47 @@ func (b *rowBuild) nextForm() bool {
 		if k := b.kinds[c.Key]; k != NoKind {
 			b.e.kind[c.Key] = k
 		}
+		if c.Form == forms.Ladder {
+			b.pair = b.ladderPair(c)
+		}
 		return true
 	}
-	return false
+	return b.takePair()
+}
+
+// ladderPair — пара первой лесенки ряда c: лучший по Q кандидат-лесенка другого направления и
+// другого вида (разворот ↔ страница) не ниже пола ряда; нет такого — зеркало c (L ↔ A). Так в
+// ряду есть и вниз, и вверх; первая остаётся по (Q, ключ) — ключи рядов альбомов 0.13 на месте.
+func (b *rowBuild) ladderPair(c forms.Cand) *forms.Cand {
+	dir, paged := forms.LadderDir(c.Key), layout.IsPaged(c.Key)
+	for i, d := range b.cands {
+		if quanta(d.Q) < b.floor {
+			break
+		}
+		if !b.used[i] && d.Form == forms.Ladder && forms.LadderDir(d.Key) != dir && layout.IsPaged(d.Key) != paged {
+			b.used[i] = true
+			return &d
+		}
+	}
+	r, ok := layout.Build(forms.MirrorLadder(c.Key), b.as, b.p)
+	if !ok {
+		return nil
+	}
+	if q, ok := forms.Quality(r, forms.Ladder, b.p); ok && quanta(q) >= b.floor {
+		return &forms.Cand{Result: r, Form: forms.Ladder, Q: q}
+	}
+	return nil
+}
+
+// takePair — вторая лесенка, если она есть и её ключ и вид в ряду новые; ставится один раз.
+func (b *rowBuild) takePair() bool {
+	c := b.pair
+	b.pair = nil
+	if c == nil || b.keys[c.Key] || b.looks[Look(c.Rects, b.p)] {
+		return false
+	}
+	b.add(*c, true)
+	return true
 }
 
 // nextBase — следующий ещё не показанный из ряда layout; false — ряд кончился.
@@ -147,7 +190,7 @@ func (b *rowBuild) nextBase() bool {
 // buildRow — ряд из base (layout.Cached) и форм; первые head позиций чередуются с формами.
 func buildRow(as []float64, p layout.Params, rowLen int, base []layout.Result) rowEntry {
 	b := &rowBuild{e: rowEntry{kind: map[string]Kind{}, gen: map[string]bool{}}, p: p,
-		keys: map[string]bool{}, looks: map[string]bool{}, shown: map[forms.Form]bool{}, base: base, bi: 1}
+		keys: map[string]bool{}, looks: map[string]bool{}, shown: map[forms.Form]bool{}, base: base, bi: 1, as: as}
 	if len(base) == 0 || rowLen <= 0 {
 		return b.e
 	}

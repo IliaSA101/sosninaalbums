@@ -200,7 +200,7 @@ export function ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:n
 
 export function SetBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
-export function SetBackdropAngle(arg1:string,arg2:string,arg3:number):Promise<model.View>;
+export function SetBackdropAngle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>;
 
 export function SetBackdropBox(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>;
 
@@ -226,7 +226,7 @@ export function SetFlip(arg1:Array<string>,arg2:string):Promise<model.View>;
 
 export function SetFrame(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>;
 
-export function SetFrameAngle(arg1:string,arg2:number):Promise<model.View>;
+export function SetFrameAngle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>;
 
 export function SetGrid(arg1:string,arg2:boolean):Promise<model.View>;
 

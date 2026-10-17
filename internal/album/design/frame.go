@@ -5,6 +5,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
 // Кадр фото, зеркало, наклон и цвет страниц разворота (спека 006). Операция —
@@ -22,25 +23,71 @@ func SetFrame(p *model.Project, photoID string, s, x, y float64) {
 	p.Photos[photoID] = r
 }
 
-// SetFrameAngle — наклон фото в рамке tilt (градусы, −44,9…44,9 при текущих четвертях
-// поворота; шаг 0.1). S, X, Y и пропорции стоят, «Авто» не закрепляется. NaN/Inf и
-// тот же наклон — холостая правка.
-func SetFrameAngle(p *model.Project, photoID string, tilt float64) {
+// SetFrameAngle — наклон фото листа spreadID в рамке tilt (градусы, −44,9…44,9 при текущих
+// четвертях; шаг 0.1) от кадра base (начало сессии жеста; nil — текущий). Наклон держит
+// приближение (057, geom.TiltCrop): S, X, Y считаются от base, у «Целиком» меняется только
+// R. Пропорции стоят, «Авто» не закрепляется. Фото не на листе и тот же наклон — холостая.
+func SetFrameAngle(p *model.Project, spreadID, photoID string, tilt float64, base *model.Frame) {
+	s := p.Sheet(spreadID)
 	r, ok := p.Photos[photoID]
-	if !ok {
+	if s == nil || !ok || !slices.Contains(s.Photos, photoID) {
 		return
 	}
-	f := r.FrameOrDefault()
-	turn, _ := model.SplitR(f.R)
+	cur := r.FrameOrDefault()
+	turn, _ := model.SplitR(cur.R)
+	b := cur
+	if base != nil {
+		if t0, _ := model.SplitR(base.R); t0 == turn { // четверти сменились мимо сессии — от текущего
+			b = *base
+		}
+	}
+	f := cur
 	f.R = model.ClampR(float64(90*turn) + geom.ClampF(model.Round1(tilt), -model.MaxTilt, model.MaxTilt))
+	if cell, o, ok := tiltCell(p, s, photoID); ok {
+		c := geom.TiltCrop(cell, p.RawAspect(photoID), geom.Crop{S: b.S, X: b.X, Y: b.Y, R: b.R}, f.R, o)
+		f = model.Frame{S: c.S, X: c.X, Y: c.Y, R: c.R}
+	}
 	r.Frame = model.ClampFrame(&f)
 	p.Photos[photoID] = r
 }
 
+// tiltCell — место фото для правила наклона (057, решение 12): сетка и обложка — рамка места
+// и его форма, «Авто» — ячейка действующей раскладки (прямоугольник). «Целиком» и фото без
+// места — ok = false: правило к ним не относится, меняется только R.
+func tiltCell(p *model.Project, s *model.Spread, photoID string) (layout.Rect, geom.Outline, bool) {
+	if len(s.Grid) > 0 {
+		pl := s.PlaceRef(photoID)
+		if pl == nil || pl.Fit == model.FitContain {
+			return layout.Rect{}, geom.Outline{}, false
+		}
+		return layout.Rect{W: pl.W, H: pl.H}, pl.Outline(), true
+	}
+	res, _, ok := p.Layout(s)
+	i := slices.Index(s.Photos, photoID)
+	if !ok || i < 0 || i >= len(res.Rects) {
+		return layout.Rect{}, geom.Outline{}, false
+	}
+	return res.Rects[i], geom.Outline{}, true
+}
+
+// BaseFrame — кадр фото photoID в снимке p0 (начало сессии наклона, 057). Снимка нет или
+// фото в нём нет — nil: база — текущий кадр. Кадр по умолчанию — не nil, а {S: 1}.
+func BaseFrame(p0 *model.Project, photoID string) *model.Frame {
+	if p0 == nil {
+		return nil
+	}
+	r, ok := p0.Photos[photoID]
+	if !ok {
+		return nil
+	}
+	f := r.FrameOrDefault()
+	return &f
+}
+
 // StraightenPhoto — «Выпрямить по линии» (045): линия (dx, dy) мм листа встаёт параллельно
 // краю места (у «Авто» — краю листа). Четверти стоят, наклон упирается в ±44,9 — пропорции
-// те же, «Авто» не закрепляется и не пересобирается. Фото не на листе, нет линии или она
-// уже ровная — холостая правка.
+// те же, «Авто» не закрепляется и не пересобирается; приближение держится, как у наклона
+// (057, от текущего кадра). Фото не на листе, нет линии или она уже ровная — холостая правка.
 func StraightenPhoto(p *model.Project, spreadID, photoID string, dx, dy float64) {
 	s := p.Sheet(spreadID)
 	if s == nil || !slices.Contains(s.Photos, photoID) {
@@ -55,7 +102,7 @@ func StraightenPhoto(p *model.Project, spreadID, photoID string, dx, dy float64)
 		return
 	}
 	_, tilt := model.SplitR(p.Photos[photoID].FrameOrDefault().R)
-	SetFrameAngle(p, photoID, tilt+d)
+	SetFrameAngle(p, spreadID, photoID, tilt+d, nil)
 }
 
 // TurnPhotos поворачивает фото ids на quarters·90° (quarters ∈ {−1, 1, 2}, иначе

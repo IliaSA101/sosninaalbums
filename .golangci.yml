@@ -366,6 +366,16 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/album$
             - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
             - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Серии съёмки (051, разрез spreads) — область дерева album; да владельца 17.10.
+        "album/series: только model":
+          files:
+            - "**/internal/album/series/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/series
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
         "album/spreads: только model":
           files:
             - "**/internal/album/spreads/**"
@@ -373,6 +383,7 @@ linters:
           allow:
             - $gostd
             - github.com/IliaSA101/sosninaalbums/internal/album/spreads
+            - github.com/IliaSA101/sosninaalbums/internal/album/series
             - github.com/IliaSA101/sosninaalbums/internal/album/model
             - github.com/IliaSA101/sosninaalbums/internal/geom
             - github.com/IliaSA101/sosninaalbums/internal/layout
@@ -526,6 +537,8 @@ linters:
               desc: сборка вида — через Editor.View (023)
             - pkg: github.com/IliaSA101/sosninaalbums/internal/album/vigsheet
               desc: тело правки без проверок обёртки Editor (разрез 0.12)
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/series
+              desc: серии съёмки — только для автосборки в дереве альбома (разрез spreads)
         "prefs: только library, osx, paths, album":
           files:
             - "**/internal/prefs/**"

@@ -52,6 +52,8 @@ class ViewMode {
   }
   // 053: размер миниатюр ленты, целые px; настройка окна, как высота ленты.
   thumbSize = $state(THUMB_DEF)
+  // 058: последняя типография в списке форматов «Настроек альбома» ("" — «Общие»).
+  presetGroup = $state('')
   // Запрос «прокрутить панель к разделу»: счётчик, чтобы повторный запрос тоже срабатывал.
   reveal = $state<{ name: SectionName; n: number } | null>(null)
 
@@ -69,6 +71,7 @@ class ViewMode {
       this.rulers = v.rulers !== false
       const t = v.thumbSize
       if (Number.isInteger(t) && t >= THUMB_MIN && t <= THUMB_MAX) this.thumbSize = t
+      if (typeof v.presetGroup === 'string') this.presetGroup = v.presetGroup
       this.loadAuto(v)
       const s = v.sections
       if (s && typeof s === 'object') {
@@ -102,6 +105,7 @@ class ViewMode {
           safe: this.safe,
           rulers: this.rulers,
           thumbSize: this.thumbSize,
+          presetGroup: this.presetGroup,
           sections: this.sections,
           autoSpreads: this.autoSpreads,
           autoRange: this.autoRange,
@@ -153,6 +157,12 @@ class ViewMode {
   setThumb(n: number) {
     if (!Number.isFinite(n)) return
     this.thumbSize = Math.max(THUMB_MIN, Math.min(THUMB_MAX, Math.round(n)))
+    this.save()
+  }
+
+  // Запомнить типографию списка форматов.
+  setPresetGroup(g: string) {
+    this.presetGroup = g
     this.save()
   }
 

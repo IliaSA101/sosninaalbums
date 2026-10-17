@@ -44,6 +44,8 @@ type App struct {
 	ctx    context.Context
 	cfgDir string
 	cache  *library.Cache
+	// data — имя папок данных (osx.DataName): у стенда QA (SA_STAND) своё, задаёт Run до окна.
+	data string
 
 	// ed подменяется при «Новый»/«Открыть», а читается из обработчиков /media,
 	// автосохранения и методов UI одновременно — поэтому только через editor().
@@ -143,7 +145,7 @@ type State struct {
 
 func NewApp() *App {
 	a := &App{byID: map[string]library.Photo{}, rename: os.Rename, scanner: library.NewScanner(),
-		ready: make(chan struct{}), exists: fileExists, snapRefs: editorPaths}
+		ready: make(chan struct{}), exists: fileExists, snapRefs: editorPaths, data: osx.AppName}
 	a.stopCtx, a.stopCancel = context.WithCancel(context.Background())
 	a.emit = func(name string, data ...any) {
 		if a.ctx != nil {
@@ -164,8 +166,8 @@ func (a *App) startup(ctx context.Context) {
 	defer close(a.ready)
 	defer guard("startup")
 	a.ctx = ctx
-	cfg, _ := os.UserConfigDir()
-	a.cfgDir = filepath.Join(cfg, "SosninaAlbums")
+	cfgDir, thumbsDir := dataDirs(a.data)
+	a.cfgDir = cfgDir
 	if err := os.MkdirAll(a.cfgDir, 0o755); err != nil {
 		log.Printf("папка настроек: %v", paths.NoPath(err)) // без неё лог и конфиг не пишутся, но программа работает
 	}
@@ -175,8 +177,7 @@ func (a *App) startup(ctx context.Context) {
 	a.startBackups()
 	a.openDecor() // до первого Load: свои фоны альбома находят путь по ключу
 
-	cacheDir, _ := os.UserCacheDir()
-	c, err := library.NewCache(filepath.Join(cacheDir, "SosninaAlbums", "thumbs"))
+	c, err := library.NewCache(thumbsDir)
 	if err != nil {
 		log.Printf("кэш миниатюр: %v", paths.NoPath(err))
 	}
@@ -387,6 +388,23 @@ func (a *App) fitScreen(ctx context.Context) {
 // (межпроцессного замка нет сознательно, спека 019 §C). Сторож — TestInstanceIDStable.
 const instanceID = "6f1c2b7e-3a4d-4e58-9b0a-5d2e8c7f1a93"
 
+// instanceKey — замок второго экземпляра: у стенда QA свой, чтобы 2–3 копии wails dev
+// открылись рядом (папки данных у них тоже свои, см. dataDirs).
+func instanceKey(stand string) string {
+	if stand == "" {
+		return instanceID
+	}
+	return instanceID + "-stand-" + stand
+}
+
+// dataDirs — папка настроек (config.json, templates.json, Библиотека, черновик, log.txt) и кэша
+// миниатюр; name — osx.DataName.
+func dataDirs(name string) (cfg, thumbs string) {
+	c, _ := os.UserConfigDir()
+	k, _ := os.UserCacheDir()
+	return filepath.Join(c, name), filepath.Join(k, name, "thumbs")
+}
+
 // quietTransport выключает keep-alive у транспорта. В wails dev обратный прокси к Vite идёт через
 // http.DefaultTransport (в exe прокси нет, своих HTTP-клиентов у программы нет). Vite пишет
 // «400 Bad Request» в простаивающее keep-alive соединение, и net/http сыплет в log.txt
@@ -405,7 +423,13 @@ func Run(assets fs.FS, wailsCfg []byte) error {
 	if t, ok := http.DefaultTransport.(*http.Transport); ok {
 		quietTransport(t)
 	}
+	// Неверное имя стенда — отказ, а не тихий запуск в настоящих настройках.
+	stand, err := osx.Stand()
+	if err != nil {
+		return err
+	}
 	app := NewApp()
+	app.data = osx.DataName(stand)
 
 	return wails.Run(&options.App{
 		Title:            "Sosnina Albums",
@@ -420,7 +444,7 @@ func Run(assets fs.FS, wailsCfg []byte) error {
 		},
 		BackgroundColour: &options.RGBA{R: 38, G: 38, B: 40, A: 1},
 		// Данные WebView2 (localStorage) не привязаны к имени exe: у каждой версии оно своё.
-		Windows:     &windows.Options{WebviewUserDataPath: osx.WebViewDir()},
+		Windows:     &windows.Options{WebviewUserDataPath: osx.WebViewDir(app.data)},
 		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
 		OnStartup:   app.startup,
 		OnDomReady:  app.fitScreen,
@@ -428,7 +452,7 @@ func Run(assets fs.FS, wailsCfg []byte) error {
 		Bind:        []any{app},
 		// Два окна пишут в один черновик и конфиг: второй запуск лишь поднимает первое окно.
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: instanceID,
+			UniqueId: instanceKey(stand),
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
 				if app.ctx == nil {
 					return

@@ -3,13 +3,16 @@ package view_test
 import (
 	"encoding/json"
 	"math"
+	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/view"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // TestSpreadViewSize — размер листа в виде из Geo (032 §6): разворот — 2·pageW × pageH со
@@ -193,5 +196,64 @@ func TestSpreadOfMatchesView(t *testing.T) {
 	}
 	if sv, err := view.SpreadOf(p, "нет"); err == nil || sv.ID != "" {
 		t.Fatalf("неизвестный лист: %v, %q", err, sv.ID)
+	}
+}
+
+// TestCoverViewSpineText — CoverView.SpineText (058 №19): ID надписи на корешке по условию
+// «Надписи на корешке»; прямой текст и повёрнутый вне корешка — не она; повтор кнопки — холостой
+// и ID тот же; Save→Load — тот же ID; отмена и удаление — "".
+func TestCoverViewSpineText(t *testing.T) {
+	e := edtest.CoverEd(t, "k", edtest.Calendar(), []string{"x"})
+	spine := func() string { t.Helper(); return e.View().Cover.SpineText }
+	if s := spine(); s != "" {
+		t.Fatalf("без надписи: %q", s)
+	}
+	if _, err := e.AddText(model.CoverID, 1, ""); err != nil { // прямой текст на лицевой
+		t.Fatal(err)
+	}
+	edtest.Change(e, func(p *model.Project) { // повёрнутый — на лицевой, не в корешке
+		tb := *p.Cover.Sheet.Texts[0]
+		tb.ID, tb.Rot = "tilted", 10
+		p.Cover.Sheet.Texts = append(p.Cover.Sheet.Texts, &tb)
+	})
+	if s := spine(); s != "" {
+		t.Fatalf("прямой и повёрнутый вне корешка: %q", s)
+	}
+	undo, n := edtest.UndoLen(e), len(edtest.P(e).Cover.Sheet.Texts)
+	if _, err := e.CoverSpineText(); err != nil {
+		t.Fatal(err)
+	}
+	ts := edtest.P(e).Cover.Sheet.Texts
+	id := ts[len(ts)-1].ID
+	if s := spine(); s == "" || s != id || len(ts) != n+1 || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("надпись %q, ждали %q; текстов %d, шагов %d", s, id, len(ts), edtest.UndoLen(e)-undo)
+	}
+	rev := edtest.Rev(e)
+	if _, err := e.CoverSpineText(); err != nil {
+		t.Fatal(err)
+	}
+	edtest.Same(t, e, rev, undo+1, "повтор «Надписи»")
+	if s := spine(); s != id {
+		t.Fatalf("после повтора %q", s)
+	}
+	path := filepath.Join(testkit.TempDir(t), "a.salbum")
+	if err := e.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	q, err := album.LoadBase(path, filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := edtest.Open(t, q, path).View().Cover.SpineText; s != id {
+		t.Fatalf("после Save→Load %q, ждали %q", s, id)
+	}
+	e.Undo()
+	if s := spine(); s != "" {
+		t.Fatalf("после отмены %q", s)
+	}
+	e.Redo()
+	e.DeleteText(id)
+	if s := spine(); s != "" {
+		t.Fatalf("после удаления %q", s)
 	}
 }

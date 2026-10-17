@@ -358,6 +358,9 @@ func TestSaveVignetteTemplateRefusals(t *testing.T) {
 
 // Предел файла 1 МБ: сохранение, дающее файл больше, отказывает ErrTemplatesFull — файл и список прежние.
 func TestSaveVignetteTemplateFull(t *testing.T) {
+	if testing.Short() {
+		t.Skip("заполнение до MaxTemplates (секунды): полный прогон")
+	}
 	a, sid := vigTplApp(t)
 	long := strings.Repeat("я", model.MaxCaptionRunes)
 	// Шаблон с шапкой: её рамка и стиль тоже в шаблоне (у «grid» шаблонная шапка снимается, 049).

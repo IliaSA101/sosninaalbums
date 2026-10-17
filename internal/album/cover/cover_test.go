@@ -370,3 +370,35 @@ func TestCoverSpineTextOddFront(t *testing.T) {
 		}
 	}
 }
+
+// TestCoverViewSpineText — CoverView.SpineText («Выделить надпись», 058 №19): пусто, пока в
+// корешке нет повёрнутой надписи (обычный текст обложки не в счёт); после «Надписи на корешке» —
+// её ID, повтор холостой; Save → Load тот же ID; отмена снова пусто.
+func TestCoverViewSpineText(t *testing.T) {
+	e := coverAlbum(t, 3)
+	if _, err := e.AddText(model.CoverID, 1, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.View().Cover.SpineText; got != "" {
+		t.Fatalf("только обычный текст: SpineText %q", got)
+	}
+	v, err := e.CoverSpineText()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := sheet(e).Texts[len(sheet(e).Texts)-1].ID
+	if got := v.Cover.SpineText; got == "" || got != id {
+		t.Fatalf("после надписи: SpineText %q, ждали %q", got, id)
+	}
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	if v, _ = e.CoverSpineText(); v.Cover.SpineText != id {
+		t.Fatalf("повтор: SpineText %q", v.Cover.SpineText)
+	}
+	edtest.Same(t, e, rev, undo, "повторная надпись на корешке")
+	if q := edtest.SaveLoad(t, e); q.SpineTextID() != id {
+		t.Fatalf("после Save → Load: %q, ждали %q", q.SpineTextID(), id)
+	}
+	if got := e.Undo().Cover.SpineText; got != "" {
+		t.Fatalf("после отмены: SpineText %q", got)
+	}
+}

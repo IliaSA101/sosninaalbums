@@ -114,7 +114,9 @@ func TestQualityFloors(t *testing.T) {
 		{"лента: мельче пола", row(53.9), Strip, geomSq, false},
 		{"ряды: на полу 0.14", row(42), Rows, geomSq, true},
 		{"ряды: мельче пола", row(41.9), Rows, geomSq, false},
-		{"лесенка: пол 0.25", row(74), Ladder, geomSq, false},
+		// 055: пол лесенки 0.18 (был 0.25 — 4V на разворот 0.245 не проходили).
+		{"лесенка: на полу 0.18", row(54), Ladder, geomSq, true},
+		{"лесенка: мельче пола", row(53.9), Ladder, geomSq, false},
 		{"мозаика: мелко — всё равно да", row(5), Mosaic, geomSq, true},
 		{"в край: да", row(5), Bleed, geomSq, true},
 		{"через корешок широкое", []layout.Rect{r(210, 12, 180, 100), r(12, 12, 100, 60)}, Strip, geomSq, true},

@@ -223,7 +223,7 @@ func rangeDP(cols [][]float64, n, N, a, b int, t, cuts []float64) [][2]int {
 		}
 		for k := a; k <= b; k++ {
 			j0, j1 := max(lo, plo+k), min(hi, phi+k)
-			if j0 > j1 || k < 0 || k > math.MaxUint8 { // k ≤ layout.MaxPhotos (perRange); проверка — для uint8
+			if j0 > j1 || k < 0 || k > math.MaxUint8 { // k ≥ a ≥ 1 (perRange), обе границы — только для gosec G115 (uint8 ниже)
 				continue
 			}
 			d := float64(k) - t[c-1]

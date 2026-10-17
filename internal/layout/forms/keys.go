@@ -120,3 +120,31 @@ func gGrid(lo, hi, r int) string {
 	}
 	return gKey(append(bounds, hi))
 }
+
+// LadderDir — направление первой лесенки ключа: 'L' (вниз), 'A' (вверх), 0 — лесенки нет.
+// Других букв L и A перед «(» в грамматике 051 нет.
+func LadderDir(key string) byte {
+	for i := 0; i+1 < len(key); i++ {
+		if key[i+1] == '(' && (key[i] == 'L' || key[i] == 'A') {
+			return key[i]
+		}
+	}
+	return 0
+}
+
+// MirrorLadder — тот же ключ с лесенками другого направления (L ↔ A); без лесенки — как есть.
+func MirrorLadder(key string) string {
+	b := []byte(key)
+	for i := 0; i+1 < len(b); i++ {
+		if b[i+1] != '(' {
+			continue
+		}
+		switch b[i] {
+		case 'L':
+			b[i] = 'A'
+		case 'A':
+			b[i] = 'L'
+		}
+	}
+	return string(b)
+}

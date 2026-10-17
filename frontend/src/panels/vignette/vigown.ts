@@ -5,7 +5,7 @@ import { errText } from '../../base/words/errtext'
 import type { GridResult, VigChoice } from '../../base/core/types'
 import { tplCall } from '../layouts/gridactions'
 import { tplError } from '../gallery/gridgallery'
-import { RATIOS, choiceOf, leftText, portraitLines, type Ratio, type Shape } from './vignette'
+import { RATIOS, choiceOf, leftText, portraitLines, type Ratio } from './vignette'
 
 export const OWN_TITLE = 'Мои шаблоны'
 export const NAME_MAX = 60
@@ -39,80 +39,6 @@ export function pickedRatio(items: readonly VigChoice[], id: string, cur: string
   const c = items.find((x) => x.id === id)
   const r = c?.ratio as Ratio | undefined
   return c?.own && r && r !== cur && RATIOS.includes(r) ? r : null
-}
-
-// Смена шаблона в окне и в ▦ (049, решение №122): что поменять в форме. Каталожный шаблон с подсказкой круга
-// ставит «Круг» и портрет 1:1 (видно и можно сменить); уход с него на шаблон без подсказки возвращает прямоугольник,
-// если форму не меняли; портрет не трогается. Свой шаблон — только его портрет (как pickedRatio). null — менять нечего.
-export function pickedForm(
-  items: readonly VigChoice[],
-  prevId: string,
-  nextId: string,
-  form: { ratio: string; shape?: string },
-): { ratio?: Ratio; shape?: Shape } | null {
-  const next = items.find((x) => x.id === nextId)
-  const out: { ratio?: Ratio; shape?: Shape } = {}
-  const own = pickedRatio(items, nextId, form.ratio)
-  if (own) out.ratio = own
-  if (next && !next.own && next.shape === 'oval') {
-    if (form.shape !== 'oval') out.shape = 'oval'
-    if (form.ratio !== '1:1') out.ratio = '1:1'
-  } else if (form.shape === 'oval' && next?.shape !== 'oval' && items.find((x) => x.id === prevId)?.shape === 'oval') {
-    out.shape = ''
-  }
-  return out.ratio || out.shape !== undefined ? out : null
-}
-
-// То же для формы мест (044): свой шаблон с формой переключает «Форму» в окне. null — менять нечего
-// (каталожный шаблон, форма не задана или та же).
-export function pickedShape(
-  items: readonly VigChoice[],
-  id: string,
-  cur: { shape?: string; round?: number },
-): { shape: Shape; round: number } | null {
-  const c = items.find((x) => x.id === id)
-  if (!c?.own || (c.shape === undefined && c.round === undefined)) return null
-  const shape: Shape = c.shape === 'oval' ? 'oval' : ''
-  const round = shape === 'oval' ? 0 : (c.round ?? 0)
-  return shape === (cur.shape ?? '') && round === (cur.round ?? 0) ? null : { shape, round }
-}
-
-// Форма и пропорция мест на плитке шаблона (049): то, что получится после щелчка по ней при текущей форме и шаблоне curId,
-// — плитки не меняют вид при выборе другого шаблона. Логика та же, что у pickedForm/pickedShape (они применяются при выборе).
-// ratio — портрет мест после щелчка («круги» — 1:1); from — портрет, в котором Go посчитал коробки плитки
-// (каталожный — портрет окна, свой — его собственный): отличие ratio от from VigCard гасит вписыванием (fitBox).
-export type TileForm = { shape?: string; round?: number; ratio: string; from: string }
-
-export function tileForm(
-  items: readonly VigChoice[],
-  curId: string,
-  tileId: string,
-  form: { ratio: string; shape?: string; round?: number },
-): TileForm {
-  const own = pickedShape(items, tileId, form)
-  const p = pickedForm(items, curId, tileId, form)
-  const ratio = p?.ratio ?? form.ratio
-  const from = items.find((x) => x.id === tileId)?.own ? ratio : form.ratio
-  if (own) return { ...own, ratio, from }
-  return { shape: p?.shape ?? form.shape, round: form.round, ratio, from }
-}
-
-// Место портрета ratio внутри коробки плитки (доли листа bx,by,bw,bh; w,h — px плитки): вписано по меньшей стороне
-// по центру, больше коробки не бывает. Пропорцию считает не Go, а выбранная форма: «круг» всегда 1:1.
-export function fitBox(
-  b: { x: number; y: number; w: number; h: number },
-  w: number,
-  h: number,
-  ratio: string,
-): { x: number; y: number; w: number; h: number } {
-  const [rw, rh] = ratio.split(':').map(Number)
-  const a = rw > 0 && rh > 0 ? rw / rh : 0
-  const pw = b.w * w
-  const ph = b.h * h
-  if (!a || pw <= 0 || ph <= 0) return b
-  const nw = pw / ph > a ? ph * a : pw
-  const nh = pw / ph > a ? ph : pw / a
-  return { x: b.x + (b.w - nw / w) / 2, y: b.y + (b.h - nh / h) / 2, w: nw / w, h: nh / h }
 }
 
 // Текст вопроса об удалении; cap — «Лист» или «Разворот» (unitOf.cap).

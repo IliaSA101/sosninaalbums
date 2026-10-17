@@ -24,9 +24,6 @@ const (
 	FamStaff = "staff" // руководитель и учителя-предметники
 )
 
-// ShapeOval — подсказка у шаблонов-кругов: выбор (окно, ▦, ‹ ›) ставит «Круг» и портрет 1:1 (049 §3.3).
-const ShapeOval = "oval"
-
 // StaffText — подпись учителя у шаблонов «Руководитель…»; та же строка, что model.StaffCaption
 // (пакет ниже модели её не видит; сверяет тест G3).
 const StaffText = "{Фамилия}\n{Имя} {Отчество}\n{Предмет}"
@@ -44,7 +41,6 @@ type Tpl struct {
 	Big     bool   `json:"big,omitempty"`
 	Stagger bool   `json:"stagger,omitempty"` // ученики шахматкой (049 §1.3.5)
 	Family  string `json:"family"`            // вид для фильтра: Fam*
-	Shape   string `json:"shape,omitempty"`   // подсказка выбору: ShapeOval — «Круг» и 1:1
 	TText   string `json:"ttext,omitempty"`   // подпись учителя, которую приносит смена шаблона
 }
 
@@ -92,11 +88,11 @@ func Catalog(sheet bool) []Tpl {
 			TText: StaffText},
 		{ID: "split-lead", Name: "Руководитель слева, учителя справа", Head: PosTop, Teach: PosLead, Split: true,
 			Family: FamStaff, TText: StaffText},
-		{ID: "round", Name: "Круги россыпью", Teach: PosInline, Stagger: true, Family: FamRound, Shape: ShapeOval},
-		{ID: "head-round", Name: "Шапка, круги россыпью", Head: PosTop, Teach: PosInline, Stagger: true, Family: FamRound,
-			Shape: ShapeOval},
-		{ID: "head-t-left-round", Name: "Шапка, учителя слева, круги", Head: PosTop, Teach: PosLeft, Stagger: true,
-			Family: FamRound, Shape: ShapeOval},
+		// 056 №5, №7: имена «…россыпью», формы нет — круги или иную форму выбирает плитка.
+		{ID: "round", Name: "Россыпью", Teach: PosInline, Stagger: true, Family: FamRound},
+		{ID: "head-round", Name: "Шапка, россыпью", Head: PosTop, Teach: PosInline, Stagger: true, Family: FamRound},
+		{ID: "head-t-left-round", Name: "Шапка, учителя слева, россыпью", Head: PosTop, Teach: PosLeft, Stagger: true,
+			Family: FamRound},
 	}
 	if !sheet {
 		return all

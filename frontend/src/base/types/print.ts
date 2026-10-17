@@ -49,6 +49,7 @@ export interface CoverView {
   over: boolean // разворотов больше, чем в таблице пресета
   layout: CoverLayout
   spineBg: string // #rrggbb плашки корешка; "" — нет
+  spineText: string // ID надписи на корешке; "" — нет (058, решение №19)
   zones: CoverZone[]
   drop: CoverZone[]
   safe: Rect[]

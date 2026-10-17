@@ -8,22 +8,11 @@
   import VigStrip from './VigStrip.svelte'
   import { VigSession, vigDialog } from './vigsession.svelte'
   import { vigOwn } from './vigown.svelte'
-  import { ownLabel, pickedForm, pickedShape } from './vigown'
+  import { ownLabel } from './vigown'
+  import { FORMS, FORM_FILTERS, curKey, pickTile, shapeKey, vigTiles, type Tile } from './vigform'
   import Seg from '../../base/tpl/Seg.svelte'
-  import { activeFamily, familiesIn, shownTpls, type VigFamilyFilter } from '../../base/tpl/tplfilter'
-  import {
-    PREVIEW_RESERVE,
-    SHAPE_KEYS,
-    VAR_FIELDS,
-    VAR_MAX,
-    leftLine,
-    placesLine,
-    previewBox,
-    resetWarning,
-    shapeKey,
-    shapePatch,
-    stripMax,
-  } from './vigdialog'
+  import { activeFamily, familiesIn, type VigFamilyFilter } from '../../base/tpl/tplfilter'
+  import { PREVIEW_RESERVE, VAR_FIELDS, VAR_MAX, leftLine, placesLine, previewBox, resetWarning, stripMax } from './vigdialog'
   import { MAX_PUPILS, MAX_TEACHERS, RATIOS, clampCount, isVignette, portraitText } from './vignette'
 
   // Окно «Настроить виньетку» (031 dialog §3): большой предпросмотр листа, сетка шаблонов, числа, подпись учителя
@@ -79,11 +68,14 @@
   let winH = $state(760)
   const sheet = $derived(ses ? sheetIn(store.view, ses.id) : undefined)
 
-  // Фильтр видов (049): сетка и стрелки в ней идут по видимым; выбранный шаблон виден всегда, свои не фильтруются
+  // Фильтры вида (049) и формы (056): сетка и стрелки в ней идут по видимым плиткам; выбранная плитка видна всегда,
+  // вид свои шаблоны не фильтрует. Сами фильтры только отбирают — форму мест выбирает щелчок по плитке.
   const families = $derived(familiesIn(ses?.items ?? []))
   const fam = $derived(activeFamily(ses?.family ?? 'all', families))
   const famItems = $derived<{ id: VigFamilyFilter; label: string }[]>([{ id: 'all', label: 'Все' }, ...families])
-  const tplShown = $derived(shownTpls(ses?.items ?? [], fam, ses?.form.tpl))
+  const tiles = $derived(ses ? vigTiles(ses.items, fam, ses.formFilter, ses.form) : [])
+  const hasCatalog = $derived((ses?.items ?? []).some((c) => !c.own))
+  const filterRows = $derived((families.length > 0 ? 1 : 0) + (hasCatalog ? 1 : 0))
   // Ручная виньетка: «Применить» пересоберёт места и сбросит ручные — предупреждаем до нажатия
   const resetWarn = $derived(resetWarning(isVignette(sheet) && sheet.vig.manual, ses?.unchanged ?? true))
   const shown = $derived(ses?.preview.value?.spread ?? sheet)
@@ -109,14 +101,9 @@
     }
   }
 
-  // Свой шаблон ставит и свой портрет (точный режим требует того же); числа не трогает.
-  function pick(id: string) {
-    if (!ses) return
-    const form = pickedForm(ses.items, ses.form.tpl, id, ses.form)
-    ses.form.tpl = id
-    if (form) Object.assign(ses.form, form)
-    const shape = pickedShape(ses.items, id, ses.form)
-    if (shape) Object.assign(ses.form, shape)
+  // Плитка ставит шаблон и свою форму (скруглённые — 10 %); свой шаблон — ещё свой портрет, каталожная портрет не трогает.
+  function pick(t: Tile) {
+    if (ses) Object.assign(ses.form, pickTile(t, ses.form.ratio))
   }
 </script>
 
@@ -137,15 +124,17 @@
           {#if families.length > 0}
             <div class="fam"><Seg items={famItems} value={fam} onpick={(f) => (s.family = f)} label="Вид шаблонов" /></div>
           {/if}
+          {#if hasCatalog}
+            <div class="fam"><Seg items={FORM_FILTERS} value={s.formFilter} onpick={(f) => (s.formFilter = f)} label="Форма мест" /></div>
+          {/if}
           <VigStrip
-            items={tplShown}
-            cur={s.form.tpl}
+            {tiles}
+            cur={curKey(tiles, s.form)}
             sheetW={sheet?.w ?? 1}
             sheetH={sheet?.h ?? 1}
-            maxH={stripMax(winH, box.h + (families.length > 0 ? 38 : 0))}
+            maxH={stripMax(winH, box.h, filterRows)}
             onpick={pick}
             onapply={apply}
-            form={s.form}
           />
         </div>
 
@@ -185,20 +174,6 @@
               {/each}
             </div>
           </div>
-          <div class="row stack">
-            Форма
-            <div class="seg" role="group" aria-label="Форма мест">
-              {#each SHAPE_KEYS as sk (sk.k)}
-                <button
-                  type="button"
-                  class:on={shapeKey(s.form) === sk.k}
-                  aria-pressed={shapeKey(s.form) === sk.k}
-                  title={sk.hint}
-                  onclick={() => Object.assign(s.form, shapePatch(sk.k))}>{sk.label}</button
-                >
-              {/each}
-            </div>
-          </div>
           <label class="col">
             Подпись учителя
             <textarea rows="2" maxlength="200" placeholder={'{Фамилия}\n{Имя} {Отчество}'} bind:value={s.form.ttext}></textarea>
@@ -216,7 +191,8 @@
 
           <div class="about" role="status">
             {#if s.now}
-              <span>{ownLabel(s.now)}</span> · <span class:small={s.now.small}>{portraitText(s.now)}</span>
+              <span>{ownLabel(s.now)}</span> · <span>{FORMS[shapeKey(s.form)].name}</span> ·
+              <span class:small={s.now.small}>{portraitText(s.now)}</span>
             {/if}
             {#if s.preview.error && s.total <= s.max}<div class="err">{s.preview.error}</div>{/if}
           </div>
@@ -300,11 +276,6 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
-  }
-  .row.stack {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
   }
   label.col {
     flex-direction: column;

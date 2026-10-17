@@ -1,50 +1,48 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import type { VigChoice } from '../../base/core/types'
   import Icon from '../../base/ui/Icon.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import VigCard from './VigCard.svelte'
   import { cardBox, gridStep, revealX, type ArrowKey } from './vigdialog'
-  import { OWN_TITLE, canEditOwn, firstOwn, ownLabel, tileForm } from './vigown'
+  import { FORMS, tileFormOf, type Tile } from './vigform'
+  import { canEditOwn, ownLabel } from './vigown'
   import { vigOwn } from './vigown.svelte'
   import { portraitText } from './vignette'
 
-  // Шаблоны виньетки сеткой под предпросмотром (031 dialog §3): карточки с названием переносятся рядами, без
+  // Плитки шаблонов виньетки сеткой под предпросмотром (031 dialog §3, 056): плитка = шаблон + форма, группы с заголовками
+  // («Прямоугольные», «Скруглённые», «Круги», «Мои шаблоны») идут из Tile.sep. Карточки с названием переносятся рядами, без
   // стрелок и горизонтальной прокрутки; не влезло по высоте — прокручивается только сетка.
-  // Выбор пишет вызывающий (onpick), «Применить» на уже выбранной карточке по Enter — onapply.
+  // Выбор пишет вызывающий (onpick), «Применить» на уже выбранной плитке по Enter — onapply. cur — ключ выбранной плитки.
   let {
-    items,
+    tiles,
     cur,
     sheetW,
     sheetH,
     maxH,
     onpick,
     onapply,
-    form,
   }: {
-    items: VigChoice[]
+    tiles: Tile[]
     cur: string
     sheetW: number
     sheetH: number
     maxH: number
-    onpick: (id: string) => void
+    onpick: (t: Tile) => void
     onapply: () => void
-    form?: { ratio: string; shape?: string; round?: number } // форма окна: плитка рисует то, что станет после щелчка (tileForm)
   } = $props()
 
   const card = $derived(cardBox(sheetW, sheetH))
-  const ownAt = $derived(firstOwn(items)) // перед этой карточкой — заголовок «Мои шаблоны»
   const canTpl = $derived(prefs.can('templates')) // ✎ и × — с уровня «Шаблоны»
   let grid = $state<HTMLElement>()
 
-  // Roving tabindex: Tab заходит в сетку одной остановкой — на выбранную карточку (нет выбранной — на первую).
-  const tabId = $derived(items.some((c) => c.id === cur) ? cur : (items[0]?.id ?? ''))
+  // Roving tabindex: Tab заходит в сетку одной остановкой — на выбранную плитку (нет выбранной — на первую).
+  const tabKey = $derived(tiles.some((t) => t.key === cur) ? cur : (tiles[0]?.key ?? ''))
 
-  const cardEl = (id: string) => grid?.querySelector<HTMLElement>(`[data-tpl="${CSS.escape(id)}"]`)
+  const cardEl = (key: string) => grid?.querySelector<HTMLElement>(`[data-tpl="${CSS.escape(key)}"]`)
   // Положение в сетке — у обёртки .cell (она position: relative для ✎ и ×), а не у кнопки внутри неё.
   const cellOf = (el: HTMLElement) => el.parentElement as HTMLElement
 
-  // Колонок в сетке — по числу карточек в первом ряду (ширину решает CSS).
+  // Колонок в сетке — по числу плиток в первом ряду (ширину решает CSS).
   function columns(): number {
     const all = grid?.querySelectorAll<HTMLElement>('[data-tpl]')
     if (!all?.length) return 1
@@ -52,31 +50,32 @@
     return Array.from(all).filter((el) => cellOf(el).offsetTop === top).length
   }
 
-  async function onkey(e: KeyboardEvent, c: VigChoice) {
+  async function onkey(e: KeyboardEvent, t: Tile) {
     if (e.key === 'Enter') {
       e.preventDefault()
       e.stopPropagation()
-      if (c.over) return
-      if (c.id === cur) onapply()
-      else onpick(c.id)
+      if (t.c.over) return
+      if (t.key === cur) onapply()
+      else onpick(t)
       return
     }
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return
     e.preventDefault()
-    const id = gridStep(items, c.id, e.key as ArrowKey, columns())
-    if (!id) return
-    onpick(id)
+    const ids = tiles.map((x) => ({ id: x.key, over: x.c.over }))
+    const next = tiles.find((x) => x.key === gridStep(ids, t.key, e.key as ArrowKey, columns()))
+    if (!next) return
+    onpick(next)
     await tick()
-    cardEl(id)?.focus()
+    cardEl(next.key)?.focus()
   }
 
-  // Выбранный шаблон — в поле зрения сетки (при открытии и после ответа Go).
+  // Выбранная плитка — в поле зрения сетки (при открытии и после ответа Go).
   $effect(() => {
-    const id = cur
-    void items.length
-    if (!id) return
+    const key = cur
+    void tiles.length
+    if (!key) return
     tick().then(() => {
-      const el = cardEl(id)
+      const el = cardEl(key)
       const c = el && cellOf(el)
       if (grid && c) grid.scrollTop = revealX(grid.scrollTop, c.offsetTop, c.offsetTop + c.offsetHeight, grid.clientHeight)
     })
@@ -84,24 +83,25 @@
 </script>
 
 <div class="grid" bind:this={grid} style:max-height="{maxH}px" role="group" aria-label="Шаблоны">
-  {#each items as c, i (c.id)}
-    <!-- Заголовок — не карточка: в items его нет, стрелки его не видят -->
-    {#if i === ownAt}<div class="sect">{OWN_TITLE}</div>{/if}
+  {#each tiles as t (t.key)}
+    {@const c = t.c}
+    <!-- Заголовок — не плитка: в tiles его нет, стрелки его не видят -->
+    {#if t.sep}<div class="sect">{t.sep}</div>{/if}
     <div class="cell">
       <button
         type="button"
         class="tpl"
-        class:on={cur === c.id}
+        class:on={cur === t.key}
         class:off={c.over}
-        data-tpl={c.id}
-        tabindex={c.id === tabId ? 0 : -1}
-        aria-pressed={cur === c.id}
+        data-tpl={t.key}
+        tabindex={t.key === tabKey ? 0 : -1}
+        aria-pressed={cur === t.key}
         aria-disabled={c.over}
-        title="{ownLabel(c)} · {portraitText(c)}"
-        onclick={() => !c.over && onpick(c.id)}
-        onkeydown={(e) => onkey(e, c)}
+        title="{ownLabel(c)} · {FORMS[t.k].name} · {portraitText(c)}"
+        onclick={() => !c.over && onpick(t)}
+        onkeydown={(e) => onkey(e, t)}
       >
-        <VigCard {c} w={card.w} h={card.h} form={form && tileForm(items, cur, c.id, form)} />
+        <VigCard {c} w={card.w} h={card.h} form={tileFormOf(t)} />
         <span class="name">{ownLabel(c)}</span>
       </button>
       {#if canEditOwn(c, canTpl)}

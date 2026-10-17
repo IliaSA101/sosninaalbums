@@ -2,6 +2,7 @@ package vigsheet_test
 
 import (
 	"bytes"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -186,51 +187,14 @@ func TestVigTemplateShape(t *testing.T) {
 	sameAll(t, e2, model.RoleTeacher, "oval:0")
 }
 
-// Панель шлёт SetVignette без формы: смена шаблона и чисел форму листа не стирает (её меняет
-// только окно); повтор — холостая; отмена — прежний шаблон с той же формой.
-func TestSetVignetteKeepsShape(t *testing.T) {
-	for _, c := range []struct {
-		shape string
-		round float64
-		want  string
-	}{{model.ShapeOval, 0, "oval:0"}, {"", 10, ":10"}} {
-		e, sid := vigSheet(t, 25)
-		st := model.VigSetup{Vig: model.Vignette{Tpl: "t-top-g", Teachers: 2, Pupils: 12, Ratio: "1:1", Shape: c.shape, Round: c.round}}
-		if _, _, err := e.SetupVignette(sid, st, nil); err != nil {
-			t.Fatal(err)
-		}
-		undo := edtest.UndoLen(e)
-		panel := model.Vignette{Tpl: "head-t-left", Teachers: 1, Pupils: 24, Ratio: "1:1"}
-		if _, _, err := e.SetVignette(sid, panel, nil); err != nil || edtest.UndoLen(e) != undo+1 {
-			t.Fatalf("%s: смена шаблона: %v, шагов %d", c.want, err, edtest.UndoLen(e)-undo)
-		}
-		if v := vigOf(e, 0); v.Tpl != "head-t-left" || v.Shape != c.shape || v.Round != c.round {
-			t.Fatalf("%s: виньетка %+v", c.want, v)
-		}
-		sameAll(t, e, model.RolePupil, c.want)
-		sameAll(t, e, model.RoleTeacher, c.want)
-		rev := edtest.Rev(e)
-		if _, _, err := e.SetVignette(sid, panel, nil); err != nil {
-			t.Fatal(err)
-		}
-		edtest.Same(t, e, rev, undo+1, "повтор панели")
-		e.Undo()
-		if v := vigOf(e, 0); v.Tpl != "t-top-g" || v.Shape != c.shape {
-			t.Fatalf("%s: отмена: %+v", c.want, v)
-		}
-		sameAll(t, e, model.RolePupil, c.want)
-		sameAll(t, e, model.RoleGroup, ":0")
-	}
-}
-
 // formOf — "форма:скругление" для сравнения превью.
 func formOf(shape string, round float64) string {
 	return shape + ":" + map[float64]string{0: "0", 10: "10"}[round]
 }
 
 // Превью своего шаблона с формой несёт её (окно переключает «Форму», как портрет): поля
-// Shape/Round и формы коробок людей; групповое и каталог — прямоугольники, кроме каталожных
-// «кругов» (049: подсказка oval); удалённый шаблон листа — форма листа.
+// Shape/Round и формы коробок людей; групповое и весь каталог — прямоугольники (056 №5);
+// удалённый шаблон листа — форма листа.
 func TestVigChoicesShape(t *testing.T) {
 	e, sid, tpl := ownEd(t)
 	styled := func(id, shape string, round float64) model.Template {
@@ -244,10 +208,7 @@ func TestVigChoicesShape(t *testing.T) {
 		t.Helper()
 		own := 0
 		for _, c := range cs {
-			w := ":0" // каталог — прямоугольники, «круги» — подсказка oval
-			if c.Family == "round" {
-				w = "oval:0"
-			}
+			w := ":0" // каталог — прямоугольники, и «Россыпь» (056 №5: подсказки формы нет)
 			if c.Own {
 				own++
 				w = want[c.ID]
@@ -281,78 +242,87 @@ func TestVigChoicesShape(t *testing.T) {
 	check(cs, map[string]string{"my:t1": "oval:0"})
 }
 
-// Смена шаблона из панели (▦, ‹ ›, Пробел; QA 049): каталожный «круг» ставит Круг и 1:1, как
-// выбор в окне, — один шаг, повтор холостой; «круг» → «круг» — Круг; уход на шаблон без
-// подсказки — прямоугольник; ручная форма на «круге» при уходе стоит; переживает Save→Load.
-func TestSetVignetteRoundHint(t *testing.T) {
+// SetVignette ставит форму, что прислали (056 №5): плитка ▦ и окно шлют форму целиком,
+// подсказки «кругов» нет — ни Круга, ни 1:1 сами не появляются. Смена шаблона и формы — один шаг,
+// повтор холостой, отмена — прежняя форма; переживает Save→Load; мусор формы зажимается.
+func TestSetVignetteFormFromUI(t *testing.T) {
 	e, sid := vigSheet(t, 25)
-	set := func(tpl, ratio string) {
+	set := func(tpl, ratio, shape string, round float64) {
 		t.Helper()
-		panel := model.Vignette{Tpl: tpl, Teachers: 1, Pupils: 24, Ratio: ratio} // панель шлёт без формы
-		if _, _, err := e.SetVignette(sid, panel, nil); err != nil {
-			t.Fatalf("%s: %v", tpl, err)
+		v := model.Vignette{Tpl: tpl, Teachers: 1, Pupils: 24, Ratio: ratio, Shape: shape, Round: round}
+		if _, _, err := e.SetVignette(sid, v, nil); err != nil {
+			t.Fatalf("%s %q %v: %v", tpl, shape, round, err)
 		}
 	}
-	set("head-t-left", "3:4")
-	if v := vigOf(e, 0); v.Shape != "" || v.Ratio != "3:4" {
-		t.Fatalf("исходный лист: %+v", v)
+	people := func(want string) {
+		t.Helper()
+		sameAll(t, e, model.RolePupil, want)
+		sameAll(t, e, model.RoleTeacher, want)
 	}
+	set("head-t-left", "3:4", model.ShapeOval, 0)
+	people("oval:0")
 	undo := edtest.UndoLen(e)
-	set("round", "3:4")
-	if v := vigOf(e, 0); v.Shape != model.ShapeOval || v.Ratio != "1:1" || edtest.UndoLen(e) != undo+1 {
-		t.Fatalf("«Круги»: %+v, шагов %d", v, edtest.UndoLen(e)-undo)
+	// «Россыпью ▭» с листа-кругов: прямоугольник и портрет как прислали.
+	set("round", "3:4", "", 0)
+	if v := vigOf(e, 0); v.Tpl != "round" || v.Shape != "" || v.Round != 0 || v.Ratio != "3:4" || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("«Россыпью ▭»: %+v, шагов %d", v, edtest.UndoLen(e)-undo)
 	}
-	sameAll(t, e, model.RolePupil, "oval:0")
-	sameAll(t, e, model.RoleTeacher, "oval:0")
+	people(":0")
 	rev := edtest.Rev(e)
-	set("round", "1:1")
-	edtest.Same(t, e, rev, undo+1, "повтор «Кругов»")
+	set("round", "3:4", "", 0)
+	edtest.Same(t, e, rev, undo+1, "повтор той же плитки")
+	// Тот же шаблон, другая форма: только форма, шаг.
+	set("round", "3:4", "", 10)
+	if v := vigOf(e, 0); v.Shape != "" || v.Round != 10 || v.Ratio != "3:4" || edtest.UndoLen(e) != undo+2 {
+		t.Fatalf("«Россыпью ▢»: %+v, шагов %d", v, edtest.UndoLen(e)-undo)
+	}
+	people(":10")
+	set("head-t-left-g", "3:4", model.ShapeOval, 10) // у круга скругления нет
+	if v := vigOf(e, 0); v.Shape != model.ShapeOval || v.Round != 0 || v.Ratio != "3:4" {
+		t.Fatalf("«…групповое снизу ◯»: %+v", v)
+	}
+	people("oval:0")
+	sameAll(t, e, model.RoleGroup, ":0") // групповое — всегда прямоугольник
 	q := saveLoad(t, e)
-	if q.Spreads[0].Vig.Shape != model.ShapeOval {
-		t.Fatalf("после Save→Load: %+v", *q.Spreads[0].Vig)
+	if v := q.Spreads[0].Vig; v.Tpl != "head-t-left-g" || v.Shape != model.ShapeOval || v.Round != 0 || v.Ratio != "3:4" {
+		t.Fatalf("после Save→Load: %+v", *v)
 	}
 	for _, pl := range q.Spreads[0].Grid {
-		if r := model.RoleOf(pl); r != model.RoleGroup && pl.Shape != model.ShapeOval {
-			t.Fatalf("после Save→Load место %s (%s): форма %q", pl.ID, r, pl.Shape)
+		if r := model.RoleOf(pl); r != model.RoleGroup && (pl.Shape != model.ShapeOval || pl.Round != 0) {
+			t.Fatalf("после Save→Load место %s (%s): %q %v", pl.ID, r, pl.Shape, pl.Round)
 		}
 	}
-	set("head-t-left-round", "1:1")
-	sameAll(t, e, model.RolePupil, "oval:0")
-	set("head-t-left", "1:1")
-	if v := vigOf(e, 0); v.Shape != "" || v.Ratio != "1:1" || edtest.UndoLen(e) != undo+3 {
-		t.Fatalf("уход с «кругов»: %+v, шагов %d", v, edtest.UndoLen(e)-undo)
-	}
-	sameAll(t, e, model.RolePupil, ":0")
-	sameAll(t, e, model.RoleTeacher, ":0")
 	e.Undo()
-	if v := vigOf(e, 0); v.Tpl != "head-t-left-round" || v.Shape != model.ShapeOval {
-		t.Fatalf("отмена ухода: %+v", v)
+	if v := vigOf(e, 0); v.Tpl != "round" || v.Shape != "" || v.Round != 10 {
+		t.Fatalf("отмена: %+v", v)
 	}
-	sameAll(t, e, model.RolePupil, "oval:0")
-	// Ручная форма на «круге» (окно: скруглённые) при уходе не меняется.
-	st := model.VigSetup{Vig: model.Vignette{Tpl: "round", Teachers: 1, Pupils: 24, Ratio: "1:1", Round: 10}}
-	if _, _, err := e.SetupVignette(sid, st, nil); err != nil {
-		t.Fatal(err)
+	people(":10")
+	e.Undo()
+	people(":0")
+	// Мусор формы: незнакомая форма — прямоугольник, скругление — до предела, NaN — 0.
+	set("round", "3:4", "нет такой", 1e9)
+	if v := vigOf(e, 0); v.Shape != "" || v.Round != model.MaxRound {
+		t.Fatalf("зажим: %+v", v)
 	}
-	set("head-t-left", "1:1")
-	sameAll(t, e, model.RolePupil, ":10")
+	set("round", "3:4", "", math.NaN())
+	if v := vigOf(e, 0); v.Shape != "" || v.Round != 0 {
+		t.Fatalf("NaN: %+v", v)
+	}
 }
 
-// «Сделать виньеткой» на обычном листе: с «кругами» — Круг и 1:1, с прочим шаблоном — форма,
-// что прислали.
-func TestSetVignetteRoundHintNew(t *testing.T) {
-	for _, c := range []struct{ tpl, shape, want, ratio string }{
-		{"head-round", "", model.ShapeOval, "1:1"},
-		{"head-t-left", model.ShapeOval, model.ShapeOval, "3:4"},
-		{"head-t-left", "", "", "3:4"},
-	} {
+// «Сделать виньеткой» на обычном листе — тоже форма и портрет как прислали, и у шаблонов «Россыпи».
+func TestSetVignetteFormNew(t *testing.T) {
+	for _, c := range []struct {
+		tpl, shape string
+		round      float64
+	}{{"head-round", "", 0}, {"round", "", 10}, {"head-t-left-round", model.ShapeOval, 0}, {"head-t-left", model.ShapeOval, 0}} {
 		e := edtest.Open(t, model.NewSheet(204, 304), "")
 		sid := edtest.P(e).Spreads[0].ID
-		v := model.Vignette{Tpl: c.tpl, Teachers: 1, Pupils: 24, Ratio: "3:4", Shape: c.shape}
+		v := model.Vignette{Tpl: c.tpl, Teachers: 1, Pupils: 24, Ratio: "3:4", Shape: c.shape, Round: c.round}
 		if _, _, err := e.SetVignette(sid, v, nil); err != nil {
 			t.Fatal(err)
 		}
-		if g := vigOf(e, 0); g.Shape != c.want || g.Ratio != c.ratio {
+		if g := vigOf(e, 0); g.Shape != c.shape || g.Round != c.round || g.Ratio != "3:4" {
 			t.Fatalf("%s/%q: %+v", c.tpl, c.shape, g)
 		}
 	}

@@ -31,10 +31,10 @@ func TestLoadBackdropTiltV8(t *testing.T) {
 	v := edtest.NewSpread(e, -1, edtest.Photos("b"))
 	s1, s2 := v.Spreads[0].ID, v.Spreads[1].ID
 	edtest.SetBg(t, e, s1, "spread", "bg")
-	e.SetBackdropAngle(s1, "spread", 4.5)
+	e.SetBackdropAngle(s1, "spread", 4.5, "")
 	e.FlipBackdrop(s1, "spread", "h") // наклон −4,5
 	edtest.SetBg(t, e, s2, "left", "bg2")
-	e.SetBackdropAngle(s2, "left", 44.9)
+	e.SetBackdropAngle(s2, "left", 44.9, "")
 	edtest.SetBg(t, e, s2, "right", "bg3")
 	e.SetBackdropFrame(s2, "right", 2, 0.5, 0) // без наклона
 	if err := e.Save(path); err != nil {

@@ -13,6 +13,7 @@
     parseNum,
     presetGroups,
     specWith,
+    spineAction,
     spineLine,
     totalLine,
     type SpecField,
@@ -24,6 +25,7 @@
   const groups = $derived(presetGroups(coverAct.presets))
   const custom = $derived(!!cv && !hasTable(cv.spec))
   const over = $derived(cv ? overLine(cv) : '')
+  const spine = $derived(spineAction(cv))
 
   // Не $effect: он зависел от loading внутри loadPresets и при пустом ответе гонял запрос по кругу.
   onMount(() => void coverAct.loadPresets())
@@ -76,9 +78,14 @@
     <label class="cap" for="cover-preset">Типография</label>
     <select id="cover-preset" data-guide="cover-print" value={cv.preset} onchange={(e) => coverAct.applyPreset(e.currentTarget.value)}>
       {#each groups as g (g.group)}
-        <optgroup label={g.group}>
+        {#if g.group}
+          <optgroup label={g.group}>
+            {#each g.items as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+          </optgroup>
+        {:else}
+          <!-- без группы — обычные варианты: пустая подпись optgroup рисуется пустой строкой -->
           {#each g.items as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-        </optgroup>
+        {/if}
       {/each}
       {#if !coverAct.presets.some((p) => p.id === cv.preset)}
         <option value={cv.preset}>{cv.preset === CUSTOM_ID ? 'Свои размеры' : cv.preset}</option>
@@ -133,14 +140,15 @@
           onclick={() => cv.layout !== l.kind && coverAct.setLayout(l.kind)}>{l.label}</button
         >
       {/each}
-      <button
-        data-guide="cover-spine"
-        title="Текст вдоль корешка по центру, на цветной плашке во весь корешок"
-        onclick={() => coverAct.spineText()}>Надпись на корешке</button
-      >
     </div>
-    <div class="row">
-      <span class="lbl">Плашка корешка</span>
+    <div class="row spine" data-guide="cover-spine">
+      <span class="lbl">Корешок</span>
+      <button
+        class="spinebtn"
+        title={spine.kind === 'add' ? 'Текст вдоль корешка по центру, на цветной плашке во весь корешок' : 'Выделить надпись на корешке'}
+        onclick={() => coverAct.spineText()}>{spine.label}</button
+      >
+      <span class="plate">Плашка</span>
       <ColorPicker value={cv.spineBg || '#ffffff'} label="Цвет плашки корешка" onpick={(c) => coverAct.setSpineBg(c)} />
       <button class="reset" disabled={!cv.spineBg} aria-label="Без плашки" title="Без плашки" onclick={() => coverAct.setSpineBg('')}
         >нет</button
@@ -270,6 +278,24 @@
   }
   .lbl {
     flex: 1;
+    color: var(--muted);
+  }
+  .row.spine {
+    flex-wrap: wrap;
+  }
+  .row.spine .lbl {
+    flex: none;
+    width: 52px;
+  }
+  .spinebtn {
+    height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+  .plate {
+    flex: 1;
+    min-width: 40px;
+    text-align: right;
     color: var(--muted);
   }
   .reset {

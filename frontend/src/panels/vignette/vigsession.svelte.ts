@@ -5,6 +5,7 @@ import type { VigFamilyFilter } from '../../base/tpl/tplfilter'
 import type { SpreadView, VigChoice, VigPreview, VigSetup, VignetteView } from '../../base/core/types'
 import { applySetup, previewVignette, vigChoices } from './vigact'
 import { dialogBlock, sameAsDialog, setupOf, varsFormOf, type VarsForm } from './vigdialog'
+import type { FormFilter } from './vigform'
 import { choiceOf, formOf, groupCount, isVignette, totalPlaces, type VigForm } from './vignette'
 
 // Запросы окна не копятся (031 dialog §3): один в полёте, пока он идёт — запоминается только последнее
@@ -77,6 +78,7 @@ export class VigSession {
   vars = $state<VarsForm>(varsFormOf(undefined))
   busy = $state(false)
   family = $state<VigFamilyFilter>('all') // фильтр видов над сеткой (049): при открытии окна «Все»
+  formFilter = $state<FormFilter>('all') // фильтр формы рядом с ним (056): только отбирает плитки, форму мест не меняет
   readonly preview: Latest<VigSetup, VigPreview>
   readonly choices: Latest<Pick<VigForm, 'teachers' | 'pupils' | 'ratio'>, VigChoice[]>
 

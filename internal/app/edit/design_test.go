@@ -53,7 +53,7 @@ func TestDesignSurface(t *testing.T) {
 		t.Errorf("сброс кадра: %+v", f)
 	}
 	r = rev()
-	v = a.SetFrameAngle("b", 10)
+	v = a.SetFrameAngle("s2", "b", 10, "")
 	grew("SetFrameAngle", r, v)
 	if f := v.Spreads[1].Frames[0]; f.Tilt != 10 {
 		t.Errorf("наклон: %+v", f)

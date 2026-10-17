@@ -24,6 +24,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -332,6 +333,40 @@ func TestCloseBackgroundSilencesAutosave(t *testing.T) {
 func TestInstanceIDStable(t *testing.T) {
 	if instanceID != "6f1c2b7e-3a4d-4e58-9b0a-5d2e8c7f1a93" {
 		t.Fatalf("instanceID сменился: %s", instanceID)
+	}
+}
+
+// Стенды QA (SA_STAND): без стенда замок и все папки данных — прежние побитно; у каждого стенда
+// свои, не общие ни с основной копией, ни друг с другом.
+func TestStandIsolation(t *testing.T) {
+	t.Setenv("APPDATA", testkit.TempDir(t))
+	t.Setenv("LOCALAPPDATA", testkit.TempDir(t))
+	cfgBase, _ := os.UserConfigDir()
+	cacheBase, _ := os.UserCacheDir()
+	if NewApp().data != "SosninaAlbums" || instanceKey("") != instanceID {
+		t.Fatal("без стенда сменились имя данных или замок")
+	}
+	cfg, thumbs := dataDirs(osx.DataName(""))
+	want := []string{filepath.Join(cfgBase, "SosninaAlbums"), filepath.Join(cacheBase, "SosninaAlbums", "thumbs"),
+		filepath.Join(os.Getenv("LOCALAPPDATA"), "SosninaAlbums", "WebView2"),
+		filepath.Join(os.Getenv("LOCALAPPDATA"), "SosninaAlbums", "backups")}
+	got := []string{cfg, thumbs, osx.WebViewDir(osx.DataName("")), backup.DefaultRoot(osx.DataName(""))}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("без стенда: %q, ждали %q", got, want)
+	}
+	seen := map[string]string{instanceID: ""}
+	for _, p := range want {
+		seen[p] = ""
+	}
+	for _, s := range []string{"b", "c"} {
+		name := osx.DataName(s)
+		cfg, thumbs := dataDirs(name)
+		for _, p := range []string{instanceKey(s), cfg, thumbs, osx.WebViewDir(name), backup.DefaultRoot(name)} {
+			if prev, ok := seen[p]; ok {
+				t.Fatalf("стенд %q делит %q с %q", s, p, prev)
+			}
+			seen[p] = s
+		}
 	}
 }
 

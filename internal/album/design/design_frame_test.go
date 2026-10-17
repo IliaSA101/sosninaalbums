@@ -52,7 +52,7 @@ func TestFrameTiltTie(t *testing.T) {
 	cell0 := cellA()
 	// Наклон ±50 зажимается; пропорции и раскладка стоят.
 	for _, tilt := range []float64{50, -50, 44.9, -44.9, 0.04} {
-		v := e.SetFrameAngle("a", tilt)
+		v := edtest.Tilt(e, "a", tilt)
 		f := frameOf(t, v, "a")
 		want := math.Max(-44.9, math.Min(44.9, math.Round(tilt*10)/10))
 		if math.Abs(want) < 0.05 {
@@ -63,27 +63,27 @@ func TestFrameTiltTie(t *testing.T) {
 		}
 	}
 	// ↻ из крайнего наклона: наклон остаётся, четверть +1, пропорции меняются один раз.
-	e.SetFrameAngle("a", 44.9)
+	edtest.Tilt(e, "a", 44.9)
 	f := frameOf(t, e.TurnPhotos([]string{"a"}, 1), "a")
 	if f.Turn != 1 || f.Tilt != 44.9 || f.R != 134.9 {
 		t.Fatalf("↻ из 44,9: %+v", f)
 	}
-	e.SetFrameAngle("a", -44.9)
+	edtest.Tilt(e, "a", -44.9)
 	f = frameOf(t, e.View(), "a")
 	if f.Turn != 1 || f.Tilt != -44.9 || f.R != 45.1 {
 		t.Fatalf("наклон −44,9 при ↻: %+v", f)
 	}
 	before := edtest.P(e).Aspects([]string{"a"})[0]
-	e.SetFrameAngle("a", 44.9)
+	edtest.Tilt(e, "a", 44.9)
 	if edtest.P(e).Aspects([]string{"a"})[0] != before {
 		t.Fatal("наклон поменял пропорции")
 	}
 	// NaN/Inf и тот же наклон — холостая.
 	n := edtest.UndoLen(e)
-	e.SetFrameAngle("a", math.NaN())
-	e.SetFrameAngle("a", math.Inf(1))
-	e.SetFrameAngle("a", 44.9)
-	e.SetFrameAngle("нет", 10)
+	edtest.Tilt(e, "a", math.NaN())
+	edtest.Tilt(e, "a", math.Inf(1))
+	edtest.Tilt(e, "a", 44.9)
+	edtest.Tilt(e, "нет", 10)
 	if edtest.UndoLen(e) != n {
 		t.Fatal("холостая правка записана")
 	}
@@ -92,7 +92,7 @@ func TestFrameTiltTie(t *testing.T) {
 // Сдвиг, зум, зеркало и сброс не теряют поворот.
 func TestSetFrameKeepsR(t *testing.T) {
 	e, _, _ := edtest.NewTwo(t)
-	e.SetFrameAngle("a", 10)
+	edtest.Tilt(e, "a", 10)
 	if got := edtest.P(e).Photos["a"].FrameOrDefault(); got != (model.Frame{S: 1, R: 10}) {
 		t.Fatalf("наклон: %+v", got)
 	}
@@ -108,7 +108,7 @@ func TestSetFrameKeepsR(t *testing.T) {
 	if got := edtest.P(e).Photos["a"].FrameOrDefault(); got != (model.Frame{S: 1, R: -10}) {
 		t.Fatalf("ResetFrame: %+v", got)
 	}
-	e.SetFrameAngle("a", 0)
+	edtest.Tilt(e, "a", 0)
 	if edtest.P(e).Photos["a"].Frame != nil {
 		t.Fatalf("кадр по умолчанию — nil: %+v", edtest.P(e).Photos["a"].Frame)
 	}
@@ -117,8 +117,8 @@ func TestSetFrameKeepsR(t *testing.T) {
 // Зеркало меняет знак наклона по любой оси, повтор возвращает; четверти не теряются.
 func TestFlipNegatesFrameR(t *testing.T) {
 	e, _, _ := edtest.NewTwo(t)
+	edtest.Tilt(e, "a", 12.5) // до кадра: наклон держит приближение (057) и сменил бы S, X, Y
 	e.SetFrame("a", 2, 0.25, 0.5)
-	e.SetFrameAngle("a", 12.5)
 	e.TurnPhotos([]string{"a"}, 1) // R = 102.5
 	for _, c := range []struct {
 		axis string
@@ -138,7 +138,7 @@ func TestFlipNegatesFrameR(t *testing.T) {
 		t.Fatalf("круг: %+v", got)
 	}
 	// 180°: знак не меняется, -0 не появляется.
-	e.SetFrameAngle("b", 0)
+	edtest.Tilt(e, "b", 0)
 	e.TurnPhotos([]string{"b"}, 2)
 	e.SetFlip([]string{"b"}, "h")
 	if got := edtest.P(e).Photos["b"].FrameOrDefault(); got != (model.Frame{S: 1, R: 180}) {
@@ -146,8 +146,8 @@ func TestFlipNegatesFrameR(t *testing.T) {
 	}
 	// Два фото: включено не у всех — включается у недостающего, у остальных стоит.
 	e, _, _ = edtest.NewTwo(t)
-	e.SetFrameAngle("a", 20)
-	e.SetFrameAngle("b", 30)
+	edtest.Tilt(e, "a", 20)
+	edtest.Tilt(e, "b", 30)
 	e.SetFlip([]string{"a"}, "v")
 	e.SetFlip([]string{"a", "b"}, "v")
 	if a, b := edtest.P(e).Photos["a"].FrameOrDefault().R, edtest.P(e).Photos["b"].FrameOrDefault().R; a != -20 || b != -30 {
@@ -240,7 +240,7 @@ func TestTurnPhotosAutoRelayout(t *testing.T) {
 		t.Fatal("раскладка не строится")
 	}
 	// Наклон раскладку не трогает.
-	e.SetFrameAngle("a", 20)
+	edtest.Tilt(e, "a", 20)
 	if edtest.RectOf(e.View(), 0, "a") != c1 {
 		t.Fatal("наклон пересобрал разворот")
 	}

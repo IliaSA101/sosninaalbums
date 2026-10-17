@@ -342,6 +342,9 @@ func ratio2(a float64, b int) float64 {
 // TestVarietyMetrics — пороги design §10 на корпусе: повторы вида, σ заполнения, звезда
 // главная, средняя потеря. Если реализация даёт лучше порога — порог не поднимать без решения.
 func TestVarietyMetrics(t *testing.T) {
+	if testing.Short() {
+		t.Skip("метрики по всему корпусу: полный прогон (check.ps1) и CI")
+	}
 	var all, small [3]total // весь корпус; альбомы со средним ≤ 6 фото на развороте
 	var fs [3]formStats     // формы (051): не мозаика, соседи одной формы
 	for _, a := range corpus() {

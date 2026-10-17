@@ -4,13 +4,13 @@
 export type VigFamily = 'side' | 'big' | 'inrow' | 'group' | 'round' | 'staff'
 export type VigFamilyFilter = VigFamily | 'all'
 
-// Виды в порядке сегментов: «Все · С края · Крупно · В ряду · С групповым · Круги · Предметники».
+// Виды в порядке сегментов: «Все · С края · Крупно · В ряду · С групповым · Россыпь · Предметники».
 export const VIG_FAMILIES: readonly { id: VigFamily; label: string }[] = [
   { id: 'side', label: 'С края' },
   { id: 'big', label: 'Крупно' },
   { id: 'inrow', label: 'В ряду' },
   { id: 'group', label: 'С групповым' },
-  { id: 'round', label: 'Круги' },
+  { id: 'round', label: 'Россыпь' },
   { id: 'staff', label: 'Предметники' },
 ]
 

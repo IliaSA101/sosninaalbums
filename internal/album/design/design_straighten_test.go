@@ -25,7 +25,7 @@ func TestStraightenPhotoKeepsTurn(t *testing.T) {
 	rot.Rot = 10
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(10, 20, 90, 60, "a"), rot, edtest.Gp(10, 150, 60, 90, "c")})
 	e.TurnPhotos([]string{"c"}, 1)
-	e.SetFrameAngle("c", 40)
+	edtest.Tilt(e, "c", 40)
 	cells := map[string]any{}
 	for _, id := range []string{"a", "b", "c"} {
 		cells[id] = edtest.RectOf(e.View(), 0, id)
@@ -55,7 +55,7 @@ func TestStraightenPhotoKeepsTurn(t *testing.T) {
 // Одна правка — один шаг отмены; Undo возвращает прежний наклон, Redo — новый.
 func TestStraightenPhotoOneStep(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(10, 20, 90, 60, "a"), edtest.Gp(150, 20, 80, 60, "b")})
-	e.SetFrameAngle("a", 2)
+	edtest.Tilt(e, "a", 2)
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
 	v := straighten(e, "s1", "a", -4.5)
 	if f := frameOf(t, v, "a"); f.Tilt != 6.5 || edtest.Rev(e) != rev+1 || edtest.UndoLen(e) != undo+1 {

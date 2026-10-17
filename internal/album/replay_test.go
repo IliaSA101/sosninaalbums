@@ -282,7 +282,7 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.do("StepLayout", e.StepLayout(s0, "spread", 1))
 	r.do("StepLayout:левая", e.StepLayout(s0, "left", -1))
 	r.do("SetFrame", e.SetFrame(id(2), 1.6, 0.4, -0.3))
-	r.do("SetFrameAngle", e.SetFrameAngle(id(2), 7.5))
+	r.do("SetFrameAngle", edtest.Tilt(e, id(2), 7.5))
 	r.do("TurnPhotos", e.TurnPhotos([]string{id(3)}, 1))
 	r.do("ResetFrame", e.ResetFrame(id(2)))
 	r.do("SetFlip", e.SetFlip([]string{id(2), id(3)}, "h"))

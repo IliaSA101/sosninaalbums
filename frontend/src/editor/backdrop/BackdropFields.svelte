@@ -4,6 +4,8 @@
   import { fitBackdrop, flipBackdrop } from './backdropact'
   import { normDeg, rotateAbout } from '../../base/geom/textbox'
   import { MAX_SCALE, MIN_SCALE, zoomFrame } from '../../base/geom/frame'
+  import { store } from '../../base/core/store.svelte'
+  import { backdropTilt, liveTiltBox } from '../photo/tiltlive'
   import Icon from '../../base/ui/Icon.svelte'
   import TiltRow from '../inspector/TiltRow.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
@@ -17,7 +19,9 @@
     const raw = el.value.trim().replace(',', '.')
     return raw === '' ? NaN : Number(raw)
   }
-  const pct = $derived(Math.round(b.frame.s * 100))
+  // Масштаб на ходу: пока тянут наклон, он меняется (057), поэтому из предпросмотра.
+  const shownS = $derived(bgmode.live && bgmode.cur?.scope === b.scope ? bgmode.live.frame.s : b.frame.s)
+  const pct = $derived(Math.round(shownS * 100))
 
   function commitScale(el: HTMLInputElement) {
     const n = num(el)
@@ -40,11 +44,24 @@
     el.value = String(deg)
     if (deg !== b.box.rot) bgmode.setBox(rotateAbout(b.box, deg))
   }
-  // Наклон фото внутри рамки (045): предпросмотр — тот же live, что у масштаба; рамка стоит на месте.
-  // Телом, а не `=> (x = …)`: значение присваивания не нужно, Svelte ругается на assignment_value_stale.
+  // Наклон фото внутри рамки (045 → 057): предпросмотр — тот же live, что у масштаба; рамка стоит на месте, а наклон
+  // держит приближение (расчёт от кадра начала сессии, как в Go). Телом, а не `=> (x = …)`: иначе Svelte
+  // ругается на assignment_value_stale.
+  const key = $derived(`${spread}:${b.scope}`)
   const tiltLive = (t: number) => {
-    bgmode.live = { box: b.box, frame: { ...b.frame, r: t } }
+    const { base } = backdropTilt.keep(key, b.frame, store.view.rev)
+    const aspect = b.img.h > 0 ? b.img.w / b.img.h : 1
+    bgmode.live = { box: b.box, frame: liveTiltBox(b.box, aspect, base, t) }
   }
+  async function tiltCommit(t: number) {
+    await bgmode.setAngle(t, backdropTilt.keep(key, b.frame, store.view.rev).id)
+    backdropTilt.settle(store.view.rev)
+  }
+  // Другая область или уход панели закрывают сессию.
+  $effect(() => {
+    void key
+    return () => backdropTilt.end()
+  })
   const enter = (e: KeyboardEvent) => {
     if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur()
   }
@@ -64,8 +81,9 @@
   <TiltRow
     tilt={b.frame.r ?? 0}
     onlive={tiltLive}
-    oncommit={(t) => bgmode.setAngle(t)}
+    oncommit={tiltCommit}
     onend={() => (bgmode.live = null)}
+    onleave={() => backdropTilt.end()}
     onstraighten={() => straighten.startBackdrop()}
   />
 {/if}

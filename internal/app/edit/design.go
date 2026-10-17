@@ -15,11 +15,13 @@ func (m *Methods) ResetFrame(photoID string) (v model.View) {
 	return m.changed(m.editor().ResetFrame(photoID))
 }
 
-// SetFrameAngle: наклон фото в рамке tilt, градусы (−44,9…44,9, шаг 0,1); масштаб,
-// сдвиг и пропорции стоят. Вызывать на отпускании ползунка (один шаг отмены).
-func (m *Methods) SetFrameAngle(photoID string, tilt float64) (v model.View) {
+// SetFrameAngle: наклон фото листа spreadID в рамке tilt, градусы (−44,9…44,9, шаг 0,1);
+// наклон держит приближение (057: S, X, Y от начала сессии), пропорции стоят. session —
+// сессия строки «Наклон» ([A-Za-z0-9-]{1,32}; "" — без слияния): всё до ухода фокуса — один
+// шаг отмены. Вызывать на отпускании ползунка, стрелках, вводе числа.
+func (m *Methods) SetFrameAngle(spreadID, photoID string, tilt float64, session string) (v model.View) {
 	defer m.guardEdit("SetFrameAngle", &v, nil)
-	return m.changed(m.editor().SetFrameAngle(photoID, tilt))
+	return m.changed(m.editor().SetFrameAngle(spreadID, photoID, tilt, session))
 }
 
 // StraightenPhoto — «Выпрямить по линии»: dx, dy — конец минус начало линии, мм листа
@@ -168,10 +170,11 @@ func (m *Methods) SetBackdropFrame(spreadID, scope string, s, x, y float64) (v m
 }
 
 // SetBackdropAngle: наклон фото в рамке фона tilt, градусы (−44,9…44,9, шаг 0,1); рамка
-// стоит, фото закрывает её само. Вызывать на отпускании ползунка или Enter (один шаг отмены).
-func (m *Methods) SetBackdropAngle(spreadID, scope string, tilt float64) (v model.View) {
+// стоит, фото закрывает её само, наклон держит приближение (057). session — как у
+// SetFrameAngle: сессия строки «Наклон», один шаг отмены.
+func (m *Methods) SetBackdropAngle(spreadID, scope string, tilt float64, session string) (v model.View) {
 	defer m.guardEdit("SetBackdropAngle", &v, nil)
-	return m.changed(m.editor().SetBackdropAngle(spreadID, scope, tilt))
+	return m.changed(m.editor().SetBackdropAngle(spreadID, scope, tilt, session))
 }
 
 // StraightenBackdrop — «Выпрямить по линии» для фона: dx, dy — конец минус начало линии,

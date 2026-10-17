@@ -151,6 +151,48 @@ func TestCtxOfForms(t *testing.T) {
 	}
 }
 
+// TestCtxOfLadder (055): Ctx.Ladder — направление ближайшей лесенки перед цепочкой, хоть у начала
+// альбома (дальше окна форм); мёртвый разворот, сетка и ключ, который не строится (действует
+// лучшая), лесенкой не считаются; лесенок нет — 0.
+func TestCtxOfLadder(t *testing.T) {
+	p := model.New()
+	far, near := autoSpread(p, "far", 3), autoSpread(p, "near", 3)
+	far.Layout, near.Layout = "L(0,1,2)", "A(0,1,2)"
+	p.Spreads = []*model.Spread{far}
+	for i := range variety.FormsWindow + 2 {
+		p.Spreads = append(p.Spreads, autoSpread(p, fmt.Sprint("m", i), 4))
+	}
+	grid, broken := autoSpread(p, "grid", 3), autoSpread(p, "broken", 3)
+	grid.Layout, grid.Grid = "L(0,1,2)", []*model.Place{{ID: "pl", W: 50, H: 50}}
+	broken.Layout = "L(0,1,2,3)" // фото 3 — Build отказывает, действует лучшая
+	p.Spreads = append(p.Spreads, near, grid, broken, autoSpread(p, "target", 4))
+	at := len(p.Spreads) - 1
+	for _, s := range []*model.Spread{far, near} {
+		if r, _, ok := p.Layout(s); !ok || r.Key != s.Layout || variety.Describe(r, p.Params()).Form != forms.Ladder {
+			t.Fatalf("заготовка: %s — не лесенка %q", s.ID, s.Layout)
+		}
+	}
+	for _, c := range []struct {
+		name string
+		dead func(*model.Spread) bool
+		want byte
+	}{
+		{"ближняя — A", nil, 'A'},
+		{"ближняя мертва — дальняя L", func(s *model.Spread) bool { return s == near }, 'L'},
+		{"обе мертвы — нет", func(s *model.Spread) bool { return s == near || s == far }, 0},
+	} {
+		if got := ctxOf(p, at, at, c.dead).Ladder; got != c.want {
+			t.Errorf("%s: %q, ждали %q", c.name, got, c.want)
+		}
+	}
+	if got := ctxOf(p, 0, 0, nil).Ladder; got != 0 {
+		t.Errorf("начало альбома: %q", got)
+	}
+	if got := ctxOf(p, 1, 1, nil).Ladder; got != 'L' {
+		t.Errorf("сразу после дальней: %q", got)
+	}
+}
+
 // neighborCand — кандидат пула из настоящей раскладки r с заданным видом и оценкой: «Плотно»,
 // без главного (семейство одно на всех — штраф семейства соседа выбор не решает).
 func neighborCand(r layout.Result, prm layout.Params, look string, score float64) variety.Cand {

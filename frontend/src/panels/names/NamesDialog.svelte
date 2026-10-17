@@ -7,7 +7,7 @@
   import { vigDialog } from '../vignette/vigsession.svelte'
   import { namesUi } from './names.svelte'
   import { isPasteKey, personLine } from './names'
-  import { columnsLine, fileInfo, leftList, summaryLine, vigHint } from './plantext'
+  import { columnsLine, fileInfo, leftList, noPhotosLine, summaryLine, vigHint } from './plantext'
 
   // «Имена» (спеки 030, 043): список (в том числе из файла Excel/CSV) или имена файлов → имена на фото листа.
   // Разбор и предпросмотр «фото ← строка» считает Go (PreviewNames, тот же план, что у вставки), здесь — показ.
@@ -121,7 +121,7 @@
             >
           </li>
         {:else}
-          <li class="none">{plan ? `${w.onCap} нет фото` : ''}</li>
+          <li class="none empty">{plan ? noPhotosLine(w.onCap) : ''}</li>
         {/each}
       </ul>
 
@@ -301,6 +301,11 @@
   }
   .rows .none {
     color: var(--muted);
+  }
+  /* пустое состояние — обычный абзац: в сетке строки фраза рвалась по слову в первой узкой колонке */
+  .rows li.empty {
+    display: block;
+    line-height: 1.4;
   }
   .no {
     color: var(--muted);

@@ -79,6 +79,17 @@ func (e *Editor) dropUndo(i int) {
 	e.undo = slices.Delete(e.undo, i, i+1)
 }
 
+// sessionStart — проект до первой правки идущей цепочки merge (снимок её шага отмены): база
+// правок «от начала жеста» (наклон, 057). Цепочка не идёт, ключ пуст или снимка нет — nil.
+// Только чтение; зовётся из fn правки, под e.mu.
+func (e *Editor) sessionStart(merge string) *model.Project {
+	top := len(e.undo) - 1
+	if merge == "" || merge != e.lastMerge || top < 0 {
+		return nil
+	}
+	return e.undo[top].P
+}
+
 func (e *Editor) Undo() model.View {
 	e.mu.Lock()
 	defer e.mu.Unlock()

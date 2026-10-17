@@ -367,7 +367,7 @@ const backupNotice = "Это резервная копия — сохранит�
 
 // startBackups — хранилище копий и чистка старых в фоне (startup).
 func (a *App) startBackups() {
-	root := backup.DefaultRoot()
+	root := backup.DefaultRoot(a.data)
 	if root == "" {
 		return
 	}

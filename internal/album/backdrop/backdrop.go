@@ -3,6 +3,7 @@ package backdrop
 import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
 // Фото на фоне разворота или страницы (спека 009, design-backdrop). Рамка — как у
@@ -82,27 +83,50 @@ func SetBackdropFrame(p *model.Project, spreadID, scope string, s, x, y float64)
 }
 
 // SetBackdropAngle — тело Editor.SetBackdropAngle: наклон фото в рамке фона tilt, градусы
-// (±44,9, шаг 0,1; четвертей у фона нет — 90° даёт «Поворот» рамки). Рамка стоит, фото
-// само увеличивается и закрывает её (045). Масштаб и сдвиг кадра стоят.
-func SetBackdropAngle(p *model.Project, spreadID, scope string, tilt float64) {
-	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) { setTilt(b, tilt) })
+// (±44,9, шаг 0,1; четвертей у фона нет — 90° даёт «Поворот» рамки) от кадра base (начало
+// сессии жеста; nil — текущий). Рамка стоит, наклон держит приближение, как у фото в месте
+// (057, решение 14): рамка — прямоугольник b.W×b.H.
+func SetBackdropAngle(p *model.Project, spreadID, scope string, tilt float64, base *model.Frame) {
+	changeBackdrop(p, spreadID, scope, func(p *model.Project, _ *model.Spread, b *model.Backdrop) { setTilt(p, b, tilt, base) })
 }
 
 // StraightenBackdrop — тело Editor.StraightenBackdrop: линия (dx, dy) мм листа встаёт
 // параллельно краю рамки фона. Нет линии или она уже ровная — холостая правка.
 func StraightenBackdrop(p *model.Project, spreadID, scope string, dx, dy float64) {
-	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) {
+	changeBackdrop(p, spreadID, scope, func(p *model.Project, _ *model.Spread, b *model.Backdrop) {
 		if d, ok := geom.StraightenDelta(dx, dy, b.Rot); ok {
-			setTilt(b, b.FrameOrDefault().R+d)
+			setTilt(p, b, b.FrameOrDefault().R+d, nil)
 		}
 	})
 }
 
-// setTilt — наклон кадра фона: зажим ±44,9 и шаг 0,1 (ClampBackdrop потом его не меняет).
-func setTilt(b *model.Backdrop, tilt float64) {
+// setTilt — наклон кадра фона: зажим ±44,9 и шаг 0,1 (ClampBackdrop потом его не меняет);
+// S, X, Y — geom.TiltCrop от base (nil — текущий кадр).
+func setTilt(p *model.Project, b *model.Backdrop, tilt float64, base *model.Frame) {
 	f := b.FrameOrDefault()
-	f.R = geom.ClampF(model.Round1(tilt), -model.MaxTilt, model.MaxTilt)
-	b.Frame = model.ClampFrame(&f)
+	if base != nil {
+		f = *base
+	}
+	r := geom.ClampF(model.Round1(tilt), -model.MaxTilt, model.MaxTilt)
+	c := geom.TiltCrop(layout.Rect{W: b.W, H: b.H}, p.RawAspect(b.Photo), geom.Crop{S: f.S, X: f.X, Y: f.Y, R: f.R}, r, geom.Outline{})
+	b.Frame = model.ClampFrame(&model.Frame{S: c.S, X: c.X, Y: c.Y, R: c.R})
+}
+
+// BaseFrame — кадр фона области scope листа spreadID в снимке p0 (начало сессии наклона,
+// 057). Снимка, листа или фона нет — nil: база — текущий кадр.
+func BaseFrame(p0 *model.Project, spreadID, scope string) *model.Frame {
+	if p0 == nil {
+		return nil
+	}
+	s := p0.Sheet(spreadID)
+	if s == nil {
+		return nil
+	}
+	if sl := s.Slot(scope); sl != nil && *sl != nil {
+		f := (*sl).FrameOrDefault()
+		return &f
+	}
+	return nil
 }
 
 // FlipBackdrop — тело Editor.FlipBackdrop над проектом (axis уже проверена).

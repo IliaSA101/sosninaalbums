@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import vectors from '../../../../testdata/parity/frames.json'
+import containVectors from '../../../../testdata/parity/contain.json'
+import tiltVectors from '../../../../testdata/parity/tilt.json'
 import {
   clampFrame,
+  containImage,
   effectiveDPI,
   fitTilt,
   flipCss,
@@ -12,6 +15,7 @@ import {
   placeImage,
   rotateFrame,
   thumbBox,
+  tiltFrame,
   zoomFrame,
 } from './frame'
 import type { Frame, Rect } from '../core/types'
@@ -193,5 +197,73 @@ describe('photoCss, thumbBox, fitTilt', () => {
     expect(fitTilt(0, 1.5)).toBe(1)
     expect(fitTilt(10, 1.5)).toBeLessThan(1)
     expect(fitTilt(-10, 1.5)).toBeCloseTo(fitTilt(10, 1.5), 12)
+  })
+})
+
+interface ContainVector {
+  cell: Rect
+  aspect: number
+  r: number
+  outline?: Outline
+  img: Rect
+}
+
+describe('contain parity', () => {
+  const list = containVectors as ContainVector[]
+  it('векторы прочитаны: все формы и углы', () => {
+    expect(list.length).toBeGreaterThanOrEqual(12)
+    expect(list.some((v) => v.outline?.oval)).toBe(true)
+    expect(list.some((v) => (v.outline?.radius ?? 0) > 0)).toBe(true)
+    for (const r of [0, 30, -44.9, 90]) expect(list.some((v) => v.r === r)).toBe(true)
+  })
+  list.forEach((v, i) => {
+    it(`вектор ${i}: img`, () => {
+      const img = containImage(v.cell, v.aspect, v.r, v.outline)
+      for (const k of ['x', 'y', 'w', 'h'] as const) expect(img[k]).toBeCloseTo(v.img[k], 9)
+    })
+  })
+  it('нулевой и бесконечный aspect — как 1', () => {
+    const cell = { x: 0, y: 0, w: 100, h: 60 }
+    expect(containImage(cell, 0, 0)).toEqual(containImage(cell, 1, 0))
+    expect(containImage(cell, Infinity, 30)).toEqual(containImage(cell, 1, 30))
+  })
+})
+
+interface TiltVector {
+  cell: Rect
+  aspect: number
+  outline?: Outline
+  base: Frame
+  r: number
+  want: Frame
+}
+
+describe('tilt parity', () => {
+  const list = tiltVectors as TiltVector[]
+  it('векторы прочитаны: формы, четверти, отрицательный наклон, пределы S', () => {
+    expect(list.length).toBeGreaterThanOrEqual(12)
+    expect(list.some((v) => v.outline?.oval)).toBe(true)
+    expect(list.some((v) => (v.outline?.radius ?? 0) > 0)).toBe(true)
+    expect(list.some((v) => v.r < 0)).toBe(true)
+    expect(list.some((v) => v.r > 90 && v.r < 100)).toBe(true)
+    expect(list.some((v) => v.want.s === 1 && v.base.s > 1)).toBe(true)
+  })
+  list.forEach((v, i) => {
+    it(`вектор ${i}: кадр`, () => {
+      const got = tiltFrame(v.cell, v.aspect, v.base, v.r, v.outline)
+      for (const k of ['s', 'x', 'y'] as const) expect(got[k]).toBeCloseTo(v.want[k], 9)
+      expect(got.r ?? 0).toBe(v.want.r ?? 0)
+    })
+  })
+  const cell = { x: 0, y: 0, w: 150, h: 100 }
+  it('тот же угол — кадр как есть; без приближения S остаётся 1', () => {
+    const f = { s: 1.5, x: 0.2, y: -0.1, r: 3 }
+    expect(tiltFrame(cell, 1.5, f, 3)).toBe(f)
+    expect(tiltFrame(cell, 1.5, { s: 1, x: 0, y: 0, r: 3 }, 0).s).toBe(1)
+  })
+  it('нулевой и бесконечный aspect — как 1', () => {
+    const f = { s: 2, x: 0.3, y: 0.3 }
+    expect(tiltFrame(cell, 0, f, 5)).toEqual(tiltFrame(cell, 1, f, 5))
+    expect(tiltFrame(cell, Infinity, f, 5)).toEqual(tiltFrame(cell, 1, f, 5))
   })
 })

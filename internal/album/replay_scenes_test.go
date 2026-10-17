@@ -188,7 +188,7 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	r.do("StraightenPhoto", e.StraightenPhoto(sid, ph[6].ID, 40, 3))
 	r.do("StraightenPhoto:ровная", e.StraightenPhoto(sid, ph[6].ID, 40, 0))
 	r.ve("SetBackdrop:045")(e.SetBackdrop(sid, model.ScopeSpread, ph[13]))
-	r.do("SetBackdropAngle", e.SetBackdropAngle(sid, model.ScopeSpread, 4.5))
+	r.do("SetBackdropAngle", e.SetBackdropAngle(sid, model.ScopeSpread, 4.5, ""))
 	r.do("StraightenBackdrop", e.StraightenBackdrop(sid, model.ScopeSpread, 100, 3))
 	r.do("SetBackdropFrame:045", e.SetBackdropFrame(sid, model.ScopeSpread, 1.4, 0.3, 0))
 	r.do("FlipBackdrop:045", e.FlipBackdrop(sid, model.ScopeSpread, "h"))

@@ -8,6 +8,7 @@ import { hasSeam, isCover } from '../../base/geom/sheet'
 import { startOrder, type FamilyFilter, type RowOrder } from './variants'
 import type { TplSource } from '../../base/tpl/tplsource'
 import type { VigFamilyFilter } from '../../base/tpl/tplfilter'
+import type { FormFilter } from '../vignette/vigform'
 import { stepVignette } from '../vignette/vigact'
 import { isVignette } from '../vignette/vignette'
 import type { Choices, GalleryTab, LayoutScope, PageView, RotRect, SpreadView } from '../../base/core/types'
@@ -41,6 +42,8 @@ class Gallery {
   source = $state<TplSource>('all')
   // 049: фильтр видов шаблонов виньетки (▦); здесь, а не в VigGallery, чтобы Пробел листал видимые.
   vigFamily = $state<VigFamilyFilter>('all')
+  // 056: фильтр формы мест рядом с ним; только отбирает плитки, сбрасывается вместе с ним
+  vigForm = $state<FormFilter>('all')
 
   private choicesReq = 0
   private choicesWant = ''
@@ -50,7 +53,7 @@ class Gallery {
     const s = store.spread
     // Виньетка: листаются шаблоны виньетки, а не раскладки «Авто» (решение 80).
     if (isVignette(s)) {
-      await stepVignette(s, delta, this.vigFamily)
+      await stepVignette(s, delta, this.vigFamily, this.vigForm)
       return
     }
     if (!s || !s.layout || isCover(s)) return
@@ -89,6 +92,7 @@ class Gallery {
     this.openTwins = []
     this.source = 'all'
     this.vigFamily = 'all'
+    this.vigForm = 'all'
     this.order = order
   }
 
@@ -110,6 +114,10 @@ class Gallery {
 
   setVigFamily(f: VigFamilyFilter) {
     this.vigFamily = f
+  }
+
+  setVigForm(f: FormFilter) {
+    this.vigForm = f
   }
 
   setFamily(f: FamilyFilter) {

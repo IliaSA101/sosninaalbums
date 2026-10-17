@@ -73,12 +73,13 @@ class BgMode {
     await store.run(Api.SetBackdropFrame(c.spread, c.scope, f.s, f.x, f.y))
   }
 
-  // Наклон фото в рамке (045): поле и ползунок «Наклон, °», один шаг undo на отпускание.
-  async setAngle(tilt: number) {
+  // Наклон фото в рамке (045): поле и ползунок «Наклон, °»; session (057) — сессия строки «Наклон», в Go ключ merge:
+  // протяжки одной сессии — один шаг undo.
+  async setAngle(tilt: number, session: string) {
     const c = this.cur
     if (!c) return
     this.session = ''
-    await store.run(Api.SetBackdropAngle(c.spread, c.scope, tilt))
+    await store.run(Api.SetBackdropAngle(c.spread, c.scope, tilt, session))
   }
 
   // Стрелки: очередь, чтобы удержанная клавиша считала от актуального View.

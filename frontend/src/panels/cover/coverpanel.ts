@@ -11,7 +11,8 @@ export interface PresetGroup {
   items: CoverPreset[]
 }
 
-// Список «Типография»: группы в порядке появления (Фотосфера, Нетпринт, Свои размеры), пустые не нужны.
+// Список «Типография»: группы в порядке появления (Фотосфера, Нетпринт), пустые не нужны.
+// Варианты без группы (group '') — в конце: в списке они идут обычными <option>, без пустой подписи.
 export function presetGroups(list: readonly CoverPreset[]): PresetGroup[] {
   const out: PresetGroup[] = []
   for (const p of list) {
@@ -19,7 +20,7 @@ export function presetGroups(list: readonly CoverPreset[]): PresetGroup[] {
     if (g) g.items.push(p)
     else out.push({ group: p.group, items: [p] })
   }
-  return out
+  return [...out.filter((x) => x.group !== ''), ...out.filter((x) => x.group === '')]
 }
 
 // Размеры сторонки (мм) — по зоне «Задняя» из Go; её нет — null.
@@ -88,4 +89,9 @@ export function fieldValue(cv: Pick<CoverView, 'spec' | 'zones'>, field: SpecFie
     if (side) return side[field]
   }
   return cv.spec[field] ?? 0
+}
+
+// Кнопка строки «Корешок» (058 В): надписи нет — «Надпись» добавляет; есть (Go прислал её ID) — выделяет.
+export function spineAction(cv: Pick<CoverView, 'spineText'> | null | undefined): { label: string; kind: 'add' | 'select' } {
+  return cv?.spineText ? { label: 'Выделить надпись', kind: 'select' } : { label: 'Надпись', kind: 'add' }
 }

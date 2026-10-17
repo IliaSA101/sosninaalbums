@@ -319,12 +319,12 @@ describe('AutoDialog', () => {
 
   it('ошибка Go показывается в окне, собирать нельзя', async () => {
     const ask: PlanFn = async () => {
-      throw 'в альбоме уже 1000 разворотов'
+      throw 'в альбоме уже 200 разворотов'
     }
     const d = new AutoDialog(ids, ask, { spreads: 5, range: [1, 64] })
     d.start()
     await d.idle()
-    expect(d.error).toBe('В альбоме уже 1000 разворотов')
+    expect(d.error).toBe('В альбоме уже 200 разворотов')
     expect(d.canBuild).toBe(false)
     expect(d.pending).toBe(false)
   })

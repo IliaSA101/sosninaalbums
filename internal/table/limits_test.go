@@ -85,8 +85,17 @@ func bombBook(t *testing.T, total int) []byte {
 	return b.Bytes()
 }
 
+// skipBig — большие наборы пропускаются на быстром уровне (-short: precheck и цикл исполнителя).
+func skipBig(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("большой набор: полный прогон")
+	}
+}
+
 func TestReadXLSXLimits(t *testing.T) {
 	t.Run("бомба 200 МБ", func(t *testing.T) {
+		skipBig(t)
 		data := bombBook(t, 200<<20)
 		if len(data) > MaxFile {
 			t.Fatalf("бомба не сжалась: %d байт", len(data))
@@ -94,6 +103,7 @@ func TestReadXLSXLimits(t *testing.T) {
 		within(t, time.Second, data, ErrTooBig)
 	})
 	t.Run("часть ровно MaxPart", func(t *testing.T) {
+		skipBig(t)
 		// Предел — «не больше», ровно на пределе (пробелы после корня) ещё не ошибка.
 		sheet := sheetXML(`<row><c t="inlineStr"><is><t>Иванов</t></is></c></row>`)
 		sheet += padding(MaxPart - len(sheet))
@@ -131,6 +141,7 @@ func TestReadXLSXLimits(t *testing.T) {
 		within(t, time.Second, zipOf(t, parts(MaxEntries+1)...), ErrTooBig)
 	})
 	t.Run("общие строки", func(t *testing.T) {
+		skipBig(t)
 		within(t, time.Second, book(t, sheetXML(`<row><c t="s"><v>0</v></c></row>`), sstXML(strings.Repeat(`<si/>`, MaxStrings+1))), ErrTooBig)
 		s, err := Read(book(t, sheetXML(`<row><c t="s"><v>0</v></c></row>`), sstXML(`<si><t>Иванов</t></si>`+strings.Repeat(`<si/>`, MaxStrings-1))))
 		if err != nil || s.Rows[0][0] != "Иванов" {
@@ -143,6 +154,7 @@ func TestReadXLSXLimits(t *testing.T) {
 		within(t, time.Second, data, ErrTooBig)
 	})
 	t.Run("300 000 ячеек за столбцом XFD", func(t *testing.T) {
+		skipBig(t)
 		cells := strings.Repeat(`<c r="XFD1"><v>1</v></c>`, 300000)
 		within(t, 2*time.Second, book(t, sheetXML(`<row>`+cells+`</row>`), ""), ErrEmpty)
 	})

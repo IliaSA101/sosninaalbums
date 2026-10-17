@@ -153,13 +153,17 @@ func (e *Editor) SetBackdropFrame(spreadID, scope string, s, x, y float64) model
 }
 
 // SetBackdropAngle ставит наклон фото в рамке фона: ±44,9°, шаг 0,1 (045). Рамка стоит,
-// фото закрывает её само. Один шаг на отпускание ползунка.
-// Договор: область известна, tilt — конечное число.
-func (e *Editor) SetBackdropAngle(spreadID, scope string, tilt float64) model.View {
+// фото закрывает её само, наклон держит приближение (057). session — сессия строки «Наклон»:
+// один шаг отмены, расчёт от кадра её начала.
+// Договор: область известна, tilt — конечное число; ключ слияния — tiltMerge.
+func (e *Editor) SetBackdropAngle(spreadID, scope string, tilt float64, session string) model.View {
 	if !model.ValidScope(scope) || !allFinite(tilt) {
 		return e.View()
 	}
-	return e.change(func(p *model.Project) { backdrop.SetBackdropAngle(p, spreadID, scope, tilt) })
+	merge := tiltMerge("bdtilt:"+spreadID+":"+scope, session)
+	return e.apply(merge, func(p *model.Project) {
+		backdrop.SetBackdropAngle(p, spreadID, scope, tilt, backdrop.BaseFrame(e.sessionStart(merge), spreadID, scope))
+	})
 }
 
 // StraightenBackdrop — «Выпрямить по линии» для фона: (dx, dy) мм листа встаёт вдоль края рамки.

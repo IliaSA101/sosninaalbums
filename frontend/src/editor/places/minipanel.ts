@@ -143,11 +143,39 @@ export const MINI_H = 30 // высота полосы, px
 
 export const ROT_KEEP = 18 // px вокруг центра ⟳, куда полоса не заходит (кружок 12 + область захвата)
 
-// Где стоит полоса (px от угла разворота): под рамкой, иначе над ней, иначе внутри у верхнего края;
-// по горизонтали — по центру рамки, не выходя за разворот. w — ширина полосы, px.
-// avoid — центр ⟳ (px): полоса его не закрывает. capBottom — низ подписи или заглушки выделенного, мм (037):
-// «под рамкой» значит под этой полосой, иначе щелчки по подписи попадают в кнопки. Сначала пробуем те же места по порядку; если ⟳
-// мешает — полоса сдвигается вбок вдоль рамки (ближайший к центру свободный сдвиг), иначе встаёт внутри.
+// Границы, в которых полоса ищет место: видимая область холста в осях разворота (px от его угла).
+// Серое поле вокруг листа — тоже место: полоса не должна прыгать только потому, что лист упёрся в край окна.
+export interface MiniView {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+type Box = { left: number; top: number; width: number; height: number }
+
+// Окно холста (win) в осях разворота (sheet — его экранный прямоугольник; width — его ширина, px раскладки).
+// Масштаб берём из прямоугольника, а не из width: так верно и при трансформации предков.
+export function visibleArea(sheet: Box, win: Box, width: number): MiniView | undefined {
+  const k = sheet.width > 0 && width > 0 ? sheet.width / width : 0
+  if (!(k > 0) || !(win.width > 0) || !(win.height > 0)) return undefined
+  return {
+    left: (win.left - sheet.left) / k,
+    top: (win.top - sheet.top) / k,
+    right: (win.left + win.width - sheet.left) / k,
+    bottom: (win.top + win.height - sheet.top) / k,
+  }
+}
+
+// Тот же прямоугольник (перемер без сдвига не должен гонять перерисовку).
+export const sameView = (a?: MiniView, b?: MiniView) =>
+  a === b || (!!a && !!b && a.left === b.left && a.top === b.top && a.right === b.right && a.bottom === b.bottom)
+
+// Где стоит полоса (px от угла разворота), всегда по центру рамки (зажим краями видимой области view;
+// не задана — лист). Порядок: под рамкой; нет места до низа видимой области — над рамкой, выше ⟳ (avoid — его
+// центр, px: полоса его не закрывает); и там нет — внутри у верха видимой части (рамка занимает весь экран),
+// там полоса при нужде сдвигается вбок от ⟳. w — ширина полосы, px. capBottom — низ подписи или заглушки выделенного,
+// мм (037): «под рамкой» значит под этой полосой, иначе щелчки по подписи попадают в кнопки.
 export function miniPlace(
   box: Rect,
   ppm: number,
@@ -156,30 +184,31 @@ export function miniPlace(
   w: number,
   avoid?: { x: number; y: number },
   capBottom = 0,
+  view: MiniView = { left: 0, top: 0, right: width, bottom: height },
 ): { top: number; left: number } {
   const by = box.y * ppm
-  const bh = Math.max(box.y + box.h, capBottom) * ppm - by
+  const bottom = Math.max(box.y + box.h, capBottom) * ppm
   const half = w / 2
-  const cx = Math.max(half, Math.min((box.x + box.w / 2) * ppm, width - half))
+  const cx = Math.max(view.left + half, Math.min((box.x + box.w / 2) * ppm, view.right - half))
   const hits = (top: number, left: number) =>
     !!avoid &&
     avoid.x > left - half - ROT_KEEP &&
     avoid.x < left + half + ROT_KEEP &&
     avoid.y > top - ROT_KEEP &&
     avoid.y < top + MINI_H + ROT_KEEP
-  const outside: number[] = []
-  if (by + bh + MINI_GAP + MINI_H <= height) outside.push(by + bh + MINI_GAP)
-  if (by - MINI_GAP - MINI_H >= 0) outside.push(by - MINI_GAP - MINI_H)
-  const inside = by + MINI_GAP // у верхнего края внутри — последнее место
-  // Сдвиг вбок: край полосы встаёт за круг ⟳; левый и правый варианты, ближе к центру рамки — первым.
+  const under = bottom + MINI_GAP
+  if (under + MINI_H <= view.bottom && !hits(under, cx)) return { top: under, left: cx }
+  let above = by - MINI_GAP - MINI_H
+  if (hits(above, cx)) above = avoid!.y - ROT_KEEP - MINI_H // ⟳ стоит над серединой стороны — полоса выше него
+  if (above >= view.top && !hits(above, cx)) return { top: above, left: cx }
+  // Внутри у верха видимой части рамки; ⟳ тут стоит у самой стороны — сдвиг вбок, ближе к центру рамки первым.
+  const inside = Math.max(by, view.top) + MINI_GAP
+  const top = Math.max(view.top, Math.min(inside, view.bottom - MINI_H - MINI_GAP))
   const shifts = avoid
     ? [avoid.x - ROT_KEEP - half, avoid.x + ROT_KEEP + half]
-        .filter((l) => l >= half && l <= width - half)
+        .filter((l) => l >= view.left + half && l <= view.right - half)
         .sort((a, b) => Math.abs(a - cx) - Math.abs(b - cx))
     : []
-  for (const tops of [outside, [inside]]) {
-    for (const top of tops) if (!hits(top, cx)) return { top, left: cx }
-    for (const top of tops) for (const left of shifts) if (!hits(top, left)) return { top, left }
-  }
-  return { top: inside, left: cx }
+  for (const left of [cx, ...shifts]) if (!hits(top, left)) return { top, left }
+  return { top, left: cx }
 }

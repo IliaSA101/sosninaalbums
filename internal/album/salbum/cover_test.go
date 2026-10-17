@@ -197,6 +197,50 @@ func TestCoverClampOnLoad(t *testing.T) {
 	}
 }
 
+// Мест на обложке больше предела, и все заняты: зажим оставляет MaxPlaces, лишним фото места не
+// находится (у обложки нет «Авто»). Сетка снимается, фото обложки уходят целиком вместе со
+// своими записями, разворот и фон не страдают; повторный круг файла не меняет.
+func TestCoverOverfullGridDropsPhotos(t *testing.T) {
+	dir := testkit.TempDir(t)
+	p := coverAlbum(t, dir)
+	n := model.MaxPlaces + 3
+	p.Cover.Sheet.Grid, p.Cover.Sheet.Photos = nil, nil
+	var gone []string
+	for i := range n {
+		path := filepath.Join(dir, "Отбор", fmt.Sprintf("m%03d.jpg", i))
+		putFile(t, path, 10)
+		id := library.IDFor(path)
+		gone = append(gone, id)
+		p.Photos[id] = model.PhotoRef{Path: path, W: 300, H: 200, Size: 10}
+		p.Cover.Sheet.Grid = append(p.Cover.Sheet.Grid, box(fmt.Sprintf("%012x", 0x1000+i), 10+float64(i%10)*20, 10+float64(i/10)*20, 15, 15, id))
+		p.Cover.Sheet.Photos = append(p.Cover.Sheet.Photos, id)
+	}
+	data, err := Encode(p, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := mustDecode(t, data, dir)
+	c := q.Cover.Sheet
+	if c.Grid != nil || len(c.Photos) != 0 {
+		t.Fatalf("сетка обложки не снята: мест %d, фото %d", len(c.Grid), len(c.Photos))
+	}
+	for _, id := range gone {
+		if hasRef(q, id) {
+			t.Fatalf("запись фото обложки %s осталась без дела", id)
+		}
+	}
+	if c.BgPhotoR == nil || len(q.Spreads) != 1 || len(q.Spreads[0].Photos) != 1 || len(q.Photos) != 2 {
+		t.Fatalf("фон или разворот пострадали: фон %+v, развороты %+v, фото %d", c.BgPhotoR, q.Spreads, len(q.Photos))
+	}
+	again, err := Encode(q, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(model.Marshal(q), model.Marshal(mustDecode(t, again, dir))) {
+		t.Fatal("круг файла меняет проект")
+	}
+}
+
 // Путь разметки — как у фото: относительный в файле, abs рядом; запасной abs, если
 // основного нет; UNC, устройства, «../../..» и чужое расширение — "" (032, критерий 8).
 func TestCoverGuidePath(t *testing.T) {
@@ -218,6 +262,15 @@ func TestCoverGuidePath(t *testing.T) {
 	}
 	if g := load("Нет/c.png", ""); g != filepath.Join(dir, "Нет", "c.png") {
 		t.Fatalf("файла нет нигде — путь остаётся: %q", g)
+	}
+	// Основной на месте — он и остаётся, запасной (есть он или нет) его не вытесняет.
+	other := filepath.Join(dir, "Другая", "c.png")
+	if g := load("Разметка/c.png", other); g != guide {
+		t.Fatalf("основной есть, запасного нет: %q", g)
+	}
+	putFile(t, other, 10)
+	if g := load("Разметка/c.png", other); g != guide {
+		t.Fatalf("основной и запасной есть: %q", g)
 	}
 	bad := []string{"../../../c.png", "Разметка/c.bmp", "Разметка/c"}
 	if runtime.GOOS == "windows" {

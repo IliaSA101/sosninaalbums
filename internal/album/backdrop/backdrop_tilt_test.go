@@ -37,6 +37,18 @@ func covers(img layout.Rect, w, h, r float64) bool {
 	return true
 }
 
+// heldZoom — наклон держит приближение (057): фото того же размера (до шага кадра 0,001) и
+// та же точка фото в центре рамки (доля размера фото в его осях).
+func heldZoom(b0, b1 model.BackdropView) bool {
+	pt := func(b model.BackdropView) (float64, float64) {
+		u, v := geom.Rotate(-b.Frame.R, b.Img.X+b.Img.W/2-b.Box.W/2, b.Img.Y+b.Img.H/2-b.Box.H/2)
+		return u / b.Img.W, v / b.Img.H
+	}
+	x0, y0 := pt(b0)
+	x1, y1 := pt(b1)
+	return math.Abs(b1.Img.W-b0.Img.W) <= 1e-3*b0.Img.W && math.Abs(x1-x0) < 1e-3 && math.Abs(y1-y0) < 1e-3
+}
+
 // Зажим: четверть отбрасывается, наклон ±44,9 и шаг 0,1 остаются; не число — 0; идемпотентно.
 func TestClampBackdropTilt(t *testing.T) {
 	e, _, _ := edtest.BdEd(t)
@@ -67,27 +79,28 @@ func TestSetBackdropAngle(t *testing.T) {
 	e, s1, _ := edtest.BdEd(t)
 	edtest.SetBg(t, e, s1, "left", "bg")
 	edtest.SetBg(t, e, s1, "right", "bg2")
-	e.SetBackdropFrame(s1, "left", 1.5, 0.3, -0.2)
+	b0 := bdView(t, e.SetBackdropFrame(s1, "left", 1.5, 0.3, -0.2), "left")
 	undo := edtest.UndoLen(e)
-	v := e.SetBackdropAngle(s1, "left", 4.54)
-	if f := bdView(t, v, "left").Frame; f != (model.Frame{S: 1.5, X: 0.3, Y: -0.2, R: 4.5}) || edtest.UndoLen(e) != undo+1 {
-		t.Fatalf("наклон: %+v, undo %d → %d", f, undo, edtest.UndoLen(e))
+	v := e.SetBackdropAngle(s1, "left", 4.54, "")
+	// 057: масштаб падает, а фото на экране того же размера и с той же точкой в центре.
+	if b := bdView(t, v, "left"); b.Frame.R != 4.5 || !(b.Frame.S < 1.5) || !heldZoom(b0, b) || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("наклон: %+v, undo %d → %d", b.Frame, undo, edtest.UndoLen(e))
 	}
 	if f := bdView(t, v, "right").Frame; f.R != 0 {
 		t.Fatalf("правая страница: %+v", f)
 	}
-	if f := bdView(t, e.SetBackdropAngle(s1, "right", -60), "right").Frame; f.R != -44.9 {
+	if f := bdView(t, e.SetBackdropAngle(s1, "right", -60, ""), "right").Frame; f.R != -44.9 {
 		t.Fatalf("упор: %+v", f)
 	}
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
 	for name, f := range map[string]func(){
-		"тот же":       func() { e.SetBackdropAngle(s1, "left", 4.5) },
-		"почти тот же": func() { e.SetBackdropAngle(s1, "left", 4.53) },
-		"NaN":          func() { e.SetBackdropAngle(s1, "left", math.NaN()) },
-		"Inf":          func() { e.SetBackdropAngle(s1, "left", math.Inf(-1)) },
-		"нет фона":     func() { e.SetBackdropAngle(s1, "spread", 3) },
-		"область":      func() { e.SetBackdropAngle(s1, "top", 3) },
-		"лист":         func() { e.SetBackdropAngle("нет", "left", 3) },
+		"тот же":       func() { e.SetBackdropAngle(s1, "left", 4.5, "") },
+		"почти тот же": func() { e.SetBackdropAngle(s1, "left", 4.53, "") },
+		"NaN":          func() { e.SetBackdropAngle(s1, "left", math.NaN(), "") },
+		"Inf":          func() { e.SetBackdropAngle(s1, "left", math.Inf(-1), "") },
+		"нет фона":     func() { e.SetBackdropAngle(s1, "spread", 3, "") },
+		"область":      func() { e.SetBackdropAngle(s1, "top", 3, "") },
+		"лист":         func() { e.SetBackdropAngle("нет", "left", 3, "") },
 	} {
 		f()
 		edtest.Same(t, e, rev, undo, name)
@@ -106,16 +119,21 @@ func TestBackdropTiltCovers(t *testing.T) {
 		for _, fr := range [][3]float64{{1, 0, 0}, {1.7, 1, -1}, {2.5, -0.4, 0.8}} {
 			e.SetBackdropFrame(s1, scope, fr[0], fr[1], fr[2])
 			for _, tilt := range []float64{4.5, -4.5, 44.9, -44.9} {
-				v := e.SetBackdropAngle(s1, scope, tilt)
+				b0 := bdView(t, e.View(), scope)
+				v := e.SetBackdropAngle(s1, scope, tilt, "")
 				b := bdView(t, v, scope)
-				if b.Frame.R != tilt || b.Frame.S != fr[0] || !covers(b.Img, b.Box.W, b.Box.H, b.Frame.R) {
+				if b.Frame.R != tilt || !covers(b.Img, b.Box.W, b.Box.H, b.Frame.R) {
 					t.Errorf("%s, кадр %v, наклон %v: открыто %+v в рамке %+v", scope, fr, tilt, b.Img, b.Box)
+				}
+				// Размер (057): без приближения S = 1; с ним — тот же размер, либо S упёрлось в 1.
+				if fr[0] == 1 && b.Frame.S != 1 || fr[0] > 1 && b.Frame.S > 1 && !heldZoom(b0, b) || b.Frame.S == 1 && b.Img.W < b0.Img.W-1e-9 {
+					t.Errorf("%s, кадр %v, наклон %v: S %v → %v, ширина %v → %v", scope, fr, tilt, b0.Frame.S, b.Frame.S, b0.Img.W, b.Img.W)
 				}
 			}
 		}
 		// Повёрнутая рамка: наклон тот же, Img в осях рамки — закрыта так же.
 		e.SetBackdropBox(s1, scope, 20, 10, 150, 120, 30, "")
-		b := bdView(t, e.SetBackdropAngle(s1, scope, -20), scope)
+		b := bdView(t, e.SetBackdropAngle(s1, scope, -20, ""), scope)
 		if b.Box.Rot != 30 || b.Frame.R != -20 || !covers(b.Img, b.Box.W, b.Box.H, -20) {
 			t.Errorf("%s, рамка под 30°: %+v", scope, b)
 		}
@@ -134,7 +152,7 @@ func TestBackdropDPITilt(t *testing.T) {
 		t.Fatal(err)
 	}
 	b0 := bdView(t, v, "spread")
-	b1 := bdView(t, e.SetBackdropAngle(sid, "spread", 4.5), "spread")
+	b1 := bdView(t, e.SetBackdropAngle(sid, "spread", 4.5, ""), "spread")
 	if k := b1.Img.W / b0.Img.W; math.Abs(k-1.0361) > 1e-4 {
 		t.Fatalf("увеличение %v, ждали 1,0361", k)
 	}
@@ -147,7 +165,7 @@ func TestBackdropDPITilt(t *testing.T) {
 func TestSetBackdropFrameKeepsTilt(t *testing.T) {
 	e, s1, _ := edtest.BdEd(t)
 	edtest.SetBg(t, e, s1, "spread", "bg")
-	e.SetBackdropAngle(s1, "spread", -7.3)
+	e.SetBackdropAngle(s1, "spread", -7.3, "")
 	e.SetBackdropFrame(s1, "spread", 2, -0.5, 0.25)
 	if f := edtest.BdOf(e, s1, "spread").Frame; *f != (model.Frame{S: 2, X: -0.5, Y: 0.25, R: -7.3}) {
 		t.Fatalf("кадр: %+v", f)
@@ -164,7 +182,7 @@ func TestFlipBackdropNegatesTilt(t *testing.T) {
 	e, s1, _ := edtest.BdEd(t)
 	edtest.SetBg(t, e, s1, "left", "bg")
 	edtest.SetBg(t, e, s1, "right", "bg2")
-	e.SetBackdropAngle(s1, "left", 4.5)
+	e.SetBackdropAngle(s1, "left", 4.5, "")
 	e.FlipBackdrop(s1, "left", "h")
 	if b := edtest.BdOf(e, s1, "left"); !b.FlipH || b.Frame.R != -4.5 {
 		t.Fatalf("↔: %+v %+v", b, b.Frame)
@@ -185,7 +203,7 @@ func TestFitBackdropKeepsTilt(t *testing.T) {
 	edtest.SetBg(t, e, s1, "right", "bg")
 	e.SetBackdropBox(s1, "right", 350, 20, 100, 100, 30, "")
 	e.SetBackdropFrame(s1, "right", 3, 0.2, 0.2)
-	e.SetBackdropAngle(s1, "right", 12)
+	e.SetBackdropAngle(s1, "right", 12, "")
 	e.FlipBackdrop(s1, "right", "v")
 	e.FitBackdrop(s1, "right")
 	b := edtest.BdOf(e, s1, "right")
@@ -228,5 +246,56 @@ func TestStraightenBackdrop(t *testing.T) {
 	edtest.Same(t, e, rev, undo, "холостые")
 	if r := bdView(t, e.Undo(), "left").Frame.R; r != -4.5 {
 		t.Fatalf("Undo: %v", r)
+	}
+}
+
+// Наклон фона держит приближение (057, решение 14): сессия — один шаг и расчёт от её начала,
+// без сессии — от текущего; S = 1 остаётся 1; области не сливаются; выпрямление; Save→Load.
+func TestBackdropAngleKeepsZoom(t *testing.T) {
+	e, s1, _ := edtest.BdEd(t)
+	edtest.SetBg(t, e, s1, "left", "bg")
+	edtest.SetBg(t, e, s1, "right", "bg2")
+	b0 := bdView(t, e.SetBackdropFrame(s1, "left", 1.5, 0.4, -0.3), "left")
+	start, n := *edtest.BdOf(e, s1, "left").Frame, edtest.UndoLen(e)
+	e.SetBackdropAngle(s1, "left", 3, "tl-1")
+	b := bdView(t, e.SetBackdropAngle(s1, "left", 5, "tl-1"), "left")
+	if b.Frame.R != 5 || !heldZoom(b0, b) || edtest.UndoLen(e) != n+1 {
+		t.Fatalf("сессия 0 → 3 → 5: %+v, шагов %d", b.Frame, edtest.UndoLen(e)-n)
+	}
+	e.SetBackdropAngle(s1, "left", 0, "tl-1")
+	if f := *edtest.BdOf(e, s1, "left").Frame; f != start || edtest.UndoLen(e) > n+1 {
+		t.Fatalf("0 → 5 → 0: %+v, ждали %+v", f, start)
+	}
+	// Без сессии: 3° → 0° — 1,5 ± 0,001.
+	if f := bdView(t, e.SetBackdropAngle(s1, "left", 3, ""), "left").Frame; !(f.S < 1.5) {
+		t.Fatalf("3°: %+v", f)
+	}
+	if f := bdView(t, e.SetBackdropAngle(s1, "left", 0, ""), "left").Frame; math.Abs(f.S-1.5) > 1e-3 {
+		t.Fatalf("3° → 0°: %+v", f)
+	}
+	// Правая без приближения: S = 1 при любом наклоне; та же сессия у другой области — свой шаг.
+	n = edtest.UndoLen(e)
+	e.SetBackdropAngle(s1, "left", 2, "tl-2")
+	for _, tilt := range []float64{8, -30, 0.5} {
+		if f := bdView(t, e.SetBackdropAngle(s1, "right", tilt, "tl-2"), "right").Frame; f.S != 1 || f.R != tilt {
+			t.Fatalf("правая %v: %+v", tilt, f)
+		}
+	}
+	if edtest.UndoLen(e) != n+2 {
+		t.Fatalf("области слились: шагов %d", edtest.UndoLen(e)-n)
+	}
+	// Выпрямить по линии — держит приближение, один шаг.
+	b0 = bdView(t, e.SetBackdropFrame(s1, "left", 2, 0, 0.5), "left")
+	n = edtest.UndoLen(e)
+	s, c := math.Sincos(4 * math.Pi / 180)
+	if b := bdView(t, e.StraightenBackdrop(s1, "left", 80*c, 80*s), "left"); b.Frame.R != -2 || !heldZoom(b0, b) || edtest.UndoLen(e) != n+1 {
+		t.Fatalf("выпрямить: %+v → %+v", b0.Frame, b.Frame)
+	}
+	// Save→Load — те же кадры обеих страниц.
+	q := edtest.SaveLoad(t, e)
+	for _, scope := range []string{"left", "right"} {
+		if got, want := (*q.Sheet(s1).Slot(scope)).Frame, edtest.BdOf(e, s1, scope).Frame; got == nil || *got != *want {
+			t.Errorf("%s после Load: %+v, ждали %+v", scope, got, want)
+		}
 	}
 }

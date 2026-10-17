@@ -41,30 +41,6 @@ export const sameVars = (a: VarsForm, b: VarsForm): boolean => VAR_FIELDS.every(
 
 export const setupOf = (f: VigForm, v: VarsForm): VigSetup => ({ vig: paramsOf(f), vars: varsOf(v) })
 
-// ---------- Форма мест (044) ----------
-
-export type ShapeKey = 'rect' | 'round' | 'oval'
-
-// «Скруглённые» — 10 % меньшей стороны (решение 044 №35); «Круг» у виньетки ещё и ставит портрет 1:1.
-export const VIG_ROUND = 10
-export const SHAPE_KEYS: readonly { k: ShapeKey; label: string; hint: string }[] = [
-  { k: 'rect', label: 'Прямоугольник', hint: 'Места учеников и учителей — прямоугольные' },
-  { k: 'round', label: 'Скруглённые', hint: 'Прямоугольники со скруглёнными углами (10 %)' },
-  { k: 'oval', label: 'Круг', hint: 'Круглые портреты; пропорция портрета станет 1:1' },
-]
-
-// Какая кнопка подсвечена: круг, любое скругление (в том числе из своего шаблона) или прямоугольник.
-export function shapeKey(f: Pick<VigForm, 'shape' | 'round'>): ShapeKey {
-  if (f.shape === 'oval') return 'oval'
-  return (f.round ?? 0) > 0 ? 'round' : 'rect'
-}
-
-// Что поменять в форме при выборе кнопки. Круг — портрет 1:1 (в овале 3:4 были бы овалы; вернёте 3:4 — овалы).
-export function shapePatch(k: ShapeKey): Pick<VigForm, 'shape' | 'round'> & Partial<Pick<VigForm, 'ratio'>> {
-  if (k === 'oval') return { shape: 'oval', round: 0, ratio: '1:1' }
-  return { shape: '', round: k === 'round' ? VIG_ROUND : 0 }
-}
-
 // ---------- Тексты ----------
 
 const TEACHERS: [string, string, string] = ['учитель', 'учителя', 'учителей']
@@ -138,9 +114,11 @@ export const CARD_MAX_H = 110
 export const cardBox = (sw: number, sh: number): { w: number; h: number } => fitBox(sw, sh, CARD_W, CARD_MAX_H)
 
 // Высота сетки шаблонов: что осталось в окне под предпросмотром (отступ окна от краёв 32, шапка и низ ≈ 120,
-// зазор 10), но не меньше STRIP_MIN; выше — сетка прокручивается сама, а не окно.
+// зазор 10), но не меньше STRIP_MIN; выше — сетка прокручивается сама, а не окно. Строка сегментов фильтров (вид, форма) — FILTER_ROW.
 export const STRIP_MIN = 130
-export const stripMax = (winH: number, previewH: number): number => Math.max(STRIP_MIN, winH - 32 - 120 - previewH - 10)
+export const FILTER_ROW = 38
+export const stripMax = (winH: number, previewH: number, filterRows = 0): number =>
+  Math.max(STRIP_MIN, winH - 32 - 120 - previewH - FILTER_ROW * filterRows - 10)
 
 // Куда сдвинуть выбор стрелкой в сетке из cols колонок: ← → — соседний шаблон по кругу, ↑ ↓ — на ряд;
 // «не поместится» пропускается, за краем сетки — null (остаёмся).

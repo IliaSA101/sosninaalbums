@@ -69,7 +69,7 @@ func TestSetPlaceShape(t *testing.T) {
 	ids := []string{g[0].ID, "b"} // ID места и ID фото — обе ссылки
 	e.SetPlaceRound("s1", ids, 25)
 	e.SetFrame("a", 2, 0.5, -0.5)
-	e.SetFrameAngle("a", 10)
+	edtest.Tilt(e, "a", 10)
 	before := slices.Clone([]model.Place{*g[0], *g[1], *g[2]})
 	frame := edtest.P(e).Photos["a"].Frame
 	undo := edtest.UndoLen(e)

@@ -252,8 +252,8 @@ func TestAppBackdropEditAndExport(t *testing.T) {
 	a.SetBackdropBox("s2", "right", 320, 10, 200, 150, 30, "")
 	a.FlipBackdrop("s2", "right", "h")
 	a.SetBackdropFrame("s2", "right", 2, 0.5, 0)
-	a.SetBackdropAngle("s2", "right", 4.5)  // 045: наклон фона доходит до задания
-	a.StraightenPhoto("s2", "b", 100, 7.87) // линия под 4,5° → наклон фото −4,5
+	a.SetBackdropAngle("s2", "right", 4.5, "") // 045: наклон фона доходит до задания
+	a.StraightenPhoto("s2", "b", 100, 7.87)    // линия под 4,5° → наклон фото −4,5
 	pp, view := a.editor().Snapshot()
 	got := export.FromView(pp, view)[1].Backdrops
 	if len(got) != 1 {

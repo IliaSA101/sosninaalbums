@@ -6,7 +6,7 @@
   import Popover from '../../base/ui/Popover.svelte'
   import { gallery } from '../gallery/gallery.svelte'
   import { folderName } from '../library/names'
-  import { folderCounts } from './folders'
+  import { folderCounts, inFeedText } from './folders'
   import { folderfilter } from './folderfilter.svelte'
 
   // Папки проекта одной кнопкой (спека 024): без папок — прежняя «+ Папка с фото», с папками — окно со списком.
@@ -107,10 +107,13 @@
         </li>
       {/each}
     </ul>
-    {#if hiddenN > 0}
+    <!-- Строка состояния есть всегда: от неё зависит высота окна, а окно у нижней ленты растёт вверх, и строки уезжали бы из-под курсора -->
+    {#if multi}
       <div class="foot">
-        <span class="count" role="status">В ленте {store.inFolders.length} из {store.photos.length} фото</span>
-        <button type="button" class="ghost" onpointerdown={stop} onclick={() => folderfilter.showAll()}>Показать все</button>
+        <span class="count" role="status">{inFeedText(store.inFolders.length, store.photos.length)}</span>
+        <button type="button" class="ghost" disabled={hiddenN === 0} onpointerdown={stop} onclick={() => folderfilter.showAll()}
+          >Показать все</button
+        >
       </div>
     {/if}
     <button

@@ -103,6 +103,22 @@ func (p *Project) CoverGeo() CoverGeo {
 	return g
 }
 
+// SpineTextID — ID надписи на корешке: первый повёрнутый текст обложки с центром в зоне корешка;
+// "" — нет. Одно условие на «надпись уже есть» у «Надписи на корешке» (cover.SpineText) и у
+// кнопки «Выделить надпись» (CoverView.SpineText, 058 №19).
+func (p *Project) SpineTextID() string {
+	if p.Cover == nil || p.Cover.Sheet == nil {
+		return ""
+	}
+	cg := p.CoverGeo()
+	for _, t := range p.Cover.Sheet.Texts {
+		if x, _ := BoxOf(t).Center(); t.Rot != 0 && x >= cg.X[3] && x <= cg.X[4] {
+			return t.ID
+		}
+	}
+	return ""
+}
+
 // FsferaFormatOf — формат Фотосферы по точному размеру страницы (047; ClampSettings округляет
 // до 0,01, размеры таблицы целые). Лист 031 — не фотокнига: false. Здесь, а не в cover.go:
 // страницу читает только геометрия листа (TestPageWReaders).

@@ -43,69 +43,16 @@ function Step([string]$Name, [scriptblock]$Cmd, [string]$Dir = $root, [switch]$E
     }
 }
 
-# Размер файлов: больше 600 строк или 30 КБ — резать по смыслу (см. docs/BACKLOG.md).
-# Список из git (учитывает .gitignore: node_modules, dist, .gotmp, build/bin не попадают).
+# Размер файлов и порог папок — scripts/limits.mjs (единственный источник пределов, 0.13.1): Go — файл кода 800 строк,
+# тест 1200, счётчика файлов в папке нет; фронт — .ts 600 строк / 30 КБ, .svelte 600, тест 900, область ≤ 20 файлов
+# кода без тестов; подпапок ≤ 20. Пустой вывод — чисто; иначе провал со списком.
 function CheckSizes {
-    $skip = '(^|/)(wailsjs|build|docs/private|docs/refs)/|\.d\.ts$'
-    git ls-files --cached --others --exclude-standard |
-        Where-Object { $_ -match '\.(go|ts|js|svelte|css|ps1|py)$' -and $_ -notmatch $skip -and (Test-Path -LiteralPath $_) } |
-        ForEach-Object {
-            $f = Get-Item -LiteralPath $_
-            $lines = @(Get-Content -LiteralPath $f.FullName).Count
-            if ($lines -gt 600 -or $f.Length -gt 30KB) { "$_ ($lines строк, $([math]::Round($f.Length / 1KB, 1)) КБ)" }
-        }
-    # Пустой вывод — всё чисто; иначе провал с именами файлов.
+    node scripts/limits.mjs sizes
     $global:LASTEXITCODE = 0
 }
 
-# Порог папок (022): не больше 20 файлов .go/.ts/.svelte (с тестами) на папку Go и на область frontend/src.
-# Исключения - scripts/folder-exceptions.txt (строки "папка потолок # причина").
 function CheckFolders {
-    # Порог по уровням (022, docs/specs/0.8/022-structure/design.md §4): файлов кода прямо в папке ≤ 20 (ключ — папка
-    # файла, для Go и фронта одинаково); подпапок у любой папки ≤ 20 (по всем путям репозитория, docs тоже — решение
-    # владельца 2026-10-09); код фронта — только frontend/src/<файл> или frontend/src/<группа>/<область>/<файл>.
-    # Исключения — scripts/folder-exceptions.txt: «<папка> N» — файлы, «<папка>/ N» — подпапки.
-    $skip = '(^|/)(wailsjs|testdata|node_modules)/|\.d\.ts$'
-    $maxFiles = @{}
-    $maxDirs = @{}
-    $exc = Join-Path $root 'scripts/folder-exceptions.txt'
-    if (Test-Path -LiteralPath $exc) {
-        foreach ($line in Get-Content -LiteralPath $exc) {
-            if ($line -match '^\s*([^\s#]+)/\s+(\d+)') { $maxDirs[$Matches[1]] = [int]$Matches[2] }
-            elseif ($line -match '^\s*([^\s#]+)\s+(\d+)') { $maxFiles[$Matches[1]] = [int]$Matches[2] }
-        }
-    }
-    $all = @(git ls-files --cached --others --exclude-standard | Where-Object { Test-Path -LiteralPath $_ })
-    $code = @($all | Where-Object { $_ -match '\.(go|ts|svelte)$' -and $_ -notmatch $skip })
-
-    $code | ForEach-Object { if ($_.Contains('/')) { $_.Substring(0, $_.LastIndexOf('/')) } else { '.' } } |
-        Group-Object |
-        ForEach-Object {
-            $lim = 20
-            if ($maxFiles.ContainsKey($_.Name)) { $lim = $maxFiles[$_.Name] }
-            if ($_.Count -gt $lim) { "$($_.Name): $($_.Count) files (max $lim)" }
-        }
-
-    $kids = @{}
-    foreach ($f in $all) {
-        $parts = $f.Split('/')
-        $parent = '.'
-        for ($i = 0; $i -lt $parts.Length - 1; $i++) {
-            if (-not $kids.ContainsKey($parent)) { $kids[$parent] = @{} }
-            $kids[$parent][$parts[$i]] = 1
-            $parent = if ($i -eq 0) { $parts[0] } else { "$parent/$($parts[$i])" }
-        }
-    }
-    foreach ($p in ($kids.Keys | Sort-Object)) {
-        $lim = 20
-        if ($maxDirs.ContainsKey($p)) { $lim = $maxDirs[$p] }
-        if ($kids[$p].Count -gt $lim) { "${p}: $($kids[$p].Count) folders (max $lim)" }
-    }
-
-    $code | Where-Object { $_ -match '^frontend/src/' -and $_.Split('/').Length -notin 3, 5 } |
-        ForEach-Object { $_.Substring(0, $_.LastIndexOf('/')) } |
-        Sort-Object -Unique |
-        ForEach-Object { "${_}: code outside frontend/src/<group>/<area>" }
+    node scripts/limits.mjs folders
     $global:LASTEXITCODE = 0
 }
 
@@ -118,13 +65,14 @@ if ($runGo) {
     # Только файлы из git (как в CheckSizes): .gotmp в .gitignore, worktree агентов в .claude — отдельные репозитории.
     # Иначе недописанный файл агента роняет gofmt кодом выхода, а фильтр вывода этого не спасает.
     Step 'gofmt' { gofmt -l (git ls-files --cached --others --exclude-standard -- '*.go') } -EmptyOut
-    Step 'go vet' { go vet ./... }
+    # Пакеты — `. ./internal/...`, не `./...`: тот заходит в frontend/node_modules (flatted/golang)
+    Step 'go vet' { go vet . ./internal/... }
     # golangci-lint ставится через go install — лежит в GOPATH\bin, которого может не быть в PATH
     $gcl = Get-Command golangci-lint -ErrorAction SilentlyContinue
     $gclPath = if ($gcl) { $gcl.Source } else { Join-Path (go env GOPATH) 'bin\golangci-lint.exe' }
     # Проверки веток идут параллельно в фоне (решение владельца 2026-10-09): у каждой копии свой .gotmp и json-вывод,
     # общий только замок golangci-lint — без флага второй прогон отказывается работать.
-    Step 'golangci-lint' { node scripts/heavy.mjs $gclPath run --allow-parallel-runners ./... }
+    Step 'golangci-lint' { node scripts/heavy.mjs $gclPath run --allow-parallel-runners . ./internal/... }
     if ($Race) {
         # gcc от winget (WinLibs) может не попасть в PATH старого окна — ищем сами
         if (-not (Get-Command gcc -ErrorAction SilentlyContinue)) {
@@ -138,7 +86,7 @@ if ($runGo) {
         $gvc = Get-Command govulncheck -ErrorAction SilentlyContinue
         $gvcPath = if ($gvc) { $gvc.Source } else { Join-Path (go env GOPATH) 'bin\govulncheck.exe' }
         if (Test-Path $gvcPath) {
-            Step 'govulncheck' { & $gvcPath ./... }
+            Step 'govulncheck' { & $gvcPath . ./internal/... }
         } else {
             Write-Host 'govulncheck не найден (go install golang.org/x/vuln/cmd/govulncheck@latest) - шаг пропущен' -ForegroundColor Yellow
         }

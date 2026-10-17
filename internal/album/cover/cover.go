@@ -188,12 +188,10 @@ func SpineText(p *model.Project) error {
 	if c == nil {
 		return ErrNone
 	}
-	s, cg := c.Sheet, p.CoverGeo()
-	for _, t := range s.Texts {
-		if x, _ := model.BoxOf(t).Center(); t.Rot != 0 && x >= cg.X[3] && x <= cg.X[4] {
-			return nil
-		}
+	if p.SpineTextID() != "" {
+		return nil
 	}
+	s, cg := c.Sheet, p.CoverGeo()
 	if len(s.Texts) >= model.MaxTexts {
 		return fmt.Errorf("на развороте не может быть больше %d текстов", model.MaxTexts)
 	}

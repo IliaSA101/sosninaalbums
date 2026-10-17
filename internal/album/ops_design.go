@@ -27,12 +27,27 @@ func (e *Editor) SetFrame(photoID string, s, x, y float64) model.View {
 	return e.change(func(p *model.Project) { design.SetFrame(p, photoID, s, x, y) })
 }
 
-// Договор: NaN/Inf в наклоне — холостая правка; зажим угла делает тело.
-func (e *Editor) SetFrameAngle(photoID string, tilt float64) model.View {
-	if math.IsNaN(tilt) || math.IsInf(tilt, 0) {
+// tiltMerge — ключ сессии наклона (057): всё, что сделано в строке «Наклон» одного фото или
+// фона, пока в ней фокус, — один шаг отмены и расчёт от начала сессии. Пустая или чужая по
+// виду сессия — без слияния, от текущего кадра.
+func tiltMerge(kind, session string) string {
+	if !model.ValidSession(session) {
+		return ""
+	}
+	return kind + ":" + session
+}
+
+// SetFrameAngle — наклон фото листа spreadID; наклон держит приближение (057).
+// Договор: NaN/Inf в наклоне — холостая правка; фото должно быть на листе spreadID (обложка
+// тоже); база — кадр начала сессии (снимок отмены первой правки цепочки tiltMerge).
+func (e *Editor) SetFrameAngle(spreadID, photoID string, tilt float64, session string) model.View {
+	if !allFinite(tilt) {
 		return e.View()
 	}
-	return e.change(func(p *model.Project) { design.SetFrameAngle(p, photoID, tilt) })
+	merge := tiltMerge("tilt:"+photoID, session)
+	return e.apply(merge, func(p *model.Project) {
+		design.SetFrameAngle(p, spreadID, photoID, tilt, design.BaseFrame(e.sessionStart(merge), photoID))
+	})
 }
 
 // Договор: NaN/Inf в линии — холостая правка; фото должно быть на листе spreadID (обложка тоже).

@@ -16,15 +16,15 @@ import (
 // Family — характер раскладки; подписи для интерфейса считает Go (Choice.family).
 type Family string
 
-// Семейства: у Describe — первое подошедшее по порядку bleed, air, hero, dense (ритм 041 в Pick);
-// у подборки — по форме (FamilyOf), там же strip и figure (051).
+// Семейства: у Describe — первое подошедшее по порядку bleed, figure (только лесенка, 055), air,
+// hero, dense (ритм 041 в Pick); у подборки — по форме (FamilyOf), там же strip и figure (051).
 const (
 	Dense  Family = "dense"  // «Плотно»
 	Hero   Family = "hero"   // «С главным фото»
 	Air    Family = "air"    // «Воздух»
 	Bleed  Family = "bleed"  // «В край»
 	Strip  Family = "strip"  // «Ленты»: лента, ряды, сетка (только FamilyOf)
-	Figure Family = "figure" // «Фигуры»: лесенка, мелкое — крупное, рамка (только FamilyOf)
+	Figure Family = "figure" // «Фигуры»: лесенка, мелкое — крупное, рамка (у Describe — только лесенка)
 )
 
 // FamilyOf — сегмент фильтра подборки по форме (design §8): воздух и разные страницы — «Воздух»,
@@ -145,6 +145,10 @@ func describe(r layout.Result, p layout.Params, f forms.Form, q float64) Info {
 	switch {
 	case f == forms.Bleed:
 		in.Family = Bleed
+	case f == forms.Ladder:
+		// По заполнению лесенка — воздух, и ритм воздуха штрафовал её вне такта: в сборке она
+		// почти не вставала (0.3 % разворотов, 055). Воздух она и не обнуляет.
+		in.Family = Figure
 	case in.Fill < airFill:
 		in.Family = Air
 	case in.Heroes > 0:

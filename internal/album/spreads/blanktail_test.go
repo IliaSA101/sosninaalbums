@@ -288,7 +288,7 @@ func TestAutoPlanRoomCountsBlankTail(t *testing.T) {
 	}
 	// Вставка в середину хвост не занимает: сверх предела — ошибка, проект как был.
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
-	if _, err := e.AutoBuild(mixedPhotos("p", 10), 0, model.AutoOpts{Spreads: 2, MaxPer: 64}); err == nil || !strings.Contains(err.Error(), "1000") {
+	if _, err := e.AutoBuild(mixedPhotos("p", 10), 0, model.AutoOpts{Spreads: 2, MaxPer: 64}); err == nil || !strings.Contains(err.Error(), "200 разворотов") {
 		t.Fatalf("вставка в середину полного: %v", err)
 	}
 	edtest.Same(t, e, rev, undo, "отказ вставки в середину")
