@@ -1,6 +1,7 @@
 // Точки, куда верхние группы (editor/, panels/, shell/) подключают себя при старте: основа их не
 // импортирует (docs/STRUCTURE.md, правило 9). Подключение — shell/boot/wire.ts (wire() в main.ts и в
 // тестах, которым нужен верх). Без него store работает «голым»: хуки пустые, ленты не фильтруются.
+import type { KeymapView } from '../types/keys'
 import type { FontFamily, MarkView, Photo, View } from './types'
 
 // Что выбрано для автосборки (034): откуда фото и сколько из них уже в альбоме — для строки окна.
@@ -26,10 +27,14 @@ export interface StoreHooks {
   spreadsCleared(): void
   // Шрифты из GetState: зарегистрировать в document.fonts.
   fontsLoaded(fonts: FontFamily[]): void
+  // Горячие клавиши из GetState (State.keymap); пока Go поля не шлёт (до G2) — не зовётся.
+  keymapLoaded(view: KeymapView): void
 
   // --- данные верха, из которых store строит ленту ---
   // Свои отметки фото (ID -> поля, поставленные в программе).
   marks(): MarkMap
+  // Порядок ленты (075): «По имени» — тот же массив, «По дате съёмки» — по ключу shot.
+  order(photos: Photo[]): Photo[]
   // Фото без скрытых папок (054): первый слой ленты, до «Не в альбоме» и отметок.
   folders(photos: Photo[]): Photo[]
   // Лента после фильтра по отметкам.
@@ -55,7 +60,9 @@ export const noHooks: StoreHooks = {
   reloaded: () => {},
   spreadsCleared: () => {},
   fontsLoaded: () => {},
+  keymapLoaded: () => {},
   marks: () => ({}),
+  order: (photos) => photos,
   folders: (photos) => photos,
   visible: (photos) => photos,
   free: (photos, used, backdrop) => photos.filter((p) => !used.has(p.id) && !backdrop.has(p.id)),

@@ -9,7 +9,7 @@ import { row } from '../../editor/spread/spreadrow.svelte'
 import { edit } from '../../editor/text/edit.svelte'
 import { ownMarks } from '../../panels/marks/ownmarks.svelte'
 import { gallery } from '../../panels/gallery/gallery.svelte'
-import { help } from './help.svelte'
+import { keysUi } from '../hotkeys/keysui.svelte'
 import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
 import { packsUi } from '../dialogs/packs.svelte'
@@ -33,51 +33,9 @@ import { isAlignOp, normAlignTo } from '../../panels/layouts/align'
 import { errText } from '../../base/words/errtext'
 import { effH, ZOOM_STEP } from '../../editor/zoom/zoom'
 import { newDoc } from '../newdoc/newdoc.svelte'
-import type { KeyAction } from './hotkeys'
-import type { Label, MarkPatch, RecentProject } from '../../base/core/types'
+import type { MarkPatch, RecentProject } from '../../base/core/types'
 
-// Команды без клавиши: только меню (и кнопки).
-export type MenuCommand =
-  | 'addFolder'
-  | 'relink'
-  | 'backups'
-  | 'packs'
-  | 'collect'
-  | 'showExport'
-  | 'settings'
-  | 'addText'
-  | 'pasteNames'
-  | 'flipH'
-  | 'flipV'
-  | 'gray'
-  | 'align'
-  | 'alignTo'
-  | 'turnCw'
-  | 'turnCcw'
-  | 'straighten'
-  | 'toggleSnap'
-  | 'toggleMarkup'
-  | 'allSpreads'
-  | 'levelSimple'
-  | 'levelStandard'
-  | 'levelFull'
-  | 'levelCustom'
-  | 'compareLevels'
-  | 'openRecent'
-  | 'clearRecent'
-  | 'startWindow'
-  | 'whatsNew'
-  | 'newSheet'
-  | 'makeVignette'
-  | 'vigSetup'
-  | 'varyLayouts'
-  | 'bgGallery'
-  | 'addSticker'
-  | 'copyDecor'
-  | 'spreadTpl'
-export type Command = KeyAction | MenuCommand
-
-// ev — клавиатурное событие, если команду вызвала клавиша: сдвиг стрелкой и Пробел берут из него клавишу.
+// ev — клавиатурное событие, если команду вызвала клавиша: сдвиг стрелкой и Пробел берут из него клавишу (служебные клавиши).
 // arg — параметр пункта меню (путь альбома у openRecent, действие у align, опора у alignTo).
 type Handler = (ev?: KeyboardEvent, arg?: string) => unknown
 
@@ -126,16 +84,14 @@ async function clearRecent() {
   }
 }
 
-// Цвета клавиш 6–9 (как в Lightroom); фиолетовый — только мышью.
-const KEY_LABEL: Record<string, Label> = { '6': 'red', '7': 'yellow', '8': 'green', '9': 'blue' }
+// Отметка выделенным фото ленты: свой id у каждой клавиши (074-7), событие не нужно. Тост без выделения — в ownMarks.setMarks.
+const mark = (patch: MarkPatch) => () => void ownMarks.setMarks(store, patch)
+const rate = (n: number) => mark({ rating: n })
+const label = (l: 'red' | 'yellow' | 'green' | 'blue') => mark({ label: l, toggle: true })
+const alignOp = (op: Parameters<typeof align.run>[0]) => () => align.run(op)
 
-// Отметка клавишей: без события (меню) и с чужой клавишей не делает ничего. Тост без выделения — в ownMarks.setMarks.
-function mark(ev: KeyboardEvent | undefined, patch: (key: string) => MarkPatch | null) {
-  const p = ev && patch(ev.key.toLowerCase())
-  if (p) void ownMarks.setMarks(store, p)
-}
-
-export const COMMANDS: Record<Command, Handler> = {
+// Все команды каталога клавиш (internal/keymap) и команды меню с параметром; commands.contract.test сверяет с каталогом.
+const HANDLERS = {
   // Файл
   new: () => newDoc.replace(Api.NewProject('album')),
   open: () => store.replaceState(Api.OpenProject()),
@@ -214,8 +170,17 @@ export const COMMANDS: Record<Command, Handler> = {
   flipH: () => placesel.flip('h'),
   flipV: () => placesel.flip('v'),
   gray: () => placesel.gray(),
-  align: (_e, op) => isAlignOp(op) && align.run(op),
-  alignTo: (_e, to) => align.setTo(normAlignTo(to)),
+  // Выровнять ▸: пункт меню с параметром и отдельные команды для клавиш (074-7)
+  align: (_e: KeyboardEvent | undefined, op?: string) => isAlignOp(op) && align.run(op),
+  alignTo: (_e: KeyboardEvent | undefined, to?: string) => align.setTo(normAlignTo(to)),
+  alignLeft: alignOp('left'),
+  alignHcenter: alignOp('hcenter'),
+  alignRight: alignOp('right'),
+  alignTop: alignOp('top'),
+  alignVcenter: alignOp('vcenter'),
+  alignBottom: alignOp('bottom'),
+  alignDistH: alignOp('distH'),
+  alignDistV: alignOp('distV'),
   turnCw: () => placesel.turn(1),
   turnCcw: () => placesel.turn(-1),
   straighten: () => straighten.startPhoto(),
@@ -234,16 +199,26 @@ export const COMMANDS: Record<Command, Handler> = {
   // Окно уровней рисует LevelsDialog (читает prefs.compare).
   compareLevels: () => (prefs.compare = true),
   fitZoom: () => canvas.fit(),
-  markRating: (e) => mark(e, (k) => (/^[0-5]$/.test(k) ? { rating: Number(k) } : null)),
-  markStep: (e) => mark(e, (k) => ({ step: k === ']' || k === 'ъ' ? 1 : -1 })),
-  markLabel: (e) => mark(e, (k) => (KEY_LABEL[k] ? { label: KEY_LABEL[k], toggle: true } : null)),
-  markPick: (e) => mark(e, () => ({ flag: 1 })),
-  markReject: (e) => mark(e, () => ({ flag: -1 })),
-  markUnflag: (e) => mark(e, () => ({ flag: 0 })),
+  // Отметки фото ленты (004)
+  markRating0: rate(0),
+  markRating1: rate(1),
+  markRating2: rate(2),
+  markRating3: rate(3),
+  markRating4: rate(4),
+  markRating5: rate(5),
+  markUp: mark({ step: 1 }),
+  markDown: mark({ step: -1 }),
+  markRed: label('red'),
+  markYellow: label('yellow'),
+  markGreen: label('green'),
+  markBlue: label('blue'),
+  markPick: mark({ flag: 1 }),
+  markReject: mark({ flag: -1 }),
+  markUnflag: mark({ flag: 0 }),
   zoomIn: () => zoomBy(ZOOM_STEP),
   zoomOut: () => zoomBy(1 / ZOOM_STEP),
   allSpreads: () => modes.openSection('grid'),
-  help: () => (help.open = true),
+  help: () => keysUi.show(),
   guide: () => guide.openFresh(),
   startWindow: () => (prefs.startOpen = true),
   // «Файл ▸ Новый проект: виньетка-лист…»: стартовое окно сразу на выборе листа (размер и «Создать» — там).
@@ -279,10 +254,18 @@ export const COMMANDS: Record<Command, Handler> = {
   bgExit: () => bgmode.exit(),
   bgNudge: (e) => e && bgmode.nudge(e.key, e.shiftKey),
   bgRemove: () => bgmode.remove(),
-  // Ctrl+R ниже «Полного»: окно не перезагружаем, больше ничего.
-  reload: () => {},
-}
+} satisfies Record<string, Handler>
+
+export type Command = keyof typeof HANDLERS
+export const COMMANDS: Record<Command, Handler> = HANDLERS
 
 export function run(cmd: Command, ev?: KeyboardEvent, arg?: string) {
   return COMMANDS[cmd](ev, arg)
+}
+
+// Клавиша: id пришёл из каталога Go. Которого нет в интерфейсе (каталог новее) — молча пропускаем;
+// commands.contract.test не даёт такому случиться в выпуске.
+export function runKey(id: string, ev: KeyboardEvent) {
+  const h = (COMMANDS as Record<string, Handler>)[id]
+  return h?.(ev)
 }

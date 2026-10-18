@@ -300,7 +300,7 @@ describe('имена из названий файлов (060)', () => {
     DropPhotos.mockResolvedValueOnce(reply({ named: ['a'] }))
     await dropGrid('g', '', ['a'], -1, false)
     const run = store.toast!.action!.run
-    store.view.rev = 5 // правка прошла, а тост ещё на экране (событие view без смены)
+    store.view = { ...store.view, rev: 5 } // правка прошла, а тост ещё на экране (событие view без смены)
     await run()
     expect(ForgetFileNames).not.toHaveBeenCalled()
     expect(store.toast?.text).toBe('Уже были другие изменения — имена не тронуты')

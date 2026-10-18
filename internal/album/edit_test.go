@@ -283,11 +283,11 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// TestSlowLog — строки G5 появляются дольше порога и не появляются ниже него;
+// TestSlowLog — строки G5 и правки (075-6) появляются дольше порога и не появляются ниже него;
 // в строке только счётчики, без путей.
 func TestSlowLog(t *testing.T) {
-	old := edtest.SlowOp()
-	defer func() { edtest.SetSlowOp(old) }()
+	old, oldEdit := edtest.SlowOp(), edtest.SlowEdit()
+	defer func() { edtest.SetSlowOp(old); edtest.SetSlowEdit(oldEdit) }()
 	photos := make([]model.PhotoInfo, 6)
 	for i := range photos {
 		photos[i] = model.PhotoInfo{ID: fmt.Sprintf("p%d", i), Path: fmt.Sprintf("/секрет/p%d.jpg", i), W: 300, H: 200}
@@ -304,10 +304,12 @@ func TestSlowLog(t *testing.T) {
 
 	// Порог 0: любая операция «медленная».
 	edtest.SetSlowOp(0)
+	edtest.SetSlowEdit(0)
 	buf := captureLog(t)
 	run(edtest.Open(t, &model.Project{Settings: model.DefaultSettings(), Photos: map[string]model.PhotoRef{}}, ""))
 	out := buf.String()
-	for _, want := range []string{"автосборка: 6 фото → 2 разворотов за ", "настройки: 2 разворотов за ", "View: 2 разворотов за "} {
+	for _, want := range []string{"автосборка: 6 фото → 2 разворотов за ", "настройки: 2 разворотов за ", "View: 2 разворотов за ",
+		"правка: 2 разворотов за "} {
 		if !strings.Contains(out, want) {
 			t.Errorf("нет строки %q в логе: %q", want, out)
 		}
@@ -316,12 +318,25 @@ func TestSlowLog(t *testing.T) {
 		t.Errorf("в логе путь: %q", out)
 	}
 
+	// Порог правки свой: при часе у правки и нуле у операций строки «правка» нет, прочие есть.
+	edtest.SetSlowEdit(time.Hour)
+	buf.Reset()
+	run(edtest.Open(t, &model.Project{Settings: model.DefaultSettings(), Photos: map[string]model.PhotoRef{}}, ""))
+	if out := buf.String(); strings.Contains(out, "правка:") || !strings.Contains(out, "View: ") {
+		t.Errorf("порог правки не свой: %q", out)
+	}
+
 	// Порог в час: ничего не пишется.
 	edtest.SetSlowOp(time.Hour)
+	edtest.SetSlowEdit(time.Hour)
 	buf.Reset()
 	run(edtest.Open(t, &model.Project{Settings: model.DefaultSettings(), Photos: map[string]model.PhotoRef{}}, ""))
 	if buf.Len() != 0 {
 		t.Errorf("ниже порога в логе: %q", buf.String())
+	}
+	// Пороги выпуска: правка — от 100 мс (цель 50 мс, 075-6), ниже операций.
+	if oldEdit != 100*time.Millisecond || oldEdit >= old {
+		t.Errorf("пороги: правка %v, операция %v", oldEdit, old)
 	}
 }
 

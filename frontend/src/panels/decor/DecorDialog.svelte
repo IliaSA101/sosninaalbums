@@ -75,7 +75,7 @@
 </script>
 
 {#if c && sp}
-  <Modal title={DECOR_TITLE[c.kind]} size="large" onclose={() => decor.close()}>
+  <Modal title={DECOR_TITLE[c.kind]} size="large" undo onclose={() => decor.close()}>
     <div class="body">
       <div class="side">
         <SideList

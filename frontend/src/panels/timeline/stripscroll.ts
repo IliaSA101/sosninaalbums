@@ -38,6 +38,12 @@ export class StripFollow {
     return moving && !this.wasMoving
   }
 
+  // Ряд стоит на месте (позиция та же, хода нет и не было), и мы уже писали прокрутку: при тех же центрах групп
+  // прокручивать нечего, а чтение scrollLeft форсировало бы раскладку ленты на каждую правку (075-16).
+  idle(pos: number, moving: boolean): boolean {
+    return !moving && !this.wasMoving && pos === this.lastPos && this.written !== null
+  }
+
   // Прокручивать ли в этом кадре; запоминает позицию и ход.
   next(pos: number, moving: boolean, scrollLeft: number): boolean {
     const go = shouldScroll({ posChanged: pos !== this.lastPos, movingStarted: this.starting(moving), scrollLeft, written: this.written })

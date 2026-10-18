@@ -52,7 +52,7 @@ func TestLogNoNames(t *testing.T) {
 func isLogCall(call *ast.CallExpr) bool {
 	switch fn := call.Fun.(type) {
 	case *ast.Ident:
-		return fn.Name == "logRare"
+		return fn.Name == "logRare" || fn.Name == "slow" || fn.Name == "slowAt" // album: обёртки над log
 	case *ast.SelectorExpr:
 		x, ok := fn.X.(*ast.Ident)
 		return ok && logCalls[fn.Sel.Name] && (x.Name == "log" || x.Name == "xl")

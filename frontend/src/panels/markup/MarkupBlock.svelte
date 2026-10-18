@@ -8,11 +8,6 @@
   // Один на карточку обложки и на «Настройки альбома» (развороты); применяется сразу, один шаг отмены.
   let { kind, guide }: { kind: MarkupKind; guide: GuideView | null } = $props()
 
-  // Стрелки ползунка не листают развороты.
-  const SLIDER_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'])
-  function sliderKey(e: KeyboardEvent) {
-    if (SLIDER_KEYS.has(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) e.stopPropagation()
-  }
   // Ползунок нужен, когда есть что показывать: картинка или хотя бы линии.
   const shown = $derived(!!guide && guide.ok && (guide.image || !!guide.lines?.length))
 </script>
@@ -44,7 +39,6 @@
         step="1"
         value={Math.round(markupUi.opacity[kind] * 100)}
         aria-label="Прозрачность разметки, %"
-        onkeydown={sliderKey}
         oninput={(e) => markupUi.setOpacity(kind, +e.currentTarget.value / 100)}
       />
     </label>

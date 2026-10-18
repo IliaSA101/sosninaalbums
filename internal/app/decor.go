@@ -331,8 +331,11 @@ func (a *App) AddSticker(spreadID string, page int, itemID string) (r StickerRes
 	}
 	// Пустой ID — стикер не встал (неизвестный лист): выделять нечего, в недавние не кладём.
 	v, id, err := ed.AddSticker(spreadID, page, src)
-	if err != nil || id == "" {
+	if err != nil {
 		return StickerResult{View: v}, err
+	}
+	if id == "" {
+		return StickerResult{View: a.out(v)}, nil
 	}
 	prefs.RememberDecor(a.cfgDir, decor.KindSticker, itemID)
 	return StickerResult{View: a.changed(v), ID: id}, nil
@@ -349,8 +352,11 @@ func (a *App) ReplaceSticker(spreadID, id, itemID string) (v model.View, err err
 		return ed.View(), err
 	}
 	v, changed, err := ed.ReplaceSticker(spreadID, id, src)
-	if err != nil || !changed {
+	if err != nil {
 		return v, err
+	}
+	if !changed {
+		return a.out(v), nil
 	}
 	prefs.RememberDecor(a.cfgDir, decor.KindSticker, itemID)
 	return a.changed(v), nil

@@ -2,7 +2,10 @@
 // переключить (уровень, лист, выделение, панели) и что подсветить. Проект не меняется никогда:
 // шаги правят только вид. Исполняет план guide.svelte.ts.
 import { buildMenu, type Menu, type MenuCtx, type MenuId } from '../menu/menu'
-import { HOTKEYS } from '../menu/hotkeys'
+import { keymap } from '../../base/keys/keymap.svelte'
+import { chordsText } from '../../base/keys/chordtext'
+import { isMac } from '../../base/core/platform'
+import { MOUSE_HELP } from '../menu/mousehelp'
 import { features, fromBase, shortOf, toggle } from '../../base/prefs/levelcustom'
 import { LEVEL_TITLE, RANK, minLevel, rowOf, type Base, type Custom, type FeatureId, type Level, type RowId } from '../../base/prefs/levels'
 import type { SectionName } from '../../base/prefs/view.svelte'
@@ -193,14 +196,18 @@ export interface KeyRow {
   label: string
 }
 
-// Строки таблицы клавиш статьи: по action или по show, без служебных.
+// Клавиши статьи: id команды из реестра (текущие сочетания, в том числе свои) или show справочной строки (мышь, жесты).
+// Команда без клавиши строки не даёт.
 export function keyRows(a: Article): KeyRow[] {
   const out: KeyRow[] = []
   for (const k of a.keys ?? []) {
-    for (const h of HOTKEYS) {
-      if (h.hidden || (h.action !== k && h.show !== k) || out.some((r) => r.show === h.show)) continue
-      out.push({ show: h.show, label: h.label })
+    const e = keymap.entry(k)
+    if (e) {
+      if (e.keys.length > 0 && !out.some((r) => r.label === e.label)) out.push({ show: chordsText(e.keys, isMac()), label: e.label })
+      continue
     }
+    const m = MOUSE_HELP.find((r) => r.show === k)
+    if (m && !out.some((r) => r.show === m.show)) out.push({ show: m.show, label: m.label })
   }
   return out
 }

@@ -55,6 +55,23 @@ describe('StripFollow', () => {
     expect(f.next(0, false, 0)).toBe(false)
   })
 
+  it('idle: ряд стоит и прокрутка уже писалась — прокручивать нечего', () => {
+    const f = new StripFollow()
+    expect(f.idle(0, false)).toBe(false) // ещё не писали
+    f.next(0, false, 0)
+    expect(f.idle(0, false)).toBe(false) // next был, wrote — нет
+    f.wrote(244)
+    expect(f.idle(0, false)).toBe(true)
+    expect(f.idle(1, false)).toBe(false) // позиция ряда сменилась
+    expect(f.idle(0, true)).toBe(false) // ряд идёт
+    f.next(0, true, 244)
+    expect(f.idle(0, false)).toBe(false) // ход только закончился — ещё один кадр
+    f.next(0, false, 244)
+    expect(f.idle(0, false)).toBe(true)
+    f.reset()
+    expect(f.idle(0, false)).toBe(false)
+  })
+
   it('начало хода — один раз', () => {
     const f = new StripFollow()
     expect(f.starting(true)).toBe(true)

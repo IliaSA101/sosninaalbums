@@ -74,6 +74,50 @@ func TestRememberDir(t *testing.T) {
 	}
 }
 
+// Свои клавиши (074): круг записи и чтения нескольких команд, пустой список («без клавиши»)
+// остаётся пустым списком, а не исчезает; пустой набор — ключа в файле нет.
+func TestConfigHotkeysRoundTrip(t *testing.T) {
+	dir := testkit.TempDir(t)
+	if c := LoadConfig(dir); c.Hotkeys != nil {
+		t.Fatalf("без файла: %v", c.Hotkeys)
+	}
+	want := map[string][]string{"toggleBig": {"KeyB", "Mod+KeyB"}, "toggleSafe": {}, "redo": {"Mod+KeyY"}}
+	UpdateConfig(dir, func(c *Config) { c.Hotkeys = want })
+	got := LoadConfig(dir).Hotkeys
+	if len(got) != 3 || !slices.Equal(got["toggleBig"], want["toggleBig"]) || !slices.Equal(got["redo"], want["redo"]) {
+		t.Fatalf("прочитано %v", got)
+	}
+	if l, ok := got["toggleSafe"]; !ok || l == nil || len(l) != 0 {
+		t.Errorf("«без клавиши» потеряно: %v", got)
+	}
+	data, _ := os.ReadFile(ConfigPath(dir))
+	if !strings.Contains(string(data), `"toggleSafe": []`) {
+		t.Errorf("пустой список записан не как []: %s", data)
+	}
+	UpdateConfig(dir, func(c *Config) { c.Hotkeys = map[string][]string{} })
+	if data, _ := os.ReadFile(ConfigPath(dir)); strings.Contains(string(data), "hotkeys") {
+		t.Errorf("пустой набор оставил ключ: %s", data)
+	}
+}
+
+// Чужие ключи config.json и незнакомые id в hotkeys (от новой версии) переживают правку
+// другого поля: prefs id не толкует.
+func TestConfigHotkeysForeignKept(t *testing.T) {
+	dir := testkit.TempDir(t)
+	raw := `{"future":{"x":1},"level":"full","hotkeys":{"futureCmd":["KeyQ"],"toggleBig":["KeyB"],"bad id":["?"]}}`
+	if err := os.WriteFile(ConfigPath(dir), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	UpdateConfig(dir, func(c *Config) { c.LastProject = "p.salbum" })
+	c := LoadConfig(dir)
+	if len(c.Hotkeys) != 3 || !slices.Equal(c.Hotkeys["futureCmd"], []string{"KeyQ"}) || !slices.Equal(c.Hotkeys["bad id"], []string{"?"}) {
+		t.Errorf("hotkeys после правки другого поля: %v", c.Hotkeys)
+	}
+	if data, _ := os.ReadFile(ConfigPath(dir)); !strings.Contains(string(data), `"future": {`) || c.Level != "full" {
+		t.Errorf("чужой ключ потерян: %s", data)
+	}
+}
+
 // TestRecentDecor — недавние плитки библиотеки: наверх без повторов, предел 12, мусор из файла
 // отбрасывается, виды раздельно, круг записи и чтения config.json; чужие ключи целы.
 func TestRecentDecor(t *testing.T) {
@@ -114,5 +158,40 @@ func TestRecentDecor(t *testing.T) {
 	data, _ := os.ReadFile(ConfigPath(dir))
 	if !strings.Contains(string(data), `"future": 1`) || strings.Contains(string(data), "Фоны") {
 		t.Errorf("config.json: %s", data)
+	}
+}
+
+// config.json больше предела читается как битый (пустой конфиг), а правка его не тянет в память:
+// переписывается заново без старого содержимого.
+func TestConfigTooBig(t *testing.T) {
+	dir := testkit.TempDir(t)
+	small := `{"level":"full","lastProject":"p.salbum"}`
+	if err := os.WriteFile(ConfigPath(dir), []byte(small), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if c := LoadConfig(dir); c.Level != "full" {
+		t.Fatalf("малый файл не прочитан: %+v", c)
+	}
+	// Ровно на пределе — читается; на байт больше — как битый.
+	pad := func(n int) []byte {
+		b := []byte(small[:len(small)-1] + `,"x":"`)
+		b = append(b, strings.Repeat("a", n-len(b)-2)...)
+		return append(b, '"', '}')
+	}
+	if err := os.WriteFile(ConfigPath(dir), pad(maxConfigSize), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if c := LoadConfig(dir); c.Level != "full" {
+		t.Errorf("файл ровно в предел не прочитан: %+v", c)
+	}
+	if err := os.WriteFile(ConfigPath(dir), pad(maxConfigSize+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if c := LoadConfig(dir); c.Level != "" || c.LastProject != "" {
+		t.Errorf("файл больше предела прочитан: %+v", c)
+	}
+	UpdateConfig(dir, func(c *Config) { c.LastProject = "q.salbum" })
+	if data, _ := os.ReadFile(ConfigPath(dir)); len(data) > 1<<10 || LoadConfig(dir).LastProject != "q.salbum" {
+		t.Errorf("после правки: %d байт, %+v", len(data), LoadConfig(dir))
 	}
 }

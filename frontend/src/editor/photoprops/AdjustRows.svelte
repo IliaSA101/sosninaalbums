@@ -51,11 +51,6 @@
     if (!needsGray(base, want)) return
     await gate.run(() => store.run(Api.SetGray([id])))
   }
-  // Стрелки ползунка не листают развороты (←/→ в общих хоткеях); шаг на нажатие даёт сам ползунок.
-  const KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'])
-  function keydown(e: KeyboardEvent) {
-    if (KEYS.has(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) e.stopPropagation()
-  }
   // Смена фото или уход панели: чужой просмотр не оставляем.
   $effect(() => {
     void id
@@ -90,7 +85,6 @@
       aria-valuetext={signed(cur[row])}
       oninput={(e) => liveSet(row, e)}
       onchange={(e) => commit(row, e)}
-      onkeydown={keydown}
       onblur={blur}
       onpointerup={(e) => e.currentTarget.blur()}
     />

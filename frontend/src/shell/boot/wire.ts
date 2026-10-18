@@ -4,12 +4,15 @@
 import { store } from '../../base/core/store.svelte'
 import { dropHooks } from '../../base/drag/dropact'
 import { drag } from '../../base/drag/drag.svelte'
+import { keymap } from '../../base/keys/keymap.svelte'
 import { dropAsk, dropGrid } from '../../base/drag/dropgrid.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
+import { modes } from '../../base/prefs/view.svelte'
 import { setBackdrop } from '../../editor/backdrop/backdropact'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { loadFonts } from '../../editor/text/fonts'
 import { freePhotos, pickFor } from '../../panels/library/freephotos'
+import { sortPhotos } from '../../panels/library/sortphotos'
 import { gallery } from '../../panels/gallery/gallery.svelte'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
 import { folderfilter } from '../../panels/folders/folderfilter.svelte'
@@ -53,7 +56,9 @@ export function wire() {
     spreadsCleared: () => spreadsel.clear(),
     // Не ждём: ошибка шрифта не должна мешать старту, текст пока рисуется запасным.
     fontsLoaded: (fonts) => void loadFonts(fonts),
+    keymapLoaded: (view) => keymap.apply(view),
     marks: () => ownMarks.map,
+    order: (photos) => sortPhotos(photos, modes.libSort),
     // Список папок читаем только при скрытых: без фильтра правка альбома ленту не трогает.
     folders: (photos) => (folderfilter.active ? filterFolders(store.view.folders, photos, folderfilter.hidden) : photos),
     visible: (photos) => filterPhotos(photos, ownMarks.map, libfilter),

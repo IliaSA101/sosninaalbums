@@ -65,7 +65,7 @@ beforeEach(() => {
   })
   store.current = 0
   store.navAt = 0
-  store.view.spreads = Array.from({ length: N }, (_, i) => ({ id: `s${i}`, photos: [] }))
+  store.view = { ...store.view, spreads: Array.from({ length: N }, (_, i) => ({ id: `s${i}`, photos: [] })) as never }
   go.mockReset()
   setGo()
   row.geo(P, N, false)

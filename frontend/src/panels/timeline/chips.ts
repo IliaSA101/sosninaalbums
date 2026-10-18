@@ -51,6 +51,24 @@ export function shownW(sp: SpreadView, expanded: string | null): number {
 // Раскрытая группа сворачивается, когда текущий разворот сменился (prev — прежний, cur — новый).
 export const afterNav = (expanded: string | null, prev: string, cur: string): string | null => (cur === prev ? expanded : null)
 
+// Ширина свёрнутой группы по объекту разворота: дельта вида (075) сохраняет неизменённые объекты, пересчёт — по сменившимся.
+const widths = new WeakMap<SpreadView, number>()
+
+// Подпись ширин всех групп ленты: меняется, только если сдвинулись центры групп (Timeline перемеряет их по ней,
+// а не на каждую правку: чтение offsetLeft после правки DOM заставляет браузер раскладывать ленту немедленно).
+export function widthsKey(spreads: readonly SpreadView[], expanded: string | null): string {
+  let out = ''
+  for (const sp of spreads) {
+    let w = sp.id === expanded ? undefined : widths.get(sp)
+    if (w === undefined) {
+      w = shownW(sp, expanded)
+      if (sp.id !== expanded) widths.set(sp, w)
+    }
+    out += w + ','
+  }
+  return out
+}
+
 // Фото спрятано под «+N» в свёрнутой группе — его выбор на холсте раскрывает группу.
 export function isHidden(sp: SpreadView, photo: string, expanded: string | null): boolean {
   if (asSheet(sp)) return false // лист виньетки не сворачивается — раскрывать нечего

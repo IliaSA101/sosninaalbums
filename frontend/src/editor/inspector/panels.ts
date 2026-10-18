@@ -1,6 +1,6 @@
 // Боковые панели правки (спека 008, panels.md): размеры, запас по бокам разворота и режим.
 // Чистые функции, без Svelte.
-import { HOTKEYS, type KeyAction } from '../../shell/menu/hotkeys'
+import { keymap } from '../../base/keys/keymap.svelte'
 import { plural } from '../../base/words/plural'
 
 export const M = 8 // отступ панелей от краёв окна холста
@@ -133,8 +133,5 @@ export function sideReserve(side: number, gap: number, docked: boolean, cols: nu
 // Наибольшая высота карточки: под ней — значок масштаба.
 export const inspectorMaxH = (vpH: number): number => Math.max(0, vpH - 2 * M - BADGE)
 
-// Клавиша для подсказки кнопки — из таблицы hotkeys.ts, без пояснения в скобках.
-export function keyHint(action: KeyAction): string {
-  const show = HOTKEYS.find((h) => h.action === action)?.show ?? ''
-  return show.replace(/\s*\(.*\)\s*$/, '')
-}
+// Клавиша для подсказки кнопки — из реестра клавиш (base/keys), нет клавиши — ''.
+export const keyHint = (id: string): string => keymap.hint(id)

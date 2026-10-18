@@ -406,18 +406,14 @@ func TestSaveLeavesNoTmp(t *testing.T) {
 	if err := Save(model.New(), path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
-		t.Fatal(".tmp остался после успешной записи")
-	}
+	noTmp(t, path)
 	// Ошибка переименования (цель — непустая папка): .tmp убирается.
 	bad := filepath.Join(dir, "d.salbum")
 	os.MkdirAll(filepath.Join(bad, "x"), 0o755)
 	if err := Save(model.New(), bad); err == nil {
 		t.Fatal("ждали ошибку записи поверх папки")
 	}
-	if _, err := os.Stat(bad + ".tmp"); !os.IsNotExist(err) {
-		t.Fatal(".tmp остался после ошибки")
-	}
+	noTmp(t, bad)
 }
 
 // root — корень диска временной папки: абсолютный путь на любой ОС.

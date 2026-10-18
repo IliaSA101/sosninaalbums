@@ -65,7 +65,8 @@ func probes() []probe {
 		{"DeleteSpread", kView, func(m *Methods) (model.View, error) { return ok(m.DeleteSpread("s1")) }},
 		{"DeleteSpreads", kView, func(m *Methods) (model.View, error) { return ok(m.DeleteSpreads([]string{"s1"})) }},
 		{"MoveSpread", kView, func(m *Methods) (model.View, error) { return ok(m.MoveSpread("s1", 1)) }},
-		{"SplitSpread", kView, func(m *Methods) (model.View, error) { return ok(m.SplitSpread("s1", 1)) }},
+		{"SplitSpread", kErr, func(m *Methods) (model.View, error) { return m.SplitSpread("s1", 1) }},
+		{"PurgePhotos", kView, func(m *Methods) (model.View, error) { return ok(m.PurgePhotos(ids)) }},
 		{"MergeSpreads", kView, func(m *Methods) (model.View, error) { return ok(m.MergeSpreads("s1")) }},
 		{"SetLayout", kView, func(m *Methods) (model.View, error) { return ok(m.SetLayout("s1", "x")) }},
 		{"StepLayout", kView, func(m *Methods) (model.View, error) { return ok(m.StepLayout("s1", "spread", 1)) }},
@@ -230,6 +231,7 @@ func TestFailWhenEditorAlwaysPanics(t *testing.T) {
 	m := New(Host{
 		Editor:      func() *album.Editor { panic("нет Editor") },
 		Changed:     func(v model.View) model.View { t.Error("Changed после паники"); return v },
+		Out:         func(v model.View) model.View { t.Error("Out после паники"); return v },
 		Notice:      func(s string) { notes = append(notes, s) },
 		Infos:       func([]string) []model.PhotoInfo { return nil },
 		InfosOrRefs: func([]string) []model.PhotoInfo { return nil },
@@ -253,6 +255,7 @@ func TestNewRejectsEmptyHostField(t *testing.T) {
 		return Host{
 			Editor:      func() *album.Editor { return nil },
 			Changed:     func(v model.View) model.View { return v },
+			Out:         func(v model.View) model.View { return v },
 			Notice:      func(string) {},
 			Infos:       func([]string) []model.PhotoInfo { return nil },
 			InfosOrRefs: func([]string) []model.PhotoInfo { return nil },

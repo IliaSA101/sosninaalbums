@@ -115,8 +115,9 @@
       css: (t: number) => `opacity:${t};transform:${turn}scale(${0.85 + 0.15 * t})`,
     }
   }
+  // Исчезающий слот не ловит указатель: его обработчики читают производные уже неживого владельца (derived_inert).
   function vanish(_node: Element) {
-    return mini ? { duration: 0 } : { duration: 140, css: (t: number) => `opacity:${t}` }
+    return mini ? { duration: 0 } : { duration: 140, css: (t: number) => `opacity:${t};pointer-events:none` }
   }
 </script>
 

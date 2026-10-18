@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keymap } from '../../base/keys/keymap.svelte'
   import type { LayoutScope, SpreadView, VigChoice } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
   import { gridAct } from './gridact.svelte'
@@ -133,7 +134,7 @@
           class="arrow"
           onpointerdown={stop}
           onclick={() => gallery.step('spread', -1)}
-          title="Предыдущий шаблон виньетки (Shift+пробел)"
+          title={keymap.tip('Предыдущий шаблон виньетки', 'spaceDown', 1)}
           aria-label="Предыдущий шаблон виньетки"><Icon name="chevron-left" /></button
         >
       {/if}
@@ -165,7 +166,7 @@
             class="arrow"
             onpointerdown={stop}
             onclick={() => gallery.step('spread', 1)}
-            title="Следующий шаблон виньетки (пробел)"
+            title={keymap.tip('Следующий шаблон виньетки', 'spaceDown')}
             aria-label="Следующий шаблон виньетки"><Icon name="chevron-right" /></button
           >
         {/snippet}
@@ -227,7 +228,7 @@
           disabled={stillSpread(spread)}
           onpointerdown={stop}
           onclick={() => gallery.step('spread', -1)}
-          title="Предыдущая раскладка (Shift+пробел)"
+          title={keymap.tip('Предыдущая раскладка', 'spaceDown', 1)}
           aria-label="Предыдущая раскладка разворота"><Icon name="chevron-left" /></button
         >
       {/if}
@@ -248,7 +249,7 @@
           disabled={stillSpread(spread)}
           onpointerdown={stop}
           onclick={() => gallery.step('spread', 1)}
-          title="Следующая раскладка (пробел)"
+          title={keymap.tip('Следующая раскладка', 'spaceDown')}
           aria-label="Следующая раскладка разворота"><Icon name="chevron-right" /></button
         >
       {/if}

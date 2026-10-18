@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url'
 import { bigState } from './perf-open/state.mjs'
 
 // Пороги приёмки §7.
-const LIMITS = { longest: 500, total: 1000, dom: 4000, img: 300 }
+// edit — правка дельтой после прогрева (075), editCold — первая правка после открытия (JIT, первые кэши; 075-17), мс
+const LIMITS = { longest: 500, total: 1000, dom: 4000, img: 300, edit: 20, editCold: 30 }
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
@@ -260,27 +261,33 @@ try {
     `({lt:(window.__lt||[]).filter(x=>x.s>=${t0}-5), img:document.images.length, dom:document.getElementsByTagName('*').length, spreads:document.querySelectorAll('.spread').length, err:window.__err.slice(-5)})`,
   )
   const opened = media.length - m0
-  const edit = await ev('window.__mock.timeEdit(6)')
+  const edit = await ev("window.__mock.timeEdit(7, 'delta')")
+  const editFull = await ev("window.__mock.timeEdit(6, 'full')")
   if (r.err.length) console.log('perf-open: ошибки страницы:', r.err.join(' | '))
 
   const longest = Math.max(0, ...r.lt.map((x) => x.d))
   const total = r.lt.reduce((s, x) => s + x.d, 0)
-  const editMax = Math.max(...edit)
+  const editCold = edit[0]
+  const editMax = Math.max(...edit.slice(1))
+  const editFullMax = Math.max(...editFull)
   const rows = [
     ['Самая длинная задача', longest, 'мс', LIMITS.longest],
     ['Сумма длинных задач', total, 'мс', LIMITS.total],
     ['DOM (узлов)', r.dom, '', LIMITS.dom],
     ['img', r.img, '', LIMITS.img],
+    ['Правка до кадра (дельта)', editMax, 'мс', LIMITS.edit],
+    ['Первая правка (холодная)', editCold, 'мс', LIMITS.editCold],
   ]
   console.log(`\nОткрытие big200 из «Последних» (разворотов в DOM: ${r.spreads}, длинных задач: ${r.lt.length})`)
   let fail = 0
   for (const [name, v, unit, lim] of rows) {
     const ok = v <= lim
     if (!ok) fail++
-    console.log(`  ${ok ? 'OK  ' : 'FAIL'} ${name.padEnd(22)} ${String(v).padStart(7)} ${unit.padEnd(2)} (порог ≤ ${lim})`)
+    console.log(`  ${ok ? 'OK  ' : 'FAIL'} ${name.padEnd(26)} ${String(v).padStart(7)} ${unit.padEnd(2)} (порог ≤ ${lim})`)
   }
   console.log(`  --   Запросы /media         ${String(opened).padStart(7)}    (на открытие; всего ${media.length})`)
-  console.log(`  --   Правка до кадра        ${String(editMax).padStart(7)} мс (макс. из ${edit.join(', ')}; цель ≤ 60)`)
+  console.log(`  --   Правка, дельта         ${String(editMax).padStart(7)} мс (первая ${editCold}, макс. остальных из ${edit.slice(1).join(', ')}; цель ≤ ${LIMITS.edit})`)
+  console.log(`  --   Правка, полный вид     ${String(editFullMax).padStart(7)} мс (макс. из ${editFull.join(', ')}; для сравнения, как до 075)`)
   code = fail ? 1 : 0
   console.log(fail ? `\nperf-open: ПРОВАЛ, порогов нарушено: ${fail}` : '\nperf-open: OK')
 } catch (e) {

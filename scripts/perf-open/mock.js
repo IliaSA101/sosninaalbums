@@ -13,6 +13,7 @@
     folders: [],
     path: '',
     rev: 1,
+    seq: 1, // стартовый вид раньше открытого альбома в цепочке (075)
   })
   const empty = {
     ...big,
@@ -83,16 +84,32 @@
       }),
     },
   }
+  // Номер вида в цепочке App (075): растёт на каждый отданный вид.
+  let seq = big.view.seq
   window.__mock = {
-    // Время правки до кадра: применение вида + раскладка + отрисовка (rAF, затем задача), мс.
-    timeEdit(n = 6) {
+    // Время правки до кадра: разбор JSON (мост Wails) + применение вида + раскладка + отрисовка (rAF, затем задача), мс.
+    // mode 'delta' — как после 075: шапка и один изменённый разворот; 'full' — весь вид, как до 075.
+    timeEdit(n = 6, mode = 'delta') {
+      // Строка JSON готовится заранее: в замер входит только разбор, как у моста.
+      const wire = (k) => {
+        seq++
+        const v = copy(big.view)
+        v.rev = big.view.rev + 10 + k + (mode === 'delta' ? 0 : 1000)
+        v.seq = seq
+        const i = k % v.spreads.length
+        v.spreads[i].name = 'Правка ' + mode + k
+        if (mode === 'delta') {
+          v.base = seq - 1
+          v.order = v.spreads.map((s) => s.id)
+          v.spreads = [v.spreads[i]]
+        }
+        return JSON.stringify(v)
+      }
       const one = (k) =>
         new Promise((res) => {
-          const v = copy(big.view)
-          v.rev = big.view.rev + 10 + k
-          v.spreads[k % v.spreads.length].name = 'Правка ' + k
+          const text = wire(k)
           const t = performance.now()
-          emit('view', v)
+          emit('view', JSON.parse(text))
           requestAnimationFrame(() => setTimeout(() => res(performance.now() - t), 0))
         })
       return (async () => {

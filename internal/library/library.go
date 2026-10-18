@@ -10,6 +10,7 @@ import (
 	_ "image/png"  // то же
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 )
@@ -24,6 +25,9 @@ type Photo struct {
 	Rotate int    `json:"-"` // EXIF Orientation
 	// Taken — время съёмки (EXIF), секунды Unix, местное время камеры как UTC; 0 — нет. Для серий автосборки.
 	Taken int64 `json:"-"`
+	// Shot — ключ порядка «по дате съёмки» (075-14), секунды «стенного» времени как UTC: EXIF Taken,
+	// без него — время файла в местном поясе (ShotKey); 0 — нет и того, и другого.
+	Shot int64 `json:"shot,omitempty"`
 	// Size — размер файла в байтах (из Stat при чтении).
 	Size int64 `json:"size,omitempty"`
 	// Color и Profile — класс и имя цветового профиля: от них зависят значки в интерфейсе.
@@ -31,6 +35,20 @@ type Photo struct {
 	Profile string        `json:"profile,omitempty"`
 	// Xmp — отметки из файла (XMP в JPEG и сайдкар); nil — нет, чтобы не раздувать событие library.
 	Xmp *Marks `json:"xmp,omitempty"`
+}
+
+// ShotKey — ключ порядка по дате съёмки: время EXIF (taken, уже «стенное» время камеры как UTC),
+// иначе время изменения файла mod, переведённое в местное и записанное теми же полями как UTC.
+// Одна шкала: иначе фото без EXIF уезжали бы относительно снятых на часовой пояс. 0 — времени нет.
+func ShotKey(taken int64, mod time.Time) int64 {
+	if taken > 0 {
+		return taken
+	}
+	if mod.IsZero() {
+		return 0
+	}
+	l := mod.In(time.Local)
+	return time.Date(l.Year(), l.Month(), l.Day(), l.Hour(), l.Minute(), l.Second(), 0, time.UTC).Unix()
 }
 
 func (p Photo) Aspect() float64 {
@@ -99,7 +117,7 @@ func readHead(path string) (Photo, []byte, error) {
 	}
 	return Photo{
 		ID: IDFor(path), Path: path, Name: filepath.Base(path), W: w, H: h,
-		Rotate: head.Orient, Taken: head.Taken, Size: st.Size(), Color: col, Profile: prof,
+		Rotate: head.Orient, Taken: head.Taken, Shot: ShotKey(head.Taken, st.ModTime()), Size: st.Size(), Color: col, Profile: prof,
 	}, head.XMP, nil
 }
 

@@ -1,8 +1,8 @@
 // Строка меню «Файл · Правка · Вид · Справка» (спека 010, design-ui §2). Чистая логика: что показать
 // и что серое по ситуации; выполняет команду `commands.run`, рисует MenuBar.svelte.
-// Клавиши берутся из HOTKEYS — одна таблица на клавиши, справку и меню.
+// Клавиши берутся из реестра (base/keys) — один список на клавиши, справку и меню.
 import type { Command } from './commands'
-import { HOTKEYS } from './hotkeys'
+import { keymap } from '../../base/keys/keymap.svelte'
 import { ALIGN_OPS, ALIGN_TO, alignBlock, type AlignTo } from '../../panels/layouts/align'
 import type { Zone } from '../../editor/places/groupsel'
 import { ALL_LEVELS, LEVEL_TITLE, type FeatureId, type Level } from '../../base/prefs/levels'
@@ -66,10 +66,33 @@ export interface MenuCtx {
   alignTo?: AlignTo // опора «Относительно»; нет — «Выделения»
 }
 
-// Клавиша команды для подписи пункта: короткая запись строки таблицы, иначе её show.
-export function keysOf(cmd: Command): string | undefined {
-  const h = HOTKEYS.find((r) => r.action === cmd && r.combos)
-  return h ? (h.menu ?? h.show) : undefined
+// Id команды каталога для пункта: align с параметром — отдельные alignLeft…alignDistV (074-7);
+// команды с путём или опорой (openRecent, clearRecent, alignTo) клавиши не имеют.
+export function keyId(cmd: Command, arg?: string): string | undefined {
+  if (cmd === 'align') return arg ? 'align' + arg[0].toUpperCase() + arg.slice(1) : undefined
+  return cmd === 'alignTo' || cmd === 'openRecent' || cmd === 'clearRecent' ? undefined : cmd
+}
+
+// Клавиша команды для подписи пункта: первая из действующих (в том числе своя).
+export function keysOf(cmd: Command, arg?: string): string | undefined {
+  const id = keyId(cmd, arg)
+  return (id && keymap.hint(id)) || undefined
+}
+
+// Команды каталога, чей пункт меню виден и не серый (ни он сам, ни его подменю): по ним клавиша
+// команды без своих условий срабатывает (074-8). Пункт под серым родителем не считается.
+export function enabledCmds(menus: Menu[]): Set<string> {
+  const out = new Set<string>()
+  const walk = (items: MenuItem[]) => {
+    for (const it of items) {
+      if (it.disabled) continue
+      const id = it.cmd && keyId(it.cmd, it.arg)
+      if (id) out.add(id)
+      if (it.sub) walk(it.sub)
+    }
+  }
+  for (const m of menus) walk(m.items)
+  return out
 }
 
 interface Spec extends Omit<MenuItem, 'keys' | 'sub'> {
@@ -97,7 +120,7 @@ function build(groups: Spec[][], can: (f: Feature) => boolean): MenuItem[] {
       const it: MenuItem = { id: spec.id, label: spec.label, ...plain(spec) }
       if (spec.cmd) {
         it.cmd = spec.cmd
-        it.keys = keysOf(spec.cmd)
+        it.keys = keysOf(spec.cmd, spec.arg)
       }
       if (spec.sub) {
         it.sub = build([spec.sub], can)

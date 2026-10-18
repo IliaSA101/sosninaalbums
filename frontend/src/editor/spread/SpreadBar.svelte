@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keymap } from '../../base/keys/keymap.svelte'
   import { store } from '../../base/core/store.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { gallery } from '../../panels/gallery/gallery.svelte'
@@ -28,8 +29,12 @@
 <div class="bar">
   {#if sp}
     <div class="nav">
-      <button class="icon" disabled={row.near === 0} onclick={() => row.step(-1)} title="Предыдущий (←)" aria-label="Предыдущий {unit.one}"
-        ><Icon name="chevron-left" /></button
+      <button
+        class="icon"
+        disabled={row.near === 0}
+        onclick={() => row.step(-1)}
+        title={keymap.tip('Предыдущий', 'prevSpread')}
+        aria-label="Предыдущий {unit.one}"><Icon name="chevron-left" /></button
       >
       <span class="label counter"
         >{#if onCover}<b>Обложка</b>{:else}{unit.cap} <b>{shown}</b> из {total}{/if}</span
@@ -38,7 +43,7 @@
         class="icon"
         disabled={row.atNew || (canvas.zoomed && store.sheetIndex >= slots - 1)}
         onclick={() => row.step(1)}
-        title="Следующий (→)"
+        title={keymap.tip('Следующий', 'nextSpread')}
         aria-label="Следующий {unit.one}"><Icon name="chevron-right" /></button
       >
       <!-- Ячейка фиксированной ширины: название не двигает стрелки при листании -->
@@ -49,12 +54,15 @@
         <button
           class="icon"
           onclick={() => gallery.step('spread', -1)}
-          title="Предыдущая раскладка (Shift+пробел)"
+          title={keymap.tip('Предыдущая раскладка', 'spaceDown', 1)}
           aria-label="Предыдущая раскладка"><Icon name="caret-left" size={12} /></button
         >
         <span class="label counter" title="Другие варианты расположения тех же фото">Раскладка {variantCounter(sp)}</span>
-        <button class="icon" onclick={() => gallery.step('spread', 1)} title="Другая раскладка (пробел)" aria-label="Следующая раскладка"
-          ><Icon name="caret-right" size={12} /></button
+        <button
+          class="icon"
+          onclick={() => gallery.step('spread', 1)}
+          title={keymap.tip('Другая раскладка', 'spaceDown')}
+          aria-label="Следующая раскладка"><Icon name="caret-right" size={12} /></button
         >
         <!-- Место под пометку держится всегда: навигация не прыгает -->
         <span class="mark" class:hidden={!sp.rearranged} title="Фото стоят не в порядке ленты">· перестановка</span>
@@ -67,8 +75,9 @@
         class="ghost act"
         disabled={!store.selectedCell}
         onclick={() => placesel.deleteSelected()}
-        title="Убрать выбранное фото (Del)"
-        aria-label="Убрать фото"><Icon name="photo-minus" size={18} stroke={1.8} /><span class="text">Убрать фото (Del)</span></button
+        title={keymap.tip('Убрать выбранное фото', 'removeCell')}
+        aria-label="Убрать фото"
+        ><Icon name="photo-minus" size={18} stroke={1.8} /><span class="text">{keymap.tip('Убрать фото', 'removeCell')}</span></button
       >
       {#if onCover}
         <button class="ghost act" onclick={() => store.deleteCover()} title="Удалить обложку" aria-label="Удалить обложку"

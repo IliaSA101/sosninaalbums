@@ -6,11 +6,14 @@
   import { canvas } from '../canvas/canvas.svelte'
   import { row } from '../spread/spreadrow.svelte'
   import { percent } from './zoom'
+  import { keymap } from '../../base/keys/keymap.svelte'
   import { zoomui } from './zoomui.svelte'
   import ZoomSlider from './ZoomSlider.svelte'
 
   const p = $derived(percent(canvas.cur.z))
   const can = $derived(prefs.can('zoom'))
+  // Клавиша «вписать» — из реестра: после переназначения подсказка не врёт
+  const fitTip = $derived('Ctrl+колесо — масштаб' + (keymap.hint('fitZoom') ? `, ${keymap.hint('fitZoom')} — вписать` : ''))
 
   let badge: HTMLButtonElement | undefined = $state()
   let slider: ZoomSlider | undefined = $state()
@@ -85,7 +88,7 @@
     onkeydown={keydown}
     onpointerenter={() => zoomui.hover(true)}
     onpointerleave={() => zoomui.hover(false)}
-    title="Ctrl+колесо — масштаб, 0 — вписать"
+    title={fitTip}
     aria-label={can ? `Масштаб ${p} %. Щелчок — бегунок, двойной щелчок — вписать` : `Масштаб ${p} %, вписать`}>{p} %</button
   >
 </div>

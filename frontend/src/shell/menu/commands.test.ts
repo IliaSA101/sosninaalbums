@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { COMMANDS } from './commands'
+import { COMMANDS, runKey } from './commands'
 import { canvas } from '../../editor/canvas/canvas.svelte'
+import { align } from '../../panels/layouts/align.svelte'
 import { ownMarks } from '../../panels/marks/ownmarks.svelte'
-import { HOTKEYS, KEY_ACTIONS } from './hotkeys'
+import { catalogView } from '../../base/keys/keymap.fixture'
 import { buildMenu, type MenuCtx, type MenuItem } from './menu'
 import { store } from '../../base/core/store.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
@@ -54,44 +55,69 @@ describe('команды', () => {
     }
   })
 
-  it('у каждого действия таблицы клавиш есть команда', () => {
-    for (const a of KEY_ACTIONS) expect(typeof COMMANDS[a], a).toBe('function')
-    for (const h of HOTKEYS) if (h.action) expect(COMMANDS[h.action], h.show).toBeDefined()
+  it('у каждой команды каталога клавиш есть обработчик', () => {
+    for (const e of catalogView.commands) expect(typeof (COMMANDS as Record<string, unknown>)[e.id], e.id).toBe('function')
   })
 
-  it('Ctrl+R ничего не делает, но команда есть (окно не перезагружается)', () => {
-    expect(COMMANDS.reload()).toBeUndefined()
-  })
-
-  it('клавиши отметок собирают MarkPatch из e.key', () => {
+  it('у каждого id отметок свой MarkPatch — событие и e.key не нужны (074-7)', () => {
     const set = vi.spyOn(ownMarks, 'setMarks').mockResolvedValue(true)
-    const key = (k: string) => ({ key: k }) as KeyboardEvent
-    COMMANDS.markRating(key('4'))
-    COMMANDS.markRating(key('0'))
-    COMMANDS.markStep(key(']'))
-    COMMANDS.markStep(key('х'))
-    COMMANDS.markStep(key('ъ'))
-    COMMANDS.markLabel(key('7'))
-    COMMANDS.markPick(key('p'))
-    COMMANDS.markReject(key('x'))
-    COMMANDS.markUnflag(key('u'))
+    const run = [
+      COMMANDS.markRating0,
+      COMMANDS.markRating1,
+      COMMANDS.markRating4,
+      COMMANDS.markRating5,
+      COMMANDS.markUp,
+      COMMANDS.markDown,
+      COMMANDS.markRed,
+      COMMANDS.markYellow,
+      COMMANDS.markGreen,
+      COMMANDS.markBlue,
+      COMMANDS.markPick,
+      COMMANDS.markReject,
+      COMMANDS.markUnflag,
+    ]
+    for (const h of run) h()
     expect(set.mock.calls.map((c) => c[1])).toEqual([
-      { rating: 4 },
       { rating: 0 },
+      { rating: 1 },
+      { rating: 4 },
+      { rating: 5 },
       { step: 1 },
       { step: -1 },
-      { step: 1 },
+      { label: 'red', toggle: true },
       { label: 'yellow', toggle: true },
+      { label: 'green', toggle: true },
+      { label: 'blue', toggle: true },
       { flag: 1 },
       { flag: -1 },
       { flag: 0 },
     ])
-    // Без события (меню) и с чужой клавишей — ничего.
-    set.mockClear()
-    COMMANDS.markRating()
-    COMMANDS.markLabel(key('1'))
-    expect(set).not.toHaveBeenCalled()
     set.mockRestore()
+  })
+
+  it('alignLeft…alignDistV (074-7): каждая клавиша — своё выравнивание, без параметра пункта меню', () => {
+    const run = vi.spyOn(align, 'run').mockImplementation(() => Promise.resolve(true) as never)
+    for (const id of [
+      'alignLeft',
+      'alignHcenter',
+      'alignRight',
+      'alignTop',
+      'alignVcenter',
+      'alignBottom',
+      'alignDistH',
+      'alignDistV',
+    ] as const)
+      COMMANDS[id]()
+    expect(run.mock.calls.map((c) => c[0])).toEqual(['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom', 'distH', 'distV'])
+    run.mockRestore()
+  })
+
+  it('runKey: id, которого нет в интерфейсе, молча пропускается; известный выполняется', () => {
+    const fit = vi.spyOn(canvas, 'fit').mockImplementation(() => {})
+    expect(runKey('noSuchCommand', {} as KeyboardEvent)).toBeUndefined()
+    runKey('fitZoom', {} as KeyboardEvent)
+    expect(fit).toHaveBeenCalledOnce()
+    fit.mockRestore()
   })
 
   it('«Настроить виньетку…»: на виньетке открывает окно этого листа; на обычном листе и на «Простом» — молчит', () => {

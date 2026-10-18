@@ -151,14 +151,9 @@ const maxWorkers = 8
 // WarmLayouts прогревает ряд «в порядке ленты» (layout.Cached), ряд «Авто» по формам (variety.Row)
 // и «Другие варианты» (ExtraRow: счётчик «i / N» в View) у разворотов параллельно: следующий за
 // ним последовательный код попадает в кэш. Паника — только в лог: тот же счёт повторится последовательно и поведёт себя как раньше.
-func (p *Project) WarmLayouts(spreads []*Spread) { p.WarmLayoutsProgress(spreads, nil) }
-
-// WarmLayoutsProgress — WarmLayouts с ходом (073, окно «Открываем альбом»): done(n) — готово n
-// разворотов из len(spreads), после каждого (и упавшего с паникой). Зовётся по одному, n растёт
-// на 1: счётчик и вызов — под одним замком, иначе воркеры обгоняли бы друг друга и ход шёл назад.
-// done == nil — без хода; без параллельности не греет и done не зовёт.
-func (p *Project) WarmLayoutsProgress(spreads []*Spread, done func(n int)) {
-	WarmAspects(p.WarmJobs(spreads), p.Params(), done)
+// Без хода; ход открытия (073) — WarmAspects со счётчиком done.
+func (p *Project) WarmLayouts(spreads []*Spread) {
+	WarmAspects(p.WarmJobs(spreads), p.Params(), nil)
 }
 
 // WarmJob — вход прогрева одного разворота, отдельный от проекта: пропорции — своя копия.
@@ -177,7 +172,10 @@ func (p *Project) WarmJobs(spreads []*Spread) []WarmJob {
 	return jobs
 }
 
-// WarmAspects — WarmLayoutsProgress по снимку, без проекта. Кэши раскладок — чистые функции
+// WarmAspects — прогрев WarmLayouts по снимку, без проекта, с ходом (073, окно «Открываем альбом»):
+// done(n) — готово n разворотов из len(jobs), после каждого (и упавшего с паникой). Зовётся по
+// одному, n растёт на 1: счётчик и вызов — под одним замком, иначе воркеры обгоняли бы друг друга
+// и ход шёл назад. done == nil — без хода; без параллельности не греет и done не зовёт. Кэши раскладок — чистые функции
 // (пропорции, Params, длина ряда): снимок, устаревший из-за правки, греет ненужный ключ — лишняя
 // работа, но не неверный вид.
 func WarmAspects(jobs []WarmJob, prm layout.Params, done func(n int)) {

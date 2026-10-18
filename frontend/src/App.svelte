@@ -16,7 +16,7 @@
   import AutoAskDialog from './shell/ask/AutoAskDialog.svelte'
   import DropAskDialog from './shell/ask/DropAskDialog.svelte'
   import AutoBuildDialog from './shell/autobuild/AutoBuildDialog.svelte'
-  import HotkeysHelp from './shell/menu/HotkeysHelp.svelte'
+  import KeysDialog from './shell/hotkeys/KeysDialog.svelte'
   import Guide from './shell/guide/Guide.svelte'
   import Spot from './shell/guide/Spot.svelte'
   import { guide } from './shell/guide/guidestate.svelte'
@@ -42,9 +42,12 @@
   import { gallery } from './panels/gallery/gallery.svelte'
   import { placesel } from './editor/places/placesel.svelte'
   import { canvas } from './editor/canvas/canvas.svelte'
-  import { run } from './shell/menu/commands'
-  import { help } from './shell/menu/help.svelte'
-  import { isTextField, keyAction, preventsDefault } from './shell/menu/keys'
+  import { run, runKey } from './shell/menu/commands'
+  import { keysUi } from './shell/hotkeys/keysui.svelte'
+  import { guardsBrowser, isTextField, isWidget, keyCommand, preventsDefault, type DialogState } from './shell/menu/keys'
+  import { menuOn } from './shell/menu/menuctx'
+  import { eventChord, isSpace } from './base/keys/chord'
+  import { modalStack } from './base/ui/modalstack.svelte'
   import { zoneOf } from './editor/places/groupsel'
   import { bgmode } from './editor/backdrop/bgmode.svelte'
   import { prefs } from './base/prefs/prefs.svelte'
@@ -63,7 +66,7 @@
   // Пробел листает раскладки «Авто»: у сетки их нет, у обложки (032) тоже.
   const noAutoLayouts = () => !!store.spread?.grid || store.onCover
 
-  // Открыт вопрос ручного листа (автораскладка, броски, копия сетки): под ним F1 и Ctrl+N/O/E молчат.
+  // Открыт вопрос ручного листа (автораскладка, броски, копия сетки): под ним F1 молчит.
   const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!gridAct.copyGrid
 
   // Открыто окно фоновой работы Go: экспорт, его памятка, сбор в папку (069) или «Открываем альбом» (073: F1 не открывает справочник под ним).
@@ -72,26 +75,16 @@
   // F1 — справочник функций (033). В WebView2 он открыл бы справку браузера, поэтому гасится всегда.
   // Поверх стартового окна и окна уровней справочник открывается; под другими окнами и сам справочник — нет.
   function f1(e: KeyboardEvent): boolean {
-    if (e.key !== 'F1' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false
+    if (eventChord(e) !== 'F1') return false
     e.preventDefault()
     const other =
-      help.open || backupsUi.open || packsUi.open || namesUi.open || !!vigDialog.id || !!store.autoDraft || jobsOpen() || askOpen()
+      keysUi.open || backupsUi.open || packsUi.open || namesUi.open || !!vigDialog.id || !!store.autoDraft || jobsOpen() || askOpen()
     if (!guide.open && !other) guide.openFresh()
     return true
   }
 
-  // Окна, под которыми клавиши приложения молчат (Esc закрывает само окно).
-  const underDialog = () =>
-    guide.open ||
-    jobs.collectOpen ||
-    jobs.openShown ||
-    prefs.startOpen ||
-    prefs.compare ||
-    backupsUi.open ||
-    packsUi.open ||
-    namesUi.open ||
-    !!vigDialog.id ||
-    !!store.autoDraft
+  // Окно открыто: отмена и повтор — только под окнами, что сами правят альбом (Modal undo), под остальными клавиши молчат (074-18, 074-28).
+  const dialogState = (): DialogState | undefined => (modalStack.any() ? (modalStack.topUndo() ? 'undo' : 'shut') : undefined)
   // Цель события бывает не Element (document/window, синтетическое событие) — тогда null.
   const targetEl = (e: Event) => (e.target instanceof Element ? e.target : null)
   const isCheckbox = (t: Element | null) => !!t?.matches("input[type='checkbox']")
@@ -99,16 +92,10 @@
   function keys(e: KeyboardEvent) {
     const t = targetEl(e)
     if (f1(e)) return
-    // Пока открыта справка, клавиши не работают; Esc её закрывает (если фокус ушёл из окна).
-    if (help.open) {
-      if (e.key === 'Escape') help.open = false
-      return
-    }
-    // Стартовое окно и окно уровней: клавиши под ними молчат (Esc закрывает само окно).
-    if (underDialog()) return
-    // Хоткеи глушим только при вводе текста/чисел (в том числе в contenteditable); select и ползунок их не блокируют.
-    const act = keyAction(e, {
+    // Клавиши глушим при вводе текста/чисел (в том числе в contenteditable); ползунку, select и списку остаются их стрелки.
+    const id = keyCommand(e, {
       inTextField: isTextField(t),
+      widget: isWidget(t),
       onCheckbox: isCheckbox(t),
       galleryOpen: !!gallery.cur,
       hasSelection: store.selectedIds.length > 0,
@@ -119,17 +106,23 @@
       zone: store.zone,
       bgMode: !!bgmode.cur,
       big: modes.big,
-      modal: jobs.exportOpen || !!jobs.exportMemo || askOpen(),
+      dialog: dialogState(),
       can: prefs.can,
+      menuOn,
     })
-    if (!act) return
-    if (preventsDefault(act)) e.preventDefault()
-    run(act, e)
+    if (!id) {
+      // Перезагрузка и «назад» страницы гасит страж. Удержанный Пробел команду не повторяет (автоповтор — только у команд
+      // с флагом), но и странице не достаётся.
+      if (guardsBrowser(e) || (e.repeat && isSpace(e) && !isTextField(t) && !isCheckbox(t))) e.preventDefault()
+      return
+    }
+    if (preventsDefault(id, e)) e.preventDefault()
+    runKey(id, e)
   }
 
   // Отпустили Пробел: коротко и без панорамы — следующая (с Shift — предыдущая) раскладка; у сетки — нет.
   function keyup(e: KeyboardEvent) {
-    if (e.key !== ' ') return
+    if (!isSpace(e)) return
     const step = canvas.spaceUp()
     if (step) run(step > 0 ? 'nextLayout' : 'prevLayout')
   }
@@ -164,7 +157,7 @@
 <AutoBuildDialog />
 <StartDialog />
 <Guide />
-<HotkeysHelp />
+<KeysDialog />
 <LevelsDialog />
 <BackupsDialog />
 <PacksDialog />

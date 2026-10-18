@@ -359,10 +359,20 @@ func TestTotalSpreadsLimit(t *testing.T) {
 	edtest.Change(e, func(p *model.Project) { p.Spreads = p.Spreads[:model.MaxSpreads-1] })
 	v := edtest.NewSpread(e, -1, edtest.Photos("a", "b"))
 	sid := v.Spreads[len(v.Spreads)-1].ID
-	rev = edtest.Rev(e)
-	e.SplitSpread(sid, 1)
-	if len(edtest.P(e).Spreads) != model.MaxSpreads || edtest.Rev(e) != rev {
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	// Отказ — ошибкой с пределом (075-7: тост, как у NewSpread), не молча.
+	v, err := e.SplitSpread(sid, 1)
+	if err == nil || err.Error() != "в альбоме не может быть больше 200 разворотов" {
+		t.Fatalf("SplitSpread сверх MaxSpreads: err %v", err)
+	}
+	if len(v.Spreads) != model.MaxSpreads || len(edtest.P(e).Spreads) != model.MaxSpreads {
 		t.Fatalf("SplitSpread сверх MaxSpreads: %d разворотов", len(edtest.P(e).Spreads))
+	}
+	edtest.Same(t, e, rev, undo, "SplitSpread сверх MaxSpreads")
+	// На один меньше предела деление проходит: ровно MaxSpreads.
+	edtest.Change(e, func(p *model.Project) { p.Spreads = p.Spreads[1:] })
+	if v, err = e.SplitSpread(sid, 1); err != nil || len(v.Spreads) != model.MaxSpreads {
+		t.Fatalf("SplitSpread до предела: %d разворотов, err %v", len(v.Spreads), err)
 	}
 }
 

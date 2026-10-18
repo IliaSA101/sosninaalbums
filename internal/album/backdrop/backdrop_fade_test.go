@@ -127,7 +127,7 @@ func TestBackdropMergeAndCopy(t *testing.T) {
 	e.Undo()
 	// Делим: фон остаётся первому.
 	edtest.SetBg(t, e, s1, "left", "bg1")
-	v = e.SplitSpread(s1, 1)
+	v, _ = e.SplitSpread(s1, 1)
 	if len(v.Spreads) != 3 || len(v.Spreads[0].Backdrops) != 1 || len(v.Spreads[1].Backdrops) != 0 {
 		t.Fatalf("деление: %+v", v.Spreads)
 	}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
+  import { keymap } from '../../base/keys/keymap.svelte'
   import { shortOf } from '../../base/prefs/levelcustom'
   import { LEVEL_TITLE, minLevel, rowOf } from '../../base/prefs/levels'
   import type { Article } from './articles'
@@ -38,10 +39,10 @@
 
 <article class="card" aria-label={a.title}>
   <h2>{a.title}</h2>
-  <p class="what">{a.what}</p>
-  {#if a.where}<div class="row"><b>Где</b><span>{a.where}</span></div>{/if}
+  <p class="what">{keymap.text(a.what)}</p>
+  {#if a.where}<div class="row"><b>Где</b><span>{keymap.text(a.where)}</span></div>{/if}
   {#each menus as m (m)}<div class="row"><b>Меню</b><span>{m}</span></div>{/each}
-  {#if a.how}<div class="row"><b>Как</b><span>{a.how}</span></div>{/if}
+  {#if a.how}<div class="row"><b>Как</b><span>{keymap.text(a.how)}</span></div>{/if}
   {#if keys.length > 0}
     <div class="row">
       <b>Клавиши</b>

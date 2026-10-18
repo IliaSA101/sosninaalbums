@@ -31,7 +31,7 @@ describe('большой альбом: размеры и окна списков
   })
 
   it('лента альбома: SpreadChips монтируется только под near.has', () => {
-    const s = code(src('/timeline/Timeline.svelte'))
+    const s = code(src('/timeline/TimelineGroup.svelte'))
     expect(s).toMatch(/\{#if near\.has\([^}]*\}\s*<SpreadChips\b/)
   })
 

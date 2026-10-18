@@ -132,7 +132,7 @@ func replayVignette(r *replay, ph []model.PhotoInfo) {
 func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	e, id := r.e, func(i int) string { return ph[i].ID }
 	s0 := r.spreadOf(id(2))
-	r.do("SplitSpread", e.SplitSpread(s0, 2))
+	r.ve("SplitSpread")(e.SplitSpread(s0, 2))
 	r.do("MergeSpreads", e.MergeSpreads(s0))
 	r.do("MoveSpread", e.MoveSpread(r.v.Spreads[len(r.v.Spreads)-1].ID, 0))
 	r.do("RemovePhotos", e.RemovePhotos([]string{id(12)}))
@@ -279,4 +279,7 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	r.do("SetPlacePerson:слияние", e.SetPlacePerson(sid, seat, model.Person{Last: "Петров", First: "Ваня"}, "s071"))
 	spv, ok := e.PlacePerson(sid, seat)
 	r.read("PlacePerson", []any{spv, ok})
+	// «Убрать из альбома» в полосе «Не найдено» (075, в конце, как 042): фото из мест, фон-фото и
+	// своё фото фона — одним шагом; неизвестный ID пропускается.
+	r.do("PurgePhotos", e.PurgePhotos([]string{ph[6].ID, ph[13].ID, own.ID, "нет"}))
 }

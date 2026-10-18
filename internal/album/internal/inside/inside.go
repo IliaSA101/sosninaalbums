@@ -48,8 +48,11 @@ var (
 	Alt    func(m any) string
 )
 
-// Крючок ядра: порог медленной операции (slowOp в editor.go) — тест лога ставит 0 и час.
+// Крючок ядра: пороги медленной операции и правки (slowOp, slowEdit в editor.go) — тест лога
+// ставит 0 и час.
 var (
-	SlowOp    func() time.Duration
-	SetSlowOp func(d time.Duration)
+	SlowOp      func() time.Duration
+	SetSlowOp   func(d time.Duration)
+	SlowEdit    func() time.Duration
+	SetSlowEdit func(d time.Duration)
 )

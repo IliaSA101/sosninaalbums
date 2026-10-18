@@ -23,6 +23,22 @@ describe('modalStack', () => {
     modalStack.remove(b)
   })
 
+  it('topUndo: отмену пускает верхнее окно, а не любое под ним (вопрос поверх «Фонов» — нет)', () => {
+    expect(modalStack.topUndo()).toBe(false)
+    const plain = modalStack.push()
+    expect(modalStack.topUndo()).toBe(false) // обычное окно
+    const edit = modalStack.push(true)
+    expect(modalStack.topUndo()).toBe(true)
+    const ask = modalStack.push() // вопрос поверх окна правки
+    expect(modalStack.topUndo()).toBe(false)
+    modalStack.remove(ask)
+    expect(modalStack.topUndo()).toBe(true) // вопрос закрыт — снова решает окно правки
+    modalStack.remove(edit)
+    expect(modalStack.topUndo()).toBe(false)
+    modalStack.remove(plain)
+    expect(modalStack.topUndo()).toBe(false)
+  })
+
   it('удаление неизвестного id безвредно', () => {
     const a = modalStack.push()
     modalStack.remove(-1)

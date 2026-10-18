@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HOLD_MS, LIMIT, SHOWN, afterNav, asSheet, isHidden, sheetThumbW, shownW, visibleChips } from './chips'
+import { HOLD_MS, LIMIT, SHOWN, afterNav, asSheet, isHidden, sheetThumbW, shownW, visibleChips, widthsKey } from './chips'
 import { GAP, PAD, cellW, chipW, groupW } from './timeline'
 import type { PlaceView, SpreadView } from '../../base/core/types'
 
@@ -57,6 +57,25 @@ describe('shownW', () => {
   it('раскрытая: все и квадрат «‹»', () => {
     const s = sp(13)
     expect(shownW(s, 's1')).toBe(13 * cellW(s.rects[0]) + chipW(1) + GAP * 13 + 2 * PAD)
+  })
+})
+
+describe('widthsKey', () => {
+  it('те же ширины — та же подпись, даже у нового объекта разворота', () => {
+    const a = sp(4)
+    const b = { ...sp(2), id: 's2' }
+    expect(widthsKey([a, b], null)).toBe(widthsKey([{ ...a, name: 'Новое' }, b], null))
+  })
+  it('сменилось число плиток или раскрылась длинная группа — подпись другая', () => {
+    const a = sp(4)
+    const long = { ...sp(13), id: 'long' }
+    const k = widthsKey([a, long], null)
+    expect(widthsKey([sp(5), long], null)).not.toBe(k)
+    expect(widthsKey([a, long], 'long')).not.toBe(k)
+    expect(widthsKey([a, long], null)).toBe(k) // раскрытие не отравило кэш свёрнутой
+  })
+  it('пустая лента', () => {
+    expect(widthsKey([], null)).toBe('')
   })
 })
 

@@ -13,7 +13,7 @@ func (m *Methods) NewSpread(at int, ids []string) (v model.View, err error) {
 	infos := m.infos(ids)
 	if len(ids) > 0 && len(infos) == 0 {
 		// Фото пропали при пересканировании во время переноса: пустой разворот здесь не просили.
-		return m.editor().View(), nil
+		return m.out(m.editor().View()), nil
 	}
 	return m.changedOrErr(m.editor().NewSpread(at, infos))
 }
@@ -33,6 +33,13 @@ func (m *Methods) RemovePhotos(ids []string) (v model.View) {
 	return m.changed(m.editor().RemovePhotos(ids))
 }
 
+// PurgePhotos — «Убрать из альбома» в полосе «Не найдено»: в отличие от RemovePhotos снимает
+// и фоны, и свои стикеры с этими фото, одним шагом отмены (075-13).
+func (m *Methods) PurgePhotos(ids []string) (v model.View) {
+	defer m.guardEdit("PurgePhotos", &v, nil)
+	return m.changed(m.editor().PurgePhotos(ids))
+}
+
 func (m *Methods) DeleteSpread(id string) (v model.View) {
 	defer m.guardEdit("DeleteSpread", &v, nil)
 	return m.changed(m.editor().DeleteSpread(id))
@@ -49,9 +56,10 @@ func (m *Methods) MoveSpread(id string, to int) (v model.View) {
 	return m.changed(m.editor().MoveSpread(id, to))
 }
 
-func (m *Methods) SplitSpread(id string, at int) (v model.View) {
-	defer m.guardEdit("SplitSpread", &v, nil)
-	return m.changed(m.editor().SplitSpread(id, at))
+// SplitSpread: на пределе MaxSpreads разворотов — ошибка (тост в UI), проект не меняется.
+func (m *Methods) SplitSpread(id string, at int) (v model.View, err error) {
+	defer m.guardEdit("SplitSpread", &v, &err)
+	return m.changedOrErr(m.editor().SplitSpread(id, at))
 }
 
 // MergeSpreads: больше MaxPhotos фото или MaxTexts текстов вместе — ничего не меняет.

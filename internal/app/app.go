@@ -22,6 +22,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
+	"github.com/IliaSA101/sosninaalbums/internal/keymap"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -59,6 +60,8 @@ type App struct {
 	warm   context.CancelFunc
 	// layouts — идущие прогревы раскладок (warmEditor); миниатюры ждут их (warmThumbs).
 	layouts busyGate
+	// wire — цепочка видов для интерфейса (075, wire.go): последний отданный вид и номер.
+	wire wireState
 
 	// missing — ID фото альбома, чьих файлов нет на диске (см. refreshMissing), по порядку; под mu,
 	// как и missGen — поколение полного пересчёта, и missRefs — ID → путь фото альбома, за которым
@@ -155,6 +158,9 @@ type State struct {
 	// Prefs — уровень интерфейса и стартовое окно (config.json); Recent — последние альбомы.
 	Prefs  prefs.Prefs           `json:"prefs"`
 	Recent []prefs.RecentProject `json:"recent"`
+	// Keymap — действующие горячие клавиши (074-25): известны с первого GetState, без
+	// отдельного вызова, когда клавиши ещё молчат. Окно «Горячие клавиши» берёт Keymap().
+	Keymap keymap.View `json:"keymap"`
 	// Cancelled — пользователь закрыл нативный диалог, проект прежний. Сравнение path+rev
 	// на фронте отмену не отличит: удачное открытие шлёт `view` раньше ответа метода.
 	Cancelled bool `json:"cancelled,omitempty"`
@@ -355,7 +361,7 @@ func (a *App) guardEdit(name string, v *model.View, err *error) {
 
 // editHost — что пакету edit нужно от App.
 func (a *App) editHost() edit.Host {
-	return edit.Host{Editor: a.editor, Changed: a.changed, Notice: a.notice, Infos: a.infos,
+	return edit.Host{Editor: a.editor, Changed: a.changed, Out: a.out, Notice: a.notice, Infos: a.infos,
 		InfosOrRefs: a.infosOrRefs, Templates: a.templateList}
 }
 

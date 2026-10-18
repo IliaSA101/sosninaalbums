@@ -35,11 +35,6 @@
   })
 
   const val = (e: Event) => +(e.currentTarget as HTMLInputElement).value
-  // Стрелки ползунка не уходят в общие хоткеи (←/→ листают разворот).
-  const KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'])
-  function keydown(e: KeyboardEvent) {
-    if (KEYS.has(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) e.stopPropagation()
-  }
   const key = $derived(st ? stKey(sid, st.id) : '')
 
   // Chromium не шлёт change, если значение при отпускании равно исходному: тогда просмотр залип бы.
@@ -112,7 +107,6 @@
       aria-valuetext="{fadePct(fade)} %"
       onfocus={() => sticker.session.begin(key)}
       onblur={blur}
-      onkeydown={keydown}
       oninput={(e) => stickerFadeLive.set(sid, st.id, pctFade(val(e)))}
       onchange={(e) => {
         const merge = sticker.session.merge(key)

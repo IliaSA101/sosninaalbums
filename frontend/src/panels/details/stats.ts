@@ -27,6 +27,35 @@ export function orientation(w: number, h: number): Orientation {
   return r > 1 ? 'h' : 'v'
 }
 
+// Вклад одного листа: h/v/sq, цвет, число фото. Кэш по объекту листа и таблице фото: дельта вида (075) сохраняет
+// неизменённые развороты теми же объектами, поэтому правка пересчитывает только изменённый, а не все фото альбома.
+interface Part {
+  photos: number
+  h: number
+  v: number
+  sq: number
+  adobe: number
+  other: number
+}
+const parts = new WeakMap<SpreadView, { byId: Map<string, Photo>; part: Part }>()
+
+function partOf(s: SpreadView, byId: Map<string, Photo>): Part {
+  const hit = parts.get(s)
+  if (hit && hit.byId === byId) return hit.part
+  const part: Part = { photos: 0, h: 0, v: 0, sq: 0, adobe: 0, other: 0 }
+  s.photos.forEach((id, i) => {
+    part.photos++
+    // Фото из недоступной папки в библиотеке нет — берём аспект его ячейки.
+    const lib = byId.get(id)
+    if (lib?.color === 'adobe') part.adobe++
+    else if (lib?.color === 'other') part.other++
+    const p = lib ?? s.rects?.[i]
+    part[p ? orientation(p.w, p.h) : 'sq']++
+  })
+  parts.set(s, { byId, part })
+  return part
+}
+
 // sheets — листы ряда: [обложка?] + развороты, lead — сколько в начале обложек (0 или 1). Фото обложки считаются,
 // а в развороты, страницы и раскладки она не входит (032).
 export function albumStats(sheets: SpreadView[], byId: Map<string, Photo>, total: number, lead = 0): AlbumStats {
@@ -46,15 +75,13 @@ export function albumStats(sheets: SpreadView[], byId: Map<string, Photo>, total
   const keys = new Set<string>()
   for (const [n, s] of sheets.entries()) {
     if (n >= lead && s.layout) keys.add(s.layout)
-    s.photos.forEach((id, i) => {
-      st.photos++
-      // Фото из недоступной папки в библиотеке нет — берём аспект его ячейки.
-      const lib = byId.get(id)
-      if (lib?.color === 'adobe') st.adobe++
-      else if (lib?.color === 'other') st.other++
-      const p = lib ?? s.rects?.[i]
-      st[p ? orientation(p.w, p.h) : 'sq']++
-    })
+    const p = partOf(s, byId)
+    st.photos += p.photos
+    st.h += p.h
+    st.v += p.v
+    st.sq += p.sq
+    st.adobe += p.adobe
+    st.other += p.other
   }
   st.layouts = keys.size
   return st

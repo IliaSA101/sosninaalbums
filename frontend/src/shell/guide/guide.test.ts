@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FEATURES, rowOf } from '../../base/prefs/levels'
-import { HOTKEYS } from '../menu/hotkeys'
+import { catalogView } from '../../base/keys/keymap.fixture'
+import { MOUSE_HELP } from '../menu/mousehelp'
 import { ARTICLES, GUIDE_GROUPS, placesOf } from './articles'
 import { HINT_SPOTS, menuPath, menus } from './show'
 
@@ -91,8 +92,8 @@ describe('справочник функций: стражи', () => {
     expect(badMenu).toEqual([])
 
     const badKeys: string[] = []
-    for (const a of ARTICLES)
-      for (const k of a.keys ?? []) if (!HOTKEYS.some((h) => !h.hidden && (h.action === k || h.show === k))) badKeys.push(`${a.id}: ${k}`)
+    const known = new Set([...catalogView.commands.map((e) => e.id), ...MOUSE_HELP.map((r) => r.show)])
+    for (const a of ARTICLES) for (const k of a.keys ?? []) if (!known.has(k)) badKeys.push(`${a.id}: ${k}`)
     expect(badKeys).toEqual([])
   })
 

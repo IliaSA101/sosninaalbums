@@ -329,7 +329,10 @@ func TestSplitKeepsTexts(t *testing.T) {
 	e, s1, _ := edtest.NewTwo(t)
 	e.AddText(s1, 0, "")
 	e.SetBackground(s1, "spread", "#f6f1e7")
-	v := e.SplitSpread(s1, 1)
+	v, err := e.SplitSpread(s1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(v.Spreads) != 3 || len(v.Spreads[0].Texts) != 1 || len(v.Spreads[1].Texts) != 0 {
 		t.Fatalf("разрез: %+v", v.Spreads)
 	}

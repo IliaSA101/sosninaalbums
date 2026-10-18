@@ -1,3 +1,4 @@
+import type { KeymapView } from './keys'
 import type { Photo, ScanProgress } from './marks'
 import type { CoverView, GuideView } from './print'
 import type { Rect, SpreadView } from './sheet'
@@ -18,6 +19,11 @@ export interface Settings {
 
 export interface View {
   spreads: SpreadView[]
+  // Цепочка видов (075): seq растёт у App на каждый отданный вид, 0 — вне цепочки. base > 0 — дельта к виду с seq == base:
+  // spreads — только изменённые, order — ID всех разворотов по порядку (viewdelta.ts).
+  seq?: number
+  base?: number
+  order?: string[]
   settings: Settings
   folders: string[]
   path: string
@@ -94,5 +100,6 @@ export interface State {
   missing?: string[]
   prefs?: Prefs
   recent?: RecentProject[]
+  keymap?: KeymapView | null // горячие клавиши (074); Go начнёт слать с G2 — до этого undefined
   cancelled?: boolean // только OpenProject: диалог закрыт без выбора, состояние прежнее
 }

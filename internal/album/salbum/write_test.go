@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -98,4 +99,37 @@ func readFile(t *testing.T, path string) FileProject {
 		t.Fatal("пустой abs в файле")
 	}
 	return f
+}
+
+// Антивирус переименовывает заменяемый или удаляемый файл в <имя>.tmp и держит открытым:
+// запись проекта не должна зависеть от этого имени, чужой файл — не тронут.
+func TestWriteSurvivesHeldDotTmp(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("занятость имени — поведение Windows")
+	}
+	dir := testkit.TempDir(t)
+	for _, name := range []string{"черновик.salbum", "альбом.salbum"} { // несколько файлов в одной папке
+		path := filepath.Join(dir, name)
+		orig := []byte("старый " + name)
+		if err := os.WriteFile(path+".tmp", orig, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		held, err := os.Open(path + ".tmp") // как дескриптор антивируса: без FILE_SHARE_DELETE
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = held.Close() })
+		for range 2 { // второй раз — поверх уже записанного
+			if err := Write(model.New(), path, "", nil); err != nil {
+				t.Fatalf("запись при занятом %s.tmp: %v", name, err)
+			}
+		}
+		if _, err := Load(path); err != nil {
+			t.Fatalf("записанный %s не читается: %v", name, err)
+		}
+		if got, err := os.ReadFile(path + ".tmp"); err != nil || !bytes.Equal(got, orig) {
+			t.Fatalf("занятый %s.tmp тронут: %q, %v", name, got, err)
+		}
+		noTmp(t, path)
+	}
 }

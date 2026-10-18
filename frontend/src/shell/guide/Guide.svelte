@@ -4,7 +4,7 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { shortOf } from '../../base/prefs/levelcustom'
   import { rowOf } from '../../base/prefs/levels'
-  import { help } from '../menu/help.svelte'
+  import { keysUi } from '../hotkeys/keysui.svelte'
   import { ARTICLES, GUIDE_GROUPS, placesOf, type Article } from './articles'
   import GuideCard from './GuideCard.svelte'
   import { selectQuery } from './queryfocus'
@@ -48,7 +48,7 @@
     if (id) void tick().then(() => list?.querySelector(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest' }))
   })
 
-  const allKeys = () => (help.open = true)
+  const allKeys = () => keysUi.show()
   const levels = () => (prefs.compare = true)
 </script>
 

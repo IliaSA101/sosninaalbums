@@ -4,7 +4,33 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
+
+// layout.ResetCache сбрасывает и кэши variety (подписка OnReset, 075-15): ряд «Авто» и
+// «Другие варианты» — обоих наборов сразу; повторный сброс на пустом — холостой.
+func TestResetCacheResetsVariety(t *testing.T) {
+	t.Cleanup(ResetCache)
+	sets := [][]float64{mixedAspects(9, 3), mixedAspects(7, 5)}
+	for _, as := range sets {
+		Row(as, geomSq, 24)
+		Extra(as, geomSq, 24)
+		if !RowCached(as, geomSq, 24) || !Cached(as, geomSq, 24) {
+			t.Fatalf("заготовка: ряд %v, другие %v", RowCached(as, geomSq, 24), Cached(as, geomSq, 24))
+		}
+	}
+	layout.ResetCache()
+	for i, as := range sets {
+		if RowCached(as, geomSq, 24) || Cached(as, geomSq, 24) {
+			t.Errorf("набор %d: после layout.ResetCache кэш variety тёплый", i)
+		}
+	}
+	layout.ResetCache() // на пустом — без паники и без следов
+	if c, o := rowCache.size(); c != 0 || o != 0 {
+		t.Errorf("после повторного сброса %d + %d", c, o)
+	}
+}
 
 // Края genCache: пустой кэш ничего не отдаёт, nil — тоже значение, смена поколений не теряет
 // свежее, reset очищает оба поколения.

@@ -116,7 +116,10 @@ func TestSplitSpread(t *testing.T) {
 	before := model.Marshal(edtest.P(e))
 	rev, undo := e.View().Rev, edtest.UndoLen(e)
 
-	v = e.SplitSpread(id, 2)
+	v, err := e.SplitSpread(id, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(v.Spreads) != 2 || v.Spreads[0].ID != id || v.Spreads[1].ID == id {
 		t.Fatalf("развороты после разреза: %+v", v.Spreads)
 	}
@@ -153,8 +156,8 @@ func TestSplitSpreadNoop(t *testing.T) {
 		id string
 		at int
 	}{{s1, 0}, {s1, -1}, {s1, 2}, {s1, 5}, {"нет", 1}, {s2, 1}, {s2, 0}} {
-		v := e.SplitSpread(c.id, c.at)
-		if v.Rev != rev || edtest.UndoLen(e) != undo || v.Dirty {
+		v, err := e.SplitSpread(c.id, c.at)
+		if err != nil || v.Rev != rev || edtest.UndoLen(e) != undo || v.Dirty {
 			t.Fatalf("SplitSpread(%q, %d) не холостой", c.id, c.at)
 		}
 	}

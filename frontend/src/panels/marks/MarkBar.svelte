@@ -1,6 +1,7 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
+  import { keymap } from '../../base/keys/keymap.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import { ownMarks } from './ownmarks.svelte'
   import { flagClick, hasOwn, LABEL_VIEW, ratingClick, sharedMark, starsLit } from './markbar'
@@ -78,7 +79,7 @@
         class="flag"
         class:on={shared.flag === 1}
         aria-pressed={shared.flag === 1}
-        title={shared.flag === 1 ? 'Снять флажок (U)' : 'Отобрано (P)'}
+        title={shared.flag === 1 ? keymap.tip('Снять флажок', 'markUnflag') : keymap.tip('Отобрано', 'markPick')}
         aria-label="Отобрано"
         onpointerdown={stop}
         onmousedown={keep}
@@ -88,7 +89,7 @@
         class="flag"
         class:on={shared.flag === -1}
         aria-pressed={shared.flag === -1}
-        title={shared.flag === -1 ? 'Снять флажок (U)' : 'Отклонено (X)'}
+        title={shared.flag === -1 ? keymap.tip('Снять флажок', 'markUnflag') : keymap.tip('Отклонено', 'markReject')}
         aria-label="Отклонено"
         onpointerdown={stop}
         onmousedown={keep}

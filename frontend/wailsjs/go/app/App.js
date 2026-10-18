@@ -234,6 +234,10 @@ export function GetState() {
   return window['go']['app']['App']['GetState']();
 }
 
+export function GetView() {
+  return window['go']['app']['App']['GetView']();
+}
+
 export function GridChoices(arg1, arg2, arg3) {
   return window['go']['app']['App']['GridChoices'](arg1, arg2, arg3);
 }
@@ -248,6 +252,10 @@ export function ImportDecor(arg1, arg2) {
 
 export function ImportDecorPaths(arg1, arg2, arg3) {
   return window['go']['app']['App']['ImportDecorPaths'](arg1, arg2, arg3);
+}
+
+export function Keymap() {
+  return window['go']['app']['App']['Keymap']();
 }
 
 export function LayoutChoices(arg1) {
@@ -370,6 +378,10 @@ export function PreviewVignette(arg1, arg2) {
   return window['go']['app']['App']['PreviewVignette'](arg1, arg2);
 }
 
+export function PurgePhotos(arg1) {
+  return window['go']['app']['App']['PurgePhotos'](arg1);
+}
+
 export function Recent() {
   return window['go']['app']['App']['Recent']();
 }
@@ -392,6 +404,10 @@ export function RelinkFolderPath(arg1) {
 
 export function RemoveFolder(arg1) {
   return window['go']['app']['App']['RemoveFolder'](arg1);
+}
+
+export function RemoveHotkey(arg1, arg2) {
+  return window['go']['app']['App']['RemoveHotkey'](arg1, arg2);
 }
 
 export function RemovePack(arg1) {
@@ -422,6 +438,14 @@ export function ResetFrame(arg1) {
   return window['go']['app']['App']['ResetFrame'](arg1);
 }
 
+export function ResetHotkey(arg1, arg2) {
+  return window['go']['app']['App']['ResetHotkey'](arg1, arg2);
+}
+
+export function ResetHotkeys() {
+  return window['go']['app']['App']['ResetHotkeys']();
+}
+
 export function ResetLibrarySkip() {
   return window['go']['app']['App']['ResetLibrarySkip']();
 }
@@ -436,6 +460,10 @@ export function ResetVignette(arg1) {
 
 export function RestoreBackup(arg1) {
   return window['go']['app']['App']['RestoreBackup'](arg1);
+}
+
+export function RestoreHotkeys(arg1) {
+  return window['go']['app']['App']['RestoreHotkeys'](arg1);
 }
 
 export function RotateGroup(arg1, arg2, arg3, arg4, arg5) {
@@ -532,6 +560,10 @@ export function SetGray(arg1) {
 
 export function SetGrid(arg1, arg2) {
   return window['go']['app']['App']['SetGrid'](arg1, arg2);
+}
+
+export function SetHotkey(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['App']['SetHotkey'](arg1, arg2, arg3, arg4);
 }
 
 export function SetLayout(arg1, arg2) {

@@ -1,6 +1,7 @@
 // Поиск по справочнику (спека 033, design §3). Чистая логика: регистр, «ё/е», окончания и английская
-// раскладка не важны. Индекс строится один раз при загрузке модуля.
-import { HOTKEYS } from '../menu/hotkeys'
+// раскладка не важны. Индекс строится при первом поиске и заново, когда клавиши реестра сменились (074).
+import { keymap } from '../../base/keys/keymap.svelte'
+import { keyRows } from './show'
 import { ARTICLES, GUIDE_GROUPS, type Article } from './articles'
 
 // Нижний регистр и «ё → е».
@@ -48,23 +49,31 @@ interface Indexed {
   fields: { w: number; t: string[] }[]
 }
 
-// Показ клавиш статьи: строки HOTKEYS по action или по show.
-function keyShows(a: Article): string[] {
-  const out: string[] = []
-  for (const k of a.keys ?? []) for (const h of HOTKEYS) if (!h.hidden && (h.action === k || h.show === k)) out.push(h.show)
-  return out
-}
+const build = (): Indexed[] =>
+  ARTICLES.map((a) => ({
+    a,
+    title: norm(a.title),
+    fields: [
+      { w: W.title, t: tokens(a.title) },
+      { w: W.words, t: tokens(a.words ?? '') },
+      {
+        w: W.keys,
+        t: tokens(
+          keyRows(a)
+            .map((r) => r.show)
+            .join(' '),
+        ),
+      },
+      { w: W.text, t: tokens(keymap.text(`${a.what} ${a.where ?? ''} ${a.how ?? ''}`)) },
+    ],
+  }))
 
-const INDEX: Indexed[] = ARTICLES.map((a) => ({
-  a,
-  title: norm(a.title),
-  fields: [
-    { w: W.title, t: tokens(a.title) },
-    { w: W.words, t: tokens(a.words ?? '') },
-    { w: W.keys, t: tokens(keyShows(a).join(' ')) },
-    { w: W.text, t: tokens(`${a.what} ${a.where ?? ''} ${a.how ?? ''}`) },
-  ],
-}))
+// Клавиши меняет пользователь: индекс привязан к виду реестра и пересобирается при его замене.
+let built: { view: unknown; index: Indexed[] } | null = null
+function index(): Indexed[] {
+  if (!built || built.view !== keymap.view) built = { view: keymap.view, index: build() }
+  return built.index
+}
 
 // Лучший вес слова среди полей статьи; 0 — слова нет.
 function weight(it: Indexed, stemmed: string): number {
@@ -77,7 +86,7 @@ function run(q: string): Hit[] {
   const words = tokens(q).map(stem)
   const whole = norm(q).trim()
   const hits: Hit[] = []
-  for (const it of INDEX) {
+  for (const it of index()) {
     let score = 0
     let ok = true
     for (const w of words) {

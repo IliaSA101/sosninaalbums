@@ -379,8 +379,18 @@ func TestSaveOverwritesAndKeepsNoTmp(t *testing.T) {
 	if _, err := Load(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Lstat(path + ".tmp"); !os.IsNotExist(err) {
-		t.Fatalf(".tmp остался: %v", err)
+	noTmp(t, path)
+}
+
+// noTmp — рядом с path не осталось временных <имя>.*.tmp.
+func noTmp(t *testing.T, path string) {
+	t.Helper()
+	left, err := filepath.Glob(path + ".*.tmp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) > 0 {
+		t.Fatalf(".tmp остался: %v", left)
 	}
 }
 
@@ -411,17 +421,25 @@ func TestSaveIgnoresHardlinkedTmp(t *testing.T) {
 	}
 }
 
-// Папка на месте .tmp — понятная ошибка, а не зависание; сам альбом не затронут.
+// Папка на месте постоянного <имя>.tmp записи не мешает (временное имя случайное) и не тронута.
 func TestSaveDirAtTmp(t *testing.T) {
 	dir := testkit.TempDir(t)
 	path := filepath.Join(dir, "a.salbum")
+	inner := filepath.Join(path+".tmp", "чужое.txt")
 	if err := os.Mkdir(path+".tmp", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := Save(model.New(), path); err == nil {
-		t.Fatal("ожидалась ошибка")
+	if err := os.WriteFile(inner, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Lstat(path); !os.IsNotExist(err) {
-		t.Fatalf("альбом не должен появиться: %v", err)
+	if err := Save(model.New(), path); err != nil {
+		t.Fatal(err)
 	}
+	if _, err := Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(inner); err != nil || string(got) != "x" {
+		t.Fatalf("папка на месте .tmp тронута: %q, %v", got, err)
+	}
+	noTmp(t, path)
 }

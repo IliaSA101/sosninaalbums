@@ -13,6 +13,18 @@
   --lbl-blue: #3e63dd;
   --lbl-purple: #8e4ec6;
   --lbl-other: #8b8d98;
+  /* Цвета групп команд на карте клавиатуры (074, окно «Горячие клавиши»); other — группа, которой здесь не знают */
+  --grp-album: #4a78c2;
+  --grp-view: #3a9a8c;
+  --grp-canvas: #8a6fd1;
+  --grp-spreads: #c9803a;
+  --grp-photos: #4ba3c7;
+  --grp-marks: #d1b43a;
+  --grp-text: #c25f9c;
+  --grp-grid: #7ea64a;
+  --grp-decor: #b0605a;
+  --grp-backdrop: #8b8d98;
+  --grp-other: #8b8d98;
   /* Скорость и характер «переезда» фото при смене раскладки */
   --move: 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
   color-scheme: dark;

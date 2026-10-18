@@ -6,6 +6,7 @@ import type { IconName } from '../../base/ui/Icon.svelte'
 import type { FeatureId } from '../../base/prefs/levels'
 import type { Rect, SpreadView } from '../../base/core/types'
 import { whoOf } from '../captions/nametarget'
+import { keymap } from '../../base/keys/keymap.svelte'
 
 export type MiniId = 'flipH' | 'flipV' | 'turn' | 'tilt' | 'fit' | 'fitPhoto' | 'caption' | 'name' | 'layer' | 'swap' | 'same' | 'delete'
 
@@ -69,10 +70,15 @@ const TURN: MiniItem = { id: 'turn', label: 'Повернуть фото на 90
 
 // Значок «Удалить»: подпись зависит от того, что выделено.
 function deleteItem(c: MiniCtx, n: number): MiniItem {
-  if (n > 1) return { id: 'delete', label: `Удалить выделенное (${n}) (Delete)`, icon: 'trash', badge: String(n) }
-  if (c.photos === 0) return { id: 'delete', label: 'Убрать пустое место (Delete)', icon: 'trash' }
-  if (c.grid) return { id: 'delete', label: 'Убрать фото с места: оно вернётся в ленту, место останется пустым (Delete)', icon: 'trash' }
-  return { id: 'delete', label: 'Убрать фото с разворота: оно вернётся в ленту (Delete)', icon: 'trash' }
+  if (n > 1) return { id: 'delete', label: keymap.tip(`Удалить выделенное (${n})`, 'removeCell'), icon: 'trash', badge: String(n) }
+  if (c.photos === 0) return { id: 'delete', label: keymap.tip('Убрать пустое место', 'removeCell'), icon: 'trash' }
+  if (c.grid)
+    return {
+      id: 'delete',
+      label: keymap.tip('Убрать фото с места: оно вернётся в ленту, место останется пустым', 'removeCell'),
+      icon: 'trash',
+    }
+  return { id: 'delete', label: keymap.tip('Убрать фото с разворота: оно вернётся в ленту', 'removeCell'), icon: 'trash' }
 }
 
 // Группы значков про фото: зеркало, кадр (одно фото) или только поворот (несколько).

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keymap } from '../../base/keys/keymap.svelte'
   import type { BackdropView } from '../../base/core/types'
   import { bgmode } from './bgmode.svelte'
   import { fitBackdrop, flipBackdrop } from './backdropact'
@@ -100,7 +101,7 @@
 </div>
 <div class="btns">
   <button class="done" onclick={() => bgmode.exit()}>Готово</button>
-  <button class="ghost" title="Убрать фото фона (Del)" onclick={() => bgmode.remove()}>Убрать</button>
+  <button class="ghost" title={keymap.tip('Убрать фото фона', 'bgRemove')} onclick={() => bgmode.remove()}>Убрать</button>
 </div>
 
 <style>

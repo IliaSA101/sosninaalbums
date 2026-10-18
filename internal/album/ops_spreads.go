@@ -97,6 +97,12 @@ func (e *Editor) RemovePhotos(ids []string) model.View {
 	return e.change(func(p *model.Project) { spreads.RemovePhotos(p, ids) })
 }
 
+// PurgePhotos — «Убрать из альбома» в полосе «Не найдено» (075-13): фото уходят из мест, с фонов
+// всех листов и своими стикерами, одним шагом отмены. Договор: нет — неизвестные ID пропускаются.
+func (e *Editor) PurgePhotos(ids []string) model.View {
+	return e.change(func(p *model.Project) { spreads.PurgePhotos(p, ids) })
+}
+
 // DeleteSpread удаляет разворот. Договор: нет — неизвестный ID — холостая правка.
 func (e *Editor) DeleteSpread(id string) model.View {
 	return e.change(func(p *model.Project) { spreads.DeleteSpread(p, id) })
@@ -236,9 +242,10 @@ func (e *Editor) outside(snap func(p *model.Project) func()) {
 // в новый разворот сразу после него. at вне 1..len−1 или неизвестный id — ничего
 // не делает, как и сетка. У обоих лучшая раскладка для нового состава. Тексты,
 // фон и название остаются у первого: координаты текстов привязаны к нему.
+// На пределе MaxSpreads — ошибка из CheckTotals, проект прежний, шага нет (075-7: тост, как у NewSpread).
 // Договор: нет — границы at проверяет операция.
-func (e *Editor) SplitSpread(id string, at int) model.View {
-	return e.change(func(p *model.Project) { spreads.SplitSpread(p, id, at) })
+func (e *Editor) SplitSpread(id string, at int) (model.View, error) {
+	return e.try("", func(p *model.Project) error { spreads.SplitSpread(p, id, at); return nil })
 }
 
 // MergeSpreads клеит разворот id со следующим: фото следующего встают в конец,

@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
 import { AUTO_LABEL, emptyCanvas } from './emptycanvas'
+
+afterEach(() => dropCatalog())
 
 describe('пустой холст', () => {
   it('с фото главная кнопка — «Автосборка…»', () => {
@@ -15,8 +18,16 @@ describe('пустой холст', () => {
     expect(c.hint).toEqual(['Сначала добавьте папку с фотографиями (кнопка внизу)', 'или перетащите папку в окно'])
   })
 
-  it('крупный просмотр: подсказка про F, главная зависит от фото', () => {
+  it('крупный просмотр: подсказка с клавишей из реестра, главная зависит от фото', () => {
+    useCatalog()
     expect(emptyCanvas(true, 0)).toEqual({ hint: ['Выключите крупный просмотр (F), чтобы добавить фото'], primary: 'spread' })
     expect(emptyCanvas(true, 3).primary).toBe('auto')
+  })
+
+  it('своя клавиша видна в подсказке сразу; нет клавиши — без скобок', () => {
+    useCatalog({ toggleBig: ['KeyB'] })
+    expect(emptyCanvas(true, 0).hint).toEqual(['Выключите крупный просмотр (B), чтобы добавить фото'])
+    useCatalog({ toggleBig: [] })
+    expect(emptyCanvas(true, 0).hint).toEqual(['Выключите крупный просмотр, чтобы добавить фото'])
   })
 })

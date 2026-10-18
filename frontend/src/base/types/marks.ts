@@ -4,6 +4,8 @@ export interface Photo {
   name: string
   w: number
   h: number
+  // Время съёмки для порядка ленты (075): секунды «стенного» времени; EXIF, иначе время файла (считает Go).
+  shot?: number
   // Цветовой профиль (спека 005): пусто — sRGB или профиля нет.
   color?: 'srgb' | 'adobe' | 'other'
   profile?: string

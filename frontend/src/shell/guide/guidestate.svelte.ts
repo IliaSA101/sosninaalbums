@@ -4,6 +4,7 @@
 import { tick } from 'svelte'
 import { store } from '../../base/core/store.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
+import { keymap } from '../../base/keys/keymap.svelte'
 import { modes } from '../../base/prefs/view.svelte'
 import type { RowId } from '../../base/prefs/levels'
 import { isSheet } from '../../base/geom/sheet'
@@ -166,7 +167,7 @@ class Guide {
       const s2 = `[data-guide~="${spotId(alt)}"]`
       spot.reveal(s2)
       const e2 = choose(await locate(s2, 300))
-      if (e2) return { el: e2, hint: a.miss?.hint ?? '' }
+      if (e2) return { el: e2, hint: keymap.text(a.miss?.hint ?? '') }
     }
     return null
   }

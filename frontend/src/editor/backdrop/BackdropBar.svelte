@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keymap } from '../../base/keys/keymap.svelte'
   import { bgmode } from './bgmode.svelte'
   import { store } from '../../base/core/store.svelte'
   import { SCOPE_BAR } from './bgmode'
@@ -39,7 +40,7 @@
         onclick={() => fitBackdrop(c.spread, c.scope)}
         title="Рамка во всю область, без поворота, кадр сброшен, наклон сохраняется">По области</button
       >
-      <button onpointerdown={stop} onclick={() => bgmode.remove()} title="Убрать фото фона (Del)">Убрать</button>
+      <button onpointerdown={stop} onclick={() => bgmode.remove()} title={keymap.tip('Убрать фото фона', 'bgRemove')}>Убрать</button>
       <button class="done" onpointerdown={stop} onclick={() => bgmode.exit()} title="Выйти из режима фона">Готово (Esc)</button>
     </div>
   </div>

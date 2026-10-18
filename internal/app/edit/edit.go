@@ -22,6 +22,7 @@ import (
 type Host struct {
 	Editor      func() *album.Editor
 	Changed     func(model.View) model.View          // после правки: автосохранение, событие view, недостающие
+	Out         func(model.View) model.View          // ответ без правки — в цепочку видов (075), без автосохранения
 	Notice      func(text string)                    // тост пользователю
 	Infos       func(ids []string) []model.PhotoInfo // сведения о фото ленты
 	InfosOrRefs func(ids []string) []model.PhotoInfo // из ленты, а для фото альбома — из проекта
@@ -54,6 +55,7 @@ var (
 
 func (m *Methods) editor() *album.Editor                      { return m.h.Editor() }
 func (m *Methods) changed(v model.View) model.View            { return m.h.Changed(v) }
+func (m *Methods) out(v model.View) model.View                { return m.h.Out(v) }
 func (m *Methods) infos(ids []string) []model.PhotoInfo       { return m.h.Infos(ids) }
 func (m *Methods) templateList() []model.Template             { return m.h.Templates() }
 func (m *Methods) infosOrRefs(ids []string) []model.PhotoInfo { return m.h.InfosOrRefs(ids) }

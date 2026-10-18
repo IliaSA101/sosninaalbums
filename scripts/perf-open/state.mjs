@@ -83,6 +83,7 @@ export function bigState(spreads = 200, per = 16) {
     })
   }
   const view = {
+    seq: 2, // номер вида в цепочке App (075); пустой стартовый вид в mock.js — 1
     spreads: views,
     settings: {
       pageW: PAGE_W,

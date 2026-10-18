@@ -49,12 +49,6 @@
     if (same) live.release()
   }
 
-  // Стрелки ползунка не уходят в общие хоткеи (←/→ листают разворот).
-  const KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'])
-  function keydown(e: KeyboardEvent) {
-    if (KEYS.has(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) e.stopPropagation()
-  }
-
   // Плитка каталога, из которой поставлен узор (PatternView.preset от Go, запасной — по цветам): имя и светлая подложка миниатюры — как на плитке окна «Фоны».
   const preset = (p: PatternView) => presetOfView(p, decor.bgItems)
   const nameOf = (p: PatternView) => (p.known ? (preset(p)?.name ?? p.name) : PATTERN_NEWER)
@@ -110,7 +104,6 @@
           aria-valuetext="{scalePct(scale)} %"
           onfocus={() => session.begin(patKey(sp.id, p))}
           onblur={() => blur(patScaleLive, scalePct(scale) === scalePct(p.pat.scale))}
-          onkeydown={keydown}
           oninput={(e) => patScaleLive.set(sp.id, p.scope, pctScale(val(e)))}
           onchange={(e) => {
             const merge = session.merge(patKey(sp.id, p))
@@ -133,7 +126,6 @@
           aria-valuetext="{fadePct(fade)} %"
           onfocus={() => session.begin(patKey(sp.id, p))}
           onblur={() => blur(patFadeLive, fadePct(fade) === fadePct(p.pat.fade ?? 0))}
-          onkeydown={keydown}
           oninput={(e) => patFadeLive.set(sp.id, p.scope, pctFade(val(e)))}
           onchange={(e) => {
             const merge = session.merge(patKey(sp.id, p))

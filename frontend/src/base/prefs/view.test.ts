@@ -225,3 +225,51 @@ describe('modes.markup (066)', () => {
     expect([n.markup, n.safe]).toEqual([false, true])
   })
 })
+
+describe('modes.libSort (075: порядок ленты)', () => {
+  beforeEach(useStorage)
+
+  it('по умолчанию «по имени»', async () => {
+    expect((await fresh()).libSort).toBe('name')
+  })
+  it('выбор запоминается; повторный выбор того же ничего не ломает', async () => {
+    const m = await fresh()
+    m.setLibSort('shot')
+    m.setLibSort('shot')
+    expect((await fresh()).libSort).toBe('shot')
+    const n = await fresh()
+    n.setLibSort('name')
+    expect((await fresh()).libSort).toBe('name')
+  })
+  it('мусор в хранилище — «по имени»', async () => {
+    localStorage.setItem('viewMode', JSON.stringify({ libSort: 'date' }))
+    expect((await fresh()).libSort).toBe('name')
+  })
+})
+
+describe('modes.keysMode и keysSplit (074: окно «Горячие клавиши»)', () => {
+  beforeEach(useStorage)
+
+  it('по умолчанию — «Карта крупно», границы по размеру клавиш', async () => {
+    const m = await fresh()
+    expect(m.keysMode).toBe('map')
+    expect(m.keysSplit).toEqual({ ra: null, rw: 0.27, rh: 0.62 })
+  })
+  it('вид и доли запоминаются; повтор того же вида без записи', async () => {
+    const m = await fresh()
+    m.setKeysMode('list')
+    m.setKeysSplit({ ra: 0.5, rw: 0.4, rh: 0.3 })
+    const n = await fresh()
+    expect(n.keysMode).toBe('list')
+    expect(n.keysSplit).toEqual({ ra: 0.5, rw: 0.4, rh: 0.3 })
+    const set = vi.spyOn(localStorage, 'setItem')
+    n.setKeysMode('list')
+    expect(set).not.toHaveBeenCalled()
+  })
+  it('мусор в хранилище — значения по умолчанию, годные доли остаются', async () => {
+    localStorage.setItem('viewMode', JSON.stringify({ keysMode: 'x', keysSplit: { ra: 2, rw: 0.4, rh: 'a' } }))
+    const m = await fresh()
+    expect(m.keysMode).toBe('map')
+    expect(m.keysSplit).toEqual({ ra: null, rw: 0.4, rh: 0.62 })
+  })
+})

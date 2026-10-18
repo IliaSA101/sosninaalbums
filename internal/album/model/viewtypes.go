@@ -462,6 +462,9 @@ type CaptionView struct {
 	Who []string `json:"who,omitempty"`
 }
 
+// View — вид альбома для интерфейса. В JSON может уйти дельтой (075, viewwire.go): у вида с
+// Base > 0 MarshalJSON кладёт в spreads только изменённые развороты. Go-код всегда видит полный
+// список Spreads.
 type View struct {
 	// Product — тип изделия: по нему интерфейс выбирает режимы (в 0.5.0 только album).
 	Product  string       `json:"product"`
@@ -508,6 +511,14 @@ type View struct {
 	Unnamed  int      `json:"unnamed"`
 	// Cover — обложка (032); nil — её нет. В Spreads её нет: в счёт и нумерацию не входит.
 	Cover *CoverView `json:"cover"`
+	// Seq — номер вида в цепочке App (075); 0 — вид вне цепочки (Editor.View, экспорт, паника).
+	Seq int `json:"seq"`
+	// Base > 0 — дельта к виду с seq == Base: в JSON spreads — только изменённые развороты.
+	Base int `json:"base,omitempty"`
+	// Order — в дельте ID всех разворотов по порядку (удалённого нет, новый — и в spreads).
+	Order []string `json:"order,omitempty"`
+	// fresh — какие Spreads идут в дельту; ставит только Wire.
+	fresh []bool
 }
 
 // DefaultSafe — безопасная зона по умолчанию, мм (требование fsfera: значимое не ближе 8 мм).

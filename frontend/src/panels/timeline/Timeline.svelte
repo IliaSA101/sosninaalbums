@@ -6,25 +6,19 @@
   import { canvas } from '../../editor/canvas/canvas.svelte'
   import { tip } from '../../base/ui/tip.svelte'
   import { H, PAD, mergeCount } from './timeline'
-  import { afterNav, isHidden, shownW } from './chips'
+  import { afterNav, isHidden, widthsKey } from './chips'
   import { row } from '../../editor/spread/spreadrow.svelte'
   import { rowScroll } from '../../editor/spread/spreadrow'
   import { CENTER_SEL, StripFollow } from './stripscroll'
-  import { labelTitle, spreadLabel } from './spreadname'
   import FixedTip from '../../base/ui/FixedTip.svelte'
-  import SpreadName from './SpreadName.svelte'
   import SpreadMenu from './SpreadMenu.svelte'
-  import SpreadChips from './SpreadChips.svelte'
-  import LowDpiBadge from '../../base/ui/LowDpiBadge.svelte'
-  import MissingMark from '../../base/ui/MissingMark.svelte'
-  import { missingIn } from '../library/missing'
-  import VigMark from '../vignette/VigMark.svelte'
   import JoinLine from './JoinLine.svelte'
+  import TimelineGroup from './TimelineGroup.svelte'
   import AddColumn from './AddColumn.svelte'
   import CoverTile from '../cover/CoverTile.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { spreadsel } from './spreadsel.svelte'
-  import { COVER_ID, isSheet, sheetIn, unitOf } from '../../base/geom/sheet'
+  import { COVER_ID, sheetIn, unitOf } from '../../base/geom/sheet'
   import { isSelectClick } from './spreadsel'
   import { anyVaries } from '../gallery/variants'
   import { clearVignette, makeVignette } from '../vignette/vigact'
@@ -55,8 +49,9 @@
   let renaming = $state<string | null>(null)
 
   // Лента едет вместе с рядом разворотов (спека 012 §7): прокрутка — от дробной позиции row.pos,
-  // плавность даёт сам ряд, поэтому без smooth. Центры групп (последний — «+») кэшируются:
-  // пересчёт при правке, смене числа групп, ширины ленты, названия в правке и в начале движения.
+  // плавность даёт сам ряд, поэтому без smooth. Центры групп (последний — «+») кэшируются: перемер — при смене ширин групп
+  // (widthsKey, а не каждой правки: чтение offsetLeft после правки DOM форсирует раскладку), числа слотов, ширины ленты,
+  // названия в правке, обложки и в начале движения.
   let centers: number[] = []
   let centersKey = ''
   const follow = new StripFollow()
@@ -64,7 +59,8 @@
     centers = Array.from(box.querySelectorAll<HTMLElement>(CENTER_SEL), (el) => el.offsetLeft + el.offsetWidth / 2)
   }
   $effect(() => {
-    const key = `${store.view.rev}|${slots}|${bw}|${renaming}`
+    const cv = store.cover?.sheet
+    const key = `${widthsKey(spreads, expanded)}|${slots}|${bw}|${renaming}|${cv?.w}x${cv?.h}`
     const moving = row.moving
     const pos = row.pos
     if (!box || slots === 0 || bw === 0) {
@@ -73,7 +69,9 @@
       centersKey = ''
       return
     }
-    if (key !== centersKey || centers.length !== slots + 1 || follow.starting(moving)) {
+    const same = key === centersKey && centers.length === slots + 1
+    if (same && follow.idle(pos, moving)) return // правка не сдвинула группы: ни перемера, ни чтения scrollLeft
+    if (!same || follow.starting(moving)) {
       measure()
       centersKey = key
     }
@@ -219,55 +217,22 @@
     {#each spreads as sp, i (sp.id)}
       {@const cnt = mergeCount(spreads, i)}
       {@const gridJoin = gridAt(i)}
-      <div
-        class="group"
-        class:current={i + lead === row.near}
-        class:over={drag.over.startsWith(`mini:${sp.id}:`) && drag.payload?.kind === 'photos'}
-        class:ins-before={drag.over === `mini:${sp.id}:before` && drag.payload?.kind === 'spread'}
-        class:ins-after={drag.over === `mini:${sp.id}:after` && drag.payload?.kind === 'spread'}
-        class:lifted={drag.active && drag.payload?.kind === 'spread' && drag.payload.id === sp.id}
-        class:renaming={renaming === sp.id}
-        class:picked={spreadsel.has(sp.id)}
-        style:contain-intrinsic-size="auto {shownW(sp, expanded)}px auto {H + 2 * PAD + 17}px"
-        data-drop="mini"
-        {@attach (n) =>
-          near.watch(
-            n,
-            untrack(() => sp.id),
-          )}
-        data-spread={sp.id}
-        data-index={i}
-        role="button"
-        tabindex="-1"
-        aria-label="{unit.cap} {i + 1}"
-        onpointerdown={(e) => drag.start(e, () => ({ kind: 'spread', id: sp.id, index: i }))}
-        onclick={(e) => pickGroup(e, i, sp.id)}
-        oncontextmenu={(e) => openMenu(e, sp.id)}
-        onkeydown={() => {}}
-      >
-        {#if near.has(sp.id)}
-          <SpreadChips {sp} {i} {expanded} {cuts} onpick={pickCell} onexpand={() => (expanded = sp.id)} onfold={() => (expanded = null)} />
-        {:else}
-          <div style:width="{shownW(sp, expanded) - 2 * PAD}px" style:height="{H}px"></div>
-        {/if}
-        <LowDpiBadge count={sp.lowDPI} min={store.view.minDPI} />
-        <MissingMark count={missingIn(sp, missSet)} />
-        <VigMark kind={sp.kind} />
-        {#if renaming === sp.id}
-          <SpreadName id={sp.id} name={sp.name} onclose={() => (renaming = null)} />
-        {:else}
-          <!-- Якорь справочника — только у номера текущего разворота: иначе подсветится самый широкий из всех -->
-          <div
-            class="num"
-            {...i + lead === row.near ? { 'data-guide': 'spread-num' } : {}}
-            title={labelTitle(i, sp.name, true, isSheet(store.view.settings))}
-            ondblclick={() => prefs.can('names') && (renaming = sp.id)}
-            role="presentation"
-          >
-            {spreadLabel(i, sp.name)}
-          </div>
-        {/if}
-      </div>
+      <TimelineGroup
+        {sp}
+        {i}
+        {lead}
+        {near}
+        {expanded}
+        {renaming}
+        {cuts}
+        {missSet}
+        onpick={pickCell}
+        onpickgroup={pickGroup}
+        onmenu={openMenu}
+        onexpand={() => (expanded = sp.id)}
+        onfold={() => (expanded = null)}
+        onrename={(id) => (renaming = id)}
+      />
 
       {#if i < n - 1}<JoinLine {i} id={sp.id} {cnt} {gridJoin} {cuts} {max} />{/if}
     {/each}
@@ -345,74 +310,6 @@
   .timeline.empty {
     padding-top: 12px;
     padding-bottom: 2px;
-  }
-  .group {
-    position: relative;
-    flex: none;
-    padding: var(--pad);
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.15s;
-    /* 100+ разворотов: группы вне вида не рисуются. Обрезает всё за краем группы,
-       поэтому индикаторы рисуются внутри её отступа. */
-    content-visibility: auto;
-  }
-  .group.current {
-    background: rgba(255, 255, 255, 0.14);
-  }
-  .dragging .group.current {
-    background: rgba(245, 217, 10, 0.35);
-  }
-  .group.over,
-  .dragging .group.over {
-    background: rgba(245, 217, 10, 0.6);
-  }
-  /* Выделенные Ctrl/Shift+щелчком группы (спека 019 F) */
-  .group.picked {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-  }
-  .group.lifted {
-    opacity: 0.4;
-  }
-  .group.ins-before::before,
-  .group.ins-after::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    border-radius: 2px;
-    background: var(--accent);
-    z-index: 3;
-  }
-  .group.ins-before::before {
-    left: 0;
-  }
-  .group.ins-after::before {
-    right: 0;
-  }
-  .num {
-    text-align: center;
-    font-size: 11px;
-    line-height: 14px;
-    color: var(--muted);
-    margin-top: 3px;
-    /* Длинное название обрезается по ширине группы и саму группу не растягивает */
-    width: 0;
-    min-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    user-select: none;
-  }
-  /* Поле названия в узкой группе: группа на время правки раздвигается */
-  .group.renaming {
-    min-width: 88px;
-  }
-  .group.current .num {
-    color: var(--text);
-    font-weight: 600;
   }
   .lead {
     all: unset;

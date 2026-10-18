@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
 import { can, minLevel, rowOf, type Level } from '../../base/prefs/levels'
 import { features, fromBase } from '../../base/prefs/levelcustom'
 import { articleById, placesOf } from './articles'
@@ -47,6 +48,8 @@ const at = (level: Level, o: Partial<ShowCtx> = {}) => ctx({ level, can: (f) => 
 const art = (id: string) => articleById(id)!
 const plan = (id: string, o: Partial<ShowCtx> = {}): Plan => planShow(art(id), ctx(o))
 const kinds = (p: Plan) => p.steps.map((s) => s.do)
+
+afterEach(() => dropCatalog())
 
 describe('уровень', () => {
   it('функция есть — шагов уровня нет', () => {
@@ -244,10 +247,19 @@ describe('вспомогательное', () => {
     expect(menuPath('export')).toMatch(/^Файл ▸ Экспорт/)
     expect(menuPath('guide')).toBe('Справка ▸ Справочник функций…')
   })
-  it('keyRows: по action и по show, служебные строки пропускаются', () => {
+  it('keyRows: по id команды (текущие клавиши) и по справочной строке мыши', () => {
+    useCatalog()
     const rows = keyRows(art('undo'))
-    expect(rows.map((r) => r.show)).toEqual(expect.arrayContaining(['Ctrl+Z']))
+    expect(rows.map((r) => r.show)).toEqual(['Ctrl+Z', 'Ctrl+Y / Ctrl+Shift+Z'])
+    expect(rows.map((r) => r.label)).toEqual(['Отменить', 'Повторить'])
     expect(keyRows(art('hotkeys')).length).toBeGreaterThan(0)
+    // справочная строка мыши и жеста — по её show
+    expect(keyRows(art('zoom')).map((r) => r.show)).toContain('Ctrl+колесо, щипок тачпада')
+  })
+  it('keyRows: своя клавиша видна сразу; команда без клавиши строки не даёт; без реестра пусто', () => {
+    expect(keyRows(art('undo'))).toEqual([])
+    useCatalog({ undo: ['KeyU'], redo: [] })
+    expect(keyRows(art('undo')).map((r) => r.show)).toEqual(['U'])
   })
 })
 

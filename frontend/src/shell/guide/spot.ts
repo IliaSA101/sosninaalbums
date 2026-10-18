@@ -1,5 +1,7 @@
 // Подсветка места (спека 033, design §5): какой из подходящих элементов мигает и где подпись.
 // Чистая геометрия в px окна, без DOM.
+import { keymap } from '../../base/keys/keymap.svelte'
+
 export interface Box {
   left: number
   top: number
@@ -95,7 +97,7 @@ export function revealShift(lo: number, hi: number, vlo: number, vhi: number, pa
 
 // Запасной тост, когда мигать нечем: «Название: где». Всегда непустой, даже у статьи без where и how.
 export function missToast(a: { title: string; where?: string; how?: string }, hint = ''): string {
-  return `«${a.title}»: ${hint || a.where || a.how || 'сейчас этого места на экране нет'}`
+  return keymap.text(`«${a.title}»: ${hint || a.where || a.how || 'сейчас этого места на экране нет'}`)
 }
 
 // Тост про смену уровня и запасной — одним сообщением: второй notify затёр бы первый.

@@ -96,11 +96,14 @@ func TestSplitMergeMoveDelete(t *testing.T) {
 		id string
 		at int
 	}{{"s1", 0}, {"s1", 3}, {"s1", -1}, {"нет", 1}} {
-		if v := a.SplitSpread(c.id, c.at); v.Rev != r || len(v.Spreads) != 2 {
+		if v, err := a.SplitSpread(c.id, c.at); err != nil || v.Rev != r || len(v.Spreads) != 2 {
 			t.Fatalf("SplitSpread(%q, %d) изменил проект: rev %d→%d", c.id, c.at, r, v.Rev)
 		}
 	}
-	v := a.SplitSpread("s1", 1)
+	v, err := a.SplitSpread("s1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(v.Spreads) != 3 || !equalComposition(photosOf(v), []string{"a"}, []string{"b", "c"}, []string{"d"}) {
 		t.Fatalf("SplitSpread: %v", photosOf(v))
 	}
@@ -243,5 +246,55 @@ func TestSetSettings(t *testing.T) {
 	}
 	if v = a.undo(); v.Settings != before.Settings {
 		t.Errorf("Undo настроек: %+v, было %+v", v.Settings, before.Settings)
+	}
+}
+
+// «Разрезать» на пределе MaxSpreads (075-7): ошибка с пределом, вид не рассылается, проект прежний.
+func TestSplitSpreadLimit(t *testing.T) {
+	p := model.New()
+	for i := range model.MaxSpreads {
+		id := fmt.Sprintf("p%d", i)
+		p.Spreads = append(p.Spreads, &model.Spread{ID: fmt.Sprintf("s%d", i), Photos: []string{id}})
+		p.Photos[id] = model.PhotoRef{Path: `C:\` + id + ".jpg", W: 300, H: 200}
+	}
+	p.Spreads[0].Photos = append(p.Spreads[0].Photos, "x")
+	p.Photos["x"] = model.PhotoRef{Path: `C:\x.jpg`, W: 300, H: 200}
+	a, views := newMethods(t, p)
+	rev := a.editor().View().Rev
+	v, err := a.SplitSpread("s0", 1)
+	if err == nil || !strings.Contains(err.Error(), "200 разворотов") {
+		t.Fatalf("ждали отказ по пределу: %v", err)
+	}
+	if v.Rev != rev || len(v.Spreads) != model.MaxSpreads || len(views()) != 0 {
+		t.Fatalf("после отказа: rev %d→%d, %d разворотов, видов %d", rev, v.Rev, len(v.Spreads), len(views()))
+	}
+}
+
+// «Убрать из альбома» (075-13): место, фон и свой стикер — один шаг и одна рассылка вида;
+// RemovePhotos фон и стикер фото из места оставляет. Undo возвращает всё.
+func TestPurgePhotosMethod(t *testing.T) {
+	a, views := spreadsMethods(t, []string{"a", "b"}, []string{"c"})
+	ed := a.editor()
+	pa := model.PhotoInfo{ID: "a", Path: `C:\a.jpg`, W: 300, H: 200}
+	if _, err := ed.SetBackdrop("s2", model.ScopeSpread, pa); err != nil {
+		t.Fatal(err)
+	}
+	if _, id, err := ed.AddSticker("s2", 0, model.StickerSrc{Photo: pa}); err != nil || id == "" {
+		t.Fatalf("стикер: %q, %v", id, err)
+	}
+	if v := a.RemovePhotos([]string{"a"}); len(v.Spreads[1].Backdrops) != 1 || len(v.Spreads[1].Stickers) != 1 {
+		t.Fatalf("RemovePhotos снял фон или стикер: %+v", v.Spreads[1])
+	}
+	a.undo()
+	n, rev := len(views()), ed.View().Rev
+	v := a.PurgePhotos([]string{"a"})
+	if v.Rev != rev+1 || len(views()) != n+1 {
+		t.Fatalf("rev %d→%d, видов %d→%d", rev, v.Rev, n, len(views()))
+	}
+	if !equalComposition(photosOf(v), []string{"b"}, []string{"c"}) || len(v.Spreads[1].Backdrops) != 0 || len(v.Spreads[1].Stickers) != 0 {
+		t.Fatalf("PurgePhotos: %v %+v", photosOf(v), v.Spreads[1])
+	}
+	if v = a.undo(); !equalComposition(photosOf(v), []string{"a", "b"}, []string{"c"}) || len(v.Spreads[1].Backdrops) != 1 || len(v.Spreads[1].Stickers) != 1 {
+		t.Fatalf("Undo: %v %+v", photosOf(v), v.Spreads[1])
 	}
 }

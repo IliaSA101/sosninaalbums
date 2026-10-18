@@ -3,6 +3,7 @@
 
 import type { Family, Variety } from '../core/types'
 import { normFamilies } from './families'
+import { DEF_KEYS_SPLIT, loadKeysMode, loadKeysSplit, type KeysMode, type KeysSplit } from './keyswin'
 
 // card — сворачиваемая карточка выделенного в панели деталей (028 Б), не раздел Section.
 export type SectionName = 'card' | 'info' | 'settings' | 'grid'
@@ -17,6 +18,9 @@ export type AutoMem = 'auto' | [number, number]
 export const THUMB_MIN = 70
 export const THUMB_MAX = 220
 export const THUMB_DEF = 110
+
+// Порядок ленты фото (075): по имени (как от Go) или по времени съёмки.
+export type LibSort = 'name' | 'shot'
 
 const isPer = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 64
 
@@ -57,8 +61,13 @@ class ViewMode {
   }
   // 053: размер миниатюр ленты, целые px; настройка окна, как высота ленты.
   thumbSize = $state(THUMB_DEF)
+  // 075: порядок ленты («Фильтр ▸ Порядок»); настройка окна, фильтр «Сбросить» её не трогает.
+  libSort = $state<LibSort>('name')
   // 058: последняя типография в списке форматов «Настроек альбома» ("" — «Общие»).
   presetGroup = $state('')
+  // 074: окно «Горячие клавиши» — вид (карта или список крупно) и доли блоков.
+  keysMode = $state<KeysMode>('map')
+  keysSplit = $state<KeysSplit>({ ...DEF_KEYS_SPLIT })
   // Запрос «прокрутить панель к разделу»: счётчик, чтобы повторный запрос тоже срабатывал.
   reveal = $state<{ name: SectionName; n: number } | null>(null)
 
@@ -77,7 +86,10 @@ class ViewMode {
       this.rulers = v.rulers !== false
       const t = v.thumbSize
       if (Number.isInteger(t) && t >= THUMB_MIN && t <= THUMB_MAX) this.thumbSize = t
+      if (v.libSort === 'name' || v.libSort === 'shot') this.libSort = v.libSort
       if (typeof v.presetGroup === 'string') this.presetGroup = v.presetGroup
+      this.keysMode = loadKeysMode(v.keysMode)
+      this.keysSplit = loadKeysSplit(v.keysSplit)
       this.loadAuto(v)
       const s = v.sections
       if (s && typeof s === 'object') {
@@ -113,7 +125,10 @@ class ViewMode {
           markup: this.markup,
           rulers: this.rulers,
           thumbSize: this.thumbSize,
+          libSort: this.libSort,
           presetGroup: this.presetGroup,
+          keysMode: this.keysMode,
+          keysSplit: this.keysSplit,
           sections: this.sections,
           autoSpreads: this.autoSpreads,
           autoRange: this.autoRange,
@@ -176,9 +191,28 @@ class ViewMode {
     this.save()
   }
 
+  // Порядок ленты: запомнить (повторный выбор того же — без записи).
+  setLibSort(s: LibSort) {
+    if (this.libSort === s) return
+    this.libSort = s
+    this.save()
+  }
+
   // Запомнить типографию списка форматов.
   setPresetGroup(g: string) {
     this.presetGroup = g
+    this.save()
+  }
+
+  // Окно клавиш (074): вид и доли блоков запоминаются; повтор того же — без записи.
+  setKeysMode(m: KeysMode) {
+    if (this.keysMode === m) return
+    this.keysMode = m
+    this.save()
+  }
+
+  setKeysSplit(s: KeysSplit) {
+    this.keysSplit = { ...s }
     this.save()
   }
 

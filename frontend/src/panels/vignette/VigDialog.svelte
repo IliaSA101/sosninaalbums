@@ -111,7 +111,7 @@
 
 {#if ses}
   {@const s = ses}
-  <Modal title="Настроить виньетку" size="large" onclose={close}>
+  <Modal title="Настроить виньетку" size="large" onclose={close} undo>
     <div class="body" role="presentation" onkeydown={key}>
       <div class="grid">
         <div class="left" bind:clientWidth={colW}>

@@ -119,11 +119,14 @@ func Cached(aspects []float64, p layout.Params, rowLen int) bool {
 	return extraCache.has(extraKey(aspects, p, rowLen))
 }
 
-// ResetCache — холодный кэш ряда «Авто» и «Других вариантов» для бенчмарков (вместе с layout.ResetCache).
+// ResetCache — холодный кэш ряда «Авто» и «Других вариантов» для бенчмарков. Зовётся и из
+// layout.ResetCache (подписка OnReset, образец — plan): иначе холодный замер оставлял variety тёплым.
 func ResetCache() {
 	extraCache.reset()
 	rowCache.reset()
 }
+
+func init() { layout.OnReset(ResetCache) }
 
 // extraKey — ключ кэша layout: пропорции точно, иначе ряд зависел бы от того, какой из близких
 // наборов посчитан первым (extras и featured считаются по точным пропорциям).

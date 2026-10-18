@@ -7,15 +7,13 @@
   import { edit } from '../../editor/text/edit.svelte'
   import { parseExportRange, rangeSummary } from './exportrange'
   import ExportRun from './ExportRun.svelte'
+  import ExportGroup from './ExportGroup.svelte'
+  import ExportQuality from './ExportQuality.svelte'
   import {
-    DPI_PRESETS,
-    QUALITIES,
     buildOptions,
     canExport,
     coverAvailable,
-    estimateBytes,
     exportWarnings,
-    formatSize,
     FSFERA_DPI,
     hasFix,
     loadPrefs,
@@ -88,7 +86,6 @@
   const can = $derived(canExport({ busy, bad, fsPref: prefs.fsfera, plan }))
 
   const album = $derived(settings.dpi)
-  const albumIsPreset = $derived(DPI_PRESETS.some((d) => d.v === album))
   // Выбранное dpi в числе; 0 в выборе — «как в альбоме».
   const dpiNow = $derived(fs ? FSFERA_DPI : prefs.dpi > 0 ? prefs.dpi : album)
   const unit = $derived(sheet ? 'лист' : pagesNow ? 'страницу' : 'разворот')
@@ -145,16 +142,13 @@
       <ExportRun />
     {:else}
       {#if plan?.format}
-        <div class="group">
-          <span class="cap">Печать</span>
-          <div class="opts">
-            <label
-              ><input type="checkbox" checked={prefs.fsfera} onchange={(e) => setPrefs({ fsfera: e.currentTarget.checked })} />Для Фотосферы
-              Pro
-              <span class="hint">(папка «{plan.folder}», 300 dpi{hasCover ? ', с обложкой' : ''})</span></label
-            >
-          </div>
-        </div>
+        <ExportGroup cap="Печать">
+          <label
+            ><input type="checkbox" checked={prefs.fsfera} onchange={(e) => setPrefs({ fsfera: e.currentTarget.checked })} />Для Фотосферы
+            Pro
+            <span class="hint">(папка «{plan.folder}», 300 dpi{hasCover ? ', с обложкой' : ''})</span></label
+          >
+        </ExportGroup>
         {#if fs}
           {#if plan.memo.length}<p class="hint">{memoLine(plan.memo)}</p>{/if}
           {#each plan.block as line, i (line)}
@@ -170,68 +164,62 @@
       {/if}
 
       {#if hasCover}
-        <div class="group" class:off={fs}>
-          <span class="cap">Обложка</span>
-          <div class="opts">
-            <label
-              ><input
-                type="checkbox"
-                checked={fs || prefs.cover || only}
-                disabled={only || fs}
-                onchange={(e) => setPrefs({ cover: e.currentTarget.checked })}
-              />Обложка <span class="hint">(00.jpg)</span></label
-            >
-            <label
-              ><input
-                type="checkbox"
-                checked={prefs.coverOnly && !fs}
-                disabled={fs}
-                onchange={(e) => setPrefs({ coverOnly: e.currentTarget.checked })}
-              />Только обложка</label
-            >
-          </div>
-        </div>
+        <ExportGroup cap="Обложка" off={fs}>
+          <label
+            ><input
+              type="checkbox"
+              checked={fs || prefs.cover || only}
+              disabled={only || fs}
+              onchange={(e) => setPrefs({ cover: e.currentTarget.checked })}
+            />Обложка <span class="hint">(00.jpg)</span></label
+          >
+          <label
+            ><input
+              type="checkbox"
+              checked={prefs.coverOnly && !fs}
+              disabled={fs}
+              onchange={(e) => setPrefs({ coverOnly: e.currentTarget.checked })}
+            />Только обложка</label
+          >
+        </ExportGroup>
       {/if}
 
-      <div class="group" class:off={only || fs} role="radiogroup" aria-label="Что выгрузить">
-        <span class="cap">{sheet ? 'Листы' : 'Развороты'}</span>
-        <div class="opts">
-          <label
-            ><input type="radio" name="ex-scope" disabled={only || fs} checked={scopeNow === 'all'} onchange={() => pick('all')} />Все ({spreads.length})</label
-          >
-          <label
-            ><input
-              type="radio"
-              name="ex-scope"
-              disabled={only || fs}
-              checked={scopeNow === 'current'}
-              onchange={() => pick('current')}
-            />Текущий ({store.onCover && hasCover ? 'обложка' : current})</label
-          >
-          <label class="inline"
-            ><input
-              type="radio"
-              name="ex-scope"
-              disabled={only || fs}
-              checked={scopeNow === 'range'}
-              onchange={() => pick('range')}
-            />Диапазон:
-            <input
-              type="text"
-              class="ranges"
-              class:bad
-              placeholder={sheet ? '3-5, 8' : '3-5, 8, 7п'}
-              aria-label="Диапазон экспорта"
-              aria-invalid={bad}
-              disabled={only || fs}
-              bind:this={field}
-              bind:value={text}
-              onfocus={() => (scope = 'range')}
-              onkeydown={enter}
-            /></label
-          >
-        </div>
-      </div>
+      <ExportGroup cap={sheet ? 'Листы' : 'Развороты'} off={only || fs} role="radiogroup" label="Что выгрузить">
+        <label
+          ><input type="radio" name="ex-scope" disabled={only || fs} checked={scopeNow === 'all'} onchange={() => pick('all')} />Все ({spreads.length})</label
+        >
+        <label
+          ><input
+            type="radio"
+            name="ex-scope"
+            disabled={only || fs}
+            checked={scopeNow === 'current'}
+            onchange={() => pick('current')}
+          />Текущий ({store.onCover && hasCover ? 'обложка' : current})</label
+        >
+        <label class="inline"
+          ><input
+            type="radio"
+            name="ex-scope"
+            disabled={only || fs}
+            checked={scopeNow === 'range'}
+            onchange={() => pick('range')}
+          />Диапазон:
+          <input
+            type="text"
+            class="ranges"
+            class:bad
+            placeholder={sheet ? '3-5, 8' : '3-5, 8, 7п'}
+            aria-label="Диапазон экспорта"
+            aria-invalid={bad}
+            disabled={only || fs}
+            bind:this={field}
+            bind:value={text}
+            onfocus={() => (scope = 'range')}
+            onkeydown={enter}
+          /></label
+        >
+      </ExportGroup>
       {#if scope === 'range' && !only && !fs}
         {#if parsed.error}<p class="err">{parsed.error}</p>{:else}<p class="hint" role="status">
             {rangeSummary(parsed.units, sheet, hasCover && prefs.cover)}
@@ -242,78 +230,19 @@
       {/if}
 
       {#if !sheet}
-        <div class="group" class:off={fs} role="radiogroup" aria-label="Вид">
-          <span class="cap">Вид</span>
-          <div class="opts">
-            <label
-              ><input
-                type="radio"
-                name="ex-pages"
-                checked={!pagesNow}
-                disabled={fs}
-                onchange={() => setPrefs({ pages: false })}
-              />Разворотами
-              <span class="hint">{sampleName(current, spreads.length, false)}</span></label
-            >
-            <label
-              ><input type="radio" name="ex-pages" checked={pagesNow} disabled={fs} onchange={() => setPrefs({ pages: true })} />По
-              страницам
-              <span class="hint">{sampleName(current, spreads.length, true)}</span></label
-            >
-          </div>
-        </div>
+        <ExportGroup cap="Вид" off={fs} role="radiogroup" label="Вид">
+          <label
+            ><input type="radio" name="ex-pages" checked={!pagesNow} disabled={fs} onchange={() => setPrefs({ pages: false })} />Разворотами
+            <span class="hint">{sampleName(current, spreads.length, false)}</span></label
+          >
+          <label
+            ><input type="radio" name="ex-pages" checked={pagesNow} disabled={fs} onchange={() => setPrefs({ pages: true })} />По страницам
+            <span class="hint">{sampleName(current, spreads.length, true)}</span></label
+          >
+        </ExportGroup>
       {/if}
 
-      <div class="group" role="radiogroup" aria-label="Качество">
-        <span class="cap">Качество</span>
-        <div class="opts">
-          {#each QUALITIES as q (q.v)}
-            <button
-              class="chip"
-              class:on={prefs.quality === q.v}
-              role="radio"
-              aria-checked={prefs.quality === q.v}
-              onclick={() => setPrefs({ quality: q.v })}
-            >
-              <b>{q.v}</b>
-              <span>{q.label}</span>
-              <small>{formatSize(estimateBytes(settings, dpiNow, q.v, pagesNow))}</small>
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <div class="group" class:off={fs} role="radiogroup" aria-label="Разрешение">
-        <span class="cap">Dpi</span>
-        <div class="opts">
-          {#if !albumIsPreset}
-            <button
-              class="chip"
-              class:on={prefs.dpi === 0 && !fs}
-              role="radio"
-              aria-checked={prefs.dpi === 0 && !fs}
-              disabled={fs}
-              onclick={() => setPrefs({ dpi: 0 })}
-            >
-              <b>{album}</b>
-              <span>из альбома</span>
-            </button>
-          {/if}
-          {#each DPI_PRESETS as d (d.v)}
-            <button
-              class="chip"
-              class:on={dpiNow === d.v}
-              role="radio"
-              aria-checked={dpiNow === d.v}
-              disabled={fs}
-              onclick={() => setDpi(d.v)}
-            >
-              <b>{d.v}</b>
-              <span>{d.label}</span>
-            </button>
-          {/each}
-        </div>
-      </div>
+      <ExportQuality {prefs} {settings} {dpiNow} {pagesNow} {fs} {setPrefs} {setDpi} />
       <p class="hint size">{summary}.</p>
       {#if warn}<p class="warn">{warn}.</p>{/if}
 
@@ -326,29 +255,6 @@
 {/if}
 
 <style>
-  /* Окно шире обычного: строки «Развороты» и «Вид» помещаются в одну строку */
-  :global(.box.wide):has(.opts) {
-    width: 560px;
-  }
-  /* Подпись строки — левая колонка 64 px, варианты — правая; при переносе держатся левого края вариантов. */
-  .group {
-    display: grid;
-    grid-template-columns: 64px 1fr;
-    align-items: center;
-    gap: 0 14px;
-    margin-bottom: 12px;
-  }
-  .opts {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px 14px;
-    min-width: 0;
-  }
-  .cap {
-    color: var(--muted);
-    font-size: 12px;
-  }
   label {
     display: inline-flex;
     align-items: center;
@@ -359,9 +265,6 @@
   input[type='checkbox'] {
     accent-color: var(--accent);
     margin: 0;
-  }
-  .group.off {
-    opacity: 0.5;
   }
   .inline {
     flex-wrap: wrap;
@@ -414,29 +317,6 @@
     margin: 8px 0 0;
     color: var(--text);
     font-size: 12px;
-  }
-  .chip {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1px;
-    height: auto;
-    min-height: 30px;
-    min-width: 84px;
-    padding: 4px 8px;
-    line-height: 1.25;
-  }
-  .chip.on {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .chip b {
-    font-weight: 600;
-  }
-  .chip span,
-  .chip small {
-    color: var(--muted);
-    font-size: 11px;
   }
   .actions {
     display: flex;

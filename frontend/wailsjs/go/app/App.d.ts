@@ -5,6 +5,7 @@ import {model} from '../models';
 import {prefs} from '../models';
 import {collect} from '../models';
 import {fsfera} from '../models';
+import {keymap} from '../models';
 import {text} from '../models';
 
 export function AddDecorPNG(arg1:string,arg2:string):Promise<app.DecorItem>;
@@ -123,6 +124,8 @@ export function FsferaPlan():Promise<fsfera.Plan>;
 
 export function GetState():Promise<app.State>;
 
+export function GetView():Promise<model.View>;
+
 export function GridChoices(arg1:string,arg2:number,arg3:string):Promise<model.GridChoices>;
 
 export function HideDecor(arg1:string,arg2:string):Promise<void>;
@@ -130,6 +133,8 @@ export function HideDecor(arg1:string,arg2:string):Promise<void>;
 export function ImportDecor(arg1:string,arg2:string):Promise<app.DecorImport>;
 
 export function ImportDecorPaths(arg1:string,arg2:string,arg3:Array<string>):Promise<app.DecorImport>;
+
+export function Keymap():Promise<keymap.View>;
 
 export function LayoutChoices(arg1:string):Promise<model.Choices>;
 
@@ -191,6 +196,8 @@ export function PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.Nam
 
 export function PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>;
 
+export function PurgePhotos(arg1:Array<string>):Promise<model.View>;
+
 export function Recent():Promise<Array<prefs.RecentProject>>;
 
 export function Redo():Promise<model.View>;
@@ -202,6 +209,8 @@ export function RelinkFolder():Promise<app.RelinkResult>;
 export function RelinkFolderPath(arg1:string):Promise<app.RelinkResult>;
 
 export function RemoveFolder(arg1:string):Promise<model.View>;
+
+export function RemoveHotkey(arg1:string,arg2:string):Promise<keymap.View>;
 
 export function RemovePack(arg1:string):Promise<app.PackList>;
 
@@ -217,6 +226,10 @@ export function Rescan():Promise<void>;
 
 export function ResetFrame(arg1:string):Promise<model.View>;
 
+export function ResetHotkey(arg1:string,arg2:boolean):Promise<keymap.SetResult>;
+
+export function ResetHotkeys():Promise<keymap.View>;
+
 export function ResetLibrarySkip():Promise<app.LibraryNet>;
 
 export function ResetMarks(arg1:Array<string>):Promise<model.View>;
@@ -224,6 +237,8 @@ export function ResetMarks(arg1:Array<string>):Promise<model.View>;
 export function ResetVignette(arg1:string):Promise<app.GridResult>;
 
 export function RestoreBackup(arg1:string):Promise<model.View>;
+
+export function RestoreHotkeys(arg1:Record<string, Array<string>>):Promise<keymap.View>;
 
 export function RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>;
 
@@ -272,6 +287,8 @@ export function SetFrameAngle(arg1:string,arg2:string,arg3:number,arg4:string):P
 export function SetGray(arg1:Array<string>):Promise<model.View>;
 
 export function SetGrid(arg1:string,arg2:boolean):Promise<model.View>;
+
+export function SetHotkey(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<keymap.SetResult>;
 
 export function SetLayout(arg1:string,arg2:string):Promise<model.View>;
 

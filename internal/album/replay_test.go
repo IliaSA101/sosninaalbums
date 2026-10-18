@@ -56,7 +56,8 @@ type replay struct {
 	ids   map[string]string
 	revs  map[int]int
 	steps []replayStep
-	v     model.View // View последней правки: из него берутся ID для следующих шагов
+	v     model.View   // View последней правки: из него берутся ID для следующих шагов
+	views []model.View // виды всех правок по порядку (сверка дельт, TestWireDeltaReplay)
 }
 
 var replayID = regexp.MustCompile(`"[0-9a-f]{12}"`)
@@ -95,6 +96,7 @@ func (r *replay) push(s replayStep) {
 func (r *replay) edit(name string, v model.View, out any, err error) {
 	r.t.Helper()
 	r.v = v
+	r.views = append(r.views, v)
 	v.Path = strings.Replace(v.Path, r.file, "<album>", 1)
 	if _, ok := r.revs[v.MarksRev]; !ok {
 		r.revs[v.MarksRev] = len(r.revs)

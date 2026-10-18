@@ -9,6 +9,9 @@ import { jobs } from './jobs.svelte'
 import { Toasts, stepToast, undoToast, type Toast } from './toasts.svelte'
 import type { MarkMap, PickResult } from './hooks'
 import { backdropLost, pickCurrent } from './undo'
+import { deepFreeze } from './viewdelta'
+import { ViewChain } from './viewchain'
+import { keepSet } from './usedindex'
 import { mergeSnapshot, noEvents } from './startstate'
 import { movedFrom, movedText, type Moved } from './strip'
 import { prefs } from '../prefs/prefs.svelte'
@@ -75,14 +78,17 @@ class Store extends Nav {
   busy = $state(false)
   byId = $derived(new Map(this.photos.map((p) => [p.id, p])))
   // Фото на фоне: в used не входят (не «в альбоме»), но автосборка и фильтр их не берут (freephotos.ts).
-  backdropUsed = $derived(new Set(this.view.backdropUsed ?? []))
+  // Состав не менялся — тот же объект, чтобы `free` (3200 фото) не пересчитывался на каждую правку (075-16).
+  private bdPrev = new Set<string>()
+  backdropUsed = $derived((this.bdPrev = keepSet(this.bdPrev, this.view.backdropUsed ?? [])))
   // Свои отметки фото (спека 004): ID → поля, поставленные в программе (library/ownmarks.svelte.ts).
   // Действующая отметка с учётом XMP — markOf(photo, store.marks[photo.id]).
   get marks(): MarkMap {
     return this.hooks.marks()
   }
   // Фото без скрытых папок (054): без фильтра по папкам — тот же массив.
-  inFolders = $derived(this.hooks.folders(this.photos))
+  ordered = $derived(this.hooks.order(this.photos))
+  inFolders = $derived(this.hooks.folders(this.ordered))
   // Не в местах и не на фоне (среди показанных папок).
   free = $derived(this.hooks.free(this.inFolders, this.used, this.backdropUsed))
   // Лента до фильтра по отметкам (длина — «из M» в MarkFilter) и после него (libfilter).
@@ -116,7 +122,8 @@ class Store extends Nav {
       if (s) this.scan = s
     })
     EventsOn('thumbs', (done: number, total: number) => (this.thumbs = { done, total }))
-    EventsOn('saved', (v: View) => (this.view = { ...this.view, dirty: v.dirty, path: v.path }))
+    // 075-5: автосохранение шлёт только {dirty, path}, не вид
+    EventsOn('saved', (v: { dirty: boolean; path: string }) => (this.view = { ...this.view, dirty: v.dirty, path: v.path }))
     EventsOn('missing', (ids: string[] | null) => {
       this.seen.missing = true
       this.setMissing(ids ?? [])
@@ -137,6 +144,7 @@ class Store extends Nav {
       this.version = st.version ?? ''
       this.fonts = st.fonts ?? []
       prefs.load(st.prefs)
+      if (st.keymap) this.hooks.keymapLoaded(st.keymap)
       this.recent = st.recent ?? []
       // Не ждём: ошибка шрифта не должна мешать старту, текст пока рисуется запасным.
       this.hooks.fontsLoaded(this.fonts)
@@ -165,8 +173,9 @@ class Store extends Nav {
   // Все правки идут сюда: Go возвращает новое состояние альбома.
   async run(p: Promise<unknown>): Promise<boolean> {
     try {
-      this.apply((await p) as View)
-      return true
+      // Дельта не к нашему виду: ждём пересинхрона, иначе вызывающий (rev, current) увидит старый вид.
+      const w = this.chain.take((await p) as View)
+      return w ? await w : true
     } catch (e) {
       this.notify(errText(e), 'error')
       return false
@@ -183,12 +192,30 @@ class Store extends Nav {
     return true
   }
 
-  apply(v: View) {
-    if (!v) return
-    this.view = { ...v, folders: v.folders ?? [], spreads: v.spreads ?? [] }
+  // Цепочка видов App (075, viewchain.ts): дубли, дельты, пересинхрон через GetView.
+  private readonly chain = new ViewChain({
+    current: () => this.view,
+    show: (v) => this.show(v),
+    fetch: () => Api.GetView() as unknown as Promise<View>,
+    fail: (e) => this.notify(errText(e), 'error'),
+  })
+
+  apply(raw: View) {
+    void this.chain.take(raw)
+  }
+
+  private show(v: View) {
+    const next = { ...v, folders: v.folders ?? [], spreads: v.spreads ?? [] }
+    this.view = import.meta.env.DEV ? deepFreeze(next) : next
+    this.settle()
+  }
+
+  // После смены вида: тост, обложка, текущий разворот, хук верха.
+  private settle() {
+    const v = this.view
     // «Вернуть» отменяет последнюю правку: после любой другой смены ревизии он уже не про то.
     if (this.toast?.rev !== undefined && v.rev !== this.toast.rev) this.toast = null
-    const sp = this.view.spreads
+    const sp = v.spreads
     // Обложку удалили (или Undo её убрал) — возвращаемся на разворот; остались одни обложки — стоим на ней.
     if (this.onCover && !this.cover) this.onCover = false
     if (!this.onCover && sp.length === 0 && this.cover) this.onCover = true

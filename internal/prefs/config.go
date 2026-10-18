@@ -4,6 +4,8 @@ package prefs
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"maps"
 	"os"
@@ -37,6 +39,9 @@ type Config struct {
 	RecentDecor map[string][]string `json:"recentDecor,omitempty"`
 	// LibraryNet — согласие на сеть библиотеки и удалённые наборы (067 Ф3, libnet.go).
 	LibraryNet *LibraryNet `json:"libraryNet,omitempty"`
+	// Hotkeys — свои горячие клавиши (074): id команды → её сочетания, только отличия от
+	// стандартных (keymap.Overrides). Правила и пределы — internal/keymap, здесь не толкуются.
+	Hotkeys map[string][]string `json:"hotkeys,omitempty"`
 }
 
 // configKeys — ключи config.json, которыми владеет эта версия (по тегам Config).
@@ -64,9 +69,29 @@ func LoadConfig(dir string) Config {
 	return loadConfig(dir)
 }
 
+// maxConfigSize — предел config.json: настоящий весит килобайты; подсунутый гигабайтный файл
+// не должен читаться целиком (Keymap() зовёт LoadConfig на каждом GetState).
+const maxConfigSize = 1 << 20
+
+// readConfigFile читает config.json не больше maxConfigSize; больше — как отсутствующий.
+func readConfigFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxConfigSize+1))
+	if err == nil && len(data) > maxConfigSize {
+		err = errConfigTooBig
+	}
+	return data, err
+}
+
+var errConfigTooBig = errors.New("config.json больше предела")
+
 func loadConfig(dir string) Config {
 	var c Config
-	if data, err := os.ReadFile(ConfigPath(dir)); err == nil {
+	if data, err := readConfigFile(ConfigPath(dir)); err == nil {
 		// Битый конфиг — как отсутствующий: просто откроется черновик.
 		_ = json.Unmarshal(data, &c)
 	}
@@ -83,7 +108,7 @@ func UpdateConfig(dir string, fn func(c *Config)) {
 	fn(&c)
 	path := ConfigPath(dir)
 	raw := map[string]json.RawMessage{}
-	if old, err := os.ReadFile(path); err == nil {
+	if old, err := readConfigFile(path); err == nil {
 		_ = json.Unmarshal(old, &raw) // битый файл — как пустой
 	}
 	if raw == nil { // файл "null"

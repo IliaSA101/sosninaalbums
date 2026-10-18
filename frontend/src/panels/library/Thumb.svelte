@@ -25,7 +25,12 @@
   role="button"
   tabindex="-1"
   title={markTitle(p.name, mark)}
-  onpointerdown={(e) => drag.start(e, () => ({ kind: 'photos', ids: store.dragIds(p.id) }))}
+  onpointerdown={(e) =>
+    drag.start(
+      e,
+      () => ({ kind: 'photos', ids: store.selected.has(p.id) ? store.selectedIds : [p.id] }),
+      () => store.dragIds(p.id), // выделение меняется, только когда перенос начался
+    )}
   onclick={(e) => drag.clickAllowed() && store.click(p.id, e)}
   ondblclick={() => store.addToCurrent([p.id])}
   onkeydown={() => {}}

@@ -27,12 +27,6 @@
     if (pct === fadePct(b.fade)) fadeLive.release()
   }
 
-  // Стрелки ползунка не уходят в общие хоткеи (←/→ листают разворот, в режиме фона двигают рамку).
-  const KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'])
-  function keydown(e: KeyboardEvent) {
-    if (KEYS.has(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) e.stopPropagation()
-  }
-
   // Уход с разворота или из режима фона: просмотр не должен остаться на чужом развороте.
   $effect(() => {
     void spread
@@ -56,7 +50,6 @@
     aria-valuetext="{pct} %"
     onfocus={() => (session = bdSession())}
     onblur={blur}
-    onkeydown={keydown}
     oninput={(e) => fadeLive.set(spread, b.scope, pctFade(val(e)))}
     onchange={commit}
     onpointerup={(e) => e.currentTarget.blur()}

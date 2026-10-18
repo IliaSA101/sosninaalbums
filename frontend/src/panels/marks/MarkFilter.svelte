@@ -6,6 +6,7 @@
   import Icon from '../../base/ui/Icon.svelte'
   import Popover from '../../base/ui/Popover.svelte'
   import { libfilter } from './libfilter.svelte'
+  import { LIB_SORTS } from '../library/sortphotos'
   import { filterLabel, LABEL_VIEW } from './markbar'
   import type { FlagFilter } from './marks'
 
@@ -71,6 +72,20 @@
 
 <Popover anchor={btn} bind:open label="Фильтр ленты" kind="filter">
   <div class="pop">
+    <div class="cap">Порядок</div>
+    <div class="row">
+      {#each LIB_SORTS as s (s.v)}
+        <button
+          type="button"
+          class="opt"
+          class:on={modes.libSort === s.v}
+          title={s.title}
+          aria-pressed={modes.libSort === s.v}
+          onclick={() => modes.setLibSort(s.v)}>{s.text}</button
+        >
+      {/each}
+    </div>
+
     <div class="cap">Показывать</div>
     <div class="row">
       <button

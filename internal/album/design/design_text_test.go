@@ -75,7 +75,7 @@ func TestSpreadNameMoveSplitMerge(t *testing.T) {
 		t.Fatalf("перенос: %+v", v.Spreads[1])
 	}
 	e.MoveSpread(s1, 0)
-	v = e.SplitSpread(s1, 1)
+	v, _ = e.SplitSpread(s1, 1)
 	if v.Spreads[0].Name != "Сборы" || v.Spreads[1].Name != "" {
 		t.Fatalf("разрез: %q %q", v.Spreads[0].Name, v.Spreads[1].Name)
 	}

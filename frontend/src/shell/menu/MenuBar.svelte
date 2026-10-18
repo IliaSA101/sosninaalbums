@@ -1,63 +1,15 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte'
   import { store } from '../../base/core/store.svelte'
-  import { jobs } from '../../base/core/jobs.svelte'
-  import { placesel } from '../../editor/places/placesel.svelte'
-  import { edit } from '../../editor/text/edit.svelte'
-  import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
-  import { modes } from '../../base/prefs/view.svelte'
-  import { prefs } from '../../base/prefs/prefs.svelte'
-  import { align } from '../../panels/layouts/align.svelte'
   import { run } from './commands'
   import { menuUi } from './menuui.svelte'
-  import { anyVaries, varyTargets } from '../../panels/gallery/variants'
-  import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
-  import { isCover } from '../../base/geom/sheet'
-  import { splitMissing } from '../../panels/library/missing'
-  import { buildMenu, type MenuCtx, type MenuId, type MenuItem } from './menu'
+  import { menuCtx } from './menuctx'
+  import { buildMenu, type MenuId, type MenuItem } from './menu'
   import { placePopover, placeSubmenu, type Box } from '../../base/ui/popover'
 
   // Своя строка меню (не системная, спека 010): щелчок открывает, наведение переключает соседнее меню,
   // Esc и щелчок мимо закрывают, ← → ↑ ↓ Enter работают. Пункты и серые — menu/menu.ts.
-  const ctx = $derived<MenuCtx>({
-    can: prefs.can,
-    level: prefs.level,
-    recent: store.recent,
-    spreads: store.sheets.length, // лист обложки (032) тоже можно выгрузить
-    hasSpread: !!store.spread,
-    canUndo: store.view.canUndo,
-    canRedo: store.view.canRedo,
-    zone: store.zone,
-    libraryPhotos: store.visible.length,
-    anySelection:
-      store.selected.size > 0 ||
-      spreadsel.size > 0 ||
-      placesel.refs.length > 0 ||
-      placesel.texts.length > 0 ||
-      placesel.stickers.length > 0 ||
-      !!edit.sel,
-    deletable: placesel.refs.length > 0 || placesel.texts.length > 0 || placesel.stickers.length > 0 || !!edit.sel,
-    flippable: placesel.selected.some((b) => b.photo),
-    allGray: placesel.allGray,
-    sticker: !!placesel.soloSticker,
-    varyable: anyVaries(store.view.spreads, varyTargets(spreadsel.ordered(store.view.spreads.map((s) => s.id)), store.spread?.id)),
-    vigable: canMakeVignette(store.spread, prefs.can),
-    decorable: !!store.spread && !isCover(store.spread),
-    vigSetup: isVignette(store.spread),
-    layerable: placesel.canLayer,
-    missing: splitMissing(store.missing, store.view.libPhotos).photos.length, // свои из библиотеки папкой не ищутся (048)
-    collecting: !!jobs.collecting,
-    exporting: !!jobs.exporting,
-    big: modes.big,
-    details: modes.details,
-    safe: modes.safe,
-    markup: modes.markup,
-    rulers: modes.rulers,
-    snap: placesel.snap,
-    alignCount: align.ids.length,
-    alignTo: align.to,
-  })
-  const menus = $derived(buildMenu(ctx))
+  const menus = $derived(buildMenu(menuCtx()))
 
   let root = $state<HTMLElement>()
   let drop = $state<HTMLElement>()

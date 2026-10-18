@@ -31,12 +31,11 @@ func (a *App) removeDraft() {
 	}
 }
 
-// emitState рассылает вид нового проекта (как changed) и возвращает состояние целиком.
+// emitState рассылает вид нового проекта (как changed) и возвращает состояние целиком. Вид —
+// полный и уже в цепочке (GetState → fullLocked).
 func (a *App) emitState() State {
 	st := a.GetState()
-	if a.ctx != nil {
-		wr.EventsEmit(a.ctx, "view", st.View)
-	}
+	a.emit("view", st.View)
 	return st
 }
 
@@ -109,8 +108,10 @@ func (a *App) SaveProject() (model.View, error) {
 		return a.SaveProjectAs()
 	}
 	a.backupBefore(path, backupKey(path), false) // и без правок: см. save
-	err := ed.Save("")
-	return ed.View(), err
+	if err := ed.Save(""); err != nil {
+		return ed.View(), err
+	}
+	return a.out(ed.View()), nil
 }
 
 func (a *App) SaveProjectAs() (model.View, error) {
@@ -121,8 +122,11 @@ func (a *App) SaveProjectAs() (model.View, error) {
 		DefaultFilename:  "Альбом" + projectExt,
 		Filters:          []wr.FileFilter{{DisplayName: "Альбом (*" + projectExt + ")", Pattern: "*" + projectExt}},
 	})
-	if err != nil || path == "" {
+	if err != nil {
 		return ed.View(), err
+	}
+	if path == "" {
+		return a.out(ed.View()), nil
 	}
 	if !strings.HasSuffix(strings.ToLower(path), projectExt) {
 		path += projectExt
@@ -149,7 +153,7 @@ func (a *App) saveAs(ed *album.Editor, path string) (model.View, error) {
 	if !a.draftLocked.Load() {
 		a.removeDraft()
 	}
-	return ed.View(), nil
+	return a.out(ed.View()), nil
 }
 
 func (a *App) draftPath() string { return filepath.Join(a.cfgDir, "черновик"+projectExt) }
@@ -197,7 +201,7 @@ func (a *App) unlockDraft() bool {
 
 // changed — после каждой правки: через секунду тишины проект сохраняется сам; список
 // недостающих следует за набором фото альбома (убрали битое фото — полоса уходит сразу).
-func (a *App) changed(v model.View) model.View {
+func (a *App) changed(v model.View) (w model.View) {
 	func() {
 		a.mu.Lock()
 		defer a.mu.Unlock() // и при панике рассылки: guardEdit затем читает вид
@@ -205,11 +209,15 @@ func (a *App) changed(v model.View) model.View {
 			a.saveTimer.Stop()
 		}
 		a.saveTimer = time.AfterFunc(time.Second, a.autosave)
-		// Другие открытые клиенты (окно и браузер в режиме разработки) тоже обновятся.
-		a.emit("view", v)
+		// Другие открытые клиенты (окно и браузер в режиме разработки) тоже обновятся; холостой
+		// и обогнанной правке событие не нужно (075-3).
+		var send bool
+		if w, send = a.outLocked(v); send {
+			a.emit("view", w)
+		}
 	}()
 	a.syncMissing(v.Rev)
-	return v
+	return w
 }
 
 // autosave — сработал таймер. Проверка stopped под saveMu: запись не может начаться после
@@ -257,9 +265,14 @@ func (a *App) save() {
 		log.Printf("автосохранение: %v", paths.NoPath(err))
 		return
 	}
-	if a.ctx != nil {
-		wr.EventsEmit(a.ctx, "saved", ed.View())
-	}
+	v := ed.View() // dirty и path — после записи: правка в промежутке снова ставит dirty
+	a.emit("saved", Saved{Dirty: v.Dirty, Path: v.Path})
+}
+
+// Saved — событие saved (075-5): фронту нужны только эти два поля, а не вид в 1,2 МБ.
+type Saved struct {
+	Dirty bool   `json:"dirty"`
+	Path  string `json:"path"`
 }
 
 // Настройки и «Последние» — рядом с открытием файлов: OpenRecent идёт через openPath.

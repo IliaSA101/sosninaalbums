@@ -58,7 +58,7 @@
 <svelte:window onkeydown={key} />
 
 {#if namesUi.open && sp}
-  <Modal title="Имена" onclose={close} wide>
+  <Modal title="Имена" onclose={close} wide undo>
     <div class="body" bind:this={bodyEl}>
       <div class="seg" role="group" aria-label="Откуда имена">
         <button class:on={namesUi.from === 'list'} aria-pressed={namesUi.from === 'list'} onclick={() => (namesUi.from = 'list')}

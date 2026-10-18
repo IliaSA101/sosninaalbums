@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keymap } from '../../base/keys/keymap.svelte'
   import { store } from '../../base/core/store.svelte'
   import { exportShut, jobs } from '../../base/core/jobs.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
@@ -29,8 +30,8 @@
     </span>
     <div class="sep"></div>
     <span class="pair" data-guide="topbar-undo">
-      <button class="icon" disabled={!store.view.canUndo} onclick={() => run('undo')} title="Отменить (Ctrl+Z)">↶</button>
-      <button class="icon" disabled={!store.view.canRedo} onclick={() => run('redo')} title="Повторить (Ctrl+Y)">↷</button>
+      <button class="icon" disabled={!store.view.canUndo} onclick={() => run('undo')} title={keymap.tip('Отменить', 'undo')}>↶</button>
+      <button class="icon" disabled={!store.view.canRedo} onclick={() => run('redo')} title={keymap.tip('Повторить', 'redo')}>↷</button>
     </span>
   </div>
 
@@ -51,7 +52,7 @@
         class:on={modes.big}
         aria-pressed={modes.big}
         onclick={() => modes.toggleBig()}
-        title="Крупный просмотр (F)"
+        title={keymap.tip('Крупный просмотр', 'toggleBig')}
         aria-label="Крупный просмотр"
       >
         <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -65,7 +66,7 @@
       class:on={modes.details}
       aria-pressed={modes.details}
       onclick={() => modes.toggleDetails()}
-      title="Панель деталей (I)"
+      title={keymap.tip('Панель деталей', 'toggleDetails')}
       aria-label="Панель деталей"
     >
       <svg viewBox="0 0 20 20" aria-hidden="true">

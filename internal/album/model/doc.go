@@ -13,7 +13,7 @@
 // (узор фона Pattern, его слоты и зажим, ключ своего из библиотеки 048), spreadtpl.go (шаблон готового
 // разворота 067: SpreadTpl, якоря, зажим, разбор, ключ),
 // text.go (кадр, рамки текстов, ширина «по тексту», кегль подписи, PhotoRef.Copy; имя на фото 030, 043: PhotoRef.Name, PersonFromFile и вольное PersonFromFileLoose, NameView), looksname.go (LooksLikeName — имя из названия файла при броске 060 и стоп-список), seatname.go (табличка места 071: NameAt, PlaceOf, жильцы мест Occupant, ClampSeat), order.go (стек
-// слоёв), marks.go (типы отметок), tone.go (ч/б и тон фото 068: Tone, ClampTone, строка CSS), viewtypes.go (View, выбор сеток, PathPair, план окна «Имена» 043),
+// слоёв), marks.go (типы отметок), tone.go (ч/б и тон фото 068: Tone, ClampTone, строка CSS), viewtypes.go (View, выбор сеток, PathPair, план окна «Имена» 043), viewwire.go (дельта вида 075: Wire, SameView, MarshalJSON),
 // templates.go (шаблоны сеток), limits.go (пределы и ошибки; параллельный счёт раскладок), clamp.go (зажимы сетки и оформления, CheckTotals), fields.go (поля подписей 030:
 // Vars — поля шапки листа и VarsOf, Person, SheetCaps, их зажим, Expand), cover.go (обложка 032: Cover, CoverSpec,
 // пресеты, зажим; Фотосфера 047: форматы, пресеты страницы, шаблон обложки), sheet.go (геометрия листа Geo, Sheet, Sheets, CoverGeo, AreaOf, проект-лист 031

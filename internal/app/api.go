@@ -29,7 +29,7 @@ func (a *App) GetState() State {
 	// View — под тем же замком, что photos/scan: снимок согласован с событиями library/scan,
 	// а медленное чтение диска (prefsAndRecent) — уже после.
 	a.mu.Lock()
-	view := a.editor().View()
+	view := a.fullLocked(a.editor().View())
 	photos, scan := a.photos, a.scan
 	notice := a.startNotice
 	a.startNotice = ""
@@ -40,7 +40,7 @@ func (a *App) GetState() State {
 	}
 	p, recent := a.prefsAndRecent()
 	return State{View: view, Photos: photos, Scan: scan, Notice: notice, Missing: missing,
-		Version: appVersion(wailsJSON), Fonts: text.Families(), Prefs: p, Recent: recent}
+		Version: appVersion(wailsJSON), Fonts: text.Families(), Prefs: p, Recent: recent, Keymap: a.Keymap()}
 }
 
 // notice показывает пользователю текст ошибки тостом (событие `notice`); без окна — только лог.
@@ -55,8 +55,11 @@ func (a *App) ChooseFolder() (model.View, error) {
 		Title:            "Папка с фотографиями",
 		DefaultDirectory: a.dialogDir(prefs.DirPhotos),
 	})
-	if err != nil || dir == "" {
+	if err != nil {
 		return a.editor().View(), err
+	}
+	if dir == "" {
+		return a.out(a.editor().View()), nil
 	}
 	v, err := a.AddFolderPath(dir)
 	if err == nil {
@@ -303,7 +306,7 @@ func (a *App) DropPhotos(spreadID, placeID string, ids []string, at float64, res
 	defer a.guardEdit("DropPhotos", &r.View, &err)
 	v, o, err := a.editor().DropPhotos(spreadID, placeID, a.infosOrRefs(ids), at, rest)
 	if o.Ask && err == nil { // правки нет (v — нынешний вид): не рассылать, автосохранение не трогать
-		r.View = v
+		r.View = a.out(v)
 	} else if r.View, err = a.changedOrErr(v, err); err != nil {
 		return r, err
 	}

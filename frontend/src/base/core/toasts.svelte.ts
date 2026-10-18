@@ -1,5 +1,6 @@
 import * as Api from '../../../wailsjs/go/app/App'
 import { capFirst } from '../words/errtext'
+import { keymap } from '../keys/keymap.svelte'
 
 // rev — ревизия альбома, на которую рассчитан тост с «Вернуть»: другая ревизия (Ctrl+Z, любая правка) гасит тост.
 export type Toast = { text: string; kind: 'info' | 'error'; action?: { label: string; run: () => void }; rev?: number }
@@ -36,7 +37,7 @@ export function undoToast(h: ToastHost, text: string, back?: string) {
     run: async () => {
       // Идущее следом удаление ещё может менять альбом: сначала дожидаемся очереди, потом сверяем ревизию.
       await h.delQueue
-      if (h.view.rev !== rev) return h.notify('Уже были другие изменения — используйте Ctrl+Z')
+      if (h.view.rev !== rev) return h.notify(keymap.tip('Уже были другие изменения — используйте «Отменить»', 'undo'))
       if ((await h.run(Api.Undo())) && back) h.goId(back)
     },
   })

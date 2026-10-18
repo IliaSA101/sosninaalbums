@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 )
 
 // pathEnc — путь из памяти для записи: path (относительный или абсолютный) и запасной abs ("" —
@@ -120,45 +121,10 @@ func writeEnc(p *model.Project, path string, marks map[string]model.Mark, enc pa
 	return writeAtomic(path, data)
 }
 
-func writeAtomic(path string, data []byte) error {
-	tmp := path + ".tmp"
-	// Заранее лежащий .tmp (жёсткая ссылка, чужой файл) убираем, а не пишем сквозь него:
-	// иначе запись пошла бы в чужой файл по ссылке.
-	if fi, err := os.Lstat(tmp); err == nil && fi.IsDir() {
-		return fmt.Errorf("на месте временного файла %s лежит папка", tmp)
-	}
-	if err := os.Remove(tmp); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	if err := writeSynced(tmp, data); err != nil {
-		_ = os.Remove(tmp) // уже есть ошибка записи; остаток .tmp безвреден
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp) // уже есть ошибка записи; остаток .tmp безвреден
-		return err
-	}
-	return nil
-}
-
-// writeSynced пишет файл и сбрасывает его на диск до переименования: иначе после
-// сбоя питания вместо проекта может остаться пустой файл. O_EXCL — не открывать
-// чужой файл, подложенный на место path.
-func writeSynced(path string, data []byte) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close() // уже есть ошибка записи
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close() // уже есть ошибка записи
-		return err
-	}
-	return f.Close()
-}
+// writeAtomic пишет через случайное <путь>.*.tmp (O_EXCL, Sync, Rename): постоянное <путь>.tmp
+// на Windows временно держит чужой процесс (антивирус) — и запись молча не шла; подложенные
+// на постоянное имя ссылка или папка тоже больше не мешают.
+func writeAtomic(path string, data []byte) error { return library.WriteFileAtomic(path, data) }
 
 // backupPath — копия файла старой версии: <путь>.v<from>.bak (from — версия на чтении).
 func backupPath(path string, from int) string { return fmt.Sprintf("%s.v%d.bak", path, from) }

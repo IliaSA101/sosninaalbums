@@ -56,10 +56,12 @@ method ForgetFileNames(arg1:Array<string>):Promise<model.View>
 method ForgetRecent(arg1:string):Promise<Array<prefs.RecentProject>>
 method FsferaPlan():Promise<fsfera.Plan>
 method GetState():Promise<APP.State>
+method GetView():Promise<model.View>
 method GridChoices(arg1:string,arg2:number,arg3:string):Promise<model.GridChoices>
 method HideDecor(arg1:string,arg2:string):Promise<void>
 method ImportDecor(arg1:string,arg2:string):Promise<APP.DecorImport>
 method ImportDecorPaths(arg1:string,arg2:string,arg3:Array<string>):Promise<APP.DecorImport>
+method Keymap():Promise<keymap.View>
 method LayoutChoices(arg1:string):Promise<model.Choices>
 method LibraryPacks():Promise<APP.PackList>
 method Marks():Promise<Record<string, model.MarkView>>
@@ -90,12 +92,14 @@ method PlanRemovePack(arg1:string):Promise<APP.PackRemove>
 method PlanSpreadTpl(arg1:string,arg2:string,arg3:string):Promise<model.GridPlan>
 method PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.NamesPlan>
 method PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>
+method PurgePhotos(arg1:Array<string>):Promise<model.View>
 method Recent():Promise<Array<prefs.RecentProject>>
 method Redo():Promise<model.View>
 method RelinkDrive(arg1:string,arg2:string):Promise<model.View>
 method RelinkFolder():Promise<APP.RelinkResult>
 method RelinkFolderPath(arg1:string):Promise<APP.RelinkResult>
 method RemoveFolder(arg1:string):Promise<model.View>
+method RemoveHotkey(arg1:string,arg2:string):Promise<keymap.View>
 method RemovePack(arg1:string):Promise<APP.PackList>
 method RemovePhotos(arg1:Array<string>):Promise<model.View>
 method RenameDecor(arg1:string,arg2:string,arg3:string):Promise<void>
@@ -103,10 +107,13 @@ method RenameGridTemplate(arg1:string,arg2:string):Promise<void>
 method ReplaceSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method Rescan():Promise<void>
 method ResetFrame(arg1:string):Promise<model.View>
+method ResetHotkey(arg1:string,arg2:boolean):Promise<keymap.SetResult>
+method ResetHotkeys():Promise<keymap.View>
 method ResetLibrarySkip():Promise<APP.LibraryNet>
 method ResetMarks(arg1:Array<string>):Promise<model.View>
 method ResetVignette(arg1:string):Promise<APP.GridResult>
 method RestoreBackup(arg1:string):Promise<model.View>
+method RestoreHotkeys(arg1:Record<string, Array<string>>):Promise<keymap.View>
 method RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>
 method SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<void>
 method SaveProject():Promise<model.View>
@@ -131,6 +138,7 @@ method SetFrame(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.V
 method SetFrameAngle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>
 method SetGray(arg1:Array<string>):Promise<model.View>
 method SetGrid(arg1:string,arg2:boolean):Promise<model.View>
+method SetHotkey(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<keymap.SetResult>
 method SetLayout(arg1:string,arg2:string):Promise<model.View>
 method SetLevel(arg1:string):Promise<prefs.Prefs>
 method SetLibraryNet(arg1:boolean,arg2:boolean):Promise<APP.LibraryNet>
@@ -317,6 +325,7 @@ type APP.State
   fonts: text.Family[]
   prefs: prefs.Prefs
   recent: prefs.RecentProject[]
+  keymap: keymap.View
   cancelled?: boolean
 type APP.StickerResult
   view: model.View
@@ -347,6 +356,48 @@ type fsfera.Plan
   fixAt: number
   warn: string[]
   memo: string[]
+type keymap.Entry
+  id: string
+  label: string
+  short: string
+  hint?: string
+  group: string
+  scope: string
+  feature?: string
+  defaults: string[]
+  fixed?: boolean
+  repeat?: boolean
+  dialogs?: boolean
+  keys: string[]
+  custom: boolean
+type keymap.Named
+  id: string
+  title: string
+type keymap.Ref
+  id: string
+  label: string
+  chord: string
+type keymap.Reserved
+  chord: string
+  anyMods?: boolean
+  prefix?: boolean
+  reason: string
+type keymap.ScopeInfo
+  id: string
+  title: string
+  rank: number
+type keymap.SetResult
+  view: View
+  conflict?: Ref
+  replaced?: Ref
+  shadows: Ref[]
+type keymap.View
+  commands: Entry[]
+  groups: Named[]
+  scopes: ScopeInfo[]
+  locked: Reserved[]
+  custom: Record<string, Array<string>>
+  changed: number
 type layout.Rect
   x: number
   y: number
@@ -363,6 +414,7 @@ type library.Photo
   name: string
   w: number
   h: number
+  shot?: number
   size?: number
   color?: string
   profile?: string
@@ -812,6 +864,9 @@ type model.View
   unfilled: string[]
   unnamed: number
   cover?: CoverView
+  seq: number
+  base?: number
+  order?: string[]
 type model.VigChoice
   id: string
   name: string

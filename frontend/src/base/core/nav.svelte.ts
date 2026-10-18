@@ -1,5 +1,6 @@
 import { noHooks, type StoreHooks } from './hooks'
 import { COVER_ID, sheetIn } from '../geom/sheet'
+import { UsedIndex } from './usedindex'
 import type { CoverView, SpreadView, View } from './types'
 
 export const emptyView: View = {
@@ -24,7 +25,8 @@ export const emptyView: View = {
 // Основа Store: альбом (view), текущий лист и переходы. Вынесено, чтобы store.svelte.ts не рос за 600 строк;
 // наружу всё доступно через store.* как раньше.
 export class Nav {
-  view = $state<View>(emptyView)
+  // Вид целиком заменяется (store.apply), вложенное не мутирует: $state.raw — без глубокого прокси на 3200 фото (075-16).
+  view = $state.raw<View>(emptyView)
   // Подключённый верх (hooks.ts): ставит shell/boot/wire.ts. Реактивно — ленты пересчитаются после подключения.
   hooks = $state.raw<StoreHooks>(noHooks)
   plug(h: StoreHooks) {
@@ -52,9 +54,10 @@ export class Nav {
   sheets = $derived<SpreadView[]>(this.cover ? [this.cover.sheet, ...this.view.spreads] : this.view.spreads)
   lead = $derived(this.cover ? 1 : 0)
   sheetIndex = $derived(this.onCover ? 0 : this.current + this.lead)
-  // Неизменяемый набор, пересоздаётся целиком: SvelteSet завёл бы сигнал на каждый id.
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  used = $derived(new Set(this.sheets.flatMap((s) => s.photos)))
+  // Неизменяемый набор (SvelteSet завёл бы сигнал на каждый id); считает UsedIndex по сменившимся разворотам,
+  // состав не менялся — тот же объект.
+  private readonly usedIdx = new UsedIndex()
+  used = $derived(this.usedIdx.update(this.sheets))
   spread = $derived<SpreadView | undefined>(this.onCover && this.cover ? this.cover.sheet : this.view.spreads[this.current])
 
   // i — индекс в view.spreads (обложку открывает goCover). Без разворотов, но с обложкой — она и открывается.

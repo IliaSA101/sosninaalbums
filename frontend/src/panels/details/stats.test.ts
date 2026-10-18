@@ -46,6 +46,14 @@ describe('albumStats', () => {
     const st = albumStats([spread(['a', 'b', 'c'], 'k')], byId, 4)
     expect(st).toMatchObject({ adobe: 1, other: 1 })
   })
+  it('кэш по листу: тот же лист при новой таблице фото считается заново', () => {
+    const s = spread(['a'], 'k')
+    const v1 = new Map([photo('a', 3, 2)].map((p) => [p.id, p]))
+    expect(albumStats([s], v1, 1)).toMatchObject({ h: 1, v: 0 })
+    expect(albumStats([s], v1, 1)).toMatchObject({ h: 1, v: 0 }) // из кэша
+    const v2 = new Map([{ ...photo('a', 2, 3), color: 'adobe' } as Photo].map((p) => [p.id, p]))
+    expect(albumStats([s], v2, 1)).toMatchObject({ h: 0, v: 1, adobe: 1 })
+  })
   it('пустой альбом', () => {
     expect(albumStats([], new Map(), 0)).toMatchObject({ spreads: 0, photos: 0, layouts: 0 })
   })

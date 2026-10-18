@@ -2,9 +2,11 @@
   import { untrack, type Snippet } from 'svelte'
   import Icon from './Icon.svelte'
   import { modalStack } from './modalstack.svelte'
+  import { escCloses } from './modalesc'
 
   // Окно поверх интерфейса (не нативное — работает и в браузере dev). Esc и клик по фону закрывают;
   // Esc не доходит до хоткеев App (не закрывает галерею и не снимает выделение). width — своя ширина, если 380/460 мало.
+  // onescape — окно забирает Esc себе (true: обработан, окно остаётся); headExtra — своё место в шапке между названием и крестиком.
   // size: 'large' — окно с предпросмотром (до 1280 px по ширине экрана, 031 «Настроить виньетку»: сетка шаблонов в 4–5 колонок).
   let {
     title,
@@ -12,6 +14,9 @@
     wide = false,
     size,
     width,
+    undo = false,
+    onescape,
+    headExtra,
     children,
   }: {
     title: string
@@ -19,6 +24,9 @@
     wide?: boolean
     size?: 'large'
     width?: number
+    undo?: boolean // окно само правит альбом: под ним работают «Отменить» и «Повторить» (074-28); под остальными клавиши молчат
+    onescape?: () => boolean
+    headExtra?: Snippet
     children: Snippet
   } = $props()
 
@@ -27,7 +35,7 @@
   let me = $state(0)
   const top = $derived(me > 0 && modalStack.isTop(me))
   $effect(() => {
-    const id = untrack(() => modalStack.push())
+    const id = untrack(() => modalStack.push(undo))
     me = id
     return () => modalStack.remove(id)
   })
@@ -46,7 +54,7 @@
       if (e.defaultPrevented) return // Esc уже закрыл вложенное окно (Popover внутри окна)
       e.stopPropagation()
       e.preventDefault()
-      onclose()
+      if (escCloses(onescape)) onclose()
     } else if (box && !box.contains(document.activeElement)) {
       e.stopPropagation()
       box.focus()
@@ -72,7 +80,8 @@
     bind:this={box}
   >
     <header>
-      <span>{title}</span>
+      <span class="title">{title}</span>
+      {#if headExtra}{@render headExtra()}{/if}
       <button class="x" onclick={onclose} title="Закрыть (Esc)" aria-label="Закрыть"><Icon name="x" size={14} /></button>
     </header>
     {@render children()}
@@ -110,10 +119,13 @@
   header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 10px;
     font-size: 15px;
     font-weight: 600;
+  }
+  .title {
+    flex: 1;
   }
   .x {
     width: 26px;

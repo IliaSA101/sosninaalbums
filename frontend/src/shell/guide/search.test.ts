@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
 import { ARTICLES } from './articles'
 import { fromLatin, grouped, norm, search, stem, tokens } from './search'
 
 const titles = (q: string) => search(q).hits.map((h) => h.a.title)
+
+// Клавиши статей — из реестра (074): без него поиск по клавише пуст.
+beforeEach(() => useCatalog())
+afterEach(() => dropCatalog())
 
 describe('нормализация', () => {
   it('регистр и «ё» не важны', () => {
@@ -50,6 +55,13 @@ describe('поиск (спека 033)', () => {
   })
   it('поиск по клавише: Ctrl+Z находит отмену', () => {
     expect(titles('ctrl+z')).toContain('Отменить и повторить')
+  })
+  it('индекс клавиш пересобирается вместе с реестром: своя клавиша находит статью, пока её нет — нет', () => {
+    expect(titles('q')).not.toContain('Отменить и повторить')
+    useCatalog({ undo: ['KeyQ'] })
+    expect(titles('q')).toContain('Отменить и повторить')
+    useCatalog()
+    expect(titles('q')).not.toContain('Отменить и повторить')
   })
   it('все слова запроса обязательны', () => {
     expect(titles('виньетка шрифт зеркало')).toEqual([])

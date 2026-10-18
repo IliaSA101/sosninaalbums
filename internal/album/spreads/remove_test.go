@@ -1,6 +1,7 @@
 package spreads_test
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -86,4 +87,118 @@ func sheetBd(e *album.Editor, id, scope string) *model.Backdrop {
 		return *s.Slot(scope)
 	}
 	return nil
+}
+
+// «Убрать из альбома» в полосе «Не найдено» (075-13): фото уходят из мест, с фонов всех листов
+// (с обложкой) — и стоящие в месте тоже, — и своими стикерами на нескольких листах; одним
+// шагом отмены. Рисунок, чужие фото, фоны и стикеры стоят. Итог переживает Save→Load.
+func TestPurgePhotos(t *testing.T) {
+	e, s1, s2 := edtest.NewTwo(t)
+	edtest.Change(e, func(p *model.Project) {
+		pr, _ := model.CoverPresetOf(model.CoverDefault)
+		p.Cover = &model.Cover{Spec: pr.Spec, Sheet: &model.Spread{ID: model.CoverID, Photos: []string{}}}
+	})
+	edtest.SetBg(t, e, s1, model.ScopeSpread, "a")   // a и в месте, и фоном
+	edtest.SetBg(t, e, s2, model.ScopeLeft, "x")     // только фон
+	edtest.SetBg(t, e, s2, model.ScopeRight, "keep") // чужой фон
+	edtest.SetBg(t, e, model.CoverID, model.ScopeSpread, "z")
+	ownSticker(t, e, s1, "st")
+	ownSticker(t, e, model.CoverID, "st")
+	ownSticker(t, e, s2, "keepst")
+	if _, id, err := e.AddSticker(s2, 0, model.StickerSrc{Art: &model.Art{Kind: "plate"}}); err != nil || id == "" {
+		t.Fatalf("рисунок: %q, %v", id, err)
+	}
+	before := model.Marshal(edtest.P(e))
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+
+	v := e.PurgePhotos([]string{"a", "x", "z", "st", "нет-такого", ""})
+	if edtest.Rev(e) != rev+1 || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("rev %d → %d, undo %d → %d: ждали один шаг", rev, edtest.Rev(e), undo, edtest.UndoLen(e))
+	}
+	if len(v.Spreads) != 2 || !slices.Equal(v.Spreads[0].Photos, []string{"b"}) || !slices.Equal(v.Spreads[1].Photos, []string{"c"}) {
+		t.Fatalf("места: %+v", v.Spreads)
+	}
+	purged(t, "правка", e, s1, s2)
+	file := filepath.Join(testkit.TempDir(t), "a.salbum")
+	if err := e.Save(file); err != nil {
+		t.Fatal(err)
+	}
+	q, err := album.LoadBase(file, filepath.Dir(file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	purged(t, "Save→Load", edtest.Open(t, q, ""), s1, s2)
+
+	e.Undo()
+	if got := model.Marshal(edtest.P(e)); string(got) != string(before) {
+		t.Fatalf("отмена вернула не тот проект:\n%s\n%s", got, before)
+	}
+	// RemovePhotos (бросок в ленту) фон фото, стоящего и в месте, оставляет — PurgePhotos нет.
+	e.RemovePhotos([]string{"a"})
+	if b := sheetBd(e, s1, model.ScopeSpread); b == nil || b.Photo != "a" {
+		t.Fatalf("RemovePhotos снял фон a: %+v", b)
+	}
+}
+
+// purged — итог TestPurgePhotos. После Load ID пересчитаны (Rekey): фото узнаём по пути.
+func purged(t *testing.T, when string, e *album.Editor, s1, s2 string) {
+	t.Helper()
+	refs := e.Refs()
+	path := func(b *model.Backdrop) string { return refs[b.Photo].Path }
+	for _, c := range []struct{ id, scope string }{{s1, model.ScopeSpread}, {s2, model.ScopeLeft}, {model.CoverID, model.ScopeSpread}} {
+		if b := sheetBd(e, c.id, c.scope); b != nil {
+			t.Errorf("%s: фон %s/%s остался: %s", when, c.id, c.scope, path(b))
+		}
+	}
+	if b := sheetBd(e, s2, model.ScopeRight); b == nil || path(b) != edtest.Abs("keep.jpg") {
+		t.Errorf("%s: чужой фон снят: %+v", when, b)
+	}
+	if got := stickerPaths(e, s1, refs); len(got) != 0 {
+		t.Errorf("%s: стикеры s1 %v", when, got)
+	}
+	if got := stickerPaths(e, model.CoverID, refs); len(got) != 0 {
+		t.Errorf("%s: стикеры обложки %v", when, got)
+	}
+	if got := stickerPaths(e, s2, refs); !slices.Equal(got, []string{edtest.Abs("keepst.jpg"), "рисунок"}) {
+		t.Errorf("%s: стикеры s2 %v", when, got)
+	}
+	gone := []string{edtest.Abs("a.jpg"), edtest.Abs("x.jpg"), edtest.Abs("z.jpg"), edtest.Abs("st.jpg")}
+	for _, r := range refs {
+		if slices.Contains(gone, r.Path) {
+			t.Errorf("%s: в Refs осталось %s", when, r.Path)
+		}
+	}
+}
+
+// Холостая «Убрать из альбома»: nil, пустой список, неизвестные и пустые ID — без шага и rev.
+func TestPurgePhotosNoop(t *testing.T) {
+	e, _, _ := edtest.NewTwo(t)
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	for _, ids := range [][]string{nil, {}, {"нет"}, {""}} {
+		e.PurgePhotos(ids)
+		edtest.Same(t, e, rev, undo, fmt.Sprintf("PurgePhotos(%q)", ids))
+	}
+}
+
+// ownSticker — свой стикер из фото id на лист sid.
+func ownSticker(t *testing.T, e *album.Editor, sid, id string) {
+	t.Helper()
+	if _, sk, err := e.AddSticker(sid, 0, model.StickerSrc{Photo: edtest.Photo(id)}); err != nil || sk == "" {
+		t.Fatalf("стикер %s на %s: %q, %v", id, sid, sk, err)
+	}
+}
+
+// stickerPaths — стикеры листа по порядку: путь фото или «рисунок».
+func stickerPaths(e *album.Editor, sid string, refs map[string]model.PhotoRef) []string {
+	edtest.Mu(e).Lock()
+	defer edtest.Mu(e).Unlock()
+	var out []string
+	for _, st := range edtest.P(e).Sheet(sid).Stickers {
+		if st.Photo == "" {
+			out = append(out, "рисунок")
+		} else {
+			out = append(out, refs[st.Photo].Path)
+		}
+	}
+	return out
 }

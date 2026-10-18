@@ -8,8 +8,10 @@
   import { slide } from 'svelte/transition'
   import { store, Api } from '../../base/core/store.svelte'
   import { unitOf } from '../../base/geom/sheet'
+  import { keymap } from '../../base/keys/keymap.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import Popover from '../../base/ui/Popover.svelte'
+  import { purgeMissing } from './purge'
   import { relinkFolder } from './relink'
   import {
     albumPhotos,
@@ -80,13 +82,13 @@
     }
   }
 
-  // Убрать из альбома все пропавшие фото: места остаются пустыми, Undo возвращает.
+  // Убрать из альбома все пропавшие фото отовсюду: из мест, с фонов и из своих стикеров (075-13).
+  // Места остаются пустыми, Ctrl+Z возвращает всё одним шагом.
   async function removeAll() {
     if (busy || spots.length === 0) return
     busy = true
     try {
-      const n = spots.length
-      if (await store.run(Api.RemovePhotos(spots.map((s) => s.photo)))) store.notify(`Убрано фото: ${n}`)
+      await purgeMissing(spots.map((s) => s.photo))
     } finally {
       busy = false
     }
@@ -120,8 +122,11 @@
     {/if}
     <button disabled={busy} onclick={findFolder} title="Выбрать папку, где лежат эти фото">Найти…</button>
     {#if spots.length > 0}
-      <button disabled={busy} onclick={removeAll} title="Убрать пропавшие фото из альбома: места останутся пустыми, Ctrl+Z вернёт"
-        >Убрать из альбома</button
+      <button
+        disabled={busy}
+        onclick={removeAll}
+        title={'Убрать пропавшие фото из альбома: из мест, с фонов и стикеров; места останутся пустыми, ' +
+          keymap.tip('«Отменить» вернёт', 'undo')}>Убрать из альбома</button
       >
     {/if}
     <button class="x ghost" onclick={() => (hidden = key)} title="Скрыть до следующего открытия" aria-label="Скрыть до следующего открытия"

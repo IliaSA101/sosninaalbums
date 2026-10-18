@@ -58,6 +58,9 @@ func TestPhotosFromRibbon(t *testing.T) {
 	if v, err = k.NewSpread(0, []string{"призрак"}); err != nil || len(v.Spreads) != 4 || k.calls != calls || v.Rev != rev {
 		t.Errorf("NewSpread из пропавших: err %v, разворотов %d, Changed %d → %d", err, len(v.Spreads), calls, k.calls)
 	}
+	if k.outs != 1 { // ответ без ошибки всё равно в цепочке видов (075): иначе фронт просит полный
+		t.Errorf("NewSpread из пропавших: Host.Out %d раз", k.outs)
+	}
 }
 
 // Разворотные правки без папок: одним вызовом сразу несколько разворотов; неизвестные

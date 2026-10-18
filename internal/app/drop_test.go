@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -60,7 +61,7 @@ func dropApp(t *testing.T) (*App, *[]string) {
 }
 
 // Перетаскивание: CheckLocalPath раньше Stat — UNC-папка и устройство не доходят до файловой
-// системы (иначе окно ждало бы сетевого таймаута); отказ — тост с путём.
+// системы (иначе окно ждало бы сетевого таймаута); отказы — один тост со счётом.
 func TestDropFolderChecksPathFirst(t *testing.T) {
 	a, notices := dropApp(t)
 	captureLog(t)
@@ -83,11 +84,10 @@ func TestDropFolderChecksPathFirst(t *testing.T) {
 	if len(statted) != 0 {
 		t.Fatalf("Stat вызван до отказа: %v", statted)
 	}
-	if len(*notices) != len(bad) {
-		t.Fatalf("тостов %d из %d: %v", len(*notices), len(bad), *notices)
-	}
-	if !strings.Contains((*notices)[0], "сервер") {
-		t.Errorf("тост без пути: %q", (*notices)[0])
+	// Все отказы — один тост со счётом (075-10).
+	want := fmt.Sprintf("Не добавлено путей: %d", len(bad))
+	if len(*notices) != 1 || !strings.Contains((*notices)[0], want) {
+		t.Fatalf("тосты %v, ждали один с %q", *notices, want)
 	}
 	if v := a.editor().View(); len(v.Folders) != 0 {
 		t.Errorf("папки добавились: %v", v.Folders)
@@ -152,11 +152,12 @@ func TestDropFolderDeviceExt(t *testing.T) {
 	}
 }
 
-// В log.txt отказ без пути (имя пользователя и название съёмки), в тосте — с путём.
+// В log.txt отказ без пути (имя пользователя и название съёмки), в тосте одного пути — с путём.
 func TestDropFolderLogNoPath(t *testing.T) {
 	a, notices := dropApp(t)
 	buf := captureLog(t)
-	a.dropPaths([]string{`\\сервер\Иванов_свадьба\Съёмка`, "Петров/относительный"})
+	a.dropPaths([]string{`\\сервер\Иванов_свадьба\Съёмка`})
+	a.dropPaths([]string{"Петров/относительный"})
 	logged := buf.String()
 	if !strings.Contains(logged, "перетаскивание:") {
 		t.Fatalf("в логе нет записи: %q", logged)
@@ -169,6 +170,54 @@ func TestDropFolderLogNoPath(t *testing.T) {
 	}
 	if len(*notices) != 2 || !strings.Contains((*notices)[0], "Иванов_свадьба") {
 		t.Errorf("тост должен нести путь: %v", *notices)
+	}
+}
+
+// Бросок 12 путей с сетевого диска — один тост со счётом и одна строка лога без путей (075-10);
+// один путь — прежний текст с путём; хорошая папка среди плохих добавляется, счёт плохих — только их.
+func TestDropManyNotLocal(t *testing.T) {
+	a, notices := dropApp(t)
+	buf := captureLog(t)
+	bad := make([]string, 12)
+	for i := range bad {
+		bad[i] = fmt.Sprintf(`\\NAS\Иванов_свадьба\Съёмка%d`, i)
+	}
+	a.dropPaths(bad)
+	if len(*notices) != 1 || !strings.Contains((*notices)[0], "Не добавлено путей: 12") ||
+		!strings.Contains((*notices)[0], `C:\папка`) {
+		t.Fatalf("тосты: %v", *notices)
+	}
+	if strings.Contains((*notices)[0], "NAS") {
+		t.Errorf("тост со счётом несёт путь: %q", (*notices)[0])
+	}
+	logged := buf.String()
+	if got := strings.Count(logged, "перетаскивание:"); got != 1 {
+		t.Errorf("строк лога %d, ждали 1: %q", got, logged)
+	}
+	for _, leak := range []string{"NAS", "Иванов", "Съёмка"} {
+		if strings.Contains(logged, leak) {
+			t.Errorf("в логе путь: %q", logged)
+			break
+		}
+	}
+
+	// Один путь — прежний текст с путём; пустой бросок молчит.
+	*notices = nil
+	a.dropPaths([]string{bad[0]})
+	if len(*notices) != 1 || !strings.Contains((*notices)[0], "NAS") || strings.Contains((*notices)[0], "Не добавлено путей") {
+		t.Errorf("один путь: %v", *notices)
+	}
+
+	// Два плохих и одна хорошая: счёт — только плохих, хорошая добавлена.
+	*notices = nil
+	good := testkit.TempDir(t)
+	a.dropPaths([]string{bad[0], good, bad[1]})
+	waitScan(t, a)
+	if len(*notices) != 1 || !strings.Contains((*notices)[0], "Не добавлено путей: 2") {
+		t.Errorf("смесь: %v", *notices)
+	}
+	if got := len(a.editor().View().Folders); got != 1 {
+		t.Errorf("папок %d, ждали 1", got)
 	}
 }
 

@@ -12,6 +12,7 @@ const view = (rev: number, gone: string[] = []) => ({
 let delRev = 2
 let gate: Promise<void> | null = null
 let undos = 0
+let splitFail = false
 
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
 vi.mock('../../../wailsjs/go/app/App', () => ({
@@ -19,7 +20,11 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
     if (gate) await gate
     return view(delRev, ['a'])
   },
-  SplitSpread: async () => view(2),
+  SplitSpread: async () => {
+    // Предел 200 разворотов: Go отвечает отказом строкой (075-7), как «Новый разворот».
+    if (splitFail) throw 'в альбоме не может быть больше 200 разворотов'
+    return view(2)
+  },
   // Go отвечает отказом строкой (Wails): на развороте нет места.
   AddPhotos: async () => {
     throw 'на развороте нет свободных мест'
@@ -106,6 +111,24 @@ describe('тост с «Вернуть» и ревизия альбома', () =
     // Ревизия сменилась вторым удалением: Undo не вызван.
     expect(undos).toBe(0)
     expect(store.view.rev).toBe(3)
+  })
+})
+
+describe('разрез на пределе разворотов (075-7)', () => {
+  it('отказ Go — красный тост с текстом, без «Вернуть», вид и текущий разворот прежние', async () => {
+    store.toast = null
+    store.apply(view(1) as never)
+    store.goId('b')
+    splitFail = true
+    try {
+      await store.split('a', 1)
+    } finally {
+      splitFail = false
+    }
+    expect(store.toast).toMatchObject({ kind: 'error', text: 'В альбоме не может быть больше 200 разворотов' })
+    expect((store.toast as { action?: unknown } | null)?.action).toBeUndefined()
+    expect(store.view.rev).toBe(1)
+    expect(store.currentId).toBe('b')
   })
 })
 

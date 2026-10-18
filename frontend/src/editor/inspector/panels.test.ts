@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
 import {
   COL_W,
   groupHeight,
@@ -133,9 +134,13 @@ describe('inspectorMaxH / keyHint', () => {
     expect(inspectorMaxH(268)).toBe(268 - 16 - 32)
     expect(inspectorMaxH(10)).toBe(0)
   })
-  it('клавиша без пояснения', () => {
-    expect(keyHint('nudgePlace')).toBe('← ↑ ↓ →')
-    expect(keyHint('removeCell')).toBe('Delete / Backspace')
+  it('клавиша — первая из реестра, без пояснения; нет реестра или клавиши — пусто', () => {
+    expect(keyHint('removeCell')).toBe('')
+    useCatalog()
+    expect(keyHint('nudgePlace')).toBe('←')
+    expect(keyHint('removeCell')).toBe('Del')
+    expect(keyHint('toggleMarkup')).toBe('')
+    dropCatalog()
   })
 })
 

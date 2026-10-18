@@ -603,6 +603,7 @@ export namespace app {
 	    fonts: text.Family[];
 	    prefs: prefs.Prefs;
 	    recent: prefs.RecentProject[];
+	    keymap: keymap.View;
 	    cancelled?: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -620,6 +621,7 @@ export namespace app {
 	        this.fonts = this.convertValues(source["fonts"], text.Family);
 	        this.prefs = this.convertValues(source["prefs"], prefs.Prefs);
 	        this.recent = this.convertValues(source["recent"], prefs.RecentProject);
+	        this.keymap = this.convertValues(source["keymap"], keymap.View);
 	        this.cancelled = source["cancelled"];
 	    }
 	
@@ -780,6 +782,187 @@ export namespace fsfera {
 
 }
 
+export namespace keymap {
+	
+	export class Entry {
+	    id: string;
+	    label: string;
+	    short: string;
+	    hint?: string;
+	    group: string;
+	    scope: string;
+	    feature?: string;
+	    defaults: string[];
+	    fixed?: boolean;
+	    repeat?: boolean;
+	    dialogs?: boolean;
+	    keys: string[];
+	    custom: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Entry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.short = source["short"];
+	        this.hint = source["hint"];
+	        this.group = source["group"];
+	        this.scope = source["scope"];
+	        this.feature = source["feature"];
+	        this.defaults = source["defaults"];
+	        this.fixed = source["fixed"];
+	        this.repeat = source["repeat"];
+	        this.dialogs = source["dialogs"];
+	        this.keys = source["keys"];
+	        this.custom = source["custom"];
+	    }
+	}
+	export class Named {
+	    id: string;
+	    title: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Named(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	    }
+	}
+	export class Ref {
+	    id: string;
+	    label: string;
+	    chord: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Ref(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.chord = source["chord"];
+	    }
+	}
+	export class Reserved {
+	    chord: string;
+	    anyMods?: boolean;
+	    prefix?: boolean;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Reserved(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.chord = source["chord"];
+	        this.anyMods = source["anyMods"];
+	        this.prefix = source["prefix"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class ScopeInfo {
+	    id: string;
+	    title: string;
+	    rank: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScopeInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.rank = source["rank"];
+	    }
+	}
+	export class View {
+	    commands: Entry[];
+	    groups: Named[];
+	    scopes: ScopeInfo[];
+	    locked: Reserved[];
+	    custom: Record<string, Array<string>>;
+	    changed: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new View(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.commands = this.convertValues(source["commands"], Entry);
+	        this.groups = this.convertValues(source["groups"], Named);
+	        this.scopes = this.convertValues(source["scopes"], ScopeInfo);
+	        this.locked = this.convertValues(source["locked"], Reserved);
+	        this.custom = source["custom"];
+	        this.changed = source["changed"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SetResult {
+	    view: View;
+	    conflict?: Ref;
+	    replaced?: Ref;
+	    shadows: Ref[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SetResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.view = this.convertValues(source["view"], View);
+	        this.conflict = this.convertValues(source["conflict"], Ref);
+	        this.replaced = this.convertValues(source["replaced"], Ref);
+	        this.shadows = this.convertValues(source["shadows"], Ref);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace layout {
 	
 	export class Rect {
@@ -829,6 +1012,7 @@ export namespace library {
 	    name: string;
 	    w: number;
 	    h: number;
+	    shot?: number;
 	    size?: number;
 	    color?: string;
 	    profile?: string;
@@ -845,6 +1029,7 @@ export namespace library {
 	        this.name = source["name"];
 	        this.w = source["w"];
 	        this.h = source["h"];
+	        this.shot = source["shot"];
 	        this.size = source["size"];
 	        this.color = source["color"];
 	        this.profile = source["profile"];
@@ -2700,6 +2885,9 @@ export namespace model {
 	    unfilled: string[];
 	    unnamed: number;
 	    cover?: CoverView;
+	    seq: number;
+	    base?: number;
+	    order?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new View(source);
@@ -2730,6 +2918,9 @@ export namespace model {
 	        this.unfilled = source["unfilled"];
 	        this.unnamed = source["unnamed"];
 	        this.cover = this.convertValues(source["cover"], CoverView);
+	        this.seq = source["seq"];
+	        this.base = source["base"];
+	        this.order = source["order"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

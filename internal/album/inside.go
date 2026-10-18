@@ -42,4 +42,6 @@ func init() {
 
 	inside.SlowOp = func() time.Duration { return slowOp }
 	inside.SetSlowOp = func(d time.Duration) { slowOp = d }
+	inside.SlowEdit = func() time.Duration { return slowEdit }
+	inside.SetSlowEdit = func(d time.Duration) { slowEdit = d }
 }

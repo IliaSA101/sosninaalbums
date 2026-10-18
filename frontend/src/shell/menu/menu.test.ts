@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
-import { HOTKEYS } from './hotkeys'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
+import { keymap } from '../../base/keys/keymap.svelte'
 import { can, type Custom, type Level } from '../../base/prefs/levels'
 import { features } from '../../base/prefs/levelcustom'
-import { buildMenu, keysOf, type Menu, type MenuCtx, type MenuItem } from './menu'
+import { buildMenu, enabledCmds, keyId, keysOf, type Menu, type MenuCtx, type MenuItem } from './menu'
+
+// Клавиши меню — из реестра (074): без него подписи пусты.
+beforeEach(() => useCatalog())
+afterEach(() => dropCatalog())
 
 const base: MenuCtx = {
   spreads: 3,
@@ -34,7 +39,7 @@ describe('buildMenu', () => {
     expect(buildMenu(ctx()).map((m) => m.label)).toEqual(['Файл', 'Правка', 'Вид', 'Справка'])
   })
 
-  it('состав «Файл» и клавиши берутся из таблицы', () => {
+  it('состав «Файл» и клавиши берутся из реестра', () => {
     const m = buildMenu(ctx())
     expect(ids(m, 'file')).toEqual([
       'new',
@@ -58,9 +63,20 @@ describe('buildMenu', () => {
     expect(find(m, 'redo')?.keys).toBe('Ctrl+Y')
   })
 
-  it('каждая клавиша пункта есть в HOTKEYS', () => {
-    const shows = new Set(HOTKEYS.flatMap((h) => [h.show, h.menu].filter(Boolean)))
-    for (const it of buildMenu(ctx()).flatMap((m) => flat(m.items))) if (it.keys) expect(shows.has(it.keys), it.id).toBe(true)
+  it('клавиша каждого пункта — первая клавиша его команды в реестре; без команды в реестре пункт без клавиши', () => {
+    for (const it of buildMenu(ctx()).flatMap((m) => flat(m.items))) {
+      const id = it.cmd && keyId(it.cmd, it.arg)
+      expect(it.keys ?? '', it.id).toBe((id && keymap.hint(id)) || '')
+    }
+  })
+
+  it('своя клавиша видна в меню сразу, команда без клавиши — без подписи', () => {
+    useCatalog({ toggleBig: ['KeyB'], save: [], alignLeft: ['Mod+Shift+KeyL'] })
+    const m = buildMenu(ctx({ alignCount: 3, level: 'full', can: (f) => can(f, 'full') }))
+    expect(find(m, 'big')?.keys).toBe('B')
+    expect(find(m, 'save')?.keys).toBeUndefined()
+    expect(find(m, 'align-left')?.keys).toBe('Ctrl+Shift+L')
+    expect(find(m, 'align-right')?.keys).toBeUndefined()
   })
 
   it('«Последние»: пункты по списку, пропавший серый, путь — в arg; пусто — пункт серый', () => {
@@ -363,6 +379,35 @@ describe('keysOf', () => {
   it('команда без клавиши — undefined', () => {
     expect(keysOf('addFolder')).toBeUndefined()
     expect(keysOf('zoomIn')).toBe('Ctrl+=')
+  })
+  it('align с параметром — отдельные команды каталога; команды с путём и опорой клавиши не имеют', () => {
+    expect(keyId('align', 'hcenter')).toBe('alignHcenter')
+    expect(keyId('align', 'distV')).toBe('alignDistV')
+    expect(keyId('align')).toBeUndefined()
+    for (const c of ['alignTo', 'openRecent', 'clearRecent'] as const) expect(keyId(c, 'x'), c).toBeUndefined()
+    expect(keyId('undo')).toBe('undo')
+  })
+})
+
+describe('enabledCmds: пункт виден и не серый (074-8)', () => {
+  it('серый пункт и пункт под серым родителем не считаются', () => {
+    const on = enabledCmds(buildMenu(ctx({ flippable: true, alignCount: 3, level: 'full', can: (f) => can(f, 'full') })))
+    expect(on.has('flipH')).toBe(true)
+    expect(on.has('alignLeft')).toBe(true)
+    const off = enabledCmds(buildMenu(ctx({ flippable: false, alignCount: 0, level: 'full', can: (f) => can(f, 'full') })))
+    expect(off.has('flipH')).toBe(false)
+    expect(off.has('gray')).toBe(false)
+    expect(off.has('alignLeft')).toBe(false)
+    expect(off.has('save')).toBe(true)
+  })
+  it('пункт, скрытый уровнем, не считается', () => {
+    const simple = enabledCmds(buildMenu(ctx({ level: 'simple', can: (f) => can(f, 'simple') })))
+    expect(simple.has('toggleRulers')).toBe(false)
+    expect(simple.has('startWindow')).toBe(true)
+  })
+  it('команды без клавиш (openRecent, alignTo) в набор не попадают', () => {
+    const on = enabledCmds(buildMenu(ctx({ alignCount: 3, recent: [{ path: 'a.salbum', name: 'a', exists: true, modified: 1 }] })))
+    for (const c of ['openRecent', 'alignTo', 'clearRecent', 'align']) expect(on.has(c), c).toBe(false)
   })
 })
 

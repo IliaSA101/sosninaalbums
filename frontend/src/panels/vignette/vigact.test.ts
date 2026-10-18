@@ -27,8 +27,7 @@ import { startForm } from './vignette'
 
 beforeEach(() => {
   vi.clearAllMocks()
-  store.view.rev = 5
-  store.view.spreads = [{ id: 'a' }, { id: 'b' }] as never
+  store.view = { ...store.view, rev: 5, spreads: [{ id: 'a' }, { id: 'b' }] as never }
   vi.mocked(store.run).mockResolvedValue(true)
 })
 
@@ -73,12 +72,12 @@ describe('applyVignette', () => {
     await makeVignette({ id: 'a', photos: [] } as never)
     expect(store.undoToast).toHaveBeenCalledWith('Разворот стал виньеткой. Убрано в ленту: 2', 'a')
     vi.mocked(store.undoToast).mockClear()
-    ;(store.view as { settings?: unknown }).settings = { sheet: true }
+    store.view = { ...store.view, settings: { sheet: true } as never }
     try {
       await makeVignette({ id: 'a', photos: [] } as never)
       expect(store.undoToast).toHaveBeenCalledWith('Лист стал виньеткой. Убрано в ленту: 2', 'a')
     } finally {
-      delete (store.view as { settings?: unknown }).settings
+      store.view = { ...store.view, settings: undefined as never }
     }
   })
 
@@ -92,7 +91,7 @@ describe('applyVignette', () => {
 describe('addVignette', () => {
   it('новый лист открывается', async () => {
     vi.mocked(store.run).mockImplementation(async () => {
-      store.view.spreads = [{ id: 'a' }, { id: 'new' }, { id: 'b' }] as never
+      store.view = { ...store.view, spreads: [{ id: 'a' }, { id: 'new' }, { id: 'b' }] as never }
       return true
     })
     await addVignette(1)
@@ -121,7 +120,7 @@ describe('clearVignette и sortVignette', () => {
 
   it('сортировка изменила проект (rev вырос) — без тоста', async () => {
     vi.mocked(store.run).mockImplementation(async () => {
-      store.view.rev = 6
+      store.view = { ...store.view, rev: 6 }
       return true
     })
     await sortVignette('a')

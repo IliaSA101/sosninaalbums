@@ -115,6 +115,8 @@ func (e *Editor) try(merge string, fn func(p *model.Project) error) (model.View,
 func (e *Editor) edit(merge string, whole bool, fn func(p *model.Project) error, marks func() []MarkChange) (model.View, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	t0 := time.Now()
+	defer func() { slowAt(t0, slowEdit, "правка: %d разворотов", len(e.p.Spreads)) }()
 	data := model.Marshal(e.p) // паника, а не пустой снимок: e.p остаётся как был
 	e.size = len(data)
 	before := model.Unmarshal(data)
@@ -307,13 +309,20 @@ func (e *Editor) Warm(progress func(done, total int)) {
 // Медленные операции в log.txt (спека 020).
 
 // slowOp — порог «медленной» операции: дольше него в log.txt уходит строка с временем.
-// Переменная, а не const, только ради теста.
-var slowOp = 300 * time.Millisecond
+// slowEdit — то же для правки (075-6): цель 50 мс, порог ниже slowOp, чтобы log.txt медленных
+// ноутбуков фотографов показал, сколько правка идёт у них. Переменные, а не const, только ради теста.
+var (
+	slowOp   = 300 * time.Millisecond
+	slowEdit = 100 * time.Millisecond
+)
 
 // slow пишет в лог строку, если с t0 прошло не меньше slowOp. В строке только счётчики
 // и время — ни путей, ни имён файлов (design 020 §4.3).
-func slow(t0 time.Time, format string, args ...any) {
-	if d := time.Since(t0); d >= slowOp {
+func slow(t0 time.Time, format string, args ...any) { slowAt(t0, slowOp, format, args...) }
+
+// slowAt — slow со своим порогом limit.
+func slowAt(t0 time.Time, limit time.Duration, format string, args ...any) {
+	if d := time.Since(t0); d >= limit {
 		log.Printf(format+" за %s", append(args, d.Round(time.Millisecond))...)
 	}
 }

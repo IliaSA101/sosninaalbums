@@ -21,16 +21,19 @@ class Drag {
   // Бросок начался: верх убирает то, что мешает целиться (предпросмотр галереи). Подключает shell/boot/wire.ts.
   onStart: () => void = () => {}
 
-  // start вешается на pointerdown источника. make вызывается, только
-  // если мышь действительно сдвинулась — обычный клик остаётся кликом.
-  start(e: PointerEvent, make: () => Payload) {
+  // start вешается на pointerdown источника. make читает данные источника сразу, при нажатии (derived_inert,
+  // 075-9: к первому сдвигу плитка ленты уже размонтирована). Побочное — в begin, он идёт только когда
+  // мышь действительно сдвинулась: обычный клик остаётся кликом.
+  start(e: PointerEvent, make: () => Payload, begin?: () => void) {
     if (!primaryPress(e)) return
     const sx = e.clientX
     const sy = e.clientY
+    const snap = make()
     const move = (ev: PointerEvent) => {
       if (!this.active) {
         if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < THRESHOLD) return
-        this.payload = make()
+        begin?.()
+        this.payload = snap
         this.active = true
         document.body.classList.add('dragging')
         this.onStart()
