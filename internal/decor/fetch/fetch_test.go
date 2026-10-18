@@ -262,16 +262,20 @@ const ghAsset = "https://release-assets.githubusercontent.com/github-production-
 	"&sks=b&skv=2018-11-09&sig=Qm9ndXMlMkJzaWc%3D&jwt=eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjF9.c2ln&filename=ivory-1.zip" +
 	"&response-content-disposition=attachment%3B%20filename%3Divory-1.zip&response-content-type=application%2Foctet-stream"
 
+// cdnAsset — адрес ассета на CDN objects с подписью Amazon.
+const cdnAsset = "https://objects.githubusercontent.com/github-production-release-asset-2e65be/1/2?X-Amz-Signature=ab&X-Amz-Expires=300"
+
 // Переход на CDN ассетов: параметры можно только на переходе, только https и только хостам CDN;
 // первый запрос — без параметров и туда.
 func TestFetchRedirectCDN(t *testing.T) {
 	g := GitHub()
 	for raw, want := range map[string]bool{
-		ghAsset: true,
-		"https://objects.githubusercontent.com/github-production-release-asset-2e65be/1/2?X-Amz-Signature=ab&X-Amz-Expires=300": true,
-		"https://release-assets.githubusercontent.com/x":                                                                        true,
-		"https://release-assets.githubusercontent.com/x?":                                                                       true,
-		"https://github.com/x?q=1":                                          false, // хост из списка, но не CDN
+		ghAsset:  true,
+		cdnAsset: true,
+		"https://release-assets.githubusercontent.com/x":  true,
+		"https://release-assets.githubusercontent.com/x?": true,
+		// хост из списка, но не CDN
+		"https://github.com/x?q=1":                                          false,
 		"https://raw.githubusercontent.com/x/main/catalog.json?v=2":         false,
 		"http://release-assets.githubusercontent.com/x?sig=1":               false,
 		"https://u@release-assets.githubusercontent.com/x?sig=1":            false,
