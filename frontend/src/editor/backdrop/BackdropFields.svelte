@@ -7,7 +7,7 @@
   import { store } from '../../base/core/store.svelte'
   import { backdropTilt, liveTiltBox } from '../tilt/tiltlive'
   import Icon from '../../base/ui/Icon.svelte'
-  import TiltRow from '../inspector/TiltRow.svelte'
+  import TiltRow from '../photoprops/TiltRow.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { straighten } from '../tilt/straighten.svelte'
 

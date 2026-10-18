@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,6 +16,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/pack"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
+	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -40,11 +42,13 @@ type PackInfo struct {
 	Removable bool   `json:"removable"`
 }
 
-// LibraryNet — согласие на сеть и проверка при запуске (заполняет Ф3, G4; до неё — нули).
+// LibraryNet — согласие на сеть и проверка при запуске (prefs.LibraryNet без списка удалённых:
+// наружу — только сколько их, для «Вернуть удалённые»).
 type LibraryNet struct {
 	Allowed bool  `json:"allowed"`
 	AtStart bool  `json:"atStart"`
 	Checked int64 `json:"checked"` // unix мс последней удачной проверки
+	Skipped int   `json:"skipped"` // удалённых пользователем: «Обновить» их не ставит
 }
 
 // PackList — содержимое окна «Наборы»: Busy — идёт операция (кнопки неактивны).
@@ -167,7 +171,7 @@ func newPackAdd() PackAdd { return PackAdd{Skipped: []DecorSkip{}} }
 // LibraryPacks — список наборов: встроенные и поставленные.
 func (a *App) LibraryPacks() (list PackList, err error) {
 	defer guardErr("LibraryPacks", &err)
-	list = PackList{Packs: []PackInfo{}, Busy: a.packs.busy.Load()}
+	list = PackList{Packs: []PackInfo{}, Busy: a.packs.busy.Load(), Net: netView(prefs.LibraryNetOf(a.cfgDir))}
 	s, err := a.decorStore()
 	if err != nil {
 		return list, err
@@ -279,6 +283,10 @@ func (a *App) installPack(s *decor.Store, st *decor.Staged, res PackAdd) (PackAd
 		return res, err
 	}
 	res.Pack, res.Ask, res.Token = PackInfo(info), "", ""
+	// Поставленный из файла снова получает обновления из сети (решение 16).
+	if slices.Contains(prefs.LibraryNetOf(a.cfgDir).Skip, info.ID) {
+		prefs.UpdateLibraryNet(a.cfgDir, func(n *prefs.LibraryNet) { n.SetSkip(info.ID, false) })
+	}
 	a.relinkLib(s)
 	a.emit("library:changed", struct{}{})
 	return res, nil
@@ -308,7 +316,14 @@ func (a *App) RemovePack(id string) (list PackList, err error) {
 		return list, errPackBusy
 	}
 	a.packs.dropPending()
+	// origin — до удаления: после него набора нет. Пропуск отвечает только на «почему сеть не
+	// вернула набор» (0.17 решение №4) и пишется под замком: иначе «Обновить» между снятием
+	// замка и записью вернул бы удалённый.
+	fromNet := slices.ContainsFunc(s.Packs(), func(p decor.PackInfo) bool { return p.ID == id && p.Origin == decor.OriginNet })
 	_, err = s.RemovePack(id, a.albumLibs())
+	if err == nil && fromNet {
+		prefs.UpdateLibraryNet(a.cfgDir, func(n *prefs.LibraryNet) { n.SetSkip(id, true) })
+	}
 	a.packs.unlock()
 	if err == nil {
 		a.emit("library:changed", struct{}{})

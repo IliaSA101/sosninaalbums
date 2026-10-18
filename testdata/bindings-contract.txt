@@ -20,6 +20,7 @@ method AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>
 method AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.AutoPreview>
 method Backups():Promise<Array<APP.BackupInfo>>
 method CancelCollect():Promise<void>
+method CancelLibrary():Promise<void>
 method ChooseFolder():Promise<model.View>
 method ClearBackdrop(arg1:string,arg2:string):Promise<model.View>
 method ClearCoverGuide():Promise<model.View>
@@ -100,6 +101,7 @@ method RenameGridTemplate(arg1:string,arg2:string):Promise<void>
 method ReplaceSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method Rescan():Promise<void>
 method ResetFrame(arg1:string):Promise<model.View>
+method ResetLibrarySkip():Promise<APP.LibraryNet>
 method ResetMarks(arg1:Array<string>):Promise<model.View>
 method ResetVignette(arg1:string):Promise<APP.GridResult>
 method RestoreBackup(arg1:string):Promise<model.View>
@@ -129,6 +131,7 @@ method SetGray(arg1:Array<string>):Promise<model.View>
 method SetGrid(arg1:string,arg2:boolean):Promise<model.View>
 method SetLayout(arg1:string,arg2:string):Promise<model.View>
 method SetLevel(arg1:string):Promise<prefs.Prefs>
+method SetLibraryNet(arg1:boolean,arg2:boolean):Promise<APP.LibraryNet>
 method SetMarks(arg1:Array<string>,arg2:model.MarkPatch):Promise<model.View>
 method SetPattern(arg1:string,arg2:string,arg3:model.Pattern,arg4:string):Promise<model.View>
 method SetPerson(arg1:string,arg2:model.Person,arg3:string):Promise<model.View>
@@ -169,6 +172,7 @@ method TransformGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg
 method TurnBackdrop(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>
 method TurnPhotos(arg1:Array<string>,arg2:number):Promise<model.View>
 method Undo():Promise<model.View>
+method UpdateLibrary():Promise<APP.LibraryUpdate>
 method VaryLayouts(arg1:Array<string>,arg2:number,arg3:Array<string>):Promise<model.View>
 method VignetteChoices(arg1:string,arg2:number,arg3:number,arg4:string):Promise<Array<model.VigChoice>>
 type APP.BackupInfo
@@ -247,6 +251,12 @@ type APP.LibraryNet
   allowed: boolean
   atStart: boolean
   checked: number
+  skipped: number
+type APP.LibraryUpdate
+  added: number
+  updated: number
+  skipped: DecorSkip[]
+  bytes: number
 type APP.NamesFile
   text: string
   file: string

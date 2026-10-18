@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 // Выпуск набора библиотеки (спека 067, design §4–§5, §12): папка набора -> zip с manifest.json,
-// строка в catalog.json и подпись catalog.json.sig (ed25519). Только node:*, без зависимостей.
+// строка в catalog.json — конверт с подписью ed25519 (0.17 decisions №2). Только node:*, без зависимостей.
 //
 // Папка набора: manifest.src.json (id, version, minApp, title, about, author, license, source и
 // items[{file, kind, theme, name}] — sha256 и size считает скрипт) + файлы предметов + LICENSE.txt.
 //
-//   node scripts/library-pack.mjs <папка набора> [--out dist] [--catalog catalog.json] [--key pem]
+//   node scripts/library-pack.mjs <папка набора> [--out dist] [--catalog catalog.json] [--key pem] [--seq N] [--new]
 //   node scripts/library-pack.mjs --test-key     одноразовый ключ в .gotmp/ + открытый ключ (base64, 32 байта)
+//
+// catalog.json = {"sig": base64 ed25519 по байтам body, "body": base64 внутреннего JSON {format:1, seq, packs}}.
+// seq > 0: --seq N (обязательно больше seq прежнего каталога: клиент не принимает каталог с меньшим seq,
+// и одна такая публикация ломает проверку у всех, кто принял больший), иначе seq прежнего + 1.
+// Нет файла каталога (опечатка в --catalog и т. п.) — отказ; новый каталог с seq 1 — только с явным --new.
+// Файла catalog.json.sig больше нет.
 //
 // Закрытый ключ (по умолчанию docs/private/library-key.pem, вне git) в вывод не печатается.
 import crypto from 'node:crypto'
@@ -166,7 +172,7 @@ export function catalogRow(manifest, zip, tag) {
 }
 
 /** Добавляет/заменяет строку по id; возвращает новый каталог. Старее стоящей версии — отказ. */
-export function upsertCatalog(cat, row) {
+export function upsertCatalog(cat, row, seq) {
   const packs = [...(cat?.packs ?? [])]
   const i = packs.findIndex((p) => p.id === row.id)
   if (i >= 0 && packs[i].version > row.version) throw new Error(`в каталоге версия ${packs[i].version} новее ${row.version}`)
@@ -174,7 +180,31 @@ export function upsertCatalog(cat, row) {
   else packs.push(row)
   packs.sort((a, b) => a.id.localeCompare(b.id))
   if (packs.length > 500) throw new Error('в каталоге больше 500 наборов')
-  return { format: 1, packs }
+  const prev = Number.isInteger(cat?.seq) && cat.seq > 0 ? cat.seq : 0
+  seq ??= prev + 1
+  if (!Number.isInteger(seq) || seq <= 0) throw new Error('seq должен быть целым > 0')
+  if (cat && seq <= prev) throw new Error(`seq ${seq} должен быть больше seq прежнего каталога (${prev})`)
+  return { format: 1, seq, packs }
+}
+
+/** Прежний каталог обязателен: без файла — отказ, если не задан явный --new (тогда каталог начинается с seq 1). */
+export function requireBase(cat, isNew) {
+  if (!cat && !isNew) throw new Error('нет прежнего каталога: проверьте --catalog или передайте --new (новый каталог, seq 1)')
+  if (cat && isNew) throw new Error('--new, но каталог уже есть: уберите --new или укажите другой --catalog')
+  return cat
+}
+
+/** Конверт каталога: подпись — по точным байтам внутреннего JSON (до base64). */
+export function sealCatalog(cat, privateKey) {
+  const body = Buffer.from(JSON.stringify(cat))
+  return { sig: signBytes(body, privateKey), body: body.toString('base64') }
+}
+
+/** Внутренний каталог из файла-конверта (без проверки подписи); null, если файла нет. */
+export function readCatalogFile(file) {
+  if (!fs.existsSync(file)) return null
+  const env = JSON.parse(fs.readFileSync(file, 'utf8'))
+  return JSON.parse(Buffer.from(env.body, 'base64').toString('utf8'))
 }
 
 // ---- подпись ----
@@ -213,7 +243,7 @@ function main(argv) {
   }
   const dir = argv.find((a, i) => !a.startsWith('--') && (i === 0 || !argv[i - 1].startsWith('--')))
   if (!dir) {
-    console.error('использование: node scripts/library-pack.mjs <папка набора> [--out dist] [--catalog catalog.json] [--key pem] | --test-key')
+    console.error('использование: node scripts/library-pack.mjs <папка набора> [--out dist] [--catalog catalog.json] [--key pem] [--seq N] [--new] | --test-key')
     process.exit(2)
   }
   const keyPath = path.resolve(arg(argv, '--key', path.join(root, 'docs', 'private', 'library-key.pem')))
@@ -224,17 +254,23 @@ function main(argv) {
   const privateKey = crypto.createPrivateKey(fs.readFileSync(keyPath))
   const outDir = path.resolve(arg(argv, '--out', 'dist'))
   const catPath = path.resolve(arg(argv, '--catalog', path.join(outDir, 'catalog.json')))
+  let base
+  try {
+    base = requireBase(readCatalogFile(catPath), argv.includes('--new'))
+  } catch (e) {
+    console.error(e.message)
+    process.exit(2)
+  }
   const { manifest, files } = buildPack(path.resolve(dir))
   const zip = makeZip(files)
   const tag = `${manifest.id}-${manifest.version}.zip`
   fs.mkdirSync(outDir, { recursive: true })
   fs.writeFileSync(path.join(outDir, tag), zip)
-  const old = fs.existsSync(catPath) ? JSON.parse(fs.readFileSync(catPath, 'utf8')) : null
-  const cat = upsertCatalog(old, catalogRow(manifest, zip, tag))
-  const catData = Buffer.from(JSON.stringify(cat, null, 2) + '\n')
-  fs.writeFileSync(catPath, catData)
-  fs.writeFileSync(catPath + '.sig', signBytes(catData, privateKey) + '\n')
-  console.log(`${tag}: ${zip.length} байт, предметов ${manifest.items.length}; каталог и подпись обновлены`)
+  const seqArg = arg(argv, '--seq', undefined)
+  const cat = upsertCatalog(base, catalogRow(manifest, zip, tag), seqArg === undefined ? undefined : Number(seqArg))
+  fs.writeFileSync(catPath, JSON.stringify(sealCatalog(cat, privateKey)) + '\n')
+  fs.rmSync(catPath + '.sig', { force: true }) // отдельная подпись формата 0.16 больше не нужна
+  console.log(`${tag}: ${zip.length} байт, предметов ${manifest.items.length}; каталог (seq ${cat.seq}) подписан`)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main(process.argv.slice(2))

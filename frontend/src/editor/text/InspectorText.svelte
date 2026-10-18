@@ -7,7 +7,7 @@
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import SnapToggle from '../inspector/SnapToggle.svelte'
+  import SnapToggle from '../photoprops/SnapToggle.svelte'
   import LayerRow from '../inspector/LayerRow.svelte'
   import TextGeomFields from './TextGeomFields.svelte'
   import FontPicker from './FontPicker.svelte'

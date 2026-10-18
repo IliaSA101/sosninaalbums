@@ -68,7 +68,7 @@ func (e *exportEnv) export(t *testing.T, o ExportOptions) string {
 	select {
 	case msg := <-e.done:
 		return msg
-	case <-time.After(30 * time.Second):
+	case <-time.After(testkit.Limit(30 * time.Second)):
 		t.Fatal("экспорт не закончился")
 	}
 	return ""

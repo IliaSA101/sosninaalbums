@@ -112,7 +112,7 @@ func (e *collectEnv) run(t *testing.T, all bool) (dir, msg, note string, stopped
 			t.Fatal("collect:done пришло, пока флаг сбора стоит")
 		}
 		return d[0].(string), d[1].(string), d[2].(string), d[3].(bool)
-	case <-time.After(30 * time.Second):
+	case <-time.After(testkit.Limit(30 * time.Second)):
 		t.Fatal("сбор не закончился")
 	}
 	return

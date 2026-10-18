@@ -419,7 +419,7 @@ func TestGetStateWaitsStartup(t *testing.T) {
 		if st.View.Path != path || st.Notice != "не открылся" {
 			t.Errorf("View.Path=%q Notice=%q: снимок до startup", st.View.Path, st.Notice)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Limit(5 * time.Second)):
 		t.Fatal("GetState не вернулся после startup")
 	}
 }
@@ -434,7 +434,7 @@ func TestGetStateStopReleases(t *testing.T) {
 	a.stopBackground()
 	select {
 	case <-got:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Limit(5 * time.Second)):
 		t.Fatal("GetState не вернулся после остановки")
 	}
 }

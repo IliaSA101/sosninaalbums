@@ -21,6 +21,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
+	"github.com/IliaSA101/sosninaalbums/internal/decor/pack"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -446,13 +447,20 @@ func TestAddPackFile(t *testing.T) {
 // badZip — набор, где манифест годен, а все картинки не читаются: decor отбрасывает каждую.
 func badZip(t *testing.T, names ...string) string {
 	t.Helper()
+	return namedZip(t, ".png", names...)
+}
+
+// namedZip — набор из предметов bg/bad-N<ext> с данными-«не картинками»; ext задаёт, кто
+// отбросит предмет: .png — decor (не читается), .svg — манифест pack (SVG не принимается).
+func namedZip(t *testing.T, ext string, names ...string) string {
+	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	items := make([]map[string]any, 0, len(names))
 	for i, name := range names {
 		data := []byte("не картинка " + name)
 		sum := sha256.Sum256(data)
-		file := fmt.Sprintf("bg/bad-%d.png", i)
+		file := fmt.Sprintf("bg/bad-%d%s", i, ext)
 		items = append(items, map[string]any{"file": file, "kind": "bg", "theme": "wedding", "name": name,
 			"sha256": hex.EncodeToString(sum[:]), "size": len(data)})
 		w, _ := zw.Create(file)
@@ -508,6 +516,37 @@ func TestAddPackEmpty(t *testing.T) {
 	if err := packEmptyErr(decor.ErrPackEmpty, nil); err.Error() != decor.ErrPackEmpty.Error() {
 		t.Errorf("без причин: %v", err)
 	}
+}
+
+// Манифест отбросил все предметы (SVG): текст ошибки AddPackPath несёт первую причину и «и ещё N»,
+// без путей; errors.Is(pack.ErrEmpty) держится. Раньше причина терялась вместе с пустым Manifest.
+func TestAddPackManifestEmpty(t *testing.T) {
+	a := decorApp(t)
+	for _, c := range []struct {
+		names []string
+		more  string
+	}{
+		{[]string{"Фон А"}, ""},
+		{[]string{"Фон А", "Фон Б", "Фон В"}, "(и ещё 2)"},
+	} {
+		p := namedZip(t, ".svg", c.names...)
+		_, err := a.AddPackPath(p)
+		if !errors.Is(err, pack.ErrEmpty) {
+			t.Fatalf("%v: %v", c.names, err)
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "bg/bad-0.svg — ") || !strings.Contains(msg, "SVG") ||
+			strings.Contains(msg, "bad-1") || strings.Contains(msg, filepath.Dir(p)) || strings.Contains(msg, a.cfgDir) {
+			t.Errorf("%v: текст %q", c.names, msg)
+		}
+		if (c.more == "") == strings.Contains(msg, "и ещё") || c.more != "" && !strings.Contains(msg, c.more) {
+			t.Errorf("%v: «и ещё» в %q", c.names, msg)
+		}
+	}
+	if list, _ := a.LibraryPacks(); len(list.Packs) != 1 {
+		t.Errorf("пустой набор поставился: %+v", list.Packs)
+	}
+	assertNoTmpLib(t, a)
 }
 
 func packIDs(t *testing.T, a *App, kind string) []string {

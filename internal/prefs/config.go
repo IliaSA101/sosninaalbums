@@ -35,6 +35,8 @@ type Config struct {
 	Custom      *CustomLevel      `json:"custom,omitempty"` // набор «Своего»; остаётся при смене уровня
 	// RecentDecor — недавние плитки библиотеки (048): вид (bg, sticker) → ID, новые первыми.
 	RecentDecor map[string][]string `json:"recentDecor,omitempty"`
+	// LibraryNet — согласие на сеть библиотеки и удалённые наборы (067 Ф3, libnet.go).
+	LibraryNet *LibraryNet `json:"libraryNet,omitempty"`
 }
 
 // configKeys — ключи config.json, которыми владеет эта версия (по тегам Config).

@@ -4,9 +4,9 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import PlaceFields from './PlaceFields.svelte'
   import GroupFields from './GroupFields.svelte'
-  import FitToggle from './FitToggle.svelte'
-  import ShapeToggle from './ShapeToggle.svelte'
-  import SnapToggle from './SnapToggle.svelte'
+  import FitToggle from '../photoprops/FitToggle.svelte'
+  import ShapeToggle from '../photoprops/ShapeToggle.svelte'
+  import SnapToggle from '../photoprops/SnapToggle.svelte'
 
   // Карточка пустого места или группы (спеки 008, 014). Место: X/Y/Ш/В образца, замок, привязка (общая с текстом),
   // «Целиком / С обрезкой». Группа (2+ объекта, в том числе тексты): состав в заголовке и X/Y/Ш/В общей рамки.

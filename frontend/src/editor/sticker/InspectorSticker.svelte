@@ -10,7 +10,7 @@
   import { fadePct, pctFade } from '../backdrop/fade'
   import { placesel } from '../places/placesel.svelte'
   import LayerRow from '../inspector/LayerRow.svelte'
-  import SnapToggle from '../inspector/SnapToggle.svelte'
+  import SnapToggle from '../photoprops/SnapToggle.svelte'
   import { STICKER_NEWER, inksOf, isLost, stKey, stickerName } from './sticker'
   import { sticker, stickerFadeLive } from './sticker.svelte'
 

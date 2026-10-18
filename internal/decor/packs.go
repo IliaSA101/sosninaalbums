@@ -302,3 +302,24 @@ func regularFile(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && st.Mode().IsRegular()
 }
+
+// Used — байты библиотеки (свои + наборы): App сверяет квоту по размеру из каталога до
+// скачивания (design §4.2), а не после 300 МБ трафика.
+func (s *Store) Used() int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.libBytes()
+}
+
+// DownloadPath — временный файл скачивания набора id: Наборы/.dl-<id>.tmp (остаток оборванного
+// убирает loadPacks при запуске). Имя только из id по грамматике.
+func (s *Store) DownloadPath(id string) (string, error) {
+	if !validPackID(id) {
+		return "", errors.New("недопустимый id набора")
+	}
+	dir := filepath.Join(s.root, packsDir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", errors.New("папка наборов недоступна")
+	}
+	return filepath.Join(dir, ".dl-"+id+".tmp"), nil
+}

@@ -39,7 +39,7 @@ const info = (o: Record<string, unknown> = {}) => ({
 const builtin = info({ id: 'builtin', title: 'Встроенные', origin: 'builtin', removable: false, version: 1, bytes: 0 })
 const list = (packs: unknown[] = [builtin, info()], o: Record<string, unknown> = {}) => ({
   packs,
-  net: { allowed: false, atStart: false, checked: 0 },
+  net: { allowed: false, atStart: false, checked: 0, skipped: 0 },
   busy: false,
   readOnly: false,
   ...o,

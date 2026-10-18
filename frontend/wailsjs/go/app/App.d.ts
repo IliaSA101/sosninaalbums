@@ -51,6 +51,8 @@ export function Backups():Promise<Array<app.BackupInfo>>;
 
 export function CancelCollect():Promise<void>;
 
+export function CancelLibrary():Promise<void>;
+
 export function ChooseFolder():Promise<model.View>;
 
 export function ClearBackdrop(arg1:string,arg2:string):Promise<model.View>;
@@ -211,6 +213,8 @@ export function Rescan():Promise<void>;
 
 export function ResetFrame(arg1:string):Promise<model.View>;
 
+export function ResetLibrarySkip():Promise<app.LibraryNet>;
+
 export function ResetMarks(arg1:Array<string>):Promise<model.View>;
 
 export function ResetVignette(arg1:string):Promise<app.GridResult>;
@@ -268,6 +272,8 @@ export function SetGrid(arg1:string,arg2:boolean):Promise<model.View>;
 export function SetLayout(arg1:string,arg2:string):Promise<model.View>;
 
 export function SetLevel(arg1:string):Promise<prefs.Prefs>;
+
+export function SetLibraryNet(arg1:boolean,arg2:boolean):Promise<app.LibraryNet>;
 
 export function SetMarks(arg1:Array<string>,arg2:model.MarkPatch):Promise<model.View>;
 
@@ -348,6 +354,8 @@ export function TurnBackdrop(arg1:string,arg2:string,arg3:number,arg4:string):Pr
 export function TurnPhotos(arg1:Array<string>,arg2:number):Promise<model.View>;
 
 export function Undo():Promise<model.View>;
+
+export function UpdateLibrary():Promise<app.LibraryUpdate>;
 
 export function VaryLayouts(arg1:Array<string>,arg2:number,arg3:Array<string>):Promise<model.View>;
 

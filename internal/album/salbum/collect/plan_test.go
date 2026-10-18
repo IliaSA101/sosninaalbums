@@ -186,6 +186,46 @@ func TestCollectSameFileOnce(t *testing.T) {
 	}
 }
 
+// Один файл — фото альбома и своё: итоговый вид «фото» при любом порядке записей. Photos
+// обходится по отсортированным ID, а в TestCollectSameFileOnce ID — хэши случайного пути, так что
+// ветка «своё уже добавлено, пришло фото» (sources: смена KindOwn → KindPhoto) проходилась
+// в половине прогонов. Здесь ID заданы: «a…» всегда раньше «b…».
+func TestCollectOwnThenPhotoKind(t *testing.T) {
+	for _, c := range []struct{ name, ownID, photoID string }{
+		{"своё раньше фото", "a-own", "b-photo"},   // ветка смены вида
+		{"фото раньше своего", "b-own", "a-photo"}, // вид «фото» уже есть
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			root := testkit.TempDir(t)
+			a := filepath.Join(root, "A")
+			f := filepath.Join(a, "f.png")
+			p := album(t, []string{a}, f)
+			clear(p.Photos)
+			put(t, f, "xxxxx")
+			p.Photos[c.ownID] = model.PhotoRef{Lib: libKey, Path: f}
+			p.Photos[c.photoID] = model.PhotoRef{Path: f, W: 3, H: 2}
+			// Второй файл, только своё: вид «своё» не должен смениться на «фото».
+			only := filepath.Join(root, "own-only.png")
+			put(t, only, "yy")
+			p.Photos["c-only"] = model.PhotoRef{Lib: "my:9", Path: only}
+			pl, err := Make(p, nil, "", os.Stat)
+			if err != nil {
+				t.Fatal(err)
+			}
+			kinds := map[string]string{}
+			for _, it := range pl.Items {
+				kinds[it.Src] = it.Kind
+				if it.Src == f && len(it.Refs) != 2 {
+					t.Errorf("ссылки файла: %v", it.Refs)
+				}
+			}
+			if len(pl.Items) != 2 || kinds[f] != KindPhoto || kinds[only] != KindOwn {
+				t.Fatalf("виды: %v, элементов %d", kinds, len(pl.Items))
+			}
+		})
+	}
+}
+
 // Имя занято 999 раз — ошибка, а не бесконечный цикл и не перезапись.
 func TestCollectTooManyDups(t *testing.T) {
 	root := testkit.TempDir(t)

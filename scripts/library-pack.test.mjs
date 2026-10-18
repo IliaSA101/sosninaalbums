@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import { buildPack, catalogRow, makeZip, publicRaw, readZip, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
+import { buildPack, catalogRow, makeZip, publicRaw, readCatalogFile, readZip, requireBase, sealCatalog, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
 
 function setDir() {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'libpack-'))
@@ -75,10 +75,50 @@ test('каталог подписан, порча байта ломает под
   assert.equal(verifyBytes(data, sig, other), false)
 })
 
+test('конверт каталога: подпись по байтам body, seq растёт', () => {
+  const { manifest, files } = buildPack(setDir())
+  const row = catalogRow(manifest, makeZip(files), 'a.zip')
+  const cat = upsertCatalog(null, row)
+  assert.equal(cat.seq, 1)
+  assert.equal(upsertCatalog(cat, row).seq, 2)
+  assert.equal(upsertCatalog(cat, row, 7).seq, 7)
+  assert.throws(() => upsertCatalog(null, row, 0))
+  const { privateKey } = crypto.generateKeyPairSync('ed25519')
+  const env = sealCatalog(cat, privateKey)
+  assert.deepEqual(Object.keys(env).sort(), ['body', 'sig'])
+  const body = Buffer.from(env.body, 'base64')
+  assert.equal(verifyBytes(body, env.sig, publicRaw(privateKey)), true)
+  assert.deepEqual(JSON.parse(body.toString()), cat)
+  const f = path.join(os.tmpdir(), `lib-cat-${process.pid}.json`)
+  fs.writeFileSync(f, JSON.stringify(env))
+  assert.equal(readCatalogFile(f).seq, 1)
+  fs.rmSync(f)
+})
+
 test('каталог: замена по id, старее — отказ', () => {
   const { manifest, files } = buildPack(setDir())
   const row = catalogRow(manifest, makeZip(files), 'a.zip')
   const c1 = upsertCatalog(null, row)
   assert.equal(upsertCatalog(c1, { ...row, version: 3 }).packs.length, 1)
   assert.throws(() => upsertCatalog(c1, { ...row, version: 1 }))
+})
+
+test('--seq: не больше seq прежнего каталога — отказ; больше — принят', () => {
+  const { manifest, files } = buildPack(setDir())
+  const row = catalogRow(manifest, makeZip(files), 'a.zip')
+  const c5 = upsertCatalog(null, row, 5)
+  assert.throws(() => upsertCatalog(c5, row, 5), /больше seq прежнего/)
+  assert.throws(() => upsertCatalog(c5, row, 3), /больше seq прежнего/)
+  assert.equal(upsertCatalog(c5, row, 6).seq, 6)
+  assert.equal(upsertCatalog(c5, row).seq, 6)
+  assert.equal(upsertCatalog(null, row, 1).seq, 1) // нового каталога прежнего seq нет
+})
+
+test('нет файла каталога: отказ без --new; с --new — новый; --new при готовом каталоге — отказ', () => {
+  const { manifest, files } = buildPack(setDir())
+  const cat = upsertCatalog(null, catalogRow(manifest, makeZip(files), 'a.zip'))
+  assert.throws(() => requireBase(null, false), /--new/)
+  assert.equal(requireBase(null, true), null)
+  assert.equal(requireBase(cat, false), cat)
+  assert.throws(() => requireBase(cat, true), /уже есть/)
 })

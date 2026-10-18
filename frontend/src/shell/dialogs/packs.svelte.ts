@@ -16,10 +16,11 @@ import {
   type PackList,
   type PackRemove,
 } from './packs'
+import { LibNet } from './packnet.svelte'
 
 // Окно «Файл ▸ Наборы библиотеки…» (067 Ф2): список наборов, «Добавить из файла…», «Удалить». Открывается и поверх окон
 // «Фоны», «Стикеры», «Развороты» (кнопка «Наборы…»). Наборы не часть альбома: правок проекта и шагов отмены нет.
-// Итоги — тосты (они выше окон); окно хранит только ошибку чтения списка. Сеть (Ф3) — в 0.17, здесь её нет.
+// Итоги — тосты (они выше окон); окно хранит только ошибку чтения списка. Сеть (Ф3) — `net` (packnet.svelte.ts).
 class PacksUi {
   open = $state(false)
   packs = $state<PackInfo[]>([])
@@ -29,10 +30,11 @@ class PacksUi {
   readOnly = $state(false)
   error = $state('')
   ask = $state<PackAsk | null>(null)
+  readonly net = new LibNet(this)
   private req = 0
 
   get locked(): boolean {
-    return this.busy || this.goBusy
+    return this.busy || this.goBusy || this.net.updating
   }
 
   async show() {
@@ -46,6 +48,7 @@ class PacksUi {
   close() {
     this.open = false
     this.ask = null
+    this.net.stop()
     this.req++ // запоздавший ответ списка окну не нужен
   }
 
@@ -68,6 +71,8 @@ class PacksUi {
     this.packs = sortPacks(list.packs ?? [])
     this.goBusy = !!list.busy
     this.readOnly = !!list.readOnly
+    this.net.take(list.net)
+    this.net.busy(this.goBusy)
   }
 
   // library:changed от Go (набор добавлен, удалён, обновлён): список и каталог открытого окна «Фоны/Стикеры/Развороты».

@@ -127,9 +127,22 @@ func ParseManifest(data []byte, app string) (Manifest, error) {
 		m.Items = append(m.Items, it)
 	}
 	if len(m.Items) == 0 {
-		return Manifest{}, ErrEmpty
+		return Manifest{}, emptyErr(m.Skipped)
 	}
 	return m, nil
+}
+
+// emptyErr — «нечего ставить» с первой причиной отбора: Wails с ошибкой отдаёт только текст, а
+// Skipped вместе с пустым Manifest теряется. Имена — записи архива, путей диска в них нет.
+func emptyErr(skips []Skip) error {
+	if len(skips) == 0 {
+		return ErrEmpty
+	}
+	msg := Clean(skips[0].File, 64) + " — " + skips[0].Why
+	if n := len(skips) - 1; n > 0 {
+		msg += fmt.Sprintf(" (и ещё %d)", n)
+	}
+	return fmt.Errorf("%w: %s", ErrEmpty, msg)
 }
 
 // checkHead — шапка манифеста: формат, id, версия, minApp, тексты (чистятся и режутся).

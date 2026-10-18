@@ -10,7 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { fileURLToPath } from 'node:url'
-import { buildPack, catalogRow, makeZip, signBytes, upsertCatalog } from './library-pack.mjs'
+import { buildPack, catalogRow, makeZip, sealCatalog, upsertCatalog } from './library-pack.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const base = path.join(root, '.testphotos', 'library')
@@ -104,10 +104,9 @@ for (const [id, title, color] of [
 }
 // Для стенда адреса архивов — локальные (SA_LIBRARY_URL); путь после хоста — как в файле site/.
 for (const p of cat.packs) p.url = `http://127.0.0.1:34190/${path.basename(p.url)}`
-const catData = Buffer.from(JSON.stringify(cat, null, 2) + '\n')
-fs.writeFileSync(path.join(base, 'site', 'catalog.json'), catData)
-if (key) fs.writeFileSync(path.join(base, 'site', 'catalog.json.sig'), signBytes(catData, key) + '\n')
-else console.log('нет тестового ключа: node scripts/library-pack.mjs --test-key, затем запустить снова — подпись не записана')
+fs.rmSync(path.join(base, 'site', 'catalog.json.sig'), { force: true })
+if (key) fs.writeFileSync(path.join(base, 'site', 'catalog.json'), JSON.stringify(sealCatalog(cat, key)) + '\n')
+else console.log('нет тестового ключа: node scripts/library-pack.mjs --test-key, затем запустить снова — каталог не записан')
 
 // Плохие архивы: манифест собирается из хорошего набора и портится.
 const good = buildPack(path.join(base, 'src', 'ivory'))

@@ -312,7 +312,7 @@ func TestPackStageLimits(t *testing.T) {
 	writeReg(t, cfg, `{"version":1,"items":[`+strings.Join(items, ",")+`]}`)
 	s := Open(cfg)
 	m, src := testPack("full", 1, pit{"bg/a.png", renderPNG(t, 46, 30)})
-	if _, err := s.StagePack(m, src, OriginFile, ""); !errors.Is(err, errLibFull) {
+	if _, err := s.StagePack(m, src, OriginFile, ""); !errors.Is(err, ErrLibFull) {
 		t.Errorf("квота: %v", err)
 	}
 	writeReg(t, cfg, `{"version":99,"items":[]}`)

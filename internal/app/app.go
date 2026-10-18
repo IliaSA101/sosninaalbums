@@ -126,6 +126,8 @@ type App struct {
 	decorLib atomic.Pointer[decor.Store]
 	// packs — одна операция наборов за раз и набор, ждущий «Заменить» (packs.go).
 	packs packState
+	// net — «Обновить библиотеку»: отмена, проверка при запуске, источник (packs_net.go).
+	net libNet
 }
 
 // State — то, что нужно интерфейсу целиком: альбом и фото из папок.
@@ -362,6 +364,13 @@ func (a *App) editHost() edit.Host {
 		InfosOrRefs: a.infosOrRefs, Templates: a.templateList}
 }
 
+// domReady — окно открыто: размер под экран и проверка библиотеки при запуске (067 Ф3).
+func (a *App) domReady(ctx context.Context) {
+	defer guard("domReady")
+	a.fitScreen(ctx)
+	a.scheduleLibraryCheck()
+}
+
 // fitScreen: если обычный (не развёрнутый) размер окна больше экрана —
 // уменьшаем его, иначе после «Свернуть в окно» окно выглядит развёрнутым
 // и его не за что взять, чтобы перетащить на другой монитор.
@@ -414,7 +423,7 @@ func dataDirs(name string) (cfg, thumbs string) {
 }
 
 // quietTransport выключает keep-alive у транспорта. В wails dev обратный прокси к Vite идёт через
-// http.DefaultTransport (в exe прокси нет, своих HTTP-клиентов у программы нет). Vite пишет
+// http.DefaultTransport (в exe прокси нет; свой клиент библиотеки — decor/fetch, со своим транспортом). Vite пишет
 // «400 Bad Request» в простаивающее keep-alive соединение, и net/http сыплет в log.txt
 // «Unsolicited response received on idle HTTP channel». Без повторного использования
 // соединений простаивающих нет; WebSocket HMR не страдает: Upgrade-запросы Transport
@@ -455,7 +464,7 @@ func Run(assets fs.FS, wailsCfg []byte) error {
 		Windows:     &windows.Options{WebviewUserDataPath: osx.WebViewDir(app.data)},
 		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
 		OnStartup:   app.startup,
-		OnDomReady:  app.fitScreen,
+		OnDomReady:  app.domReady,
 		OnShutdown:  app.shutdown,
 		Bind:        []any{app},
 		// Два окна пишут в один черновик и конфиг: второй запуск лишь поднимает первое окно.

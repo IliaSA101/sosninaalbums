@@ -122,8 +122,20 @@ func TestParseManifestSkips(t *testing.T) {
 	_, err = ParseManifest(manifestJSON(t, func(m map[string]any) {
 		m["items"] = []any{map[string]any{"file": "a.svg", "kind": "bg", "sha256": sumA, "size": 1}}
 	}), "0.16.0")
-	if !errors.Is(err, ErrEmpty) {
+	if !errors.Is(err, ErrEmpty) || !strings.Contains(err.Error(), "a.svg — ") || !strings.Contains(err.Error(), "SVG") ||
+		strings.Contains(err.Error(), "ещё") {
 		t.Errorf("все пропущены: %v", err)
+	}
+	// Несколько пропущенных: первая причина и «и ещё N»; в тексте только имена записей.
+	_, err = ParseManifest(manifestJSON(t, func(m map[string]any) {
+		m["items"] = []any{
+			map[string]any{"file": "a.svg", "kind": "bg", "sha256": sumA, "size": 1},
+			map[string]any{"file": "b.txt", "kind": "bg", "sha256": sumA, "size": 1},
+			map[string]any{"file": "c.png", "kind": "future", "sha256": sumA, "size": 1},
+		}
+	}), "0.16.0")
+	if !errors.Is(err, ErrEmpty) || !strings.Contains(err.Error(), "a.svg — ") || !strings.Contains(err.Error(), "(и ещё 2)") {
+		t.Errorf("три пропущены: %v", err)
 	}
 	// 1001 предмет — отказ; ровно 1000 — да.
 	many := func(n int) func(m map[string]any) {

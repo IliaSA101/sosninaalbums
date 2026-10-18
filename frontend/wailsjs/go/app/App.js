@@ -90,6 +90,10 @@ export function CancelCollect() {
   return window['go']['app']['App']['CancelCollect']();
 }
 
+export function CancelLibrary() {
+  return window['go']['app']['App']['CancelLibrary']();
+}
+
 export function ChooseFolder() {
   return window['go']['app']['App']['ChooseFolder']();
 }
@@ -410,6 +414,10 @@ export function ResetFrame(arg1) {
   return window['go']['app']['App']['ResetFrame'](arg1);
 }
 
+export function ResetLibrarySkip() {
+  return window['go']['app']['App']['ResetLibrarySkip']();
+}
+
 export function ResetMarks(arg1) {
   return window['go']['app']['App']['ResetMarks'](arg1);
 }
@@ -524,6 +532,10 @@ export function SetLayout(arg1, arg2) {
 
 export function SetLevel(arg1) {
   return window['go']['app']['App']['SetLevel'](arg1);
+}
+
+export function SetLibraryNet(arg1, arg2) {
+  return window['go']['app']['App']['SetLibraryNet'](arg1, arg2);
 }
 
 export function SetMarks(arg1, arg2) {
@@ -684,6 +696,10 @@ export function TurnPhotos(arg1, arg2) {
 
 export function Undo() {
   return window['go']['app']['App']['Undo']();
+}
+
+export function UpdateLibrary() {
+  return window['go']['app']['App']['UpdateLibrary']();
 }
 
 export function VaryLayouts(arg1, arg2, arg3) {

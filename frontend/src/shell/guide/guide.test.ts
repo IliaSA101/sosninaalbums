@@ -190,6 +190,10 @@ describe('справочник функций: стражи', () => {
     const a = ARTICLES.find((x) => x.id === 'library-packs')
     expect(a).toMatchObject({ title: 'Наборы библиотеки', feature: 'decor', menu: ['packs'] })
     for (const w of ['Файл ▸ Наборы библиотеки…', '«Наборы…»', '«Добавить из файла…»', '«Заменить?»']) expect(a?.where, w).toContain(w)
+    // Ф3: сеть — согласие, ход, флажок и отзыв названы теми же словами, что в окне
+    for (const w of ['«Обновить библиотеку»', '«Обратиться к GitHub?»', '«Отменить»', '«Проверять при запуске»', '«Не обращаться к сети»'])
+      expect(a?.where, w).toContain(w)
+    expect(a?.what).toContain('только с вашего согласия')
     expect(placesOf(a!).map((p) => p.spot)).toEqual(['menu:packs'])
   })
 

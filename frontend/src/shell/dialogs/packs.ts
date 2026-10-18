@@ -31,8 +31,16 @@ export interface PackAdd {
   token: string
   skipped: PackSkip[] | null
 }
+// Согласие на сеть (app.LibraryNet): allowed — разрешено, atStart — проверять при запуске, checked — unix мс последней проверки.
+export interface LibraryNet {
+  allowed: boolean
+  atStart: boolean
+  checked: number
+  skipped: number // сетевых наборов в пропуске (удалены пользователем)
+}
 export interface PackList {
   packs: PackInfo[] | null
+  net?: LibraryNet // у старого Go поля нет
   busy: boolean
   readOnly: boolean
 }

@@ -41,7 +41,8 @@ var (
 	ErrPackEmpty = errors.New("в наборе нечего ставить")
 	errPackOlder = errors.New("уже стоит версия набора новее")
 	errPackSame  = errors.New("этот набор уже стоит")
-	errLibFull   = fmt.Errorf("библиотека заполнена (%d ГБ)", MaxLibraryLen>>30)
+	// ErrLibFull — своё и наборы вместе дошли до MaxLibraryLen.
+	ErrLibFull = fmt.Errorf("библиотека заполнена (%d ГБ)", MaxLibraryLen>>30)
 )
 
 // PackManifest — проверенный манифест набора (pack.Manifest без пропущенных предметов).
@@ -164,7 +165,7 @@ func (s *Store) StagePack(m PackManifest, src PackSource, origin, zipSum string)
 		need += max(it.Size, 0)
 	}
 	if used+need > MaxLibraryLen { // до распаковки: по размерам манифеста
-		return nil, errLibFull
+		return nil, ErrLibFull
 	}
 	if err := s.stageItems(st, src); err != nil {
 		st.Close()
@@ -392,7 +393,7 @@ var packStep = func(int) error { return nil }
 // тем же ключом есть — байты те же, временный удаляется), последним — реестр Наборы/<id>.json
 // (точка фиксации). Сбой до неё — новые файлы удаляются, библиотека прежняя. Обновление —
 // ключи прежней версии, которых нет в новой, уходят сборкой мусора; keep — нужны открытому
-// альбому. Квота сверяется заново (errLibFull). Временные файлы st после успеха пусты; Close
+// альбому. Квота сверяется заново (ErrLibFull). Временные файлы st после успеха пусты; Close
 // всё равно нужен.
 func (s *Store) InstallPack(st *Staged, keep func(key string) bool) (PackInfo, error) {
 	if st == nil || len(st.items) == 0 {
@@ -415,7 +416,7 @@ func (s *Store) InstallPack(st *Staged, keep func(key string) bool) (PackInfo, e
 	// Повторная сверка квоты: между StagePack и «Заменить?» могли пройти минуты, а своё и другие
 	// наборы — встать за это время.
 	if used+need > MaxLibraryLen {
-		return PackInfo{}, errLibFull
+		return PackInfo{}, ErrLibFull
 	}
 	if old != nil && old.Version == st.m.Version {
 		return PackInfo{}, errPackSame

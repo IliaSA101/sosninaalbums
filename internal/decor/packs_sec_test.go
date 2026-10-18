@@ -108,7 +108,7 @@ func TestInstallPackRecheckQuota(t *testing.T) {
 	used := s.libBytes()
 	s.packs = append(s.packs, &packReg{V: packRegV, ID: "late", Version: 1, Title: "late", Items: fillerEntries(MaxLibraryLen - 1 - used)})
 	s.mu.Unlock()
-	if _, err := s.InstallPack(fresh, nil); !errors.Is(err, errLibFull) {
+	if _, err := s.InstallPack(fresh, nil); !errors.Is(err, ErrLibFull) {
 		t.Errorf("новый набор сверх квоты: %v", err)
 	}
 	if _, ok := s.Find(libKey(c)); ok || regularFile(filepath.Join(cfg, RootName, packsDir, "rose.json")) {
@@ -229,5 +229,42 @@ func TestPackIDDevice(t *testing.T) {
 	m, src := testPack("aux", 1, pit{"bg/a.png", renderPNG(t, 33, 20)})
 	if _, err := s.StagePack(m, src, OriginFile, ""); err == nil {
 		t.Error("набор aux принят")
+	}
+}
+
+// Скачивание набора: временный файл только по id в Наборы/ (папка создаётся), id не по
+// грамматике и устройство Windows — отказ; остаток оборванного убирается при открытии.
+// Used — байты своих и наборов (квота до скачивания), общий файл двух наборов — один раз.
+func TestDownloadPathAndUsed(t *testing.T) {
+	s, cfg := openTemp(t)
+	if s.Used() != 0 {
+		t.Fatalf("пустая библиотека: %d", s.Used())
+	}
+	p, err := s.DownloadPath("ivory")
+	if err != nil || p != filepath.Join(cfg, RootName, packsDir, ".dl-ivory.tmp") {
+		t.Fatalf("путь: %v %q", err, p)
+	}
+	if fi, err := os.Stat(filepath.Dir(p)); err != nil || !fi.IsDir() {
+		t.Fatalf("папка наборов: %v", err)
+	}
+	for _, bad := range []string{"", "../x", "Ivory", "ab", "con", "a/b", strings.Repeat("a", 41)} {
+		if _, err := s.DownloadPath(bad); err == nil {
+			t.Errorf("id %q принят", bad)
+		}
+	}
+	if err := os.WriteFile(p, []byte("обрыв"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bg, st := renderPNG(t, 40, 30), renderPNG(t, 16, 16)
+	m, src := testPack("ivory", 1, pit{"bg/one.png", bg}, pit{"stickers/dot.png", st})
+	install(t, s, m, src, nil)
+	m2, src2 := testPack("sage", 1, pit{"bg/one.png", bg})
+	install(t, s, m2, src2, nil)
+	if got := s.Used(); got != int64(len(bg)+len(st)) {
+		t.Fatalf("занято %d, ждали %d", got, len(bg)+len(st))
+	}
+	s2 := Open(cfg)
+	if regularFile(p) || s2.Used() != s.Used() {
+		t.Fatalf("после перезапуска: остаток %v, занято %d", regularFile(p), s2.Used())
 	}
 }
