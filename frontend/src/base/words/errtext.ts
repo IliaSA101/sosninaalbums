@@ -28,3 +28,6 @@ export function exportDoneText(total: number | undefined, note?: string): string
   const head = total && total > 0 ? `Выгружено файлов: ${total}` : 'Выгрузка готова'
   return note ? `${head}. ${note}` : head
 }
+
+// Тост остановленной выгрузки (073-4): готовую фразу пишет Go (note), вид — как у остановленного сбора: красный, без «Открыть папку».
+export const exportStoppedText = (note: string | undefined): string => note || 'Экспорт остановлен'

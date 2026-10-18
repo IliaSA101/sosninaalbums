@@ -2,7 +2,13 @@
   // ⟳ на «усике» над серединой верхней стороны рамки (общая для мест и фона): стоит внутри повёрнутой
   // рамки и крутится вместе с ней. Shift — шаг 15°, Alt — без прилипания, двойной щелчок — 0°.
   // rotIn — ⟳ внутри рамки (над ней он вышел бы за разворот). Жест ведёт хозяин рамки.
-  let { rotIn = false, onrotate, onzero }: { rotIn?: boolean; onrotate: (e: PointerEvent) => void; onzero: () => void } = $props()
+  // accept — «это обычное нажатие, а не правый щелчок» (primaryPress из core/platform): ui/ его не импортирует.
+  let {
+    rotIn = false,
+    accept,
+    onrotate,
+    onzero,
+  }: { rotIn?: boolean; accept: (e: PointerEvent) => boolean; onrotate: (e: PointerEvent) => void; onzero: () => void } = $props()
 </script>
 
 <div
@@ -12,7 +18,7 @@
   role="presentation"
   title="Повернуть (Shift — шаг 15°, Alt — без привязки). Двойной щелчок — 0°"
   onpointerdown={(e) => {
-    if (e.button !== 0) return
+    if (!accept(e)) return
     e.stopPropagation()
     onrotate(e)
   }}

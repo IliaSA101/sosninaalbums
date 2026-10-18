@@ -168,7 +168,6 @@ const FULL: MenuCtx = {
   varyable: true,
   layerable: true,
   missing: 1,
-  exporting: false,
   big: false,
   details: false,
   safe: false,

@@ -16,6 +16,14 @@ describe('packnet: тексты', () => {
     expect(progressText(null)).toBe('Обновляем библиотеку…')
   })
 
+  it('updateText: без нулевых частей', () => {
+    const one = (added: number, updated: number) => updateText({ added, updated, skipped: [], bytes: 1 })
+    expect(one(2, 0)).toBe('Библиотека обновлена: новых наборов 2')
+    expect(one(0, 1)).toBe('Библиотека обновлена: обновлено наборов 1')
+    expect(one(2, 1)).toBe('Библиотека обновлена: новых наборов 2, обновлено 1')
+    expect(one(1, 3)).not.toMatch(/\b0\b/)
+  })
+
   it('полоса: доля только у скачивания с известным размером, зажата 0…100', () => {
     expect(progressPercent({ stage: 'download', title: 'a', done: 10, total: 40 })).toBe(25)
     expect(progressPercent({ stage: 'download', title: 'a', done: 50, total: 40 })).toBe(100)
@@ -27,11 +35,11 @@ describe('packnet: тексты', () => {
 
   it('итог: новых и обновлено; ничего — «Всё уже свежее»; пропущенное в конце', () => {
     expect(updateText({ added: 2, updated: 1, skipped: [], bytes: 1 })).toBe('Библиотека обновлена: новых наборов 2, обновлено 1')
-    expect(updateText({ added: 0, updated: 3, skipped: null, bytes: 1 })).toBe('Библиотека обновлена: новых наборов 0, обновлено 3')
+    expect(updateText({ added: 0, updated: 3, skipped: null, bytes: 1 })).toBe('Библиотека обновлена: обновлено наборов 3')
     expect(updateText({ added: 0, updated: 0, skipped: [], bytes: 0 })).toBe('Всё уже свежее')
     expect(updateText({ added: 0, updated: 0, skipped: null, bytes: 0 })).toBe('Всё уже свежее')
     expect(updateText({ added: 1, updated: 0, skipped: [{ name: 'Новый', why: 'нужна новая версия программы' }], bytes: 1 })).toBe(
-      'Библиотека обновлена: новых наборов 1, обновлено 0; пропущено: 1 (Новый — нужна новая версия программы)',
+      'Библиотека обновлена: новых наборов 1; пропущено: 1 (Новый — нужна новая версия программы)',
     )
   })
 
@@ -279,7 +287,7 @@ describe('сеть: ход, «Отменить», итоги', () => {
     expect(net.progress).toBeNull()
     expect(packsUi.locked).toBe(false)
     expect(api.LibraryPacks).toHaveBeenCalled()
-    expect(toast()?.text).toBe('Библиотека обновлена: новых наборов 1, обновлено 0')
+    expect(toast()?.text).toBe('Библиотека обновлена: новых наборов 1')
   })
 
   it('«Отменить»: CancelLibrary; ответ «отменено» — обычный тост, не красный', async () => {
@@ -362,7 +370,17 @@ describe('сеть: ход, «Отменить», итоги', () => {
     api.UpdateLibrary.mockResolvedValue(upd({ updated: 2 }))
     await net.run()
     expect(api.LibraryPacks).not.toHaveBeenCalled()
-    expect(toast()?.text).toBe('Библиотека обновлена: новых наборов 0, обновлено 2')
+    expect(toast()?.text).toBe('Библиотека обновлена: обновлено наборов 2')
+  })
+})
+
+describe('сеть: library:updated', () => {
+  it('library:updated — обычный тост (не красный), текст как у кнопки', () => {
+    net.updated(upd({ added: 2, updated: 1 }))
+    expect(toast()).toMatchObject({ text: 'Библиотека обновлена: новых наборов 2, обновлено 1' })
+    expect(toast()?.kind).not.toBe('error')
+    net.updated(upd({ updated: 2 }))
+    expect(toast()?.text).toBe('Библиотека обновлена: обновлено наборов 2')
   })
 })
 
@@ -373,7 +391,7 @@ describe('сеть: library:offer и чужая операция', () => {
     expect(toast()?.action?.label).toBe('Скачать')
     api.UpdateLibrary.mockResolvedValue(upd({ added: 2 }))
     toast()?.action?.run()
-    await vi.waitFor(() => expect(toast()?.text).toBe('Библиотека обновлена: новых наборов 2, обновлено 0'))
+    await vi.waitFor(() => expect(toast()?.text).toBe('Библиотека обновлена: новых наборов 2'))
     expect(api.UpdateLibrary).toHaveBeenCalledTimes(1)
     expect(api.SetLibraryNet).not.toHaveBeenCalled()
   })

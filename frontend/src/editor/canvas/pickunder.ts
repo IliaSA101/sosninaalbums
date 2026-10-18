@@ -1,5 +1,6 @@
 // Выбор нижнего объекта Alt+щелчком (спека 015, design §3). Чистая логика под тесты: стек объектов под
 // курсором по View (рамки, углы и z приходят из Go) и решение на нажатие. Без DOM и состояния.
+import { isLeft } from '../../base/core/platform'
 import { placeBox } from '../../base/geom/rotbox'
 import { corners, rotate, type Pt, type TextBox } from '../../base/geom/textbox'
 import { inShape } from '../../base/geom/shape'
@@ -92,7 +93,7 @@ const PASS: PressPlan = { press: 'pass', click: 'pass', hint: false }
 
 // Решение на pointerdown, таблица design §3 (строки 1–6).
 export function pressPlan(c: PressCtx): PressPlan {
-  if (c.button !== 0 || c.additive) return PASS
+  if (!isLeft(c.button) || c.additive) return PASS
   const { stack, cur } = c
   const top = stack[0] ?? null
   // Текущий лежит под курсором, но закрыт другим.

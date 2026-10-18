@@ -1,8 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import type { NamesPlan, NamesRow } from './nametypes'
-import { columnsLine, fileInfo, leftList, leftLine, noPhotosLine, summaryLine, vigHint } from './plantext'
+import {
+  columnsLine,
+  EMPTY_SEAT,
+  fileInfo,
+  hasSeats,
+  leftList,
+  leftLine,
+  noSeatsAction,
+  noSeatsLine,
+  rowKey,
+  summaryLine,
+  vigHint,
+  whoText,
+} from './plantext'
 
-const row = (tag: string, no = 1): NamesRow => ({ photo: tag + no, tag, no, line: no, who: { last: 'Иванов' } })
+const row = (tag: string, no = 1): NamesRow => ({ place: '', photo: tag + no, seat: false, tag, no, line: no, who: { last: 'Иванов' } })
+// Место листа с местами: photo '' — пустое.
+const seat = (id: string, photo = '', over: Partial<NamesRow> = {}): NamesRow => ({
+  place: id,
+  photo,
+  seat: true,
+  tag: 'ученик 1',
+  no: 1,
+  line: 2,
+  who: { last: 'Иванов', first: 'Петя' },
+  ...over,
+})
 const plan = (over: Partial<NamesPlan> = {}): NamesPlan => ({
   rows: [],
   left: [],
@@ -48,8 +72,24 @@ describe('columnsLine', () => {
 })
 
 describe('summaryLine и строки без фото', () => {
-  it('итог по плану', () => {
-    expect(summaryLine({ named: 23, seats: 25, extra: 1, missing: 2 })).toBe('Подписано: 23 из 25 · строк лишних: 1 · фото без имени: 2')
+  it('«Авто»: итог по фото', () => {
+    const rows = [row('')]
+    expect(summaryLine({ named: 23, seats: 25, extra: 1, missing: 2, rows })).toBe(
+      'Подписано: 23 из 25 · строк лишних: 1 · фото без имени: 2',
+    )
+  })
+
+  it('лист с местами (хоть одна строка с place): «мест без имени»', () => {
+    const rows = [seat('p1'), seat('p2', 'a')]
+    expect(summaryLine({ named: 10, seats: 12, extra: 0, missing: 2, rows })).toBe(
+      'Подписано: 10 из 12 · строк лишних: 0 · мест без имени: 2',
+    )
+  })
+
+  it('нет строк — как «Авто»', () => {
+    expect(summaryLine({ named: 0, seats: 0, extra: 3, missing: 0, rows: [] })).toBe(
+      'Подписано: 0 из 0 · строк лишних: 3 · фото без имени: 0',
+    )
   })
 
   it('причины со своим текстом', () => {
@@ -104,9 +144,56 @@ describe('vigHint', () => {
   })
 })
 
-describe('пустой предпросмотр', () => {
+describe('нет мест и фото (071-11)', () => {
   it('фраза с подсказкой, слово — по единице', () => {
-    expect(noPhotosLine('На листе')).toBe('На листе пока нет фото. Положите фото — имена лягут на них по порядку мест')
-    expect(noPhotosLine('На развороте')).toMatch(/^На развороте пока нет фото\./)
+    expect(noSeatsLine('На листе')).toBe('На листе нет мест. Сделайте виньетку или ручную сетку — имена лягут на места по порядку')
+    expect(noSeatsLine('На развороте')).toMatch(/^На развороте нет мест./)
+  })
+  it('обложка: совета про виньетку нет', () => {
+    expect(noSeatsLine('На обложке', true)).toBe('На обложке нет мест для имён')
+  })
+})
+
+describe('noSeatsAction: кнопка пустого предпросмотра', () => {
+  const all = () => true
+  const sp = (over: object = {}) => ({ id: 's1', kind: 'spread', ...over }) as never
+  it('«Авто» без фото: сначала сделать виньеткой', () => {
+    expect(noSeatsAction(sp(), all)).toBe('make')
+  })
+  it('виньетка: сразу окно', () => {
+    expect(noSeatsAction(sp({ kind: 'vignette', vig: {} }), all)).toBe('setup')
+  })
+  it('обложка, нет листа, уровень без виньетки: кнопки нет', () => {
+    expect(noSeatsAction(sp({ id: 'cover' }), all)).toBe('none')
+    expect(noSeatsAction(null, all)).toBe('none')
+    expect(noSeatsAction(sp(), () => false)).toBe('none')
+  })
+})
+
+describe('строки по месту', () => {
+  it('ключ — место, на «Авто» — фото; пустые места не сливаются', () => {
+    expect(rowKey(seat('p1'))).toBe('p1')
+    expect(rowKey(seat('p2', 'a'))).toBe('p2')
+    expect(rowKey(row(''))).toBe('1')
+    const keys = [seat('p1'), seat('p2'), seat('p3', 'a')].map(rowKey)
+    expect(new Set(keys).size).toBe(3)
+  })
+
+  it('лист с местами определяется по place', () => {
+    expect(hasSeats({ rows: [seat('p1')] })).toBe(true)
+    expect(hasSeats({ rows: [row('')] })).toBe(false)
+    expect(hasSeats({ rows: [] })).toBe(false)
+  })
+
+  it('справа от стрелки: имя, «без имени» у группового на виньетке, прочерк', () => {
+    expect(whoText(seat('p1'), true)).toBe('Иванов Петя')
+    expect(whoText(seat('p2', '', { no: 0, tag: 'групповое', who: null }), true)).toBe('без имени')
+    expect(whoText(seat('p3', 'a', { who: null }), true)).toBe('—')
+    expect(whoText(row('', 1), false)).toBe('Иванов')
+    expect(whoText(row('', 0), false)).toBe('Иванов')
+  })
+
+  it('подпись файла у пустого места', () => {
+    expect(EMPTY_SEAT).toBe('место без фото')
   })
 })

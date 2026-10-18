@@ -133,10 +133,23 @@ func (e *Editor) SetCaptionStyle(photoID string, st model.TextStyle, over bool, 
 // Поля подписей (030, тела — names).
 
 // Договор: имя и предмет зажаты ClampPerson (все пусты — nil: снова из имени файла); session — как у
-// SetText: набор в поле — один шаг отмены.
+// SetText: набор в поле — один шаг отмены. Фото на месте с табличкой — правится табличка (071).
 func (e *Editor) SetPerson(photoID string, who model.Person, session string) model.View {
 	pp := model.ClampPerson(who)
 	return e.apply(textMerge(session), func(p *model.Project) { names.SetPerson(p, photoID, pp) })
+}
+
+// SetPlacePerson — табличка места (071): имя ждёт фото на месте.
+// Договор: имя и предмет зажаты ClampSeat (все пусты — ноль: снять); session — как у SetPerson.
+func (e *Editor) SetPlacePerson(spreadID, placeID string, who model.Person, session string) model.View {
+	t := model.ClampSeat(who)
+	return e.apply(textMerge(session), func(p *model.Project) { names.SetPlacePerson(p, spreadID, placeID, t) })
+}
+
+// PlacePerson — табличка места для карточки и окошка «Имя» (071); ok = false — места нет.
+func (e *Editor) PlacePerson(spreadID, placeID string) (pv model.PersonView, ok bool) {
+	e.read(func(p *model.Project) { pv, ok = names.PlacePerson(p, spreadID, placeID) })
+	return pv, ok
 }
 
 // ForgetFileNames — «Убрать имена» тоста броска (060): снять имя у фото ids, если оно всё ещё
@@ -146,13 +159,14 @@ func (e *Editor) ForgetFileNames(ids []string) model.View {
 	return e.change(func(p *model.Project) { names.ForgetFileNames(p, ids) })
 }
 
-// Person — имя фото для карточки (своё или из имени файла) и стоит ли оно на месте
-// учителя виньетки; ok = false — фото не в альбоме.
+// Person — видимое имя фото для карточки (табличка места 071, своё или из имени файла) и
+// стоит ли оно на месте учителя виньетки; ok = false — фото не в альбоме.
 func (e *Editor) Person(photoID string) (pv model.PersonView, ok bool) {
 	e.read(func(p *model.Project) {
 		var r model.PhotoRef
 		if r, ok = p.Photos[photoID]; ok {
-			pv = model.NameView(r)
+			_, pl := p.PlaceOf(photoID)
+			pv = model.NameViewAt(r, pl)
 			pv.Teacher = p.TeacherSeat(photoID)
 		}
 	})

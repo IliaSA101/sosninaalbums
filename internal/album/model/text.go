@@ -392,14 +392,20 @@ func nameWord(w string) bool {
 
 // PersonView — имя на фото для карточки: своё или из имени файла (FromFile — подсказка
 // серым; предмет и тогда свой). Teacher — фото на месте учителя виньетки: карточка
-// показывает поле «Предмет» (049).
+// показывает поле «Предмет» (049). Place — ID места, чья табличка видна (071): правка имени
+// идёт в табличку, а не в фото (у таблички только с предметом — лишь предмет, 071-16); "" —
+// имя фото. SeatNamed — табличка видна и в ней есть имя (не только предмет): по нему фронт
+// выбирает подсказку «Имя места…» или «Предмет места…» — имя фото под табличкой только с
+// предметом в остальном выглядит так же (Place + имя).
 type PersonView struct {
-	Last     string `json:"last"`
-	First    string `json:"first"`
-	Middle   string `json:"middle"`
-	Subject  string `json:"subject"`
-	FromFile bool   `json:"fromFile"`
-	Teacher  bool   `json:"teacher"`
+	Last      string `json:"last"`
+	First     string `json:"first"`
+	Middle    string `json:"middle"`
+	Subject   string `json:"subject"`
+	FromFile  bool   `json:"fromFile"`
+	Teacher   bool   `json:"teacher"`
+	Place     string `json:"place"`
+	SeatNamed bool   `json:"seatNamed"`
 }
 
 // NameView — имя фото r для карточки; имени нет — пустые поля. Teacher ставит тот, кто
@@ -410,6 +416,17 @@ func NameView(r PhotoRef) PersonView {
 		return PersonView{}
 	}
 	return PersonView{Last: who.Last, First: who.First, Middle: who.Middle, Subject: who.Subject, FromFile: file}
+}
+
+// NameViewAt — видимое имя фото r на месте pl (NameAt) для карточки: при табличке Place — ID
+// места. FromFile — имя из файла под табличкой только с предметом (071-16): правка имени идёт в
+// фото, как без таблички, и карточка помечает его «из имени файла»; у таблички с именем — false.
+func NameViewAt(r PhotoRef, pl *Place) PersonView {
+	who, file, seat := NameAt(r, pl)
+	if !seat {
+		return NameView(r)
+	}
+	return PersonView{Last: who.Last, First: who.First, Middle: who.Middle, Subject: who.Subject, FromFile: file, Place: pl.ID, SeatNamed: pl.Person.Named()}
 }
 
 // Окно «Имена» (043): предпросмотр и вставка считаются одной функцией names.Plan,
@@ -428,11 +445,13 @@ type NamesOpts struct {
 
 // NamesRow — место листа, получающее имя, в порядке предпросмотра.
 type NamesRow struct {
-	Photo string  `json:"photo"`
-	Tag   string  `json:"tag"`  // "учитель" | "ученик 3" | "групповое"; "" — не виньетка
-	No    int     `json:"no"`   // номер среди получающих; 0 — групповое (пропуск)
-	Line  int     `json:"line"` // строка поля (1 — первая, считая заголовок); 0 — из имени файла или нет
-	Who   *Person `json:"who"`  // что ляжет; nil — имя не меняется
+	Place string  `json:"place"` // ID места (виньетка, ручная сетка); "" — лист «Авто»
+	Photo string  `json:"photo"` // "" — пустое место (071: имя ляжет табличкой)
+	Seat  bool    `json:"seat"`  // имя ляжет табличкой места, а не в фото (071-4)
+	Tag   string  `json:"tag"`   // "учитель" | "ученик 3" | "групповое"; "" — не виньетка
+	No    int     `json:"no"`    // номер среди получающих; 0 — групповое (пропуск)
+	Line  int     `json:"line"`  // строка поля (1 — первая, считая заголовок); 0 — из имени файла или нет
+	Who   *Person `json:"who"`   // что ляжет; nil — имя не меняется
 }
 
 // NamesLeft — строка списка без фото.
@@ -448,7 +467,7 @@ type NamesPlan struct {
 	Rows         []NamesRow  `json:"rows"`
 	Left         []NamesLeft `json:"left"`         // не больше 50; полное число — Extra
 	Extra        int         `json:"extra"`        // строк без фото
-	Seats        int         `json:"seats"`        // мест, получающих имя (фото листа без группового)
+	Seats        int         `json:"seats"`        // мест, получающих имя: фото «Авто» или места листа (и пустые), без группового
 	Named        int         `json:"named"`        // из них с именем после вставки
 	Missing      int         `json:"missing"`      // Seats − Named
 	Cols         []string    `json:"cols"`         // по столбцам: "Фамилия" | "Имя" | "Отчество" | "ФИО" | "Предмет" | "Файл" | "" (не используется); nil — без заголовка
@@ -459,5 +478,5 @@ type NamesPlan struct {
 	Pupils       int         `json:"pupils"`       // остальных строк
 	TeacherSeats int         `json:"teacherSeats"` // мест учителей на виньетке, и пустых; не виньетка — 0
 	PupilSeats   int         `json:"pupilSeats"`   // мест учеников на виньетке, и пустых; не виньетка — 0
-	NeedCaption  bool        `json:"needCaption"`  // обычный лист без шаблона подписи: окно покажет флажок «Подписать фото»
+	NeedCaption  bool        `json:"needCaption"`  // не виньетка, есть строки, нет шаблона подписи: окно покажет флажок «Подписать фото»
 }

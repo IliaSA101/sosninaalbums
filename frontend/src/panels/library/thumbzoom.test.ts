@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { THUMB_MAX, THUMB_MIN } from '../../base/prefs/view.svelte'
-import { anchorFrac, isThumbWheel, scrollFix, thumbStep, thumbWheelAcc, type ThumbWheel } from './thumbzoom'
+import { isThumbWheel, thumbStep, thumbWheelAcc, type ThumbWheel } from './thumbzoom'
 
 const wheel = (deltaY: number, mod: Partial<ThumbWheel> = {}): ThumbWheel => ({
   deltaX: 0,
@@ -85,27 +85,5 @@ describe('isThumbWheel', () => {
     expect(isThumbWheel(wheel(-100, { ctrlKey: false, altKey: true }))).toBe(true)
     expect(isThumbWheel(wheel(-100, { ctrlKey: false }))).toBe(false)
     expect(isThumbWheel(wheel(-100, { ctrlKey: false, metaKey: false, altKey: false }))).toBe(false)
-  })
-})
-
-describe('якорь', () => {
-  it('anchorFrac: середина, края и вне ячейки', () => {
-    expect(anchorFrac(100, 80, 140)).toBe(0.5)
-    expect(anchorFrac(100, 80, 90)).toBe(0)
-    expect(anchorFrac(100, 80, 500)).toBe(1)
-    expect(anchorFrac(100, 0, 140)).toBe(0)
-  })
-
-  it('scrollFix: фото под курсором остаётся на месте (≤ 2 px)', () => {
-    // курсор на 25 % высоты ячейки 100 px, верх ячейки 200; после смены на 150 px верх уехал на 230
-    const cy = 225
-    const fy = anchorFrac(200, 100, cy)
-    const dy = scrollFix(230, cy, fy, 150)
-    // после прокрутки верх = 230 − dy; точка ячейки под курсором
-    expect(Math.abs(230 - dy + fy * 150 - cy)).toBeLessThanOrEqual(2)
-  })
-
-  it('scrollFix: без сдвига — ноль', () => {
-    expect(scrollFix(200, 225, 0.25, 100)).toBe(0)
   })
 })

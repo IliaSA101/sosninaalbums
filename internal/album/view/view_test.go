@@ -496,6 +496,10 @@ func benchViewCold(b *testing.B, n, k int) {
 
 func BenchmarkViewCold40x16(b *testing.B) { benchViewCold(b, 40, 16) }
 
+// BenchmarkViewCold200x16 — худший случай при пределе разворотов (073: 200 × 16, перебор на 16
+// фото — самый долгий): наблюдение, без порога; прогрев с ходом — BenchmarkWarmView200x16.
+func BenchmarkViewCold200x16(b *testing.B) { benchViewCold(b, 200, 16) }
+
 // BenchmarkViewCold40x64 — 40 разворотов по 64 фото (быстрые раскладки, спека 027): цель ≤ 1 с.
 func BenchmarkViewCold40x64(b *testing.B) { benchViewCold(b, 40, 64) }
 

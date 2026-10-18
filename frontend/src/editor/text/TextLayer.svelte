@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import { untrack } from 'svelte'
   import type { CaptionView, SpreadView, TextView } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
@@ -25,7 +26,7 @@
   const pctY = (v: number) => `${(v / ph) * 100}%`
 
   function downText(e: PointerEvent, t: TextView) {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     e.stopPropagation()
     // Текст «Стандартного» уровня на «Простом»: виден, но не выделяется (вопрос 5), только тост.
     if (prefs.blocked('text', () => edit.select({ kind: 'text', spread: spread.id, id: t.id }))) return
@@ -47,7 +48,7 @@
   }
 
   function downCaption(e: PointerEvent, c: CaptionView) {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     e.stopPropagation()
     // Без функции «Подписи» готовая подпись видна и печатается, но не выделяется (спека 011): тост.
     if (prefs.blocked('caption', () => edit.select({ kind: 'caption', spread: spread.id, id: c.photo }))) return
@@ -69,7 +70,7 @@
     if (mini) return
     // Клик мимо: конец ввода и снятие выделения; свои элементы и панель текста помечены data-text-ui.
     const down = (e: PointerEvent) => {
-      if (e.button !== 0 || !edit.sel || edit.sel.spread !== spread.id) return
+      if (!primaryPress(e) || !edit.sel || edit.sel.spread !== spread.id) return
       // Перенос выбранного нижнего берёт Alt-выбор (спека 015): выделение не снимаем.
       if (pickOwns(e)) return
       if (keepsSelection(e)) return

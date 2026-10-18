@@ -72,10 +72,12 @@ func TestPlaceFieldsRoundTrip(t *testing.T) {
 	dir := testkit.TempDir(t)
 	_, ids := gridFile(t, dir, []string{"a"}, nil)
 	full := model.Place{ID: "c0ffee000001", X: 20.5, Y: 30.25, W: 100, H: 60, Photo: ids["a"], Fit: model.FitContain, Rot: 30,
-		Role: model.RoleTeacher, Shape: model.ShapeOval}
-	// Форма и скругление (044) у одного места не живут вместе: скругление — у второго.
+		Role: model.RoleTeacher, Shape: model.ShapeOval, Person: model.Person{Last: "Сидорова", First: "Ольга", Subject: "Математика"}}
+	// Форма и скругление (044) у одного места не живут вместе: скругление — у второго; у него же
+	// табличка (071) только с предметом — пустое место учителя.
 	round := full
 	round.ID, round.Photo, round.Y, round.Shape, round.Round = "c0ffee000002", "", 150, "", 12
+	round.Person = model.Person{Subject: "Физика"}
 	v, r := reflect.ValueOf(full), reflect.ValueOf(round)
 	for i := range v.NumField() {
 		if v.Field(i).IsZero() && r.Field(i).IsZero() {

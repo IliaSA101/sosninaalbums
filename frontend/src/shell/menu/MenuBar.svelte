@@ -46,8 +46,8 @@
     vigSetup: isVignette(store.spread),
     layerable: placesel.canLayer,
     missing: splitMissing(store.missing, store.view.libPhotos).photos.length, // свои из библиотеки папкой не ищутся (048)
-    exporting: !!jobs.exporting,
     collecting: !!jobs.collecting,
+    exporting: !!jobs.exporting,
     big: modes.big,
     details: modes.details,
     safe: modes.safe,

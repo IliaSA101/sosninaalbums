@@ -209,8 +209,9 @@ func TestPrintViewBlanksFields(t *testing.T) {
 	}
 }
 
-// Поля имени подписи по шаблону (037): по порядку шаблона, у своей подписи, шаблона без
-// имени и заглушки пустого места — пусто; несколько фото сразу; вид печати тот же.
+// Поля имени подписи по шаблону (037): по порядку шаблона, у своей подписи и шаблона без
+// имени — пусто; у заглушки пустого места — те же поля (071: окошко «Имя» места); несколько
+// фото сразу; вид печати тот же.
 func TestCaptionWhoFields(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(10, 10, 80, 100, "a"), edtest.Gp(100, 10, 80, 100, "b"),
 		edtest.Gp(190, 10, 80, 100, "c"), edtest.Gp(10, 130, 80, 100, "")})
@@ -228,7 +229,7 @@ func TestCaptionWhoFields(t *testing.T) {
 		switch {
 		case st.Photo == "b" && !slices.Equal(st.Who, want):
 			t.Fatalf("заглушка фото без имени: %+v", st)
-		case st.Photo == "" && st.Who != nil:
+		case st.Photo == "" && !slices.Equal(st.Who, want):
 			t.Fatalf("заглушка пустого места: %+v", st)
 		}
 	}

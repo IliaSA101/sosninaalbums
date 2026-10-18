@@ -77,6 +77,22 @@ describe('темы окна', () => {
     expect(firstTheme(null)).toBe(ALL)
   })
 
+  it('firstTheme: тема нового набора', () => {
+    const packed = cat({
+      themes: [...cat().themes, { id: 'ivory', name: 'Айвори', count: 2 }],
+      items: [...cat().items, item('pk:1', 'ivory', { pack: 'Айвори' }), item('pk:2', 'wedding', { pack: 'Айвори' })],
+    })
+    expect(firstTheme(packed, '', new Set(['Айвори']))).toBe('ivory') // первая плитка набора
+    expect(firstTheme(packed, 'wedding', new Set(['Айвори']))).toBe('ivory') // свежее главнее прежнего выбора
+    expect(firstTheme(packed, 'wedding', new Set(['Другой']))).toBe('wedding') // таких плиток нет
+    expect(firstTheme(packed, '', new Set())).toBe(RECENT)
+    expect(firstTheme(packed, 'wedding')).toBe('wedding')
+    // тема плитки пропала из списка тем — не возвращаем несуществующую
+    const gone = cat({ items: [item('pk:1', 'нет-темы', { pack: 'Айвори' })] })
+    expect(firstTheme(gone, '', new Set(['Айвори']))).toBe(RECENT)
+    expect(firstTheme(null, '', new Set(['Айвори']))).toBe(ALL)
+  })
+
   it('плитки темы: «Все» — каталог, «Недавние» — в порядке поставленных без пропавших, остальные — по теме', () => {
     const c = cat()
     expect(themeItems(c, ALL)).toHaveLength(4)

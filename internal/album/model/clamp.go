@@ -328,7 +328,7 @@ func (p *Project) clampSheetTexts(s *Spread, b *textBudget, seen map[string]bool
 // spendTexts — единый обход общего запаса текста для ClampDesign (fix: лишнее отбрасывается,
 // поля зажимаются) и CheckTotals (!fix: false — запас превышен). Порядок один — поля шапки
 // всех листов (Spread.Vars), листы (обложка первой: шаблон подписей листа, подпись учителя
-// виньетки, блоки), подписи и имена фото в порядке ленты; поля шапки и имена — только знаки
+// виньетки, блоки, таблички мест 071), подписи и имена фото в порядке ленты; поля шапки и имена — только знаки
 // (решение 61). Поля шапки — отдельным первым проходом: шаблон обложки раскрывается полями
 // первой виньетки (VarsOf), и её поля должны быть уже зажаты. Разный счёт дал бы правку,
 // которую Load молча обрежет (TestTotalsMatchLoad). Шаблоны листа списываются столько раз,
@@ -355,18 +355,11 @@ func (p *Project) spendTexts(fix bool) bool {
 			s.Caps = clampCapsIn(s.Caps, func(t string) int { return tplCost(v, t, capShows(s)) }, &b)
 			s.Vig = clampVigIn(s, func(t string) int { return tplCost(v, t, teacherShows(s)) }, &b)
 			p.clampSheetTexts(s, &b, seen)
+			s.spendSeats(&b, true)
 			continue
 		}
-		if s.Caps != nil && !b.takeRunes(tplCost(v, s.Caps.Text, capShows(s))) {
+		if !s.spendSheet(v, &b) {
 			return false
-		}
-		if s.Kind == KindVignette && s.Vig != nil && !b.takeRunes(tplCost(v, s.Vig.TText, teacherShows(s))) {
-			return false
-		}
-		for _, t := range s.Texts {
-			if t != nil && strings.TrimSpace(t.Text) != "" && !b.take(t.Text) {
-				return false
-			}
 		}
 	}
 	for _, id := range p.ribbonPhotos() {
@@ -386,6 +379,23 @@ func (p *Project) spendTexts(fix bool) bool {
 		}
 	}
 	return true
+}
+
+// spendSheet — счёт листа s для CheckTotals в порядке зажима Load (spendTexts): шаблон
+// подписей, подпись учителя, блоки, таблички мест; false — запас превышен.
+func (s *Spread) spendSheet(v *Vars, b *textBudget) bool {
+	if s.Caps != nil && !b.takeRunes(tplCost(v, s.Caps.Text, capShows(s))) {
+		return false
+	}
+	if s.Kind == KindVignette && s.Vig != nil && !b.takeRunes(tplCost(v, s.Vig.TText, teacherShows(s))) {
+		return false
+	}
+	for _, t := range s.Texts {
+		if t != nil && strings.TrimSpace(t.Text) != "" && !b.take(t.Text) {
+			return false
+		}
+	}
+	return s.spendSeats(b, false)
 }
 
 // tplCost — знаков запаса на шаблон листа tpl, показанный shows раз: на каждый показ — длина

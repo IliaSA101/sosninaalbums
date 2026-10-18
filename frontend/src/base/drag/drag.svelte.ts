@@ -1,5 +1,6 @@
 // Перетаскивание на событиях указателя: так полностью управляем видом
 // «призрака» и подсветкой мест, куда можно отпустить.
+import { primaryPress } from '../core/platform'
 import type { Payload, Target } from '../core/types'
 import { store } from '../core/store.svelte'
 import { dropOn } from './dropact'
@@ -23,7 +24,7 @@ class Drag {
   // start вешается на pointerdown источника. make вызывается, только
   // если мышь действительно сдвинулась — обычный клик остаётся кликом.
   start(e: PointerEvent, make: () => Payload) {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     const sx = e.clientX
     const sy = e.clientY
     const move = (ev: PointerEvent) => {

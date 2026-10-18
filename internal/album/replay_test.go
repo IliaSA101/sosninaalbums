@@ -358,6 +358,10 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.read("Snapshot", q)
 	_, marks := e.SnapshotMarks() // сбор в папку (069): отметки вместе со снимком
 	r.read("SnapshotMarks", marks)
+	// 073: прогрев раскладок — чтение; шаг пишет ход (вызовов, последнее done и total).
+	var warm [3]int
+	e.Warm(func(done, total int) { warm = [3]int{warm[0] + 1, done, total} })
+	r.read("Warm", warm)
 	return q
 }
 

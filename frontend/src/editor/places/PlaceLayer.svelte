@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { SpreadView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
   import { placesel } from './placesel.svelte'
@@ -17,7 +18,7 @@
   const sw = $derived(spread.w)
   // Выделение — на нажатии: перенос начинается с того же жеста.
   function down(e: PointerEvent, id: string) {
-    if (mini || e.button !== 0) return
+    if (mini || !primaryPress(e)) return
     e.stopPropagation()
     // Пустое место «Ручной» на низком уровне: видно, но не выделяется (вопрос 5).
     // «Включить» в тосте после включения выделяет это место, как обычный щелчок.

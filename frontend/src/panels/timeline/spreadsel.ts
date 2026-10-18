@@ -1,5 +1,6 @@
 // Выделение групп в ленте альбома (спека 019 F): чистые функции над списками id.
 // Порядок в выделении не важен: удаляются развороты в порядке альбома (spreadsel.svelte.ts).
+import { toggleKey } from '../../base/core/platform'
 
 // Ctrl+щелчок: группа входит в выделение или выходит из него.
 export function toggle(sel: readonly string[], id: string): string[] {
@@ -24,5 +25,5 @@ export function prune(sel: readonly string[], ids: readonly string[]): readonly 
 
 // Щелчок собирает выделение (Ctrl/Cmd/Shift), а не переходит к группе. Для фото внутри группы — то же.
 export function isSelectClick(e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }): boolean {
-  return e.ctrlKey || e.metaKey || e.shiftKey
+  return toggleKey(e) || e.shiftKey
 }

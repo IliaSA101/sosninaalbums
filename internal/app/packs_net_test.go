@@ -470,11 +470,12 @@ func TestStartCheckOnce(t *testing.T) {
 	a.scheduleLibraryCheck()
 	a.scheduleLibraryCheck()
 	a.bg.Wait()
-	if l.hits.Load() != 2 || l.archives.Load() != 1 || len(ev.of("notice")) != 1 || len(ev.of("library:changed")) != 1 {
-		t.Fatalf("запросов %d, архивов %d, тостов %d", l.hits.Load(), l.archives.Load(), len(ev.of("notice")))
+	if l.hits.Load() != 2 || l.archives.Load() != 1 || len(ev.of("library:updated")) != 1 || len(ev.of("notice")) != 0 || len(ev.of("library:changed")) != 1 {
+		t.Fatalf("запросов %d, архивов %d, итогов %d", l.hits.Load(), l.archives.Load(), len(ev.of("library:updated")))
 	}
-	if msg := ev.of("notice")[0].(string); msg != "Библиотека обновлена: новых наборов 1, обновлено 0" {
-		t.Errorf("тост: %q", msg)
+	// Фразу собирает фронт; Go отдаёт числа и тот же LibraryUpdate, что кнопка (073-2).
+	if u := ev.of("library:updated")[0].(LibraryUpdate); u.Added != 1 || u.Updated != 0 {
+		t.Errorf("итог: %+v", u)
 	}
 	for name, tc := range map[string]struct {
 		checked time.Duration // назад от сейчас; < 0 — в будущем

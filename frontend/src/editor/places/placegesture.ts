@@ -2,6 +2,7 @@
 // Общие для SelFrame (рамка выделенного) и PlaceLayer (тело пустого места). Предпросмотр считает
 // gridedit.ts и показывает рамка выделения (placesel.live); на отпускании — один SetPlaces по ref
 // (у «Авто» первая такая правка закрепляет разворот в Go).
+import { primaryPress } from '../../base/core/platform'
 import { Api, store } from '../../base/core/store.svelte'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
 import { placesel } from './placesel.svelte'
@@ -56,7 +57,7 @@ export function drive<T>(
   commit: (r: T) => Promise<unknown>,
   onClick?: () => void,
 ) {
-  if (e.button !== 0 || running || canvas.space || canvas.panning) return
+  if (!primaryPress(e) || running || canvas.space || canvas.panning) return
   const sw = store.spread?.w ?? 0
   if (!(sw > 0)) return
   const mmPx = sw / root.getBoundingClientRect().width

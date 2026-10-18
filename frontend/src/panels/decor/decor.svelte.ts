@@ -42,6 +42,9 @@ class DecorUi {
   // То же для каталога «стикеры» (048 Ф2): имя своего стикера и плитка в карточке «Стикер».
   stItems = $state<DecorItem[]>([])
   private req = 0
+  // 073-1: названия поставленных за сеанс наборов; окно встаёт на тему первого из них один раз для каждого вида.
+  private fresh = new Set<string>()
+  private shown = new Set<DecorKind>()
   private namesLoaded = false
   private stLoaded = false
 
@@ -50,7 +53,26 @@ class DecorUi {
     if (this.cat && this.cat.kind !== kind) this.theme = ''
     this.cur = replace ? { kind, spread, scope, replace } : { kind, spread, scope }
     this.ask = null
-    void this.refresh()
+    void this.refresh(this.takeFresh(kind))
+  }
+
+  // library:changed: названия поставленных и обновлённых наборов. Удаление (пусто) ничего не меняет.
+  note(installed: readonly string[] | null | undefined) {
+    if (!installed?.length) return
+    installed.forEach((t) => this.fresh.add(t))
+    this.shown.clear()
+  }
+
+  // Свежие наборы для открывающегося окна; каждому виду — один раз, показаны всем трём — забываются.
+  private takeFresh(kind: DecorKind): ReadonlySet<string> | undefined {
+    if (!this.fresh.size || this.shown.has(kind)) return undefined
+    const out = new Set(this.fresh)
+    this.shown.add(kind)
+    if (this.shown.size >= 3) {
+      this.fresh.clear()
+      this.shown.clear()
+    }
+    return out
   }
 
   close() {
@@ -69,7 +91,8 @@ class DecorUi {
   }
 
   // Каталог заново (после ✎, ×, загрузки). Тема остаётся, если ещё есть. Номер запроса отсекает запоздавший ответ.
-  async refresh() {
+  // fresh — только при открытии окна (show): открытое окно тему не меняет.
+  async refresh(fresh?: ReadonlySet<string>) {
     const c = this.cur
     if (!c) return
     const my = ++this.req
@@ -78,7 +101,7 @@ class DecorUi {
       const cat = (await Api.DecorCatalog(c.kind)) as unknown as DecorCatalog
       if (my !== this.req) return
       this.cat = cat
-      this.theme = firstTheme(cat, this.theme)
+      this.theme = firstTheme(cat, this.theme, fresh)
       this.remember(cat)
     } catch (e) {
       if (my === this.req) store.notify(errText(e), 'error')

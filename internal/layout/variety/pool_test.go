@@ -3,7 +3,6 @@ package variety
 import (
 	"fmt"
 	"slices"
-	"strconv"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
@@ -190,29 +189,10 @@ func TestExtra(t *testing.T) {
 	}
 }
 
-// TestExtraCacheGen: на extraGen записях кэш «Других вариантов» начинается заново (память не
-// растёт), новая запись в нём; прежние — нет.
-func TestExtraCacheGen(t *testing.T) {
-	ResetCache()
-	t.Cleanup(ResetCache)
-	old := sameAspects(4, aspL)
-	Extra(old, geomSq, 24)
-	extraCache.Lock()
-	for i := len(extraCache.m); i < extraGen; i++ {
-		extraCache.m[strconv.Itoa(i)] = extraEntry{}
-	}
-	extraCache.Unlock()
-	as := sameAspects(3, aspL)
-	if Cached(as, geomSq, 24) {
-		t.Fatal("заготовка: ряд уже в кэше")
-	}
-	Extra(as, geomSq, 24)
-	extraCache.Lock()
-	n := len(extraCache.m)
-	extraCache.Unlock()
-	if n != 1 || !Cached(as, geomSq, 24) || Cached(old, geomSq, 24) {
-		t.Fatalf("после предела записей %d, новая в кэше %v", n, Cached(as, geomSq, 24))
-	}
+// TestExtraCacheGenerations: кэш «Других вариантов» — два поколения, как у ряда (073).
+func TestExtraCacheGenerations(t *testing.T) {
+	genCacheCase(t, func(as []float64) { Extra(as, geomSq, 24) },
+		func(as []float64) bool { return Cached(as, geomSq, 24) }, extraCache.size)
 }
 
 // TestExtraOrderFree: ряд «Других вариантов» — функция только ключа. 1334/2000 и 1335/2000

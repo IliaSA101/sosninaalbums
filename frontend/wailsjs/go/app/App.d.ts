@@ -51,6 +51,8 @@ export function Backups():Promise<Array<app.BackupInfo>>;
 
 export function CancelCollect():Promise<void>;
 
+export function CancelExport():Promise<void>;
+
 export function CancelLibrary():Promise<void>;
 
 export function ChooseFolder():Promise<model.View>;
@@ -173,6 +175,8 @@ export function PickNamesFile():Promise<app.NamesFile>;
 
 export function PickSpreadGuide():Promise<model.View>;
 
+export function PlacePerson(arg1:string,arg2:string):Promise<model.PersonView>;
+
 export function PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<app.GridResult>;
 
 export function PlanCopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>;
@@ -284,6 +288,8 @@ export function SetPerson(arg1:string,arg2:model.Person,arg3:string):Promise<mod
 export function SetPlaceAngle(arg1:string,arg2:string,arg3:number):Promise<model.View>;
 
 export function SetPlaceFit(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>;
+
+export function SetPlacePerson(arg1:string,arg2:string,arg3:model.Person,arg4:string):Promise<model.View>;
 
 export function SetPlaceRound(arg1:string,arg2:Array<string>,arg3:number):Promise<model.View>;
 

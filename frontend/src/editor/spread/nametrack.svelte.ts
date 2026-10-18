@@ -8,7 +8,7 @@ import { pageAt } from '../../base/geom/sheet'
 import type { SpreadView } from '../../base/core/types'
 import { placesel } from '../places/placesel.svelte'
 import { nameEdit } from '../captions/nameedit.svelte'
-import { nameTargetAt, takesNameTarget, type NameTarget } from '../captions/nametarget'
+import { nameTargetAt, takesNameTarget, targetKey, type NameTarget } from '../captions/nametarget'
 import { edit } from '../text/edit.svelte'
 import { emptyField } from '../canvas/field'
 
@@ -57,7 +57,7 @@ export class NameTrack {
     const t =
       drag.active || nameEdit.cur || !this.takes(e.target) ? null : nameTargetAt(spread, x, ((e.clientY - r.top) / r.height) * spread.h)
     const next = t?.who.length ? t : null
-    if (next?.photo !== this.named?.photo) this.named = next
+    if ((next && targetKey(next)) !== (this.named && targetKey(this.named))) this.named = next
   }
 
   leave = () => {

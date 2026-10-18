@@ -1,5 +1,9 @@
 // Тексты окна «Имена» (043) по плану Go: строки над и под предпросмотром. Чистая логика, без DOM.
-import type { NamesFile, NamesLeft, NamesPlan } from './nametypes'
+import type { SpreadView } from '../../base/core/types'
+import type { FeatureId } from '../../base/prefs/levels'
+import { isCover } from '../../base/geom/sheet'
+import { canMakeVignette, isVignette } from '../vignette/vignette'
+import type { NamesFile, NamesLeft, NamesPlan, NamesRow } from './nametypes'
 import { personLine } from './names'
 
 // Сколько строк без фото показываем; остальные — «…ещё N».
@@ -22,12 +26,39 @@ export function columnsLine(plan: Pick<NamesPlan, 'cols' | 'ignored'> | null): s
   return `Столбцы: ${parts.filter(Boolean).join(' · ')}`
 }
 
-// Пустой предпросмотр: onCap — «На развороте» / «На листе» / «На обложке» (unitWords).
-export const noPhotosLine = (onCap: string): string => `${onCap} пока нет фото. Положите фото — имена лягут на них по порядку мест`
+// Пустой предпросмотр (нет ни мест, ни фото; 071-11): onCap — «На развороте» / «На листе» / «На обложке» (unitWords).
+// Дальше окно показывает кнопку виньетки (noSeatsAction), «Вставить» неактивна. На обложке виньетки нет — совет другой.
+export const noSeatsLine = (onCap: string, cover = false): string =>
+  cover ? `${onCap} нет мест для имён` : `${onCap} нет мест. Сделайте виньетку или ручную сетку — имена лягут на места по порядку`
 
-// Итог внизу окна: «Подписано: 23 из 25 · строк лишних: 1 · фото без имени: 2».
-export const summaryLine = (p: Pick<NamesPlan, 'named' | 'seats' | 'extra' | 'missing'>): string =>
-  `Подписано: ${p.named} из ${p.seats} · строк лишних: ${p.extra} · фото без имени: ${p.missing}`
+// Кнопка пустого предпросмотра: 'setup' — лист уже виньетка, открыть окно; 'make' — обычный лист, сначала сделать
+// виньеткой (окно для не-виньетки закрывается само); 'none' — кнопки нет (обложка, уровень без виньетки).
+export type NoSeatsAction = 'setup' | 'make' | 'none'
+export function noSeatsAction(
+  sp: Pick<SpreadView, 'id' | 'kind' | 'vig'> | null | undefined,
+  can: (f: FeatureId) => boolean,
+): NoSeatsAction {
+  if (!sp || isCover(sp)) return 'none'
+  if (isVignette(sp)) return 'setup'
+  return canMakeVignette(sp, can) ? 'make' : 'none'
+}
+
+// Ключ строки предпросмотра: место (лист с местами) или фото («Авто»).
+export const rowKey = (r: Pick<NamesRow, 'place' | 'photo'>): string => r.place || r.photo
+
+// Лист с местами (виньетка, ручная сетка) — у строк есть место; «Авто» — только фото.
+export const hasSeats = (p: Pick<NamesPlan, 'rows'>): boolean => p.rows.some((r) => r.place)
+
+// Файл в строке: у пустого места фото нет.
+export const EMPTY_SEAT = 'место без фото'
+
+// Итог внизу окна: «Подписано: 23 из 25 · строк лишних: 1 · мест без имени: 2» (на «Авто» — «фото без имени»).
+export const summaryLine = (p: Pick<NamesPlan, 'named' | 'seats' | 'extra' | 'missing' | 'rows'>): string =>
+  `Подписано: ${p.named} из ${p.seats} · строк лишних: ${p.extra} · ${hasSeats(p) ? 'мест' : 'фото'} без имени: ${p.missing}`
+
+// Правая часть строки «Куда ляжет»: групповое место виньетки — «без имени», нет имени — «—».
+export const whoText = (r: Pick<NamesRow, 'no' | 'who'>, vig: boolean): string =>
+  !r.no && vig ? 'без имени' : r.who ? personLine(r.who) : '—'
 
 const REASONS: Record<string, (file: string) => string> = {
   extra: () => 'нет места на листе',
@@ -50,7 +81,7 @@ export function leftList(plan: Pick<NamesPlan, 'left' | 'extra'>): { items: stri
 // Подсказка виньетки: в таблице людей не столько, сколько мест. Только для вставки по порядку.
 export function vigHint(plan: NamesPlan | null): string {
   if (!plan || plan.byFile) return ''
-  // Места считает Go вместе с пустыми (rows — только занятые).
+  // Места считает Go вместе с пустыми.
   const t = plan.teacherSeats
   const p = plan.pupilSeats
   if (t + p === 0) return ''

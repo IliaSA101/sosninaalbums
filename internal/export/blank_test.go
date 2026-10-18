@@ -128,16 +128,58 @@ func TestFieldsWarning(t *testing.T) {
 	cases := []struct {
 		unfilled []string
 		unnamed  int
+		waiting  int
 		want     string
 	}{
-		{nil, 0, ""},
-		{[]string{"Год", "Школа"}, 3, "Не заполнены поля: Год, Школа; фото без имени: 3. В выгрузке они будут пустыми. Продолжить?"},
-		{[]string{"Класс"}, 0, "Не заполнены поля: Класс. В выгрузке они будут пустыми. Продолжить?"},
-		{nil, 2, "Фото без имени: 2. В выгрузке они будут пустыми. Продолжить?"},
+		{nil, 0, 0, ""},
+		{[]string{"Год", "Школа"}, 3, 0, "Не заполнены поля: Год, Школа; фото без имени: 3. В выгрузке они будут пустыми. Продолжить?"},
+		{[]string{"Класс"}, 0, 0, "Не заполнены поля: Класс. В выгрузке они будут пустыми. Продолжить?"},
+		{nil, 2, 0, "Фото без имени: 2. В выгрузке они будут пустыми. Продолжить?"},
 	}
 	for _, c := range cases {
-		if got := FieldsWarning(c.unfilled, c.unnamed); got != c.want {
+		if got := FieldsWarning(c.unfilled, c.unnamed, c.waiting); got != c.want {
 			t.Errorf("%v, %d: %q", c.unfilled, c.unnamed, got)
+		}
+	}
+}
+
+// Имена без фото (071 §7а): таблички пустых мест — третьей частью после фото без имени;
+// первой — с большой буквы; ноль — без части. Счёт — только по листам плана (диапазон,
+// «Только обложка»).
+func TestFieldsWarningWaiting(t *testing.T) {
+	const tail = ". В выгрузке они будут пустыми. Продолжить?"
+	for _, c := range []struct {
+		unfilled         []string
+		unnamed, waiting int
+		want             string
+	}{
+		{nil, 0, 0, ""},
+		{nil, 0, 4, "Имён без фото: 4" + tail},
+		{nil, 2, 1, "Фото без имени: 2; имён без фото: 1" + tail},
+		{[]string{"Год"}, 0, 3, "Не заполнены поля: Год; имён без фото: 3" + tail},
+		{[]string{"Год"}, 5, 64, "Не заполнены поля: Год; фото без имени: 5; имён без фото: 64" + tail},
+	} {
+		if got := FieldsWarning(c.unfilled, c.unnamed, c.waiting); got != c.want {
+			t.Errorf("%v, %d, %d: %q, ждали %q", c.unfilled, c.unnamed, c.waiting, got, c.want)
+		}
+	}
+	v := model.View{
+		Spreads: []model.SpreadView{{Waiting: 1}, {Waiting: 2, Unnamed: 1}, {}},
+		Cover:   &model.CoverView{Sheet: model.SpreadView{Waiting: 7}},
+	}
+	for _, c := range []struct {
+		name             string
+		plan             Plan
+		unnamed, waiting int
+	}{
+		{"все развороты", NewPlan(nil, 3, false), 1, 3},
+		{"разворот 2", NewPlan([]Unit{{2, 0}}, 3, false), 1, 2},
+		{"разворот 3", NewPlan([]Unit{{3, 0}}, 3, false), 0, 0},
+		{"только обложка", Plan{}.WithCover(&CoverJob{}), 0, 7},
+		{"обложка и 1", NewPlan([]Unit{{1, 0}}, 3, false).WithCover(&CoverJob{}), 0, 8},
+	} {
+		if _, n, w := PlanFields(v, &c.plan); n != c.unnamed || w != c.waiting {
+			t.Errorf("%s: без имени %d, без фото %d; ждали %d, %d", c.name, n, w, c.unnamed, c.waiting)
 		}
 	}
 }
@@ -145,23 +187,23 @@ func TestFieldsWarning(t *testing.T) {
 // PlanFields: только листы плана (развороты по маске, обложка — если в плане); повторы полей
 // сливаются; пустой план и вид без листов — ничего.
 func TestPlanFields(t *testing.T) {
-	if u, n := PlanFields(model.View{}, &Plan{}); len(u) != 0 || n != 0 {
-		t.Fatalf("пусто: %v %d", u, n)
+	if u, n, w := PlanFields(model.View{}, &Plan{}); len(u) != 0 || n != 0 || w != 0 {
+		t.Fatalf("пусто: %v %d %d", u, n, w)
 	}
 	v := model.View{
 		Spreads: []model.SpreadView{{Unfilled: []string{"Год"}}, {Unfilled: []string{"Год", "Заголовок"}, Unnamed: 2}, {Unnamed: 1}},
 		Cover:   &model.CoverView{Sheet: model.SpreadView{Unfilled: []string{"Руководитель"}, Unnamed: 4}},
 	}
 	all := NewPlan(nil, 3, false)
-	if u, n := PlanFields(v, &all); !slices.Equal(u, []string{"Год", "Заголовок"}) || n != 3 {
+	if u, n, _ := PlanFields(v, &all); !slices.Equal(u, []string{"Год", "Заголовок"}) || n != 3 {
 		t.Fatalf("все развороты: %v %d", u, n)
 	}
 	part := NewPlan([]Unit{{3, 1}}, 3, false).WithCover(&CoverJob{})
-	if u, n := PlanFields(v, &part); !slices.Equal(u, []string{"Руководитель"}) || n != 5 {
+	if u, n, _ := PlanFields(v, &part); !slices.Equal(u, []string{"Руководитель"}) || n != 5 {
 		t.Fatalf("страница 3 и обложка: %v %d", u, n)
 	}
 	only := Plan{}.WithCover(&CoverJob{})
-	if u, n := PlanFields(model.View{Spreads: v.Spreads}, &only); len(u) != 0 || n != 0 {
-		t.Fatalf("обложка в плане, а в виде её нет: %v %d", u, n)
+	if u, n, w := PlanFields(model.View{Spreads: v.Spreads}, &only); len(u) != 0 || n != 0 || w != 0 {
+		t.Fatalf("обложка в плане, а в виде её нет: %v %d %d", u, n, w)
 	}
 }

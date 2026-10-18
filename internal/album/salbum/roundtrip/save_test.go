@@ -3,6 +3,7 @@ package roundtrip_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -291,6 +292,20 @@ func FuzzLoad(f *testing.F) {
 	f.Add(spine(`{"preset":"custom","wrap":3,"a":0.99,"b":0,"hinge":0}`, "both", `{"photo":"q","w":1e-9,"h":1e-9,"rot":45}`))
 	f.Add(spine(wide, "front", `{"photo":"q","w":6,"h":300}`))
 	f.Add(spine(wide, "both", `{"photo":"q","w":"NaN","h":300}`))
+	// 071 (v13): таблички мест — 64 места × 4 части сверх предела, управляющие, пустые, только
+	// предмет, у фото и на обложке, не строка, не UTF-8.
+	var seats strings.Builder
+	for i := range model.MaxPlaces {
+		fmt.Fprintf(&seats, `,{"id":"c0ffee%06x","x":%d,"y":%d,"w":20,"h":20,"person":{"last":"%s","first":"\u0000\n\u202e","middle":"\t\u00a0","subj":"%s"}}`,
+			i+16, 10+i%16*30, 10+i/16*30, strings.Repeat("я", 70), strings.Repeat("ь", i))
+	}
+	f.Add([]byte(`{"version":13,"spreads":[{"id":"s","photos":["p"],"grid":[{"id":"c0ffee000001","x":1,"y":1,"w":50,"h":50,"photo":"p",
+"person":{"last":"Петров","first":"Ваня"}},{"id":"c0ffee000002","x":60,"y":1,"w":50,"h":50,"person":{"subj":"Физика"}},
+{"id":"c0ffee000003","x":120,"y":1,"w":50,"h":50,"person":{"last":"  ","first":"\t"}}]},{"id":"t","grid":[` + seats.String()[1:] + `]}],
+"cover":{"sheet":{"id":"cover","grid":[{"id":"c0ffee000004","x":300,"y":250,"w":60,"h":50,"person":{"last":"Иванова"}}]},"layout":"front"},
+"photos":{"p":{"path":"a.jpg","person":{"last":"Свой"}}}}`))
+	f.Add([]byte(`{"version":13,"spreads":[{"id":"s","grid":[{"id":"c0ffee000001","w":10,"h":10,"person":"Петров"},{"person":null}]}]}`))
+	f.Add([]byte("{\"version\":13,\"spreads\":[{\"id\":\"s\",\"grid\":[{\"id\":\"c0ffee000001\",\"w\":10,\"h\":10,\"person\":{\"last\":\"\xff\xfe\",\"first\":\"\xc3\"}}]}]}"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := testkit.TempDir(t)
 		path := filepath.Join(dir, "f.salbum")
@@ -318,6 +333,11 @@ func FuzzLoad(f *testing.F) {
 			}
 			if utf8.RuneCountInString(s.Name) > model.MaxNameRunes || s.Name != model.CleanName(s.Name) {
 				t.Fatalf("название: %q", s.Name)
+			}
+			for _, pl := range s.Grid { // табличка (071) — уже зажата: одна строка, ≤ 60 знаков на часть
+				if pl.Person != model.ClampSeat(pl.Person) {
+					t.Fatalf("табличка места: %+v", pl.Person)
+				}
 			}
 			for _, tb := range s.Texts {
 				minW := model.MinTextW

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { SpreadView } from '../../base/core/types'
   import { canvas } from '../canvas/canvas.svelte'
   import { straighten } from './straighten.svelte'
@@ -29,7 +30,7 @@
   $effect(() => stop)
 
   function down(e: PointerEvent) {
-    if (off || e.button !== 0 || canvas.space || !root || !t) return
+    if (off || !primaryPress(e) || canvas.space || !root || !t) return
     e.stopPropagation()
     e.preventDefault()
     const r = root.getBoundingClientRect()

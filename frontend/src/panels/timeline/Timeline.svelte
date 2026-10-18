@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
+  import { toggleKey } from '../../base/core/platform'
   import { store } from '../../base/core/store.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { canvas } from '../../editor/canvas/canvas.svelte'
@@ -29,6 +30,7 @@
   import { clearVignette, makeVignette } from '../vignette/vigact'
   import { vigDialog } from '../vignette/vigsession.svelte'
   import { modes } from '../../base/prefs/view.svelte'
+  import { Nearby } from '../../base/ui/nearby.svelte'
 
   // Лента альбома (спека 003): миниатюры фото, сгруппированные по разворотам.
   // Расчёты размеров — timeline/timeline.ts, подсказка — FixedTip. Поля по краям ленты — полширины окна:
@@ -46,6 +48,8 @@
   const missSet = $derived(new Set(store.missing))
 
   let box: HTMLDivElement
+  // 073: миниатюры группы монтируются только рядом с видимой частью ленты; саму группу (цели броска, номер) рисуем у всех.
+  const near = new Nearby(() => box ?? null, '0px 1500px')
   let bw = $state(0) // видимая ширина ленты
   // Разворот, у которого сейчас правится название (двойной щелчок по номеру).
   let renaming = $state<string | null>(null)
@@ -136,7 +140,7 @@
   // Без модификатора выделение снимается и лента переходит к группе.
   function pickGroup(e: MouseEvent, i: number, id: string) {
     if (!drag.clickAllowed()) return
-    if (e.ctrlKey || e.metaKey) spreadsel.toggle(id)
+    if (toggleKey(e)) spreadsel.toggle(id)
     else if (e.shiftKey)
       spreadsel.extend(
         spreads.map((s) => s.id),
@@ -226,6 +230,11 @@
         class:picked={spreadsel.has(sp.id)}
         style:contain-intrinsic-size="auto {shownW(sp, expanded)}px auto {H + 2 * PAD + 17}px"
         data-drop="mini"
+        {@attach (n) =>
+          near.watch(
+            n,
+            untrack(() => sp.id),
+          )}
         data-spread={sp.id}
         data-index={i}
         role="button"
@@ -236,7 +245,11 @@
         oncontextmenu={(e) => openMenu(e, sp.id)}
         onkeydown={() => {}}
       >
-        <SpreadChips {sp} {i} {expanded} {cuts} onpick={pickCell} onexpand={() => (expanded = sp.id)} onfold={() => (expanded = null)} />
+        {#if near.has(sp.id)}
+          <SpreadChips {sp} {i} {expanded} {cuts} onpick={pickCell} onexpand={() => (expanded = sp.id)} onfold={() => (expanded = null)} />
+        {:else}
+          <div style:width="{shownW(sp, expanded) - 2 * PAD}px" style:height="{H}px"></div>
+        {/if}
         <LowDpiBadge count={sp.lowDPI} min={store.view.minDPI} />
         <MissingMark count={missingIn(sp, missSet)} />
         <VigMark kind={sp.kind} />

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { Frame, FrameView, SpreadView } from '../../base/core/types'
   import { Api, store } from '../../base/core/store.svelte'
   import Icon from '../../base/ui/Icon.svelte'
@@ -74,7 +75,7 @@
   }
 
   function begin(e: PointerEvent, jump?: number) {
-    if (e.button !== 0 || ctl.dragging) return
+    if (!primaryPress(e) || ctl.dragging) return
     e.preventDefault() // фокус не берём: стрелки холста после протяжки по-прежнему двигают место
     e.stopPropagation()
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)

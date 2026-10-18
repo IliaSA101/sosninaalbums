@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // Частота событий сканирования: интерфейс не должен захлёбываться на больших папках.
@@ -374,6 +376,13 @@ func ctxDue(ctx context.Context, visited int) error {
 // файла nil (берутся из d.Info() по надобности). file = false — callback возвращает ret:
 // nil — пропустить запись, SkipDir — не заходить в точку-папку.
 func walkEntry(root, p string, d fs.DirEntry) (info fs.FileInfo, file bool, ret error) {
+	if p != root && paths.DeviceElem(d.Name()) {
+		// «CON.jpg» с Windows 11 на Windows 10 — устройство: открыть его — обратиться к консоли.
+		if d.IsDir() {
+			return nil, false, filepath.SkipDir
+		}
+		return nil, false, nil
+	}
 	if d.Type()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
 		// Ссылка или junction на папку может вести в цикл; ссылки на файлы читаем,
 		// если цель локальная (ссылка на UNC открыла бы сетевую шару).
@@ -412,23 +421,20 @@ func statLink(p string) (fs.FileInfo, bool) {
 	return st, true
 }
 
-// localTarget — цель ссылки лежит на локальном диске: относительная считается от папки ссылки,
-// на Windows абсолютная — только `X:\…` (как paths.CheckLocalPath), на остальных ОС — без `//`.
+// localTarget — цель ссылки лежит на локальном диске: абсолютная (и всё с корнем или двоеточием
+// на Windows) проходит paths.CheckLocalPath; относительная — без устройств в элементах
+// (paths.DeviceElem) и только из папки на локальном диске.
 func localTarget(dir, target string) bool {
 	if target == "" || strings.ContainsRune(target, 0) {
 		return false
 	}
-	if runtime.GOOS != "windows" {
-		return !strings.HasPrefix(target, "//")
+	if filepath.IsAbs(target) || runtime.GOOS == "windows" && (paths.IsSep(target[0]) || strings.ContainsRune(target, ':')) {
+		return paths.CheckLocalPath(target) == nil
 	}
-	if len(target) >= 3 && target[1] == ':' && (target[2] == '\\' || target[2] == '/') {
-		c := target[0] | 0x20
-		return c >= 'a' && c <= 'z' && !strings.ContainsRune(target[2:], ':')
+	for _, el := range strings.FieldsFunc(target, paths.IsSepRune) {
+		if paths.DeviceElem(el) {
+			return false
+		}
 	}
-	// Корень без диска и всё с двоеточием — не наше; чисто относительный путь допустим,
-	// если сама папка ссылки на локальном диске.
-	if target[0] == '\\' || target[0] == '/' || strings.ContainsRune(target, ':') {
-		return false
-	}
-	return len(dir) >= 3 && dir[1] == ':'
+	return runtime.GOOS != "windows" || paths.CheckLocalPath(dir) == nil
 }

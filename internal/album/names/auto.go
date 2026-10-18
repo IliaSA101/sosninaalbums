@@ -26,7 +26,8 @@ func WithAuto(p *model.Project, photos []model.PhotoInfo, body func() error) ([]
 
 // AutoFromFiles — имя из названия файла (LooksLikeName) фото ids, которые стоят на листе, где
 // шаблон подписи их места содержит поля имени; у фото нет своей подписи, своего имени и
-// строгого имени из файла (его и так видно). Групповое фото виньетки имени не получает (как в
+// строгого имени из файла (его и так видно), а место без таблички с именем (071: её и видно —
+// автоимя скрытым всплыло бы при переносе). Групповое фото виньетки имени не получает (как в
 // окне «Имена»). Возвращает ID получивших имя по порядку ids; никому — nil (в JSON [] ставит App).
 func AutoFromFiles(p *model.Project, ids []string) (named []string) {
 	if len(ids) == 0 {
@@ -40,6 +41,9 @@ func AutoFromFiles(p *model.Project, ids []string) (named []string) {
 			continue
 		}
 		if !hasNameField(t) {
+			continue
+		}
+		if _, pl := p.PlaceOf(id); pl != nil && pl.Person.Named() {
 			continue
 		}
 		who := model.LooksLikeName(r.Path)

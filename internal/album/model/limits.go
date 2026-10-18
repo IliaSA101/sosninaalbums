@@ -133,8 +133,8 @@ func DedupePhotos(photos []PhotoInfo) []PhotoInfo {
 
 // Раскладки разворотов независимы, а холодный перебор на 8–16 фото — десятки мс:
 // открытие альбома и смена настроек считают их параллельно (design 020 §4.2).
-// Воркеры живут только внутри вызова под e.mu и проект лишь читают; кэш layout —
-// под своим замком.
+// Воркеры живут только внутри вызова и проект лишь читают (WarmAspects — снимок, без проекта);
+// кэш layout — под своим замком.
 
 // parallelLayouts — выключатель для теста: без него View считается как прежде, по порядку.
 var parallelLayouts = true
@@ -151,20 +151,55 @@ const maxWorkers = 8
 // WarmLayouts прогревает ряд «в порядке ленты» (layout.Cached), ряд «Авто» по формам (variety.Row)
 // и «Другие варианты» (ExtraRow: счётчик «i / N» в View) у разворотов параллельно: следующий за
 // ним последовательный код попадает в кэш. Паника — только в лог: тот же счёт повторится последовательно и поведёт себя как раньше.
-func (p *Project) WarmLayouts(spreads []*Spread) {
+func (p *Project) WarmLayouts(spreads []*Spread) { p.WarmLayoutsProgress(spreads, nil) }
+
+// WarmLayoutsProgress — WarmLayouts с ходом (073, окно «Открываем альбом»): done(n) — готово n
+// разворотов из len(spreads), после каждого (и упавшего с паникой). Зовётся по одному, n растёт
+// на 1: счётчик и вызов — под одним замком, иначе воркеры обгоняли бы друг друга и ход шёл назад.
+// done == nil — без хода; без параллельности не греет и done не зовёт.
+func (p *Project) WarmLayoutsProgress(spreads []*Spread, done func(n int)) {
+	WarmAspects(p.WarmJobs(spreads), p.Params(), done)
+}
+
+// WarmJob — вход прогрева одного разворота, отдельный от проекта: пропорции — своя копия.
+type WarmJob struct {
+	ID  string // для лога паники
+	Asp []float64
+}
+
+// WarmJobs — снимок входа прогрева (073-11): берётся под замком Editor, а считает WarmAspects уже
+// без него — правки и чтения не ждут секунды холодного счёта.
+func (p *Project) WarmJobs(spreads []*Spread) []WarmJob {
+	jobs := make([]WarmJob, len(spreads))
+	for i, s := range spreads {
+		jobs[i] = WarmJob{ID: s.ID, Asp: p.Aspects(s.Photos)}
+	}
+	return jobs
+}
+
+// WarmAspects — WarmLayoutsProgress по снимку, без проекта. Кэши раскладок — чистые функции
+// (пропорции, Params, длина ряда): снимок, устаревший из-за правки, греет ненужный ключ — лишняя
+// работа, но не неверный вид.
+func WarmAspects(jobs []WarmJob, prm layout.Params, done func(n int)) {
 	if !parallelLayouts {
 		return
 	}
-	prm := p.Params()
 	var pl PanicLog
-	Each(len(spreads), func(i int) {
-		s := spreads[i]
-		pl.Safely(s.ID, func() {
-			asp := p.Aspects(s.Photos)
-			layout.Cached(asp, prm, RowLen(len(s.Photos)))
-			variety.Row(asp, prm, RowLen(len(s.Photos)))
-			ExtraRow(asp, prm)
+	var mu sync.Mutex
+	n := 0
+	Each(len(jobs), func(i int) {
+		j := jobs[i]
+		pl.Safely(j.ID, func() {
+			layout.Cached(j.Asp, prm, RowLen(len(j.Asp)))
+			variety.Row(j.Asp, prm, RowLen(len(j.Asp)))
+			ExtraRow(j.Asp, prm)
 		})
+		if done != nil {
+			mu.Lock()
+			defer mu.Unlock()
+			n++
+			pl.Safely(j.ID, func() { done(n) }) // паника в done не должна ронять воркер
+		}
 	})
 	pl.Summary()
 }

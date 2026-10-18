@@ -57,6 +57,8 @@ type App struct {
 	photos []library.Photo
 	byID   map[string]library.Photo
 	warm   context.CancelFunc
+	// layouts — идущие прогревы раскладок (warmEditor); миниатюры ждут их (warmThumbs).
+	layouts busyGate
 
 	// missing — ID фото альбома, чьих файлов нет на диске (см. refreshMissing), по порядку; под mu,
 	// как и missGen — поколение полного пересчёта, и missRefs — ID → путь фото альбома, за которым
@@ -77,6 +79,9 @@ type App struct {
 
 	// Сканирование папок (см. rescan): поколение растёт с каждым запуском, отчёты устаревших
 	// поколений отбрасываются. scan и scanGen — под mu.
+	// rescanMu — снимок папок редактора и новое поколение одним куском (порядок: rescanMu →
+	// замок Editor → mu): Folders ждёт замка редактора (правка) не под mu.
+	rescanMu   sync.Mutex
 	scanner    *library.Scanner
 	scanCancel context.CancelFunc
 	scanGen    int
@@ -113,6 +118,8 @@ type App struct {
 	bg         sync.WaitGroup // сканирование (с прогревом) и экспорт
 	exporting  bool
 	exportDir  string // папка последнего экспорта: её открывает ShowInExplorer
+	// exportCancel — «Остановить» идущего экспорта (073), под mu; nil — выгрузки нет.
+	exportCancel context.CancelFunc
 	// Сбор в папку (069, collect.go), под mu: идёт ли, отмена идущего, папка последнего (ShowCollected).
 	collecting    bool
 	collectCancel context.CancelFunc
@@ -202,19 +209,7 @@ func (a *App) startup(ctx context.Context) {
 	a.mu.Unlock()
 	a.rescan()
 
-	wr.OnFileDrop(ctx, func(x, y int, paths []string) {
-		for _, p := range paths {
-			if st, err := os.Stat(p); err == nil && st.IsDir() {
-				v, err := a.editor().AddFolder(p)
-				if err != nil {
-					a.notice(err.Error())
-					continue
-				}
-				a.changed(v)
-			}
-		}
-		a.rescan()
-	})
+	wr.OnFileDrop(ctx, func(x, y int, ps []string) { a.dropPaths(ps) })
 }
 
 // loadStartup открывает последний проект, а если его нет — черновик; иначе пустой.
@@ -247,7 +242,7 @@ func (a *App) loadStartup(last string) (p *model.Project, path, notice string) {
 			}
 			continue
 		}
-		log.Printf("не открылся проект %s: %v", filepath.Base(cand), paths.NoPath(err))
+		log.Printf("не открылся проект: %v", paths.NoPath(err))
 		if cand != a.draftPath() {
 			notes = append(notes, "Не открылся проект: "+err.Error()+".")
 			continue
@@ -259,7 +254,7 @@ func (a *App) loadStartup(last string) (p *model.Project, path, notice string) {
 		}
 		bad := a.badDraftPath(time.Now())
 		if rerr := a.rename(cand, bad); rerr != nil {
-			log.Printf("черновик не удалось сохранить в %s: %v", filepath.Base(bad), paths.NoPath(rerr))
+			log.Printf("черновик не удалось сохранить отдельно: %v", paths.NoPath(rerr))
 			a.draftLocked.Store(true)
 			notes = append(notes, "Не открылся черновик ("+err.Error()+") и не сохранён отдельно: автосохранение отключено до перезапуска.")
 		} else {

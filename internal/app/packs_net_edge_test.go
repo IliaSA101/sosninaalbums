@@ -385,3 +385,163 @@ func TestNetInstallItemMismatch(t *testing.T) {
 		}
 	}
 }
+
+// installedOf — названия из последнего library:changed (событий должно быть ровно n).
+func installedOf(t *testing.T, ev *capture, n int) []string {
+	t.Helper()
+	all := ev.of("library:changed")
+	if len(all) != n {
+		t.Fatalf("library:changed: событий %d, ждали %d", len(all), n)
+	}
+	c, ok := all[n-1].(libChanged)
+	if !ok || c.Installed == nil {
+		t.Fatalf("library:changed: %#v — нужен libChanged со списком (не null)", all[n-1])
+	}
+	return c.Installed
+}
+
+// Данные library:changed: сеть (оба набора сразу), обновление, удаление — названия
+// (PackInfo.Title) для темы окна (073-1); удаление — пустой список, не nil (в JSON [], не null).
+func TestLibraryChangedInstalled(t *testing.T) {
+	a, l := netApp(t, true)
+	ev := captureEvents(a)
+	zip := d1Zip(t)
+	sage := rezip(t, zip, func(m map[string]any) { m["id"], m["title"] = "sage", "Шалфей" })
+	l.publish(t, nil, zip, sage)
+	if res, err := a.UpdateLibrary(); err != nil || res.Added != 2 {
+		t.Fatalf("сеть: %v %+v", err, res)
+	}
+	if got := installedOf(t, ev, 1); len(got) != 2 || got[0] != "Свадьба — айвори" || got[1] != "Шалфей" {
+		t.Fatalf("сеть, названия: %v", got)
+	}
+	// Обновление обоих до версии 2: это тоже «поставлено», названия — те же.
+	v2 := rezip(t, zip, func(m map[string]any) { m["version"] = 2 }, before2File(t, zip))
+	v2s := rezip(t, sage, func(m map[string]any) { m["version"] = 2 }, before2File(t, sage))
+	l.publish(t, nil, v2, v2s)
+	if res, err := a.UpdateLibrary(); err != nil || res.Updated != 2 || res.Added != 0 {
+		t.Fatalf("обновление: %v %+v", err, res)
+	}
+	if got := installedOf(t, ev, 2); len(got) != 2 || got[0] != "Свадьба — айвори" || got[1] != "Шалфей" {
+		t.Fatalf("обновление, названия: %v", got)
+	}
+	// Холостая проверка: ничего нового — ни library:changed, ни library:updated (запуск).
+	a.startCheck()
+	if len(ev.of("library:changed")) != 2 || len(ev.of("library:updated")) != 0 {
+		t.Fatalf("холостая проверка дала события: %d / %d", len(ev.of("library:changed")), len(ev.of("library:updated")))
+	}
+	// Удаление: пустой, но не nil список.
+	if _, err := a.RemovePack("sage"); err != nil {
+		t.Fatal(err)
+	}
+	all := ev.of("library:changed")
+	if len(all) != 3 {
+		t.Fatalf("удаление: событий %d", len(all))
+	}
+	last, ok := all[2].(libChanged)
+	if !ok || last.Installed == nil || len(last.Installed) != 0 {
+		t.Fatalf("удаление: %#v", all[2])
+	}
+	if raw, _ := json.Marshal(last); string(raw) != `{"installed":[]}` {
+		t.Errorf("JSON удаления: %s", raw)
+	}
+}
+
+// Файл: AddPackPath и ConfirmPack («Заменить версией N») шлют название набора; «уже есть» и
+// вопрос о замене до ответа — не шлют.
+func TestLibraryChangedFile(t *testing.T) {
+	a := decorApp(t)
+	ev := captureEvents(a)
+	zip := d1Zip(t)
+	if _, err := a.AddPackPath(zip); err != nil {
+		t.Fatal(err)
+	}
+	if got := installedOf(t, ev, 1); len(got) != 1 || got[0] != "Свадьба — айвори" {
+		t.Fatalf("файл: %v", got)
+	}
+	if r, err := a.AddPackPath(zip); err != nil || r.Ask != decor.AskSame {
+		t.Fatalf("повтор: %v %+v", err, r)
+	}
+	installedOf(t, ev, 1)
+	v2 := rezip(t, zip, func(m map[string]any) { m["version"] = 2; m["title"] = "Айвори 2" }, before2File(t, zip))
+	r, err := a.AddPackPath(v2)
+	if err != nil || r.Ask != decor.AskUpdate || r.Token == "" {
+		t.Fatalf("вопрос: %v %+v", err, r)
+	}
+	installedOf(t, ev, 1) // до «Заменить» события нет
+	if _, err := a.ConfirmPack(r.Token); err != nil {
+		t.Fatal(err)
+	}
+	if got := installedOf(t, ev, 2); len(got) != 1 || got[0] != "Айвори 2" {
+		t.Fatalf("замена: %v", got)
+	}
+}
+
+// Ошибка на втором наборе: первый поставлен — его название в library:changed, второго нет.
+func TestLibraryChangedPartial(t *testing.T) {
+	a, l := netApp(t, true)
+	ev := captureEvents(a)
+	zip := d1Zip(t)
+	sage := rezip(t, zip, func(m map[string]any) { m["id"], m["title"] = "sage", "Шалфей" })
+	l.publish(t, func(r map[string]any) {
+		if r["id"] == "sage" {
+			r["sha256"] = strings.Repeat("0", 64)
+		}
+	}, zip, sage)
+	if _, err := a.UpdateLibrary(); err == nil {
+		t.Fatal("ждали ошибку второго набора")
+	}
+	if got := installedOf(t, ev, 1); len(got) != 1 || got[0] != "Свадьба — айвори" {
+		t.Fatalf("названия: %v", got)
+	}
+}
+
+// Строка итога в log.txt после каждой удачной проверки — и кнопкой, и при запуске; при нуле
+// тоже; после ошибки — нет.
+func TestLibraryLogSummary(t *testing.T) {
+	a, l := netApp(t, true)
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	zip := d1Zip(t)
+	l.publish(t, nil, zip)
+	if _, err := a.UpdateLibrary(); err != nil {
+		t.Fatal(err)
+	}
+	if out := buf.String(); !strings.Contains(out, "библиотека: итог — новых 1, обновлено 0, пропущено 0") {
+		t.Fatalf("после установки: %q", out)
+	}
+	// Ноль — тоже строка (запуск).
+	buf.Reset()
+	a.startCheck()
+	if out := buf.String(); !strings.Contains(out, "библиотека: итог — новых 0, обновлено 0, пропущено 0") {
+		t.Fatalf("при нуле: %q", out)
+	}
+	// Обновление и пропуск: версия 2 ивори и набор, которому нужна новая программа.
+	buf.Reset()
+	v2 := rezip(t, zip, func(m map[string]any) { m["version"] = 2 }, before2File(t, zip))
+	defer func(old []byte) { wailsJSON = old }(wailsJSON)
+	wailsJSON = []byte(`{"info":{"productVersion":"0.17.0"}}`)
+	later := rezip(t, zip, func(m map[string]any) { m["id"], m["title"] = "later", "Позже" })
+	l.publish(t, func(r map[string]any) {
+		if r["id"] == "later" {
+			r["minApp"] = "0.99.0"
+		}
+	}, v2, later)
+	if _, err := a.UpdateLibrary(); err != nil {
+		t.Fatal(err)
+	}
+	if out := buf.String(); !strings.Contains(out, "библиотека: итог — новых 0, обновлено 1, пропущено 1") {
+		t.Fatalf("обновление с пропуском: %q", out)
+	}
+	// Неудачная проверка итога не пишет.
+	buf.Reset()
+	l.mu.Lock()
+	l.sig = nil
+	l.mu.Unlock()
+	if _, err := a.UpdateLibrary(); err == nil {
+		t.Fatal("ждали ошибку")
+	}
+	if strings.Contains(buf.String(), "итог") {
+		t.Errorf("итог после ошибки: %q", buf.String())
+	}
+}

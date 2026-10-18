@@ -131,6 +131,9 @@ func probes() []probe {
 		{"SetCaption", kView, func(m *Methods) (model.View, error) { return ok(m.SetCaption("a", "x", "")) }},
 		{"SetCaptionStyle", kView, func(m *Methods) (model.View, error) { return ok(m.SetCaptionStyle("a", tst, true, 1)) }},
 		{"SetPerson", kView, func(m *Methods) (model.View, error) { return ok(m.SetPerson("a", model.Person{Last: "Х"}, "")) }},
+		{"SetPlacePerson", kView, func(m *Methods) (model.View, error) {
+			return ok(m.SetPlacePerson("s1", "00000000000b", model.Person{Last: "Х"}, ""))
+		}},
 		{"ForgetFileNames", kView, func(m *Methods) (model.View, error) { return ok(m.ForgetFileNames(ids)) }},
 		{"PreviewNames", kReadEr, func(m *Methods) (model.View, error) {
 			_, err := m.PreviewNames("s1", model.NamesOpts{})

@@ -11,6 +11,7 @@
   import SelFrame from '../places/SelFrame.svelte'
   import StickerOverlay from '../sticker/StickerOverlay.svelte'
   import NameEditor from '../captions/NameEditor.svelte'
+  import { targetKey } from '../captions/nametarget'
   import TextOverlay from '../text/TextOverlay.svelte'
   import type { TextGestures } from '../text/textgesture.svelte'
   import type { NameTrack } from './nametrack.svelte'
@@ -46,7 +47,7 @@
 {#if !mini}<TextOverlay {spread} {width} {tg} />{/if}
 {#if nt.named}
   <!-- key: при переходе на соседнюю подпись без зазора подсказка переставляется заново -->
-  {#key nt.named.photo}
+  {#key targetKey(nt.named)}
     <div
       bind:this={nt.hint}
       class="namehint"

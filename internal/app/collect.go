@@ -251,8 +251,8 @@ func (a *App) runCollect(ctx context.Context, cancel context.CancelFunc, j colle
 		log.Printf("сбор: %v", paths.NoPath(err))
 	} else {
 		files, size, _ := planTotals(j.pl)
-		log.Printf("сбор: %d %s (%s) в %s за %v", files, plural(files, "файл", "файла", "файлов"),
-			collect.SizeText(size), paths.LogQ(filepath.Base(j.dir)), time.Since(start).Round(time.Second))
+		log.Printf("сбор: %d %s (%s) за %v", files, plural(files, "файл", "файла", "файлов"),
+			collect.SizeText(size), time.Since(start).Round(time.Second))
 	}
 	// Флаг — до события: окно по collect:done снова даёт «Собрать…», и повтор сразу не должен
 	// получить «сбор уже идёт».

@@ -21,6 +21,7 @@
   import Spot from './shell/guide/Spot.svelte'
   import { guide } from './shell/guide/guidestate.svelte'
   import StartDialog from './shell/dialogs/StartDialog.svelte'
+  import OpenProgress from './shell/dialogs/OpenProgress.svelte'
   import LevelsDialog from './shell/dialogs/LevelsDialog.svelte'
   import BackupsDialog from './shell/dialogs/BackupsDialog.svelte'
   import { backupsUi } from './shell/dialogs/backups.svelte'
@@ -65,8 +66,8 @@
   // Открыт вопрос ручного листа (автораскладка, броски, копия сетки): под ним F1 и Ctrl+N/O/E молчат.
   const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!gridAct.copyGrid
 
-  // Открыто окно фоновой работы Go: экспорт, его памятка или сбор в папку (069).
-  const jobsOpen = () => jobs.exportOpen || jobs.collectOpen || !!jobs.exportMemo
+  // Открыто окно фоновой работы Go: экспорт, его памятка, сбор в папку (069) или «Открываем альбом» (073: F1 не открывает справочник под ним).
+  const jobsOpen = () => jobs.exportOpen || jobs.collectOpen || !!jobs.exportMemo || jobs.openShown
 
   // F1 — справочник функций (033). В WebView2 он открыл бы справку браузера, поэтому гасится всегда.
   // Поверх стартового окна и окна уровней справочник открывается; под другими окнами и сам справочник — нет.
@@ -83,6 +84,7 @@
   const underDialog = () =>
     guide.open ||
     jobs.collectOpen ||
+    jobs.openShown ||
     prefs.startOpen ||
     prefs.compare ||
     backupsUi.open ||
@@ -173,6 +175,8 @@
 <PhotoMenu />
 <PhotoPreview />
 <Spot />
+<!-- Последним: окно хода открытия (073) лежит над стартовым окном -->
+<OpenProgress />
 
 <style>
   main {

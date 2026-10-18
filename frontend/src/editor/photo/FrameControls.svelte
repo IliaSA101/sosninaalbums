@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { Frame, FrameView, Rect, SpreadView } from '../../base/core/types'
   import { store, Api } from '../../base/core/store.svelte'
   import { panFrame, sinCosDeg, zoomFrame } from '../../base/geom/frame'
@@ -46,7 +47,7 @@
   const lift = $derived(miniSpot.photo === id ? Math.max(16, miniSpot.lift) : 16)
 
   function startPan(e: PointerEvent) {
-    if (e.button !== 0 || !fv) return
+    if (!primaryPress(e) || !fv) return
     // Оболочка в осях места: по ширине её описанного прямоугольника px переводятся в мм.
     const cell = (e.currentTarget as HTMLElement).closest('[data-cov]')
     if (!cell) return

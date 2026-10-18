@@ -1,12 +1,14 @@
 package library
 
 import (
+	"bytes"
 	"crypto/sha1" //nolint:gosec // как в cacheKey
 	"encoding/hex"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,4 +125,26 @@ func TestOpenOrientedKeepsAlpha(t *testing.T) {
 func TestWarmOnePanicRecovered(t *testing.T) {
 	path := testkit.JPEG(t, testkit.TempDir(t), "bad.jpg", 20, 20)
 	warmOne(nil, Photo{Path: path, Name: "bad.jpg"}) // nil-кэш → паника внутри File
+}
+
+// Запись о панике прогрева — с расширением, без имени файла (073-7).
+func TestThumbPanicLogNoName(t *testing.T) {
+	var buf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(prev) })
+	for _, name := range []string{"Иванов_секрет.JPG", "Иванов_без_расширения", "Петров." + strings.Repeat("я", 20)} {
+		path := testkit.JPEG(t, testkit.TempDir(t), "x.jpg", 20, 20)
+		warmOne(nil, Photo{Path: path, Name: name})
+	}
+	got := buf.String()
+	if strings.Count(got, "ПАНИКА при прогреве") != 3 || !strings.Contains(got, `(файл ".jpg")`) ||
+		!strings.Contains(got, `(файл "")`) || !strings.Contains(got, `(файл "прочее")`) {
+		t.Errorf("запись: %.300q", got)
+	}
+	for _, leak := range []string{"Иванов", "Петров", "x.jpg"} {
+		if strings.Contains(got, leak) {
+			t.Errorf("в логе %q", leak)
+		}
+	}
 }

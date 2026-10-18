@@ -9,7 +9,7 @@
 //
 // Файлы ядра:
 //   - editor.go — Editor, NewEditor и own (своя копия проекта с проверкой путей), конвейер edit
-//     (change, apply, try), Save, WriteCopy, Snapshot, Ref, View;
+//     (change, apply, try), Save, WriteCopy, Snapshot, Ref, View, Warm (прогрев раскладок с ходом, 073);
 //     медленные операции в log.txt (slow);
 //   - editor_undo.go — шаги отмены, их предел по числу и по байтам, Undo и Redo; SyncOwnNames —
 //     исключение «мимо change»: имена своих шаблонов виньетки в проекте и истории без шага

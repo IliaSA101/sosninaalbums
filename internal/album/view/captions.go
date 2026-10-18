@@ -214,26 +214,31 @@ func capTemplate(s *model.Spread, role string) string {
 	return s.Caps.Text
 }
 
-// photoRoles — роль места каждого фото виньетки s; у прочих листов nil (роль "").
-func photoRoles(s *model.Spread) map[string]string {
-	if !s.IsVignette() {
+// photoPlaces — место каждого фото листа s (071: табличка места и роль виньетки); у «Авто»
+// мест нет — nil.
+func photoPlaces(s *model.Spread) map[string]*model.Place {
+	if len(s.Grid) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(s.Grid))
+	out := make(map[string]*model.Place, len(s.Grid))
 	for _, pl := range s.Grid {
-		if pl.Photo != "" {
-			out[pl.Photo] = pl.Role
+		if pl != nil && pl.Photo != "" {
+			out[pl.Photo] = pl
 		}
 	}
 	return out
 }
 
-// caption — подпись фото id в месте роли role на листе s: текст для показа, исходник и вид.
-// Своя подпись заменяет шаблон листа текстом; names — поля имени шаблона (037), у своей
-// подписи nil. Фото без своей подписи и без имени под шаблоном с полями имени — заглушка
-// (на холсте; в печати ничего).
-func (f *fields) caption(s *model.Spread, id, role string) (out, src string, look Look, kind capKind, names []string) {
+// caption — подпись фото id на месте pl (nil — «Авто») листа s: текст для показа, исходник и
+// вид. Своя подпись заменяет шаблон листа текстом; names — поля имени шаблона (037), у своей
+// подписи nil. Имя — model.NameAt: табличка места главнее имени фото (071). Фото без своей
+// подписи и без имени под шаблоном с полями имени — заглушка (на холсте; в печати ничего).
+func (f *fields) caption(s *model.Spread, id string, pl *model.Place) (out, src string, look Look, kind capKind, names []string) {
 	ref := f.p.Photos[id]
+	role := "" // «Авто» — мест нет
+	if pl != nil {
+		role = pl.Role
+	}
 	own, caps := ref.Caption, s.Caps
 	switch tpl := capTemplate(s, role); {
 	case own != nil:
@@ -247,7 +252,7 @@ func (f *fields) caption(s *model.Spread, id, role string) (out, src string, loo
 	if own == nil {
 		names = model.NameFieldsOf(src)
 	}
-	who, _ := ref.Name()
+	who, _, _ := model.NameAt(ref, pl)
 	out, miss := model.ShownCaption(f.vars, src, who, f.mode())
 	unnamed := f.noName(src, who, miss)
 	if unnamed {
@@ -309,9 +314,9 @@ func sheetBottom(p *model.Project, s *model.Spread) float64 {
 // раздвигает: не хватило места — Overflow > 0, интерфейс показывает «!».
 func captionViews(f *fields, s *model.Spread, ids []string, rects []layout.Rect, outlines []geom.Outline) (caps []model.CaptionView, stubs []model.StubView) {
 	caps, stubs = []model.CaptionView{}, []model.StubView{}
-	roles, bottom := photoRoles(s), sheetBottom(f.p, s)
+	places, bottom := photoPlaces(s), sheetBottom(f.p, s)
 	for i := range rects {
-		out, src, look, kind, who := f.caption(s, ids[i], roles[ids[i]])
+		out, src, look, kind, who := f.caption(s, ids[i], places[ids[i]])
 		if kind == capNone {
 			continue
 		}
@@ -326,9 +331,11 @@ func captionViews(f *fields, s *model.Spread, ids []string, rects []layout.Rect,
 	return caps, stubs
 }
 
-// placeStubs — заглушки пустых мест сетки под шаблоном листа: текст шаблона в режиме
-// заглушки («[Фамилия]», переменные — значения); у учителя виньетки — его шаблон.
-// Препятствия снизу — все места листа.
+// placeStubs — заглушки пустых мест сетки под шаблоном листа: у места с табличкой (071) —
+// текст шаблона с ней (как подпись на холсте), без таблички — режим заглушки («[Фамилия]»,
+// переменные — значения); у учителя виньетки — его шаблон. Who — поля имени шаблона: двойной
+// щелчок открывает окошко «Имя» места. Пустые поля табличек в итог не идут: в печати
+// заглушек нет. Препятствия снизу — все места листа.
 func placeStubs(f *fields, sv *model.SpreadView, s *model.Spread) {
 	if f.print || s.Caps == nil {
 		return
@@ -343,9 +350,30 @@ func placeStubs(f *fields, sv *model.SpreadView, s *model.Spread) {
 		if pl.Photo != "" || tpl == "" {
 			continue
 		}
-		out, _ := model.ShownCaption(f.vars, tpl, nil, model.FieldStub)
-		cv := CaptionViewOf(CaptionIn{Text: out, Look: look, Rects: rects, I: i, PageH: bottom, Outlines: outlines})
+		cv := CaptionViewOf(CaptionIn{Text: f.seatText(tpl, pl.Person), Look: look, Rects: rects, I: i, PageH: bottom, Outlines: outlines})
 		turnCaption(&cv, pl)
-		sv.Stubs = append(sv.Stubs, model.StubView{Place: pl.ID, TextView: cv.TextView})
+		sv.Stubs = append(sv.Stubs, model.StubView{Place: pl.ID, TextView: cv.TextView, Who: model.NameFieldsOf(tpl)})
 	}
+}
+
+// seatText — текст заглушки пустого места по шаблону tpl: с табличкой t — как подпись на
+// холсте (пустые поля — «[Имя]», предмет учителя виден и без имени), без таблички — заглушка.
+func (f *fields) seatText(tpl string, t model.Person) string {
+	if t == (model.Person{}) {
+		out, _ := model.ShownCaption(f.vars, tpl, nil, model.FieldStub)
+		return out
+	}
+	out, _ := model.ShownCaption(f.vars, tpl, &t, model.FieldCanvas)
+	return out
+}
+
+// waiting — пустые места листа с именем на табличке (071, SpreadView.Waiting).
+func waiting(s *model.Spread) int {
+	n := 0
+	for _, pl := range s.Grid {
+		if pl != nil && pl.Photo == "" && pl.Person.Named() {
+			n++
+		}
+	}
+	return n
 }

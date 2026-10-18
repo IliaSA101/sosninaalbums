@@ -58,7 +58,11 @@ type gen struct {
 	seen   map[string]bool
 	out    []Cand
 	builds int
-	relax  float64 // пол мельчайшей стороны не строже этого (мм); 0 — полы как есть
+	relax  float64               // пол мельчайшей стороны не строже этого (мм); 0 — полы как есть
+	parts  map[partKey][]int     // разрезы на ряды многих фото (part)
+	tables map[[2]int]*partTable // таблицы DP разреза по началу и minN (part)
+	others map[[2]int][]string   // страницы рядом с главным (otherPage)
+	heroes map[heroKey][]string  // лучшие страницы с главным (heroPage)
 }
 
 // Gen — раскладки форм для фото aspects (пропорции ширина/высота) в порядке ленты: ключи без
@@ -78,7 +82,17 @@ func GenMin(aspects []float64, p layout.Params, minSide float64) []Cand {
 			return nil
 		}
 	}
-	g := &gen{as: aspects, pre: prefixSums(aspects), p: p, k: k, flat: p.Layflat, pages: !p.Sheet, seen: map[string]bool{}, relax: minSide}
+	g := newGen(aspects, p, minSide)
+	g.run()
+	return g.out
+}
+
+func newGen(as []float64, p layout.Params, relax float64) *gen {
+	return &gen{as: as, pre: prefixSums(as), p: p, k: len(as), flat: p.Layflat, pages: !p.Sheet, seen: map[string]bool{}, relax: relax}
+}
+
+// run — все генераторы по очереди; на многих фото (17–40) — ещё «сетка + главное» и «две крупных».
+func (g *gen) run() {
 	g.strip()
 	g.rows()
 	g.grid()
@@ -87,7 +101,10 @@ func GenMin(aspects []float64, p layout.Params, minSide float64) []Cand {
 	g.contrast()
 	g.ladder()
 	g.frame()
-	return g.out
+	if g.many() {
+		g.gridHero()
+		g.gridPair()
+	}
 }
 
 // try строит ключ и берёт его, если Build его принял, вид проходит полы, а у U/D есть сдвиг.

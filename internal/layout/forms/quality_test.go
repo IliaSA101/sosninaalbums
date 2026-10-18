@@ -336,10 +336,11 @@ func TestGenMin(t *testing.T) {
 
 // TestPageRowsFallback (решение 0.13 №40): запасной перебор Q[G|G] (разрез ±1, ряды 2–4 с разницей
 // на один) — только когда у середины с равным числом рядов ничего не прошло; в его рядах не меньше
-// двух фото. Смеси и серии 12–30 фото без layflat; запасной срабатывает хоть раз.
+// двух фото. Смеси и серии 12–16 фото без layflat; запасной срабатывает хоть раз. С ManyFrom фото
+// pageRows не зовётся: там ряды manyRows (072-5, TestManyRows).
 func TestPageRowsFallback(t *testing.T) {
 	fallback := 0
-	for n := 12; n <= 30; n++ {
+	for n := 12; n < layout.ManyFrom; n++ {
 		for seed := uint64(1); seed <= 4; seed++ {
 			for _, as := range [][]float64{mixed(n, seed), series(n, seed)} {
 				got, spare := pageRowKeys(as)

@@ -271,8 +271,9 @@ func inheritVars(p *model.Project, s *model.Spread) *model.Vars {
 }
 
 // placeVignette ставит места плана: ID — прежние ID мест той же роли по порядку (с ними и
-// режим кадра, и форма — 044), сверх них — новые; фото садятся по своей роли в прежнем
-// порядке, остаток уходит из листа. Новые места людей получают форму v, групповое —
+// режим кадра, и форма — 044), сверх них — новые; жильцы мест (фото и табличка, 071) садятся
+// по своей роли в прежнем порядке, остаток фото уходит из листа, лишние таблички пропадают.
+// Новые места людей получают форму v, групповое —
 // прямоугольник; reshape (новая виньетка, смена шаблона или формы) — форму v всем местам
 // людей. Шапка встаёт в свою полосу; нет надписи — создаётся, только если mkHead («Применить»):
 // пересборка Relay удалённую пользователем шапку не возвращает. Тот же план даёт тот же
@@ -286,37 +287,35 @@ func placeVignette(p *model.Project, s *model.Spread, v model.Vignette, plan Vig
 		return 0, errVigHead()
 	}
 	had := len(s.Photos)
-	ids, photos, fits := map[string][]string{}, map[string][]string{}, map[string]string{}
+	ids, fits := map[string][]string{}, map[string]string{}
+	// Жильцы мест по ролям (071): фото и табличка; пустые места без таблички сжимаются.
+	occ, byRole := map[string][]model.Occupant{}, map[string][]*model.Place{}
 	shapes := map[string]model.Place{} // форма прежнего места по ID
 	if len(s.Grid) == 0 {              // «Авто», которое не закрепилось: фото ленты — ученики по порядку
-		photos[model.RolePupil] = slices.Clone(s.Photos)
+		for _, id := range s.Photos {
+			occ[model.RolePupil] = append(occ[model.RolePupil], model.Occupant{Photo: id})
+		}
 	}
 	for _, pl := range s.Grid {
 		r := model.RoleOf(pl)
 		ids[r] = append(ids[r], pl.ID)
 		fits[pl.ID] = pl.Fit
 		shapes[pl.ID] = model.Place{Shape: pl.Shape, Round: pl.Round}
-		if pl.Photo != "" {
-			photos[r] = append(photos[r], pl.Photo)
-		}
+		byRole[r] = append(byRole[r], pl)
+	}
+	for r, pls := range byRole {
+		occ[r] = model.Occupants(pls)
 	}
 	taken := p.PlaceIDs()
-	next := func(m map[string][]string, r string) string {
-		if len(m[r]) == 0 {
-			return ""
-		}
-		x := m[r][0]
-		m[r] = m[r][1:]
-		return x
-	}
 	grid := make([]*model.Place, len(plan.Slots))
 	for i, sl := range plan.Slots {
 		b := sl.Box
-		pl := &model.Place{ID: next(ids, sl.Role), X: b.X, Y: b.Y, W: b.W, H: b.H, Role: sl.Role}
+		pl := &model.Place{ID: shift(ids, sl.Role), X: b.X, Y: b.Y, W: b.W, H: b.H, Role: sl.Role}
 		if pl.ID == "" {
 			pl.ID = model.NewPlaceID(taken)
 		}
-		pl.Fit, pl.Photo = fits[pl.ID], next(photos, sl.Role)
+		o := shift(occ, sl.Role) // фото и табличка места едут вместе
+		pl.Fit, pl.Photo, pl.Person = fits[pl.ID], o.Photo, o.Person
 		old, kept := shapes[pl.ID]
 		vigShape(pl, old, kept && (!reshape || sl.Role == model.RoleGroup), v)
 		p.ClampPlace(s, pl)
@@ -337,6 +336,15 @@ func placeVignette(p *model.Project, s *model.Spread, v model.Vignette, plan Vig
 	}
 	s.Kind, s.Vig = model.KindVignette, &v
 	return had - len(s.Photos), nil
+}
+
+// shift — первый в очереди роли r и сдвиг очереди; пусто — ноль.
+func shift[T any](m map[string][]T, r string) (x T) {
+	if len(m[r]) == 0 {
+		return x
+	}
+	x, m[r] = m[r][0], m[r][1:]
+	return x
 }
 
 // vigShape — форма места плана pl (044): прежняя old, если keep, иначе у ученика и учителя —
@@ -470,16 +478,17 @@ func ClearVignette(p *model.Project, spreadID string) {
 	}
 }
 
-// SortVignette — «Сортировать по фамилии»: фото занятых мест учеников по (Фамилия, Имя) без
-// регистра, «ё» как «е», по кодовым точкам; без имени — в конце в прежнем порядке. Учителя,
-// групповое и пустые места не двигаются.
+// SortVignette — «Сортировать по фамилии»: жильцы мест учеников (фото и/или табличка, 071) по
+// видимому имени (Фамилия, Имя) без регистра, «ё» как «е», по кодовым точкам; без имени — в
+// конце в прежнем порядке. Фото и табличка места едут вместе. Учителя, групповое и пустые
+// места без таблички не двигаются.
 func SortVignette(p *model.Project, spreadID string) {
 	_, s := p.Find(spreadID)
 	if s == nil || !s.IsVignette() {
 		return
 	}
 	type seat struct {
-		photo       string
+		o           model.Occupant
 		named       bool
 		last, first string
 	}
@@ -487,12 +496,13 @@ func SortVignette(p *model.Project, spreadID string) {
 	var places []*model.Place
 	var seats []seat
 	for _, pl := range s.Grid {
-		if pl.Photo == "" || model.RoleOf(pl) != model.RolePupil {
+		o := model.Occupant{Photo: pl.Photo, Person: pl.Person}
+		if o == (model.Occupant{}) || model.RoleOf(pl) != model.RolePupil {
 			continue
 		}
-		st := seat{photo: pl.Photo}
-		if who, _ := p.Photos[pl.Photo].Name(); who != nil {
-			st = seat{pl.Photo, true, key(who.Last), key(who.First)}
+		st := seat{o: o}
+		if who, _, _ := model.NameAt(p.Photos[pl.Photo], pl); who != nil && who.Named() {
+			st = seat{o, true, key(who.Last), key(who.First)}
 		}
 		places, seats = append(places, pl), append(seats, st)
 	}
@@ -506,7 +516,7 @@ func SortVignette(p *model.Project, spreadID string) {
 		return cmp.Or(strings.Compare(a.last, b.last), strings.Compare(a.first, b.first))
 	})
 	for i, pl := range places {
-		pl.Photo = seats[i].photo
+		pl.Photo, pl.Person = seats[i].o.Photo, seats[i].o.Person
 	}
 	s.Photos = model.GridPhotos(s)
 }

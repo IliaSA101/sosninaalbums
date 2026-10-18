@@ -64,3 +64,63 @@ describe('nameEdit.verdict', () => {
     expect(nameEdit.verdict(stubSheet('s1'), 's1')).toBe('keep')
   })
 })
+
+describe('nameEdit: пустое место (071)', () => {
+  const style = { font: 'f', size: 12, color: '#000', align: 'center' as const }
+  const stub = (place: string, photo: string, who?: string[]) => ({
+    place,
+    photo,
+    x: 10,
+    y: 20,
+    w: 60,
+    h: 12,
+    rot: 0,
+    z: 1,
+    style,
+    lines: [],
+    who,
+  })
+  const placeSheet = (id: string, stubs = [stub('p9', '', ['last', 'first'])]): SpreadView =>
+    ({ id, w: 200, h: 100, captions: [], stubs }) as unknown as SpreadView
+  const click = (x: number, y: number) => ({ clientX: x, clientY: y }) as MouseEvent
+  // Разворот 200×100 мм на экране 200×100 px от (0, 0): px = мм.
+  const root = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 100 }) } as HTMLElement
+
+  beforeEach(() => nameEdit.close())
+
+  it('двойной щелчок по заглушке пустого места открывает окошко места, тоста нет', () => {
+    expect(nameEdit.dbl(placeSheet('s1'), click(30, 25), root)).toBe(true)
+    expect(nameEdit.cur).toMatchObject({ spread: 's1', photo: '', place: 'p9', who: ['last', 'first'] })
+  })
+
+  it('мимо заглушки и заглушка без who — false, окошко не открыто', () => {
+    expect(nameEdit.dbl(placeSheet('s1'), click(150, 80), root)).toBe(false)
+    expect(nameEdit.dbl(placeSheet('s1', [stub('p9', '')]), click(30, 25), root)).toBe(false)
+    expect(nameEdit.cur).toBeNull()
+  })
+
+  it('verdict держит окошко места, пока у места есть заглушка с who (в том числе с табличкой)', () => {
+    nameEdit.dbl(placeSheet('s1'), click(30, 25), root)
+    expect(nameEdit.verdict(placeSheet('s1'), 's1')).toBe('keep')
+    expect(nameEdit.verdict(placeSheet('s1', [stub('p9', '', ['last'])]), 's1')).toBe('keep')
+  })
+
+  it('verdict закрывает окошко места, когда на нём встало фото или заглушки нет; другой разворот — тоже', () => {
+    nameEdit.dbl(placeSheet('s1'), click(30, 25), root)
+    expect(nameEdit.verdict(placeSheet('s1', [stub('p9', 'a', ['last'])]), 's1')).toBe('close')
+    expect(nameEdit.verdict(placeSheet('s1', []), 's1')).toBe('close')
+    expect(nameEdit.verdict(placeSheet('s1'), 's2')).toBe('close')
+  })
+
+  it('двойной щелчок по подписи фото — окошко фото (place пуст)', () => {
+    const s = {
+      id: 's1',
+      w: 200,
+      h: 100,
+      captions: [{ photo: 'a', x: 10, y: 20, w: 60, h: 12, rot: 0, z: 1, who: ['last'] }],
+      stubs: [],
+    } as unknown as SpreadView
+    expect(nameEdit.dbl(s, click(30, 25), root)).toBe(true)
+    expect(nameEdit.cur).toMatchObject({ photo: 'a', place: '' })
+  })
+})

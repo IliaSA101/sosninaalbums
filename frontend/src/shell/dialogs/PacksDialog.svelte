@@ -15,8 +15,10 @@
     skipLine,
     progressPercent,
     progressText,
+    type LibraryChanged,
     type LibraryOffer,
     type LibraryProgress,
+    type LibraryUpdate,
   } from './packnet'
 
   // Окно «Наборы библиотеки» (067 Ф2): по образцу «Резервных копий» — список, кнопка у строки, «Закрыть» внизу.
@@ -25,10 +27,12 @@
   const net = packsUi.net
 
   // События Go (компонент смонтирован всегда, окно может быть закрыто — тост предложения и ход нужны и тогда):
-  // library:changed — список и каталог открытого окна «Фоны/Стикеры/Развороты» перечитываются.
+  // library:changed — список и каталог открытого окна «Фоны/Стикеры/Развороты» перечитываются;
+  // library:updated — итог проверки при запуске: обычный тост, как у кнопки «Обновить библиотеку» (073-2).
   $effect(() => {
     const off = [
-      EventsOn('library:changed', () => packsUi.changed()),
+      EventsOn('library:changed', (r?: LibraryChanged) => packsUi.changed(r?.installed)),
+      EventsOn('library:updated', (r: LibraryUpdate) => net.updated(r)),
       EventsOn('library:progress', (p: LibraryProgress) => net.progressed(p)),
       EventsOn('library:offer', (o: LibraryOffer) => net.offered(o)),
     ]

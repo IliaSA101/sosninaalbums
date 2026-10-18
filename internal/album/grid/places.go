@@ -52,9 +52,11 @@ func InArea(p *model.Project, s *model.Spread, x, w float64, scope string) bool 
 // applyGrid — общая постановка сетки (копирование, шаблон, встроенные; design §3):
 // «Авто» сначала закрепляется, места области scope снимаются, новые места boxes
 // (мм разворота, зажимаются) встают на позицию первого снятого в Grid — места
-// другой страницы и их слои не двигаются; фото снятых мест по порядку садятся в
-// новые, лишние уходят из альбома. left — сколько фото ушло. Тексты и фон не
-// трогаются. Больше MaxPlaces в итоге — ошибка (try откатывает).
+// другой страницы и их слои не двигаются; жильцы снятых мест (фото и табличка, 071)
+// по порядку садятся в новые: пустое место с табличкой — в общей очереди, иначе имя
+// уехало бы на чужое лицо. Лишние фото уходят из альбома, лишние таблички пропадают.
+// left — сколько фото ушло. Тексты и фон не трогаются. Больше MaxPlaces в итоге —
+// ошибка (try откатывает).
 func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Box) (left int, err error) {
 	if _, ok := pageArea(p, s, scope); !ok {
 		return 0, model.ErrScope
@@ -62,7 +64,7 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 	p.Freeze(s)
 	had := len(s.Photos)
 	at, kept := -1, make([]*model.Place, 0, len(s.Grid)+len(boxes))
-	var q []string
+	var gone []*model.Place
 	for _, pl := range s.Grid {
 		if !InArea(p, s, pl.X, pl.W, scope) {
 			kept = append(kept, pl)
@@ -71,10 +73,9 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 		if at < 0 {
 			at = len(kept)
 		}
-		if pl.Photo != "" {
-			q = append(q, pl.Photo)
-		}
+		gone = append(gone, pl)
 	}
+	q := model.Occupants(gone)
 	if at < 0 {
 		at = len(kept)
 	}
@@ -88,8 +89,8 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 		p.ClampPlace(s, fresh[i])
 	}
 	s.Grid = slices.Insert(kept, at, fresh...)
-	for i, id := range q[:min(len(q), len(fresh))] {
-		p.Put(s, fresh[i], id)
+	for i, o := range q[:min(len(q), len(fresh))] {
+		p.Seat(s, fresh[i], o)
 	}
 	s.Photos = model.GridPhotos(s) // фото без нового места покидают разворот
 	return had - len(s.Photos), nil

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { SpreadView, StickerView } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
   import { thumbUrl, previewUrl } from '../../base/core/media'
@@ -27,7 +28,7 @@
   const dpr = $derived(globalThis.devicePixelRatio || 1)
 
   function down(e: PointerEvent, st: StickerView) {
-    if (mini || e.button !== 0) return
+    if (mini || !primaryPress(e)) return
     e.stopPropagation()
     // Стикеры «Стандартного» уровня на «Простом»: видны и печатаются, но не выделяются (вопрос 5), только тост.
     if (prefs.blocked('sticker', () => placesel.pickSticker(st.id, false))) return

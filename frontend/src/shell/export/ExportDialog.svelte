@@ -5,7 +5,8 @@
   import type { FsferaPlan } from '../../base/core/types'
   import { coverAct } from '../../panels/cover/coveract.svelte'
   import { edit } from '../../editor/text/edit.svelte'
-  import { parseExportRange } from './exportrange'
+  import { parseExportRange, rangeSummary } from './exportrange'
+  import ExportRun from './ExportRun.svelte'
   import {
     DPI_PRESETS,
     QUALITIES,
@@ -31,6 +32,7 @@
 
   // Окно «Экспорт» (спека 009 U8, design §6.4): что выгрузить, как резать, качество и dpi.
   // Открыто, пока jobs.exportOpen; дальше всё ведёт Go (вопросы, диалог папки, прогресс).
+  // Пока выгрузка идёт (jobs.exporting), вместо настроек — ход (ExportRun); крестик окно прячет, выгрузка продолжается (073).
   const spreads = $derived(store.view.spreads)
   const settings = $derived(store.view.settings)
   // Лист виньетки (031): страниц нет — «По страницам» и «л/п» не предлагаются, файл на лист.
@@ -125,11 +127,9 @@
     const folder = fs ? plan!.folder : '' // имя папки — из плана этого запуска, для окна «Готово»
     await edit.idle() // набранное в тексте должно попасть в файл
     jobs.exportFolder = folder
-    const ok = await jobs.runExport(
-      buildOptions(scope, current, text, sheet ? { ...prefs, pages: false } : prefs, hasCover, store.onCover, fs),
-    )
+    // Окно остаётся: при успехе в нём пойдёт ход (jobs.exporting), при отказе Go — прежние настройки.
+    await jobs.runExport(buildOptions(scope, current, text, sheet ? { ...prefs, pages: false } : prefs, hasCover, store.onCover, fs))
     busy = false
-    if (ok) close()
   }
   const enter = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -141,174 +141,187 @@
 
 {#if jobs.exportOpen}
   <Modal title="Экспорт" onclose={close} wide>
-    {#if plan?.format}
-      <div class="group">
-        <span class="cap">Печать</span>
-        <div class="opts">
-          <label
-            ><input type="checkbox" checked={prefs.fsfera} onchange={(e) => setPrefs({ fsfera: e.currentTarget.checked })} />Для Фотосферы
-            Pro
-            <span class="hint">(папка «{plan.folder}», 300 dpi{hasCover ? ', с обложкой' : ''})</span></label
-          >
+    {#if jobs.exporting}
+      <ExportRun />
+    {:else}
+      {#if plan?.format}
+        <div class="group">
+          <span class="cap">Печать</span>
+          <div class="opts">
+            <label
+              ><input type="checkbox" checked={prefs.fsfera} onchange={(e) => setPrefs({ fsfera: e.currentTarget.checked })} />Для Фотосферы
+              Pro
+              <span class="hint">(папка «{plan.folder}», 300 dpi{hasCover ? ', с обложкой' : ''})</span></label
+            >
+          </div>
         </div>
-      </div>
-      {#if fs}
-        {#if plan.memo.length}<p class="hint">{memoLine(plan.memo)}</p>{/if}
-        {#each plan.block as line, i (line)}
-          <p class="err blocked">
-            {line}
-            {#if hasFix(plan, i) && store.cover}
-              <button class="fix" onclick={() => coverAct.applyPreset(store.cover!.preset)}>Исправить</button>
-            {/if}
-          </p>
-        {/each}
-        {#each plan.warn as line (line)}<p class="warn fs">{line}</p>{/each}
-      {/if}
-    {/if}
-
-    {#if hasCover}
-      <div class="group" class:off={fs}>
-        <span class="cap">Обложка</span>
-        <div class="opts">
-          <label
-            ><input
-              type="checkbox"
-              checked={fs || prefs.cover || only}
-              disabled={only || fs}
-              onchange={(e) => setPrefs({ cover: e.currentTarget.checked })}
-            />Обложка <span class="hint">(00.jpg)</span></label
-          >
-          <label
-            ><input
-              type="checkbox"
-              checked={prefs.coverOnly && !fs}
-              disabled={fs}
-              onchange={(e) => setPrefs({ coverOnly: e.currentTarget.checked })}
-            />Только обложка</label
-          >
-        </div>
-      </div>
-    {/if}
-
-    <div class="group" class:off={only || fs} role="radiogroup" aria-label="Что выгрузить">
-      <span class="cap">{sheet ? 'Листы' : 'Развороты'}</span>
-      <div class="opts">
-        <label
-          ><input type="radio" name="ex-scope" disabled={only || fs} checked={scopeNow === 'all'} onchange={() => pick('all')} />Все ({spreads.length})</label
-        >
-        <label
-          ><input
-            type="radio"
-            name="ex-scope"
-            disabled={only || fs}
-            checked={scopeNow === 'current'}
-            onchange={() => pick('current')}
-          />Текущий ({store.onCover && hasCover ? 'обложка' : current})</label
-        >
-        <label class="inline"
-          ><input
-            type="radio"
-            name="ex-scope"
-            disabled={only || fs}
-            checked={scopeNow === 'range'}
-            onchange={() => pick('range')}
-          />Диапазон:
-          <input
-            type="text"
-            class="ranges"
-            class:bad
-            placeholder={sheet ? '3-5, 8' : '3-5, 8, 7п'}
-            aria-label="Диапазон экспорта"
-            aria-invalid={bad}
-            disabled={only || fs}
-            bind:this={field}
-            bind:value={text}
-            onfocus={() => (scope = 'range')}
-            onkeydown={enter}
-          /></label
-        >
-      </div>
-    </div>
-    {#if scope === 'range' && !only && !fs}
-      {#if parsed.error}<p class="err">{parsed.error}</p>{/if}
-      <p class="hint">
-        {sheet ? '3-5, 8 — номера листов.' : '3-5, 8 — развороты; 7л, 7п — левая или правая страница.'}
-      </p>
-    {/if}
-
-    {#if !sheet}
-      <div class="group" class:off={fs} role="radiogroup" aria-label="Вид">
-        <span class="cap">Вид</span>
-        <div class="opts">
-          <label
-            ><input type="radio" name="ex-pages" checked={!pagesNow} disabled={fs} onchange={() => setPrefs({ pages: false })} />Разворотами
-            <span class="hint">{sampleName(current, spreads.length, false)}</span></label
-          >
-          <label
-            ><input type="radio" name="ex-pages" checked={pagesNow} disabled={fs} onchange={() => setPrefs({ pages: true })} />По страницам
-            <span class="hint">{sampleName(current, spreads.length, true)}</span></label
-          >
-        </div>
-      </div>
-    {/if}
-
-    <div class="group" role="radiogroup" aria-label="Качество">
-      <span class="cap">Качество</span>
-      <div class="opts">
-        {#each QUALITIES as q (q.v)}
-          <button
-            class="chip"
-            class:on={prefs.quality === q.v}
-            role="radio"
-            aria-checked={prefs.quality === q.v}
-            onclick={() => setPrefs({ quality: q.v })}
-          >
-            <b>{q.v}</b>
-            <span>{q.label}</span>
-            <small>{formatSize(estimateBytes(settings, dpiNow, q.v, pagesNow))}</small>
-          </button>
-        {/each}
-      </div>
-    </div>
-
-    <div class="group" class:off={fs} role="radiogroup" aria-label="Разрешение">
-      <span class="cap">Dpi</span>
-      <div class="opts">
-        {#if !albumIsPreset}
-          <button
-            class="chip"
-            class:on={prefs.dpi === 0 && !fs}
-            role="radio"
-            aria-checked={prefs.dpi === 0 && !fs}
-            disabled={fs}
-            onclick={() => setPrefs({ dpi: 0 })}
-          >
-            <b>{album}</b>
-            <span>из альбома</span>
-          </button>
+        {#if fs}
+          {#if plan.memo.length}<p class="hint">{memoLine(plan.memo)}</p>{/if}
+          {#each plan.block as line, i (line)}
+            <p class="err blocked">
+              {line}
+              {#if hasFix(plan, i) && store.cover}
+                <button class="fix" onclick={() => coverAct.applyPreset(store.cover!.preset)}>Исправить</button>
+              {/if}
+            </p>
+          {/each}
+          {#each plan.warn as line (line)}<p class="warn fs">{line}</p>{/each}
         {/if}
-        {#each DPI_PRESETS as d (d.v)}
-          <button
-            class="chip"
-            class:on={dpiNow === d.v}
-            role="radio"
-            aria-checked={dpiNow === d.v}
-            disabled={fs}
-            onclick={() => setDpi(d.v)}
-          >
-            <b>{d.v}</b>
-            <span>{d.label}</span>
-          </button>
-        {/each}
-      </div>
-    </div>
-    <p class="hint size">{summary}.</p>
-    {#if warn}<p class="warn">{warn}.</p>{/if}
+      {/if}
 
-    <div class="actions">
-      <button class="ghost" onclick={close}>Отмена</button>
-      <button class="primary" data-autofocus disabled={!can} onclick={go}>Выгрузить</button>
-    </div>
+      {#if hasCover}
+        <div class="group" class:off={fs}>
+          <span class="cap">Обложка</span>
+          <div class="opts">
+            <label
+              ><input
+                type="checkbox"
+                checked={fs || prefs.cover || only}
+                disabled={only || fs}
+                onchange={(e) => setPrefs({ cover: e.currentTarget.checked })}
+              />Обложка <span class="hint">(00.jpg)</span></label
+            >
+            <label
+              ><input
+                type="checkbox"
+                checked={prefs.coverOnly && !fs}
+                disabled={fs}
+                onchange={(e) => setPrefs({ coverOnly: e.currentTarget.checked })}
+              />Только обложка</label
+            >
+          </div>
+        </div>
+      {/if}
+
+      <div class="group" class:off={only || fs} role="radiogroup" aria-label="Что выгрузить">
+        <span class="cap">{sheet ? 'Листы' : 'Развороты'}</span>
+        <div class="opts">
+          <label
+            ><input type="radio" name="ex-scope" disabled={only || fs} checked={scopeNow === 'all'} onchange={() => pick('all')} />Все ({spreads.length})</label
+          >
+          <label
+            ><input
+              type="radio"
+              name="ex-scope"
+              disabled={only || fs}
+              checked={scopeNow === 'current'}
+              onchange={() => pick('current')}
+            />Текущий ({store.onCover && hasCover ? 'обложка' : current})</label
+          >
+          <label class="inline"
+            ><input
+              type="radio"
+              name="ex-scope"
+              disabled={only || fs}
+              checked={scopeNow === 'range'}
+              onchange={() => pick('range')}
+            />Диапазон:
+            <input
+              type="text"
+              class="ranges"
+              class:bad
+              placeholder={sheet ? '3-5, 8' : '3-5, 8, 7п'}
+              aria-label="Диапазон экспорта"
+              aria-invalid={bad}
+              disabled={only || fs}
+              bind:this={field}
+              bind:value={text}
+              onfocus={() => (scope = 'range')}
+              onkeydown={enter}
+            /></label
+          >
+        </div>
+      </div>
+      {#if scope === 'range' && !only && !fs}
+        {#if parsed.error}<p class="err">{parsed.error}</p>{:else}<p class="hint" role="status">
+            {rangeSummary(parsed.units, sheet, hasCover && prefs.cover)}
+          </p>{/if}
+        <p class="hint">
+          {sheet ? '3-5, 8 — номера листов.' : '3-5, 8 — развороты; 7л, 7п — левая или правая страница.'}
+        </p>
+      {/if}
+
+      {#if !sheet}
+        <div class="group" class:off={fs} role="radiogroup" aria-label="Вид">
+          <span class="cap">Вид</span>
+          <div class="opts">
+            <label
+              ><input
+                type="radio"
+                name="ex-pages"
+                checked={!pagesNow}
+                disabled={fs}
+                onchange={() => setPrefs({ pages: false })}
+              />Разворотами
+              <span class="hint">{sampleName(current, spreads.length, false)}</span></label
+            >
+            <label
+              ><input type="radio" name="ex-pages" checked={pagesNow} disabled={fs} onchange={() => setPrefs({ pages: true })} />По
+              страницам
+              <span class="hint">{sampleName(current, spreads.length, true)}</span></label
+            >
+          </div>
+        </div>
+      {/if}
+
+      <div class="group" role="radiogroup" aria-label="Качество">
+        <span class="cap">Качество</span>
+        <div class="opts">
+          {#each QUALITIES as q (q.v)}
+            <button
+              class="chip"
+              class:on={prefs.quality === q.v}
+              role="radio"
+              aria-checked={prefs.quality === q.v}
+              onclick={() => setPrefs({ quality: q.v })}
+            >
+              <b>{q.v}</b>
+              <span>{q.label}</span>
+              <small>{formatSize(estimateBytes(settings, dpiNow, q.v, pagesNow))}</small>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="group" class:off={fs} role="radiogroup" aria-label="Разрешение">
+        <span class="cap">Dpi</span>
+        <div class="opts">
+          {#if !albumIsPreset}
+            <button
+              class="chip"
+              class:on={prefs.dpi === 0 && !fs}
+              role="radio"
+              aria-checked={prefs.dpi === 0 && !fs}
+              disabled={fs}
+              onclick={() => setPrefs({ dpi: 0 })}
+            >
+              <b>{album}</b>
+              <span>из альбома</span>
+            </button>
+          {/if}
+          {#each DPI_PRESETS as d (d.v)}
+            <button
+              class="chip"
+              class:on={dpiNow === d.v}
+              role="radio"
+              aria-checked={dpiNow === d.v}
+              disabled={fs}
+              onclick={() => setDpi(d.v)}
+            >
+              <b>{d.v}</b>
+              <span>{d.label}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+      <p class="hint size">{summary}.</p>
+      {#if warn}<p class="warn">{warn}.</p>{/if}
+
+      <div class="actions">
+        <button class="ghost" onclick={close}>Отмена</button>
+        <button class="primary" data-autofocus disabled={!can} onclick={go}>Выгрузить</button>
+      </div>
+    {/if}
   </Modal>
 {/if}
 

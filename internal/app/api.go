@@ -23,6 +23,9 @@ func (a *App) GetState() State {
 	case <-a.ready:
 	case <-a.stopCtx.Done():
 	}
+	// Холодные раскладки большого альбома — секунды (073): считаются до замка, с ходом open:progress.
+	// View под замком берёт их из кэша — тот же снимок, но лента и события не стоят.
+	a.warmEditor(a.editor())
 	// View — под тем же замком, что photos/scan: снимок согласован с событиями library/scan,
 	// а медленное чтение диска (prefsAndRecent) — уже после.
 	a.mu.Lock()
@@ -180,6 +183,14 @@ func (a *App) Person(photoID string) model.PersonView {
 		return model.PersonView{}
 	}
 	return model.NameView(model.PhotoRef{Path: ph.Path})
+}
+
+// PlacePerson — табличка места placeID листа spreadID (071) для карточки «Место» и окошка «Имя»
+// пустого места; teacher — место учителя виньетки. Места нет — пустой.
+func (a *App) PlacePerson(spreadID, placeID string) model.PersonView {
+	defer guard("PlacePerson")
+	pv, _ := a.editor().PlacePerson(spreadID, placeID)
+	return pv
 }
 
 // PasteNames — окно «Имена» (043): имена из списка (строка таблицы — человек; заголовки,

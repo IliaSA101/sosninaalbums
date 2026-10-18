@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { SpreadView } from '../../base/core/types'
   import { placesel } from './placesel.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
@@ -52,17 +53,17 @@
 
   const pc = (v: number, of: number) => `${(v / of) * 100}%`
   const move = (e: PointerEvent) => {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     e.stopPropagation()
     startGroupMove(e, root)
   }
   const scale = (e: PointerEvent, c: GroupCorner) => {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     e.stopPropagation()
     startGroupScale(e, root, c)
   }
   const stretch = (e: PointerEvent, s: GroupSide) => {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     e.stopPropagation()
     startGroupSide(e, root, s)
   }
@@ -97,7 +98,7 @@
         ></span>
       {/each}
       {#if rotatable}
-        <RotateHandle {rotIn} onrotate={(e) => startGroupRotate(e, root)} onzero={straightenGroup} />
+        <RotateHandle {rotIn} accept={primaryPress} onrotate={(e) => startGroupRotate(e, root)} onzero={straightenGroup} />
       {/if}
     </div>
   {/if}

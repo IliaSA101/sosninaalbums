@@ -368,11 +368,12 @@ func BenchmarkScanXMP(b *testing.B) {
 	}
 }
 
-// Ошибка открытия сайдкара пишет в лог имя файла, а не полный путь из PathError.
+// Ошибка открытия сайдкара пишет в лог вид файла и операцию — ни полного пути из PathError,
+// ни имени (073-7).
 func TestSidecarLogNoDir(t *testing.T) {
 	dir := testkit.TempDir(t)
 	p := testkit.JPEGSegments(t, dir, "a.jpg", 8, 8)
-	gone := filepath.Join(dir, "gone-dir", "a.xmp")
+	gone := filepath.Join(dir, "gone-dir", "Иванов.xmp")
 	var buf bytes.Buffer
 	prev := log.Writer()
 	log.SetOutput(&buf)
@@ -382,7 +383,7 @@ func TestSidecarLogNoDir(t *testing.T) {
 		t.Fatalf("err %v, retry %v", err, retry)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "a.xmp: open") || strings.Contains(out, "gone-dir") || strings.Contains(out, dir) {
+	if !strings.Contains(out, `".xmp": open`) || strings.Contains(out, "Иванов") || strings.Contains(out, "gone-dir") || strings.Contains(out, dir) {
 		t.Errorf("в логе каталог: %q", out)
 	}
 }

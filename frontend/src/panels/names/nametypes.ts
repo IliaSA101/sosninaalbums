@@ -9,10 +9,14 @@ export interface NamesOpts {
   caption: boolean
 }
 
-// Место листа в предпросмотре: tag — «учитель» | «ученик 3» | «групповое» ('' — не виньетка); no 0 — групповое;
-// who null — имя не меняется.
+// Место листа в предпросмотре (071). place — ID места на листе с местами ('' — «Авто»), ключ строки — place || photo;
+// photo '' — пустое место (имя ляжет табличкой); seat — имя ляжет табличкой места, а не в фото
+// (в режиме «Имена файлов» и со столбцом «Файл» false). tag — «учитель» | «ученик 3» | «групповое» ('' — не виньетка);
+// no 0 — групповое; who null — имя не меняется.
 export interface NamesRow {
+  place: string
   photo: string
+  seat: boolean
   tag: string
   no: number
   line: number
@@ -32,6 +36,7 @@ export interface NamesPlan {
   rows: NamesRow[]
   left: NamesLeft[]
   extra: number
+  // Мест, получающих имя: фото «Авто» или места листа с пустыми, без группового.
   seats: number
   named: number
   missing: number

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -36,14 +38,17 @@ func album(t *testing.T, folders []string, files ...string) *model.Project {
 	return p
 }
 
-// Сц. 5: повтор имён папок и файлов (и регистр), «Прочие» среди папок, устройство в имени,
-// длинное имя с расширением, сайдкар — за новым именем фото.
+// Сц. 5: повтор имён папок и файлов (и регистр), «Прочие» среди папок, имя, которое в назначении
+// становится устройством, длинное имя с расширением, сайдкар — за новым именем фото.
 func TestCollectNames(t *testing.T) {
 	root := testkit.TempDir(t)
 	a, b, c := filepath.Join(root, "1", "JPG"), filepath.Join(root, "2", "jpg"), filepath.Join(root, "3", "Прочие")
 	long := strings.Repeat("я", 70) + ".jpeg"
 	o1, o2, o3 := filepath.Join(root, "x", "IMG.jpg"), filepath.Join(root, "y", "img.JPG"), filepath.Join(root, "z", "IMG.jpg")
-	files := []string{filepath.Join(a, "IMG.jpg"), filepath.Join(b, "IMG.jpg"), filepath.Join(c, "CON.jpg"), filepath.Join(c, long), o1, o2, o3}
+	// Источник — «CON» с невидимым знаком U+200B: имя годное (CheckLocalPath пускает), а FileName
+	// знак убирает и получает устройство CON → «Фото.jpg». Сам «CON.jpg» на Windows — отказ
+	// источника (TestCollectDeviceSource), здесь его взять нельзя.
+	files := []string{filepath.Join(a, "IMG.jpg"), filepath.Join(b, "IMG.jpg"), filepath.Join(c, "CON\u200b.jpg"), filepath.Join(c, long), o1, o2, o3}
 	p := album(t, []string{a, b, c}, files...)
 	put(t, o3+".xmp", "<x/>")
 	pl, err := Make(p, nil, "", os.Stat)
@@ -65,6 +70,47 @@ func TestCollectNames(t *testing.T) {
 	}
 	if in := pl.Info(); in.Photos != 7 || in.Extra != 0 || in.Own != 0 || in.Guides != 0 || in.Missing != 0 {
 		t.Fatalf("сводка: %+v", in)
+	}
+}
+
+// Источник с именем устройства Windows (CON.jpg) на ОС, которая считает его устройством
+// (подмена: Windows 10), — отказ источника, как любой другой: файл не копируется (G4: такой путь —
+// обращение к устройству), но не исчезает молча, а идёт в Missing и в сводку. Там, где это обычный
+// файл (Windows 11, 073-10; вне Windows), FileName меняет имя на «Фото.jpg».
+func TestCollectDeviceSource(t *testing.T) {
+	for _, old := range []bool{true, false} {
+		t.Run(fmt.Sprint("старая ОС ", old), func(t *testing.T) {
+			restore := paths.SetDeviceOracle(func(el string) bool { return old && paths.Device(el) })
+			defer restore()
+			collectDeviceSource(t, old && runtime.GOOS == "windows")
+		})
+	}
+}
+
+func collectDeviceSource(t *testing.T, device bool) {
+	root := testkit.TempDir(t)
+	c := filepath.Join(root, "Прочие")
+	dev, ok1, ok2 := filepath.Join(c, "CON.jpg"), filepath.Join(c, "a.jpg"), filepath.Join(c, "b.jpg")
+	p := model.New()
+	p.Folders = []string{c}
+	for i, f := range []string{dev, ok1, ok2} {
+		put(t, f, strings.Repeat("x", 5+i))
+		p.Photos[library.IDFor(f)] = model.PhotoRef{Path: f, W: 3, H: 2}
+	}
+	pl, err := Make(p, nil, "", os.Stat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{ok1: "Фото/Прочие (2)/a.jpg", ok2: "Фото/Прочие (2)/b.jpg"}
+	wantMiss := []string{library.IDFor(dev)}
+	if !device {
+		want[dev], wantMiss = "Фото/Прочие (2)/Фото.jpg", nil
+	}
+	if got := rels(pl); !mapsEqual(got, want) {
+		t.Fatalf("план: %v, ждали %v", got, want)
+	}
+	if !slices.Equal(pl.Missing, wantMiss) || pl.Info().Missing != len(wantMiss) || pl.Info().Photos != len(want) {
+		t.Fatalf("пропавшие %v (ждали %v), сводка %+v", pl.Missing, wantMiss, pl.Info())
 	}
 }
 

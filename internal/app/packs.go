@@ -288,7 +288,7 @@ func (a *App) installPack(s *decor.Store, st *decor.Staged, res PackAdd) (PackAd
 		prefs.UpdateLibraryNet(a.cfgDir, func(n *prefs.LibraryNet) { n.SetSkip(info.ID, false) })
 	}
 	a.relinkLib(s)
-	a.emit("library:changed", struct{}{})
+	a.emitChanged(info.Title)
 	return res, nil
 }
 
@@ -326,7 +326,7 @@ func (a *App) RemovePack(id string) (list PackList, err error) {
 	}
 	a.packs.unlock()
 	if err == nil {
-		a.emit("library:changed", struct{}{})
+		a.emitChanged() // удаление: названий нет, окно тему не меняет
 	}
 	list, lerr := a.LibraryPacks()
 	if err == nil {

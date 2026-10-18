@@ -19,7 +19,7 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
 
 vi.stubGlobal('window', globalThis) // notify ставит таймер на window
 const { store } = await import('./store.svelte')
-const { jobs } = await import('./jobs.svelte')
+const { jobs, exportShut } = await import('./jobs.svelte')
 
 const view = { spreads: [], folders: [] }
 const sp = (id: string) => ({ id, photos: [`ph-${id}`] })
@@ -53,11 +53,23 @@ describe('jobs.exportAll', () => {
     jobs.exportAll()
     expect(jobs.exportOpen).toBe(false)
   })
-  it('экспорт уже идёт — окно не открывается', () => {
+  it('экспорт идёт, а листов не осталось — окно хода всё равно открывается («Остановить» достать можно)', () => {
+    load({ spreads: [] })
+    jobs.exporting = { done: 1, total: 4 }
+    jobs.exportAll()
+    expect(jobs.exportOpen).toBe(true)
+  })
+  it('exportShut: закрыт только при нуле листов и без выгрузки', () => {
+    expect(exportShut(0, false)).toBe(true)
+    expect(exportShut(0, true)).toBe(false)
+    expect(exportShut(1, false)).toBe(false)
+    expect(exportShut(5, true)).toBe(false)
+  })
+  it('экспорт уже идёт — окно открывается и показывает ход (073)', () => {
     load()
     jobs.exporting = { done: 1, total: 4 }
     jobs.exportAll()
-    expect(jobs.exportOpen).toBe(false)
+    expect(jobs.exportOpen).toBe(true)
   })
 })
 
@@ -97,6 +109,25 @@ describe('export:done (047)', () => {
     handlers['export:done']('C:/out', 'диск полон', '', memo)
     expect(jobs.exportMemo).toBeNull()
     expect(store.toast).toMatchObject({ kind: 'error', text: 'Экспорт не удался: диск полон' })
+  })
+
+  it('export:done stopped — красный тост из note, без «Открыть папку», окно хода закрыто (073)', async () => {
+    await ready()
+    jobs.exportOpen = true
+    jobs.exporting = { done: 5, total: 12 }
+    const note = 'Экспорт остановлен: готово 5 из 12. Уже выгруженные файлы остались в папке.'
+    handlers['export:done']('C:/out', '', note, null, true)
+    expect(jobs.exporting).toBeNull()
+    expect(jobs.exportOpen).toBe(false)
+    expect(jobs.exportMemo).toBeNull()
+    expect(store.toast).toMatchObject({ kind: 'error', text: note })
+    expect((store.toast as { action?: unknown }).action).toBeUndefined()
+  })
+
+  it('export:done stopped без note — запасной текст', async () => {
+    await ready()
+    handlers['export:done']('C:/out', '', '', null, true)
+    expect(store.toast).toMatchObject({ kind: 'error', text: 'Экспорт остановлен' })
   })
 
   it('export:progress ведёт счётчик, export:done его снимает', async () => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import Spread from '../../editor/spread/Spread.svelte'
   import LowDpiBadge from '../../base/ui/LowDpiBadge.svelte'
   import VigMark from '../vignette/VigMark.svelte'
@@ -6,6 +7,7 @@
   import { newSheetSize, sheetSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import { labelTitle, spreadLabel } from '../timeline/spreadname'
+  import { Nearby } from '../../base/ui/nearby.svelte'
 
   // Ширина панели 400, поля раздела 16, между плитками 8: три колонки.
   const COLS = 3
@@ -21,6 +23,9 @@
   const tileH = $derived((MINI * sheet.h) / sheet.w)
 
   let box = $state<HTMLDivElement>()
+  // 073: разворот в плитке монтируется только рядом с видимой частью; плитки обрезает скроллер панели (.scroll),
+  // а не окно, поэтому он и есть корень — иначе запас rootMargin не работает. untrack: не подписываться на box.
+  const near = new Nearby(() => untrack(() => box?.closest('.scroll') ?? null), '400px 0px')
 
   // Текущая плитка остаётся видимой в панели. Прокручиваем только вертикально
   // и только свой контейнер: scrollIntoView сдвинул бы и панель с overflow: hidden.
@@ -58,8 +63,16 @@
         onclick={() => store.go(i)}
         onkeydown={() => {}}
       >
-        <div class="frame">
-          <Spread spread={sp} settings={s} width={MINI} mini />
+        <div
+          class="frame"
+          style:height="{(MINI * sp.h) / sp.w}px"
+          {@attach (n) =>
+            near.watch(
+              n,
+              untrack(() => sp.id),
+            )}
+        >
+          {#if modes.details && near.has(sp.id)}<Spread spread={sp} settings={s} width={MINI} mini />{/if}
         </div>
         <LowDpiBadge count={sp.lowDPI} min={store.view.minDPI} />
         <VigMark kind={sp.kind} />

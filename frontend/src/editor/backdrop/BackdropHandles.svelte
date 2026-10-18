@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { Side } from '../../base/geom/bdbox'
   import type { Corner } from '../../base/geom/textbox'
   import RotateHandle from '../../base/ui/RotateHandle.svelte'
@@ -35,7 +36,7 @@
     onpointerdown={(e) => oncorner(e, c)}
   ></div>
 {/each}
-<RotateHandle {rotIn} {onrotate} {onzero} />
+<RotateHandle {rotIn} accept={primaryPress} {onrotate} {onzero} />
 
 <style>
   .side,

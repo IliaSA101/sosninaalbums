@@ -152,7 +152,7 @@ func checkCand(t *testing.T, name string, as []float64, p layout.Params, c Cand)
 
 // TestFormsInvariants: все ключи Gen на наборах 2–40 фото × 4 геометрии (в т. ч. лист и без
 // layflat) строятся, повторяют Build (круг ключ → раскладка), проходят инварианты и не повторяют
-// ключ; на каждой геометрии что-то есть; бюджет Build ≤ 80 на разворот.
+// ключ; на каждой геометрии что-то есть; бюджет Build на разворот — buildLimit.
 func TestFormsInvariants(t *testing.T) {
 	all := sets()
 	for _, g := range geoms {
@@ -169,8 +169,8 @@ func TestFormsInvariants(t *testing.T) {
 				seen[c.Key] = true
 			}
 			total += len(cs)
-			if b := builds(as, g.p); b > 80 {
-				t.Errorf("%s/%s: Build %d > 80", g.name, name, b)
+			if b, lim := builds(as, g.p), buildLimit(len(as)); b > lim {
+				t.Errorf("%s/%s: Build %d > %d", g.name, name, b, lim)
 			}
 		}
 		if total == 0 {
@@ -179,17 +179,18 @@ func TestFormsInvariants(t *testing.T) {
 	}
 }
 
+// buildLimit — бюджет Build на разворот: 80 до 16 фото, 200 с ManyFrom (генераторы многих фото 072).
+func buildLimit(k int) int {
+	if k >= layout.ManyFrom {
+		return 200
+	}
+	return 80
+}
+
 // builds — сколько раз генератор вызывает Build на наборе.
 func builds(as []float64, p layout.Params) int {
-	g := &gen{as: as, pre: prefixSums(as), p: p, k: len(as), flat: p.Layflat, pages: !p.Sheet, seen: map[string]bool{}}
-	g.strip()
-	g.rows()
-	g.grid()
-	g.air()
-	g.asym()
-	g.contrast()
-	g.ladder()
-	g.frame()
+	g := newGen(as, p, 0)
+	g.run()
 	return g.builds
 }
 
@@ -281,7 +282,8 @@ func TestGenEdges(t *testing.T) {
 }
 
 // TestGenDeterministic: тот же вход — те же ключи в том же порядке; шум 1e-12 в пропорциях (как
-// FMA на arm64) не меняет ключи (ничьи — в квантах).
+// FMA на arm64) не меняет ключи (ничьи — в квантах). Кроме sets — многие фото 072 (разрез DP, планы
+// главного): серии и stock на 20, 25, 30.
 func TestGenDeterministic(t *testing.T) {
 	keys := func(as []float64, p layout.Params) []string {
 		var out []string
@@ -292,6 +294,13 @@ func TestGenDeterministic(t *testing.T) {
 	}
 	r := rng(41)
 	all := sets()
+	st := testkit.StockAspects(t)
+	for _, n := range []int{20, 25, 30} {
+		all[fmt.Sprintf("серия%d", n)] = series(n, uint64(n))
+		all[fmt.Sprintf("серия%d+", n)] = series(n, uint64(n+7))
+		all[fmt.Sprintf("stock%d", n)] = st[:n]
+		all[fmt.Sprintf("stock30+%d", n)] = st[30 : 30+n]
+	}
 	for _, g := range geoms[:3] {
 		for _, name := range sortedNames(all) {
 			as := all[name]

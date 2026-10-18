@@ -24,7 +24,7 @@ import { Api, store } from '../../base/core/store.svelte'
 import { namesUi, PREVIEW_DELAY } from './names.svelte'
 
 const plan = (over: object = {}) => ({
-  rows: [{ photo: 'a', tag: '', no: 1, line: 1, who: { last: 'Иванов', first: 'Пётр' } }],
+  rows: [{ place: '', photo: 'a', seat: false, tag: '', no: 1, line: 1, who: { last: 'Иванов', first: 'Пётр' } }],
   left: [],
   extra: 0,
   seats: 2,
@@ -197,10 +197,32 @@ describe('namesUi: предпросмотр', () => {
   })
 
   it('вставить можно, только если хоть одно место получит имя', async () => {
-    vi.mocked(Api.PreviewNames).mockResolvedValue(plan({ rows: [{ photo: 'a', tag: '', no: 1, line: 0, who: null }] }) as never)
+    vi.mocked(Api.PreviewNames).mockResolvedValue(
+      plan({ rows: [{ place: '', photo: 'a', seat: false, tag: '', no: 1, line: 0, who: null }] }) as never,
+    )
     await namesUi.show()
     namesUi.refresh()
     await vi.advanceTimersByTimeAsync(0)
+    expect(namesUi.canPaste).toBe(false)
+  })
+
+  it('пустое место с именем — вставить можно (071: имя ляжет табличкой)', async () => {
+    const seat = { place: 'p1', photo: '', seat: true, tag: 'ученик 1', no: 1, line: 2, who: { last: 'Иванов', first: 'Петя' } }
+    vi.mocked(Api.PreviewNames).mockResolvedValue(plan({ rows: [seat] }) as never)
+    await namesUi.show()
+    namesUi.refresh()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(namesUi.canPaste).toBe(true)
+  })
+
+  it('лист без мест и фото — rows пуст, вставить нельзя, строки — в left', async () => {
+    const left = [{ line: 1, who: { last: 'Иванов' }, reason: 'extra', file: '' }]
+    vi.mocked(Api.PreviewNames).mockResolvedValue(plan({ rows: [], left, extra: 1, seats: 0, named: 0, missing: 0 }) as never)
+    await namesUi.show()
+    namesUi.text = 'Иванов'
+    namesUi.refresh()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(namesUi.plan?.rows).toEqual([])
     expect(namesUi.canPaste).toBe(false)
   })
 })

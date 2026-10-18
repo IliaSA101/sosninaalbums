@@ -50,8 +50,9 @@ func TestAddPhotosKeepsSize(t *testing.T) {
 	}
 }
 
-// Список папок читается под тем же замком, что и выдача поколения: rescan, ждущий замок,
-// видит папки, добавленные за время ожидания (иначе устаревший список победил бы новый).
+// Список папок читается под тем же замком, что и выдача поколения (rescanMu; App.mu — уже после
+// Folders, чтобы прогрев раскладок его не держал): rescan, ждущий замок, видит папки,
+// добавленные за время ожидания (иначе устаревший список победил бы новый).
 func TestRescanReadsFoldersUnderLock(t *testing.T) {
 	a := newApp(t)
 	a.cfgDir = testkit.TempDir(t)
@@ -63,14 +64,14 @@ func TestRescanReadsFoldersUnderLock(t *testing.T) {
 	if _, err := ed.AddFolder(dirA); err != nil {
 		t.Fatal(err)
 	}
-	a.mu.Lock()
+	a.rescanMu.Lock()
 	done := make(chan struct{})
 	go func() { a.rescan(); close(done) }()
 	time.Sleep(50 * time.Millisecond) // rescan упёрся в замок
 	if _, err := ed.AddFolder(dirB); err != nil {
 		t.Fatal(err)
 	}
-	a.mu.Unlock()
+	a.rescanMu.Unlock()
 	<-done
 	waitScan(t, a)
 	if n := len(a.GetState().Photos); n != 2 {

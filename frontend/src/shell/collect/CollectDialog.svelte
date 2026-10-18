@@ -37,7 +37,7 @@
   <Modal title="Собрать проект в папку" onclose={() => collectUi.close()} width={560}>
     {#if phase === 'running' && jobs.collecting}
       {@const pct = progressPercent(jobs.collecting)}
-      <div class="run">
+      <div class="collect-run">
         <progress max="100" value={pct ?? undefined} aria-label="Ход копирования"></progress>
         <div class="line" role="status">{progressLine(jobs.collecting)}</div>
         <p class="hint">Файл, который копировался в момент остановки, удаляется; скопированное остаётся. Альбом записывается в конце.</p>
@@ -73,8 +73,9 @@
 {/if}
 
 <style>
-  /* Во время копирования закрыть окно нельзя — крестик Modal не показываем (Esc и фон глушит collectUi.close) */
-  :global(.box:has(.run) .x) {
+  /* Во время копирования закрыть окно нельзя — крестик Modal не показываем (Esc и фон глушит collectUi.close).
+     Класс свой (collect-run): правило глобальное, общее имя прятало бы крестик у других окон (у «Экспорт» — 073). */
+  :global(.box:has(.collect-run) .x) {
     visibility: hidden;
   }
   /* Подпись строки — левая колонка 64 px, варианты — правая (как в «Экспорт») */

@@ -31,6 +31,10 @@ type Place struct {
 	// у ShapeOval всегда 0 (ClampShape). Рамка X, Y, W, H — описанный прямоугольник.
 	Shape string  `json:"shape,omitempty"`
 	Round float64 `json:"round,omitempty"`
+	// Person — табличка места (071, v13): имя из списка остаётся на месте, какое фото ни поставь;
+	// ноль — таблички нет. Значение, а не указатель: места сравниваются == (WithGrid), копии
+	// места (np := *pl) не делят табличку. Видимое имя — NameAt (seatname.go).
+	Person Person `json:"person,omitzero"`
 }
 
 // ShapeOval — Place.Shape эллипса (не "ellipse": 200 шаблонов × 64 места с ним не
@@ -63,11 +67,12 @@ func (pl *Place) Outline() geom.Outline {
 	return geom.Outline{Oval: pl.Shape == ShapeOval, Radius: ShapeRadius(pl.Round, pl.W, pl.H)}
 }
 
-// ClonePlace — копия места целиком (новые поля Place переезжают сами) с новым ID
-// и без фото: деление и копия сетки дают пустые места.
+// ClonePlace — копия места целиком (новые поля Place переезжают сами) с новым ID,
+// без фото и таблички: деление и копия сетки дают пустые места, а копия имени
+// размножила бы человека из списка (071).
 func ClonePlace(pl *Place, taken map[string]bool) *Place {
 	c := *pl
-	c.ID, c.Photo = NewPlaceID(taken), ""
+	c.ID, c.Photo, c.Person = NewPlaceID(taken), "", Person{}
 	return &c
 }
 
@@ -278,11 +283,13 @@ func (p *Project) Freeze(s *Spread) {
 // Unfreeze («Вернуть авто»): места снимаются, ключ ставится через setLayout —
 // сохранённый, если Build строит его для нынешних фото, иначе лучшая. Лучшая
 // хранится как "", иначе её выбор в галерее перестал бы быть холостым.
-// Кадры фото остаются: в «Авто» они тоже действуют.
+// Кадры фото остаются: в «Авто» они тоже действуют. Мест нет — табличек тоже (071):
+// табличка места с фото становится именем фото (подпись та же), пустых — пропадает.
 func (p *Project) Unfreeze(s *Spread) {
 	if len(s.Grid) == 0 {
 		return
 	}
+	p.seatsToPhotos(s)
 	s.Grid = nil
 	key := s.Layout
 	if key != "" {
@@ -291,6 +298,25 @@ func (p *Project) Unfreeze(s *Spread) {
 		}
 	}
 	p.SetLayout(s, key)
+}
+
+// seatsToPhotos — видимое имя фото на месте с табличкой (NameAt) переходит в PhotoRef.Person.
+// Имя из файла остаётся из файла (у фото только предмет таблички) — карточка по-прежнему
+// покажет «из имени файла».
+func (p *Project) seatsToPhotos(s *Spread) {
+	for _, pl := range s.Grid {
+		r, ok := p.Photos[pl.Photo]
+		if pl.Photo == "" || !ok || pl.Person == (Person{}) {
+			continue
+		}
+		who, fromFile, _ := NameAt(r, pl)
+		c := *who
+		if fromFile {
+			c = Person{Subject: c.Subject}
+		}
+		r.Person = &c
+		p.Photos[pl.Photo] = r
+	}
 }
 
 // EmptyGridDupes — у места, чьё фото не в Photos разворота, или второго места

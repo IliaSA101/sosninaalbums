@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   captionBottom,
   captionBoxes,
-  hasNameFields,
   nameTargetAt,
   namePlace,
   takesNameTarget,
+  targetKey,
   whoOf,
+  whoOfPlace,
   type PointCtx,
   type Who,
 } from './nametarget'
@@ -28,6 +29,7 @@ describe('nameTargetAt', () => {
     const t = nameTargetAt(s, 40, 105)
     expect(t).not.toBeNull()
     expect(t?.photo).toBe('a')
+    expect(t?.place).toBe('')
     expect(t?.who).toEqual(['last', 'first'])
   })
 
@@ -38,15 +40,24 @@ describe('nameTargetAt', () => {
     expect(nameTargetAt(s, 230, 105)).toBeNull()
   })
 
-  it('заглушка пустого места при полях имени в листе — цель без фото и без полей (тост)', () => {
-    const s = sheet([cap('a', 100, 100, 60, 12, ['last'])], [stub('p2', '', 10, 100, 60, 12)])
+  it('заглушка пустого места с who — цель-место (071): без фото, с ID места и полями шаблона', () => {
+    const s = sheet([cap('a', 100, 100, 60, 12, ['last'])], [stub('p2', '', 10, 100, 60, 12, ['last', 'first'])])
     const t = nameTargetAt(s, 40, 105)
     expect(t).not.toBeNull()
     expect(t?.photo).toBe('')
-    expect(t?.who).toEqual([])
+    expect(t?.place).toBe('p2')
+    expect(t?.who).toEqual(['last', 'first'])
+    expect(t?.box).toEqual({ x: 10, y: 100, w: 60, h: 12 })
   })
 
-  it('заглушка пустого места, когда полей имени в листе нет — не цель (остаётся «вписать»)', () => {
+  it('заглушка фото на месте с табличкой — цель-фото (place пуст): поля правят табличку через Go', () => {
+    const s = sheet([], [stub('p1', 'a', 10, 100, 60, 12, ['last'])])
+    const t = nameTargetAt(s, 40, 105)
+    expect(t?.photo).toBe('a')
+    expect(t?.place).toBe('')
+  })
+
+  it('заглушка пустого места без who (шаблона с именем нет) — не цель (остаётся «вписать»)', () => {
     const s = sheet([cap('a', 100, 100, 60, 12)], [stub('p2', '', 10, 100, 60, 12)])
     expect(nameTargetAt(s, 40, 105)).toBeNull()
   })
@@ -98,55 +109,37 @@ describe('captionBoxes', () => {
   })
 })
 
-describe('hasNameFields', () => {
-  it('есть who у подписи или заглушки', () => {
-    expect(hasNameFields(sheet([cap('a', 0, 0, 1, 1, ['last'])]))).toBe(true)
-    expect(hasNameFields(sheet([], [stub('p', 'b', 0, 0, 1, 1, ['first'])]))).toBe(true)
-    expect(hasNameFields(sheet([cap('a', 0, 0, 1, 1), cap('b', 0, 0, 1, 1, [])], [stub('p', '', 0, 0, 1, 1)]))).toBe(false)
+describe('targetKey / whoOfPlace', () => {
+  it('ключ цели: место у пустого места, иначе фото', () => {
+    expect(targetKey({ photo: '', place: 'p2' })).toBe('p2')
+    expect(targetKey({ photo: 'a', place: '' })).toBe('a')
+  })
+  it('поля имени пустого места — по заглушке без фото; занятое место и чужое — пусто', () => {
+    const s = sheet([], [stub('p2', '', 0, 0, 10, 10, ['last', 'subject']), stub('p1', 'a', 0, 0, 10, 10, ['last'])])
+    expect(whoOfPlace(s, 'p2')).toEqual(['last', 'subject'])
+    expect(whoOfPlace(s, 'p1')).toEqual([])
+    expect(whoOfPlace(s, 'zz')).toEqual([])
+    expect(whoOfPlace(s, '')).toEqual([])
+    expect(whoOfPlace(undefined, 'p2')).toEqual([])
   })
 })
 
-describe('пустая виньетка', () => {
-  const vig = (text: string, ttext = ''): SpreadView =>
-    ({
-      id: 'v',
-      kind: 'vignette',
-      caps: { text },
-      vig: { ttext },
-      captions: [],
-      stubs: [stub('p2', '', 10, 100, 60, 12)],
-    }) as unknown as SpreadView
-  it('с шаблоном подписи пустое место — цель (тост), хотя who нигде нет', () => {
-    expect(hasNameFields(vig('{Фамилия}'))).toBe(true)
-    expect(nameTargetAt(vig('{Фамилия}'), 40, 105)?.photo).toBe('')
+// Go отдаёт who и пустому месту (поля имени шаблона, 071): шаблон листа и учителя фронт не разбирает.
+describe('пустая виньетка (071)', () => {
+  const vig = (...stubs: StubView[]): SpreadView => ({ id: 'v', kind: 'vignette', captions: [], stubs }) as unknown as SpreadView
+  it('учитель: заглушка с «Предметом» — цель с предметом; ученик — без него', () => {
+    const s = vig(stub('t', '', 10, 10, 60, 12, ['last', 'first', 'middle', 'subject']), stub('u1', '', 100, 10, 60, 12, ['last', 'first']))
+    expect(nameTargetAt(s, 40, 15)?.who).toEqual(['last', 'first', 'middle', 'subject'])
+    expect(nameTargetAt(s, 130, 15)?.place).toBe('u1')
+    expect(nameTargetAt(s, 130, 15)?.who).toEqual(['last', 'first'])
   })
-  it('поле имени только в шаблоне учителя (ttext) — тоже', () => {
-    expect(hasNameFields(vig('', '{имя} {Отчество}'))).toBe(true)
-  })
-  it('«Предмет» (049): поле имени — шаблон учителя с {Предмет} ждёт ввода, who пропускает subject', () => {
-    expect(hasNameFields(vig('', '{Фамилия}\n{Предмет}'))).toBe(true)
-    expect(hasNameFields(vig('{предмет}'))).toBe(true)
+  it('подпись фото с «Предметом» (049): who сохраняет subject', () => {
     const s = sheet([cap('a', 10, 100, 60, 12, ['last', 'subject'])])
     expect(nameTargetAt(s, 40, 105)?.who).toEqual(['last', 'subject'])
     expect(whoOf(s, 'a')).toEqual(['last', 'subject'])
   })
-  it('без шаблона подписи или без полей имени — как обычный лист', () => {
-    expect(hasNameFields(vig(''))).toBe(false)
-    expect(hasNameFields(vig('Класс 11А', '{Заголовок}'))).toBe(false)
-    expect(nameTargetAt(vig(''), 40, 105)).toBeNull()
-  })
-})
-
-describe('шаблон листа с полями имени (не только виньетка)', () => {
-  const plain = (text: string): SpreadView =>
-    ({ id: 'p', caps: { text }, captions: [], stubs: [stub('p2', '', 10, 100, 60, 12)] }) as unknown as SpreadView
-  it('«Подпись к каждому фото» с полями имени — пустое место цель', () => {
-    expect(hasNameFields(plain('{Фамилия} {Имя}'))).toBe(true)
-    expect(nameTargetAt(plain('{Фамилия}'), 40, 105)?.photo).toBe('')
-  })
-  it('шаблон без полей имени — нет', () => {
-    expect(hasNameFields(plain('Выпуск 2026'))).toBe(false)
-    expect(hasNameFields(plain('{Год}'))).toBe(false)
+  it('шаблона с полями имени нет — заглушки без who, целей нет', () => {
+    expect(nameTargetAt(vig(stub('u1', '', 100, 10, 60, 12)), 130, 15)).toBeNull()
   })
 })
 

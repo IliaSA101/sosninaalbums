@@ -2,6 +2,7 @@ import * as Api from '../../../wailsjs/go/app/App'
 import { model } from '../../../wailsjs/go/models'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { SvelteSet } from 'svelte/reactivity'
+import { toggleKey } from './platform'
 import { errText, withSkipped } from '../words/errtext'
 import { Nav } from './nav.svelte'
 import { jobs } from './jobs.svelte'
@@ -143,6 +144,7 @@ class Store extends Nav {
       if (st.notice) this.notify(st.notice, 'error')
     } finally {
       this.loaded = true
+      jobs.endOpening() // альбом открыт: окно хода (073) гаснет, даже если (total, total) потерялось
     }
   }
 
@@ -218,12 +220,12 @@ class Store extends Nav {
       const a = list.findIndex((p) => p.id === this.anchor)
       const b = list.findIndex((p) => p.id === id)
       if (a >= 0 && b >= 0) {
-        if (!e.ctrlKey && !e.metaKey) this.selected.clear()
+        if (!toggleKey(e)) this.selected.clear()
         for (let i = Math.min(a, b); i <= Math.max(a, b); i++) this.selected.add(list[i].id)
         return
       }
     }
-    if (e.ctrlKey || e.metaKey) {
+    if (toggleKey(e)) {
       if (this.selected.has(id)) this.selected.delete(id)
       else this.selected.add(id)
     } else {
@@ -508,6 +510,8 @@ class Store extends Nav {
     } catch (e) {
       this.notify(errText(e), 'error')
       return false
+    } finally {
+      jobs.endOpening() // смена альбома (в том числе отмена диалога и ошибка): окно хода (073) гаснет
     }
   }
 }

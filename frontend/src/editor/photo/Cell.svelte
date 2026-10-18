@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
+  import { watchSize } from '../../base/ui/size'
   import type { Frame, Rect, SpreadView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
   import { store } from '../../base/core/store.svelte'
@@ -84,7 +86,7 @@
     const here = !!root && spread.id === store.spread?.id
     const inGroup = placesel.isGroup && placesel.refs.includes(id)
     const act = bodyAction({ grid: !!spread.grid && prefs.can('manual'), selected, inGroup })
-    if (act === 'drag' || !here || !root || e.button !== 0) {
+    if (act === 'drag' || !here || !root || !primaryPress(e)) {
       drag.start(e, () => ({ kind: 'photos', ids: [id], fromSpread: spread.id }))
       return
     }
@@ -109,8 +111,7 @@
 
 <div
   bind:this={el}
-  bind:clientWidth={cw}
-  bind:clientHeight={ch}
+  {@attach (n) => (mini ? undefined : watchSize(n, (w, h) => ((cw = w), (ch = h))))}
   class="cell"
   style:border-radius={radiusCss}
   class:selected

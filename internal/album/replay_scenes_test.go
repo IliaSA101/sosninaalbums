@@ -273,4 +273,10 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	// Ключи библиотеки для удаления набора (ревью 067, в конце, как 042): фон в проекте, удалённый
 	// стикер — только в истории; чтение без шага.
 	r.read("LibKeys", e.LibKeys())
+	// Табличка места (071, в конце, как 042): набор одной сессией — один шаг, чтение для карточки.
+	seat := r.emptyPlace(sid)
+	r.do("SetPlacePerson", e.SetPlacePerson(sid, seat, model.Person{Last: "Петров"}, "s071"))
+	r.do("SetPlacePerson:слияние", e.SetPlacePerson(sid, seat, model.Person{Last: "Петров", First: "Ваня"}, "s071"))
+	spv, ok := e.PlacePerson(sid, seat)
+	r.read("PlacePerson", []any{spv, ok})
 }

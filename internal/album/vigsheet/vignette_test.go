@@ -436,8 +436,12 @@ func TestVignettePasteNames(t *testing.T) {
 	if err != nil || plan.Extra != 1 {
 		t.Fatalf("вставка: %v, лишних %d", err, plan.Extra)
 	}
-	if r := edtest.P(e).Photos["x3"]; r.Person != nil || edtest.P(e).Photos["x2"].Person.Last != "Петров" {
-		t.Fatalf("имя группового %+v", r.Person)
+	// Имена ложатся табличками мест (071); у группового нет ни таблички, ни своего имени.
+	p := edtest.P(e)
+	_, pl3 := p.PlaceOf("x3")
+	_, pl2 := p.PlaceOf("x2")
+	if r := p.Photos["x3"]; r.Person != nil || pl3 == nil || pl3.Person != (model.Person{}) || pl2 == nil || pl2.Person.Last != "Петров" {
+		t.Fatalf("имя группового %+v, места %+v %+v", r.Person, pl3, pl2)
 	}
 }
 

@@ -20,5 +20,5 @@ export function bodyAction({ grid, inGroup }: BodyCtx): BodyAction {
   return inGroup ? 'moveGroup' : 'move'
 }
 
-// Shift или Ctrl (Cmd) на щелчке — добавить к выделению или убрать из него (группа).
-export const additive = (e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => e.shiftKey || e.ctrlKey || e.metaKey
+// Shift или Ctrl/Cmd на щелчке — добавить к выделению; на Mac Ctrl не считается (073): определение в platform.ts.
+export { additive } from '../../base/core/platform'

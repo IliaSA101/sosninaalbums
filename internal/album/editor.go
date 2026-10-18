@@ -16,13 +16,17 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/album/vigsheet"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // Editor — открытый проект: все правки идут через него, каждая
 // правка запоминает прошлое состояние для отмены.
 type Editor struct {
-	mu        sync.Mutex
+	mu sync.Mutex
+	// warmMu — прогревы раскладок (Warm) по одному: ход каждого монотонный, а второй берёт
+	// готовое из кэша. Порядок: warmMu → mu.
+	warmMu    sync.Mutex
 	p         *model.Project
 	size      int // длина JSON e.p; известна после первой правки (до неё undo пуст)
 	path      string
@@ -266,6 +270,38 @@ func (e *Editor) View() model.View {
 	v := e.view()
 	slow(t0, "View: %d разворотов", len(v.Spreads))
 	return v
+}
+
+// Warm заранее считает раскладки разворотов «Авто» с фото — ту же работу, что первый View
+// (073): App зовёт его до своего замка, и окно открытия большого альбома видит ход, а не
+// зависание. progress(done, total) — после каждого разворота, done растёт на 1 до total, зовётся
+// по одному; total 0 — ни одного вызова. Это не правка: rev, dirty и отмена не меняются.
+// Под e.mu — только снимок входа (пропорции и Params, 073-11), счёт — без замка: Folders, Ref
+// для /media и правки не ждут секунды холодного прогрева. Правка во время счёта безопасна:
+// снимок взят целиком под e.mu (проект уже после normalize прошлой правки), дальше прогрев
+// проект не трогает и только кладёт в кэши чистые функции своего входа; View считает по
+// текущему проекту под e.mu и берёт из кэша лишь совпавшие ключи. Худшее — лишняя работа.
+func (e *Editor) Warm(progress func(done, total int)) {
+	e.warmMu.Lock()
+	defer e.warmMu.Unlock()
+	var jobs []model.WarmJob
+	var prm layout.Params
+	e.read(func(p *model.Project) {
+		var todo []*model.Spread
+		for _, s := range p.Spreads {
+			if len(s.Grid) == 0 && len(s.Photos) > 0 { // как layAll: остальное View не перебирает
+				todo = append(todo, s)
+			}
+		}
+		jobs, prm = p.WarmJobs(todo), p.Params()
+	})
+	t0 := time.Now()
+	var done func(int)
+	if progress != nil && len(jobs) > 0 {
+		done = func(n int) { progress(n, len(jobs)) }
+	}
+	model.WarmAspects(jobs, prm, done)
+	slow(t0, "прогрев раскладок: %d разворотов", len(jobs))
 }
 
 // Медленные операции в log.txt (спека 020).

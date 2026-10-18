@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
@@ -277,4 +278,258 @@ func TestGridInvariants(t *testing.T) {
 	}
 	t.Logf("сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, разворотов %d",
 		withGrid, seated, turned, ordered, vigs, len(edtest.P(e).Spreads))
+}
+
+// seatSet — таблички мест всего альбома (с обложкой) как мультимножество.
+func seatSet(p *model.Project) []string {
+	var out []string
+	for _, s := range p.Sheets() {
+		for _, pl := range s.Grid {
+			if pl.Person != (model.Person{}) {
+				out = append(out, fmt.Sprintf("%+v", pl.Person))
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// seatRun — прогон TestSeatNamesInvariant: случайный лист, место и фото на шаг.
+type seatRun struct {
+	t     *testing.T
+	e     *album.Editor
+	r     *rand.Rand
+	pool  []model.PhotoInfo
+	names []model.Person
+	step  int
+	// Цель шага: лист, его места и ссылки (место или фото).
+	s       *model.Spread
+	place   string
+	refs    []string
+	rebuilt int // повторов пересборки виньетки с табличками
+	scopes  []string
+}
+
+func (x *seatRun) pick(n int) []model.PhotoInfo {
+	out := make([]model.PhotoInfo, 0, n)
+	for range n {
+		out = append(out, x.pool[x.r.IntN(len(x.pool))])
+	}
+	return out
+}
+
+func (x *seatRun) photo() string { return x.pool[x.r.IntN(len(x.pool))].ID }
+
+func (x *seatRun) scope() string { return x.scopes[x.r.IntN(len(x.scopes))] }
+
+// aim — цель шага на листе s: случайное место (или мусор) и ссылки.
+func (x *seatRun) aim(s *model.Spread) {
+	x.s, x.place = s, "нет такого"
+	var places []string
+	for _, pl := range s.Grid {
+		places = append(places, pl.ID)
+	}
+	if len(places) > 0 {
+		x.place = places[x.r.IntN(len(places))]
+	}
+	x.refs = append(places, s.Photos...)
+}
+
+// photoOp — действия с фото: таблички — поле места, код их не трогает.
+func (x *seatRun) photoOp(op string) bool {
+	e, id, r := x.e, x.s.ID, x.r
+	switch op {
+	case "place":
+		e.PlacePhotos(id, x.place, x.pick(1+r.IntN(3)))
+	case "fill":
+		e.FillPlaces(x.pick(3), id)
+	case "drop": // 042: и плитка новых мест, и рост виньетки
+		_, _, _ = e.DropPhotos(id, []string{"", x.place}[r.IntN(2)], x.pick(1+r.IntN(4)), r.Float64(), []string{"", "add", "skip"}[r.IntN(3)])
+	case "swap":
+		e.SwapPhotos(x.photo(), x.photo())
+	case "move":
+		e.MovePhoto(x.photo(), id, r.IntN(3)-1)
+	case "remove":
+		e.RemovePhotos([]string{x.photo()})
+	case "add":
+		e.AddPhotos(id, x.pick(1), -1)
+	case "sort":
+		e.SortVignette(id)
+	default:
+		return false
+	}
+	return true
+}
+
+// placeOp — движение, форма, слои, деление и копии мест: таблички те же.
+func (x *seatRun) placeOp(op string) bool {
+	e, id, r := x.e, x.s.ID, x.r
+	switch op {
+	case "setPlaces":
+		e.SetPlaces(id, []model.PlaceBox{{ID: x.place, X: r.Float64() * 400, Y: r.Float64() * 200, W: 20 + r.Float64()*200, H: 20 + r.Float64()*200}}, "")
+	case "arrange":
+		e.ArrangePlaces(id, []string{"same", "sameW", "fitPhoto", "splitH", "splitV", "front", "back"}[r.IntN(7)], x.refs)
+	case "layers":
+		e.ArrangeLayers(id, []string{"front", "up", "down", "back"}[r.IntN(4)], x.refs[:r.IntN(len(x.refs)+1)])
+	case "angle":
+		e.SetPlaceAngle(id, x.place, []float64{0, 30, 90, -45}[r.IntN(4)])
+	case "shape":
+		e.SetPlaceShape(id, []string{x.place}, []string{"", model.ShapeOval}[r.IntN(2)])
+	case "fit":
+		e.SetPlaceFit(id, []string{x.place}, []string{"", model.FitContain}[r.IntN(2)])
+	case "mirror":
+		e.MirrorGrid(id, x.scope())
+	case "dup":
+		if len(edtest.P(e).Spreads) < 8 {
+			e.DuplicateGrid(id, 1, r.IntN(2) == 0)
+		}
+	case "addPlace":
+		e.AddPlace(id, r.IntN(2), "")
+	case "clear":
+		e.ClearVignette(id)
+	case "settings": // пересборка нетронутых виньеток: слотов столько же — все жильцы садятся
+		st := edtest.P(e).Settings
+		st.PageW, st.PageH = 200+float64(r.IntN(200)), 200+float64(r.IntN(200))
+		e.SetSettings(st)
+	default:
+		return false
+	}
+	return true
+}
+
+// rebuildOp — правки, которые законно меняют таблички: своя табличка, удаление и пересборка
+// мест, «Вернуть авто», раскладка, вставка списка имён, отмена.
+func (x *seatRun) rebuildOp(op string) {
+	e, id, r, p := x.e, x.s.ID, x.r, edtest.P(x.e)
+	switch op {
+	case "seat":
+		if n := len(x.s.Grid); n > 0 {
+			who, k := x.names[r.IntN(len(x.names))], r.IntN(n)
+			edtest.Change(e, func(p *model.Project) { _, sp := p.Find(id); sp.Grid[k].Person = who })
+		}
+	case "delete":
+		e.DeletePlaces(id, []string{x.place})
+	case "apply":
+		e.ApplyGrid(id, x.scope(), []string{model.TplPage, model.TplSpread}[r.IntN(2)],
+			[]model.Box{{X: 0, Y: 0, W: 0.5, H: 1}, {X: 0.5, Y: 0, W: 0.5, H: 0.5}, {X: 0.5, Y: 0.5, W: 0.5, H: 0.5}}[:1+r.IntN(3)])
+	case "copy":
+		to := p.Spreads[r.IntN(len(p.Spreads))].ID
+		e.CopyGrid(id, x.scope(), []model.GridTarget{{Spread: to, Scope: x.scope()}}, r.IntN(2) == 0, false)
+	case "unfreeze", "freeze":
+		e.SetGrid(id, op == "freeze")
+	case "layout":
+		if rows := layout.Cached(p.Aspects(x.s.Photos), p.Params(), model.VariantLimit); len(rows) > 0 {
+			e.SetLayout(id, rows[r.IntN(len(rows))].Key)
+		}
+	case "vignette":
+		if r.IntN(3) == 0 && len(p.Spreads) < 8 {
+			_, _ = e.AddVignette(r.IntN(len(p.Spreads) + 1))
+			return
+		}
+		_, _, _ = e.SetVignette(id, model.Vignette{Tpl: []string{"grid", "t-left", "g-top"}[r.IntN(3)], Teachers: r.IntN(3), Pupils: r.IntN(12)}, nil)
+	case "reset":
+		x.reset()
+	case "paste":
+		x.paste()
+	case "undo":
+		e.Undo()
+	case "redo":
+		e.Redo()
+	}
+}
+
+// reset — «Вернуть авто» виньетки (с местами, если есть: иначе повторов почти нет) и повтор:
+// пересборка с табличками идемпотентна — повтор холостой.
+func (x *seatRun) reset() {
+	for _, v := range edtest.P(x.e).Spreads {
+		if v.IsVignette() && len(v.Grid) > 0 && x.r.IntN(2) == 0 {
+			x.aim(v)
+		}
+	}
+	if _, _, err := x.e.ResetVignette(x.s.ID); err != nil || !x.s.IsVignette() || len(x.s.Grid) == 0 {
+		return
+	}
+	x.rebuilt++
+	rev, undo := edtest.Rev(x.e), edtest.UndoLen(x.e)
+	_, _, _ = x.e.ResetVignette(x.s.ID)
+	edtest.Same(x.t, x.e, rev, undo, fmt.Sprintf("шаг %d: повтор «Вернуть авто» виньетки", x.step))
+}
+
+// paste — окно «Имена» (071 G4): список ложится табличками мест (и пустых), «Имена файлов» и
+// столбец «Файл» снимают табличку места, где имя легло в фото; повтор той же вставки холостой.
+func (x *seatRun) paste() {
+	o := []model.NamesOpts{{Text: "Фамилия\tИмя\tПредмет\nСидорова\tОльга\tФизика\nИванов\tПетя\nПетров"},
+		{Text: "А Б\nВ Г\nД Е\nЖ З\nИ К\nЛ М\nН О"}, {From: "files"},
+		{Text: "Файл\tФИО\nDSC_01.jpg\tОрлов Олег\nDSC_05.jpg\tКозлов Иван"}}[x.r.IntN(4)]
+	if _, _, err := x.e.PasteNames(x.s.ID, o); err != nil {
+		x.t.Fatalf("шаг %d: вставка имён: %v", x.step, err)
+	}
+	rev, undo := edtest.Rev(x.e), edtest.UndoLen(x.e)
+	_, _, _ = x.e.PasteNames(x.s.ID, o)
+	edtest.Same(x.t, x.e, rev, undo, fmt.Sprintf("шаг %d: повтор вставки имён", x.step))
+}
+
+// check — после шага: таблички правок keep те же, холостая правка их не меняет, сетка цела,
+// круг записи (каждый пятый шаг) их не меняет.
+func (x *seatRun) check(op string, kept bool, was []string, rev int) []string {
+	got := seatSet(edtest.P(x.e))
+	if kept && !slices.Equal(got, was) {
+		x.t.Fatalf("шаг %d (%s): таблички %v → %v", x.step, op, was, got)
+	}
+	if edtest.Rev(x.e) == rev && !slices.Equal(got, was) {
+		x.t.Fatalf("шаг %d (%s): холостая правка сменила таблички", x.step, op)
+	}
+	if err := edtest.GridInvariants(edtest.P(x.e)); err != nil {
+		x.t.Fatalf("шаг %d (%s): %v", x.step, op, err)
+	}
+	if x.step%5 == 4 {
+		if err := edtest.Reopen(edtest.P(x.e)); err != nil {
+			x.t.Fatalf("шаг %d (%s): %v", x.step, op, err)
+		}
+	}
+	return got
+}
+
+// TestSeatNamesInvariant — таблички мест (071) после случайных правок: действия с фото, движение,
+// форма, слои, деление и сортировка таблички не теряют и не размножают; меняют их только удаление
+// и пересборка мест, «Вернуть авто», правка имени, окно «Имена» и отмена. Повтор пересборки — холостая правка.
+func TestSeatNamesInvariant(t *testing.T) {
+	dir := testkit.TempDir(t)
+	x := &seatRun{t: t, r: rand.New(rand.NewPCG(71, 2026)), pool: make([]model.PhotoInfo, 12),
+		names: []model.Person{{Last: "Иванов", First: "Петя"}, {Last: "Сидорова", First: "Ольга", Subject: "Математика"},
+			{Subject: "Физика"}, {Last: "Петров"}, {}},
+		scopes: []string{model.ScopeLeft, model.ScopeRight, model.ScopeSpread}}
+	for i := range x.pool {
+		path := filepath.Join(dir, fmt.Sprintf("DSC_%02d.jpg", i))
+		x.pool[i] = model.PhotoInfo{ID: library.IDFor(path), Path: path, W: 200 + 50*(i%4), H: 300 - 40*(i%3)}
+	}
+	x.e = edtest.Open(t, model.New(), "")
+	edtest.NewSpread(x.e, -1, x.pool[:4])
+	_, _ = x.e.AddVignette(-1)
+	ops := []string{"place", "fill", "drop", "swap", "move", "remove", "add", "sort", // фото
+		"setPlaces", "arrange", "layers", "angle", "shape", "fit", "mirror", "dup", "addPlace", "clear", "settings", // места
+		"seat", "seat", "seat", "delete", "apply", "copy", "unfreeze", "freeze", "layout", "vignette", "reset", "paste", "undo", "redo"}
+	withSeats := 0 // тест не должен выродиться в прогон без табличек
+	steps := testkit.Steps(900, 300)
+	for x.step = range steps {
+		p := edtest.P(x.e)
+		if len(p.Spreads) == 0 {
+			edtest.NewSpread(x.e, -1, x.pick(3))
+			continue
+		}
+		x.aim(p.Spreads[x.r.IntN(len(p.Spreads))])
+		was, rev := seatSet(p), edtest.Rev(x.e)
+		op := ops[x.r.IntN(len(ops))]
+		kept := x.photoOp(op) || x.placeOp(op)
+		if !kept {
+			x.rebuildOp(op)
+		}
+		if len(x.check(op, kept, was, rev)) > 0 {
+			withSeats++
+		}
+	}
+	if withSeats < steps/2 || x.rebuilt < steps/100 {
+		t.Fatalf("табличек мало: шагов с ними %d из %d, пересборок %d", withSeats, steps, x.rebuilt)
+	}
+	t.Logf("шагов с табличками %d из %d, повторов пересборки %d", withSeats, steps, x.rebuilt)
 }

@@ -89,14 +89,16 @@ func numList(nums []int) string {
 	return list
 }
 
-// PlanFields — пустые поля (по алфавиту) и фото без имени на листах, которые пишет план:
-// развороты из pl.mask и обложка, если она в плане. По всему альбому (View.Unfilled) нельзя —
-// «Только обложка» или диапазон спросили бы о листах, которые не выгружаются. При выгрузке
-// одной страницы разворота вопрос учитывает поля всего разворота: лишний вопрос, данные целы.
-func PlanFields(v model.View, pl *Plan) (unfilled []string, unnamed int) {
+// PlanFields — пустые поля (по алфавиту), фото без имени и имена без фото (таблички пустых
+// мест, 071) на листах, которые пишет план: развороты из pl.mask и обложка, если она в плане.
+// По всему альбому (View.Unfilled) нельзя — «Только обложка» или диапазон спросили бы о листах,
+// которые не выгружаются. При выгрузке одной страницы разворота вопрос учитывает поля всего
+// разворота: лишний вопрос, данные целы.
+func PlanFields(v model.View, pl *Plan) (unfilled []string, unnamed, waiting int) {
 	add := func(s model.SpreadView) {
 		unfilled = append(unfilled, s.Unfilled...)
 		unnamed += s.Unnamed
+		waiting += s.Waiting
 	}
 	if pl.Cover != nil && v.Cover != nil {
 		add(v.Cover.Sheet)
@@ -107,23 +109,28 @@ func PlanFields(v model.View, pl *Plan) (unfilled []string, unnamed int) {
 		}
 	}
 	slices.Sort(unfilled)
-	return slices.Compact(unfilled), unnamed
+	return slices.Compact(unfilled), unnamed, waiting
 }
 
 // FieldsWarning — вопрос перед экспортом о пустых полях подписей (030): unfilled —
-// имена полей, unnamed — фото без имени (оба — из PlanFields); "" — всё заполнено.
-func FieldsWarning(unfilled []string, unnamed int) string {
+// имена полей, unnamed — фото без имени, waiting — имена без фото (071; все — из PlanFields);
+// "" — всё заполнено.
+func FieldsWarning(unfilled []string, unnamed, waiting int) string {
 	var parts []string
 	if len(unfilled) > 0 {
 		parts = append(parts, "Не заполнены поля: "+strings.Join(unfilled, ", "))
 	}
-	if unnamed > 0 {
-		head := "фото без имени"
-		if len(parts) == 0 {
-			head = "Фото без имени"
+	count := func(first, head string, n int) { // first — первой частью, с большой буквы
+		if n == 0 {
+			return
 		}
-		parts = append(parts, fmt.Sprintf("%s: %d", head, unnamed))
+		if len(parts) == 0 {
+			head = first
+		}
+		parts = append(parts, fmt.Sprintf("%s: %d", head, n))
 	}
+	count("Фото без имени", "фото без имени", unnamed)
+	count("Имён без фото", "имён без фото", waiting)
 	if len(parts) == 0 {
 		return ""
 	}

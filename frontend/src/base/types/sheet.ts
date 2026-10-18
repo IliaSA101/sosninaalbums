@@ -97,12 +97,12 @@ export interface CaptionView extends TextView {
   who?: ('last' | 'first' | 'middle' | 'subject')[] // поля имени шаблона по порядку (037); у своей подписи нет
 }
 
-// Заглушка на пустом месте листа с шаблоном подписи (030): серый «[Фамилия]», только на холсте.
+// Заглушка на пустом месте листа с шаблоном подписи (030): серый «[Фамилия]» или табличка «Орлова [Имя]» (071), только на холсте.
 // place — ID места ("" в «Авто»), photo — "" у пустого места.
 export interface StubView extends TextView {
   place: string
   photo: string
-  who?: ('last' | 'first' | 'middle' | 'subject')[] // у заглушки фото; у пустого места нет
+  who?: ('last' | 'first' | 'middle' | 'subject')[] // поля имени шаблона: у заглушки фото и у пустого места (071)
 }
 
 // Поля шапки листа для {Заголовок} {Подзаголовок} {Год} {Руководитель} (031 dialog §4): свойство листа, не альбома.
@@ -122,14 +122,16 @@ export interface Person {
   subj?: string // предмет учителя (049); ключ как у Go (json:"subj")
 }
 
-// Api.Person: действующее имя; fromFile — взято из имени файла.
+// Api.Person / Api.PlacePerson: действующее имя; fromFile — взято из имени файла.
 export interface PersonView {
   last: string
   first: string
   middle: string
   subject: string
-  fromFile: boolean
-  teacher: boolean // фото на месте учителя виньетки: карточка показывает «Предмет»
+  fromFile: boolean // под табличкой с именем false; под табличкой только с предметом (071-16) бывает true — имя фото из файла
+  teacher: boolean // место учителя виньетки: карточка показывает «Предмет»
+  place: string // ID места, чья табличка видна (071); "" — видно имя фото. У PlacePerson — ID места, если табличка не пуста
+  seatNamed: boolean // в табличке этого места есть имя (а не только предмет); false и при place == ""
 }
 
 // Общий стиль подписей листа (SpreadView.caps). wrap: true — переносить, иначе ужимать кегль.

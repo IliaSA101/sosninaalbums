@@ -141,6 +141,13 @@ func (m *Methods) SetPerson(photoID string, p model.Person, session string) (v m
 	return m.changed(m.editor().SetPerson(photoID, p, session))
 }
 
+// SetPlacePerson — табличка места (071): имя ждёт фото на месте; все поля пусты — снять.
+// Одна session — один шаг.
+func (m *Methods) SetPlacePerson(spreadID, placeID string, p model.Person, session string) (v model.View) {
+	defer m.guardEdit("SetPlacePerson", &v, nil)
+	return m.changed(m.editor().SetPlacePerson(spreadID, placeID, p, session))
+}
+
 // ForgetFileNames — «Убрать имена» тоста броска (060): у фото ids снимается имя, взятое из
 // названия файла (DropResult.named, GridResult.named), если его не правили после. Один шаг.
 func (m *Methods) ForgetFileNames(ids []string) (v model.View) {

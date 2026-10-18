@@ -3,6 +3,8 @@ package model
 // Прогрев раскладок (WarmLayouts) на разворотах без «Других вариантов».
 
 import (
+	"io"
+	"log"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout/variety"
@@ -44,6 +46,103 @@ func TestWarmLayoutsRow(t *testing.T) {
 			if got != par {
 				t.Fatalf("параллельно=%v: ряд разворота на %d фото прогрет=%v", par, len(ss[i+2].Photos), got)
 			}
+		}
+	}
+}
+
+// WarmLayoutsProgress (073): ход 1, 2, …, n по одному на разворот, без повторов и шагов назад, даже
+// когда воркеры кончают вперемешку; после него ряды прогреты, как у WarmLayouts. Пустой список —
+// ни одного вызова; без параллельности — ни прогрева, ни хода; done == nil — тот же прогрев.
+func TestWarmLayoutsProgress(t *testing.T) {
+	p := New()
+	p.Photos = map[string]PhotoRef{}
+	var ss []*Spread
+	for k := range 12 {
+		s := &Spread{ID: NewID()}
+		for i := range 3 + k%5 {
+			id := NewID()
+			w, h := 300, 200+k*7+i // свой состав у каждого: ряды не делят кэш
+			if i%3 == 0 {
+				w, h = 200, 300
+			}
+			p.Photos[id] = PhotoRef{W: w, H: h}
+			s.Photos = append(s.Photos, id)
+		}
+		ss = append(ss, s)
+	}
+	t.Cleanup(func() { SetParallelLayouts(true); variety.ResetCache() })
+	prm := p.Params()
+	warmed := func(s *Spread) bool { return variety.RowCached(p.Aspects(s.Photos), prm, RowLen(len(s.Photos))) }
+	run := func(spreads []*Spread) []int {
+		var got []int
+		p.WarmLayoutsProgress(spreads, func(n int) { got = append(got, n) })
+		return got
+	}
+	if got := run(nil); len(got) != 0 {
+		t.Fatalf("пустой список: ход %v", got)
+	}
+	SetParallelLayouts(false)
+	variety.ResetCache()
+	if got := run(ss); len(got) != 0 || warmed(ss[0]) {
+		t.Fatalf("без параллельности: ход %v или прогрев", got)
+	}
+	SetParallelLayouts(true)
+	for _, warm := range []bool{false, true} { // холодный и тёплый кэш
+		got := run(ss)
+		if len(got) != len(ss) {
+			t.Fatalf("тёплый=%v: ход %v, ждали 1…%d", warm, got, len(ss))
+		}
+		for i, n := range got {
+			if n != i+1 {
+				t.Fatalf("тёплый=%v: ход %v не по порядку", warm, got)
+			}
+		}
+		for _, s := range ss {
+			if !warmed(s) {
+				t.Fatalf("тёплый=%v: ряд разворота на %d фото не прогрет", warm, len(s.Photos))
+			}
+		}
+	}
+	variety.ResetCache()
+	p.WarmLayoutsProgress(ss, nil)
+	if !warmed(ss[5]) {
+		t.Fatal("done == nil: ряд не прогрет")
+	}
+}
+
+// TestWarmLayoutsProgressPanicInDone: паника в done уходит в лог, как паника раскладки: воркер
+// жив, остальные события приходят по порядку, прогрев доходит до конца. Паника на нескольких
+// событиях подряд и на последнем.
+func TestWarmLayoutsProgressPanicInDone(t *testing.T) {
+	prev := log.Writer()
+	log.SetOutput(io.Discard)
+	t.Cleanup(func() { log.SetOutput(prev); variety.ResetCache() })
+	p := New()
+	p.Photos = map[string]PhotoRef{}
+	var ss []*Spread
+	for k := range 10 {
+		s := &Spread{ID: NewID()}
+		for i := range 3 {
+			id := NewID()
+			p.Photos[id] = PhotoRef{W: 300, H: 200 + k*5 + i}
+			s.Photos = append(s.Photos, id)
+		}
+		ss = append(ss, s)
+	}
+	variety.ResetCache()
+	var got []int
+	p.WarmLayoutsProgress(ss, func(n int) {
+		got = append(got, n)
+		if n == 2 || n == 3 || n == len(ss) {
+			panic("сбой хода")
+		}
+	})
+	if len(got) != len(ss) {
+		t.Fatalf("событий %d из %d: %v", len(got), len(ss), got)
+	}
+	for i, n := range got {
+		if n != i+1 {
+			t.Fatalf("ход %v не по порядку", got)
 		}
 	}
 }

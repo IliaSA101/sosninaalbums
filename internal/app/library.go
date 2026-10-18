@@ -29,9 +29,6 @@ import (
 // Фото альбома на диске: чтение папок, миниатюры, /media, недостающие фото и перепривязка,
 // показ фото в Проводнике.
 
-// maxSkippedLog — сколько путей нечитаемых файлов писать в лог.
-const maxSkippedLog = 20
-
 // readColor — imgfile.ReadColor; подменяется в тестах (/media не должен читать недостающие).
 var readColor = imgfile.ReadColor
 
@@ -42,10 +39,12 @@ func (a *App) rescan() {
 	defer guard("rescan")
 	ctx, cancel := context.WithCancel(a.stopCtx)
 
-	a.mu.Lock()
-	// Список папок и поколение — под одним замком: два rescan подряд (OnFileDrop и Undo)
-	// не могут поменяться местами, и новое поколение всегда с новым списком.
+	// Список папок и поколение — одним куском под rescanMu: два rescan подряд (OnFileDrop и Undo)
+	// не могут поменяться местами, и новое поколение всегда с новым списком. Folders — до a.mu:
+	// замок редактора держат правки (и снимок прогрева), а a.mu ждут publish, infos и /media.
+	a.rescanMu.Lock()
 	folders := a.editor().Folders()
+	a.mu.Lock()
 	if a.scanCancel != nil {
 		a.scanCancel()
 	}
@@ -68,6 +67,7 @@ func (a *App) rescan() {
 	a.scan = library.ScanProgress{Active: true, Walking: true}
 	pr := a.scan
 	a.mu.Unlock()
+	a.rescanMu.Unlock()
 
 	if stopWarm {
 		// Прогрев отменён: полоска «Готовлю миниатюры» сбрасывается (0/0 — прогрева нет).
@@ -91,12 +91,8 @@ func (a *App) rescan() {
 		}
 		log.Printf("папок %d: %d фото (обход %v, чтение %v, из памяти %d), пропущено %d", len(folders), len(photos),
 			fin.WalkTime.Round(time.Millisecond), fin.ReadTime.Round(time.Millisecond), fin.Memo, len(skipped))
-		for i, s := range skipped {
-			if i >= maxSkippedLog {
-				log.Printf("  ... и ещё %d (всего не читается %d)", len(skipped)-i, len(skipped))
-				break
-			}
-			log.Printf("  не читается: %s", filepath.Base(s))
+		if len(skipped) > 0 {
+			log.Printf("  не читается: %s", skippedSummary(skipped))
 		}
 		a.warmThumbs(gen, photos)
 	})
@@ -137,6 +133,10 @@ func (a *App) publish(gen int, photos []library.Photo, pr library.ScanProgress) 
 }
 
 // warmThumbs запускает прогрев миниатюр после чтения папок, если поколение ещё актуально.
+// Прогрев раскладок открытия (warmEditor) идёт первым (073-11): прогрев миниатюр ждёт его до
+// старта, а начатый — встаёт после текущего фото каждого воркера. Видимые миниатюры ленты от
+// этого не ждут: их отдаёт /media своим cache.File по запросу, а пауза лишь освобождает им
+// места семафора кэша.
 func (a *App) warmThumbs(gen int, photos []library.Photo) {
 	if a.cache == nil {
 		return
@@ -149,9 +149,16 @@ func (a *App) warmThumbs(gen int, photos []library.Photo) {
 	ctx, cancel := context.WithCancel(a.stopCtx)
 	a.warm = cancel
 	a.mu.Unlock()
+	if a.layouts.wait(ctx); ctx.Err() != nil {
+		return // отменён, пока ждал раскладки: и не начинаем
+	}
 	var lastMu sync.Mutex // колбэк зовут все воркеры прогрева
 	last := time.Time{}
 	a.cache.Warm(ctx, photos, func(done, total int) {
+		// Колбэк — после каждого фото, до следующего: здесь воркер и встаёт на паузу.
+		if a.layouts.wait(ctx); ctx.Err() != nil {
+			return // отменённый прогрев молчит
+		}
 		lastMu.Lock()
 		due := done == total || time.Since(last) > 200*time.Millisecond
 		if due {
@@ -226,7 +233,7 @@ func (a *App) media(next http.Handler) http.Handler {
 		}
 		if !ok {
 			// Фото из проекта, чья папка сейчас не открыта.
-			if ref, found := a.editor().Ref(parts[1]); found && reachable(ref.Path) {
+			if ref, found := a.editor().Ref(parts[1]); found && paths.CheckLocalPath(ref.Path) == nil && reachable(ref.Path) {
 				col, prof := readColor(ref.Path) // от цвета зависит ключ кэша и пересчёт
 				p, ok = library.Photo{ID: parts[1], Path: ref.Path, Name: filepath.Base(ref.Path), Color: col, Profile: prof}, true
 			}
@@ -239,7 +246,7 @@ func (a *App) media(next http.Handler) http.Handler {
 		}
 		file, err := a.cache.File(p, parts[0] == "p")
 		if err != nil {
-			logRare(a.mediaMiss.Add(1), "превью %s: %v", filepath.Base(p.Path), paths.NoPath(err))
+			logRare(a.mediaMiss.Add(1), "превью: %v", paths.NoPath(err))
 			http.NotFound(w, r)
 			return
 		}
@@ -300,9 +307,10 @@ func missingOf(refs map[string]model.PhotoRef, exists func(string) bool) []strin
 var reachable = osx.Reachable
 
 // fileExists — обычный файл на месте; том, который не отвечает (отключённый сетевой диск),
-// — «нет файла» без ожидания таймаута SMB.
+// — «нет файла» без ожидания таймаута SMB. Путь, который не проходит CheckLocalPath (фото
+// «CON.jpg» с Windows 11 на Windows 10, 073-10), — тоже «нет»: Stat открыл бы устройство.
 func fileExists(path string) bool {
-	if !reachable(path) {
+	if paths.CheckLocalPath(path) != nil || !reachable(path) {
 		return false
 	}
 	st, err := os.Stat(path)

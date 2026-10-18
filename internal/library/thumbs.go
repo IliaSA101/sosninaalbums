@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/disintegration/imaging"
 )
 
@@ -73,7 +74,7 @@ func (c *Cache) File(p Photo, preview bool) (string, error) {
 		if f, ok := c.find(key, preview, isPNG); ok {
 			return f, nil
 		}
-		return "", fmt.Errorf("не удалось сделать превью %s", p.Name)
+		return "", fmt.Errorf("не удалось сделать превью (файл %q)", paths.LogExt(p.Name))
 	}
 	ch := make(chan struct{})
 	c.inflight[key] = ch
@@ -94,7 +95,7 @@ func (c *Cache) File(p Photo, preview bool) (string, error) {
 	if f, ok := c.find(key, preview, isPNG); ok {
 		return f, nil
 	}
-	return "", fmt.Errorf("не удалось сделать превью %s", p.Name)
+	return "", fmt.Errorf("не удалось сделать превью (файл %q)", paths.LogExt(p.Name))
 }
 
 // Warm заранее готовит миниатюры, чтобы лента не ждала.
@@ -128,7 +129,8 @@ func (c *Cache) Warm(ctx context.Context, photos []Photo, progress func(done, to
 func warmOne(c *Cache, p Photo) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("ПАНИКА при прогреве %s: %v\n%s", p.Name, r, debug.Stack())
+			// Без имени файла: в log.txt, который отправляют разработчику, имена клиентов — лишнее (073-7).
+			log.Printf("ПАНИКА при прогреве (файл %q): %v\n%s", paths.LogExt(p.Name), r, debug.Stack())
 		}
 	}()
 	_, _ = c.File(p, false) // прогрев: ошибка проявится при реальном запросе

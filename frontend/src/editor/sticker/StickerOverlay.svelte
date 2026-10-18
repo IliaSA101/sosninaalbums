@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { SpreadView } from '../../base/core/types'
   import RotateHandle from '../../base/ui/RotateHandle.svelte'
   import { resizeCursor, rotHandleIn } from '../../base/geom/rotbox'
@@ -31,12 +32,12 @@
   const pc = (v: number, of: number) => `${(v / of) * 100}%`
 
   const move = (e: PointerEvent) => {
-    if (e.button !== 0 || !st) return
+    if (!primaryPress(e) || !st) return
     e.stopPropagation()
     sticker.move(e, root, st)
   }
   const resize = (e: PointerEvent, h: StCorner) => {
-    if (e.button !== 0 || !st) return
+    if (!primaryPress(e) || !st) return
     e.stopPropagation()
     sticker.resize(e, root, st, h)
   }
@@ -76,7 +77,12 @@
           onclick={keep}
         ></span>
       {/each}
-      <RotateHandle rotIn={rotHandleIn(box, ROT_REACH / ppm, sw, ph)} onrotate={rotate} onzero={() => sticker.zero(st)} />
+      <RotateHandle
+        accept={primaryPress}
+        rotIn={rotHandleIn(box, ROT_REACH / ppm, sw, ph)}
+        onrotate={rotate}
+        onzero={() => sticker.zero(st)}
+      />
     </div>
   {/if}
 

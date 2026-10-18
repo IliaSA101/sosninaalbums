@@ -500,6 +500,9 @@ func budgetCount(p *model.Project) (blocks, runes int) {
 		for _, tb := range s.Texts {
 			blocks, runes = blocks+1, runes+n(tb.Text)
 		}
+		for _, pl := range s.Grid { // таблички мест (071)
+			runes += n(pl.Person.Last) + n(pl.Person.First) + n(pl.Person.Middle) + n(pl.Person.Subject)
+		}
 	}
 	for _, r := range p.Photos {
 		if r.Caption != nil {

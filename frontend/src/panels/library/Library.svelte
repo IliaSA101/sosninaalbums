@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import { tick } from 'svelte'
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
@@ -9,7 +10,9 @@
   import { allInAlbum, allInAlbumText } from './freephotos'
   import { libfilter } from '../marks/libfilter.svelte'
   import { folderfilter } from '../folders/folderfilter.svelte'
-  import { anchorFrac, isThumbWheel, scrollFix, thumbWheelAcc } from './thumbzoom'
+  import { isThumbWheel, thumbWheelAcc } from './thumbzoom'
+  import { PAD_X, anchorTop, colsOf, libWindow, photoAt } from './libwindow'
+  import { watchSize } from '../../base/ui/size'
   import LibraryBar from './LibraryBar.svelte'
   import Thumb from './Thumb.svelte'
 
@@ -36,7 +39,7 @@
   }
 
   function split(e: PointerEvent) {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     const el = e.currentTarget as HTMLElement
     const y0 = e.clientY
     const h0 = eff
@@ -76,19 +79,20 @@
     wy = e.clientY
     if (first && !raf) raf = requestAnimationFrame(() => void applyZoom())
   }
-  // Ячейка-якорь: под курсором, иначе верхняя видимая (её верх остаётся на месте).
-  function anchor(g: HTMLElement): { el: HTMLElement; cy: number; fy: number } | null {
-    const under = document.elementFromPoint(wx, wy)?.closest<HTMLElement>('[data-thumb]')
-    if (under && g.contains(under)) {
-      const r = under.getBoundingClientRect()
-      return { el: under, cy: wy, fy: anchorFrac(r.top, r.height, wy) }
-    }
-    const top = g.getBoundingClientRect().top
-    for (const el of g.querySelectorAll<HTMLElement>('[data-thumb]')) {
-      const r = el.getBoundingClientRect()
-      if (r.bottom > top) return { el, cy: r.top, fy: 0 }
-    }
-    return null
+  // Окно рядов (073): в DOM только видимые ряды ± запас, остальное — распорки. Размер сетки — watchSize.
+  let gw = $state(0)
+  let gh = $state(0)
+  let st = $state(0)
+  const win = $derived(libWindow({ n: store.visible.length, width: gw, height: gh, scrollTop: st, size: modes.thumbSize }))
+  const shown = $derived(store.visible.slice(win.r0 * win.cols, win.r1 * win.cols))
+
+  // Якорь зума — индекс фото под курсором (элемент мог уйти из окна); вне сетки — верхний видимый ряд.
+  function anchor(g: HTMLElement): { index: number; cy: number; fy: number } | null {
+    const r = g.getBoundingClientRect()
+    const inside = wx >= r.left && wx < r.right && wy >= r.top && wy < r.bottom
+    const cy = inside ? wy - r.top : 0
+    const at = photoAt(store.visible.length, g.clientWidth, modes.thumbSize, inside ? wx - r.left : PAD_X, g.scrollTop + cy)
+    return at && { ...at, cy }
   }
   async function applyZoom() {
     raf = 0
@@ -96,10 +100,11 @@
     if (!grid || n === modes.thumbSize) return
     const a = anchor(grid)
     modes.setThumb(n)
-    await tick()
-    if (!a || !grid || !a.el.isConnected) return
-    const r = a.el.getBoundingClientRect()
-    grid.scrollTop += scrollFix(r.top, a.cy, a.fy, r.height)
+    await tick() // высота содержимого уже новая, иначе браузер подрежет прокрутку
+    if (!a || !grid) return
+    // Прокрутка считается из индекса и нового размера; окно обновляем сразу, а не по событию scroll.
+    grid.scrollTop = anchorTop(a.index, colsOf(grid.clientWidth, n), n, a.cy, a.fy)
+    st = grid.scrollTop
   }
   // Свой слушатель с passive: false — иначе preventDefault у колеса не сработает.
   function wheelOn(node: HTMLElement) {
@@ -129,31 +134,38 @@
   <div class="library" use:wheelOn class:over={drag.over === 'library'} style:height="{eff}px" data-drop="library" data-guide="library">
     <LibraryBar />
 
-    <div class="grid" bind:this={grid} style:--size="{modes.thumbSize}px">
-      {#each store.visible as p (p.id)}
+    <div
+      class="grid"
+      bind:this={grid}
+      style:--size="{modes.thumbSize}px"
+      {@attach (g) => watchSize(g, (w, h) => ((gw = w), (gh = h)))}
+      onscroll={() => (st = grid?.scrollTop ?? 0)}
+    >
+      {#if win.padTop > 0}<div class="spacer" style:height="{win.padTop}px"></div>{/if}
+      {#each shown as p (p.id)}
         <Thumb {p} />
-      {:else}
-        {#if store.loaded}
-          <div class="hint">
-            {#if store.scan.active && store.photos.length === 0}
-              {scanText(store.scan)}
-            {:else if store.view.folders.length === 0}
-              Нажмите «+ Папка с фото» или перетащите папку прямо в окно программы
-            {:else if folderfilter.allHidden(store.view.folders)}
-              Все папки скрыты
-              <button class="reset" onclick={() => folderfilter.showAll()}>Показать все</button>
-            {:else if allInAlbum(store.filter, store.free.length, store.inFolders.length)}
-              {allInAlbumText(folderfilter.active)}
-              <button class="reset" onclick={() => (store.filter = 'all')}>Показать все</button>
-            {:else if prefs.can('marks') && libfilter.active && store.inFolders.length > 0}
-              Ни одно фото не подходит под фильтр
-              <button class="reset" onclick={() => libfilter.reset()}>Сбросить фильтр</button>
-            {:else}
-              Здесь пусто
-            {/if}
-          </div>
-        {/if}
       {/each}
+      {#if win.padBottom > 0}<div class="spacer" style:height="{win.padBottom}px"></div>{/if}
+      {#if store.visible.length === 0 && store.loaded}
+        <div class="hint">
+          {#if store.scan.active && store.photos.length === 0}
+            {scanText(store.scan)}
+          {:else if store.view.folders.length === 0}
+            Нажмите «+ Папка с фото» или перетащите папку прямо в окно программы
+          {:else if folderfilter.allHidden(store.view.folders)}
+            Все папки скрыты
+            <button class="reset" onclick={() => folderfilter.showAll()}>Показать все</button>
+          {:else if allInAlbum(store.filter, store.free.length, store.inFolders.length)}
+            {allInAlbumText(folderfilter.active)}
+            <button class="reset" onclick={() => (store.filter = 'all')}>Показать все</button>
+          {:else if prefs.can('marks') && libfilter.active && store.inFolders.length > 0}
+            Ни одно фото не подходит под фильтр
+            <button class="reset" onclick={() => libfilter.reset()}>Сбросить фильтр</button>
+          {:else}
+            Здесь пусто
+          {/if}
+        </div>
+      {/if}
     </div>
     {#if drag.over === 'library'}
       <div class="drop-hint">Отпустите, чтобы убрать фото из альбома</div>
@@ -205,6 +217,10 @@
     align-content: flex-start;
     gap: 16px;
     padding: 12px 16px;
+  }
+  /* Заменяет пропущенные ряды окна: на всю строку, высота — по числу рядов (libwindow.ts) */
+  .spacer {
+    flex: 0 0 100%;
   }
   .hint {
     color: var(--muted);

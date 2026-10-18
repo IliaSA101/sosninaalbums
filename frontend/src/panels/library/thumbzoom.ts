@@ -40,13 +40,3 @@ export function thumbWheelAcc() {
     },
   }
 }
-
-// Доля высоты ячейки, на которую пришёлся курсор (0 — верх, 1 — низ); вне ячейки — на край.
-export function anchorFrac(top: number, size: number, cy: number): number {
-  if (!(size > 0)) return 0
-  return Math.max(0, Math.min(1, (cy - top) / size))
-}
-
-// Насколько прокрутить сетку, чтобы точка ячейки (доля fy) осталась под курсором cy:
-// topNew — верх ячейки после смены размера, size — её новая высота.
-export const scrollFix = (topNew: number, cy: number, fy: number, size: number): number => topNew - (cy - fy * size)

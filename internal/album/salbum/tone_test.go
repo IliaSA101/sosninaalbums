@@ -34,7 +34,7 @@ func TestV12ToneRoundtrip(t *testing.T) {
 	p, ids := toneProject(dir)
 	path := filepath.Join(dir, "a.salbum")
 	first, q := saveLoad(t, p, path)
-	if f := fileJSON(t, path); f.Version != 12 || bytes.Count(first, []byte(`"adj"`)) != 2 {
+	if f := fileJSON(t, path); f.Version != 13 || bytes.Count(first, []byte(`"adj"`)) != 2 {
 		t.Fatalf("файл v%d:\n%s", f.Version, first)
 	}
 	if !bytes.Contains(first, []byte(`"gray": true`)) || !bytes.Contains(first, []byte(`"c": 7`)) {
@@ -55,7 +55,7 @@ func TestV12ToneRoundtrip(t *testing.T) {
 	}
 }
 
-// v11 (0.15) открывается без тона; первая запись — v12 без adj, BackupOld кладёт .v11.bak с исходником.
+// v11 (0.15) открывается без тона; первая запись — текущая версия без adj, BackupOld кладёт .v11.bak с исходником.
 func TestV11LoadsWithoutTone(t *testing.T) {
 	dir := testkit.TempDir(t)
 	p, ids := toneProject(dir)
@@ -94,7 +94,7 @@ func TestV11LoadsWithoutTone(t *testing.T) {
 	if bak, err := os.ReadFile(path + ".v11.bak"); err != nil || !bytes.Equal(bak, src) {
 		t.Fatalf(".v11.bak: %v", err)
 	}
-	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"adj"`)) || fileJSON(t, path).Version != 12 {
+	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"adj"`)) || fileJSON(t, path).Version != 13 {
 		t.Fatalf("запись v11:\n%s", out)
 	}
 }

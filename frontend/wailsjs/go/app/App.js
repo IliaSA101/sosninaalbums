@@ -90,6 +90,10 @@ export function CancelCollect() {
   return window['go']['app']['App']['CancelCollect']();
 }
 
+export function CancelExport() {
+  return window['go']['app']['App']['CancelExport']();
+}
+
 export function CancelLibrary() {
   return window['go']['app']['App']['CancelLibrary']();
 }
@@ -334,6 +338,10 @@ export function PickSpreadGuide() {
   return window['go']['app']['App']['PickSpreadGuide']();
 }
 
+export function PlacePerson(arg1, arg2) {
+  return window['go']['app']['App']['PlacePerson'](arg1, arg2);
+}
+
 export function PlacePhotos(arg1, arg2, arg3) {
   return window['go']['app']['App']['PlacePhotos'](arg1, arg2, arg3);
 }
@@ -556,6 +564,10 @@ export function SetPlaceAngle(arg1, arg2, arg3) {
 
 export function SetPlaceFit(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetPlaceFit'](arg1, arg2, arg3);
+}
+
+export function SetPlacePerson(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['App']['SetPlacePerson'](arg1, arg2, arg3, arg4);
 }
 
 export function SetPlaceRound(arg1, arg2, arg3) {

@@ -1,15 +1,15 @@
 // Куда попал двойной щелчок на подписи (спека 037): подпись по шаблону или заглушка с полями имени — цель
-// ввода имени; заглушка пустого места — цель подсказки. Чистая логика в мм разворота, без DOM; рамки и
+// ввода имени; заглушка пустого места (071) — цель ввода таблички места. Чистая логика в мм разворота, без DOM; рамки и
 // `who` приходят из Go (View), поворот — вокруг левого верхнего угла рамки, как у подписи.
 import { aabb, rotate, type Pt } from '../../base/geom/textbox'
-import { PERSON_FIELDS } from './fields'
 import type { CaptionView, Rect, SpreadView, StubView } from '../../base/core/types'
 
 export type Who = 'last' | 'first' | 'middle' | 'subject'
 
-// photo === '' — заглушка пустого места: имени у неё нет (имя — свойство фото).
+// photo === '' — заглушка пустого места: имя вводится табличкой места (place — ID места). Иначе place === ''.
 export interface NameTarget {
   photo: string
+  place: string
   who: Who[]
   box: Rect // описанный прямоугольник, мм: от него окошко ставится под подпись
 }
@@ -26,37 +26,24 @@ function inside(t: Item, p: Pt): boolean {
 const WHO: readonly string[] = ['last', 'first', 'middle', 'subject']
 const whoOfItem = (t: Item): Who[] => (t.who ?? []).filter((w): w is Who => WHO.includes(w))
 
-// Шаблон подписи ждёт имя: в нём есть {Фамилия}, {Имя}, {Отчество} или {Предмет} (регистр не важен).
-// «Предмет» не в PERSON_FIELDS: оттуда берётся меню свадебного листа (решение 173).
-const hasPersonField = (t: string | undefined): boolean =>
-  !!t && [...PERSON_FIELDS, 'Предмет'].some((f) => t.toLowerCase().includes(`{${f.toLowerCase()}}`))
-
-// В листе есть поля имени: у какой-либо подписи или заглушки есть who, либо шаблон листа (подписи к каждому
-// фото, подпись учителя виньетки) содержит поле имени — тогда пустое место тоже ждёт имя, тост уместен.
-// Заглушки пустых мест who не несут, поэтому шаблон смотрим отдельно.
-export function hasNameFields(s: SpreadView): boolean {
-  if (hasPersonField(s.caps?.text) || hasPersonField(s.vig?.ttext)) return true
-  return [...s.captions, ...(s.stubs ?? [])].some((t) => whoOfItem(t).length > 0)
-}
-
 // Подпись или заглушка под точкой (x, y — мм разворота), верхняя по z. Своя подпись, подпись без полей
-// имени и пустое поле — null: там работают прежние жесты («вписать», правка текста).
+// имени и пустое поле — null: там работают прежние жесты («вписать», правка текста). Заглушка пустого места
+// с who (Go отдаёт их по шаблону, 071) — цель с place.
 export function nameTargetAt(s: SpreadView, x: number, y: number): NameTarget | null {
   const p = { x, y }
-  const fields = hasNameFields(s)
-  const items: [Item, boolean][] = [
-    ...s.captions.map((c): [Item, boolean] => [c, false]),
-    ...(s.stubs ?? []).map((t): [Item, boolean] => [t, t.photo === '' && fields]),
-  ]
   let best: Item | null = null
-  for (const [it, emptyStub] of items) {
-    if (!emptyStub && whoOfItem(it).length === 0) continue
+  for (const it of [...s.captions, ...(s.stubs ?? [])]) {
+    if (whoOfItem(it).length === 0) continue
     if (!inside(it, p)) continue
     if (!best || it.z > best.z) best = it
   }
   if (!best) return null
-  return { photo: best.photo, who: whoOfItem(best), box: aabb(best) }
+  const place = 'place' in best && !best.photo ? best.place : ''
+  return { photo: best.photo, place, who: whoOfItem(best), box: aabb(best) }
 }
+
+// Ключ цели: фото или (у пустого места) место; по нему сравнивают цели и ключуют подсказку.
+export const targetKey = (t: Pick<NameTarget, 'photo' | 'place'>): string => t.place || t.photo
 
 // Признаки цели жеста (двойной щелчок, наведение): брать ли разворот под цель ввода имени. Цель по точке
 // не знает, что лежит выше по z (свободный текст, фото) и открыт ли редактор, — это решают признаки:
@@ -89,6 +76,13 @@ export function namePlace(box: Rect, ppm: number, width: number, height: number,
 export function whoOf(s: SpreadView | undefined, photo: string): Who[] {
   if (!s || !photo) return []
   const it = s.captions.find((c) => c.photo === photo) ?? (s.stubs ?? []).find((t) => t.photo === photo)
+  return it ? whoOfItem(it) : []
+}
+
+// Поля имени заглушки пустого места (071); пусто — у места нет заглушки с полями (занято фото, шаблона нет).
+export function whoOfPlace(s: SpreadView | undefined, place: string): Who[] {
+  if (!s || !place) return []
+  const it = (s.stubs ?? []).find((t) => t.photo === '' && t.place === place)
   return it ? whoOfItem(it) : []
 }
 

@@ -3,7 +3,6 @@ package variety
 import (
 	"cmp"
 	"slices"
-	"sync"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
@@ -21,9 +20,8 @@ const (
 // ни один уровень (= deltaStar «Больше»): в подборку их не берём.
 const featSlack = 0.15
 
-// extraGen — записей кэша, после которых он начинается заново: запись — до 24 раскладок (≈ 14 КБ
-// на 16 фото), 5000 — ≈ 70 МБ, как было при 12 раскладках и 10 000; это впятеро больше предела
-// разворотов альбома (model.MaxSpreads), а память не растёт без предела.
+// extraGen — записей в поколении кэшей ряда и «Других вариантов» (varietyGen, gencache.go): запись —
+// до 24 раскладок (≈ 14 КБ на 16 фото), 5000 — ≈ 70 МБ на поколение; память не растёт без предела.
 const extraGen = 5000
 
 // extraEntry — «Другие варианты» разворота и семейства featured в них (Pool берёт их оттуда).
@@ -35,10 +33,7 @@ type extraEntry struct {
 // extraCache — ряды «Других вариантов» по пропорциям и геометрии: View считает счётчик
 // «i / N» по ряду «Авто» + «Другие варианты» (решение 0.11 №36) у каждого разворота на каждый
 // запрос, а без кэша это десяток поисков в кэше layout, генератор featured и сортировка.
-var extraCache = struct {
-	sync.Mutex
-	m map[string]extraEntry
-}{m: map[string]extraEntry{}}
+var extraCache genCache[extraEntry]
 
 // Extra — «Другие варианты» разворота вне ряда «Авто» Row(aspects, p, rowLen): воздух (≤ airLimit
 // лучших по оценке) и раскладки с главным фото (≤ featLimit, bestFeatured; с 051 — от featLo фото,
@@ -50,9 +45,7 @@ func Extra(aspects []float64, p layout.Params, rowLen int) []layout.Result {
 
 func extraOf(aspects []float64, p layout.Params, rowLen int) extraEntry {
 	key := extraKey(aspects, p, rowLen)
-	extraCache.Lock()
-	e, ok := extraCache.m[key]
-	extraCache.Unlock()
+	e, ok := extraCache.get(key)
 	if ok {
 		return e
 	}
@@ -74,12 +67,7 @@ func extraOf(aspects []float64, p layout.Params, rowLen int) extraEntry {
 	}
 	byScore(e.row)
 	e.row = slices.Clip(e.row)
-	extraCache.Lock()
-	if len(extraCache.m) >= extraGen {
-		extraCache.m = map[string]extraEntry{}
-	}
-	extraCache.m[key] = e
-	extraCache.Unlock()
+	extraCache.put(key, e)
 	return e
 }
 
@@ -128,20 +116,13 @@ func bestFeatured(fs []Feat, row []layout.Result, seen map[string]bool) []Feat {
 
 // Cached — ряд «Других вариантов» уже посчитан (проверка прогрева: Extra на холодном кэше — десятки мс).
 func Cached(aspects []float64, p layout.Params, rowLen int) bool {
-	extraCache.Lock()
-	defer extraCache.Unlock()
-	_, ok := extraCache.m[extraKey(aspects, p, rowLen)]
-	return ok
+	return extraCache.has(extraKey(aspects, p, rowLen))
 }
 
 // ResetCache — холодный кэш ряда «Авто» и «Других вариантов» для бенчмарков (вместе с layout.ResetCache).
 func ResetCache() {
-	extraCache.Lock()
-	extraCache.m = map[string]extraEntry{}
-	extraCache.Unlock()
-	rowCache.Lock()
-	rowCache.m = map[string]rowEntry{}
-	rowCache.Unlock()
+	extraCache.reset()
+	rowCache.reset()
 }
 
 // extraKey — ключ кэша layout: пропорции точно, иначе ряд зависел бы от того, какой из близких

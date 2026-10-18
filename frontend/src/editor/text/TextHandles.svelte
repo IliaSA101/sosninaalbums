@@ -2,6 +2,7 @@
   // Ручки выделенного блока (внутри рамки, крутятся вместе с ней): поворот над серединой верхней стороны,
   // две боковые — ширина, четыре угловые — кегль вместе с рамкой. Двойной щелчок по боковой возвращает
   // «по тексту». Жесты ведёт TextGestures.
+  import { primaryPress } from '../../base/core/platform'
   import type { Corner } from '../../base/geom/textbox'
 
   let {
@@ -25,7 +26,7 @@
   const CORNERS: Corner[] = ['tl', 'tr', 'bl', 'br']
 
   const side = (e: PointerEvent, s: 'l' | 'r') => {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     e.stopPropagation()
     onresize(e, s)
   }
@@ -42,7 +43,7 @@
     data-text-ui
     role="presentation"
     onpointerdown={(e) => {
-      if (e.button !== 0) return
+      if (!primaryPress(e)) return
       e.stopPropagation()
       onscale(e, c)
     }}
@@ -57,7 +58,7 @@
     data-text-ui
     role="presentation"
     onpointerdown={(e) => {
-      if (e.button !== 0) return
+      if (!primaryPress(e)) return
       e.stopPropagation()
       onrotate(e)
     }}

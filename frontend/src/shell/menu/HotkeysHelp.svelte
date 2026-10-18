@@ -13,7 +13,7 @@
 
 {#if help.open}
   <Modal title="Горячие клавиши" onclose={() => (help.open = false)} wide>
-    <div class="cols">
+    <div class="hkcols">
       {#each groups as g (g.id)}
         <section>
           <h3>{g.title}</h3>
@@ -35,10 +35,10 @@
 
 <style>
   /* Окно шире обычного: две колонки разделов */
-  :global(.box.wide):has(.cols) {
+  :global(.box.wide):has(.hkcols) {
     width: 760px;
   }
-  .cols {
+  .hkcols {
     columns: 2 340px;
     column-gap: 24px;
   }

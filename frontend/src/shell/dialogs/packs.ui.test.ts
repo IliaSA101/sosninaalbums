@@ -280,6 +280,16 @@ describe('packsUi: library:changed', () => {
     expect(api.DecorCatalog).not.toHaveBeenCalled()
   })
 
+  it('названия поставленных наборов уходят окнам «Фоны/Стикеры/Развороты» (073-1)', () => {
+    const note = vi.spyOn(decor, 'note')
+    packsUi.changed(['Айвори'])
+    expect(note).toHaveBeenCalledWith(['Айвори'])
+    packsUi.changed() // старое событие без данных
+    packsUi.changed([]) // удаление набора
+    expect(note).toHaveBeenCalledTimes(3)
+    note.mockRestore()
+  })
+
   it('открытое окно «Фоны» перечитывает каталог', () => {
     decor.cur = { kind: 'bg', spread: 's1', scope: 'spread' }
     packsUi.changed()

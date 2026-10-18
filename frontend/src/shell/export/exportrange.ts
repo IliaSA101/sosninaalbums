@@ -1,3 +1,5 @@
+import { plural } from '../../base/words/plural'
+
 // Диапазон экспорта (спека 009, design §6.1.1): «3-5, 8, 7п». Паритет с Go parseRange —
 // общие примеры testdata/parity/ranges.json. layouts/ranges.ts (копирование раскладки) — отдельно: страниц там нет.
 export type ExportUnit = [spread: number, page: 0 | 1 | 2] // page: 0 — разворот целиком, 1 — левая, 2 — правая
@@ -61,4 +63,19 @@ function badToken(tok: string, src: string): string {
     if (g) return `Номер страницы пишется слитно: ${g[1]}${g[2].toLowerCase()}`
   }
   return `Не понимаю «${tok}». Пример: 3-5, 8, 7п`
+}
+
+// Сводка под полем диапазона (073): «Выгрузится 3 разворота и 1 страница», у листа 031 — «4 листа»; с обложкой — «… и обложка».
+export function rangeSummary(units: readonly ExportUnit[], sheet: boolean, cover: boolean): string {
+  const whole = units.filter(([, p]) => p === 0).length
+  const pages = units.length - whole
+  const parts: string[] = []
+  if (whole > 0) {
+    const forms: [string, string, string] = sheet ? ['лист', 'листа', 'листов'] : ['разворот', 'разворота', 'разворотов']
+    parts.push(`${whole} ${plural(whole, forms)}`)
+  }
+  if (pages > 0) parts.push(`${pages} ${plural(pages, ['страница', 'страницы', 'страниц'])}`)
+  if (cover) parts.push('обложка')
+  if (parts.length < 2) return `Выгрузится ${parts[0] ?? '0 разворотов'}`
+  return `Выгрузится ${parts.slice(0, -1).join(', ')} и ${parts[parts.length - 1]}`
 }

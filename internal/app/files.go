@@ -188,7 +188,7 @@ func (a *App) unlockDraft() bool {
 	}
 	bad := a.badDraftPath(time.Now())
 	if err := a.rename(a.draftPath(), bad); err != nil && !errors.Is(err, os.ErrNotExist) {
-		log.Printf("черновик по-прежнему не удалось сохранить в %s: %v", filepath.Base(bad), paths.NoPath(err))
+		log.Printf("черновик по-прежнему не удалось сохранить отдельно: %v", paths.NoPath(err))
 		return false
 	}
 	a.draftLocked.Store(false)

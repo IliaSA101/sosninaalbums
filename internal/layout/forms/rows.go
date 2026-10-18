@@ -1,9 +1,11 @@
 package forms
 
+import "github.com/IliaSA101/sosninaalbums/internal/layout"
+
 // Ряды одной высоты (rows) и ровная сетка (grid): корень G (spec 051 §2).
 
-// rows — G из 2–4 рядов с равными суммами пропорций на разворот (layflat) или Q[G|G] (pageRows).
-// В ряду — не меньше двух фото.
+// rows — G из 2–4 рядов с равными суммами пропорций на разворот (layflat) или Q[G|G] (pageRows;
+// с ManyFrom фото — manyRows: до 6 рядов разрезом DP, 072-5). В ряду — не меньше двух фото.
 func (g *gen) rows() {
 	k := g.k
 	if k < rowsMin || k > rowsMax {
@@ -14,7 +16,10 @@ func (g *gen) rows() {
 			g.try(gEq(g.pre, 0, k, r), noShift)
 		}
 	}
-	if g.pages {
+	switch {
+	case g.pages && k >= layout.ManyFrom:
+		g.manyRows()
+	case g.pages:
 		g.pageRows()
 	}
 }

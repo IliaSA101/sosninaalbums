@@ -38,6 +38,7 @@ export interface MenuCtx {
   recent?: readonly RecentProject[] // последние альбомы; не заданы — список пуст
   level?: Level // текущий уровень: галочка в «Вид ▸ Уровень»; не задан — «Полный»
   spreads: number // разворотов в альбоме
+  exporting?: boolean // выгрузка идёт: «Экспорт…» открывает окно хода, даже если листов не осталось (073)
   hasSpread: boolean // есть текущий разворот
   canUndo: boolean
   canRedo: boolean
@@ -54,7 +55,6 @@ export interface MenuCtx {
   vigSetup?: boolean // текущий лист — виньетка: «Настроить виньетку…» доступна; нет — серое
   layerable?: boolean // «Ручная» и выделено место, фото, текст или стикер; «Авто» — стикер (с текстом или без) без мест: слои двигать есть что; нет — серое
   missing: number // пропавших фото
-  exporting: boolean // экспорт уже идёт
   collecting?: boolean // сбор проекта в папку уже идёт (069)
   big: boolean
   details: boolean
@@ -186,7 +186,7 @@ function fileSpecs(c: MenuCtx): Spec[][] {
       { id: 'relink', label: 'Найти пропавшие фото…', cmd: 'relink', disabled: c.missing === 0 },
     ],
     [
-      { id: 'export', label: 'Экспорт…', cmd: 'export', disabled: c.exporting || c.spreads === 0 },
+      { id: 'export', label: 'Экспорт…', cmd: 'export', disabled: c.spreads === 0 && !c.exporting },
       { id: 'showExport', label: 'Открыть папку экспорта', cmd: 'showExport' },
     ],
     [{ id: 'settings', label: 'Настройки альбома…', cmd: 'settings' }],

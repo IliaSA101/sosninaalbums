@@ -107,6 +107,78 @@ describe('окно «Фоны»: открытие', () => {
   })
 })
 
+describe('окно после установки набора (073-1)', () => {
+  afterEach(() => {
+    decor.cat = null // каталог с набором другим тестам не нужен
+    decor.setTheme('')
+  })
+
+  const withPack = () =>
+    catalog({
+      themes: [
+        { id: 'recent', name: 'Недавние', count: 1 },
+        { id: 'all', name: 'Все', count: 3 },
+        { id: 'basic', name: 'Универсальные', count: 1 },
+        { id: 'ivory', name: 'Айвори', count: 2 },
+      ],
+      items: [
+        { id: 'sa:dots', theme: 'basic', name: 'Горох', url: '/a', own: false, aspect: 0, w: 0, h: 0 },
+        { id: 'pk:1', theme: 'ivory', name: 'Лён', url: '/b', own: false, aspect: 0, w: 0, h: 0, pack: 'Айвори' },
+        { id: 'pk:2', theme: 'ivory', name: 'Шёлк', url: '/c', own: false, aspect: 0, w: 0, h: 0, pack: 'Айвори' },
+      ],
+    })
+
+  it('после установки — тема набора, открытое окно не прыгает', async () => {
+    api.DecorCatalog.mockImplementation(async () => withPack())
+    decor.note(['Айвори'])
+    decor.show('bg', 's1', 'spread')
+    await vi.waitFor(() => expect(decor.loading).toBe(false))
+    expect(decor.theme).toBe('ivory')
+    // Пока окно открыто: ещё один набор и перечитывание каталога — тема остаётся, на новый набор не переходит.
+    decor.setTheme('basic')
+    decor.note(['Айвори'])
+    await decor.refresh()
+    expect(decor.theme).toBe('basic')
+    // Следующее открытие каждого окна — на теме набора, один раз; потом забыто.
+    for (const kind of ['sticker', 'spread', 'bg'] as const) {
+      decor.close()
+      decor.setTheme('basic')
+      decor.show(kind, 's1', 'spread')
+      await vi.waitFor(() => expect(decor.loading).toBe(false))
+      expect(decor.theme).toBe('ivory')
+    }
+    decor.close()
+    decor.setTheme('basic')
+    decor.show('bg', 's1', 'spread')
+    await vi.waitFor(() => expect(decor.loading).toBe(false))
+    expect(decor.theme).toBe('basic') // свежее показано всем трём видам и забыто
+  })
+
+  it('повторное открытие того же вида не прыгает; удаление набора (пусто) и набор без плиток вида — тоже', async () => {
+    api.DecorCatalog.mockImplementation(async () => withPack())
+    decor.setTheme('')
+    decor.note([]) // удаление набора
+    decor.show('bg', 's1', 'spread')
+    await vi.waitFor(() => expect(decor.loading).toBe(false))
+    expect(decor.theme).toBe('recent')
+    decor.close()
+    decor.note(['Нет такого'])
+    decor.show('bg', 's1', 'spread')
+    await vi.waitFor(() => expect(decor.loading).toBe(false))
+    expect(decor.theme).toBe('recent') // плиток набора в этом виде нет — как раньше
+    decor.close()
+    decor.show('bg', 's1', 'spread') // этот вид уже получил своё
+    await vi.waitFor(() => expect(decor.loading).toBe(false))
+    expect(decor.theme).toBe('recent')
+    for (const kind of ['sticker', 'spread'] as const) {
+      decor.close()
+      decor.show(kind, 's1', 'spread')
+      await vi.waitFor(() => expect(decor.loading).toBe(false))
+    }
+    decor.close()
+  })
+})
+
 describe('щелчок по плитке', () => {
   it('закрывает окно сразу и зовёт ApplyBackground с областью и ключом плитки', async () => {
     api.ApplyBackground.mockResolvedValue({ ...spreadView(), rev: 2 })

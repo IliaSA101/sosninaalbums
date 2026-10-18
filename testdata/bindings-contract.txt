@@ -20,6 +20,7 @@ method AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>
 method AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.AutoPreview>
 method Backups():Promise<Array<APP.BackupInfo>>
 method CancelCollect():Promise<void>
+method CancelExport():Promise<void>
 method CancelLibrary():Promise<void>
 method ChooseFolder():Promise<model.View>
 method ClearBackdrop(arg1:string,arg2:string):Promise<model.View>
@@ -81,6 +82,7 @@ method PickBackdropFile(arg1:string,arg2:string):Promise<model.View>
 method PickCoverGuide():Promise<model.View>
 method PickNamesFile():Promise<APP.NamesFile>
 method PickSpreadGuide():Promise<model.View>
+method PlacePerson(arg1:string,arg2:string):Promise<model.PersonView>
 method PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<APP.GridResult>
 method PlanCopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
 method PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
@@ -137,6 +139,7 @@ method SetPattern(arg1:string,arg2:string,arg3:model.Pattern,arg4:string):Promis
 method SetPerson(arg1:string,arg2:model.Person,arg3:string):Promise<model.View>
 method SetPlaceAngle(arg1:string,arg2:string,arg3:number):Promise<model.View>
 method SetPlaceFit(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
+method SetPlacePerson(arg1:string,arg2:string,arg3:model.Person,arg4:string):Promise<model.View>
 method SetPlaceRound(arg1:string,arg2:Array<string>,arg3:number):Promise<model.View>
 method SetPlaceShape(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
 method SetPlaces(arg1:string,arg2:Array<model.PlaceBox>,arg3:string):Promise<model.View>
@@ -590,7 +593,9 @@ type model.NamesPlan
   pupilSeats: number
   needCaption: boolean
 type model.NamesRow
+  place: string
   photo: string
+  seat: boolean
   tag: string
   no: number
   line: number
@@ -639,6 +644,8 @@ type model.PersonView
   subject: string
   fromFile: boolean
   teacher: boolean
+  place: string
+  seatNamed: boolean
 type model.PlaceBox
   id: string
   x: number

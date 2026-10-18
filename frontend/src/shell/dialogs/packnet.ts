@@ -11,6 +11,10 @@ export interface LibraryUpdate {
   skipped: PackSkip[] | null
   bytes: number
 }
+// library:changed: названия (PackInfo.Title) поставленных и обновлённых наборов; при удалении пусто.
+export interface LibraryChanged {
+  installed: string[] | null
+}
 export interface LibraryProgress {
   stage: string // catalog | download | install
   title: string
@@ -67,11 +71,15 @@ export function progressPercent(p: LibraryProgress | null): number | null {
   return Math.max(0, Math.min(100, Math.round((p.done / p.total) * 100)))
 }
 
-// Итог «Обновить библиотеку»: ничего не поставлено — «Всё уже свежее». Пропущенное (нужна новая программа и т. п.) — в конце.
+// Итог «Обновить библиотеку» и проверки при запуске: ничего не поставлено — «Всё уже свежее»; нулевой части в тексте нет.
+// Пропущенное (нужна новая программа и т. п.) — в конце.
 export function updateText(r: LibraryUpdate): string {
   const skipped = skippedLabel(r.skipped)
   if (r.added + r.updated === 0) return [FRESH_TEXT, skipped].filter(Boolean).join('; ')
-  return [`Библиотека обновлена: новых наборов ${r.added}, обновлено ${r.updated}`, skipped].filter(Boolean).join('; ')
+  const parts: string[] = []
+  if (r.added > 0) parts.push(`новых наборов ${r.added}`)
+  if (r.updated > 0) parts.push(r.added > 0 ? `обновлено ${r.updated}` : `обновлено наборов ${r.updated}`)
+  return [`Библиотека обновлена: ${parts.join(', ')}`, skipped].filter(Boolean).join('; ')
 }
 
 // Предложение при запуске: «Есть новые наборы: 2 (120 МБ)».

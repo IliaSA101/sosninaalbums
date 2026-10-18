@@ -18,6 +18,7 @@ import {
   type PanelCtx,
   groupTitle,
   cardTitle,
+  seatOf,
 } from './panels'
 
 const ctx = (p: Partial<PanelCtx> = {}): PanelCtx => ({
@@ -174,5 +175,18 @@ describe('cardTitle', () => {
   it('на обложке без выделения — «Обложка», с выделением — как у разворота', () => {
     expect(cardTitle('idle', { ...c, cover: true })).toBe('Обложка')
     expect(cardTitle('text', { ...c, cover: true })).toBe('Текст')
+  })
+})
+
+describe('seatOf (071)', () => {
+  const empty = { id: 'p1', photo: '' }
+  it('одно пустое место — его ID', () => {
+    expect(seatOf(false, [empty])).toBe('p1')
+  })
+  it('место с фото, группа, несколько и ничего — пусто', () => {
+    expect(seatOf(false, [{ id: 'p1', photo: 'a' }])).toBe('')
+    expect(seatOf(true, [empty])).toBe('')
+    expect(seatOf(false, [empty, { id: 'p2', photo: '' }])).toBe('')
+    expect(seatOf(false, [])).toBe('')
   })
 })

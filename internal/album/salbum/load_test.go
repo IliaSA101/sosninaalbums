@@ -3,6 +3,7 @@ package salbum
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -21,6 +22,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -244,7 +246,18 @@ func TestLoadRelativeFallbackAbs(t *testing.T) {
 func TestLoadRejectsBadRelative(t *testing.T) {
 	bad := []string{`C:x`, `\\srv\a`, `../../../x`, `a/../b`, `a:b`, "a\x00b", `a//b`, `./a`, `a/.`, `\x`}
 	if runtime.GOOS == "windows" {
-		bad = append(bad, `/x`, `a/NUL`, `COM1`)
+		bad = append(bad, `/x`)
+		// Устройство (073-10): CheckRel — отказ с ErrDevice, а Load не падает — фото недостающее.
+		for _, r := range []string{`a/NUL`, `COM1`} {
+			dir := testkit.TempDir(t)
+			p, err := Load(writeV2(t, dir, FilePhoto{PhotoRef: model.PhotoRef{Path: r, W: 1, H: 1}}))
+			if err != nil || !paths.SamePath(onlyRef(t, p).Path, filepath.Join(dir, filepath.FromSlash(r))) {
+				t.Errorf("устройство %q: Load %v, фото %+v", r, err, p)
+			}
+			if err := CheckRel(r); !errors.Is(err, paths.ErrDevice) {
+				t.Errorf("checkRel(%q) = %v, ждали ErrDevice", r, err)
+			}
+		}
 	}
 	for _, r := range bad {
 		path := writeV2(t, testkit.TempDir(t), FilePhoto{PhotoRef: model.PhotoRef{Path: r, W: 1, H: 1}})
@@ -524,5 +537,18 @@ func TestLoadSplitBigKeepsFields(t *testing.T) {
 	if b.ID == "big" || b.ID == "" || b.Name != "" || b.BgL != "" || b.BgR != "" ||
 		len(b.Texts) != 0 || len(b.Photos) != 1 {
 		t.Errorf("вторая часть: %+v", b)
+	}
+}
+
+// Папка: основного (относительного) пути нет, запасной abs на месте — папкой становится запасной,
+// без записи в FolderAlt.
+func TestLoadFolderAltWhenPrimaryGone(t *testing.T) {
+	dir, other := testkit.TempDir(t), testkit.TempDir(t)
+	f := FileProject{Version: 2, Settings: model.DefaultSettings(), Photos: map[string]FilePhoto{},
+		Folders: []FileFolder{{Path: "Нет", Abs: other}}}
+	data, _ := json.Marshal(f)
+	p, err := Decode(data, dir)
+	if err != nil || !slices.Equal(p.Folders, []string{other}) || len(p.FolderAlt) != 0 {
+		t.Fatalf("папки %+v: %v", p, err)
 	}
 }

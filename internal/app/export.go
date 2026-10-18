@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -150,7 +151,7 @@ func extraQuestion(dir string, written []string) string {
 }
 
 // Export собирает развороты по настройкам окна экспорта: спрашивает папку и пишет в фоне.
-// Ход работы приходит событиями export:progress и export:done.
+// Ход работы приходит событиями export:progress и export:done; остановка — CancelExport.
 func (a *App) Export(o ExportOptions) (bool, error) {
 	// Флаг ставим до диалога: пока он открыт, второй вызов (из браузера) не пройдёт.
 	a.mu.Lock()
@@ -229,7 +230,7 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 			return false, err
 		}
 	}
-	// Пустые поля подписей (030) — тоже до папки: в печати они пусты. Только листы плана.
+	// Пустые поля подписей (030) и имена без фото (071) — тоже до папки: в печати они пусты. Только листы плана.
 	if text := export.FieldsWarning(export.PlanFields(v, &pl)); text != "" {
 		if ok, err := askYes(a, text); !ok {
 			return false, err
@@ -298,35 +299,88 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 		memo = fs.Memo
 	}
 
-	spreads := export.FromView(p, v)
+	j := exportJob{spreads: export.FromView(p, v), pl: pl, opt: opt, dir: dir, stale: stale, adobe: adobe, memo: memo}
+	ctx, cancel := context.WithCancel(a.stopCtx)
 	started = true
 	a.mu.Lock()
-	a.exportDir = dir
+	a.exportDir, a.exportCancel = dir, cancel
 	a.mu.Unlock()
-	a.bg.Go(func() {
-		defer guard("экспорт")
-		defer func() {
-			a.mu.Lock()
-			a.exporting = false
-			a.mu.Unlock()
-		}()
-		start := time.Now()
-		err := export.RunPlan(a.stopCtx, spreads, pl, opt, dir, stale,
-			func(done, total int) { a.emit("export:progress", done, total) })
-		msg, note, done := "", "", []string(nil)
-		if err != nil {
-			msg = err.Error()
-			log.Printf("экспорт: %v", paths.NoPath(err))
-		} else {
-			note, done = export.ColorNote(adobe), memo
-			log.Printf("экспорт: %d разворотов в %s за %v", len(pl.Jobs), paths.LogQ(filepath.Base(dir)), time.Since(start).Round(time.Second))
-			if note != "" {
-				log.Print(note)
-			}
-		}
-		a.emit("export:done", dir, msg, note, done)
-	})
+	a.bg.Go(func() { a.runExport(ctx, cancel, j) })
 	return true, nil
+}
+
+// exportJob — проверенная выгрузка: развороты, план, папка и что сказать по итогу.
+type exportJob struct {
+	spreads []render.Spread
+	pl      export.Plan
+	opt     render.Options
+	dir     string
+	stale   []string // прежние файлы: удаляются только после записи всех новых
+	adobe   int      // фото Adobe RGB — для строки о пересчёте цвета
+	memo    []string // памятка Фотосферы; nil — обычный тост
+}
+
+// runExport — фон экспорта и итог export:done (dir, err, note, memo, stopped). Остановка
+// (CancelExport или выход из программы) ждёт конца текущего разворота: готовые файлы остаются,
+// прежние не удаляются.
+func (a *App) runExport(ctx context.Context, cancel context.CancelFunc, j exportJob) {
+	defer guard("экспорт")
+	// Флаг снимается один раз — до export:done; здесь только при панике до него: после события
+	// флаг может уже принадлежать новому экспорту.
+	ended := false
+	defer func() {
+		if !ended {
+			a.endExport()
+		}
+	}()
+	defer cancel()
+	start := time.Now()
+	done, total := 0, len(j.pl.Jobs)
+	if j.pl.Cover != nil {
+		total++
+	}
+	err := export.RunPlan(ctx, j.spreads, j.pl, j.opt, j.dir, j.stale, func(d, t int) {
+		done, total = d, t
+		a.emit("export:progress", d, t)
+	})
+	msg, note, memo, stopped := "", "", []string(nil), false
+	switch {
+	case errors.Is(err, context.Canceled):
+		note, stopped = fmt.Sprintf("Экспорт остановлен: готово %d из %d. Уже выгруженные файлы остались в папке.", done, total), true
+		log.Printf("экспорт: остановлен, готово %d из %d", done, total)
+	case err != nil:
+		msg = err.Error()
+		log.Printf("экспорт: %v", paths.NoPath(err))
+	default:
+		note, memo = export.ColorNote(j.adobe), j.memo
+		log.Printf("экспорт: %d разворотов за %v", len(j.pl.Jobs), time.Since(start).Round(time.Second))
+		if note != "" {
+			log.Print(note)
+		}
+	}
+	// Флаг — до события: окно по export:done снова даёт «Экспорт», и повтор сразу не должен
+	// получить «экспорт уже идёт».
+	a.endExport()
+	ended = true
+	a.emit("export:done", j.dir, msg, note, memo, stopped)
+}
+
+// endExport снимает флаг экспорта и его отмену.
+func (a *App) endExport() {
+	a.mu.Lock()
+	a.exporting, a.exportCancel = false, nil
+	a.mu.Unlock()
+}
+
+// CancelExport — «Остановить»: текущий разворот дописывается, следующие не пишутся, прежние
+// файлы папки не удаляются. Экспорта нет — ничего.
+func (a *App) CancelExport() {
+	a.mu.Lock()
+	cancel := a.exportCancel
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 // exportUnits — цели диапазона окна экспорта; "" — nil (все развороты). У листа 031 «л»/«п» — ошибка.

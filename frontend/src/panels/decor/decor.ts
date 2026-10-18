@@ -65,10 +65,15 @@ export const RECENT = 'recent'
 export const ALL = 'all'
 export const MINE = 'mine'
 
-// Тема при открытии: прежний выбор, если он ещё есть; иначе «Недавние» (если не пусты), иначе «Все».
-export function firstTheme(cat: Pick<DecorCatalog, 'themes'> | null, prev = ''): string {
+// Тема при открытии: тема только что поставленного набора (073-1, fresh — названия наборов; первая плитка каталога из них),
+// иначе прежний выбор, если он ещё есть; иначе «Недавние» (если не пусты), иначе «Все».
+export function firstTheme(cat: Pick<DecorCatalog, 'themes' | 'items'> | null, prev = '', fresh?: ReadonlySet<string>): string {
   if (!cat) return ALL
   const has = (id: string) => cat.themes.some((t) => t.id === id)
+  if (fresh?.size) {
+    const it = (cat.items ?? []).find((i) => i.pack && fresh.has(i.pack) && has(i.theme))
+    if (it) return it.theme
+  }
   if (prev && has(prev)) return prev
   return cat.themes.find((t) => t.id === RECENT && t.count > 0) ? RECENT : ALL
 }

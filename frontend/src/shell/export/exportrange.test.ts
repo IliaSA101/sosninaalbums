@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import cases from '../../../../testdata/parity/ranges.json'
-import { parseExportRange } from './exportrange'
+import { parseExportRange, rangeSummary, type ExportUnit } from './exportrange'
 
 type Case = { in: string; n: number; want?: [number, number][]; err?: true }
 
@@ -63,5 +63,40 @@ describe('parseExportRange: проект-лист (031)', () => {
       [4, 0],
       [8, 0],
     ])
+  })
+})
+
+describe('rangeSummary (073)', () => {
+  const whole = (n: number): ExportUnit[] => Array.from({ length: n }, (_, i) => [i + 1, 0])
+  it('развороты: 1 / 2 / 5 / 11 / 21', () => {
+    expect(rangeSummary(whole(1), false, false)).toBe('Выгрузится 1 разворот')
+    expect(rangeSummary(whole(2), false, false)).toBe('Выгрузится 2 разворота')
+    expect(rangeSummary(whole(5), false, false)).toBe('Выгрузится 5 разворотов')
+    expect(rangeSummary(whole(11), false, false)).toBe('Выгрузится 11 разворотов')
+    expect(rangeSummary(whole(21), false, false)).toBe('Выгрузится 21 разворот')
+  })
+  it('развороты и страницы вместе', () => {
+    expect(rangeSummary([...whole(3), [7, 2]], false, false)).toBe('Выгрузится 3 разворота и 1 страница')
+  })
+  it('только страницы', () => {
+    const u: ExportUnit[] = [
+      [2, 1],
+      [3, 2],
+    ]
+    expect(rangeSummary(u, false, false)).toBe('Выгрузится 2 страницы')
+    expect(rangeSummary([[2, 1]], false, false)).toBe('Выгрузится 1 страница')
+  })
+  it('лист виньетки (031)', () => {
+    expect(rangeSummary(whole(4), true, false)).toBe('Выгрузится 4 листа')
+    expect(rangeSummary(whole(1), true, false)).toBe('Выгрузится 1 лист')
+    expect(rangeSummary(whole(5), true, false)).toBe('Выгрузится 5 листов')
+  })
+  it('обложка — «… и обложка»', () => {
+    expect(rangeSummary(whole(4), false, true)).toBe('Выгрузится 4 разворота и обложка')
+    expect(rangeSummary(whole(4), true, true)).toBe('Выгрузится 4 листа и обложка')
+    expect(rangeSummary([...whole(3), [7, 2]], false, true)).toBe('Выгрузится 3 разворота, 1 страница и обложка')
+  })
+  it('из разбора «3-5, 7п» — 3 разворота и 1 страница', () => {
+    expect(rangeSummary(parseExportRange('3-5, 7п', 10).units, false, false)).toBe('Выгрузится 3 разворота и 1 страница')
   })
 })

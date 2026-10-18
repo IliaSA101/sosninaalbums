@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // maxXMPLog — сколько строк об ошибках XMP пишется за одно сканирование: на папке
@@ -93,7 +95,7 @@ func readScan(f scanFile, xl *xmpLog) (ph Photo, retry bool, err error) {
 	if packet != nil {
 		var perr error
 		if m, mf, perr = parseXMP(packet); perr != nil {
-			xl.printf("XMP в %s: %v", ph.Name, perr)
+			xl.printf("XMP в файле %q: %v", paths.LogExt(ph.Name), perr)
 		}
 	}
 	if f.side.path != "" {
@@ -102,10 +104,9 @@ func readScan(f scanFile, xl *xmpLog) (ph Photo, retry bool, err error) {
 			var pe *fs.PathError
 			retry = errors.As(serr, &pe)
 			if retry {
-				// в PathError полный (личный) путь, а имя файла уже есть через Base
-				serr = fmt.Errorf("%s: %w", pe.Op, pe.Err)
+				serr = fmt.Errorf("%s: %w", pe.Op, pe.Err) // в PathError полный (личный) путь
 			}
-			xl.printf("сайдкар %s: %v", filepath.Base(f.side.path), serr)
+			xl.printf("сайдкар %q: %v", paths.LogExt(f.side.path), serr)
 		} else {
 			m = mergeMarks(m, mf, sm, sf)
 		}

@@ -5,9 +5,10 @@
   import { sheetIn } from '../../base/geom/sheet'
   import { unitWords } from '../../editor/captions/unitword'
   import { vigDialog } from '../vignette/vigsession.svelte'
+  import NamesNoSeats from './NamesNoSeats.svelte'
   import { namesUi } from './names.svelte'
-  import { isPasteKey, personLine } from './names'
-  import { columnsLine, fileInfo, leftList, noPhotosLine, summaryLine, vigHint } from './plantext'
+  import { isPasteKey } from './names'
+  import { columnsLine, EMPTY_SEAT, fileInfo, leftList, rowKey, summaryLine, vigHint, whoText } from './plantext'
 
   // «Имена» (спеки 030, 043): список (в том числе из файла Excel/CSV) или имена файлов → имена на фото листа.
   // Разбор и предпросмотр «фото ← строка» считает Go (PreviewNames, тот же план, что у вставки), здесь — показ.
@@ -108,20 +109,20 @@
 
       <div class="cap">Куда ляжет</div>
       <ul class="rows" aria-label="Предпросмотр">
-        {#each plan?.rows ?? [] as r (r.photo)}
+        {#each plan?.rows ?? [] as r (rowKey(r))}
           <li class:none={!r.who} class:vig>
             <span class="no">{r.no ? r.no : ''}</span>
             {#if vig}<span class="role" class:skip={!r.no}>{r.tag}</span>{/if}
-            <span class="file" title={nameOf(r.photo)}>{nameOf(r.photo)}</span>
+            <span class="file" class:blank={!r.photo} title={r.photo ? nameOf(r.photo) : EMPTY_SEAT}
+              >{r.photo ? nameOf(r.photo) : EMPTY_SEAT}</span
+            >
             <span class="arrow" aria-hidden="true">←</span>
             <span class="who"
-              >{!r.no && vig ? 'без имени' : r.who ? personLine(r.who) : '—'}{#if r.no && r.who?.subj}<span class="subj"
-                  >{' · ' + r.who.subj}</span
-                >{/if}</span
+              >{whoText(r, vig)}{#if r.no && r.who?.subj}<span class="subj">{' · ' + r.who.subj}</span>{/if}</span
             >
           </li>
         {:else}
-          <li class="none empty">{plan ? noPhotosLine(w.onCap) : ''}</li>
+          {#if plan}<NamesNoSeats {sp} onCap={w.onCap} />{:else}<li class="none"></li>{/if}
         {/each}
       </ul>
 
@@ -170,8 +171,8 @@
       </tbody>
     </table>
     <p>
-      Первая строка — заголовки. Столбец «Предмет» (или «Должность») делает строку учителем, а сам предмет печатается под именем. Столбец
-      «Файл» — по файлам. На Mac сохраняйте «CSV UTF-8».
+      Первая строка — заголовки. Столбец «Предмет» (или «Должность») делает строку учителем, а сам предмет печатается, если в шаблоне
+      подписи есть &#123;Предмет&#125;. Столбец «Файл» — по файлам. На Mac сохраняйте «CSV UTF-8».
     </p>
     <p>Одиночная кавычка " в начале ячейки, без закрывающей, склеит остаток файла.</p>
   </div>
@@ -302,10 +303,10 @@
   .rows .none {
     color: var(--muted);
   }
-  /* пустое состояние — обычный абзац: в сетке строки фраза рвалась по слову в первой узкой колонке */
-  .rows li.empty {
-    display: block;
-    line-height: 1.4;
+  /* пустое место: фото нет — бледно и курсивом, как заглушка подписи */
+  .rows .file.blank {
+    color: var(--muted);
+    font-style: italic;
   }
   .no {
     color: var(--muted);

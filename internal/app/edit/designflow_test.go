@@ -63,6 +63,36 @@ func TestPersonAndSheetCaps(t *testing.T) {
 	}
 }
 
+// Табличка места (071): правка в проекте и Changed, сессия — один шаг, пусто — снять,
+// чужое место — холостая; SetPerson фото на месте с табличкой правит её.
+func TestSetPlacePersonFlow(t *testing.T) {
+	k := gridKit(t)
+	seat := func(i int) model.Person { p, _ := k.ed.Snapshot(); return p.Spreads[0].Grid[i].Person }
+	r0 := k.rev()
+	k.SetPlacePerson("s1", "00000000000b", model.Person{Last: "Пет"}, "s")
+	v := k.SetPlacePerson("s1", "00000000000b", model.Person{Last: "Петров"}, "s")
+	if seat(1) != (model.Person{Last: "Петров"}) || v.Rev <= r0 || k.calls != 2 {
+		t.Fatalf("табличка: %+v, rev %d → %d, Changed %d", seat(1), r0, v.Rev, k.calls)
+	}
+	// Одна сессия — один шаг: отмена снимает весь набор.
+	if k.ed.Undo(); seat(1) != (model.Person{}) {
+		t.Fatalf("отмена сессии: %+v", seat(1))
+	}
+	k.ed.Redo()
+	rev := k.rev()
+	if v = k.SetPlacePerson("s1", "нет", model.Person{Last: "Х"}, ""); v.Rev != rev {
+		t.Fatalf("чужое место: rev %d → %d", rev, v.Rev)
+	}
+	k.SetPlacePerson("s1", "00000000000a", model.Person{Last: "Орлов"}, "")
+	k.SetPerson("a", model.Person{Last: "Козлов"}, "")
+	if seat(0) != (model.Person{Last: "Козлов"}) || k.person("a") != nil {
+		t.Fatalf("SetPerson на месте с табличкой: %+v, у фото %+v", seat(0), k.person("a"))
+	}
+	if k.SetPlacePerson("s1", "00000000000b", model.Person{}, ""); seat(1) != (model.Person{}) {
+		t.Fatalf("не снята: %+v", seat(1))
+	}
+}
+
 // Окно «Имена»: предпросмотр — только чтение; плохой список и неизвестный лист — ошибка.
 func TestPreviewNamesReadOnly(t *testing.T) {
 	k := twoSpreads(t)

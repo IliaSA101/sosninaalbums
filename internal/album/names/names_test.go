@@ -21,33 +21,39 @@ func TestPasteNames(t *testing.T) {
 		edtest.Gp(130, 10, 50, 50, "b"), edtest.Gp(10, 70, 50, 50, "c"), edtest.Gp(70, 70, 50, 50, "d")})
 	undo := edtest.UndoLen(e)
 	v, extra, missing, err := paste(e, "s1", "1. Сидоров Иван\r\n\n2) Петрова\tАнна\tСергеевна\nКозлов Пётр", false)
-	if err != nil || extra != 0 || missing != 1 || edtest.UndoLen(e) != undo+1 {
+	if err != nil || extra != 0 || missing != 2 || edtest.UndoLen(e) != undo+1 {
 		t.Fatalf("вставка: лишних %d, без имени %d, err %v, шагов %d", extra, missing, err, edtest.UndoLen(e)-undo)
 	}
-	// Порядок мест, пустое место пропускается: a, b, c получили имена, d — нет.
-	want := map[string]model.Person{"a": {Last: "Сидоров", First: "Иван"},
-		"b": {Last: "Петрова", First: "Анна", Middle: "Сергеевна"}, "c": {Last: "Козлов", First: "Пётр"}}
-	for id, w := range want {
-		if got := edtest.P(e).Photos[id].Person; got == nil || *got != w {
-			t.Fatalf("%s: %+v, ждали %+v", id, got, w)
+	// Порядок мест, и пустое (071): таблички мест a, пустого и b; c и d — без имени. Имена — на
+	// местах, своих имён фото не получают.
+	want := []model.Person{{Last: "Сидоров", First: "Иван"}, {Last: "Петрова", First: "Анна", Middle: "Сергеевна"},
+		{Last: "Козлов", First: "Пётр"}, {}, {}}
+	for i, w := range want {
+		if got := seatOf(e, i); got != w {
+			t.Fatalf("место %d: %+v, ждали %+v", i, got, w)
 		}
 	}
-	if edtest.P(e).Photos["d"].Person != nil || v.Rev != edtest.Rev(e) {
-		t.Fatal("d без имени")
+	for _, id := range []string{"a", "b", "c", "d"} {
+		if edtest.P(e).Photos[id].Person != nil {
+			t.Fatalf("%s получило своё имя: %+v", id, edtest.P(e).Photos[id].Person)
+		}
+	}
+	if seen(e, "a") != "Сидоров Иван" || seen(e, "b") != "Козлов Пётр" || seen(e, "d") != "" || v.Rev != edtest.Rev(e) {
+		t.Fatalf("видно: a %q, b %q, d %q", seen(e, "a"), seen(e, "b"), seen(e, "d"))
 	}
 	// Та же вставка — холостая: ни шага, ни rev.
 	rev := edtest.Rev(e)
 	if _, _, _, err := paste(e, "s1", "Сидоров Иван\nПетрова Анна Сергеевна\nКозлов Пётр", false); err != nil || edtest.Rev(e) != rev {
 		t.Fatalf("повтор: err %v, rev %d → %d", err, rev, edtest.Rev(e))
 	}
-	// Имя первым и лишние строки.
-	_, extra, missing, _ = paste(e, "s1", "Иван Сидоров\nАнна Сергеевна Петрова\nПётр Козлов\nОля Иванова\nЛишний Человек", true)
-	if extra != 1 || missing != 0 || *edtest.P(e).Photos["b"].Person != want["b"] || edtest.P(e).Photos["d"].Person.Last != "Иванова" {
-		t.Fatalf("имя первым: лишних %d, без имени %d, b %+v", extra, missing, edtest.P(e).Photos["b"].Person)
+	// Имя первым и лишние строки: пять мест — пять строк, шестая лишняя.
+	_, extra, missing, _ = paste(e, "s1", "Иван Сидоров\nАнна Сергеевна Петрова\nПётр Козлов\nОля Иванова\nМаша Орлова\nЛишний Человек", true)
+	if extra != 1 || missing != 0 || seatOf(e, 1) != want[1] || seen(e, "d") != "Орлова Маша" {
+		t.Fatalf("имя первым: лишних %d, без имени %d, место 1 %+v, d %q", extra, missing, seatOf(e, 1), seen(e, "d"))
 	}
 	// Отмена — одним шагом.
 	e.Undo()
-	if edtest.P(e).Photos["d"].Person != nil {
+	if seatOf(e, 4) != (model.Person{}) || seatOf(e, 0) != want[0] {
 		t.Fatal("отмена вставки")
 	}
 	// Слишком длинный список и чужой разворот — ошибка без правки.
@@ -197,9 +203,11 @@ func TestNamesSubject(t *testing.T) {
 	if _, _, err := e.PasteNames(sid, model.NamesOpts{Text: text}); err != nil {
 		t.Fatal(err)
 	}
-	ph := edtest.P(e).Photos
-	if who := ph[teacher].Person; who == nil || who.Subject != "Физика" || ph[pupils[0]].Person.Subject != "" {
-		t.Fatalf("из списка: учитель %+v, ученик %+v", who, ph[pupils[0]].Person)
+	// Имена на виньетке — таблички мест (071): видно табличку, свой предмет фото снят.
+	tv, _ := e.Person(teacher)
+	if pv, _ := e.Person(pupils[0]); tv.Subject != "Физика" || tv.Place == "" || pv.Subject != "" || pv.Place == "" ||
+		edtest.P(e).Photos[teacher].Person != nil {
+		t.Fatalf("из списка: учитель %+v, ученик %+v, своё %+v", tv, pv, edtest.P(e).Photos[teacher].Person)
 	}
 	rev := edtest.Rev(e)
 	if _, _, _ = e.PasteNames(sid, model.NamesOpts{Text: text}); edtest.Rev(e) != rev {
@@ -209,10 +217,10 @@ func TestNamesSubject(t *testing.T) {
 		t.Fatalf("карточка: %+v", pv)
 	}
 	plain := "Фамилия\tИмя\nСидорова\tОльга\nКозлов\tИван\nОрлов\tОлег\nПетрова\tАнна\n"
-	if _, _, _ = e.PasteNames(sid, model.NamesOpts{Text: plain}); edtest.P(e).Photos[teacher].Person.Subject != "" {
-		t.Fatalf("список без предмета: %+v", edtest.P(e).Photos[teacher].Person)
+	if _, _, _ = e.PasteNames(sid, model.NamesOpts{Text: plain}); seenSubject(e, teacher) != "" {
+		t.Fatalf("список без предмета: %q", seenSubject(e, teacher))
 	}
-	if e.Undo(); edtest.P(e).Photos[teacher].Person.Subject != "Физика" {
+	if e.Undo(); seenSubject(e, teacher) != "Физика" {
 		t.Fatal("отмена вставки не вернула предмет")
 	}
 }

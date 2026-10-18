@@ -110,12 +110,16 @@ const res = (r, emptyOut = false) => ({ ok: r.code === 0 && !(emptyOut && r.out.
 // ---- Go ----
 const goFiles = changed.filter((f) => f.endsWith('.go'))
 if (goFiles.length) {
-  const dirs = [...new Set(goFiles.map((f) => (f.includes('/') ? f.slice(0, f.lastIndexOf('/')) : '.')))]
+  // Разовые скрипты с //go:build ignore (scripts/*.go) — не пакет: go test и golangci-lint на их папке падают
+  const ignored = (f) => /^\/\/go:build ignore\b/m.test(fs.readFileSync(path.join(root, f), 'utf8').slice(0, 400))
+  const built = goFiles.filter((f) => !ignored(f))
+  const dirs = [...new Set(built.map((f) => (f.includes('/') ? f.slice(0, f.lastIndexOf('/')) : '.')))]
   const pkgs = dirs.map((d) => (d === '.' ? '.' : `./${d}`))
   step('gofmt', () => res(run('gofmt', ['-l', ...goFiles]), true))
   // vet по всему модулю (2–4 с): ловит чужие вызовы и тесты после смены сигнатуры, а не только изменённые пакеты
   step('go vet', () => res(run('go', ['vet', ...MODULE_PKGS])))
   step('go test -short', () => {
+    if (!pkgs.length) return res({ code: 0, out: '' })
     // Больше трёх пакетов — через очередь: go test занимает все ядра
     const goTest = ['test', '-short', '-count=1', ...pkgs]
     return res(pkgs.length > 3 ? run('node', ['scripts/heavy.mjs', 'go', ...goTest]) : run('go', goTest))
@@ -142,6 +146,7 @@ if (goFiles.length) {
     })
   }
   step('golangci-lint', () => {
+    if (!pkgs.length) return res({ code: 0, out: '' })
     const gcl = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['golangci-lint'], { encoding: 'utf8' })
     let exe = gcl.status === 0 ? gcl.stdout.split('\n')[0].trim() : ''
     if (!exe) {

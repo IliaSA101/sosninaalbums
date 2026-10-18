@@ -73,11 +73,13 @@ func FuzzFileName(f *testing.F) {
 }
 
 // FuzzCheckLocalPath: принятый на Windows путь — только `X:` + разделитель, без `:`
-// дальше второй позиции и без NUL.
+// дальше второй позиции и без NUL; ни один элемент ОС не считает устройством.
 func FuzzCheckLocalPath(f *testing.F) {
 	for _, s := range []string{
 		`C:\a`, `D:/a/b`, `\\h\s`, `\\?\C:\x`, `C:x`, `C:\a:s`, "C:\\a\x00", "", `é:\я`,
 		`C:\Съёмки\1.jpg`, `\??\UNC\h\s`, "//h/s", `Ｃ:\x`, `C:\a::$DATA`,
+		`C:\x\COM1`, `C:\CON\a.jpg`, `C:/x/nul.txt/y`, `C:\x\COM10`,
+		`C:\x\CON.jpg`, `C:\x\CON . .`, `C:\x\aux.2024`, `C:\x\COM¹.a`, `C:\x\..\NUL`,
 	} {
 		f.Add(s)
 	}
@@ -96,6 +98,13 @@ func FuzzCheckLocalPath(f *testing.F) {
 			!strings.ContainsRune(p[2:], ':')
 		if !ok {
 			t.Fatalf("принят %q: не вид X:<разделитель> или есть ':' дальше", p)
+		}
+		// Независимо от реализации: элемент, который сама ОС не считает локальным (устройство —
+		// RtlIsDosDeviceName_U), в принятом пути не стоит; «..» в абсолютном пути допустим.
+		for _, el := range strings.FieldsFunc(p[3:], IsSepRune) {
+			if el != ".." && !filepath.IsLocal(el) {
+				t.Fatalf("принят %q: элемент %q ОС считает нелокальным", p, el)
+			}
 		}
 	})
 }

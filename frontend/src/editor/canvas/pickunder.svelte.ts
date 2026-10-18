@@ -1,6 +1,7 @@
 // Подключение выбора нижнего объекта (спека 015, design §4): action на `.content` разворота ловит нажатие и
 // щелчок в фазе захвата, решает по чистому pressPlan (pickunder.ts) и либо уступает обычным обработчикам,
 // либо берёт перенос/выделение на себя. Состояние — только «выбрано Alt+щелчком» и счётчик подсказки.
+import { secondaryPress } from '../../base/core/platform'
 import { store } from '../../base/core/store.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { edit } from '../text/edit.svelte'
@@ -87,7 +88,7 @@ function compute(e: PointerEvent): Ctx | null {
   const sel = selection(s)
   const cur = (sel && stack.find((it) => it.kind === sel.kind && it.ref === sel.ref)) || null
   const pk = picked && picked.sig === sigOf(s.id) ? picked.item : null
-  const plan = pressPlan({ button: e.button, alt: e.altKey, additive: additive(e), stack, cur, picked: pk })
+  const plan = pressPlan({ button: secondaryPress(e) ? 2 : e.button, alt: e.altKey, additive: additive(e), stack, cur, picked: pk })
   return { plan, top: stack[0] ?? null, params: p }
 }
 

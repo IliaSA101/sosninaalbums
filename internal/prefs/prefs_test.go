@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -166,6 +168,36 @@ func TestRecentList(t *testing.T) {
 	rows = RecentView(long)
 	if len(rows) != maxRecent || rows[0].Path != at("k") || rows[maxRecent-1].Path != at(string(rune('k'+maxRecent-1))) {
 		t.Fatalf("RecentView из чужого конфига: %+v", rows)
+	}
+}
+
+// «Последние» с альбомами «Nul.salbum» и «Con.2024\a.salbum» (Windows 11 — обычные файлы,
+// 073-10): PushRecent и RecentView их не теряют; на «старой ОС» (подмена: Windows 10) — пропускают,
+// а «CON» без расширения — всегда.
+func TestRecentDeviceNames(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("устройства DOS — только Windows")
+	}
+	dir := testkit.TempDir(t)
+	nul, con, plain := filepath.Join(dir, "Nul.salbum"), filepath.Join(dir, "Con.2024", "a.salbum"), filepath.Join(dir, "b.salbum")
+	t.Cleanup(paths.SetDeviceOracle(func(string) bool { return false }))
+	list := PushRecent(PushRecent(PushRecent(nil, plain), con), nul)
+	if !slices.Equal(list, []string{nul, con, plain}) {
+		t.Fatalf("Windows 11: %v", list)
+	}
+	if rows := RecentView(list); len(rows) != 3 || rows[0].Name != "Nul" || rows[1].Name != "a" {
+		t.Fatalf("Windows 11: RecentView %+v", rows)
+	}
+	if got := PushRecent(list, filepath.Join(dir, "CON", "x.salbum")); !slices.Equal(got, list) {
+		t.Fatalf("CON без расширения попал в список: %v", got)
+	}
+	restore := paths.SetDeviceOracle(paths.Device)
+	defer restore()
+	if rows := RecentView(list); len(rows) != 1 || rows[0].Path != plain {
+		t.Fatalf("Windows 10: RecentView %+v", rows)
+	}
+	if got := PushRecent(list, plain); !slices.Equal(got, []string{plain}) {
+		t.Fatalf("Windows 10: PushRecent %v", got)
 	}
 }
 

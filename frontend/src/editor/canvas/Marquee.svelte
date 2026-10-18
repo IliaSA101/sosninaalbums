@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import { store } from '../../base/core/store.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { canvas } from './canvas.svelte'
@@ -19,7 +20,7 @@
   // Начать жест на нажатии e (левая кнопка, не панорама). Вернёт true, если жест взят.
   export function start(e: PointerEvent): boolean {
     const el = stage
-    if (!el || !store.spread || e.button !== 0 || canvas.space || canvas.panning) return false
+    if (!el || !store.spread || !primaryPress(e) || canvas.space || canvas.panning) return false
     if (!emptyField(e.target as Element | null)) return false
     const origin: Pt = { x: e.clientX, y: e.clientY }
     let moved = false

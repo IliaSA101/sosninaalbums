@@ -9,7 +9,6 @@ import (
 	"cmp"
 	"math"
 	"slices"
-	"sync"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
@@ -18,6 +17,11 @@ import (
 // rowQSlack — форма встаёт в ряд, если её Q не хуже Q лучшей раскладки на столько: дальше она
 // заметно слабее мозаики, и в начале ряда её показывать незачем.
 const rowQSlack = 0.25
+
+// manySideSlack — «не мельче мозаики» на многих фото (072-2): мельчайшая сторона формы не меньше
+// этой доли той же у Row[0]. Мозаики 2–8-й плиток того же ряда уже бывают на 10–15 % мельче первой,
+// а при 1,0 на 30 фото смеси в трети наборов оставалась одна мозаика.
+const manySideSlack = 0.9
 
 // rowEntry — ряд «Авто» и то, что о нём нужно пулу и «Другим вариантам».
 type rowEntry struct {
@@ -29,11 +33,8 @@ type rowEntry struct {
 }
 
 // rowCache — ряды по пропорциям и геометрии: View берёт ряд у каждого разворота на каждый запрос,
-// а без кэша это Gen, featured и Quality на каждую раскладку. Предел — как у extraCache.
-var rowCache = struct {
-	sync.Mutex
-	m map[string]rowEntry
-}{m: map[string]rowEntry{}}
+// а без кэша это Gen, featured и Quality на каждую раскладку. Два поколения, как у extraCache.
+var rowCache genCache[rowEntry]
 
 // Row — ряд «Авто» разворота длиной не больше rowLen: Row[0] = layout.Cached[0] всегда; на
 // позициях 1, 3, 5, … — лучшая по Q ещё не показанной формы (Q ≥ Q[0] − rowQSlack; ключ и вид не
@@ -52,9 +53,7 @@ func RowResults(aspects []float64, p layout.Params, rowLen int) []layout.Result 
 
 func rowOf(aspects []float64, p layout.Params, rowLen int) rowEntry {
 	key := layout.CacheKey(aspects, p, rowLen)
-	rowCache.Lock()
-	e, ok := rowCache.m[key]
-	rowCache.Unlock()
+	e, ok := rowCache.get(key)
 	if ok {
 		return e
 	}
@@ -68,12 +67,7 @@ func rowOf(aspects []float64, p layout.Params, rowLen int) rowEntry {
 	for i, c := range e.row {
 		e.res[i] = c.Result
 	}
-	rowCache.Lock()
-	if len(rowCache.m) >= extraGen {
-		rowCache.m = map[string]rowEntry{}
-	}
-	rowCache.m[key] = e
-	rowCache.Unlock()
+	rowCache.put(key, e)
 	return e
 }
 
@@ -249,9 +243,9 @@ func tailRow(head rowEntry, base []layout.Result, rowLen int, p layout.Params) r
 	return e
 }
 
-// formRelax — с ManyFrom фото пол мельчайшей стороны форм Gen не строже, чем у лучшей раскладки
-// (мм): на 25+ фото полы видов отсекали почти все формы, хотя мозаика там не крупнее (решение
-// 0.13 №40). До ManyFrom — 0: полы вида как есть.
+// formRelax — с ManyFrom фото пол мельчайшей стороны форм Gen не строже manySideSlack той же у
+// лучшей раскладки (мм): на 25+ фото полы видов отсекали почти все формы, хотя мозаика там не
+// крупнее (решение 0.13 №40, 072-2). До ManyFrom — 0: полы вида как есть.
 func formRelax(as []float64, best layout.Result) float64 {
 	if len(as) < layout.ManyFrom || len(best.Rects) == 0 {
 		return 0
@@ -260,7 +254,7 @@ func formRelax(as []float64, best layout.Result) float64 {
 	for _, r := range best.Rects {
 		m = math.Min(m, math.Min(r.W, r.H))
 	}
-	return m
+	return manySideSlack * m
 }
 
 // formCands — кандидаты форм: Gen (пол мельчайшей стороны не строже relax мм, formRelax) и
@@ -293,8 +287,5 @@ func formCands(as []float64, p layout.Params, feats []Feat, relax float64) ([]fo
 
 // RowCached — ряд «Авто» уже посчитан (проверка прогрева).
 func RowCached(aspects []float64, p layout.Params, rowLen int) bool {
-	rowCache.Lock()
-	defer rowCache.Unlock()
-	_, ok := rowCache.m[layout.CacheKey(aspects, p, rowLen)]
-	return ok
+	return rowCache.has(layout.CacheKey(aspects, p, rowLen))
 }

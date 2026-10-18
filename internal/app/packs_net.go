@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"slices"
@@ -28,6 +27,22 @@ type LibraryUpdate struct {
 	Updated int         `json:"updated"`
 	Skipped []DecorSkip `json:"skipped"`
 	Bytes   int64       `json:"bytes"`
+	titles  []string    // названия поставленных и обновлённых — в library:changed; в JSON не идут
+}
+
+// libChanged — данные library:changed: названия (PackInfo.Title) поставленных и обновлённых
+// наборов, чтобы окно «Фоны/Стикеры/Развороты» встало на тему нового (решение 073-1). При
+// удалении — пустой список (не null).
+type libChanged struct {
+	Installed []string `json:"installed"`
+}
+
+// emitChanged шлёт library:changed с названиями; nil превращается в пустой список.
+func (a *App) emitChanged(titles ...string) {
+	if titles == nil {
+		titles = []string{}
+	}
+	a.emit("library:changed", libChanged{Installed: titles})
 }
 
 // LibraryProgress — событие library:progress: этап catalog | download | install, набор и байты.
@@ -231,7 +246,7 @@ func (a *App) startCheck() {
 	case offer.Count > 0:
 		a.emit("library:offer", offer)
 	case res.Added+res.Updated > 0:
-		a.notice(fmt.Sprintf("Библиотека обновлена: новых наборов %d, обновлено %d", res.Added, res.Updated))
+		a.emit("library:updated", res) // тост собирает фронт, обычный, не красный (073-2)
 	}
 }
 
@@ -261,7 +276,7 @@ func (a *App) updateLibrary(ctx context.Context, s *decor.Store, offerOver int64
 	defer func() {
 		if res.Added+res.Updated > 0 {
 			a.relinkLib(s)
-			a.emit("library:changed", struct{}{})
+			a.emitChanged(res.titles...)
 		}
 	}()
 	for _, e := range todo {
@@ -271,7 +286,7 @@ func (a *App) updateLibrary(ctx context.Context, s *decor.Store, offerOver int64
 		}
 	}
 	a.markChecked()
-	log.Printf("библиотека: проверка, новых %d", res.Added+res.Updated)
+	log.Printf("библиотека: итог — новых %d, обновлено %d, пропущено %d", res.Added, res.Updated, len(res.Skipped))
 	return res, offer, nil
 }
 
@@ -364,9 +379,11 @@ func (a *App) netInstall(ctx context.Context, s *decor.Store, c *fetch.Client, e
 	case st.Ask == decor.AskSame || st.Ask == decor.AskOlder:
 		return nil // поставили «из файла» за время скачивания
 	}
-	if _, err := s.InstallPack(st, a.albumLibs()); err != nil {
+	info, err := s.InstallPack(st, a.albumLibs())
+	if err != nil {
 		return diskErr(e, err)
 	}
+	res.titles = append(res.titles, info.Title)
 	if st.Ask == decor.AskUpdate {
 		res.Updated++
 	} else {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
-  import { jobs } from '../../base/core/jobs.svelte'
+  import { exportShut, jobs } from '../../base/core/jobs.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import { run } from './commands'
@@ -73,7 +73,7 @@
         <path d="M12 3.5v13M14 7h1.5M14 10h1.5" />
       </svg>
     </button>
-    <button class="accent" disabled={!!jobs.exporting || store.sheets.length === 0} onclick={() => run('export')}>
+    <button class="accent" disabled={exportShut(store.sheets.length, !!jobs.exporting)} onclick={() => run('export')}>
       {#if jobs.exporting && jobs.exporting.total > 0}
         Экспорт {jobs.exporting.done} / {jobs.exporting.total}
       {:else if jobs.exporting}

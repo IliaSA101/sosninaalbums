@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { SpreadView } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
   import { coverSides } from '../cover/cover'
@@ -43,7 +44,7 @@
   // Общий жест: порог 3 px, Esc отменяет (до Esc режима — фаза захвата), правка — на отпускании.
   function gesture(e: PointerEvent, step: Step, done: (l: BgLive) => Promise<void>) {
     const cur = b
-    if (e.button !== 0 || canvas.space || !cur || !root) return
+    if (!primaryPress(e) || canvas.space || !cur || !root) return
     e.stopPropagation()
     e.preventDefault()
     const r = root.getBoundingClientRect()
@@ -159,7 +160,7 @@
   // полоса и края соседних разворотов работают как обычно.
   function outside(e: PointerEvent) {
     const c = bgmode.cur
-    if (e.button !== 0 || canvas.space || !c || !root) return
+    if (!primaryPress(e) || canvas.space || !c || !root) return
     const el = e.target as Element | null
     if (!el?.closest('.stage') || el.closest('[data-chrome], [data-bd-ui], [data-peer], .zoom-badge')) return
     e.stopPropagation()

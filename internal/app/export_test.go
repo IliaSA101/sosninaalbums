@@ -27,6 +27,10 @@ type exportEnv struct {
 	answer bool
 	done   chan string // msg из export:done
 	photos []string
+	// onStep — вызов на каждом export:progress (номер готового); last — данные export:done
+	// и флаг экспорта на момент события (читать после приёма из done).
+	onStep func(done int)
+	last   []any
 }
 
 func newExportEnv(t *testing.T, n int) *exportEnv {
@@ -45,7 +49,16 @@ func newExportEnv(t *testing.T, n int) *exportEnv {
 	e.a = newApp(t)
 	e.a.cfgDir = testkit.TempDir(t)
 	e.a.emit = func(name string, data ...any) {
-		if name == "export:done" {
+		switch name {
+		case "export:progress":
+			if e.onStep != nil {
+				e.onStep(data[0].(int))
+			}
+		case "export:done":
+			e.a.mu.Lock()
+			busy := e.a.exporting
+			e.a.mu.Unlock()
+			e.last = append(data, busy)
 			e.done <- data[1].(string)
 		}
 	}
@@ -370,12 +383,62 @@ func TestExportFieldsWarningPlan(t *testing.T) {
 			t.Fatalf("%+v: Export = %v, %v", c.o, ok, err)
 		}
 		var want []string
-		if w := export.FieldsWarning(c.unfilled, c.unnamed); w != "" {
+		if w := export.FieldsWarning(c.unfilled, c.unnamed, 0); w != "" {
 			want = []string{w}
 		}
 		if !slices.Equal(e.asked, want) {
 			t.Errorf("%+v: вопросы %q, ждали %q", c.o, e.asked, want)
 		}
+	}
+}
+
+// Имена без фото (071 §7а): табличка пустого места — в вопросе до выбора папки, только по
+// листам плана; «нет» — ничего не записано; место заполнили — вопроса нет.
+func TestExportWaitingWarning(t *testing.T) {
+	e := newExportEnv(t, 2)
+	p, _ := e.a.editor().Snapshot()
+	p.Spreads[0].Grid = []*model.Place{{ID: "0000000000a1", X: 5, Y: 5, W: 20, H: 20, Photo: "p0"},
+		{ID: "0000000000a2", X: 65, Y: 5, W: 20, H: 20}, {ID: "0000000000a3", X: 90, Y: 5, W: 20, H: 20}}
+	e.a.ed.Store(mustEditor(t, p, ""))
+	e.a.SetPlacePerson("s0", "0000000000a2", model.Person{Last: "Петров", First: "Ваня"}, "")
+	e.a.SetPlacePerson("s0", "0000000000a3", model.Person{Subject: "Химия"}, "") // предмет — не имя
+	if pv := e.a.PlacePerson("s0", "0000000000a2"); pv.Last != "Петров" || pv.Place != "0000000000a2" {
+		t.Fatalf("PlacePerson: %+v", pv)
+	}
+	if pv := e.a.PlacePerson("s0", "нет"); pv != (model.PersonView{}) {
+		t.Fatalf("нет места: %+v", pv)
+	}
+	pick := pickExportDir
+	t.Cleanup(func() { pickExportDir = pick })
+	for _, c := range []struct {
+		o    ExportOptions
+		want []string
+	}{
+		{ExportOptions{Range: "2"}, nil},
+		{ExportOptions{Range: "1"}, []string{"Имён без фото: 1. В выгрузке они будут пустыми. Продолжить?"}},
+		{ExportOptions{}, []string{"Имён без фото: 1. В выгрузке они будут пустыми. Продолжить?"}},
+	} {
+		e.asked, e.answer = nil, false
+		c.o.DPI = 72
+		pickExportDir = func(*App, string) (string, error) { return "", nil } // отмена выбора папки
+		if ok, err := e.a.Export(c.o); ok || err != nil || !slices.Equal(e.asked, c.want) {
+			t.Errorf("%+v: Export = %v, %v; вопросы %q", c.o, ok, err, e.asked)
+		}
+	}
+	if ents, _ := os.ReadDir(e.dir); len(ents) != 0 {
+		t.Fatalf("после «нет» записано %d файлов", len(ents))
+	}
+	// Фото встало на место с табличкой — имени без фото больше нет.
+	ph := model.PhotoInfo{ID: "p1", Path: e.photos[1], W: 60, H: 40}
+	v, _, err := e.a.editor().DropPhotos("s0", "0000000000a2", []model.PhotoInfo{ph}, -1, "")
+	if err != nil || v.Spreads[0].Waiting != 0 {
+		t.Fatalf("бросок на место: %v, ждут %d", err, v.Spreads[0].Waiting)
+	}
+	e.asked, e.answer = nil, true
+	pickExportDir = pick
+	// Осталось пустое место с одним предметом — вопрос только о пустом месте.
+	if msg := e.export(t, ExportOptions{}); msg != "" || len(e.asked) != 1 || strings.Contains(e.asked[0], "без фото") {
+		t.Fatalf("заполнено: %q, вопросы %q", msg, e.asked)
 	}
 }
 

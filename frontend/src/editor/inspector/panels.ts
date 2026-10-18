@@ -47,6 +47,11 @@ export function panelMode(c: PanelCtx): PanelMode {
   return 'idle'
 }
 
+// Одно выделенное пустое место (не группа, не фото): его ID — карточка показывает «Имя на месте» (071); иначе ''.
+export function seatOf(group: boolean, selected: { id: string; photo: string }[]): string {
+  return !group && selected.length === 1 && !selected[0].photo ? selected[0].id : ''
+}
+
 // Заголовок карточки группы: «3 места», «2 места, 1 текст», «2 текста», «1 текст, 2 стикера».
 export function groupTitle(places: number, texts: number, stickers = 0): string {
   const parts: string[] = []

@@ -146,9 +146,9 @@ func TestRowForms(t *testing.T) {
 			}
 		}
 	}
-	// Из 36 наборов (решение 0.13 №40: было 24): форм меньше только у 3 фото без layflat (лента,
-	// мелкое — крупное, главное) и у серии 25 фото (мозаика крупнее любых рядов одной высоты).
-	if full < 30 {
+	// Из 36 наборов (решение 0.13 №40: было 24, 072: 30 → 33): форм меньше только у 3 фото без
+	// layflat (лента, мелкое — крупное, главное); серия 25 — с «Рядами» DP и «С главным» (072).
+	if full < 33 {
 		t.Errorf("≥ 4 форм в первых 8 — только у %d наборов из 36", full)
 	}
 }
@@ -209,24 +209,55 @@ func TestRowEdges(t *testing.T) {
 	}
 }
 
-// TestRowCacheGen: на extraGen записях кэш ряда начинается заново (память не растёт).
-func TestRowCacheGen(t *testing.T) {
+// TestRowCacheGenerations: кэш ряда «Авто» — два поколения (073): свежая запись переживает
+// переполнение, взятая из старого поколения переезжает в новое и тоже переживает, остальные
+// старые уходят при следующей смене; объём не больше 2·поколение. Прежде кэш сбрасывался целиком.
+func TestRowCacheGenerations(t *testing.T) {
+	genCacheCase(t, func(as []float64) { Row(as, geomSq, 24) },
+		func(as []float64) bool { return RowCached(as, geomSq, 24) }, rowCache.size)
+}
+
+// genCacheCase — общий сценарий поколений: поколение 3, наборы a0…a6 разного числа фото (ключи
+// различны). a0, a1, a2 заполняют cur; a3 сдвигает их в old; a0 взят из old — в cur; a4, a5
+// заполняют cur, при a5 старое поколение (a1, a2) уходит, а cur (a3, a0, a4) становится old.
+func genCacheCase(t *testing.T, fill func([]float64), cached func([]float64) bool, size func() (int, int)) {
+	t.Helper()
+	was := varietyGen
+	varietyGen = 3
+	t.Cleanup(func() { varietyGen = was; ResetCache() })
 	ResetCache()
-	t.Cleanup(ResetCache)
-	old := sameAspects(4, aspL)
-	Row(old, geomSq, 24)
-	rowCache.Lock()
-	for i := len(rowCache.m); i < extraGen; i++ {
-		rowCache.m[fmt.Sprint(i)] = rowEntry{}
+	if c, o := size(); c != 0 || o != 0 {
+		t.Fatalf("после сброса записей %d + %d", c, o)
 	}
-	rowCache.Unlock()
-	as := sameAspects(3, aspL)
-	Row(as, geomSq, 24)
-	rowCache.Lock()
-	n := len(rowCache.m)
-	rowCache.Unlock()
-	if n != 1 || !RowCached(as, geomSq, 24) || RowCached(old, geomSq, 24) {
-		t.Fatalf("после предела записей %d", n)
+	sets := make([][]float64, 7)
+	for i := range sets {
+		sets[i] = sameAspects(i+2, aspL)
+	}
+	check := func(step string) {
+		t.Helper()
+		if c, o := size(); c+o > 2*varietyGen || c > varietyGen {
+			t.Fatalf("%s: записей %d + %d при поколении %d", step, c, o, varietyGen)
+		}
+	}
+	for i := range 4 {
+		fill(sets[i])
+		check(fmt.Sprint("a", i))
+	}
+	if !cached(sets[0]) || !cached(sets[3]) {
+		t.Fatal("после первой смены поколений пропали записи")
+	}
+	fill(sets[0]) // из old — в cur
+	check("a0 снова")
+	fill(sets[4])
+	fill(sets[5])
+	check("a5")
+	for i, want := range []bool{true, false, false, true, true, true} {
+		if got := cached(sets[i]); got != want {
+			t.Errorf("a%d в кэше %v, ждали %v", i, got, want)
+		}
+	}
+	if c, o := size(); c != 1 || o != 3 {
+		t.Errorf("записей %d + %d, ждали 1 + 3", c, o)
 	}
 }
 

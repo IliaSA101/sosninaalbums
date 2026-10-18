@@ -25,14 +25,17 @@
 
   let box = $state<HTMLElement>()
 
-  // Фото окошка — последнее непустое: при закрытии cur уже null, а поля (blur, досылка набранного по Esc)
-  // читают photo ещё раз — ленивое cur.photo там бросало TypeError.
-  let last = { photo: '', who: [] as readonly string[] }
+  // Цель окошка (фото или пустое место) — последняя непустая: при закрытии cur уже null, а поля (blur,
+  // досылка набранного по Esc) читают её ещё раз — ленивое cur.photo там бросало TypeError.
+  let last = { photo: '', place: '', who: [] as readonly string[] }
   const snap = $derived.by(() => {
-    if (cur) last = { photo: cur.photo, who: cur.who }
+    if (cur) last = { photo: cur.photo, place: cur.place, who: cur.who }
     return last
   })
   const photo = $derived(snap.photo)
+  // Ссылка на место — от примитивов: новый вид разворота (spread) каждую правку её не пересоздаёт.
+  const sid = $derived(spread.id)
+  const placeRef = $derived(snap.place ? { spread: sid, id: snap.place } : undefined)
 
   // Другой разворот или полей имени у фото больше нет — закрыть сразу.
   $effect(() => {
@@ -82,10 +85,11 @@
       if (e.key === 'Escape') nameEdit.close()
     }}
   >
-    {#key photo}
-      <PersonFields {photo} only={snap.who} inline ondone={() => nameEdit.close()} />
+    {#key snap.place || photo}
+      <PersonFields {photo} place={placeRef} only={snap.who} inline ondone={() => nameEdit.close()} />
     {/key}
-    <button type="button" class="own" onclick={own}>Свой текст вместо шаблона</button>
+    <!-- «Свой текст» — правка подписи фото; у пустого места подписи нет -->
+    {#if photo}<button type="button" class="own" onclick={own}>Свой текст вместо шаблона</button>{/if}
   </div>
 {/if}
 

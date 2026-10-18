@@ -144,11 +144,8 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("файл проекта повреждён: %w", err)
 	}
-	if f.Version > model.FormatVersion {
-		return nil, ErrNewer
-	}
-	if len(f.Spreads) > model.MaxSpreads { // сырой список: до dedupe/splitBig не гонять огромный файл
-		return nil, errTooMany(len(f.Spreads))
+	if err := checkRaw(&f); err != nil {
+		return nil, err
 	}
 	p := model.New()
 	p.SetFrom(max(f.Version, 1))
@@ -165,18 +162,8 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 		return nil, err
 	}
 	fixCoverAndGuide(p, &f, base, v1)
-	for id, fp := range f.Photos {
-		if fp.Lib != "" { // своё из библиотеки: путь — от искателя (lib.go)
-			if ref, ok := resolveLib(fp); ok {
-				p.Photos[id] = ref
-			}
-			continue
-		}
-		ref, err := resolvePhoto(fp, base, v1)
-		if err != nil {
-			return nil, fmt.Errorf("фото в проекте: %w", err)
-		}
-		p.Photos[id] = ref
+	if err := loadPhotos(p, f.Photos, base, v1); err != nil {
+		return nil, err
 	}
 	dropNilPlaces(p)
 	unionGrid(p)
@@ -207,6 +194,69 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	return p, nil
 }
 
+// loadPhotos — фото из файла. Устройство в пути на этой ОС (paths.ErrDevice, 073-10) — фото
+// недостающее, как ненайденный файл: путь остаётся, к файлу не обращаемся.
+func loadPhotos(p *model.Project, list map[string]FilePhoto, base string, v1 bool) error {
+	devs := 0
+	for id, fp := range list {
+		if fp.Lib != "" { // своё из библиотеки: путь — от искателя (lib.go)
+			if ref, ok := resolveLib(fp); ok {
+				p.Photos[id] = ref
+			}
+			continue
+		}
+		ref, err := resolvePhoto(fp, base, v1)
+		if errors.Is(err, paths.ErrDevice) {
+			devs++
+		} else if err != nil {
+			return fmt.Errorf("фото в проекте: %w", err)
+		}
+		p.Photos[id] = ref
+	}
+	if devs > 0 {
+		log.Printf("фото проекта: %d с именем устройства Windows в пути — недостающие", devs)
+	}
+	return nil
+}
+
+// checkRaw — первые шаги по сырому файлу, до всякого разбора: новее программы — ErrNewer, сверх
+// MaxSpreads — отказ (до dedupe/splitBig не гонять огромный файл), хвост мест — capRawGrid.
+func checkRaw(f *FileProject) error {
+	if f.Version > model.FormatVersion {
+		return ErrNewer
+	}
+	if len(f.Spreads) > model.MaxSpreads {
+		return errTooMany(len(f.Spreads))
+	}
+	capRawGrid(f)
+	return nil
+}
+
+// rawPlaces — предел сырого списка мест листа до починки. Своя программа пишет не больше
+// MaxPlaces, и ClampGrid (trimPlaces) всё равно оставит столько же; запас ×4 — чтобы у почти
+// верного файла выбор, какие места оставить, по-прежнему делал trimPlaces.
+const rawPlaces = 4 * model.MaxPlaces
+
+// capRawGrid — хвост мест сверх rawPlaces у разворотов и обложки отбрасывается сразу после
+// разбора, как сырой список папок (loadFolders): чужой или битый файл с сотнями тысяч мест
+// иначе держал бы открытие секунды и сотни МБ в dedupe, unionGrid и ClampGrid. Отказ, как у
+// MaxSpreads, не нужен: такой файл ни одна версия программы не писала, а мест сверх MaxPlaces
+// Load и так не оставляет. Фото из отброшенных мест, которых нет в Photos листа, выпадают.
+func capRawGrid(f *FileProject) {
+	capGrid := func(s *model.Spread) {
+		if s != nil && len(s.Grid) > rawPlaces {
+			clear(s.Grid[rawPlaces:])
+			s.Grid = s.Grid[:rawPlaces:rawPlaces]
+		}
+	}
+	for _, s := range f.Spreads {
+		capGrid(s)
+	}
+	if f.Cover != nil {
+		capGrid(f.Cover.Sheet)
+	}
+}
+
 // loadFolders — папки из файла. Сверх MaxFolders хвост отбрасывается: своя программа больше не
 // пишет (AddFolder), а чужой файл с сотнями тысяч папок не держит открытие на stat каждой.
 func loadFolders(p *model.Project, list []FileFolder, base string, v1 bool) error {
@@ -215,8 +265,15 @@ func loadFolders(p *model.Project, list []FileFolder, base string, v1 bool) erro
 		over, list = len(list)-2*model.MaxFolders, list[:2*model.MaxFolders]
 	}
 	seen := make(map[string]bool, min(len(list), model.MaxFolders))
+	devs := 0
 	for _, ff := range list {
 		dir, alt, err := candidates(ff.Path, ff.Abs, base, v1)
+		if errors.Is(err, paths.ErrDevice) {
+			// Устройство на этой ОС (Windows 10 и «CON.jpg» с 11): папку не прочитать — пропуск;
+			// её фото — недостающие (decodeFile).
+			devs++
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf("папка в проекте: %w", err)
 		}
@@ -243,36 +300,60 @@ func loadFolders(p *model.Project, list []FileFolder, base string, v1 bool) erro
 	if over > 0 {
 		log.Printf("папки проекта: больше %d, отброшено записей %d", model.MaxFolders, over)
 	}
+	if devs > 0 {
+		log.Printf("папки проекта: пропущено с именем устройства Windows в пути %d", devs)
+	}
 	return nil
 }
 
 // candidates разбирает пару path/abs из файла: primary — основной путь
 // (относительный уже разрешён от base), alt — запасной ("" — нет или тот же).
-// Оба проходят CheckLocalPath; битый относительный путь — файл повреждён.
+// Оба проходят CheckLocalPath; битый относительный путь — файл повреждён. Устройство на этой
+// ОС (paths.ErrDevice: «CON.jpg» на Windows 10) — не порча: годный второй путь становится
+// основным, иначе ошибка с ErrDevice и primary — путь с устройством (фото — недостающее).
 func candidates(path, abs, base string, v1 bool) (primary, alt string, err error) {
+	var dev string // путь с устройством: годного нет — его отдаёт ошибка ErrDevice
+	var devErr error
 	if abs != "" {
-		if err := paths.CheckLocalPath(abs); err != nil {
+		if err := paths.CheckLocalPath(abs); errors.Is(err, paths.ErrDevice) {
+			dev, devErr = abs, err
+		} else if err != nil {
 			return "", "", err
+		} else {
+			alt = abs
 		}
-		alt = abs
+	}
+	devOrAlt := func(p string, err error) (string, string, error) {
+		if alt != "" {
+			return alt, "", nil
+		}
+		return p, "", err
 	}
 	if filepath.IsAbs(path) || v1 {
 		// v1 не знал относительных путей: там любой путь проверяется как абсолютный.
-		if err := paths.CheckLocalPath(path); err != nil {
+		if err := paths.CheckLocalPath(path); errors.Is(err, paths.ErrDevice) {
+			return devOrAlt(path, err)
+		} else if err != nil {
 			return "", "", err
 		}
 		primary = path
 	} else {
-		if err := CheckRel(path); err != nil {
+		if err := CheckRel(path); err != nil && !errors.Is(err, paths.ErrDevice) {
 			return "", "", err
 		}
 		primary = filepath.Join(base, filepath.FromSlash(path))
-		if base == "" || paths.CheckLocalPath(primary) != nil {
+		perr := paths.CheckLocalPath(primary)
+		switch {
+		case base != "" && perr == nil:
+		case base != "" && errors.Is(perr, paths.ErrDevice):
+			return devOrAlt(primary, perr)
+		case alt != "":
 			// Альбом открыт не с локального диска (UNC): остаётся только запасной путь.
-			if alt == "" {
-				return "", "", fmt.Errorf("относительный путь у альбома не на локальном диске: %s", paths.LogQ(path))
-			}
 			return alt, "", nil
+		case dev != "":
+			return dev, "", devErr
+		default:
+			return "", "", fmt.Errorf("относительный путь у альбома не на локальном диске: %s", paths.LogQ(path))
 		}
 	}
 	if paths.SamePath(primary, alt) {
@@ -286,8 +367,11 @@ func candidates(path, abs, base string, v1 bool) (primary, alt string, err error
 // (размеры обновляются). Нигде нет — основной, запасной хранится в Alt.
 func resolvePhoto(fp FilePhoto, base string, v1 bool) (model.PhotoRef, error) {
 	ref, err := resolvePaths(fp, base, v1)
-	if err == nil {
+	switch {
+	case err == nil:
 		fixDims(&ref, fp.Size <= 0)
+	case errors.Is(err, paths.ErrDevice):
+		fixDims(&ref, false) // без чтения файла: открыть путь — обратиться к устройству
 	}
 	return ref, err
 }
@@ -319,6 +403,10 @@ func resolvePaths(fp FilePhoto, base string, v1 bool) (model.PhotoRef, error) {
 	ref.Alt = "" // alt в файл не пишется; если он там есть, это не наше
 	ref.W, ref.H, ref.Size = max(ref.W, 0), max(ref.H, 0), max(ref.Size, 0)
 	primary, alt, err := candidates(fp.Path, fp.Abs, base, v1)
+	if errors.Is(err, paths.ErrDevice) {
+		ref.Path = filepath.Clean(primary)
+		return ref, err
+	}
 	if err != nil {
 		return ref, err
 	}
@@ -357,7 +445,7 @@ func refresh(ref *model.PhotoRef, size int64) {
 // probeDims читает размеры из заголовка с учётом поворота EXIF: пересохранённое
 // фото могли и повернуть, а пропорции нужны раскладке точные.
 func probeDims(path string) (w, h int, ok bool) {
-	if path == "" || !reachable(path) {
+	if path == "" || paths.CheckLocalPath(path) != nil || !reachable(path) {
 		return 0, 0, false
 	}
 	ph, err := library.ReadInfo(path)
@@ -394,7 +482,8 @@ func isDir(path string) bool {
 // CheckRel — относительный путь из файла: без диска, двоеточий и NUL, не от
 // корня; элементы непустые, без «.»; «..» только в начале и не больше maxUp;
 // остальное — обычные имена (filepath.IsLocal отсекает NUL, CON и прочие устройства).
-// Сам «.» — папка альбома.
+// Сам «.» — папка альбома. Устройство на этой ОС (paths.DeviceElem: «CON.jpg» на Windows 10) —
+// ошибка с paths.ErrDevice, а не «повреждён»: файл цел, Load считает фото недостающим.
 func CheckRel(r string) error {
 	bad := fmt.Errorf("файл проекта повреждён: недопустимый относительный путь %s", paths.LogQ(r))
 	if r == "." {
@@ -415,6 +504,11 @@ func CheckRel(r string) error {
 	for _, el := range body {
 		if el == "" || el == "." || el == ".." {
 			return bad
+		}
+	}
+	for _, el := range body {
+		if paths.DeviceElem(el) {
+			return fmt.Errorf("относительный путь %s: %w", paths.LogQ(r), paths.ErrDevice)
 		}
 	}
 	if len(body) > 0 && !filepath.IsLocal(filepath.FromSlash(strings.Join(body, "/"))) {
@@ -443,7 +537,8 @@ func RelPath(base, path string) (string, bool) {
 // Check — пути проекта из памяти (NewEditor, Restore) по правилам Load: после decodeFile
 // каждый путь — абсолютный локальный (candidates), поэтому CheckLocalPath и только он (у
 // своего из библиотеки путь бывает пуст, ключ — по грамматике); CheckRel
-// здесь не нужен — относительный путь CheckLocalPath не пропустит. Без диска: Load уже стучался
+// здесь не нужен — относительный путь CheckLocalPath не пропустит; фото с устройством в пути
+// (paths.ErrDevice) — недостающее, как после Load. Без диска: Load уже стучался
 // к файлам, второй обход тысяч фото открытие только замедлит. Отметки — из p.Loaded().
 func Check(p *model.Project) error {
 	for _, dir := range p.Folders {
@@ -462,6 +557,9 @@ func Check(p *model.Project) error {
 		}
 		if r.Lib != "" && r.Path == "" && r.Alt == "" {
 			continue // своё, которого нет в библиотеке этого компьютера
+		}
+		if r.Alt == "" && errors.Is(paths.CheckLocalPath(r.Path), paths.ErrDevice) {
+			continue // недостающее с устройством в пути (как его оставляет Load): к файлу не обращаются
 		}
 		if err := checkPair("фото", r.Path, r.Alt); err != nil {
 			return err

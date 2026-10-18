@@ -23,7 +23,9 @@ const (
 	// foldEps — как spineEps в layout: фото, лишь касающееся корешка, его не пересекает.
 	foldEps = 0.01
 
-	// heroShare — доля главного в площади фото; у пары — каждого из двух (041).
+	// heroShare — доля главного в площади фото; у пары — каждого из двух (041). У «С главным» и
+	// «Две крупных» на 17–40 фото со страницами проходит и главное ≥ heroManyRatio медиан прочих
+	// (manyHeroOK, 072-4).
 	heroShare = 0.30
 	pairShare = 0.15
 	// defaultFloor — мельчайшая сторона фото / высота страницы у видов без своего пола.
@@ -248,6 +250,7 @@ func admissible(rs []layout.Rect, f Form, p layout.Params, h HeroInfo, relax flo
 	for _, x := range rs {
 		sum += x.W * x.H
 	}
+	many := manyHeroOK(rs, f, p, h)
 	for i, x := range rs {
 		hero := heroForm && h.isHero(i)
 		if hero {
@@ -255,7 +258,7 @@ func admissible(rs []layout.Rect, f Form, p layout.Params, h HeroInfo, relax flo
 			if h.N == 2 {
 				share = pairShare
 			}
-			if quanta(x.W*x.H/sum) < quanta(share) {
+			if quanta(x.W*x.H/sum) < quanta(share) && !many {
 				return false
 			}
 			continue

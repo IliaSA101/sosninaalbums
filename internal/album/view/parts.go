@@ -58,6 +58,7 @@ func gridView(f *fields, sv *model.SpreadView, s *model.Spread) {
 		}
 	}
 	placeStubs(f, sv, s)
+	sv.Waiting = waiting(s) // и в печати: вопрос перед экспортом (071)
 }
 
 // turnCaption — подпись повёрнутого места pl: посчитана для неповёрнутой рамки,

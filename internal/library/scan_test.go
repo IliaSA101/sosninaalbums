@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -349,6 +350,57 @@ func TestLocalTarget(t *testing.T) {
 	}
 	if localTarget(`\\srv\album`, `a.jpg`) {
 		t.Error("относительная цель в папке на шаре не локальна")
+	}
+}
+
+// Цель ссылки с устройством (073-10): без расширения — отказ всегда, «CON.jpg» — как судит ОС
+// (подмена: Windows 10 — отказ, 11 — цель годная); абсолютная и относительная одинаково.
+func TestLocalTargetDevices(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("устройства DOS — только Windows")
+	}
+	for _, target := range []string{`CON`, `x\NUL\a.jpg`, `D:\x\COM1`, `..\LPT1.`, `D:\CON\a.jpg`} {
+		if localTarget(`D:\album`, target) {
+			t.Errorf("localTarget(%q) пропустил устройство", target)
+		}
+	}
+	ext := []string{`CON.jpg`, `x\aux.2024\a.jpg`, `D:\x\nul.jpg`}
+	restore := paths.SetDeviceOracle(func(string) bool { return false })
+	for _, target := range ext {
+		if !localTarget(`D:\album`, target) {
+			t.Errorf("Windows 11: localTarget(%q) = false", target)
+		}
+	}
+	restore()
+	t.Cleanup(paths.SetDeviceOracle(paths.Device))
+	for _, target := range ext {
+		if localTarget(`D:\album`, target) {
+			t.Errorf("Windows 10: localTarget(%q) = true", target)
+		}
+	}
+}
+
+// Обход папки на «старой ОС» (подмена: Windows 10) пропускает «CON.jpg» и папку «Con.2024»:
+// открыть их — обратиться к устройству; на «новой» — обычные фото.
+func TestScanSkipsDevices(t *testing.T) {
+	if runtime.GOOS != "windows" || !filepath.IsLocal("CON.jpg") {
+		t.Skip("нужна ОС, где «CON.jpg» — файл (Windows 11)")
+	}
+	dir := testkit.TempDir(t)
+	sub := filepath.Join(dir, "Con.2024")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testkit.JPEG(t, dir, "CON.jpg", 30, 20)
+	testkit.JPEG(t, sub, "b.jpg", 30, 20)
+	testkit.JPEG(t, dir, "a.jpg", 30, 20)
+	if photos, _ := Scan([]string{dir}); len(photos) != 3 {
+		t.Fatalf("Windows 11: фото %d, ждали 3", len(photos))
+	}
+	t.Cleanup(paths.SetDeviceOracle(paths.Device))
+	photos, _ := Scan([]string{dir})
+	if len(photos) != 1 || photos[0].Name != "a.jpg" {
+		t.Fatalf("Windows 10: фото %+v, ждали только a.jpg", photos)
 	}
 }
 

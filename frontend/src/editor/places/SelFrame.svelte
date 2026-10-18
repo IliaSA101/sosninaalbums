@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import type { Handle, SpreadView } from '../../base/core/types'
   import { placesel } from './placesel.svelte'
   import { startMove, startResize, startRotate, zeroAngle } from './placegesture'
@@ -64,12 +65,12 @@
 
   const pc = (v: number, of: number) => `${(v / of) * 100}%`
   const down = (e: PointerEvent, ref: string) => {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     e.stopPropagation()
     startMove(e, root, ref)
   }
   const resize = (e: PointerEvent, h: Handle) => {
-    if (e.button !== 0) return
+    if (!primaryPress(e)) return
     e.stopPropagation()
     startResize(e, root, h)
   }
@@ -114,7 +115,7 @@
         {/each}
       {/if}
       {#if it.sample && !group && rotatable && !noRot(it.photo)}
-        <RotateHandle rotIn={rotHandleIn(it.box, ROT_REACH / ppm, sw, ph)} onrotate={rotate} onzero={zeroAngle} />
+        <RotateHandle accept={primaryPress} rotIn={rotHandleIn(it.box, ROT_REACH / ppm, sw, ph)} onrotate={rotate} onzero={zeroAngle} />
       {/if}
     </div>
   {/each}

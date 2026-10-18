@@ -86,6 +86,11 @@ export class LibNet {
     store.notify(offerText(o), 'info', { label: 'Скачать', run: () => void this.guardedRun() })
   }
 
+  // library:updated: проверка при запуске поставила наборы — тот же тост, что у кнопки (073-2), не красный.
+  updated(r: LibraryUpdate) {
+    store.notify(updateText(r))
+  }
+
   // Входы мимо update() («Скачать» из тоста, согласие флажком) проверяют то же, что update():
   // только чтение — подсказка про более новую версию, занято — молча; Go в обоих случаях не зовётся.
   private blocked(): boolean {

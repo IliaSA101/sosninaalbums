@@ -76,7 +76,9 @@ class PacksUi {
   }
 
   // library:changed от Go (набор добавлен, удалён, обновлён): список и каталог открытого окна «Фоны/Стикеры/Развороты».
-  changed() {
+  // installed — названия поставленных наборов (при удалении пусто): следующее открытие окон встанет на их тему (073-1).
+  changed(installed?: readonly string[] | null) {
+    decor.note(installed)
     if (this.open) void this.load()
     if (decor.cur) void decor.refresh()
   }

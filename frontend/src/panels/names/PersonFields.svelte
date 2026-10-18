@@ -1,15 +1,26 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import { Api, store } from '../../base/core/store.svelte'
+  import { store } from '../../base/core/store.svelte'
   import { sessionId } from '../../editor/text/textedit'
   import { personOf } from './names'
+  import { cardOf, loadPerson, savePerson, type PersonTarget, type PlaceRef } from './personapi'
 
   // Имя на фото (спека 030) в карточке фото: Фамилия, Имя, Отчество, у учителя виньетки ещё Предмет (049). Пока своего имени нет, значения берутся
   // из имени файла и видны серым («из имени файла»); все три поля очищены — снова имя из файла. Набор уходит в Go
   // с паузой, одной сессией на фокус (один шаг отмены), и при смене фото досылается.
+  // place (071) — имя пустого места (табличка): те же поля, но через PlacePerson / SetPlacePerson; photo при этом ''.
+  // У фото на месте с табличкой поля показывают её же («Имя места — останется здесь…»; у таблички только с предметом — «Предмет места…»).
   // inline — окошко имени на холсте (037): без заголовка, показаны только поля из only, фокус — в первом,
   // Enter ведёт к следующему полю (на последнем — ondone), вся сессия набора — один шаг отмены.
-  let { photo, only, inline = false, ondone }: { photo: string; only?: readonly string[]; inline?: boolean; ondone?: () => void } = $props()
+  let {
+    photo,
+    place,
+    only,
+    inline = false,
+    ondone,
+  }: { photo: string; place?: PlaceRef; only?: readonly string[]; inline?: boolean; ondone?: () => void } = $props()
+  const target = (): PersonTarget => ({ photo, place })
+  const title = $derived(place ? 'Имя на месте' : 'Имя на фото')
 
   const DELAY = 500
   // k — ключ Person, w — имя поля в who шаблона (у предмета они разные: subj / subject).
@@ -25,6 +36,7 @@
 
   let draft = $state({ last: '', first: '', middle: '', subj: '' })
   let fromFile = $state(false)
+  let seatNote = $state('') // подсказка, если у фото видна табличка места
   let dirty = $state(false)
   let session = ''
   let root: HTMLElement | undefined
@@ -36,15 +48,17 @@
 
   // Действующее имя от Go: при смене фото и после любой правки. Свой набор (dirty) ответ не перебивает.
   $effect(() => {
-    const id = photo
+    const t = target()
     void store.view.rev
     const n = ++seq
-    Api.Person(id).then(
+    loadPerson(t).then(
       (pv) => {
         if (n !== seq || dirty) return
-        draft = { last: pv.last, first: pv.first, middle: pv.middle, subj: pv.subject }
+        const c = cardOf(t, pv)
+        draft = c.draft
         if (pv.teacher || pv.subject) subjectShown = true
-        fromFile = pv.fromFile
+        fromFile = c.fromFile
+        seatNote = c.note
         if (selectFirst) {
           selectFirst = false
           void tick().then(() => selectFocused())
@@ -54,7 +68,7 @@
     )
   })
 
-  function send(id: string) {
+  function send(t: PersonTarget) {
     clearTimeout(timer)
     timer = 0
     if (!dirty) return
@@ -62,14 +76,14 @@
     const p = personOf(fromFile ? { subj: draft.subj } : draft)
     const s = session
     dirty = false // дальше свежий ответ Go (имя из файла после очистки) можно показывать
-    queued = queued.then(() => store.run(Api.SetPerson(id, p, s)))
+    queued = queued.then(() => savePerson(t, p, s))
   }
 
   // Карточка закрыта или фото сменилось (родитель пересоздаёт компонент по фото): набранное досылаем.
   $effect(() => {
-    const id = photo
+    const t = target()
     return () => {
-      if (timer) send(id)
+      if (timer) send(t)
     }
   })
 
@@ -110,13 +124,13 @@
     dirty = true
     if (k !== 'subj') fromFile = false
     clearTimeout(timer)
-    const id = photo
-    timer = window.setTimeout(() => send(id), DELAY)
+    const t = target()
+    timer = window.setTimeout(() => send(t), DELAY)
   }
 </script>
 
-<div bind:this={root} class="person" class:inline role="group" aria-label="Имя на фото" {...inline ? {} : { 'data-guide': 'person' }}>
-  {#if !inline}<div class="cap">Имя на фото</div>{/if}
+<div bind:this={root} class="person" class:inline role="group" aria-label={title} {...inline || place ? {} : { 'data-guide': 'person' }}>
+  {#if !inline}<div class="cap">{title}</div>{/if}
   {#each FIELDS as f (f.k)}
     <input
       type="text"
@@ -128,10 +142,11 @@
       onfocus={focus}
       oninput={(e) => input(f.k, e.currentTarget.value)}
       onkeydown={key}
-      onblur={() => send(photo)}
+      onblur={() => send(target())}
     />
   {/each}
   {#if fromFile}<div class="note">из имени файла</div>{/if}
+  {#if seatNote}<div class="note">{seatNote}</div>{/if}
 </div>
 
 <style>

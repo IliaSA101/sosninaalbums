@@ -17,7 +17,6 @@ const base: MenuCtx = {
   varyable: true,
   layerable: true,
   missing: 2,
-  exporting: false,
   big: false,
   details: false,
   safe: false,
@@ -91,10 +90,11 @@ describe('buildMenu', () => {
     expect(find(buildMenu(ctx()), 'relink')?.disabled).toBeFalsy()
   })
 
-  it('экспорт серый при пустом альбоме и пока идёт экспорт', () => {
+  it('экспорт серый при пустом альбоме; пока идёт выгрузка пункт доступен — открывает окно хода (073)', () => {
     expect(find(buildMenu(ctx({ spreads: 0 })), 'export')?.disabled).toBe(true)
-    expect(find(buildMenu(ctx({ exporting: true })), 'export')?.disabled).toBe(true)
     expect(find(buildMenu(ctx()), 'export')?.disabled).toBeFalsy()
+    expect(find(buildMenu(ctx({ spreads: 0, exporting: true })), 'export')?.disabled).toBeFalsy()
+    expect(find(buildMenu(ctx({ spreads: 0, exporting: false })), 'export')?.disabled).toBe(true)
   })
 
   it('«Собрать проект в папку…» — после «Сохранить как…»; серое только пока сбор идёт (в пустом альбоме активно)', () => {

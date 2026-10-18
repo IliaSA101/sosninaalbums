@@ -2456,7 +2456,9 @@ export namespace model {
 	    }
 	}
 	export class NamesRow {
+	    place: string;
 	    photo: string;
+	    seat: boolean;
 	    tag: string;
 	    no: number;
 	    line: number;
@@ -2468,7 +2470,9 @@ export namespace model {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.place = source["place"];
 	        this.photo = source["photo"];
+	        this.seat = source["seat"];
 	        this.tag = source["tag"];
 	        this.no = source["no"];
 	        this.line = source["line"];
@@ -2591,6 +2595,8 @@ export namespace model {
 	    subject: string;
 	    fromFile: boolean;
 	    teacher: boolean;
+	    place: string;
+	    seatNamed: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new PersonView(source);
@@ -2604,6 +2610,8 @@ export namespace model {
 	        this.subject = source["subject"];
 	        this.fromFile = source["fromFile"];
 	        this.teacher = source["teacher"];
+	        this.place = source["place"];
+	        this.seatNamed = source["seatNamed"];
 	    }
 	}
 	export class PlaceBox {

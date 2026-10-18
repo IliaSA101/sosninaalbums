@@ -529,6 +529,41 @@ func TestLoadFoldersLimit(t *testing.T) {
 	}
 }
 
+// Сырой список мест листа сверх rawPlaces обрезается сразу после разбора: фото последнего
+// оставленного места (его нет в Photos листа) остаётся, из отброшенного — выпадает; мест после
+// Load — не больше MaxPlaces. Ровно rawPlaces, пустой лист, nil и обложка без листа — как есть.
+func TestLoadRawGridLimit(t *testing.T) {
+	dir := testkit.TempDir(t)
+	_, ids := gridFile(t, dir, []string{"a", "b", "z"}, nil)
+	s := &model.Spread{ID: "s1", Photos: []string{ids["a"]}}
+	for i := range rawPlaces + 10 {
+		s.Grid = append(s.Grid, box(model.NewID(), float64(i%50), 0, 10, 10, ""))
+	}
+	s.Grid[0].Photo, s.Grid[rawPlaces-1].Photo, s.Grid[rawPlaces+5].Photo = ids["a"], ids["b"], ids["z"]
+	data, _ := gridFile(t, dir, []string{"a", "b", "z"}, []*model.Spread{s})
+	p := mustDecode(t, data, dir)
+	got := p.Spreads[0]
+	if !slices.Equal(got.Photos, []string{ids["a"], ids["b"]}) || len(got.Grid) > model.MaxPlaces || !slices.Equal(model.GridPhotos(got), got.Photos) {
+		t.Fatalf("фото %v, мест %d, в местах %v", got.Photos, len(got.Grid), model.GridPhotos(got))
+	}
+
+	grid := func(n int) []*model.Place {
+		g := make([]*model.Place, n)
+		for i := range g {
+			g[i] = box(model.NewID(), 0, 0, 10, 10, "")
+		}
+		return g
+	}
+	exact, over, empty := &model.Spread{Grid: grid(rawPlaces)}, &model.Spread{Grid: grid(rawPlaces + 1)}, &model.Spread{}
+	cover := &model.Spread{Grid: grid(3 * rawPlaces)}
+	f := FileProject{Spreads: []*model.Spread{nil, exact, over, empty}, Cover: &FileCover{Cover: model.Cover{Sheet: cover}}}
+	capRawGrid(&f)
+	if len(exact.Grid) != rawPlaces || len(over.Grid) != rawPlaces || empty.Grid != nil || len(cover.Grid) != rawPlaces || f.Spreads[0] != nil {
+		t.Fatalf("мест: ровно %d, сверх %d, пусто %v, обложка %d", len(exact.Grid), len(over.Grid), empty.Grid, len(cover.Grid))
+	}
+	capRawGrid(&FileProject{Cover: &FileCover{}}) // обложка без листа — без паники
+}
+
 func TestCheckLocalPathLong(t *testing.T) {
 	if err := paths.CheckLocalPath(root() + strings.Repeat("a", 200)); err != nil {
 		t.Fatal(err)

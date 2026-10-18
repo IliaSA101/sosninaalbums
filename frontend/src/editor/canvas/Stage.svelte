@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryPress } from '../../base/core/platform'
   import SpreadSlots from '../spread/SpreadSlots.svelte'
   import LayoutBar from '../../panels/layouts/LayoutBar.svelte'
   import BackdropBar from '../backdrop/BackdropBar.svelte'
@@ -149,7 +150,7 @@
   function down(e: PointerEvent) {
     const t = e.target as HTMLElement
     if (t.closest('[data-chrome]')) return // полоса и панели — не холст
-    if (e.button === 1 || (e.button === 0 && canvas.space)) {
+    if (e.button === 1 || (primaryPress(e) && canvas.space)) {
       e.preventDefault() // средняя кнопка: иначе автопрокрутка Chromium
       e.stopPropagation()
       canvas.startPan()
@@ -164,7 +165,7 @@
       ly = e.clientY
       return
     }
-    if (e.button === 0) {
+    if (primaryPress(e)) {
       // Сосед: протяжка двигает ряд, щелчок без сдвига уйдёт в его слой
       if (t.closest('[data-peer]') && row.grab(e, ended)) return
       canvas.pressed = true

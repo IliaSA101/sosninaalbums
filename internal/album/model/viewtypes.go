@@ -277,6 +277,9 @@ type SpreadView struct {
 	// считается по листам плана выгрузки (диапазон, «Только обложка»). Интерфейсу не нужны.
 	Unfilled []string `json:"-"`
 	Unnamed  int      `json:"-"`
+	// Waiting — пустые места листа с именем на табличке (071): человек из списка без фото,
+	// в печати его нет — вопрос перед экспортом. Интерфейсу не нужно.
+	Waiting int `json:"-"`
 }
 
 // VignetteView — виньетка для панели: параметры, сколько мест они дают (с групповым)
@@ -351,8 +354,8 @@ type StubView struct {
 	Place string `json:"place"`
 	Photo string `json:"photo"`
 	TextView
-	// Who — поля имени шаблона по порядку (last, first, middle, subject) у заглушки фото (037);
-	// у заглушки пустого места пусто.
+	// Who — поля имени шаблона по порядку (last, first, middle, subject) у заглушки фото (037)
+	// и пустого места (071: окошко «Имя» пишет табличку места).
 	Who []string `json:"who,omitempty"`
 }
 
