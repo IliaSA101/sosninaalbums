@@ -1,13 +1,13 @@
 import type { PagePreset, Settings } from '../../base/core/types'
 
 // Пресеты размера страницы приходят из Go (App.PagePresets, 047): здесь только помощники.
-// dpi/layflat/safe заданы лишь там, где их требует типография; 0/false/нет поля — пресет их не трогает.
-export type Preset = Pick<PagePreset, 'label' | 'w' | 'h' | 'dpi' | 'layflat' | 'safe' | 'hint'>
+// dpi/layflat/safe/bleed заданы лишь там, где их требует типография; 0/false/нет поля — пресет их не трогает.
+export type Preset = Pick<PagePreset, 'label' | 'w' | 'h' | 'dpi' | 'layflat' | 'safe' | 'bleed' | 'hint'>
 
 // Та же формула, что px() в internal/export.
 export const exportPx = (mm: number, dpi: number) => Math.round((mm / 25.4) * dpi)
 
-type Form = Pick<Settings, 'pageW' | 'pageH' | 'dpi' | 'layflat' | 'safe'>
+type Form = Pick<Settings, 'pageW' | 'pageH' | 'dpi' | 'layflat' | 'safe' | 'bleed'>
 
 // Пресет подсвечен, когда совпадают все заданные в нём поля.
 export function presetActive(p: Preset, s: Form): boolean {
@@ -15,6 +15,7 @@ export function presetActive(p: Preset, s: Form): boolean {
   if (p.dpi && +s.dpi !== p.dpi) return false
   if (p.layflat && !s.layflat) return false
   if (p.safe && +s.safe !== p.safe) return false
+  if (p.bleed && (Number(s.bleed) || 0) !== p.bleed) return false
   return true
 }
 
@@ -24,6 +25,7 @@ export function presetFields(p: Preset): Partial<Settings> {
   if (p.dpi) f.dpi = p.dpi
   if (p.layflat) f.layflat = true
   if (p.safe) f.safe = p.safe
+  if (p.bleed) f.bleed = p.bleed
   return f
 }
 

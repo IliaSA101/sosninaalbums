@@ -1,7 +1,6 @@
 // Действия карточки обложки (спека 032): вызовы Go. Каждая правка — один шаг отмены; свой вид Go присылает сам.
 import { Api, store } from '../../base/core/store.svelte'
 import type { CoverLayout, CoverPreset, CoverSpec } from '../../base/core/types'
-import { coverUi } from '../../editor/cover/coverui.svelte'
 import { edit } from '../../editor/text/edit.svelte'
 import { COVER_ID } from '../../base/geom/sheet'
 import { CUSTOM_ID, customSpec, spineAction } from './coverpanel'
@@ -53,16 +52,6 @@ class CoverActions {
   // Цвет плашки корешка; "" — убрать плашку.
   setSpineBg(color: string) {
     return store.run(Api.SetCoverSpineBg(color))
-  }
-
-  // Новый файл разметки: адрес картинки тот же, поэтому кэш сбивается номером правки.
-  async pickGuide() {
-    const before = store.view.rev
-    if ((await store.run(Api.PickCoverGuide())) && store.view.rev !== before) coverUi.guideRev = store.view.rev
-  }
-
-  clearGuide() {
-    return store.run(Api.ClearCoverGuide())
   }
 }
 

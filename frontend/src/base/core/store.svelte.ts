@@ -1,18 +1,20 @@
 import * as Api from '../../../wailsjs/go/app/App'
+import { model } from '../../../wailsjs/go/models'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { SvelteSet } from 'svelte/reactivity'
-import { capFirst, errText, exportDoneText, withSkipped } from '../words/errtext'
+import { errText, exportDoneText, withSkipped } from '../words/errtext'
 import { Nav } from './nav.svelte'
+import { Toasts, stepToast, undoToast, type Toast } from './toasts.svelte'
 import type { MarkMap, PickResult } from './hooks'
 import { backdropLost, pickCurrent } from './undo'
 import { mergeSnapshot, noEvents } from './startstate'
 import { movedFrom, movedText, type Moved } from './strip'
 import { prefs } from '../prefs/prefs.svelte'
 import { COVER_ID, unitOf } from '../geom/sheet'
-import { model } from '../../../wailsjs/go/models'
 import type {
   AutoRange,
   ExportOpts,
+  Family,
   FontFamily,
   GridResult,
   Photo,
@@ -24,9 +26,6 @@ import type {
   View,
   Zone,
 } from './types'
-
-// rev — ревизия альбома, на которую рассчитан тост с «Вернуть»: другая ревизия (Ctrl+Z, любая правка) гасит тост.
-type Toast = { text: string; kind: 'info' | 'error'; action?: { label: string; run: () => void }; rev?: number }
 
 class Store extends Nav {
   photos = $state<Photo[]>([])
@@ -62,7 +61,14 @@ class Store extends Nav {
   // Ход чтения папок (событие scan, начальное значение — из GetState).
   scan = $state<ScanProgress>({ active: false, walking: false, found: 0, read: 0 })
   exporting = $state<{ done: number; total: number } | null>(null)
-  toast = $state<Toast | null>(null)
+  // Тост: состояние и таймер — в Toasts; store отдаёт его как свой toast/notify (так зовут все).
+  private readonly toasts = new Toasts()
+  get toast(): Toast | null {
+    return this.toasts.toast
+  }
+  set toast(t: Toast | null) {
+    this.toasts.toast = t
+  }
   filter = $state<'all' | 'unused'>('all')
   // Окно автосборки (027): открыто, пока не null; фото уже выбраны (выделенные или свободные без отклонённых).
   autoDraft = $state<PickResult | null>(null)
@@ -99,7 +105,6 @@ class Store extends Nav {
       : 'Черновик',
   )
 
-  private toastTimer = 0
   // События photos/scan/missing, пришедшие, пока ждём снимок состояния (startstate.ts).
   private seen = noEvents()
 
@@ -174,10 +179,7 @@ class Store extends Nav {
   }
 
   notify(text: string, kind: Toast['kind'] = 'info', action?: Toast['action']) {
-    // Ошибки Go пишутся со строчной буквы.
-    this.toast = { text: kind === 'error' ? capFirst(text) : text, kind, action }
-    clearTimeout(this.toastTimer)
-    this.toastTimer = window.setTimeout(() => (this.toast = null), action ? 8000 : 4000)
+    this.toasts.notify(text, kind, action)
   }
 
   // Все правки идут сюда: Go возвращает новое состояние альбома.
@@ -338,39 +340,13 @@ class Store extends Nav {
     this.undoToast('Обложка удалена', COVER_ID)
   }
 
-  // Тост с кнопкой «Вернуть» = Undo, как у разреза: безопасно, только если после правки ничего не менялось.
-  // back — разворот, на который перейти после возврата.
+  // Тосты «Вернуть» / «Убрать имена» — toasts.svelte.ts.
   undoToast(text: string, back?: string) {
-    const rev = this.view.rev
-    this.notify(text, 'info', {
-      label: 'Вернуть',
-      run: async () => {
-        // Идущее следом удаление ещё может менять альбом: сначала дожидаемся очереди, потом сверяем ревизию.
-        await this.delQueue
-        if (this.view.rev !== rev) return this.notify('Уже были другие изменения — используйте Ctrl+Z')
-        if ((await this.run(Api.Undo())) && back) this.goId(back)
-      },
-    })
-    if (this.toast) this.toast.rev = rev
+    undoToast(this, text, back)
   }
 
-  // Итоговый тост правки, добавившей фото (042, 060). notes — заметки с «Вернуть» (отменяют весь шаг);
-  // named — фото, получившие имя из названия файла: с заметками имена идут в тот же тост, без них у тоста
-  // своя кнопка «Убрать имена» (снимает только имена, бросок остаётся). lead — прежний простой тост.
   stepToast(lead: string, notes: string[], named: string[]) {
-    const names = named.length > 0 ? `Имена взяты из названий файлов: ${named.length}` : ''
-    if (notes.length > 0) return this.undoToast([lead, ...notes, names].filter(Boolean).join('. '))
-    if (!names) return lead ? this.notify(lead) : undefined
-    const rev = this.view.rev
-    this.notify([lead, names].filter(Boolean).join('. '), 'info', {
-      label: 'Убрать имена',
-      run: async () => {
-        // Как у «Вернуть»: после чужой правки кнопка уже не про этот шаг.
-        if (this.view.rev !== rev) return this.notify('Уже были другие изменения — имена не тронуты')
-        await this.run(Api.ForgetFileNames(named))
-      },
-    })
-    if (this.toast) this.toast.rev = rev
+    stepToast(this, lead, notes, named)
   }
 
   // «Заполнить пустые места»: выделенные фото (иначе все не в альбоме) — в пустые места, начиная с текущего разворота.
@@ -397,8 +373,8 @@ class Store extends Nav {
   }
 
   // «Собрать» в окне: ровно `spreads` разворотов, фото на каждом — по `range` («Авто» или «от … до …», серии; 051),
-  // разнообразие раскладок — variety (041).
-  async autoBuild(spreads: number, range: AutoRange, variety: Variety = 1): Promise<boolean> {
+  // разнообразие раскладок — variety (041), разрешённые семейства — families (065; [] — все).
+  async autoBuild(spreads: number, range: AutoRange, variety: Variety = 1, families: readonly Family[] = []): Promise<boolean> {
     // Выделенные — как есть: Go переносит уже стоящие в альбоме фото в новые развороты.
     const d = this.autoDraft
     this.autoDraft = null
@@ -408,7 +384,7 @@ class Store extends Nav {
     this.busy = true
     let ok: boolean
     try {
-      const opts = model.AutoOpts.createFrom({ spreads, ...range, variety })
+      const opts = model.AutoOpts.createFrom({ spreads, ...range, variety, families: [...families] })
       ok = await this.run(Api.AutoBuild([...d.ids], at, opts))
     } finally {
       this.busy = false
@@ -426,14 +402,14 @@ class Store extends Nav {
   }
 
   // «Разнообразить раскладки» (041): Go меняет раскладки выбранных разворотов с учётом соседей, один шаг отмены.
-  // Вид без изменений (rev тот же) — тост вместо немого ничего; иначе — тост с «Вернуть».
-  async varyLayouts(ids: readonly string[], variety: Variety): Promise<boolean> {
+  // families — тот же фильтр, что у автосборки (065). Вид без изменений (rev тот же) — тост вместо немого ничего; иначе — тост с «Вернуть».
+  async varyLayouts(ids: readonly string[], variety: Variety, families: readonly Family[] = []): Promise<boolean> {
     if (ids.length === 0 || this.busy) return false
     const was = new Map(this.view.spreads.map((s) => [s.id, s.layout]))
     const before = this.view.rev
-    if (!(await this.run(Api.VaryLayouts([...ids], variety)))) return false
+    if (!(await this.run(Api.VaryLayouts([...ids], variety, [...families])))) return false
     if (this.view.rev === before) {
-      this.notify('Раскладки уже разные — менять нечего')
+      this.notify('Менять нечего: раскладки уже разные или других подходящих нет')
       return false
     }
     const n = this.view.spreads.filter((s) => was.has(s.id) && was.get(s.id) !== s.layout).length
@@ -445,7 +421,7 @@ class Store extends Nav {
 
   // Щелчки быстрее ответа Go: каждое удаление ждёт предыдущее, а «текущий» берётся уже после него —
   // иначе все щелчки уходят с одним id и удаляется один разворот. run ловит ошибки, цепочка не рвётся.
-  private delQueue: Promise<unknown> = Promise.resolve()
+  delQueue: Promise<unknown> = Promise.resolve()
 
   // id не задан — текущий разворот на момент выполнения; меню ленты передаёт разворот, по которому щёлкнули.
   deleteSpread(id?: string): Promise<void> {

@@ -9,8 +9,8 @@ import { bgmode } from '../backdrop/bgmode.svelte'
 import { guide } from '../../shell/guide/guidestate.svelte'
 import { miniSpot } from '../places/minispot.svelte'
 import { placesel } from '../places/placesel.svelte'
-import { framelive } from './framelive.svelte'
-import { photoui } from './photoui.svelte'
+import { framelive } from '../photo/framelive.svelte'
+import { photoui } from '../photo/photoui.svelte'
 import { straighten } from './straighten.svelte'
 
 // Режим жив, пока выделено ровно одно фото (без текстов и стикеров), оно на месте, уровень даёт «Наклон»,

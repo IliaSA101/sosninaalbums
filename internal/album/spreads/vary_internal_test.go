@@ -42,7 +42,7 @@ func TestPickRunSameLookKeepsKey(t *testing.T) {
 	same.Look = curLook // тот же вид, что у текущего K, но ключ — лучшая ("")
 	diff := same
 	diff.Look = "иной вид"
-	pickRun(p, 0, 1, variety.Normal, nil, true, [][]variety.Cand{{same}, {diff}}, nil)
+	pickRun(p, 0, 1, variety.Normal, nil, true, [][]variety.Cand{{same}, {diff}}, nil, nil)
 	if a.Layout != other.Key {
 		t.Fatalf("тот же вид: ключ %q, был %q", a.Layout, other.Key)
 	}
@@ -51,7 +51,7 @@ func TestPickRunSameLookKeepsKey(t *testing.T) {
 	}
 	// сборка (cur = false) пишет как прежде: у собранных текущего вида ещё нет
 	a.Layout = other.Key
-	pickRun(p, 0, 0, variety.Normal, nil, false, [][]variety.Cand{{same}}, nil)
+	pickRun(p, 0, 0, variety.Normal, nil, false, [][]variety.Cand{{same}}, nil, nil)
 	if a.Layout != "" {
 		t.Fatalf("без «Разнообразить» ключ %q, ждали лучшую", a.Layout)
 	}
@@ -219,7 +219,7 @@ func TestVaryNeighborKey(t *testing.T) {
 	} {
 		a.Layout, b.Layout = c.prev, ""
 		pool := []variety.Cand{neighborCand(row[0], prm, "X", 1.0), neighborCand(row[1], prm, "Y", 0.99)}
-		pickRun(p, 1, 1, variety.Normal, nil, true, [][]variety.Cand{pool}, nil)
+		pickRun(p, 1, 1, variety.Normal, nil, true, [][]variety.Cand{pool}, nil, nil)
 		if b.Layout != c.want {
 			t.Errorf("%s: ключ %q, ждали %q", c.name, b.Layout, c.want)
 		}
@@ -258,7 +258,7 @@ func TestVaryAfterHeroNeighbor(t *testing.T) {
 		best := neighborCand(row[0], prm, ia.Look, 1.0)
 		feat := neighborCand(row[1], prm, "F", 0.99)
 		feat.InRow, feat.Family, feat.Big, feat.Heroes, feat.Kind = false, variety.Hero, 0, 1, variety.KindPage
-		pickRun(p, 1, 1, variety.Normal, nil, true, [][]variety.Cand{{best, feat}}, nil)
+		pickRun(p, 1, 1, variety.Normal, nil, true, [][]variety.Cand{{best, feat}}, nil, nil)
 		if b.Layout != c.want {
 			t.Errorf("%s: ключ %q, ждали %q", c.name, b.Layout, c.want)
 		}

@@ -190,7 +190,8 @@ func (a *App) infos(ids []string) []model.PhotoInfo {
 }
 
 // media отдаёт миниатюры: /media/t/<id> и /media/p/<id>; шрифты — /media/font/<файл>;
-// библиотека фонов — /media/gen/*, /media/lib/* (serveDecor).
+// библиотека фонов — /media/gen/*, /media/lib/* (serveDecor); разметки — /media/cover-guide и
+// /media/spread-guide (serveMarkup).
 func (a *App) media(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/media/") {
@@ -202,8 +203,7 @@ func (a *App) media(next http.Handler) http.Handler {
 			serveFont(w, r, name)
 			return
 		}
-		if r.URL.Path == "/media/cover-guide" {
-			a.serveCoverGuide(w, r)
+		if a.serveMarkup(w, r) {
 			return
 		}
 		if a.serveDecor(w, r) {

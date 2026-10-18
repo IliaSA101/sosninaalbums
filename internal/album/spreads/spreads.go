@@ -114,6 +114,12 @@ func SetSettings(p *model.Project, s model.Settings) {
 	p.Settings = s
 }
 
+// SetGuide — файл-разметка разворотов (066): уже проверенный абсолютный путь; "" — убрать.
+// Запасной путь прежнего файла не годится и новому: файл выбран и есть на месте.
+func SetGuide(p *model.Project, path string) {
+	p.SpreadGuide, p.SpreadGuideAlt = path, ""
+}
+
 // AddFolder — операция над проектом. Путь проверяет и обёртка, но тело экспортное: проверка
 // повторена здесь (защита в глубину), иначе вызов мимо Editor положил бы в проект UNC-путь.
 func AddFolder(p *model.Project, dir string) error {

@@ -271,12 +271,12 @@ func TestVaryLayouts(t *testing.T) {
 
 	// холостые: ничего подходящего
 	for _, sel := range [][]string{nil, {}, {"нет"}, {ids[2], ids[3]}} {
-		if v := e.VaryLayouts(sel, model.VarietyNormal, nil); v.Rev != rev || edtest.UndoLen(e) != undo {
+		if v := e.VaryLayouts(sel, model.VarietyNormal, nil, nil); v.Rev != rev || edtest.UndoLen(e) != undo {
 			t.Fatalf("VaryLayouts(%v): rev %d → %d", sel, rev, v.Rev)
 		}
 	}
 
-	v := e.VaryLayouts([]string{ids[0], ids[1], "нет"}, model.VarietyNormal, nil)
+	v := e.VaryLayouts([]string{ids[0], ids[1], "нет"}, model.VarietyNormal, nil, nil)
 	ls := looks(e)
 	if v.Rev != rev+1 || edtest.UndoLen(e) != undo+1 || !v.CanUndo {
 		t.Fatalf("правка: rev %d → %d, отмена %d → %d", rev, v.Rev, undo, edtest.UndoLen(e))
@@ -293,14 +293,14 @@ func TestVaryLayouts(t *testing.T) {
 	}
 
 	// всё выделено: сетка и виньетка стоят, две цепочки ([0,1] и [4]) меняются
-	e.VaryLayouts(append(slices.Clone(ids), ids[0]), model.VarietyLess, nil)
+	e.VaryLayouts(append(slices.Clone(ids), ids[0]), model.VarietyLess, nil, nil)
 	ls = looks(e)
 	if ls[0] == was[0] || ls[1] == was[1] || ls[4] == was[4] || frozen() != fixed {
 		t.Fatalf("всё выделено: было %v, стало %v", was, ls)
 	}
 	less := spreadsShape(edtest.P(e))
 	e.Undo()
-	e.VaryLayouts(ids, model.VarietyNormal, nil)
+	e.VaryLayouts(ids, model.VarietyNormal, nil, nil)
 	if got := spreadsShape(edtest.P(e)); !slices.Equal(got, less) {
 		t.Fatalf("«Меньше» ≠ «Обычное»: %v / %v", less, got)
 	}
@@ -325,7 +325,7 @@ func TestVaryLayoutsNoop(t *testing.T) {
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
 	before := model.Marshal(edtest.P(e))
 	for _, v := range levels {
-		e.VaryLayouts(ids, v, nil)
+		e.VaryLayouts(ids, v, nil, nil)
 	}
 	if edtest.Rev(e) != rev || edtest.UndoLen(e) != undo || edtest.Dirty(e) || string(model.Marshal(edtest.P(e))) != string(before) {
 		t.Fatalf("холостая оставила след: rev %d → %d, отмена %d → %d", rev, edtest.Rev(e), undo, edtest.UndoLen(e))
@@ -359,7 +359,7 @@ func TestVaryLayoutsStar(t *testing.T) {
 		}
 		infos := slices.Clone(ph)
 		infos[3].Xmp.Rating = xmp
-		v := e.VaryLayouts(ids, model.VarietyNormal, infos)
+		v := e.VaryLayouts(ids, model.VarietyNormal, nil, infos)
 		return bigOf(v.Spreads[0].Rects, 3), v.Spreads[0].Layout
 	}
 	if big, key := run(edtest.Ip(5), 0); big < 1.6 {

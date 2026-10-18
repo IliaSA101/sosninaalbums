@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Choice, SpreadView } from '../../base/core/types'
+import { FAMILY_IDS } from '../../base/prefs/families'
 import {
   activeFamily,
   anyVaries,
+  FAMILIES,
   familiesIn,
   galleryCount,
   galleryLines,
@@ -93,6 +95,12 @@ describe('activeFamily', () => {
   })
 })
 
+describe('FAMILIES', () => {
+  it('065: порядок и имена те же, что у FAMILY_IDS основы (память окна автосборки)', () => {
+    expect(FAMILIES.map((f) => f.id)).toEqual([...FAMILY_IDS])
+  })
+})
+
 describe('shownRow', () => {
   const list = [ch('a', 'dense'), ch('b', 'dense', 0), ch('c', 'air'), ch('d', 'air', 2), ch('e', 'air', 2)]
   it('«Все»: похожие свёрнуты, счётчик — сколько скрыто', () => {
@@ -120,6 +128,16 @@ describe('shownRow', () => {
     expect(r.shown.map((c) => c.key)).toEqual(['c'])
     expect(r.hidden).toBe(2)
     expect(shownRow(list, { family: 'hero', open: false })).toEqual({ shown: [], hidden: 0 })
+  })
+  it('065: набор семейств — предикат; те же правила свёртки и текущей', () => {
+    const set = (c: { family: string }) => c.family === 'air' || c.family === 'dense'
+    expect(shownRow(list, { family: set, open: false })).toEqual(shownRow(list, { family: 'all', open: false }))
+    const onlyAir = (c: { family: string }) => c.family === 'air'
+    expect(shownRow(list, { family: onlyAir, open: false })).toEqual(shownRow(list, { family: 'air', open: false }))
+    expect(shownRow(list, { family: onlyAir, current: 'a', open: false })).toEqual(
+      shownRow(list, { family: 'air', current: 'a', open: false }),
+    )
+    expect(shownRow(list, { family: () => false, open: false })).toEqual({ shown: [], hidden: 0 })
   })
   it('близнец другого семейства не сворачивается: фильтр семейства не прячет чужое', () => {
     const mixed = [ch('a', 'dense'), ch('b', 'air', 0)]

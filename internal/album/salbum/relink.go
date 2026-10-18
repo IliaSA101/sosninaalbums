@@ -59,7 +59,7 @@ func RelinkDrive(p *model.Project, from, to string) (files, dirs []model.PathPai
 		}
 	}
 	p.Folders = uniquePaths(p.Folders)
-	relinkGuide(p, from, to)
+	relinkGuides(p, from, to)
 	return files, dirs
 }
 

@@ -6,11 +6,11 @@
   import { normDeg } from '../../base/geom/textbox'
   import { MAX_SCALE, MIN_SCALE, zoomFrame } from '../../base/geom/frame'
   import { store } from '../../base/core/store.svelte'
-  import { backdropTilt, liveTiltBox } from '../photo/tiltlive'
+  import { backdropTilt, liveTiltBox } from '../tilt/tiltlive'
   import Icon from '../../base/ui/Icon.svelte'
   import TiltRow from '../inspector/TiltRow.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import { straighten } from '../photo/straighten.svelte'
+  import { straighten } from '../tilt/straighten.svelte'
 
   // Карточка в режиме фона (design-backdrop §6.2): масштаб фото в рамке, поворот рамки вокруг центра,
   // зеркало, «По области», «Убрать», «Готово». Поле применяется по Enter или уходу из поля.

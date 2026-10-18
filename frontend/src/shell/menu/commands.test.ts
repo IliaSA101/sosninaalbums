@@ -207,15 +207,18 @@ describe('команды', () => {
       store.current = 1
       prefs.level = 'simple'
       await COMMANDS.varyLayouts()
-      expect(vary).toHaveBeenLastCalledWith(['b'], 1)
+      expect(vary).toHaveBeenLastCalledWith(['b'], 1, [])
       spreadsel.toggle('c')
       spreadsel.toggle('a')
       modes.autoVariety = 0 // «Меньше» считается «Обычным»
       await COMMANDS.varyLayouts()
-      expect(vary).toHaveBeenLastCalledWith(['a', 'c'], 1)
+      expect(vary).toHaveBeenLastCalledWith(['a', 'c'], 1, [])
       modes.autoVariety = 2
       await COMMANDS.varyLayouts()
-      expect(vary).toHaveBeenLastCalledWith(['a', 'c'], 2)
+      expect(vary).toHaveBeenLastCalledWith(['a', 'c'], 2, [])
+      modes.autoFamilies = ['dense', 'hero'] // 065: «Разнообразить» берёт семейства окна автосборки
+      await COMMANDS.varyLayouts()
+      expect(vary).toHaveBeenLastCalledWith(['a', 'c'], 2, ['dense', 'hero'])
       // Все цели — сетка или виньетка: молча, Go не зовём (пункт меню серый, тоста нет)
       vary.mockClear()
       store.view = { ...store.view, spreads: [sp('a', { grid: true }), sp('b'), sp('c', { kind: 'vignette' })] }
@@ -228,6 +231,7 @@ describe('команды', () => {
       store.current = was.current
       prefs.level = was.level
       modes.autoVariety = was.variety
+      modes.autoFamilies = []
     }
   })
 

@@ -23,7 +23,7 @@ func TestVersionsV9ToV10(t *testing.T) { oldVersionOpens(t, 9) }
 
 // TestLoadV9CoverBoth — обложка 0.13 «Лицевая + задняя» (фикстура v9) открывается как «Задняя +
 // корешок + лицевая» с пустым корешком: фото, кадры, плашка и надпись те же, в виде три области
-// и пустая зона корешка; Save пишет v10 и .v9.bak с исходными байтами, второй круг без потерь.
+// и пустая зона корешка; Save пишет текущую версию и .v9.bak с исходными байтами, второй круг без потерь.
 func TestLoadV9CoverBoth(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("..", "testdata", "v9-cover.salbum.json"))
 	if err != nil {
@@ -38,7 +38,7 @@ func TestLoadV9CoverBoth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != model.FormatVersion || model.FormatVersion != 10 || edtest.From(p) != 9 {
+	if p.Version != model.FormatVersion || model.FormatVersion != 11 || edtest.From(p) != 9 {
 		t.Fatalf("версия %d, from %d", p.Version, edtest.From(p))
 	}
 	c := p.Cover
@@ -66,12 +66,12 @@ func TestLoadV9CoverBoth(t *testing.T) {
 		t.Fatalf(".v9.bak: %v, совпадает с исходником: %v", err, bytes.Equal(bak, src))
 	}
 	data, _ := os.ReadFile(path)
-	if f := fileJSON(t, path); f.Version != 10 || bytes.Contains(data, []byte(`"bgPhotoS"`)) {
+	if f := fileJSON(t, path); f.Version != 11 || bytes.Contains(data, []byte(`"bgPhotoS"`)) {
 		t.Fatalf("файл v%d:\n%s", f.Version, data)
 	}
 	q, err := salbum.Load(path)
 	if err != nil || !bytes.Equal(before, model.Marshal(q)) {
-		t.Fatalf("потери v9 → v10: %v\n%s\n%s", err, before, model.Marshal(q))
+		t.Fatalf("потери v9 → v11: %v\n%s\n%s", err, before, model.Marshal(q))
 	}
 }
 
@@ -102,7 +102,7 @@ func TestSaveV10Spine(t *testing.T) {
 		t.Fatal(err)
 	}
 	first, _ := os.ReadFile(path)
-	if f := fileJSON(t, path); f.Version != 10 || !bytes.Contains(first, []byte(`"bgPhotoS"`)) {
+	if f := fileJSON(t, path); f.Version != 11 || !bytes.Contains(first, []byte(`"bgPhotoS"`)) {
 		t.Fatalf("файл v%d без фото корешка", f.Version)
 	}
 	q, err := salbum.Load(path)

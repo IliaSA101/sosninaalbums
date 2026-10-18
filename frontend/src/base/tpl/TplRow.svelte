@@ -12,6 +12,7 @@
     count,
     empty = '',
     inert = false,
+    dim = false,
     watch,
     side,
     children,
@@ -19,6 +20,7 @@
     count: number
     empty?: string
     inert?: boolean
+    dim?: boolean // ряд пересчитывается (065): плитки бледные
     watch?: unknown
     side?: Snippet
     children: Snippet
@@ -58,7 +60,7 @@
       <button class="nav" onclick={() => scrollBy(-1)} title="Прокрутить влево" aria-label="Прокрутить влево"
         ><Icon name="chevron-left" size={18} /></button
       >
-      <div class="scroll" bind:this={scroll} onwheel={wheel} {inert}>
+      <div class="scroll" class:dim bind:this={scroll} onwheel={wheel} {inert}>
         {@render children()}
       </div>
       <button class="nav" onclick={() => scrollBy(1)} title="Прокрутить вправо" aria-label="Прокрутить вправо"
@@ -99,6 +101,10 @@
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
+    transition: opacity 0.12s;
+  }
+  .scroll.dim {
+    opacity: 0.45;
   }
   .nav {
     flex: none;

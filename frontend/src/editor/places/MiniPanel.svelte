@@ -29,7 +29,7 @@
   import { canvas } from '../canvas/canvas.svelte'
   import { panels } from '../inspector/panelmode.svelte'
   import { row } from '../spread/spreadrow.svelte'
-  import { tiltmode } from '../photo/tiltmode.svelte'
+  import { tiltmode } from '../tilt/tiltmode.svelte'
   import { onMount } from 'svelte'
   import { isTextField } from '../../shell/menu/keys'
   import Icon from '../../base/ui/Icon.svelte'

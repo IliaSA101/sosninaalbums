@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -419,7 +420,8 @@ func TestAutoBuildSpreadLimit(t *testing.T) {
 // «менять нечего»); правка — один шаг отмены поверх сборки.
 func TestAutoBuildOpts(t *testing.T) {
 	var o model.AutoOpts
-	if err := json.Unmarshal([]byte(`{"spreads":2,"maxPer":3,"variety":2}`), &o); err != nil || o != (model.AutoOpts{Spreads: 2, MaxPer: 3, Variety: model.VarietyMore}) {
+	if err := json.Unmarshal([]byte(`{"spreads":2,"maxPer":3,"variety":2,"families":["dense","hero"]}`), &o); err != nil ||
+		!reflect.DeepEqual(o, model.AutoOpts{Spreads: 2, MaxPer: 3, Variety: model.VarietyMore, Families: []string{"dense", "hero"}}) {
 		t.Fatalf("AutoOpts из JSON: %+v %v", o, err)
 	}
 	a := newApp(t)
@@ -436,12 +438,12 @@ func TestAutoBuildOpts(t *testing.T) {
 		t.Fatalf("AutoBuild: %v, разворотов %d", err, len(v.Spreads))
 	}
 	for _, sel := range [][]string{nil, {}, {"нет"}} {
-		if got, err := a.VaryLayouts(sel, 1); err != nil || got.Rev != v.Rev {
+		if got, err := a.VaryLayouts(sel, 1, nil); err != nil || got.Rev != v.Rev {
 			t.Fatalf("VaryLayouts(%v): %v, rev %d → %d", sel, err, v.Rev, got.Rev)
 		}
 	}
 	all := []string{v.Spreads[0].ID, v.Spreads[1].ID, "нет"}
-	got, err := a.VaryLayouts(all, -1)
+	got, err := a.VaryLayouts(all, -1, nil)
 	if err != nil || got.Rev != v.Rev+1 || len(got.Spreads) != 2 {
 		t.Fatalf("VaryLayouts: %v, rev %d → %d", err, v.Rev, got.Rev)
 	}
@@ -480,7 +482,7 @@ func TestVaryLayoutsXmp(t *testing.T) {
 	if v, err = a.AutoBuild(ids, -1, model.AutoOpts{Spreads: 1, MaxPer: 64}); err != nil || big(v) >= 1.6 {
 		t.Fatalf("«Меньше»: %v, %.2f — звезда не должна влиять", err, big(v))
 	}
-	if v, err = a.VaryLayouts([]string{v.Spreads[0].ID}, 0); err != nil || big(v) < 1.6 {
+	if v, err = a.VaryLayouts([]string{v.Spreads[0].ID}, 0, nil); err != nil || big(v) < 1.6 {
 		t.Fatalf("«Разнообразить»: %v, фото d больше других в %.2f раза", err, big(v))
 	}
 }

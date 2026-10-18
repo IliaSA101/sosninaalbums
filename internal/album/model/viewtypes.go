@@ -63,6 +63,52 @@ type AutoOpts struct {
 	Auto    bool    `json:"auto"`    // «Авто» (051): диапазон от среднего по N; MinPer, MaxPer не действуют
 	Series  bool    `json:"series"`  // не разрывать серии съёмки (папки, время; 051); только с диапазоном
 	Variety Variety `json:"variety"` // в AutoPlan не влияет: группы те же
+	// Families — разрешённые семейства раскладок (065, variety.Family: dense, hero, air, bleed,
+	// strip, figure); nil, пусто или все — «Все», как 0.14. В AutoPlan не влияет.
+	Families []string `json:"families"`
+}
+
+// maxFamilyArgs — сколько строк семейств App берёт от UI: их шесть, остальное — мусор, а
+// большой массив не должен разбираться целиком.
+const maxFamilyArgs = 16
+
+// Clamp — настройки из UI: Variety в 0…2, семейств не больше maxFamilyArgs строк (имена и
+// повторы разбирает сборка).
+func (o AutoOpts) Clamp() AutoOpts {
+	o.Variety = o.Variety.Clamp()
+	o.Families = ClampFamilies(o.Families)
+	return o
+}
+
+// ClampFamilies — первые maxFamilyArgs строк семейств от UI (nil остаётся nil).
+func ClampFamilies(fs []string) []string { return fs[:min(len(fs), maxFamilyArgs)] }
+
+// AutoPreview — ряд блока «Раскладки» окна автосборки (065): возможные варианты и то, что
+// соберёт AutoBuild с теми же аргументами; проект не меняется.
+type AutoPreview struct {
+	W        float64         `json:"w"` // лист нового разворота, мм (как SpreadView.w)
+	H        float64         `json:"h"`
+	Samples  []SampleRow     `json:"samples"`  // «Варианты»: по одному на число фото плана, по возрастанию
+	Spreads  []PreviewSpread `json:"spreads"`  // «Что соберётся»: по порядку сборки
+	Fallback int             `json:"fallback"` // разворотов без раскладки разрешённых семейств
+}
+
+// SampleRow — варианты первой группы плана из Photos фото (её настоящие пропорции): то, что
+// покажет полоса «Варианты» на этом развороте. Семейства не фильтруются — фильтрует UI, как в
+// полосе: снятие фильтра не требует запроса.
+type SampleRow struct {
+	Photos  int      `json:"photos"`
+	Group   int      `json:"group"`   // номер разворота в сборке, 0-based
+	InOrder []Choice `json:"inOrder"` // ряд «Авто» (первая порция, без «Ещё»)
+	Extra   []Choice `json:"extra"`   // «Другие варианты»
+}
+
+// PreviewSpread — будущий разворот «Что соберётся»: ключ и rects (весь разворот, мм), семейство
+// и форма; Twin = −1 (похожие в этом ряду не сворачиваются).
+type PreviewSpread struct {
+	Choice
+	Photos   int  `json:"photos"`
+	Fallback bool `json:"fallback"` // разрешённых семейств нет — взята лучшая
 }
 
 // AutoPlan — подсказка окна автосборки: сколько фото и как они лягут на N разворотов.
@@ -424,6 +470,11 @@ type View struct {
 	// Safe — безопасная зона (мм, в координатах разворота): значимое не ближе Settings.Safe к краю.
 	// Считается всегда; показывать или нет, решает интерфейс.
 	Safe []layout.Rect `json:"safe"`
+	// Bleed — полосы обреза (066) по внешним краям разворота, мм: верх, низ, лево, право; nil —
+	// Settings.Bleed 0. Показываются вместе с Safe; у сгиба полос нет.
+	Bleed []layout.Rect `json:"bleed"`
+	// SpreadMarkup — разметка типографии разворотов (066, Project.SpreadGuide); nil — файла нет.
+	SpreadMarkup *GuideView `json:"spreadMarkup"`
 	// MinDPI — порог «!» у фото: min(lowDPILimit, settings.dpi). LowDPI — сколько фото ниже него
 	// (кадры и фоны, сумма SpreadView.LowDPI).
 	MinDPI int `json:"minDPI"`

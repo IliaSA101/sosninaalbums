@@ -90,14 +90,15 @@ func TestRowLadderNotFirst(t *testing.T) {
 // TestLadderSpreadFour (страж BACKLOG, разборы A и B): 4 вертикальных на разворот 30×30 и 30×20 —
 // в Gen обе лесенки на разворот, мельчайшая сторона не ниже пола 0.18, корешок ни одно фото не
 // пересекает; в ряду есть лесенка на разворот, первая лесенка на месте 3…9, вторая — другого
-// направления. 3 и 5 вертикальных на разворот 30×30 — нет (среднее фото на сгибе).
+// направления (в обоих положениях сгиба: корешок свободен). 3 и 5 вертикальных на разворот 30×30
+// при «только широкие» — нет (среднее фото на сгибе), при «любые фото» — есть (064).
 func TestLadderSpreadFour(t *testing.T) {
 	ResetCache()
 	as := sameAspects(4, aspP)
 	for _, g := range []struct {
 		name string
 		p    layout.Params
-	}{{"30x30", geomSq}, {"30x20", geomWide}} {
+	}{{"30x30", geomSq}, {"30x20", geomWide}, {"30x30 широкие", wideFold(geomSq)}, {"30x20 широкие", wideFold(geomWide)}} {
 		row := Row(as, g.p, rowLen(len(as)))
 		gen := map[string]forms.Cand{}
 		for _, c := range forms.Gen(as, g.p) {
@@ -126,10 +127,15 @@ func TestLadderSpreadFour(t *testing.T) {
 		}
 	}
 	for _, k := range []int{3, 5} {
-		for _, c := range forms.Gen(sameAspects(k, aspP), geomSq) {
+		for _, c := range forms.Gen(sameAspects(k, aspP), wideFold(geomSq)) {
 			if c.Form == forms.Ladder && !layout.IsPaged(c.Key) {
-				t.Errorf("%d вертикальных: лесенка на разворот %q (фото на сгибе)", k, c.Key)
+				t.Errorf("%d вертикальных, «широкие»: лесенка на разворот %q (фото на сгибе)", k, c.Key)
 			}
+		}
+		if !slices.ContainsFunc(forms.Gen(sameAspects(k, aspP), geomSq), func(c forms.Cand) bool {
+			return c.Form == forms.Ladder && !layout.IsPaged(c.Key)
+		}) {
+			t.Errorf("%d вертикальных, «любые»: в Gen нет лесенки на разворот", k)
 		}
 	}
 }

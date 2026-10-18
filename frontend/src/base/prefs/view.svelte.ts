@@ -1,7 +1,8 @@
 // Режимы вида (спека 003): крупный просмотр и панель деталей. Это настройки
 // окна, а не проекта: в .salbum и в undo не попадают, живут в localStorage.
 
-import type { Variety } from '../core/types'
+import type { Family, Variety } from '../core/types'
+import { normFamilies } from './families'
 
 // card — сворачиваемая карточка выделенного в панели деталей (028 Б), не раздел Section.
 export type SectionName = 'card' | 'info' | 'settings' | 'grid'
@@ -33,6 +34,8 @@ class ViewMode {
   details = $state(false)
   // Безопасная зона (спека 005): пунктир на Settings.safe мм от края.
   safe = $state(false)
+  // Разметка типографии (066): подложка обложки и разворотов; по умолчанию включена, файл остаётся при выключении.
+  markup = $state(true)
   // Линейки (спека 010): по умолчанию включены, видны на уровне «Полный».
   rulers = $state(true)
   sections = $state<Sections>({ card: true, info: true, settings: false, grid: true })
@@ -46,6 +49,8 @@ class ViewMode {
   autoBy = $state<'spreads' | 'per'>('spreads')
   // 041: «Разнообразие раскладок» окна автосборки; его же берёт «Разнообразить раскладки» (там «Меньше» = «Обычное»).
   autoVariety = $state<Variety>(1)
+  // 065: разрешённые семейства автосборки; `[]` — «Все». Тот же выбор берёт «Разнообразить раскладки».
+  autoFamilies = $state<Family[]>([])
   // Уровень «Разнообразить раскладок»: «Меньше» там считается «Обычным» (decisions 0.11 №25).
   get varyLevel(): Variety {
     return this.autoVariety === 2 ? 2 : 1
@@ -68,6 +73,7 @@ class ViewMode {
       this.big = v.big === true
       this.details = v.details === true
       this.safe = v.safe === true
+      this.markup = v.markup !== false
       this.rulers = v.rulers !== false
       const t = v.thumbSize
       if (Number.isInteger(t) && t >= THUMB_MIN && t <= THUMB_MAX) this.thumbSize = t
@@ -86,8 +92,9 @@ class ViewMode {
 
   // Память окна автосборки; мусор в хранилище — прежние значения.
   private loadAuto(v: Record<string, unknown>) {
-    const { autoSpreads: sp, autoPer: per, autoBy: by, autoVariety: va, autoSeries: se } = v
+    const { autoSpreads: sp, autoPer: per, autoBy: by, autoVariety: va, autoSeries: se, autoFamilies: fa } = v
     if (va === 0 || va === 1 || va === 2) this.autoVariety = va
+    this.autoFamilies = normFamilies(fa)
     if (Number.isInteger(sp) && (sp as number) > 0) this.autoSpreads = sp as number
     this.autoRange = loadRange(v)
     if (typeof se === 'boolean') this.autoSeries = se
@@ -103,6 +110,7 @@ class ViewMode {
           big: this.big,
           details: this.details,
           safe: this.safe,
+          markup: this.markup,
           rulers: this.rulers,
           thumbSize: this.thumbSize,
           presetGroup: this.presetGroup,
@@ -113,6 +121,7 @@ class ViewMode {
           autoPer: this.autoPer,
           autoBy: this.autoBy,
           autoVariety: this.autoVariety,
+          autoFamilies: this.autoFamilies,
         }),
       )
     } catch {
@@ -130,6 +139,11 @@ class ViewMode {
     this.save()
   }
 
+  toggleMarkup() {
+    this.markup = !this.markup
+    this.save()
+  }
+
   toggleRulers() {
     this.rulers = !this.rulers
     this.save()
@@ -143,11 +157,13 @@ class ViewMode {
     by: 'spreads' | 'per',
     variety: Variety = this.autoVariety,
     series: boolean = this.autoSeries,
+    families: readonly Family[] = this.autoFamilies,
   ) {
     this.autoSpreads = spreads
     this.autoRange = range
     this.autoSeries = series
     this.autoVariety = variety
+    this.autoFamilies = normFamilies(families)
     this.autoPer = Number.isFinite(per) ? Math.max(1, Math.min(64, per)) : null
     this.autoBy = by
     this.save()

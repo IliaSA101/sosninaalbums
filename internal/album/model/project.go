@@ -32,10 +32,16 @@ import (
 // 9 (общий на 0.13): новые значения `Spread.Layout` — ключи форм 051 (`Q[…]`, `G(…)`,
 // `L/A(…)`, `m<i>`, `S/U/D(…)`); полей нет, но 0.12 показала бы мозаику и правкой затёрла ключ;
 // 10 (0.14): фото корешка обложки `bgPhotoS` (спека 061; имя у места 060 ушло в 0.15 — decisions
-// 0.14 №12) — 0.13 файл не откроет и не затрёт его автосохранением.
+// 0.14 №12) — 0.13 файл не откроет и не затрёт его автосохранением;
+// 11 (общий на 0.15, новые поля 0.15 до выпуска ложатся сюда же, без нового номера): правило
+// сгиба `settings.foldAny` (спека 064) — у прежних layflat-файлов «Авто», которое правило меняет,
+// закрепляется при чтении (salbum.pinFoldAuto), иначе 0.14 показала бы «Авто» иначе и
+// автосохранением затёрла бы закрепления; обрез `settings.bleed` и разметка разворотов
+// `spreadGuide`/`spreadGuideAbs` (спека 066, omitempty; `cover.guide` бывает .psd) — 0.14 файл не
+// откроет и не сотрёт их автосохранением.
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 10
+const FormatVersion = 11
 
 type Settings struct {
 	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
@@ -43,16 +49,25 @@ type Settings struct {
 	Margin  float64 `json:"margin"`  // мм
 	Gap     float64 `json:"gap"`     // мм
 	Layflat bool    `json:"layflat"` // фото может идти через корешок
-	DPI     int     `json:"dpi"`
-	Bg      string  `json:"bg"` // цвет страниц альбома #rrggbb; "" — белый
+	// FoldAny — при Layflat через корешок идут любые фото; false — только широкие (layout.FoldOK,
+	// владелец 2026-10-17). Без Layflat и у листа ClampSettings обнуляет. Без omitempty: поле
+	// видно в файле, а отсутствующее (файл до v11) — «только широкие» после закрепления «Авто».
+	FoldAny bool   `json:"foldAny"`
+	DPI     int    `json:"dpi"`
+	Bg      string `json:"bg"` // цвет страниц альбома #rrggbb; "" — белый
 	// Safe — безопасная зона от края, мм; 0 — без зоны. Без omitempty: 0 допустим,
 	// а отсутствующее в файле поле Load заполняет DefaultSafe (028).
 	Safe float64 `json:"safe"`
 	// Sheet — проект из отдельных листов без корешка (виньетка 031): лист — одна страница
 	// PageW×PageH (Geo), layflat всегда. Задаётся при создании и не меняется (SetSettings).
 	Sheet bool `json:"sheet,omitempty"`
+	// Bleed — обрез (вылет) от края файла по внешним краям разворота, мм (066): только полоса на
+	// экране, геометрию не меняет; 0 — полосы нет.
+	Bleed float64 `json:"bleed,omitempty"`
 }
 
+// DefaultSettings — новый альбом: layflat, через корешок «Только широкие» (FoldAny false,
+// decisions 0.15 №4).
 func DefaultSettings() Settings {
 	return Settings{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true, DPI: 300, Safe: DefaultSafe}
 }
@@ -173,6 +188,12 @@ type Project struct {
 	FolderAlt map[string]string `json:"folderAlt,omitempty"`
 	// Cover — обложка (032, cover.go): лист вне Spreads, в нумерацию не входит; nil — нет.
 	Cover *Cover `json:"cover,omitempty"`
+	// SpreadGuide — файл-разметка разворотов (066), в памяти абсолютный путь; "" — нет. Живёт
+	// в проекте, а не в Settings: настройки приходят из интерфейса целиком, а путь от него не
+	// принимается (как Cover.Guide). SpreadGuideAlt — запасной путь, как Cover.GuideAlt (в JSON
+	// снимков отмены он нужен; в файл идёт как spreadGuideAbs).
+	SpreadGuide    string `json:"spreadGuide,omitempty"`
+	SpreadGuideAlt string `json:"spreadGuideAlt,omitempty"`
 	// from — версия файла, из которого прочитан проект (0 — новый): по ней
 	// Editor решает, нужен ли бэкап перед первой записью.
 	from int
@@ -206,7 +227,7 @@ func (p *Project) Params() layout.Params {
 	if s.Sheet {
 		return layout.Params{PageW: s.PageW / 2, PageH: s.PageH, Margin: s.Margin, Gap: s.Gap, Layflat: true, Sheet: true}
 	}
-	return layout.Params{PageW: s.PageW, PageH: s.PageH, Margin: s.Margin, Gap: s.Gap, Layflat: s.Layflat}
+	return layout.Params{PageW: s.PageW, PageH: s.PageH, Margin: s.Margin, Gap: s.Gap, Layflat: s.Layflat, FoldAny: s.FoldAny}
 }
 
 // Aspects — действующие пропорции фото в ячейке: при нечётной четверти поворота

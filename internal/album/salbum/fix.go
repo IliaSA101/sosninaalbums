@@ -108,12 +108,13 @@ func Rekey(p *model.Project, idFor func(string) string) {
 // прозрачности фона, своих отметок, больше 20 текстов на развороте, своих шаблонов виньетки,
 // наклона фото фона — прежний frame.r фона зажим и так обнулял, — ключей форм 051: старые ключи
 // строятся как раньше, — фото корешка 061: прежняя «Лицевая + задняя» и есть «Задняя + корешок
-// + лицевая» с пустым корешком).
+// + лицевая» с пустым корешком). v10 → v11 — шаги 0.15 (migrateV11).
 // До v6 (0.10) ничьи раскладок решал порядок перебора по точным битам, с 0.10 — tieQ и
 // ключ (решение 95): «Авто» с Layout "" и номер варианта берутся из ряда в прежнем
 // порядке (layout.LegacyLayouts), и ключ, отличный от нынешней лучшей, записывается —
 // старый альбом выглядит как раньше на той же машине. Номер вне ряда (в том числе
 // отрицательный) зажимается к краю ряда. Сначала — ключи длиннее предела (dropLongKeys).
+// В migrateV11 у файла с layflat последний шаг — pinFoldAuto (064).
 func migrate(p *model.Project) {
 	dropLongKeys(p)
 	legacy := p.From() < tiesFrom
@@ -137,7 +138,22 @@ func migrate(p *model.Project) {
 	for _, s := range p.Spreads {
 		s.Variant = 0
 	}
+	if p.From() < v11From {
+		migrateV11(p)
+	}
 	p.Version = model.FormatVersion
+}
+
+// migrateV11 — шаги v10 → v11 (общий формат 0.15). Каждая спека 0.15 с полями, которым нужна
+// починка старого файла, добавляет сюда свой шаг. 066 (обрез settings.bleed, разметка
+// разворотов spreadGuide) — только номер: у старых файлов обреза и разметки нет, нули верны.
+// 064 (правило сгиба settings.foldAny) — у того же файла, что читал foldLegacy, pinFoldAuto;
+// он последний среди шагов раскладок: migRows выше считал «Авто» по-прежнему. Условие —
+// foldWas, а не FoldAny: ClampSettings между ними тоже трогает FoldAny.
+func migrateV11(p *model.Project) {
+	if foldWas(p.From(), p.Settings) {
+		pinFoldAuto(p)
+	}
 }
 
 // dropLongKeys — ключ раскладки длиннее layout.MaxKeyLen не строится никогда (Build
@@ -173,10 +189,17 @@ var migRowImpl = func(asp []float64, prm layout.Params, legacy bool) migRow {
 func migRows(p *model.Project, spreads []*model.Spread, legacy bool) []migRow {
 	rows := make([]migRow, len(spreads))
 	prm := p.Params()
+	eachSpread(spreads, func(i int, s *model.Spread) { rows[i] = migRowImpl(p.Aspects(s.Photos), prm, legacy) })
+	return rows
+}
+
+// eachSpread зовёт f по разворотам параллельно, как WarmLayouts (без параллельности — по
+// очереди); паника f — в лог, остальные развороты считаются.
+func eachSpread(spreads []*model.Spread, f func(i int, s *model.Spread)) {
 	var pl model.PanicLog
 	one := func(i int) {
 		s := spreads[i]
-		pl.Safely(s.ID, func() { rows[i] = migRowImpl(p.Aspects(s.Photos), prm, legacy) })
+		pl.Safely(s.ID, func() { f(i, s) })
 	}
 	if model.ParallelLayouts() {
 		model.Each(len(spreads), one)
@@ -186,7 +209,66 @@ func migRows(p *model.Project, spreads []*model.Spread, legacy bool) []migRow {
 		}
 	}
 	pl.Summary()
-	return rows
+}
+
+// v11From — общий формат 0.15: с него у layflat-альбома действует правило сгиба (064), файлы
+// раньше считали «Авто» как нынешнее «Любые фото» и проходят migrateV11.
+const v11From = 11
+
+// foldWas — файл версии from с настройками s считал «Авто» как «Любые фото»: до v11, layflat,
+// не лист (у листа шва нет). Одно условие для foldLegacy и migrateV11.
+func foldWas(from int, s model.Settings) bool { return from < v11From && s.Layflat && !s.Sheet }
+
+// foldLegacy — настройки файла версии from: у foldWas на время чтения FoldAny = true, чтобы
+// migrate и ничьи до v6 считали «Авто» по прежнему поведению; иначе ветка legacy сравнивала бы
+// прежний ряд с новой первой (decisions 0.15 №15). Снимает pinFoldAuto.
+func foldLegacy(from int, s model.Settings) model.Settings {
+	if foldWas(from, s) {
+		s.FoldAny = true
+	}
+	return s
+}
+
+// pinFoldAuto — последний шаг раскладок при чтении файла до v11 (decisions 0.15 №2, №15):
+// альбом переходит на «Только широкие», а «Авто», у которого первая по правилу меняется,
+// закрепляется прежним ключом — свёрстанное не трогается (владелец 2026-10-17). Сетки и ключи,
+// выбранные руками, не трогаются; ряды — параллельно, как migRows. Ключ строит Build (он не
+// фильтрует), SetLayout пускает его как стоящий.
+func pinFoldAuto(p *model.Project) {
+	p.Settings.FoldAny = true // прежнее поведение — явно, не по следу foldLegacy
+	was := p.Params()
+	p.Settings.FoldAny = false
+	now := p.Params()
+	var todo []*model.Spread
+	for _, s := range p.Spreads {
+		if len(s.Grid) == 0 && len(s.Photos) > 0 {
+			todo = append(todo, s)
+		}
+	}
+	keys := make([]string, len(todo))
+	eachSpread(todo, func(i int, s *model.Spread) { keys[i] = pinKey(p.Aspects(s.Photos), s.Layout, was, now) })
+	for i, k := range keys {
+		if k != "" {
+			todo[i].Layout = k
+		}
+	}
+}
+
+// pinKey — ключ, которым закрепить разворот с раскладкой key: прежняя первая (was), если
+// нынешняя (now) другая; "" — закреплять нечего. Негодный ключ показывался как «Авто» —
+// закрепляется так же.
+func pinKey(asp []float64, key string, was, now layout.Params) string {
+	if key != "" {
+		if _, ok := layout.Build(key, asp, now); ok {
+			return ""
+		}
+	}
+	n := model.RowLen(len(asp))
+	old, cur := layout.Cached(asp, was, n), layout.Cached(asp, now, n)
+	if len(old) == 0 || len(cur) > 0 && cur[0].Key == old[0].Key {
+		return ""
+	}
+	return old[0].Key
 }
 
 // dropNilPlaces — первый шаг decode: `"grid":[null]` даёт nil в []*Place без

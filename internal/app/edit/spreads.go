@@ -99,21 +99,31 @@ func (m *Methods) AutoPlan(ids []string, o model.AutoOpts) (pl model.AutoPlan, e
 }
 
 // AutoBuild собирает ровно те развороты, что показал AutoPlan с теми же аргументами.
-// Сверх MaxSpreads разворотов — ошибка, проект не меняется. Variety зажимается в 0…2.
+// Сверх MaxSpreads разворотов — ошибка, проект не меняется. Variety зажимается в 0…2,
+// семейства — до 16 строк (065: имена и повторы разбирает сборка).
 func (m *Methods) AutoBuild(ids []string, at int, o model.AutoOpts) (v model.View, err error) {
 	defer m.guardEdit("AutoBuild", &v, &err)
-	o.Variety = o.Variety.Clamp()
-	return m.changedOrErr(m.editor().AutoBuild(m.infos(ids), at, o))
+	return m.changedOrErr(m.editor().AutoBuild(m.infos(ids), at, o.Clamp()))
+}
+
+// AutoPreview — ряд блока «Раскладки» окна автосборки (065): «Варианты» групп плана и «Что
+// соберётся» — AutoBuild с теми же аргументами на копии проекта. Только чтение: rev, undo и
+// события не меняются. Фото нет — пустые ряды; ошибка плана — как у AutoPlan.
+func (m *Methods) AutoPreview(ids []string, at int, o model.AutoOpts) (pv model.AutoPreview, err error) {
+	defer GuardErr("AutoPreview", &err)
+	return m.editor().AutoPreview(m.infos(ids), at, o.Clamp())
 }
 
 // VaryLayouts — «Разнообразить раскладки» (041) для выделенных разворотов, одним шагом
-// отмены; variety зажимается в 0…2. Нечего менять — холостая: rev тот же, UI покажет тост.
+// отмены; variety зажимается в 0…2, families — фильтр семейств окна автосборки (065; пусто —
+// все, до 16 строк). Нечего менять — холостая: rev тот же, UI покажет тост.
 // Оценки из XMP берутся до замка Editor: замки не вкладываются.
-func (m *Methods) VaryLayouts(spreadIDs []string, variety int) (v model.View, err error) {
+func (m *Methods) VaryLayouts(spreadIDs []string, variety int, families []string) (v model.View, err error) {
 	defer m.guardEdit("VaryLayouts", &v, &err)
 	ed := m.editor()
 	infos := m.infos(ed.PhotosOf(spreadIDs))
-	return m.changed(ed.VaryLayouts(spreadIDs, model.Variety(variety).Clamp(), infos)), nil
+	fs := model.ClampFamilies(families)
+	return m.changed(ed.VaryLayouts(spreadIDs, model.Variety(variety).Clamp(), fs, infos)), nil
 }
 
 // SetMarks ставит свои отметки фото ленты; ID, которых нет в ленте, пропускаются.

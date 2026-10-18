@@ -95,7 +95,7 @@ func TestQualityStripNearMosaic(t *testing.T) {
 }
 
 // TestQualityFloors: полы допустимости — мельчайшая сторона, корешок, главное; мозаика и «в край»
-// допустимы всегда (синтетические Rects на странице 30×30).
+// по полам вида допустимы всегда (сгиб — TestFoldAdmissible) (синтетические Rects на странице 30×30).
 func TestQualityFloors(t *testing.T) {
 	r := func(x, y, w, h float64) layout.Rect { return layout.Rect{X: x, Y: y, W: w, H: h} }
 	row := func(h float64) []layout.Rect { return []layout.Rect{r(12, 12, 100, h), r(120, 12, 100, h)} }
@@ -122,7 +122,7 @@ func TestQualityFloors(t *testing.T) {
 		{"через корешок широкое", []layout.Rect{r(210, 12, 180, 100), r(12, 12, 100, 60)}, Strip, geomSq, true},
 		{"через корешок: портрет", []layout.Rect{r(250, 12, 100, 150), r(12, 12, 100, 60)}, Strip, geomSq, false},
 		{"через корешок: узкая полоска", []layout.Rect{r(297, 12, 100, 60), r(12, 12, 100, 60)}, Strip, geomSq, false},
-		{"то же без layflat — не пересекает", []layout.Rect{r(250, 12, 100, 150), r(12, 12, 100, 60)}, Strip, geomFlat, true},
+		{"то же без layflat — через корешок нельзя", []layout.Rect{r(250, 12, 100, 150), r(12, 12, 100, 60)}, Strip, geomFlat, false},
 		{"то же на листе", []layout.Rect{r(250, 12, 100, 150), r(12, 12, 100, 60)}, Strip, geomSh, true},
 		{"главное: нет главного", row(100), Hero, geomSq, false},
 		{"главное слева", []layout.Rect{r(12, 12, 200, 150), r(320, 12, 60, 40), r(390, 12, 60, 40), r(460, 12, 60, 40)}, Hero, geomSq, true},
@@ -143,11 +143,14 @@ func TestQualityFloors(t *testing.T) {
 	}
 }
 
-// TestSpineOK (decisions 0.13.1 №23): правило корешка для ключа не из ряда — то же, что у полов Gen:
-// лесенка с фото 0.74 на корешке (2,4 мм) — нет, и Quality её не пускает; с широким через корешок
-// — да; «воздух» V(0,1) с узким на корешке — нет; мозаика с узким на корешке — да (Gen её не режет);
-// без корешка (лист, без layflat) и пустая — да; все кандидаты Gen правило проходят.
-func TestSpineOK(t *testing.T) {
+// TestFoldAdmissible — правило сгиба в полах форм, «владелец 2026-10-17» (одно правило для всех
+// путей подбора, decisions 0.15 №6, №16): при «только широкие» лесенка с узким фото на корешке —
+// нет, с широким через корешок — да; «воздух» и мозаика с узким на корешке — нет (мозаика больше
+// не обходит проверку); при «любые» всё это — да; без layflat фото через корешок — никогда, на
+// листе корешка нет; главное через корешок с полоской < 20 % — нет при «широких» (особого случая
+// главного больше нет), не-главное через корешок у вида с главным — нет при любом положении (пол
+// вида); все кандидаты Gen проходят layout.FoldOK.
+func TestFoldAdmissible(t *testing.T) {
 	const v, n = 200.0 / 300, 222.0 / 300
 	build := func(key string, as []float64, p layout.Params) layout.Result {
 		t.Helper()
@@ -157,31 +160,67 @@ func TestSpineOK(t *testing.T) {
 		}
 		return r
 	}
-	narrow := build("A(0,1,2,3)", []float64{v, n, v, v}, geomSq)
-	if _, adm := Quality(narrow, Of(narrow.Key, narrow.Rects, geomSq), geomSq); adm || SpineOK(narrow, geomSq) {
-		t.Errorf("лесенка с узким фото на корешке: Quality %v, SpineOK %v — ждали нет", adm, SpineOK(narrow, geomSq))
+	adm := func(r layout.Result, p layout.Params) bool {
+		_, ok := Quality(r, Of(r.Key, r.Rects, p), p)
+		return ok
 	}
+	narrow := build("A(0,1,2,3)", []float64{v, n, v, v}, geomSq)
+	for _, c := range []struct {
+		name      string
+		r         layout.Result
+		p         layout.Params
+		wide, any bool // «только широкие», «любые»
+	}{
+		{"лесенка: узкое на корешке", narrow, geomSq, false, true},
+		{"лесенка: широкое через корешок", build("A(0,1,2,3)", []float64{aspL, aspL, aspL, n}, geomSq), geomSq, true, true},
+		{"воздух: узкое на корешке", build("V(0,1)", []float64{n, v}, geomSq), geomSq, false, true},
+		{"мозаика: узкое на корешке", build("H(0,1)", []float64{n, v}, geomSq), geomSq, false, true},
+		{"воздух на листе", build("V(0,1)", []float64{n, v}, geomSh), geomSh, true, true},
+		{"те же рамки без layflat", narrow, geomFlat, false, false},
+	} {
+		pa := c.p
+		pa.FoldAny = true
+		if got := adm(c.r, c.p); got != c.wide {
+			t.Errorf("%s (%s), «только широкие»: %v, ждали %v", c.name, c.r.Key, got, c.wide)
+		}
+		if got := adm(c.r, pa); got != c.any {
+			t.Errorf("%s (%s), «любые»: %v, ждали %v", c.name, c.r.Key, got, c.any)
+		}
+	}
+
+	// Вид с главным — синтетические рамки 30×30: главное широкое через корешок, полоска справа
+	// 15 % < FoldPart; не-главное через корешок рядом с главным слева.
+	r := func(x, y, w, h float64) layout.Rect { return layout.Rect{X: x, Y: y, W: w, H: h} }
+	small := []layout.Rect{r(320, 220, 60, 40), r(390, 220, 60, 40), r(460, 220, 60, 40)}
+	strip := append([]layout.Rect{r(130, 12, 200, 150)}, small...)
+	other := append([]layout.Rect{r(12, 12, 200, 150), r(280, 220, 60, 40)}, small...)
+	anyP := geomSq
+	anyP.FoldAny = true
 	for _, c := range []struct {
 		name string
-		r    layout.Result
+		rs   []layout.Rect
 		p    layout.Params
 		want bool
 	}{
-		{"лесенка: широкое через корешок", build("A(0,1,2,3)", []float64{aspL, aspL, aspL, n}, geomSq), geomSq, true},
-		{"воздух: узкое на корешке", build("V(0,1)", []float64{n, v}, geomSq), geomSq, false},
-		{"воздух на листе", build("V(0,1)", []float64{n, v}, geomSh), geomSh, true},
-		{"мозаика: узкое на корешке", build("H(0,1)", []float64{n, v}, geomSq), geomSq, true},
-		{"те же рамки без layflat", narrow, geomFlat, true},
-		{"пустая", layout.Result{}, geomSq, true},
+		{"главное: полоска 15 % за корешком, «широкие»", strip, geomSq, false},
+		{"главное: полоска 15 % за корешком, «любые»", strip, anyP, true},
+		{"главное через корешок по центру", append([]layout.Rect{r(200, 12, 200, 150)}, small...), geomSq, true},
+		{"не-главное через корешок, «широкие»", other, geomSq, false},
+		{"не-главное через корешок, «любые» — пол вида", other, anyP, false},
 	} {
-		if got := SpineOK(c.r, c.p); got != c.want {
-			t.Errorf("%s (%s): %v, ждали %v", c.name, c.r.Key, got, c.want)
+		if got := admissible(c.rs, Hero, c.p, Heroes(c.rs), 0); got != c.want {
+			t.Errorf("%s: %v, ждали %v (главных %d)", c.name, got, c.want, Heroes(c.rs).N)
 		}
 	}
-	for _, as := range [][]float64{{v, n, v, v}, same(4, aspL), {aspL, v, aspL, n, v}, same(7, v)} {
+
+	// Пустая: на сгибе ничего (саму пустую раскладку не пускает Quality — TestQualityFloors).
+	if !admissible(nil, Strip, geomSq, HeroInfo{}, 0) {
+		t.Error("пустая: правило сгиба не пустило")
+	}
+	for _, as := range [][]float64{{v, n, v, v}, same(3, aspP), same(4, aspL), {aspL, v, aspL, n, v}, same(7, v)} {
 		for _, c := range Gen(as, geomSq) {
-			if !SpineOK(c.Result, geomSq) {
-				t.Errorf("%v: кандидат Gen %s не проходит SpineOK", as, c.Key)
+			if !layout.FoldOK(c.Rects, as, geomSq) {
+				t.Errorf("%v: кандидат Gen %s вне правила сгиба", as, c.Key)
 			}
 		}
 	}

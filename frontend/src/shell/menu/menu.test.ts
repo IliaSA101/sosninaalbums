@@ -130,6 +130,16 @@ describe('buildMenu', () => {
     expect(find(m, 'fit')?.checked).toBeUndefined()
   })
 
+  it('«Вид ▸ Разметка типографии» (066): сразу после «Безопасной зоны», галочка по состоянию, без клавиши', () => {
+    const on = buildMenu(ctx({ markup: true }))
+    expect(find(on, 'markup')).toMatchObject({ label: 'Разметка типографии', cmd: 'toggleMarkup', checked: true })
+    expect(find(on, 'markup')?.keys).toBeUndefined()
+    expect(find(buildMenu(ctx({ markup: false })), 'markup')?.checked).toBe(false)
+    expect(find(buildMenu(ctx()), 'markup')?.checked).toBe(false) // поле не передали — выключено
+    const view = ids(on, 'view')
+    expect(view.indexOf('markup')).toBe(view.indexOf('safe') + 1)
+  })
+
   it('без разворота масштаб серый', () => {
     const m = buildMenu(ctx({ hasSpread: false }))
     for (const id of ['fit', 'zoomIn', 'zoomOut', 'addText']) expect(find(m, id)?.disabled, id).toBe(true)

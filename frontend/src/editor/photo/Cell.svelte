@@ -5,7 +5,7 @@
   import { thumbUrl, previewUrl, wantPreview } from '../../base/core/media'
   import { colorBadge } from './color'
   import { DEFAULT_FRAME } from '../../base/geom/frame'
-  import { liveImage, liveTransform } from './tiltlive'
+  import { liveImage, liveTransform } from '../tilt/tiltlive'
   import { framelive } from './framelive.svelte'
   import { aabbOf, uprightAt } from '../../base/geom/rotbox'
   import { cornerInset, markAt, outlineOf, shapeCss } from '../../base/geom/shape'

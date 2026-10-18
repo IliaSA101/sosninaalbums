@@ -17,9 +17,26 @@ import (
 // layflat, лист) — sha256 отсортированных «ключ вид». Ловит любую смену генераторов, Of и полов.
 // Оценки Q не в хэше: они плавающие, их сверяют TestFormsInvariants и TestQualityMatchesScoreTerms.
 // amd64: ничьи — в квантах, но эталон снят на amd64 (на arm64 — наблюдение).
-var updateGolden = flag.Bool("update", false, "перезаписать testdata/golden/forms.sha")
+// Layflat-геометрии forms.sha — «только широкие» (прежнее правило форм совпало с ним на корпусе:
+// эталон не менялся, 064); «любые фото» — forms-any.sha: формы пускают через сгиб и узкие кадры.
+var updateGolden = flag.Bool("update", false, "перезаписать testdata/golden/forms*.sha")
 
-const goldenPath = "testdata/golden/forms.sha"
+const (
+	goldenPath    = "testdata/golden/forms.sha"
+	goldenAnyPath = "testdata/golden/forms-any.sha"
+)
+
+// geomsAny — layflat-геометрии эталона (не лист) в положении «любые фото».
+func geomsAny() []namedGeom {
+	var out []namedGeom
+	for _, g := range geoms {
+		if g.p.Layflat && !g.p.Sheet {
+			g.p.FoldAny = true
+			out = append(out, namedGeom{g.name + "-any", g.p})
+		}
+	}
+	return out
+}
 
 // goldenSets — 12 наборов: разные размеры и составы.
 func goldenSets() map[string][]float64 {
@@ -30,10 +47,10 @@ func goldenSets() map[string][]float64 {
 	}
 }
 
-func goldenLines() []string {
+func goldenLines(gs []namedGeom) []string {
 	sets := goldenSets()
 	var out []string
-	for _, g := range geoms {
+	for _, g := range gs {
 		for _, name := range sortedNames(sets) {
 			var lines []string
 			for _, c := range Gen(sets[name], g.p) {
@@ -47,22 +64,27 @@ func goldenLines() []string {
 	return out
 }
 
-func TestGoldenForms(t *testing.T) {
+func TestGoldenForms(t *testing.T) { checkGoldenForms(t, goldenPath, goldenLines(geoms)) }
+
+// TestGoldenFormsAny — тот же корпус при «любые фото» (064).
+func TestGoldenFormsAny(t *testing.T) { checkGoldenForms(t, goldenAnyPath, goldenLines(geomsAny())) }
+
+func checkGoldenForms(t *testing.T, path string, got []string) {
+	t.Helper()
 	if runtime.GOARCH != "amd64" && os.Getenv("SA_GOLDEN_ANYARCH") != "1" {
 		t.Skip("эталон снят на amd64 (SA_GOLDEN_ANYARCH=1 — гонять и здесь)")
 	}
-	got := goldenLines()
 	if *updateGolden || os.Getenv("SA_GOLDEN_UPDATE") == "1" {
-		if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(goldenPath, []byte(strings.Join(got, "\n")+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(strings.Join(got, "\n")+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("эталон перезаписан: %s (%d строк)", goldenPath, len(got))
+		t.Logf("эталон перезаписан: %s (%d строк)", path, len(got))
 		return
 	}
-	data, err := os.ReadFile(goldenPath)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("нет эталона (%v): go test ./internal/layout/forms -run GoldenForms -update", err)
 	}

@@ -185,6 +185,38 @@ func TestClampSettingsSafe(t *testing.T) {
 	}
 }
 
+// TestClampFoldAny (064): FoldAny держится только при layflat и не у листа; новый альбом —
+// «Только широкие»; Params передаёт положение (у листа — без FoldAny); зажим идемпотентен.
+func TestClampFoldAny(t *testing.T) {
+	if d := DefaultSettings(); !d.Layflat || d.FoldAny {
+		t.Fatalf("по умолчанию layflat %v, foldAny %v — ждали «Только широкие»", d.Layflat, d.FoldAny)
+	}
+	cases := []struct {
+		layflat, foldAny, sheet bool
+		wantFlat, wantAny       bool
+	}{
+		{false, false, false, false, false},
+		{false, true, false, false, false},
+		{true, false, false, true, false},
+		{true, true, false, true, true},
+		{true, true, true, true, false},
+		{false, true, true, true, false},
+	}
+	for _, c := range cases {
+		s := DefaultSettings()
+		s.Layflat, s.FoldAny, s.Sheet = c.layflat, c.foldAny, c.sheet
+		got := ClampSettings(s)
+		if got.Layflat != c.wantFlat || got.FoldAny != c.wantAny || ClampSettings(got) != got {
+			t.Errorf("%+v: layflat %v, foldAny %v (ждали %v, %v)", c, got.Layflat, got.FoldAny, c.wantFlat, c.wantAny)
+		}
+		p := New()
+		p.Settings = got
+		if prm := p.Params(); prm.FoldAny != got.FoldAny || prm.Layflat != got.Layflat {
+			t.Errorf("%+v: Params layflat %v, foldAny %v", c, prm.Layflat, prm.FoldAny)
+		}
+	}
+}
+
 // Числа обложки (032 §4): NaN/Inf — «Свои размеры», пределы, таблица ≤ 64 строк по
 // возрастанию без повторов, неизвестный пресет — custom; зажим идемпотентен.
 func TestClampCoverSpec(t *testing.T) {
@@ -239,6 +271,23 @@ func TestVarietyClamp(t *testing.T) {
 	}
 	if (AutoOpts{}).Variety != VarietyLess {
 		t.Fatal("нулевые AutoOpts — не «Меньше»")
+	}
+}
+
+// AutoOpts из UI (065): Variety в 0…2, семейств не больше 16 строк (nil остаётся nil, короткий
+// список — как есть); остальные поля не трогаются.
+func TestAutoOptsClamp(t *testing.T) {
+	long := make([]string, 40)
+	for i := range long {
+		long[i] = strconv.Itoa(i)
+	}
+	got := AutoOpts{Spreads: 7, MaxPer: 9, Variety: 9, Families: long}.Clamp()
+	if got.Variety != VarietyMore || got.Spreads != 7 || got.MaxPer != 9 || !slices.Equal(got.Families, long[:16]) {
+		t.Fatalf("Clamp: %+v", got)
+	}
+	if ClampFamilies(nil) != nil || !slices.Equal(ClampFamilies([]string{"dense", "hero"}), []string{"dense", "hero"}) ||
+		len(ClampFamilies(long[:16])) != 16 || len(ClampFamilies([]string{})) != 0 {
+		t.Fatal("ClampFamilies")
 	}
 }
 

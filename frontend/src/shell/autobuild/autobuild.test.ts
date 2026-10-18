@@ -448,13 +448,13 @@ describe('AutoDialog', () => {
     await go.release()
     const got: unknown[][] = []
     expect(await d.submit((...a) => got.push(a))).toBe(true)
-    expect(got).toEqual([[25, R64, 4, 'per', 1]])
+    expect(got).toEqual([[25, R64, 4, 'per', 1, []]])
     d.setSpreads(20)
     await go.release()
     await go.release()
     got.length = 0
     await d.submit((...a) => got.push(a))
-    expect(got).toEqual([[20, R64, 5, 'spreads', 1]]) // X — фактическое 100 / 20
+    expect(got).toEqual([[20, R64, 5, 'spreads', 1, []]]) // X — фактическое 100 / 20
   })
 })
 
@@ -480,7 +480,7 @@ describe('разнообразие раскладок (041)', () => {
     expect(new AutoDialog(ids, fakeGo().ask, { spreads: 10, range: [1, 64], variety: 2 }).variety).toBe(2)
     expect(new AutoDialog(ids, fakeGo().ask, { spreads: 10, range: [1, 64], variety: 0 }).variety).toBe(0)
   })
-  it('выбор уходит в «Собрать» пятым аргументом и не гоняет запрос плана', async () => {
+  it('выбор уходит в «Собрать» пятым аргументом, семейства (065) — шестым и не гоняет запрос плана', async () => {
     const go = fakeGo()
     const d = new AutoDialog(ids, go.ask, { spreads: 10, range: [1, 64] })
     d.start()
@@ -489,7 +489,7 @@ describe('разнообразие раскладок (041)', () => {
     expect(go.calls).toHaveLength(1) // план от ручки не зависит
     const got: unknown[][] = []
     expect(await d.submit((...a) => got.push(a))).toBe(true)
-    expect(got).toEqual([[10, R64, 10, 'spreads', 2]])
+    expect(got).toEqual([[10, R64, 10, 'spreads', 2, []]])
   })
 })
 
@@ -516,7 +516,7 @@ describe('активное поле (щелчок по карточке)', () =>
     const got: unknown[][] = []
     await d.submit((...a) => got.push(a))
     expect(d.n).toBe(n)
-    expect(got).toEqual([[n, R64, 4.5, 'per', 1]])
+    expect(got).toEqual([[n, R64, 4.5, 'per', 1, []]])
   })
 
   it('первое открытие: запомненное 40 фото на разворот при 80 фото — N = 2 сразу и после ответа', async () => {

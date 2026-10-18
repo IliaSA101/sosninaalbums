@@ -9,11 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -46,15 +48,37 @@ func formatGolden(gs []goldenGroup) string {
 	return b.String()
 }
 
-const goldenPlan051Path = "testdata/golden/plan051.sha"
+const (
+	goldenPlan051Path     = "testdata/golden/plan051.sha"
+	goldenPlan051WidePath = "testdata/golden/plan051-wide.sha"
+)
 
 // TestGoldenPlan051 — группировка с разбросом (PlanRange, спека 051 §3) побитово: три набора
 // (свадьба 100/11, серии 161/16 и 600/50, у каждого своя геометрия) × «Авто», широкий свой,
 // узкий свой × без серий и с сериями. -update — только при осознанной смене плана.
+// Layflat-геометрии — «любые фото» (прежний план бит-в-бит, 064).
 func TestGoldenPlan051(t *testing.T) {
 	if runtime.GOARCH != "amd64" {
 		t.Skip("эталон снят на amd64")
 	}
+	checkGolden(t, goldenPlan051Path, plan051Groups(goldenGeoms))
+}
+
+// TestGoldenPlan051Wide — тот же корпус при «только широкие» (064): окна плана не считают ряд
+// на разворот с фото на сгибе вне правила. Геометрия без layflat — та же, что в plan051.sha.
+func TestGoldenPlan051Wide(t *testing.T) {
+	if runtime.GOARCH != "amd64" {
+		t.Skip("эталон снят на amd64")
+	}
+	geoms := slices.Clone(goldenGeoms)
+	for i := range geoms {
+		geoms[i].FoldAny = false
+	}
+	checkGolden(t, goldenPlan051WidePath, plan051Groups(geoms))
+}
+
+// plan051Groups — группы эталона plan051 на геометриях geoms (по одной на набор).
+func plan051Groups(geoms []layout.Params) []goldenGroup {
 	wed := weddingAspects(51, 100)
 	wedCuts := make([]float64, 101)
 	wedCuts[23], wedCuts[51], wedCuts[77] = 1, 0.6, 0.3 // папка и паузы разной силы
@@ -77,7 +101,7 @@ func TestGoldenPlan051(t *testing.T) {
 			gr := goldenGroup{name: fmt.Sprintf("p%d/%s/%s", g, set.name, r.name)}
 			for _, cuts := range [][]float64{nil, set.cuts} {
 				var d dump
-				for _, x := range PlanRange(set.asp, goldenGeoms[g], PlanOpts{Spreads: set.N, MinPer: r.lo, MaxPer: r.hi, Cuts: cuts}).Groups {
+				for _, x := range PlanRange(set.asp, geoms[g], PlanOpts{Spreads: set.N, MinPer: r.lo, MaxPer: r.hi, Cuts: cuts}).Groups {
 					d.u64(uint64(x[0]))
 					d.u64(uint64(x[1]))
 				}
@@ -86,7 +110,7 @@ func TestGoldenPlan051(t *testing.T) {
 			got = append(got, gr)
 		}
 	}
-	checkGolden(t, goldenPlan051Path, got)
+	return got
 }
 
 const goldenManyPath = "testdata/golden/many.sha"

@@ -30,6 +30,9 @@ export type AutoPlan = model.AutoPlan
 // auto — диапазон от среднего (minPer и maxPer тогда не действуют); series — не разрывать серии съёмки.
 export type AutoRange = Pick<model.AutoOpts, 'auto' | 'minPer' | 'maxPer' | 'series'>
 
+// Ответ App.AutoPreview (065): ряд «Варианты» (образцы по числу фото плана) и «Что соберётся». Тип — из биндинга.
+export type AutoPreview = model.AutoPreview
+
 export interface Choices {
   spread: string
   rev: number // для какого rev посчитано

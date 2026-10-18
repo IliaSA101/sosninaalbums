@@ -13,8 +13,8 @@
   import BackdropEditor from '../backdrop/BackdropEditor.svelte'
   import Cell from '../photo/Cell.svelte'
   import CellOverlay from '../photo/CellOverlay.svelte'
-  import StraightenLayer from '../photo/StraightenLayer.svelte'
-  import { straighten } from '../photo/straighten.svelte'
+  import StraightenLayer from '../tilt/StraightenLayer.svelte'
+  import { straighten } from '../tilt/straighten.svelte'
   import GroupFrame from '../places/GroupFrame.svelte'
   import PlaceLayer from '../places/PlaceLayer.svelte'
   import { shapeCss } from '../../base/geom/shape'
@@ -39,7 +39,8 @@
   import CoverDrop from '../cover/CoverDrop.svelte'
   import CoverGuides from '../cover/CoverGuides.svelte'
   import CoverPlate from '../cover/CoverPlate.svelte'
-  import CoverUnderlay from '../cover/CoverUnderlay.svelte'
+  import BleedStrips from '../markup/BleedStrips.svelte'
+  import MarkupUnderlay from '../markup/MarkupUnderlay.svelte'
 
   // peer — сосед в ряду разворотов (спека 012): рисуется как mini (лёгкий, без жестов), но с тенью и обводкой
   // листа — тот же экземпляр становится текущим сменой mini, без перемонтирования.
@@ -294,8 +295,12 @@
     ></div>
   {/each}
   {#if cover && !mini}
-    <CoverUnderlay {cover} />
+    <MarkupUnderlay kind="cover" guide={cover.markup} w={sw} h={sh} />
     <CoverGuides {cover} />
+  {:else if !cover && !mini}
+    <!-- обрез (под пунктиром безопасной зоны) и разметка типографии разворотов (066): в мини-разворотах и экспорте нет -->
+    <BleedStrips w={sw} h={sh} />
+    <MarkupUnderlay kind="spreads" guide={store.view.spreadMarkup ?? null} w={sw} h={sh} />
   {/if}
   <!-- На сетке с местами у каждого пустого места своя метка «+ фото» — общая подсказка её перекрывает -->
   {#if spread.photos.length === 0 && !mini && !spread.places?.length && !cover}

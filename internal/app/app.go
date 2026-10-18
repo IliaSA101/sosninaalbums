@@ -50,6 +50,8 @@ type App struct {
 	// ed подменяется при «Новый»/«Открыть», а читается из обработчиков /media,
 	// автосохранения и методов UI одновременно — поэтому только через editor().
 	ed atomic.Pointer[album.Editor]
+	// markups — кэш превью PSD разметок обложки и разворотов (markup.go), по записи на вид.
+	markups [2]markupCache
 
 	mu     sync.Mutex
 	photos []library.Photo

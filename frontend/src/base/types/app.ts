@@ -1,5 +1,5 @@
 import type { Photo, ScanProgress } from './marks'
-import type { CoverView } from './print'
+import type { CoverView, GuideView } from './print'
 import type { Rect, SpreadView } from './sheet'
 
 export interface Settings {
@@ -8,9 +8,11 @@ export interface Settings {
   margin: number
   gap: number
   layflat: boolean
+  foldAny: boolean // при layflat: true — через корешок любые фото, false — только широкие (064)
   dpi: number
   bg: string // #rrggbb, цвет альбома; "" — белый
   safe: number // безопасная зона, мм от края страницы; 0 — без зоны
+  bleed?: number // обрез, мм (066): полоса по внешним краям разворота; нет/0 — без полосы
   sheet?: boolean // альбом из отдельных листов (031): pageW — ширина листа, шва нет
 }
 
@@ -25,6 +27,8 @@ export interface View {
   rev: number // растёт при каждой реальной правке/undo/redo
   maxSpreadPhotos: number // больше фото в развороте не склеиваем (спека 003)
   safe?: Rect[] | null // безопасная зона, мм, координаты разворота (спека 005); считает Go
+  bleed?: Rect[] | null // полосы обреза, мм разворота: верх, низ, лево, право (066); null — обреза нет
+  spreadMarkup?: GuideView | null // разметка типографии разворотов (066); null — файла нет
   minDPI: number // порог «!»: min(200, dpi настроек)
   lowDPI: number // фото на разворотах с 0 < dpi < minDPI
   emptyPlaces: number // пустых мест во всём альбоме (спека 007)

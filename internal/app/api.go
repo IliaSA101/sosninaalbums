@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -123,62 +122,7 @@ func (a *App) NewVignetteSheet(w, h float64) State {
 
 // Обложка (032). Места, тексты, фоны и слои на ней — общие методы с spreadID "cover".
 
-// dirCoverGuide — своя последняя папка у диалога «Разметка типографии».
-const dirCoverGuide = "coverGuide"
-
-// PickCoverGuide — «Выбрать файл…» разметки: диалог в Go, путь от интерфейса не принимается;
-// файл проверяется так же строго, как свой фон. Отказ от диалога — вид без изменений.
-func (a *App) PickCoverGuide() (v model.View, err error) {
-	defer a.guardEdit("PickCoverGuide", &v, &err)
-	path, err := openFileDialog(a.ctx, wr.OpenDialogOptions{
-		Title:            "Разметка типографии",
-		DefaultDirectory: a.dialogDir(dirCoverGuide),
-		Filters:          []wr.FileFilter{{DisplayName: "Изображение (*.jpg, *.jpeg, *.png)", Pattern: "*.jpg;*.jpeg;*.png"}},
-	})
-	if err != nil || path == "" {
-		return a.editor().View(), err
-	}
-	return a.setCoverGuide(path)
-}
-
-// setCoverGuide — проверка выбранного файла разметки и правка.
-func (a *App) setCoverGuide(path string) (model.View, error) {
-	ph, err := library.BackdropFile(path)
-	if err != nil {
-		return a.editor().View(), err
-	}
-	v, err := a.changedOrErr(a.editor().SetCoverGuide(ph.Path))
-	if err == nil {
-		a.rememberDir(dirCoverGuide, filepath.Dir(ph.Path))
-	}
-	return v, err
-}
-
-// maxGuideBytes — предел файла разметки для раздачи: WebView декодирует его сам.
-const maxGuideBytes = 100 << 20
-
-// serveCoverGuide отдаёт /media/cover-guide — файл-разметку обложки. Путь берётся только из
-// проекта (из запроса его нет: ?r=<rev> нужен лишь сбросу кэша), заново проверяется так же, как
-// при выборе (локальный путь, JPEG/PNG, обычный файл), том должен отвечать.
-func (a *App) serveCoverGuide(w http.ResponseWriter, r *http.Request) {
-	path := a.editor().CoverGuidePath()
-	if path == "" || !reachable(path) {
-		http.NotFound(w, r)
-		return
-	}
-	ph, err := library.BackdropFile(path)
-	if err != nil || ph.Size > maxGuideBytes {
-		http.NotFound(w, r)
-		return
-	}
-	ct := "image/jpeg"
-	if strings.EqualFold(filepath.Ext(ph.Path), ".png") {
-		ct = "image/png"
-	}
-	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Cache-Control", "no-cache") // файл на диске могут заменить под тем же путём
-	http.ServeFile(w, r, ph.Path)               //nolint:gosec // ph.Path — путь разметки из проекта после BackdropFile, не из запроса
-}
+// Разметка типографии обложки и разворотов (выбор файла, раздача) — markup.go.
 
 // Виньетка (031 G5): панель, лента и меню «Разворот».
 

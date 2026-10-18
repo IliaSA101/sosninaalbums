@@ -120,7 +120,7 @@ func TestVarietySaveLoad(t *testing.T) {
 	for _, v := range []model.Variety{model.VarietyNormal, model.VarietyMore} {
 		e := edtest.Open(t, model.New(), "")
 		view := build(t, e, ph, -1, model.AutoOpts{Spreads: 16, MaxPer: 12, Variety: v})
-		view = e.VaryLayouts(edtest.SpreadIDs(view)[3:11], v, nil)
+		view = e.VaryLayouts(edtest.SpreadIDs(view)[3:11], v, nil, nil)
 		p := edtest.P(e)
 		for _, s := range p.Spreads {
 			asp, prm := p.Aspects(s.Photos), p.Params()
@@ -172,7 +172,7 @@ func mustBuild(t *testing.T, key string, asp []float64, prm layout.Params) layou
 func TestVaryLayoutsRedo(t *testing.T) {
 	e, ids := varyEd(t)
 	before := model.Marshal(edtest.P(e))
-	e.VaryLayouts(ids, model.VarietyNormal, nil)
+	e.VaryLayouts(ids, model.VarietyNormal, nil, nil)
 	after, shape := model.Marshal(edtest.P(e)), spreadsShape(edtest.P(e))
 	if string(after) == string(before) {
 		t.Fatal("«Разнообразить» ничего не поменяло")

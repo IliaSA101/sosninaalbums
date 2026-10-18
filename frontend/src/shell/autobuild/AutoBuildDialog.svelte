@@ -3,25 +3,14 @@
   import { model } from '../../../wailsjs/go/models'
   import { store } from '../../base/core/store.svelte'
   import * as Api from '../../../wailsjs/go/app/App'
-  import type { PlanFn } from './autobuild.svelte'
+  import type { PlanFn, PreviewFn } from './autobuild.svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import Modal from '../../base/ui/Modal.svelte'
+  import AutoLayouts from './AutoLayouts.svelte'
+  import AutoRangeRow from './AutoRangeRow.svelte'
+  import { prefs } from '../../base/prefs/prefs.svelte'
   import { AutoDialog } from './autobuild.svelte'
-  import {
-    MAX_PER,
-    RANGE_HINT,
-    VARIETY_OPTIONS,
-    albumAfter,
-    anchorField,
-    memOf,
-    otherField,
-    perText,
-    planHint,
-    rangeText,
-    seriesText,
-    sourceLine,
-    unitWord,
-  } from './autobuild'
+  import { albumAfter, anchorField, memOf, otherField, perText, planHint, rangeText, seriesText, sourceLine, unitWord } from './autobuild'
   import { unitOf } from '../../base/geom/sheet'
 
   // Окно «Автосборка» (027 U2, 034): сколько разворотов собрать — числом N или средним «фото на разворот»
@@ -30,20 +19,35 @@
   // Разнообразие на план не влияет (группы те же), но поле контракта заполняем запомненным.
   const autoPlan: PlanFn = (ids, spreads, range) =>
     Api.AutoPlan([...ids], model.AutoOpts.createFrom({ spreads, ...range, variety: modes.autoVariety }))
+  // 065: ряд «Раскладки» — то же, что соберёт «Собрать»: вставка в конец альбома, как у store.autoBuild.
+  const previewRows: PreviewFn = (ids, o) =>
+    Api.AutoPreview(
+      [...ids],
+      store.view.spreads.length,
+      model.AutoOpts.createFrom({ spreads: o.spreads, ...o.range, variety: o.variety, families: [...(o.families ?? [])] }),
+    )
+  // Семейства — часть функции «Варианты раскладки»: без неё фильтра нет и в сборку уходит «Все».
+  const famOn = $derived(prefs.can('variants'))
 
   // Каждое открытие — новое состояние: N, среднее, диапазон и серии берутся из памяти окна, ответ Go запрашивается заново.
   $effect(() => {
     const d = store.autoDraft
     untrack(() => {
       ui = d
-        ? new AutoDialog(d.ids, autoPlan, {
-            spreads: modes.autoSpreads,
-            range: modes.autoRange,
-            series: modes.autoSeries,
-            per: modes.autoPer,
-            by: modes.autoBy,
-            variety: modes.autoVariety,
-          })
+        ? new AutoDialog(
+            d.ids,
+            autoPlan,
+            {
+              spreads: modes.autoSpreads,
+              range: modes.autoRange,
+              series: modes.autoSeries,
+              per: modes.autoPer,
+              by: modes.autoBy,
+              variety: modes.autoVariety,
+              families: famOn ? modes.autoFamilies : [],
+            },
+            previewRows,
+          )
         : null
       typing = null
       ui?.start()
@@ -55,9 +59,10 @@
   async function go() {
     if (!ui) return
     // Запоминаем и собираем то, что подтвердил Go: N после ответа, а не то, что успели набрать.
-    await ui.submit((n, range, per, by, variety) => {
-      modes.rememberAuto(n, memOf(range), per, by, variety, range.series)
-      return store.autoBuild(n, range, variety)
+    await ui.submit((n, range, per, by, variety, families) => {
+      // Без функции «Варианты раскладки» фильтра в окне не было — память семейств не трогаем
+      modes.rememberAuto(n, memOf(range), per, by, variety, range.series, famOn ? families : modes.autoFamilies)
+      return store.autoBuild(n, range, variety, families)
     })
   }
 
@@ -83,11 +88,6 @@
   // Поле якоря получает первый фокус (data-autofocus); у второго атрибута нет вовсе — false Svelte пишет строкой.
   const first = (id: 'auto-n' | 'auto-per') => (ui && anchorField(ui.anchor) === id ? '' : undefined)
   const shownPer = () => (ui ? perText(ui.photos, ui.n) : '')
-  // Поле диапазона: фокус ушёл — «от» > «до» подтягивается, пустое поле возвращает показанное число.
-  const leave = (e: FocusEvent & { currentTarget: HTMLInputElement }, which: 'from' | 'to') => {
-    ui?.settle()
-    e.currentTarget.value = String((which === 'from' ? ui?.from : ui?.to) ?? '')
-  }
 
   // Стрелки и PgUp/PgDn: направление и шаг (PgUp/PgDn — 5).
   const arrow = (key: string): [number, number] => [
@@ -137,7 +137,7 @@
 
 {#if store.autoDraft && ui}
   {@const d = store.autoDraft}
-  <Modal title="Автосборка" onclose={close} width={540}>
+  <Modal title="Автосборка" onclose={close} width={860}>
     <div class="body" role="presentation" onkeydown={key}>
       <p class="src">{sourceLine({ ...d, count: d.ids.length }, ui.plan?.photos ?? null)}</p>
 
@@ -231,41 +231,9 @@
       />
       <p class="after">{albumAfter(store.view.spreads.length, ui.n, unit, ui.plan?.reuse ?? 0)}</p>
 
-      <!-- 051: фото на разворот «от … до …»; «Авто» — от среднего, ввод в поле — «Свой» -->
-      <div class="more first" role="group" aria-label="Фото на {unit.one}">
-        Фото на {unit.one}:
-        <div class="seg">
-          <button type="button" class:on={ui.auto} aria-pressed={ui.auto} disabled={empty} onclick={() => ui?.setAuto()}>Авто</button>
-          <button type="button" class:on={!ui.auto} aria-pressed={!ui.auto} disabled={empty} onclick={() => ui?.setOwn()}>Свой</button>
-        </div>
-        от
-        <input
-          id="auto-from"
-          type="number"
-          min="1"
-          max={MAX_PER}
-          step="1"
-          value={ui.from ?? ''}
-          disabled={empty}
-          aria-label="Фото на {unit.one}: от"
-          onblur={(e) => leave(e, 'from')}
-          oninput={(e) => e.currentTarget.value !== '' && ui?.setMinPer(e.currentTarget.valueAsNumber)}
-        />
-        до
-        <input
-          id="auto-to"
-          type="number"
-          min="1"
-          max={MAX_PER}
-          step="1"
-          value={ui.to ?? ''}
-          disabled={empty}
-          aria-label="Фото на {unit.one}: до"
-          onblur={(e) => leave(e, 'to')}
-          oninput={(e) => e.currentTarget.value !== '' && ui?.setMaxPer(e.currentTarget.valueAsNumber)}
-        />
-      </div>
-      <p class="hint">{RANGE_HINT}</p>
+      <AutoRangeRow {ui} {unit} {empty} />
+
+      <AutoLayouts {ui} {famOn} {unit} {empty} />
 
       <details>
         <summary>Дополнительно</summary>
@@ -276,18 +244,6 @@
             <span class="cuts">· {seriesText(ui.plan.cuts)}</span>
           {/if}
         </label>
-        <!-- 041: выбор из трёх — сегменты, как «Разворот / Левая / Правая» в галерее -->
-        <div class="more" role="group" aria-label="Разнообразие раскладок">
-          Разнообразие раскладок
-          <div class="seg">
-            {#each VARIETY_OPTIONS as o (o.v)}
-              <button type="button" class:on={ui.variety === o.v} aria-pressed={ui.variety === o.v} onclick={() => ui?.setVariety(o.v)}
-                >{o.label}</button
-              >
-            {/each}
-          </div>
-        </div>
-        <p class="hint" role="status">{VARIETY_OPTIONS.find((o) => o.v === ui?.variety)?.hint}</p>
       </details>
 
       <div class="actions">
@@ -310,7 +266,8 @@
     color: var(--muted);
     font-size: 12px;
   }
-  /* Поля встают в ряд, пока хватает места; иначе друг под другом (без прокрутки и обрезки) */
+  /* Поля встают в ряд, пока хватает места; иначе друг под другом (без прокрутки и обрезки).
+     Порог — окно ≤ 600 (спека 065): контейнер = окно − поля Modal (2×16) − рамка (2) − 32 отступа от края = 600 − 66 = 534. */
   .tiles {
     container-type: inline-size;
   }
@@ -320,7 +277,7 @@
     align-items: center;
     gap: 8px;
   }
-  @container (max-width: 440px) {
+  @container (max-width: 534px) {
     .pair {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -418,41 +375,8 @@
     gap: 8px;
     margin-top: 8px;
   }
-  .more.first {
-    margin-top: 0;
-  }
-  .more input[type='number'] {
-    width: 64px;
-  }
   .cuts {
     color: var(--muted);
-  }
-  /* Сегменты — как в галерее страницы (GridGallery) */
-  .seg {
-    display: flex;
-    gap: 1px;
-    padding: 2px;
-    background: #1b1b1d;
-    border-radius: 7px;
-  }
-  .seg button {
-    height: 24px;
-    min-width: 28px;
-    padding: 0 8px;
-    font-size: 12px;
-    background: transparent;
-    border-radius: 5px;
-  }
-  .seg button.on {
-    background: var(--accent);
-    color: #1e1e1e;
-    font-weight: 600;
-  }
-  .hint {
-    margin: 4px 0 0;
-    min-height: 16px;
-    color: var(--muted);
-    font-size: 12px;
   }
   .actions {
     display: flex;

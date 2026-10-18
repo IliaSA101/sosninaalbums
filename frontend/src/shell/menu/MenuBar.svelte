@@ -48,6 +48,7 @@
     big: modes.big,
     details: modes.details,
     safe: modes.safe,
+    markup: modes.markup,
     rulers: modes.rulers,
     snap: placesel.snap,
     alignCount: align.ids.length,

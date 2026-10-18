@@ -39,8 +39,6 @@ const (
 	// heroCap — потолок лучшей оценки в допуске (решение №30): у одинаковых 12 фото сетка даёт
 	// 0.89, главное по Fair — 0.66–0.74; без потолка главного на них не бывает.
 	heroCap = 0.72
-	// foldAspect — через сгиб идёт только главное с такой шириной к высоте (портрет — нет, №31).
-	foldAspect = 1.2
 	// otherMinSide — мельчайшая сторона не-главных фото / высота страницы (жёсткий пол, №31).
 	otherMinSide = 0.12
 	// heroShare — доля главного в площади фото; у пары — каждого из двух (pairShare).
@@ -146,10 +144,12 @@ func (g *gen) try(k Kind, key string) {
 }
 
 // allowed — жёсткие запреты (решение №31): главное по геометрии есть и занимает свою долю площади,
-// не-главные не мельче пола и не на сгибе, через сгиб — только главное шире foldAspect.
+// не-главные не мельче пола и не на сгибе. Через сгиб — по общему правилу layout.FoldOK
+// (064: своей копии правила больше нет, главное — как любое фото); запрет «не-главное на сгибе» —
+// композиция вида, он при любом положении сгиба (decisions 0.15 №16).
 func (g *gen) allowed(rs []layout.Rect) bool {
 	h := forms.Heroes(rs)
-	if h.N == 0 {
+	if h.N == 0 || !layout.FoldOK(rs, g.as, g.p) {
 		return false
 	}
 	share := heroShare
@@ -166,14 +166,13 @@ func (g *gen) allowed(rs []layout.Rect) bool {
 	// (FMA на arm64) решал бы, пройдёт ли раскладка.
 	spine := g.p.PageW
 	for i, x := range rs {
-		fold := g.p.Layflat && x.X < spine-foldEps && x.X+x.W > spine+foldEps
 		if h.Idx[0] == i || h.Idx[1] == i {
-			if quanta(x.W*x.H/sum) < quanta(share) || fold && quanta(x.W/x.H) < quanta(foldAspect) {
+			if quanta(x.W*x.H/sum) < quanta(share) {
 				return false
 			}
 			continue
 		}
-		if fold || quanta(math.Min(x.W, x.H)/g.p.PageH) < quanta(otherMinSide) {
+		if x.X < spine-foldEps && x.X+x.W > spine+foldEps || quanta(math.Min(x.W, x.H)/g.p.PageH) < quanta(otherMinSide) {
 			return false
 		}
 	}
@@ -280,11 +279,12 @@ func (g *gen) centerAt(h, m int) {
 }
 
 // spine — главное s через корешок, по бокам столбцы (≥ 2 фото с каждой стороны); только
-// широкие кадры (портрет через сгиб — запрет).
+// широкие кадры при любом положении сгиба: это вид (портрет посередине — не «главное»), и Build
+// на узкие не тратим (бюджет design §8). Пропускает ли сгиб — решает allowed.
 func (g *gen) spine() {
 	k := len(g.as)
 	for s := 2; s <= k-3; s++ {
-		if g.as[s] < foldAspect {
+		if g.as[s] < layout.FoldAspect {
 			continue
 		}
 		side := (g.sw - g.ch*g.as[s] - 2*g.p.Gap) / 2

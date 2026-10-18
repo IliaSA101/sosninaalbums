@@ -81,6 +81,11 @@ func replayCover(r *replay, ph []model.PhotoInfo) {
 	r.read("CoverGuidePath", e.CoverGuidePath())
 	r.ve("SetCoverGuide:UNC")(e.SetCoverGuide(`\\server\share\cover.png`))
 	r.do("ClearCoverGuide", e.ClearCoverGuide())
+	r.ve("SetSpreadGuide")(e.SetSpreadGuide(`Q:\Разметка\spread_30x30.psd`)) // 066: разметка разворотов
+	r.read("SpreadGuidePath", e.SpreadGuidePath())
+	r.ve("SetSpreadGuide:PSB")(e.SetSpreadGuide(`Q:\Разметка\big.psb`))
+	r.do("ClearSpreadGuide", e.ClearSpreadGuide())
+	r.do("ClearSpreadGuide:повтор", e.ClearSpreadGuide())
 	r.ve("AddPlace:обложка")(e.AddPlace(model.CoverID, 1, ""))
 	r.vnne("PlacePhotos:обложка")(e.PlacePhotos(model.CoverID, r.v.Cover.Sheet.Places[0].ID, ph[18:19]))
 	r.do("DeleteCover", e.DeleteCover())
@@ -168,7 +173,7 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	sid, was := last().ID, last().Layout
 	rated := slices.Clone(ph[6:10])
 	rated[2].Xmp.Rating = 5
-	r.do("VaryLayouts", e.VaryLayouts([]string{sid}, model.VarietyNormal, rated))
+	r.do("VaryLayouts", e.VaryLayouts([]string{sid}, model.VarietyNormal, nil, rated))
 	if last().ID != sid || last().Layout == was {
 		r.t.Fatalf("VaryLayouts: раскладка %q не сменилась", was)
 	}
@@ -247,4 +252,10 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	}
 	v, o, err := e.DropPhotos(sid, "", who, -1, "add")
 	r.edit("DropPhotos:имя", v, fmt.Sprintf("ask=%v total=%d named=%v", o.Ask, o.Total, o.Named), err)
+	// Ряд окна автосборки (065, в конце, как 042): чтение на копии — rev тот же, шага нет.
+	pv, err := e.AutoPreview(ph[1:7], -1, model.AutoOpts{Spreads: 2, MaxPer: 64, Families: []string{"dense", "hero"}})
+	if e.View().Rev != r.v.Rev {
+		r.t.Fatalf("AutoPreview сменил rev: %d → %d", r.v.Rev, e.View().Rev)
+	}
+	r.read("AutoPreview", []any{pv, fmt.Sprint(err)})
 }

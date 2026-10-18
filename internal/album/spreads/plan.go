@@ -127,12 +127,19 @@ func strongCuts(cuts []float64) int {
 // альбома или в пустом хвосте) занимает пустые развороты хвоста вместо новых, лишние пустые
 // остаются после собранных (035 U1). Раскладки — по o.Variety с учётом соседей (041);
 // «Меньше» — лучшие, как 0.10. rate — оценки фото для звезды разворота.
-// Возвращает число новых разворотов.
+// Семейства (o.Families, 065) сужают выбор раскладок. Возвращает число новых разворотов.
 func AutoBuild(p *model.Project, pre Prep, at int, rate Rating) (made int, err error) {
+	_, made, _, err = build(p, pre, at, rate)
+	return made, err
+}
+
+// build — AutoBuild с позицией первого собранного разворота и флагами запасных (разрешённых
+// семейств нет — лучшая; nil — фильтра нет): их читает предпросмотр на копии (Preview).
+func build(p *model.Project, pre Prep, at int, rate Rating) (at0, made int, fb []bool, err error) {
 	j := PlanOf(p, pre.photos)
 	pl, ready, err := pre.planFor(j)
 	if err != nil || len(pl.Groups) == 0 {
-		return 0, err
+		return 0, 0, nil, err
 	}
 	// Хвост — по снимку до Detach, как в Plan: иначе подсказка разойдётся со сборкой.
 	// Опустевшие от переезда фото не занимаются — их уберёт Normalize.
@@ -149,13 +156,13 @@ func AutoBuild(p *model.Project, pre Prep, at int, rate Rating) (made int, err e
 	if at < 0 || at >= start { // в т.ч. за концом альбома
 		at, use = start, min(j.tail, len(pl.Groups))
 	} else if len(p.Spreads)+len(pl.Groups) > model.MaxSpreads {
-		return 0, errSpreads() // вставка в середину: план считал хвост свободным
+		return 0, 0, nil, errSpreads() // вставка в середину: план считал хвост свободным
 	}
 	out := make([]*model.Spread, len(pl.Groups))
 	for i, g := range pl.Groups {
 		out[i] = &model.Spread{ID: model.NewID(), Photos: slices.Clone(ids[g[0]:g[1]])}
 	}
 	p.Spreads = slices.Replace(p.Spreads, at, at+use, out...)
-	varyBuilt(p, at, len(out), pre.o, rate, ready, dead)
-	return len(out), nil
+	fb = varyBuilt(p, at, len(out), pre.o, rate, ready, dead)
+	return at, len(out), fb, nil
 }

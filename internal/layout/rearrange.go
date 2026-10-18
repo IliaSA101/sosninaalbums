@@ -382,6 +382,7 @@ func putPage(rects []Rect, b pageBlock, picks [][]int) (string, []int) {
 // spread — перестановки блока на весь разворот, пока хватает бюджета.
 func (r *permRun) spread() []Result {
 	ps, g := r.ps, r.ps.g
+	fold := foldOn(r.p)
 	var all []Result
 	eachSeq(r.cnt, func(seq []int) bool {
 		if !ps.more() {
@@ -391,6 +392,9 @@ func (r *permRun) spread() []Result {
 		ps.used += trees
 		idx := assign(seq, r.byClass)
 		for _, c := range cs {
+			if fold && !FoldOK(c.Rects, nil, r.p) {
+				continue // до выбора по форме: иначе форма ушла бы с годной перестановкой
+			}
 			rects := make([]Rect, r.n)
 			for j, id := range idx {
 				rects[id] = c.Rects[j]
@@ -445,7 +449,8 @@ func finish(all, base []Result, aspects []float64, p Params, limit int, by func(
 	var out []Result
 	for _, pk := range picks {
 		r, ok := Build(pk.r.Key, aspects, p)
-		if !ok {
+		// Сгиб — и на точных пропорциях: перебор шёл по представителям классов.
+		if !ok || foldOn(p) && !FoldOK(r.Rects, nil, p) {
 			continue
 		}
 		if by(r) >= best-rearrangeSlack {

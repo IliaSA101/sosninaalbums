@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { VIG_FAMILIES, activeFamily, familiesIn, shownTpls, visibleTpls, type FamilyItem } from './tplfilter'
+import { VIG_FAMILIES, activeFamily, familiesIn, segOn, shownTpls, visibleTpls, type FamilyItem } from './tplfilter'
 
 const t = (id: string, family?: string, own?: boolean): FamilyItem => ({ id, family, own })
 const list = [t('a', 'side'), t('b', 'side'), t('c', 'big'), t('d', 'group'), t('my:1', undefined, true)]
@@ -65,5 +65,19 @@ describe('shownTpls', () => {
     const before = list.length
     shownTpls(list, 'group').push(t('x'))
     expect(list).toHaveLength(before)
+  })
+})
+
+describe('segOn', () => {
+  it('одиночный выбор — по value', () => {
+    expect(segOn('a', 'a')).toBe(true)
+    expect(segOn('b', 'a')).toBe(false)
+    expect(segOn('a', undefined)).toBe(false)
+  })
+  it('набор (065) главнее value: нажато несколько', () => {
+    expect(segOn('a', undefined, ['a', 'c'])).toBe(true)
+    expect(segOn('c', 'zzz', ['a', 'c'])).toBe(true)
+    expect(segOn('b', 'b', ['a', 'c'])).toBe(false)
+    expect(segOn('a', undefined, [])).toBe(false)
   })
 })

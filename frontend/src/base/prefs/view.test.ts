@@ -117,6 +117,25 @@ describe('modes.auto*', () => {
     expect((await fresh()).autoVariety).toBe(1)
   })
 
+  it('семейства (065): по умолчанию «Все», запоминаются, мусор и «все шесть» — «Все»', async () => {
+    const m = await fresh()
+    expect(m.autoFamilies).toEqual([])
+    m.rememberAuto(5, 'auto', 4, 'spreads', 1, true, ['hero', 'dense'])
+    expect((await fresh()).autoFamilies).toEqual(['dense', 'hero']) // порядок сегментов
+    m.rememberAuto(5, 'auto', 4, 'spreads') // без аргумента — прежний выбор
+    expect((await fresh()).autoFamilies).toEqual(['dense', 'hero'])
+    const of = async (x: unknown) => {
+      localStorage.setItem('viewMode', JSON.stringify({ autoFamilies: x }))
+      return (await fresh()).autoFamilies
+    }
+    expect(await of('dense')).toEqual([])
+    expect(await of(7)).toEqual([])
+    expect(await of(['dense', 'мусор', 5, 'dense', 'strip'])).toEqual(['dense', 'strip'])
+    expect(await of(['dense', 'hero', 'air', 'bleed', 'strip', 'figure'])).toEqual([])
+    m.rememberAuto(5, 'auto', 4, 'spreads', 1, true, [])
+    expect((await fresh()).autoFamilies).toEqual([])
+  })
+
   it('«Разнообразить раскладки»: «Меньше» считается «Обычным», «Больше» остаётся', async () => {
     const m = await fresh()
     m.autoVariety = 0
@@ -174,5 +193,35 @@ describe('modes.presetGroup (058)', () => {
   it('мусор в хранилище — «Общие»', async () => {
     localStorage.setItem('viewMode', JSON.stringify({ presetGroup: 5 }))
     expect((await fresh()).presetGroup).toBe('')
+  })
+})
+
+describe('modes.markup (066)', () => {
+  beforeEach(useStorage)
+
+  it('по умолчанию включена', async () => {
+    expect((await fresh()).markup).toBe(true)
+  })
+  it('выключение запоминается и возвращается обратно', async () => {
+    const m = await fresh()
+    m.toggleMarkup()
+    expect(m.markup).toBe(false)
+    const n = await fresh()
+    expect(n.markup).toBe(false)
+    n.toggleMarkup()
+    expect((await fresh()).markup).toBe(true)
+  })
+  it('старая запись без поля даёт true; мусор вместо флажка — тоже', async () => {
+    localStorage.setItem('viewMode', JSON.stringify({ safe: true }))
+    expect((await fresh()).markup).toBe(true)
+    localStorage.setItem('viewMode', JSON.stringify({ markup: 'нет' }))
+    expect((await fresh()).markup).toBe(true)
+  })
+  it('не зависит от безопасной зоны', async () => {
+    const m = await fresh()
+    m.toggleMarkup()
+    m.toggleSafe()
+    const n = await fresh()
+    expect([n.markup, n.safe]).toEqual([false, true])
   })
 })

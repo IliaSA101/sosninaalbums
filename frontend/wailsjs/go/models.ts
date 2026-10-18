@@ -649,6 +649,7 @@ export namespace model {
 	    auto: boolean;
 	    series: boolean;
 	    variety: number;
+	    families: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new AutoOpts(source);
@@ -662,6 +663,7 @@ export namespace model {
 	        this.auto = source["auto"];
 	        this.series = source["series"];
 	        this.variety = source["variety"];
+	        this.families = source["families"];
 	    }
 	}
 	export class AutoPlan {
@@ -695,6 +697,160 @@ export namespace model {
 	        this.to = source["to"];
 	        this.cuts = source["cuts"];
 	    }
+	}
+	export class PreviewSpread {
+	    key: string;
+	    rects: layout.Rect[];
+	    family: string;
+	    twin: number;
+	    formName: string;
+	    photos: number;
+	    fallback: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PreviewSpread(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.rects = this.convertValues(source["rects"], layout.Rect);
+	        this.family = source["family"];
+	        this.twin = source["twin"];
+	        this.formName = source["formName"];
+	        this.photos = source["photos"];
+	        this.fallback = source["fallback"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Choice {
+	    key: string;
+	    rects: layout.Rect[];
+	    family: string;
+	    twin: number;
+	    formName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Choice(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.rects = this.convertValues(source["rects"], layout.Rect);
+	        this.family = source["family"];
+	        this.twin = source["twin"];
+	        this.formName = source["formName"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SampleRow {
+	    photos: number;
+	    group: number;
+	    inOrder: Choice[];
+	    extra: Choice[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SampleRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.photos = source["photos"];
+	        this.group = source["group"];
+	        this.inOrder = this.convertValues(source["inOrder"], Choice);
+	        this.extra = this.convertValues(source["extra"], Choice);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AutoPreview {
+	    w: number;
+	    h: number;
+	    samples: SampleRow[];
+	    spreads: PreviewSpread[];
+	    fallback: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AutoPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.w = source["w"];
+	        this.h = source["h"];
+	        this.samples = this.convertValues(source["samples"], SampleRow);
+	        this.spreads = this.convertValues(source["spreads"], PreviewSpread);
+	        this.fallback = source["fallback"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class BackdropBox {
 	    x: number;
@@ -872,44 +1028,7 @@ export namespace model {
 		    return a;
 		}
 	}
-	export class Choice {
-	    key: string;
-	    rects: layout.Rect[];
-	    family: string;
-	    twin: number;
-	    formName: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new Choice(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.key = source["key"];
-	        this.rects = this.convertValues(source["rects"], layout.Rect);
-	        this.family = source["family"];
-	        this.twin = source["twin"];
-	        this.formName = source["formName"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class ChoiceRows {
 	    inOrder: Choice[];
 	    rearranged: Choice[];
@@ -1099,6 +1218,62 @@ export namespace model {
 	    }
 	}
 	
+	export class GuideLine {
+	    v: boolean;
+	    at: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new GuideLine(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.v = source["v"];
+	        this.at = source["at"];
+	    }
+	}
+	export class GuideView {
+	    name: string;
+	    key: string;
+	    ok: boolean;
+	    image: boolean;
+	    warn?: string;
+	    note?: string;
+	    lines?: GuideLine[];
+	
+	    static createFrom(source: any = {}) {
+	        return new GuideView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.key = source["key"];
+	        this.ok = source["ok"];
+	        this.image = source["image"];
+	        this.warn = source["warn"];
+	        this.note = source["note"];
+	        this.lines = this.convertValues(source["lines"], GuideLine);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CoverZone {
 	    kind: string;
 	    rect: layout.Rect;
@@ -1756,9 +1931,7 @@ export namespace model {
 	    scopes: CoverScope[];
 	    safe: layout.Rect[];
 	    textMaxW: number;
-	    guide: string;
-	    guideOK: boolean;
-	    guideWarn: boolean;
+	    markup?: GuideView;
 	    pxW: number;
 	    pxH: number;
 	    fix: string;
@@ -1783,9 +1956,7 @@ export namespace model {
 	        this.scopes = this.convertValues(source["scopes"], CoverScope);
 	        this.safe = this.convertValues(source["safe"], layout.Rect);
 	        this.textMaxW = source["textMaxW"];
-	        this.guide = source["guide"];
-	        this.guideOK = source["guideOK"];
-	        this.guideWarn = source["guideWarn"];
+	        this.markup = this.convertValues(source["markup"], GuideView);
 	        this.pxW = source["pxW"];
 	        this.pxH = source["pxH"];
 	        this.fix = source["fix"];
@@ -1916,6 +2087,8 @@ export namespace model {
 	        this.scope = source["scope"];
 	    }
 	}
+	
+	
 	export class MarkPatch {
 	    rating?: number;
 	    step?: number;
@@ -2113,6 +2286,7 @@ export namespace model {
 	    dpi?: number;
 	    layflat?: boolean;
 	    safe?: number;
+	    bleed?: number;
 	    hint?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -2128,6 +2302,7 @@ export namespace model {
 	        this.dpi = source["dpi"];
 	        this.layflat = source["layflat"];
 	        this.safe = source["safe"];
+	        this.bleed = source["bleed"];
 	        this.hint = source["hint"];
 	    }
 	}
@@ -2178,16 +2353,20 @@ export namespace model {
 	    }
 	}
 	
+	
+	
 	export class Settings {
 	    pageW: number;
 	    pageH: number;
 	    margin: number;
 	    gap: number;
 	    layflat: boolean;
+	    foldAny: boolean;
 	    dpi: number;
 	    bg: string;
 	    safe: number;
 	    sheet?: boolean;
+	    bleed?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -2200,10 +2379,12 @@ export namespace model {
 	        this.margin = source["margin"];
 	        this.gap = source["gap"];
 	        this.layflat = source["layflat"];
+	        this.foldAny = source["foldAny"];
 	        this.dpi = source["dpi"];
 	        this.bg = source["bg"];
 	        this.safe = source["safe"];
 	        this.sheet = source["sheet"];
+	        this.bleed = source["bleed"];
 	    }
 	}
 	
@@ -2225,6 +2406,8 @@ export namespace model {
 	    rev: number;
 	    maxSpreadPhotos: number;
 	    safe: layout.Rect[];
+	    bleed: layout.Rect[];
+	    spreadMarkup?: GuideView;
 	    minDPI: number;
 	    lowDPI: number;
 	    emptyPlaces: number;
@@ -2253,6 +2436,8 @@ export namespace model {
 	        this.rev = source["rev"];
 	        this.maxSpreadPhotos = source["maxSpreadPhotos"];
 	        this.safe = this.convertValues(source["safe"], layout.Rect);
+	        this.bleed = this.convertValues(source["bleed"], layout.Rect);
+	        this.spreadMarkup = this.convertValues(source["spreadMarkup"], GuideView);
 	        this.minDPI = source["minDPI"];
 	        this.lowDPI = source["lowDPI"];
 	        this.emptyPlaces = source["emptyPlaces"];

@@ -5,7 +5,7 @@
   import { canvas } from '../canvas/canvas.svelte'
   import { markDone } from '../places/placegesture'
   import type { ArcRoom } from '../places/minipanel'
-  import { framelive } from './framelive.svelte'
+  import { framelive } from '../photo/framelive.svelte'
   import { canvasTilt, liveTilt } from './tiltlive'
   import { ARC_PHI, arcAngle, arcGeom, axisDelta, DialControl, fmtTilt, knobAt, KNOB, sameTilt, TILT_ARC } from './tiltdial'
   import { straighten } from './straighten.svelte'

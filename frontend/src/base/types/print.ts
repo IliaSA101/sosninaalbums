@@ -46,6 +46,23 @@ export interface CoverScope {
   label: string
 }
 
+// Направляющая PSD (066): v — вертикальная; at — мм от левого (v) или верхнего края своего листа.
+export interface GuideLine {
+  v: boolean
+  at: number
+}
+
+// Разметка типографии из Go (066): обложка и развороты; ok/image/warn/note решает Go.
+export interface GuideView {
+  name: string // имя файла без папки
+  key: string // отпечаток файла (путь+размер+время), 12 hex: другой файл — другой key даже при том же имени
+  ok: boolean // файл на месте и прочитан
+  image: boolean // есть картинка для подложки
+  warn?: string // размер или пропорции не те
+  note?: string // почему видны только направляющие
+  lines?: GuideLine[] // направляющие PSD, ≤ 200
+}
+
 export interface CoverView {
   sheet: SpreadView // ID "cover"
   spec: CoverSpec
@@ -61,9 +78,7 @@ export interface CoverView {
   scopes: CoverScope[] // области фона текущей раскладки: front — Лицевая; wrap — Вся обложка; both — Задняя, Корешок, Лицевая
   safe: Rect[]
   textMaxW: number
-  guide: string // имя файла разметки; "" — нет
-  guideOK: boolean
-  guideWarn: boolean // пропорции разметки не совпадают с листом
+  markup: GuideView | null // разметка типографии (032, 066); null — файла нет
   pxW: number
   pxH: number
   fix: string // «Не по шаблону Фотосферы…» (047); "" — по шаблону или не Фотосфера
@@ -89,6 +104,7 @@ export interface PagePreset {
   dpi?: number
   layflat?: boolean
   safe?: number
+  bleed?: number // обрез, мм (066); 0/нет — пресет его не задаёт
   hint?: string
 }
 

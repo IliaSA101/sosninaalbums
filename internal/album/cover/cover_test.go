@@ -248,15 +248,23 @@ func TestCoverIdleEdits(t *testing.T) {
 	edtest.Same(t, e, rev, undo, "правки без обложки")
 }
 
-// TestCoverGuide — путь разметки: абсолютный JPEG/PNG; имя файла в виде, файла нет — GuideOK false.
+// markupOf — разметка обложки в виде; нет — нулевая (Name "").
+func markupOf(v model.View) model.GuideView {
+	if v.Cover == nil || v.Cover.Markup == nil {
+		return model.GuideView{}
+	}
+	return *v.Cover.Markup
+}
+
+// TestCoverGuide — путь разметки: абсолютный PSD/JPEG/PNG; имя файла в виде, файла нет — OK false.
 func TestCoverGuide(t *testing.T) {
 	e := coverAlbum(t, 2)
 	path := edtest.Abs("нет-такой-разметки.png")
 	v, err := e.SetCoverGuide(path)
-	if err != nil || edtest.P(e).Cover.Guide != path || v.Cover.Guide != "нет-такой-разметки.png" || v.Cover.GuideOK {
-		t.Fatalf("разметка: %v, вид %q ok=%v", err, v.Cover.Guide, v.Cover.GuideOK)
+	if m := markupOf(v); err != nil || edtest.P(e).Cover.Guide != path || m.Name != "нет-такой-разметки.png" || m.OK {
+		t.Fatalf("разметка: %v, вид %+v", err, m)
 	}
-	if v = e.ClearCoverGuide(); v.Cover.Guide != "" || edtest.P(e).Cover.Guide != "" {
+	if v = e.ClearCoverGuide(); v.Cover.Markup != nil || edtest.P(e).Cover.Guide != "" {
 		t.Fatal("разметка не снята")
 	}
 }
@@ -317,26 +325,26 @@ func writePNG(t *testing.T, name string, w, h int) string {
 	return path
 }
 
-// TestCoverGuideReadable — разметка читается: GuideOK; пропорции чужие (больше 1 % от листа) —
-// GuideWarn; файл не картинка — GuideOK false без ошибки правки.
+// TestCoverGuideReadable — разметка читается: OK; пропорции чужие (больше 1 % от листа) —
+// Warn; файл не картинка — OK false без ошибки правки.
 func TestCoverGuideReadable(t *testing.T) {
 	e := coverAlbum(t, 2)
 	g := edtest.P(e).Geo(sheet(e))
 	exact := writePNG(t, "exact.png", int(math.Round(g.W*10)), int(math.Round(g.H*10)))
 	v, err := e.SetCoverGuide(exact)
-	if err != nil || !v.Cover.GuideOK || v.Cover.GuideWarn {
-		t.Fatalf("разметка по листу: %v, ok=%v warn=%v", err, v.Cover.GuideOK, v.Cover.GuideWarn)
+	if m := markupOf(v); err != nil || !m.OK || m.Warn != "" || !m.Image {
+		t.Fatalf("разметка по листу: %v, %+v", err, m)
 	}
 	v, err = e.SetCoverGuide(writePNG(t, "square.png", 100, 100))
-	if err != nil || !v.Cover.GuideOK || !v.Cover.GuideWarn {
-		t.Fatalf("квадратная разметка: %v, ok=%v warn=%v", err, v.Cover.GuideOK, v.Cover.GuideWarn)
+	if m := markupOf(v); err != nil || !m.OK || m.Warn != "Пропорции разметки не совпадают с обложкой" {
+		t.Fatalf("квадратная разметка: %v, %+v", err, m)
 	}
 	junk := filepath.Join(testkit.TempDir(t), "junk.png")
 	if err := os.WriteFile(junk, []byte("не картинка"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if v, err = e.SetCoverGuide(junk); err != nil || v.Cover.GuideOK || v.Cover.GuideWarn {
-		t.Fatalf("не картинка: %v, ok=%v warn=%v", err, v.Cover.GuideOK, v.Cover.GuideWarn)
+	if v, err = e.SetCoverGuide(junk); err != nil || markupOf(v).OK || markupOf(v).Warn != "" {
+		t.Fatalf("не картинка: %v, %+v", err, markupOf(v))
 	}
 }
 

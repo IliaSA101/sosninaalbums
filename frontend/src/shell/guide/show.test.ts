@@ -215,6 +215,11 @@ describe('карточка и панели', () => {
   it('раздел панели деталей', () => {
     expect(plan('settings').steps).toContainEqual({ do: 'details', section: 'settings' })
   })
+  it('фото через корешок (064): «Показать» раскрывает «Настройки альбома» и подсвечивает переключатель', () => {
+    const p = plan('fold')
+    expect(p.steps).toContainEqual({ do: 'details', section: 'settings' })
+    expect(placesOf(articleById('fold')!).map((x) => x.spot)).toEqual(['ui:fold-mode'])
+  })
 })
 
 describe('сброс вида и меню', () => {

@@ -3,7 +3,7 @@
   import { store } from '../../base/core/store.svelte'
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
   import { COVER_LAYOUTS } from '../../editor/cover/cover'
-  import { coverUi } from '../../editor/cover/coverui.svelte'
+  import MarkupBlock from '../markup/MarkupBlock.svelte'
   import { coverAct } from './coveract.svelte'
   import {
     CUSTOM_ID,
@@ -50,11 +50,6 @@
       if (cv) el.value = String(fieldValue(cv, field))
       el.blur()
     }
-  }
-  // Стрелки ползунка не листают развороты.
-  const SLIDER_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'])
-  function sliderKey(e: KeyboardEvent) {
-    if (SLIDER_KEYS.has(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) e.stopPropagation()
   }
 </script>
 
@@ -155,34 +150,7 @@
       >
     </div>
 
-    <div class="cap sub">Разметка типографии</div>
-    {#if cv.guide}
-      <div class="file" title={cv.guide}>{cv.guide}</div>
-      {#if !cv.guideOK}
-        <div class="warn">Файл разметки не найден</div>
-      {:else if cv.guideWarn}
-        <div class="warn">Пропорции разметки не совпадают с обложкой</div>
-      {/if}
-    {/if}
-    <div class="btns" data-guide="cover-markup">
-      <button onclick={() => coverAct.pickGuide()}>Выбрать файл…</button>
-      <button class="ghost" disabled={!cv.guide} onclick={() => coverAct.clearGuide()}>Убрать</button>
-    </div>
-    {#if cv.guide && cv.guideOK}
-      <label class="fade" title="Прозрачность разметки на экране; в файл обложки она не попадает">
-        <span class="lbl">Прозрачность</span>
-        <input
-          type="range"
-          min="5"
-          max="100"
-          step="1"
-          value={Math.round(coverUi.guideOpacity * 100)}
-          aria-label="Прозрачность разметки, %"
-          onkeydown={sliderKey}
-          oninput={(e) => coverUi.setOpacity(+e.currentTarget.value / 100)}
-        />
-      </label>
-    {/if}
+    <MarkupBlock kind="cover" guide={cv.markup} />
 
     <button class="ghost del" onclick={() => store.deleteCover()}>Удалить обложку</button>
   </div>
@@ -307,12 +275,6 @@
     color: #cfcfd4;
     border-radius: 4px;
   }
-  .file {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--muted);
-  }
   .btns {
     display: flex;
     flex-wrap: wrap; /* узкая колонка: кнопки переносятся, а не сжимаются */
@@ -324,14 +286,6 @@
     height: 24px;
     padding: 0 6px;
     font-size: 12px;
-  }
-  .fade {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .fade input {
-    width: 90px;
   }
   .del {
     margin-top: 8px;

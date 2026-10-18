@@ -6,10 +6,10 @@
   import { framelive } from './framelive.svelte'
   import { canvas } from '../canvas/canvas.svelte'
   import { markDone } from '../places/placegesture'
-  import { tiltmode } from './tiltmode.svelte'
+  import { tiltmode } from '../tilt/tiltmode.svelte'
   import { miniSpot } from '../places/minispot.svelte'
   import { NO_ROOM, type ArcRoom } from '../places/minipanel'
-  import TiltDial from './TiltDial.svelte'
+  import TiltDial from '../tilt/TiltDial.svelte'
 
   // Управление кадром на выделенной ячейке: ✥ (сдвиг кадра) и ползунок масштаба. Тело ячейки занято
   // переносом фото или места, поэтому кадр двигает только ✥. Правка уходит в Go при отпускании.

@@ -236,7 +236,7 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/layout
             - github.com/IliaSA101/sosninaalbums/internal/text
             - github.com/IliaSA101/sosninaalbums/internal/decor/gen
-        "library: только colorspace, imgfile, paths":
+        "library: только colorspace, imgfile, paths, psd":
           files:
             - "**/internal/library/**"
           list-mode: strict
@@ -248,6 +248,16 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/colorspace
             - github.com/IliaSA101/sosninaalbums/internal/imgfile
             - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/psd # разметка типографии (066); да владельца 17.10
+        # Разбор недоверенного PSD (066) — только stdlib; да владельца 17.10.
+        "psd: ничего из internal":
+          files:
+            - "**/internal/psd/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/psd
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
         "backup: только library, paths":
           files:
             - "**/internal/backup/**"

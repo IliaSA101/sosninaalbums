@@ -34,6 +34,10 @@ type FileProject struct {
 	// (moveAlbumVars), Save не пишет — поля шапки живут в Spread.Vars (решение 125).
 	Vars  *albumVars `json:"vars,omitempty"`
 	Cover *FileCover `json:"cover,omitempty"` // обложка (v6, 032; cover.go)
+	// SpreadGuide — файл-разметка разворотов (v11, 066): относительный от папки альбома,
+	// SpreadGuideAbs — запасной абсолютный (как guide/guideAbs обложки).
+	SpreadGuide    string `json:"spreadGuide,omitempty"`
+	SpreadGuideAbs string `json:"spreadGuideAbs,omitempty"`
 }
 
 // FileFolder — папка: path (относительный или абсолютный) и запасной abs.
@@ -149,7 +153,8 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	p := model.New()
 	p.SetFrom(max(f.Version, 1))
 	p.Product = model.NormProduct(f.Product)
-	p.Settings, p.Spreads = f.Settings, f.Spreads
+	// foldLegacy — до всех шагов, что считают «Авто»: они — по прежнему поведению (064).
+	p.Settings, p.Spreads = foldLegacy(p.From(), f.Settings), f.Spreads
 	for _, s := range p.Spreads {
 		if s == nil {
 			return nil, fmt.Errorf("файл проекта повреждён: пустой разворот")
@@ -159,7 +164,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	if err := loadFolders(p, f.Folders, base, v1); err != nil {
 		return nil, err
 	}
-	fixCover(p, f.Cover, base, v1)
+	fixCoverAndGuide(p, &f, base, v1)
 	for id, fp := range f.Photos {
 		if fp.Lib != "" { // своё из библиотеки: путь — от искателя (lib.go)
 			if ref, ok := resolveLib(fp); ok {
@@ -468,7 +473,12 @@ func Check(p *model.Project) error {
 		}
 	}
 	if p.Cover != nil && p.Cover.Guide != "" {
-		return checkPair("разметка обложки", p.Cover.Guide, p.Cover.GuideAlt)
+		if err := checkPair("разметка обложки", p.Cover.Guide, p.Cover.GuideAlt); err != nil {
+			return err
+		}
+	}
+	if p.SpreadGuide != "" {
+		return checkPair("разметка разворотов", p.SpreadGuide, p.SpreadGuideAlt)
 	}
 	return nil
 }
@@ -529,6 +539,7 @@ func encodeWith(p *model.Project, base string, marks map[string]model.Mark) ([]b
 		}
 		f.Photos[id] = fp
 	}
+	f.SpreadGuide, f.SpreadGuideAbs = encodeGuide(p.SpreadGuide, p.SpreadGuideAlt, base)
 	f.Marks = encodeMarks(marks, base)
 	return json.MarshalIndent(f, "", "  ")
 }

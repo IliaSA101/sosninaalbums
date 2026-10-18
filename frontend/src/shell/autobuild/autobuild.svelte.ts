@@ -1,6 +1,8 @@
 import { errText, capFirst } from '../../base/words/errtext'
-import type { AutoPlan, AutoRange, Variety } from '../../base/core/types'
+import type { AutoPlan, AutoPreview, AutoRange, Family, Variety } from '../../base/core/types'
 import type { AutoMem } from '../../base/prefs/view.svelte'
+import { normFamilies } from '../../base/prefs/families'
+import { toggleFamily } from './autolayouts'
 import {
   MAX_PER,
   clampMaxPer,
@@ -16,6 +18,16 @@ import {
 } from './autobuild'
 
 export type PlanFn = (ids: readonly string[], spreads: number, range: AutoRange) => Promise<AutoPlan>
+
+// 065: ряд блока «Раскладки» (App.AutoPreview); позицию вставки (конец альбома) подставляет вызывающий.
+export interface PreviewOpts {
+  spreads: number
+  range: AutoRange
+  variety: Variety
+  families: readonly Family[]
+}
+export type PreviewFn = (ids: readonly string[], o: PreviewOpts) => Promise<AutoPreview>
+export type RowMode = 'samples' | 'build' // «Варианты» | «Что соберётся»
 
 // Состояние открытого окна автосборки: N, диапазон «от … до …» (051), среднее X и ответ Go. Запрос в полёте один:
 // пока он идёт, новое значение только запоминается и уходит следом (ответ на устаревшее N не показываем).
@@ -33,8 +45,15 @@ export class AutoDialog {
   plan = $state<AutoPlan | null>(null)
   pending = $state(true)
   error = $state('')
+  // 065: разрешённые семейства (`[]` — «Все»), ряд «Раскладки» и его состояние. Ряд — подсказка: ошибка не блокирует «Собрать».
+  families = $state<Family[]>([])
+  preview = $state<AutoPreview | null>(null)
+  previewBusy = $state(false)
+  previewError = $state(false)
+  rowMode = $state<RowMode>('samples')
 
   private running = false
+  private previewRunning = false
   private waiters: (() => void)[] = []
   private firstTime: boolean
   private touched: 'min' | 'max' = 'max' // какое поле диапазона трогали последним
@@ -42,9 +61,19 @@ export class AutoDialog {
   constructor(
     readonly ids: readonly string[],
     private ask: PlanFn,
-    saved: { spreads: number | null; range?: AutoMem; series?: boolean; per?: number | null; by?: Anchor; variety?: Variety },
+    saved: {
+      spreads: number | null
+      range?: AutoMem
+      series?: boolean
+      per?: number | null
+      by?: Anchor
+      variety?: Variety
+      families?: readonly Family[]
+    },
+    private askPreview: PreviewFn | null = null,
   ) {
     this.variety = normVariety(saved.variety)
+    this.families = normFamilies(saved.families)
     const byPer = saved.by === 'per' && saved.per != null
     this.firstTime = saved.spreads === null && !byPer
     this.series = saved.series !== false
@@ -107,8 +136,20 @@ export class AutoDialog {
     void this.pump()
   }
 
+  // Разнообразие и семейства на план не влияют — только на ряд «Раскладки».
   setVariety(v: Variety) {
     this.variety = v
+    void this.previewPump()
+  }
+
+  // Щелчок по сегменту семейств (autolayouts.toggleFamily).
+  setFamilies(id: Family | 'all') {
+    this.families = toggleFamily(this.families, id)
+    void this.previewPump()
+  }
+
+  setRowMode(m: RowMode) {
+    this.rowMode = m
   }
 
   // Что уходит в Go: «Авто» поля не использует, «Свой» — как набрано.
@@ -198,12 +239,52 @@ export class AutoDialog {
   }
 
   // «Собрать»/Enter: подтягивает «от» > «до», ждёт ответа, потом build(N, диапазон, X, якорь, разнообразие); false — собирать нечего.
-  async submit(build: (spreads: number, range: AutoRange, per: number, by: Anchor, variety: Variety) => unknown): Promise<boolean> {
+  async submit(
+    build: (spreads: number, range: AutoRange, per: number, by: Anchor, variety: Variety, families: readonly Family[]) => unknown,
+  ): Promise<boolean> {
     this.settle()
     await this.idle()
     if (!this.canBuild) return false
-    await build(this.n, this.range, this.perTyped ?? this.photos / this.n, this.anchor, this.variety)
+    await build(this.n, this.range, this.perTyped ?? this.photos / this.n, this.anchor, this.variety, [...this.families])
     return true
+  }
+
+  private previewKey = () => `${this.n}|${this.key()}|${this.variety}|${this.families.join(',')}`
+
+  // Ряд «Раскладки» (065): после ответа плана и при смене семейств/разнообразия. Один запрос в полёте; ответ на устаревшие
+  // значения отбрасывается и спрашивается заново. Пока считается план, ряд не спрашиваем: его конец сам запустит насос.
+  private async previewPump() {
+    if (!this.askPreview || this.previewRunning) return
+    this.previewRunning = true
+    this.previewBusy = true
+    try {
+      for (;;) {
+        const p = this.plan
+        if (this.running || this.inverted || !p) return
+        if (p.photos === 0) {
+          this.preview = null
+          this.previewError = false
+          return
+        }
+        const k = this.previewKey()
+        let res: AutoPreview
+        try {
+          res = await this.askPreview(this.ids, { spreads: this.n, range: this.range, variety: this.variety, families: [...this.families] })
+        } catch {
+          if (k !== this.previewKey()) continue
+          this.preview = null
+          this.previewError = true
+          return
+        }
+        if (k !== this.previewKey()) continue
+        this.preview = res
+        this.previewError = false
+        return
+      }
+    } finally {
+      this.previewRunning = false
+      this.previewBusy = false
+    }
   }
 
   // Диапазон для N по умолчанию: «Свой» — [от, до], «Авто» — null (по 4).
@@ -225,6 +306,7 @@ export class AutoDialog {
           res = await this.ask(this.ids, n, this.range)
         } catch (e) {
           this.plan = null
+          this.preview = null
           this.error = capFirst(errText(e))
           return
         }
@@ -249,6 +331,7 @@ export class AutoDialog {
       this.running = false
       this.pending = false
       for (const w of this.waiters.splice(0)) w()
+      void this.previewPump() // план готов (или пуст) — ряд «Раскладки» про него
     }
   }
 }

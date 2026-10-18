@@ -547,13 +547,13 @@ func TestAppCover(t *testing.T) {
 	guide := testkit.PNG(t, dir, "guide.png", 600, 320, color.NRGBA{A: 255})
 	v, err = a.setCoverGuide(guide)
 	ratio := 600.0 / 320 / (v.Cover.Sheet.W / v.Cover.Sheet.H)
-	if err != nil || v.Cover.Guide != "guide.png" || !v.Cover.GuideOK || v.Cover.GuideWarn != (math.Abs(ratio-1) > 0.01) {
-		t.Fatalf("разметка: %v, %q ok=%v warn=%v (пропорции %v)", err, v.Cover.Guide, v.Cover.GuideOK, v.Cover.GuideWarn, ratio)
+	if m := v.Cover.Markup; err != nil || m == nil || m.Name != "guide.png" || !m.OK || (m.Warn != "") != (math.Abs(ratio-1) > 0.01) {
+		t.Fatalf("разметка: %v, %+v (пропорции %v)", err, m, ratio)
 	}
 	if _, err := a.setCoverGuide(filepath.Join(dir, "нет.png")); err == nil {
 		t.Fatal("несуществующий файл разметки принят")
 	}
-	if v = a.ClearCoverGuide(); v.Cover.Guide != "" {
+	if v = a.ClearCoverGuide(); v.Cover.Markup != nil {
 		t.Fatal("разметка не снята")
 	}
 	if v = a.DeleteCover(); v.Cover != nil || !equalComposition(photosOf(v), []string{"a"}, []string{"b"}) {

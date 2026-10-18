@@ -66,6 +66,12 @@ func (m *Methods) ClearCoverGuide() (v model.View) {
 	return m.changed(m.editor().ClearCoverGuide())
 }
 
+// ClearSpreadGuide убирает разметку разворотов (066); её нет — без изменений.
+func (m *Methods) ClearSpreadGuide() (v model.View) {
+	defer m.guardEdit("ClearSpreadGuide", &v, nil)
+	return m.changed(m.editor().ClearSpreadGuide())
+}
+
 // VignetteChoices — превью шаблонов виньетки для чисел и пропорции панели (без правки).
 func (m *Methods) VignetteChoices(spreadID string, teachers, pupils int, ratio string) []model.VigChoice {
 	defer Guard("VignetteChoices")

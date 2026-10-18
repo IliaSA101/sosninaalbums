@@ -351,7 +351,8 @@ func TestMarksDupPrefersPrimary(t *testing.T) {
 // поля шапки, стиль подписей листа, имена, отступ своей подписи, безопасная зона, 18 фото на
 // развороте. Пути — от папки C:\album (файлов нет), поэтому тест только на Windows.
 // Файл заморожен (решение 0.11 №29): не пересоздаётся. Сверка байт в байт — с исходником, где
-// "version": 6 заменено на текущий номер (v7 038 и v8 045 больше ничего в нём не меняют).
+// "version": 6 заменено на текущий номер (v7 038 и v8 045 больше ничего в нём не меняют), а после
+// "layflat" дописано "foldAny": false (v11, 064: «Авто» файла правило сгиба не меняет — закреплять нечего).
 
 const goldenBase = `C:\album`
 
@@ -380,7 +381,9 @@ func TestGolden010(t *testing.T) {
 		t.Fatal(err)
 	}
 	cur := fmt.Sprintf(`"version": %d,`, model.FormatVersion)
-	if want := bytes.Replace(data, []byte(`"version": 6,`), []byte(cur), 1); !bytes.Equal(out, want) {
+	want := bytes.Replace(data, []byte(`"version": 6,`), []byte(cur), 1)
+	want = bytes.Replace(want, []byte(`"layflat": true,`), []byte("\"layflat\": true,\n    \"foldAny\": false,"), 1)
+	if !bytes.Equal(out, want) {
 		t.Fatalf("Load → Encode файла 0.10 отличается от исходника с версией %d:\n%s", model.FormatVersion, out)
 	}
 	// Текущая версия стабильна: чтение и запись снова не меняют байты.

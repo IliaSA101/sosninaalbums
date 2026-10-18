@@ -14,12 +14,14 @@ method ArrangeLayers(arg1:string,arg2:string,arg3:Array<string>):Promise<model.V
 method ArrangePlaces(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>
 method AutoBuild(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.View>
 method AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>
+method AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.AutoPreview>
 method Backups():Promise<Array<APP.BackupInfo>>
 method ChooseFolder():Promise<model.View>
 method ClearBackdrop(arg1:string,arg2:string):Promise<model.View>
 method ClearCoverGuide():Promise<model.View>
 method ClearPattern(arg1:string,arg2:string):Promise<model.View>
 method ClearRecent():Promise<Array<prefs.RecentProject>>
+method ClearSpreadGuide():Promise<model.View>
 method ClearVignette(arg1:string):Promise<model.View>
 method CopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<APP.GridResult>
 method CopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<APP.GridResult>
@@ -69,6 +71,7 @@ method Person(arg1:string):Promise<model.PersonView>
 method PickBackdropFile(arg1:string,arg2:string):Promise<model.View>
 method PickCoverGuide():Promise<model.View>
 method PickNamesFile():Promise<APP.NamesFile>
+method PickSpreadGuide():Promise<model.View>
 method PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<APP.GridResult>
 method PlanCopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
 method PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
@@ -149,7 +152,7 @@ method SwapPhotos(arg1:string,arg2:string):Promise<model.View>
 method TransformGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>
 method TurnPhotos(arg1:Array<string>,arg2:number):Promise<model.View>
 method Undo():Promise<model.View>
-method VaryLayouts(arg1:Array<string>,arg2:number):Promise<model.View>
+method VaryLayouts(arg1:Array<string>,arg2:number,arg3:Array<string>):Promise<model.View>
 method VignetteChoices(arg1:string,arg2:number,arg3:number,arg4:string):Promise<Array<model.VigChoice>>
 type APP.BackupInfo
   name: string
@@ -298,6 +301,7 @@ type model.AutoOpts
   auto: boolean
   series: boolean
   variety: number
+  families: string[]
 type model.AutoPlan
   photos: number
   spreads: number
@@ -310,6 +314,12 @@ type model.AutoPlan
   from: number
   to: number
   cuts: number
+type model.AutoPreview
+  w: number
+  h: number
+  samples: SampleRow[]
+  spreads: PreviewSpread[]
+  fallback: number
 type model.BackdropBox
   x: number
   y: number
@@ -407,9 +417,7 @@ type model.CoverView
   scopes: CoverScope[]
   safe: layout.Rect[]
   textMaxW: number
-  guide: string
-  guideOK: boolean
-  guideWarn: boolean
+  markup?: GuideView
   pxW: number
   pxH: number
   fix: string
@@ -455,6 +463,17 @@ type model.GridPlan
 type model.GridTarget
   spread: string
   scope: string
+type model.GuideLine
+  v: boolean
+  at: number
+type model.GuideView
+  name: string
+  key: string
+  ok: boolean
+  image: boolean
+  warn?: string
+  note?: string
+  lines?: GuideLine[]
 type model.MarkPatch
   rating?: number
   step?: number
@@ -501,6 +520,7 @@ type model.PagePreset
   dpi?: number
   layflat?: boolean
   safe?: number
+  bleed?: number
   hint?: string
 type model.PageView
   photos: number
@@ -557,16 +577,31 @@ type model.PlaceView
   shape: string
   round: number
   radius: number
+type model.PreviewSpread
+  key: string
+  rects: layout.Rect[]
+  family: string
+  twin: number
+  formName: string
+  photos: number
+  fallback: boolean
+type model.SampleRow
+  photos: number
+  group: number
+  inOrder: Choice[]
+  extra: Choice[]
 type model.Settings
   pageW: number
   pageH: number
   margin: number
   gap: number
   layflat: boolean
+  foldAny: boolean
   dpi: number
   bg: string
   safe: number
   sheet?: boolean
+  bleed?: number
 type model.SheetCaps
   style: text.Style
   pad: number
@@ -675,6 +710,8 @@ type model.View
   rev: number
   maxSpreadPhotos: number
   safe: layout.Rect[]
+  bleed: layout.Rect[]
+  spreadMarkup?: GuideView
   minDPI: number
   lowDPI: number
   emptyPlaces: number

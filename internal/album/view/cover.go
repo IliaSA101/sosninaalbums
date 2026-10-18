@@ -4,20 +4,26 @@ import (
 	"cmp"
 	"fmt"
 	"math"
-	"path/filepath"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 )
 
 // Вид обложки (032 §6): лист собирается тем же spreadView, что и развороты (подстановки,
 // заглушки, Unfilled/Unnamed — тот же fields), плюс числа, направляющие и зоны броска.
 
-// Guide — что Editor знает о файле-разметке (размер читается один раз на путь, не под каждый вид).
+// Guide — что Editor знает о файле-разметке (читается один раз на путь, не под каждый вид).
 type Guide struct {
 	Path string
-	W, H int
+	Info library.MarkupInfo
 	OK   bool
+}
+
+// markupOf — вид разметки path по тому, что прочитал Editor (st — по тому же пути, иначе «не прочитан»).
+func markupOf(path string, st Guide, w, h float64, where string) *model.GuideView {
+	ok := st.OK && st.Path == path
+	return model.MarkupView(path, st.Info, ok, w, h, where)
 }
 
 // coverView — вид обложки p или nil; лист считается в итоги вида v (LowDPI, пустые места, фоны).
@@ -41,13 +47,7 @@ func coverView(f *fields, st State, v *model.View) *model.CoverView {
 			cv.Safe = append(cv.Safe, z.Rect)
 		}
 	}
-	if c.Guide != "" {
-		cv.Guide = filepath.Base(c.Guide)
-		if st.Guide.Path == c.Guide && st.Guide.OK {
-			cv.GuideOK = true
-			cv.GuideWarn = st.Guide.H > 0 && g.H > 0 && math.Abs(float64(st.Guide.W)/float64(st.Guide.H)/(g.W/g.H)-1) > 0.01
-		}
-	}
+	cv.Markup = markupOf(c.Guide, st.CoverGuide, g.W, g.H, model.MarkupCover)
 	sv := &cv.Sheet
 	sv.LowDPI = lowDPI(sv, v.MinDPI)
 	v.LowDPI += sv.LowDPI

@@ -225,18 +225,22 @@ func (w *planWork) placeRow(asp []float64, cuts []int, q int, x, y, wd, h, gap f
 // (левая — в порядке рядов, к каждой все правые), затем ряды на весь разворот; лучшая —
 // первая из наибольших. pages[s] — ряды страниц, начинающихся с s; spread — ряды
 // разворота от i (nil без layflat). pages nil — страниц нет (лист 031). −1 — окно не раскладывается.
-func (w *planWork) window(asp []float64, i, k int, pages []segRows, spread *segRows, g layout.Geom, gap float64) float64 {
+// Ряд на весь разворот вне правила сгиба (layout.FoldOK, 064) в оценку окна не идёт — как у
+// manyGen.spread, иначе автосборка делила бы ленту под раскладку, которую ряд не покажет.
+func (w *planWork) window(asp []float64, i, k int, pages []segRows, spread *segRows, g layout.Geom, p layout.Params) float64 {
+	gap := p.Gap
 	best, found := -1.0, false
 	if pages != nil {
 		best, found = w.pairs(asp, i, k, pages, g, gap)
 	}
 	if spread != nil {
+		strict := !p.FoldAny && !p.Sheet // «любые» — без проверки: прежний счёт бит-в-бит
 		for d := -1; d <= 1; d++ {
 			c := spread.tree(k, d)
 			if c == nil {
 				continue
 			}
-			if _, dep, ok := w.fit(asp[i:i+k], c, g.Spread, gap, w.comb); ok {
+			if _, dep, ok := w.fit(asp[i:i+k], c, g.Spread, gap, w.comb); ok && (!strict || layout.FoldOK(w.comb[:k], nil, p)) {
 				if s := layout.Score(w.comb[:k], g.Spread, g.Spine, dep); !found || s > best {
 					best, found = s, true
 				}
@@ -320,7 +324,7 @@ func windowCols(aspects []float64, p layout.Params, from, to int) [][]float64 {
 			w.rows(aspects, i, kmin, min(to, n-i), g.Spread, p.Gap, spread)
 		}
 		for k := kmin; k <= min(to, n-i); k++ {
-			out[k-from][i] = float64(k) * w.window(aspects, i, k, pages, spread, g, p.Gap)
+			out[k-from][i] = float64(k) * w.window(aspects, i, k, pages, spread, g, p)
 		}
 	})
 	return out

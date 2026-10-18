@@ -38,6 +38,8 @@ export function AutoBuild(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Pr
 
 export function AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>;
 
+export function AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.AutoPreview>;
+
 export function Backups():Promise<Array<app.BackupInfo>>;
 
 export function ChooseFolder():Promise<model.View>;
@@ -49,6 +51,8 @@ export function ClearCoverGuide():Promise<model.View>;
 export function ClearPattern(arg1:string,arg2:string):Promise<model.View>;
 
 export function ClearRecent():Promise<Array<prefs.RecentProject>>;
+
+export function ClearSpreadGuide():Promise<model.View>;
 
 export function ClearVignette(arg1:string):Promise<model.View>;
 
@@ -147,6 +151,8 @@ export function PickBackdropFile(arg1:string,arg2:string):Promise<model.View>;
 export function PickCoverGuide():Promise<model.View>;
 
 export function PickNamesFile():Promise<app.NamesFile>;
+
+export function PickSpreadGuide():Promise<model.View>;
 
 export function PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<app.GridResult>;
 
@@ -308,6 +314,6 @@ export function TurnPhotos(arg1:Array<string>,arg2:number):Promise<model.View>;
 
 export function Undo():Promise<model.View>;
 
-export function VaryLayouts(arg1:Array<string>,arg2:number):Promise<model.View>;
+export function VaryLayouts(arg1:Array<string>,arg2:number,arg3:Array<string>):Promise<model.View>;
 
 export function VignetteChoices(arg1:string,arg2:number,arg3:number,arg4:string):Promise<Array<model.VigChoice>>;

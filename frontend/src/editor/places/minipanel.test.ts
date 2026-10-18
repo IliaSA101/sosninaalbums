@@ -19,7 +19,7 @@ import {
   zoomLift,
   type MiniCtx,
 } from './minipanel'
-import { ARC_CMIN, ARC_OUT_GAP, ARC_PHI, KNOB } from '../photo/tiltdial'
+import { ARC_CMIN, ARC_OUT_GAP, ARC_PHI, KNOB } from '../tilt/tiltdial'
 import type { SelBox } from '../../base/geom/gridedit'
 import { can, type FeatureId, type Level } from '../../base/prefs/levels'
 import type { FrameView, SpreadView } from '../../base/core/types'

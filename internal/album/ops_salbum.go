@@ -75,8 +75,8 @@ func (e *Editor) printView() model.View { return view.BuildView(e.p, e.state(tru
 func (e *Editor) state(forPrint bool) view.State {
 	st := view.State{Path: e.path, Dirty: e.dirty, CanUndo: len(e.undo) > 0,
 		CanRedo: len(e.redo) > 0, Rev: e.rev, MarksRev: e.marksRev, Print: forPrint}
-	if e.p.Cover != nil && !forPrint {
-		st.Guide = e.guideFor(e.p.Cover.Guide)
+	if !forPrint {
+		e.markupState(&st)
 	}
 	return st
 }

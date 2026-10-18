@@ -555,7 +555,7 @@ func TestEditHostComplete(t *testing.T) {
 func TestAutoPlanSeriesFromLibrary(t *testing.T) {
 	var o model.AutoOpts
 	if err := json.Unmarshal([]byte(`{"spreads":2,"maxPer":9,"minPer":2,"auto":true,"series":true}`), &o); err != nil ||
-		o != (model.AutoOpts{Spreads: 2, MaxPer: 9, MinPer: 2, Auto: true, Series: true}) {
+		!reflect.DeepEqual(o, model.AutoOpts{Spreads: 2, MaxPer: 9, MinPer: 2, Auto: true, Series: true}) {
 		t.Fatalf("AutoOpts из JSON: %+v %v", o, err)
 	}
 	a := newApp(t)

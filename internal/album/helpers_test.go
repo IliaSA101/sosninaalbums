@@ -36,7 +36,7 @@ func TestGuideRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v := e.View(); v.Cover == nil || v.Cover.GuideOK {
+	if v := e.View(); v.Cover == nil || v.Cover.Markup == nil || v.Cover.Markup.OK {
 		t.Fatalf("разметки нет, а вид её показывает: %+v", v.Cover)
 	}
 	var buf bytes.Buffer
@@ -46,12 +46,12 @@ func TestGuideRetry(t *testing.T) {
 	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if v := e.View(); v.Cover.GuideOK {
+	if v := e.View(); v.Cover.Markup.OK {
 		t.Fatal("свежая неудача перечитана сразу")
 	}
 	e.mu.Lock()
-	busy := e.guide.busy
-	e.guide.at = time.Now().Add(-guideRetry)
+	busy := e.guides[markupCover].busy
+	e.guides[markupCover].at = time.Now().Add(-guideRetry)
 	e.mu.Unlock()
 	if busy {
 		t.Fatal("перечитывание до guideRetry")
@@ -59,7 +59,7 @@ func TestGuideRetry(t *testing.T) {
 	e.View() // запускает фоновое перечитывание
 	for deadline := time.Now().Add(testkit.Limit(5 * time.Second)); ; time.Sleep(5 * time.Millisecond) {
 		e.mu.Lock()
-		ok, busy := e.guide.OK, e.guide.busy
+		ok, busy := e.guides[markupCover].OK, e.guides[markupCover].busy
 		e.mu.Unlock()
 		if ok && !busy {
 			break
@@ -68,8 +68,8 @@ func TestGuideRetry(t *testing.T) {
 			t.Fatal("разметка не перечитана")
 		}
 	}
-	if v := e.View(); !v.Cover.GuideOK || !v.Cover.GuideWarn { // 4×3 — не пропорции листа
-		t.Fatalf("после перечитывания: ok=%v warn=%v", v.Cover.GuideOK, v.Cover.GuideWarn)
+	if v := e.View(); !v.Cover.Markup.OK || v.Cover.Markup.Warn == "" { // 4×3 — не пропорции листа
+		t.Fatalf("после перечитывания: %+v", v.Cover.Markup)
 	}
 }
 

@@ -28,7 +28,7 @@ const fire = (type: string, props: Record<string, unknown> = {}) =>
   window.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), props))
 
 function gestures() {
-  const settings = { pageW: 200, pageH: 200, margin: 5, gap: 2, layflat: false, dpi: 300, bg: '' }
+  const settings = { pageW: 200, pageH: 200, margin: 5, gap: 2, layflat: false, foldAny: false, dpi: 300, bg: '' }
   const spread = { id: 's1', w: 400, h: 200, mid: 200, rects: [], photos: [], texts: [text], captions: [] }
   return new TextGestures(() => ({ spread, settings, width: 800, root: undefined }) as never)
 }

@@ -6,12 +6,10 @@ import (
 	"math"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/backdrop"
 	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
-	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/album/view"
 	"github.com/IliaSA101/sosninaalbums/internal/album/vignette"
 	"github.com/IliaSA101/sosninaalbums/internal/album/vigsheet"
@@ -70,75 +68,6 @@ func (e *Editor) SetCoverSpineBg(color string) model.View {
 		return e.View()
 	}
 	return e.change(func(p *model.Project) { cover.SetSpineBg(p, c) })
-}
-
-// SetCoverGuide — файл-разметка типографии (абсолютный путь JPEG/PNG; проверка путей — как
-// у фото при Load: без UNC и устройств). Подложка только для экрана.
-func (e *Editor) SetCoverGuide(path string) (model.View, error) {
-	if err := salbum.CheckGuide(path); err != nil {
-		return e.View(), err
-	}
-	return e.change(func(p *model.Project) {
-		e.guide = guideState{} // тот же путь выбрали заново — файл могли заменить
-		cover.SetGuide(p, path)
-	}), nil
-}
-
-// ClearCoverGuide убирает разметку обложки.
-func (e *Editor) ClearCoverGuide() model.View {
-	return e.change(func(p *model.Project) { cover.SetGuide(p, "") })
-}
-
-// guideState — что Editor знает о файле-разметке: размер, когда читали, идёт ли перечитывание.
-type guideState struct {
-	view.Guide
-	at   time.Time
-	busy bool
-}
-
-// guideRetry — не чаще этого файл, которого не было (диск не подключён, том не отвечал),
-// перечитывается: иначе разметка не появилась бы до смены пути.
-const guideRetry = 10 * time.Second
-
-// guideFor — размер файла-разметки path: читается один раз на путь (смена пути — выбор,
-// Undo, Load), а не под каждый вид. Неудача перечитывается в фоне не чаще guideRetry: проба
-// мёртвого тома не держит e.mu, найденный размер покажет следующий вид. Договор: e.mu взят.
-func (e *Editor) guideFor(path string) view.Guide {
-	switch {
-	case path == "":
-	case e.guide.Path != path:
-		w, h, ok := salbum.GuideSize(path)
-		e.guide = guideState{Guide: view.Guide{Path: path, W: w, H: h, OK: ok}, at: time.Now()}
-	case !e.guide.OK && !e.guide.busy && time.Since(e.guide.at) >= guideRetry:
-		e.guide.busy, e.guide.at = true, time.Now()
-		go e.reprobeGuide(path)
-	}
-	return e.guide.Guide
-}
-
-// reprobeGuide — фоновое перечитывание разметки path без замка; результат кладётся, только
-// если путь тот же и файла ещё не было (выбор нового пути за это время не затирается).
-func (e *Editor) reprobeGuide(path string) {
-	w, h, ok := salbum.GuideSize(path)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.guide.Path != path || e.guide.OK {
-		return
-	}
-	e.guide.busy, e.guide.at = false, time.Now()
-	if ok {
-		e.guide.Guide = view.Guide{Path: path, W: w, H: h, OK: true}
-	}
-}
-
-// CoverGuidePath — абсолютный путь файла-разметки обложки ("" — нет); для раздачи /media/cover-guide.
-func (e *Editor) CoverGuidePath() (path string) {
-	e.read(func(p *model.Project) {
-		if p.Cover != nil {
-			path = p.Cover.Guide
-		}
-	})
-	return path
 }
 
 // Виньетка (031 G5): тела правок — vigsheet/vignette.go, план мест — пакет vignette (vigPlan).

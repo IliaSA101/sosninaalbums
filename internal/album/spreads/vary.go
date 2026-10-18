@@ -47,7 +47,7 @@ func Prepare(job PlanJob, photos []model.PhotoInfo, o model.AutoOpts) Prep {
 		for i, g := range w.pl.Groups {
 			asps[i] = job.asp[g[0]:g[1]]
 		}
-		w.pools = pools(asps, job.prm, level(o.Variety))
+		w.pools = pools(asps, job.prm, poolLv(level(o.Variety), allowOf(o.Families)))
 	}
 	return w
 }
@@ -238,11 +238,15 @@ func starOf(photos []string, rate Rating) int {
 // pickRun выбирает раскладки цепочки p.Spreads[first..last] (все varies) и пишет ключи.
 // cur — текущий вид тоже повтор («Разнообразить»): разворот меняется, если есть другой.
 // ready — пулы цепочки, посчитанные вне замка (nil или nil-пул — считать здесь); dead — см. ctxOf.
+// allow — разрешённые семейства (065, nil — все): пул сужается до Pick, [0] выборки — «лучшая»
+// для допусков. Возвращает по развороту цепочки: разрешённых нет, взята лучшая.
 // Выбранный вид совпал с текущим — ключ не пишется: смена ключа без видимой перемены дала бы
 // rev, шаг отмены и тост «Раскладки изменены» впустую.
-func pickRun(p *model.Project, first, last int, lv variety.Level, rate Rating, cur bool, ready [][]variety.Cand, dead func(*model.Spread) bool) {
+func pickRun(p *model.Project, first, last int, lv variety.Level, rate Rating, cur bool, ready [][]variety.Cand,
+	dead func(*model.Spread) bool, allow map[variety.Family]bool) []bool {
 	c, prm := ctxOf(p, first, last, dead), p.Params()
 	in := make([]variety.Spread, last-first+1)
+	fb := make([]bool, len(in))
 	for k := range in {
 		s := p.Spreads[first+k]
 		pool := []variety.Cand(nil)
@@ -250,8 +254,9 @@ func pickRun(p *model.Project, first, last int, lv variety.Level, rate Rating, c
 			pool = ready[k]
 		}
 		if pool == nil {
-			pool = poolOf(p.Aspects(s.Photos), prm, lv)
+			pool = poolOf(p.Aspects(s.Photos), prm, poolLv(lv, allow))
 		}
+		pool, fb[k] = variety.ByFamily(pool, allow)
 		in[k] = variety.Spread{Pool: pool, Star: starOf(s.Photos, rate)}
 		if cur {
 			info, _ := shown(p, s)
@@ -263,14 +268,18 @@ func pickRun(p *model.Project, first, last int, lv variety.Level, rate Rating, c
 			p.SetLayout(p.Spreads[first+k], in[k].Pool[x].Key)
 		}
 	}
+	return fb
 }
 
-// varyBuilt — раскладки n собранных разворотов с позиции at по уровню ручки; «Меньше» —
-// ничего (лучшая, Layout ""), ровно как 0.10.
-func varyBuilt(p *model.Project, at, n int, o model.AutoOpts, rate Rating, ready [][]variety.Cand, dead func(*model.Spread) bool) {
-	if lv := level(o.Variety); lv > variety.Less && n > 0 {
-		pickRun(p, at, at+n-1, lv, rate, false, ready, dead)
+// varyBuilt — раскладки n собранных разворотов с позиции at по уровню ручки; «Меньше» без
+// семейств — ничего (лучшая, Layout ""), ровно как 0.10; с семействами — первая разрешённая
+// (SetLayout пишет "" за лучшую). Возвращает флаги запасных (nil — фильтра нет).
+func varyBuilt(p *model.Project, at, n int, o model.AutoOpts, rate Rating, ready [][]variety.Cand, dead func(*model.Spread) bool) []bool {
+	lv, allow := level(o.Variety), allowOf(o.Families)
+	if (lv > variety.Less || allow != nil) && n > 0 {
+		return pickRun(p, at, at+n-1, lv, rate, false, ready, dead, allow)
 	}
+	return nil
 }
 
 // runs — цепочки подряд идущих выделенных разворотов «Авто» с фото, по порядку альбома.
@@ -308,12 +317,13 @@ func VaryWarm(p *model.Project, ids []string, v model.Variety) func() {
 
 // VaryLayouts — «Разнообразить раскладки» (041): выделенные развороты «Авто» с фото по
 // порядку альбома, каждая цепочка подряд идущих — с соседями по краям и своим текущим видом.
-// Сетки, виньетки и обложка не трогаются; «Меньше» считается «Обычным». Нечего менять —
-// проект тот же (холостая правка у Editor).
-func VaryLayouts(p *model.Project, ids []string, v model.Variety, rate Rating) {
-	lv := max(variety.Normal, level(v))
+// Сетки, виньетки и обложка не трогаются; «Меньше» считается «Обычным». families — тот же
+// фильтр семейств, что у автосборки (065; пусто — все). Нечего менять — проект тот же
+// (холостая правка у Editor).
+func VaryLayouts(p *model.Project, ids []string, v model.Variety, families []string, rate Rating) {
+	lv, allow := max(variety.Normal, level(v)), allowOf(families)
 	for _, r := range runs(p, ids) {
-		pickRun(p, r[0], r[1], lv, rate, true, nil, nil)
+		pickRun(p, r[0], r[1], lv, rate, true, nil, nil, allow)
 	}
 }
 

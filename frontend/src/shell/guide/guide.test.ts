@@ -153,10 +153,21 @@ describe('справочник функций: стражи', () => {
   it('041: статья про разнообразие раскладок — ручка, команда в «Правка» и галерея; в «Автосборке» — строка про ручку', () => {
     const a = ARTICLES.find((x) => x.id === 'variety')
     expect(a).toMatchObject({ title: 'Разнообразие раскладок', feature: 'variants', menu: ['varyLayouts'] })
-    for (const w of ['Автосборка', 'Дополнительно', 'Разнообразить раскладки', 'Похожие', 'Другие варианты'])
-      expect(a?.where, w).toContain(w)
+    for (const w of ['Автосборка', 'Раскладки', 'Разнообразить раскладки', 'Похожие', 'Другие варианты']) expect(a?.where, w).toContain(w)
     expect(a?.words).toContain('звезды')
     expect(ARTICLES.find((x) => x.id === 'autobuild')?.where).toContain('Разнообразие раскладок')
+  })
+
+  it('065: фильтр семейств — в «Автосборка ▸ Раскладки»; «Разнообразить раскладки» берёт его же; серии остались в «Дополнительно»', () => {
+    const b = ARTICLES.find((x) => x.id === 'autobuild')
+    for (const w of ['«Раскладки»', 'фильтр семейств', 'Варианты · Что соберётся', 'Разнообразие раскладок'])
+      expect(b?.where, w).toContain(w)
+    expect(b?.where).toMatch(/Не разрывать серии съёмки[^.]*«Дополнительно»/)
+    expect(b?.words).toContain('семейства')
+    const v = ARTICLES.find((x) => x.id === 'variety')
+    expect(v?.where).toContain('фильтр семейств')
+    expect(v?.where).toContain('берёт их же')
+    expect(v?.where).not.toContain('«Дополнительно»') // ручка переехала из «Дополнительно» в «Раскладки»
   })
 
   it('051: «Автосборка» — «Авто | Свой от … до …» и серии, без прежнего «не больше»; «Разнообразие» — ленты, фигуры, формы', () => {

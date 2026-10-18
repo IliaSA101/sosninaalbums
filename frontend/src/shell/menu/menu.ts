@@ -57,6 +57,7 @@ export interface MenuCtx {
   big: boolean
   details: boolean
   safe: boolean
+  markup?: boolean // подложка разметки типографии включена (066); нет — выключена
   rulers: boolean
   snap: boolean
   alignCount?: number // выделено объектов на текущем развороте (места, фото, тексты); нет — 0
@@ -271,6 +272,7 @@ function viewSpecs(c: MenuCtx): Spec[][] {
       { id: 'big', label: 'Крупный просмотр', cmd: 'toggleBig', feature: 'timeline', checked: c.big },
       { id: 'details', label: 'Панель деталей', cmd: 'toggleDetails', checked: c.details },
       { id: 'safe', label: 'Безопасная зона', cmd: 'toggleSafe', checked: c.safe },
+      { id: 'markup', label: 'Разметка типографии', cmd: 'toggleMarkup', checked: !!c.markup },
       { id: 'rulers', label: 'Линейки', cmd: 'toggleRulers', feature: 'rulers', checked: c.rulers },
       { id: 'snap', label: 'Привязка', cmd: 'toggleSnap', feature: 'manual', checked: c.snap },
     ],

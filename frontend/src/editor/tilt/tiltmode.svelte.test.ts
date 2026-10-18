@@ -19,8 +19,8 @@ const { placesel } = await import('../places/placesel.svelte')
 const { drag } = await import('../../base/drag/drag.svelte')
 const { modalStack } = await import('../../base/ui/modalstack.svelte')
 const { gallery } = await import('../../panels/gallery/gallery.svelte')
-const { photoui } = await import('./photoui.svelte')
-const { framelive } = await import('./framelive.svelte')
+const { photoui } = await import('../photo/photoui.svelte')
+const { framelive } = await import('../photo/framelive.svelte')
 
 const spread = (o: Partial<SpreadView> = {}): SpreadView =>
   ({

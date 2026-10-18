@@ -43,8 +43,9 @@ type Editor struct {
 	// marks — свои отметки (ID фото → отметка), не nil; marksRev — из общего счётчика процесса.
 	marks    map[string]model.Mark
 	marksRev int
-	// guide — размер файла-разметки обложки для вида (guideFor): не данные проекта.
-	guide guideState
+	// guides — что прочитано о файлах-разметках обложки и разворотов для вида (guideFor, 066):
+	// не данные проекта; у каждой разметки свой слот.
+	guides [markupKinds]guideState
 }
 
 // NewEditor открывает проект p (из salbum.Load или model.New). Editor держит свою копию, p

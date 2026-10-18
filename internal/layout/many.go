@@ -325,8 +325,13 @@ func (m *manyGen) cut(k, d0, d1 int) {
 }
 
 // spread — кандидаты на весь разворот (только layflat): оценка со штрафом за корешок.
+// Блок вне правила сгиба пропускается (через него и RefQuickScore — сверка с plan).
 func (m *manyGen) spread(bs []*mblock) {
+	fold := foldOn(m.p)
 	for _, b := range bs {
+		if fold && !FoldOK(b.rects, nil, m.p) {
+			continue
+		}
 		m.add(score(b.rects, m.g.spread, m.g.spine, b.t.depth), b, nil)
 	}
 }

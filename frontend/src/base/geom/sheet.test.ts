@@ -78,6 +78,7 @@ describe('чтения pageW', () => {
     '/src/base/core/nav.svelte.ts', // значения по умолчанию до первого ответа Go (emptyView)
     '/src/panels/details/SettingsForm.svelte', // форма правки настроек альбома
     '/src/panels/details/presets.ts', // пресеты форматов — поля той же формы
+    '/src/panels/details/settingsnorm.ts', // нормализация полей той же формы (вынесена из SettingsForm, 066)
   ]
   const files = import.meta.glob('/src/**/*.{ts,svelte}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
 

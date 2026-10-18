@@ -42,3 +42,6 @@ export function shownTpls<T extends FamilyItem>(list: readonly T[], family: VigF
 // Вид, которого уже нет среди каталожных (числа поменялись), — «Все».
 export const visibleTpls = <T extends FamilyItem>(list: readonly T[], family: VigFamilyFilter, current?: string): T[] =>
   shownTpls(list, activeFamily(family, familiesIn(list)), current)
+
+// Нажат ли пункт сегмента Seg: набор values (065, можно несколько) главнее одиночного value.
+export const segOn = <T>(id: T, value: T | undefined, values?: readonly T[]): boolean => (values ? values.includes(id) : value === id)

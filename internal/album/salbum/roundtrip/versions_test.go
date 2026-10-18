@@ -162,13 +162,23 @@ func tieCase(t *testing.T, prm layout.Params) (set [][2]int, legacy, now string)
 	return nil, "", ""
 }
 
+// tieParams — геометрия файлов tieFile при «Любые фото»: так файлы до v11 считали «Авто»
+// (064), ничьи сравниваются в нём, а закрепление сгиба (pinFoldAuto) — отдельный шаг.
+func tieParams(t *testing.T, dir string) layout.Params {
+	t.Helper()
+	prm := edtest.MustDecode(t, tieFile(t, dir, 5, nil), dir).Params()
+	prm.FoldAny = true
+	return prm
+}
+
 // Альбом до 0.10 (v5): у «Авто» с Layout "" Load записывает ключ раскладки, которую выбирал
 // прежний порядок ничьих (решение 95), если он отличается от нынешней лучшей; где совпадает —
-// остаётся "". Файл v6 не мигрирует. Save → Load ничего не меняет.
+// остаётся "". Файл v6 по ничьим не мигрирует (показывает нынешнюю лучшую «Любых фото» — её же
+// мог закрепить pinFoldAuto). Ключ ничьей сгиб не трогает (064, TestLoadV5FoldLegacy). Save →
+// Load ничего не меняет.
 func TestLoadV5KeepsTieLayout(t *testing.T) {
 	dir := testkit.TempDir(t)
-	prm := edtest.MustDecode(t, tieFile(t, dir, 5, nil), dir).Params()
-	set, legacy, now := tieCase(t, prm)
+	set, legacy, now := tieCase(t, tieParams(t, dir))
 	same := [][2]int{{300, 200}}
 	path := filepath.Join(dir, "a.salbum")
 	if err := os.WriteFile(path, tieFile(t, dir, 5, [][][2]int{set, same}), 0o644); err != nil {
@@ -187,8 +197,12 @@ func TestLoadV5KeepsTieLayout(t *testing.T) {
 	if got := p.Spreads[1].Layout; got != "" {
 		t.Fatalf("v5 без ничьей: Layout %q, ждали \"\"", got)
 	}
-	if q := edtest.MustDecode(t, tieFile(t, dir, 6, [][][2]int{set}), dir); q.Spreads[0].Layout != "" {
-		t.Fatalf("v6 мигрировал: Layout %q", q.Spreads[0].Layout)
+	if p.Settings.FoldAny || !p.Settings.Layflat {
+		t.Fatalf("v5: layflat %v, foldAny %v — ждали «Только широкие»", p.Settings.Layflat, p.Settings.FoldAny)
+	}
+	v6 := edtest.MustDecode(t, tieFile(t, dir, 6, [][][2]int{set}), dir)
+	if r, _, _ := v6.Layout(v6.Spreads[0]); v6.Spreads[0].Layout == legacy || r.Key != now {
+		t.Fatalf("v6 мигрировал по ничьим: Layout %q, действует %q (ждали %q)", v6.Spreads[0].Layout, r.Key, now)
 	}
 	e := edtest.Open(t, p, path)
 	before := model.Marshal(p)
@@ -208,8 +222,7 @@ func TestLoadV5KeepsTieLayout(t *testing.T) {
 // а не падает на индексе ряда; прежний выбор при ничьей тот же, что у variant 0.
 func TestLoadNegativeVariant(t *testing.T) {
 	dir := testkit.TempDir(t)
-	prm := edtest.MustDecode(t, tieFile(t, dir, 5, nil), dir).Params()
-	set, legacy, _ := tieCase(t, prm)
+	set, legacy, _ := tieCase(t, tieParams(t, dir))
 	for _, v := range []int{4, 5} {
 		data := tieFile(t, dir, v, [][][2]int{set})
 		data = bytes.Replace(data, []byte(`"id":"5e1f0a2b0000"`), []byte(`"id":"5e1f0a2b0000","variant":-1`), 1)
@@ -427,7 +440,7 @@ func TestSaveLoadV3Names(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != model.FormatVersion || model.FormatVersion != 10 {
+	if p.Version != model.FormatVersion || model.FormatVersion != 11 {
 		t.Fatalf("версия %d", p.Version)
 	}
 	ta, tb := *edtest.P(e).Spreads[0].Texts[0], *edtest.P(e).Spreads[0].Texts[1]
@@ -483,8 +496,8 @@ func TestLoadOrderRepair(t *testing.T) {
 // открывается с 8 благодаря заполнению DefaultSettings() до разбора; 12 и 0 («без зоны»)
 // переживают запись и чтение.
 func TestLoadSafeDefault(t *testing.T) {
-	if model.FormatVersion != 10 {
-		t.Fatalf("FormatVersion %d: безопасная зона — с v6 (decisions 0.10, запись 2), v7 — vig.own (038), v8 — наклон фона (045), v9 — ключи форм (051), v10 — фото корешка (061)", model.FormatVersion)
+	if model.FormatVersion != 11 {
+		t.Fatalf("FormatVersion %d: безопасная зона — с v6 (decisions 0.10, запись 2), v7 — vig.own (038), v8 — наклон фона (045), v9 — ключи форм (051), v10 — фото корешка (061), v11 — правило сгиба (064), обрез и разметка разворотов (066)", model.FormatVersion)
 	}
 	data, err := os.ReadFile(filepath.Join("..", "testdata", "v5.salbum.json"))
 	if err != nil {
@@ -526,8 +539,7 @@ func TestLoadSafeDefault(t *testing.T) {
 // что и параллельная: ветка migRows без model.Each.
 func TestLoadV5KeepsTieLayoutSequential(t *testing.T) {
 	dir := testkit.TempDir(t)
-	prm := edtest.MustDecode(t, tieFile(t, dir, 5, nil), dir).Params()
-	set, legacy, _ := tieCase(t, prm)
+	set, legacy, _ := tieCase(t, tieParams(t, dir))
 	data := tieFile(t, dir, 5, [][][2]int{set, {{300, 200}}})
 	par := edtest.MustDecode(t, data, dir)
 	model.SetParallelLayouts(false)

@@ -5,7 +5,8 @@ import "github.com/IliaSA101/sosninaalbums/internal/layout"
 // Тест-хелперы: копии из layout (тесты двух пакетов не делятся). Генераторы определяют
 // наборы эталонов, поэтому менять их нельзя.
 
-var album30 = layout.Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true}
+// Layflat-геометрии — в «любые фото» (FoldAny): прежнее поведение, эталоны прежние (064).
+var album30 = layout.Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true, FoldAny: true}
 
 const (
 	L = 1.5     // горизонтальное 3:2
@@ -55,5 +56,5 @@ func goldenAspects(seed uint64, n, set int) []float64 {
 var goldenGeoms = []layout.Params{
 	album30,
 	{PageW: 300, PageH: 200, Margin: 10, Gap: 4, Layflat: false},
-	{PageW: 200, PageH: 300, Margin: 5, Gap: 0, Layflat: true},
+	{PageW: 200, PageH: 300, Margin: 5, Gap: 0, Layflat: true, FoldAny: true},
 }

@@ -48,6 +48,8 @@ export const FAMILIES: readonly { id: Family; label: string }[] = [
 ]
 
 export type FamilyFilter = Family | 'all'
+// 065: фильтр-набор (окно «Автосборка» пропускает несколько семейств) — предикат вместо одного семейства.
+export type FamilyPass = (c: Pick<Choice, 'family'>) => boolean
 
 // Семейства, что есть хотя бы в одном ряду: пустые сегменты не показываются.
 export function familiesIn(rows: readonly (readonly Choice[])[]): readonly { id: Family; label: string }[] {
@@ -88,9 +90,10 @@ export interface ShownRow {
 }
 
 // Ряд под фильтром семейства; та же картинка (twin ≥ 0) сворачивается, кроме текущей раскладки. open — похожие раскрыты.
-export function shownRow(list: readonly Choice[], o: { family: FamilyFilter; current?: string; open: boolean }): ShownRow {
+export function shownRow(list: readonly Choice[], o: { family: FamilyFilter | FamilyPass; current?: string; open: boolean }): ShownRow {
   // Текущая раскладка видна всегда, даже если фильтр её семейства не выбрал (050).
-  const byFamily = o.family === 'all' ? list : list.filter((c) => c.family === o.family || c.key === o.current)
+  const pass = typeof o.family === 'function' ? o.family : o.family === 'all' ? null : (c: Choice) => c.family === o.family
+  const byFamily = pass ? list.filter((c) => pass(c) || c.key === o.current) : list
   // Близнец — только того же семейства: иначе фильтр семейства спрятал бы «похожую» карточку другого вида.
   const twin = (c: Choice) => (c.twin ?? -1) >= 0 && c.key !== o.current && list[c.twin!]?.family === c.family
   const shown = o.open ? [...byFamily] : byFamily.filter((c) => !twin(c))
@@ -119,7 +122,7 @@ const NO_FAMILY = 'Нет раскладок этого семейства'
 export function galleryRow(
   lines: readonly GalleryLine[],
   order: RowOrder,
-  o: { family: FamilyFilter; current?: string; openTwins: readonly string[] },
+  o: { family: FamilyFilter | FamilyPass; current?: string; openTwins: readonly string[] },
 ): GalleryRow {
   const mine = lines.filter((l) => (order === 'rearranged' ? l.label === ROW.rearranged : l.label !== ROW.rearranged))
   const parts: RowPart[] = []

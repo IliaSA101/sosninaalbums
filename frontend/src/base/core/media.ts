@@ -6,8 +6,10 @@ const V = 3
 export const thumbUrl = (id: string) => `/media/t/${encodeURIComponent(id)}?v=${V}`
 export const previewUrl = (id: string) => `/media/p/${encodeURIComponent(id)}?v=${V}`
 
-// Разметка типографии обложки (032): путь Go берёт из проекта, rev только сбивает кэш при смене файла.
+// Разметка типографии обложки (032) и разворотов (066): путь Go берёт из проекта, rev только сбивает кэш
+// при смене файла. PSD Go отдаёт PNG ≤ 4096 px.
 export const coverGuideUrl = (rev: number) => `/media/cover-guide?r=${Math.trunc(rev) || 0}`
+export const spreadGuideUrl = (rev: number) => `/media/spread-guide?r=${Math.trunc(rev) || 0}`
 
 // Разворот на 17+ фото (027): превью 2048 для каждой ячейки съедает память WebView2, поэтому
 // крупное превью грузим только там, где миниатюры 400 px не хватает, и соседей не прогреваем.

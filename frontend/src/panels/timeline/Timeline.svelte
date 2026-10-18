@@ -173,7 +173,7 @@
   function varyFromMenu() {
     const ids = menu?.ids ?? []
     menu = null
-    void store.varyLayouts(ids, modes.varyLevel)
+    void store.varyLayouts(ids, modes.varyLevel, modes.autoFamilies)
   }
 
   function deleteFromMenu() {

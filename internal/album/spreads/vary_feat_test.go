@@ -253,7 +253,7 @@ func TestVaryLayoutsHeroRhythm(t *testing.T) {
 		at   int
 		want bool
 	}{{0, false}, {5, true}, {6, false}} {
-		e.VaryLayouts([]string{ids[c.at]}, model.VarietyNormal, nil)
+		e.VaryLayouts([]string{ids[c.at]}, model.VarietyNormal, nil, nil)
 		if got := feat(c.at); got != c.want {
 			t.Fatalf("разворот %d: с главным %v, ждали %v (%q)", c.at, got, c.want, edtest.P(e).Spreads[c.at].Layout)
 		}
@@ -290,7 +290,7 @@ func TestVaryThenDropAndSettings(t *testing.T) {
 	e := edtest.Open(t, model.New(), "")
 	ids := edtest.SpreadIDs(build(t, e, horizontals("r", 120), -1, model.AutoOpts{Spreads: 10, MaxPer: 16}))
 	const at = 5
-	e.VaryLayouts([]string{ids[at]}, model.VarietyNormal, nil)
+	e.VaryLayouts([]string{ids[at]}, model.VarietyNormal, nil, nil)
 	p := edtest.P(e)
 	s := p.Spreads[at]
 	key := s.Layout

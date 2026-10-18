@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coverGuideUrl, previewUrl, thumbUrl, warmable, wantPreview } from './media'
+import { coverGuideUrl, spreadGuideUrl, previewUrl, thumbUrl, warmable, wantPreview } from './media'
 
 describe('media', () => {
   it('обычный id', () => {
@@ -16,6 +16,8 @@ describe('разметка обложки', () => {
   it('в адресе только номер правки', () => {
     expect(coverGuideUrl(7)).toBe('/media/cover-guide?r=7')
     expect(coverGuideUrl(NaN)).toBe('/media/cover-guide?r=0')
+    expect(spreadGuideUrl(7)).toBe('/media/spread-guide?r=7')
+    expect(spreadGuideUrl(NaN)).toBe('/media/spread-guide?r=0')
   })
 })
 

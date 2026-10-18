@@ -57,6 +57,7 @@ func ErrTooMany() error {
 const (
 	minPage, maxPage = 50.0, 1000.0
 	minDPI, maxDPI   = 72, 1200
+	maxBleed         = 10.0 // обрез (066): у типографий 2–3 мм, поле «Обрез, мм» — 0…10
 )
 
 // ClampSettings приводит настройки к допустимым: NaN/Inf — значение по умолчанию,
@@ -76,12 +77,16 @@ func ClampSettings(s Settings) Settings {
 	s.Margin = fix(s.Margin, d.Margin, 0, top)
 	s.Gap = fix(s.Gap, d.Gap, 0, top)
 	s.Safe = fix(s.Safe, d.Safe, 0, top)
+	s.Bleed = fix(s.Bleed, 0, 0, min(maxBleed, top))
 	if s.DPI == 0 {
 		s.DPI = d.DPI
 	}
 	s.DPI = max(minDPI, min(maxDPI, s.DPI))
 	s.Bg = BgColor(s.Bg)
 	s.Layflat = s.Layflat || s.Sheet
+	// У листа шва нет, без layflat через корешок не идёт ничего: поле не действует — нулевое,
+	// иначе одинаковые по смыслу настройки различались бы (холостая правка, сравнение в UI).
+	s.FoldAny = s.FoldAny && s.Layflat && !s.Sheet
 	return s
 }
 

@@ -22,10 +22,17 @@ import (
 // альбомы, сиды 1–3, звёзды. Входы детерминированы своим генератором — не зависят от версии Go.
 
 var (
-	geomSq   = layout.Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true}
-	geomWide = layout.Params{PageW: 300, PageH: 200, Margin: 12, Gap: 3, Layflat: true}
+	// Layflat — в «любые фото» (FoldAny): прежнее поведение, эталоны прежние (064 G1).
+	geomSq   = layout.Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true, FoldAny: true}
+	geomWide = layout.Params{PageW: 300, PageH: 200, Margin: 12, Gap: 3, Layflat: true, FoldAny: true}
 	geomFlat = layout.Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: false}
 )
+
+// wideFold — p в положении «только широкие» (layflat-геометрии тестов выше — «любые фото», 064).
+func wideFold(p layout.Params) layout.Params {
+	p.FoldAny = false
+	return p
+}
 
 const (
 	aspL = 1.5       // горизонтальное 3:2
@@ -164,27 +171,46 @@ var corpusSpecs = []albumSpec{
 const corpusSeeds = 3
 
 var (
-	corpusOnce sync.Once
-	corpusData []corpusAlbum
+	corpusOnce, corpusWideOnce sync.Once
+	corpusData, corpusWideData []corpusAlbum
 )
 
 // corpus — 8 альбомов × 3 сида = 24; строится один раз параллельно (пулы на холодном кэше).
+// Layflat-альбомы — «любые фото» (прежнее поведение, эталон variety.sha).
 func corpus() []corpusAlbum {
-	corpusOnce.Do(func() {
-		corpusData = make([]corpusAlbum, len(corpusSpecs)*corpusSeeds)
-		var wg sync.WaitGroup
-		for i, sp := range corpusSpecs {
-			for s := range corpusSeeds {
-				wg.Go(func() {
-					seed := uint64(s + 1)
-					corpusData[i*corpusSeeds+s] = build(fmt.Sprintf("%s s%d", sp.name, seed),
-						sp.set(sp.n, seed), sp.sp, sp.maxP, sp.p, seed)
-				})
+	corpusOnce.Do(func() { corpusData = buildCorpus(corpusSpecs) })
+	return corpusData
+}
+
+// corpusWide — layflat-альбомы корпуса при «только широкие» (064; без layflat — тот же, не
+// повторяется): 7 × 3 = 21, эталон variety-wide.sha.
+func corpusWide() []corpusAlbum {
+	corpusWideOnce.Do(func() {
+		var specs []albumSpec
+		for _, sp := range corpusSpecs {
+			if sp.p.Layflat {
+				sp.name, sp.p = sp.name+" широкие", wideFold(sp.p)
+				specs = append(specs, sp)
 			}
 		}
-		wg.Wait()
+		corpusWideData = buildCorpus(specs)
 	})
-	return corpusData
+	return corpusWideData
+}
+
+func buildCorpus(specs []albumSpec) []corpusAlbum {
+	out := make([]corpusAlbum, len(specs)*corpusSeeds)
+	var wg sync.WaitGroup
+	for i, sp := range specs {
+		for s := range corpusSeeds {
+			wg.Go(func() {
+				seed := uint64(s + 1)
+				out[i*corpusSeeds+s] = build(fmt.Sprintf("%s s%d", sp.name, seed), sp.set(sp.n, seed), sp.sp, sp.maxP, sp.p, seed)
+			})
+		}
+	}
+	wg.Wait()
+	return out
 }
 
 // metrics — показатели одного альбома на одном уровне.
@@ -409,9 +435,13 @@ func sum(v []int) int {
 // Эталон выбора (design §11): sha256 ключей выбранных раскладок по альбому корпуса и уровню.
 // Ловит любую смену порогов, штрафов, пула и самого корпуса; -update — только осознанно, с записью
 // в decisions. Как many.sha — на amd64 (оценки с FMA на arm64 различаются в последних битах).
-var updateGolden = flag.Bool("update", false, "перезаписать testdata/golden/variety.sha")
+// variety.sha — layflat «любые фото», variety-wide.sha — «только широкие» (064).
+var updateGolden = flag.Bool("update", false, "перезаписать testdata/golden/variety*.sha")
 
-const goldenPath = "testdata/golden/variety.sha"
+const (
+	goldenPath     = "testdata/golden/variety.sha"
+	goldenWidePath = "testdata/golden/variety-wide.sha"
+)
 
 // keysHash — первые 8 байт sha256 ключей по строке на ключ (строка эталона).
 func keysHash(keys []string) string {
@@ -422,9 +452,9 @@ func keysHash(keys []string) string {
 	return hex.EncodeToString(h.Sum(nil)[:8])
 }
 
-func goldenLines() []string {
+func goldenLines(albums []corpusAlbum) []string {
 	var out []string
-	for _, a := range corpus() {
+	for _, a := range albums {
 		for lv := Less; lv <= More; lv++ {
 			var keys []string
 			for i, k := range Pick(a.spreads, a.p, lv, Ctx{}) {
@@ -447,20 +477,27 @@ func goldenArch(t *testing.T) {
 	}
 }
 
-func TestGoldenVariety(t *testing.T) {
+func TestGoldenVariety(t *testing.T) { checkGoldenVariety(t, goldenPath, goldenLines(corpus())) }
+
+// TestGoldenVarietyWide — выбор на layflat-альбомах корпуса при «только широкие» (064).
+func TestGoldenVarietyWide(t *testing.T) {
+	checkGoldenVariety(t, goldenWidePath, goldenLines(corpusWide()))
+}
+
+func checkGoldenVariety(t *testing.T, path string, got []string) {
+	t.Helper()
 	goldenArch(t)
-	got := goldenLines()
 	if *updateGolden || os.Getenv("SA_GOLDEN_UPDATE") == "1" {
-		if err := os.MkdirAll(filepath.Dir(goldenPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(goldenPath, []byte(strings.Join(got, "\n")+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(strings.Join(got, "\n")+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("эталон перезаписан: %s (%d строк)", goldenPath, len(got))
+		t.Logf("эталон перезаписан: %s (%d строк)", path, len(got))
 		return
 	}
-	data, err := os.ReadFile(goldenPath)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("нет эталона (%v): go test ./internal/layout/variety -run Golden -update", err)
 	}

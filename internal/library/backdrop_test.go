@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -123,5 +124,54 @@ func TestBackdropFileSymlink(t *testing.T) {
 	}
 	if _, err := BackdropFile(dangling); err == nil {
 		t.Error("висячая ссылка принята")
+	}
+	// Ссылка на UNC — отказ по сырой цели, до EvalSymlinks (сетевой ошибки нет).
+	netTarget := `\\127.0.0.1\nosuchshare\x.jpg`
+	if runtime.GOOS != "windows" {
+		netTarget = "//nosuchhost/x.jpg"
+	}
+	unc := filepath.Join(dir, "unc.jpg")
+	if err := os.Symlink(netTarget, unc); err != nil {
+		t.Skipf("ссылка на UNC: %v", err)
+	}
+	if _, err := BackdropFile(unc); err == nil || err.Error() != "ссылка ведёт за пределы локального диска" {
+		t.Errorf("ссылка на UNC: %v", err)
+	}
+}
+
+// linkLocal: цепочка ссылок проверяется по сырым целям — UNC на любом звене, корень без диска,
+// пустая цель и слишком длинная (или зацикленная) цепочка — отказ; локальные абсолютная и
+// относительная — да, не ссылка — да (дальше решает Stat).
+func TestLinkLocal(t *testing.T) {
+	root, unc := `C:\a`, `\\srv\share\x.jpg`
+	if runtime.GOOS != "windows" {
+		root, unc = "/a", "//srv/x.jpg"
+	}
+	at := func(name string) string { return filepath.Join(root, name) }
+	links := map[string]string{
+		at("ok.jpg"):     at("real.jpg"),
+		at("rel.jpg"):    "real.jpg",
+		at("chain.jpg"):  at("ok.jpg"),
+		at("unc.jpg"):    unc,
+		at("hop.jpg"):    at("unc.jpg"), // первое звено локально, второе — на шару
+		at("loop1.jpg"):  at("loop2.jpg"),
+		at("loop2.jpg"):  at("loop1.jpg"),
+		at("empty.jpg"):  "",
+		at("rooted.jpg"): `\x.jpg`,
+	}
+	old := readLink
+	readLink = func(p string) (string, error) {
+		if v, ok := links[p]; ok {
+			return v, nil
+		}
+		return "", os.ErrInvalid
+	}
+	t.Cleanup(func() { readLink = old })
+	want := map[string]bool{"ok.jpg": true, "rel.jpg": true, "chain.jpg": true, "real.jpg": true,
+		"unc.jpg": false, "hop.jpg": false, "loop1.jpg": false, "empty.jpg": false, "rooted.jpg": runtime.GOOS != "windows"}
+	for name, w := range want {
+		if got := linkLocal(at(name)); got != w {
+			t.Errorf("%s: %v, ждали %v", name, got, w)
+		}
 	}
 }

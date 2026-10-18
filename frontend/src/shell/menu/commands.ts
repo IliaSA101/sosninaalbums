@@ -13,7 +13,7 @@ import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
 import { namesUi } from '../../panels/names/names.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
-import { straighten } from '../../editor/photo/straighten.svelte'
+import { straighten } from '../../editor/tilt/straighten.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { modes } from '../../base/prefs/view.svelte'
@@ -50,6 +50,7 @@ export type MenuCommand =
   | 'turnCcw'
   | 'straighten'
   | 'toggleSnap'
+  | 'toggleMarkup'
   | 'allSpreads'
   | 'levelSimple'
   | 'levelStandard'
@@ -172,12 +173,12 @@ export const COMMANDS: Record<Command, Handler> = {
     const s = store.spread
     if (isVignette(s) && prefs.can('vignette')) vigDialog.open(s.id)
   },
-  // 041: выделенные в ленте развороты, иначе текущий; уровень — запомненный в окне автосборки.
+  // 041: выделенные в ленте развороты, иначе текущий; уровень и семейства (065) — запомненные в окне автосборки.
   varyLayouts: () => {
     if (!prefs.can('variants')) return
     const ids = varyTargets(spreadsel.ordered(store.view.spreads.map((s) => s.id)), store.spread?.id)
     if (!anyVaries(store.view.spreads, ids)) return // как серый пункт меню: сетки, виньетки, пустые — молча
-    return store.varyLayouts(ids, modes.varyLevel)
+    return store.varyLayouts(ids, modes.varyLevel, modes.autoFamilies)
   },
   // 048: окно «Фоны»; нет листа или функции на уровне — молчим, как серый пункт меню
   bgGallery: () => {
@@ -207,6 +208,7 @@ export const COMMANDS: Record<Command, Handler> = {
   toggleDetails: () => modes.toggleDetails(),
   toggleSafe: () => modes.toggleSafe(),
   toggleRulers: () => modes.toggleRulers(),
+  toggleMarkup: () => modes.toggleMarkup(),
   toggleSnap: () => placesel.toggleSnap(),
   levelSimple: () => prefs.set('simple'),
   levelStandard: () => prefs.set('standard'),

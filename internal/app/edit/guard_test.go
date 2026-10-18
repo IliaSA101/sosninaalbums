@@ -47,6 +47,7 @@ func probes() []probe {
 		{"CoverSpineText", kErr, func(m *Methods) (model.View, error) { return m.CoverSpineText() }},
 		{"SetCoverSpineBg", kView, func(m *Methods) (model.View, error) { return ok(m.SetCoverSpineBg("#112233")) }},
 		{"ClearCoverGuide", kView, func(m *Methods) (model.View, error) { return ok(m.ClearCoverGuide()) }},
+		{"ClearSpreadGuide", kView, func(m *Methods) (model.View, error) { return ok(m.ClearSpreadGuide()) }},
 		{"VignetteChoices", kRead, func(m *Methods) (model.View, error) { m.VignetteChoices("s1", 1, 1, "2:3"); return none(m) }},
 		{"PreviewVignette", kReadEr, func(m *Methods) (model.View, error) {
 			_, err := m.PreviewVignette("s1", model.VigSetup{})
@@ -78,7 +79,11 @@ func probes() []probe {
 		{"AutoBuild", kErr, func(m *Methods) (model.View, error) {
 			return m.AutoBuild(ids, 0, model.AutoOpts{Spreads: 1, MaxPer: 4})
 		}},
-		{"VaryLayouts", kErr, func(m *Methods) (model.View, error) { return m.VaryLayouts([]string{"s1"}, 1) }},
+		{"AutoPreview", kReadEr, func(m *Methods) (model.View, error) {
+			_, err := m.AutoPreview(ids, 0, model.AutoOpts{Spreads: 1, MaxPer: 4})
+			return model.View{}, err
+		}},
+		{"VaryLayouts", kErr, func(m *Methods) (model.View, error) { return m.VaryLayouts([]string{"s1"}, 1, nil) }},
 		{"SetMarks", kErr, func(m *Methods) (model.View, error) { return m.SetMarks(ids, model.MarkPatch{}) }},
 		{"ResetMarks", kView, func(m *Methods) (model.View, error) { return ok(m.ResetMarks(ids)) }},
 		{"Marks", kRead, func(m *Methods) (model.View, error) { m.Marks(); return none(m) }},

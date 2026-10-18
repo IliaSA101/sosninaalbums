@@ -66,6 +66,10 @@ export function AutoPlan(arg1, arg2) {
   return window['go']['app']['App']['AutoPlan'](arg1, arg2);
 }
 
+export function AutoPreview(arg1, arg2, arg3) {
+  return window['go']['app']['App']['AutoPreview'](arg1, arg2, arg3);
+}
+
 export function Backups() {
   return window['go']['app']['App']['Backups']();
 }
@@ -88,6 +92,10 @@ export function ClearPattern(arg1, arg2) {
 
 export function ClearRecent() {
   return window['go']['app']['App']['ClearRecent']();
+}
+
+export function ClearSpreadGuide() {
+  return window['go']['app']['App']['ClearSpreadGuide']();
 }
 
 export function ClearVignette(arg1) {
@@ -284,6 +292,10 @@ export function PickCoverGuide() {
 
 export function PickNamesFile() {
   return window['go']['app']['App']['PickNamesFile']();
+}
+
+export function PickSpreadGuide() {
+  return window['go']['app']['App']['PickSpreadGuide']();
 }
 
 export function PlacePhotos(arg1, arg2, arg3) {
@@ -606,8 +618,8 @@ export function Undo() {
   return window['go']['app']['App']['Undo']();
 }
 
-export function VaryLayouts(arg1, arg2) {
-  return window['go']['app']['App']['VaryLayouts'](arg1, arg2);
+export function VaryLayouts(arg1, arg2, arg3) {
+  return window['go']['app']['App']['VaryLayouts'](arg1, arg2, arg3);
 }
 
 export function VignetteChoices(arg1, arg2, arg3, arg4) {

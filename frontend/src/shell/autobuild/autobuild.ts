@@ -47,6 +47,12 @@ export function clampMaxPer(v: number): number {
 // Подсказка под строкой «Фото на разворот» (051).
 export const RANGE_HINT = 'Шире — альбом живее, уже — ровнее'
 
+// Режим «Фото на разворот» (051): Seg «Авто | Свой».
+export const RANGE_MODES = [
+  { id: 'auto', label: 'Авто' },
+  { id: 'own', label: 'Свой' },
+] as const
+
 // Диапазон «от … до …» → память окна и обратно; «Авто» поля не хранит.
 export const memOf = (r: AutoRange): AutoMem => (r.auto ? 'auto' : [r.minPer, r.maxPer])
 

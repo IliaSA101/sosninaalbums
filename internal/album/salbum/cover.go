@@ -46,14 +46,21 @@ func fixCover(p *model.Project, fc *FileCover, base string, v1 bool) {
 		c.Layout = model.CoverFront
 	}
 	c.SpineBg = model.BgColor(c.SpineBg)
-	c.Guide, c.GuideAlt = loadGuide(c.Guide, fc.GuideAbs, base, v1)
+	c.Guide, c.GuideAlt = loadGuide("обложка", c.Guide, fc.GuideAbs, base, v1)
 	p.Cover = &c
 }
 
-// guideExt — разметка типографии — только JPEG и PNG.
+// fixCoverAndGuide — обложка (fixCover) и путь разметки разворотов (066): обе разметки
+// читаются по одним правилам (loadGuide).
+func fixCoverAndGuide(p *model.Project, f *FileProject, base string, v1 bool) {
+	fixCover(p, f.Cover, base, v1)
+	p.SpreadGuide, p.SpreadGuideAlt = loadGuide("развороты", f.SpreadGuide, f.SpreadGuideAbs, base, v1)
+}
+
+// guideExt — разметка типографии — PSD (066), JPEG или PNG.
 func guideExt(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".jpg", ".jpeg", ".png":
+	case ".jpg", ".jpeg", ".png", ".psd":
 		return true
 	}
 	return false
@@ -63,14 +70,14 @@ func guideExt(path string) bool {
 // альбома, запасной abs; CheckRel и paths.CheckLocalPath). Основного файла нет, а запасной
 // есть — запасной; нет нигде — основной, а запасной едет в alt (Cover.GuideAlt), как у фото.
 // Недопустимый путь или расширение — "" и строка в log.txt без пути: разметка только
-// подложка, её выбирают заново, а открыть альбом важнее.
-func loadGuide(path, abs, base string, v1 bool) (guide, alt string) {
+// подложка, её выбирают заново, а открыть альбом важнее. what — чья разметка, для log.txt.
+func loadGuide(what, path, abs, base string, v1 bool) (guide, alt string) {
 	if path == "" {
 		return "", ""
 	}
 	primary, alt, err := candidates(path, abs, base, v1)
 	if err != nil || !guideExt(primary) {
-		log.Print("обложка: файл разметки отброшен — недопустимый путь или тип")
+		log.Printf("%s: файл разметки отброшен — недопустимый путь или тип", what)
 		return "", ""
 	}
 	if alt == "" || !guideExt(alt) {
@@ -93,13 +100,24 @@ func encodeCover(c *model.Cover, base string) *FileCover {
 	}
 	fc := &FileCover{Cover: *c}
 	fc.GuideAlt = "" // в файле запасной путь — guideAbs
-	if r, ok := RelPath(base, c.Guide); c.Guide != "" && ok {
-		fc.Guide, fc.GuideAbs = r, c.Guide
-	}
-	if c.Guide != "" && c.GuideAlt != "" {
-		fc.GuideAbs = c.GuideAlt // разметки не нашлось при открытии: запасной путь как был
-	}
+	fc.Guide, fc.GuideAbs = encodeGuide(c.Guide, c.GuideAlt, base)
 	return fc
+}
+
+// encodeGuide — путь разметки для записи: внутри base — относительный с абсолютным рядом;
+// base == "" (черновик) — абсолютный; разметки не нашлось при открытии — запасной как был.
+func encodeGuide(guide, alt, base string) (path, abs string) {
+	if guide == "" {
+		return "", ""
+	}
+	path = guide
+	if r, ok := RelPath(base, guide); ok {
+		path, abs = r, guide
+	}
+	if alt != "" {
+		abs = alt
+	}
+	return path, abs
 }
 
 // coverNoAuto — у обложки нет «Авто»: если починка мест (SyncGrid(true)) сняла сетку
@@ -112,43 +130,56 @@ func coverNoAuto(p *model.Project) {
 	p.PruneRefs()
 }
 
-// relinkGuide — смена буквы диска для разметки обложки (RelinkDrive): файла нет на месте,
-// а на диске to есть. Relink по файлам фото разметку не трогает: она не фото.
-func relinkGuide(p *model.Project, from, to string) {
-	if p.Cover == nil || p.Cover.Guide == "" {
+// relinkGuides — смена буквы диска для разметок обложки и разворотов (RelinkDrive). Relink по
+// файлам фото разметку не трогает: она не фото.
+func relinkGuides(p *model.Project, from, to string) {
+	if p.Cover != nil {
+		relinkGuide(&p.Cover.Guide, &p.Cover.GuideAlt, from, to)
+	}
+	relinkGuide(&p.SpreadGuide, &p.SpreadGuideAlt, from, to)
+}
+
+// relinkGuide — файла *guide нет на месте, а на диске to есть: путь переезжает, запасной снят.
+func relinkGuide(guide, alt *string, from, to string) {
+	if *guide == "" {
 		return
 	}
-	if _, here := fileSize(p.Cover.Guide); here {
+	if _, here := fileSize(*guide); here {
 		return
 	}
-	if np, ok := paths.SwapDrive(p.Cover.Guide, from, to); ok {
+	if np, ok := paths.SwapDrive(*guide, from, to); ok {
 		if _, there := fileSize(np); there {
-			p.Cover.Guide, p.Cover.GuideAlt = np, ""
+			*guide, *alt = np, ""
 		}
 	}
 }
 
-// CheckGuide — путь файла-разметки из интерфейса или диалога (SetCoverGuide): абсолютный
-// локальный (paths.CheckLocalPath: без UNC и устройств) и только JPEG или PNG.
+// CheckGuide — путь файла-разметки из интерфейса или диалога (SetCoverGuide, SetSpreadGuide):
+// абсолютный локальный (paths.CheckLocalPath: без UNC и устройств) и только PSD, JPEG или PNG;
+// PSB — свой текст (066 №11).
 func CheckGuide(path string) error {
 	if err := paths.CheckLocalPath(path); err != nil {
 		return fmt.Errorf("файл разметки: %w", err)
 	}
+	if strings.EqualFold(filepath.Ext(path), ".psb") {
+		return library.ErrPSB
+	}
 	if !guideExt(path) {
-		return errors.New("файл разметки — только JPEG или PNG")
+		return errors.New("файл разметки — только PSD, JPEG или PNG")
 	}
 	return nil
 }
 
-// GuideSize — размер файла-разметки в пикселях (с учётом поворота EXIF); ok=false — файла
-// нет, он не картинка или том не отвечает (мёртвый сетевой диск не вешает вид, 019).
-func GuideSize(path string) (w, h int, ok bool) {
+// GuideInfo — сведения о файле-разметке (library.MarkupInfo: размер, у PSD — DPI и
+// направляющие); ok=false — файла нет, он не читается или том не отвечает (мёртвый сетевой
+// диск не вешает вид, 019).
+func GuideInfo(path string) (library.MarkupInfo, bool) {
 	if path == "" || !reachable(path) {
-		return 0, 0, false
+		return library.MarkupInfo{}, false
 	}
-	ph, err := library.ReadInfo(path)
+	m, err := library.MarkupFile(path)
 	if err != nil {
-		return 0, 0, false
+		return library.MarkupInfo{}, false
 	}
-	return ph.W, ph.H, true
+	return m, true
 }

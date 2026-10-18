@@ -72,6 +72,17 @@ func TestCoverWiring(t *testing.T) {
 	if v = k.ClearCoverGuide(); v.Rev != before {
 		t.Errorf("ClearCoverGuide без разметки: rev %d → %d", before, v.Rev)
 	}
+	// Разметки разворотов нет: ClearSpreadGuide холостая; есть — шаг, Changed зовётся (066).
+	calls := k.calls
+	if v = k.ClearSpreadGuide(); v.Rev != before || k.calls != calls+1 {
+		t.Errorf("ClearSpreadGuide без разметки: rev %d → %d, Changed %d", before, v.Rev, k.calls-calls)
+	}
+	if _, err := k.ed.SetSpreadGuide(`C:\Шаблоны\spread.psd`); err != nil {
+		t.Fatal(err)
+	}
+	if v = k.ClearSpreadGuide(); v.SpreadMarkup != nil || v.Rev != before+2 {
+		t.Errorf("ClearSpreadGuide: rev %d → %d, %+v", before, v.Rev, v.SpreadMarkup)
+	}
 
 	// Снять обложку: вид без неё; повторно — холостая. Undo возвращает обложку.
 	if v = k.DeleteCover(); v.Cover != nil {

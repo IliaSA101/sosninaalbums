@@ -76,7 +76,7 @@ func refPlanDP(cols [][]float64, n, N, K int) [][2]int {
 }
 
 // planGeoms — геометрии эталона и поля 0 (фото страниц у самого корешка).
-var planGeoms = append(slices.Clone(goldenGeoms), layout.Params{PageW: 300, PageH: 300, Margin: 0, Gap: 3, Layflat: true})
+var planGeoms = append(slices.Clone(goldenGeoms), layout.Params{PageW: 300, PageH: 300, Margin: 0, Gap: 3, Layflat: true, FoldAny: true})
 
 // planSets — наборы пропорций: свадьба, кадрирование, случайные и крайние (панорамы, полоски).
 func planSets(seed uint64, n int) [][]float64 {

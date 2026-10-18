@@ -7,7 +7,12 @@ import (
 	"testing"
 )
 
-var album30 = Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true}
+// album30 — квадратный layflat-альбом 30×30 в положении «любые фото»: прежнее поведение
+// бит-в-бит, на нём эталоны (064, decisions 0.15 №18). «Только широкие» — album30wide.
+var album30 = Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true, FoldAny: true}
+
+// album30wide — тот же альбом при «только широкие» (правило сгиба FoldOK действует).
+var album30wide = Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true}
 
 const (
 	L = 1.5     // горизонтальное 3:2
@@ -22,7 +27,7 @@ var invariantCases = [][]float64{
 	{P, P, P, P, P, P, P, P, P, P, P, P}, // 12 — ряды/колонки
 }
 
-var invariantParams = []Params{album30, {PageW: 300, PageH: 200, Margin: 10, Gap: 4, Layflat: false}}
+var invariantParams = []Params{album30, {PageW: 300, PageH: 200, Margin: 10, Gap: 4, Layflat: false}, album30wide}
 
 // rows — все ряды, которые видит интерфейс: порядок ленты, перестановки,
 // ряды страниц для первых постраничных раскладок и для раскладок «в край»,
@@ -91,10 +96,20 @@ func TestInvariants(t *testing.T) {
 						t.Errorf("%v %s: ключ %s повторяется", asp, name, r.Key)
 					}
 					seen[r.Key] = true
-					checkResult(t, asp, params, r)
+					checkRow(t, asp, params, r)
 				}
 			}
 		}
+	}
+}
+
+// checkRow — checkResult для результата ряда: ещё и правило сгиба (064). Build его не
+// проверяет — стоящий ключ строится и вне правила (decisions 0.15 №1).
+func checkRow(t *testing.T, asp []float64, p Params, r Result) {
+	t.Helper()
+	checkResult(t, asp, p, r)
+	if !FoldOK(r.Rects, asp, p) {
+		t.Errorf("%s: фото на сгибе вне правила (FoldAny=%t): %+v", r.Key, p.FoldAny, r.Rects)
 	}
 }
 
@@ -487,18 +502,26 @@ func ascii(r Result, p Params) string {
 	return b.String()
 }
 
-func BenchmarkEight(b *testing.B) {
+// Бенчмарки скорости — при «любые» (album30, прежнее поведение, сравнимо с 020) и при «только
+// широкие» (*Wide, album30wide — по умолчанию у новых альбомов; цель 064 — не хуже +5 %).
+func BenchmarkEight(b *testing.B)     { benchEight(b, album30) }
+func BenchmarkEightWide(b *testing.B) { benchEight(b, album30wide) }
+
+func benchEight(b *testing.B, p Params) {
 	asp := []float64{P, P, L, P, L, L, P, S}
 	for b.Loop() {
-		Layouts(asp, album30, 12)
+		Layouts(asp, p, 12)
 	}
 }
 
-func BenchmarkRearranged7(b *testing.B) {
+func BenchmarkRearranged7(b *testing.B)     { benchRearranged7(b, album30) }
+func BenchmarkRearranged7Wide(b *testing.B) { benchRearranged7(b, album30wide) }
+
+func benchRearranged7(b *testing.B, p Params) {
 	asp := []float64{P, L, P, L, P, L, P}
 	for b.Loop() {
 		resetCache()
-		Rearranged(asp, album30, 24)
+		Rearranged(asp, p, 24)
 	}
 }
 
@@ -511,14 +534,17 @@ func BenchmarkRearranged7Distinct(b *testing.B) {
 }
 
 // BenchmarkLayouts16 — худший случай Layouts: 16 случайных пропорций (5 наборов по кругу).
-func BenchmarkLayouts16(b *testing.B) {
+func BenchmarkLayouts16(b *testing.B)     { benchLayouts16(b, album30) }
+func BenchmarkLayouts16Wide(b *testing.B) { benchLayouts16(b, album30wide) }
+
+func benchLayouts16(b *testing.B, p Params) {
 	var sets [5][]float64
 	for i := range sets {
 		sets[i] = goldenAspects(uint64(i), 16, 2)
 	}
 	i := 0
 	for b.Loop() {
-		Layouts(sets[i%len(sets)], album30, 24)
+		Layouts(sets[i%len(sets)], p, 24)
 		i++
 	}
 }

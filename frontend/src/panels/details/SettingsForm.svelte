@@ -7,30 +7,14 @@
   import { onMount, untrack } from 'svelte'
   import { Api, store } from '../../base/core/store.svelte'
   import type { PagePreset, Settings } from '../../base/core/types'
+  import Seg from '../../base/tpl/Seg.svelte'
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
   import { SHEET_PRESETS, isSheet, newSheetSize } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
+  import MarkupBlock from '../markup/MarkupBlock.svelte'
+  import { FOLD_ITEMS, foldChangeNote, foldFields, foldNote, foldOf } from './fold'
   import { groupLabel, presetActive, presetFields, presetGroupOf, presetRows, exportPx, type Preset } from './presets'
-
-  const NUMS = ['pageW', 'pageH', 'margin', 'gap', 'dpi', 'safe'] as const
-
-  // Поле number при пустом вводе даёт null — приводим к числу при сравнении и сохранении.
-  const norm = (x: Settings): Settings => ({
-    pageW: Number(x.pageW),
-    pageH: Number(x.pageH),
-    margin: Number(x.margin),
-    gap: Number(x.gap),
-    dpi: Number(x.dpi),
-    safe: Number(x.safe),
-    layflat: !!x.layflat,
-    bg: x.bg ?? '', // "" — белый
-    sheet: x.sheet, // Go режим не меняет: лист остаётся листом
-  })
-  const same = (a: Settings, b: Settings) => {
-    const x = norm(a)
-    const y = norm(b)
-    return x.layflat === y.layflat && x.bg === y.bg && NUMS.every((k) => x[k] === y[k])
-  }
+  import { NUMS, norm, same } from './settingsnorm'
 
   // base — настройки, с которыми форма сверялась последний раз.
   let base = $state<Settings>({ ...store.view.settings })
@@ -40,7 +24,16 @@
   const differs = $derived(!same(s, store.view.settings))
   const valid = $derived.by(() => {
     const n = norm(s)
-    return n.pageW > 0 && n.pageH > 0 && n.dpi > 0 && n.margin >= 0 && n.gap >= 0 && n.safe >= 0 && NUMS.every((k) => Number.isFinite(n[k]))
+    return (
+      n.pageW > 0 &&
+      n.pageH > 0 &&
+      n.dpi > 0 &&
+      n.margin >= 0 &&
+      n.gap >= 0 &&
+      n.safe >= 0 &&
+      (n.bleed ?? 0) >= 0 &&
+      NUMS.every((k) => Number.isFinite(n[k]))
+    )
   })
 
   // Настройки сменились не отсюда (Undo, второе окно): без своих правок форма подтягивает их.
@@ -127,6 +120,9 @@
   <label title="Значимое — не ближе к краю; пунктир — Вид → Безопасная зона"
     >Безопасная зона, мм <input type="number" min="0" max="30" step="0.5" bind:value={s.safe} /></label
   >
+  <label title="Срежется при обрезке; полоса — Вид → Безопасная зона"
+    >Обрез, мм <input type="number" min="0" max="10" step="0.5" bind:value={() => s.bleed ?? 0, (v) => (s.bleed = v)} /></label
+  >
   <label>Промежуток между фото, мм <input type="number" min="0" max="30" step="0.5" bind:value={s.gap} /></label>
   <label>Разрешение экспорта, dpi <input type="number" min="150" max="600" step="50" bind:value={s.dpi} /></label>
   <label>
@@ -135,10 +131,17 @@
     <ColorPicker value={s.bg || '#ffffff'} label={sheet ? 'Цвет листов' : 'Цвет страниц альбома'} onpick={(c) => (s.bg = c)} />
   </label>
   {#if !sheet}
-    <label class="check">
-      <input type="checkbox" bind:checked={s.layflat} />
-      Фото может проходить через корешок (layflat-альбом)
-    </label>
+    <!-- Положение — в черновике формы; Go применит «Применить» (SetSettings, один шаг undo) -->
+    <div class="fold" data-guide="fold-mode">
+      <span class="cap" title="Для layflat-альбомов: разворот раскрывается плоско">Фото через корешок</span>
+      <div class="foldseg">
+        <Seg look="card" label="Фото через корешок" items={FOLD_ITEMS} value={foldOf(s)} onpick={(m) => Object.assign(s, foldFields(m))} />
+      </div>
+      <p class="note">{foldNote(foldOf(s))}</p>
+      {#if foldChangeNote(foldOf(store.view.settings), foldOf(s))}
+        <p class="note change">{foldChangeNote(foldOf(store.view.settings), foldOf(s))}</p>
+      {/if}
+    </div>
   {/if}
 </div>
 {#if valid}
@@ -155,6 +158,12 @@
 <div class="actions">
   <button class="ghost" disabled={!differs} onclick={reset}>Сбросить</button>
   <button class="accent" disabled={!differs || !valid} onclick={apply}>Применить</button>
+</div>
+
+<!-- Не часть формы: файл выбирается сразу, один шаг отмены (066) -->
+<div class="markup">
+  <MarkupBlock kind="spreads" guide={store.view.spreadMarkup ?? null} />
+  <p class="note">Файл разметки действует сразу, без «Применить».</p>
 </div>
 
 <style>
@@ -210,8 +219,18 @@
   .pair input[type='number'] {
     width: 70px;
   }
-  .check {
-    justify-content: flex-start;
+  .fold .cap {
+    display: block;
+  }
+  .foldseg {
+    margin-top: 6px;
+  }
+  .fold .note {
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+  .fold .note.change {
+    color: #cfcfd4;
   }
   .note {
     font-size: 12px;
@@ -220,6 +239,14 @@
   }
   .note.bad {
     color: #e0806f;
+  }
+  .markup {
+    margin-top: 14px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+  }
+  .markup .note {
+    margin: 4px 0 0;
   }
   .actions {
     display: flex;

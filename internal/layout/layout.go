@@ -31,6 +31,10 @@ type Params struct {
 	Margin  float64 // поле по краю страницы, мм
 	Gap     float64 // промежуток между фото, мм
 	Layflat bool    // фото может идти через корешок
+	// FoldAny — при Layflat через корешок любые фото (правило сгиба выключено); false — только
+	// широкие (FoldOK, владелец 2026-10-17). Без Layflat и у листа не действует. Нулевое —
+	// строгое правило: забытый литерал Params{Layflat: true} лицо на сгиб не пускает.
+	FoldAny bool
 	// Sheet — отдельный лист шириной 2·PageW без корешка (виньетка 031): штрафа корешка
 	// нет, постраничных вариантов (P[…], B[right…], B[pages…]) нет. Требует Layflat.
 	Sheet bool
@@ -62,7 +66,9 @@ func Layouts(aspects []float64, p Params, limit int) []Result {
 // LegacyLayouts — Layouts в порядке до 0.10: равные оценки по точным битам и порядку
 // перебора. Только для миграции старых альбомов: их «Авто» остаётся тем, что было на
 // этой машине (решение 95). С ManyFrom — то же, что Layouts (таких альбомов до 0.10 не было).
+// Правило сгиба не действует (decisions 0.15 №14): иначе изменилось бы прежнее «Авто».
 func LegacyLayouts(aspects []float64, p Params, limit int) []Result {
+	p.FoldAny = true
 	return layouts(aspects, p, limit, legacyOrder)
 }
 
@@ -107,13 +113,14 @@ func layouts(aspects []float64, p Params, limit int, o order) []Result {
 	// Нужны только блоки, способные войти в первые limit различных ключей; в all они
 	// идут в порядке перебора, как раньше, — тогда итоговая сортировка та же.
 	// Равенство с прежним порядком доказано для конечных оценок; для конечных пропорций
-	// они конечны: aspectOf > 0 и place ≥ 1 мм.
+	// они конечны: aspectOf > 0 и place ≥ 1 мм. Правило сгиба — до отбора keep: иначе
+	// ряд короче при тех же кандидатах.
 	if p.Layflat {
 		keep := limit
 		if keep <= 0 {
 			keep = -1 // topUnique при limit 0 отдаёт все
 		}
-		cs, _ := bestBlocksIn(o, aspects, g.spread, p.Gap, g.spine, keep, true)
+		cs, _ := bestBlocksIn(o, aspects, g.spread, p.Gap, g.spine, keep, true, foldOf(p))
 		slices.SortFunc(cs, func(a, b candidate) int { return cmp.Compare(a.tree, b.tree) })
 		for _, c := range cs {
 			all = append(all, c.Result)
@@ -140,7 +147,8 @@ func layouts(aspects []float64, p Params, limit int, o order) []Result {
 
 	// 3. Фото в край, с обрезкой: на весь разворот или по странице.
 	if n == 1 {
-		if p.Layflat {
+		// Ширина — по кадру: «в край» рамка шире обрезанного кадра (№13).
+		if p.Layflat && FoldOK([]Rect{g.full}, aspects, p) {
 			all = appendBleed(all, aspects, []Rect{g.full}, g, "B[full:0]")
 		}
 		if !p.Sheet {
@@ -194,7 +202,7 @@ func topBlocks(o order, aspects []float64, box Rect, gap float64, limit int) []c
 	if len(aspects) == 0 {
 		return []candidate{{Result: Result{Key: "-"}}}
 	}
-	cs, _ := bestBlocksIn(o, aspects, box, gap, -1, limit, false)
+	cs, _ := bestBlocksIn(o, aspects, box, gap, -1, limit, false, nil)
 	return cs[:min(len(cs), limit)]
 }
 
@@ -218,13 +226,14 @@ func desc(a, b float64) int {
 // При NaN в оценке отдаёт все: порядок сортировки с NaN зависит от всего списка,
 // и отсекать нельзя (из настоящих пропорций NaN не бывает). Ничьи (tieQ) — по номеру дерева.
 func bestBlocks(aspects []float64, box Rect, gap, spine float64, keep int, unique bool) (out []candidate, trees int) {
-	return bestBlocksIn(tieOrder, aspects, box, gap, spine, keep, unique)
+	return bestBlocksIn(tieOrder, aspects, box, gap, spine, keep, unique, nil)
 }
 
 // bestBlocksIn — bestBlocks в порядке o. В tieOrder с unique после первых keep идут и все
 // равные последнему: выдачу (topUnique) при ничьей упорядочивает ключ, и отсечённый по
 // номеру дерева блок с меньшим ключом иначе пропал бы из первых limit.
-func bestBlocksIn(o order, aspects []float64, box Rect, gap, spine float64, keep int, unique bool) (out []candidate, trees int) {
+// fold != nil — блоки вне правила сгиба (FoldOK) отбрасываются до сортировки и keep.
+func bestBlocksIn(o order, aspects []float64, box Rect, gap, spine float64, keep int, unique bool, fold *Params) (out []candidate, trees int) {
 	n := len(aspects)
 	roots := newEnum(aspects, gap).roots(n)
 	type scored struct { // без указателей: сортировка дешёвая
@@ -235,7 +244,7 @@ func bestBlocksIn(o order, aspects []float64, box Rect, gap, spine float64, keep
 	list := make([]scored, 0, len(roots))
 	for i, t := range roots {
 		h, ok := fitTree(t, box, gap, buf)
-		if !ok {
+		if !ok || fold != nil && !FoldOK(buf, nil, *fold) {
 			continue
 		}
 		s := score(buf, box, spine, t.depth)

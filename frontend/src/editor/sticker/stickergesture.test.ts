@@ -81,7 +81,7 @@ const view = (stickers: StickerView[] = [mk('k1')], grid = false, texts: unknown
         bg: ['#fff', '#fff'],
       },
     ],
-    settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, dpi: 300, bg: '' },
+    settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, foldAny: false, dpi: 300, bg: '' },
     folders: [],
     rev: rev++,
     safe: [],

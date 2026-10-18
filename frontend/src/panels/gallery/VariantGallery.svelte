@@ -4,6 +4,8 @@
   import { gallery } from './gallery.svelte'
   import { plural } from '../../base/words/plural'
   import { newSheetSize, sheetSize } from '../../base/geom/sheet'
+  import LayoutCard from '../../base/tpl/LayoutCard.svelte'
+  import MoreTile from '../../base/tpl/MoreTile.svelte'
   import Seg from '../../base/tpl/Seg.svelte'
   import SideList from '../../base/tpl/SideList.svelte'
   import TplRow from '../../base/tpl/TplRow.svelte'
@@ -31,7 +33,6 @@
   const sp = $derived(store.view.spreads.find((x) => x.id === g.spread))
   // Плитка — пропорции листа (Go: sv.w × sv.h); нет листа — по настройкам.
   const sheet = $derived(sp ? sheetSize(sp) : newSheetSize(store.view.settings))
-  const cardW = $derived((H * sheet.w) / sheet.h)
   // Варианты показываем, только если они посчитаны для этого разворота.
   const c = $derived(gallery.choices?.spread === g.spread ? gallery.choices : null)
   const rows = $derived<ChoiceRows | null>(c ? (g.scope === 'spread' ? c.whole : c[g.scope]) : null)
@@ -107,109 +108,38 @@
   {#each row.parts as p (p.line)}
     {#if p.sep}<TplSep label={p.sep} title="Другие варианты: воздух и с главным фото" />{/if}
     {#each p.shown as ch (ch.key)}
-      <button
-        class="card"
-        class:current={ch.key === sp?.layout}
+      <LayoutCard
+        rects={ch.rects}
+        {sheet}
+        h={H}
+        {page}
+        current={ch.key === sp?.layout}
         title={tileTitle(ch)}
-        style:width="{cardW}px"
-        style:height="{H}px"
         onmouseenter={() => gallery.previewChoice(ch)}
         onmouseleave={() => gallery.previewChoice(null)}
         onclick={() => pick(ch)}
-      >
-        {#each ch.rects as r, i (i)}
-          <span
-            class="cell"
-            style:left="{(r.x / sheet.w) * 100}%"
-            style:top="{(r.y / sheet.h) * 100}%"
-            style:width="{(r.w / sheet.w) * 100}%"
-            style:height="{(r.h / sheet.h) * 100}%"
-          ></span>
-        {/each}
-        <span class="spine"></span>
-        {#if page}
-          <span class="other" style:left={page === 'left' ? '50%' : '0'}></span>
-        {/if}
-      </button>
+      />
     {/each}
     {#if p.hidden > 0}
       {@const open = gallery.openTwins.includes(p.line)}
-      <button
-        class="card more"
-        style:width="{cardW}px"
-        style:height="{H}px"
-        aria-expanded={open}
+      <MoreTile
+        {sheet}
+        h={H}
+        expanded={open}
+        label={twinsLabel(p.hidden, open)}
+        title="Раскладки, почти не отличающиеся от соседних"
         onclick={() => gallery.toggleTwins(p.line)}
-        title="Раскладки, почти не отличающиеся от соседних">{twinsLabel(p.hidden, open)}</button
-      >
+      />
     {/if}
     {#if p.more}
-      <button
-        class="card more"
-        style:width="{cardW}px"
-        style:height="{H}px"
+      <MoreTile
+        {sheet}
+        h={H}
         disabled={gallery.moreBusy}
+        label={gallery.moreBusy ? 'Считаю…' : 'Ещё'}
+        title="Досчитать ещё 12 раскладок"
         onclick={more}
-        title="Досчитать ещё 12 раскладок">{gallery.moreBusy ? 'Считаю…' : 'Ещё'}</button
-      >
+      />
     {/if}
   {/each}
 </TplRow>
-
-<style>
-  .card {
-    all: unset;
-    flex: none;
-    position: relative;
-    background: #fff;
-    cursor: pointer;
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-    transition: outline-color 0.15s;
-  }
-  .card:hover {
-    outline-color: #8a8a90;
-  }
-  .card.current {
-    outline-color: var(--accent);
-  }
-  /* Плитка «Ещё» и «Похожие» — не раскладка: пунктир на фоне панели */
-  .card.more {
-    display: grid;
-    place-items: center;
-    background: transparent;
-    outline: 1px dashed var(--line);
-    outline-offset: 0;
-    color: var(--muted);
-    font-size: 13px;
-    text-align: center;
-  }
-  .card.more:hover:not(:disabled) {
-    outline-color: #8a8a90;
-    color: var(--text);
-  }
-  .card.more:disabled {
-    cursor: progress;
-  }
-  .cell {
-    position: absolute;
-    background: #d8d8d8;
-    box-shadow: inset 0 0 0 1px #a8a8a8;
-  }
-  .spine {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: rgba(0, 0, 0, 0.25);
-  }
-  /* Галерея страницы: чужая половина не участвует */
-  .other {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 50%;
-    background: #555;
-  }
-</style>

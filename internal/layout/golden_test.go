@@ -44,7 +44,29 @@ func TestGoldenLayouts(t *testing.T) {
 	if runtime.GOARCH != "amd64" {
 		t.Skip("эталон снят на amd64")
 	}
-	checkGolden(t, goldenPath, goldenCorpus())
+	checkGolden(t, goldenPath, goldenCorpus(false))
+}
+
+const goldenWidePath = "testdata/golden/layouts-wide.sha"
+
+// TestGoldenLayoutsWide — корпус layouts.sha на layflat-геометриях при «только широкие»
+// (064): прежний файл доказывает «любые» = старое, этот — новое правило.
+func TestGoldenLayoutsWide(t *testing.T) {
+	if runtime.GOARCH != "amd64" {
+		t.Skip("эталон снят на amd64")
+	}
+	checkGolden(t, goldenWidePath, goldenCorpus(true))
+}
+
+// geomAt — геометрия g из gs; wide — в положении «только широкие» (FoldAny false, *-wide.sha).
+// false — у геометрии без layflat «широкие» ничего не меняют: группы нет.
+func geomAt(gs []Params, g int, wide bool) (Params, bool) {
+	p := gs[g]
+	if wide {
+		p.FoldAny = false
+		return p, p.Layflat
+	}
+	return p, true
 }
 
 const goldenLegacyPath = "testdata/golden/legacy.sha"
@@ -78,15 +100,28 @@ func TestGoldenLegacy(t *testing.T) {
 	checkGolden(t, goldenLegacyPath, got)
 }
 
-const goldenFirst16Path = "testdata/golden/first16.sha"
+const (
+	goldenFirst16Path     = "testdata/golden/first16.sha"
+	goldenFirst16WidePath = "testdata/golden/first16-wide.sha"
+)
 
 // TestGoldenFirst16 — ключ первой раскладки (Layouts(…, 24)[0], «Авто») на 1…16 фото:
 // goldenGeoms × три набора goldenAspects. Как first.sha для 17–64 — без оценок и Rects, поэтому
 // сверяется и на arm64: ничьи решают tieQ и ключ (решение 95), а не шум FMA. -update — только
 // при осознанной смене раскладки.
 func TestGoldenFirst16(t *testing.T) {
+	checkGolden(t, goldenFirst16Path, goldenFirst16(false))
+	checkGolden(t, goldenFirst16WidePath, goldenFirst16(true)) // «только широкие» (064)
+}
+
+// goldenFirst16 — группы TestGoldenFirst16; wide — как geomAt.
+func goldenFirst16(wide bool) []goldenGroup {
 	var got []goldenGroup
-	for g, p := range goldenGeoms {
+	for g := range goldenGeoms {
+		p, ok := geomAt(goldenGeoms, g, wide)
+		if !ok {
+			continue
+		}
 		for set := range 3 {
 			gr := goldenGroup{name: fmt.Sprintf("p%d/набор%d", g, set), cases: make([]goldenCase, goldenMaxN)}
 			var wg sync.WaitGroup
@@ -101,7 +136,7 @@ func TestGoldenFirst16(t *testing.T) {
 			got = append(got, gr)
 		}
 	}
-	checkGolden(t, goldenFirst16Path, got)
+	return got
 }
 
 // checkGolden сверяет группы с файлом эталона path или перезаписывает его (-update).
@@ -196,10 +231,11 @@ func goldenAspects(seed uint64, n, set int) []float64 {
 	return out
 }
 
+// goldenGeoms — layflat-геометрии в «любые фото» (прежнее поведение); «широкие» — geomAt.
 var goldenGeoms = []Params{
 	album30,
 	{PageW: 300, PageH: 200, Margin: 10, Gap: 4, Layflat: false},
-	{PageW: 200, PageH: 300, Margin: 5, Gap: 0, Layflat: true},
+	{PageW: 200, PageH: 300, Margin: 5, Gap: 0, Layflat: true, FoldAny: true},
 }
 
 // goldenSets — какие наборы пропорций берём на n фото: счёт дорожает быстро, поэтому
@@ -256,9 +292,8 @@ func pagedKeys(asp []float64, p Params) []string {
 	return keys
 }
 
-// goldenN считает группы L, R, P0, P1 для геометрии g и числа фото n.
-func goldenN(g, n int) []goldenGroup {
-	p := goldenGeoms[g]
+// goldenN считает группы L, R, P0, P1 для геометрии p (номер g — в имени группы) и n фото.
+func goldenN(g int, p Params, n int) []goldenGroup {
 	kinds := []string{"L", "R", "P0", "P1"}
 	groups := make([]goldenGroup, len(kinds))
 	for i, k := range kinds {
@@ -298,14 +333,19 @@ func goldenN(g, n int) []goldenGroup {
 }
 
 // goldenCorpus считает весь корпус параллельно; порядок групп фиксирован по имени.
-func goldenCorpus() []goldenGroup {
+// wide — как geomAt.
+func goldenCorpus(wide bool) []goldenGroup {
 	var jobs []func() []goldenGroup
 	for g := range goldenGeoms {
+		p, ok := geomAt(goldenGeoms, g, wide)
+		if !ok {
+			continue
+		}
 		for n := 1; n <= goldenMaxN; n++ {
 			if g > 0 && n >= 13 && n < goldenMaxN {
 				continue // 13…15 дороги; на 2-й и 3-й геометрии берём только предел
 			}
-			jobs = append(jobs, func() []goldenGroup { return goldenN(g, n) })
+			jobs = append(jobs, func() []goldenGroup { return goldenN(g, p, n) })
 		}
 	}
 	res := make([][]goldenGroup, len(jobs))

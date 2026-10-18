@@ -30,6 +30,28 @@ func safeZone(g model.Geo, m float64) []layout.Rect {
 	return out
 }
 
+// bleedStrips — полосы обреза m мм по внешнему краю листа g (066): верх и низ во всю ширину,
+// лево и право — между ними. У сгиба полос нет ни с layflat, ни без: обрез — край файла.
+func bleedStrips(g model.Geo, m float64) []layout.Rect {
+	m = min(m, g.W/2, g.H/2)
+	if m <= 0 {
+		return nil
+	}
+	side := max(g.H-2*m, 0)
+	return []layout.Rect{
+		{W: g.W, H: m}, {Y: g.H - m, W: g.W, H: m},
+		{Y: m, W: m, H: side}, {X: g.W - m, Y: m, W: m, H: side},
+	}
+}
+
+// sheetWord — чем считается лист разметки разворотов в строке Warn: разворот или лист 031.
+func sheetWord(p *model.Project) string {
+	if p.Settings.Sheet {
+		return model.MarkupSheet
+	}
+	return model.MarkupSpread
+}
+
 // State — поля Editor, которые попадают в View (проект их не хранит).
 type State struct {
 	Path             string
@@ -38,8 +60,9 @@ type State struct {
 	Rev, MarksRev    int
 	// Print — вид печати (Editor.Snapshot, экспорт): пустые поля — пусто, заглушек нет (030).
 	Print bool
-	// Guide — размер файла-разметки обложки (Editor читает его один раз на путь).
-	Guide Guide
+	// CoverGuide, SpreadGuide — что Editor прочитал о файлах-разметках обложки и разворотов
+	// (один раз на путь, 066).
+	CoverGuide, SpreadGuide Guide
 }
 
 // BuildView — вид проекта p с состоянием редактора st (вызов под замком Editor).
@@ -57,12 +80,15 @@ func BuildView(p *model.Project, st State) model.View {
 
 		MaxSpreadPhotos: model.MaxPhotos,
 		Safe:            safeZone(p.Geo(nil), p.Settings.Safe),
+		Bleed:           bleedStrips(p.Geo(nil), p.Settings.Bleed),
 		MinDPI:          min(lowDPILimit, p.Settings.DPI),
 		TextMaxW:        p.TextMaxW(nil),
 		BackdropUsed:    []string{},
 		LibPhotos:       libPhotos(p),
 		MarksRev:        st.MarksRev,
 	}
+	g := p.Geo(nil)
+	v.SpreadMarkup = markupOf(p.SpreadGuide, st.SpreadGuide, g.W, g.H, sheetWord(p))
 	f := newFields(p, st.Print)
 	ls := layAll(p, p.Spreads)
 	for i, s := range p.Spreads {

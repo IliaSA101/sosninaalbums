@@ -43,6 +43,9 @@ func refLayouts(o order, asp []float64, p Params, limit int) []Result {
 	if p.Layflat {
 		cs, _ := blockCandidates(asp, g.spread, p.Gap)
 		for _, c := range cs {
+			if !FoldOK(c.Rects, nil, p) { // 064: правило сгиба до отбора limit
+				continue
+			}
 			c.Score = score(c.Rects, g.spread, g.spine, c.depth)
 			all = append(all, c.Result)
 		}
@@ -63,7 +66,7 @@ func refLayouts(o order, asp []float64, p Params, limit int) []Result {
 		}
 	}
 	if n == 1 {
-		if p.Layflat {
+		if p.Layflat && FoldOK([]Rect{g.full}, asp, p) {
 			all = appendBleed(all, asp, []Rect{g.full}, g, "B[full:0]")
 		}
 		all = appendBleed(all, asp, []Rect{g.bleed[1]}, g, "B[right:0]")
@@ -131,7 +134,7 @@ func TestBestBlocksSame(t *testing.T) {
 				nans++
 			}
 			for _, keep := range []int{-1, 1, 4, 24} {
-				got, _ := bestBlocksIn(o, c.asp, g.spread, album30.Gap, g.spine, keep, false)
+				got, _ := bestBlocksIn(o, c.asp, g.spread, album30.Gap, g.spine, keep, false, nil)
 				want := ref
 				if keep >= 0 && !nan {
 					want = want[:min(len(want), keep)]
@@ -156,9 +159,10 @@ func TestBestBlocksSame(t *testing.T) {
 // порядке и на точных ничьих (tieSets): отсев блоков не меняет выдачу.
 func TestLayoutsSameAsBefore(t *testing.T) {
 	cases := slices.Clone(bestCases)
-	few, geoms := 8, goldenGeoms
+	// «Только широкие» (064) — тот же прежний путь с фильтром сгиба до отбора limit.
+	few, geoms := 8, append(slices.Clone(goldenGeoms), album30wide)
 	if testkit.Lite() {
-		few, geoms = 5, goldenGeoms[:1]
+		few, geoms = 5, []Params{album30, album30wide}
 	}
 	for _, asp := range tieSets[:few] { // до 8 фото: и деревья, и ряды; больше — долго
 		cases = append(cases, struct {
@@ -222,7 +226,7 @@ func TestBestBlocksUniqueSame(t *testing.T) {
 			ref := refBlocks(o, asp, g.spread, album30.Gap, g.spine)
 			nan := slices.ContainsFunc(ref, func(r candidate) bool { return math.IsNaN(r.Score) })
 			for _, keep := range []int{-1, 1, 4, 24} {
-				cs, _ := bestBlocksIn(o, asp, g.spread, album30.Gap, g.spine, keep, true)
+				cs, _ := bestBlocksIn(o, asp, g.spread, album30.Gap, g.spine, keep, true, nil)
 				got := make([]Result, len(cs))
 				for i, c := range cs {
 					got[i] = c.Result

@@ -19,11 +19,14 @@ var (
 	geomWide = layout.Params{PageW: 300, PageH: 200, Margin: 12, Gap: 3, Layflat: true}
 	geomFlat = layout.Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: false}
 	geomSh   = layout.Params{PageW: 300, PageH: 300, Margin: 12, Gap: 3, Layflat: true, Sheet: true}
-	geoms    = []struct {
-		name string
-		p    layout.Params
-	}{{"30x30", geomSq}, {"30x20", geomWide}, {"30x30-flat", geomFlat}, {"30x30-sheet", geomSh}}
+	geoms    = []namedGeom{{"30x30", geomSq}, {"30x20", geomWide}, {"30x30-flat", geomFlat}, {"30x30-sheet", geomSh}}
 )
+
+// namedGeom — геометрия теста с именем для сообщений и строк эталона.
+type namedGeom struct {
+	name string
+	p    layout.Params
+}
 
 const (
 	aspL = 1.5       // горизонтальное 3:2

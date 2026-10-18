@@ -126,6 +126,9 @@ const CoverGroupNetprint = "Нетпринт"
 const (
 	fsferaWrap                       = 20.0
 	fsferaCoverSafe, fsferaSpineSafe = 8.0, 12.0
+	// fsferaBleed — обрез разворота: в PSD 20×30, 25×25, 30×30 — 2 мм (066 research §2.1);
+	// у прочих форматов — по исследованию 047 («2 мм у всех»).
+	fsferaBleed = 2.0
 )
 
 // PrintFormat — формат изделия типографии: страница альбома и шаблон обложки, мм.
@@ -134,6 +137,7 @@ type PrintFormat struct {
 	Name         string  // "30×30"
 	PageW, PageH float64 // страница с вылетом (половина файла разворота)
 	Safe         float64 // безопасная зона разворота от края файла
+	Bleed        float64 // обрез разворота от края файла (066: розовое поле PSD)
 	SideW, SideH float64 // сторонка обложки
 	Wrap         float64 // заворот
 }
@@ -143,7 +147,7 @@ type PrintFormat struct {
 func FsferaFormats() []PrintFormat {
 	f := func(name string, pw, ph, safe, sw, sh, wrap float64) PrintFormat {
 		return PrintFormat{ID: "fsfera-" + strings.ReplaceAll(name, "×", "x"), Name: name,
-			PageW: pw, PageH: ph, Safe: safe, SideW: sw, SideH: sh, Wrap: wrap}
+			PageW: pw, PageH: ph, Safe: safe, Bleed: fsferaBleed, SideW: sw, SideH: sh, Wrap: wrap}
 	}
 	return []PrintFormat{
 		f("20×15", 201, 152, 10, 206, 156, 20),
@@ -165,6 +169,7 @@ type PagePreset struct {
 	DPI     int     `json:"dpi,omitempty"`
 	Layflat bool    `json:"layflat,omitempty"` // true — ставит layflat; пресетов с false нет
 	Safe    float64 `json:"safe,omitempty"`
+	Bleed   float64 `json:"bleed,omitempty"` // обрез (066); 0 — пресет его не задаёт
 	Hint    string  `json:"hint,omitempty"`
 }
 
@@ -181,7 +186,7 @@ func PagePresets() []PagePreset {
 		{Label: "40×30", W: 400, H: 300},
 	}
 	for _, f := range FsferaFormats() {
-		out = append(out, PagePreset{Label: f.Name, Group: CoverGroupFsfera, W: f.PageW, H: f.PageH, DPI: 300, Layflat: true, Safe: f.Safe,
+		out = append(out, PagePreset{Label: f.Name, Group: CoverGroupFsfera, W: f.PageW, H: f.PageH, DPI: 300, Layflat: true, Safe: f.Safe, Bleed: f.Bleed,
 			Hint: "Фотосфера Pro: JPEG sRGB 300 dpi, 00.jpg — обложка, 01.jpg… — развороты; важное — не ближе " + MmText(f.Safe) + " мм к краю"})
 	}
 	return append(out, netprintPresets()...)
@@ -189,9 +194,10 @@ func PagePresets() []PagePreset {
 
 // netprintPresets — Нетпринт «Премиум» твёрдой обложки (058 №16, netprint.ru «Технические размеры
 // фотокниг Премиум», 17.10): страница — половина дообрезного разворота; важное — 10 мм от края
-// (3 мм обреза + 7 мм зоны возможной обрезки; гипотеза — сверить при QA).
+// (3 мм обреза + 7 мм зоны возможной обрезки; гипотеза — сверить при QA). Обрез 3 мм — тоже
+// гипотеза (066 decisions №5): сверить по шаблону Нетпринта, когда будет.
 func netprintPresets() []PagePreset {
-	const safe = 10.0
+	const safe, bleed = 10.0, 3.0
 	rows := []struct {
 		label string
 		w, h  float64
@@ -201,7 +207,7 @@ func netprintPresets() []PagePreset {
 	}
 	out := make([]PagePreset, len(rows))
 	for i, r := range rows {
-		out[i] = PagePreset{Label: r.label, Group: CoverGroupNetprint, W: r.w, H: r.h, DPI: 300, Layflat: true, Safe: safe,
+		out[i] = PagePreset{Label: r.label, Group: CoverGroupNetprint, W: r.w, H: r.h, DPI: 300, Layflat: true, Safe: safe, Bleed: bleed,
 			Hint: "Нетпринт Премиум: JPEG 300 dpi, разворотами; важное — не ближе " + MmText(safe) + " мм к краю"}
 	}
 	return out
@@ -396,13 +402,10 @@ type CoverView struct {
 	// «по тексту» на обложке: у разворотов свои в View.
 	Safe     []layout.Rect `json:"safe"`
 	TextMaxW float64       `json:"textMaxW"`
-	// Guide — имя файла разметки без папки ("" — нет); GuideOK — файл на месте;
-	// GuideWarn — пропорции файла отличаются от листа больше 1 %.
-	Guide     string `json:"guide"`
-	GuideOK   bool   `json:"guideOK"`
-	GuideWarn bool   `json:"guideWarn"`
-	PxW       int    `json:"pxW"` // 00.jpg при dpi альбома
-	PxH       int    `json:"pxH"`
+	// Markup — разметка типографии обложки (066, markup.go); nil — файла нет.
+	Markup *GuideView `json:"markup"`
+	PxW    int        `json:"pxW"` // 00.jpg при dpi альбома
+	PxH    int        `json:"pxH"`
 	// Fix — «Не по шаблону Фотосферы 30×30: …» (CoverFixText, 047); "" — по шаблону или не Фотосфера.
 	Fix string `json:"fix"`
 }

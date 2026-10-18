@@ -67,7 +67,7 @@ const view = (stZ: number): View =>
         stickers: [stk(stZ)],
       },
     ],
-    settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, dpi: 300, bg: '' },
+    settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, foldAny: false, dpi: 300, bg: '' },
     folders: [],
     rev: 1,
     safe: [],

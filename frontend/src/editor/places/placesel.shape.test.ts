@@ -41,7 +41,7 @@ const view = (): View =>
         })),
       },
     ],
-    settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, dpi: 300, bg: '' },
+    settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, foldAny: false, dpi: 300, bg: '' },
     folders: [],
     rev,
     safe: [],

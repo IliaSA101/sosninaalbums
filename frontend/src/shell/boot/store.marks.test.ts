@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const calls: { name: string; ids: string[]; patch?: unknown }[] = []
 let marksCalls = 0
 let buildArgs: unknown = null
+let buildFamilies: unknown = null
 let marksAnswer: () => Promise<unknown> = async () => ({})
 // «Авто» с сериями — умолчание окна автосборки (051)
 const RANGE = { auto: true, minPer: 1, maxPer: 64, series: true }
@@ -23,9 +24,10 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
   AutoBuild: async (
     ids: string[],
     at: number,
-    o: { spreads: number; minPer: number; maxPer: number; auto: boolean; series: boolean; variety: number },
+    o: { spreads: number; minPer: number; maxPer: number; auto: boolean; series: boolean; variety: number; families?: string[] },
   ) => {
     buildArgs = { at, spreads: o.spreads, minPer: o.minPer, maxPer: o.maxPer, auto: o.auto, series: o.series, variety: o.variety }
+    buildFamilies = o.families
     calls.push({ name: 'build', ids })
     return view(7, 1, {
       spreads: [
@@ -206,6 +208,14 @@ describe('автосборка и заполнение мест: что уход
     store.openAuto()
     await store.autoBuild(2, { auto: false, minPer: 4, maxPer: 9, series: false }, 2)
     expect(buildArgs).toEqual({ at: 1, spreads: 2, minPer: 4, maxPer: 9, auto: false, series: false, variety: 2 })
+    expect(buildFamilies).toEqual([]) // 065: без выбора — «Все»
+  })
+
+  it('семейства (065) доходят до Go в AutoOpts.families', async () => {
+    await setup()
+    store.openAuto()
+    await store.autoBuild(1, RANGE, 1, ['dense', 'hero'])
+    expect(buildFamilies).toEqual(['dense', 'hero'])
   })
 
   it('автосборка без выделения — свободные без отклонённых, тост «Отклонённые не взяты»', async () => {

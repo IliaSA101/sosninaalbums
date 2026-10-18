@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PagePreset } from '../../base/core/types'
+import { foldOf } from './fold'
 import { exportPx, groupLabel, presetActive, presetFields, presetGroupOf, presetRows } from './presets'
 
 // Как отдаёт Go (App.PagePresets): общий ряд без dpi/layflat, ряд Фотосферы — с ними.
@@ -88,5 +89,49 @@ describe('типография списка форматов', () => {
   it('подпись группы: пустая — «Общие»', () => {
     expect(groupLabel('')).toBe('Общие')
     expect(groupLabel('Нетпринт')).toBe('Нетпринт')
+  })
+})
+
+// 064: пресет с layflat только включает layflat, foldAny не трогает — так «Нет» превращается в «Только широкие».
+describe('пресет и положение «через корешок» (064)', () => {
+  const pickInto = (form: { layflat: boolean; foldAny: boolean }, p: PagePreset) => ({ ...blank, ...form, ...presetFields(p) })
+  it('при «Нет» пресет Фотосферы и Нетпринта ставит «Только широкие»', () => {
+    for (const p of [fs30, fs25, np20]) {
+      expect(foldOf(pickInto({ layflat: false, foldAny: false }, p))).toBe('wide')
+    }
+  })
+  it('«Только широкие» и «Любые фото» пресет оставляет как есть', () => {
+    expect(foldOf(pickInto({ layflat: true, foldAny: false }, fs30))).toBe('wide')
+    expect(foldOf(pickInto({ layflat: true, foldAny: true }, fs30))).toBe('any')
+  })
+  it('общий пресет положение не меняет', () => {
+    expect(foldOf(pickInto({ layflat: false, foldAny: false }, sq))).toBe('none')
+    expect(foldOf(pickInto({ layflat: true, foldAny: true }, sq))).toBe('any')
+  })
+  it('подсветка: при «Нет» пресет layflat не активен, при любом другом положении — активен', () => {
+    const s = { pageW: 281, pageH: 284, dpi: 300, safe: 10 }
+    expect(presetActive(fs30, { ...s, layflat: false })).toBe(false)
+    expect(presetActive(fs30, { ...s, layflat: true })).toBe(true)
+  })
+})
+
+// Обрез (066): Фотосфера 2 мм, Нетпринт 3 (гипотеза); общий ряд обрез не задаёт.
+describe('обрез пресета (066)', () => {
+  const fsb: PagePreset = { ...fs30, bleed: 2 }
+  const s = { pageW: 281, pageH: 284, dpi: 300, layflat: true, safe: 10, bleed: 2 }
+  it('presetFields подставляет обрез, у пресета без обреза поле не трогает', () => {
+    expect(presetFields(fsb)).toEqual({ pageW: 281, pageH: 284, dpi: 300, layflat: true, safe: 10, bleed: 2 })
+    expect('bleed' in presetFields(fs30)).toBe(false)
+    expect('bleed' in presetFields(sq)).toBe(false)
+  })
+  it('presetActive: другой обрез в форме — не подсвечен; нет поля = 0', () => {
+    expect(presetActive(fsb, s)).toBe(true)
+    expect(presetActive(fsb, { ...s, bleed: 3 })).toBe(false)
+    expect(presetActive(fsb, { ...s, bleed: undefined })).toBe(false)
+    expect(presetActive(fsb, { ...s, bleed: '2' as never })).toBe(true)
+  })
+  it('пресет без обреза подсвечен при любом обрезе формы', () => {
+    expect(presetActive(fs30, { ...s, bleed: 0 })).toBe(true)
+    expect(presetActive(fs30, { ...s, bleed: 5 })).toBe(true)
   })
 })

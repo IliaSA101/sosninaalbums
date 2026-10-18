@@ -29,8 +29,11 @@ var cacheGen = 10000
 // float64), а не с точностью 0.001: иначе 1334/2000 и 1335/2000 делят запись, и выдача
 // зависит от того, кто посчитал первым (окна plan считаются параллельно — подсказка
 // и сборка расходились). Кадры одной камеры дают одинаковые float — попадания те же.
+// FoldAny — только там, где действует (layflat-разворот): иначе одна выдача в двух записях.
 func CacheKey(aspects []float64, p Params, n int) string {
-	b := fmt.Appendf(make([]byte, 0, 48+20*len(aspects)), "%g/%g/%g/%g/%t/%t/%d:", p.PageW, p.PageH, p.Margin, p.Gap, p.Layflat, p.Sheet, n)
+	fold := p.FoldAny && p.Layflat && !p.Sheet
+	b := fmt.Appendf(make([]byte, 0, 48+20*len(aspects)), "%g/%g/%g/%g/%t/%t/%t/%d:",
+		p.PageW, p.PageH, p.Margin, p.Gap, p.Layflat, fold, p.Sheet, n)
 	for _, a := range aspects {
 		b = strconv.AppendFloat(b, a, 'g', -1, 64)
 		b = append(b, ',')

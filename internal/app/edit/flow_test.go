@@ -147,7 +147,7 @@ func TestVaryLayoutsWiring(t *testing.T) {
 	k.lentPhoto("b")
 	k.lentPhoto("c")
 	rev := k.rev()
-	v, err := k.VaryLayouts([]string{"s1", "нет"}, 7) // 7 → зажим в 0…2
+	v, err := k.VaryLayouts([]string{"s1", "нет"}, 7, nil) // 7 → зажим в 0…2
 	if err != nil || k.calls != 1 {
 		t.Fatalf("VaryLayouts: err %v, Changed %d", err, k.calls)
 	}
@@ -158,8 +158,109 @@ func TestVaryLayoutsWiring(t *testing.T) {
 		t.Errorf("rev упал: %d → %d", rev, v.Rev)
 	}
 	rev = k.rev()
-	if v, err = k.VaryLayouts(nil, 1); err != nil || v.Rev != rev {
+	if v, err = k.VaryLayouts(nil, 1, nil); err != nil || v.Rev != rev {
 		t.Errorf("пустой выбор: err %v, rev %d → %d", err, rev, v.Rev)
+	}
+}
+
+// lentMixed кладёт в ленту n фото: каждое третье портретное (раскладкам есть из чего выбирать).
+func (k *kit) lentMixed(prefix string, n int) []string {
+	ids := make([]string, n)
+	for i := range ids {
+		ids[i] = fmt.Sprint(prefix, i)
+		pi := k.lentPhoto(ids[i])
+		if i%3 == 0 {
+			pi.W, pi.H = 200, 300
+			k.lent[ids[i]] = pi
+		}
+	}
+	return ids
+}
+
+// layouts — действующие ключи разворотов вида.
+func layouts(v model.View) []string {
+	out := make([]string, len(v.Spreads))
+	for i, s := range v.Spreads {
+		out[i] = s.Layout
+	}
+	return out
+}
+
+// Предпросмотр автосборки (065): фото из ленты, ровно o.Spreads разворотов, проект не трогает —
+// ни rev, ни Changed; нет фото — пустые ряды.
+func TestAutoPreviewWiring(t *testing.T) {
+	k := twoSpreads(t)
+	ids := k.lentMixed("p", 24)
+	rev := k.rev()
+	o := model.AutoOpts{Spreads: 4, MaxPer: 8, Variety: 1, Families: []string{"dense", "hero"}}
+	pv, err := k.AutoPreview(ids, -1, o)
+	if err != nil || len(pv.Spreads) != 4 || len(pv.Samples) == 0 {
+		t.Fatalf("AutoPreview: err %v, разворотов %d, образцов %d", err, len(pv.Spreads), len(pv.Samples))
+	}
+	if k.rev() != rev || k.calls != 0 || !slices.Equal(k.asked[len(k.asked)-1], ids) {
+		t.Errorf("предпросмотр: rev %d → %d, Changed %d, у ленты спросили %v", rev, k.rev(), k.calls, k.asked)
+	}
+	var keys []string
+	for _, s := range pv.Spreads {
+		keys = append(keys, s.Key)
+	}
+	if v, err := k.AutoBuild(ids, -1, o); err != nil || !slices.Equal(layouts(v)[2:], keys) {
+		t.Errorf("сборка разошлась с предпросмотром %v: %v %v", keys, err, layouts(v))
+	}
+	if empty, err := k.AutoPreview(nil, -1, o); err != nil || len(empty.Spreads)+len(empty.Samples) != 0 {
+		t.Errorf("без фото: err %v, %+v", err, empty)
+	}
+}
+
+// TestAutoOptsFamiliesClamp (065): App берёт не больше 16 строк семейств — «Плотно» 17-й строкой
+// после мусора не действует (= без семейств), первой — действует, хвост мусора не мешает;
+// то же у «Разнообразить». Variety зажимается в 0…2.
+func TestAutoOptsFamiliesClamp(t *testing.T) {
+	junk := make([]string, 16, 1000)
+	for i := range junk {
+		junk[i] = fmt.Sprint("мусор", i)
+	}
+	if got := (model.AutoOpts{Variety: 99, Families: append(slices.Clone(junk), "dense")}).Clamp(); got.Variety != 2 ||
+		len(got.Families) != 16 || model.ClampFamilies(nil) != nil {
+		t.Fatalf("Clamp: %+v", got)
+	}
+	build := func(fs []string) (*kit, model.View) {
+		k := twoSpreads(t)
+		ids := k.lentMixed("q", 30)
+		v, err := k.AutoBuild(ids, -1, model.AutoOpts{Spreads: 6, MaxPer: 8, Variety: 1, Families: fs})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return k, v
+	}
+	_, none := build(nil)
+	_, late := build(append(slices.Clone(junk), "strip"))
+	_, strip := build([]string{"strip"})
+	_, long := build(append([]string{"strip"}, append(junk, junk...)...))
+	if !slices.Equal(layouts(late), layouts(none)) {
+		t.Errorf("17-я строка подействовала: %v ≠ %v", layouts(late), layouts(none))
+	}
+	if slices.Equal(layouts(strip), layouts(none)) || !slices.Equal(layouts(long), layouts(strip)) {
+		t.Errorf("«Ленты» первой строкой: %v, с хвостом %v, без семейств %v", layouts(strip), layouts(long), layouts(none))
+	}
+
+	vary := func(fs []string) []string {
+		k, v := build(nil)
+		var ids []string
+		for _, s := range v.Spreads[2:] {
+			ids = append(ids, s.ID)
+		}
+		got, err := k.VaryLayouts(ids, 1, fs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return layouts(got)
+	}
+	if a, b := vary(append(slices.Clone(junk), "strip")), vary(nil); !slices.Equal(a, b) {
+		t.Errorf("«Разнообразить»: 17-я строка подействовала: %v ≠ %v", a, b)
+	}
+	if a, b := vary([]string{"strip"}), vary(nil); slices.Equal(a, b) {
+		t.Errorf("«Разнообразить» с «Лентами» = без семейств: %v", a)
 	}
 }
 

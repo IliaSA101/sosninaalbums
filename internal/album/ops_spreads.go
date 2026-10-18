@@ -197,14 +197,32 @@ func (e *Editor) PhotosOf(ids []string) []string {
 	return out
 }
 
+// AutoPreview — ряд блока «Раскладки» окна автосборки (065): что соберёт AutoBuild с теми же
+// аргументами и варианты групп плана. Только чтение: сборка — на копии проекта вне замка
+// (под замком — снимок входа, копия и оценки), rev, undo и события не меняются.
+// Договор: photos без повторов (DedupePhotos).
+func (e *Editor) AutoPreview(photos []model.PhotoInfo, at int, o model.AutoOpts) (model.AutoPreview, error) {
+	pre := e.autoPrep(model.DedupePhotos(photos), o)
+	var c *model.Project
+	rates := make(map[string]int, len(photos))
+	e.read(func(p *model.Project) {
+		c = p.Clone()
+		rate := e.rating(photos) // оценки — как у AutoBuild, по тем же photos
+		for _, ph := range photos {
+			rates[ph.ID] = rate(ph.ID)
+		}
+	})
+	return spreads.Preview(c, pre, at, func(id string) int { return rates[id] })
+}
+
 // VaryLayouts — «Разнообразить раскладки» (041) для разворотов ids с уровнем v («Меньше» —
-// как «Обычное»): раскладки «Авто» с учётом соседей и текущего вида, звёзды — из XMP в infos
-// и своих отметок. Сетки, виньетки и обложка не трогаются. Один шаг отмены; нечего менять —
-// холостая (rev тот же). Пулы греются вне замка.
+// как «Обычное») и семействами families (065, пусто — все): раскладки «Авто» с учётом соседей
+// и текущего вида, звёзды — из XMP в infos и своих отметок. Сетки, виньетки и обложка не
+// трогаются. Один шаг отмены; нечего менять — холостая (rev тот же). Пулы греются вне замка.
 // Договор: нет — неизвестные и неподходящие развороты пропускает операция.
-func (e *Editor) VaryLayouts(ids []string, v model.Variety, infos []model.PhotoInfo) model.View {
+func (e *Editor) VaryLayouts(ids []string, v model.Variety, families []string, infos []model.PhotoInfo) model.View {
 	e.outside(func(p *model.Project) func() { return spreads.VaryWarm(p, ids, v) })
-	return e.change(func(p *model.Project) { spreads.VaryLayouts(p, ids, v, e.rating(infos)) })
+	return e.change(func(p *model.Project) { spreads.VaryLayouts(p, ids, v, families, e.rating(infos)) })
 }
 
 // outside — снимок под замком (snap), его счёт — вне замка: прогрев кэша раскладок перед правкой.

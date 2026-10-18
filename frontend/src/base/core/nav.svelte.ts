@@ -4,7 +4,7 @@ import type { CoverView, SpreadView, View } from './types'
 
 export const emptyView: View = {
   spreads: [],
-  settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, dpi: 300, bg: '', safe: 8 },
+  settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, foldAny: false, dpi: 300, bg: '', safe: 8 },
   folders: [],
   path: '',
   dirty: false,

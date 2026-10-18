@@ -103,7 +103,7 @@ func TestVaryLadderCtx(t *testing.T) {
 		for _, s := range edtest.P(e).Spreads[at+1:] {
 			ids = append(ids, s.ID)
 		}
-		e.VaryLayouts(ids, model.VarietyMore, nil)
+		e.VaryLayouts(ids, model.VarietyMore, nil, nil)
 		after := ladderDirs(edtest.P(e))
 		if after[at] != forms.LadderDir(k) {
 			t.Fatalf("лесенка %q не встала: %q", k, after[at])
@@ -195,11 +195,30 @@ func choiceKeys(c model.Choices) map[string]bool {
 	return out
 }
 
-// TestSetLayoutSpineOutOfRow (decisions 0.13.1 №23): ключ не из подборки, у которого узкое фото
-// лежит на корешке (A(0,1,2,3) на «V 0.74 V V», 30×30), — холостая правка: ни rev, ни шага
-// отмены, и у сетки «Вернуть авто» не срабатывает. Тот же ключ с широким фото через корешок
-// ставится; ключ из подборки с узким фото на корешке (ряд Layouts корешок только штрафует) — тоже;
-// оба переживают Save → Load, отмена снимает их по шагу.
+// choicesFoldOK — у каждого разворота подборка не пуста и каждый её ключ проходит правило сгиба.
+func choicesFoldOK(t *testing.T, e *album.Editor, ids []string) {
+	t.Helper()
+	p := edtest.P(e)
+	prm := p.Params()
+	for i, id := range ids {
+		asp := p.Aspects(p.Spreads[i].Photos)
+		keys := choiceKeys(e.LayoutChoices(id))
+		if len(keys) == 0 {
+			t.Fatalf("разворот %d: подборка пуста", i)
+		}
+		for k := range keys {
+			if r, ok := layout.Build(k, asp, prm); !ok || !layout.FoldOK(r.Rects, asp, prm) {
+				t.Errorf("разворот %d: в подборке %q вне правила сгиба (Build %v)", i, k, ok)
+			}
+		}
+	}
+}
+
+// TestSetLayoutSpineOutOfRow (decisions 0.13.1 №23, пересмотр 0.15 №7): ключ, у которого узкое
+// фото лежит на корешке (A(0,1,2,3) на «V 0.74 V V», 30×30, «Только широкие»), — холостая
+// правка: ни rev, ни шага отмены, и у сетки «Вернуть авто» не срабатывает. Тот же ключ с широким
+// фото через корешок ставится, переживает Save → Load, отмена снимает его шагом. Ряды подборки
+// подчинены тому же правилу (layout.FoldOK): ключа вне правила в них нет ни у одного разворота.
 func TestSetLayoutSpineOutOfRow(t *testing.T) {
 	const key = "A(0,1,2,3)"
 	v, h := [2]int{200, 300}, [2]int{300, 200}
@@ -210,29 +229,22 @@ func TestSetLayoutSpineOutOfRow(t *testing.T) {
 	p := edtest.P(e)
 	prm := p.Params()
 	ids := []string{view.Spreads[0].ID, view.Spreads[1].ID, view.Spreads[2].ID}
+	if !prm.Layflat || prm.FoldAny {
+		t.Fatalf("новый альбом: layflat %v, foldAny %v — ждали «Только широкие»", prm.Layflat, prm.FoldAny)
+	}
 
 	// Предусловия: ключ строится на обоих, его нет в подборке; на первом узкое фото на корешке.
-	for i, spineOK := range []bool{false, true} {
-		r, ok := layout.Build(key, p.Aspects(p.Spreads[i].Photos), prm)
-		if !ok || forms.SpineOK(r, prm) != spineOK {
-			t.Fatalf("разворот %d: Build %v, SpineOK %v (ждали %v) — тест не проверяет", i, ok, forms.SpineOK(r, prm), spineOK)
+	for i, foldOK := range []bool{false, true} {
+		asp := p.Aspects(p.Spreads[i].Photos)
+		r, ok := layout.Build(key, asp, prm)
+		if !ok || layout.FoldOK(r.Rects, asp, prm) != foldOK {
+			t.Fatalf("разворот %d: Build %v, FoldOK %v (ждали %v) — тест не проверяет", i, ok, layout.FoldOK(r.Rects, asp, prm), foldOK)
 		}
 		if choiceKeys(e.LayoutChoices(ids[i]))[key] {
 			t.Fatalf("разворот %d: %s в подборке — тест не проверяет", i, key)
 		}
 	}
-	// Ключ подборки с узким фото на корешке, кроме стоящего (лучшая пишется как "").
-	rowKey := ""
-	asp := p.Aspects(p.Spreads[2].Photos)
-	cur, _, _ := p.Layout(p.Spreads[2])
-	for k := range choiceKeys(e.LayoutChoices(ids[2])) {
-		if r, ok := layout.Build(k, asp, prm); ok && !forms.SpineOK(r, prm) && k != cur.Key && k > rowKey {
-			rowKey = k // наибольший — детерминированно
-		}
-	}
-	if rowKey == "" {
-		t.Fatal("в подборке нет ключа с узким фото на корешке — тест не проверяет")
-	}
+	choicesFoldOK(t, e, ids)
 
 	rev, undo := e.View().Rev, edtest.UndoLen(e)
 	if got := e.SetLayout(ids[0], key); got.Rev != rev || edtest.UndoLen(e) != undo || edtest.P(e).Spreads[0].Layout != "" {
@@ -245,18 +257,15 @@ func TestSetLayoutSpineOutOfRow(t *testing.T) {
 	}
 
 	e.SetLayout(ids[1], key)
-	e.SetLayout(ids[2], rowKey)
-	q := edtest.P(e)
-	if q.Spreads[1].Layout != key || q.Spreads[2].Layout != rowKey || edtest.UndoLen(e) != undo+2 {
-		t.Fatalf("допустимые ключи не встали: %q, %q (ждали %q, %q), шагов %d", q.Spreads[1].Layout, q.Spreads[2].Layout, key, rowKey, edtest.UndoLen(e)-undo)
+	if q := edtest.P(e); q.Spreads[1].Layout != key || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("допустимый ключ не встал: %q (ждали %q), шагов %d", q.Spreads[1].Layout, key, edtest.UndoLen(e)-undo)
 	}
-	if s := edtest.SaveLoad(t, e).Spreads; s[1].Layout != key || s[2].Layout != rowKey {
+	if s := edtest.SaveLoad(t, e).Spreads; s[1].Layout != key || s[2].Layout != "" {
 		t.Fatalf("после Save → Load: %q, %q", s[1].Layout, s[2].Layout)
 	}
 	e.Undo()
-	e.Undo()
-	if q := edtest.P(e); q.Spreads[1].Layout != "" || q.Spreads[2].Layout != "" || len(q.Spreads[0].Grid) == 0 {
-		t.Fatalf("отмена: %q, %q", q.Spreads[1].Layout, q.Spreads[2].Layout)
+	if q := edtest.P(e); q.Spreads[1].Layout != "" || len(q.Spreads[0].Grid) == 0 {
+		t.Fatalf("отмена: %q", q.Spreads[1].Layout)
 	}
 
 	// Ключ уже стоит (как из старого файла): ветка r.Key == s.Layout в foldAllowed — «Вернуть авто»

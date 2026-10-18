@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // «Разнообразить раскладки» (041) и очередь удалений: Go подменён, ответы задаёт тест.
-const varyCalls: { ids: string[]; variety: number }[] = []
+const varyCalls: { ids: string[]; variety: number; families?: string[] }[] = []
 let answer: () => unknown = () => ({})
 
 // Отложенные ответы удаления: тест отпускает их по одному.
@@ -10,8 +10,8 @@ const pending: Array<{ resolve: (v: unknown) => void; reject: (e: unknown) => vo
 
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
 vi.mock('../../../wailsjs/go/app/App', () => ({
-  VaryLayouts: async (ids: string[], variety: number) => {
-    varyCalls.push({ ids, variety })
+  VaryLayouts: async (ids: string[], variety: number, families?: string[]) => {
+    varyCalls.push({ ids, variety, families })
     const a = answer()
     if (a instanceof Error) throw a
     return a
@@ -45,15 +45,21 @@ describe('store.varyLayouts', () => {
   it('идёт в Go с выделенными и уровнем; перемену показывает тостом «Вернуть» с числом изменённых', async () => {
     answer = () => view(2, { a: 'x', b: 'y2', c: 'z2' })
     expect(await store.varyLayouts(['b', 'c'], 2)).toBe(true)
-    expect(varyCalls).toEqual([{ ids: ['b', 'c'], variety: 2 }])
+    expect(varyCalls).toEqual([{ ids: ['b', 'c'], variety: 2, families: [] }])
     expect(store.toast?.text).toBe('Раскладки изменены: 2')
     expect(store.toast?.action?.label).toBe('Вернуть')
   })
 
-  it('вид без изменений (rev тот же) — тост «Раскладки уже разные — менять нечего», без «Вернуть»', async () => {
+  it('семейства (065) уходят третьим аргументом', async () => {
+    answer = () => view(2, { a: 'x', b: 'y2', c: 'z' })
+    expect(await store.varyLayouts(['b'], 1, ['strip'])).toBe(true)
+    expect(varyCalls).toEqual([{ ids: ['b'], variety: 1, families: ['strip'] }])
+  })
+
+  it('вид без изменений (rev тот же) — тост «Менять нечего: раскладки уже разные или других подходящих нет», без «Вернуть»', async () => {
     answer = () => view(1, { a: 'x', b: 'y', c: 'z' })
     expect(await store.varyLayouts(['a'], 1)).toBe(false)
-    expect(store.toast?.text).toBe('Раскладки уже разные — менять нечего')
+    expect(store.toast?.text).toBe('Менять нечего: раскладки уже разные или других подходящих нет')
     expect(store.toast?.action).toBeUndefined()
   })
 

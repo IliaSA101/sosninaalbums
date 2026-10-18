@@ -3,7 +3,7 @@
   import { placesel } from '../places/placesel.svelte'
   import { edit } from '../text/edit.svelte'
   import { photoui } from './photoui.svelte'
-  import { straighten } from './straighten.svelte'
+  import { straighten } from '../tilt/straighten.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { menuContext, photoMenu, type MenuId } from './photomenu'
   import { LAYER_OPS, type LayerOp } from '../places/minipanel'

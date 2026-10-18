@@ -80,7 +80,7 @@ func checkManyRow(t *testing.T, asp []float64, p Params, name string, rs []Resul
 		if name == "layouts48" && IsRearranged(r.Key) {
 			t.Errorf("n=%d: %s не в порядке ленты", len(asp), r.Key)
 		}
-		checkResult(t, asp, p, r)
+		checkRow(t, asp, p, r)
 		checkRoundTrip(t, asp, p, name, r)
 	}
 }
@@ -172,7 +172,9 @@ func TestManyFamiliesShown(t *testing.T) {
 			if !has(0, ManyBatch, hero) || !has(ManyBatch, 2*ManyBatch, last) {
 				t.Errorf("n=%d layflat=%t: нет крупного первого в 1-й порции или последнего во 2-й", n, p.Layflat)
 			}
-			if has(0, ManyCap, whole) != p.Layflat || p.Layflat && !has(0, ManyBatch, whole) {
+			// При «только широкие» (064) разворотных может не быть: узкое фото на сгибе.
+			anyFold := p.Layflat && p.FoldAny
+			if has(0, ManyCap, whole) && !p.Layflat || anyFold && !has(0, ManyBatch, whole) {
 				t.Errorf("n=%d layflat=%t: раскладки на весь разворот не там", n, p.Layflat)
 			}
 			for i := 1; i < len(row); i++ {
@@ -207,11 +209,16 @@ func TestManyFill(t *testing.T) {
 // goldenMany — регрессионный эталон many.sha: Layouts(ManyCap) и PageChoices первых
 // постраничных ключей на 17…64 фото, геометрии manyGeoms, наборы manyAspects 0–4.
 // Группировка на 600 фото переехала в layout/plan (testdata/golden/many.sha там).
-func goldenMany() []goldenGroup {
+// goldenMany — группы many.sha; wide — как geomAt (many-wide.sha).
+func goldenMany(wide bool) []goldenGroup {
 	var jobs []func() []goldenGroup
 	for g := range manyGeoms {
+		p, ok := geomAt(manyGeoms, g, wide)
+		if !ok {
+			continue
+		}
 		for _, n := range manyNs {
-			jobs = append(jobs, func() []goldenGroup { return goldenManyN(g, n) })
+			jobs = append(jobs, func() []goldenGroup { return goldenManyN(g, p, n) })
 		}
 	}
 	res := make([][]goldenGroup, len(jobs))
@@ -236,8 +243,7 @@ func goldenMany() []goldenGroup {
 	return all
 }
 
-func goldenManyN(g, n int) []goldenGroup {
-	p := manyGeoms[g]
+func goldenManyN(g int, p Params, n int) []goldenGroup {
 	kinds := []string{"L", "P0", "P1"}
 	groups := make([]goldenGroup, len(kinds))
 	for i, k := range kinds {
@@ -269,7 +275,10 @@ func goldenManyN(g, n int) []goldenGroup {
 	return groups
 }
 
-const goldenManyPath = "testdata/golden/many.sha"
+const (
+	goldenManyPath     = "testdata/golden/many.sha"
+	goldenManyWidePath = "testdata/golden/many-wide.sha"
+)
 
 // TestGoldenMany — быстрые раскладки и группировка совпадают с эталоном many.sha побитово.
 // После выпуска смена генератора меняет вид альбомов с Layout = "": -update — по тем же
@@ -281,7 +290,8 @@ func TestGoldenMany(t *testing.T) {
 	if runtime.GOARCH != "amd64" {
 		t.Skip("эталон снят на amd64")
 	}
-	checkGolden(t, goldenManyPath, goldenMany())
+	checkGolden(t, goldenManyPath, goldenMany(false))
+	checkGolden(t, goldenManyWidePath, goldenMany(true)) // «только широкие» (064)
 }
 
 // TestPreviewMany печатает лучшие раскладки на 24 и 64 фото — отладочная печать без проверок,
@@ -332,7 +342,7 @@ func BenchmarkLayouts64First(b *testing.B) {
 // промежутком 0), квадрат 20×20 без layflat и широкий 40×30.
 var manyGeoms = append(slices.Clone(goldenGeoms),
 	Params{PageW: 200, PageH: 200, Margin: 12, Gap: 3, Layflat: false},
-	Params{PageW: 400, PageH: 300, Margin: 12, Gap: 3, Layflat: true},
+	Params{PageW: 400, PageH: 300, Margin: 12, Gap: 3, Layflat: true, FoldAny: true},
 )
 
 // manySetNames — наборы manyAspects (0–2 как у goldenAspects, 3–4 — все фото одной

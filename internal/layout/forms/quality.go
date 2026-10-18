@@ -20,10 +20,6 @@ const (
 	// bandW — штраф за каждую единицу доли рамки вне полосы вида.
 	bandW = 1.5
 
-	// foldAspect — через корешок идёт только фото такой ширины к высоте; foldPart — и не меньше
-	// этой доли с каждой стороны (меньше — узкая полоска, score штрафует её на 0.4).
-	foldAspect = 1.2
-	foldPart   = 0.2
 	// foldEps — как spineEps в layout: фото, лишь касающееся корешка, его не пересекает.
 	foldEps = 0.01
 
@@ -223,11 +219,17 @@ func quality(r layout.Result, f Form, p layout.Params, relax float64) (q float64
 
 // crosses — фото лежит по обе стороны корешка.
 func crosses(x layout.Rect, p layout.Params) bool {
-	return p.Layflat && !p.Sheet && x.X < p.PageW-foldEps && x.X+x.W > p.PageW+foldEps
+	return !p.Sheet && x.X < p.PageW-foldEps && x.X+x.W > p.PageW+foldEps
 }
 
-// admissible — полы вида. Мозаика — как есть (ряд Layouts уже оценён layout), в край — тоже.
+// admissible — правило сгиба (layout.FoldOK, одно для всех путей подбора, 064) и полы вида.
+// Сгиб проверяется и у мозаики: прежде она обходила проверку, и узкое фото через корешок
+// попадало в ряд мимо настройки. Рамки = кадры: «в край» Gen сам не строит (Bleed сюда не
+// доходит — его ряд layout проверил по кадру). Мозаика дальше — как есть (оценена layout).
 func admissible(rs []layout.Rect, f Form, p layout.Params, h HeroInfo, relax float64) bool {
+	if !layout.FoldOK(rs, nil, p) {
+		return false
+	}
 	if f == Mosaic {
 		return true
 	}
@@ -248,9 +250,6 @@ func admissible(rs []layout.Rect, f Form, p layout.Params, h HeroInfo, relax flo
 	}
 	for i, x := range rs {
 		hero := heroForm && h.isHero(i)
-		if !foldOK(x, heroForm, hero, p) {
-			return false
-		}
 		if hero {
 			share := heroShare
 			if h.N == 2 {
@@ -261,45 +260,11 @@ func admissible(rs []layout.Rect, f Form, p layout.Params, h HeroInfo, relax flo
 			}
 			continue
 		}
-		if quanta(math.Min(x.W, x.H)/p.PageH) < quanta(floor) {
+		// Пол вида с главным (decisions 0.15 №16): остальные — по сторонам, не через корешок,
+		// при любом положении сгиба — это композиция вида, а не правило сгиба.
+		if heroForm && crosses(x, p) || quanta(math.Min(x.W, x.H)/p.PageH) < quanta(floor) {
 			return false
 		}
 	}
 	return true
-}
-
-// foldOK — фото x может так лежать на корешке: не пересекает его, или главное у вида с главным
-// и широкое, или (у видов без главного) широкое и заходит на каждую сторону не меньше foldPart.
-func foldOK(x layout.Rect, heroForm, hero bool, p layout.Params) bool {
-	if !crosses(x, p) {
-		return true
-	}
-	wide := quanta(x.W/x.H) >= quanta(foldAspect)
-	if hero {
-		return wide
-	}
-	return !heroForm && wide && partOK(x, p)
-}
-
-// SpineOK — фото на корешке допустимы, как у Gen (foldOK по виду Of): для ключа не из ряда
-// (SetLayout прямым вызовом, decisions 0.13.1 №23). Мозаику и «в край» Gen корешком не режет —
-// их оценивает layout (корешок там только штраф), здесь тоже.
-func SpineOK(r layout.Result, p layout.Params) bool {
-	f := Of(r.Key, r.Rects, p)
-	if f == Mosaic || f == Bleed {
-		return true
-	}
-	heroForm := f == Hero || f == Pair || f == Spine
-	h := Heroes(r.Rects)
-	for i, x := range r.Rects {
-		if !foldOK(x, heroForm, heroForm && h.isHero(i), p) {
-			return false
-		}
-	}
-	return true
-}
-
-// partOK — через корешок фото заходит не меньше чем на foldPart с каждой стороны.
-func partOK(x layout.Rect, p layout.Params) bool {
-	return quanta(math.Min(p.PageW-x.X, x.X+x.W-p.PageW)/x.W) >= quanta(foldPart)
 }
