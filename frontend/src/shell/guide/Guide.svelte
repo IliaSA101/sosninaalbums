@@ -7,6 +7,7 @@
   import { help } from '../menu/help.svelte'
   import { ARTICLES, GUIDE_GROUPS, placesOf, type Article } from './articles'
   import GuideCard from './GuideCard.svelte'
+  import { selectQuery } from './queryfocus'
   import { guide } from './guidestate.svelte'
   import { grouped, search, type Section } from './search'
 
@@ -47,9 +48,6 @@
     if (id) void tick().then(() => list?.querySelector(`[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest' }))
   })
 
-  // Прошлый запрос остаётся в поле, но выделен целиком: новый ввод заменяет его, а не приклеивается.
-  const selectAll = (el: HTMLInputElement) => el.select()
-
   const allKeys = () => (help.open = true)
   const levels = () => (prefs.compare = true)
 </script>
@@ -61,7 +59,7 @@
         class="q"
         type="search"
         data-autofocus
-        use:selectAll
+        use:selectQuery
         placeholder="Что вы ищете? Например: виньетка, обложка, зеркало"
         aria-label="Поиск по функциям"
         bind:value={guide.query}

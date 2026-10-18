@@ -213,23 +213,24 @@ func netprintPresets() []PagePreset {
 	return out
 }
 
-// CoverPresetFor — пресет id для страницы s. У группы «Фотосфера» на формате из таблицы —
-// сторонка и заворот шаблона; на прочей странице — W/H 0 (страница) и заворот 20. Остальные
-// пресеты — как CoverPresetOf.
+// CoverPresetFor — пресет id для страницы s. У группы «Фотосфера» сторонка и заворот —
+// всегда числа шаблона: формат страницы из таблицы, на прочей странице — ближайший формат
+// (FsferaFormatNear, 070 Е, decisions 0.16 №28); W/H 0 («из страницы») пресет не даёт.
+// Остальные пресеты — как CoverPresetOf.
 func CoverPresetFor(id string, s Settings) (CoverPreset, bool) {
 	pr, ok := CoverPresetOf(id)
 	if !ok || pr.Group != CoverGroupFsfera {
 		return pr, ok
 	}
-	if f, ok := FsferaFormatOf(s); ok {
-		pr.Spec.W, pr.Spec.H, pr.Spec.Wrap = f.SideW, f.SideH, f.Wrap
-	}
+	f := FsferaFormatNear(s)
+	pr.Spec.W, pr.Spec.H, pr.Spec.Wrap = f.SideW, f.SideH, f.Wrap
 	return pr, true
 }
 
 // CoverOffTemplate — обложка «Фотосферы» не совпадает с шаблоном для текущей страницы:
 // have/want — размер листа обложки, мм (при текущем числе разворотов). Сравниваются действующая
-// сторонка (только если страница из таблицы), Wrap, Hinge, Steps; A, B и безопасные линии — нет.
+// сторонка (W/H 0 — страница), Wrap, Hinge, Steps; A, B и безопасные линии — нет. format — формат
+// шаблона: страница из таблицы или ближайший к ней (070 Е).
 // Пресет не «Фотосфера» или обложки нет — off=false.
 func (p *Project) CoverOffTemplate() (have, want [2]float64, format PrintFormat, off bool) {
 	if p.Cover == nil {
@@ -240,31 +241,28 @@ func (p *Project) CoverOffTemplate() (have, want [2]float64, format PrintFormat,
 	if !ok || pr.Group != CoverGroupFsfera {
 		return have, want, format, false
 	}
-	format, inTable := FsferaFormatOf(p.Settings)
+	format = FsferaFormatNear(p.Settings)
 	d := pr.Spec
 	// Шаблон считает та же CoverGeo: числа строки и «Итог» карточки сходятся до 0,01.
 	cg := p.CoverGeo()
 	tpl := (&Project{Settings: p.Settings, Spreads: p.Spreads, Cover: &Cover{Spec: d}}).CoverGeo()
 	have, want = [2]float64{cg.X[7], cg.Y[3]}, [2]float64{tpl.X[7], tpl.Y[3]}
-	sideOK := !inTable || (cg.X[2]-cg.X[1] == tpl.X[2]-tpl.X[1] && cg.Y[2]-cg.Y[1] == tpl.Y[2]-tpl.Y[1])
+	sideOK := cg.X[2]-cg.X[1] == tpl.X[2]-tpl.X[1] && cg.Y[2]-cg.Y[1] == tpl.Y[2]-tpl.Y[1]
 	off = !sideOK || c.Wrap != d.Wrap || c.Hinge != d.Hinge || !slices.Equal(c.Steps, d.Steps)
 	return have, want, format, off
 }
 
 // CoverFixText — строка «Не по шаблону Фотосферы 30×30: 623 × 331 мм, нужно 626 × 326» для
-// карточки обложки и проверки выгрузки; "" — по шаблону или не Фотосфера. Страница не из таблицы
-// или размер листа совпал (другая таблица корешка) — называется заворот, иначе корешок и расстав.
+// карточки обложки и проверки выгрузки; "" — по шаблону или не Фотосфера. Размер листа совпал
+// (другая таблица корешка) — называется заворот, иначе корешок и расстав.
 func CoverFixText(p *Project) string {
 	have, want, f, off := p.CoverOffTemplate()
 	if !off {
 		return ""
 	}
-	head := "Не по шаблону Фотосферы"
-	if f.Name != "" {
-		head += " " + f.Name
-		if have != want {
-			return fmt.Sprintf("%s: %s × %s мм, нужно %s × %s", head, MmText(have[0]), MmText(have[1]), MmText(want[0]), MmText(want[1]))
-		}
+	head := "Не по шаблону Фотосферы " + f.Name // формат есть всегда: точный или ближайший
+	if have != want {
+		return fmt.Sprintf("%s: %s × %s мм, нужно %s × %s", head, MmText(have[0]), MmText(have[1]), MmText(want[0]), MmText(want[1]))
 	}
 	c := p.Cover.Spec
 	pr, _ := CoverPresetFor(c.Preset, p.Settings)

@@ -198,6 +198,39 @@ describe('команды', () => {
     }
   })
 
+  it('«Готовые развороты…» (067): окно разворотов текущего листа на весь лист; обложка, «Простой» и без листа — молчит', () => {
+    const was = { view: store.view, current: store.current, level: prefs.level, onCover: store.onCover }
+    const show = vi.spyOn(decor, 'show').mockImplementation(() => {})
+    try {
+      store.view = { ...store.view, spreads: [{ id: 'a', photos: [] } as unknown as SpreadView] }
+      store.current = 0
+      prefs.level = 'simple'
+      COMMANDS.spreadTpl()
+      expect(show).not.toHaveBeenCalled()
+      prefs.level = 'standard'
+      COMMANDS.spreadTpl()
+      expect(show).toHaveBeenCalledWith('spread', 'a', 'spread')
+      show.mockClear()
+      store.view = { ...store.view, spreads: [] }
+      COMMANDS.spreadTpl()
+      expect(show).not.toHaveBeenCalled()
+      store.view = {
+        ...store.view,
+        spreads: [{ id: 'a', photos: [] } as unknown as SpreadView],
+        cover: { sheet: { id: 'cover', photos: [] } } as never,
+      }
+      store.onCover = true
+      COMMANDS.spreadTpl()
+      expect(show).not.toHaveBeenCalled()
+    } finally {
+      show.mockRestore()
+      store.view = was.view
+      store.current = was.current
+      store.onCover = was.onCover
+      prefs.level = was.level
+    }
+  })
+
   it('«Разнообразить раскладки» (041): выделенные в ленте, иначе текущий; уровень из окна автосборки; на «Простом» тоже', async () => {
     const was = { view: store.view, current: store.current, level: prefs.level, variety: modes.autoVariety }
     const vary = vi.spyOn(store, 'varyLayouts').mockResolvedValue(true)

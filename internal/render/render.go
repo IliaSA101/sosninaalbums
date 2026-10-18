@@ -35,7 +35,7 @@ func Render(s Spread, opt Options) (*image.RGBA, error) {
 		return nil, err
 	}
 
-	items := make([]item, 0, len(s.Backdrops)+len(s.Plates)+len(s.Photos)+len(s.Stickers)+len(s.Arts)+len(s.Texts))
+	items := make([]item, 0, len(s.Backdrops)+len(s.Plates)+len(s.Slots)+len(s.Photos)+len(s.Stickers)+len(s.Arts)+len(s.Texts))
 	// Фоны без OverPlates, плашки, фоны с OverPlates (фото корешка над плашкой, 061).
 	addBackdrops := func(over bool) {
 		for _, b := range s.Backdrops {
@@ -55,6 +55,9 @@ func Render(s Spread, opt Options) (*image.RGBA, error) {
 	nb := len(items)
 	for _, ph := range s.Photos {
 		items = append(items, item{ph: ph, z: ph.Z})
+	}
+	for i := range s.Slots {
+		items = append(items, item{plate: &s.Slots[i], z: s.Slots[i].Z})
 	}
 	for _, ph := range s.Stickers {
 		if ph.Fade < 1 { // не виден: файл не открываем
@@ -207,6 +210,7 @@ func prepareSafe(it item, canvas image.Rectangle, dpi int) (paint func(*image.RG
 		if err != nil || cell == nil {
 			return nil, err
 		}
+		applyTone(cell, ph.Tone) // до маски формы: тон касается только картинки (068)
 		fadeAlpha(cell, ph.Fade) // снаружи prepareFn: подмена в тестах его не обходит
 		if hasShape(ph.Outline) {
 			// Маска — от рамки, а не от r: у «Целиком» r меньше рамки.

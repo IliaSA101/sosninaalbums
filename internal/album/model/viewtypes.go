@@ -404,6 +404,12 @@ type FrameView struct {
 	// FlipH/FlipV — зеркало картинки внутри Img (геометрия не меняется).
 	FlipH bool `json:"flipH"`
 	FlipV bool `json:"flipV"`
+	// Gray, Bright, Contrast — тон фото (068) для карточки; Filter — готовая строка CSS
+	// filter для <img> (Tone.CSS), "" — без тона.
+	Gray     bool   `json:"gray"`
+	Bright   int    `json:"bright"`
+	Contrast int    `json:"contrast"`
+	Filter   string `json:"filter"`
 	// CellRot — угол ячейки (= места, вокруг его центра; в «Авто» 0): Rects и Img
 	// неповёрнутые, UI крутит ячейку целиком, не ища место.
 	CellRot float64 `json:"cellRot"`

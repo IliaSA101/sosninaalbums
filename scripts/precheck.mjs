@@ -1,7 +1,7 @@
 // Быстрая предпроверка для исполнителей перед отчётом: `node scripts/precheck.mjs [--base <rev>]`.
 // Ловит то, что иначе падает только на полном check.ps1 у оркестратора: gofmt, vet по всему модулю, golangci-lint
 // (только новое), go test -short изменённых пакетов, покрытие дерева album (при правке internal/album/**) против эталона,
-// prettier, eslint, svelte-check, vitest related, размер файлов, лимит файлов в папке. Полный go test и test-baseline
+// prettier, eslint, svelte-check, vitest related + стражи (тесты со сканом дерева), язык комментариев, размер файлов, лимит файлов в папке. Полный go test и test-baseline
 // остаются шагом оркестратора (check.ps1 без -short: эталоны и большие наборы там).
 // Пределы размера и папок — scripts/limits.mjs (один источник с check.ps1, pre-commit и хуком file-size).
 import { spawnSync } from 'node:child_process'
@@ -10,6 +10,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
 import { checkFolders, checkSizes } from './limits.mjs'
+import { collect as collectAdded, violations as langViolations } from './comment-lang.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(root)
@@ -152,6 +153,21 @@ if (goFiles.length) {
 }
 
 // ---- Фронт ----
+// scanGuards — тесты src, читающие всё дерево через import.meta.glob (пути от frontend/, как у vitest)
+function scanGuards(dir) {
+  const res = []
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name)
+      if (e.isDirectory()) walk(p)
+      else if (/\.test\.ts$/.test(e.name) && fs.readFileSync(p, 'utf8').includes('import.meta.glob')) {
+        res.push(path.relative(path.join(root, 'frontend'), p).replaceAll('\\', '/'))
+      }
+    }
+  }
+  walk(dir)
+  return res.sort()
+}
 const fe = changed
   .filter((f) => /^frontend\//.test(f) && !/^frontend\/(wailsjs|dist)\//.test(f) && !/package(-lock)?\.json$/.test(f))
   .filter((f) => /\.(ts|js|svelte|css|html|json)$/.test(f))
@@ -176,6 +192,12 @@ if (fe.length) {
   }
   const src = fe.filter((f) => /^src\/.*\.(ts|js|svelte)$/.test(f))
   if (src.length) step('vitest related', () => res(npx(fePart(['vitest', 'related', '--run', '--passWithNoTests'], src))))
+  // Стражи: тесты-сканеры всего дерева фронта (import.meta.glob) — vitest related их не выбирает, а ломаются они от
+  // любой правки src. Список вычисляем по содержимому, не храним.
+  if (src.length) {
+    const guards = scanGuards(path.join(root, 'frontend', 'src'))
+    if (guards.length) step(`стражи фронта (${guards.length})`, () => res(npx([['vitest', 'run', ...guards]])))
+  }
 }
 
 // ---- Всегда ----
@@ -183,6 +205,15 @@ const tracked = git('ls-files', '--cached', '--others', '--exclude-standard')
   .out.split('\n')
   .map((s) => s.trim())
   .filter((f) => f && fs.existsSync(path.join(root, f)))
+
+step('язык комментариев', () => {
+  // Только добавленные строки (дифф к базе + рабочее дерево); исключение строки — маркер lang-ok
+  const seen = new Set()
+  const bad = langViolations(collectAdded({ root, base }))
+    .filter((v) => !seen.has(`${v.file}:${v.line}`) && seen.add(`${v.file}:${v.line}`))
+    .map((v) => `${v.file}:${v.line}: ${v.text}`)
+  return { ok: bad.length === 0, out: bad.length ? ['английские комментарии — переписать по-русски (или lang-ok):', ...bad].join('\n') : '' }
+})
 
 step('размер файлов', () => {
   // Только изменённые файлы; пределы по языку — limits.mjs

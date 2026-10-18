@@ -7,6 +7,7 @@
   import { DEFAULT_FRAME } from '../../base/geom/frame'
   import { liveImage, liveTransform } from '../tilt/tiltlive'
   import { framelive } from './framelive.svelte'
+  import { adjlive } from './adjlive.svelte'
   import { aabbOf, uprightAt } from '../../base/geom/rotbox'
   import { cornerInset, markAt, outlineOf, shapeCss } from '../../base/geom/shape'
   import { placesel } from '../places/placesel.svelte'
@@ -62,6 +63,9 @@
   const pre = $derived(mini ? null : framelive.of(id))
   const cur = $derived(pre ?? frame)
   const img = $derived(pre || preview || !fv ? liveImage(r, aspect, cur, contain, outline) : fv.img)
+
+  // Ч/б и тон (068): строка filter из Go; пока тянут ползунок карточки — живая. Фильтр на самой картинке: поле страницы не задет.
+  const tone = $derived(adjlive.filterOf(id, fv))
 
   const selected = $derived(!mini && store.selectedCell === id)
   const missing = $derived(store.missing.includes(id))
@@ -132,6 +136,7 @@
         class:gone={contain && previewReady}
         style={pos}
         style:transform={liveTransform(cur, fv)}
+        style:filter={tone}
         src={thumbUrl(id)}
         alt=""
         draggable="false"
@@ -140,6 +145,7 @@
           class="ph"
           style={pos}
           style:transform={liveTransform(cur, fv)}
+          style:filter={tone}
           src={previewUrl(id)}
           alt=""
           draggable="false"

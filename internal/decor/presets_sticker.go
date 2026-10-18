@@ -90,8 +90,9 @@ func (s *Store) Sticker(id string) (Sticker, error) {
 	s.mu.RLock()
 	e := s.entryOf(KindSticker, id)
 	path, ok := s.files[KindSticker][id]
+	ok = ok && (e != nil || s.inPack(KindSticker, id))
 	s.mu.RUnlock()
-	if e == nil || !ok {
+	if !ok {
 		return Sticker{}, ErrNotFound
 	}
 	info, err := library.ReadInfo(path)
@@ -106,8 +107,11 @@ func (s *Store) Sticker(id string) (Sticker, error) {
 
 // presetsOf — встроенные плитки вида.
 func presetsOf(kind string) []preset {
-	if kind == KindSticker {
+	switch kind {
+	case KindSticker:
 		return stickerPresets
+	case KindSpread: // встроенные развороты — spreadBuiltins
+		return nil
 	}
 	return bgPresets
 }

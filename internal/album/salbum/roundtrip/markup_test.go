@@ -2,6 +2,7 @@ package roundtrip_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -53,7 +54,7 @@ func TestGoldenV11Markup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != 11 || edtest.From(p) != 11 || p.Settings.Bleed != 2 || p.Settings.Safe != 10 {
+	if p.Version != model.FormatVersion || edtest.From(p) != 11 || p.Settings.Bleed != 2 || p.Settings.Safe != 10 {
 		t.Fatalf("версия %d, from %d, обрез %v", p.Version, edtest.From(p), p.Settings.Bleed)
 	}
 	if p.SpreadGuide != goldenBase+`\Разметка\spread_30x30.psd` || p.SpreadGuideAlt != `D:\Шаблоны\spread_30x30.psd` {
@@ -66,7 +67,10 @@ func TestGoldenV11Markup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(out, bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))) {
+	// Голден v11: запись — в текущей версии, остальное байт в байт.
+	want := bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	want = bytes.Replace(want, []byte(`"version": 11,`), fmt.Appendf(nil, `"version": %d,`, model.FormatVersion), 1)
+	if !bytes.Equal(out, want) {
 		t.Fatalf("Decode → Encode v11 отличается от голдена:\n%s", out)
 	}
 	if err := salbum.Check(p); err != nil {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte'
   import { store } from '../../base/core/store.svelte'
+  import { jobs } from '../../base/core/jobs.svelte'
   import { placesel } from '../../editor/places/placesel.svelte'
   import { edit } from '../../editor/text/edit.svelte'
   import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
@@ -37,6 +38,7 @@
       !!edit.sel,
     deletable: placesel.refs.length > 0 || placesel.texts.length > 0 || placesel.stickers.length > 0 || !!edit.sel,
     flippable: placesel.selected.some((b) => b.photo),
+    allGray: placesel.allGray,
     sticker: !!placesel.soloSticker,
     varyable: anyVaries(store.view.spreads, varyTargets(spreadsel.ordered(store.view.spreads.map((s) => s.id)), store.spread?.id)),
     vigable: canMakeVignette(store.spread, prefs.can),
@@ -44,7 +46,8 @@
     vigSetup: isVignette(store.spread),
     layerable: placesel.canLayer,
     missing: splitMissing(store.missing, store.view.libPhotos).photos.length, // свои из библиотеки папкой не ищутся (048)
-    exporting: !!store.exporting,
+    exporting: !!jobs.exporting,
+    collecting: !!jobs.collecting,
     big: modes.big,
     details: modes.details,
     safe: modes.safe,

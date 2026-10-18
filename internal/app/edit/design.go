@@ -46,6 +46,19 @@ func (m *Methods) SetFlip(ids []string, axis string) (v model.View) {
 	return m.changed(m.editor().SetFlip(ids, axis))
 }
 
+// SetGray — ч/б фото ids (068): не у всех включено — всем включить, иначе всем выключить.
+func (m *Methods) SetGray(ids []string) (v model.View) {
+	defer m.guardEdit("SetGray", &v, nil)
+	return m.changed(m.editor().SetGray(ids))
+}
+
+// SetTone — яркость и контраст фото (068), −50…50 каждое (зажим в Go); ч/б остаётся.
+// UI шлёт оба значения сразу: второе — из вида.
+func (m *Methods) SetTone(photoID string, bright, contrast int) (v model.View) {
+	defer m.guardEdit("SetTone", &v, nil)
+	return m.changed(m.editor().SetTone(photoID, bright, contrast))
+}
+
 // SetBackground: scope "spread" (обе страницы) | "left" | "right"; color "" — снять
 // свой цвет. Цвет альбома — SetSettings.
 func (m *Methods) SetBackground(spreadID, scope, color string) (v model.View) {
@@ -168,6 +181,13 @@ func (m *Methods) SetBackdrop(spreadID, scope, photoID string) (v model.View, er
 func (m *Methods) SetBackdropBox(spreadID, scope string, x, y, w, h, rot float64, merge string) (v model.View) {
 	defer m.guardEdit("SetBackdropBox", &v, nil)
 	return m.changed(m.editor().SetBackdropBox(spreadID, scope, x, y, w, h, rot, merge))
+}
+
+// TurnBackdrop: поворот рамки фона на rot° вокруг центра; смена ориентации (около 0/180° ↔ ±90°)
+// меняет стороны местами. Любая область, один шаг отмены (merge — сессия поля), тот же угол — холостая.
+func (m *Methods) TurnBackdrop(spreadID, scope string, rot float64, merge string) (v model.View) {
+	defer m.guardEdit("TurnBackdrop", &v, nil)
+	return m.changed(m.editor().TurnBackdrop(spreadID, scope, rot, merge))
 }
 
 // SetBackdropFrame: кадр фото в рамке — масштаб s 1..4, сдвиг x/y −1..1.

@@ -122,16 +122,15 @@
     if (!root) return
     const r = root.getBoundingClientRect()
     const k = sw / r.width
-    const spine = base.scope === 'spine' // у корешка w и h меняются местами при смене ориентации (решение 33)
     const c = center(base.box)
     const grab = cursorDeg(c, { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k })
     gesture(
       e,
       (_dx, _dy, ev, p) => ({
-        box: turnBackdropBox(base.box, bdAngle(c, p, grab, base.box.rot, ev.shiftKey, ev.altKey), spine),
+        box: turnBackdropBox(base.box, bdAngle(c, p, grab, base.box.rot, ev.shiftKey, ev.altKey)),
         frame: base.frame,
       }),
-      commitBox,
+      (l) => bgmode.turn(l.box.rot), // коммит считает Go от рамки до жеста
     )
   }
 
@@ -198,13 +197,7 @@
       style:transform={t.rot ? `rotate(${t.rot}deg)` : undefined}
       onpointerdown={startMove}
     >
-      <BackdropHandles
-        {rotIn}
-        onside={startSide}
-        oncorner={startCorner}
-        onrotate={startRotate}
-        onzero={() => b && bgmode.setBox(turnBackdropBox(b.box, 0, b.scope === 'spine'))}
-      />
+      <BackdropHandles {rotIn} onside={startSide} oncorner={startCorner} onrotate={startRotate} onzero={() => b && bgmode.turn(0)} />
       {#if movable && !panning}
         <button class="pan" title="Сдвинуть фото в рамке" aria-label="Сдвинуть фото в рамке" onpointerdown={startPan}>✥</button>
       {/if}

@@ -79,6 +79,17 @@ func (e *Editor) SetFlip(ids []string, axis string) model.View {
 	return e.change(func(p *model.Project) { design.SetFlip(p, ids, axis) })
 }
 
+// Договор: проверок нет; чужие и повторные ID пропускает тело.
+func (e *Editor) SetGray(ids []string) model.View {
+	return e.change(func(p *model.Project) { design.SetGray(p, ids) })
+}
+
+// Договор: яркость и контраст зажаты −MaxTone…MaxTone (ClampTone); чужое фото пропускает тело.
+func (e *Editor) SetTone(photoID string, bright, contrast int) model.View {
+	t := model.ClampTone(&model.Tone{Bright: bright, Contrast: contrast})
+	return e.change(func(p *model.Project) { design.SetTone(p, photoID, t) })
+}
+
 // Договор: цвет зажат ClampColor (неверный непустой — холостая правка), "" снимает цвет;
 // scope проверяет тело.
 func (e *Editor) SetBackground(spreadID, scope, color string) model.View {

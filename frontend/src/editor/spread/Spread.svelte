@@ -5,42 +5,28 @@
   import { store } from '../../base/core/store.svelte'
   import { gallery, pageSwitchable } from '../../panels/gallery/gallery.svelte'
   import { modes } from '../../base/prefs/view.svelte'
-  import { placesel } from '../places/placesel.svelte'
   import { fieldClick } from '../places/placegesture'
   import { bgmode } from '../backdrop/bgmode.svelte'
   import BackdropLayer from '../backdrop/BackdropLayer.svelte'
   import PatternLayer from '../pattern/PatternLayer.svelte'
-  import BackdropEditor from '../backdrop/BackdropEditor.svelte'
   import Cell from '../photo/Cell.svelte'
-  import CellOverlay from '../photo/CellOverlay.svelte'
-  import StraightenLayer from '../tilt/StraightenLayer.svelte'
-  import { straighten } from '../tilt/straighten.svelte'
-  import GroupFrame from '../places/GroupFrame.svelte'
   import PlaceLayer from '../places/PlaceLayer.svelte'
   import { shapeCss } from '../../base/geom/shape'
-  import SelFrame from '../places/SelFrame.svelte'
   import TextLayer from '../text/TextLayer.svelte'
   import StickerLayer from '../sticker/StickerLayer.svelte'
   import { sticker } from '../sticker/sticker.svelte'
   import { stickerOverflow } from '../sticker/sticker'
-  import StickerOverlay from '../sticker/StickerOverlay.svelte'
-  import NameEditor from '../captions/NameEditor.svelte'
-  import { nameEdit } from '../captions/nameedit.svelte'
-  import { nameTargetAt, takesNameTarget, type NameTarget } from '../captions/nametarget'
-  import { edit } from '../text/edit.svelte'
-  import { emptyField } from '../canvas/field'
-  import { prefs } from '../../base/prefs/prefs.svelte'
-  import { tip } from '../../base/ui/tip.svelte'
-  import TextOverlay from '../text/TextOverlay.svelte'
   import { TextGestures } from '../text/textgesture.svelte'
   import { layerIndex } from '../places/layers'
-  import { hasSeam, isCover, pageAt } from '../../base/geom/sheet'
+  import { hasSeam, isCover } from '../../base/geom/sheet'
   import { pickUnder } from '../canvas/pickunder.svelte'
   import CoverDrop from '../cover/CoverDrop.svelte'
   import CoverGuides from '../cover/CoverGuides.svelte'
   import CoverPlate from '../cover/CoverPlate.svelte'
   import BleedStrips from '../markup/BleedStrips.svelte'
   import MarkupUnderlay from '../markup/MarkupUnderlay.svelte'
+  import SpreadOverlays from './SpreadOverlays.svelte'
+  import { NameTrack } from './nametrack.svelte'
 
   // peer — сосед в ряду разворотов (спека 012): рисуется как mini (лёгкий, без жестов), но с тенью и обводкой
   // листа — тот же экземпляр становится текущим сменой mini, без перемонтирования.
@@ -105,64 +91,11 @@
   // Режим фона на этом развороте: места и тексты приглушены, сверху — рамка фона (BackdropEditor).
   const bgEdit = $derived(!mini && bgmode.cur?.spread === spread.id && store.spread?.id === spread.id)
 
-  // Рамка выделения: у текущего большого разворота, не в предпросмотре галереи и не во время переноса фото.
-  // Контролы выделенной ячейки (✥, ползунок, «!») и подсветка цели броска — над стеком, вне обрезки (CellOverlay).
-  const cellUi = $derived(!mini && !preview && !bgEdit)
-  const framed = $derived(!mini && !preview && !drag.active && !bgEdit && store.spread?.id === spread.id && placesel.selected.length > 0)
-
-  // Рамка выделенных стикеров (048): те же условия, что у рамки места. Один — с ручками, в группе — обводки членов.
-  const stickerFramed = $derived(
-    !mini && !preview && !drag.active && !bgEdit && store.spread?.id === spread.id && placesel.selectedStickers.length > 0,
-  )
-
-  // Рамка группы — тот же набор условий, плюс выделено 2 и больше объектов (в том числе тексты).
-  const grouped = $derived(!mini && !preview && !drag.active && !bgEdit && store.spread?.id === spread.id && placesel.isGroup)
-
   // Сгиб есть только у листа со швом; от него зависит белый уголок под листом.
   const hasFold = $derived(seam && !cover)
 
-  // Подпись или заглушка с полями имени под курсором (037): курсор text и подсказка. Заглушки мышь не ловят,
-  // поэтому цель ищем по точке (мм), а не по элементу. hint — невидимая рамка цели, от неё встаёт подсказка.
-  let named = $state<NameTarget | null>(null)
-  let hint = $state<HTMLElement>()
-  $effect(() => {
-    const el = hint
-    if (!el) return
-    tip.showAt(el, 'Двойной щелчок — ввести имя')
-    return () => tip.hideFor(el)
-  })
-
-  // Цель по точке не знает, что выше (свободный текст, фото) и открыт ли редактор: решают признаки элемента.
-  function takes(target: EventTarget | null): boolean {
-    const el = target as Element | null
-    return takesNameTarget({
-      can: prefs.can('captions'),
-      bgEdit,
-      editing: edit.editing,
-      empty: emptyField(el),
-      onNamed: !!el?.closest?.('.hit.caption.named'),
-    })
-  }
-
-  // Страница под курсором: «+ Место» встаёт на неё; заодно — цель ввода имени.
-  function track(e: PointerEvent) {
-    if (mini || store.spread?.id !== spread.id) return
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const x = ((e.clientX - r.left) / r.width) * sw
-    placesel.page = pageAt(spread, x)
-    const t = drag.active || nameEdit.cur || !takes(e.target) ? null : nameTargetAt(spread, x, ((e.clientY - r.top) / r.height) * sh)
-    const next = t?.who.length ? t : null
-    if (next?.photo !== named?.photo) named = next
-  }
-
-  // Двойной щелчок по подписи по шаблону или заглушке: ввод имени вместо «вписать» (Stage.dbl его не увидит).
-  function dbl(e: MouseEvent) {
-    if (mini || store.spread?.id !== spread.id || !root || !takes(e.target)) return
-    if (nameEdit.dbl(spread, e, root)) {
-      e.stopPropagation()
-      named = null
-    }
-  }
+  // Цель ввода имени под курсором (037) — nametrack.svelte.ts.
+  const nt = new NameTrack(() => ({ spread, mini, root, bgEdit }))
 
   // Щелчок по полю (и сквозь фото на фоне) только снимает выделение; с Shift/Ctrl — ничего (gestures.md);
   // после жеста над рамкой он не считается.
@@ -201,10 +134,10 @@
   data-spread={spread.id}
   role="presentation"
   onclick={bgClick}
-  onpointermove={track}
-  onpointerleave={() => (named = null)}
-  ondblclick={dbl}
-  style:cursor={named ? 'text' : undefined}
+  onpointermove={nt.track}
+  onpointerleave={nt.leave}
+  ondblclick={nt.dbl}
+  style:cursor={nt.named ? 'text' : undefined}
 >
   <div class="page" class:whole={!seam} style:background={bg[0]}></div>
   {#if seam}<div class="page right" style:background={bg[1]}></div>{/if}
@@ -249,28 +182,7 @@
     <!-- В «Авто» корешок виден над фото (как до 0.5.0), но под текстами: z верхнего фото, позже слотов в DOM -->
     {#if !spread.grid && seam && !cover}<div class="spine front" style:z-index={photoTop}></div>{/if}
   </div>
-  {#if !mini}<TextOverlay {spread} {width} {tg} />{/if}
-  {#if named}
-    <!-- key: при переходе на соседнюю подпись без зазора подсказка переставляется заново -->
-    {#key named.photo}
-      <div
-        bind:this={hint}
-        class="namehint"
-        style:left="{(named.box.x / sw) * 100}%"
-        style:top="{(named.box.y / sh) * 100}%"
-        style:width="{(named.box.w / sw) * 100}%"
-        style:height="{(named.box.h / sh) * 100}%"
-      ></div>
-    {/key}
-  {/if}
-  {#if !mini}<NameEditor {spread} {width} />{/if}
-  {#if cellUi}<CellOverlay {spread} {width} />{/if}
-  {#if framed}<SelFrame {spread} {width} />{/if}
-  {#if stickerFramed}<StickerOverlay {spread} {width} />{/if}
-  {#if grouped}<GroupFrame {spread} {width} />{/if}
-  {#if bgEdit}<BackdropEditor {spread} {width} />{/if}
-  <!-- Режим «Выпрямить по линии» (045): слой ловит мышь над рамками выделения и фона -->
-  {#if !mini && !preview && straighten.cur?.spread === spread.id && store.spread?.id === spread.id}<StraightenLayer {spread} />{/if}
+  <SpreadOverlays {spread} {width} {mini} {preview} {bgEdit} {tg} {nt} />
   {#if !mini && seam}
     <div
       class="dim"
@@ -445,10 +357,6 @@
   .dim.on,
   .focus.on {
     opacity: 1;
-  }
-  .namehint {
-    position: absolute;
-    pointer-events: none;
   }
   .empty {
     position: absolute;

@@ -79,6 +79,16 @@ func SetBackdropBox(p *model.Project, spreadID, scope string, x, y, w, h, rot fl
 	})
 }
 
+// TurnBackdrop — тело Editor.TurnBackdrop: поворот рамки фона на rot вокруг центра,
+// смена ориентации (около 0/180° ↔ ±90°) меняет стороны местами (geom.TurnBox). Для любой
+// области: разворот, страница, корешок.
+func TurnBackdrop(p *model.Project, spreadID, scope string, rot float64) {
+	changeBackdrop(p, spreadID, scope, func(_ *model.Project, _ *model.Spread, b *model.Backdrop) {
+		t := geom.TurnBox(b.TBox(), rot)
+		b.X, b.Y, b.W, b.H, b.Rot = t.X, t.Y, t.W, t.H, t.Rot
+	})
+}
+
 // SetBackdropFrame — тело Editor.SetBackdropFrame над проектом. Наклон прежнего кадра
 // остаётся (как design.SetFrame).
 func SetBackdropFrame(p *model.Project, spreadID, scope string, s, x, y float64) {

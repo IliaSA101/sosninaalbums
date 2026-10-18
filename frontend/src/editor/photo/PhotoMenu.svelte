@@ -147,6 +147,7 @@
     straighten: (first) => straighten.startPhoto(first),
     flipH: () => placesel.flip('h'),
     flipV: () => placesel.flip('v'),
+    gray: () => placesel.gray(),
     contain: () => placesel.setFit(true),
     cover: () => placesel.setFit(false),
     round: () => placesel.setShape(true),

@@ -31,6 +31,7 @@ const LEGACY_MIN: Record<FeatureId, 'simple' | 'standard' | 'full'> = {
   photoMenu: 'standard',
   frame: 'standard',
   flip: 'standard',
+  adjust: 'standard', // 068: ч/б, яркость и контраст фото
   tilt: 'standard',
   zoom: 'standard',
   names: 'standard',
@@ -67,8 +68,8 @@ describe('таблица уровней', () => {
       for (const l of LEVELS) expect(can(id, l), `${id}@${l}`).toBe(LEVELS.indexOf(l) >= LEVELS.indexOf(LEGACY_MIN[id]))
     }
   })
-  it('26 строк, у каждой краткое имя без повторов', () => {
-    expect(FEATURES).toHaveLength(26)
+  it('27 строк, у каждой краткое имя без повторов', () => {
+    expect(FEATURES).toHaveLength(27)
     const shorts = FEATURES.map((f) => f.short)
     expect(new Set(shorts).size).toBe(shorts.length)
     for (const s of shorts) expect(s.trim(), s).not.toBe('')
@@ -139,6 +140,7 @@ describe('таблица уровней', () => {
       'photoMenu',
       'frame',
       'flip',
+      'adjust',
       'tilt',
       'zoom',
       'names',

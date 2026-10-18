@@ -66,6 +66,14 @@ class BgMode {
     await store.run(Api.SetBackdropBox(c.spread, c.scope, box.x, box.y, box.w, box.h, box.rot, merge))
   }
 
+  // Поворот рамки (070 Г): ориентацию (w↔h) и центр считает Go (TurnBackdrop) — для всех областей.
+  async turn(rot: number) {
+    const c = this.cur
+    if (!c) return
+    this.session = ''
+    await store.run(Api.TurnBackdrop(c.spread, c.scope, rot, ''))
+  }
+
   async setFrame(f: { s: number; x: number; y: number }) {
     const c = this.cur
     if (!c) return

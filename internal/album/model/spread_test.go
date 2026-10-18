@@ -391,9 +391,9 @@ func TestPagePresetsGroups(t *testing.T) {
 	}
 }
 
-// CoverPresetFor (047): Фотосфера на формате из таблицы — сторонка и заворот шаблона, вне
-// таблицы и на листе 031 — страница (0) и заворот 20; безопасные линии 8/12; прочие пресеты —
-// как CoverPresetOf; неизвестный — false.
+// CoverPresetFor (047, 070 Е): Фотосфера — сторонка и заворот шаблона формата страницы, вне
+// таблицы и на листе 031 — ближайшего формата (не «из страницы»: W/H > 0 всегда); безопасные
+// линии 8/12; прочие пресеты — как CoverPresetOf; неизвестный — false.
 func TestCoverPresetFor(t *testing.T) {
 	for _, c := range []struct {
 		st         Settings
@@ -401,8 +401,9 @@ func TestCoverPresetFor(t *testing.T) {
 	}{
 		{Settings{PageW: 281, PageH: 284}, 286, 286, 20},
 		{Settings{PageW: 208, PageH: 296}, 211, 296, 16},
-		{Settings{PageW: 300, PageH: 300}, 0, 0, 20},
-		{Settings{PageW: 281, PageH: 284, Sheet: true}, 0, 0, 20},
+		{Settings{PageW: 300, PageH: 300}, 286, 286, 20},
+		{Settings{PageW: 281, PageH: 284, Sheet: true}, 286, 286, 20},
+		{Settings{PageW: 200, PageH: 300}, 211, 296, 16}, // ближайший 21×30 (12 мм), не 20×30 (28 мм)
 	} {
 		for _, id := range []string{"fsfera-thin", "fsfera-card", "fsfera-double"} {
 			pr, ok := CoverPresetFor(id, c.st)
@@ -420,8 +421,9 @@ func TestCoverPresetFor(t *testing.T) {
 	}
 }
 
-// CoverOffTemplate и CoverFixText (047): старая обложка (заворот 23,5, сторонка — страница)
-// на 30×30 — размеры листа; вне таблицы — заворот; другая таблица корешка при том же листе —
+// CoverOffTemplate и CoverFixText (047, 070 Е): старая обложка (заворот 23,5, сторонка — страница)
+// на 30×30 — размеры листа; вне таблицы — размеры листа ближайшего формата; обложка «из страницы»
+// на нетабличной странице — тоже не шаблон; другая таблица корешка при том же листе —
 // «корешок или расстав»; шаблон, Нетпринт, своя и нет обложки — "".
 func TestCoverFixText(t *testing.T) {
 	thin, _ := CoverPresetOf("fsfera-thin")
@@ -431,6 +433,9 @@ func TestCoverFixText(t *testing.T) {
 	steps := tpl.Spec
 	steps.Steps = slices.Clone(steps.Steps)
 	steps.Steps[len(steps.Steps)-1].Mm = 31
+	// Заворот 23 при сторонке, уменьшенной ровно на него: лист тот же, не так — заворот.
+	wrap := tpl.Spec
+	wrap.Wrap, wrap.W, wrap.H = 23, wrap.W-3, wrap.H-6
 	np, _ := CoverPresetOf("netprint-premium")
 	cu, _ := CoverPresetOf(CoverCustom)
 	for _, c := range []struct {
@@ -439,10 +444,12 @@ func TestCoverFixText(t *testing.T) {
 		want string
 	}{
 		{281, 284, old, "Не по шаблону Фотосферы 30×30: 623 × 331 мм, нужно 626 × 326"},
-		{300, 300, old, "Не по шаблону Фотосферы: заворот 23,5 мм, нужно 20"},
+		{300, 300, old, "Не по шаблону Фотосферы 30×30: 661 × 347 мм, нужно 626 × 326"},
+		{300, 300, thin.Spec, "Не по шаблону Фотосферы 30×30: 654 × 340 мм, нужно 626 × 326"},
+		{281, 284, wrap, "Не по шаблону Фотосферы 30×30: заворот 23 мм, нужно 20"},
 		{281, 284, steps, "Не по шаблону Фотосферы 30×30: корешок или расстав не по таблице"},
 		{281, 284, tpl.Spec, ""},
-		{300, 300, thin.Spec, ""},
+		{300, 300, tpl.Spec, ""},
 		{281, 284, np.Spec, ""},
 		{281, 284, cu.Spec, ""},
 	} {

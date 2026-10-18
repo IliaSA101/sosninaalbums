@@ -44,6 +44,7 @@ func TestScopesNoPanic(t *testing.T) {
 		{"SetBackdrop", true, false, func(e *album.Editor, id string) error { _, err := e.SetBackdrop(id, sp, info(pid(2))); return err }},
 		{"ApplyBackdrop", true, false, func(e *album.Editor, id string) error { _, err := e.ApplyBackdrop(id, sp, info(pid(4))); return err }},
 		{"SetBackdropBox", true, false, func(e *album.Editor, id string) error { e.SetBackdropBox(id, sp, 300, 5, 20, 100, 0, ""); return nil }},
+		{"TurnBackdrop", true, false, func(e *album.Editor, id string) error { e.TurnBackdrop(id, sp, 90, ""); return nil }},
 		{"SetBackdropFrame", true, false, func(e *album.Editor, id string) error { e.SetBackdropFrame(id, sp, 1.5, 0.1, 0); return nil }},
 		{"SetBackdropAngle", true, false, func(e *album.Editor, id string) error { e.SetBackdropAngle(id, sp, 2, ""); return nil }},
 		{"StraightenBackdrop", true, false, func(e *album.Editor, id string) error { e.StraightenBackdrop(id, sp, 10, 1); return nil }},

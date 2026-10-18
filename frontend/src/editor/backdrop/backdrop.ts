@@ -36,11 +36,11 @@ export const backdropCss = (b: BackdropView): string | undefined => photoCss({ r
 // Рамка лежит вдоль вертикали (около ±90°): для корешка это «вдоль корешка».
 const upright = (deg: number): boolean => Math.abs((((deg % 180) + 180) % 180) - 90) < 45
 
-// Поворот рамки фона через поле «Поворот, °» (QA 061-3, решение 33). У корешка при смене ориентации (около 0/180° ↔ ±90°)
-// w и h меняются местами вокруг центра: иначе горизонтальное фото лежит поперёк корешка и его не заполняет.
-// Остальные области — просто поворот вокруг центра.
-export function turnBackdropBox(box: TextBox, deg: number, spine: boolean): TextBox {
-  if (!spine || upright(box.rot) === upright(deg)) return rotateAbout(box, deg)
+// Живой показ поворота рамки фона (протяжка ⟳). Одно правило для всех областей (070 Г): при смене ориентации
+// (около 0/180° ↔ ±90°) w и h меняются местами вокруг центра, иначе — поворот на месте. Коммит считает Go
+// (Api.TurnBackdrop, geom.TurnBox; паритет testdata/parity/bdturn.json) — здесь только показ.
+export function turnBackdropBox(box: TextBox, deg: number): TextBox {
+  if (upright(box.rot) === upright(deg)) return rotateAbout(box, deg)
   const c = center(box)
   const w = box.h
   const h = box.w

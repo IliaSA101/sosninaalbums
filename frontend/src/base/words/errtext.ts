@@ -14,6 +14,14 @@ export function withSkipped(text: string, skipped: number): string {
   return [text, skipped > 0 ? `Отклонённые не взяты: ${skipped}` : ''].filter(Boolean).join('. ')
 }
 
+// Тост после сбора проекта в папку (069): готовые фразы пишет Go (err, note), здесь — только вид тоста.
+// Ошибка и остановка — красный (как в макете), успех — обычный с «Открыть папку» (open).
+export function collectDoneText(err: string, note: string, stopped: boolean): { text: string; kind: 'info' | 'error'; open: boolean } {
+  if (err) return { text: err, kind: 'error', open: false }
+  if (stopped) return { text: note || 'Сбор остановлен', kind: 'error', open: false }
+  return { text: note || 'Проект собран', kind: 'info', open: true }
+}
+
 // Тост после выгрузки (035 U9): число файлов — последний total из export:progress (0/нет — Go не сообщил),
 // сводка цвета от Go — через точку.
 export function exportDoneText(total: number | undefined, note?: string): string {

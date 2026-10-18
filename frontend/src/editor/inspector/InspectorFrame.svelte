@@ -11,6 +11,7 @@
   import ShapeToggle from './ShapeToggle.svelte'
   import SnapToggle from './SnapToggle.svelte'
   import FlipToggle from './FlipToggle.svelte'
+  import AdjustRows from './AdjustRows.svelte'
   import LayerRow from './LayerRow.svelte'
   import TiltRow from './TiltRow.svelte'
   import { straighten } from '../tilt/straighten.svelte'
@@ -125,6 +126,7 @@
 {/if}
 {#if prefs.can('frame')}<FitToggle /><ShapeToggle />{/if}
 {#if prefs.can('flip')}<FlipToggle />{/if}
+{#if prefs.can('adjust') && fv}<AdjustRows {id} />{/if}
 {#if sp?.grid && prefs.can('layers')}
   <LayerRow onpick={(op) => placesel.layer(op)} />
 {/if}

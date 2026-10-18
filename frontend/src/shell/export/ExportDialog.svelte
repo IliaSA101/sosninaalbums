@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { Api, store } from '../../base/core/store.svelte'
+  import { jobs } from '../../base/core/jobs.svelte'
   import type { FsferaPlan } from '../../base/core/types'
   import { coverAct } from '../../panels/cover/coveract.svelte'
   import { edit } from '../../editor/text/edit.svelte'
@@ -29,7 +30,7 @@
   import { isSheet } from '../../base/geom/sheet'
 
   // Окно «Экспорт» (спека 009 U8, design §6.4): что выгрузить, как резать, качество и dpi.
-  // Открыто, пока store.exportOpen; дальше всё ведёт Go (вопросы, диалог папки, прогресс).
+  // Открыто, пока jobs.exportOpen; дальше всё ведёт Go (вопросы, диалог папки, прогресс).
   const spreads = $derived(store.view.spreads)
   const settings = $derived(store.view.settings)
   // Лист виньетки (031): страниц нет — «По страницам» и «л/п» не предлагаются, файл на лист.
@@ -47,7 +48,7 @@
   let planReq = 0
   $effect(() => {
     void store.view.rev
-    if (!store.exportOpen) return
+    if (!jobs.exportOpen) return
     const my = ++planReq
     Api.FsferaPlan()
       .then((p) => {
@@ -59,7 +60,7 @@
   })
   // Каждое открытие — заново: выбор из localStorage, диапазон «Все».
   $effect(() => {
-    if (!store.exportOpen) return
+    if (!jobs.exportOpen) return
     untrack(() => {
       scope = 'all'
       text = ''
@@ -115,7 +116,7 @@
   }
 
   function close() {
-    store.exportOpen = false
+    jobs.exportOpen = false
   }
 
   async function go() {
@@ -123,8 +124,8 @@
     busy = true
     const folder = fs ? plan!.folder : '' // имя папки — из плана этого запуска, для окна «Готово»
     await edit.idle() // набранное в тексте должно попасть в файл
-    store.exportFolder = folder
-    const ok = await store.runExport(
+    jobs.exportFolder = folder
+    const ok = await jobs.runExport(
       buildOptions(scope, current, text, sheet ? { ...prefs, pages: false } : prefs, hasCover, store.onCover, fs),
     )
     busy = false
@@ -138,7 +139,7 @@
   }
 </script>
 
-{#if store.exportOpen}
+{#if jobs.exportOpen}
   <Modal title="Экспорт" onclose={close} wide>
     {#if plan?.format}
       <div class="group">

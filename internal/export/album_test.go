@@ -396,3 +396,61 @@ func TestExportStickers(t *testing.T) {
 		}
 	}
 }
+
+// TestTplScenePlaceholders — плитка шаблона (067): пустые места — серые плашки в своём слое
+// (стикер «под местами» ниже, остальные выше), повёрнутое — описанным прямоугольником; лист без
+// мест — без плашек; пустой вид — false. Экспорт альбома плашек не получает (эталоны — golden_test).
+func TestTplScenePlaceholders(t *testing.T) {
+	tp := model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Page: []model.TplBg{{Color: "#ffeedd"}, {}},
+		Places: []model.Box{{X: 0.05, Y: 0.1, W: 0.4, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.4, H: 0.4, Rot: 30}},
+		Stickers: []model.TplItem{
+			{W: 0.9, H: 0.5, Under: true, Art: &model.Art{Kind: "plate"}},
+			{Anchor: model.Anchor{AX: 1, AY: 1, DX: -0.1, DY: -0.1}, W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}},
+		}}
+	p, v, err := album.PreviewTpl(tp, 400, 200, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, ok := TplScene(p, v)
+	if !ok || len(sc.Slots) != 2 || len(sc.Arts) != 2 || len(sc.Photos) != 0 {
+		t.Fatalf("сцена: %v, мест %d, стикеров %d, фото %d", ok, len(sc.Slots), len(sc.Arts), len(sc.Photos))
+	}
+	if sc.Bg[0] != render.ParseHex("#ffeedd") {
+		t.Errorf("цвет левой %v", sc.Bg[0])
+	}
+	under, above := sc.Arts[0], sc.Arts[1]
+	if under.Kind != "plate" {
+		under, above = above, under
+	}
+	for _, sl := range sc.Slots {
+		if sl.Color != slotColor || sl.Z <= under.Z || sl.Z >= above.Z {
+			t.Errorf("место %+v: под %d, над %d", sl, under.Z, above.Z)
+		}
+	}
+	straight, rot := sc.Slots[0], sc.Slots[1]
+	if pl := v.Spreads[0].Places[1]; rot.Rect.W <= pl.W || rot.Rect.H <= pl.H {
+		t.Errorf("повёрнутое место %+v, рамка %+v", rot.Rect, pl)
+	}
+	if want := (layout.Rect{X: 20, Y: 20, W: 160, H: 160}); !nearRect(straight.Rect, want) {
+		t.Errorf("место %+v, ждали %+v", straight.Rect, want)
+	}
+	if _, ok := TplScene(p, model.View{}); ok {
+		t.Fatal("пустой вид дал сцену")
+	}
+	tp.Places = nil
+	p, v, err = album.PreviewTpl(tp, 400, 200, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sc, _ := TplScene(p, v); len(sc.Slots) != 0 {
+		t.Fatalf("без мест: %+v", sc.Slots)
+	}
+	if es := FromView(p, v); len(es) != 1 || len(es[0].Slots) != 0 {
+		t.Fatal("экспорт получил плашки мест")
+	}
+}
+
+func nearRect(a, b layout.Rect) bool {
+	d := func(x, y float64) bool { return x-y < 0.01 && y-x < 0.01 }
+	return d(a.X, b.X) && d(a.Y, b.Y) && d(a.W, b.W) && d(a.H, b.H)
+}

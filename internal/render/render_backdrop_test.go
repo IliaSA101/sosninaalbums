@@ -197,6 +197,26 @@ func TestRenderSpineOverPlate(t *testing.T) {
 	wantAt(t, "фон без флага под плашкой", renderBd(t, s, 127), 127, 100, 20, plate.Color)
 }
 
+// Пустые места превью шаблона (067, Slots) лежат в общем стеке по Z: над плашкой и местом с
+// меньшим Z, под местом с большим; порядок в списке слоям не мешает.
+func TestRenderSlotsByZ(t *testing.T) {
+	blue := quadrants(t, testkit.TempDir(t), [4]color.RGBA{flipCols.blu, flipCols.blu, flipCols.blu, flipCols.blu})
+	plate := Plate{Rect: layout.Rect{W: 200, H: 100}, Color: color.RGBA{10, 20, 30, 255}}
+	top := Plate{Rect: layout.Rect{X: 10, Y: 10, W: 60, H: 60}, Color: color.RGBA{200, 0, 0, 255}, Z: 5}
+	low := Plate{Rect: layout.Rect{X: 40, Y: 10, W: 60, H: 60}, Color: color.RGBA{0, 0, 200, 255}, Z: 1}
+	ph := coverPhoto(layout.Rect{X: 120, Y: 10, W: 20, H: 20}, 1, blue)
+	ph.Z = 3
+	s := Spread{Bg: [2]color.RGBA{bdGray, bdGray}, Plates: []Plate{plate}, Slots: []Plate{top, low}, Photos: []Photo{ph}}
+	s.Slots = append(s.Slots, Plate{Rect: layout.Rect{X: 110, Y: 0, W: 40, H: 40}, Color: color.RGBA{0, 150, 0, 255}, Z: 2})
+	img := renderBd(t, s, 127)
+	wantAt(t, "Z 5 над Z 1", img, 127, 55, 40, top.Color)
+	wantAt(t, "Z 1 вне Z 5", img, 127, 90, 40, low.Color)
+	wantAt(t, "Z 1 над плашкой", img, 127, 95, 20, low.Color)
+	wantAt(t, "место Z 3 над пустым Z 2", img, 127, 130, 20, flipCols.blu)
+	wantAt(t, "пустое Z 2 вне места", img, 127, 145, 35, color.RGBA{0, 150, 0, 255})
+	wantAt(t, "плашка вне мест", img, 127, 180, 80, plate.Color)
+}
+
 // Повёрнутый фон с кадром из .salbum, не совпадающим с файлом (узкая полоса 4000×10 при
 // рамке 100×2500 мм): окно оригинала нельзя растягивать до размера печати (~140 МБ), иначе
 // подделанный файл просит гигабайты. Заодно ничего не пропадает: полоса остаётся на холсте.

@@ -23,7 +23,7 @@ type fileMark struct {
 }
 
 // encodeMarks — список для файла, по пути в нижнем регистре: стабильный дифф.
-func encodeMarks(marks map[string]model.Mark, base string) []fileMark {
+func encodeMarks(marks map[string]model.Mark, enc pathEnc) []fileMark {
 	if len(marks) == 0 {
 		return nil
 	}
@@ -33,10 +33,8 @@ func encodeMarks(marks map[string]model.Mark, base string) []fileMark {
 	})
 	out := make([]fileMark, len(list))
 	for i, m := range list {
-		fm := fileMark{Path: m.Path, Rating: m.Rating, Label: m.Label, Flag: m.Flag}
-		if r, ok := RelPath(base, m.Path); ok {
-			fm.Path, fm.Abs = r, m.Path
-		}
+		fm := fileMark{Rating: m.Rating, Label: m.Label, Flag: m.Flag}
+		fm.Path, fm.Abs = enc(m.Path)
 		if m.Alt() != "" {
 			fm.Abs = m.Alt()
 		}

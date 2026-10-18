@@ -291,6 +291,9 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.do("TurnPhotos", e.TurnPhotos([]string{id(3)}, 1))
 	r.do("ResetFrame", e.ResetFrame(id(2)))
 	r.do("SetFlip", e.SetFlip([]string{id(2), id(3)}, "h"))
+	r.do("SetGray", e.SetGray([]string{id(2), id(3), id(2), "нет"}))
+	r.do("SetTone", e.SetTone(id(3), 70, -12)) // яркость зажимается до 50
+	r.do("SetTone:холостая", e.SetTone(id(3), 50, -12))
 	r.do("SetBackground", e.SetBackground(s0, "left", "#ffeedd"))
 
 	r.ve("AddText")(e.AddText(s0, 0, "t1"))
@@ -339,6 +342,9 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.do("FlipBackdrop", e.FlipBackdrop(sb, model.ScopeSpread, "v"))
 	r.do("SetBackdropFade", e.SetBackdropFade(sb, model.ScopeSpread, 0.35, "f1"))
 	r.do("FitBackdrop", e.FitBackdrop(sb, model.ScopeSpread))
+	r.do("TurnBackdrop", e.TurnBackdrop(sb, model.ScopeSpread, 90, "t1"))
+	r.do("TurnBackdrop:слияние", e.TurnBackdrop(sb, model.ScopeSpread, 0, "t1"))
+	r.do("TurnBackdrop:холостая", e.TurnBackdrop(sb, model.ScopeSpread, 0, ""))
 	sc := r.spreadOf(id(6))
 	r.ve("SetBackdrop:левая")(e.SetBackdrop(sc, model.ScopeLeft, ph[14]))
 	r.do("ClearBackdrop", e.ClearBackdrop(sc, model.ScopeLeft))
@@ -350,6 +356,8 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.read("SheetSize", [2]float64{sw, sh})
 	q, _ := e.Snapshot()
 	r.read("Snapshot", q)
+	_, marks := e.SnapshotMarks() // сбор в папку (069): отметки вместе со снимком
+	r.read("SnapshotMarks", marks)
 	return q
 }
 

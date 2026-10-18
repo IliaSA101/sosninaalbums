@@ -74,6 +74,7 @@ export type FeatureId =
   | 'photoMenu'
   | 'frame'
   | 'flip'
+  | 'adjust'
   | 'tilt'
   | 'zoom'
   | 'names'
@@ -133,6 +134,7 @@ export const FEATURES: Feature[] = [
   { id: 'photoMenu', group: 'Фото и текст', title: 'Меню по правой кнопке', short: 'Меню по правой кнопке', min: 'standard' },
   { id: 'frame', group: 'Фото и текст', title: 'Кадр (✥, ползунок), «Целиком / С обрезкой», форма места', short: 'Кадр', min: 'standard' },
   { id: 'flip', group: 'Фото и текст', title: 'Зеркало фото', short: 'Зеркало фото', min: 'standard' },
+  { id: 'adjust', group: 'Фото и текст', title: 'Ч/б, яркость и контраст фото', short: 'Ч/б и тон фото', min: 'standard' },
   { id: 'tilt', group: 'Фото и текст', title: 'Наклон фото', short: 'Наклон фото', min: 'standard' },
   { id: 'bgPhoto', group: 'Фото и текст', title: 'Фото на фоне и режим фона', short: 'Фото на фоне', min: 'standard' },
   {

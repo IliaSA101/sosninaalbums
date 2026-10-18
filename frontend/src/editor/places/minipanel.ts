@@ -142,8 +142,26 @@ export type LayerOp = (typeof LAYER_OPS)[number]['op']
 // Пока зажат модификатор, панель пропускает мышь к фото под ней: Shift/Ctrl+щелчок по соседу
 // добавляет его к выделению, а не попадает в кнопку панели (у кнопок вариантов с модификатором нет).
 // Alt — «выбрать под курсором» (015).
-export function passThrough(e: { shiftKey: boolean; ctrlKey: boolean; altKey: boolean; metaKey: boolean }): boolean {
+export type Mods = { shiftKey: boolean; ctrlKey: boolean; altKey: boolean; metaKey: boolean }
+
+export function passThrough(e: Mods): boolean {
   return e.shiftKey || e.ctrlKey || e.altKey || e.metaKey
+}
+
+// События, по которым пересчитывается «панель пропускает мышь» (QA 0.14.1 №1). Признак не копится по keydown/keyup:
+// keyup модификатора бывает потерян (Alt уходит в системное меню окна, отпускание вне окна), и панель, возникшая под
+// неподвижным курсором, оставалась полупрозрачной — первый щелчок по кнопке уходил в фото. Поэтому каждое событие
+// указателя несёт настоящее состояние модификаторов и перекрывает прежний признак; blur/скрытие окна и новое положение
+// панели (или другое выделенное) — сброс на состояние последнего указателя (lastPointer; не задан — нет модификаторов).
+export type ThroughEv =
+  | ({ type: 'keydown' | 'keyup' | 'pointermove' | 'pointerdown' | 'pointerover' } & Mods)
+  | { type: 'blur' | 'hidden' }
+  | { type: 'place'; lastPointer?: Mods }
+
+export function throughNext(ev: ThroughEv): boolean {
+  if (ev.type === 'blur' || ev.type === 'hidden') return false
+  if (ev.type === 'place') return !!ev.lastPointer && passThrough(ev.lastPointer)
+  return passThrough(ev as Mods)
 }
 
 export const MINI_GAP = 8 // отступ от рамки, px
@@ -288,12 +306,52 @@ export function miniPlace(
   return { top, left: cx, where: 'top' }
 }
 
-// Насколько поднять ползунок масштаба кадра: внутри у низа он стоит над полосой (px от низа рамки), иначе 0 (обычные 16 px).
-// У места с поворотом полоса считана в осях разворота, а ползунок живёт в осях места: точный подъём там неверен, поэтому
-// постоянный — выше полосы, что стоит у нижнего края видимой части (отступ + высота + 8): иначе ползунок ляжет на неё.
-export const zoomLift = (p: { top: number; where: MiniWhere }, boxBottomPx: number, rot = 0): number => {
-  if (p.where !== 'inside') return 0
-  return rot ? MINI_IN_GAP + MINI_H + 8 : boxBottomPx - p.top + 8
+// Высота ползунка масштаба кадра на холсте (кружок 16 px) и зазоры: у видимого края и над полосой.
+const ZOOM_H = 16
+const ZOOM_EDGE = 16
+const ZOOM_STEP = 4
+
+// Рамка места для ползунка: px от угла разворота, оси места (rot — угол вокруг центра, °).
+export type ZoomBox = { x: number; y: number; w: number; h: number; rot?: number }
+
+// Все ли углы прямоугольника ползунка (в осях места, от центра) после поворота места лежат в видимой области
+// и не ниже maxY (внутри у низа — выше полосы).
+function zoomFits(b: ZoomBox, up: number, hw: number, view: MiniView, maxY: number): boolean {
+  const a = ((b.rot ?? 0) * Math.PI) / 180
+  const [sn, cs] = [Math.sin(a), Math.cos(a)]
+  const cx = b.x + b.w / 2
+  const cy = b.y + b.h / 2
+  for (const dx of [-hw, hw])
+    for (const dy of [b.h / 2 - up - ZOOM_H, b.h / 2 - up]) {
+      const x = cx + dx * cs - dy * sn
+      const y = cy + dx * sn + dy * cs
+      if (x < view.left || x > view.right || y < view.top || y > Math.min(view.bottom, maxY)) return false
+    }
+  return true
+}
+
+// Насколько поднять ползунок масштаба кадра: px от низа рамки места до низа ползунка (не меньше 16 — прежнее место).
+// Ползунок не прячется (owner-ux §1.3): внутри у низа он над полосой; иначе у нижнего края ВИДИМОЙ части рамки, если
+// низ рамки за экраном. У повёрнутого места — вдоль оси места до первой точки, где он целиком в видимой области (view);
+// нет такой — прежнее место. Видимой части у рамки нет — прежнее место.
+export const zoomLift = (p: { top: number; where: MiniWhere }, b: ZoomBox, view?: MiniView): number => {
+  const rot = b.rot ?? 0
+  const bottom = b.y + b.h
+  const inside = p.where === 'inside'
+  if (!rot) {
+    if (inside) return bottom - p.top + 8
+    if (!view || b.y >= view.bottom || bottom <= view.top || bottom <= view.bottom) return ZOOM_EDGE
+    // низ за экраном: у нижнего края видимой части, но не выше верха видимой части рамки
+    const top = Math.max(b.y, view.top)
+    const lift = bottom - view.bottom + ZOOM_EDGE
+    return lift > bottom - top - ZOOM_H ? ZOOM_EDGE : lift
+  }
+  const base = inside ? MINI_IN_GAP + MINI_H + 8 : ZOOM_EDGE // прежние: у повёрнутого полоса считана в чужих осях
+  if (!view) return base
+  const hw = Math.min(b.w * 0.6, 170) / 2
+  const maxY = inside ? p.top - 8 : Infinity // внутри у низа — над полосой
+  for (let up = base; up <= b.h - ZOOM_H - 8; up += ZOOM_STEP) if (zoomFits(b, up, hw, view, maxY)) return up
+  return base
 }
 
 // Дуге наклона — есть ли место (063): внутри у верха видимой части, над рамкой снаружи или нигде.

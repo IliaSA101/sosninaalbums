@@ -2,6 +2,7 @@
 // показать в данном контексте. Чистая логика; действия — в PhotoMenu.svelte.
 import { canFitPhoto, type SelBox } from '../../base/geom/gridedit'
 import { actualAspect, isDefaultFrame } from '../../base/geom/frame'
+import { allGray } from '../../base/geom/tone'
 import type { FeatureId } from '../../base/prefs/levels'
 import type { SpreadView } from '../../base/core/types'
 
@@ -19,6 +20,7 @@ export type MenuId =
   | 'resetFrame'
   | 'flipH'
   | 'flipV'
+  | 'gray'
   | 'turnCw'
   | 'turnCcw'
   | 'straighten'
@@ -49,6 +51,7 @@ export interface MenuCtx {
   allCover: boolean
   allOval: boolean // форма (044): у всех выделенных круг
   allRect: boolean // у всех прямоугольник (в «Авто» всегда)
+  allGray: boolean // 068: все выделенные фото уже ч/б — пункт «Сделать цветным»
   framed: boolean // одно фото и его кадр изменён
 }
 
@@ -72,6 +75,10 @@ export function menuContext(s: SpreadView | undefined, sel: SelBox[], missing: r
     allCover: sel.length > 0 && sel.every((b) => b.fit !== 'contain'),
     allOval: sel.length > 0 && sel.every((b) => b.shape === 'oval'),
     allRect: sel.length > 0 && sel.every((b) => b.shape !== 'oval'),
+    allGray: allGray(
+      s,
+      withPhoto.map((b) => b.photo),
+    ),
     framed: !!fv && !isDefaultFrame(fv),
   }
 }
@@ -87,6 +94,7 @@ const FEATURE: Partial<Record<MenuId, FeatureId>> = {
   resetFrame: 'frame',
   flipH: 'flip',
   flipV: 'flip',
+  gray: 'adjust',
   turnCw: 'turn',
   turnCcw: 'turn',
   straighten: 'tilt',
@@ -155,6 +163,12 @@ const shapeItems = (c: MenuCtx): MenuItem[] => [
   ...(c.allRect ? [] : [item('rect', 'Прямоугольное')]),
 ]
 
+// Зеркало и ч/б (068) — только у фото. Ч/б: всем или никому решает Go (SetGray), подпись — по состоянию выделенных.
+const colorItems = (c: MenuCtx): MenuItem[] =>
+  c.photos === 0
+    ? []
+    : [item('flipH', 'Зеркало ↔'), item('flipV', 'Зеркало ↕'), item('gray', c.allGray ? 'Сделать цветным' : 'Сделать ч/б')]
+
 // Место и кадр; линия — перед первым пунктом группы.
 function frameItems(c: MenuCtx): MenuItem[] {
   // Зеркало — фото; «Слой ▸» — любое выделенное место, только «Ручная» (у «Авто» места не перекрываются).
@@ -164,8 +178,7 @@ function frameItems(c: MenuCtx): MenuItem[] {
     hasPhoto && item('turnCcw', 'Повернуть ↺ 90°'),
     // Выпрямить по линии (045): одно фото, без текстов в группе — режим привязан к выделенному фото.
     canStraighten(c) && item('straighten', 'Выпрямить по линии'),
-    hasPhoto && item('flipH', 'Зеркало ↔'),
-    hasPhoto && item('flipV', 'Зеркало ↕'),
+    ...colorItems(c),
     hasPhoto && c.differ && item('fitPhoto', 'Пропорции под фото'),
     hasPhoto && !c.allContain && item('contain', 'Целиком'),
     hasPhoto && !c.allCover && item('cover', 'С обрезкой'),

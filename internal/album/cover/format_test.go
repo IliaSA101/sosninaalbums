@@ -112,7 +112,7 @@ func presetDropsTemplateSide(t *testing.T) {
 
 // TestCoverFollowsFormat — обложка по шаблону переходит на шаблон нового формата тем же шагом
 // (решение 53): одно Undo возвращает и страницу, и обложку; своя обложка и старая (заворот 23,5)
-// остаются; формат → не формат — сторонка 0 (страница), обратно — шаблон.
+// остаются; формат → не формат — шаблон ближайшего формата (070 Е), обратно — шаблон нового.
 func TestCoverFollowsFormat(t *testing.T) {
 	e := coverAlbum(t, 2)
 	x0 := sheet(e).BgPhotoR.X
@@ -128,7 +128,7 @@ func TestCoverFollowsFormat(t *testing.T) {
 		t.Fatalf("Undo: страница %v, обложка %+v", edtest.P(e).Settings.PageW, spec(e))
 	}
 	page(e, 300, 300)
-	if c := spec(e); c.W != 0 || c.H != 0 || c.Wrap != 20 {
+	if c := spec(e); c.W != 286 || c.H != 286 || c.Wrap != 20 {
 		t.Fatalf("формат → не формат: %+v", c)
 	}
 	page(e, 208, 296)

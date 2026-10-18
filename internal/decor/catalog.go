@@ -50,6 +50,10 @@ type Item struct {
 	W      int     `json:"w"`
 	H      int     `json:"h"`
 	Color  string  `json:"color,omitempty"` // цвет страниц пресета фона: подложка плитки
+	// Pages, Places — у разворота (067): 1 — страница, 2 — разворот; мест в шаблоне.
+	Pages  int    `json:"pages,omitempty"`
+	Places int    `json:"places,omitempty"`
+	Pack   string `json:"pack,omitempty"` // название набора (067): подсказка «Набор «…»»
 }
 
 // Theme — строка списка тем слева.
@@ -81,6 +85,7 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 			cat.Items = append(cat.Items, p.item(w, h))
 		}
 	}
+	cat.Items = append(cat.Items, spreadBuiltins(kind)...)
 	s.mu.RLock()
 	cat.ReadOnly = s.readOnly
 	// Копии записей: ✎ и × меняют их под mu, пока каталог собирается.
@@ -90,12 +95,9 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 			own = append(own, *e)
 		}
 	}
+	packs := s.packItems(kind)
 	s.mu.RUnlock()
-	// Свои — новые первыми, как «Мои шаблоны».
-	slices.SortStableFunc(own, func(a, b entry) int { return cmp.Compare(b.Added, a.Added) })
-	for i := range own {
-		cat.Items = append(cat.Items, own[i].item())
-	}
+	cat.Items = append(cat.Items, s.libItems(kind, packs, own)...)
 	has := make(map[string]bool, len(cat.Items))
 	count := map[string]int{ThemeAll: len(cat.Items)}
 	for _, it := range cat.Items {
@@ -117,6 +119,41 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 	return cat, nil
 }
 
+// libItems — плитки после встроенных: наборы (design §4.4; тот же ключ у своего — плитка
+// своего: у неё ✎ и ×), затем свои новыми первыми, как «Мои шаблоны». Шаблон разворота, файл
+// которого не разбирается, — без плитки.
+func (s *Store) libItems(kind string, packs []Item, own []entry) []Item {
+	if kind == KindSpread {
+		keys := make([]string, 0, len(packs)+len(own))
+		for _, it := range packs {
+			keys = append(keys, it.ID)
+		}
+		for _, e := range own {
+			keys = append(keys, e.Key)
+		}
+		s.warmTpl(keys)
+	}
+	out := make([]Item, 0, len(packs)+len(own))
+	for _, it := range packs {
+		if slices.ContainsFunc(own, func(e entry) bool { return e.Key == it.ID }) {
+			continue
+		}
+		if kind == KindSpread && !s.tplMeta(&it) {
+			continue
+		}
+		out = append(out, it)
+	}
+	slices.SortStableFunc(own, func(a, b entry) int { return cmp.Compare(b.Added, a.Added) })
+	for i := range own {
+		it := own[i].item()
+		if kind == KindSpread && !s.tplMeta(&it) {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
 // tileSize — мм плитки узора: лист, а без него (или с мусором) — квадрат 300 мм.
 func tileSize(w, h float64) (float64, float64) {
 	const maxMM = 2500 // предел области gen
@@ -129,6 +166,9 @@ func tileSize(w, h float64) (float64, float64) {
 // item — плитка своего: превью через кэш миниатюр по ключу (/media/lib/t).
 func (e *entry) item() Item {
 	it := Item{ID: e.Key, Theme: e.Theme, Name: e.Name, URL: LibURL(e.Key, false), Own: true, W: e.W, H: e.H}
+	if e.Kind == KindSpread { // плитку рисует Go по шаблону (/media/tpl), не кэш миниатюр
+		it.URL = TplURL(e.Key)
+	}
 	if e.W > 0 && e.H > 0 {
 		it.Aspect = float64(e.W) / float64(e.H)
 	}
@@ -169,8 +209,9 @@ func (s *Store) Background(id string) (Background, error) {
 	s.mu.RLock()
 	e := s.entryOf(KindBg, id)
 	path, ok := s.files[KindBg][id]
+	ok = ok && (e != nil || s.inPack(KindBg, id))
 	s.mu.RUnlock()
-	if e == nil || !ok {
+	if !ok {
 		return Background{}, ErrNotFound
 	}
 	// Размеры — из файла с поворотом EXIF, как у записи при открытии альбома.
@@ -183,8 +224,10 @@ func (s *Store) Background(id string) (Background, error) {
 
 // cleanName — имя для показа: без управляющих и невидимых знаков, пробелы схлопнуты,
 // ≤ 60 знаков; пусто — "".
-func cleanName(s string) string {
-	const maxRunes = 60
+func cleanName(s string) string { return cleanText(s, 60) }
+
+// cleanText — cleanName с другим пределом (описание, лицензия, источник набора).
+func cleanText(s string, maxRunes int) string {
 	var b strings.Builder
 	n, space := 0, false
 	for _, r := range s {

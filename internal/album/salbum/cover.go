@@ -57,8 +57,8 @@ func fixCoverAndGuide(p *model.Project, f *FileProject, base string, v1 bool) {
 	p.SpreadGuide, p.SpreadGuideAlt = loadGuide("развороты", f.SpreadGuide, f.SpreadGuideAbs, base, v1)
 }
 
-// guideExt — разметка типографии — PSD (066), JPEG или PNG.
-func guideExt(path string) bool {
+// GuideExt — разметка типографии — PSD (066), JPEG или PNG; иное сбор в папку (069) не копирует.
+func GuideExt(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".jpg", ".jpeg", ".png", ".psd":
 		return true
@@ -76,11 +76,11 @@ func loadGuide(what, path, abs, base string, v1 bool) (guide, alt string) {
 		return "", ""
 	}
 	primary, alt, err := candidates(path, abs, base, v1)
-	if err != nil || !guideExt(primary) {
+	if err != nil || !GuideExt(primary) {
 		log.Printf("%s: файл разметки отброшен — недопустимый путь или тип", what)
 		return "", ""
 	}
-	if alt == "" || !guideExt(alt) {
+	if alt == "" || !GuideExt(alt) {
 		return primary, ""
 	}
 	if _, ok := fileSize(primary); ok {
@@ -92,28 +92,25 @@ func loadGuide(what, path, abs, base string, v1 bool) (guide, alt string) {
 	return primary, alt
 }
 
-// encodeCover — обложка для записи: путь разметки внутри base — относительный с абсолютным
-// рядом; base == "" (черновик) — абсолютный. Без обложки поле не пишется (omitempty).
-func encodeCover(c *model.Cover, base string) *FileCover {
+// encodeCover — обложка для записи: путь разметки — по enc (write.go). Без обложки поле не
+// пишется (omitempty).
+func encodeCover(c *model.Cover, enc pathEnc) *FileCover {
 	if c == nil {
 		return nil
 	}
 	fc := &FileCover{Cover: *c}
 	fc.GuideAlt = "" // в файле запасной путь — guideAbs
-	fc.Guide, fc.GuideAbs = encodeGuide(c.Guide, c.GuideAlt, base)
+	fc.Guide, fc.GuideAbs = encodeGuide(c.Guide, c.GuideAlt, enc)
 	return fc
 }
 
-// encodeGuide — путь разметки для записи: внутри base — относительный с абсолютным рядом;
-// base == "" (черновик) — абсолютный; разметки не нашлось при открытии — запасной как был.
-func encodeGuide(guide, alt, base string) (path, abs string) {
+// encodeGuide — путь разметки для записи (по enc); разметки не нашлось при открытии — запасной
+// как был.
+func encodeGuide(guide, alt string, enc pathEnc) (path, abs string) {
 	if guide == "" {
 		return "", ""
 	}
-	path = guide
-	if r, ok := RelPath(base, guide); ok {
-		path, abs = r, guide
-	}
+	path, abs = enc(guide)
 	if alt != "" {
 		abs = alt
 	}
@@ -164,7 +161,7 @@ func CheckGuide(path string) error {
 	if strings.EqualFold(filepath.Ext(path), ".psb") {
 		return library.ErrPSB
 	}
-	if !guideExt(path) {
+	if !GuideExt(path) {
 		return errors.New("файл разметки — только PSD, JPEG или PNG")
 	}
 	return nil

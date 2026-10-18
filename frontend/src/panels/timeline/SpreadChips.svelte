@@ -4,6 +4,7 @@
   import { drag } from '../../base/drag/drag.svelte'
   import { tip, tipped } from '../../base/ui/tip.svelte'
   import { thumbUrl } from '../../base/core/media'
+  import { adjlive } from '../../editor/photo/adjlive.svelte'
   import { flipCss, photoCss, thumbBox } from '../../base/geom/frame'
   import { outlineOf } from '../../base/geom/shape'
   import type { SpreadView } from '../../base/core/types'
@@ -106,10 +107,18 @@
                 outlineOf(sp.frames[j].shape, sp.frames[j].radius),
               )}
               style:transform={photoCss(sp.frames[j])}
+              style:filter={adjlive.filterOf(id, sp.frames[j])}
             /></span
           >
         {:else}
-          <img src={thumbUrl(id)} alt="" loading="lazy" draggable="false" style:transform={flipCss(sp.frames?.[j])} />
+          <img
+            src={thumbUrl(id)}
+            alt=""
+            loading="lazy"
+            draggable="false"
+            style:transform={flipCss(sp.frames?.[j])}
+            style:filter={adjlive.filterOf(id, sp.frames?.[j])}
+          />
         {/if}
         {#if j > 0 && !sp.grid && cuts}
           <!-- Разрез перед этим фото -->

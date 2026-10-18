@@ -16,7 +16,6 @@ import {
   passThrough,
   ROT_KEEP,
   visibleArea,
-  zoomLift,
   type MiniCtx,
 } from './minipanel'
 import { ARC_CMIN, ARC_OUT_GAP, ARC_PHI, KNOB } from '../tilt/tiltdial'
@@ -92,6 +91,10 @@ const fv = (o: Partial<FrameView>): FrameView => ({
   dpi: 300,
   flipH: false,
   flipV: false,
+  gray: false,
+  bright: 0,
+  contrast: 0,
+  filter: '',
   cellRot: 0,
   z: 1,
   ...o,
@@ -319,28 +322,6 @@ describe('miniPlace внутри у низа (владелец 2026-10-17, owner
   it('подпись сбоку от полосы по горизонтали её не сдвигает', () => {
     const side = cap(0, 120, 40, 12) // x 0..80 px, полоса 250..350
     expect(miniPlace(box, 2, 600, 300, 100, undefined, 0, undefined, [side]).top).toBe(300 - MINI_IN_GAP - MINI_H)
-  })
-  it('zoomLift: ползунок масштаба над полосой (владелец 2026-10-17)', () => {
-    const p = miniPlace(box, 2, 600, 300, 100)
-    expect(zoomLift(p, 300)).toBe(300 - p.top + 8)
-    expect(zoomLift({ top: 10, where: 'below' }, 300)).toBe(0)
-    expect(zoomLift({ top: 10, where: 'above' }, 300)).toBe(0)
-    expect(zoomLift({ top: 10, where: 'top' }, 300)).toBe(0)
-    // у повёрнутого места оси чужие: вне 'inside' — 0, на 'inside' — постоянный подъём над полосой (ревью 0.14.1)
-    expect(zoomLift({ top: 10, where: 'below' }, 300, 15)).toBe(0)
-    expect(zoomLift(p, 300, 15)).toBe(MINI_IN_GAP + MINI_H + 8)
-  })
-  it('зум: повёрнутое место с полосой у низа — ползунок выше полосы', () => {
-    const v = { left: 0, top: 0, right: 1000, bottom: 400 }
-    const r = (3 * Math.PI) / 180
-    const [W, H] = [200, 220] // мм, ppm 2 → 400×440 px; низ рамки в 10 px над низом окна
-    const aw = W * Math.cos(r) + H * Math.sin(r)
-    const ah = W * Math.sin(r) + H * Math.cos(r)
-    const b = { x: 250 - aw / 2, y: 195 - ah, w: aw, h: ah }
-    const p = miniPlace(b, 2, 1000, 1000, 290, undefined, 0, v)
-    expect(p.where).toBe('inside')
-    const lift = zoomLift(p, (b.y + b.h) * 2, 3)
-    expect(lift).toBeGreaterThanOrEqual((b.y + b.h) * 2 - p.top) // выше верха полосы
   })
   it('внутри не помещается — прежний запасной (владелец 2026-10-17)', () => {
     const cut = { left: 0, top: 0, right: 600, bottom: 150 }

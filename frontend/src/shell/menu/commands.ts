@@ -2,6 +2,7 @@
 // зовут один `run`, поэтому «Отменить» из меню и Ctrl+Z делают одно и то же.
 // Здесь только вызовы store/Api; решения «что показать» — в menu.ts и keys.ts.
 import { Api, store } from '../../base/core/store.svelte'
+import { jobs } from '../../base/core/jobs.svelte'
 import { bgmode } from '../../editor/backdrop/bgmode.svelte'
 import { canvas } from '../../editor/canvas/canvas.svelte'
 import { row } from '../../editor/spread/spreadrow.svelte'
@@ -11,6 +12,7 @@ import { gallery } from '../../panels/gallery/gallery.svelte'
 import { help } from './help.svelte'
 import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
+import { packsUi } from '../dialogs/packs.svelte'
 import { namesUi } from '../../panels/names/names.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { straighten } from '../../editor/tilt/straighten.svelte'
@@ -22,6 +24,7 @@ import { makeVignette } from '../../panels/vignette/vigact'
 import { vigDialog } from '../../panels/vignette/vigsession.svelte'
 import { decor } from '../../panels/decor/decor.svelte'
 import { defaultScope } from '../../panels/decor/decor'
+import { COVER_ID } from '../../base/geom/sheet'
 import { relinkFolder } from '../../panels/library/relink'
 import { anyVaries, varyTargets } from '../../panels/gallery/variants'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
@@ -38,12 +41,15 @@ export type MenuCommand =
   | 'addFolder'
   | 'relink'
   | 'backups'
+  | 'packs'
+  | 'collect'
   | 'showExport'
   | 'settings'
   | 'addText'
   | 'pasteNames'
   | 'flipH'
   | 'flipV'
+  | 'gray'
   | 'align'
   | 'alignTo'
   | 'turnCw'
@@ -68,6 +74,7 @@ export type MenuCommand =
   | 'bgGallery'
   | 'addSticker'
   | 'copyDecor'
+  | 'spreadTpl'
 export type Command = KeyAction | MenuCommand
 
 // ev — клавиатурное событие, если команду вызвала клавиша: сдвиг стрелкой и Пробел берут из него клавишу.
@@ -137,9 +144,13 @@ export const COMMANDS: Record<Command, Handler> = {
   save: () => afterEdit(() => Api.SaveProject()),
   saveAs: () => afterEdit(() => Api.SaveProjectAs()),
   backups: () => backupsUi.show(),
+  packs: () => {
+    if (prefs.can('decor')) void packsUi.show() // без «Фонов и стикеров» на уровне наборам нечего показывать
+  },
+  collect: () => edit.idle().then(() => jobs.collectShow()),
   addFolder: () => store.run(Api.ChooseFolder()),
   relink: () => relinkFolder(),
-  export: () => edit.idle().then(() => store.exportAll()),
+  export: () => edit.idle().then(() => jobs.exportAll()),
   showExport: () => showExportFolder(),
   settings: () => modes.openSection('settings'),
 
@@ -195,8 +206,14 @@ export const COMMANDS: Record<Command, Handler> = {
     const s = store.spread
     if (s && prefs.can('decor')) gridAct.openDecor(s.id)
   },
+  // 067: окно «Развороты» с текущего листа; обложка (не цель), нет листа или функции на уровне — молчим
+  spreadTpl: () => {
+    const s = store.spread
+    if (s && s.id !== COVER_ID && prefs.can('decor')) decor.show('spread', s.id, 'spread')
+  },
   flipH: () => placesel.flip('h'),
   flipV: () => placesel.flip('v'),
+  gray: () => placesel.gray(),
   align: (_e, op) => isAlignOp(op) && align.run(op),
   alignTo: (_e, to) => align.setTo(normAlignTo(to)),
   turnCw: () => placesel.turn(1),

@@ -46,6 +46,7 @@ export interface MenuCtx {
   anySelection: boolean // выделено что угодно (фото в ленте, место, текст)
   deletable: boolean // есть что удалять с разворота (место, фото, текст)
   flippable: boolean // выделено фото на развороте (зеркалить, повернуть)
+  allGray?: boolean // 068: все выделенные фото ч/б — пункт «Сделать цветным»; нет — «Сделать ч/б»
   sticker?: boolean // выделен один стикер (048): зеркалить можно и его
   varyable?: boolean // у «Разнообразить раскладки» есть цель: развороты «Авто» с фото среди выделенных, без выделения — текущий; нет — серое
   vigable?: boolean // текущий лист можно сделать виньеткой (обычный разворот, не обложка); нет — серое
@@ -54,6 +55,7 @@ export interface MenuCtx {
   layerable?: boolean // «Ручная» и выделено место, фото, текст или стикер; «Авто» — стикер (с текстом или без) без мест: слои двигать есть что; нет — серое
   missing: number // пропавших фото
   exporting: boolean // экспорт уже идёт
+  collecting?: boolean // сбор проекта в папку уже идёт (069)
   big: boolean
   details: boolean
   safe: boolean
@@ -173,7 +175,11 @@ function fileSpecs(c: MenuCtx): Spec[][] {
       },
       { id: 'save', label: 'Сохранить', cmd: 'save' },
       { id: 'saveAs', label: 'Сохранить как…', cmd: 'saveAs' },
+      // 069: копия альбома и всех его файлов в одну папку для переноса; пока сбор идёт — серое
+      { id: 'collect', label: 'Собрать проект в папку…', cmd: 'collect', disabled: !!c.collecting },
       { id: 'backups', label: 'Резервные копии…', cmd: 'backups' },
+      // 067 Ф2: наборы фонов, стикеров и разворотов — добавить из файла, удалить
+      { id: 'packs', label: 'Наборы библиотеки…', cmd: 'packs', feature: 'decor' },
     ],
     [
       { id: 'addFolder', label: 'Добавить папку с фото…', cmd: 'addFolder' },
@@ -213,6 +219,8 @@ function editSpecs(c: MenuCtx): Spec[][] {
       { id: 'bgGallery', label: 'Галерея фонов…', cmd: 'bgGallery', feature: 'decor', disabled: !c.hasSpread },
       // 049 Ф2: «Копировать оформление…» — окно как у «Копировать раскладку…»; обложка не источник (серое)
       { id: 'copyDecor', label: 'Копировать оформление…', cmd: 'copyDecor', feature: 'decor', disabled: !c.decorable },
+      // 067: окно «Развороты» — места и оформление готовых разворотов; обложка не цель (серое)
+      { id: 'spreadTpl', label: 'Готовые развороты…', cmd: 'spreadTpl', feature: 'decor', disabled: !c.decorable },
       { id: 'pasteNames', label: 'Имена из списка…', cmd: 'pasteNames', feature: 'captions', disabled: !c.hasSpread },
       { id: 'makeVignette', label: 'Сделать разворот виньеткой', cmd: 'makeVignette', feature: 'vignette', disabled: !c.vigable },
       { id: 'vigSetup', label: 'Настроить виньетку…', cmd: 'vigSetup', feature: 'vignette', disabled: !c.vigSetup },
@@ -251,6 +259,13 @@ function editSpecs(c: MenuCtx): Spec[][] {
           { id: 'flipH', label: '↔ По горизонтали', cmd: 'flipH' },
           { id: 'flipV', label: '↕ По вертикали', cmd: 'flipV' },
         ],
+      },
+      {
+        id: 'gray',
+        label: c.allGray ? 'Сделать цветным' : 'Сделать ч/б',
+        feature: 'adjust',
+        disabled: !c.flippable,
+        cmd: 'gray',
       },
       alignMenu(c),
     ],

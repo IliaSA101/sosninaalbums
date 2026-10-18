@@ -80,10 +80,15 @@ func coverZones(cg model.CoverGeo, edge, spine float64) []model.CoverZone {
 	x, y := cg.X, cg.Y
 	w, h := x[7], y[3]
 	band := func(x0, x1, y0, y1 float64) layout.Rect { return layout.Rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0} }
+	// Корешок уже MinSpine — зона (черта сгиба) остаётся, надписи нет: вертикальный текст в щели не читается (070 Д).
+	spineLabel := ""
+	if cg.Spine >= model.MinSpine {
+		spineLabel = fmt.Sprintf("Корешок %s мм", model.MmText(cg.Spine))
+	}
 	z := []model.CoverZone{
 		{Kind: "back", Rect: band(x[1], x[2], y[1], y[2]), Label: "Задняя"},
 		{Kind: "front", Rect: band(x[5], x[6], y[1], y[2]), Label: "Лицевая"},
-		{Kind: "spine", Rect: band(x[3], x[4], 0, h), Label: fmt.Sprintf("Корешок %s мм", model.MmText(cg.Spine))},
+		{Kind: "spine", Rect: band(x[3], x[4], 0, h), Label: spineLabel},
 	}
 	if hinge := x[3] - x[2]; hinge > 0 {
 		lbl := fmt.Sprintf("Расстав %s мм", model.MmText(hinge))

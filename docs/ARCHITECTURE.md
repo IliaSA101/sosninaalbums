@@ -12,6 +12,7 @@
 - [Формат `.salbum`](architecture/salbum-format.md) — файл альбома, версии, миграции.
 - [Перепривязка](architecture/relink.md) — недостающие фото.
 - [Чтение папок и цвет](architecture/folders-color.md) — `internal/library`.
+- [Библиотека](architecture/library.md) — виды, наборы, каталог, подпись ed25519, ротация ключа (спека 067).
 - [Раскладка](architecture/layout.md) — `internal/layout`.
 - [Автосборка](architecture/autobuild.md) — `Group`.
 - [Drag-система](architecture/drag.md) — фронтенд.

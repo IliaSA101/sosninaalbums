@@ -20,6 +20,7 @@ func TestBackdropBodiesBadArea(t *testing.T) {
 
 	edits := map[string]func(sid, scope string){
 		"рамка":        func(sid, scope string) { backdrop.SetBackdropBox(p, sid, scope, 10, 20, 100, 80, 15) },
+		"поворот":      func(sid, scope string) { backdrop.TurnBackdrop(p, sid, scope, 90) },
 		"кадр":         func(sid, scope string) { backdrop.SetBackdropFrame(p, sid, scope, 2, 0.5, -0.5) },
 		"наклон":       func(sid, scope string) { backdrop.SetBackdropAngle(p, sid, scope, 7, nil) },
 		"выпрямить":    func(sid, scope string) { backdrop.StraightenBackdrop(p, sid, scope, 80, 5) },

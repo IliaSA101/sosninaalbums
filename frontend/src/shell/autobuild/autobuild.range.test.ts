@@ -110,11 +110,11 @@ describe('AutoDialog: диапазон 051', () => {
     d.setAuto() // уже «Авто»
     expect(go.waiting()).toBe(0)
     d.setMinPer(8)
-    await go.release()
+    await drain(go) // запомненный N первая смена диапазона пересчитывает — спрашивает заново
     d.setOwn() // уже «Свой»
     expect(go.waiting()).toBe(0)
     d.setAuto()
-    await go.release()
+    await drain(go)
     expect(d.auto).toBe(true)
     expect([d.from, d.to]).toEqual([3, 16])
     expect(go.asked.at(-1)?.range.auto).toBe(true)
@@ -135,7 +135,7 @@ describe('AutoDialog: диапазон 051', () => {
     await go.release()
     expect(d.n).toBe(10)
     expect([d.plan?.minSpreads, d.plan?.maxSpreads]).toEqual([10, 12])
-    d.setSpreads(40)
+    d.setSpreads(31)
     await go.release()
     await go.release()
     expect(d.n).toBe(12)
@@ -248,7 +248,7 @@ describe('AutoDialog: диапазон 051', () => {
     expect(got).toEqual([{ auto: true, minPer: 1, maxPer: 64, series: false }])
     expect(memOf(got[0])).toBe('auto')
     d.setMinPer(4)
-    await go.release()
+    await drain(go)
     got.length = 0
     await d.submit((_n, r) => got.push(r))
     expect(memOf(got[0])).toEqual([4, 16])
@@ -268,5 +268,124 @@ describe('AutoDialog: диапазон 051', () => {
     d.start()
     await go.release()
     expect(d.canBuild).toBe(false)
+  })
+})
+
+// Ответить на все запросы, включая те, что насос задаёт следом (N сдвинулся — спрашиваем заново).
+const drain = async (go: ReturnType<typeof fakeGo>) => {
+  for (let i = 0; i < 10 && go.waiting() > 0; i++) await go.release()
+  await go.release()
+}
+
+// 070 В: N от середины диапазона, пока его не трогали руками.
+describe('AutoDialog: N при смене диапазона (070 В)', () => {
+  it('«Авто» → «Свой 1–3» при 100 фото: N = round(100 / 2), в пределах', async () => {
+    const { d, go } = await open({ spreads: null })
+    expect(d.n).toBe(25) // по 4 фото
+    d.setMinPer(1)
+    await drain(go)
+    d.setMaxPer(3)
+    await drain(go)
+    expect([d.minPer, d.maxPer]).toEqual([1, 3])
+    expect(d.n).toBe(50)
+    expect(d.n).toBeGreaterThanOrEqual(d.plan?.minSpreads ?? 0)
+    expect(d.n).toBeLessThanOrEqual(d.plan?.maxSpreads ?? 0)
+  })
+
+  it('диапазон меняют дальше («до», «Авто») — N снова от середины', async () => {
+    const { d, go } = await open({ spreads: null })
+    d.setOwn()
+    await drain(go)
+    d.setMinPer(8)
+    await drain(go)
+    d.setMaxPer(12)
+    await drain(go)
+    expect(d.n).toBe(10) // 100 / 10
+    d.setAuto()
+    await drain(go)
+    expect(d.n).toBe(25)
+  })
+
+  it('N набрали руками — смена диапазона его держит (в пределах)', async () => {
+    const { d, go } = await open({ spreads: null })
+    d.setSpreads(30)
+    await drain(go)
+    d.setMinPer(2)
+    await drain(go)
+    d.setMaxPer(4)
+    await drain(go)
+    expect(d.n).toBe(30)
+  })
+
+  it('запомненный N с прошлой сборки: при открытии он, первая смена диапазона пересчитывает от середины', async () => {
+    const { d, go } = await open({ spreads: 30 })
+    expect(d.n).toBe(30)
+    d.setMinPer(1)
+    await drain(go)
+    d.setMaxPer(3)
+    await drain(go)
+    expect(d.n).toBe(50)
+  })
+
+  it('запомненное «X на разворот» — то же: при открытии N из X, смена диапазона пересчитывает', async () => {
+    const { d, go } = await open({ spreads: 20, per: 5, by: 'per' })
+    expect(d.n).toBe(20)
+    d.setMinPer(1)
+    await drain(go)
+    d.setMaxPer(3)
+    await drain(go)
+    expect(d.n).toBe(50)
+  })
+
+  it('запомненный N, затем ввод руками, затем смена диапазона — держится', async () => {
+    const { d, go } = await open({ spreads: 30 })
+    d.setSpreads(31)
+    await drain(go)
+    d.setMinPer(2)
+    await drain(go)
+    d.setMaxPer(4)
+    await drain(go)
+    expect(d.n).toBe(31)
+  })
+
+  it('«X фото на разворот» и ↑↓ — тоже ручной ввод', async () => {
+    const a = await open({ spreads: null })
+    a.d.setPer(5) // N = 20
+    await drain(a.go)
+    a.d.setMinPer(1)
+    await drain(a.go)
+    a.d.setMaxPer(3)
+    await drain(a.go)
+    expect(a.d.anchor).toBe('per')
+    expect(a.d.n).toBeGreaterThanOrEqual(a.d.plan?.minSpreads ?? 0)
+    expect(a.d.n).not.toBe(50)
+    const b = await open({ spreads: null })
+    b.d.stepPer(1)
+    await drain(b.go)
+    b.d.setMinPer(1)
+    await drain(b.go)
+    b.d.setMaxPer(3)
+    await drain(b.go)
+    expect(b.d.n).not.toBe(50)
+  })
+
+  it('якорь «среднее» выбран без ввода: N всё равно от середины, X следует за ним', async () => {
+    const { d, go } = await open({ spreads: null })
+    d.activate('per')
+    d.setMinPer(1)
+    await drain(go)
+    d.setMaxPer(3)
+    await drain(go)
+    expect(d.n).toBe(50)
+    expect(d.perTyped).toBe(2) // 100 фото / 50 разворотов
+  })
+
+  it('мало фото и «до» меньше «от» (подтяжка) — N не выходит за пределы', async () => {
+    const { d, go } = await open({ spreads: null }, 5)
+    d.setMinPer(20)
+    d.settle()
+    await drain(go)
+    expect(d.n).toBe(1)
+    expect(d.canBuild).toBe(true)
   })
 })

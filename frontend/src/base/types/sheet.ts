@@ -42,6 +42,10 @@ export interface FrameView extends Frame {
   dpi: number // 0 — размер фото неизвестен
   flipH: boolean // зеркало ↔ внутри img (геометрия не меняется)
   flipV: boolean // зеркало ↕
+  gray: boolean // ч/б (068)
+  bright: number // яркость −50…50, %
+  contrast: number // контраст −50…50, %
+  filter: string // готовая строка CSS filter из Go; '' — без тона
   cellRot: number // угол ячейки (= места, вокруг его центра); в «Авто» 0
   z: number // слой в общем стеке разворота (от Go): z-index = 10 + z
   shape?: string // форма места (044): '' / нет — прямоугольник, 'oval' — эллипс в рамке; у «Авто» нет

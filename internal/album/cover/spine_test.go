@@ -2,6 +2,7 @@ package cover_test
 
 import (
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
@@ -213,6 +214,37 @@ func TestSpineTextNoPlateOverPhoto(t *testing.T) {
 	if _, err := e.CoverSpineText(); err != nil || edtest.P(e).Cover.SpineBg == "" {
 		t.Fatalf("без фото корешка плашка не поставлена: %v", err)
 	}
+}
+
+// TestTurnBackdropSpine — «Поворот» 90° фото корешка: стороны рамки меняются местами вокруг
+// центра (узкая полоса ложится вдоль корешка), обратно — по области; каждый поворот — один шаг.
+func TestTurnBackdropSpine(t *testing.T) {
+	e := spineAlbum(t, 6)
+	x, w, h := spineArea(e)
+	undo := edtest.UndoLen(e)
+	e.TurnBackdrop(model.CoverID, model.ScopeSpine, 90, "")
+	b := sheet(e).BgPhotoS
+	if b == nil {
+		t.Fatal("фото корешка пропало")
+	}
+	cx, _ := b.TBox().Center()
+	if b.Rot != 90 || b.W != h || b.H != w || math.Abs(cx-(x+w/2)) > 0.02 || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("90°: %+v, центр по x %v", b, cx)
+	}
+	if q := edtest.SaveLoad(t, e); q.Sheet(model.CoverID).BgPhotoS == nil || q.Sheet(model.CoverID).BgPhotoS.Rot != 90 {
+		t.Fatal("после Save → Load поворот потерян")
+	}
+	e.TurnBackdrop(model.CoverID, model.ScopeSpine, 0, "")
+	if b = sheet(e).BgPhotoS; b.Rot != 0 || b.W != w || b.H != h {
+		t.Fatalf("обратно в 0°: %+v", b)
+	}
+	e.Undo()
+	if b = sheet(e).BgPhotoS; b.Rot != 90 {
+		t.Fatalf("Undo: %+v", b)
+	}
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	e.TurnBackdrop(model.CoverID, model.ScopeSpine, 90, "")
+	edtest.Same(t, e, rev, undo, "повтор того же угла")
 }
 
 // TestSpineBackdropEdits — фото корешка правится как фон страницы: рамка, кадр, наклон,

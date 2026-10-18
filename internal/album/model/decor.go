@@ -348,6 +348,10 @@ func (p *Project) FitStickers() {
 	}
 }
 
+// FitSticker — FitStickers для одного стикера листа s: постановка шаблона (067) сразу даёт
+// рамку, какой её оставит конвейер, — иначе повтор не сверить без шума округления.
+func (p *Project) FitSticker(s *Spread, st *Sticker) { p.fitSticker(p.Geo(s), st) }
+
 func (p *Project) fitSticker(g Geo, st *Sticker) {
 	cx, cy := st.X+st.W/2, st.Y+st.H/2
 	w, h := st.W, st.H

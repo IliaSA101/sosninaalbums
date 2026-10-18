@@ -190,7 +190,8 @@ func (a *App) infos(ids []string) []model.PhotoInfo {
 }
 
 // media отдаёт миниатюры: /media/t/<id> и /media/p/<id>; шрифты — /media/font/<файл>;
-// библиотека фонов — /media/gen/*, /media/lib/* (serveDecor); разметки — /media/cover-guide и
+// библиотека фонов — /media/gen/*, /media/lib/* (serveDecor), плитки разворотов — /media/tpl/*
+// (serveTpl); разметки — /media/cover-guide и
 // /media/spread-guide (serveMarkup).
 func (a *App) media(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -206,7 +207,7 @@ func (a *App) media(next http.Handler) http.Handler {
 		if a.serveMarkup(w, r) {
 			return
 		}
-		if a.serveDecor(w, r) {
+		if a.serveDecor(w, r) || a.serveTpl(w, r) {
 			return
 		}
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/media/"), "/")

@@ -7,6 +7,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/names"
+	"github.com/IliaSA101/sosninaalbums/internal/album/view"
 )
 
 // Обёртки области grid (023 Ш4): тело ≤ 3 операторов, сама правка — в пакете grid
@@ -190,6 +191,58 @@ func (e *Editor) SetPlaceAngle(spreadID, ref string, deg float64) model.View {
 func (e *Editor) PlaceBoxes(spreadID, scope string) (boxes []model.Box, tplScope string, err error) {
 	e.read(func(p *model.Project) { boxes, tplScope, err = grid.PlaceBoxes(p, spreadID, scope) })
 	return boxes, tplScope, err
+}
+
+// ApplySpreadTpl (067). Договор: до правки ничего; места и оформление — одна правка (один шаг
+// отмены), отказ — откат без шага; область уже такая — холостая. missing — ключей библиотеки
+// без файла на этом ПК (слои пропущены).
+func (e *Editor) ApplySpreadTpl(spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (v model.View, plan model.GridPlan, missing int, err error) {
+	v, err = e.try("", func(p *model.Project) (err error) {
+		plan, missing, err = grid.ApplySpreadTpl(p, spreadID, scope, t, libs)
+		return err
+	})
+	if err != nil {
+		plan, missing = model.GridPlan{}, 0
+	}
+	return v, plan, missing, err
+}
+
+// PlanSpreadTpl. Договор: как PlanCopyGrid — сухой прогон на копии, снятой под замком.
+func (e *Editor) PlanSpreadTpl(spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (model.GridPlan, error) {
+	var c *model.Project
+	e.read(func(p *model.Project) { c = p.Clone() })
+	return grid.PlanSpreadTpl(c, spreadID, scope, t, libs)
+}
+
+// SpreadTplOf. Договор: только чтение под замком («Авто» закрепляется на копии).
+func (e *Editor) SpreadTplOf(spreadID, scope string, places, texts bool) (t model.SpreadTpl, err error) {
+	e.read(func(p *model.Project) { t, err = grid.SpreadTplOf(p, spreadID, scope, places, texts) })
+	return t, err
+}
+
+// PreviewTpl — плитка шаблона без Editor (067, design §2): временный проект с одним листом, на
+// который шаблон встаёт тем же ApplySpreadTpl и конвейером settle, что и в альбоме (плитка =
+// результат). Pages = 2 — разворот wmm×hmm; Pages = 1 — левая страница wmm×hmm (правая пуста:
+// плитка — AreaOf(left)). Вид — печатный (без заглушек полей).
+func PreviewTpl(t model.SpreadTpl, wmm, hmm float64, libs map[string]model.PhotoInfo) (*model.Project, model.View, error) {
+	p := model.New()
+	pw, scope := wmm, model.ScopeLeft
+	if t.Pages == 2 {
+		pw, scope = wmm/2, model.ScopeSpread
+	}
+	p.Settings.PageW, p.Settings.PageH = pw, hmm
+	p.Settings = model.ClampSettings(p.Settings)
+	s := &model.Spread{ID: model.NewID(), Photos: []string{}}
+	p.Spreads = []*model.Spread{s}
+	before := p.Clone()
+	_, _, err := grid.ApplySpreadTpl(p, s.ID, scope, t, libs)
+	if err == nil {
+		err = settle(p, before, false)
+	}
+	if err != nil {
+		return nil, model.View{}, err
+	}
+	return p, view.BuildView(p, view.State{Print: true}), nil
 }
 
 // GridChoices. Договор: снимок входа под замком (GridInput), layout считается вне него.

@@ -326,6 +326,8 @@ describe('AutoDialog', () => {
     const d = new AutoDialog(ids, go.ask, { spreads: 10, range: [1, 64] })
     d.start()
     await go.release()
+    d.setSpreads(10) // N введён руками в этом окне (070 В: запомненный N первая смена диапазона пересчитала бы)
+    await go.release()
     d.setMaxPer(5) // 100 фото по 5 — не меньше 20 разворотов
     await go.release()
     await go.release()

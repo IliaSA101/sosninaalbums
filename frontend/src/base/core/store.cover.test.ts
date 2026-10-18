@@ -58,8 +58,6 @@ beforeEach(() => {
   calls.length = 0
   reply = null
   store.toast = null
-  store.exporting = null
-  store.exportOpen = false
 })
 
 describe('store: ряд листов без обложки', () => {
@@ -264,19 +262,6 @@ describe('store.runHistory: обложка и Ctrl+Z / Ctrl+Y', () => {
     await store.runHistory(Api.Undo())
     expect(store.onCover).toBe(true)
     expect(store.navSeq).toBe(seq)
-  })
-})
-
-describe('store.exportAll', () => {
-  it('одна обложка без разворотов выгружается', () => {
-    load({ spreads: [], cover: [] })
-    store.exportAll()
-    expect(store.exportOpen).toBe(true)
-  })
-  it('пустой альбом — окно не открывается', () => {
-    load({ spreads: [] })
-    store.exportAll()
-    expect(store.exportOpen).toBe(false)
   })
 })
 

@@ -47,7 +47,7 @@ type ImportResult struct {
 // «уже есть», скрытый — возвращается. Ошибка — только когда библиотека закрыта целиком.
 func (s *Store) Import(kind, theme string, files []string) (ImportResult, error) {
 	res := ImportResult{Added: []Item{}, Skipped: []Skip{}, Svg: []SvgJob{}}
-	if _, ok := kindDirs[kind]; !ok {
+	if _, ok := kindDirs[kind]; !ok || kind == KindSpread { // шаблон разворота — SaveSpreadTpl
 		return res, ErrKind
 	}
 	if !isTheme(theme) {
@@ -196,17 +196,16 @@ func (s *Store) commit(kind, theme, name, key, tmp, ext string, info library.Pho
 	return e.item(), true, nil
 }
 
-// usage — своих вида kind и байты всей библиотеки (по реестру); под mu. Сумма насыщается за
-// пределом библиотеки: записей из правленого руками реестра может быть сколько угодно.
+// usage — своих вида kind и байты всей библиотеки — свои и наборы (libBytes): квота 2 ГБ общая
+// (design §4.2), иначе набор у предела и своё сверху проходили бы мимо неё; под mu.
 func (s *Store) usage(kind string) (int, int64) {
-	n, total := 0, int64(0)
+	n := 0
 	for _, e := range s.entries {
 		if e.Kind == kind {
 			n++
 		}
-		total += min(max(e.Bytes, 0), MaxLibraryLen+1-total) // total ≤ предел + 1: без переполнения
 	}
-	return n, total
+	return n, s.libBytes()
 }
 
 // copyHashed копирует src во временный файл папки dir, считая sha256 по дороге: исходник

@@ -132,6 +132,33 @@ func (e *Editor) swap(s Snap, back bool) Snap {
 	return r
 }
 
+// LibKeys — ключи своего из библиотеки (PhotoRef.Lib) в проекте и во всех снимках отмены и
+// возврата: удаление набора держит их файлы, иначе Ctrl+Z/Ctrl+Y вернул бы фон без файла
+// (ревью 067). Только чтение, без шага.
+func (e *Editor) LibKeys() map[string]bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	keys := map[string]bool{}
+	add := func(p *model.Project) {
+		if p == nil { // шаг только отметок
+			return
+		}
+		for _, r := range p.Photos {
+			if r.Lib != "" {
+				keys[r.Lib] = true
+			}
+		}
+	}
+	add(e.p)
+	for _, s := range e.undo {
+		add(s.P)
+	}
+	for _, s := range e.redo {
+		add(s.P)
+	}
+	return keys
+}
+
 // SyncOwnNames — имена своих шаблонов виньетки на листах (Vig.Own.Name) по файлу шаблонов tpls,
 // в проекте и во всех снимках отмены и возврата, без шага отмены. Имя шаблона — не правка
 // альбома (переименование отмены не имеет); иначе Ctrl+Z после «Применить» возвращал листу

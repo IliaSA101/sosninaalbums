@@ -36,6 +36,42 @@ func FuzzFolderName(f *testing.F) {
 	})
 }
 
+// FuzzFileName: имя файла сбора (069) — не пустое, локальное, без разделителей, `:` и невидимых,
+// без точки и пробела по краям, основа без устройства и не длиннее FolderMaxRunes, расширение —
+// не длиннее 8 знаков; повторный вызов его не меняет.
+func FuzzFileName(f *testing.F) {
+	zw := string(rune(0x200b)) // пробел нулевой ширины
+	for _, s := range []string{
+		"IMG.jpg", "", "CON.jpg", ".jpg", "a.", "a/b.c", zw + ".png", "я.JPG", "a.j" + zw + "pg", "a.tar.gz", "x:y.jpg", "...",
+		strings.Repeat("я", 70) + ".jpeg", strings.Repeat("я", 59) + "b. .a" + "ццц.ц",
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		got := FileName(s, "Файл")
+		if got == "" || !filepath.IsLocal(got) || strings.ContainsAny(got, `\/`) {
+			t.Fatalf("FileName(%q) = %q", s, got)
+		}
+		bad := strings.IndexFunc(got, func(r rune) bool {
+			return r == utf8.RuneError || r == ':' || unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
+		})
+		if bad >= 0 || !utf8.ValidString(got) || strings.Trim(got, ". ") != got {
+			t.Fatalf("FileName(%q) = %q — запретный знак или край", s, got)
+		}
+		ext := filepath.Ext(got)
+		if !goodExt(ext) {
+			ext = ""
+		}
+		stem := strings.TrimSuffix(got, ext)
+		if utf8.RuneCountInString(stem) > FolderMaxRunes || stem != "Файл" && reservedName(stem) {
+			t.Fatalf("FileName(%q) = %q — длинная основа или устройство", s, got)
+		}
+		if again := FileName(got, "Файл"); again != got {
+			t.Fatalf("не идемпотентна: %q → %q → %q", s, got, again)
+		}
+	})
+}
+
 // FuzzCheckLocalPath: принятый на Windows путь — только `X:` + разделитель, без `:`
 // дальше второй позиции и без NUL.
 func FuzzCheckLocalPath(f *testing.F) {

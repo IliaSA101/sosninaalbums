@@ -331,3 +331,32 @@ func TestDropPhotosOneUndo(t *testing.T) {
 		})
 	}
 }
+
+// LibKeys — ключи своего из проекта, отмены и возврата; шаг только отметок (P == nil) и фото
+// без ключа не мешают; пустой редактор — пустое множество. Чтение: rev и стек не меняются.
+func TestLibKeys(t *testing.T) {
+	e := newEditor(t, model.New(), "")
+	if keys := e.LibKeys(); keys == nil || len(keys) != 0 {
+		t.Fatalf("пустой: %v", keys)
+	}
+	mk := func(keys ...string) *model.Project {
+		p := model.New()
+		p.Photos = map[string]model.PhotoRef{"plain": {Path: `C:\ф\a.jpg`}}
+		for _, k := range keys {
+			p.Photos[model.LibPhotoID(k)] = model.PhotoRef{Lib: k}
+		}
+		return p
+	}
+	const a, b, c, d = "my:000000000000000a", "my:000000000000000b", "my:000000000000000c", "my:000000000000000d"
+	e.p = mk(a)
+	e.undo = []Snap{{P: mk(b, a)}, {Marks: []MarkChange{{ID: "x"}}}}
+	e.redo = []Snap{{P: mk(c)}, {P: mk(d)}}
+	rev := e.rev
+	keys := e.LibKeys()
+	if len(keys) != 4 || !keys[a] || !keys[b] || !keys[c] || !keys[d] || keys[""] {
+		t.Fatalf("ключи %v", keys)
+	}
+	if e.rev != rev || len(e.undo) != 2 || len(e.redo) != 2 {
+		t.Fatal("чтение поменяло редактор")
+	}
+}

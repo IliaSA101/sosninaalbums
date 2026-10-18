@@ -173,6 +173,31 @@ func TestResetMarks(t *testing.T) {
 	edtest.WantMarks(t, e, map[string][3]any{"a": {1, "-", -9}, "b": {1, "-", -9}})
 }
 
+// SnapshotMarks (069): копии проекта и отметок без общих указателей с редактором; без отметок —
+// пустая карта, не nil; снимок не делает шага и не меняет rev.
+func TestSnapshotMarks(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	if p, m := e.SnapshotMarks(); p == nil || m == nil || len(m) != 0 {
+		t.Fatalf("пустой альбом: %v %v", p, m)
+	}
+	edtest.SetMarks(t, e, edtest.Photos("a", "b"), model.MarkPatch{Rating: edtest.Ip(2)})
+	v := e.View()
+	p, m := e.SnapshotMarks()
+	if len(m) != 2 || *m["a"].Rating != 2 || *m["b"].Rating != 2 {
+		t.Fatalf("снимок отметок: %v", m)
+	}
+	*m["a"].Rating = 5
+	delete(m, "b")
+	p.Settings.PageW = 1
+	edtest.WantMarks(t, e, map[string][3]any{"a": {2, "-", -9}, "b": {2, "-", -9}})
+	if edtest.P(e).Settings.PageW == 1 {
+		t.Fatal("снимок проекта связан с редактором")
+	}
+	if nv := e.View(); nv.Rev != v.Rev || edtest.UndoLen(e) != 1 {
+		t.Fatalf("снимок сделал шаг: rev %d→%d, undo %d", v.Rev, nv.Rev, edtest.UndoLen(e))
+	}
+}
+
 // Общий стек: шаги альбома и отметок отменяются по порядку, каждый своё.
 func TestMarksUndoMixed(t *testing.T) {
 	e := edtest.Open(t, model.New(), "")

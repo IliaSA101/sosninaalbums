@@ -21,7 +21,7 @@ func (r PhotoRef) FrameOrDefault() Frame {
 	return *r.Frame
 }
 
-// Copy — копия без общих указателей: Frame, Caption (с Pad) и Person, отданные наружу
+// Copy — копия без общих указателей: Frame, Caption (с Pad), Person и Adj, отданные наружу
 // (Ref, Refs), не ведут внутрь проекта — правка копии не обходит Editor.change.
 func (r PhotoRef) Copy() PhotoRef {
 	if r.Frame != nil {
@@ -39,6 +39,10 @@ func (r PhotoRef) Copy() PhotoRef {
 	if r.Person != nil {
 		n := *r.Person
 		r.Person = &n
+	}
+	if r.Adj != nil {
+		a := *r.Adj
+		r.Adj = &a
 	}
 	return r
 }
@@ -223,10 +227,16 @@ func PersonFromFileLoose(path string, firstFirst bool) *Person {
 func fileBase(path string) string {
 	base := path[strings.LastIndexAny(path, `\/`)+1:]
 	base = strings.TrimSuffix(base, filepath.Ext(base))
-	if strings.ContainsAny(base, "\u0306\u0308") {
-		base = composeNames.Replace(base)
+	return ComposeNames(base)
+}
+
+// ComposeNames \u2014 \u0431\u0443\u043a\u0432\u044b \u0438\u0437 \u0434\u0432\u0443\u0445 \u043a\u043e\u0434\u043e\u0432\u044b\u0445 \u0442\u043e\u0447\u0435\u043a (NFD) \u043f\u043e \u0442\u0430\u0431\u043b\u0438\u0446\u0435 composeNames \u2014 \u043e\u0434\u043d\u043e\u0439 (NFC);
+// \u043f\u0440\u043e\u0447\u0435\u0435 \u043a\u0430\u043a \u0435\u0441\u0442\u044c. \u0421\u0431\u043e\u0440 \u0432 \u043f\u0430\u043f\u043a\u0443 (069) \u0442\u0430\u043a \u0441\u0440\u0430\u0432\u043d\u0438\u0432\u0430\u0435\u0442 \u0438\u043c\u0435\u043d\u0430 \u0444\u0430\u0439\u043b\u043e\u0432: macOS \u0438\u0445 \u043d\u0435 \u0440\u0430\u0437\u043b\u0438\u0447\u0430\u0435\u0442.
+func ComposeNames(s string) string {
+	if !strings.ContainsAny(s, "\u0306\u0308") {
+		return s
 	}
-	return base
+	return composeNames.Replace(s)
 }
 
 // composeNames — своя таблица NFC для имён без внешнего пакета (decisions 34): у прочих букв

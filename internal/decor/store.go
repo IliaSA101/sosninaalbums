@@ -28,6 +28,7 @@ import (
 const (
 	KindBg      = "bg"
 	KindSticker = "sticker"
+	KindSpread  = "spread" // готовые развороты (067): файл — шаблон JSON, не картинка
 )
 
 // RootName — папка библиотеки в папке данных (решение №79); regFile — реестр.
@@ -76,14 +77,16 @@ type Store struct {
 	mu       sync.RWMutex
 	entries  []*entry                     // порядок файла; запись сохраняет и чужие виды
 	files    map[string]map[string]string // вид → ключ → путь файла на диске (скан + импорт)
+	packs    []*packReg                   // наборы (packs.go) по installed
 	readOnly bool
 
 	media *mediaCache
 	svg   svgTokens // проверенные SVG, ждущие PNG от окна (AddPNG)
+	tpl   tplCache  // разбор своих шаблонов разворотов для плиток (spreads.go)
 }
 
 // kindDirs — папка вида; имя файла внутри — только <16 hex>.<ext> от ключа.
-var kindDirs = map[string]string{KindBg: "Фоны", KindSticker: "Стикеры"}
+var kindDirs = map[string]string{KindBg: "Фоны", KindSticker: "Стикеры", KindSpread: "Развороты"}
 
 // Open открывает библиотеку в <cfgDir>/Библиотека: читает реестр и ищет файлы. Ошибки чтения
 // не мешают работе: битый реестр уходит в .bad, библиотека пуста (строка в log.txt).
@@ -91,6 +94,7 @@ func Open(cfgDir string) *Store {
 	s := &Store{root: filepath.Join(cfgDir, RootName), files: map[string]map[string]string{}, media: newMediaCache(mediaCacheMax)}
 	s.scan()
 	s.load()
+	s.loadPacks()
 	return s
 }
 
@@ -104,8 +108,16 @@ func (s *Store) ReadOnly() bool {
 	return s.readOnly
 }
 
-// scan строит индекс ключ → файл по папкам видов и убирает остатки оборванного импорта.
+// scan строит индекс ключ → файл по папкам видов и убирает остатки оборванного импорта и
+// оборванной записи шаблона и реестра (WriteFileAtomic: <имя>.<случайное>.tmp).
 func (s *Store) scan() {
+	if list, err := os.ReadDir(s.root); err == nil {
+		for _, de := range list {
+			if name := de.Name(); strings.HasPrefix(name, regFile+".") && strings.HasSuffix(name, ".tmp") {
+				_ = os.Remove(filepath.Join(s.root, name))
+			}
+		}
+	}
 	for kind, sub := range kindDirs {
 		dir := filepath.Join(s.root, sub)
 		list, err := os.ReadDir(dir)
@@ -115,11 +127,11 @@ func (s *Store) scan() {
 		m := map[string]string{}
 		for _, de := range list {
 			name := de.Name()
-			if strings.HasPrefix(name, tmpPrefix) && strings.HasSuffix(name, ".tmp") {
-				_ = os.Remove(filepath.Join(dir, name)) // остаток импорта, оборванного выходом
+			if strings.HasPrefix(name, tmpPrefix) && strings.HasSuffix(name, ".tmp") || atomicLeft(name) {
+				_ = os.Remove(filepath.Join(dir, name)) // остаток импорта или записи, оборванных выходом
 				continue
 			}
-			key, ok := keyOfFile(name)
+			key, ok := keyOfFile(kind, name)
 			if !ok || !de.Type().IsRegular() {
 				continue
 			}
@@ -131,10 +143,11 @@ func (s *Store) scan() {
 	}
 }
 
-// keyOfFile — ключ по имени файла <16 hex>.<jpg|png>; иначе ok = false.
-func keyOfFile(name string) (string, bool) {
+// keyOfFile — ключ по имени файла <16 hex>.<jpg|png>, в папке разворотов — <16 hex>.json;
+// иначе ok = false.
+func keyOfFile(kind, name string) (string, bool) {
 	base, ext, ok := strings.Cut(name, ".")
-	if !ok || (ext != "jpg" && ext != "png") {
+	if !ok || (kind == KindSpread) != (ext == "json") || ext != "json" && ext != "jpg" && ext != "png" {
 		return "", false
 	}
 	key := libPrefix + base
@@ -142,6 +155,13 @@ func keyOfFile(name string) (string, bool) {
 }
 
 const libPrefix = "my:"
+
+// atomicLeft — остаток WriteFileAtomic файла шаблона: <16 hex>.json.<случайное>.tmp. Только по
+// имени от ключа: чужие файлы в папке вида не трогаются.
+func atomicLeft(name string) bool {
+	base, rest, _ := strings.Cut(name, ".")
+	return strings.HasPrefix(rest, "json.") && strings.HasSuffix(rest, ".tmp") && model.ValidLibKey(libPrefix+base)
+}
 
 // load читает library.json. Нет файла — пустой реестр; битый (разбор, версия, размер) — в .bad;
 // не читается (доступ, блокировка антивирусом или облаком) — реестр не трогаем, сеанс только

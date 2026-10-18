@@ -19,6 +19,7 @@ import { marqueePick, type Hit } from '../canvas/marquee'
 import { layerTargets } from './layers'
 import { boxOf as stickerBox, nudgeBox } from '../sticker/sticker'
 import { sheetIn } from '../../base/geom/sheet'
+import { allGray as photosGray } from '../../base/geom/tone'
 import type { LayerOp } from './minipanel'
 import type { Rect, RotRect, StickerView } from '../../base/core/types'
 
@@ -391,6 +392,13 @@ class PlaceSel {
     await store.run(Api.SetFlip(photos, axis))
   }
 
+  // «Сделать ч/б / цветным» (068) у выделенных фото: «всем или никому» решает Go (SetGray); раскладку не трогает.
+  async gray() {
+    const photos = this.selected.map((i) => i.photo).filter(Boolean)
+    if (photos.length === 0) return
+    await store.run(Api.SetGray(photos))
+  }
+
   // ↻ 90° (quarters 1) / ↺ (−1) у выделенных фото: поворот кадра, место стоит; «Авто» Go пересобирает сам.
   // Раскладку не закрепляет, поэтому store.run, а не placeEdit.
   async turn(quarters: -1 | 1 | 2) {
@@ -432,6 +440,8 @@ class PlaceSel {
   // «Целиком / С обрезкой» в карточке: подсвечено, только если так у всех выделенных.
   allContain = $derived(this.selected.length > 0 && this.selected.every((p) => p.fit === 'contain'))
   allCover = $derived(this.selected.length > 0 && this.selected.every((p) => p.fit !== 'contain'))
+  // Все выделенные фото ч/б (068): подпись «Сделать ч/б / цветным» в «Правке».
+  allGray = $derived(photosGray(store.spread, this.selected.map((b) => b.photo).filter(Boolean)))
   async setFit(contain: boolean) {
     const s = store.spread
     if (!s || this.selected.length === 0 || (contain ? this.allContain : this.allCover)) return

@@ -108,6 +108,29 @@ func FromView(p *model.Project, v model.View) []render.Spread {
 	return out
 }
 
+// slotColor — пустое место на плитке шаблона (067): серая плашка, как заглушка холста.
+var slotColor = color.RGBA{0xcf, 0xcf, 0xd4, 255}
+
+// TplScene — сцена плитки готового разворота (067, design §3) из вида временного проекта
+// album.PreviewTpl: как экспорт листа, а пустые места — плашки в их слое (стикер «под
+// местами» остаётся под ними). Повёрнутое место — описанным прямоугольником: для плитки
+// хватает. Нет листа — false.
+func TplScene(p *model.Project, v model.View) (render.Spread, bool) {
+	if len(v.Spreads) == 0 {
+		return render.Spread{}, false
+	}
+	s := v.Spreads[0]
+	es := fromSheet(p, s)
+	for _, pl := range s.Places {
+		if pl.Photo != "" {
+			continue
+		}
+		r := geom.RotRect{X: pl.X, Y: pl.Y, W: pl.W, H: pl.H, Rot: pl.Rot}.AABB()
+		es.Slots = append(es.Slots, render.Plate{Rect: r, Color: slotColor, Z: pl.Z})
+	}
+	return es, true
+}
+
 // fromSheet — задание рендера одного листа (разворота или обложки) из его вида.
 func fromSheet(p *model.Project, s model.SpreadView) render.Spread {
 	es := render.Spread{Bg: [2]color.RGBA{render.ParseHex(s.Bg[0]), render.ParseHex(s.Bg[1])},
@@ -119,7 +142,8 @@ func fromSheet(p *model.Project, s model.SpreadView) render.Spread {
 		f := s.Frames[i]
 		es.Photos = append(es.Photos, render.Photo{Cell: s.Rects[i], Img: f.Img, Path: p.Photos[id].Path,
 			FlipH: f.FlipH, FlipV: f.FlipV, Rot: f.CellRot, ImgRot: f.R, Z: f.Z,
-			Outline: geom.Outline{Oval: f.Shape == model.ShapeOval, Radius: f.Radius}})
+			Outline: geom.Outline{Oval: f.Shape == model.ShapeOval, Radius: f.Radius},
+			Tone:    render.Tone{Gray: f.Gray, Bright: f.Bright, Contrast: f.Contrast}})
 	}
 	stickers(p, s, &es)
 	for _, c := range s.Captions {

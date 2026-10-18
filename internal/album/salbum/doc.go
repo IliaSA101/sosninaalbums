@@ -6,13 +6,14 @@
 // (глубокая копия сведений о фото) здесь — тела его обёрток (ops_salbum.go), напрямую из
 // app их не звать.
 //
-// Карта: load.go (Load, Decode, Encode, Save, пути и CheckRel; Check — пути проекта из памяти
+// Карта: load.go (Load, Decode, пути и CheckRel; Check — пути проекта из памяти
 // для NewEditor/Restore), fix.go (migrate и
 // починки при чтении: dedupe, Rekey, dropNilPlaces, unionGrid; перенос vars альбома
-// (moveAlbumVars)), write.go (атомарная
-// запись, копия файла старой версии), marks.go (секция отметок), relink.go (перепривязка),
+// (moveAlbumVars)), write.go (Encode, Save, Write; WriteRel — только относительные пути для
+// собранной папки 069; атомарная запись, копия файла старой версии), marks.go (секция отметок), relink.go (перепривязка),
 // lib.go (свои фоны и стикеры по ключу библиотеки 048: искатель, чтение, RelinkLib),
 // cover.go (обложка 032: FileCover, зажим при чтении, путь разметки).
 // Голдены старых версий — testdata/ (v1, v3, v4-dev, v5; альбом 0.10.0 — golden-0.10, заморожен: только чтение v6).
+// Подпакет collect — «Собрать проект в папку» (069): план, копирование, собранный альбом.
 // Внешние тесты через Editor (отметки, перепривязка, Save/Load, версии, виньетка) — подпакет roundtrip.
 package salbum

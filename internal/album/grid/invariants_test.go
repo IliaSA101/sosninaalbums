@@ -163,6 +163,13 @@ func TestGridInvariants(t *testing.T) {
 			}
 			e.CopyGrid(id, scopes[r.IntN(3)], []model.GridTarget{{Spread: to, Scope: scopes[r.IntN(3)]}}, r.IntN(2) == 0, r.IntN(2) == 0)
 		case "apply":
+			if r.IntN(4) == 0 { // 067: готовый разворот — снимок случайного листа на случайную область
+				from := edtest.P(e).Spreads[r.IntN(n)].ID
+				if tp, err := e.SpreadTplOf(from, scopes[r.IntN(3)], r.IntN(3) > 0, r.IntN(2) == 0); err == nil {
+					_, _, _, _ = e.ApplySpreadTpl(id, scopes[r.IntN(3)], tp, nil)
+				}
+				break
+			}
 			e.ApplyGrid(id, scopes[r.IntN(3)], []string{model.TplPage, model.TplSpread}[r.IntN(2)],
 				[]model.Box{{X: r.Float64(), Y: r.Float64(), W: r.Float64(), H: r.Float64(), Rot: float64(r.IntN(3)-1) * 35}, {X: 0.5, Y: 0, W: 0.5, H: 0.5}})
 		case "dup":

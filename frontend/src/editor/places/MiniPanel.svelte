@@ -15,7 +15,9 @@
     miniContext,
     miniItems,
     miniPlace,
-    passThrough,
+    throughNext,
+    type Mods,
+    type ThroughEv,
     visibleArea,
     sameView,
     zoomLift,
@@ -116,11 +118,18 @@
     ),
   )
 
+  // Рамка места для ползунка кадра: у повёрнутого — оси места (sel — до поворота), иначе рамка выделения.
+  const zoomBox = $derived.by(() => {
+    const sel = placesel.selected[0]
+    const b = sel?.rot ? sel : box
+    return { x: b.x * ppm, y: b.y * ppm, w: b.w * ppm, h: b.h * ppm, rot: sel?.rot ?? 0 }
+  })
+
   $effect(() => {
     if (solo) {
       miniSpot.photo = photo
       miniSpot.where = place.where
-      miniSpot.lift = zoomLift(place, (box.y + box.h) * ppm, placesel.selected[0]?.rot ?? 0)
+      miniSpot.lift = zoomLift(place, zoomBox, seen)
       const a = miniSpot.arc
       if (arc.mode !== a.mode || arc.vx !== a.vx || arc.vy !== a.vy || arc.vw !== a.vw) miniSpot.arc = arc // тот же объект — читатели не гоняются
     } else clear()
@@ -135,9 +144,25 @@
 
   const stop = (e: Event) => e.stopPropagation()
 
-  // Модификатор зажат — панель полупрозрачна и не ловит мышь. pointermove видит и Shift, зажатый вне окна.
+  // Модификатор зажат — панель полупрозрачна и не ловит мышь (QA 0.14.1 №1). Признак не копим по keydown/keyup: каждое
+  // событие указателя несёт настоящее состояние модификаторов (throughNext), а новое положение панели его пересчитывает.
   let through = $state(false)
-  const mods = (e: KeyboardEvent | PointerEvent) => (through = passThrough(e))
+  let lastPtr: Mods | undefined // модификаторы последнего события указателя
+  const flags = (e: KeyboardEvent | PointerEvent): Mods => ({
+    shiftKey: e.shiftKey,
+    ctrlKey: e.ctrlKey,
+    altKey: e.altKey,
+    metaKey: e.metaKey,
+  })
+  function mods(e: KeyboardEvent | PointerEvent) {
+    const m = flags(e)
+    if (e instanceof PointerEvent) lastPtr = m
+    through = throughNext({ type: e.type, ...m } as ThroughEv)
+  }
+  $effect(() => {
+    void [place.top, place.left, place.where, photo, placesel.selected.length]
+    through = throughNext({ type: 'place', lastPointer: lastPtr })
+  })
 
   function run(id: MiniId) {
     switch (id) {
@@ -185,8 +210,15 @@
   }
 </script>
 
-<svelte:document onkeydown={esc} />
-<svelte:window onkeydown={mods} onkeyup={mods} onpointermove={mods} onblur={() => (through = false)} />
+<svelte:document onkeydown={esc} onvisibilitychange={() => document.hidden && (through = throughNext({ type: 'hidden' }))} />
+<svelte:window
+  onkeydown={mods}
+  onkeyup={mods}
+  onpointermove={mods}
+  onpointerover={mods}
+  onpointerdowncapture={mods}
+  onblur={() => (through = throughNext({ type: 'blur' }))}
+/>
 
 <!-- Клики полосы не должны снимать выделение: клавиатурных аналогов у самой полосы нет, кнопки внутри фокусируются сами -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->

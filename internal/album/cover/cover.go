@@ -89,8 +89,8 @@ func SetSpec(p *model.Project, s model.CoverSpec) error {
 }
 
 // samePreset — числа s — ровно пресет s.Preset для страницы альбома (CoverPresetFor). Сторонка
-// в счёт, только если её задаёт шаблон (Фотосфера на формате из таблицы): сравнивается
-// действующая, 0 — страница. Безопасные линии — нет: это направляющие пресета.
+// в счёт, только если её задаёт шаблон (Фотосфера): сравнивается действующая, 0 — страница.
+// Безопасные линии — нет: это направляющие пресета.
 func samePreset(p *model.Project, s model.CoverSpec) bool {
 	pr, ok := model.CoverPresetFor(s.Preset, p.Settings)
 	if !ok {
@@ -114,6 +114,8 @@ func samePreset(p *model.Project, s model.CoverSpec) bool {
 
 // FollowFormat — смена формата страницы (old — прежние настройки): обложка ровно по шаблону
 // прежнего формата переходит на шаблон нового (047 решение 53); свои числа не трогает.
+// Безопасные линии в сравнении не участвуют (070 Е): обложка v10 без линий тоже переходит
+// и получает линии шаблона. Обложка «из страницы» (W/H 0) шаблоном не считается — не трогаем.
 // Зовёт обёртка Editor.SetSettings тем же шагом отмены (spreads не импортирует cover).
 func FollowFormat(p *model.Project, old model.Settings) {
 	c := p.Cover
@@ -128,10 +130,10 @@ func FollowFormat(p *model.Project, old model.Settings) {
 	c.Spec = now.Spec
 }
 
-// sameSpec — те же числа обложки (id не в счёт).
+// sameSpec — те же числа обложки (id и безопасные линии не в счёт: это направляющие).
 func sameSpec(a, b model.CoverSpec) bool {
 	return a.W == b.W && a.H == b.H && a.Wrap == b.Wrap && a.Hinge == b.Hinge && a.A == b.A && a.B == b.B &&
-		a.Safe == b.Safe && a.SpineSafe == b.SpineSafe && slices.Equal(a.Steps, b.Steps)
+		slices.Equal(a.Steps, b.Steps)
 }
 
 // SetLayout — раскладка обложки kind (front | both | wrap; "" — front): фото фона переходят

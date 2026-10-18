@@ -277,7 +277,7 @@ func cleanLine(s string, n int) string {
 	return s
 }
 
-// ClampDesign — зажим оформления прочитанного проекта: кадры, подписи, фон,
+// ClampDesign — зажим оформления прочитанного проекта: кадры, подписи, тон фото, фон,
 // блоки текста (лишние и пустые отбрасываются, плохой или повторный ID — новый).
 // Координаты блоков и ширину «по тексту» потом держит FitTexts. Запас текста — spendTexts.
 // Стикеры (048) — после текстов: их ID не совпадают с ID текстов и мест.
@@ -285,6 +285,13 @@ func (p *Project) ClampDesign() {
 	p.Settings.Bg = BgColor(p.Settings.Bg)
 	p.spendTexts(true)
 	p.clampStickers()
+	// Тон (068) — всем фото, не только ленты: запаса текста не тратит, мусор из файла зажимается.
+	for id, r := range p.Photos {
+		if r.Adj != nil {
+			r.Adj = ClampTone(r.Adj)
+			p.Photos[id] = r
+		}
+	}
 }
 
 // clampSheetTexts — блоки листа s при Load: лишние и не влезшие в запас отбрасываются,

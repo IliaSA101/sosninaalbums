@@ -15,7 +15,6 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/export/fsfera"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
-	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
@@ -352,10 +351,7 @@ func (a *App) ShowInExplorer() {
 	a.mu.Lock()
 	dir := a.exportDir
 	a.mu.Unlock()
-	if st, err := os.Stat(dir); dir == "" || err != nil || !st.IsDir() {
-		return
-	}
-	_ = osx.OpenDir(dir) // не открылась папка — не страшно, ошибку показать нечем
+	showDir(dir)
 }
 
 // ExportOptions — настройки окна экспорта. Живёт в internal/app, а не в internal/export: Wails берёт

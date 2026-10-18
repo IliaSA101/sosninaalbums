@@ -2,8 +2,9 @@ import * as Api from '../../../wailsjs/go/app/App'
 import { model } from '../../../wailsjs/go/models'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { SvelteSet } from 'svelte/reactivity'
-import { errText, exportDoneText, withSkipped } from '../words/errtext'
+import { errText, withSkipped } from '../words/errtext'
 import { Nav } from './nav.svelte'
+import { jobs } from './jobs.svelte'
 import { Toasts, stepToast, undoToast, type Toast } from './toasts.svelte'
 import type { MarkMap, PickResult } from './hooks'
 import { backdropLost, pickCurrent } from './undo'
@@ -13,7 +14,6 @@ import { prefs } from '../prefs/prefs.svelte'
 import { COVER_ID, unitOf } from '../geom/sheet'
 import type {
   AutoRange,
-  ExportOpts,
   Family,
   FontFamily,
   GridResult,
@@ -60,7 +60,6 @@ class Store extends Nav {
   thumbs = $state({ done: 0, total: 0 })
   // Ход чтения папок (событие scan, начальное значение — из GetState).
   scan = $state<ScanProgress>({ active: false, walking: false, found: 0, read: 0 })
-  exporting = $state<{ done: number; total: number } | null>(null)
   // Тост: состояние и таймер — в Toasts; store отдаёт его как свой toast/notify (так зовут все).
   private readonly toasts = new Toasts()
   get toast(): Toast | null {
@@ -73,12 +72,6 @@ class Store extends Nav {
   // Окно автосборки (027): открыто, пока не null; фото уже выбраны (выделенные или свободные без отклонённых).
   autoDraft = $state<PickResult | null>(null)
   busy = $state(false)
-  // Окно «Экспорт» (009 U8) открыто.
-  exportOpen = $state(false)
-  // Памятка после выгрузки для Фотосферы Pro (047): не null — открыто окно «Готово для Фотосферы» (shell/export/FsferaDone).
-  exportMemo = $state<string[] | null>(null)
-  exportNote = $state('') // сводка Go о пересчёте цвета к той же памятке
-  exportFolder = $state('') // имя папки книги из плана в момент запуска выгрузки (окно «Готово»)
   byId = $derived(new Map(this.photos.map((p) => [p.id, p])))
   // Фото на фоне: в used не входят (не «в альбоме»), но автосборка и фильтр их не берут (freephotos.ts).
   backdropUsed = $derived(new Set(this.view.backdropUsed ?? []))
@@ -127,24 +120,9 @@ class Store extends Nav {
       this.seen.missing = true
       this.setMissing(ids ?? [])
     })
-    EventsOn('export:progress', (done: number, total: number) => (this.exporting = { done, total }))
     // Ошибки, которые Go находит сам (перетащенная папка и т.п.)
     EventsOn('notice', (text: string) => this.notify(text, 'error'))
-    // note — сводка Go о пересчёте цвета (может быть пустой или отсутствовать у старого Go).
-    // memo (047) — строки памятки для Фотосферы: вместо тоста открывается окно «Готово», тост нужен только при ошибке.
-    EventsOn('export:done', (_dir: string, err: string, note?: string, memo?: string[] | null) => {
-      const total = this.exporting?.total
-      this.exporting = null
-      if (err) this.notify('Экспорт не удался: ' + errText(err), 'error')
-      else if (memo?.length) {
-        this.exportMemo = memo
-        this.exportNote = note ?? ''
-      } else
-        this.notify(exportDoneText(total, note), 'info', {
-          label: 'Открыть папку',
-          run: () => Api.ShowInExplorer(),
-        })
-    })
+    jobs.listen()
     try {
       const st = (await Api.GetState()) as unknown as State
       this.hooks.reloaded()
@@ -491,25 +469,6 @@ class Store extends Nav {
     await this.run(Api.SetSettings(s))
   }
 
-  // «Экспорт» открывает окно настроек (ExportDialog); сам запуск — runExport.
-  exportAll() {
-    if (this.exporting || this.sheets.length === 0) return
-    this.exportOpen = true
-  }
-
-  // true — экспорт пошёл; false — отказ (диалог папки закрыт, вопрос «Нет») или ошибка: окно остаётся открытым.
-  async runExport(opt: ExportOpts): Promise<boolean> {
-    try {
-      const started = await Api.Export(opt)
-      // total неизвестен (диапазон, «по страницам»): считает Go, первое export:progress его пришлёт.
-      if (started) this.exporting = { done: 0, total: 0 }
-      return started
-    } catch (e) {
-      this.notify(errText(e), 'error')
-      return false
-    }
-  }
-
   // Список пропавших и их имена. Номер запроса отсекает запоздавший ответ.
   private setMissing(ids: string[]) {
     this.missing = ids
@@ -554,4 +513,5 @@ class Store extends Nav {
 }
 
 export const store = new Store()
+jobs.attach(store)
 export { Api }

@@ -20,6 +20,18 @@ export namespace app {
 	        this.photos = source["photos"];
 	    }
 	}
+	export class CollectOptions {
+	    all: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CollectOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.all = source["all"];
+	    }
+	}
 	export class DecorItem {
 	    id: string;
 	    theme: string;
@@ -30,6 +42,9 @@ export namespace app {
 	    w: number;
 	    h: number;
 	    color?: string;
+	    pages?: number;
+	    places?: number;
+	    pack?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new DecorItem(source);
@@ -46,6 +61,9 @@ export namespace app {
 	        this.w = source["w"];
 	        this.h = source["h"];
 	        this.color = source["color"];
+	        this.pages = source["pages"];
+	        this.places = source["places"];
+	        this.pack = source["pack"];
 	    }
 	}
 	export class DecorTheme {
@@ -298,6 +316,22 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class LibraryNet {
+	    allowed: boolean;
+	    atStart: boolean;
+	    checked: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LibraryNet(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.allowed = source["allowed"];
+	        this.atStart = source["atStart"];
+	        this.checked = source["checked"];
+	    }
+	}
 	export class NamesFile {
 	    text: string;
 	    file: string;
@@ -357,6 +391,133 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+	export class PackInfo {
+	    id: string;
+	    title: string;
+	    about: string;
+	    author: string;
+	    license: string;
+	    source: string;
+	    origin: string;
+	    version: number;
+	    bg: number;
+	    sticker: number;
+	    spread: number;
+	    bytes: number;
+	    removable: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PackInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.about = source["about"];
+	        this.author = source["author"];
+	        this.license = source["license"];
+	        this.source = source["source"];
+	        this.origin = source["origin"];
+	        this.version = source["version"];
+	        this.bg = source["bg"];
+	        this.sticker = source["sticker"];
+	        this.spread = source["spread"];
+	        this.bytes = source["bytes"];
+	        this.removable = source["removable"];
+	    }
+	}
+	export class PackAdd {
+	    pack: PackInfo;
+	    ask: string;
+	    fromVersion: number;
+	    token: string;
+	    skipped: DecorSkip[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PackAdd(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pack = this.convertValues(source["pack"], PackInfo);
+	        this.ask = source["ask"];
+	        this.fromVersion = source["fromVersion"];
+	        this.token = source["token"];
+	        this.skipped = this.convertValues(source["skipped"], DecorSkip);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class PackList {
+	    packs: PackInfo[];
+	    net: LibraryNet;
+	    busy: boolean;
+	    readOnly: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PackList(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.packs = this.convertValues(source["packs"], PackInfo);
+	        this.net = this.convertValues(source["net"], LibraryNet);
+	        this.busy = source["busy"];
+	        this.readOnly = source["readOnly"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PackRemove {
+	    files: number;
+	    kept: number;
+	    bytes: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PackRemove(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.files = source["files"];
+	        this.kept = source["kept"];
+	        this.bytes = source["bytes"];
+	    }
 	}
 	export class RelinkResult {
 	    view: model.View;
@@ -473,6 +634,73 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+	export class TplResult {
+	    view: model.View;
+	    left: number;
+	    missing: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TplResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.view = this.convertValues(source["view"], model.View);
+	        this.left = source["left"];
+	        this.missing = source["missing"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace collect {
+	
+	export class Info {
+	    photos: number;
+	    extra: number;
+	    own: number;
+	    guides: number;
+	    missing: number;
+	    missingGuides: number;
+	    bytes: number;
+	    scanning: boolean;
+	    folderName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.photos = source["photos"];
+	        this.extra = source["extra"];
+	        this.own = source["own"];
+	        this.guides = source["guides"];
+	        this.missing = source["missing"];
+	        this.missingGuides = source["missingGuides"];
+	        this.bytes = source["bytes"];
+	        this.scanning = source["scanning"];
+	        this.folderName = source["folderName"];
+	    }
 	}
 
 }
@@ -1765,6 +1993,10 @@ export namespace model {
 	    dpi: number;
 	    flipH: boolean;
 	    flipV: boolean;
+	    gray: boolean;
+	    bright: number;
+	    contrast: number;
+	    filter: string;
 	    cellRot: number;
 	    z: number;
 	    shape: string;
@@ -1786,6 +2018,10 @@ export namespace model {
 	        this.dpi = source["dpi"];
 	        this.flipH = source["flipH"];
 	        this.flipV = source["flipV"];
+	        this.gray = source["gray"];
+	        this.bright = source["bright"];
+	        this.contrast = source["contrast"];
+	        this.filter = source["filter"];
 	        this.cellRot = source["cellRot"];
 	        this.z = source["z"];
 	        this.shape = source["shape"];

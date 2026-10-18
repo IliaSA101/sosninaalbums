@@ -3,7 +3,7 @@
 // и скрытие — не правки проекта: отмены нет, как у «Мои шаблоны».
 import { Api, store } from '../../base/core/store.svelte'
 import { errText } from '../../base/words/errtext'
-import type { BackdropScope } from '../../base/core/types'
+import type { BackdropScope, GridPlan } from '../../base/core/types'
 import { applyBackground } from '../../editor/backdrop/backdropact'
 import { currentPage, sticker } from '../../editor/sticker/sticker.svelte'
 import {
@@ -15,10 +15,14 @@ import {
   type DecorImport,
   type DecorItem,
   type DecorKind,
+  type TplResult,
 } from './decor'
+import { putQuestion, putToast } from './spreadtpl'
 import { mergeImport, rasterSvgs } from './svgraster'
 
-export type DecorAsk = { kind: 'rename'; id: string } | { kind: 'hide'; id: string; name: string }
+// put (067) — вопрос перед постановкой разворота: уходят фото в ленту или заменяются стикеры и надписи.
+export type DecorAsk =
+  { kind: 'rename'; id: string } | { kind: 'hide'; id: string; name: string } | { kind: 'put'; id: string; text: string }
 
 class DecorUi {
   // Открытое окно: что ставим (вид), на каком листе и в какую область. replace — ID стикера, которому ищут замену
@@ -132,10 +136,58 @@ class DecorUi {
   async pick(item: DecorItem) {
     const c = this.cur
     if (!c) return
+    if (c.kind === 'spread') return this.pickSpread(item)
     this.close()
     if (c.kind === 'bg') await applyBackground(c.spread, c.scope, item.id)
     else if (c.replace) await sticker.replace(c.spread, c.replace, item.id)
     else await sticker.add(c.spread, currentPage(), item.id)
+  }
+
+  // Развороты (067): сначала вопрос Go (сухой прогон), без чисел для вопроса — ставим сразу. Окно закрывается,
+  // когда решено ставить; ошибка прогона оставляет его открытым. Второй щелчок, пока идёт прогон, не нужен.
+  private async pickSpread(item: DecorItem) {
+    const c = this.cur
+    if (!c || this.busy) return
+    this.busy = true
+    try {
+      const plan = (await Api.PlanSpreadTpl(c.spread, c.scope, item.id)) as unknown as GridPlan
+      if (this.cur !== c) return // окно закрыли, пока считался вопрос
+      const sp = store.view.spreads.find((s) => s.id === c.spread)
+      const text = putQuestion(plan, sp, item.places ?? 0)
+      if (text) {
+        this.ask = { kind: 'put', id: item.id, text }
+        return
+      }
+      this.close()
+      await this.putSpread(c.spread, c.scope, item.id)
+    } catch (e) {
+      store.notify(errText(e), 'error')
+    } finally {
+      this.busy = false
+    }
+  }
+
+  // «Поставить» в вопросе: окно разворотов закрывается вместе с ним.
+  async confirmPut() {
+    const a = this.ask
+    const c = this.cur
+    if (a?.kind !== 'put' || !c) return
+    this.close()
+    await this.putSpread(c.spread, c.scope, a.id)
+  }
+
+  // Постановка: один вызов Go — места и оформление одним шагом отмены. Версия не выросла — повтор, шага нет.
+  private async putSpread(spread: string, scope: BackdropScope, id: string) {
+    const before = store.view.rev
+    try {
+      const r = (await Api.ApplySpreadTpl(spread, scope, id)) as unknown as TplResult
+      store.apply(r.view)
+      const t = putToast(store.view.rev !== before, r.left, r.missing)
+      if (t.undo) store.undoToast(t.text)
+      else store.notify(t.text)
+    } catch (e) {
+      store.notify(errText(e), 'error')
+    }
   }
 
   // «Загрузить своё…»: диалог выбора файлов в Go; итог — тост и свежий каталог.
@@ -174,7 +226,7 @@ class DecorUi {
   async commit(): Promise<boolean> {
     const a = this.ask
     const c = this.cur
-    if (!a || !c) return false
+    if (!a || !c || a.kind === 'put') return false
     this.ask = null
     try {
       if (a.kind === 'rename') await Api.RenameDecor(c.kind, a.id, cleanName(this.name))

@@ -3,6 +3,7 @@
   import { photoui } from './photoui.svelte'
   import { previewUrl } from '../../base/core/media'
   import { fitTilt } from '../../base/geom/frame'
+  import { adjlive } from './adjlive.svelte'
   import Icon from '../../base/ui/Icon.svelte'
 
   // Крупный просмотр фото (Quick Preview из SmartAlbums, но без клавиши: Пробел занят). Esc,
@@ -12,6 +13,7 @@
   let box = $state<HTMLElement>()
   // Поворот фото в рамке (010 U5): просмотр показывает фото целиком, но так, как оно стоит в альбоме.
   const fv = $derived(id ? store.spread?.frames?.[store.spread.photos.indexOf(id)] : undefined)
+  const tone = $derived(id ? adjlive.filterOf(id, fv) : undefined) // ч/б и тон (068): просмотр показывает фото как в альбоме
   const turned = $derived((fv?.turn ?? 0) % 2 === 1)
   let nat = $state({ w: 0, h: 0 }) // размер картинки просмотра, px
   // Размер от прошлого фото не переносим.
@@ -59,6 +61,7 @@
             style:width={turned ? '100cqh' : '100cqw'}
             style:height={turned ? '100cqw' : '100cqh'}
             style:transform="translate(-50%, -50%) rotate({fv?.r}deg) scale({k})"
+            style:filter={tone}
           />
         </div>
       {:else}
@@ -69,6 +72,7 @@
           draggable="false"
           bind:naturalWidth={nat.w}
           bind:naturalHeight={nat.h}
+          style:filter={tone}
         />
       {/if}
       <div class="cap">

@@ -32,6 +32,10 @@ type DecorItem struct {
 	W      int     `json:"w"`
 	H      int     `json:"h"`
 	Color  string  `json:"color,omitempty"` // цвет страниц пресета: подложка плитки
+	// Pages, Places — у разворота (067): 1 — страница, 2 — разворот; мест в шаблоне.
+	Pages  int    `json:"pages,omitempty"`
+	Places int    `json:"places,omitempty"`
+	Pack   string `json:"pack,omitempty"` // название набора: подсказка «Набор «…»»
 }
 
 // DecorTheme — строка списка тем слева.

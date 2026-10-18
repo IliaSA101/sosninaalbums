@@ -3,12 +3,17 @@
 import {app} from '../models';
 import {model} from '../models';
 import {prefs} from '../models';
+import {collect} from '../models';
 import {fsfera} from '../models';
 import {text} from '../models';
 
 export function AddDecorPNG(arg1:string,arg2:string):Promise<app.DecorItem>;
 
 export function AddFolderPath(arg1:string):Promise<model.View>;
+
+export function AddPackFile():Promise<app.PackAdd>;
+
+export function AddPackPath(arg1:string):Promise<app.PackAdd>;
 
 export function AddPhotos(arg1:string,arg2:Array<string>,arg3:number):Promise<model.View>;
 
@@ -30,6 +35,8 @@ export function ApplyCoverPreset(arg1:string):Promise<model.View>;
 
 export function ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<app.GridResult>;
 
+export function ApplySpreadTpl(arg1:string,arg2:string,arg3:string):Promise<app.TplResult>;
+
 export function ArrangeLayers(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>;
 
 export function ArrangePlaces(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>;
@@ -41,6 +48,8 @@ export function AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.A
 export function AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.AutoPreview>;
 
 export function Backups():Promise<Array<app.BackupInfo>>;
+
+export function CancelCollect():Promise<void>;
 
 export function ChooseFolder():Promise<model.View>;
 
@@ -55,6 +64,12 @@ export function ClearRecent():Promise<Array<prefs.RecentProject>>;
 export function ClearSpreadGuide():Promise<model.View>;
 
 export function ClearVignette(arg1:string):Promise<model.View>;
+
+export function Collect(arg1:app.CollectOptions):Promise<boolean>;
+
+export function CollectInfo(arg1:boolean):Promise<collect.Info>;
+
+export function ConfirmPack(arg1:string):Promise<app.PackAdd>;
 
 export function CopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<app.GridResult>;
 
@@ -114,6 +129,8 @@ export function ImportDecorPaths(arg1:string,arg2:string,arg3:Array<string>):Pro
 
 export function LayoutChoices(arg1:string):Promise<model.Choices>;
 
+export function LibraryPacks():Promise<app.PackList>;
+
 export function Marks():Promise<Record<string, model.MarkView>>;
 
 export function MergeSpreads(arg1:string):Promise<model.View>;
@@ -160,6 +177,10 @@ export function PlanCopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarge
 
 export function PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>;
 
+export function PlanRemovePack(arg1:string):Promise<app.PackRemove>;
+
+export function PlanSpreadTpl(arg1:string,arg2:string,arg3:string):Promise<model.GridPlan>;
+
 export function PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.NamesPlan>;
 
 export function PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>;
@@ -175,6 +196,8 @@ export function RelinkFolder():Promise<app.RelinkResult>;
 export function RelinkFolderPath(arg1:string):Promise<app.RelinkResult>;
 
 export function RemoveFolder(arg1:string):Promise<model.View>;
+
+export function RemovePack(arg1:string):Promise<app.PackList>;
 
 export function RemovePhotos(arg1:Array<string>):Promise<model.View>;
 
@@ -201,6 +224,8 @@ export function SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<vo
 export function SaveProject():Promise<model.View>;
 
 export function SaveProjectAs():Promise<model.View>;
+
+export function SaveSpreadTpl(arg1:string,arg2:string,arg3:string,arg4:string,arg5:boolean,arg6:boolean):Promise<app.DecorItem>;
 
 export function SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>;
 
@@ -235,6 +260,8 @@ export function SetFlip(arg1:Array<string>,arg2:string):Promise<model.View>;
 export function SetFrame(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>;
 
 export function SetFrameAngle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>;
+
+export function SetGray(arg1:Array<string>):Promise<model.View>;
 
 export function SetGrid(arg1:string,arg2:boolean):Promise<model.View>;
 
@@ -284,13 +311,19 @@ export function SetTextScale(arg1:string,arg2:number,arg3:number,arg4:number):Pr
 
 export function SetTextStyle(arg1:string,arg2:text.Style):Promise<model.View>;
 
+export function SetTone(arg1:string,arg2:number,arg3:number):Promise<model.View>;
+
 export function SetVignette(arg1:string,arg2:model.Vignette):Promise<app.GridResult>;
 
 export function SetupVignette(arg1:string,arg2:model.VigSetup):Promise<app.GridResult>;
 
 export function ShowBackups():Promise<void>;
 
+export function ShowCollected():Promise<void>;
+
 export function ShowInExplorer():Promise<void>;
+
+export function ShowLibraryFolder():Promise<void>;
 
 export function ShowPhotoInExplorer(arg1:string):Promise<void>;
 
@@ -309,6 +342,8 @@ export function SuggestDrive():Promise<app.DriveHint>;
 export function SwapPhotos(arg1:string,arg2:string):Promise<model.View>;
 
 export function TransformGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>;
+
+export function TurnBackdrop(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>;
 
 export function TurnPhotos(arg1:Array<string>,arg2:number):Promise<model.View>;
 

@@ -179,6 +179,20 @@ describe('справочник функций: стражи', () => {
     expect(v?.words).toContain('лесенка')
   })
 
+  it('067: «Готовые развороты» — на функции «Фоны и стикеры», вход в «Фон» карточки и в «Правка»', () => {
+    const a = ARTICLES.find((x) => x.id === 'spread-tpl')
+    expect(a).toMatchObject({ title: 'Готовые развороты', feature: 'decor', menu: ['spreadTpl'] })
+    for (const w of ['«Фон»', 'Правка ▸ Готовые развороты…', '«Левую» и «Правую»']) expect(a?.where, w).toContain(w)
+    expect(placesOf(a!).map((p) => p.spot)).toEqual(['ui:spread-tpl', 'menu:spreadTpl'])
+  })
+
+  it('067 Ф2: «Наборы библиотеки» — на функции «Фоны и стикеры», вход в «Файл» и в окна', () => {
+    const a = ARTICLES.find((x) => x.id === 'library-packs')
+    expect(a).toMatchObject({ title: 'Наборы библиотеки', feature: 'decor', menu: ['packs'] })
+    for (const w of ['Файл ▸ Наборы библиотеки…', '«Наборы…»', '«Добавить из файла…»', '«Заменить?»']) expect(a?.where, w).toContain(w)
+    expect(placesOf(a!).map((p) => p.spot)).toEqual(['menu:packs'])
+  })
+
   it('у каждого раздела есть статьи; метки версии у статей нет', () => {
     for (const g of GUIDE_GROUPS)
       expect(

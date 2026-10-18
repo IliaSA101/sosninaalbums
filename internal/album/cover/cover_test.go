@@ -127,8 +127,8 @@ func TestCoverCreateErrors(t *testing.T) {
 }
 
 // TestCoverSpecPreset — пресет остаётся подписью, пока числа его; любое своё число —
-// «Свои размеры» с теми же числами. Сторонка в счёт, только если её задаёт шаблон (Фотосфера
-// на формате из таблицы, 047); вне таблицы ApplyCoverPreset сторонку не трогает.
+// «Свои размеры» с теми же числами. Сторонка в счёт, только если её задаёт шаблон (Фотосфера:
+// формат страницы или ближайший, 070 Е); Нетпринт сторонку пользователя не трогает.
 func TestCoverSpecPreset(t *testing.T) {
 	e := coverAlbum(t, 2)
 	sp := edtest.P(e).Cover.Spec
@@ -136,15 +136,16 @@ func TestCoverSpecPreset(t *testing.T) {
 	if _, err := e.SetCoverSpec(sp); err != nil || edtest.P(e).Cover.Spec.Preset != model.CoverCustom || edtest.P(e).Cover.Spec.W != 300 {
 		t.Fatalf("своя сторонка на формате Фотосферы: %v %+v", err, edtest.P(e).Cover.Spec)
 	}
-	// Страница не из таблицы: сторонка шаблона — страница (0), своя сторонка пресет не меняет.
+	// Страница не из таблицы: сторонка шаблона — ближайший формат (30×30: 286×286), а не страница;
+	// своя сторонка 300×290 — уже не шаблон, пресет «Своих размеров».
 	st := edtest.P(e).Settings
 	st.PageW, st.PageH = 300, 300
 	e.SetSettings(st)
-	if _, err := e.ApplyCoverPreset(model.CoverDefault); err != nil || edtest.P(e).Cover.Spec.W != 300 || edtest.P(e).Cover.Spec.H != 290 {
-		t.Fatalf("пресет вне таблицы тронул сторонку: %v %+v", err, edtest.P(e).Cover.Spec)
+	if _, err := e.ApplyCoverPreset(model.CoverDefault); err != nil || edtest.P(e).Cover.Spec.W != 286 || edtest.P(e).Cover.Spec.H != 286 {
+		t.Fatalf("пресет вне таблицы не по ближайшему формату: %v %+v", err, edtest.P(e).Cover.Spec)
 	}
-	if _, err := e.SetCoverSpec(sp); err != nil || edtest.P(e).Cover.Spec.Preset != model.CoverDefault {
-		t.Fatalf("сторонка сменила пресет: %v %+v", err, edtest.P(e).Cover.Spec)
+	if _, err := e.SetCoverSpec(sp); err != nil || edtest.P(e).Cover.Spec.Preset != model.CoverCustom || edtest.P(e).Cover.Spec.W != 300 {
+		t.Fatalf("своя сторонка вне таблицы осталась «Фотосферой»: %v %+v", err, edtest.P(e).Cover.Spec)
 	}
 	sp.Wrap = 21
 	if _, _ = e.SetCoverSpec(sp); edtest.P(e).Cover.Spec.Preset != model.CoverCustom || edtest.P(e).Cover.Spec.Wrap != 21 {

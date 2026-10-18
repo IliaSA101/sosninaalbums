@@ -1,7 +1,7 @@
 // Окно «Фоны» (048): чистые решения — темы, плитки, «Куда», итог загрузки, тексты. Каталог и правки — у Go;
 // здесь ничего не считается, кроме отбора плиток по теме и шага размера картинки.
 import type { app } from '../../../wailsjs/go/models'
-import type { BackdropScope, CoverView, PatternSpec, PatternView, SpreadView } from '../../base/core/types'
+import type { BackdropScope, CoverView, PatternSpec, PatternView, SpreadView, View } from '../../base/core/types'
 import { hasSeam, isCover } from '../../base/geom/sheet'
 import { backdropOf } from '../../editor/backdrop/backdrop'
 import { patternOf } from '../../editor/pattern/pattern'
@@ -10,7 +10,7 @@ import { coverLabel, coverScopes } from '../../editor/cover/cover'
 import type { SegItem } from '../../base/tpl/Seg.svelte'
 import type { SideItem } from '../../base/tpl/SideList.svelte'
 
-export type DecorKind = 'bg' | 'sticker'
+export type DecorKind = 'bg' | 'sticker' | 'spread'
 
 // Типы ответа Go (app.DecorCatalog и др.): интерфейс читает их как есть.
 export interface DecorItem {
@@ -23,6 +23,9 @@ export interface DecorItem {
   w: number
   h: number
   color?: string // цвет страниц пресета: подложка плитки
+  pages?: number // 067, только вид spread: 1 — страница, 2 — весь разворот
+  places?: number // 067: сколько мест для фото в шаблоне
+  pack?: string // 067: название набора, из которого плитка
 }
 export interface DecorTheme {
   id: string
@@ -47,7 +50,16 @@ export interface DecorImport {
   svg?: app.DecorSvg[]
 }
 
-export const DECOR_TITLE: Record<DecorKind, string> = { bg: 'Фоны', sticker: 'Стикеры' }
+// Итог ApplySpreadTpl (app.TplResult): вид, сколько фото ушло в ленту, сколько слоёв библиотеки не нашлось на этом компьютере.
+export interface TplResult {
+  view: View
+  left: number
+  missing: number
+}
+
+export const DECOR_TITLE: Record<DecorKind, string> = { bg: 'Фоны', sticker: 'Стикеры', spread: 'Развороты' }
+// Что лежит на плитке — для подписей ✎ и ×.
+export const NOUN: Record<DecorKind, string> = { bg: 'фон', sticker: 'стикер', spread: 'разворот' }
 export const NAME_MAX = 60
 export const RECENT = 'recent'
 export const ALL = 'all'
@@ -79,7 +91,9 @@ export function themeItems(cat: DecorCatalog | null, theme: string): DecorItem[]
 export const importTheme = (theme: string): string => (theme === ALL || theme === RECENT ? MINE : theme)
 
 // Пустая тема: «Мои» зовут к загрузке, остальные — просто пусто.
-export function emptyText(theme: string, readOnly: boolean): string {
+export function emptyText(theme: string, readOnly: boolean, kind: DecorKind = 'bg'): string {
+  if (theme === MINE && kind === 'spread')
+    return readOnly ? 'Здесь появятся ваши развороты' : 'Сохраните свой разворот кнопкой «Сохранить разворот…»'
   if (theme === MINE) return readOnly ? 'Здесь появятся ваши фоны' : 'Загрузите свои кнопкой выше'
   return 'В этой теме пока пусто'
 }
@@ -144,7 +158,10 @@ export function importSummary(r: DecorImport): { text: string; error: boolean } 
   return { text: `${head} (${why.join('; ')}${rest > 0 ? ` и ещё ${rest}` : ''})`, error: added === 0 }
 }
 
-export const deleteText = (name: string): string => `«${name}» будет убран из библиотеки. Где он уже стоит, не изменится.`
+export const deleteText = (name: string, kind: DecorKind = 'bg'): string =>
+  kind === 'spread'
+    ? `«${name}» будет убран из библиотеки. Уже поставленные развороты не изменятся.`
+    : `«${name}» будет убран из библиотеки. Где он уже стоит, не изменится.`
 
 // Имя в поле ✎: пробелы по краям лишние; пустое Go отклонит само.
 export const cleanName = (s: string): string => s.trim()

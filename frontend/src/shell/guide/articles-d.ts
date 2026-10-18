@@ -47,6 +47,20 @@ export const PART_D: Article[] = [
     ],
   },
   {
+    id: 'adjust',
+    title: 'Ч/б, яркость и контраст',
+    group: 'onspread',
+    feature: 'adjust',
+    what: 'Делает фото чёрно-белым или подтягивает тёмный кадр; исходный файл не меняется, в JPEG — то же, что на экране.',
+    where: 'Карточка фото ▸ «Цвет | Ч/б», «Яркость», «Контраст»; правая кнопка по фото и «Правка» ▸ «Сделать ч/б».',
+    words: 'чб черно белый серый яркость контраст светлее темнее тон gray',
+    menu: ['gray'],
+    spots: [
+      { label: 'Показать в карточке', spot: 'ui:adjust', needs: ['spread', 'photo', 'card'] },
+      { label: 'Показать в меню', spot: 'menu:gray', needs: ['spread', 'photo'] },
+    ],
+  },
+  {
     id: 'tilt',
     title: 'Наклон фото',
     group: 'onspread',

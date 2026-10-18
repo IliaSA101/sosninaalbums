@@ -94,6 +94,13 @@
     title="Поставить такое же оформление на другие {unit.many}"
     onclick={() => gridAct.openDecor(sp.id)}>Копировать оформление…</button
   >
+  <!-- 067: готовые развороты — места и оформление одним щелчком; окно то же, что «Правка ▸ Готовые развороты…» -->
+  <button
+    class="ghost copy"
+    data-guide="spread-tpl"
+    title="Поставить готовый разворот: места для фото и оформление"
+    onclick={() => decor.show('spread', sp.id, 'spread')}>Готовые развороты…</button
+  >
 {/if}
 
 <style>

@@ -149,6 +149,18 @@ func (e *Editor) Marks() map[string]model.MarkView {
 	return out
 }
 
+// SnapshotMarks — копия проекта и своих отметок под одним замком (сбор в папку, 069): правка
+// между двумя отдельными снимками развела бы альбом и отметки собранной копии.
+func (e *Editor) SnapshotMarks() (*model.Project, map[string]model.Mark) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := make(map[string]model.Mark, len(e.marks))
+	for id, m := range e.marks {
+		out[id] = m.Clone()
+	}
+	return e.p.Clone(), out
+}
+
 // rating — действующая оценка фото (своя отметка поверх XMP из infos; фото не из ленты —
 // только своя): звезда разворота в автосборке и «Разнообразить» (041). Зовётся и читает
 // e.marks только под e.mu (внутри правки).

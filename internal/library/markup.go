@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
-	"github.com/IliaSA101/sosninaalbums/internal/psd"
+	"github.com/IliaSA101/sosninaalbums/internal/library/psd"
 )
 
 // Файл-разметка типографии (066): PSD, JPEG или PNG. Подложка только для экрана: разбор PSD —

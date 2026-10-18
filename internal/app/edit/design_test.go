@@ -71,6 +71,18 @@ func TestDesignSurface(t *testing.T) {
 		t.Error("зеркало не включено")
 	}
 	r = rev()
+	v = a.SetGray([]string{"b"})
+	grew("SetGray", r, v)
+	if f := v.Spreads[1].Frames[0]; !f.Gray || f.Filter != "grayscale(1)" {
+		t.Errorf("ч/б: %+v", f)
+	}
+	r = rev()
+	v = a.SetTone("b", 20, -60)
+	grew("SetTone", r, v)
+	if f := v.Spreads[1].Frames[0]; !f.Gray || f.Bright != 20 || f.Contrast != -50 || f.Filter != "grayscale(1) brightness(120%) contrast(50%)" {
+		t.Errorf("тон: %+v", f)
+	}
+	r = rev()
 	v = a.SetBackground("s2", "left", "#112233")
 	grew("SetBackground", r, v)
 	if v.Spreads[1].BgSet[0] != "#112233" {

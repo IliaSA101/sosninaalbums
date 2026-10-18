@@ -42,7 +42,7 @@
   const dial = $derived(room.mode !== 'none')
   // ✥ прячется только на время протяжки: сдвига кадра или кружка дуги
   const hideMove = $derived(panning || (dial && tiltmode.dialing))
-  // Ползунок масштаба над мини-панелью, когда она стоит внутри у нижнего края (063)
+  // Ползунок масштаба: над мини-панелью внутри у нижнего края (063) и у нижнего края видимой части, если низ рамки за экраном (070)
   const lift = $derived(miniSpot.photo === id ? Math.max(16, miniSpot.lift) : 16)
 
   function startPan(e: PointerEvent) {
@@ -123,7 +123,7 @@
   <input
     class="zoom"
     class:shaped
-    style:bottom={shaped ? `calc(${lift}px + 8%)` : `${lift}px`}
+    style:bottom={shaped ? `max(calc(16px + 8%), ${lift}px)` : `${lift}px`}
     data-guide="frame"
     type="range"
     min="100"

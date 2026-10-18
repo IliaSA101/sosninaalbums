@@ -1,4 +1,5 @@
-// Package osx — вызовы ОС: файловый менеджер и папка данных WebView2.
+// Package osx — вызовы ОС: файловый менеджер, папка данных WebView2, доступность тома и
+// свободное место на нём (FreeBytes, free_*.go).
 package osx
 
 import (

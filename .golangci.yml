@@ -59,6 +59,10 @@ linters:
         - pattern: ^model\.(SetMarksLimit|SetParallelLayouts)$
           pkg: ^github\.com/IliaSA101/sosninaalbums/internal/album/model$
           msg: "023: крючок теста — только в _test.go"
+        # 067: в сеть ходит только decor/fetch (белый список хостов, пределы, подпись); сервер /media — не клиент
+        - pattern: ^http\.(Get|Head|Post|PostForm|NewRequest|NewRequestWithContext|DefaultClient|DefaultTransport|Client|Transport)$
+          pkg: ^net/http$
+          msg: "067: сетевой клиент — только в internal/decor/fetch"
     # Границы пакетов (docs/ARCHITECTURE.md «Слои»): у каждого пакета internal/* белый список
     # того, что он вправе импортировать; всё остальное из internal — нарушение. Новый пакет
     # сначала вносится сюда. Имя правила — то, что увидит автор в сообщении линтера.
@@ -143,6 +147,23 @@ linters:
             - $gostd
             - github.com/IliaSA101/sosninaalbums/internal/decor/svgcheck
             - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Разбор недоверенного набора и сеть (067) — только stdlib; да владельца 18.10.
+        "decor/pack: только stdlib":
+          files:
+            - "**/internal/decor/pack/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/pack
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "decor/fetch: только stdlib":
+          files:
+            - "**/internal/decor/fetch/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch
             - github.com/IliaSA101/sosninaalbums/internal/testkit
         "decor: gen, model, library, imgfile, paths":
           files:
@@ -236,7 +257,7 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/layout
             - github.com/IliaSA101/sosninaalbums/internal/text
             - github.com/IliaSA101/sosninaalbums/internal/decor/gen
-        "library: только colorspace, imgfile, paths, psd":
+        "library: только colorspace, imgfile, paths":
           files:
             - "**/internal/library/**"
           list-mode: strict
@@ -248,15 +269,15 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/colorspace
             - github.com/IliaSA101/sosninaalbums/internal/imgfile
             - github.com/IliaSA101/sosninaalbums/internal/paths
-            - github.com/IliaSA101/sosninaalbums/internal/psd # разметка типографии (066); да владельца 17.10
+            # разметка типографии (066) — подпакет library/psd под тем же префиксом; да владельца 17.10
         # Разбор недоверенного PSD (066) — только stdlib; да владельца 17.10.
-        "psd: ничего из internal":
+        "library/psd: ничего из internal":
           files:
-            - "**/internal/psd/**"
+            - "**/internal/library/psd/**"
           list-mode: strict
           allow:
             - $gostd
-            - github.com/IliaSA101/sosninaalbums/internal/psd
+            - github.com/IliaSA101/sosninaalbums/internal/library/psd
             - github.com/IliaSA101/sosninaalbums/internal/testkit
         "backup: только library, paths":
           files:
@@ -645,6 +666,14 @@ linters:
       - path: _test\.go
         linters: [forbidigo]
         text: "крючок теста"
+      # 067: сам клиент; тесты ходят в свой httptest-сервер
+      - path: (internal/decor/fetch/|_test\.go)
+        linters: [forbidigo]
+        text: "сетевой клиент"
+      # quietTransport глушит keep-alive общего транспорта для прокси wails dev — настройка, не запрос в сеть
+      - path: internal/app/app\.go
+        linters: [forbidigo]
+        text: "сетевой клиент"
 formatters:
   enable:
     - gofmt

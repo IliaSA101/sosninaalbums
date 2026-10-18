@@ -3,6 +3,7 @@ package model
 import (
 	"cmp"
 	"log"
+	"math"
 	"slices"
 	"strings"
 
@@ -132,6 +133,23 @@ func FsferaFormatOf(s Settings) (PrintFormat, bool) {
 		}
 	}
 	return PrintFormat{}, false
+}
+
+// FsferaFormatNear — формат Фотосферы, по которому считается шаблон обложки страницы s (070 Е):
+// точный из таблицы, иначе ближайший по |ΔW|+|ΔH| страницы (при равенстве — раньше в таблице).
+// Страница лист-виньетки 031 тоже приводится к ближайшему: обложки у неё нет, но пресет определён.
+func FsferaFormatNear(s Settings) PrintFormat {
+	if f, ok := FsferaFormatOf(s); ok {
+		return f
+	}
+	all := FsferaFormats()
+	best, bestD := all[0], math.Inf(1)
+	for _, f := range all {
+		if d := math.Abs(f.PageW-s.PageW) + math.Abs(f.PageH-s.PageH); d < bestD {
+			best, bestD = f, d
+		}
+	}
+	return best
 }
 
 // AreaOf — область scope листа s (left | right | spread | spine), мм; ok=false — неизвестная.

@@ -11,6 +11,7 @@
   import Overlay from './base/drag/Overlay.svelte'
   import CopyGridDialog from './panels/layouts/CopyGridDialog.svelte'
   import ExportDialog from './shell/export/ExportDialog.svelte'
+  import CollectDialog from './shell/collect/CollectDialog.svelte'
   import FsferaDone from './shell/export/FsferaDone.svelte'
   import AutoAskDialog from './shell/ask/AutoAskDialog.svelte'
   import DropAskDialog from './shell/ask/DropAskDialog.svelte'
@@ -23,6 +24,8 @@
   import LevelsDialog from './shell/dialogs/LevelsDialog.svelte'
   import BackupsDialog from './shell/dialogs/BackupsDialog.svelte'
   import { backupsUi } from './shell/dialogs/backups.svelte'
+  import PacksDialog from './shell/dialogs/PacksDialog.svelte'
+  import { packsUi } from './shell/dialogs/packs.svelte'
   import NamesDialog from './panels/names/NamesDialog.svelte'
   import VigDialog from './panels/vignette/VigDialog.svelte'
   import VigTplSave from './panels/vignette/VigTplSave.svelte'
@@ -32,6 +35,7 @@
   import PhotoMenu from './editor/photo/PhotoMenu.svelte'
   import PhotoPreview from './editor/photo/PhotoPreview.svelte'
   import { store } from './base/core/store.svelte'
+  import { jobs } from './base/core/jobs.svelte'
   import { gridAct } from './panels/layouts/gridact.svelte'
   import { dropAsk } from './base/drag/dropgrid.svelte'
   import { gallery } from './panels/gallery/gallery.svelte'
@@ -61,27 +65,31 @@
   // Открыт вопрос ручного листа (автораскладка, броски, копия сетки): под ним F1 и Ctrl+N/O/E молчат.
   const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!gridAct.copyGrid
 
+  // Открыто окно фоновой работы Go: экспорт, его памятка или сбор в папку (069).
+  const jobsOpen = () => jobs.exportOpen || jobs.collectOpen || !!jobs.exportMemo
+
   // F1 — справочник функций (033). В WebView2 он открыл бы справку браузера, поэтому гасится всегда.
   // Поверх стартового окна и окна уровней справочник открывается; под другими окнами и сам справочник — нет.
   function f1(e: KeyboardEvent): boolean {
     if (e.key !== 'F1' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false
     e.preventDefault()
     const other =
-      help.open ||
-      backupsUi.open ||
-      namesUi.open ||
-      !!vigDialog.id ||
-      !!store.autoDraft ||
-      store.exportOpen ||
-      !!store.exportMemo ||
-      askOpen()
+      help.open || backupsUi.open || packsUi.open || namesUi.open || !!vigDialog.id || !!store.autoDraft || jobsOpen() || askOpen()
     if (!guide.open && !other) guide.openFresh()
     return true
   }
 
   // Окна, под которыми клавиши приложения молчат (Esc закрывает само окно).
   const underDialog = () =>
-    guide.open || prefs.startOpen || prefs.compare || backupsUi.open || namesUi.open || !!vigDialog.id || !!store.autoDraft
+    guide.open ||
+    jobs.collectOpen ||
+    prefs.startOpen ||
+    prefs.compare ||
+    backupsUi.open ||
+    packsUi.open ||
+    namesUi.open ||
+    !!vigDialog.id ||
+    !!store.autoDraft
   // Цель события бывает не Element (document/window, синтетическое событие) — тогда null.
   const targetEl = (e: Event) => (e.target instanceof Element ? e.target : null)
   const isCheckbox = (t: Element | null) => !!t?.matches("input[type='checkbox']")
@@ -109,7 +117,7 @@
       zone: store.zone,
       bgMode: !!bgmode.cur,
       big: modes.big,
-      modal: store.exportOpen || !!store.exportMemo || askOpen(),
+      modal: jobs.exportOpen || !!jobs.exportMemo || askOpen(),
       can: prefs.can,
     })
     if (!act) return
@@ -147,6 +155,7 @@
 <Overlay />
 <CopyGridDialog />
 <ExportDialog />
+<CollectDialog />
 <FsferaDone />
 <AutoAskDialog />
 <DropAskDialog />
@@ -156,6 +165,7 @@
 <HotkeysHelp />
 <LevelsDialog />
 <BackupsDialog />
+<PacksDialog />
 <NamesDialog />
 <VigDialog />
 <VigTplSave />

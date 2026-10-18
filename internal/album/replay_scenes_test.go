@@ -258,4 +258,19 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 		r.t.Fatalf("AutoPreview сменил rev: %d → %d", r.v.Rev, e.View().Rev)
 	}
 	r.read("AutoPreview", []any{pv, fmt.Sprint(err)})
+	// Готовый разворот (067, в конце, как 042): снимок правой страницы с местами и надписями
+	// (своё фото фона — ключом), план, постановка на весь лист (правая — зеркально), повтор
+	// холостой — только rev и ошибка.
+	tp, err := e.SpreadTplOf(sid, model.ScopeRight, true, true)
+	r.read("SpreadTplOf", []any{tp, fmt.Sprint(err)})
+	libs := map[string]model.PhotoInfo{key: own}
+	tplan, err := e.PlanSpreadTpl(sid, model.ScopeSpread, tp, libs)
+	r.read("PlanSpreadTpl", []any{tplan, fmt.Sprint(err)})
+	v, tplan, missing, err := e.ApplySpreadTpl(sid, model.ScopeSpread, tp, libs)
+	r.edit("ApplySpreadTpl", v, []any{tplan, missing}, err)
+	v, _, _, err = e.ApplySpreadTpl(sid, model.ScopeSpread, tp, libs)
+	r.read("ApplySpreadTpl:повтор", [2]any{v.Rev, err})
+	// Ключи библиотеки для удаления набора (ревью 067, в конце, как 042): фон в проекте, удалённый
+	// стикер — только в истории; чтение без шага.
+	r.read("LibKeys", e.LibKeys())
 }

@@ -38,6 +38,50 @@ func FolderName(s, fallback string) string {
 	return name
 }
 
+// FileName — имя файла из чужого имени (сбор проекта в папку, 069): основа — как у FolderName
+// (запретные знаки, невидимые, устройства — и «CON.jpg», края, не длиннее FolderMaxRunes);
+// пустая или негодная основа — fallback. Расширение сохраняется, если это точка и 1–8 латинских
+// букв или цифр, иначе оно — часть основы. Идемпотентна при годном fallback.
+func FileName(s, fallback string) string {
+	name := fileNameOnce(s, fallback)
+	// Обрезка длины могла открыть новое годное расширение («…b. .a»): повтор только укорачивает
+	// имя (основа уже не пустая и не устройство), так что цикл конечен.
+	for {
+		next := fileNameOnce(name, fallback)
+		if next == name {
+			return name
+		}
+		name = next
+	}
+}
+
+func fileNameOnce(s, fallback string) string {
+	stem, ext := s, filepath.Ext(s)
+	if goodExt(ext) {
+		stem = strings.TrimSuffix(s, ext)
+	} else {
+		ext = ""
+	}
+	return FolderName(stem, fallback) + ext
+}
+
+// goodExt — расширение из точки и 1–8 латинских букв или цифр.
+func goodExt(ext string) bool {
+	if len(ext) < 2 || len(ext) > 9 {
+		return false
+	}
+	for _, c := range []byte(ext[1:]) {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// Device — имя (основа до первой точки, регистр не важен) — устройство Windows: CON, NUL,
+// COM1, LPT¹, CONIN$… Файл с таким именем не создать и не открыть как обычный.
+func Device(name string) bool { return reservedName(name) }
+
 // reservedName — основа имени до первой точки (без пробелов, регистр не важен) — имя
 // устройства Windows.
 func reservedName(name string) bool {

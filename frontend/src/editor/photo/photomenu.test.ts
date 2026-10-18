@@ -16,6 +16,7 @@ const base: MenuCtx = {
   allCover: true,
   allOval: false,
   allRect: true,
+  allGray: false,
   framed: false,
 }
 const ids = (c: Partial<MenuCtx>) => photoMenu({ ...base, ...c }).map((i) => i.id)
@@ -32,6 +33,7 @@ describe('photoMenu', () => {
       'straighten',
       'flipH',
       'flipV',
+      'gray',
       'contain',
       'round',
       'caption',
@@ -86,9 +88,9 @@ describe('photoMenu', () => {
   })
   it('несколько: имена и «Удалить (N)», без просмотра, подписи и Проводника', () => {
     const m = photoMenu({ ...base, places: 3, photos: 3 })
-    expect(m.map((i) => i.id)).toEqual(['copy', 'turnCw', 'turnCcw', 'flipH', 'flipV', 'contain', 'round', 'delete'])
+    expect(m.map((i) => i.id)).toEqual(['copy', 'turnCw', 'turnCcw', 'flipH', 'flipV', 'gray', 'contain', 'round', 'delete'])
     expect(m[0].label).toBe('Копировать имена файлов')
-    expect(m[7].label).toBe('Удалить (3)')
+    expect(m[8].label).toBe('Удалить (3)')
   })
   it('пустое место: без файловых пунктов и «Целиком»', () => {
     expect(ids({ grid: true, photos: 0, allCover: true })).toEqual(['round', 'layer', 'delete'])
@@ -231,6 +233,7 @@ describe('photoMenu по уровням (спека 010 U1)', () => {
       'straighten',
       'flipH',
       'flipV',
+      'gray',
       'contain',
       'round',
       'caption',
@@ -249,7 +252,7 @@ describe('photoMenu по уровням (спека 010 U1)', () => {
     expect(items[0].sep).toBeFalsy()
     const all = photoMenu(base, at('standard'))
     // Зеркала и кадр скрыты (в «Простом» нет меню совсем) — проверяем «Стандартный» без зеркала.
-    const noFlip = photoMenu(base, (f) => f !== 'flip' && f !== 'turn' && f !== 'tilt')
+    const noFlip = photoMenu(base, (f) => f !== 'flip' && f !== 'turn' && f !== 'tilt' && f !== 'adjust')
     expect(noFlip.find((i) => i.id === 'contain')?.sep).toBe(true)
     expect(all[0].sep).toBeFalsy()
   })
@@ -307,5 +310,42 @@ describe('«Круглое» / «Прямоугольное» в меню (сп�
     expect(menuContext(undefined, [b('oval'), b('oval')], [])).toMatchObject({ allOval: true, allRect: false })
     expect(menuContext(undefined, [b(''), b('oval')], [])).toMatchObject({ allOval: false, allRect: false })
     expect(menuContext(undefined, [b('')], [])).toMatchObject({ allOval: false, allRect: true })
+  })
+})
+
+describe('«Сделать ч/б / цветным» в меню (068)', () => {
+  const gray = (c: Partial<MenuCtx> = {}, can?: (f: FeatureId) => boolean) => photoMenu({ ...base, ...c }, can).find((i) => i.id === 'gray')
+
+  it('стоит после «Зеркало ↕», подпись по состоянию', () => {
+    const m = photoMenu(base)
+    expect(m[m.findIndex((i) => i.id === 'flipV') + 1]).toMatchObject({ id: 'gray', label: 'Сделать ч/б' })
+    expect(gray({ allGray: true })?.label).toBe('Сделать цветным')
+  })
+  it('есть у группы фото, нет у пустого места', () => {
+    expect(gray({ places: 3, photos: 3 })).toBeDefined()
+    expect(gray({ grid: true, photos: 0 })).toBeUndefined()
+  })
+  it('только при can(adjust): «Простой» меню не имеет, без adjust пункта нет', () => {
+    expect(gray({}, (f) => f !== 'adjust')).toBeUndefined()
+    expect(gray({}, (f) => can(f, 'standard'))).toBeDefined()
+  })
+  it('линия группы переходит к «Сделать ч/б», когда скрыты поворот и зеркало', () => {
+    const m = photoMenu(base, (f) => f !== 'flip' && f !== 'turn' && f !== 'tilt')
+    expect(m.find((i) => i.id === 'gray')?.sep).toBe(true)
+  })
+  it('menuContext: allGray — у всех выделенных фото ч/б', () => {
+    const s = {
+      id: 's1',
+      grid: false,
+      photos: ['a', 'b'],
+      frames: [
+        { gray: true, img: { x: 0, y: 0, w: 100, h: 100 }, dpi: 300 },
+        { gray: false, img: { x: 0, y: 0, w: 100, h: 100 }, dpi: 300 },
+      ],
+    } as unknown as SpreadView
+    const box = (photo: string): SelBox => ({ x: 0, y: 0, w: 100, h: 100, ref: photo, id: photo, photo, fit: '', rot: 0 })
+    expect(menuContext(s, [box('a')], []).allGray).toBe(true)
+    expect(menuContext(s, [box('a'), box('b')], []).allGray).toBe(false)
+    expect(menuContext(s, [], []).allGray).toBe(false)
   })
 })

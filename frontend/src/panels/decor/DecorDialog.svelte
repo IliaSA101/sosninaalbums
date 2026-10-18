@@ -6,9 +6,14 @@
   import SideList from '../../base/tpl/SideList.svelte'
   import TplItem from '../../base/tpl/TplItem.svelte'
   import { decor } from './decor.svelte'
+  import SpreadSave from './SpreadSave.svelte'
+  import { spreadSave } from './tplsave.svelte'
+  import { packsUi } from '../../shell/dialogs/packs.svelte'
+  import { FILTERED_EMPTY, saveScopes, tileLook, tplNote, tplSideItems, tplSrc, tplTitle, tplVisible } from './spreadtpl'
   import {
     DECOR_TITLE,
     NAME_MAX,
+    NOUN,
     READ_ONLY_HINT,
     deleteText,
     emptyText,
@@ -23,7 +28,7 @@
     whereItems,
   } from './decor'
 
-  // Окно «Фоны» (048): темы слева («источник слева», как в галерее шаблонов ⊞), справа плитки в пропорции листа,
+  // Окно «Фоны» (048; те же плитки для «Стикеры» и «Развороты» 067): темы слева («источник слева», как в галерее шаблонов ⊞), справа плитки в пропорции листа,
   // сверху «Куда» и «Загрузить своё…». Щелчок по плитке ставит фон и закрывает окно; ✎ и × — у своих, как у «Мои шаблоны».
   const TILE_W = 168 // CSS px: плитка с запасом в dpr берёт PNG шириной px
 
@@ -32,15 +37,19 @@
   const unit = $derived(unitOf(store.view.settings))
   const where = $derived(whereItems(sp, store.cover, unit.all))
   const scope = $derived(c ? scopeIn(where, c.scope) : 'spread')
-  const items = $derived(themeItems(decor.cat, decor.theme))
+  const sticker = $derived(c?.kind === 'sticker')
+  const spreads = $derived(c?.kind === 'spread') // 067: плитки готовых разворотов, «Куда» отбирает их
+  const themed = $derived(themeItems(decor.cat, decor.theme))
+  const items = $derived(spreads && sp ? tplVisible(themed, scope, sp) : themed)
   const readOnly = $derived(!!decor.cat?.readOnly)
   const px = $derived(tilePx(TILE_W, globalThis.devicePixelRatio || 1))
   // Плитка, что стоит в этой области сейчас: отмечена, как текущая раскладка в галерее ⊞
-  const sticker = $derived(c?.kind === 'sticker')
   const standing = $derived(
-    sticker ? standingSticker(sp, c?.replace, decor.cat?.items ?? []) : standingId(sp, scope, decor.cat?.items ?? []),
+    spreads ? '' : sticker ? standingSticker(sp, c?.replace, decor.cat?.items ?? []) : standingId(sp, scope, decor.cat?.items ?? []),
   )
-  const noun = $derived(sticker ? 'стикер' : 'фон')
+  const noun = $derived(c ? NOUN[c.kind] : 'фон')
+  const dpr = $derived(globalThis.devicePixelRatio || 1)
+  const emptyMsg = $derived(spreads && themed.length > 0 && !decor.loading ? FILTERED_EMPTY : emptyText(decor.theme, readOnly, c?.kind))
 
   // Лист пропал, пока окно открыто (удалён, смена альбома): закрываем. Область пропала из списка — первая доступная.
   $effect(() => {
@@ -69,49 +78,81 @@
   <Modal title={DECOR_TITLE[c.kind]} size="large" onclose={() => decor.close()}>
     <div class="body">
       <div class="side">
-        <SideList items={sideItems(decor.cat)} value={decor.theme} onpick={(id) => decor.setTheme(id)} label="Темы" scroll />
+        <SideList
+          items={spreads && sp ? tplSideItems(decor.cat, scope, sp) : sideItems(decor.cat)}
+          value={decor.theme}
+          onpick={(id) => decor.setTheme(id)}
+          label="Темы"
+          scroll
+        />
       </div>
       <div class="main">
         <div class="bar">
-          {#if c.kind === 'bg' && where.length > 1}
+          {#if (c.kind === 'bg' || spreads) && where.length > 1}
             <span class="lbl">Куда</span>
-            <Seg items={where} value={scope} onpick={(s) => decor.setScope(s)} label="Куда поставить фон" />
+            <Seg items={where} value={scope} onpick={(s) => decor.setScope(s)} label="Куда поставить {noun}" />
           {/if}
           <span class="grow"></span>
-          <button
-            class="ghost"
-            disabled={decor.busy || readOnly}
-            title={readOnly ? READ_ONLY_HINT : uploadHint(c.kind)}
-            onclick={() => decor.upload()}>Загрузить своё…</button
-          >
+          <!-- 067 Ф2: те же наборы во всех трёх окнах; окно «Наборы» открывается поверх -->
+          <button class="ghost" title="Наборы библиотеки: добавить из файла, удалить" onclick={() => packsUi.show()}>Наборы…</button>
+          {#if spreads}
+            <button
+              class="ghost"
+              disabled={decor.busy || readOnly}
+              title={readOnly ? READ_ONLY_HINT : 'Сохранить места и оформление этого разворота в «Мои»'}
+              onclick={() => spreadSave.show()}>Сохранить разворот…</button
+            >
+          {:else}
+            <button
+              class="ghost"
+              disabled={decor.busy || readOnly}
+              title={readOnly ? READ_ONLY_HINT : uploadHint(c.kind)}
+              onclick={() => decor.upload()}>Загрузить своё…</button
+            >
+          {/if}
         </div>
         <div class="tiles" aria-busy={decor.loading}>
           {#each items as it (it.id)}
+            {@const look = spreads ? tileLook(it, sp, scope, TILE_W, dpr) : null}
             <TplItem
               name={it.name}
+              note={spreads ? tplNote(it) : undefined}
               onrename={it.own && !readOnly ? () => decor.askRename(it) : undefined}
               ondelete={it.own && !readOnly ? () => decor.askHide(it) : undefined}
               renameLabel="Переименовать {noun}"
               deleteTitle="Убрать из библиотеки"
               deleteLabel="Убрать {noun} из библиотеки"
             >
-              <button
-                class="tile"
-                class:current={it.id === standing}
-                class:stk={sticker}
-                aria-current={it.id === standing ? 'true' : undefined}
-                use:seenIf={it.id === standing}
-                style:aspect-ratio={sticker ? '1 / 1' : `${sp.w} / ${sp.h}`}
-                style:background={it.color || undefined}
-                title={it.name}
-                onclick={() => decor.pick(it)}
-              >
-                <img src={tileSrc(it.url, px)} alt="" loading="lazy" draggable="false" />
-              </button>
+              {#if look}
+                <!-- 067: лист одной пропорции на всё окно; страница в «Весь разворот» стоит по центру на своей -->
+                <button
+                  class="tile tpl"
+                  style:aspect-ratio={look.box}
+                  title={tplTitle(it)}
+                  disabled={decor.busy}
+                  onclick={() => decor.pick(it)}
+                >
+                  <img src={tplSrc(it.url, look.px, look.r)} alt="" loading="lazy" draggable="false" />
+                </button>
+              {:else}
+                <button
+                  class="tile"
+                  class:current={it.id === standing}
+                  class:stk={sticker}
+                  aria-current={it.id === standing ? 'true' : undefined}
+                  use:seenIf={it.id === standing}
+                  style:aspect-ratio={sticker ? '1 / 1' : `${sp.w} / ${sp.h}`}
+                  style:background={it.color || undefined}
+                  title={tplTitle(it)}
+                  onclick={() => decor.pick(it)}
+                >
+                  <img src={tileSrc(it.url, px)} alt="" loading="lazy" draggable="false" />
+                </button>
+              {/if}
             </TplItem>
           {/each}
           {#if decor.cat && items.length === 0}
-            <div class="empty">{emptyText(decor.theme, readOnly)}</div>
+            <div class="empty">{emptyMsg}</div>
           {/if}
         </div>
       </div>
@@ -129,13 +170,24 @@
   </Modal>
 {:else if c && decor.ask?.kind === 'hide'}
   <Modal title="Убрать из библиотеки?" onclose={() => decor.dismiss()}>
-    <p>{deleteText(decor.ask.name)}</p>
+    <p>{deleteText(decor.ask.name, c.kind)}</p>
     <div class="actions">
       <button class="ghost" onclick={() => decor.dismiss()}>Отмена</button>
       <button class="primary" onclick={() => decor.commit()}>Убрать</button>
     </div>
   </Modal>
+{:else if c && decor.ask?.kind === 'put'}
+  <!-- 067: вопрос перед постановкой разворота; «Отмена» возвращает в окно плиток -->
+  <Modal title="Поставить разворот?" onclose={() => decor.dismiss()}>
+    <p>{decor.ask.text}</p>
+    <div class="actions">
+      <button class="ghost" onclick={() => decor.dismiss()}>Отмена</button>
+      <button class="primary" data-autofocus onclick={() => decor.confirmPut()}>Поставить</button>
+    </div>
+  </Modal>
 {/if}
+
+<SpreadSave scopes={saveScopes(where)} />
 
 <style>
   /* Высота задана окну, а не содержимому: темы и плитки прокручиваются каждые сами, шапка окна остаётся на месте */
@@ -208,6 +260,10 @@
     pointer-events: none;
   }
   /* Стикер: квадратная плитка, рисунок вписан целиком, под ним шашечка (видно прозрачность) */
+  /* Готовый разворот: картинка вписана в кнопку (страница уже листа — по краям подложка) */
+  .tile.tpl img {
+    object-fit: contain;
+  }
   .tile.stk {
     background: repeating-conic-gradient(#d4d4d8 0 25%, #f4f4f5 0 50%) 0 0 / 14px 14px;
   }

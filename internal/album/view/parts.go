@@ -37,6 +37,7 @@ func gridView(f *fields, sv *model.SpreadView, s *model.Spread) {
 			fv = newFrameView(model.PlaceImageIn(r, a, f, o), f)
 		}
 		fv.FlipH, fv.FlipV, fv.CellRot = ref.FlipH, ref.FlipV, pl.Rot
+		toneView(&fv, ref)
 		fv.Shape, fv.Radius = pl.Shape, o.Radius
 		fv.DPI = geom.FrameDPI(ref.W, fv.Img)
 		sv.Rects = append(sv.Rects, r)
@@ -200,8 +201,17 @@ func frameViews(p *model.Project, ids []string, rects []layout.Rect) []model.Fra
 		img := model.PlaceImage(r, p.RawAspect(ids[i]), f)
 		out[i] = newFrameView(img, f)
 		out[i].DPI, out[i].FlipH, out[i].FlipV = geom.FrameDPI(ref.W, img), ref.FlipH, ref.FlipV
+		toneView(&out[i], ref)
 	}
 	return out
+}
+
+// toneView — тон фото (068) в виде кадра: числа для карточки и строка CSS для <img>.
+// Одно место для «Авто» и сетки — иначе экран и экспорт разошлись бы на одном из путей.
+func toneView(fv *model.FrameView, ref model.PhotoRef) {
+	if t := ref.Adj; t != nil {
+		fv.Gray, fv.Bright, fv.Contrast, fv.Filter = t.Gray, t.Bright, t.Contrast, t.CSS()
+	}
 }
 
 // newFrameView — вид кадра f: Img и поворот, разложенный на четверти и наклон.

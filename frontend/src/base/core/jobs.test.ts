@@ -1,0 +1,134 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Обработчики событий Go, которые store.init() кладёт в EventsOn.
+const handlers: Record<string, (...a: unknown[]) => void> = {}
+let resolveState: (st: unknown) => void = () => {}
+let resolveCollect: (started: boolean) => void = () => {}
+
+vi.mock('../../../wailsjs/runtime/runtime', () => ({
+  EventsOn: (name: string, fn: (...a: unknown[]) => void) => {
+    handlers[name] = fn
+    return () => {}
+  },
+}))
+vi.mock('../../../wailsjs/go/app/App', () => ({
+  GetState: () => new Promise((r) => (resolveState = r)),
+  MissingNames: async () => ({}),
+  Collect: () => new Promise<boolean>((r) => (resolveCollect = r)),
+}))
+
+vi.stubGlobal('window', globalThis) // notify ставит таймер на window
+const { store } = await import('./store.svelte')
+const { jobs } = await import('./jobs.svelte')
+
+const view = { spreads: [], folders: [] }
+const sp = (id: string) => ({ id, photos: [`ph-${id}`] })
+const load = (o: { spreads?: string[]; cover?: boolean } = {}) => {
+  store.onCover = false
+  store.apply({
+    rev: 1,
+    folders: [],
+    settings: { sheet: false },
+    spreads: (o.spreads ?? ['a', 'b', 'c']).map(sp),
+    cover: o.cover ? { sheet: sp('cover'), spine: 14 } : null,
+  } as never)
+  store.go(0)
+}
+
+beforeEach(() => {
+  for (const k of Object.keys(handlers)) delete handlers[k]
+  store.toast = null
+  jobs.exporting = null
+  jobs.exportOpen = false
+})
+
+describe('jobs.exportAll', () => {
+  it('одна обложка без разворотов выгружается', () => {
+    load({ spreads: [], cover: true })
+    jobs.exportAll()
+    expect(jobs.exportOpen).toBe(true)
+  })
+  it('пустой альбом — окно не открывается', () => {
+    load({ spreads: [] })
+    jobs.exportAll()
+    expect(jobs.exportOpen).toBe(false)
+  })
+  it('экспорт уже идёт — окно не открывается', () => {
+    load()
+    jobs.exporting = { done: 1, total: 4 }
+    jobs.exportAll()
+    expect(jobs.exportOpen).toBe(false)
+  })
+})
+
+describe('export:done (047)', () => {
+  // Регистрирует обработчики; init дозавершаем, чтобы он не висел.
+  async function ready() {
+    const done = store.init()
+    resolveState({ view, photos: [], missing: [] })
+    await done
+    store.toast = null
+    jobs.exportMemo = null
+    jobs.exportNote = ''
+  }
+  const memo = ['Фотокнига 30×30', 'Папка: Иванов — 01…20.jpg']
+
+  it('с памяткой — окно «Готово для Фотосферы», тоста нет; сводка цвета остаётся', async () => {
+    await ready()
+    handlers['export:done']('C:/out/Иванов', '', 'Пересчитано из Adobe RGB в sRGB: 2 фото', memo)
+    expect(jobs.exportMemo).toEqual(memo)
+    expect(jobs.exportNote).toBe('Пересчитано из Adobe RGB в sRGB: 2 фото')
+    expect(store.toast).toBeNull()
+  })
+
+  it('без памятки (и с пустой) — прежний тост', async () => {
+    await ready()
+    handlers['export:done']('C:/out', '', '', null)
+    expect(jobs.exportMemo).toBeNull()
+    expect(store.toast).toMatchObject({ kind: 'info', text: 'Выгрузка готова' })
+    store.toast = null
+    handlers['export:done']('C:/out', '', '', [])
+    expect(jobs.exportMemo).toBeNull()
+    expect((store.toast as { text: string } | null)?.text).toBe('Выгрузка готова')
+  })
+
+  it('ошибка — красный тост, окна нет, даже если памятка пришла', async () => {
+    await ready()
+    handlers['export:done']('C:/out', 'диск полон', '', memo)
+    expect(jobs.exportMemo).toBeNull()
+    expect(store.toast).toMatchObject({ kind: 'error', text: 'Экспорт не удался: диск полон' })
+  })
+
+  it('export:progress ведёт счётчик, export:done его снимает', async () => {
+    await ready()
+    handlers['export:progress'](2, 10)
+    expect(jobs.exporting).toEqual({ done: 2, total: 10 })
+    handlers['export:done']('C:/out', '', '', null)
+    expect(jobs.exporting).toBeNull()
+  })
+})
+
+describe('jobs.runCollect (069)', () => {
+  async function ready() {
+    const done = store.init()
+    resolveState({ view, photos: [], missing: [] })
+    await done
+    jobs.collecting = null
+  }
+  it('collect:progress до ответа Collect — заглушка 0/0 его не затирает', async () => {
+    await ready()
+    const run = jobs.runCollect(false)
+    handlers['collect:progress'](3, 10, 300, 1000)
+    resolveCollect(true)
+    await run
+    expect(jobs.collecting).toEqual({ doneFiles: 3, totalFiles: 10, doneBytes: 300, totalBytes: 1000 })
+    expect(jobs.collectOpen).toBe(true)
+  })
+  it('прогресса ещё не было — полоса стартует с нулей', async () => {
+    await ready()
+    const run = jobs.runCollect(true)
+    resolveCollect(true)
+    await run
+    expect(jobs.collecting).toEqual({ doneFiles: 0, totalFiles: 0, doneBytes: 0, totalBytes: 0 })
+  })
+})

@@ -2,8 +2,15 @@ package geom
 
 import "math"
 
-// Round2 — до 0.01 мм: рамка, сдвинутая на шум, — холостая правка.
-func Round2(v float64) float64 { return math.Round(v*100) / 100 }
+// Round2 — до 0.01 мм: рамка, сдвинутая на шум, — холостая правка. Минус ноль не оставляет:
+// в JSON «-0» ≠ «0», и повтор правки давал бы лишний шаг отмены.
+func Round2(v float64) float64 {
+	v = math.Round(v*100) / 100
+	if v == 0 {
+		return 0
+	}
+	return v
+}
 
 // ceil01 и floor01 — округление до 0.01 вверх и вниз с допуском на шум float.
 func ceil01(v float64) float64  { return math.Ceil(v*100-1e-4) / 100 }

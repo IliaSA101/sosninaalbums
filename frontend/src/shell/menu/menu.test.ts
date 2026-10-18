@@ -44,7 +44,9 @@ describe('buildMenu', () => {
       'recent',
       'save',
       'saveAs',
+      'collect',
       'backups',
+      'packs',
       'addFolder',
       'relink',
       'export',
@@ -93,6 +95,15 @@ describe('buildMenu', () => {
     expect(find(buildMenu(ctx({ spreads: 0 })), 'export')?.disabled).toBe(true)
     expect(find(buildMenu(ctx({ exporting: true })), 'export')?.disabled).toBe(true)
     expect(find(buildMenu(ctx()), 'export')?.disabled).toBeFalsy()
+  })
+
+  it('«Собрать проект в папку…» — после «Сохранить как…»; серое только пока сбор идёт (в пустом альбоме активно)', () => {
+    const file = ids(buildMenu(ctx()), 'file')
+    expect(file.indexOf('collect')).toBe(file.indexOf('saveAs') + 1)
+    expect(find(buildMenu(ctx()), 'collect')?.cmd).toBe('collect')
+    expect(find(buildMenu(ctx()), 'collect')?.disabled).toBeFalsy()
+    expect(find(buildMenu(ctx({ spreads: 0 })), 'collect')?.disabled).toBeFalsy()
+    expect(find(buildMenu(ctx({ collecting: true })), 'collect')?.disabled).toBe(true)
   })
 
   it('«Отменить / Повторить» следуют за историей', () => {
@@ -247,6 +258,24 @@ describe('уровень в меню (спека 010 U1)', () => {
     expect(edit.indexOf('copyDecor')).toBe(edit.indexOf('bgGallery') + 1)
     expect(find(buildMenu(at('standard')), 'copyDecor')?.disabled).toBe(true) // обложка / нет листа: decorable не задан
     expect(find(buildMenu({ ...at('full'), decorable: false }), 'copyDecor')?.disabled).toBe(true)
+  })
+  it('«Файл ▸ Наборы библиотеки…» (067 Ф2) — сразу после «Резервных копий…», со «Стандартного»', () => {
+    expect(ids(buildMenu(at('simple')), 'file')).not.toContain('packs')
+    const std = buildMenu(at('standard'))
+    expect(find(std, 'packs')).toMatchObject({ label: 'Наборы библиотеки…', cmd: 'packs' })
+    expect(find(std, 'packs')?.disabled).toBeUndefined()
+    const file = ids(std, 'file')
+    expect(file.indexOf('packs')).toBe(file.indexOf('backups') + 1)
+  })
+  it('«Правка ▸ Готовые развороты…» (067) — сразу после «Копировать оформление…», со «Стандартного», серое на обложке и без листа', () => {
+    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('spreadTpl')
+    const std = buildMenu({ ...at('standard'), decorable: true })
+    expect(find(std, 'spreadTpl')).toMatchObject({ label: 'Готовые развороты…', cmd: 'spreadTpl' })
+    expect(find(std, 'spreadTpl')?.disabled).toBeUndefined()
+    const edit = ids(std, 'edit')
+    expect(edit.indexOf('spreadTpl')).toBe(edit.indexOf('copyDecor') + 1)
+    expect(find(buildMenu(at('standard')), 'spreadTpl')?.disabled).toBe(true) // обложка / нет листа: decorable не задан
+    expect(find(buildMenu({ ...at('full'), decorable: false }), 'spreadTpl')?.disabled).toBe(true)
   })
   it('«Правка ▸ Добавить стикер…» (048 Ф2) — сразу после «Добавить текст», со «Стандартного», серое без листа', () => {
     expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('addSticker')
@@ -420,5 +449,29 @@ describe('«Слой» (010 U6)', () => {
       expect(!!find(buildMenu(ctx({ can: (f) => can(f, l) })), 'layer'), l).toBe(can('layers', l))
     const edit = ids(buildMenu(ctx()), 'edit')
     expect(edit.indexOf('layer')).toBeLessThan(edit.indexOf('turn'))
+  })
+})
+
+describe('«Сделать ч/б / цветным» (068)', () => {
+  it('в «Правка» сразу после «Зеркало», команда gray', () => {
+    const edit = ids(buildMenu(ctx()), 'edit')
+    expect(edit.indexOf('gray')).toBeGreaterThan(edit.indexOf('flip'))
+    expect(find(buildMenu(ctx()), 'gray')?.cmd).toBe('gray')
+  })
+  it('подпись по состоянию выделенных', () => {
+    expect(find(buildMenu(ctx()), 'gray')?.label).toBe('Сделать ч/б')
+    expect(find(buildMenu(ctx({ allGray: false })), 'gray')?.label).toBe('Сделать ч/б')
+    expect(find(buildMenu(ctx({ allGray: true })), 'gray')?.label).toBe('Сделать цветным')
+  })
+  it('серое, когда фото не выделено', () => {
+    expect(find(buildMenu(ctx({ flippable: false })), 'gray')?.disabled).toBe(true)
+    expect(find(buildMenu(ctx()), 'gray')?.disabled).toBeFalsy()
+  })
+  it('со «Стандартного»: «Простой» пункта не имеет, «Свой» с включённой функцией — имеет', () => {
+    const at = (l: Level) => ids(buildMenu(ctx({ can: (f) => can(f, l) })), 'edit')
+    expect(at('simple')).not.toContain('gray')
+    expect(at('standard')).toContain('gray')
+    const custom: Custom = { base: 'simple', on: ['adjust'], off: [] }
+    expect(ids(buildMenu(ctx({ can: (f) => features('custom', custom).has(f) })), 'edit')).toContain('gray')
   })
 })

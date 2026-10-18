@@ -338,6 +338,7 @@ func cropSource(ph Photo, k float64, covers bool, u0, v0, u1, v1 float64) (*rotS
 		pad = 2
 		crop = padEdge(crop, pad)
 	}
+	applyTone(crop, ph.Tone) // пути 2 и 3: до поворота, как путь 1 — после уменьшения
 	fadeAlpha(crop, ph.Fade) // пути 2 и 3: draw выберет Over по альфе
 	return &rotSrc{im: crop, win: win, sw: sw, sh: sh, pad: pad}, nil
 }

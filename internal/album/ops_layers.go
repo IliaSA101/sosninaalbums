@@ -143,6 +143,17 @@ func (e *Editor) SetBackdropBox(spreadID, scope string, x, y, w, h, rot float64,
 	return e.apply(backdropMerge(merge), func(p *model.Project) { backdrop.SetBackdropBox(p, spreadID, scope, x, y, w, h, rot) })
 }
 
+// TurnBackdrop поворачивает рамку фона на rot° (по часовой, вокруг центра) в любой области.
+// Смена ориентации (около 0/180° ↔ ±90°) меняет ширину и высоту местами. Тот же угол или
+// нет фона — холостая правка. merge — сессия поля: серия — один шаг отмены.
+// Договор: область известна, rot конечен; ключ слияния — backdropMerge.
+func (e *Editor) TurnBackdrop(spreadID, scope string, rot float64, merge string) model.View {
+	if !model.ValidBdScope(scope) || !allFinite(rot) {
+		return e.View()
+	}
+	return e.apply(backdropMerge(merge), func(p *model.Project) { backdrop.TurnBackdrop(p, spreadID, scope, rot) })
+}
+
 // SetBackdropFrame ставит кадр фото в рамке: s 1..4, x/y −1..1 (как SetFrame).
 // Договор: область известна; зажим кадра — в операции.
 func (e *Editor) SetBackdropFrame(spreadID, scope string, s, x, y float64) model.View {

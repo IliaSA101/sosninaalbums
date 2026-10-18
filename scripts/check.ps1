@@ -117,6 +117,8 @@ Step 'test baseline' {
 
 Step 'размер файлов' { CheckSizes } -EmptyOut
 Step 'folder limit' { CheckFolders } -EmptyOut
+# Комментарии по-русски (CLAUDE.md «Правила»): новые английские фразы в диффе ветки к dev — провал (да владельца 17.10)
+Step 'язык комментариев' { node scripts/comment-lang.mjs }
 
 $time = '{0:N1}s' -f $total.Elapsed.TotalSeconds
 if ($failed.Count -gt 0) {

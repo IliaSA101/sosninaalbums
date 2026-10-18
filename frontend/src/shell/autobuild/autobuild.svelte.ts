@@ -55,7 +55,10 @@ export class AutoDialog {
   private running = false
   private previewRunning = false
   private waiters: (() => void)[] = []
-  private firstTime: boolean
+  // N ввели руками в этом окне: смена диапазона его не двигает. Пока нет — N от середины текущего диапазона (0.14 №27, 070 В).
+  private nKept = false
+  // Запомненный с прошлой сборки N показываем при открытии; первая смена диапазона уже пересчитывает его от середины.
+  private memRange: string | null = null
   private touched: 'min' | 'max' = 'max' // какое поле диапазона трогали последним
 
   constructor(
@@ -75,7 +78,6 @@ export class AutoDialog {
     this.variety = normVariety(saved.variety)
     this.families = normFamilies(saved.families)
     const byPer = saved.by === 'per' && saved.per != null
-    this.firstTime = saved.spreads === null && !byPer
     this.series = saved.series !== false
     if (Array.isArray(saved.range)) {
       this.auto = false
@@ -84,6 +86,7 @@ export class AutoDialog {
     this.anchor = byPer ? 'per' : 'spreads'
     this.perTyped = byPer ? (saved.per ?? null) : null
     this.n = firstSpreads(ids.length, saved, { min: 1, max: Math.max(1, ids.length) }, this.defRange())
+    if (saved.spreads !== null || byPer) this.memRange = this.rangeKey()
   }
 
   // Фото в сборку: ответ Go, пока его нет — всё, что пришло.
@@ -104,6 +107,7 @@ export class AutoDialog {
   setSpreads(v: number) {
     if (!Number.isFinite(v)) return
     this.n = clampSpreads(Math.round(v), this.plan) || 1
+    this.nKept = true
     this.anchor = 'spreads'
     this.perTyped = null
     void this.pump()
@@ -122,6 +126,7 @@ export class AutoDialog {
     const n = spreadsForPer(this.photos, x, this.lim)
     if (n === null) return
     this.n = n
+    this.nKept = true
     this.anchor = 'per'
     this.perTyped = x
     void this.pump()
@@ -131,6 +136,7 @@ export class AutoDialog {
   stepPer(dir: 1 | -1) {
     if (this.photos < 1) return
     this.n = perStep(this.photos, this.n, dir, this.lim)
+    this.nKept = true
     this.anchor = 'per'
     this.perTyped = this.photos / this.n
     void this.pump()
@@ -290,7 +296,18 @@ export class AutoDialog {
   // Диапазон для N по умолчанию: «Свой» — [от, до], «Авто» — null (по 4).
   private defRange = (): [number, number] | null => (this.auto ? null : [this.minPer, this.maxPer])
 
+  private rangeKey = () => `${this.auto}|${this.minPer}|${this.maxPer}`
+
   private key = () => `${this.auto}|${this.minPer}|${this.maxPer}|${this.series}`
+
+  // N после ответа Go. N не трогали руками — round(фото / середина диапазона) (у «Авто» — по 4); число фото насчитал Go.
+  // Якорь «среднее» у тронутого N: заново из X по числу фото и пределам ответа (Go мог взять меньше фото, диапазон сдвинул низ).
+  private wantN(res: AutoPlan, n: number): number {
+    if (this.memRange !== null && this.memRange !== this.rangeKey()) this.memRange = null // диапазон сдвинули — запомненный N уже не держим
+    if (!this.nKept && this.memRange === null) return defaultSpreads(res.photos, this.defRange())
+    if (this.anchor !== 'per' || this.perTyped === null || res.photos <= 0) return n
+    return spreadsForPer(res.photos, this.perTyped, { min: Math.max(1, res.minSpreads), max: Math.max(1, res.maxSpreads) }) ?? n
+  }
 
   private async pump() {
     if (this.running) return
@@ -311,20 +328,16 @@ export class AutoDialog {
           return
         }
         if (n !== this.n || k !== this.key()) continue // за время ответа значения ушли дальше
-        // Первый раз без запомненного N — round(фото / 4); у «Свой» — фото / середина диапазона; число фото насчитал Go; дальше зажим в пределы ответа.
-        // Якорь «среднее»: N заново из X по числу фото и пределам ответа (Go мог взять меньше фото, диапазон сдвинул низ).
-        let want = this.firstTime ? defaultSpreads(res.photos, this.defRange()) : n
-        if (!this.firstTime && this.anchor === 'per' && this.perTyped !== null && res.photos > 0) {
-          want = spreadsForPer(res.photos, this.perTyped, { min: Math.max(1, res.minSpreads), max: Math.max(1, res.maxSpreads) }) ?? n
-        }
+        let want = this.wantN(res, n)
         want = clampSpreads(want, res)
-        this.firstTime = false
         if (want !== n) {
           this.n = want
           continue
         }
         this.plan = res
         this.error = ''
+        // Якорь «среднее» без ввода (поле только выбрано): X следует за новым N.
+        if (!this.nKept && this.memRange === null && this.anchor === 'per' && n > 0) this.perTyped = res.photos / n
         return
       }
     } finally {

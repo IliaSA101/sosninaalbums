@@ -113,6 +113,10 @@ type App struct {
 	bg         sync.WaitGroup // сканирование (с прогревом) и экспорт
 	exporting  bool
 	exportDir  string // папка последнего экспорта: её открывает ShowInExplorer
+	// Сбор в папку (069, collect.go), под mu: идёт ли, отмена идущего, папка последнего (ShowCollected).
+	collecting    bool
+	collectCancel context.CancelFunc
+	collectDir    string
 
 	mediaMiss atomic.Int64 // промахи /media, чтобы не писать в лог каждый
 
@@ -120,6 +124,8 @@ type App struct {
 
 	// decorLib — библиотека фонов и стикеров (decor.go); nil до startup — методы отвечают ошибкой.
 	decorLib atomic.Pointer[decor.Store]
+	// packs — одна операция наборов за раз и набор, ждущий «Заменить» (packs.go).
+	packs packState
 }
 
 // State — то, что нужно интерфейсу целиком: альбом и фото из папок.

@@ -44,7 +44,7 @@ func TestLoadBackdropTiltV8(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f := fileJSON(t, path); f.Version != 11 || !bytes.Contains(data, []byte(`"r": -4.5`)) || !bytes.Contains(data, []byte(`"r": 44.9`)) {
+	if f := fileJSON(t, path); f.Version != 12 || !bytes.Contains(data, []byte(`"r": -4.5`)) || !bytes.Contains(data, []byte(`"r": 44.9`)) {
 		t.Fatalf("файл v%d без наклона фона:\n%s", f.Version, data)
 	}
 	q, err := salbum.Load(path)
@@ -159,7 +159,7 @@ func TestSalbumShapeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f := fileJSON(t, path); f.Version != 11 || bytes.Count(data, []byte(`"shape": "oval"`)) != 1 ||
+	if f := fileJSON(t, path); f.Version != 12 || bytes.Count(data, []byte(`"shape": "oval"`)) != 1 ||
 		bytes.Count(data, []byte(`"round": 12`)) != 1 || bytes.Count(data, []byte(`"shape"`)) != 1 || bytes.Count(data, []byte(`"round"`)) != 1 {
 		t.Fatalf("файл v%d:\n%s", f.Version, data)
 	}
@@ -237,7 +237,7 @@ func TestSalbumPatternRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f := fileJSON(t, path); f.Version != 11 || bytes.Count(data, []byte(`"pat`)) != 6 || bytes.Count(data, []byte(`"preset"`)) != 1 {
+	if f := fileJSON(t, path); f.Version != 12 || bytes.Count(data, []byte(`"pat`)) != 6 || bytes.Count(data, []byte(`"preset"`)) != 1 {
 		t.Fatalf("файл v%d, узоры:\n%s", f.Version, data)
 	}
 	q, err := salbum.Load(path)

@@ -81,7 +81,41 @@ func TestCoverView(t *testing.T) {
 	}
 }
 
-// TestCoverZonesSpineSafe — безопасные линии обложки (047): Safe от линии загиба, SpineSafe от
+// TestCoverZonesSpineZeroNoLabel — корешок уже MinSpine (1 мм): зона-черта сгиба есть, подписи
+// нет; от 1 мм — «Корешок N мм» (070 Д). После Save → Load и Undo правило то же.
+func TestCoverZonesSpineZeroNoLabel(t *testing.T) {
+	e := edtest.CoverEd(t, "k", edtest.Calendar(), []string{"x"})
+	spine := func(mm float64) (model.CoverZone, bool) {
+		edtest.Change(e, func(p *model.Project) { p.Cover.Spec.Steps = []model.SpineStep{{Upto: 999, Mm: mm}} })
+		for _, z := range e.View().Cover.Zones {
+			if z.Kind == "spine" {
+				return z, true
+			}
+		}
+		return model.CoverZone{}, false
+	}
+	for _, c := range []struct {
+		mm    float64
+		label string
+	}{{0, ""}, {0.5, ""}, {0.99, ""}, {1, "Корешок 1 мм"}, {6, "Корешок 6 мм"}} {
+		z, ok := spine(c.mm)
+		if !ok || z.Label != c.label {
+			t.Errorf("корешок %v мм: зона %v, подпись %q, ждали %q", c.mm, ok, z.Label, c.label)
+		}
+		if c.mm == 0 && z.Rect.W != 0 {
+			t.Errorf("корешок 0 мм: ширина зоны %v", z.Rect.W)
+		}
+	}
+	spine(0)
+	q := edtest.Open(t, edtest.SaveLoad(t, e), "")
+	for _, z := range q.View().Cover.Zones {
+		if z.Kind == "spine" && z.Label != "" {
+			t.Errorf("после Save → Load подпись 0 мм: %q", z.Label)
+		}
+	}
+}
+
+// TestCoverZonesSpineSafe —безопасные линии обложки (047): Safe от линии загиба, SpineSafe от
 // края корешка (у Нетпринта — от края расстава); 0 — Settings.Safe со всех сторон, как до 047.
 func TestCoverZonesSpineSafe(t *testing.T) {
 	e := edtest.CoverEd(t, "k", edtest.Calendar(), []string{"x"})

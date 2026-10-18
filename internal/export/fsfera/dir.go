@@ -1,42 +1,22 @@
 package fsfera
 
 import (
-	"errors"
-	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/export"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // ourRe — имена файлов экспорта программы (NN.jpg, NN-1.jpg, 00.jpg); свои ли — по метке.
 var ourRe = regexp.MustCompile(`(?i)^\d{2,}(?:-[12])?\.jpg$`)
 
-// BookDir — папка книги name в выбранной папке parent (047 §4.3). Выбрана сама папка книги
-// (имя совпало без учёта регистра) — она же, exists (решение 56). Иначе parent/name: нет —
-// exists=false (создаёт вызывающий os.Mkdir после всех вопросов), обычная папка — exists.
-// Файл, ссылка или junction на её месте — отказ: через ссылку не пишем (Lstat, не Stat).
+// BookDir — папка книги name в выбранной папке parent (047 §4.3, решение 56); логика общая со
+// сбором в папку (069) — paths.BookDir. Создаёт вызывающий os.Mkdir после всех вопросов.
 func BookDir(parent, name string) (dir string, exists bool, err error) {
-	if name == "" || name == "." || name == ".." || name != filepath.Base(name) {
-		return "", false, fmt.Errorf("недопустимое имя папки книги %q", name)
-	}
-	if strings.EqualFold(filepath.Base(parent), name) {
-		return parent, true, nil
-	}
-	dir = filepath.Join(parent, name)
-	st, err := os.Lstat(dir)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return dir, false, nil
-	case err != nil:
-		return "", false, err
-	case st.Mode().Type() == fs.ModeDir:
-		return dir, true, nil
-	}
-	return "", false, fmt.Errorf("на месте папки книги «%s» уже есть файл или ссылка — выберите другую папку", name)
+	return paths.BookDir(parent, name, "книги")
 }
 
 // Extra — посторонние файлы папки книги dir: обычные файлы не из written (регистр не важен).
