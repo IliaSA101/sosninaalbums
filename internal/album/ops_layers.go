@@ -259,6 +259,22 @@ func (e *Editor) ApplyBackdrop(spreadID, scope string, ph model.PhotoInfo) (mode
 	return e.try("", func(p *model.Project) error { return backdrop.ApplyBackdrop(p, spreadID, scope, ph) })
 }
 
+// ApplyBackgroundTo — плитка «Фоны» на набор листов (077): узор src.Pattern с цветом или своё
+// фото на области targets одной правкой — один шаг отмены; итог — число изменённых листов
+// (0 — холостая, rev тот же). Обложка не цель.
+// Договор: до правки ничего; цели, область и источник проверяет тело (ошибка — откат без шага).
+func (e *Editor) ApplyBackgroundTo(targets []model.GridTarget, src model.BgSource) (model.View, int, error) {
+	return e.gridTry(func(p *model.Project) (int, error) { return backdrop.ApplyTo(p, targets, src) })
+}
+
+// PlanBackgroundTo — вопрос до ApplyBackgroundTo: сколько листов изменится и сколько фото фона
+// уйдёт. Договор: как PlanCopyDecor — прогон на копии, снятой под замком; снимка, события и rev нет.
+func (e *Editor) PlanBackgroundTo(targets []model.GridTarget, src model.BgSource) (model.BgPlan, error) {
+	var c *model.Project
+	e.read(func(p *model.Project) { c = p.Clone() })
+	return backdrop.PlanTo(c, targets, src)
+}
+
 // SetPattern ставит цвета, масштаб, seed и прозрачность узора области (ключ генератора
 // стоит); зажим — ClampPattern. merge — сессия ползунка: серия — один шаг отмены. Узора нет —
 // холостая.

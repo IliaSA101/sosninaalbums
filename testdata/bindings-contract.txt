@@ -10,6 +10,8 @@ method AddVignette(arg1:number):Promise<model.View>
 method AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>
 method AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<boolean>
 method ApplyBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method ApplyBackgroundTo(arg1:Array<model.GridTarget>,arg2:string):Promise<APP.BgResult>
+method ApplyBorder(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
 method ApplyCoverPreset(arg1:string):Promise<model.View>
 method ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<APP.GridResult>
 method ApplySpreadTpl(arg1:string,arg2:string,arg3:string):Promise<APP.TplResult>
@@ -18,6 +20,7 @@ method ArrangePlaces(arg1:string,arg2:string,arg3:Array<string>):Promise<model.V
 method AutoBuild(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.View>
 method AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>
 method AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.AutoPreview>
+method AutoSimilar(arg1:Array<string>,arg2:model.AutoOpts):Promise<Array<model.SimilarDrop>>
 method Backups():Promise<Array<APP.BackupInfo>>
 method CancelCollect():Promise<void>
 method CancelExport():Promise<void>
@@ -86,10 +89,12 @@ method PickNamesFile():Promise<APP.NamesFile>
 method PickSpreadGuide():Promise<model.View>
 method PlacePerson(arg1:string,arg2:string):Promise<model.PersonView>
 method PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<APP.GridResult>
+method PlanBackgroundTo(arg1:Array<model.GridTarget>,arg2:string):Promise<model.BgPlan>
 method PlanCopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
 method PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
 method PlanRemovePack(arg1:string):Promise<APP.PackRemove>
 method PlanSpreadTpl(arg1:string,arg2:string,arg3:string):Promise<model.GridPlan>
+method PrepareSigs(arg1:Array<string>):Promise<APP.SigState>
 method PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.NamesPlan>
 method PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>
 method PurgePhotos(arg1:Array<string>):Promise<model.View>
@@ -127,6 +132,7 @@ method SetBackdropBox(arg1:string,arg2:string,arg3:number,arg4:number,arg5:numbe
 method SetBackdropFade(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>
 method SetBackdropFrame(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number):Promise<model.View>
 method SetBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method SetBorder(arg1:string,arg2:Array<string>,arg3:model.BorderPatch,arg4:string):Promise<model.View>
 method SetCaption(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method SetCaptionStyle(arg1:string,arg2:text.Style,arg3:boolean,arg4:number):Promise<model.View>
 method SetCoverLayout(arg1:string):Promise<model.View>
@@ -145,6 +151,7 @@ method SetLibraryNet(arg1:boolean,arg2:boolean):Promise<APP.LibraryNet>
 method SetMarks(arg1:Array<string>,arg2:model.MarkPatch):Promise<model.View>
 method SetPattern(arg1:string,arg2:string,arg3:model.Pattern,arg4:string):Promise<model.View>
 method SetPerson(arg1:string,arg2:model.Person,arg3:string):Promise<model.View>
+method SetPhotoFade(arg1:Array<string>,arg2:number,arg3:string):Promise<model.View>
 method SetPlaceAngle(arg1:string,arg2:string,arg3:number):Promise<model.View>
 method SetPlaceFit(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
 method SetPlacePerson(arg1:string,arg2:string,arg3:model.Person,arg4:string):Promise<model.View>
@@ -192,6 +199,9 @@ type APP.BackupInfo
   size: number
   spreads: number
   photos: number
+type APP.BgResult
+  view: model.View
+  spreads: number
 type APP.CollectOptions
   all: boolean
 type APP.DecorCatalog
@@ -299,6 +309,7 @@ type APP.PackInfo
   bg: number
   sticker: number
   spread: number
+  frame: number
   bytes: number
   removable: boolean
 type APP.PackList
@@ -315,6 +326,9 @@ type APP.RelinkResult
   found: number
   missing: number
   ambiguous: number
+type APP.SigState
+  done: number
+  total: number
 type APP.State
   view: model.View
   photos: library.Photo[]
@@ -436,6 +450,11 @@ type model.AutoOpts
   series: boolean
   variety: number
   families: string[]
+  similar: number
+  keep: string[]
+  gray: number
+  variant: number
+  again: boolean
 type model.AutoPlan
   photos: number
   spreads: number
@@ -448,6 +467,8 @@ type model.AutoPlan
   from: number
   to: number
   cuts: number
+  similar?: number
+  gray?: number
 type model.AutoPreview
   w: number
   h: number
@@ -472,6 +493,38 @@ type model.BackdropView
   dpi: number
   fade: number
   lib?: string
+type model.BgPlan
+  spreads: number
+  photos: number
+type model.Border
+  kind?: string
+  photo?: string
+  inks?: string[]
+  w?: number
+  scale?: number
+  cut: number[]
+  open?: boolean
+  preset?: string
+type model.BorderPatch
+  inks?: string[]
+  width?: number
+  scale?: number
+type model.BorderView
+  kind: string
+  photo: string
+  lib: string
+  preset: string
+  name: string
+  inks: string[]
+  width: number
+  defWidth?: number
+  scale: number
+  ins: number[]
+  url: string
+  maskUrl: string
+  pic: boolean
+  open: boolean
+  known: boolean
 type model.Box
   x: number
   y: number
@@ -583,6 +636,10 @@ type model.FrameView
   z: number
   shape: string
   radius: number
+  win: layout.Rect
+  winShape: string
+  winRadius: number
+  fade: number
 type model.GridChoice
   id: string
   name: string
@@ -719,6 +776,7 @@ type model.PlaceView
   shape: string
   round: number
   radius: number
+  border?: BorderView
 type model.PreviewSpread
   key: string
   rects: layout.Rect[]
@@ -727,6 +785,7 @@ type model.PreviewSpread
   formName: string
   photos: number
   fallback: boolean
+  gray: boolean
 type model.SampleRow
   photos: number
   group: number
@@ -750,6 +809,10 @@ type model.SheetCaps
   over?: boolean
   wrap?: boolean
   text?: string
+type model.SimilarDrop
+  id: string
+  like: string
+  dist: number
 type model.SpineStep
   upto: number
   mm: number
@@ -864,6 +927,7 @@ type model.View
   unfilled: string[]
   unnamed: number
   cover?: CoverView
+  again: boolean
   seq: number
   base?: number
   order?: string[]

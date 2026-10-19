@@ -34,7 +34,7 @@ func row(id string, version int, url string, body []byte) map[string]any {
 	sum := sha256.Sum256(body)
 	return map[string]any{"id": id, "version": version, "minApp": "0.16.0", "title": "Набор " + id, "about": "о наборе",
 		"license": "CC0-1.0", "size": len(body), "sha256": hex.EncodeToString(sum[:]), "url": url,
-		"counts": map[string]int{"bg": 2, "sticker": 1, "spread": 1}}
+		"counts": map[string]int{"bg": 2, "sticker": 1, "spread": 1, "frame": 3}}
 }
 
 // Подпись конверта: верная (основным и запасным ключом) — каталог читается; чужой ключ,
@@ -51,7 +51,7 @@ func TestCatalogSignature(t *testing.T) {
 	c := l.client()
 	env = l.envelope(body)
 	cat, err := c.Catalog(context.Background(), 0)
-	if err != nil || cat.Seq != 1 || len(cat.Packs) != 1 || cat.Packs[0].ID != "ivory" || cat.Packs[0].URL != asset || cat.Packs[0].Counts.Bg != 2 {
+	if err != nil || cat.Seq != 1 || len(cat.Packs) != 1 || cat.Packs[0].ID != "ivory" || cat.Packs[0].URL != asset || cat.Packs[0].Counts.Bg != 2 || cat.Packs[0].Counts.Frame != 3 {
 		t.Fatalf("верная подпись: %v %+v", err, cat)
 	}
 	if n := l.hits.Load(); n != 1 {
@@ -170,7 +170,7 @@ func TestParseCatalog(t *testing.T) {
 	}
 	long := ok("long")
 	long["title"] = "  Очень\tдлинное\x00 " + strings.Repeat("я", 100)
-	long["counts"] = map[string]int{"bg": -5, "sticker": 1 << 30}
+	long["counts"] = map[string]int{"bg": -5, "sticker": 1 << 30, "frame": -1}
 	data := catalogJSON(t, ok("ivory"), long,
 		with("Bad", "id", "Bad"), with("ab", "id", "ab"),
 		with("v0", "version", 0), with("vbig", "version", 1000000),
@@ -204,7 +204,7 @@ func TestParseCatalog(t *testing.T) {
 	}
 	lg := cat.Packs[1]
 	if strings.ContainsAny(lg.Title, "\t\x00") || !strings.HasPrefix(lg.Title, "Очень длинное я") || len([]rune(lg.Title)) != 60 ||
-		lg.Counts.Bg != 0 || lg.Counts.Sticker != maxCount {
+		lg.Counts.Bg != 0 || lg.Counts.Frame != 0 || lg.Counts.Sticker != maxCount {
 		t.Errorf("чистка: %q %+v", lg.Title, lg.Counts)
 	}
 	if cat.Packs[2].Title != "notitle" {

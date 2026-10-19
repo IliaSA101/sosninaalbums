@@ -126,7 +126,8 @@ func tplBoxes(p *model.Project, s *model.Spread, parts []tplPart, t model.Spread
 }
 
 // samePlaces — места области scope уже те, что поставит шаблон (boxes после зажима, тот же
-// порядок, без «Вписать»): повтор шаблона — холостой. У «Авто» мест нет — не те же.
+// порядок, без «Вписать», те же рамочки): повтор шаблона — холостой. У «Авто» мест нет — не те
+// же. Рамочка сравнивается: иначе снимет ли шаблон рамочку, зависело бы от того, менялся ли фон.
 func samePlaces(p *model.Project, s *model.Spread, scope string, boxes []model.Box) bool {
 	var cur []*model.Place
 	for _, pl := range s.Grid {
@@ -138,11 +139,11 @@ func samePlaces(p *model.Project, s *model.Spread, scope string, boxes []model.B
 		return false
 	}
 	for i, b := range boxes {
-		n := model.Place{X: b.X, Y: b.Y, W: b.W, H: b.H, Rot: b.Rot, Shape: b.Shape, Round: b.Round}
+		n := model.Place{X: b.X, Y: b.Y, W: b.W, H: b.H, Rot: b.Rot, Shape: b.Shape, Round: b.Round, Border: b.Border}
 		p.ClampPlace(s, &n)
 		c := cur[i]
 		if cents(c.X) != cents(n.X) || cents(c.Y) != cents(n.Y) || cents(c.W) != cents(n.W) || cents(c.H) != cents(n.H) ||
-			c.Rot != n.Rot || c.Shape != n.Shape || c.Round != n.Round || c.Fit != "" {
+			c.Rot != n.Rot || c.Shape != n.Shape || c.Round != n.Round || c.Fit != "" || !sameBorder(c.Border, n.Border) {
 			return false
 		}
 	}

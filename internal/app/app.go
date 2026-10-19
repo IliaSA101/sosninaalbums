@@ -62,6 +62,8 @@ type App struct {
 	layouts busyGate
 	// wire — цепочка видов для интерфейса (075, wire.go): последний отданный вид и номер.
 	wire wireState
+	// sig — подписи кадров для автосборки и их фоновая подготовка (078, sigs.go), под mu.
+	sig sigState
 
 	// missing — ID фото альбома, чьих файлов нет на диске (см. refreshMissing), по порядку; под mu,
 	// как и missGen — поколение полного пересчёта, и missRefs — ID → путь фото альбома, за которым

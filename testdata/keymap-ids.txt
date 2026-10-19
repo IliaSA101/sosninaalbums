@@ -90,3 +90,4 @@ spreadTpl
 bgNudge
 bgRemove
 bgExit
+borderGallery

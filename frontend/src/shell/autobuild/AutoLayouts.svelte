@@ -11,7 +11,17 @@
   import { FAMILIES, tileTitle, twinsLabel } from '../../panels/gallery/variants'
   import type { AutoDialog, RowMode } from './autobuild.svelte'
   import { VARIETY_OPTIONS } from './autobuild'
-  import { autoRows, fallbackNote, familiesHint, layoutsStatus, layoutsWaiting, shownFamilies, spreadTitle, twinKey } from './autolayouts'
+  import {
+    autoRows,
+    fallbackNote,
+    familiesHint,
+    layoutsStatus,
+    layoutsWaiting,
+    shownFamilies,
+    spreadNote,
+    spreadTitle,
+    twinKey,
+  } from './autolayouts'
 
   // Блок «Раскладки» окна автосборки (065): фильтр семейств, переключатель ряда слева и ряд плиток — то же устройство, что у полосы
   // «Варианты» над разворотом (LayoutCard, TplRow, SideList). Щелчок по плитке ничего не ставит: это предпросмотр.
@@ -91,7 +101,7 @@
       {/each}
     {:else if pv}
       {#each pv.spreads as s, i (i)}
-        <TplItem name={String(i + 1)} note="{s.photos} фото">
+        <TplItem name={String(i + 1)} note={spreadNote(s)}>
           <LayoutCard rects={s.rects} {sheet} h={H} fallback={s.fallback} title={spreadTitle(s)} />
         </TplItem>
       {/each}

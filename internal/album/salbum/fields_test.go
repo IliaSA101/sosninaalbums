@@ -70,14 +70,17 @@ func TestLoadPlaceRotClamp(t *testing.T) {
 // или с потерей в Load этот тест уронит — дописать его в full.
 func TestPlaceFieldsRoundTrip(t *testing.T) {
 	dir := testkit.TempDir(t)
-	_, ids := gridFile(t, dir, []string{"a"}, nil)
+	_, ids := gridFile(t, dir, []string{"a", "b"}, nil)
 	full := model.Place{ID: "c0ffee000001", X: 20.5, Y: 30.25, W: 100, H: 60, Photo: ids["a"], Fit: model.FitContain, Rot: 30,
-		Role: model.RoleTeacher, Shape: model.ShapeOval, Person: model.Person{Last: "Сидорова", First: "Ольга", Subject: "Математика"}}
+		Role: model.RoleTeacher, Shape: model.ShapeOval, Person: model.Person{Last: "Сидорова", First: "Ольга", Subject: "Математика"},
+		Border: &model.Border{Kind: "mat", Inks: []string{"#fbf8f1", "#c8a24a"}, Width: 6.5, Preset: "sa:fr-mat"}}
 	// Форма и скругление (044) у одного места не живут вместе: скругление — у второго; у него же
-	// табличка (071) только с предметом — пустое место учителя.
+	// табличка (071) только с предметом — пустое место учителя — и рамочка-картинка (079): запись
+	// «b» только под рамочкой.
 	round := full
 	round.ID, round.Photo, round.Y, round.Shape, round.Round = "c0ffee000002", "", 150, "", 12
 	round.Person = model.Person{Subject: "Физика"}
+	round.Border = &model.Border{Photo: ids["b"], Scale: 1.25, Cut: [4]float64{0.1, 0.2, 0.3, 0.45}, Open: true}
 	v, r := reflect.ValueOf(full), reflect.ValueOf(round)
 	for i := range v.NumField() {
 		if v.Field(i).IsZero() && r.Field(i).IsZero() {
@@ -86,10 +89,10 @@ func TestPlaceFieldsRoundTrip(t *testing.T) {
 	}
 	pl, pr := full, round
 	// Роль живёт только у виньетки (031): разворот — виньетка с двумя учителями.
-	data, _ := gridFile(t, dir, []string{"a"}, []*model.Spread{{ID: "aaaaaaaaaaaa", Photos: []string{ids["a"]}, Grid: []*model.Place{&pl, &pr},
+	data, _ := gridFile(t, dir, []string{"a", "b"}, []*model.Spread{{ID: "aaaaaaaaaaaa", Photos: []string{ids["a"]}, Grid: []*model.Place{&pl, &pr},
 		Kind: model.KindVignette, Vig: &model.Vignette{Tpl: "t-left", Teachers: 2, Ratio: model.VigRatio}}})
 	p := mustDecode(t, data, dir)
-	if g := p.Spreads[0].Grid; len(g) != 2 || *g[0] != full || *g[1] != round {
+	if g := p.Spreads[0].Grid; len(g) != 2 || !reflect.DeepEqual(*g[0], full) || !reflect.DeepEqual(*g[1], round) {
 		t.Fatalf("круг: %+v, ждали %+v и %+v", g, full, round)
 	}
 }

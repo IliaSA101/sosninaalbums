@@ -64,3 +64,6 @@ func SetSlowOp(d time.Duration) { inside.SetSlowOp(d) }
 // Порог медленной правки ядра (slowEdit, 075-6).
 func SlowEdit() time.Duration     { return inside.SlowEdit() }
 func SetSlowEdit(d time.Duration) { inside.SetSlowEdit(d) }
+
+// SetAgainGap — fn между снимком входа пересборки и её правкой (nil — снять).
+func SetAgainGap(fn func()) { inside.SetAgainGap(fn) }

@@ -5,7 +5,7 @@
   import { keymap } from '../../base/keys/keymap.svelte'
   import type { KeysMode } from '../../base/prefs/keyswin'
   import KeyChips from './KeyChips.svelte'
-  import { emptyText, groupRows, listed, rowTag } from './keylist'
+  import { emptyText, groupRows, listed, navKey, rowTag, stepRow } from './keylist'
   import { keysUi } from './keysui.svelte'
 
   // Список команд по группам (074). «Карта крупно» — строки с чипами сочетаний (как в варианте А), «Список крупно» —
@@ -16,25 +16,55 @@
   const opts = $derived({ query: keysUi.query, onlyOwn: keysUi.onlyOwn, visible: keysUi.visible, mac })
   const groups = $derived(groupRows(keymap.view, listed(keymap.view, opts)))
 
-  // Строка выбранной клавиши — в поле зрения списка; прокручивается только сам список, а не окно.
+  // Видимые строки по порядку (поиск и группы уже учтены) — по ним ходят стрелки.
+  const order = $derived(groups.flatMap((g) => g.rows.map((e) => e.id)))
+
+  // Строка в поле зрения списка; прокручивается только сам список, а не окно.
   let box = $state<HTMLElement>()
-  $effect(() => {
-    const s = keysUi.scroll
-    if (!s || !box) return
-    const row = box.querySelector<HTMLElement>(`[data-id="${s.id}"]`)
-    if (!row) return
+  const rowEl = (id: string) => box?.querySelector<HTMLElement>('[data-id="' + id + '"]') ?? null
+  function reveal(row: HTMLElement) {
+    if (!box) return
     const r = row.getBoundingClientRect()
     const b = box.getBoundingClientRect()
     if (r.top < b.top) box.scrollTop -= b.top - r.top + 4
     else if (r.bottom > b.bottom) box.scrollTop += r.bottom - b.bottom + 4
+  }
+  // Строка выбранной клавиши карты — в поле зрения.
+  $effect(() => {
+    const s = keysUi.scroll
+    const row = s && rowEl(s.id)
+    if (row) reveal(row)
   })
 
+  // Переход стрелкой: выбор строки, фокус на неё, прокрутка. На Home список уходит к самому верху (виден и заголовок группы).
+  function go(id: string, top = false) {
+    keysUi.browse(id)
+    const row = rowEl(id)
+    if (!row || !box) return
+    row.focus({ preventScroll: true })
+    reveal(row)
+    if (top) box.scrollTop = 0
+  }
+  // Из поля поиска ↓ входит в список (окно вызывает).
+  export function focusFirst() {
+    if (order[0]) go(order[0], true)
+  }
+
   // Enter и Пробел на строке — как щелчок (окно забирает нажатия для карты, но строка остаётся доступной щелчком).
-  const rowKey = (ev: KeyboardEvent, id: string) => {
-    if (ev.key === 'Enter' || ev.key === ' ') {
+  // ↑/↓/Home/End — соседняя строка. Во время записи и вопроса нажатия сюда не доходят (окно забирает), но на всякий случай молчим.
+  // typed: у <div>-строки Enter/Пробел обрабатываем сами; у <button> их даёт браузер (клик), нужны только стрелки.
+  const rowKey = (ev: KeyboardEvent, id: string, typed: boolean) => {
+    if (keysUi.rec || keysUi.ask) return
+    if (typed && (ev.key === 'Enter' || ev.key === ' ')) {
       ev.preventDefault()
       keysUi.selectRow(id)
+      return
     }
+    const k = navKey(ev)
+    const to = k && stepRow(order, id, k)
+    if (!to) return
+    ev.preventDefault() // стрелка не должна прокручивать список сама
+    go(to, k === 'Home')
   }
 </script>
 
@@ -57,7 +87,7 @@
             aria-selected={on}
             tabindex="-1"
             onclick={() => keysUi.selectRow(e.id)}
-            onkeydown={(ev) => rowKey(ev, e.id)}
+            onkeydown={(ev) => rowKey(ev, e.id, true)}
           >
             <div class="nm">
               <span class="t" title={e.label}>{e.label}</span>
@@ -74,6 +104,7 @@
             role="option"
             aria-selected={on}
             onclick={() => keysUi.selectRow(e.id)}
+            onkeydown={(ev) => rowKey(ev, e.id, false)}
           >
             <span class="t" title={e.label}>{e.label}</span>
             <span class="kt">
@@ -141,6 +172,11 @@
   }
   .row:hover {
     background: #38383c;
+  }
+  .row:focus-visible,
+  .item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
   .row.on {
     background: #46464b;

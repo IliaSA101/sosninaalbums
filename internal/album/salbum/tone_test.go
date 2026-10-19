@@ -34,7 +34,7 @@ func TestV12ToneRoundtrip(t *testing.T) {
 	p, ids := toneProject(dir)
 	path := filepath.Join(dir, "a.salbum")
 	first, q := saveLoad(t, p, path)
-	if f := fileJSON(t, path); f.Version != 13 || bytes.Count(first, []byte(`"adj"`)) != 2 {
+	if f := fileJSON(t, path); f.Version != 14 || bytes.Count(first, []byte(`"adj"`)) != 2 {
 		t.Fatalf("файл v%d:\n%s", f.Version, first)
 	}
 	if !bytes.Contains(first, []byte(`"gray": true`)) || !bytes.Contains(first, []byte(`"c": 7`)) {
@@ -94,7 +94,7 @@ func TestV11LoadsWithoutTone(t *testing.T) {
 	if bak, err := os.ReadFile(path + ".v11.bak"); err != nil || !bytes.Equal(bak, src) {
 		t.Fatalf(".v11.bak: %v", err)
 	}
-	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"adj"`)) || fileJSON(t, path).Version != 13 {
+	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"adj"`)) || fileJSON(t, path).Version != 14 {
 		t.Fatalf("запись v11:\n%s", out)
 	}
 }

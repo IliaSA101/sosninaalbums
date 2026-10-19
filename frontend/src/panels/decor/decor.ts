@@ -10,7 +10,7 @@ import { coverLabel, coverScopes } from '../../editor/cover/cover'
 import type { SegItem } from '../../base/tpl/Seg.svelte'
 import type { SideItem } from '../../base/tpl/SideList.svelte'
 
-export type DecorKind = 'bg' | 'sticker' | 'spread'
+export type DecorKind = 'bg' | 'sticker' | 'spread' | 'frame'
 
 // Типы ответа Go (app.DecorCatalog и др.): интерфейс читает их как есть.
 export interface DecorItem {
@@ -57,9 +57,9 @@ export interface TplResult {
   missing: number
 }
 
-export const DECOR_TITLE: Record<DecorKind, string> = { bg: 'Фоны', sticker: 'Стикеры', spread: 'Развороты' }
+export const DECOR_TITLE: Record<DecorKind, string> = { bg: 'Фоны', sticker: 'Стикеры', spread: 'Развороты', frame: 'Рамочки' }
 // Что лежит на плитке — для подписей ✎ и ×.
-export const NOUN: Record<DecorKind, string> = { bg: 'фон', sticker: 'стикер', spread: 'разворот' }
+export const NOUN: Record<DecorKind, string> = { bg: 'фон', sticker: 'стикер', spread: 'разворот', frame: 'рамочку' }
 export const NAME_MAX = 60
 export const RECENT = 'recent'
 export const ALL = 'all'
@@ -99,13 +99,14 @@ export const importTheme = (theme: string): string => (theme === ALL || theme ==
 export function emptyText(theme: string, readOnly: boolean, kind: DecorKind = 'bg'): string {
   if (theme === MINE && kind === 'spread')
     return readOnly ? 'Здесь появятся ваши развороты' : 'Сохраните свой разворот кнопкой «Сохранить разворот…»'
+  if (theme === MINE && kind === 'frame') return readOnly ? 'Здесь появятся ваши рамочки' : 'Загрузите свои кнопкой выше'
   if (theme === MINE) return readOnly ? 'Здесь появятся ваши фоны' : 'Загрузите свои кнопкой выше'
   return 'В этой теме пока пусто'
 }
 
 // Подсказка кнопки «Загрузить своё…»: стикеры принимают и SVG.
 export const uploadHint = (kind: DecorKind): string =>
-  `Свои ${kind === 'sticker' ? 'JPEG, PNG и SVG' : 'JPEG и PNG'}: копия остаётся в библиотеке программы`
+  `Свои ${kind === 'sticker' ? 'JPEG, PNG и SVG' : kind === 'frame' ? 'PNG с прозрачностью и SVG' : 'JPEG и PNG'}: копия остаётся в библиотеке программы`
 
 export const READ_ONLY_HINT = 'Библиотеку изменила более новая версия программы: свои файлы пока только смотреть'
 
@@ -166,7 +167,9 @@ export function importSummary(r: DecorImport): { text: string; error: boolean } 
 export const deleteText = (name: string, kind: DecorKind = 'bg'): string =>
   kind === 'spread'
     ? `«${name}» будет убран из библиотеки. Уже поставленные развороты не изменятся.`
-    : `«${name}» будет убран из библиотеки. Где он уже стоит, не изменится.`
+    : kind === 'frame'
+      ? `«${name}» будет убрана из библиотеки. Где она уже стоит, не изменится.`
+      : `«${name}» будет убран из библиотеки. Где он уже стоит, не изменится.`
 
 // Имя в поле ✎: пробелы по краям лишние; пустое Go отклонит само.
 export const cleanName = (s: string): string => s.trim()

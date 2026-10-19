@@ -1,33 +1,39 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { model } from '../../../wailsjs/go/models'
+  import { EventsOn } from '../../../wailsjs/runtime/runtime'
   import { store } from '../../base/core/store.svelte'
-  import * as Api from '../../../wailsjs/go/app/App'
-  import type { PlanFn, PreviewFn } from './autobuild.svelte'
+  import type { SigState } from '../../base/core/types'
   import { modes } from '../../base/prefs/view.svelte'
   import Modal from '../../base/ui/Modal.svelte'
   import AutoLayouts from './AutoLayouts.svelte'
+  import AutoPhotos from './AutoPhotos.svelte'
   import AutoRangeRow from './AutoRangeRow.svelte'
+  import AutoVariant from './AutoVariant.svelte'
+  import { dropsFn, planFn, previewFn, savedOf, sigsFn } from './autoapi'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { AutoDialog } from './autobuild.svelte'
-  import { albumAfter, anchorField, memOf, otherField, perText, planHint, rangeText, seriesText, sourceLine, unitWord } from './autobuild'
+  import {
+    albumAfter,
+    anchorField,
+    memOf,
+    otherField,
+    perText,
+    planHint,
+    rangeText,
+    seriesText,
+    sourceLine,
+    spreadsBefore,
+    unitWord,
+  } from './autobuild'
   import { unitOf } from '../../base/geom/sheet'
 
   // Окно «Автосборка» (027 U2, 034): сколько разворотов собрать — числом N или средним «фото на разворот»
   // (поля связаны). Открыто, пока store.autoDraft; фото выбраны заранее (store.openAuto).
   let ui = $state<AutoDialog | null>(null)
-  // Разнообразие на план не влияет (группы те же), но поле контракта заполняем запомненным.
-  const autoPlan: PlanFn = (ids, spreads, range) =>
-    Api.AutoPlan([...ids], model.AutoOpts.createFrom({ spreads, ...range, variety: modes.autoVariety }))
-  // 065: ряд «Раскладки» — то же, что соберёт «Собрать»: вставка в конец альбома, как у store.autoBuild.
-  const previewRows: PreviewFn = (ids, o) =>
-    Api.AutoPreview(
-      [...ids],
-      store.view.spreads.length,
-      model.AutoOpts.createFrom({ spreads: o.spreads, ...o.range, variety: o.variety, families: [...(o.families ?? [])] }),
-    )
   // Семейства — часть функции «Варианты раскладки»: без неё фильтра нет и в сборку уходит «Все».
   const famOn = $derived(prefs.can('variants'))
+  // 078: строка «Ч/б развороты» — часть функции «Ч/б и тон фото»; без неё в Go уходит gray 0
+  const grayOn = $derived(prefs.can('adjust'))
 
   // Каждое открытие — новое состояние: N, среднее, диапазон и серии берутся из памяти окна, ответ Go запрашивается заново.
   $effect(() => {
@@ -36,33 +42,32 @@
       ui = d
         ? new AutoDialog(
             d.ids,
-            autoPlan,
-            {
-              spreads: modes.autoSpreads,
-              range: modes.autoRange,
-              series: modes.autoSeries,
-              per: modes.autoPer,
-              by: modes.autoBy,
-              variety: modes.autoVariety,
-              families: famOn ? modes.autoFamilies : [],
-            },
-            previewRows,
+            planFn(() => modes.autoVariety),
+            savedOf(d, famOn, grayOn),
+            previewFn,
+            { grayOn, sigs: sigsFn, drops: dropsFn },
           )
         : null
       typing = null
       ui?.start()
     })
+    return () => untrack(() => ui?.dispose())
   })
+
+  // Ход подготовки подписей кадров (078-12): «Сверяю кадры: done из total…»
+  $effect(() => EventsOn('sigs:progress', (s: SigState) => ui?.ph.onProgress(s)))
 
   const close = () => (store.autoDraft = null)
 
   async function go() {
     if (!ui) return
+    const u = ui
     // Запоминаем и собираем то, что подтвердил Go: N после ответа, а не то, что успели набрать.
-    await ui.submit((n, range, per, by, variety, families) => {
-      // Без функции «Варианты раскладки» фильтра в окне не было — память семейств не трогаем
+    await u.submit((n, range, per, by, variety, families) => {
+      // Без функции «Варианты раскладки» фильтра в окне не было — память семейств не трогаем; так же ч/б без «Ч/б и тон фото»
       modes.rememberAuto(n, memOf(range), per, by, variety, range.series, famOn ? families : modes.autoFamilies)
-      return store.autoBuild(n, range, variety, families)
+      modes.rememberPhotos(u.ph.similar, grayOn ? u.ph.gray : modes.autoGray)
+      return store.autoBuild(n, range, variety, families, u.ph.opts, u.plan?.similar ?? 0)
     })
   }
 
@@ -139,7 +144,7 @@
   {@const d = store.autoDraft}
   <Modal title="Автосборка" onclose={close} width={860}>
     <div class="body" role="presentation" onkeydown={key}>
-      <p class="src">{sourceLine({ ...d, count: d.ids.length }, ui.plan?.photos ?? null)}</p>
+      <p class="src">{sourceLine({ ...d, count: d.ids.length }, ui.plan?.photos ?? null, ui.plan?.similar ?? 0)}</p>
 
       <div class="tiles">
         <div class="pair" role="presentation" onpointerdown={pick} onclick={pick}>
@@ -229,9 +234,11 @@
         aria-label="Число {unit.plural[2]}"
         oninput={(e) => ui?.setSpreads(e.currentTarget.valueAsNumber)}
       />
-      <p class="after">{albumAfter(store.view.spreads.length, ui.n, unit, ui.plan?.reuse ?? 0)}</p>
+      <p class="after">{albumAfter(spreadsBefore(d.again, store.view.spreads.length, store.lastAuto), ui.n, unit, ui.plan?.reuse ?? 0)}</p>
 
       <AutoRangeRow {ui} {unit} {empty} />
+
+      <AutoPhotos ph={ui.ph} plan={ui.plan} {unit} {empty} {grayOn} />
 
       <AutoLayouts {ui} {famOn} {unit} {empty} />
 
@@ -247,8 +254,9 @@
       </details>
 
       <div class="actions">
+        <AutoVariant ph={ui.ph} off={empty} />
         <button class="ghost" onclick={close}>Отмена</button>
-        <button class="primary" disabled={!ui.canBuild} onclick={go}>Собрать</button>
+        <button class="primary" disabled={!ui.canBuild} onclick={go}>{ui.ph.again ? 'Пересобрать' : 'Собрать'}</button>
       </div>
     </div>
   </Modal>

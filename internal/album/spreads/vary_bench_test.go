@@ -26,7 +26,7 @@ func benchOpts(v model.Variety) model.AutoOpts {
 func underLock(tb testing.TB, ph []model.PhotoInfo, v model.Variety) time.Duration {
 	tb.Helper()
 	p := model.New()
-	pre := spreads.Prepare(spreads.PlanOf(p, ph), ph, benchOpts(v))
+	pre := spreads.Prepare(spreads.PlanOf(p, ph, nil), ph, benchOpts(v))
 	return testkit.Fastest(3, func() {
 		q := p.Clone()
 		if made, err := spreads.AutoBuild(q, pre, -1, nil); err != nil || made != benchSpreads {

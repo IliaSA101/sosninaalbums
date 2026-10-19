@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { store } from '../../base/core/store.svelte'
+  import { BORDER_NOTE, hasBorders, sheetIn } from '../../base/geom/sheet'
   import Modal from '../../base/ui/Modal.svelte'
   import Seg, { type SegItem } from '../../base/tpl/Seg.svelte'
   import type { BackdropScope } from '../../base/core/types'
@@ -54,6 +56,7 @@
       <label class="chk"><input type="checkbox" bind:checked={f.texts} />Надписи</label>
     </div>
     <p class="hint">{SAVE_HINT}</p>
+    {#if f.places && hasBorders(sheetIn(store.view, decor.cur.spread), f.scope)}<p class="hint">{BORDER_NOTE}</p>{/if}
     <div class="actions">
       <button class="ghost" onclick={() => f.close()}>Отмена</button>
       <button class="primary" disabled={empty || f.busy} onclick={() => f.commit()}>Сохранить</button>

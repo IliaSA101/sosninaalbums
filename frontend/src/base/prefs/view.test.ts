@@ -136,6 +136,23 @@ describe('modes.auto*', () => {
     expect((await fresh()).autoFamilies).toEqual([])
   })
 
+  it('похожие и ч/б (078): по умолчанию «Нет», запоминаются, мусор — «Нет»', async () => {
+    const m = await fresh()
+    expect([m.autoSimilar, m.autoGray]).toEqual([0, 0])
+    m.rememberPhotos(2, 3)
+    const n = await fresh()
+    expect([n.autoSimilar, n.autoGray]).toEqual([2, 3])
+    m.rememberAuto(5, 'auto', 4, 'spreads') // обычное запоминание их не трогает
+    expect([(await fresh()).autoSimilar, (await fresh()).autoGray]).toEqual([2, 3])
+    for (const bad of [4, -1, 1.5, '2', null, true]) {
+      localStorage.setItem('viewMode', JSON.stringify({ autoSimilar: bad, autoGray: bad }))
+      const k = await fresh()
+      expect([k.autoSimilar, k.autoGray]).toEqual([0, 0])
+    }
+    m.rememberPhotos(9, 0.5) // мусор при запоминании — «Нет»
+    expect([m.autoSimilar, m.autoGray]).toEqual([0, 0])
+  })
+
   it('«Разнообразить раскладки»: «Меньше» считается «Обычным», «Больше» остаётся', async () => {
     const m = await fresh()
     m.autoVariety = 0

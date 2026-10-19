@@ -82,7 +82,7 @@ func RemovePhotos(p *model.Project, ids []string) {
 }
 
 // PurgePhotos — «Убрать из альбома» в полосе «Не найдено» (075): фото уходят отовсюду — из
-// мест, с фонов всех листов (с обложкой) и своими стикерами. Отдельно от RemovePhotos: бросок
+// мест, с фонов всех листов (с обложкой), своими стикерами и рамочками мест (079). Отдельно от RemovePhotos: бросок
 // в ленту обязан оставлять фон фото, стоящего и в месте (075-13).
 func PurgePhotos(p *model.Project, ids []string) {
 	gone := make(map[string]bool, len(ids))
@@ -99,6 +99,13 @@ func PurgePhotos(p *model.Project, ids []string) {
 		s.Stickers = slices.DeleteFunc(s.Stickers, func(st *model.Sticker) bool { return gone[st.Photo] })
 		if len(s.Stickers) == 0 {
 			s.Stickers = nil
+		}
+		// Рамочка-картинка (079-38): снимается, место остаётся. Заменой указателя, не правкой на
+		// месте (079-23); у встроенной Photo пуст — gone[""] ложь.
+		for _, pl := range s.Grid {
+			if pl.Border != nil && gone[pl.Border.Photo] {
+				pl.Border = nil
+			}
 		}
 	}
 }

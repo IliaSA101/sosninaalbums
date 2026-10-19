@@ -44,7 +44,7 @@ func (s *Store) importSticker(theme, name, src string) (Item, *SvgJob, bool, err
 		return Item{}, nil, false, paths.NoPath(err)
 	}
 	if strings.EqualFold(filepath.Ext(path), ".svg") {
-		return s.importSVG(theme, name, path, size)
+		return s.importSVG(KindSticker, theme, name, path, size)
 	}
 	if size > MaxStickerBytes {
 		return Item{}, nil, false, fmt.Errorf("файл больше %d МБ", MaxStickerBytes>>20)
@@ -117,8 +117,9 @@ func shrinkSticker(tmp, dir string) (string, library.Photo, error) {
 }
 
 // importSVG проверяет SVG и выдаёт окну задание; тот же SVG, уже стоящий в библиотеке, —
-// «уже есть», скрытый — возвращается.
-func (s *Store) importSVG(theme, name, path string, size int64) (Item, *SvgJob, bool, error) {
+// «уже есть», скрытый — возвращается. kind — стикер или рамочка (079): запись и PNG окна
+// лягут в свою папку.
+func (s *Store) importSVG(kind, theme, name, path string, size int64) (Item, *SvgJob, bool, error) {
 	if size > svgcheck.MaxBytes {
 		return Item{}, nil, false, fmt.Errorf("SVG больше %d МБ", svgcheck.MaxBytes>>20)
 	}
@@ -138,9 +139,9 @@ func (s *Store) importSVG(theme, name, path string, size int64) (Item, *SvgJob, 
 	sum := sha256.Sum256(data)
 	key := libPrefix + hex.EncodeToString(sum[:8])
 	s.mu.RLock()
-	e := s.entryOf(KindSticker, key)
-	have, onDisk := s.files[KindSticker][key]
-	n, _ := s.usage(KindSticker)
+	e := s.entryOf(kind, key)
+	have, onDisk := s.files[kind][key]
+	n, _ := s.usage(kind)
 	s.mu.RUnlock()
 	if onDisk {
 		_, serr := os.Stat(have)
@@ -157,7 +158,7 @@ func (s *Store) importSVG(theme, name, path string, size int64) (Item, *SvgJob, 
 	case e == nil && n >= MaxOwn:
 		return Item{}, nil, false, fmt.Errorf("своих уже %d — больше не помещается", MaxOwn)
 	}
-	tok, err := s.svg.issue(pendingSVG{kind: KindSticker, theme: theme, key: key, name: name, w: sz.W, h: sz.H})
+	tok, err := s.svg.issue(pendingSVG{kind: kind, theme: theme, key: key, name: name, w: sz.W, h: sz.H})
 	if err != nil {
 		return Item{}, nil, false, errors.New("не удалось подготовить SVG")
 	}

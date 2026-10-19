@@ -1,11 +1,11 @@
 import * as Api from '../../../wailsjs/go/app/App'
-import { model } from '../../../wailsjs/go/models'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { SvelteSet } from 'svelte/reactivity'
 import { toggleKey } from './platform'
 import { errText, withSkipped } from '../words/errtext'
 import { Nav } from './nav.svelte'
 import { jobs } from './jobs.svelte'
+import { AutoRun } from './autorun.svelte'
 import { Toasts, stepToast, undoToast, type Toast } from './toasts.svelte'
 import type { MarkMap, PickResult } from './hooks'
 import { backdropLost, pickCurrent } from './undo'
@@ -15,21 +15,8 @@ import { keepSet } from './usedindex'
 import { mergeSnapshot, noEvents } from './startstate'
 import { movedFrom, movedText, type Moved } from './strip'
 import { prefs } from '../prefs/prefs.svelte'
-import { COVER_ID, unitOf } from '../geom/sheet'
-import type {
-  AutoRange,
-  Family,
-  FontFamily,
-  GridResult,
-  Photo,
-  RecentProject,
-  ScanProgress,
-  Settings,
-  State,
-  Variety,
-  View,
-  Zone,
-} from './types'
+import { COVER_ID } from '../geom/sheet'
+import type { Family, FontFamily, GridResult, Photo, RecentProject, ScanProgress, Settings, State, Variety, View, Zone } from './types'
 
 class Store extends Nav {
   photos = $state<Photo[]>([])
@@ -75,6 +62,7 @@ class Store extends Nav {
   filter = $state<'all' | 'unused'>('all')
   // Окно автосборки (027): открыто, пока не null; фото уже выбраны (выделенные или свободные без отклонённых).
   autoDraft = $state<PickResult | null>(null)
+  private readonly autorun = new AutoRun(this)
   busy = $state(false)
   byId = $derived(new Map(this.photos.map((p) => [p.id, p])))
   // Фото на фоне: в used не входят (не «в альбоме»), но автосборка и фильтр их не берут (freephotos.ts).
@@ -108,6 +96,12 @@ class Store extends Nav {
   // События photos/scan/missing, пришедшие, пока ждём снимок состояния (startstate.ts).
   private seen = noEvents()
 
+  // Альбом заменён целиком: отметки и прошлая автосборка прежнего не нужны.
+  private reloaded() {
+    this.hooks.reloaded()
+    this.autorun.reset()
+  }
+
   async init() {
     this.seen = noEvents()
     EventsOn('library', (photos: Photo[]) => {
@@ -133,7 +127,7 @@ class Store extends Nav {
     jobs.listen()
     try {
       const st = (await Api.GetState()) as unknown as State
-      this.hooks.reloaded()
+      this.reloaded()
       this.apply(st.view)
       // Событие, обогнавшее ответ, свежее снимка.
       const cur = { photos: this.photos, scan: this.scan, missing: this.missing }
@@ -234,7 +228,7 @@ class Store extends Nav {
   }
 
   // Перейти на разворот, которого не было среди ids (только что созданный).
-  private goNew(before: Set<string>, fallback: number) {
+  goNew(before: Set<string>, fallback: number) {
     const i = this.view.spreads.findIndex((s) => !before.has(s.id))
     this.go(i >= 0 ? i : fallback)
   }
@@ -372,40 +366,21 @@ class Store extends Nav {
     }
   }
 
-  // «Автосборка»: выбрать фото и открыть окно; пусто — тост с причиной уже показан.
+  // «Автосборка» и «Пересобрать…» (078) — autorun.svelte.ts; здесь входы для окон, меню и тостов.
   openAuto() {
-    if (this.busy) return
-    const p = this.hooks.pick(true)
-    if (p.ids.length > 0) this.autoDraft = p
+    this.autorun.open()
   }
 
-  // «Собрать» в окне: ровно `spreads` разворотов, фото на каждом — по `range` («Авто» или «от … до …», серии; 051),
-  // разнообразие раскладок — variety (041), разрешённые семейства — families (065; [] — все).
-  async autoBuild(spreads: number, range: AutoRange, variety: Variety = 1, families: readonly Family[] = []): Promise<boolean> {
-    // Выделенные — как есть: Go переносит уже стоящие в альбоме фото в новые развороты.
-    const d = this.autoDraft
-    this.autoDraft = null
-    if (!d || d.ids.length === 0) return false
-    const at = this.view.spreads.length
-    const before = new Set(this.view.spreads.map((s) => s.id))
-    this.busy = true
-    let ok: boolean
-    try {
-      const opts = model.AutoOpts.createFrom({ spreads, ...range, variety, families: [...families] })
-      ok = await this.run(Api.AutoBuild([...d.ids], at, opts))
-    } finally {
-      this.busy = false
-    }
-    if (!ok) return false
-    this.selected.clear()
-    this.goNew(before, at)
-    this.notify(
-      withSkipped(
-        `Собрано ${unitOf(this.view.settings).plural[2]}: ${this.view.spreads.filter((s) => !before.has(s.id)).length}`,
-        d.skipped,
-      ),
-    )
-    return true
+  openAgain() {
+    this.autorun.openAgain()
+  }
+
+  get lastAuto() {
+    return this.autorun.last
+  }
+
+  autoBuild(...a: Parameters<AutoRun['build']>): Promise<boolean> {
+    return this.autorun.build(...a)
   }
 
   // «Разнообразить раскладки» (041): Go меняет раскладки выбранных разворотов с учётом соседей, один шаг отмены.
@@ -524,7 +499,7 @@ class Store extends Nav {
     try {
       const st = (await p) as State
       if (st.cancelled === true) return true
-      this.hooks.reloaded() // другой альбом: отметки перечитать, даже если marksRev тот же
+      this.reloaded() // другой альбом: отметки перечитать, даже если marksRev тот же
       this.apply(st.view)
       const cur = { photos: this.photos, scan: this.scan, missing: this.missing }
       this.photos = mergeSnapshot(cur, { photos: st.photos ?? [] }, this.seen).photos

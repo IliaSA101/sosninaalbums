@@ -75,25 +75,10 @@ func fromSrc(p *model.Project, src model.StickerSrc) (*model.Sticker, error) {
 	if ph.ID == "" || ph.Lib != "" && (!model.ValidLibKey(ph.Lib) || ph.ID != model.LibPhotoID(ph.Lib)) {
 		return nil, model.ErrLibKey
 	}
-	if !onBackdrop(p, ph.ID) {
+	if !p.OnBackdrop(ph.ID) { // пропорция у копии та же: стикеру запись фона годится
 		model.Remember(p, []model.PhotoInfo{ph})
 	}
 	return &model.Sticker{Photo: ph.ID}, nil
-}
-
-// onBackdrop — запись id уже стоит на фоне какого-то листа. Один исходник, загруженный и фоном,
-// и стикером, — одна запись (ID от ключа); у фона в ней путь к байтам исходника, у стикера —
-// к копии ≤ 4096 px: переписать — фон напечатается из уменьшенной копии. Пропорция у копии та
-// же, так что стикеру запись фона годится (и Load по ключу находит сначала фон — decor.Find).
-func onBackdrop(p *model.Project, id string) bool {
-	for _, s := range p.Sheets() {
-		for _, b := range s.Backdrops() {
-			if b.Photo == id {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // SetStickerBox — тело Editor.SetStickerBox: перенос, размер, поворот (мм листа, угол рамки до

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inShape, isOval, liveRadius, outlineOf, shapeCss } from './shape'
+import { inShape, isOval, liveRadius, outlineOf, shapeArg, shapeCss, shapeKey } from './shape'
 
 describe('shapeCss', () => {
   it('прямоугольник — без стиля', () => {
@@ -58,5 +58,18 @@ describe('inShape', () => {
   it('прямоугольник: вся рамка, вне рамки — нет', () => {
     expect(inShape({ x: 0, y: 0 }, 100, 60, '')).toBe(true)
     expect(inShape({ x: 101, y: 10 }, 100, 60, '')).toBe(false)
+  })
+})
+
+describe('shapeKey / shapeArg (076)', () => {
+  it('круг, любое скругление, прямоугольник', () => {
+    expect(shapeKey({})).toBe('rect')
+    expect(shapeKey({ shape: '', round: 0 })).toBe('rect')
+    expect(shapeKey({ shape: '', round: 25 })).toBe('round')
+    expect(shapeKey({ shape: 'oval', round: 0 })).toBe('oval')
+    expect(shapeKey({ shape: 'oval', round: 30 })).toBe('oval')
+  })
+  it('ключ правки для Go: "" / "rounded" / "oval"', () => {
+    expect([shapeArg('rect'), shapeArg('round'), shapeArg('oval')]).toEqual(['', 'rounded', 'oval'])
   })
 })

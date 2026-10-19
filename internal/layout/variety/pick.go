@@ -3,6 +3,7 @@ package variety
 import (
 	"math"
 	"slices"
+	"strconv"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
@@ -37,6 +38,10 @@ type Ctx struct {
 	// Ladder — направление ближайшей лесенки перед первым ('L', 'A', 0 — нет; forms.LadderDir):
 	// «Разнообразить» части альбома продолжает чередование вниз/вверх (055).
 	Ladder byte
+	// Seed — номер варианта сборки (078): 0 и 1 — выбор как в 0.19 побитово; 2… — к штрафу
+	// кандидата прибавляется детерминированный «шум» (seedNoise) и сдвигается ритм воздуха и
+	// главного. Генератора случайных чисел нет: тот же номер на том же входе — тот же выбор.
+	Seed int
 }
 
 // tuning — пороги уровня (спека 041, design §5, §10). Меняются только с прогоном
@@ -89,6 +94,19 @@ const (
 	// penLadderDir — лесенка не того направления: ждём противоположное прошлой, без прошлой — L
 	// (по ходу чтения, 055). L и A различает только он, так что лесенок в целом не меньше и не больше.
 	penLadderDir = 0.25
+	// seedAmp — размах «шума» варианта (078, design §7): меньше penSameKey (1.0), больше penSeen
+	// (0.25) — перемешивает почти равные раскладки, но штрафы соседей (penSame1 2.0) не ломает.
+	// Подобран по TestPickSeedDiffers / TestPickSeedKeepsRules; правка — записью в decisions.
+	seedAmp = 0.6
+	// seedLossK — вес потери оценки в варианте. Без него шум становится последним доводом вместо
+	// «меньше потеря», и средняя потеря растёт на 30 % (замер на корпусе: размах шума 0,02…0,6 на это
+	// не влияет); с весом 16 потеря на уровне варианта 1, а варианты отличаются у 42–45 % разворотов.
+	seedLossK = 16.0
+	// seedLossCap — потеря выше не штрафуется: воздух и главное допускаются своими правилами с большой потерей.
+	seedLossCap = 0.04
+	// seedLessLoss — «Меньше» с вариантом берёт любую раскладку ряда «Авто» с потерей не больше этой
+	// (иначе у «Меньше» номер варианта ничего бы не менял).
+	seedLessLoss = 0.02
 )
 
 const (
@@ -153,12 +171,18 @@ func Pick(in []Spread, p layout.Params, lv Level, c Ctx) []int {
 		for i, s := range in {
 			if len(s.Pool) == 0 {
 				out[i] = -1
+			} else if c.Seed >= 2 {
+				out[i] = lessSeeded(s, c.Seed, i)
 			}
 		}
 		return out
 	}
 	t := tunings[lv]
 	st := newChain(c)
+	if c.Seed >= 2 { // ритм воздуха и главного сдвигается на номер варианта
+		st.since += (c.Seed - 1) % t.period
+		st.sinceHero += (c.Seed - 1) % t.heroPeriod
+	}
 	for i, s := range in {
 		if len(s.Pool) == 0 {
 			out[i] = -1
@@ -171,6 +195,7 @@ func Pick(in []Spread, p layout.Params, lv Level, c Ctx) []int {
 		if i < len(c.Cur) {
 			n.cur = c.Cur[i]
 		}
+		n.seed, n.idx = c.Seed, i
 		out[i] = t.one(s, p, &n)
 		st.push(&s.Pool[out[i]])
 	}
@@ -273,6 +298,7 @@ type neighbors struct {
 	mosaics                 int             // мозаик подряд перед этим разворотом
 	small, big              bool            // группа редкая / плотная против среднего альбома
 	ladder                  byte            // направление последней лесенки, 0 — не было
+	seed, idx               int             // номер варианта и место разворота в цепочке (шум seedNoise)
 }
 
 // ladderDir — направление лесенки кандидата ('L', 'A'), 0 — не лесенка.
@@ -309,7 +335,7 @@ func (t tuning) one(s Spread, p layout.Params, n *neighbors) int {
 		if !ok {
 			continue
 		}
-		pen := bonus + n.penalty(x)
+		pen := bonus + n.penalty(x) + n.noise(x, loss*tieEps)
 		if capped && x.Form == forms.Mosaic {
 			if better(s.Pool, mo, moPen, moLoss, i, pen, loss) {
 				mo, moPen, moLoss = i, pen, loss
@@ -455,4 +481,52 @@ func (n *neighbors) formPenalty(f forms.Form) float64 {
 		pen += bonusSize
 	}
 	return pen
+}
+
+// seedNoise — «шум» варианта в [0, 1): FNV-1a 64 от (номер варианта, место в цепочке, ключ).
+// Не зависит от порядка вызовов и параллелизма — один вход даёт один выбор.
+func seedNoise(seed, idx int, key string) float64 {
+	const (
+		offset = 14695981039346656037
+		prime  = 1099511628211
+	)
+	h := uint64(offset)
+	mix := func(b byte) { h = (h ^ uint64(b)) * prime }
+	var buf [48]byte
+	b := strconv.AppendInt(buf[:0], int64(seed), 10)
+	b = append(b, '/')
+	b = strconv.AppendInt(b, int64(idx), 10)
+	b = append(b, '/')
+	for _, c := range b {
+		mix(c)
+	}
+	for i := range len(key) {
+		mix(key[i])
+	}
+	return float64(h>>11) / (1 << 53)
+}
+
+// noise — добавка к штрафу кандидата; у вариантов 0 и 1 её нет.
+func (n *neighbors) noise(x *Cand, loss float64) float64 {
+	if n.seed < 2 {
+		return 0
+	}
+	return seedAmp*seedNoise(n.seed, n.idx, x.Key) + seedLossK*min(max(loss, 0), seedLossCap)
+}
+
+// lessSeeded — «Меньше» с вариантом: из ряда «Авто» с потерей ≤ seedLessLoss берётся минимум
+// шума (ничья — меньший индекс); лучшая раскладка [0] подходит всегда.
+func lessSeeded(s Spread, seed, idx int) int {
+	bestQ := quanta(s.Pool[0].Score)
+	at, atU := 0, math.Inf(1)
+	for i := range s.Pool {
+		x := &s.Pool[i]
+		if !x.InRow && i != 0 || bestQ-quanta(x.Score) > quanta(seedLessLoss) {
+			continue
+		}
+		if u := seedNoise(seed, idx, x.Key); u < atU {
+			at, atU = i, u
+		}
+	}
+	return at
 }

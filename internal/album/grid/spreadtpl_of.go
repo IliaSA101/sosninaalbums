@@ -64,10 +64,15 @@ func SpreadTplOf(p *model.Project, spreadID, scope string, places, texts bool) (
 	return c, nil
 }
 
-// placesOf — места области в долях; у «Авто» — закреплённые на копии проекта.
+// placesOf — места области в долях; у «Авто» — закреплённые на копии проекта. Без рамочек
+// (079-10): готовый разворот их не хранит, а поле в памяти несло бы их до первого сохранения.
 func placesOf(p *model.Project, s *model.Spread, scope string) []model.Box {
 	if len(s.Grid) > 0 {
-		return AreaFrac(p, s, scope)
+		out := AreaFrac(p, s, scope)
+		for i := range out {
+			out[i].Border = nil
+		}
+		return out
 	}
 	c := p.Clone()
 	_, cs := c.Find(s.ID)

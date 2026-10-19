@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { store } from '../../base/core/store.svelte'
+  import { shapeKey } from '../../base/geom/shape'
   import { sheetIn } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import Modal from '../../base/ui/Modal.svelte'
@@ -9,7 +10,7 @@
   import { VigSession, vigDialog } from './vigsession.svelte'
   import { vigOwn } from './vigown.svelte'
   import { ownLabel } from './vigown'
-  import { FORMS, FORM_FILTERS, curKey, pickTile, shapeKey, vigTiles, type Tile } from './vigform'
+  import { FORMS, FORM_FILTERS, curKey, pickTile, vigTiles, type Tile } from './vigform'
   import Seg from '../../base/tpl/Seg.svelte'
   import { activeFamily, familiesIn, type VigFamilyFilter } from '../../base/tpl/tplfilter'
   import { PREVIEW_RESERVE, VAR_FIELDS, VAR_MAX, leftLine, placesLine, previewBox, resetWarning, stripMax } from './vigdialog'

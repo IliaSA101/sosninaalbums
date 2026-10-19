@@ -22,7 +22,8 @@ import (
 //	(cd .gotmp/prev && go test ./internal/album/salbum -run TestWriteShape -shapeout=<путь>/vNN-shape.json)
 //	удалить .gotmp/prev и .gotmp/prev.tar
 //
-// Снятый 0.17: v12-shape.json (git-тег v0.17.0, FormatVersion 12). Следующий — v13-shape.json из 0.18.
+// Снятые: v12-shape.json (git-тег v0.17.0, FormatVersion 12), v13-shape.json (v0.18.0, 13; 0.19 —
+// тоже 13). Следующий — v14-shape.json из выпуска 0.20.
 
 var shapeOut = flag.String("shapeout", "", "записать форму JSON FileProject в файл (снимок прошлого выпуска)")
 

@@ -43,10 +43,13 @@ import (
 // `photos.*.adj` (спека 068, omitempty) — 0.15 файл не откроет и не затрёт тон автосохранением;
 // 13 (общий на 0.18, новые поля 0.18 до выпуска ложатся сюда же, без нового номера): табличка
 // места `grid[].person` (спека 071, omitzero) — 0.17 файл не откроет и не сотрёт таблички
-// автосохранением.
+// автосохранением;
+// 14 (общий на 0.20, новые поля 0.20 до выпуска ложатся сюда же, без нового номера): рамочки мест
+// `grid[].border` и прозрачность фото `photos.*.fade` (спека 079, omitempty) — 0.19 файл не
+// откроет и не сотрёт их автосохранением.
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 13
+const FormatVersion = 14
 
 type Settings struct {
 	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
@@ -172,6 +175,8 @@ type PhotoRef struct {
 	FlipV bool `json:"flipV,omitempty"`
 	// Adj — ч/б и тон (068); едет с фото, как Frame. nil — без тона.
 	Adj *Tone `json:"adj,omitempty"`
+	// Fade — прозрачность фото места 0…1, шаг 0,01 (079, v14, ClampPhotoFade); едет с фото, как Adj.
+	Fade float64 `json:"fade,omitempty"`
 	// Person — имя на фото (030): своё или из вставки; едет с фото. nil — из имени файла.
 	Person *Person `json:"person,omitempty"`
 	// Lib — ключ своего элемента библиотеки my:<16 hex> (048): в файле вместо пути, путь в
@@ -443,10 +448,10 @@ func (p *Project) Placed(id string) bool {
 	return false
 }
 
-// PruneRefs оставляет в Photos только используемые фото: стоящие в местах, на фонах и в
-// стикерах (048). Фото, оставшееся только на фоне или в стикере, теряет свойства места (кадр,
-// подпись, зеркало, тон): они не переживают уход из мест. Имя (Person) — свойство фото, а не места:
-// остаётся.
+// PruneRefs оставляет в Photos только используемые фото: стоящие в местах, на фонах, в
+// стикерах (048) и рамочках мест (079). Фото, оставшееся только на фоне, в стикере или рамочке,
+// теряет свойства места (кадр, подпись, зеркало, тон, прозрачность): они не переживают уход из
+// мест. Имя (Person) — свойство фото, а не места: остаётся.
 func (p *Project) PruneRefs() {
 	used := map[string]bool{}
 	for _, s := range p.Sheets() {
@@ -460,8 +465,8 @@ func (p *Project) PruneRefs() {
 		case used[id]:
 		case !onBg[id]:
 			delete(p.Photos, id)
-		case r.Frame != nil || r.Caption != nil || r.FlipH || r.FlipV || r.Adj != nil:
-			r.Frame, r.Caption, r.FlipH, r.FlipV, r.Adj = nil, nil, false, false, nil
+		case r.Frame != nil || r.Caption != nil || r.FlipH || r.FlipV || r.Adj != nil || r.Fade != 0:
+			r.Frame, r.Caption, r.FlipH, r.FlipV, r.Adj, r.Fade = nil, nil, false, false, nil, 0
 			p.Photos[id] = r
 		}
 	}

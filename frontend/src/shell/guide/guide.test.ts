@@ -159,6 +159,25 @@ describe('справочник функций: стражи', () => {
     expect(ARTICLES.find((x) => x.id === 'autobuild')?.where).toContain('Разнообразие раскладок')
   })
 
+  it('078: «Похожие кадры» — блок «Фото» окна автосборки, якорь строки и запасное место; «Автосборка» называет блок и вариант', () => {
+    const a = ARTICLES.find((x) => x.id === 'similar')
+    expect(a).toMatchObject({ title: 'Похожие кадры', feature: 'base', spot: 'ui:auto-similar', miss: { spot: 'ui:autobuild' } })
+    for (const w of ['Убирать похожие кадры: Нет · Дубли · Очень похожие · Похожие', 'Ч/б развороты', '«Вернуть все»', 'Вариант ‹ 1 ›'])
+      expect(a?.where, w).toContain(w)
+    for (const w of ['«беру» и 4–5★ не убираются никогда', 'Убранные остаются в ленте']) expect(a?.how, w).toContain(w)
+    for (const w of ['дубли', 'вернуть', 'вариант', 'ч/б']) expect(a?.words, w).toContain(w)
+    expect(ARTICLES.find((x) => x.id === 'autobuild')?.where).toMatch(/блок «Фото»[^.]*«Убирать похожие кадры»/)
+    expect(ARTICLES.find((x) => x.id === 'autobuild')?.words).toContain('вариант')
+  })
+
+  it('078: «Автосборка» рассказывает про «Пересобрать…»: тост, вариант, отмена одним шагом, что её закрывает', () => {
+    const a = ARTICLES.find((x) => x.id === 'autobuild')
+    for (const w of ['«Пересобрать…»', '«Вариант»', 'одним шагом', 'Звёзды и метки пересборку не закрывают', 'свободных фото нет'])
+      expect(a?.how, w).toContain(w)
+    expect(a?.how).toContain('{key:undo|')
+    for (const w of ['пересобрать', 'пересборка']) expect(a?.words, w).toContain(w)
+  })
+
   it('065: фильтр семейств — в «Автосборка ▸ Раскладки»; «Разнообразить раскладки» берёт его же; серии остались в «Дополнительно»', () => {
     const b = ARTICLES.find((x) => x.id === 'autobuild')
     for (const w of ['«Раскладки»', 'фильтр семейств', 'Варианты · Что соберётся', 'Разнообразие раскладок'])
@@ -185,6 +204,29 @@ describe('справочник функций: стражи', () => {
     expect(a).toMatchObject({ title: 'Готовые развороты', feature: 'decor', menu: ['spreadTpl'] })
     for (const w of ['«Фон»', 'Правка ▸ Готовые развороты…', '«Левую» и «Правую»']) expect(a?.where, w).toContain(w)
     expect(placesOf(a!).map((p) => p.spot)).toEqual(['ui:spread-tpl', 'menu:spreadTpl'])
+  })
+
+  it('077: «Фоны и стикеры» — фон сразу на много листов, слова поиска', () => {
+    const a = ARTICLES.find((x) => x.id === 'decor')
+    for (const w of ['на выделенные в ленте', 'на развороты: 3, 5-8', 'на все развороты', 'один шаг отмены'])
+      expect(a?.where, w).toContain(w)
+    for (const w of ['все', 'развороты', 'сразу', 'несколько', 'набор', 'страниц']) expect(a?.words, w).toContain(w)
+  })
+
+  it('079: «Рамочки» и «Прозрачность фото» — свои функции уровня, якоря карточки, вход в «Правка», слова поиска', () => {
+    const b = ARTICLES.find((x) => x.id === 'border')
+    expect(b).toMatchObject({ title: 'Рамочки', feature: 'border', menu: ['borderGallery'] })
+    for (const w of ['«Рамочка» ▸ «Выбрать…»', 'Правка ▸ Рамочки…', 'правая кнопка', 'все места разворота', '«Загрузить своё…»'])
+      expect(b?.where, w).toContain(w)
+    expect(placesOf(b!).map((p) => p.spot)).toEqual(['ui:border', 'menu:borderGallery'])
+    for (const w of ['рамочка', 'рамка', 'паспарту', 'полароид', 'обводка']) expect(b?.words, w).toContain(w)
+    const f = ARTICLES.find((x) => x.id === 'photo-fade')
+    expect(f).toMatchObject({ title: 'Прозрачность фото', feature: 'photoFade', spot: 'ui:photo-fade' })
+    expect(f?.where).toContain('«Прозрачность»')
+    expect(f?.what).toContain('«Авто» не закрепляется')
+    // строка уровня у обеих — прежняя: нового выбора в «Своём» нет
+    expect(rowOf('border')).toBe('decor')
+    expect(rowOf('photoFade')).toBe('adjust')
   })
 
   it('067 Ф2: «Наборы библиотеки» — на функции «Фоны и стикеры», вход в «Файл» и в окна', () => {

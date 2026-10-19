@@ -50,6 +50,11 @@ export interface FrameView extends Frame {
   z: number // слой в общем стеке разворота (от Go): z-index = 10 + z
   shape?: string // форма места (044): '' / нет — прямоугольник, 'oval' — эллипс в рамке; у «Авто» нет
   radius?: number // радиус скругления, мм (от Go); для рисования
+  // Окно рамочки (079): фото сидит в нём, а не во всём месте. Без рамочки win = ячейка; нет поля (старый вид, «Авто») — то же.
+  win?: Rect // окно, мм разворота, в осях места до поворота; img посчитан для него
+  winShape?: string // форма окна: 'oval' — овал, вписанный в окно; иначе скругление winRadius
+  winRadius?: number // скругление окна, мм (max(R − min(отступы), 0)); нет — прямые углы
+  fade?: number // прозрачность фото 0…1 (0 — непрозрачное), шаг 0,01; рамочка не прозрачнеет
 }
 
 // Стиль текста. font — id семейства из State.fonts.
@@ -144,6 +149,25 @@ export interface SheetCaps {
 }
 
 // Место в режиме «Сетка» (спека 007), мм разворота. Порядок в SpreadView.places = порядок слоёв (z-index).
+// Рамочка места (079, от Go: model.BorderView). URL и maskUrl — без px, UI дописывает &px= сам.
+export interface BorderView {
+  kind: string // встроенная: ключ вида; у картинки ''
+  photo: string // картинка: ID записи альбома
+  lib: string // ключ своей в библиотеке (my:…); у встроенной ''
+  preset: string // плитка sa:fr-…, поставившая рамочку; '' — правили руками
+  name: string // имя вида или плитки
+  inks: string[] // действующие цвета
+  width: number // толщина, мм (встроенная)
+  defWidth?: number // толщина вида по умолчанию, мм (двойной щелчок по «Толщине»); нет — двойной щелчок молчит
+  scale: number // картинка: 1 — как задумано
+  ins: number[] // отступы окна [l, t, r, b], мм
+  url: string
+  maskUrl: string // '' — маски нет
+  pic: boolean
+  open: boolean
+  known: boolean // false — вида нет в этой сборке (файл новее)
+}
+
 export interface PlaceView extends RotRect {
   id: string
   photo: string // "" — пустое место
@@ -155,6 +179,7 @@ export interface PlaceView extends RotRect {
   shape?: string // форма (044): '' / нет — прямоугольник, 'oval' — эллипс, вписанный в рамку
   round?: number // скругление углов, % меньшей стороны, 0…50; у oval 0
   radius?: number // то же в мм (считает Go): для рисования
+  border?: BorderView // рамочка (079); нет — без рамочки
 }
 
 // Место для SetPlaces: только геометрия (мм разворота).

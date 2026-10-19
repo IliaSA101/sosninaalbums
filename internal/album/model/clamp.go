@@ -77,6 +77,7 @@ func (p *Project) ClampGrid() {
 				pl.Fit = ""
 			}
 			pl.Shape, pl.Round = ClampShape(pl.Shape, pl.Round)
+			pl.Border = ClampBorder(p, pl.Border)
 			if _, ok := p.Photos[pl.Photo]; pl.Photo != "" && (!ok || !in[pl.Photo] || seenPhoto[pl.Photo]) {
 				pl.Photo = ""
 			}
@@ -285,10 +286,11 @@ func (p *Project) ClampDesign() {
 	p.Settings.Bg = BgColor(p.Settings.Bg)
 	p.spendTexts(true)
 	p.clampStickers()
-	// Тон (068) — всем фото, не только ленты: запаса текста не тратит, мусор из файла зажимается.
+	// Тон (068) и прозрачность (079) — всем фото, не только ленты: запаса текста не тратят, мусор
+	// из файла зажимается.
 	for id, r := range p.Photos {
-		if r.Adj != nil {
-			r.Adj = ClampTone(r.Adj)
+		if r.Adj != nil || r.Fade != 0 {
+			r.Adj, r.Fade = ClampTone(r.Adj), ClampPhotoFade(r.Fade)
 			p.Photos[id] = r
 		}
 	}

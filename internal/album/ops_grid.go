@@ -3,10 +3,12 @@ package album
 import (
 	"errors"
 	"math"
+	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/names"
+	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/album/view"
 )
 
@@ -21,7 +23,7 @@ func (e *Editor) SetGrid(spreadID string, on bool) model.View {
 }
 
 // AddPlace. Договор: до правки ничего; лимит мест — ошибка try, откат без шага; чужая
-// форма — прямоугольник внутри.
+// форма — прямоугольник внутри; ShapeRounded — скругление RoundedPct.
 func (e *Editor) AddPlace(spreadID string, page int, shape string) (model.View, error) {
 	return e.try("", func(p *model.Project) error { return grid.AddPlace(p, spreadID, page, shape) })
 }
@@ -47,7 +49,7 @@ func (e *Editor) SetPlaceFit(spreadID string, ids []string, fit string) model.Vi
 	return e.change(func(p *model.Project) { grid.SetPlaceFit(p, spreadID, ids, fit) })
 }
 
-// SetPlaceShape. Договор: до правки ничего; форма вне ""/ShapeOval — холостая внутри.
+// SetPlaceShape. Договор: до правки ничего; форма вне ""/ShapeOval/ShapeRounded — холостая внутри.
 func (e *Editor) SetPlaceShape(spreadID string, ids []string, shape string) model.View {
 	return e.change(func(p *model.Project) { grid.SetPlaceShape(p, spreadID, ids, shape) })
 }
@@ -58,6 +60,67 @@ func (e *Editor) SetPlaceRound(spreadID string, ids []string, round float64) mod
 		return e.View()
 	}
 	return e.change(func(p *model.Project) { grid.SetPlaceRound(p, spreadID, ids, round) })
+}
+
+// ApplyBorder — рамочка src местам ids листа (079 §8; ids — ссылки мест или фото); пустой src —
+// снять. Один шаг: и закрепление «Авто», и запись своей картинки; та же рамочка — холостая.
+// Договор: до правки ничего; вид, ключ своей и лист проверяет тело (ошибка — откат без шага).
+func (e *Editor) ApplyBorder(spreadID string, ids []string, src model.BorderSrc) (model.View, error) {
+	v, _, err := e.ApplyBorderStep(spreadID, ids, src)
+	return v, err
+}
+
+// ApplyBorderStep — ApplyBorder и была ли правка (шаг отмены): плитка идёт в недавние только при
+// ней (079 §8), как у ReplaceSticker. Договор: как у ApplyBorder.
+func (e *Editor) ApplyBorderStep(spreadID string, ids []string, src model.BorderSrc) (v model.View, changed bool, err error) {
+	rev := -1
+	v, err = e.try("", func(p *model.Project) error {
+		rev = e.rev
+		return grid.ApplyBorder(p, spreadID, ids, src)
+	})
+	return v, err == nil && v.Rev != rev, err
+}
+
+// BorderPath — путь картинки записи id для /media/f (079-22, 079-35): только запись, на которую
+// ссылается рамочка места листа или обложки, и только с путём (своя без файла — false). Обычное
+// фото альбома, фон, стикер и чужой ID — false. Своя — файл из «Рамочек» (salbum.FramePath, 079-40).
+func (e *Editor) BorderPath(id string) (path string, ok bool) {
+	e.read(func(p *model.Project) {
+		if p.OnBorder(id) {
+			path = salbum.FramePath(p.Photos[id])
+		}
+	})
+	return path, path != ""
+}
+
+// BorderIDs — записи под рамочками мест листов и обложки, отсортированы, без повторов: /media/f сверяет
+// с ними ID из адреса и дальше идёт с ID альбома, а не из запроса (079-40).
+// Договор: только чтение под замком.
+func (e *Editor) BorderIDs() (ids []string) {
+	e.read(func(p *model.Project) {
+		for _, s := range p.Sheets() {
+			ids = append(ids, s.BorderPhotos()...)
+		}
+	})
+	slices.Sort(ids)
+	return slices.Compact(ids)
+}
+
+// borderMerge — ключ слияния серии ползунка или палитры рамочки в один шаг отмены.
+func borderMerge(session string) string {
+	if !model.ValidSession(session) {
+		return ""
+	}
+	return "border:" + session
+}
+
+// SetBorder — цвета, толщина или размер рамочек мест ids (079 §8); nil и 0 — поле не менять.
+// Договор: толщина и размер — конечные числа (иначе холостая до правки); зажим — ClampBorder в теле.
+func (e *Editor) SetBorder(spreadID string, ids []string, pt model.BorderPatch, merge string) model.View {
+	if !allFinite(pt.Width, pt.Scale) {
+		return e.View()
+	}
+	return e.apply(borderMerge(merge), func(p *model.Project) { grid.SetBorder(p, spreadID, ids, pt) })
 }
 
 // ArrangePlaces. Договор: до правки ничего; неизвестный op — холостая, слишком

@@ -36,6 +36,11 @@ type Editor struct {
 	undoAlbum int // шагов undo со снимком альбома (p != nil); остальные — только отметки
 	redo      []Snap
 	rev       int // растёт при каждой реальной правке, отмене и возврате
+	// projRev — правки самого проекта: растёт, когда сменились его байты (правка, Undo/Redo шага
+	// со снимком); отметки его не трогают. По нему живёт пересборка (auto, 078 §8).
+	projRev int
+	// auto — последняя автосборка для «Пересобрать» (ops_auto.go).
+	auto autoChain
 	// lastMerge — ключ слияния последней правки (layout:<разворот>, text:<сессия>):
 	// подряд идущие правки с тем же ключом — один шаг отмены.
 	lastMerge string
@@ -113,6 +118,20 @@ func (e *Editor) try(merge string, fn func(p *model.Project) error) (model.View,
 // marks (может быть nil) — дельта своих отметок той же правки (перепривязка, Restore): зовётся
 // после удачной правки проекта и идёт в тот же шаг отмены; слияние с прошлым шагом она рвёт.
 func (e *Editor) edit(merge string, whole bool, fn func(p *model.Project) error, marks func() []MarkChange) (model.View, error) {
+	return e.editWith(merge, whole, fn, marks, editOpts{})
+}
+
+// editOpts — необязательное у правки (пересборка, 078 §8). rel — от какого проекта считать
+// поправки settle (nil — от проекта до fn): пересборка ставит альбом до прошлой сборки и
+// нормализуется от него, а не от прошлого варианта. done — после удачной правки, сменившей
+// проект, под замком; pushed — снимок, ушедший в отмену этой правкой (nil — слита с прошлой).
+type editOpts struct {
+	rel  *model.Project
+	done func(pushed *model.Project)
+}
+
+// editWith — тело edit с необязательным o.
+func (e *Editor) editWith(merge string, whole bool, fn func(p *model.Project) error, marks func() []MarkChange, o editOpts) (model.View, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	t0 := time.Now()
@@ -122,7 +141,7 @@ func (e *Editor) edit(merge string, whole bool, fn func(p *model.Project) error,
 	before := model.Unmarshal(data)
 	err := fn(e.p)
 	if err == nil {
-		err = settle(e.p, before, whole)
+		err = settle(e.p, o.relOr(before), whole)
 	}
 	if err != nil {
 		e.p = before
@@ -148,11 +167,13 @@ func (e *Editor) edit(merge string, whole bool, fn func(p *model.Project) error,
 	}
 	top := len(e.undo) - 1
 	merged := merge != "" && merge == e.lastMerge && top >= 0
+	var pushed *model.Project
 	switch {
 	case same:
 		e.pushUndo(Snap{Marks: delta}) // проект не изменился: снимок альбома не нужен
 	case !merged:
 		e.pushUndo(Snap{P: before, N: len(data), Marks: delta})
+		pushed = before
 	case e.undo[top].P != nil && e.undo[top].N == len(after) && bytes.Equal(model.Marshal(e.undo[top].P), after):
 		// Слитая цепочка вернула проект к началу (блок добавили и стёрли):
 		// пустой шаг отмены не нужен.
@@ -163,8 +184,29 @@ func (e *Editor) edit(merge string, whole bool, fn func(p *model.Project) error,
 	e.lastMerge = merge
 	e.redo = nil
 	e.dirty = true
-	e.rev++
+	e.stepped(same, pushed, o)
 	return e.view(), nil
+}
+
+// relOr — от чего считать поправки settle: o.rel, а без него — проект до fn.
+func (o editOpts) relOr(before *model.Project) *model.Project {
+	if o.rel != nil {
+		return o.rel
+	}
+	return before
+}
+
+// stepped — счётчики после удачной правки: rev всегда, projRev и o.done — если сменился проект
+// (same — нет, правка только отметок).
+func (e *Editor) stepped(same bool, pushed *model.Project, o editOpts) {
+	e.rev++
+	if same {
+		return
+	}
+	e.projRev++
+	if o.done != nil {
+		o.done(pushed)
+	}
 }
 
 // settle — хвост конвейера правки после fn: p приводится к инвариантам относительно before.

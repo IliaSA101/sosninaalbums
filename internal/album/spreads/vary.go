@@ -47,7 +47,7 @@ func Prepare(job PlanJob, photos []model.PhotoInfo, o model.AutoOpts) Prep {
 		for i, g := range w.pl.Groups {
 			asps[i] = job.asp[g[0]:g[1]]
 		}
-		w.pools = pools(asps, job.prm, poolLv(level(o.Variety), allowOf(o.Families)))
+		w.pools = pools(asps, job.prm, poolLv(level(o.Variety), allowOf(o.Families)), o.Variant >= 2)
 	}
 	return w
 }
@@ -66,12 +66,12 @@ func (w Prep) planFor(j PlanJob) (plan.Plan, [][]variety.Cand, error) {
 }
 
 // same — тот же вход плана: пропорции, геометрия, разворотов и пустой хвост, а для серий
-// (051) — папки и время съёмки тех же фото.
+// (051) — папки и время съёмки тех же фото; для ч/б (078) — подписи и оценки.
 func (j PlanJob) same(k PlanJob) bool {
 	return j.prm == k.prm && j.have == k.have && j.tail == k.tail && slices.Equal(j.asp, k.asp) &&
-		slices.EqualFunc(j.infos, k.infos, func(a, b model.PhotoInfo) bool {
-			return a.Path == b.Path && a.Lib == b.Lib && a.Taken == b.Taken
-		})
+		slices.Equal(j.rate, k.rate) && slices.EqualFunc(j.infos, k.infos, func(a, b model.PhotoInfo) bool {
+		return a.Path == b.Path && a.Lib == b.Lib && a.Taken == b.Taken && a.Sig == b.Sig
+	})
 }
 
 // poolLevel — пул разворота из n фото: с ManyFrom — только ряд «Авто», как у ExtraRow: выбранный
@@ -93,9 +93,10 @@ func poolOf(asp []float64, prm layout.Params, lv variety.Level) []variety.Cand {
 }
 
 // pools считает пулы параллельно вне замка (nil — выключено тестом). На «Меньше» пулов нет —
-// только прогрев «Других вариантов» (ExtraRow), результат nil. Паника — только в лог, пул остаётся
-// nil: тот же счёт повторится под замком и поведёт себя как раньше.
-func pools(asps [][]float64, prm layout.Params, lv variety.Level) [][]variety.Cand {
+// только прогрев «Других вариантов» (ExtraRow), результат nil; seeded (вариант ≥ 2, 078) — пулы
+// нужны и «Меньше». Паника — только в лог, пул остаётся nil: тот же счёт повторится под замком
+// и поведёт себя как раньше.
+func pools(asps [][]float64, prm layout.Params, lv variety.Level, seeded bool) [][]variety.Cand {
 	if !model.ParallelLayouts() || len(asps) == 0 {
 		return nil
 	}
@@ -103,7 +104,7 @@ func pools(asps [][]float64, prm layout.Params, lv variety.Level) [][]variety.Ca
 	var pl model.PanicLog
 	model.Each(len(asps), func(i int) {
 		pl.Safely("", func() {
-			if lv > variety.Less {
+			if lv > variety.Less || seeded {
 				out[i] = poolOf(asps[i], prm, lv)
 			} else {
 				model.ExtraRow(asps[i], prm)
@@ -111,7 +112,7 @@ func pools(asps [][]float64, prm layout.Params, lv variety.Level) [][]variety.Ca
 		})
 	})
 	pl.Summary()
-	if lv == variety.Less {
+	if lv == variety.Less && !seeded {
 		return nil
 	}
 	return out
@@ -244,7 +245,14 @@ func starOf(photos []string, rate Rating) int {
 // rev, шаг отмены и тост «Раскладки изменены» впустую.
 func pickRun(p *model.Project, first, last int, lv variety.Level, rate Rating, cur bool, ready [][]variety.Cand,
 	dead func(*model.Spread) bool, allow map[variety.Family]bool) []bool {
+	return pickSeeded(p, first, last, lv, rate, cur, ready, dead, allow, 0)
+}
+
+// pickSeeded — pickRun с номером варианта сборки seed (078 §7; 0 и 1 — как pickRun).
+func pickSeeded(p *model.Project, first, last int, lv variety.Level, rate Rating, cur bool, ready [][]variety.Cand,
+	dead func(*model.Spread) bool, allow map[variety.Family]bool, seed int) []bool {
 	c, prm := ctxOf(p, first, last, dead), p.Params()
+	c.Seed = seed
 	in := make([]variety.Spread, last-first+1)
 	fb := make([]bool, len(in))
 	for k := range in {
@@ -273,11 +281,12 @@ func pickRun(p *model.Project, first, last int, lv variety.Level, rate Rating, c
 
 // varyBuilt — раскладки n собранных разворотов с позиции at по уровню ручки; «Меньше» без
 // семейств — ничего (лучшая, Layout ""), ровно как 0.10; с семействами — первая разрешённая
-// (SetLayout пишет "" за лучшую). Возвращает флаги запасных (nil — фильтра нет).
+// (SetLayout пишет "" за лучшую). Вариант ≥ 2 (078) выбирает и на «Меньше»: из ряда «Авто» почти
+// без потери. Возвращает флаги запасных (nil — фильтра нет).
 func varyBuilt(p *model.Project, at, n int, o model.AutoOpts, rate Rating, ready [][]variety.Cand, dead func(*model.Spread) bool) []bool {
 	lv, allow := level(o.Variety), allowOf(o.Families)
-	if (lv > variety.Less || allow != nil) && n > 0 {
-		return pickRun(p, at, at+n-1, lv, rate, false, ready, dead, allow)
+	if (lv > variety.Less || allow != nil || o.Variant >= 2) && n > 0 {
+		return pickSeeded(p, at, at+n-1, lv, rate, false, ready, dead, allow, o.Variant)
 	}
 	return nil
 }
@@ -312,7 +321,7 @@ func VaryWarm(p *model.Project, ids []string, v model.Variety) func() {
 			asps = append(asps, p.Aspects(s.Photos))
 		}
 	}
-	return func() { pools(asps, prm, lv) } // только прогрев кэша: позиции под замком могут сдвинуться
+	return func() { pools(asps, prm, lv, false) } // только прогрев кэша: позиции под замком могут сдвинуться
 }
 
 // VaryLayouts — «Разнообразить раскладки» (041): выделенные развороты «Авто» с фото по

@@ -84,6 +84,10 @@ func probes() []probe {
 			_, err := m.AutoPreview(ids, 0, model.AutoOpts{Spreads: 1, MaxPer: 4})
 			return model.View{}, err
 		}},
+		{"AutoSimilar", kReadEr, func(m *Methods) (model.View, error) {
+			_, err := m.AutoSimilar(ids, model.AutoOpts{Spreads: 1, MaxPer: 4, Similar: 1})
+			return model.View{}, err
+		}},
 		{"VaryLayouts", kErr, func(m *Methods) (model.View, error) { return m.VaryLayouts([]string{"s1"}, 1, nil) }},
 		{"SetMarks", kErr, func(m *Methods) (model.View, error) { return m.SetMarks(ids, model.MarkPatch{}) }},
 		{"ResetMarks", kView, func(m *Methods) (model.View, error) { return ok(m.ResetMarks(ids)) }},
@@ -105,6 +109,9 @@ func probes() []probe {
 		{"SetPlaceFit", kView, func(m *Methods) (model.View, error) { return ok(m.SetPlaceFit("s1", ids, "contain")) }},
 		{"SetPlaceShape", kView, func(m *Methods) (model.View, error) { return ok(m.SetPlaceShape("s1", ids, "oval")) }},
 		{"SetPlaceRound", kView, func(m *Methods) (model.View, error) { return ok(m.SetPlaceRound("s1", ids, 10)) }},
+		{"SetBorder", kView, func(m *Methods) (model.View, error) {
+			return ok(m.SetBorder("s1", ids, model.BorderPatch{Width: 2}, ""))
+		}},
 		{"MirrorGrid", kView, func(m *Methods) (model.View, error) { return ok(m.MirrorGrid("s1", "left")) }},
 		{"DuplicateGrid", kErr, func(m *Methods) (model.View, error) { return m.DuplicateGrid("s1", 1, false) }},
 		{"PlanCopyGrid", kRead, func(m *Methods) (model.View, error) { m.PlanCopyGrid("s1", "s1", nil, false, false); return none(m) }},
@@ -148,6 +155,7 @@ func probes() []probe {
 		{"SetBackdropAngle", kView, func(m *Methods) (model.View, error) { return ok(m.SetBackdropAngle("s1", "spread", 5, "")) }},
 		{"StraightenBackdrop", kView, func(m *Methods) (model.View, error) { return ok(m.StraightenBackdrop("s1", "spread", 10, 1)) }},
 		{"SetBackdropFade", kView, func(m *Methods) (model.View, error) { return ok(m.SetBackdropFade("s1", "spread", 0.5, "")) }},
+		{"SetPhotoFade", kView, func(m *Methods) (model.View, error) { return ok(m.SetPhotoFade(ids, 0.5, "")) }},
 		{"FlipBackdrop", kView, func(m *Methods) (model.View, error) { return ok(m.FlipBackdrop("s1", "spread", "h")) }},
 		{"FitBackdrop", kView, func(m *Methods) (model.View, error) { return ok(m.FitBackdrop("s1", "spread")) }},
 		{"ClearBackdrop", kView, func(m *Methods) (model.View, error) { return ok(m.ClearBackdrop("s1", "spread")) }},

@@ -85,7 +85,8 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 	taken := p.PlaceIDs()
 	fresh := make([]*model.Place, len(boxes))
 	for i, b := range boxes {
-		fresh[i] = &model.Place{ID: model.NewPlaceID(taken), X: b.X, Y: b.Y, W: b.W, H: b.H, Rot: b.Rot, Shape: b.Shape, Round: b.Round}
+		fresh[i] = &model.Place{ID: model.NewPlaceID(taken), X: b.X, Y: b.Y, W: b.W, H: b.H, Rot: b.Rot, Shape: b.Shape, Round: b.Round,
+			Border: b.Border.Clone()} // рамочка — своя у места (079-23); у коробок шаблонов её нет
 		p.ClampPlace(s, fresh[i])
 	}
 	s.Grid = slices.Insert(kept, at, fresh...)
@@ -97,11 +98,14 @@ func applyGrid(p *model.Project, s *model.Spread, scope string, boxes []model.Bo
 }
 
 // FracBoxes переводит доли области шаблона tplScope (TplPage | TplSpread) в мм
-// области scope листа s. Шаблон страницы на разворот ставится на обе страницы.
+// области scope листа s. Шаблон страницы на разворот ставится на обе страницы. Рамочка коробки
+// (079, только в памяти) — копия на каждую: одни доли идут на обе страницы и на все цели
+// «Копировать раскладку», общий *Border правка одной цели меняла бы у всех (079-23).
 func FracBoxes(p *model.Project, s *model.Spread, tplScope, scope string, frac []model.Box) ([]model.Box, error) {
 	conv := func(out []model.Box, a layout.Rect) []model.Box {
 		for _, f := range frac {
-			out = append(out, model.Box{X: a.X + f.X*a.W, Y: a.Y + f.Y*a.H, W: f.W * a.W, H: f.H * a.H, Rot: f.Rot, Shape: f.Shape, Round: f.Round})
+			out = append(out, model.Box{X: a.X + f.X*a.W, Y: a.Y + f.Y*a.H, W: f.W * a.W, H: f.H * a.H, Rot: f.Rot, Shape: f.Shape, Round: f.Round,
+				Border: f.Border.Clone()})
 		}
 		return out
 	}
@@ -122,7 +126,8 @@ func FracBoxes(p *model.Project, s *model.Spread, tplScope, scope string, frac [
 	return nil, model.ErrScope
 }
 
-// AreaFrac — места области scope листа s в долях этой области (порядок мест).
+// AreaFrac — места области scope листа s в долях этой области (порядок мест), с копией рамочки
+// места (079-23: коробка не делит *Border с источником).
 func AreaFrac(p *model.Project, s *model.Spread, scope string) []model.Box {
 	a, ok := pageArea(p, s, scope)
 	if !ok {
@@ -131,7 +136,8 @@ func AreaFrac(p *model.Project, s *model.Spread, scope string) []model.Box {
 	var out []model.Box
 	for _, pl := range s.Grid {
 		if InArea(p, s, pl.X, pl.W, scope) {
-			out = append(out, model.Box{X: (pl.X - a.X) / a.W, Y: (pl.Y - a.Y) / a.H, W: pl.W / a.W, H: pl.H / a.H, Rot: pl.Rot, Shape: pl.Shape, Round: pl.Round})
+			out = append(out, model.Box{X: (pl.X - a.X) / a.W, Y: (pl.Y - a.Y) / a.H, W: pl.W / a.W, H: pl.H / a.H, Rot: pl.Rot, Shape: pl.Shape, Round: pl.Round,
+				Border: pl.Border.Clone()})
 		}
 	}
 	return model.ClampBoxes(out) // то же правило, что у PlaceBoxes и шаблонов

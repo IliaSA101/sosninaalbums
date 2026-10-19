@@ -42,6 +42,17 @@ describe('«Свой» и основа', () => {
     expect(set.has('bgColor')).toBe(false)
     expect(features('custom', fromBase('standard')).has('allSpreads')).toBe(true)
   })
+  it('079: рамочки идут вместе с «Фонами и стикерами», прозрачность — вместе с «Ч/б и тоном»', () => {
+    const on = features('custom', fromBase('standard'))
+    expect(on.has('border')).toBe(true)
+    expect(on.has('photoFade')).toBe(true)
+    const noDecor = features('custom', toggle(fromBase('standard'), 'decor', false).custom)
+    expect(noDecor.has('border')).toBe(false)
+    expect(noDecor.has('photoFade')).toBe(true)
+    const noAdjust = features('custom', toggle(fromBase('standard'), 'adjust', false).custom)
+    expect(noAdjust.has('photoFade')).toBe(false)
+    expect(noAdjust.has('border')).toBe(true)
+  })
   it('«Свой» без набора — «Простой»', () => {
     expect(sorted(features('custom', null))).toEqual(sorted(features('simple', null)))
   })

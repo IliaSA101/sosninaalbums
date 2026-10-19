@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"encoding/json"
 	"math"
 	"slices"
 	"testing"
@@ -190,5 +191,100 @@ func TestPlaceShapeSurface(t *testing.T) {
 	}
 	if v = a.undo(); v.Spreads[0].Places[1].Round != 0 || v.Spreads[0].Places[0].Shape != model.ShapeOval {
 		t.Fatalf("отмена: %+v", v.Spreads[0].Places)
+	}
+	// 076: "rounded" — 10 % у круга и прямоугольника одним шагом, повтор — тот же rev; во View
+	// ключа нет; "" снимает скругление; «Место ▸ Скруглённое» — место с round 10.
+	r = v.Rev
+	v = a.SetPlaceShape("s1", ids, model.ShapeRounded)
+	if p := v.Spreads[0].Places; v.Rev != r+1 || p[0].Shape != "" || p[0].Round != 10 || p[1].Shape != "" || p[1].Round != 10 {
+		t.Fatalf("SetPlaceShape(rounded): rev %d → %d, %+v", r, v.Rev, p)
+	}
+	if v = a.SetPlaceShape("s1", ids, model.ShapeRounded); v.Rev != r+1 {
+		t.Errorf("повтор rounded поднял rev %d → %d", r+1, v.Rev)
+	}
+	if v = a.SetPlaceShape("s1", ids, ""); v.Rev != r+2 || v.Spreads[0].Places[0].Round != 0 || v.Spreads[0].Places[1].Round != 0 {
+		t.Fatalf("SetPlaceShape(\"\"): rev %d, %+v", v.Rev, v.Spreads[0].Places)
+	}
+	v, err := a.AddPlace("s1", 0, model.ShapeRounded)
+	if p := v.Spreads[0].Places; err != nil || len(p) != 3 || p[2].Shape != "" || p[2].Round != 10 || p[2].Radius <= 0 {
+		t.Fatalf("AddPlace(rounded): %v, %+v", err, p)
+	}
+}
+
+// BorderPatch из JSON, как его шлёт UI через Wails (frameapi.ts): нет ключа — nil и 0 («не менять»),
+// "inks": [] — пустой, но не nil список (цвета вида); правка «[]» возвращает цвета вида.
+func TestBorderPatchJSON(t *testing.T) {
+	var keep, reset, width model.BorderPatch
+	for raw, dst := range map[string]*model.BorderPatch{`{}`: &keep, `{"inks":[]}`: &reset, `{"width":2.5}`: &width} {
+		if err := json.Unmarshal([]byte(raw), dst); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if keep.Inks != nil || keep.Width != 0 || reset.Inks == nil || len(reset.Inks) != 0 || width.Width != 2.5 || width.Inks != nil {
+		t.Fatalf("разбор: {} %+v, inks:[] %+v, width %+v", keep, reset, width)
+	}
+	a := gridMethods(t)
+	ids := []string{"00000000000a"}
+	if _, err := a.editor().ApplyBorder("s1", ids, model.BorderSrc{Kind: "line", Inks: []string{"#123456"}}); err != nil {
+		t.Fatal(err)
+	}
+	r := a.editor().View().Rev
+	if v := a.SetBorder("s1", ids, keep, ""); v.Rev != r {
+		t.Fatalf("{} — правка: rev %d → %d", r, v.Rev)
+	}
+	v := a.SetBorder("s1", ids, reset, "")
+	if b := v.Spreads[0].Places[0].Border; v.Rev != r+1 || !slices.Equal(b.Inks, []string{"#ffffff"}) {
+		t.Fatalf("inks:[] — цвета вида: rev %d → %d, %+v", r, v.Rev, b)
+	}
+}
+
+// Рамочка и прозрачность (079 §8): серия толщины на два места — один шаг, лишний цвет у вида с
+// одним цветом отброшен (079-36), NaN, та же толщина и пустой список — холостые; прозрачность —
+// по ID фото (ID места — холостая), серия — один шаг с зажимом, отмена возвращает прежнее.
+func TestBorderFadeSurface(t *testing.T) {
+	a := gridMethods(t)
+	ids := []string{"00000000000a", "00000000000b"}
+	if _, err := a.editor().ApplyBorder("s1", ids, model.BorderSrc{Kind: "line"}); err != nil {
+		t.Fatal(err)
+	}
+	r := a.editor().View().Rev
+	a.SetBorder("s1", ids, model.BorderPatch{Width: 2}, "w1")
+	v := a.SetBorder("s1", ids, model.BorderPatch{Width: 3, Inks: []string{"#111111", "#222222"}}, "w1")
+	for _, pl := range v.Spreads[0].Places {
+		if b := pl.Border; b == nil || b.Width != 3 || !slices.Equal(b.Inks, []string{"#111111"}) || b.DefWidth != 1.5 {
+			t.Fatalf("SetBorder %s: %+v", pl.ID, b)
+		}
+	}
+	if v.Rev != r+2 || !v.CanUndo {
+		t.Fatalf("серия толщины: rev %d → %d", r, v.Rev)
+	}
+	r = v.Rev
+	for name, v := range map[string]model.View{
+		"NaN":         a.SetBorder("s1", ids, model.BorderPatch{Width: math.NaN()}, ""),
+		"та же":       a.SetBorder("s1", ids, model.BorderPatch{Width: 3}, ""),
+		"пустой":      a.SetBorder("s1", nil, model.BorderPatch{Width: 5}, ""),
+		"нет листа":   a.SetBorder("s9", ids, model.BorderPatch{Width: 5}, ""),
+		"fade NaN":    a.SetPhotoFade([]string{"a"}, math.NaN(), ""),
+		"fade место":  a.SetPhotoFade(ids, 0.5, ""),
+		"fade пустой": a.SetPhotoFade(nil, 0.5, ""),
+	} {
+		if v.Rev != r {
+			t.Errorf("%s: холостая правка подняла rev %d → %d", name, r, v.Rev)
+		}
+	}
+	a.SetPhotoFade([]string{"a", "b"}, 0.3, "f1")
+	v = a.SetPhotoFade([]string{"a", "b"}, 1.7, "f1") // зажим до 1
+	if fv := v.Spreads[0].Frames[0]; v.Rev != r+2 || fv.Fade != 1 || v.Spreads[1].Frames[0].Fade != 1 {
+		t.Fatalf("SetPhotoFade: rev %d → %d, %+v", r, v.Rev, fv)
+	}
+	if v = a.undo(); v.Spreads[0].Frames[0].Fade != 0 || v.Spreads[1].Frames[0].Fade != 0 {
+		t.Fatalf("отмена прозрачности: %+v", v.Spreads[0].Frames[0])
+	}
+	// Один Ctrl+Z на серию: толщина прежняя, следующий шаг — сама постановка рамочки.
+	if v = a.undo(); v.Spreads[0].Places[0].Border.Width != 1.5 {
+		t.Fatalf("отмена серии толщины: %+v", v.Spreads[0].Places[0].Border)
+	}
+	if v = a.undo(); v.Spreads[0].Places[0].Border != nil {
+		t.Fatalf("вторая отмена — не постановка: %+v", v.Spreads[0].Places[0].Border)
 	}
 }

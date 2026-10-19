@@ -50,6 +50,14 @@ export function ApplyBackground(arg1, arg2, arg3) {
   return window['go']['app']['App']['ApplyBackground'](arg1, arg2, arg3);
 }
 
+export function ApplyBackgroundTo(arg1, arg2) {
+  return window['go']['app']['App']['ApplyBackgroundTo'](arg1, arg2);
+}
+
+export function ApplyBorder(arg1, arg2, arg3) {
+  return window['go']['app']['App']['ApplyBorder'](arg1, arg2, arg3);
+}
+
 export function ApplyCoverPreset(arg1) {
   return window['go']['app']['App']['ApplyCoverPreset'](arg1);
 }
@@ -80,6 +88,10 @@ export function AutoPlan(arg1, arg2) {
 
 export function AutoPreview(arg1, arg2, arg3) {
   return window['go']['app']['App']['AutoPreview'](arg1, arg2, arg3);
+}
+
+export function AutoSimilar(arg1, arg2) {
+  return window['go']['app']['App']['AutoSimilar'](arg1, arg2);
 }
 
 export function Backups() {
@@ -354,6 +366,10 @@ export function PlacePhotos(arg1, arg2, arg3) {
   return window['go']['app']['App']['PlacePhotos'](arg1, arg2, arg3);
 }
 
+export function PlanBackgroundTo(arg1, arg2) {
+  return window['go']['app']['App']['PlanBackgroundTo'](arg1, arg2);
+}
+
 export function PlanCopyDecor(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['App']['PlanCopyDecor'](arg1, arg2, arg3, arg4, arg5);
 }
@@ -368,6 +384,10 @@ export function PlanRemovePack(arg1) {
 
 export function PlanSpreadTpl(arg1, arg2, arg3) {
   return window['go']['app']['App']['PlanSpreadTpl'](arg1, arg2, arg3);
+}
+
+export function PrepareSigs(arg1) {
+  return window['go']['app']['App']['PrepareSigs'](arg1);
 }
 
 export function PreviewNames(arg1, arg2) {
@@ -518,6 +538,10 @@ export function SetBackground(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetBackground'](arg1, arg2, arg3);
 }
 
+export function SetBorder(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['App']['SetBorder'](arg1, arg2, arg3, arg4);
+}
+
 export function SetCaption(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetCaption'](arg1, arg2, arg3);
 }
@@ -588,6 +612,10 @@ export function SetPattern(arg1, arg2, arg3, arg4) {
 
 export function SetPerson(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetPerson'](arg1, arg2, arg3);
+}
+
+export function SetPhotoFade(arg1, arg2, arg3) {
+  return window['go']['app']['App']['SetPhotoFade'](arg1, arg2, arg3);
 }
 
 export function SetPlaceAngle(arg1, arg2, arg3) {

@@ -15,13 +15,16 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
-// Совместимость формата с прошлым выпуском (075-12). Программа прошлого выпуска (0.17, формат 12)
-// файл формата 13 открыть не обязана, но обязана разобрать до проверки версии и сказать
-// «сохранён более новой версией», а не «повреждён»: для этого каждый ключ, который она знает,
-// в новом файле обязан остаться того же вида (объект, список, строка, число, логическое).
-// Снимок формы 0.17 — testdata/compat/v12-shape.json (рецепт — shape_test.go). После повышения
-// формата добавить снимок прошлого выпуска и перевести тест на него.
-const prevShape = "testdata/compat/v12-shape.json"
+// Совместимость формата с прошлыми выпусками (075-12, 079-26). Программа прошлого выпуска
+// (0.17 — формат 12, 0.18 — 13) файл нового формата открыть не обязана, но обязана разобрать до
+// проверки версии и сказать «сохранён более новой версией», а не «повреждён»: для этого каждый
+// ключ, который она знает, в новом файле обязан остаться того же вида (объект, список, строка,
+// число, логическое). Снимки формы — testdata/compat/v<N>-shape.json (рецепт — shape_test.go):
+// после повышения формата добавить снимок прошлого выпуска и тест рядом (readableBy).
+const (
+	v12Shape = "testdata/compat/v12-shape.json" // 0.17
+	v13Shape = "testdata/compat/v13-shape.json" // 0.18 (тег v0.18.0)
+)
 
 func readShape(t *testing.T, path string) map[string]string {
 	t.Helper()
@@ -52,7 +55,8 @@ func sameShape(prev, cur map[string]string) []string {
 }
 
 // fillAll — значение типа t, где заполнено каждое поле (omitempty и omitzero тоже пишутся):
-// строка, 1, true, один элемент списка и словаря. Рекурсивный тип обрывается пустым значением.
+// строка, 1, true, один элемент списка и словаря, все элементы массива. Рекурсивный тип
+// обрывается пустым значением.
 func fillAll(t reflect.Type, open map[reflect.Type]bool) reflect.Value {
 	v := reflect.New(t).Elem()
 	switch t.Kind() {
@@ -71,6 +75,11 @@ func fillAll(t reflect.Type, open map[reflect.Type]bool) reflect.Value {
 		}
 	case reflect.Slice:
 		v.Set(reflect.Append(v, fillAll(t.Elem(), open)))
+	case reflect.Array:
+		// Каждый элемент заполнен: массив с omitzero (срез рамочки, 079) иначе выпал бы из JSON.
+		for i := range t.Len() {
+			v.Index(i).Set(fillAll(t.Elem(), open))
+		}
 	case reflect.Map:
 		v.Set(reflect.MakeMap(t))
 		v.SetMapIndex(reflect.ValueOf("k").Convert(t.Key()), fillAll(t.Elem(), open))
@@ -92,10 +101,28 @@ func fillAll(t reflect.Type, open map[reflect.Type]bool) reflect.Value {
 // по настоящему файлу Encode (с табличками мест grid[].person) и по самому помощнику shapeOf
 // (его вид совпадает с видом готового JSON). Новые ключи формата 13 — в файле есть, в снимке нет.
 func TestV13ReadableBy017(t *testing.T) {
-	prev := readShape(t, prevShape)
+	dir := testkit.TempDir(t)
+	readableBy(t, "0.17", v12Shape, seatProject(dir), dir, map[string]string{"$.spreads[].grid[].person": "object"})
+}
+
+// Файл формата 14 держит форму ключей, известных 0.18 (079-26): 0.18 разбирает весь файл до
+// проверки версии, и ключ знакомого вида, сменивший вид, сделал бы черновик v14 «повреждённым».
+// Новые ключи 14 — рамочки мест и прозрачность фото — в файле есть, в снимке 0.18 нет.
+func TestV14ReadableBy018(t *testing.T) {
+	dir := testkit.TempDir(t)
+	readableBy(t, "0.18", v13Shape, borderProject(dir), dir, map[string]string{
+		"$.spreads[].grid[].border": "object", "$.spreads[].grid[].border.cut": "array", "$.photos{}.fade": "number"})
+}
+
+// readableBy — общее тело: снимок формы выпуска rel (shapePath) против типов FileProject, полного
+// JSON помощника и файла Encode проекта p; fresh — новые ключи формата (путь → вид), которых в
+// снимке нет, а в файле и полном JSON — есть (тест не пуст).
+func readableBy(t *testing.T, rel, shapePath string, p *model.Project, dir string, fresh map[string]string) {
+	t.Helper()
+	prev := readShape(t, shapePath)
 	cur := shapeOf(reflect.TypeFor[FileProject]())
 	if bad := sameShape(prev, cur); len(bad) > 0 {
-		t.Errorf("по типам FileProject вид ключей 0.17 сменился:\n%s", strings.Join(bad, "\n"))
+		t.Errorf("по типам FileProject вид ключей %s сменился:\n%s", rel, strings.Join(bad, "\n"))
 	}
 
 	// Помощник честен: полностью заполненный FileProject пишется в JSON ровно той формы, что shapeOf.
@@ -113,12 +140,11 @@ func TestV13ReadableBy017(t *testing.T) {
 		}
 	}
 	if bad := sameShape(prev, filled); len(bad) > 0 {
-		t.Errorf("в полном файле вид ключей 0.17 сменился:\n%s", strings.Join(bad, "\n"))
+		t.Errorf("в полном файле вид ключей %s сменился:\n%s", rel, strings.Join(bad, "\n"))
 	}
 
-	// Настоящий проект с табличками мест: каждый ключ, что 0.17 знает, того же вида.
-	dir := testkit.TempDir(t)
-	data, err := Encode(seatProject(dir), dir)
+	// Настоящий проект с новыми полями: каждый ключ, что прошлый выпуск знает, того же вида.
+	data, err := Encode(p, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +154,7 @@ func TestV13ReadableBy017(t *testing.T) {
 	}
 	for path, kind := range got {
 		if want, ok := prev[path]; ok && want != kind {
-			t.Errorf("файл Encode: %s — %s, 0.17 ждёт %s", path, kind, want)
+			t.Errorf("файл Encode: %s — %s, %s ждёт %s", path, kind, rel, want)
 		}
 	}
 	var head struct {
@@ -138,10 +164,11 @@ func TestV13ReadableBy017(t *testing.T) {
 		t.Errorf("версия в файле %d (%v), ждали %d", head.Version, err, model.FormatVersion)
 	}
 
-	// Тест не пуст: новое в формате 13 — таблички мест — в файле есть, а 0.17 их не знает.
-	const seat = "$.spreads[].grid[].person"
-	if _, known := prev[seat]; known || got[seat] != "object" || filled[seat] != "object" {
-		t.Errorf("%s: в снимке 0.17 %q, в файле %q — снимок не от 0.17 или табличек нет", seat, prev[seat], got[seat])
+	// Тест не пуст: новое в формате в файле есть, а прошлый выпуск его не знает.
+	for key, kind := range fresh {
+		if _, known := prev[key]; known || got[key] != kind || filled[key] != kind {
+			t.Errorf("%s: в снимке %s %q, в файле %q — снимок не от %s или поля нет", key, rel, prev[key], got[key], rel)
+		}
 	}
 }
 

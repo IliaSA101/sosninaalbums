@@ -340,6 +340,38 @@ describe('«Заменить?»', () => {
   })
 })
 
+describe('переход стрелкой по строкам', () => {
+  it('browse = выбор строки как щелчком', () => {
+    keysUi.browse('save')
+    expect(keysUi.sel).toEqual({ kind: 'cmd', id: 'save' })
+    expect(keysUi.mods).toEqual({ mod: true, alt: false, shift: false })
+  })
+  it('пока клавиша ждёт команду, стрелка не назначает: ничего не выбирает и Go не зовёт', async () => {
+    keysUi.assignKey('KeyB')
+    keysUi.browse('toggleBig')
+    await flush()
+    expect(api.SetHotkey).not.toHaveBeenCalled()
+    expect(keysUi.sel).toBeNull()
+    expect(keysUi.pend).toBe('KeyB')
+  })
+  it('стрелки во время записи окно забирает: выбор не меняется', () => {
+    keysUi.selectRow('save')
+    keysUi.startRec('save', 'Mod+KeyS')
+    expect(keysUi.keydown(ev('ArrowDown', 'ArrowDown'), false, true)).toBe('eat')
+    expect(keysUi.sel).toEqual({ kind: 'cmd', id: 'save' })
+  })
+  it('в поле поиска стрелки не трогаются окном', () => {
+    keysUi.selectRow('save')
+    expect(keysUi.keydown(ev('ArrowDown', 'ArrowDown'), true)).toBe('pass')
+    expect(keysUi.sel).toEqual({ kind: 'cmd', id: 'save' })
+  })
+  it('на строке списка ↑/↓/Home/End идут самой строке (own), а не выбору клавиши на карте', () => {
+    keysUi.selectRow('save')
+    for (const k of ['ArrowUp', 'ArrowDown', 'Home', 'End']) expect(keysUi.keydown(ev(k, k), false, true)).toBe('pass')
+    expect(keysUi.sel).toEqual({ kind: 'cmd', id: 'save' })
+  })
+})
+
 describe('назначение свободной клавиши (макет Г)', () => {
   it('«Назначить команду…» → строка списка → SetHotkey(id, "", клавиша); клавиша остаётся выбранной с этой командой', async () => {
     keysUi.selectKey('KeyB')

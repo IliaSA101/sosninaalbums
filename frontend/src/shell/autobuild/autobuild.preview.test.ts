@@ -179,7 +179,7 @@ describe('AutoDialog: ряд «Раскладки» (065)', () => {
   it('ошибка плана сбрасывает ряд', async () => {
     const f = fake()
     let fail = false
-    const planFn: PlanFn = (a, b, c) => (fail ? Promise.reject(new Error('плохо')) : f.planFn(a, b, c))
+    const planFn: PlanFn = (a, b, c, p) => (fail ? Promise.reject(new Error('плохо')) : f.planFn(a, b, c, p))
     const d = new AutoDialog(ids, planFn, { spreads: 10, range: [1, 64] }, f.previewFn)
     d.start()
     await f.settle()

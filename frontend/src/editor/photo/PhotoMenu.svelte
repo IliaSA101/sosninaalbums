@@ -135,6 +135,12 @@
     if (t) decor.show('sticker', t.spread, 'spread', t.id)
   }
 
+  // «Рамочка…» (079): окно «Рамочки» с выделенными местами в «Куда» (меню уже закрыто с сохранением выделения).
+  function openBorder() {
+    const s = store.spread
+    if (s) decor.show('frame', s.id, 'spread')
+  }
+
   // Действие пункта; first — первое выделенное фото (у части пунктов оно не нужно).
   const ACTIONS: Partial<Record<MenuId, (first: string) => void>> = {
     preview: (first) => (photoui.preview = first),
@@ -150,8 +156,10 @@
     gray: () => placesel.gray(),
     contain: () => placesel.setFit(true),
     cover: () => placesel.setFit(false),
-    round: () => placesel.setShape(true),
-    rect: () => placesel.setShape(false),
+    rect: () => placesel.setShape('rect'),
+    rounded: () => placesel.setShape('round'),
+    oval: () => placesel.setShape('oval'),
+    border: openBorder,
     resetFrame: (first) => void store.run(Api.ResetFrame(first)),
     caption: (first) => edit.editCaption(first),
     replace: replaceSticker,

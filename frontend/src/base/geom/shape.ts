@@ -13,6 +13,19 @@ export interface Outline {
 
 export const isOval = (shape?: string): boolean => shape === SHAPE_OVAL
 
+// Вид формы места (076): прямоугольное · скруглённое · круглое. Один ключ на меню «Место ▾», карточку, меню правой
+// кнопки и виньетку; процент скругления решает Go (10 % у «Скруглённого»), здесь его нет.
+export type ShapeKey = 'rect' | 'round' | 'oval'
+
+// Форма по виду листа или места: круг, любое скругление (в том числе из своего шаблона) или прямоугольник.
+export function shapeKey(f: { shape?: string; round?: number }): ShapeKey {
+  if (isOval(f.shape)) return 'oval'
+  return (f.round ?? 0) > 0 ? 'round' : 'rect'
+}
+
+// Аргумент `shape` у AddPlace и SetPlaceShape: '' — прямые углы, 'rounded' — скруглённое, 'oval' — круг.
+export const shapeArg = (k: ShapeKey): '' | 'rounded' | 'oval' => (k === 'rect' ? '' : k === 'round' ? 'rounded' : 'oval')
+
 // Форма места из полей View: нет формы и радиуса — undefined (прямоугольник, прежние формулы).
 export function outlineOf(shape?: string, radius?: number): Outline | undefined {
   if (isOval(shape)) return { oval: true }

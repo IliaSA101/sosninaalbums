@@ -56,3 +56,7 @@ var (
 	SlowEdit    func() time.Duration
 	SetSlowEdit func(d time.Duration)
 )
+
+// Крючок пересборки (078): fn зовётся между снимком входа и замком правки — тест правит альбом
+// «за время счёта».
+var SetAgainGap func(fn func())

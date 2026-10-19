@@ -1,4 +1,4 @@
-import type { model } from '../../../wailsjs/go/models'
+import type { app, model } from '../../../wailsjs/go/models'
 import type { View } from './app'
 import type { Box } from './sheet'
 
@@ -32,6 +32,13 @@ export type AutoRange = Pick<model.AutoOpts, 'auto' | 'minPer' | 'maxPer' | 'ser
 
 // Ответ App.AutoPreview (065): ряд «Варианты» (образцы по числу фото плана) и «Что соберётся». Тип — из биндинга.
 export type AutoPreview = model.AutoPreview
+
+// 078: поля AutoOpts про фото — похожие, возвращённые (keep), ч/б, вариант сборки, пересборка. Окно шлёт их вместе с AutoRange.
+export type PhotoOpts = Pick<model.AutoOpts, 'similar' | 'keep' | 'gray' | 'variant' | 'again'>
+
+// Отброшенный как похожий кадр (App.AutoSimilar) и ход подготовки подписей кадров (PrepareSigs, событие sigs:progress).
+export type SimilarDrop = Pick<model.SimilarDrop, 'id' | 'like' | 'dist'>
+export type SigState = Pick<app.SigState, 'done' | 'total'>
 
 export interface Choices {
   spread: string

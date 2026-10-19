@@ -254,7 +254,7 @@ describe('окна: отмену пускают только окна правк
     const have = sources.filter(([, src]) => /<Modal\b[^>]*\sundo\b/.test(src)).map(([p]) => p)
     expect(have.sort()).toEqual(UNDO_WINDOWS)
     const decor = files['/src/panels/decor/DecorDialog.svelte']
-    expect(decor.match(/<Modal\b/g)).toHaveLength(4) // вопросы поверх «Фонов» — без undo
+    expect(decor.match(/<Modal\b/g)).toHaveLength(5) // вопросы поверх «Фонов» (имя, убрать, разворот, фон на набор) — без undo
     expect(decor.match(/<Modal\b[^>]*\sundo\b/g)).toHaveLength(1)
   })
 })

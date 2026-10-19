@@ -25,8 +25,20 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const URL_PREFIX = 'https://github.com/IliaSA101/sosninaalbums-library/releases/download/'
 const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}(\/[a-z0-9][a-z0-9._-]{0,63}){0,2}$/
 const ID_RE = /^[a-z0-9][a-z0-9-]{2,39}$/
-const LIMITS = { bg: 60 << 20, sticker: 30 << 20, spread: 256 << 10 }
+const LIMITS = { bg: 60 << 20, sticker: 30 << 20, spread: 256 << 10, frame: 30 << 20 }
 const KINDS = Object.keys(LIMITS)
+const FRAME_MIN_APP = [0, 20, 0] // рамочки-картинки умеют только версии с 0.20.0 (079)
+const FRAME_MAX_SIDE = 4096 // как decor.MaxFrameSide: больше приложение не рисует
+
+/** x.y.z -> число для сравнения версий. */
+const verNum = (v) => v.split('.').reduce((a, n) => a * 1e6 + Number(n), 0)
+
+/** Размеры PNG по IHDR (первые 24 байта); не PNG — исключение. */
+export function pngSize(data) {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  if (data.length < 24 || !data.subarray(0, 8).equals(sig) || data.toString('latin1', 12, 16) !== 'IHDR') throw new Error('нет PNG-заголовка')
+  return { w: data.readUInt32BE(16), h: data.readUInt32BE(20) }
+}
 
 // ---- zip (Store/Deflate, без зависимостей) ----
 
@@ -128,8 +140,14 @@ export function buildPack(dir) {
     if (seen.has(it.file.toLowerCase())) throw new Error(`повтор файла: ${it.file}`)
     seen.add(it.file.toLowerCase())
     if (!KINDS.includes(it.kind)) throw new Error(`kind ${it.kind}`)
+    if (it.kind === 'frame' && !it.file.endsWith('.png')) throw new Error(`${it.file}: рамочка в наборе — только PNG`)
     const data = fs.readFileSync(path.join(dir, ...it.file.split('/')))
     if (data.length < 1 || data.length > LIMITS[it.kind]) throw new Error(`${it.file}: размер вне предела вида`)
+    if (it.kind === 'frame') {
+      if (verNum(src.minApp) < verNum(FRAME_MIN_APP.join('.'))) throw new Error(`${it.file}: набор с рамочками требует minApp не ниже ${FRAME_MIN_APP.join('.')}`)
+      const { w, h } = pngSize(data)
+      if (w < 1 || h < 1 || Math.max(w, h) > FRAME_MAX_SIDE) throw new Error(`${it.file}: сторона PNG ${w}×${h} вне 1…${FRAME_MAX_SIDE}`)
+    }
     files.push({ name: it.file, data })
     return { file: it.file, kind: it.kind, theme: it.theme ?? 'basic', name: it.name, sha256: sha256(data), size: data.length }
   })
@@ -154,7 +172,7 @@ export function buildPack(dir) {
 
 /** Строка каталога по собранному архиву. */
 export function catalogRow(manifest, zip, tag) {
-  const counts = { bg: 0, sticker: 0, spread: 0 }
+  const counts = { bg: 0, sticker: 0, spread: 0, frame: 0 }
   for (const it of manifest.items) counts[it.kind]++
   const url = `${URL_PREFIX}${manifest.id}-v${manifest.version}/${tag}`
   return {

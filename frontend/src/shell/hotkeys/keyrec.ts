@@ -43,7 +43,7 @@ export function ownsKeys(el: { closest?(sel: string): unknown } | null | undefin
   return isWidget(el) || (typeof el?.closest === 'function' && !!el.closest(OWNERS))
 }
 const isBare = (e: ChordEvent) => !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey
-const OWN_KEYS = /^(Enter| |ArrowLeft|ArrowRight|ArrowUp|ArrowDown)$/
+const OWN_KEYS = /^(Enter| |ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End)$/
 
 // Нажатие вне записи (окно открыто, фокус не в поле ввода). own — фокус на элементе, которому нужны Enter/Пробел/стрелки:
 // им они и достаются, а не выбору клавиши на карте.

@@ -106,12 +106,13 @@ func BuildView(p *model.Project, st State) model.View {
 	// Обложка — тем же f до result: её поля и имена попадают в Unfilled/Unnamed.
 	v.Cover = coverView(f, st, &v)
 	v.Unfilled, v.Unnamed = f.result()
-	for _, s := range p.Sheets() { // свои стикеры (048) — как фото фона: «в альбоме» не считаются
+	for _, s := range p.Sheets() { // свои стикеры (048) и рамочки (079) — как фото фона: «в альбоме» не считаются
 		for _, st := range s.Stickers {
 			if st.Photo != "" {
 				v.BackdropUsed = append(v.BackdropUsed, st.Photo)
 			}
 		}
+		v.BackdropUsed = append(v.BackdropUsed, s.BorderPhotos()...)
 	}
 	slices.Sort(v.BackdropUsed)
 	v.BackdropUsed = slices.Compact(v.BackdropUsed)
@@ -208,7 +209,7 @@ func spreadView(f *fields, s *model.Spread, l Laid) (sv model.SpreadView) {
 	}
 	sv.Rects, sv.Layout = l.cur.Rects, l.cur.Key
 	sv.Frames = frameViews(p, s.Photos, l.cur.Rects)
-	sv.Captions, sv.Stubs = captionViews(f, s, s.Photos, l.cur.Rects, nil)
+	sv.Captions, sv.Stubs = captionViews(f, s, s.Photos, l.cur.Rects, nil, nil)
 	sv.Variant, sv.Variants, sv.More, sv.Rearranged, sv.Pages = l.variant, l.variants, l.more, l.rearranged, l.pages
 	return sv
 }

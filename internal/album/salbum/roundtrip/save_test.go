@@ -306,6 +306,20 @@ func FuzzLoad(f *testing.F) {
 "photos":{"p":{"path":"a.jpg","person":{"last":"Свой"}}}}`))
 	f.Add([]byte(`{"version":13,"spreads":[{"id":"s","grid":[{"id":"c0ffee000001","w":10,"h":10,"person":"Петров"},{"person":null}]}]}`))
 	f.Add([]byte("{\"version\":13,\"spreads\":[{\"id\":\"s\",\"grid\":[{\"id\":\"c0ffee000001\",\"w\":10,\"h\":10,\"person\":{\"last\":\"\xff\xfe\",\"first\":\"\xc3\"}}]}]}"))
+	// 079 (v14): рамочки — голден, оба поля сразу, срез за пределом, огромный размер, пять цветов,
+	// запись без размеров, чужая запись, неизвестный вид, рамочка у «Авто» и на обложке, прозрачность.
+	if g, err := os.ReadFile(filepath.Join("..", "testdata", "v14-border.salbum.json")); err == nil {
+		f.Add(g)
+	}
+	f.Add([]byte(`{"version":14,"spreads":[{"id":"s","photos":["p"],"grid":[{"id":"c0ffee000001","x":1,"y":1,"w":50,"h":50,"photo":"p",
+"border":{"kind":"line","photo":"q","cut":[0.6,1e308,-1],"scale":1e308,"inks":["#1","#ABCDEF","#000000","#111111","#222222"],"w":1e308}},
+{"id":"c0ffee000002","x":60,"y":1,"w":0.5,"h":1e9,"border":{"photo":"q","cut":[0.6,1e308,-1,0.45],"scale":1e308,"open":true}},
+{"id":"c0ffee000003","x":120,"y":1,"w":50,"h":50,"border":{"photo":"нет"}},{"id":"c0ffee000004","x":180,"y":1,"w":50,"h":50,"border":{"kind":"Плохой"}},
+{"id":"c0ffee000005","x":240,"y":1,"w":50,"h":50,"border":{"kind":"new-kind","inks":["#AAAAAA","#BBBBBB","#CCCCCC","#DDDDDD","#EEEEEE"],"w":-5,"preset":"sa:x"}}]},
+{"id":"t","photos":["r"],"border":{"kind":"line"}}],
+"cover":{"sheet":{"id":"cover","grid":[{"id":"c0ffee000006","x":300,"y":250,"w":60,"h":50,"border":{"photo":"q","cut":[0.45,0.45,0.45,0.45],"scale":2}}]},"layout":"front"},
+"photos":{"p":{"path":"a.jpg","w":3,"h":2,"fade":1e308},"q":{"path":"f.png","w":0,"h":0,"fade":-1,"frame":{"s":3}},"r":{"path":"b.jpg","fade":0.123456}}}`))
+	f.Add([]byte(`{"version":14,"spreads":[{"id":"s","grid":[{"id":"c0ffee000001","w":10,"h":10,"border":"line"},{"w":10,"h":10,"border":{"cut":"x"}},{"border":null}]}]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := testkit.TempDir(t)
 		path := filepath.Join(dir, "f.salbum")
@@ -338,6 +352,9 @@ func FuzzLoad(f *testing.F) {
 				if pl.Person != model.ClampSeat(pl.Person) {
 					t.Fatalf("табличка места: %+v", pl.Person)
 				}
+				if !reflect.DeepEqual(model.ClampBorder(p, pl.Border), pl.Border) { // рамочка (079) — зажата
+					t.Fatalf("рамочка места: %+v", pl.Border)
+				}
 			}
 			for _, tb := range s.Texts {
 				minW := model.MinTextW
@@ -354,6 +371,9 @@ func FuzzLoad(f *testing.F) {
 		for _, r := range p.Photos {
 			if fr := r.Frame; fr != nil && (fr.S < 1 || fr.S > model.MaxScale || fr.X < -1 || fr.X > 1) {
 				t.Fatalf("кадр: %+v", fr)
+			}
+			if r.Fade != model.ClampPhotoFade(r.Fade) {
+				t.Fatalf("прозрачность фото: %v", r.Fade)
 			}
 		}
 		// Load оставляет то, что пропустит CheckTotals: иначе открытый проект «замёрз» бы (79).

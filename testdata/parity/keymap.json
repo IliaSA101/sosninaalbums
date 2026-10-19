@@ -1111,6 +1111,17 @@
         "custom": false
       },
       {
+        "id": "borderGallery",
+        "label": "Рамочки…",
+        "short": "Рамочки",
+        "group": "decor",
+        "scope": "app",
+        "feature": "border",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
         "id": "addSticker",
         "label": "Добавить стикер…",
         "short": "Стикер",

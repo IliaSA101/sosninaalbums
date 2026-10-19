@@ -270,6 +270,21 @@ func inheritVars(p *model.Project, s *model.Spread) *model.Vars {
 	return nil
 }
 
+// vigBorders — рамочки мест grid (079-15): byID — по ID места, та же ячейка без копии; byRole —
+// рамочка первого места роли (и nil): новому месту роли — её копия (079-23), иначе новые ученики
+// остались бы без рамочки.
+func vigBorders(grid []*model.Place) (byID, byRole map[string]*model.Border) {
+	byID, byRole = map[string]*model.Border{}, map[string]*model.Border{}
+	for _, pl := range grid {
+		byID[pl.ID] = pl.Border
+		r := model.RoleOf(pl)
+		if _, ok := byRole[r]; !ok {
+			byRole[r] = pl.Border
+		}
+	}
+	return byID, byRole
+}
+
 // placeVignette ставит места плана: ID — прежние ID мест той же роли по порядку (с ними и
 // режим кадра, и форма — 044), сверх них — новые; жильцы мест (фото и табличка, 071) садятся
 // по своей роли в прежнем порядке, остаток фото уходит из листа, лишние таблички пропадают.
@@ -291,7 +306,8 @@ func placeVignette(p *model.Project, s *model.Spread, v model.Vignette, plan Vig
 	// Жильцы мест по ролям (071): фото и табличка; пустые места без таблички сжимаются.
 	occ, byRole := map[string][]model.Occupant{}, map[string][]*model.Place{}
 	shapes := map[string]model.Place{} // форма прежнего места по ID
-	if len(s.Grid) == 0 {              // «Авто», которое не закрепилось: фото ленты — ученики по порядку
+	borders, roleBorder := vigBorders(s.Grid)
+	if len(s.Grid) == 0 { // «Авто», которое не закрепилось: фото ленты — ученики по порядку
 		for _, id := range s.Photos {
 			occ[model.RolePupil] = append(occ[model.RolePupil], model.Occupant{Photo: id})
 		}
@@ -318,6 +334,9 @@ func placeVignette(p *model.Project, s *model.Spread, v model.Vignette, plan Vig
 		pl.Fit, pl.Photo, pl.Person = fits[pl.ID], o.Photo, o.Person
 		old, kept := shapes[pl.ID]
 		vigShape(pl, old, kept && (!reshape || sl.Role == model.RoleGroup), v)
+		if pl.Border = borders[pl.ID]; !kept {
+			pl.Border = roleBorder[model.RoleOf(pl)].Clone()
+		}
 		p.ClampPlace(s, pl)
 		grid[i] = pl
 	}

@@ -33,6 +33,9 @@ export function loadRange(v: Record<string, unknown>): AutoMem {
   return 'auto'
 }
 
+// Уровень 0…3 (похожие, ч/б); всё остальное — 0.
+export const norm03 = (x: unknown): number => (x === 1 || x === 2 || x === 3 ? x : 0)
+
 class ViewMode {
   big = $state(false)
   details = $state(false)
@@ -55,6 +58,9 @@ class ViewMode {
   autoVariety = $state<Variety>(1)
   // 065: разрешённые семейства автосборки; `[]` — «Все». Тот же выбор берёт «Разнообразить раскладки».
   autoFamilies = $state<Family[]>([])
+  // 078: «Убирать похожие кадры» и «Ч/б развороты», 0…3; возвращённые кадры (keep) и вариант сборки не запоминаются.
+  autoSimilar = $state(0)
+  autoGray = $state(0)
   // Уровень «Разнообразить раскладок»: «Меньше» там считается «Обычным» (decisions 0.11 №25).
   get varyLevel(): Variety {
     return this.autoVariety === 2 ? 2 : 1
@@ -110,6 +116,8 @@ class ViewMode {
     if (Number.isInteger(sp) && (sp as number) > 0) this.autoSpreads = sp as number
     this.autoRange = loadRange(v)
     if (typeof se === 'boolean') this.autoSeries = se
+    this.autoSimilar = norm03(v.autoSimilar)
+    this.autoGray = norm03(v.autoGray)
     if (typeof per === 'number' && per >= 1 && per <= 64) this.autoPer = per
     if (by === 'spreads' || by === 'per') this.autoBy = by
   }
@@ -137,6 +145,8 @@ class ViewMode {
           autoBy: this.autoBy,
           autoVariety: this.autoVariety,
           autoFamilies: this.autoFamilies,
+          autoSimilar: this.autoSimilar,
+          autoGray: this.autoGray,
         }),
       )
     } catch {
@@ -181,6 +191,13 @@ class ViewMode {
     this.autoFamilies = normFamilies(families)
     this.autoPer = Number.isFinite(per) ? Math.max(1, Math.min(64, per)) : null
     this.autoBy = by
+    this.save()
+  }
+
+  // 078: запомнить уровни «похожих» и «ч/б» после «Собрать» (мусор — 0).
+  rememberPhotos(similar: number, gray: number) {
+    this.autoSimilar = norm03(similar)
+    this.autoGray = norm03(gray)
     this.save()
   }
 

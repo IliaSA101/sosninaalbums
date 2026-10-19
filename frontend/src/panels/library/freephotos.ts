@@ -30,6 +30,14 @@ export function autoPick(
   return { ids: kept.map((p) => p.id), skipped: free.length - kept.length }
 }
 
+// 078: пересборка берёт фото последней сборки без отклонённых после неё (то же правило, что у autoPick).
+export function notRejected(ids: readonly string[], byId: ReadonlyMap<string, Photo>, marks: OwnMarks): string[] {
+  return ids.filter((id) => {
+    const p = byId.get(id)
+    return !p || markOf(p, marks[id]).flag !== -1
+  })
+}
+
 // Фильтр «Не в альбоме» пуст потому, что все фото уже разложены: лента говорит об этом и даёт «Показать все» (035 U11).
 export function allInAlbum(filter: 'all' | 'unused', freeCount: number, total: number): boolean {
   return filter === 'unused' && freeCount === 0 && total > 0

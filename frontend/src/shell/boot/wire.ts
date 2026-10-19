@@ -11,7 +11,7 @@ import { modes } from '../../base/prefs/view.svelte'
 import { setBackdrop } from '../../editor/backdrop/backdropact'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { loadFonts } from '../../editor/text/fonts'
-import { freePhotos, pickFor } from '../../panels/library/freephotos'
+import { freePhotos, notRejected, pickFor } from '../../panels/library/freephotos'
 import { sortPhotos } from '../../panels/library/sortphotos'
 import { gallery } from '../../panels/gallery/gallery.svelte'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
@@ -64,6 +64,7 @@ export function wire() {
     visible: (photos) => filterPhotos(photos, ownMarks.map, libfilter),
     free: freePhotos,
     pick: (moveUsed) => pickFor(store, moveUsed, libfilter.active || folderfilter.active),
+    notRejected: (ids) => notRejected(ids, store.byId, ownMarks.map),
     selectedRefs: () => placesel.refs,
     select: (ids) => placesel.select(ids),
     // Enter и двойной щелчок по фото в ленте: на ручной разворот — как бросок на лист, точки под курсором нет (042).

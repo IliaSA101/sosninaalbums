@@ -148,3 +148,23 @@ describe('missing: свои из библиотеки (048)', () => {
     expect(missingWhere(missingSpots(SHEETS, ['bg']), U)).toBe('разворот 2')
   })
 })
+
+describe('missing: рамочки-картинки (079 U5)', () => {
+  const sheets = [
+    { id: 's1', photos: ['a'], places: [{ border: { photo: 'fr1' } }, {}, { border: { photo: '' } }] },
+    { id: 's2', photos: [], places: null },
+    { id: 's3', photos: ['b'], places: [{ border: {} }] },
+  ]
+  it('пустое место с рамочкой без файла — на ленте метка и в списке «Показать»', () => {
+    expect(missingIn(sheets[0], new Set(['fr1']))).toBe(1)
+    expect(missingIn(sheets[1], new Set(['fr1']))).toBe(0)
+    expect(missingWhere(missingSpots(sheets, ['fr1']), U)).toBe('разворот 1')
+  })
+  it('нет photo у рамочки (встроенная) — не пропавшая; места без рамочки не мешают', () => {
+    expect(missingIn(sheets[2], new Set(['b']))).toBe(1)
+    expect(missingSpots(sheets, ['']).length).toBe(0)
+  })
+  it('своя рамочка делится по libPhotos так же, как фон: загрузкой, а не папкой', () => {
+    expect(splitMissing(['fr1', 'a'], ['fr1'])).toEqual({ photos: ['a'], own: ['fr1'] })
+  })
+})

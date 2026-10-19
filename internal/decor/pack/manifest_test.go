@@ -89,7 +89,7 @@ func TestParseManifest(t *testing.T) {
 func TestParseManifestSkips(t *testing.T) {
 	m, err := ParseManifest(manifestJSON(t, func(m map[string]any) {
 		m["items"] = append(m["items"].([]any),
-			map[string]any{"file": "x/new.bin", "kind": "frame", "sha256": sumA, "size": 1},
+			map[string]any{"file": "x/new.bin", "kind": "future", "sha256": sumA, "size": 1},
 			map[string]any{"file": "stickers/rose.svg", "kind": "sticker", "sha256": sumA, "size": 10},
 			map[string]any{"file": "stickers/big.png", "kind": "sticker", "sha256": sumA, "size": MaxSticker + 1},
 			map[string]any{"file": "bg/big.jpg", "kind": "bg", "sha256": sumA, "size": MaxBg + 1},
@@ -217,4 +217,29 @@ func FuzzParseManifest(f *testing.F) {
 			t.Fatalf("набор %d байт", total)
 		}
 	})
+}
+
+// Рамочка в наборе (079, решение 079-19): PNG ставится, SVG, JPEG и всё прочее — пропуск с причиной,
+// предел 30 МБ; предметов других видов это не задевает.
+func TestParseManifestFrame(t *testing.T) {
+	m, err := ParseManifest(manifestJSON(t, func(m map[string]any) {
+		m["items"] = append(m["items"].([]any),
+			map[string]any{"file": "frames/ring.png", "kind": "frame", "theme": "wedding", "name": "Кольцо", "sha256": sumA, "size": MaxFrame},
+			map[string]any{"file": "frames/vec.svg", "kind": "frame", "sha256": sumA, "size": 10},
+			map[string]any{"file": "frames/photo.jpg", "kind": "frame", "sha256": sumA, "size": 10},
+			map[string]any{"file": "frames/big.png", "kind": "frame", "sha256": sumA, "size": MaxFrame + 1},
+		)
+	}), "0.16.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Items) != 3 || m.Items[2].Kind != KindFrame || m.Items[2].Name != "Кольцо" || len(m.Skipped) != 3 {
+		t.Fatalf("предметы %+v, пропуски %+v", m.Items, m.Skipped)
+	}
+	if !strings.Contains(m.Skipped[0].Why, "SVG") || !strings.Contains(m.Skipped[1].Why, "только PNG") || !strings.Contains(m.Skipped[2].Why, "30 МБ") {
+		t.Errorf("причины %+v", m.Skipped)
+	}
+	if KindLimit(KindFrame) != MaxFrame {
+		t.Errorf("предел рамочки %d", KindLimit(KindFrame))
+	}
 }

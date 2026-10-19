@@ -122,10 +122,14 @@ export interface Source {
   inAlbum: number
   skipped: number
   filtered: boolean
+  again?: boolean // 078: пересборка — те же фото последней сборки
 }
-export function sourceLine(d: Source, photos: number | null): string {
+// similar — сколько кадров убрано как похожие (AutoPlan.similar): они уже в строке «Не возьму N похожих»,
+// в «из сеток и с фонов» не входят.
+export function sourceLine(d: Source, photos: number | null, similar = 0): string {
   let s: string
-  if (d.from === 'selected') {
+  if (d.again) s = `Пересборка: те же ${d.count} фото`
+  else if (d.from === 'selected') {
     s = `Выделенные фото: ${d.count}`
     if (d.inAlbum > 0) s += `, из них ${d.inAlbum} уже в альбоме — переедут в новые развороты`
   } else {
@@ -133,9 +137,15 @@ export function sourceLine(d: Source, photos: number | null): string {
     if (d.filtered) s += ' (фильтр ленты)'
     if (d.skipped > 0) s += `, без ${d.skipped} ${plural(d.skipped, ['отклонённого', 'отклонённых', 'отклонённых'])}`
   }
-  if (photos !== null && photos > 0 && photos < d.count) s += `; ${d.count - photos} из сеток и с фонов не беру`
+  const off = photos !== null && photos > 0 ? d.count - photos - similar : 0
+  if (off > 0) s += `; ${off} из сеток и с фонов не беру`
   return s
 }
+
+// Сколько разворотов в альбоме до сборки. Пересборка заменяет развороты прошлой сборки (Go считает от альбома
+// до неё), поэтому берём число из снимка прошлой сборки; нет снимка — как есть.
+export const spreadsBefore = (again: boolean | undefined, now: number, last: { have: number } | null): number =>
+  again && last ? last.have : now
 
 // Слово при числе: «1 разворот», «2 разворота», «5 разворотов» — подпись поля N (U3).
 export const unitWord = (n: number, unit: Unit = SPREAD): string => plural(n, unit.plural)

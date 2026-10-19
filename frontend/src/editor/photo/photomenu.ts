@@ -2,9 +2,11 @@
 // показать в данном контексте. Чистая логика; действия — в PhotoMenu.svelte.
 import { canFitPhoto, type SelBox } from '../../base/geom/gridedit'
 import { actualAspect, isDefaultFrame } from '../../base/geom/frame'
+import { shapeKey } from '../../base/geom/shape'
 import { allGray } from '../../base/geom/tone'
 import type { FeatureId } from '../../base/prefs/levels'
 import type { SpreadView } from '../../base/core/types'
+import { borderNeedsRelink } from '../border/borderstate'
 
 export type MenuId =
   | 'preview'
@@ -15,8 +17,10 @@ export type MenuId =
   | 'fitPhoto'
   | 'contain'
   | 'cover'
-  | 'round'
   | 'rect'
+  | 'rounded'
+  | 'oval'
+  | 'border'
   | 'resetFrame'
   | 'flipH'
   | 'flipV'
@@ -46,11 +50,13 @@ export interface MenuCtx {
   stickers: number // выделенных стикеров (048); без мест и текстов меню — стикера
   photos: number // из них с фото
   missing: number // из них фото без файла на диске
+  borderLost: number // у скольких пропала картинка рамочки без записи в библиотеке (079): ищется папкой
   differ: boolean // у кого-то пропорции места не совпадают с фото
   allContain: boolean
   allCover: boolean
-  allOval: boolean // форма (044): у всех выделенных круг
-  allRect: boolean // у всех прямоугольник (в «Авто» всегда)
+  allRect: boolean // форма (044, 076): у всех прямоугольник (в «Авто» всегда)
+  allRounded: boolean // у всех скруглённое
+  allOval: boolean // у всех круг
   allGray: boolean // 068: все выделенные фото уже ч/б — пункт «Сделать цветным»
   framed: boolean // одно фото и его кадр изменён
 }
@@ -70,11 +76,13 @@ export function menuContext(s: SpreadView | undefined, sel: SelBox[], missing: r
     stickers,
     photos: withPhoto.length,
     missing: withPhoto.filter((b) => missing.includes(b.photo)).length,
+    borderLost: sel.filter((b) => borderNeedsRelink(s?.places?.find((p) => p.id === b.id)?.border, missing)).length,
     differ,
     allContain: sel.length > 0 && sel.every((b) => b.fit === 'contain'),
     allCover: sel.length > 0 && sel.every((b) => b.fit !== 'contain'),
-    allOval: sel.length > 0 && sel.every((b) => b.shape === 'oval'),
-    allRect: sel.length > 0 && sel.every((b) => b.shape !== 'oval'),
+    allRect: sel.length > 0 && sel.every((b) => shapeKey(b) === 'rect'),
+    allRounded: sel.length > 0 && sel.every((b) => shapeKey(b) === 'round'),
+    allOval: sel.length > 0 && sel.every((b) => shapeKey(b) === 'oval'),
     allGray: allGray(
       s,
       withPhoto.map((b) => b.photo),
@@ -89,8 +97,10 @@ const FEATURE: Partial<Record<MenuId, FeatureId>> = {
   fitPhoto: 'frame',
   contain: 'frame',
   cover: 'frame',
-  round: 'frame',
   rect: 'frame',
+  rounded: 'frame',
+  oval: 'frame',
+  border: 'border',
   resetFrame: 'frame',
   flipH: 'flip',
   flipV: 'flip',
@@ -150,17 +160,19 @@ function fileItems(c: MenuCtx, one: boolean): MenuItem[] {
   if (alive) out.push(item('explorer', 'Показать в Проводнике'))
   // Фото может стоять и в месте, и на фоне: из места оно не уходит (спека 009).
   if (alive) out.push(item('backdrop', 'На фон', { sub: true }))
-  if (c.missing > 0) out.push(item('relink', 'Перепривязать…'))
+  if (c.missing > 0 || c.borderLost > 0) out.push(item('relink', 'Перепривязать…'))
   return out
 }
 
 // Выпрямлять можно одно фото: режим привязан к выделенному фото, группа с текстом ему мешает.
 const canStraighten = (c: MenuCtx) => c.places === 1 && c.photos === 1 && c.texts === 0 && c.stickers === 0
 
-// Форма (044) — у любого места, в том числе пустого: показан пункт, которого нет у всех выделенных.
+// Форма (044, 076) — у любого места, в том числе пустого: показан пункт, которого нет у всех выделенных.
+// Порядок везде один: прямоугольное · скруглённое · круглое.
 const shapeItems = (c: MenuCtx): MenuItem[] => [
-  ...(c.allOval ? [] : [item('round', 'Круглое')]),
   ...(c.allRect ? [] : [item('rect', 'Прямоугольное')]),
+  ...(c.allRounded ? [] : [item('rounded', 'Скруглённое')]),
+  ...(c.allOval ? [] : [item('oval', 'Круглое')]),
 ]
 
 // Зеркало и ч/б (068) — только у фото. Ч/б: всем или никому решает Go (SetGray), подпись — по состоянию выделенных.
@@ -183,6 +195,7 @@ function frameItems(c: MenuCtx): MenuItem[] {
     hasPhoto && !c.allContain && item('contain', 'Целиком'),
     hasPhoto && !c.allCover && item('cover', 'С обрезкой'),
     ...shapeItems(c),
+    item('border', 'Рамочка…'), // 079: окно «Рамочки», у фото и пустого места
     c.framed && item('resetFrame', 'Сбросить кадр'),
     c.grid && item('layer', 'Слой', { sub: true }),
   ]

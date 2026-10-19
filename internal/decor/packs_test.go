@@ -41,6 +41,8 @@ func kindOfFile(file string) string {
 		return KindBg
 	case "stickers":
 		return KindSticker
+	case "frames":
+		return KindFrame
 	}
 	return KindSpread
 }
@@ -101,7 +103,7 @@ func catIDs(t *testing.T, s *Store, kind string) []string {
 
 func noTmpAnywhere(t *testing.T, cfg string) {
 	t.Helper()
-	for _, d := range []string{"Фоны", "Стикеры", kindDirs[KindSpread], packsDir} {
+	for _, d := range []string{"Фоны", "Стикеры", kindDirs[KindSpread], kindDirs[KindFrame], packsDir} {
 		assertNoTmp(t, filepath.Join(cfg, RootName, d))
 	}
 }
@@ -254,7 +256,7 @@ func TestPackStageSkips(t *testing.T) {
 		{"stickers/ok.png", renderPNG(t, 4096, 8)},
 	}
 	m, src := testPack("skips", 1, items...)
-	m.Items = append(m.Items, PackItem{File: "x/frame.bin", Kind: "frame", Size: 1})
+	m.Items = append(m.Items, PackItem{File: "x/frame.bin", Kind: "future", Size: 1})
 	src = append(src, []byte{1})
 	st, err := s.StagePack(m, src, OriginNet, "")
 	if err != nil {
@@ -483,7 +485,7 @@ func TestPackRegistryLoad(t *testing.T) {
 		"BIG.json":         `{"v":1,"id":"BIG"}`,
 		".dl-ivory.tmp":    "часть",
 		"ok.json.123.tmp":  "{",
-		"clamp.json":       `{"v":1,"id":"clamp","version":-5,"title":"","origin":"evil","items":[{"key":"my:0123456789abcdef","kind":"bg","theme":"mine","name":"\u0000","w":-1,"h":999999999999,"bytes":99999999999999},{"key":"../x","kind":"bg"},{"key":"my:0123456789abcdef","kind":"bg"},{"key":"my:0123456789abcdef","kind":"frame"}]}`,
+		"clamp.json":       `{"v":1,"id":"clamp","version":-5,"title":"","origin":"evil","items":[{"key":"my:0123456789abcdef","kind":"bg","theme":"mine","name":"\u0000","w":-1,"h":999999999999,"bytes":99999999999999},{"key":"../x","kind":"bg"},{"key":"my:0123456789abcdef","kind":"bg"},{"key":"my:0123456789abcdef","kind":"future"}]}`,
 		"good-pack.json":   `{"v":1,"id":"good-pack","version":2,"title":"Хороший","origin":"net","installed":5,"items":[]}`,
 		"good-pack.json.x": "{",
 	}

@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { bdLines } from './bdbox'
-import { SHEET_PRESETS, hasSeam, isCover, isSheet, newSheetSize, pageAt, pageSize, sheetIn, sheetSize, sheetsOf, unitOf } from './sheet'
+import {
+  BORDER_NOTE,
+  SHEET_PRESETS,
+  hasBorders,
+  hasSeam,
+  isCover,
+  isSheet,
+  newSheetSize,
+  pageAt,
+  pageSize,
+  sheetIn,
+  sheetSize,
+  sheetsOf,
+  unitOf,
+} from './sheet'
 import { snapLines, snapThreshold } from './snap'
 
 describe('sheet', () => {
@@ -118,5 +132,35 @@ describe('лист обложки (032)', () => {
     expect(sheetIn(none, 'cover')).toBeUndefined()
     expect(sheetsOf(none).map((s) => s.id)).toEqual(['a'])
     expect(sheetIn({ spreads: [sp('a')] }, 'cover')).toBeUndefined()
+  })
+})
+
+describe('hasBorders (079: рамочки в шаблон не входят)', () => {
+  const b = { kind: 'sa:fr-1' }
+  const pl = (x: number, border?: object) => ({ x, y: 0, w: 100, h: 100, ...(border ? { border } : {}) })
+  const sv = (places: ReturnType<typeof pl>[] | null, mid = 280) => ({ mid, places }) as never
+
+  it('нет листа, «Авто», нет мест или рамочек — false', () => {
+    expect(hasBorders(undefined)).toBe(false)
+    expect(hasBorders(sv(null))).toBe(false)
+    expect(hasBorders(sv([]))).toBe(false)
+    expect(hasBorders(sv([pl(10), pl(300)]))).toBe(false)
+  })
+  it('одно место с рамочкой — true (один элемент)', () => {
+    expect(hasBorders(sv([pl(300, b)]))).toBe(true)
+  })
+  it('страница: левая и правая смотрят только свои места', () => {
+    const s = sv([pl(10), pl(300, b)])
+    expect(hasBorders(s, 'left')).toBe(false)
+    expect(hasBorders(s, 'right')).toBe(true)
+    expect(hasBorders(s, 'spread')).toBe(true)
+    expect(hasBorders(sv([pl(10, b)]), 'left')).toBe(true)
+    expect(hasBorders(sv([pl(10, b)]), 'right')).toBe(false)
+  })
+  it('лист без шва (виньетка): область не режет', () => {
+    expect(hasBorders(sv([pl(10, b)], 0), 'right')).toBe(true)
+  })
+  it('текст пояснения', () => {
+    expect(BORDER_NOTE).toBe('Рамочки в шаблон не входят')
   })
 })

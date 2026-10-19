@@ -493,6 +493,9 @@ func TestOwnSheetCopies(t *testing.T) {
 			t.Fatalf("%s: листов %d", what, len(p.Spreads))
 		}
 		own := p.Spreads[0].Vig.Own
+		if err := edtest.BorderInvariant(p); err != nil { // 079-23: копии мест не делят рамочку
+			t.Fatalf("%s: %v", what, err)
+		}
 		for i, s := range p.Spreads {
 			if err := edtest.VigInvariant(s); err != nil {
 				t.Fatalf("%s, лист %d: %v", what, i, err)

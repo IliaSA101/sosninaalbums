@@ -16,7 +16,8 @@ import (
 )
 
 // Библиотека фонов (спека 048 Ф1, design §8): окно «Фоны», «Загрузить своё…», ✎ и ×
-// своего, щелчок по плитке и правки узора. kind — "bg" | "sticker" (стикеры — Ф2).
+// своего, щелчок по плитке и правки узора. kind — "bg" | "sticker" (стикеры — Ф2) | "frame"
+// (рамочки мест, 079).
 // Пути к файлам библиотеки от интерфейса не принимаются: ID плитки → индекс decor.Store.
 
 // Типы биндингов — копии decor.* (решение №178): namespace Wails = имя пакета.
@@ -86,10 +87,12 @@ func newDecorImport() DecorImport {
 // errNoLibrary — библиотека не открылась (startup не дошёл до неё).
 var errNoLibrary = errors.New("библиотека фонов недоступна")
 
-// Своя последняя папка у диалога «Загрузить своё…»: фоны и стикеры обычно лежат в разных папках.
+// Своя последняя папка у диалога «Загрузить своё…»: фоны, стикеры и рамочки обычно лежат в
+// разных папках.
 const (
 	dirDecor   = "decor"
 	dirSticker = "sticker"
+	dirFrame   = "frame"
 )
 
 // openFilesDialog — нативный выбор нескольких файлов; в тестах подменяется.
@@ -100,6 +103,7 @@ func (a *App) openDecor() {
 	s := decor.Open(a.cfgDir)
 	a.decorLib.Store(s)
 	salbum.SetLibFinder(s.Find)
+	salbum.SetFrameFinder(s.FindFrame)
 }
 
 func (a *App) decorStore() (*decor.Store, error) {
@@ -163,7 +167,7 @@ func (a *App) ImportDecor(kind, theme string) (res DecorImport, err error) {
 		return res, err
 	}
 	// Отказ — до диалога: выбранные файлы иначе пропали бы зря.
-	if kind != decor.KindBg && kind != decor.KindSticker {
+	if kind != decor.KindBg && kind != decor.KindSticker && kind != decor.KindFrame {
 		return res, decor.ErrKind
 	}
 	if s.ReadOnly() {
@@ -175,10 +179,15 @@ func (a *App) ImportDecor(kind, theme string) (res DecorImport, err error) {
 		Filters:          []wr.FileFilter{{DisplayName: "Картинки (*.jpg, *.jpeg, *.png)", Pattern: "*.jpg;*.jpeg;*.png"}},
 	}
 	dir := dirDecor
-	if kind == decor.KindSticker {
+	switch kind {
+	case decor.KindSticker:
 		dir = dirSticker
 		opts.Title, opts.DefaultDirectory = "Свои стикеры", a.dialogDir(dirSticker)
 		opts.Filters = []wr.FileFilter{{DisplayName: "Картинки (*.png, *.jpg, *.jpeg, *.svg)", Pattern: "*.png;*.jpg;*.jpeg;*.svg"}}
+	case decor.KindFrame: // рамочке нужна прозрачность окна: JPEG не предлагаем (импорт его всё равно отклонит)
+		dir = dirFrame
+		opts.Title, opts.DefaultDirectory = "Свои рамочки", a.dialogDir(dirFrame)
+		opts.Filters = []wr.FileFilter{{DisplayName: "Картинки (*.png, *.svg)", Pattern: "*.png;*.svg"}}
 	}
 	files, err := openFilesDialog(a.ctx, opts)
 	if err != nil || len(files) == 0 {
@@ -313,6 +322,59 @@ func (a *App) ClearPattern(spreadID, scope string) (v model.View) {
 	return a.changed(a.editor().ClearPattern(spreadID, scope))
 }
 
+// BgResult — итог ApplyBackgroundTo: вид и сколько листов изменилось (тост «Фон поставлен на
+// N разворотов»; 0 — у всех уже этот фон, шага нет).
+type BgResult struct {
+	View    model.View `json:"view"`
+	Spreads int        `json:"spreads"`
+}
+
+// ApplyBackgroundTo — щелчок по плитке «Фоны» с набором листов (077): тот же фон на области
+// targets одним шагом отмены; обложка не цель, пустые развороты — цель, стоящий фон заменяется,
+// как у ApplyBackground. Плитка — в недавние один раз.
+func (a *App) ApplyBackgroundTo(targets []model.GridTarget, itemID string) (r BgResult, err error) {
+	defer a.guardEdit("ApplyBackgroundTo", &r.View, &err)
+	ed := a.editor()
+	src, err := a.bgSource(targets, itemID)
+	if err != nil {
+		return BgResult{View: ed.View()}, err
+	}
+	v, n, err := ed.ApplyBackgroundTo(targets, src)
+	if err != nil {
+		return BgResult{View: v}, err
+	}
+	prefs.RememberDecor(a.cfgDir, decor.KindBg, itemID)
+	return BgResult{View: a.changed(v), Spreads: n}, nil
+}
+
+// PlanBackgroundTo — вопрос до ApplyBackgroundTo: сколько листов изменится и сколько фото фона
+// заменится (кадр и поворот пропадут); без правки.
+func (a *App) PlanBackgroundTo(targets []model.GridTarget, itemID string) (plan model.BgPlan, err error) {
+	defer guardErr("PlanBackgroundTo", &err)
+	src, err := a.bgSource(targets, itemID)
+	if err != nil {
+		return plan, err
+	}
+	return a.editor().PlanBackgroundTo(targets, src)
+}
+
+// bgSource — источник плитки для фона на набор: область каждой цели — только left/right/spread
+// (корешок — у обложки, а она не цель), плитка — из библиотеки.
+func (a *App) bgSource(targets []model.GridTarget, itemID string) (model.BgSource, error) {
+	if slices.ContainsFunc(targets, func(t model.GridTarget) bool { return !model.ValidScope(t.Scope) }) {
+		return model.BgSource{}, errBackdropScope
+	}
+	s, err := a.decorStore()
+	if err != nil {
+		return model.BgSource{}, err
+	}
+	bg, err := s.Background(itemID)
+	if err != nil {
+		return model.BgSource{}, err
+	}
+	return model.BgSource{Pattern: bg.Pattern, Color: bg.Color, Photo: bg.Photo}, nil
+}
+
 // StickerResult — итог AddSticker: вид и ID нового стикера (интерфейс его выделяет).
 type StickerResult struct {
 	View model.View `json:"view"`
@@ -377,6 +439,37 @@ func (a *App) stickerSrc(itemID string) (model.StickerSrc, error) {
 		return model.StickerSrc{Art: &model.Art{Kind: st.Art.Kind, Inks: st.Art.Inks, Seed: st.Art.Seed}}, nil
 	}
 	return model.StickerSrc{Photo: st.Photo}, nil
+}
+
+// ApplyBorder — щелчок по плитке рамочки (079 §8): встроенная (sa:fr-…) или своя (my:…) местам
+// ids листа (ссылки мест или фото), "" — снять. Один шаг отмены (у «Авто» — с закреплением); та
+// же рамочка — холостая без шага и без недавних, плитка — в недавние только при правке.
+func (a *App) ApplyBorder(spreadID string, ids []string, itemID string) (v model.View, err error) {
+	defer a.guardEdit("ApplyBorder", &v, &err)
+	ed := a.editor()
+	var src model.BorderSrc
+	if itemID != "" {
+		s, err := a.decorStore()
+		if err != nil {
+			return ed.View(), err
+		}
+		fr, err := s.Frame(itemID)
+		if err != nil {
+			return ed.View(), err
+		}
+		src = model.BorderSrc(fr) // те же поля: разойдутся — не соберётся
+	}
+	v, changed, err := ed.ApplyBorderStep(spreadID, ids, src)
+	if err != nil {
+		return v, err
+	}
+	if !changed {
+		return a.out(v), nil
+	}
+	if itemID != "" {
+		prefs.RememberDecor(a.cfgDir, decor.KindFrame, itemID)
+	}
+	return a.changed(v), nil
 }
 
 // Фото на фоне разворота или страницы (спека 009, design-backdrop §5, §7).

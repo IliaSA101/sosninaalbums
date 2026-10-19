@@ -4,7 +4,10 @@ import (
 	"log"
 	"math"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -285,6 +288,17 @@ func TestAutoOptsClamp(t *testing.T) {
 	if got.Variety != VarietyMore || got.Spreads != 7 || got.MaxPer != 9 || !slices.Equal(got.Families, long[:16]) {
 		t.Fatalf("Clamp: %+v", got)
 	}
+	// 078: уровни похожих и ч/б в 0…3, вариант в 1…MaxVariant, возвращённых — первые 10 000.
+	keep := make([]string, maxKeepArgs+5)
+	for _, c := range []struct{ in, sim, gray, variant int }{{0, 0, 0, 1}, {-3, 0, 0, 1}, {2, 2, 2, 2}, {7, 3, 3, 7}, {1 << 40, 3, 3, MaxVariant}} {
+		got := AutoOpts{Similar: c.in, Gray: c.in, Variant: c.in, Keep: keep, Again: true}.Clamp()
+		if got.Similar != c.sim || got.Gray != c.gray || got.Variant != c.variant || len(got.Keep) != maxKeepArgs || !got.Again {
+			t.Fatalf("Clamp(%d): %+v", c.in, got)
+		}
+	}
+	if (AutoOpts{}).Clamp().Keep != nil || len(AutoOpts{Keep: keep[:3]}.Clamp().Keep) != 3 {
+		t.Fatal("Clamp: короткий и пустой Keep")
+	}
 	if ClampFamilies(nil) != nil || !slices.Equal(ClampFamilies([]string{"dense", "hero"}), []string{"dense", "hero"}) ||
 		len(ClampFamilies(long[:16])) != 16 || len(ClampFamilies([]string{})) != 0 {
 		t.Fatal("ClampFamilies")
@@ -463,6 +477,26 @@ func TestClampPlaceShape(t *testing.T) {
 	}
 	if o := (&Place{W: 40, H: 80, Shape: ShapeOval}).Outline(); !o.Oval || o.Radius != 0 {
 		t.Fatalf("Outline круга: %+v", o)
+	}
+}
+
+// «Скруглённое» (076) — те же 10 %, что «Скруглённые» виньетки: VIG_ROUND во фронте читается
+// из исходника, чтобы два числа не разошлись. Ключ правки в файл не попадает: из файла
+// "rounded" — чужая форма (прямоугольник со своим скруглением).
+func TestRoundedPct(t *testing.T) {
+	if RoundedPct != 10 || RoundedPct > MaxRound {
+		t.Fatalf("RoundedPct = %v", RoundedPct)
+	}
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "frontend", "src", "panels", "vignette", "vigform.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`export const VIG_ROUND = (\d+)`).FindSubmatch(src)
+	if m == nil || string(m[1]) != strconv.Itoa(RoundedPct) {
+		t.Fatalf("VIG_ROUND во фронте: %q, RoundedPct %d", m, RoundedPct)
+	}
+	if s, r := ClampShape(ShapeRounded, 25); s != "" || r != 25 {
+		t.Fatalf("ClampShape(rounded) = %q, %v", s, r)
 	}
 }
 

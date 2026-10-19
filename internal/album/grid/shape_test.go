@@ -2,11 +2,16 @@ package grid_test
 
 import (
 	"math"
+	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Форма места (спека 044): добавление, переключение, скругление и перенос правками сетки.
@@ -21,7 +26,7 @@ func shapes(p *model.Project, i int) []string {
 }
 
 func shapeOf(pl *model.Place) string {
-	return pl.Shape + ":" + map[float64]string{0: "0", 12: "12", 25: "25", 50: "50"}[pl.Round]
+	return pl.Shape + ":" + map[float64]string{0: "0", 10: "10", 12: "12", 25: "25", 50: "50"}[pl.Round]
 }
 
 // «Место ▸ Круглое» — то же квадратное место в форме круга; чужая форма — прямоугольник.
@@ -103,6 +108,24 @@ func TestSetPlaceShape(t *testing.T) {
 	if got := shapes(edtest.P(e), 0); !slices.Equal(got, []string{"oval:0", ":0", ":0"}) {
 		t.Fatalf("обратно в прямоугольник: %v", got)
 	}
+	// 076: "" у скруглённого — прямые углы одним шагом (в 0.19 была холостая); рамка стоит.
+	e.SetPlaceRound("s1", []string{g[2].ID}, 25)
+	box := *edtest.P(e).Spreads[0].Grid[2]
+	undo = edtest.UndoLen(e)
+	e.SetPlaceShape("s1", []string{g[2].ID, "b"}, "")
+	if got := shapes(edtest.P(e), 0); !slices.Equal(got, []string{"oval:0", ":0", ":0"}) || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("прямые углы: %v, шагов %d", got, edtest.UndoLen(e)-undo)
+	}
+	if pl := edtest.P(e).Spreads[0].Grid[2]; pl.X != box.X || pl.Y != box.Y || pl.W != box.W || pl.H != box.H {
+		t.Fatalf("рамка сдвинулась: %+v → %+v", box, *pl)
+	}
+	rev, undo = edtest.Rev(e), edtest.UndoLen(e)
+	e.SetPlaceShape("s1", []string{g[2].ID, "b"}, "")
+	edtest.Same(t, e, rev, undo, "повтор прямых углов")
+	e.Undo()
+	if got := shapes(edtest.P(e), 0); !slices.Equal(got, []string{"oval:0", ":0", ":25"}) {
+		t.Fatalf("отмена прямых углов: %v", got)
+	}
 	edtest.MustGrid(t, e)
 }
 
@@ -113,6 +136,7 @@ func TestSetPlaceShapeAuto(t *testing.T) {
 	e.SetPlaceShape(id, []string{"a"}, "")
 	e.SetPlaceShape(id, []string{"a"}, "heart")
 	e.SetPlaceShape(id, []string{"нет"}, model.ShapeOval) // закреплять нечего — откат
+	e.SetPlaceShape(id, []string{"нет"}, model.ShapeRounded)
 	e.SetPlaceRound(id, []string{"a"}, 0)
 	edtest.Same(t, e, rev, undo, `"" , чужая форма и ID, скругление 0 у «Авто»`)
 	if edtest.P(e).Spreads[0].Grid != nil {
@@ -131,6 +155,144 @@ func TestSetPlaceShapeAuto(t *testing.T) {
 	e.SetPlaceRound(id, []string{"b"}, 12)
 	if got := shapes(edtest.P(e), 0); !slices.Equal(got, []string{":0", ":12", ":0"}) {
 		t.Fatalf("скругление у «Авто»: %v", got)
+	}
+	// 076: «Скруглённое» у «Авто» — закрепление и 10 % одним шагом, отмена — «Авто».
+	e.Undo()
+	undo = edtest.UndoLen(e)
+	e.SetPlaceShape(id, []string{"a", "b"}, model.ShapeRounded)
+	edtest.MustGrid(t, e)
+	if got := shapes(edtest.P(e), 0); !slices.Equal(got, []string{":10", ":10", ":0"}) || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("скруглённое у «Авто»: %v, шагов %d", got, edtest.UndoLen(e)-undo)
+	}
+	e.Undo()
+	if edtest.P(e).Spreads[0].Grid != nil {
+		t.Fatal("отмена скруглённого не вернула «Авто»")
+	}
+}
+
+// «Место ▸ Скруглённое» (076): то же квадратное место, что прямоугольное, со скруглением
+// RoundedPct; одно добавление — один шаг; у «Авто» закрепление и место — один шаг.
+func TestAddPlaceRounded(t *testing.T) {
+	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 100, 60, "a")})
+	if _, err := e.AddPlace("s1", 1, ""); err != nil {
+		t.Fatal(err)
+	}
+	undo := edtest.UndoLen(e)
+	if _, err := e.AddPlace("s1", 1, model.ShapeRounded); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.AddPlace("s1", 0, model.ShapeRounded); err != nil {
+		t.Fatal(err)
+	}
+	edtest.MustGrid(t, e)
+	g := edtest.P(e).Spreads[0].Grid
+	if len(g) != 4 || edtest.UndoLen(e) != undo+2 {
+		t.Fatalf("мест %d, шагов %d", len(g), edtest.UndoLen(e)-undo)
+	}
+	if got := shapes(edtest.P(e), 0); !slices.Equal(got, []string{":0", ":0", ":10", ":10"}) {
+		t.Fatalf("формы: %v", got)
+	}
+	if r, q := g[1], g[2]; q.W != r.W || q.H != r.H || q.W != q.H {
+		t.Fatalf("размер скруглённого %vx%v, прямоугольного %vx%v", q.W, q.H, r.W, r.H)
+	}
+	e.Undo()
+	if got := shapes(edtest.P(e), 0); !slices.Equal(got, []string{":0", ":0", ":10"}) {
+		t.Fatalf("отмена: %v", got)
+	}
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	if _, err := e.AddPlace("нет", 0, model.ShapeRounded); err != nil {
+		t.Fatal(err)
+	}
+	edtest.Same(t, e, rev, undo, "чужой разворот")
+	// Круг Save → Load: скругление осталось.
+	if got := shapes(edtest.SaveLoad(t, e), 0); !slices.Equal(got, []string{":0", ":0", ":10"}) {
+		t.Fatalf("после Save → Load: %v", got)
+	}
+	a, id := edtest.AutoEd(t)
+	undo = edtest.UndoLen(a)
+	if _, err := a.AddPlace(id, 1, model.ShapeRounded); err != nil {
+		t.Fatal(err)
+	}
+	if got := shapes(edtest.P(a), 0); !slices.Equal(got, []string{":0", ":0", ":0", ":10"}) || edtest.UndoLen(a) != undo+1 {
+		t.Fatalf("у «Авто»: %v, шагов %d", got, edtest.UndoLen(a)-undo)
+	}
+	a.Undo()
+	if edtest.P(a).Spreads[0].Grid != nil {
+		t.Fatal("отмена не вернула «Авто»")
+	}
+}
+
+// ▢ над группой (076): прямоугольник и круг — RoundedPct, своё скругление остаётся; рамка,
+// фото и кадр стоят; один шаг; повтор — без rev и шага; отмена возвращает все формы.
+func TestSetPlaceShapeRounded(t *testing.T) {
+	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 100, 60, "a"), edtest.Gp(130, 12, 80, 80, "b"), edtest.Gp(12, 150, 60, 60, "")})
+	g := edtest.P(e).Spreads[0].Grid
+	e.SetPlaceRound("s1", []string{"b"}, 25)
+	e.SetPlaceShape("s1", []string{g[2].ID}, model.ShapeOval)
+	e.SetFrame("a", 2, 0.5, -0.5)
+	frame := *edtest.P(e).Photos["a"].Frame
+	before := []model.Place{*g[0], *g[1], *g[2]}
+	all := []string{"a", g[1].ID, g[2].ID}
+	undo := edtest.UndoLen(e)
+	e.SetPlaceShape("s1", all, model.ShapeRounded)
+	if got := shapes(edtest.P(e), 0); !slices.Equal(got, []string{":10", ":25", ":10"}) || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("формы %v, шагов %d", got, edtest.UndoLen(e)-undo)
+	}
+	for i, pl := range edtest.P(e).Spreads[0].Grid {
+		b := before[i]
+		if pl.X != b.X || pl.Y != b.Y || pl.W != b.W || pl.H != b.H || pl.Photo != b.Photo {
+			t.Fatalf("место %d сдвинулось: %+v → %+v", i, b, *pl)
+		}
+	}
+	if f := edtest.P(e).Photos["a"].Frame; f == nil || *f != frame {
+		t.Fatalf("кадр изменился: %+v → %+v", frame, f)
+	}
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	e.SetPlaceShape("s1", all, model.ShapeRounded)
+	e.SetPlaceShape("s1", nil, model.ShapeRounded)
+	e.SetPlaceShape("s1", []string{}, model.ShapeRounded)
+	e.SetPlaceShape("нет", all, model.ShapeRounded)
+	edtest.Same(t, e, rev, undo, "повтор, пустой список, чужой разворот")
+	e.Undo()
+	if got := shapes(edtest.P(e), 0); !slices.Equal(got, []string{":0", ":25", "oval:0"}) {
+		t.Fatalf("отмена: %v", got)
+	}
+	// Туда и обратно: 25 % → круг → ▢ даёт 10 %, а не 25 (у круга скругления нет, 044).
+	e.SetPlaceShape("s1", []string{"b"}, model.ShapeOval)
+	e.SetPlaceShape("s1", []string{"b"}, model.ShapeRounded)
+	if got := shapes(edtest.P(e), 0)[1]; got != ":10" {
+		t.Fatalf("круг → ▢: %v", got)
+	}
+	// Предел: 50 % остаётся 50.
+	e.SetPlaceRound("s1", []string{"b"}, 50)
+	e.SetPlaceShape("s1", []string{"b"}, model.ShapeRounded)
+	if got := shapes(edtest.P(e), 0)[1]; got != ":50" {
+		t.Fatalf("50 %% → ▢: %v", got)
+	}
+	edtest.MustGrid(t, e)
+}
+
+// Ключ "rounded" — только правка: в файле Shape "" и round 10, Save → Load — то же (076).
+func TestRoundedNotStored(t *testing.T) {
+	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 100, 60, "a"), edtest.Gp(130, 12, 80, 80, "")})
+	g := edtest.P(e).Spreads[0].Grid
+	e.SetPlaceShape("s1", []string{"a", g[1].ID}, model.ShapeRounded)
+	if _, err := e.AddPlace("s1", 1, model.ShapeRounded); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(testkit.TempDir(t), "r.salbum")
+	if err := e.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), model.ShapeRounded) || len(regexp.MustCompile(`"round":\s*10\b`).FindAll(data, -1)) != 3 {
+		t.Fatalf("файл: %s", data)
+	}
+	if got := shapes(edtest.SaveLoad(t, e), 0); !slices.Equal(got, []string{":10", ":10", ":10"}) {
+		t.Fatalf("после Save → Load: %v", got)
 	}
 }
 

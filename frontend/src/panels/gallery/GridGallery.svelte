@@ -6,7 +6,7 @@
   import { applyChoice, tplCall } from '../layouts/gridactions'
   import { builtinOf, cardBoxes, defaultN, dropTitle, gridSourceTexts, MAX_N, mineOf, previewRects } from './gridgallery'
   import type { GridChoice, GridChoices, LayoutScope } from '../../base/core/types'
-  import { isSheet, newSheetSize, sheetSize, unitOf } from '../../base/geom/sheet'
+  import { BORDER_NOTE, hasBorders, isSheet, newSheetSize, sheetIn, sheetSize, unitOf } from '../../base/geom/sheet'
   import Modal from '../../base/ui/Modal.svelte'
   import TplRow from '../../base/tpl/TplRow.svelte'
   import TplItem from '../../base/tpl/TplItem.svelte'
@@ -242,6 +242,7 @@
     <p class="hint">
       Запоминаются только места, без фото.{pages.length > 1 ? ' «Левая» и «Правая» дают шаблон страницы.' : ''}
     </p>
+    {#if hasBorders(sheetIn(store.view, g.spread), save.scope)}<p class="hint">{BORDER_NOTE}</p>{/if}
     <div class="actions">
       <button class="ghost" onclick={() => (save = null)}>Отмена</button>
       <button class="primary" onclick={doSave}>Сохранить</button>

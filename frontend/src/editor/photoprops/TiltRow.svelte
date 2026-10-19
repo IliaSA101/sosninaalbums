@@ -25,6 +25,8 @@
     step = 0.1,
     guide = 'tilt',
     id = 'tilt',
+    dflt = 0,
+    mixed = false,
   }: {
     tilt: number
     onlive: (t: number) => void
@@ -39,8 +41,10 @@
     min?: number
     max?: number
     step?: number
-    guide?: 'tilt' | 'round' // якорь справочника F1 (литералами в разметке: страж ищет их текстом)
+    guide?: 'tilt' | 'round' | '' // якорь справочника F1 (литералами в разметке: страж ищет их текстом); '' — без якоря
     id?: string
+    dflt?: number | null // двойной щелчок по ползунку (079: «по умолчанию»); null — двойной щелчок молчит
+    mixed?: boolean // у выделенных значения разные (079, группа): в поле «—», первая правка ставит всем одно
   } = $props()
 
   let wrap = $state<HTMLElement>() // обёртка строки: уход фокуса ловим со всей строки (ползунок ↔ поле — не уход)
@@ -64,9 +68,9 @@
   async function commit(e: Event) {
     const input = e.currentTarget as HTMLInputElement
     const v = tiltOf(e)
-    if (Number.isFinite(v) && clampTilt(v) !== tilt) await oncommit(clampTilt(v))
+    if (Number.isFinite(v) && (mixed || clampTilt(v) !== tilt)) await oncommit(clampTilt(v))
     // Недонабранное («-», пусто) откатываем к значению из Go, иначе поле осталось бы пустым.
-    else if (!Number.isFinite(v)) input.value = String(tilt)
+    else if (!Number.isFinite(v)) input.value = mixed ? '' : String(tilt)
     draft = null // после ответа Go: иначе ползунок на миг прыгнет назад
     onend()
   }
@@ -78,7 +82,7 @@
     const input = e.currentTarget as HTMLInputElement
     if (act === 'cancel') {
       e.stopPropagation()
-      input.value = String(tilt)
+      input.value = mixed ? '' : String(tilt)
       draft = null
       onend()
     }
@@ -104,7 +108,8 @@
     {min}
     {max}
     {step}
-    value={shown}
+    value={mixed && draft === null ? '' : shown}
+    placeholder={mixed ? '—' : undefined}
     aria-label={numLabel}
     oninput={live}
     onchange={commit}
@@ -115,8 +120,10 @@
 <div class="wrap" bind:this={wrap} onfocusout={focusout}>
   {#if guide === 'round'}
     <div class="row tilt" data-guide="round">{@render head()}</div>
-  {:else}
+  {:else if guide === 'tilt'}
     <div class="row tilt" data-guide="tilt">{@render head()}</div>
+  {:else}
+    <div class="row tilt">{@render head()}</div>
   {/if}
   <input
     type="range"
@@ -129,7 +136,8 @@
     oninput={live}
     onchange={commit}
     ondblclick={(e) => {
-      e.currentTarget.value = '0'
+      if (dflt === null) return
+      e.currentTarget.value = String(dflt)
       live(e)
       commit(e)
     }}

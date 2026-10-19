@@ -173,11 +173,11 @@
           in:appear={rot}
           out:vanish
         >
-          <Cell {spread} {i} {r} {mini} {preview} />
+          <Cell {spread} {i} {r} {mini} {preview} {width} />
         </div>
       {/if}
     {/each}
-    {#if spread.grid && !preview}<PlaceLayer {spread} {mini} />{/if}
+    {#if spread.grid && !preview}<PlaceLayer {spread} {mini} {width} />{/if}
     <TextLayer {spread} {mini} {tg} />
     <StickerLayer {spread} {mini} {width} />
     <!-- В «Авто» корешок виден над фото (как до 0.5.0), но под текстами: z верхнего фото, позже слотов в DOM -->

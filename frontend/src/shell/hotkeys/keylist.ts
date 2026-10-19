@@ -66,5 +66,27 @@ export const emptyText = (o: Pick<ListOpts, 'query' | 'onlyOwn'>): string =>
     ? 'Своих сочетаний пока нет.'
     : 'Ничего не нашлось. Попробуйте другое слово, название клавиши или русскую букву.'
 
+// Хождение по строкам списка с клавиатуры (0.19-Q2): ↑/↓ — соседняя видимая строка, Home/End — первая и последняя.
+export type NavKey = 'ArrowUp' | 'ArrowDown' | 'Home' | 'End'
+const NAV_KEYS: readonly string[] = ['ArrowUp', 'ArrowDown', 'Home', 'End']
+
+// Клавиша перехода без модификаторов (Ctrl+Home, Shift+↓ — не наши); иначе null.
+export function navKey(e: { key: string; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; metaKey: boolean }): NavKey | null {
+  if (e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return null
+  return NAV_KEYS.includes(e.key) ? (e.key as NavKey) : null
+}
+
+// Куда перейти из строки from по порядку видимых строк ids (поиск и группы уже учтены списком).
+// На краях остаёмся на месте, не зацикливаем; нет строки from (её скрыл поиск) — вход с начала или с конца. Пусто — null.
+export function stepRow(ids: readonly string[], from: string | null, key: NavKey): string | null {
+  if (ids.length === 0) return null
+  const last = ids.length - 1
+  if (key === 'Home') return ids[0]
+  if (key === 'End') return ids[last]
+  const i = from === null ? -1 : ids.indexOf(from)
+  if (i < 0) return key === 'ArrowDown' ? ids[0] : ids[last]
+  return ids[Math.min(last, Math.max(0, i + (key === 'ArrowDown' ? 1 : -1)))]
+}
+
 // Метка строки: подпись области нужна, если область не «везде» и группа не держит её в заголовке.
 export const rowTag = (e: KeymapEntry, g: ListGroup): string => (g.scopeTag ? '' : SCOPE_TAG[e.scope])

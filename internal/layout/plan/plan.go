@@ -91,6 +91,9 @@ type PlanOpts struct {
 	Spreads        int       // ровно N (зажим — RangeSpreads)
 	MinPer, MaxPer int       // k ∈ [MinPer, MaxPer]; MinPer 0 — прежний PlanGroups побитово
 	Cuts           []float64 // len n+1 или nil: сила границы серии перед фото j, 0…1
+	// Phase — сдвиг волны размеров для варианта сборки (078): 0 — волна как в 0.19 побитово,
+	// k ≥ 1 — вариант k+1 (первая цель остаётся редкой, остальные идут по кругу со сдвигом).
+	Phase int
 }
 
 // Числа подобраны по TestPlanRangeMetrics (-v); правка — записью в decisions 0.13.
@@ -169,21 +172,39 @@ func PlanRange(aspects []float64, p layout.Params, o PlanOpts) Plan {
 	N := max(lo, min(o.Spreads, hi))
 	a, b := RangePer(n, N, o.MinPer, o.MaxPer)
 	cols := planMatrix(aspects, p, a, b)
-	return planOf(rangeDP(cols, n, N, a, b, rangeTargets(n, N, a, b), rangeCuts(o.Cuts, n)), n)
+	return planOf(rangeDP(cols, n, N, a, b, rangeTargetsPhase(n, N, a, b, o.Phase), rangeCuts(o.Cuts, n)), n)
 }
 
-// rangeTargets — цели размеров групп: среднее, сдвинутое волной к «от» или «до» на долю
+// Шаги сдвига волны на номер варианта (078 design §7): с периодом L−1 (первая цель не сдвигается),
+// шаг взаимно прост с периодом — соседние варианты не повторяют друг друга.
+const (
+	phaseStep     = 3 // rangeWave: L = 8, период 7
+	phaseStepSoft = 5 // rangeWaveSoft: L = 13, период 12
+)
+
+// rangeTargets — цели размеров групп варианта 1 (волна как в 0.19).
+func rangeTargets(n, N, a, b int) []float64 { return rangeTargetsPhase(n, N, a, b, 0) }
+
+// rangeTargetsPhase — цели размеров групп: среднее, сдвинутое волной к «от» или «до» на долю
 // rangeWave, затем нормировка на сумму n. Узкий диапазон сжимает волну — почти ровно.
-func rangeTargets(n, N, a, b int) []float64 {
+// phase > 0: первая цель — по-прежнему wave[0] (первый разворот редкий), остальные берут волну
+// со сдвигом φ = phase·шаг по кругу длиной L−1; phase 0 — прежний круг c mod L.
+func rangeTargetsPhase(n, N, a, b, phase int) []float64 {
 	avg := float64(n) / float64(N)
 	t := make([]float64, N)
 	sum := 0.0
-	wave := rangeWave[:]
+	wave, step := rangeWave[:], phaseStep
 	if b-a <= 3 {
-		wave = rangeWaveSoft[:]
+		wave, step = rangeWaveSoft[:], phaseStepSoft
 	}
+	L := len(wave)
+	phi := (max(phase, 0) * step) % (L - 1)
 	for c := range t {
-		w := wave[c%len(wave)]
+		wi := c % L
+		if phase > 0 && c > 0 {
+			wi = 1 + (c-1+phi)%(L-1)
+		}
+		w := wave[wi]
 		if w >= 0 {
 			t[c] = avg + w*(float64(b)-avg)
 		} else {

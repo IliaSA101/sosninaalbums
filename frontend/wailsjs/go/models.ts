@@ -20,6 +20,38 @@ export namespace app {
 	        this.photos = source["photos"];
 	    }
 	}
+	export class BgResult {
+	    view: model.View;
+	    spreads: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BgResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.view = this.convertValues(source["view"], model.View);
+	        this.spreads = source["spreads"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CollectOptions {
 	    all: boolean;
 	
@@ -442,6 +474,7 @@ export namespace app {
 	    bg: number;
 	    sticker: number;
 	    spread: number;
+	    frame: number;
 	    bytes: number;
 	    removable: boolean;
 	
@@ -462,6 +495,7 @@ export namespace app {
 	        this.bg = source["bg"];
 	        this.sticker = source["sticker"];
 	        this.spread = source["spread"];
+	        this.frame = source["frame"];
 	        this.bytes = source["bytes"];
 	        this.removable = source["removable"];
 	    }
@@ -592,6 +626,20 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+	export class SigState {
+	    done: number;
+	    total: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SigState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.done = source["done"];
+	        this.total = source["total"];
+	    }
 	}
 	export class State {
 	    view: model.View;
@@ -1101,6 +1149,11 @@ export namespace model {
 	    series: boolean;
 	    variety: number;
 	    families: string[];
+	    similar: number;
+	    keep: string[];
+	    gray: number;
+	    variant: number;
+	    again: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new AutoOpts(source);
@@ -1115,6 +1168,11 @@ export namespace model {
 	        this.series = source["series"];
 	        this.variety = source["variety"];
 	        this.families = source["families"];
+	        this.similar = source["similar"];
+	        this.keep = source["keep"];
+	        this.gray = source["gray"];
+	        this.variant = source["variant"];
+	        this.again = source["again"];
 	    }
 	}
 	export class AutoPlan {
@@ -1129,6 +1187,8 @@ export namespace model {
 	    from: number;
 	    to: number;
 	    cuts: number;
+	    similar?: number;
+	    gray?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AutoPlan(source);
@@ -1147,6 +1207,8 @@ export namespace model {
 	        this.from = source["from"];
 	        this.to = source["to"];
 	        this.cuts = source["cuts"];
+	        this.similar = source["similar"];
+	        this.gray = source["gray"];
 	    }
 	}
 	export class PreviewSpread {
@@ -1157,6 +1219,7 @@ export namespace model {
 	    formName: string;
 	    photos: number;
 	    fallback: boolean;
+	    gray: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new PreviewSpread(source);
@@ -1171,6 +1234,7 @@ export namespace model {
 	        this.formName = source["formName"];
 	        this.photos = source["photos"];
 	        this.fallback = source["fallback"];
+	        this.gray = source["gray"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1390,6 +1454,102 @@ export namespace model {
 		    }
 		    return a;
 		}
+	}
+	export class BgPlan {
+	    spreads: number;
+	    photos: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BgPlan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.spreads = source["spreads"];
+	        this.photos = source["photos"];
+	    }
+	}
+	export class Border {
+	    kind?: string;
+	    photo?: string;
+	    inks?: string[];
+	    w?: number;
+	    scale?: number;
+	    cut: number[];
+	    open?: boolean;
+	    preset?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Border(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.photo = source["photo"];
+	        this.inks = source["inks"];
+	        this.w = source["w"];
+	        this.scale = source["scale"];
+	        this.cut = source["cut"];
+	        this.open = source["open"];
+	        this.preset = source["preset"];
+	    }
+	}
+	export class BorderPatch {
+	    inks?: string[];
+	    width?: number;
+	    scale?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BorderPatch(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.inks = source["inks"];
+	        this.width = source["width"];
+	        this.scale = source["scale"];
+	    }
+	}
+	export class BorderView {
+	    kind: string;
+	    photo: string;
+	    lib: string;
+	    preset: string;
+	    name: string;
+	    inks: string[];
+	    width: number;
+	    defWidth?: number;
+	    scale: number;
+	    ins: number[];
+	    url: string;
+	    maskUrl: string;
+	    pic: boolean;
+	    open: boolean;
+	    known: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new BorderView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.photo = source["photo"];
+	        this.lib = source["lib"];
+	        this.preset = source["preset"];
+	        this.name = source["name"];
+	        this.inks = source["inks"];
+	        this.width = source["width"];
+	        this.defWidth = source["defWidth"];
+	        this.scale = source["scale"];
+	        this.ins = source["ins"];
+	        this.url = source["url"];
+	        this.maskUrl = source["maskUrl"];
+	        this.pic = source["pic"];
+	        this.open = source["open"];
+	        this.known = source["known"];
+	    }
 	}
 	export class Box {
 	    x: number;
@@ -2130,6 +2290,7 @@ export namespace model {
 	    shape: string;
 	    round: number;
 	    radius: number;
+	    border?: BorderView;
 	
 	    static createFrom(source: any = {}) {
 	        return new PlaceView(source);
@@ -2151,7 +2312,26 @@ export namespace model {
 	        this.shape = source["shape"];
 	        this.round = source["round"];
 	        this.radius = source["radius"];
+	        this.border = this.convertValues(source["border"], BorderView);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class TextView {
 	    id: string;
@@ -2224,6 +2404,10 @@ export namespace model {
 	    z: number;
 	    shape: string;
 	    radius: number;
+	    win: layout.Rect;
+	    winShape: string;
+	    winRadius: number;
+	    fade: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new FrameView(source);
@@ -2249,6 +2433,10 @@ export namespace model {
 	        this.z = source["z"];
 	        this.shape = source["shape"];
 	        this.radius = source["radius"];
+	        this.win = this.convertValues(source["win"], layout.Rect);
+	        this.winShape = source["winShape"];
+	        this.winRadius = source["winRadius"];
+	        this.fade = source["fade"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2855,6 +3043,22 @@ export namespace model {
 	    }
 	}
 	
+	export class SimilarDrop {
+	    id: string;
+	    like: string;
+	    dist: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SimilarDrop(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.like = source["like"];
+	        this.dist = source["dist"];
+	    }
+	}
 	
 	
 	
@@ -2885,6 +3089,7 @@ export namespace model {
 	    unfilled: string[];
 	    unnamed: number;
 	    cover?: CoverView;
+	    again: boolean;
 	    seq: number;
 	    base?: number;
 	    order?: string[];
@@ -2918,6 +3123,7 @@ export namespace model {
 	        this.unfilled = source["unfilled"];
 	        this.unnamed = source["unnamed"];
 	        this.cover = this.convertValues(source["cover"], CoverView);
+	        this.again = source["again"];
 	        this.seq = source["seq"];
 	        this.base = source["base"];
 	        this.order = source["order"];

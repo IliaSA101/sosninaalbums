@@ -14,6 +14,10 @@ export function withSkipped(text: string, skipped: number): string {
   return [text, skipped > 0 ? `Отклонённые не взяты: ${skipped}` : ''].filter(Boolean).join('. ')
 }
 
+// 078: тост сборки + «Похожих кадров не взято: N — они в ленте» (если сборка их убрала).
+export const withSimilar = (text: string, dropped: number): string =>
+  dropped > 0 ? `${text}. Похожих кадров не взято: ${dropped} — они в ленте` : text
+
 // Тост после сбора проекта в папку (069): готовые фразы пишет Go (err, note), здесь — только вид тоста.
 // Ошибка и остановка — красный (как в макете), успех — обычный с «Открыть папку» (open).
 export function collectDoneText(err: string, note: string, stopped: boolean): { text: string; kind: 'info' | 'error'; open: boolean } {

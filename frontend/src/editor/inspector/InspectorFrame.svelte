@@ -12,6 +12,8 @@
   import SnapToggle from '../photoprops/SnapToggle.svelte'
   import FlipToggle from '../photoprops/FlipToggle.svelte'
   import AdjustRows from '../photoprops/AdjustRows.svelte'
+  import PhotoFade from '../border/PhotoFade.svelte'
+  import InspectorBorder from '../border/InspectorBorder.svelte'
   import LayerRow from './LayerRow.svelte'
   import TiltRow from '../photoprops/TiltRow.svelte'
   import { straighten } from '../tilt/straighten.svelte'
@@ -127,6 +129,8 @@
 {#if prefs.can('frame')}<FitToggle /><ShapeToggle />{/if}
 {#if prefs.can('flip')}<FlipToggle />{/if}
 {#if prefs.can('adjust') && fv}<AdjustRows {id} />{/if}
+{#if prefs.can('photoFade') && fv}<PhotoFade photos={[id]} />{/if}
+{#if prefs.can('border')}<InspectorBorder />{/if}
 {#if sp?.grid && prefs.can('layers')}
   <LayerRow onpick={(op) => placesel.layer(op)} />
 {/if}

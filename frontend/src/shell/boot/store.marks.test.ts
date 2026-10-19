@@ -5,6 +5,7 @@ const calls: { name: string; ids: string[]; patch?: unknown }[] = []
 let marksCalls = 0
 let buildArgs: unknown = null
 let buildFamilies: unknown = null
+let buildPhotos: unknown = null
 let marksAnswer: () => Promise<unknown> = async () => ({})
 // «Авто» с сериями — умолчание окна автосборки (051)
 const RANGE = { auto: true, minPer: 1, maxPer: 64, series: true }
@@ -24,10 +25,24 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
   AutoBuild: async (
     ids: string[],
     at: number,
-    o: { spreads: number; minPer: number; maxPer: number; auto: boolean; series: boolean; variety: number; families?: string[] },
+    o: {
+      spreads: number
+      minPer: number
+      maxPer: number
+      auto: boolean
+      series: boolean
+      variety: number
+      families?: string[]
+      similar?: number
+      keep?: string[]
+      gray?: number
+      variant?: number
+      again?: boolean
+    },
   ) => {
     buildArgs = { at, spreads: o.spreads, minPer: o.minPer, maxPer: o.maxPer, auto: o.auto, series: o.series, variety: o.variety }
     buildFamilies = o.families
+    buildPhotos = { similar: o.similar, keep: o.keep, gray: o.gray, variant: o.variant, again: o.again }
     calls.push({ name: 'build', ids })
     return view(7, 1, {
       spreads: [
@@ -216,6 +231,23 @@ describe('автосборка и заполнение мест: что уход
     store.openAuto()
     await store.autoBuild(1, RANGE, 1, ['dense', 'hero'])
     expect(buildFamilies).toEqual(['dense', 'hero'])
+  })
+
+  it('похожие, ч/б и вариант (078) доходят до Go; тост называет не взятые похожие', async () => {
+    await setup()
+    store.openAuto()
+    const ph = { similar: 2, keep: ['c'], gray: 1, variant: 3, again: false }
+    await store.autoBuild(1, RANGE, 1, [], ph, 37)
+    expect(buildPhotos).toEqual(ph)
+    expect(store.toast?.text).toBe('Собрано разворотов: 1. Похожих кадров не взято: 37 — они в ленте. Отклонённые не взяты: 1')
+  })
+
+  it('без блока «Фото» в Go уходят нули (как 0.19), тост без строки про похожие', async () => {
+    await setup()
+    store.openAuto()
+    await store.autoBuild(1, RANGE)
+    expect(buildPhotos).toEqual({ similar: undefined, keep: undefined, gray: undefined, variant: undefined, again: undefined })
+    expect(store.toast?.text).not.toContain('Похожих')
   })
 
   it('автосборка без выделения — свободные без отклонённых, тост «Отклонённые не взяты»', async () => {

@@ -45,6 +45,7 @@ export interface View {
   unfilled?: string[] // пустые переменные из текстов, по алфавиту
   unnamed?: number // фото с полями имени в подписи и без имени
   cover?: CoverView | null // обложка (032); нет — её нет в альбоме
+  again?: boolean // 078: «Пересобрать…» ещё можно (Go считает по версиям проекта; отметки её не закрывают)
 }
 
 // Начертание шрифта (State.fonts[].faces[]): file — имя в /media/font/<file>.

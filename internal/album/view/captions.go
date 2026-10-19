@@ -59,9 +59,12 @@ type CaptionIn struct {
 	Rects []layout.Rect // ячейки листа: Rects[I] — своя, остальные — препятствия снизу
 	I     int
 	PageH float64 // низ листа, мм: у разворота — высота страницы, у обложки — линия обреза снизу
-	// Outlines — формы ячеек (044, рядом с Rects; у «Авто» nil): подпись «на фото» стоит во
-	// вписанном прямоугольнике формы, «под фото» и препятствия — по рамкам.
+	// Outlines — формы окон фото (044, рядом с Rects; у «Авто» nil): подпись «на фото» стоит во
+	// вписанном прямоугольнике формы окна, «под фото» и препятствия — по рамкам мест.
 	Outlines []geom.Outline
+	// Wins — окна фото в рамочках (079 §2, рядом с Rects; nil — окно = ячейка): подпись «на фото»
+	// не ложится на рамочку.
+	Wins []layout.Rect
 }
 
 // CaptionViewOf — место подписи к фото в ячейке Rects[I] шириной в ячейку.
@@ -70,6 +73,9 @@ type CaptionIn struct {
 // внутри неё. Свободные блоки текста препятствием не считаются.
 func CaptionViewOf(in CaptionIn) model.CaptionView {
 	r := in.Rects[in.I]
+	if in.Look.Over && in.I < len(in.Wins) {
+		r = in.Wins[in.I]
+	}
 	if in.Look.Over && in.I < len(in.Outlines) {
 		r = geom.InnerBox(r, in.Outlines[in.I])
 	}
@@ -309,10 +315,10 @@ func sheetBottom(p *model.Project, s *model.Spread) float64 {
 	return p.Geo(s).H
 }
 
-// captionViews — подписи фото листа s в порядке ленты (ids[i] — в ячейке rects[i] формы
-// outlines[i]; у «Авто» outlines nil) и заглушки фото без имени. Раскладку подпись не
+// captionViews — подписи фото листа s в порядке ленты (ids[i] — в ячейке rects[i] с окном
+// wins[i] формы outlines[i]; у «Авто» оба nil) и заглушки фото без имени. Раскладку подпись не
 // раздвигает: не хватило места — Overflow > 0, интерфейс показывает «!».
-func captionViews(f *fields, s *model.Spread, ids []string, rects []layout.Rect, outlines []geom.Outline) (caps []model.CaptionView, stubs []model.StubView) {
+func captionViews(f *fields, s *model.Spread, ids []string, rects, wins []layout.Rect, outlines []geom.Outline) (caps []model.CaptionView, stubs []model.StubView) {
 	caps, stubs = []model.CaptionView{}, []model.StubView{}
 	places, bottom := photoPlaces(s), sheetBottom(f.p, s)
 	for i := range rects {
@@ -320,7 +326,7 @@ func captionViews(f *fields, s *model.Spread, ids []string, rects []layout.Rect,
 		if kind == capNone {
 			continue
 		}
-		cv := CaptionViewOf(CaptionIn{Photo: ids[i], Text: out, Src: src, Look: look, Rects: rects, I: i, PageH: bottom, Outlines: outlines})
+		cv := CaptionViewOf(CaptionIn{Photo: ids[i], Text: out, Src: src, Look: look, Rects: rects, I: i, PageH: bottom, Outlines: outlines, Wins: wins})
 		if kind == capStub {
 			stubs = append(stubs, model.StubView{Photo: ids[i], TextView: cv.TextView, Who: who})
 			continue
@@ -340,9 +346,10 @@ func placeStubs(f *fields, sv *model.SpreadView, s *model.Spread) {
 	if f.print || s.Caps == nil {
 		return
 	}
-	rects, outlines := make([]layout.Rect, len(s.Grid)), make([]geom.Outline, len(s.Grid))
+	rects, wins, outlines := make([]layout.Rect, len(s.Grid)), make([]layout.Rect, len(s.Grid)), make([]geom.Outline, len(s.Grid))
 	for i, pl := range s.Grid {
-		rects[i], outlines[i] = layout.Rect{X: pl.X, Y: pl.Y, W: pl.W, H: pl.H}, pl.Outline()
+		rects[i] = layout.Rect{X: pl.X, Y: pl.Y, W: pl.W, H: pl.H}
+		wins[i], outlines[i] = f.p.BorderWindow(pl)
 	}
 	look, bottom := LookOf(nil, s.Caps), sheetBottom(f.p, s)
 	for i, pl := range s.Grid {
@@ -350,7 +357,7 @@ func placeStubs(f *fields, sv *model.SpreadView, s *model.Spread) {
 		if pl.Photo != "" || tpl == "" {
 			continue
 		}
-		cv := CaptionViewOf(CaptionIn{Text: f.seatText(tpl, pl.Person), Look: look, Rects: rects, I: i, PageH: bottom, Outlines: outlines})
+		cv := CaptionViewOf(CaptionIn{Text: f.seatText(tpl, pl.Person), Look: look, Rects: rects, I: i, PageH: bottom, Outlines: outlines, Wins: wins})
 		turnCaption(&cv, pl)
 		sv.Stubs = append(sv.Stubs, model.StubView{Place: pl.ID, TextView: cv.TextView, Who: model.NameFieldsOf(tpl)})
 	}

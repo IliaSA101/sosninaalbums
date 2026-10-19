@@ -6,7 +6,8 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 )
 
-// Ч/б и тон фото в месте (068): PhotoRef.Adj, едет с фото, как кадр и зеркало.
+// Ч/б и тон фото в месте (068): PhotoRef.Adj, едет с фото, как кадр и зеркало; прозрачность
+// фото (079) — PhotoRef.Fade.
 
 // SetGray — ч/б фото ids «всем или никому», как SetFlip: если включено не у всех известных —
 // всем включается, иначе у всех выключается. Яркость и контраст остаются. Пустые, чужие и
@@ -48,4 +49,16 @@ func SetTone(p *model.Project, photoID string, t *model.Tone) {
 	n.Gray = r.Adj != nil && r.Adj.Gray
 	r.Adj = model.ClampTone(&n)
 	p.Photos[photoID] = r
+}
+
+// SetPhotoFade — прозрачность фото ids (079, PhotoRef.Fade, уже зажата ClampPhotoFade): едет с
+// фото, как тон; у «Авто» без закрепления. Чужие ID пропускаются; то же значение — холостая.
+// У фото только на фоне или в рамочке PruneRefs её снимет — правка там холостая.
+func SetPhotoFade(p *model.Project, ids []string, fade float64) {
+	for _, id := range ids {
+		if r, ok := p.Photos[id]; ok {
+			r.Fade = fade
+			p.Photos[id] = r
+		}
+	}
 }

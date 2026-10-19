@@ -152,6 +152,11 @@ const HANDLERS = {
     const s = store.spread
     if (s && prefs.can('decor')) decor.show('bg', s.id, defaultScope(s, store.cover))
   },
+  // 079: окно «Рамочки»; «Куда» — выделенные места, без выделения — весь лист. Нет листа или функции — молчим
+  borderGallery: () => {
+    const s = store.spread
+    if (s && prefs.can('border')) decor.show('frame', s.id, 'spread')
+  },
   // 048 Ф2: окно «Стикеры»; щелчок по плитке ставит стикер в центр страницы. Нет листа или функции на уровне — молчим
   addSticker: () => {
     const s = store.spread

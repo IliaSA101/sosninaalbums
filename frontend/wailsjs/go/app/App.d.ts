@@ -32,6 +32,10 @@ export function AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:str
 
 export function ApplyBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
+export function ApplyBackgroundTo(arg1:Array<model.GridTarget>,arg2:string):Promise<app.BgResult>;
+
+export function ApplyBorder(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>;
+
 export function ApplyCoverPreset(arg1:string):Promise<model.View>;
 
 export function ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<app.GridResult>;
@@ -47,6 +51,8 @@ export function AutoBuild(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Pr
 export function AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>;
 
 export function AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.AutoPreview>;
+
+export function AutoSimilar(arg1:Array<string>,arg2:model.AutoOpts):Promise<Array<model.SimilarDrop>>;
 
 export function Backups():Promise<Array<app.BackupInfo>>;
 
@@ -184,6 +190,8 @@ export function PlacePerson(arg1:string,arg2:string):Promise<model.PersonView>;
 
 export function PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<app.GridResult>;
 
+export function PlanBackgroundTo(arg1:Array<model.GridTarget>,arg2:string):Promise<model.BgPlan>;
+
 export function PlanCopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>;
 
 export function PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>;
@@ -191,6 +199,8 @@ export function PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget
 export function PlanRemovePack(arg1:string):Promise<app.PackRemove>;
 
 export function PlanSpreadTpl(arg1:string,arg2:string,arg3:string):Promise<model.GridPlan>;
+
+export function PrepareSigs(arg1:Array<string>):Promise<app.SigState>;
 
 export function PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.NamesPlan>;
 
@@ -266,6 +276,8 @@ export function SetBackdropFrame(arg1:string,arg2:string,arg3:number,arg4:number
 
 export function SetBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
+export function SetBorder(arg1:string,arg2:Array<string>,arg3:model.BorderPatch,arg4:string):Promise<model.View>;
+
 export function SetCaption(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
 export function SetCaptionStyle(arg1:string,arg2:text.Style,arg3:boolean,arg4:number):Promise<model.View>;
@@ -301,6 +313,8 @@ export function SetMarks(arg1:Array<string>,arg2:model.MarkPatch):Promise<model.
 export function SetPattern(arg1:string,arg2:string,arg3:model.Pattern,arg4:string):Promise<model.View>;
 
 export function SetPerson(arg1:string,arg2:model.Person,arg3:string):Promise<model.View>;
+
+export function SetPhotoFade(arg1:Array<string>,arg2:number,arg3:string):Promise<model.View>;
 
 export function SetPlaceAngle(arg1:string,arg2:string,arg3:number):Promise<model.View>;
 

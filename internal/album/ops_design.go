@@ -90,6 +90,24 @@ func (e *Editor) SetTone(photoID string, bright, contrast int) model.View {
 	return e.change(func(p *model.Project) { design.SetTone(p, photoID, t) })
 }
 
+// fadeMerge — ключ слияния серии ползунка «Прозрачность» фото в один шаг отмены.
+func fadeMerge(session string) string {
+	if !model.ValidSession(session) {
+		return ""
+	}
+	return "fade:" + session
+}
+
+// SetPhotoFade — прозрачность фото ids (079): 0…1, шаг 0,01; merge — сессия ползунка.
+// Договор: NaN/Inf — холостая до правки; значение зажато ClampPhotoFade; чужие ID пропускает тело.
+func (e *Editor) SetPhotoFade(ids []string, fade float64, merge string) model.View {
+	if !allFinite(fade) {
+		return e.View()
+	}
+	fade = model.ClampPhotoFade(fade)
+	return e.apply(fadeMerge(merge), func(p *model.Project) { design.SetPhotoFade(p, ids, fade) })
+}
+
 // Договор: цвет зажат ClampColor (неверный непустой — холостая правка), "" снимает цвет;
 // scope проверяет тело.
 func (e *Editor) SetBackground(spreadID, scope, color string) model.View {

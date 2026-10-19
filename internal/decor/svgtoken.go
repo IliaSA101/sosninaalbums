@@ -145,13 +145,23 @@ func (s *Store) AddPNG(token, data string) (Item, error) {
 		return Item{}, errors.New("картинка из SVG не читается")
 	}
 	blank := blankImage(img)
+	var win winInfo
+	if !blank && p.kind == KindFrame { // рамочка из SVG — то же окно, что у PNG (079, сц. 7)
+		win, err = windowOf(img)
+	}
 	release()
 	if blank {
 		return Item{}, errSVGBlank
 	}
+	if err != nil {
+		return Item{}, err
+	}
 	it, changed, err := s.commit(p.kind, p.theme, p.name, p.key, tmp, ext, info)
 	if changed {
 		s.saveLogged()
+	}
+	if err == nil && p.kind == KindFrame {
+		s.frame.put(p.key, win)
 	}
 	return it, err
 }

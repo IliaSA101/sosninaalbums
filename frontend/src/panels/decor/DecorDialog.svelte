@@ -6,9 +6,12 @@
   import SideList from '../../base/tpl/SideList.svelte'
   import TplItem from '../../base/tpl/TplItem.svelte'
   import { decor } from './decor.svelte'
+  import BgTargets from './BgTargets.svelte'
+  import { bgPickShown } from './bgtargets'
   import SpreadSave from './SpreadSave.svelte'
   import { spreadSave } from './tplsave.svelte'
   import { packsUi } from '../../shell/dialogs/packs.svelte'
+  import { frameStanding, frameWhereItems } from './frames'
   import { FILTERED_EMPTY, saveScopes, tileLook, tplNote, tplSideItems, tplSrc, tplTitle, tplVisible } from './spreadtpl'
   import {
     DECOR_TITLE,
@@ -38,6 +41,7 @@
   const where = $derived(whereItems(sp, store.cover, unit.all))
   const scope = $derived(c ? scopeIn(where, c.scope) : 'spread')
   const sticker = $derived(c?.kind === 'sticker')
+  const frame = $derived(c?.kind === 'frame') // 079: «Куда» — выделенные места или весь лист, а не область листа
   const spreads = $derived(c?.kind === 'spread') // 067: плитки готовых разворотов, «Куда» отбирает их
   const themed = $derived(themeItems(decor.cat, decor.theme))
   const items = $derived(spreads && sp ? tplVisible(themed, scope, sp) : themed)
@@ -45,8 +49,18 @@
   const px = $derived(tilePx(TILE_W, globalThis.devicePixelRatio || 1))
   // Плитка, что стоит в этой области сейчас: отмечена, как текущая раскладка в галерее ⊞
   const standing = $derived(
-    spreads ? '' : sticker ? standingSticker(sp, c?.replace, decor.cat?.items ?? []) : standingId(sp, scope, decor.cat?.items ?? []),
+    frame
+      ? frameStanding(sp, decor.frameIds(), decor.cat?.items ?? [])
+      : spreads
+        ? ''
+        : sticker
+          ? standingSticker(sp, c?.replace, decor.cat?.items ?? [])
+          : standingId(sp, scope, decor.cat?.items ?? []),
   )
+  // 077: строка «на какие листы» под «Куда» — у «Фонов», не на обложке и не в альбоме из одного разворота
+  const manyRow = $derived(c?.kind === 'bg' && bgPickShown(sp, store.view.spreads.length))
+  const bgPlan = $derived(decor.bgPlan())
+  const frameWhere = $derived(frameWhereItems(decor.frameSel().length))
   const noun = $derived(c ? NOUN[c.kind] : 'фон')
   const dpr = $derived(globalThis.devicePixelRatio || 1)
   const emptyMsg = $derived(spreads && themed.length > 0 && !decor.loading ? FILTERED_EMPTY : emptyText(decor.theme, readOnly, c?.kind))
@@ -55,7 +69,7 @@
   $effect(() => {
     if (!c) return
     if (!sp) decor.close()
-    else if (scope !== c.scope) decor.setScope(scope)
+    else if (!frame && scope !== c.scope) decor.setScope(scope)
   })
 
   // Отмеченная плитка при открытии окна не должна прятаться за краем прокрутки.
@@ -88,7 +102,11 @@
       </div>
       <div class="main">
         <div class="bar">
-          {#if (c.kind === 'bg' || spreads) && where.length > 1}
+          {#if frame}
+            <!-- 079: без выделения пункта «Выделенные» нет (owner-ux 2.7) -->
+            <span class="lbl">Куда</span>
+            <Seg items={frameWhere} value={decor.frameWhereNow()} onpick={(w) => decor.setFrameWhere(w)} label="Куда поставить рамочку" />
+          {:else if (c.kind === 'bg' || spreads) && where.length > 1}
             <span class="lbl">Куда</span>
             <Seg items={where} value={scope} onpick={(s) => decor.setScope(s)} label="Куда поставить {noun}" />
           {/if}
@@ -111,6 +129,19 @@
             >
           {/if}
         </div>
+        {#if manyRow}
+          <BgTargets
+            bind:pick={decor.bgPick}
+            bind:text={decor.bgText}
+            selN={decor.selIds().length}
+            total={store.view.spreads.length}
+            {unit}
+            {scope}
+            n={bgPlan.targets.length}
+            error={bgPlan.error}
+            focus={decor.numsFocus}
+          />
+        {/if}
         <div class="tiles" aria-busy={decor.loading}>
           {#each items as it (it.id)}
             {@const look = spreads ? tileLook(it, sp, scope, TILE_W, dpr) : null}
@@ -139,9 +170,11 @@
                   class="tile"
                   class:current={it.id === standing}
                   class:stk={sticker}
+                  class:frm={frame}
+                  class:chk={frame && it.own}
                   aria-current={it.id === standing ? 'true' : undefined}
                   use:seenIf={it.id === standing}
-                  style:aspect-ratio={sticker ? '1 / 1' : `${sp.w} / ${sp.h}`}
+                  style:aspect-ratio={sticker || frame ? '1 / 1' : `${sp.w} / ${sp.h}`}
                   style:background={it.color || undefined}
                   title={tplTitle(it)}
                   onclick={() => decor.pick(it)}
@@ -183,6 +216,15 @@
     <div class="actions">
       <button class="ghost" onclick={() => decor.dismiss()}>Отмена</button>
       <button class="primary" data-autofocus onclick={() => decor.confirmPut()}>Поставить</button>
+    </div>
+  </Modal>
+{:else if c && decor.ask?.kind === 'bgMany'}
+  <!-- 077: вопрос, если уходят фото фона; «Отмена» возвращает в окно плиток -->
+  <Modal title="Поставить фон?" onclose={() => decor.dismiss()}>
+    <p>{decor.ask.text}</p>
+    <div class="actions">
+      <button class="ghost" onclick={() => decor.dismiss()}>Отмена</button>
+      <button class="primary" data-autofocus onclick={() => decor.confirmBgMany()}>Поставить</button>
     </div>
   </Modal>
 {/if}
@@ -272,6 +314,13 @@
     inset: 6px;
     width: calc(100% - 12px);
     height: calc(100% - 12px);
+  }
+  /* Рамочка: квадратная плитка, рамка вокруг силуэта вписана целиком; шашечка (видно прозрачность) — только у своих */
+  .tile.frm img {
+    object-fit: contain;
+  }
+  .tile.chk {
+    background: repeating-conic-gradient(#d4d4d8 0 25%, #f4f4f5 0 50%) 0 0 / 14px 14px;
   }
   .empty {
     grid-column: 1 / -1;

@@ -263,7 +263,7 @@ describe('AutoDialog: диапазон 051', () => {
 
   it('нет фото: собирать нельзя', async () => {
     const go = fakeGo(0)
-    const empty: PlanFn = (i, n, r) => go.ask(i, n, r).then((p) => ({ ...p, photos: 0, minSpreads: 0, maxSpreads: 0 }))
+    const empty: PlanFn = (i, n, r, p) => go.ask(i, n, r, p).then((p) => ({ ...p, photos: 0, minSpreads: 0, maxSpreads: 0 }))
     const d = new AutoDialog([], empty, { spreads: null })
     d.start()
     await go.release()

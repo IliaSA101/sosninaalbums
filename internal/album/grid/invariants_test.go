@@ -38,12 +38,16 @@ func TestGridInvariants(t *testing.T) {
 	edtest.NewSpread(e, -1, pool[:3])
 	scopes := []string{model.ScopeLeft, model.ScopeRight, model.ScopeSpread}
 	ops := []string{"set", "add", "move", "swap", "remove", "new", "place", "fill", "addPlace", "setPlaces", "delete",
-		"arrange", "layers", "group", "fit", "shape", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop"}
+		"arrange", "layers", "group", "fit", "shape", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop", "border", "border"}
 	arr := []string{"same", "sameW", "fitPhoto", "splitH", "splitV", "front", "back"}
 	vigTpls := []string{"grid", "head-t-left", "g-top", "t-top-g", "split-tg", "нет такого"}
 	withGrid, seated, turned, ordered := 0, 0, 0, 0 // тест не должен выродиться в прогон одного «Авто»
 	onCover, vigs := 0, 0                           // шагов над местами обложки (032), виньеток (031)
-	steps := testkit.Steps(1500, 500)               // -short: префикс той же последовательности, пороги ниже пропорционально
+	bordered := 0                                   // мест с рамочкой по шагам (079)
+	frSrcs := []model.BorderSrc{{}, {Kind: "line", Width: 2}, {Kind: "polaroid", Inks: []string{"#EEEEEE"}}, {Kind: "future-kind"},
+		{Photo: model.PhotoInfo{ID: model.LibPhotoID(frKey), Path: filepath.Join(dir, "frame.png"), Lib: frKey, W: 3000, H: 4000}, Cut: [4]float64{0.1, 0.2, 0.1, 0.3}},
+		{Kind: "Плохой"}}
+	steps := testkit.Steps(1500, 500) // -short: префикс той же последовательности, пороги ниже пропорционально
 	need := func(n int) int { return n * steps / 1500 }
 	for step := range steps {
 		n := len(edtest.P(e).Spreads)
@@ -93,7 +97,7 @@ func TestGridInvariants(t *testing.T) {
 		case "drop": // 042: бросок на лист или место, с вопросом и любым ответом
 			_, _, _ = e.DropPhotos(id, []string{"", place}[r.IntN(2)], pick(1+r.IntN(5)), r.Float64()*1.4-0.2, []string{"", "add", "skip"}[r.IntN(3)])
 		case "addPlace":
-			e.AddPlace(id, r.IntN(2), []string{"", model.ShapeOval, "нет такой"}[r.IntN(3)])
+			e.AddPlace(id, r.IntN(2), []string{"", model.ShapeOval, model.ShapeRounded, "нет такой"}[r.IntN(4)])
 		case "setPlaces":
 			e.SetPlaces(id, []model.PlaceBox{{ID: place, X: r.Float64()*700 - 50, Y: r.Float64()*350 - 20, W: r.Float64() * 300, H: r.Float64() * 300}}, "m")
 			e.SetPlaces(id, []model.PlaceBox{{ID: ref, X: r.Float64() * 400, Y: r.Float64() * 200, W: 20 + r.Float64()*200, H: 20 + r.Float64()*200}}, "")
@@ -150,7 +154,7 @@ func TestGridInvariants(t *testing.T) {
 			e.SetPlaceFit(id, []string{ref}, []string{"", model.FitContain}[r.IntN(2)])
 		case "shape": // 044: форма и скругление, и у «Авто»
 			if r.IntN(2) == 0 {
-				e.SetPlaceShape(id, []string{ref, place}, []string{"", model.ShapeOval, "нет такой"}[r.IntN(3)])
+				e.SetPlaceShape(id, []string{ref, place}, []string{"", model.ShapeOval, model.ShapeRounded, "нет такой"}[r.IntN(4)])
 			} else {
 				e.SetPlaceRound(id, []string{ref, place}, []float64{0, 10, 12.4, 50, 70, -5, math.NaN()}[r.IntN(7)])
 			}
@@ -227,6 +231,16 @@ func TestGridInvariants(t *testing.T) {
 				e.SetSheetCaps(id, r.IntN(3) > 0, model.SheetCaps{Style: model.DefaultCaptionStyle(), Pad: r.Float64() * 25,
 					Over: r.IntN(2) == 0, Wrap: r.IntN(2) == 0, Text: []string{"", "{Имя}", "{Фамилия}\n{Имя}"}[r.IntN(3)]})
 			}
+		case "border": // 079: рамочка на выделение (и у «Авто»), правка серией, прозрачность фото
+			switch r.IntN(3) {
+			case 0:
+				_, _ = e.ApplyBorder(id, refs[:r.IntN(len(refs)+1)], frSrcs[r.IntN(len(frSrcs))])
+			case 1:
+				e.SetBorder(id, []string{ref, place}, model.BorderPatch{Width: r.Float64() * 25, Scale: r.Float64() * 3,
+					Inks: [][]string{nil, {}, {"#123456", "#abcdef", "#000000"}}[r.IntN(3)]}, []string{"", "b"}[r.IntN(2)])
+			default:
+				e.SetPhotoFade([]string{ref}, r.Float64()*1.4-0.2, "")
+			}
 		case "undo":
 			e.Undo()
 		case "redo":
@@ -260,6 +274,9 @@ func TestGridInvariants(t *testing.T) {
 				if pv.Rot != 0 {
 					turned++
 				}
+				if pv.Border != nil {
+					bordered++
+				}
 			}
 		}
 	}
@@ -269,6 +286,9 @@ func TestGridInvariants(t *testing.T) {
 	if onCover < need(100) {
 		t.Fatalf("обложку почти не правили: %d мест по шагам", onCover)
 	}
+	if bordered < need(500) {
+		t.Fatalf("рамочек почти не было: %d мест по шагам", bordered)
+	}
 	if vigs < need(100) {
 		t.Fatalf("виньеток почти не было: %d по шагам", vigs)
 	}
@@ -276,8 +296,8 @@ func TestGridInvariants(t *testing.T) {
 		t.Fatalf("сеток мало: %d разворотов-сеток по шагам, %d фото в местах, %d повёрнутых мест, %d с общим порядком",
 			withGrid, seated, turned, ordered)
 	}
-	t.Logf("сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, разворотов %d",
-		withGrid, seated, turned, ordered, vigs, len(edtest.P(e).Spreads))
+	t.Logf("сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, разворотов %d",
+		withGrid, seated, turned, ordered, vigs, bordered, len(edtest.P(e).Spreads))
 }
 
 // seatSet — таблички мест всего альбома (с обложкой) как мультимножество.
@@ -374,7 +394,7 @@ func (x *seatRun) placeOp(op string) bool {
 	case "angle":
 		e.SetPlaceAngle(id, x.place, []float64{0, 30, 90, -45}[r.IntN(4)])
 	case "shape":
-		e.SetPlaceShape(id, []string{x.place}, []string{"", model.ShapeOval}[r.IntN(2)])
+		e.SetPlaceShape(id, []string{x.place}, []string{"", model.ShapeOval, model.ShapeRounded}[r.IntN(3)])
 	case "fit":
 		e.SetPlaceFit(id, []string{x.place}, []string{"", model.FitContain}[r.IntN(2)])
 	case "mirror":

@@ -17,34 +17,42 @@ func gridView(f *fields, sv *model.SpreadView, s *model.Spread) {
 	sv.Photos = model.GridPhotos(s)
 	sv.Places = make([]model.PlaceView, len(s.Grid))
 	flat := p.Geo(s).Layflat    // обложка — всегда: место через корешок законно
-	var outlines []geom.Outline // формы ячеек с фото, рядом с Rects (подписи «на фото»)
+	var wins []layout.Rect      // окна рамочек мест с фото, рядом с Rects (подписи «на фото», 079)
+	var outlines []geom.Outline // формы окон, рядом с Rects
 	for i, pl := range s.Grid {
 		o := pl.Outline()
 		sv.Places[i] = model.PlaceView{ID: pl.ID, X: pl.X, Y: pl.Y, W: pl.W, H: pl.H, Photo: pl.Photo, Fit: pl.Fit,
-			Spine: !flat && p.CrossesSpine(s, pl), Rot: pl.Rot, Role: pl.Role, Shape: pl.Shape, Round: pl.Round, Radius: o.Radius}
+			Spine: !flat && p.CrossesSpine(s, pl), Rot: pl.Rot, Role: pl.Role, Shape: pl.Shape, Round: pl.Round, Radius: o.Radius,
+			Border: borderView(p, pl)}
 		if pl.Photo == "" {
 			continue
 		}
 		r := layout.Rect{X: pl.X, Y: pl.Y, W: pl.W, H: pl.H}
+		// Фото садится в окно рамочки (079-3): кадр, «Целиком» и dpi — по окну; без рамочки окно = место.
+		win, wo := p.BorderWindow(pl)
 		ref := p.Photos[pl.Photo]
 		a, f := p.RawAspect(pl.Photo), ref.FrameOrDefault()
 		var fv model.FrameView
 		if pl.Fit == model.FitContain {
 			// Целиком, без S/X/Y: ползунка у такого места нет; поворот фото действует.
-			fv = newFrameView(geom.ContainImageIn(r, a, f.R, o), model.Frame{S: 1, R: f.R})
+			fv = newFrameView(geom.ContainImageIn(win, a, f.R, wo), model.Frame{S: 1, R: f.R})
 		} else {
 			// Фото закрывает форму, а не рамку (044): у круга наклон его не увеличивает.
-			fv = newFrameView(model.PlaceImageIn(r, a, f, o), f)
+			fv = newFrameView(model.PlaceImageIn(win, a, f, wo), f)
 		}
 		fv.FlipH, fv.FlipV, fv.CellRot = ref.FlipH, ref.FlipV, pl.Rot
 		toneView(&fv, ref)
 		fv.Shape, fv.Radius = pl.Shape, o.Radius
+		fv.Win, fv.WinRadius = win, wo.Radius
+		if wo.Oval {
+			fv.WinShape = model.ShapeOval
+		}
 		fv.DPI = geom.FrameDPI(ref.W, fv.Img)
 		sv.Rects = append(sv.Rects, r)
 		sv.Frames = append(sv.Frames, fv)
-		outlines = append(outlines, o)
+		wins, outlines = append(wins, win), append(outlines, wo)
 	}
-	sv.Captions, sv.Stubs = captionViews(f, s, sv.Photos, sv.Rects, outlines)
+	sv.Captions, sv.Stubs = captionViews(f, s, sv.Photos, sv.Rects, wins, outlines)
 	for i := range sv.Captions {
 		if pl := s.PlaceRef(sv.Captions[i].Photo); pl != nil {
 			turnCaption(&sv.Captions[i], pl)
@@ -201,15 +209,17 @@ func frameViews(p *model.Project, ids []string, rects []layout.Rect) []model.Fra
 		f := ref.FrameOrDefault()
 		img := model.PlaceImage(r, p.RawAspect(ids[i]), f)
 		out[i] = newFrameView(img, f)
-		out[i].DPI, out[i].FlipH, out[i].FlipV = geom.FrameDPI(ref.W, img), ref.FlipH, ref.FlipV
+		out[i].DPI, out[i].FlipH, out[i].FlipV, out[i].Win = geom.FrameDPI(ref.W, img), ref.FlipH, ref.FlipV, r
 		toneView(&out[i], ref)
 	}
 	return out
 }
 
-// toneView — тон фото (068) в виде кадра: числа для карточки и строка CSS для <img>.
-// Одно место для «Авто» и сетки — иначе экран и экспорт разошлись бы на одном из путей.
+// toneView — тон фото (068) в виде кадра: числа для карточки и строка CSS для <img>; и
+// прозрачность (079). Одно место для «Авто» и сетки — иначе экран и экспорт разошлись бы на
+// одном из путей.
 func toneView(fv *model.FrameView, ref model.PhotoRef) {
+	fv.Fade = ref.Fade
 	if t := ref.Adj; t != nil {
 		fv.Gray, fv.Bright, fv.Contrast, fv.Filter = t.Gray, t.Bright, t.Contrast, t.CSS()
 	}

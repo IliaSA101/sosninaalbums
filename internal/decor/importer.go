@@ -70,9 +70,13 @@ func (s *Store) Import(kind, theme string, files []string) (ImportResult, error)
 			changed bool
 			err     error
 		)
-		if kind == KindSticker {
+		if kind == KindSticker || kind == KindFrame {
 			var job *SvgJob
-			it, job, changed, err = s.importSticker(theme, name, p)
+			if kind == KindFrame {
+				it, job, changed, err = s.importFrame(theme, name, p)
+			} else {
+				it, job, changed, err = s.importSticker(theme, name, p)
+			}
 			if job != nil { // SVG чист: PNG нарисует окно, запись появится в AddPNG
 				res.Svg = append(res.Svg, *job)
 			}

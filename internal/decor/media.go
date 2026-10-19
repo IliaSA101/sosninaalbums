@@ -61,12 +61,33 @@ func (s *Store) Handler(cache *library.Cache) http.Handler {
 	})
 }
 
-// serveGen — /media/gen/pat|art: разбор и зажим — gen.Parse (px 16..4096, картинка ≤ 4096²).
-func (s *Store) serveGen(w http.ResponseWriter, r *http.Request) {
-	req, ok := gen.Parse(r.URL.Path, r.URL.RawQuery)
-	if !ok {
+// guard — защита ответа /media: ответ пишется только после рисования, поэтому паника до него —
+// чистый 404, а в лог идёт стек. Зовётся через defer в Handler и ServeFramePic.
+func guard(w http.ResponseWriter, r *http.Request) {
+	if v := recover(); v != nil {
+		log.Printf("ПАНИКА в media decor: %v\n%s", v, debug.Stack())
 		http.NotFound(w, r)
-		return
+	}
+}
+
+// serveGen — /media/gen/pat|art|frame: разбор и зажим — gen.Parse, gen.ParseFrame (px 16..4096,
+// картинка ≤ 4096²).
+func (s *Store) serveGen(w http.ResponseWriter, r *http.Request) {
+	var draw func() image.Image
+	if r.URL.Path == gen.FramePath {
+		req, ok := gen.ParseFrame(r.URL.RawQuery)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		draw = func() image.Image { return drawFrame(req) }
+	} else {
+		req, ok := gen.Parse(r.URL.Path, r.URL.RawQuery)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		draw = func() image.Image { return drawGen(req) }
 	}
 	key := r.URL.Path + "?" + r.URL.RawQuery
 	data, hit := s.media.get(key)
@@ -77,7 +98,7 @@ func (s *Store) serveGen(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var err error
-		data, err = drawPNG(req)
+		data, err = drawPNG(draw)
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -91,18 +112,26 @@ func (s *Store) serveGen(w http.ResponseWriter, r *http.Request) {
 }
 
 // drawPNG рисует и кодирует ответ в занятом слоте genSem; слот освобождается и при панике
-// генератора (её ловит Handler) — иначе после стольких паник, сколько слотов, /media/gen висел бы.
-func drawPNG(req gen.Request) ([]byte, error) {
+// генератора (её ловит guard) — иначе после стольких паник, сколько слотов, /media/gen висел бы.
+func drawPNG(draw func() image.Image) ([]byte, error) {
 	defer func() { <-genSem }()
+	return encodePNG(draw())
+}
+
+// encodePNG — PNG быстрым сжатием: превью живёт в памяти и на экране, не в файле.
+func encodePNG(img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, drawGen(req)); err != nil {
+	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, img); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
 }
 
-// drawGen — рисование ответа (var: тест подставляет паникующий генератор).
-var drawGen = func(req gen.Request) image.Image { return req.Draw() }
+// drawGen, drawFrame — рисование ответа (var: тест подставляет паникующий генератор).
+var (
+	drawGen   = func(req gen.Request) image.Image { return req.Draw() }
+	drawFrame = func(req gen.FrameRequest) image.Image { return req.Draw() }
+)
 
 // serveLib — /media/lib/<t|p>/<16 hex>[?v=…&px=…]: ключ по грамматике и только из реестра.
 func (s *Store) serveLib(w http.ResponseWriter, r *http.Request, cache *library.Cache) {
@@ -178,7 +207,7 @@ func (s *Store) registered(key string) (string, bool) {
 			return p, true
 		}
 	}
-	for _, kind := range []string{KindBg, KindSticker} {
+	for _, kind := range []string{KindBg, KindSticker, KindFrame} {
 		if p, ok := s.files[kind][key]; ok && s.inPack(kind, key) {
 			return p, true
 		}

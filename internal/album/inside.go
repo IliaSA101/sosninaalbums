@@ -39,9 +39,13 @@ func init() {
 	inside.From = func(p any) int { return p.(*model.Project).From() }
 	inside.Loaded = func(p any) any { return p.(*model.Project).Loaded() }
 	inside.Alt = func(m any) string { return m.(model.Mark).Alt() }
+}
 
+// Крючки времени и пересборки — отдельным init: один превышает предел funlen.
+func init() {
 	inside.SlowOp = func() time.Duration { return slowOp }
 	inside.SetSlowOp = func(d time.Duration) { slowOp = d }
 	inside.SlowEdit = func() time.Duration { return slowEdit }
 	inside.SetSlowEdit = func(d time.Duration) { slowEdit = d }
+	inside.SetAgainGap = func(fn func()) { againGap = fn }
 }

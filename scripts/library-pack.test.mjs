@@ -122,3 +122,68 @@ test('нет файла каталога: отказ без --new; с --new — 
   assert.equal(requireBase(cat, false), cat)
   assert.throws(() => requireBase(cat, true), /уже есть/)
 })
+
+/** PNG-заглушка: сигнатура и IHDR нужного размера (остальное для проверки заголовка не нужно). */
+function pngStub(w, h) {
+  const b = Buffer.alloc(700)
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b)
+  b.writeUInt32BE(13, 8)
+  b.write('IHDR', 12, 'latin1')
+  b.writeUInt32BE(w, 16)
+  b.writeUInt32BE(h, 20)
+  return b
+}
+
+test('рамочка (079): kind frame — PNG в пределах, counts.frame; не PNG и больше предела отвергаются', () => {
+  const d = setDir()
+  fs.mkdirSync(path.join(d, 'frames'))
+  fs.writeFileSync(path.join(d, 'frames', 'ring.png'), pngStub(120, 160))
+  const p = path.join(d, 'manifest.src.json')
+  const src = JSON.parse(fs.readFileSync(p, 'utf8'))
+  src.minApp = '0.20.0'
+  src.items.push({ file: 'frames/ring.png', kind: 'frame', theme: 'wedding', name: 'Кольцо' })
+  fs.writeFileSync(p, JSON.stringify(src))
+  const { manifest } = buildPack(d)
+  assert.equal(manifest.items[2].kind, 'frame')
+  assert.deepEqual(catalogRow(manifest, Buffer.from('zip'), 'v1').counts, { bg: 1, sticker: 0, spread: 1, frame: 1 })
+  fs.writeFileSync(path.join(d, 'frames', 'ring.jpg'), crypto.randomBytes(700))
+  src.items[2].file = 'frames/ring.jpg'
+  fs.writeFileSync(p, JSON.stringify(src))
+  assert.throws(() => buildPack(d), /только PNG/)
+  fs.writeFileSync(path.join(d, 'frames', 'big.png'), Buffer.alloc((30 << 20) + 1))
+  src.items[2].file = 'frames/big.png'
+  fs.writeFileSync(p, JSON.stringify(src))
+  assert.throws(() => buildPack(d), /размер вне предела/)
+})
+
+test('рамочка (079-35): minApp ниже 0.20.0 и сторона PNG больше 4096 или не PNG — ошибка сборки', () => {
+  const d = setDir()
+  fs.mkdirSync(path.join(d, 'frames'))
+  const p = path.join(d, 'manifest.src.json')
+  const src = JSON.parse(fs.readFileSync(p, 'utf8'))
+  src.items.push({ file: 'frames/ring.png', kind: 'frame', theme: 'wedding', name: 'Кольцо' })
+  const put = (minApp, png) => {
+    src.minApp = minApp
+    fs.writeFileSync(path.join(d, 'frames', 'ring.png'), png)
+    fs.writeFileSync(p, JSON.stringify(src))
+  }
+  put('0.19.9', pngStub(100, 100))
+  assert.throws(() => buildPack(d), /minApp не ниже 0\.20\.0/)
+  put('0.9.0', pngStub(100, 100)) // сравнение числовое, не строковое
+  assert.throws(() => buildPack(d), /minApp не ниже/)
+  put('0.20.0', pngStub(100, 100))
+  assert.equal(buildPack(d).manifest.items[2].kind, 'frame')
+  put('1.0.0', pngStub(4096, 1)) // предел включительно
+  assert.equal(buildPack(d).manifest.items[2].kind, 'frame')
+  put('0.20.0', pngStub(4097, 100))
+  assert.throws(() => buildPack(d), /сторона PNG 4097×100/)
+  put('0.20.0', pngStub(100, 4097))
+  assert.throws(() => buildPack(d), /сторона PNG/)
+  put('0.20.0', pngStub(0, 100))
+  assert.throws(() => buildPack(d), /сторона PNG/)
+  put('0.20.0', crypto.randomBytes(700)) // .png без сигнатуры
+  assert.throws(() => buildPack(d), /нет PNG-заголовка/)
+  // набор без рамочек старого minApp по-прежнему собирается
+  const d2 = setDir()
+  assert.equal(buildPack(d2).manifest.minApp, '0.16.0')
+})

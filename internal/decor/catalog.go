@@ -12,7 +12,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 )
 
-// Каталог окна «Фоны» / «Стикеры» (design §5.2): встроенные пресеты + свои − скрытые, темы
+// Каталог окна «Фоны» / «Стикеры» / «Рамочки» (design §5.2): встроенные пресеты + свои − скрытые, темы
 // с числами, недавние.
 
 // Темы (решение №92). recent и all — не поле записи, а выборки.
@@ -86,6 +86,7 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 		}
 	}
 	cat.Items = append(cat.Items, spreadBuiltins(kind)...)
+	cat.Items = append(cat.Items, frameBuiltins(kind)...)
 	s.mu.RLock()
 	cat.ReadOnly = s.readOnly
 	// Копии записей: ✎ и × меняют их под mu, пока каталог собирается.

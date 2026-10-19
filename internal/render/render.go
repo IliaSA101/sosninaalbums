@@ -35,7 +35,8 @@ func Render(s Spread, opt Options) (*image.RGBA, error) {
 		return nil, err
 	}
 
-	items := make([]item, 0, len(s.Backdrops)+len(s.Plates)+len(s.Slots)+len(s.Photos)+len(s.Stickers)+len(s.Arts)+len(s.Texts))
+	items := make([]item, 0, len(s.Backdrops)+len(s.Plates)+len(s.Slots)+len(s.Photos)+len(s.Borders)+len(s.Stickers)+len(s.Arts)+len(s.Texts))
+	env := &borderEnv{} // кэши рамочек этого листа
 	// Фоны без OverPlates, плашки, фоны с OverPlates (фото корешка над плашкой, 061).
 	addBackdrops := func(over bool) {
 		for _, b := range s.Backdrops {
@@ -54,7 +55,12 @@ func Render(s Spread, opt Options) (*image.RGBA, error) {
 	addBackdrops(true)
 	nb := len(items)
 	for _, ph := range s.Photos {
-		items = append(items, item{ph: ph, z: ph.Z})
+		if ph.Fade < 1 { // не виден (079): файл не открываем; рамочка у него своя
+			items = append(items, item{ph: ph, z: ph.Z, env: env})
+		}
+	}
+	for i := range s.Borders { // сразу за фото: при равных Z рамочка над своим фото
+		items = append(items, item{border: &s.Borders[i], z: s.Borders[i].Z, env: env})
 	}
 	for i := range s.Slots {
 		items = append(items, item{plate: &s.Slots[i], z: s.Slots[i].Z})
@@ -88,6 +94,8 @@ type item struct {
 	text     *TextDraw
 	plate    *Plate
 	art      *ArtDraw
+	border   *BorderDraw // рамочка места (079)
+	env      *borderEnv  // кэши рамочек листа; nil вне Render
 	z        int
 }
 
@@ -131,7 +139,7 @@ func drawItems(canvas *image.RGBA, items []item, dpi int) error {
 	var wg sync.WaitGroup
 	var failed atomic.Bool // после первой ошибки новые фото не запускаем: результат всё равно отброшен
 	for i, it := range items {
-		photo := it.text == nil && it.plate == nil && it.art == nil
+		photo := it.text == nil && it.plate == nil && it.art == nil && (it.border == nil || it.border.Pic)
 		if photo {
 			sem <- struct{}{}
 		}
@@ -149,6 +157,8 @@ func drawItems(canvas *image.RGBA, items []item, dpi int) error {
 			var paint func(*image.RGBA) error
 			var err error
 			switch {
+			case it.border != nil:
+				paint, err = prepareBorderSafe(it, canvas.Bounds(), dpi)
 			case photo:
 				paint, err = prepareSafe(it, canvas.Bounds(), dpi)
 			case it.art != nil:
@@ -205,16 +215,29 @@ func prepareSafe(it item, canvas image.Rectangle, dpi int) (paint func(*image.RG
 	if !it.clip.Empty() {
 		clip = it.clip.Intersect(canvas)
 	}
+	// Маска окна — после фото: фото за холстом (nil) её не строит (до 400 Мп у большого места).
 	if _, quarter := quarterOf(ph.ImgRot); ph.Rot == 0 && quarter {
 		cell, r, err := prepareFn(ph, dpi, clip)
 		if err != nil || cell == nil {
 			return nil, err
 		}
+		win, err := winOf(it, dpi)
+		if err != nil {
+			return nil, err
+		}
 		applyTone(cell, ph.Tone) // до маски формы: тон касается только картинки (068)
 		fadeAlpha(cell, ph.Fade) // снаружи prepareFn: подмена в тестах его не обходит
-		if hasShape(ph.Outline) {
+		if hasShape(ph.Outline) || win != nil {
 			// Маска — от рамки, а не от r: у «Целиком» r меньше рамки.
-			m := shapeMask(r, ph.Cell, 0, ph.Outline, float64(dpi)/25.4)
+			var m *image.Alpha
+			if hasShape(ph.Outline) {
+				m = shapeMask(r, ph.Cell, 0, ph.Outline, float64(dpi)/25.4)
+			} else {
+				m = fullMask(r)
+			}
+			if win != nil {
+				win.mulInto(m.Pix, m.Stride, r)
+			}
 			return func(c *image.RGBA) error {
 				blitMasked(c, cell, r, m)
 				return nil
@@ -229,6 +252,9 @@ func prepareSafe(it item, canvas image.Rectangle, dpi int) (paint func(*image.RG
 	if err != nil || job == nil {
 		return nil, err
 	}
+	if job.win, err = winOf(it, dpi); err != nil {
+		return nil, err
+	}
 	return job.draw, nil
 }
 
@@ -236,8 +262,11 @@ func prepareSafe(it item, canvas image.Rectangle, dpi int) (paint func(*image.RG
 // пути 3 приходит ошибкой из inParallel.
 func paintSafe(paint func(*image.RGBA) error, canvas *image.RGBA, it item) (err error) {
 	name := baseName(it.ph.Path)
-	if it.art != nil { // файла нет: в тексте — ключ рисунка
+	switch {
+	case it.art != nil: // файла нет: в тексте — ключ рисунка
 		name = it.art.Kind
+	case it.border != nil:
+		name = borderName(*it.border)
 	}
 	defer func() {
 		if p := recover(); p != nil {
@@ -258,6 +287,8 @@ func what(it item) string {
 		return "фона"
 	case it.sticker, it.art != nil:
 		return "стикера"
+	case it.border != nil:
+		return "рамочки"
 	}
 	return "фото"
 }

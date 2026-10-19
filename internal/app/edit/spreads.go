@@ -99,16 +99,25 @@ func (m *Methods) SetSettings(s model.Settings) (v model.View) {
 
 // AutoPlan — подсказка окна автосборки на o.Spreads разворотов по o.MinPer…o.MaxPer фото или
 // «Авто», с сериями или без (всё зажимается; MaxPer — в 1…64; Variety не влияет; нули новых
-// полей — как 0.12). Только чтение. Фото нет — пустой
+// полей — как 0.12). Похожие (078) — без них, число в similar; ч/б — gray; o.again — от альбома
+// до прошлой сборки (не жива — ошибка). Только чтение. Фото нет — пустой
 // план; альбом почти полон (MaxSpreads) — ошибка.
 func (m *Methods) AutoPlan(ids []string, o model.AutoOpts) (pl model.AutoPlan, err error) {
 	defer GuardErr("AutoPlan", &err)
 	return m.editor().AutoPlan(m.infos(ids), o)
 }
 
+// AutoSimilar — кадры, которых автосборка с теми же аргументами не возьмёт как похожие (078), по
+// порядку ленты: like — оставленный, на который похож. similar 0 — пусто. Только чтение.
+func (m *Methods) AutoSimilar(ids []string, o model.AutoOpts) (out []model.SimilarDrop, err error) {
+	defer GuardErr("AutoSimilar", &err)
+	return m.editor().AutoSimilar(m.infos(ids), o)
+}
+
 // AutoBuild собирает ровно те развороты, что показал AutoPlan с теми же аргументами.
 // Сверх MaxSpreads разворотов — ошибка, проект не меняется. Variety зажимается в 0…2,
-// семейства — до 16 строк (065: имена и повторы разбирает сборка).
+// семейства — до 16 строк (065: имена и повторы разбирает сборка). o.again = true — пересборка
+// последней сборки (078 §8): тот же шаг отмены, пока после неё не было шагов; не жива — ошибка.
 func (m *Methods) AutoBuild(ids []string, at int, o model.AutoOpts) (v model.View, err error) {
 	defer m.guardEdit("AutoBuild", &v, &err)
 	return m.changedOrErr(m.editor().AutoBuild(m.infos(ids), at, o.Clamp()))

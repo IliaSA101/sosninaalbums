@@ -58,6 +58,9 @@ export function layoutsStatus(o: { error: boolean; empty: boolean; waiting: bool
 export const spreadTitle = (s: { formName: string; fallback: boolean }): string | undefined =>
   s.fallback ? `${s.formName || 'Раскладка'} — нет раскладок выбранных семейств, взята лучшая` : s.formName || undefined
 
+// Подпись плитки «Что соберётся» (078): число фото и «ч/б», если разворот сборка сделает чёрно-белым.
+export const spreadNote = (s: { photos: number; gray?: boolean }): string => `${s.photos} фото${s.gray ? ' · ч/б' : ''}`
+
 export interface AutoPart {
   photos: number // «k фото» — подпись черты
   group: number // с какого разворота сборки взят образец

@@ -37,7 +37,9 @@ func AddPlace(p *model.Project, spreadID string, page int, shape string) error {
 	}
 	p.Freeze(s)
 	pl, err := p.AddPlace(s, page, 1, p.PlaceIDs())
-	if err == nil {
+	if err == nil && shape == model.ShapeRounded {
+		pl.Shape, pl.Round = "", model.RoundedPct
+	} else if err == nil {
 		pl.Shape, pl.Round = model.ClampShape(shape, 0)
 	}
 	return err
@@ -98,17 +100,24 @@ func SetPlaceFit(p *model.Project, spreadID string, ids []string, fit string) {
 }
 
 // SetPlaceShape — форма мест ids (ссылки placeRef, 044) по образцу SetPlaceFit: рамка, фото
-// и кадр стоят; ShapeOval снимает скругление. Форма не из белого списка — холостая; у «Авто»
-// ShapeOval закрепляет разворот, "" ничего не меняет.
+// и кадр стоят. "" — прямые углы (076: скругление снимается, иначе ▭ у скруглённого холостой);
+// ShapeOval — круг без скругления; ShapeRounded — своё скругление, если есть, иначе RoundedPct
+// (у круга скругления нет — 10 %). Форма не из белого списка — холостая; у «Авто» ShapeOval и
+// ShapeRounded закрепляют разворот, "" ничего не меняет.
 func SetPlaceShape(p *model.Project, spreadID string, ids []string, shape string) {
 	s := p.Sheet(spreadID)
-	if s == nil || shape != "" && shape != model.ShapeOval || shape == "" && len(s.Grid) == 0 {
+	if s == nil || shape != "" && shape != model.ShapeOval && shape != model.ShapeRounded || shape == "" && len(s.Grid) == 0 {
 		return
 	}
 	_ = p.WithGrid(s, func() error {
 		for _, ref := range ids {
-			if pl := s.PlaceRef(ref); pl != nil {
-				pl.Shape, pl.Round = model.ClampShape(shape, pl.Round)
+			pl := s.PlaceRef(ref)
+			switch {
+			case pl == nil:
+			case shape != model.ShapeRounded:
+				pl.Shape, pl.Round = model.ClampShape(shape, 0)
+			case pl.Shape != "" || pl.Round <= 0:
+				pl.Shape, pl.Round = "", model.RoundedPct
 			}
 		}
 		return nil
@@ -175,11 +184,7 @@ func arrange(p *model.Project, s *model.Spread, op string, ids []string) error {
 	case "fitPhoto":
 		for _, pl := range sel {
 			if pl.Photo != "" {
-				a := p.Aspects([]string{pl.Photo})[0]
-				w, h := pl.W, pl.W/a
-				if ph := p.Geo(s).H; h > ph {
-					h, w = ph, ph*a
-				}
+				w, h := fitPhoto(p, s, pl)
 				resize(p, s, pl, w, h)
 			}
 		}
@@ -194,6 +199,25 @@ func arrange(p *model.Project, s *model.Spread, op string, ids []string) error {
 		s.RestackLayers(op, ids)
 	}
 	return nil
+}
+
+// fitPhoto — размер места pl под пропорцию его фото: в пропорции фото окно рамочки (079 §2), без
+// рамочки — само место. Ширина стоит; не встало по высоте страницы — по высоте. Отступы картинки
+// зависят от размера места (k), поэтому две итерации; у встроенной они постоянны — точно с первой,
+// без размеров картинки отступов нет — как без рамочки.
+func fitPhoto(p *model.Project, s *model.Spread, pl *model.Place) (w, h float64) {
+	a, ph := p.Aspects([]string{pl.Photo})[0], p.Geo(s).H
+	w, h = pl.W, pl.H
+	for range 2 {
+		q := *pl // только для отступов: Border не меняется
+		q.W, q.H = w, h
+		ins := p.BorderIns(&q)
+		dw, dh := ins[0]+ins[2], ins[1]+ins[3]
+		if w, h = pl.W, (pl.W-dw)/a+dh; h > ph {
+			h, w = ph, (ph-dh)*a+dw
+		}
+	}
+	return w, h
 }
 
 // resize — новый размер места листа s с прежним центром, затем зажим.

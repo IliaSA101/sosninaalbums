@@ -229,8 +229,11 @@ type metrics struct {
 	big, bigOne, bigHero, bigStars, bigStarsBig int
 }
 
-func measure(a corpusAlbum, lv Level) metrics {
-	picked := Pick(a.spreads, a.p, lv, Ctx{})
+func measure(a corpusAlbum, lv Level) metrics { return measureCtx(a, lv, Ctx{}) }
+
+// measureCtx — measure с заданным Ctx (варианты сборки: Ctx.Seed).
+func measureCtx(a corpusAlbum, lv Level, c Ctx) metrics {
+	picked := Pick(a.spreads, a.p, lv, c)
 	m := metrics{picked: picked, spreadsN: len(picked)}
 	looks := map[string]bool{}
 	var fills []float64

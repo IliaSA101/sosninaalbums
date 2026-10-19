@@ -9,7 +9,7 @@ func (m *Methods) SetGrid(spreadID string, on bool) (v model.View) {
 }
 
 // AddPlace — пустое место на страницу page (0/1); у «Авто» — закрепление той же правкой.
-// shape — форма (044): "oval" — круглое, иначе прямоугольное.
+// shape — форма (044, 076): "oval" — круглое, "rounded" — скругление 10 %, иначе прямоугольное.
 func (m *Methods) AddPlace(spreadID string, page int, shape string) (v model.View, err error) {
 	defer m.guardEdit("AddPlace", &v, &err)
 	return m.changedOrErr(m.editor().AddPlace(spreadID, page, shape))
@@ -103,8 +103,9 @@ func (m *Methods) SetPlaceFit(spreadID string, ids []string, fit string) (v mode
 	return m.changed(m.editor().SetPlaceFit(spreadID, ids, fit))
 }
 
-// SetPlaceShape: ids — ref; shape "" — прямоугольник, "oval" — круг/овал, вписанный в рамку
-// (скругление снимается; у «Авто» закрепляет). Иное — тот же rev.
+// SetPlaceShape: ids — ref; shape "" — прямые углы, "rounded" — скругление (своё или 10 %),
+// "oval" — круг/овал, вписанный в рамку (скругление снимается). "rounded" и "oval" у «Авто»
+// закрепляют. Иное — тот же rev.
 func (m *Methods) SetPlaceShape(spreadID string, ids []string, shape string) (v model.View) {
 	defer m.guardEdit("SetPlaceShape", &v, nil)
 	return m.changed(m.editor().SetPlaceShape(spreadID, ids, shape))
@@ -115,6 +116,14 @@ func (m *Methods) SetPlaceShape(spreadID string, ids []string, shape string) (v 
 func (m *Methods) SetPlaceRound(spreadID string, ids []string, round float64) (v model.View) {
 	defer m.guardEdit("SetPlaceRound", &v, nil)
 	return m.changed(m.editor().SetPlaceRound(spreadID, ids, round))
+}
+
+// SetBorder: ids — ref; цвета, толщина или размер рамочек мест (079 §8). Inks nil — не менять,
+// [] — цвета вида, лишние цвета у вида с меньшим их числом отбрасываются (079-36); 0 — не
+// менять; правка снимает отметку плитки. Серия с одним merge — один шаг; NaN — тот же rev.
+func (m *Methods) SetBorder(spreadID string, ids []string, p model.BorderPatch, merge string) (v model.View) {
+	defer m.guardEdit("SetBorder", &v, nil)
+	return m.changed(m.editor().SetBorder(spreadID, ids, p, merge))
 }
 
 // MirrorGrid: scope left | right | spread. Симметричная сетка — тот же rev.

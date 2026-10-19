@@ -152,42 +152,6 @@ func (e *Editor) RemoveFolder(dir string) model.View {
 	return e.change(func(p *model.Project) { spreads.RemoveFolder(p, dir) })
 }
 
-// AutoPlan — подсказка окна автосборки: как фото лягут ровно на o.Spreads разворотов (от o.MinPer
-// до o.MaxPer на разворот или «Авто», серии — o.Series; всё зажимается; o.Variety не влияет —
-// группы те же). Только чтение: вход снимается под замком, матрица
-// оценок и DP считаются вне его (на тысячах фото — секунды при первом вызове).
-// Пустой хвост альбома (развороты без фото, названия, цвета, сетки) — свободное место:
-// верх ползунка считает его, AutoPlan.Reuse — сколько из него займёт сборка в конец.
-// Договор: photos без повторов (DedupePhotos).
-func (e *Editor) AutoPlan(photos []model.PhotoInfo, o model.AutoOpts) (model.AutoPlan, error) {
-	var job spreads.PlanJob
-	e.read(func(p *model.Project) { job = spreads.PlanOf(p, model.DedupePhotos(photos)) })
-	return job.Plan(o)
-}
-
-// AutoBuild раскладывает фото ровно на o.Spreads новых разворотов (как AutoPlan с теми же
-// аргументами), начиная с позиции at. Фото из сеток и с фонов автосборка не трогает.
-// Сборка в конец (at < 0 или за непустыми) встаёт на место пустого хвоста, а не после него.
-// Раскладки — по o.Variety с учётом соседей (041), звёзды — из оценок photos и своих отметок.
-// План и пулы раскладок считаются вне замка (autoPrep): под замком — только выбор и запись.
-// Договор: photos без повторов (DedupePhotos).
-func (e *Editor) AutoBuild(photos []model.PhotoInfo, at int, o model.AutoOpts) (model.View, error) {
-	t0, made, pre := time.Now(), 0, e.autoPrep(model.DedupePhotos(photos), o)
-	defer func() { slow(t0, "автосборка: %d фото → %d разворотов", pre.Photos(), made) }()
-	return e.try("", func(p *model.Project) (err error) {
-		made, err = spreads.AutoBuild(p, pre, at, e.rating(photos))
-		return
-	})
-}
-
-// autoPrep — вход сборки снимается под замком, план и прогрев пулов — вне его (design 041 §7):
-// холодный разворот 16 фото — десятки мс, сотня разворотов держала бы замок секунды.
-func (e *Editor) autoPrep(photos []model.PhotoInfo, o model.AutoOpts) spreads.Prep {
-	var job spreads.PlanJob
-	e.read(func(p *model.Project) { job = spreads.PlanOf(p, photos) })
-	return spreads.Prepare(job, photos, o)
-}
-
 // PhotosOf — ID фото разворотов ids по порядку ids (чтение): App по ним берёт оценки из XMP
 // вне замка Editor. Неизвестные развороты пропускаются; дальше MaxSpreads ID не разбираем
 // (как DeleteSpreads: огромный список от UI не должен раздуть ответ).
@@ -201,24 +165,6 @@ func (e *Editor) PhotosOf(ids []string) []string {
 		}
 	})
 	return out
-}
-
-// AutoPreview — ряд блока «Раскладки» окна автосборки (065): что соберёт AutoBuild с теми же
-// аргументами и варианты групп плана. Только чтение: сборка — на копии проекта вне замка
-// (под замком — снимок входа, копия и оценки), rev, undo и события не меняются.
-// Договор: photos без повторов (DedupePhotos).
-func (e *Editor) AutoPreview(photos []model.PhotoInfo, at int, o model.AutoOpts) (model.AutoPreview, error) {
-	pre := e.autoPrep(model.DedupePhotos(photos), o)
-	var c *model.Project
-	rates := make(map[string]int, len(photos))
-	e.read(func(p *model.Project) {
-		c = p.Clone()
-		rate := e.rating(photos) // оценки — как у AutoBuild, по тем же photos
-		for _, ph := range photos {
-			rates[ph.ID] = rate(ph.ID)
-		}
-	})
-	return spreads.Preview(c, pre, at, func(id string) int { return rates[id] })
 }
 
 // VaryLayouts — «Разнообразить раскладки» (041) для разворотов ids с уровнем v («Меньше» —

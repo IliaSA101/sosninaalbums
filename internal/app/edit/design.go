@@ -225,6 +225,13 @@ func (m *Methods) SetBackdropFade(spreadID, scope string, fade float64, merge st
 	return m.changed(m.editor().SetBackdropFade(spreadID, scope, fade, merge))
 }
 
+// SetPhotoFade: прозрачность фото ids (ID фото, не мест; 079-36) 0..1, шаг 0.01 — в Go; у фото
+// только на фоне или в рамочке — холостая. Серия с одним merge — один шаг; NaN — тот же rev.
+func (m *Methods) SetPhotoFade(ids []string, fade float64, merge string) (v model.View) {
+	defer m.guardEdit("SetPhotoFade", &v, nil)
+	return m.changed(m.editor().SetPhotoFade(ids, fade, merge))
+}
+
 // FlipBackdrop: axis "h" (↔) | "v" (↕) — переключить зеркало; видимая часть кадра та же.
 func (m *Methods) FlipBackdrop(spreadID, scope, axis string) (v model.View) {
 	defer m.guardEdit("FlipBackdrop", &v, nil)

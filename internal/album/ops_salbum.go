@@ -65,12 +65,36 @@ func (e *Editor) RelinkLib(find salbum.LibFinder) model.View {
 func (e *Editor) view() model.View {
 	v := view.BuildView(e.p, e.state(false))
 	markVigs(e.p, &v) // имя шаблона и «Ручная» виньеток: план мест знает Editor (038)
+	v.Again = e.againAlive()
 	return v
 }
 
 // printView — вид печати для экспорта (Snapshot): пустые поля — пусто, заглушек нет (030).
 // Договор: как у view.
-func (e *Editor) printView() model.View { return view.BuildView(e.p, e.state(true)) }
+func (e *Editor) printView() model.View {
+	v := view.BuildView(e.p, e.state(true))
+	borderFiles(e.p, &v)
+	return v
+}
+
+// borderFiles — рамочкам-картинкам вида печати файл печати BorderView.File (079-40): копия из
+// «Рамочек», а не путь записи, общей с фоном той же картинки.
+func borderFiles(p *model.Project, v *model.View) {
+	sheets := make([]*model.SpreadView, 0, len(v.Spreads)+1)
+	for i := range v.Spreads {
+		sheets = append(sheets, &v.Spreads[i])
+	}
+	if v.Cover != nil {
+		sheets = append(sheets, &v.Cover.Sheet)
+	}
+	for _, s := range sheets {
+		for _, pv := range s.Places {
+			if b := pv.Border; b != nil && b.Pic {
+				b.File = salbum.FramePath(p.Photos[b.Photo])
+			}
+		}
+	}
+}
 
 func (e *Editor) state(forPrint bool) view.State {
 	st := view.State{Path: e.path, Dirty: e.dirty, CanUndo: len(e.undo) > 0,

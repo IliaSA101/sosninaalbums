@@ -265,13 +265,25 @@ describe('уровень в меню (спека 010 U1)', () => {
     expect(edit.indexOf('bgGallery')).toBe(edit.indexOf('addSticker') + 1)
     expect(find(buildMenu({ ...at('full'), hasSpread: false }), 'bgGallery')?.disabled).toBe(true)
   })
+  it('«Правка ▸ Рамочки…» (079) — сразу после «Галереи фонов…», со «Стандартного», серое без листа, клавиши по умолчанию нет', () => {
+    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('borderGallery')
+    const std = buildMenu(at('standard'))
+    expect(find(std, 'borderGallery')).toMatchObject({ label: 'Рамочки…', cmd: 'borderGallery' })
+    expect(find(std, 'borderGallery')?.disabled).toBeUndefined()
+    expect(find(std, 'borderGallery')?.keys).toBeFalsy()
+    const edit = ids(std, 'edit')
+    expect(edit.indexOf('borderGallery')).toBe(edit.indexOf('bgGallery') + 1)
+    expect(find(buildMenu({ ...at('full'), hasSpread: false }), 'borderGallery')?.disabled).toBe(true)
+    // «Свой» без функции «Фоны, стикеры и рамочки»: пункта нет
+    expect(ids(buildMenu({ ...at('full'), can: (f) => f !== 'border' }), 'edit')).not.toContain('borderGallery')
+  })
   it('«Правка ▸ Копировать оформление…» (049 Ф2) — после «Галереи фонов…», со «Стандартного», серое на обложке и без листа', () => {
     expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('copyDecor')
     const std = buildMenu({ ...at('standard'), decorable: true })
     expect(find(std, 'copyDecor')).toMatchObject({ label: 'Копировать оформление…', cmd: 'copyDecor' })
     expect(find(std, 'copyDecor')?.disabled).toBeUndefined()
     const edit = ids(std, 'edit')
-    expect(edit.indexOf('copyDecor')).toBe(edit.indexOf('bgGallery') + 1)
+    expect(edit.indexOf('copyDecor')).toBe(edit.indexOf('borderGallery') + 1)
     expect(find(buildMenu(at('standard')), 'copyDecor')?.disabled).toBe(true) // обложка / нет листа: decorable не задан
     expect(find(buildMenu({ ...at('full'), decorable: false }), 'copyDecor')?.disabled).toBe(true)
   })

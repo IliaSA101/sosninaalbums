@@ -27,6 +27,7 @@ const (
 	MaxTotal    = 1 << 30   // весь набор распакованным
 	MaxBg       = 60 << 20  // фон; меньше своего (200 МБ): набор готовят заранее
 	MaxSticker  = 30 << 20  // стикер
+	MaxFrame    = 30 << 20  // рамочка-картинка (079)
 	MaxSpread   = 256 << 10 // шаблон разворота (= model.MaxTplFile)
 	// ManifestName — манифест в корне архива.
 	ManifestName = "manifest.json"
@@ -37,6 +38,7 @@ const (
 	KindBg      = "bg"
 	KindSticker = "sticker"
 	KindSpread  = "spread"
+	KindFrame   = "frame" // рамочка-картинка (079): только PNG с прозрачным окном
 )
 
 // Ошибки для интерфейса: по-русски, без путей.
@@ -183,6 +185,13 @@ func itemSkip(it Item) string {
 		if ext != ".png" && ext != ".jpg" && ext != ".jpeg" {
 			return "не картинка JPEG или PNG"
 		}
+	case KindFrame:
+		if ext == ".svg" {
+			return "SVG в наборах не принимается — нужен PNG" // решение 9, 079-18
+		}
+		if ext != ".png" {
+			return "рамочка в наборе — только PNG с прозрачностью"
+		}
 	case KindSpread:
 		if ext != ".json" {
 			return "шаблон разворота — не .json"
@@ -205,6 +214,8 @@ func KindLimit(kind string) int64 {
 		return MaxSticker
 	case KindSpread:
 		return MaxSpread
+	case KindFrame:
+		return MaxFrame
 	}
 	return 0
 }

@@ -38,6 +38,7 @@ type PackInfo struct {
 	Bg        int    `json:"bg"`
 	Sticker   int    `json:"sticker"`
 	Spread    int    `json:"spread"`
+	Frame     int    `json:"frame"` // 079: рамочки-картинки
 	Bytes     int64  `json:"bytes"`
 	Removable bool   `json:"removable"`
 }

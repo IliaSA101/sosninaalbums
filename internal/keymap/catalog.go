@@ -184,6 +184,7 @@ var catalog = []Command{
 	c("grid", "alignDistV", "Распределить по вертикали", "Распр. ↕", "align"),
 
 	c("decor", "bgGallery", "Галерея фонов…", "Фоны", "decor"),
+	c("decor", "borderGallery", "Рамочки…", "Рамочки", "border"),
 	c("decor", "addSticker", "Добавить стикер…", "Стикер", "decor"),
 	c("decor", "copyDecor", "Копировать оформление…", "Оформление", "decor"),
 	c("decor", "spreadTpl", "Готовые развороты…", "Готовые", "decor"),

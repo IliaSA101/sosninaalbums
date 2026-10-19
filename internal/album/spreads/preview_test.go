@@ -67,6 +67,50 @@ func TestAutoPreviewMatchesBuild(t *testing.T) {
 			}
 		}
 	}
+	// 078: похожие, ч/б и вариант — то же совпадение, и пометки ч/б как у сборки.
+	for _, o := range []model.AutoOpts{
+		{Spreads: 8, MinPer: 2, MaxPer: 9, Variety: model.VarietyNormal, Similar: 2, Gray: 2, Variant: 4},
+		{Spreads: 8, Auto: true, Variety: model.VarietyMore, Similar: 3, Gray: 3, Variant: 2, Families: []string{"dense"}},
+	} {
+		for _, at := range []int{-1, 1} {
+			previewMatches078(t, o, at)
+		}
+	}
+}
+
+// previewMatches078 — «Что соберётся» == сборка с похожими, ч/б и вариантом (078) из at, и пометки
+// ч/б — как у собранных разворотов.
+func previewMatches078(t *testing.T, o model.AutoOpts, at int) {
+	t.Helper()
+	name := fmt.Sprintf("078 %+v/at%d", o, at)
+	e, ph := previewAlbum(t)
+	sig, _ := scenes("x", len(ph))
+	for i := range ph {
+		ph[i].Sig = sig[i].Sig
+	}
+	pv, err := e.AutoPreview(ph, at, o)
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	if ap, _ := e.AutoPlan(ph, o); ap.Similar == 0 || ap.Gray == 0 {
+		t.Fatalf("%s: отбор не сработал — план %+v", name, ap)
+	}
+	was := map[string]bool{}
+	for _, s := range edtest.P(e).Spreads {
+		was[s.ID] = true
+	}
+	build(t, e, ph, at, o)
+	got := built(edtest.P(e), was)
+	samePreview(t, name, edtest.P(e), got, pv, o.Families)
+	for i, s := range got {
+		gray := true
+		for _, id := range s.Photos {
+			gray = gray && edtest.P(e).Photos[id].Adj != nil && edtest.P(e).Photos[id].Adj.Gray
+		}
+		if gray != pv.Spreads[i].Gray {
+			t.Errorf("%s: разворот %d ч/б %v, в предпросмотре %v", name, i, gray, pv.Spreads[i].Gray)
+		}
+	}
 }
 
 // samePreview — собранные развороты got == «Что соберётся» pv: число, фото, действующий ключ,

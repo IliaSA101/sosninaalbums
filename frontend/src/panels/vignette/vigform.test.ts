@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('../../base/core/store.svelte', () => ({ store: {}, Api: {} }))
 
 import type { VigChoice, VignetteView } from '../../base/core/types'
+import { shapeKey } from '../../base/geom/shape'
 import { setupOf, varsFormOf } from './vigdialog'
 import {
   FORMS,
@@ -13,7 +14,6 @@ import {
   curKey,
   isCurrent,
   pickTile,
-  shapeKey,
   stepTile,
   tileFormOf,
   tileShape,

@@ -12,6 +12,7 @@ import {
   blocker,
   can,
   minLevel,
+  rowOf,
   normLevel,
   type FeatureId,
 } from './levels'
@@ -50,6 +51,8 @@ const LEGACY_MIN: Record<FeatureId, 'simple' | 'standard' | 'full'> = {
   marks: 'simple', // спека 004
   vignette: 'standard', // 031: на «Простом» пунктов виньетки нет (решение 80)
   decor: 'standard', // 048: галерея фонов и стикеров; опора — фото на фоне
+  border: 'standard', // 079: рамочки — also строки decor
+  photoFade: 'standard', // 079: прозрачность фото — also строки adjust
 }
 
 describe('featureGroups', () => {
@@ -120,6 +123,16 @@ describe('таблица уровней', () => {
     expect(LEVEL_HINT.simple).toContain('обложка')
     expect(FEATURES.find((f) => f.id === 'base')?.title).toContain('обложка')
   })
+  it('079: рамочки — в строке «Фоны и стикеры», прозрачность — в строке «Ч/б и тон»; без новых строк «Своего»', () => {
+    expect(rowOf('border')).toBe('decor')
+    expect(rowOf('photoFade')).toBe('adjust')
+    expect(FEATURES.find((f) => f.id === 'decor')?.title).toBe('Фоны, стикеры и рамочки из библиотеки')
+    expect(FEATURES.find((f) => f.id === 'adjust')?.title).toBe('Ч/б, яркость, контраст и прозрачность фото')
+    for (const id of ['border', 'photoFade'] as const) {
+      expect(can(id, 'simple'), id).toBe(false)
+      expect(can(id, 'standard'), id).toBe(true)
+    }
+  })
   it('у каждой функции один главный id и нет повторов среди всех', () => {
     expect(new Set(ALL).size).toBe(ALL.length)
   })
@@ -133,6 +146,11 @@ describe('таблица уровней', () => {
   it('«Простой» — основа, подписи, цвет фона, меню, ↻ 90° и отметки фото (вопрос 2; 004)', () => {
     for (const id of ['base', 'variants', 'timeline', 'captions', 'bgColor', 'menu', 'turn', 'marks'] as const)
       expect(can(id, 'simple'), id).toBe(true)
+  })
+  it('078: строка «Ч/б развороты» окна автосборки идёт по «adjust» — на «Простом» её нет, похожие и вариант — основа', () => {
+    expect(can('adjust', 'simple')).toBe(false)
+    expect(can('adjust', 'standard')).toBe(true)
+    expect(can('base', 'simple')).toBe(true) // «Убирать похожие кадры», «Вариант ‹ ›» и «Пересобрать…» — без отдельной строки
   })
   it('«Стандартный» добавляет текст, кадр, зеркало, зум, группу, фото фона и меню правой кнопки', () => {
     for (const id of [

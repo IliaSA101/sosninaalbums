@@ -135,15 +135,20 @@ func TplScene(p *model.Project, v model.View) (render.Spread, bool) {
 func fromSheet(p *model.Project, s model.SpreadView) render.Spread {
 	es := render.Spread{Bg: [2]color.RGBA{render.ParseHex(s.Bg[0]), render.ParseHex(s.Bg[1])},
 		Patterns: patterns(s), Backdrops: backdrops(p, s)}
+	placed := placedPlaces(s) // места с фото: рамочки (079) и окна
 	for i, id := range s.Photos {
 		if i >= len(s.Rects) || i >= len(s.Frames) {
 			break // раскладки нет: фото без ячейки не рисуем
 		}
 		f := s.Frames[i]
-		es.Photos = append(es.Photos, render.Photo{Cell: s.Rects[i], Img: f.Img, Path: p.Photos[id].Path,
-			FlipH: f.FlipH, FlipV: f.FlipV, Rot: f.CellRot, ImgRot: f.R, Z: f.Z,
+		ph := render.Photo{Cell: s.Rects[i], Img: f.Img, Path: p.Photos[id].Path,
+			FlipH: f.FlipH, FlipV: f.FlipV, Rot: f.CellRot, ImgRot: f.R, Z: f.Z, Fade: f.Fade,
 			Outline: geom.Outline{Oval: f.Shape == model.ShapeOval, Radius: f.Radius},
-			Tone:    render.Tone{Gray: f.Gray, Bright: f.Bright, Contrast: f.Contrast}})
+			Tone:    render.Tone{Gray: f.Gray, Bright: f.Bright, Contrast: f.Contrast}}
+		if i < len(placed) {
+			applyBorder(p, s.ID, placed[i], f, &ph, &es)
+		}
+		es.Photos = append(es.Photos, ph)
 	}
 	stickers(p, s, &es)
 	for _, c := range s.Captions {

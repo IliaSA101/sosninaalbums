@@ -147,6 +147,44 @@ func TestVignetteShapeRelayKeepsOwn(t *testing.T) {
 	sameAll(t, e, model.RolePupil, ":10")
 }
 
+// Ручное ▢ (076) у места виньетки — как ручной круг: переживает смену формата и числа людей;
+// соседи остаются прямоугольными.
+func TestVignetteRoundedOwnKept(t *testing.T) {
+	e, sid := vigSheet(t, 25)
+	g := edtest.P(e).Spreads[0].Grid
+	own := g[3].ID
+	sameAll(t, e, model.RolePupil, ":0")
+	undo := edtest.UndoLen(e)
+	e.SetPlaceShape(sid, []string{own}, model.ShapeRounded)
+	if edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("шагов %d", edtest.UndoLen(e)-undo)
+	}
+	formOf := func() string {
+		_, pl := edtest.P(e).Spreads[0].FindPlace(own)
+		if pl == nil {
+			return "нет места"
+		}
+		return pl.Shape + ":" + map[float64]string{0: "0", 10: "10"}[pl.Round]
+	}
+	count := func() int {
+		return len(slices.DeleteFunc(vigShapes(e, 0), func(s string) bool { return s != model.RolePupil+"::10" }))
+	}
+	if formOf() != ":10" || count() != 1 {
+		t.Fatalf("▢: %q, %v", formOf(), vigShapes(e, 0))
+	}
+	st := edtest.P(e).Settings
+	st.PageW, st.PageH = 304, 404
+	e.SetSettings(st)
+	if formOf() != ":10" || count() != 1 {
+		t.Fatalf("смена формата: %q, %v", formOf(), vigShapes(e, 0))
+	}
+	v := vigOf(e, 0)
+	v.Pupils++
+	if _, _, err := e.SetVignette(sid, v, nil); err != nil || formOf() != ":10" || count() != 1 {
+		t.Fatalf("другие числа: %v, %q, %v", err, formOf(), vigShapes(e, 0))
+	}
+}
+
 // Свой шаблон запоминает форму (стиль и коробки), файл шаблонов с ним — v5; выбор шаблона
 // приносит форму, как подпись учителя.
 func TestVigTemplateShape(t *testing.T) {

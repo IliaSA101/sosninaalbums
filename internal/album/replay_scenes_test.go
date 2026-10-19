@@ -258,6 +258,9 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 		r.t.Fatalf("AutoPreview сменил rev: %d → %d", r.v.Rev, e.View().Rev)
 	}
 	r.read("AutoPreview", []any{pv, fmt.Sprint(err)})
+	// Похожие кадры (078): чтение; у фото реплея подписей нет — отброшенных нет.
+	sd, err := e.AutoSimilar(ph[1:7], model.AutoOpts{Spreads: 2, MaxPer: 64, Similar: model.MaxAutoLevel})
+	r.read("AutoSimilar", []any{sd, fmt.Sprint(err)})
 	// Готовый разворот (067, в конце, как 042): снимок правой страницы с местами и надписями
 	// (своё фото фона — ключом), план, постановка на весь лист (правая — зеркально), повтор
 	// холостой — только rev и ошибка.
@@ -282,4 +285,35 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	// «Убрать из альбома» в полосе «Не найдено» (075, в конце, как 042): фото из мест, фон-фото и
 	// своё фото фона — одним шагом; неизвестный ID пропускается.
 	r.do("PurgePhotos", e.PurgePhotos([]string{ph[6].ID, ph[13].ID, own.ID, "нет"}))
+	// Фон на набор листов (077, в конце, как 042): план, узор на весь лист (обложка — не цель),
+	// повтор холостой — только rev, счёт и ошибка.
+	bgTo := []model.GridTarget{{Spread: sid, Scope: model.ScopeSpread}, {Spread: model.CoverID, Scope: model.ScopeSpread}}
+	dots := model.BgSource{Pattern: &model.Pattern{Kind: "dots", Preset: "sa:dots"}, Color: "#f5efe6"}
+	bplan, err := e.PlanBackgroundTo(bgTo, dots)
+	r.read("PlanBackgroundTo", []any{bplan, fmt.Sprint(err)})
+	r.vne("ApplyBackgroundTo")(e.ApplyBackgroundTo(bgTo, dots))
+	bv, bn, err := e.ApplyBackgroundTo(bgTo, dots)
+	r.read("ApplyBackgroundTo:повтор", []any{bv.Rev, bn, fmt.Sprint(err)})
+	// Рамочки и прозрачность (079, в конце, как 042): встроенная на фото и пустое место, повтор
+	// холостой (только rev), серия толщины, своя картинка, отказ по ключу, прозрачность серией.
+	at := []string{ph[7].ID, seat}
+	r.ve("ApplyBorder")(e.ApplyBorder(sid, at, model.BorderSrc{Kind: "line", Preset: "sa:line"}))
+	bv, err = e.ApplyBorder(sid, at, model.BorderSrc{Kind: "line", Preset: "sa:line"})
+	r.read("ApplyBorder:повтор", [2]any{bv.Rev, err})
+	r.do("SetBorder", e.SetBorder(sid, at, model.BorderPatch{Width: 2.5}, "b079"))
+	r.do("SetBorder:слияние", e.SetBorder(sid, at, model.BorderPatch{Inks: []string{"#C8A24A"}}, "b079"))
+	const key3 = "my:00112233445566ff"
+	fr := model.PhotoInfo{ID: model.LibPhotoID(key3), Path: `Q:\Библиотека\Рамочки\00112233445566ff.png`, Lib: key3, W: 3000, H: 4000}
+	bv, err = e.ApplyBorder(sid, []string{seat}, model.BorderSrc{Photo: model.PhotoInfo{ID: "x", Lib: "my:x"}})
+	r.read("ApplyBorder:ключ", [2]any{bv.Rev, fmt.Sprint(err)})
+	r.ve("ApplyBorder:своя")(e.ApplyBorder(sid, []string{seat}, model.BorderSrc{Photo: fr, Cut: [4]float64{0.14, 0.14, 0.14, 0.14}}))
+	r.do("SetPhotoFade", e.SetPhotoFade([]string{ph[7].ID}, 0.25, "f079"))
+	// G6: та же своя повторно — без шага (плитка не в недавние); путь /media/f — только у записи
+	// под рамочкой, у фото места — нет.
+	sv, changed, err := e.ApplyBorderStep(sid, []string{seat}, model.BorderSrc{Photo: fr, Cut: [4]float64{0.14, 0.14, 0.14, 0.14}})
+	r.read("ApplyBorderStep:повтор", []any{sv.Rev, changed, fmt.Sprint(err)})
+	frPath, frOK := e.BorderPath(fr.ID)
+	phPath, phOK := e.BorderPath(ph[7].ID)
+	r.read("BorderPath", []any{frPath, frOK, phPath, phOK})
+	r.read("BorderIDs", e.BorderIDs()) // 079-40: /media/f сверяет ID адреса с ними
 }

@@ -9,6 +9,8 @@
   import FitToggle from '../photoprops/FitToggle.svelte'
   import ShapeToggle from '../photoprops/ShapeToggle.svelte'
   import SnapToggle from '../photoprops/SnapToggle.svelte'
+  import PhotoFade from '../border/PhotoFade.svelte'
+  import InspectorBorder from '../border/InspectorBorder.svelte'
 
   // Карточка пустого места или группы (спеки 008, 014). Место: X/Y/Ш/В образца, замок, привязка (общая с текстом),
   // «Целиком / С обрезкой». Группа (2+ объекта, в том числе тексты): состав в заголовке и X/Y/Ш/В общей рамки.
@@ -18,6 +20,8 @@
   const title = $derived(
     placesel.isGroup ? groupTitle(placesel.selected.length, placesel.texts.length, placesel.selectedStickers.length) : 'Место',
   )
+  // Фото выделенных мест: у них своя прозрачность (079); пустые места её не имеют
+  const photos = $derived(placesel.selected.map((b) => b.photo).filter((x) => x !== ''))
   const seat = $derived(seatOf(placesel.isGroup, placesel.selected))
   // Ссылка на место — от примитивов: новый вид разворота каждую правку её не пересоздаёт (иначе поля перезапускают загрузку).
   const sid = $derived(store.spread?.id ?? '')
@@ -30,6 +34,8 @@
   <SnapToggle />
 {/if}
 {#if prefs.can('frame') && placesel.selected.length > 0}<FitToggle /><ShapeToggle />{/if}
+{#if prefs.can('photoFade') && photos.length > 0}<PhotoFade {photos} />{/if}
+{#if prefs.can('border') && placesel.selected.length > 0}<InspectorBorder />{/if}
 {#if seat && sid && prefs.can('captions')}
   <!-- По месту пересоздаётся: набранное уходит на своё место -->
   {#key seat}<PersonFields photo="" place={seatRef} />{/key}

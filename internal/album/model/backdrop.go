@@ -79,6 +79,21 @@ func (p *Project) SpineErr(s *Spread) error {
 	return nil
 }
 
+// BgSource — что ставит плитка «Фоны» (077): встроенный узор с цветом страниц или своё фото
+// фона из библиотеки. Ровно одно: Pattern != nil или Photo.ID != "". В файл не пишется.
+type BgSource struct {
+	Pattern *Pattern
+	Color   string
+	Photo   PhotoInfo
+}
+
+// BgPlan — фон на набор листов (077): сколько листов изменится и сколько фото фона уйдёт или
+// заменится (вопрос перед постановкой: кадр и поворот фото — работа фотографа).
+type BgPlan struct {
+	Spreads int `json:"spreads"`
+	Photos  int `json:"photos"`
+}
+
 // Slot — где лежит фон области; nil — область неизвестна.
 func (s *Spread) Slot(scope string) **Backdrop {
 	switch scope {
@@ -122,8 +137,9 @@ func (p *Project) clampBackdrops(s *Spread) {
 	}
 }
 
-// PhotoIDs — все фото разворота: в местах, на фонах и в стикерах (048). Единая точка для
-// rekey и colorReport; «в альбоме» (Photos) фото фона и стикера не считается.
+// PhotoIDs — все фото разворота: в местах, на фонах, в стикерах (048) и рамочках мест (079).
+// Единая точка для rekey и colorReport; «в альбоме» (Photos) фото фона, стикера и рамочки не
+// считается.
 func (s *Spread) PhotoIDs() []string {
 	ids := slices.Clone(s.Photos)
 	for _, id := range s.decorPhotos() {
@@ -134,7 +150,7 @@ func (s *Spread) PhotoIDs() []string {
 	return ids
 }
 
-// decorPhotos — фото оформления листа: фонов и своих стикеров (с повторами).
+// decorPhotos — фото оформления листа: фонов, своих стикеров и рамочек-картинок мест (с повторами).
 func (s *Spread) decorPhotos() []string {
 	var ids []string
 	for _, b := range s.Backdrops() {
@@ -145,11 +161,50 @@ func (s *Spread) decorPhotos() []string {
 			ids = append(ids, st.Photo)
 		}
 	}
+	return append(ids, s.BorderPhotos()...)
+}
+
+// BorderPhotos — фото рамочек-картинок мест листа (079), по порядку мест, с повторами.
+func (s *Spread) BorderPhotos() []string {
+	var ids []string
+	for _, pl := range s.Grid {
+		if b := pl.Border; b != nil && b.Photo != "" {
+			ids = append(ids, b.Photo)
+		}
+	}
 	return ids
 }
 
-// OnDecor — ID фото, стоящих на фонах и в стикерах любого листа (с обложкой): «в альбоме» они
-// не считаются — автосборка и «Заполнить пустые» их не берут.
+// OnBackdrop — запись id уже стоит на фоне какого-то листа (с обложкой). Один исходник,
+// загруженный и фоном, и стикером или рамочкой, — одна запись (ID от ключа); у фона в ней путь к
+// байтам исходника, у стикера и рамочки — к копии ≤ 4096 px: переписать — фон напечатается из
+// уменьшенной копии (Load по ключу находит сначала фон — decor.Find).
+func (p *Project) OnBackdrop(id string) bool {
+	for _, s := range p.Sheets() {
+		for _, b := range s.Backdrops() {
+			if b.Photo == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// OnBorder — запись id стоит в рамочке-картинке места какого-то листа (с обложкой): только такую
+// отдаёт /media/f (079-22) — обычное фото альбома этим путём не нарисовать.
+func (p *Project) OnBorder(id string) bool {
+	for _, s := range p.Sheets() {
+		for _, pl := range s.Grid {
+			if b := pl.Border; b != nil && b.Photo != "" && b.Photo == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// OnDecor — ID фото, стоящих на фонах, в стикерах и рамочках любого листа (с обложкой): «в
+// альбоме» они не считаются — автосборка и «Заполнить пустые» их не берут.
 func (p *Project) OnDecor() map[string]bool {
 	out := map[string]bool{}
 	for _, s := range p.Sheets() {

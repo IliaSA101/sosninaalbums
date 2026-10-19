@@ -144,6 +144,30 @@ describe('команды', () => {
     }
   })
 
+  it('«Рамочки…» (079): открывает окно «Рамочки» текущего листа; на «Простом» и без листа — молчит', () => {
+    const was = { view: store.view, current: store.current, level: prefs.level }
+    const show = vi.spyOn(decor, 'show').mockImplementation(() => {})
+    try {
+      store.view = { ...store.view, spreads: [{ id: 'a', photos: [] } as unknown as SpreadView] }
+      store.current = 0
+      prefs.level = 'simple'
+      COMMANDS.borderGallery()
+      expect(show).not.toHaveBeenCalled()
+      prefs.level = 'standard'
+      COMMANDS.borderGallery()
+      expect(show).toHaveBeenCalledWith('frame', 'a', 'spread')
+      show.mockClear()
+      store.view = { ...store.view, spreads: [] }
+      COMMANDS.borderGallery()
+      expect(show).not.toHaveBeenCalled()
+    } finally {
+      show.mockRestore()
+      store.view = was.view
+      store.current = was.current
+      prefs.level = was.level
+    }
+  })
+
   it('«Галерея фонов…» (048): открывает окно текущего листа на весь лист; на «Простом» и без листа — молчит', () => {
     const was = { view: store.view, current: store.current, level: prefs.level }
     const show = vi.spyOn(decor, 'show').mockImplementation(() => {})

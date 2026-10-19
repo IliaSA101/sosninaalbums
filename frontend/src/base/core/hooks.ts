@@ -11,6 +11,7 @@ export interface PickResult {
   from: 'selected' | 'free'
   inAlbum: number
   filtered: boolean
+  again?: boolean // 078: окно открыто как «Пересобрать» (те же фото последней сборки)
 }
 
 export type MarkMap = Readonly<Record<string, MarkView>>
@@ -43,6 +44,8 @@ export interface StoreHooks {
   free(photos: Photo[], used: ReadonlySet<string>, backdrop: ReadonlySet<string>): Photo[]
   // Что отдать автосборке / «Заполнить пустые места»; пусто — тост с причиной уже показан.
   pick(moveUsed: boolean): PickResult
+  // 078: из фото последней сборки убрать отклонённые (флажок ✕) — в пересборку они не идут
+  notRejected(ids: readonly string[]): string[]
 
   // --- выделение на холсте ---
   selectedRefs(): readonly string[]
@@ -67,6 +70,7 @@ export const noHooks: StoreHooks = {
   visible: (photos) => photos,
   free: (photos, used, backdrop) => photos.filter((p) => !used.has(p.id) && !backdrop.has(p.id)),
   pick: () => ({ ids: [], skipped: 0, from: 'free', inAlbum: 0, filtered: false }),
+  notRejected: (ids) => [...ids],
   selectedRefs: () => [],
   select: () => {},
   dropGrid: async () => false,

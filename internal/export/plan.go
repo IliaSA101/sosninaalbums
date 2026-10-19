@@ -96,9 +96,10 @@ func (pl Plan) wants(spread int, r layout.Rect, pageW float64) bool {
 }
 
 // SelectedPhotos — фото, которые попадут в выгрузку по плану (для проверки пропавших и цвета):
-// в местах, на фонах и в своих стикерах. Фон цели-страницы считается, если его видимая часть
-// заходит на неё, стикер — если описанная рамка; фон и стикер с Fade ≥ 1 не печатаются и файл
-// не читается — их пропажа экспорт не держит.
+// в местах, на фонах, в своих стикерах и в рамочках-картинках мест с фото. Фон цели-страницы
+// считается, если его видимая часть заходит на неё, стикер и рамочка — если описанная рамка; фон и
+// стикер с Fade ≥ 1 не печатаются и файл не читается — их пропажа экспорт не держит. Рамочка
+// пустого места не печатается (079).
 func (pl Plan) SelectedPhotos(v model.View, pageW float64) map[string]bool {
 	out := map[string]bool{}
 	if pl.Cover != nil && v.Cover != nil {
@@ -123,6 +124,7 @@ func (pl Plan) SelectedPhotos(v model.View, pageW float64) map[string]bool {
 				out[st.Photo] = true
 			}
 		}
+		pl.borderPhotoWants(s, i+1, pageW, out)
 	}
 	return out
 }
@@ -135,7 +137,8 @@ func stickerAABB(st model.StickerView) layout.Rect {
 	return geom.RotRect{X: st.X, Y: st.Y, W: st.W, H: st.H, Rot: st.Rot}.AABB()
 }
 
-// coverPhotos — фото обложки, которые попадут в печать: места, видимые фоны и свои стикеры.
+// coverPhotos — фото обложки, которые попадут в печать: места, видимые фоны, свои стикеры и
+// рамочки-картинки мест с фото.
 func coverPhotos(s model.SpreadView, out map[string]bool) {
 	for _, id := range s.Photos {
 		out[id] = true
@@ -150,6 +153,7 @@ func coverPhotos(s model.SpreadView, out map[string]bool) {
 			out[st.Photo] = true
 		}
 	}
+	borderPhotos(s, out)
 }
 
 // ReplaceQuestion — вопрос о замене найденных файлов прежнего экспорта; обложка (00.jpg) — в тексте отдельно.
@@ -246,16 +250,18 @@ func MissingPhotos(p *model.Project, ids map[string]bool, exists func(string) bo
 		return nil
 	}
 	var gone []string
-	onSticker := stickerPhotos(p)
-	bgs, sts := 0, 0
+	onSticker, onBorder := stickerPhotos(p), ownBorders(p)
+	var own [3]int // не найденное своё: фоны, стикеры, рамочки
 	for _, id := range all {
 		switch {
 		case sub[id].Lib == "":
 			gone = append(gone, id)
 		case onSticker[id]:
-			sts++
+			own[1]++
+		case onBorder[id]:
+			own[2]++
 		default:
-			bgs++
+			own[0]++
 		}
 	}
 	var parts []string
@@ -270,9 +276,9 @@ func MissingPhotos(p *model.Project, ids map[string]bool, exists func(string) bo
 		}
 		parts = append(parts, fmt.Sprintf("не найдены файлы фото: %d (%s); найдите их: Файл ▸ Найти пропавшие фото…", len(gone), list))
 	}
-	if bgs+sts > 0 {
+	if n := own[0] + own[1] + own[2]; n > 0 {
 		parts = append(parts, fmt.Sprintf("нет в библиотеке этого компьютера: %d (%s); загрузите те же файлы в %s, они найдутся сами",
-			bgs+sts, libWhat(bgs, sts), libWhere(bgs, sts)))
+			n, libWhat(own), libWhere(own)))
 	}
 	return fmt.Errorf("%s — и повторите выгрузку", strings.Join(parts, "; "))
 }
@@ -291,28 +297,51 @@ func stickerPhotos(p *model.Project) map[string]bool {
 	return out
 }
 
-// libWhat — что пропало из библиотеки: «свой фон», «свои стикеры», «свои фоны и стикеры».
-func libWhat(bgs, sts int) string {
-	switch {
-	case sts == 0 && bgs == 1:
-		return "свой фон"
-	case sts == 0:
-		return "свои фоны"
-	case bgs == 0 && sts == 1:
-		return "свой стикер"
-	case bgs == 0:
-		return "свои стикеры"
+// libKinds — виды своего: фон, стикер, рамочка. Единственное число — когда пропал один файл одного
+// вида; несколько видов сразу — всегда множественное, как «свои фоны и стикеры».
+var libKinds = [3]struct{ one, many, gallery string }{
+	{"свой фон", "фоны", "фонов"},
+	{"свой стикер", "стикеры", "стикеров"},
+	{"своя рамочка", "рамочки", "рамочек"},
+}
+
+// joinRu — «а», «а и б», «а, б и в».
+func joinRu(w []string) string {
+	if len(w) < 2 {
+		return strings.Join(w, "")
 	}
-	return "свои фоны и стикеры"
+	return strings.Join(w[:len(w)-1], ", ") + " и " + w[len(w)-1]
+}
+
+// libWhat — что пропало из библиотеки (own — число файлов по видам): «свой фон», «свои стикеры»,
+// «свои фоны и стикеры», «свои фоны, стикеры и рамочки».
+func libWhat(own [3]int) string {
+	var many []string
+	last := 0
+	for i, n := range own {
+		if n > 0 {
+			many, last = append(many, libKinds[i].many), i
+		}
+	}
+	if len(many) == 1 {
+		if own[last] == 1 {
+			return libKinds[last].one
+		}
+		return "свои " + many[0]
+	}
+	return "свои " + joinRu(many)
 }
 
 // libWhere — куда загрузить пропавшее: галерея того вида, где оно стоит.
-func libWhere(bgs, sts int) string {
-	switch {
-	case sts == 0:
-		return "галерею фонов"
-	case bgs == 0:
-		return "галерею стикеров"
+func libWhere(own [3]int) string {
+	var gal []string
+	for i, n := range own {
+		if n > 0 {
+			gal = append(gal, libKinds[i].gallery)
+		}
 	}
-	return "галереи фонов и стикеров"
+	if len(gal) == 1 {
+		return "галерею " + gal[0]
+	}
+	return "галереи " + joinRu(gal)
 }

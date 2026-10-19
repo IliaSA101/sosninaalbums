@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { catalogView, catalogWith } from '../../base/keys/keymap.fixture'
-import { emptyText, groupRows, listed, matches, norm, rowTag } from './keylist'
+import { emptyText, groupRows, listed, matches, navKey, norm, rowTag, stepRow } from './keylist'
 
 const all = () => true
 const ids = (rows: { id: string }[]) => rows.map((e) => e.id)
@@ -68,5 +68,48 @@ describe('пустой список', () => {
     expect(emptyText({ query: '', onlyOwn: true })).toBe('Своих сочетаний пока нет.')
     expect(emptyText({ query: 'я', onlyOwn: true })).toMatch(/^Ничего не нашлось/)
     expect(emptyText({ query: 'х', onlyOwn: false })).toMatch(/^Ничего не нашлось/)
+  })
+})
+
+describe('хождение стрелками по строкам', () => {
+  const order = ['a', 'b', 'c']
+  const bare = { ctrlKey: false, shiftKey: false, altKey: false, metaKey: false }
+  it('↓/↑ — соседняя строка, на краях остаёмся на месте (без круга)', () => {
+    expect(stepRow(order, 'a', 'ArrowDown')).toBe('b')
+    expect(stepRow(order, 'b', 'ArrowUp')).toBe('a')
+    expect(stepRow(order, 'c', 'ArrowDown')).toBe('c')
+    expect(stepRow(order, 'a', 'ArrowUp')).toBe('a')
+  })
+  it('Home/End — первая и последняя', () => {
+    expect(stepRow(order, 'b', 'Home')).toBe('a')
+    expect(stepRow(order, 'b', 'End')).toBe('c')
+    expect(stepRow(order, null, 'End')).toBe('c')
+  })
+  it('одна строка: стрелки никуда не уводят', () => {
+    for (const k of ['ArrowUp', 'ArrowDown', 'Home', 'End'] as const) expect(stepRow(['x'], 'x', k)).toBe('x')
+  })
+  it('пусто (поиск ничего не нашёл) — null', () => {
+    expect(stepRow([], 'a', 'ArrowDown')).toBeNull()
+    expect(stepRow([], null, 'Home')).toBeNull()
+  })
+  it('текущей строки нет среди видимых (скрыта поиском) — вход с начала или с конца', () => {
+    expect(stepRow(order, 'gone', 'ArrowDown')).toBe('a')
+    expect(stepRow(order, 'gone', 'ArrowUp')).toBe('c')
+    expect(stepRow(order, null, 'ArrowDown')).toBe('a')
+  })
+  it('порядок берётся из групп и поиска: скрытые строки пропускаются', () => {
+    const groups = groupRows(catalogView, listed(catalogView, { query: 'ctrl', onlyOwn: false, visible: all }))
+    const rows = groups.flatMap((g) => g.rows.map((e) => e.id))
+    expect(rows.length).toBeGreaterThan(1)
+    expect(stepRow(rows, rows[0], 'ArrowDown')).toBe(rows[1])
+    expect(stepRow(rows, rows[0], 'End')).toBe(rows[rows.length - 1])
+  })
+  it('navKey: только голые ↑ ↓ Home End; с модификаторами и другие клавиши — null', () => {
+    expect(navKey({ key: 'ArrowDown', ...bare })).toBe('ArrowDown')
+    expect(navKey({ key: 'Home', ...bare })).toBe('Home')
+    expect(navKey({ key: 'ArrowDown', ...bare, ctrlKey: true })).toBeNull()
+    expect(navKey({ key: 'End', ...bare, shiftKey: true })).toBeNull()
+    expect(navKey({ key: 'ArrowLeft', ...bare })).toBeNull()
+    expect(navKey({ key: 'a', ...bare })).toBeNull()
   })
 })

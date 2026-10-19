@@ -103,3 +103,21 @@ export function sheetsOf(v: Sheets): readonly SpreadView[] {
 export function sheetIn(v: Sheets, id: string): SpreadView | undefined {
   return id === COVER_ID ? (v.cover?.sheet ?? undefined) : v.spreads.find((s) => s.id === id)
 }
+
+// Рамочки (079) в шаблон не входят (до 0.21): окна «Сохранить как шаблон» честно говорят об этом.
+export const BORDER_NOTE = 'Рамочки в шаблон не входят'
+
+// Есть ли рамочка у мест области scope: страница — по центру места относительно шва, как defaultN;
+// лист без шва (виньетка) режется не по областям, «Авто» (places = null) рамочек не имеет.
+export function hasBorders(
+  sv: Pick<SpreadView, 'mid' | 'places'> | undefined,
+  scope: 'spread' | 'left' | 'right' | 'spine' = 'spread',
+): boolean {
+  if (!sv) return false
+  return (sv.places ?? []).some((p) => {
+    if (!p.border) return false
+    if (scope === 'spread' || scope === 'spine' || !hasSeam(sv)) return true
+    const left = p.x + p.w / 2 < sv.mid
+    return scope === 'left' ? left : !left
+  })
+}

@@ -18,7 +18,7 @@ import (
 // поэтому «Что соберётся» совпадает со сборкой. Фото нет — пустые ряды без ошибки.
 func Preview(c *model.Project, pre Prep, at int, rate Rating) (model.AutoPreview, error) {
 	pv := model.AutoPreview{Samples: []model.SampleRow{}, Spreads: []model.PreviewSpread{}}
-	at0, made, fb, err := build(c, pre, at, rate)
+	b, err := build(c, pre, at, rate, nil)
 	if err != nil {
 		return pv, err
 	}
@@ -26,9 +26,10 @@ func Preview(c *model.Project, pre Prep, at int, rate Rating) (model.AutoPreview
 	pv.W, pv.H = g.W, g.H
 	prm := c.Params()
 	seen := map[int]bool{}
-	for i, s := range c.Spreads[at0 : at0+made] {
+	for i, s := range c.Spreads[b.at : b.at+b.made] {
 		r, _, _ := c.Layout(s) // у собранного разворота 1…64 фото — раскладка есть всегда
-		ps := model.PreviewSpread{Choice: describeOne(r, prm), Photos: len(s.Photos), Fallback: i < len(fb) && fb[i]}
+		ps := model.PreviewSpread{Choice: describeOne(r, prm), Photos: len(s.Photos), Fallback: i < len(b.fb) && b.fb[i],
+			Gray: i < len(b.gray) && b.gray[i]}
 		if ps.Fallback {
 			pv.Fallback++
 		}

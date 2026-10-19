@@ -202,3 +202,62 @@ func stickerPaths(e *album.Editor, sid string, refs map[string]model.PhotoRef) [
 	}
 	return out
 }
+
+// «Убрать из альбома» снимает рамочку-картинку, чья запись в списке (079-38): у места с фото и у
+// пустого, на листе и на обложке; места, их фото, встроенная рамочка и чужая картинка стоят. Один
+// шаг, отмена возвращает всё; итог переживает Save→Load.
+func TestPurgePhotosBorder(t *testing.T) {
+	e := edtest.CoverEd(t, "cv", []*model.Place{edtest.Gp(10, 10, 100, 60, "a"), edtest.Gp(130, 10, 80, 80, ""), edtest.Gp(10, 100, 60, 60, "b")}, []string{"c"})
+	cut := [4]float64{0.1, 0.1, 0.1, 0.1}
+	edtest.Change(e, func(p *model.Project) {
+		p.Photos["fr"] = model.PhotoRef{Path: edtest.Abs("fr.png"), W: 300, H: 200}
+		p.Photos["keep"] = model.PhotoRef{Path: edtest.Abs("keep.png"), W: 300, H: 200}
+		g := p.Spreads[0].Grid
+		g[0].Border, g[1].Border = &model.Border{Photo: "fr", Cut: cut}, &model.Border{Photo: "fr", Cut: cut}
+		g[2].Border = &model.Border{Kind: "line"}
+		p.Cover.Sheet.Grid[0].Border = &model.Border{Photo: "fr", Cut: cut}
+		p.Spreads[1].Grid = []*model.Place{{ID: "000000000099", X: 10, Y: 10, W: 50, H: 50, Photo: "c", Border: &model.Border{Photo: "keep", Cut: cut}}}
+	})
+	before := model.Marshal(edtest.P(e))
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	e.PurgePhotos([]string{"fr"})
+	if edtest.Rev(e) != rev+1 || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("rev %d → %d, undo %d → %d: ждали один шаг", rev, edtest.Rev(e), undo, edtest.UndoLen(e))
+	}
+	check := func(when string, e *album.Editor) {
+		t.Helper()
+		p := edtest.P(e)
+		g := p.Spreads[0].Grid
+		if len(g) != 3 || g[0].Photo == "" || g[0].Border != nil || g[1].Border != nil || g[2].Border == nil || g[2].Border.Kind != "line" {
+			t.Fatalf("%s: места листа %+v %+v %+v", when, g[0], g[1], g[2])
+		}
+		if cv := p.Cover.Sheet.Grid[0]; cv.Border != nil || cv.Photo == "" {
+			t.Fatalf("%s: обложка %+v", when, cv)
+		}
+		if k := p.Spreads[1].Grid[0].Border; k == nil || p.Photos[k.Photo].Path != edtest.Abs("keep.png") {
+			t.Fatalf("%s: чужая рамочка снята: %+v", when, k)
+		}
+		for _, r := range p.Photos {
+			if r.Path == edtest.Abs("fr.png") {
+				t.Fatalf("%s: запись рамочки осталась", when)
+			}
+		}
+		if err := edtest.BorderInvariant(p); err != nil {
+			t.Fatalf("%s: %v", when, err)
+		}
+	}
+	check("правка", e)
+	file := filepath.Join(testkit.TempDir(t), "a.salbum")
+	if err := e.Save(file); err != nil {
+		t.Fatal(err)
+	}
+	q, err := album.LoadBase(file, filepath.Dir(file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("Save→Load", edtest.Open(t, q, ""))
+	e.Undo()
+	if got := model.Marshal(edtest.P(e)); string(got) != string(before) {
+		t.Fatalf("отмена вернула не тот проект:\n%s\n%s", got, before)
+	}
+}

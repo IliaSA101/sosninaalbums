@@ -40,7 +40,7 @@ func TestSalbumSpreadGuideRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(first, &f); err != nil {
 		t.Fatal(err)
 	}
-	if f.Version != 13 || f.SpreadGuide != "Разметка/spread.psd" || f.SpreadGuideAbs != guide || bytes.Contains(first, []byte("spreadGuideAlt")) {
+	if f.Version != 14 || f.SpreadGuide != "Разметка/spread.psd" || f.SpreadGuideAbs != guide || bytes.Contains(first, []byte("spreadGuideAlt")) {
 		t.Fatalf("в файле v%d: %q, abs %q", f.Version, f.SpreadGuide, f.SpreadGuideAbs)
 	}
 	second, r := saveLoad(t, q, path)

@@ -48,9 +48,38 @@ func quarterOf(deg float64) (int, bool) {
 
 func center(r layout.Rect) (float64, float64) { return r.X + r.W/2, r.Y + r.H/2 }
 
+// hasPivot — у фото задана рамка места, вокруг центра которой поворот (079).
+func hasPivot(ph Photo) bool { return ph.Pivot.W > 0 && ph.Pivot.H > 0 }
+
+// pivotOf — центр поворота места: рамка места (Pivot) или центр Cell.
+func pivotOf(ph Photo) (float64, float64) {
+	if hasPivot(ph) {
+		return center(ph.Pivot)
+	}
+	return center(ph.Cell)
+}
+
+// turnedCell — Cell после поворота на Rot вокруг центра поворота: прямоугольник тех же размеров,
+// центр которого сдвинут; фигуры строятся вокруг его центра. Без Pivot — сам Cell, дословно.
+func turnedCell(ph Photo) layout.Rect {
+	if !hasPivot(ph) {
+		return ph.Cell
+	}
+	px, py := center(ph.Pivot)
+	cx, cy := center(ph.Cell)
+	s, c := sincosDeg(ph.Rot)
+	dx, dy := cx-px, cy-py
+	return centered(px+dx*c-dy*s, py+dx*s+dy*c, ph.Cell.W, ph.Cell.H)
+}
+
+func centered(cx, cy, w, h float64) layout.Rect {
+	return layout.Rect{X: cx - w/2, Y: cy - h/2, W: w, H: h}
+}
+
 // fold переносит поворот места, кратный 90°, в поворот фото: ячейка снова прямая (при
-// нечётной четверти стороны меняются), центр фото поворачивается вокруг центра ячейки.
-// Так место под 90° идёт путём 1 (Lanczos, без маски), а под 90° с наклоном — путём 2.
+// нечётной четверти стороны меняются), центр фото поворачивается вокруг центра ячейки (или
+// рамки места, Pivot: окно рамочки со смещённым центром). Так место под 90° идёт путём 1
+// (Lanczos, без маски), а под 90° с наклоном — путём 2.
 func fold(ph Photo) Photo {
 	q, ok := quarterOf(ph.Rot)
 	if !ok {
@@ -58,15 +87,23 @@ func fold(ph Photo) Photo {
 	}
 	if q == 0 {
 		ph.Rot = 0 // Img не пересчитываем: иной порядок сложений сдвинул бы px() прежних альбомов
+		ph.Pivot = layout.Rect{}
 		return ph
 	}
-	cx, cy := center(ph.Cell)
+	cx, cy := pivotOf(ph)
 	ix, iy := center(ph.Img)
 	s, c := sincosDeg(ph.Rot)
 	dx, dy := ix-cx, iy-cy
-	if q%2 == 1 {
+	if hasPivot(ph) {
+		turned := turnedCell(ph)
+		if q%2 == 1 {
+			turned = centered(turned.X+turned.W/2, turned.Y+turned.H/2, turned.H, turned.W)
+		}
+		ph.Cell = turned
+	} else if q%2 == 1 {
 		ph.Cell = layout.Rect{X: cx - ph.Cell.H/2, Y: cy - ph.Cell.W/2, W: ph.Cell.H, H: ph.Cell.W}
 	}
+	ph.Pivot = layout.Rect{}
 	ph.Img.X, ph.Img.Y = cx+dx*c-dy*s-ph.Img.W/2, cy+dx*s+dy*c-ph.Img.H/2
 	ph.ImgRot += ph.Rot
 	ph.Rot = 0
@@ -82,7 +119,7 @@ type rotGeom struct {
 func newGeom(ph Photo, k float64) rotGeom {
 	sr, cr := sincosDeg(ph.Rot)
 	s, c := sincosDeg(ph.Rot + ph.ImgRot)
-	cx, cy := center(ph.Cell)
+	cx, cy := pivotOf(ph)
 	ix, iy := center(ph.Img)
 	dx, dy := ix-cx, iy-cy
 	ox, oy := cx+dx*cr-dy*sr, cy+dx*sr+dy*cr // центр фото после поворота места
@@ -187,6 +224,7 @@ type rotJob struct {
 	frame layout.Rect
 	rot   float64
 	k     float64
+	win   *winSampler // маска окна рамочки (079); с ней всегда путь 3
 }
 
 // prepareRot готовит фото путей 2 и 3; clip — куда можно рисовать (холст или область фона).
@@ -224,7 +262,7 @@ func checkRotPhoto(ph Photo) error {
 	if ph.Img.W <= 0 || ph.Img.H <= 0 {
 		return fmt.Errorf("%s: у фото нет кадра", baseName(ph.Path))
 	}
-	for _, v := range []float64{ph.Rot, ph.ImgRot, ph.Cell.X, ph.Cell.Y, ph.Cell.W, ph.Cell.H, ph.Img.X, ph.Img.Y, ph.Img.W, ph.Img.H, ph.Outline.Radius} {
+	for _, v := range []float64{ph.Rot, ph.ImgRot, ph.Pivot.X, ph.Pivot.Y, ph.Pivot.W, ph.Pivot.H, ph.Cell.X, ph.Cell.Y, ph.Cell.W, ph.Cell.H, ph.Img.X, ph.Img.Y, ph.Img.W, ph.Img.H, ph.Outline.Radius} {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			return fmt.Errorf("%s: некорректная геометрия фото", baseName(ph.Path))
 		}
@@ -237,7 +275,8 @@ func checkRotPhoto(ph Photo) error {
 func rotShape(ph Photo, dpi int, clip image.Rectangle, g rotGeom, k float64) (job *rotJob, poly []pt, covers bool) {
 	W, H := ph.Img.W, ph.Img.H
 	photo := []pt{g.fwd(0, 0), g.fwd(W, 0), g.fwd(W, H), g.fwd(0, H)}
-	frame := framePoly(ph.Cell, ph.Rot, k)
+	turned := turnedCell(ph)
+	frame := framePoly(turned, ph.Rot, k)
 	covers = true
 	for _, p := range frame {
 		if !inside(photo, p, 1e-3) {
@@ -245,8 +284,8 @@ func rotShape(ph Photo, dpi int, clip image.Rectangle, g rotGeom, k float64) (jo
 			break
 		}
 	}
-	job = &rotJob{shape: ph.Outline, frame: ph.Cell, rot: ph.Rot, k: k}
-	if ph.Rot == 0 && covers && !hasShape(ph.Outline) {
+	job = &rotJob{shape: ph.Outline, frame: turned, rot: ph.Rot, k: k}
+	if ph.Rot == 0 && covers && !hasShape(ph.Outline) && ph.Win == nil {
 		// Путь 2: клип — ячейка в px, как у пути 1; окно — под её пиксели.
 		job.cell = image.Rect(px(ph.Cell.X, dpi), px(ph.Cell.Y, dpi), px(ph.Cell.X+ph.Cell.W, dpi), px(ph.Cell.Y+ph.Cell.H, dpi)).Intersect(clip)
 		if job.cell.Empty() {
@@ -480,6 +519,9 @@ func (j *rotJob) draw(canvas *image.RGBA) error {
 			form := &image.Alpha{Pix: b.form[:n], Stride: w, Rect: mask.Rect}
 			drawShape(&b.z, form, r.Min, j.frame, j.rot, j.shape, j.k)
 			mulMask(mask.Pix, form.Pix)
+		}
+		if j.win != nil {
+			j.win.mulInto(mask.Pix, w, r)
 		}
 		draw.DrawMask(canvas, r, tmp, r.Min, mask, image.Point{}, draw.Over)
 	})

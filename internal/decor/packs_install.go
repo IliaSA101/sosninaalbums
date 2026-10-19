@@ -79,8 +79,9 @@ type Staged struct {
 
 type stagedItem struct {
 	kind, key, theme, name, ext string
-	tmp                         string // картинка: временный файл в папке вида
-	tpl                         []byte // шаблон: канонический JSON (ключ — TplKey)
+	tmp                         string  // картинка: временный файл в папке вида
+	win                         winInfo // рамочка: окно, найденное при проверке
+	tpl                         []byte  // шаблон: канонический JSON (ключ — TplKey)
 	libs                        []libRef
 	w, h                        int
 	bytes                       int64
@@ -192,7 +193,7 @@ func (s *Store) stageItems(st *Staged, src PackSource) error {
 			err error
 		)
 		switch it.Kind {
-		case KindBg, KindSticker:
+		case KindBg, KindSticker, KindFrame:
 			si, why, err = s.stageImage(i, it, src)
 		case KindSpread:
 			si, why, err = stageTpl(i, src)
@@ -257,6 +258,19 @@ func (s *Store) stageImage(i int, it PackItem, src PackSource) (si stagedItem, w
 	}
 	if it.Kind == KindSticker && max(info.W, info.H) > packMaxSide {
 		return si, fmt.Sprintf("стикер больше %d px по стороне", packMaxSide), nil
+	}
+	if it.Kind == KindFrame {
+		if ext != "png" {
+			return si, errNeedPNG.Error(), nil
+		}
+		if max(info.W, info.H) > packMaxSide {
+			return si, fmt.Sprintf("рамочка больше %d px по стороне", packMaxSide), nil
+		}
+		win, err := readWindow(si.tmp) // окно проверяется при установке, как при «Загрузить своё…»
+		if err != nil {
+			return si, err.Error(), nil
+		}
+		si.win = win
 	}
 	si.ext, si.w, si.h, si.bytes = ext, info.W, info.H, info.Size
 	return si, "", nil
@@ -441,6 +455,9 @@ func (s *Store) InstallPack(st *Staged, keep func(key string) bool) (PackInfo, e
 	s.mu.Lock()
 	for i, it := range st.items {
 		s.indexFile(it.kind, it.key, placed[i])
+		if it.kind == KindFrame {
+			s.frame.put(it.key, it.win)
+		}
 	}
 	if old != nil {
 		s.packs[slices.Index(s.packs, old)] = reg

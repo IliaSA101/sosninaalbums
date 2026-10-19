@@ -60,7 +60,7 @@ func sizesOf(groups [][2]int) []int {
 // только считает границы.
 func TestAutoOptsZeroIsOld(t *testing.T) {
 	for _, n := range []int{1, 7, 30, 68} {
-		j := PlanOf(model.New(), folders(n/2, n-n/2))
+		j := PlanOf(model.New(), folders(n/2, n-n/2), nil)
 		for _, o := range []model.AutoOpts{{}, {Spreads: 1, MaxPer: 64}, {Spreads: 5, MaxPer: 8}, {Spreads: 999, MaxPer: 200}, {Spreads: 3}, {Spreads: -4, MaxPer: 3}} {
 			m := max(1, min(o.MaxPer, model.MaxPhotos))
 			want := plan.PlanGroups(j.asp, j.prm, o.Spreads, m)
@@ -81,6 +81,13 @@ func TestAutoOptsZeroIsOld(t *testing.T) {
 				if ap.Cuts != wantCuts {
 					t.Fatalf("n=%d %+v: границ серий %d, ждали %d", n, o, ap.Cuts, wantCuts)
 				}
+				// 078: нули новых полей и вариант 1 — тот же план, ни похожих, ни ч/б.
+				o1 := o
+				o1.Variant = 1
+				ap1, got1, err := j.plan(o1)
+				if err != nil || fmt.Sprint(got1) != fmt.Sprint(want) || ap1 != ap || ap.Similar != 0 || ap.Gray != 0 {
+					t.Fatalf("n=%d %+v: вариант 1 %+v %v, без него %+v", n, o, ap1, got1, ap)
+				}
 			}
 		}
 	}
@@ -96,7 +103,7 @@ func TestPlanRangeSeriesPull(t *testing.T) {
 			bound[i] = true
 		}
 	}
-	j := PlanOf(model.New(), ph)
+	j := PlanOf(model.New(), ph, nil)
 	for _, o := range []model.AutoOpts{{Spreads: 10, Auto: true}, {Spreads: 10, MinPer: 3, MaxPer: 12}} {
 		var hits [2]int
 		for i, series := range []bool{false, true} {
@@ -140,14 +147,14 @@ func TestAutoBuildIsPlan(t *testing.T) {
 	} {
 		for _, stale := range []bool{false, true} {
 			p := model.New()
-			j := PlanOf(p, ph)
+			j := PlanOf(p, ph, nil)
 			_, want, err := j.plan(o)
 			if err != nil {
 				t.Fatal(err)
 			}
 			pre := Prepare(j, ph, o)
 			if stale {
-				pre = Prepare(PlanOf(p, flat), ph, o)
+				pre = Prepare(PlanOf(p, flat, nil), ph, o)
 			}
 			if _, err := AutoBuild(p, pre, -1, nil); err != nil {
 				t.Fatal(err)
@@ -163,8 +170,8 @@ func TestAutoBuildIsPlan(t *testing.T) {
 	}
 	// Серии в самом деле меняют план: иначе проверка stale выше ничего не ловит.
 	o := model.AutoOpts{Spreads: 10, Auto: true, Series: true}
-	_, a, _ := PlanOf(model.New(), ph).plan(o)
-	_, b, _ := PlanOf(model.New(), flat).plan(o)
+	_, a, _ := PlanOf(model.New(), ph, nil).plan(o)
+	_, b, _ := PlanOf(model.New(), flat, nil).plan(o)
 	if fmt.Sprint(a.Groups) == fmt.Sprint(b.Groups) {
 		t.Fatal("план с сериями совпал с планом без них")
 	}
@@ -182,20 +189,20 @@ func TestPlanJobSameLib(t *testing.T) {
 	for i := range lib {
 		lib[i].Lib = "my:0123456789abcdef"
 	}
-	if !PlanOf(model.New(), ph).same(PlanOf(model.New(), slices.Clone(ph))) {
+	if !PlanOf(model.New(), ph, nil).same(PlanOf(model.New(), slices.Clone(ph), nil)) {
 		t.Fatal("одинаковый вход признан другим")
 	}
-	if PlanOf(model.New(), ph).same(PlanOf(model.New(), lib)) {
+	if PlanOf(model.New(), ph, nil).same(PlanOf(model.New(), lib, nil)) {
 		t.Fatal("смена Lib не замечена")
 	}
 	o := model.AutoOpts{Spreads: 10, Auto: true, Series: true}
-	_, a, _ := PlanOf(model.New(), ph).plan(o)
-	_, b, _ := PlanOf(model.New(), lib).plan(o)
+	_, a, _ := PlanOf(model.New(), ph, nil).plan(o)
+	_, b, _ := PlanOf(model.New(), lib, nil).plan(o)
 	if fmt.Sprint(a.Groups) == fmt.Sprint(b.Groups) {
 		t.Fatal("Lib не меняет план: проверка stale ниже ничего не ловит")
 	}
 	p := model.New()
-	pre := Prepare(PlanOf(p, lib), ph, o) // посчитано для lib, а собираем ph
+	pre := Prepare(PlanOf(p, lib, nil), ph, o) // посчитано для lib, а собираем ph
 	if _, err := AutoBuild(p, pre, -1, nil); err != nil {
 		t.Fatal(err)
 	}

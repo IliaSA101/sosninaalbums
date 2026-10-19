@@ -1,6 +1,6 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
-  import { unitOf } from '../../base/geom/sheet'
+  import { BORDER_NOTE, hasBorders, sheetIn, unitOf } from '../../base/geom/sheet'
   import Modal from '../../base/ui/Modal.svelte'
   import { NAME_MAX, SAVE_HINT, deleteText } from './vigown'
   import { vigOwn } from './vigown.svelte'
@@ -29,6 +29,7 @@
       <input type="text" maxlength={NAME_MAX} data-autofocus placeholder="Шаблон N" bind:value={vigOwn.name} onkeydown={enter} /></label
     >
     <p class="hint">{SAVE_HINT}</p>
+    {#if hasBorders(sheetIn(store.view, ask.spread))}<p class="hint">{BORDER_NOTE}</p>{/if}
     <div class="actions">
       <button class="ghost" onclick={close}>Отмена</button>
       <button class="primary" onclick={commit}>Сохранить</button>

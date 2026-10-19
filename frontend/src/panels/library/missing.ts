@@ -40,14 +40,19 @@ export function missingText(missing: number, total: number, where = ''): string 
 }
 
 // Лист для поиска пропавших: ID фото лежат в photos, фоны — в backdrops[].photo, свои стикеры (048) — в
-// stickers[].photo (у процедурного фото нет); кадры и места берут photos.
-type Sheet = Pick<SpreadView, 'id' | 'photos'> & { backdrops?: { photo: string }[] | null; stickers?: { photo?: string }[] | null }
+// stickers[].photo (у процедурного фото нет), рамочки-картинки (079) — в places[].border.photo; кадры и места берут photos.
+type Sheet = Pick<SpreadView, 'id' | 'photos'> & {
+  backdrops?: { photo: string }[] | null
+  stickers?: { photo?: string }[] | null
+  places?: { border?: { photo?: string } }[] | null
+}
 type Unit = { one: string; many: string; cap: string }
 
 const idsOf = (sp: Sheet): string[] => [
   ...(sp.photos ?? []),
   ...(sp.backdrops ?? []).map((b) => b.photo),
   ...(sp.stickers ?? []).flatMap((s) => s.photo ?? []),
+  ...(sp.places ?? []).flatMap((p) => p.border?.photo || []),
 ]
 
 // Сколько пропавших фото на листе (метка в ленте).

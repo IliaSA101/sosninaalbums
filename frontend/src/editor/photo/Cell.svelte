@@ -12,6 +12,11 @@
   import { adjlive } from './adjlive.svelte'
   import { aabbOf, uprightAt } from '../../base/geom/rotbox'
   import { cornerInset, markAt, outlineOf, shapeCss } from '../../base/geom/shape'
+  import { opacityOf } from '../backdrop/fade'
+  import BorderOverlay from '../border/BorderOverlay.svelte'
+  import { borderPx, borderSrc, maskUrlCss, watchMask, windowOf, winStyle } from '../border/border'
+  import { borderTip } from '../border/borderstate'
+  import { borderlive } from '../border/borderlive.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { photoui } from './photoui.svelte'
@@ -30,12 +35,14 @@
     r,
     mini = false,
     preview = false,
+    width = 0,
   }: {
     spread: SpreadView
     i: number
     r: Rect // ячейка, мм разворота (при предпросмотре галереи — не из View)
     mini?: boolean
     preview?: boolean // r взят из карточки галереи: картинку считаем сами
+    width?: number // ширина листа на экране, px: от неё размер PNG рамочки (079)
   } = $props()
 
   const NINTHS = [1, 2, 3, 4, 5, 6, 7, 8] // линии сетки наклона 9×9 (059)
@@ -53,10 +60,26 @@
   // Форма места (044): в галерее (preview) места не из View — формы нет. Радиус в мм приходит из Go.
   const shape = $derived(preview ? undefined : fv?.shape)
   const radius = $derived(preview ? 0 : placesel.liveRadius([place?.id, id], fv?.radius ?? 0, r.w, r.h))
-  const outline = $derived(outlineOf(shape, radius))
   const radiusCss = $derived(shapeCss(shape, radius, r.w, r.h))
-  // Значки в углу вписанного прямоугольника: круг не должен их обрезать.
-  const inset = $derived(cornerInset(shape, radius, r.w, r.h))
+  // Рамочка места (079): фото сидит в окне внутри места; форма окна и кадр считаются по нему. Без рамочки окно = место.
+  const border = $derived(preview ? undefined : place?.border)
+  // Ползунок «Толщина» / «Размер» в карточке ведёт отступы окна на ходу (borderlive), Go зовётся на отпускании.
+  const liveIns = $derived(border ? borderlive.insOf(spread.id, [place?.id, id], border) : undefined)
+  const w = $derived(windowOf(r, fv, radius, liveIns ?? border?.ins, preview, liveIns !== undefined))
+  const outline = $derived(outlineOf(w.shape, w.radius))
+  const clipCss = $derived(shapeCss(w.shape, w.radius, w.win.w, w.win.h))
+  const ws = $derived(winStyle(r, w))
+  // Значки в углу вписанного в окно прямоугольника: круг не должен их обрезать.
+  const inset = $derived(cornerInset(w.shape, w.radius, w.win.w, w.win.h))
+  // Прозрачность — у фото (у .clip), рамочка поверх не прозрачнеет.
+  const fade = $derived(preview ? 0 : borderlive.fadeOf(spread.id, id, fv?.fade ?? 0))
+  // Рамочка пропала или новее программы (U5): подсказка на всей ячейке, как у стикера; у пропавшего фото своя (.miss).
+  const borderNote = $derived(border && !mini ? borderTip(border, store.missing, store.missingNames) : undefined)
+  const bpx = $derived(border ? borderPx(r.w, spread.w, width, globalThis.devicePixelRatio || 1) : 0)
+  // Маска окна рамочки-картинки и мягкого края: ставится, когда PNG открылся (иначе фото пропало бы целиком).
+  const maskSrc = $derived(border?.maskUrl ? borderSrc(border.maskUrl, bpx) : '')
+  let maskReady = $state('')
+  $effect(() => watchMask(maskSrc, (u) => (maskReady = u)))
   const dpiAt = $derived(markAt(r, rot, shape, radius, 6) ?? (rot ? uprightAt(r, rot, aabbOf({ ...r, rot }), 6) : undefined))
   // Пропорции файла: img лежит в осях фото, поэтому и при повороте на 90° это они, а не рамки.
   const aspect = $derived(fv && fv.img.h > 0 ? fv.img.w / fv.img.h : r.w / r.h)
@@ -64,7 +87,7 @@
   // Кадр, который тянут (✥, ползунки на ячейке и в карточке справа — всё через framelive), до отпускания.
   const pre = $derived(mini ? null : framelive.of(id))
   const cur = $derived(pre ?? frame)
-  const img = $derived(pre || preview || !fv ? liveImage(r, aspect, cur, contain, outline) : fv.img)
+  const img = $derived(pre || preview || !fv || liveIns ? liveImage(w.win, aspect, cur, contain, outline) : fv.img)
 
   // Ч/б и тон (068): строка filter из Go; пока тянут ползунок карточки — живая. Фильтр на самой картинке: поле страницы не задет.
   const tone = $derived(adjlive.filterOf(id, fv))
@@ -114,6 +137,7 @@
   {@attach (n) => (mini ? undefined : watchSize(n, (w, h) => ((cw = w), (ch = h))))}
   class="cell"
   style:border-radius={radiusCss}
+  title={borderNote}
   class:selected
   class:missing
   class:lifted={!mini && drag.active && drag.payload?.kind === 'photos' && drag.payload.fromSpread && drag.payload.ids[0] === id}
@@ -127,11 +151,23 @@
   onclick={mini ? undefined : select}
   oncontextmenu={mini || preview ? undefined : (e) => photoui.open(e, id)}
 >
-  <div class="clip" class:contain style:border-radius={radiusCss}>
+  <div
+    class="clip"
+    class:contain
+    class:win={w.windowed}
+    class:masked={maskReady !== ''}
+    style:left={ws?.left}
+    style:top={ws?.top}
+    style:width={ws?.width}
+    style:height={ws?.height}
+    style:border-radius={clipCss}
+    style:opacity={opacityOf(fade)}
+    style:--m={maskUrlCss(maskReady)}
+  >
     {#if missing}
       <div class="miss" title={missTip(id, store.missingNames)}><Icon name="photo-minus" size={mini ? 12 : 28} stroke={1.8} /></div>
     {:else}
-      {@const pos = `left:${pct(img.x - r.x, r.w)};top:${pct(img.y - r.y, r.h)};width:${pct(img.w, r.w)};height:${pct(img.h, r.h)}`}
+      {@const pos = `left:${pct(img.x - w.win.x, w.win.w)};top:${pct(img.y - w.win.y, w.win.h)};width:${pct(img.w, w.win.w)};height:${pct(img.h, w.win.h)}`}
       <img
         class="ph"
         class:gone={contain && previewReady}
@@ -171,12 +207,13 @@
       {@const badge = colorBadge(store.byId.get(id))}
       {#if badge}<span
           class="badge {badge.level}"
-          style:left={radiusCss ? `calc(6px + ${(inset.x / r.w) * 100}%)` : undefined}
-          style:bottom={radiusCss ? `calc(6px + ${(inset.y / r.h) * 100}%)` : undefined}
+          style:left={clipCss ? `calc(6px + ${(inset.x / w.win.w) * 100}%)` : undefined}
+          style:bottom={clipCss ? `calc(6px + ${(inset.y / w.win.h) * 100}%)` : undefined}
           title={badge.title}>{badge.label}</span
         >{/if}
     {/if}
   </div>
+  {#if border}<BorderOverlay {border} px={bpx} {mini} />{/if}
   <!-- У выделенной ячейки «!» dpi, ✥ и ползунок рисует CellOverlay (выше стека, не обрезаются) -->
   {#if !mini && (!selected || preview) && !missing}<DpiMark dpi={fv?.dpi ?? 0} minDPI={store.view.minDPI} at={dpiAt} />{/if}
 </div>
@@ -201,6 +238,16 @@
     inset: 0;
     overflow: hidden;
     background: #ddd;
+  }
+  /* Окно рамочки (079): позиция задана стилем, а не inset. */
+  .clip.win {
+    right: auto;
+    bottom: auto;
+  }
+  /* Маска окна рамочки-картинки / мягкого края: пересекается с обрезкой по border-radius. Префикс — для WKWebView. */
+  .clip.masked {
+    -webkit-mask: var(--m) center / 100% 100% no-repeat;
+    mask: var(--m) center / 100% 100% no-repeat;
   }
   /* Вписанное целиком: вокруг картинки виден фон страницы, а не серая подложка. */
   .clip.contain {

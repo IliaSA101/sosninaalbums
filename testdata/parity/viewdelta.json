@@ -150,6 +150,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 10
     },
     "delta": {
@@ -226,6 +227,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 11,
       "base": 10,
       "order": [
@@ -235,6 +237,7 @@
       ]
     },
     "want": {
+      "again": false,
       "backdropUsed": null,
       "bleed": null,
       "canRedo": false,
@@ -538,6 +541,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 10
     },
     "delta": {
@@ -574,6 +578,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 11,
       "base": 10,
       "order": [
@@ -582,6 +587,7 @@
       ]
     },
     "want": {
+      "again": false,
       "backdropUsed": null,
       "bleed": null,
       "canRedo": false,
@@ -846,6 +852,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 10
     },
     "delta": {
@@ -919,6 +926,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 11,
       "base": 10,
       "order": [
@@ -929,6 +937,7 @@
       ]
     },
     "want": {
+      "again": false,
       "backdropUsed": null,
       "bleed": null,
       "canRedo": false,
@@ -1267,6 +1276,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 10
     },
     "delta": {
@@ -1303,6 +1313,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 11,
       "base": 10,
       "order": [
@@ -1312,6 +1323,7 @@
       ]
     },
     "want": {
+      "again": false,
       "backdropUsed": null,
       "bleed": null,
       "canRedo": false,
@@ -1614,6 +1626,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 10
     },
     "delta": {
@@ -1709,6 +1722,7 @@
         "pxH": 0,
         "fix": ""
       },
+      "again": false,
       "seq": 11,
       "base": 10,
       "order": [
@@ -1718,6 +1732,7 @@
       ]
     },
     "want": {
+      "again": false,
       "backdropUsed": null,
       "bleed": null,
       "canRedo": false,
@@ -2079,6 +2094,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 10
     },
     "delta": {
@@ -2115,11 +2131,13 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 11,
       "base": 10,
       "order": []
     },
     "want": {
+      "again": false,
       "backdropUsed": null,
       "bleed": null,
       "canRedo": false,
@@ -2307,6 +2325,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 10
     },
     "delta": {
@@ -2343,6 +2362,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 10,
       "base": 10,
       "order": [
@@ -2352,6 +2372,7 @@
       ]
     },
     "want": {
+      "again": false,
       "backdropUsed": null,
       "bleed": null,
       "canRedo": false,
@@ -2654,6 +2675,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 10
     },
     "delta": {
@@ -2727,6 +2749,7 @@
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
+      "again": false,
       "seq": 11,
       "base": 10,
       "order": [

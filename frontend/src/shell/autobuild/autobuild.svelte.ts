@@ -1,8 +1,9 @@
 import { errText, capFirst } from '../../base/words/errtext'
-import type { AutoPlan, AutoPreview, AutoRange, Family, Variety } from '../../base/core/types'
+import type { AutoPlan, AutoPreview, AutoRange, Family, PhotoOpts, Variety } from '../../base/core/types'
 import type { AutoMem } from '../../base/prefs/view.svelte'
 import { normFamilies } from '../../base/prefs/families'
 import { toggleFamily } from './autolayouts'
+import { PhotosState, type DropsFn, type PhotosSaved, type SigsFn } from './autosimilar.svelte'
 import {
   MAX_PER,
   clampMaxPer,
@@ -17,7 +18,7 @@ import {
   type Lim,
 } from './autobuild'
 
-export type PlanFn = (ids: readonly string[], spreads: number, range: AutoRange) => Promise<AutoPlan>
+export type PlanFn = (ids: readonly string[], spreads: number, range: AutoRange, ph: PhotoOpts) => Promise<AutoPlan>
 
 // 065: ряд блока «Раскладки» (App.AutoPreview); позицию вставки (конец альбома) подставляет вызывающий.
 export interface PreviewOpts {
@@ -25,6 +26,7 @@ export interface PreviewOpts {
   range: AutoRange
   variety: Variety
   families: readonly Family[]
+  ph: PhotoOpts // 078: похожие, ч/б, вариант
 }
 export type PreviewFn = (ids: readonly string[], o: PreviewOpts) => Promise<AutoPreview>
 export type RowMode = 'samples' | 'build' // «Варианты» | «Что соберётся»
@@ -51,6 +53,8 @@ export class AutoDialog {
   previewBusy = $state(false)
   previewError = $state(false)
   rowMode = $state<RowMode>('samples')
+  // 078: блок «Фото» — похожие кадры, ч/б, вариант сборки, подготовка подписей
+  readonly ph: PhotosState
 
   private running = false
   private previewRunning = false
@@ -72,8 +76,9 @@ export class AutoDialog {
       by?: Anchor
       variety?: Variety
       families?: readonly Family[]
-    },
+    } & PhotosSaved,
     private askPreview: PreviewFn | null = null,
+    extra: { grayOn?: boolean; sigs?: SigsFn | null; drops?: DropsFn | null } = {},
   ) {
     this.variety = normVariety(saved.variety)
     this.families = normFamilies(saved.families)
@@ -87,6 +92,14 @@ export class AutoDialog {
     this.perTyped = byPer ? (saved.per ?? null) : null
     this.n = firstSpreads(ids.length, saved, { min: 1, max: Math.max(1, ids.length) }, this.defRange())
     if (saved.spreads !== null || byPer) this.memRange = this.rangeKey()
+    this.ph = new PhotosState(
+      ids,
+      { range: () => this.range, replan: () => void this.pump() },
+      saved,
+      extra.grayOn !== false,
+      extra.sigs ?? null,
+      extra.drops ?? null,
+    )
   }
 
   // Фото в сборку: ответ Go, пока его нет — всё, что пришло.
@@ -101,7 +114,12 @@ export class AutoDialog {
   }
 
   start() {
-    void this.pump()
+    this.ph.start()
+  }
+
+  // Окно закрыто: Go перестаёт готовить подписи
+  dispose() {
+    this.ph.dispose()
   }
 
   setSpreads(v: number) {
@@ -229,6 +247,7 @@ export class AutoDialog {
     const p = this.plan
     return (
       !this.pending &&
+      !this.ph.waiting &&
       !this.error &&
       !this.inverted &&
       !!p &&
@@ -244,7 +263,7 @@ export class AutoDialog {
     return this.running ? new Promise((res) => this.waiters.push(res)) : Promise.resolve()
   }
 
-  // «Собрать»/Enter: подтягивает «от» > «до», ждёт ответа, потом build(N, диапазон, X, якорь, разнообразие); false — собирать нечего.
+  // «Собрать»/Enter: подтягивает «от» > «до», ждёт ответа, потом build(N, диапазон, X, якорь, разнообразие, семейства); false — собирать нечего.
   async submit(
     build: (spreads: number, range: AutoRange, per: number, by: Anchor, variety: Variety, families: readonly Family[]) => unknown,
   ): Promise<boolean> {
@@ -275,7 +294,13 @@ export class AutoDialog {
         const k = this.previewKey()
         let res: AutoPreview
         try {
-          res = await this.askPreview(this.ids, { spreads: this.n, range: this.range, variety: this.variety, families: [...this.families] })
+          res = await this.askPreview(this.ids, {
+            spreads: this.n,
+            range: this.range,
+            variety: this.variety,
+            families: [...this.families],
+            ph: this.ph.opts,
+          })
         } catch {
           if (k !== this.previewKey()) continue
           this.preview = null
@@ -298,7 +323,7 @@ export class AutoDialog {
 
   private rangeKey = () => `${this.auto}|${this.minPer}|${this.maxPer}`
 
-  private key = () => `${this.auto}|${this.minPer}|${this.maxPer}|${this.series}`
+  private key = () => `${this.auto}|${this.minPer}|${this.maxPer}|${this.series}|${this.ph.key}`
 
   // N после ответа Go. N не трогали руками — round(фото / середина диапазона) (у «Авто» — по 4); число фото насчитал Go.
   // Якорь «среднее» у тронутого N: заново из X по числу фото и пределам ответа (Go мог взять меньше фото, диапазон сдвинул низ).
@@ -320,7 +345,7 @@ export class AutoDialog {
         const k = this.key()
         let res: AutoPlan
         try {
-          res = await this.ask(this.ids, n, this.range)
+          res = await this.ask(this.ids, n, this.range, this.ph.opts)
         } catch (e) {
           this.plan = null
           this.preview = null

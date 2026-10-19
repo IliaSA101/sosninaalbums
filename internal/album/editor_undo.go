@@ -99,6 +99,9 @@ func (e *Editor) Undo() model.View {
 		e.redo = append(e.redo, e.swap(s, true))
 		e.dirty = true
 		e.rev++
+		if s.P != nil {
+			e.projRev++
+		}
 	}
 	e.lastMerge = ""
 	return e.view()
@@ -113,6 +116,9 @@ func (e *Editor) Redo() model.View {
 		e.pushUndo(e.swap(s, false))
 		e.dirty = true
 		e.rev++
+		if s.P != nil {
+			e.projRev++
+		}
 	}
 	e.lastMerge = ""
 	return e.view()
@@ -150,6 +156,7 @@ func (e *Editor) LibKeys() map[string]bool {
 		}
 	}
 	add(e.p)
+	add(e.auto.base) // пересборка вернёт альбом до сборки, даже если его снимок ушёл из отмены
 	for _, s := range e.undo {
 		add(s.P)
 	}
@@ -189,6 +196,9 @@ func (e *Editor) SyncOwnNames(tpls []model.Template) (v model.View, changed bool
 			_, grow := vigsheet.RenameOwn(e.redo[i].P, names)
 			e.redo[i].N += grow
 		}
+	}
+	if e.auto.base != nil { // снимок пересборки бывает и вне отмены (вытеснен); в отмене — уже переименован
+		vigsheet.RenameOwn(e.auto.base, names)
 	}
 	return e.view(), changed
 }

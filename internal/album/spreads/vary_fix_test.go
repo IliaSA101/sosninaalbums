@@ -49,7 +49,7 @@ func TestAutoBuildStalePrep(t *testing.T) {
 		for _, v := range []model.Variety{model.VarietyLess, model.VarietyNormal, model.VarietyMore} {
 			o := model.AutoOpts{Spreads: 4, MaxPer: 12, Variety: v}
 			stale := staleBase(t, ph)
-			pre := spreads.Prepare(spreads.PlanOf(edtest.P(stale), ph), ph, o)
+			pre := spreads.Prepare(spreads.PlanOf(edtest.P(stale), ph, nil), ph, o)
 			mutate(t, stale)
 			if _, err := edtest.Try(stale, "", func(p *model.Project) error {
 				_, err := spreads.AutoBuild(p, pre, -1, nil)
@@ -104,7 +104,7 @@ func TestPrepareWarmsExtra(t *testing.T) {
 			t.Fatal("кэш не холодный")
 		}
 		e := edtest.Open(t, model.New(), "")
-		spreads.Prepare(spreads.PlanOf(edtest.P(e), ph), ph, model.AutoOpts{Spreads: 1, MaxPer: 64, Variety: v})
+		spreads.Prepare(spreads.PlanOf(edtest.P(e), ph, nil), ph, model.AutoOpts{Spreads: 1, MaxPer: 64, Variety: v})
 		if !variety.Cached(asp, prm, model.RowLen(len(asp))) {
 			t.Fatalf("Variety %d: «Другие варианты» не прогреты в Prepare", v)
 		}

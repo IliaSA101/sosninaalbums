@@ -2,12 +2,12 @@
 // набор плиток окна и ▦, что ставит щелчок, листание Пробелом. Форму мест выбирает только щелчок по плитке:
 // фильтр лишь отбирает плитки и сам не меняется. Места и портрет считает Go.
 import type { VigChoice } from '../../base/core/types'
+import { shapeKey, type ShapeKey } from '../../base/geom/shape'
 import type { SegItem } from '../../base/tpl/Seg.svelte'
 import { visibleTpls, type VigFamilyFilter } from '../../base/tpl/tplfilter'
 import { OWN_TITLE, pickedRatio } from './vigown'
 import { stepTpl, type Ratio, type Shape, type VigForm } from './vignette'
 
-export type ShapeKey = 'rect' | 'round' | 'oval'
 export type FormFilter = 'all' | ShapeKey
 
 // «Скруглённые» — 10 % меньшей стороны (044 №35, 056 №6): у всех каталожных плиток, чужое скругление листа не рисуется.
@@ -35,12 +35,6 @@ export const FORM_FILTERS_SHORT: readonly SegItem<FormFilter>[] = [
 ]
 
 type FormPair = { shape: Shape; round: number }
-
-// Форма по виду листа или места: круг, любое скругление (в том числе из своего шаблона) или прямоугольник.
-export function shapeKey(f: { shape?: string; round?: number }): ShapeKey {
-  if (f.shape === 'oval') return 'oval'
-  return (f.round ?? 0) > 0 ? 'round' : 'rect'
-}
 
 // Что встанет на лист для формы плитки: прямоугольник '' / 0, скруглённые '' / 10, круг 'oval' / 0.
 export const tileShape = (k: ShapeKey): FormPair => ({ shape: k === 'oval' ? 'oval' : '', round: k === 'round' ? VIG_ROUND : 0 })

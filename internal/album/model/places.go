@@ -35,11 +35,23 @@ type Place struct {
 	// ноль — таблички нет. Значение, а не указатель: места сравниваются == (WithGrid), копии
 	// места (np := *pl) не делят табличку. Видимое имя — NameAt (seatname.go).
 	Person Person `json:"person,omitzero"`
+	// Border — рамочка места (079, v14, border.go): фото садится в её окно. Указатель свой у
+	// каждого места (079-23): копии — Clone, правка — заменой указателя, иначе общий Border
+	// после «Разделить» менял бы оба места, а WithGrid (==) правку не увидел бы.
+	Border *Border `json:"border,omitempty"`
 }
 
 // ShapeOval — Place.Shape эллипса (не "ellipse": 200 шаблонов × 64 места с ним не
 // укладываются в MaxTemplatesFile, 044 research §2).
 const ShapeOval = "oval"
+
+// ShapeRounded — ключ правки «скруглённое место» (076) у AddPlace и SetPlaceShape. В модель и файл
+// не пишется: правка ставит Shape "" и Round = RoundedPct (или оставляет своё скругление).
+const ShapeRounded = "rounded"
+
+// RoundedPct — скругление «Скруглённого», % меньшей стороны: как «Скруглённые» виньетки
+// (VIG_ROUND во фронте, 044 №35) — одно число, тест с каждой стороны.
+const RoundedPct = 10
 
 // MaxRound — предел скругления, % меньшей стороны: 50 — у квадрата на вид круг.
 const MaxRound = 50.0
@@ -69,10 +81,10 @@ func (pl *Place) Outline() geom.Outline {
 
 // ClonePlace — копия места целиком (новые поля Place переезжают сами) с новым ID,
 // без фото и таблички: деление и копия сетки дают пустые места, а копия имени
-// размножила бы человека из списка (071).
+// размножила бы человека из списка (071). Рамочка — своя копия (079-23).
 func ClonePlace(pl *Place, taken map[string]bool) *Place {
 	c := *pl
-	c.ID, c.Photo, c.Person = NewPlaceID(taken), "", Person{}
+	c.ID, c.Photo, c.Person, c.Border = NewPlaceID(taken), "", Person{}, pl.Border.Clone()
 	return &c
 }
 
@@ -338,7 +350,7 @@ func EmptyGridDupes(s *Spread) {
 }
 
 // RenameRefs переводит ID фото по карте «старый → новый» и в Photos листов (с обложкой),
-// и в местах: одной картой, иначе syncGrid пересадил бы фото по первым пустым местам.
+// и в местах (и их рамочках, 079): одной картой, иначе syncGrid пересадил бы фото по первым пустым местам.
 func (p *Project) RenameRefs(moved map[string]string) {
 	if len(moved) == 0 {
 		return
@@ -353,6 +365,7 @@ func (p *Project) RenameRefs(moved map[string]string) {
 			if nid, ok := moved[pl.Photo]; ok {
 				pl.Photo = nid
 			}
+			renameBorder(pl, moved)
 		}
 		for _, b := range s.Backdrops() {
 			if nid, ok := moved[b.Photo]; ok {
@@ -363,6 +376,17 @@ func (p *Project) RenameRefs(moved map[string]string) {
 			if nid, ok := moved[st.Photo]; ok && st.Photo != "" {
 				st.Photo = nid
 			}
+		}
+	}
+}
+
+// renameBorder — картинка рамочки места по карте moved; заменой указателя (079-23).
+func renameBorder(pl *Place, moved map[string]string) {
+	if b := pl.Border; b != nil && b.Photo != "" {
+		if nid, ok := moved[b.Photo]; ok {
+			nb := b.Clone()
+			nb.Photo = nid
+			pl.Border = nb
 		}
 	}
 }

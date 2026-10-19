@@ -1,20 +1,18 @@
 <script lang="ts">
   import { tip, tipped } from '../../base/ui/tip.svelte'
-  import Icon, { type IconName } from '../../base/ui/Icon.svelte'
+  import Icon from '../../base/ui/Icon.svelte'
+  import { PLACE_ADD_ITEMS } from './placeadd'
+  import type { ShapeKey } from '../../base/geom/shape'
 
-  // Меню «Место ▾» в ленте правки (044): «Прямоугольное» / «Круглое». Устроено как «Отразить» (MirrorMenu,
+  // Меню «Место ▾» в ленте правки (044): «Прямоугольное» / «Скруглённое» / «Круглое» (076, порядок как у формы в виньетке). Устроено как «Отразить» (MirrorMenu,
   // side='right'): кнопка получает стиль `rb` от EditRail, список справа через portal, Esc и щелчок вне закрывают.
   // label — подпись справа от значка (лента в один столбец).
-  let { onpick, title, label = '' }: { onpick: (shape: '' | 'oval') => void; title: string; label?: string } = $props()
+  let { onpick, title, label = '' }: { onpick: (shape: ShapeKey) => void; title: string; label?: string } = $props()
 
   let open = $state(false)
   let at = $state({ x: 0, y: 0 })
   let btn = $state<HTMLElement>()
   let menu = $state<HTMLElement>()
-  const items: { shape: '' | 'oval'; label: string; icon: IconName }[] = [
-    { shape: '', label: 'Прямоугольное', icon: 'place-add' },
-    { shape: 'oval', label: 'Круглое', icon: 'place-round' },
-  ]
   const stop = (e: PointerEvent) => e.stopPropagation()
   // Кнопки ленты не забирают фокус у редактора текста: курсор остаётся в нём.
   const keepFocus = (e: MouseEvent) => e.preventDefault()
@@ -34,7 +32,7 @@
     open = !open
   }
 
-  function pick(shape: '' | 'oval') {
+  function pick(shape: ShapeKey) {
     open = false
     onpick(shape)
   }
@@ -69,7 +67,7 @@
 >
 {#if open}
   <div class="menu" role="menu" bind:this={menu} use:portal style:left="{at.x}px" style:top="{at.y}px">
-    {#each items as it (it.shape)}
+    {#each PLACE_ADD_ITEMS as it (it.shape)}
       <button role="menuitem" onmousedown={keepFocus} onclick={() => pick(it.shape)}><Icon name={it.icon} size={16} />{it.label}</button>
     {/each}
   </div>

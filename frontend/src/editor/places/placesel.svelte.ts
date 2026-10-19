@@ -14,7 +14,7 @@ import { gridSession, refsBoxes, sampleFirst } from '../../base/geom/gridedit'
 import { groupBox, type GxText } from '../../base/groupgeom/groupxf'
 import { frameAngle, groupOBB, mixedAngles, reduce90, type Turn } from '../../base/groupgeom/groupframe'
 import { normDeg } from '../../base/geom/textbox'
-import { liveRadius as radiusOfRound } from '../../base/geom/shape'
+import { liveRadius as radiusOfRound, shapeArg, shapeKey, type ShapeKey } from '../../base/geom/shape'
 import { marqueePick, type Hit } from '../canvas/marquee'
 import { layerTargets } from './layers'
 import { boxOf as stickerBox, nudgeBox } from '../sticker/sticker'
@@ -353,12 +353,13 @@ class PlaceSel {
 
   // «+ Место»: на страницу под курсором (последнюю наведённую), новое место выделяется.
   // У «Авто» первая такая правка закрепляет разворот (gridAct.placeEdit скажет об этом).
-  // shape (044): '' — прямоугольное, 'oval' — круглое (квадрат 1/3 страницы формой круга).
-  async addPlace(shape: '' | 'oval' = '') {
+  // Форма (044, 076): rect — прямоугольное, round — скруглённое (процент ставит Go), oval — круглое
+  // (квадрат 1/3 страницы формой круга).
+  async addPlace(shape: ShapeKey = 'rect') {
     const s = store.spread
     if (!s) return
     const before = new Set((s.places ?? []).map((p) => p.id))
-    if (!(await gridAct.placeEdit(s.id, Api.AddPlace(s.id, this.page, shape)))) return
+    if (!(await gridAct.placeEdit(s.id, Api.AddPlace(s.id, this.page, shapeArg(shape))))) return
     // У «Авто» до правки мест не было: новое — пустое место, а не закреплённые ячейки.
     const added = store.spread?.places?.find((p) => !before.has(p.id) && !p.photo)
     if (added) this.pick(added.id, false)
@@ -455,19 +456,23 @@ class PlaceSel {
     )
   }
 
-  // Форма в карточке и в меню (044): «Прямоугольник · Круг», подсвечено, только если так у всех выделенных.
-  // У «Авто» все прямоугольные; «Круг» закрепляет разворот (gridAct.placeEdit), «Прямоугольник» там холостая.
-  allOval = $derived(this.selected.length > 0 && this.selected.every((p) => p.shape === 'oval'))
-  allRect = $derived(this.selected.length > 0 && this.selected.every((p) => p.shape !== 'oval'))
-  async setShape(oval: boolean) {
+  // Форма в карточке и в меню (044, 076): ▭ ▢ ◯, подсвечено, только если так у всех выделенных.
+  // У «Авто» все прямоугольные; ▢ и ◯ закрепляют разворот (gridAct.placeEdit), ▭ там холостая.
+  private allShape(k: ShapeKey): boolean {
+    return this.selected.length > 0 && this.selected.every((p) => shapeKey(p) === k)
+  }
+  allRect = $derived(this.allShape('rect'))
+  allRounded = $derived(this.allShape('round'))
+  allOval = $derived(this.allShape('oval'))
+  async setShape(k: ShapeKey) {
     const s = store.spread
-    if (!s || this.selected.length === 0 || (oval ? this.allOval : this.allRect)) return
+    if (!s || this.selected.length === 0 || this.allShape(k)) return
     await gridAct.placeEdit(
       s.id,
       Api.SetPlaceShape(
         s.id,
         this.selected.map((i) => i.id),
-        oval ? 'oval' : '',
+        shapeArg(k),
       ),
     )
   }

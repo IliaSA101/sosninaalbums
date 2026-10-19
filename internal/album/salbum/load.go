@@ -190,6 +190,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	p.ClampDesign()
 	p.PruneRefs() // фон, выброшенный зажимом (взаимоисключение), не оставляет фото без дела
 	p.ClampGrid()
+	p.PruneRefs() // запись рамочки, снятой зажимом (079: вид и картинка сразу), не остаётся без дела
 	migrate(p)
 	if err := p.SyncGrid(true); err != nil {
 		return nil, err

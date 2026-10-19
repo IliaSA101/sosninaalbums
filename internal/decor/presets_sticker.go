@@ -110,7 +110,7 @@ func presetsOf(kind string) []preset {
 	switch kind {
 	case KindSticker:
 		return stickerPresets
-	case KindSpread: // встроенные развороты — spreadBuiltins
+	case KindSpread, KindFrame: // встроенные развороты — spreadBuiltins, рамочки — frameBuiltins
 		return nil
 	}
 	return bgPresets

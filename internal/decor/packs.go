@@ -74,6 +74,7 @@ type PackInfo struct {
 	Bg        int    `json:"bg"`
 	Sticker   int    `json:"sticker"`
 	Spread    int    `json:"spread"`
+	Frame     int    `json:"frame"`
 	Bytes     int64  `json:"bytes"`
 	Removable bool   `json:"removable"`
 }
@@ -249,7 +250,7 @@ func (e packEntry) item(pack string) Item {
 // Packs — строки окна «Наборы»: встроенные (не удаляются), затем наборы по installed.
 func (s *Store) Packs() []PackInfo {
 	out := []PackInfo{{ID: BuiltinPack, Title: "Встроенные", Author: "Sosnina Albums", Origin: OriginBuiltin,
-		Version: 1, Bg: knownPresets(bgPresets), Sticker: knownPresets(stickerPresets), Spread: len(spreadBuiltins(KindSpread))}}
+		Version: 1, Bg: knownPresets(bgPresets), Sticker: knownPresets(stickerPresets), Spread: len(spreadBuiltins(KindSpread)), Frame: knownFrames()}}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, r := range s.packs {
@@ -279,6 +280,8 @@ func (r *packReg) info() PackInfo {
 			p.Sticker++
 		case KindSpread:
 			p.Spread++
+		case KindFrame:
+			p.Frame++
 		}
 		p.Bytes += e.Bytes
 	}

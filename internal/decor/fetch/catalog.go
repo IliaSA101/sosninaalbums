@@ -54,6 +54,7 @@ type Counts struct {
 	Bg      int `json:"bg"`
 	Sticker int `json:"sticker"`
 	Spread  int `json:"spread"`
+	Frame   int `json:"frame"` // 079: старые версии лишний ключ пропускают
 }
 
 // Skip — строка каталога, которая не берётся, и причина (в log.txt).
@@ -169,7 +170,7 @@ func entrySkip(e *Entry, src Source) string {
 	}
 	e.About, e.License = cleanText(e.About, 300), cleanText(e.License, 40)
 	clampCount := func(n int) int { return min(max(n, 0), maxCount) }
-	e.Counts = Counts{Bg: clampCount(e.Counts.Bg), Sticker: clampCount(e.Counts.Sticker), Spread: clampCount(e.Counts.Spread)}
+	e.Counts = Counts{Bg: clampCount(e.Counts.Bg), Sticker: clampCount(e.Counts.Sticker), Spread: clampCount(e.Counts.Spread), Frame: clampCount(e.Counts.Frame)}
 	return ""
 }
 

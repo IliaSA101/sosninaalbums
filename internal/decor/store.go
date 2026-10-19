@@ -29,6 +29,7 @@ const (
 	KindBg      = "bg"
 	KindSticker = "sticker"
 	KindSpread  = "spread" // готовые развороты (067): файл — шаблон JSON, не картинка
+	KindFrame   = "frame"  // рамочки-картинки (079): только PNG с прозрачным окном
 )
 
 // RootName — папка библиотеки в папке данных (решение №79); regFile — реестр.
@@ -83,10 +84,11 @@ type Store struct {
 	media *mediaCache
 	svg   svgTokens // проверенные SVG, ждущие PNG от окна (AddPNG)
 	tpl   tplCache  // разбор своих шаблонов разворотов для плиток (spreads.go)
+	frame frameMeta // окна рамочек-картинок: нужны импорту и Frame (frame.go)
 }
 
 // kindDirs — папка вида; имя файла внутри — только <16 hex>.<ext> от ключа.
-var kindDirs = map[string]string{KindBg: "Фоны", KindSticker: "Стикеры", KindSpread: "Развороты"}
+var kindDirs = map[string]string{KindBg: "Фоны", KindSticker: "Стикеры", KindSpread: "Развороты", KindFrame: "Рамочки"}
 
 // Open открывает библиотеку в <cfgDir>/Библиотека: читает реестр и ищет файлы. Ошибки чтения
 // не мешают работе: битый реестр уходит в .bad, библиотека пуста (строка в log.txt).
@@ -143,11 +145,12 @@ func (s *Store) scan() {
 	}
 }
 
-// keyOfFile — ключ по имени файла <16 hex>.<jpg|png>, в папке разворотов — <16 hex>.json;
-// иначе ok = false.
+// keyOfFile — ключ по имени файла <16 hex>.<jpg|png>, в папке разворотов — <16 hex>.json, в
+// папке рамочек — только <16 hex>.png; иначе ok = false.
 func keyOfFile(kind, name string) (string, bool) {
 	base, ext, ok := strings.Cut(name, ".")
-	if !ok || (kind == KindSpread) != (ext == "json") || ext != "json" && ext != "jpg" && ext != "png" {
+	if !ok || (kind == KindSpread) != (ext == "json") || ext != "json" && ext != "jpg" && ext != "png" ||
+		kind == KindFrame && ext != "png" {
 		return "", false
 	}
 	key := libPrefix + base
@@ -271,19 +274,32 @@ func (s *Store) entryOf(kind, key string) *entry {
 }
 
 // Find — путь своего файла по ключу (искатель salbum.LibFinder): по индексу, без реестра —
-// скопированный руками файл тоже находится. Фон важнее стикера: у фона байты исходника.
+// скопированный руками файл тоже находится. Фон важнее стикера: у фона байты исходника;
+// рамочка (079) — последней.
 func (s *Store) Find(key string) (string, bool) {
 	if !model.ValidLibKey(key) {
 		return "", false
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, kind := range []string{KindBg, KindSticker} {
+	for _, kind := range []string{KindBg, KindSticker, KindFrame} {
 		if p, ok := s.files[kind][key]; ok {
 			return p, true
 		}
 	}
 	return "", false
+}
+
+// FindFrame — путь своей рамочки по ключу (искатель salbum.SetFrameFinder, 079-40): у картинки,
+// загруженной и в «Фоны», Find отдаёт фон — исходник, который в рамочку может не пройти по размеру.
+func (s *Store) FindFrame(key string) (string, bool) {
+	if !model.ValidLibKey(key) {
+		return "", false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	p, ok := s.files[KindFrame][key]
+	return p, ok
 }
 
 // mutate — правка одной записи своего (✎, ×): проверки, fn под mu, запись реестра;

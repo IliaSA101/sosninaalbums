@@ -32,7 +32,7 @@ func decorApp(t *testing.T) *App {
 	p.Spreads = []*model.Spread{{ID: "s1"}, {ID: "s2"}}
 	a.ed.Store(mustEditor(t, p, ""))
 	a.openDecor()
-	t.Cleanup(func() { salbum.SetLibFinder(nil) })
+	t.Cleanup(func() { salbum.SetLibFinder(nil); salbum.SetFrameFinder(nil) })
 	return a
 }
 

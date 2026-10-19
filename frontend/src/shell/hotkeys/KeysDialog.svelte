@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import Modal from '../../base/ui/Modal.svelte'
   import { watchSize } from '../../base/ui/size'
   import { keymap } from '../../base/keys/keymap.svelte'
@@ -51,12 +52,29 @@
   const targetOf = (e: Event) => (e.target instanceof Element ? e.target : null)
   const inText = (e: Event) => isTextField(targetOf(e))
   function keydown(e: KeyboardEvent) {
-    // Enter/Пробел/стрелки на кнопке, флажке и в списке — самому элементу (вне записи).
+    // Enter/Пробел/стрелки/Home/End на кнопке, флажке и в списке — самому элементу (вне записи).
     if (keysUi.keydown(e, inText(e), ownsKeys(targetOf(e))) === 'eat') {
       e.preventDefault()
       e.stopImmediatePropagation()
     }
   }
+  // Из поля поиска ↓ входит в список: выбирается первая строка (↑/↓ внутри поля больше ничего не делают).
+  let q = $state<HTMLInputElement>()
+  let list = $state<KeyList>()
+  function searchKey(e: KeyboardEvent) {
+    if (e.key !== 'ArrowDown' || e.ctrlKey || e.altKey || e.shiftKey || e.metaKey || e.isComposing) return
+    e.preventDefault()
+    list?.focusFirst()
+  }
+
+  // Кнопка гаснет, а строка «Вернуть» исчезает вместе с фокусом: возвращаем его на поиск, чтобы он не ушёл из окна.
+  async function keepFocus(act: Promise<void>) {
+    await act
+    await tick()
+    const a = document.activeElement
+    if (!a || a === document.body || !a.isConnected || (a instanceof HTMLButtonElement && a.disabled)) q?.focus()
+  }
+
   const keyup = (e: KeyboardEvent) => keysUi.keyup(e, inText(e))
 
   // Щелчок мимо чипа отменяет запись; щелчок по чипу (другому или тому же) начинает её заново.
@@ -85,6 +103,8 @@
           aria-label="Поиск по командам"
           autocomplete="off"
           bind:value={keysUi.query}
+          bind:this={q}
+          onkeydown={searchKey}
         />
         <label class="onlyown"><input type="checkbox" bind:checked={keysUi.onlyOwn} />Только свои</label>
         {#if mode === 'map'}<KeyLayer />{/if}
@@ -92,7 +112,7 @@
           class="ghost"
           disabled={keymap.view.changed === 0}
           title={keymap.view.changed === 0 ? 'Своих сочетаний нет' : undefined}
-          onclick={() => void keysUi.resetAll()}
+          onclick={() => void keepFocus(keysUi.resetAll())}
         >
           Сбросить всё как было
         </button>
@@ -129,13 +149,13 @@
         {#if mode === 'list'}
           <Splitter area="vs" dir="col" onmove={move('rw')} onend={end} onreset={reset('rw')} />
         {/if}
-        <div class="p-list"><KeyList {mode} /></div>
+        <div class="p-list"><KeyList {mode} bind:this={list} /></div>
         <div class="p-card"><KeyCard /></div>
       </div>
 
       <p class="status" aria-live="polite">
         {#if keysUi.status}
-          {keysUi.status.text} · <button class="link" onclick={() => void keysUi.restore()}>Вернуть</button>
+          {keysUi.status.text} · <button class="link" onclick={() => void keepFocus(keysUi.restore())}>Вернуть</button>
         {/if}
         {#each keysUi.notes as n (n)}<span class="note">{n}</span>{/each}
       </p>

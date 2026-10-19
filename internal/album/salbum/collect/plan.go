@@ -232,10 +232,11 @@ func sources(p *model.Project, extra []string, roots []root, stat func(string) (
 		out = append(out, s)
 		return true
 	}
+	ownOnly := ownOnlyRefs(p)
 	for _, id := range slices.Sorted(maps.Keys(p.Photos)) {
 		ref := p.Photos[id]
 		kind := KindPhoto
-		if ref.Lib != "" {
+		if ref.Lib != "" || ownOnly[id] {
 			kind = KindOwn
 		}
 		if ref.Path == "" || !add(kind, ref.Path, id) {
@@ -261,6 +262,33 @@ func sources(p *model.Project, extra []string, roots []root, stat func(string) (
 	}
 	guide(p.SpreadGuide, RefSpreads)
 	return out
+}
+
+// ownOnlyRefs — записи, на которые ссылаются только рамочки мест и свои стикеры (079-27): в
+// собранном альбоме lib снят (retarget), и при повторном сборе такая запись иначе ушла бы как
+// фото в «Фото/Прочие» — в ленту. Фото фона не в счёт: фоном бывает и обычный кадр ленты.
+func ownOnlyRefs(p *model.Project) map[string]bool {
+	own, other := map[string]bool{}, map[string]bool{}
+	for _, s := range p.Sheets() {
+		for _, id := range s.Photos {
+			other[id] = true
+		}
+		for _, b := range s.Backdrops() {
+			other[b.Photo] = true
+		}
+		for _, st := range s.Stickers {
+			if st.Photo != "" {
+				own[st.Photo] = true
+			}
+		}
+		for _, id := range s.BorderPhotos() {
+			own[id] = true
+		}
+	}
+	for id := range other {
+		delete(own, id)
+	}
+	return own
 }
 
 // fileExt — расширение годится для вида: копируем только то, что программа сама берёт (фото —

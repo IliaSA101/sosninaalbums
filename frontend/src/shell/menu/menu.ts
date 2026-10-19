@@ -240,6 +240,8 @@ function editSpecs(c: MenuCtx): Spec[][] {
       { id: 'addSticker', label: 'Добавить стикер…', cmd: 'addSticker', feature: 'decor', disabled: !c.hasSpread },
       // 048: окно «Фоны» для текущего листа; область — весь лист (у обложки — первая сторонка)
       { id: 'bgGallery', label: 'Галерея фонов…', cmd: 'bgGallery', feature: 'decor', disabled: !c.hasSpread },
+      // 079: окно «Рамочки» — рамочка на выделенные места или на весь лист; сочетания по умолчанию нет
+      { id: 'borderGallery', label: 'Рамочки…', cmd: 'borderGallery', feature: 'border', disabled: !c.hasSpread },
       // 049 Ф2: «Копировать оформление…» — окно как у «Копировать раскладку…»; обложка не источник (серое)
       { id: 'copyDecor', label: 'Копировать оформление…', cmd: 'copyDecor', feature: 'decor', disabled: !c.decorable },
       // 067: окно «Развороты» — места и оформление готовых разворотов; обложка не цель (серое)

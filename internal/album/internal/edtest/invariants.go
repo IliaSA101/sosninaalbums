@@ -65,7 +65,7 @@ func GridInvariants(p *model.Project) error {
 			placeIDs[pl.ID] = true
 		}
 	}
-	return nil
+	return BorderInvariant(p)
 }
 
 // sameShape — форма места уже зажата (044): правка и Load не оставляют чужого.
@@ -184,6 +184,40 @@ func StickerInvariant(p *model.Project, s *model.Spread, seen map[string]bool) e
 		seen[st.ID] = true
 		if cs, i := fit.FindSticker(st.ID); cs == nil || !reflect.DeepEqual(cs.Stickers[i], st) {
 			return fmt.Errorf("пропорция стикера не держится: %+v", *st)
+		}
+	}
+	return nil
+}
+
+// BorderInvariant — рамочки мест (079-23) по всем листам: нет двух мест с одним *Border или общим
+// массивом Inks (правка «одного» на месте меняла бы оба), запись картинки есть в Photos, рамочка
+// зажата (ClampBorder — неподвижная точка). После Load и каждой правки (зовёт GridInvariants).
+func BorderInvariant(p *model.Project) error {
+	owner := map[*model.Border]string{}
+	inks := map[*string]string{}
+	for _, s := range p.Sheets() {
+		for _, pl := range s.Grid {
+			if pl == nil || pl.Border == nil {
+				continue
+			}
+			b := pl.Border
+			if o, ok := owner[b]; ok {
+				return fmt.Errorf("рамочка общая у мест %s и %s", o, pl.ID)
+			}
+			owner[b] = pl.ID
+			if cap(b.Inks) > 0 {
+				k := &b.Inks[:1][0]
+				if o, ok := inks[k]; ok {
+					return fmt.Errorf("цвета рамочки общие у мест %s и %s", o, pl.ID)
+				}
+				inks[k] = pl.ID
+			}
+			switch {
+			case b.Photo != "" && !HasRef(p, b.Photo):
+				return fmt.Errorf("место %s: рамочка без записи %s", pl.ID, b.Photo)
+			case !reflect.DeepEqual(model.ClampBorder(p, b), b):
+				return fmt.Errorf("место %s: рамочка не зажата %+v", pl.ID, *b)
+			}
 		}
 	}
 	return nil
