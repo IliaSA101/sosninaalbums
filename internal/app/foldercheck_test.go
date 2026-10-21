@@ -63,7 +63,7 @@ func checkApp(t *testing.T, n int, cache bool) (a *App, dir string, evs *evLog) 
 	for i := range n {
 		testkit.JPEG(t, dir, fmt.Sprintf("p%d.jpg", i), 20, 10)
 	}
-	if _, err := a.editor().AddFolder(dir); err != nil {
+	if _, _, err := a.editor().AddFolder(dir); err != nil {
 		t.Fatal(err)
 	}
 	return a, dir, evs
@@ -520,7 +520,7 @@ func TestRescanDeadFolderKeeps(t *testing.T) {
 	dirB := testkit.TempDir(t)
 	testkit.JPEG(t, dirB, "b0.jpg", 20, 10)
 	testkit.JPEG(t, dirB, "b1.jpg", 20, 10)
-	if _, err := a.editor().AddFolder(dirB); err != nil {
+	if _, _, err := a.editor().AddFolder(dirB); err != nil {
 		t.Fatal(err)
 	}
 	loudScan(t, a)

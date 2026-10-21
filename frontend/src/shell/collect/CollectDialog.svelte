@@ -65,7 +65,7 @@
             <span class="hint" class:pending={!collectUi.album}>{sum.albumHint}</span></label
           >
           <label
-            ><input type="radio" name="col-all" checked={collectUi.all} onchange={() => collectUi.setAll(true)} />Все фото из папок альбома
+            ><input type="radio" name="col-all" checked={collectUi.all} onchange={() => collectUi.setAll(true)} />{sum.fullLabel}
             <span class="hint" class:pending={!collectUi.full}>{sum.fullHint}</span></label
           >
         </div>

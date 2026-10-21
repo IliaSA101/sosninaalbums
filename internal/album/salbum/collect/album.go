@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // Album — копия проекта p для собранной папки dir после успешного Copy (design §4): у записей
@@ -16,7 +18,9 @@ import (
 // decisions №13); пропавшие — как были. Папка альбома — dir/Фото (лента читает подпапки),
 // разметки — новые пути. Отметки: фото в плане — новый путь, пропавшее фото — как было,
 // остальные (фото вне сбора) не пишутся, а с ними и их членство в подборках (083-12); подборки —
-// копией. ID — по новым путям (Rekey). p и side не меняются.
+// копией. Отдельные фото (097 §6): в плане — новый путь в «Фото отдельно», пропавшие — как были,
+// не скопированные (режим «только альбом») — выпадают. ID — по новым путям (Rekey). p и side не
+// меняются.
 func Album(p *model.Project, side model.Side, dir string, pl Plan) (*model.Project, model.Side) {
 	q := p.Clone()
 	moved := map[string]string{} // ключ пути источника → путь в папке сбора
@@ -24,16 +28,49 @@ func Album(p *model.Project, side model.Side, dir string, pl Plan) (*model.Proje
 	for _, it := range pl.Items {
 		np := filepath.Join(dir, filepath.FromSlash(it.Rel))
 		moved[key(it.Src)] = np
-		photos = photos || it.Kind == KindPhoto
+		// Только отдельные фото — папки «Фото» нет: пропавшая папка в списке была бы ложной
+		photos = photos || it.Kind == KindPhoto && !strings.HasPrefix(it.Rel, DirLoose+"/")
 		retarget(q, it, np)
 	}
 	q.Folders, q.FolderAlt = nil, nil
 	if photos {
 		q.Folders = []string{filepath.Join(dir, DirPhotos)}
 	}
+	q.Loose = looseMoved(p, moved, pl)
+	q.FoldSources(paths.Linked)
 	out := model.Side{Marks: moveMarks(p, side.Marks, moved, pl.Missing), Bins: slices.Clone(side.Bins)}
 	salbum.Rekey(q, library.IDFor)
 	return q, out
+}
+
+// looseMoved — отдельные фото собранного альбома: файл в плане — его новый путь; пропавший (фото
+// альбома из pl.Missing или pl.LooseLost) — как был; остальные выпадают.
+func looseMoved(p *model.Project, moved map[string]string, pl Plan) []model.LooseAdd {
+	lost := map[string]bool{}
+	for _, k := range pl.LooseLost {
+		lost[k] = true
+	}
+	for _, id := range pl.Missing {
+		if ref, ok := p.Photos[id]; ok && ref.Path != "" {
+			lost[key(ref.Path)] = true
+		}
+	}
+	var out []model.LooseAdd
+	for _, a := range p.Loose {
+		files := make([]model.LooseFile, 0, len(a.Files))
+		for _, f := range a.Files {
+			if np, ok := moved[key(f.Path)]; ok {
+				files = append(files, model.LooseFile{Path: np})
+			} else if lost[key(f.Path)] {
+				files = append(files, f)
+			}
+		}
+		if len(files) > 0 {
+			a.Files = files
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // retarget — записи элемента плана it в копии q смотрят на его файл np в папке сбора.

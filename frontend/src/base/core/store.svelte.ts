@@ -220,7 +220,7 @@ class Store extends Nav {
   }
 
   private show(v: View) {
-    const next = { ...v, folders: v.folders ?? [], spreads: v.spreads ?? [] }
+    const next = { ...v, folders: v.folders ?? [], loose: v.loose ?? [], spreads: v.spreads ?? [] }
     this.view = import.meta.env.DEV ? deepFreeze(next) : next
     this.settle()
   }
@@ -495,7 +495,8 @@ class Store extends Nav {
     const lost = backdropLost(this.view.spreads[i], this.view.spreads[i + 1])
     if (!(await this.run(Api.MergeSpreads(id))) || this.view.rev === before) return
     this.goId(id)
-    if (lost) this.undoToast('Фон второго разворота снят')
+    // Тост, как у разреза (094 §1.4): склейка больше не тихая; снятый фон — второй фразой того же тоста.
+    this.undoToast(lost ? 'Развороты склеены. Фон второго разворота снят' : 'Развороты склеены', id)
   }
 
   // Название разворота; пустое снимает. Правка — шаг undo, то же название — холостая в Go.

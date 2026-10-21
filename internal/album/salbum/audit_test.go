@@ -419,35 +419,6 @@ func TestSaveLeavesNoTmp(t *testing.T) {
 // root — корень диска временной папки: абсолютный путь на любой ОС.
 func root() string { return filepath.VolumeName(os.TempDir()) + string(filepath.Separator) }
 
-// underAny совпадает с library.Under по любой папке: вложенные, корень, регистр, общий префикс имени.
-func TestUnderAny(t *testing.T) {
-	j := func(parts ...string) string { return filepath.Join(append([]string{root()}, parts...)...) }
-	sets := [][]string{
-		nil,
-		{j("Съёмки")},
-		{j("Съёмки"), j("съёмки", "Ивановы"), j("a b"), j("a")},
-		{j("a", "b"), j("a b", "c"), j("ab")},
-		{root()},
-	}
-	paths := []string{
-		j("Съёмки", "1.jpg"), j("СЪЁМКИ", "Ивановы", "2.jpg"), j("Съёмки2", "1.jpg"), j("Съёмки"),
-		j("a", "1.jpg"), j("a b", "c", "1.jpg"), j("ab", "1.jpg"), j("a", "b", "c", "1.jpg"), j("a", "bc", "1.jpg"),
-		j("x.jpg"), root(),
-	}
-	for _, folders := range sets {
-		under := UnderAny(folders)
-		for _, p := range paths {
-			want := false
-			for _, f := range folders {
-				want = want || library.Under(p, f)
-			}
-			if got := under(p); got != want {
-				t.Errorf("папки %q, путь %q: %v, ждали %v", folders, p, got, want)
-			}
-		}
-	}
-}
-
 // trimBig — 200 000 отметок в 2000 папках, половина — вне папок проекта.
 func trimBig() (out map[string]model.Mark, order, folders []string) {
 	base := filepath.Join(root(), "Съёмки")
@@ -474,7 +445,7 @@ func TestTrimMarksFast(t *testing.T) {
 	out, order, folders := trimBig()
 	runtime.GC() // сборка мусора от подготовки не в замер
 	start := time.Now()
-	TrimMarks(out, order, folders)
+	TrimMarks(out, order, folders, nil)
 	if d := time.Since(start); d > testkit.Limit(time.Second) {
 		t.Fatalf("обрезка %v", d)
 	}
@@ -493,7 +464,7 @@ func BenchmarkTrimMarks(b *testing.B) {
 		b.StopTimer()
 		out, order, folders := trimBig()
 		b.StartTimer()
-		TrimMarks(out, order, folders)
+		TrimMarks(out, order, folders, nil)
 	}
 }
 

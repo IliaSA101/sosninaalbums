@@ -1,11 +1,13 @@
 <script lang="ts">
   import Icon from '../../base/ui/Icon.svelte'
-  import { canVary, deleteLabel, menuPos, setupItem, varyLabel, vignetteItem } from './spreadmenu'
+  import { canVary, deleteLabel, menuPos, setupItem, stripItems, varyLabel, vignetteItem } from './spreadmenu'
+  import { modClick } from './timeline'
+  import { isMac } from '../../base/core/platform'
   import { store } from '../../base/core/store.svelte'
   import { isSheet } from '../../base/geom/sheet'
   import { prefs } from '../../base/prefs/prefs.svelte'
 
-  // Меню правого щелчка по группе ленты: виньетка (031) и удаление. Esc и щелчок мимо закрывают;
+  // Меню правого щелчка по группе ленты: название, разрез и склейка (094), виньетка (031) и удаление. Esc и щелчок мимо закрывают;
   // окно держится внутри экрана. Устройство — как у PhotoMenu. count > 1 — выделено несколько групп.
   // label — свой текст пункта удаления (плитка обложки: «Удалить обложку»); у неё пункта виньетки нет.
   let {
@@ -18,6 +20,11 @@
     onNewVignette,
     onVary,
     varies = true,
+    onRename,
+    cut,
+    onCut,
+    join,
+    onJoin,
     onDelete,
     onclose,
   }: {
@@ -30,6 +37,11 @@
     onNewVignette?: () => void // плитка «+»: новая виньетка вместо пунктов группы
     onVary?: () => void // «Разнообразить раскладки» (041); нет — пункта нет (плитка обложки)
     varies?: boolean // среди целей есть разворот «Авто» с фото (anyVaries); нет — пункт серый
+    onRename?: () => void // «Название…»; нет — пункта нет
+    cut?: { show: boolean; ok: boolean; why: string } // разрез перед фото под курсором (cutState)
+    onCut?: () => void
+    join?: { ok: boolean; why: string } // склейка со следующей (joinState); у последней группы нет
+    onJoin?: () => void
     onDelete?: () => void
     onclose: () => void
   } = $props()
@@ -38,6 +50,10 @@
   // Пункт показан, если функция есть на уровне; серым — когда менять нечего (сетки, виньетки, пустые).
   const showVary = $derived(!!onVary && !isSheet(store.view.settings) && prefs.can('variants'))
   const vary = $derived(canVary(varies, isSheet(store.view.settings), prefs.can('variants')))
+
+  const strip = $derived(stripItems(count, (f) => prefs.can(f), onCut ? cut : undefined, onJoin ? join : undefined))
+  // Способ мышью справа в пункте — как клавиша в строке меню.
+  const how = modClick(isMac())
 
   const setup = $derived(onVignette ? setupItem(count, kind, prefs.can('vignette')) : null)
 
@@ -81,6 +97,21 @@
   data-text-ui
   oncontextmenu={(e) => e.preventDefault()}
 >
+  {#if onRename && strip.rename}
+    <button role="menuitem" onclick={onRename}>
+      <Icon name="text" size={16} stroke={1.8} /><span class="label">Название…</span>
+    </button>
+  {/if}
+  {#if strip.cut}
+    <button role="menuitem" disabled={!strip.cut.ok} title={strip.cut.why || undefined} onclick={onCut}>
+      <Icon name="scissors" size={16} stroke={1.8} /><span class="label">Разрезать перед этим фото</span><kbd>{how}</kbd>
+    </button>
+  {/if}
+  {#if strip.join}
+    <button role="menuitem" disabled={!strip.join.ok} title={strip.join.why || undefined} onclick={onJoin}>
+      <Icon name="merge" size={16} stroke={1.8} /><span class="label">Склеить со следующим</span><kbd>{how}</kbd>
+    </button>
+  {/if}
   {#if setup}
     <button role="menuitem" onclick={() => onVignette?.(setup.act)}>
       <Icon name="vignette" size={16} stroke={1.8} /><span>{setup.label}</span>
@@ -143,6 +174,16 @@
   button:focus-visible {
     background: #38383c;
     color: #fff;
+  }
+  .label {
+    flex: 1;
+  }
+  /* Способ мышью справа — как клавиша в строке меню (MenuBar) */
+  kbd {
+    margin-left: 24px;
+    font: inherit;
+    font-size: 11px;
+    color: var(--muted);
   }
   button.danger:hover,
   button.danger:focus-visible {

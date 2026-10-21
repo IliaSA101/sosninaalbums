@@ -337,6 +337,23 @@ func FuzzLoad(f *testing.F) {
 		f.Add(g)
 	}
 	f.Add([]byte(`{"version":15,"fonts":null,"spreads":[{"id":"s","texts":[{"id":"0a0b0c0d0e01","w":50,"text":"x","style":{"font":"my:0123456789abcdef"}}]}]}`))
+	// 097 (v16): отдельные фото — голден, null, пустые, повторы ID и путей, битые пути, устройство,
+	// поток NTFS, огромное и отрицательное время, вложенные папки и фото под ними, 5 000 файлов.
+	if g, err := os.ReadFile(filepath.Join("..", "testdata", golden16Loose)); err == nil {
+		f.Add(g)
+	}
+	f.Add([]byte(`{"version":16,"loose":null}`))
+	f.Add([]byte(`{"version":16,"loose":[null,{"id":"x","files":null},{"files":[null]},{"id":"3fa9c01b7d22","at":1.7e9}]}`))
+	f.Add([]byte(`{"version":16,"loose":[{"id":"3fa9c01b7d22","at":"1","files":[5]}]}`))
+	f.Add([]byte(`{"version":16,"folders":["Весна","Весна/Март","весна",{"path":"Весна/Март/Избранное","abs":"C:\\x"}],
+"loose":[{"id":"3fa9c01b7d22","at":-1e18,"files":[{"path":"Весна/1.jpg"},{"path":"../../../x.jpg"},{"path":"CON.jpg"},{"path":"\\\\srv\\a.jpg"},
+{"path":"C:\\a.jpg:ads"},{"path":"a.txt"},{"path":"b.jpg","abs":"\\\\srv\\b.jpg"},{"path":"Б.JPG"},{"path":"б.jpg"}]},
+{"id":"3fa9c01b7d22","at":1e300,"files":[{"path":"б.jpg"},"c.png"]}]}`))
+	var many strings.Builder
+	for i := range 5000 {
+		fmt.Fprintf(&many, `,{"path":"%d.jpg"}`, i)
+	}
+	f.Add([]byte(`{"version":16,"loose":[{"id":"0123456789ab","at":1,"files":[` + many.String()[1:] + `]}]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := testkit.TempDir(t)
 		path := filepath.Join(dir, "f.salbum")
@@ -352,6 +369,9 @@ func FuzzLoad(f *testing.F) {
 		}
 		if len(p.Folders) > model.MaxFolders {
 			t.Fatalf("папок %d", len(p.Folders))
+		}
+		if err := edtest.SourcesInvariant(p); err != nil { // 093, 097: источники не пересекаются
+			t.Fatal(err)
 		}
 		side := edtest.Loaded(p)
 		marks := side.Marks
@@ -427,6 +447,9 @@ func FuzzLoad(f *testing.F) {
 		}
 		if err := edtest.GridInvariants(q); err != nil {
 			t.Fatalf("после записи и чтения: %v", err)
+		}
+		if !reflect.DeepEqual(q.Folders, p.Folders) || !reflect.DeepEqual(q.Loose, p.Loose) {
+			t.Fatalf("источники после записи и чтения:\n%q %+v\nждали\n%q %+v", q.Folders, q.Loose, p.Folders, p.Loose)
 		}
 		fuzzBackdrops(t, p, q)
 	})
@@ -593,7 +616,7 @@ func TestBackdropRelink(t *testing.T) {
 func TestPathsRejected(t *testing.T) {
 	e := edtest.Open(t, model.New(), "")
 	rev := e.View().Rev
-	if v, err := e.AddFolder(`\\host\share`); v.Rev != rev || err == nil {
+	if v, _, err := e.AddFolder(`\\host\share`); v.Rev != rev || err == nil {
 		t.Fatal("AddFolder с UNC должен отказать")
 	}
 	p := model.New()

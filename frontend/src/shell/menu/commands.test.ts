@@ -9,6 +9,7 @@ import { store } from '../../base/core/store.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { modes } from '../../base/prefs/view.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
+import { naming } from '../../panels/timeline/naming.svelte'
 import { makeVignette } from '../../panels/vignette/vigact'
 import { vigDialog } from '../../panels/vignette/vigsession.svelte'
 import { decor } from '../../panels/decor/decor.svelte'
@@ -373,6 +374,40 @@ describe('команды', () => {
     } finally {
       store.view = was.view
       store.current = was.current
+      prefs.level = was.level
+    }
+  })
+
+  it('renameSpread: поле у текущего, на обложке — ничего', () => {
+    const was = { view: store.view, current: store.current, level: prefs.level, onCover: store.onCover }
+    const sp = { id: 'a', photos: ['1'] } as unknown as SpreadView
+    try {
+      store.view = { ...store.view, spreads: [sp, { ...sp, id: 'b' }] }
+      store.current = 1
+      store.onCover = false
+      prefs.level = 'standard'
+      naming.stop()
+      COMMANDS.renameSpread()
+      expect(naming.id).toBe('b')
+      naming.stop()
+      store.onCover = true
+      COMMANDS.renameSpread()
+      expect(naming.id).toBeNull()
+      // Без разворотов и без функции «Названия» — тоже молча.
+      store.onCover = false
+      store.view = { ...store.view, spreads: [] }
+      COMMANDS.renameSpread()
+      expect(naming.id).toBeNull()
+      store.view = { ...store.view, spreads: [sp] }
+      store.current = 0
+      prefs.level = 'simple'
+      COMMANDS.renameSpread()
+      expect(naming.id).toBeNull()
+    } finally {
+      naming.stop()
+      store.view = was.view
+      store.current = was.current
+      store.onCover = was.onCover
       prefs.level = was.level
     }
   })

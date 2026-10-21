@@ -30,7 +30,7 @@ func devFile(t *testing.T) bool {
 }
 
 // devAlbum — альбом в папке dir: фото «CON.jpg», «Отбор/aux.2024.jpg» (устройство с расширением)
-// и обычные «a.jpg», «Отбор/b.jpg» в одном развороте; папки dir и «Con.2024». onDisk — файлы на
+// и обычные «a.jpg», «Отбор/b.jpg» в одном развороте; папки «Отбор» и «Con.2024». onDisk — файлы на
 // диске (длины 10, 20, 30, 40). Возвращает проект, файл альбома и пути фото по порядку.
 func devAlbum(t *testing.T, onDisk bool) (*model.Project, string, []string) {
 	t.Helper()
@@ -50,7 +50,8 @@ func devAlbum(t *testing.T, onDisk bool) (*model.Project, string, []string) {
 		s.Photos = append(s.Photos, id)
 	}
 	p.Spreads = []*model.Spread{s}
-	p.Folders = []string{dir, filepath.Join(dir, "Con.2024")}
+	// Папки — соседи, а не вложенные: вложенную Load сворачивает в корень (093-4).
+	p.Folders = []string{filepath.Join(dir, "Отбор"), filepath.Join(dir, "Con.2024")}
 	if onDisk {
 		if err := os.MkdirAll(p.Folders[1], 0o755); err != nil {
 			t.Fatal(err)

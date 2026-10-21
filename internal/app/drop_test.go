@@ -8,10 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -233,7 +236,7 @@ func TestScanLogNoNames(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := a.editor().AddFolder(dir); err != nil {
+	if _, _, err := a.editor().AddFolder(dir); err != nil {
 		t.Fatal(err)
 	}
 	a.rescan()
@@ -271,5 +274,138 @@ func TestSkippedSummary(t *testing.T) {
 	got = skippedSummary(many)
 	if !strings.HasSuffix(got, "и ещё 5 видов") || strings.Count(got, ", ") != maxSkippedKinds {
 		t.Errorf("предел видов: %q", got)
+	}
+}
+
+// Бросок больше MaxLooseFiles путей — один тост «не больше 2 000» до любого Lstat (0.22-sec-5);
+// ровно MaxLooseFiles — предел не срабатывает, Lstat идёт по каждому пути.
+func TestDropTooManyNoStat(t *testing.T) {
+	a, notices := dropApp(t)
+	captureLog(t)
+	var statted int
+	prev := dropStat
+	dropStat = func(string) (fs.FileInfo, error) {
+		statted++
+		return nil, os.ErrNotExist
+	}
+	t.Cleanup(func() { dropStat = prev })
+	dir := testkit.TempDir(t)
+	ps := make([]string, model.MaxLooseFiles+1)
+	for i := range ps {
+		ps[i] = filepath.Join(dir, fmt.Sprintf("Анна_%d.jpg", i))
+	}
+	a.dropPaths(ps)
+	if statted != 0 {
+		t.Fatalf("Lstat вызван %d раз до отказа по пределу", statted)
+	}
+	if len(*notices) != 1 || !strings.Contains((*notices)[0], "2 000") || !strings.Contains((*notices)[0], "не добавлено 1") {
+		t.Fatalf("тосты %v, ждали один про 2 000", *notices)
+	}
+	if v := a.editor().View(); len(v.Loose) != 0 || len(v.Folders) != 0 {
+		t.Errorf("что-то добавилось: %+v %v", v.Loose, v.Folders)
+	}
+
+	// Ровно предел — бросок разбирается: Lstat по каждому пути, пропавшие молчат.
+	*notices = nil
+	a.dropPaths(ps[:model.MaxLooseFiles])
+	waitScan(t, a)
+	if statted != model.MaxLooseFiles {
+		t.Errorf("Lstat %d раз, ждали %d", statted, model.MaxLooseFiles)
+	}
+	if len(*notices) != 0 {
+		t.Errorf("тосты на пределе: %v", *notices)
+	}
+}
+
+// Junction (или символьная ссылка) на локальную папку — добавляется папкой: Lstat видит ссылку,
+// LinkTarget проверяет цепочку и даёт папку-цель; отдельных фото не появляется.
+func TestDropFolderLink(t *testing.T) {
+	a, ev := evApp(t)
+	captureLog(t)
+	root := testkit.TempDir(t)
+	target := filepath.Join(root, "Съёмка")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testkit.JPEG(t, target, "a.jpg", 20, 10)
+	link := testkit.DirLink(t, target, filepath.Join(root, "Ссылка"))
+	other := testkit.TempDir(t)
+	a.dropPaths([]string{link, other})
+	waitScan(t, a)
+	v := a.editor().View()
+	if len(v.Folders) != 2 || !slices.Contains(v.Folders, link) || !slices.Contains(v.Folders, other) {
+		t.Fatalf("папки %v, ждали ссылку и обычную", v.Folders)
+	}
+	if len(v.Loose) != 0 || len(ev("loose:added")) != 0 {
+		t.Errorf("ссылка ушла в отдельные фото: %+v", v.Loose)
+	}
+	if n := ev("notice"); len(n) != 0 {
+		t.Errorf("тосты: %v", n)
+	}
+}
+
+// linkInfo — сведения настоящей папки, но с видом «ссылка» (как Lstat у ссылки).
+type linkInfo struct{ fs.FileInfo }
+
+func (l linkInfo) Mode() fs.FileMode { return l.FileInfo.Mode() | fs.ModeSymlink }
+
+// Ссылка, цепочка которой уходит на UNC, — не папка и не фото: до Stat цели не доходит (иначе
+// настоящая папка под ней добавилась бы папкой), уходит в отдельные фото и там пропускается;
+// соседняя обычная папка добавляется.
+func TestDropLinkNotLocal(t *testing.T) {
+	a, ev := evApp(t)
+	captureLog(t)
+	root := testkit.TempDir(t)
+	link := filepath.Join(root, "Ссылка")
+	if err := os.Mkdir(link, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	good := testkit.TempDir(t)
+	unc := `\\127.0.0.1\nosuchshare\Иванова`
+	if runtime.GOOS != "windows" {
+		unc = "//nosuchhost/Иванова"
+	}
+	var mu sync.Mutex
+	var read []string
+	t.Cleanup(library.SetReadLink(func(p string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		read = append(read, p)
+		if p == link {
+			return unc, nil
+		}
+		return "", os.ErrInvalid
+	}))
+	prev := dropStat
+	dropStat = func(p string) (fs.FileInfo, error) {
+		st, err := os.Lstat(p)
+		if err != nil || p != link {
+			return st, err
+		}
+		return linkInfo{st}, nil
+	}
+	t.Cleanup(func() { dropStat = prev })
+
+	a.dropPaths([]string{link, good})
+	waitScan(t, a)
+	mu.Lock()
+	checked := slices.Contains(read, link)
+	mu.Unlock()
+	if !checked {
+		t.Error("цель ссылки не проверена")
+	}
+	v := a.editor().View()
+	if len(v.Folders) != 1 || v.Folders[0] != good {
+		t.Fatalf("папки %v, ждали только обычную", v.Folders)
+	}
+	evs := ev("loose:added")
+	if len(evs) != 1 {
+		t.Fatalf("событий loose:added %d", len(evs))
+	}
+	if got, ok := evs[0].data[0].(model.LooseAdded); !ok || got.Skipped != 1 || got.Added != 0 {
+		t.Errorf("событие %+v, ждали один пропущенный", evs[0].data)
+	}
+	if len(v.Loose) != 0 {
+		t.Errorf("отдельные фото: %+v", v.Loose)
 	}
 }

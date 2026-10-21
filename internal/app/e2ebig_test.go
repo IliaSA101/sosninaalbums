@@ -396,7 +396,7 @@ func (s *e2eState) scan(t *testing.T) {
 	s.mark = s.bus.mark()
 	t0 := time.Now()
 	for _, f := range s.set.folders[:len(s.set.folders)-1] { // чтение одно, на последней папке: оно берёт все
-		if _, err := s.a.editor().AddFolder(f); err != nil {
+		if _, _, err := s.a.editor().AddFolder(f); err != nil {
 			t.Fatal(err)
 		}
 	}

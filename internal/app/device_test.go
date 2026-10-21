@@ -43,7 +43,8 @@ func TestDraftDeviceNamesKept(t *testing.T) {
 		s.Photos = append(s.Photos, id)
 	}
 	p.Spreads = []*model.Spread{s}
-	p.Folders = []string{dir, filepath.Join(dir, "Con.2024")}
+	// Папки — соседи, а не вложенные: вложенную Load сворачивает в корень (093-4).
+	p.Folders = []string{filepath.Join(dir, "Свадьба"), filepath.Join(dir, "Con.2024")}
 	devIDs := []string{library.IDFor(files[0]), library.IDFor(files[1])}
 	slices.Sort(devIDs)
 

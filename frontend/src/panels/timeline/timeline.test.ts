@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { B, GAP, H, PAD, cellW, centerScroll, chipW, groupW, isBlank, mergeCount, tipLeft } from './timeline'
+import {
+  B,
+  GAP,
+  H,
+  PAD,
+  cellW,
+  centerScroll,
+  chipW,
+  cutState,
+  cutTip,
+  groupW,
+  isBlank,
+  joinState,
+  joinTip,
+  mergeCount,
+  tipLeft,
+} from './timeline'
 import type { SpreadView } from '../../base/core/types'
 
 const sp = (n: number, w = 2, h = 1): SpreadView =>
@@ -60,5 +76,30 @@ describe('tipLeft и centerScroll', () => {
   })
   it('группа по центру', () => {
     expect(centerScroll(500, 400, 100)).toBe(350)
+  })
+})
+
+describe('joinState и cutState (094)', () => {
+  const grid = (s: SpreadView): SpreadView => ({ ...s, grid: true }) as SpreadView
+
+  it('joinState: сетка, сверх максимума, можно — тексты черты', () => {
+    expect(joinState([grid(sp(1)), sp(1)], 0, 64)).toEqual({ ok: false, why: 'Сначала «Вернуть авто»' })
+    expect(joinState([sp(1), grid(sp(1))], 0, 64).why).toBe('Сначала «Вернуть авто»')
+    expect(joinState([sp(3), sp(4)], 0, 6)).toEqual({ ok: false, why: 'Нельзя склеить: вместе 7 фото, максимум 6' })
+    const ok = joinState([sp(3), sp(3)], 0, 6)
+    expect(ok).toEqual({ ok: true, why: '' })
+    expect(joinTip(ok, false)).toBe('Ctrl+щелчок — склеить')
+    expect(joinTip(ok, true)).toBe('⌘+щелчок — склеить')
+    expect(joinTip({ ok: false, why: 'Сначала «Вернуть авто»' }, false)).toBe('Сначала «Вернуть авто»')
+    expect(cutTip(false)).toBe('Ctrl+щелчок — разрезать')
+    expect(cutTip(true)).toBe('⌘+щелчок — разрезать')
+  })
+
+  it('cutState: первое фото — пункта нет, сетка — серый с причиной', () => {
+    expect(cutState(sp(3), 0).show).toBe(false)
+    expect(cutState(sp(3), -1).show).toBe(false)
+    expect(cutState(sp(3), 3).show).toBe(false) // за последним фото резать нечего
+    expect(cutState(sp(3), 2)).toEqual({ show: true, ok: true, why: '' })
+    expect(cutState(grid(sp(3)), 1)).toEqual({ show: true, ok: false, why: 'Сначала «Вернуть авто»' })
   })
 })

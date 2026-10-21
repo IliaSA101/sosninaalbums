@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canVary, deleteLabel, menuPos, setupItem, varyLabel, vignetteItem } from './spreadmenu'
+import { canVary, deleteLabel, menuPos, setupItem, stripItems, varyLabel, vignetteItem } from './spreadmenu'
 
 const view = { w: 1000, h: 600 }
 const size = { w: 200, h: 36 }
@@ -70,5 +70,32 @@ describe('vignetteItem', () => {
   it('несколько выделенных групп — пункта нет', () => {
     expect(vignetteItem(2, 'vignette')).toBeNull()
     expect(vignetteItem(3, undefined)).toBeNull()
+  })
+})
+
+describe('stripItems (094)', () => {
+  const all = () => true
+  const cut = { show: true, ok: true, why: '' }
+  const join = { ok: true, why: '' }
+  const grayCut = { show: true, ok: false, why: 'Сначала «Вернуть авто»' }
+
+  it('Название… / Разрезать перед этим фото / Склеить со следующим: одна группа, по уровню, серые с причиной', () => {
+    expect(stripItems(1, all, cut, join)).toEqual({ rename: true, cut: { ok: true, why: '' }, join: { ok: true, why: '' } })
+    // Без «Разреза и склейки» — только название; без «Названий» — только разрез и склейка.
+    expect(stripItems(1, (f) => f === 'names', cut, join)).toEqual({ rename: true, cut: null, join: null })
+    expect(stripItems(1, (f) => f === 'timeline', cut, join).rename).toBe(false)
+    // Серые несут причину черты.
+    expect(stripItems(1, all, grayCut, { ok: false, why: 'Нельзя склеить: вместе 70 фото, максимум 64' })).toEqual({
+      rename: true,
+      cut: { ok: false, why: 'Сначала «Вернуть авто»' },
+      join: { ok: false, why: 'Нельзя склеить: вместе 70 фото, максимум 64' },
+    })
+    // Первое фото (show = нет) и последняя группа (join не задан) — пунктов нет.
+    expect(stripItems(1, all, { ...cut, show: false }, undefined)).toEqual({ rename: true, cut: null, join: null })
+  })
+
+  it('при нескольких выделенных их нет', () => {
+    expect(stripItems(2, all, cut, join)).toEqual({ rename: false, cut: null, join: null })
+    expect(stripItems(5, all, cut, join)).toEqual({ rename: false, cut: null, join: null })
   })
 })

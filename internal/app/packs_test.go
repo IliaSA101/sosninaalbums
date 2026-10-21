@@ -223,8 +223,13 @@ func TestConfirmPack(t *testing.T) {
 func assertNoTmpLib(t *testing.T, a *App) {
 	t.Helper()
 	_ = filepath.WalkDir(filepath.Join(a.cfgDir, decor.RootName), func(p string, d os.DirEntry, err error) error {
-		if err == nil && strings.HasSuffix(p, ".tmp") {
+		if err != nil || !strings.HasSuffix(p, ".tmp") {
+			return nil
+		}
+		if testkit.OwnTmp(filepath.Base(p)) {
 			t.Errorf("остался временный %s", p)
+		} else {
+			t.Logf("чужой временный файл (антивирус) %s", p)
 		}
 		return nil
 	})

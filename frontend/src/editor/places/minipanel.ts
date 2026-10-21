@@ -188,6 +188,9 @@ export interface MiniView {
   top: number
   right: number
   bottom: number
+  // Низ ленты разворотов под холстом, в тех же осях (095, владелец 2026-10-21): «под фото» можно заходить на ленту,
+  // если низ фото виден на холсте. Нет — ленты под холстом нет.
+  spill?: number
 }
 
 type Box = { left: number; top: number; width: number; height: number }
@@ -236,7 +239,7 @@ export function chromeInset(win: Box, parts: { edge: 'top' | 'left' | 'right'; b
 
 // Тот же прямоугольник (перемер без сдвига не должен гонять перерисовку).
 export const sameView = (a?: MiniView, b?: MiniView) =>
-  a === b || (!!a && !!b && a.left === b.left && a.top === b.top && a.right === b.right && a.bottom === b.bottom)
+  a === b || (!!a && !!b && a.left === b.left && a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.spill === b.spill)
 
 export type MiniWhere = 'below' | 'above' | 'inside' | 'top'
 
@@ -262,8 +265,14 @@ function insideAt(box: Rect, ppm: number, w: number, view: MiniView, caps: Rect[
   return { top, left }
 }
 
+// Нижняя граница полосы «под рамкой»: низ рамки (bottom, px) виден — до низа ленты разворотов (owner-ux §1.5,
+// 2026-10-21), ушёл за край холста — до низа видимой области.
+const floorOf = (view: MiniView, bottom: number): number =>
+  view.spill !== undefined && bottom <= view.bottom ? Math.max(view.bottom, view.spill) : view.bottom
+
 // Где стоит полоса (px от угла разворота), всегда по центру рамки (зажим краями видимой области view;
-// не задана — лист). Порядок (владелец 2026-10-17, owner-ux §1): под рамкой; нет места до низа видимой области —
+// не задана — лист). Порядок (владелец 2026-10-17, owner-ux §1): под рамкой (низ рамки виден — до низа ленты разворотов,
+// view.spill; 2026-10-21); нет места до низа видимой области —
 // над рамкой, выше ⟳ (avoid — его центр, px: полоса его не закрывает); и там нет (рамка во весь экран) — внутри
 // у нижнего края видимой части, по центру; не помещается — прежний запасной 0.13.1: внутри у верха, вбок от ⟳.
 // w — ширина полосы, px. capBottom — низ подписи или заглушки выделенного, мм (037): «под рамкой» значит
@@ -292,7 +301,7 @@ export function miniPlace(
     avoid.y > top - ROT_KEEP &&
     avoid.y < top + MINI_H + ROT_KEEP
   const under = bottom + MINI_GAP
-  if (under + MINI_H <= view.bottom && !hits(under, cx)) return { top: under, left: cx, where: 'below' }
+  if (under + MINI_H <= floorOf(view, bottom) && !hits(under, cx)) return { top: under, left: cx, where: 'below' }
   let above = by - MINI_GAP - MINI_H
   if (hits(above, cx)) above = avoid!.y - ROT_KEEP - MINI_H // ⟳ стоит над серединой стороны — полоса выше него
   if (above >= view.top && !hits(above, cx)) return { top: above, left: cx, where: 'above' }

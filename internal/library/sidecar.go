@@ -64,6 +64,11 @@ func (ss *sideSet) add(p string, d fs.DirEntry) {
 	if err != nil {
 		return // размера нет — как будто сайдкара нет; найдётся при следующем чтении папок
 	}
+	ss.put(p, info)
+}
+
+// put запоминает сайдкар со сведениями info (общее для листинга папки и отдельного файла).
+func (ss *sideSet) put(p string, info fs.FileInfo) {
 	ss.m[strings.ToLower(p)] = sidecar{path: p, size: info.Size(), mod: info.ModTime().UnixNano()}
 }
 

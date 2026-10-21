@@ -4,6 +4,8 @@
   import LowDpiBadge from '../../base/ui/LowDpiBadge.svelte'
   import VigMark from '../vignette/VigMark.svelte'
   import { store } from '../../base/core/store.svelte'
+  import { drag } from '../../base/drag/drag.svelte'
+  import { Reorder, gridSource } from '../../base/drag/reorder.svelte'
   import { newSheetSize, sheetSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import { labelTitle, spreadLabel } from '../timeline/spreadname'
@@ -27,6 +29,20 @@
   // а не окно, поэтому он и есть корень — иначе запас rootMargin не работает. untrack: не подписываться на box.
   const near = new Nearby(() => untrack(() => box?.closest('.scroll') ?? null), '400px 0px')
 
+  // Порядок разворотов — перетаскиванием плитки (096), тот же жест, что в ленте; щелчок без сдвига — переход.
+  const reorder = new Reorder()
+  const scroller = () => box?.closest<HTMLElement>('.scroll') ?? null
+  function press(e: PointerEvent, i: number, id: string) {
+    if (!box) return
+    const grid = box
+    drag.start(
+      e,
+      () => ({ kind: 'spread', id, index: i }),
+      undefined,
+      (sx, sy) => reorder.session(gridSource(grid, scroller), i, sx, sy),
+    )
+  }
+
   // Текущая плитка остаётся видимой в панели. Прокручиваем только вертикально
   // и только свой контейнер: scrollIntoView сдвинул бы и панель с overflow: hidden.
   $effect(() => {
@@ -45,6 +61,8 @@
 {#if store.view.spreads.length}
   <div
     class="grid"
+    class:reordering={reorder.busy}
+    class:landing={reorder.landing}
     data-guide="spread-grid"
     bind:this={box}
     style:--tile="{TILE}px"
@@ -56,11 +74,14 @@
       <div
         class="tile"
         class:current={i === store.current}
+        class:src={reorder.lifted(i)}
+        style:transform={reorder.css(i)}
         data-tile={i}
         role="button"
         tabindex="-1"
         title={labelTitle(i, sp.name) ?? `${unit.cap} ${i + 1}`}
-        onclick={() => store.go(i)}
+        onpointerdown={(e) => press(e, i, sp.id)}
+        onclick={() => drag.clickAllowed() && store.go(i)}
         onkeydown={() => {}}
       >
         <div
@@ -86,6 +107,7 @@
 
 <style>
   .grid {
+    position: relative; /* offsetLeft/offsetTop плиток — от сетки (замер перестановки) */
     display: grid;
     grid-template-columns: repeat(3, var(--tile));
     gap: 4px var(--gap);
@@ -97,6 +119,21 @@
     /* Большие альбомы: плитки вне вида не рисуются */
     content-visibility: auto;
     contain-intrinsic-size: auto var(--tile) auto calc(var(--tile-h) + 2 * var(--pad) + 18px);
+    border-radius: 4px;
+    transition: transform 0.15s ease;
+  }
+  /* Перестановка (096): как в ленте — все плитки рисуются, бросок без переходов, поднятая поверх соседей. */
+  .reordering .tile {
+    content-visibility: visible;
+  }
+  .landing .tile {
+    transition: none;
+  }
+  .tile.src {
+    z-index: 5;
+    transition: none;
+    background: #3f3f41;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
   }
   .frame {
     pointer-events: none;

@@ -6,6 +6,10 @@ export function AddDecorPNG(arg1, arg2) {
   return window['go']['app']['App']['AddDecorPNG'](arg1, arg2);
 }
 
+export function AddFilePaths(arg1) {
+  return window['go']['app']['App']['AddFilePaths'](arg1);
+}
+
 export function AddFolderPath(arg1) {
   return window['go']['app']['App']['AddFolderPath'](arg1);
 }
@@ -112,6 +116,10 @@ export function CancelLibrary() {
 
 export function CheckFolders(arg1) {
   return window['go']['app']['App']['CheckFolders'](arg1);
+}
+
+export function ChooseFiles() {
+  return window['go']['app']['App']['ChooseFiles']();
 }
 
 export function ChooseFolder() {
@@ -310,6 +318,10 @@ export function LibraryPacks() {
   return window['go']['app']['App']['LibraryPacks']();
 }
 
+export function LogUI(arg1) {
+  return window['go']['app']['App']['LogUI'](arg1);
+}
+
 export function Marks() {
   return window['go']['app']['App']['Marks']();
 }
@@ -476,6 +488,10 @@ export function RemoveFolder(arg1) {
 
 export function RemoveHotkey(arg1, arg2) {
   return window['go']['app']['App']['RemoveHotkey'](arg1, arg2);
+}
+
+export function RemoveLoose(arg1, arg2) {
+  return window['go']['app']['App']['RemoveLoose'](arg1, arg2);
 }
 
 export function RemovePack(arg1) {

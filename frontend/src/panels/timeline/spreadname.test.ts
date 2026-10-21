@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NAME_MAX, labelTitle, nameChanged, normName, spreadLabel } from './spreadname'
+import { DBL_MS, DBL_PX, NAME_MAX, dblOwner, labelTitle, nameChanged, normName, spreadLabel } from './spreadname'
 
 describe('spreadLabel', () => {
   it('номер и название', () => {
@@ -46,5 +46,24 @@ describe('nameChanged', () => {
     expect(nameChanged('Сборы', 'Банкет')).toBe(true)
     expect(nameChanged('Сборы', '')).toBe(true)
     expect(nameChanged('', 'Сборы')).toBe(true)
+  })
+})
+
+describe('dblOwner (094 §3.1)', () => {
+  const first = { id: 's2', x: 100, y: 50, t: 1000 }
+  it('499 мс / 5 px — разворот первого', () => {
+    expect(dblOwner(first, { x: 105, y: 50, t: 1499 })).toBe('s2')
+  })
+  it('ровно 500 мс / 6 px — тоже', () => {
+    expect(DBL_MS).toBe(500)
+    expect(DBL_PX).toBe(6)
+    expect(dblOwner(first, { x: 100, y: 56, t: 1500 })).toBe('s2')
+  })
+  it('501 мс или 6,1 px — null', () => {
+    expect(dblOwner(first, { x: 100, y: 50, t: 1501 })).toBeNull()
+    expect(dblOwner(first, { x: 106.1, y: 50, t: 1100 })).toBeNull()
+  })
+  it('первого нет — null', () => {
+    expect(dblOwner(null, { x: 100, y: 50, t: 1000 })).toBeNull()
   })
 })

@@ -55,6 +55,7 @@
 
 <style>
   .addcol {
+    position: relative;
     flex: none;
     margin-left: 6px;
     display: flex;

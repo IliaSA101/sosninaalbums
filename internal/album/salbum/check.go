@@ -82,6 +82,9 @@ func Check(p *model.Project) error {
 			return err
 		}
 	}
+	if err := checkLoose(p); err != nil {
+		return err
+	}
 	for _, r := range p.Photos {
 		if r.Lib != "" && !model.ValidLibKey(r.Lib) {
 			return fmt.Errorf("фото в проекте: недопустимый ключ библиотеки %s", paths.LogQ(r.Lib))

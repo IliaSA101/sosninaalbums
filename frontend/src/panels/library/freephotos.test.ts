@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { allInAlbum, allInAlbumText, emptyReason, freePhotos, pickFor, type PickHost } from './freephotos'
-import { filterFolders } from '../folders/folders'
+import { filterTree } from '../folders/tree'
 import type { Photo } from '../../base/core/types'
 
 const ph = (id: string): Photo => ({ id, path: id, name: id, w: 100, h: 100 })
@@ -46,13 +46,13 @@ describe('folder filter (054)', () => {
   })
 
   it('автосборка берёт только показанные, filtered: true', () => {
-    const shown = filterFolders(['D:/one', 'D:/two'], inA, new Set(['d:/one']))
+    const shown = filterTree(inA, new Set(['d:d:/one']))
     expect(pickFor(host(shown), true, true)).toMatchObject({ ids: ['c', 'd'], filtered: true })
   })
 
   it('все папки скрыты — пусто и тост про фильтр', () => {
     const toasts: string[] = []
-    const shown = filterFolders(['D:/one', 'D:/two'], inA, new Set(['d:/one', 'd:/two']))
+    const shown = filterTree(inA, new Set(['d:d:/one', 'd:d:/two']))
     expect(
       pickFor(
         host(shown, (t) => toasts.push(t)),

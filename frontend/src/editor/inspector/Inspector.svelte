@@ -30,9 +30,8 @@
     photo: InspectorFrame as Component<{ head?: boolean }>, // своего заголовка нет: имя файла остаётся в теле
   }
   const Body = $derived(panels.mode ? BODIES[panels.mode] : undefined)
-  // При переносе фото карточка остаётся: в ней зона «Фото фона» (цель броска). Но под карточкой может
-  // оказаться «+ новый разворот», поэтому в переносе она пропускает указатель сквозь себя, кроме самой зоны
-  // (стиль .through). При переносе разворота (не фото) карточка скрыта.
+  // При переносе фото карточка остаётся: в ней зона «Фото фона» (цель броска). Остальное тело карточки — не цель,
+  // и всё под ней тоже (pickDrop по data-chrome). При переносе разворота (не фото) карточка скрыта.
   const photos = $derived(drag.active && drag.payload?.kind === 'photos')
   // Плавающая карточка — только «Полный»; в панели деталей (docked) она на любом уровне (вопрос 11).
   const shown = $derived(!!Body && (docked || (prefs.can('panels') && (!drag.active || photos))))
@@ -84,7 +83,6 @@
     data-mini-edge={docked ? null : 'right'}
     {...docked ? {} : { 'data-guide': 'inspector' }}
     class:docked
-    class:through
     bind:this={el}
     style:right={docked ? null : `${M}px`}
     style:top={docked ? null : `${BAR + M}px`}
@@ -124,12 +122,6 @@
     overflow-y: auto;
     scrollbar-width: thin;
     cursor: default;
-  }
-  .insp.through {
-    pointer-events: none;
-  }
-  .insp.through :global([data-drop='backdrop']) {
-    pointer-events: auto;
   }
   .insp.docked {
     position: static;

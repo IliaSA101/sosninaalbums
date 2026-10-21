@@ -49,6 +49,14 @@ func SetMarksLimit(n int) { marksLimit = n }
 // FormatVersion. Съёмка — единицы папок; 10 000 — запас без квадратичных проверок.
 const MaxFolders = 10_000
 
+// Пределы отдельных фото (097, v16): файлов во всех добавлениях и самих добавлений. Load
+// отбрасывает лишние с потерей: поднимать только со сменой FormatVersion. Список уходит в
+// шапку вида с каждой правкой — поэтому 2 000, а не 10 000, как у папок (decisions 097-3).
+const (
+	MaxLooseFiles = 2_000
+	MaxLooseAdds  = 500
+)
+
 func ErrTooMany() error {
 	return fmt.Errorf("на развороте не может быть больше %d фото", MaxPhotos)
 }

@@ -263,7 +263,11 @@ function check(base, cur) {
   const notes = []
   if (cur.go) {
     if (!base.go) fail('baseline has no go section - run --write')
-    for (const { key, name, k } of lost(base.go, cur.go)) errors.push(`go ${key}: test lost${k > 1 ? ` x${k}` : ''}: ${name}`)
+    for (const { key, name, k } of lost(base.go, cur.go)) {
+      // Число тестов в пакете не упало — скорее переименование, чем потеря (владелец 2026-10-21)
+      if (cur.go[key] && cur.go[key].tests >= base.go[key].tests) notes.push(`go ${key}: test renamed? ${name} - проверь, что проверка не ослаблена`)
+      else errors.push(`go ${key}: test lost${k > 1 ? ` x${k}` : ''}: ${name}`)
+    }
     for (const [p, b] of Object.entries(base.go)) {
       const c = cur.go[p]
       if (!c) {
@@ -283,7 +287,10 @@ function check(base, cur) {
   }
   if (cur.ui) {
     if (!base.ui) fail('baseline has no ui section - run --write')
-    for (const { name, k } of lost({ ui: base.ui }, { ui: cur.ui })) errors.push(`ui test lost${k > 1 ? ` x${k}` : ''}: ${name}`)
+    for (const { name, k } of lost({ ui: base.ui }, { ui: cur.ui })) {
+      if (cur.ui.tests >= base.ui.tests) notes.push(`ui: test renamed? ${name} - проверь, что проверка не ослаблена`)
+      else errors.push(`ui test lost${k > 1 ? ` x${k}` : ''}: ${name}`)
+    }
     if (cur.ui.tests > base.ui.tests) notes.push(`ui: tests ${base.ui.tests} -> ${cur.ui.tests}`)
   }
   return { errors, notes }

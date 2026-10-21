@@ -50,6 +50,7 @@ func FindByName(ctx context.Context, dir string, want []Want, limit int) (Found,
 	byName := wantByName(want)
 	cands := make(map[int][]string)
 	visited := 0
+	dir = filepath.Clean(dir) // как Scanner.walk: корень-ссылку с «\» на конце не обходить по цели
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil

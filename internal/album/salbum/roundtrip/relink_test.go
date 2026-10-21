@@ -401,3 +401,137 @@ func TestClampSticker(t *testing.T) {
 		t.Error("nil-стикер")
 	}
 }
+
+// looseOf — пути отдельных фото проекта по порядку добавлений.
+func looseOf(e *album.Editor) []string { return edtest.P(e).LooseFiles() }
+
+// addLoose — одно добавление отдельных фото; все файлы должны войти.
+func addLoose(t *testing.T, e *album.Editor, files ...string) {
+	t.Helper()
+	if _, r, err := e.AddLoose(files, 100); err != nil || r.Added != len(files) {
+		t.Fatalf("AddLoose: %+v, %v", r, err)
+	}
+}
+
+// 097 §5: отдельные фото альбома переехали — записи добавления следуют за ними. Ловушка: пары,
+// у которых прежний путь — отдельное фото, не уходят в addFolderFor — выбранная папка ради
+// них не добавляется. Один шаг отмены, повтор — холостой, круг Save → Load.
+func TestRelinkLooseFollows(t *testing.T) {
+	edtest.SkipNotWindows(t)
+	root := testkit.TempDir(t)
+	old1, old2 := filepath.Join(root, "E", "Отдельно", "1.jpg"), filepath.Join(root, "E", "Отдельно", "2.jpg")
+	new1, new2 := filepath.Join(root, "F", "Отдельно", "1.jpg"), filepath.Join(root, "F", "Отдельно", "2.jpg")
+	edtest.PutFile(t, new1, 30)
+	edtest.PutFile(t, new2, 40)
+	e := edtest.Open(t, model.New(), "")
+	id1, id2 := library.IDFor(old1), library.IDFor(old2)
+	edtest.NewSpread(e, -1, []model.PhotoInfo{{ID: id1, Path: old1, W: 3, H: 2, Size: 30}, {ID: id2, Path: old2, W: 3, H: 2, Size: 40}})
+	addLoose(t, e, old1, old2)
+	v := e.Relink(map[string]string{id1: new1, id2: new2}, filepath.Dir(new1))
+	if len(v.Folders) != 0 {
+		t.Fatalf("папка добавлена ради отдельных фото: %v", v.Folders)
+	}
+	if got := looseOf(e); !slices.Equal(got, []string{new1, new2}) {
+		t.Fatalf("отдельные: %v", got)
+	}
+	if got := v.Spreads[0].Photos; !slices.Equal(got, []string{library.IDFor(new1), library.IDFor(new2)}) {
+		t.Fatalf("ID в развороте: %v", got)
+	}
+	if v2 := e.Relink(map[string]string{id1: new1}, filepath.Dir(new1)); v2.Rev != v.Rev {
+		t.Error("повторная перепривязка — не холостая правка")
+	}
+	if lp := edtest.SaveLoad(t, e); !slices.Equal(lp.LooseFiles(), []string{new1, new2}) || len(lp.Folders) != 0 {
+		t.Fatalf("после Save → Load: %v, папки %v", lp.LooseFiles(), lp.Folders)
+	}
+	if u := e.Undo(); !slices.Equal(looseOf(e), []string{old1, old2}) || u.Spreads[0].Photos[0] != id1 {
+		t.Fatalf("после отмены: %v %v", looseOf(e), u.Spreads[0].Photos)
+	}
+	// Вместе с обычным фото, новое место которого уже в папке альбома: выбранная папка тоже не нужна.
+	keep := filepath.Join(root, "F", "Съёмка")
+	old3, new3 := filepath.Join(root, "E", "Съёмка", "3.jpg"), filepath.Join(keep, "3.jpg")
+	edtest.PutFile(t, new3, 50)
+	edtest.AddFolder(e, keep)
+	id3 := library.IDFor(old3)
+	edtest.NewSpread(e, -1, []model.PhotoInfo{{ID: id3, Path: old3, W: 3, H: 2, Size: 50}})
+	v = e.Relink(map[string]string{id1: new1, id3: new3}, filepath.Join(root, "G"))
+	if !slices.Equal(v.Folders, []string{keep}) || looseOf(e)[0] != new1 {
+		t.Fatalf("вместе с обычным фото: папки %v, отдельные %v", v.Folders, looseOf(e))
+	}
+}
+
+// 097 §5: пропавшие отдельные не из альбома из той же папки, что прежний путь пары, переезжают
+// следом, если файл с тем же именем есть в новой папке. Остаются: фото альбома (его ведёт своя
+// пара), файл на прежнем месте, файл, которого нет и в новой папке, файл из другой папки.
+func TestRelinkLooseSameDir(t *testing.T) {
+	edtest.SkipNotWindows(t)
+	root := testkit.TempDir(t)
+	oldDir, newDir := filepath.Join(root, "E", "Отдельно"), filepath.Join(root, "F", "Отдельно")
+	at := func(dir, name string) string { return filepath.Join(dir, name) }
+	for _, n := range []string{"1.jpg", "2.jpg", "3.jpg", "4.jpg"} {
+		edtest.PutFile(t, at(newDir, n), 30)
+	}
+	edtest.PutFile(t, at(oldDir, "4.jpg"), 30) // на месте
+	otherOld := filepath.Join(root, "E", "Другое", "6.jpg")
+	edtest.PutFile(t, filepath.Join(root, "F", "Другое", "6.jpg"), 30)
+	e := edtest.Open(t, model.New(), "")
+	id1, id3 := library.IDFor(at(oldDir, "1.jpg")), library.IDFor(at(oldDir, "3.jpg"))
+	edtest.NewSpread(e, -1, []model.PhotoInfo{
+		{ID: id1, Path: at(oldDir, "1.jpg"), W: 3, H: 2, Size: 30},
+		{ID: id3, Path: at(oldDir, "3.jpg"), W: 3, H: 2, Size: 30},
+	})
+	addLoose(t, e, at(oldDir, "1.jpg"), at(oldDir, "2.jpg"), at(oldDir, "3.jpg"), at(oldDir, "4.jpg"), at(oldDir, "5.jpg"))
+	addLoose(t, e, otherOld)
+	before := looseOf(e)
+	e.Relink(map[string]string{id1: at(newDir, "1.jpg")}, "")
+	want := []string{at(newDir, "1.jpg"), at(newDir, "2.jpg"), at(oldDir, "3.jpg"), at(oldDir, "4.jpg"), at(oldDir, "5.jpg"), otherOld}
+	if got := looseOf(e); !slices.Equal(got, want) {
+		t.Fatalf("отдельные:\n%v\nждали\n%v", got, want)
+	}
+	e.Undo()
+	if got := looseOf(e); !slices.Equal(got, before) {
+		t.Fatalf("после отмены: %v", got)
+	}
+}
+
+// 097 §5, смена буквы диска: отдельное фото альбома следует за своей парой, пропавшее не из
+// альбома ищется на новом диске. Остаются: файл на месте, файл, которого нет и там, путь
+// с другой буквой. Повтор — холостой, один шаг отмены.
+func TestRelinkDriveLoose(t *testing.T) {
+	edtest.SkipNotWindows(t)
+	root := testkit.TempDir(t)
+	vol := filepath.VolumeName(root)
+	to, _ := paths.DriveLetter(vol)
+	from, other := "Q", "Z"
+	if to == from {
+		from = "P"
+	}
+	if to == other {
+		other = "Y"
+	}
+	tail := root[len(vol):]
+	here := func(n string) string { return filepath.Join(root, "Отдельно", n) }
+	gone := func(d, n string) string { return d + ":" + filepath.Join(tail, "Отдельно", n) }
+	for _, n := range []string{"1.jpg", "2.jpg", "3.jpg"} {
+		edtest.PutFile(t, here(n), 10)
+	}
+	e := edtest.Open(t, model.New(), "")
+	id := library.IDFor(gone(from, "1.jpg"))
+	edtest.NewSpread(e, -1, []model.PhotoInfo{{ID: id, Path: gone(from, "1.jpg"), W: 3, H: 2, Size: 10}})
+	addLoose(t, e, gone(from, "1.jpg"), gone(from, "2.jpg"), here("3.jpg"), gone(from, "4.jpg"), gone(other, "5.jpg"))
+	before := looseOf(e)
+	v := e.RelinkDrive(from, to)
+	want := []string{here("1.jpg"), here("2.jpg"), here("3.jpg"), gone(from, "4.jpg"), gone(other, "5.jpg")}
+	if got := looseOf(e); !slices.Equal(got, want) {
+		t.Fatalf("отдельные:\n%v\nждали\n%v", got, want)
+	}
+	if v.Spreads[0].Photos[0] != library.IDFor(here("1.jpg")) || len(v.Folders) != 0 {
+		t.Fatalf("фото %v, папки %v", v.Spreads[0].Photos, v.Folders)
+	}
+	if v2 := e.RelinkDrive(from, to); v2.Rev != v.Rev {
+		t.Error("повторная смена диска — не холостая правка")
+	}
+	e.Undo()
+	if got := looseOf(e); !slices.Equal(got, before) {
+		t.Fatalf("после отмены: %v", got)
+	}
+}

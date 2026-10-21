@@ -36,6 +36,8 @@ describe('hadDraft', () => {
     expect(hadDraft({ path: '', spreads: [1], folders: [] })).toBe(true)
     expect(hadDraft({ path: '', spreads: [], folders: [1] })).toBe(true)
     expect(hadDraft({ path: '', spreads: [], folders: [] })).toBe(false)
+    expect(hadDraft({ path: '', spreads: [], folders: [], loose: [1] })).toBe(true) // только отдельные фото (097)
+    expect(hadDraft({ path: '', spreads: [], folders: [], loose: [] })).toBe(false)
     expect(hadDraft({ path: 'a.salbum', spreads: [1], folders: [1] })).toBe(false)
   })
 })

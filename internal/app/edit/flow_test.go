@@ -2,6 +2,7 @@ package edit
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"reflect"
@@ -59,10 +60,10 @@ func TestPhotosFromRibbon(t *testing.T) {
 		t.Errorf("у ленты спросили %v", got)
 	}
 
-	// Ленте ничего не известно: холостая, не ошибка.
-	rev := k.rev()
-	if v, err = k.AddPhotos("s1", []string{"призрак"}, 0); err != nil || v.Rev != rev {
-		t.Errorf("AddPhotos чужих ID: err %v, rev %d → %d", err, rev, v.Rev)
+	// Ни в ленте, ни в альбоме: ошибка (092), проект и событие прежние.
+	rev, calls := k.rev(), k.calls
+	if v, err = k.AddPhotos("s1", []string{"призрак"}, 0); !errors.Is(err, ErrNoPhoto) || v.Rev != rev || k.calls != calls {
+		t.Errorf("AddPhotos чужих ID: err %v, rev %d → %d, Changed %d → %d", err, rev, v.Rev, calls, k.calls)
 	}
 
 	// Лимит фото на развороте: ошибка, проект и событие прежние.
@@ -72,7 +73,7 @@ func TestPhotosFromRibbon(t *testing.T) {
 		k.lentPhoto(id)
 		many = append(many, id)
 	}
-	calls := k.calls
+	calls = k.calls
 	if v, err = k.AddPhotos("s1", many, 0); err == nil || k.calls != calls || v.Rev != rev {
 		t.Errorf("AddPhotos сверх лимита: err %v, Changed %d → %d, rev %d → %d", err, calls, k.calls, rev, v.Rev)
 	}
@@ -88,13 +89,10 @@ func TestPhotosFromRibbon(t *testing.T) {
 	if v, err = k.NewSpread(0, nil); err != nil || len(v.Spreads) != 4 || len(v.Spreads[0].Photos) != 0 {
 		t.Errorf("пустой NewSpread: err %v, %v", err, photosOf(v))
 	}
-	// Все фото пропали из ленты при переносе: разворот не создаётся, события нет.
+	// Все фото пропали из ленты при переносе: ErrNoPhoto (092), разворот не создаётся, события нет.
 	calls, rev = k.calls, k.rev()
-	if v, err = k.NewSpread(0, []string{"призрак"}); err != nil || len(v.Spreads) != 4 || k.calls != calls || v.Rev != rev {
+	if v, err = k.NewSpread(0, []string{"призрак"}); !errors.Is(err, ErrNoPhoto) || len(v.Spreads) != 4 || k.calls != calls || v.Rev != rev {
 		t.Errorf("NewSpread из пропавших: err %v, разворотов %d, Changed %d → %d", err, len(v.Spreads), calls, k.calls)
-	}
-	if k.outs != 1 { // ответ без ошибки всё равно в цепочке видов (075): иначе фронт просит полный
-		t.Errorf("NewSpread из пропавших: Host.Out %d раз", k.outs)
 	}
 }
 

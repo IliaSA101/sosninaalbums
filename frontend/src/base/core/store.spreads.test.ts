@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // «Разнообразить раскладки» (041) и очередь удалений: Go подменён, ответы задаёт тест.
 const varyCalls: { ids: string[]; variety: number; families?: string[] }[] = []
 let answer: () => unknown = () => ({})
+let mergeAnswer: () => unknown = () => ({})
 
 // Отложенные ответы удаления: тест отпускает их по одному.
 const calls: string[] = []
@@ -16,6 +17,7 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
     if (a instanceof Error) throw a
     return a
   },
+  MergeSpreads: async () => mergeAnswer(),
   DeleteSpread: (id: string) =>
     new Promise((resolve, reject) => {
       calls.push(id)
@@ -121,5 +123,47 @@ describe('store.deleteSpread: очередь', () => {
     await Promise.all(all)
     expect(store.view.spreads.map((s) => s.id)).toEqual(['b', 'c', 'd'])
     expect(store.toast?.kind).toBe('info')
+  })
+})
+
+// Склейка (094 §1.4): тост, как у разреза; снятый фон второго — второй фразой того же тоста.
+describe('store.merge: тост', () => {
+  const bd = [{ id: 'b1' }]
+  const two = (rev: number, lostBg = false) => ({
+    rev,
+    folders: [],
+    spreads: [
+      { id: 'a', photos: ['1'], backdrops: lostBg ? bd : undefined },
+      { id: 'b', photos: ['2'], backdrops: lostBg ? bd : undefined },
+    ],
+  })
+  const one = (rev: number) => ({ rev, folders: [], spreads: [{ id: 'a', photos: ['1', '2'] }] })
+
+  beforeEach(() => {
+    store.toast = null
+    store.busy = false
+  })
+
+  it('склейка — тост «Развороты склеены» с «Вернуть»', async () => {
+    store.apply(two(10) as never)
+    mergeAnswer = () => one(11)
+    await store.merge('a')
+    expect(store.toast?.text).toBe('Развороты склеены')
+    expect(store.toast?.action?.label).toBe('Вернуть')
+  })
+
+  it('с потерей фона — обе фразы', async () => {
+    store.apply(two(20, true) as never)
+    mergeAnswer = () => one(21)
+    await store.merge('a')
+    expect(store.toast?.text).toBe('Развороты склеены. Фон второго разворота снят')
+    expect(store.toast?.action?.label).toBe('Вернуть')
+  })
+
+  it('холостая — тоста нет', async () => {
+    store.apply(two(30) as never)
+    mergeAnswer = () => two(30)
+    await store.merge('a')
+    expect(store.toast).toBeNull()
   })
 })

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { HOLD_MS, LIMIT, SHOWN, afterNav, asSheet, isHidden, sheetThumbW, shownW, visibleChips, widthsKey } from './chips'
+import { afterEach, describe, expect, it } from 'vitest'
+import { HOLD_MS, LIMIT, SHOWN, afterNav, asSheet, cutHeldNext, isHidden, sheetThumbW, shownW, visibleChips, widthsKey } from './chips'
+import { setMacForTest } from '../../base/core/platform'
 import { GAP, PAD, cellW, chipW, groupW } from './timeline'
 import type { PlaceView, SpreadView } from '../../base/core/types'
 
@@ -128,5 +129,32 @@ describe('лист виньетки в ленте', () => {
   })
   it('нет размеров — квадрат', () => {
     expect(sheetThumbW({ w: 0, h: 0 })).toBe(40)
+  })
+})
+
+describe('cutHeldNext (094 §1)', () => {
+  afterEach(() => setMacForTest(null))
+  const ev = (type: 'keydown' | 'keyup' | 'pointermove' | 'pointerdown', ctrlKey: boolean, metaKey = false) => ({ type, ctrlKey, metaKey })
+
+  it('Ctrl на Windows и ⌘ на Mac — да, Ctrl на Mac — нет', () => {
+    setMacForTest(false)
+    expect(cutHeldNext(ev('keydown', true))).toBe(true)
+    expect(cutHeldNext(ev('keyup', false))).toBe(false)
+    setMacForTest(true)
+    expect(cutHeldNext(ev('keydown', false, true))).toBe(true)
+    expect(cutHeldNext(ev('keydown', true))).toBe(false) // Ctrl+щелчок на Mac — правая кнопка
+  })
+  it('blur и скрытие окна — нет', () => {
+    expect(cutHeldNext({ type: 'blur' })).toBe(false)
+    expect(cutHeldNext({ type: 'hidden' })).toBe(false)
+  })
+  it('pointermove без Ctrl снимает признак после потерянного keyup', () => {
+    setMacForTest(false)
+    let held = cutHeldNext(ev('keydown', true))
+    expect(held).toBe(true)
+    // keyup ушёл в другое окно (Alt+Tab) — первое же движение мыши несёт настоящее состояние
+    held = cutHeldNext(ev('pointermove', false))
+    expect(held).toBe(false)
+    expect(cutHeldNext(ev('pointerdown', true))).toBe(true)
   })
 })

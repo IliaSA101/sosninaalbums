@@ -10,6 +10,8 @@ import {text} from '../models';
 
 export function AddDecorPNG(arg1:string,arg2:string):Promise<app.DecorItem>;
 
+export function AddFilePaths(arg1:Array<string>):Promise<app.LooseResult>;
+
 export function AddFolderPath(arg1:string):Promise<model.View>;
 
 export function AddPackFile():Promise<app.PackAdd>;
@@ -63,6 +65,8 @@ export function CancelExport():Promise<void>;
 export function CancelLibrary():Promise<void>;
 
 export function CheckFolders(arg1:boolean):Promise<void>;
+
+export function ChooseFiles():Promise<app.LooseResult>;
 
 export function ChooseFolder():Promise<model.View>;
 
@@ -162,6 +166,8 @@ export function LayoutChoices(arg1:string):Promise<model.Choices>;
 
 export function LibraryPacks():Promise<app.PackList>;
 
+export function LogUI(arg1:string):Promise<void>;
+
 export function Marks():Promise<Record<string, model.MarkView>>;
 
 export function MergeSpreads(arg1:string):Promise<model.View>;
@@ -245,6 +251,8 @@ export function RelinkFolderPath(arg1:string):Promise<app.RelinkResult>;
 export function RemoveFolder(arg1:string):Promise<model.View>;
 
 export function RemoveHotkey(arg1:string,arg2:string):Promise<keymap.View>;
+
+export function RemoveLoose(arg1:string,arg2:string):Promise<model.View>;
 
 export function RemovePack(arg1:string):Promise<app.PackList>;
 

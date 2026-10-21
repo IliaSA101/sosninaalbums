@@ -456,6 +456,52 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class LooseResult {
+	    view: model.View;
+	    batch: string;
+	    added: number;
+	    inFolder: number;
+	    folder: string;
+	    dup: number;
+	    over: number;
+	    skipped: number;
+	    bad: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LooseResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.view = this.convertValues(source["view"], model.View);
+	        this.batch = source["batch"];
+	        this.added = source["added"];
+	        this.inFolder = source["inFolder"];
+	        this.folder = source["folder"];
+	        this.dup = source["dup"];
+	        this.over = source["over"];
+	        this.skipped = source["skipped"];
+	        this.bad = source["bad"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class NamesFile {
 	    text: string;
 	    file: string;
@@ -899,6 +945,7 @@ export namespace collect {
 	export class Info {
 	    photos: number;
 	    extra: number;
+	    loose: number;
 	    own: number;
 	    guides: number;
 	    missing: number;
@@ -918,6 +965,7 @@ export namespace collect {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.photos = source["photos"];
 	        this.extra = source["extra"];
+	        this.loose = source["loose"];
 	        this.own = source["own"];
 	        this.guides = source["guides"];
 	        this.missing = source["missing"];
@@ -2867,6 +2915,54 @@ export namespace model {
 	}
 	
 	
+	export class LooseFileView {
+	    path: string;
+	    photo: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LooseFileView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.photo = source["photo"];
+	    }
+	}
+	export class LooseView {
+	    id: string;
+	    at: number;
+	    files: LooseFileView[];
+	
+	    static createFrom(source: any = {}) {
+	        return new LooseView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.at = source["at"];
+	        this.files = this.convertValues(source["files"], LooseFileView);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class MarkPatch {
 	    rating?: number;
 	    step?: number;
@@ -3237,6 +3333,7 @@ export namespace model {
 	    spreads: SpreadView[];
 	    settings: Settings;
 	    folders: string[];
+	    loose: LooseView[];
 	    path: string;
 	    dirty: boolean;
 	    canUndo: boolean;
@@ -3274,6 +3371,7 @@ export namespace model {
 	        this.spreads = this.convertValues(source["spreads"], SpreadView);
 	        this.settings = this.convertValues(source["settings"], Settings);
 	        this.folders = source["folders"];
+	        this.loose = this.convertValues(source["loose"], LooseView);
 	        this.path = source["path"];
 	        this.dirty = source["dirty"];
 	        this.canUndo = source["canUndo"];

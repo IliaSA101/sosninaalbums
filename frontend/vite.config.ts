@@ -5,7 +5,7 @@ import { releaseCsp } from './src/shell/boot/csp'
 
 export default defineConfig(({ mode }) => ({
   // Условие browser — только для тестов реактивности ($effect.root + flushSync, спека 045).
-  ...(mode === 'test' ? { ssr: { resolve: { conditions: ['browser'] } } } : {}),
+  ...(mode === 'test' ? { ssr: { resolve: { conditions: ['browser'] } }, resolve: { conditions: ['browser'] } } : {}),
   plugins: [
     // Тесты идут на клиентской сборке Svelte (компиляция + условие browser выше): на серверной $effect и flushSync пустые.
     svelte(mode === 'test' ? { dynamicCompileOptions: () => ({ generate: 'client' }) } : {}),

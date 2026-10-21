@@ -11,6 +11,13 @@ vi.stubGlobal('window', {
   addEventListener: (t: string) => listeners.add.push(t),
   removeEventListener: () => {},
 })
+// 092 U1: жест слушает и скрытие окна на документе.
+vi.stubGlobal('document', {
+  addEventListener: (t: string) => listeners.add.push(`document:${t}`),
+  removeEventListener: () => {},
+})
+// Полный набор слушателей жеста: перенос, бросок, отмена (092 U1: pointercancel, blur, скрытие), Esc, колесо (095).
+const GESTURE = ['pointermove', 'pointerup', 'pointercancel', 'blur', 'keydown', 'wheel', 'document:visibilitychange']
 
 const { setMacForTest } = await import('../../base/core/platform')
 const { drag } = await import('../../base/drag/drag.svelte')
@@ -47,12 +54,12 @@ describe('drag.start (Thumb, Cell, Timeline, SpreadChips)', () => {
   it('Mac: обычная левая — жест есть', () => {
     setMacForTest(true)
     drag.start(down(), () => ({ kind: 'photos', ids: ['a'] }))
-    expect(listeners.add).toEqual(['pointermove', 'pointerup', 'keydown'])
+    expect(listeners.add).toEqual(GESTURE)
   })
   it('Windows: Ctrl+левая — жест есть (без изменений)', () => {
     setMacForTest(false)
     drag.start(down({ ctrlKey: true }), () => ({ kind: 'photos', ids: ['a'] }))
-    expect(listeners.add).toEqual(['pointermove', 'pointerup', 'keydown'])
+    expect(listeners.add).toEqual(GESTURE)
   })
 })
 

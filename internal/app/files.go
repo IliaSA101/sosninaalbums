@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -522,14 +521,14 @@ func (a *App) RestoreBackup(name string) (v model.View, err error) {
 	} else {
 		a.backupDraftKeep(name)
 	}
-	before := ed.Folders()
+	before := sourcesOf(ed)
 	v, err = ed.Restore(q)
 	if err != nil {
 		return v, err
 	}
 	v = a.changed(v)
 	// Недостающие при смене набора фото без смены папок пересчитывает changed.
-	if !slices.Equal(before, v.Folders) {
+	if before.differs(sourcesOf(ed)) {
 		a.rescan()
 	}
 	return v, nil

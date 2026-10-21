@@ -56,10 +56,14 @@
   // Одиночное фото на месте: только ему дуга наклона и ползунок масштаба над панелью.
   const solo = $derived(placesel.selected.length === 1 && !!photo && placesel.texts.length + placesel.selectedStickers.length === 0)
   let w = $state(0) // ширина полосы, px (замер)
-  let el = $state<HTMLElement>()
+  // Якорь на месте полосы внутри листа: от его родителя — экранный прямоугольник листа. Сама полоса уходит в body
+  // (095, owner-ux §1.5): окно холста её обрезало бы, а у нижнего фото она встаёт поверх ленты разворотов.
+  let anchor = $state<HTMLElement>()
   // Видимая область холста в осях разворота (px) без линеек, ленты и карточки. DOM не реактивен: перемеряем после
   // раскладки при зуме, сдвиге, смене размера окна, листании ряда и смене панелей.
   let view = $state.raw<MiniView>()
+  // Угол листа на экране и px экрана на px листа: полоса стоит position: fixed от него.
+  let org = $state.raw<Org>()
   $effect(() => {
     void [
       canvas.cur,
@@ -75,24 +79,41 @@
       prefs.level,
       prefs.enabled,
     ]
-    const sheet = el?.parentElement?.getBoundingClientRect()
-    const win = canvas.win?.getBoundingClientRect()
-    let v: MiniView | undefined
-    if (sheet && win) {
-      const parts = [...(canvas.win?.parentElement?.querySelectorAll<HTMLElement>('[data-mini-edge]') ?? [])].map((n) => ({
-        edge: n.dataset.miniEdge as 'top' | 'left' | 'right',
-        box: n.getBoundingClientRect(),
-      }))
-      v = visibleArea(sheet, win, width, chromeInset(win, parts))
-    }
-    if (!sameView(v, view)) view = v
+    const m = measure()
+    if (!sameView(m.v, view)) view = m.v
+    if (!sameOrg(m.o, org)) org = m.o
   })
+  type Org = { x: number; y: number; k: number }
+  const sameOrg = (a?: Org, b?: Org) => a === b || (!!a && !!b && a.x === b.x && a.y === b.y && a.k === b.k)
+  // Видимая область и угол листа на экране; лента разворотов под холстом — в view.spill.
+  function measure(): { v?: MiniView; o?: Org } {
+    const sheet = anchor?.parentElement?.getBoundingClientRect()
+    const win = canvas.win?.getBoundingClientRect()
+    if (!sheet || !win) return {}
+    const parts = [...(canvas.win?.parentElement?.querySelectorAll<HTMLElement>('[data-mini-edge]') ?? [])].map((n) => ({
+      edge: n.dataset.miniEdge as 'top' | 'left' | 'right',
+      box: n.getBoundingClientRect(),
+    }))
+    const v = visibleArea(sheet, win, width, chromeInset(win, parts))
+    const k = width > 0 ? sheet.width / width : 0
+    if (!v || !(k > 0)) return { v }
+    const sp = spillOf(win, k, sheet.top)
+    return { v: sp === undefined ? v : { ...v, spill: sp }, o: { x: sheet.left, y: sheet.top, k } }
+  }
+  // Низ ленты разворотов в осях листа, если она стоит сразу под окном холста (±2 px); иначе ленты нет.
+  function spillOf(win: DOMRect, k: number, top: number): number | undefined {
+    const tl = document.querySelector('[data-guide="timeline"]')?.getBoundingClientRect()
+    if (!tl || !(tl.height > 0) || Math.abs(tl.top - (win.top + win.height)) > 2) return undefined
+    return (tl.top + tl.height - top) / k
+  }
   const seen = $derived(view ?? { left: 0, top: 0, right: width, bottom: height })
   // В режиме наклона ⟳ спрятан (стоит на месте дуги): полоса его не обходит.
   const avoidAt = $derived(solo && tiltmode.on ? undefined : avoid)
   const placeFor = (av?: { x: number; y: number }) =>
     miniPlace(box, ppm, width, height, w, av, captionBottom(spread, placesel.selected), seen, captionBoxes(spread, placesel.selected))
   const place = $derived(placeFor(avoidAt))
+  // Полоса целиком вне окна холста (и ленты под ним) — не рисуем: в body её больше ничто не обрезает.
+  const outside = $derived(place.top < seen.top - 0.5 || place.top + MINI_H > Math.max(seen.bottom, seen.spill ?? seen.bottom) + 0.5)
   // Дуге наклона: повёрнутое место считаем по его осям (box тут — описанный прямоугольник). Где стоит полоса — берём как в режиме
   // наклона (⟳ спрятан), а не как сейчас: иначе при выключенном режиме «есть место» → включили → полоса переехала → «нет» → выход.
   const arc = $derived.by(() => {
@@ -143,6 +164,12 @@
   onMount(() => clear)
 
   const stop = (e: Event) => e.stopPropagation()
+
+  // Полоса — в body (образец — LayerMenu): position: fixed от окна, z-index над лентой разворотов.
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node)
+    return { destroy: () => node.remove() }
+  }
 
   // Модификатор зажат — панель полупрозрачна и не ловит мышь (QA 0.14.1 №1). Признак не копим по keydown/keyup: каждое
   // событие указателя несёт настоящее состояние модификаторов (throughNext), а новое положение панели его пересчитывает.
@@ -220,15 +247,19 @@
   onblur={() => (through = throughNext({ type: 'blur' }))}
 />
 
-<!-- Клики полосы не должны снимать выделение: клавиатурных аналогов у самой полосы нет, кнопки внутри фокусируются сами -->
+<span class="anchor" bind:this={anchor}></span>
+
+<!-- Клики полосы не должны снимать выделение: клавиатурных аналогов у самой полосы нет, кнопки внутри фокусируются сами.
+     При любом переносе — сквозная, как при Alt (095 сц. 15): бросок на миниатюры под ней попадает в них. Ряд едет — гаснет. -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class="minipanel"
-  bind:this={el}
-  class:through
+  use:portal
+  class:through={through || drag.active}
+  class:away={row.moving || !org || outside}
   bind:clientWidth={w}
-  style:top="{place.top}px"
-  style:left="{place.left}px"
+  style:top="{(org?.y ?? 0) + place.top * (org?.k ?? 1)}px"
+  style:left="{(org?.x ?? 0) + place.left * (org?.k ?? 1)}px"
   style:height="{MINI_H}px"
   role="toolbar"
   tabindex="-1"
@@ -263,8 +294,13 @@
 </div>
 
 <style>
+  .anchor {
+    display: none;
+  }
+  /* z 40: над лентой разворотов, под окнами (80), меню (90), подсказками (95) и призраком (100) */
   .minipanel {
-    position: absolute;
+    position: fixed;
+    z-index: 40;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
@@ -282,6 +318,11 @@
   .minipanel.through {
     pointer-events: none;
     opacity: 0.35;
+  }
+  /* Как полоса раскладки над листом (Stage .frame.away) */
+  .minipanel.away {
+    opacity: 0;
+    pointer-events: none;
   }
   button {
     height: 22px;

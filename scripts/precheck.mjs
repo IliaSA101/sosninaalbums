@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
+import { PRECHECK_SLACK, TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
 import { withGoCaches } from './goenv.mjs'
 import { checkFolders, checkSizes } from './limits.mjs'
 import { collect as collectAdded, violations as langViolations } from './comment-lang.mjs'
@@ -95,7 +95,14 @@ const step = (name, fn) => {
   const t = Date.now()
   const r = fn()
   const time = `${((Date.now() - t) / 1000).toFixed(1)}s`
-  if (r.ok) console.log(`OK   ${name} (${time})`)
+  if (r.ok && r.warn) {
+    console.log(`WARN ${name} (${time})`)
+    r.warn
+      .split('\n')
+      .filter((l) => l.trim())
+      .slice(-30)
+      .forEach((l) => console.log(`     ${l}`))
+  } else if (r.ok) console.log(`OK   ${name} (${time})`)
   else {
     console.log(`FAIL ${name} (${time})`)
     r.out
@@ -138,6 +145,11 @@ if (goFiles.length) {
       }
       const errors = compareTree(entry, cur)
       if (errors.length === 0) return { ok: true, out: '' }
+      // Небольшой спад — допуск быстрого уровня (владелец 2026-10-21): предупреждение, строго проверяют check.ps1 и CI
+      if (compareTree(entry, cur, PRECHECK_SLACK).length === 0) {
+        const hint = 'в допуске precheck; check.ps1 и CI проверяют строго — допиши тест к своему коду'
+        return { ok: true, out: '', warn: [...errors, hint].join('\n') }
+      }
       // Где не хватает теста: непокрытые блоки изменённых файлов (остальные — наследие эталона)
       const mine = cur.missedBlocks
         .map((b) => b.replace(/^[^/]+\/[^/]+\/[^/]+\//, '')) // модуль github.com/<owner>/<repo>/

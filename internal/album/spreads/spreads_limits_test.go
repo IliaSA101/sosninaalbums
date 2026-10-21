@@ -129,10 +129,10 @@ func TestAddFolderLimit(t *testing.T) {
 		}
 	})
 	n, rev := edtest.UndoLen(e), e.View().Rev
-	if _, err := e.AddFolder(filepath.Join(dir, "ещё")); err == nil {
+	if _, _, err := e.AddFolder(filepath.Join(dir, "ещё")); err == nil {
 		t.Fatal("папка сверх предела добавилась")
 	}
-	if v, err := e.AddFolder(filepath.Join(dir, "0")); err != nil || v.Rev != rev || edtest.UndoLen(e) != n {
+	if v, _, err := e.AddFolder(filepath.Join(dir, "0")); err != nil || v.Rev != rev || edtest.UndoLen(e) != n {
 		t.Fatalf("повтор папки: %v, rev %d→%d", err, rev, v.Rev)
 	}
 }
@@ -142,7 +142,7 @@ func TestAddFolderLimit(t *testing.T) {
 func TestAddFolderBodyChecksPath(t *testing.T) {
 	p := model.New()
 	for _, dir := range []string{`\\server\share\фото`, `\\?\C:\фото`, `\\.\C:\фото`, "фото", ""} {
-		err := spreads.AddFolder(p, dir)
+		_, err := spreads.AddFolder(p, dir)
 		if want := paths.CheckLocalPath(dir); err == nil || want == nil || err.Error() != want.Error() {
 			t.Errorf("путь %q: ошибка %v, нужна %v", dir, err, want)
 		}
@@ -151,7 +151,7 @@ func TestAddFolderBodyChecksPath(t *testing.T) {
 		t.Fatalf("непроверенный путь в проекте: %q", p.Folders)
 	}
 	dir := testkit.TempDir(t)
-	if err := spreads.AddFolder(p, dir); err != nil || len(p.Folders) != 1 {
+	if _, err := spreads.AddFolder(p, dir); err != nil || len(p.Folders) != 1 {
 		t.Fatalf("локальная папка: %v, папок %d", err, len(p.Folders))
 	}
 }

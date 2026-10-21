@@ -3,10 +3,12 @@
 import { plural } from '../../base/words/plural'
 import type { CollectProgress } from '../../base/core/jobs.svelte'
 
-// Сводка Go (collect.Info): photos — фото альбома, extra — ещё фото из папок альбома (режим «Все»).
+// Сводка Go (collect.Info): photos — фото альбома, extra — ещё фото из папок альбома (режим «Все»),
+// loose — отдельные фото вне альбома (097; в extra не входят).
 export interface CollectInfo {
   photos: number
   extra: number
+  loose: number
   own: number
   guides: number
   missing: number
@@ -114,15 +116,21 @@ export const PENDING_TOTAL = 'Скопируется …'
 // Строки сводки для окна: готовые числа или заглушки той же высоты; pending — бледный вид.
 export interface Summary {
   albumHint: string
+  fullLabel: string // подпись варианта «Все фото…»: с отдельными фото — «…и отдельные»
   fullHint: string
   total: string
   pending: boolean // итог ещё не пришёл
 }
 
+// Подпись варианта «Все»: отдельные фото вне папок (097) входят в счёт — подпись говорит об этом (0.22-collect-label).
+export const FULL_LABEL = 'Все фото из папок альбома'
+export const FULL_LOOSE_LABEL = 'Все фото из папок альбома и отдельные'
+
 export function summaryOf(album: CollectInfo | null, full: CollectInfo | null, cur: CollectInfo | null): Summary {
   return {
     albumHint: album ? optionHint(album.photos, album.bytes) : PENDING_HINT,
-    fullHint: full ? optionHint(full.photos + full.extra, full.bytes) : PENDING_HINT,
+    fullLabel: full && full.loose > 0 ? FULL_LOOSE_LABEL : FULL_LABEL,
+    fullHint: full ? optionHint(full.photos + full.extra + full.loose, full.bytes) : PENDING_HINT,
     total: cur ? totalLine(cur) + (cur.scanning ? ' ' + SCANNING_LINE : '') : PENDING_TOTAL,
     pending: !cur,
   }

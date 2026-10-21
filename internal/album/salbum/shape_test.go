@@ -23,7 +23,8 @@ import (
 //	удалить .gotmp/prev и .gotmp/prev.tar
 //
 // Снятые: v12-shape.json (git-тег v0.17.0, FormatVersion 12), v13-shape.json (v0.18.0, 13; 0.19 —
-// тоже 13), v14-shape.json (v0.20.0, 14). Следующий — v15-shape.json из выпуска 0.21.
+// тоже 13), v14-shape.json (v0.20.0, 14), v15-shape.json (v0.21.0, 15). Следующий — v16-shape.json
+// из выпуска 0.22.
 
 var shapeOut = flag.String("shapeout", "", "записать форму JSON FileProject в файл (снимок прошлого выпуска)")
 

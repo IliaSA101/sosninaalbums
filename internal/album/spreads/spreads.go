@@ -149,25 +149,57 @@ func SetGuide(p *model.Project, path string) {
 	p.SpreadGuide, p.SpreadGuideAlt = path, ""
 }
 
-// AddFolder — операция над проектом. Путь проверяет и обёртка, но тело экспортное: проверка
+// AddFolder — операция над проектом (093). Путь проверяет и обёртка, но тело экспортное: проверка
 // повторена здесь (защита в глубину), иначе вызов мимо Editor положил бы в проект UNC-путь.
-func AddFolder(p *model.Project, dir string) error {
+// dir уже в списке или внутри папки списка — проект не трогается, Within — та папка. Папки списка
+// внутри dir уходят, dir встаёт на место первой из них (Merged); отдельные фото внутри dir уходят
+// из Loose (LooseIn): лента видит их через папку.
+func AddFolder(p *model.Project, dir string) (model.FolderAdd, error) {
 	if err := paths.CheckLocalPath(dir); err != nil {
-		return err
+		return model.FolderAdd{}, err
+	}
+	// «Внутри» — куда дойдёт сканер (093-4): подпапка на «.» или через ссылку — своя запись.
+	if f, in := paths.NewCover(p.Folders, paths.Linked).Root(dir, false); in {
+		return model.FolderAdd{Within: f}, nil
+	}
+	first := -1
+	for i, f := range p.Folders {
+		if paths.SamePath(f, dir) {
+			return model.FolderAdd{Within: f}, nil
+		}
+		if first < 0 && paths.Reaches(dir, f, false, paths.Linked) {
+			first = i
+		}
 	}
 	switch {
-	case slices.Contains(p.Folders, dir):
+	case first >= 0:
+		p.Folders[first] = dir
 	case len(p.Folders) >= model.MaxFolders:
-		return fmt.Errorf("в проекте не может быть больше %d папок", model.MaxFolders)
+		return model.FolderAdd{}, fmt.Errorf("в проекте не может быть больше %d папок", model.MaxFolders)
 	default:
 		p.Folders = append(p.Folders, dir)
 	}
-	return nil
+	merged, looseIn := p.FoldSources(paths.Linked)
+	if first >= 0 {
+		merged++ // первая вошедшая: на её месте теперь dir
+	}
+	return model.FolderAdd{Merged: merged, LooseIn: looseIn}, nil
 }
 
-// RemoveFolder — операция над проектом.
+// RemoveFolder — операция над проектом: папка и вложенные в неё записи (у проекта не из Load они
+// бывают, 093) уходят одним шагом, их запасные пути — тоже. Отдельный корень внутри dir
+// (подпапка на «.» или через ссылку, 093-4) — своя запись: её фото dir не читает, она остаётся.
 func RemoveFolder(p *model.Project, dir string) {
-	p.Folders = slices.DeleteFunc(p.Folders, func(f string) bool { return f == dir })
+	p.Folders = slices.DeleteFunc(p.Folders, func(f string) bool {
+		gone := f == dir || paths.Reaches(dir, f, false, paths.Linked)
+		if gone {
+			delete(p.FolderAlt, f)
+		}
+		return gone
+	})
+	if len(p.FolderAlt) == 0 {
+		p.FolderAlt = nil
+	}
 }
 
 // SplitSpread — операция над проектом.

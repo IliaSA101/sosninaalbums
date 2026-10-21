@@ -523,7 +523,7 @@ func TestRescanThumbsAfterLayouts(t *testing.T) {
 	dir := testkit.TempDir(t)
 	testkit.JPEG(t, dir, "a.jpg", 60, 40)
 	testkit.JPEG(t, dir, "b.jpg", 60, 40)
-	if _, err := a.editor().AddFolder(dir); err != nil {
+	if _, _, err := a.editor().AddFolder(dir); err != nil {
 		t.Fatal(err)
 	}
 	a.layouts.enter()

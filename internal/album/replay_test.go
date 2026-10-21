@@ -28,6 +28,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -134,6 +135,18 @@ func (r *replay) do(name string, v model.View) { r.edit(name, v, nil, nil) }
 
 func (r *replay) ve(name string) func(model.View, error) {
 	return func(v model.View, err error) { r.edit(name, v, nil, err) }
+}
+
+// voe — правка с прочим результатом (AddFolder, AddLoose): он идёт в out шага, случайные ID в
+// нём заменены, как во View.
+func (r *replay) voe(name string) func(model.View, any, error) {
+	return func(v model.View, out any, err error) {
+		data, jerr := json.Marshal(out)
+		if jerr != nil {
+			r.t.Fatalf("%s: %v", name, jerr)
+		}
+		r.edit(name, v, json.RawMessage(r.norm(data)), err)
+	}
 }
 
 func (r *replay) vne(name string) func(model.View, int, error) {
@@ -258,6 +271,14 @@ func replayScenario(t *testing.T) *replay {
 		uses, used := r.e.PhotoUses(pid)
 		r.read("PhotoUses", []any{uses, used})
 	}
+	// 097: отдельные фото — тоже в конце.
+	r.voe("AddLoose")(r.e.AddLoose([]string{`Q:\Телефон\1.jpg`, `Q:\Свадьба\2.jpg`}, 1792501500))
+	if len(r.v.Loose) != 1 {
+		t.Fatalf("AddLoose: %+v", r.v.Loose)
+	}
+	folders, files := r.e.Sources()
+	r.read("Sources", []any{folders, files})
+	r.do("RemoveLoose", r.e.RemoveLoose(r.v.Loose[0].ID, ""))
 	return r
 }
 
@@ -265,9 +286,9 @@ func replayScenario(t *testing.T) *replay {
 // Возвращает снимок альбома для Restore в конце.
 func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	e, id := r.e, func(i int) string { return ph[i].ID }
-	r.ve("AddFolder")(e.AddFolder(`Q:\Свадьба`))
-	r.ve("AddFolder:второй")(e.AddFolder(`Q:\Банкет`))
-	r.ve("AddFolder:относительный")(e.AddFolder(`Банкет`))
+	r.voe("AddFolder")(e.AddFolder(`Q:\Свадьба`))
+	r.voe("AddFolder:второй")(e.AddFolder(`Q:\Банкет`))
+	r.voe("AddFolder:относительный")(e.AddFolder(`Банкет`))
 	r.ve("NewSpread")(e.NewSpread(-1, ph[1:4]))
 	r.ve("NewSpread:второй")(e.NewSpread(-1, ph[4:6]))
 	if ap, err := e.AutoPlan(ph[6:12], model.AutoOpts{Spreads: 2, MaxPer: 64}); err != nil || ap.Spreads != 2 {
@@ -384,6 +405,9 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 
 func TestEditorReplay(t *testing.T) {
 	edtest.SkipNotWindows(t) // пути фото и папок — с буквой диска
+	// Диск Q: вымышленный: «том на месте» — иначе свёртка источников зависела бы от машины
+	// (нет тома — запись не сворачивается, 0.22-sec-1).
+	t.Cleanup(paths.SetVolumeOracle(func(string) bool { return true }))
 	r := replayScenario(t)
 	// Шаг на каждый публичный метод Editor, кроме View и Save (они идут в каждом
 	// шаге-правке) и ID (номер Editor в процессе, 087-3: зависит от порядка тестов, в эталон

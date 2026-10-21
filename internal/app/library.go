@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"slices"
 	"sync"
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // Фото альбома на диске: чтение папок и миниатюры (/media — media.go, недостающие — missing.go,
@@ -44,7 +44,7 @@ func (a *App) rescanWith(mode scanMode) {
 	// не могут поменяться местами, и новое поколение всегда с новым списком. Folders — до a.mu:
 	// замок редактора держат правки (и снимок прогрева), а a.mu ждут publish, infos и /media.
 	a.rescanMu.Lock()
-	folders := a.editor().Folders()
+	src := a.sources()
 	a.mu.Lock()
 	if quiet && a.scanning {
 		a.mu.Unlock()
@@ -71,12 +71,7 @@ func (a *App) rescanWith(mode scanMode) {
 	gen := a.scanGen
 	a.scanning = true
 	// Новые срезы, а не правка на месте: прежний уже мог уйти в GetState или в событие.
-	kept := make([]library.Photo, 0, len(a.photos))
-	for _, p := range a.photos {
-		if slices.ContainsFunc(folders, func(f string) bool { return library.Under(p.Path, f) }) {
-			kept = append(kept, p)
-		}
-	}
+	kept := keptPhotos(a.photos, src)
 	next := byIDMap(kept)
 	a.mediaSt.forget(a.byID, next) // плитки прежнего альбома из очереди браузера — не промах
 	a.photos, a.byID = kept, next
@@ -102,19 +97,20 @@ func (a *App) rescanWith(mode scanMode) {
 	a.bg.Go(func() {
 		defer guard("сканирование")
 		defer a.scanDone(gen)
-		a.readFolders(ctx, gen, folders, kept, quiet, seen)
+		a.readFolders(ctx, gen, src, kept, quiet, seen)
 	})
 }
 
 // readFolders — фоновая часть rescanWith: проба томов, чтение, лог и прогрев миниатюр.
-func (a *App) readFolders(ctx context.Context, gen int, folders []string, kept []library.Photo,
+func (a *App) readFolders(ctx context.Context, gen int, src library.Sources, kept []library.Photo,
 	quiet bool, seen map[string]library.Photo) {
 	// Проба тома — до 1,5 с на папку, поэтому здесь, а не до возврата rescan.
-	live, dead := splitLive(folders)
-	deadKept := photosUnder(kept, dead)
+	live, dead := splitLive(src.Folders)
+	liveFiles, deadFiles := splitLive(src.Files)
+	deadKept := photosUnder(kept, dead, deadFiles)
 	show, decided := !quiet, !quiet
 	var fin library.ScanProgress
-	photos, skipped, err := a.scanner.Scan(ctx, live, func(ph []library.Photo, cur library.ScanProgress, final bool) {
+	photos, skipped, err := a.scanner.Scan(ctx, library.Sources{Folders: live, Files: liveFiles}, func(ph []library.Photo, cur library.ScanProgress, final bool) {
 		if final {
 			fin = cur
 		}
@@ -134,11 +130,10 @@ func (a *App) readFolders(ctx context.Context, gen int, folders []string, kept [
 	if err != nil {
 		return // отменено: уже идёт новое сканирование
 	}
-	log.Printf("папок %d: %d фото (обход %v, чтение %v, из памяти %d), пропущено %d", len(folders), len(photos),
-		fin.WalkTime.Round(time.Millisecond), fin.ReadTime.Round(time.Millisecond), fin.Memo, len(skipped))
+	log.Print(scanLogLine(src, len(photos), fin, len(skipped)))
 	album.LogMem("чтение папок")
-	if len(dead) > 0 {
-		log.Printf("  на недоступном диске папок: %d — не читались", len(dead))
+	if n := len(dead) + len(deadFiles); n > 0 {
+		log.Printf("  на недоступном диске источников: %d — не читались", n)
 	}
 	if len(skipped) > 0 {
 		log.Printf("  не читается: %s", skippedSummary(skipped))
@@ -180,18 +175,45 @@ func splitLive(folders []string) (live, dead []string) {
 	return live, dead
 }
 
-// photosUnder — фото из photos, лежащие в одной из папок dirs, в прежнем порядке.
-func photosUnder(photos []library.Photo, dirs []string) []library.Photo {
-	if len(dirs) == 0 {
+// photosUnder — фото из photos, лежащие в одной из папок dirs или это один из файлов files, в прежнем порядке.
+func photosUnder(photos []library.Photo, dirs, files []string) []library.Photo {
+	if len(dirs)+len(files) == 0 {
 		return nil
 	}
-	var out []library.Photo
+	return keptPhotos(photos, library.Sources{Folders: dirs, Files: files})
+}
+
+// keptPhotos — фото из photos, которые читают источники src (папка над фото или сам файл), в прежнем
+// порядке. Новый срез: прежний мог уйти в GetState или в событие.
+func keptPhotos(photos []library.Photo, src library.Sources) []library.Photo {
+	under := paths.UnderAny(src.Folders)
+	files := make(map[string]bool, len(src.Files))
+	for _, f := range src.Files {
+		files[model.LooseKey(f)] = true
+	}
+	kept := make([]library.Photo, 0, len(photos))
 	for _, p := range photos {
-		if slices.ContainsFunc(dirs, func(f string) bool { return library.Under(p.Path, f) }) {
-			out = append(out, p)
+		if under(p.Path) || len(files) > 0 && files[model.LooseKey(p.Path)] {
+			kept = append(kept, p)
 		}
 	}
-	return out
+	return kept
+}
+
+// sources — источники ленты проекта: папки и отдельные фото.
+func (a *App) sources() library.Sources {
+	folders, files := a.editor().Sources()
+	return library.Sources{Folders: folders, Files: files}
+}
+
+// scanLogLine — итог чтения для log.txt: без путей, «отдельных» только когда они есть.
+func scanLogLine(src library.Sources, photos int, fin library.ScanProgress, skipped int) string {
+	s := fmt.Sprintf("папок %d: %d фото (обход %v, чтение %v, из памяти %d), пропущено %d", len(src.Folders), photos,
+		fin.WalkTime.Round(time.Millisecond), fin.ReadTime.Round(time.Millisecond), fin.Memo, skipped)
+	if n := len(src.Files); n > 0 {
+		s += fmt.Sprintf(", отдельных %d", n)
+	}
+	return s
 }
 
 func byIDMap(photos []library.Photo) map[string]library.Photo {

@@ -34,6 +34,9 @@ const { prefs } = await import('../../base/prefs/prefs.svelte')
 const { binsel } = await import('../../panels/bins/binsel.svelte')
 const { binCounts } = await import('../../panels/bins/bins')
 const { folderfilter } = await import('../../panels/folders/folderfilter.svelte')
+const { buildTree, findNode, nodeKey } = await import('../../panels/folders/tree')
+// Узел дерева папки по текущим папкам и фото store (093: фильтр хранит узлы, а не папки списка).
+const node = (dir: string) => findNode(buildTree(store.view.folders, store.photos), nodeKey(dir))!
 const { libfilter } = await import('../../panels/marks/libfilter.svelte')
 const { ownMarks } = await import('../../panels/marks/ownmarks.svelte')
 
@@ -71,7 +74,7 @@ describe('лента подборки', () => {
   it('порядок: папки → подборка → «Не в альбоме» → отметки', () => {
     store.apply(view(2, { spreads: [{ id: 's', photos: ['a1'] }] }) as never)
     binsel.show('b1')
-    folderfilter.toggle('D:/b') // скрыта папка b: b1 уходит раньше подборки
+    folderfilter.toggle(node('D:/b')) // скрыта папка b: b1 уходит раньше подборки
     expect(ids(store.inFolders)).toEqual(['a1', 'a2'])
     expect(ids(store.inBin)).toEqual(['a1', 'a2'])
     folderfilter.showAll()

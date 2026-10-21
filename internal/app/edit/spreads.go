@@ -8,15 +8,20 @@ import (
 // AddPhotos, NewSpread, MovePhoto: отказ (лимит фото на развороте) — ошибка, проект не меняется.
 func (m *Methods) AddPhotos(spreadID string, ids []string, index int) (v model.View, err error) {
 	defer m.guardEdit("AddPhotos", &v, &err)
-	return m.changedOrErr(m.editor().AddPhotos(spreadID, m.infos(ids), index))
+	infos, err := PhotosFor("AddPhotos", ids, m.infosOrRefs)
+	if err != nil {
+		return m.editor().View(), err
+	}
+	return m.changedOrErr(m.editor().AddPhotos(spreadID, infos, index))
 }
 
 func (m *Methods) NewSpread(at int, ids []string) (v model.View, err error) {
 	defer m.guardEdit("NewSpread", &v, &err)
-	infos := m.infos(ids)
-	if len(ids) > 0 && len(infos) == 0 {
-		// Фото пропали при пересканировании во время переноса: пустой разворот здесь не просили.
-		return m.out(m.editor().View()), nil
+	// Фото пропали при пересканировании во время переноса: пустой разворот здесь не просили —
+	// ошибка (092), а не тихая холостая.
+	infos, err := PhotosFor("NewSpread", ids, m.infosOrRefs)
+	if err != nil {
+		return m.editor().View(), err
 	}
 	return m.changedOrErr(m.editor().NewSpread(at, infos))
 }
@@ -145,7 +150,7 @@ func (m *Methods) AutoPreview(ids []string, at int, o model.AutoOpts) (pv model.
 func (m *Methods) VaryLayouts(spreadIDs []string, variety int, families []string) (v model.View, err error) {
 	defer m.guardEdit("VaryLayouts", &v, &err)
 	ed := m.editor()
-	infos := m.infos(ed.PhotosOf(spreadIDs))
+	infos := m.infosOrRefs(ed.PhotosOf(spreadIDs)) // ID — фото разворотов; ошибки «не найдено» нет
 	fs := model.ClampFamilies(families)
 	return m.changed(ed.VaryLayouts(spreadIDs, model.Variety(variety).Clamp(), fs, infos)), nil
 }

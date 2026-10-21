@@ -78,3 +78,42 @@ func BenchmarkEditBig200(b *testing.B) {
 	}
 	b.ReportMetric(float64(sent)/1024/float64(n), "KB/edit")
 }
+
+// BenchmarkWireLoose — та же правка на 20 × 8 с предельными 2 000 отдельных фото (097 §11, §13):
+// шапка вида несёт их при каждой правке. «KB/edit» — ответ + событие, «KB/loose» — доля отдельных
+// в одном виде; порога нет: цифра решает, нужна ли `loose` в дельте только при изменении.
+func BenchmarkWireLoose(b *testing.B) {
+	p := bigAlbum(20, 8)
+	root := filepath.VolumeName(os.TempDir()) + string(filepath.Separator)
+	adds := model.MaxLooseAdds / 5 // 100 добавлений по 20 файлов
+	for i := range adds {
+		add := model.LooseAdd{ID: model.NewID(), At: int64(1_700_000_000 + i)}
+		for j := range model.MaxLooseFiles / adds {
+			add.Files = append(add.Files, model.LooseFile{Path: filepath.Join(root, "Фото отдельно", fmt.Sprintf("a%03d", i), fmt.Sprintf("IMG_%04d.jpg", j))})
+		}
+		p.Loose = append(p.Loose, add)
+	}
+	a := newApp(b)
+	a.cfgDir = testkit.TempDir(b)
+	sent := 0
+	a.emit = func(name string, data ...any) {
+		if name == "view" {
+			sent += wailsEvent(data[0])
+		}
+	}
+	a.ed.Store(mustEditor(b, p, ""))
+	v := a.GetState().View
+	if n := len(p.LooseFiles()); n != model.MaxLooseFiles || len(v.Loose) != len(p.Loose) {
+		b.Fatalf("отдельных %d, в виде добавлений %d", n, len(v.Loose))
+	}
+	looseKB := float64(wailsReply(v.Loose)) / 1024
+	i, n := 0, 0
+	sent = 0
+	for b.Loop() {
+		i++
+		sent += wailsReply(a.SetSpreadName("s005", fmt.Sprint("Имя ", i)))
+		n++
+	}
+	b.ReportMetric(float64(sent)/1024/float64(n), "KB/edit")
+	b.ReportMetric(looseKB, "KB/loose")
+}

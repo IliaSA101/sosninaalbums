@@ -20,3 +20,23 @@ export const normName = (s: string): string =>
 
 // Есть ли смысл звать Go: название реально поменялось.
 export const nameChanged = (prev: string | undefined, input: string): boolean => normName(input) !== (prev ?? '')
+
+// Двойной щелчок по номеру (094 §3.1): второй щелчок принадлежит развороту первого. После первого лента едет
+// к группе, и второй попадает в чужую — поэтому место и время сверяем сами, а не по dblclick и e.detail.
+export interface Click {
+  id: string
+  x: number
+  y: number
+  t: number
+}
+
+export const DBL_MS = 500 // системное значение Windows по умолчанию
+export const DBL_PX = 6 // экранных px
+
+// Разворот первого щелчка, если второй не позже DBL_MS и не дальше DBL_PX (включительно); иначе null.
+export function dblOwner(first: Click | null, now: { x: number; y: number; t: number }): string | null {
+  if (!first) return null
+  const dt = now.t - first.t
+  if (dt < 0 || dt > DBL_MS) return null
+  return Math.hypot(now.x - first.x, now.y - first.y) <= DBL_PX ? first.id : null
+}

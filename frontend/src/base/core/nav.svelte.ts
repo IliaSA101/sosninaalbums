@@ -7,6 +7,7 @@ export const emptyView: View = {
   spreads: [],
   settings: { pageW: 300, pageH: 300, margin: 12, gap: 3, layflat: true, foldAny: false, dpi: 300, bg: '', safe: 8 },
   folders: [],
+  loose: [],
   path: '',
   dirty: false,
   canUndo: false,

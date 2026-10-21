@@ -140,6 +140,7 @@ var catalog = []Command{
 	c("spreads", "varyLayouts", "Разнообразить раскладки", "Разнообр.", "variants"),
 	c("spreads", "makeVignette", "Сделать разворот виньеткой", "Виньетка", "vignette"),
 	c("spreads", "vigSetup", "Настроить виньетку…", "Виньетка…", "vignette"),
+	c("spreads", "renameSpread", "Название разворота…", "Название", "names", "F2"),
 
 	c("photos", "selectSpread", "Выделить всё на развороте", "Выделить", "groupSelect", "Mod+KeyA").
 		hint("Все фото, места и тексты разворота").in(ScopeCanvas),

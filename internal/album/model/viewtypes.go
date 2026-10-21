@@ -381,11 +381,13 @@ type View struct {
 	Spreads  []SpreadView `json:"spreads"`
 	Settings Settings     `json:"settings"`
 	Folders  []string     `json:"folders"`
-	Path     string       `json:"path"`
-	Dirty    bool         `json:"dirty"`
-	CanUndo  bool         `json:"canUndo"`
-	CanRedo  bool         `json:"canRedo"`
-	Rev      int          `json:"rev"`
+	// Loose — отдельные фото по добавлениям (097, LooseView); всегда список, не null.
+	Loose   []LooseView `json:"loose"`
+	Path    string      `json:"path"`
+	Dirty   bool        `json:"dirty"`
+	CanUndo bool        `json:"canUndo"`
+	CanRedo bool        `json:"canRedo"`
+	Rev     int         `json:"rev"`
 	// MaxSpreadPhotos — интерфейс по нему заранее отключает склейку (= MaxPhotos;
 	// имя прежнее — контракт UI).
 	MaxSpreadPhotos int `json:"maxSpreadPhotos"`

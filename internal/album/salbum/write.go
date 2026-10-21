@@ -81,6 +81,7 @@ func encodeWith(p *model.Project, side model.Side, enc pathEnc) ([]byte, error) 
 		f.Photos[id] = fp
 	}
 	f.SpreadGuide, f.SpreadGuideAbs = encodeGuide(p.SpreadGuide, p.SpreadGuideAlt, enc)
+	f.Loose = encodeLoose(p.Loose, enc)
 	f.Bins = slices.Clone(side.Bins)
 	f.Marks = encodeMarks(side.Marks, model.BinSet(side.Bins), enc)
 	return json.MarshalIndent(f, "", "  ")

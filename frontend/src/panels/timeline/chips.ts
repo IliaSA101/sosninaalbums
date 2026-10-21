@@ -1,6 +1,7 @@
 // Сворачивание длинной группы ленты (спека 027 §7): больше LIMIT плиток — видны SHOWN и плитка «+N».
 // Плитки — фото и пустые места сетки; без Svelte, под тесты.
 import type { SpreadView } from '../../base/core/types'
+import { toggleKey } from '../../base/core/platform'
 import { B, GAP, H, PAD, cellW, chipW, emptyPlaces, isBlank } from './timeline'
 
 // Лист виньетки (031) в ленте — одна миниатюра листа, а не плитки мест: 25–60 мест разворачивались
@@ -75,3 +76,11 @@ export function isHidden(sp: SpreadView, photo: string, expanded: string | null)
   const j = sp.photos.indexOf(photo)
   return j >= 0 && j >= visibleChips(sp, expanded).photos
 }
+
+// Зажат ли Ctrl (на Mac ⌘) для разреза и склейки (094 §1). Как throughNext мини-панели: каждое событие указателя
+// и клавиатуры несёт настоящее состояние клавиши, поэтому потерянный keyup (Alt+Tab, отпускание вне окна)
+// снимается первым же движением мыши; blur и скрытие окна — сброс.
+export type CutEv =
+  ({ type: 'keydown' | 'keyup' | 'pointermove' | 'pointerdown' } & { ctrlKey: boolean; metaKey: boolean }) | { type: 'blur' | 'hidden' }
+
+export const cutHeldNext = (ev: CutEv): boolean => ('ctrlKey' in ev ? toggleKey(ev) : false)

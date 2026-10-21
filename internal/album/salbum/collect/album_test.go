@@ -342,6 +342,54 @@ func TestCollectEmpty(t *testing.T) {
 	}
 }
 
+// 097 §6, «Только фото альбома»: отдельное фото альбома копируется в «Фото отдельно», отдельные
+// не из альбома (на месте и пропавшие) не копируются и выпадают, пропавшее фото альбома — как
+// было; добавление, в котором ничего не осталось, уходит. Круг Save → Load.
+func TestCollectLooseAlbumOnly(t *testing.T) {
+	root := testkit.TempDir(t)
+	inA, free := filepath.Join(root, "Отдельно", "1.jpg"), filepath.Join(root, "Отдельно", "2.jpg")
+	put(t, inA, "abc")
+	put(t, free, "abcd")
+	gone, lost := filepath.Join(root, "Отдельно", "пропало.jpg"), filepath.Join(root, "Ещё", "нет.jpg")
+	p := model.New()
+	p.Photos[library.IDFor(inA)] = model.PhotoRef{Path: inA, W: 3, H: 2}
+	p.Photos[library.IDFor(gone)] = model.PhotoRef{Path: gone, W: 3, H: 2}
+	p.Loose = []model.LooseAdd{
+		{ID: "0123456789ab", At: 1, Files: []model.LooseFile{{Path: free}, {Path: inA}, {Path: gone}}},
+		{ID: "0123456789ac", At: 2, Files: []model.LooseFile{{Path: free + "x"}, {Path: lost}}},
+	}
+	dir := filepath.Join(root, "Сбор")
+	pl, err := Make(p, nil, dir, os.Stat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pl.Items) != 1 || pl.Items[0].Rel != DirLoose+"/1.jpg" || len(pl.LooseLost) != 0 {
+		t.Fatalf("план: %+v, пропавшие отдельные %v", pl.Items, pl.LooseLost)
+	}
+	if _, err := Copy(context.Background(), dir, &pl, nil); err != nil {
+		t.Fatal(err)
+	}
+	q, marks := Album(p, model.Side{}, dir, pl)
+	if q.Folders != nil {
+		t.Fatalf("папки: %v", q.Folders)
+	}
+	path := filepath.Join(dir, "Альбом.salbum")
+	if err := Save(q, marks, path, pl); err != nil {
+		t.Fatal(err)
+	}
+	lp, err := salbum.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []model.LooseAdd{{ID: "0123456789ab", At: 1, Files: []model.LooseFile{{Path: filepath.Join(dir, DirLoose, "1.jpg")}, {Path: gone}}}}
+	if !reflect.DeepEqual(lp.Loose, want) {
+		t.Fatalf("отдельные после Save → Load: %+v", lp.Loose)
+	}
+	if _, err := os.Stat(filepath.Join(dir, DirLoose, "2.jpg")); err == nil {
+		t.Error("отдельное не из альбома скопировано в режиме «только альбом»")
+	}
+}
+
 // Save ловит ошибку плана: фото, которого нет в папке сбора, — ошибка, хотя альбом записан.
 func TestCollectSaveCatchesLost(t *testing.T) {
 	sc := newScene(t)

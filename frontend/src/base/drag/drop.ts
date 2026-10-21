@@ -31,12 +31,10 @@ type PhotoPayload = Extract<Payload, { kind: 'photos' }>
 // Вставка «до/после» элемента с индексом index.
 const insertAt = (side: 'before' | 'after' | 'center', index: number) => (side === 'after' ? index + 1 : index)
 
-// Перенос разворота: только на миниатюру в ленте; на своё же место — ничего.
+// Перенос разворота: только в щель ленты (095, цель gap — индекс уже итоговый); на своё же место — ничего.
 function spreadPlan(p: Extract<Payload, { kind: 'spread' }>, t: Target): DropPlan | null {
-  if (t.kind !== 'mini') return null
-  let at = insertAt(t.side, t.index)
-  if (at > p.index) at--
-  return at === p.index ? null : { op: 'moveSpread', id: p.id, at }
+  if (t.kind !== 'gap') return null
+  return t.to === p.index ? null : { op: 'moveSpread', id: p.id, at: t.to }
 }
 
 // Фото на ячейку: центр — обмен, иначе вставка рядом.
@@ -80,6 +78,12 @@ function coverPlan(ids: string[]): DropPlan | null {
   return ids.length === 1 ? { op: 'cover', photo: ids[0] } : { op: 'reject', text: COVER_ONE }
 }
 
+// Фото из альбома в ленту фото — убрать (только с холста); из ленты на «Подборки» — в подборку (083).
+function outPlan(kind: 'bin' | 'library', ids: string[], fromSpread: boolean): DropPlan | null {
+  if (kind === 'library') return fromSpread ? { op: 'remove', ids } : null
+  return fromSpread || ids.length === 0 ? null : { op: 'bin', ids }
+}
+
 export function dropPlan(p: Payload, t: Target): DropPlan | null {
   if (p.kind === 'spread') return spreadPlan(p, t)
   const ids = p.ids
@@ -101,8 +105,9 @@ export function dropPlan(p: Payload, t: Target): DropPlan | null {
     case 'cover':
       return coverPlan(ids)
     case 'bin':
-      return fromSpread || ids.length === 0 ? null : { op: 'bin', ids }
     case 'library':
-      return fromSpread ? { op: 'remove', ids } : null
+      return outPlan(t.kind, ids, fromSpread)
+    case 'gap':
+      return null // щель — только для разворота
   }
 }

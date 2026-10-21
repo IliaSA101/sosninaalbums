@@ -12,6 +12,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // GridInvariants — инварианты сетки (design 007 §1) по всем листам (обложка — лист «-1»):
@@ -244,4 +245,26 @@ func Same(t *testing.T, e *album.Editor, rev, undo int, what string) {
 	if Rev(e) != rev || UndoLen(e) != undo {
 		t.Fatalf("%s: rev %d → %d, undo %d → %d", what, rev, Rev(e), undo, UndoLen(e))
 	}
+}
+
+// SourcesInvariant — источники ленты не пересекаются (093, 097 §2): папки без повторов и
+// вложенных, отдельное фото не внутри папки и не повторяется, добавлений без файлов нет, пределы
+// держатся; FoldSources на копии ничего не меняет.
+func SourcesInvariant(p *model.Project) error {
+	q := p.Clone()
+	merged, in := q.FoldSources(paths.Linked)
+	if merged+in > 0 || !reflect.DeepEqual(q.Folders, p.Folders) || !reflect.DeepEqual(q.Loose, p.Loose) {
+		return fmt.Errorf("источники пересекаются: слито папок %d, отдельных в папках %d", merged, in)
+	}
+	n := 0
+	for _, a := range p.Loose {
+		if len(a.Files) == 0 || !model.ValidID(a.ID) || a.At < 0 {
+			return fmt.Errorf("добавление %q: файлов %d, at %d", a.ID, len(a.Files), a.At)
+		}
+		n += len(a.Files)
+	}
+	if len(p.Loose) > model.MaxLooseAdds || n > model.MaxLooseFiles {
+		return fmt.Errorf("сверх пределов: добавлений %d, файлов %d", len(p.Loose), n)
+	}
+	return nil
 }

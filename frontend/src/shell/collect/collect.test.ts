@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   extraLine,
+  FULL_LABEL,
+  FULL_LOOSE_LABEL,
   folderHint,
   folderStub,
   FONTS_HINT,
@@ -155,6 +157,7 @@ describe('сводка до ответа Go: места заняты', () => {
   const i = {
     photos: 312,
     extra: 928,
+    loose: 0,
     own: 0,
     guides: 0,
     missing: 0,
@@ -176,6 +179,18 @@ describe('сводка до ответа Go: места заняты', () => {
     expect(s.fullHint).toBe('(' + num(1240) + ' фото, 6,0 ГБ)')
     expect(s.total).toBe('Скопируется 6,0 ГБ.')
     expect(s.pending).toBe(false)
+  })
+  it('отдельные фото вне альбома входят в счёт «Все фото» (097), в «Только альбом» — нет', () => {
+    const l = { ...i, extra: 0, loose: 10, photos: 3 }
+    expect(summaryOf(l, l, l).fullHint).toBe('(13 фото, 6,0 ГБ)')
+    expect(summaryOf(l, l, l).albumHint).toBe('(3 фото, 6,0 ГБ)')
+  })
+  it('подпись «Все фото»: без отдельных — про папки, с отдельными — «и отдельные»', () => {
+    expect(summaryOf(null, null, null).fullLabel).toBe(FULL_LABEL)
+    expect(summaryOf(i, i, i).fullLabel).toBe('Все фото из папок альбома')
+    const l = { ...i, loose: 10 }
+    expect(summaryOf(l, l, l).fullLabel).toBe(FULL_LOOSE_LABEL)
+    expect(FULL_LOOSE_LABEL).toBe('Все фото из папок альбома и отдельные')
   })
   it('идущее чтение папок дописывается к итогу', () => {
     expect(summaryOf(i, i, { ...i, scanning: true }).total).toContain(SCANNING_LINE)

@@ -7,7 +7,6 @@
   import { shownW } from './chips'
   import { labelTitle, spreadLabel } from './spreadname'
   import { spreadsel } from './spreadsel.svelte'
-  import { prefs } from '../../base/prefs/prefs.svelte'
   import { isSheet, unitOf } from '../../base/geom/sheet'
   import { missingIn } from '../library/missing'
   import type { Nearby } from '../../base/ui/nearby.svelte'
@@ -29,12 +28,15 @@
     renaming,
     cuts,
     missSet,
+    shift,
+    lifted,
+    onpress,
     onpick,
     onpickgroup,
     onmenu,
     onexpand,
     onfold,
-    onrename,
+    onnamed,
   }: {
     sp: SpreadView
     i: number
@@ -44,12 +46,15 @@
     renaming: string | null
     cuts: boolean
     missSet: Set<string>
+    shift: string | undefined // смещение на время перестановки (096)
+    lifted: boolean // эту группу тянут: едет за курсором поверх соседей
+    onpress: (e: PointerEvent, i: number, id: string) => void
     onpick: (e: MouseEvent, i: number, photo: string, spread: string) => void
     onpickgroup: (e: MouseEvent, i: number, id: string) => void
     onmenu: (e: MouseEvent, id: string) => void
     onexpand: () => void
     onfold: () => void
-    onrename: (id: string | null) => void
+    onnamed: () => void // поле названия закрыто
   } = $props()
 
   const unit = $derived(unitOf(store.view.settings))
@@ -57,14 +62,13 @@
 
 <div
   class="group"
-  class:dragging={drag.active}
+  class:dragging={drag.active && drag.payload?.kind === 'photos'}
   class:current={i + lead === row.near}
   class:over={drag.over.startsWith(`mini:${sp.id}:`) && drag.payload?.kind === 'photos'}
-  class:ins-before={drag.over === `mini:${sp.id}:before` && drag.payload?.kind === 'spread'}
-  class:ins-after={drag.over === `mini:${sp.id}:after` && drag.payload?.kind === 'spread'}
-  class:lifted={drag.active && drag.payload?.kind === 'spread' && drag.payload.id === sp.id}
+  class:src={lifted}
   class:renaming={renaming === sp.id}
   class:picked={spreadsel.has(sp.id)}
+  style:transform={shift}
   style:contain-intrinsic-size="auto {shownW(sp, expanded)}px auto {H + 2 * PAD + 17}px"
   data-drop="mini"
   {@attach (n) =>
@@ -77,7 +81,7 @@
   role="button"
   tabindex="-1"
   aria-label="{unit.cap} {i + 1}"
-  onpointerdown={(e) => drag.start(e, () => ({ kind: 'spread', id: sp.id, index: i }))}
+  onpointerdown={(e) => onpress(e, i, sp.id)}
   onclick={(e) => onpickgroup(e, i, sp.id)}
   oncontextmenu={(e) => onmenu(e, sp.id)}
   onkeydown={() => {}}
@@ -91,14 +95,14 @@
   <MissingMark count={missingIn(sp, missSet)} />
   <VigMark kind={sp.kind} />
   {#if renaming === sp.id}
-    <SpreadName id={sp.id} name={sp.name} onclose={() => onrename(null)} />
+    <SpreadName id={sp.id} name={sp.name} onclose={onnamed} />
   {:else}
-    <!-- Якорь справочника — только у номера текущего разворота: иначе подсветится самый широкий из всех -->
+    <!-- Якорь справочника — только у номера текущего разворота: иначе подсветится самый широкий из всех.
+         Двойной щелчок ловит лента целиком (naming.capture, 094 §3.1): второй щелчок мог попасть в другую группу. -->
     <div
       class="num"
       {...i + lead === row.near ? { 'data-guide': 'spread-num' } : {}}
       title={labelTitle(i, sp.name, true, isSheet(store.view.settings))}
-      ondblclick={() => prefs.can('names') && onrename(sp.id)}
       role="presentation"
     >
       {spreadLabel(i, sp.name)}
@@ -113,7 +117,9 @@
     padding: var(--pad);
     border-radius: 4px;
     cursor: pointer;
-    transition: background 0.15s;
+    transition:
+      background 0.15s,
+      transform 0.15s ease;
     /* 100+ разворотов: группы вне вида не рисуются. Обрезает всё за краем группы,
        поэтому индикаторы рисуются внутри её отступа. */
     content-visibility: auto;
@@ -133,25 +139,20 @@
     outline: 2px solid var(--accent);
     outline-offset: -2px;
   }
-  .group.lifted {
-    opacity: 0.4;
+  /* Перестановка (096): все группы рисуются — сдвинутая в вид не мелькает пустой; миниатюры по-прежнему только
+     рядом с видом (Nearby). Бросок — без переходов: группы уже стоят там, где их поставит новый порядок. */
+  :global(.timeline.reordering) .group {
+    content-visibility: visible;
   }
-  .group.ins-before::before,
-  .group.ins-after::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    border-radius: 2px;
-    background: var(--accent);
-    z-index: 3;
+  :global(.timeline.landing) .group {
+    transition: none;
   }
-  .group.ins-before::before {
-    left: 0;
-  }
-  .group.ins-after::before {
-    right: 0;
+  /* Поднятая группа едет за курсором без перехода, поверх соседей. */
+  .group.src {
+    z-index: 5;
+    transition: background 0.15s;
+    background: #3f3f41;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
   }
   .num {
     text-align: center;

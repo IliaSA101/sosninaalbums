@@ -557,6 +557,21 @@
         "custom": false
       },
       {
+        "id": "renameSpread",
+        "label": "Название разворота…",
+        "short": "Название",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "names",
+        "defaults": [
+          "F2"
+        ],
+        "keys": [
+          "F2"
+        ],
+        "custom": false
+      },
+      {
         "id": "selectSpread",
         "label": "Выделить всё на развороте",
         "short": "Выделить",

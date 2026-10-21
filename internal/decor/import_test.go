@@ -156,8 +156,13 @@ func assertNoTmp(t *testing.T, dir string) {
 	t.Helper()
 	list, _ := os.ReadDir(dir)
 	for _, de := range list {
-		if strings.HasSuffix(de.Name(), ".tmp") {
+		if !strings.HasSuffix(de.Name(), ".tmp") {
+			continue
+		}
+		if testkit.OwnTmp(de.Name()) {
 			t.Errorf("остался временный %s", de.Name())
+		} else {
+			t.Logf("чужой временный файл (антивирус) %s", de.Name())
 		}
 	}
 }

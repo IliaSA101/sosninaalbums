@@ -10,6 +10,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/app/namesfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -71,12 +72,14 @@ func (a *App) ChooseFolder() (model.View, error) {
 // AddFolderPath: недопустимый путь — ошибка (отклонённый промис), проект не меняется.
 func (a *App) AddFolderPath(dir string) (v model.View, err error) {
 	defer a.guardEdit("AddFolderPath", &v, &err)
-	v, err = a.editor().AddFolder(dir)
+	v, r, err := a.editor().AddFolder(dir)
 	if err != nil {
 		return v, err
 	}
 	a.rescan()
-	return a.changed(v), nil
+	v = a.changed(v)
+	a.folderAdded(dir, r) // окно покажет «уже входит в…» и что забрала папка
+	return v, nil
 }
 
 func (a *App) RemoveFolder(dir string) (v model.View) {
@@ -99,14 +102,14 @@ func (a *App) changedOrErr(v model.View, err error) (model.View, error) {
 func (a *App) Undo() model.View { return a.step((*album.Editor).Undo) }
 func (a *App) Redo() model.View { return a.step((*album.Editor).Redo) }
 
-// step выполняет отмену или возврат; если при этом поменялся список папок — перечитывает библиотеку.
+// step выполняет отмену или возврат; если при этом поменялись папки или отдельные фото — перечитывает библиотеку.
 func (a *App) step(do func(*album.Editor) model.View) (v model.View) {
 	defer a.guardEdit("Undo/Redo", &v, nil)
 	ed := a.editor()
-	before := ed.Folders()
+	before := sourcesOf(ed)
 	v = a.changed(do(ed))
 	// Недостающие при отмене перепривязки (меняет пути, а не папки) пересчитывает changed.
-	if !slices.Equal(before, v.Folders) {
+	if before.differs(sourcesOf(ed)) {
 		a.rescan()
 	}
 	return v
@@ -315,10 +318,15 @@ func (a *App) DropPhotos(spreadID, placeID string, ids []string, at float64, res
 }
 
 // FillPlaces — «Заполнить пустые места» фото из ленты, начиная с разворота fromSpread.
-func (a *App) FillPlaces(ids []string, fromSpread string) (r GridResult) {
-	defer a.guardEdit("FillPlaces", &r.View, nil)
-	v, left, named := a.editor().FillPlaces(a.infos(ids), fromSpread)
-	return GridResult{View: a.changed(v), Left: left, Named: named}
+// Ни одного фото не найдено — ErrNoPhoto, проект прежний (092).
+func (a *App) FillPlaces(ids []string, fromSpread string) (r GridResult, err error) {
+	defer a.guardEdit("FillPlaces", &r.View, &err)
+	infos, err := edit.PhotosFor("FillPlaces", ids, a.infosOrRefs)
+	if err != nil {
+		return GridResult{View: a.editor().View()}, err
+	}
+	v, left, named := a.editor().FillPlaces(infos, fromSpread)
+	return GridResult{View: a.changed(v), Left: left, Named: named}, nil
 }
 
 // CopyGrid копирует места области from на цели; design — с текстом и фоном,

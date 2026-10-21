@@ -11,6 +11,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // fileMark — своя отметка в файле: путь как у фото (относительный + запасной abs).
@@ -133,7 +134,8 @@ const maxMarkDirs = 1000
 // путь выбирается по наличию папки, а не файла: stat на папку, не на 5000 фото.
 // Подборки записи — только из known (подборки файла после ClampBins): чужие ID отбрасываются,
 // запись, где ничего не осталось, считается пустой.
-func decodeMarks(list []fileMark, base string, folders []string, known map[string]bool) map[string]model.Mark {
+// loose — отдельные фото проекта (097): их отметки при обрезке «внутри», как у фото папок.
+func decodeMarks(list []fileMark, base string, folders, loose []string, known map[string]bool) map[string]model.Mark {
 	out := map[string]model.Mark{}
 	var bad, dup, empty int
 	// Своя программа больше maxMarks не пишет: длиннее — чужой файл, хвост не разбираем.
@@ -204,7 +206,7 @@ func decodeMarks(list []fileMark, base string, folders []string, known map[strin
 		log.Printf("свои отметки: отброшено записей — с битым путём %d, повторов %d, пустых %d", bad, dup, empty)
 	}
 	if over := len(out) - model.MarksLimit(); over > 0 {
-		TrimMarks(out, order, folders)
+		TrimMarks(out, order, folders, loose)
 		log.Printf("свои отметки: больше %d, лишние %d отброшены", model.MarksLimit(), over)
 	}
 	return out
@@ -224,13 +226,17 @@ func knownBins(ids []string, known map[string]bool) []string {
 	return out
 }
 
-// TrimMarks оставляет maxMarks отметок: сначала уходят отметки вне папок проекта, затем
-// последние в файле (order — ID в порядке файла).
-func TrimMarks(out map[string]model.Mark, order []string, folders []string) {
-	under := UnderAny(folders)
+// TrimMarks оставляет maxMarks отметок: сначала уходят отметки вне папок проекта и не отдельных
+// фото (loose, 097), затем последние в файле (order — ID в порядке файла).
+func TrimMarks(out map[string]model.Mark, order []string, folders, loose []string) {
+	under := paths.UnderAny(folders) // только порядок урезки: проверка ссылок на 200 тыс. путей не нужна
+	own := make(map[string]bool, len(loose))
+	for _, f := range loose {
+		own[model.LooseKey(f)] = true
+	}
 	in, out2 := make([]string, 0, len(order)), make([]string, 0, len(order))
 	for _, id := range order {
-		if under(out[id].Path) {
+		if path := out[id].Path; under(path) || own[model.LooseKey(path)] {
 			in = append(in, id)
 		} else {
 			out2 = append(out2, id)
@@ -238,32 +244,5 @@ func TrimMarks(out map[string]model.Mark, order []string, folders []string) {
 	}
 	for _, id := range append(in, out2...)[model.MarksLimit():] {
 		delete(out, id)
-	}
-}
-
-// UnderAny — library.Under по любой из папок за O(log папок): Under по каждой папке на каждую
-// отметку открывал чужой файл минутами. Вложенные папки отбрасываются — в оставшемся наборе
-// ни один ключ не префикс другого, и подходить может только ближайший снизу.
-func UnderAny(folders []string) func(path string) bool {
-	sep := string(filepath.Separator)
-	keys := make([]string, 0, len(folders))
-	for _, f := range folders {
-		k := strings.ToLower(filepath.Clean(f))
-		if !strings.HasSuffix(k, sep) {
-			k += sep
-		}
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	top := keys[:0]
-	for _, k := range keys {
-		if len(top) == 0 || !strings.HasPrefix(k, top[len(top)-1]) {
-			top = append(top, k)
-		}
-	}
-	return func(path string) bool {
-		p := strings.ToLower(filepath.Clean(path))
-		i, found := slices.BinarySearch(top, p)
-		return found || i > 0 && strings.HasPrefix(p, top[i-1])
 	}
 }

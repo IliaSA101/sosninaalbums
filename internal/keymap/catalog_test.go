@@ -137,3 +137,24 @@ func TestOverlaps(t *testing.T) {
 		}
 	}
 }
+
+// 094: «Название разворота…» — F2, группа разворотов, функция «Названия», переназначаемая;
+// F2 больше ни у кого (конфликты в области проверяет TestCatalogNoConflictsInScope).
+func TestRenameSpreadF2(t *testing.T) {
+	i, ok := byID["renameSpread"]
+	if !ok {
+		t.Fatal("в каталоге нет renameSpread")
+	}
+	x := catalog[i]
+	if x.Group != "spreads" || x.Feature != "names" || x.Scope != ScopeApp || x.Fixed || x.Dialogs {
+		t.Errorf("renameSpread: %+v", x)
+	}
+	if len(x.Defaults) != 1 || x.Defaults[0] != "F2" {
+		t.Errorf("клавиши по умолчанию %v, ждали [F2]", x.Defaults)
+	}
+	for _, o := range catalog {
+		if o.ID != x.ID && slices.Contains(o.Defaults, "F2") {
+			t.Errorf("F2 занята и командой %s", o.ID)
+		}
+	}
+}

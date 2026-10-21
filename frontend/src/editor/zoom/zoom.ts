@@ -1,6 +1,5 @@
 // Зум холста (спека 008, design §6.1). Состояние хранится в мм разворота: ресайз окна и
 // смена вида его не трогают, только пересчитывают пиксели. Чистые функции, без Svelte.
-import { MINI_GAP, MINI_H } from '../places/minipanel'
 export const MIN_ZOOM = 1
 export const MAX_ZOOM = 8
 export const HOLD_MS = 400 // Пробел дольше этого — не «короткое нажатие»
@@ -13,7 +12,7 @@ export interface ZoomState {
 
 // Окно: px области Stage под полосой раскладок; k0 — px на мм при z = 1; sw, ph — разворот в мм.
 // pad — px у левого и правого края под боковыми панелями (inspector/panels.ts), по умолчанию 0.
-// padB — px снизу окна, которые «вписанный» лист оставляет свободными сверх FIT_TOP (под мини-панель, 063).
+// padB — px снизу окна, которые «вписанный» лист оставляет свободными сверх FIT_TOP (063; с 095 у Stage — 0, механизм оставлен).
 export interface Viewport {
   w: number
   h: number
@@ -24,10 +23,10 @@ export interface Viewport {
   padB?: number
 }
 
-// «Вписать» (владелец 2026-10-17, owner-ux §1 п. 5): сверху 16 px, снизу — полоса под мини-панель с отступом
-// (MINI_GAP 8 + MINI_H 30 + 2), чтобы панель под фото помещалась у фото у самого низа страницы.
+// «Вписать» (владелец 2026-10-21, owner-ux §1 п. 5): 16 px сверху и снизу — полосы под листом нет, мини-панель
+// у фото у самого низа рисуется поверх ленты разворотов (MiniPanel). Было (2026-10-17): снизу MINI_GAP + MINI_H + 2.
 export const FIT_TOP = 16
-export const FIT_BOTTOM = MINI_GAP + MINI_H + 2
+export const FIT_BOTTOM = FIT_TOP
 // Высота под лист при «вписать» в окне высотой h.
 export const fitH = (h: number): number => h - FIT_TOP - FIT_BOTTOM
 // Высота окна для центровки: лист «по центру» стоит в части окна над padB.

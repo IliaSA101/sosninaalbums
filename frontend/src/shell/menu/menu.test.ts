@@ -247,6 +247,18 @@ describe('уровень в меню (спека 010 U1)', () => {
     expect(find(buildMenu(at('standard')), 'makeVignette')?.disabled).toBe(true)
     expect(find(buildMenu({ ...at('full'), vigable: false }), 'makeVignette')?.disabled).toBe(true)
   })
+  it('Правка ▸ Название разворота…: F2, серое без разворотов и на обложке', () => {
+    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('renameSpread') // «Названия» — со «Стандартного»
+    const std = buildMenu({ ...at('standard'), decorable: true })
+    expect(find(std, 'renameSpread')).toMatchObject({ label: 'Название разворота…', cmd: 'renameSpread', keys: 'F2' })
+    expect(find(std, 'renameSpread')?.disabled).toBeUndefined()
+    // Перед «Сделать разворот виньеткой»: рядом с прочими пунктами разворота.
+    const edit = ids(std, 'edit')
+    expect(edit.indexOf('renameSpread')).toBe(edit.indexOf('makeVignette') - 1)
+    // decorable не задан — обложка или нет листа.
+    expect(find(buildMenu(at('standard')), 'renameSpread')?.disabled).toBe(true)
+    expect(find(buildMenu({ ...at('full'), decorable: false, spreads: 0, hasSpread: false }), 'renameSpread')?.disabled).toBe(true)
+  })
   it('«Правка ▸ Разнообразить раскладки» (041) — с уровня «Простой», серое, когда менять нечего', () => {
     expect(find(buildMenu(at('simple')), 'varyLayouts')).toMatchObject({ label: 'Разнообразить раскладки', cmd: 'varyLayouts' })
     expect(find(buildMenu(at('full')), 'varyLayouts')?.disabled).toBeUndefined()

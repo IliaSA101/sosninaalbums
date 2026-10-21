@@ -68,6 +68,9 @@ func IDFor(path string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
+// IsImage — расширение фото ленты (JPEG, PNG): для отдельных фото из файла альбома (097).
+func IsImage(name string) bool { return isImage(name) }
+
 func isImage(name string) bool {
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".jpg", ".jpeg", ".png":

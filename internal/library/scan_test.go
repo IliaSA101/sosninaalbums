@@ -103,7 +103,7 @@ func TestScanReportsProgress(t *testing.T) {
 	}
 	var events []scanEvent
 	var once sync.Once
-	photos, skipped, err := s.Scan(context.Background(), []string{dir}, func(ph []Photo, pr ScanProgress, final bool) {
+	photos, skipped, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func(ph []Photo, pr ScanProgress, final bool) {
 		started.Store(true)
 		events = append(events, scanEvent{ph, pr, final})
 		if len(ph) == n-1 {
@@ -189,7 +189,7 @@ func TestScanCancel(t *testing.T) {
 	var finals atomic.Int32
 	done := make(chan error, 1)
 	go func() {
-		_, _, err := s.Scan(ctx, []string{dir}, func(_ []Photo, _ ScanProgress, final bool) {
+		_, _, err := s.Scan(ctx, Sources{Folders: []string{dir}}, func(_ []Photo, _ ScanProgress, final bool) {
 			if final {
 				finals.Add(1)
 			}
@@ -213,7 +213,7 @@ func TestScanCancel(t *testing.T) {
 
 	// уже прочитанное осталось в памяти
 	var fin ScanProgress
-	if _, _, err := s.Scan(context.Background(), []string{dir}, func(_ []Photo, pr ScanProgress, final bool) {
+	if _, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func(_ []Photo, pr ScanProgress, final bool) {
 		if final {
 			fin = pr
 		}
@@ -230,7 +230,7 @@ func TestScanCancelBeforeStart(t *testing.T) {
 	testkit.JPEG(t, dir, "a.jpg", 20, 10)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, err := NewScanner().Scan(ctx, []string{dir}, func([]Photo, ScanProgress, bool) {}); !errors.Is(err, context.Canceled) {
+	if _, _, err := NewScanner().Scan(ctx, Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("ошибка %v", err)
 	}
 }
@@ -242,7 +242,7 @@ func TestScanMemo(t *testing.T) {
 	s := NewScanner()
 	scan := func() (photos []Photo, skipped []string, memo int) {
 		var fin ScanProgress
-		photos, skipped, err := s.Scan(context.Background(), []string{dir}, func(_ []Photo, pr ScanProgress, final bool) {
+		photos, skipped, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func(_ []Photo, pr ScanProgress, final bool) {
 			if final {
 				fin = pr
 			}

@@ -16,8 +16,10 @@ export type Target =
   // at — доля ширины листа под курсором 0…1 (есть только у самого листа на холсте; у соседа в ряду нет)
   | { kind: 'spread'; spread: string; at?: number }
   | { kind: 'mini'; spread: string; index: number; side: 'before' | 'after' }
-  // Миниатюра фото в ленте альбома (Timeline): вставка до или после неё.
+  // Миниатюра фото в ленте альбома (Timeline): index — щель в порядке фото (095: «после j» = «до j+1»), side всегда 'before'.
   | { kind: 'chip'; spread: string; index: number; photo: string; side: 'before' | 'after' }
+  // Щель ленты для переноса разворота (095): at — щель в нынешнем порядке (0…n), to — индекс для MoveSpread.
+  | { kind: 'gap'; at: number; to: number }
   | { kind: 'new'; at: number }
   | { kind: 'library' }
   // Место разворота-сетки (пустое или занятое): сторон нет, всё место — «центр».

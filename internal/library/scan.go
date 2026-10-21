@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -148,7 +147,10 @@ func (s *Scanner) prepare(files []scanFile) *scanRun {
 	return r
 }
 
-// Scan находит фото в папках (с подпапками) и читает их заголовки.
+// Sources — источники ленты: папки (с подпапками) и отдельные файлы (097).
+type Sources struct{ Folders, Files []string }
+
+// Scan находит фото в папках (с подпапками) и отдельных файлах и читает их заголовки.
 // Файлы, которые не удалось прочитать, попадают в skipped.
 //
 // report вызывается только из горутины Scan, не параллельно: сразу в начале, потом не чаще
@@ -156,13 +158,13 @@ func (s *Scanner) prepare(files []scanFile) *scanRun {
 // ленты (не чаще ListEvery): известные по памяти сразу, новые — подряд идущим префиксом, чтобы
 // ничего не прыгало. Отмена через ctx: новые задания не выдаются, Scan возвращает ctx.Err()
 // без финального report; уже прочитанное остаётся в памяти.
-func (s *Scanner) Scan(ctx context.Context, folders []string,
+func (s *Scanner) Scan(ctx context.Context, src Sources,
 	report func(photos []Photo, pr ScanProgress, final bool)) (photos []Photo, skipped []string, err error) {
 	report(nil, ScanProgress{Active: true, Walking: true}, false)
 	s.invalidateLast()
 
 	t0 := time.Now()
-	files, err := s.walk(ctx, folders, func(found int) {
+	files, err := s.walk(ctx, src, func(found int) {
 		report(nil, ScanProgress{Active: true, Walking: true, Found: found}, false)
 	})
 	if err != nil {
@@ -184,7 +186,7 @@ func (s *Scanner) Scan(ctx context.Context, folders []string,
 		return nil, nil, err
 	}
 
-	s.setLast(fingerprintOf(folders, files))
+	s.setLast(fingerprintOf(src, files))
 	m := len(files)
 	photos = make([]Photo, 0, m)
 	for i, f := range files {
@@ -299,11 +301,15 @@ func (s *Scanner) remember(f scanFile, r scanResult) {
 // walk обходит папки, как раньше: ссылки на папки и скрытые папки пропускаются, дубли тоже.
 // Размер и время берутся из d.Info(): на Windows это данные листинга, лишнего вызова нет.
 // Попутно собирает сайдкары .xmp и в конце приписывает их к фото.
-func (s *Scanner) walk(ctx context.Context, folders []string, tick func(found int)) ([]scanFile, error) {
+func (s *Scanner) walk(ctx context.Context, src Sources, tick func(found int)) ([]scanFile, error) {
 	w := scanWalk{seen: map[string]bool{}, sides: sideSet{m: map[string]sidecar{}},
 		last: time.Now(), every: s.progressEvery, tick: tick}
 	visited := 0
-	for _, dir := range folders {
+	for _, dir := range src.Folders {
+		// Корень-ссылка не обходится, как и ссылка внутри (walkEntry): так договорено с
+		// paths.Reaches — она ничего не накрывает (0.22-sec-1). Clean — «C:\Ссылка\» с разделителем
+		// на конце WalkDir прошёл бы по цели без проверки её локальности.
+		dir = filepath.Clean(dir)
 		// Ошибки отдельных файлов callback пропускает сам; корень недоступен — просто нет фото.
 		err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -328,6 +334,12 @@ func (s *Scanner) walk(ctx context.Context, folders []string, tick func(found in
 			return nil, err
 		}
 	}
+	for i, p := range src.Files {
+		if err := ctxDue(ctx, i+1); err != nil {
+			return nil, err
+		}
+		w.addLoose(p)
+	}
 	files := w.files
 	if len(w.sides.m) > 0 {
 		for i := range files {
@@ -349,14 +361,19 @@ type scanWalk struct {
 
 // addImage берёт файл-фото, если он ещё не встречался; info == nil — из d.Info().
 func (w *scanWalk) addImage(p string, d fs.DirEntry, info fs.FileInfo) {
+	w.add(p, d.Name(), info, func() fs.FileInfo { i, _ := d.Info(); return i })
+}
+
+// add — общее тело addImage и addLoose; load отдаёт сведения о файле, когда info == nil.
+func (w *scanWalk) add(p, name string, info fs.FileInfo, load func() fs.FileInfo) {
 	key := strings.ToLower(p)
-	if !isImage(d.Name()) || w.seen[key] {
+	if !isImage(name) || w.seen[key] {
 		return
 	}
 	w.seen[key] = true
 	f := scanFile{path: p, key: key, size: -1}
 	if info == nil {
-		info, _ = d.Info()
+		info = load()
 	}
 	if info != nil {
 		f.size, f.mod = info.Size(), info.ModTime().UnixNano()
@@ -408,38 +425,6 @@ func walkEntry(root, p string, d fs.DirEntry) (info fs.FileInfo, file bool, ret 
 
 // Scan — одноразовое сканирование без отчётов и памяти (тесты и простые случаи).
 func Scan(folders []string) ([]Photo, []string) {
-	photos, skipped, _ := NewScanner().Scan(context.Background(), folders, func([]Photo, ScanProgress, bool) {})
+	photos, skipped, _ := NewScanner().Scan(context.Background(), Sources{Folders: folders}, func([]Photo, ScanProgress, bool) {})
 	return photos, skipped
-}
-
-// statLink — сведения о файле, на который указывает ссылка p; ok = false для папок,
-// битых ссылок и ссылок на нелокальный путь (UNC, `\\?\`, устройство).
-// Если цель прочитать нельзя (не символическая ссылка, а другая точка повторной обработки), решает Stat.
-func statLink(p string) (fs.FileInfo, bool) {
-	if target, err := os.Readlink(p); err == nil && !localTarget(filepath.Dir(p), target) {
-		return nil, false
-	}
-	st, err := os.Stat(p)
-	if err != nil || st.IsDir() {
-		return nil, false
-	}
-	return st, true
-}
-
-// localTarget — цель ссылки лежит на локальном диске: абсолютная (и всё с корнем или двоеточием
-// на Windows) проходит paths.CheckLocalPath; относительная — без устройств в элементах
-// (paths.DeviceElem) и только из папки на локальном диске.
-func localTarget(dir, target string) bool {
-	if target == "" || strings.ContainsRune(target, 0) {
-		return false
-	}
-	if filepath.IsAbs(target) || runtime.GOOS == "windows" && (paths.IsSep(target[0]) || strings.ContainsRune(target, ':')) {
-		return paths.CheckLocalPath(target) == nil
-	}
-	for _, el := range strings.FieldsFunc(target, paths.IsSepRune) {
-		if paths.DeviceElem(el) {
-			return false
-		}
-	}
-	return runtime.GOOS != "windows" || paths.CheckLocalPath(dir) == nil
 }

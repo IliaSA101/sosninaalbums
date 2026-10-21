@@ -3,6 +3,7 @@ package roundtrip_test
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -86,7 +87,12 @@ func TestBinsGoldenV15(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(out, data) {
-		t.Fatalf("Decode → Encode отличается от голдена:\n%s", out)
+	// Голден остаётся файлом v15 (база совместимости): запись отличается только номером версии.
+	wantFile := bytes.Replace(data, []byte(`"version": 15,`), fmt.Appendf(nil, `"version": %d,`, model.FormatVersion), 1)
+	if bytes.Equal(wantFile, data) && model.FormatVersion != 15 {
+		t.Fatal("в голдене нет номера версии 15")
+	}
+	if !bytes.Equal(out, wantFile) {
+		t.Fatalf("Decode → Encode v15 отличается от голдена (кроме номера версии):\n%s", out)
 	}
 }

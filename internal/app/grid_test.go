@@ -65,7 +65,11 @@ func TestAppGridResultNamed(t *testing.T) {
 		t.Fatalf("PlacePhotos: %v, named %v", err, r.Named) // фото из альбома имени не берёт
 	}
 	js("PlacePhotos", r)
-	js("FillPlaces", a.FillPlaces([]string{"zz"}, "s1"))
+	fr, err := a.FillPlaces([]string{"a"}, "s1") // фото альбома — по сведениям проекта, уже стоит: пропуск
+	if err != nil {
+		t.Fatalf("FillPlaces: %v", err)
+	}
+	js("FillPlaces", fr)
 	r, err = a.ApplyGrid("s1", "left", "spread", []model.Box{{W: 0.5, H: 0.5}})
 	if err == nil {
 		t.Fatal("ApplyGrid: ждали отказ")
@@ -95,9 +99,22 @@ func TestAppGridErrors(t *testing.T) {
 	if plan := a.PlanCopyGrid("s1", "left", []model.GridTarget{{Spread: "s2", Scope: "left"}}, false, false); plan.Frozen != 0 {
 		t.Fatalf("план: %+v", plan)
 	}
-	// Заполнение пустых мест фото из ленты: фото a и b уже в альбоме — у ленты только неизвестные.
-	if res := a.FillPlaces([]string{"zz"}, "s1"); res.Left != 0 {
-		t.Errorf("FillPlaces неизвестного: %+v", res)
+}
+
+// FillPlaces: ни одного из ID нет ни в ленте, ни в альбоме — ErrNoPhoto (092), проект и rev прежние;
+// фото альбома, уже стоящее на месте, — без ошибки и без правки.
+func TestFillPlacesUnknownIDs(t *testing.T) {
+	a := gridApp(t)
+	rev := a.editor().View().Rev
+	r, err := a.FillPlaces([]string{"zz", "yy"}, "s1")
+	if !errors.Is(err, errNoPhoto) || r.View.Rev != rev || a.editor().View().Rev != rev {
+		t.Fatalf("FillPlaces неизвестных: err %v, rev %d→%d", err, rev, a.editor().View().Rev)
+	}
+	if r, err = a.FillPlaces(nil, "s1"); err != nil || r.View.Rev != rev { // пустой список — как прежде
+		t.Fatalf("FillPlaces пустого: err %v, rev %d", err, r.View.Rev)
+	}
+	if r, err = a.FillPlaces([]string{"a", "zz"}, "s1"); err != nil || r.View.Rev != rev { // часть найдена
+		t.Fatalf("FillPlaces части: err %v, rev %d", err, r.View.Rev)
 	}
 }
 
@@ -559,7 +576,7 @@ func TestAppUndoRedoFoldersRescan(t *testing.T) {
 	a, _ := spreadsApp(t, []string{"a"})
 	dir := testkit.TempDir(t)
 	testkit.JPEG(t, dir, "x.jpg", 20, 10)
-	if _, err := a.editor().AddFolder(dir); err != nil {
+	if _, _, err := a.editor().AddFolder(dir); err != nil {
 		t.Fatal(err)
 	}
 	a.rescan()

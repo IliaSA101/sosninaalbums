@@ -98,3 +98,4 @@ binToggle
 binNew
 binRemove
 binAll
+renameSpread

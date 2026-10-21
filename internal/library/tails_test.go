@@ -300,8 +300,13 @@ func TestCloseDropsPendingTails(t *testing.T) {
 		t.Errorf("декодов %d, ждали 4 (3 миниатюры + полный путь ждавшего)", got)
 	}
 	_ = filepath.WalkDir(c.dir, func(p string, d fs.DirEntry, err error) error {
-		if err == nil && strings.HasSuffix(p, ".tmp") {
+		if err != nil || !strings.HasSuffix(p, ".tmp") {
+			return nil
+		}
+		if testkit.OwnTmp(filepath.Base(p)) {
 			t.Errorf("недописанный файл %s", p)
+		} else {
+			t.Logf("чужой временный файл (антивирус) %s", p)
 		}
 		return nil
 	})

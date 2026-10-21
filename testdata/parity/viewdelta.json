@@ -131,6 +131,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -209,6 +210,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -250,6 +252,7 @@
       "emptyPlaces": 0,
       "folders": [],
       "libPhotos": null,
+      "loose": null,
       "lowDPI": 0,
       "marksRev": 0,
       "maxSpreadPhotos": 0,
@@ -525,6 +528,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -563,6 +567,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -603,6 +608,7 @@
       "emptyPlaces": 0,
       "folders": [],
       "libPhotos": null,
+      "loose": null,
       "lowDPI": 0,
       "marksRev": 0,
       "maxSpreadPhotos": 0,
@@ -839,6 +845,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -914,6 +921,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -956,6 +964,7 @@
       "emptyPlaces": 0,
       "folders": [],
       "libPhotos": null,
+      "loose": null,
       "lowDPI": 0,
       "marksRev": 0,
       "maxSpreadPhotos": 0,
@@ -1266,6 +1275,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -1304,6 +1314,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -1345,6 +1356,7 @@
       "emptyPlaces": 0,
       "folders": [],
       "libPhotos": null,
+      "loose": null,
       "lowDPI": 0,
       "marksRev": 0,
       "maxSpreadPhotos": 0,
@@ -1619,6 +1631,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -1657,6 +1670,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -1816,6 +1830,7 @@
       "emptyPlaces": 0,
       "folders": [],
       "libPhotos": null,
+      "loose": null,
       "lowDPI": 0,
       "marksRev": 0,
       "maxSpreadPhotos": 0,
@@ -2090,6 +2105,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -2128,6 +2144,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -2189,6 +2206,7 @@
       "emptyPlaces": 0,
       "folders": [],
       "libPhotos": null,
+      "loose": null,
       "lowDPI": 0,
       "marksRev": 0,
       "maxSpreadPhotos": 0,
@@ -2463,6 +2481,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -2501,6 +2520,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -2538,6 +2558,7 @@
       "emptyPlaces": 0,
       "folders": [],
       "libPhotos": null,
+      "loose": null,
       "lowDPI": 0,
       "marksRev": 0,
       "maxSpreadPhotos": 0,
@@ -2697,6 +2718,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -2735,6 +2757,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -2776,6 +2799,7 @@
       "emptyPlaces": 0,
       "folders": [],
       "libPhotos": null,
+      "loose": null,
       "lowDPI": 0,
       "marksRev": 0,
       "maxSpreadPhotos": 0,
@@ -3050,6 +3074,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,
@@ -3125,6 +3150,7 @@
         "safe": 0
       },
       "folders": [],
+      "loose": null,
       "path": "",
       "dirty": false,
       "canUndo": false,

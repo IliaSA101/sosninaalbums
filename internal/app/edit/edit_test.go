@@ -29,7 +29,6 @@ func newMethods(t testing.TB, p *model.Project) (m *Methods, views func() []mode
 			seen = append(seen, v)
 			return v
 		},
-		Out:    func(v model.View) model.View { return v },
 		Notice: func(string) {},
 		Infos:  func([]string) []model.PhotoInfo { return nil },
 		InfosOrRefs: func(ids []string) []model.PhotoInfo { // ленты нет: сведения из проекта, как у App

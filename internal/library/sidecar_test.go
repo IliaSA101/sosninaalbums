@@ -258,7 +258,7 @@ func TestScannerSidecarChange(t *testing.T) {
 	scan := func() (map[string]*Marks, int) {
 		t.Helper()
 		var fin ScanProgress
-		photos, _, err := s.Scan(context.Background(), []string{dir}, func(_ []Photo, pr ScanProgress, final bool) {
+		photos, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func(_ []Photo, pr ScanProgress, final bool) {
 			if final {
 				fin = pr
 			}
@@ -323,7 +323,7 @@ func TestSidecarRetry(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	photos, _, err := s.Scan(context.Background(), []string{dir}, func([]Photo, ScanProgress, bool) {})
+	photos, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {})
 	if err != nil || len(photos) != 1 || photos[0].Xmp != nil {
 		t.Fatalf("сайдкар пропал: %+v, %v", photos, err)
 	}
@@ -331,7 +331,7 @@ func TestSidecarRetry(t *testing.T) {
 	if err := os.Rename(hidden, side); err != nil {
 		t.Fatal(err)
 	}
-	photos, _, err = s.Scan(context.Background(), []string{dir}, func([]Photo, ScanProgress, bool) {})
+	photos, _, err = s.Scan(context.Background(), Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {})
 	if err != nil || len(photos) != 1 || photos[0].Xmp == nil || photos[0].Xmp.Rating != 4 {
 		t.Fatalf("сайдкар вернулся: %+v, %v", photos, err)
 	}

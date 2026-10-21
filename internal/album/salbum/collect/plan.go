@@ -31,6 +31,9 @@ import (
 const (
 	DirPhotos = "Фото"
 	DirOther  = "Прочие" // внутри DirPhotos: фото не из папок альбома
+	// DirLoose — отдельные фото (097, decisions 097-5): рядом с DirPhotos, а не внутри — иначе
+	// папка альбома «Фото» накрыла бы их и добавления пропали бы.
+	DirLoose  = "Фото отдельно"
 	DirOwn    = "Свои фоны и стикеры"
 	DirGuides = "Разметка"
 )
@@ -77,6 +80,9 @@ type Plan struct {
 	// альбоме гарнитур нет на этом компьютере.
 	FontsRestricted []string
 	MissingFonts    int
+	// LooseLost — ключи (key) отдельных фото не из альбома, которых нет на диске (режим «Все»): в
+	// собранном альбоме остаются со старым путём, как пропавшие фото альбома.
+	LooseLost []string
 }
 
 // Info — сводка для окна (069, контракт CollectInfo). Scanning и FolderName заполняет App: лента
@@ -84,6 +90,7 @@ type Plan struct {
 type Info struct {
 	Photos        int    `json:"photos"` // фото альбома
 	Extra         int    `json:"extra"`  // фото из папок альбома вне альбома (режим «Все»)
+	Loose         int    `json:"loose"`  // отдельные фото (097) вне альбома (режим «Все»): не входят в Extra
 	Own           int    `json:"own"`
 	Guides        int    `json:"guides"`
 	Missing       int    `json:"missing"`
@@ -106,6 +113,8 @@ func (pl Plan) Info() Info {
 		switch {
 		case it.Kind == KindPhoto && len(it.Refs) > 0:
 			in.Photos++
+		case it.Kind == KindPhoto && strings.HasPrefix(it.Rel, DirLoose+"/"):
+			in.Loose++
 		case it.Kind == KindPhoto:
 			in.Extra++
 		case it.Kind == KindOwn:
@@ -123,14 +132,19 @@ func (pl Plan) Info() Info {
 var reachable = osx.Reachable
 
 // Make — план сбора проекта p в папку dir ("" — без сверки с папкой назначения: сводка окна,
-// ничего не пропускается). extra — пути фото ленты (режим «Все»): берутся только лежащие внутри
-// папок альбома. stat — Stat источника (os.Stat; подменяется в тестах).
+// ничего не пропускается). extra — пути фото ленты (режим «Все», не nil): берутся лежащие внутри
+// папок альбома и все отдельные фото (097). stat — Stat источника (os.Stat; подменяется в тестах).
 func Make(p *model.Project, extra []string, dir string, stat func(string) (fs.FileInfo, error)) (Plan, error) {
 	var pl Plan
 	roots := makeRoots(p.Folders)
 	srcs := sources(p, extra, roots, stat, &pl)
+	loose := looseSet(p)
 	for i := range srcs {
-		srcs[i].dest = destDir(srcs[i], roots)
+		if loose[key(srcs[i].path)] && srcs[i].kind == KindPhoto {
+			srcs[i].dest = DirLoose
+		} else {
+			srcs[i].dest = destDir(srcs[i], roots)
+		}
 		srcs[i].lowDest = nameKey(srcs[i].dest)
 	}
 	// Нижний регистр — заранее: в сравнении сортировки ToLower занимал почти всё время плана.
@@ -190,6 +204,8 @@ func makeRoots(folders []string) []root {
 	slices.SortStableFunc(byLen, func(a, b string) int { return len(a) - len(b) })
 	var top []string
 	for _, f := range byLen {
+		// Отдельный корень внутри другого (подпапка на «.» или через ссылку, 093-4) — часть корня:
+		// FolderName срезает точку, копия ссылкой не будет — сканер собранного альбома его прочтёт.
 		if !slices.ContainsFunc(top, func(r string) bool { return paths.SamePath(r, f) || library.Under(f, r) }) {
 			top = append(top, f)
 		}
@@ -247,21 +263,18 @@ func sources(p *model.Project, extra []string, roots []root, stat func(string) (
 	ownOnly := ownOnlyRefs(p)
 	for _, id := range slices.Sorted(maps.Keys(p.Photos)) {
 		ref := p.Photos[id]
-		kind := KindPhoto
-		if ref.Lib != "" || ownOnly[id] {
-			kind = KindOwn
-		}
-		if ref.Path == "" || !add(kind, ref.Path, id) {
+		if ref.Path == "" || !add(kindOf(ref, ownOnly[id]), ref.Path, id) {
 			pl.Missing = append(pl.Missing, id)
 		}
 	}
-	for _, e := range extra {
-		if _, in := at[key(e)]; in || e == "" {
-			continue // уже в альбоме
-		}
-		le := lower(filepath.Clean(e))
-		if slices.ContainsFunc(roots, func(r root) bool { return strings.HasPrefix(le, r.low) }) {
+	for _, e := range extraIn(extra, roots) {
+		if _, in := at[key(e)]; !in {
 			add(KindPhoto, e, "") // пропало из ленты за время сбора — просто не берём
+		}
+	}
+	for _, f := range looseAll(p, extra) {
+		if _, in := at[key(f)]; !in && !add(KindPhoto, f, "") {
+			pl.LooseLost = append(pl.LooseLost, key(f))
 		}
 	}
 	guide := func(path, ref string) {
@@ -273,6 +286,44 @@ func sources(p *model.Project, extra []string, roots []root, stat func(string) (
 		guide(p.Cover.Guide, RefCover)
 	}
 	guide(p.SpreadGuide, RefSpreads)
+	return out
+}
+
+// kindOf — вид источника записи: своё из библиотеки или запись только рамочек и своих стикеров — KindOwn.
+func kindOf(ref model.PhotoRef, ownOnly bool) string {
+	if ref.Lib != "" || ownOnly {
+		return KindOwn
+	}
+	return KindPhoto
+}
+
+// extraIn — фото ленты (режим «Все») внутри корней альбома; пустые пути отброшены.
+func extraIn(extra []string, roots []root) []string {
+	var out []string
+	for _, e := range extra {
+		le := lower(filepath.Clean(e))
+		if e != "" && slices.ContainsFunc(roots, func(r root) bool { return strings.HasPrefix(le, r.low) }) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// looseAll — отдельные фото для режима «Все» (extra != nil): все, не только прочитанные лентой;
+// вне режима — ничего.
+func looseAll(p *model.Project, extra []string) []string {
+	if extra == nil {
+		return nil
+	}
+	return p.LooseFiles()
+}
+
+// looseSet — ключи (key) путей отдельных фото проекта.
+func looseSet(p *model.Project) map[string]bool {
+	out := map[string]bool{}
+	for _, f := range p.LooseFiles() {
+		out[key(f)] = true
+	}
 	return out
 }
 

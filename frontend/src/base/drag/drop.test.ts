@@ -7,17 +7,24 @@ const inSpread: Payload = { kind: 'photos', ids: ['a'], fromSpread: 's1' }
 const group: Payload = { kind: 'spread', id: 's1', index: 1 }
 
 describe('dropPlan: разворот', () => {
-  it('на mini — перенос с поправкой индекса', () => {
-    const t: Target = { kind: 'mini', spread: 's3', index: 3, side: 'after' }
-    expect(dropPlan(group, t)).toEqual({ op: 'moveSpread', id: 's1', at: 3 })
+  // 095: цель разворота — щель ленты (gap), индекс в ней уже итоговый.
+  it('gap → moveSpread', () => {
+    expect(dropPlan(group, { kind: 'gap', at: 4, to: 3 })).toEqual({ op: 'moveSpread', id: 's1', at: 3 })
+    expect(dropPlan(group, { kind: 'gap', at: 0, to: 0 })).toEqual({ op: 'moveSpread', id: 's1', at: 0 })
   })
-  it('на своё место — ничего', () => {
-    expect(dropPlan(group, { kind: 'mini', spread: 's1', index: 1, side: 'before' })).toBeNull()
-    expect(dropPlan(group, { kind: 'mini', spread: 's0', index: 0, side: 'after' })).toBeNull()
+  it('gap на своё место — ничего', () => {
+    expect(dropPlan(group, { kind: 'gap', at: 2, to: 1 })).toBeNull()
+    expect(dropPlan(group, { kind: 'gap', at: 1, to: 1 })).toBeNull()
+  })
+  it('mini для разворота — ничего', () => {
+    expect(dropPlan(group, { kind: 'mini', spread: 's3', index: 3, side: 'after' })).toBeNull()
   })
   it('на другие цели — ничего', () => {
     expect(dropPlan(group, { kind: 'library' })).toBeNull()
     expect(dropPlan(group, { kind: 'new', at: 0 })).toBeNull()
+  })
+  it('щель для фото — ничего', () => {
+    expect(dropPlan(strip, { kind: 'gap', at: 0, to: 0 })).toBeNull()
   })
 })
 

@@ -59,7 +59,7 @@ func TestV13SeatNameRoundtrip(t *testing.T) {
 	dir := testkit.TempDir(t)
 	path := filepath.Join(dir, "a.salbum")
 	first, q := saveLoad(t, seatProject(dir), path)
-	if f := fileJSON(t, path); f.Version != 15 || bytes.Count(first, []byte(`"person"`)) != 3 {
+	if f := fileJSON(t, path); f.Version != 16 || bytes.Count(first, []byte(`"person"`)) != 3 {
 		t.Fatalf("файл v%d, табличек в файле %d (ждали 3: ноль не пишется):\n%s", f.Version, bytes.Count(first, []byte(`"person"`)), first)
 	}
 	want := []model.Person{seatPetya, seatOlga, {}, {}, seatPhys}
@@ -119,12 +119,12 @@ func TestV12OpensWithoutSeatNames(t *testing.T) {
 	if bak, err := os.ReadFile(path + ".v12.bak"); err != nil || !bytes.Equal(bak, src) {
 		t.Fatalf(".v12.bak: %v", err)
 	}
-	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"person"`)) || fileJSON(t, path).Version != 15 {
+	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"person"`)) || fileJSON(t, path).Version != 16 {
 		t.Fatalf("запись v12:\n%s", out)
 	}
-	newer := bytes.Replace(data, cur, []byte(`"version": 16,`), 1)
+	newer := bytes.Replace(data, cur, fmt.Appendf(nil, `"version": %d,`, model.FormatVersion+1), 1)
 	if _, err := Decode(newer, dir); !errors.Is(err, ErrNewer) {
-		t.Fatalf("v16: %v", err)
+		t.Fatalf("v%d: %v", model.FormatVersion+1, err)
 	}
 }
 

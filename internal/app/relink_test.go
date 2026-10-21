@@ -37,7 +37,7 @@ func relinkApp(t *testing.T) (a *App, moved string, events func() []emitted) {
 		t.Fatal(err)
 	}
 	e := mustEditor(t, model.New(), "")
-	if _, err := e.AddFolder(shoot); err != nil {
+	if _, _, err := e.AddFolder(shoot); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.NewSpread(-1, []model.PhotoInfo{
@@ -457,7 +457,7 @@ func TestAppSuggestRelinkDrive(t *testing.T) {
 	a.cfgDir = testkit.TempDir(t)
 	a.emit = func(string, ...any) {}
 	ed := a.editor()
-	if _, err := ed.AddFolder(oldFolder); err != nil {
+	if _, _, err := ed.AddFolder(oldFolder); err != nil {
 		t.Fatal(err)
 	}
 	oldID := library.IDFor(oldPath)

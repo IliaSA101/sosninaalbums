@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -407,5 +408,82 @@ func TestCollectNFDNames(t *testing.T) {
 	}
 	if got := rels(pl); !mapsEqual(got, want) {
 		t.Fatalf("имена:\n%q\nждали\n%q", got, want)
+	}
+}
+
+// 097 §6, режим «Все»: отдельные фото — в «Фото отдельно» (и фото альбома вне папок, и не из
+// альбома), пропавшее не из альбома — в LooseLost; копия альбома: скопированные — новый путь,
+// пропавшие (и фото альбома из Missing) — как были.
+func TestCollectLoose(t *testing.T) {
+	root := testkit.TempDir(t)
+	a := filepath.Join(root, "A")
+	in, inA := filepath.Join(a, "in.jpg"), filepath.Join(root, "Отдельно", "1.jpg")
+	p := album(t, []string{a}, in, inA)
+	free, lost := filepath.Join(root, "Ещё", "2.jpg"), filepath.Join(root, "Ещё", "нет.jpg")
+	put(t, free, "123")
+	gone := filepath.Join(root, "Отдельно", "пропало.jpg")
+	p.Photos[library.IDFor(gone)] = model.PhotoRef{Path: gone}
+	p.Loose = []model.LooseAdd{
+		{ID: "0123456789ab", At: 1, Files: []model.LooseFile{{Path: inA}, {Path: free}}},
+		{ID: "0123456789ac", At: 2, Files: []model.LooseFile{{Path: lost}, {Path: gone}}},
+	}
+	pl, err := Make(p, []string{in}, "", os.Stat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{in: "Фото/A/in.jpg", inA: DirLoose + "/1.jpg", free: DirLoose + "/2.jpg"}
+	if got := rels(pl); !mapsEqual(got, want) {
+		t.Fatalf("план: %v", got)
+	}
+	if !slices.Equal(pl.Missing, []string{library.IDFor(gone)}) {
+		t.Fatalf("пропавшие: %v", pl.Missing)
+	}
+	if in := pl.Info(); in.Photos != 2 || in.Loose != 1 || in.Extra != 0 {
+		t.Fatalf("сводка: фото %d, отдельных %d, лишних %d", in.Photos, in.Loose, in.Extra)
+	}
+	wantLost := []string{key(gone), key(lost)}
+	slices.Sort(wantLost)
+	if slices.Sort(pl.LooseLost); !slices.Equal(pl.LooseLost, wantLost) {
+		t.Fatalf("пропавшие отдельные: %v, ждали %v", pl.LooseLost, wantLost)
+	}
+	dir := filepath.Join(root, "Сбор")
+	q, _ := Album(p, model.Side{}, dir, pl)
+	wantLoose := []model.LooseAdd{
+		{ID: "0123456789ab", At: 1, Files: []model.LooseFile{{Path: filepath.Join(dir, DirLoose, "1.jpg")}, {Path: filepath.Join(dir, DirLoose, "2.jpg")}}},
+		{ID: "0123456789ac", At: 2, Files: []model.LooseFile{{Path: lost}, {Path: gone}}},
+	}
+	if !reflect.DeepEqual(q.Loose, wantLoose) {
+		t.Fatalf("отдельные в копии: %+v", q.Loose)
+	}
+	if p.Loose[0].Files[0].Path != inA {
+		t.Fatal("Album изменил исходный проект")
+	}
+	// Отдельных нет — фото альбома вне папок снова в «Прочие», пропавших отдельных нет.
+	p.Loose = nil
+	pl, err = Make(p, []string{in}, "", os.Stat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q, _ := Album(p, model.Side{}, dir, pl); q.Loose != nil || len(pl.LooseLost) != 0 || rels(pl)[inA] != "Фото/Прочие/1.jpg" {
+		t.Fatalf("без отдельных: %v %v %v", q.Loose, pl.LooseLost, rels(pl))
+	}
+}
+
+// Info считает отдельные фото вне альбома («Фото отдельно», без Refs) в Loose, а не в Extra; фото
+// отдельных добавлений, стоящие в альбоме, — в Photos; пустой план — нули.
+func TestInfoLoose(t *testing.T) {
+	if in := (Plan{}).Info(); in.Loose != 0 || in.Extra != 0 || in.Photos != 0 {
+		t.Fatalf("пустой план: %+v", in)
+	}
+	pl := Plan{Items: []Item{
+		{Kind: KindPhoto, Rel: "Фото/A/1.jpg", Refs: []string{"a"}},
+		{Kind: KindPhoto, Rel: "Фото/A/2.jpg"},
+		{Kind: KindPhoto, Rel: DirLoose + "/3.jpg", Refs: []string{"c"}},
+		{Kind: KindPhoto, Rel: DirLoose + "/4.jpg"},
+		{Kind: KindPhoto, Rel: DirLoose + "/5.jpg"},
+		{Kind: KindXMP, Rel: DirLoose + "/5.xmp"},
+	}}
+	if in := pl.Info(); in.Photos != 2 || in.Extra != 1 || in.Loose != 2 {
+		t.Fatalf("сводка: фото %d, лишних %d, отдельных %d", in.Photos, in.Extra, in.Loose)
 	}
 }

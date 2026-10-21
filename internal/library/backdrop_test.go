@@ -159,14 +159,12 @@ func TestLinkLocal(t *testing.T) {
 		at("empty.jpg"):  "",
 		at("rooted.jpg"): `\x.jpg`,
 	}
-	old := readLink
-	readLink = func(p string) (string, error) {
+	t.Cleanup(SetReadLink(func(p string) (string, error) {
 		if v, ok := links[p]; ok {
 			return v, nil
 		}
 		return "", os.ErrInvalid
-	}
-	t.Cleanup(func() { readLink = old })
+	}))
 	want := map[string]bool{"ok.jpg": true, "rel.jpg": true, "chain.jpg": true, "real.jpg": true,
 		"unc.jpg": false, "hop.jpg": false, "loop1.jpg": false, "empty.jpg": false, "rooted.jpg": runtime.GOOS != "windows"}
 	for name, w := range want {

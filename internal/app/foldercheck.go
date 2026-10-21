@@ -3,6 +3,8 @@ package app
 import (
 	"sync"
 	"time"
+
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 )
 
 // Сверка папок проекта с диском (088): интерфейс зовёт CheckFolders при фокусе окна, по таймеру
@@ -91,8 +93,10 @@ func (a *App) beginCheck(full bool) bool {
 
 // checkFolders — тело проверки; отдаёт длительность обхода.
 func (a *App) checkFolders(full bool) time.Duration {
-	live, _ := splitLive(a.editor().Folders()) // недоступный том не обходим: ждали бы таймаута SMB
-	changed, took, err := a.scanner.Changed(a.stopCtx, live)
+	src := a.sources()
+	live, _ := splitLive(src.Folders) // недоступный том не обходим: ждали бы таймаута SMB
+	liveFiles, _ := splitLive(src.Files)
+	changed, took, err := a.scanner.Changed(a.stopCtx, library.Sources{Folders: live, Files: liveFiles})
 	if err != nil {
 		return took // остановка программы
 	}

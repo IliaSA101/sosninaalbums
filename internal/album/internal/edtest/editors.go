@@ -205,7 +205,7 @@ func AddPhotos(e *album.Editor, id string, ph []model.PhotoInfo, idx int) model.
 }
 
 func AddFolder(e *album.Editor, dir string) model.View {
-	v, err := e.AddFolder(dir)
+	v, _, err := e.AddFolder(dir)
 	if err != nil {
 		panic(err)
 	}

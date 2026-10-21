@@ -1,7 +1,10 @@
 package edit
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"log"
 	"slices"
 	"strings"
 	"testing"
@@ -297,4 +300,58 @@ func TestPurgePhotosMethod(t *testing.T) {
 	if v = a.undo(); !equalComposition(photosOf(v), []string{"a", "b"}, []string{"c"}) || len(v.Spreads[1].Backdrops) != 1 || len(v.Spreads[1].Stickers) != 1 {
 		t.Fatalf("Undo: %v %+v", photosOf(v), v.Spreads[1])
 	}
+}
+
+// PhotosFor (092): строка журнала «не найдено K из N» без ID и путей; повтор ID считается один раз;
+// пустой список — тишина; все найдены — строки нет; ни одного — ErrNoPhoto.
+func TestPhotosForLog(t *testing.T) {
+	var buf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	k := twoSpreads(t)
+	k.lentPhoto("лента-секрет")
+	get := k.h.InfosOrRefs
+	check := func(name string, wantLog string) {
+		t.Helper()
+		got := buf.String()
+		buf.Reset()
+		if wantLog == "" && got != "" || wantLog != "" && !strings.Contains(got, wantLog) {
+			t.Errorf("%s: журнал %q, ждали %q", name, got, wantLog)
+		}
+		for _, bad := range []string{`C:\`, "секрет", "призрак"} {
+			if strings.Contains(got, bad) {
+				t.Errorf("%s: в журнале %q есть %q", name, got, bad)
+			}
+		}
+	}
+
+	infos, err := PhotosFor("AddPhotos", []string{"лента-секрет", "призрак-1"}, get)
+	if err != nil || len(infos) != 1 {
+		t.Fatalf("часть: err %v, %d сведений", err, len(infos))
+	}
+	check("часть", "не найдено 1 из 2")
+
+	// Повторы во входе: один ID — один счёт.
+	if _, err = PhotosFor("NewSpread", []string{"призрак-1", "призрак-1", "лента-секрет"}, get); err != nil {
+		t.Fatal(err)
+	}
+	check("повторы", "не найдено 1 из 2")
+
+	if infos, err = PhotosFor("AddPhotos", []string{"призрак-1", "призрак-2"}, get); !errors.Is(err, ErrNoPhoto) || infos != nil {
+		t.Fatalf("ни одного: err %v, %v", err, infos)
+	}
+	check("ни одного", "не найдено 2 из 2")
+
+	// Фото альбома без ленты — найдено по проекту, строки нет.
+	if infos, err = PhotosFor("AddPhotos", []string{"a"}, get); err != nil || len(infos) != 1 {
+		t.Fatalf("альбом: err %v, %v", err, infos)
+	}
+	check("все найдены", "")
+	// Пустой список — не просьба: ни ошибки, ни строки.
+	if infos, err = PhotosFor("NewSpread", nil, get); err != nil || infos != nil {
+		t.Fatalf("пустой: err %v, %v", err, infos)
+	}
+	check("пустой", "")
 }

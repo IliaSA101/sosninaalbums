@@ -31,8 +31,12 @@ func fnvAdd(h uint64, s string) uint64 {
 
 // fingerprintOf считает отпечаток по файлам обхода. В него входят и нечитаемые
 // (stBad) файлы: иначе их появление или правка остались бы незамеченными.
-func fingerprintOf(folders []string, files []scanFile) fingerprint {
-	fp := fingerprint{key: strings.ToLower(strings.Join(folders, "\n")), n: len(files)}
+func fingerprintOf(src Sources, files []scanFile) fingerprint {
+	key := strings.Join(src.Folders, "\n")
+	if len(src.Files) > 0 {
+		key += "\x00" + strings.Join(src.Files, "\n") // отдельное фото не сойдёт за папку
+	}
+	fp := fingerprint{key: strings.ToLower(key), n: len(files)}
 	for _, f := range files {
 		// Поля разделены нулём; без сайдкара путь пуст, размер и время — нули.
 		h := uint64(fnvOffset)
@@ -45,17 +49,17 @@ func fingerprintOf(folders []string, files []scanFile) fingerprint {
 	return fp
 }
 
-// Changed обходит папки тем же walk, что Scan, и сравнивает с отпечатком последнего
-// законченного Scan. Список папок другой или Scan ещё не заканчивался (или отменён) — true.
+// Changed обходит источники тем же walk, что Scan, и сравнивает с отпечатком последнего
+// законченного Scan. Список папок или отдельных файлов другой или Scan ещё не заканчивался (или отменён) — true.
 // took — длительность обхода. Память заголовков не трогает.
-func (s *Scanner) Changed(ctx context.Context, folders []string) (changed bool, took time.Duration, err error) {
+func (s *Scanner) Changed(ctx context.Context, src Sources) (changed bool, took time.Duration, err error) {
 	t0 := time.Now()
-	files, err := s.walk(ctx, folders, func(int) {})
+	files, err := s.walk(ctx, src, func(int) {})
 	took = time.Since(t0)
 	if err != nil {
 		return false, took, err
 	}
-	fp := fingerprintOf(folders, files)
+	fp := fingerprintOf(src, files)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return !s.lastOK || s.last != fp, took, nil

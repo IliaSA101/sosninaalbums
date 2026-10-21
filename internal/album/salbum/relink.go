@@ -22,13 +22,18 @@ func Refs(p *model.Project) map[string]model.PhotoRef {
 }
 
 // Relink — тело Editor.Relink над проектом: переехавшие файлы и папки (для своих отметок).
+// Отдельные фото (097 §5): запись следует за фото альбома, папка ради него не добавляется;
+// пропавшие отдельные не из альбома из той же папки переезжают следом (их пары — в files).
 func Relink(p *model.Project, moves map[string]string, addFolder string) (files, dirs []model.PathPair) {
 	files = relink(p, moves)
 	if len(files) == 0 {
 		return files, nil
 	}
+	loose := followLoose(p, files)
 	dirs = moveFolders(p, files)
-	addFolderFor(p, files, addFolder)
+	addFolderFor(p, slices.DeleteFunc(slices.Clone(files), func(pr model.PathPair) bool { return loose[model.LooseKey(pr.Old)] }), addFolder)
+	files = append(files, sameDirLoose(p, files)...)
+	p.FoldSources(paths.Linked)
 	return files, dirs
 }
 
@@ -60,7 +65,82 @@ func RelinkDrive(p *model.Project, from, to string) (files, dirs []model.PathPai
 	}
 	p.Folders = uniquePaths(p.Folders)
 	relinkGuides(p, from, to)
+	files = append(files, swapLoose(p, from, to)...)
+	p.FoldSources(paths.Linked)
 	return files, dirs
+}
+
+// followLoose — записи отдельных фото с прежним путём пары переезжают на новый (097 §5);
+// ответ — ключи LooseKey прежних путей, которые были отдельными.
+func followLoose(p *model.Project, pairs []model.PathPair) map[string]bool {
+	if len(p.Loose) == 0 {
+		return nil
+	}
+	to := make(map[string]string, len(pairs))
+	for _, pr := range pairs {
+		to[model.LooseKey(pr.Old)] = pr.New
+	}
+	was := map[string]bool{}
+	eachLoose(p, func(f *model.LooseFile) {
+		k := model.LooseKey(f.Path)
+		if np, ok := to[k]; ok {
+			was[k] = true
+			f.Path, f.Alt = np, ""
+		}
+	})
+	return was
+}
+
+// sameDirLoose — пропавшие отдельные фото не из альбома, лежавшие в той же папке, что прежний
+// путь пары: файл с тем же именем в новой папке пары — переезд (пара — для своих отметок).
+func sameDirLoose(p *model.Project, pairs []model.PathPair) []model.PathPair {
+	if len(p.Loose) == 0 {
+		return nil
+	}
+	dirs := make(map[string]string, len(pairs))
+	for _, pr := range pairs {
+		dirs[model.LooseKey(filepath.Dir(pr.Old))] = filepath.Dir(pr.New)
+	}
+	album := make(map[string]bool, len(p.Photos))
+	for _, r := range p.Photos {
+		album[model.LooseKey(r.Path)] = true
+	}
+	var out []model.PathPair
+	eachLoose(p, func(f *model.LooseFile) {
+		nd, ok := dirs[model.LooseKey(filepath.Dir(f.Path))]
+		if !ok || album[model.LooseKey(f.Path)] || isFile(f.Path) {
+			return
+		}
+		if np := filepath.Join(nd, filepath.Base(f.Path)); paths.CheckLocalPath(np) == nil && isFile(np) {
+			out = append(out, model.PathPair{Old: f.Path, New: np})
+			f.Path, f.Alt = np, ""
+		}
+	})
+	return out
+}
+
+// swapLoose — смена буквы диска у пропавших отдельных фото, которые есть на новом месте.
+func swapLoose(p *model.Project, from, to string) []model.PathPair {
+	var out []model.PathPair
+	eachLoose(p, func(f *model.LooseFile) {
+		if isFile(f.Path) {
+			return
+		}
+		if np, ok := paths.SwapDrive(f.Path, from, to); ok && isFile(np) {
+			out = append(out, model.PathPair{Old: f.Path, New: np})
+			f.Path, f.Alt = np, ""
+		}
+	})
+	return out
+}
+
+// eachLoose — fn по каждому файлу отдельных фото (по указателю: правка на месте).
+func eachLoose(p *model.Project, fn func(f *model.LooseFile)) {
+	for i := range p.Loose {
+		for j := range p.Loose[i].Files {
+			fn(&p.Loose[i].Files[j])
+		}
+	}
 }
 
 // relink меняет пути фото из moves и пересчитывает ID. Пропускает: неизвестный ID, своё из
@@ -151,8 +231,9 @@ func addFolderFor(p *model.Project, pairs []model.PathPair, dir string) {
 	if len(pairs) == 0 {
 		return
 	}
+	in := paths.NewCover(p.Folders, paths.Linked) // лента видит то, куда дойдёт сканер (093-4)
 	for _, pr := range pairs {
-		if slices.ContainsFunc(p.Folders, func(f string) bool { return library.Under(pr.New, f) }) {
+		if in.HasFile(pr.New) {
 			return
 		}
 	}

@@ -42,3 +42,29 @@ export const varyLabel = (count: number) => (count > 1 ? `Разнообрази
 // Пункт активен, если функция входит в уровень, это не лист проекта и среди целей есть разворот, который Go может менять
 // (`anyVaries`: «Авто» с фото; сетки «Ручная», виньетки и пустые он пропускает). То же правило — в «Правке».
 export const canVary = (varies: boolean, sheet: boolean, can: boolean) => can && !sheet && varies
+
+// Пункты разреза, склейки и названия (094 §1.8, §3.3): только у одной группы; разрез и склейка — с функцией
+// «Разрез и склейка» (timeline), «Название…» — с «Названиями» (names). Серый пункт несёт причину (why).
+// cut — разрез перед фото под курсором (cutState; show = нет — пункта нет), join — со следующей (у последней — нет).
+type Can = { ok: boolean; why: string }
+
+export interface StripItems {
+  rename: boolean
+  cut: Can | null
+  join: Can | null
+}
+
+export function stripItems(
+  count: number,
+  can: (feature: 'timeline' | 'names') => boolean,
+  cut: (Can & { show: boolean }) | undefined,
+  join: Can | undefined,
+): StripItems {
+  if (count !== 1) return { rename: false, cut: null, join: null }
+  const strip = can('timeline')
+  return {
+    rename: can('names'),
+    cut: strip && cut?.show ? { ok: cut.ok, why: cut.why } : null,
+    join: strip && join ? { ok: join.ok, why: join.why } : null,
+  }
+}

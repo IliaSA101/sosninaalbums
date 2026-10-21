@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -46,6 +45,8 @@ type App struct {
 	ctx    context.Context
 	cfgDir string
 	cache  *library.Cache
+	// uilog — журнал ошибок интерфейса (LogUI, 092): окно в минуту, повторы счётчиком.
+	uilog uiLog
 	// data — имя папок данных (osx.DataName): у стенда QA (SA_STAND) своё, задаёт Run до окна.
 	data string
 
@@ -348,6 +349,7 @@ func (a *App) shutdown(ctx context.Context) {
 	// Сначала барьер, потом запись: правка между ними иначе не попала бы на диск.
 	a.stopBackground()
 	a.flushSave()
+	a.uilog.flush() // итог окна журнала интерфейса — до строки «выход»
 	log.Printf("выход")
 }
 
@@ -394,7 +396,7 @@ func (a *App) guardEdit(name string, v *model.View, err *error) {
 
 // editHost — что пакету edit нужно от App.
 func (a *App) editHost() edit.Host {
-	return edit.Host{Editor: a.editor, Changed: a.changed, Out: a.out, Notice: a.notice, Infos: a.infos,
+	return edit.Host{Editor: a.editor, Changed: a.changed, Notice: a.notice, Infos: a.infos,
 		InfosOrRefs: a.infosOrRefs, Templates: a.templateList}
 }
 
@@ -550,49 +552,4 @@ func appVersion(raw []byte) string {
 		return "dev"
 	}
 	return cfg.Info.ProductVersion
-}
-
-const maxLogSize = 2 << 20
-
-// setupLog пишет лог в файл и, если есть консоль, в stderr; файл больше 2 МБ уходит в .old.
-func setupLog(path string) {
-	rotateLog(path, maxLogSize)
-	if f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-		log.SetOutput(logWriter{file: f, console: os.Stderr})
-	}
-}
-
-// logWriter пишет сначала в файл, потом в консоль, и ошибку консоли не возвращает.
-// io.MultiWriter(os.Stderr, f) не годится: у собранного exe (GUI без консоли) запись
-// в stderr падает, MultiWriter на этом останавливается — и log.txt оставался пустым
-// (так было в 0.2.0 у Марины).
-type logWriter struct {
-	file    io.Writer
-	console io.Writer
-}
-
-func (w logWriter) Write(p []byte) (int, error) {
-	n, err := w.file.Write(p)
-	_, _ = w.console.Write(p)
-	return n, err
-}
-
-// rotateLog переименовывает log.txt в log.old.txt, если он больше limit байт.
-func rotateLog(path string, limit int64) {
-	st, err := os.Stat(path)
-	if err != nil || st.Size() <= limit {
-		return
-	}
-	old := strings.TrimSuffix(path, ".txt") + ".old.txt"
-	// Ротация — удобство: при сбое лог просто продолжит расти до следующего запуска.
-	_ = os.Remove(old)
-	_ = os.Rename(path, old)
-}
-
-// logRare пишет в лог первое событие счётчика и затем каждое сотое:
-// на повторяющихся ошибках (например, 404 от /media) файл не раздувается.
-func logRare(n int64, format string, args ...any) {
-	if n == 1 || n%100 == 0 {
-		log.Printf("[x%d] "+format, append([]any{n}, args...)...) //nolint:gosec // G706: текст ошибок ОС и имя файла без путей, в лог-файл разработчику
-	}
 }

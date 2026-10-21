@@ -13,6 +13,8 @@
   import { binsel } from '../bins/binsel.svelte'
   import { binsOf, emptyBinText, filterBin, hiddenBinText } from '../bins/bins'
   import { folderfilter } from '../folders/folderfilter.svelte'
+  import { hasSources } from '../folders/folders'
+  import { foldersUi } from '../folders/foldersui.svelte'
   import { isThumbWheel, thumbWheelAcc } from './thumbzoom'
   import { LIB_DEF, PAD_X, SPLITTER, anchorTop, colsOf, keepScroll, libFloor, libWindow, photoAt } from './libwindow'
   import { watchSize } from '../../base/ui/size'
@@ -189,9 +191,10 @@
         <div class="hint">
           {#if store.scan.active && store.photos.length === 0}
             {scanText(store.scan)}
-          {:else if store.view.folders.length === 0}
-            Нажмите «+ Папка с фото» или перетащите папку прямо в окно программы
-          {:else if folderfilter.allHidden(store.view.folders)}
+          {:else if !hasSources(store.view)}
+            Нажмите «+ Папка с фото» или перетащите в окно папку или отдельные фото
+            <button class="reset" onclick={() => foldersUi.addFiles()}>Добавить отдельные фото…</button>
+          {:else if folderfilter.allHidden(store.inFolders.length, store.photos.length)}
             Все папки скрыты
             <button class="reset" onclick={() => folderfilter.showAll()}>Показать все</button>
           {:else if binsel.shown && store.inBin.length === 0 && filterBin(store.photos, binsel.shown, binsel.index).length > 0}

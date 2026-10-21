@@ -26,6 +26,7 @@ export interface View {
   order?: string[]
   settings: Settings
   folders: string[]
+  loose: LooseView[] // 097: добавления отдельных фото по порядку; файл не лежит ни в одной папке folders (инвариант Go)
   path: string
   dirty: boolean
   canUndo: boolean
@@ -49,6 +50,32 @@ export interface View {
   albumFonts?: FontUse[] // 082: свои шрифты, стоящие в альбоме; Go начнёт слать с G4 — до этого undefined
   bins: Bin[] // 083: подборки фото в порядке создания
   again?: boolean // 078: «Пересобрать…» ещё можно (Go считает по версиям проекта; отметки её не закрывают)
+}
+
+// Добавление отдельных фото (097): at — Unix-секунды, подпись — местным временем в окне «Папки».
+export interface LooseView {
+  id: string
+  at: number
+  files: LooseFileView[]
+}
+
+// Файл добавления: photo — ID фото ленты (его же ждёт набор «в альбоме»); файла нет в ленте — нет на диске или ещё читается.
+export interface LooseFileView {
+  path: string
+  photo: string
+}
+
+// Итог добавления отдельных фото (097): ответ ChooseFiles/AddFilePaths (с view) и событие `loose:added` (без него).
+// batch '' — ничего не добавлено; inFolder — уже в папке альбома (folder — эта папка); dup — уже добавлены отдельно.
+export interface LooseAdded {
+  batch: string
+  added: number
+  inFolder: number
+  folder: string
+  dup: number
+  skipped: number // не фото, не файл
+  bad: number // не локальный путь
+  over: number // сверх предела 2 000
 }
 
 // Предел разворотов типографии (085): тексты готовит Go, UI их только показывает.

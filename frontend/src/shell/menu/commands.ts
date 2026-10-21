@@ -20,6 +20,7 @@ import { namesUi } from '../../panels/names/names.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { straighten } from '../../editor/tilt/straighten.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
+import { naming } from '../../panels/timeline/naming.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { modes } from '../../base/prefs/view.svelte'
 import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
@@ -151,6 +152,11 @@ const HANDLERS = {
   makeVignette: () => {
     const s = store.spread
     if (s && canMakeVignette(s, prefs.can)) return makeVignette(s)
+  },
+  // F2 (094 §3.2): поле названия текущего разворота в ленте; на обложке и без разворотов — молчим, как серый пункт.
+  renameSpread: () => {
+    const s = store.spread
+    if (!store.onCover && s && prefs.can('names')) naming.start(s.id)
   },
   // Окно «Настроить виньетку» для текущего листа; не виньетка или функции нет на уровне — молчим.
   vigSetup: () => {

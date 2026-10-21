@@ -25,6 +25,7 @@ const (
 	v12Shape = "testdata/compat/v12-shape.json" // 0.17
 	v13Shape = "testdata/compat/v13-shape.json" // 0.18 (тег v0.18.0)
 	v14Shape = "testdata/compat/v14-shape.json" // 0.20 (тег v0.20.0)
+	v15Shape = "testdata/compat/v15-shape.json" // 0.21 (тег v0.21.0)
 )
 
 func readShape(t *testing.T, path string) map[string]string {
@@ -128,6 +129,18 @@ func TestV15ReadableBy020(t *testing.T) {
 	readableBy(t, "0.20", v14Shape, p, dir, map[string]string{
 		"$.bins": "array", "$.bins[]": "object", "$.bins[].id": "string", "$.bins[].name": "string", "$.marks[].bins": "array",
 		"$.fonts": "object", "$.fonts{}": "object", "$.fonts{}.name": "string"})
+}
+
+// Файл формата 16 держит форму ключей, известных 0.21 (097 §3): 0.21 видит номер 16 и говорит
+// «сохранён более новой версией», а не «повреждён». Новые ключи 16 — отдельные фото loose — в
+// файле есть, в снимке 0.21 нет.
+func TestReadableByV15(t *testing.T) {
+	dir := testkit.TempDir(t)
+	p := binsProject(dir)
+	p.Loose = []model.LooseAdd{{ID: "3fa9c01b7d22", At: 1792501500, Files: []model.LooseFile{{Path: filepath.Join(dir, "Телефон", "1.jpg")}}}}
+	readableBy(t, "0.21", v15Shape, p, dir, map[string]string{
+		"$.loose": "array", "$.loose[]": "object", "$.loose[].id": "string", "$.loose[].at": "number",
+		"$.loose[].files": "array", "$.loose[].files[]": "object", "$.loose[].files[].path": "string", "$.loose[].files[].abs": "string"})
 }
 
 // readableBy — общее тело: снимок формы выпуска rel (shapePath) против типов FileProject, полного

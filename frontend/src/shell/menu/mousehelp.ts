@@ -17,6 +17,11 @@ export const MOUSE_HELP: readonly MouseRow[] = [
   { show: 'Колесо, Shift+колесо, тачпад', label: 'Прокрутить ряд разворотов', group: 'canvas' },
   { show: 'Колесо, Shift+колесо (в увеличении)', label: 'Двигать лист по вертикали и по горизонтали', group: 'canvas', feature: 'zoom' },
   { show: 'Ctrl+колесо, щипок тачпада', label: 'Масштаб к курсору', group: 'canvas', feature: 'zoom' },
+  // 095: при переносе — без feature, на всех уровнях (перенос есть всегда).
+  { show: 'Колесо при переносе фото', label: 'Листать развороты, не отпуская фото', group: 'canvas' },
+  { show: 'Фото или разворот у края ленты', label: 'Лента прокручивается сама', group: 'spreads' },
+  // 096: живая перестановка — на всех уровнях, как и прежний перенос разворота.
+  { show: 'Перетащить разворот в ленте или в «Все развороты»', label: 'Поменять порядок разворотов; Esc — отмена', group: 'spreads' },
   { show: 'Ctrl+колесо, Alt+колесо над лентой', label: 'Размер миниатюр', group: 'photos' },
   { show: 'Перетащить соседний разворот, Пробел+мышь', label: 'Прокрутить ряд разворотов', group: 'canvas' },
   { show: 'Зажатое колёсико', label: 'Двигать увеличенный разворот', group: 'canvas', feature: 'zoom' },
@@ -26,6 +31,9 @@ export const MOUSE_HELP: readonly MouseRow[] = [
   // Спека 015: способ выделения, а не инструмент — без feature, на всех уровнях.
   { show: 'Alt+щелчок', label: 'Выбрать объект под ним; ещё раз — следующий, по кругу', group: 'canvas' },
   { show: 'Двойной щелчок по номеру в ленте', label: 'Название разворота', group: 'spreads', feature: 'names' },
+  // 094: простой щелчок по зазору и черте больше не режет и не клеит — только с Ctrl (на Mac ⌘).
+  { show: 'Ctrl+щелчок между фото в ленте', label: 'Разрезать разворот (на Mac — ⌘)', group: 'spreads', feature: 'timeline' },
+  { show: 'Ctrl+щелчок по черте между разворотами', label: 'Склеить развороты (на Mac — ⌘)', group: 'spreads', feature: 'timeline' },
   { show: 'Двойной щелчок по тексту', label: 'Править текст', group: 'text', feature: 'text' },
   { show: 'Esc / Ctrl+Enter (в тексте)', label: 'Закончить правку текста', group: 'text', feature: 'text' },
   { show: 'Shift (поворот текста)', label: 'Угол кратен 15°', group: 'text', feature: 'textRotate' },

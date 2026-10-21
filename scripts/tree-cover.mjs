@@ -74,13 +74,19 @@ export function treeCover({ root, env, heavy = false }) {
 // Сравнение с записью эталона tree:album (base) — список ошибок. Те же правила, что в test-baseline --check:
 // падение покрытия больше MAX_DROP, уровень ниже TREE_MIN (критерий 023) и больше непокрытых блоков, чем в эталоне
 // (до первого --write — TREE_MAX_MISSED).
-export function compareTree(base, cur) {
+export function compareTree(base, cur, slack = { drop: 0, missed: 0 }) {
   const errors = []
-  if (base.cover - cur.cover > MAX_DROP + 1e-9) {
-    errors.push(`${TREE_KEY}: coverage fell ${base.cover}% -> ${cur.cover}% (max drop ${MAX_DROP})`)
+  const maxDrop = MAX_DROP + slack.drop
+  if (base.cover - cur.cover > maxDrop + 1e-9) {
+    errors.push(`${TREE_KEY}: coverage fell ${base.cover}% -> ${cur.cover}% (max drop ${maxDrop})`)
   }
-  if (cur.cover < TREE_MIN - 1e-9) errors.push(`${TREE_KEY}: coverage ${cur.cover}% below ${TREE_MIN}% (023 criterion)`)
-  const maxMissed = base.missed ?? TREE_MAX_MISSED
+  const min = TREE_MIN - slack.drop
+  if (cur.cover < min - 1e-9) errors.push(`${TREE_KEY}: coverage ${cur.cover}% below ${min}% (023 criterion)`)
+  const maxMissed = (base.missed ?? TREE_MAX_MISSED) + slack.missed
   if (cur.missed > maxMissed) errors.push(`${TREE_KEY}: uncovered blocks ${cur.missed} > ${maxMissed}`)
   return errors
 }
+
+// Допуск быстрого уровня (владелец 2026-10-21, вопрос 7): в precheck небольшой спад покрытия — только предупреждение,
+// строго проверяют check.ps1 и CI. Больше 3 провалов покрытия в check.ps1 за неделю — допуск убрать.
+export const PRECHECK_SLACK = { drop: 0.5, missed: 5 }

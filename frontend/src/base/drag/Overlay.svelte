@@ -1,5 +1,6 @@
 <script lang="ts">
   import { drag } from './drag.svelte'
+  import { HINT_TEXT, wheelHint } from './wheelhint.svelte'
   import { store } from '../core/store.svelte'
   import { thumbUrl } from '../core/media'
   import Icon from '../ui/Icon.svelte'
@@ -19,6 +20,7 @@
         >{#if drag.over}<Icon name="plus" size={12} stroke={3} />{/if}{#if ids.length > 1}<span>{ids.length}</span>{/if}</span
       >
     {/if}
+    {#if wheelHint.show}<div class="hint">{HINT_TEXT}</div>{/if}
   </div>
 {/if}
 
@@ -73,6 +75,20 @@
     align-items: center;
     justify-content: center;
     gap: 1px;
+  }
+  /* Подсказка колеса (095 §В): под стопкой, в стиле тоста, мышь не ловит (наследует от .ghost-stack) */
+  .hint {
+    position: absolute;
+    left: 0;
+    top: 100%;
+    margin-top: 10px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(32, 32, 34, 0.92);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-size: 12px;
+    white-space: nowrap;
   }
   .toast {
     position: fixed;

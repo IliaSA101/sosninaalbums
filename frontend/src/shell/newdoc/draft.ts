@@ -4,11 +4,12 @@
 export interface DraftView {
   path: string
   folders: readonly unknown[]
+  loose?: readonly unknown[] // отдельные фото (097) — тоже содержимое
   spreads: readonly unknown[]
 }
 
 export const DRAFT_NOTE = 'Прежний черновик — в резервных копиях'
 
 export function hadDraft(v: DraftView): boolean {
-  return v.path === '' && (v.spreads.length > 0 || v.folders.length > 0)
+  return v.path === '' && (v.spreads.length > 0 || v.folders.length > 0 || (v.loose ?? []).length > 0)
 }

@@ -18,7 +18,7 @@ func scannedDir(t *testing.T) (s *Scanner, dir string) {
 		testkit.JPEG(t, dir, n, 40, 30)
 	}
 	s = NewScanner()
-	if _, _, err := s.Scan(context.Background(), []string{dir}, func([]Photo, ScanProgress, bool) {}); err != nil {
+	if _, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {}); err != nil {
 		t.Fatal(err)
 	}
 	return s, dir
@@ -26,7 +26,7 @@ func scannedDir(t *testing.T) (s *Scanner, dir string) {
 
 func changed(t *testing.T, s *Scanner, folders ...string) bool {
 	t.Helper()
-	ch, took, err := s.Changed(context.Background(), folders)
+	ch, took, err := s.Changed(context.Background(), Sources{Folders: folders})
 	if err != nil || took < 0 {
 		t.Fatalf("Changed: %v, %v", took, err)
 	}
@@ -58,7 +58,7 @@ func TestScannerChanged(t *testing.T) {
 	t.Run("пустая папка после Scan", func(t *testing.T) {
 		dir := testkit.TempDir(t)
 		s := NewScanner()
-		if _, _, err := s.Scan(context.Background(), []string{dir}, func([]Photo, ScanProgress, bool) {}); err != nil {
+		if _, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {}); err != nil {
 			t.Fatal(err)
 		}
 		if changed(t, s, dir) {
@@ -172,7 +172,7 @@ func TestScannerChangedSidecar(t *testing.T) {
 			t.Fatal("новый сайдкар не замечен")
 		}
 		// Перечитали с сайдкаром: отпечаток снова актуален.
-		if _, _, err := s.Scan(context.Background(), []string{dir}, func([]Photo, ScanProgress, bool) {}); err != nil {
+		if _, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {}); err != nil {
 			t.Fatal(err)
 		}
 		if changed(t, s, dir) {
@@ -182,14 +182,14 @@ func TestScannerChangedSidecar(t *testing.T) {
 		if !changed(t, s, dir) {
 			t.Fatal("правка сайдкара (размер) не замечена")
 		}
-		if _, _, err := s.Scan(context.Background(), []string{dir}, func([]Photo, ScanProgress, bool) {}); err != nil {
+		if _, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {}); err != nil {
 			t.Fatal(err)
 		}
 		touch(t, side, time.Hour) // только время
 		if !changed(t, s, dir) {
 			t.Fatal("правка сайдкара (время) не замечена")
 		}
-		if _, _, err := s.Scan(context.Background(), []string{dir}, func([]Photo, ScanProgress, bool) {}); err != nil {
+		if _, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {}); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Remove(side); err != nil {
@@ -219,14 +219,14 @@ func TestScannerChangedScope(t *testing.T) {
 		s, dir := scannedDir(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if _, _, err := s.Scan(ctx, []string{dir}, func([]Photo, ScanProgress, bool) {}); err == nil {
+		if _, _, err := s.Scan(ctx, Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {}); err == nil {
 			t.Fatal("отменённый Scan без ошибки")
 		}
 		if !changed(t, s, dir) {
 			t.Fatal("после отменённого Scan changed = false")
 		}
 		// Следующий законченный Scan снова даёт актуальный отпечаток.
-		if _, _, err := s.Scan(context.Background(), []string{dir}, func([]Photo, ScanProgress, bool) {}); err != nil {
+		if _, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {}); err != nil {
 			t.Fatal(err)
 		}
 		if changed(t, s, dir) {
@@ -237,7 +237,7 @@ func TestScannerChangedScope(t *testing.T) {
 		s, dir := scannedDir(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if _, _, err := s.Changed(ctx, []string{dir}); err == nil {
+		if _, _, err := s.Changed(ctx, Sources{Folders: []string{dir}}); err == nil {
 			t.Fatal("отменённый Changed без ошибки")
 		}
 		if changed(t, s, dir) {
@@ -249,12 +249,12 @@ func TestScannerChangedScope(t *testing.T) {
 func TestFingerprintOfOrderFree(t *testing.T) {
 	a := scanFile{key: "/x/a.jpg", size: 1, mod: 2}
 	b := scanFile{key: "/x/b.jpg", size: 3, mod: 4, side: sidecar{path: "/x/b.xmp", size: 5, mod: 6}}
-	f1 := fingerprintOf([]string{"/X"}, []scanFile{a, b})
-	f2 := fingerprintOf([]string{"/x"}, []scanFile{b, a})
+	f1 := fingerprintOf(Sources{Folders: []string{"/X"}}, []scanFile{a, b})
+	f2 := fingerprintOf(Sources{Folders: []string{"/x"}}, []scanFile{b, a})
 	if f1 != f2 {
 		t.Fatalf("порядок или регистр папки меняет отпечаток: %+v %+v", f1, f2)
 	}
-	if fingerprintOf([]string{"/x"}, nil) == f1 {
+	if fingerprintOf(Sources{Folders: []string{"/x"}}, nil) == f1 {
 		t.Fatal("пустой набор совпал с непустым")
 	}
 }

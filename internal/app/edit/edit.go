@@ -13,6 +13,7 @@ import (
 	"log"
 	"reflect"
 	"runtime/debug"
+	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -22,7 +23,6 @@ import (
 type Host struct {
 	Editor      func() *album.Editor
 	Changed     func(model.View) model.View          // после правки: автосохранение, событие view, недостающие
-	Out         func(model.View) model.View          // ответ без правки — в цепочку видов (075), без автосохранения
 	Notice      func(text string)                    // тост пользователю
 	Infos       func(ids []string) []model.PhotoInfo // сведения о фото ленты
 	InfosOrRefs func(ids []string) []model.PhotoInfo // из ленты, а для фото альбома — из проекта
@@ -55,7 +55,6 @@ var (
 
 func (m *Methods) editor() *album.Editor                      { return m.h.Editor() }
 func (m *Methods) changed(v model.View) model.View            { return m.h.Changed(v) }
-func (m *Methods) out(v model.View) model.View                { return m.h.Out(v) }
 func (m *Methods) infos(ids []string) []model.PhotoInfo       { return m.h.Infos(ids) }
 func (m *Methods) templateList() []model.Template             { return m.h.Templates() }
 func (m *Methods) infosOrRefs(ids []string) []model.PhotoInfo { return m.h.InfosOrRefs(ids) }
@@ -106,4 +105,33 @@ func GuardErr(name string, err *error) {
 		log.Printf("ПАНИКА в %s: %v\n%s", name, r, debug.Stack())
 		*err = ErrInternal
 	}
+}
+
+// PhotosFor — сведения о фото для правки op через get (InfosOrRefs). Не найдено ни одного из
+// непустого ids — ErrNoPhoto; не найдена часть — правка идёт с найденными. В обоих случаях —
+// строка журнала без ID и путей (092). Пустой ids — nil без ошибки: пустой список не просьба.
+func PhotosFor(op string, ids []string, get func([]string) []model.PhotoInfo) ([]model.PhotoInfo, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	infos := get(ids)
+	// Счёт по уникальным ID: во входе бывают повторы.
+	uniq := slices.Compact(slices.Sorted(slices.Values(ids)))
+	found := make(map[string]struct{}, len(infos))
+	for _, p := range infos {
+		found[p.ID] = struct{}{}
+	}
+	miss := 0
+	for _, id := range uniq {
+		if _, ok := found[id]; !ok {
+			miss++
+		}
+	}
+	if miss > 0 {
+		log.Printf("перенос: %s — не найдено %d из %d фото", op, miss, len(uniq))
+	}
+	if len(infos) == 0 {
+		return nil, ErrNoPhoto
+	}
+	return infos, nil
 }

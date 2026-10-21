@@ -38,6 +38,8 @@ type FileProject struct {
 	// SpreadGuideAbs — запасной абсолютный (как guide/guideAbs обложки).
 	SpreadGuide    string `json:"spreadGuide,omitempty"`
 	SpreadGuideAbs string `json:"spreadGuideAbs,omitempty"`
+	// Loose — отдельные фото по добавлениям (v16, 097; loose.go): файл записан как папка.
+	Loose []FileLoose `json:"loose,omitempty"`
 }
 
 // FileFolder — папка: path (относительный или абсолютный) и запасной abs.
@@ -169,7 +171,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 		}
 	}
 	v1 := p.From() < 2
-	if err := loadFolders(p, f.Folders, base, v1); err != nil {
+	if err := loadSources(p, &f, base, v1); err != nil {
 		return nil, err
 	}
 	fixCoverAndGuide(p, &f, base, v1)
@@ -205,8 +207,21 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	p.FitStickers()
 	p.LoadOrder()
 	bins := decodeBins(f.Bins)
-	p.SetLoaded(model.Side{Marks: decodeMarks(f.Marks, base, p.Folders, model.BinSet(bins)), Bins: bins})
+	p.SetLoaded(model.Side{Marks: decodeMarks(f.Marks, base, p.Folders, p.LooseFiles(), model.BinSet(bins)), Bins: bins})
 	return p, nil
+}
+
+// loadSources — папки и отдельные фото из файла. Источники не пересекаются (093-4): любая версия,
+// и файл, поправленный руками.
+func loadSources(p *model.Project, f *FileProject, base string, v1 bool) error {
+	if err := loadFolders(p, f.Folders, base, v1); err != nil {
+		return err
+	}
+	loadLoose(p, f.Loose, base, v1)
+	if merged, _ := p.FoldSources(paths.Linked); merged > 0 {
+		log.Printf("папки проекта: вложенных слито %d", merged)
+	}
+	return nil
 }
 
 // loadPhotos — фото из файла. Устройство в пути на этой ОС (paths.ErrDevice, 073-10) — фото

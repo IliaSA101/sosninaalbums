@@ -1,4 +1,5 @@
 method AddDecorPNG(arg1:string,arg2:string):Promise<APP.DecorItem>
+method AddFilePaths(arg1:Array<string>):Promise<APP.LooseResult>
 method AddFolderPath(arg1:string):Promise<model.View>
 method AddPackFile():Promise<APP.PackAdd>
 method AddPackPath(arg1:string):Promise<APP.PackAdd>
@@ -26,6 +27,7 @@ method CancelCollect():Promise<void>
 method CancelExport():Promise<void>
 method CancelLibrary():Promise<void>
 method CheckFolders(arg1:boolean):Promise<void>
+method ChooseFiles():Promise<APP.LooseResult>
 method ChooseFolder():Promise<model.View>
 method ClearBackdrop(arg1:string,arg2:string):Promise<model.View>
 method ClearCoverGuide():Promise<model.View>
@@ -75,6 +77,7 @@ method ImportTemplatesPath(arg1:string):Promise<APP.TplLoad>
 method Keymap():Promise<keymap.View>
 method LayoutChoices(arg1:string):Promise<model.Choices>
 method LibraryPacks():Promise<APP.PackList>
+method LogUI(arg1:string):Promise<void>
 method Marks():Promise<Record<string, model.MarkView>>
 method MergeSpreads(arg1:string):Promise<model.View>
 method MirrorGrid(arg1:string,arg2:string):Promise<model.View>
@@ -117,6 +120,7 @@ method RelinkFolder():Promise<APP.RelinkResult>
 method RelinkFolderPath(arg1:string):Promise<APP.RelinkResult>
 method RemoveFolder(arg1:string):Promise<model.View>
 method RemoveHotkey(arg1:string,arg2:string):Promise<keymap.View>
+method RemoveLoose(arg1:string,arg2:string):Promise<model.View>
 method RemovePack(arg1:string):Promise<APP.PackList>
 method RemovePhotos(arg1:Array<string>):Promise<model.View>
 method RenameBin(arg1:string,arg2:string):Promise<model.View>
@@ -303,6 +307,16 @@ type APP.LibraryUpdate
   updated: number
   skipped: DecorSkip[]
   bytes: number
+type APP.LooseResult
+  view: model.View
+  batch: string
+  added: number
+  inFolder: number
+  folder: string
+  dup: number
+  over: number
+  skipped: number
+  bad: number
 type APP.NamesFile
   text: string
   file: string
@@ -395,6 +409,7 @@ type APP.TplSave
 type collect.Info
   photos: number
   extra: number
+  loose: number
   own: number
   guides: number
   missing: number
@@ -710,6 +725,13 @@ type model.GuideView
   warn?: string
   note?: string
   lines?: GuideLine[]
+type model.LooseFileView
+  path: string
+  photo: string
+type model.LooseView
+  id: string
+  at: number
+  files: LooseFileView[]
 type model.MarkPatch
   rating?: number
   step?: number
@@ -959,6 +981,7 @@ type model.View
   spreads: SpreadView[]
   settings: Settings
   folders: string[]
+  loose: LooseView[]
   path: string
   dirty: boolean
   canUndo: boolean

@@ -8,6 +8,7 @@
   import MarkBar from '../marks/MarkBar.svelte'
   import MarkFilter from '../marks/MarkFilter.svelte'
   import FolderMenu from '../folders/FolderMenu.svelte'
+  import { hasSources } from '../folders/folders'
   import BinMenu from '../bins/BinMenu.svelte'
   import { binHost, moreBinDrop } from '../bins/bins'
   import { binsel } from '../bins/binsel.svelte'
@@ -37,7 +38,7 @@
   const present = $derived(
     [...LEFT, ...RIGHT].filter((id) => {
       if (id === 'fill') return store.view.emptyPlaces > 0
-      if (id === 'bins') return prefs.can('bins') && (store.view.folders.length > 0 || (store.view.bins ?? []).length > 0)
+      if (id === 'bins') return prefs.can('bins') && (hasSources(store.view) || (store.view.bins ?? []).length > 0)
       if (id === 'status') return store.scan.active || loading
       if (id === 'marks') return store.selectedIds.length > 0
       return true

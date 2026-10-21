@@ -72,6 +72,15 @@ describe('eventChord: раскладки', () => {
   })
 })
 
+describe('eventChord: событие без key', () => {
+  it('key не задан: сочетания нет, без исключения', () => {
+    const bad = { code: '', ctrlKey: false, shiftKey: false, altKey: false, metaKey: false } as unknown as ChordEvent
+    expect(eventChord(bad)).toBeNull()
+    expect(recordChord(bad)).toBeNull()
+    expect(eventChord({ ...bad, code: 'KeyA', ctrlKey: true })).toBeNull()
+  })
+})
+
 describe('eventChord: цифровой блок', () => {
   it('NumLock включён: цифры и знаки приводятся к основному ряду', () => {
     expect(eventChord(ev({ key: '5', code: 'Numpad5' }))).toBe('Digit5')

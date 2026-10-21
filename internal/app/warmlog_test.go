@@ -41,7 +41,7 @@ func TestWarmLogsDone(t *testing.T) {
 	for i := range 3 {
 		testkit.JPEG(t, dir, fmt.Sprintf("секрет%d.jpg", i), 60, 40)
 	}
-	if _, err := a.editor().AddFolder(dir); err != nil {
+	if _, _, err := a.editor().AddFolder(dir); err != nil {
 		t.Fatal(err)
 	}
 	a.rescan()

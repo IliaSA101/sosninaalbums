@@ -154,6 +154,7 @@ function codeOfEvent(e: ChordEvent): string | null {
 }
 
 function build(e: ChordEvent, allowModAlt: boolean): string | null {
+  if (typeof e.key !== 'string') return null // синтетическое событие без key: сочетания нет, а не падение в toLowerCase
   if (MODIFIER_KEYS.has(e.key)) return null
   const mac = isMac()
   // Mod — строго основной модификатор платформы: Win на Windows и Ctrl на Mac — не наши (074-20).

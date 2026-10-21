@@ -19,7 +19,7 @@ import { drop as dropOnBin } from '../../panels/bins/binact'
 import { binsel } from '../../panels/bins/binsel.svelte'
 import { filterBin } from '../../panels/bins/bins'
 import { folderfilter } from '../../panels/folders/folderfilter.svelte'
-import { cachedFilterFolders } from '../../panels/folders/folders'
+import { cachedFilterTree } from '../../panels/folders/tree'
 import { libfilter } from '../../panels/marks/libfilter.svelte'
 import { filterPhotos } from '../../panels/marks/marks'
 import { ownMarks } from '../../panels/marks/ownmarks.svelte'
@@ -28,7 +28,7 @@ import { spineNote } from '../../editor/cover/spinenote.svelte'
 import { narrow } from './narrow'
 
 let wired = false
-const filterFolders = cachedFilterFolders()
+const filterFolders = cachedFilterTree()
 
 export function wire() {
   if (wired) return
@@ -41,7 +41,7 @@ export function wire() {
       gridAct.prune(v.spreads)
       dropAsk.prune(v)
       gallery.sync()
-      folderfilter.prune(v.folders)
+      folderfilter.prune(v.folders, v.loose)
       binsel.prune(v.bins ?? []) // удалённая (и отменённая «Новая») подборка больше не показана
       // Корешок обложки пересчитывается от числа разворотов: отметка «X → Y», пока обложку не открыли (032).
       spineNote.see(v.cover?.spine ?? null, store.onCover)
@@ -70,8 +70,8 @@ export function wire() {
     keymapLoaded: (view) => keymap.apply(view),
     marks: () => ownMarks.map,
     order: (photos) => sortPhotos(photos, modes.libSort),
-    // Список папок читаем только при скрытых: без фильтра правка альбома ленту не трогает.
-    folders: (photos) => (folderfilter.active ? filterFolders(store.view.folders, photos, folderfilter.hidden) : photos),
+    // Скрытые — ключи узлов дерева (093): без фильтра правка альбома ленту не трогает.
+    folders: (photos) => (folderfilter.active ? filterFolders(photos, folderfilter.hidden) : photos),
     // Подборка (083): после папок; без неё и на «Простом» — тот же массив.
     bin: (photos) => (binsel.shown ? filterBin(photos, binsel.shown, binsel.index) : photos),
     visible: (photos) => filterPhotos(photos, ownMarks.map, libfilter),

@@ -100,7 +100,8 @@ func (e *exportEnv) names(t *testing.T) []string {
 	}
 	var out []string
 	for _, f := range ents {
-		if strings.HasSuffix(strings.ToLower(f.Name()), ".tmp") {
+		if strings.HasSuffix(strings.ToLower(f.Name()), ".tmp") && !testkit.OwnTmp(f.Name()) {
+			t.Logf("чужой временный файл (антивирус) %s", f.Name())
 			continue
 		}
 		if _, err := os.Lstat(filepath.Join(e.dir, f.Name())); err != nil {
@@ -634,9 +635,9 @@ func TestAppDeleteSpreads(t *testing.T) {
 	}
 }
 
-// App.NewSpread: фото пропали из ленты при пересканировании во время переноса — правки нет,
-// пустой разворот вместо них не создаётся (спека 013).
-func TestNewSpreadUnknownIDsNoop(t *testing.T) {
+// App.NewSpread: фото пропали из ленты при пересканировании во время переноса — ErrNoPhoto
+// (092; до 0.22 была тихая холостая), правки нет, пустой разворот вместо них не создаётся (013).
+func TestNewSpreadUnknownIDsError(t *testing.T) {
 	a := newApp(t)
 	a.emit = func(string, ...any) {}
 	p := model.New()
@@ -644,7 +645,7 @@ func TestNewSpreadUnknownIDsNoop(t *testing.T) {
 	a.ed.Store(mustEditor(t, p, ""))
 	before := a.editor().View()
 	v, err := a.NewSpread(-1, []string{"нет-такого"})
-	if err != nil || v.Rev != before.Rev || len(v.Spreads) != 1 {
+	if !errors.Is(err, errNoPhoto) || v.Rev != before.Rev || len(v.Spreads) != 1 {
 		t.Fatalf("NewSpread с пропавшими фото: %v, rev %d→%d, разворотов %d", err, before.Rev, v.Rev, len(v.Spreads))
 	}
 	if got := a.editor().View(); got.Rev != before.Rev || got.Dirty {

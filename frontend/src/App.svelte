@@ -37,6 +37,8 @@
   import PhotoPreview from './editor/photo/PhotoPreview.svelte'
   import { store } from './base/core/store.svelte'
   import { autocheck } from './panels/folders/autocheck'
+  import { foldersUi } from './panels/folders/foldersui.svelte'
+  import RemoveAsk from './panels/folders/RemoveAsk.svelte'
   import { jobs } from './base/core/jobs.svelte'
   import { gridAct } from './panels/layouts/gridact.svelte'
   import { dropAsk } from './base/drag/dropgrid.svelte'
@@ -58,7 +60,12 @@
     store.init()
     // Сверка папок по фокусу и таймеру (088): удалённые в Проводнике файлы уходят из ленты, новые появляются.
     autocheck.start(window, document)
-    return () => autocheck.stop()
+    // 093: папка добавлена или уже была — окно «Папки» открывается на ней (кнопка может быть в «⋯», поэтому не в FolderMenu).
+    const offAdded = foldersUi.listen()
+    return () => {
+      autocheck.stop()
+      offAdded()
+    }
   })
 
   // Зона последнего нажатия: Ctrl+A и Del действуют по ней (библиотека или холст с лентой альбома).
@@ -170,6 +177,7 @@
 <VigDialog />
 <VigTplSave />
 <DecorDialog />
+<RemoveAsk />
 <PhotoMenu />
 <PhotoPreview />
 <Spot />

@@ -70,7 +70,7 @@ func TestScanShot(t *testing.T) {
 
 	s := NewScanner()
 	for pass := 1; pass <= 2; pass++ { // второй проход — из памяти сканера
-		photos, _, err := s.Scan(context.Background(), []string{dir}, func([]Photo, ScanProgress, bool) {})
+		photos, _, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func([]Photo, ScanProgress, bool) {})
 		if err != nil || len(photos) != len(want) {
 			t.Fatalf("проход %d: фото %d, ошибка %v", pass, len(photos), err)
 		}

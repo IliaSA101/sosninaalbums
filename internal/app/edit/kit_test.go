@@ -14,7 +14,6 @@ type kit struct {
 	*Methods
 	ed        *album.Editor
 	calls     int
-	outs      int // ответы без правки (Host.Out): в цепочку видов, но не в Changed
 	notices   []string
 	asked     [][]string
 	panicNext bool
@@ -49,7 +48,6 @@ func newKit(t testing.TB, p *model.Project) *kit {
 			return ed
 		},
 		Changed: func(v model.View) model.View { k.calls++; return v },
-		Out:     func(v model.View) model.View { k.outs++; return v },
 		Notice:  func(s string) { k.notices = append(k.notices, s) },
 		Infos:   infos,
 		InfosOrRefs: func(ids []string) []model.PhotoInfo {

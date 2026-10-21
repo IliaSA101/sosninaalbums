@@ -8,6 +8,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 )
 
 // lowDPILimit — ниже этого эффективного dpi фото печатается мыльно.
@@ -73,6 +74,7 @@ func BuildView(p *model.Project, st State) model.View {
 		Product:  p.Product,
 		Settings: p.Settings,
 		Folders:  append([]string{}, p.Folders...),
+		Loose:    looseView(p),
 		Path:     st.Path,
 		Dirty:    st.Dirty,
 		CanUndo:  st.CanUndo,
@@ -233,4 +235,18 @@ func spreadView(f *fields, s *model.Spread, l Laid) (sv model.SpreadView) {
 	sv.Captions, sv.Stubs = captionViews(f, s, s.Photos, l.cur.Rects, nil, nil)
 	sv.Variant, sv.Variants, sv.More, sv.Rearranged, sv.Pages = l.variant, l.variants, l.more, l.rearranged, l.pages
 	return sv
+}
+
+// looseView — отдельные фото для интерфейса (097): всегда список; ID фото — как у ленты
+// (library.IDFor), запасной путь не идёт.
+func looseView(p *model.Project) []model.LooseView {
+	out := make([]model.LooseView, 0, len(p.Loose))
+	for _, a := range p.Loose {
+		lv := model.LooseView{ID: a.ID, At: a.At, Files: make([]model.LooseFileView, 0, len(a.Files))}
+		for _, f := range a.Files {
+			lv.Files = append(lv.Files, model.LooseFileView{Path: f.Path, Photo: library.IDFor(f.Path)})
+		}
+		out = append(out, lv)
+	}
+	return out
 }

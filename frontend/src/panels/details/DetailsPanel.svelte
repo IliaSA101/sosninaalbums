@@ -8,6 +8,7 @@
   import PhotoAbout from '../../editor/photoprops/PhotoAbout.svelte'
   import { libPhotoOf } from '../../editor/photoprops/aboutload.svelte'
   import { store } from '../../base/core/store.svelte'
+  import { edgeScroll } from '../../base/drag/edgescroll'
   import { newSheetSize, pageSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
@@ -85,7 +86,7 @@
 
 <!-- Ширина анимируется, содержимое фиксированной ширины 400 px: текст не перетекает. -->
 <aside class="details" class:open={modes.details} inert={!modes.details} aria-label="Панель деталей">
-  <div class="scroll" bind:this={scroller}>
+  <div class="scroll" bind:this={scroller} use:edgeScroll={{ axis: 'y' }}>
     <!-- Карточка свойств выделенного: первый блок прокрутки, сворачивается (028 Б); на виньетке в ней раздел «Виньетка» -->
     {#if modes.details}<Inspector docked {reveal} />{/if}
     {#if libId}

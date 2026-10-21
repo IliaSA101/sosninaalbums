@@ -30,7 +30,7 @@ func TestAddPhotosKeepsSize(t *testing.T) {
 	a.emit = func(string, ...any) {}
 	dir := testkit.TempDir(t)
 	path := testkit.JPEG(t, dir, "a.jpg", 40, 30)
-	if _, err := a.editor().AddFolder(dir); err != nil {
+	if _, _, err := a.editor().AddFolder(dir); err != nil {
 		t.Fatal(err)
 	}
 	a.rescan()
@@ -61,14 +61,14 @@ func TestRescanReadsFoldersUnderLock(t *testing.T) {
 	testkit.JPEG(t, dirA, "a.jpg", 20, 10)
 	testkit.JPEG(t, dirB, "b.jpg", 20, 10)
 	ed := a.editor()
-	if _, err := ed.AddFolder(dirA); err != nil {
+	if _, _, err := ed.AddFolder(dirA); err != nil {
 		t.Fatal(err)
 	}
 	a.rescanMu.Lock()
 	done := make(chan struct{})
 	go func() { a.rescan(); close(done) }()
 	time.Sleep(50 * time.Millisecond) // rescan упёрся в замок
-	if _, err := ed.AddFolder(dirB); err != nil {
+	if _, _, err := ed.AddFolder(dirB); err != nil {
 		t.Fatal(err)
 	}
 	a.rescanMu.Unlock()
@@ -103,7 +103,7 @@ func TestRescanResetsThumbs(t *testing.T) {
 		testkit.JPEG(t, dir, fmt.Sprintf("p%03d.jpg", i), 600, 400)
 	}
 	ed := a.editor()
-	if _, err := ed.AddFolder(dir); err != nil {
+	if _, _, err := ed.AddFolder(dir); err != nil {
 		t.Fatal(err)
 	}
 	a.rescan()
@@ -202,12 +202,12 @@ func TestRescanGeneration(t *testing.T) {
 		testkit.JPEG(t, dirB, fmt.Sprintf("b%d.jpg", i), 20, 10)
 	}
 	ed := a.editor()
-	if _, err := ed.AddFolder(dirA); err != nil {
+	if _, _, err := ed.AddFolder(dirA); err != nil {
 		t.Fatal(err)
 	}
 	a.rescan() // первое сканирование ещё идёт, когда начнётся второе
 	ed.RemoveFolder(dirA)
-	if _, err := ed.AddFolder(dirB); err != nil {
+	if _, _, err := ed.AddFolder(dirB); err != nil {
 		t.Fatal(err)
 	}
 	a.rescan()

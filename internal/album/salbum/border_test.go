@@ -73,7 +73,7 @@ func TestSalbumBorderRoundTrip(t *testing.T) {
 	want := borders(p)
 	path := filepath.Join(dir, "a.salbum")
 	first, q := saveLoad(t, p, path)
-	if f := fileJSON(t, path); f.Version != 15 || bytes.Count(first, []byte(`"border"`)) != 6 || bytes.Count(first, []byte(`"fade"`)) != 2 {
+	if f := fileJSON(t, path); f.Version != 16 || bytes.Count(first, []byte(`"border"`)) != 6 || bytes.Count(first, []byte(`"fade"`)) != 2 {
 		t.Fatalf("файл v%d, рамочек %d, прозрачностей %d:\n%s", f.Version, bytes.Count(first, []byte(`"border"`)), bytes.Count(first, []byte(`"fade"`)), first)
 	}
 	if got := borders(q); !reflect.DeepEqual(got, want) {
@@ -116,7 +116,7 @@ func TestV13OpensWithoutBorders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := bytes.Replace(data, []byte(`"version": 15,`), []byte(`"version": 13,`), 1)
+	src := bytes.Replace(data, []byte(`"version": 16,`), []byte(`"version": 13,`), 1)
 	if bytes.Equal(src, data) {
 		t.Fatal("заготовка v13 без номера версии")
 	}
@@ -145,7 +145,7 @@ func TestV13OpensWithoutBorders(t *testing.T) {
 	if bak, err := os.ReadFile(path + ".v13.bak"); err != nil || !bytes.Equal(bak, src) {
 		t.Fatalf(".v13.bak: %v", err)
 	}
-	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"border"`)) || bytes.Contains(out, []byte(`"fade"`)) || fileJSON(t, path).Version != 15 {
+	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"border"`)) || bytes.Contains(out, []byte(`"fade"`)) || fileJSON(t, path).Version != 16 {
 		t.Fatalf("запись v13:\n%s", out)
 	}
 }

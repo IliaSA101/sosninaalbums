@@ -24,6 +24,9 @@ vi.stubGlobal('window', globalThis)
 const { store } = await import('../../base/core/store.svelte')
 const { wire } = await import('./wire')
 const { folderfilter } = await import('../../panels/folders/folderfilter.svelte')
+const { buildTree, findNode, nodeKey } = await import('../../panels/folders/tree')
+// Узел дерева папки по текущим папкам и фото store (093: фильтр хранит узлы, а не папки списка).
+const node = (dir: string) => findNode(buildTree(store.view.folders, store.photos), nodeKey(dir))!
 const { libfilter } = await import('../../panels/marks/libfilter.svelte')
 
 const FOLDERS = ['D:/a', 'D:/b', 'D:/c']
@@ -50,7 +53,7 @@ describe('folderfilter в ленте', () => {
   })
 
   it('правки без смены папок и фото — тот же массив ленты (без пересчёта)', () => {
-    folderfilter.toggle('D:/b')
+    folderfilter.toggle(node('D:/b'))
     const first = store.inFolders
     const vis = store.visible
     store.apply(view(2, [...FOLDERS], { spreads: [{ id: 's', photos: ['a1'] }] }) as never)
@@ -58,12 +61,12 @@ describe('folderfilter в ленте', () => {
     expect(store.inFolders).toBe(first)
     expect(store.visible).toBe(vis)
     // смена скрытых — новый массив
-    folderfilter.toggle('D:/c')
+    folderfilter.toggle(node('D:/c'))
     expect(store.inFolders).not.toBe(first)
   })
 
   it('скрытая папка уходит из ленты сразу; «Показать все» возвращает', () => {
-    folderfilter.toggle('D:/b')
+    folderfilter.toggle(node('D:/b'))
     expect(ids(store.visible)).toEqual(['a1', 'a2', 'c1'])
     expect(ids(store.inFolders)).toEqual(['a1', 'a2', 'c1'])
     folderfilter.showAll()
@@ -72,7 +75,7 @@ describe('folderfilter в ленте', () => {
 
   it('«Не в альбоме» и отметки считаются по показанным папкам', () => {
     store.apply(view(2, FOLDERS, { spreads: [{ id: 's', photos: ['a1'] }] }) as never)
-    folderfilter.toggle('D:/c')
+    folderfilter.toggle(node('D:/c'))
     store.filter = 'unused'
     expect(ids(store.free)).toEqual(['a2', 'b1'])
     expect(ids(store.visible)).toEqual(['a2', 'b1'])
@@ -81,20 +84,20 @@ describe('folderfilter в ленте', () => {
   it('выделенное в скрытой папке не входит в selectedIds и в Ctrl+A-набор', () => {
     store.selected.add('a1')
     store.selected.add('b1')
-    folderfilter.toggle('D:/b')
+    folderfilter.toggle(node('D:/b'))
     expect(store.selectedIds).toEqual(['a1'])
   })
 
   it('скрыты все папки — лента пуста', () => {
-    for (const f of FOLDERS) folderfilter.toggle(f)
+    for (const f of FOLDERS) folderfilter.toggle(node(f))
     expect(store.visible).toEqual([])
-    expect(folderfilter.allHidden(store.view.folders)).toBe(true)
+    expect(folderfilter.allHidden(store.inFolders.length, store.photos.length)).toBe(true)
   })
 })
 
 describe('автосборка и заполнение мест при скрытой папке', () => {
   it('автосборка без выделения берёт только показанные, filtered: true', () => {
-    folderfilter.toggle('D:/a')
+    folderfilter.toggle(node('D:/a'))
     store.openAuto()
     expect(store.autoDraft).toMatchObject({ ids: ['b1', 'c1'], filtered: true, from: 'free' })
   })
@@ -105,20 +108,20 @@ describe('автосборка и заполнение мест при скры�
   })
 
   it('автосборка уходит в Go только с показанными', async () => {
-    folderfilter.toggle('D:/a')
+    folderfilter.toggle(node('D:/a'))
     store.openAuto()
     await store.autoBuild(1, RANGE)
     expect(calls).toEqual([{ name: 'build', ids: ['b1', 'c1'] }])
   })
 
   it('заполнение мест — только показанные', async () => {
-    folderfilter.toggle('D:/c')
+    folderfilter.toggle(node('D:/c'))
     await store.fillPlaces()
     expect(calls).toEqual([{ name: 'fill', ids: ['a1', 'a2', 'b1'] }])
   })
 
   it('все папки скрыты — Go не зовём, тост «Под фильтр не подходит…»', async () => {
-    for (const f of FOLDERS) folderfilter.toggle(f)
+    for (const f of FOLDERS) folderfilter.toggle(node(f))
     await store.fillPlaces()
     expect(calls).toEqual([])
     expect(store.toast?.text).toBe('Под фильтр не подходит ни одно свободное фото')
@@ -127,35 +130,45 @@ describe('автосборка и заполнение мест при скры�
 
 describe('жизнь фильтра', () => {
   it('убрали скрытую папку — забыта; Ctrl+Z (папка вернулась) — показана', () => {
-    folderfilter.toggle('D:/b')
+    folderfilter.toggle(node('D:/b'))
     store.apply(view(2, ['D:/a', 'D:/c']) as never)
     expect(folderfilter.active).toBe(false)
     store.apply(view(3, FOLDERS) as never)
     expect(ids(store.visible)).toHaveLength(4)
   })
 
-  it('осталась одна папка — фильтр снят', () => {
-    folderfilter.toggle('D:/b')
+  // 093: при одной папке фильтр не снимается — скрыть можно подпапку (054 сбрасывал: при одной папке скрывать было нечего).
+  it('осталась одна папка — скрытое под ней остаётся, остальное забыто', () => {
+    folderfilter.toggle(node('D:/b'))
+    folderfilter.toggle(node('D:/c'))
     store.apply(view(2, ['D:/b']) as never)
-    expect(folderfilter.active).toBe(false)
+    expect([...folderfilter.hidden]).toEqual([nodeKey('D:/b')])
+  })
+
+  it('скрыта подпапка — уходят только её фото, фото папки остаются', () => {
+    store.photos = [...store.photos, ph('x1', 'D:/b/x')] as never
+    folderfilter.toggle(node('D:/b/x'))
+    expect(ids(store.visible)).toEqual(['a1', 'a2', 'b1', 'c1'])
+    folderfilter.toggle(node('D:/b')) // «—» у папки b: показать всё поддерево
+    expect(ids(store.visible)).toHaveLength(5)
   })
 
   it('новая папка показана', () => {
-    folderfilter.toggle('D:/b')
+    folderfilter.toggle(node('D:/b'))
     store.apply(view(2, [...FOLDERS, 'D:/d']) as never)
-    expect(folderfilter.isHidden('D:/d')).toBe(false)
-    expect(folderfilter.isHidden('D:/b')).toBe(true)
+    expect([...folderfilter.hidden]).toEqual([nodeKey('D:/b')])
+    expect(ids(store.visible)).toEqual(['a1', 'a2', 'c1'])
   })
 
   it('«Новый»/«Открыть» — все показаны, даже если папки те же', async () => {
-    folderfilter.toggle('D:/b')
+    folderfilter.toggle(node('D:/b'))
     await store.replaceState(Promise.resolve({ view: view(30, FOLDERS), photos: store.photos }))
     expect(folderfilter.active).toBe(false)
     expect(ids(store.visible)).toHaveLength(4)
   })
 
   it('перезапуск (GetState) — все показаны', async () => {
-    folderfilter.toggle('D:/b')
+    folderfilter.toggle(node('D:/b'))
     await store.init()
     expect(folderfilter.active).toBe(false)
   })

@@ -299,6 +299,16 @@ describe('справочник функций: стражи', () => {
     expect(bad).toEqual([])
   })
 
+  it('096: «Порядок разворотов» — статья в «Развороты» на всех уровнях со строкой мыши; «Все развороты» называет перетаскивание', () => {
+    const a = ARTICLES.find((x) => x.id === 'spread-order')
+    expect(a).toMatchObject({ title: 'Порядок разворотов', group: 'spreads', feature: 'base', spot: 'ui:timeline' })
+    const row = MOUSE_HELP.find((r) => r.show === 'Перетащить разворот в ленте или в «Все развороты»')
+    expect(row).toMatchObject({ label: 'Поменять порядок разворотов; Esc — отмена', group: 'spreads' })
+    expect(row?.feature).toBeUndefined()
+    expect(a?.keys).toContain(row?.show)
+    expect(ARTICLES.find((x) => x.id === 'all-spreads')?.what).toContain('порядок — перетаскиванием')
+  })
+
   it('у каждого раздела есть статьи; метки версии у статей нет', () => {
     for (const g of GUIDE_GROUPS)
       expect(

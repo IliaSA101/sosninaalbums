@@ -262,6 +262,8 @@ function editSpecs(c: MenuCtx): Spec[][] {
       // 067: окно «Развороты» — места и оформление готовых разворотов; обложка не цель (серое)
       { id: 'spreadTpl', label: 'Готовые развороты…', cmd: 'spreadTpl', feature: 'decor', disabled: !c.decorable },
       { id: 'pasteNames', label: 'Имена из списка…', cmd: 'pasteNames', feature: 'captions', disabled: !c.hasSpread },
+      // 094: поле названия текущего разворота в ленте; обложка и пустой альбом — серое (decorable)
+      { id: 'renameSpread', label: 'Название разворота…', cmd: 'renameSpread', feature: 'names', disabled: !c.decorable },
       { id: 'makeVignette', label: 'Сделать разворот виньеткой', cmd: 'makeVignette', feature: 'vignette', disabled: !c.vigable },
       { id: 'vigSetup', label: 'Настроить виньетку…', cmd: 'vigSetup', feature: 'vignette', disabled: !c.vigSetup },
       // 041: выделенные развороты ленты, нет выделения — текущий; серое, если менять нечего (сетки, виньетки, пустые)
@@ -300,13 +302,7 @@ function editSpecs(c: MenuCtx): Spec[][] {
           { id: 'flipV', label: '↕ По вертикали', cmd: 'flipV' },
         ],
       },
-      {
-        id: 'gray',
-        label: c.allGray ? 'Сделать цветным' : 'Сделать ч/б',
-        feature: 'adjust',
-        disabled: !c.flippable,
-        cmd: 'gray',
-      },
+      { id: 'gray', label: c.allGray ? 'Сделать цветным' : 'Сделать ч/б', feature: 'adjust', disabled: !c.flippable, cmd: 'gray' },
       alignMenu(c),
     ],
   ]

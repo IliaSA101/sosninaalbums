@@ -9,6 +9,7 @@ let infoImpl: (all: boolean) => Promise<unknown> = async (all) => info(all)
 const info = (all: boolean) => ({
   photos: 312,
   extra: all ? 928 : 0,
+  loose: 0,
   own: 3,
   guides: 2,
   missing: 4,

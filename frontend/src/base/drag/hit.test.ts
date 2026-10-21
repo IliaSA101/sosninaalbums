@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { Payload } from '../core/types'
-import { backdropTarget, binTarget, cellSide, coverTarget, halfSide, isNoopMove, placeTarget, sheetFrac } from './hit'
+import {
+  backdropTarget,
+  binTarget,
+  cellSide,
+  coverTarget,
+  gapIndex,
+  gapNoop,
+  gapOf,
+  halfSide,
+  isNoopMove,
+  photoNoop,
+  placeTarget,
+  sheetFrac,
+} from './hit'
 
 describe('backdropTarget', () => {
   const one: Payload = { kind: 'photos', ids: ['a'] }
@@ -108,5 +121,50 @@ describe('binTarget (083)', () => {
     expect(binTarget({ kind: 'photos', ids: ['a'], fromSpread: 's1' })).toBeNull()
     expect(binTarget({ kind: 'photos', ids: [] })).toBeNull()
     expect(binTarget({ kind: 'spread', id: 's1', index: 0 })).toBeNull()
+  })
+})
+
+// 095: одна черта в щели, холостые места не светятся.
+describe('щели (095)', () => {
+  it('gapOf: после j = до j+1', () => {
+    expect(gapOf(3, 'after')).toBe(gapOf(4, 'before'))
+    expect(gapOf(0, 'before')).toBe(0)
+    expect(gapOf(0, 'after')).toBe(1)
+  })
+  it('gapIndex: своё место — холостое', () => {
+    // разворот 2 в щели 2 и 3 — остаётся вторым
+    expect(gapIndex(2, 2)).toBe(2)
+    expect(gapIndex(3, 2)).toBe(2)
+    expect(gapNoop(2, 2)).toBe(true)
+    expect(gapNoop(2, 3)).toBe(true)
+    // дальше вправо — индекс на один меньше (сам уходит из-под), влево — как есть
+    expect(gapIndex(5, 2)).toBe(4)
+    expect(gapIndex(0, 2)).toBe(0)
+    expect(gapNoop(2, 4)).toBe(false)
+    expect(gapNoop(-1, 0)).toBe(false)
+  })
+  it('isNoopMove — то же через щель', () => {
+    expect(isNoopMove(2, 1, 'after')).toBe(gapNoop(2, 2))
+  })
+  it('photoNoop: chip, cell, mini, свой лист', () => {
+    const one = { kind: 'photos' as const, ids: ['a'], fromSpread: 's1' }
+    const two = { kind: 'photos' as const, ids: ['a', 'b'], fromSpread: 's1' }
+    const strip = { kind: 'photos' as const, ids: ['a'] }
+    // фото 2 своего разворота: щели 2 и 3 — у себя, 1 и 4 — нет
+    for (const k of ['chip', 'cell'] as const) {
+      expect(photoNoop(k, one, 's1', 2, 2), k).toBe(true)
+      expect(photoNoop(k, one, 's1', 2, 3), k).toBe(true)
+      expect(photoNoop(k, one, 's1', 2, 1), k).toBe(false)
+      expect(photoNoop(k, one, 's1', 2, 4), k).toBe(false)
+      // чужой разворот, из ленты, несколько фото — не холостой
+      expect(photoNoop(k, one, 's2', 2, 2), k).toBe(false)
+      expect(photoNoop(k, strip, 's1', -1, 0), k).toBe(false)
+      expect(photoNoop(k, two, 's1', -1, 2), k).toBe(false)
+    }
+    // своя группа ленты и свой лист — холостой всегда, чужие — нет
+    expect(photoNoop('mini', one, 's1')).toBe(true)
+    expect(photoNoop('spread', two, 's1')).toBe(true)
+    expect(photoNoop('mini', one, 's2')).toBe(false)
+    expect(photoNoop('spread', strip, 's1')).toBe(false)
   })
 })

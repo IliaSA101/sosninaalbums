@@ -244,7 +244,6 @@ func TestFailWhenEditorAlwaysPanics(t *testing.T) {
 	m := New(Host{
 		Editor:      func() *album.Editor { panic("нет Editor") },
 		Changed:     func(v model.View) model.View { t.Error("Changed после паники"); return v },
-		Out:         func(v model.View) model.View { t.Error("Out после паники"); return v },
 		Notice:      func(s string) { notes = append(notes, s) },
 		Infos:       func([]string) []model.PhotoInfo { return nil },
 		InfosOrRefs: func([]string) []model.PhotoInfo { return nil },
@@ -268,7 +267,6 @@ func TestNewRejectsEmptyHostField(t *testing.T) {
 		return Host{
 			Editor:      func() *album.Editor { return nil },
 			Changed:     func(v model.View) model.View { return v },
-			Out:         func(v model.View) model.View { return v },
 			Notice:      func(string) {},
 			Infos:       func([]string) []model.PhotoInfo { return nil },
 			InfosOrRefs: func([]string) []model.PhotoInfo { return nil },

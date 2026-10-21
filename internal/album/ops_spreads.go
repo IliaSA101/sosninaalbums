@@ -6,6 +6,7 @@ package album
 
 import (
 	"math"
+	"slices"
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
@@ -137,19 +138,44 @@ func (e *Editor) SheetSize() (w, h float64) {
 	return w, h
 }
 
-// AddFolder добавляет папку; нелокальный путь (UNC, device, относительный) или сверх MaxFolders —
-// ошибка, проект не меняется.
+// AddFolder добавляет папку (093): уже в списке или внутри папки списка — холостая, Within — та
+// папка; папки внутри dir и отдельные фото внутри неё уходят в том же шаге. Нелокальный путь (UNC,
+// device, относительный) или сверх MaxFolders — ошибка, проект не меняется.
 // Договор: путь локальный (paths.CheckLocalPath) — операция ему доверяет.
-func (e *Editor) AddFolder(dir string) (model.View, error) {
+func (e *Editor) AddFolder(dir string) (v model.View, r model.FolderAdd, err error) {
 	if err := paths.CheckLocalPath(dir); err != nil {
-		return e.View(), err
+		return e.View(), r, err
 	}
-	return e.try("", func(p *model.Project) error { return spreads.AddFolder(p, dir) })
+	v, err = e.try("", func(p *model.Project) (err error) { r, err = spreads.AddFolder(p, dir); return err })
+	return v, r, err
 }
 
-// RemoveFolder убирает папку из списка. Договор: нет — неизвестная папка — холостая правка.
+// RemoveFolder убирает папку из списка (и вложенные в неё записи). Договор: нет — неизвестная
+// папка — холостая правка.
 func (e *Editor) RemoveFolder(dir string) model.View {
 	return e.change(func(p *model.Project) { spreads.RemoveFolder(p, dir) })
+}
+
+// AddLoose — новое добавление отдельных фото (097) со временем at (Unix-секунды; даёт App —
+// операция детерминирована в тестах). Ничего нового — холостая: ни шага, ни rev, ни dirty.
+// Сверх MaxLooseAdds или нелокальный путь — ошибка, проект не меняется.
+// Договор: файлы — обычные JPEG/PNG на локальном диске (проверил App); пути операция проверит сама.
+func (e *Editor) AddLoose(files []string, at int64) (v model.View, r model.LooseAdded, err error) {
+	v, err = e.try("", func(p *model.Project) (err error) { r, err = spreads.AddLoose(p, files, at); return err })
+	return v, r, err
+}
+
+// RemoveLoose убирает добавление id (file == "") или один его файл. Договор: нет — неизвестное —
+// холостая правка.
+func (e *Editor) RemoveLoose(id, file string) model.View {
+	return e.change(func(p *model.Project) { spreads.RemoveLoose(p, id, file) })
+}
+
+// Sources — копии списков источников ленты (папки и отдельные файлы) для сканера App.
+// Договор: только чтение под замком.
+func (e *Editor) Sources() (folders, files []string) {
+	e.read(func(p *model.Project) { folders, files = slices.Clone(p.Folders), p.LooseFiles() })
+	return folders, files
 }
 
 // PhotosOf — ID фото разворотов ids по порядку ids (чтение): App по ним берёт оценки из XMP

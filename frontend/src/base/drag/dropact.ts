@@ -14,14 +14,25 @@ export const dropHooks = {
   bin: async (_ids: string[]): Promise<void> => {},
 }
 
-export async function dropOn(p: Payload, t: Target) {
+// false — правка не прошла (живая перестановка 096 возвращает соседей на места); остальные броски — true.
+export async function dropOn(p: Payload, t: Target): Promise<boolean> {
   const plan = dropPlan(p, t)
-  if (!plan) return
+  if (!plan) return false
+  if (plan.op === 'moveSpread') return moveSpread(plan.id, plan.at)
+  await act(plan)
+  return true
+}
+
+// Перенесённый разворот становится текущим, как по щелчку по группе (096 сц. 5). После отмены текущий следует
+// за id сам (store.apply).
+async function moveSpread(id: string, at: number): Promise<boolean> {
+  if (!(await store.run(Api.MoveSpread(id, at)))) return false
+  store.goId(id)
+  return true
+}
+
+async function act(plan: DropPlan) {
   switch (plan.op) {
-    case 'moveSpread':
-      // Текущий разворот следует за своим id сам (см. store.apply).
-      await store.run(Api.MoveSpread(plan.id, plan.at))
-      return
     case 'add':
       await addPhotos(plan)
       return
