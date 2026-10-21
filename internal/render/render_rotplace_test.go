@@ -1,6 +1,7 @@
 package render
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"image/png"
@@ -315,7 +316,7 @@ func TestInParallelPanicBecomesError(t *testing.T) {
 func TestPrepareRotTinyPhoto(t *testing.T) {
 	cell := layout.Rect{X: 10, Y: 10, W: 20, H: 20}
 	for _, img := range []layout.Rect{{X: 20, Y: 20, W: 1e-6, H: 5}, {X: 20, Y: 20, W: 5, H: 1e-6}} {
-		job, err := prepareRot(Photo{Cell: cell, Img: img, ImgRot: 10, Path: "нет.jpg"}, 300, image.Rect(0, 0, 1000, 1000))
+		job, err := prepareRot(context.Background(), Photo{Cell: cell, Img: img, ImgRot: 10, Path: "нет.jpg"}, 300, image.Rect(0, 0, 1000, 1000))
 		if job != nil || err != nil {
 			t.Fatalf("%v: %v, %v", img, job, err)
 		}

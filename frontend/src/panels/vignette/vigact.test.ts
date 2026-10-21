@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../base/core/store.svelte', () => ({
   store: {
     view: { rev: 5, spreads: [{ id: 'a' }, { id: 'b' }] },
-    apply: vi.fn(),
+    take: vi.fn(async () => true),
     notify: vi.fn(),
     undoToast: vi.fn(),
     run: vi.fn(async () => true),
@@ -37,7 +37,7 @@ describe('applyVignette', () => {
     vi.mocked(Api.SetVignette).mockResolvedValue({ view, left: 5 } as never)
     expect(await applyVignette('a', { tpl: 't', teachers: 2, pupils: 20, ratio: '4:5', ttext: '' })).toBe(true)
     expect(Api.SetVignette).toHaveBeenCalledWith('a', { tpl: 't', teachers: 2, pupils: 20, ratio: '4:5', ttext: '', head: '' })
-    expect(store.apply).toHaveBeenCalledWith(view)
+    expect(store.take).toHaveBeenCalledWith(view)
     expect(store.undoToast).toHaveBeenCalledWith('Убрано в ленту: 5')
   })
 
@@ -50,7 +50,7 @@ describe('applyVignette', () => {
   it('ошибка Go (больше 64 мест) — тост-ошибка, вид не меняется', async () => {
     vi.mocked(Api.SetVignette).mockRejectedValue('не больше 64 мест на развороте')
     expect(await applyVignette('a', startForm(0))).toBe(false)
-    expect(store.apply).not.toHaveBeenCalled()
+    expect(store.take).not.toHaveBeenCalled()
     expect(store.notify).toHaveBeenCalledWith('не больше 64 мест на развороте', 'error')
   })
 
@@ -244,14 +244,14 @@ describe('окно «Настроить виньетку»: вызовы Go', ()
     vi.mocked(Api.SetupVignette).mockResolvedValue({ view, left: 3 } as never)
     expect(await applySetup('a', setup)).toBe(true)
     expect(Api.SetupVignette).toHaveBeenCalledWith('a', setup)
-    expect(store.apply).toHaveBeenCalledWith(view)
+    expect(store.take).toHaveBeenCalledWith(view)
     expect(store.undoToast).toHaveBeenCalledWith('Убрано в ленту: 3')
   })
 
   it('applySetup: ошибка Go — тост-ошибка, false, вид не меняется', async () => {
     vi.mocked(Api.SetupVignette).mockRejectedValue('не больше 64 мест на развороте')
     expect(await applySetup('a', setup)).toBe(false)
-    expect(store.apply).not.toHaveBeenCalled()
+    expect(store.take).not.toHaveBeenCalled()
     expect(store.notify).toHaveBeenCalledWith('не больше 64 мест на развороте', 'error')
   })
 })

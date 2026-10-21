@@ -96,7 +96,7 @@ func Check(p *model.Project) error {
 			return err
 		}
 	}
-	for _, m := range p.Loaded() {
+	for _, m := range p.Loaded().Marks {
 		if err := checkPair("отметка", m.Path, m.Alt()); err != nil {
 			return err
 		}

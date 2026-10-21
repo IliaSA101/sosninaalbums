@@ -2,6 +2,7 @@ package library
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1" //nolint:gosec // как в cacheKey
 	"encoding/hex"
 	"fmt"
@@ -124,7 +125,7 @@ func TestOpenOrientedKeepsAlpha(t *testing.T) {
 // Паника при прогреве одного фото (битый файл в декодере) гасится: воркер и процесс живы.
 func TestWarmOnePanicRecovered(t *testing.T) {
 	path := testkit.JPEG(t, testkit.TempDir(t), "bad.jpg", 20, 20)
-	warmOne(nil, Photo{Path: path, Name: "bad.jpg"}) // nil-кэш → паника внутри File
+	warmOne(context.Background(), nil, Photo{Path: path, Name: "bad.jpg"}) // nil-кэш → паника внутри File
 }
 
 // Запись о панике прогрева — с расширением, без имени файла (073-7).
@@ -135,7 +136,7 @@ func TestThumbPanicLogNoName(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(prev) })
 	for _, name := range []string{"Иванов_секрет.JPG", "Иванов_без_расширения", "Петров." + strings.Repeat("я", 20)} {
 		path := testkit.JPEG(t, testkit.TempDir(t), "x.jpg", 20, 20)
-		warmOne(nil, Photo{Path: path, Name: name})
+		warmOne(context.Background(), nil, Photo{Path: path, Name: name})
 	}
 	got := buf.String()
 	if strings.Count(got, "ПАНИКА при прогреве") != 3 || !strings.Contains(got, `(файл ".jpg")`) ||

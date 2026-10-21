@@ -1,6 +1,6 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import Popover from '../../base/ui/Popover.svelte'
   import { sheetIn } from '../../base/geom/sheet'
   import { unitWords } from '../../editor/captions/unitword'

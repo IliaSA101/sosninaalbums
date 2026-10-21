@@ -252,7 +252,7 @@ func TestRunCoverErrors(t *testing.T) {
 	huge := *job
 	huge.Opt.PageW = 1e6
 	dir := filepath.Join(base, "huge")
-	if err := runCover(&huge, dir); err == nil || !strings.HasPrefix(err.Error(), "обложка: ") {
+	if err := runCover(context.Background(), &huge, dir); err == nil || !strings.HasPrefix(err.Error(), "обложка: ") {
 		t.Fatalf("огромный холст: %v", err)
 	}
 	if _, err := os.Stat(dir); err == nil {
@@ -263,14 +263,14 @@ func TestRunCoverErrors(t *testing.T) {
 	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runCover(job, filepath.Join(file, "sub")); err == nil {
+	if err := runCover(context.Background(), job, filepath.Join(file, "sub")); err == nil {
 		t.Fatal("папка внутри файла принята")
 	}
 
 	cell := layout.Rect{X: 5, Y: 5, W: 20, H: 20}
 	missing := *job
 	missing.Spread = render.Spread{Photos: []render.Photo{{Cell: cell, Img: cell, Path: filepath.Join(base, "нет.jpg")}}}
-	if err := runCover(&missing, filepath.Join(base, "m")); err == nil || !strings.HasPrefix(err.Error(), "обложка: ") {
+	if err := runCover(context.Background(), &missing, filepath.Join(base, "m")); err == nil || !strings.HasPrefix(err.Error(), "обложка: ") {
 		t.Fatalf("нет фото: %v", err)
 	}
 
@@ -278,7 +278,7 @@ func TestRunCoverErrors(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(busy, CoverName), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := runCover(job, busy); err == nil || !strings.HasPrefix(err.Error(), "обложка: ") {
+	if err := runCover(context.Background(), job, busy); err == nil || !strings.HasPrefix(err.Error(), "обложка: ") {
 		t.Fatalf("00.jpg — папка: %v", err)
 	}
 

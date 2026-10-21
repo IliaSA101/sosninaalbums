@@ -125,17 +125,30 @@ func (t *Templates) Store(dir string, list []model.Template, rename func(from, t
 	return nil
 }
 
-// reread — второе чтение файла, не открывшегося при старте. Память была пуста, поэтому
-// list — только добавленные шаблоны: они встают после прочитанных из файла. Снова не
-// открылся — ошибка, файл не трогаем.
-func (t *Templates) reread(dir string, list []model.Template) ([]model.Template, error) {
+// Ensure перечитывает файл, не открывшийся при старте: до этого List пуст, и любая сверка
+// с ним (импорт, поиск по ID, лимит) ошибочна. Читать можно, не записывая. Снова не
+// открылся — ошибка, отметка unread остаётся. Исправный файл — без работы.
+func (t *Templates) Ensure(dir string) error {
+	if !t.unread {
+		return nil
+	}
 	var re Templates
 	if err := re.read(dir); err != nil {
 		log.Printf("templates.json снова не прочитан: %v", paths.NoPath(err))
-		return nil, fmt.Errorf("не удалось прочитать templates.json: %w", err)
+		return fmt.Errorf("не удалось прочитать templates.json: %w", err)
 	}
 	*t = re
-	merged := append(slices.Clone(re.list), list...)
+	return nil
+}
+
+// reread — второе чтение файла, не открывшегося при старте (Store без предварительного
+// Ensure). Память была пуста, поэтому list — только добавленные шаблоны: они встают после
+// прочитанных из файла.
+func (t *Templates) reread(dir string, list []model.Template) ([]model.Template, error) {
+	if err := t.Ensure(dir); err != nil {
+		return nil, err
+	}
+	merged := append(slices.Clone(t.list), list...)
 	if len(merged) > model.MaxTemplates {
 		return nil, model.ErrTooManyTpl
 	}

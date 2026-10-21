@@ -27,6 +27,8 @@ export type Target =
   | { kind: 'backdrop'; spread: string; scope: BackdropScope; many?: boolean }
   // Плитка обложки в ленте (032): бросок фото создаёт обложку; несколько фото — тост «только одно».
   | { kind: 'cover'; many?: boolean }
+  // Кнопка «Подборки» в полосе ленты (083): бросок фото из ленты добавляет их в подборку.
+  | { kind: 'bin' }
 
 // Вкладка галереи под разворотом: раскладки «Авто» или сетки (спека 007).
 export type GalleryTab = 'layouts' | 'grids'

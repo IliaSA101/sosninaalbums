@@ -2,11 +2,13 @@ package render
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"math"
+	"runtime"
 	"slices"
 	"strconv"
 	"sync"
@@ -22,6 +24,15 @@ import (
 // Render рисует разворот в полном разрешении: фон страниц, узоры, фото на фоне, затем фото мест,
 // стикеры и тексты одним стеком по Z. Для ячейки «в край» окно — центр кадра, как у прежнего Fill.
 func Render(s Spread, opt Options) (*image.RGBA, error) {
+	return RenderCtx(context.Background(), s, opt)
+}
+
+// RenderCtx — Render с отменой (080-8): ctx доходит до ожидания бюджета памяти и декодов, и
+// перед каждым элементом листа проверяется. Отмена — ctx.Err() без обёртки, холст отбрасывается.
+func RenderCtx(ctx context.Context, s Spread, opt Options) (*image.RGBA, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	W, H := CanvasSize(opt)
 	if err := CheckSize(W, H); err != nil {
 		return nil, err
@@ -78,7 +89,10 @@ func Render(s Spread, opt Options) (*image.RGBA, error) {
 	}
 	// Фоны — под всем; остальное по слоям, при равных Z — прежний порядок (фото, затем тексты).
 	slices.SortStableFunc(items[nb:], func(a, b item) int { return cmp.Compare(a.z, b.z) })
-	if err := drawItems(canvas, items, opt.DPI); err != nil {
+	if err := drawItems(ctx, canvas, items, opt.DPI); err != nil {
+		if cerr := ctx.Err(); cerr != nil { // отмена важнее обёртки «фото: …» от того, кто упал первым
+			return nil, cerr
+		}
 		return nil, err
 	}
 	return canvas, nil
@@ -124,13 +138,31 @@ func fill(dst *image.RGBA, r image.Rectangle, c color.RGBA) {
 	draw.Draw(dst, r, image.NewUniform(c), image.Point{}, draw.Src)
 }
 
+// photoSlots — сколько фото листа готовятся сразу: половина ядер, не меньше 3 (как было) и не
+// больше 6 — память (design 091 §5). Пиксели от числа слотов не зависят: на холст фото
+// ложатся по порядку. Переменная — тест подменяет.
+var photoSlots = func() int { return min(max(runtime.NumCPU()/2, 3), 6) }
+
+// window — окно r оригинала для ресайза: SubImage без копии (сканер imaging читает те же байты,
+// что у imaging.Crop, design 091 F3); тип без SubImage — копия, как раньше. Результат только
+// читается: окно не уходит дальше ресайза — всё, что меняет пиксели на месте, получает новый
+// буфер Resize/Clone/Crop. Оригинал живёт до конца prepare/cropSource (defer release()).
+func window(src image.Image, r image.Rectangle) image.Image {
+	if s, ok := src.(interface {
+		SubImage(image.Rectangle) image.Image
+	}); ok {
+		return s.SubImage(r)
+	}
+	return imaging.Crop(src, r)
+}
+
 // drawItems готовит фото параллельно, но кладёт на холст строго по порядку списка: последнее
-// сверху, как на экране; тексты рисуются в той же очереди. Слот семафора (3 готовые ячейки
-// в памяти: оригинал на 24 Мп — это ~100 МБ) берётся здесь, по порядку и до go, поэтому
+// сверху, как на экране; тексты рисуются в той же очереди. Слот семафора (photoSlots() готовых
+// ячеек в памяти: оригинал на 24 Мп — это ~100 МБ) берётся здесь, по порядку и до go, поэтому
 // младший индекс всегда получает слот раньше старших и тех, кто его ждёт, не блокирует.
 // Тексту слот не нужен: памяти он не держит.
-func drawItems(canvas *image.RGBA, items []item, dpi int) error {
-	sem := make(chan struct{}, 3)
+func drawItems(ctx context.Context, canvas *image.RGBA, items []item, dpi int) error {
+	sem := make(chan struct{}, photoSlots())
 	errs := make([]error, len(items))
 	done := make([]chan struct{}, len(items))
 	for i := range done {
@@ -143,7 +175,7 @@ func drawItems(canvas *image.RGBA, items []item, dpi int) error {
 		if photo {
 			sem <- struct{}{}
 		}
-		if failed.Load() {
+		if failed.Load() || ctx.Err() != nil {
 			if photo {
 				<-sem
 			}
@@ -154,33 +186,7 @@ func drawItems(canvas *image.RGBA, items []item, dpi int) error {
 				defer func() { <-sem }()
 			}
 			defer close(done[i]) // и при ошибке: иначе следующий ждал бы вечно
-			var paint func(*image.RGBA) error
-			var err error
-			switch {
-			case it.border != nil:
-				paint, err = prepareBorderSafe(it, canvas.Bounds(), dpi)
-			case photo:
-				paint, err = prepareSafe(it, canvas.Bounds(), dpi)
-			case it.art != nil:
-				a := *it.art
-				paint = func(c *image.RGBA) error {
-					drawArt(c, a, dpi)
-					return nil
-				}
-			case it.plate != nil:
-				pl := *it.plate
-				paint = func(c *image.RGBA) error {
-					r := image.Rect(px(pl.Rect.X, dpi), px(pl.Rect.Y, dpi), px(pl.Rect.X+pl.Rect.W, dpi), px(pl.Rect.Y+pl.Rect.H, dpi))
-					fill(c, r.Intersect(c.Bounds()), pl.Color)
-					return nil
-				}
-			default:
-				t := *it.text
-				paint = func(c *image.RGBA) error {
-					text.Draw(c, t.Box, t.Style, t.X, t.Y, t.Rot, dpi)
-					return nil
-				}
-			}
+			paint, err := preparePaint(ctx, it, photo, canvas.Bounds(), dpi)
 			if i > 0 {
 				<-done[i-1]
 			}
@@ -199,12 +205,47 @@ func drawItems(canvas *image.RGBA, items []item, dpi int) error {
 			return err
 		}
 	}
-	return nil
+	return ctx.Err() // запуск прерван отменой до первой ошибки: холст недорисован
+}
+
+// preparePaint готовит элемент листа: фото и рамочки-картинки декодируются здесь (в потоке
+// подготовки), остальное — замыкание рисования. Отменённый ctx — ошибка до любой работы.
+func preparePaint(ctx context.Context, it item, photo bool, canvas image.Rectangle, dpi int) (paint func(*image.RGBA) error, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	switch {
+	case it.border != nil:
+		return prepareBorderSafe(ctx, it, canvas, dpi)
+	case photo:
+		return prepareSafe(ctx, it, canvas, dpi)
+	case it.art != nil:
+		a := *it.art
+		return func(c *image.RGBA) error {
+			drawArt(c, a, dpi)
+			return nil
+		}, nil
+	case it.plate != nil:
+		pl := *it.plate
+		return func(c *image.RGBA) error {
+			r := image.Rect(px(pl.Rect.X, dpi), px(pl.Rect.Y, dpi), px(pl.Rect.X+pl.Rect.W, dpi), px(pl.Rect.Y+pl.Rect.H, dpi))
+			fill(c, r.Intersect(c.Bounds()), pl.Color)
+			return nil
+		}, nil
+	}
+	t := *it.text
+	return func(c *image.RGBA) error {
+		if t.Gen != 0 && t.Gen != text.Gen() {
+			t.Box = text.Cached(t.Text, t.Style, t.Box.W)
+		}
+		text.Draw(c, t.Box, t.Style, t.X, t.Y, t.Rot, dpi)
+		return nil
+	}, nil
 }
 
 // prepareSafe готовит фото по одному из трёх путей (design-rotation §3); паника декодера
 // становится ошибкой: горутина без recover уронила бы весь процесс. nil без ошибки — рисовать нечего.
-func prepareSafe(it item, canvas image.Rectangle, dpi int) (paint func(*image.RGBA) error, err error) {
+func prepareSafe(ctx context.Context, it item, canvas image.Rectangle, dpi int) (paint func(*image.RGBA) error, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			paint, err = nil, fmt.Errorf("%s: сбой при обработке %s: %v", baseName(it.ph.Path), what(it), p)
@@ -217,11 +258,11 @@ func prepareSafe(it item, canvas image.Rectangle, dpi int) (paint func(*image.RG
 	}
 	// Маска окна — после фото: фото за холстом (nil) её не строит (до 400 Мп у большого места).
 	if _, quarter := quarterOf(ph.ImgRot); ph.Rot == 0 && quarter {
-		cell, r, err := prepareFn(ph, dpi, clip)
+		cell, r, err := prepareFn(ctx, ph, dpi, clip)
 		if err != nil || cell == nil {
 			return nil, err
 		}
-		win, err := winOf(it, dpi)
+		win, err := winOf(ctx, it, dpi)
 		if err != nil {
 			return nil, err
 		}
@@ -248,11 +289,11 @@ func prepareSafe(it item, canvas image.Rectangle, dpi int) (paint func(*image.RG
 			return nil
 		}, nil
 	}
-	job, err := prepareRot(ph, dpi, clip)
+	job, err := prepareRot(ctx, ph, dpi, clip)
 	if err != nil || job == nil {
 		return nil, err
 	}
-	if job.win, err = winOf(it, dpi); err != nil {
+	if job.win, err = winOf(ctx, it, dpi); err != nil {
 		return nil, err
 	}
 	return job.draw, nil
@@ -309,7 +350,7 @@ const clipSlack = 2
 // окно — его часть кадра; остальное остаётся фоном страницы. nil — рисовать нечего.
 // ImgRot, кратный 90° (путь 1): окно и уменьшение — в осях файла, затем зеркало и поворот
 // готовой ячейки; при ImgRot = 0 геометрия прежняя.
-func prepare(ph Photo, dpi int, clip image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
+func prepare(ctx context.Context, ph Photo, dpi int, clip image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
 	if ph.Img.W <= 0 || ph.Img.H <= 0 {
 		return nil, image.Rectangle{}, fmt.Errorf("%s: у фото нет кадра", baseName(ph.Path))
 	}
@@ -333,7 +374,7 @@ func prepare(ph Photo, dpi int, clip image.Rectangle) (*image.NRGBA, image.Recta
 	if r != full { // видимая часть — доли исходной по пикселям, тем же отображением мм → px
 		c = subRect(c, full, r)
 	}
-	src, release, err := imgfile.OpenOriented(ph.Path)
+	src, release, err := imgfile.OpenOrientedCtx(ctx, ph.Path)
 	if err != nil {
 		return nil, image.Rectangle{}, photoErr(ph.Path, err)
 	}
@@ -368,7 +409,7 @@ func prepare(ph Photo, dpi int, clip image.Rectangle) (*image.NRGBA, image.Recta
 		cell = resizeClipped(src, w, ph.Img, dw, dh, clip)
 	} else {
 		win := cropWindow(w, ph.Img, b.Dx(), b.Dy()).Add(b.Min)
-		cell = resizeBounded(imaging.Crop(src, win), dw, dh)
+		cell = resizeBounded(window(src, win), dw, dh)
 	}
 	return orientCell(cell, ph, q), r, nil
 }
@@ -477,10 +518,10 @@ func resizeClipped(src image.Image, w, img layout.Rect, dw, dh int, clip image.R
 	y0, y1, bh, oy, oky := axis(w.Y, w.H, img.Y, img.H, b.Dy(), dh)
 	if !okx || !oky || int64(bw)*int64(bh) > 2*int64(clip.Dx())*int64(clip.Dy()) {
 		win := cropWindow(w, img, b.Dx(), b.Dy()).Add(b.Min)
-		return resizeBounded(imaging.Crop(src, win), dw, dh)
+		return resizeBounded(window(src, win), dw, dh)
 	}
 	win := image.Rect(x0, y0, x1, y1).Add(b.Min)
-	big := resizeBounded(imaging.Crop(src, win), bw, bh)
+	big := resizeBounded(window(src, win), bw, bh)
 	return imaging.Crop(big, image.Rect(ox, oy, ox+dw, oy+dh))
 }
 

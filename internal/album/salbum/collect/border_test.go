@@ -101,7 +101,7 @@ func TestCollectTwiceBorder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	again := &scene{root: sc.root, p: lp, marks: edtest.Loaded(lp)}
+	again := &scene{root: sc.root, p: lp, marks: edtest.Loaded(lp).Marks}
 	dir := filepath.Join(sc.root, "Флешка2", "Иванов")
 	pl, path2 := collectTo(t, again, dir, false)
 	for _, name := range []string{"fedcba9876543210.png", "0123456789abcdef.png"} {

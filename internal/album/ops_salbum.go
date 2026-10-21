@@ -56,6 +56,13 @@ func (e *Editor) RelinkLib(find salbum.LibFinder) model.View {
 	return e.change(func(p *model.Project) { salbum.RelinkLib(p, find) })
 }
 
+// RefitFonts — набор своих шрифтов сменился (загрузка, откат окна; App зовёт после
+// text.SetCustom): ширины «по тексту» и названия в Fonts пересчитывают FitTexts и SyncFonts
+// конвейера, тело пустое. Шаг отмены, если что-то сдвинулось; иначе холостая (как RelinkLib).
+func (e *Editor) RefitFonts() model.View {
+	return e.change(func(*model.Project) {})
+}
+
 // Обёртка Editor над сборкой вида (internal/album/view). Вызывается под e.mu: View, edit,
 // Undo/Redo и правки отметок берут замок раньше. Всё остальное чтение вида идёт через
 // публичный Editor.View (editor.go).
@@ -66,6 +73,9 @@ func (e *Editor) view() model.View {
 	v := view.BuildView(e.p, e.state(false))
 	markVigs(e.p, &v) // имя шаблона и «Ручная» виньеток: план мест знает Editor (038)
 	v.Again = e.againAlive()
+	// Подборки — всегда список, а не nil: шапка дельты (sameHead) сравнивает их DeepEqual.
+	v.Bins = append([]model.Bin{}, e.bins...)
+	v.SetSrc(e.id)
 	return v
 }
 

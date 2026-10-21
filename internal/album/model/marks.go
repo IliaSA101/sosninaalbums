@@ -1,6 +1,10 @@
 package model
 
-import "github.com/IliaSA101/sosninaalbums/internal/library"
+import (
+	"slices"
+
+	"github.com/IliaSA101/sosninaalbums/internal/library"
+)
 
 // Свои отметки фото (спека 004, design §2): живут в Editor рядом с Project, а не в нём —
 // иначе 5000 отметок платили бы marshal/unmarshal на каждой правке альбома.
@@ -15,6 +19,8 @@ type Mark struct {
 	Rating *int    `json:"rating,omitempty"`
 	Label  *string `json:"label,omitempty"` // "" — метка снята в программе
 	Flag   *int    `json:"flag,omitempty"`
+	// Bins — ID подборок фото (083) по возрастанию, без повторов; срез не правится на месте.
+	Bins []string `json:"bins,omitempty"`
 	// alt — запасной путь из файла, если не нашлось ни там, ни там (как PhotoRef.Alt).
 	alt string
 }
@@ -24,6 +30,9 @@ func (m Mark) Alt() string { return m.alt }
 
 // WithAlt — копия с запасным путём (Load; перепривязка сбрасывает).
 func (m Mark) WithAlt(s string) Mark { m.alt = s; return m }
+
+// WithBins — копия с подборками ids (сорт, без повторов, пусто — nil).
+func (m Mark) WithBins(ids []string) Mark { m.Bins = normBins(ids); return m }
 
 // MarkPatch — что поменять у выбранных фото. Rating и Step вместе — Step не действует.
 type MarkPatch struct {
@@ -36,26 +45,32 @@ type MarkPatch struct {
 
 // MarkView — своя отметка для UI (App.Marks); nil — поле своё не задано.
 type MarkView struct {
-	Rating *int    `json:"rating,omitempty"`
-	Label  *string `json:"label,omitempty"`
-	Flag   *int    `json:"flag,omitempty"`
+	Rating *int     `json:"rating,omitempty"`
+	Label  *string  `json:"label,omitempty"`
+	Flag   *int     `json:"flag,omitempty"`
+	Bins   []string `json:"bins,omitempty"` // ID подборок (083)
 }
 
 // Clone — копия с собственными указателями: Editor не делит отметки с чужим проектом.
 func (m Mark) Clone() Mark {
 	m.Rating, m.Label, m.Flag = clonePtr(m.Rating), clonePtr(m.Label), clonePtr(m.Flag)
+	m.Bins = slices.Clone(m.Bins)
 	return m
 }
 
-func (m Mark) None() bool { return m.Rating == nil && m.Label == nil && m.Flag == nil }
+// None — записи нет смысла хранить: ни своих отметок, ни подборок.
+func (m Mark) None() bool {
+	return m.Rating == nil && m.Label == nil && m.Flag == nil && len(m.Bins) == 0
+}
 
 func (m Mark) View() MarkView {
-	return MarkView{Rating: clonePtr(m.Rating), Label: clonePtr(m.Label), Flag: clonePtr(m.Flag)}
+	return MarkView{Rating: clonePtr(m.Rating), Label: clonePtr(m.Label), Flag: clonePtr(m.Flag), Bins: slices.Clone(m.Bins)}
 }
 
 func SameMark(a, b Mark) bool {
 	return a.Path == b.Path && a.alt == b.alt &&
-		samePtr(a.Rating, b.Rating) && samePtr(a.Label, b.Label) && samePtr(a.Flag, b.Flag)
+		samePtr(a.Rating, b.Rating) && samePtr(a.Label, b.Label) && samePtr(a.Flag, b.Flag) &&
+		slices.Equal(a.Bins, b.Bins)
 }
 
 func samePtr[T comparable](a, b *T) bool {

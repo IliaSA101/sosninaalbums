@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
+import { withGoCaches } from './goenv.mjs'
 import { checkFolders, checkSizes } from './limits.mjs'
 import { collect as collectAdded, violations as langViolations } from './comment-lang.mjs'
 
@@ -16,7 +17,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(root)
 const gotmp = path.join(root, '.gotmp') // антивирус: exe go только сюда (как в check.ps1)
 fs.mkdirSync(gotmp, { recursive: true })
-const env = { ...process.env, GOTMPDIR: gotmp }
+const env = withGoCaches({ ...process.env, GOTMPDIR: gotmp }, root)
 
 // Пакеты модуля: не ./... — тот заходит в frontend/node_modules (flatted/golang). Один шаблон для всех скриптов и CI.
 const MODULE_PKGS = ['.', './internal/...']
@@ -202,6 +203,15 @@ if (fe.length) {
   if (src.length) {
     const guards = scanGuards(path.join(root, 'frontend', 'src'))
     if (guards.length) step(`стражи фронта (${guards.length})`, () => res(npx([['vitest', 'run', ...guards]])))
+  }
+}
+
+// ---- Python: e2e-скрипты (089) ----
+// Юнит-тесты чистых частей scripts/e2e; нет каталога или Python — шаг пропускается молча.
+if (changed.some((f) => /^scripts\/e2e\/.*\.py$/.test(f)) && fs.existsSync(path.join(root, 'scripts', 'e2e'))) {
+  const py = spawnSync('python', ['--version'], { encoding: 'utf8' })
+  if (py.status === 0) {
+    step('python unittest (scripts/e2e)', () => res(run('python', ['-m', 'unittest', 'discover', '-s', 'scripts/e2e'])))
   }
 }
 

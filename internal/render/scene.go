@@ -48,6 +48,11 @@ type TextDraw struct {
 	Box   text.Box
 	Style text.Style
 	Z     int // слой в общем стеке разворота (с фото)
+	// Text и Gen — строки Box разбиты из Text по ширине Box.W при text.Gen() == Gen. Выгрузка идёт
+	// в фоне: шрифт, загруженный или откатанный за это время, сменил бы ширины, а строки остались
+	// бы прежними — тогда они разбиваются заново. Gen 0 — не запомнено, Box как есть.
+	Text string
+	Gen  uint64
 }
 
 // PatternDraw — узор области (048): Area — мм листа, как у фото фона; Kind, Inks, Scale, Seed —

@@ -14,9 +14,11 @@ import (
 )
 
 var (
-	oldSpreadRe = regexp.MustCompile(`(?i)^spread_(\d+)\.jpg$`)                 // экспорт v0.2: наш, метки в нём нет
-	numberedRe  = regexp.MustCompile(`(?i)^(\d{2,})(?:-([12]))?\.jpg$`)         // 01.jpg, 01-1.jpg…, 0001.jpg: наш только с COM-меткой
-	tmpRe       = regexp.MustCompile(`(?i)^(\d{2,})(?:-[12])?\.jpg\.\d+\.tmp$`) // остаток WriteFileAtomic: 05.jpg.<число>.tmp
+	oldSpreadRe = regexp.MustCompile(`(?i)^spread_(\d+)\.jpg$`)         // экспорт v0.2: наш, метки в нём нет
+	numberedRe  = regexp.MustCompile(`(?i)^(\d{2,})(?:-([12]))?\.jpg$`) // 01.jpg, 01-1.jpg…, 0001.jpg: наш только с COM-меткой
+	// остаток WriteFileAtomic: 05.jpg.<число>.tmp; с префиксом плана — 1-05.jpg.<число>.tmp (081 №9).
+	// Префикс только «1-», не любое число: чужой 2024-05.jpg.7.tmp не наш.
+	tmpRe = regexp.MustCompile(`(?i)^(?:1-)?(\d{2,})(?:-[12])?\.jpg\.\d+\.tmp$`)
 )
 
 // DirFile — файл папки экспорта: Spread — номер разворота из имени (с 1, ширина не важна),
@@ -30,15 +32,23 @@ type DirFile struct {
 // (их можно заменить), foreign — NN.jpg / NN-1.jpg без метки, а также папка или ссылка
 // с таким именем (под них экспорт отказывает).
 // 00.jpg/000.jpg (обложка из шаблона типографии) и прочие файлы не трогаем никогда.
-func PlanDir(dir string) (ours, foreign []DirFile, err error) {
+func PlanDir(dir string) (ours, foreign []DirFile, err error) { return PlanDirPrefix(dir, "") }
+
+// PlanDirPrefix — PlanDir для имён с префиксом плана (081 №9): при «1-» разворот — 1-NN.jpg,
+// 1-00.jpg — обложка (как 00.jpg); NN.jpg и spread_NN.jpg этой выгрузке не свои и не мешают.
+func PlanDirPrefix(dir, prefix string) (ours, foreign []DirFile, err error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, nil, err
 	}
+	numbered := numberedRe
+	if prefix != "" {
+		numbered = regexp.MustCompile(`(?i)^` + regexp.QuoteMeta(prefix) + `(\d{2,})(?:-([12]))?\.jpg$`)
+	}
 	for _, e := range entries {
 		name := e.Name()
 		regular := e.Type().IsRegular() // папка и ссылка — не файл экспорта, но и не пустое место
-		if m := oldSpreadRe.FindStringSubmatch(name); m != nil {
+		if m := oldSpreadRe.FindStringSubmatch(name); m != nil && prefix == "" {
 			n, _ := strconv.Atoi(m[1])
 			f := DirFile{Name: name, Spread: n}
 			if regular {
@@ -48,7 +58,7 @@ func PlanDir(dir string) (ours, foreign []DirFile, err error) {
 			}
 			continue
 		}
-		m := numberedRe.FindStringSubmatch(name)
+		m := numbered.FindStringSubmatch(name)
 		if m == nil || strings.Trim(m[1], "0") == "" {
 			continue // не номер разворота или обложка
 		}
@@ -121,6 +131,11 @@ func RunPlan(ctx context.Context, spreads []render.Spread, pl Plan, opt render.O
 	if err := runCoverPlan(ctx, spreads, pl, opt, dir, progress); err != nil {
 		return err
 	}
+	// «Остановить» во время кодирования последнего листа: RenderCtx уже вернулся, а прежние
+	// файлы удалять нельзя — выгрузка не завершена (080-11).
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := removeFiles(dir, stale); err != nil {
 		return fmt.Errorf("не удалось удалить прежние файлы экспорта: %w", err)
 	}
@@ -133,7 +148,7 @@ const tmpMaxAge = time.Hour
 
 // removeStaleTmp убирает остатки WriteFileAtomic (05.jpg.<число>.tmp) старше tmpMaxAge:
 // имя случайное, поэтому после сбоев они копились бы в папке. Ошибки не мешают экспорту.
-// Остаток записи обложки (00.jpg.<число>.tmp) не трогаем: он не отличим от чужого файла типографии.
+// Остаток записи обложки (00.jpg.<число>.tmp, 1-00.jpg.<число>.tmp) не трогаем: он не отличим от чужого файла типографии.
 func removeStaleTmp(dir string, now time.Time) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

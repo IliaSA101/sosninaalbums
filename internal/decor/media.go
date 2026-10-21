@@ -150,7 +150,12 @@ func (s *Store) serveLib(w http.ResponseWriter, r *http.Request, cache *library.
 		http.NotFound(w, r)
 		return
 	}
-	file, err := cache.File(info, parts[0] == "p")
+	ctx := r.Context()
+	file, err := cache.FileCtx(ctx, info, parts[0] == "p")
+	if ctx.Err() != nil { // плитка ушла с экрана: отвечать некому, это не сбой (090 G2)
+		s.cancelled.Add(1)
+		return
+	}
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -164,6 +169,10 @@ func (s *Store) serveLib(w http.ResponseWriter, r *http.Request, cache *library.
 	w.Header().Set("Cache-Control", "max-age=86400")
 	http.ServeFile(w, r, file) //nolint:gosec // file — путь из кэша миниатюр по файлу реестра, не из запроса
 }
+
+// Cancelled — сколько запросов /media/lib клиент снял до ответа: их число пишет журнал прогрева
+// миниатюр вместе со снятыми плитками ленты.
+func (s *Store) Cancelled() int64 { return s.cancelled.Load() }
 
 // libQueryOK — у /media/lib допустимы только v и px (UI дописывает &px= ко всем плиткам).
 func libQueryOK(raw string) bool {

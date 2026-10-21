@@ -39,7 +39,7 @@ class BackupsUi {
     await edit.idle() // набранный текст сначала записывается
     const before = store.view.rev
     try {
-      store.apply((await Api.RestoreBackup(b.name)) as unknown as View)
+      await store.take((await Api.RestoreBackup(b.name)) as unknown as View)
     } catch (e) {
       this.error = capFirst(errText(e))
       return

@@ -15,7 +15,7 @@ const Api = await import('../../../wailsjs/go/app/App')
 const { store } = await import('../core/store.svelte')
 const { noHooks } = await import('../core/hooks')
 const { dropAsk, dropAskText, dropGrid, answerDrop, cancelDrop } = await import('./dropgrid.svelte')
-const { dropOn } = await import('./dropact')
+const { dropOn, dropHooks } = await import('./dropact')
 const { unitOf } = await import('../geom/sheet')
 
 const DropPhotos = vi.mocked(Api.DropPhotos)
@@ -398,5 +398,16 @@ describe('имена из названий файлов (060)', () => {
     vi.mocked(Api.FillPlaces).mockResolvedValueOnce({ view: view(2), left: 0, named: [] } as never)
     await store.fillPlaces()
     expect(store.toast).toBeNull()
+  })
+})
+
+describe('бросок на кнопку «Подборки» (083)', () => {
+  it('фото из ленты уходят в хук подборок; с холста — нет', async () => {
+    const hook = vi.spyOn(dropHooks, 'bin').mockResolvedValue()
+    await dropOn({ kind: 'photos', ids: ['a', 'b'] }, { kind: 'bin' })
+    expect(hook).toHaveBeenCalledWith(['a', 'b'])
+    await dropOn({ kind: 'photos', ids: ['a'], fromSpread: 's1' }, { kind: 'bin' })
+    expect(hook).toHaveBeenCalledOnce()
+    hook.mockRestore()
   })
 })

@@ -4,7 +4,7 @@
 import { Api, store } from '../../base/core/store.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { drag } from '../../base/drag/drag.svelte'
-import { modalStack } from '../../base/ui/modalstack.svelte'
+import { modalStack } from '../../base/modal/modalstack.svelte'
 import { bgmode } from '../backdrop/bgmode.svelte'
 import { placesel } from '../places/placesel.svelte'
 import { isLine, keepStraighten, lineMM, photoUnder, type StraightenTarget } from './straighten'

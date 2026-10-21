@@ -128,6 +128,32 @@ describe('store.apply: дельта вида', () => {
     expect(store.view.spreads.map((s) => s.id)).toEqual(['a', 'b'])
   })
 
+  it('take дожидается пересинхрона: после него вызывающий видит новый вид и rev', async () => {
+    const store = await load()
+    store.apply(full(1, [sp('a')]) as never)
+    let done: (v: unknown) => void = () => {}
+    getView.mockReturnValueOnce(new Promise((r) => (done = r)))
+    let res: boolean | null = null
+    const take = store.take(delta(5, ['a', 'b'], [sp('b')], { rev: 7 }) as never).then((ok) => (res = ok)) // base 4 ≠ 1
+    await flush()
+    expect(res).toBeNull()
+    expect(store.view.rev).toBe(1) // apply тут бы вернулся со старым видом
+    done(full(5, [sp('a'), sp('b')], { rev: 7 }))
+    await take
+    expect(res).toBe(true)
+    expect(store.view.rev).toBe(7)
+  })
+
+  it('take при ошибке пересинхрона — false и красный тост; без расхождения — true без GetView', async () => {
+    const store = await load()
+    store.apply(full(1, [sp('a')]) as never)
+    expect(await store.take(delta(2, ['a'], [sp('a', 'x')], { rev: 2 }) as never)).toBe(true)
+    expect(getView).not.toHaveBeenCalled()
+    getView.mockRejectedValueOnce(new Error('нет связи'))
+    expect(await store.take(delta(9, ['a'], []) as never)).toBe(false)
+    expect(store.toast?.kind).toBe('error')
+  })
+
   it('run при ошибке пересинхрона — false и красный тост', async () => {
     const store = await load()
     store.apply(full(1, [sp('a')]) as never)

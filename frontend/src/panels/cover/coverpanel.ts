@@ -11,7 +11,7 @@ export interface PresetGroup {
   items: CoverPreset[]
 }
 
-// Список «Типография»: группы в порядке появления (Фотосфера, Нетпринт), пустые не нужны.
+// Список «Типография»: группы в порядке появления (Фотосфера, Нетпринт, Фабрика Фотокниги), пустые не нужны.
 // Варианты без группы (group '') — в конце: в списке они идут обычными <option>, без пустой подписи.
 export function presetGroups(list: readonly CoverPreset[]): PresetGroup[] {
   const out: PresetGroup[] = []

@@ -3,10 +3,15 @@
   import { drag } from '../../base/drag/drag.svelte'
   import type { Photo } from '../../base/core/types'
   import Icon from '../../base/ui/Icon.svelte'
+  import MissPhoto from '../../base/ui/MissPhoto.svelte'
   import { thumbUrl } from '../../base/core/media'
+  import { cancelOnUnmount } from '../../base/ui/imgcancel'
   import { colorBadge } from '../../editor/photo/color'
   import { markOf } from '../marks/marks'
   import { markTitle, stars } from '../marks/thumbmark'
+  import { binsel } from '../bins/binsel.svelte'
+  import { lost } from './lost.svelte'
+  import { missTip } from './missing'
 
   // Миниатюра фото в библиотеке. Размер задаёт --size родителя (.grid в Library).
   let { p }: { p: Photo } = $props()
@@ -24,7 +29,7 @@
   class:rejected
   role="button"
   tabindex="-1"
-  title={markTitle(p.name, mark)}
+  title={markTitle(p.name, mark, binsel.namesOf(store.marks[p.id]?.bins))}
   onpointerdown={(e) =>
     drag.start(
       e,
@@ -37,7 +42,20 @@
 >
   <!-- .im повторяет форму фото и вписан в квадратную ячейку: рамка идёт по самому фото -->
   <div class="im" class:tall={p.h > p.w} style:aspect-ratio="{p.w} / {p.h}">
-    <img src={thumbUrl(p.id)} alt="" loading="lazy" draggable="false" />
+    {#if lost.has(p.id)}
+      <!-- Файл пропал до проверки папок (088): заглушка вместо битой картинки, рамка — как у img -->
+      <div class="gone"><MissPhoto size={24} tip={missTip(p.id, { [p.id]: p.name })} label="нет файла" /></div>
+    {:else}
+      <!-- retryOf: разовая перезагрузка после сверки папок, если файл на месте (lost.retry) -->
+      <img
+        src={thumbUrl(p.id, lost.retryOf(p.id))}
+        alt=""
+        loading="lazy"
+        draggable="false"
+        onerror={() => lost.mark(p.id)}
+        {@attach cancelOnUnmount}
+      />
+    {/if}
     {#if store.used.has(p.id)}<span class="check" aria-label="Уже в альбоме">✓</span>{/if}
     {#if badge}<span class="badge {badge.level}" title={badge.title}>{badge.label}</span>{/if}
     {#if mark.label !== ''}<span class="strip {mark.label}"></span>{/if}
@@ -82,6 +100,17 @@
     user-select: none;
   }
   .thumb.selected img {
+    border-color: var(--accent);
+  }
+  /* Заглушка «нет файла» в форме фото: белая рамка 2 px, как у img; бледность used/rejected к ней не применяется */
+  .gone {
+    position: absolute;
+    inset: 0;
+    border: 2px solid #fff;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .thumb.selected .gone {
     border-color: var(--accent);
   }
   /* Уже в альбоме: галочка в углу и чуть бледнее. Одной бледности мало — на ярких

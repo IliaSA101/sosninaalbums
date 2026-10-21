@@ -5,7 +5,7 @@
 
 <script lang="ts">
   import { untrack, type Snippet } from 'svelte'
-  import { placePopover, type Placed } from './popover'
+  import { BARPOP_OPEN, closesOnPeer, placePopover, type Placed } from './popover'
 
   // Окно панели (спека 024): под кнопкой, в body (лента обрезает overflow). Закрывается Esc (только верхнее),
   // щелчком и колесом снаружи, сменой размера окна. Окна со своим `data-barpop` и без номера или с большим
@@ -74,6 +74,22 @@
       { width: pop.offsetWidth, height: pop.offsetHeight },
       { width: window.innerWidth, height: window.innerHeight },
     )
+  })
+
+  // Открылось другое окно панели — это закрываем (одно окно панели за раз); своё открытие объявляем остальным.
+  $effect(() => {
+    if (!open) return
+    const on = (e: Event) => {
+      if (closesOnPeer((e as CustomEvent).detail, { anchor, pop })) open = false
+    }
+    window.addEventListener(BARPOP_OPEN, on)
+    return () => window.removeEventListener(BARPOP_OPEN, on)
+  })
+  $effect(() => {
+    if (!open) return
+    untrack(() => {
+      if (anchor) window.dispatchEvent(new CustomEvent(BARPOP_OPEN, { detail: anchor }))
+    })
   })
 
   // Вложенное окно относительно этого: другое окно панели без номера или с большим номером.

@@ -11,6 +11,11 @@ export interface CollectInfo {
   guides: number
   missing: number
   missingGuides: number
+  // 082 (Go G4 пришлёт позже — поля необязательные): файлов шрифтов к копированию, имена гарнитур, чей файл запрещает
+  // перенос (Restricted), и сколько шрифтов альбома нет на этом компьютере.
+  fonts?: number
+  fontsRestricted?: string[]
+  missingFonts?: number
   bytes: number
   scanning: boolean
   folderName: string // имя папки альбома, как её создаст Go (fsfera.FolderName)
@@ -44,23 +49,49 @@ export function optionHint(photos: number | null, bytes: number): string {
   return photos === null ? '' : `(${num(photos)} фото, ${sizeText(bytes)})`
 }
 
-// «Ещё: свои фоны и стикеры — 3, разметка типографии — 2.»; нечего сказать — пусто.
-export function extraLine(i: Pick<CollectInfo, 'own' | 'guides'>): string {
-  const parts = [i.own > 0 ? `свои фоны и стикеры — ${i.own}` : '', i.guides > 0 ? `разметка типографии — ${i.guides}` : ''].filter(Boolean)
+// «Ещё: свои фоны и стикеры — 3, шрифты — 2, разметка типографии — 2.»; нечего сказать — пусто.
+export function extraLine(i: Pick<CollectInfo, 'own' | 'guides' | 'fonts'>): string {
+  const parts = [
+    i.own > 0 ? `свои фоны и стикеры — ${i.own}` : '',
+    (i.fonts ?? 0) > 0 ? `шрифты — ${i.fonts}` : '',
+    i.guides > 0 ? `разметка типографии — ${i.guides}` : '',
+  ].filter(Boolean)
   return parts.length ? `Ещё: ${parts.join(', ')}.` : ''
 }
 
+// Подсказка к строке «Ещё: …», когда в ней есть шрифты: лицензия — на том, кто передаёт папку.
+export const FONTS_HINT = 'Файлы шрифтов копируются, чтобы альбом открылся на другом компьютере. Передавая папку, проверьте лицензию шрифта'
+
+// Оранжевое предупреждение: файл шрифта запрещает перенос (fsType Restricted) — в папку не копируется (082-13).
+export function fontsRestrictedLine(names: readonly string[]): string {
+  const list = names.map((n) => `„${n}“`).join(', ')
+  if (names.length === 0) return ''
+  if (names.length === 1) return `Шрифт ${list} не переносится по лицензии — загрузите его на другом компьютере сами`
+  return `Шрифты ${list} не переносятся по лицензии — загрузите их на другом компьютере сами`
+}
+
 // «4 фото не найдены — в папку не попадут.»; слова те же, что в вопросе Go (missingQuestion).
-export function missingLine(i: Pick<CollectInfo, 'missing' | 'missingGuides'>): string {
+// Шрифты — отдельной фразой: «2 шрифта нет на этом компьютере — в папку не попадут.»
+export function missingLine(i: Pick<CollectInfo, 'missing' | 'missingGuides' | 'missingFonts'>): string {
   const g = i.missingGuides
+  const f = i.missingFonts ?? 0
   const what = [
     i.missing > 0 ? `${i.missing} фото` : '',
     g > 0 ? `${g} ${plural(g, ['разметка', 'разметки', 'разметок'])} типографии` : '',
   ].filter(Boolean)
-  if (what.length === 0) return ''
-  if (i.missing === 1 && g === 0) return '1 фото не найдено — в папку не попадёт.'
-  if (i.missing === 0 && g === 1) return '1 разметка типографии не найдена — в папку не попадёт.'
-  return `${what.join(' и ')} не найдены — в папку не попадут.`
+  const fonts =
+    f > 0
+      ? `${f} ${plural(f, ['шрифта', 'шрифта', 'шрифтов'])} нет на этом компьютере — в папку не ${f === 1 ? 'попадёт' : 'попадут'}.`
+      : ''
+  const files =
+    what.length === 0
+      ? ''
+      : i.missing === 1 && g === 0
+        ? '1 фото не найдено — в папку не попадёт.'
+        : i.missing === 0 && g === 1
+          ? '1 разметка типографии не найдена — в папку не попадёт.'
+          : `${what.join(' и ')} не найдены — в папку не попадут.`
+  return [files, fonts].filter(Boolean).join(' ')
 }
 
 // Заглушка имени папки до ответа Go: настоящее имя (запретные знаки, обрезка) строит Go и отдаёт в CollectInfo.folderName.

@@ -2,6 +2,7 @@
   import type { SpreadView } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
   import Icon from '../../base/ui/Icon.svelte'
+  import { cancelOnUnmount } from '../../base/ui/imgcancel'
   import { previewUrl, thumbUrl } from '../../base/core/media'
   import { bgmode } from './bgmode.svelte'
   import { liveImg } from './bgmode'
@@ -60,6 +61,7 @@
             alt=""
             draggable="false"
             loading="lazy"
+            {@attach cancelOnUnmount}
           />{/if}
       {/if}
     </div>

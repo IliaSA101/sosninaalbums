@@ -343,7 +343,7 @@ func TestFsferaFormats(t *testing.T) {
 // 300 dpi, layflat, зона формата, подсказка с числом зоны.
 func TestPagePresets(t *testing.T) {
 	all, fs := PagePresets(), FsferaFormats()
-	if len(all) != 6+len(fs)+8 {
+	if len(all) != 6+len(fs)+8+len(FabrikaFormats()) {
 		t.Fatalf("пресетов %d", len(all))
 	}
 	for i, f := range fs {
@@ -362,14 +362,18 @@ func TestPagePresets(t *testing.T) {
 	}
 }
 
-// Группы пресетов (058): "", «Фотосфера», «Нетпринт» подряд в этом порядке; ряд Нетпринта —
-// 8 форматов «Премиум» (058 п. 5), 300 dpi, layflat, важное 10 мм.
+// Группы пресетов (058, 081): "", «Фотосфера», «Нетпринт», «Фабрика Фотокниги» подряд в этом порядке;
+// ряд Нетпринта — 8 форматов «Премиум» (058 п. 5), 300 dpi, layflat, важное 10 мм; у Фабрики 5 строк.
 func TestPagePresetsGroups(t *testing.T) {
 	var groups []string
 	var np []string
+	fabrika := 0
 	for _, pp := range PagePresets() {
 		if len(groups) == 0 || groups[len(groups)-1] != pp.Group {
 			groups = append(groups, pp.Group)
+		}
+		if pp.Group == CoverGroupFabrika {
+			fabrika++
 		}
 		if pp.Group == CoverGroupNetprint {
 			if pp.DPI != 300 || !pp.Layflat || pp.Safe != 10 || pp.Hint != "Нетпринт Премиум: JPEG 300 dpi, разворотами; важное — не ближе 10 мм к краю" {
@@ -378,13 +382,16 @@ func TestPagePresetsGroups(t *testing.T) {
 			np = append(np, fmt.Sprintf("%s %v×%v", pp.Label, pp.W, pp.H))
 		}
 	}
-	if want := []string{"", CoverGroupFsfera, "Нетпринт"}; !slices.Equal(groups, want) {
+	if want := []string{"", CoverGroupFsfera, "Нетпринт", CoverGroupFabrika}; !slices.Equal(groups, want) {
 		t.Fatalf("группы %q, ждали %q", groups, want)
 	}
 	want := []string{"15×20 153×203", "20×15 200×156", "18×13 182.5×127", "20×20 200×203", "20×28 200×270", "28×20 285×203",
 		"25×25 250×254", "30×30 300×305"}
 	if !slices.Equal(np, want) {
 		t.Fatalf("Нетпринт %q", np)
+	}
+	if fabrika != 5 {
+		t.Errorf("кнопок Фабрики %d, ждали 5", fabrika)
 	}
 	if pr, _ := CoverPresetOf("netprint-premium"); pr.Group != CoverGroupNetprint {
 		t.Fatalf("обложка Нетпринта в группе %q", pr.Group)

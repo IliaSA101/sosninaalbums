@@ -15,6 +15,8 @@ export type DropPlan =
   | { op: 'backdrop'; spread: string; scope: BackdropScope; photo: string }
   // Фото на плитку обложки (032): обложка создаётся с ним на лицевой.
   | { op: 'cover'; photo: string }
+  // Фото из ленты на кнопку «Подборки» (083): в целевую подборку или в окно выбора.
+  | { op: 'bin'; ids: string[] }
   // Бросок, который не выполняется, но о причине надо сказать (тост).
   | { op: 'reject'; text: string }
 
@@ -72,6 +74,12 @@ function wholePlan(p: PhotoPayload, t: Extract<Target, { kind: 'spread' | 'mini'
   return plan
 }
 
+// Фото на плитку обложки: ровно одно, с несколькими — тост.
+function coverPlan(ids: string[]): DropPlan | null {
+  if (ids.length === 0) return null
+  return ids.length === 1 ? { op: 'cover', photo: ids[0] } : { op: 'reject', text: COVER_ONE }
+}
+
 export function dropPlan(p: Payload, t: Target): DropPlan | null {
   if (p.kind === 'spread') return spreadPlan(p, t)
   const ids = p.ids
@@ -91,8 +99,9 @@ export function dropPlan(p: Payload, t: Target): DropPlan | null {
     case 'backdrop':
       return backdropPlan(p, t)
     case 'cover':
-      if (ids.length === 0) return null
-      return ids.length === 1 ? { op: 'cover', photo: ids[0] } : { op: 'reject', text: COVER_ONE }
+      return coverPlan(ids)
+    case 'bin':
+      return fromSpread || ids.length === 0 ? null : { op: 'bin', ids }
     case 'library':
       return fromSpread ? { op: 'remove', ids } : null
   }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { screenDpr } from '../../base/ui/dpr.svelte'
   import { primaryPress } from '../../base/core/platform'
   import type { BorderView, SpreadView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
@@ -21,7 +22,7 @@
   let { spread, mini = false, width = 0 }: { spread: SpreadView; mini?: boolean; width?: number } = $props()
 
   const sw = $derived(spread.w)
-  const dpr = $derived(globalThis.devicePixelRatio || 1)
+  const dpr = $derived(screenDpr.value)
   // Выделение — на нажатии: перенос начинается с того же жеста.
   function down(e: PointerEvent, id: string) {
     if (mini || !primaryPress(e)) return

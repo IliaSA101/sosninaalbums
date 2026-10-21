@@ -24,6 +24,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { withGoCaches } from './goenv.mjs'
 import { MAX_DROP, TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -48,7 +49,7 @@ function env() {
   // GOTMPDIR нужен из-за антивируса, см. README
   e.GOTMPDIR ||= path.join(root, '.gotmp')
   fs.mkdirSync(e.GOTMPDIR, { recursive: true })
-  return e
+  return withGoCaches(e, root)
 }
 
 // Запуск с выводом прямо в файл (без буфера и перекодировки).

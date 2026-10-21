@@ -49,7 +49,7 @@ describe('глобальные :has(.класс) не задевают чужи�
 
 describe('разметка хода выгрузки', () => {
   const dialog = src('shell/export/ExportDialog.svelte')
-  const modal = src('base/ui/Modal.svelte')
+  const modal = src('base/modal/Modal.svelte')
   const run = src('shell/export/ExportRun.svelte')
   it('при jobs.exporting вместо настроек — ExportRun, окно обёрнуто в Modal с onclose = close', () => {
     expect(dialog).toMatch(/<Modal title="Экспорт" onclose=\{close\}[^>]*>\s*\{#if jobs\.exporting\}\s*<ExportRun \/>\s*\{:else\}/)

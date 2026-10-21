@@ -12,7 +12,7 @@
   import CopyGridDialog from './panels/layouts/CopyGridDialog.svelte'
   import ExportDialog from './shell/export/ExportDialog.svelte'
   import CollectDialog from './shell/collect/CollectDialog.svelte'
-  import FsferaDone from './shell/export/FsferaDone.svelte'
+  import PrintDone from './shell/export/PrintDone.svelte'
   import AutoAskDialog from './shell/ask/AutoAskDialog.svelte'
   import DropAskDialog from './shell/ask/DropAskDialog.svelte'
   import AutoBuildDialog from './shell/autobuild/AutoBuildDialog.svelte'
@@ -36,6 +36,7 @@
   import PhotoMenu from './editor/photo/PhotoMenu.svelte'
   import PhotoPreview from './editor/photo/PhotoPreview.svelte'
   import { store } from './base/core/store.svelte'
+  import { autocheck } from './panels/folders/autocheck'
   import { jobs } from './base/core/jobs.svelte'
   import { gridAct } from './panels/layouts/gridact.svelte'
   import { dropAsk } from './base/drag/dropgrid.svelte'
@@ -47,7 +48,7 @@
   import { guardsBrowser, isTextField, isWidget, keyCommand, preventsDefault, type DialogState } from './shell/menu/keys'
   import { menuOn } from './shell/menu/menuctx'
   import { eventChord, isSpace } from './base/keys/chord'
-  import { modalStack } from './base/ui/modalstack.svelte'
+  import { modalStack } from './base/modal/modalstack.svelte'
   import { zoneOf } from './editor/places/groupsel'
   import { bgmode } from './editor/backdrop/bgmode.svelte'
   import { prefs } from './base/prefs/prefs.svelte'
@@ -55,6 +56,9 @@
 
   onMount(() => {
     store.init()
+    // Сверка папок по фокусу и таймеру (088): удалённые в Проводнике файлы уходят из ленты, новые появляются.
+    autocheck.start(window, document)
+    return () => autocheck.stop()
   })
 
   // Зона последнего нажатия: Ctrl+A и Del действуют по ней (библиотека или холст с лентой альбома).
@@ -96,6 +100,7 @@
     const id = keyCommand(e, {
       inTextField: isTextField(t),
       widget: isWidget(t),
+      popup: !!t?.closest('[data-barpop]'),
       onCheckbox: isCheckbox(t),
       galleryOpen: !!gallery.cur,
       hasSelection: store.selectedIds.length > 0,
@@ -151,7 +156,7 @@
 <CopyGridDialog />
 <ExportDialog />
 <CollectDialog />
-<FsferaDone />
+<PrintDone />
 <AutoAskDialog />
 <DropAskDialog />
 <AutoBuildDialog />

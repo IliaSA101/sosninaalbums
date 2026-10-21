@@ -1,10 +1,12 @@
 package album_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"reflect"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 )
 
@@ -97,4 +99,51 @@ func TestWireDeltaReplay(t *testing.T) {
 		t.Fatalf("частичных дельт %d, холостых %d: ждали и те и другие", partial, idle)
 	}
 	t.Logf("правок %d: частичных дельт %d, холостых %d", len(r.views)-1, partial, idle)
+}
+
+// TestEditorViewSrc — номер Editor в виде (087-3): у двух Editor разные и не 0; у одного —
+// тот же в View, ответе правки, Undo/Redo, Restore и дельте; в JSON не идёт.
+func TestEditorViewSrc(t *testing.T) {
+	e1, e2 := edtest.Open(t, model.New(), ""), edtest.Open(t, model.New(), "")
+	id := e1.ID()
+	if id == 0 || e2.ID() == 0 || e2.ID() == id {
+		t.Fatalf("номера Editor: %d и %d", id, e2.ID())
+	}
+	if e2.View().Src() != e2.ID() {
+		t.Fatalf("вид второго: %d, а не %d", e2.View().Src(), e2.ID())
+	}
+	v, err := e1.NewSpread(0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	views := map[string]model.View{"View": e1.View(), "NewSpread": v}
+	views["SetSpreadName"] = e1.SetSpreadName(v.Spreads[0].ID, "Сборы")
+	views["холостая"] = e1.SetSpreadName(v.Spreads[0].ID, "Сборы")
+	views["Undo"] = e1.Undo()
+	views["Redo"] = e1.Redo()
+	q, _ := e1.Snapshot()
+	if views["Restore"], err = e1.Restore(q); err != nil {
+		t.Fatal(err)
+	}
+	prev := e2.View()
+	w, _ := model.Wire(&prev, views["Redo"], 1, 2)
+	views["дельта"], views["пустая дельта"] = w, model.Unchanged(views["Redo"], 2)
+	for name, v := range views {
+		if v.Src() != id {
+			t.Errorf("%s: номер %d, а не %d", name, v.Src(), id)
+		}
+		data, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(data, []byte(`"src"`)) {
+			t.Errorf("%s: номер Editor ушёл в JSON", name)
+		}
+	}
+	// Номер Editor не делает виды разными: иначе у одинаковых видов слалось бы лишнее событие.
+	a, b := e1.View(), e1.View()
+	b.SetSrc(e2.ID())
+	if !model.SameView(a, b) {
+		t.Error("SameView различает виды по номеру Editor")
+	}
 }

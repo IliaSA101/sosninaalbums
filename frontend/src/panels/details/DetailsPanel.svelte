@@ -5,6 +5,8 @@
   import SettingsForm from './SettingsForm.svelte'
   import SpreadGrid from './SpreadGrid.svelte'
   import Inspector from '../../editor/inspector/Inspector.svelte'
+  import PhotoAbout from '../../editor/photoprops/PhotoAbout.svelte'
+  import { libPhotoOf } from '../../editor/photoprops/aboutload.svelte'
   import { store } from '../../base/core/store.svelte'
   import { newSheetSize, pageSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
@@ -20,6 +22,9 @@
   const unit = $derived(unitOf(s))
   // Без лишних нулей: 21.5, а не 21.50.
   const num = (n: number) => String(Math.round(n * 100) / 100)
+
+  // Раздел «Фото из ленты» (084): одно выделенное в ленте фото при открытой панели.
+  const libId = $derived(libPhotoOf(store.selectedIds, modes.details, store.selectedCell ?? ''))
 
   let scroller: HTMLDivElement
 
@@ -83,6 +88,9 @@
   <div class="scroll" bind:this={scroller}>
     <!-- Карточка свойств выделенного: первый блок прокрутки, сворачивается (028 Б); на виньетке в ней раздел «Виньетка» -->
     {#if modes.details}<Inspector docked {reveal} />{/if}
+    {#if libId}
+      <Section name="photo" title="Фото из ленты"><div data-guide="photo-section"><PhotoAbout id={libId} head /></div></Section>
+    {/if}
     <div class="format">
       <div class="name">{num(page.w / 10)}×{num(page.h / 10)}</div>
       <div class="sub">

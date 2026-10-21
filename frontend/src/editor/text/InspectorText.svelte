@@ -39,7 +39,7 @@
 
 {#if st}
   {#if head}<div class="head">{cap ? 'Подпись' : 'Текст'}</div>{/if}
-  <FontPicker value={st.font} fonts={store.fonts} onpick={(id) => edit.setStyle({ font: id })} />
+  <FontPicker value={st.font} fonts={store.fonts} used={store.view.albumFonts} onpick={(id) => edit.setStyle({ font: id })} />
 
   <div class="row">
     <div class="size" title="Кегль, pt">

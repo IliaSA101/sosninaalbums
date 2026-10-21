@@ -6,6 +6,8 @@ const api = vi.hoisted(() => ({
   PlanCopyDecor: vi.fn(),
   CopyGrid: vi.fn(),
   PlanCopyGrid: vi.fn(),
+  GetView: vi.fn(),
+  ApplyGrid: vi.fn(),
 }))
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
 vi.mock('../../../wailsjs/go/app/App', () => api)
@@ -14,7 +16,7 @@ vi.stubGlobal('window', globalThis)
 
 const { store } = await import('../../base/core/store.svelte')
 const { gridAct } = await import('./gridact.svelte')
-const { planFor, runFor } = await import('./gridactions')
+const { planFor, runFor, applyChoice } = await import('./gridactions')
 const { copyTargets, planQuestion, touched } = await import('../gallery/gridgallery')
 
 const sp = (id: string, grid = false) => ({ id, photos: [], w: 600, h: 300, mid: 300, frames: [], texts: [], captions: [], grid })
@@ -81,6 +83,22 @@ describe('runFor: копирование оформления', () => {
     expect(store.toast).toMatchObject({ text: 'Оформление скопировано на 2 разворота', kind: 'info' })
   })
 
+  // 087 U2: ответ — дельта не к нашему виду, пересинхрон ещё в пути; без ожидания rev старый и тост врёт.
+  it('CopyDecor при пересинхроне — тост «скопировано»', async () => {
+    let done: (v: unknown) => void = () => {}
+    api.GetView.mockReturnValueOnce(new Promise((r) => (done = r)))
+    api.CopyDecor.mockResolvedValue({ view: { rev: 2, seq: 6, base: 5, order: ['s1', 's2', 's3'], spreads: [], folders: [] }, left: 0 })
+    let res: boolean | null = null
+    const run = runFor(call(), 2).then((ok) => (res = ok))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(res).toBeNull() // GetView ещё в пути: тост не показан
+    expect(store.toast).toBeNull()
+    done({ ...view(2), seq: 6 })
+    await run
+    expect(store.view.rev).toBe(2)
+    expect(store.toast).toMatchObject({ text: 'Оформление скопировано на 2 разворота', kind: 'info' })
+  })
+
   it('на один разворот и на лист виньетки — склонение по режиму альбома', async () => {
     api.CopyDecor.mockResolvedValue({ view: view(2), left: 0 })
     await runFor(call(), 1)
@@ -112,6 +130,26 @@ describe('runFor: копирование оформления', () => {
     expect(await runFor(call(), 2)).toBe(false)
     expect(store.toast).toMatchObject({ kind: 'error', text: 'На развороте 3 не больше 40 стикеров' })
     expect(store.view.rev).toBe(1)
+  })
+
+  // 087: дельта не к нашему виду, GetView падает — красный тост цепочки остаётся, синий «скопировано» поверх не ставится.
+  it('сбой пересинхрона (GetView): красный тост цепочки не перекрывается синим, false', async () => {
+    const delta = { ...view(2), base: 5, seq: 6, order: ['s1'] }
+    api.GetView.mockRejectedValue('нет связи с Go')
+    api.CopyDecor.mockResolvedValue({ view: delta, left: 0 })
+    expect(await runFor(call(), 2)).toBe(false)
+    expect(store.toast).toMatchObject({ kind: 'error', text: 'Нет связи с Go' })
+    api.CopyGrid.mockResolvedValue({ view: delta, left: 0 })
+    expect(await runFor(call({ decor: false }), 2)).toBe(false)
+    expect(store.toast).toMatchObject({ kind: 'error' })
+  })
+
+  it('сбой пересинхрона при выборе сетки: тост «Вернуть» не ставится', async () => {
+    api.GetView.mockRejectedValue('нет связи с Go')
+    api.ApplyGrid.mockResolvedValue({ view: { ...view(2), base: 5, seq: 6, order: ['s1'] }, left: 2 })
+    await applyChoice('s1', 'spread', { scope: 'spread', boxes: [] } as never)
+    expect(store.toast).toMatchObject({ kind: 'error' })
+    expect(store.toast?.action).toBeUndefined()
   })
 
   it('отказ плана — исключение уходит к вызывающему (окно покажет тост и не закроется)', async () => {

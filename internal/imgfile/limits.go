@@ -1,9 +1,11 @@
 package imgfile
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 	"os"
 
@@ -41,7 +43,7 @@ func OpenRegular(path string) (*os.File, error) {
 	return f, nil
 }
 
-// checkFile — CheckSize, но возвращает ещё и число пикселей (для бюджета памяти)
+// checkFile — CheckSize, но возвращает ещё и вес декода в бюджете памяти (decodeWeight)
 // и класс цветового профиля (Adobe RGB пересчитывается при декоде).
 func checkFile(path string) (int64, Color, error) {
 	f, err := OpenRegular(path)
@@ -54,22 +56,30 @@ func checkFile(path string) (int64, Color, error) {
 
 // checkOpened — проверка заголовка уже открытого файла; указатель после неё не определён.
 func checkOpened(f *os.File) (int64, Color, error) {
-	cfg, format, err := image.DecodeConfig(f)
+	d, err := DimsOf(f, MaxPixels)
 	if err != nil {
 		return 0, ColorNone, err
 	}
-	// imaging подключает и TIFF/BMP/GIF: у их декодеров в x/image известные уязвимости, а нужны только эти два.
-	if format != "jpeg" && format != "png" {
-		return 0, ColorNone, fmt.Errorf("формат %q не поддерживается (нужен JPEG или PNG)", format)
-	}
-	if err := CheckDims(cfg.Width, cfg.Height); err != nil {
-		return 0, ColorNone, err
-	}
-	col := ColorNone
+	h := Head{Orient: 1}
 	if _, err := f.Seek(0, io.SeekStart); err == nil {
-		col = Header(f).Color
+		h = Header(f)
 	}
-	return int64(cfg.Width) * int64(cfg.Height), col, nil
+	return decodeWeight(d, h), h.Color, nil
+}
+
+// decodeWeight — сколько единиц бюджета (~4 байта на пиксель) занимает декод: 16-битный PNG
+// декодируется в RGBA64/NRGBA64 (8 байт на пиксель), а EXIF-поворот (AutoOrientation) и пересчёт
+// Adobe RGB держат оригинал и NRGBA-копию одновременно. Пересчёт идёт по повёрнутой NRGBA на месте,
+// так что поворот и Adobe вместе — одна лишняя копия, не две.
+func decodeWeight(d Dims, h Head) int64 {
+	n := int64(d.W) * int64(d.H)
+	if d.Color == color.RGBA64Model || d.Color == color.NRGBA64Model {
+		n *= 2
+	}
+	if h.Color == ColorAdobe || h.Orient >= 2 {
+		n *= 2
+	}
+	return n
 }
 
 func CheckDims(w, h int) error {
@@ -88,15 +98,20 @@ func CheckDims(w, h int) error {
 // миниатюры, превью и экспорт получают одинаковые цвета. Вызывающий обязан вызвать release,
 // когда изображение больше не нужно.
 func OpenOriented(path string) (img image.Image, release func(), err error) {
+	return OpenOrientedCtx(context.Background(), path)
+}
+
+// OpenOrientedCtx — OpenOriented с отменой: ожидание места в бюджете прерывается ctx
+// (ошибка — ctx.Err(), бюджет не тронут).
+func OpenOrientedCtx(ctx context.Context, path string) (img image.Image, release func(), err error) {
 	// Файл не держим открытым, пока ждём бюджет: проверка по пути, место, и только потом открытие.
 	n, col, err := checkFile(path)
 	if err != nil {
 		return nil, nil, err
 	}
-	if col == ColorAdobe {
-		n *= 2 // YCbCr и NRGBA-копия живут одновременно, бюджет рассчитан на ~4 байта на пиксель
+	if err := DecodeBudget.AcquireCtx(ctx, n); err != nil {
+		return nil, nil, err
 	}
-	DecodeBudget.Acquire(n)
 	done := false
 	defer func() {
 		// Ошибка или паника декодера: место возвращается, паника идёт дальше.
@@ -115,9 +130,6 @@ func OpenOriented(path string) (img image.Image, release func(), err error) {
 	n2, col2, err := checkOpened(f)
 	if err != nil {
 		return nil, nil, err
-	}
-	if col2 == ColorAdobe {
-		n2 *= 2
 	}
 	if n2 != n || col2 != col {
 		return nil, nil, errors.New("файл изменился во время чтения")

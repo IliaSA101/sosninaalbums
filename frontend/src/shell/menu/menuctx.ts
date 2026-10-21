@@ -7,6 +7,7 @@ import { edit } from '../../editor/text/edit.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
 import { modes } from '../../base/prefs/view.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
+import { binsel } from '../../panels/bins/binsel.svelte'
 import { align } from '../../panels/layouts/align.svelte'
 import { anyVaries, varyTargets } from '../../panels/gallery/variants'
 import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
@@ -50,6 +51,7 @@ export function menuCtx(): MenuCtx {
     markup: modes.markup,
     rulers: modes.rulers,
     snap: placesel.snap,
+    binShown: binsel.active,
     alignCount: align.ids.length,
     alignTo: align.to,
   }

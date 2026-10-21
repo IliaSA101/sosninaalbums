@@ -24,7 +24,7 @@ vi.stubGlobal('window', globalThis)
 const { store } = await import('../../base/core/store.svelte')
 const { jobs } = await import('../../base/core/jobs.svelte')
 
-const opt = { range: '', quality: 95, dpi: 0, pages: false, cover: false, coverOnly: false, fsfera: false }
+const opt = { range: '', quality: 95, dpi: 0, pages: false, cover: false, coverOnly: false, print: '' }
 const sp = (id: string) => ({ id, photos: [`ph-${id}`] })
 const album = (ids: string[]) => ({ rev: 1, folders: [], settings: { sheet: false }, spreads: ids.map(sp), cover: null }) as never
 
@@ -41,6 +41,7 @@ beforeEach(async () => {
   jobs.exportOpen = false
   jobs.exportStopping = false
   jobs.exportMemo = null
+  jobs.exportPrint = null
 })
 
 describe('ход экспорта в окне', () => {

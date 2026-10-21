@@ -44,7 +44,7 @@ var (
 // Поля модели без экспорта (JSON): Project.from, Project.loaded, Mark.alt.
 var (
 	From   func(p any) int // p — *Project
-	Loaded func(p any) any // map[string]Mark
+	Loaded func(p any) any // Side
 	Alt    func(m any) string
 )
 

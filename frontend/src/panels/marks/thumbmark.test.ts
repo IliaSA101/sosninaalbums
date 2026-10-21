@@ -30,6 +30,13 @@ describe('markTitle', () => {
     expect(markTitle('a.jpg', m)).toBe('a.jpg · метка: Клиенту <b>x</b>')
     expect(markTitle('a.jpg', { ...none, label: 'other' })).toBe('a.jpg · метка: своя метка')
   })
+  it('подборки дописываются в конец (083)', () => {
+    expect(markTitle('a.jpg', { rating: 4, label: '', flag: 0 }, ['Обязательно', 'Для родителей'])).toBe(
+      'a.jpg · ★★★★ · Подборки: Обязательно, Для родителей',
+    )
+    expect(markTitle('a.jpg', none, ['Запас'])).toBe('a.jpg · Подборки: Запас')
+    expect(markTitle('a.jpg', none, [])).toBe('a.jpg')
+  })
   it('своя расходится с файлом — «в Lightroom»', () => {
     const lr: Mark = { rating: 5, label: 'green', flag: 0 }
     expect(markTitle('a.jpg', { rating: 2, label: 'green', flag: 0, lr })).toBe('a.jpg · ★★ · метка: зелёная · в Lightroom: ★★★★★')

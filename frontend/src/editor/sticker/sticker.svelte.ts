@@ -109,7 +109,7 @@ class StickerActions {
   async add(spread: string, page: 0 | 1, item: string): Promise<boolean> {
     try {
       const r = await Api.AddSticker(spread, page, item)
-      store.apply(r.view as unknown as View)
+      if (!(await store.take(r.view as unknown as View))) return false
       if (r.id) placesel.pickSticker(r.id, false)
       return true
     } catch (e) {

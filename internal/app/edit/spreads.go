@@ -1,6 +1,9 @@
 package edit
 
-import "github.com/IliaSA101/sosninaalbums/internal/album/model"
+import (
+	"github.com/IliaSA101/sosninaalbums/internal/album"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+)
 
 // AddPhotos, NewSpread, MovePhoto: отказ (лимит фото на развороте) — ошибка, проект не меняется.
 func (m *Methods) AddPhotos(spreadID string, ids []string, index int) (v model.View, err error) {
@@ -120,7 +123,11 @@ func (m *Methods) AutoSimilar(ids []string, o model.AutoOpts) (out []model.Simil
 // последней сборки (078 §8): тот же шаг отмены, пока после неё не было шагов; не жива — ошибка.
 func (m *Methods) AutoBuild(ids []string, at int, o model.AutoOpts) (v model.View, err error) {
 	defer m.guardEdit("AutoBuild", &v, &err)
-	return m.changedOrErr(m.editor().AutoBuild(m.infos(ids), at, o.Clamp()))
+	v, err = m.changedOrErr(m.editor().AutoBuild(m.infos(ids), at, o.Clamp()))
+	if err == nil {
+		album.LogMem("автосборка") // 089: строка для e2e-отчёта; не в Editor — ниже порога журнал молчит
+	}
+	return v, err
 }
 
 // AutoPreview — ряд блока «Раскладки» окна автосборки (065): «Варианты» групп плана и «Что

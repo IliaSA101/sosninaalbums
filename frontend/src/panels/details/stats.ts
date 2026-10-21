@@ -1,5 +1,5 @@
 // Сводка по альбому для панели деталей. Это счётчики, а не геометрия, поэтому на фронте.
-import type { Photo, SpreadView } from '../../base/core/types'
+import type { Photo, SpreadView, View } from '../../base/core/types'
 
 // Квадратное — если пропорции отличаются от 1:1 не больше чем на 2 %.
 export const SQUARE_TOLERANCE = 0.02
@@ -17,6 +17,18 @@ export interface AlbumStats {
   sq: number
   adobe: number // фото в Adobe RGB (будут пересчитаны)
   other: number // фото с другим профилем (не пересчитываются)
+}
+
+// Строка предела разворотов (085): предупреждение Go или серая «Типография: предел». Нет поля — строки нет.
+export interface LimitLine {
+  text: string
+  warn: boolean
+}
+export function limitLine(v: Pick<View, 'pageLimit'>): LimitLine | null {
+  const l = v.pageLimit
+  if (!l) return null
+  if (l.warn) return { text: l.warn, warn: true }
+  return { text: `${l.who}: ${l.range}`, warn: false }
 }
 
 export function orientation(w: number, h: number): Orientation {

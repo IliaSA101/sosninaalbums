@@ -79,19 +79,7 @@ func ScaleGroupAxes(p *model.Project, spreadID string, ids []string, kx, ky, phi
 			putSticker(p, s, st, r)
 		}
 		for i, t := range txs {
-			o := out.Texts[i]
-			t.X, t.Y, t.W = o.X, o.Y, o.W
-			if t.W < model.MinTextW { // fitTexts поднял бы ширину от угла рамки — растим вокруг точки выравнивания
-				dx, dy := geom.Rotate(t.Rot, (t.W-model.MinTextW)*o.Al, 0)
-				t.X, t.Y, t.W = geom.Round2(t.X+dx), geom.Round2(t.Y+dy), model.MinTextW
-			}
-			if o.Size != in.Texts[i].Size {
-				t.Style.Size = o.Size
-				t.Style = model.ClampStyle(t.Style)
-			}
-			if t.Auto { // ширина по тексту нового кегля, точка выравнивания стоит
-				p.SetAutoW(s, t, p.SheetAutoW(s, t), false)
-			}
+			putText(p, s, t, out.Texts[i], in.Texts[i])
 		}
 	})
 }
@@ -119,17 +107,25 @@ func transformGroup(p *model.Project, s *model.Spread, ids []string, k, ax, ay, 
 		putSticker(p, s, st, r)
 	}
 	for i, t := range txs {
-		o := out.Texts[i]
-		t.X, t.Y = o.X, o.Y
-		if o.Size != in.Texts[i].Size {
-			t.Style.Size = o.Size
-			t.Style = model.ClampStyle(t.Style)
-		}
-		if t.Auto {
-			t.W = p.SheetAutoW(s, t) // та же ширина, что насчитает fitTexts
-		} else {
-			t.W = o.W
-		}
+		putText(p, s, t, out.Texts[i], in.Texts[i])
+	}
+}
+
+// putText — текст t листа s из расчёта группы o (was — он до правки: кегль, доля выравнивания): ширина меньше
+// MinTextW растёт вокруг точки выравнивания (fitTexts поднял бы её от угла блока, текст
+// уехал бы), «по тексту» — ширина нового кегля, точка выравнивания стоит.
+func putText(p *model.Project, s *model.Spread, t *model.TextBlock, o, was geom.GxText) {
+	t.X, t.Y, t.W = o.X, o.Y, o.W
+	if t.W < model.MinTextW {
+		dx, dy := geom.Rotate(t.Rot, (t.W-model.MinTextW)*was.Al, 0)
+		t.X, t.Y, t.W = geom.Round2(t.X+dx), geom.Round2(t.Y+dy), model.MinTextW
+	}
+	if o.Size != was.Size {
+		t.Style.Size = o.Size
+		t.Style = model.ClampStyle(t.Style)
+	}
+	if t.Auto {
+		p.SetAutoW(s, t, p.SheetAutoW(s, t), false)
 	}
 }
 

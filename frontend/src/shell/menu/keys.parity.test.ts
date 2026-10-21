@@ -95,6 +95,16 @@ export const INTENDED_DIFFS: readonly Diff[] = [
     now: null,
     why: '074-18: под любым окном команды молчат, Ctrl+Z — только под окнами правки (074-28)',
   },
+  // Подборки фото (083, каталог G3): B, Shift+B и Del ленты раньше молчали. Del — только с выделением (WHEN binRemove).
+  { ctx: '*', token: 'b', was: null, now: 'binToggle', why: '074-24 (083-11): B — в целевую подборку, повтор — убрать' },
+  { ctx: '*', token: 'shift+B', was: null, now: 'binNew', why: '074-24 (083-11): Shift+B — новая подборка из выделенных' },
+  {
+    ctx: '*',
+    token: /^(Delete|Backspace)$/,
+    was: null,
+    now: 'binRemove',
+    why: '074-24 (083-11): Del и Backspace в ленте с выделением — убрать из показанной подборки',
+  },
   // Ctrl+R без «Полного»: reload-no-op ушёл из таблицы, страж браузера гасит перезагрузку (проверка ниже).
   { ctx: '*', token: /^ctrl\+[rк]$/i, was: 'reload', now: null, why: '074-8: reload ушёл из таблицы — Ctrl+R гасит страж браузера' },
 ]

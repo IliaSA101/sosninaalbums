@@ -2,7 +2,7 @@
   import { answerDrop, cancelDrop, dropAsk, dropAskText } from '../../base/drag/dropgrid.svelte'
   import { store } from '../../base/core/store.svelte'
   import { unitOf } from '../../base/geom/sheet'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
 
   // Вопрос после броска на ручной разворот (042): мест меньше, чем фото. Правки ещё не было;
   // ответ — второй вызов Go с rest, × и Esc — бросок отменён. Устроен как AutoAskDialog: безопасный выбор слева и в фокусе.

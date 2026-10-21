@@ -411,9 +411,15 @@ type View struct {
 	// LibPhotos — ID записей Photos со своим из библиотеки (PhotoRef.Lib, 048), по возрастанию:
 	// пропавшие среди них UI считает отдельно («Нет в библиотеке этого компьютера», без «Найти…»).
 	LibPhotos []string `json:"libPhotos"`
+	// AlbumFonts — свои гарнитуры, стоящие в альбоме (Project.Fonts, 082), по названию: каких нет
+	// на этом компьютере, UI считает сам — их нет в списке шрифтов (082-24). Без своих — поля нет.
+	AlbumFonts []FontUse `json:"albumFonts,omitempty"`
 	// MarksRev — номер состояния своих отметок: сменился — UI перечитывает Marks (сами отметки
 	// в View не кладутся: на тысячах фото это сотни КБ на каждое событие).
 	MarksRev int `json:"marksRev"`
+	// Bins — подборки фото (083) в порядке создания; всегда список (nil и [] разошлись бы в шапке
+	// дельты). Членство — в Marks (MarkView.Bins).
+	Bins []Bin `json:"bins"`
 	// Unfilled — пустые переменные и поля, встреченные в печатаемом тексте всех листов (по
 	// алфавиту); Unnamed — фото, у подписи которых поля имени есть, а имени нет. По ним —
 	// вопрос перед экспортом (export.FieldsWarning).
@@ -421,6 +427,9 @@ type View struct {
 	Unnamed  int      `json:"unnamed"`
 	// Cover — обложка (032); nil — её нет. В Spreads её нет: в счёт и нумерацию не входит.
 	Cover *CoverView `json:"cover"`
+	// PageLimit — предел разворотов типографии альбома (085, LimitOf); nil — типография
+	// неизвестна или у изделия нет предела. omitempty: у альбомов без типографии вид прежний.
+	PageLimit *PageLimitView `json:"pageLimit,omitempty"`
 	// Again — последнюю автосборку можно пересобрать (078 §8): после неё альбом не менялся
 	// (звёзды и метки не в счёт). UI по нему показывает «Пересобрать…».
 	Again bool `json:"again"`
@@ -432,6 +441,31 @@ type View struct {
 	Order []string `json:"order,omitempty"`
 	// fresh — какие Spreads идут в дельту; ставит только Wire.
 	fresh []bool
+	// src — номер Editor, построившего вид (087-3): поздний вид прежнего альбома App отличает
+	// от вида нынешнего. В JSON не идёт; 0 — вид не от Editor.
+	src uint64
+}
+
+// SetSrc — пометить вид номером Editor (ставит только Editor.view).
+func (v *View) SetSrc(id uint64) { v.src = id }
+
+// Src — номер Editor, построившего вид; 0 — неизвестен.
+func (v View) Src() uint64 { return v.src }
+
+// PageLimitView — предел разворотов типографии альбома (085): строки готовы для интерфейса.
+type PageLimitView struct {
+	Who   string `json:"who"`   // «Нетпринт «Премиум»» — изделие из обложки | «Фотосфера»
+	Range string `json:"range"` // «от 10 до 60 разворотов» | «до 57 разворотов»
+	Count int    `json:"count"` // разворотов (страниц при PrintLimit.Pages)
+	Min   int    `json:"min"`   // 0 — не задано
+	Max   int    `json:"max"`   // 0 — не задано
+	Warn  string `json:"warn"`  // "" — в пределах; иначе текст предупреждения
+}
+
+// PhotoUse — одно вхождение фото в альбом для карточки (084): лист и подпись.
+type PhotoUse struct {
+	Sheet int    `json:"sheet"` // индекс в Project.Sheets() — он же store.sheets интерфейса
+	Label string `json:"label"` // «Разворот 3 — место», «Обложка — фон», «Лист 2 — стикер»
 }
 
 // DefaultSafe — безопасная зона по умолчанию, мм (требование fsfera: значимое не ближе 8 мм).

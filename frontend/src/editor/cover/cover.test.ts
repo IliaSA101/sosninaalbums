@@ -4,10 +4,12 @@ import {
   COVER_LAYOUTS,
   COVER_Z,
   DROP_SCOPE,
+  SPINE_HIT_PX,
   boxCss,
   coverLabel,
   coverLabels,
   coverScopes,
+  dropOrder,
   labeled,
   mmText,
   pctBox,
@@ -65,6 +67,14 @@ describe('зоны броска и раскладки', () => {
       ['wrap', 'Одно фото через корешок'],
       ['both', 'Задняя + корешок + лицевая'],
     ])
+  })
+  it('dropOrder: корешок последним', () => {
+    const d = [z('back', 0, 0, 1, 1), z('spine', 1, 0, 1, 1), z('front', 2, 0, 1, 1), z('wrap', 0, 0, 3, 1)]
+    expect(dropOrder(d).map((x) => x.kind)).toEqual(['back', 'front', 'wrap', 'spine'])
+    expect(dropOrder(d.filter((x) => x.kind !== 'spine')).map((x) => x.kind)).toEqual(['back', 'front', 'wrap'])
+    expect(dropOrder([])).toEqual([])
+    expect(d[1].kind).toBe('spine') // вход не меняется
+    expect(SPINE_HIT_PX).toBe(24)
   })
   it('zonesOf отбирает по виду', () => {
     expect(zonesOf({ zones }, 'wrap')).toHaveLength(2)

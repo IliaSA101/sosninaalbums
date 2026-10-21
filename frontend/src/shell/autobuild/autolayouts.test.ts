@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { AutoPreview, Choice, Family } from '../../base/core/types'
 import { model } from '../../../wailsjs/go/models'
 import { unitOf } from '../../base/geom/sheet'
+import { FAMILIES } from '../../panels/gallery/variants'
 import { FAMILY_IDS, normFamilies } from '../../base/prefs/families'
 import {
   autoRows,
+  emptyColumn,
+  FAMILY_GEN,
   fallbackNote,
   familiesHint,
   layoutsStatus,
@@ -84,15 +87,15 @@ describe('familiesHint (сценарий 7)', () => {
     expect(familiesHint(['hero', 'dense'])).toBe('Только: Плотно, С главным фото')
   })
   it('запасные: склонение «развороте / разворотах»', () => {
-    expect(fallbackNote(1)).toBe('на 1 развороте таких нет — там лучшая раскладка')
-    expect(fallbackNote(7)).toBe('на 7 разворотах таких нет — там лучшая раскладка')
+    expect(fallbackNote(1)).toBe('на 1 развороте таких нет — там будет лучшая из всех')
+    expect(fallbackNote(7)).toBe('на 7 разворотах таких нет — там будет лучшая из всех')
     expect(fallbackNote(21)).toContain('на 21 развороте')
     expect(fallbackNote(12)).toContain('на 12 разворотах')
   })
   it('лист виньетки: «листе / листах»', () => {
     const u = unitOf({ sheet: true })
-    expect(fallbackNote(1, u)).toBe('на 1 листе таких нет — там лучшая раскладка')
-    expect(fallbackNote(3, u)).toBe('на 3 листах таких нет — там лучшая раскладка')
+    expect(fallbackNote(1, u)).toBe('на 1 листе таких нет — там будет лучшая из всех')
+    expect(fallbackNote(3, u)).toBe('на 3 листах таких нет — там будет лучшая из всех')
     expect(fallbackNote(0, u)).toBe('')
   })
 })
@@ -154,5 +157,27 @@ describe('spreadTitle', () => {
     expect(spreadTitle({ formName: 'Лента', fallback: false })).toBe('Лента')
     expect(spreadTitle({ formName: '', fallback: false })).toBeUndefined()
     expect(spreadTitle({ formName: 'Плотно', fallback: true })).toBe('Плотно — нет раскладок выбранных семейств, взята лучшая')
+  })
+})
+
+describe('emptyColumn: пустая колонка при фильтре', () => {
+  it('таблица слов есть для каждого семейства', () => {
+    expect(Object.keys(FAMILY_GEN).sort()).toEqual(FAMILIES.map((f) => f.id).sort())
+    expect(FAMILY_GEN.dense).toBe('Плотных')
+    expect(FAMILY_GEN.hero).toBe('С главным фото')
+    expect(FAMILY_GEN.air).toBe('С воздухом')
+    expect(FAMILY_GEN.strip).toBe('Лент')
+    expect(FAMILY_GEN.figure).toBe('Фигур')
+  })
+  it('одно семейство — его имя', () => {
+    const e = emptyColumn(['dense'], 4)
+    expect(e.main).toBe('Плотных на 4 фото нет')
+    expect(e.sub).toBe('возьмём лучшую из всех')
+    expect(e.title).toBe(
+      'В выбранных раскладках нет вариантов на 4 фото — на таких разворотах автосборка поставит лучшую раскладку из всех',
+    )
+  })
+  it('несколько семейств — «Таких раскладок»', () => {
+    expect(emptyColumn(['dense', 'air'], 2).main).toBe('Таких раскладок на 2 фото нет')
   })
 })

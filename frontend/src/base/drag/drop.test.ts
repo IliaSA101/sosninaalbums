@@ -154,3 +154,17 @@ describe('dropPlan: зона фона обложки', () => {
     expect(dropPlan({ kind: 'photos', ids: ['a'] }, t)).toEqual({ op: 'backdrop', spread: 'cover', scope: 'right', photo: 'a' })
   })
 })
+
+describe('dropPlan: кнопка «Подборки» (083)', () => {
+  const t: Target = { kind: 'bin' }
+  it('фото из ленты — в подборку, порядок id сохранён', () => {
+    expect(dropPlan({ kind: 'photos', ids: ['b', 'a'] }, t)).toEqual({ op: 'bin', ids: ['b', 'a'] })
+  })
+  it('фото с холста и пустой набор — ничего (с холста бросок в ленту убирает фото, а не добавляет в подборку)', () => {
+    expect(dropPlan({ kind: 'photos', ids: ['a'], fromSpread: 's1' }, t)).toBeNull()
+    expect(dropPlan({ kind: 'photos', ids: [] }, t)).toBeNull()
+  })
+  it('разворот на кнопку — ничего', () => {
+    expect(dropPlan({ kind: 'spread', id: 's1', index: 0 }, t)).toBeNull()
+  })
+})

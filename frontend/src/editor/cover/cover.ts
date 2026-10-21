@@ -31,6 +31,15 @@ export const scopeOfDrop = (kind: string): BackdropScope | null => DROP_SCOPE[ki
 // Фото корешка идёт в DOM раньше зон, поэтому при равном z зона сверху.
 export const COVER_Z = { plate: 1, spine: 2, drop: 2 } as const
 
+// Полоса попадания у зоны корешка, px экрана: на «вписать» сам корешок 5–13 px, в него не попасть (087-1).
+export const SPINE_HIT_PX = 24
+
+// Порядок зон в слое: корешок последним — при равном z он ложится поверх лицевой, и его полоса шире зоны
+// не уходит под соседние; остальные — в прежнем порядке.
+export function dropOrder<T extends { kind: string }>(zones: readonly T[]): T[] {
+  return [...zones.filter((z) => z.kind !== 'spine'), ...zones.filter((z) => z.kind === 'spine')]
+}
+
 // Запасные подписи для цвета и узора: их области не зависят от раскладки (всегда сторонки и вся обложка),
 // а `cover.scopes` — только области фото фона.
 const SIDE_LABEL: Record<BackdropScope, string> = { spread: 'Вся обложка', left: 'Задняя', right: 'Лицевая', spine: 'Корешок' }

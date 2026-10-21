@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { screenDpr } from '../../base/ui/dpr.svelte'
   import { Api, store } from '../../base/core/store.svelte'
   import type { PatternSpec, PatternView, SpreadView } from '../../base/core/types'
   import { isCover } from '../../base/geom/sheet'
@@ -32,7 +33,7 @@
 
   const list = $derived(sp.patterns ?? [])
   const labels = $derived(isCover(sp) ? coverLabels(store.cover) : SCOPE_LABEL)
-  const dpr = $derived(globalThis.devicePixelRatio || 1)
+  const dpr = $derived(screenDpr.value)
 
   const set = (p: PatternView, patch: Partial<PatternSpec>, merge = '') =>
     store.run(Api.SetPattern(sp.id, p.scope, patched(p, patch), merge) as Promise<unknown>)

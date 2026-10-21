@@ -14,9 +14,19 @@ import (
 const CoverName = "00.jpg"
 
 // CoverJob — обложка к выгрузке: лист и параметры рендера (холст — размер листа, не разворота).
+// Name — имя файла (00.jpg, 1-00.jpg): ставит Plan.WithCover по префиксу плана.
 type CoverJob struct {
 	Spread render.Spread
 	Opt    render.Options
+	Name   string
+}
+
+// name — имя файла обложки; задание мимо плана (Name "") — CoverName.
+func (j *CoverJob) name() string {
+	if j.Name == "" {
+		return CoverName
+	}
+	return j.Name
 }
 
 // NewCoverJob собирает задание обложки из вида печати (Editor.Snapshot): без направляющих
@@ -35,28 +45,35 @@ func NewCoverJob(p *model.Project, v model.View, dpi, quality int) *CoverJob {
 		}
 	}
 	// Холст рендера — две половины PageW; у обложки PageW = W/2, а шов закрывает плашка.
-	return &CoverJob{Spread: s, Opt: render.Options{PageW: c.Sheet.W / 2, PageH: c.Sheet.H, DPI: dpi, Quality: quality}}
+	return &CoverJob{Spread: s, Opt: render.Options{PageW: c.Sheet.W / 2, PageH: c.Sheet.H, DPI: dpi, Quality: quality}, Name: CoverName}
 }
 
-// WithCover добавляет обложку в план: её имя, вопрос о замене и прогресс.
+// WithCover добавляет обложку в план: её имя (по префиксу плана), вопрос о замене и прогресс.
+// Задание копируется: имя в одном плане не меняет обложку другого.
 func (pl Plan) WithCover(j *CoverJob) Plan {
-	pl.Cover = j
+	if j == nil {
+		pl.Cover = nil
+		return pl
+	}
+	c := *j
+	c.Name = pl.CoverName()
+	pl.Cover = &c
 	return pl
 }
 
-// runCover рисует и пишет 00.jpg.
-func runCover(j *CoverJob, dir string) error {
+// runCover рисует и пишет файл обложки (00.jpg; с префиксом плана — 1-00.jpg).
+func runCover(ctx context.Context, j *CoverJob, dir string) error {
 	if err := CheckCanvas(j.Opt); err != nil {
 		return fmt.Errorf("обложка: %w", err)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	img, err := render.Render(j.Spread, j.Opt)
+	img, err := render.RenderCtx(ctx, j.Spread, j.Opt)
 	if err != nil {
 		return fmt.Errorf("обложка: %w", err)
 	}
-	if err := saveJPEG(img, filepath.Join(dir, CoverName), j.Opt); err != nil {
+	if err := saveJPEG(img, filepath.Join(dir, j.name()), j.Opt); err != nil {
 		return fmt.Errorf("обложка: %w", err)
 	}
 	return nil
@@ -70,7 +87,7 @@ func runCoverPlan(ctx context.Context, spreads []render.Spread, pl Plan, opt ren
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := runCover(pl.Cover, dir); err != nil {
+		if err := runCover(ctx, pl.Cover, dir); err != nil {
 			return err
 		}
 		progress(1, total)
@@ -89,15 +106,16 @@ func AddCoverFile(pl Plan, dir string, ours, foreign []DirFile) ([]DirFile, []Di
 	if pl.Cover == nil {
 		return ours, foreign
 	}
-	path := filepath.Join(dir, CoverName)
+	name := pl.CoverName() // 1-00.jpg у плана с префиксом
+	path := filepath.Join(dir, name)
 	st, err := os.Lstat(path)
 	if err != nil {
 		return ours, foreign
 	}
 	if st.Mode().IsRegular() && IsOurs(path) {
-		return append(ours, DirFile{Name: CoverName}), foreign
+		return append(ours, DirFile{Name: name}), foreign
 	}
-	return ours, append(foreign, DirFile{Name: CoverName})
+	return ours, append(foreign, DirFile{Name: name})
 }
 
 // BlankCover — обложка в виде печати пуста: ни фото, ни мест, ни текстов, ни фото фона, ни

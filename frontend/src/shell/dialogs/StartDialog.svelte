@@ -1,8 +1,8 @@
 <script lang="ts">
-  import Modal from '../../base/ui/Modal.svelte'
-  import { Api, store } from '../../base/core/store.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
+  import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import { forgetRecent, openRecent } from '../menu/commands'
+  import { forgetRecent, openProject, openRecent } from '../menu/commands'
   import type { Level } from '../../base/prefs/levels'
   import { tick } from 'svelte'
   import LevelCards from './LevelCards.svelte'
@@ -57,7 +57,7 @@
   // Диалог выбора файла нативный: окно остаётся, пока он открыт, и закрывается, только если альбом открылся (не отмена).
   async function open() {
     const seq = store.openSeq
-    await store.replaceState(Api.OpenProject())
+    await openProject()
     if (store.openSeq !== seq) close()
   }
 

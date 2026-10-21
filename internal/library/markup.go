@@ -2,12 +2,17 @@ package library
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+
+	"github.com/disintegration/imaging"
 
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library/psd"
@@ -16,7 +21,8 @@ import (
 // Файл-разметка типографии (066): PSD, JPEG или PNG. Подложка только для экрана: разбор PSD —
 // пакет psd (вход недоверенный), здесь — проверка пути и открытие файла.
 
-// MarkupMaxSide — превью PSD не больше этого по длинной стороне, px (design §2.3).
+// MarkupMaxSide — превью разметки не больше этого по длинной стороне, px (design §2.3). JPEG/PNG
+// до этого размера отдаются файлом как есть.
 const MarkupMaxSide = 4096
 
 // MarkupInfo — что известно о файле-разметке. У JPEG/PNG направляющих и DPI нет, картинка есть.
@@ -35,8 +41,12 @@ type MarkupInfo struct {
 // альбома знают library, а пакет разбора psd им не нужен.
 type MarkupGuide = psd.Guide
 
-// IsPSD — разметка в PSD (превью делает Go, JPEG/PNG WebView показывает сам).
+// IsPSD — разметка в PSD (WebView его не показывает: картинку всегда строит Go).
 func (m MarkupInfo) IsPSD() bool { return strings.EqualFold(filepath.Ext(m.Path), ".psd") }
+
+// Big — картинку подложки строит Go (превью ≤ MarkupMaxSide): PSD и JPEG/PNG длиннее
+// MarkupMaxSide. Остальные JPEG/PNG окно показывает самим файлом.
+func (m MarkupInfo) Big() bool { return m.IsPSD() || max(m.W, m.H) > MarkupMaxSide }
 
 // ErrPSB — отказ PSB с текстом для пользователя: salbum проверяет путь тем же текстом, не зная
 // пакета psd.
@@ -103,19 +113,33 @@ func withPSD(path string, fn func(r io.ReadSeeker, size int64) error) error {
 // ErrNoMarkupImage — в PSD нет картинки для подложки (видны только направляющие).
 var ErrNoMarkupImage = errors.New("в PSD нет картинки для подложки")
 
-// MarkupPreview — картинка разметки для /media: PSD — превью ≤ MarkupMaxSide в PNG (BestSpeed:
-// белые шаблоны с тонкими линиями так меньше и быстрее JPEG, research §3). JPEG/PNG — nil без
-// ошибки: их WebView показывает файлом. Превью берёт место в общем бюджете декодирования.
+// MarkupPreview — картинка разметки для /media, когда её строит Go (MarkupInfo.Big): PSD —
+// превью ≤ MarkupMaxSide в PNG (BestSpeed: белые шаблоны с тонкими линиями так меньше и быстрее
+// JPEG, research §3); JPEG/PNG больше MarkupMaxSide — уменьшенная копия, JPEG 88 или PNG, если
+// есть прозрачность (как миниатюры). Остальным JPEG/PNG — nil без ошибки: их отдаёт файл.
+// Превью берёт место в общем бюджете декодирования.
 func MarkupPreview(path string) (data []byte, ctype string, err error) {
+	return MarkupPreviewCtx(context.Background(), path)
+}
+
+// MarkupPreviewCtx — MarkupPreview с отменой: ожидание места в бюджете прерывается ctx (запрос
+// /media закрыт — ошибка ctx.Err(), бюджет не тронут), иначе пока экспорт держит бюджет,
+// запросы к большой разметке висят и копятся.
+func MarkupPreviewCtx(ctx context.Context, path string) (data []byte, ctype string, err error) {
 	m, err := MarkupFile(path)
-	if err != nil || !m.IsPSD() {
+	if err != nil || !m.Big() {
 		return nil, "", err
+	}
+	if !m.IsPSD() {
+		return bigPreview(ctx, m.Path)
 	}
 	if !m.Image {
 		return nil, "", ErrNoMarkupImage
 	}
 	px := previewPixels(m.W, m.H)
-	imgfile.DecodeBudget.Acquire(px)
+	if err := imgfile.DecodeBudget.AcquireCtx(ctx, px); err != nil {
+		return nil, "", err
+	}
 	defer imgfile.DecodeBudget.Release(px)
 	var buf bytes.Buffer
 	err = withPSD(m.Path, func(r io.ReadSeeker, size int64) error {
@@ -129,6 +153,38 @@ func MarkupPreview(path string) (data []byte, ctype string, err error) {
 		return (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, img)
 	})
 	if err != nil {
+		return nil, "", err
+	}
+	return buf.Bytes(), "image/png", nil
+}
+
+// beforeEncode вызывается перед кодированием превью; подменяется в тестах (занят ли бюджет).
+var beforeEncode = func() {}
+
+// bigPreview — уменьшенная копия большого JPEG/PNG. Декод — только через OpenOrientedCtx (бюджет
+// памяти, пределы размера и EXIF-поворот внутри). Бюджет держится, пока оригинал нужен
+// (прозрачность и уменьшение); кодирование копии идёт уже без него, иначе оно зря задерживает
+// экспорт и миниатюры.
+func bigPreview(ctx context.Context, path string) ([]byte, string, error) {
+	img, release, err := imgfile.OpenOrientedCtx(ctx, path)
+	if err != nil {
+		return nil, "", err
+	}
+	// OnceFunc: defer страхует панику в fit, явный вызов ниже — освобождение до кодирования.
+	release = sync.OnceFunc(release)
+	defer release()
+	opaque := isOpaque(img)
+	small := fit(img, MarkupMaxSide, imaging.Box)
+	release()
+	beforeEncode()
+	var buf bytes.Buffer
+	if opaque {
+		if err := jpeg.Encode(&buf, small, &jpeg.Options{Quality: 88}); err != nil {
+			return nil, "", err
+		}
+		return buf.Bytes(), "image/jpeg", nil
+	}
+	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, small); err != nil {
 		return nil, "", err
 	}
 	return buf.Bytes(), "image/png", nil

@@ -6,6 +6,10 @@ describe('media', () => {
     expect(thumbUrl('ab12')).toBe('/media/t/ab12?v=3')
     expect(previewUrl('ab12')).toBe('/media/p/ab12?v=3')
   })
+  it('повторная загрузка миниатюры (088): метка r сбивает кэш, 0 — адрес прежний', () => {
+    expect(thumbUrl('ab12', 0)).toBe('/media/t/ab12?v=3')
+    expect(thumbUrl('ab12', 2)).toBe('/media/t/ab12?v=3&r=2')
+  })
   it('id экранируется: ни путь, ни запрос не подменяются', () => {
     expect(thumbUrl('a/../b?x')).toBe('/media/t/a%2F..%2Fb%3Fx?v=3')
     expect(previewUrl('a b#c')).toBe('/media/p/a%20b%23c?v=3')

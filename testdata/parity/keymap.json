@@ -100,6 +100,36 @@
         "custom": false
       },
       {
+        "id": "tplExport",
+        "label": "Сохранить мои шаблоны в файл…",
+        "short": "Сохр. шабл",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "tplImport",
+        "label": "Загрузить шаблоны из файла…",
+        "short": "Загр. шабл",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "showData",
+        "label": "Открыть папку данных",
+        "short": "К данным",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
         "id": "addFolder",
         "label": "Добавить папку с фото…",
         "short": "Папка фото",
@@ -898,6 +928,66 @@
         "custom": false
       },
       {
+        "id": "binToggle",
+        "label": "Подборка: добавить или убрать выделенные",
+        "short": "Подборка",
+        "hint": "В показанную подборку, иначе — в последнюю, куда добавляли; повтор у всех выделенных — убрать",
+        "group": "bins",
+        "scope": "library",
+        "feature": "bins",
+        "defaults": [
+          "KeyB"
+        ],
+        "keys": [
+          "KeyB"
+        ],
+        "custom": false
+      },
+      {
+        "id": "binNew",
+        "label": "Новая подборка из выделенных…",
+        "short": "Новая",
+        "group": "bins",
+        "scope": "library",
+        "feature": "bins",
+        "defaults": [
+          "Shift+KeyB"
+        ],
+        "keys": [
+          "Shift+KeyB"
+        ],
+        "custom": false
+      },
+      {
+        "id": "binRemove",
+        "label": "Убрать выделенные из подборки",
+        "short": "Из подб.",
+        "hint": "Когда лента показывает подборку. С диска и из альбома ничего не удаляется",
+        "group": "bins",
+        "scope": "library",
+        "feature": "bins",
+        "defaults": [
+          "Delete",
+          "Backspace"
+        ],
+        "keys": [
+          "Delete",
+          "Backspace"
+        ],
+        "custom": false
+      },
+      {
+        "id": "binAll",
+        "label": "Показать все фото (без подборки)",
+        "short": "Все фото",
+        "group": "bins",
+        "scope": "library",
+        "feature": "bins",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
         "id": "addText",
         "label": "Добавить текст",
         "short": "Текст",
@@ -1245,6 +1335,10 @@
       {
         "id": "marks",
         "title": "Отметки фото"
+      },
+      {
+        "id": "bins",
+        "title": "Подборки фото"
       },
       {
         "id": "text",

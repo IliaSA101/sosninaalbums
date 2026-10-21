@@ -32,6 +32,14 @@ try { $probe.Start() } catch { throw "Порт $Port занят — другой
 # GOTMPDIR — из-за антивируса (README): exe собираются только в .gotmp рабочей копии.
 $env:GOTMPDIR = Join-Path $root '.gotmp'
 if (-not (Test-Path $env:GOTMPDIR)) { New-Item -ItemType Directory -Path $env:GOTMPDIR | Out-Null }
+# Кэши Go и golangci-lint — в .gotmp основной копии (общие для worktree): пользовательская GOCACHE уводила их мимо проекта (20.10)
+$prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+$common = git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null
+$gitOk = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEap
+$main = if ($gitOk -and $common) { Split-Path -Parent $common } else { $root }
+$env:GOCACHE = Join-Path (Join-Path $main '.gotmp') 'cache-go'
+$env:GOLANGCI_LINT_CACHE = Join-Path (Join-Path $main '.gotmp') 'cache-golangci'
 $env:SA_STAND = $Name
 $log = Join-Path $env:GOTMPDIR "wails-dev-$Name.log"
 Set-Content -LiteralPath $log -Value "стенд $Name, http://localhost:$Port, $root" -Encoding UTF8

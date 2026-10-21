@@ -30,9 +30,29 @@ export function shownFamilies(pv: Pick<AutoPreview, 'samples'> | null, cur: read
 const IN_SPREAD: [string, string, string] = ['развороте', 'разворотах', 'разворотах']
 const IN_SHEET: [string, string, string] = ['листе', 'листах', 'листах']
 
-// «на 7 разворотах таких нет — там лучшая раскладка»; запасных нет — пусто.
+// «на 7 разворотах таких нет — там будет лучшая из всех»; запасных нет — пусто.
 export const fallbackNote = (fallback: number, unit: Unit = SPREAD): string =>
-  fallback > 0 ? `на ${fallback} ${plural(fallback, unit === SPREAD ? IN_SPREAD : IN_SHEET)} таких нет — там лучшая раскладка` : ''
+  fallback > 0 ? `на ${fallback} ${plural(fallback, unit === SPREAD ? IN_SPREAD : IN_SHEET)} таких нет — там будет лучшая из всех` : ''
+
+// Имя семейства в родительном мн. числе для пустой колонки: «Плотных на 4 фото нет».
+export const FAMILY_GEN: Record<Family, string> = {
+  dense: 'Плотных',
+  hero: 'С главным фото',
+  air: 'С воздухом',
+  bleed: 'В край',
+  strip: 'Лент',
+  figure: 'Фигур',
+}
+
+// Текст пустой колонки «k фото» при фильтре: у одного семейства — его имя, у нескольких — «Таких раскладок».
+export function emptyColumn(cur: readonly Family[], photos: number): { main: string; sub: string; title: string } {
+  const who = cur.length === 1 ? FAMILY_GEN[cur[0]] : 'Таких раскладок'
+  return {
+    main: `${who} на ${photos} фото нет`,
+    sub: 'возьмём лучшую из всех',
+    title: `В выбранных раскладках нет вариантов на ${photos} фото — на таких разворотах автосборка поставит лучшую раскладку из всех`,
+  }
+}
 
 // Строка состояния про семейства (сценарий 7); запасные раскладки окно показывает отдельно (fallbackNote, с выделением).
 export function familiesHint(cur: readonly Family[]): string {

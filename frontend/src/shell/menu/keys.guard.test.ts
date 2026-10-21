@@ -38,7 +38,7 @@ describe('обработчики клавиш мимо реестра', () => {
   // Del, Ctrl+буква) среди них нет и быть не должно: команда — в каталог internal/keymap.
   const ALLOWED: Record<string, string> = {
     '/src/App.svelte': 'диспетчер: единственное место командных клавиш',
-    '/src/base/ui/Modal.svelte': 'окно: Esc закрывает, фокус не уходит под окно',
+    '/src/base/modal/Modal.svelte': 'окно: Esc закрывает, фокус не уходит под окно',
     '/src/base/ui/Popover.svelte': 'Esc закрывает всплывающее окно',
     '/src/base/ui/ColorPicker.svelte': 'Esc закрывает палитру и отменяет пипетку',
     '/src/base/drag/drag.svelte.ts': 'Esc отменяет перенос',

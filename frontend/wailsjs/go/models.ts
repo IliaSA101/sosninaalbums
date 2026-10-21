@@ -297,7 +297,7 @@ export namespace app {
 	    pages: boolean;
 	    cover: boolean;
 	    coverOnly: boolean;
-	    fsfera: boolean;
+	    print: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ExportOptions(source);
@@ -311,8 +311,62 @@ export namespace app {
 	        this.pages = source["pages"];
 	        this.cover = source["cover"];
 	        this.coverOnly = source["coverOnly"];
-	        this.fsfera = source["fsfera"];
+	        this.print = source["print"];
 	    }
+	}
+	export class FontAdded {
+	    id: string;
+	    name: string;
+	    faces: number;
+	    noCyr: boolean;
+	    files: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FontAdded(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.faces = source["faces"];
+	        this.noCyr = source["noCyr"];
+	        this.files = source["files"];
+	    }
+	}
+	export class FontImport {
+	    added: FontAdded[];
+	    faces: string[];
+	    skipped: DecorSkip[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FontImport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.added = this.convertValues(source["added"], FontAdded);
+	        this.faces = source["faces"];
+	        this.skipped = this.convertValues(source["skipped"], DecorSkip);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class GridResult {
 	    view: model.View;
@@ -591,6 +645,46 @@ export namespace app {
 	        this.bytes = source["bytes"];
 	    }
 	}
+	export class PhotoAbout {
+	    id: string;
+	    file: string;
+	    shot: string[];
+	    note: string;
+	    used: string;
+	    uses: model.PhotoUse[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PhotoAbout(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.file = source["file"];
+	        this.shot = source["shot"];
+	        this.note = source["note"];
+	        this.used = source["used"];
+	        this.uses = this.convertValues(source["uses"], model.PhotoUse);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class RelinkResult {
 	    view: model.View;
 	    found: number;
@@ -646,6 +740,8 @@ export namespace app {
 	    photos: library.Photo[];
 	    scan: library.ScanProgress;
 	    notice?: string;
+	    info?: string;
+	    freshFonts?: string[];
 	    missing: string[];
 	    version: string;
 	    fonts: text.Family[];
@@ -664,6 +760,8 @@ export namespace app {
 	        this.photos = this.convertValues(source["photos"], library.Photo);
 	        this.scan = this.convertValues(source["scan"], library.ScanProgress);
 	        this.notice = source["notice"];
+	        this.info = source["info"];
+	        this.freshFonts = source["freshFonts"];
 	        this.missing = source["missing"];
 	        this.version = source["version"];
 	        this.fonts = this.convertValues(source["fonts"], text.Family);
@@ -723,6 +821,26 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class TplLoad {
+	    canceled: boolean;
+	    added: number;
+	    same: number;
+	    over: number;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TplLoad(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.canceled = source["canceled"];
+	        this.added = source["added"];
+	        this.same = source["same"];
+	        this.over = source["over"];
+	        this.text = source["text"];
+	    }
+	}
 	export class TplResult {
 	    view: model.View;
 	    left: number;
@@ -757,6 +875,22 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class TplSave {
+	    canceled: boolean;
+	    saved: number;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TplSave(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.canceled = source["canceled"];
+	        this.saved = source["saved"];
+	        this.text = source["text"];
+	    }
+	}
 
 }
 
@@ -772,6 +906,9 @@ export namespace collect {
 	    bytes: number;
 	    scanning: boolean;
 	    folderName: string;
+	    fonts: number;
+	    fontsRestricted: string[];
+	    missingFonts: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Info(source);
@@ -788,43 +925,9 @@ export namespace collect {
 	        this.bytes = source["bytes"];
 	        this.scanning = source["scanning"];
 	        this.folderName = source["folderName"];
-	    }
-	}
-
-}
-
-export namespace fsfera {
-	
-	export class Plan {
-	    format: string;
-	    pages: string;
-	    spreads: number;
-	    spine: number;
-	    max: number;
-	    folder: string;
-	    block: string[];
-	    coverFix: boolean;
-	    fixAt: number;
-	    warn: string[];
-	    memo: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new Plan(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.format = source["format"];
-	        this.pages = source["pages"];
-	        this.spreads = source["spreads"];
-	        this.spine = source["spine"];
-	        this.max = source["max"];
-	        this.folder = source["folder"];
-	        this.block = source["block"];
-	        this.coverFix = source["coverFix"];
-	        this.fixAt = source["fixAt"];
-	        this.warn = source["warn"];
-	        this.memo = source["memo"];
+	        this.fonts = source["fonts"];
+	        this.fontsRestricted = source["fontsRestricted"];
+	        this.missingFonts = source["missingFonts"];
 	    }
 	}
 
@@ -1467,6 +1570,20 @@ export namespace model {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.spreads = source["spreads"];
 	        this.photos = source["photos"];
+	    }
+	}
+	export class Bin {
+	    id: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Bin(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
 	    }
 	}
 	export class Border {
@@ -2628,6 +2745,20 @@ export namespace model {
 		}
 	}
 	
+	export class FontUse {
+	    id: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FontUse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	    }
+	}
 	
 	
 	export class GridChoice {
@@ -2929,6 +3060,28 @@ export namespace model {
 		}
 	}
 	
+	export class PageLimitView {
+	    who: string;
+	    range: string;
+	    count: number;
+	    min: number;
+	    max: number;
+	    warn: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PageLimitView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.who = source["who"];
+	        this.range = source["range"];
+	        this.count = source["count"];
+	        this.min = source["min"];
+	        this.max = source["max"];
+	        this.warn = source["warn"];
+	    }
+	}
 	export class PagePreset {
 	    label: string;
 	    group: string;
@@ -2985,6 +3138,20 @@ export namespace model {
 	        this.teacher = source["teacher"];
 	        this.place = source["place"];
 	        this.seatNamed = source["seatNamed"];
+	    }
+	}
+	export class PhotoUse {
+	    sheet: number;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PhotoUse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sheet = source["sheet"];
+	        this.label = source["label"];
 	    }
 	}
 	export class PlaceBox {
@@ -3085,10 +3252,13 @@ export namespace model {
 	    textMaxW: number;
 	    backdropUsed: string[];
 	    libPhotos: string[];
+	    albumFonts?: FontUse[];
 	    marksRev: number;
+	    bins: Bin[];
 	    unfilled: string[];
 	    unnamed: number;
 	    cover?: CoverView;
+	    pageLimit?: PageLimitView;
 	    again: boolean;
 	    seq: number;
 	    base?: number;
@@ -3119,10 +3289,13 @@ export namespace model {
 	        this.textMaxW = source["textMaxW"];
 	        this.backdropUsed = source["backdropUsed"];
 	        this.libPhotos = source["libPhotos"];
+	        this.albumFonts = this.convertValues(source["albumFonts"], FontUse);
 	        this.marksRev = source["marksRev"];
+	        this.bins = this.convertValues(source["bins"], Bin);
 	        this.unfilled = source["unfilled"];
 	        this.unnamed = source["unnamed"];
 	        this.cover = this.convertValues(source["cover"], CoverView);
+	        this.pageLimit = this.convertValues(source["pageLimit"], PageLimitView);
 	        this.again = source["again"];
 	        this.seq = source["seq"];
 	        this.base = source["base"];
@@ -3393,6 +3566,59 @@ export namespace prefs {
 
 }
 
+export namespace printshop {
+	
+	export class Plan {
+	    kind: string;
+	    title: string;
+	    format: string;
+	    pages: string;
+	    spreads: number;
+	    spine: number;
+	    min: number;
+	    max: number;
+	    folder: string;
+	    coverName: string;
+	    quality: number;
+	    block: string[];
+	    coverFix: boolean;
+	    fixAt: number;
+	    warn: string[];
+	    memo: string[];
+	    done: string;
+	    site: string;
+	    siteButton: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Plan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.title = source["title"];
+	        this.format = source["format"];
+	        this.pages = source["pages"];
+	        this.spreads = source["spreads"];
+	        this.spine = source["spine"];
+	        this.min = source["min"];
+	        this.max = source["max"];
+	        this.folder = source["folder"];
+	        this.coverName = source["coverName"];
+	        this.quality = source["quality"];
+	        this.block = source["block"];
+	        this.coverFix = source["coverFix"];
+	        this.fixAt = source["fixAt"];
+	        this.warn = source["warn"];
+	        this.memo = source["memo"];
+	        this.done = source["done"];
+	        this.site = source["site"];
+	        this.siteButton = source["siteButton"];
+	    }
+	}
+
+}
+
 export namespace text {
 	
 	export class Face {
@@ -3417,6 +3643,8 @@ export namespace text {
 	    css: string;
 	    group: string;
 	    faces: Face[];
+	    hidden?: boolean;
+	    noCyr?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Family(source);
@@ -3429,6 +3657,8 @@ export namespace text {
 	        this.css = source["css"];
 	        this.group = source["group"];
 	        this.faces = this.convertValues(source["faces"], Face);
+	        this.hidden = source["hidden"];
+	        this.noCyr = source["noCyr"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

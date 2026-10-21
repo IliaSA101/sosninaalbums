@@ -13,12 +13,34 @@ import { makeVignette } from '../../panels/vignette/vigact'
 import { vigDialog } from '../../panels/vignette/vigsession.svelte'
 import { decor } from '../../panels/decor/decor.svelte'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
+import { edit } from '../../editor/text/edit.svelte'
+import { newDoc } from '../newdoc/newdoc.svelte'
+import * as Bins from '../../panels/bins/binact'
+import { binsel } from '../../panels/bins/binsel.svelte'
+import * as App from '../../../wailsjs/go/app/App'
 import type { SpreadView } from '../../base/core/types'
 
 // Go не зовём: «Сделать виньеткой» проверяем по вызову действия vigact.
 vi.mock('../../panels/vignette/vigact', async (orig) => ({
   ...(await orig<typeof import('../../panels/vignette/vigact')>()),
   makeVignette: vi.fn(async () => true),
+}))
+
+// Подборки (083): действия binact подменены, проверяем только связку команда → действие.
+vi.mock('../../panels/bins/binact', async (orig) => ({
+  ...(await orig<typeof import('../../panels/bins/binact')>()),
+  toggleSelected: vi.fn(async () => true),
+  removeSelected: vi.fn(async () => true),
+  openNew: vi.fn(),
+}))
+
+// Смена альбома: Go не зовём, считаем вызовы (холостой ответ — «отмена диалога»).
+vi.mock('../../../wailsjs/go/app/App', async (orig) => ({
+  ...(await orig<typeof import('../../../wailsjs/go/app/App')>()),
+  OpenRecent: vi.fn(async () => ({ cancelled: true })),
+  OpenProject: vi.fn(async () => ({ cancelled: true })),
+  NewProject: vi.fn(async () => ({ cancelled: true })),
+  NewVignetteSheet: vi.fn(async () => ({ cancelled: true })),
 }))
 
 const full: MenuCtx = {
@@ -93,6 +115,21 @@ describe('команды', () => {
       { flag: 0 },
     ])
     set.mockRestore()
+  })
+
+  it('подборки (083): binToggle/binNew/binRemove зовут действия, binAll — «Все фото»', () => {
+    COMMANDS.binToggle()
+    COMMANDS.binNew()
+    COMMANDS.binRemove()
+    expect(Bins.toggleSelected).toHaveBeenCalledOnce()
+    expect(Bins.openNew).toHaveBeenCalledOnce()
+    expect(Bins.removeSelected).toHaveBeenCalledOnce()
+    binsel.cur = 'b1'
+    COMMANDS.binAll()
+    expect(binsel.cur).toBe('')
+    // Клавиша идёт тем же путём, что пункт меню
+    runKey('binToggle', {} as KeyboardEvent)
+    expect(Bins.toggleSelected).toHaveBeenCalledTimes(2)
   })
 
   it('alignLeft…alignDistV (074-7): каждая клавиша — своё выравнивание, без параметра пункта меню', () => {
@@ -373,5 +410,40 @@ describe('команды', () => {
         vi.unstubAllGlobals()
       }
     })
+  })
+
+  it('смена альбома ждёт набранный текст (087-5)', async () => {
+    const calls = [App.OpenRecent, App.NewProject, App.OpenProject, App.NewVignetteSheet] as unknown as ReturnType<typeof vi.fn>[]
+    const entries: [string, () => unknown][] = [
+      ['openRecent', () => COMMANDS.openRecent(undefined, 'a.salbum')],
+      ['new', () => COMMANDS.new()],
+      ['open', () => COMMANDS.open()],
+      ['newDoc.create (альбом)', () => ((newDoc.kind = 'album'), newDoc.create())],
+      ['newDoc.create (лист)', () => ((newDoc.kind = 'sheet'), newDoc.create())],
+    ]
+    for (const [name, run] of entries) {
+      calls.forEach((c) => c.mockClear())
+      newDoc.busy = false
+      let release!: () => void
+      const idle = vi.spyOn(edit, 'idle').mockImplementation(() => new Promise<void>((r) => (release = r)))
+      try {
+        const done = run()
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(
+          calls.map((c) => c.mock.calls.length),
+          name + ': до записи текста Go не зовём',
+        ).toEqual([0, 0, 0, 0])
+        release()
+        await done
+        expect(
+          calls.reduce((n, c) => n + c.mock.calls.length, 0),
+          name + ': после — ровно один вызов',
+        ).toBe(1)
+      } finally {
+        idle.mockRestore()
+      }
+    }
+    newDoc.kind = 'album'
   })
 })

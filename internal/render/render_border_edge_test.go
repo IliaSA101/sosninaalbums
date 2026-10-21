@@ -1,6 +1,7 @@
 package render
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -237,7 +238,7 @@ func TestPicGeometryAreaCap(t *testing.T) {
 func TestBorderEnvEviction(t *testing.T) {
 	frame := ringPNG(t, 60, 80, 10, color.NRGBA{20, 140, 40, 255})
 	var e borderEnv
-	pic, err := e.picture(frame)
+	pic, err := e.picture(context.Background(), frame)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,13 +260,13 @@ func TestBorderEnvEviction(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("не png"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, e1 := e.picture(bad)
-	_, e2 := e.picture(bad)
+	_, e1 := e.picture(context.Background(), bad)
+	_, e2 := e.picture(context.Background(), bad)
 	if e1 == nil || e1 != e2 {
 		t.Errorf("ошибка не запомнена: %v / %v", e1, e2)
 	}
 	// Нет файла: stampOf отказывает до кэша.
-	if _, err := e.picture(filepath.Join(filepath.Dir(bad), "нет.png")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := e.picture(context.Background(), filepath.Join(filepath.Dir(bad), "нет.png")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("пропавший файл: %v", err)
 	}
 
@@ -373,7 +374,7 @@ func TestBorderBufBudget(t *testing.T) {
 	cut := [4]float64{1.0 / 6, 1.0 / 8, 1.0 / 6, 1.0 / 8}
 	canvas := image.Rect(0, 0, 1000, 500)
 	huge := BorderDraw{Box: layout.Rect{W: 1100, H: 1100}, Rot: 30, Pic: true, Path: ring, Cut: cut} // 11000² px при 254 dpi
-	paint, err := prepareBorder(huge, nil, canvas, 254)
+	paint, err := prepareBorder(context.Background(), huge, nil, canvas, 254)
 	if err != nil || paint == nil {
 		t.Fatalf("121 Мп: %v, рисунок %v", err, paint != nil)
 	}
@@ -381,7 +382,7 @@ func TestBorderBufBudget(t *testing.T) {
 		t.Fatalf("подготовка держит бюджет: %d", n)
 	}
 
-	paint, err = prepareBorder(BorderDraw{Box: layout.Rect{X: 10, Y: 10, W: 40, H: 30}, Rot: 20, Pic: true, Path: ring, Cut: cut}, nil, canvas, 254)
+	paint, err = prepareBorder(context.Background(), BorderDraw{Box: layout.Rect{X: 10, Y: 10, W: 40, H: 30}, Rot: 20, Pic: true, Path: ring, Cut: cut}, nil, canvas, 254)
 	if err != nil || paint == nil {
 		t.Fatalf("малая: %v", err)
 	}

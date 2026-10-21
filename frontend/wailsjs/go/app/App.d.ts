@@ -4,8 +4,8 @@ import {app} from '../models';
 import {model} from '../models';
 import {prefs} from '../models';
 import {collect} from '../models';
-import {fsfera} from '../models';
 import {keymap} from '../models';
+import {printshop} from '../models';
 import {text} from '../models';
 
 export function AddDecorPNG(arg1:string,arg2:string):Promise<app.DecorItem>;
@@ -62,6 +62,8 @@ export function CancelExport():Promise<void>;
 
 export function CancelLibrary():Promise<void>;
 
+export function CheckFolders(arg1:boolean):Promise<void>;
+
 export function ChooseFolder():Promise<model.View>;
 
 export function ClearBackdrop(arg1:string,arg2:string):Promise<model.View>;
@@ -94,6 +96,8 @@ export function CreateCover(arg1:string,arg2:string):Promise<model.View>;
 
 export function DecorCatalog(arg1:string):Promise<app.DecorCatalog>;
 
+export function DeleteBin(arg1:string):Promise<model.View>;
+
 export function DeleteCover():Promise<model.View>;
 
 export function DeleteGridTemplate(arg1:string):Promise<void>;
@@ -108,11 +112,15 @@ export function DeleteSpreads(arg1:Array<string>):Promise<model.View>;
 
 export function DeleteText(arg1:string):Promise<model.View>;
 
+export function DropFonts(arg1:Array<string>):Promise<Array<string>>;
+
 export function DropPhotos(arg1:string,arg2:string,arg3:Array<string>,arg4:number,arg5:string):Promise<app.DropResult>;
 
 export function DuplicateGrid(arg1:string,arg2:number,arg3:boolean):Promise<model.View>;
 
 export function Export(arg1:app.ExportOptions):Promise<boolean>;
+
+export function ExportTemplates():Promise<app.TplSave>;
 
 export function FillPlaces(arg1:Array<string>,arg2:string):Promise<app.GridResult>;
 
@@ -126,8 +134,6 @@ export function ForgetFileNames(arg1:Array<string>):Promise<model.View>;
 
 export function ForgetRecent(arg1:string):Promise<Array<prefs.RecentProject>>;
 
-export function FsferaPlan():Promise<fsfera.Plan>;
-
 export function GetState():Promise<app.State>;
 
 export function GetView():Promise<model.View>;
@@ -136,9 +142,19 @@ export function GridChoices(arg1:string,arg2:number,arg3:string):Promise<model.G
 
 export function HideDecor(arg1:string,arg2:string):Promise<void>;
 
+export function HideFont(arg1:string):Promise<void>;
+
 export function ImportDecor(arg1:string,arg2:string):Promise<app.DecorImport>;
 
 export function ImportDecorPaths(arg1:string,arg2:string,arg3:Array<string>):Promise<app.DecorImport>;
+
+export function ImportFontPaths(arg1:Array<string>):Promise<app.FontImport>;
+
+export function ImportFonts():Promise<app.FontImport>;
+
+export function ImportTemplates():Promise<app.TplLoad>;
+
+export function ImportTemplatesPath(arg1:string):Promise<app.TplLoad>;
 
 export function Keymap():Promise<keymap.View>;
 
@@ -160,11 +176,15 @@ export function MovePhoto(arg1:string,arg2:string,arg3:number):Promise<model.Vie
 
 export function MoveSpread(arg1:string,arg2:number):Promise<model.View>;
 
+export function NewBin(arg1:string,arg2:Array<string>):Promise<model.View>;
+
 export function NewProject(arg1:string):Promise<app.State>;
 
 export function NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>;
 
 export function NewVignetteSheet(arg1:number,arg2:number):Promise<app.State>;
+
+export function OpenFabrika():Promise<void>;
 
 export function OpenFsfera():Promise<void>;
 
@@ -177,6 +197,8 @@ export function PagePresets():Promise<Array<model.PagePreset>>;
 export function PasteNames(arg1:string,arg2:model.NamesOpts):Promise<app.NamesResult>;
 
 export function Person(arg1:string):Promise<model.PersonView>;
+
+export function PhotoAbout(arg1:string):Promise<app.PhotoAbout>;
 
 export function PickBackdropFile(arg1:string,arg2:string):Promise<model.View>;
 
@@ -206,6 +228,8 @@ export function PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.Nam
 
 export function PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>;
 
+export function PrintPlans():Promise<Array<printshop.Plan>>;
+
 export function PurgePhotos(arg1:Array<string>):Promise<model.View>;
 
 export function Recent():Promise<Array<prefs.RecentProject>>;
@@ -225,6 +249,8 @@ export function RemoveHotkey(arg1:string,arg2:string):Promise<keymap.View>;
 export function RemovePack(arg1:string):Promise<app.PackList>;
 
 export function RemovePhotos(arg1:Array<string>):Promise<model.View>;
+
+export function RenameBin(arg1:string,arg2:string):Promise<model.View>;
 
 export function RenameDecor(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -275,6 +301,8 @@ export function SetBackdropFade(arg1:string,arg2:string,arg3:number,arg4:string)
 export function SetBackdropFrame(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number):Promise<model.View>;
 
 export function SetBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>;
+
+export function SetBin(arg1:string,arg2:Array<string>,arg3:boolean):Promise<model.View>;
 
 export function SetBorder(arg1:string,arg2:Array<string>,arg3:model.BorderPatch,arg4:string):Promise<model.View>;
 
@@ -363,6 +391,8 @@ export function SetupVignette(arg1:string,arg2:model.VigSetup):Promise<app.GridR
 export function ShowBackups():Promise<void>;
 
 export function ShowCollected():Promise<void>;
+
+export function ShowDataFolder():Promise<void>;
 
 export function ShowInExplorer():Promise<void>;
 

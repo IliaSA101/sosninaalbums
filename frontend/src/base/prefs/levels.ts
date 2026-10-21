@@ -92,6 +92,7 @@ export type FeatureId =
   | 'textRotate'
   | 'panels'
   | 'marks'
+  | 'bins' // 083: подборки фото
   | 'vignette'
   | 'border' // 079: рамочки, строка decor
   | 'photoFade' // 079: прозрачность фото, строка adjust
@@ -131,6 +132,13 @@ export const FEATURES: Feature[] = [
     min: 'simple',
   },
   { id: 'marks', group: 'Основа', title: 'Звёзды, метки, флажки и фильтр ленты', short: 'Отметки фото', min: 'simple' },
+  {
+    id: 'bins',
+    group: 'Основа',
+    title: 'Подборки фото: кнопка в ленте, B, перетаскивание',
+    short: 'Подборки фото',
+    min: 'standard',
+  },
   { id: 'turn', group: 'Фото и текст', title: 'Мини-панель: Подпись · ↻ 90° · Удалить', short: 'Поворот фото на 90°', min: 'simple' },
   { id: 'text', group: 'Фото и текст', title: 'Свободный текст', short: 'Свободный текст', min: 'standard' },
   { id: 'photoMenu', group: 'Фото и текст', title: 'Меню по правой кнопке', short: 'Меню по правой кнопке', min: 'standard' },

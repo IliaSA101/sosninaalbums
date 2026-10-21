@@ -2,30 +2,31 @@
   import { untrack } from 'svelte'
   import { Api, store } from '../../base/core/store.svelte'
   import { jobs } from '../../base/core/jobs.svelte'
-  import type { FsferaPlan } from '../../base/core/types'
-  import { coverAct } from '../../panels/cover/coveract.svelte'
+  import type { PrintPlan } from '../../base/core/types'
   import { edit } from '../../editor/text/edit.svelte'
   import { parseExportRange, rangeSummary } from './exportrange'
   import ExportRun from './ExportRun.svelte'
   import ExportGroup from './ExportGroup.svelte'
   import ExportQuality from './ExportQuality.svelte'
+  import PrintGroup from './PrintGroup.svelte'
   import {
+    activePlan,
     buildOptions,
     canExport,
     coverAvailable,
     exportWarnings,
-    FSFERA_DPI,
-    hasFix,
+    limitWarn,
+    PRINT_DPI,
     loadPrefs,
-    memoLine,
     planStale,
+    printQuality,
     sampleName,
     savePrefs,
     sizeSummary,
     type ExportPrefs,
     type ExportScope,
   } from './exportopts'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { isSheet } from '../../base/geom/sheet'
 
   // Окно «Экспорт» (спека 009 U8, design §6.4): что выгрузить, как резать, качество и dpi.
@@ -42,20 +43,20 @@
   let busy = $state(false)
   let field = $state<HTMLInputElement>()
 
-  // Готовность к выгрузке для Фотосферы Pro (047): Go считает при открытии окна и при каждой правке альбома.
-  // Номер запроса отсекает запоздавший ответ.
-  let plan = $state<FsferaPlan | null>(null)
+  // Готовность к выгрузке для типографий (047, 081): Go считает при открытии окна и при каждой правке альбома.
+  // null — ответа ещё нет; [] — для страницы нет ни одной типографии. Номер запроса отсекает запоздавший ответ.
+  let plans = $state<PrintPlan[] | null>(null)
   let planReq = 0
   $effect(() => {
     void store.view.rev
     if (!jobs.exportOpen) return
     const my = ++planReq
-    Api.FsferaPlan()
+    Api.PrintPlans()
       .then((p) => {
-        if (!planStale(my, planReq)) plan = p as FsferaPlan
+        if (!planStale(my, planReq)) plans = (p ?? []) as PrintPlan[]
       })
       .catch(() => {
-        if (!planStale(my, planReq)) plan = null // без плана окно работает как раньше
+        if (!planStale(my, planReq)) plans = [] // без планов окно работает как обычно
       })
   })
   // Каждое открытие — заново: выбор из localStorage, диапазон «Все».
@@ -66,41 +67,45 @@
       text = ''
       prefs = loadPrefs()
       busy = false
-      plan = null // план прошлого открытия не показываем и не берём в расчёт
+      plans = null // планы прошлого открытия не показываем и не берём в расчёт
     })
   })
 
-  // Режим включён: флажок есть (страница — формат Фотосферы, не лист 031) и выбран.
-  const fs = $derived(!!plan?.format && prefs.fsfera)
+  // Режим печати включён: у страницы есть план этой типографии (формат из её таблицы, не лист 031) и флажок выбран.
+  const plan = $derived(activePlan(plans, prefs.print))
+  const fs = $derived(!!plan)
 
   const current = $derived(store.current + 1)
   const parsed = $derived(parseExportRange(text, spreads.length, sheet))
   // Пункты обложки — только если она есть (и это не лист-виньетка); «только обложка» гасит выбор разворотов.
-  // Для Фотосферы выбор разворотов, вида и dpi серый: выгружается всё разворотами в 300 dpi (Go игнорирует эти поля).
+  // В режиме печати выбор разворотов, вида и dpi серый: выгружается всё разворотами в 300 dpi (Go игнорирует эти поля).
   const hasCover = $derived(coverAvailable(store.view))
   const only = $derived(hasCover && prefs.coverOnly && !fs)
   const scopeNow = $derived(fs ? 'all' : scope)
   const pagesNow = $derived(!fs && prefs.pages)
   const bad = $derived(!only && !fs && scope === 'range' && !!parsed.error)
-  // Пока план не пришёл, а Фотосфера выбрана, выгрузка закрыта (блок неизвестен).
-  const can = $derived(canExport({ busy, bad, fsPref: prefs.fsfera, plan }))
+  // Пока планы не пришли, а типография выбрана, выгрузка закрыта (блок неизвестен).
+  const can = $derived(canExport({ busy, bad, printPref: prefs.print, plans }))
 
   const album = $derived(settings.dpi)
   // Выбранное dpi в числе; 0 в выборе — «как в альбоме».
-  const dpiNow = $derived(fs ? FSFERA_DPI : prefs.dpi > 0 ? prefs.dpi : album)
+  const dpiNow = $derived(fs ? PRINT_DPI : prefs.dpi > 0 ? prefs.dpi : album)
+  // Качество: у типографии со своим (Фабрика — 100) выбор окна серый и показывает его.
+  const qualityNow = $derived(printQuality(plan, prefs.quality))
   const unit = $derived(sheet ? 'лист' : pagesNow ? 'страницу' : 'разворот')
   // Итог по выбранному объёму (U22) и предупреждения из данных альбома (U8).
   const summary = $derived(
-    sizeSummary(settings, dpiNow, prefs.quality, pagesNow, unit, {
+    sizeSummary(settings, dpiNow, qualityNow, pagesNow, unit, {
       scope: scopeNow,
       spreads: spreads.length,
       units: parsed.error ? null : parsed.units,
       cover: hasCover && (fs || prefs.cover || only),
       only,
-      fsfera: fs,
+      print: fs,
     }),
   )
   const warn = $derived(exportWarnings(store.view, store.missing.length))
+  const limit = $derived(limitWarn(store.view, fs))
 
   function setPrefs(p: Partial<ExportPrefs>) {
     prefs = { ...prefs, ...p }
@@ -121,11 +126,11 @@
   async function go() {
     if (!can) return
     busy = true
-    const folder = fs ? plan!.folder : '' // имя папки — из плана этого запуска, для окна «Готово»
+    const printPlan = plan // план этого запуска — для окна «Готово» (заголовок, сайт, папка)
     await edit.idle() // набранное в тексте должно попасть в файл
-    jobs.exportFolder = folder
+    jobs.exportPrint = printPlan
     // Окно остаётся: при успехе в нём пойдёт ход (jobs.exporting), при отказе Go — прежние настройки.
-    await jobs.runExport(buildOptions(scope, current, text, sheet ? { ...prefs, pages: false } : prefs, hasCover, store.onCover, fs))
+    await jobs.runExport(buildOptions(scope, current, text, sheet ? { ...prefs, pages: false } : prefs, hasCover, store.onCover, printPlan))
     busy = false
   }
   const enter = (e: KeyboardEvent) => {
@@ -141,27 +146,13 @@
     {#if jobs.exporting}
       <ExportRun />
     {:else}
-      {#if plan?.format}
-        <ExportGroup cap="Печать">
-          <label
-            ><input type="checkbox" checked={prefs.fsfera} onchange={(e) => setPrefs({ fsfera: e.currentTarget.checked })} />Для Фотосферы
-            Pro
-            <span class="hint">(папка «{plan.folder}», 300 dpi{hasCover ? ', с обложкой' : ''})</span></label
-          >
-        </ExportGroup>
-        {#if fs}
-          {#if plan.memo.length}<p class="hint">{memoLine(plan.memo)}</p>{/if}
-          {#each plan.block as line, i (line)}
-            <p class="err blocked">
-              {line}
-              {#if hasFix(plan, i) && store.cover}
-                <button class="fix" onclick={() => coverAct.applyPreset(store.cover!.preset)}>Исправить</button>
-              {/if}
-            </p>
-          {/each}
-          {#each plan.warn as line (line)}<p class="warn fs">{line}</p>{/each}
-        {/if}
-      {/if}
+      <PrintGroup
+        plans={(plans ?? []).filter((p) => p.format)}
+        pref={prefs.print}
+        {plan}
+        {hasCover}
+        setPref={(v) => setPrefs({ print: v })}
+      />
 
       {#if hasCover}
         <ExportGroup cap="Обложка" off={fs}>
@@ -242,8 +233,19 @@
         </ExportGroup>
       {/if}
 
-      <ExportQuality {prefs} {settings} {dpiNow} {pagesNow} {fs} {setPrefs} {setDpi} />
+      <ExportQuality
+        {prefs}
+        {settings}
+        {dpiNow}
+        {pagesNow}
+        {fs}
+        {qualityNow}
+        qualityLocked={(plan?.quality ?? 0) > 0}
+        {setPrefs}
+        {setDpi}
+      />
       <p class="hint size">{summary}.</p>
+      {#if limit}<p class="warn">{limit}.</p>{/if}
       {#if warn}<p class="warn">{warn}.</p>{/if}
 
       <div class="actions">
@@ -288,16 +290,6 @@
     color: #e5645a;
     font-size: 12px;
   }
-  /* Кнопка «Исправить» стоит рядом с текстом, как в карточке обложки */
-  .err.blocked {
-    margin-top: -2px;
-  }
-  .fix {
-    height: 22px;
-    margin-left: 6px;
-    padding: 0 8px;
-    font-size: 12px;
-  }
   .hint {
     color: var(--muted);
     font-size: 12px;
@@ -308,10 +300,6 @@
   }
   p.hint.size {
     margin: -4px 0 0;
-  }
-  /* Предупреждения плана Фотосферы — под флажком, с тем же отступом, что у подсказок */
-  p.warn.fs {
-    margin: -6px 0 12px 78px;
   }
   p.warn {
     margin: 8px 0 0;

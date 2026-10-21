@@ -63,7 +63,7 @@ func pxOf(t *testing.T, path string) [2]int {
 // папка книги — без вложенной; посторонний файл — вопрос, «нет» ничего не пишет.
 func TestExportFsfera(t *testing.T) {
 	e, memo := fsferaEnv(t, 2, "fsfera-thin")
-	o := ExportOptions{Fsfera: true, Range: "1", Pages: true, CoverOnly: true, Quality: 80}
+	o := ExportOptions{Print: "fsfera", Range: "1", Pages: true, CoverOnly: true, Quality: 80}
 	if msg := e.export(t, o); msg != "" || len(e.asked) != 0 {
 		t.Fatalf("выгрузка: %q, вопросы %q", msg, e.asked)
 	}
@@ -134,7 +134,7 @@ func TestExportFsferaBlocked(t *testing.T) {
 		if c.p != nil {
 			e.a.ed.Store(mustEditor(t, c.p, ""))
 		}
-		if ok, err := e.a.Export(ExportOptions{Fsfera: true}); ok || err == nil || err.Error() != c.want {
+		if ok, err := e.a.Export(ExportOptions{Print: "fsfera"}); ok || err == nil || err.Error() != c.want {
 			t.Errorf("%q: %v %v", c.want, ok, err)
 		}
 	}
@@ -158,14 +158,14 @@ func TestExportFsferaAsk(t *testing.T) {
 	}
 	e.answer = false
 	ask := "Обложки нет: в папке будут только развороты, а для фотообложки нужен 00.jpg. Выгрузить без обложки?"
-	if ok, err := e.a.Export(ExportOptions{Fsfera: true}); ok || err != nil || picked != 0 || !slices.Equal(e.asked, []string{ask}) {
+	if ok, err := e.a.Export(ExportOptions{Print: "fsfera"}); ok || err != nil || picked != 0 || !slices.Equal(e.asked, []string{ask}) {
 		t.Fatalf("«нет»: %v %v, выбор папки %d, вопросы %q", ok, err, picked, e.asked)
 	}
 	if _, err := os.Stat(filepath.Join(e.dir, "Альбом")); err == nil {
 		t.Fatal("«нет» оставил папку книги")
 	}
 	e.answer = true
-	if msg := e.export(t, ExportOptions{Fsfera: true}); msg != "" || picked != 1 {
+	if msg := e.export(t, ExportOptions{Print: "fsfera"}); msg != "" || picked != 1 {
 		t.Fatalf("«да»: %q, выбор папки %d", msg, picked)
 	}
 	if e.dir = filepath.Join(e.dir, "Альбом"); !slices.Equal(e.names(t), []string{"01.jpg"}) || !slices.Equal(*memo, []string{"Фотокнига 20×15", "Разворотов: 1", "Папка: Альбом — 01.jpg"}) {
@@ -178,7 +178,7 @@ func TestExportFsferaAsk(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(e.dir, "00.jpg"), ours, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if e.dir = filepath.Dir(e.dir); e.export(t, ExportOptions{Fsfera: true}) != "" {
+	if e.dir = filepath.Dir(e.dir); e.export(t, ExportOptions{Print: "fsfera"}) != "" {
 		t.Fatal("повтор без обложки")
 	}
 	if e.dir = filepath.Join(e.dir, "Альбом"); !slices.Equal(e.names(t), []string{"01.jpg"}) {
@@ -189,7 +189,7 @@ func TestExportFsferaAsk(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(e.dir, "Альбом"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := e.a.Export(ExportOptions{Fsfera: true}); ok || err == nil || !strings.Contains(err.Error(), "файл или ссылка") {
+	if ok, err := e.a.Export(ExportOptions{Print: "fsfera"}); ok || err == nil || !strings.Contains(err.Error(), "файл или ссылка") {
 		t.Fatalf("файл на месте папки: %v %v", ok, err)
 	}
 }
@@ -203,7 +203,7 @@ func TestExportFsferaBookLast(t *testing.T) {
 	s.Grid = []*model.Place{{ID: "00000000a001", X: 10, Y: 10, W: 80, H: 60, Photo: s.Photos[0]}, {ID: "00000000a002", X: 110, Y: 10, W: 80, H: 60}}
 	e.a.ed.Store(mustEditor(t, p, ""))
 	e.answer = false
-	if ok, err := e.a.Export(ExportOptions{Fsfera: true}); ok || err != nil || len(e.asked) != 1 || !strings.Contains(e.asked[0], "пустые места") {
+	if ok, err := e.a.Export(ExportOptions{Print: "fsfera"}); ok || err != nil || len(e.asked) != 1 || !strings.Contains(e.asked[0], "пустые места") {
 		t.Fatalf("пустое место: %v %v, вопросы %q", ok, err, e.asked)
 	}
 	if _, err := os.Lstat(filepath.Join(e.dir, "Альбом")); !errors.Is(err, fs.ErrNotExist) || e.a.exporting {
@@ -243,7 +243,7 @@ func TestFsferaPlan(t *testing.T) {
 	p, _ := e.a.editor().Snapshot()
 	e.a.ed.Store(mustEditor(t, p, filepath.Join(testkit.TempDir(t), "Иванов.salbum")))
 	before := e.a.editor().View()
-	pl := e.a.FsferaPlan()
+	pl := e.a.PrintPlans()[0] // 20×15 — формат только Фотосферы: план один
 	if pl.Format != "20×15" || pl.Folder != "Иванов" || pl.Pages != "Картон" || len(pl.Block) != 0 {
 		t.Fatalf("план %+v", pl)
 	}

@@ -2,12 +2,13 @@
   import { store } from '../../base/core/store.svelte'
   import { plural } from '../../base/words/plural'
   import { unitOf, isSheet } from '../../base/geom/sheet'
-  import { albumStats, colorLine, nextLowSheet } from './stats'
+  import { albumStats, colorLine, limitLine, nextLowSheet } from './stats'
 
   const st = $derived(albumStats(store.sheets, store.byId, store.photos.length, store.lead))
   const color = $derived(colorLine(st))
   const unit = $derived(unitOf(store.view.settings))
   const sheet = $derived(isSheet(store.view.settings))
+  const limit = $derived(limitLine(store.view))
 
   // Следующий лист с малым разрешением по кругу: развороты после текущего, обложка (032), снова с начала.
   function goLow() {
@@ -23,6 +24,7 @@
     {#if !sheet}({st.pages}
       {plural(st.pages, ['страница', 'страницы', 'страниц'])}){/if}
   </li>
+  {#if limit}<li class:warn={limit.warn} class:muted={!limit.warn}>{limit.text}</li>{/if}
   <li>Уникальных раскладок: {st.layouts}</li>
   <li>Фото в альбоме: {st.photos} из {st.total}</li>
   <li class="muted">Горизонтальных: {st.h} · Вертикальных: {st.v} · Квадратных: {st.sq}</li>

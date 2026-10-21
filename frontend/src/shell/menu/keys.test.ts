@@ -105,6 +105,10 @@ describe('keyCommand', () => {
     expect(cmd(ev('Enter'))).toBeNull()
     expect(cmd(ev('Enter'), ctx({ hasSelection: true }))).toBe('addSelected')
   })
+  it('Enter внутри окна панели («Подборки») не переносит выделенные; другие клавиши окна работают', () => {
+    expect(cmd(ev('Enter'), ctx({ hasSelection: true, popup: true }))).toBeNull()
+    expect(cmd(ev('z', ctrl), ctx({ popup: true }))).toBe('undo')
+  })
   it('Esc: сначала галерея, потом выделение', () => {
     expect(cmd(ev('Escape'), ctx({ galleryOpen: true }))).toBe('closeGallery')
     expect(cmd(ev('Escape'))).toBe('clearSelection')
@@ -461,9 +465,10 @@ describe('автоповтор: повторяют только команды �
 
 describe('свои клавиши (074-5)', () => {
   it('своя клавиша срабатывает, стандартная после переназначения молчит', () => {
-    useCatalog({ toggleBig: ['KeyB'] })
-    expect(cmd(ev('b'))).toBe('toggleBig')
-    expect(cmd(ev('и'))).toBe('toggleBig') // русская «и» на той же клавише
+    // KeyB занят подборками (083), поэтому своя клавиша — свободная KeyQ
+    useCatalog({ toggleBig: ['KeyQ'] })
+    expect(cmd(ev('q'))).toBe('toggleBig')
+    expect(cmd(ev('й'))).toBe('toggleBig') // русская «й» на той же клавише
     expect(cmd(ev('f'))).toBeNull()
   })
   it('сочетание со вторым модификатором: точное совпадение, Shift не «не важен» (074-9)', () => {
@@ -514,5 +519,42 @@ describe('Mac: модификатор только Cmd (074-20)', () => {
     setMacForTest(true)
     expect(cmd(ev('f'))).toBe('toggleBig')
     expect(cmd(ev('f', ctrl))).toBeNull()
+  })
+})
+
+describe('подборки фото (083)', () => {
+  const lib = { zone: 'library' as const, hasSelection: true }
+  const KEY_B = { code: 'KeyB' }
+  it('B — в подборку, Shift+B — новая; по-русски (И на той же клавише) — то же', () => {
+    expect(cmd(ev('b', KEY_B), ctx(lib))).toBe('binToggle')
+    expect(cmd(ev('и', KEY_B), ctx(lib))).toBe('binToggle')
+    expect(cmd(ev('B', { ...KEY_B, shiftKey: true }), ctx(lib))).toBe('binNew')
+    // Без выделения команды живые: тост «Выделите фото» и окно новой подборки говорят сами
+    expect(cmd(ev('b', KEY_B), ctx({ zone: 'library' }))).toBe('binToggle')
+    expect(cmd(ev('B', { ...KEY_B, shiftKey: true }), ctx({ zone: 'library' }))).toBe('binNew')
+  })
+  it('Del и Backspace ленты с выделением — убрать из подборки; без выделения молчат', () => {
+    expect(cmd(ev('Delete'), ctx(lib))).toBe('binRemove')
+    expect(cmd(ev('Backspace'), ctx(lib))).toBe('binRemove')
+    expect(cmd(ev('Delete'), ctx({ zone: 'library' }))).toBeNull()
+  })
+  it('на холсте Del по-прежнему убирает ячейку, B молчит; в режиме фона Del — убрать фон', () => {
+    expect(cmd(ev('Delete'), ctx({ zone: 'canvas', hasSelection: true }))).toBe('removeCell')
+    expect(cmd(ev('b', KEY_B), ctx({ zone: 'canvas' }))).toBeNull()
+    expect(cmd(ev('Delete'), ctx({ zone: 'canvas', bgMode: true, hasSelection: true }))).toBe('bgRemove')
+  })
+  it('крупный просмотр, галерея, поле ввода, окно: клавиши подборок молчат', () => {
+    for (const o of [{ big: true }, { galleryOpen: true }, { inTextField: true }, { dialog: 'shut' as const }])
+      expect(cmd(ev('b', KEY_B), ctx({ ...lib, ...o })), JSON.stringify(o)).toBeNull()
+  })
+  it('«Простой» — без подборок: B, Shift+B, Del молчат; «Стандартный» — есть', () => {
+    const at = (level: 'simple' | 'standard') => ctx({ ...lib, can: (f) => can(f, level) })
+    expect(cmd(ev('b', KEY_B), at('simple'))).toBeNull()
+    expect(cmd(ev('B', { ...KEY_B, shiftKey: true }), at('simple'))).toBeNull()
+    expect(cmd(ev('Delete'), at('simple'))).toBeNull()
+    expect(cmd(ev('b', KEY_B), at('standard'))).toBe('binToggle')
+  })
+  it('повтор клавиши удержанием не срабатывает (сдвиг и отмена — только они)', () => {
+    expect(cmd(ev('b', { ...KEY_B, repeat: true }), ctx(lib))).toBeNull()
   })
 })

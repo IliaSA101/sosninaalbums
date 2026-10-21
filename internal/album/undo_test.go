@@ -20,7 +20,7 @@ func undoInvariants(t *testing.T, e *Editor) {
 		if s.P != nil {
 			album++
 		}
-		if s.P == nil && len(s.Marks) == 0 {
+		if s.P == nil && !s.side() {
 			t.Fatal("пустой шаг в отмене")
 		}
 		sum += s.Weight()
@@ -150,6 +150,74 @@ func TestUndoMixedModel(t *testing.T) {
 			t.Fatalf("seed %d: Redo до конца не дал конец", seed)
 		}
 		undoInvariants(t, e)
+	}
+}
+
+// orphanBins — ID подборок в членстве отметок, которых нет в списке (083 §4.3: не бывает).
+func orphanBins(e *Editor) []string {
+	known := model.BinSet(e.bins)
+	var out []string
+	for _, m := range e.marks {
+		for _, id := range m.Bins {
+			if !known[id] {
+				out = append(out, id)
+			}
+		}
+	}
+	return out
+}
+
+// Вытеснение отмены (083 §4.3): шаг подборки сверх 2000 шагов «рядом» уходит целиком — список и
+// членство вместе; снимок альбома сверх 200 уходит, а подборки шага остаются шагом «рядом».
+func TestBinsUndoEvict(t *testing.T) {
+	e := newEditor(t, model.New(), "")
+	if _, err := e.NewBin("A", photos("a", "b")); err != nil {
+		t.Fatal(err)
+	}
+	newSpread(e, -1, photos("x"))
+	for i := range MaxMarkUndo {
+		if i%2 == 0 {
+			setMarks(t, e, photos("c"), model.MarkPatch{Rating: ip(i%5 + 1)})
+		} else {
+			e.ResetMarks([]string{"c"})
+		}
+	}
+	undoInvariants(t, e)
+	if len(e.undo) != MaxMarkUndo+1 || e.undo[0].P == nil || e.undo[0].Bins != nil {
+		t.Fatalf("шагов %d, первый %+v", len(e.undo), e.undo[0])
+	}
+	for e.View().CanUndo {
+		e.Undo()
+		if o := orphanBins(e); len(o) > 0 {
+			t.Fatalf("членство без подборки %v", o)
+		}
+	}
+	// Шаг «A» вытеснен: отмена останавливается на его результате.
+	if len(e.bins) != 1 || len(e.marks) != 2 || len(e.p.Spreads) != 0 {
+		t.Fatalf("после отмены подборок %d, отметок %d, разворотов %d", len(e.bins), len(e.marks), len(e.p.Spreads))
+	}
+
+	// Снимок с подборками (Restore) сверх 200 снимков: снимок уходит, подборки остаются шагом.
+	e = newEditor(t, model.New(), "")
+	bins := &BinsSwap{After: []model.Bin{{ID: "b1", Name: "A"}}}
+	e.setSide(nil, bins, false)
+	e.pushUndo(Snap{P: model.New(), N: 10, Bins: bins})
+	for range MaxUndo {
+		e.pushUndo(Snap{P: model.New(), N: 10})
+	}
+	undoInvariants(t, e)
+	if e.undo[0].P != nil || e.undo[0].Bins != bins || e.undoAlbum != MaxUndo {
+		t.Fatalf("первый шаг %+v, снимков %d", e.undo[0], e.undoAlbum)
+	}
+	// Шаги старше вытесненного шага «рядом» теряют и отметки, и подборки (вес — тоже).
+	e = newEditor(t, model.New(), "")
+	e.pushUndo(Snap{P: model.New(), N: 10, Bins: bins})
+	for i := range MaxMarkUndo + 1 {
+		e.pushUndo(Snap{Bins: &BinsSwap{After: []model.Bin{{ID: fmt.Sprint("b", i), Name: "A"}}}})
+	}
+	undoInvariants(t, e)
+	if len(e.undo) != MaxMarkUndo+1 || e.undo[0].P == nil || e.undo[0].Bins != nil || e.undo[1].Bins.After[0].ID != "b1" {
+		t.Fatalf("шагов %d, первый %+v", len(e.undo), e.undo[0])
 	}
 }
 

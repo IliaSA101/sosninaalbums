@@ -4,6 +4,7 @@
 import { withSkipped } from '../../base/words/errtext'
 import type { PickResult } from '../../base/core/hooks'
 import type { Photo } from '../../base/core/types'
+import { allBinInAlbumText } from '../bins/bins'
 import { markOf, type OwnMarks } from '../marks/marks'
 
 export { withSkipped }
@@ -43,21 +44,26 @@ export function allInAlbum(filter: 'all' | 'unused', freeCount: number, total: n
   return filter === 'unused' && freeCount === 0 && total > 0
 }
 
-// Текст пустой ленты «Не в альбоме»: при скрытых папках речь о показанных (054).
-export function allInAlbumText(foldersFiltered: boolean): string {
+// Текст пустой ленты «Не в альбоме»: при показанной подборке речь о ней (083), при скрытых папках — о показанных (054).
+export function allInAlbumText(foldersFiltered: boolean, bin = ''): string {
+  if (bin) return allBinInAlbumText(bin)
   return foldersFiltered ? 'Все фото показанных папок уже в альбоме' : 'Все фото уже в альбоме'
 }
 
-// Тост, когда автосборке нечего брать.
-export function emptyReason(selected: boolean, skipped: number, filtered: boolean): string {
+// Тост, когда автосборке нечего брать. bin — имя показанной подборки (083): без выделения речь о ней;
+// binEmpty — в ней нет ни одного фото.
+export function emptyReason(selected: boolean, skipped: number, filtered: boolean, bin = '', binEmpty = false): string {
   if (skipped > 0) return withSkipped('', skipped)
   if (selected) return 'Выделенные фото уже в альбоме'
+  if (bin && binEmpty) return `В подборке «${bin}» нет фото`
+  if (bin && !filtered) return allBinInAlbumText(bin)
   return filtered ? 'Под фильтр не подходит ни одно свободное фото' : 'Все фото уже в альбоме'
 }
 
 // Что нужно от store, чтобы выбрать фото (store передаёт себя).
 export interface PickHost {
   readonly visible: Photo[]
+  readonly inBin?: Photo[] // 083: лента показанной подборки (для причины «в подборке нет фото»)
   readonly selectedIds: string[]
   readonly used: ReadonlySet<string>
   readonly backdropUsed: ReadonlySet<string>
@@ -66,9 +72,16 @@ export interface PickHost {
 }
 
 // autoPick для store: пусто — тост с причиной (ids пуст, вызывающий выходит).
-export function pickFor(h: PickHost, moveUsed: boolean, filtered: boolean): PickResult {
+export function pickFor(h: PickHost, moveUsed: boolean, filtered: boolean, bin = ''): PickResult {
   const r = autoPick(h.visible, h.selectedIds, h.used, h.backdropUsed, h.marks, moveUsed)
-  if (r.ids.length === 0) h.notify(emptyReason(h.selectedIds.length > 0, r.skipped, filtered))
   const sel = h.selectedIds.length > 0
-  return { ...r, from: sel ? 'selected' : 'free', inAlbum: sel ? r.ids.filter((id) => h.used.has(id)).length : 0, filtered }
+  if (r.ids.length === 0) h.notify(emptyReason(sel, r.skipped, filtered, bin, h.inBin?.length === 0))
+  const out: PickResult = {
+    ...r,
+    from: sel ? 'selected' : 'free',
+    inAlbum: sel ? r.ids.filter((id) => h.used.has(id)).length : 0,
+    filtered,
+  }
+  if (bin && !sel) out.bin = bin
+  return out
 }

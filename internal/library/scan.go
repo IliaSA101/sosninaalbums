@@ -53,6 +53,9 @@ type Scanner struct {
 	mu   sync.Mutex
 	memo map[string]memoEntry
 
+	last   fingerprint // отпечаток последнего законченного Scan (fingerprint.go)
+	lastOK bool        // last заполнен: Scan с тех пор не начинался заново без конца
+
 	progressEvery, listEvery time.Duration     // ProgressEvery и ListEvery; в тестах короче
 	beforeRead               func(path string) // только для тестов: вызывается перед чтением файла
 }
@@ -156,6 +159,7 @@ func (s *Scanner) prepare(files []scanFile) *scanRun {
 func (s *Scanner) Scan(ctx context.Context, folders []string,
 	report func(photos []Photo, pr ScanProgress, final bool)) (photos []Photo, skipped []string, err error) {
 	report(nil, ScanProgress{Active: true, Walking: true}, false)
+	s.invalidateLast()
 
 	t0 := time.Now()
 	files, err := s.walk(ctx, folders, func(found int) {
@@ -180,6 +184,7 @@ func (s *Scanner) Scan(ctx context.Context, folders []string,
 		return nil, nil, err
 	}
 
+	s.setLast(fingerprintOf(folders, files))
 	m := len(files)
 	photos = make([]Photo, 0, m)
 	for i, f := range files {

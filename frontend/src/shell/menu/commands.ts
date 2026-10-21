@@ -8,11 +8,14 @@ import { canvas } from '../../editor/canvas/canvas.svelte'
 import { row } from '../../editor/spread/spreadrow.svelte'
 import { edit } from '../../editor/text/edit.svelte'
 import { ownMarks } from '../../panels/marks/ownmarks.svelte'
+import { openNew, removeSelected, toggleSelected } from '../../panels/bins/binact'
+import { binsel } from '../../panels/bins/binsel.svelte'
 import { gallery } from '../../panels/gallery/gallery.svelte'
 import { keysUi } from '../hotkeys/keysui.svelte'
 import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
 import { packsUi } from '../dialogs/packs.svelte'
+import { tplio } from './tplio.svelte'
 import { namesUi } from '../../panels/names/names.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { straighten } from '../../editor/tilt/straighten.svelte'
@@ -30,7 +33,7 @@ import { anyVaries, varyTargets } from '../../panels/gallery/variants'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
 import { align } from '../../panels/layouts/align.svelte'
 import { isAlignOp, normAlignTo } from '../../panels/layouts/align'
-import { errText } from '../../base/words/errtext'
+import { capFirst, errText } from '../../base/words/errtext'
 import { effH, ZOOM_STEP } from '../../editor/zoom/zoom'
 import { newDoc } from '../newdoc/newdoc.svelte'
 import type { MarkPatch, RecentProject } from '../../base/core/types'
@@ -65,8 +68,19 @@ async function showExportFolder() {
   }
 }
 
+// Папка настроек и шаблонов (config.json, templates.json, log.txt): как «Открыть папку экспорта», ошибка — тостом.
+async function showDataFolder() {
+  try {
+    await Api.ShowDataFolder()
+  } catch (e) {
+    store.notify(capFirst(errText(e)), 'error')
+  }
+}
+
 // Последние альбомы. Путь Go принимает только из своего списка (config.recent).
-export const openRecent = (path: string) => store.replaceState(Api.OpenRecent(path))
+// Смена альбома ждёт набранный текст и имена: иначе они уйдут уже в новый альбом (087-5). Вызов Api — внутри then.
+export const openRecent = (path: string) => edit.idle().then(() => store.replaceState(Api.OpenRecent(path)))
+export const openProject = () => edit.idle().then(() => store.replaceState(Api.OpenProject()))
 
 export async function forgetRecent(path: string) {
   try {
@@ -93,8 +107,8 @@ const alignOp = (op: Parameters<typeof align.run>[0]) => () => align.run(op)
 // Все команды каталога клавиш (internal/keymap) и команды меню с параметром; commands.contract.test сверяет с каталогом.
 const HANDLERS = {
   // Файл
-  new: () => newDoc.replace(Api.NewProject('album')),
-  open: () => store.replaceState(Api.OpenProject()),
+  new: () => newDoc.replace(() => Api.NewProject('album')),
+  open: () => openProject(),
   openRecent: (_e, path) => path && openRecent(path),
   clearRecent: () => clearRecent(),
   save: () => afterEdit(() => Api.SaveProject()),
@@ -108,6 +122,9 @@ const HANDLERS = {
   relink: () => relinkFolder(),
   export: () => edit.idle().then(() => jobs.exportAll()),
   showExport: () => showExportFolder(),
+  showData: () => showDataFolder(),
+  tplExport: () => tplio.save(),
+  tplImport: () => tplio.load(),
   settings: () => modes.openSection('settings'),
 
   // Правка
@@ -220,6 +237,11 @@ const HANDLERS = {
   markPick: mark({ flag: 1 }),
   markReject: mark({ flag: -1 }),
   markUnflag: mark({ flag: 0 }),
+  // Подборки фото (083): B, Shift+B, Del ленты; «Все фото» — без клавиши (пункт «Вид»)
+  binToggle: () => void toggleSelected(),
+  binNew: () => openNew(),
+  binRemove: () => void removeSelected(),
+  binAll: () => binsel.showAll(),
   zoomIn: () => zoomBy(ZOOM_STEP),
   zoomOut: () => zoomBy(1 / ZOOM_STEP),
   allSpreads: () => modes.openSection('grid'),

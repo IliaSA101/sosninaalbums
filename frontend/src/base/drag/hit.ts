@@ -38,6 +38,12 @@ export function coverTarget(p: Payload): Target | null {
   return p.ids.length > 1 ? { kind: 'cover', many: true } : { kind: 'cover' }
 }
 
+// Кнопка «Подборки» (083): цель только для фото из ленты. С холста бросок в ленту убирает фото из альбома —
+// эти два смысла не смешиваем.
+export function binTarget(p: Payload): Target | null {
+  return p.kind === 'photos' && !p.fromSpread && p.ids.length > 0 ? { kind: 'bin' } : null
+}
+
 // Зона «Фото фона» в карточке разворота: на фон встаёт одно фото. Несколько — цель с many (без подсветки,
 // бросок даёт тост «только одно»), иначе бросок молча не срабатывал бы. d — dataset с data-drop="backdrop".
 export function backdropTarget(d: { spread?: string; scope?: string }, p: Payload): Target | null {

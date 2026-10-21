@@ -1,4 +1,4 @@
-// Действия с виньеткой (031): вызовы Go и тосты. Ответ — в store.apply, ошибка Go (в том числе «не больше
+// Действия с виньеткой (031): вызовы Go и тосты. Ответ — в store.take, ошибка Go (в том числе «не больше
 // 64 мест») — тост. Используют панель, меню разворота, карточка, «Правка» и колонка «+ Новый …» ленты.
 import { Api, store } from '../../base/core/store.svelte'
 import { errText } from '../../base/words/errtext'
@@ -26,7 +26,7 @@ export const previewVignette = (spreadId: string, s: VigSetup): Promise<VigPrevi
 export async function applySetup(spreadId: string, s: VigSetup): Promise<boolean> {
   try {
     const r = (await Api.SetupVignette(spreadId, model.VigSetup.createFrom(s))) as unknown as GridResult
-    store.apply(r.view)
+    if (!(await store.take(r.view))) return false
     if (r.left > 0) store.undoToast(leftText(r.left))
     return true
   } catch (e) {
@@ -40,7 +40,7 @@ export async function applySetup(spreadId: string, s: VigSetup): Promise<boolean
 export async function applyVignette(spreadId: string, f: VigForm, done = ''): Promise<boolean> {
   try {
     const r = (await Api.SetVignette(spreadId, model.Vignette.createFrom(paramsOf(f)))) as unknown as GridResult
-    store.apply(r.view)
+    if (!(await store.take(r.view))) return false
     const left = r.left > 0 ? leftText(r.left) : ''
     if (done) store.undoToast(left ? `${done}. ${left}` : done, spreadId)
     else if (left) store.undoToast(left)

@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { screenDpr } from '../../base/ui/dpr.svelte'
   import { primaryPress } from '../../base/core/platform'
   import type { SpreadView, StickerView } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
   import { thumbUrl, previewUrl } from '../../base/core/media'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import Icon from '../../base/ui/Icon.svelte'
+  import { cancelOnUnmount } from '../../base/ui/imgcancel'
   import { placesel } from '../places/placesel.svelte'
   import { moveSelected } from '../places/groupgesture'
   import { photoui } from '../photo/photoui.svelte'
@@ -25,7 +27,7 @@
   const sw = $derived(spread.w)
   const ph = $derived(spread.h)
   const pct = (v: number, of: number) => (of > 0 ? `${(v / of) * 100}%` : '0%')
-  const dpr = $derived(globalThis.devicePixelRatio || 1)
+  const dpr = $derived(screenDpr.value)
 
   function down(e: PointerEvent, st: StickerView) {
     if (mini || !primaryPress(e)) return
@@ -90,6 +92,7 @@
         style:transform={st.flipH || st.flipV ? `scale(${st.flipH ? -1 : 1}, ${st.flipV ? -1 : 1})` : undefined}
         alt=""
         draggable="false"
+        {@attach cancelOnUnmount}
       />
     {/if}
   </div>

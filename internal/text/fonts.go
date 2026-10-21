@@ -46,27 +46,32 @@ type Face struct {
 }
 
 // Family — гарнитура: css — имя для font-family в интерфейсе, group — раздел
-// списка (script | kids | serif | sans | display).
+// списка (my | script | kids | serif | sans | display). Hidden и NoCyr — только у
+// своих: убрана из списка (×) и нет русских букв.
 type Family struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	CSS   string `json:"css"`
-	Group string `json:"group"`
-	Faces []Face `json:"faces"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	CSS    string `json:"css"`
+	Group  string `json:"group"`
+	Faces  []Face `json:"faces"`
+	Hidden bool   `json:"hidden,omitempty"`
+	NoCyr  bool   `json:"noCyr,omitempty"`
 }
 
-// Families возвращает копию списка гарнитур.
+// Families возвращает копию списка гарнитур: встроенные, затем свои
+// зарегистрированные (по имени без регистра, сломанные не отдаются).
 func Families() []Family {
 	out := make([]Family, len(families))
 	for i, f := range families {
 		out[i] = f
 		out[i].Faces = append([]Face(nil), f.Faces...)
 	}
-	return out
+	return append(out, customFamilies()...)
 }
 
-// FontFile отдаёт байты встроенного шрифта по имени файла. Имя ищется среди
-// известных начертаний (белый список): путь из запроса в ФС не попадает.
+// FontFile отдаёт байты шрифта по имени файла. Имя ищется среди известных
+// начертаний (белый список): путь из запроса в ФС не попадает. Своё начертание —
+// «<16 hex>.<ttf|otf>» зарегистрированной гарнитуры.
 func FontFile(name string) ([]byte, bool) {
 	for _, f := range families {
 		for _, fc := range f.Faces {
@@ -76,7 +81,7 @@ func FontFile(name string) ([]byte, bool) {
 			}
 		}
 	}
-	return nil, false
+	return customFile(name)
 }
 
 var (
@@ -108,18 +113,25 @@ func loadFonts() (map[string]*sfnt.Font, error) {
 	return parsed, parseErr
 }
 
-// family ищет гарнитуру по id; неизвестный id — гарнитура по умолчанию.
-func family(id string) Family {
-	def := Family{}
-	for _, f := range families {
-		if f.ID == id {
-			return f
-		}
-		if f.ID == DefaultFont {
-			def = f
+// builtinFamily — встроенная гарнитура по id или nil.
+func builtinFamily(id string) *Family {
+	for i := range families {
+		if families[i].ID == id {
+			return &families[i]
 		}
 	}
-	return def
+	return nil
+}
+
+// family ищет гарнитуру по id: встроенная, своя зарегистрированная, иначе — по умолчанию.
+func family(id string) Family {
+	if f := builtinFamily(id); f != nil {
+		return *f
+	}
+	if c := lookupCustom(id); c != nil {
+		return c.asFamily()
+	}
+	return *builtinFamily(DefaultFont)
 }
 
 // has сообщает, есть ли у гарнитуры начертание с такими признаками.
@@ -132,8 +144,13 @@ func (f Family) has(bold, italic bool) bool {
 	return false
 }
 
-// faceFile выбирает файл начертания; нужного нет — обычное начертание гарнитуры.
+// faceFile выбирает файл начертания; нужного нет — обычное начертание гарнитуры
+// (у своей без обычного — первое из курсива, жирного, жирного курсива).
 func faceFile(st Style) string {
+	if c := lookupCustom(st.Font); c != nil {
+		f := c.face(st.Bold, st.Italic)
+		return f.Key + "." + f.Ext
+	}
 	f := family(st.Font)
 	for _, fc := range f.Faces {
 		if fc.Bold == st.Bold && fc.Italic == st.Italic {
@@ -143,8 +160,19 @@ func faceFile(st Style) string {
 	return f.Faces[0].File
 }
 
-// font возвращает разобранный шрифт стиля и имя его файла.
+// font возвращает разобранный шрифт стиля и имя его файла. Своя гарнитура, которой
+// нет или чей файл не читается, — Montserrat того же начертания: никогда не nil,
+// иначе Layout вернул бы пустой блок и текст исчез бы.
 func font(st Style) (*sfnt.Font, string) {
+	if IsCustomID(st.Font) {
+		if c := usableCustom(st.Font); c != nil {
+			f := c.face(st.Bold, st.Italic)
+			if sf := f.d.parse(c.load); sf != nil {
+				return sf, f.Key + "." + f.Ext
+			}
+		}
+		st.Font = DefaultFont
+	}
 	m, err := loadFonts()
 	file := faceFile(st)
 	if err != nil {
@@ -155,18 +183,22 @@ func font(st Style) (*sfnt.Font, string) {
 
 // Clamped приводит стиль к допустимому: неизвестная гарнитура — Montserrat,
 // жирный и курсив сбрасываются, если у гарнитуры нет такого начертания, размер в 6..200 pt (NaN/Inf — по умолчанию),
-// выравнивание и цвет вне формата — по умолчанию.
+// выравнивание и цвет вне формата — по умолчанию. Id своей гарнитуры остаётся
+// всегда (082-5): незарегистрированная рисуется Montserrat, у которой есть все
+// четыре начертания, поэтому её жирный и курсив не трогаются — иначе альбом
+// потерял бы их на компьютере без шрифта.
 func (s Style) Clamped() Style {
-	known := false
-	for _, f := range families {
-		if f.ID == s.Font {
-			known = true
+	var f Family
+	if b := builtinFamily(s.Font); b != nil {
+		f = *b
+	} else if c := lookupCustom(s.Font); c != nil {
+		f = c.asFamily()
+	} else {
+		if !IsCustomID(s.Font) {
+			s.Font = DefaultFont
 		}
+		f = *builtinFamily(DefaultFont)
 	}
-	if !known {
-		s.Font = DefaultFont
-	}
-	f := family(s.Font)
 	s.Bold = s.Bold && f.has(true, false)
 	s.Italic = s.Italic && f.has(false, true)
 	if !f.has(s.Bold, s.Italic) { // пара без своего файла (жирный курсив при неполном наборе)
@@ -217,8 +249,8 @@ func parseColor(s string) (color.RGBA, bool) {
 // файла: знак, которого нет в гарнитуре, берётся из него, как в CSS
 // `"SA X", "SA Montserrat"`. st уже Clamped. У самой Montserrat запасного нет.
 func fallback(st Style) (*sfnt.Font, string) {
-	if st.Font == DefaultFont {
-		return nil, ""
+	if st.Font == DefaultFont || (IsCustomID(st.Font) && usableCustom(st.Font) == nil) {
+		return nil, "" // своя без файла уже рисуется Montserrat
 	}
 	return font(Style{Font: DefaultFont, Bold: st.Bold, Italic: st.Italic})
 }

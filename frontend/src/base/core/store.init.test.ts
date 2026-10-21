@@ -119,3 +119,64 @@ describe('store.replaceState: отмена диалога «Открыть»', (
     expect(store.selected.size).toBe(0)
   })
 })
+
+describe('State.info и freshFonts (082)', () => {
+  const fresh: string[][] = []
+  beforeEach(() => {
+    fresh.length = 0
+    store.toast = null
+    store.plug({ ...store.hooks, freshFonts: (files) => void fresh.push(files) })
+  })
+
+  it('init: info — тост вида info, не ошибка', async () => {
+    const done = store.init()
+    resolveState({ view, photos: [], info: 'Добавлены шрифты из папки альбома: «Lato»' })
+    await done
+    expect(store.toast).toMatchObject({ text: 'Добавлены шрифты из папки альбома: «Lato»', kind: 'info' })
+  })
+
+  it('init: notice остаётся ошибкой; при обоих последним показан info', async () => {
+    const done = store.init()
+    resolveState({ view, photos: [], notice: 'не открылся', info: 'Добавлены шрифты' })
+    await done
+    expect(store.toast).toMatchObject({ text: 'Добавлены шрифты', kind: 'info' })
+    const again = store.init()
+    resolveState({ view, photos: [], notice: 'не открылся' })
+    await again
+    expect(store.toast).toMatchObject({ text: 'Не открылся', kind: 'error' })
+  })
+
+  it('init: freshFonts зовёт проверку окном, пустые и отсутствующие — нет', async () => {
+    const done = store.init()
+    resolveState({ view, photos: [], freshFonts: ['0123456789abcdef.ttf'] })
+    await done
+    expect(fresh).toEqual([['0123456789abcdef.ttf']])
+    const a = store.init()
+    resolveState({ view, photos: [], freshFonts: [] })
+    await a
+    const b = store.init()
+    resolveState({ view, photos: [] })
+    await b
+    expect(fresh).toHaveLength(1)
+  })
+
+  it('replaceState (меню, «Последние»): info — тост info', async () => {
+    await store.replaceState(Promise.resolve({ view, photos: [], info: 'Добавлены шрифты из папки альбома' }))
+    expect(store.toast).toMatchObject({ text: 'Добавлены шрифты из папки альбома', kind: 'info' })
+  })
+
+  it('replaceState: freshFonts зовёт проверку; без них и при отмене диалога — нет', async () => {
+    await store.replaceState(Promise.resolve({ view, photos: [], freshFonts: ['aaaaaaaaaaaaaaaa.otf'] }))
+    expect(fresh).toEqual([['aaaaaaaaaaaaaaaa.otf']])
+    await store.replaceState(Promise.resolve({ view, photos: [] }))
+    await store.replaceState(Promise.resolve({ cancelled: true, info: 'не должно показаться', freshFonts: ['x'] }))
+    expect(fresh).toHaveLength(1)
+    expect(store.toast?.text).not.toBe('не должно показаться')
+  })
+
+  it('replaceState: ошибка открытия — тост ошибки, проверки нет', async () => {
+    await store.replaceState(Promise.reject('нет доступа'))
+    expect(store.toast).toMatchObject({ kind: 'error' })
+    expect(fresh).toHaveLength(0)
+  })
+})

@@ -78,7 +78,7 @@ async function call(q: Query, rest: '' | 'add' | 'skip') {
     if (r.ask) {
       const vig = store.sheet(q.spread)?.vig
       dropAsk.cur = { ...q, fit: r.fit, total: r.total, grow: !!vig && !vig.manual, rev: r.view.rev }
-    } else done(q, r)
+    } else await done(q, r)
   } catch (e) {
     // Предел мест и слишком мелкая плитка приходят ошибкой: проект прежний.
     store.notify(errText(e), 'error')
@@ -87,8 +87,8 @@ async function call(q: Query, rest: '' | 'add' | 'skip') {
   }
 }
 
-function done(q: Query, r: DropResult) {
-  store.apply(r.view)
+async function done(q: Query, r: DropResult) {
+  if (!(await store.take(r.view))) return // сбой GetView: красный тост цепочки уже показан (087)
   if (q.go) store.goId(q.spread)
   const sheet = store.sheet(q.spread)
   // «Перенесено из …» не показываем сразу: общий тост ниже должен нести и её (иначе «Вернуть» перетрёт).

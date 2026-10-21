@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { placePopover, placeSubmenu, type Box } from './popover'
+import { closesOnPeer, placePopover, placeSubmenu, type Box } from './popover'
 
 const view = { width: 1280, height: 760 }
 const size = { width: 240, height: 300 }
@@ -80,5 +80,25 @@ describe('placeSubmenu', () => {
   })
   it('с обеих сторон тесно — остаётся справа', () => {
     expect(placeSubmenu({ left: 10, top: 0, width: 220, height: 28 }, { width: 1200, height: 60 }, view).flipped).toBe(false)
+  })
+})
+
+describe('closesOnPeer (открылось другое окно панели)', () => {
+  const a = {}
+  const other = {}
+  const inner = {}
+  const pop = { contains: (n: unknown) => n === inner }
+  it('чужой якорь вне окна — закрыться (Папки закрываются, когда клавиша B открыла «Подборки»)', () => {
+    expect(closesOnPeer(other, { anchor: a, pop })).toBe(true)
+  })
+  it('своё открытие не закрывает себя', () => {
+    expect(closesOnPeer(a, { anchor: a, pop })).toBe(false)
+  })
+  it('вложенное окно (якорь внутри этого) не закрывает родителя', () => {
+    expect(closesOnPeer(inner, { anchor: a, pop })).toBe(false)
+  })
+  it('нет якоря в событии или окна ещё нет — закрыться по чужому якорю нечем/можно', () => {
+    expect(closesOnPeer(undefined, { anchor: a, pop })).toBe(false)
+    expect(closesOnPeer(other, { anchor: a, pop: null })).toBe(true)
   })
 })

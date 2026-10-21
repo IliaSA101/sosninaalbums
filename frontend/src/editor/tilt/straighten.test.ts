@@ -28,7 +28,7 @@ const { straighten } = await import('./straighten.svelte')
 const { bgmode } = await import('../backdrop/bgmode.svelte')
 const { placesel } = await import('../places/placesel.svelte')
 const { drag } = await import('../../base/drag/drag.svelte')
-const { modalStack } = await import('../../base/ui/modalstack.svelte')
+const { modalStack } = await import('../../base/modal/modalstack.svelte')
 const { keepStraighten, isLine, lineMM, placeBox, hitTarget, photoUnder, MIN_LINE_PX } = await import('./straighten')
 
 const bd = (o: Partial<BackdropView> = {}): BackdropView => ({

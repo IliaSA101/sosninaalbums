@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -82,7 +83,8 @@ func (a *App) setGuide(path, kind string, slot int, set func(*album.Editor, stri
 	return v, err
 }
 
-// maxGuideBytes — предел JPEG/PNG разметки для раздачи: WebView декодирует его сам.
+// maxGuideBytes — предел JPEG/PNG разметки до MarkupMaxSide для раздачи файлом: WebView
+// декодирует его сам. Большие (по пикселям) идут через превью Go.
 const maxGuideBytes = 100 << 20
 
 // Слоты кэша превью в App.markups.
@@ -105,8 +107,9 @@ func (a *App) serveMarkup(w http.ResponseWriter, r *http.Request) bool {
 }
 
 // serveGuide — файл-разметка path из проекта (из запроса пути нет: ?r=<rev> лишь сбивает кэш
-// WebView). Каждый раз заново: том отвечает, файл проходит MarkupFile. JPEG/PNG отдаются
-// файлом, PSD — PNG-превью из кэша слота. Ошибка — 404 и строка в log.txt без пути.
+// WebView). Каждый раз заново: том отвечает, файл проходит MarkupFile. JPEG/PNG до 4096 px
+// отдаются файлом, PSD и большие JPEG/PNG — превью Go из кэша слота (JPEG, PNG при прозрачности).
+// Ошибка — 404 и строка в log.txt без пути.
 func (a *App) serveGuide(w http.ResponseWriter, r *http.Request, slot int, path string) {
 	if path == "" || !reachable(path) {
 		http.NotFound(w, r)
@@ -119,7 +122,7 @@ func (a *App) serveGuide(w http.ResponseWriter, r *http.Request, slot int, path 
 	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-cache") // файл на диске могут заменить под тем же путём
-	if !m.IsPSD() {
+	if !m.Big() {
 		if m.Size > maxGuideBytes {
 			http.NotFound(w, r)
 			return
@@ -132,25 +135,30 @@ func (a *App) serveGuide(w http.ResponseWriter, r *http.Request, slot int, path 
 		http.ServeFile(w, r, m.Path) //nolint:gosec // m.Path — путь разметки из проекта после MarkupFile, не из запроса
 		return
 	}
-	data, err := a.markups[slot].get(m.Path)
+	data, ct, err := a.markups[slot].get(r.Context(), m.Path)
 	if err == nil && len(data) == 0 {
 		err = library.ErrNoMarkupImage
 	}
 	if err != nil {
 		// PSD без сведённого — обычный случай (видны только направляющие): 404 без строки в
 		// log.txt, иначе каждое обновление подложки засоряет журнал.
-		if !errors.Is(err, library.ErrNoMarkupImage) {
-			log.Printf("разметка: превью PSD не построено: %v", paths.NoPath(err))
+		// Запрос закрыт (подложку перерисовали, пока бюджет держал экспорт) — тоже без строки.
+		if !errors.Is(err, library.ErrNoMarkupImage) && r.Context().Err() == nil {
+			what := "превью разметки"
+			if m.IsPSD() {
+				what = "превью PSD"
+			}
+			log.Printf("разметка: %s не построено: %v", what, paths.NoPath(err))
 		}
 		http.NotFound(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Type", ct)
 	_, _ = w.Write(data)
 }
 
-// markupPreview — построение превью PSD; подменяется в тестах (счёт обращений).
-var markupPreview = library.MarkupPreview
+// markupPreview — построение превью (PSD, большой JPEG/PNG); подменяется в тестах (счёт обращений).
+var markupPreview = library.MarkupPreviewCtx
 
 // markupKey — превью действительно, пока у файла те же путь, размер и время записи.
 type markupKey struct {
@@ -159,37 +167,66 @@ type markupKey struct {
 	mod  int64 // ModTime в нс: time.Time через == сравнивать нельзя
 }
 
-// markupCache — одна запись на вид разметки. Замок держится и на время построения: второй
-// запрос того же файла ждёт готовый результат, а не строит его заново. Замок Editor здесь
-// не берётся — путь уже прочитан.
+// markupCache — одна запись на вид разметки. Замок на время построения не держится (ожидание
+// бюджета декода может быть долгим): второй запрос того же файла ждёт готовый результат на канале
+// busy со своим контекстом, а не строит заново. Замок Editor здесь не берётся — путь уже прочитан.
 type markupCache struct {
-	mu   sync.Mutex
-	key  markupKey
-	data []byte
-	err  error
+	mu    sync.Mutex
+	key   markupKey
+	data  []byte
+	ctype string // Content-Type превью: PNG у PSD, JPEG или PNG у большой картинки
+	err   error
+	busy  chan struct{} // не nil — идёт построение busyK; закрывается по готовности
+	busyK markupKey
+	gen   int // растёт при reset: результат построения, начатого до сброса, не запоминается
 }
 
 // reset — забыть запись: следующий get строит превью заново.
 func (c *markupCache) reset() {
 	c.mu.Lock()
-	c.key, c.data, c.err = markupKey{}, nil, nil
+	c.key, c.data, c.ctype, c.err = markupKey{}, nil, "", nil
+	c.gen++
 	c.mu.Unlock()
 }
 
-// get — превью PSD path: из кэша, если файл не менялся, иначе заново (и ошибка тоже
-// запоминается: битый файл не разбирается на каждый запрос).
-func (c *markupCache) get(path string) ([]byte, error) {
+// get — превью path и его Content-Type: из кэша, если файл не менялся, иначе заново (и ошибка
+// тоже запоминается: битый файл не разбирается на каждый запрос). Отмена ctx (запрос закрыт)
+// прерывает ожидание и не запоминается: следующий запрос строит превью заново.
+func (c *markupCache) get(ctx context.Context, path string) ([]byte, string, error) {
 	st, err := os.Stat(path)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	k := markupKey{path: path, size: st.Size(), mod: st.ModTime().UnixNano()}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.key == k {
-		return c.data, c.err
+	for c.key != k && c.busy != nil && c.busyK == k {
+		wait := c.busy
+		c.mu.Unlock()
+		select {
+		case <-wait:
+		case <-ctx.Done():
+			return nil, "", ctx.Err()
+		}
+		c.mu.Lock()
 	}
-	data, _, err := markupPreview(path)
-	c.key, c.data, c.err = k, data, err
-	return data, err
+	if c.key == k {
+		defer c.mu.Unlock()
+		return c.data, c.ctype, c.err
+	}
+	done, gen := make(chan struct{}), c.gen
+	c.busy, c.busyK = done, k
+	c.mu.Unlock()
+
+	data, ct, err := markupPreview(ctx, path)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.busy == done {
+		c.busy = nil
+	}
+	close(done)
+	if c.gen == gen && (err == nil || ctx.Err() == nil) {
+		c.key, c.data, c.ctype, c.err = k, data, ct, err
+	}
+	return data, ct, err
 }

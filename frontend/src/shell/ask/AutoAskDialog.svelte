@@ -1,6 +1,6 @@
 <script lang="ts">
   import { autoAskText, gridAct } from '../../panels/layouts/gridact.svelte'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
 
   // Вопрос перед возвратом сетки к «Авто» (спека 008): места сбросятся. По умолчанию — «Отмена».
   // Открыт, пока gridAct.autoAsk не null; ответ — gridAct.confirmAuto / cancelAuto.

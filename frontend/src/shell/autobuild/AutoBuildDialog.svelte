@@ -4,10 +4,11 @@
   import { store } from '../../base/core/store.svelte'
   import type { SigState } from '../../base/core/types'
   import { modes } from '../../base/prefs/view.svelte'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import AutoLayouts from './AutoLayouts.svelte'
   import AutoPhotos from './AutoPhotos.svelte'
   import AutoRangeRow from './AutoRangeRow.svelte'
+  import AutoSource from './AutoSource.svelte'
   import AutoVariant from './AutoVariant.svelte'
   import { dropsFn, planFn, previewFn, savedOf, sigsFn } from './autoapi'
   import { prefs } from '../../base/prefs/prefs.svelte'
@@ -20,8 +21,8 @@
     perText,
     planHint,
     rangeText,
+    sameText,
     seriesText,
-    sourceLine,
     spreadsBefore,
     unitWord,
   } from './autobuild'
@@ -60,14 +61,15 @@
   const close = () => (store.autoDraft = null)
 
   async function go() {
-    if (!ui) return
+    if (!ui || store.autoWaiting) return // пересборка уже ждёт ответа: второй Enter не уходит
     const u = ui
     // Запоминаем и собираем то, что подтвердил Go: N после ответа, а не то, что успели набрать.
     await u.submit((n, range, per, by, variety, families) => {
       // Без функции «Варианты раскладки» фильтра в окне не было — память семейств не трогаем; так же ч/б без «Ч/б и тон фото»
       modes.rememberAuto(n, memOf(range), per, by, variety, range.series, famOn ? families : modes.autoFamilies)
       modes.rememberPhotos(u.ph.similar, grayOn ? u.ph.gray : modes.autoGray)
-      return store.autoBuild(n, range, variety, families, u.ph.opts, u.plan?.similar ?? 0)
+      // Вариант совпал с текущим, окно открыто (080-1): показываем следующий
+      return store.autoBuild(n, range, variety, families, u.ph.opts, u.plan?.similar ?? 0, (v) => u.ph.setVariant(v))
     })
   }
 
@@ -144,7 +146,7 @@
   {@const d = store.autoDraft}
   <Modal title="Автосборка" onclose={close} width={860}>
     <div class="body" role="presentation" onkeydown={key}>
-      <p class="src">{sourceLine({ ...d, count: d.ids.length }, ui.plan?.photos ?? null, ui.plan?.similar ?? 0)}</p>
+      <AutoSource {d} plan={ui.plan} />
 
       <div class="tiles">
         <div class="pair" role="presentation" onpointerdown={pick} onclick={pick}>
@@ -254,9 +256,11 @@
       </details>
 
       <div class="actions">
-        <AutoVariant ph={ui.ph} off={empty} />
+        <AutoVariant ph={ui.ph} off={empty || store.autoWaiting} note={sameText(store.autoSame, ui.ph.variant)} />
         <button class="ghost" onclick={close}>Отмена</button>
-        <button class="primary" disabled={!ui.canBuild} onclick={go}>{ui.ph.again ? 'Пересобрать' : 'Собрать'}</button>
+        <button class="primary" disabled={!ui.canBuild || store.autoWaiting} onclick={go}>
+          {store.autoWaiting ? 'Пересобираю…' : ui.ph.again ? 'Пересобрать' : 'Собрать'}
+        </button>
       </div>
     </div>
   </Modal>
@@ -268,11 +272,6 @@
     flex-direction: column;
     gap: 8px;
     min-width: 0;
-  }
-  .src {
-    margin: 0;
-    color: var(--muted);
-    font-size: 12px;
   }
   /* Поля встают в ряд, пока хватает места; иначе друг под другом (без прокрутки и обрезки).
      Порог — окно ≤ 600 (спека 065): контейнер = окно − поля Modal (2×16) − рамка (2) − 32 отступа от края = 600 − 66 = 534. */
@@ -389,6 +388,7 @@
   .actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 8px;
     margin-top: 8px;
   }

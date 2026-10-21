@@ -1,6 +1,6 @@
 // Настройки окна экспорта (спека 009 U8, design §6.4): сборка ExportOptions, оценка размера файла,
 // последний выбор в localStorage (свойство программы, не проекта — как view.svelte.ts).
-import type { ExportOpts, Settings, View } from '../../base/core/types'
+import type { ExportOpts, PrintKind, PrintPlan, Settings, View } from '../../base/core/types'
 import type { ExportUnit } from './exportrange'
 import { newSheetSize, type SheetSettings } from '../../base/geom/sheet'
 
@@ -27,17 +27,17 @@ export interface ExportPrefs {
   pages: boolean
   cover: boolean // выгружать обложку (00.jpg)
   coverOnly: boolean // только обложка
-  fsfera: boolean // «Для Фотосферы Pro» (047); действует, только если страница альбома — формат Фотосферы
+  print: '' | PrintKind // «Для Фотосферы Pro» / «Для Фабрики Фотокниги» (047, 081); действует, только если у страницы есть такой план
 }
 export type ExportScope = 'all' | 'current' | 'range'
 
-export const DEFAULT_PREFS: ExportPrefs = { quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false, fsfera: false }
+export const DEFAULT_PREFS: ExportPrefs = { quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false, print: '' }
 
 // Байт на пиксель по качеству. ГИПОТЕЗА по типичным JPEG фотокамер: сверить на настоящих фото при QA.
 const BYTES_PER_PX: Record<Quality, number> = { 100: 0.9, 95: 0.45, 80: 0.2 }
 
-// Выгрузка для Фотосферы Pro всегда 300 dpi (Go принудительно ставит то же).
-export const FSFERA_DPI = 300
+// Выгрузка для типографии всегда 300 dpi (Go принудительно ставит то же).
+export const PRINT_DPI = 300
 
 const px = (mm: number, dpi: number) => Math.round((mm / 25.4) * dpi)
 
@@ -67,6 +67,12 @@ export function exportWarnings(v: Pick<View, 'emptyPlaces' | 'lowDPI'>, missing:
   return parts.length ? `Перед выгрузкой: ${parts.join(', ')}` : ''
 }
 
+// Предел разворотов типографии (085): в обычной выгрузке — строка-предупреждение (только совет, «Выгрузить» доступна);
+// в режиме печати (любой типографии) пределы проверяет Go в плане (красный список), второй строки не нужно.
+export function limitWarn(v: Pick<View, 'pageLimit'>, printOn: boolean): string {
+  return printOn ? '' : (v.pageLimit?.warn ?? '')
+}
+
 // Что попадёт в выгрузку — для итога по объёму (035 U22). Обложка считается как один разворот.
 export interface SizeScope {
   scope: ExportScope
@@ -74,7 +80,7 @@ export interface SizeScope {
   units: ExportUnit[] | null // разобранный диапазон; null — ввод неверен
   cover: boolean // обложка уйдёт в выгрузку (в том числе «только обложка»)
   only: boolean // только обложка
-  fsfera?: boolean // для Фотосферы (047): все развороты, 300 dpi, разворотами; обложка — как в cover
+  print?: boolean // для типографии (047, 081): все развороты, 300 dpi, разворотами; обложка — как в cover
 }
 
 // «≈ X на разворот, всего ≈ Y»; «всего» — если файлов больше одного, неверный диапазон — без итога.
@@ -86,8 +92,8 @@ export function sizeSummary(
   unit: string,
   w: SizeScope,
 ): string {
-  if (w.fsfera) {
-    dpi = FSFERA_DPI
+  if (w.print) {
+    dpi = PRINT_DPI
     pages = false
     w = { ...w, scope: 'all', only: false }
   }
@@ -110,9 +116,31 @@ export function coverAvailable(v: Pick<View, 'cover' | 'settings'>): boolean {
   return !!v.cover && !v.settings.sheet
 }
 
+// План включённой типографии: выбор запомнен, и у страницы такой план есть (флажок показан). Иначе null — режима нет.
+export function activePlan(plans: readonly PrintPlan[] | null, pref: '' | PrintKind): PrintPlan | null {
+  return (pref && plans?.find((p) => p.kind === pref && p.format)) || null
+}
+
+// Щелчок по флажку типографии: включённый выключается, другой переключает (включён не больше одного).
+export const togglePrint = (pref: '' | PrintKind, kind: PrintKind, checked: boolean): '' | PrintKind =>
+  checked ? kind : pref === kind ? '' : pref
+
+// Качество в режиме печати: у плана с quality > 0 оно своё (Go игнорирует выбор окна), иначе — выбор.
+export function printQuality(plan: Pick<PrintPlan, 'quality'> | null, q: Quality): Quality {
+  if (!plan || plan.quality <= 0) return q
+  return plan.quality >= 100 ? 100 : plan.quality >= 95 ? 95 : 80
+}
+
+// Подсказка у флажка: «(папка «Иванов», 300 dpi, качество 100, с обложкой)».
+export function printHint(plan: Pick<PrintPlan, 'folder' | 'quality'>, hasCover: boolean): string {
+  const q = plan.quality > 0 ? `, качество ${plan.quality}` : ''
+  return `(папка «${plan.folder}», ${PRINT_DPI} dpi${q}${hasCover ? ', с обложкой' : ''})`
+}
+
 // Сборка опций. current — номер текущего разворота с 1. «Все» — пустой диапазон.
 // hasCover — есть ли что выгружать: без обложки флаги уходят false. «Только обложка» включает обложку и гасит диапазон.
 // onCover — открыта обложка: «Текущий» тогда значит обложку, а не разворот с номером, на котором стояли до неё.
+// plan — включённая типография (activePlan); null — обычная выгрузка.
 export function buildOptions(
   scope: ExportScope,
   current: number,
@@ -120,13 +148,16 @@ export function buildOptions(
   p: ExportPrefs,
   hasCover = false,
   onCover = false,
-  fsfera = false,
+  plan: Pick<PrintPlan, 'kind' | 'quality'> | null = null,
 ): ExportOpts {
-  // Для Фотосферы Go берёт всё сам (диапазон, страницы, dpi и «только обложка» игнорирует), но уходят честные значения.
-  if (fsfera) return { range: '', quality: p.quality, dpi: FSFERA_DPI, pages: false, cover: hasCover, coverOnly: false, fsfera: true }
+  // Для типографии Go берёт всё сам (диапазон, страницы, dpi и «только обложка» игнорирует), но уходят честные значения.
+  if (plan) {
+    const quality = plan.quality > 0 ? plan.quality : p.quality
+    return { range: '', quality, dpi: PRINT_DPI, pages: false, cover: hasCover, coverOnly: false, print: plan.kind }
+  }
   const only = hasCover && (p.coverOnly || (scope === 'current' && onCover))
   const range = only || scope === 'all' ? '' : scope === 'current' ? String(current) : rangeText.trim()
-  return { range, quality: p.quality, dpi: p.dpi, pages: p.pages, cover: hasCover && (p.cover || only), coverOnly: only, fsfera: false }
+  return { range, quality: p.quality, dpi: p.dpi, pages: p.pages, cover: hasCover && (p.cover || only), coverOnly: only, print: '' }
 }
 
 // Строки памятки в окне экспорта: первые три через « · » (формат, страницы, развороты), остальное — в окне «Готово».
@@ -135,20 +166,12 @@ export const memoLine = (memo: readonly string[]): string => memo.slice(0, 3).jo
 // «Исправить» стоит у строки блока с номером plan.fixAt (Go: -1 — такой строки нет); по тексту строки не ищем.
 export const hasFix = (plan: { coverFix: boolean; fixAt: number }, i: number): boolean => plan.coverFix && i === plan.fixAt
 
-// Имя папки в окне «Готово»: из плана момента запуска; пусто (старый Go) — «книги».
-export const doneFolder = (folder: string): string => folder || 'книги'
-
-// Допуск «Выгрузить» (047). Пока план не пришёл, а Фотосфера выбрана, выгружать нельзя: блок неизвестен.
-export function canExport(o: {
-  busy: boolean
-  bad: boolean
-  fsPref: boolean
-  plan: { format: string; block: readonly string[] } | null
-}): boolean {
+// Допуск «Выгрузить» (047, 081). Пока планы не пришли (null), а типография выбрана, выгружать нельзя: блок неизвестен.
+export function canExport(o: { busy: boolean; bad: boolean; printPref: '' | PrintKind; plans: readonly PrintPlan[] | null }): boolean {
   if (o.busy) return false
-  if (o.fsPref && o.plan === null) return false
-  const fs = !!o.plan?.format && o.fsPref
-  if (fs) return o.plan!.block.length === 0
+  if (o.printPref && o.plans === null) return false
+  const plan = activePlan(o.plans, o.printPref)
+  if (plan) return plan.block.length === 0
   return !o.bad
 }
 
@@ -164,6 +187,12 @@ export function sampleName(n: number, total: number, pages: boolean): string {
 
 const KEY = 'exportOpts'
 
+// Выбор типографии из хранилища. Прежняя редакция (до 081) хранила флажок fsfera: true; чужое значение print — «выключено».
+function printOf(v: { print?: unknown; fsfera?: unknown }): ExportPrefs['print'] {
+  if (v.print === 'fsfera' || v.print === 'fabrika') return v.print
+  return v.print === undefined && v.fsfera === true ? 'fsfera' : ''
+}
+
 export function loadPrefs(): ExportPrefs {
   const o = { ...DEFAULT_PREFS }
   try {
@@ -174,7 +203,7 @@ export function loadPrefs(): ExportPrefs {
       if (typeof v.pages === 'boolean') o.pages = v.pages
       if (typeof v.cover === 'boolean') o.cover = v.cover
       if (typeof v.coverOnly === 'boolean') o.coverOnly = v.coverOnly
-      if (typeof v.fsfera === 'boolean') o.fsfera = v.fsfera
+      o.print = printOf(v)
     }
   } catch {
     // Без хранилища или с порченым значением — по умолчанию.

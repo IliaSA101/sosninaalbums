@@ -93,7 +93,7 @@
         class="opt"
         class:on={store.filter === 'all'}
         aria-pressed={store.filter === 'all'}
-        onclick={() => (store.filter = 'all')}>Все фото ({store.inFolders.length})</button
+        onclick={() => (store.filter = 'all')}>Все фото ({store.inBin.length})</button
       >
       <button
         type="button"

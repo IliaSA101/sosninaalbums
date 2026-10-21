@@ -487,16 +487,18 @@ func TestOpenRejectsForeignPaths(t *testing.T) {
 			p.Photos["bg"] = model.PhotoRef{Path: unc}
 			p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{}, BgPhoto: &model.Backdrop{Photo: "bg", W: 10, H: 10}}}
 		}},
-		{"отметка UNC", func(p *model.Project) { p.SetLoaded(map[string]model.Mark{"a": {Path: unc, Flag: &one}}) }},
+		{"отметка UNC", func(p *model.Project) {
+			p.SetLoaded(model.Side{Marks: map[string]model.Mark{"a": {Path: unc, Flag: &one}}})
+		}},
 		{"запасной путь отметки", func(p *model.Project) {
-			p.SetLoaded(map[string]model.Mark{"a": model.Mark{Path: ok, Flag: &one}.WithAlt(rel)})
+			p.SetLoaded(model.Side{Marks: map[string]model.Mark{"a": model.Mark{Path: ok, Flag: &one}.WithAlt(rel)}})
 		}},
 		{"NaN", func(p *model.Project) { p.Photos["a"] = model.PhotoRef{Path: ok, Frame: &model.Frame{S: math.NaN()}} }},
 	}
 	good := model.New()
 	good.Folders, good.FolderAlt = []string{dir}, map[string]string{dir: edtest.Abs("Старое")}
 	good.Photos["a"] = model.PhotoRef{Path: ok, Alt: edtest.Abs("b.jpg")}
-	good.SetLoaded(map[string]model.Mark{"a": model.Mark{Path: ok, Flag: &one}.WithAlt(edtest.Abs("b.jpg"))})
+	good.SetLoaded(model.Side{Marks: map[string]model.Mark{"a": model.Mark{Path: ok, Flag: &one}.WithAlt(edtest.Abs("b.jpg"))}})
 	if _, err := album.NewEditor(good, ""); err != nil {
 		t.Fatalf("локальные пути не прошли: %v", err)
 	}
@@ -525,10 +527,10 @@ func TestNewEditorOwnsCopy(t *testing.T) {
 	p.Photos["a"] = model.PhotoRef{Path: ok, W: 3, H: 2, Frame: &model.Frame{S: 2}}
 	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a"}}}
 	p.SetFrom(4)
-	p.SetLoaded(map[string]model.Mark{"a": {Path: ok, Flag: &one}})
+	p.SetLoaded(model.Side{Marks: map[string]model.Mark{"a": {Path: ok, Flag: &one}}})
 	e := edtest.Open(t, p, edtest.Abs("альбом.salbum"))
-	if !edtest.Backup(e) || len(e.Marks()) != 1 || len(edtest.Loaded(p)) != 1 {
-		t.Fatalf("from и отметки: копия старой версии %v, отметок %d, у p %d", edtest.Backup(e), len(e.Marks()), len(edtest.Loaded(p)))
+	if !edtest.Backup(e) || len(e.Marks()) != 1 || len(edtest.Loaded(p).Marks) != 1 {
+		t.Fatalf("from и отметки: копия старой версии %v, отметок %d, у p %d", edtest.Backup(e), len(e.Marks()), len(edtest.Loaded(p).Marks))
 	}
 	p.Photos["a"].Frame.S = 3
 	p.Spreads[0].Name = "чужое"
@@ -537,14 +539,14 @@ func TestNewEditorOwnsCopy(t *testing.T) {
 		t.Fatal("правка p после NewEditor дошла до альбома")
 	}
 	// Указатели отметки общие с p (maps.Clone без копии полей) — правка в p дошла бы до Editor.
-	*edtest.Loaded(p)["a"].Flag = -1
+	*edtest.Loaded(p).Marks["a"].Flag = -1
 	if f := e.Marks()["a"].Flag; f == nil || *f != 1 {
 		t.Fatalf("правка отметки в p после NewEditor дошла до Editor: флаг %v", f)
 	}
 	// Карта отметок общая с p (без maps.Clone) — новая отметка Editor появилась бы и у p.
 	edtest.SetMarks(t, e, edtest.Photos("n"), model.MarkPatch{Rating: &one})
-	if len(edtest.Loaded(p)) != 1 {
-		t.Fatalf("отметка Editor попала в p.loaded: %d", len(edtest.Loaded(p)))
+	if len(edtest.Loaded(p).Marks) != 1 {
+		t.Fatalf("отметка Editor попала в p.loaded: %d", len(edtest.Loaded(p).Marks))
 	}
 }
 

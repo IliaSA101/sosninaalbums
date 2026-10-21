@@ -41,7 +41,7 @@ func TestWriteRelNoAbs(t *testing.T) {
 	five := 5
 	marks := map[string]model.Mark{ids[in]: {Path: in, Rating: &five}}
 	path := filepath.Join(base, "Иванов.salbum")
-	if err := WriteRel(p, path, base, marks); err != nil {
+	if err := WriteRel(p, path, base, model.Side{Marks: marks}); err != nil {
 		t.Fatal(err)
 	}
 	f := readFile(t, path)
@@ -66,11 +66,11 @@ func TestWriteRelNoAbs(t *testing.T) {
 	if q.Photos[ids[in]].Path != in || q.Photos[ids[up]].Path != up || q.Photos[ids[gone]].Alt != alt || q.SpreadGuide != guide {
 		t.Fatalf("Load: %+v, разметка %q", q.Photos, q.SpreadGuide)
 	}
-	if m := q.Loaded()[ids[in]]; m.Path != in {
-		t.Fatalf("отметка после Load: %+v", q.Loaded())
+	if m := q.Loaded().Marks[ids[in]]; m.Path != in {
+		t.Fatalf("отметка после Load: %+v", q.Loaded().Marks)
 	}
 	// Write — как раньше: относительный с abs рядом, «..» допустим.
-	if err := Write(p, path, base, marks); err != nil {
+	if err := Write(p, path, base, model.Side{Marks: marks}); err != nil {
 		t.Fatal(err)
 	}
 	f = readFile(t, path)
@@ -80,7 +80,7 @@ func TestWriteRelNoAbs(t *testing.T) {
 	if got := f.Photos[ids[up]]; got.Path != "../b.jpg" || got.Abs != up {
 		t.Errorf("Write уровнем выше: %+v", got)
 	}
-	if err := WriteRel(p, path, "", marks); err == nil {
+	if err := WriteRel(p, path, "", model.Side{Marks: marks}); err == nil {
 		t.Fatal("WriteRel без папки альбома принят")
 	}
 }
@@ -120,7 +120,7 @@ func TestWriteSurvivesHeldDotTmp(t *testing.T) {
 		}
 		t.Cleanup(func() { _ = held.Close() })
 		for range 2 { // второй раз — поверх уже записанного
-			if err := Write(model.New(), path, "", nil); err != nil {
+			if err := Write(model.New(), path, "", model.Side{}); err != nil {
 				t.Fatalf("запись при занятом %s.tmp: %v", name, err)
 			}
 		}

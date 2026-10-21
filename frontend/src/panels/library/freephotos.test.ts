@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allInAlbum, allInAlbumText, freePhotos, pickFor, type PickHost } from './freephotos'
+import { allInAlbum, allInAlbumText, emptyReason, freePhotos, pickFor, type PickHost } from './freephotos'
 import { filterFolders } from '../folders/folders'
 import type { Photo } from '../../base/core/types'
 
@@ -72,6 +72,58 @@ describe('allInAlbum (035 U11)', () => {
     expect(allInAlbum('unused', 3, 12)).toBe(false)
     expect(allInAlbum('all', 0, 12)).toBe(false)
     expect(allInAlbum('unused', 0, 0)).toBe(false)
+  })
+})
+
+describe('подборка (083)', () => {
+  const host = (visible: Photo[], inBin: Photo[] | undefined, notify: (t: string) => void = () => {}): PickHost => ({
+    visible,
+    inBin,
+    selectedIds: [],
+    used: new Set(['a', 'b', 'c', 'd']),
+    backdropUsed: new Set(),
+    marks: {},
+    notify,
+  })
+  it('без выделения: имя подборки в результате', () => {
+    const h = { ...host(photos, photos), used: new Set<string>() }
+    expect(pickFor(h, true, false, 'Запас')).toMatchObject({ from: 'free', bin: 'Запас' })
+  })
+  it('выделение главнее: подборка не называется', () => {
+    const h = { ...host(photos, photos), selectedIds: ['a'], used: new Set<string>() }
+    expect(pickFor(h, true, false, 'Запас').bin).toBeUndefined()
+  })
+  it('все фото подборки в альбоме — тост с её именем', () => {
+    const t: string[] = []
+    expect(
+      pickFor(
+        host(photos, photos, (x) => t.push(x)),
+        true,
+        false,
+        'Запас',
+      ).ids,
+    ).toEqual([])
+    expect(t).toEqual(['Все фото подборки «Запас» уже в альбоме'])
+  })
+  it('в подборке нет фото — свой тост', () => {
+    const t: string[] = []
+    pickFor(
+      host([], [], (x) => t.push(x)),
+      true,
+      false,
+      'Запас',
+    )
+    expect(t).toEqual(['В подборке «Запас» нет фото'])
+  })
+  it('подборка и фильтр отметок: причина — фильтр', () => {
+    expect(emptyReason(false, 0, true, 'Запас')).toBe('Под фильтр не подходит ни одно свободное фото')
+  })
+  it('без подборки причины прежние', () => {
+    expect(emptyReason(false, 0, false)).toBe('Все фото уже в альбоме')
+    expect(emptyReason(true, 0, false, 'Запас')).toBe('Выделенные фото уже в альбоме')
+  })
+  it('пустая лента «Не в альбоме»: текст про подборку главнее папок', () => {
+    expect(allInAlbumText(true, 'Запас')).toBe('Все фото подборки «Запас» уже в альбоме')
   })
 })
 

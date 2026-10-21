@@ -10,7 +10,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/vigsheet"
 )
 
-// maxUndo — шагов отмены со снимком альбома; maxMarkUndo — шагов только отметок (решение
+// maxUndo — шагов отмены со снимком альбома; maxMarkUndo — шагов только отметок и подборок (решение
 // владельца 2026-10-09): частые клики оценок не вытесняют правки альбома, а дельты лёгкие.
 const (
 	MaxUndo     = 200
@@ -21,19 +21,41 @@ const (
 // в 200 шагах иначе может занять гигабайты. var — чтобы тест мог уменьшить.
 var maxUndoBytes = 256 << 20
 
-// Snap — шаг отмены: снимок проекта и его размер в байтах JSON и/или дельта своих отметок.
-// p == nil — шаг только отметок (снимок альбома им не нужен).
+// Snap — шаг отмены: снимок проекта и его размер в байтах JSON и/или правка «рядом с проектом»
+// (дельта своих отметок, список подборок). p == nil — шаг только отметок и подборок (снимок
+// альбома им не нужен).
 type Snap struct {
 	P     *model.Project
 	N     int
 	Marks []MarkChange
+	Bins  *BinsSwap // nil — подборки шаг не менял
 }
 
+// BinsSwap — список подборок до и после шага целиком (083 §4.1): ≤ MaxBins строк, дельта не нужна.
+// Срезы не правятся на месте: их делят Editor.bins и шаги отмены.
+type BinsSwap struct{ before, After []model.Bin }
+
 // MarkBytes — вес записи дельты отметок в undoBytes: замер с путём, полями и двумя Mark — 169–176 Б.
-const MarkBytes = 176
+// BinBytes — вес строки списка подборок: ID ~10 Б, имя до 80 Б UTF-8, заголовки строк и среза.
+const (
+	MarkBytes = 176
+	BinBytes  = 128
+)
 
 // Weight — вклад шага в undoBytes.
-func (s Snap) Weight() int { return s.N + MarkBytes*len(s.Marks) }
+func (s Snap) Weight() int { return s.N + s.sideWeight() }
+
+// sideWeight — вес правки «рядом с проектом» (отметки и подборки).
+func (s Snap) sideWeight() int {
+	n := MarkBytes * len(s.Marks)
+	if s.Bins != nil {
+		n += BinBytes * (len(s.Bins.before) + len(s.Bins.After))
+	}
+	return n
+}
+
+// side — у шага есть правка отметок или подборок.
+func (s Snap) side() bool { return len(s.Marks) > 0 || s.Bins != nil }
 
 // pushUndo кладёт шаг в отмену. Сверх maxUndo снимков альбома уходит самый старый снимок,
 // сверх maxMarkUndo шагов только отметок — самый старый такой шаг, сверх maxUndoBytes — самый
@@ -46,22 +68,23 @@ func (e *Editor) pushUndo(s Snap) {
 	}
 	for e.undoAlbum > MaxUndo {
 		i := slices.IndexFunc(e.undo, func(s Snap) bool { return s.P != nil })
-		if len(e.undo[i].Marks) == 0 {
+		if !e.undo[i].side() {
 			e.dropUndo(i)
 			continue
 		}
-		// Снимок уходит, дельта отметок остаётся шагом отметок: иначе цепочка отметок порвалась бы.
+		// Снимок уходит, отметки и подборки остаются шагом «рядом»: иначе их цепочка порвалась бы.
 		e.undoBytes -= e.undo[i].N
 		e.undo[i].P, e.undo[i].N = nil, 0
 		e.undoAlbum--
 	}
 	for len(e.undo)-e.undoAlbum > MaxMarkUndo {
 		i := slices.IndexFunc(e.undo, func(s Snap) bool { return s.P == nil })
-		// Шаги старше вытесненного теряют свои дельты отметок: отменяются только снимки альбома,
-		// а отметки — непрерывным хвостом истории.
+		// Шаги старше вытесненного теряют свои отметки и подборки: отменяются только снимки
+		// альбома, а отметки и подборки — непрерывным хвостом истории (членство и список уходят
+		// вместе — подборки без определения не остаётся, 083 §4.3).
 		for j := range i {
-			e.undoBytes -= MarkBytes * len(e.undo[j].Marks)
-			e.undo[j].Marks = nil
+			e.undoBytes -= e.undo[j].sideWeight()
+			e.undo[j].Marks, e.undo[j].Bins = nil, nil
 		}
 		e.dropUndo(i)
 	}
@@ -93,6 +116,9 @@ func (e *Editor) sessionStart(merge string) *model.Project {
 func (e *Editor) Undo() model.View {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.shut("отмена") {
+		return e.view()
+	}
 	if n := len(e.undo); n > 0 {
 		s := e.undo[n-1]
 		e.dropUndo(n - 1)
@@ -110,6 +136,9 @@ func (e *Editor) Undo() model.View {
 func (e *Editor) Redo() model.View {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.shut("возврат") {
+		return e.view()
+	}
 	if n := len(e.redo); n > 0 {
 		s := e.redo[n-1]
 		e.redo = e.redo[:n-1]
@@ -124,16 +153,16 @@ func (e *Editor) Redo() model.View {
 	return e.view()
 }
 
-// swap ставит состояние шага s (back — отмена: отметки «до», иначе «после») и возвращает
-// обратный шаг: снимок текущего проекта, если у s он есть, и ту же дельту отметок.
+// swap ставит состояние шага s (back — отмена: отметки и подборки «до», иначе «после») и
+// возвращает обратный шаг: снимок текущего проекта, если у s он есть, и ту же правку «рядом».
 func (e *Editor) swap(s Snap, back bool) Snap {
-	r := Snap{Marks: s.Marks}
+	r := Snap{Marks: s.Marks, Bins: s.Bins}
 	if s.P != nil {
 		r.P, r.N = e.p, e.size
 		e.p, e.size = s.P, s.N
 	}
-	if len(s.Marks) > 0 {
-		e.setMarks(s.Marks, back)
+	if s.side() {
+		e.setSide(s.Marks, s.Bins, back)
 	}
 	return r
 }
@@ -175,6 +204,9 @@ func (e *Editor) SyncOwnNames(tpls []model.Template) (v model.View, changed bool
 	names := vigsheet.OwnNames(tpls)
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.shut("имена шаблонов") {
+		return e.view(), false
+	}
 	if len(names) == 0 {
 		return e.view(), false
 	}

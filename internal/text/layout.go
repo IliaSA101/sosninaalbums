@@ -101,10 +101,24 @@ func measure(sf, fb *sfnt.Font, s string) *para {
 // Стиль приводится к допустимому (Clamped), текст — к CleanText.
 func Layout(s string, st Style, w float64) Box {
 	st = st.Clamped()
-	size := st.Size * 25.4 / 72
-	box := Box{W: w, Size: size}
+	if c := usableCustom(st.Font); c != nil {
+		sf, _ := font(st)
+		fb, _ := fallback(st)
+		var box Box
+		if guarded(func() { box = layoutWith(s, st, w, sf, fb) }) {
+			return box
+		}
+		c.markBroken("перенос строк") // дальше — Montserrat, как у пропавшего шрифта
+	}
 	sf, _ := font(st)
 	fb, _ := fallback(st)
+	return layoutWith(s, st, w, sf, fb)
+}
+
+// layoutWith — Layout заданным шрифтом sf и запасным fb (может быть nil); st уже Clamped.
+func layoutWith(s string, st Style, w float64, sf, fb *sfnt.Font) Box {
+	size := st.Size * 25.4 / 72
+	box := Box{W: w, Size: size}
 	if sf == nil || !(w > 0) || math.IsInf(w, 0) {
 		return box
 	}
@@ -197,11 +211,14 @@ func wrap(p *para, mm func(fixed.Int26_6) float64, w float64) []Line {
 	return lines
 }
 
-// Кэш переносов: ключ — текст, стиль и ширина с точностью 0.01 мм.
+// Кэш переносов: ключ — текст, стиль, ширина с точностью 0.01 мм и поколение
+// реестра своих шрифтов. Чистки кэша при смене набора мало: Layout, начатый
+// до смены, положил бы старую строку уже после чистки.
 type cacheKey struct {
-	s  string
-	st Style
-	w  int64
+	s   string
+	st  Style
+	w   int64
+	gen uint64
 }
 
 type cacheEntry struct {
@@ -223,7 +240,7 @@ func Cached(s string, st Style, w float64) Box {
 	if math.IsNaN(w) || math.IsInf(w, 0) {
 		return Layout(s, st, 0)
 	}
-	k := cacheKey{s, st, int64(math.Round(w * 100))}
+	k := cacheKey{s, st, int64(math.Round(w * 100)), customGen.Load()}
 	cache.Lock()
 	if e, ok := cache.m[k]; ok {
 		cache.lru.MoveToFront(e)

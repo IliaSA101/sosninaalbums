@@ -149,6 +149,8 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	r.do("RelinkDrive", e.RelinkDrive("Q", "R"))
 	// Своих из библиотеки в сценарии нет — холостая (настоящая — TestRelinkLib в salbum).
 	r.do("RelinkLib", e.RelinkLib(func(string) (string, bool) { return "", false }))
+	// Своих шрифтов в сценарии нет — холостая (настоящая — TestRefitFontsStep).
+	r.do("RefitFonts", e.RefitFonts())
 	r.do("RemoveFolder", e.RemoveFolder(`Q:\Банкет`))
 	r.ve("Restore")(e.Restore(q))
 	r.do("Undo:восстановление", e.Undo())

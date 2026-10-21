@@ -61,6 +61,13 @@ async function firstBuild(variant = 1) {
   return store.autoBuild(2, RANGE, 1, [], OPTS(variant), 0)
 }
 
+// Окно пересборки открыто, запрос ушёл (синхронная часть build выполнена); show — окно показывает следующий вариант
+function again(variant: number, next: object, show?: (v: number) => void) {
+  if (!store.autoDraft) store.openAgain()
+  answer = () => next
+  return store.autoBuild(2, RANGE, 1, [], OPTS(variant, true), 0, show)
+}
+
 describe('lastAuto после «Собрать»', () => {
   it('запоминает фото, позицию вставки, настройки и вариант; тост с «Пересобрать…»', async () => {
     expect(store.lastAuto).toBeNull()
@@ -198,13 +205,13 @@ describe('«Автосборка» без свободных фото', () => {
   })
 })
 
-describe('пересборка: AutoBuild(again)', () => {
-  async function again(variant: number, next: object) {
-    store.openAgain()
-    answer = () => next
-    return store.autoBuild(2, RANGE, 1, [], OPTS(variant, true), 0)
-  }
+const SAME = view(2, true, [
+  { id: 's', photos: ['a'] },
+  { id: 'n1', photos: ['b'] },
+  { id: 'n2', photos: ['c', 'd'] },
+])
 
+describe('пересборка: AutoBuild(again)', () => {
   it('позиция вставки — первой сборки; тост «Пересобрано: вариант k»; Пересобрать… снова', async () => {
     await firstBuild()
     // за время между сборками число разворотов в виде сменилось (отметки не меняют альбом, но at всё равно первый)
@@ -232,21 +239,15 @@ describe('пересборка: AutoBuild(again)', () => {
     expect(store.lastAuto?.opts.ph.again).toBe(false) // признак — не часть «настроек сборки»
   })
 
-  it('вариант совпал (rev тот же) — «не отличается», пересборка остаётся доступной', async () => {
+  it('вариант совпал, а окно закрыли (✕ во время ожидания) — ответ тостом «не отличается», пересборка доступна', async () => {
     await firstBuild()
-    expect(
-      await again(
-        2,
-        view(2, true, [
-          { id: 's', photos: ['a'] },
-          { id: 'n1', photos: ['b'] },
-          { id: 'n2', photos: ['c', 'd'] },
-        ]),
-      ),
-    ).toBe(true)
+    const p = again(2, SAME)
+    store.autoDraft = null // ✕: окно закрылось, пока Go считает
+    expect(await p).toBe(true)
     expect(store.toast?.text).toBe('Этот вариант не отличается — попробуйте следующий')
     expect(store.toast?.action?.label).toBe('Пересобрать…')
-    expect(store.lastAuto?.variant).toBe(2)
+    expect(store.lastAuto?.variant).toBe(2) // как в 0.20: вариант поставлен
+    expect(store.autoSame).toBeNull()
   })
 
   it('переход не прыгает: текущий разворот остаётся (ID прошлого варианта сохраняются)', async () => {
@@ -340,5 +341,205 @@ describe('savedOf: начальные значения окна', () => {
     const s = savedOf(store.autoDraft!, false, false)
     expect(s.families).toEqual([])
     expect(s.gray).not.toBe(2)
+  })
+})
+
+describe('окно пересборки ждёт ответа (080-1)', () => {
+  const CHANGED = view(4, true, [
+    { id: 's', photos: ['a'] },
+    { id: 'n1', photos: ['d'] },
+    { id: 'n2', photos: ['b', 'c'] },
+  ])
+
+  it('пока Go считает: окно открыто, ждёт (кнопка «Пересобираю…»); потом ожидание снято', async () => {
+    await firstBuild()
+    expect(store.autoWaiting).toBe(false)
+    const p = again(2, CHANGED)
+    expect(store.autoWaiting).toBe(true)
+    expect(store.autoDraft?.again).toBe(true)
+    await p
+    expect(store.autoWaiting).toBe(false)
+  })
+
+  it('двойной Enter: два autoBuild(again) подряд без await — в Go уходит один, «Пересобираю…» держится до ответа', async () => {
+    await firstBuild()
+    builds.length = 0
+    const p1 = again(2, CHANGED)
+    const p2 = store.autoBuild(2, RANGE, 1, [], OPTS(2, true), 0)
+    expect(store.autoWaiting).toBe(true)
+    expect(await p2).toBe(false)
+    expect(store.autoWaiting).toBe(true) // второй вызов не снял ожидание первого
+    expect(await p1).toBe(true)
+    expect(builds).toHaveLength(1)
+    expect(store.autoWaiting).toBe(false)
+  })
+
+  it('обычная сборка окно закрывает сразу и не «ждёт»', async () => {
+    store.openAuto()
+    const p = store.autoBuild(2, RANGE, 1, [], OPTS(), 0)
+    expect(store.autoDraft).toBeNull()
+    expect(store.autoWaiting).toBe(false)
+    await p
+  })
+
+  it('вариант совпал: окно открыто, показан следующий, тоста нет, last прежний', async () => {
+    await firstBuild()
+    store.toast = null
+    const was = store.lastAuto
+    const shown: number[] = []
+    expect(await again(2, SAME, (v) => shown.push(v))).toBe(true)
+    expect(store.autoDraft?.again).toBe(true)
+    expect(shown).toEqual([3])
+    expect(store.autoSame).toEqual({ first: 2, last: 2, next: 3 })
+    expect(store.toast).toBeNull()
+    expect(store.lastAuto).toBe(was)
+  })
+
+  it('три совпадения подряд — одна серия 2–4; вариант, выбранный руками, серию начинает заново', async () => {
+    await firstBuild()
+    store.toast = null
+    const shown: number[] = []
+    for (const v of [2, 3, 4]) await again(v, SAME, (n) => shown.push(n))
+    expect(shown).toEqual([3, 4, 5])
+    expect(store.autoSame).toEqual({ first: 2, last: 4, next: 5 })
+    await again(7, SAME, (n) => shown.push(n))
+    expect(store.autoSame).toEqual({ first: 7, last: 7, next: 8 })
+  })
+
+  it('пересборка изменила альбом: окно закрыто, тост «Пересобрано»', async () => {
+    await firstBuild()
+    const shown: number[] = []
+    expect(await again(2, CHANGED, (v) => shown.push(v))).toBe(true)
+    expect(store.autoDraft).toBeNull()
+    expect(shown).toEqual([])
+    expect(store.toast?.text).toBe('Пересобрано: вариант 2')
+    expect(store.lastAuto?.variant).toBe(2)
+  })
+
+  it('✕ во время ожидания: ответ тостом, show не зовётся, ожидание снято', async () => {
+    await firstBuild()
+    const shown: number[] = []
+    const p = again(3, CHANGED, (v) => shown.push(v))
+    store.autoDraft = null
+    await p
+    expect(store.toast?.text).toBe('Пересобрано: вариант 3')
+    expect(shown).toEqual([])
+    expect(store.autoWaiting).toBe(false)
+  })
+
+  it('ошибка Go: окно закрыто, тост ошибки, ожидание снято', async () => {
+    await firstBuild()
+    store.openAgain()
+    answer = () => {
+      throw 'ошибка Go'
+    }
+    expect(await store.autoBuild(2, RANGE, 1, [], OPTS(2, true), 0)).toBe(false)
+    expect(store.autoDraft).toBeNull()
+    expect(store.toast?.kind).toBe('error')
+    expect(store.autoWaiting).toBe(false)
+  })
+
+  it('ссылка не работает, пока идёт ожидание', async () => {
+    await firstBuild()
+    store.photos = ['a', 'b', 'c', 'd', 'e'].map(ph) as never
+    store.openAuto() // свободные после сборки свободных: пересборка + alt
+    expect(store.autoDraft?.alt?.ids).toEqual(['e'])
+    const p = again(2, CHANGED)
+    store.swapAuto()
+    expect(store.autoDraft?.again).toBe(true)
+    await p
+  })
+})
+
+describe('«Автосборка» без выделения: пересборка или новая (080-3)', () => {
+  const E = () => (store.photos = ['a', 'b', 'c', 'd', 'e'].map(ph) as never)
+
+  it('после сборки свободных — пересборка, alt = свободные', async () => {
+    await firstBuild()
+    E()
+    store.toast = null
+    store.openAuto()
+    expect(store.autoDraft).toMatchObject({ ids: ['b', 'c', 'd'], again: true })
+    expect(store.autoDraft?.alt).toMatchObject({ ids: ['e'], from: 'free' })
+    expect(store.autoDraft?.alt?.alt).toBeUndefined()
+  })
+
+  it('после сборки выделенных — новая сборка свободных, alt = пересборка', async () => {
+    store.selected.add('b')
+    store.openAuto()
+    await store.autoBuild(1, RANGE, 1, [], OPTS(), 0)
+    expect(store.lastAuto?.pick.from).toBe('selected')
+    E()
+    store.openAuto()
+    expect(store.autoDraft?.again).toBeUndefined()
+    expect(store.autoDraft?.ids).toEqual(['e'])
+    expect(store.autoDraft?.alt).toMatchObject({ ids: ['b'], again: true })
+  })
+
+  it('с выделением — новая сборка выделенных, alt = пересборка', async () => {
+    await firstBuild()
+    E()
+    store.selected.add('e')
+    store.openAuto()
+    expect(store.autoDraft).toMatchObject({ ids: ['e'], from: 'selected' })
+    expect(store.autoDraft?.again).toBeUndefined()
+    expect(store.autoDraft?.alt).toMatchObject({ ids: ['b', 'c', 'd'], again: true })
+  })
+
+  it('пересборка не жива — alt нет, обычная новая сборка', async () => {
+    await firstBuild()
+    E()
+    store.apply(view(3, false, [{ id: 's', photos: ['a'] }]) as never)
+    store.openAuto()
+    expect(store.autoDraft?.again).toBeUndefined()
+    expect(store.autoDraft?.alt).toBeUndefined()
+    expect(store.autoDraft?.ids).toEqual(['b', 'c', 'd', 'e'])
+  })
+
+  it('свободных нет, пересборка жива — пересборка без alt', async () => {
+    await firstBuild()
+    store.apply(view(3, true, [{ id: 's', photos: ['a', 'b', 'c', 'd'] }]) as never)
+    store.openAuto()
+    expect(store.autoDraft?.again).toBe(true)
+    expect(store.autoDraft?.alt).toBeUndefined()
+  })
+
+  it('«Пересобрать…» из тоста — без alt (явный выбор)', async () => {
+    await firstBuild()
+    E()
+    store.toast?.action?.run()
+    expect(store.autoDraft?.again).toBe(true)
+    expect(store.autoDraft?.alt).toBeUndefined()
+  })
+
+  it('ссылка меняет окно и возвращает обратно; у alt своего alt нет', async () => {
+    await firstBuild()
+    E()
+    store.openAuto()
+    store.swapAuto()
+    expect(store.autoDraft).toMatchObject({ ids: ['e'], from: 'free' })
+    expect(store.autoDraft?.again).toBeUndefined()
+    expect(store.autoDraft?.alt).toMatchObject({ ids: ['b', 'c', 'd'], again: true })
+    expect(store.autoDraft?.alt?.alt).toBeUndefined()
+    store.swapAuto()
+    expect(store.autoDraft).toMatchObject({ ids: ['b', 'c', 'd'], again: true })
+    expect(store.autoDraft?.alt).toMatchObject({ ids: ['e'] })
+  })
+
+  it('swap без alt — ничего', () => {
+    store.swapAuto()
+    expect(store.autoDraft).toBeNull()
+    store.openAuto()
+    const d = store.autoDraft
+    store.swapAuto()
+    expect(store.autoDraft).toBe(d)
+  })
+
+  it('alt не попадает в lastAuto.pick', async () => {
+    await firstBuild()
+    E()
+    store.openAuto()
+    await store.autoBuild(2, RANGE, 1, [], OPTS(2, true), 0)
+    expect(store.lastAuto?.pick.alt).toBeUndefined()
   })
 })

@@ -8,6 +8,12 @@
   import MarkBar from '../marks/MarkBar.svelte'
   import MarkFilter from '../marks/MarkFilter.svelte'
   import FolderMenu from '../folders/FolderMenu.svelte'
+  import BinMenu from '../bins/BinMenu.svelte'
+  import { binHost, moreBinDrop } from '../bins/bins'
+  import { binsel } from '../bins/binsel.svelte'
+  import { gallery } from '../gallery/gallery.svelte'
+  import { drag } from '../../base/drag/drag.svelte'
+  import { prefs } from '../../base/prefs/prefs.svelte'
   import MoreMenu from './MoreMenu.svelte'
 
   // Верхняя полоса ленты фото (спека 024): всегда одна строка. Что не поместилось — уходит в «⋯» по приоритету
@@ -23,14 +29,15 @@
   const SPACER = 2 * GAP // зазоры вокруг растяжки между левой и правой частью
 
   // Порядок слева направо: до растяжки и после неё.
-  const LEFT = ['folders', 'auto', 'fill']
+  const LEFT = ['folders', 'bins', 'auto', 'fill']
   const RIGHT = ['status', 'marks', 'filter', 'size']
-  const PRIO: Record<string, number> = { folders: 60, auto: Infinity, fill: 40, status: 20, marks: 70, filter: 50, size: 10 }
+  const PRIO: Record<string, number> = { folders: 60, bins: 55, auto: Infinity, fill: 40, status: 20, marks: 70, filter: 50, size: 10 }
 
   // Какие группы есть сейчас (пустые не занимают места).
   const present = $derived(
     [...LEFT, ...RIGHT].filter((id) => {
       if (id === 'fill') return store.view.emptyPlaces > 0
+      if (id === 'bins') return prefs.can('bins') && (store.view.folders.length > 0 || (store.view.bins ?? []).length > 0)
       if (id === 'status') return store.scan.active || loading
       if (id === 'marks') return store.selectedIds.length > 0
       return true
@@ -55,9 +62,33 @@
     return fitGroups(groups, barW - PAD - SPACER, GAP, MORE_W)
   })
   const inMore = $derived(present.filter((id) => hidden.has(id)))
+
+  // Окно «Подборки» просят открыть клавишей (B, Shift+B), а кнопка ушла в «⋯»: открываем «⋯» — окно встанет там.
+  // Окну негде быть (нет группы, лента свёрнута) — флаг сбрасываем, иначе окно всплыло бы при следующем открытии.
+  let moreOpen = $state(false)
+  // Хост кнопки нужен и закрытому окну: тост B без подборок называет путь через «⋯».
+  $effect(() => {
+    binsel.host = binHost(present.includes('bins'), hidden.has('bins'), modes.big || !!gallery.cur)
+  })
+  $effect(() => {
+    if (!binsel.open) return
+    const host = binsel.host
+    if (host === 'more') moreOpen = true
+    else if (host === 'none') binsel.close()
+  })
+  // Бросок фото на подборку, пока её кнопка в «⋯»: «⋯» — цель (083-29).
+  const moreDrop = $derived(
+    moreBinDrop(
+      binHost(present.includes('bins'), hidden.has('bins'), modes.big || !!gallery.cur),
+      drag.active && drag.payload?.kind === 'photos' && !drag.payload.fromSpread,
+      drag.over === 'bin',
+      binsel.targetName,
+    ),
+  )
   // Якоря справочника (033) групп, что ушли в «⋯»: кнопка «⋯» мигает вместо них.
   const GUIDE_OF: Record<string, string> = {
     folders: 'folders',
+    bins: 'bins',
     fill: 'fill-empty',
     marks: 'mark-bar',
     filter: 'mark-filter',
@@ -78,6 +109,8 @@
 {#snippet grp(id: string)}
   {#if id === 'folders'}
     <FolderMenu />
+  {:else if id === 'bins'}
+    <BinMenu />
   {:else if id === 'auto'}
     <button
       class="primary"
@@ -140,7 +173,7 @@
     <span class="g" use:measure={id}>{@render grp(id)}</span>
   {/each}
   {#if inMore.length > 0}
-    <MoreMenu ids={inMore} item={grp} {hold} />
+    <MoreMenu ids={inMore} item={grp} {hold} bind:open={moreOpen} dropBin={moreDrop.drop} dropText={moreDrop.text} />
   {/if}
   {#if store.scan.active}
     <div class="progress" class:indeterminate={frac === null}>

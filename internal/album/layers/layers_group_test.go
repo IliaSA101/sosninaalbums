@@ -243,6 +243,63 @@ func TestScaleGroupAxesMinTextW(t *testing.T) {
 	}
 }
 
+// TestTransformGroupMinTextW — пропорциональный масштаб: закреплённая ширина 12 мм × 0.5 < MinTextW,
+// ширина растёт вокруг точки выравнивания, центр не уезжает (было 2 мм); место рядом едет с ним.
+func TestTransformGroupMinTextW(t *testing.T) {
+	e := edtest.GridEd(t, []*model.Place{edtest.Gp(20, 20, 100, 100, "a")})
+	tx := edtest.AddText(t, e, "s1", 0)
+	edtest.StyleAlign(t, e, tx, "center")
+	e.SetTextBox(tx, 100, 150, 12)
+	g := edtest.PlaceIDsOf(e)
+	tb := edtest.P(e).Spreads[0].Texts[0]
+	if tb.Auto || tb.W != 12 {
+		t.Fatalf("исходный блок: %+v", *tb)
+	}
+	ax0, ay0 := model.BoxOf(tb).Anchor("center")
+	undo := edtest.UndoLen(e)
+	e.TransformGroup("s1", []string{g[0], tx}, 0.5, 20, 20, 0, 0, "")
+	if edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("шагов отмены %d", edtest.UndoLen(e)-undo)
+	}
+	tb = edtest.P(e).Spreads[0].Texts[0]
+	ax, ay := model.BoxOf(tb).Anchor("center")
+	wx, wy := 20+(ax0-20)*0.5, 20+(ay0-20)*0.5
+	if tb.W != model.MinTextW || math.Abs(ax-wx) > 0.01 || math.Abs(ay-wy) > 0.01 {
+		t.Fatalf("ширина %v, центр (%.3f, %.3f), ждали (%.3f, %.3f)", tb.W, ax, ay, wx, wy)
+	}
+	e.Undo()
+	if got := edtest.P(e).Spreads[0].Texts[0]; got.W != 12 || got.X != 100 {
+		t.Fatalf("отмена не вернула текст: %+v", *got)
+	}
+}
+
+// TestTransformGroupAutoAnchor — «по тексту», справа: правый край идёт за масштабом без
+// накопления (ширина нового кегля ≠ W·k на сотые, раньше 0,035 и 0,043 мм), ширина — по тексту.
+func TestTransformGroupAutoAnchor(t *testing.T) {
+	for _, k := range []float64{0.73, 1.37} {
+		e := edtest.GridEd(t, []*model.Place{edtest.Gp(20, 20, 100, 100, "a")})
+		tx := edtest.AddText(t, e, "s1", 0)
+		edtest.StyleAlign(t, e, tx, "right")
+		g := edtest.PlaceIDsOf(e)
+		tb := edtest.P(e).Spreads[0].Texts[0]
+		if !tb.Auto {
+			t.Fatal("новый текст не «по тексту»")
+		}
+		ax0, ay0 := model.BoxOf(tb).Anchor("right")
+		e.TransformGroup("s1", []string{g[0], tx}, k, 20, 20, 0, 0, "")
+		kk := edtest.P(e).Spreads[0].Grid[0].W / 100 // действующий k: зажим мог его урезать
+		tb = edtest.P(e).Spreads[0].Texts[0]
+		ax, ay := model.BoxOf(tb).Anchor("right")
+		wx, wy := 20+(ax0-20)*kk, 20+(ay0-20)*kk
+		if math.Abs(ax-wx) > 0.015 || math.Abs(ay-wy) > 0.015 {
+			t.Errorf("k %v: правый край (%.3f, %.3f), ждали (%.3f, %.3f)", k, ax, ay, wx, wy)
+		}
+		if !tb.Auto || tb.W != edtest.P(e).SheetAutoW(nil, tb) {
+			t.Errorf("k %v: ширина %v не по тексту, %+v", k, tb.W, *tb)
+		}
+	}
+}
+
 func TestTransformGroupScaleWithText(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(10, 10, 100, 100, "a"), edtest.Gp(120, 10, 100, 100, "b")})
 	tx := edtest.AddText(t, e, "s1", 1)

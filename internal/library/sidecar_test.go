@@ -383,7 +383,37 @@ func TestSidecarLogNoDir(t *testing.T) {
 		t.Fatalf("err %v, retry %v", err, retry)
 	}
 	out := buf.String()
-	if !strings.Contains(out, `".xmp": open`) || strings.Contains(out, "Иванов") || strings.Contains(out, "gone-dir") || strings.Contains(out, dir) {
+	if !strings.Contains(out, `сайдкар .xmp фото ".jpg" (имя.xmp): open`) || strings.Contains(out, "Иванов") || strings.Contains(out, "gone-dir") || strings.Contains(out, dir) {
 		t.Errorf("в логе каталог: %q", out)
+	}
+}
+
+// Форма имени сайдкара и вид фото в строке лога; ни имени, ни каталога (073-7).
+func TestSidecarLogKind(t *testing.T) {
+	big := bytes.Repeat([]byte("x"), maxXMPBytes+1)
+	for _, c := range []struct{ photo, side, want string }{
+		{"Иванов.jpg", "Иванов.jpg.xmp", `фото ".jpg" (имя.расш.xmp)`},
+		{"Иванов.jpg", "Иванов.xmp", `фото ".jpg" (имя.xmp)`},
+		{"Иванов.CR2", "Иванов.CR2.xmp", `фото ".cr2" (имя.расш.xmp)`},
+		{"Иванов.cr2", "Иванов.xmp", `фото ".cr2" (имя.xmp)`},
+	} {
+		dir := testkit.TempDir(t)
+		p := testkit.JPEGSegments(t, dir, c.photo, 8, 8)
+		side := filepath.Join(dir, c.side)
+		if err := os.WriteFile(side, big, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		prev := log.Writer()
+		log.SetOutput(&buf)
+		_, retry, err := readScan(scanFile{path: p, key: strings.ToLower(p), side: sidecar{path: side, size: int64(len(big))}}, &xmpLog{})
+		log.SetOutput(prev)
+		out := buf.String()
+		if err != nil || retry || !strings.Contains(out, "сайдкар .xmp "+c.want+": ") || !strings.Contains(out, "не читается") {
+			t.Errorf("%s/%s: err %v retry %v, лог %q", c.photo, c.side, err, retry, out)
+		}
+		if strings.Contains(out, "Иванов") || strings.Contains(out, dir) {
+			t.Errorf("%s/%s: в логе имя или каталог: %q", c.photo, c.side, out)
+		}
 	}
 }

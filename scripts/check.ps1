@@ -13,6 +13,14 @@ Set-Location $root
 # GOTMPDIR нужен из-за антивируса, см. README
 $env:GOTMPDIR = Join-Path $root '.gotmp'
 if (-not (Test-Path $env:GOTMPDIR)) { New-Item -ItemType Directory -Path $env:GOTMPDIR | Out-Null }
+# Кэши Go и golangci-lint — в .gotmp основной копии (общие для worktree): пользовательская GOCACHE уводила их мимо проекта (20.10)
+$prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+$common = git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null
+$gitOk = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEap
+$main = if ($gitOk -and $common) { Split-Path -Parent $common } else { $root }
+$env:GOCACHE = Join-Path (Join-Path $main '.gotmp') 'cache-go'
+$env:GOLANGCI_LINT_CACHE = Join-Path (Join-Path $main '.gotmp') 'cache-golangci'
 
 $runGo = $Go -or -not $Ui
 $runUi = $Ui -or -not $Go
@@ -67,6 +75,8 @@ if ($runGo) {
     Step 'gofmt' { gofmt -l (git ls-files --cached --others --exclude-standard -- '*.go') } -EmptyOut
     # Пакеты — `. ./internal/...`, не `./...`: тот заходит в frontend/node_modules (flatted/golang)
     Step 'go vet' { go vet . ./internal/... }
+    # e2e-тест L1 (тег e2ebig) иначе не собирает никто: при правке App он тихо перестал бы компилироваться (ревью 0.21, владелец 2026-10-20)
+    Step 'go vet e2ebig' { go vet -tags e2ebig ./internal/app }
     # golangci-lint ставится через go install — лежит в GOPATH\bin, которого может не быть в PATH
     $gcl = Get-Command golangci-lint -ErrorAction SilentlyContinue
     $gclPath = if ($gcl) { $gcl.Source } else { Join-Path (go env GOPATH) 'bin\golangci-lint.exe' }

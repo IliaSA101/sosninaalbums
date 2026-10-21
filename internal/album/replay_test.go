@@ -1,6 +1,6 @@
 package album_test
 
-// Голден-реплей поведения Editor (023 Ш0, docs/specs/0.8/023-editor-core/critic.md п.7):
+// Голден-реплей поведения Editor (023 Ш0, docs/specs/archive/0.8/023-editor-core/critic.md п.7):
 // каждый публичный метод хотя бы раз по фикстуре, после правки — View, глубина отмены
 // и возврата, rev и sha256 байтов Save. Ловит дрейф поведения при переносе ядра,
 // который точечные тесты не видят. Эталон — testdata/replay.json.gz (gzip, строка — шаг),
@@ -60,7 +60,8 @@ type replay struct {
 	views []model.View // виды всех правок по порядку (сверка дельт, TestWireDeltaReplay)
 }
 
-var replayID = regexp.MustCompile(`"[0-9a-f]{12}"`)
+// ID подборок (083, «b» + 8 hex) тоже случайные — заменяются так же.
+var replayID = regexp.MustCompile(`"(?:[0-9a-f]{12}|b[0-9a-f]{8})"`)
 
 func newReplay(t *testing.T) *replay {
 	dir := testkit.TempDir(t)
@@ -252,6 +253,11 @@ func replayScenario(t *testing.T) *replay {
 	replayCover(r, ph)
 	replayVignette(r, ph)
 	replayTail(r, ph, q)
+	// 084: вхождения фото — чтение; в конце, чтобы прежние строки эталона не сдвинулись.
+	for _, pid := range []string{ph[14].ID, ph[1].ID, "нет"} {
+		uses, used := r.e.PhotoUses(pid)
+		r.read("PhotoUses", []any{uses, used})
+	}
 	return r
 }
 
@@ -334,6 +340,15 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.do("Undo", e.Undo())
 	r.do("Undo:правка", e.Undo())
 	r.do("Redo", e.Redo())
+	// Подборки (083): шаги «рядом с проектом», как отметки; одна остаётся — её пишет Save.
+	r.ve("NewBin")(e.NewBin("Обязательно", ph[1:4]))
+	bin := r.v.Bins[0].ID
+	r.ve("SetBin")(e.SetBin(bin, ph[4:5], true))
+	r.ve("SetBin:убрать")(e.SetBin(bin, ph[1:2], false))
+	r.ve("RenameBin")(e.RenameBin(bin, "Запас"))
+	r.ve("NewBin:вторая")(e.NewBin("", nil))
+	r.do("DeleteBin", e.DeleteBin(r.v.Bins[1].ID))
+	r.read("Marks:подборки", e.Marks())
 
 	sb := r.spreadOf(id(1))
 	r.ve("SetBackdrop")(e.SetBackdrop(sb, model.ScopeSpread, ph[13]))
@@ -358,8 +373,8 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.read("SheetSize", [2]float64{sw, sh})
 	q, _ := e.Snapshot()
 	r.read("Snapshot", q)
-	_, marks := e.SnapshotMarks() // сбор в папку (069): отметки вместе со снимком
-	r.read("SnapshotMarks", marks)
+	_, side := e.SnapshotSide() // сбор в папку (069): отметки и подборки вместе со снимком
+	r.read("SnapshotSide", side)
 	// 073: прогрев раскладок — чтение; шаг пишет ход (вызовов, последнее done и total).
 	var warm [3]int
 	e.Warm(func(done, total int) { warm = [3]int{warm[0] + 1, done, total} })
@@ -371,8 +386,10 @@ func TestEditorReplay(t *testing.T) {
 	edtest.SkipNotWindows(t) // пути фото и папок — с буквой диска
 	r := replayScenario(t)
 	// Шаг на каждый публичный метод Editor, кроме View и Save (они идут в каждом
-	// шаге-правке): новый метод без шага — провал.
-	seen := map[string]bool{"View": true, "Save": true}
+	// шаге-правке) и ID (номер Editor в процессе, 087-3: зависит от порядка тестов, в эталон
+	// не годится; проверка — TestEditorViewSrc), Close (после него реплей правок не идёт; проверка —
+	// TestEditorClose): новый метод без шага — провал.
+	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true}
 	for _, s := range r.steps {
 		seen[strings.SplitN(s.Step, ":", 2)[0]] = true
 	}

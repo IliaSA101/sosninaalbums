@@ -2,6 +2,7 @@
   // «Скрыть»: ключ набора пропавших (missingKey). Только в памяти: новое пропавшее фото или новое открытие — полоса снова.
   let hidden = $state('')
   let hiddenOwn = $state('') // то же для полосы про свои из библиотеки (048)
+  let hiddenFonts = $state('') // то же для полосы «Нет шрифтов» (082)
 </script>
 
 <script lang="ts">
@@ -11,13 +12,17 @@
   import { keymap } from '../../base/keys/keymap.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import Popover from '../../base/ui/Popover.svelte'
+  import { uploadFontsNoPick } from '../../editor/text/fontupload'
   import { purgeMissing } from './purge'
   import { relinkFolder } from './relink'
   import {
     albumPhotos,
     driveLabel,
+    fontsKey,
+    fontsMissingText,
     isHidden,
     libMissingText,
+    missingFonts,
     missingKey,
     missingSpots,
     missingText,
@@ -39,6 +44,22 @@
   const key = $derived(missingKey(split.photos, store.openSeq))
   const ownText = $derived(libMissingText(split.own.length, missingWhere(missingSpots(store.sheets, split.own), unit)))
   const ownKey = $derived(missingKey(split.own, store.openSeq))
+
+  // Свои шрифты альбома, которых нет на этом компьютере (082): тексты показаны Montserrat. Скрытый × шрифт в списке есть.
+  const fontMiss = $derived(missingFonts(store.view.albumFonts, store.fonts))
+  const fontsText = $derived(fontsMissingText(fontMiss.map((u) => u.name)))
+  const fontsHideKey = $derived(fontsKey(fontMiss, store.openSeq))
+
+  // «Загрузить шрифт…»: общий путь со списком «Шрифт» (диалог Go, проверка окном, тост); тексту шрифт не ставим (082-7).
+  async function uploadFont() {
+    if (busy) return
+    busy = true
+    try {
+      await uploadFontsNoPick({ fonts: () => store.fonts, notify: (t, k) => store.notify(t, k) })
+    } finally {
+      busy = false
+    }
+  }
 
   // Список «Показать»: переход к листу и выделение фото; окно закрывается.
   let listOpen = $state(false)
@@ -149,6 +170,25 @@
     <button
       class="x ghost"
       onclick={() => (hiddenOwn = ownKey)}
+      title="Скрыть до следующего открытия"
+      aria-label="Скрыть до следующего открытия"><Icon name="x" size={14} /></button
+    >
+  </div>
+{/if}
+
+{#if fontMiss.length > 0 && !isHidden(hiddenFonts, fontsHideKey)}
+  <!-- role=status + aria-live: полоса появляется сама, читалка называет её и кнопки (082, QA 3) -->
+  <div class="bar" role="status" aria-live="polite" aria-label="Нет шрифтов на этом компьютере" transition:slide={{ duration: 150 }}>
+    <span class="msg" title={fontsText}><i aria-hidden="true">!</i><span class="txt">{fontsText}</span></span>
+    <button
+      disabled={busy}
+      onclick={uploadFont}
+      aria-label="Загрузить шрифт…"
+      title="Выбрать файлы шрифтов TTF или OTF: тексты сразу станут ими">Загрузить шрифт…</button
+    >
+    <button
+      class="x ghost"
+      onclick={() => (hiddenFonts = fontsHideKey)}
       title="Скрыть до следующего открытия"
       aria-label="Скрыть до следующего открытия"><Icon name="x" size={14} /></button
     >

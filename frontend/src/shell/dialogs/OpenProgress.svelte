@@ -1,6 +1,6 @@
 <script lang="ts">
   import { jobs } from '../../base/core/jobs.svelte'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { openLine, openPercent } from './openprogress'
 
   // Окно «Открываем альбом» (073): ход прогрева раскладок большого альбома. Вид — как ход сбора (CollectDialog),

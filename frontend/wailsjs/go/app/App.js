@@ -110,6 +110,10 @@ export function CancelLibrary() {
   return window['go']['app']['App']['CancelLibrary']();
 }
 
+export function CheckFolders(arg1) {
+  return window['go']['app']['App']['CheckFolders'](arg1);
+}
+
 export function ChooseFolder() {
   return window['go']['app']['App']['ChooseFolder']();
 }
@@ -174,6 +178,10 @@ export function DecorCatalog(arg1) {
   return window['go']['app']['App']['DecorCatalog'](arg1);
 }
 
+export function DeleteBin(arg1) {
+  return window['go']['app']['App']['DeleteBin'](arg1);
+}
+
 export function DeleteCover() {
   return window['go']['app']['App']['DeleteCover']();
 }
@@ -202,6 +210,10 @@ export function DeleteText(arg1) {
   return window['go']['app']['App']['DeleteText'](arg1);
 }
 
+export function DropFonts(arg1) {
+  return window['go']['app']['App']['DropFonts'](arg1);
+}
+
 export function DropPhotos(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['App']['DropPhotos'](arg1, arg2, arg3, arg4, arg5);
 }
@@ -212,6 +224,10 @@ export function DuplicateGrid(arg1, arg2, arg3) {
 
 export function Export(arg1) {
   return window['go']['app']['App']['Export'](arg1);
+}
+
+export function ExportTemplates() {
+  return window['go']['app']['App']['ExportTemplates']();
 }
 
 export function FillPlaces(arg1, arg2) {
@@ -238,10 +254,6 @@ export function ForgetRecent(arg1) {
   return window['go']['app']['App']['ForgetRecent'](arg1);
 }
 
-export function FsferaPlan() {
-  return window['go']['app']['App']['FsferaPlan']();
-}
-
 export function GetState() {
   return window['go']['app']['App']['GetState']();
 }
@@ -258,12 +270,32 @@ export function HideDecor(arg1, arg2) {
   return window['go']['app']['App']['HideDecor'](arg1, arg2);
 }
 
+export function HideFont(arg1) {
+  return window['go']['app']['App']['HideFont'](arg1);
+}
+
 export function ImportDecor(arg1, arg2) {
   return window['go']['app']['App']['ImportDecor'](arg1, arg2);
 }
 
 export function ImportDecorPaths(arg1, arg2, arg3) {
   return window['go']['app']['App']['ImportDecorPaths'](arg1, arg2, arg3);
+}
+
+export function ImportFontPaths(arg1) {
+  return window['go']['app']['App']['ImportFontPaths'](arg1);
+}
+
+export function ImportFonts() {
+  return window['go']['app']['App']['ImportFonts']();
+}
+
+export function ImportTemplates() {
+  return window['go']['app']['App']['ImportTemplates']();
+}
+
+export function ImportTemplatesPath(arg1) {
+  return window['go']['app']['App']['ImportTemplatesPath'](arg1);
 }
 
 export function Keymap() {
@@ -306,6 +338,10 @@ export function MoveSpread(arg1, arg2) {
   return window['go']['app']['App']['MoveSpread'](arg1, arg2);
 }
 
+export function NewBin(arg1, arg2) {
+  return window['go']['app']['App']['NewBin'](arg1, arg2);
+}
+
 export function NewProject(arg1) {
   return window['go']['app']['App']['NewProject'](arg1);
 }
@@ -316,6 +352,10 @@ export function NewSpread(arg1, arg2) {
 
 export function NewVignetteSheet(arg1, arg2) {
   return window['go']['app']['App']['NewVignetteSheet'](arg1, arg2);
+}
+
+export function OpenFabrika() {
+  return window['go']['app']['App']['OpenFabrika']();
 }
 
 export function OpenFsfera() {
@@ -340,6 +380,10 @@ export function PasteNames(arg1, arg2) {
 
 export function Person(arg1) {
   return window['go']['app']['App']['Person'](arg1);
+}
+
+export function PhotoAbout(arg1) {
+  return window['go']['app']['App']['PhotoAbout'](arg1);
 }
 
 export function PickBackdropFile(arg1, arg2) {
@@ -398,6 +442,10 @@ export function PreviewVignette(arg1, arg2) {
   return window['go']['app']['App']['PreviewVignette'](arg1, arg2);
 }
 
+export function PrintPlans() {
+  return window['go']['app']['App']['PrintPlans']();
+}
+
 export function PurgePhotos(arg1) {
   return window['go']['app']['App']['PurgePhotos'](arg1);
 }
@@ -436,6 +484,10 @@ export function RemovePack(arg1) {
 
 export function RemovePhotos(arg1) {
   return window['go']['app']['App']['RemovePhotos'](arg1);
+}
+
+export function RenameBin(arg1, arg2) {
+  return window['go']['app']['App']['RenameBin'](arg1, arg2);
 }
 
 export function RenameDecor(arg1, arg2, arg3) {
@@ -536,6 +588,10 @@ export function SetBackdropFrame(arg1, arg2, arg3, arg4, arg5) {
 
 export function SetBackground(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetBackground'](arg1, arg2, arg3);
+}
+
+export function SetBin(arg1, arg2, arg3) {
+  return window['go']['app']['App']['SetBin'](arg1, arg2, arg3);
 }
 
 export function SetBorder(arg1, arg2, arg3, arg4) {
@@ -712,6 +768,10 @@ export function ShowBackups() {
 
 export function ShowCollected() {
   return window['go']['app']['App']['ShowCollected']();
+}
+
+export function ShowDataFolder() {
+  return window['go']['app']['App']['ShowDataFolder']();
 }
 
 export function ShowInExplorer() {

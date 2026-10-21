@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EXTRA, GAP, PAD_Y, anchorTop, colsOf, libWindow, photoAt } from './libwindow'
+import { EXTRA, GAP, PAD_Y, anchorAfter, anchorTop, colsOf, keepScroll, libWindow, photoAt } from './libwindow'
 
 const base = { n: 3200, width: 1000, height: 300, size: 100 }
 // Высота содержимого, как её даёт CSS .grid: поля + ряды с зазорами.
@@ -110,5 +110,60 @@ describe('зум: якорь по индексу', () => {
 
   it('anchorTop не уходит в минус', () => {
     expect(anchorTop(0, 5, 100, 400, 0)).toBe(0)
+  })
+})
+
+describe('anchorAfter: прокрутка при смене списка (088)', () => {
+  const ids = (n: number, from = 0) => Array.from({ length: n }, (_, i) => `p${from + i}`)
+
+  it('верхнее фото уцелело — его новый номер', () => {
+    const prev = ids(20)
+    const next = prev.filter((id) => id !== 'p2' && id !== 'p3') // удалили выше верхнего
+    expect(anchorAfter(prev, next, 10)).toBe(8)
+  })
+
+  it('верхнее фото удалено — ближайшее следующее уцелевшее', () => {
+    const prev = ids(20)
+    const next = prev.filter((id) => id !== 'p10' && id !== 'p11')
+    expect(next[anchorAfter(prev, next, 10)]).toBe('p12')
+  })
+
+  it('следующих уцелевших нет — прежний номер, зажатый в список; пустой список — 0', () => {
+    expect(anchorAfter(ids(20), ids(5), 10)).toBe(4)
+    expect(anchorAfter(ids(20), [], 10)).toBe(0)
+  })
+
+  it('новые файлы выше верхнего сдвигают якорь вниз', () => {
+    const prev = ids(10)
+    expect(anchorAfter(prev, [...ids(5, 100), ...prev], 4)).toBe(9)
+  })
+})
+
+describe('keepScroll', () => {
+  const size = 100
+  const width = 1000
+  const cols = colsOf(width, size)
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i}`)
+  const rowTop = (index: number) => PAD_Y + Math.floor(index / cols) * (size + GAP)
+
+  it('у самого верха и при прежнем списке — не трогаем', () => {
+    expect(keepScroll(ids(100), ids(50), 0, width, size)).toBeNull()
+    expect(keepScroll(ids(100), ids(100), 500, width, size)).toBeNull()
+    expect(keepScroll([], ids(10), 500, width, size)).toBeNull()
+    expect(keepScroll(ids(100), ids(50), 500, 0, size)).toBeNull() // лента свёрнута
+  })
+
+  it('удалили фото выше — верхний ряд остаётся на том же месте экрана', () => {
+    const prev = ids(300)
+    const st = rowTop(cols * 5) + 30 // пятый ряд, 30 px сверху срезано
+    const next = prev.slice(cols * 2) // два верхних ряда пропали
+    const to = keepScroll(prev, next, st, width, size)!
+    expect(to).toBeCloseTo(rowTop(cols * 3) + 30, 6) // тот же ряд, теперь третий
+  })
+
+  it('прокрутка не уходит в минус', () => {
+    const prev = ids(300)
+    const to = keepScroll(prev, prev.slice(1), PAD_Y + 10, width, size)!
+    expect(to).toBeGreaterThanOrEqual(0)
   })
 })

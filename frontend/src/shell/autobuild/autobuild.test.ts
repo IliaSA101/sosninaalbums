@@ -91,6 +91,15 @@ describe('подписи 034', () => {
     expect(sourceLine(d, 642)).toBe('Все свободные фото ленты: 645, без 12 отклонённых; 3 из сеток и с фонов не беру')
     expect(sourceLine({ ...d, from: 'selected', skipped: 0 }, 642)).toBe('Выделенные фото: 645; 3 из сеток и с фонов не беру')
   })
+  it('откуда фото: показанная подборка (083)', () => {
+    const d = { from: 'free' as const, count: 18, inAlbum: 0, skipped: 0, filtered: false, bin: 'Обязательно' }
+    expect(sourceLine(d, null)).toBe('Свободные фото подборки «Обязательно»: 18')
+    expect(sourceLine({ ...d, filtered: true, skipped: 2 }, 18)).toBe(
+      'Свободные фото подборки «Обязательно»: 18 (фильтр ленты), без 2 отклонённых',
+    )
+    // выделение главнее подборки: источник — выделенные
+    expect(sourceLine({ ...d, from: 'selected' }, 18)).toBe('Выделенные фото: 18')
+  })
   it('станет в альбоме', () => {
     expect(albumAfter(3, 30)).toBe('В альбоме станет 33 разворота (66 стр.)')
     expect(albumAfter(0, 30)).toBe('')

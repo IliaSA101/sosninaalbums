@@ -26,6 +26,18 @@ describe('вид альбома только через store.apply', () => {
     expect(bad, 'store.apply(view) / store.run(Api.X())').toEqual([])
   })
 
+  // 087 U2: apply не ждёт пересинхрона — вызывающий читает rev/current старого вида («копировать нечего», «Вернуть» гаснет).
+  it('ответ правки — store.take / store.run, не store.apply', () => {
+    const bad: string[] = []
+    for (const [path, src] of Object.entries(files)) {
+      if (own(path)) continue
+      code(src).forEach((line, i) => {
+        if (/\bstore\.apply\(/.test(line)) bad.push(`${path}:${i + 1}: ${line.trim()}`)
+      })
+    }
+    expect(bad, 'await store.take(r.view) или store.run(Api.X())').toEqual([])
+  })
+
   it('store.apply проверяет цепочку, пересинхрон идёт через GetView, saved не принимает вид', () => {
     const src = files['/src/base/core/store.svelte.ts']
     const chain = files['/src/base/core/viewchain.ts']

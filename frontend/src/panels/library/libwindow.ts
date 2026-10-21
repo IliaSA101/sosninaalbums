@@ -6,6 +6,20 @@ export const PAD_Y = 12
 // Запас рядов сверху и снизу от видимой части.
 export const EXTRA = 2
 
+// Высота ленты фото по умолчанию; сплиттер между лентой и лентой альбома (D15, 089).
+export const LIB_DEF = 240
+export const SPLITTER = 6
+// Всё в ленте, кроме сетки: рамка сверху 1 + полоса LibraryBar (отступы 2·8 + кнопка 30 + линия 1).
+export const LIB_CHROME = 1 + 2 * 8 + 30 + 1
+
+// Нижний предел высоты ленты (D15): один полный ряд плиток — полоса, поля сетки сверху и снизу, плитка.
+// Ниже ряд обрезается; при сжатии окна лента уступает холсту только до этой высоты.
+export const rowFloor = (size: number): number => LIB_CHROME + 2 * PAD_Y + size
+
+// Фактический нижний предел: не выше заданной высоты eff — если её выбрали меньше ряда (крупные плитки
+// или ручной выбор), лента ниже не опустится, но и выше своей высоты не растёт.
+export const libFloor = (size: number, eff: number): number => Math.min(rowFloor(size), eff)
+
 export interface WinIn {
   n: number // фото в ленте
   width: number // clientWidth сетки (с полями)
@@ -53,6 +67,28 @@ export function libWindow({ n, width, height, scrollTop, size }: WinIn): Win {
 export function anchorTop(index: number, cols: number, size: number, cy: number, fy: number): number {
   const top = PAD_Y + Math.floor(index / Math.max(1, cols)) * (size + GAP)
   return Math.max(0, top - (cy - fy * size))
+}
+
+// Новый список ленты (088): куда встало верхнее видимое фото прежнего. Пропало — ближайшее следующее
+// из уцелевших; таких нет — прежний номер, зажатый в список; список пуст — 0.
+export function anchorAfter(prev: string[], next: string[], topIndex: number): number {
+  if (next.length === 0) return 0
+  const pos = new Map(next.map((id, i) => [id, i]))
+  for (let i = Math.max(0, topIndex); i < prev.length; i++) {
+    const j = pos.get(prev[i])
+    if (j !== undefined) return j
+  }
+  return Math.min(Math.max(0, topIndex), next.length - 1)
+}
+
+// Прокрутка после смены списка: верхний видимый ряд остаётся на месте экрана (образец — Ctrl+колесо, 053).
+// null — прокручивать не надо (лента у самого верха или список прежний).
+export function keepScroll(prev: string[], next: string[], scrollTop: number, width: number, size: number): number | null {
+  if (scrollTop <= 0 || width <= 0 || prev.length === 0) return null
+  if (prev.length === next.length && prev.every((id, i) => id === next[i])) return null
+  const at = photoAt(prev.length, width, size, PAD_X, scrollTop)
+  if (!at) return null
+  return anchorTop(anchorAfter(prev, next, at.index), colsOf(width, size), size, 0, at.fy)
 }
 
 // Фото под точкой (x, y — от левого верха сетки с учётом прокрутки: y = clientY − верх + scrollTop):

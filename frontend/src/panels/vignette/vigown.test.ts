@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Go и store подменены: проверяем, что уходит в Go, какие тосты и когда обновляется список шаблонов.
 vi.mock('../../base/core/store.svelte', () => ({
-  store: { apply: vi.fn(), notify: vi.fn(), undoToast: vi.fn() },
+  store: { take: vi.fn(async () => true), notify: vi.fn(), undoToast: vi.fn() },
   Api: {
     SaveVignetteTemplate: vi.fn(),
     RenameGridTemplate: vi.fn(),
@@ -150,12 +150,12 @@ describe('вызовы Go', () => {
     expect(vi.mocked(store.notify).mock.calls[0][0]).toMatch(/Обновите программу/)
   })
 
-  it('resetVignette: ответ — в store.apply, лишние фото — тост «Вернуть»', async () => {
+  it('resetVignette: ответ — в store.take, лишние фото — тост «Вернуть»', async () => {
     const view = { rev: 9 }
     vi.mocked(Api.ResetVignette).mockResolvedValue({ view, left: 2 } as never)
     expect(await resetVignette('s1')).toBe(true)
     expect(Api.ResetVignette).toHaveBeenCalledWith('s1')
-    expect(store.apply).toHaveBeenCalledWith(view)
+    expect(store.take).toHaveBeenCalledWith(view)
     expect(store.undoToast).toHaveBeenCalledWith('Убрано в ленту: 2')
   })
 
@@ -164,9 +164,9 @@ describe('вызовы Go', () => {
     await resetVignette('s1')
     expect(store.undoToast).not.toHaveBeenCalled()
     vi.mocked(Api.ResetVignette).mockRejectedValueOnce('Лист не найден')
-    vi.mocked(store.apply).mockClear()
+    vi.mocked(store.take).mockClear()
     expect(await resetVignette('s1')).toBe(false)
-    expect(store.apply).not.toHaveBeenCalled()
+    expect(store.take).not.toHaveBeenCalled()
     expect(store.notify).toHaveBeenCalledWith('Лист не найден', 'error')
   })
 })

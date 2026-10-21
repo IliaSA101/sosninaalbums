@@ -62,9 +62,13 @@ func (p *pen) glyph(segs sfnt.Segments, gx, gy float64) {
 		return
 	}
 	// Прямоугольник по самим точкам контура (с запасом в px): контур кривых лежит
-	// внутри оболочки своих точек, так что растеризатор не выходит за маску.
+	// внутри оболочки своих точек.
 	r := image.Rect(int(math.Floor(minX))-1, int(math.Floor(minY))-1, int(math.Ceil(maxX))+1, int(math.Ceil(maxY))+1)
-	if !r.Overlaps(p.dst.Bounds()) {
+	// Маска — только видимая часть: иначе она растёт как кегль², и злой шрифт с крошечным
+	// unitsPerEm съедает гигабайты (аудит 082). Контур за краем маски vector обрабатывает
+	// верно: строки вне маски пропускает, x зажимает к краю — накопленная площадь та же.
+	r = r.Intersect(p.dst.Bounds())
+	if r.Empty() {
 		return
 	}
 	w, h := r.Dx(), r.Dy()

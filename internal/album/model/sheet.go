@@ -120,14 +120,15 @@ func (p *Project) SpineTextID() string {
 	return ""
 }
 
-// FsferaFormatOf — формат Фотосферы по точному размеру страницы (047; ClampSettings округляет
-// до 0,01, размеры таблицы целые). Лист 031 — не фотокнига: false. Здесь, а не в cover.go:
-// страницу читает только геометрия листа (TestPageWReaders).
-func FsferaFormatOf(s Settings) (PrintFormat, bool) {
-	if s.Sheet {
+// FormatOf — формат шаблонной группы (Фотосфера, Фабрика Фотокниги) по точному размеру страницы
+// (047, 081; ClampSettings округляет до 0,01, размеры таблиц целые). Лист 031 — не фотокнига:
+// false. Здесь, а не в cover.go: страницу читает только геометрия листа (TestPageWReaders).
+func FormatOf(group string, s Settings) (PrintFormat, bool) {
+	tg, ok := templateGroupOf(group)
+	if !ok || s.Sheet {
 		return PrintFormat{}, false
 	}
-	for _, f := range FsferaFormats() {
+	for _, f := range tg.Formats() {
 		if f.PageW == s.PageW && f.PageH == s.PageH {
 			return f, true
 		}
@@ -135,14 +136,21 @@ func FsferaFormatOf(s Settings) (PrintFormat, bool) {
 	return PrintFormat{}, false
 }
 
-// FsferaFormatNear — формат Фотосферы, по которому считается шаблон обложки страницы s (070 Е):
-// точный из таблицы, иначе ближайший по |ΔW|+|ΔH| страницы (при равенстве — раньше в таблице).
-// Страница лист-виньетки 031 тоже приводится к ближайшему: обложки у неё нет, но пресет определён.
-func FsferaFormatNear(s Settings) PrintFormat {
-	if f, ok := FsferaFormatOf(s); ok {
-		return f
+// FormatNear — формат группы, по которому считается шаблон обложки страницы s (070 Е): точный из
+// таблицы, иначе ближайший по |ΔW|+|ΔH| страницы (при равенстве — раньше в таблице). Страница
+// лист-виньетки 031 тоже приводится к ближайшему: обложки у неё нет, но пресет определён.
+// Группа не шаблонная — нулевой формат.
+func FormatNear(group string, s Settings) PrintFormat {
+	tg, ok := templateGroupOf(group)
+	if !ok {
+		return PrintFormat{}
 	}
-	all := FsferaFormats()
+	all := tg.Formats()
+	for _, f := range all {
+		if f.PageW == s.PageW && f.PageH == s.PageH {
+			return f
+		}
+	}
 	best, bestD := all[0], math.Inf(1)
 	for _, f := range all {
 		if d := math.Abs(f.PageW-s.PageW) + math.Abs(f.PageH-s.PageH); d < bestD {
@@ -150,6 +158,60 @@ func FsferaFormatNear(s Settings) PrintFormat {
 		}
 	}
 	return best
+}
+
+// FsferaFormatOf — формат Фотосферы по точному размеру страницы (047); лист 031 — false.
+func FsferaFormatOf(s Settings) (PrintFormat, bool) { return FormatOf(CoverGroupFsfera, s) }
+
+// FsferaFormatNear — ближайший формат Фотосферы для шаблона обложки страницы s (070 Е).
+func FsferaFormatNear(s Settings) PrintFormat { return FormatNear(CoverGroupFsfera, s) }
+
+// presetFits — страница s совпадает с кнопкой pr целиком: размер и все заданные в ней поля
+// (правило подсветки presetActive в интерфейсе).
+func presetFits(pr PagePreset, s Settings) bool {
+	return pr.W == s.PageW && pr.H == s.PageH &&
+		(pr.DPI == 0 || pr.DPI == s.DPI) && (!pr.Layflat || s.Layflat) &&
+		(pr.Safe == 0 || pr.Safe == s.Safe) && (pr.Bleed == 0 || pr.Bleed == s.Bleed)
+}
+
+// PagePresetOf — кнопка ряда типографии, с которой совпадает страница s (085: типография альбома
+// без обложки). Среди кнопок с этим размером первой берётся та, что совпала по всем заданным
+// полям (081 С3: 21×30 Фабрики и Фотосферы различает зона и обрез), иначе первая по порядку
+// PagePresets. Общий ряд и лист 031 — false. Здесь: страницу читает только геометрия листа
+// (TestPageWReaders).
+func PagePresetOf(s Settings) (PagePreset, bool) {
+	if s.Sheet {
+		return PagePreset{}, false
+	}
+	var first PagePreset
+	found := false
+	for _, pr := range PagePresets() {
+		if pr.Group == "" || pr.W != s.PageW || pr.H != s.PageH {
+			continue
+		}
+		if presetFits(pr, s) {
+			return pr, true
+		}
+		if !found {
+			first, found = pr, true
+		}
+	}
+	return first, found
+}
+
+// PagePresetIn — кнопка ряда group с размером страницы s; лист 031, общий ряд и размер вне ряда —
+// false. Формат строки предела (LimitIn) берётся из ряда типографии, а не из первой кнопки по
+// размеру: 30×30 Фабрики и Нетпринта — один размер (081 С4).
+func PagePresetIn(s Settings, group string) (PagePreset, bool) {
+	if s.Sheet || group == "" {
+		return PagePreset{}, false
+	}
+	for _, pr := range PagePresets() {
+		if pr.Group == group && pr.W == s.PageW && pr.H == s.PageH {
+			return pr, true
+		}
+	}
+	return PagePreset{}, false
 }
 
 // AreaOf — область scope листа s (left | right | spread | spine), мм; ok=false — неизвестная.

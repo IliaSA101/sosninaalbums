@@ -8,6 +8,14 @@ Set-Location $root
 # GOTMPDIR нужен из-за антивируса, см. README
 $env:GOTMPDIR = Join-Path $root '.gotmp'
 if (-not (Test-Path $env:GOTMPDIR)) { New-Item -ItemType Directory -Path $env:GOTMPDIR | Out-Null }
+# Кэши Go и golangci-lint — в .gotmp основной копии (общие для worktree): пользовательская GOCACHE уводила их мимо проекта (20.10)
+$prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+$common = git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null
+$gitOk = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $prevEap
+$main = if ($gitOk -and $common) { Split-Path -Parent $common } else { $root }
+$env:GOCACHE = Join-Path (Join-Path $main '.gotmp') 'cache-go'
+$env:GOLANGCI_LINT_CACHE = Join-Path (Join-Path $main '.gotmp') 'cache-golangci'
 
 $ver = (Get-Content (Join-Path $root 'wails.json') -Raw -Encoding UTF8 | ConvertFrom-Json).info.productVersion
 if (-not $ver) { throw 'нет info.productVersion в wails.json' }

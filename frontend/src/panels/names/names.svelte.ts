@@ -120,7 +120,7 @@ class NamesUi {
     try {
       const before = store.view.rev
       const r = (await Api.PasteNames(this.spreadId, this.opts())) as unknown as NamesResult
-      store.apply(r.view)
+      if (!(await store.take(r.view))) return false
       this.close()
       // Те же имена уже стоят: rev не вырос, шага отмены нет — тост «Вставлены» был бы неправдой.
       if (r.view.rev === before) {

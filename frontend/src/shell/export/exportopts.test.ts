@@ -6,9 +6,13 @@ import {
   estimateBytes,
   exportDoneText,
   exportWarnings,
+  limitWarn,
   formatSize,
   hasFix,
-  doneFolder,
+  activePlan,
+  printHint,
+  printQuality,
+  togglePrint,
   canExport,
   planStale,
   loadPrefs,
@@ -17,6 +21,7 @@ import {
   savePrefs,
   sizeSummary,
 } from './exportopts'
+import type { PrintPlan } from '../../base/core/types'
 
 const album = { pageW: 300, pageH: 300, dpi: 300 }
 const MB = 1024 * 1024
@@ -59,7 +64,7 @@ describe('coverAvailable', () => {
 })
 
 describe('buildOptions', () => {
-  const p = { quality: 80 as const, dpi: 150, pages: true, cover: true, coverOnly: false, fsfera: false }
+  const p = { quality: 80 as const, dpi: 150, pages: true, cover: true, coverOnly: false, print: '' as const }
   it('«Все» — пустой диапазон', () => {
     expect(buildOptions('all', 3, '1-2', p)).toEqual({
       range: '',
@@ -68,7 +73,7 @@ describe('buildOptions', () => {
       pages: true,
       cover: false,
       coverOnly: false,
-      fsfera: false,
+      print: '',
     })
   })
   it('«Текущий» — номер с 1', () => {
@@ -79,7 +84,7 @@ describe('buildOptions', () => {
       pages: false,
       cover: false,
       coverOnly: false,
-      fsfera: false,
+      print: '',
     })
   })
   it('«Диапазон» — текст без пробелов по краям', () => {
@@ -92,11 +97,11 @@ describe('buildOptions', () => {
   })
   it('«только обложка» включает обложку сам и гасит диапазон', () => {
     const o = buildOptions('range', 2, '3-5', { ...p, cover: false, coverOnly: true }, true)
-    expect(o).toEqual({ range: '', quality: 80, dpi: 150, pages: true, cover: true, coverOnly: true, fsfera: false })
+    expect(o).toEqual({ range: '', quality: 80, dpi: 150, pages: true, cover: true, coverOnly: true, print: '' })
   })
   it('«Текущий» на обложке — только обложка, а не разворот с номером до неё', () => {
     const o = buildOptions('current', 4, '', p, true, true)
-    expect(o).toEqual({ range: '', quality: 80, dpi: 150, pages: true, cover: true, coverOnly: true, fsfera: false })
+    expect(o).toEqual({ range: '', quality: 80, dpi: 150, pages: true, cover: true, coverOnly: true, print: '' })
     expect(buildOptions('current', 4, '', p, true, false).range).toBe('4')
     expect(buildOptions('all', 4, '', p, true, true).coverOnly).toBe(false)
   })
@@ -121,14 +126,17 @@ function useStorage(broken = false) {
 describe('prefs в localStorage', () => {
   beforeEach(() => useStorage())
   it('по умолчанию 95, из альбома, разворотами', () => {
-    expect(loadPrefs()).toEqual({ quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false, fsfera: false })
+    expect(loadPrefs()).toEqual({ quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false, print: '' })
   })
   it('сохранённое читается', () => {
-    savePrefs({ quality: 100, dpi: 150, pages: true, cover: false, coverOnly: true, fsfera: true })
-    expect(loadPrefs()).toEqual({ quality: 100, dpi: 150, pages: true, cover: false, coverOnly: true, fsfera: true })
+    savePrefs({ quality: 100, dpi: 150, pages: true, cover: false, coverOnly: true, print: 'fabrika' })
+    expect(loadPrefs()).toEqual({ quality: 100, dpi: 150, pages: true, cover: false, coverOnly: true, print: 'fabrika' })
   })
   it('порченое и чужое отбрасывается', () => {
-    localStorage.setItem('exportOpts', JSON.stringify({ quality: 50, dpi: 5, pages: 'да', cover: 1, coverOnly: 'да', fsfera: 1 }))
+    localStorage.setItem(
+      'exportOpts',
+      JSON.stringify({ quality: 50, dpi: 5, pages: 'да', cover: 1, coverOnly: 'да', print: 'xerox', fsfera: 1 }),
+    )
     expect(loadPrefs()).toEqual(DEFAULT_PREFS)
     localStorage.setItem('exportOpts', '{не json')
     expect(loadPrefs()).toEqual(DEFAULT_PREFS)
@@ -167,6 +175,34 @@ describe('сводка перед выгрузкой', () => {
   })
 })
 
+describe('предел разворотов в окне (085)', () => {
+  const over = {
+    pageLimit: {
+      who: 'Нетпринт',
+      range: 'до 30 разворотов',
+      count: 31,
+      min: 8,
+      max: 30,
+      warn: 'Разворотов 31 — у Нетпринта («Royal») не больше 30',
+    },
+  }
+  it('обычная выгрузка — строка предупреждения Go', () => {
+    expect(limitWarn(over, false)).toBe('Разворотов 31 — у Нетпринта («Royal») не больше 30')
+  })
+  it('для Фотосферы Pro — нет: список плана от Go', () => {
+    expect(limitWarn(over, true)).toBe('')
+  })
+  it('в пределах или без типографии — пусто', () => {
+    expect(limitWarn({ pageLimit: { ...over.pageLimit, count: 20, warn: '' } }, false)).toBe('')
+    expect(limitWarn({}, false)).toBe('')
+  })
+  it('«Выгрузить» не зависит от предела: при непустом warn допуск остаётся', () => {
+    expect(limitWarn(over, false)).not.toBe('')
+    expect(canExport({ busy: false, bad: false, printPref: '', plans: null })).toBe(true)
+    expect(exportWarnings({ emptyPlaces: 0, lowDPI: 0 }, 0)).toBe('') // строка «Перед выгрузкой» тоже не меняется
+  })
+})
+
 describe('итог по объёму', () => {
   const one = estimateBytes(album, 300, 95, false)
   const base = { scope: 'all' as const, spreads: 4, units: null, cover: false, only: false }
@@ -196,20 +232,65 @@ describe('итог по объёму', () => {
   })
 })
 
-describe('для Фотосферы Pro (047)', () => {
-  const p = { quality: 80 as const, dpi: 150, pages: true, cover: false, coverOnly: true, fsfera: true }
+const plan = (o: Partial<PrintPlan> = {}): PrintPlan => ({
+  kind: 'fsfera',
+  title: 'Для Фотосферы Pro',
+  format: '30×30',
+  pages: 'Тонкие',
+  spreads: 20,
+  spine: 14,
+  min: 0,
+  max: 40,
+  folder: 'Иванов',
+  coverName: '00.jpg',
+  quality: 0,
+  block: [],
+  coverFix: false,
+  fixAt: -1,
+  warn: [],
+  memo: [],
+  done: 'Готово для Фотосферы',
+  site: '',
+  siteButton: 'Открыть Фотосферу',
+  ...o,
+})
+const fab = plan({ kind: 'fabrika', title: 'Для Фабрики Фотокниги', quality: 100, coverName: '1-00.jpg' })
+
+describe('для типографии: Фотосфера Pro (047), Фабрика Фотокниги (081)', () => {
+  const p = { quality: 80 as const, dpi: 150, pages: true, cover: false, coverOnly: true, print: 'fsfera' as const }
   it('buildOptions: прочие выборы игнорируются, обложка — если она есть', () => {
-    const want = { range: '', quality: 80, dpi: 300, pages: false, coverOnly: false, fsfera: true }
-    expect(buildOptions('range', 2, '3-5', p, true, true, true)).toEqual({ ...want, cover: true })
-    expect(buildOptions('range', 2, '3-5', p, false, false, true)).toEqual({ ...want, cover: false })
+    const want = { range: '', quality: 80, dpi: 300, pages: false, coverOnly: false, print: 'fsfera' }
+    expect(buildOptions('range', 2, '3-5', p, true, true, plan())).toEqual({ ...want, cover: true })
+    expect(buildOptions('range', 2, '3-5', p, false, false, plan())).toEqual({ ...want, cover: false })
   })
-  it('без флага — fsfera false, как раньше', () => {
-    expect(buildOptions('all', 1, '', p, true).fsfera).toBe(false)
+  it('buildOptions fabrika: качество плана 100 вместо выбора окна', () => {
+    expect(buildOptions('all', 1, '', p, true, false, fab)).toEqual({
+      range: '',
+      quality: 100,
+      dpi: 300,
+      pages: false,
+      cover: true,
+      coverOnly: false,
+      print: 'fabrika',
+    })
+  })
+  it('без плана — print пусто, как обычная выгрузка', () => {
+    expect(buildOptions('all', 1, '', p, true).print).toBe('')
   })
   it('sizeSummary: все развороты и обложка при 300 dpi, как ни выбрано в окне', () => {
     const one = estimateBytes(album, 300, 95, false)
-    const w = { scope: 'current' as const, spreads: 4, units: null, cover: true, only: true, fsfera: true }
+    const w = { scope: 'current' as const, spreads: 4, units: null, cover: true, only: true, print: true }
     expect(sizeSummary(album, 150, 95, true, 'разворот', w)).toBe(`${formatSize(one)} на разворот, всего ${formatSize(5 * one)}`)
+  })
+  it('printQuality: у плана со своим качеством оно, иначе выбор окна', () => {
+    expect(printQuality(fab, 80)).toBe(100)
+    expect(printQuality(plan(), 80)).toBe(80)
+    expect(printQuality(null, 95)).toBe(95)
+  })
+  it('printHint: папка, 300 dpi, качество плана и обложка', () => {
+    expect(printHint(plan(), true)).toBe('(папка «Иванов», 300 dpi, с обложкой)')
+    expect(printHint(fab, false)).toBe('(папка «Иванов», 300 dpi, качество 100)')
+    expect(printHint(fab, true)).toBe('(папка «Иванов», 300 dpi, качество 100, с обложкой)')
   })
   it('памятка: первые три строки', () => {
     const memo = [
@@ -220,35 +301,85 @@ describe('для Фотосферы Pro (047)', () => {
     ]
     expect(memoLine(memo)).toBe('Фотокнига 30×30, обложка «Фото» · Страницы: Тонкие · Разворотов: 20 (корешок 14 мм)')
   })
-  it('имя папки в «Готово» — из плана, « — » в имени не режется', () => {
-    expect(doneFolder('Иванов — Петрова')).toBe('Иванов — Петрова')
-    expect(doneFolder('')).toBe('книги')
-  })
   it('«Исправить» — у строки с номером fixAt, не по тексту', () => {
-    const plan = { coverFix: true, fixAt: 1 }
-    expect([0, 1, 2].map((i) => hasFix(plan, i))).toEqual([false, true, false])
+    const fix = { coverFix: true, fixAt: 1 }
+    expect([0, 1, 2].map((i) => hasFix(fix, i))).toEqual([false, true, false])
     expect(hasFix({ coverFix: true, fixAt: -1 }, 0)).toBe(false)
     expect(hasFix({ coverFix: false, fixAt: 0 }, 0)).toBe(false)
   })
-  it('допуск «Выгрузить»: занято, диапазон, блок, план не пришёл', () => {
-    const ok = { format: '30×30', block: [] as string[] }
-    const blocked = { format: '30×30', block: ['Разворотов 60'] }
-    const base = { busy: false, bad: false, fsPref: false, plan: null }
+  it('activePlan: берёт план выбранной типографии, без формата или не выбрана — нет режима', () => {
+    expect(activePlan([plan(), fab], 'fabrika')).toBe(fab)
+    expect(activePlan([plan(), fab], 'fsfera')).toEqual(plan())
+    expect(activePlan([plan(), fab], '')).toBeNull()
+    expect(activePlan([plan()], 'fabrika')).toBeNull() // у страницы Фабрики нет: флажка нет, режим выключен
+    expect(activePlan([plan({ format: '' })], 'fsfera')).toBeNull()
+    expect(activePlan(null, 'fsfera')).toBeNull()
+  })
+  it('two plans one checked: включён не больше одного, повторный щелчок выключает', () => {
+    let pref: '' | 'fsfera' | 'fabrika' = ''
+    pref = togglePrint(pref, 'fsfera', true)
+    expect(pref).toBe('fsfera')
+    pref = togglePrint(pref, 'fabrika', true) // второй флажок переключает
+    expect(pref).toBe('fabrika')
+    expect(activePlan([plan(), fab], pref)).toBe(fab)
+    pref = togglePrint(pref, 'fsfera', false) // снятие чужого флажка выбор не меняет
+    expect(pref).toBe('fabrika')
+    pref = togglePrint(pref, 'fabrika', false)
+    expect(pref).toBe('')
+  })
+  it('допуск «Выгрузить»: занято, диапазон, блок, планы не пришли', () => {
+    const ok = plan()
+    const blocked = plan({ block: ['Разворотов 60'] })
+    const base = { busy: false, bad: false, printPref: '' as '' | 'fsfera' | 'fabrika', plans: null as PrintPlan[] | null }
     expect(canExport(base)).toBe(true)
     expect(canExport({ ...base, busy: true })).toBe(false)
     expect(canExport({ ...base, bad: true })).toBe(false)
     // без флажка блок плана не мешает обычному экспорту
-    expect(canExport({ ...base, plan: blocked })).toBe(true)
-    expect(canExport({ ...base, fsPref: true, plan: ok })).toBe(true)
-    expect(canExport({ ...base, fsPref: true, plan: blocked })).toBe(false)
-    // Фотосфера выбрана, плана ещё нет (только что открыли окно) — закрыто
-    expect(canExport({ ...base, fsPref: true, plan: null })).toBe(false)
-    // формат не Фотосферы (флажка нет): режим не включён, план не мешает
-    expect(canExport({ ...base, fsPref: true, plan: { format: '', block: ['x'] } })).toBe(true)
+    expect(canExport({ ...base, plans: [blocked] })).toBe(true)
+    expect(canExport({ ...base, printPref: 'fsfera', plans: [ok] })).toBe(true)
+    expect(canExport({ ...base, printPref: 'fsfera', plans: [blocked] })).toBe(false)
+    // блок Фабрики не мешает, пока включена Фотосфера, и наоборот
+    expect(canExport({ ...base, printPref: 'fsfera', plans: [ok, plan({ kind: 'fabrika', block: ['x'] })] })).toBe(true)
+  })
+  it('canExport print pref without plan: типография выбрана, а планов ещё нет — закрыто; страница не её — открыто', () => {
+    const base = { busy: false, bad: false, printPref: 'fabrika' as '' | 'fsfera' | 'fabrika' }
+    expect(canExport({ ...base, plans: null })).toBe(false) // только открыли окно
+    expect(canExport({ ...base, plans: [] })).toBe(true) // страница без типографии: режим выключен
+    expect(canExport({ ...base, plans: [plan()] })).toBe(true) // у страницы только Фотосфера
+    expect(canExport({ ...base, plans: [plan({ kind: 'fabrika', format: '' })] })).toBe(true)
+    expect(canExport({ ...base, bad: true, plans: [] })).toBe(false) // неверный диапазон мешает обычной выгрузке
   })
   it('запоздавший ответ плана отсекается по номеру запроса', () => {
     expect(planStale(2, 2)).toBe(false)
     expect(planStale(1, 2)).toBe(true)
+  })
+})
+
+describe('prefs печати', () => {
+  beforeEach(() => useStorage())
+  it('loadPrefs migrates fsfera: прежний флажок fsfera: true становится print «fsfera»', () => {
+    localStorage.setItem('exportOpts', JSON.stringify({ quality: 80, fsfera: true }))
+    expect(loadPrefs()).toMatchObject({ quality: 80, print: 'fsfera' })
+    localStorage.setItem('exportOpts', JSON.stringify({ fsfera: false }))
+    expect(loadPrefs().print).toBe('')
+  })
+  it('print главнее старого fsfera; неизвестное значение — выключено', () => {
+    localStorage.setItem('exportOpts', JSON.stringify({ print: 'fabrika', fsfera: true }))
+    expect(loadPrefs().print).toBe('fabrika')
+    localStorage.setItem('exportOpts', JSON.stringify({ print: 'xerox', fsfera: true }))
+    expect(loadPrefs().print).toBe('')
+  })
+  it('в сохранённое старое поле fsfera не пишется', () => {
+    savePrefs({ ...DEFAULT_PREFS, print: 'fsfera' })
+    expect(JSON.parse(localStorage.getItem('exportOpts')!)).not.toHaveProperty('fsfera')
+  })
+})
+
+describe('строка предела в режиме печати', () => {
+  const v = { pageLimit: { warn: 'Разворотов 21 — у Фабрики Фотокниги («Лайфлат, картон») не больше 20' } } as never
+  it('limitWarn hidden in print mode: любая типография прячет строку 085', () => {
+    expect(limitWarn(v, true)).toBe('')
+    expect(limitWarn(v, false)).toContain('Фабрики Фотокниги')
   })
 })
 

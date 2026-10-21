@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,6 +31,19 @@ func mustEditor(t testing.TB, p *model.Project, path string) *album.Editor {
 		t.Fatal(err)
 	}
 	return e
+}
+
+// sameLines — строки совпадают; координаты — до 1e-9 мм (угол блока прибавлен и вычтен).
+func sameLines(a, b []text.Line) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Text != b[i].Text || math.Abs(a[i].X-b[i].X) > 1e-9 || math.Abs(a[i].Y-b[i].Y) > 1e-9 || math.Abs(a[i].W-b[i].W) > 1e-9 {
+			return false
+		}
+	}
+	return true
 }
 
 // Задание экспорта из View: кадр, фон, подписи перед блоками, развороты только с текстом
@@ -69,6 +83,23 @@ func TestExportSpreads(t *testing.T) {
 	// Строки блока — от его угла: базовая линия первой строки около кегля, а не около Y блока.
 	if l := s1.Texts[1].Box.Lines[0]; l.Y <= 0 || l.Y > 20 || s1.Texts[1].X != 20 || s1.Texts[1].Y != 30 {
 		t.Fatalf("строка блока: %+v, угол (%v, %v)", l, s1.Texts[1].X, s1.Texts[1].Y)
+	}
+	// Text — показанный текст; переразбивка при смене шрифтов (render, 082) из Text по Box.W даёт
+	// те же строки, что в View, пока шрифты те же. Gen ставит PinFonts всем текстам.
+	for i, want := range []string{"Подпись", "Привет"} {
+		td := s1.Texts[i]
+		again := text.Cached(td.Text, td.Style, td.Box.W).Lines
+		if td.Text != want || td.Gen != 0 || !sameLines(again, td.Box.Lines) {
+			t.Fatalf("текст %d: %q, Gen %d, строки %+v, заново %+v", i, td.Text, td.Gen, td.Box.Lines, again)
+		}
+	}
+	PinFonts(got, 7)
+	for _, sp := range got {
+		for _, td := range sp.Texts {
+			if td.Gen != 7 {
+				t.Fatalf("PinFonts: %+v", td)
+			}
+		}
 	}
 	album := color.RGBA{0xf6, 0xf1, 0xe7, 255}
 	if s1.Bg != [2]color.RGBA{album, album} {

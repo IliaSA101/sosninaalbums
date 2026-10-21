@@ -249,11 +249,12 @@ func TestNewSheetProject(t *testing.T) {
 	if a.SetSettings(al).Settings.Sheet {
 		t.Fatal("альбом стал листом")
 	}
-	// Итог чтения папок (rescan в фоне) — обычная строка; остального быть не должно. Буфер
-	// читается после конца фоновых rescan: иначе их log.Printf пишет в него одновременно (гонка).
+	// Итог чтения папок (rescan в фоне) и следом память (089 G3) — обычные строки; остального быть
+	// не должно. Буфер читается после конца фоновых rescan: иначе их log.Printf пишет в него
+	// одновременно (гонка).
 	a.bg.Wait()
 	for line := range strings.Lines(buf.String()) {
-		if !strings.Contains(line, "папок 0: 0 фото") {
+		if !strings.Contains(line, "папок 0: 0 фото") && !strings.Contains(line, "память: чтение папок — Go ") {
 			t.Errorf("в log.txt: %s", line)
 		}
 	}
@@ -577,5 +578,28 @@ func TestAutoPlanSeriesFromLibrary(t *testing.T) {
 	v, err := a.AutoBuild(ids, -1, o)
 	if err != nil || len(v.Spreads) != 2 || len(v.Spreads[0].Photos) != 6 {
 		t.Fatalf("AutoBuild с сериями: %v, %+v", err, v.Spreads)
+	}
+}
+
+// Минимум окна по экрану (089-D16): на обычном экране — постоянный, на малом — не больше экрана.
+func TestMinSizeFitsScreen(t *testing.T) {
+	cases := []struct{ sw, sh, w, h int }{
+		{1920, 1080, minWinW, minWinH}, // обычный экран — без изменений
+		{1366, 768, minWinW, minWinH},  // 1366×768 при 100 %: 1326×648 — минимум прежний
+		{1093, 614, 1053, 494},         // 1366×768 при 125 %
+		{1097, 617, 1057, 497},         // 1920×1080 при 175 %
+		{800, 600, 760, 480},           // совсем малый
+		{30, 100, 1, 1},                // меньше отступов — минимум не 0 и не отрицательный
+		{0, 0, minWinW, minWinH},       // размер экрана неизвестен
+		{-5, 768, minWinW, minWinH},
+	}
+	for _, c := range cases {
+		w, h := minSize(c.sw, c.sh)
+		if w != c.w || h != c.h {
+			t.Errorf("minSize(%d, %d) = %d×%d, want %d×%d", c.sw, c.sh, w, h, c.w, c.h)
+		}
+		if c.sw > 40 && c.sh > 120 && (w > c.sw || h > c.sh) {
+			t.Errorf("minSize(%d, %d) = %d×%d — больше экрана", c.sw, c.sh, w, h)
+		}
 	}
 }

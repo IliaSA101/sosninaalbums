@@ -147,6 +147,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -224,6 +225,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -239,6 +241,7 @@
     "want": {
       "again": false,
       "backdropUsed": null,
+      "bins": null,
       "bleed": null,
       "canRedo": false,
       "canUndo": false,
@@ -538,6 +541,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -575,6 +579,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -589,6 +594,7 @@
     "want": {
       "again": false,
       "backdropUsed": null,
+      "bins": null,
       "bleed": null,
       "canRedo": false,
       "canUndo": false,
@@ -849,6 +855,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -923,6 +930,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -939,6 +947,7 @@
     "want": {
       "again": false,
       "backdropUsed": null,
+      "bins": null,
       "bleed": null,
       "canRedo": false,
       "canUndo": false,
@@ -1273,6 +1282,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -1310,6 +1320,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -1325,6 +1336,7 @@
     "want": {
       "again": false,
       "backdropUsed": null,
+      "bins": null,
       "bleed": null,
       "canRedo": false,
       "canUndo": false,
@@ -1623,6 +1635,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -1660,6 +1673,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": {
@@ -1734,6 +1748,7 @@
     "want": {
       "again": false,
       "backdropUsed": null,
+      "bins": null,
       "bleed": null,
       "canRedo": false,
       "canUndo": false,
@@ -1797,6 +1812,379 @@
         "textMaxW": 0,
         "zones": null
       },
+      "dirty": false,
+      "emptyPlaces": 0,
+      "folders": [],
+      "libPhotos": null,
+      "lowDPI": 0,
+      "marksRev": 0,
+      "maxSpreadPhotos": 0,
+      "minDPI": 0,
+      "path": "",
+      "product": "album",
+      "rev": 5,
+      "safe": null,
+      "seq": 11,
+      "settings": {
+        "bg": "",
+        "dpi": 0,
+        "foldAny": false,
+        "gap": 0,
+        "layflat": false,
+        "margin": 0,
+        "pageH": 0,
+        "pageW": 0,
+        "safe": 0
+      },
+      "spreadMarkup": null,
+      "spreads": [
+        {
+          "backdrops": null,
+          "bg": [
+            "",
+            ""
+          ],
+          "bgSet": [
+            "",
+            ""
+          ],
+          "captions": null,
+          "fields": null,
+          "frames": null,
+          "grid": false,
+          "h": 300,
+          "id": "a",
+          "kind": "",
+          "layout": "",
+          "lowDPI": 0,
+          "mid": 300,
+          "more": false,
+          "name": "",
+          "pages": null,
+          "patterns": null,
+          "photos": [
+            "p1"
+          ],
+          "places": null,
+          "rearranged": false,
+          "rects": null,
+          "stickers": null,
+          "stubs": null,
+          "texts": null,
+          "variant": 0,
+          "variants": 0,
+          "vars": {},
+          "w": 600
+        },
+        {
+          "backdrops": null,
+          "bg": [
+            "",
+            ""
+          ],
+          "bgSet": [
+            "",
+            ""
+          ],
+          "captions": null,
+          "fields": null,
+          "frames": null,
+          "grid": false,
+          "h": 300,
+          "id": "b",
+          "kind": "",
+          "layout": "",
+          "lowDPI": 0,
+          "mid": 300,
+          "more": false,
+          "name": "",
+          "pages": null,
+          "patterns": null,
+          "photos": [
+            "p2"
+          ],
+          "places": null,
+          "rearranged": false,
+          "rects": null,
+          "stickers": null,
+          "stubs": null,
+          "texts": null,
+          "variant": 0,
+          "variants": 0,
+          "vars": {},
+          "w": 600
+        },
+        {
+          "backdrops": null,
+          "bg": [
+            "",
+            ""
+          ],
+          "bgSet": [
+            "",
+            ""
+          ],
+          "captions": null,
+          "fields": null,
+          "frames": null,
+          "grid": false,
+          "h": 300,
+          "id": "c",
+          "kind": "",
+          "layout": "",
+          "lowDPI": 0,
+          "mid": 300,
+          "more": false,
+          "name": "",
+          "pages": null,
+          "patterns": null,
+          "photos": [
+            "p3"
+          ],
+          "places": null,
+          "rearranged": false,
+          "rects": null,
+          "stickers": null,
+          "stubs": null,
+          "texts": null,
+          "variant": 0,
+          "variants": 0,
+          "vars": {},
+          "w": 600
+        }
+      ],
+      "textMaxW": 0,
+      "unfilled": null,
+      "unnamed": 0
+    }
+  },
+  {
+    "name": "только шапка (свои шрифты)",
+    "prev": {
+      "product": "album",
+      "spreads": [
+        {
+          "id": "a",
+          "photos": [
+            "p1"
+          ],
+          "w": 600,
+          "h": 300,
+          "mid": 300,
+          "rects": null,
+          "layout": "",
+          "variant": 0,
+          "variants": 0,
+          "more": false,
+          "rearranged": false,
+          "pages": null,
+          "frames": null,
+          "texts": null,
+          "captions": null,
+          "bg": [
+            "",
+            ""
+          ],
+          "bgSet": [
+            "",
+            ""
+          ],
+          "grid": false,
+          "places": null,
+          "name": "",
+          "backdrops": null,
+          "patterns": null,
+          "stickers": null,
+          "lowDPI": 0,
+          "stubs": null,
+          "kind": "",
+          "vars": {},
+          "fields": null
+        },
+        {
+          "id": "b",
+          "photos": [
+            "p2"
+          ],
+          "w": 600,
+          "h": 300,
+          "mid": 300,
+          "rects": null,
+          "layout": "",
+          "variant": 0,
+          "variants": 0,
+          "more": false,
+          "rearranged": false,
+          "pages": null,
+          "frames": null,
+          "texts": null,
+          "captions": null,
+          "bg": [
+            "",
+            ""
+          ],
+          "bgSet": [
+            "",
+            ""
+          ],
+          "grid": false,
+          "places": null,
+          "name": "",
+          "backdrops": null,
+          "patterns": null,
+          "stickers": null,
+          "lowDPI": 0,
+          "stubs": null,
+          "kind": "",
+          "vars": {},
+          "fields": null
+        },
+        {
+          "id": "c",
+          "photos": [
+            "p3"
+          ],
+          "w": 600,
+          "h": 300,
+          "mid": 300,
+          "rects": null,
+          "layout": "",
+          "variant": 0,
+          "variants": 0,
+          "more": false,
+          "rearranged": false,
+          "pages": null,
+          "frames": null,
+          "texts": null,
+          "captions": null,
+          "bg": [
+            "",
+            ""
+          ],
+          "bgSet": [
+            "",
+            ""
+          ],
+          "grid": false,
+          "places": null,
+          "name": "",
+          "backdrops": null,
+          "patterns": null,
+          "stickers": null,
+          "lowDPI": 0,
+          "stubs": null,
+          "kind": "",
+          "vars": {},
+          "fields": null
+        }
+      ],
+      "settings": {
+        "pageW": 0,
+        "pageH": 0,
+        "margin": 0,
+        "gap": 0,
+        "layflat": false,
+        "foldAny": false,
+        "dpi": 0,
+        "bg": "",
+        "safe": 0
+      },
+      "folders": [],
+      "path": "",
+      "dirty": false,
+      "canUndo": false,
+      "canRedo": false,
+      "rev": 4,
+      "maxSpreadPhotos": 0,
+      "safe": null,
+      "bleed": null,
+      "spreadMarkup": null,
+      "minDPI": 0,
+      "lowDPI": 0,
+      "emptyPlaces": 0,
+      "textMaxW": 0,
+      "backdropUsed": null,
+      "libPhotos": null,
+      "marksRev": 0,
+      "bins": null,
+      "unfilled": null,
+      "unnamed": 0,
+      "cover": null,
+      "again": false,
+      "seq": 10
+    },
+    "delta": {
+      "product": "album",
+      "spreads": [],
+      "settings": {
+        "pageW": 0,
+        "pageH": 0,
+        "margin": 0,
+        "gap": 0,
+        "layflat": false,
+        "foldAny": false,
+        "dpi": 0,
+        "bg": "",
+        "safe": 0
+      },
+      "folders": [],
+      "path": "",
+      "dirty": false,
+      "canUndo": false,
+      "canRedo": false,
+      "rev": 5,
+      "maxSpreadPhotos": 0,
+      "safe": null,
+      "bleed": null,
+      "spreadMarkup": null,
+      "minDPI": 0,
+      "lowDPI": 0,
+      "emptyPlaces": 0,
+      "textMaxW": 0,
+      "backdropUsed": null,
+      "libPhotos": null,
+      "albumFonts": [
+        {
+          "id": "my:0123456789abcdef",
+          "name": "Lato"
+        },
+        {
+          "id": "my:fedcba9876543210",
+          "name": ""
+        }
+      ],
+      "marksRev": 0,
+      "bins": null,
+      "unfilled": null,
+      "unnamed": 0,
+      "cover": null,
+      "again": false,
+      "seq": 11,
+      "base": 10,
+      "order": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    "want": {
+      "again": false,
+      "albumFonts": [
+        {
+          "id": "my:0123456789abcdef",
+          "name": "Lato"
+        },
+        {
+          "id": "my:fedcba9876543210",
+          "name": ""
+        }
+      ],
+      "backdropUsed": null,
+      "bins": null,
+      "bleed": null,
+      "canRedo": false,
+      "canUndo": false,
+      "cover": null,
       "dirty": false,
       "emptyPlaces": 0,
       "folders": [],
@@ -2091,6 +2479,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -2128,6 +2517,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -2139,6 +2529,7 @@
     "want": {
       "again": false,
       "backdropUsed": null,
+      "bins": null,
       "bleed": null,
       "canRedo": false,
       "canUndo": false,
@@ -2322,6 +2713,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -2359,6 +2751,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -2374,6 +2767,7 @@
     "want": {
       "again": false,
       "backdropUsed": null,
+      "bins": null,
       "bleed": null,
       "canRedo": false,
       "canUndo": false,
@@ -2672,6 +3066,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,
@@ -2746,6 +3141,7 @@
       "backdropUsed": null,
       "libPhotos": null,
       "marksRev": 0,
+      "bins": null,
       "unfilled": null,
       "unnamed": 0,
       "cover": null,

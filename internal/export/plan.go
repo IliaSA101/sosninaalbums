@@ -28,7 +28,27 @@ type Plan struct {
 	mask map[int]uint8 // номер разворота с 1 → маска целей
 	// Cover — обложка (00.jpg, 032); nil — не пишется. Задаётся WithCover.
 	Cover *CoverJob
+	// Prefix — перед именами файлов (081 №9: 1-00.jpg, 1-01.jpg у Фабрики Фотокниги); "" — прежние
+	// имена. Задаётся WithPrefix.
+	Prefix string
 }
+
+// WithPrefix ставит префикс имён плану, его заданиям и обложке: имена рождаются и узнаются
+// (PlanDirPrefix, AddCoverFile, ReplaceQuestion) с одним префиксом.
+func (pl Plan) WithPrefix(prefix string) Plan {
+	pl.Prefix = prefix
+	pl.Jobs = slices.Clone(pl.Jobs)
+	for i := range pl.Jobs {
+		pl.Jobs[i].Prefix = prefix
+	}
+	if pl.Cover != nil {
+		pl = pl.WithCover(pl.Cover)
+	}
+	return pl
+}
+
+// CoverName — имя файла обложки плана: 00.jpg, с префиксом — 1-00.jpg.
+func (pl Plan) CoverName() string { return pl.Prefix + CoverName }
 
 // NewPlan строит план: units — цели из ParseRange, nil — все n разворотов; pages — вид
 // «По страницам». Цель «разворот» в этом виде даёт обе страницы, цель «страница» — одну.
@@ -67,7 +87,7 @@ func NewPlan(units []Unit, n int, pages bool) Plan {
 func (pl Plan) Names(total int) []string {
 	var out []string
 	if pl.Cover != nil {
-		out = append(out, CoverName)
+		out = append(out, pl.CoverName())
 	}
 	for _, j := range pl.Jobs {
 		out = append(out, j.Names(total)...)
@@ -156,7 +176,7 @@ func coverPhotos(s model.SpreadView, out map[string]bool) {
 	borderPhotos(s, out)
 }
 
-// ReplaceQuestion — вопрос о замене найденных файлов прежнего экспорта; обложка (00.jpg) — в тексте отдельно.
+// ReplaceQuestion — вопрос о замене найденных файлов прежнего экспорта; обложка (имя плана) — в тексте отдельно.
 func ReplaceQuestion(pl Plan, hit []DirFile) string {
 	var nums []int
 	cover := false
@@ -172,7 +192,7 @@ func ReplaceQuestion(pl Plan, hit []DirFile) string {
 		files--
 	}
 	if files == 0 { // только обложка
-		return "В папке уже есть обложка прежнего экспорта (" + CoverName + "). Заменить?"
+		return "В папке уже есть обложка прежнего экспорта (" + pl.CoverName() + "). Заменить?"
 	}
 	if pl.Full {
 		if cover {

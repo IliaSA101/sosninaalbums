@@ -1,7 +1,7 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
   import { BORDER_NOTE, hasBorders, sheetIn, unitOf } from '../../base/geom/sheet'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { NAME_MAX, SAVE_HINT, deleteText } from './vigown'
   import { vigOwn } from './vigown.svelte'
 

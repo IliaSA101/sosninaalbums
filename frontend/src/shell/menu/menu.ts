@@ -62,6 +62,7 @@ export interface MenuCtx {
   markup?: boolean // подложка разметки типографии включена (066); нет — выключена
   rulers: boolean
   snap: boolean
+  binShown?: boolean // в ленте показана подборка (083): «Показать все фото» без неё серое; не задан — серое
   alignCount?: number // выделено объектов на текущем развороте (места, фото, тексты); нет — 0
   alignTo?: AlignTo // опора «Относительно»; нет — «Выделения»
 }
@@ -203,6 +204,20 @@ function fileSpecs(c: MenuCtx): Spec[][] {
       { id: 'backups', label: 'Резервные копии…', cmd: 'backups' },
       // 067 Ф2: наборы фонов, стикеров и разворотов — добавить из файла, удалить
       { id: 'packs', label: 'Наборы библиотеки…', cmd: 'packs', feature: 'decor' },
+      // 086: свои шаблоны сеток и виньеток — в файл и из файла; без шаблонов и виньетки на уровне подменю нечего показывать
+      ...(!c.can || c.can('templates') || c.can('vignette')
+        ? [
+            {
+              id: 'tpl',
+              label: 'Мои шаблоны',
+              sub: [
+                { id: 'tplExport', label: 'Сохранить в файл…', cmd: 'tplExport' as const },
+                { id: 'tplImport', label: 'Загрузить из файла…', cmd: 'tplImport' as const },
+              ],
+            },
+          ]
+        : []),
+      { id: 'showData', label: 'Открыть папку данных', cmd: 'showData' },
     ],
     [
       { id: 'addFolder', label: 'Добавить папку с фото…', cmd: 'addFolder' },
@@ -322,6 +337,8 @@ function viewSpecs(c: MenuCtx): Spec[][] {
       { id: 'zoomOut', label: 'Уменьшить', cmd: 'zoomOut', feature: 'zoom', disabled: !c.hasSpread },
       { id: 'allSpreads', label: 'Все развороты', cmd: 'allSpreads', feature: 'allSpreads' },
     ],
+    // Без клавиши по умолчанию — пункт меню нужен, чтобы её можно было назначить (074-8).
+    [{ id: 'binAll', label: 'Показать все фото (без подборки)', cmd: 'binAll', feature: 'bins', disabled: !c.binShown }],
   ]
 }
 

@@ -16,10 +16,26 @@ import (
 // opentype.Face сюда не годится: его Kern почти нулевой (design §5).
 func Draw(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int) {
 	st = st.Clamped()
+	if c := usableCustom(st.Font); c != nil {
+		sf, _ := font(st)
+		fb, _ := fallback(st)
+		if guarded(func() { drawWith(dst, b, st, x0, y0, deg, dpi, sf, fb) }) {
+			return
+		}
+		// Уже нарисованные глифы остаются: после Inspect (все глифы и пробная
+		// отрисовка) такого не ждём, главное — не уронить выгрузку.
+		c.markBroken("отрисовка")
+	}
+	sf, _ := font(st)
+	fb, _ := fallback(st)
+	drawWith(dst, b, st, x0, y0, deg, dpi, sf, fb)
+}
+
+// drawWith — Draw заданным шрифтом sf и запасным fb (может быть nil); st уже Clamped.
+func drawWith(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int, sf, fb *sfnt.Font) {
 	if dpi <= 0 || len(b.Lines) == 0 || math.IsNaN(x0+y0) || math.IsInf(x0+y0, 0) {
 		return
 	}
-	sf, _ := font(st)
 	if sf == nil {
 		return
 	}
@@ -35,7 +51,7 @@ func Draw(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int) {
 	o := dst.Bounds().Min
 	ox, oy := float64(o.X)+x0*pxmm, float64(o.Y)+y0*pxmm
 	p := newPen(dst, image.NewUniform(col), deg, ox, oy)
-	fb, _ := fallback(st) // знак вне гарнитуры — из Montserrat, как в measure
+	// fb — знак вне гарнитуры, из Montserrat, как в measure
 	var buf, fbBuf sfnt.Buffer
 	main, alt := glyphSrc{sf, &buf}, glyphSrc{fb, &fbBuf}
 	for _, l := range b.Lines {

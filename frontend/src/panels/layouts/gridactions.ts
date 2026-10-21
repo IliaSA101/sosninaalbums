@@ -1,4 +1,4 @@
-// Вызовы Go для галереи сеток и копирования (спека 007, U9): ответ — в store.apply, ошибка — тост.
+// Вызовы Go для галереи сеток и копирования (спека 007, U9): ответ — в store.take, ошибка — тост.
 import { store, Api } from '../../base/core/store.svelte'
 import { errText } from '../../base/words/errtext'
 import { plural } from '../../base/words/plural'
@@ -17,7 +17,7 @@ const leftText = (n: number) => `${n} ${plural(n, ['фото вернулось'
 export async function applyChoice(spread: string, scope: LayoutScope, ch: GridChoice) {
   try {
     const r = (await Api.ApplyGrid(spread, scope, ch.scope, ch.boxes)) as unknown as GridResult
-    store.apply(r.view)
+    if (!(await store.take(r.view))) return // сбой GetView: красный тост цепочки уже показан, синий поверх не нужен (087)
     if (r.left > 0) notifyUndo(leftText(r.left))
   } catch (e) {
     store.notify(errText(e), 'error')
@@ -49,7 +49,7 @@ export async function runCopy(
 ): Promise<boolean> {
   try {
     const r = (await Api.CopyGrid(src, from, to, design, mirror)) as unknown as GridResult
-    store.apply(r.view)
+    if (!(await store.take(r.view))) return false
     const head = `Раскладка скопирована на ${n} ${plural(n, unitOf(store.view.settings).plural)}`
     if (r.left > 0) notifyUndo(`${head}. ${leftText(r.left)}`)
     else store.notify(head)
@@ -100,7 +100,7 @@ export async function runCopyDecor(
   try {
     const before = store.view.rev
     const r = (await Api.CopyDecor(src, from, to, texts, mirror)) as unknown as GridResult
-    store.apply(r.view)
+    if (!(await store.take(r.view))) return false
     if (store.view.rev === before) store.notify('У выбранных уже такое же оформление: копировать нечего')
     else store.notify(`Оформление скопировано на ${n} ${plural(n, unitOf(store.view.settings).plural)}`)
     return true

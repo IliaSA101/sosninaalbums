@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -119,7 +120,7 @@ func collectTo(t *testing.T, sc *scene, dir string, all bool) (Plan, string) {
 	if _, err := Copy(context.Background(), dir, &pl, nil); err != nil {
 		t.Fatal(err)
 	}
-	q, marks := Album(sc.p, sc.marks, dir, pl)
+	q, marks := Album(sc.p, model.Side{Marks: sc.marks}, dir, pl)
 	path := filepath.Join(dir, "Иванов.salbum")
 	if err := Save(q, marks, path, pl); err != nil {
 		t.Fatal(err)
@@ -189,7 +190,8 @@ func TestCollectRoundtrip(t *testing.T) {
 	if len(pl.Missing) != 1 || pl.MissingGuides != 0 || pl.SideBusy != 0 {
 		t.Fatalf("пропавшие %v, разметки %d, сайдкары %d", pl.Missing, pl.MissingGuides, pl.SideBusy)
 	}
-	if in := pl.Info(); in != (Info{Photos: 5, Own: 1, Guides: 2, Missing: 1, Bytes: pl.Bytes}) || pl.Bytes == 0 {
+	wantIn := Info{Photos: 5, Own: 1, Guides: 2, Missing: 1, Bytes: pl.Bytes, FontsRestricted: []string{}}
+	if in := pl.Info(); !reflect.DeepEqual(in, wantIn) || pl.Bytes == 0 {
 		t.Fatalf("сводка: %+v", in)
 	}
 	lp, err := salbum.Load(path)
@@ -208,7 +210,7 @@ func TestCollectRoundtrip(t *testing.T) {
 	if len(lp.Folders) != 1 || lp.Folders[0] != filepath.Join(dir, DirPhotos) {
 		t.Fatalf("папки: %v", lp.Folders)
 	}
-	marks := edtest.Loaded(lp)
+	marks := edtest.Loaded(lp).Marks
 	want := map[string]bool{filepath.Join(dir, "Фото", "JPG", "IMG_0001.jpg"): true, sc.gone: true}
 	if len(marks) != len(want) {
 		t.Fatalf("отметки: %v", marks)
@@ -220,7 +222,7 @@ func TestCollectRoundtrip(t *testing.T) {
 	}
 	// Круг Save → Load собранного — тот же альбом.
 	again := filepath.Join(dir, "again.salbum")
-	if err := salbum.WriteRel(lp, again, dir, marks); err != nil {
+	if err := salbum.WriteRel(lp, again, dir, model.Side{Marks: marks}); err != nil {
 		t.Fatal(err)
 	}
 	if rp, err := salbum.Load(again); err != nil || !bytes.Equal(model.Marshal(rp), model.Marshal(lp)) {
@@ -252,8 +254,8 @@ func TestCollectMovedFolder(t *testing.T) {
 	}
 	// «Все фото»: отметка фото ленты вне альбома переехала вместе с ним.
 	unused := filepath.Join(moved, "Фото", "JPG", "unused.jpg")
-	if m, ok := edtest.Loaded(lp)[library.IDFor(unused)]; !ok || m.Path != unused {
-		t.Fatalf("отметка фото ленты: %v", edtest.Loaded(lp))
+	if m, ok := edtest.Loaded(lp).Marks[library.IDFor(unused)]; !ok || m.Path != unused {
+		t.Fatalf("отметка фото ленты: %v", edtest.Loaded(lp).Marks)
 	}
 }
 
@@ -326,8 +328,8 @@ func TestCollectEmpty(t *testing.T) {
 	if n, err := Copy(context.Background(), dir, &pl, nil); err != nil || n != 0 {
 		t.Fatalf("Copy пустого: %d, %v", n, err)
 	}
-	q, marks := Album(p, nil, dir, pl)
-	if q.Folders != nil || len(marks) != 0 {
+	q, marks := Album(p, model.Side{}, dir, pl)
+	if q.Folders != nil || len(marks.Marks) != 0 {
 		t.Fatalf("папки %v, отметки %v", q.Folders, marks)
 	}
 	path := filepath.Join(dir, "Альбом.salbum")
@@ -354,7 +356,7 @@ func TestCollectSaveCatchesLost(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "Фото", "Прочие", "x.jpg")); err != nil {
 		t.Fatal(err)
 	}
-	q, marks := Album(sc.p, sc.marks, dir, pl)
+	q, marks := Album(sc.p, model.Side{Marks: sc.marks}, dir, pl)
 	if err := Save(q, marks, filepath.Join(dir, "Иванов.salbum"), pl); err == nil || !strings.Contains(err.Error(), "не нашлось фото: 1") {
 		t.Fatalf("Save без файла: %v", err)
 	}

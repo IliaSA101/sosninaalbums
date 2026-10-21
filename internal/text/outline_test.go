@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -136,6 +137,82 @@ func TestDrawEdgeClip(t *testing.T) {
 	}
 	if !inside {
 		t.Error("у края ничего не нарисовано")
+	}
+}
+
+// TestDrawMaskClipped — аудит 082: маска глифа не больше холста. «Ж» 200 pt при 300 dpi —
+// ~800 px; без обрезки маска и растеризатор берут мегабайты на холсте 100×100.
+func TestDrawMaskClipped(t *testing.T) {
+	const dpi, side = 300, 100
+	st := Style{Font: DefaultFont, Size: MaxSize, Color: "#000000", Align: "left"}
+	b := Layout("Ж", st, 500)
+	dst := whiteCanvas(side, side)
+	Draw(dst, b, st, -5, -30, 0, dpi) // прогрев: кэш шрифта и разбор файла — не в счёт
+	if !hasInk(dst) {
+		t.Fatal("глиф не лёг на холст — проверять нечего")
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	Draw(dst, b, st, -5, -30, 0, dpi)
+	runtime.ReadMemStats(&after)
+	// маска 1 байт и растеризатор 4 байта на px холста, плюс мелочь строки
+	if got, lim := after.TotalAlloc-before.TotalAlloc, uint64(side*side*5+64<<10); got > lim {
+		t.Errorf("отрисовка выделила %d байт, предел %d", got, lim)
+	}
+	// то же напрямую: маска пера не больше холста, хотя глиф намного больше
+	sf, _ := font(st)
+	var buf sfnt.Buffer
+	g, _ := sf.GlyphIndex(&buf, 'Ж')
+	segs, err := sf.LoadGlyph(&buf, g, fixed.I(833), nil) // 200 pt при 300 dpi
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := newPen(dst, image.Black, 15, 0, 0)
+	p.glyph(segs, -50, 600)
+	if n := cap(p.mask.Pix); n == 0 || n > side*side {
+		t.Errorf("маска %d байт, холст %d px", n, side*side)
+	}
+}
+
+func hasInk(img *image.RGBA) bool {
+	for i := 0; i < len(img.Pix); i += 4 {
+		if img.Pix[i] < 128 {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDrawClippedSame — обрезанная по холсту маска даёт те же пиксели, что целая: холст —
+// окно большого изображения, глиф (с поворотом) режут все четыре края.
+func TestDrawClippedSame(t *testing.T) {
+	const dpi = 300
+	pxmm := float64(dpi) / 25.4
+	st := Style{Font: "marck", Size: 120, Color: "#202020", Align: "left"}
+	b := Layout("Жёлудь", st, 300)
+	full := whiteCanvas(1400, 700)
+	Draw(full, b, st, 10, 10, 12, dpi)
+	for _, win := range []image.Rectangle{image.Rect(150, 120, 420, 330), image.Rect(0, 0, 90, 700), image.Rect(700, 300, 1400, 700)} {
+		part := whiteCanvas(1400, 700).SubImage(win).(*image.RGBA)
+		Draw(part, b, st, 10-float64(win.Min.X)/pxmm, 10-float64(win.Min.Y)/pxmm, 12, dpi)
+		ink, worst := 0, 0
+		for y := win.Min.Y; y < win.Max.Y; y++ {
+			for x := win.Min.X; x < win.Max.X; x++ {
+				a, c := int(full.RGBAAt(x, y).R), int(part.RGBAAt(x, y).R)
+				if a < 200 {
+					ink++
+				}
+				worst = max(worst, abs(a-c))
+			}
+		}
+		if ink == 0 {
+			t.Errorf("%v: окно без чернил — тест ничего не режет", win)
+		}
+		// до 512 px vector считает в фиксированной точке, крупнее — в плавающей: расхождение
+		// в пару уровней ожидаемо, ошибка сдвига начала дала бы сотни
+		if worst > 4 {
+			t.Errorf("%v: обрезанная маска расходится на %d", win, worst)
+		}
 	}
 }
 

@@ -1,13 +1,48 @@
 package edit
 
 import (
+	"bytes"
 	"fmt"
+	"log"
 	"reflect"
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 )
+
+// TestAutoBuildLogsMem (089 G3): удачная сборка пишет одну строку «память: автосборка», отказ
+// (пересборка без прошлой сборки) и холостая сборка без фото — не пишет; путей в строке нет.
+func TestAutoBuildLogsMem(t *testing.T) {
+	var buf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(prev) })
+	re := regexp.MustCompile(`память: автосборка — Go \d+ МБ, куча \d+ МБ\n`)
+
+	k := twoSpreads(t)
+	var ids []string
+	for i := range 6 {
+		id := fmt.Sprintf("m%d", i)
+		k.lentPhoto(id)
+		ids = append(ids, id)
+	}
+	// Отказ: пересборка, когда собирать ещё нечего.
+	if _, err := k.AutoBuild(ids, -1, model.AutoOpts{Spreads: 2, MaxPer: 4, Again: true}); err == nil {
+		t.Fatal("пересборка без прошлой сборки не отказала")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("отказ написал в журнал: %q", buf.String())
+	}
+	if _, err := k.AutoBuild(ids, -1, model.AutoOpts{Spreads: 2, MaxPer: 4}); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(re.FindAllString(buf.String(), -1)); n != 1 || strings.Contains(buf.String(), "lent") {
+		t.Errorf("строк памяти %d (ждали 1), журнал %q", n, buf.String())
+	}
+}
 
 // Фото берутся из ленты (Host.Infos): AddPhotos и NewSpread кладут именно их; неизвестные
 // ленте ID пропускаются; отказ Editor (лимит фото на развороте) возвращается без события.

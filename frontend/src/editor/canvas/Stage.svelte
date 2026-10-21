@@ -269,7 +269,9 @@
      по placement (целые px) */
   .stage {
     position: relative;
-    flex: 1;
+    /* Основа = полоса BAR 32 + 240 (LIB_DEF): холст получает «лишнее» и теряет высоту только после ленты фото,
+       у которой flex-shrink на порядки больше (D15, 089; тест libfit.test.ts держит числа вместе) */
+    flex: 1 1 272px;
     min-height: 0;
     overflow: hidden;
     isolation: isolate;

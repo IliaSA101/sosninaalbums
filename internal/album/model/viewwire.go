@@ -86,9 +86,9 @@ func (v View) Fresh() int {
 	return n
 }
 
-// sameHead — всё, кроме разворотов и номеров цепочки, совпадает.
+// sameHead — всё, кроме разворотов, номеров цепочки и номера Editor, совпадает.
 func sameHead(a, b View) bool {
-	a.Spreads, a.Seq, a.Base, a.Order, a.fresh = nil, 0, 0, nil, nil
-	b.Spreads, b.Seq, b.Base, b.Order, b.fresh = nil, 0, 0, nil, nil
+	a.Spreads, a.Seq, a.Base, a.Order, a.fresh, a.src = nil, 0, 0, nil, nil, 0
+	b.Spreads, b.Seq, b.Base, b.Order, b.fresh, b.src = nil, 0, 0, nil, nil, 0
 	return reflect.DeepEqual(a, b)
 }

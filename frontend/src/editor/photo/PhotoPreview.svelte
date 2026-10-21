@@ -2,9 +2,13 @@
   import { store } from '../../base/core/store.svelte'
   import { photoui } from './photoui.svelte'
   import { previewUrl } from '../../base/core/media'
+  import { cancelOnUnmount } from '../../base/ui/imgcancel'
   import { fitTilt } from '../../base/geom/frame'
   import { adjlive } from './adjlive.svelte'
   import Icon from '../../base/ui/Icon.svelte'
+  import MissPhoto from '../../base/ui/MissPhoto.svelte'
+  import { missTip } from '../../panels/library/missing'
+  import { autocheck } from '../../panels/folders/autocheck'
 
   // Крупный просмотр фото (Quick Preview из SmartAlbums, но без клавиши: Пробел занят). Esc,
   // щелчок по фону или ✕ закрывают; остальные клавиши страницу под окном не трогают.
@@ -16,9 +20,21 @@
   const tone = $derived(id ? adjlive.filterOf(id, fv) : undefined) // ч/б и тон (068): просмотр показывает фото как в альбоме
   const turned = $derived((fv?.turn ?? 0) % 2 === 1)
   let nat = $state({ w: 0, h: 0 }) // размер картинки просмотра, px
-  // Размер от прошлого фото не переносим.
+  // Файла нет (088): Go уже сообщил (store.missing) или картинка не загрузилась — заглушка вместо битой картинки.
+  let failed = $state(false)
+  const gone = $derived(failed || (!!id && store.missing.includes(id)))
+  const ratio = $derived(photo && photo.w > 0 && photo.h > 0 ? photo.w / photo.h : 1.5)
+  const failTip = $derived(id ? missTip(id, { [id]: photo?.name ?? '' }) : '')
+  function onFail() {
+    failed = true
+    autocheck.soon(true)
+  }
+  // Размер и сбой от прошлого фото не переносим.
   $effect(() => {
-    if (id) nat = { w: 0, h: 0 }
+    if (id) {
+      nat = { w: 0, h: 0 }
+      failed = false
+    }
   })
   // Пропорции после поворота на четверти; пока картинка не загружена — неизвестны, рисуем как есть.
   const aspect = $derived(nat.w > 0 && nat.h > 0 ? (turned ? nat.h / nat.w : nat.w / nat.h) : 0)
@@ -50,7 +66,9 @@
 {#if id}
   <div class="back" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && close()} data-chrome>
     <div class="box" role="dialog" aria-modal="true" aria-label="Крупный просмотр" tabindex="-1" bind:this={box}>
-      {#if rotated}
+      {#if gone}
+        <div class="gone" style:--a={ratio}><MissPhoto size={48} tip={failTip} /></div>
+      {:else if rotated}
         <!-- Рамка под пропорции повёрнутого на четверти фото; картинка внутри крутится на полный угол -->
         <div class="turned" style:--a={aspect}>
           <img
@@ -62,6 +80,8 @@
             style:height={turned ? '100cqw' : '100cqh'}
             style:transform="translate(-50%, -50%) rotate({fv?.r}deg) scale({k})"
             style:filter={tone}
+            onerror={onFail}
+            {@attach cancelOnUnmount}
           />
         </div>
       {:else}
@@ -73,6 +93,8 @@
           bind:naturalWidth={nat.w}
           bind:naturalHeight={nat.h}
           style:filter={tone}
+          onerror={onFail}
+          {@attach cancelOnUnmount}
         />
       {/if}
       <div class="cap">
@@ -112,6 +134,14 @@
     container-type: size;
     margin: auto;
     --h: min(calc(94vh - 36px), calc(94vw / var(--a, 1)));
+    height: var(--h);
+    width: calc(var(--h) * var(--a, 1));
+  }
+  /* Заглушка «нет файла» в пропорциях фото; вписана в ту же область, что и картинка */
+  .gone {
+    position: relative;
+    margin: auto;
+    --h: min(calc(94vh - 36px), 70vh, calc(94vw / var(--a, 1)));
     height: var(--h);
     width: calc(var(--h) * var(--a, 1));
   }

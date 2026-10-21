@@ -1,6 +1,6 @@
 <script lang="ts">
   import { primaryPress } from '../../base/core/platform'
-  import { tick } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { gallery } from '../gallery/gallery.svelte'
@@ -9,32 +9,39 @@
   import { scanText } from '../folders/scan'
   import { allInAlbum, allInAlbumText } from './freephotos'
   import { libfilter } from '../marks/libfilter.svelte'
+  import { keymap } from '../../base/keys/keymap.svelte'
+  import { binsel } from '../bins/binsel.svelte'
+  import { binsOf, emptyBinText, filterBin, hiddenBinText } from '../bins/bins'
   import { folderfilter } from '../folders/folderfilter.svelte'
   import { isThumbWheel, thumbWheelAcc } from './thumbzoom'
-  import { PAD_X, anchorTop, colsOf, libWindow, photoAt } from './libwindow'
+  import { LIB_DEF, PAD_X, SPLITTER, anchorTop, colsOf, keepScroll, libFloor, libWindow, photoAt } from './libwindow'
   import { watchSize } from '../../base/ui/size'
   import LibraryBar from './LibraryBar.svelte'
   import Thumb from './Thumb.svelte'
 
-  // Высота библиотеки: по умолчанию 240px, меняется сплиттером и запоминается.
+  // Высота библиотеки: по умолчанию LIB_DEF, меняется сплиттером и запоминается.
+  // Сохранённая высота (h) — желаемая: при нехватке окна CSS сжимает ленту до одного ряда плиток (D15, 089),
+  // настройка при этом не меняется, и в большем окне лента снова прежняя.
   const KEY = 'libraryHeight'
   const MIN_H = 140
   let wh = $state(window.innerHeight)
+  let box = $state<HTMLElement>()
   let h = $state(load())
   // Пока тянут сплиттер, высота без анимации, иначе лента отстаёт от мыши.
   let resizing = $state(false)
-  const SPLITTER = 6
   // Крупный просмотр и открытая галерея раскладок сворачивают ленту: галерея
   // отнимает высоту у разворота, и без этого он сжимается до нечитаемого.
   const collapsed = $derived(modes.big || !!gallery.cur)
   const eff = $derived(Math.max(MIN_H, Math.min(h, Math.max(MIN_H, wh * 0.6))))
+  // Ниже этой высоты лента не сжимается: один полный ряд плиток (но не выше заданной).
+  const floor = $derived(libFloor(modes.thumbSize, eff))
 
   function load(): number {
     try {
       const v = Number(localStorage.getItem(KEY))
-      return v > 0 ? v : 240
+      return v > 0 ? v : LIB_DEF
     } catch {
-      return 240
+      return LIB_DEF
     }
   }
 
@@ -42,7 +49,8 @@
     if (!primaryPress(e)) return
     const el = e.currentTarget as HTMLElement
     const y0 = e.clientY
-    const h0 = eff
+    // Начало жеста — фактическая высота (лента могла быть сжата окном), а не заданная.
+    const h0 = box?.offsetHeight ?? eff
     el.setPointerCapture(e.pointerId)
     resizing = true
     const move = (ev: PointerEvent) => {
@@ -86,6 +94,23 @@
   const win = $derived(libWindow({ n: store.visible.length, width: gw, height: gh, scrollTop: st, size: modes.thumbSize }))
   const shown = $derived(store.visible.slice(win.r0 * win.cols, win.r1 * win.cols))
 
+  // Список ленты сменился (файлы пропали или добавились, 088): верхнее видимое фото остаётся на месте.
+  // Следим только за списком; ширина, размер и прокрутка читаются без подписки (зум ведёт applyZoom).
+  let prevIds: string[] = []
+  $effect.pre(() => {
+    const ids = store.visible.map((p) => p.id)
+    const prev = prevIds
+    prevIds = ids
+    const to = untrack(() => (grid ? keepScroll(prev, ids, grid.scrollTop, grid.clientWidth, modes.thumbSize) : null))
+    if (to === null) return
+    // Высота содержимого должна стать новой, иначе браузер подрежет прокрутку.
+    void tick().then(() => {
+      if (!grid || Math.abs(grid.scrollTop - to) < 0.5) return
+      grid.scrollTop = to
+      st = grid.scrollTop
+    })
+  })
+
   // Якорь зума — индекс фото под курсором (элемент мог уйти из окна); вне сетки — верхний видимый ряд.
   function anchor(g: HTMLElement): { index: number; cy: number; fy: number } | null {
     const r = g.getBoundingClientRect()
@@ -123,7 +148,13 @@
 <svelte:window bind:innerHeight={wh} />
 
 <!-- Свёрнутая лента не размонтируется: выделение, автосборка и прогрев миниатюр продолжаются. -->
-<div class="wrap" class:resizing style:height="{collapsed ? 0 : eff + SPLITTER}px" inert={collapsed}>
+<div
+  class="wrap"
+  class:resizing
+  style:flex-basis="{collapsed ? 0 : eff + SPLITTER}px"
+  style:min-height="{collapsed ? 0 : floor + SPLITTER}px"
+  inert={collapsed}
+>
   <div
     class="splitter"
     role="separator"
@@ -131,7 +162,15 @@
     title="Потяните, чтобы изменить высоту ленты фото"
     onpointerdown={split}
   ></div>
-  <div class="library" use:wheelOn class:over={drag.over === 'library'} style:height="{eff}px" data-drop="library" data-guide="library">
+  <div
+    class="library"
+    bind:this={box}
+    use:wheelOn
+    class:over={drag.over === 'library'}
+    style:min-height="{floor}px"
+    data-drop="library"
+    data-guide="library"
+  >
     <LibraryBar />
 
     <div
@@ -155,10 +194,16 @@
           {:else if folderfilter.allHidden(store.view.folders)}
             Все папки скрыты
             <button class="reset" onclick={() => folderfilter.showAll()}>Показать все</button>
-          {:else if allInAlbum(store.filter, store.free.length, store.inFolders.length)}
-            {allInAlbumText(folderfilter.active)}
+          {:else if binsel.shown && store.inBin.length === 0 && filterBin(store.photos, binsel.shown, binsel.index).length > 0}
+            {hiddenBinText(binsel.curName(binsOf(store.view)))}
+            <button class="reset" onclick={() => folderfilter.showAll()}>Показать все папки</button>
+          {:else if binsel.shown && store.inBin.length === 0}
+            {emptyBinText(binsel.curName(binsOf(store.view)), keymap.hint('binToggle'))}
+            <button class="reset" onclick={() => binsel.showAll()}>Показать все фото</button>
+          {:else if allInAlbum(store.filter, store.free.length, store.inBin.length)}
+            {allInAlbumText(folderfilter.active, binsel.curName(binsOf(store.view)))}
             <button class="reset" onclick={() => (store.filter = 'all')}>Показать все</button>
-          {:else if prefs.can('marks') && libfilter.active && store.inFolders.length > 0}
+          {:else if prefs.can('marks') && libfilter.active && store.inBin.length > 0}
             Ни одно фото не подходит под фильтр
             <button class="reset" onclick={() => libfilter.reset()}>Сбросить фильтр</button>
           {:else}
@@ -174,12 +219,17 @@
 </div>
 
 <style>
+  /* Основа flex-basis (eff + сплиттер) задана в разметке. Сжимается раньше холста: flex-shrink на порядки
+     больше, чем у Stage, а min-height (один ряд плиток) держит нижний предел; потом уступает холст */
   .wrap {
-    flex: none;
+    flex: 0 1 auto;
+    flex-shrink: 10000;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: height var(--move);
+    transition:
+      flex-basis var(--move),
+      min-height var(--move);
   }
   .wrap.resizing {
     transition: none;
@@ -194,11 +244,11 @@
   .splitter:hover {
     background: #3a3a3e;
   }
-  /* Высота ленты задана (eff) и от содержимого не зависит: пустое состояние «Все папки скрыты» её не меняет */
+  /* Высота ленты — от .wrap и от содержимого не зависит: пустое состояние «Все папки скрыты» её не меняет.
+     min-height (в разметке) = нижний предел: у свёрнутой ленты сетка не схлопывается, обрезает .wrap */
   .library {
     position: relative;
-    flex: none;
-    min-height: 0;
+    flex: 1 1 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;

@@ -23,7 +23,7 @@ export interface CoverSpec {
   spineSafe?: number // то же от корешка
 }
 
-// Типография в списке «Типография»: group — Фотосфера / Нетпринт / Свои размеры.
+// Типография в списке «Типография»: group — Фотосфера / Нетпринт / Фабрика Фотокниги / Свои размеры.
 export interface CoverPreset {
   id: string
   name: string
@@ -84,6 +84,9 @@ export interface CoverView {
   fix: string // «Не по шаблону Фотосферы…» (047); "" — по шаблону или не Фотосфера
 }
 
+// Типография, для которой есть выгрузка (App.PrintPlans, 081).
+export type PrintKind = 'fsfera' | 'fabrika'
+
 // Что уходит в App.Export (JSON-теги Go).
 export interface ExportOpts {
   range: string
@@ -92,7 +95,7 @@ export interface ExportOpts {
   pages: boolean
   cover: boolean // 00.jpg (032); Go игнорирует без обложки и в листе
   coverOnly: boolean // только обложка: диапазон игнорируется
-  fsfera: boolean // выгрузка для Фотосферы Pro (047): Go сам берёт всё, разворотами, 300 dpi
+  print: PrintKind | '' // выгрузка для типографии (047, 081): Go сам берёт всё, разворотами, 300 dpi
 }
 
 // Кнопка размера страницы из Go (App.PagePresets, 047). Нет поля (0/false) — пресет его не задаёт.
@@ -108,17 +111,26 @@ export interface PagePreset {
   hint?: string
 }
 
-// Готовность к выгрузке для Фотосферы Pro (App.FsferaPlan, 047). format "" — флажка нет.
-export interface FsferaPlan {
-  format: string // «30×30»
+// Готовность к выгрузке для типографии (App.PrintPlans, 047, 081). В списке только планы с форматом.
+// Тексты title/done/site/siteButton готовит Go, UI их рисует.
+export interface PrintPlan {
+  kind: PrintKind
+  title: string // подпись флажка: «Для Фотосферы Pro», «Для Фабрики Фотокниги»
+  format: string // «30×30»; "" — флажка нет
   pages: string // «Тонкие» | «Картон» | «Двойной картон» | ""
   spreads: number
   spine: number
+  min: number
   max: number
   folder: string // имя папки книги
+  coverName: string // имя файла обложки: 00.jpg / 1-00.jpg
+  quality: number // > 0 — качество задаёт типография, выбор в окне игнорируется
   block: string[] // мешает выгрузке
   coverFix: boolean // в block есть «не по шаблону»: у строки «Исправить»
   fixAt: number // номер этой строки в block; -1 — её нет
   warn: string[]
   memo: string[]
+  done: string // заголовок окна «Готово»
+  site: string // строка «На сайте: …»
+  siteButton: string // «Открыть Фотосферу» / «Открыть Фабрику Фотокниги»
 }

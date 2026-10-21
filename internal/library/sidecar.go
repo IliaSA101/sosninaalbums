@@ -82,6 +82,15 @@ func sidecarFor(key string, sides map[string]sidecar) sidecar {
 	return sidecar{}
 }
 
+// sideKind — форма имени сайдкара для лога без самого имени (073-7): «имя.расш.xmp»
+// (darktable, digiKam) или «имя.xmp» (Lightroom, Bridge).
+func sideKind(photo, side string) string {
+	if strings.EqualFold(side, photo+".xmp") {
+		return "имя.расш.xmp"
+	}
+	return "имя.xmp"
+}
+
 // readScan — заголовок фото для сканера: readInfo и отметки из XMP в JPEG и сайдкара.
 // Битый XMP не делает фото нечитаемым: отметок нет, строка в log.txt (через xl).
 // retry — сайдкар не открылся или не дочитался (диск, блокировка): результат не запоминать.
@@ -106,7 +115,7 @@ func readScan(f scanFile, xl *xmpLog) (ph Photo, retry bool, err error) {
 			if retry {
 				serr = fmt.Errorf("%s: %w", pe.Op, pe.Err) // в PathError полный (личный) путь
 			}
-			xl.printf("сайдкар %q: %v", paths.LogExt(f.side.path), serr)
+			xl.printf("сайдкар .xmp фото %q (%s): %v", paths.LogExt(f.path), sideKind(f.path, f.side.path), serr)
 		} else {
 			m = mergeMarks(m, mf, sm, sf)
 		}

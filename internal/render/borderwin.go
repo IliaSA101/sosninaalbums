@@ -1,6 +1,7 @@
 package render
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"math"
@@ -102,13 +103,13 @@ type borderPic struct {
 	img   *image.NRGBA
 }
 
-func (e *borderEnv) picture(path string) (*borderPic, error) {
+func (e *borderEnv) picture(ctx context.Context, path string) (*borderPic, error) {
 	st, err := stampOf(path)
 	if err != nil {
 		return nil, err
 	}
 	return e.pics.get(st, func() (*borderPic, error) {
-		img, err := loadBorderPic(path)
+		img, err := loadBorderPic(ctx, path)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +139,7 @@ type winSampler struct {
 }
 
 // sampler строит выборку маски w при dpi; nil — маски нет (вид без маски, окно не нашлось).
-func (e *borderEnv) sampler(w *WinMask, dpi int) (*winSampler, error) {
+func (e *borderEnv) sampler(ctx context.Context, w *WinMask, dpi int) (*winSampler, error) {
 	if w == nil || !finiteBox(w.Box, w.Rot) {
 		return nil, nil
 	}
@@ -146,7 +147,7 @@ func (e *borderEnv) sampler(w *WinMask, dpi int) (*winSampler, error) {
 	if int64(r.Dx())*int64(r.Dy()) > borderBuf {
 		return nil, errBorderBuf("маска окна", r)
 	}
-	a, err := e.winAlpha(w, r.Dx(), r.Dy())
+	a, err := e.winAlpha(ctx, w, r.Dx(), r.Dy())
 	if err != nil || a == nil {
 		return nil, err
 	}
@@ -157,7 +158,7 @@ func (e *borderEnv) sampler(w *WinMask, dpi int) (*winSampler, error) {
 // winAlpha — маска окна в осях места размером pw×ph px. Мягкий край — gen.FrameMask; картинка —
 // прозрачная область (gen.WindowMask по срезу) растянута на окно (gen.StretchWindowAlpha), которое
 // считает модель: отступы k·срез под предел 0,7 стороны (gen.ClampInsets), как у /media/f.
-func (e *borderEnv) winAlpha(w *WinMask, pw, ph int) (*image.Alpha, error) {
+func (e *borderEnv) winAlpha(ctx context.Context, w *WinMask, pw, ph int) (*image.Alpha, error) {
 	if w.Path == "" {
 		if !FrameHasMask(w.Kind) {
 			return nil, nil
@@ -170,7 +171,7 @@ func (e *borderEnv) winAlpha(w *WinMask, pw, ph int) (*image.Alpha, error) {
 			return a, nil
 		})
 	}
-	pic, err := e.picture(w.Path)
+	pic, err := e.picture(ctx, w.Path)
 	if err != nil {
 		return nil, photoErr(w.Path, err)
 	}
@@ -249,7 +250,7 @@ func (s *winSampler) mulDirect(dst []uint8, stride int, r image.Rectangle) {
 
 // winOf — выборка маски окна фото item; nil — маски нет. Кэши берутся у листа (item.env), вне
 // Render (тесты) — свои.
-func winOf(it item, dpi int) (*winSampler, error) {
+func winOf(ctx context.Context, it item, dpi int) (*winSampler, error) {
 	if it.ph.Win == nil {
 		return nil, nil
 	}
@@ -257,7 +258,7 @@ func winOf(it item, dpi int) (*winSampler, error) {
 	if env == nil {
 		env = &borderEnv{}
 	}
-	s, err := env.sampler(it.ph.Win, dpi)
+	s, err := env.sampler(ctx, it.ph.Win, dpi)
 	return s, photoErr(it.ph.Path, err)
 }
 

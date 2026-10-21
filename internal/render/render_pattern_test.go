@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
 	"image/draw"
@@ -250,9 +251,9 @@ func TestRenderBackdropFadeFull(t *testing.T) {
 	calls := 0
 	old := prepareFn
 	t.Cleanup(func() { prepareFn = old })
-	prepareFn = func(ph Photo, dpi int, clip image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
+	prepareFn = func(ctx context.Context, ph Photo, dpi int, clip image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
 		calls++
-		return old(ph, dpi, clip)
+		return old(ctx, ph, dpi, clip)
 	}
 	missing := filepath.Join(testkit.TempDir(t), "нет.jpg")
 	left := layout.Rect{W: 100, H: 100}

@@ -512,7 +512,7 @@ func equalComposition(got [][]string, want ...[]string) bool {
 // свои числа, надпись на корешке, разметка с проверкой файла и пропорций; отказ в проекте-листе.
 func TestAppCover(t *testing.T) {
 	a, _ := spreadsApp(t, []string{"a"}, []string{"b"})
-	if n := len(a.CoverPresets()); n != 7 {
+	if n := len(a.CoverPresets()); n != 13 {
 		t.Fatalf("пресетов %d", n)
 	}
 	v, err := a.CreateCover("", "a")

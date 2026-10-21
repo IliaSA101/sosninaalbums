@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PagePreset } from '../../base/core/types'
 import { foldOf } from './fold'
-import { exportPx, groupLabel, presetActive, presetFields, presetGroupOf, presetRows } from './presets'
+import { exportPx, groupLabel, presetActive, presetFields, presetGroupOf, presetHint, presetRows } from './presets'
 
 // Как отдаёт Go (App.PagePresets): общий ряд без dpi/layflat, ряд Фотосферы — с ними.
 const sq: PagePreset = { label: '25×25', group: '', w: 250, h: 250 }
@@ -72,6 +72,15 @@ describe('типография списка форматов', () => {
     expect(presetGroupOf(list, { pageW: 281, pageH: 284, dpi: 300, layflat: true, safe: 10 })).toBe('Фотосфера')
     expect(presetGroupOf(list, { pageW: 400, pageH: 300, dpi: 150, layflat: false, safe: 0 }, 'Нетпринт')).toBe('')
   })
+  it('group of active preset prefers saved among equals: одинаковые числа — группа, выбранная последней', () => {
+    const f20: PagePreset = { ...np20, label: '20×20', group: 'Фабрика Фотокниги' }
+    const both = [...list, f20]
+    const form = { pageW: 200, pageH: 203, dpi: 300, layflat: true, safe: 10 }
+    expect(presetGroupOf(both, form, 'Фабрика Фотокниги')).toBe('Фабрика Фотокниги')
+    expect(presetGroupOf(both, form, 'Нетпринт')).toBe('Нетпринт')
+    expect(presetGroupOf(both, form)).toBe('Нетпринт') // сохранённой нет — первая по порядку
+    expect(presetGroupOf(both, form, 'Фотосфера')).toBe('Нетпринт') // сохранённая не среди подсвеченных
+  })
   it('нет подсвеченного: сохранённая группа, если она есть в списке, иначе общие', () => {
     expect(presetGroupOf(list, blank, 'Нетпринт')).toBe('Нетпринт')
     expect(presetGroupOf(list, blank, 'Чужая')).toBe('')
@@ -133,5 +142,21 @@ describe('обрез пресета (066)', () => {
   it('пресет без обреза подсвечен при любом обрезе формы', () => {
     expect(presetActive(fs30, { ...s, bleed: 0 })).toBe(true)
     expect(presetActive(fs30, { ...s, bleed: 5 })).toBe(true)
+  })
+})
+
+describe('подсказка пресета по выбранной типографии', () => {
+  const nk: PagePreset = { label: '30×30', group: 'Нетпринт', w: 300, h: 305, dpi: 300, layflat: true, safe: 10, hint: 'Нетпринт: …' }
+  const fk: PagePreset = { ...nk, group: 'Фабрика Фотокниги', hint: 'Фабрика: …' }
+  const form = { pageW: 300, pageH: 305, dpi: 300, layflat: true, safe: 10 }
+  it('одинаковые числа: Фабрика — подсказка Фабрики, Нетпринт — Нетпринта', () => {
+    expect(presetHint([nk, fk], form, 'Фабрика Фотокниги')).toBe('Фабрика: …')
+    expect(presetHint([nk, fk], form, 'Нетпринт')).toBe('Нетпринт: …')
+  })
+  it('нет подсвеченного пресета в группе или у него нет подсказки — undefined', () => {
+    expect(presetHint([nk, fk], form, 'Фотосфера')).toBeUndefined()
+    expect(presetHint([nk, fk], { ...form, pageW: 123 }, 'Нетпринт')).toBeUndefined()
+    expect(presetHint([{ ...nk, hint: undefined }], form, 'Нетпринт')).toBeUndefined()
+    expect(presetHint([], form, '')).toBeUndefined()
   })
 })

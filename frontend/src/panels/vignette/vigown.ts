@@ -64,7 +64,7 @@ export const deleteVigTemplate = (id: string): Promise<boolean> => tplCall(Api.D
 export async function resetVignette(spreadId: string): Promise<boolean> {
   try {
     const r = (await Api.ResetVignette(spreadId)) as unknown as GridResult
-    store.apply(r.view)
+    if (!(await store.take(r.view))) return false
     if (r.left > 0) store.undoToast(leftText(r.left))
     return true
   } catch (e) {

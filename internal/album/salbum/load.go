@@ -27,6 +27,9 @@ type FileProject struct {
 	Spreads  []*model.Spread      `json:"spreads"`
 	Photos   map[string]FilePhoto `json:"photos"`
 	Marks    markList             `json:"marks,omitempty"` // свои отметки (v5, 004)
+	Bins     binList              `json:"bins,omitempty"`  // подборки фото (v15, 083)
+	// Fonts — свои гарнитуры текстов (v15, 082): id → название, без путей к файлам.
+	Fonts map[string]model.FontRef `json:"fonts,omitempty"`
 	// Vars — поля альбома из dev-сборок v6 (030): только чтение, Load переносит их в листы
 	// (moveAlbumVars), Save не пишет — поля шапки живут в Spread.Vars (решение 125).
 	Vars  *albumVars `json:"vars,omitempty"`
@@ -196,10 +199,13 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 		return nil, err
 	}
 	coverNoAuto(p)
+	p.Fonts = model.ClampFonts(f.Fonts, p.UsedFonts())
 	p.FitTexts()
+	p.SyncFonts() // после FitTexts, как в Editor: таблица — по стилям, имена — из реестра
 	p.FitStickers()
 	p.LoadOrder()
-	p.SetLoaded(decodeMarks(f.Marks, base, p.Folders))
+	bins := decodeBins(f.Bins)
+	p.SetLoaded(model.Side{Marks: decodeMarks(f.Marks, base, p.Folders, model.BinSet(bins)), Bins: bins})
 	return p, nil
 }
 

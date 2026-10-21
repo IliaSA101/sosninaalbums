@@ -4,7 +4,7 @@
   import { shapeKey } from '../../base/geom/shape'
   import { sheetIn } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import Spread from '../../editor/spread/Spread.svelte'
   import VigStrip from './VigStrip.svelte'
   import { VigSession, vigDialog } from './vigsession.svelte'

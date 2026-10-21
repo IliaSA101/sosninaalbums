@@ -4,7 +4,7 @@ import { primaryPress } from '../core/platform'
 import type { Payload, Target } from '../core/types'
 import { store } from '../core/store.svelte'
 import { dropOn } from './dropact'
-import { backdropTarget, cellSide, coverTarget, halfSide, isNoopMove, placeTarget, sheetFrac } from './hit'
+import { backdropTarget, binTarget, cellSide, coverTarget, halfSide, isNoopMove, placeTarget, sheetFrac } from './hit'
 
 const THRESHOLD = 5
 
@@ -154,6 +154,8 @@ function zoneTarget(d: Data, p: Payload): Target | null {
       return backdropTarget(d, p)
     case 'cover':
       return coverTarget(p)
+    case 'bin':
+      return binTarget(p)
   }
   return null
 }
@@ -186,6 +188,8 @@ function keyOf(t: Target | null): string {
       return t.many ? '' : `backdrop:${t.scope}`
     case 'cover':
       return t.many ? '' : 'cover'
+    case 'bin':
+      return 'bin'
   }
 }
 

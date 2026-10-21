@@ -4,13 +4,16 @@
   import { DPI_PRESETS, QUALITIES, estimateBytes, formatSize, type ExportPrefs } from './exportopts'
 
   // Разделы «Качество» и «Dpi» окна «Экспорт» (вынесено из ExportDialog, 075-11).
-  // dpiNow — выбранное dpi в числе (для Фотосферы 300); setPrefs/setDpi сохраняют выбор в localStorage.
+  // dpiNow — выбранное dpi в числе (в режиме печати 300); qualityNow — качество в числе (у плана со своим качеством — оно);
+  // qualityLocked — качество задаёт типография (серое, 081); setPrefs/setDpi сохраняют выбор в localStorage.
   let {
     prefs,
     settings,
     dpiNow,
     pagesNow,
     fs,
+    qualityNow,
+    qualityLocked,
     setPrefs,
     setDpi,
   }: {
@@ -19,6 +22,8 @@
     dpiNow: number
     pagesNow: boolean
     fs: boolean
+    qualityNow: number
+    qualityLocked: boolean
     setPrefs: (p: Partial<ExportPrefs>) => void
     setDpi: (v: number) => void
   } = $props()
@@ -27,13 +32,14 @@
   const albumIsPreset = $derived(DPI_PRESETS.some((d) => d.v === album))
 </script>
 
-<ExportGroup cap="Качество" role="radiogroup" label="Качество">
+<ExportGroup cap="Качество" off={qualityLocked} role="radiogroup" label="Качество">
   {#each QUALITIES as q (q.v)}
     <button
       class="chip"
-      class:on={prefs.quality === q.v}
+      class:on={qualityNow === q.v}
       role="radio"
-      aria-checked={prefs.quality === q.v}
+      aria-checked={qualityNow === q.v}
+      disabled={qualityLocked}
       onclick={() => setPrefs({ quality: q.v })}
     >
       <b>{q.v}</b>

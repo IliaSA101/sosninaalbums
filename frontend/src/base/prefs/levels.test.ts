@@ -49,6 +49,7 @@ const LEGACY_MIN: Record<FeatureId, 'simple' | 'standard' | 'full'> = {
   textRotate: 'full',
   panels: 'full',
   marks: 'simple', // спека 004
+  bins: 'standard', // 083: подборки фото; на «Простом» кнопки и клавиш нет
   vignette: 'standard', // 031: на «Простом» пунктов виньетки нет (решение 80)
   decor: 'standard', // 048: галерея фонов и стикеров; опора — фото на фоне
   border: 'standard', // 079: рамочки — also строки decor
@@ -71,8 +72,8 @@ describe('таблица уровней', () => {
       for (const l of LEVELS) expect(can(id, l), `${id}@${l}`).toBe(LEVELS.indexOf(l) >= LEVELS.indexOf(LEGACY_MIN[id]))
     }
   })
-  it('27 строк, у каждой краткое имя без повторов', () => {
-    expect(FEATURES).toHaveLength(27)
+  it('28 строк, у каждой краткое имя без повторов', () => {
+    expect(FEATURES).toHaveLength(28)
     const shorts = FEATURES.map((f) => f.short)
     expect(new Set(shorts).size).toBe(shorts.length)
     for (const s of shorts) expect(s.trim(), s).not.toBe('')

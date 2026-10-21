@@ -17,6 +17,7 @@ export type DialogState = 'undo' | 'shut'
 
 export interface KeyContext {
   inTextField: boolean // фокус в поле ввода текста/чисел: клавиши молчат
+  popup?: boolean // фокус внутри окна панели (Popover, data-barpop): Enter там — кнопка или поле окна, не «Перенести на разворот»
   widget?: boolean // фокус на ползунке, select или списке: стрелки и PageUp/PageDown/Home/End — его (074-19)
   onCheckbox: boolean // пробел на флажке переключает флажок
   galleryOpen: boolean
@@ -61,6 +62,8 @@ const stickerNudging = (c: KeyContext) => !c.bgMode && !!c.stickerSelected && (!
 const nudging = (c: KeyContext) => gridNudging(c) || stickerNudging(c)
 // Отметки (004): не в крупном просмотре и не при открытой галерее (лента свёрнута и inert). Зону решает область library.
 const marksOn = (c: KeyContext) => !c.big && !c.galleryOpen
+// Подборки (083): то же, и функция уровня (Go проверяет feature, но когда can не задан — всё доступно).
+const binsOn = (c: KeyContext) => marksOn(c) && (!c.can || c.can('bins'))
 
 // Условия команд (прежние when таблицы). Команда без записи — без условий; без клавиши по умолчанию — «пункт меню».
 const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
@@ -83,6 +86,11 @@ const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
       'markUnflag',
     ].map((id) => [id, marksOn]),
   ),
+  // Подборки (083): как отметки, плюс уровень; Del — только с выделением (без него в ленте Del молчит, как раньше).
+  binToggle: (c) => binsOn(c),
+  binNew: (c) => binsOn(c),
+  binAll: (c) => binsOn(c),
+  binRemove: (c) => binsOn(c) && c.hasSelection,
   prevSpread: (c) => !nudging(c),
   nextSpread: (c) => !nudging(c),
   nudgePlace: nudging,
@@ -112,6 +120,7 @@ export function keyCommand(e: KeyEvent, c: KeyContext): string | null {
   const chord = eventChord(e)
   if (!chord) return null
   if (c.widget && widgetKey(chord)) return null
+  if (c.popup && chord === 'Enter') return null
   for (const cmd of keymap.index.get(chord) ?? []) if (allowed(cmd, e, c)) return cmd.id
   return null
 }

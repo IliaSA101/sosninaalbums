@@ -46,7 +46,7 @@
   {/if}
 
   {#if grayOn}
-    <div class="more gray">
+    <div class="more gray" data-guide="auto-gray">
       Ч/б развороты
       <Seg
         items={GRAY_OPTIONS.map((o) => ({ id: o.v, label: o.label }))}

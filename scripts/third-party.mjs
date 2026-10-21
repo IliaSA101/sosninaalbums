@@ -9,13 +9,14 @@ import os from 'os'
 import path from 'path'
 import { execFileSync } from 'child_process'
 import { fileURLToPath } from 'url'
+import { withGoCaches } from './goenv.mjs'
 
 const R = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..').replace(/\\/g, '/')
 const W = R
 const TAGS = 'desktop,production'
 const goLicenses = path.join(process.env.GOPATH || path.join(os.homedir(), 'go'), 'bin', 'go-licenses')
 const run = (cmd, args) =>
-  execFileSync(cmd, args, { cwd: R, encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, GOFLAGS: `-tags=${TAGS}` } })
+  execFileSync(cmd, args, { cwd: R, encoding: 'utf8', maxBuffer: 1 << 26, env: withGoCaches({ ...process.env, GOFLAGS: `-tags=${TAGS}` }, R) })
 const GOROOT = run('go', ['env', 'GOROOT']).trim()
 const tmp = fs.mkdtempSync(path.join(process.env.GOTMPDIR || os.tmpdir(), 'notices-'))
 const glReport = run(goLicenses, ['report', './...'])

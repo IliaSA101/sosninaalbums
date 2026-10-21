@@ -19,6 +19,6 @@ export default defineConfig(({ mode }) => ({
     { name: 'keep-dist', closeBundle: () => writeFileSync('dist/gitkeep', '') },
   ],
   // Один бандл грузится из exe (go:embed), не по сети: порог 500 КБ для сайтов здесь ни о чём,
-  // а предупреждение роняет check.ps1. Поднято с 0.10 (503 КБ после 034).
-  build: { chunkSizeWarningLimit: 1000 },
+  // а предупреждение роняет check.ps1. Поднято с 0.10 (503 КБ после 034), 1500 — с 0.21 (1004 КБ после 081).
+  build: { chunkSizeWarningLimit: 1500 },
 }))

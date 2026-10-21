@@ -2,9 +2,19 @@
   import { untrack } from 'svelte'
   import { store } from '../../base/core/store.svelte'
   import { jobs } from '../../base/core/jobs.svelte'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { collectUi } from './collect.svelte'
-  import { extraLine, folderHint, missingLine, phaseOf, progressLine, progressPercent, summaryOf } from './collect'
+  import {
+    extraLine,
+    folderHint,
+    fontsRestrictedLine,
+    FONTS_HINT,
+    missingLine,
+    phaseOf,
+    progressLine,
+    progressPercent,
+    summaryOf,
+  } from './collect'
 
   // Окно «Собрать проект в папку» (спека 069): что войдёт и объём, дальше — ход копирования.
   // Вид и порядок кнопок — как у «Экспорт»; вопросы, диалог папки и проверки ведёт Go.
@@ -13,6 +23,7 @@
   const missing = $derived(info ? missingLine(info) : '')
   const sum = $derived(summaryOf(collectUi.album, collectUi.full, info))
   const extra = $derived(info ? extraLine(info) : '')
+  const restricted = $derived(info ? fontsRestrictedLine(info.fontsRestricted ?? []) : '')
 
   // Каждое открытие — заново: выбор из localStorage, прежние сводки и ошибка не показываются.
   $effect(() => {
@@ -59,7 +70,8 @@
           >
         </div>
       </div>
-      {#if extra}<p class="hint">{extra}</p>{/if}
+      {#if extra}<p class="hint" title={(info?.fonts ?? 0) > 0 ? FONTS_HINT : undefined}>{extra}</p>{/if}
+      {#if restricted}<p class="warn">{restricted}</p>{/if}
       {#if missing}<p class="warn">{missing}</p>{/if}
       <p class="hint">{folderHint(collectUi.folder)}</p>
       <p class="hint" class:pending={sum.pending}>{sum.total}</p>

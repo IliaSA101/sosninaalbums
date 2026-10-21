@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { watchSize } from '../../base/ui/size'
   import { keymap } from '../../base/keys/keymap.svelte'
   import { modes } from '../../base/prefs/view.svelte'

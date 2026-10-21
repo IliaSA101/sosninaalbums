@@ -123,6 +123,7 @@ export interface Source {
   skipped: number
   filtered: boolean
   again?: boolean // 078: пересборка — те же фото последней сборки
+  bin?: string // 083: без выделения фото взяты из показанной подборки
 }
 // similar — сколько кадров убрано как похожие (AutoPlan.similar): они уже в строке «Не возьму N похожих»,
 // в «из сеток и с фонов» не входят.
@@ -133,13 +134,28 @@ export function sourceLine(d: Source, photos: number | null, similar = 0): strin
     s = `Выделенные фото: ${d.count}`
     if (d.inAlbum > 0) s += `, из них ${d.inAlbum} уже в альбоме — переедут в новые развороты`
   } else {
-    s = `Все свободные фото ленты: ${d.count}`
+    s = d.bin ? `Свободные фото подборки «${d.bin}»: ${d.count}` : `Все свободные фото ленты: ${d.count}`
     if (d.filtered) s += ' (фильтр ленты)'
     if (d.skipped > 0) s += `, без ${d.skipped} ${plural(d.skipped, ['отклонённого', 'отклонённых', 'отклонённых'])}`
   }
   const off = photos !== null && photos > 0 ? d.count - photos - similar : 0
   if (off > 0) s += `; ${off} из сеток и с фонов не беру`
   return s
+}
+
+// Ссылка в строке источника (080-3): второй путь открытия. В окне пересборки — «Собрать свободные: N»,
+// в обычном окне — «Пересобрать прошлую (N фото)»; пути нет — пусто.
+export function altLabel(d: { again?: boolean; alt?: { ids: readonly string[] } }): string {
+  if (!d.alt) return ''
+  return d.again ? `Собрать свободные: ${d.alt.ids.length}` : `Пересобрать прошлую (${d.alt.ids.length} фото)`
+}
+
+// Строка-статус у «Вариант ‹ › » (080-1): варианты first…last совпали с текущим сбором, показан next; пусто — другой
+// вариант уже выбран руками. Три и больше подряд — других сборок этих фото, похоже, нет.
+export function sameText(s: { first: number; last: number; next: number } | null, shown: number): string {
+  if (!s || s.next !== shown) return ''
+  if (s.last - s.first >= 2) return `Варианты ${s.first}–${s.last} не отличаются — других сборок этих фото, похоже, нет`
+  return `Вариант ${s.last} не отличается от текущего — показан ${s.next}`
 }
 
 // Сколько разворотов в альбоме до сборки. Пересборка заменяет развороты прошлой сборки (Go считает от альбома

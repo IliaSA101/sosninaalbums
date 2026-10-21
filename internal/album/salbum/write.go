@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -37,13 +38,13 @@ func encFor(base string, relOnly bool) pathEnc {
 	}
 }
 
-// Encode — файл проекта с отметками p.loaded (проект без Editor).
+// Encode — файл проекта с отметками и подборками p.loaded (проект без Editor).
 func Encode(p *model.Project, base string) ([]byte, error) {
 	return encodeWith(p, p.Loaded(), encFor(base, false))
 }
 
-// encodeWith — файл проекта и свои отметки marks; пути — по enc.
-func encodeWith(p *model.Project, marks map[string]model.Mark, enc pathEnc) ([]byte, error) {
+// encodeWith — файл проекта, свои отметки и подборки side; пути — по enc.
+func encodeWith(p *model.Project, side model.Side, enc pathEnc) ([]byte, error) {
 	f := FileProject{
 		Version:  model.FormatVersion,
 		Product:  model.NormProduct(p.Product),
@@ -52,6 +53,7 @@ func encodeWith(p *model.Project, marks map[string]model.Mark, enc pathEnc) ([]b
 		Spreads:  p.Spreads,
 		Photos:   make(map[string]FilePhoto, len(p.Photos)),
 		Cover:    encodeCover(p.Cover, enc),
+		Fonts:    p.Fonts, // только названия: файлы шрифтов альбом не несёт (082-8)
 	}
 	if f.Spreads == nil {
 		f.Spreads = []*model.Spread{}
@@ -79,39 +81,40 @@ func encodeWith(p *model.Project, marks map[string]model.Mark, enc pathEnc) ([]b
 		f.Photos[id] = fp
 	}
 	f.SpreadGuide, f.SpreadGuideAbs = encodeGuide(p.SpreadGuide, p.SpreadGuideAlt, enc)
-	f.Marks = encodeMarks(marks, enc)
+	f.Bins = slices.Clone(side.Bins)
+	f.Marks = encodeMarks(side.Marks, model.BinSet(side.Bins), enc)
 	return json.MarshalIndent(f, "", "  ")
 }
 
 // Save пишет проект; относительные пути считаются от папки файла.
 func Save(p *model.Project, path string) error { return SaveWith(p, path, p.Loaded()) }
 
-// SaveWith — Save со своими отметками marks (Editor держит их отдельно от проекта).
-func SaveWith(p *model.Project, path string, marks map[string]model.Mark) error {
+// SaveWith — Save со своими отметками и подборками side (Editor держит их отдельно от проекта).
+func SaveWith(p *model.Project, path string, side model.Side) error {
 	base, err := filepath.Abs(filepath.Dir(path))
 	if err != nil {
 		return err
 	}
-	return Write(p, path, base, marks)
+	return Write(p, path, base, side)
 }
 
 // Write — запись через временный файл, чтобы сбой не испортил проект.
 // base == "" — все пути абсолютные (черновик).
-func Write(p *model.Project, path, base string, marks map[string]model.Mark) error {
-	return writeEnc(p, path, marks, encFor(base, false))
+func Write(p *model.Project, path, base string, side model.Side) error {
+	return writeEnc(p, path, side, encFor(base, false))
 }
 
 // WriteRel — Write для собранной папки (069): пути внутри base — только относительные, без
 // запасного abs; вне base (пропавшие фото) — абсолютные.
-func WriteRel(p *model.Project, path, base string, marks map[string]model.Mark) error {
+func WriteRel(p *model.Project, path, base string, side model.Side) error {
 	if base == "" {
 		return fmt.Errorf("запись с относительными путями без папки альбома")
 	}
-	return writeEnc(p, path, marks, encFor(base, true))
+	return writeEnc(p, path, side, encFor(base, true))
 }
 
-func writeEnc(p *model.Project, path string, marks map[string]model.Mark, enc pathEnc) error {
-	data, err := encodeWith(p, marks, enc)
+func writeEnc(p *model.Project, path string, side model.Side, enc pathEnc) error {
+	data, err := encodeWith(p, side, enc)
 	if err != nil {
 		return err
 	}

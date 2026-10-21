@@ -1,6 +1,7 @@
 package render
 
 import (
+	"context"
 	"crypto/sha256"
 	"errors"
 	"image"
@@ -242,6 +243,43 @@ func textBlock(s string, x, y, w float64, st text.Style) TextDraw {
 	return TextDraw{X: x, Y: y, Box: text.Layout(s, st, w), Style: st}
 }
 
+// TestTextRelayoutOnFontGen — набор шрифтов сменился после снимка (Gen запомнен и не совпал):
+// строки разбиваются заново из Text; совпал или не запомнен (0) — Box рисуется как есть (082).
+func TestTextRelayoutOnFontGen(t *testing.T) {
+	opt := Options{PageW: 80, PageH: 40, DPI: 100}
+	st := text.Style{Font: "montserrat", Size: 18, Color: "#000000", Align: "left"}
+	const s = "Анна и Павел"
+	stale := textBlock("Ж", 5, 5, 60, st) // строки «старого» шрифта: не те, что дал бы Text
+	stale.Text = s
+	fresh := textBlock(s, 5, 5, 60, st)
+	draw := func(td TextDraw) []byte {
+		img, err := Render(Spread{Texts: []TextDraw{td}}, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return img.Pix
+	}
+	asIs, want := draw(textBlock("Ж", 5, 5, 60, st)), draw(fresh)
+	if slices.Equal(asIs, want) {
+		t.Fatal("старые и новые строки рисуются одинаково — тест ничего не различает")
+	}
+	for _, c := range []struct {
+		name string
+		gen  uint64
+		same []byte
+	}{
+		{"не запомнено", 0, asIs},
+		{"набор тот же", text.Gen(), asIs},
+		{"набор сменился", text.Gen() + 1, want},
+	} {
+		td := stale
+		td.Gen = c.gen
+		if got := draw(td); !slices.Equal(got, c.same) {
+			t.Errorf("%s: рисунок не тот", c.name)
+		}
+	}
+}
+
 // inkBounds — рамка пикселей, отличных от фона bg.
 func inkBounds(img *image.RGBA, bg color.RGBA) (r image.Rectangle) {
 	b := img.Bounds()
@@ -347,19 +385,21 @@ func TestParseHex(t *testing.T) {
 func TestDrawItemsPanicBecomesError(t *testing.T) {
 	old := prepareFn
 	t.Cleanup(func() { prepareFn = old })
-	prepareFn = func(Photo, int, image.Rectangle) (*image.NRGBA, image.Rectangle, error) { panic("декодер") }
-	err := drawItems(image.NewRGBA(image.Rect(0, 0, 10, 10)), []item{{ph: Photo{Path: "a.jpg"}}}, 100)
+	prepareFn = func(context.Context, Photo, int, image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
+		panic("декодер")
+	}
+	err := drawItems(context.Background(), image.NewRGBA(image.Rect(0, 0, 10, 10)), []item{{ph: Photo{Path: "a.jpg"}}}, 100)
 	if err == nil || !strings.Contains(err.Error(), "декодер") {
 		t.Fatalf("ждали ошибку с причиной паники, получили %v", err)
 	}
 }
 
-// После первой ошибки новые фото не запускаются: максимум те, кто уже получил слот (их 3).
+// После первой ошибки новые фото не запускаются: максимум те, кто уже получил слот (их photoSlots()).
 func TestDrawItemsStopsAfterError(t *testing.T) {
 	old := prepareFn
 	t.Cleanup(func() { prepareFn = old })
 	var calls atomic.Int32
-	prepareFn = func(ph Photo, _ int, _ image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
+	prepareFn = func(_ context.Context, ph Photo, _ int, _ image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
 		calls.Add(1)
 		if ph.Path == "0" {
 			return nil, image.Rectangle{}, errors.New("не открылось")
@@ -370,11 +410,11 @@ func TestDrawItemsStopsAfterError(t *testing.T) {
 	for i := range items {
 		items[i].ph.Path = strconv.Itoa(i)
 	}
-	if err := drawItems(image.NewRGBA(image.Rect(0, 0, 10, 10)), items, 100); err == nil {
+	if err := drawItems(context.Background(), image.NewRGBA(image.Rect(0, 0, 10, 10)), items, 100); err == nil {
 		t.Fatal("ждали ошибку")
 	}
-	if n := calls.Load(); n > 3 {
-		t.Fatalf("запущено %d фото из 30, ждали не больше 3", n)
+	if n, lim := calls.Load(), photoSlots(); int(n) > lim {
+		t.Fatalf("запущено %d фото из 30, ждали не больше %d", n, lim)
 	}
 }
 

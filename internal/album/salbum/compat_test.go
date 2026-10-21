@@ -24,6 +24,7 @@ import (
 const (
 	v12Shape = "testdata/compat/v12-shape.json" // 0.17
 	v13Shape = "testdata/compat/v13-shape.json" // 0.18 (тег v0.18.0)
+	v14Shape = "testdata/compat/v14-shape.json" // 0.20 (тег v0.20.0)
 )
 
 func readShape(t *testing.T, path string) map[string]string {
@@ -112,6 +113,21 @@ func TestV14ReadableBy018(t *testing.T) {
 	dir := testkit.TempDir(t)
 	readableBy(t, "0.18", v13Shape, borderProject(dir), dir, map[string]string{
 		"$.spreads[].grid[].border": "object", "$.spreads[].grid[].border.cut": "array", "$.photos{}.fade": "number"})
+}
+
+// Файл формата 15 держит форму ключей, известных 0.20 (083, design §2.5): 0.20 видит номер 15
+// и говорит «сохранён более новой версией», а не «повреждён». Новые ключи 15 — подборки, членство
+// отметок и свои шрифты (082) — в файле есть, в снимке 0.20 нет; id своей гарнитуры в стиле —
+// та же строка style.font.
+func TestV15ReadableBy020(t *testing.T) {
+	dir := testkit.TempDir(t)
+	p := binsProject(dir)
+	const lato = "my:0e82892fea1dcf13"
+	p.Spreads[0].Texts = []*model.TextBlock{{ID: "0a0b0c0d0e01", W: 50, Text: "Анна", Style: model.TextStyle{Font: lato, Size: 20}}}
+	p.Fonts = map[string]model.FontRef{lato: {Name: "Lato"}}
+	readableBy(t, "0.20", v14Shape, p, dir, map[string]string{
+		"$.bins": "array", "$.bins[]": "object", "$.bins[].id": "string", "$.bins[].name": "string", "$.marks[].bins": "array",
+		"$.fonts": "object", "$.fonts{}": "object", "$.fonts{}.name": "string"})
 }
 
 // readableBy — общее тело: снимок формы выпуска rel (shapePath) против типов FileProject, полного

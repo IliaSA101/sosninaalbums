@@ -13,7 +13,7 @@
   import { modes } from '../../base/prefs/view.svelte'
   import MarkupBlock from '../markup/MarkupBlock.svelte'
   import { FOLD_ITEMS, foldChangeNote, foldFields, foldNote, foldOf } from './fold'
-  import { groupLabel, presetActive, presetFields, presetGroupOf, presetRows, exportPx, type Preset } from './presets'
+  import { groupLabel, presetActive, presetFields, presetGroupOf, presetHint, presetRows, exportPx, type Preset } from './presets'
   import { NUMS, norm, same } from './settingsnorm'
 
   // base — настройки, с которыми форма сверялась последний раз.
@@ -79,7 +79,7 @@
       .catch(() => {})
   })
 
-  const activeHint = $derived(presets.find((p) => p.hint && presetActive(p, s))?.hint)
+  const activeHint = $derived(presetHint(presets, s, group))
 
   function reset() {
     s = { ...store.view.settings }

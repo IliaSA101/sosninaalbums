@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { screenDpr } from '../../base/ui/dpr.svelte'
   import { primaryPress } from '../../base/core/platform'
   import { watchSize } from '../../base/ui/size'
   import type { Frame, Rect, SpreadView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
   import { store } from '../../base/core/store.svelte'
   import { thumbUrl, previewUrl, wantPreview } from '../../base/core/media'
+  import { cancelOnUnmount } from '../../base/ui/imgcancel'
   import { colorBadge } from './color'
   import { DEFAULT_FRAME } from '../../base/geom/frame'
   import { liveImage, liveTransform } from '../tilt/tiltlive'
@@ -23,9 +25,10 @@
   import { gestureClickAllowed } from '../places/placegesture'
   import { moveSelected } from '../places/groupgesture'
   import { additive, bodyAction } from '../places/gesture'
-  import Icon from '../../base/ui/Icon.svelte'
+  import MissPhoto from '../../base/ui/MissPhoto.svelte'
   import DpiMark from './DpiMark.svelte'
   import { missTip } from '../../panels/library/missing'
+  import { autocheck } from '../../panels/folders/autocheck'
 
   // Ячейка фото: рамка из раскладки Go, внутри кадр (спека 006). Геометрию картинки
   // присылает Go (frames[i].img); локально считаем только предпросмотр до отпускания.
@@ -73,9 +76,9 @@
   const inset = $derived(cornerInset(w.shape, w.radius, w.win.w, w.win.h))
   // Прозрачность — у фото (у .clip), рамочка поверх не прозрачнеет.
   const fade = $derived(preview ? 0 : borderlive.fadeOf(spread.id, id, fv?.fade ?? 0))
-  // Рамочка пропала или новее программы (U5): подсказка на всей ячейке, как у стикера; у пропавшего фото своя (.miss).
+  // Рамочка пропала или новее программы (U5): подсказка на всей ячейке, как у стикера; у пропавшего фото своя (MissPhoto).
   const borderNote = $derived(border && !mini ? borderTip(border, store.missing, store.missingNames) : undefined)
-  const bpx = $derived(border ? borderPx(r.w, spread.w, width, globalThis.devicePixelRatio || 1) : 0)
+  const bpx = $derived(border ? borderPx(r.w, spread.w, width, screenDpr.value) : 0)
   // Маска окна рамочки-картинки и мягкого края: ставится, когда PNG открылся (иначе фото пропало бы целиком).
   const maskSrc = $derived(border?.maskUrl ? borderSrc(border.maskUrl, bpx) : '')
   let maskReady = $state('')
@@ -100,7 +103,7 @@
   let cw = $state(0)
   let ch = $state(0)
   const longSide = $derived(Math.max((img.w / r.w) * cw, (img.h / r.h) * ch))
-  const hiRes = $derived(!mini && wantPreview(spread.photos.length, longSide, globalThis.devicePixelRatio || 1))
+  const hiRes = $derived(!mini && wantPreview(spread.photos.length, longSide, screenDpr.value))
 
   // Тело (спека 009, gestures.md): «Авто» — перенос фото (обмен, вставка, другой разворот, лента);
   // «Ручная» — перенос места: выделяет фото и двигает рамку, у члена группы — всю группу. Кадр двигает ✥.
@@ -165,7 +168,7 @@
     style:--m={maskUrlCss(maskReady)}
   >
     {#if missing}
-      <div class="miss" title={missTip(id, store.missingNames)}><Icon name="photo-minus" size={mini ? 12 : 28} stroke={1.8} /></div>
+      <MissPhoto size={mini ? 12 : 28} tip={missTip(id, store.missingNames)} />
     {:else}
       {@const pos = `left:${pct(img.x - w.win.x, w.win.w)};top:${pct(img.y - w.win.y, w.win.h)};width:${pct(img.w, w.win.w)};height:${pct(img.h, w.win.h)}`}
       <img
@@ -175,8 +178,10 @@
         style:transform={liveTransform(cur, fv)}
         style:filter={tone}
         src={thumbUrl(id)}
+        {@attach cancelOnUnmount}
         alt=""
         draggable="false"
+        onerror={() => autocheck.soon(true)}
       />
       {#if hiRes}<img
           class="ph"
@@ -187,6 +192,7 @@
           alt=""
           draggable="false"
           loading="lazy"
+          {@attach cancelOnUnmount}
           onload={() => (previewReady = true)}
         />{/if}
     {/if}
@@ -265,15 +271,6 @@
   /* Рамку выделения рисует SelFrame, обмен и вставку — CellOverlay (выше стека). */
   .cell.lifted {
     opacity: 0.35;
-  }
-  /* Фото нет на диске: серая ячейка со значком */
-  .miss {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    background: #6a6a6e;
-    color: #cfcfd2;
   }
   .third {
     position: absolute;

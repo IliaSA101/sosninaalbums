@@ -42,3 +42,12 @@ export function placeSubmenu(item: Box, size: Size, view: Size, margin = 8): { l
   const left = flipped ? item.left - size.width : right
   return { left, top: clamp(item.top, margin, Math.max(margin, view.height - size.height - margin)), flipped }
 }
+
+// Окно панели открылось (Popover шлёт на window с якорем в detail): другие открытые окна панели закрываются, как при
+// щелчке по чужой кнопке, — но когда окно открыла клавиша (B, Shift+B), щелчка нет. Вложенное окно (якорь внутри
+// этого окна) его не закрывает.
+export const BARPOP_OPEN = 'barpop-open'
+export function closesOnPeer(opened: unknown, own: { anchor?: unknown; pop?: { contains(n: never): boolean } | null }): boolean {
+  if (typeof opened !== 'object' || opened === null || opened === own.anchor) return false
+  return !own.pop?.contains(opened as never)
+}

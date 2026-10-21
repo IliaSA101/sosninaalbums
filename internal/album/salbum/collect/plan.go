@@ -3,8 +3,8 @@
 // путями. Пишет только в папку сбора и только под своими именами: ничего не перезаписывает и не
 // удаляет, кроме своих временных *.sacopy.tmp. Методы App — internal/app/collect.go.
 //
-// Карта: plan.go (Make, раскладка по папкам, имена), copy.go (Copy, CheckSpace, ErrDiskFull),
-// album.go (Album, Save — собранный альбом), size.go (SizeText).
+// Карта: plan.go (Make, раскладка по папкам, имена), fonts.go (AddFonts — свои шрифты), copy.go
+// (Copy, CheckSpace, ErrDiskFull), album.go (Album, Save — собранный альбом), size.go (SizeText).
 package collect
 
 import (
@@ -73,6 +73,10 @@ type Plan struct {
 	MissingGuides int      // разметок, которых нет (остаются со старым путём)
 	SideBusy      int      // сайдкаров, чьё имя в папке занято чужим файлом: не копируются
 	Bytes         int64    // к копированию (без Skip)
+	// Свои шрифты (082, AddFonts): гарнитуры, чьи файлы запрещено переносить, и сколько стоящих в
+	// альбоме гарнитур нет на этом компьютере.
+	FontsRestricted []string
+	MissingFonts    int
 }
 
 // Info — сводка для окна (069, контракт CollectInfo). Scanning и FolderName заполняет App: лента
@@ -87,11 +91,17 @@ type Info struct {
 	Bytes         int64  `json:"bytes"`
 	Scanning      bool   `json:"scanning"`
 	FolderName    string `json:"folderName"` // имя папки, которую создаст сбор (заполняет App)
+	// Fonts — файлов своих шрифтов к копированию; FontsRestricted — названия гарнитур, которые
+	// лицензия не даёт переносить; MissingFonts — гарнитур альбома нет на этом компьютере (082).
+	Fonts           int      `json:"fonts"`
+	FontsRestricted []string `json:"fontsRestricted"`
+	MissingFonts    int      `json:"missingFonts"`
 }
 
 // Info — сводка плана; сайдкары считаются только в байтах.
 func (pl Plan) Info() Info {
-	in := Info{Missing: len(pl.Missing), MissingGuides: pl.MissingGuides, Bytes: pl.Bytes}
+	in := Info{Missing: len(pl.Missing), MissingGuides: pl.MissingGuides, Bytes: pl.Bytes,
+		FontsRestricted: append([]string{}, pl.FontsRestricted...), MissingFonts: pl.MissingFonts}
 	for _, it := range pl.Items {
 		switch {
 		case it.Kind == KindPhoto && len(it.Refs) > 0:
@@ -102,6 +112,8 @@ func (pl Plan) Info() Info {
 			in.Own++
 		case it.Kind == KindGuide:
 			in.Guides++
+		case it.Kind == KindFont:
+			in.Fonts++
 		}
 	}
 	return in
@@ -292,11 +304,16 @@ func ownOnlyRefs(p *model.Project) map[string]bool {
 }
 
 // fileExt — расширение годится для вида: копируем только то, что программа сама берёт (фото —
-// JPEG и PNG, своё из библиотеки — ещё SVG, как decor.ImportSticker; разметка — GuideExt).
+// JPEG и PNG, своё из библиотеки — ещё SVG, как decor.ImportSticker; разметка — GuideExt; шрифт —
+// TTF и OTF).
 // Подменённый .salbum иначе вынес бы в папку сбора чужие файлы, .lnk, .url, desktop.ini.
 func fileExt(kind, path string) bool {
-	if kind == KindGuide {
+	switch kind {
+	case KindGuide:
 		return salbum.GuideExt(path)
+	case KindFont:
+		ext := strings.ToLower(filepath.Ext(path))
+		return ext == ".ttf" || ext == ".otf"
 	}
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".jpg", ".jpeg", ".png":

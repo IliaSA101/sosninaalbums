@@ -14,7 +14,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum/collect"
-	"github.com/IliaSA101/sosninaalbums/internal/export/fsfera"
+	"github.com/IliaSA101/sosninaalbums/internal/export/printshop"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -57,7 +57,7 @@ type CollectOptions struct {
 // collectJob — проверенный сбор: снимок альбома, план для папки и файл собранного альбома.
 type collectJob struct {
 	p       *model.Project
-	marks   map[string]model.Mark
+	side    model.Side
 	dir     string // папка альбома внутри выбранной
 	album   string // dir/<имя>.salbum
 	replace bool   // файл альбома уже есть: перед записью — резервная копия
@@ -80,15 +80,15 @@ func (a *App) collectExtra(all bool) (extra []string, scanning bool) {
 
 // CollectInfo — сводка окна сбора: что войдёт и объём (без папки назначения). Проект не меняется.
 func (a *App) CollectInfo(all bool) collect.Info {
-	p, _ := a.editor().SnapshotMarks()
+	p, _ := a.editor().SnapshotSide()
 	extra, scanning := a.collectExtra(all)
-	pl, err := collect.Make(p, extra, "", os.Stat)
+	pl, err := a.collectPlan(p, extra, "")
 	if err != nil {
 		log.Printf("сбор: сводка: %v", paths.NoPath(err))
 	}
 	in := pl.Info()
 	in.Scanning = scanning
-	in.FolderName = fsfera.FolderName(a.editor().Path())
+	in.FolderName = printshop.FolderName(a.editor().Path())
 	return in
 }
 
@@ -111,10 +111,10 @@ func (a *App) Collect(o CollectOptions) (bool, error) {
 	}()
 
 	ed := a.editor()
-	p, marks := ed.SnapshotMarks()
+	p, side := ed.SnapshotSide()
 	open := ed.Path()
 	extra, _ := a.collectExtra(o.All)
-	pre, err := collect.Make(p, extra, "", os.Stat)
+	pre, err := a.collectPlan(p, extra, "")
 	if err != nil {
 		return false, err
 	}
@@ -129,7 +129,7 @@ func (a *App) Collect(o CollectOptions) (bool, error) {
 		return false, err
 	}
 	a.rememberDir(prefs.DirCollect, parent)
-	j, ok, err := a.prepareCollect(p, marks, extra, parent, open)
+	j, ok, err := a.prepareCollect(p, side, extra, parent, open)
 	if !ok || err != nil {
 		return false, err
 	}
@@ -144,11 +144,11 @@ func (a *App) Collect(o CollectOptions) (bool, error) {
 
 // prepareCollect — папка альбома в выбранной parent, план для неё, вопрос о замене альбома и
 // место на диске. ok=false без ошибки — пользователь ответил «нет».
-func (a *App) prepareCollect(p *model.Project, marks map[string]model.Mark, extra []string, parent, open string) (collectJob, bool, error) {
+func (a *App) prepareCollect(p *model.Project, side model.Side, extra []string, parent, open string) (collectJob, bool, error) {
 	if paths.CheckLocalPath(parent) != nil {
 		return collectJob{}, false, errors.New(noUNC) //nolint:staticcheck // текст уходит пользователю тостом как есть
 	}
-	name := fsfera.FolderName(open) // имя файла альбома без расширения; черновик — «Альбом»
+	name := printshop.FolderName(open) // имя файла альбома без расширения; черновик — «Альбом»
 	dir, _, err := paths.BookDir(parent, name, "альбома")
 	if err != nil {
 		return collectJob{}, false, paths.NoPath(err)
@@ -156,11 +156,11 @@ func (a *App) prepareCollect(p *model.Project, marks map[string]model.Mark, extr
 	if inPhotoFolder(dir, p.Folders) {
 		return collectJob{}, false, errors.New(inFolders) //nolint:staticcheck // текст уходит пользователю тостом как есть
 	}
-	j := collectJob{p: p, marks: marks, dir: dir, album: filepath.Join(dir, name+projectExt)}
+	j := collectJob{p: p, side: side, dir: dir, album: filepath.Join(dir, name+projectExt)}
 	if open != "" && (paths.SamePath(j.album, open) || sameFile(j.album, open)) {
 		return collectJob{}, false, errors.New("Это файл открытого альбома — выберите другую папку") //nolint:staticcheck // текст уходит пользователю тостом как есть
 	}
-	if j.pl, err = collect.Make(p, extra, dir, os.Stat); err != nil {
+	if j.pl, err = a.collectPlan(p, extra, dir); err != nil {
 		return collectJob{}, false, paths.NoPath(err)
 	}
 	text, err := replaceAlbumQuestion(j.album)
@@ -238,7 +238,7 @@ func (a *App) runCollect(ctx context.Context, cancel context.CancelFunc, j colle
 	})
 	copyFailed := err != nil
 	if err == nil {
-		q, qm := collect.Album(j.p, j.marks, j.dir, j.pl)
+		q, qm := collect.Album(j.p, j.side, j.dir, j.pl)
 		if j.replace {
 			err = a.backupReplaced(j.album)
 		}

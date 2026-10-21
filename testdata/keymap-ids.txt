@@ -91,3 +91,10 @@ bgNudge
 bgRemove
 bgExit
 borderGallery
+tplExport
+tplImport
+showData
+binToggle
+binNew
+binRemove
+binAll

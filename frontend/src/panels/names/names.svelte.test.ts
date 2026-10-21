@@ -9,7 +9,7 @@ vi.mock('../../base/core/store.svelte', () => ({
       return live
     },
     spread: { id: 's1' },
-    apply: vi.fn(),
+    take: vi.fn(async () => true),
     notify: vi.fn(),
   },
   Api: {
@@ -236,7 +236,7 @@ describe('namesUi: вставка', () => {
     namesUi.caption = false
     expect(await namesUi.apply()).toBe(true)
     expect(Api.PasteNames).toHaveBeenCalledWith('s1', { from: 'list', text: 'Иванов Пётр', firstFirst: true, caption: false })
-    expect(store.apply).toHaveBeenCalledWith(view)
+    expect(store.take).toHaveBeenCalledWith(view)
     expect(store.notify).toHaveBeenCalledWith('Имена вставлены. Подписано: 23 из 25, лишних строк: 1')
     expect(namesUi.open).toBe(false)
   })
@@ -265,6 +265,6 @@ describe('namesUi: вставка', () => {
     expect(await namesUi.apply()).toBe(false)
     expect(namesUi.open).toBe(true)
     expect(namesUi.error).toBe('Список имён слишком длинный')
-    expect(store.apply).not.toHaveBeenCalled()
+    expect(store.take).not.toHaveBeenCalled()
   })
 })

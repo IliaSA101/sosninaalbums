@@ -11,12 +11,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { mainRoot, withGoCaches } from './goenv.mjs'
 
 // Места общие для основной копии и всех worktree агентов (у проверок разные GOTMPDIR):
 // .gotmp основной копии — рядом с общим .git.
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: here, encoding: 'utf8' })
-const main = common.status === 0 ? path.dirname(common.stdout.trim()) : here
+const main = mainRoot(here)
 const dir = path.join(main, '.gotmp', 'heavy')
 const slots = Math.max(1, Number(process.env.SA_HEAVY_SLOTS) || 3)
 const cpuMax = Number(process.env.SA_HEAVY_CPU) || 70
@@ -101,7 +101,7 @@ process.on('SIGINT', () => (free(), process.exit(130)))
 process.on('SIGTERM', () => (free(), process.exit(143)))
 let r
 try {
-  r = spawnSync(cmd, args, { stdio: 'inherit', cwd: process.cwd(), env: process.env })
+  r = spawnSync(cmd, args, { stdio: 'inherit', cwd: process.cwd(), env: withGoCaches(process.env, here) })
 } finally {
   free()
 }

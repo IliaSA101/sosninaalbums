@@ -252,6 +252,11 @@ func FuzzLoad(f *testing.F) {
 {"path":"отбор/1.JPG","rating":1},{"path":"../../../x.jpg","rating":2},{"path":"x.jpg","abs":"\\\\srv\\s\\x.jpg","flag":-1},
 {"path":"C:\\b\\..\\c\\2.jpg","rating":9,"label":"pink","flag":2},{"path":"3.jpg"},null,{"path":"Отбор/4.jpg","label":"other","rating":-1}]}`))
 	f.Add([]byte(`{"version":5,"marks":{"path":"a.jpg"}}`))
+	// 083: подборки — плохой и повторный ID, пустое и повторное имя, не список, чужое членство.
+	f.Add([]byte(`{"version":15,"bins":[{"id":"b1","name":" Обязательно "},{"id":"b1","name":"x"},{"id":"B!","name":"y"},
+{"id":"b2","name":"обязательно"},{"id":"b3","name":""},null,"b4",{"id":5}],
+"marks":[{"path":"1.jpg","bins":["b2","b9","b1","b1"]},{"path":"2.jpg","bins":"b1"},{"path":"3.jpg","bins":[]}]}`))
+	f.Add([]byte(`{"version":15,"bins":{"id":"b1"},"marks":[{"path":"1.jpg","bins":["b1"],"rating":3}]}`))
 	f.Add([]byte(`{"version":5,"folders":["a","a",{"path":5}],"marks":[{"path":"1.jpg","rating":"5"},{"path":5},3.5,{"path":"2.jpg","rating":2}]}`))
 	// 032: обложка — чужой ID листа, nil-места, повторы, огромные числа, UNC разметки, null.
 	f.Add([]byte(`{"version":6,"spreads":[{"id":"cover","photos":["p"]}],"cover":{"sheet":{"id":"x","photos":["p","q"],"name":"x","layout":"y",
@@ -320,6 +325,18 @@ func FuzzLoad(f *testing.F) {
 "cover":{"sheet":{"id":"cover","grid":[{"id":"c0ffee000006","x":300,"y":250,"w":60,"h":50,"border":{"photo":"q","cut":[0.45,0.45,0.45,0.45],"scale":2}}]},"layout":"front"},
 "photos":{"p":{"path":"a.jpg","w":3,"h":2,"fade":1e308},"q":{"path":"f.png","w":0,"h":0,"fade":-1,"frame":{"s":3}},"r":{"path":"b.jpg","fade":0.123456}}}`))
 	f.Add([]byte(`{"version":14,"spreads":[{"id":"s","grid":[{"id":"c0ffee000001","w":10,"h":10,"border":"line"},{"w":10,"h":10,"border":{"cut":"x"}},{"border":null}]}]}`))
+	// 082 (v15): свои шрифты — голден, неверные ключи, длинное название, стоящая без записи, null.
+	if g, err := os.ReadFile(filepath.Join("..", "testdata", golden15Fonts)); err == nil {
+		f.Add(g)
+	}
+	f.Add([]byte(`{"version":15,"spreads":[{"id":"s","texts":[{"id":"0a0b0c0d0e01","w":50,"auto":true,"text":"x","style":{"font":"my:0123456789abcdef","bold":true}},
+{"id":"0a0b0c0d0e02","w":50,"text":"y","style":{"font":"my:0123456789ABCDEF"}}],"caps":{"style":{"font":"my:fedcba9876543210"}}}],
+"fonts":{"my:0123456789abcdef":{"name":"` + strings.Repeat("Ш\n", 50) + `"},"montserrat":{"name":"M"},"../a.ttf":{},"my:1111111111111111":{"name":7}}}`))
+	// 083 (v15): подборки — голден.
+	if g, err := os.ReadFile(filepath.Join("..", "testdata", golden15Bins)); err == nil {
+		f.Add(g)
+	}
+	f.Add([]byte(`{"version":15,"fonts":null,"spreads":[{"id":"s","texts":[{"id":"0a0b0c0d0e01","w":50,"text":"x","style":{"font":"my:0123456789abcdef"}}]}]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := testkit.TempDir(t)
 		path := filepath.Join(dir, "f.salbum")
@@ -336,8 +353,11 @@ func FuzzLoad(f *testing.F) {
 		if len(p.Folders) > model.MaxFolders {
 			t.Fatalf("папок %d", len(p.Folders))
 		}
-		marks := edtest.Loaded(p)
+		side := edtest.Loaded(p)
+		marks := side.Marks
 		fuzzMarks(t, marks)
+		fuzzBins(t, side)
+		fuzzFonts(t, p)
 		if c := p.Cover; c != nil && (c.Sheet == nil || !reflect.DeepEqual(model.ClampCoverSpec(c.Spec), c.Spec) || !model.ValidCoverLayout(c.Layout)) {
 			t.Fatalf("обложка: %+v", c)
 		}
@@ -392,15 +412,18 @@ func FuzzLoad(f *testing.F) {
 			t.Fatalf("вид печати не сериализуется: %v", err)
 		}
 		_ = p.Clone() // не паникует: NaN после Load не бывает
-		if err := salbum.SaveWith(p, path, marks); err != nil {
+		if err := salbum.SaveWith(p, path, side); err != nil {
 			t.Fatal(err)
 		}
 		q, err := salbum.Load(path)
 		if err != nil {
 			t.Fatalf("свой же файл не открылся: %v", err)
 		}
-		if len(edtest.Loaded(q)) != len(marks) || len(marks) > 0 && !reflect.DeepEqual(edtest.Loaded(q), marks) {
+		if len(edtest.Loaded(q).Marks) != len(marks) || len(marks) > 0 && !reflect.DeepEqual(edtest.Loaded(q).Marks, marks) {
 			t.Fatalf("отметки после записи и чтения:\n%+v\nждали\n%+v", edtest.Loaded(q), marks)
+		}
+		if !slices.Equal(edtest.Loaded(q).Bins, side.Bins) {
+			t.Fatalf("подборки после записи и чтения: %v, ждали %v", edtest.Loaded(q).Bins, side.Bins)
 		}
 		if err := edtest.GridInvariants(q); err != nil {
 			t.Fatalf("после записи и чтения: %v", err)

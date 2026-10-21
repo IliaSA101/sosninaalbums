@@ -168,7 +168,18 @@ func textDraw(t model.TextView) render.TextDraw {
 		l.Y -= t.Y
 		lines[i] = l
 	}
-	return render.TextDraw{X: t.X, Y: t.Y, Rot: t.Rot, Box: text.Box{W: t.W, H: t.H, Lines: lines}, Style: t.Style, Z: t.Z}
+	return render.TextDraw{X: t.X, Y: t.Y, Rot: t.Rot, Box: text.Box{W: t.W, H: t.H, Lines: lines}, Style: t.Style, Z: t.Z, Text: t.Text}
+}
+
+// PinFonts запоминает у текстов поколение шрифтов gen — text.Gen(), взятое до снимка вида: если
+// набор своих шрифтов сменится за время выгрузки, render разобьёт строки заново (082). Взятое
+// после снимка пропустило бы смену между ними.
+func PinFonts(spreads []render.Spread, gen uint64) {
+	for i := range spreads {
+		for k := range spreads[i].Texts {
+			spreads[i].Texts[k].Gen = gen
+		}
+	}
 }
 
 // backdrops — фоны разворота для экспорта: рамка, область, фото в осях рамки и его наклон из View;

@@ -1,4 +1,4 @@
-import type { SpreadView } from '../../base/core/types'
+import type { FontFamily, FontUse, SpreadView } from '../../base/core/types'
 import { COVER_ID } from '../../base/geom/sheet'
 
 // Подсказка смены диска (Api.SuggestDrive); from === '' — подсказки нет.
@@ -134,3 +134,34 @@ export function relinkSummary(r: RelinkCounts): string {
   if (r.ambiguous > 0) parts.push(`неоднозначно ${r.ambiguous}`)
   return parts.join(', ')
 }
+
+// Свои шрифты альбома (View.albumFonts, 082), которых нет в списке этого компьютера. Скрытый × остаётся в списке —
+// он на месте, полосы не вызывает. albumFonts ещё нет (старый Go) — пусто.
+export function missingFonts(albumFonts: readonly FontUse[] | null | undefined, fonts: readonly Pick<FontFamily, 'id'>[]): FontUse[] {
+  const have = new Set(fonts.map((f) => f.id))
+  return (albumFonts ?? []).filter((u) => !have.has(u.id))
+}
+
+const FONTS_SHOWN = 3 // сколько имён перечислять в полосе
+export const NAMELESS_FONT = 'Свой шрифт' // имя неизвестно (шрифт взят из шаблона)
+
+// «Нет шрифтов на этом компьютере: „Lato“, „Bodoni Moda“ — текст показан шрифтом Montserrat». Имена повторяются
+// и бывают пустыми: пустые сводятся к одному «Свой шрифт» в конце; длинный список — «и ещё N».
+export function fontsMissingText(names: readonly string[]): string {
+  const named = [...new Set(names.filter((n) => n !== ''))]
+  const items = names.some((n) => n === '') ? [...named, NAMELESS_FONT] : named
+  if (items.length === 0) return ''
+  const rest = items.length - FONTS_SHOWN
+  const list = items
+    .slice(0, FONTS_SHOWN)
+    .map((n) => `„${n}“`)
+    .join(', ')
+  return `Нет шрифтов на этом компьютере: ${list}${rest > 0 ? ` и ещё ${rest}` : ''} — текст показан шрифтом Montserrat`
+}
+
+// Ключ набора недостающих шрифтов для «Скрыть»: по id (имя может быть пустым), как у фото.
+export const fontsKey = (miss: readonly FontUse[], opened: number): string =>
+  missingKey(
+    miss.map((u) => u.id),
+    opened,
+  )

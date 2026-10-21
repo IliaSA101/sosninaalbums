@@ -1,6 +1,7 @@
 package render
 
 import (
+	"context"
 	"encoding/binary"
 	"hash/crc32"
 	"image"
@@ -336,11 +337,11 @@ func TestBorderEnvMemo(t *testing.T) {
 	green := color.NRGBA{20, 140, 40, 255}
 	frame := ringPNG(t, 60, 80, 10, green)
 	var e borderEnv
-	a, err := e.picture(frame)
+	a, err := e.picture(context.Background(), frame)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := e.picture(frame); b != a {
+	if b, _ := e.picture(context.Background(), frame); b != a {
 		t.Error("второй вызов декодировал заново")
 	}
 	s1, _ := e.scaled(a, 30, 40)

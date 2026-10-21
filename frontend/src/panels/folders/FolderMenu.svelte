@@ -120,7 +120,7 @@
       type="button"
       class="all"
       disabled={store.scan.active}
-      title="Перечитать папки и отметки. Lightroom пишет отметки в файлы, если включена автозапись XMP или нажат Ctrl+S"
+      title="Перечитать папки сейчас. Программа и сама замечает новые и пропавшие файлы, когда вы возвращаетесь в окно. Lightroom пишет отметки в файлы, если включена автозапись XMP или нажат Ctrl+S"
       onpointerdown={stop}
       onclick={rescan}>Обновить все</button
     >

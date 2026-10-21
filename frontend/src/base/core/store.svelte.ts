@@ -77,10 +77,13 @@ class Store extends Nav {
   // Фото без скрытых папок (054): без фильтра по папкам — тот же массив.
   ordered = $derived(this.hooks.order(this.photos))
   inFolders = $derived(this.hooks.folders(this.ordered))
-  // Не в местах и не на фоне (среди показанных папок).
-  free = $derived(this.hooks.free(this.inFolders, this.used, this.backdropUsed))
+  // Фото показанной подборки (083); подборка не показана — тот же массив. Порядок фильтров:
+  // папки → подборка → «Не в альбоме» → отметки.
+  inBin = $derived(this.hooks.bin(this.inFolders))
+  // Не в местах и не на фоне (среди показанных папок и подборки).
+  free = $derived(this.hooks.free(this.inBin, this.used, this.backdropUsed))
   // Лента до фильтра по отметкам (длина — «из M» в MarkFilter) и после него (libfilter).
-  beforeMarks = $derived(this.filter === 'unused' ? this.free : this.inFolders)
+  beforeMarks = $derived(this.filter === 'unused' ? this.free : this.inBin)
   visible = $derived(this.hooks.visible(this.beforeMarks))
   // Выделенные и при этом видимые (с учётом фильтра) фото — в порядке ленты.
   selectedIds = $derived(this.visible.filter((p) => this.selected.has(p.id)).map((p) => p.id))
@@ -122,6 +125,11 @@ class Store extends Nav {
       this.seen.missing = true
       this.setMissing(ids ?? [])
     })
+    // 082: полный список шрифтов (загрузка, ×, откат, шрифты из папки собранного альбома) заменяет прежний
+    EventsOn('fonts', (list: FontFamily[] | null) => {
+      this.fonts = list ?? []
+      this.hooks.fontsLoaded(this.fonts, true)
+    })
     // Ошибки, которые Go находит сам (перетащенная папка и т.п.)
     EventsOn('notice', (text: string) => this.notify(text, 'error'))
     jobs.listen()
@@ -144,10 +152,17 @@ class Store extends Nav {
       this.hooks.fontsLoaded(this.fonts)
       // Ошибка открытия последнего проекта при старте: событие пришло бы до подписки
       if (st.notice) this.notify(st.notice, 'error')
+      this.afterOpen(st)
     } finally {
       this.loaded = true
       jobs.endOpening() // альбом открыт: окно хода (073) гаснет, даже если (total, total) потерялось
     }
+  }
+
+  // Разовое после открытия альбома (запуск и меню): тост info (шрифты из папки альбома) и проверка свежих начертаний окном.
+  private afterOpen(st: State) {
+    if (st.info) this.notify(st.info, 'info')
+    if (st.freshFonts?.length) this.hooks.freshFonts(st.freshFonts)
   }
 
   // Свежий список последних: «Сохранить как» и первое сохранение кладут альбом в список без события,
@@ -167,9 +182,7 @@ class Store extends Nav {
   // Все правки идут сюда: Go возвращает новое состояние альбома.
   async run(p: Promise<unknown>): Promise<boolean> {
     try {
-      // Дельта не к нашему виду: ждём пересинхрона, иначе вызывающий (rev, current) увидит старый вид.
-      const w = this.chain.take((await p) as View)
-      return w ? await w : true
+      return await this.take((await p) as View)
     } catch (e) {
       this.notify(errText(e), 'error')
       return false
@@ -186,6 +199,13 @@ class Store extends Nav {
     return true
   }
 
+  // Принять ответ правки. Дельта не к нашему виду: ждём пересинхрона, иначе вызывающий (rev, current)
+  // увидит старый вид (087: два клиента). false — GetView упал, ошибку уже показала цепочка.
+  async take(raw: View): Promise<boolean> {
+    const w = this.chain.take(raw)
+    return w ? await w : true
+  }
+
   // Цепочка видов App (075, viewchain.ts): дубли, дельты, пересинхрон через GetView.
   private readonly chain = new ViewChain({
     current: () => this.view,
@@ -194,6 +214,7 @@ class Store extends Nav {
     fail: (e) => this.notify(errText(e), 'error'),
   })
 
+  // Событие `view` и тесты: без ожидания пересинхрона. Ответ правки — take/run.
   apply(raw: View) {
     void this.chain.take(raw)
   }
@@ -379,6 +400,19 @@ class Store extends Nav {
     return this.autorun.last
   }
 
+  // 080: окно пересборки ждёт ответа; совпавшие варианты; ссылка «Собрать свободные» / «Пересобрать прошлую»
+  get autoWaiting() {
+    return this.autorun.waiting
+  }
+
+  get autoSame() {
+    return this.autorun.same
+  }
+
+  swapAuto() {
+    this.autorun.swap()
+  }
+
   autoBuild(...a: Parameters<AutoRun['build']>): Promise<boolean> {
     return this.autorun.build(...a)
   }
@@ -504,6 +538,7 @@ class Store extends Nav {
       const cur = { photos: this.photos, scan: this.scan, missing: this.missing }
       this.photos = mergeSnapshot(cur, { photos: st.photos ?? [] }, this.seen).photos
       if (st.recent) this.recent = st.recent
+      this.afterOpen(st)
       this.selected.clear()
       this.hooks.spreadsCleared()
       this.openSeq++

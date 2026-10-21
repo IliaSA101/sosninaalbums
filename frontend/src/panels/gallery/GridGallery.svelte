@@ -3,11 +3,12 @@
   import { gallery } from './gallery.svelte'
   import { errText } from '../../base/words/errtext'
   import { plural } from '../../base/words/plural'
+  import { tplio } from '../../shell/menu/tplio.svelte'
   import { applyChoice, tplCall } from '../layouts/gridactions'
   import { builtinOf, cardBoxes, defaultN, dropTitle, gridSourceTexts, MAX_N, mineOf, previewRects } from './gridgallery'
   import type { GridChoice, GridChoices, LayoutScope } from '../../base/core/types'
   import { BORDER_NOTE, hasBorders, isSheet, newSheetSize, sheetIn, sheetSize, unitOf } from '../../base/geom/sheet'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import TplRow from '../../base/tpl/TplRow.svelte'
   import TplItem from '../../base/tpl/TplItem.svelte'
   import TplSep from '../../base/tpl/TplSep.svelte'
@@ -47,7 +48,7 @@
   $effect(() => {
     const k = key
     const sc = scope
-    void [again, store.view.rev]
+    void [again, store.view.rev, tplio.seq] // tplio.seq — шаблоны загрузили из файла (086)
     const my = ++req
     loading = true
     Api.GridChoices(g.spread, nWant, scope)

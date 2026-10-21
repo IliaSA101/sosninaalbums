@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
 import { keymap } from '../../base/keys/keymap.svelte'
-import { can, type Custom, type Level } from '../../base/prefs/levels'
+import { can, type Custom, type FeatureId, type Level } from '../../base/prefs/levels'
 import { features } from '../../base/prefs/levelcustom'
 import { buildMenu, enabledCmds, keyId, keysOf, type Menu, type MenuCtx, type MenuItem } from './menu'
 
@@ -51,6 +51,10 @@ describe('buildMenu', () => {
       'collect',
       'backups',
       'packs',
+      'tpl',
+      'tplExport',
+      'tplImport',
+      'showData',
       'addFolder',
       'relink',
       'export',
@@ -295,6 +299,38 @@ describe('уровень в меню (спека 010 U1)', () => {
     const file = ids(std, 'file')
     expect(file.indexOf('packs')).toBe(file.indexOf('backups') + 1)
   })
+  it('«Файл ▸ Мои шаблоны ▸» (086) — два пункта, виден со «Стандартного» (виньетка) и на «Полном», на «Простом» скрыт', () => {
+    expect(ids(buildMenu(at('simple')), 'file')).not.toContain('tpl')
+    for (const l of ['standard', 'full'] as const) {
+      const m = buildMenu(at(l))
+      const tpl = find(m, 'tpl')
+      expect(tpl, l).toMatchObject({ label: 'Мои шаблоны' })
+      expect(tpl?.cmd).toBeUndefined()
+      expect(tpl?.sub?.map((i) => [i.label, i.cmd])).toEqual([
+        ['Сохранить в файл…', 'tplExport'],
+        ['Загрузить из файла…', 'tplImport'],
+      ])
+      const file = ids(m, 'file')
+      expect(file.indexOf('tpl')).toBe(file.indexOf('packs') + 1)
+    }
+    // «Свой»: шаблоны сеток без виньетки тоже дают подменю; ни того ни другого — нет
+    const only = (on: FeatureId[]): Custom => ({ base: 'simple', on, off: [] })
+    const own = (c: Custom) => ids(buildMenu(ctx({ level: 'custom', can: (f) => features('custom', c).has(f) })), 'file')
+    expect(own(only(['templates', 'manual']))).toContain('tpl') // templates требует manual
+    expect(own(only(['vignette']))).toContain('tpl')
+    expect(own(only([]))).not.toContain('tpl')
+  })
+  it('«Файл ▸ Открыть папку данных» (086) — после «Мои шаблоны», на всех уровнях', () => {
+    for (const l of ['simple', 'standard', 'full'] as const) {
+      const m = buildMenu(at(l))
+      expect(find(m, 'showData'), l).toMatchObject({ label: 'Открыть папку данных', cmd: 'showData' })
+      expect(find(m, 'showData')?.disabled).toBeUndefined()
+    }
+    const full = ids(buildMenu(at('full')), 'file')
+    expect(full.indexOf('showData')).toBe(full.indexOf('tplImport') + 1)
+    const simple = ids(buildMenu(at('simple')), 'file')
+    expect(simple.indexOf('showData')).toBe(simple.indexOf('backups') + 1) // нет ни наборов, ни шаблонов
+  })
   it('«Правка ▸ Готовые развороты…» (067) — сразу после «Копировать оформление…», со «Стандартного», серое на обложке и без листа', () => {
     expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('spreadTpl')
     const std = buildMenu({ ...at('standard'), decorable: true })
@@ -329,6 +365,16 @@ describe('уровень в меню (спека 010 U1)', () => {
     const v = viewIds('standard')
     for (const id of ['zoomIn', 'zoomOut', 'allSpreads']) expect(v, id).toContain(id)
     expect(v).not.toContain('snap')
+  })
+  it('«Показать все фото» (083): пункт «Вид» со «Стандартного»; на «Простом» его нет', () => {
+    expect(viewIds('standard')).toContain('binAll')
+    expect(viewIds('simple')).not.toContain('binAll')
+    expect(find(buildMenu(at('standard')), 'binAll')?.cmd).toBe('binAll')
+  })
+  it('«Показать все фото» серое, пока подборка не показана (083-30)', () => {
+    expect(find(buildMenu(at('standard')), 'binAll')?.disabled).toBe(true)
+    expect(find(buildMenu({ ...at('standard'), binShown: false }), 'binAll')?.disabled).toBe(true)
+    expect(find(buildMenu({ ...at('standard'), binShown: true }), 'binAll')?.disabled).toBeFalsy()
   })
   it('«Полный»: привязка и линейки на месте, у линеек галочка и Ctrl+R', () => {
     expect(viewIds('full')).toContain('snap')

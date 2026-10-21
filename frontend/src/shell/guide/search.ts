@@ -1,6 +1,8 @@
 // Поиск по справочнику (спека 033, design §3). Чистая логика: регистр, «ё/е», окончания и английская
 // раскладка не важны. Индекс строится при первом поиске и заново, когда клавиши реестра сменились (074).
 import { keymap } from '../../base/keys/keymap.svelte'
+import { prefs } from '../../base/prefs/prefs.svelte'
+import { articleText } from './articletext'
 import { keyRows } from './show'
 import { ARTICLES, GUIDE_GROUPS, type Article } from './articles'
 
@@ -64,14 +66,16 @@ const build = (): Indexed[] =>
             .join(' '),
         ),
       },
-      { w: W.text, t: tokens(keymap.text(`${a.what} ${a.where ?? ''} ${a.how ?? ''}`)) },
+      { w: W.text, t: tokens(articleText(`${a.what} ${a.where ?? ''} ${a.how ?? ''}`)) },
     ],
   }))
 
-// Клавиши меняет пользователь: индекс привязан к виду реестра и пересобирается при его замене.
-let built: { view: unknown; index: Indexed[] } | null = null
+// Клавиши и уровень меняет пользователь (куски {can:…} зависят от набора функций): индекс привязан к виду реестра
+// и к набору функций и пересобирается при замене любого.
+let built: { view: unknown; enabled: unknown; index: Indexed[] } | null = null
 function index(): Indexed[] {
-  if (!built || built.view !== keymap.view) built = { view: keymap.view, index: build() }
+  if (!built || built.view !== keymap.view || built.enabled !== prefs.enabled)
+    built = { view: keymap.view, enabled: prefs.enabled, index: build() }
   return built.index
 }
 

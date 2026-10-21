@@ -46,6 +46,8 @@ func TestRemoveStaleTmp(t *testing.T) {
 		"06.jpg.777.tmp": false, // свежий: возможно, пишется сейчас
 		"00.jpg.1.tmp":   false, "05.jpg.tmp": false, "05-3.jpg.1.tmp": false,
 		"keep.tmp": false, "05.jpg.12a.tmp": false, "5.jpg.1.tmp": false,
+		"1-03.jpg.5.tmp": true, "03.jpg.5.tmp": true, // свой остаток: с префиксом плана и без
+		"2024-05.jpg.7.tmp": false, // чужой файл: число впереди — не префикс плана
 	}
 	for n := range files {
 		p := filepath.Join(dir, n)

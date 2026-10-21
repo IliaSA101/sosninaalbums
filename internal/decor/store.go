@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -85,6 +86,8 @@ type Store struct {
 	svg   svgTokens // проверенные SVG, ждущие PNG от окна (AddPNG)
 	tpl   tplCache  // разбор своих шаблонов разворотов для плиток (spreads.go)
 	frame frameMeta // окна рамочек-картинок: нужны импорту и Frame (frame.go)
+
+	cancelled atomic.Int64 // запросы /media/lib, снятые клиентом (Cancelled)
 }
 
 // kindDirs — папка вида; имя файла внутри — только <16 hex>.<ext> от ключа.

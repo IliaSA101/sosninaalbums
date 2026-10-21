@@ -31,15 +31,15 @@ func (a *App) GetState() State {
 	a.mu.Lock()
 	view := a.fullLocked(a.editor().View())
 	photos, scan := a.photos, a.scan
-	notice := a.startNotice
-	a.startNotice = ""
+	notice, info, fresh := a.startNotice, a.startInfo, a.startFresh
+	a.startNotice, a.startInfo, a.startFresh = "", "", nil
 	missing := append([]string{}, a.missing...)
 	a.mu.Unlock()
 	if photos == nil {
 		photos = []library.Photo{}
 	}
 	p, recent := a.prefsAndRecent()
-	return State{View: view, Photos: photos, Scan: scan, Notice: notice, Missing: missing,
+	return State{View: view, Photos: photos, Scan: scan, Notice: notice, Info: info, FreshFonts: fresh, Missing: missing,
 		Version: appVersion(wailsJSON), Fonts: text.Families(), Prefs: p, Recent: recent, Keymap: a.Keymap()}
 }
 
@@ -390,6 +390,10 @@ func (a *App) storeTemplates(list []model.Template) error {
 	return a.tpls.Store(a.cfgDir, list, a.rename)
 }
 
+// tplReady — шаблоны прочитаны с диска (не открылись при старте — перечитываются здесь), чтобы
+// лимиты, поиск по ID и сверка импорта шли по настоящему списку. Вызывать под tplMu.
+func (a *App) tplReady() error { return a.tpls.Ensure(a.cfgDir) }
+
 // SaveGridTemplate сохраняет места области scope ("left"/"right"/"spread") разворота
 // как шаблон (страницы или разворота). Пустое имя — «Шаблон N». Нет мест — ошибка.
 func (a *App) SaveGridTemplate(spreadID, scope, name string) (err error) {
@@ -400,6 +404,9 @@ func (a *App) SaveGridTemplate(spreadID, scope, name string) (err error) {
 	}
 	a.tplMu.Lock()
 	defer a.tplMu.Unlock()
+	if err := a.tplReady(); err != nil {
+		return err
+	}
 	if a.tpls.Newer() {
 		return model.ErrTemplatesNewer
 	}
@@ -425,6 +432,9 @@ func (a *App) SaveVignetteTemplate(spreadID, name string) (err error) {
 	}
 	a.tplMu.Lock()
 	defer a.tplMu.Unlock()
+	if err := a.tplReady(); err != nil {
+		return err
+	}
 	if a.tpls.Newer() {
 		return model.ErrTemplatesNewer
 	}
@@ -476,6 +486,9 @@ func (a *App) editTemplates(id string, fn func(list []model.Template, i int) []m
 	id = strings.TrimPrefix(id, model.VigOwnPrefix)
 	a.tplMu.Lock()
 	defer a.tplMu.Unlock()
+	if err := a.tplReady(); err != nil {
+		return err
+	}
 	if a.tpls.Newer() {
 		return model.ErrTemplatesNewer
 	}

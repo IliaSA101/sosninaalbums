@@ -41,7 +41,13 @@ func fileExists(path string) bool {
 // refreshMissing — полный пересчёт недостающих (открытие, rescan) в фоне: os.Stat тысяч фото
 // (или мёртвый сетевой том) не держит startup, Undo и rescan. Отчёт прежнего полного пересчёта
 // отбрасывается; событие `missing` — под emitMu, как library и scan.
-func (a *App) refreshMissing() {
+func (a *App) refreshMissing() { a.refreshMissingWith(false) }
+
+// refreshMissingQuiet — тот же полный пересчёт для сверки папок (088): событие `missing` только
+// при смене списка — без изменений интерфейс ничего не получает.
+func (a *App) refreshMissingQuiet() { a.refreshMissingWith(true) }
+
+func (a *App) refreshMissingWith(quiet bool) {
 	a.missSyncMu.Lock()
 	defer a.missSyncMu.Unlock()
 	refs := a.snapRefs(a.editor())
@@ -50,11 +56,11 @@ func (a *App) refreshMissing() {
 	gen := a.missGen
 	a.missRefs = refs
 	a.mu.Unlock()
-	a.checkMissing(gen, refs, false)
+	a.checkMissing(gen, refs, quiet)
 }
 
 // checkMissing — фоновая проверка фото refs (ID → путь) поколения gen. Итог сливается с уже
-// известным списком (mergeMissing). quiet — событие только при смене списка (после правки).
+// известным списком (mergeMissing). quiet — событие только при смене списка (после правки, сверка).
 func (a *App) checkMissing(gen int, refs map[string]string, quiet bool) {
 	a.missPending.Add(1)
 	a.bg.Go(func() {

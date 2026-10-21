@@ -3,7 +3,8 @@
 // с альфой (v=3), а старые копии лежат в кэше браузера.
 const V = 3
 
-export const thumbUrl = (id: string) => `/media/t/${encodeURIComponent(id)}?v=${V}`
+// retry — повторная загрузка после сверки папок (088): новая метка сбивает кэш неудачного запроса; путь для Go прежний.
+export const thumbUrl = (id: string, retry = 0) => `/media/t/${encodeURIComponent(id)}?v=${V}${retry > 0 ? `&r=${retry}` : ''}`
 export const previewUrl = (id: string) => `/media/p/${encodeURIComponent(id)}?v=${V}`
 
 // Разметка типографии обложки (032) и разворотов (066): путь Go берёт из проекта, rev только сбивает кэш

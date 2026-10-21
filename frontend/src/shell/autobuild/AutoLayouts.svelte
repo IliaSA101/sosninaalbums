@@ -13,6 +13,7 @@
   import { VARIETY_OPTIONS } from './autobuild'
   import {
     autoRows,
+    emptyColumn,
     fallbackNote,
     familiesHint,
     layoutsStatus,
@@ -78,7 +79,12 @@
       {#each rows.parts as part (part.photos)}
         <TplSep label="{part.photos} фото" />
         {#if part.row.parts.length === 0}
-          <div class="none">{ui.families.length > 0 ? 'нет — будет лучшая' : part.row.empty}</div>
+          {#if ui.families.length > 0}
+            {@const e = emptyColumn(ui.families, part.photos)}
+            <div class="none" title={e.title}>{e.main}<small>{e.sub}</small></div>
+          {:else}
+            <div class="none">{part.row.empty}</div>
+          {/if}
         {/if}
         {#each part.row.parts as p (p.line)}
           {#if p.sep}<TplSep label={p.sep} title="Другие варианты: воздух и с главным фото" />{/if}
@@ -165,11 +171,15 @@
     color: var(--muted);
     font-size: 12px;
   }
-  /* У числа фото нет раскладок выбранных семейств: сборка возьмёт лучшую */
+  /* У числа фото нет раскладок выбранных семейств: сборка возьмёт лучшую из всех */
   .none {
     flex: none;
     padding: 30px 8px 0 0;
     color: var(--muted);
     font-size: 13px;
+  }
+  .none small {
+    display: block;
+    font-size: 11px;
   }
 </style>

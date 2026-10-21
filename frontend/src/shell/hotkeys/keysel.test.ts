@@ -83,8 +83,8 @@ describe('единый выбор: клавиша = строка списка (�
     expect(keyCell(ctx, 'Escape', NO_MODS, null, null, view).why).not.toBe('')
   })
   it('своя клавиша: команда на новом месте, на старом — пусто', () => {
-    setup(catalogWith({ toggleBig: ['KeyB'] }))
-    expect(cmdsAt(ctx, 'KeyB').map((e) => e.id)).toEqual(['toggleBig'])
+    setup(catalogWith({ toggleBig: ['KeyQ'] })) // KeyB занят подборками (083)
+    expect(cmdsAt(ctx, 'KeyQ').map((e) => e.id)).toEqual(['toggleBig'])
     expect(cmdsAt(ctx, 'KeyF')).toEqual([])
   })
 })

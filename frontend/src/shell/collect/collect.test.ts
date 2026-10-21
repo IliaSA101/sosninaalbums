@@ -3,6 +3,8 @@ import {
   extraLine,
   folderHint,
   folderStub,
+  FONTS_HINT,
+  fontsRestrictedLine,
   infoStale,
   loadAll,
   missingLine,
@@ -177,5 +179,34 @@ describe('сводка до ответа Go: места заняты', () => {
   })
   it('идущее чтение папок дописывается к итогу', () => {
     expect(summaryOf(i, i, { ...i, scanning: true }).total).toContain(SCANNING_LINE)
+  })
+})
+
+describe('свои шрифты в сборе (082)', () => {
+  it('extraLine: шрифты — между фонами и разметкой; одни шрифты; без шрифтов как раньше', () => {
+    expect(extraLine({ own: 3, guides: 0, fonts: 2 })).toBe('Ещё: свои фоны и стикеры — 3, шрифты — 2.')
+    expect(extraLine({ own: 3, guides: 2, fonts: 2 })).toBe('Ещё: свои фоны и стикеры — 3, шрифты — 2, разметка типографии — 2.')
+    expect(extraLine({ own: 0, guides: 0, fonts: 1 })).toBe('Ещё: шрифты — 1.')
+    expect(extraLine({ own: 0, guides: 0, fonts: 0 })).toBe('')
+    expect(extraLine({ own: 0, guides: 0 })).toBe('')
+    expect(FONTS_HINT).toContain('лицензию')
+  })
+  it('fontsRestrictedLine: 1 имя, 2 имени, пусто', () => {
+    expect(fontsRestrictedLine(['Lato'])).toBe('Шрифт „Lato“ не переносится по лицензии — загрузите его на другом компьютере сами')
+    expect(fontsRestrictedLine(['Lato', 'Bodoni Moda'])).toBe(
+      'Шрифты „Lato“, „Bodoni Moda“ не переносятся по лицензии — загрузите их на другом компьютере сами',
+    )
+    expect(fontsRestrictedLine([])).toBe('')
+  })
+  it('missingLine: шрифты — отдельной фразой, склонение и согласование', () => {
+    const base = { missing: 0, missingGuides: 0 }
+    expect(missingLine({ ...base, missingFonts: 1 })).toBe('1 шрифта нет на этом компьютере — в папку не попадёт.')
+    expect(missingLine({ ...base, missingFonts: 2 })).toBe('2 шрифта нет на этом компьютере — в папку не попадут.')
+    expect(missingLine({ ...base, missingFonts: 5 })).toBe('5 шрифтов нет на этом компьютере — в папку не попадут.')
+    expect(missingLine({ missing: 4, missingGuides: 0, missingFonts: 2 })).toBe(
+      '4 фото не найдены — в папку не попадут. 2 шрифта нет на этом компьютере — в папку не попадут.',
+    )
+    expect(missingLine({ ...base, missingFonts: 0 })).toBe('')
+    expect(missingLine(base)).toBe('')
   })
 })

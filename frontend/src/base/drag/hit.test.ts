@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Payload } from '../core/types'
-import { backdropTarget, cellSide, coverTarget, halfSide, isNoopMove, placeTarget, sheetFrac } from './hit'
+import { backdropTarget, binTarget, cellSide, coverTarget, halfSide, isNoopMove, placeTarget, sheetFrac } from './hit'
 
 describe('backdropTarget', () => {
   const one: Payload = { kind: 'photos', ids: ['a'] }
@@ -99,5 +99,14 @@ describe('sheetFrac', () => {
   })
   it('нулевая ширина листа (NaN, ±Infinity) — точки нет, -1', () => {
     expect([NaN, Infinity, -Infinity].map(sheetFrac)).toEqual([-1, -1, -1])
+  })
+})
+
+describe('binTarget (083)', () => {
+  it('фото из ленты — цель; с холста, пустой набор и разворот — нет', () => {
+    expect(binTarget({ kind: 'photos', ids: ['a', 'b'] })).toEqual({ kind: 'bin' })
+    expect(binTarget({ kind: 'photos', ids: ['a'], fromSpread: 's1' })).toBeNull()
+    expect(binTarget({ kind: 'photos', ids: [] })).toBeNull()
+    expect(binTarget({ kind: 'spread', id: 's1', index: 0 })).toBeNull()
   })
 })

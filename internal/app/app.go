@@ -28,6 +28,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
+	"github.com/IliaSA101/sosninaalbums/internal/text/fontlib"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -91,11 +92,17 @@ type App struct {
 	scanCancel context.CancelFunc
 	scanGen    int
 	scan       library.ScanProgress
+	// scanning — чтение папок поколения scanGen ещё не закончило Scan (под mu); пока оно идёт,
+	// сверка папок (foldercheck.go) и тихое чтение не начинаются.
+	scanning bool
+	check    folderCheck // ворота сверки папок (088)
 	// emitMu сериализует события library/scan: порядок отправки совпадает с порядком обновления состояния.
 	emitMu sync.Mutex
 	emit   func(name string, data ...any) // отправка события в интерфейс; в тестах подменяется
 
-	startNotice string // см. State.Notice
+	startNotice string   // см. State.Notice
+	startInfo   string   // см. State.Info
+	startFresh  []string // см. State.FreshFonts
 
 	// ready закрывает startup, когда редактор, startNotice и первое сканирование готовы.
 	// Wails зовёт методы App параллельно с OnStartup: без него GetState отдал бы пустой
@@ -131,11 +138,18 @@ type App struct {
 	collectDir    string
 
 	mediaMiss atomic.Int64 // промахи /media, чтобы не писать в лог каждый
+	mediaSt   mediaState   // снятые запросы /media и прежний реестр фото (media.go)
+	about     aboutCache   // сведения о файлах для карточки фото (photoabout.go)
 
 	backups *backup.Store // резервные копии альбома (files.go); nil — без копий
 
 	// decorLib — библиотека фонов и стикеров (decor.go); nil до startup — методы отвечают ошибкой.
 	decorLib atomic.Pointer[decor.Store]
+	// fontLib — библиотека своих шрифтов (fonts.go, 082); nil до startup — методы отвечают ошибкой.
+	fontLib atomic.Pointer[fontlib.Store]
+	// fontsMu — набор библиотеки → регистрация в text → событие `fonts` одним шагом: два
+	// параллельных publishFonts иначе отдали бы окну старый список последним.
+	fontsMu sync.Mutex
 	// packs — одна операция наборов за раз и набор, ждущий «Заменить» (packs.go).
 	packs packState
 	// net — «Обновить библиотеку»: отмена, проверка при запуске, источник (packs_net.go).
@@ -151,11 +165,19 @@ type State struct {
 	// Notice — ошибка запуска (не открылся проект): интерфейс ещё не подписан на
 	// событие `notice`, поэтому она ждёт первого GetState и отдаётся один раз.
 	Notice string `json:"notice,omitempty"`
+	// Info — разовое сообщение (тост вида info), не ошибка: «Добавлены шрифты из папки альбома»
+	// (082) при запуске и в ответе открытия альбома; отдаётся один раз.
+	Info string `json:"info,omitempty"`
+	// FreshFonts — «<16 hex>.<ttf|otf>» начертаний, которые только что добавила папка «Шрифты»
+	// альбома (082-8): окно проверяет, что открывает их, и откатывает отказавшие DropFonts, как
+	// после ImportFonts. Разово, вместе с Info.
+	FreshFonts []string `json:"freshFonts,omitempty"`
 	// Missing — ID недостающих фото (файла нет на диске); обновляется событием `missing`.
 	Missing []string `json:"missing"`
 	// Version — версия программы из wails.json.
 	Version string `json:"version"`
-	// Fonts — встроенные гарнитуры: интерфейс подключает их по /media/font/<file>.
+	// Fonts — гарнитуры (встроенные и свои, 082): интерфейс подключает их по /media/font/<file>;
+	// смена набора своих — событие `fonts`.
 	Fonts []text.Family `json:"fonts"`
 	// Prefs — уровень интерфейса и стартовое окно (config.json); Recent — последние альбомы.
 	Prefs  prefs.Prefs           `json:"prefs"`
@@ -201,6 +223,7 @@ func (a *App) startup(ctx context.Context) {
 	a.loadTemplates()
 	a.startBackups()
 	a.openDecor() // до первого Load: свои фоны альбома находят путь по ключу
+	a.openFonts() // до первого Load: ширины «по тексту» — своими шрифтами
 
 	c, err := library.NewCache(thumbsDir)
 	if err != nil {
@@ -237,7 +260,15 @@ func (a *App) loadStartup(last string) (p *model.Project, path, notice string) {
 			notes = append(notes, "Диск "+filepath.VolumeName(cand)+" с последним альбомом недоступен. Открыт черновик.")
 			continue
 		}
-		loaded, err := salbum.Load(cand)
+		var loaded *model.Project
+		var err error
+		if cand == a.draftPath() || a.backups.Inside(cand) {
+			loaded, err = salbum.Load(cand)
+		} else {
+			var af albumFonts // шрифты папки собранного альбома (082-8): State.Info, не ошибка
+			loaded, af, err = a.loadAlbum(cand)
+			a.keepAlbumFonts(af)
+		}
 		if err == nil {
 			if cand == a.draftPath() {
 				cand = ""
@@ -374,9 +405,26 @@ func (a *App) domReady(ctx context.Context) {
 	a.scheduleLibraryCheck()
 }
 
+// Постоянный минимум окна (логические px); на малом экране его уменьшает minSize.
+const (
+	minWinW = 1200
+	minWinH = 640
+)
+
+// minSize — минимум окна под экран sw×sh (логические px, 089-D16): Wails умножает минимум
+// на масштаб, и при 125 % на 1366×768 постоянный 1200×640 шире и выше экрана — окно
+// не сжать до экрана. Неизвестный размер экрана — постоянный минимум.
+func minSize(sw, sh int) (w, h int) {
+	if sw <= 0 || sh <= 0 {
+		return minWinW, minWinH
+	}
+	return max(1, min(minWinW, sw-40)), max(1, min(minWinH, sh-120))
+}
+
 // fitScreen: если обычный (не развёрнутый) размер окна больше экрана —
 // уменьшаем его, иначе после «Свернуть в окно» окно выглядит развёрнутым
 // и его не за что взять, чтобы перетащить на другой монитор.
+// Минимум ставим раньше: WindowSetSize не даёт окну стать меньше минимума.
 func (a *App) fitScreen(ctx context.Context) {
 	defer guard("fitScreen")
 	screens, err := wr.ScreenGetAll(ctx)
@@ -387,6 +435,8 @@ func (a *App) fitScreen(ctx context.Context) {
 		if !s.IsCurrent {
 			continue
 		}
+		mw, mh := minSize(s.Size.Width, s.Size.Height)
+		wr.WindowSetMinSize(ctx, mw, mh)
 		w, h := wr.WindowGetSize(ctx)
 		maxW, maxH := s.Size.Width-80, s.Size.Height-120
 		if w > maxW || h > maxH {
@@ -448,6 +498,7 @@ func Run(assets fs.FS, wailsCfg []byte) error {
 	if err != nil {
 		return err
 	}
+	applyMemoryLimit()
 	app := NewApp()
 	app.data = osx.DataName(stand)
 
@@ -455,8 +506,8 @@ func Run(assets fs.FS, wailsCfg []byte) error {
 		Title:            "Sosnina Albums",
 		Width:            1280,
 		Height:           760,
-		MinWidth:         1200,
-		MinHeight:        640,
+		MinWidth:         minWinW,
+		MinHeight:        minWinH,
 		WindowStartState: options.Maximised,
 		AssetServer: &assetserver.Options{
 			Assets:     assets,

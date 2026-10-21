@@ -503,3 +503,39 @@ func TestMoveBadSameSecond(t *testing.T) {
 		}
 	}
 }
+
+// Ensure: исправный файл — ничего не делает; не открывшийся при старте — читается и снимает
+// unread, ничего не записывая; снова не открылся — ошибка, отметка остаётся.
+func TestTemplatesEnsure(t *testing.T) {
+	dir := testkit.TempDir(t)
+	var first Templates
+	if err := first.Store(dir, []model.Template{testTpl("а"), testTpl("б")}, os.Rename); err != nil {
+		t.Fatal(err)
+	}
+	ok := LoadTemplates(dir)
+	if err := ok.Ensure(dir); err != nil || len(ok.List()) != 2 {
+		t.Fatalf("исправный: %v %+v", err, ok.List())
+	}
+	var empty Templates // нет файла вообще
+	if err := empty.Ensure(testkit.TempDir(t)); err != nil || len(empty.List()) != 0 {
+		t.Fatalf("без файла: %v", err)
+	}
+
+	tp := loadLocked(t, dir)
+	if len(tp.List()) != 0 {
+		t.Fatal("список не пуст при неоткрытом файле")
+	}
+	openTplFile = func(string) (*os.File, error) { return nil, os.ErrPermission }
+	if err := tp.Ensure(dir); err == nil || !tp.unread {
+		t.Fatalf("повторная ошибка: %v unread=%v", err, tp.unread)
+	}
+	openTplFile = os.Open
+	before, _ := os.ReadFile(TemplatesPath(dir))
+	if err := tp.Ensure(dir); err != nil || tp.unread || len(tp.List()) != 2 {
+		t.Fatalf("после снятия замка: %v unread=%v %+v", err, tp.unread, tp.List())
+	}
+	if after, _ := os.ReadFile(TemplatesPath(dir)); !bytes.Equal(before, after) {
+		t.Fatal("Ensure переписал файл")
+	}
+	noBad(t, dir)
+}

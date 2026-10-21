@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -293,6 +294,28 @@ func fuzzMarks(t *testing.T, marks map[string]model.Mark) {
 			m.Rating != nil && !model.OkRating(*m.Rating) || m.Label != nil && !model.OkLabel(*m.Label) || m.Flag != nil && !model.OkFlag(*m.Flag) ||
 			edtest.Alt(m) != "" && paths.CheckLocalPath(edtest.Alt(m)) != nil || strings.ContainsRune(m.Path, 0) {
 			t.Fatalf("отметка %s: %+v", id, m)
+		}
+	}
+}
+
+// fuzzBins — подборки после Load (083): ID верные и разные, имена чистые и разные без учёта
+// регистра, не больше MaxBins; членство отметок — только известные ID, по возрастанию, без повторов.
+func fuzzBins(t *testing.T, side model.Side) {
+	t.Helper()
+	if len(side.Bins) > model.MaxBins {
+		t.Fatalf("подборок %d", len(side.Bins))
+	}
+	for i, b := range side.Bins {
+		if !model.OkBinID(b.ID) || b.Name == "" || model.CleanBinName(b.Name) != b.Name ||
+			model.BinNameTaken(side.Bins[:i], b.Name, "") || slices.ContainsFunc(side.Bins[:i], func(o model.Bin) bool { return o.ID == b.ID }) {
+			t.Fatalf("подборка %d: %+v из %+v", i, b, side.Bins)
+		}
+	}
+	known := model.BinSet(side.Bins)
+	for id, m := range side.Marks {
+		if !slices.IsSorted(m.Bins) || len(slices.Compact(slices.Clone(m.Bins))) != len(m.Bins) ||
+			slices.ContainsFunc(m.Bins, func(b string) bool { return !known[b] }) {
+			t.Fatalf("членство %s: %v", id, m.Bins)
 		}
 	}
 }

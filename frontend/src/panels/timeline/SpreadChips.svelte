@@ -4,6 +4,7 @@
   import { drag } from '../../base/drag/drag.svelte'
   import { tip, tipped } from '../../base/ui/tip.svelte'
   import { thumbUrl } from '../../base/core/media'
+  import { cancelOnUnmount } from '../../base/ui/imgcancel'
   import { adjlive } from '../../editor/photo/adjlive.svelte'
   import { flipCss, photoCss, thumbBox } from '../../base/geom/frame'
   import { outlineOf } from '../../base/geom/shape'
@@ -97,6 +98,7 @@
           <span class="rot"
             ><img
               src={thumbUrl(id)}
+              {@attach cancelOnUnmount}
               alt=""
               loading="lazy"
               draggable="false"
@@ -113,6 +115,7 @@
         {:else}
           <img
             src={thumbUrl(id)}
+            {@attach cancelOnUnmount}
             alt=""
             loading="lazy"
             draggable="false"

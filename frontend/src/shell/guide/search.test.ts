@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
+import { prefs } from '../../base/prefs/prefs.svelte'
 import { ARTICLES } from './articles'
 import { fromLatin, grouped, norm, search, stem, tokens } from './search'
 
@@ -74,6 +75,20 @@ describe('поиск (спека 033)', () => {
     expect(titles('q')).toContain('Отменить и повторить')
     useCatalog()
     expect(titles('q')).not.toContain('Отменить и повторить')
+  })
+  it('080-9: «ч/б» на «Простом» находит «Ч/б развороты» (скрытую функцию), а не «Похожие кадры»', () => {
+    prefs.load({ level: 'simple', showStart: false, first: false, custom: null })
+    const ids = search('ч/б').hits.map((h) => h.a.id)
+    expect(ids).toContain('auto-gray')
+    expect(ids).not.toContain('similar')
+  })
+  it('080-9: индекс пересобирается при смене уровня: «можно несколько» (фильтр семейств) в «Автосборке» только пока есть «Варианты раскладки»', () => {
+    const has = () => search('несколько').hits.some((h) => h.a.id === 'autobuild')
+    prefs.load({ level: 'standard', showStart: false, first: false, custom: null })
+    expect(has()).toBe(true)
+    prefs.load({ level: 'custom', showStart: false, first: false, custom: { base: 'standard', on: [], off: ['variants'] } })
+    expect(has()).toBe(false)
+    prefs.load({ level: 'simple', showStart: false, first: false, custom: null })
   })
   it('все слова запроса обязательны', () => {
     expect(titles('виньетка шрифт зеркало')).toEqual([])

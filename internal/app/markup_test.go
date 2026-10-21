@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,9 +31,9 @@ func countPreview(t *testing.T) *atomic.Int32 {
 	t.Helper()
 	var n atomic.Int32
 	old := markupPreview
-	markupPreview = func(path string) ([]byte, string, error) {
+	markupPreview = func(ctx context.Context, path string) ([]byte, string, error) {
 		n.Add(1)
-		return library.MarkupPreview(path)
+		return library.MarkupPreviewCtx(ctx, path)
 	}
 	t.Cleanup(func() { markupPreview = old })
 	return &n
@@ -161,11 +162,13 @@ func TestServeGuideNoImageLog(t *testing.T) {
 			t.Fatalf("без картинки: %d", c)
 		}
 	}
-	if buf.Len() != 0 {
-		t.Fatalf("PSD без сведённого попал в журнал: %q", buf.String())
+	if out := logWithoutSlow(buf.String()); out != "" {
+		t.Fatalf("PSD без сведённого попал в журнал: %q", out)
 	}
 	old := markupPreview
-	markupPreview = func(string) ([]byte, string, error) { return nil, "", errors.New("сбой разбора") }
+	markupPreview = func(context.Context, string) ([]byte, string, error) {
+		return nil, "", errors.New("сбой разбора")
+	}
 	t.Cleanup(func() { markupPreview = old })
 	full := testkit.PSD(t, dir, "full.psd", testkit.PSDSpec{W: 8, H: 8, C: color.NRGBA{A: 255}})
 	if _, err := a.setSpreadGuide(full); err != nil {
@@ -195,12 +198,12 @@ func TestSetGuideResetsPreviewError(t *testing.T) {
 	fail := true
 	var built atomic.Int32
 	old := markupPreview
-	markupPreview = func(path string) ([]byte, string, error) {
+	markupPreview = func(ctx context.Context, path string) ([]byte, string, error) {
 		built.Add(1)
 		if fail {
 			return nil, "", errors.New("сбой чтения")
 		}
-		return library.MarkupPreview(path)
+		return library.MarkupPreviewCtx(ctx, path)
 	}
 	t.Cleanup(func() { markupPreview = old })
 	dir := testkit.TempDir(t)
@@ -301,5 +304,85 @@ func TestPickSpreadGuide(t *testing.T) {
 	}
 	if v = a.ClearSpreadGuide(); v.SpreadMarkup != nil {
 		t.Fatal("разметка не снята")
+	}
+}
+
+// reset во время идущего построения: результат уже начатого построения отдаётся ждущему, но не
+// запоминается (путь поменяли — старое превью не должно встать в кэш); следующий get строит заново
+// и уже запоминает.
+func TestMarkupCacheResetDuringBuild(t *testing.T) {
+	path := filepath.Join(testkit.TempDir(t), "m.bin")
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var built atomic.Int32
+	started, gate := make(chan struct{}, 4), make(chan struct{})
+	old := markupPreview
+	t.Cleanup(func() { markupPreview = old })
+	markupPreview = func(context.Context, string) ([]byte, string, error) {
+		n := built.Add(1)
+		started <- struct{}{}
+		if n == 1 {
+			<-gate // первое построение держим, пока не сделан reset
+		}
+		return []byte{byte(n)}, "image/png", nil
+	}
+	var c markupCache
+	got := make(chan []byte, 1)
+	go func() {
+		d, _, _ := c.get(context.Background(), path)
+		got <- d
+	}()
+	<-started
+	c.reset()
+	close(gate)
+	if d := <-got; len(d) != 1 || d[0] != 1 {
+		t.Fatalf("ждущий получил %v", d)
+	}
+	c.mu.Lock()
+	cached := c.data != nil || c.key != (markupKey{})
+	c.mu.Unlock()
+	if cached {
+		t.Fatal("результат построения, начатого до reset, запомнен")
+	}
+	for range 2 { // второй get — уже из кэша, без третьего построения
+		if d, _, err := c.get(context.Background(), path); err != nil || len(d) != 1 || d[0] != 2 {
+			t.Fatalf("после reset: %v %v", d, err)
+		}
+	}
+	if n := built.Load(); n != 2 {
+		t.Fatalf("построений %d, ждали 2", n)
+	}
+}
+
+// logWithoutSlow убирает из журнала строки медленных операций Editor («правка: … за 208ms»,
+// slowAt): под нагрузкой они появляются в любом тесте и к теме проверки не относятся.
+func logWithoutSlow(s string) string {
+	var keep []string
+	for _, ln := range strings.Split(s, "\n") {
+		if ln == "" || (strings.Contains(ln, " за ") && slowLineRe.MatchString(ln)) {
+			continue
+		}
+		keep = append(keep, ln)
+	}
+	return strings.Join(keep, "\n")
+}
+
+// slowLineRe — строка slow/slowAt Editor: «<дата> <время> правка|View|настройки|прогрев раскладок:
+// N разворотов за <длительность>» (log.Printf со стандартными флагами). Другие строки «… за …» остаются.
+var slowLineRe = regexp.MustCompile(`^\d{4}/\d\d/\d\d \d\d:\d\d:\d\d(\.\d+)? (правка|View|настройки|прогрев раскладок): \d+ разворотов за \d[\d.]*(ns|µs|ms|s|m[\d.]*s?|h[\d.]*m?[\d.]*s?)$`)
+
+// Медленные правки Editor убираются, прочие строки с «за» — нет.
+func TestLogWithoutSlow(t *testing.T) {
+	in := strings.Join([]string{
+		"2026/10/20 12:00:00 правка: 3 разворотов за 208ms",
+		"2026/10/20 12:00:00 View: 120 разворотов за 1.5s",
+		"2026/10/20 12:00:00 разметка: 4 файла за 3s",
+		"2026/10/20 12:00:00 правка: сбой за 208ms",
+		"",
+	}, "\n")
+	want := "2026/10/20 12:00:00 разметка: 4 файла за 3s\n2026/10/20 12:00:00 правка: сбой за 208ms"
+	if got := logWithoutSlow(in); got != want {
+		t.Errorf("осталось %q, ждали %q", got, want)
 	}
 }

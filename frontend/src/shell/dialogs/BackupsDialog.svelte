@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { backupsUi } from './backups.svelte'
   import { countLabel, sizeLabel, whenLabel } from './backups'
 

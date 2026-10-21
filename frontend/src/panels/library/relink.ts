@@ -9,7 +9,7 @@ export async function relinkFolder() {
     // Отмена диалога: Go вернул всё по нулям — молча.
     const text = relinkSummary(r)
     if (!text) return
-    store.apply(r.view as never)
+    if (!(await store.take(r.view as never))) return // сбой GetView: красный тост цепочки уже показан (087)
     store.notify(text, r.found > 0 ? 'info' : 'error')
   } catch (e) {
     store.notify(errText(e), 'error')

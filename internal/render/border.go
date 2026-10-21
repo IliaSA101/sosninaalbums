@@ -1,6 +1,7 @@
 package render
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -111,14 +112,14 @@ func placePx(b layout.Rect, dpi int) image.Rectangle {
 }
 
 // prepareBorderSafe — prepareBorder с паникой в ошибку: горутина без recover уронила бы процесс.
-func prepareBorderSafe(it item, canvas image.Rectangle, dpi int) (paint func(*image.RGBA) error, err error) {
+func prepareBorderSafe(ctx context.Context, it item, canvas image.Rectangle, dpi int) (paint func(*image.RGBA) error, err error) {
 	b := *it.border
 	defer func() {
 		if p := recover(); p != nil {
 			paint, err = nil, fmt.Errorf("%s: сбой при обработке рамочки: %v", borderName(b), p)
 		}
 	}()
-	return prepareBorder(b, it.env, canvas, dpi)
+	return prepareBorder(ctx, b, it.env, canvas, dpi)
 }
 
 func borderName(b BorderDraw) string {
@@ -131,7 +132,7 @@ func borderName(b BorderDraw) string {
 // prepareBorder готовит рамочку: встроенная рисуется при укладке на холст, картинка — здесь
 // декодируется и масштабируется (в потоке подготовки), на холст ложится по порядку. nil без
 // ошибки — рисовать нечего.
-func prepareBorder(b BorderDraw, env *borderEnv, canvas image.Rectangle, dpi int) (func(*image.RGBA) error, error) {
+func prepareBorder(ctx context.Context, b BorderDraw, env *borderEnv, canvas image.Rectangle, dpi int) (func(*image.RGBA) error, error) {
 	if !finiteBox(b.Box, b.Rot) {
 		return nil, nil
 	}
@@ -142,7 +143,7 @@ func prepareBorder(b BorderDraw, env *borderEnv, canvas image.Rectangle, dpi int
 	if !b.Pic {
 		return builtinPaint(b, k, canvas), nil
 	}
-	return picPaint(b, env, k, dpi, canvas)
+	return picPaint(ctx, b, env, k, dpi, canvas)
 }
 
 // builtinPaint — встроенная рамочка: gen.DrawFrame в подхолст по габариту места под поворотом
@@ -197,7 +198,7 @@ func picGeometry(b layout.Rect, scale float64, cut [4]float64, iw, ih, pw, ph in
 // обрезает по холсту, буфера нет); повёрнутое — Nine в буфер с прозрачным полем и поворот. Буфер
 // строится при укладке (по одному за раз, а не у каждого из параллельных элементов) и занимает
 // место в DecodeBudget: до 1,6 ГБ у места во весь холст.
-func picPaint(b BorderDraw, env *borderEnv, k float64, dpi int, canvas image.Rectangle) (func(*image.RGBA) error, error) {
+func picPaint(ctx context.Context, b BorderDraw, env *borderEnv, k float64, dpi int, canvas image.Rectangle) (func(*image.RGBA) error, error) {
 	r := placePx(b.Box, dpi)
 	rotated := b.Rot != 0
 	buf := image.Rect(0, 0, r.Dx()+2*borderPad, r.Dy()+2*borderPad)
@@ -207,7 +208,7 @@ func picPaint(b BorderDraw, env *borderEnv, k float64, dpi int, canvas image.Rec
 	if !rotated && r.Intersect(canvas).Empty() {
 		return nil, nil
 	}
-	pic, err := env.picture(b.Path)
+	pic, err := env.picture(ctx, b.Path)
 	if err != nil {
 		return nil, photoErr(b.Path, err)
 	}
@@ -230,7 +231,9 @@ func picPaint(b BorderDraw, env *borderEnv, k float64, dpi int, canvas image.Rec
 	}
 	return func(c *image.RGBA) error {
 		n := int64(buf.Dx()) * int64(buf.Dy())
-		imgfile.DecodeBudget.Acquire(n)
+		if err := imgfile.DecodeBudget.AcquireCtx(ctx, n); err != nil {
+			return err
+		}
 		defer imgfile.DecodeBudget.Release(n)
 		tmp := image.NewRGBA(buf)
 		gen.NineTo(tmp, image.Rect(borderPad, borderPad, borderPad+g.pw, borderPad+g.ph), scaled, g.sl, g.dsl)
@@ -244,32 +247,21 @@ func picPaint(b BorderDraw, env *borderEnv, k float64, dpi int, canvas image.Rec
 // checkBorderFile — размеры картинки рамочки по заголовку, до декода (079-35): больше
 // maxBorderSrc — отказ. Дальше imgfile.OpenOriented проверит ещё раз на своём дескрипторе.
 func checkBorderFile(path string) error {
-	f, err := imgfile.OpenRegular(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close() //nolint:errcheck // чтение: ошибка закрытия ничего не теряет
-	cfg, _, err := image.DecodeConfig(f)
-	if err != nil {
-		return err
-	}
-	if cfg.Width <= 0 || cfg.Height <= 0 {
-		return fmt.Errorf("некорректный размер изображения %dx%d", cfg.Width, cfg.Height)
-	}
-	if int64(cfg.Width)*int64(cfg.Height) > maxBorderSrc {
+	_, err := imgfile.FileDims(path, maxBorderSrc)
+	if errors.Is(err, imgfile.ErrTooBig) {
 		return errBorderBig
 	}
-	return nil
+	return err
 }
 
 // loadBorderPic читает картинку рамочки: заголовок, затем декод под бюджетом памяти; сторона
 // больше maxBorderSide уменьшается до неё, пока бюджет ещё занят (079-40). Результат — NRGBA без
 // привязки к бюджету (он отпущен сразу, в кэше картинка живёт до конца листа).
-func loadBorderPic(path string) (*image.NRGBA, error) {
+func loadBorderPic(ctx context.Context, path string) (*image.NRGBA, error) {
 	if err := checkBorderFile(path); err != nil {
 		return nil, err
 	}
-	img, release, err := imgfile.OpenOriented(path)
+	img, release, err := imgfile.OpenOrientedCtx(ctx, path)
 	if err != nil {
 		return nil, err
 	}

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { FEATURES, rowOf } from '../../base/prefs/levels'
+import { FEATURES, rowOf, type FeatureId } from '../../base/prefs/levels'
+import { prefs } from '../../base/prefs/prefs.svelte'
 import { catalogView } from '../../base/keys/keymap.fixture'
 import { MOUSE_HELP } from '../menu/mousehelp'
 import { ARTICLES, GUIDE_GROUPS, placesOf } from './articles'
+import { articleText } from './articletext'
+import { levelMarks, nestedLevels } from './leveltext'
 import { HINT_SPOTS, menuPath, menus } from './show'
 
 // Стражи справочника (спека 033, design §9): справка не устаревает молча. Новая функция без статьи роняет
@@ -162,10 +165,10 @@ describe('справочник функций: стражи', () => {
   it('078: «Похожие кадры» — блок «Фото» окна автосборки, якорь строки и запасное место; «Автосборка» называет блок и вариант', () => {
     const a = ARTICLES.find((x) => x.id === 'similar')
     expect(a).toMatchObject({ title: 'Похожие кадры', feature: 'base', spot: 'ui:auto-similar', miss: { spot: 'ui:autobuild' } })
-    for (const w of ['Убирать похожие кадры: Нет · Дубли · Очень похожие · Похожие', 'Ч/б развороты', '«Вернуть все»', 'Вариант ‹ 1 ›'])
+    for (const w of ['Убирать похожие кадры: Нет · Дубли · Очень похожие · Похожие', '«Вернуть все»', 'Вариант ‹ 1 ›'])
       expect(a?.where, w).toContain(w)
     for (const w of ['«беру» и 4–5★ не убираются никогда', 'Убранные остаются в ленте']) expect(a?.how, w).toContain(w)
-    for (const w of ['дубли', 'вернуть', 'вариант', 'ч/б']) expect(a?.words, w).toContain(w)
+    for (const w of ['дубли', 'вернуть', 'вариант']) expect(a?.words, w).toContain(w)
     expect(ARTICLES.find((x) => x.id === 'autobuild')?.where).toMatch(/блок «Фото»[^.]*«Убирать похожие кадры»/)
     expect(ARTICLES.find((x) => x.id === 'autobuild')?.words).toContain('вариант')
   })
@@ -238,6 +241,62 @@ describe('справочник функций: стражи', () => {
       expect(a?.where, w).toContain(w)
     expect(a?.what).toContain('только с вашего согласия')
     expect(placesOf(a!).map((p) => p.spot)).toEqual(['menu:packs'])
+  })
+
+  it('086: «Папка данных и перенос» — вход в «Файл», что лежит в папке, перенос целиком и шаблоны в файл', () => {
+    const a = ARTICLES.find((x) => x.id === 'data-folder')
+    expect(a).toMatchObject({ title: 'Папка данных и перенос', feature: 'base' })
+    for (const w of ['Файл ▸ Открыть папку данных', 'Мои шаблоны ▸ Сохранить в файл', 'Загрузить из файла'])
+      expect(a?.where, w).toContain(w)
+    for (const w of ['config.json', 'templates.json', 'log.txt', 'Резервные копии', 'миниатюры']) expect(a?.how, w).toContain(w)
+    expect(placesOf(a!).map((p) => p.spot)).toEqual(['menu:showData'])
+  })
+
+  it('080-9: «Ч/б развороты» — отдельная статья на функции «adjust», якорь строки, запасное место — окно', () => {
+    const a = ARTICLES.find((x) => x.id === 'auto-gray')
+    expect(a).toMatchObject({
+      title: 'Ч/б развороты',
+      group: 'spreads',
+      feature: 'adjust',
+      spot: 'ui:auto-gray',
+      miss: { spot: 'ui:autobuild' },
+    })
+    for (const w of ['Ч/б развороты: Нет · 10 % · 20 % · 30 %', '«Что соберётся»']) expect(a?.where, w).toContain(w)
+    for (const w of ['ч/б', 'чёрно-белые', 'автосборка']) expect(a?.words, w).toContain(w)
+  })
+
+  it('080-9: на «Простом» «Похожие кадры» и «Автосборка» не говорят о ч/б; на «Стандартном» — говорят', () => {
+    const texts = (id: string) => {
+      const a = ARTICLES.find((x) => x.id === id)
+      return [a?.what, a?.where, a?.how, a?.words].map((t) => articleText(t ?? '')).join(' ')
+    }
+    prefs.load({ level: 'simple', showStart: false, first: false, custom: null })
+    for (const id of ['similar', 'autobuild']) expect(texts(id), id).not.toMatch(/ч\/б/i)
+    expect(texts('autobuild')).not.toContain('{can:')
+    prefs.load({ level: 'standard', showStart: false, first: false, custom: null })
+    expect(texts('autobuild')).toContain('«Ч/б развороты» (статья «Ч/б развороты»)')
+    expect(texts('similar')).not.toMatch(/ч\/б/i) // ч/б теперь только в своей статье
+  })
+
+  it('080-9: «Свой» без «Вариантов раскладки» — «Автосборка» не называет фильтр семейств', () => {
+    const where = () => articleText(ARTICLES.find((x) => x.id === 'autobuild')?.where ?? '')
+    prefs.load({ level: 'standard', showStart: false, first: false, custom: null })
+    expect(where()).toContain('фильтр семейств')
+    prefs.load({ level: 'custom', showStart: false, first: false, custom: { base: 'standard', on: [], off: ['variants'] } })
+    expect(where()).not.toContain('семейств')
+    expect(where()).toContain('Раскладки»: переключатель') // без двойных пробелов и «,»
+    prefs.load({ level: 'simple', showStart: false, first: false, custom: null })
+  })
+
+  it('080-9: каждая метка {can:id} называет FeatureId, вложенной {can} нет', () => {
+    const ids = new Set<string>(FEATURES.flatMap((f) => [f.id, ...(f.also ?? [])]))
+    const bad: string[] = []
+    for (const a of ARTICLES)
+      for (const t of [a.what, a.where, a.how, a.miss?.hint, a.words]) {
+        for (const id of levelMarks(t ?? '')) if (!ids.has(id as FeatureId)) bad.push(`${a.id}: ${id}`)
+        for (const body of nestedLevels(t ?? '')) bad.push(`${a.id}: вложенная метка в «${body}»`)
+      }
+    expect(bad).toEqual([])
   })
 
   it('у каждого раздела есть статьи; метки версии у статей нет', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { albumStats, colorLine, nextLowSheet, orientation } from './stats'
-import type { Photo, SpreadView } from '../../base/core/types'
+import { albumStats, colorLine, limitLine, nextLowSheet, orientation } from './stats'
+import type { PageLimitView, Photo, SpreadView } from '../../base/core/types'
 
 const photo = (id: string, w: number, h: number): Photo => ({ id, path: id, name: id, w, h })
 const spread = (photos: string[], layout: string, rects: { w: number; h: number }[] = []): SpreadView =>
@@ -91,5 +91,28 @@ describe('nextLowSheet', () => {
   it('нет таких разворотов или альбом пуст — −1', () => {
     expect(nextLowSheet(sp(0, 0), 0)).toBe(-1)
     expect(nextLowSheet([], 0)).toBe(-1)
+  })
+})
+
+describe('limitLine (085)', () => {
+  const lim = (p: Partial<PageLimitView>): { pageLimit: PageLimitView } => ({
+    pageLimit: { who: 'Нетпринт «Премиум»', range: 'от 10 до 60 разворотов', count: 20, min: 10, max: 60, warn: '', ...p },
+  })
+  it('нет типографии — строки нет', () => {
+    expect(limitLine({})).toBeNull()
+    expect(limitLine({ pageLimit: undefined })).toBeNull()
+  })
+  it('в пределах — серая строка «кто: диапазон»', () => {
+    expect(limitLine(lim({}))).toEqual({ text: 'Нетпринт «Премиум»: от 10 до 60 разворотов', warn: false })
+    expect(limitLine(lim({ who: 'Фотосфера', range: 'до 57 разворотов', min: 0, max: 57 }))).toEqual({
+      text: 'Фотосфера: до 57 разворотов',
+      warn: false,
+    })
+  })
+  it('вне предела — текст Go как предупреждение, диапазона нет', () => {
+    const warn = 'Разворотов 62 — у Нетпринта («Премиум») не больше 60'
+    expect(limitLine(lim({ count: 62, warn }))).toEqual({ text: warn, warn: true })
+    const few = 'Разворотов 6 — у Нетпринта («Премиум») не меньше 10'
+    expect(limitLine(lim({ count: 6, warn: few }))).toEqual({ text: few, warn: true })
   })
 })

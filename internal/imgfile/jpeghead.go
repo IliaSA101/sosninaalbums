@@ -24,8 +24,10 @@ const XMPPrefix = "http://ns.adobe.com/xap/1.0/\x00"
 // (ICC важнее EXIF Interop: так камеры Canon/Nikon помечают Adobe RGB без профиля).
 // CMYK без ICC здесь не виден — его определяет readInfo по DecodeConfig.
 // Ошибка чтения не-JPEG и мусор дают {1, "", "", nil}.
-func Header(r io.Reader) Head {
-	s := jpegSegments(r)
+func Header(r io.Reader) Head { return headOf(jpegSegments(r)) }
+
+// headOf собирает Head из уже прочитанных сегментов.
+func headOf(s jpegSegs) Head {
 	h := Head{Orient: 1, XMP: s.xmp, Taken: s.taken}
 	if s.orient > 0 {
 		h.Orient = s.orient
@@ -45,6 +47,7 @@ type jpegSegs struct {
 	interop string // EXIF InteropIndex
 	orient  int    // EXIF Orientation, 0 — тега нет
 	taken   int64  // EXIF время съёмки, 0 — нет
+	exif    []byte // TIFF-часть первого APP1 «Exif» (срез прочитанного сегмента); nil — нет
 	xmp     []byte // первый APP1 XMP без префикса
 }
 
@@ -82,6 +85,7 @@ func jpegSegments(r io.Reader) jpegSegs {
 		switch {
 		case m[1] == 0xE1 && !haveExif && len(seg) >= 6 && string(seg[:6]) == "Exif\x00\x00":
 			haveExif = true
+			out.exif = seg[6:]
 			out.interop = exifInterop(seg[6:])
 			out.orient = exifOrientation(seg)
 			out.taken = exifTaken(seg[6:])

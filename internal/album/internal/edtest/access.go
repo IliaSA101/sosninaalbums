@@ -52,8 +52,8 @@ func RelinkMarks(e *album.Editor, files, dirs []model.PathPair) []album.MarkChan
 
 // Поля модели без экспорта (JSON): версия исходного файла, отметки из файла, запасной путь.
 func From(p *model.Project) int { return inside.From(p) }
-func Loaded(p *model.Project) map[string]model.Mark {
-	return inside.Loaded(p).(map[string]model.Mark)
+func Loaded(p *model.Project) model.Side {
+	return inside.Loaded(p).(model.Side)
 }
 func Alt(m model.Mark) string { return inside.Alt(m) }
 

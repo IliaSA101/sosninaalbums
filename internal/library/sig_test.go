@@ -3,6 +3,7 @@ package library
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -102,6 +103,53 @@ func TestCacheSigRoundTrip(t *testing.T) {
 	}
 	if _, err := os.Stat(thumb); err == nil {
 		t.Error("чтение готовой подписи заново сделало миниатюру")
+	}
+}
+
+// Кэш 0.19: миниатюра есть, `_s.bin` нет — подпись считается по миниатюре, оригинал не декодируется
+// (его подменили мусором того же размера и времени: ключ кэша прежний), файл подписи появляется.
+func TestCacheSigFromOldThumb(t *testing.T) {
+	c, dir := sigCache(t)
+	var photos []Photo
+	for i := range 3 { // несколько кадров: у каждого свой файл подписи
+		p := blocksJPEG(t, dir, fmt.Sprintf("old-%d.jpg", i), uint64(i+1))
+		if _, err := c.File(p, false); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(sigFileOf(t, c, p)); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		st, err := os.Stat(p.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p.Path, bytes.Repeat([]byte{0xAB}, int(st.Size())), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p.Path, st.ModTime(), st.ModTime()); err != nil {
+			t.Fatal(err)
+		}
+		photos = append(photos, p)
+	}
+	for _, p := range photos {
+		s, err := c.Sig(p)
+		if err != nil || !s.Ok {
+			t.Fatalf("%s: Sig %+v, %v", p.Name, s, err)
+		}
+		thumb, err := c.File(p, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		img, err := decodeThumb(thumb)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := imgsig.Of(img); s != want {
+			t.Errorf("%s: подпись %+v, по миниатюре %+v", p.Name, s, want)
+		}
+		if st, err := os.Stat(sigFileOf(t, c, p)); err != nil || st.Size() != imgsig.FileSize {
+			t.Errorf("%s: файл подписи: %v, %v", p.Name, st, err)
+		}
 	}
 }
 

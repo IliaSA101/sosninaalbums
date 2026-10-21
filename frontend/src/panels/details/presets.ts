@@ -32,12 +32,19 @@ export function presetFields(p: Preset): Partial<Settings> {
 // Подпись типографии в списке: группа "" — «Общие».
 export const groupLabel = (group: string): string => group || 'Общие'
 
-// Типография для списка: у подсвеченного пресета — его группа; нет подсвеченного — последняя выбранная
+// Типография для списка: у подсвеченного пресета — его группа; подсвечены несколько (20×20 у Нетпринта и Фабрики —
+// одни числа, 081 №12) — последняя выбранная, если она среди них; нет подсвеченного — последняя выбранная
 // (настройки окна), если она есть в списке; иначе «Общие» (""). Форму не меняет.
 export function presetGroupOf(list: readonly PagePreset[], form: Form, saved = ''): string {
-  const act = list.find((p) => presetActive(p, form))
-  if (act) return act.group ?? ''
+  const act = list.filter((p) => presetActive(p, form))
+  if (act.length) return (act.find((p) => (p.group ?? '') === saved) ?? act[0]).group ?? ''
   return saved && list.some((p) => (p.group ?? '') === saved) ? saved : ''
+}
+
+// Подсказка подсвеченного пресета выбранной типографии: числа у Нетпринта и Фабрики совпадают (081 №12),
+// подсказка чужой группы вводила бы в заблуждение.
+export function presetHint(list: readonly PagePreset[], form: Form, group: string): string | undefined {
+  return list.find((p) => p.hint && (p.group ?? '') === group && presetActive(p, form))?.hint
 }
 
 // Ряды кнопок: общий (group "") первым, дальше по группам в порядке появления («Фотосфера:»).

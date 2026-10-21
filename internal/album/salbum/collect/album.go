@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
@@ -14,8 +15,9 @@ import (
 // плана — путь в папке сбора, без запасного пути и без ключа библиотеки (своё — обычный файл,
 // decisions №13); пропавшие — как были. Папка альбома — dir/Фото (лента читает подпапки),
 // разметки — новые пути. Отметки: фото в плане — новый путь, пропавшее фото — как было,
-// остальные (фото вне сбора) не пишутся. ID — по новым путям (Rekey). p и marks не меняются.
-func Album(p *model.Project, marks map[string]model.Mark, dir string, pl Plan) (*model.Project, map[string]model.Mark) {
+// остальные (фото вне сбора) не пишутся, а с ними и их членство в подборках (083-12); подборки —
+// копией. ID — по новым путям (Rekey). p и side не меняются.
+func Album(p *model.Project, side model.Side, dir string, pl Plan) (*model.Project, model.Side) {
 	q := p.Clone()
 	moved := map[string]string{} // ключ пути источника → путь в папке сбора
 	photos := false
@@ -29,7 +31,7 @@ func Album(p *model.Project, marks map[string]model.Mark, dir string, pl Plan) (
 	if photos {
 		q.Folders = []string{filepath.Join(dir, DirPhotos)}
 	}
-	out := moveMarks(p, marks, moved, pl.Missing)
+	out := model.Side{Marks: moveMarks(p, side.Marks, moved, pl.Missing), Bins: slices.Clone(side.Bins)}
 	salbum.Rekey(q, library.IDFor)
 	return q, out
 }
@@ -75,8 +77,8 @@ func moveMarks(p *model.Project, marks map[string]model.Mark, moved map[string]s
 // Save пишет собранный альбом q в path только относительными путями от его папки (WriteRel,
 // атомарно) и открывает записанное заново: пропавших больше, чем pl.Missing, — ошибка плана
 // (альбом уже записан, но об этом нужно сказать). Резервную копию прежнего файла делает App.
-func Save(q *model.Project, marks map[string]model.Mark, path string, pl Plan) error {
-	if err := salbum.WriteRel(q, path, filepath.Dir(path), marks); err != nil {
+func Save(q *model.Project, side model.Side, path string, pl Plan) error {
+	if err := salbum.WriteRel(q, path, filepath.Dir(path), side); err != nil {
 		return diskFull(err) // альбом пишется последним: место могло кончиться и на нём
 	}
 	lp, err := salbum.Load(path)

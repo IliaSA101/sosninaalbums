@@ -4,6 +4,7 @@
 //
 // Файлы: jpeghead — один проход по сегментам заголовка (Header, XMPPrefix); exif — ориентация,
 // обход IFD (exifWalk) и время съёмки (Head.Taken);
-// icc — цветовой профиль и класс Color; limits — CheckSize, CheckDims, OpenRegular, OpenOriented;
-// budget — общий бюджет пикселей декода (DecodeBudget).
+// icc — цветовой профиль и класс Color; limits — CheckSize, CheckDims, OpenRegular, OpenOriented(Ctx);
+// header — DimsOf/FileDims (размеры по заголовку с пределом, ErrTooBig);
+// budget — общий бюджет пикселей декода (DecodeBudget, AcquireCtx).
 package imgfile

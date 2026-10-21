@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { screenDpr } from '../../base/ui/dpr.svelte'
   import { store } from '../../base/core/store.svelte'
   import { sheetIn, unitOf } from '../../base/geom/sheet'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import Seg from '../../base/tpl/Seg.svelte'
   import SideList from '../../base/tpl/SideList.svelte'
   import TplItem from '../../base/tpl/TplItem.svelte'
@@ -46,7 +47,7 @@
   const themed = $derived(themeItems(decor.cat, decor.theme))
   const items = $derived(spreads && sp ? tplVisible(themed, scope, sp) : themed)
   const readOnly = $derived(!!decor.cat?.readOnly)
-  const px = $derived(tilePx(TILE_W, globalThis.devicePixelRatio || 1))
+  const px = $derived(tilePx(TILE_W, screenDpr.value))
   // Плитка, что стоит в этой области сейчас: отмечена, как текущая раскладка в галерее ⊞
   const standing = $derived(
     frame
@@ -62,7 +63,7 @@
   const bgPlan = $derived(decor.bgPlan())
   const frameWhere = $derived(frameWhereItems(decor.frameSel().length))
   const noun = $derived(c ? NOUN[c.kind] : 'фон')
-  const dpr = $derived(globalThis.devicePixelRatio || 1)
+  const dpr = $derived(screenDpr.value)
   const emptyMsg = $derived(spreads && themed.length > 0 && !decor.loading ? FILTERED_EMPTY : emptyText(decor.theme, readOnly, c?.kind))
 
   // Лист пропал, пока окно открыто (удалён, смена альбома): закрываем. Область пропала из списка — первая доступная.

@@ -10,6 +10,8 @@ import type { BackdropScope, GridResult, Payload, Target } from '../core/types'
 // Фото на фон — действие редактора (editor/backdrop/backdropact.ts); подключает shell/boot/wire.ts.
 export const dropHooks = {
   setBackdrop: async (_spread: string, _scope: BackdropScope, _photo: string): Promise<void> => {},
+  // Фото на кнопку «Подборки» (083) — panels/bins/binact.ts; основа панели не импортирует.
+  bin: async (_ids: string[]): Promise<void> => {},
 }
 
 export async function dropOn(p: Payload, t: Target) {
@@ -40,6 +42,9 @@ export async function dropOn(p: Payload, t: Target) {
       return
     case 'backdrop':
       await dropHooks.setBackdrop(plan.spread, plan.scope, plan.photo)
+      return
+    case 'bin':
+      await dropHooks.bin(plan.ids)
       return
     case 'cover':
       if (await store.createCover(plan.photo)) store.selected.clear()

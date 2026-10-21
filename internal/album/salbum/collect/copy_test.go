@@ -113,7 +113,7 @@ func TestCollectNeverOverwrites(t *testing.T) {
 	if got, _ := os.ReadFile(filepath.Join(dir, "Фото", "Прочие", "x (2).jpg")); string(got) != "eeeeeeeeeeeeee" {
 		t.Fatalf("копия под « (2)»: %q", got)
 	}
-	q, _ := Album(sc.p, nil, dir, pl)
+	q, _ := Album(sc.p, model.Side{}, dir, pl)
 	if ref := q.Photos[library.IDFor(filepath.Join(dir, "Фото", "Прочие", "x (2).jpg"))]; ref.Path == "" {
 		t.Fatal("собранный альбом не смотрит на « (2)»")
 	}

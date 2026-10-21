@@ -1,8 +1,10 @@
 package view
 
 import (
+	"cmp"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
@@ -85,6 +87,7 @@ func BuildView(p *model.Project, st State) model.View {
 		TextMaxW:        p.TextMaxW(nil),
 		BackdropUsed:    []string{},
 		LibPhotos:       libPhotos(p),
+		AlbumFonts:      albumFonts(p),
 		MarksRev:        st.MarksRev,
 	}
 	g := p.Geo(nil)
@@ -105,6 +108,9 @@ func BuildView(p *model.Project, st State) model.View {
 	}
 	// Обложка — тем же f до result: её поля и имена попадают в Unfilled/Unnamed.
 	v.Cover = coverView(f, st, &v)
+	if l, ok := model.LimitOf(p); ok {
+		v.PageLimit = &l
+	}
 	v.Unfilled, v.Unnamed = f.result()
 	for _, s := range p.Sheets() { // свои стикеры (048) и рамочки (079) — как фото фона: «в альбоме» не считаются
 		for _, st := range s.Stickers {
@@ -128,6 +134,21 @@ func libPhotos(p *model.Project) []string {
 		}
 	}
 	slices.Sort(out)
+	return out
+}
+
+// albumFonts — таблица своих гарнитур альбома по названию без регистра (равные — по id); пусто — nil.
+func albumFonts(p *model.Project) []model.FontUse {
+	if len(p.Fonts) == 0 {
+		return nil
+	}
+	out := make([]model.FontUse, 0, len(p.Fonts))
+	for id, f := range p.Fonts {
+		out = append(out, model.FontUse{ID: id, Name: f.Name})
+	}
+	slices.SortFunc(out, func(a, b model.FontUse) int {
+		return cmp.Or(strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)), strings.Compare(a.ID, b.ID))
+	})
 	return out
 }
 

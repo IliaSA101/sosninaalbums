@@ -46,10 +46,14 @@ import (
 // автосохранением;
 // 14 (общий на 0.20, новые поля 0.20 до выпуска ложатся сюда же, без нового номера): рамочки мест
 // `grid[].border` и прозрачность фото `photos.*.fade` (спека 079, omitempty) — 0.19 файл не
-// откроет и не сотрёт их автосохранением.
+// откроет и не сотрёт их автосохранением;
+// 15 (общий на 0.21, новые поля 0.21 до выпуска ложатся сюда же, без нового номера): подборки фото
+// `bins` и членство `marks[].bins` (спека 083, omitempty) — 0.20 файл не откроет и не сотрёт
+// подборки автосохранением; свои шрифты `fonts` (спека 082, omitempty) — 0.20 заменила бы id своей
+// гарнитуры в стилях на Montserrat и затёрла выбор автосохранением.
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 14
+const FormatVersion = 15
 
 type Settings struct {
 	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
@@ -206,11 +210,14 @@ type Project struct {
 	// снимков отмены он нужен; в файл идёт как spreadGuideAbs).
 	SpreadGuide    string `json:"spreadGuide,omitempty"`
 	SpreadGuideAlt string `json:"spreadGuideAlt,omitempty"`
+	// Fonts — свои гарнитуры, стоящие в текстах (082, v15, fonts.go): ключ — id my:<16 hex>.
+	// Держит SyncFonts; пустой — nil.
+	Fonts map[string]FontRef `json:"fonts,omitempty"`
 	// from — версия файла, из которого прочитан проект (0 — новый): по ней
 	// Editor решает, нужен ли бэкап перед первой записью.
 	from int
-	// loaded — свои отметки из файла (ID → отметка): NewEditor копирует их себе (JSON их не несёт).
-	loaded map[string]Mark
+	// loaded — свои отметки и подборки из файла: NewEditor копирует их себе (JSON их не несёт).
+	loaded Side
 }
 
 // Доступы к from и loaded: полем их не экспортировать — попали бы в JSON снимков отмены
@@ -222,11 +229,11 @@ func (p *Project) From() int { return p.from }
 // SetFrom — версия исходного файла (Load, Restore).
 func (p *Project) SetFrom(v int) { p.from = v }
 
-// Loaded — свои отметки, прочитанные из файла.
-func (p *Project) Loaded() map[string]Mark { return p.loaded }
+// Loaded — свои отметки и подборки, прочитанные из файла.
+func (p *Project) Loaded() Side { return p.loaded }
 
-// SetLoaded — отметки из файла (Load кладёт, NewEditor копирует).
-func (p *Project) SetLoaded(m map[string]Mark) { p.loaded = m }
+// SetLoaded — отметки и подборки из файла (Load кладёт, NewEditor копирует).
+func (p *Project) SetLoaded(s Side) { p.loaded = s }
 
 func New() *Project {
 	return &Project{Version: FormatVersion, Product: ProductAlbum, Settings: DefaultSettings(), Photos: map[string]PhotoRef{}}

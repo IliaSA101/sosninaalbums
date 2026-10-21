@@ -595,14 +595,21 @@ func TestManyPanoramas(t *testing.T) {
 	for k := layout.ManyFrom; k <= manyMax; k++ {
 		ks = append(ks, k)
 	}
-	if testkit.Lite() {
-		ratios, ks = []float64{11, 20, 100}, []int{17, 25, 40}
-	}
+	lite := testkit.Lite()
 	for _, k := range ks {
 		t.Run(fmt.Sprint(k), func(t *testing.T) {
 			t.Parallel()
-			for _, at := range []int{0, 1, 2, k / 2, k - 3, k - 2, k - 1} {
-				for _, ratio := range ratios {
+			// Под Lite набор подтестов тот же (test-baseline сверяет имена), урезается объём внутри:
+			// вне {17, 25, 40} — одно соотношение и только края ленты.
+			rs, ats := ratios, []int{0, 1, 2, k / 2, k - 3, k - 2, k - 1}
+			if lite {
+				rs = []float64{11, 20, 100}
+				if k != 17 && k != 25 && k != 40 {
+					rs, ats = []float64{20}, []int{0, k - 1}
+				}
+			}
+			for _, at := range ats {
+				for _, ratio := range rs {
 					as := same(k, aspP)
 					if k%2 == 1 {
 						as = mixed(k, uint64(k))

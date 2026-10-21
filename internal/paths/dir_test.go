@@ -11,7 +11,7 @@ import (
 
 // BookDir (047, 069): нет — путь без создания, есть — та же, выбрана сама папка (регистр не
 // важен) — она; файл на месте и негодное имя — отказ со словом вызывающего. Ссылки и junction —
-// TestBookDir в export/fsfera.
+// TestBookDir в export/printshop.
 func TestBookDir(t *testing.T) {
 	parent := testkit.TempDir(t)
 	want := filepath.Join(parent, "Иванов")

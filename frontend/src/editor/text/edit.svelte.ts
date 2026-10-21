@@ -41,6 +41,9 @@ class Edit {
   private pending: string | null = null // набрано, но не отправлено
   private timer = 0
   private chain: Promise<unknown> = Promise.resolve()
+  // Отправки вне цепочки текста (имена в карточке, 087-9): «досыльщики» отложенного и летящие вызовы Go.
+  private flushers = new Set<() => void>()
+  private flying = new Set<Promise<unknown>>()
 
   get editing() {
     return this.target !== null
@@ -159,10 +162,24 @@ class Edit {
   async idle(): Promise<void> {
     this.stopTimer()
     if (this.pending !== null) void this.flush(false)
-    await this.chain.then(
-      () => {},
-      () => {},
-    )
+    for (const f of [...this.flushers]) f()
+    const wait = [this.chain, ...this.flying]
+    await Promise.allSettled(wait)
+  }
+
+  // Другой отправитель (имена) регистрирует досылку отложенного: idle() зовёт её и ждёт track-нутые вызовы.
+  // Возвращает отписку.
+  onIdle(flush: () => void): () => void {
+    this.flushers.add(flush)
+    return () => this.flushers.delete(flush)
+  }
+
+  // Летящий вызов Go, который idle() обязан дождаться (смена альбома, сохранение, отмена).
+  track<T>(p: Promise<T>): Promise<T> {
+    this.flying.add(p)
+    const drop = () => this.flying.delete(p)
+    p.then(drop, drop)
+    return p
   }
 
   // ---------- новые блоки ----------

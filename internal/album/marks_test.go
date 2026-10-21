@@ -177,12 +177,13 @@ func TestResetMarks(t *testing.T) {
 // пустая карта, не nil; снимок не делает шага и не меняет rev.
 func TestSnapshotMarks(t *testing.T) {
 	e := edtest.Open(t, model.New(), "")
-	if p, m := e.SnapshotMarks(); p == nil || m == nil || len(m) != 0 {
-		t.Fatalf("пустой альбом: %v %v", p, m)
+	if p, sd := e.SnapshotSide(); p == nil || sd.Marks == nil || len(sd.Marks) != 0 {
+		t.Fatalf("пустой альбом: %v %v", p, sd)
 	}
 	edtest.SetMarks(t, e, edtest.Photos("a", "b"), model.MarkPatch{Rating: edtest.Ip(2)})
 	v := e.View()
-	p, m := e.SnapshotMarks()
+	p, sd := e.SnapshotSide()
+	m := sd.Marks
 	if len(m) != 2 || *m["a"].Rating != 2 || *m["b"].Rating != 2 {
 		t.Fatalf("снимок отметок: %v", m)
 	}

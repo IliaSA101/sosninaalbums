@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AutoPlan, AutoPreview, PhotoOpts } from '../../base/core/types'
 import { AutoDialog, type PlanFn, type PreviewFn } from './autobuild.svelte'
 import { clampVariant, MAX_VARIANT, PhotosState, type DropsFn } from './autosimilar.svelte'
-import { albumAfter, sourceLine, spreadsBefore } from './autobuild'
+import { albumAfter, altLabel, sameText, sourceLine, spreadsBefore } from './autobuild'
 
 // 078: «Вариант ‹ k ›» и признак пересборки в запросах окна; режим пересборки окна (U2). Тост и вход — autobuild.lastauto.test.ts.
 const ids = Array.from({ length: 12 }, (_, i) => `p${i}`)
@@ -180,5 +180,24 @@ describe('Окно в режиме пересборки (U2)', () => {
     ph.toggleKeep('p9')
     await settle()
     expect(seen.at(-1)).toContain('p1') // следующие — с набором
+  })
+})
+
+describe('Строки окна пересборки (080)', () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `x${i}`)
+
+  it('ссылка в строке источника: в обычном окне «Пересобрать прошлую», в пересборке «Собрать свободные»', () => {
+    expect(altLabel({ alt: { ids: ids(240) } })).toBe('Пересобрать прошлую (240 фото)')
+    expect(altLabel({ again: true, alt: { ids: ids(37) } })).toBe('Собрать свободные: 37')
+    expect(altLabel({ again: true })).toBe('')
+    expect(altLabel({})).toBe('')
+  })
+
+  it('строка-статус: одно совпадение, три подряд, другой вариант выбран руками, нет серии', () => {
+    expect(sameText({ first: 3, last: 3, next: 4 }, 4)).toBe('Вариант 3 не отличается от текущего — показан 4')
+    expect(sameText({ first: 3, last: 4, next: 5 }, 5)).toBe('Вариант 4 не отличается от текущего — показан 5')
+    expect(sameText({ first: 3, last: 5, next: 6 }, 6)).toBe('Варианты 3–5 не отличаются — других сборок этих фото, похоже, нет')
+    expect(sameText({ first: 3, last: 3, next: 4 }, 5)).toBe('')
+    expect(sameText(null, 4)).toBe('')
   })
 })

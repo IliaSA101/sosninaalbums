@@ -27,6 +27,12 @@ export interface MarkView {
   rating?: number
   label?: Label
   flag?: Flag
+  bins?: string[] // 083: ID подборок, куда входит фото
+}
+// Подборка фото (083): определение; членство — в MarkView.bins.
+export interface Bin {
+  id: string
+  name: string
 }
 // Что поменять у выделенных (Api.SetMarks).
 export interface MarkPatch {

@@ -11,9 +11,9 @@ import (
 // Обрез и разметка типографии (066).
 
 // TestPagePresetsBleed — обрез у пресетов: Фотосфера 2 (все форматы), Нетпринт 3 (гипотеза,
-// decisions-066 №5), общий ряд 0 — обрез пользователя он не трогает, как и безопасную зону.
+// decisions-066 №5), Фабрика Фотокниги 3 (081 №2, гипотеза), общий ряд 0 — обрез пользователя он не трогает, как и безопасную зону.
 func TestPagePresetsBleed(t *testing.T) {
-	want := map[string]float64{"": 0, CoverGroupFsfera: 2, CoverGroupNetprint: 3}
+	want := map[string]float64{"": 0, CoverGroupFsfera: 2, CoverGroupNetprint: 3, CoverGroupFabrika: 3}
 	n := map[string]int{}
 	for _, pp := range PagePresets() {
 		if pp.Bleed != want[pp.Group] {
@@ -21,7 +21,7 @@ func TestPagePresetsBleed(t *testing.T) {
 		}
 		n[pp.Group]++
 	}
-	if n[""] == 0 || n[CoverGroupFsfera] != len(FsferaFormats()) || n[CoverGroupNetprint] == 0 {
+	if n[""] == 0 || n[CoverGroupFsfera] != len(FsferaFormats()) || n[CoverGroupNetprint] == 0 || n[CoverGroupFabrika] != len(FabrikaFormats()) {
 		t.Fatalf("ряды пресетов: %v", n)
 	}
 	for _, f := range FsferaFormats() {

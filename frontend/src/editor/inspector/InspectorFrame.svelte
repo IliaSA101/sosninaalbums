@@ -16,6 +16,7 @@
   import InspectorBorder from '../border/InspectorBorder.svelte'
   import LayerRow from './LayerRow.svelte'
   import TiltRow from '../photoprops/TiltRow.svelte'
+  import PhotoAbout from '../photoprops/PhotoAbout.svelte'
   import { straighten } from '../tilt/straighten.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
@@ -150,6 +151,7 @@
 {#if profile}
   <div class="profile" class:warn={profile.level === 'warn'} title={profile.title}>{profile.text}</div>
 {/if}
+{#if id}<div data-guide="photo-about"><PhotoAbout {id} /></div>{/if}
 
 <style>
   .name {

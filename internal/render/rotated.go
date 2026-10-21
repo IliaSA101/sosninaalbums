@@ -1,6 +1,7 @@
 package render
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/draw"
@@ -229,7 +230,7 @@ type rotJob struct {
 
 // prepareRot готовит фото путей 2 и 3; clip — куда можно рисовать (холст или область фона).
 // nil без ошибки — рисовать нечего.
-func prepareRot(ph Photo, dpi int, clip image.Rectangle) (*rotJob, error) {
+func prepareRot(ctx context.Context, ph Photo, dpi int, clip image.Rectangle) (*rotJob, error) {
 	if err := checkRotPhoto(ph); err != nil {
 		return nil, err
 	}
@@ -248,7 +249,7 @@ func prepareRot(ph Photo, dpi int, clip image.Rectangle) (*rotJob, error) {
 	if !ok {
 		return nil, nil
 	}
-	src, err := cropSource(ph, k, covers, u0, v0, u1, v1)
+	src, err := cropSource(ctx, ph, k, covers, u0, v0, u1, v1)
 	if err != nil || src == nil {
 		return nil, err
 	}
@@ -347,9 +348,9 @@ type rotSrc struct {
 
 // cropSource читает оригинал и вырезает окно [u0,u1]×[v0,v1] (мм в осях файла).
 // nil без ошибки — окно пусто.
-func cropSource(ph Photo, k float64, covers bool, u0, v0, u1, v1 float64) (*rotSrc, error) {
+func cropSource(ctx context.Context, ph Photo, k float64, covers bool, u0, v0, u1, v1 float64) (*rotSrc, error) {
 	W, H := ph.Img.W, ph.Img.H
-	src, release, err := imgfile.OpenOriented(ph.Path)
+	src, release, err := imgfile.OpenOrientedCtx(ctx, ph.Path)
 	if err != nil {
 		return nil, photoErr(ph.Path, err)
 	}
@@ -366,9 +367,12 @@ func cropSource(ph Photo, k float64, covers bool, u0, v0, u1, v1 float64) (*rotS
 	// Копия окна отпускает бюджет декода до своей очереди на холст.
 	printW := max(1, int(math.Round(float64(win.Dx())/sw*W*k)))
 	printH := max(1, int(math.Round(float64(win.Dy())/sh*H*k)))
-	crop := imaging.Crop(src, win.Add(b.Min))
+	var crop *image.NRGBA
 	if win.Dx() > 2*printW || win.Dy() > 2*printH {
-		crop = imaging.Resize(crop, min(printW, win.Dx()), min(printH, win.Dy()), imaging.Lanczos)
+		// Уменьшение читает окно без копии: Resize сам даёт новый буфер.
+		crop = imaging.Resize(window(src, win.Add(b.Min)), min(printW, win.Dx()), min(printH, win.Dy()), imaging.Lanczos)
+	} else {
+		crop = imaging.Crop(src, win.Add(b.Min))
 	}
 	pad := 0
 	if !covers {

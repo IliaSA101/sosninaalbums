@@ -9,7 +9,7 @@
   import { emptyField } from '../canvas/field'
   import { moveSelected } from '../places/groupgesture'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import { svgTextCss } from './fonts'
+  import { lineLen, svgTextCss } from './fonts'
   import { layerIndex } from '../places/layers'
   import type { TextGestures } from './textgesture.svelte'
   import { pickOwns } from '../canvas/pickunder.svelte'
@@ -115,7 +115,9 @@
         <!-- Подпись повёрнутого места: Go отдаёт угол рамки и Rot, как у текста (экспорт рисует так же) -->
         <g transform={c.rot ? `rotate(${c.rot} ${c.x} ${c.y})` : undefined}>
           {#each c.lines as l, i (i)}
-            {#if l.text}<text x={l.x} y={l.y} style={svgTextCss(c.style, store.fonts)}>{l.text}</text>{/if}
+            {#if l.text}<text x={l.x} y={l.y} textLength={lineLen(l.w)} lengthAdjust="spacing" style={svgTextCss(c.style, store.fonts)}
+                >{l.text}</text
+              >{/if}
           {/each}
         </g>
       </svg>
@@ -146,7 +148,9 @@
     <svg viewBox="0 0 {sw} {ph}" preserveAspectRatio="none" aria-hidden="true">
       <g transform={s.rot ? 'rotate(' + s.rot + ' ' + s.x + ' ' + s.y + ')' : undefined}>
         {#each s.lines as l, i (i)}
-          {#if l.text}<text x={l.x} y={l.y} style={svgTextCss(s.style, store.fonts)}>{l.text}</text>{/if}
+          {#if l.text}<text x={l.x} y={l.y} textLength={lineLen(l.w)} lengthAdjust="spacing" style={svgTextCss(s.style, store.fonts)}
+              >{l.text}</text
+            >{/if}
         {/each}
       </g>
     </svg>
@@ -165,7 +169,9 @@
             : 0}) rotate({e.rot} {t.x} {t.y}) translate({t.x} {t.y}) scale({e.scale}) translate({-t.x} {-t.y})"
         >
           {#each t.lines as l, i (i)}
-            {#if l.text}<text x={l.x} y={l.y} style={svgTextCss(t.style, store.fonts)}>{l.text}</text>{/if}
+            {#if l.text}<text x={l.x} y={l.y} textLength={lineLen(l.w)} lengthAdjust="spacing" style={svgTextCss(t.style, store.fonts)}
+                >{l.text}</text
+              >{/if}
           {/each}
         </g>
       </svg>

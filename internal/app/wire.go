@@ -22,6 +22,11 @@ type wireState struct {
 func (a *App) outLocked(v model.View) (w model.View, emit bool) {
 	ws := &a.wire
 	ed := a.editor()
+	if foreign(v, ed) {
+		// Поздний вид прежнего альбома (правка началась до открытия, 087-3): его rev с нынешним
+		// не сравним — в цепочку и событием не идёт, вызывающему — вид нынешнего.
+		return a.fullLocked(ed.View()), false
+	}
 	switch {
 	case ws.sentEd.Value() != ed:
 		// Первый вид или другой альбом: дельте не к чему относиться — полный.
@@ -40,6 +45,11 @@ func (a *App) outLocked(v model.View) (w model.View, emit bool) {
 	ws.seq++
 	ws.sent = v
 	return w, true
+}
+
+// foreign — вид построен не Editor ed (прежним альбомом). Вид без номера считается своим.
+func foreign(v model.View, ed *album.Editor) bool {
+	return v.Src() != 0 && v.Src() != ed.ID()
 }
 
 // fullLocked — полный вид в цепочку (открытие, GetState, GetView). Равный отданному номер не

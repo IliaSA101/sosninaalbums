@@ -6,7 +6,7 @@ import { normFamilies } from './families'
 import { DEF_KEYS_SPLIT, loadKeysMode, loadKeysSplit, type KeysMode, type KeysSplit } from './keyswin'
 
 // card — сворачиваемая карточка выделенного в панели деталей (028 Б), не раздел Section.
-export type SectionName = 'card' | 'info' | 'settings' | 'grid'
+export type SectionName = 'card' | 'photo' | 'info' | 'settings' | 'grid'
 type Sections = Record<SectionName, boolean>
 
 const KEY = 'viewMode'
@@ -45,7 +45,7 @@ class ViewMode {
   markup = $state(true)
   // Линейки (спека 010): по умолчанию включены, видны на уровне «Полный».
   rulers = $state(true)
-  sections = $state<Sections>({ card: true, info: true, settings: false, grid: true })
+  sections = $state<Sections>({ card: true, photo: true, info: true, settings: false, grid: true })
   // Окно автосборки (027): сколько разворотов собирали в прошлый раз (null — ещё не собирали).
   autoSpreads = $state<number | null>(null)
   // 051: «Фото на разворот» — «Авто» или свой [от, до] (вместо прежнего «не больше»); не разрывать серии съёмки.

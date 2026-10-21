@@ -10,12 +10,15 @@
 // Файлы ядра:
 //   - editor.go — Editor, NewEditor и own (своя копия проекта с проверкой путей), конвейер edit
 //     (change, apply, try), Save, WriteCopy, Snapshot, Ref, View, Warm (прогрев раскладок с ходом, 073);
+//     Close и shut — смена альбома (087-5): закрытый отклоняет правки шести входов, запись работает;
 //     медленные операции и правки в log.txt (slow, slowAt: «правка: …» от 100 мс, 075-6);
 //   - editor_undo.go — шаги отмены, их предел по числу и по байтам, Undo и Redo; SyncOwnNames —
 //     исключение «мимо change»: имена своих шаблонов виньетки в проекте и истории без шага
 //     отмены (решение 0.11 №67); LibKeys — ключи библиотеки проекта и истории (чтение);
 //   - editor_marks.go — свои отметки (спека 004): живут в Editor рядом с проектом и идут в тот
 //     же стек отмены, но не через change; перепривязка отметок;
+//   - editor_bins.go — подборки фото (083): список в Editor, членство в отметках; шаг «рядом с
+//     проектом», как у отметок (commitSide), projRev не трогает;
 //   - LoadBase и Restore (резервные копии, спека 019; проект проходит own), черновик
 //     (WriteDraft) — в конце editor.go;
 //   - inside.go — доступ тестов к состоянию Editor (internal/inside, обёртки — internal/edtest);
@@ -47,8 +50,8 @@
 // Порядок шагов Editor.edit: снимок проекта, fn; SyncGrid(false) (ошибка — откат без шага
 // отмены); PruneRefs; для обычной правки Normalize, KeepLayouts, design.Rescale,
 // grid.Rescale, backdrop.Rescale, cover.Reflow, FixVignettes, vigsheet.Relay (пересборка
-// нетронутых виньеток, 031; Restore их пропускает); FitTexts; FitStickers (пропорция
-// стикеров, 048); SyncOrder; CheckTotals;
+// нетронутых виньеток, 031; Restore их пропускает); FitTexts; SyncFonts (таблица своих шрифтов,
+// 082); FitStickers (пропорция стикеров, 048); SyncOrder; CheckTotals;
 // сравнение JSON до и после — холостая правка не даёт ни шага отмены, ни rev. Шаги от
 // SyncGrid до CheckTotals — settle (editor.go): его же зовёт сухой прогон PreviewVignette.
 //

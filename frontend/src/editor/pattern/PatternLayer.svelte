@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { screenDpr } from '../../base/ui/dpr.svelte'
   import type { SpreadView } from '../../base/core/types'
   import { opacityOf } from '../backdrop/fade'
   import { patFadeLive } from '../backdrop/fade.svelte'
@@ -12,7 +13,7 @@
 
   const sw = $derived(spread.w)
   const pct = (v: number, of: number) => (of > 0 ? `${(v / of) * 100}%` : '0%')
-  const dpr = $derived(globalThis.devicePixelRatio || 1)
+  const dpr = $derived(screenDpr.value)
 </script>
 
 {#each spread.patterns ?? [] as p (p.scope)}

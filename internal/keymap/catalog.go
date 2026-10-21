@@ -52,6 +52,7 @@ var groups = []Named{
 	{"spreads", "Развороты и раскладки"},
 	{"photos", "Фото"},
 	{"marks", "Отметки фото"},
+	{"bins", "Подборки фото"},
 	{"text", "Текст"},
 	{"grid", "Ручная раскладка"},
 	{"decor", "Оформление"},
@@ -79,6 +80,7 @@ func (x Command) fixed() Command        { x.Fixed = true; return x }
 func (x Command) repeat() Command       { x.Repeat = true; return x }
 func (x Command) dialogs() Command      { x.Dialogs = true; return x }
 func (x Command) marks() Command        { x.Scope = ScopeLibrary; x.Feature = "marks"; return x }
+func (x Command) bins() Command         { x.Scope = ScopeLibrary; x.Feature = "bins"; return x }
 func (x Command) bg() Command           { x.Scope = ScopeBg; x.Feature = "bgPhoto"; return x }
 
 var arrows = []string{
@@ -97,6 +99,10 @@ var catalog = []Command{
 	c("album", "collect", "Собрать проект в папку…", "Собрать", ""),
 	c("album", "backups", "Резервные копии…", "Копии", ""),
 	c("album", "packs", "Наборы библиотеки…", "Наборы", "decor"),
+	// Без функции уровня: подменю «Мои шаблоны» видно при сетках или виньетке — решает меню (086).
+	c("album", "tplExport", "Сохранить мои шаблоны в файл…", "Сохр. шабл", ""),
+	c("album", "tplImport", "Загрузить шаблоны из файла…", "Загр. шабл", ""),
+	c("album", "showData", "Открыть папку данных", "К данным", ""),
 	c("album", "addFolder", "Добавить папку с фото…", "Папка фото", ""),
 	c("album", "relink", "Найти пропавшие фото…", "Пропавшие", ""),
 	c("album", "export", "Экспорт…", "Экспорт", "", "Mod+KeyE"),
@@ -165,6 +171,13 @@ var catalog = []Command{
 	c("marks", "markPick", "Флажок «отобрано»", "Отобрано", "", "KeyP").marks(),
 	c("marks", "markReject", "Флажок «отклонено»", "Отклонено", "", "KeyX").marks(),
 	c("marks", "markUnflag", "Снять флажок", "Без флажка", "", "KeyU").marks(),
+
+	c("bins", "binToggle", "Подборка: добавить или убрать выделенные", "Подборка", "", "KeyB").bins().
+		hint("В показанную подборку, иначе — в последнюю, куда добавляли; повтор у всех выделенных — убрать"),
+	c("bins", "binNew", "Новая подборка из выделенных…", "Новая", "", "Shift+KeyB").bins(),
+	c("bins", "binRemove", "Убрать выделенные из подборки", "Из подб.", "", "Delete", "Backspace").bins().
+		hint("Когда лента показывает подборку. С диска и из альбома ничего не удаляется"),
+	c("bins", "binAll", "Показать все фото (без подборки)", "Все фото", "").bins(),
 
 	c("text", "addText", "Добавить текст", "Текст", "text"),
 	c("text", "pasteNames", "Имена из списка…", "Имена", "captions"),

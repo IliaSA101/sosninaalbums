@@ -132,6 +132,46 @@ func TestWireChain(t *testing.T) {
 	}
 }
 
+// TestWireLateChangedOldEditor — правка прежнего альбома вернулась после открытия нового (087-3):
+// её вид не уходит событием и не встаёт в цепочку (rev у Editor свой — иначе правки нового
+// дальше «обогнанные»), ответ — вид нынешнего; следующая правка нового — обычная дельта.
+func TestWireLateChangedOldEditor(t *testing.T) {
+	a, views, _ := wireApp(t)
+	a.GetState()
+	for _, id := range []string{"s1", "s2", "s3"} {
+		a.SetSpreadName(id, "до "+id)
+	}
+	e1 := a.editor()
+	p := model.New()
+	p.Spreads = []*model.Spread{{ID: "n1", Photos: []string{"x"}}}
+	p.Photos["x"] = model.PhotoRef{Path: `C:\x.jpg`, W: 300, H: 200}
+	e2 := mustEditor(t, p, "")
+	a.ed.Store(e2)
+	st := a.emitState()
+	n := len(views())
+
+	w := a.changed(e1.SetSpreadName("s1", "late"))
+	if len(views()) != n {
+		t.Fatalf("поздний вид прежнего альбома разослан: событий %d, было %d", len(views()), n)
+	}
+	if len(w.Spreads) != 1 || w.Spreads[0].ID != "n1" || w.Rev != e2.View().Rev || w.Base != 0 || w.Seq != st.View.Seq {
+		t.Fatalf("ответ позднему: %d разворотов, rev %d, seq %d base %d (нынешний seq %d)",
+			len(w.Spreads), w.Rev, w.Seq, w.Base, st.View.Seq)
+	}
+	if v := a.GetView(); len(v.Spreads) != 1 || v.Seq != st.View.Seq {
+		t.Fatalf("GetView после позднего: %d разворотов, seq %d", len(v.Spreads), v.Seq)
+	}
+
+	w = a.SetSpreadName("n1", "new")
+	ids, _ := wireSpreads(t, w)
+	if w.Base != st.View.Seq || w.Seq != st.View.Seq+1 || len(ids) != 1 || w.Spreads[0].Name != "new" {
+		t.Fatalf("правка нового: seq %d base %d, %v, имя %q", w.Seq, w.Base, ids, w.Spreads[0].Name)
+	}
+	if ev := views(); len(ev) != n+1 || ev[n].Seq != w.Seq {
+		t.Fatalf("правка нового без события: событий %d", len(ev))
+	}
+}
+
 // TestWireSaveAndSaved — Ctrl+S: дельта без разворотов, снимающая dirty (другие клиенты тоже);
 // событие saved — {dirty, path}, а не вид (075-5).
 func TestWireSaveAndSaved(t *testing.T) {

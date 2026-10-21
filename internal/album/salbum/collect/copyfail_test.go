@@ -167,13 +167,13 @@ func TestCollectSaveFails(t *testing.T) {
 	file := filepath.Join(root, "файл")
 	put(t, file, "x")
 	q := model.New()
-	if err := Save(q, nil, filepath.Join(file, "a.salbum"), Plan{}); err == nil {
+	if err := Save(q, model.Side{}, filepath.Join(file, "a.salbum"), Plan{}); err == nil {
 		t.Fatal("запись под файлом прошла")
 	}
 	dir := filepath.Join(root, "Сбор")
 	q.Photos["bad"] = model.PhotoRef{Path: filepath.Join(dir, "a\x00.jpg"), W: 3, H: 2}
 	q.Spreads = []*model.Spread{{ID: "0123456789a1", Photos: []string{"bad"}}}
-	if err := Save(q, nil, filepath.Join(dir, "a.salbum"), Plan{}); err == nil || !strings.Contains(err.Error(), "не открылся") {
+	if err := Save(q, model.Side{}, filepath.Join(dir, "a.salbum"), Plan{}); err == nil || !strings.Contains(err.Error(), "не открылся") {
 		t.Fatalf("неоткрываемый альбом: %v", err)
 	}
 }

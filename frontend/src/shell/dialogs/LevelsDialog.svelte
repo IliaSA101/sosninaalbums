@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import type { Level } from '../../base/prefs/levels'
   import LevelMatrix from './LevelMatrix.svelte'

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { shortOf } from '../../base/prefs/levelcustom'
   import { rowOf } from '../../base/prefs/levels'

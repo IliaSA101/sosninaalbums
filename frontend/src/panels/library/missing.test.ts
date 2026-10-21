@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   albumPhotos,
   driveLabel,
+  fontsKey,
+  fontsMissingText,
   LIB_MISSING_TEXT,
   isHidden,
   libMissingText,
   missTip,
+  missingFonts,
+  NAMELESS_FONT,
   missingIn,
   missingKey,
   missingSpots,
@@ -166,5 +170,49 @@ describe('missing: рамочки-картинки (079 U5)', () => {
   })
   it('своя рамочка делится по libPhotos так же, как фон: загрузкой, а не папкой', () => {
     expect(splitMissing(['fr1', 'a'], ['fr1'])).toEqual({ photos: ['a'], own: ['fr1'] })
+  })
+})
+
+describe('свои шрифты в полосе недостающих (082)', () => {
+  const have = [{ id: 'montserrat' }, { id: 'lato' }]
+  it('missingFonts: только те, чьих id нет в списке; скрытый × остаётся в списке', () => {
+    const use = [
+      { id: 'lato', name: 'Lato' },
+      { id: 'bodoni', name: 'Bodoni Moda' },
+      { id: 'tpl', name: '' },
+    ]
+    expect(missingFonts(use, have)).toEqual([
+      { id: 'bodoni', name: 'Bodoni Moda' },
+      { id: 'tpl', name: '' },
+    ])
+    expect(missingFonts(use, [])).toHaveLength(3)
+  })
+  it('missingFonts: Go не прислал albumFonts или пусто — нет полосы', () => {
+    expect(missingFonts(undefined, have)).toEqual([])
+    expect(missingFonts(null, have)).toEqual([])
+    expect(missingFonts([], have)).toEqual([])
+  })
+  it('fontsMissingText: 1, 3 и 5 имён', () => {
+    const tail = ' — текст показан шрифтом Montserrat'
+    expect(fontsMissingText(['Lato'])).toBe('Нет шрифтов на этом компьютере: „Lato“' + tail)
+    expect(fontsMissingText(['Lato', 'Bodoni Moda', 'Pacifico'])).toBe(
+      'Нет шрифтов на этом компьютере: „Lato“, „Bodoni Moda“, „Pacifico“' + tail,
+    )
+    expect(fontsMissingText(['A', 'B', 'C', 'D', 'E'])).toBe('Нет шрифтов на этом компьютере: „A“, „B“, „C“ и ещё 2' + tail)
+  })
+  it('fontsMissingText: пустое имя — «Свой шрифт» один раз; повторы сводятся; нет имён — пусто', () => {
+    const tail = ' — текст показан шрифтом Montserrat'
+    expect(fontsMissingText([''])).toBe(`Нет шрифтов на этом компьютере: „${NAMELESS_FONT}“` + tail)
+    expect(fontsMissingText(['', 'Lato', ''])).toBe(`Нет шрифтов на этом компьютере: „Lato“, „${NAMELESS_FONT}“` + tail)
+    expect(fontsMissingText(['Lato', 'Lato'])).toBe('Нет шрифтов на этом компьютере: „Lato“' + tail)
+    expect(fontsMissingText([])).toBe('')
+  })
+  it('fontsKey: от id и номера открытия, порядок не важен; нет недостающих — пусто', () => {
+    const a = { id: 'a', name: 'A' }
+    const b = { id: 'b', name: '' }
+    expect(fontsKey([a, b], 3)).toBe(fontsKey([b, a], 3))
+    expect(fontsKey([a, b], 3)).not.toBe(fontsKey([a, b], 4))
+    expect(fontsKey([a], 3)).not.toBe(fontsKey([a, b], 3))
+    expect(fontsKey([], 3)).toBe('')
   })
 })

@@ -165,7 +165,7 @@ func TestCollectAlbum(t *testing.T) {
 			t.Errorf("фото не скопировано: %v", err)
 		}
 	}
-	if marks := lp.Loaded(); len(marks) != 1 {
+	if marks := lp.Loaded().Marks; len(marks) != 1 {
 		t.Errorf("отметок в собранном %d, ждали 1", len(marks))
 	}
 	v := e.a.editor().View()
@@ -195,7 +195,7 @@ func TestCollectReplacesAlbumWithBackup(t *testing.T) {
 	if err := os.MkdirAll(e.book(), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := salbum.Write(model.New(), e.albumFile(), "", nil); err != nil {
+	if err := salbum.Write(model.New(), e.albumFile(), "", model.Side{}); err != nil {
 		t.Fatal(err)
 	}
 	old, _ := os.ReadFile(e.albumFile())
@@ -232,7 +232,7 @@ func TestCollectReplaceBackupFails(t *testing.T) {
 	if err := os.MkdirAll(e.book(), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := salbum.Write(model.New(), e.albumFile(), "", nil); err != nil {
+	if err := salbum.Write(model.New(), e.albumFile(), "", model.Side{}); err != nil {
 		t.Fatal(err)
 	}
 	old, _ := os.ReadFile(e.albumFile())
@@ -283,7 +283,7 @@ func TestCollectRejectsUNC(t *testing.T) {
 func TestCollectOwnAlbum(t *testing.T) {
 	e := newCollectEnv(t, 1)
 	e.file = filepath.Join(e.book(), "Иванов"+projectExt)
-	p, _ := e.a.editor().SnapshotMarks()
+	p, _ := e.a.editor().SnapshotSide()
 	e.a.ed.Store(mustEditor(t, p, e.file))
 	e.parent = e.book()
 	if ok, err := e.a.Collect(CollectOptions{}); ok || err == nil || !strings.Contains(err.Error(), "открытого альбома") {
@@ -298,7 +298,7 @@ func TestCollectOwnAlbum(t *testing.T) {
 // отказ до вопросов, файл цел, копирования нет.
 func TestCollectOwnAlbumLink(t *testing.T) {
 	e := newCollectEnv(t, 1)
-	if err := salbum.Write(model.New(), e.file, "", nil); err != nil {
+	if err := salbum.Write(model.New(), e.file, "", model.Side{}); err != nil {
 		t.Fatal(err)
 	}
 	old, _ := os.ReadFile(e.file)
@@ -412,7 +412,7 @@ func TestCollectEmptyDraft(t *testing.T) {
 // только в режиме «Все»; пропавшие считаются.
 func TestCollectInfo(t *testing.T) {
 	e := newCollectEnv(t, 2)
-	p, _ := e.a.editor().SnapshotMarks()
+	p, _ := e.a.editor().SnapshotSide()
 	extra := testkit.JPEG(t, p.Folders[0], "лишнее.jpg", 60, 40)
 	outside := testkit.JPEG(t, testkit.TempDir(t), "чужое.jpg", 60, 40)
 	e.a.mu.Lock()
@@ -443,7 +443,7 @@ func TestCollectInfo(t *testing.T) {
 // снят; соседняя папка с тем же началом имени — не внутри.
 func TestCollectInsidePhotoFolder(t *testing.T) {
 	e := newCollectEnv(t, 2)
-	p, _ := e.a.editor().SnapshotMarks()
+	p, _ := e.a.editor().SnapshotSide()
 	sub := filepath.Join(p.Folders[1], "сбор")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)

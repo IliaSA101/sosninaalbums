@@ -19,18 +19,27 @@ const stockDims = `1331/2000,2000/1333,1333/2000,2000/1325,1333/2000,2000/1333,1
 2000/1123,2000/2000,2000/1333,2000/1125,2000/1335,2000/1333,2000/1335,2000/1331,2000/1333,1254/2000,
 2000/1333,1333/2000,1333/2000,2000/1333,1125/2000,2000/1333,2000/1335,2000/1330,1600/2000,2000/1333`
 
-// StockAspects — пропорции stock (живые кадры: 1333…1335/2000 рядом с точными L и P).
-func StockAspects(t testing.TB) []float64 {
+// parseStockAspects разбирает stockDims без testing: нужен и плану большого набора (bigset.go).
+func parseStockAspects() ([]float64, error) {
 	var out []float64
 	for f := range strings.FieldsFuncSeq(stockDims, func(r rune) bool { return r == ',' || r == '\n' }) {
 		var w, h float64
 		if _, err := fmt.Sscanf(f, "%g/%g", &w, &h); err != nil {
-			t.Fatalf("stockDims %q: %v", f, err)
+			return nil, fmt.Errorf("stockDims %q: %w", f, err)
 		}
 		out = append(out, w/h)
 	}
 	if len(out) != 100 {
-		t.Fatalf("stock: %d фото", len(out))
+		return nil, fmt.Errorf("stock: %d фото", len(out))
+	}
+	return out, nil
+}
+
+// StockAspects — пропорции stock (живые кадры: 1333…1335/2000 рядом с точными L и P).
+func StockAspects(t testing.TB) []float64 {
+	out, err := parseStockAspects()
+	if err != nil {
+		t.Fatal(err)
 	}
 	return out
 }

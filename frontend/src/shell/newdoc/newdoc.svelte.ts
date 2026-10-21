@@ -1,5 +1,6 @@
 import { Api, store } from '../../base/core/store.svelte'
 import { SHEET_PRESETS } from '../../base/geom/sheet'
+import { edit } from '../../editor/text/edit.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
 import { DRAFT_NOTE, hadDraft } from './draft'
 import { pickedDims, type ProductKind, type SizePick } from './newproduct'
@@ -31,9 +32,9 @@ class NewDoc {
     if (this.busy) return false
     this.busy = true
     try {
-      if (this.kind === 'album') return await this.replace(Api.NewProject('album'))
+      if (this.kind === 'album') return await this.replace(() => Api.NewProject('album'))
       const d = this.dims
-      return d ? await this.replace(Api.NewVignetteSheet(d.w, d.h)) : false
+      return d ? await this.replace(() => Api.NewVignetteSheet(d.w, d.h)) : false
     } finally {
       this.busy = false
     }
@@ -42,9 +43,11 @@ class NewDoc {
   // Замена проекта новым (меню, стартовое окно, лист): Go прежний черновик убирает в резервные копии молча —
   // говорим об этом тостом с «Открыть копии» (U4). Черновик определяем до замены.
   // Отказ Go (черновик занят другой программой — вернул прежнее состояние) тостом не затираем: после замены черновика уже нет.
-  async replace(next: Promise<unknown>): Promise<boolean> {
+  // Сначала ждём набранный текст (087-5), вызов Go — внутри замены: иначе он уйдёт раньше.
+  async replace(next: () => Promise<unknown>): Promise<boolean> {
+    await edit.idle()
     const draft = hadDraft(store.view)
-    const ok = await store.replaceState(next)
+    const ok = await store.replaceState(next())
     if (ok && draft && !hadDraft(store.view)) store.notify(DRAFT_NOTE, 'info', { label: 'Открыть копии', run: () => void backupsUi.show() })
     return ok
   }

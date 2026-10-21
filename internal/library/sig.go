@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"errors"
 	"image"
 	"image/jpeg"
@@ -29,7 +30,8 @@ func (c *Cache) Sig(p Photo) (imgsig.Sig, error) {
 	if s, ok := readSig(sp); ok {
 		return s, nil
 	}
-	f, err := c.File(p, false)
+	// Класс прогрева: окно автосборки просит подписи пачкой в сотни — места ленты не отнимаем (090-D5).
+	f, err := c.get(context.Background(), p, false, bg)
 	if err != nil {
 		return imgsig.Sig{}, err
 	}
@@ -56,7 +58,7 @@ func (c *Cache) ShotSig(p Photo) (imgsig.Sig, error) {
 	if err != nil {
 		return s, err
 	}
-	f, err := c.File(p, false) // миниатюра уже есть: только поиск файла
+	f, err := c.get(context.Background(), p, false, bg) // миниатюра уже есть: только поиск файла
 	if err != nil {
 		return imgsig.Sig{}, err
 	}

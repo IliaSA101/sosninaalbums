@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/jpeg" // заголовок JPEG для DecodeConfig (рамочка — PNG, но подмена расширением не должна падать иначе)
-	_ "image/png"
 	"math"
 	"net/http"
 	"os"
@@ -55,15 +53,11 @@ var (
 	picBad   = map[picStamp]struct{}{}
 	picMedia = newMediaCache(framePicCache)
 
-	// Заглушки тестов: чтение заголовка и полный декод.
+	// Заглушки тестов: чтение заголовка и полный декод. Заголовок — общий помощник imgfile
+	// (JPEG/PNG, площадь ≤ framePicMaxSrc, обычный файл).
 	readPicConfig = func(path string) (image.Config, error) {
-		f, err := imgfile.OpenRegular(path)
-		if err != nil {
-			return image.Config{}, err
-		}
-		defer f.Close() //nolint:errcheck // чтение: ошибка закрытия ничего не теряет
-		cfg, _, err := image.DecodeConfig(f)
-		return cfg, err
+		d, err := imgfile.FileDims(path, framePicMaxSrc)
+		return image.Config{Width: d.W, Height: d.H}, err
 	}
 	openOriented = imgfile.OpenOriented
 )
@@ -98,16 +92,15 @@ func picCheckHeader(st picStamp) error {
 		}
 	}
 	picMu.Unlock()
-	cfg, err := readPicConfig(st.path)
-	if err != nil {
+	if _, err := readPicConfig(st.path); err != nil {
+		if errors.Is(err, imgfile.ErrTooBig) { // раздутый заголовок — отказ постоянный
+			picReject(st)
+			return errors.New("картинка слишком велика")
+		}
 		if _, perr := os.Stat(st.path); perr == nil { // файл есть, но не картинка — отказ постоянный
 			picReject(st)
 		}
 		return err
-	}
-	if cfg.Width < 1 || cfg.Height < 1 || int64(cfg.Width)*int64(cfg.Height) > framePicMaxSrc {
-		picReject(st)
-		return errors.New("картинка слишком велика")
 	}
 	return nil
 }

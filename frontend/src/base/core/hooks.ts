@@ -12,6 +12,8 @@ export interface PickResult {
   inAlbum: number
   filtered: boolean
   again?: boolean // 078: окно открыто как «Пересобрать» (те же фото последней сборки)
+  alt?: PickResult // 080: второй путь для ссылки в строке источника (у alt своего alt нет)
+  bin?: string // 083: без выделения фото взяты из показанной подборки — её имя для строки окна
 }
 
 export type MarkMap = Readonly<Record<string, MarkView>>
@@ -26,8 +28,11 @@ export interface StoreHooks {
   reloaded(): void
   // Выделение разворотов в ленте больше не к чему (группа удалена, альбом заменён).
   spreadsCleared(): void
-  // Шрифты из GetState: зарегистрировать в document.fonts.
-  fontsLoaded(fonts: FontFamily[]): void
+  // Шрифты из GetState или события `fonts`: зарегистрировать в document.fonts. fresh — пришли событием (загрузка,
+  // открыт собранный альбом): новые свои начертания ещё надо проверить окном (082-14).
+  fontsLoaded(fonts: FontFamily[], fresh?: boolean): void
+  // State.freshFonts: новые начертания из папки альбома (запуск, открытие) — проверить окном, как после загрузки.
+  freshFonts(files: string[]): void
   // Горячие клавиши из GetState (State.keymap); пока Go поля не шлёт (до G2) — не зовётся.
   keymapLoaded(view: KeymapView): void
 
@@ -38,6 +43,8 @@ export interface StoreHooks {
   order(photos: Photo[]): Photo[]
   // Фото без скрытых папок (054): первый слой ленты, до «Не в альбоме» и отметок.
   folders(photos: Photo[]): Photo[]
+  // Фото показанной подборки (083): после папок, до «Не в альбоме» и отметок; без подборки — тот же массив.
+  bin(photos: Photo[]): Photo[]
   // Лента после фильтра по отметкам.
   visible(photos: Photo[]): Photo[]
   // Фото не в местах и не на фоне (автосборка, фильтр «Неиспользованные»).
@@ -63,10 +70,12 @@ export const noHooks: StoreHooks = {
   reloaded: () => {},
   spreadsCleared: () => {},
   fontsLoaded: () => {},
+  freshFonts: () => {},
   keymapLoaded: () => {},
   marks: () => ({}),
   order: (photos) => photos,
   folders: (photos) => photos,
+  bin: (photos) => photos,
   visible: (photos) => photos,
   free: (photos, used, backdrop) => photos.filter((p) => !used.has(p.id) && !backdrop.has(p.id)),
   pick: () => ({ ids: [], skipped: 0, from: 'free', inAlbum: 0, filtered: false }),

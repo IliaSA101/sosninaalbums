@@ -110,6 +110,21 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/paths
             - github.com/IliaSA101/sosninaalbums/internal/table
             - github.com/IliaSA101/sosninaalbums/internal/app/namesfile
+        # devtools — инструменты разработчика (нарезка листа стикеров и т. п.): в exe не входят, запускают
+        # внешние команды (rembg). Импортирует их только CLI в scripts/ (//go:build ignore); да владельца 19.10.
+        "devtools — не в программу":
+          files:
+            - "!**/internal/devtools/**"
+          deny:
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/devtools
+              desc: инструменты разработчика подключают только скрипты scripts/*.go
+        "devtools: ничего из internal":
+          files:
+            - "**/internal/devtools/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/devtools
         "paths: ничего из internal":
           files:
             - "**/internal/paths/**"
@@ -191,10 +206,26 @@ linters:
         "text: ничего из internal":
           files:
             - "**/internal/text/**"
+            # Хранилище шрифтов пользователя живёт под text (предел подпапок internal/, 0.21-S1),
+            # но ему нужны граница путей и безопасное открытие файла — своё правило ниже.
+            - "!**/internal/text/fontlib/**"
           list-mode: strict
           allow:
             - $gostd
             - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/image
+            # NFC для FamilyID (082-2): в stdlib нет; x/text уже в модуле (его тянет sfnt).
+            - golang.org/x/text/unicode/norm
+        "text/fontlib: только text, paths, imgfile":
+          files:
+            - "**/internal/text/fontlib/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
             - github.com/IliaSA101/sosninaalbums/internal/testkit
             - golang.org/x/image
         "osx: ничего из internal":

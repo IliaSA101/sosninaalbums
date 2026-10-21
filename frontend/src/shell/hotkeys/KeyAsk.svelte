@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { keysUi } from './keysui.svelte'
 
   // «Заменить?» (074): сочетание уже у другой команды той же области. «Отмена» слева и с фокусом, главная справа —

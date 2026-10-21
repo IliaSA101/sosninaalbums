@@ -20,6 +20,7 @@ export const emptyView: View = {
   textMaxW: 284,
   backdropUsed: [],
   marksRev: 0,
+  bins: [],
 }
 
 // Основа Store: альбом (view), текущий лист и переходы. Вынесено, чтобы store.svelte.ts не рос за 600 строк;

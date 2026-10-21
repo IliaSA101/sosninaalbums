@@ -28,9 +28,15 @@ var marksSeq atomic.Int64
 
 func nextMarksRev() int { return int(marksSeq.Add(1)) }
 
-// setMarks ставит в e.marks состояние дельты: back — «до» (отмена), иначе «после».
-// ID в дельте не повторяются (diffMarks), порядок не важен.
-func (e *Editor) setMarks(delta []MarkChange, back bool) {
+// setSide ставит в e.marks состояние дельты, а если bins != nil — и список подборок: back — «до»
+// (отмена), иначе «после». ID в дельте не повторяются (diffMarks), порядок не важен.
+func (e *Editor) setSide(delta []MarkChange, bins *BinsSwap, back bool) {
+	if bins != nil {
+		e.bins = bins.After
+		if back {
+			e.bins = bins.before
+		}
+	}
 	for _, c := range delta {
 		m := c.After
 		if back {
@@ -65,13 +71,14 @@ func (e *Editor) diffMarks(next map[string]*model.Mark) []MarkChange {
 	return out
 }
 
-// commitMarks — шаг отмены только отметок. Под e.mu.
-func (e *Editor) commitMarks(delta []MarkChange) model.View {
-	if len(delta) == 0 {
+// commitSide — шаг отмены только отметок и подборок (bins nil — список прежний); projRev не
+// трогается. Ничего нет — холостая. Под e.mu.
+func (e *Editor) commitSide(delta []MarkChange, bins *BinsSwap) model.View {
+	if len(delta) == 0 && bins == nil {
 		return e.view()
 	}
-	e.setMarks(delta, false)
-	e.pushUndo(Snap{Marks: delta})
+	e.setSide(delta, bins, false)
+	e.pushUndo(Snap{Marks: delta, Bins: bins})
 	e.lastMerge = ""
 	e.redo = nil
 	e.dirty = true
@@ -82,10 +89,13 @@ func (e *Editor) commitMarks(delta []MarkChange) model.View {
 // SetMarks ставит свои отметки фото (ID, путь, отметки из файла). Холостая по полю: своего нет,
 // а цель равна отметке из файла. Сверх MaxMarks записей — ошибка, отметки прежние.
 func (e *Editor) SetMarks(photos []model.PhotoInfo, patch model.MarkPatch) (model.View, error) {
-	photos = slices.DeleteFunc(model.DedupePhotos(photos), func(ph model.PhotoInfo) bool { return ph.ID == "" || ph.Path == "" })
+	photos = feedPhotos(photos)
 	patch = model.CleanPatch(patch)
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.shut("отметки") {
+		return e.view(), nil
+	}
 	label := patch.Label
 	if label != nil && patch.Toggle && *label != "" && len(photos) > 0 &&
 		!slices.ContainsFunc(photos, func(ph model.PhotoInfo) bool { return model.Effective(e.marks[ph.ID], ph.Xmp).Label != *label }) {
@@ -113,6 +123,19 @@ func (e *Editor) SetMarks(photos []model.PhotoInfo, patch model.MarkPatch) (mode
 		next[ph.ID] = &m
 	}
 	delta := e.diffMarks(next)
+	if err := e.marksFit(delta); err != nil {
+		return e.view(), err
+	}
+	return e.commitSide(delta, nil), nil
+}
+
+// feedPhotos — фото ленты для правки отметок: без повторов, пустых ID и путей.
+func feedPhotos(photos []model.PhotoInfo) []model.PhotoInfo {
+	return slices.DeleteFunc(model.DedupePhotos(photos), func(ph model.PhotoInfo) bool { return ph.ID == "" || ph.Path == "" })
+}
+
+// marksFit — дельта не выводит число записей отметок за MarksLimit: иначе ошибка, шага нет.
+func (e *Editor) marksFit(delta []MarkChange) error {
 	added := 0
 	for _, c := range delta {
 		if c.before == nil {
@@ -120,22 +143,27 @@ func (e *Editor) SetMarks(photos []model.PhotoInfo, patch model.MarkPatch) (mode
 		}
 	}
 	if len(e.marks)+added > model.MarksLimit() {
-		return e.view(), fmt.Errorf("слишком много своих отметок (больше %d)", model.MarksLimit())
+		return fmt.Errorf("слишком много своих отметок (больше %d)", model.MarksLimit())
 	}
-	return e.commitMarks(delta), nil
+	return nil
 }
 
-// ResetMarks убирает свои отметки фото ids: снова действуют отметки из файлов.
+// ResetMarks убирает свои отметки фото ids: снова действуют отметки из файлов. Членство в
+// подборках остаётся (083-23): в XMP его нет; запись без подборок удаляется целиком.
 func (e *Editor) ResetMarks(ids []string) model.View {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.shut("отметки") {
+		return e.view()
+	}
 	next := map[string]*model.Mark{}
 	for _, id := range ids {
-		if _, ok := e.marks[id]; ok {
-			next[id] = nil
+		if m, ok := e.marks[id]; ok {
+			m.Rating, m.Label, m.Flag = nil, nil, nil
+			next[id] = &m
 		}
 	}
-	return e.commitMarks(e.diffMarks(next))
+	return e.commitSide(e.diffMarks(next), nil)
 }
 
 // Marks — копия своих отметок (ID → заданные поля).
@@ -149,16 +177,12 @@ func (e *Editor) Marks() map[string]model.MarkView {
 	return out
 }
 
-// SnapshotMarks — копия проекта и своих отметок под одним замком (сбор в папку, 069): правка
-// между двумя отдельными снимками развела бы альбом и отметки собранной копии.
-func (e *Editor) SnapshotMarks() (*model.Project, map[string]model.Mark) {
+// SnapshotSide — копия проекта, своих отметок и подборок под одним замком (сбор в папку, 069):
+// правка между двумя отдельными снимками развела бы альбом и отметки собранной копии.
+func (e *Editor) SnapshotSide() (*model.Project, model.Side) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	out := make(map[string]model.Mark, len(e.marks))
-	for id, m := range e.marks {
-		out[id] = m.Clone()
-	}
-	return e.p.Clone(), out
+	return e.p.Clone(), e.side().Clone()
 }
 
 // rating — действующая оценка фото (своя отметка поверх XMP из infos; фото не из ленты —
@@ -205,6 +229,14 @@ func (e *Editor) relinkMarks(files, dirs []model.PathPair) []MarkChange {
 		next[id], next[nid] = nil, &m
 	}
 	return e.diffMarks(next)
+}
+
+// replaceBins — смена списка подборок на bins целиком (Restore); совпал — nil.
+func (e *Editor) replaceBins(bins []model.Bin) *BinsSwap {
+	if slices.Equal(e.bins, bins) {
+		return nil
+	}
+	return &BinsSwap{before: e.bins, After: bins}
 }
 
 // replaceMarks — дельта к отметкам marks целиком (Restore).

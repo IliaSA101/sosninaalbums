@@ -1,6 +1,7 @@
 package render
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"math"
@@ -16,7 +17,7 @@ func TestBorderWithoutSheetEnv(t *testing.T) {
 	frame := ringPNG(t, 120, 160, 20, color.NRGBA{20, 140, 40, 255})
 	box := layout.Rect{X: 20, Y: 10, W: 40, H: 30}
 	canvas := image.NewRGBA(image.Rect(0, 0, 1000, 500))
-	paint, err := prepareBorder(BorderDraw{Box: box, Pic: true, Path: frame, Cut: [4]float64{20.0 / 120, 20.0 / 160, 20.0 / 120, 20.0 / 160}},
+	paint, err := prepareBorder(context.Background(), BorderDraw{Box: box, Pic: true, Path: frame, Cut: [4]float64{20.0 / 120, 20.0 / 160, 20.0 / 120, 20.0 / 160}},
 		nil, canvas.Bounds(), 254)
 	if err != nil || paint == nil {
 		t.Fatalf("prepareBorder: %v, %v", paint != nil, err)
@@ -27,15 +28,15 @@ func TestBorderWithoutSheetEnv(t *testing.T) {
 	if c := canvas.RGBAAt(px(21.5, 254), px(25, 254)); !near(c, color.RGBA{20, 140, 40, 255}, 1) {
 		t.Errorf("кайма: %v", c)
 	}
-	if s, err := winOf(item{}, 254); s != nil || err != nil {
+	if s, err := winOf(context.Background(), item{}, 254); s != nil || err != nil {
 		t.Errorf("фото без маски: %v, %v", s, err)
 	}
-	s, err := winOf(item{ph: Photo{Win: &WinMask{Box: box, Kind: "soft", Width: 4}}}, 254)
+	s, err := winOf(context.Background(), item{ph: Photo{Win: &WinMask{Box: box, Kind: "soft", Width: 4}}}, 254)
 	if err != nil || s == nil {
 		t.Fatalf("маска без кэша листа: %v, %v", s, err)
 	}
 	// Ошибка маски называет фото, а не рамочку.
-	_, err = winOf(item{ph: Photo{Path: filepath.Join("a", "photo.jpg"), Win: &WinMask{Box: layout.Rect{W: 2100, H: 2100}, Kind: "soft", Width: 4}}}, 254)
+	_, err = winOf(context.Background(), item{ph: Photo{Path: filepath.Join("a", "photo.jpg"), Win: &WinMask{Box: layout.Rect{W: 2100, H: 2100}, Kind: "soft", Width: 4}}}, 254)
 	if err == nil || !strings.Contains(err.Error(), "photo.jpg") {
 		t.Errorf("слишком большая маска: %v", err)
 	}

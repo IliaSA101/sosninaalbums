@@ -1,6 +1,6 @@
 <script lang="ts">
   import { EventsOn } from '../../../wailsjs/runtime/runtime'
-  import Modal from '../../base/ui/Modal.svelte'
+  import Modal from '../../base/modal/Modal.svelte'
   import { READ_ONLY_HINT } from '../../panels/decor/decor'
   import { packsUi } from './packs.svelte'
   import { ADD_HINT, BUILTIN_NOTE, BUSY_HINT, EMPTY_TEXT, creditLine, metaLine, onlyBuiltin } from './packs'

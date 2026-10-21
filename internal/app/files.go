@@ -48,14 +48,15 @@ func (a *App) NewProject(product string) State {
 // startNew — общий путь «Новый» (альбом и лист 031): прежний проект сохраняется, черновик
 // убирается, редактор ed становится текущим.
 func (a *App) startNew(ed *album.Editor) State {
-	a.flushSave()
 	// Застрявший сломанный черновик не удаляем: сначала пробуем убрать его в .bad.
 	// Не вышло — оставляем всё как есть, иначе новый проект пошёл бы поверх нечитаемого черновика.
 	if !a.unlockDraft() {
 		a.notice("Не удалось сохранить прежний черновик отдельно, новый проект не создан. Закройте программы, держащие файл «черновик" + projectExt + "», и повторите.")
 		return a.GetState()
 	}
-	a.ed.Store(ed)
+	// Запись прежнего — в retire: после разблокировки правки пустого альбома попадут в черновик и
+	// его копию (removeDraft).
+	a.retire(ed, nil)
 	a.removeDraft()
 	a.updateConfig(func(c *prefs.Config) { c.LastProject = "" })
 	a.rescan()
@@ -85,7 +86,7 @@ func (a *App) openPath(path string) (State, error) {
 	if a.backups.Inside(path) {
 		return a.openBackup(path)
 	}
-	p, err := salbum.Load(path)
+	p, af, err := a.loadAlbum(path)
 	if err != nil {
 		return a.GetState(), err
 	}
@@ -93,10 +94,10 @@ func (a *App) openPath(path string) (State, error) {
 	if err != nil {
 		return a.GetState(), err
 	}
-	a.flushSave()
-	a.ed.Store(ed)
+	a.retire(ed, nil)
 	a.rememberProject(path)
 	a.rescan()
+	a.keepAlbumFonts(af) // тост и новые начертания — в ответе (State.Info, State.FreshFonts)
 	return a.emitState(), nil
 }
 
@@ -202,6 +203,7 @@ func (a *App) unlockDraft() bool {
 // changed — после каждой правки: через секунду тишины проект сохраняется сам; список
 // недостающих следует за набором фото альбома (убрали битое фото — полоса уходит сразу).
 func (a *App) changed(v model.View) (w model.View) {
+	var old bool
 	func() {
 		a.mu.Lock()
 		defer a.mu.Unlock() // и при панике рассылки: guardEdit затем читает вид
@@ -209,6 +211,7 @@ func (a *App) changed(v model.View) (w model.View) {
 			a.saveTimer.Stop()
 		}
 		a.saveTimer = time.AfterFunc(time.Second, a.autosave)
+		old = foreign(v, a.editor())
 		// Другие открытые клиенты (окно и браузер в режиме разработки) тоже обновятся; холостой
 		// и обогнанной правке событие не нужно (075-3).
 		var send bool
@@ -216,7 +219,9 @@ func (a *App) changed(v model.View) (w model.View) {
 			a.emit("view", w)
 		}
 	}()
-	a.syncMissing(v.Rev)
+	if !old { // rev прежнего альбома сбил бы проверку недостающих нынешнего
+		a.syncMissing(v.Rev)
+	}
 	return w
 }
 
@@ -235,6 +240,24 @@ func (a *App) flushSave() {
 	a.saveMu.Lock()
 	defer a.saveMu.Unlock()
 	a.save()
+}
+
+// retire — смена альбома (087-5): прежний закрывается (Close ждёт правки, уже вставшие к его
+// замку, поздние отклоняет), пишется и только потом next становится текущим; between — после
+// записи прежнего, до смены (копия черновика перед openBackup). Всё под saveMu: две смены подряд
+// не разминутся (вторая закроет и запишет next, а не снова прежний), автосохранение — между ними.
+// Закрытый Editor текущим не остаётся: смена — в defer, и паника записи её не отменит.
+func (a *App) retire(next *album.Editor, between func()) {
+	a.saveMu.Lock()
+	defer a.saveMu.Unlock()
+	defer a.ed.Store(next) // до Unlock: автосохранение после смены пишет уже next
+	if ed := a.editor(); ed != nil {
+		ed.Close()
+	}
+	a.save()
+	if between != nil {
+		between()
+	}
 }
 
 // save пишет проект или черновик; вызывать под saveMu.
@@ -538,9 +561,7 @@ func (a *App) openBackup(path string) (State, error) {
 	if err != nil {
 		return a.GetState(), err
 	}
-	a.flushSave()
-	a.backupDraft()
-	a.ed.Store(ed)
+	a.retire(ed, a.backupDraft)
 	a.rescan()
 	st := a.emitState()
 	a.notice(backupNotice)

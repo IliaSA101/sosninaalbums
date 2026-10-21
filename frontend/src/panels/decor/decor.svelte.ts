@@ -318,7 +318,7 @@ class DecorUi {
   private async putMany(targets: GridTarget[], id: string) {
     try {
       const r = (await Api.ApplyBackgroundTo(targets, id)) as unknown as BgResult
-      store.apply(r.view)
+      if (!(await store.take(r.view))) return // сбой GetView: красный тост цепочки уже показан (087)
       this.close()
       store.notify(bgDoneText(r.spreads, unitOf(store.view.settings)))
     } catch (e) {
@@ -364,7 +364,7 @@ class DecorUi {
     const before = store.view.rev
     try {
       const r = (await Api.ApplySpreadTpl(spread, scope, id)) as unknown as TplResult
-      store.apply(r.view)
+      if (!(await store.take(r.view))) return
       const t = putToast(store.view.rev !== before, r.left, r.missing)
       if (t.undo) store.undoToast(t.text)
       else store.notify(t.text)

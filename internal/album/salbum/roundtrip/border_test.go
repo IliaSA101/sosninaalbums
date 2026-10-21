@@ -111,8 +111,13 @@ func TestBorderGoldenV14(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(out, data) {
-		t.Fatalf("Decode → Encode v14 отличается от голдена:\n%s", out)
+	// Голден остаётся файлом v14 (база совместимости): запись отличается только номером версии.
+	wantFile := bytes.Replace(data, []byte(`"version": 14,`), fmt.Appendf(nil, `"version": %d,`, model.FormatVersion), 1)
+	if bytes.Equal(wantFile, data) && model.FormatVersion != 14 {
+		t.Fatal("в голдене нет номера версии 14")
+	}
+	if !bytes.Equal(out, wantFile) {
+		t.Fatalf("Decode → Encode v14 отличается от голдена (кроме номера версии):\n%s", out)
 	}
 	if err := salbum.Check(p); err != nil {
 		t.Fatal(err)

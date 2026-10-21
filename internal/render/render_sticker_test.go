@@ -1,6 +1,7 @@
 package render
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"image/draw"
@@ -258,8 +259,8 @@ func TestRenderStickerHugeFrameBounded(t *testing.T) {
 	var cells []image.Rectangle
 	old := prepareFn
 	t.Cleanup(func() { prepareFn = old })
-	prepareFn = func(ph Photo, dpi int, clip image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
-		cell, r, err := old(ph, dpi, clip)
+	prepareFn = func(ctx context.Context, ph Photo, dpi int, clip image.Rectangle) (*image.NRGBA, image.Rectangle, error) {
+		cell, r, err := old(ctx, ph, dpi, clip)
 		if cell != nil {
 			mu.Lock()
 			cells = append(cells, cell.Bounds(), r)

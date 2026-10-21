@@ -92,6 +92,11 @@ func probes() []probe {
 		{"SetMarks", kErr, func(m *Methods) (model.View, error) { return m.SetMarks(ids, model.MarkPatch{}) }},
 		{"ResetMarks", kView, func(m *Methods) (model.View, error) { return ok(m.ResetMarks(ids)) }},
 		{"Marks", kRead, func(m *Methods) (model.View, error) { m.Marks(); return none(m) }},
+		// bins.go
+		{"NewBin", kErr, func(m *Methods) (model.View, error) { return m.NewBin("A", ids) }},
+		{"RenameBin", kErr, func(m *Methods) (model.View, error) { return m.RenameBin("b1", "A") }},
+		{"DeleteBin", kView, func(m *Methods) (model.View, error) { return ok(m.DeleteBin("b1")) }},
+		{"SetBin", kErr, func(m *Methods) (model.View, error) { return m.SetBin("b1", ids, true) }},
 		// grid.go
 		{"SetGrid", kView, func(m *Methods) (model.View, error) { return ok(m.SetGrid("s1", true)) }},
 		{"AddPlace", kErr, func(m *Methods) (model.View, error) { return m.AddPlace("s1", 0, "") }},

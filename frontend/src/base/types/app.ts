@@ -1,5 +1,5 @@
 import type { KeymapView } from './keys'
-import type { Photo, ScanProgress } from './marks'
+import type { Bin, Photo, ScanProgress } from './marks'
 import type { CoverView, GuideView } from './print'
 import type { Rect, SpreadView } from './sheet'
 
@@ -45,7 +45,20 @@ export interface View {
   unfilled?: string[] // пустые переменные из текстов, по алфавиту
   unnamed?: number // фото с полями имени в подписи и без имени
   cover?: CoverView | null // обложка (032); нет — её нет в альбоме
+  pageLimit?: PageLimitView // предел разворотов типографии (085); нет поля — типография неизвестна
+  albumFonts?: FontUse[] // 082: свои шрифты, стоящие в альбоме; Go начнёт слать с G4 — до этого undefined
+  bins: Bin[] // 083: подборки фото в порядке создания
   again?: boolean // 078: «Пересобрать…» ещё можно (Go считает по версиям проекта; отметки её не закрывают)
+}
+
+// Предел разворотов типографии (085): тексты готовит Go, UI их только показывает.
+export interface PageLimitView {
+  who: string // «Нетпринт «Премиум»» | «Фотосфера»
+  range: string // «от 10 до 60 разворотов» | «до 57 разворотов»
+  count: number
+  min: number // 0 — не задано
+  max: number // 0 — не задано
+  warn: string // '' — в пределах; иначе текст предупреждения
 }
 
 // Начертание шрифта (State.fonts[].faces[]): file — имя в /media/font/<file>.
@@ -60,8 +73,30 @@ export interface FontFamily {
   id: string
   name: string
   css: string
-  group: string // script | kids | serif | sans
+  group: string // my (свои, 082) | script | kids | serif | sans | display
   faces: FontFaceInfo[]
+  hidden?: boolean // 082: убран × из списка; текущий выбор остаётся видимым
+  noCyr?: boolean // 082: в шрифте нет русских букв — образец латиницей
+}
+
+// Свои гарнитуры, стоящие в альбоме (View.albumFonts, 082): нет в State.fonts — «нет на этом компьютере».
+export interface FontUse {
+  id: string
+  name: string // '' — имя неизвестно (взято из шаблона)
+}
+
+// Итог ImportFonts / ImportFontPaths (app.FontImport, 082): faces — ключи новых начертаний для checkFaces.
+export interface FontAdded {
+  id: string
+  name: string
+  faces: number
+  noCyr: boolean
+  files: string[] // файлы этой гарнитуры, записанные этой загрузкой; пусто — лишь вернулась из скрытых
+}
+export interface FontImport {
+  added: FontAdded[]
+  faces: string[] // '<16 hex>.ttf|otf'
+  skipped: { name: string; why: string }[]
 }
 
 // Настройки программы (State.prefs, Api.SetLevel / SetCustom / SetShowStart): level — simple | standard | full | custom;
@@ -94,7 +129,9 @@ export interface BackupInfo {
 export interface State {
   view: View
   photos: Photo[]
-  notice?: string
+  notice?: string // ошибка открытия при старте
+  info?: string // разовый тост вида info (например «Добавлены шрифты из папки альбома»)
+  freshFonts?: string[] // файлы новых начертаний из папки альбома: окно их проверяет (082-14)
   version?: string
   scan?: ScanProgress
   fonts?: FontFamily[]

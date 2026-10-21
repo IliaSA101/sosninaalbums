@@ -2,6 +2,8 @@
   import { onMount, tick } from 'svelte'
   import { store } from '../../base/core/store.svelte'
   import { sessionId } from '../../editor/text/textedit'
+  import { edit } from '../../editor/text/edit.svelte'
+  import { PersonSend } from './personsend'
   import { personOf } from './names'
   import { cardOf, loadPerson, savePerson, type PersonTarget, type PlaceRef } from './personapi'
 
@@ -42,8 +44,8 @@
   let root: HTMLElement | undefined
   let nSession = 0
   let seq = 0
-  let timer = 0
-  let queued: Promise<unknown> = Promise.resolve()
+  // Пауза и очередь отправок; edit.idle() досылает и ждёт их (смена альбома, сохранение, отмена).
+  const sender = new PersonSend()
   let selectFirst = false // inline: после первой загрузки имени выделить текст в поле с фокусом
 
   // Действующее имя от Go: при смене фото и после любой правки. Свой набор (dirty) ответ не перебивает.
@@ -68,22 +70,26 @@
     )
   })
 
-  function send(t: PersonTarget) {
-    clearTimeout(timer)
-    timer = 0
-    if (!dirty) return
-    // Имя ещё из файла, набран только предмет: имена не шлём — Go оставит имя из файла (решение 174).
-    const p = personOf(fromFile ? { subj: draft.subj } : draft)
-    const s = session
-    dirty = false // дальше свежий ответ Go (имя из файла после очистки) можно показывать
-    queued = queued.then(() => savePerson(t, p, s))
+  // Что уйдёт в Go: считается в момент отправки; null — набора нет.
+  function prepare(t: PersonTarget) {
+    return () => {
+      if (!dirty) return null
+      // Имя ещё из файла, набран только предмет: имена не шлём — Go оставит имя из файла (решение 174).
+      const p = personOf(fromFile ? { subj: draft.subj } : draft)
+      const s = session
+      dirty = false // дальше свежий ответ Go (имя из файла после очистки) можно показывать
+      return () => savePerson(t, p, s)
+    }
   }
 
   // Карточка закрыта или фото сменилось (родитель пересоздаёт компонент по фото): набранное досылаем.
+  // Летящий вызов остаётся в edit.idle() и после размонтирования.
   $effect(() => {
-    const t = target()
+    void target() // смена фото/места — досылка, как при закрытии
+    const off = edit.onIdle(() => void sender.flush())
     return () => {
-      if (timer) send(t)
+      off()
+      if (sender.waiting) void sender.flush()
     }
   })
 
@@ -123,9 +129,7 @@
     draft[k] = v
     dirty = true
     if (k !== 'subj') fromFile = false
-    clearTimeout(timer)
-    const t = target()
-    timer = window.setTimeout(() => send(t), DELAY)
+    sender.schedule(prepare(target()), DELAY)
   }
 </script>
 
@@ -142,7 +146,7 @@
       onfocus={focus}
       oninput={(e) => input(f.k, e.currentTarget.value)}
       onkeydown={key}
-      onblur={() => send(target())}
+      onblur={() => void sender.flush(prepare(target()))}
     />
   {/each}
   {#if fromFile}<div class="note">из имени файла</div>{/if}

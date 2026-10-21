@@ -6,6 +6,7 @@ import (
 	"image"
 	_ "image/jpeg" // декод ответа /media/lib
 	"image/png"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -193,6 +194,49 @@ func TestMediaLib(t *testing.T) {
 	}
 	if rec := get(s2.Handler(nil), http.MethodGet, "/media/lib/t/"+hexA, ""); rec.Code != http.StatusNotFound {
 		t.Errorf("без кэша: %d", rec.Code)
+	}
+}
+
+// TestMediaLibCancelled — снятый клиентом запрос своей плитки (090 G2): ни ответа, ни копии,
+// счётчик снятых растёт на каждый; живой запрос после — 200, счётчик не трогает.
+func TestMediaLibCancelled(t *testing.T) {
+	src, cacheDir := testkit.TempDir(t), testkit.TempDir(t)
+	s, _ := openTemp(t)
+	cache, err := library.NewCache(cacheDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testkit.BeforeRemove(t, cache.Close)
+	h := s.Handler(cache)
+	items := importOK(t, s, "mine", testkit.JPEG(t, src, "a.jpg", 80, 60), testkit.JPEG(t, src, "b.jpg", 30, 20))
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, it := range items {
+		for _, preview := range []bool{false, true} {
+			path, query, _ := strings.Cut(LibURL(it.ID, preview), "?")
+			rec := httptest.NewRecorder()
+			req := (&http.Request{Method: http.MethodGet, URL: &url.URL{Path: path, RawQuery: query}, Header: http.Header{}}).WithContext(gone)
+			h.ServeHTTP(rec, req)
+			if rec.Body.Len() != 0 || len(rec.Header()) != 0 {
+				t.Errorf("снятый %s: ответ %d", path, rec.Code)
+			}
+		}
+	}
+	if got := s.Cancelled(); got != 4 {
+		t.Errorf("снято %d, ждали 4", got)
+	}
+	err = filepath.WalkDir(cacheDir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			t.Errorf("снятый запрос сделал копию %s", d.Name())
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, query, _ := strings.Cut(LibURL(items[0].ID, false), "?")
+	if rec := get(h, http.MethodGet, path, query); rec.Code != http.StatusOK || s.Cancelled() != 4 {
+		t.Errorf("живой: %d, снято %d", rec.Code, s.Cancelled())
 	}
 }
 

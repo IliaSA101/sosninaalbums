@@ -206,6 +206,8 @@ func deltaCases(t *testing.T) []deltaCase {
 	}
 	cover := wv(5, sv("a", "p1"), sv("b", "p2"), sv("c", "p3"))
 	cover.Cover = &CoverView{Sheet: sv("cover", "p7"), N: 3}
+	fonts := wv(5, sv("a", "p1"), sv("b", "p2"), sv("c", "p3")) // шапка с albumFonts (082)
+	fonts.AlbumFonts = []FontUse{{ID: "my:0123456789abcdef", Name: "Lato"}, {ID: "my:fedcba9876543210"}}
 	other := wv(4, sv("x", "p1"))
 	other.Seq = 10
 	foreign, _ := Wire(&other, wv(5, sv("x", "p1"), sv("y")), 10, 11)
@@ -215,6 +217,7 @@ func deltaCases(t *testing.T) []deltaCase {
 		mk("добавлен в середину", wv(5, sv("a", "p1"), sv("n"), sv("b", "p2"), sv("c", "p3"))),
 		mk("порядок", wv(5, sv("c", "p3"), sv("a", "p1"), sv("b", "p2"))),
 		mk("только шапка (обложка)", cover),
+		mk("только шапка (свои шрифты)", fonts),
 		mk("все удалены", wv(5)),
 		{Name: "пустая дельта", Prev: raw(prev), Delta: raw(Unchanged(prev, prev.Seq)), Want: raw(full(t, prev, prev.Seq))},
 		{Name: "дельта к чужому виду", Prev: raw(prev), Delta: raw(foreign), Want: json.RawMessage("null")},
