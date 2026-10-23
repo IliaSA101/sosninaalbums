@@ -8,7 +8,6 @@ import (
 	"math/rand/v2"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -203,12 +202,20 @@ func TestDominantDropsUnder1Percent(t *testing.T) {
 	}
 }
 
+// TestDominantCost: Dominant на 65 536 точках ≤ 30 × один проход assignAll по тем же точкам.
+// Эталон (замер 2026-10-23, 2 ядра, -cover): ≈ 11,5 проходов — 10 шагов Ллойда, итоговое отнесение,
+// затравка. Абсолютные миллисекунды на медленном раннере CI (2 ядра) пробивали 60 мс (77 мс при 32 мс
+// у разработчика), а отношение к проходу на той же машине не зависит от её скорости; лишний цикл
+// или квадратичный рост поднимут его в разы.
 func TestDominantCost(t *testing.T) {
 	pts := pseudoPts(65536, 11)
-	d := testkit.Fastest(3, func() { Dominant(pts, 8) })
-	t.Logf("65 536 точек: %v", d)
-	if lim := testkit.Limit(60 * time.Millisecond); d > lim {
-		t.Errorf("65 536 точек: %v > %v", d, lim)
+	cent := append([]Lab(nil), pts[:kClusters]...)
+	assign := make([]int, len(pts))
+	ref := testkit.Fastest(5, func() { assignAll(pts, cent, assign) })
+	d := testkit.Fastest(5, func() { Dominant(pts, 8) })
+	t.Logf("65 536 точек: %v, проход %v, отношение %.1f", d, ref, float64(d)/float64(ref))
+	if lim := testkit.Limit(ref * 30); d > lim {
+		t.Errorf("65 536 точек: %v > %v (30 проходов по %v)", d, lim, ref)
 	}
 }
 
