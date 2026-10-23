@@ -274,6 +274,10 @@ jobs:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
 
+      # Код из метки со старым режимом 100644: скрипты зовут друг друга напрямую, поэтому +x в рабочей копии раннера
+      - name: права на скрипты scripts/linux
+        run: chmod +x scripts/linux/*.sh
+
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.26.10"
@@ -298,7 +302,8 @@ jobs:
         run: wails build -clean -trimpath -skipbindings -tags webkit2_41
 
       - name: Страж glibc (не выше 2.35 — Ubuntu 22.04)
-        run: scripts/linux/glibc.sh build/bin/sosninaalbums 2.35
+        # Через bash: код берётся из метки, а режим 100644 у scripts/linux/*.sh в метке уже не исправить
+        run: bash scripts/linux/glibc.sh build/bin/sosninaalbums 2.35
 
       # -trimpath должен вычистить пути сборки из бинарника (то же делает scripts/build.sh)
       - name: Страж личных путей
@@ -438,6 +443,10 @@ jobs:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
 
+      # Код из метки со старым режимом 100644: скрипты зовут друг друга напрямую, поэтому +x в рабочей копии раннера
+      - name: права на скрипты scripts/linux
+        run: chmod +x scripts/linux/*.sh
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packages
@@ -479,18 +488,18 @@ jobs:
           desktop-file-validate /usr/share/applications/sosninaalbums.desktop
 
       - name: Тест сборки .deb (deb.sh, glibc.sh)
-        run: scripts/linux/test_deb.sh
+        run: bash scripts/linux/test_deb.sh
 
       # Провал валит задание, а с ним и «Черновик релиза»
       - name: Проверка запуска .deb (smoke.sh)
         env:
           DEB: ${{ steps.pkg.outputs.deb }}
-        run: scripts/linux/smoke.sh "$DEB" "$RUNNER_TEMP/linux-out/deb"
+        run: bash scripts/linux/smoke.sh "$DEB" "$RUNNER_TEMP/linux-out/deb"
 
       - name: Проверка запуска tar.gz (smoke.sh)
         env:
           TGZ: ${{ steps.pkg.outputs.tgz }}
-        run: scripts/linux/smoke.sh "$TGZ" "$RUNNER_TEMP/linux-out/tar"
+        run: bash scripts/linux/smoke.sh "$TGZ" "$RUNNER_TEMP/linux-out/tar"
 
       - name: Сводка
         if: always()
@@ -611,6 +620,10 @@ jobs:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
 
+      # Код из метки со старым режимом 100644: скрипты зовут друг друга напрямую, поэтому +x в рабочей копии раннера
+      - name: права на скрипты scripts/linux
+        run: chmod +x scripts/linux/*.sh
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -692,7 +705,7 @@ jobs:
             --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --license LICENSE --notice NOTICE.md \
             --out out --date "$date" | tee "$RUNNER_TEMP/pack-linux.log"
           # .deb: dpkg-deb, лицензии внутри (/usr/share/doc/sosninaalbums); время файлов — коммита метки, как у архивов
-          scripts/linux/deb.sh --bin "$lin" --version "$VERSION" --out out --date "$date"
+          bash scripts/linux/deb.sh --bin "$lin" --version "$VERSION" --out out --date "$date"
 
           # Ровно три архива и .deb с ожидаемыми именами; последняя строка вывода pack.py — путь к архиву
           for kv in "windows:windows-x64.zip" "macos:macos-universal.zip" "linux:linux-amd64.tar.gz"; do
