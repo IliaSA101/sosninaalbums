@@ -15,6 +15,7 @@
   import PrintDone from './shell/export/PrintDone.svelte'
   import AutoAskDialog from './shell/ask/AutoAskDialog.svelte'
   import DropAskDialog from './shell/ask/DropAskDialog.svelte'
+  import CopyAskDialog from './shell/ask/CopyAskDialog.svelte'
   import AutoBuildDialog from './shell/autobuild/AutoBuildDialog.svelte'
   import KeysDialog from './shell/hotkeys/KeysDialog.svelte'
   import Guide from './shell/guide/Guide.svelte'
@@ -25,8 +26,10 @@
   import LevelsDialog from './shell/dialogs/LevelsDialog.svelte'
   import BackupsDialog from './shell/dialogs/BackupsDialog.svelte'
   import { backupsUi } from './shell/dialogs/backups.svelte'
-  import PacksDialog from './shell/dialogs/PacksDialog.svelte'
-  import { packsUi } from './shell/dialogs/packs.svelte'
+  import PacksDialog from './shell/packs/PacksDialog.svelte'
+  import { packsUi } from './shell/packs/packs.svelte'
+  import AboutDialog from './shell/dialogs/AboutDialog.svelte'
+  import { aboutUi } from './shell/dialogs/about.svelte'
   import NamesDialog from './panels/names/NamesDialog.svelte'
   import VigDialog from './panels/vignette/VigDialog.svelte'
   import VigTplSave from './panels/vignette/VigTplSave.svelte'
@@ -42,8 +45,12 @@
   import { jobs } from './base/core/jobs.svelte'
   import { gridAct } from './panels/layouts/gridact.svelte'
   import { dropAsk } from './base/drag/dropgrid.svelte'
+  import { copyAsk } from './base/drag/copyask.svelte'
   import { gallery } from './panels/gallery/gallery.svelte'
   import { placesel } from './editor/places/placesel.svelte'
+  import { clip } from './editor/clip/clip.svelte'
+  import { nativeSel } from './editor/clip/clip'
+  import { installClipDom } from './editor/clip/clipdom'
   import { canvas } from './editor/canvas/canvas.svelte'
   import { run, runKey } from './shell/menu/commands'
   import { keysUi } from './shell/hotkeys/keysui.svelte'
@@ -58,14 +65,36 @@
 
   onMount(() => {
     store.init()
+    void clip.sync()
     // Сверка папок по фокусу и таймеру (088): удалённые в Проводнике файлы уходят из ленты, новые появляются.
     autocheck.start(window, document)
     // 093: папка добавлена или уже была — окно «Папки» открывается на ней (кнопка может быть в «⋯», поэтому не в FolderMenu).
     const offAdded = foldersUi.listen()
+    // 099-13: copy/cut/paste браузера — пункты системной «Правки» на Mac; условия те же, что у клавиш.
+    const offClip = installClipDom(
+      document,
+      (t) => ({
+        inTextField: isTextField(t) || isWidget(t),
+        dialog: dialogState() !== undefined || askOpen() || jobsOpen(),
+        nativeSel: nativeSel(getSelection()),
+        canvas: store.zone === 'canvas',
+        clipboardOn: prefs.can('clipboard'),
+        off: !!bgmode.cur || !!gallery.cur || modes.big,
+        copyable: clip.canCopy,
+        pasteable: clip.canPaste,
+      }),
+      run,
+    )
     return () => {
+      offClip()
       autocheck.stop()
       offAdded()
     }
+  })
+
+  // Другой альбом (Новый, Открыть): буфер прежнего пуст — сводку берём у Go (099-3).
+  $effect(() => {
+    if (store.openSeq > 0) void clip.sync()
   })
 
   // Зона последнего нажатия: Ctrl+A и Del действуют по ней (библиотека или холст с лентой альбома).
@@ -77,8 +106,8 @@
   // Пробел листает раскладки «Авто»: у сетки их нет, у обложки (032) тоже.
   const noAutoLayouts = () => !!store.spread?.grid || store.onCover
 
-  // Открыт вопрос ручного листа (автораскладка, броски, копия сетки): под ним F1 молчит.
-  const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!gridAct.copyGrid
+  // Открыт вопрос ручного листа (автораскладка, броски, копия сетки, «Фото уже в альбоме»): под ним F1 молчит.
+  const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!copyAsk.cur || !!gridAct.copyGrid
 
   // Открыто окно фоновой работы Go: экспорт, его памятка, сбор в папку (069) или «Открываем альбом» (073: F1 не открывает справочник под ним).
   const jobsOpen = () => jobs.exportOpen || jobs.collectOpen || !!jobs.exportMemo || jobs.openShown
@@ -89,7 +118,15 @@
     if (eventChord(e) !== 'F1') return false
     e.preventDefault()
     const other =
-      keysUi.open || backupsUi.open || packsUi.open || namesUi.open || !!vigDialog.id || !!store.autoDraft || jobsOpen() || askOpen()
+      keysUi.open ||
+      backupsUi.open ||
+      packsUi.open ||
+      aboutUi.open ||
+      namesUi.open ||
+      !!vigDialog.id ||
+      !!store.autoDraft ||
+      jobsOpen() ||
+      askOpen()
     if (!guide.open && !other) guide.openFresh()
     return true
   }
@@ -115,6 +152,9 @@
       placeSelected: placesel.selected.length > 0 || placesel.texts.length > 0,
       stickerSelected: placesel.selected.length === 0 && placesel.texts.length === 0 && placesel.stickers.length > 0,
       layerable: placesel.canLayer,
+      copyable: clip.canCopy,
+      pasteable: clip.canPaste,
+      nativeSel: nativeSel(getSelection()),
       zone: store.zone,
       bgMode: !!bgmode.cur,
       big: modes.big,
@@ -166,6 +206,7 @@
 <PrintDone />
 <AutoAskDialog />
 <DropAskDialog />
+<CopyAskDialog />
 <AutoBuildDialog />
 <StartDialog />
 <Guide />
@@ -173,6 +214,7 @@
 <LevelsDialog />
 <BackupsDialog />
 <PacksDialog />
+<AboutDialog />
 <NamesDialog />
 <VigDialog />
 <VigTplSave />

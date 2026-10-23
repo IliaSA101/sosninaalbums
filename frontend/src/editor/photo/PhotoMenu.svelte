@@ -5,7 +5,9 @@
   import { photoui } from './photoui.svelte'
   import { straighten } from '../tilt/straighten.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import { menuContext, photoMenu, type MenuId } from './photomenu'
+  import { keymap } from '../../base/keys/keymap.svelte'
+  import { clip } from '../clip/clip.svelte'
+  import { menuContext, photoMenu, sheetMenu, type MenuId } from './photomenu'
   import { LAYER_OPS, type LayerOp } from '../places/minipanel'
   import { relinkFolder } from '../../panels/library/relink'
   import { decor } from '../../panels/decor/decor.svelte'
@@ -16,6 +18,7 @@
   import { coverLabel, coverScopes } from '../cover/cover'
   import { isCover, isSheet } from '../../base/geom/sheet'
   import type { BackdropScope } from '../../base/core/types'
+  import type { Pt } from '../clip/clip'
 
   const sheet = $derived(isSheet(store.view.settings))
   // На обложке (032) фон ставят в области её раскладки, названия — сторонки; в листе (031) — только «Весь лист».
@@ -25,12 +28,26 @@
 
   // Меню правого щелчка по фото (спека 008): своё, работает и в браузере. Пункты — photo/photomenu.ts.
   // Esc и щелчок мимо закрывают; окно держится внутри экрана.
-  // Выделены одни стикеры (048) — меню стикера: «Заменить…», «Зеркало», «Слой», «Удалить».
+  // Выделены одни стикеры (048) — меню стикера: «Копировать», «Вставить», «Заменить…», «Зеркало», «Слой», «Удалить».
+  // Одни надписи (099) — своё меню по его образцу; пустой лист (099) — только «Вставить».
+  // Одиночная надпись выделена через edit.sel, а не placesel.texts: считается, лишь когда ни мест, ни стикеров.
+  const texts = $derived(
+    placesel.texts.length ||
+      (placesel.selected.length === 0 && placesel.stickers.length === 0 && edit.sel?.kind === 'text' && edit.sel.spread === store.spread?.id
+        ? 1
+        : 0),
+  )
   const items = $derived(
-    photoMenu(
-      menuContext(store.spread, placesel.selected, store.missing, placesel.texts.length, placesel.selectedStickers.length),
-      prefs.can,
-    ),
+    photoui.menu?.kind === 'sheet'
+      ? sheetMenu(clip.canPaste, prefs.can, keymap.hint.bind(keymap))
+      : photoMenu(
+          menuContext(store.spread, placesel.selected, store.missing, texts, placesel.selectedStickers.length, {
+            copy: clip.canCopy,
+            paste: clip.canPaste,
+          }),
+          prefs.can,
+          keymap.hint.bind(keymap),
+        ),
   )
   const GAP = 8 // отступ от края окна, px
 
@@ -58,7 +75,7 @@
   })
   // Фокус на первый пункт: стрелки и Enter работают сразу.
   $effect(() => {
-    if (box) box.querySelector<HTMLElement>('button')?.focus()
+    if (box) box.querySelector<HTMLElement>('button:not(:disabled)')?.focus()
   })
 
   function key(e: KeyboardEvent) {
@@ -71,7 +88,7 @@
       photoui.close()
     } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && box) {
       e.preventDefault()
-      const bs = [...box.querySelectorAll<HTMLElement>('button')]
+      const bs = [...box.querySelectorAll<HTMLElement>('button:not(:disabled)')]
       const at = bs.indexOf(document.activeElement as HTMLElement)
       bs[(at + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length]?.focus()
     }
@@ -125,8 +142,9 @@
       return
     }
     const first = photos()[0]
+    const at = photoui.menu?.at // точка щелчка, мм — для «Вставить»
     photoui.close(true)
-    ACTIONS[id]?.(first)
+    ACTIONS[id]?.(first, at)
   }
 
   // «Заменить…» у стикера: то же окно «Стикеры», что и в карточке.
@@ -142,9 +160,11 @@
   }
 
   // Действие пункта; first — первое выделенное фото (у части пунктов оно не нужно).
-  const ACTIONS: Partial<Record<MenuId, (first: string) => void>> = {
+  const ACTIONS: Partial<Record<MenuId, (first: string, at?: Pt) => void>> = {
     preview: (first) => (photoui.preview = first),
     copy: () => void copyNames(),
+    clipCopy: () => clip.copy(),
+    clipPaste: (_first, at) => clip.paste(at),
     explorer: (first) => void explorer(first),
     relink: () => void relinkFolder(),
     fitPhoto: () => placesel.arrange('fitPhoto'),
@@ -163,7 +183,8 @@
     resetFrame: (first) => void store.run(Api.ResetFrame(first)),
     caption: (first) => edit.editCaption(first),
     replace: replaceSticker,
-    delete: () => placesel.deleteSelected(),
+    // Одиночная надпись (099) живёт в edit.sel, не в placesel: удаляется своим путём (как Del).
+    delete: () => (texts === 1 && placesel.texts.length === 0 ? edit.removeSelected() : placesel.deleteSelected()),
   }
 </script>
 
@@ -188,6 +209,7 @@
       {#if it.sep}<div class="sep" role="separator"></div>{/if}
       <button
         class:danger={it.danger}
+        disabled={it.disabled}
         role="menuitem"
         aria-haspopup={it.sub ? 'menu' : undefined}
         aria-expanded={it.sub ? subOpen === it.id : undefined}
@@ -238,7 +260,11 @@
     color: var(--text);
     border-radius: 4px;
   }
-  button:hover,
+  button:disabled {
+    color: var(--muted);
+    cursor: default;
+  }
+  button:hover:not(:disabled),
   button:focus-visible {
     background: #38383c;
     color: #fff;

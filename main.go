@@ -15,8 +15,13 @@ var assets embed.FS
 //go:embed wails.json
 var wailsJSON []byte
 
+// Значок окна Linux (tar.gz без .desktop): тот же appicon, что у exe.
+//
+//go:embed build/appicon.png
+var appIcon []byte
+
 func main() {
-	if err := app.Run(assets, wailsJSON); err != nil {
+	if err := app.Run(assets, wailsJSON, appIcon); err != nil {
 		log.Println("Ошибка:", err)
 	}
 }

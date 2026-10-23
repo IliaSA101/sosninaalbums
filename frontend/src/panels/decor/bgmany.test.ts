@@ -316,3 +316,156 @@ describe('ошибки Go', () => {
     expect(api.ApplyBackgroundTo).not.toHaveBeenCalled()
   })
 })
+
+// 100-8: два раза подряд один фон на соседние листы — тост «На все»
+describe('тост серии «На все развороты?»', () => {
+  // Вид, где своё фото фона стоит на листах putIds (область «весь разворот»)
+  const scopes = new Map<string, string>() // область, в которой click() поставил фон на лист
+  const put = (putIds: string[], rev = 2, n = 5) => ({
+    ...view(n, rev),
+    spreads: ids(n).map((id) => ({
+      ...sheet(id),
+      backdrops: putIds.includes(id) ? [{ scope: scopes.get(id) ?? 'spread', photo: 'p', lib: OWN }] : null,
+    })),
+  })
+  // Один щелчок по плитке «свой фон» на листе: Go ставит его там (к уже стоящим добавляется)
+  const stood: string[] = []
+  const click = async (spread: string, scope: 'spread' | 'left' | 'right' = 'spread') => {
+    stood.push(spread)
+    scopes.set(spread, scope)
+    api.ApplyBackground.mockImplementation(async () => put(stood))
+    await open(spread, scope)
+    await decor.pick(tile(1))
+  }
+  beforeEach(() => {
+    stood.length = 0
+    scopes.clear()
+    store.openSeq++ // новый альбом: серия и «уже спрашивали» забыты
+  })
+
+  it('первая постановка — тоста нет; вторая на соседний — «Без него ещё 3», кнопка «На все»', async () => {
+    await click('s2')
+    expect(store.toast).toBeNull()
+    await click('s3')
+    expect(store.toast?.text).toBe('Поставить этот фон на все развороты? Без него ещё 3')
+    expect(store.toast?.action?.label).toBe('На все')
+  })
+
+  it('«На все»: тот же путь, что «Все развороты» — PlanBackgroundTo, ApplyBackgroundTo, тост итога; без фото — без вопроса', async () => {
+    await click('s2')
+    await click('s3')
+    api.PlanBackgroundTo.mockResolvedValue({ spreads: 5, photos: 0 })
+    api.ApplyBackgroundTo.mockResolvedValue({ view: put(ids(5), 3), spreads: 3 })
+    store.toast!.action!.run()
+    await vi.waitFor(() => expect(store.toast?.text).toBe('Фон поставлен на 3 разворота'))
+    expect(api.PlanBackgroundTo).toHaveBeenCalledWith(tg(ids(5)), OWN)
+    expect(api.ApplyBackgroundTo).toHaveBeenCalledWith(tg(ids(5)), OWN)
+    expect(store.view.rev).toBe(3)
+  })
+
+  it('«На все», а фото фона уходят — окно «Фоны» с вопросом, выбор «Все развороты»; без «Поставить» ничего не ставится', async () => {
+    await click('s2')
+    await click('s3')
+    api.PlanBackgroundTo.mockResolvedValue({ spreads: 5, photos: 2 })
+    api.ApplyBackgroundTo.mockClear()
+    store.toast!.action!.run()
+    await vi.waitFor(() => expect(decor.ask?.kind).toBe('bgMany'))
+    expect(decor.cur).toMatchObject({ kind: 'bg', spread: 's3' })
+    expect(decor.bgPick).toBe('all')
+    expect(decor.ask).toMatchObject({ text: '2 фото фона заменятся. Поставить фон на 5 разворотов?', targets: tg(ids(5)) })
+    expect(api.ApplyBackgroundTo).not.toHaveBeenCalled()
+    await decor.confirmBgMany()
+    expect(api.ApplyBackgroundTo).toHaveBeenCalledTimes(1)
+  })
+
+  it('серия соседних — тост, один раз: на этом фоне один раз за альбом; в новом альбоме — снова', async () => {
+    await click('s2')
+    await click('s3')
+    store.toast = null
+    await click('s4')
+    expect(store.toast).toBeNull()
+    store.openSeq++
+    stood.length = 0
+    await click('s2')
+    await click('s3')
+    expect((store.toast as { text: string } | null)?.text).toContain('Без него ещё 3')
+  })
+
+  it('не сосед (через один), другая область, повтор на том же листе — тоста нет', async () => {
+    await click('s1')
+    await click('s3')
+    expect(store.toast).toBeNull()
+    await click('s3') // тот же лист
+    expect(store.toast).toBeNull()
+  })
+
+  it('соседний лист, но другая область — тоста нет', async () => {
+    await click('s2')
+    await click('s3', 'left')
+    expect(store.toast).toBeNull()
+  })
+
+  it('отмена между постановками — тоста нет; правка или Ctrl+Z после тоста гасят его', async () => {
+    await click('s2')
+    stood.length = 0 // Ctrl+Z: s2 снова без фона
+    store.apply(put([], 3) as never)
+    await click('s3')
+    expect(store.toast).toBeNull()
+    // тост показан — любая смена ревизии его гасит
+    await click('s4')
+    expect(store.toast?.action?.label).toBe('На все')
+    store.apply(put([], 9) as never)
+    expect(store.toast).toBeNull()
+  })
+
+  it('«На все» из тоста другого альбома ничего не ставит', async () => {
+    await click('s2')
+    await click('s3')
+    const run = store.toast!.action!.run
+    store.openSeq++ // открыли другой альбом
+    await run()
+    expect(api.PlanBackgroundTo).not.toHaveBeenCalled()
+    expect(api.ApplyBackgroundTo).not.toHaveBeenCalled()
+  })
+
+  it('фон не встал (холостая постановка) или встал везде — тоста нет', async () => {
+    await open('s2')
+    api.ApplyBackground.mockResolvedValue(put([])) // Go ничего не поставил
+    await decor.pick(tile(1))
+    await open('s3')
+    await decor.pick(tile(1))
+    expect(store.toast).toBeNull()
+    stood.push('s1', 's2', 's4', 's5') // уже везде, кроме s3 — после него «без него» нет ни одного
+    await click('s3')
+    await click('s4')
+    expect(store.toast).toBeNull()
+  })
+
+  it('обложка — нет: обложка и альбом из одного разворота — тоста нет', async () => {
+    store.apply({ ...put([], 1), cover: { sheet: { ...sheet('cover'), backdrops: [{ scope: 'right', photo: 'p', lib: OWN }] } } } as never)
+    api.ApplyBackground.mockResolvedValue(store.view)
+    await open('cover', 'right')
+    await decor.pick(tile(1))
+    await open('cover', 'right')
+    await decor.pick(tile(1))
+    expect(store.toast).toBeNull()
+    store.apply(put(['s1'], 3, 1) as never)
+    api.ApplyBackground.mockResolvedValue(store.view)
+    await open('s1')
+    await decor.pick(tile(1))
+    await open('s1')
+    await decor.pick(tile(1))
+    expect(store.toast).toBeNull()
+  })
+
+  it('постановка набором («Все развороты») серию обрывает', async () => {
+    await click('s2')
+    await open('s3')
+    decor.bgPick = 'all'
+    api.PlanBackgroundTo.mockResolvedValue({ spreads: 5, photos: 0 })
+    await decor.pick(tile(1))
+    store.toast = null
+    await click('s3')
+    expect(store.toast).toBeNull()
+  })
+})

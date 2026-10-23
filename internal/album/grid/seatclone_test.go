@@ -125,6 +125,8 @@ func TestSeatSitesGuard(t *testing.T) {
 		"model/places.go ClonePlace": "TestClonePlaceDropsPerson",
 		"grid/copy.go DuplicateGrid": "TestClonePlaceDropsPerson",
 		"grid/ops.go splitPlaces":    "TestClonePlaceDropsPerson",
+		// Вставка из буфера (099): табличка только у вырезанного и вставленного места.
+		"grid/paste.go pastePlaces": "TestPasteMovedPhotoRestoresRef",
 		// Новые пустые места и «Авто»: табличек ещё нет.
 		"model/places.go AddPlace": "новое пустое место (TestSeatNamesInvariant: addPlace)",
 		"spreads/drop.go tileRest": "плитка броска — новые места (TestSeatNamesInvariant: drop)",

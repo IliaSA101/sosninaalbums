@@ -206,7 +206,7 @@ func arrange(p *model.Project, s *model.Spread, op string, ids []string) error {
 // зависят от размера места (k), поэтому две итерации; у встроенной они постоянны — точно с первой,
 // без размеров картинки отступов нет — как без рамочки.
 func fitPhoto(p *model.Project, s *model.Spread, pl *model.Place) (w, h float64) {
-	a, ph := p.Aspects([]string{pl.Photo})[0], p.Geo(s).H
+	a, ph := p.PhotoAspects([]string{pl.Photo})[0], p.Geo(s).H
 	w, h = pl.W, pl.H
 	for range 2 {
 		q := *pl // только для отступов: Border не меняется
@@ -324,6 +324,10 @@ func PlacePhotos(p *model.Project, spreadID, placeID string, photos []model.Phot
 	if pl == nil {
 		return 0, nil
 	}
+	photos, err = model.ResolveCopies(p, photos) // запрос копии (098) — новая запись
+	if err != nil {
+		return 0, err
+	}
 	inAlbum := p.Placed(photos[0].ID)
 	ids := model.Remember(p, photos)
 	if p.DropOn(s, pl, ids[0], inAlbum) {
@@ -345,11 +349,12 @@ func PlacePhotos(p *model.Project, spreadID, placeID string, photos []model.Phot
 
 // FillPlaces — «Заполнить пустые места»: фото не из альбома по порядку садятся в
 // пустые места разворотов-сеток, начиная с fromSpread (неизвестный — с начала)
-// и дальше по альбому. Фото из альбома, с фонов и стикеров пропускаются. left — сколько не встало.
+// и дальше по альбому. Фото из альбома (и стоящие только копией, 098-17), с фонов и стикеров
+// пропускаются. left — сколько не встало.
 func FillPlaces(p *model.Project, photos []model.PhotoInfo, fromSpread string) (left int) {
 	photos = model.DedupePhotos(photos)
-	onBg := p.OnDecor()
-	fresh := slices.DeleteFunc(slices.Clone(photos), func(ph model.PhotoInfo) bool { return p.Placed(ph.ID) || onBg[ph.ID] })
+	onBg, files := p.OnDecor(), p.PlacedFiles()
+	fresh := slices.DeleteFunc(slices.Clone(photos), func(ph model.PhotoInfo) bool { return files[model.BaseID(ph.ID)] || onBg[ph.ID] })
 	ids := model.Remember(p, fresh)
 	start, _ := p.Find(fromSpread)
 	k := 0

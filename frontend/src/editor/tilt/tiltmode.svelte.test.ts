@@ -326,7 +326,7 @@ describe('esc order', () => {
   })
   it('меню фото открыто — не наша: Esc закрывает только меню, режим остаётся', () => {
     start()
-    photoui.menu = { x: 1, y: 1 }
+    photoui.menu = { x: 1, y: 1, kind: 'photo' }
     expect(tiltmode.key({ key: 'Escape' })).toBe(false)
     expect(tiltmode.on).toBe(true)
     photoui.close() // меню закрыл свой обработчик

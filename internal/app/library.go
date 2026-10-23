@@ -341,8 +341,12 @@ func (a *App) infos(ids []string) []model.PhotoInfo {
 	defer a.mu.Unlock()
 	out := make([]model.PhotoInfo, 0, len(ids))
 	for _, id := range ids {
-		if p, ok := a.byID[id]; ok {
-			info := model.PhotoInfo{ID: p.ID, Path: p.Path, W: p.W, H: p.H, Size: p.Size, Taken: p.Taken, Sig: a.sigOf(p)}
+		p, ok := a.byID[id]
+		if !ok && model.IsCopyReq(id) { // запрос копии (098): сведения файла, ID — прежний запрос
+			p, ok = a.byID[model.FileOf(id)]
+		}
+		if ok {
+			info := model.PhotoInfo{ID: id, Path: p.Path, W: p.W, H: p.H, Size: p.Size, Taken: p.Taken, Sig: a.sigOf(p)}
 			if p.Xmp != nil { // отметки — только из сканера: ReadInfo их нарочно не читает
 				info.Xmp = *p.Xmp
 			}

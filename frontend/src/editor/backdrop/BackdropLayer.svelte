@@ -7,7 +7,7 @@
   import { bgmode } from './bgmode.svelte'
   import { liveImg } from './bgmode'
   import { opacityOf } from './fade'
-  import { fadeLive } from './fade.svelte'
+  import { albumFade, fadeLive } from './fade.svelte'
   import { backdropCss } from './backdrop'
   import { COVER_Z } from '../cover/cover'
 
@@ -15,6 +15,7 @@
   // -> img. Прозрачность (017) — opacity на рамке, не на img: миниатюра под превью иначе просвечивала бы.
   // Наклон (045): фото крутится в стоящей рамке на frame.r — сначала зеркало, потом поворот, как в экспорте.
   // Файл фона не найден (в том числе своё из библиотеки на другом компьютере, 048): вместо картинки значок «фото нет».
+  // Фон альбома (098, b.album) тот же слой с тем же рисунком: щелчком не выделяется (мышь слой не ловит), data-backdrop у него нет.
   // Всё в процентах от Go-шных мм, без расчётов. Мышь не ловит никогда: вне режима фона фон
   // не объект, щелчки и жесты проходят по полю.
   let { spread, mini = false }: { spread: SpreadView; mini?: boolean } = $props()
@@ -25,7 +26,7 @@
   const live = $derived(!mini && bgmode.live && bgmode.cur?.spread === spread.id ? { scope: bgmode.cur.scope, l: bgmode.live } : null)
   const shown = $derived(
     (spread.backdrops ?? []).map((b) =>
-      live && live.scope === b.scope ? { ...b, box: { ...live.l.box }, img: liveImg(b, live.l), frame: live.l.frame } : b,
+      live && !b.album && live.scope === b.scope ? { ...b, box: { ...live.l.box }, img: liveImg(b, live.l), frame: live.l.frame } : b,
     ),
   )
 </script>
@@ -35,7 +36,8 @@
   {@const pos = `left:${pct(b.img.x, b.box.w)};top:${pct(b.img.y, b.box.h)};width:${pct(b.img.w, b.box.w)};height:${pct(b.img.h, b.box.h)}`}
   <div
     class="area"
-    data-backdrop={b.scope}
+    data-backdrop={b.album ? undefined : b.scope}
+    data-album-bg={b.album ? b.scope : undefined}
     style:z-index={b.scope === 'spine' ? COVER_Z.spine : undefined}
     style:left={pct(b.area.x, sw)}
     style:top={pct(b.area.y, spread.h)}
@@ -49,7 +51,7 @@
       style:width={pct(b.box.w, b.area.w)}
       style:height={pct(b.box.h, b.area.h)}
       style:transform={b.box.rot ? `rotate(${b.box.rot}deg)` : undefined}
-      style:opacity={opacityOf(fadeLive.of(spread.id, b.scope, b.fade))}
+      style:opacity={opacityOf(b.album ? albumFade(b.fade) : fadeLive.of(spread.id, b.scope, b.fade))}
     >
       {#if !lost}
         <!-- Миниатюра подстилает превью, пока оно грузится (как в Cell) -->

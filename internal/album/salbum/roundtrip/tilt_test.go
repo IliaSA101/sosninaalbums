@@ -44,7 +44,7 @@ func TestLoadBackdropTiltV8(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f := fileJSON(t, path); f.Version != 16 || !bytes.Contains(data, []byte(`"r": -4.5`)) || !bytes.Contains(data, []byte(`"r": 44.9`)) {
+	if f := fileJSON(t, path); f.Version != 17 || !bytes.Contains(data, []byte(`"r": -4.5`)) || !bytes.Contains(data, []byte(`"r": 44.9`)) {
 		t.Fatalf("файл v%d без наклона фона:\n%s", f.Version, data)
 	}
 	q, err := salbum.Load(path)
@@ -114,8 +114,8 @@ func oldVersionOpens(t *testing.T, from int) {
 	if err := e.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	if bak, err := os.ReadFile(fmt.Sprintf("%s.v%d.bak", path, from)); err != nil || !bytes.Equal(bak, data) {
-		t.Fatalf(".v%d.bak: %v, совпадает с исходником: %v", from, err, bytes.Equal(bak, data))
+	if bak, err := os.ReadFile(salbum.BackupName(path, from, 1)); err != nil || !bytes.Equal(bak, data) {
+		t.Fatalf("копия v%d: %v, совпадает с исходником: %v", from, err, bytes.Equal(bak, data))
 	}
 	if f := fileJSON(t, path); f.Version != model.FormatVersion {
 		t.Fatalf("в файле версия %d", f.Version)
@@ -159,7 +159,7 @@ func TestSalbumShapeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f := fileJSON(t, path); f.Version != 16 || bytes.Count(data, []byte(`"shape": "oval"`)) != 1 ||
+	if f := fileJSON(t, path); f.Version != 17 || bytes.Count(data, []byte(`"shape": "oval"`)) != 1 ||
 		bytes.Count(data, []byte(`"round": 12`)) != 1 || bytes.Count(data, []byte(`"shape"`)) != 1 || bytes.Count(data, []byte(`"round"`)) != 1 {
 		t.Fatalf("файл v%d:\n%s", f.Version, data)
 	}
@@ -237,7 +237,7 @@ func TestSalbumPatternRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f := fileJSON(t, path); f.Version != 16 || bytes.Count(data, []byte(`"pat`)) != 6 || bytes.Count(data, []byte(`"preset"`)) != 1 {
+	if f := fileJSON(t, path); f.Version != 17 || bytes.Count(data, []byte(`"pat`)) != 6 || bytes.Count(data, []byte(`"preset"`)) != 1 {
 		t.Fatalf("файл v%d, узоры:\n%s", f.Version, data)
 	}
 	q, err := salbum.Load(path)

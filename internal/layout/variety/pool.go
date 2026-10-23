@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 // Level — уровень разнообразия (зеркало model.Variety: пакет не знает model).
@@ -63,7 +64,13 @@ func Pool(aspects []float64, p layout.Params, rowLen int, lv Level) []Cand {
 			Formed: re.gen[c.Key] && k == NoKind, Kind: k})
 	}
 	for _, r := range e.row {
-		out = append(out, Cand{Result: r, Info: Describe(r, p), Kind: e.kind[r.Key]})
+		in := Describe(r, p)
+		if r.Key == e.mid {
+			// Семейство по форме, как в подборке (FamilyOf): по заполнению он «Воздух», и сборка брала бы
+			// его в такт воздуха. «Центр крупнее» — только для ручного выбора из «Других вариантов».
+			in.Family = FamilyOf(forms.Contrast)
+		}
+		out = append(out, Cand{Result: r, Info: in, Kind: e.kind[r.Key]})
 	}
 	return out
 }

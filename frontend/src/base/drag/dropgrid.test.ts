@@ -411,3 +411,49 @@ describe('бросок на кнопку «Подборки» (083)', () => {
     hook.mockRestore()
   })
 })
+
+// 098: ворота копии стоят в dropGrid — для броска, двойного щелчка и Enter; с холста (fromSpread) вопроса нет.
+describe('ворота копии (098)', () => {
+  const gate = vi.fn()
+  beforeEach(() => {
+    gate.mockReset()
+    gate.mockImplementation(async (ids: string[]) => ids)
+    store.plug({ ...noHooks, select, gate })
+  })
+
+  it('из ленты: Go получает ответ ворот (запрос копии)', async () => {
+    gate.mockResolvedValueOnce(['a-new', 'b'])
+    DropPhotos.mockResolvedValueOnce(reply())
+    await dropGrid('g', '', ['a', 'b'], -1, false)
+    expect(gate).toHaveBeenCalledExactlyOnceWith(['a', 'b'])
+    expect(DropPhotos).toHaveBeenCalledExactlyOnceWith('g', '', ['a-new', 'b'], -1, '')
+  })
+
+  it('«Отмена»: Go не зовём, повторный бросок снова проходит', async () => {
+    gate.mockResolvedValueOnce(null)
+    await dropGrid('g', '', ['a'], -1, false)
+    expect(DropPhotos).not.toHaveBeenCalled()
+    DropPhotos.mockResolvedValueOnce(reply())
+    await dropGrid('g', '', ['a'], -1, false)
+    expect(DropPhotos).toHaveBeenCalledOnce()
+  })
+
+  it('с холста (fromSpread) — ворот нет', async () => {
+    DropPhotos.mockResolvedValueOnce(reply())
+    await dropGrid('g', 'pl', ['a-2'], -1, true)
+    expect(gate).not.toHaveBeenCalled()
+    expect(DropPhotos).toHaveBeenCalledExactlyOnceWith('g', 'pl', ['a-2'], -1, '')
+  })
+
+  it('пока открыт вопрос ворот, второй бросок игнорируется', async () => {
+    let answer: (v: string[] | null) => void = () => {}
+    gate.mockImplementationOnce(() => new Promise((r) => (answer = r)))
+    const first = dropGrid('g', '', ['a'], -1, false)
+    await dropGrid('g', '', ['b'], -1, false)
+    expect(gate).toHaveBeenCalledOnce()
+    DropPhotos.mockResolvedValueOnce(reply())
+    answer(['a-new'])
+    await first
+    expect(DropPhotos).toHaveBeenCalledExactlyOnceWith('g', '', ['a-new'], -1, '')
+  })
+})

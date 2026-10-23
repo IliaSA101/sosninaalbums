@@ -2,7 +2,7 @@
 // Название набора в ходе — недоверенный текст из подписанного каталога: только как текст.
 import { errText } from '../../base/words/errtext'
 import { skippedLabel, type LibraryNet, type PackSkip } from './packs'
-import { sizeLabel } from './backups'
+import { sizeLabel } from '../dialogs/backups'
 
 // Ответы Go (app.LibraryUpdate) и события (library:progress, library:offer); LibraryNet — в packs.ts.
 export interface LibraryUpdate {

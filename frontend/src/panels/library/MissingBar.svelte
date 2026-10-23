@@ -18,6 +18,7 @@
   import {
     albumPhotos,
     driveLabel,
+    fileCount,
     fontsKey,
     fontsMissingText,
     isHidden,
@@ -36,13 +37,13 @@
 
   // Свои из библиотеки (048) — отдельной полосой без «Найти…»: их ищет загрузка того же файла, а не папка.
   const split = $derived(splitMissing(store.missing, store.view.libPhotos))
-  const count = $derived(split.photos.length)
+  const count = $derived(fileCount(split.photos))
   const total = $derived(albumPhotos(store.sheets))
   const unit = $derived(unitOf(store.view.settings))
   const spots = $derived(missingSpots(store.sheets, split.photos))
   const text = $derived(missingText(count, total, missingWhere(spots, unit)))
   const key = $derived(missingKey(split.photos, store.openSeq))
-  const ownText = $derived(libMissingText(split.own.length, missingWhere(missingSpots(store.sheets, split.own), unit)))
+  const ownText = $derived(libMissingText(fileCount(split.own), missingWhere(missingSpots(store.sheets, split.own), unit)))
   const ownKey = $derived(missingKey(split.own, store.openSeq))
 
   // Свои шрифты альбома, которых нет на этом компьютере (082): тексты показаны Montserrat. Скрытый × шрифт в списке есть.

@@ -10,12 +10,15 @@
   import LevelBadge from './LevelBadge.svelte'
   import logo from '../../assets/logo.png'
   import { hasSeam, isSheet, pageSize } from '../../base/geom/sheet'
+  import { topLimit } from '../../panels/details/stats'
 
   // Страниц: у листа со швом две, у отдельного листа (шва нет) одна.
   const pages = $derived(store.view.spreads.reduce((n, sp) => n + (hasSeam(sp) ? 2 : 1), 0))
   const page = $derived(pageSize(store.view.settings))
   // Сводка: у листа виньетки страниц нет, считаем листы.
   const count = $derived(countLabel(store.view.spreads.length, pages, store.view.settings))
+  // Вне предела типографии (085) счётчик цвета предупреждения; щелчок — «Сведения об альбоме» (спека 100 п. 7).
+  const lim = $derived(topLimit(store.view))
   const usedCount = $derived(store.photos.filter((p) => store.used.has(p.id)).length)
 </script>
 
@@ -36,7 +39,12 @@
   </div>
 
   <div class="info" title="{count} · {usedCount} / {store.photos.length} фото в альбоме">
-    {count} · {usedCount} / {store.photos.length} фото в альбоме
+    {#if lim}
+      <button class="count warn" title={lim.title} onclick={() => modes.openSection('info')}>{count}</button>
+    {:else}
+      {count}
+    {/if}
+    · {usedCount} / {store.photos.length} фото в альбоме
   </div>
 
   <div class="group right">
@@ -141,6 +149,20 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* Счётчик-предупреждение: выглядит текстом, цвет как .warn в «Сведениях» */
+  .count {
+    height: auto;
+    padding: 0;
+    background: transparent;
+    font-size: inherit;
+    text-decoration: underline dotted;
+  }
+  .count.warn {
+    color: #e0806f;
+  }
+  .count:hover:not(:disabled) {
+    background: transparent;
   }
   .sep {
     width: 1px;

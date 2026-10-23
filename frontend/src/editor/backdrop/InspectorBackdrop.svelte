@@ -5,7 +5,7 @@
   import { backdropAccepts } from '../../base/drag/drop'
   import { backdropOf, SCOPE_LABEL, zoneScopes } from './backdrop'
   import { coverLabels, coverScopes } from '../cover/cover'
-  import { isCover, unitOf } from '../../base/geom/sheet'
+  import { isCover, ownBg, unitOf } from '../../base/geom/sheet'
   import { gridAct } from '../../panels/layouts/gridact.svelte'
   import { clearBackdrop, editBackdrop, pickBackdropFile } from './backdropact'
   import { thumbUrl } from '../../base/core/media'
@@ -33,7 +33,7 @@
   const missing = (photo: string) => store.missing.includes(photo)
   const ownName = (lib: string) => decor.nameOf(lib) ?? 'Свой фон'
   $effect(() => {
-    if (sp.backdrops?.some((b) => b.lib) || sp.patterns?.length) void decor.ensureNames()
+    if (ownBg(sp.backdrops).some((b) => b.lib) || ownBg(sp.patterns).length) void decor.ensureNames()
   })
 </script>
 

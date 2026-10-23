@@ -8,6 +8,20 @@ func (m *Methods) SetGrid(spreadID string, on bool) (v model.View) {
 	return m.changed(m.editor().SetGrid(spreadID, on))
 }
 
+// BackToAuto — «Вернуть авто» из окна «Вернуть авто?» (098): keep — галочка «Сохранить кадр
+// правленых фото», key — раскладка из галереи ("" — сохранённая или лучшая). Один шаг отмены;
+// заменяет в окне SetGrid(false) и SetLayout с сетки.
+func (m *Methods) BackToAuto(spreadID, key string, keep bool) (v model.View, err error) {
+	defer m.guardEdit("BackToAuto", &v, &err)
+	return m.changedOrErr(m.editor().BackToAuto(spreadID, key, keep))
+}
+
+// CropsToKeep — N для галочки «Сохранить кадр правленых фото: N»; 0 — галочки нет. Только чтение.
+func (m *Methods) CropsToKeep(spreadID string) int {
+	defer Guard("CropsToKeep")
+	return m.editor().CropsToKeep(spreadID)
+}
+
 // AddPlace — пустое место на страницу page (0/1); у «Авто» — закрепление той же правкой.
 // shape — форма (044, 076): "oval" — круглое, "rounded" — скругление 10 %, иначе прямоугольное.
 func (m *Methods) AddPlace(spreadID string, page int, shape string) (v model.View, err error) {

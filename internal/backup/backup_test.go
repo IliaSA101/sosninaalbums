@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -139,8 +140,11 @@ func TestBackupKeyAndNames(t *testing.T) {
 	if !strings.HasPrefix(a, "Ивановы-") || len(a) != len("Ивановы-")+8 {
 		t.Fatalf("ключ %q", a)
 	}
-	// Тот же путь в другом регистре — тот же ключ; другая папка — другой.
-	if b := Key(filepath.Join(strings.ToUpper(dir), "ИВАНОВЫ.salbum")); !strings.EqualFold(a, b) || a[len(a)-8:] != b[len(b)-8:] {
+	// Тот же путь в другом регистре — тот же ключ на Windows и macOS, на Linux — другой (другой
+	// файл, paths.Fold); другая папка — другой.
+	up := filepath.Join(strings.ToUpper(dir), "ИВАНОВЫ.salbum")
+	same := paths.FoldEqual(up, filepath.Join(dir, "Ивановы.salbum"))
+	if b := Key(up); !strings.EqualFold(a[:len(a)-8], b[:len(b)-8]) || (a[len(a)-8:] == b[len(b)-8:]) != same {
 		t.Errorf("регистр: %q и %q", a, b)
 	}
 	if b := Key(filepath.Join(dir, "другая", "Ивановы.salbum")); b == a {
@@ -190,8 +194,9 @@ func TestBackupPruneOnlyOwnDirs(t *testing.T) {
 		}
 		return f
 	}
-	foreign := []string{write("readme.txt"), write(`чужая\20200101-000000.txt`), write(`старый-00000000\заметка.txt`)}
-	old := write(`старый-00000000\20200101-000000.salbum`)
+	// Подпапки — через filepath.Join: «\» в имени на Linux — не разделитель, файл лёг бы в корень.
+	foreign := []string{write("readme.txt"), write(filepath.Join("чужая", "20200101-000000.txt")), write(filepath.Join("старый-00000000", "заметка.txt"))}
+	old := write(filepath.Join("старый-00000000", "20200101-000000.salbum"))
 	for i := range MaxDirs + 2 {
 		if err := s.Force(p, fmt.Sprintf("a%02d-00000000", i)); err != nil {
 			t.Fatal(err)
@@ -261,9 +266,10 @@ func TestBackupInside(t *testing.T) {
 	s, _ := newStore(t)
 	for p, want := range map[string]bool{
 		s.Root: true,
-		filepath.Join(strings.ToUpper(s.Root), "x", "y.salbum"): true,
-		s.Root + "2": false,
-		filepath.Join(filepath.Dir(s.Root), "y.salbum"): false,
+		filepath.Join(strings.ToUpper(s.Root), "x", "y.salbum"): paths.FoldEqual(strings.ToUpper(s.Root), s.Root),
+		filepath.Join(s.Root, "x", "y.salbum"):                  true,
+		s.Root + "2":                                            false,
+		filepath.Join(filepath.Dir(s.Root), "y.salbum"):         false,
 	} {
 		if s.Inside(p) != want {
 			t.Errorf("Inside(%q) = %v", p, !want)

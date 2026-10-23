@@ -102,6 +102,10 @@ func (a *App) changedOrErr(v model.View, err error) (model.View, error) {
 func (a *App) Undo() model.View { return a.step((*album.Editor).Undo) }
 func (a *App) Redo() model.View { return a.step((*album.Editor).Redo) }
 
+// MarginNote — предупреждение под полями «Поля» и «Обрез» (0.23-q7): считается по значениям формы
+// до «Применить», поэтому не часть View. Только чтение: альбом, rev и отмена не трогаются.
+func (a *App) MarginNote(margin, bleed float64) string { return model.MarginNote(margin, bleed) }
+
 // step выполняет отмену или возврат; если при этом поменялись папки или отдельные фото — перечитывает библиотеку.
 func (a *App) step(do func(*album.Editor) model.View) (v model.View) {
 	defer a.guardEdit("Undo/Redo", &v, nil)
@@ -360,7 +364,7 @@ func (a *App) ApplyGrid(spreadID, scope, tplScope string, boxes []model.Box) (r 
 }
 
 // infosOrRefs — сведения о фото из ленты, а для фото альбома, чьей папки нет в
-// ленте, — из проекта (как MovePhoto).
+// ленте, — из проекта (как MovePhoto); запрос копии (098) — сведения файла из любой записи семьи.
 func (a *App) infosOrRefs(ids []string) []model.PhotoInfo {
 	known := a.infos(ids)
 	byID := make(map[string]model.PhotoInfo, len(known))
@@ -374,6 +378,8 @@ func (a *App) infosOrRefs(ids []string) []model.PhotoInfo {
 			out = append(out, p)
 		} else if r, ok := ed.Ref(id); ok {
 			out = append(out, model.PhotoInfo{ID: id, Path: r.Path, W: r.W, H: r.H, Size: r.Size})
+		} else if r, ok := ed.FileRef(id); ok && model.IsCopyReq(id) {
+			out = append(out, model.PhotoInfo{ID: id, Path: r.Path, W: r.W, H: r.H, Size: r.Size, Lib: r.Lib})
 		}
 	}
 	return out

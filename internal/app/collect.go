@@ -119,7 +119,7 @@ func (a *App) Collect(o CollectOptions) (bool, error) {
 		return false, err
 	}
 	// Пропавшие — до диалога папки: ответ «нет» не должен стоить выбора папки.
-	if text := missingQuestion(len(pre.Missing), pre.MissingGuides); text != "" {
+	if text := missingQuestion(pre.Info().Missing, pre.MissingGuides); text != "" {
 		if ok, err := askCollect(a, text); !ok {
 			return false, err
 		}
@@ -349,7 +349,7 @@ func collectOutcome(pl collect.Plan, copied int, err error, copyFailed bool) (ms
 		note += fmt.Sprintf(" (%d уже %s в папке)", skipped, plural(skipped, "был", "были", "были"))
 	}
 	var tail []string
-	if n := len(pl.Missing); n > 0 {
+	if n := pl.Info().Missing; n > 0 { // по файлам: копии одного файла — одно фото
 		tail = append(tail, fmt.Sprintf("Не найдено фото: %d — в альбоме остались со старым путём.", n))
 	}
 	if pl.SideBusy > 0 {

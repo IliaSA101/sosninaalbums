@@ -4,6 +4,7 @@
 import { folderName } from '../library/names'
 import { addedWhen } from './loose'
 import { folderKey } from './folders'
+import { foldPath } from '../../base/core/platform'
 import type { LooseView } from '../../base/core/types'
 
 export type NodeKind = 'folder' | 'group' | 'batch' | 'file'
@@ -152,9 +153,9 @@ function finish(n: TreeNode): number {
 // Одинаковые имена добавленных папок: у каждой бледно родительская папка (полный путь — в подсказке строки).
 function markSameNames(roots: TreeNode[]) {
   const seen = new Map<string, number>()
-  for (const r of roots) seen.set(r.name.toLowerCase(), (seen.get(r.name.toLowerCase()) ?? 0) + 1)
+  for (const r of roots) seen.set(foldPath(r.name), (seen.get(foldPath(r.name)) ?? 0) + 1)
   for (const r of roots) {
-    if ((seen.get(r.name.toLowerCase()) ?? 0) < 2) continue
+    if ((seen.get(foldPath(r.name)) ?? 0) < 2) continue
     const up = dirOf(r.path.replace(/[\\/]+$/, ''))
     if (up) r.hint = folderName(up)
   }

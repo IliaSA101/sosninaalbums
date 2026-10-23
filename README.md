@@ -1,15 +1,23 @@
 # Sosnina Albums
 
 [![CI](https://github.com/IliaSA101/sosninaalbums/actions/workflows/ci.yml/badge.svg)](https://github.com/IliaSA101/sosninaalbums/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-**Sosnina Albums** is a desktop application for laying out wedding photo albums, built for a working photographer. Pick folders with photos, drag frames onto spreads (or let auto-assembly do it), flip through layout variants, and export spreads as 300 dpi JPEGs for the print shop. Layouts are computed exactly and **never crop a photo**: every frame keeps its aspect ratio; margins and gaps are set in millimetres.
+**Sosnina Albums** is a desktop application for laying out wedding photo albums, built for a working photographer. Pick folders with photos, drag frames onto spreads (or let auto-assembly do it), flip through layout variants, and export spreads as 300 dpi JPEGs for the print shop. Layouts are computed exactly and **photos are not cropped without your say**: a frame keeps the photo's aspect ratio unless you choose full bleed (crops up to 30 %) or set your own crop; margins and gaps are set in millimetres.
 
-- Platform: Windows (WebView2). Stack: Go 1.26 + [Wails](https://wails.io) v2 + Svelte 5 + TypeScript.
-- Status: version 0.22.0, actively developed; the UI is in Russian.
+- Platform: Windows, macOS, Linux (WebView2, WKWebView, WebKitGTK). Stack: Go 1.26 + [Wails](https://wails.io) v2 + Svelte 5 + TypeScript.
+- Status: version 0.23.0, actively developed; the UI is in Russian.
 - Built together with photographer Marina Sosnina ([Sosnina films](https://sosnina-films.ru)) and used in her work.
 
-![Sosnina Albums: spread, album strip and photo library](docs/screenshot.png)
+![Sosnina Albums: auto-build an album, flip through spreads, try layouts](docs/media/demo.webp)
+
+**Auto-build an album and flip through the spreads**
+
+https://github.com/user-attachments/assets/fe756aa5-5faa-49bd-99dd-2e73f1ed7c3f
+
+**Drop photos on a spread and try layout variants**
+
+https://github.com/user-attachments/assets/21096f35-4c1b-4954-b130-9b8cecf1a5b1
 
 Build from source (Go 1.26, Node.js, Wails CLI v2.16):
 
@@ -20,15 +28,27 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1     # release exe in 
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1     # gofmt, vet, tests, svelte-check, build
 ```
 
-License: MIT, see [LICENSE](LICENSE). Third-party components: [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt). Author: [IliaSA101](https://github.com/IliaSA101).
+License: GPL-3.0-only with an additional term under section 7(b) (modified versions credit the original author in their About window), see [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). Versions up to 0.22.x were released under MIT. Third-party components: [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt). Photos in the clips and on the screenshot are from Pexels (Pexels License, not GPL), authors: [docs/media/CREDITS.md](docs/media/CREDITS.md). Author: [IliaSA101](https://github.com/IliaSA101).
 
 ---
 
 ## О программе
 
-Sosnina Albums — десктопная программа для вёрстки свадебных фотоальбомов. Рассчитана на фотографа: выбираешь папки со снимками, перетаскиваешь кадры на развороты (или отдаёшь всё автосборке), листаешь варианты раскладки и выгружаешь развороты в JPEG 300 dpi для типографии. Раскладка считается точно и без обрезки фото: каждый кадр сохраняет свои пропорции, поля и промежутки заданы в миллиметрах.
+Sosnina Albums — десктопная программа для вёрстки свадебных фотоальбомов. Рассчитана на фотографа: выбираешь папки со снимками, перетаскиваешь кадры на развороты (или отдаёшь всё автосборке), листаешь варианты раскладки и выгружаешь развороты в JPEG 300 dpi для типографии. Раскладка считается точно, и фото не обрезаются без вашего разрешения: кадр сохраняет пропорции снимка, а обрезку включаете вы — «в край» (до 30 %) или свой кадр фото; поля и промежутки заданы в миллиметрах.
 
 Программу делает Илья Соснин (GitHub: IliaSA101) вместе с фотографом Мариной Сосниной ([Sosnina films](https://sosnina-films.ru)); Марина — первый пользователь и источник требований. Об упоминании и логотипе есть согласие.
+
+## Как это выглядит
+
+**Автосборка альбома и листание разворотов**
+
+https://github.com/user-attachments/assets/fe756aa5-5faa-49bd-99dd-2e73f1ed7c3f
+
+**Фото на разворот и перебор вариантов раскладки**
+
+https://github.com/user-attachments/assets/21096f35-4c1b-4954-b130-9b8cecf1a5b1
+
+![Разворот альбома, лента разворотов и лента фото](docs/media/screenshot.jpg)
 
 ## Возможности (0.15.0)
 
@@ -103,7 +123,7 @@ Kaspersky (и некоторые другие) ложно срабатывает
 
 ## Лицензия
 
-MIT — см. [LICENSE](LICENSE). Встроенные шрифты — SIL Open Font License 1.1, см. [internal/text/fonts](internal/text/fonts/README.md). Остальные зависимости — [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+GNU GPL версии 3 (только этой версии, GPL-3.0-only) с дополнительным условием по п. 7(b): изменённая версия показывает в окне «О программе» строку «Основано на Sosnina Albums, автор Илья Соснин» и ссылку на этот репозиторий — см. [LICENSE](LICENSE) и [NOTICE.md](NOTICE.md). Версии до 0.22.x включительно выпущены по лицензии MIT; полученные тогда копии остаются под MIT. Встроенные шрифты — SIL Open Font License 1.1, см. [internal/text/fonts](internal/text/fonts/README.md). Остальные зависимости — [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt). Фото в роликах и на снимке README — стоковые с Pexels (Pexels License, не GPL), авторы — [docs/media/CREDITS.md](docs/media/CREDITS.md).
 
 ## Товарные знаки
 

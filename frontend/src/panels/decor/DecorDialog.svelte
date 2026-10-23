@@ -1,7 +1,7 @@
 <script lang="ts">
   import { screenDpr } from '../../base/ui/dpr.svelte'
   import { store } from '../../base/core/store.svelte'
-  import { sheetIn, unitOf } from '../../base/geom/sheet'
+  import { isSheet, sheetIn, unitOf } from '../../base/geom/sheet'
   import Modal from '../../base/modal/Modal.svelte'
   import Seg from '../../base/tpl/Seg.svelte'
   import SideList from '../../base/tpl/SideList.svelte'
@@ -9,18 +9,26 @@
   import { decor } from './decor.svelte'
   import BgTargets from './BgTargets.svelte'
   import { bgPickShown } from './bgtargets'
+  import { ALBUM_BG, albumStanding, albumWhere, type AlbumWhere } from './albumbg'
+  import QrDialog from './QrDialog.svelte'
+  import { QR_OPEN, QR_OPEN_TIP } from './qr'
+  import { qrForm } from './qr.svelte'
   import SpreadSave from './SpreadSave.svelte'
   import { spreadSave } from './tplsave.svelte'
-  import { packsUi } from '../../shell/dialogs/packs.svelte'
+  import { packsUi } from '../../shell/packs/packs.svelte'
   import { frameStanding, frameWhereItems } from './frames'
   import { FILTERED_EMPTY, saveScopes, tileLook, tplNote, tplSideItems, tplSrc, tplTitle, tplVisible } from './spreadtpl'
   import {
+    ADD_OWN,
     DECOR_TITLE,
+    MINE,
     NAME_MAX,
     NOUN,
+    OWN_TIP_STICKER,
     READ_ONLY_HINT,
     deleteText,
     emptyText,
+    ownKind,
     scopeIn,
     sideItems,
     standingId,
@@ -33,7 +41,7 @@
   } from './decor'
 
   // Окно «Фоны» (048; те же плитки для «Стикеры» и «Развороты» 067): темы слева («источник слева», как в галерее шаблонов ⊞), справа плитки в пропорции листа,
-  // сверху «Куда» и «Загрузить своё…». Щелчок по плитке ставит фон и закрывает окно; ✎ и × — у своих, как у «Мои шаблоны».
+  // сверху «Куда» и «Добавить свой…» (100-1). Щелчок по плитке ставит фон и закрывает окно; ✎ и × — у своих, как у «Мои шаблоны».
   const TILE_W = 168 // CSS px: плитка с запасом в dpr берёт PNG шириной px
 
   const c = $derived(decor.cur)
@@ -42,6 +50,9 @@
   const where = $derived(whereItems(sp, store.cover, unit.all))
   const scope = $derived(c ? scopeIn(where, c.scope) : 'spread')
   const sticker = $derived(c?.kind === 'sticker')
+  const album = $derived(decor.albumNow()) // 098: плитка ставит фон альбома, а не фон листа
+  const albumOnly = $derived(!!c?.album) // окно «Фон альбома»: строки «На» нет
+  const albumPlaces = $derived(albumWhere(isSheet(store.view.settings), unit.all))
   const frame = $derived(c?.kind === 'frame') // 079: «Куда» — выделенные места или весь лист, а не область листа
   const spreads = $derived(c?.kind === 'spread') // 067: плитки готовых разворотов, «Куда» отбирает их
   const themed = $derived(themeItems(decor.cat, decor.theme))
@@ -50,16 +61,18 @@
   const px = $derived(tilePx(TILE_W, screenDpr.value))
   // Плитка, что стоит в этой области сейчас: отмечена, как текущая раскладка в галерее ⊞
   const standing = $derived(
-    frame
-      ? frameStanding(sp, decor.frameIds(), decor.cat?.items ?? [])
-      : spreads
-        ? ''
-        : sticker
-          ? standingSticker(sp, c?.replace, decor.cat?.items ?? [])
-          : standingId(sp, scope, decor.cat?.items ?? []),
+    album
+      ? albumStanding(store.view.albumBg, decor.cat?.items ?? [])
+      : frame
+        ? frameStanding(sp, decor.frameIds(), decor.cat?.items ?? [])
+        : spreads
+          ? ''
+          : sticker
+            ? standingSticker(sp, c?.replace, decor.cat?.items ?? [])
+            : standingId(sp, scope, decor.cat?.items ?? []),
   )
   // 077: строка «на какие листы» под «Куда» — у «Фонов», не на обложке и не в альбоме из одного разворота
-  const manyRow = $derived(c?.kind === 'bg' && bgPickShown(sp, store.view.spreads.length))
+  const manyRow = $derived(c?.kind === 'bg' && !albumOnly && bgPickShown(sp, store.view.spreads.length))
   const bgPlan = $derived(decor.bgPlan())
   const frameWhere = $derived(frameWhereItems(decor.frameSel().length))
   const noun = $derived(c ? NOUN[c.kind] : 'фон')
@@ -70,7 +83,7 @@
   $effect(() => {
     if (!c) return
     if (!sp) decor.close()
-    else if (!frame && scope !== c.scope) decor.setScope(scope)
+    else if (!frame && !album && scope !== c.scope) decor.setScope(scope)
   })
 
   // Отмеченная плитка при открытии окна не должна прятаться за краем прокрутки.
@@ -90,7 +103,7 @@
 </script>
 
 {#if c && sp}
-  <Modal title={DECOR_TITLE[c.kind]} size="large" undo onclose={() => decor.close()}>
+  <Modal title={albumOnly ? ALBUM_BG : DECOR_TITLE[c.kind]} size="large" undo onclose={() => decor.close()}>
     <div class="body">
       <div class="side">
         <SideList
@@ -107,6 +120,17 @@
             <!-- 079: без выделения пункта «Выделенные» нет (owner-ux 2.7) -->
             <span class="lbl">Куда</span>
             <Seg items={frameWhere} value={decor.frameWhereNow()} onpick={(w) => decor.setFrameWhere(w)} label="Куда поставить рамочку" />
+          {:else if album}
+            <!-- 098: фон альбома — на весь разворот или на каждую страницу; у листа без шва пункт один -->
+            {#if albumPlaces.length > 1}
+              <span class="lbl">Куда</span>
+              <Seg
+                items={albumPlaces}
+                value={decor.albumPages ? 'pages' : 'spread'}
+                onpick={(w: AlbumWhere) => decor.setAlbumPages(w === 'pages')}
+                label="Куда поставить фон альбома"
+              />
+            {/if}
           {:else if (c.kind === 'bg' || spreads) && where.length > 1}
             <span class="lbl">Куда</span>
             <Seg items={where} value={scope} onpick={(s) => decor.setScope(s)} label="Куда поставить {noun}" />
@@ -121,12 +145,22 @@
               title={readOnly ? READ_ONLY_HINT : 'Сохранить места и оформление этого разворота в «Мои»'}
               onclick={() => spreadSave.show()}>Сохранить разворот…</button
             >
-          {:else}
+          {:else if ownKind(c.kind)}
+            <!-- 100: код по ссылке — только когда стикер добавляют, а не заменяют -->
+            {#if sticker && !c.replace}
+              <button
+                class="ghost"
+                disabled={decor.busy || readOnly}
+                title={readOnly ? READ_ONLY_HINT : QR_OPEN_TIP}
+                onclick={() => qrForm.show()}>{QR_OPEN}</button
+              >
+            {/if}
+            <!-- 100-1: своё на виду — primary, крайняя справа, одна кнопка на три окна -->
             <button
-              class="ghost"
+              class="primary"
               disabled={decor.busy || readOnly}
               title={readOnly ? READ_ONLY_HINT : uploadHint(c.kind)}
-              onclick={() => decor.upload()}>Загрузить своё…</button
+              onclick={() => decor.upload()}>{ADD_OWN[c.kind]}</button
             >
           {/if}
         </div>
@@ -143,6 +177,7 @@
             focus={decor.numsFocus}
           />
         {/if}
+        {#if sticker && decor.theme === MINE}<p class="tip">{OWN_TIP_STICKER}</p>{/if}
         <div class="tiles" aria-busy={decor.loading}>
           {#each items as it (it.id)}
             {@const look = spreads ? tileLook(it, sp, scope, TILE_W, dpr) : null}
@@ -186,7 +221,17 @@
             </TplItem>
           {/each}
           {#if decor.cat && items.length === 0}
-            <div class="empty">{emptyMsg}</div>
+            <div class="empty">
+              {emptyMsg}
+              {#if decor.theme === MINE && !readOnly && !decor.loading && ownKind(c.kind)}
+                <!-- та же кнопка, что в строке выше, по центру пустой темы -->
+                <div class="center">
+                  <button class="primary" disabled={decor.busy} title={uploadHint(c.kind)} onclick={() => decor.upload()}
+                    >{ADD_OWN[c.kind]}</button
+                  >
+                </div>
+              {/if}
+            </div>
           {/if}
         </div>
       </div>
@@ -231,6 +276,7 @@
 {/if}
 
 <SpreadSave scopes={saveScopes(where)} />
+<QrDialog />
 
 <style>
   /* Высота задана окну, а не содержимому: темы и плитки прокручиваются каждые сами, шапка окна остаётся на месте */
@@ -322,6 +368,16 @@
   }
   .tile.chk {
     background: repeating-conic-gradient(#d4d4d8 0 25%, #f4f4f5 0 50%) 0 0 / 14px 14px;
+  }
+  .tip {
+    flex: none;
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .center {
+    margin-top: 14px;
+    text-align: center;
   }
   .empty {
     grid-column: 1 / -1;

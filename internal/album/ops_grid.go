@@ -22,6 +22,20 @@ func (e *Editor) SetGrid(spreadID string, on bool) model.View {
 	return e.change(func(p *model.Project) { grid.SetGrid(p, spreadID, on) })
 }
 
+// BackToAuto — «Вернуть авто» со своим кадром (098 §3.2): keep — фото держат кадр мест, key — ключ
+// из галереи ("" — сохранённый или лучшая). Договор: до правки ничего; свой кадр и раскладка —
+// одна правка (один шаг отмены), всё уже так — холостая; ошибка — только отказ settle (откат без шага).
+func (e *Editor) BackToAuto(spreadID, key string, keep bool) (model.View, error) {
+	return e.try("", func(p *model.Project) error { grid.BackToAuto(p, spreadID, key, keep); return nil })
+}
+
+// CropsToKeep — N для галочки «Сохранить кадр правленых фото: N» (098 §2 п. 3). Договор: только
+// чтение под замком.
+func (e *Editor) CropsToKeep(spreadID string) (n int) {
+	e.read(func(p *model.Project) { n = grid.CropsToKeep(p, spreadID) })
+	return n
+}
+
 // AddPlace. Договор: до правки ничего; лимит мест — ошибка try, откат без шага; чужая
 // форма — прямоугольник внутри; ShapeRounded — скругление RoundedPct.
 func (e *Editor) AddPlace(spreadID string, page int, shape string) (model.View, error) {

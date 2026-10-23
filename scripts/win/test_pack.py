@@ -88,6 +88,10 @@ class Base(unittest.TestCase):
         self.docx = self.write("guide.docx", b"PK docx")
         self.log = self.write("CHANGELOG.md", CHANGELOG.encode("utf-8"))
         self.notices = self.write("THIRD_PARTY_NOTICES.txt", "Уведомления\n".encode("utf-8"))
+        self.license = self.write("LICENSE", b"GNU GENERAL PUBLIC LICENSE\nVersion 3\n")
+        self.notice = self.write("NOTICE.md", "Условие 7(b): имя и логотип\n".encode("utf-8"))
+        self.binary = self.write("sosninaalbums", b"\x7fELF" + b"\x00" * 5000)
+        self.icon = self.write("icon.png", b"\x89PNG icon")
         self.appzip = os.path.join(self.dir, "app.zip")
         make_app_zip(self.appzip)
 
@@ -106,7 +110,7 @@ class Base(unittest.TestCase):
 
     def common(self, guide=None):
         return ["--version", V, "--guide", guide or self.pdf, "--changelog", self.log,
-                "--notices", self.notices, "--out", self.out]
+                "--notices", self.notices, "--license", self.license, "--notice", self.notice, "--out", self.out]
 
     def pack_windows(self, *extra, guide=None):
         code, out, err = self.run_pack("windows", "--exe", self.exe, *self.common(guide), "--date", DATE, *extra)
@@ -115,6 +119,12 @@ class Base(unittest.TestCase):
 
     def pack_macos(self, *extra, guide=None):
         code, out, err = self.run_pack("macos", "--app-zip", self.appzip, *self.common(guide), "--date", DATE, *extra)
+        self.assertEqual(code, 0, err)
+        return out.strip().splitlines()[-1], out
+
+    def pack_linux(self, *extra, guide=None):
+        code, out, err = self.run_pack("linux", "--bin", self.binary, "--icon", self.icon,
+                                       *self.common(guide), "--date", DATE, *extra)
         self.assertEqual(code, 0, err)
         return out.strip().splitlines()[-1], out
 
@@ -132,6 +142,8 @@ class TestPack(Base):
                 FOLDER + "/Как установить (Windows).pdf",
                 FOLDER + "/Что нового.txt",
                 FOLDER + "/THIRD_PARTY_NOTICES.txt",
+                FOLDER + "/LICENSE",
+                FOLDER + "/NOTICE.md",
             ])
             self.assertEqual(z.read(FOLDER + "/SosninaAlbums.exe"), b"MZ" + b"\x00" * 5000)
             self.assertEqual(z.read(FOLDER + "/Как установить (Windows).pdf"), b"%PDF-1.7 pdf")
@@ -155,7 +167,7 @@ class TestPack(Base):
         self.assertEqual(os.path.basename(path), "SosninaAlbums-1.2.3-macos-universal.zip")
         with zipfile.ZipFile(path) as z:
             names = z.namelist()
-            for n in ("Что нового.txt", "Как установить (Mac).pdf", "THIRD_PARTY_NOTICES.txt"):
+            for n in ("Что нового.txt", "Как установить (Mac).pdf", "THIRD_PARTY_NOTICES.txt", "LICENSE", "NOTICE.md"):
                 self.assertIn(FOLDER + "/" + n, names)
             self.assertIn(FOLDER + "/sosninaalbums.app/Contents/Info.plist", names)
             self.assertEqual(z.read(FOLDER + "/Что нового.txt")[:3], b"\xef\xbb\xbf")
@@ -270,7 +282,7 @@ class TestPack(Base):
         base = self.common()
         self.assertEqual(self.run_pack("windows", "--exe", missing, *base)[0], 1)
         self.assertEqual(self.run_pack("macos", "--app-zip", missing, *base)[0], 1)
-        for flag in ("--guide", "--changelog", "--notices"):
+        for flag in ("--guide", "--changelog", "--notices", "--license", "--notice"):
             argv = list(self.common())
             argv[argv.index(flag) + 1] = missing
             code, _, err = self.run_pack("windows", "--exe", self.exe, *argv)
@@ -288,9 +300,15 @@ class TestPack(Base):
             self.assertEqual(pack.main([]), 2)
             self.assertEqual(pack.main(["windows"]), 2)
             self.assertEqual(pack.main(["windows", "--exe", self.exe, "--version", "../x", "--guide", self.pdf,
-                                        "--changelog", self.log, "--notices", self.notices, "--out", self.out]), 2)
+                                        "--changelog", self.log, "--notices", self.notices, "--license", self.license,
+                                        "--notice", self.notice, "--out", self.out]), 2)
             self.assertEqual(pack.main(["windows", "--exe", self.exe, *self.common(), "--date", "вчера"]), 2)
-            self.assertEqual(pack.main(["check", "z.zip", "--os", "linux"]), 2)
+            self.assertEqual(pack.main(["check", "z.zip", "--os", "freebsd"]), 2)
+            # без --license/--notice упаковка отказывает по аргументам, а не молча кладёт архив без лицензии
+            no_lic = [a for a in self.common() if a not in ("--license", self.license)]
+            self.assertEqual(pack.main(["windows", "--exe", self.exe, *no_lic]), 2)
+            no_notice = [a for a in self.common() if a not in ("--notice", self.notice)]
+            self.assertEqual(pack.main(["linux", "--bin", self.binary, *no_notice]), 2)
 
     def test_utf8_flag_on_cyrillic(self):
         for path in (self.pack_windows()[0], self.pack_macos()[0]):
@@ -479,6 +497,13 @@ class TestCli(Base):
         self.assertEqual(self.run_cli("check", path, "--version", V)[0], 0)
         self.assertEqual(self.run_cli("check", path, "--version", "0.0.1")[0], 1)
         self.assertEqual(self.run_cli("windows")[0], 2)
+        # tar.gz Linux: тот же вызов `python -I` (соседние модули подключаются по __file__)
+        code, out, err = self.run_cli("linux", "--bin", self.binary, "--icon", self.icon, *self.common(), "--date", DATE)
+        self.assertEqual(code, 0, err)
+        tgz = out.strip().splitlines()[-1]
+        self.assertTrue(tgz.endswith("-linux-amd64.tar.gz"))
+        self.assertEqual(self.run_cli("check", tgz, "--os", "linux", "--version", V)[0], 0)
+        self.assertEqual(self.run_cli("check", tgz, "--version", "0.0.1")[0], 1)
 
 
 if __name__ == "__main__":

@@ -149,8 +149,8 @@ func v14Opens(t *testing.T, file string, src []byte, side model.Side, draft bool
 		if err := write(); err != nil {
 			t.Fatal(err)
 		}
-		if bak, err := os.ReadFile(file + ".v14.bak"); err != nil || !bytes.Equal(bak, src) {
-			t.Fatalf("%s: .v14.bak: %v, совпадает с исходником: %v", file, err, bytes.Equal(bak, src))
+		if bak, err := os.ReadFile(salbum.BackupName(file, 14, 1)); err != nil || !bytes.Equal(bak, src) {
+			t.Fatalf("%s: копия для 0.20: %v, совпадает с исходником: %v", file, err, bytes.Equal(bak, src))
 		}
 	}
 	q, err := salbum.Load(file)

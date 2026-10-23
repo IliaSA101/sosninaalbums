@@ -413,7 +413,6 @@ func TestGridSurvivesEmpty(t *testing.T) {
 
 // Перепривязка переводит ID и в местах: P1=A P2="" P3=B остаются на своих местах.
 func TestRelinkKeepsPlaces(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	s := edtest.NewRelinkSetup(t)
 	edtest.FreezeAt(t, s.E, 0)
 	edtest.Change(s.E, func(p *model.Project) {

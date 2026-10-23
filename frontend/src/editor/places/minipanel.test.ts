@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { setMacForTest } from '../../base/core/platform'
 import {
   ARC_IN_H,
   ARC_IN_W,
@@ -15,6 +16,7 @@ import {
   miniPlace,
   passThrough,
   ROT_KEEP,
+  swapTip,
   visibleArea,
   type MiniCtx,
 } from './minipanel'
@@ -562,6 +564,24 @@ describe('tilt', () => {
     expect(tilt({ tilt: true })?.on).toBe(true)
     expect(tilt({ tilt: false })?.on).toBe(false)
     expect(tilt({})?.on).toBe(false)
+  })
+})
+
+describe('подсказка ⇄ с Ctrl / ⌘ (спека 100 п. 6)', () => {
+  const swapLabel = () => miniItems({ ...base, grid: true }).find((i) => i.id === 'swap')?.label
+  it('текст: Ctrl вне Mac, ⌘ на Mac', () => {
+    expect(swapTip(false)).toBe('Перетащите на другое место — фото поменяются местами (или тащите фото с Ctrl)')
+    expect(swapTip(true)).toBe('Перетащите на другое место — фото поменяются местами (или тащите фото с ⌘)')
+  })
+  it('подпись значка берёт платформу из platform.ts', () => {
+    setMacForTest(false)
+    expect(swapLabel()).toBe(swapTip(false))
+    setMacForTest(true)
+    expect(swapLabel()).toBe(swapTip(true))
+    setMacForTest(null)
+  })
+  it('на «Авто» значка ⇄ нет', () => {
+    expect(ids({ grid: false })).not.toContain('swap')
   })
 })
 

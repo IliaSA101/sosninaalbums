@@ -5,6 +5,7 @@ method AddPackFile():Promise<APP.PackAdd>
 method AddPackPath(arg1:string):Promise<APP.PackAdd>
 method AddPhotos(arg1:string,arg2:Array<string>,arg3:number):Promise<model.View>
 method AddPlace(arg1:string,arg2:number,arg3:string):Promise<model.View>
+method AddQRSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResult>
 method AddSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResult>
 method AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
 method AddVignette(arg1:number):Promise<model.View>
@@ -22,6 +23,7 @@ method AutoBuild(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<mod
 method AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>
 method AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.AutoPreview>
 method AutoSimilar(arg1:Array<string>,arg2:model.AutoOpts):Promise<Array<model.SimilarDrop>>
+method BackToAuto(arg1:string,arg2:string,arg3:boolean):Promise<model.View>
 method Backups():Promise<Array<APP.BackupInfo>>
 method CancelCollect():Promise<void>
 method CancelExport():Promise<void>
@@ -29,20 +31,25 @@ method CancelLibrary():Promise<void>
 method CheckFolders(arg1:boolean):Promise<void>
 method ChooseFiles():Promise<APP.LooseResult>
 method ChooseFolder():Promise<model.View>
+method ClearAlbumBg():Promise<model.View>
 method ClearBackdrop(arg1:string,arg2:string):Promise<model.View>
 method ClearCoverGuide():Promise<model.View>
 method ClearPattern(arg1:string,arg2:string):Promise<model.View>
 method ClearRecent():Promise<Array<prefs.RecentProject>>
 method ClearSpreadGuide():Promise<model.View>
 method ClearVignette(arg1:string):Promise<model.View>
+method ClipState():Promise<model.ClipInfo>
 method Collect(arg1:APP.CollectOptions):Promise<boolean>
 method CollectInfo(arg1:boolean):Promise<collect.Info>
 method ConfirmPack(arg1:string):Promise<APP.PackAdd>
 method CopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<APP.GridResult>
 method CopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<APP.GridResult>
+method CopyItems(arg1:string,arg2:model.ClipSel):Promise<model.ClipInfo>
 method CoverPresets():Promise<Array<model.CoverPreset>>
 method CoverSpineText():Promise<model.View>
 method CreateCover(arg1:string,arg2:string):Promise<model.View>
+method CropsToKeep(arg1:string):Promise<number>
+method CutItems(arg1:string,arg2:model.ClipSel):Promise<APP.ClipResult>
 method DecorCatalog(arg1:string):Promise<APP.DecorCatalog>
 method DeleteBin(arg1:string):Promise<model.View>
 method DeleteCover():Promise<model.View>
@@ -55,6 +62,7 @@ method DeleteText(arg1:string):Promise<model.View>
 method DropFonts(arg1:Array<string>):Promise<Array<string>>
 method DropPhotos(arg1:string,arg2:string,arg3:Array<string>,arg4:number,arg5:string):Promise<APP.DropResult>
 method DuplicateGrid(arg1:string,arg2:number,arg3:boolean):Promise<model.View>
+method DuplicateItems(arg1:string,arg2:model.ClipSel):Promise<APP.PasteResult>
 method Export(arg1:APP.ExportOptions):Promise<boolean>
 method ExportTemplates():Promise<APP.TplSave>
 method FillPlaces(arg1:Array<string>,arg2:string):Promise<APP.GridResult>
@@ -78,6 +86,7 @@ method Keymap():Promise<keymap.View>
 method LayoutChoices(arg1:string):Promise<model.Choices>
 method LibraryPacks():Promise<APP.PackList>
 method LogUI(arg1:string):Promise<void>
+method MarginNote(arg1:number,arg2:number):Promise<string>
 method Marks():Promise<Record<string, model.MarkView>>
 method MergeSpreads(arg1:string):Promise<model.View>
 method MirrorGrid(arg1:string,arg2:string):Promise<model.View>
@@ -91,9 +100,11 @@ method NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>
 method NewVignetteSheet(arg1:number,arg2:number):Promise<APP.State>
 method OpenFabrika():Promise<void>
 method OpenFsfera():Promise<void>
+method OpenLink(arg1:string):Promise<void>
 method OpenProject():Promise<APP.State>
 method OpenRecent(arg1:string):Promise<APP.State>
 method PagePresets():Promise<Array<model.PagePreset>>
+method PasteItems(arg1:model.PasteReq):Promise<APP.PasteResult>
 method PasteNames(arg1:string,arg2:model.NamesOpts):Promise<APP.NamesResult>
 method Person(arg1:string):Promise<model.PersonView>
 method PhotoAbout(arg1:string):Promise<APP.PhotoAbout>
@@ -113,6 +124,7 @@ method PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.NamesPlan>
 method PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>
 method PrintPlans():Promise<Array<printshop.Plan>>
 method PurgePhotos(arg1:Array<string>):Promise<model.View>
+method QRPreview(arg1:string):Promise<APP.QRInfo>
 method Recent():Promise<Array<prefs.RecentProject>>
 method Redo():Promise<model.View>
 method RelinkDrive(arg1:string,arg2:string):Promise<model.View>
@@ -143,6 +155,8 @@ method SaveProjectAs():Promise<model.View>
 method SaveSpreadTpl(arg1:string,arg2:string,arg3:string,arg4:string,arg5:boolean,arg6:boolean):Promise<APP.DecorItem>
 method SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>
 method ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>
+method SetAlbumBg(arg1:string,arg2:boolean):Promise<model.View>
+method SetAlbumBgFade(arg1:number,arg2:string):Promise<model.View>
 method SetBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method SetBackdropAngle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>
 method SetBackdropBox(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>
@@ -167,6 +181,7 @@ method SetLayout(arg1:string,arg2:string):Promise<model.View>
 method SetLevel(arg1:string):Promise<prefs.Prefs>
 method SetLibraryNet(arg1:boolean,arg2:boolean):Promise<APP.LibraryNet>
 method SetMarks(arg1:Array<string>,arg2:model.MarkPatch):Promise<model.View>
+method SetNoAlbumBg(arg1:string,arg2:boolean):Promise<model.View>
 method SetPattern(arg1:string,arg2:string,arg3:model.Pattern,arg4:string):Promise<model.View>
 method SetPerson(arg1:string,arg2:model.Person,arg3:string):Promise<model.View>
 method SetPhotoFade(arg1:Array<string>,arg2:number,arg3:string):Promise<model.View>
@@ -212,6 +227,7 @@ method Undo():Promise<model.View>
 method UpdateLibrary():Promise<APP.LibraryUpdate>
 method VaryLayouts(arg1:Array<string>,arg2:number,arg3:Array<string>):Promise<model.View>
 method VignetteChoices(arg1:string,arg2:number,arg3:number,arg4:string):Promise<Array<model.VigChoice>>
+method WhereUsed(arg1:Array<string>):Promise<Array<model.UsedAt>>
 type APP.BackupInfo
   name: string
   time: number
@@ -221,6 +237,9 @@ type APP.BackupInfo
 type APP.BgResult
   view: model.View
   spreads: number
+type APP.ClipResult
+  view: model.View
+  clip: model.ClipInfo
 type APP.CollectOptions
   all: boolean
 type APP.DecorCatalog
@@ -360,6 +379,14 @@ type APP.PackRemove
   files: number
   kept: number
   bytes: number
+type APP.PasteResult
+  view: model.View
+  refs: string[]
+  texts: string[]
+  stickers: string[]
+  repeat: string[]
+  froze: boolean
+  clip: model.ClipInfo
 type APP.PhotoAbout
   id: string
   file: string
@@ -367,6 +394,11 @@ type APP.PhotoAbout
   note: string
   used: string
   uses: model.PhotoUse[]
+type APP.QRInfo
+  text: string
+  side: number
+  path: string
+  minMM: number
 type APP.RelinkResult
   view: model.View
   found: number
@@ -488,6 +520,13 @@ type library.ScanProgress
   walking: boolean
   found: number
   read: number
+type model.AlbumBgView
+  name: string
+  lib?: string
+  fade: number
+  pages: boolean
+  preset?: string
+  photo?: string
 type model.Art
   kind: string
   inks?: string[]
@@ -543,6 +582,7 @@ type model.BackdropView
   dpi: number
   fade: number
   lib?: string
+  album?: boolean
 type model.BgPlan
   spreads: number
   photos: number
@@ -623,6 +663,16 @@ type model.Choices
   whole: ChoiceRows
   left?: ChoiceRows
   right?: ChoiceRows
+type model.ClipInfo
+  photos: number
+  places: number
+  texts: number
+  stickers: number
+  sheet: string
+type model.ClipSel
+  refs: string[]
+  texts: string[]
+  stickers: string[]
 type model.CoverPreset
   id: string
   name: string
@@ -696,6 +746,7 @@ type model.FrameView
   winShape: string
   winRadius: number
   fade: number
+  own?: number
 type model.GridChoice
   id: string
   name: string
@@ -794,6 +845,11 @@ type model.PageView
   variant: number
   variants: number
   rearranged: boolean
+type model.PasteReq
+  sheet: string
+  hover?: Pt
+  at?: Pt
+  repeat: string
 type model.Pattern
   kind: string
   inks?: string[]
@@ -811,6 +867,7 @@ type model.PatternView
   known: boolean
   url: string
   preset?: string
+  album?: boolean
 type model.Person
   last?: string
   first?: string
@@ -828,6 +885,7 @@ type model.PersonView
 type model.PhotoUse
   sheet: number
   label: string
+  ref?: string
 type model.PlaceBox
   id: string
   x: number
@@ -859,6 +917,9 @@ type model.PreviewSpread
   photos: number
   fallback: boolean
   gray: boolean
+type model.Pt
+  x: number
+  y: number
 type model.SampleRow
   photos: number
   group: number
@@ -920,6 +981,7 @@ type model.SpreadView
   vig?: VignetteView
   vars: Vars
   fields: string[]
+  noAlbumBg?: boolean
 type model.StickerView
   id: string
   x: number
@@ -971,6 +1033,11 @@ type model.TextView
   auto: boolean
   src?: string
   z: number
+type model.UsedAt
+  id: string
+  uses: PhotoUse[]
+  places: number
+  move: string
 type model.Vars
   title?: string
   subtitle?: string
@@ -1003,6 +1070,7 @@ type model.View
   unfilled: string[]
   unnamed: number
   cover?: CoverView
+  albumBg?: AlbumBgView
   pageLimit?: PageLimitView
   again: boolean
   seq: number

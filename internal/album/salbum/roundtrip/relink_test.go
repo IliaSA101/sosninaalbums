@@ -19,7 +19,6 @@ import (
 )
 
 func TestRelinkRekeys(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	s := edtest.NewRelinkSetup(t)
 	before := s.E.View()
 	v := s.E.Relink(map[string]string{s.IdA: s.NewA, s.IdB: s.NewB}, "")
@@ -51,7 +50,6 @@ func TestRelinkRekeys(t *testing.T) {
 // Фото только на месте обложки — в альбоме, а не «только на фоне» (BgOnly): папка
 // переезжает по его паре путей, место обложки получает новый ID (032 §1).
 func TestRelinkCoverPhoto(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	s := edtest.NewRelinkSetup(t)
 	pr, _ := model.CoverPresetOf(model.CoverDefault)
 	edtest.Change(s.E, func(p *model.Project) {
@@ -77,7 +75,6 @@ func TestRelinkCoverPhoto(t *testing.T) {
 }
 
 func TestRelinkAddFolderAndGuards(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	s := edtest.NewRelinkSetup(t)
 	other := filepath.Join(filepath.Dir(s.NewFd), "Чужая")
 	// Имя файла другое: префикс не находится, папки с новым фото нет — добавляется выбранная.
@@ -417,7 +414,6 @@ func addLoose(t *testing.T, e *album.Editor, files ...string) {
 // у которых прежний путь — отдельное фото, не уходят в addFolderFor — выбранная папка ради
 // них не добавляется. Один шаг отмены, повтор — холостой, круг Save → Load.
 func TestRelinkLooseFollows(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	root := testkit.TempDir(t)
 	old1, old2 := filepath.Join(root, "E", "Отдельно", "1.jpg"), filepath.Join(root, "E", "Отдельно", "2.jpg")
 	new1, new2 := filepath.Join(root, "F", "Отдельно", "1.jpg"), filepath.Join(root, "F", "Отдельно", "2.jpg")
@@ -463,7 +459,6 @@ func TestRelinkLooseFollows(t *testing.T) {
 // следом, если файл с тем же именем есть в новой папке. Остаются: фото альбома (его ведёт своя
 // пара), файл на прежнем месте, файл, которого нет и в новой папке, файл из другой папки.
 func TestRelinkLooseSameDir(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	root := testkit.TempDir(t)
 	oldDir, newDir := filepath.Join(root, "E", "Отдельно"), filepath.Join(root, "F", "Отдельно")
 	at := func(dir, name string) string { return filepath.Join(dir, name) }

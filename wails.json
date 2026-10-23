@@ -11,6 +11,7 @@
   },
   "info": {
     "productName": "Sosnina Albums",
-    "productVersion": "0.22.0"
+    "productVersion": "0.23.0",
+    "copyright": "© 2026 Илья Соснин. GPL-3.0-only, см. NOTICE.md"
   }
 }

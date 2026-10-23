@@ -30,11 +30,14 @@ if ! over=$(node scripts/limits.mjs folders --cached); then
   exit 1
 fi
 
-# Быстрые проверки только файлов коммита (секунды); полный прогон — scripts/check.ps1.
+# Быстрые проверки только файлов коммита (секунды); полный прогон — scripts/check.ps1 (Linux, macOS — check.sh).
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 gofiles=$(echo "$staged" | grep -E '\.go$')
 if [ -n "$gofiles" ]; then
-  unformatted=$(echo "$gofiles" | xargs -n 50 gofmt -l)
+  # gofmt того же тулчейна, что go (toolchain в go.mod): системный gofmt другой версии форматирует иначе.
+  gf=$(go env GOROOT 2>/dev/null)/bin/gofmt
+  [ -x "$gf" ] || [ -x "$gf.exe" ] || gf=gofmt
+  unformatted=$(echo "$gofiles" | xargs -n 50 "$gf" -l)
   if [ -n "$unformatted" ]; then
     echo "pre-commit: не отформатировано gofmt:" >&2
     echo "$unformatted" | sed 's/^/  /' >&2

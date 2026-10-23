@@ -310,7 +310,9 @@ func TestUnder(t *testing.T) {
 		{filepath.Join(base, "a.jpg"), base, true},
 		{filepath.Join(base, "sub", "deep", "a.jpg"), base, true},
 		{filepath.Join(base, "a.jpg"), base + string(filepath.Separator), true},
-		{filepath.Join(os.TempDir(), "ФОТО", "A.JPG"), base, true}, // регистр не важен
+		// регистр — по paths.Fold: на Windows и macOS не важен, на Linux «ФОТО» — другая папка
+		{filepath.Join(os.TempDir(), "ФОТО", "A.JPG"), base, paths.FoldEqual("ФОТО", "Фото")},
+		{filepath.Join(base, "A.JPG"), base, true},
 		{filepath.Join(os.TempDir(), "Фото2", "a.jpg"), base, false},
 		{base, base, false},
 		{filepath.Join(os.TempDir(), "a.jpg"), base, false},

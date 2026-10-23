@@ -1,8 +1,10 @@
 // Проверка перед меткой выпуска: `node scripts/release-check.mjs [--version X.Y.Z] [--root <папка>]`.
 // Ловит механику выпуска, которую до сих пор находило только ревью: версия в четырёх местах (wails.json,
-// README «Status», «Что нового», CHANGELOG), `needs` публикации в release.yml (0.11), эталоны для arm64.
+// README «Status», «Что нового», CHANGELOG), `needs` публикации в release.yml (0.11), эталоны для arm64,
+// LICENSE = GPL v3 и условие 7(b) в NOTICE.md (0.23).
 // Без --version берётся productVersion из wails.json (тогда проверяется согласованность остальных мест).
 // Выход ≠ 0 и список ошибок.
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -83,6 +85,33 @@ export function specErrors(root, version, body) {
     if (!new RegExp(`^\\| ${n} \\|`, 'm').test(table)) errors.push(`спека ${n} (docs/specs/${dir}) не в таблице docs/specs/README.md`)
     if (cited.length > 0 && !cited.includes(n)) errors.push(`спека ${n} (docs/specs/${dir}) не упомянута в CHANGELOG ${version}`)
   }
+  return errors
+}
+
+// ---- лицензия ----
+
+// sha256 официального текста GPL v3 (https://www.gnu.org/licenses/gpl-3.0.txt, концы строк — LF). Любая правка
+// LICENSE меняет сумму: GitHub (licensee) узнаёт GPL-3.0 только по чистому тексту, без строчки сверху и снизу.
+export const GPL3_SHA256 = '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'
+
+// Строки условия п. 7(b) в NOTICE.md: без любой из них изменённые версии не обязаны называть автора.
+export const NOTICE_MUST = [
+  ['GPL-3.0-only', 'GPL-3.0-only'],
+  ['п. 7(b)', '7(b)'],
+  ['строка «Основано на Sosnina Albums, автор Илья Соснин»', 'Основано на Sosnina Albums, автор Илья Соснин'],
+  ['адрес репозитория', 'https://github.com/IliaSA101/sosninaalbums'],
+]
+
+export function checkLicense(root) {
+  const errors = []
+  const lic = read(root, 'LICENSE')
+  if (lic === null) errors.push('LICENSE: нет файла')
+  else if (crypto.createHash('sha256').update(lic).digest('hex') !== GPL3_SHA256) {
+    errors.push('LICENSE: не точный текст GNU GPL v3 (сверьте с https://www.gnu.org/licenses/gpl-3.0.txt, правок быть не должно)')
+  }
+  const notice = read(root, 'NOTICE.md')
+  if (notice === null) errors.push('NOTICE.md: нет файла')
+  else for (const [what, needle] of NOTICE_MUST) if (!notice.includes(needle)) errors.push(`NOTICE.md: нет условия 7(b): ${what}`)
   return errors
 }
 
@@ -174,6 +203,30 @@ export function checkArm64(root, yml) {
   return errors
 }
 
+// ---- ролики и снимок README ----
+
+export const WEBP_MAX = 2621440 // 2,5 МБ
+export const JPG_MAX = 409600 // 400 КБ
+
+// Заставка, снимок и адреса роликов A/B: заглушка TODO-README-MEDIA не должна доехать до выпуска.
+export function checkReadmeMedia(root) {
+  const errors = []
+  const readme = read(root, 'README.md')
+  if (readme === null) return ['README.md: нет файла']
+  if (readme.includes('TODO-README-MEDIA')) errors.push('README.md: остался TODO-README-MEDIA (адреса роликов не подставлены)')
+  const counts = new Map()
+  for (const m of readme.matchAll(/https:\/\/github\.com\/user-attachments\/assets\/([0-9a-f-]{36})(?![0-9a-f-])/g)) counts.set(m[1], (counts.get(m[1]) ?? 0) + 1)
+  if (counts.size !== 2) errors.push(`README.md: адресов роликов user-attachments ${counts.size}, ждали 2 разных`)
+  for (const [id, n] of counts) if (n !== 2) errors.push(`README.md: адрес ролика ${id} встречается ${n} раз, ждали 2 (английская и русская часть)`)
+  if (readme.includes('docs/screenshot.png')) errors.push('README.md: ссылка на docs/screenshot.png — снимок теперь docs/media/screenshot.jpg')
+  for (const [rel, max] of [['docs/media/demo.webp', WEBP_MAX], ['docs/media/screenshot.jpg', JPG_MAX], ['docs/media/CREDITS.md', 0]]) {
+    const f = path.join(root, rel)
+    if (!fs.existsSync(f)) errors.push(`${rel}: нет файла`)
+    else if (max && fs.statSync(f).size > max) errors.push(`${rel}: ${fs.statSync(f).size} байт, больше предела ${max}`)
+  }
+  return errors
+}
+
 // ---- всё вместе ----
 
 export function checkAll(root, version) {
@@ -189,6 +242,8 @@ export function checkAll(root, version) {
   if (!/^\d+\.\d+\.\d+$/.test(version)) return { version, errors: [`версия «${version}» — ждали X.Y.Z`] }
   errors.push(...checkVersions(root, version))
   errors.push(...checkChangelog(root, version))
+  errors.push(...checkLicense(root))
+  errors.push(...checkReadmeMedia(root))
   const yml = read(root, '.github/workflows/release.yml')
   if (yml === null) errors.push('.github/workflows/release.yml: нет файла')
   else errors.push(...checkNeeds(yml), ...checkArm64(root, yml))

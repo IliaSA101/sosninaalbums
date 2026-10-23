@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { UsedIndex, keepSet } from './usedindex'
+import { UsedIndex, keepSet, useCountOf, usesOf } from './usedindex'
+import vector from '../../../../testdata/parity/uses.json'
 import type { SpreadView } from './types'
 
 const sp = (id: string, ...photos: string[]) => ({ id, photos }) as unknown as SpreadView
@@ -91,5 +92,76 @@ describe('UsedIndex', () => {
       list = next
       expect(sorted(u.update(list))).toEqual(sorted(new Set(list.flatMap((s) => s.photos))))
     }
+  })
+})
+
+describe('UsedIndex: копии (098)', () => {
+  it('фото, стоящее только копией, — в наборе по ID файла и по ID записи', () => {
+    const u = new UsedIndex()
+    const set = u.update([sp('a', 'f1-2')])
+    expect(sorted(set)).toEqual(['f1', 'f1-2'])
+    expect(u.places('f1')).toBe(1)
+    expect(u.places('f1-2')).toBe(1)
+  })
+
+  it('уходит последняя запись семьи — файл уходит из набора; пока есть другая — остаётся', () => {
+    const u = new UsedIndex()
+    const a = sp('a', 'f1')
+    const b = sp('b', 'f1-2')
+    u.update([a, b])
+    expect(u.places('f1')).toBe(2)
+    expect(sorted(u.update([b]))).toEqual(['f1', 'f1-2'])
+    expect(sorted(u.update([]))).toEqual([])
+    expect(u.places('f1')).toBe(0)
+  })
+
+  it('правка без смены состава оставляет прежний набор и прежнюю карту счёта', () => {
+    const u = new UsedIndex()
+    const a = sp('a', 'f1', 'f2-3')
+    const b = sp('b', 'f4')
+    const set = u.update([a, b])
+    const uses = u.uses
+    expect(u.update([{ ...a }, b])).toBe(set)
+    expect(u.uses).not.toBe(uses) // карта пересоздаётся при любой правке листа, набор — нет
+    expect([...u.uses.entries()].sort()).toEqual([...uses.entries()].sort())
+  })
+
+  it('стикер и фон меняют счёт, но не набор «в альбоме»', () => {
+    const u = new UsedIndex()
+    const plain = { id: 'a', photos: ['f1'] } as unknown as SpreadView
+    const set = u.update([plain])
+    const withBd = { id: 'a', photos: ['f1'], backdrops: [{ photo: 'f9' }] } as unknown as SpreadView
+    expect(u.update([withBd])).toBe(set)
+    expect(u.uses.get('f9')).toBe(1)
+    expect(set.has('f9')).toBe(false)
+  })
+})
+
+describe('useCountOf', () => {
+  it('фон альбома добавляется один раз по ID файла', () => {
+    const uses = new Map([['f1', 2]])
+    expect(useCountOf(uses, 'f1-3', 'f1')).toBe(3)
+    expect(useCountOf(uses, undefined, 'f1-2')).toBe(2)
+    expect(useCountOf(uses, '', 'f2')).toBe(0)
+  })
+})
+
+// Паритет с Go (uses_parity_test.go, countByView): тот же вектор, тот же счёт.
+describe('паритет с Go: testdata/parity/uses.json', () => {
+  const sheets = vector.sheets as unknown as SpreadView[]
+  const u = new UsedIndex()
+  u.update(sheets)
+  it('в векторе есть файлы и фон альбома', () => {
+    expect(vector.files.length).toBeGreaterThan(5)
+    expect(vector.albumBg).not.toBe('')
+  })
+  for (const f of vector.files) {
+    it(`файл ${f.id}: вхождений ${f.uses}, мест ${f.places}`, () => {
+      expect(useCountOf(u.uses, vector.albumBg, f.id)).toBe(f.uses)
+      expect(u.places(f.id)).toBe(f.places)
+    })
+  }
+  it('фон листа с album: true не вхождение листа', () => {
+    expect(usesOf(sheets[1])).not.toContain('ada021bb4a112acb')
   })
 })

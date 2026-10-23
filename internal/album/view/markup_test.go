@@ -9,6 +9,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/view"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Обрез и разметка типографии в виде (066).
@@ -75,8 +76,8 @@ func TestMarkupViewBuild(t *testing.T) {
 	for range 20 {
 		p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}})
 	}
-	p.Cover = &model.Cover{Spec: pr.Spec, Sheet: &model.Spread{ID: model.CoverID}, Guide: `C:\Ш\Cover.psd`}
-	p.SpreadGuide = `C:\Ш\spread_30x30.psd`
+	p.Cover = &model.Cover{Spec: pr.Spec, Sheet: &model.Spread{ID: model.CoverID}, Guide: testkit.AbsPath("Ш/Cover.psd")}
+	p.SpreadGuide = testkit.AbsPath("Ш/spread_30x30.psd")
 	if v := view.BuildView(p, view.State{}); v.SpreadMarkup == nil || v.SpreadMarkup.OK || v.SpreadMarkup.Name != "spread_30x30.psd" ||
 		v.Cover.Markup == nil || v.Cover.Markup.OK || v.Cover.Markup.Name != "Cover.psd" {
 		t.Fatalf("не прочитаны: %+v %+v", v.SpreadMarkup, v.Cover.Markup)
@@ -95,7 +96,7 @@ func TestMarkupViewBuild(t *testing.T) {
 	if !cm.OK || cm.Image || cm.Warn != "Размер разметки 402 × 273 мм — у обложки 626 × 326 мм" {
 		t.Fatalf("обложка: %+v", cm)
 	}
-	st.SpreadGuide.Path = `C:\Ш\другой.psd`
+	st.SpreadGuide.Path = testkit.AbsPath("Ш/другой.psd")
 	if v = view.BuildView(p, st); v.SpreadMarkup.OK || !v.Cover.Markup.OK {
 		t.Fatalf("сведения о другом пути: %+v", v.SpreadMarkup)
 	}
@@ -104,7 +105,7 @@ func TestMarkupViewBuild(t *testing.T) {
 		t.Fatal("разметки нет, а вид есть")
 	}
 	sh := album.NewVignetteSheet(204, 304)
-	sh.SpreadGuide = `C:\Ш\list.psd`
+	sh.SpreadGuide = testkit.AbsPath("Ш/list.psd")
 	st = view.State{SpreadGuide: view.Guide{Path: sh.SpreadGuide, Info: cover, OK: true}}
 	if v = view.BuildView(sh, st); v.SpreadMarkup.Warn != "Размер разметки 402 × 273 мм — у листа 204 × 304 мм" {
 		t.Fatalf("лист 031: %+v", v.SpreadMarkup)

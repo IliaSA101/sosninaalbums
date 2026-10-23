@@ -1,5 +1,6 @@
 // Узор на фоне (048): чистые решения для слоя, карточки и вызовов Go. Картинку рисует Go (/media/gen),
 // здесь только размер запроса и перевод единиц; ключи, цвета и зажим — у Go.
+import { ownBg } from '../../base/geom/sheet'
 import type { BackdropScope, PatternSpec, PatternView, SpreadView } from '../../base/core/types'
 
 // Масштаб в Go — доля 0.25…4 (0 — 1), в карточке — проценты 50…200.
@@ -38,7 +39,7 @@ export function layerPx(areaW: number, sheetW: number, onScreenW: number, dpr: n
 export const patternSrc = (url: string, px: number): string => `${url}${url.includes('?') ? '&' : '?'}px=${px}`
 
 export const patternOf = (s: Pick<SpreadView, 'patterns'> | undefined, scope: BackdropScope): PatternView | undefined =>
-  s?.patterns?.find((p) => p.scope === scope)
+  ownBg(s?.patterns).find((p) => p.scope === scope)
 
 // Цвета узора для пикеров: столько, сколько пикеров у генератора (Go дополнил их цветами по умолчанию).
 export const inksOf = (p: Pick<PatternView, 'pat' | 'inks'>): string[] => (p.pat.inks ?? []).slice(0, p.inks)

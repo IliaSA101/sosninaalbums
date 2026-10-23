@@ -1,6 +1,7 @@
 package grid_test
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
@@ -38,15 +39,21 @@ func TestGridInvariants(t *testing.T) {
 	edtest.NewSpread(e, -1, pool[:3])
 	scopes := []string{model.ScopeLeft, model.ScopeRight, model.ScopeSpread}
 	ops := []string{"set", "add", "move", "swap", "remove", "new", "place", "fill", "addPlace", "setPlaces", "delete",
-		"arrange", "layers", "group", "fit", "shape", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop", "border", "border"}
+		"arrange", "layers", "group", "fit", "shape", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop", "border", "border", "clip", "clip", "copies"}
 	arr := []string{"same", "sameW", "fitPhoto", "splitH", "splitV", "front", "back"}
 	vigTpls := []string{"grid", "head-t-left", "g-top", "t-top-g", "split-tg", "нет такого"}
 	withGrid, seated, turned, ordered := 0, 0, 0, 0 // тест не должен выродиться в прогон одного «Авто»
 	onCover, vigs := 0, 0                           // шагов над местами обложки (032), виньеток (031)
 	bordered := 0                                   // мест с рамочкой по шагам (079)
+	clips := 0                                      // удачных вставок и дублей (099)
 	frSrcs := []model.BorderSrc{{}, {Kind: "line", Width: 2}, {Kind: "polaroid", Inks: []string{"#EEEEEE"}}, {Kind: "future-kind"},
 		{Photo: model.PhotoInfo{ID: model.LibPhotoID(frKey), Path: filepath.Join(dir, "frame.png"), Lib: frKey, W: 3000, H: 4000}, Cut: [4]float64{0.1, 0.2, 0.1, 0.3}},
 		{Kind: "Плохой"}}
+	// Свои рамочка и стикер — по ключу библиотеки: в файл путь не пишется (048), при чтении его даёт
+	// искатель; без искателя круг записи теряет путь любой своей записи, не только вставленной.
+	ownKey := "my:00000000000000aa"
+	own := model.PhotoInfo{ID: model.LibPhotoID(ownKey), Path: filepath.Join(dir, "logo.png"), Lib: ownKey, W: 400, H: 200}
+	edtest.LibFinder(t, map[string]string{frKey: frSrcs[4].Photo.Path, ownKey: own.Path})
 	steps := testkit.Steps(1500, 500) // -short: префикс той же последовательности, пороги ниже пропорционально
 	need := func(n int) int { return n * steps / 1500 }
 	for step := range steps {
@@ -241,12 +248,31 @@ func TestGridInvariants(t *testing.T) {
 			default:
 				e.SetPhotoFade([]string{ref}, r.Float64()*1.4-0.2, "")
 			}
+		case "clip":
+			clips += clipOp(e, r, s, refs, own)
+		case "copies": // 098: запрос копии во всех входах; копия — своя запись того же файла
+			cp := pick(1 + r.IntN(2))
+			for i := range cp {
+				if r.IntN(3) > 0 {
+					cp[i].ID = model.CopyReq(cp[i].ID)
+				}
+			}
+			switch r.IntN(4) {
+			case 0:
+				e.AddPhotos(id, cp, -1)
+			case 1:
+				e.NewSpread(r.IntN(n+1), cp)
+			case 2:
+				e.PlacePhotos(id, place, cp)
+			default:
+				_, _, _ = e.DropPhotos(id, []string{"", place}[r.IntN(2)], cp, -1, []string{"", "add", "skip"}[r.IntN(3)])
+			}
 		case "undo":
 			e.Undo()
 		case "redo":
 			e.Redo()
 		}
-		if err := edtest.GridInvariants(edtest.P(e)); err != nil {
+		if err := errors.Join(edtest.GridInvariants(edtest.P(e)), edtest.FamilyInvariant(edtest.P(e))); err != nil {
 			t.Fatalf("шаг %d (%s): %v", step, op, err)
 		}
 		// Повторное открытие (Decode(Encode)) — каждый третий шаг: JSON туда и обратно — две
@@ -289,6 +315,9 @@ func TestGridInvariants(t *testing.T) {
 	if bordered < need(500) {
 		t.Fatalf("рамочек почти не было: %d мест по шагам", bordered)
 	}
+	if clips < need(25) {
+		t.Fatalf("вставок буфера почти не было: %d", clips)
+	}
 	if vigs < need(100) {
 		t.Fatalf("виньеток почти не было: %d по шагам", vigs)
 	}
@@ -296,8 +325,62 @@ func TestGridInvariants(t *testing.T) {
 		t.Fatalf("сеток мало: %d разворотов-сеток по шагам, %d фото в местах, %d повёрнутых мест, %d с общим порядком",
 			withGrid, seated, turned, ordered)
 	}
-	t.Logf("сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, разворотов %d",
-		withGrid, seated, turned, ordered, vigs, bordered, len(edtest.P(e).Spreads))
+	t.Logf("сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, вставок %d, разворотов %d",
+		withGrid, seated, turned, ordered, vigs, bordered, clips, len(edtest.P(e).Spreads))
+}
+
+// clipOp — шаг буфера (099) на листе s: выделение — случайная часть мест (фото), надписей и
+// стикеров с мусором (стикер, свой или рисунок, ставится, если их меньше двух); вырезать и
+// вставить на случайный лист, копировать и вставить с любым ответом о повторе (и в точку, и под
+// курсор), дубль. Итог — 1, если вставка встала.
+func clipOp(e *album.Editor, r *rand.Rand, s *model.Spread, refs []string, own model.PhotoInfo) int {
+	if len(s.Stickers) < 2 { // стикеров другие шаги не ставят: свой (запись по ключу) или рисунок
+		src := []model.StickerSrc{{Photo: own}, {Art: &model.Art{Kind: "star"}}}[r.IntN(2)]
+		if _, _, err := e.AddSticker(s.ID, r.IntN(2), src); err == nil {
+			s = edtest.P(e).Sheet(s.ID)
+		}
+	}
+	sel := model.ClipSel{Refs: append(slices.Clone(refs), "нет такого")}
+	for _, tb := range s.Texts {
+		sel.Texts = append(sel.Texts, tb.ID)
+	}
+	for _, st := range s.Stickers {
+		sel.Stickers = append(sel.Stickers, st.ID)
+	}
+	part := func(ids []string) []string {
+		r.Shuffle(len(ids), func(i, j int) { ids[i], ids[j] = ids[j], ids[i] })
+		return ids[:r.IntN(len(ids)+1)]
+	}
+	sel.Refs, sel.Texts, sel.Stickers = part(sel.Refs), part(sel.Texts), part(sel.Stickers)
+	if r.IntN(3) == 0 {
+		_, out, err := e.DuplicateClip(s.ID, sel)
+		return okPaste(out, err)
+	}
+	var c model.Clip
+	if r.IntN(2) == 0 {
+		_, c, _, _ = e.CutClip(s.ID, sel)
+	} else {
+		c, _ = e.TakeClip(s.ID, sel)
+	}
+	sheets := []string{"нет такого"}
+	for _, sh := range edtest.P(e).Sheets() {
+		sheets = append(sheets, sh.ID)
+	}
+	pt := func() *model.Pt {
+		return []*model.Pt{nil, {X: r.Float64()*700 - 50, Y: r.Float64()*350 - 20}, {X: math.NaN(), Y: 1}}[r.IntN(3)]
+	}
+	req := model.PasteReq{Sheet: sheets[r.IntN(len(sheets))], Hover: pt(), At: pt(),
+		Repeat: []string{"", model.RepeatCopy, model.RepeatMove, "нет такого"}[r.IntN(4)]}
+	_, out, err := e.PasteClip(&c, req)
+	return okPaste(out, err)
+}
+
+// okPaste — 1, если вставка что-то поставила.
+func okPaste(out model.PasteOut, err error) int {
+	if err != nil || len(out.Refs)+len(out.Texts)+len(out.Stickers) == 0 {
+		return 0
+	}
+	return 1
 }
 
 // seatSet — таблички мест всего альбома (с обложкой) как мультимножество.

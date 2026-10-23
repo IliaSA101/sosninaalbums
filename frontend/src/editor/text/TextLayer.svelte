@@ -13,6 +13,7 @@
   import { layerIndex } from '../places/layers'
   import type { TextGestures } from './textgesture.svelte'
   import { pickOwns } from '../canvas/pickunder.svelte'
+  import { photoui } from '../photo/photoui.svelte'
 
   // Блоки текста и подписи — в общем стеке `.content` разворота (спека 010 U6): у каждого своя обёртка
   // с z-index = 10 + z из Go, поэтому текст может лежать под фото. Внутри — SVG строк (уже перенесены
@@ -191,6 +192,7 @@
           role="presentation"
           onpointerdown={(ev) => downText(ev, t)}
           onclick={(ev) => ev.stopPropagation()}
+          oncontextmenu={(ev) => photoui.openText(ev, t.id)}
           ondblclick={() => edit.startEdit()}
         ></div>
       {/if}

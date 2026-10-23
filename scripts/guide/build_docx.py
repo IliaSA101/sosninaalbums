@@ -5,9 +5,9 @@
 
 Запуск:
     python -I scripts/guide/build_docx.py docs/install/guide.md --version 0.10.0 --out .gotmp/guide [--pdf]
-    ... --variant macos|26|15|12-14|win # все Mac одним файлом, одна версия macOS или только Windows
+    ... --variant macos|26|15|12-14|win|linux # все Mac одним файлом, одна версия macOS, только Windows или только Linux
 Результат: <out>/SosninaAlbums-<версия>-install-guide-ru.docx (и .pdf с --pdf);
-с --variant macos — …-install-guide-macos-ru.docx, 26|15|12-14 — …-install-guide-macos-<вариант>-ru.docx, win — …-install-guide-windows-ru.docx.
+с --variant macos — …-install-guide-macos-ru.docx, 26|15|12-14 — …-install-guide-macos-<вариант>-ru.docx, win — …-install-guide-windows-ru.docx, linux — …-install-guide-linux-ru.docx.
 Код возврата 1 — нет картинки, остался `{{…}}` или сбой разбора. Сбой только PDF —
 код 0 и `::warning::` (PDF необязателен).
 
@@ -68,6 +68,9 @@ VARIANTS = {
               "other": "Для Windows есть отдельный файл"},
     "win": {"label": "Windows 10 и 11", "suffix": "", "file": "windows", "os": "Windows",
             "other": "Для Mac есть отдельные файлы"},
+    # linux — файл только про Linux (спека 101): .deb и tar.gz, снимков экрана нет
+    "linux": {"label": "Ubuntu, Mint, Debian", "suffix": "", "file": "linux", "os": "Linux",
+              "other": "Для Windows и Mac есть отдельные файлы"},
 }
 
 
@@ -485,7 +488,7 @@ def main(argv=None) -> int:
     ap.add_argument("guide", type=Path, help="путь к guide.md")
     ap.add_argument("--version", help="метка {{VERSION}}; по умолчанию из wails.json")
     ap.add_argument("--out", type=Path, required=True, help="папка результата")
-    ap.add_argument("--variant", choices=sorted(VARIANTS), help="файл про Mac одной версии macOS или только про Windows")
+    ap.add_argument("--variant", choices=sorted(VARIANTS), help="файл про Mac одной версии macOS, только про Windows или только про Linux")
     ap.add_argument("--pdf", action="store_true", help="ещё и PDF (Word или LibreOffice)")
     args = ap.parse_args(argv)
     version = args.version or read_version()

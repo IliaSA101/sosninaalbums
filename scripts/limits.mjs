@@ -22,7 +22,7 @@ const TEST = /(_test\.go|\.test\.(ts|js|mjs))$/
 // sizeRule — пределы файла: fail — провал проверки, warn — предупреждение хука при правке; null — не проверяется.
 export function sizeRule(file) {
   const f = file.replace(/\\/g, '/')
-  if (SIZE_SKIP.test(f) || !/\.(go|ts|js|svelte|css|ps1|py)$/.test(f)) return null
+  if (SIZE_SKIP.test(f) || !/\.(go|ts|js|svelte|css|ps1|py|sh)$/.test(f)) return null
   if (f.endsWith('.go')) return TEST.test(f) ? { fail: { lines: 1200 } } : { fail: { lines: 800 }, warn: { lines: 600 } }
   if (TEST.test(f)) return { fail: { lines: 900 } }
   if (f.endsWith('.svelte')) return { fail: { lines: 600, bytes: 30 * KB }, warn: { lines: 400 } }

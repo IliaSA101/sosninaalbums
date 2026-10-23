@@ -76,10 +76,33 @@ func TestPlaceNotice(t *testing.T) {
 	if PlaceNormal.Notice() != "" {
 		t.Error("для обычного места текст должен быть пустым")
 	}
-	if n := PlaceTemp.Notice(); !strings.Contains(n, "из архива") || !strings.Contains(n, "Извлечь все") {
+	if n := PlaceTemp.noticeFor("windows"); !strings.Contains(n, "из архива") || !strings.Contains(n, "Извлечь все") {
 		t.Errorf("текст для temp: %q", n)
 	}
 	if n := PlaceTranslocated.Notice(); !strings.Contains(n, "«Программы»") {
 		t.Errorf("текст для translocation: %q", n)
+	}
+}
+
+// Тост «из архива» по ОС: на Linux своё слово — без exe и «Извлечь все»; на Windows и Mac прежний;
+// остальные места от ОС не зависят.
+func TestNoticeTempPerOS(t *testing.T) {
+	lin := PlaceTemp.noticeFor("linux")
+	if !strings.Contains(lin, "из архива") || !strings.Contains(lin, ".deb") ||
+		strings.Contains(lin, ".exe") || strings.Contains(lin, "Извлечь все") {
+		t.Errorf("текст Linux: %q", lin)
+	}
+	for _, goos := range []string{"windows", "darwin"} {
+		if n := PlaceTemp.noticeFor(goos); n != noticeTemp {
+			t.Errorf("%s: %q", goos, n)
+		}
+	}
+	for _, goos := range []string{"linux", "windows", "darwin"} {
+		if PlaceNormal.noticeFor(goos) != "" || PlaceTranslocated.noticeFor(goos) != noticeTranslocated {
+			t.Errorf("%s: места normal/translocated изменились", goos)
+		}
+	}
+	if PlaceTemp.Notice() != PlaceTemp.noticeFor(runtime.GOOS) {
+		t.Error("Notice() не по текущей ОС")
 	}
 }

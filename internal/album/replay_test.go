@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -43,6 +44,17 @@ type replayStep struct {
 	Rev  int             `json:"rev"`
 	Save string          `json:"save,omitempty"`
 	View json.RawMessage `json:"view,omitempty"`
+}
+
+// qPath — путь на вымышленном диске Q: сценария. На Windows — ровно `Q:\…` эталона; на
+// остальных ОС — «/Q/…»: `Q:\…` там не абсолютный путь, и правки с путями (AddLoose, AddFolder,
+// разметка) отказали бы, а реплей дельт вида (TestWireDeltaReplay) идёт на любой ОС.
+func qPath(el ...string) string {
+	root := "/Q"
+	if runtime.GOOS == "windows" {
+		root = `Q:\`
+	}
+	return filepath.Join(append([]string{root}, el...)...)
 }
 
 // replay — запись сценария. Случайные ID (NewID: 12 hex) заменяются на id1, id2…
@@ -114,6 +126,9 @@ func (r *replay) edit(name string, v model.View, out any, err error) {
 	}
 	if serr := r.e.Save(r.file); serr != nil {
 		r.t.Fatalf("%s: Save: %v", name, serr)
+	}
+	if ferr := edtest.FamilyInvariant(edtest.P(r.e)); ferr != nil { // семьи копий (098-16)
+		r.t.Fatalf("%s: %v", name, ferr)
 	}
 	s.Save = r.hashFile(name, r.file, 32)
 	r.push(s)
@@ -236,7 +251,7 @@ func (r *replay) lastText(sid string) model.TextView {
 
 // replayPhoto — фото ленты с диска Q: (ID как у сканера); kind задаёт пропорции.
 func replayPhoto(n int, kind byte, x model.XmpMarks) model.PhotoInfo {
-	ph := edtest.Lib(fmt.Sprintf(`Q:\Свадьба\%02d.jpg`, n), x)
+	ph := edtest.Lib(qPath("Свадьба", fmt.Sprintf("%02d.jpg", n)), x)
 	switch kind {
 	case 'v':
 		ph.W, ph.H = 2000, 3000
@@ -272,7 +287,7 @@ func replayScenario(t *testing.T) *replay {
 		r.read("PhotoUses", []any{uses, used})
 	}
 	// 097: отдельные фото — тоже в конце.
-	r.voe("AddLoose")(r.e.AddLoose([]string{`Q:\Телефон\1.jpg`, `Q:\Свадьба\2.jpg`}, 1792501500))
+	r.voe("AddLoose")(r.e.AddLoose([]string{qPath("Телефон", "1.jpg"), qPath("Свадьба", "2.jpg")}, 1792501500))
 	if len(r.v.Loose) != 1 {
 		t.Fatalf("AddLoose: %+v", r.v.Loose)
 	}
@@ -286,8 +301,8 @@ func replayScenario(t *testing.T) *replay {
 // Возвращает снимок альбома для Restore в конце.
 func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	e, id := r.e, func(i int) string { return ph[i].ID }
-	r.voe("AddFolder")(e.AddFolder(`Q:\Свадьба`))
-	r.voe("AddFolder:второй")(e.AddFolder(`Q:\Банкет`))
+	r.voe("AddFolder")(e.AddFolder(qPath("Свадьба")))
+	r.voe("AddFolder:второй")(e.AddFolder(qPath("Банкет")))
 	r.voe("AddFolder:относительный")(e.AddFolder(`Банкет`))
 	r.ve("NewSpread")(e.NewSpread(-1, ph[1:4]))
 	r.ve("NewSpread:второй")(e.NewSpread(-1, ph[4:6]))
@@ -400,6 +415,8 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	var warm [3]int
 	e.Warm(func(done, total int) { warm = [3]int{warm[0] + 1, done, total} })
 	r.read("Warm", warm)
+	// 098: имя копии старого формата для тоста — у нового альбома копии нет, шаг пишет "".
+	r.read("TakeBackup", e.TakeBackup())
 	return q
 }
 

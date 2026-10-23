@@ -2,7 +2,7 @@
   import { screenDpr } from '../../base/ui/dpr.svelte'
   import { Api, store } from '../../base/core/store.svelte'
   import type { PatternSpec, PatternView, SpreadView } from '../../base/core/types'
-  import { isCover } from '../../base/geom/sheet'
+  import { isCover, ownBg } from '../../base/geom/sheet'
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
   import { coverLabels } from '../cover/cover'
   import { SCOPE_LABEL } from '../backdrop/backdrop'
@@ -31,7 +31,7 @@
   // на change, стрелки в одном фокусе сливаются в один шаг отмены (merge-сессия). Цвет — один шаг на выбор.
   let { sp }: { sp: SpreadView } = $props()
 
-  const list = $derived(sp.patterns ?? [])
+  const list = $derived(ownBg(sp.patterns)) // фон альбома — не узор листа (098)
   const labels = $derived(isCover(sp) ? coverLabels(store.cover) : SCOPE_LABEL)
   const dpr = $derived(screenDpr.value)
 

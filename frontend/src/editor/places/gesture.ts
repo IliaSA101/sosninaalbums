@@ -10,13 +10,15 @@ export interface BodyCtx {
   grid: boolean // «Ручная» (закреплённая сетка); false — «Авто»
   selected: boolean // фото уже выделено
   inGroup: boolean // выделено 2 и больше объектов, и это фото среди них
+  swap: boolean // зажат Ctrl (⌘ на Mac) — перенос фото на ручном (обмен), как ⇄ мини-панели
 }
 
 // «Авто»: тело всегда переносит фото (в группе — только это фото, группа ждёт).
-// «Ручная»: тело переносит место; член группы — всю группу. `selected` в ответ не входит:
+// «Ручная»: тело переносит место; член группы — всю группу; с Ctrl/⌘ (swap) — только это фото, как «Авто»
+// (без сдвига Ctrl+щелчок по-прежнему идёт в выделение: решает click, а не нажатие). `selected` в ответ не входит:
 // невыделенное фото выделяет сам жест, поэтому действие то же.
-export function bodyAction({ grid, inGroup }: BodyCtx): BodyAction {
-  if (!grid) return 'drag'
+export function bodyAction({ grid, inGroup, swap }: BodyCtx): BodyAction {
+  if (!grid || swap) return 'drag'
   return inGroup ? 'moveGroup' : 'move'
 }
 

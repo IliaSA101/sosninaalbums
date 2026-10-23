@@ -3,6 +3,7 @@ package roundtrip_test
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -37,8 +38,8 @@ func looseGolden(base string) *model.Project {
 	return p
 }
 
-// TestLooseGoldenV16 — голден v16 с отдельными фото: Decode → Encode = исходник байт в байт (он же
-// сид FuzzLoad), добавления по порядку, запасной путь на месте. Пути — от C:\album: только Windows.
+// TestLooseGoldenV16 — голден v16 с отдельными фото: Decode → Encode = исходник с текущим номером
+// версии байт в байт (он же сид FuzzLoad), добавления по порядку, запасной путь на месте. Пути — от C:\album: только Windows.
 func TestLooseGoldenV16(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("голден с путями C:\\album")
@@ -72,8 +73,12 @@ func TestLooseGoldenV16(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(out, data) {
-		t.Fatalf("Decode → Encode отличается от голдена:\n%s", out)
+	wantFile := bytes.Replace(data, []byte(`"version": 16,`), fmt.Appendf(nil, `"version": %d,`, model.FormatVersion), 1)
+	if bytes.Equal(wantFile, data) && model.FormatVersion != 16 {
+		t.Fatal("в голдене нет номера версии 16")
+	}
+	if !bytes.Equal(out, wantFile) {
+		t.Fatalf("Decode → Encode отличается от голдена (кроме номера версии):\n%s", out)
 	}
 	if err := edtest.SourcesInvariant(p); err != nil {
 		t.Fatal(err)

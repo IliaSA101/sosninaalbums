@@ -52,6 +52,38 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class ClipResult {
+	    view: model.View;
+	    clip: model.ClipInfo;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClipResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.view = this.convertValues(source["view"], model.View);
+	        this.clip = this.convertValues(source["clip"], model.ClipInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CollectOptions {
 	    all: boolean;
 	
@@ -691,6 +723,48 @@ export namespace app {
 	        this.bytes = source["bytes"];
 	    }
 	}
+	export class PasteResult {
+	    view: model.View;
+	    refs: string[];
+	    texts: string[];
+	    stickers: string[];
+	    repeat: string[];
+	    froze: boolean;
+	    clip: model.ClipInfo;
+	
+	    static createFrom(source: any = {}) {
+	        return new PasteResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.view = this.convertValues(source["view"], model.View);
+	        this.refs = source["refs"];
+	        this.texts = source["texts"];
+	        this.stickers = source["stickers"];
+	        this.repeat = source["repeat"];
+	        this.froze = source["froze"];
+	        this.clip = this.convertValues(source["clip"], model.ClipInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class PhotoAbout {
 	    id: string;
 	    file: string;
@@ -730,6 +804,24 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+	export class QRInfo {
+	    text: string;
+	    side: number;
+	    path: string;
+	    minMM: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new QRInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	        this.side = source["side"];
+	        this.path = source["path"];
+	        this.minMM = source["minMM"];
+	    }
 	}
 	export class RelinkResult {
 	    view: model.View;
@@ -1276,6 +1368,28 @@ export namespace library {
 
 export namespace model {
 	
+	export class AlbumBgView {
+	    name: string;
+	    lib?: string;
+	    fade: number;
+	    pages: boolean;
+	    preset?: string;
+	    photo?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AlbumBgView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.lib = source["lib"];
+	        this.fade = source["fade"];
+	        this.pages = source["pages"];
+	        this.preset = source["preset"];
+	        this.photo = source["photo"];
+	    }
+	}
 	export class Art {
 	    kind: string;
 	    inks?: string[];
@@ -1568,6 +1682,7 @@ export namespace model {
 	    dpi: number;
 	    fade: number;
 	    lib?: string;
+	    album?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new BackdropView(source);
@@ -1586,6 +1701,7 @@ export namespace model {
 	        this.dpi = source["dpi"];
 	        this.fade = source["fade"];
 	        this.lib = source["lib"];
+	        this.album = source["album"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1880,6 +1996,42 @@ export namespace model {
 		    }
 		    return a;
 		}
+	}
+	export class ClipInfo {
+	    photos: number;
+	    places: number;
+	    texts: number;
+	    stickers: number;
+	    sheet: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClipInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.photos = source["photos"];
+	        this.places = source["places"];
+	        this.texts = source["texts"];
+	        this.stickers = source["stickers"];
+	        this.sheet = source["sheet"];
+	    }
+	}
+	export class ClipSel {
+	    refs: string[];
+	    texts: string[];
+	    stickers: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ClipSel(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.refs = source["refs"];
+	        this.texts = source["texts"];
+	        this.stickers = source["stickers"];
+	    }
 	}
 	export class SpineStep {
 	    upto: number;
@@ -2404,6 +2556,7 @@ export namespace model {
 	    known: boolean;
 	    url: string;
 	    preset?: string;
+	    album?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new PatternView(source);
@@ -2420,6 +2573,7 @@ export namespace model {
 	        this.known = source["known"];
 	        this.url = source["url"];
 	        this.preset = source["preset"];
+	        this.album = source["album"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2573,6 +2727,7 @@ export namespace model {
 	    winShape: string;
 	    winRadius: number;
 	    fade: number;
+	    own?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new FrameView(source);
@@ -2602,6 +2757,7 @@ export namespace model {
 	        this.winShape = source["winShape"];
 	        this.winRadius = source["winRadius"];
 	        this.fade = source["fade"];
+	        this.own = source["own"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2671,6 +2827,7 @@ export namespace model {
 	    vig?: VignetteView;
 	    vars: Vars;
 	    fields: string[];
+	    noAlbumBg?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new SpreadView(source);
@@ -2708,6 +2865,7 @@ export namespace model {
 	        this.vig = this.convertValues(source["vig"], VignetteView);
 	        this.vars = this.convertValues(source["vars"], Vars);
 	        this.fields = source["fields"];
+	        this.noAlbumBg = source["noAlbumBg"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3207,6 +3365,56 @@ export namespace model {
 	    }
 	}
 	
+	export class Pt {
+	    x: number;
+	    y: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Pt(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.x = source["x"];
+	        this.y = source["y"];
+	    }
+	}
+	export class PasteReq {
+	    sheet: string;
+	    hover?: Pt;
+	    at?: Pt;
+	    repeat: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PasteReq(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sheet = source["sheet"];
+	        this.hover = this.convertValues(source["hover"], Pt);
+	        this.at = this.convertValues(source["at"], Pt);
+	        this.repeat = source["repeat"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	
 	
@@ -3239,6 +3447,7 @@ export namespace model {
 	export class PhotoUse {
 	    sheet: number;
 	    label: string;
+	    ref?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PhotoUse(source);
@@ -3248,6 +3457,7 @@ export namespace model {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sheet = source["sheet"];
 	        this.label = source["label"];
+	        this.ref = source["ref"];
 	    }
 	}
 	export class PlaceBox {
@@ -3270,6 +3480,7 @@ export namespace model {
 	        this.h = source["h"];
 	    }
 	}
+	
 	
 	
 	
@@ -3327,6 +3538,42 @@ export namespace model {
 	
 	
 	
+	export class UsedAt {
+	    id: string;
+	    uses: PhotoUse[];
+	    places: number;
+	    move: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UsedAt(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.uses = this.convertValues(source["uses"], PhotoUse);
+	        this.places = source["places"];
+	        this.move = source["move"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class View {
 	    product: string;
@@ -3355,6 +3602,7 @@ export namespace model {
 	    unfilled: string[];
 	    unnamed: number;
 	    cover?: CoverView;
+	    albumBg?: AlbumBgView;
 	    pageLimit?: PageLimitView;
 	    again: boolean;
 	    seq: number;
@@ -3393,6 +3641,7 @@ export namespace model {
 	        this.unfilled = source["unfilled"];
 	        this.unnamed = source["unnamed"];
 	        this.cover = this.convertValues(source["cover"], CoverView);
+	        this.albumBg = this.convertValues(source["albumBg"], AlbumBgView);
 	        this.pageLimit = this.convertValues(source["pageLimit"], PageLimitView);
 	        this.again = source["again"];
 	        this.seq = source["seq"];

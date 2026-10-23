@@ -40,7 +40,7 @@ func (a *App) SuggestDrive() DriveHint {
 	defer guard("SuggestDrive")
 	refs := a.editor().Refs()
 	var gone []string
-	for _, id := range missingOf(refs, a.exists) {
+	for _, id := range oneOfFamily(missingOf(refs, a.exists)) { // числа подсказки — по файлам (098-20)
 		gone = append(gone, refs[id].Path)
 	}
 	// Буквы дисков тоже через Reachable: отключённая сетевая буква иначе держит подсказку.
@@ -105,6 +105,8 @@ func (a *App) RelinkFolderPath(dir string) (res RelinkResult, rerr error) {
 		res.View = a.out(res.View) // ответ без ошибки — в цепочку видов (075)
 		return res, nil
 	}
+	// Одна запись на файл: копии едут вслед за ней (salbum.Relink), числа отчёта — по файлам (098-20).
+	ids = oneOfFamily(ids)
 	want := make([]library.Want, len(ids))
 	for i, id := range ids {
 		r := refs[id]
@@ -129,6 +131,24 @@ func (a *App) RelinkFolderPath(dir string) (res RelinkResult, rerr error) {
 	return res, nil
 }
 
+// oneOfFamily — из ID записей по одной на файл (семью копий, 098): запись с наименьшим номером,
+// исходная — первой. Порядок — как в ids по первому вхождению файла.
+func oneOfFamily(ids []string) []string {
+	at := make(map[string]int, len(ids)) // ID файла → индекс в out
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		base := model.BaseID(id)
+		i, ok := at[base]
+		if !ok {
+			at[base] = len(out)
+			out = append(out, id)
+		} else if model.CopyNo(id) < model.CopyNo(out[i]) {
+			out[i] = id
+		}
+	}
+	return out
+}
+
 // ShowPhotoInExplorer показывает файл фото альбома в Проводнике. Путь берётся из
 // проекта по ID, от интерфейса не принимается (как ShowInExplorer). Файла нет —
 // открывается его папка; нет и её — ошибка.
@@ -141,7 +161,7 @@ func (a *App) ShowPhotoInExplorer(id string) error {
 	if err := paths.CheckLocalPath(path); err != nil {
 		return errors.New("путь к фото недоступен")
 	}
-	if st, err := os.Stat(path); err == nil && !st.IsDir() {
+	if st, err := library.StatLocal(path); err == nil && !st.IsDir() {
 		return revealPath(path, true)
 	}
 	if dir := filepath.Dir(path); isDir(dir) {

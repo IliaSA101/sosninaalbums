@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { folderKey, hasSources, inFeedText } from './folders'
+import { setOsForTest } from '../../base/core/platform'
 import { folderfilter } from './folderfilter.svelte'
 import { buildTree, filterTree, findNode, nodeKey, type TreeNode } from './tree'
 
@@ -10,9 +11,30 @@ const forest = buildTree(['D:/a', 'D:/b', 'D:/c'], PHOTOS)
 const at = (dir: string) => findNode(forest, nodeKey(dir)) as TreeNode
 
 describe('folderKey', () => {
+  afterEach(() => setOsForTest(null))
+
   it('регистр, разделители и хвостовой «/» не важны', () => {
     expect(folderKey('D:\\Банкет\\')).toBe('d:/банкет')
     expect(folderKey('d:/банкет')).toBe('d:/банкет')
+  })
+
+  it('Linux различает регистр: две папки — две строки; Windows и macOS сливают в одну', () => {
+    const roots = ['/x/Весна', '/x/ВЕСНА']
+    const photos = () => ph('/x/Весна/1.jpg', '/x/ВЕСНА/2.jpg') // ключ папки кэшируется на объекте фото — под каждую ОС свежие
+    setOsForTest('linux')
+    expect(folderKey('/x/Весна')).not.toBe(folderKey('/x/ВЕСНА'))
+    const lin = buildTree(roots, photos())
+    expect(lin.map((r) => [r.name, r.total])).toEqual([
+      ['Весна', 1],
+      ['ВЕСНА', 1],
+    ])
+    for (const os of ['windows', 'mac'] as const) {
+      setOsForTest(os)
+      expect(folderKey('/x/Весна')).toBe(folderKey('/x/ВЕСНА'))
+      const t = buildTree(roots, photos())
+      expect(t).toHaveLength(1)
+      expect(t[0].total).toBe(2)
+    }
   })
 })
 

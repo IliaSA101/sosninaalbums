@@ -11,14 +11,15 @@ import (
 // fakeStand подменяет признак стенда, запуск процессов и журнал; возвращает счётчик запусков.
 func fakeStand(t *testing.T, on bool) (started *int, logs *bytes.Buffer) {
 	t.Helper()
-	oldOn, oldStart, oldOut := standOn, startCmd, log.Writer()
+	oldOn, oldStart, oldRun, oldOut := standOn, startCmd, runCmd, log.Writer()
 	n := 0
 	buf := &bytes.Buffer{}
 	standOn = func() bool { return on }
 	startCmd = func(*exec.Cmd) error { n++; return nil }
+	runCmd = func(*exec.Cmd) error { n++; return nil }
 	log.SetOutput(buf)
 	t.Cleanup(func() {
-		standOn, startCmd = oldOn, oldStart
+		standOn, startCmd, runCmd = oldOn, oldStart, oldRun
 		log.SetOutput(oldOut)
 	})
 	return &n, buf

@@ -126,10 +126,18 @@ func TestRecentList(t *testing.T) {
 	if want := []string{at("c"), at("b"), at("a")}; !slices.Equal(list, want) {
 		t.Fatalf("порядок: %v", list)
 	}
-	// Повтор (в том числе другим регистром) поднимается наверх без дубля.
-	list = PushRecent(list, strings.ToUpper(at("a")))
-	if len(list) != 3 || list[0] != strings.ToUpper(at("a")) {
+	// Повтор (на Windows и macOS — и другим регистром) поднимается наверх без дубля; на Linux
+	// другой регистр — другой альбом (paths.Fold, 101).
+	up, n := strings.ToUpper(at("a")), 3
+	if !paths.FoldEqual(up, at("a")) {
+		n = 4
+	}
+	list = PushRecent(list, up)
+	if len(list) != n || list[0] != up {
 		t.Fatalf("повтор: %v", list)
+	}
+	if list = PushRecent(list, up); len(list) != n || list[0] != up {
+		t.Fatalf("точный повтор: %v", list)
 	}
 	// Нелокальные пути не пишутся.
 	for _, bad := range []string{`\\srv\share\a.salbum`, "a.salbum", ""} {
@@ -148,8 +156,16 @@ func TestRecentList(t *testing.T) {
 	if got := PushRecent([]string{`\\srv\x.salbum`, at("a")}, at("b")); !slices.Equal(got, []string{at("b"), at("a")}) {
 		t.Fatalf("чужая запись: %v", got)
 	}
-	if got := DropRecent(list, strings.ToUpper(list[1])); len(got) != maxRecent-1 {
+	// Другим регистром убирает только там, где регистр пути не важен (paths.Fold); точный — везде.
+	drop := maxRecent - 1
+	if !paths.FoldEqual(strings.ToUpper(list[1]), list[1]) {
+		drop = maxRecent
+	}
+	if got := DropRecent(list, strings.ToUpper(list[1])); len(got) != drop {
 		t.Fatalf("DropRecent: %v", got)
+	}
+	if got := DropRecent(list, list[1]); len(got) != maxRecent-1 || slices.Contains(got, list[1]) {
+		t.Fatalf("DropRecent точный: %v", got)
 	}
 	// Строки для UI: имя без расширения, наличие файла.
 	saved := at("real")

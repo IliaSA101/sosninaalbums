@@ -109,3 +109,15 @@ func localTarget(dir, target string) bool {
 	}
 	return runtime.GOOS != "windows" || paths.CheckLocalPath(dir) == nil
 }
+
+// StatLocal — os.Stat без хода по нелокальной ссылке (101, техдолг 0.22): Lstat; ссылка или
+// точка повторной обработки — LinkTarget (каждое звено локально, до Stat цели) и сведения цели;
+// иначе — сведения самого файла. Ошибка — ErrLinkNotLocal или ошибка диска.
+func StatLocal(p string) (fs.FileInfo, error) {
+	st, err := os.Lstat(p)
+	if err != nil || st.Mode()&(fs.ModeSymlink|fs.ModeIrregular) == 0 {
+		return st, err
+	}
+	_, st, err = LinkTarget(p)
+	return st, err
+}

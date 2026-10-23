@@ -30,8 +30,8 @@ func gridApp(t *testing.T) *App {
 			{ID: "00000000000b", X: 312, Y: 12, W: 100, H: 100}}},
 		{ID: "s2", Photos: []string{"b"}},
 	}
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
-	p.Photos["b"] = model.PhotoRef{Path: `C:\b.jpg`, W: 300, H: 200}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
+	p.Photos["b"] = model.PhotoRef{Path: testkit.AbsPath("b.jpg"), W: 300, H: 200}
 	a.ed.Store(mustEditor(t, p, ""))
 	return a
 }

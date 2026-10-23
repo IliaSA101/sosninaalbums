@@ -179,7 +179,10 @@ describe('клавиши в текстах', () => {
   const EXCEPT: Record<string, { text: RegExp; why: string }> = {
     '/src/panels/names/NamesDialog.svelte': { text: /Ctrl\+Enter/, why: 'местная клавиша окна «Имена» (Ctrl+Enter в тексте)' },
     '/src/panels/folders/FolderMenu.svelte': { text: /Ctrl\+S/, why: 'Ctrl+S в Lightroom (чужая программа)' },
-    '/src/base/prefs/levels.ts': { text: /Ctrl\+A/, why: 'название функции «Выделение рамкой, Ctrl+A, удаление группы» в таблице уровней' },
+    '/src/base/prefs/levels.ts': {
+      text: /Ctrl\+[AC]/,
+      why: 'названия функций «Выделение рамкой, Ctrl+A, удаление группы» и «Копировать и вставить (Ctrl+C, X, V, D)» в таблице уровней (099)',
+    },
   }
   const textOffenders = (path: string, src: string): string[] => {
     if (inKeys(path) || path === '/src/shell/menu/mousehelp.ts') return []

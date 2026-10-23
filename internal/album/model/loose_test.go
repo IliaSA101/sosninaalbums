@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // at — абсолютный путь от корня диска временной папки (без обращения к диску).
@@ -24,16 +26,20 @@ func files(list ...string) []LooseFile {
 	return out
 }
 
-// Папки: повтор (и в другом регистре) и вложенные уходят, порядок оставшихся прежний, запасной
-// путь ушедшей снят, оставшейся — на месте; корень диска накрывает всё.
+// Папки: повтор (на Windows и macOS — и в другом регистре, paths.Fold) и вложенные уходят, порядок
+// оставшихся прежний, запасной путь ушедшей снят, оставшейся — на месте; корень диска накрывает всё.
 func TestFoldSourcesNested(t *testing.T) {
 	p := New()
 	spring, march, fav := at("Весна 2026"), at("Весна 2026", "Март"), at("Весна 2026", "Март", "Избранное")
 	other, prefix := at("Банкет"), at("Весна 2026 копия")
 	p.Folders = []string{march, other, spring, fav, strings.ToUpper(other), prefix}
 	p.FolderAlt = map[string]string{march: at("E", "Март"), other: at("E", "Банкет")}
+	want, n := []string{other, spring, prefix}, 3
+	if up := strings.ToUpper(other); !paths.FoldEqual(up, other) { // Linux: другая папка
+		want, n = []string{other, spring, up, prefix}, 2
+	}
 	merged, in := p.FoldSources(nil)
-	if want := []string{other, spring, prefix}; merged != 3 || in != 0 || !reflect.DeepEqual(p.Folders, want) {
+	if merged != n || in != 0 || !reflect.DeepEqual(p.Folders, want) {
 		t.Fatalf("папки %q (слито %d), ждали %q", p.Folders, merged, want)
 	}
 	if !reflect.DeepEqual(p.FolderAlt, map[string]string{other: at("E", "Банкет")}) {
@@ -51,8 +57,8 @@ func TestFoldSourcesNested(t *testing.T) {
 	}
 }
 
-// Отдельные: под папкой — уходит (looseIn), повтор пути в любом добавлении (регистр, Clean) —
-// уходит позднейший, пустое добавление и пустой путь — тоже; запасной путь едет с файлом.
+// Отдельные: под папкой — уходит (looseIn), повтор пути в любом добавлении (Clean; регистр — на
+// Windows и macOS) — уходит позднейший, пустое добавление и пустой путь — тоже; запасной путь едет с файлом.
 func TestFoldSourcesLoose(t *testing.T) {
 	p := New()
 	dir := at("Март")
@@ -65,15 +71,20 @@ func TestFoldSourcesLoose(t *testing.T) {
 		{ID: "000000000004", At: 4},
 		{ID: "000000000005", At: 5, Files: files("", b)},
 	}
+	dotB := filepath.Join(at("Загрузки"), ".", "b.png")
+	second := []string{dotB}
+	if upA := strings.ToUpper(a); !paths.FoldEqual(upA, a) { // Linux: другой файл, остаётся
+		second = []string{upA, dotB}
+	}
 	_, in := p.FoldSources(nil)
 	want := []LooseAdd{
 		{ID: "000000000001", At: 1, Files: []LooseFile{{Path: a, Alt: at("E", "a.jpg")}}},
-		{ID: "000000000002", At: 2, Files: files(filepath.Join(at("Загрузки"), ".", "b.png"))},
+		{ID: "000000000002", At: 2, Files: files(second...)},
 	}
 	if in != 2 || !reflect.DeepEqual(p.Loose, want) {
 		t.Fatalf("в папке %d, добавления:\n%+v\nждали\n%+v", in, p.Loose, want)
 	}
-	if got := p.LooseFiles(); !reflect.DeepEqual(got, []string{a, filepath.Join(at("Загрузки"), ".", "b.png")}) {
+	if got := p.LooseFiles(); !reflect.DeepEqual(got, append([]string{a}, second...)) {
 		t.Fatalf("LooseFiles: %q", got)
 	}
 	// Всё ушло в папки — Loose nil (в файл и снимок не пишется).

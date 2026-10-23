@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Статичные списки: пресеты типографий и размеры страницы не пустые и не требуют проекта.
@@ -77,7 +78,7 @@ func TestCoverWiring(t *testing.T) {
 	if v = k.ClearSpreadGuide(); v.Rev != before || k.calls != calls+1 {
 		t.Errorf("ClearSpreadGuide без разметки: rev %d → %d, Changed %d", before, v.Rev, k.calls-calls)
 	}
-	if _, err := k.ed.SetSpreadGuide(`C:\Шаблоны\spread.psd`); err != nil {
+	if _, err := k.ed.SetSpreadGuide(testkit.AbsPath("Шаблоны/spread.psd")); err != nil {
 		t.Fatal(err)
 	}
 	if v = k.ClearSpreadGuide(); v.SpreadMarkup != nil || v.Rev != before+2 {

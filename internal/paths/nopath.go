@@ -42,8 +42,12 @@ func NoPath(err error) error {
 
 // LogExt — вид расширения файла для лога вместо имени (073-7): «.heic» в нижнем регистре,
 // "" — без расширения, «прочее» — не 1–8 латинских букв или цифр (в чужом «расширении» бывает
-// имя: «IMG.Иванов»).
+// имя: «IMG.Иванов»). Расширение — после последнего разделителя любой ОС (IsSep): путь мог
+// быть записан на Windows, а filepath.Ext на Linux взял бы «.y\name» из «C:\x.y\name».
 func LogExt(name string) string {
+	if i := strings.LastIndexFunc(name, IsSepRune); i >= 0 {
+		name = name[i+1:]
+	}
 	ext := strings.ToLower(filepath.Ext(name))
 	if ext == "" || ext == "." {
 		return ""

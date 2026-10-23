@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Перестановка и перенос фото: рабочий случай меняет состав и шлёт вид, отказ (неизвестное фото,
@@ -258,10 +259,10 @@ func TestSplitSpreadLimit(t *testing.T) {
 	for i := range model.MaxSpreads {
 		id := fmt.Sprintf("p%d", i)
 		p.Spreads = append(p.Spreads, &model.Spread{ID: fmt.Sprintf("s%d", i), Photos: []string{id}})
-		p.Photos[id] = model.PhotoRef{Path: `C:\` + id + ".jpg", W: 300, H: 200}
+		p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 	}
 	p.Spreads[0].Photos = append(p.Spreads[0].Photos, "x")
-	p.Photos["x"] = model.PhotoRef{Path: `C:\x.jpg`, W: 300, H: 200}
+	p.Photos["x"] = model.PhotoRef{Path: testkit.AbsPath("x.jpg"), W: 300, H: 200}
 	a, views := newMethods(t, p)
 	rev := a.editor().View().Rev
 	v, err := a.SplitSpread("s0", 1)
@@ -278,7 +279,7 @@ func TestSplitSpreadLimit(t *testing.T) {
 func TestPurgePhotosMethod(t *testing.T) {
 	a, views := spreadsMethods(t, []string{"a", "b"}, []string{"c"})
 	ed := a.editor()
-	pa := model.PhotoInfo{ID: "a", Path: `C:\a.jpg`, W: 300, H: 200}
+	pa := model.PhotoInfo{ID: "a", Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
 	if _, err := ed.SetBackdrop("s2", model.ScopeSpread, pa); err != nil {
 		t.Fatal(err)
 	}

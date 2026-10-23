@@ -99,6 +99,8 @@ func probes() []probe {
 		{"SetBin", kErr, func(m *Methods) (model.View, error) { return m.SetBin("b1", ids, true) }},
 		// grid.go
 		{"SetGrid", kView, func(m *Methods) (model.View, error) { return ok(m.SetGrid("s1", true)) }},
+		{"BackToAuto", kErr, func(m *Methods) (model.View, error) { return m.BackToAuto("s1", "", true) }},
+		{"CropsToKeep", kRead, func(m *Methods) (model.View, error) { m.CropsToKeep("s1"); return none(m) }},
 		{"AddPlace", kErr, func(m *Methods) (model.View, error) { return m.AddPlace("s1", 0, "") }},
 		{"SetPlaces", kView, func(m *Methods) (model.View, error) { return ok(m.SetPlaces("s1", nil, "")) }},
 		{"SetPlaceAngle", kView, func(m *Methods) (model.View, error) { return ok(m.SetPlaceAngle("s1", "a", 5)) }},
@@ -164,6 +166,9 @@ func probes() []probe {
 		{"FlipBackdrop", kView, func(m *Methods) (model.View, error) { return ok(m.FlipBackdrop("s1", "spread", "h")) }},
 		{"FitBackdrop", kView, func(m *Methods) (model.View, error) { return ok(m.FitBackdrop("s1", "spread")) }},
 		{"ClearBackdrop", kView, func(m *Methods) (model.View, error) { return ok(m.ClearBackdrop("s1", "spread")) }},
+		{"ClearAlbumBg", kView, func(m *Methods) (model.View, error) { return ok(m.ClearAlbumBg()) }},
+		{"SetAlbumBgFade", kView, func(m *Methods) (model.View, error) { return ok(m.SetAlbumBgFade(0.5, "")) }},
+		{"SetNoAlbumBg", kView, func(m *Methods) (model.View, error) { return ok(m.SetNoAlbumBg("s1", true)) }},
 		// sticker.go
 		{"SetStickerBox", kView, func(m *Methods) (model.View, error) { return ok(m.SetStickerBox("s1", "k", 0, 0, 10, 10, 0, "")) }},
 		{"FlipSticker", kView, func(m *Methods) (model.View, error) { return ok(m.FlipSticker("s1", "k", "h")) }},

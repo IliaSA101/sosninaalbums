@@ -26,7 +26,7 @@ const (
 // borderAlbum — разворот с двумя местами: A с фото, B пустое. Стили файлов — фиктивные пути.
 func borderAlbum(rot float64) *model.Project {
 	p := model.New()
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
 	p.Spreads = []*model.Spread{{ID: brSheet, Photos: []string{"a"}, Grid: []*model.Place{
 		{ID: placeA, X: 20, Y: 10, W: 60, H: 40, Photo: "a", Rot: rot},
 		{ID: placeB, X: 100, Y: 10, W: 60, H: 40},
@@ -255,7 +255,7 @@ func TestExportBorderMissingCover(t *testing.T) {
 	// Пропавшая своя рамочка обложки стоит выгрузку и называется рамочкой.
 	p := model.New()
 	id := model.LibPhotoID(brKey)
-	p.Photos["c1"] = model.PhotoRef{Path: `C:\c.jpg`, W: 4, H: 3}
+	p.Photos["c1"] = model.PhotoRef{Path: testkit.AbsPath("c.jpg"), W: 4, H: 3}
 	p.Photos[id] = model.PhotoRef{Lib: brKey, W: 3000, H: 4000}
 	p.Cover = &model.Cover{Sheet: &model.Spread{ID: model.CoverID, Photos: []string{"c1"}, Grid: []*model.Place{
 		{ID: "000000000009", X: 10, Y: 10, W: 60, H: 40, Photo: "c1", Border: &model.Border{Photo: id}}}}}

@@ -29,12 +29,15 @@ func (e *Editor) CreateCover(preset string, ph *model.PhotoInfo) (model.View, er
 	return e.try("", func(p *model.Project) error { return createCover(p, preset, ph) })
 }
 
-// createCover — тело CreateCover: обложка и (если есть) фото фона лицевой.
+// createCover — тело CreateCover: обложка и (если есть) фото фона лицевой. Копия фону не нужна
+// (098-3): фон фото с места не снимает — запрос копии ставит само фото, а не запись «-new».
 func createCover(p *model.Project, preset string, ph *model.PhotoInfo) error {
 	if err := cover.Create(p, preset); err != nil || ph == nil {
 		return err
 	}
-	return backdrop.SetBackdrop(p, model.CoverID, model.ScopeRight, *ph)
+	in := *ph
+	in.ID = model.ReqBase(in.ID)
+	return backdrop.SetBackdrop(p, model.CoverID, model.ScopeRight, in)
 }
 
 // DeleteCover снимает обложку одним шагом отмены; нет обложки — холостая правка.

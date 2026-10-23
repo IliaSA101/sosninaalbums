@@ -102,8 +102,17 @@ MARK = "=="  # тип записи в Stand.console: метка этапа, а �
 class Stand:
     """Страница стенда в Chromium. Использовать как контекстный менеджер."""
 
-    def __init__(self, port: int, out: Path, profile: Profile | None = None, headed: bool = False, wait_s: float = 60.0):
+    def __init__(
+        self,
+        port: int,
+        out: Path,
+        profile: Profile | None = None,
+        headed: bool = False,
+        wait_s: float = 60.0,
+        init_scripts: tuple[str, ...] = (),
+    ):
         self.port, self.out, self.headed, self.wait_s = port, out, headed, wait_s
+        self.init_scripts = init_scripts  # точка расширения (102): скрипты страницы после INIT_JS, например курсор ролика
         self.profile = profile or PROFILES["A"]
         self.console: list[tuple[str, str]] = []
         self.failed: list[tuple[int, str]] = []  # ответы 4xx/5xx: код и путь
@@ -152,6 +161,8 @@ class Stand:
         )
         self.ctx.set_default_timeout(30000)
         self.ctx.add_init_script(INIT_JS)
+        for js in self.init_scripts:
+            self.ctx.add_init_script(js)
         self.page = self.ctx.new_page()
         self.page.on("console", lambda m: self.console.append((m.type, m.text)) if m.type in ("error", "warning") else None)
         self.page.on("pageerror", lambda e: self.console.append(("pageerror", str(e))))

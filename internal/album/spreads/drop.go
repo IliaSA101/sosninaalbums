@@ -59,6 +59,7 @@ const smallPart = 10
 // Drop — бросок фото на лист (design §2). «Авто» — как AddPhotos в конец; обложка — как
 // PlacePhotos (без вопроса и плитки, лишние — Left). Неизвестный лист или место, нечего
 // сажать — холостая. План считается до любых изменений: Ask оставляет проект байт в байт.
+// Запрос копии (098) — новая запись-копия (model.ResolveCopies).
 func Drop(p *model.Project, r DropReq, vig VigHooks) (DropOut, error) {
 	photos := model.DedupePhotos(r.Photos)
 	s := p.Sheet(r.Spread)
@@ -91,6 +92,12 @@ func Drop(p *model.Project, r DropReq, vig VigHooks) (DropOut, error) {
 	case rest == "" && fit < total:
 		out.Ask = true
 		return out, nil
+	}
+	// Запросы копий (098) — после вопроса: план их не различает (ни копии, ни запроса в местах
+	// листа нет), а Ask оставляет проект нетронутым.
+	photos, err := model.ResolveCopies(p, photos)
+	if err != nil {
+		return DropOut{}, err
 	}
 	grow := rest == RestAdd && fit < total && s.IsVignette() && vig.Untouched != nil && vig.Untouched(p, s)
 	left := seat(p, s, pl, at, photos, &out)
@@ -208,7 +215,7 @@ func tileRest(p *model.Project, s *model.Spread, page int, ids []string, out *Dr
 	pg := g.Page(page)
 	short := min(pg.W, pg.H)
 	area := layout.Rect{X: pg.X + g.Margin, Y: pg.Y + g.Margin, W: pg.W - 2*g.Margin, H: pg.H - 2*g.Margin}
-	rs := geom.Tile(area, p.Aspects(ids), g.Gap, short/3)
+	rs := geom.Tile(area, p.PhotoAspects(ids), g.Gap, short/3)
 	if len(rs) != len(ids) {
 		return ErrTileSmall
 	}

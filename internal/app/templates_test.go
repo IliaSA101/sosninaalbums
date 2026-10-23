@@ -427,7 +427,7 @@ func TestAppDropPhotos(t *testing.T) {
 		{ID: "s2", Photos: []string{"b", "c", "d"}},
 	}
 	for _, id := range []string{"a", "b", "c", "d"} {
-		p.Photos[id] = model.PhotoRef{Path: `C:\` + id + `.jpg`, W: 300, H: 200}
+		p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 	}
 	a.ed.Store(mustEditor(t, p, ""))
 	views := 0

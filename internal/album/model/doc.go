@@ -19,5 +19,9 @@
 // пресеты, зажим; Фотосфера 047: форматы, пресеты страницы, шаблон обложки), fabrika.go (Фабрика Фотокниги 081: форматы, изделия, строки предела), printlimit.go (предел разворотов
 // типографии 085: PrintGroups, PrintLimits, LimitFor, LimitOf, LimitIn, LimitText), sheet.go (геометрия листа Geo, Sheet, Sheets, CoverGeo, AreaOf, проект-лист 031
 // NewSheet и FoldPages, FormatOf/FormatNear, PagePresetOf/PagePresetIn; Settings.PageW — только здесь, ClampSettings и Params; виньетка 031:
-// Vignette, роли мест, зажим и FixVignettes).
+// Vignette, роли мест, зажим и FixVignettes), copies.go (копии фото 098: BaseID, CopyNo, CopyID, семья Family, PlacedFile, SetFile),
+// copyput.go (постановка копий: запрос «<ID файла>-new», ResolveCopies, AddCopy, FitFile), owncrop.go (свой кадр фото 098: PhotoRef.Asp,
+// ClampAsp, KeepCrops), albumbg.go (фон альбома 098: AlbumBg, ClampAlbumBg, AlbumBgOn), clip.go (буфер «Копировать и вставить» 099: Clip,
+// ClipSel, ClipInfo, PasteReq, PasteOut), marginnote.go (MarginNote — предупреждение к «Поле» и «Обрез» 100), autorow.go (ряды «Авто»:
+// RowLen, AutoRow, MoreRow, ExtraRow, IndexOf — вынесены из project.go).
 package model

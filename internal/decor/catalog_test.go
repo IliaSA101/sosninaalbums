@@ -183,6 +183,35 @@ func TestDecorCatalogFast(t *testing.T) {
 	}
 }
 
+// Свои с равным Added (сохранены в одну мс) встают устойчиво: позже сохранённый — первым.
+func TestCatalogOwnTieOrder(t *testing.T) {
+	s, _ := openTemp(t)
+	s.files[KindBg] = map[string]string{}
+	var keys []string
+	for i, added := range []int64{5, 7, 7, 7, 3} {
+		key := fmt.Sprintf("my:%016x", 0xf0-i*0x10) // ключи не по порядку: порядок не от Key
+		keys = append(keys, key)
+		s.entries = append(s.entries, &entry{Key: key, Kind: KindBg, Theme: "school", Name: "Фон", W: 300, H: 200, Added: added})
+		s.files[KindBg][key] = "x"
+	}
+	want := []string{keys[3], keys[2], keys[1], keys[0], keys[4]}
+	for range 20 {
+		cat, err := s.Catalog(KindBg, nil, 600, 300)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, it := range cat.Items {
+			if it.Own {
+				got = append(got, it.ID)
+			}
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("порядок %v, ждали %v", got, want)
+		}
+	}
+}
+
 func countBuiltin() int {
 	n := 0
 	for _, p := range bgPresets {

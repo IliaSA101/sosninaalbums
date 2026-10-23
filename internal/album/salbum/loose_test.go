@@ -3,6 +3,7 @@ package salbum
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -171,16 +173,21 @@ func TestLoadFoldsNestedFolders(t *testing.T) {
 	buf := captureLog(t)
 	folders := []FileFolder{{Path: "Весна 2026/Избранное", Abs: filepath.Join(testkit.TempDir(t), "нет")},
 		{Path: "Весна 2026"}, {Path: "весна 2026"}}
+	// «весна 2026» — повтор на Windows и macOS; на Linux — своя папка (paths.Fold, 101).
+	want, log := []string{spring}, "вложенных слито 2"
+	if low := filepath.Join(dir, "весна 2026"); !paths.FoldEqual(low, spring) {
+		want, log = []string{spring, low}, "вложенных слито 1"
+	}
 	for _, v := range []int{15, model.FormatVersion} {
 		p, err := Decode(looseFileJSON(t, v, folders, []FileLoose{{ID: "0123456789ab", Files: []FileFolder{{Path: "Весна 2026/1.jpg"}}}}), dir)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(p.Folders, []string{spring}) || p.FolderAlt != nil || p.Loose != nil {
+		if !reflect.DeepEqual(p.Folders, want) || p.FolderAlt != nil || p.Loose != nil {
 			t.Fatalf("v%d: папки %q, запасные %v, отдельные %+v", v, p.Folders, p.FolderAlt, p.Loose)
 		}
 	}
-	if !strings.Contains(buf.String(), "вложенных слито 2") {
+	if !strings.Contains(buf.String(), log) {
 		t.Fatalf("лог: %q", buf.String())
 	}
 }
@@ -274,8 +281,8 @@ func TestLoadMissingVolumeKeepsNested(t *testing.T) {
 	}
 }
 
-// v15 (0.21) читается как v16: отдельных нет, from 15; первая запись — .v15.bak с исходником, в
-// файле версия 16; файл новее (17) — ErrNewer.
+// v15 (0.21) читается как текущий: отдельных нет, from 15; первая запись — копия «(для 0.21)» с
+// исходником, в файле текущая версия; файл новее — ErrNewer.
 func TestMigrateV15ToV16(t *testing.T) {
 	dir := testkit.TempDir(t)
 	p := binsProject(dir)
@@ -296,23 +303,23 @@ func TestMigrateV15ToV16(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.From() != 15 || q.Version != 16 || q.Loose != nil || len(q.Loaded().Bins) != 2 {
+	if q.From() != 15 || q.Version != model.FormatVersion || q.Loose != nil || len(q.Loaded().Bins) != 2 {
 		t.Fatalf("from %d, версия %d, отдельные %+v, подборок %d", q.From(), q.Version, q.Loose, len(q.Loaded().Bins))
 	}
-	if err := BackupOld(path, q.From()); err != nil {
-		t.Fatal(err)
+	if bak, err := BackupOld(path, q.From()); err != nil || bak != BackupName(path, 15, 1) {
+		t.Fatalf("копия %q: %v", bak, err)
 	}
 	if err := Save(q, path); err != nil {
 		t.Fatal(err)
 	}
-	if bak, err := os.ReadFile(path + ".v15.bak"); err != nil || !bytes.Equal(bak, src) {
-		t.Fatalf(".v15.bak: %v", err)
+	if bak, err := os.ReadFile(BackupName(path, 15, 1)); err != nil || !bytes.Equal(bak, src) {
+		t.Fatalf("копия для %s: %v", LastApp(15), err)
 	}
-	if out, _ := os.ReadFile(path); fileOf(t, out).Version != 16 || !bytes.Equal(out, data) {
+	if out, _ := os.ReadFile(path); fileOf(t, out).Version != model.FormatVersion || !bytes.Equal(out, data) {
 		t.Fatalf("запись v15 отличается не только версией:\n%s", out)
 	}
-	if _, err := Decode(bytes.Replace(data, cur, []byte(`"version": 17,`), 1), dir); err != ErrNewer {
-		t.Fatalf("v17: %v", err)
+	if _, err := Decode(bytes.Replace(data, cur, fmt.Appendf(nil, `"version": %d,`, model.FormatVersion+1), 1), dir); !errors.Is(err, ErrNewer) {
+		t.Fatalf("v%d: %v", model.FormatVersion+1, err)
 	}
 }
 
@@ -360,9 +367,29 @@ func TestTrimMarksLoose(t *testing.T) {
 		out[id] = model.Mark{Path: f, Rating: &r}
 		order = append(order, id)
 	}
-	TrimMarks(out, order, []string{filepath.Join(dir, "Март")}, []string{strings.ToUpper(loose)})
+	// Отдельное в другом регистре — то же на Windows и macOS; на Linux — чужое (проверка ниже).
+	upper := strings.ToUpper(loose)
+	listed := upper
+	if !paths.FoldEqual(upper, loose) {
+		listed = loose
+	}
+	fresh := func() map[string]model.Mark {
+		m := map[string]model.Mark{}
+		for _, id := range order {
+			m[id] = model.Mark{Path: out[id].Path, Rating: &r}
+		}
+		return m
+	}
+	linux := fresh()
+	TrimMarks(out, order, []string{filepath.Join(dir, "Март")}, []string{listed})
 	if _, ok := out[library.IDFor(stray)]; ok || len(out) != 2 {
 		t.Fatalf("осталось %d, чужая на месте: %v", len(out), ok)
+	}
+	if listed == loose {
+		TrimMarks(linux, order, []string{filepath.Join(dir, "Март")}, []string{upper})
+		if _, ok := linux[library.IDFor(loose)]; ok || len(linux) != 2 {
+			t.Fatal("на Linux отдельное в другом регистре — не «внутри»: ждали, что уйдёт")
+		}
 	}
 	// Без отдельных — уходит последняя из «вне папок» (порядок файла), отдельное фото — в их числе.
 	out2 := map[string]model.Mark{}

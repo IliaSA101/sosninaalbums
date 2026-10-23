@@ -459,10 +459,10 @@ func TestMediaDecor(t *testing.T) {
 // Поиск пропавших в папке и на другом диске своих из библиотеки не берёт.
 func TestMissingOfSkipsLib(t *testing.T) {
 	refs := map[string]model.PhotoRef{
-		"a": {Path: `C:\нет\a.jpg`},
+		"a": {Path: testkit.AbsPath("нет/a.jpg")},
 		"b": {Path: "", Lib: "my:0123456789abcdef"},
-		"c": {Path: `C:\нет\c.jpg`, Lib: "my:fedcba9876543210"},
-		"d": {Path: `C:\есть\d.jpg`},
+		"c": {Path: testkit.AbsPath("нет/c.jpg"), Lib: "my:fedcba9876543210"},
+		"d": {Path: testkit.AbsPath("есть/d.jpg")},
 	}
 	var asked []string
 	got := missingOf(refs, func(p string) bool { asked = append(asked, p); return strings.Contains(p, "есть") })
@@ -488,7 +488,7 @@ func spreadsApp(t *testing.T, spreads ...[]string) (a *App, views func() []model
 	for i, ids := range spreads {
 		p.Spreads = append(p.Spreads, &model.Spread{ID: "s" + string(rune('1'+i)), Photos: slices.Clone(ids)})
 		for _, id := range ids {
-			p.Photos[id] = model.PhotoRef{Path: `C:\` + id + ".jpg", W: 300, H: 200}
+			p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 		}
 	}
 	a.ed.Store(mustEditor(t, p, ""))

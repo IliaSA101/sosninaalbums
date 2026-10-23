@@ -107,6 +107,15 @@ export const INTENDED_DIFFS: readonly Diff[] = [
   },
   // Название разворота (094, каталог G1): F2 раньше молчал. Серый пункт (обложка, нет листа) — команда молчит сама.
   { ctx: '*', token: 'F2', was: null, now: 'renameSpread', why: '074-24 (094-7): F2 — поле названия текущего разворота' },
+  // Копировать и вставить (099, каталог G4): Ctrl+X раньше молчал. В контекстах с выделенным на холсте (copyable) он вырезает;
+  // на «Простом» тот же контекст молчит (функция clipboard — со «Стандартного»).
+  ...['холст+выделены фото', 'холст+сетка+место', 'Стандартный: холст+сетка+место'].map((ctx): Diff => ({
+    ctx,
+    token: /^ctrl\+[xч]$/,
+    was: null,
+    now: 'cutItems',
+    why: '074-24 (099): Ctrl+X — вырезать выделенное, с уровня «Стандартный»',
+  })),
   // Ctrl+R без «Полного»: reload-no-op ушёл из таблицы, страж браузера гасит перезагрузку (проверка ниже).
   { ctx: '*', token: /^ctrl\+[rк]$/i, was: 'reload', now: null, why: '074-8: reload ушёл из таблицы — Ctrl+R гасит страж браузера' },
 ]
@@ -128,10 +137,10 @@ const CONTEXTS: Record<string, Ctx> = {
   'зоны нет (после запуска)': { level: 'full', flags: {} },
   холст: { level: 'full', flags: { zone: 'canvas' } },
   'холст+галерея': { level: 'full', flags: { zone: 'canvas', galleryOpen: true } },
-  'холст+выделены фото': { level: 'full', flags: { zone: 'canvas', hasSelection: true } },
+  'холст+выделены фото': { level: 'full', flags: { zone: 'canvas', hasSelection: true, copyable: true, pasteable: true } },
   'холст+сетка+место': {
     level: 'full',
-    flags: { zone: 'canvas', gridSpread: true, placeSelected: true, layerable: true, hasSelection: true },
+    flags: { zone: 'canvas', gridSpread: true, placeSelected: true, layerable: true, hasSelection: true, copyable: true, pasteable: true },
   },
   'холст+авто+место': { level: 'full', flags: { zone: 'canvas', gridSpread: false, placeSelected: true, layerable: false } },
   'холст+стикер': { level: 'full', flags: { zone: 'canvas', stickerSelected: true, layerable: true } },
@@ -142,11 +151,14 @@ const CONTEXTS: Record<string, Ctx> = {
   'поле ввода': { level: 'full', flags: { zone: 'canvas', inTextField: true } },
   'флажок в фокусе': { level: 'full', flags: { zone: 'canvas', onCheckbox: true } },
   'под вопросом/экспортом (modal)': { level: 'full', flags: { zone: 'canvas', dialog: 'shut', hasSelection: true } },
-  'Простой: холст+сетка+место': { level: 'simple', flags: { zone: 'canvas', gridSpread: true, placeSelected: true, layerable: true } },
+  'Простой: холст+сетка+место': {
+    level: 'simple',
+    flags: { zone: 'canvas', gridSpread: true, placeSelected: true, layerable: true, copyable: true, pasteable: true },
+  },
   'Простой: лента': { level: 'simple', flags: { zone: 'library', hasSelection: true } },
   'Стандартный: холст+сетка+место': {
     level: 'standard',
-    flags: { zone: 'canvas', gridSpread: true, placeSelected: true, layerable: true },
+    flags: { zone: 'canvas', gridSpread: true, placeSelected: true, layerable: true, copyable: true, pasteable: true },
   },
   'Стандартный: лента': { level: 'standard', flags: { zone: 'library', hasSelection: true } },
 }
@@ -469,6 +481,11 @@ describe('правила окон App.svelte после переноса на р
   })
   it('F1 открыт отдельно (поверх стартового окна), как и раньше', () => {
     expect(app).toContain("eventChord(e) !== 'F1'")
+  })
+  it('F1 молчит под всеми вопросами ручного листа, в том числе под «Фото уже в альбоме» (ревью 0.23 п. 4)', () => {
+    const m = /const askOpen = \(\) => ([^]*?) const jobsOpen/.exec(app)
+    expect(m?.[1]).toContain('copyAsk.cur')
+    expect(m?.[1]).toContain('dropAsk.cur')
   })
   it('прежние перечни окон в снимке были: список окон снимка не пуст', () => {
     expect((snap.app.underDialog as string[]).length).toBeGreaterThan(3)

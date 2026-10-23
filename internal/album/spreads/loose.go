@@ -57,15 +57,16 @@ func AddLoose(p *model.Project, files []string, at int64) (model.LooseAdded, err
 }
 
 // RemoveLoose — операция над проектом: file == "" — всё добавление id, иначе один его файл
-// (paths.SamePath); опустевшее добавление уходит. Неизвестное — холостая.
+// (по ключу model.LooseKey — тому же, что держит повторы при добавлении: иначе на Linux файл,
+// добавленный в другом регистре, не убрать); опустевшее добавление уходит. Неизвестное — холостая.
 func RemoveLoose(p *model.Project, id, file string) {
 	i := slices.IndexFunc(p.Loose, func(a model.LooseAdd) bool { return a.ID == id })
 	if i < 0 {
 		return
 	}
 	if file != "" {
-		a := &p.Loose[i]
-		a.Files = slices.DeleteFunc(a.Files, func(f model.LooseFile) bool { return paths.SamePath(f.Path, file) })
+		a, key := &p.Loose[i], model.LooseKey(file)
+		a.Files = slices.DeleteFunc(a.Files, func(f model.LooseFile) bool { return model.LooseKey(f.Path) == key })
 		if len(a.Files) > 0 {
 			return
 		}

@@ -1,4 +1,5 @@
 ﻿# Стенд QA — своя копия wails dev рядом с основной (34115): powershell -ExecutionPolicy Bypass -File scripts/stand.ps1 -Name b -Port 34116
+# ПРАВЯТСЯ ВМЕСТЕ с двойником scripts/stand.sh (Linux, macOS).
 # Запускать из корня рабочей копии (ветка до слияния); одна рабочая копия — один стенд (wails dev
 # пересобирает exe и биндинги в своей папке). SA_STAND даёт программе свой замок второго экземпляра
 # и свои папки настроек, WebView2, кэша миниатюр и копий (internal/osx DataName). Vite берёт свободный

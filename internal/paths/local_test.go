@@ -148,7 +148,7 @@ func TestLogExt(t *testing.T) {
 	for in, want := range map[string]string{
 		`C:\Иванов\IMG_1.HEIC`: ".heic", "a.cr3": ".cr3", "a": "", "a.": "", "": "",
 		"IMG.Иванов": "прочее", "a.jpeg2000x": "прочее", "a.12345678": ".12345678", "a.j-g": "прочее",
-		"a.jpg ": "прочее", `C:\x.y\name`: "",
+		"a.jpg ": "прочее", `C:\x.y\name`: "", "/x.y/name": "", `/дом/x.y\IMG.JPG`: ".jpg",
 	} {
 		if got := LogExt(in); got != want {
 			t.Errorf("LogExt(%q) = %q, ждали %q", in, got, want)

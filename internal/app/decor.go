@@ -375,6 +375,29 @@ func (a *App) bgSource(targets []model.GridTarget, itemID string) (model.BgSourc
 	return model.BgSource{Pattern: bg.Pattern, Color: bg.Color, Photo: bg.Photo}, nil
 }
 
+// SetAlbumBg — щелчок по плитке окна «Фоны» в режиме «Фон альбома» (098 §3): встроенный узор или
+// своё фото на все развороты без своего фона — на весь разворот или на каждую страницу (pages).
+// Цвет страниц пресета не ставится: цвет альбома красит и обложку. Один шаг отмены; плитка — в
+// недавние; тот же фон — холостая без шага.
+func (a *App) SetAlbumBg(itemID string, pages bool) (v model.View, err error) {
+	defer a.guardEdit("SetAlbumBg", &v, &err)
+	ed := a.editor()
+	s, err := a.decorStore()
+	if err != nil {
+		return ed.View(), err
+	}
+	bg, err := s.Background(itemID)
+	if err != nil {
+		return ed.View(), err
+	}
+	v, err = ed.SetAlbumBg(model.BgSource{Pattern: bg.Pattern, Photo: bg.Photo}, pages)
+	if err != nil {
+		return v, err
+	}
+	prefs.RememberDecor(a.cfgDir, decor.KindBg, itemID)
+	return a.changed(v), nil
+}
+
 // StickerResult — итог AddSticker: вид и ID нового стикера (интерфейс его выделяет).
 type StickerResult struct {
 	View model.View `json:"view"`

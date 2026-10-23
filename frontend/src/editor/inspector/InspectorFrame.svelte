@@ -6,6 +6,7 @@
   import { liveTilt, photoTilt } from '../tilt/tiltlive'
   import type { Frame } from '../../base/core/types'
   import Icon from '../../base/ui/Icon.svelte'
+  import { ownLabel } from './ownlabel'
   import PlaceFields from './PlaceFields.svelte'
   import FitToggle from '../photoprops/FitToggle.svelte'
   import ShapeToggle from '../photoprops/ShapeToggle.svelte'
@@ -32,6 +33,8 @@
   const cur = $derived(framelive.of(id) ?? frame)
   const contain = $derived(!!sp?.grid && sp.places?.find((p) => p.photo === id)?.fit === 'contain')
   const name = $derived(store.byId.get(id)?.name ?? 'Фото')
+  // Свой кадр (098) действует только на «Авто»: на ручном месте место задаёт пропорции, строки нет
+  const own = $derived(sp?.grid ? 0 : (fv?.own ?? 0))
   const dpi = $derived(fv?.dpi ?? 0)
   const info = $derived(store.byId.get(id))
   const px = $derived(info && info.w > 0 && info.h > 0 ? `${info.w}×${info.h} px` : '')
@@ -88,7 +91,7 @@
     <span class="pct">{pct} %</span>
     <button
       class="reset"
-      disabled={isDefaultFrame(cur)}
+      disabled={isDefaultFrame(cur) && !own}
       onclick={reset}
       aria-label="Сбросить кадр"
       title="Сбросить кадр: фото целиком в месте"><Icon name="reset" size={16} /></button
@@ -105,6 +108,15 @@
     onchange={change}
     onpointerup={(e) => e.currentTarget.blur()}
   />
+  {#if own}
+    <!-- Свой кадр (098): раскладки «Авто» строятся под эти пропорции; сброс снимает и кадр, и пропорции -->
+    <div class="row own" data-testid="own-crop">
+      <span class="lbl">Свой кадр {ownLabel(own)}</span>
+      <button class="reset" onclick={reset} aria-label="Сбросить кадр" title="Сбросить кадр: фото снова целое, раскладка подстроится"
+        ><Icon name="reset" size={16} /></button
+      >
+    </div>
+  {/if}
 {/if}
 {#if prefs.can('turn')}
   <div class="row turn">
@@ -179,7 +191,8 @@
   .pct {
     font-variant-numeric: tabular-nums;
   }
-  .turn {
+  .turn,
+  .own {
     margin-top: 8px;
   }
   .reset {

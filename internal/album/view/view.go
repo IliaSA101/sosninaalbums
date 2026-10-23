@@ -89,6 +89,7 @@ func BuildView(p *model.Project, st State) model.View {
 		TextMaxW:        p.TextMaxW(nil),
 		BackdropUsed:    []string{},
 		LibPhotos:       libPhotos(p),
+		AlbumBg:         albumBgView(p),
 		AlbumFonts:      albumFonts(p),
 		MarksRev:        st.MarksRev,
 	}
@@ -114,6 +115,9 @@ func BuildView(p *model.Project, st State) model.View {
 		v.PageLimit = &l
 	}
 	v.Unfilled, v.Unnamed = f.result()
+	if p.AlbumBg != nil && p.AlbumBg.Photo != "" { // фото фона альбома (098) — и когда ни на одном листе его не видно
+		v.BackdropUsed = append(v.BackdropUsed, p.AlbumBg.Photo)
+	}
 	for _, s := range p.Sheets() { // свои стикеры (048) и рамочки (079) — как фото фона: «в альбоме» не считаются
 		for _, st := range s.Stickers {
 			if st.Photo != "" {
@@ -208,6 +212,7 @@ func spreadView(f *fields, s *model.Spread, l Laid) (sv model.SpreadView) {
 		Frames: []model.FrameView{}, Captions: []model.CaptionView{}, Texts: textViews(f, s),
 		Bg: pageBg(p, s), BgSet: [2]string{s.BgL, s.BgR}, Name: s.Name, Backdrops: backdropViews(p, s), Patterns: patternViews(p, s),
 		Stickers: stickerViews(p, s), Stubs: []model.StubView{}, Kind: s.Kind, Fields: model.FieldsOf(s, f.vars)}
+	albumBgSheet(p, s, &sv) // после своих фонов: фон альбома лежит только там, где их нет
 	if s.Vars != nil {
 		sv.Vars = *s.Vars
 	}

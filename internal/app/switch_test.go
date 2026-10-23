@@ -31,7 +31,7 @@ func switchAlbum(t *testing.T, path string) *album.Editor {
 	p := model.New()
 	for i, id := range []string{"a", "b", "c"} {
 		p.Spreads = append(p.Spreads, &model.Spread{ID: "s" + strconv.Itoa(i+1), Photos: []string{id}})
-		p.Photos[id] = model.PhotoRef{Path: `C:\` + id + ".jpg", W: 300, H: 200}
+		p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 	}
 	ed := mustEditor(t, p, "")
 	if path != "" {

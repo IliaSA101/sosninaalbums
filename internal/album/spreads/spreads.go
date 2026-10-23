@@ -11,8 +11,13 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
-// AddPhotos — операция над проектом; photos уже без повторов.
+// AddPhotos — операция над проектом; photos уже без повторов. Запрос копии (098) — новая
+// запись-копия на этом листе.
 func AddPhotos(p *model.Project, spreadID string, photos []model.PhotoInfo, index int) error {
+	photos, err := model.ResolveCopies(p, photos)
+	if err != nil {
+		return err
+	}
 	ids := model.Remember(p, photos)
 	_, s := p.Find(spreadID)
 	if s == nil {
@@ -35,8 +40,12 @@ func AddPhotos(p *model.Project, spreadID string, photos []model.PhotoInfo, inde
 	return nil
 }
 
-// NewSpread — операция над проектом; photos уже без повторов.
+// NewSpread — операция над проектом; photos уже без повторов; запрос копии (098) — копия.
 func NewSpread(p *model.Project, at int, photos []model.PhotoInfo) error {
+	photos, err := model.ResolveCopies(p, photos)
+	if err != nil {
+		return err
+	}
 	ids := model.Remember(p, photos)
 	if len(ids) > model.MaxPhotos {
 		return model.ErrTooMany()
@@ -82,7 +91,7 @@ func RemovePhotos(p *model.Project, ids []string) {
 }
 
 // PurgePhotos — «Убрать из альбома» в полосе «Не найдено» (075): фото уходят отовсюду — из
-// мест, с фонов всех листов (с обложкой), своими стикерами и рамочками мест (079). Отдельно от RemovePhotos: бросок
+// мест, с фонов всех листов (с обложкой) и фона альбома, своими стикерами и рамочками мест (079). Отдельно от RemovePhotos: бросок
 // в ленту обязан оставлять фон фото, стоящего и в месте (075-13).
 func PurgePhotos(p *model.Project, ids []string) {
 	gone := make(map[string]bool, len(ids))
@@ -90,6 +99,9 @@ func PurgePhotos(p *model.Project, ids []string) {
 		gone[id] = id != "" // пустой ID — у стикера-рисунка, его не трогаем
 	}
 	p.Detach(ids)
+	if p.AlbumBg != nil && gone[p.AlbumBg.Photo] { // фон альбома с пропавшим фото (098 §4.3)
+		p.AlbumBg = nil
+	}
 	for _, s := range p.Sheets() {
 		for _, scope := range model.BdScopes() {
 			if slot := s.Slot(scope); *slot != nil && gone[(*slot).Photo] {
@@ -164,7 +176,10 @@ func AddFolder(p *model.Project, dir string) (model.FolderAdd, error) {
 	}
 	first := -1
 	for i, f := range p.Folders {
-		if paths.SamePath(f, dir) {
+		// Повтор — по ключу DirKey, как у свёртки FoldSources: регистр не важен на любой ОС.
+		// SamePath на Linux различал бы регистр, и «та же» папка в другом регистре ушла бы
+		// в свёртку как новый родитель, заменив собой запись пользователя.
+		if paths.DirKey(f) == paths.DirKey(dir) {
 			return model.FolderAdd{Within: f}, nil
 		}
 		if first < 0 && paths.Reaches(dir, f, false, paths.Linked) {
@@ -276,17 +291,23 @@ func addToGrid(p *model.Project, s *model.Spread, ids []string) error {
 	return nil
 }
 
-// gridPhotoSet — фото, стоящие в сетках (и в местах обложки): автосборка их не трогает.
-func gridPhotoSet(p *model.Project) map[string]bool {
-	out := map[string]bool{}
+// notForBuild — фото, которых автосборка не берёт: стоящие в сетках (и в местах обложки) и
+// файлы, стоящие в альбоме только другой записью семьи (копией, 098-17), — иначе сборка поставила
+// бы дубль. Фото на «Авто» берутся: сборка их переставляет.
+func notForBuild(p *model.Project) func(id string) bool {
+	grid, placed := map[string]bool{}, map[string]bool{}
 	for _, s := range p.Sheets() {
 		for _, pl := range s.Grid {
 			if pl.Photo != "" {
-				out[pl.Photo] = true
+				grid[pl.Photo] = true
 			}
 		}
+		for _, id := range s.Photos {
+			placed[id] = true
+		}
 	}
-	return out
+	files := p.PlacedFiles()
+	return func(id string) bool { return grid[id] || !placed[id] && files[model.BaseID(id)] }
 }
 
 // DeleteSelection — операция над проектом (Editor.DeleteSelection; порядок описан там).

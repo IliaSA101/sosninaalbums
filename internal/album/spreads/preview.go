@@ -53,7 +53,8 @@ func sampleRow(asp []float64, prm layout.Params, group int) model.SampleRow {
 }
 
 // describeOne — плитка одной раскладки с семейством и формой, как в подборке (describeRows);
-// похожих в ряду «Что соберётся» нет: Twin = −1.
+// похожих в ряду «Что соберётся» нет: Twin = −1. Семья — по форме (FamilyOf), как у сборки и её
+// фильтра: «Плотно» по заполнению (TileFamily, 0.23-q7) — только в галерее раскладок.
 func describeOne(r layout.Result, prm layout.Params) model.Choice {
 	f := forms.Of(r.Key, r.Rects, prm)
 	return model.Choice{Key: r.Key, Rects: r.Rects, Family: string(variety.FamilyOf(f)), FormName: forms.Name(f), Twin: -1}

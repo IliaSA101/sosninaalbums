@@ -378,6 +378,16 @@
         "custom": false
       },
       {
+        "id": "about",
+        "label": "О программе",
+        "short": "О прогр.",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
         "id": "guide",
         "label": "Справочник функций",
         "short": "Справка",
@@ -630,6 +640,67 @@
         "keys": [
           "Delete",
           "Backspace"
+        ],
+        "custom": false
+      },
+      {
+        "id": "cutItems",
+        "label": "Вырезать",
+        "short": "Вырезать",
+        "group": "photos",
+        "scope": "canvas",
+        "feature": "clipboard",
+        "defaults": [
+          "Mod+KeyX"
+        ],
+        "keys": [
+          "Mod+KeyX"
+        ],
+        "custom": false
+      },
+      {
+        "id": "copyItems",
+        "label": "Копировать",
+        "short": "Копировать",
+        "hint": "Фото, места, надписи и стикеры; вставка — на любом листе",
+        "group": "photos",
+        "scope": "canvas",
+        "feature": "clipboard",
+        "defaults": [
+          "Mod+KeyC"
+        ],
+        "keys": [
+          "Mod+KeyC"
+        ],
+        "custom": false
+      },
+      {
+        "id": "pasteItems",
+        "label": "Вставить",
+        "short": "Вставить",
+        "group": "photos",
+        "scope": "canvas",
+        "feature": "clipboard",
+        "defaults": [
+          "Mod+KeyV"
+        ],
+        "keys": [
+          "Mod+KeyV"
+        ],
+        "custom": false
+      },
+      {
+        "id": "duplicateItems",
+        "label": "Дублировать",
+        "short": "Дубль",
+        "group": "photos",
+        "scope": "canvas",
+        "feature": "clipboard",
+        "defaults": [
+          "Mod+KeyD"
+        ],
+        "keys": [
+          "Mod+KeyD"
         ],
         "custom": false
       },

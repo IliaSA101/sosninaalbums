@@ -62,13 +62,19 @@ func TestRescanKeptLoose(t *testing.T) {
 	inTwo := testkit.JPEG(t, two, "b.jpg", 20, 10)
 	loose := testkit.JPEG(t, two, "c.jpg", 20, 10)
 	photos := []library.Photo{{Path: inOne}, {Path: inTwo}, {Path: loose}, {Path: filepath.Join(root, "Чужое", "x.jpg")}}
+	// Отдельный файл в другом регистре — тот же на Windows и macOS, на Linux — чужой (paths.Fold, 101).
+	upLoose := []string{loose}
+	if !paths.FoldEqual(strings.ToUpper(loose), loose) {
+		upLoose = nil
+	}
 	cases := []struct {
 		name string
 		src  library.Sources
 		want []string
 	}{
 		{"папка", library.Sources{Folders: []string{one}}, []string{inOne}},
-		{"отдельное без папки", library.Sources{Files: []string{strings.ToUpper(loose)}}, []string{loose}},
+		{"отдельное без папки", library.Sources{Files: []string{loose}}, []string{loose}},
+		{"отдельное в другом регистре", library.Sources{Files: []string{strings.ToUpper(loose)}}, upLoose},
 		{"папка и отдельное", library.Sources{Folders: []string{one}, Files: []string{loose}}, []string{inOne, loose}},
 		{"две папки и файл", library.Sources{Folders: []string{one, two}, Files: []string{loose}}, []string{inOne, inTwo, loose}},
 		{"пусто", library.Sources{}, nil},
@@ -172,7 +178,8 @@ func TestAddFilePathsUNCNoStat(t *testing.T) {
 		bad = append(bad, `C:\x\COM1.jpg`, `C:\Фото\NUL.png`)
 	}
 	rev := a.editor().View().Rev
-	r, err := a.AddFilePaths(append(bad, `C:\фото\читаемо.txt`))
+	// Локальный путь не фото — под текущую ОС: `C:\…` на Linux не абсолютный и ушёл бы в Bad.
+	r, err := a.AddFilePaths(append(bad, filepath.Join(testkit.TempDir(t), "фото", "читаемо.txt")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,10 +354,15 @@ func TestFoldersAddedEvent(t *testing.T) {
 	if e := last(); e != (FolderAdded{Dir: child}) {
 		t.Errorf("новая: %+v", e)
 	}
-	if _, err := a.AddFolderPath(strings.ToUpper(child)); err != nil {
+	// Повтор другим регистром — на Windows и macOS; на Linux это другая папка (paths.Fold, 101).
+	again := strings.ToUpper(child)
+	if !paths.FoldEqual(again, child) {
+		again = child
+	}
+	if _, err := a.AddFolderPath(again); err != nil {
 		t.Fatal(err)
 	}
-	if e := last(); e.Within != strings.ToUpper(child) || e.Merged != 0 {
+	if e := last(); e.Dir != again || e.Within != again || e.Merged != 0 {
 		t.Errorf("повтор: %+v, Within должен быть равен Dir", e)
 	}
 	// Отдельное фото вне папок, затем родитель: забирает и папку, и фото.

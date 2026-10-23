@@ -38,6 +38,7 @@ const LEGACY_MIN: Record<FeatureId, 'simple' | 'standard' | 'full'> = {
   names: 'standard',
   allSpreads: 'standard',
   groupSelect: 'standard',
+  clipboard: 'standard', // 099: Ctrl+C, X, V, D; на «Простом» клавиш и пунктов нет
   bgPhoto: 'standard',
   manual: 'full',
   rotate: 'full',
@@ -72,8 +73,8 @@ describe('таблица уровней', () => {
       for (const l of LEVELS) expect(can(id, l), `${id}@${l}`).toBe(LEVELS.indexOf(l) >= LEVELS.indexOf(LEGACY_MIN[id]))
     }
   })
-  it('28 строк, у каждой краткое имя без повторов', () => {
-    expect(FEATURES).toHaveLength(28)
+  it('29 строк, у каждой краткое имя без повторов', () => {
+    expect(FEATURES).toHaveLength(29)
     const shorts = FEATURES.map((f) => f.short)
     expect(new Set(shorts).size).toBe(shorts.length)
     for (const s of shorts) expect(s.trim(), s).not.toBe('')

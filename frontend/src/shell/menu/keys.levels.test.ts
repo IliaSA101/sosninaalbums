@@ -168,3 +168,21 @@ describe('keyCommand: отметки (спека 004 U2)', () => {
     expect(act('4', { ...lib, can: () => true })).toBe('markRating4')
   })
 })
+
+describe('копировать и вставить по уровням (099)', () => {
+  const at = (l: Level) => ctx({ ...canvasZone, copyable: true, pasteable: true, can: (f) => can(f, l) })
+  it('на «Простом» Ctrl+C, X, V, D молчат; со «Стандартного» работают', () => {
+    for (const k of ['c', 'x', 'v', 'd']) {
+      expect(cmd(ev(k, ctrl), at('simple')), `simple ${k}`).toBeNull()
+      expect(cmd(ev(k, ctrl), at('standard')), `standard ${k}`).not.toBeNull()
+      expect(cmd(ev(k, ctrl), at('full')), `full ${k}`).not.toBeNull()
+    }
+  })
+  it('«Своё»: строка clipboard снята — клавиши молчат, включена на «Простом» — работают', () => {
+    const run = (c: Custom) =>
+      cmd(ev('c', ctrl), ctx({ ...canvasZone, copyable: true, can: (f: FeatureId) => features('custom', c).has(f) }))
+    expect(run({ base: 'full', on: [], off: ['clipboard'] })).toBeNull()
+    expect(run({ base: 'simple', on: ['clipboard'], off: [] })).toBe('copyItems')
+    expect(run({ base: 'standard', on: [], off: [] })).toBe('copyItems')
+  })
+})

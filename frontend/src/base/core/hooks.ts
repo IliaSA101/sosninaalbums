@@ -61,6 +61,11 @@ export interface StoreHooks {
   // --- бросок на ручной разворот (042) ---
   // Фото из ленты на лист-сетку (Enter, двойной щелчок): места, плитка, вопрос. true — обработано.
   dropGrid(spread: string, ids: string[]): Promise<boolean>
+
+  // --- копии фото (098) ---
+  // Ворота броска из ленты: ids фото, уже стоящих в альбоме, — вопрос «Фото уже в альбоме». Ответ — ID для Go
+  // (запрос копии `<id>-new` или запись переносимого места); null — «Отмена», правки не будет. Нечего спрашивать — ids как есть.
+  gate(ids: string[]): Promise<string[] | null>
 }
 
 // Пустые хуки: основа без верха.
@@ -83,4 +88,5 @@ export const noHooks: StoreHooks = {
   selectedRefs: () => [],
   select: () => {},
   dropGrid: async () => false,
+  gate: async (ids) => ids,
 }

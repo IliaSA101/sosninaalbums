@@ -65,7 +65,8 @@ func NewScanner() *Scanner {
 
 // scanFile — файл-кандидат, найденный обходом.
 type scanFile struct {
-	path, key string  // key — путь в нижнем регистре
+	path, key string  // key — paths.Fold(path): один файл — один ключ (повторы, память)
+	low       string  // путь в нижнем регистре — порядок ленты (naturalLess)
 	size, mod int64   // size < 0: размер неизвестен, в память не смотрим и не пишем
 	side      sidecar // .xmp рядом; пустой — нет
 }
@@ -173,7 +174,11 @@ func (s *Scanner) Scan(ctx context.Context, src Sources,
 	walkTime := time.Since(t0)
 
 	// Порядок задан заранее: списки потом собираются за один проход, без сортировки.
-	sort.Slice(files, func(i, j int) bool { return naturalLess(files[i].key, files[j].key) })
+	// Равны без регистра только на Linux (`Весна` и `ВЕСНА`): порядок — по точному пути, а не случаю.
+	sort.Slice(files, func(i, j int) bool {
+		a, b := &files[i], &files[j]
+		return naturalLess(a.low, b.low) || a.low == b.low && a.path < b.path
+	})
 	run := s.prepare(files)
 	run.advance()
 	report(run.list(), run.progress(), false)
@@ -343,7 +348,7 @@ func (s *Scanner) walk(ctx context.Context, src Sources, tick func(found int)) (
 	files := w.files
 	if len(w.sides.m) > 0 {
 		for i := range files {
-			files[i].side = sidecarFor(files[i].key, w.sides.m)
+			files[i].side = sidecarFor(sideKey(files[i].path), w.sides.m)
 		}
 	}
 	return files, ctx.Err()
@@ -366,12 +371,13 @@ func (w *scanWalk) addImage(p string, d fs.DirEntry, info fs.FileInfo) {
 
 // add — общее тело addImage и addLoose; load отдаёт сведения о файле, когда info == nil.
 func (w *scanWalk) add(p, name string, info fs.FileInfo, load func() fs.FileInfo) {
-	key := strings.ToLower(p)
+	key := paths.Fold(p)
 	if !isImage(name) || w.seen[key] {
 		return
 	}
 	w.seen[key] = true
-	f := scanFile{path: p, key: key, size: -1}
+	// ToLower ключа: на Windows и macOS он уже в нижнем регистре — без новой строки.
+	f := scanFile{path: p, key: key, low: strings.ToLower(key), size: -1}
 	if info == nil {
 		info = load()
 	}

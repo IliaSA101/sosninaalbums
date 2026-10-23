@@ -87,7 +87,7 @@ func (a *App) openPath(path string) (State, error) {
 	}
 	p, af, err := a.loadAlbum(path)
 	if err != nil {
-		return a.GetState(), err
+		return a.GetState(), openErr(err)
 	}
 	ed, err := album.NewEditor(p, path)
 	if err != nil {
@@ -111,6 +111,7 @@ func (a *App) SaveProject() (model.View, error) {
 	if err := ed.Save(""); err != nil {
 		return ed.View(), err
 	}
+	a.noticeBackup(ed)
 	return a.out(ed.View()), nil
 }
 
@@ -140,7 +141,7 @@ func (a *App) saveAs(ed *album.Editor, path string) (model.View, error) {
 		return ed.View(), err
 	}
 	// Файл, поверх которого пишут, — в копию: «Сохранить как» мог промахнуться мимо имени.
-	if cur := ed.Path(); cur == "" || !strings.EqualFold(filepath.Clean(cur), filepath.Clean(path)) {
+	if cur := ed.Path(); cur == "" || !paths.SamePath(cur, path) {
 		a.backupBefore(path, backupKey(path), true)
 	} else {
 		a.backupBefore(path, backupKey(path), false)
@@ -148,6 +149,7 @@ func (a *App) saveAs(ed *album.Editor, path string) (model.View, error) {
 	if err := ed.Save(path); err != nil {
 		return ed.View(), err
 	}
+	a.noticeBackup(ed)
 	a.rememberProject(path)
 	// Застрявший черновик (draftLocked) не трогаем: он нечитаем, но это данные пользователя.
 	if !a.draftLocked.Load() {
@@ -287,6 +289,7 @@ func (a *App) save() {
 		log.Printf("автосохранение: %v", paths.NoPath(err))
 		return
 	}
+	a.noticeBackup(ed)
 	v := ed.View() // dirty и path — после записи: правка в промежутке снова ставит dirty
 	a.emit("saved", Saved{Dirty: v.Dirty, Path: v.Path})
 }
@@ -310,7 +313,7 @@ func (a *App) dialogDir(kind string) string { return prefs.DialogDir(a.cfgDir, k
 
 // rememberRecent записывает альбом в «последние». Черновик (его путь внутренний) не пишем.
 func (a *App) rememberRecent(path string) {
-	if path == "" || strings.EqualFold(path, a.draftPath()) {
+	if path == "" || paths.FoldEqual(path, a.draftPath()) {
 		return
 	}
 	a.updateConfig(func(c *prefs.Config) { c.Recent = prefs.PushRecent(c.Recent, path) })

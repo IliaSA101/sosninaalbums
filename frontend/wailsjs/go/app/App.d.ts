@@ -22,6 +22,8 @@ export function AddPhotos(arg1:string,arg2:Array<string>,arg3:number):Promise<mo
 
 export function AddPlace(arg1:string,arg2:number,arg3:string):Promise<model.View>;
 
+export function AddQRSticker(arg1:string,arg2:number,arg3:string):Promise<app.StickerResult>;
+
 export function AddSticker(arg1:string,arg2:number,arg3:string):Promise<app.StickerResult>;
 
 export function AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>;
@@ -56,6 +58,8 @@ export function AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):
 
 export function AutoSimilar(arg1:Array<string>,arg2:model.AutoOpts):Promise<Array<model.SimilarDrop>>;
 
+export function BackToAuto(arg1:string,arg2:string,arg3:boolean):Promise<model.View>;
+
 export function Backups():Promise<Array<app.BackupInfo>>;
 
 export function CancelCollect():Promise<void>;
@@ -70,6 +74,8 @@ export function ChooseFiles():Promise<app.LooseResult>;
 
 export function ChooseFolder():Promise<model.View>;
 
+export function ClearAlbumBg():Promise<model.View>;
+
 export function ClearBackdrop(arg1:string,arg2:string):Promise<model.View>;
 
 export function ClearCoverGuide():Promise<model.View>;
@@ -82,6 +88,8 @@ export function ClearSpreadGuide():Promise<model.View>;
 
 export function ClearVignette(arg1:string):Promise<model.View>;
 
+export function ClipState():Promise<model.ClipInfo>;
+
 export function Collect(arg1:app.CollectOptions):Promise<boolean>;
 
 export function CollectInfo(arg1:boolean):Promise<collect.Info>;
@@ -92,11 +100,17 @@ export function CopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,a
 
 export function CopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<app.GridResult>;
 
+export function CopyItems(arg1:string,arg2:model.ClipSel):Promise<model.ClipInfo>;
+
 export function CoverPresets():Promise<Array<model.CoverPreset>>;
 
 export function CoverSpineText():Promise<model.View>;
 
 export function CreateCover(arg1:string,arg2:string):Promise<model.View>;
+
+export function CropsToKeep(arg1:string):Promise<number>;
+
+export function CutItems(arg1:string,arg2:model.ClipSel):Promise<app.ClipResult>;
 
 export function DecorCatalog(arg1:string):Promise<app.DecorCatalog>;
 
@@ -121,6 +135,8 @@ export function DropFonts(arg1:Array<string>):Promise<Array<string>>;
 export function DropPhotos(arg1:string,arg2:string,arg3:Array<string>,arg4:number,arg5:string):Promise<app.DropResult>;
 
 export function DuplicateGrid(arg1:string,arg2:number,arg3:boolean):Promise<model.View>;
+
+export function DuplicateItems(arg1:string,arg2:model.ClipSel):Promise<app.PasteResult>;
 
 export function Export(arg1:app.ExportOptions):Promise<boolean>;
 
@@ -168,6 +184,8 @@ export function LibraryPacks():Promise<app.PackList>;
 
 export function LogUI(arg1:string):Promise<void>;
 
+export function MarginNote(arg1:number,arg2:number):Promise<string>;
+
 export function Marks():Promise<Record<string, model.MarkView>>;
 
 export function MergeSpreads(arg1:string):Promise<model.View>;
@@ -194,11 +212,15 @@ export function OpenFabrika():Promise<void>;
 
 export function OpenFsfera():Promise<void>;
 
+export function OpenLink(arg1:string):Promise<void>;
+
 export function OpenProject():Promise<app.State>;
 
 export function OpenRecent(arg1:string):Promise<app.State>;
 
 export function PagePresets():Promise<Array<model.PagePreset>>;
+
+export function PasteItems(arg1:model.PasteReq):Promise<app.PasteResult>;
 
 export function PasteNames(arg1:string,arg2:model.NamesOpts):Promise<app.NamesResult>;
 
@@ -237,6 +259,8 @@ export function PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.V
 export function PrintPlans():Promise<Array<printshop.Plan>>;
 
 export function PurgePhotos(arg1:Array<string>):Promise<model.View>;
+
+export function QRPreview(arg1:string):Promise<app.QRInfo>;
 
 export function Recent():Promise<Array<prefs.RecentProject>>;
 
@@ -298,6 +322,10 @@ export function SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>;
 
 export function ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>;
 
+export function SetAlbumBg(arg1:string,arg2:boolean):Promise<model.View>;
+
+export function SetAlbumBgFade(arg1:number,arg2:string):Promise<model.View>;
+
 export function SetBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
 export function SetBackdropAngle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>;
@@ -345,6 +373,8 @@ export function SetLevel(arg1:string):Promise<prefs.Prefs>;
 export function SetLibraryNet(arg1:boolean,arg2:boolean):Promise<app.LibraryNet>;
 
 export function SetMarks(arg1:Array<string>,arg2:model.MarkPatch):Promise<model.View>;
+
+export function SetNoAlbumBg(arg1:string,arg2:boolean):Promise<model.View>;
 
 export function SetPattern(arg1:string,arg2:string,arg3:model.Pattern,arg4:string):Promise<model.View>;
 
@@ -435,3 +465,5 @@ export function UpdateLibrary():Promise<app.LibraryUpdate>;
 export function VaryLayouts(arg1:Array<string>,arg2:number,arg3:Array<string>):Promise<model.View>;
 
 export function VignetteChoices(arg1:string,arg2:number,arg3:number,arg4:string):Promise<Array<model.VigChoice>>;
+
+export function WhereUsed(arg1:Array<string>):Promise<Array<model.UsedAt>>;

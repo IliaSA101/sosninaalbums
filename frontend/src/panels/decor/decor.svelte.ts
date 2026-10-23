@@ -4,7 +4,7 @@
 import { Api, store } from '../../base/core/store.svelte'
 import { errText } from '../../base/words/errtext'
 import type { BackdropScope, GridPlan, GridTarget } from '../../base/core/types'
-import { sheetIn, unitOf } from '../../base/geom/sheet'
+import { isCover, isSheet, sheetIn, unitOf } from '../../base/geom/sheet'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { applyBackground } from '../../editor/backdrop/backdropact'
 import { currentPage, sticker } from '../../editor/sticker/sticker.svelte'
@@ -14,6 +14,7 @@ import {
   firstTheme,
   importSummary,
   importTheme,
+  standingId,
   type DecorCatalog,
   type DecorImport,
   type DecorItem,
@@ -23,13 +24,17 @@ import {
 import {
   bgAskText,
   bgDoneText,
+  bgMissing,
   bgNums,
+  bgOfferText,
   bgPickDefault,
   bgPickShown,
   bgSelShown,
+  bgStreak,
   bgTargets,
   isMany,
   type BgPick,
+  type BgPut,
   type BgPlanInfo,
   type BgResult,
 } from './bgtargets'
@@ -50,7 +55,8 @@ export type DecorAsk =
 class DecorUi {
   // Открытое окно: что ставим (вид), на каком листе и в какую область. replace — ID стикера, которому ищут замену
   // («Заменить…» в карточке «Стикер»); нет — стикер добавляется.
-  cur = $state<{ kind: DecorKind; spread: string; scope: BackdropScope; replace?: string } | null>(null)
+  // album — окно «Фон альбома» (098, из настроек и карточки листа): без строки «На», «Куда» — разворот или страницы.
+  cur = $state<{ kind: DecorKind; spread: string; scope: BackdropScope; replace?: string; album?: boolean } | null>(null)
   cat = $state<DecorCatalog | null>(null)
   theme = $state('')
   loading = $state(false)
@@ -71,9 +77,15 @@ class DecorUi {
   bgPick = $state<BgPick>('this')
   bgText = $state('')
   numsFocus = $state(0)
+  // 098: «Куда» для фона альбома — на весь разворот или на каждую страницу; запоминается на сеанс окна (show берёт из альбома)
+  albumPages = $state(false)
   // 079: «Куда» окна «Рамочки» — выделенные места или весь лист; сброс при открытии (show)
   frameWhere = $state<FrameWhere>('all')
   private req = 0
+  // 100-8: серия «тот же фон на соседний лист»; фоны, о которых уже спрашивали, — до смены альбома (store.openSeq).
+  private lastPut: BgPut | null = null
+  private offered = new Set<string>()
+  private seriesSeq = 0
   // 073-1: названия поставленных за сеанс наборов; окно встаёт на тему первого из них один раз для каждого вида.
   private fresh = new Set<string>()
   private shown = new Set<DecorKind>()
@@ -89,9 +101,31 @@ class DecorUi {
     this.bgText = ''
     this.numsFocus = 0
     this.frameWhere = frameWhereDefault(this.frameSel(spread).length)
+    this.albumPages = !!store.view.albumBg?.pages && !isSheet(store.view.settings)
     this.bgPick =
       kind === 'bg' && bgPickShown(sheetIn(store.view, spread), store.view.spreads.length) ? bgPickDefault(this.selIds().length) : 'this'
     void this.refresh(this.takeFresh(kind))
+  }
+
+  // 098: окно «Фон альбома» — лист для плиток берём обычный (не обложку: у неё свои размеры), область не нужна.
+  showAlbum() {
+    const sp = store.spread
+    const id = sp && !isCover(sp) ? sp.id : (store.view.spreads[0]?.id ?? sp?.id)
+    if (!id) return
+    this.show('bg', id, 'spread')
+    if (this.cur) this.cur = { ...this.cur, album: true }
+    this.bgPick = 'album'
+  }
+
+  // Ставим фон альбома: окно «Фон альбома» или пункт «Весь альбом» в строке «На» (она есть не везде — см. bgPickShown).
+  albumNow = (): boolean => {
+    const c = this.cur
+    if (c?.kind !== 'bg') return false
+    return !!c.album || (this.bgPick === 'album' && bgPickShown(sheetIn(store.view, c.spread), store.view.spreads.length))
+  }
+
+  setAlbumPages(pages: boolean) {
+    this.albumPages = pages && !isSheet(store.view.settings)
   }
 
   // 079: выделенные места листа (ID для ApplyBorder); выделение живёт на текущем листе, на чужом — пусто
@@ -277,6 +311,13 @@ class DecorUi {
   // Фон (077): «этот лист» — прежний путь (окно закрыто, своё — сразу режим фона); набор — сухой прогон, вопрос,
   // постановка одним вызовом. Неверные номера ничего не ставят: фокус в поле, ошибка под ним.
   private async pickBg(c: NonNullable<typeof this.cur>, item: DecorItem) {
+    if (this.albumNow()) {
+      // 098: одна правка Go — один шаг отмены; тот же фон повторно холостой (rev не меняется)
+      const pages = this.albumPages && !isSheet(store.view.settings)
+      this.close()
+      await store.run(Api.SetAlbumBg(item.id, pages))
+      return
+    }
     const { pick, targets, error } = this.bgPlan()
     if (error) {
       this.numsFocus++
@@ -284,8 +325,11 @@ class DecorUi {
     }
     if (!isMany(pick, targets, c.spread)) {
       this.close()
-      return applyBackground(c.spread, c.scope, item.id)
+      await applyBackground(c.spread, c.scope, item.id)
+      this.offerAll(c.spread, c.scope, item.id)
+      return
     }
+    this.lastPut = null
     if (this.busy) return
     this.busy = true
     try {
@@ -294,6 +338,62 @@ class DecorUi {
       const text = bgAskText(plan, unitOf(store.view.settings))
       if (text) this.ask = { kind: 'bgMany', id: item.id, text, targets }
       else await this.putMany(targets, item.id)
+    } catch (e) {
+      store.notify(errText(e), 'error')
+    } finally {
+      this.busy = false
+    }
+  }
+
+  // 100-8: второй подряд тот же фон на соседний лист — тост «На все развороты?» (один раз на фон за открытие альбома).
+  // Только если фон встал: холостая или отменённая постановка серии не продолжает.
+  private offerAll(spread: string, scope: BackdropScope, id: string) {
+    if (this.seriesSeq !== store.openSeq) {
+      this.seriesSeq = store.openSeq
+      this.lastPut = null
+      this.offered.clear()
+    }
+    const sp = sheetIn(store.view, spread)
+    const index = store.view.spreads.findIndex((s) => s.id === spread)
+    if (!bgPickShown(sp, store.view.spreads.length) || index < 0 || standingId(sp, scope, this.bgItems) !== id) {
+      this.lastPut = null
+      return
+    }
+    const cur: BgPut = { item: id, scope, index }
+    // Прошлый лист серии должен всё ещё стоять с этим фоном: отмену между постановками серия не переживает.
+    const prev = this.lastPut ? store.view.spreads[this.lastPut.index] : undefined
+    if (this.lastPut && (!prev || standingId(prev, this.lastPut.scope, this.bgItems) !== this.lastPut.item)) this.lastPut = null
+    const miss = bgMissing(store.view.spreads, scope, id, this.bgItems)
+    if (miss > 0 && bgStreak(this.lastPut, cur, this.offered)) {
+      this.offered.add(id)
+      const seq = store.openSeq
+      store.notify(bgOfferText(miss, unitOf(store.view.settings)), 'info', {
+        label: 'На все',
+        run: () => void this.putAll(id, scope, spread, seq),
+      })
+      // Любая правка и Ctrl+Z гасят тост (как «Вернуть»): серия не переживает отмену.
+      if (store.toast) store.toast.rev = store.view.rev
+    }
+    this.lastPut = cur
+  }
+
+  // «На все» в тосте: то же, что выбор «Все развороты» в окне — сухой прогон; уходят фото фона — вопрос в окне «Фоны»,
+  // иначе сразу ставим. Один шаг отмены (ApplyBackgroundTo).
+  async putAll(id: string, scope: BackdropScope, from: string, seq = store.openSeq) {
+    if (this.busy || seq !== store.openSeq) return // другой альбом — тост не про него
+    const all = this.allIds()
+    const cur = sheetIn(store.view, from) ? from : (store.spread?.id ?? all[0])
+    if (!cur) return
+    const targets = bgTargets({ pick: 'all', cur, scope, sel: [], nums: [], all })
+    this.busy = true
+    try {
+      const plan = (await Api.PlanBackgroundTo(targets, id)) as unknown as BgPlanInfo
+      const text = bgAskText(plan, unitOf(store.view.settings))
+      if (text) {
+        this.show('bg', cur, scope)
+        this.bgPick = 'all'
+        this.ask = { kind: 'bgMany', id, text, targets }
+      } else await this.putMany(targets, id)
     } catch (e) {
       store.notify(errText(e), 'error')
     } finally {
@@ -382,6 +482,8 @@ class DecorUi {
       const go = (await Api.ImportDecor(c.kind, importTheme(this.theme))) as unknown as DecorImport
       // SVG от Go рисуем здесь по очереди; итог идёт в тот же тост, что и остальные файлы.
       const res = go.svg?.length ? mergeImport(go, await rasterSvgs(go.svg, Api.AddDecorPNG)) : go
+      // 100-1: окно переходит в тему, куда легло своё («Мои», если грузили из «Все» или «Недавних»)
+      if (res.added.length && this.cur) this.setTheme(importTheme(this.theme))
       const sum = importSummary(res)
       if (sum) store.notify(sum.text, sum.error ? 'error' : 'info')
       if (this.cur) await this.refresh()

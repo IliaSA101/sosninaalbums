@@ -265,7 +265,6 @@ func TestMarksSurviveAlbumEdits(t *testing.T) {
 }
 
 func TestMarksRelink(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	s := edtest.NewRelinkSetup(t)
 	oldA := s.E.Refs()[s.IdA].Path
 	lib := filepath.Join(s.OldFolder, "Отбор", "3.jpg") // фото ленты не из альбома
@@ -372,7 +371,6 @@ func TestMarksUndoWeight(t *testing.T) {
 // Занятый путь: у нового пути уже есть своя отметка — обе остаются на месте; две отметки на
 // один новый путь — переезжает одна.
 func TestMarksRelinkTaken(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	s := edtest.NewRelinkSetup(t)
 	oldA := s.E.Refs()[s.IdA].Path
 	edtest.SetMarks(t, s.E, []model.PhotoInfo{{ID: s.IdA, Path: oldA}}, model.MarkPatch{Rating: edtest.Ip(4)})

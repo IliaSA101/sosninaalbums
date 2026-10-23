@@ -17,8 +17,34 @@ export interface Settings {
   sheet?: boolean // альбом из отдельных листов (031): pageW — ширина листа, шва нет
 }
 
+// Фон альбома для строки настроек (098, model.AlbumBgView): узор или фото, один на альбом; нет в View — фона нет.
+export interface AlbumBg {
+  name: string // имя плитки
+  lib?: string // ключ своего фото из библиотеки; нет — узор
+  fade: number // прозрачность 0…1
+  pages: boolean // на страницах листов, а не только на развороте
+  preset?: string // плитка каталога узора: образец и отметка в окне «Фоны»
+  photo?: string // ID записи фото фона (образец /media/p/<id>, когда ключа библиотеки уже нет); нет — узор
+}
+
+// Где стоит фото (084, Api.PhotoUses): sheet — индекс листа, -1 — «Фон альбома» (098); label — подпись для людей.
+export interface PhotoUse {
+  sheet: number
+  label: string
+  ref?: string // запись вхождения (098): есть, только если не та, о которой спросили (копия семьи)
+}
+
+// Ответ Api.WhereUsed (098, до 098 G2 — заглушка по design §2.4): где стоит файл и его копии.
+export interface UsedAt {
+  id: string // ID файла (BaseID переданного)
+  uses: PhotoUse[] // по семье; не null
+  places: number // сколько мест у всех записей семьи
+  move: string // запись единственного места; '' — мест 0 или больше одного
+}
+
 export interface View {
   spreads: SpreadView[]
+  albumBg?: AlbumBg // фон альбома (098); нет — его нет
   // Цепочка видов (075): seq растёт у App на каждый отданный вид, 0 — вне цепочки. base > 0 — дельта к виду с seq == base:
   // spreads — только изменённые, order — ID всех разворотов по порядку (viewdelta.ts).
   seq?: number

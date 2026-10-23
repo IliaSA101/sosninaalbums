@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ADD_OWN,
   ALL,
+  OWN_TIP_STICKER,
   MINE,
   RECENT,
   defaultScope,
@@ -9,6 +11,7 @@ import {
   firstTheme,
   importSummary,
   importTheme,
+  ownKind,
   presetOf,
   presetOfView,
   scopeIn,
@@ -110,9 +113,26 @@ describe('темы окна', () => {
   })
 
   it('пустая тема: «Мои» зовёт загрузить, а при чтении без загрузки — нет', () => {
-    expect(emptyText(MINE, false)).toBe('Загрузите свои кнопкой выше')
-    expect(emptyText(MINE, true)).not.toContain('кнопкой')
+    expect(emptyText(MINE, false)).toBe('Здесь появятся ваши фоны: нажмите «Добавить свой фон…»')
+    expect(emptyText(MINE, true)).not.toContain('нажмите')
     expect(emptyText('basic', false)).toBe('В этой теме пока пусто')
+  })
+})
+
+describe('ADD_OWN и пустые «Мои» по виду', () => {
+  it('одна кнопка на три окна, названия по виду', () => {
+    expect(ADD_OWN).toEqual({ bg: 'Добавить свой фон…', sticker: 'Добавить свой стикер…', frame: 'Добавить свою рамочку…' })
+    expect(ownKind('spread')).toBe(false)
+    expect(['bg', 'sticker', 'frame'].every((k) => ownKind(k as 'bg'))).toBe(true)
+  })
+  it('пустые «Мои» у стикеров — про стикеры, а не про фоны', () => {
+    expect(emptyText(MINE, false, 'sticker')).toBe('Здесь появятся ваши стикеры: нажмите «Добавить свой стикер…»')
+    expect(emptyText(MINE, true, 'sticker')).toBe('Здесь появятся ваши стикеры')
+  })
+  it('подсказка стикера — про логотип и белый прямоугольник JPEG; у фона её нет', () => {
+    expect(uploadHint('sticker')).toContain(OWN_TIP_STICKER)
+    expect(OWN_TIP_STICKER).toBe('Логотип и надписи — PNG или SVG с прозрачным фоном; JPEG ляжет с белым прямоугольником')
+    expect(uploadHint('bg')).not.toContain('Логотип')
   })
 })
 

@@ -97,6 +97,8 @@ type BackdropView struct {
 	Fade  float64     `json:"fade"` // прозрачность 0..1, всегда есть
 	// Lib — ключ своего из библиотеки (048): имя UI берёт из каталога; "" — обычное фото.
 	Lib string `json:"lib,omitempty"`
+	// Album — это фон альбома (098): щелчком не выделяется, лист его своим фоном не считает.
+	Album bool `json:"album,omitempty"`
 }
 
 type PageView struct {
@@ -143,6 +145,8 @@ type FrameView struct {
 	WinShape  string      `json:"winShape"`
 	WinRadius float64     `json:"winRadius"`
 	Fade      float64     `json:"fade"`
+	// Own — свой кадр фото (PhotoRef.Asp, 098) для карточки «Свой кадр 16 : 9»; 0 — нет.
+	Own float64 `json:"own,omitempty"`
 }
 
 // TextView — блок текста: рамка и строки в мм разворота (у строки x — левый

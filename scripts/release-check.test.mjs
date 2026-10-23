@@ -4,7 +4,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { changelogSection, checkAll, checkNeeds, parseJobs } from './release-check.mjs'
+import { fileURLToPath } from 'node:url'
+import { NOTICE_MUST, changelogSection, checkAll, checkLicense, checkNeeds, checkReadmeMedia, parseJobs } from './release-check.mjs'
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+// Настоящие LICENSE и NOTICE.md репозитория: макет проверяется на тех же файлах, что уйдут в выпуск.
+const LICENSE = fs.readFileSync(path.join(REPO, 'LICENSE'), 'utf8')
+const NOTICE = fs.readFileSync(path.join(REPO, 'NOTICE.md'), 'utf8')
 
 const YML = `name: Release
 jobs:
@@ -26,12 +33,22 @@ jobs:
     needs: [prepare, pack, mac-check]
 `
 
+const ID_A = 'aaaaaaaa-1111-2222-3333-444444444444'
+const ID_B = 'bbbbbbbb-1111-2222-3333-444444444444'
+const URL = (id) => `https://github.com/user-attachments/assets/${id}\n`
+const MEDIA = URL(ID_A) + URL(ID_B) + URL(ID_A) + URL(ID_B)
+
 const FILES = {
+  'docs/media/demo.webp': 'w',
+  'docs/media/screenshot.jpg': 'j',
+  'docs/media/CREDITS.md': '# Фото\n',
   'wails.json': JSON.stringify({ info: { productVersion: '1.2.0' } }),
-  'README.md': '# X\n\n- Status: version 1.2.0, actively developed\n',
+  'README.md': '# X\n\n- Status: version 1.2.0, actively developed\n' + MEDIA,
   'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.0'\nexport const WHATS_NEW: readonly string[] = [\n  'раз',\n]\n",
   'CHANGELOG.md': '# История\n\n## 1.2.0 — 2026-01-01\n\n### Добавлено\n\n- Новое (051)\n- Ещё (052)\n\n## 1.1.0 — 2025-12-01\n\n- Старое\n',
   '.github/workflows/release.yml': YML,
+  LICENSE,
+  'NOTICE.md': NOTICE,
   'docs/specs/1.2/051-one.md': '# 051\n',
   'docs/specs/1.2/052-two.md': '# 052\n',
   'docs/specs/README.md': '| 051 | [один](1.2/051-one.md) | done |\n| 052 | [два](1.2/052-two.md) | done |\n',
@@ -72,7 +89,7 @@ test('версия: каждое из четырёх мест отдельно',
     assert.match(e[0], part)
   }
   bad({ 'wails.json': JSON.stringify({ info: { productVersion: '1.1.0' } }) }, /wails\.json/)
-  bad({ 'README.md': '- Status: version 1.1.0, x\n' }, /README/)
+  bad({ 'README.md': '- Status: version 1.1.0, x\n' + MEDIA }, /README/)
   bad({ 'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.1.0'\nexport const WHATS_NEW: readonly string[] = ['а']\n" }, /whatsnew/)
   bad({ 'CHANGELOG.md': '## 1.1.0\n\n- а\n' }, /нет раздела/)
 })
@@ -102,7 +119,7 @@ test('спеки: не в таблице README и не упомянутая р�
   assert.deepEqual(no, ['спека 053 (docs/specs/1.2) не упомянута в CHANGELOG 1.2.0'])
   // CHANGELOG без номеров — сверка молчит, патч без своей папки спек тоже
   assert.deepEqual(run({ 'CHANGELOG.md': '## 1.2.0\n\n- а\n' }, '1.2.0').errors, [])
-  assert.deepEqual(run({ 'wails.json': '{"info":{"productVersion":"1.2.1"}}', 'README.md': '- Status: version 1.2.1, x\n', 'CHANGELOG.md': '## 1.2.1\n\n- а\n', 'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.1'\nexport const WHATS_NEW: readonly string[] = ['а']\n" }).errors, [])
+  assert.deepEqual(run({ 'wails.json': '{"info":{"productVersion":"1.2.1"}}', 'README.md': '- Status: version 1.2.1, x\n' + MEDIA, 'CHANGELOG.md': '## 1.2.1\n\n- а\n', 'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.1'\nexport const WHATS_NEW: readonly string[] = ['а']\n" }).errors, [])
 })
 
 test('needs: все задания в цепочке публикации', () => {
@@ -134,4 +151,50 @@ test('arm64: тест из release.yml должен существовать, э
   assert.ok(run({ 'internal/layout/testdata/golden/first.sha': '' }, '1.2.0').errors.some((e) => /пустой эталон/.test(e)))
   assert.ok(run({ 'internal/layout/testdata/golden/first.sha': null }, '1.2.0').errors.some((e) => /нет эталонов/.test(e)))
   assert.ok(run({ '.github/workflows/release.yml': 'jobs:\n  release:\n    needs: []\n' }, '1.2.0').errors.some((e) => /нет проверки эталонов/.test(e)))
+})
+
+test('release-check: лицензия GPL-3.0 и условие 7(b)', () => {
+  // файлы самого репозитория проходят
+  assert.deepEqual(checkLicense(REPO), [])
+  assert.match(LICENSE, /GNU GENERAL PUBLIC LICENSE\s+Version 3, 29 June 2007/)
+  // CRLF (Windows, autocrlf) — тот же текст
+  assert.deepEqual(run({ LICENSE: LICENSE.replace(/\n/g, '\r\n') }, '1.2.0').errors, [])
+  const lic = (mod) => run(mod, '1.2.0').errors
+  // нет файлов
+  assert.deepEqual(lic({ LICENSE: null }), ['LICENSE: нет файла'])
+  assert.deepEqual(lic({ 'NOTICE.md': null }), ['NOTICE.md: нет файла'])
+  // чужая лицензия, пустой файл, правка в одну букву, строка сверху и снизу — всё не GPL v3 «как есть»
+  for (const bad of ['MIT License\n\nCopyright (c) 2026\n', '', LICENSE.replace('Version 3', 'Version 2'), LICENSE.replace('GNU', 'GNY'), 'Sosnina Albums\n' + LICENSE, LICENSE + '\nAbout\n']) {
+    const e = lic({ LICENSE: bad })
+    assert.equal(e.length, 1, JSON.stringify(bad.slice(0, 30)))
+    assert.match(e[0], /LICENSE: не точный текст GNU GPL v3/)
+  }
+  // каждая строка условия 7(b) обязательна, а пустой NOTICE ругается на все
+  for (const [what, needle] of NOTICE_MUST) {
+    const e = lic({ 'NOTICE.md': NOTICE.split(needle).join('') })
+    assert.deepEqual(e, [`NOTICE.md: нет условия 7(b): ${what}`])
+  }
+  assert.equal(lic({ 'NOTICE.md': '' }).length, NOTICE_MUST.length)
+})
+
+test('ролики README: заглушка, число адресов, файлы, размеры, старый снимок', () => {
+  const m = (mod) => run(mod, '1.2.0').errors
+  const head = '- Status: version 1.2.0, x\n'
+  assert.deepEqual(m({}), [])
+  const stub = m({ 'README.md': head + URL('TODO-README-MEDIA-A') + URL('TODO-README-MEDIA-B') })
+  assert.ok(stub.some((e) => /TODO-README-MEDIA/.test(e)))
+  assert.ok(m({ 'README.md': head + URL(ID_A) + URL(ID_A) }).some((e) => /адресов роликов user-attachments 1/.test(e)))
+  assert.ok(m({ 'README.md': head + URL(ID_A) + URL(ID_B) + URL(ID_A) }).some((e) => /встречается 1 раз/.test(e)))
+  assert.ok(m({ 'docs/media/demo.webp': null }).some((e) => /demo\.webp: нет файла/.test(e)))
+  assert.ok(m({ 'docs/media/CREDITS.md': null }).some((e) => /CREDITS\.md: нет файла/.test(e)))
+  assert.ok(m({ 'docs/media/demo.webp': 'x'.repeat(2621441) }).some((e) => /demo\.webp.*больше предела/.test(e)))
+  assert.ok(m({ 'docs/media/screenshot.jpg': 'x'.repeat(409601) }).some((e) => /screenshot\.jpg.*больше предела/.test(e)))
+  assert.deepEqual(m({ 'docs/media/demo.webp': 'x'.repeat(2621440) }), [])
+  assert.ok(m({ 'README.md': head + MEDIA + '![x](docs/screenshot.png)\n' }).some((e) => /screenshot\.png/.test(e)))
+  const root = repo({})
+  try {
+    assert.deepEqual(checkReadmeMedia(root), [])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
 })

@@ -330,6 +330,7 @@ describe('«Загрузить своё…»', () => {
     expect(store.toast?.text).toBe('Добавлено: 3, пропущено: 1 (x.png — уже есть)')
     expect(api.DecorCatalog).toHaveBeenCalledTimes(2)
     expect(decor.busy).toBe(false)
+    expect(decor.theme).toBe('mine') // 100-1: после загрузки окно в теме «Мои»
   })
 
   it('из своей темы — в неё', async () => {
@@ -344,8 +345,10 @@ describe('«Загрузить своё…»', () => {
   it('диалог закрыли ничего не выбрав — без тоста', async () => {
     api.ImportDecor.mockResolvedValue({ added: [], skipped: [] })
     await open()
+    const was = decor.theme
     await decor.upload()
     expect(store.toast).toBeNull()
+    expect(decor.theme).toBe(was) // ничего не добавлено — тема прежняя
   })
 
   it('библиотека только для чтения — загрузки нет', async () => {

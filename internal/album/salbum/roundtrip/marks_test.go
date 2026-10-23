@@ -51,8 +51,8 @@ func TestLoadV4NoMarks(t *testing.T) {
 	if f := fileJSON(t, path); f.Version != model.FormatVersion || bytes.Contains(saved, []byte(`"marks"`)) {
 		t.Fatalf("версия %d, marks в файле без отметок: %v", f.Version, bytes.Contains(saved, []byte(`"marks"`)))
 	}
-	if _, err := os.Stat(path + ".v4.bak"); err != nil {
-		t.Fatal("нет .v4.bak")
+	if _, err := os.Stat(salbum.BackupName(path, 4, 1)); err != nil {
+		t.Fatal("нет копии для 0.6")
 	}
 }
 
@@ -124,7 +124,6 @@ func TestMarksRoundTrip(t *testing.T) {
 
 // Битые записи отбрасываются по одной, файл открывается.
 func TestMarksFileBadEntries(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	dir := testkit.TempDir(t)
 	path := filepath.Join(dir, "a.salbum")
 	esc := func(s string) string { b, _ := json.Marshal(s); return string(b) }
@@ -144,6 +143,9 @@ func TestMarksFileBadEntries(t *testing.T) {
 	want := map[string][3]any{
 		library.IDFor(ok):                          {-9, "red", -9}, // rating 9 → nil, повтор 1.JPG отброшен
 		library.IDFor(filepath.Join(dir, "3.jpg")): {-9, "-", -1},
+	}
+	if up := filepath.Join(dir, "1.JPG"); !paths.FoldEqual(up, ok) { // Linux: другой файл, не повтор
+		want[library.IDFor(up)] = [3]any{2, "-", -9}
 	}
 	edtest.WantMarks(t, e, want)
 }

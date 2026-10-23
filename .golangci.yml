@@ -186,6 +186,8 @@ linters:
           list-mode: strict
           allow:
             - $gostd
+            # QR-код по ссылке (спека 0.23/100 п. 3, «да» владельца 22.10).
+            - github.com/skip2/go-qrcode
             - github.com/IliaSA101/sosninaalbums/internal/decor$
             - github.com/IliaSA101/sosninaalbums/internal/decor/gen
             - github.com/IliaSA101/sosninaalbums/internal/decor/svgcheck

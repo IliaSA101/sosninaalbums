@@ -388,7 +388,7 @@ class TestVariants(unittest.TestCase):
 
     def test_real_guide_builds_every_variant(self):
         with tempfile.TemporaryDirectory() as d:
-            for v in (k for k in build_docx.VARIANTS if k not in ("win", "macos")):
+            for v in (k for k in build_docx.VARIANTS if k not in ("win", "macos", "linux")):
                 out = build_docx.build(GUIDE, "0.0.1", Path(d), v)
                 self.assertIn(f"macos-{v}", out.name)
                 doc = Document(out)
@@ -400,12 +400,13 @@ class TestVariants(unittest.TestCase):
     def test_label_table(self):
         """Таблица меток design 039 §7.1: что видно в каком варианте."""
         text = []
-        for tag in ("general", "both", "win", "windows", "mac", "26", "15", "12-14", "macos"):
+        for tag in ("general", "both", "win", "windows", "linux", "mac", "26", "15", "12-14", "macos"):
             text += [f"<!-- only: {tag} -->", tag, "<!-- /only -->"]
         seen = lambda v: set(mdparse.select_variant(text, v))
         self.assertEqual(seen(None), {"general", "both", "win", "26", "15", "12-14"})
         self.assertEqual(seen("win"), {"win", "windows"})
         self.assertEqual(seen("macos"), {"general", "macos", "26", "15", "12-14"})
+        self.assertEqual(seen("linux"), {"linux"})
         self.assertEqual(seen("26"), {"mac", "26"})
         self.assertEqual(seen("15"), {"mac", "15"})
         self.assertEqual(seen("12-14"), {"mac", "12-14"})
@@ -451,6 +452,34 @@ class TestVariants(unittest.TestCase):
                     if (m := mdparse.IMG_RE.match(line))]
             self.assertTrue(refs and all("/win-" in r for r in refs), refs)
             self.assertEqual(len(doc.inline_shapes), len(refs))
+
+
+    def test_real_guide_linux_file(self):
+        """101-13: файл Linux собирается; в нём нет разделов Windows и Mac, в общих файлах нет Linux."""
+        self.assertEqual(build_docx.out_name("1.2.3", "docx", "linux"),
+                         "SosninaAlbums-1.2.3-install-guide-linux-ru.docx")
+        with tempfile.TemporaryDirectory() as d:
+            out = build_docx.build(GUIDE, "0.0.1", Path(d), "linux")
+            self.assertEqual(out.name, "SosninaAlbums-0.0.1-install-guide-linux-ru.docx")
+            doc = Document(out)
+            text = "\n".join(p.text for p in doc.paragraphs)
+            tables = "\n".join(c.text for t in doc.tables for r in t.rows for c in r.cells)
+            self.assertIn("Как установить на Linux", text)
+            for want in ("sudo apt install ./SosninaAlbums-<версия>-linux-amd64.deb", "sudo apt remove sosninaalbums",
+                         "GTK 3", "WebKitGTK 4.1"):
+                self.assertIn(want, text)
+            for want in ("~/.config/SosninaAlbums", "~/.cache/SosninaAlbums", "~/.local/share/SosninaAlbums/backups"):
+                self.assertIn(want, tables)
+            self.assertIn("linux-amd64.tar.gz", tables)
+            for other in ("SmartScreen", "Windows 10", ".exe", "Gatekeeper", "Finder", "xattr", "macOS", "{{"):
+                self.assertNotIn(other, text)
+                self.assertNotIn(other, tables)
+            self.assertEqual(len(doc.inline_shapes), 0)  # снимков экрана Linux в 0.23 нет
+        # раздел Linux не попадает ни в общий файл, ни в файлы Windows и Mac
+        lines = GUIDE.read_text(encoding="utf-8").splitlines()
+        for v in (None, "win", "macos", "26", "15", "12-14"):
+            self.assertNotIn("linux-amd64", "\n".join(mdparse.select_variant(lines, v)), v)
+            self.assertNotIn("apt install", "\n".join(mdparse.select_variant(lines, v)), v)
 
 
 class TestPlaceRun(unittest.TestCase):

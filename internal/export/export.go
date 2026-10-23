@@ -10,10 +10,10 @@ import (
 	"image/jpeg"
 	"io"
 	"math"
-	"os"
 	"strconv"
 
 	"github.com/IliaSA101/sosninaalbums/internal/colorspace"
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
 )
@@ -29,7 +29,7 @@ func FileName(i, total int) string {
 
 // IsOurs — есть ли в начале файла наша COM-метка. Читает не больше 64 байт.
 func IsOurs(path string) bool {
-	f, err := os.Open(path)
+	f, err := imgfile.OpenRegular(path)
 	if err != nil {
 		return false
 	}

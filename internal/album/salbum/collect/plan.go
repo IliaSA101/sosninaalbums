@@ -15,7 +15,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -107,7 +106,7 @@ type Info struct {
 
 // Info — сводка плана; сайдкары считаются только в байтах.
 func (pl Plan) Info() Info {
-	in := Info{Missing: len(pl.Missing), MissingGuides: pl.MissingGuides, Bytes: pl.Bytes,
+	in := Info{Missing: filesOf(pl.Missing), MissingGuides: pl.MissingGuides, Bytes: pl.Bytes,
 		FontsRestricted: append([]string{}, pl.FontsRestricted...), MissingFonts: pl.MissingFonts}
 	for _, it := range pl.Items {
 		switch {
@@ -128,12 +127,22 @@ func (pl Plan) Info() Info {
 	return in
 }
 
+// filesOf — сколько файлов за ID записей: копии (098) одного файла — один (люди считают файлы,
+// decisions 098-20). Plan.Missing остаётся по записям — его сверяет Save.
+func filesOf(ids []string) int {
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		seen[model.BaseID(id)] = true
+	}
+	return len(seen)
+}
+
 // reachable — отвечает ли том источника; подменяется в тестах.
 var reachable = osx.Reachable
 
 // Make — план сбора проекта p в папку dir ("" — без сверки с папкой назначения: сводка окна,
 // ничего не пропускается). extra — пути фото ленты (режим «Все», не nil): берутся лежащие внутри
-// папок альбома и все отдельные фото (097). stat — Stat источника (os.Stat; подменяется в тестах).
+// папок альбома и все отдельные фото (097). stat — Lstat источника (os.Lstat; подменяется в тестах): ссылки — regular.
 func Make(p *model.Project, extra []string, dir string, stat func(string) (fs.FileInfo, error)) (Plan, error) {
 	var pl Plan
 	roots := makeRoots(p.Folders)
@@ -173,24 +182,17 @@ func Make(p *model.Project, extra []string, dir string, stat func(string) (fs.Fi
 type src struct {
 	kind    string
 	path    string
-	low     string // path в нижнем регистре
+	key     string // key(path): «внутри корня» (destDir)
+	low     string // path в нижнем регистре — порядок
 	refs    []string
 	st      fs.FileInfo
 	dest    string // каталог назначения от папки сбора, "/"
 	lowDest string
 }
 
-// root — папка альбома, ставшая папкой внутри «Фото»; low — путь в нижнем регистре с
-// разделителем на конце (префикс для «внутри», как library.Under).
-type root struct{ path, name, low string }
-
-func lowDir(path string) string {
-	low := lower(filepath.Clean(path))
-	if !strings.HasSuffix(low, string(filepath.Separator)) {
-		low += string(filepath.Separator)
-	}
-	return low
-}
+// root — папка альбома, ставшая папкой внутри «Фото»; key — paths.DirKey (префикс для «внутри»,
+// как library.Under: на Linux `Весна` и `ВЕСНА` — два корня).
+type root struct{ path, name, key string }
 
 // makeRoots — корни: папки альбома от коротких к длинным; вложенная в уже взятую — её часть, не
 // корень. Имя — имя папки через FolderName, повтор без учёта регистра (и «Прочие») — « (2)»;
@@ -215,7 +217,7 @@ func makeRoots(folders []string) []root {
 	for _, f := range list {
 		if i := slices.Index(top, f); i >= 0 {
 			top[i] = "" // повтор той же папки в списке — один корень
-			out = append(out, root{f, dupName(paths.FolderName(filepath.Base(f), "Папка"), used), lowDir(f)})
+			out = append(out, root{f, dupName(paths.FolderName(filepath.Base(f), "Папка"), used), paths.DirKey(f)})
 		}
 	}
 	return out
@@ -251,7 +253,7 @@ func sources(p *model.Project, extra []string, roots []root, stat func(string) (
 		if !ok {
 			return false
 		}
-		s := src{kind: kind, path: filepath.Clean(path), st: st}
+		s := src{kind: kind, path: filepath.Clean(path), key: k, st: st}
 		s.low = lower(s.path)
 		if ref != "" {
 			s.refs = []string{ref}
@@ -301,8 +303,8 @@ func kindOf(ref model.PhotoRef, ownOnly bool) string {
 func extraIn(extra []string, roots []root) []string {
 	var out []string
 	for _, e := range extra {
-		le := lower(filepath.Clean(e))
-		if e != "" && slices.ContainsFunc(roots, func(r root) bool { return strings.HasPrefix(le, r.low) }) {
+		ke := key(e)
+		if e != "" && slices.ContainsFunc(roots, func(r root) bool { return strings.HasPrefix(ke, r.key) }) {
 			out = append(out, e)
 		}
 	}
@@ -327,11 +329,15 @@ func looseSet(p *model.Project) map[string]bool {
 	return out
 }
 
-// ownOnlyRefs — записи, на которые ссылаются только рамочки мест и свои стикеры (079-27): в
-// собранном альбоме lib снят (retarget), и при повторном сборе такая запись иначе ушла бы как
-// фото в «Фото/Прочие» — в ленту. Фото фона не в счёт: фоном бывает и обычный кадр ленты.
+// ownOnlyRefs — записи, на которые ссылаются только рамочки мест, свои стикеры и фон альбома
+// (079-27, 098 §4.3): в собранном альбоме lib снят (retarget), и при повторном сборе такая запись
+// иначе ушла бы как фото в «Фото/Прочие» — в ленту. Фото фона листа не в счёт: фоном бывает и
+// обычный кадр ленты.
 func ownOnlyRefs(p *model.Project) map[string]bool {
 	own, other := map[string]bool{}, map[string]bool{}
+	if p.AlbumBg != nil && p.AlbumBg.Photo != "" {
+		own[p.AlbumBg.Photo] = true
+	}
 	for _, s := range p.Sheets() {
 		for _, id := range s.Photos {
 			other[id] = true
@@ -375,12 +381,16 @@ func fileExt(kind, path string) bool {
 	return false
 }
 
-// regular — источник вида kind — обычный файл годного расширения на отвечающем томе.
+// regular — источник вида kind — обычный файл годного расширения на отвечающем томе. stat —
+// Lstat: ссылку разбирает library.StatLocal (по нелокальной цели на диск не ходим).
 func regular(kind, path string, stat func(string) (fs.FileInfo, error)) (fs.FileInfo, bool) {
 	if !fileExt(kind, path) || paths.CheckLocalPath(path) != nil || !reachable(path) {
 		return nil, false
 	}
 	st, err := stat(path)
+	if err == nil && st.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+		st, err = library.StatLocal(path)
+	}
 	if err != nil || !st.Mode().IsRegular() {
 		return nil, false
 	}
@@ -396,7 +406,7 @@ func destDir(s src, roots []root) string {
 		return DirGuides
 	}
 	for _, r := range roots {
-		if !strings.HasPrefix(s.low, r.low) {
+		if !strings.HasPrefix(s.key, r.key) {
 			continue
 		}
 		rel, _ := filepath.Rel(r.path, filepath.Dir(s.path)) // путь внутри корня: Rel не ошибается
@@ -528,14 +538,8 @@ func same(e fs.DirEntry, st fs.FileInfo) bool {
 	return d <= mtimeSlack && d >= -mtimeSlack
 }
 
-// key — ключ пути: один файл — один ключ (Windows без учёта регистра, как paths.SamePath).
-func key(p string) string {
-	p = filepath.Clean(p)
-	if runtime.GOOS == "windows" {
-		p = strings.ToLower(p)
-	}
-	return p
-}
+// key — ключ пути: один файл — один ключ (paths.Fold, как paths.SamePath).
+func key(p string) string { return paths.Fold(filepath.Clean(p)) }
 
 func lower(s string) string { return strings.ToLower(s) }
 

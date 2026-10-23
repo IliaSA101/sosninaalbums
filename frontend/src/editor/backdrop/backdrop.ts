@@ -2,6 +2,7 @@
 import { backdropLost } from '../../base/core/undo'
 import { photoCss } from '../../base/geom/frame'
 import { center, rotate, rotateAbout, type TextBox } from '../../base/geom/textbox'
+import { ownBg } from '../../base/geom/sheet'
 import type { BackdropScope, BackdropView, SpreadView } from '../../base/core/types'
 
 // Решение живёт в основе (store.merge); здесь — для остальных.
@@ -21,12 +22,12 @@ export const scopeLabel = (scope: BackdropScope, sheet: boolean): string => (she
 export const PAGE_SCOPES: readonly BackdropScope[] = ['left', 'right']
 
 export const backdropOf = (s: SpreadView | undefined, scope: BackdropScope): BackdropView | undefined =>
-  s?.backdrops?.find((b) => b.scope === scope)
+  ownBg(s?.backdrops).find((b) => b.scope === scope)
 
 // Какие зоны броска показать в карточке: если фон уже стоит по страницам или цвета разведены по
 // страницам (split) — две зоны, иначе одна на весь разворот. Go всё равно снимает фоны другой формы.
 export function zoneScopes(backdrops: readonly BackdropView[] | null | undefined, split: boolean): readonly BackdropScope[] {
-  const pages = !!backdrops?.some((b) => b.scope !== 'spread')
+  const pages = ownBg(backdrops).some((b) => b.scope !== 'spread')
   return pages || split ? PAGE_SCOPES : ['spread']
 }
 

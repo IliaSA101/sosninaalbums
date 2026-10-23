@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // SetTextScale: новый кегль в ответе, неизвестный блок — вид без ошибки.
 func TestSetTextScale(t *testing.T) {
 	p := model.New()
 	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a"}}}
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
 	a, _ := newMethods(t, p)
 	v, err := a.AddText("s1", 0, "")
 	if err != nil {
@@ -192,9 +193,9 @@ func textOf(t *testing.T, sv model.SpreadView, id string) model.TextView {
 func TestForgetFileNamesMethod(t *testing.T) {
 	p := model.New()
 	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a", "b"}}}
-	auto := model.LooksLikeName(`C:\01_иванов_петя.jpg`)
-	p.Photos["a"] = model.PhotoRef{Path: `C:\01_иванов_петя.jpg`, W: 300, H: 200, Person: auto}
-	p.Photos["b"] = model.PhotoRef{Path: `C:\петров_иван.jpg`, W: 300, H: 200, Person: &model.Person{Last: "Петров", First: "Ваня"}}
+	auto := model.LooksLikeName(testkit.AbsPath("01_иванов_петя.jpg"))
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("01_иванов_петя.jpg"), W: 300, H: 200, Person: auto}
+	p.Photos["b"] = model.PhotoRef{Path: testkit.AbsPath("петров_иван.jpg"), W: 300, H: 200, Person: &model.Person{Last: "Петров", First: "Ваня"}}
 	k := newKit(t, p)
 	rev := k.rev()
 	v := k.ForgetFileNames([]string{"a", "b", "нет"})

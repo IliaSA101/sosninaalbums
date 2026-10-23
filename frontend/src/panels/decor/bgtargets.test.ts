@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { unitOf } from '../../base/geom/sheet'
-import { bgAskText, bgDoneText, bgHint, bgNums, bgPickDefault, bgPickShown, bgSelShown, bgTargets, isMany } from './bgtargets'
+import {
+  bgAskText,
+  bgDoneText,
+  bgHint,
+  bgMissing,
+  bgNums,
+  bgOfferText,
+  bgPickDefault,
+  bgPickItems,
+  bgPickShown,
+  bgSelShown,
+  bgStreak,
+  bgTargets,
+  isMany,
+  type BgPut,
+} from './bgtargets'
+import type { DecorItem } from './decor'
 
 const SPREAD = unitOf({ sheet: false })
 const SHEET = unitOf({ sheet: true })
@@ -84,5 +100,61 @@ describe('тексты', () => {
     expect(bgDoneText(12, SPREAD)).toBe('Фон поставлен на 12 разворотов')
     expect(bgDoneText(1, SPREAD)).toBe('Фон поставлен на 1 разворот')
     expect(bgDoneText(0, SPREAD)).toBe('У выбранных уже этот фон')
+  })
+})
+
+describe('bgPickItems: строка «На»', () => {
+  it('выделенные только от двух; порядок — этот, все, весь альбом (098), выделенные, номера', () => {
+    expect(bgPickItems(0, 26, SPREAD).map((i) => i.label)).toEqual(['Этот разворот', 'Все развороты (26)', 'Весь альбом', 'Номера'])
+    expect(bgPickItems(1, 26, SPREAD).map((i) => i.id)).toEqual(['this', 'all', 'album', 'nums'])
+    expect(bgPickItems(3, 26, SPREAD).map((i) => i.label)).toEqual([
+      'Этот разворот',
+      'Все развороты (26)',
+      'Весь альбом',
+      'Выделенные (3)',
+      'Номера',
+    ])
+  })
+  it('в альбоме-листе — «лист»', () => {
+    expect(bgPickItems(0, 4, SHEET).map((i) => i.label)).toEqual(['Этот лист', 'Все листы (4)', 'Весь альбом', 'Номера'])
+  })
+})
+
+describe('bgStreak: серия постановок', () => {
+  const put = (index: number, o: Partial<BgPut> = {}): BgPut => ({ item: 'my:a', scope: 'spread', index, ...o })
+  const none = new Set<string>()
+  it('сосед (±1), тот же фон и область — да', () => {
+    expect(bgStreak(put(2), put(3), none)).toBe(true)
+    expect(bgStreak(put(3), put(2), none)).toBe(true)
+  })
+  it('первая постановка, через один, тот же лист, другой фон, другая область — нет', () => {
+    expect(bgStreak(null, put(3), none)).toBe(false)
+    expect(bgStreak(put(1), put(3), none)).toBe(false)
+    expect(bgStreak(put(3), put(3), none)).toBe(false)
+    expect(bgStreak(put(2, { item: 'my:b' }), put(3), none)).toBe(false)
+    expect(bgStreak(put(2, { scope: 'left' }), put(3), none)).toBe(false)
+  })
+  it('об этом фоне уже спрашивали — нет', () => expect(bgStreak(put(2), put(3), new Set(['my:a']))).toBe(false))
+})
+
+describe('bgMissing: листы без этого фона', () => {
+  const lib = 'my:0123456789abcdef'
+  const items = [{ id: lib, theme: 'mine', name: 'М', url: '', own: true, aspect: 1, w: 1, h: 1 } as DecorItem]
+  const sp = (id: string, o: Record<string, unknown> = {}) => ({ id, mid: 300, backdrops: null, patterns: [], ...o }) as never
+  const own = (scope: string) => [{ scope, photo: 'p', lib }]
+  it('считает листы, где в области стоит другое или ничего', () => {
+    const list = [sp('s1', { backdrops: own('spread') }), sp('s2'), sp('s3', { backdrops: own('spread') }), sp('s4')]
+    expect(bgMissing(list, 'spread', lib, items)).toBe(2)
+    expect(bgMissing(list, 'left', lib, items)).toBe(4)
+  })
+  it('обложка не в счёт; лист без шва не принимает страницу', () => {
+    const list = [sp('cover'), sp('s1'), sp('s2', { mid: 0 })]
+    expect(bgMissing(list, 'spread', lib, items)).toBe(2)
+    expect(bgMissing(list, 'right', lib, items)).toBe(1)
+  })
+  it('на всех уже стоит — 0', () => expect(bgMissing([sp('s1', { backdrops: own('spread') })], 'spread', lib, items)).toBe(0))
+  it('текст тоста', () => {
+    expect(bgOfferText(22, SPREAD)).toBe('Поставить этот фон на все развороты? Без него ещё 22')
+    expect(bgOfferText(3, SHEET)).toBe('Поставить этот фон на все листы? Без него ещё 3')
   })
 })

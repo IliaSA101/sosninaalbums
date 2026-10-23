@@ -17,6 +17,9 @@
 // либо покрытие пакета упало больше чем на 0,5 п. п. Рост и новые пакеты — ок. Эталон обновляется только
 // через --write, с причиной в сообщении коммита и с согласия владельца, если что-то уменьшилось.
 // Go: тест, запущенный и пропущенный по среде (t.Skip, симлинки без прав), считается — иначе эталон зависел бы от машины;
+// раздел Go — свой у каждой ОС (GO_KEY и GO_BASELINE в tree-cover.mjs: go в этом файле — Windows и CI; go-linux —
+// testdata/test-baseline-linux.json, go-darwin — …-darwin.json): тестов *_windows_test.go
+// в сборке Linux нет вовсе (владелец 22.10). Фронт (ui) — общий.
 // vitest: пропущенный (it.skip) для эталона потерян.
 // Покрытие фронта не меряем: @vitest/coverage-* не установлен, новых зависимостей не ставим.
 // Сообщения — латиницей: вывод идёт через консоль PowerShell 5.1 шага check.ps1.
@@ -25,10 +28,12 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { withGoCaches } from './goenv.mjs'
-import { MAX_DROP, TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
+import { GO_BASELINE, GO_KEY, MAX_DROP, TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const target = path.join(root, 'testdata', 'test-baseline.json')
+const goTarget = path.join(root, 'testdata', GO_BASELINE)
+const readJson = (f) => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {})
 // Пакеты модуля: не ./... — тот заходит в frontend/node_modules (flatted/golang); один шаблон со всеми скриптами и CI
 const PKGS = ['.', './internal/...']
 
@@ -262,7 +267,7 @@ function check(base, cur) {
   const errors = []
   const notes = []
   if (cur.go) {
-    if (!base.go) fail('baseline has no go section - run --write')
+    if (!base.go) fail(`baseline has no ${GO_KEY} section - run --write (owner approval)`)
     for (const { key, name, k } of lost(base.go, cur.go)) {
       // Число тестов в пакете не упало — скорее переименование, чем потеря (владелец 2026-10-21)
       if (cur.go[key] && cur.go[key].tests >= base.go[key].tests) notes.push(`go ${key}: test renamed? ${name} - проверь, что проверка не ослаблена`)
@@ -315,14 +320,18 @@ const brief = () =>
 if (mode === 'print') {
   console.log(JSON.stringify(cur, null, 1))
 } else if (mode === 'write') {
-  // Обновляем только измеренную часть, вторую оставляем как была.
-  const old = fs.existsSync(target) ? JSON.parse(fs.readFileSync(target, 'utf8')) : {}
+  // Обновляем только измеренную часть, вторую оставляем как была; Go — в файл своей ОС (GO_BASELINE)
+  const files = new Map()
+  const put = (f, k, v) => files.set(f, { ...(files.get(f) ?? readJson(f)), [k]: v })
+  if (cur.go) put(goTarget, GO_KEY, cur.go)
+  if (cur.ui) put(target, 'ui', cur.ui)
   fs.mkdirSync(path.dirname(target), { recursive: true })
-  fs.writeFileSync(target, JSON.stringify({ ...old, ...cur }, null, 1) + '\n')
+  for (const [f, data] of files) fs.writeFileSync(f, JSON.stringify(data, null, 1) + '\n')
   console.log(`test-baseline written: ${brief()}`)
 } else {
   if (!fs.existsSync(target)) fail('testdata/test-baseline.json not found - run: node scripts/test-baseline.mjs --write')
-  const { errors, notes } = check(JSON.parse(fs.readFileSync(target, 'utf8')), cur)
+  // Go сверяем с разделом своей ОС (GO_KEY в GO_BASELINE), фронт — общий
+  const { errors, notes } = check({ go: readJson(goTarget)[GO_KEY], ui: readJson(target).ui }, cur)
   if (errors.length) {
     console.error('test baseline broken (tests must not weaken; update only via --write with owner approval):')
     for (const e of errors) console.error('  ' + e)

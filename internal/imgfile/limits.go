@@ -26,8 +26,9 @@ func CheckSize(path string) error {
 
 // OpenRegular открывает обычный файл: устройство (CON, NUL на старых Windows), канал или
 // каталог отклоняются по дескриптору уже открытого файла — защита в глубину поверх проверки пути.
+// Канал на unix открывается без ожидания писателя (openFlag), иначе вызов завис бы до проверки.
 func OpenRegular(path string) (*os.File, error) {
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, openFlag, 0)
 	if err != nil {
 		return nil, err
 	}

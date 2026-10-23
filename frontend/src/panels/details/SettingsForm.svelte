@@ -11,10 +11,12 @@
   import ColorPicker from '../../base/ui/ColorPicker.svelte'
   import { SHEET_PRESETS, isSheet, newSheetSize } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
+  import AlbumBgRow from './AlbumBgRow.svelte'
   import MarkupBlock from '../markup/MarkupBlock.svelte'
   import { FOLD_ITEMS, foldChangeNote, foldFields, foldNote, foldOf } from './fold'
   import { groupLabel, presetActive, presetFields, presetGroupOf, presetHint, presetRows, exportPx, type Preset } from './presets'
   import { NUMS, norm, same } from './settingsnorm'
+  import { marginNoteAsker } from './marginnote'
 
   // base — настройки, с которыми форма сверялась последний раз.
   let base = $state<Settings>({ ...store.view.settings })
@@ -81,6 +83,14 @@
 
   const activeHint = $derived(presetHint(presets, s, group))
 
+  // Поля у линии реза (0.23-q7 а): текст считает Go по черновику; пусто — строки нет.
+  let marginText = $state('')
+  const marginNote = marginNoteAsker(
+    (m, b) => Api.MarginNote(m, b),
+    (t) => (marginText = t),
+  )
+  $effect(() => marginNote.ask(s.margin, s.bleed ?? 0))
+
   function reset() {
     s = { ...store.view.settings }
     base = { ...store.view.settings }
@@ -130,6 +140,8 @@
     <!-- цвет попадает в форму при выборе; применяет «Применить» -->
     <ColorPicker value={s.bg || '#ffffff'} label={sheet ? 'Цвет листов' : 'Цвет страниц альбома'} onpick={(c) => (s.bg = c)} />
   </label>
+  <!-- 098: фон альбома — не поле формы, ставится сразу (свой шаг отмены); цвет страниц лежит под ним -->
+  <AlbumBgRow />
   {#if !sheet}
     <!-- Положение — в черновике формы; Go применит «Применить» (SetSettings, один шаг undo) -->
     <div class="fold" data-guide="fold-mode">
@@ -151,6 +163,7 @@
     {exportPx(sh.h, +s.dpi)} px.
   </p>
   {#if activeHint}<p class="note">{activeHint}</p>{/if}
+  {#if marginText}<p class="note">{marginText}</p>{/if}
 {:else}
   <p class="note bad">Проверьте значения: размеры и dpi больше нуля.</p>
 {/if}

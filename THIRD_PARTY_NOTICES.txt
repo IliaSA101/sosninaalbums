@@ -2,25 +2,31 @@ THIRD_PARTY_NOTICES
 ===================
 
 Sosnina Albums — программа вёрстки свадебных фотоальбомов. Исходный код программы
-распространяется по лицензии MIT (файл LICENSE). В программу и её исполняемый файл
+распространяется по лицензии GNU General Public License версии 3 (только этой версии,
+GPL-3.0-only) с дополнительным условием по п. 7(b) — файлы LICENSE и NOTICE.md; версии
+до 0.22.x включительно выпущены по лицензии MIT. В программу и её исполняемый файл
 входят сторонние компоненты — Go-модули, npm-пакеты фронтенда и шрифты; их авторы,
 версии и лицензии перечислены ниже, полные тексты лицензий приведены в конце файла.
-Список составлен go-licenses и по package-lock.json для версии 0.8.0.
+Все они допускают распространение вместе с программой под GPL-3.0 (Apache-2.0
+совместима с GPL версии 3). Список составлен по go list для сборок Windows, macOS
+и Linux и по package-lock.json.
 
 Содержание
   1. Go-модули в исполняемом файле
   2. npm-пакеты в сборке интерфейса
   3. Шрифты (SIL Open Font License 1.1)
-  4. Прочее (Microsoft WebView2)
+  4. Прочее (системные библиотеки)
   5. Тексты лицензий
 
-1. Go-модули в исполняемом файле (23)
+1. Go-модули в исполняемом файле (25)
 -------------------------------------------
-git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 (MIT)
-github.com/bep/debounce v1.2.1 (MIT)
+Модуль без пометки входит во все три сборки (Windows, macOS, Linux).
+git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 (MIT) — только Windows
+github.com/bep/debounce v1.2.1 (MIT) — только Windows
 github.com/disintegration/imaging v1.6.2 (MIT)
-github.com/go-ole/go-ole v1.3.0 (MIT)
-github.com/google/uuid v1.6.0 (BSD-3-Clause)
+github.com/go-ole/go-ole v1.3.0 (MIT) — только Windows
+github.com/godbus/dbus/v5 v5.1.0 (BSD-2-Clause) — только Linux
+github.com/google/uuid v1.6.0 (BSD-3-Clause) — только Windows
 github.com/leaanthony/go-ansi-parser v1.6.1 (MIT)
 github.com/leaanthony/slicer v1.6.0 (MIT)
 github.com/leaanthony/u v1.1.1 (MIT)
@@ -28,17 +34,18 @@ github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c (BSD-2-Clause)
 github.com/pkg/errors v0.9.1 (BSD-2-Clause)
 github.com/rivo/uniseg v0.4.7 (MIT)
 github.com/samber/lo v1.49.1 (MIT)
+github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e (MIT)
 github.com/tkrajina/go-reflector v0.5.8 (Apache-2.0)
-github.com/wailsapp/go-webview2 v1.0.22 (MIT)
-github.com/wailsapp/go-webview2 v1.0.22 (ISC)
+github.com/wailsapp/go-webview2 v1.0.22 (ISC) — только Windows
+github.com/wailsapp/go-webview2 v1.0.22 (MIT) — только Windows
 github.com/wailsapp/mimetype v1.4.1 (MIT)
-github.com/wailsapp/wails/v2 v2.16.0 (MIT)
 github.com/wailsapp/wails/v2 v2.16.0 (Apache-2.0)
+github.com/wailsapp/wails/v2 v2.16.0 (MIT)
 golang.org/x/image v0.46.0 (BSD-3-Clause)
 golang.org/x/net v0.56.0 (BSD-3-Clause)
 golang.org/x/sys v0.48.0 (BSD-3-Clause)
 golang.org/x/text v0.42.0 (BSD-3-Clause)
-Стандартная библиотека Go go1.26.9 (BSD-3-Clause)
+Стандартная библиотека Go go1.26.10 (BSD-3-Clause)
 
 2. npm-пакеты в сборке интерфейса (19)
 ---------------------------------------------
@@ -246,11 +253,15 @@ zimmerframe 1.1.5 (MIT)
   [Underdog]
     Copyright (c) 2012, Sergey Steblina (sergey@steblina.com), Jovanny Lemonad (lemonad@jovanny.ru), with Reserved Font Name 'Underdog'
 
-4. Прочее
----------
-Microsoft WebView2 (Evergreen Bootstrapper и WebView2Loader.dll) встроены через
-github.com/wailsapp/wails/v2 и github.com/wailsapp/go-webview2; распространяются на условиях
-Microsoft: https://developer.microsoft.com/microsoft-edge/webview2/
+4. Прочее (системные библиотеки)
+---------------------------------
+Не входят в поставку, подключаются из системы:
+  Windows — Microsoft WebView2 (Evergreen Bootstrapper и WebView2Loader.dll встроены через
+    github.com/wailsapp/wails/v2 и github.com/wailsapp/go-webview2); распространяется на условиях
+    Microsoft: https://developer.microsoft.com/microsoft-edge/webview2/
+  macOS — WKWebView (часть системы).
+  Linux — GTK 3, WebKitGTK 4.1 и libsoup 3 (LGPL-2.1 и новее, BSD); динамическое подключение,
+    ставятся из репозитория дистрибутива как зависимости пакета .deb.
 
 5. Тексты лицензий
 ------------------
@@ -403,7 +414,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 5: BSD-3-Clause ===
+=== Лицензия 5: BSD-2-Clause ===
+Применяется к:
+  - github.com/godbus/dbus/v5 v5.1.0
+
+Copyright (c) 2013, Georg Reinke (<guelfey at gmail dot com>), Google
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+=== Лицензия 6: BSD-3-Clause ===
 Применяется к:
   - github.com/google/uuid v1.6.0
 
@@ -436,7 +478,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 6: MIT ===
+=== Лицензия 7: MIT ===
 Применяется к:
   - github.com/leaanthony/go-ansi-parser v1.6.1
 
@@ -463,7 +505,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 7: MIT ===
+=== Лицензия 8: MIT ===
 Применяется к:
   - github.com/leaanthony/slicer v1.6.0
 
@@ -490,7 +532,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 8: MIT ===
+=== Лицензия 9: MIT ===
 Применяется к:
   - github.com/leaanthony/u v1.1.1
 
@@ -517,7 +559,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 9: BSD-2-Clause ===
+=== Лицензия 10: BSD-2-Clause ===
 Применяется к:
   - github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 
@@ -546,7 +588,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 10: BSD-2-Clause ===
+=== Лицензия 11: BSD-2-Clause ===
 Применяется к:
   - github.com/pkg/errors v0.9.1
 
@@ -575,7 +617,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 11: MIT ===
+=== Лицензия 12: MIT ===
 Применяется к:
   - github.com/rivo/uniseg v0.4.7
 
@@ -602,7 +644,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 12: MIT ===
+=== Лицензия 13: MIT ===
 Применяется к:
   - github.com/samber/lo v1.49.1
 
@@ -629,7 +671,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 13: Apache-2.0 ===
+=== Лицензия 14: MIT ===
+Применяется к:
+  - github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+
+Copyright (c) 2014 Tom Harwood
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+=== Лицензия 15: Apache-2.0 ===
 Применяется к:
   - github.com/tkrajina/go-reflector v0.5.8
 
@@ -836,7 +903,29 @@ Apache License
    limitations under the License.
 
 
-=== Лицензия 14: MIT ===
+=== Лицензия 16: ISC ===
+Применяется к:
+  - github.com/wailsapp/go-webview2 v1.0.22
+
+ISC License (ISC)
+
+Copyright (c) 2020 John Chadwick
+Copyright (c) 2022 Wails Project Developers
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+
+=== Лицензия 17: MIT ===
 Применяется к:
   - github.com/wailsapp/go-webview2 v1.0.22
 
@@ -864,29 +953,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 15: ISC ===
-Применяется к:
-  - github.com/wailsapp/go-webview2 v1.0.22
-
-ISC License (ISC)
-
-Copyright (c) 2020 John Chadwick
-Copyright (c) 2022 Wails Project Developers
-
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
-REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
-AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
-INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
-LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
-OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-PERFORMANCE OF THIS SOFTWARE.
-
-
-=== Лицензия 16: MIT ===
+=== Лицензия 18: MIT ===
 Применяется к:
   - github.com/wailsapp/mimetype v1.4.1
 
@@ -913,88 +980,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 17: MIT ===
-Применяется к:
-  - github.com/wailsapp/wails/v2 v2.16.0
-
-MIT License
-
-Copyright (c) 2018-Present Lea Anthony
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
-=== Лицензия 18: MIT ===
-Применяется к:
-  - github.com/wailsapp/wails/v2 v2.16.0
-
-MIT License
-
-Copyright (c) 2019 winc Authors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
-=== Лицензия 19: MIT ===
-Применяется к:
-  - github.com/wailsapp/wails/v2 v2.16.0
-
-MIT License
-
-Copyright (c) 2019 Harry Phillips
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
-=== Лицензия 20: Apache-2.0 ===
+=== Лицензия 19: Apache-2.0 ===
 Применяется к:
   - github.com/wailsapp/wails/v2 v2.16.0
 
@@ -1201,13 +1187,94 @@ Apache License
    limitations under the License.
 
 
-=== Лицензия 21: BSD-3-Clause ===
+=== Лицензия 20: MIT ===
+Применяется к:
+  - github.com/wailsapp/wails/v2 v2.16.0
+
+MIT License
+
+Copyright (c) 2018-Present Lea Anthony
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+=== Лицензия 21: MIT ===
+Применяется к:
+  - github.com/wailsapp/wails/v2 v2.16.0
+
+MIT License
+
+Copyright (c) 2019 winc Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+=== Лицензия 22: MIT ===
+Применяется к:
+  - github.com/wailsapp/wails/v2 v2.16.0
+
+MIT License
+
+Copyright (c) 2019 Harry Phillips
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+=== Лицензия 23: BSD-3-Clause ===
 Применяется к:
   - golang.org/x/image v0.46.0
   - golang.org/x/net v0.56.0
   - golang.org/x/sys v0.48.0
   - golang.org/x/text v0.42.0
-  - Стандартная библиотека Go go1.26.9
+  - Стандартная библиотека Go go1.26.10
 
 Copyright 2009 The Go Authors.
 
@@ -1238,7 +1305,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 22: MIT ===
+=== Лицензия 24: MIT ===
 Применяется к:
   - @jridgewell/gen-mapping 0.3.13
   - @jridgewell/remapping 2.3.5
@@ -1266,7 +1333,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 23: MIT ===
+=== Лицензия 25: MIT ===
 Применяется к:
   - @jridgewell/resolve-uri 3.1.2
 
@@ -1291,7 +1358,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 24: MIT ===
+=== Лицензия 26: MIT ===
 Применяется к:
   - @sveltejs/acorn-typescript 1.0.13
 
@@ -1319,7 +1386,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 25: MIT ===
+=== Лицензия 27: MIT ===
 Применяется к:
   - @types/estree 1.0.9
 
@@ -1346,7 +1413,7 @@ MIT License
     SOFTWARE
 
 
-=== Лицензия 26: MIT ===
+=== Лицензия 28: MIT ===
 Применяется к:
   - acorn 8.19.0
 
@@ -1373,7 +1440,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-=== Лицензия 27: Apache-2.0 ===
+=== Лицензия 29: Apache-2.0 ===
 Применяется к:
   - aria-query 5.3.1
   - axobject-query 4.1.0
@@ -1581,7 +1648,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-=== Лицензия 28: MIT ===
+=== Лицензия 30: MIT ===
 Применяется к:
   - clsx 2.1.1
 
@@ -1596,7 +1663,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 29: MIT ===
+=== Лицензия 31: MIT ===
 Применяется к:
   - devalue 5.9.4
 
@@ -1609,7 +1676,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 30: MIT ===
+=== Лицензия 32: MIT ===
 Применяется к:
   - esm-env 1.2.2
 
@@ -1622,7 +1689,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 31: MIT ===
+=== Лицензия 33: MIT ===
 Применяется к:
   - esrap 2.4.0
 
@@ -1635,7 +1702,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 32: MIT ===
+=== Лицензия 34: MIT ===
 Применяется к:
   - is-reference 3.0.3
   - locate-character 3.0.0
@@ -1651,7 +1718,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 33: MIT ===
+=== Лицензия 35: MIT ===
 Применяется к:
   - magic-string 0.30.21
 
@@ -1664,7 +1731,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 34: MIT ===
+=== Лицензия 36: MIT ===
 Применяется к:
   - svelte 5.57.2
 
@@ -1677,7 +1744,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 35: MIT ===
+=== Лицензия 37: MIT ===
 Применяется к:
   - zimmerframe 1.1.5
 
@@ -1704,7 +1771,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 36: OFL-1.1 ===
+=== Лицензия 38: OFL-1.1 ===
 Применяется к:
   - Bad Script (шрифт)
   - Caveat (шрифт)

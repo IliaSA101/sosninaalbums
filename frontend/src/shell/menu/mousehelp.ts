@@ -46,6 +46,7 @@ export const MOUSE_HELP: readonly MouseRow[] = [
     group: 'grid',
     feature: 'manual',
   },
+  { show: 'Ctrl+перетаскивание фото', label: 'Поменять фото местами на ручном развороте (на Mac — ⌘)', group: 'grid', feature: 'manual' },
   { show: '⇄ в мини-панели (ручная)', label: 'Перетащить фото на другое место: фото поменяются местами', group: 'grid', feature: 'manual' },
   { show: 'Shift (размер места)', label: 'Тянуть угол с сохранением пропорций', group: 'grid', feature: 'manual' },
   { show: 'Alt (перенос места или текста)', label: 'Без привязки к направляющим', group: 'grid', feature: 'manual' },

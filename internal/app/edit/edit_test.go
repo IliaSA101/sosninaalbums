@@ -7,6 +7,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // newMethods — Methods поверх проекта p без библиотеки фото; views — виды, разосланные Changed
@@ -60,7 +61,7 @@ func spreadsMethods(t *testing.T, spreads ...[]string) (m *Methods, views func()
 	for i, ids := range spreads {
 		p.Spreads = append(p.Spreads, &model.Spread{ID: "s" + string(rune('1'+i)), Photos: slices.Clone(ids)})
 		for _, id := range ids {
-			p.Photos[id] = model.PhotoRef{Path: `C:\` + id + ".jpg", W: 300, H: 200}
+			p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 		}
 	}
 	return newMethods(t, p)
@@ -76,8 +77,8 @@ func gridMethods(t *testing.T) *Methods {
 			{ID: "00000000000b", X: 312, Y: 12, W: 100, H: 100}}},
 		{ID: "s2", Photos: []string{"b"}},
 	}
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
-	p.Photos["b"] = model.PhotoRef{Path: `C:\b.jpg`, W: 300, H: 200}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
+	p.Photos["b"] = model.PhotoRef{Path: testkit.AbsPath("b.jpg"), W: 300, H: 200}
 	m, _ := newMethods(t, p)
 	return m
 }

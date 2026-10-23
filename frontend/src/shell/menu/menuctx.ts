@@ -3,6 +3,7 @@
 import { store } from '../../base/core/store.svelte'
 import { jobs } from '../../base/core/jobs.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
+import { clip } from '../../editor/clip/clip.svelte'
 import { edit } from '../../editor/text/edit.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
 import { modes } from '../../base/prefs/view.svelte'
@@ -42,6 +43,8 @@ export function menuCtx(): MenuCtx {
     decorable: !!store.spread && !isCover(store.spread),
     vigSetup: isVignette(store.spread),
     layerable: placesel.canLayer,
+    copyable: clip.canCopy,
+    pasteable: clip.canPaste,
     missing: splitMissing(store.missing, store.view.libPhotos).photos.length, // свои из библиотеки папкой не ищутся (048)
     collecting: !!jobs.collecting,
     exporting: !!jobs.exporting,

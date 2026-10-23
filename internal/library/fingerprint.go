@@ -5,12 +5,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // fingerprint — набор файлов-фото и сайдкаров обхода: число и сумма хешей
 // (путь с регистром, размер, время, сайдкар). Сумма, а не цепочка: порядок обхода не важен.
 type fingerprint struct {
-	key string // список папок через \n в нижнем регистре
+	key string // список папок через \n по правилу paths.Fold
 	n   int
 	sum uint64
 }
@@ -36,7 +38,7 @@ func fingerprintOf(src Sources, files []scanFile) fingerprint {
 	if len(src.Files) > 0 {
 		key += "\x00" + strings.Join(src.Files, "\n") // отдельное фото не сойдёт за папку
 	}
-	fp := fingerprint{key: strings.ToLower(key), n: len(files)}
+	fp := fingerprint{key: paths.Fold(key), n: len(files)}
 	for _, f := range files {
 		// Поля разделены нулём; без сайдкара путь пуст, размер и время — нули.
 		h := uint64(fnvOffset)

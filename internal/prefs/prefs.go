@@ -120,7 +120,7 @@ func Of(c Config) Prefs {
 	return p
 }
 
-// PushRecent ставит path наверх списка без повторов (EqualFold, как у путей Windows).
+// PushRecent ставит path наверх списка без повторов (paths.FoldEqual).
 // Нелокальные пути (UNC, относительные) не пишем; список режется до maxRecent.
 func PushRecent(list []string, path string) []string {
 	if paths.CheckLocalPath(path) != nil {
@@ -132,21 +132,21 @@ func PushRecent(list []string, path string) []string {
 		if len(out) == maxRecent {
 			break
 		}
-		if !strings.EqualFold(p, path) && paths.CheckLocalPath(p) == nil {
+		if !paths.FoldEqual(p, path) && paths.CheckLocalPath(p) == nil {
 			out = append(out, p)
 		}
 	}
 	return out
 }
 
-// DropRecent убирает path из списка (EqualFold).
+// DropRecent убирает path из списка (paths.FoldEqual).
 func DropRecent(list []string, path string) []string {
-	return slices.DeleteFunc(slices.Clone(list), func(p string) bool { return strings.EqualFold(p, path) })
+	return slices.DeleteFunc(slices.Clone(list), func(p string) bool { return paths.FoldEqual(p, path) })
 }
 
-// RecentIndex — позиция path в списке (EqualFold) или -1.
+// RecentIndex — позиция path в списке (paths.FoldEqual) или -1.
 func RecentIndex(list []string, path string) int {
-	return slices.IndexFunc(list, func(p string) bool { return strings.EqualFold(p, path) })
+	return slices.IndexFunc(list, func(p string) bool { return paths.FoldEqual(p, path) })
 }
 
 // RecentView строит строки списка: имя без расширения, наличие и время правки из os.Stat.

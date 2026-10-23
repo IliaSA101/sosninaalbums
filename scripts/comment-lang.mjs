@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 
 const MIN_WORDS = 4 // комментарий из стольких латинских слов без кириллицы — английская фраза
 export const MARKER = 'lang-ok'
-const CODE_EXT = /\.(go|svelte|m?js|cjs|ts|css|ps1|py)$/i
+const CODE_EXT = /\.(go|svelte|m?js|cjs|ts|css|ps1|py|sh)$/i
 const SKIP_PATH = /(^|[\\/])(wailsjs|node_modules|dist|bin|\.git|\.gotmp|testdata)[\\/]/i
 
 export const isCodeFile = (f) => CODE_EXT.test(f) && !SKIP_PATH.test(f)
@@ -37,7 +37,7 @@ export function englishComment(raw, file = '') {
   else if (/^<!--|<!--.*-->/.test(line)) c = line.replace(/^.*?<!--/, '').replace(/-->.*$/, '')
   if (c === null) return null
   c = c.trim()
-  if (!c || /^[@#]|^(eslint|prettier|svelte-ignore|go:|nolint|export\s|line\s|noinspection|@ts-|istanbul|language=|region|endregion)/i.test(c)) return null
+  if (!c || /^[@#]|^(eslint|prettier|svelte-ignore|go:|nolint|export\s|line\s|noinspection|shellcheck|@ts-|istanbul|language=|region|endregion)/i.test(c)) return null
   if (/[А-Яа-яЁё]/.test(c)) return null
   // Продолжение описания типа в docblock: `sum: string, url: string}` — не фраза
   if (/[{}]/.test(c) || /\b\w+\??:\s*[\w\\|<>[\]?]+\s*[,}]/.test(c)) return null

@@ -74,13 +74,33 @@ func IsSep(c byte) bool { return c == '\\' || c == '/' }
 // IsSepRune — IsSep для руны (strings.FieldsFunc).
 func IsSepRune(r rune) bool { return r == '\\' || r == '/' }
 
-// SamePath — один и тот же путь после Clean; на Windows без учёта регистра.
+// SamePath — один и тот же путь после Clean (FoldEqual: на Windows и macOS без учёта регистра).
 func SamePath(a, b string) bool {
 	if a == "" || b == "" {
 		return a == b
 	}
-	a, b = filepath.Clean(a), filepath.Clean(b)
-	if runtime.GOOS == "windows" {
+	return FoldEqual(filepath.Clean(a), filepath.Clean(b))
+}
+
+// Fold — ключ пути для «один ли это путь» (101, п. 4): на Windows и macOS — нижний регистр,
+// на Linux — как есть (там `/x/Весна` и `/x/ВЕСНА` — разные папки, а `DSC_1.JPG` в них — разные
+// фото). Расширения, имена файлов и порядок сортировки сводят регистр сами, не через Fold.
+func Fold(s string) string { return foldWith(foldCase, s) }
+
+// foldWith — Fold с явным режимом: тесты проверяют оба на любой ОС.
+func foldWith(ci bool, s string) string {
+	if ci {
+		return strings.ToLower(s)
+	}
+	return s
+}
+
+// FoldEqual — a и b — один путь по правилу Fold, без Clean. Без регистра — strings.EqualFold,
+// как сравнивали на Windows до 0.23.
+func FoldEqual(a, b string) bool { return foldEqualWith(foldCase, a, b) }
+
+func foldEqualWith(ci bool, a, b string) bool {
+	if ci {
 		return strings.EqualFold(a, b)
 	}
 	return a == b

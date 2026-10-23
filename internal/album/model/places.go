@@ -204,7 +204,7 @@ func (p *Project) syncSpread(s *Spread, repair bool, taken map[string]bool) erro
 			return ErrNoPlace
 		default:
 			var err error
-			if pl, err = p.AddPlace(s, 0, p.Aspects([]string{id})[0], taken); err != nil {
+			if pl, err = p.AddPlace(s, 0, p.PhotoAspects([]string{id})[0], taken); err != nil {
 				// После clampGrid так не бывает (фото и мест ≤ MaxPlaces); если всё же
 				// случилось — разворот уходит в «Авто», но фото не теряются.
 				s.Grid = nil
@@ -351,9 +351,15 @@ func EmptyGridDupes(s *Spread) {
 
 // RenameRefs переводит ID фото по карте «старый → новый» и в Photos листов (с обложкой),
 // и в местах (и их рамочках, 079): одной картой, иначе syncGrid пересадил бы фото по первым пустым местам.
+// Фото фона альбома (098) — тоже.
 func (p *Project) RenameRefs(moved map[string]string) {
 	if len(moved) == 0 {
 		return
+	}
+	if nid, ok := moved[p.albumBgPhoto()]; ok && p.albumBgPhoto() != "" {
+		c := *p.AlbumBg
+		c.Photo = nid
+		p.AlbumBg = &c
 	}
 	for _, s := range p.Sheets() {
 		for i, id := range s.Photos {

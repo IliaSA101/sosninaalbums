@@ -19,6 +19,8 @@
   // Действующая отметка (своя по полю + XMP из файла): полоса, звёзды, флажок, подсказка
   const mark = $derived(markOf(p, store.marks[p.id]))
   const rejected = $derived(mark.flag === -1)
+  // Сколько раз фото в альбоме (098-6, решение 0.23-q8: один раз — ✓, больше — число): места всех копий, фоны, стикеры, рамочки, фон альбома — то же, что «Использовано N раз».
+  const uses = $derived(store.useCount(p.id))
 </script>
 
 <div
@@ -56,7 +58,7 @@
         {@attach cancelOnUnmount}
       />
     {/if}
-    {#if store.used.has(p.id)}<span class="check" aria-label="Уже в альбоме">✓</span>{/if}
+    {#if uses > 0}<span class="check" aria-label={uses === 1 ? 'Уже в альбоме' : `В альбоме: ${uses}`}>{uses === 1 ? '✓' : uses}</span>{/if}
     {#if badge}<span class="badge {badge.level}" title={badge.title}>{badge.label}</span>{/if}
     {#if mark.label !== ''}<span class="strip {mark.label}"></span>{/if}
     {#if mark.rating > 0}<span class="stars">{stars(mark.rating)}</span>{/if}
@@ -113,7 +115,7 @@
   .thumb.selected .gone {
     border-color: var(--accent);
   }
-  /* Уже в альбоме: галочка в углу и чуть бледнее. Одной бледности мало — на ярких
+  /* Уже в альбоме: число в углу и чуть бледнее. Одной бледности мало — на ярких
      и блёклых снимках её не отличить от самого фото (отзыв пользователя 2026-10-08) */
   .thumb.used img {
     opacity: 0.75;
@@ -189,13 +191,16 @@
     color: #fff;
     filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 0.9)) drop-shadow(0 1px 1px rgb(0 0 0 / 0.9));
   }
+  /* ✓ при одном вхождении и число при нескольких — в одном кружке; трёхзначное растягивает кружок в капсулу */
   .check {
     position: absolute;
     top: 6px;
     right: 6px;
-    width: 18px;
+    min-width: 18px;
     height: 18px;
-    border-radius: 50%;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 9px;
     background: rgb(0 0 0 / 0.6);
     color: #fff;
     font-size: 11px;

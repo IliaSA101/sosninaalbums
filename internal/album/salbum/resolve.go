@@ -3,7 +3,6 @@ package salbum
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -167,21 +166,24 @@ func probeDims(path string) (w, h int, ok bool) {
 // таймаута SMB на каждом фото.
 var reachable = osx.Reachable
 
+// fileSize — размер обычного файла path; ссылка — только с локальной целью (library.StatLocal:
+// по ссылке на сетевую шару Load не ходит).
 func fileSize(path string) (int64, bool) {
 	if !reachable(path) {
 		return 0, false
 	}
-	st, err := os.Stat(path)
+	st, err := library.StatLocal(path)
 	if err != nil || !st.Mode().IsRegular() {
 		return 0, false
 	}
 	return st.Size(), true
 }
 
+// isDir — path — папка (ссылка — как fileSize).
 func isDir(path string) bool {
 	if !reachable(path) {
 		return false
 	}
-	st, err := os.Stat(path)
+	st, err := library.StatLocal(path)
 	return err == nil && st.IsDir()
 }

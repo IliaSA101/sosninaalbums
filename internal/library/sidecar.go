@@ -6,11 +6,11 @@ import (
 	"io"
 	"io/fs"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -69,12 +69,20 @@ func (ss *sideSet) add(p string, d fs.DirEntry) {
 
 // put запоминает сайдкар со сведениями info (общее для листинга папки и отдельного файла).
 func (ss *sideSet) put(p string, info fs.FileInfo) {
-	ss.m[strings.ToLower(p)] = sidecar{path: p, size: info.Size(), mod: info.ModTime().UnixNano()}
+	ss.m[sideKey(p)] = sidecar{path: p, size: info.Size(), mod: info.ModTime().UnixNano()}
+}
+
+// sideKey — ключ фото и сайдкара для sidecarFor: папка — paths.Fold (на Linux сайдкар из
+// `ВЕСНА` не пристанет к фото из `Весна`), имя — без регистра на любой ОС (`IMG_1.JPG` и
+// `img_1.xmp` — пара). На Windows и macOS — ToLower всего пути, как было.
+func sideKey(p string) string {
+	i := strings.LastIndexByte(p, filepath.Separator) + 1
+	return paths.Fold(p[:i]) + strings.ToLower(p[i:])
 }
 
 func isSidecar(name string) bool { return strings.EqualFold(filepath.Ext(name), ".xmp") }
 
-// sidecarFor ищет сайдкар фото по ключу (путь в нижнем регистре): сначала `имя.jpg.xmp`
+// sidecarFor ищет сайдкар фото по ключу sideKey: сначала `имя.jpg.xmp`
 // (darktable, digiKam), затем `имя.xmp` (Lightroom, Bridge — и для RAW рядом с JPEG).
 // Только среди найденного обходом: путь из XMP или угаданный путь не открывается.
 func sidecarFor(key string, sides map[string]sidecar) sidecar {
@@ -137,7 +145,7 @@ func readSidecar(s sidecar) (Marks, markFields, error) {
 	if s.size > maxXMPBytes {
 		return Marks{}, 0, fmt.Errorf("%d байт, больше %d — не читается", s.size, maxXMPBytes)
 	}
-	f, err := os.Open(s.path)
+	f, err := imgfile.OpenRegular(s.path)
 	if err != nil {
 		return Marks{}, 0, err
 	}

@@ -13,6 +13,7 @@ import (
 // ни подписей, ни фото на фоне, ни узора, ни стикера, ни мест, ни своего цвета страниц. Название
 // не печатается, поэтому разворот с одним названием тоже пустой (Spread.empty тут не подходит).
 // Фон, узор и стикер с Fade ≥ 1, узор и стикер неизвестного генератора не печатаются — не считаются.
+// Фон альбома (098, Album) — не содержимое листа: лист только с ним пустой, как лист только с цветом альбома.
 func BlankSpreads(v model.View, pl *Plan) []int {
 	var out []int
 	for i, s := range v.Spreads {
@@ -27,20 +28,20 @@ func BlankSpreads(v model.View, pl *Plan) []int {
 	return out
 }
 
-// shownBackdrop — на развороте есть фон, который попадёт в печать (Fade < 1).
+// shownBackdrop — на развороте есть свой фон, который попадёт в печать (Fade < 1).
 func shownBackdrop(s model.SpreadView) bool {
 	for _, b := range s.Backdrops {
-		if b.Fade < 1 {
+		if !b.Album && b.Fade < 1 {
 			return true
 		}
 	}
 	return false
 }
 
-// shownPattern — на листе есть узор, который попадёт в печать (048): видимый и известный.
+// shownPattern — на листе есть свой узор, который попадёт в печать (048): видимый и известный.
 func shownPattern(s model.SpreadView) bool {
 	for _, pv := range s.Patterns {
-		if pv.Known && pv.Pat.Fade < 1 {
+		if !pv.Album && pv.Known && pv.Pat.Fade < 1 {
 			return true
 		}
 	}

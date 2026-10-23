@@ -408,7 +408,7 @@ func frameSide(t *testing.T, path string) int {
 func TestAppApplyBorder(t *testing.T) {
 	a := decorApp(t)
 	p := model.New()
-	p.Photos[brPhoto] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
+	p.Photos[brPhoto] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
 	p.Spreads = []*model.Spread{{ID: brSheet, Photos: []string{brPhoto}, Grid: []*model.Place{
 		{ID: brPlace, X: 20, Y: 10, W: 60, H: 50, Photo: brPhoto}, {ID: brEmpty, X: 100, Y: 10, W: 40, H: 40},
 	}}}
@@ -518,7 +518,7 @@ func TestImportFrameRelinks(t *testing.T) {
 	key := res.Added[0].ID
 	id := model.LibPhotoID(key)
 	p := model.New()
-	p.Photos[brPhoto] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
+	p.Photos[brPhoto] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
 	p.Photos[id] = model.PhotoRef{Lib: key, W: 300, H: 200} // путь не найден на этом компьютере
 	p.Spreads = []*model.Spread{{ID: brSheet, Photos: []string{brPhoto}, Grid: []*model.Place{
 		{ID: brPlace, X: 20, Y: 10, W: 60, H: 50, Photo: brPhoto, Border: &model.Border{Photo: id, Cut: [4]float64{0.1, 0.15, 0.1, 0.15}}},

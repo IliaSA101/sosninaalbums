@@ -5,6 +5,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // kit — Methods со считающим Host: сколько раз правка дошла до Changed (автосохранение и
@@ -69,7 +70,7 @@ func newKit(t testing.TB, p *model.Project) *kit {
 
 // lentPhoto кладёт в ленту фото id (его нет в проекте) и возвращает его сведения.
 func (k *kit) lentPhoto(id string) model.PhotoInfo {
-	pi := model.PhotoInfo{ID: id, Path: `C:\lent\` + id + ".jpg", W: 300, H: 200, Size: 10}
+	pi := model.PhotoInfo{ID: id, Path: testkit.AbsPath("lent/" + id + ".jpg"), W: 300, H: 200, Size: 10}
 	k.lent[id] = pi
 	return pi
 }
@@ -84,7 +85,7 @@ func twoSpreads(t testing.TB) *kit {
 	for i, ids := range [][]string{{"a", "b"}, {"c"}} {
 		p.Spreads = append(p.Spreads, &model.Spread{ID: "s" + string(rune('1'+i)), Photos: ids})
 		for _, id := range ids {
-			p.Photos[id] = model.PhotoRef{Path: `C:\` + id + ".jpg", W: 300, H: 200}
+			p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 		}
 	}
 	return newKit(t, p)

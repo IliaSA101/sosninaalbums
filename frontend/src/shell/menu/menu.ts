@@ -3,7 +3,7 @@
 // Клавиши берутся из реестра (base/keys) — один список на клавиши, справку и меню.
 import type { Command } from './commands'
 import { keymap } from '../../base/keys/keymap.svelte'
-import { ALIGN_OPS, ALIGN_TO, alignBlock, type AlignTo } from '../../panels/layouts/align'
+import { ALIGN_OPS, ALIGN_TO, alignBlock, alignToBlock, type AlignTo } from '../../panels/layouts/align'
 import type { Zone } from '../../editor/places/groupsel'
 import { ALL_LEVELS, LEVEL_TITLE, type FeatureId, type Level } from '../../base/prefs/levels'
 import { recentName } from '../dialogs/recent'
@@ -53,6 +53,8 @@ export interface MenuCtx {
   vigable?: boolean // текущий лист можно сделать виньеткой (обычный разворот, не обложка); нет — серое
   decorable?: boolean // у текущего листа можно копировать оформление (049 Ф2): есть лист и это не обложка; нет — серое
   vigSetup?: boolean // текущий лист — виньетка: «Настроить виньетку…» доступна; нет — серое
+  copyable?: boolean // на листе выделено то, что копируется (099): «Вырезать», «Копировать», «Дублировать» без этого серые
+  pasteable?: boolean // буфер не пуст и есть лист (099): «Вставить» без этого серое
   layerable?: boolean // «Ручная» и выделено место, фото, текст или стикер; «Авто» — стикер (с текстом или без) без мест: слои двигать есть что; нет — серое
   missing: number // пропавших фото
   collecting?: boolean // сбор проекта в папку уже идёт (069)
@@ -162,6 +164,8 @@ function alignMenu(c: MenuCtx): Spec {
         cmd: 'alignTo' as const,
         arg: t.to,
         checked: t.to === to,
+        disabled: alignToBlock(t.to, n) !== null, // «Выделения» у одного — серое (спека 100 п. 4)
+        hint: alignToBlock(t.to, n) ?? undefined,
         sep: i === 0,
       })),
     ],
@@ -231,6 +235,17 @@ function fileSpecs(c: MenuCtx): Spec[][] {
   ]
 }
 
+// 099: порядок системной «Правки»; клавиши холста, поэтому в зоне ленты фото пункты серые.
+function clipSpecs(c: MenuCtx): Spec[] {
+  const off = c.zone !== 'canvas'
+  return [
+    { id: 'cutItems', label: 'Вырезать', cmd: 'cutItems', feature: 'clipboard', disabled: off || !c.copyable },
+    { id: 'copyItems', label: 'Копировать', cmd: 'copyItems', feature: 'clipboard', disabled: off || !c.copyable },
+    { id: 'pasteItems', label: 'Вставить', cmd: 'pasteItems', feature: 'clipboard', disabled: off || !c.pasteable },
+    { id: 'duplicateItems', label: 'Дублировать', cmd: 'duplicateItems', feature: 'clipboard', disabled: off || !c.copyable },
+  ]
+}
+
 function editSpecs(c: MenuCtx): Spec[][] {
   const onCanvas = c.zone === 'canvas'
   return [
@@ -238,6 +253,7 @@ function editSpecs(c: MenuCtx): Spec[][] {
       { id: 'undo', label: 'Отменить', cmd: 'undo', disabled: !c.canUndo },
       { id: 'redo', label: 'Повторить', cmd: 'redo', disabled: !c.canRedo },
     ],
+    clipSpecs(c),
     [
       {
         id: 'selectAll',
@@ -346,6 +362,8 @@ function helpSpecs(): Spec[][] {
       { id: 'startWindow', label: 'Стартовое окно', cmd: 'startWindow' },
       { id: 'whatsNew', label: 'Что нового', cmd: 'whatsNew' },
     ],
+    // Последним пунктом и на любом уровне (101): без feature.
+    [{ id: 'about', label: 'О программе…', cmd: 'about' }],
   ]
 }
 

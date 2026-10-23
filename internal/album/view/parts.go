@@ -201,7 +201,7 @@ func patternViews(p *model.Project, s *model.Spread) []model.PatternView {
 
 // frameViews — фото целиком для каждой ячейки по кадру из PhotoRef и эффективный dpi.
 // Геометрия фото — по пропорциям файла (rawAspect): ячейку под повёрнутое на 90° фото
-// уже подогнала раскладка.
+// уже подогнала раскладка. Own — свой кадр (098) только здесь: на ручном месте он не действует.
 func frameViews(p *model.Project, ids []string, rects []layout.Rect) []model.FrameView {
 	out := make([]model.FrameView, len(rects))
 	for i, r := range rects {
@@ -210,6 +210,7 @@ func frameViews(p *model.Project, ids []string, rects []layout.Rect) []model.Fra
 		img := model.PlaceImage(r, p.RawAspect(ids[i]), f)
 		out[i] = newFrameView(img, f)
 		out[i].DPI, out[i].FlipH, out[i].FlipV, out[i].Win = geom.FrameDPI(ref.W, img), ref.FlipH, ref.FlipV, r
+		out[i].Own = ref.Asp
 		toneView(&out[i], ref)
 	}
 	return out

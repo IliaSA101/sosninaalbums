@@ -463,7 +463,6 @@ func TestRestoreBins(t *testing.T) {
 }
 
 func TestRelinkKeepsBins(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	s := edtest.NewRelinkSetup(t)
 	oldA := s.E.Refs()[s.IdA].Path
 	a := newBin(t, s.E, "A", []model.PhotoInfo{{ID: s.IdA, Path: oldA}})

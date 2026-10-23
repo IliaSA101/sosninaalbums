@@ -21,8 +21,9 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
-// Golden v4 (testdata/v4-dev.salbum.json) открывается как текущая версия (6): первая
-// запись делает .v4.bak с исходными байтами и пишет версию 6; данные те же, поля fade нет.
+// Golden v4 (testdata/v4-dev.salbum.json) открывается как текущая версия: первая запись делает
+// копию «(для 0.6)» с исходными байтами (имя занято чужим — « 2») и пишет текущую версию; данные
+// те же, поля fade нет.
 func TestMigrateV4ToV5(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "testdata", "v4-dev.salbum.json"))
 	if err != nil {
@@ -45,12 +46,23 @@ func TestMigrateV4ToV5(t *testing.T) {
 		t.Fatal("запись поверх v4 должна делать бэкап")
 	}
 	before := model.Marshal(p)
+	// Имя копии занято чужим файлом (098-22): копия встаёт в « 2», чужой файл цел.
+	busy, bakPath := salbum.BackupName(path, 4, 1), salbum.BackupName(path, 4, 2)
+	if err := os.WriteFile(busy, []byte("чужое"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := e.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	bak, err := os.ReadFile(path + ".v4.bak")
+	if got, _ := os.ReadFile(busy); string(got) != "чужое" {
+		t.Fatalf("чужой файл %s затёрт: %q", busy, got)
+	}
+	bak, err := os.ReadFile(bakPath)
 	if err != nil || !bytes.Equal(bak, data) {
-		t.Fatalf(".v4.bak: %v, совпадает с исходником: %v", err, bytes.Equal(bak, data))
+		t.Fatalf("копия для 0.6: %v, совпадает с исходником: %v", err, bytes.Equal(bak, data))
+	}
+	if got := e.TakeBackup(); got != bakPath || e.TakeBackup() != "" {
+		t.Fatalf("имя копии для тоста %q, ждали %q один раз", got, bakPath)
 	}
 	if f := fileJSON(t, path); f.Version != model.FormatVersion {
 		t.Fatalf("версия в файле %d", f.Version)
@@ -66,13 +78,13 @@ func TestMigrateV4ToV5(t *testing.T) {
 		t.Fatalf("потери при v4 → v6:\n%s\n%s", before, model.Marshal(q))
 	}
 	// Вторая запись копию не трогает: она уже есть, а файл уже v6.
-	if err := os.WriteFile(path+".v4.bak", []byte("старое"), 0o644); err != nil {
+	if err := os.WriteFile(bakPath, []byte("старое"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := edtest.Open(t, q, path).Save(path); err != nil {
 		t.Fatal(err)
 	}
-	if bak, _ := os.ReadFile(path + ".v4.bak"); string(bak) != "старое" {
+	if bak, _ := os.ReadFile(bakPath); string(bak) != "старое" {
 		t.Fatal("копия v4 перезаписана")
 	}
 }
@@ -162,9 +174,9 @@ func TestBackupV1OnFirstSave(t *testing.T) {
 	if err := e.Save(""); err != nil {
 		t.Fatal(err)
 	}
-	bak := path + ".v1.bak"
+	bak := salbum.BackupName(path, 1, 1)
 	if got, _ := os.ReadFile(bak); !bytes.Equal(got, orig) {
-		t.Fatal("в .v1.bak не исходные байты")
+		t.Fatal("в копии для 0.3 не исходные байты")
 	}
 	if fileJSON(t, path).Version != model.FormatVersion {
 		t.Fatal("файл не записан в текущей версии")
@@ -189,7 +201,8 @@ func TestBackupV1OnFirstSave(t *testing.T) {
 	if err := edtest.Open(t, model.New(), "").Save(filepath.Join(dir, "fresh.salbum")); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{other + ".v1.bak", filepath.Join(dir, "new.salbum.v1.bak"), filepath.Join(dir, "fresh.salbum.v1.bak")} {
+	for _, f := range []string{salbum.BackupName(other, 1, 1), salbum.BackupName(filepath.Join(dir, "new.salbum"), 1, 1),
+		salbum.BackupName(filepath.Join(dir, "fresh.salbum"), 1, 1)} {
 		if _, err := os.Stat(f); err == nil {
 			t.Fatalf("лишняя копия %s", f)
 		}
@@ -354,6 +367,23 @@ func FuzzLoad(f *testing.F) {
 		fmt.Fprintf(&many, `,{"path":"%d.jpg"}`, i)
 	}
 	f.Add([]byte(`{"version":16,"loose":[{"id":"0123456789ab","at":1,"files":[` + many.String()[1:] + `]}]}`))
+	// 098 (v17): копии фото, свой кадр, фон альбома, app — голден; номера копий негодные и
+	// на границе, одно и то же с разными номерами, asp вне пределов, фон альбома с обоими полями,
+	// без записи фото и с огромными числами, app не строкой и с «../», новее программы.
+	if g, err := os.ReadFile(filepath.Join("..", "testdata", golden17Copies)); err == nil {
+		f.Add(denorm17(g, "C:/Съёмки"))
+	}
+	f.Add([]byte(`{"version":17,"app":"../../x","spreads":[{"id":"s","photos":["aaaaaaaaaaaaaaaa","aaaaaaaaaaaaaaaa-2","aaaaaaaaaaaaaaaa-1","aaaaaaaaaaaaaaaa-99",
+"aaaaaaaaaaaaaaaa-100","aaaaaaaaaaaaaaaa-x","aaaaaaaaaaaaaaaa--2","-2"],"noAlbumBg":true,"grid":[{"id":"c0ffee000001","x":1,"y":1,"w":50,"h":50,"photo":"aaaaaaaaaaaaaaaa-2"}]}],
+"photos":{"aaaaaaaaaaaaaaaa":{"path":"a.jpg","w":3,"h":2,"asp":1e308},"aaaaaaaaaaaaaaaa-2":{"path":"b.jpg","w":9,"h":9,"asp":-1,"frame":{"s":2}},
+"aaaaaaaaaaaaaaaa-1":{"path":"a.jpg","asp":0.001},"aaaaaaaaaaaaaaaa-99":{"path":"c.jpg","asp":"NaN"},"aaaaaaaaaaaaaaaa-100":{"path":"d.jpg"},
+"aaaaaaaaaaaaaaaa-x":{"path":"e.jpg"},"-2":{"path":"f.jpg"}},"albumBg":{"photo":"aaaaaaaaaaaaaaaa-2","pat":{"kind":"x"},"fade":9}}`))
+	f.Add([]byte(`{"version":17,"app":7,"photos":{"p":{"path":"a.jpg"}},"albumBg":{"photo":"нет","frame":{"s":1e308,"r":1e308},"fade":-1,"pages":true,"flipH":true}}`))
+	f.Add([]byte(`{"version":17,"albumBg":null,"spreads":[{"id":"s","noAlbumBg":"да"}]}`))
+	f.Add([]byte(`{"version":17,"albumBg":{"pat":{"kind":"stripes","inks":["#AAAAAA"],"scale":1e308,"fade":2},"photo":"","pages":true},"settings":{"sheet":true}}`))
+	f.Add([]byte(`{"version":18,"app":"0.24.0"}`))
+	// Находка fuzz 0.23: блок без ширины со своим шрифтом, которого нет здесь, — FitTexts его не трогает (082-5).
+	f.Add([]byte(`{"spreads":[{"texts":[{"text":"0","style":{"font":"my:0000000000000000"}}]}]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		dir := testkit.TempDir(t)
 		path := filepath.Join(dir, "f.salbum")
@@ -402,7 +432,9 @@ func FuzzLoad(f *testing.F) {
 					minW = 1
 				}
 				a := model.BoxOf(tb).AABB()
-				if len([]rune(tb.Text)) > model.MaxTextRunes || tb.W < minW || a.X < -1e-6 || a.Y < -1e-6 || !model.IsTextID(tb.ID) ||
+				// Блок своим шрифтом, которого нет на этом компьютере, FitTexts не трогает (082-5): ширина и место как в файле.
+				kept := edtest.FontMissing(tb.Style.Font)
+				if len([]rune(tb.Text)) > model.MaxTextRunes || !kept && (tb.W < minW || a.X < -1e-6 || a.Y < -1e-6) || !model.IsTextID(tb.ID) ||
 					tb.Rot != geom.NormDeg(tb.Rot) {
 					t.Fatalf("блок: %+v", tb)
 				}
@@ -414,6 +446,18 @@ func FuzzLoad(f *testing.F) {
 			}
 			if r.Fade != model.ClampPhotoFade(r.Fade) {
 				t.Fatalf("прозрачность фото: %v", r.Fade)
+			}
+			if r.Asp != model.ClampAsp(r.Asp) { // свой кадр (098) — зажат
+				t.Fatalf("свой кадр: %v", r.Asp)
+			}
+		}
+		if err := edtest.FamilyInvariant(p); err != nil { // семьи копий (098-16)
+			t.Fatal(err)
+		}
+		if b := p.AlbumBg; b != nil { // фон альбома (098): узор или фото с записью, ровно одно
+			_, ok := p.Photos[b.Photo]
+			if (b.Pat == nil) == (b.Photo == "") || b.Photo != "" && !ok || b.Fade != geom.Round2(geom.ClampF(b.Fade, 0, 1)) {
+				t.Fatalf("фон альбома: %+v", b)
 			}
 		}
 		// Load оставляет то, что пропустит CheckTotals: иначе открытый проект «замёрз» бы (79).
@@ -590,7 +634,6 @@ func box(id string, x, y, w, h float64, photo string) *model.Place {
 
 // Перепривязка фото, стоящего только на фоне, не добавляет его папку и не двигает папки проекта.
 func TestBackdropRelink(t *testing.T) {
-	edtest.SkipNotWindows(t)
 	s := edtest.NewRelinkSetup(t)
 	other := filepath.Join(filepath.Dir(s.NewFd), "Своя")
 	oldBg := filepath.Join(filepath.Dir(s.OldFolder), "Чужая", "fon.jpg")

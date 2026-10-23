@@ -1,11 +1,12 @@
-// Генератор THIRD_PARTY_NOTICES.txt — единый файл лицензий: реальный состав exe + полные тексты.
-// Go-модули: go-licenses (GOPATH/bin) с тегами сборки Wails; лицензия стандартной библиотеки — из GOROOT;
-// npm-пакеты — список NPM ниже (рантайм Svelte и его зависимости; тексты — из frontend/node_modules);
-// шрифты — internal/text/fonts. Только Node. Запуск из корня: node scripts/third-party.mjs
-// (нужны go, go-licenses и frontend/node_modules; GOTMPDIR задан в окружении).
+// Генератор THIRD_PARTY_NOTICES.txt — единый файл лицензий: реальный состав сборок + полные тексты.
+// Go-модули: `go list -deps` отдельно под windows, darwin и linux (теги сборки Wails; у Linux +webkit2_41),
+// у модуля пометка ОС, если он не во всех трёх; текст — ближайший к пакету файл LICENSE в кэше модулей
+// (как у go-licenses, но без него: go-licenses работает только под ОС машины); лицензия стандартной
+// библиотеки — из GOROOT; npm-пакеты — список NPM ниже (рантайм Svelte и его зависимости; тексты — из
+// frontend/node_modules); шрифты — internal/text/fonts. Только Node. Запуск из корня:
+// node scripts/third-party.mjs (нужны go и frontend/node_modules; GOTMPDIR задан в окружении).
 // При смене состава сборки обновить NPM и проверить diff.
 import fs from 'fs'
-import os from 'os'
 import path from 'path'
 import { execFileSync } from 'child_process'
 import { fileURLToPath } from 'url'
@@ -13,14 +14,16 @@ import { withGoCaches } from './goenv.mjs'
 
 const R = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..').replace(/\\/g, '/')
 const W = R
-const TAGS = 'desktop,production'
-const goLicenses = path.join(process.env.GOPATH || path.join(os.homedir(), 'go'), 'bin', 'go-licenses')
-const run = (cmd, args) =>
-  execFileSync(cmd, args, { cwd: R, encoding: 'utf8', maxBuffer: 1 << 26, env: withGoCaches({ ...process.env, GOFLAGS: `-tags=${TAGS}` }, R) })
+// Сборки программы: теги и cgo как в scripts/build.* и release.yml (у Linux — WebKitGTK 4.1).
+const TARGETS = [
+  { os: 'windows', name: 'Windows', tags: 'desktop,production', cgo: '0' },
+  { os: 'darwin', name: 'macOS', tags: 'desktop,production', cgo: '1' },
+  { os: 'linux', name: 'Linux', tags: 'desktop,production,webkit2_41', cgo: '1' },
+]
+const run = (cmd, args, extra = {}) =>
+  execFileSync(cmd, args, { cwd: R, encoding: 'utf8', maxBuffer: 1 << 26, env: withGoCaches({ ...process.env, ...extra }, R) })
 const GOROOT = run('go', ['env', 'GOROOT']).trim()
-const tmp = fs.mkdtempSync(path.join(process.env.GOTMPDIR || os.tmpdir(), 'notices-'))
-const glReport = run(goLicenses, ['report', './...'])
-run(goLicenses, ['save', './...', '--save_path', path.join(tmp, 'save'), '--force'])
+const GOVERSION = run('go', ['env', 'GOVERSION']).trim()
 const NPM = [
   ['@jridgewell/gen-mapping', 'MIT'],
   ['@jridgewell/remapping', 'MIT'],
@@ -47,8 +50,6 @@ const norm = (t) =>
     .replace(/\r\n/g, '\n')
     .replace(/[ \t]+$/gm, '')
     .trim() + '\n'
-const mods = {}
-for (const m of fs.readFileSync(W + '/go.mod', 'utf8').matchAll(/^\s*(?:require\s+)?(\S+) (v\S+)/gm)) mods[m[1]] = m[2]
 const MIT_BODY = `Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
@@ -60,28 +61,64 @@ function add(name, ver, lic, text) {
   if (!groups.has(t)) groups.set(t, { lic: new Set(), items: [] })
   const g = groups.get(t)
   g.lic.add(lic)
-  g.items.push(`${name} ${ver}`)
+  if (!g.items.includes(`${name} ${ver}`)) g.items.push(`${name} ${ver}`)
 }
 const section = { go: [], npm: [] }
-for (const line of glReport.split('\n').filter(Boolean)) {
-  const [pkg, , lic] = line.trim().split(',')
-  // Свой модуль, включая чужой Go-код внутри frontend/node_modules (flatted кладёт пакет golang/): в exe не входит.
-  if (pkg === 'github.com/IliaSA101/sosninaalbums' || pkg.startsWith('github.com/IliaSA101/sosninaalbums/')) continue
-  const modName = Object.keys(mods)
-    .filter((k) => pkg === k || pkg.startsWith(k + '/'))
-    .sort((a, b) => b.length - a.length)[0]
-  const dir = tmp + '/save/' + pkg
-  const f = fs.readdirSync(dir).find((x) => /^LICEN[CS]E/i.test(x))
-  const text = fs.readFileSync(dir + '/' + f, 'utf8')
-  const label = `${modName} ${mods[modName]} (${lic})`
-  if (!section.go.includes(label)) {
-    section.go.push(label)
-    add(modName, mods[modName], lic, text)
-  } else if (!groups.get(norm(text))) add(modName, mods[modName], lic, text)
+// Вид лицензии по тексту; незнакомый — ошибка (новый модуль проверить глазами и дополнить).
+// Файл с несколькими лицензиями (MIT + Apache) помечается всеми; BSD-4 (пункт о рекламе) — ошибка.
+function classify(text, where) {
+  if (/advertising materials/i.test(text)) throw new Error('BSD-4 (пункт о рекламе) несовместим с GPL, проверить: ' + where)
+  const found = []
+  if (/Apache License/.test(text) && /Version 2\.0/.test(text)) found.push('Apache-2.0')
+  if (/^ISC License/m.test(text)) found.push('ISC')
+  if (/Permission is hereby granted, free of charge/.test(text)) found.push('MIT')
+  if (/Redistributions of source code must retain/.test(text)) found.push(/Neither the name/.test(text) ? 'BSD-3-Clause' : 'BSD-2-Clause')
+  if (!found.length) throw new Error('неизвестная лицензия: ' + where)
+  return found.join(' + ')
+}
+// Ближайший к пакету файл лицензии внутри модуля (как у go-licenses).
+function licenseFile(dir, root) {
+  for (let d = dir; ; d = path.dirname(d)) {
+    const f = fs.readdirSync(d).find((x) => /^LICEN[CS]E/i.test(x))
+    if (f) return path.join(d, f)
+    if (d === root || path.dirname(d) === d) return null
+  }
+}
+const gomods = new Map() // «модуль версия файл» -> {name, ver, lic, text, oses}
+for (const t of TARGETS) {
+  const env = { GOOS: t.os, GOARCH: 'amd64', CGO_ENABLED: t.cgo, GOFLAGS: `-tags=${t.tags}` }
+  const raw = run('go', ['list', '-deps', '-json=Module,Dir,ImportPath', './...'], env)
+  for (const p of JSON.parse(`[${raw.replace(/}\s*{/g, '},{')}]`)) {
+    const m = p.Module
+    // Свой модуль и стандартная библиотека (у неё нет Module) в списки модулей не входят.
+    if (!m || m.Path === 'github.com/IliaSA101/sosninaalbums') continue
+    const file = licenseFile(p.Dir, m.Dir)
+    if (!file) throw new Error('нет файла лицензии: ' + p.ImportPath)
+    const key = `${m.Path} ${m.Version} ${file}`
+    if (!gomods.has(key)) {
+      const text = fs.readFileSync(file, 'utf8')
+      gomods.set(key, { name: m.Path, ver: m.Version, lic: classify(text, file), text, oses: new Set() })
+    }
+    gomods.get(key).oses.add(t.name)
+  }
+}
+// ОС по всем файлам одной лицензии модуля; пометка, если модуль не во всех сборках.
+const labelOses = new Map()
+for (const g of gomods.values()) {
+  const label = `${g.name} ${g.ver} (${g.lic})`
+  if (!labelOses.has(label)) labelOses.set(label, new Set())
+  for (const o of g.oses) labelOses.get(label).add(o)
+}
+for (const g of [...gomods.values()].sort((a, b) => a.name.localeCompare(b.name) || a.lic.localeCompare(b.lic))) {
+  const label = `${g.name} ${g.ver} (${g.lic})`
+  const oses = labelOses.get(label)
+  const line = label + (oses.size === TARGETS.length ? '' : ` — только ${TARGETS.filter((t) => oses.has(t.name)).map((t) => t.name).join(', ')}`)
+  if (!section.go.includes(line)) section.go.push(line)
+  add(g.name, g.ver, g.lic, g.text)
 }
 // Стандартная библиотека
-section.go.push('Стандартная библиотека Go go1.26.9 (BSD-3-Clause)')
-add('Стандартная библиотека Go', 'go1.26.9', 'BSD-3-Clause', fs.readFileSync(GOROOT + '/LICENSE', 'utf8'))
+section.go.push(`Стандартная библиотека Go ${GOVERSION} (BSD-3-Clause)`)
+add('Стандартная библиотека Go', GOVERSION, 'BSD-3-Clause', fs.readFileSync(GOROOT + '/LICENSE', 'utf8'))
 // npm
 for (const [name, lic] of NPM) {
   const dir = R + '/frontend/node_modules/' + name
@@ -151,20 +188,25 @@ out.push(`THIRD_PARTY_NOTICES
 ===================
 
 Sosnina Albums — программа вёрстки свадебных фотоальбомов. Исходный код программы
-распространяется по лицензии MIT (файл LICENSE). В программу и её исполняемый файл
+распространяется по лицензии GNU General Public License версии 3 (только этой версии,
+GPL-3.0-only) с дополнительным условием по п. 7(b) — файлы LICENSE и NOTICE.md; версии
+до 0.22.x включительно выпущены по лицензии MIT. В программу и её исполняемый файл
 входят сторонние компоненты — Go-модули, npm-пакеты фронтенда и шрифты; их авторы,
 версии и лицензии перечислены ниже, полные тексты лицензий приведены в конце файла.
-Список составлен go-licenses и по package-lock.json для версии 0.8.0.
+Все они допускают распространение вместе с программой под GPL-3.0 (Apache-2.0
+совместима с GPL версии 3). Список составлен по go list для сборок Windows, macOS
+и Linux и по package-lock.json.
 
 Содержание
   1. Go-модули в исполняемом файле
   2. npm-пакеты в сборке интерфейса
   3. Шрифты (SIL Open Font License 1.1)
-  4. Прочее (Microsoft WebView2)
+  4. Прочее (системные библиотеки)
   5. Тексты лицензий
 
 1. Go-модули в исполняемом файле (${section.go.length})
 -------------------------------------------
+Модуль без пометки входит во все три сборки (Windows, macOS, Linux).
 ${section.go.join('\n')}
 
 2. npm-пакеты в сборке интерфейса (${section.npm.length})
@@ -202,11 +244,15 @@ for (const [n, f] of fonts.map((x) => [x[0], x[1]])) {
   // тело OFL общее: сверяем сравнением после нормализации
   add(n, '(шрифт)', 'OFL-1.1', body)
 }
-out.push(`4. Прочее
----------
-Microsoft WebView2 (Evergreen Bootstrapper и WebView2Loader.dll) встроены через
-github.com/wailsapp/wails/v2 и github.com/wailsapp/go-webview2; распространяются на условиях
-Microsoft: https://developer.microsoft.com/microsoft-edge/webview2/
+out.push(`4. Прочее (системные библиотеки)
+---------------------------------
+Не входят в поставку, подключаются из системы:
+  Windows — Microsoft WebView2 (Evergreen Bootstrapper и WebView2Loader.dll встроены через
+    github.com/wailsapp/wails/v2 и github.com/wailsapp/go-webview2); распространяется на условиях
+    Microsoft: https://developer.microsoft.com/microsoft-edge/webview2/
+  macOS — WKWebView (часть системы).
+  Linux — GTK 3, WebKitGTK 4.1 и libsoup 3 (LGPL-2.1 и новее, BSD); динамическое подключение,
+    ставятся из репозитория дистрибутива как зависимости пакета .deb.
 `)
 out.push(`5. Тексты лицензий
 ------------------`)
@@ -222,7 +268,6 @@ fs.writeFileSync(
     .replace(/\r\n/g, '\n')
     .replace(/\n{4,}/g, '\n\n\n'),
 )
-fs.rmSync(tmp, { recursive: true, force: true })
 console.log(
   section.go.length,
   section.npm.length,

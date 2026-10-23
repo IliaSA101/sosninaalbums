@@ -10,6 +10,13 @@ export const TREE_KEY = 'tree:album'
 export const TREE_MIN = 96.9 // % — уровень до 023 (1b61383: 3127 из 3226)
 export const TREE_MAX_MISSED = 90 // непокрытых блоков, критерий спеки 023
 export const MAX_DROP = 0.5 // п. п. покрытия
+// Раздел Go в эталоне — свой у каждой ОС: *_windows_test.go и код только для Windows на Linux не собираются,
+// и сверка с эталоном Windows показала бы «потерю» тестов, которых в этой сборке просто нет (переезд на Ubuntu,
+// решение владельца 22.10). Windows (CI) — прежний раздел go, Linux — go-linux, macOS — go-darwin.
+export const GO_KEY = process.platform === 'win32' ? 'go' : `go-${process.platform}`
+// Файл с разделом Go этой ОС: Windows — общий test-baseline.json, другие ОС — свой файл рядом
+// (оба раздела в одном файле больше 2 МБ — предел pre-commit на крупные файлы).
+export const GO_BASELINE = GO_KEY === 'go' ? 'test-baseline.json' : `test-baseline-${process.platform}.json`
 
 export const isTree = (p) => TREE_ROOTS.some((r) => p === r || p.startsWith(r + '/'))
 

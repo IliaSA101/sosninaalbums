@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -138,7 +139,7 @@ func TestRescanResetsThumbs(t *testing.T) {
 	}
 }
 
-// Старый черновик (v1) перед первой записью копируется в <черновик>.v1.bak, один раз.
+// Старый черновик (v1) перед первой записью копируется в «черновик (для 0.3).salbum», один раз.
 func TestDraftV1BackedUp(t *testing.T) {
 	a := newApp(t)
 	a.cfgDir = testkit.TempDir(t)
@@ -152,9 +153,9 @@ func TestDraftV1BackedUp(t *testing.T) {
 	}
 	a.ed.Store(mustEditor(t, p, path))
 	a.flushSave()
-	bak := a.draftPath() + ".v1.bak"
+	bak := salbum.BackupName(a.draftPath(), 1, 1)
 	if got, _ := os.ReadFile(bak); string(got) != string(v1) {
-		t.Fatalf("в .v1.bak не исходный черновик: %q", got)
+		t.Fatalf("в копии для 0.3 не исходный черновик: %q", got)
 	}
 	if got, _ := os.ReadFile(a.draftPath()); string(got) == string(v1) {
 		t.Fatal("черновик не записан в новой версии")
@@ -171,7 +172,7 @@ func TestDraftV1BackedUp(t *testing.T) {
 	b := newApp(t)
 	b.cfgDir = testkit.TempDir(t)
 	b.flushSave()
-	if _, err := os.Stat(b.draftPath() + ".v1.bak"); err == nil {
+	if _, err := os.Stat(salbum.BackupName(b.draftPath(), 1, 1)); err == nil {
 		t.Fatal("лишняя копия у нового проекта")
 	}
 }
@@ -201,6 +202,21 @@ func TestRescanGeneration(t *testing.T) {
 	for i := range 5 {
 		testkit.JPEG(t, dirB, fmt.Sprintf("b%d.jpg", i), 20, 10)
 	}
+	// Чтение второго поколения держит проба тома dirB (gate), пока не проверен флаг: без неё
+	// 5 фото прочлись бы раньше проверки (на Linux — так и было). Первое поколение не держим —
+	// оно должно и правда идти рядом со вторым.
+	gate := make(chan struct{})
+	var open sync.Once
+	release := func() { open.Do(func() { close(gate) }) }
+	old := reachable
+	t.Cleanup(func() { reachable = old })
+	t.Cleanup(release) // раньше ожидания фоновых задач newApp: Cleanup — в обратном порядке
+	reachable = func(p string) bool {
+		if p == dirB {
+			<-gate
+		}
+		return old(p)
+	}
 	ed := a.editor()
 	if _, _, err := ed.AddFolder(dirA); err != nil {
 		t.Fatal(err)
@@ -224,6 +240,7 @@ func TestRescanGeneration(t *testing.T) {
 	if !a.GetState().Scan.Active {
 		t.Fatal("после rescan сканирование должно быть активным")
 	}
+	release()
 
 	deadline := time.Now().Add(10 * time.Second)
 	for a.GetState().Scan.Active {
@@ -335,6 +352,29 @@ func TestGuardRecovers(t *testing.T) {
 	}
 }
 
+// Чтения копий и буфера (WhereUsed, ClipState, CopyItems) под guard: паника в Editor не роняет
+// процесс, ответ пустой, в log.txt — строка с именем метода. App без альбома (editor() = nil)
+// даёт панику на разыменовании.
+func TestReadsGuarded(t *testing.T) {
+	var buf strings.Builder
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	a := &App{}
+	if got := a.WhereUsed([]string{"x", "y"}); got == nil || len(got) != 0 {
+		t.Errorf("WhereUsed = %#v, ждали пустой список", got)
+	}
+	if got := a.CopyItems("s1", model.ClipSel{Refs: []string{"x"}}); got != (model.ClipInfo{}) {
+		t.Errorf("CopyItems = %+v, ждали пустую сводку", got)
+	}
+	_ = a.ClipState() // чужого альбома нет: пусто, паники наружу нет
+	out := buf.String()
+	for _, name := range []string{"WhereUsed", "CopyItems"} {
+		if !strings.Contains(out, "ПАНИКА в "+name+":") {
+			t.Errorf("в логе нет паники %s: %q", name, out)
+		}
+	}
+}
+
 // publish устаревшего поколения (и «из будущего») молчит: ни событий, ни изменений реестра и хода;
 // актуальное поколение обновляет реестр и шлёт library и scan, список nil — только scan.
 func TestPublishStaleGeneration(t *testing.T) {
@@ -406,7 +446,7 @@ func TestAutoBuildSpreadLimit(t *testing.T) {
 		p.Spreads = append(p.Spreads, &model.Spread{ID: model.NewID(), Photos: []string{}, BgL: "#ffffff"}) // не пустые: пустой хвост сборка заняла бы (035)
 	}
 	a.ed.Store(mustEditor(t, p, ""))
-	a.byID["a"] = library.Photo{ID: "a", Path: `C:\a.jpg`, W: 300, H: 200}
+	a.byID["a"] = library.Photo{ID: "a", Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
 	v, err := a.AutoBuild([]string{"a"}, -1, model.AutoOpts{Spreads: 1, MaxPer: 64})
 	if err == nil || !strings.Contains(err.Error(), "200 разворотов") { // 058: предел 200
 		t.Fatalf("ждали ошибку про 200 разворотов, получили %v", err)
@@ -429,7 +469,7 @@ func TestAutoBuildOpts(t *testing.T) {
 	a.ed.Store(mustEditor(t, model.New(), ""))
 	ids := []string{"a", "b", "c", "d", "e"}
 	for _, id := range ids {
-		a.byID[id] = library.Photo{ID: id, Path: `C:\` + id + `.jpg`, W: 300, H: 200}
+		a.byID[id] = library.Photo{ID: id, Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 	}
 	if ap, err := a.AutoPlan(ids, model.AutoOpts{Spreads: 2, MaxPer: 3, Variety: -7}); err != nil || ap.Spreads != 2 {
 		t.Fatalf("AutoPlan: %+v %v", ap, err)
@@ -465,9 +505,9 @@ func TestVaryLayoutsXmp(t *testing.T) {
 	a.ed.Store(mustEditor(t, model.New(), ""))
 	ids := []string{"a", "b", "c", "d"}
 	for _, id := range ids {
-		a.byID[id] = library.Photo{ID: id, Path: `C:\` + id + `.jpg`, W: 300, H: 200}
+		a.byID[id] = library.Photo{ID: id, Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 	}
-	a.byID["d"] = library.Photo{ID: "d", Path: `C:\d.jpg`, W: 300, H: 200, Xmp: &library.Marks{Rating: 5}}
+	a.byID["d"] = library.Photo{ID: "d", Path: testkit.AbsPath("d.jpg"), W: 300, H: 200, Xmp: &library.Marks{Rating: 5}}
 	big := func(v model.View) float64 {
 		r, other := v.Spreads[0].Rects, 0.0
 		for _, x := range r[:3] {
@@ -492,11 +532,11 @@ func TestVaryLayoutsXmp(t *testing.T) {
 func TestNamesMethods(t *testing.T) {
 	a := newApp(t)
 	p := model.New()
-	p.Photos["a"] = model.PhotoRef{Path: `C:\Иванов Петя.jpg`, W: 300, H: 200}
-	p.Photos["b"] = model.PhotoRef{Path: `C:\b.jpg`, W: 300, H: 200}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("Иванов Петя.jpg"), W: 300, H: 200}
+	p.Photos["b"] = model.PhotoRef{Path: testkit.AbsPath("b.jpg"), W: 300, H: 200}
 	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a", "b"}}}
 	a.ed.Store(mustEditor(t, p, ""))
-	a.byID["lib"] = library.Photo{ID: "lib", Path: `C:\Петрова Анна Сергеевна.jpg`}
+	a.byID["lib"] = library.Photo{ID: "lib", Path: testkit.AbsPath("Петрова Анна Сергеевна.jpg")}
 	if pv := a.Person("a"); pv.Last != "Иванов" || pv.First != "Петя" || !pv.FromFile {
 		t.Fatalf("из имени файла: %+v", pv)
 	}

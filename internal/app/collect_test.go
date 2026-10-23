@@ -526,6 +526,11 @@ func TestCollectOutcome(t *testing.T) {
 	if note != want {
 		t.Errorf("успех:\n%q\n%q", note, want)
 	}
+	// Копии (098): пропавший файл с копией — одно фото, а не две записи.
+	pl.Missing = []string{"0123456789abcdef", "0123456789abcdef-2"}
+	if _, note, _ := collectOutcome(pl, 2, nil, false); note != want {
+		t.Errorf("копия пропавшего:\n%q\n%q", note, want)
+	}
 }
 
 func TestMissingQuestion(t *testing.T) {

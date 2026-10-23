@@ -17,9 +17,10 @@ func diskRoot() string { return filepath.VolumeName(os.TempDir()) + string(filep
 
 func at(parts ...string) string { return filepath.Join(append([]string{diskRoot()}, parts...)...) }
 
-// under — образец library.Under (paths от library не зависит): префикс с разделителем, регистр не важен.
+// under — образец library.Under (paths от library не зависит): префикс с разделителем, регистр —
+// по Fold (на Linux важен).
 func under(path, folder string) bool {
-	return strings.HasPrefix(strings.ToLower(filepath.Clean(path)), DirKey(folder))
+	return strings.HasPrefix(Fold(filepath.Clean(path)), DirKey(folder))
 }
 
 // UnderAny совпадает с library.Under по любой папке: вложенные, корень, регистр, общий префикс имени.
@@ -56,7 +57,11 @@ func TestTopKeys(t *testing.T) {
 	sep := string(filepath.Separator)
 	got := TopKeys([]string{at("a b"), at("a") + sep, at("A"), at("a", "x"), at("ab")})
 	want := []string{DirKey(at("a b")), DirKey(at("a")), DirKey(at("ab"))} // пробел меньше разделителя
-	if !reflect.DeepEqual(got, want) || len(got) != 3 {
+	// Linux: «A» — своя папка, её ключ меньше строчных.
+	if !FoldEqual("A", "a") {
+		want = append([]string{DirKey(at("A"))}, want...)
+	}
+	if !reflect.DeepEqual(got, want) || len(got) != len(want) {
 		t.Fatalf("TopKeys: %q, ждали %q", got, want)
 	}
 	for i := 1; i < len(got); i++ {
@@ -70,7 +75,7 @@ func TestTopKeys(t *testing.T) {
 }
 
 // Reaches — правило сканера (093-4): точка и устройство в хвосте, ссылки в папках хвоста; у файла
-// последний элемент — только устройство; root внутри себя нет; регистр не важен.
+// последний элемент — только устройство; root внутри себя нет; регистр — по Fold (на Linux важен).
 func TestReaches(t *testing.T) {
 	link := at("A", "Ссылка")
 	linked := func(dir string) bool { return strings.EqualFold(dir, link) }
@@ -79,7 +84,8 @@ func TestReaches(t *testing.T) {
 		file, want bool
 	}{
 		{at("A"), at("A", "b"), false, true},
-		{at("a"), at("A", "B", "c"), false, true},
+		{at("a"), at("A", "B", "c"), false, FoldEqual("a", "A")},
+		{at("A"), at("A", "B", "c"), false, true},
 		{at("A"), at("A"), false, false},
 		{at("A"), at("AB"), false, false},
 		{at("A"), at("A", ".edits"), false, false},

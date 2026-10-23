@@ -3,6 +3,7 @@ import * as Api from '../../../wailsjs/go/app/App'
 import { dropPlan, type DropPlan } from './drop'
 import { dropGrid } from './dropgrid.svelte'
 import { COVER_ID } from '../geom/sheet'
+import { isCopyReq } from '../core/copies'
 import { store } from '../core/store.svelte'
 import { movedText, type Moved } from '../core/strip'
 import type { BackdropScope, GridResult, Payload, Target } from '../core/types'
@@ -71,8 +72,8 @@ async function addPhotos(plan: Extract<DropPlan, { op: 'add' }>) {
   // Ручной разворот (042): места, плитка, вопрос об остальных — решает Go, не AddPhotos.
   if (isGrid(plan.spread)) return dropGrid(plan.spread, '', plan.ids, plan.frac ?? -1, plan.fromSpread, plan.go)
   // Из ленты — со снятием выделения и тостом о переносе; из разворота — просто правка.
-  const op = () => Api.AddPhotos(plan.spread, plan.ids, plan.at)
-  const ok = plan.fromSpread ? await store.run(op()) : await store.fromStrip(plan.ids, plan.spread, op)
+  const op = (ids: string[]) => Api.AddPhotos(plan.spread, ids, plan.at)
+  const ok = plan.fromSpread ? await store.run(op(plan.ids)) : await store.fromStrip(plan.ids, plan.spread, op)
   if (ok && plan.go) store.goId(plan.spread)
 }
 
@@ -85,12 +86,23 @@ function landedText(moved: Moved[], spread: string): string {
   )
 }
 
+// 098: из ленты фото, уже стоящее в альбоме, проходит ворота (окно копии); с холста ID как есть. null — «Отмена».
+const gated = (ids: string[], fromSpread: boolean): Promise<string[] | null> => (fromSpread ? Promise.resolve(ids) : store.hooks.gate(ids))
+
+// Фото не занимает места: свободное или запрос копии (новая запись) — вытесненного им хозяина места считает Go в left.
+const isFresh = (id: string) => isCopyReq(id) || !store.used.has(id)
+
+// Фото, занимающее место сейчас.
+const ownerOf = (spread: string, place: string) => store.sheet(spread)?.places?.find((p) => p.id === place)?.photo
+
 // Бросок на место: ручной лист — dropGrid, обложка — PlacePhotos. Замена занятого места фото из ленты выгоняет прежнее фото в ленту.
 async function placePhotos(spread: string, place: string, ids: string[], fromSpread: boolean) {
   if (isGrid(spread)) return dropGrid(spread, place, ids, -1, fromSpread)
-  const owner = store.sheet(spread)?.places?.find((p) => p.id === place)?.photo
+  const sent = await gated(ids, fromSpread)
+  if (!sent) return
+  ids = sent
   // Go считает в left и вытесненного хозяина места (замена фото из ленты), и фото, не нашедшие места.
-  const replaced = !!owner && !store.used.has(ids[0])
+  const replaced = !!ownerOf(spread, place) && isFresh(ids[0])
   let left = 0
   let named: string[] = []
   const op = async () => {

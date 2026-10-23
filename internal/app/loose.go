@@ -185,7 +185,9 @@ func (s srcSet) differs(o srcSet) bool {
 // равный папке с точностью до регистра и разделителей, отдаётся как dir (UI сравнивает строки).
 func (a *App) folderAdded(dir string, r model.FolderAdd) {
 	within := r.Within
-	if within != "" && paths.SamePath(within, dir) {
+	// Ключ DirKey, как у самой проверки повтора (spreads.AddFolder): SamePath на Linux различает
+	// регистр, и Dir с Within расходились бы.
+	if within != "" && paths.DirKey(within) == paths.DirKey(dir) {
 		within = dir
 	}
 	a.emit("folders:added", FolderAdded{Dir: dir, Within: within, Merged: r.Merged, LooseIn: r.LooseIn})

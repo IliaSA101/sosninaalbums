@@ -9,7 +9,6 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
-	"github.com/IliaSA101/sosninaalbums/internal/layout/variety"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
@@ -52,10 +51,14 @@ import (
 // подборки автосохранением; свои шрифты `fonts` (спека 082, omitempty) — 0.20 заменила бы id своей
 // гарнитуры в стилях на Montserrat и затёрла выбор автосохранением;
 // 16 (общий на 0.22, новые поля 0.22 до выпуска ложатся сюда же, без нового номера): отдельные фото
-// `loose` (спека 097, omitempty) — 0.21 файл не откроет и не затрёт добавления автосохранением.
+// `loose` (спека 097, omitempty) — 0.21 файл не откроет и не затрёт добавления автосохранением;
+// 17 (общий на 0.23, новые поля 0.23 до выпуска ложатся сюда же, без нового номера): копии фото —
+// ключи `photos` вида `<ID файла>-<n>`, свой кадр `photos.*.asp`, фон альбома `albumBg` и
+// `spreads[].noAlbumBg`, версия записавшей программы `app` (спека 098, omitempty) — 0.22 файл не
+// откроет и не сольёт копии автосохранением.
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 16
+const FormatVersion = 17
 
 type Settings struct {
 	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
@@ -127,6 +130,8 @@ type Spread struct {
 	Vig  *Vignette `json:"vig,omitempty"`
 	// Vars — поля шапки листа (031 dialog §4, fields.go); nil — свои пусты (VarsOf).
 	Vars *Vars `json:"vars,omitempty"`
+	// NoAlbumBg — фон альбома (098, albumbg.go) на этом листе не рисуется.
+	NoAlbumBg bool `json:"noAlbumBg,omitempty"`
 }
 
 // TextStyle — оформление текста; тип живёт в internal/text, проект его хранит.
@@ -188,7 +193,14 @@ type PhotoRef struct {
 	// Lib — ключ своего элемента библиотеки my:<16 hex> (048): в файле вместо пути, путь в
 	// памяти — от искателя библиотеки; ID записи — LibPhotoID(Lib).
 	Lib string `json:"lib,omitempty"`
+	// Asp — свой кадр (098, owncrop.go): пропорции окна, в котором стоит Frame; 0 — нет. Ячейка
+	// «Авто» берёт их вместо пропорций файла (Aspects).
+	Asp float64 `json:"asp,omitempty"`
 }
+
+// Свойства записи (decisions 098-16): файла — Path, Alt, W, H, Size, Lib — равны во всей семье
+// копий и пишутся только SetFile; использования — Frame, FlipH, FlipV, Adj, Fade, Caption,
+// Person, Asp — у каждой записи свои.
 
 // Project — альбом в памяти. Пути абсолютные; относительными они становятся
 // только в файле (file.go). JSON-теги нужны для снимков отмены и сравнения правок.
@@ -218,6 +230,8 @@ type Project struct {
 	// Fonts — свои гарнитуры, стоящие в текстах (082, v15, fonts.go): ключ — id my:<16 hex>.
 	// Держит SyncFonts; пустой — nil.
 	Fonts map[string]FontRef `json:"fonts,omitempty"`
+	// AlbumBg — фон альбома (098, albumbg.go): рисуется на листах без своего фона; nil — нет.
+	AlbumBg *AlbumBg `json:"albumBg,omitempty"`
 	// from — версия файла, из которого прочитан проект (0 — новый): по ней
 	// Editor решает, нужен ли бэкап перед первой записью.
 	from int
@@ -254,27 +268,44 @@ func (p *Project) Params() layout.Params {
 	return layout.Params{PageW: s.PageW, PageH: s.PageH, Margin: s.Margin, Gap: s.Gap, Layflat: s.Layflat, FoldAny: s.FoldAny}
 }
 
-// Aspects — действующие пропорции фото в ячейке: при нечётной четверти поворота
-// фото лежит боком, ячейке нужно 1/a. Раскладка и «Под фото» берут их.
-func (p *Project) Aspects(ids []string) []float64 {
+// Aspects — пропорции фото в ячейке «Авто»: свой кадр (Asp), иначе действующие пропорции файла
+// (при нечётной четверти поворота фото лежит боком, ячейке нужно 1/a). Их берут все пути «Авто»:
+// раскладка, листание, KeepLayouts, Freeze, автосборка, сгиб (decisions 098-18).
+func (p *Project) Aspects(ids []string) []float64 { return p.aspects(ids, aspCell) }
+
+// PhotoAspects — пропорции целого фото для нового или подгоняемого места: как Aspects, но без
+// своего кадра («Под фото», ремонт SyncGrid, tileRest — место под целое фото, 098-18).
+func (p *Project) PhotoAspects(ids []string) []float64 { return p.aspects(ids, aspPhoto) }
+
+// RawAspect — пропорции файла, без поворота: по ним считается геометрия самого фото
+// (placeImage, фон), иначе повёрнутое на 90° фото растянулось бы.
+func (p *Project) RawAspect(id string) float64 { return p.aspectOf(id, aspRaw) }
+
+// Виды пропорций записи: ячейка «Авто», целое фото с поворотом, файл.
+const (
+	aspCell = iota
+	aspPhoto
+	aspRaw
+)
+
+func (p *Project) aspects(ids []string, kind int) []float64 {
 	a := make([]float64, len(ids))
 	for i, id := range ids {
-		a[i] = p.aspectOf(id, false)
+		a[i] = p.aspectOf(id, kind)
 	}
 	return a
 }
 
-// RawAspect — пропорции файла, без поворота: по ним считается геометрия самого фото
-// (placeImage, фон), иначе повёрнутое на 90° фото растянулось бы.
-func (p *Project) RawAspect(id string) float64 { return p.aspectOf(id, true) }
-
-func (p *Project) aspectOf(id string, raw bool) float64 {
+func (p *Project) aspectOf(id string, kind int) float64 {
 	r, ok := p.Photos[id]
+	if ok && kind == aspCell && r.Asp > 0 {
+		return r.Asp // четверть поворота в нём уже учтена (TurnPhotos переворачивает)
+	}
 	if !ok || r.W <= 0 || r.H <= 0 {
 		return 1
 	}
 	a := float64(r.W) / float64(r.H)
-	if turn, _ := SplitR(r.FrameOrDefault().R); !raw && turn%2 == 1 {
+	if turn, _ := SplitR(r.FrameOrDefault().R); kind != aspRaw && turn%2 == 1 {
 		return 1 / a
 	}
 	return a
@@ -447,7 +478,7 @@ func (s *Spread) Empty() bool {
 		s.BgL == "" && s.BgR == "" && s.Name == "" &&
 		s.BgPhoto == nil && s.BgPhotoL == nil && s.BgPhotoR == nil && s.BgPhotoS == nil && s.Caps == nil &&
 		s.Pat == nil && s.PatL == nil && s.PatR == nil && len(s.Stickers) == 0 &&
-		s.Kind == "" && s.Vig == nil && s.Vars == nil
+		s.Kind == "" && s.Vig == nil && s.Vars == nil && !s.NoAlbumBg
 }
 
 // Placed — фото стоит в каком-нибудь листе (месте обложки тоже).
@@ -463,7 +494,7 @@ func (p *Project) Placed(id string) bool {
 // PruneRefs оставляет в Photos только используемые фото: стоящие в местах, на фонах, в
 // стикерах (048) и рамочках мест (079). Фото, оставшееся только на фоне, в стикере или рамочке,
 // теряет свойства места (кадр, подпись, зеркало, тон, прозрачность): они не переживают уход из
-// мест. Имя (Person) — свойство фото, а не места: остаётся.
+// мест, и свой кадр (Asp, 098). Имя (Person) — свойство фото, а не места: остаётся.
 func (p *Project) PruneRefs() {
 	used := map[string]bool{}
 	for _, s := range p.Sheets() {
@@ -477,8 +508,8 @@ func (p *Project) PruneRefs() {
 		case used[id]:
 		case !onBg[id]:
 			delete(p.Photos, id)
-		case r.Frame != nil || r.Caption != nil || r.FlipH || r.FlipV || r.Adj != nil || r.Fade != 0:
-			r.Frame, r.Caption, r.FlipH, r.FlipV, r.Adj, r.Fade = nil, nil, false, false, nil, 0
+		case r.Frame != nil || r.Caption != nil || r.FlipH || r.FlipV || r.Adj != nil || r.Fade != 0 || r.Asp != 0:
+			r.Frame, r.Caption, r.FlipH, r.FlipV, r.Adj, r.Fade, r.Asp = nil, nil, false, false, nil, 0, 0
 			p.Photos[id] = r
 		}
 	}
@@ -486,7 +517,8 @@ func (p *Project) PruneRefs() {
 
 // Remember записывает сведения о фото (и ключ своего из библиотеки, 048). Кадр, подпись
 // и зеркало остаются: перенос (MovePhoto идёт через AddPhotos) и повторная автосборка их
-// не стирают.
+// не стирают. Свойства файла получает вся семья копий (SetFile, 098-16): иначе копия со старыми
+// W/H растянулась бы в печати до перезапуска.
 func Remember(p *Project, photos []PhotoInfo) []string {
 	ids := make([]string, len(photos))
 	for i, ph := range photos {
@@ -503,73 +535,9 @@ func Remember(p *Project, photos []PhotoInfo) []string {
 			r.Size = ph.Size
 		}
 		p.Photos[ph.ID] = r
+		p.SetFile(ph.ID, r)
 	}
 	return ids
-}
-
-// VariantLimit — длина ряда раскладок (и круга листания) до 16 фото.
-const VariantLimit = 24
-
-// RowLen — длина первого ряда «Авто» для n фото: до 16 — VariantLimit, с layout.ManyFrom —
-// первая порция (layout.ManyBatch), следующие досчитываются по требованию (AutoRow).
-func RowLen(n int) int {
-	if n >= layout.ManyFrom {
-		return layout.ManyBatch
-	}
-	return VariantLimit
-}
-
-// AutoRow — ряд «Авто» в порядке ленты (variety.Row: лучшая, формы и ряд layout вперемешку,
-// 051), где стоит key, и его место в ряду (−1 — нет). До 16 фото — весь ряд VariantLimit. С
-// ManyFrom — наименьший префикс из порций по ManyBatch (до ManyCap), где key есть; нет нигде —
-// первая порция. more — ряд можно досчитать: он полный и короче ManyCap.
-func AutoRow(asp []float64, prm layout.Params, key string) (row []layout.Result, i int, more bool) {
-	if len(asp) < layout.ManyFrom {
-		row = variety.RowResults(asp, prm, VariantLimit)
-		return row, IndexOf(row, key), false
-	}
-	for n := layout.ManyBatch; n <= layout.ManyCap; n += layout.ManyBatch {
-		row = variety.RowResults(asp, prm, n)
-		if i = IndexOf(row, key); i >= 0 {
-			return row, i, len(row) == n && n < layout.ManyCap
-		}
-		if len(row) < n {
-			break // дальше ряд не растёт
-		}
-	}
-	row = variety.RowResults(asp, prm, layout.ManyBatch)
-	return row, -1, len(row) == layout.ManyBatch
-}
-
-// MoreRow — ряд «Авто» на n ≥ ManyFrom фото, досчитанный ещё на порцию после have вариантов
-// (не длиннее ManyCap). До 16 фото — весь ряд.
-func MoreRow(asp []float64, prm layout.Params, have int) (row []layout.Result, more bool) {
-	if len(asp) < layout.ManyFrom {
-		return variety.RowResults(asp, prm, VariantLimit), false
-	}
-	n := min((max(have, 0)/layout.ManyBatch+1)*layout.ManyBatch, layout.ManyCap)
-	row = variety.RowResults(asp, prm, n)
-	return row, len(row) == n && n < layout.ManyCap
-}
-
-// ExtraRow — «Другие варианты» разворота (041): в подборке третьим рядом, в листании и счётчике
-// «i / N» — сразу после ряда «Авто» (решение 0.11 №36). Ключи строит layout: SetLayout их примет.
-// С ManyFrom фото — пусто: ряд «Авто» там растёт порциями («+»), а страница поменьше делает
-// фото мельче порога воздуха (k_air ≤ 16, design 041 §5).
-func ExtraRow(asp []float64, prm layout.Params) []layout.Result {
-	if len(asp) >= layout.ManyFrom {
-		return nil
-	}
-	return variety.Extra(asp, prm, RowLen(len(asp)))
-}
-
-func IndexOf(rs []layout.Result, key string) int {
-	for i, r := range rs {
-		if r.Key == key {
-			return i
-		}
-	}
-	return -1
 }
 
 // ProductAlbum — тип изделия «Альбом»: единственный. Лист виньетки (031) — тоже album,

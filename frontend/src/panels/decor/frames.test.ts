@@ -91,7 +91,7 @@ describe('слова окна «Рамочки»', () => {
   it('заголовок, имя предмета, пустые «Мои», загрузка, удаление', () => {
     expect(DECOR_TITLE.frame).toBe('Рамочки')
     expect(NOUN.frame).toBe('рамочку')
-    expect(emptyText('mine', false, 'frame')).toBe('Загрузите свои кнопкой выше')
+    expect(emptyText('mine', false, 'frame')).toBe('Здесь появятся ваши рамочки: нажмите «Добавить свою рамочку…»')
     expect(emptyText('mine', true, 'frame')).toBe('Здесь появятся ваши рамочки')
     expect(uploadHint('frame')).toContain('PNG с прозрачностью и SVG')
     expect(deleteText('Резная', 'frame')).toBe('«Резная» будет убрана из библиотеки. Где она уже стоит, не изменится.')

@@ -1,4 +1,5 @@
 // Сводка по альбому для панели деталей. Это счётчики, а не геометрия, поэтому на фронте.
+import { baseOf } from '../../base/core/copies'
 import type { Photo, SpreadView, View } from '../../base/core/types'
 
 // Квадратное — если пропорции отличаются от 1:1 не больше чем на 2 %.
@@ -31,6 +32,12 @@ export function limitLine(v: Pick<View, 'pageLimit'>): LimitLine | null {
   return { text: `${l.who}: ${l.range}`, warn: false }
 }
 
+// Шапка (спека 100 п. 7): только предупреждение о выходе за предел типографии; в пределах — null (счётчик как был).
+export function topLimit(v: Pick<View, 'pageLimit'>): { warn: true; title: string } | null {
+  const l = limitLine(v)
+  return l?.warn ? { warn: true, title: l.text } : null
+}
+
 export function orientation(w: number, h: number): Orientation {
   const r = w / h
   // Без размеров не гадаем: считаем квадратным, чтобы сумма H+V+S всё равно сошлась.
@@ -39,37 +46,32 @@ export function orientation(w: number, h: number): Orientation {
   return r > 1 ? 'h' : 'v'
 }
 
-// Вклад одного листа: h/v/sq, цвет, число фото. Кэш по объекту листа и таблице фото: дельта вида (075) сохраняет
-// неизменённые развороты теми же объектами, поэтому правка пересчитывает только изменённый, а не все фото альбома.
-interface Part {
-  photos: number
-  h: number
-  v: number
-  sq: number
-  adobe: number
-  other: number
+// Вклад одного листа: по каждому фото — файл (baseOf), ориентация и цвет. Кэш по объекту листа и таблице фото:
+// дельта вида (075) сохраняет неизменённые развороты теми же объектами, поэтому правка пересчитывает только
+// изменённый, а не все фото альбома. Копии одного файла (098) в сумме — одно фото: считает albumStats по file.
+interface Item {
+  file: string
+  o: Orientation
+  color: Photo['color'] | undefined
 }
-const parts = new WeakMap<SpreadView, { byId: Map<string, Photo>; part: Part }>()
+const parts = new WeakMap<SpreadView, { byId: Map<string, Photo>; items: Item[] }>()
 
-function partOf(s: SpreadView, byId: Map<string, Photo>): Part {
+function partOf(s: SpreadView, byId: Map<string, Photo>): Item[] {
   const hit = parts.get(s)
-  if (hit && hit.byId === byId) return hit.part
-  const part: Part = { photos: 0, h: 0, v: 0, sq: 0, adobe: 0, other: 0 }
-  s.photos.forEach((id, i) => {
-    part.photos++
-    // Фото из недоступной папки в библиотеке нет — берём аспект его ячейки.
-    const lib = byId.get(id)
-    if (lib?.color === 'adobe') part.adobe++
-    else if (lib?.color === 'other') part.other++
+  if (hit && hit.byId === byId) return hit.items
+  const items = s.photos.map((id, i): Item => {
+    const file = baseOf(id)
+    // Фото из недоступной папки в библиотеке нет — берём аспект его ячейки. У копии в ленте её ID нет: смотрим файл.
+    const lib = byId.get(file)
     const p = lib ?? s.rects?.[i]
-    part[p ? orientation(p.w, p.h) : 'sq']++
+    return { file, o: p ? orientation(p.w, p.h) : 'sq', color: lib?.color }
   })
-  parts.set(s, { byId, part })
-  return part
+  parts.set(s, { byId, items })
+  return items
 }
 
 // sheets — листы ряда: [обложка?] + развороты, lead — сколько в начале обложек (0 или 1). Фото обложки считаются,
-// а в развороты, страницы и раскладки она не входит (032).
+// а в развороты, страницы и раскладки она не входит (032). Файл, стоящий в нескольких местах (копии), считается один раз.
 export function albumStats(sheets: SpreadView[], byId: Map<string, Photo>, total: number, lead = 0): AlbumStats {
   const spreads = sheets.length - lead
   const st: AlbumStats = {
@@ -85,15 +87,17 @@ export function albumStats(sheets: SpreadView[], byId: Map<string, Photo>, total
     other: 0,
   }
   const keys = new Set<string>()
+  const seen = new Set<string>()
   for (const [n, s] of sheets.entries()) {
     if (n >= lead && s.layout) keys.add(s.layout)
-    const p = partOf(s, byId)
-    st.photos += p.photos
-    st.h += p.h
-    st.v += p.v
-    st.sq += p.sq
-    st.adobe += p.adobe
-    st.other += p.other
+    for (const it of partOf(s, byId)) {
+      if (seen.has(it.file)) continue
+      seen.add(it.file)
+      st.photos++
+      st[it.o]++
+      if (it.color === 'adobe') st.adobe++
+      else if (it.color === 'other') st.other++
+    }
   }
   st.layouts = keys.size
   return st

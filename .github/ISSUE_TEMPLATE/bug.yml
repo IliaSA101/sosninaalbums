@@ -6,8 +6,8 @@ body:
     id: version
     attributes:
       label: Версия программы
-      description: Справка ▸ Что нового, либо имя exe-файла (SosninaAlbums-<версия>.exe).
-      placeholder: "0.17.0"
+      description: Подставляется, если вы пришли по кнопке «Сообщить о проблеме» в окне «О программе». Иначе — окно «О программе» либо «Что нового».
+      placeholder: "0.23.0"
     validations:
       required: true
   - type: dropdown
@@ -20,6 +20,8 @@ body:
         - macOS 12–14
         - macOS 15
         - macOS 26
+        - Linux (Ubuntu, Mint, Debian)
+        - Linux (другой дистрибутив)
     validations:
       required: true
   - type: textarea
@@ -46,7 +48,7 @@ body:
     attributes:
       label: Журнал log.txt
       description: |
-        Где лежит: Windows — `%APPDATA%\SosninaAlbums\log.txt`, Mac — `~/Library/Application Support/SosninaAlbums/log.txt`.
+        Где лежит: Windows — `%APPDATA%\SosninaAlbums\log.txt`, Mac — `~/Library/Application Support/SosninaAlbums/log.txt`, Linux — `~/.config/SosninaAlbums/log.txt`.
         Вставьте последние строки. Личные фото и пути к ним не прикладывайте.
       render: text
     validations:

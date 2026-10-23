@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { albumStats, colorLine, limitLine, nextLowSheet, orientation } from './stats'
+import { albumStats, colorLine, limitLine, nextLowSheet, orientation, topLimit } from './stats'
 import type { PageLimitView, Photo, SpreadView } from '../../base/core/types'
 
 const photo = (id: string, w: number, h: number): Photo => ({ id, path: id, name: id, w, h })
@@ -56,6 +56,17 @@ describe('albumStats', () => {
   })
   it('пустой альбом', () => {
     expect(albumStats([], new Map(), 0)).toMatchObject({ spreads: 0, photos: 0, layouts: 0 })
+  })
+  it('копии одного файла (098) — одно фото: число, ориентация и цвет берутся по файлу', () => {
+    const f = '00000000000000a1'
+    const byId = new Map([{ ...photo(f, 3, 2), color: 'adobe' } as Photo, photo('b', 2, 3)].map((p) => [p.id, p]))
+    // файл стоит дважды (запись и копия на другом листе) и ещё копия в той же раскладке с чужим кадром
+    const st = albumStats([spread([f, 'b'], 'k'), spread([f + '-2'], 'k2'), spread([f + '-3'], 'k3')], byId, 2)
+    expect(st).toMatchObject({ photos: 2, h: 1, v: 1, adobe: 1, other: 0, layouts: 3 })
+  })
+  it('копия без записи ленты: аспект ячейки, когда файла нет в библиотеке', () => {
+    const st = albumStats([spread(['ab-2'], 'k', [{ w: 4, h: 2 }])], new Map(), 0)
+    expect(st).toMatchObject({ photos: 1, h: 1 })
   })
 })
 
@@ -114,5 +125,24 @@ describe('limitLine (085)', () => {
     expect(limitLine(lim({ count: 62, warn }))).toEqual({ text: warn, warn: true })
     const few = 'Разворотов 6 — у Нетпринта («Премиум») не меньше 10'
     expect(limitLine(lim({ count: 6, warn: few }))).toEqual({ text: few, warn: true })
+  })
+})
+
+describe('topLimit (спека 100 п. 7)', () => {
+  const lim = (p: Partial<PageLimitView>): { pageLimit: PageLimitView } => ({
+    pageLimit: { who: 'Нетпринт «Премиум»', range: 'от 10 до 60 разворотов', count: 20, min: 10, max: 60, warn: '', ...p },
+  })
+  it('в пределах и без типографии — null, счётчик не красится', () => {
+    expect(topLimit({})).toBeNull()
+    expect(topLimit(lim({}))).toBeNull()
+    // Граница: ровно предел (10 и 60) — Go warn не ставит.
+    expect(topLimit(lim({ count: 10 }))).toBeNull()
+    expect(topLimit(lim({ count: 60 }))).toBeNull()
+  })
+  it('вне предела — warn и текст предупреждения Go для подсказки', () => {
+    const over = 'Разворотов 61 — у Нетпринта («Премиум») не больше 60'
+    expect(topLimit(lim({ count: 61, warn: over }))).toEqual({ warn: true, title: over })
+    const under = 'Разворотов 9 — у Нетпринта («Премиум») не меньше 10'
+    expect(topLimit(lim({ count: 9, warn: under }))).toEqual({ warn: true, title: under })
   })
 })

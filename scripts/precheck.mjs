@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PRECHECK_SLACK, TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
+import { GO_BASELINE, GO_KEY, PRECHECK_SLACK, TREE_KEY, compareTree, isTree, treeCover } from './tree-cover.mjs'
 import { withGoCaches } from './goenv.mjs'
 import { checkFolders, checkSizes } from './limits.mjs'
 import { collect as collectAdded, violations as langViolations } from './comment-lang.mjs'
@@ -134,9 +134,9 @@ if (goFiles.length) {
   })
   if (goFiles.some((f) => isTree(path.posix.dirname(f)))) {
     step('покрытие дерева album', () => {
-      const baseJson = path.join(root, 'testdata', 'test-baseline.json')
-      const entry = fs.existsSync(baseJson) ? JSON.parse(fs.readFileSync(baseJson, 'utf8')).go?.[TREE_KEY] : null
-      if (!entry) return { ok: false, out: `в testdata/test-baseline.json нет записи ${TREE_KEY}` }
+      const baseJson = path.join(root, 'testdata', GO_BASELINE)
+      const entry = fs.existsSync(baseJson) ? JSON.parse(fs.readFileSync(baseJson, 'utf8'))[GO_KEY]?.[TREE_KEY] : null
+      if (!entry) return { ok: false, out: `в testdata/${GO_BASELINE} нет записи ${GO_KEY}.${TREE_KEY}` }
       let cur
       try {
         cur = treeCover({ root, env, heavy: true })
@@ -218,12 +218,19 @@ if (fe.length) {
   }
 }
 
-// ---- Python: e2e-скрипты (089) ----
-// Юнит-тесты чистых частей scripts/e2e; нет каталога или Python — шаг пропускается молча.
-if (changed.some((f) => /^scripts\/e2e\/.*\.py$/.test(f)) && fs.existsSync(path.join(root, 'scripts', 'e2e'))) {
-  const py = spawnSync('python', ['--version'], { encoding: 'utf8' })
-  if (py.status === 0) {
-    step('python unittest (scripts/e2e)', () => res(run('python', ['-m', 'unittest', 'discover', '-s', 'scripts/e2e'])))
+// ---- Python: скрипты с юнит-тестами (e2e 089, win 039, demo 102) ----
+// Юнит-тесты чистых частей каталогов, где правился .py. Интерпретатор — python3 (Ubuntu, macOS), затем python (Windows);
+// нет ни того ни другого — WARN, а не молчаливый пропуск (на Ubuntu `python` нет, тесты годами не запускались).
+const PY_DIRS = ['scripts/e2e', 'scripts/win', 'scripts/demo']
+const pyTouched = PY_DIRS.filter(
+  (d) => fs.existsSync(path.join(root, d)) && changed.some((f) => f.startsWith(`${d}/`) && f.endsWith('.py')),
+)
+if (pyTouched.length) {
+  const py = ['python3', 'python'].find((c) => spawnSync(c, ['--version'], { encoding: 'utf8' }).status === 0)
+  if (py) {
+    for (const d of pyTouched) step(`python unittest (${d})`, () => res(run(py, ['-I', '-m', 'unittest', 'discover', '-s', d])))
+  } else {
+    step('python unittest', () => ({ ok: true, warn: `нет python3 и python в PATH: тесты ${pyTouched.join(', ')} не запущены` }))
   }
 }
 

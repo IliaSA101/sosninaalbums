@@ -10,6 +10,7 @@
   import BackdropLayer from '../backdrop/BackdropLayer.svelte'
   import PatternLayer from '../pattern/PatternLayer.svelte'
   import Cell from '../photo/Cell.svelte'
+  import { photoui } from '../photo/photoui.svelte'
   import PlaceLayer from '../places/PlaceLayer.svelte'
   import { shapeCss } from '../../base/geom/shape'
   import TextLayer from '../text/TextLayer.svelte'
@@ -135,6 +136,7 @@
   data-spread={spread.id}
   role="presentation"
   onclick={bgClick}
+  oncontextmenu={mini ? undefined : (e) => photoui.openSheet(e)}
   onpointermove={nt.track}
   onpointerleave={nt.leave}
   ondblclick={nt.dbl}

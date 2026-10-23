@@ -5,6 +5,7 @@ import { store } from '../../base/core/store.svelte'
 import { dropHooks } from '../../base/drag/dropact'
 import { drag } from '../../base/drag/drag.svelte'
 import { keymap } from '../../base/keys/keymap.svelte'
+import { copyAsk, gateCopy } from '../../base/drag/copyask.svelte'
 import { dropAsk, dropGrid } from '../../base/drag/dropgrid.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { modes } from '../../base/prefs/view.svelte'
@@ -40,6 +41,7 @@ export function wire() {
       spreadsel.prune(v.spreads.map((s) => s.id))
       gridAct.prune(v.spreads)
       dropAsk.prune(v)
+      copyAsk.prune(v)
       gallery.sync()
       folderfilter.prune(v.folders, v.loose)
       binsel.prune(v.bins ?? []) // удалённая (и отменённая «Новая») подборка больше не показана
@@ -85,6 +87,7 @@ export function wire() {
       await dropGrid(spread, '', ids, -1, false)
       return true
     },
+    gate: gateCopy, // 098: фото, уже стоящее в альбоме, — окно «Фото уже в альбоме»
   })
   prefs.narrowed = narrow
   // Предпросмотр галереи мешал бы целиться: раскладка на экране не та, что в проекте.

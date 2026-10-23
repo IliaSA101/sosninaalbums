@@ -90,6 +90,85 @@ func TestMaskText(t *testing.T) {
 	}
 }
 
+// Причина ошибки Go после пути остаётся: «op путь: причина» → «op <путь>: причина» (qa-0.22).
+func TestMaskTextKeepsReason(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"диск", `open C:\Users\Иван\Фото свадьба\x.jpg: no such file`, `open <путь>: no such file`},
+		{"диск, прямые черты", `stat D:/Фото/a.jpg: access is denied`, `stat <путь>: access is denied`},
+		{"Unix", `open /home/u/Фото/x.jpg: no such file or directory`, `open <путь>: no such file or directory`},
+		{"скобки в имени", `open D:\Фото\Анна\IMG (2).jpg: no such file`, `open <путь>: no such file`},
+		{"Unix, скобки в имени", `open /home/u/IMG (2).jpg: no such file`, `open <путь>: no such file`},
+		{"UNC", `open \\server\share\Анна\a.jpg: no such file`, `open <путь>: no such file`},
+		{"UNC прямыми", `open //server/share/Анна/a.jpg: permission denied`, `open <путь>: permission denied`},
+		{"file", `open file:///C:/x/a.jpg: no such file`, `open <путь>: no such file`},
+		{"тильда", `open ~/Pictures/a.jpg: no such file`, `open <путь>: no such file`},
+		{"корень без диска", `open \Users\Анна\a.jpg: no such file`, `open <путь>: no such file`},
+		{"две причины — первая тоже остаётся", `open /home/u/x.jpg: permission denied: повтор`, `open <путь>: permission denied: повтор`},
+		{"два пути в одном тексте", "open C:\\a\\x.jpg: no such file\nopen /home/u/y.jpg: is a directory", "open <путь>: no such file\nopen <путь>: is a directory"},
+		{"причина с путём — маскируется вся", `rename /home/u/a.jpg: to /home/u/b.jpg`, `rename <путь>`},
+		{"двоеточие в имени папки, дальше путь", `open /home/u/Проект: Иванов/a.jpg: no such file`, `open <путь>: no such file`},
+		{"двоеточие без пробела внутри пути", `open /home/u/a:b/x.jpg: no such file`, `open <путь>: no such file`},
+		{"кириллица в имени папки с двоеточием", `open /home/u/Свадьба: Анна и Пётр: permission denied`, `open <путь>: permission denied`},
+		{"Mac, кириллица в имени файла", `open /Users/u/Альбом: Петровы.salbum: no such file`, `open <путь>: no such file`},
+		{"слеш в ASCII-причине", `read /home/x/y: input/output error`, `read <путь>: input/output error`},
+		{"ASCII-имя с путём после двоеточия", `open /home/u/Proj: Ivanov/a.jpg: no such file`, `open <путь>: no such file`},
+		{"пустая причина", `open /home/u/x.jpg: `, `open <путь>`},
+		{"без причины", `open /home/u/x.jpg`, `open <путь>`},
+		// Аудит 0.23-sec: первое звено причины — текст errno (два слова строчными), иначе это имя.
+		{"имя с двоеточием: Smith", `open /home/u/Proj: Smith: permission denied`, `open <путь>: permission denied`},
+		{"файл после двоеточия", `open /home/u/a: Smith.jpg`, `open <путь>`},
+		{"слово после двоеточия", `open /home/u/Ivanov: wedding`, `open <путь>`},
+		{"в кавычках причина вне", `open "/home/u/Фото/x.jpg": no such file`, `open "<путь>": no such file`},
+	}
+	for _, c := range cases {
+		if got := MaskText(c.in); got != c.want {
+			t.Errorf("%s: MaskText(%q) = %q, ждали %q", c.name, c.in, got, c.want)
+		}
+	}
+}
+
+// Тома и службы Linux: /run/media, /media/<имя>, /srv; наши /media/… (ID, не пути) целы.
+func TestMaskTextLinuxMounts(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"run/media", `/run/media/ilya/ДИСК/Фото/a.jpg`, `<путь>`},
+		{"media, том пользователя", `open /media/ilya/Фото Анны/a.jpg: no such file`, `open <путь>: no such file`},
+		{"media, два знака", `/media/ab/x`, `<путь>`},
+		{"media в начале и после скобки", `at f (/media/ilya/x.js:1:2)`, `at f (<путь>)`},
+		{"srv", `open /srv/albums/Анна/a.jpg: permission denied`, `open <путь>: permission denied`},
+		{"srv в кавычках", `"/srv/data/a b.jpg" нет`, `"<путь>" нет`},
+		{"run/media, регистр", `/RUN/Media/u/x`, `<путь>`},
+		{"наш /media/t", `/media/t/3f9a0123456789ab?v=2`, `/media/t/3f9a0123456789ab?v=2`},
+		{"наш /media/p", `/media/p/ab/1?px=2`, `/media/p/ab/1?px=2`},
+		{"наш /media/f", `/media/f/ab/1`, `/media/f/ab/1`},
+		{"наш /media/font", `/media/font/Name`, `/media/font/Name`},
+		{"наш /media/gen", `/media/gen/frame?x=1`, `/media/gen/frame?x=1`},
+		{"наш /media/lib", `/media/lib/t/3f9a?v=1`, `/media/lib/t/3f9a?v=1`},
+		{"наш /media/tpl", `/media/tpl/sa:tpl-1?px=2`, `/media/tpl/sa:tpl-1?px=2`},
+		{"наш /media/cover-guide", `/media/cover-guide/1`, `/media/cover-guide/1`},
+		{"наш /media/spread-guide", `/media/spread-guide/1`, `/media/spread-guide/1`},
+		{"наш адрес в тексте", `GET /media/spread-guide/1 404`, `GET /media/spread-guide/1 404`},
+		{"сегмент из одного знака", `/media/x/file`, `/media/x/file`},
+		{"media без хвоста", `/media/ilya`, `/media/ilya`},
+		{"адрес с media внутри", `http://wails.localhost/media/ilya/x`, `http://wails.localhost/media/ilya/x`},
+		{"наш и том в одной строке", `/media/t/ab и /media/ilya/Диск/a.jpg`, `/media/t/ab и <путь>`},
+		// Аудит 0.23-sec: сетевые и прочие корни Linux, любой абсолютный путь из двух частей.
+		{"gvfs", `open /run/user/1000/gvfs/smb-share:server=nas,share=photos/Свадьба Ивановых/a.jpg: no such file`, `open <путь>: no such file`},
+		{"data", `/data/Свадьба Ивановых/a.jpg`, `<путь>`},
+		{"opt и root", "open /opt/albums/Анна/a.jpg\nи /root/Фото/b.jpg", "open <путь>\nи <путь>"},
+		{"nfs, net, storage", "/nfs/x/a.jpg\n/net/host/b.jpg\n/storage/emulated/c.jpg", "<путь>\n<путь>\n<путь>"},
+		{"произвольный корень в кавычках", `"/export/Иванова Анна/a.jpg" нет`, `"<путь>" нет`},
+		{"произвольный корень в апострофах", `'/data/Анна Иванова/a.jpg' и 'D:\b.jpg'`, `'<путь>' и '<путь>'`},
+		{"наш адрес в апострофах цел", `'/media/t/3f9a' и '/media/x/y'`, `'/media/t/3f9a' и '/media/x/y'`},
+		{"том media в апострофах", `'/media/ilya/Диск/a.jpg' нет`, `'<путь>' нет`},
+		{"одна часть не путь", `ответ /ok и /api`, `ответ /ok и /api`},
+	}
+	for _, c := range cases {
+		if got := MaskText(c.in); got != c.want {
+			t.Errorf("%s: MaskText(%q) = %q, ждали %q", c.name, c.in, got, c.want)
+		}
+	}
+}
+
 // Крайние входы: мегабайт без путей и мегабайт путей маскируются за разумное время (регулярные
 // выражения RE2 без возвратов) и не оставляют имени.
 func TestMaskTextBig(t *testing.T) {

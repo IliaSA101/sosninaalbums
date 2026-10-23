@@ -1,6 +1,6 @@
 import { noHooks, type StoreHooks } from './hooks'
 import { COVER_ID, sheetIn } from '../geom/sheet'
-import { UsedIndex } from './usedindex'
+import { UsedIndex, useCountOf } from './usedindex'
 import type { CoverView, SpreadView, View } from './types'
 
 export const emptyView: View = {
@@ -59,7 +59,15 @@ export class Nav {
   // Неизменяемый набор (SvelteSet завёл бы сигнал на каждый id); считает UsedIndex по сменившимся разворотам,
   // состав не менялся — тот же объект.
   private readonly usedIdx = new UsedIndex()
-  used = $derived(this.usedIdx.update(this.sheets))
+  // Набор и счёт считаются вместе: счёт меняется и без смены набора (новый стикер, фон), набор — реже.
+  private readonly usedNow = $derived({ set: this.usedIdx.update(this.sheets), uses: this.usedIdx.uses })
+  used = $derived(this.usedNow.set)
+  // Фон альбома (098) считается в числе вхождений один раз, фоны листов с album: true — нет.
+  private readonly albumPhoto = $derived(this.view.albumBg?.photo ?? '')
+  // Сколько раз фото стоит в альбоме (число значка ленты, 098-6): места всех копий, фоны, стикеры, рамочки, фон альбома.
+  useCount(id: string): number {
+    return useCountOf(this.usedNow.uses, this.albumPhoto, id)
+  }
   spread = $derived<SpreadView | undefined>(this.onCover && this.cover ? this.cover.sheet : this.view.spreads[this.current])
 
   // i — индекс в view.spreads (обложку открывает goCover). Без разворотов, но с обложкой — она и открывается.

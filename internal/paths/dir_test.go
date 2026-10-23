@@ -36,7 +36,7 @@ func TestBookDir(t *testing.T) {
 	if _, _, err := BookDir(parent, "Петров", "альбома"); err == nil || !strings.Contains(err.Error(), "папки альбома «Петров»") {
 		t.Fatalf("файл на месте папки: %v", err)
 	}
-	for _, bad := range []string{"", ".", "..", "a/b"} {
+	for _, bad := range []string{"", ".", "..", "a/b", `a\b`, `..\x`, "/", `\`} {
 		if _, _, err := BookDir(parent, bad, "книги"); err == nil || !strings.Contains(err.Error(), "папки книги") {
 			t.Errorf("имя %q: %v", bad, err)
 		}

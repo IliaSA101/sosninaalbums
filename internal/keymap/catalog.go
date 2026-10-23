@@ -125,6 +125,7 @@ var catalog = []Command{
 	c("view", "levelCustom", "Уровень: Свой", "Свой", ""),
 	c("view", "startWindow", "Стартовое окно", "Старт", ""),
 	c("view", "whatsNew", "Что нового", "Новое", ""),
+	c("view", "about", "О программе", "О прогр.", ""),
 	c("view", "guide", "Справочник функций", "Справка", "", "F1").fixed(),
 	c("view", "help", "Горячие клавиши…", "Клавиши", "", "Shift+Slash", "Shift+Digit7"),
 
@@ -149,6 +150,12 @@ var catalog = []Command{
 	c("photos", "removeCell", "Удалить выбранное", "Удалить", "", "Delete", "Backspace").
 		hint("Фото — в ленту (в ручной раскладке место остаётся, второй раз — убрать место); " +
 			"блок текста — удалить; группа — все сразу. Из библиотеки не удаляет").in(ScopeCanvas),
+	// Копировать и вставить (099): Mod+C/V/X/D заняты не были; лента фото своих Mod+клавиш не имеет.
+	c("photos", "cutItems", "Вырезать", "Вырезать", "clipboard", "Mod+KeyX").in(ScopeCanvas),
+	c("photos", "copyItems", "Копировать", "Копировать", "clipboard", "Mod+KeyC").
+		hint("Фото, места, надписи и стикеры; вставка — на любом листе").in(ScopeCanvas),
+	c("photos", "pasteItems", "Вставить", "Вставить", "clipboard", "Mod+KeyV").in(ScopeCanvas),
+	c("photos", "duplicateItems", "Дублировать", "Дубль", "clipboard", "Mod+KeyD").in(ScopeCanvas),
 	c("photos", "addSelected", "Выделенные фото — на разворот", "На разв.", "", "Enter"),
 	c("photos", "flipH", "Зеркало по горизонтали", "Зерк. ↔", "flip"),
 	c("photos", "flipV", "Зеркало по вертикали", "Зерк. ↕", "flip"),

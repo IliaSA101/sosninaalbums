@@ -517,12 +517,15 @@ describe('«Правка ▸ Выровнять» (спека 010 U7)', () => {
       expect(off({ alignCount: 2, alignTo }), alignTo).toEqual([])
     }
   })
-  it('опора не серая и при одном выделенном', () => {
-    expect(
-      sub({ alignCount: 1 })
-        .filter((i) => i.cmd === 'alignTo')
-        .every((i) => !i.disabled),
-    ).toBe(true)
+  it('Относительно выделения серое у одного (спека 100 п. 4), страницы и разворота — нет', () => {
+    const to = (alignCount: number) => sub({ alignCount, alignTo: 'page' }).filter((i) => i.cmd === 'alignTo')
+    expect(to(1).map((i) => [i.arg, !!i.disabled])).toEqual([
+      ['sel', true],
+      ['page', false],
+      ['spread', false],
+    ])
+    expect(to(1)[0].hint).toContain('от 2 объектов')
+    expect(to(2).every((i) => !i.disabled)).toBe(true)
   })
 })
 

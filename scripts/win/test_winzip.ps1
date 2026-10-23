@@ -84,7 +84,7 @@ try {
         if ($ln -match '^(\s*)(- )?run:\s*\|') { $inRun = $true; $runBlocks++; $runIndent = $Matches[1].Length + $(if ($Matches[2]) { 2 } else { 0 }) }
     }
     Check 'run-блоки задания shots найдены и только ASCII' ($runBlocks -ge 4 -and $nonAscii.Count -eq 0) ("блоков $runBlocks; " + ($nonAscii -join ' // '))
-    Check 'pack.py вызывается по контракту design §2' (($y -match 'pack\.py" check \S+ --os windows') -and ($y -match 'pack\.py" windows --exe \S+ --version \S+ --guide .+ --changelog \S+ --notices \S+ --out \S+'))
+    Check 'pack.py вызывается по контракту design §2' (($y -match 'pack\.py" check \S+ --os windows') -and ($y -match 'pack\.py" windows --exe \S+ --version \S+ --guide .+ --changelog \S+ --notices \S+ --license \S+ --notice \S+ --out \S+'))
     Check 'архив уходит в shots.ps1 как ZipPath' ($y.Contains('ZipPath = $env:ZIP') -and -not $y.Contains('ExePath'))
     Check 'права workflow: contents: read' ($y -match '(?m)^permissions:\s*\r?\n\s+contents: read')
     $shotsText = [IO.File]::ReadAllText((Join-Path $here 'shots.ps1'), [Text.Encoding]::UTF8)

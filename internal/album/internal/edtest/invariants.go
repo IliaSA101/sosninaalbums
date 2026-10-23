@@ -3,6 +3,7 @@ package edtest
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"reflect"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -21,6 +23,7 @@ func GridInvariants(p *model.Project) error {
 	placeIDs, inAlbum, layerIDs := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	on2 := func(v float64) bool { return math.Abs(v*100-math.Round(v*100)) < 1e-6 }
 	off := len(p.Sheets()) - len(p.Spreads)
+	fit := fitOnce(p)
 	for k, s := range p.Sheets() {
 		i := k - off
 		g := p.Geo(s)
@@ -34,7 +37,7 @@ func GridInvariants(p *model.Project) error {
 			}
 			inAlbum[id] = true
 		}
-		if err := errors.Join(OrderInvariant(s), VigInvariant(s), PatInvariant(s), StickerInvariant(p, s, layerIDs)); err != nil {
+		if err := errors.Join(OrderInvariant(s), VigInvariant(s), PatInvariant(s), StickerInvariant(p, fit, s, layerIDs)); err != nil {
 			return fmt.Errorf("разворот %d: %w", i, err)
 		}
 		if s.Grid == nil {
@@ -155,8 +158,9 @@ func OrderInvariant(s *model.Spread) error {
 
 // StickerInvariant — стикеры листа s (048): не больше MaxStickers, ID уникальны в проекте (и с
 // местами и текстами — seen общий на проект), фото есть в Photos, зажатые (ClampSticker —
-// неподвижная точка), своя пропорция держится (FitStickers ничего не меняет).
-func StickerInvariant(p *model.Project, s *model.Spread, seen map[string]bool) error {
+// неподвижная точка), своя пропорция держится (FitStickers ничего не меняет; fit — проект после
+// FitStickers, один на все листы).
+func StickerInvariant(p *model.Project, fit func() *model.Project, s *model.Spread, seen map[string]bool) error {
 	if len(s.Stickers) > model.MaxStickers {
 		return fmt.Errorf("стикеров %d", len(s.Stickers))
 	}
@@ -165,11 +169,6 @@ func StickerInvariant(p *model.Project, s *model.Spread, seen map[string]bool) e
 	}
 	for _, t := range s.Texts {
 		seen[t.ID] = true
-	}
-	fit := p
-	if len(s.Stickers) > 0 {
-		fit = p.Clone()
-		fit.FitStickers()
 	}
 	for _, st := range s.Stickers {
 		switch {
@@ -183,11 +182,24 @@ func StickerInvariant(p *model.Project, s *model.Spread, seen map[string]bool) e
 			return fmt.Errorf("стикер не зажат: %+v", *st)
 		}
 		seen[st.ID] = true
-		if cs, i := fit.FindSticker(st.ID); cs == nil || !reflect.DeepEqual(cs.Stickers[i], st) {
+		if cs, i := fit().FindSticker(st.ID); cs == nil || !reflect.DeepEqual(cs.Stickers[i], st) {
 			return fmt.Errorf("пропорция стикера не держится: %+v", *st)
 		}
 	}
 	return nil
+}
+
+// fitOnce — копия p после FitStickers, по первому запросу: клон на каждый лист со стикерами
+// делал прогон с вставками (099) втрое дольше, а FitStickers — правка всего проекта.
+func fitOnce(p *model.Project) func() *model.Project {
+	var fit *model.Project
+	return func() *model.Project {
+		if fit == nil {
+			fit = p.Clone()
+			fit.FitStickers()
+		}
+		return fit
+	}
 }
 
 // BorderInvariant — рамочки мест (079-23) по всем листам: нет двух мест с одним *Border или общим
@@ -265,6 +277,37 @@ func SourcesInvariant(p *model.Project) error {
 	}
 	if len(p.Loose) > model.MaxLooseAdds || n > model.MaxLooseFiles {
 		return fmt.Errorf("сверх пределов: добавлений %d, файлов %d", len(p.Loose), n)
+	}
+	return nil
+}
+
+// FamilyInvariant — семьи копий фото (098-16, design §2.1), после Load и каждой правки: у записи не
+// из библиотеки ID файла — от пути (BaseID == IDFor(Path)), свойства файла (Path, Alt, W, H, Size)
+// у всех записей семьи равны; у своего из библиотеки копий нет (CopyNo = 0).
+func FamilyInvariant(p *model.Project) error {
+	type file struct {
+		path, alt string
+		w, h      int
+		size      int64
+	}
+	seen := map[string]file{}
+	for _, id := range slices.Sorted(maps.Keys(p.Photos)) {
+		r := p.Photos[id]
+		if r.Lib != "" {
+			if model.CopyNo(id) != 0 {
+				return fmt.Errorf("фото %s: копия своего из библиотеки %s", id, r.Lib)
+			}
+			continue
+		}
+		base := model.BaseID(id)
+		if want := library.IDFor(r.Path); base != want {
+			return fmt.Errorf("фото %s: ID файла %s, по пути — %s", id, base, want)
+		}
+		f := file{r.Path, r.Alt, r.W, r.H, r.Size}
+		if was, ok := seen[base]; ok && was != f {
+			return fmt.Errorf("фото %s: свойства файла %+v, у семьи — %+v", id, f, was)
+		}
+		seen[base] = f
 	}
 	return nil
 }

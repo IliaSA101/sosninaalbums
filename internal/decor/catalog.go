@@ -144,6 +144,9 @@ func (s *Store) libItems(kind string, packs []Item, own []entry) []Item {
 		}
 		out = append(out, it)
 	}
+	// Ничья по Added (два шаблона в одну мс): новее тот, что сохранён позже. own идёт в порядке
+	// хранения, поэтому разворот перед устойчивой сортировкой — порядок не случаен.
+	slices.Reverse(own)
 	slices.SortStableFunc(own, func(a, b entry) int { return cmp.Compare(b.Added, a.Added) })
 	for i := range own {
 		it := own[i].item()

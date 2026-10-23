@@ -55,6 +55,13 @@ let inflight = false
 // Пока открыт вопрос, новый бросок (Enter под окном, второй жест) игнорируется: ответ уже ждёт первый.
 export async function dropGrid(spread: string, place: string, ids: string[], at: number, fromSpread: boolean, go = false): Promise<void> {
   if (ids.length === 0 || inflight || dropAsk.cur) return
+  if (!fromSpread) {
+    // 098: из ленты фото, уже стоящее в альбоме, проходит ворота (окно копии); на время вопроса новый бросок не пускаем.
+    inflight = true
+    const sent = await store.hooks.gate(ids).finally(() => (inflight = false))
+    if (!sent) return
+    ids = sent
+  }
   const moved = fromSpread ? [] : store.movedFrom(ids, spread)
   await call({ spread, place, ids, at, fromSpread, go, moved }, '')
 }

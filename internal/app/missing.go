@@ -1,7 +1,6 @@
 package app
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"weak"
@@ -30,11 +29,12 @@ var reachable = osx.Reachable
 // fileExists — обычный файл на месте; том, который не отвечает (отключённый сетевой диск),
 // — «нет файла» без ожидания таймаута SMB. Путь, который не проходит CheckLocalPath (фото
 // «CON.jpg» с Windows 11 на Windows 10, 073-10), — тоже «нет»: Stat открыл бы устройство.
+// Ссылка на нелокальный путь (\\host\share) — тоже «нет»: StatLocal не идёт по ней на диск.
 func fileExists(path string) bool {
 	if paths.CheckLocalPath(path) != nil || !reachable(path) {
 		return false
 	}
-	st, err := os.Stat(path)
+	st, err := library.StatLocal(path)
 	return err == nil && st.Mode().IsRegular()
 }
 

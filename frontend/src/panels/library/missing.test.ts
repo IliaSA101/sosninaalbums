@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   albumPhotos,
   driveLabel,
+  fileCount,
   fontsKey,
   fontsMissingText,
   LIB_MISSING_TEXT,
@@ -30,6 +31,12 @@ describe('missing', () => {
   it('считает фото альбома', () => {
     expect(albumPhotos([{ photos: ['a', 'b'] }, { photos: ['c'] }, { photos: undefined as unknown as string[] }])).toBe(3)
     expect(albumPhotos([])).toBe(0)
+  })
+
+  it('копии одного файла — одно фото (098): альбом и пропавшие считаются по файлам', () => {
+    expect(albumPhotos([{ photos: ['f1', 'f2'] }, { photos: ['f1-2'] }, { photos: ['f1-3', 'f3'] }])).toBe(3)
+    expect(fileCount(['f1', 'f1-2', 'f2'])).toBe(2)
+    expect(fileCount([])).toBe(0)
   })
 
   it('текст полосы', () => {

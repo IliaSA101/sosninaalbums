@@ -38,7 +38,7 @@ func TestLoadV9CoverBoth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != model.FormatVersion || model.FormatVersion != 16 || edtest.From(p) != 9 {
+	if p.Version != model.FormatVersion || model.FormatVersion != 17 || edtest.From(p) != 9 {
 		t.Fatalf("версия %d, from %d", p.Version, edtest.From(p))
 	}
 	c := p.Cover
@@ -62,11 +62,11 @@ func TestLoadV9CoverBoth(t *testing.T) {
 	if err := e.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	if bak, err := os.ReadFile(path + ".v9.bak"); err != nil || !bytes.Equal(bak, src) {
-		t.Fatalf(".v9.bak: %v, совпадает с исходником: %v", err, bytes.Equal(bak, src))
+	if bak, err := os.ReadFile(salbum.BackupName(path, 9, 1)); err != nil || !bytes.Equal(bak, src) {
+		t.Fatalf("копия для 0.13: %v, совпадает с исходником: %v", err, bytes.Equal(bak, src))
 	}
 	data, _ := os.ReadFile(path)
-	if f := fileJSON(t, path); f.Version != 16 || bytes.Contains(data, []byte(`"bgPhotoS"`)) {
+	if f := fileJSON(t, path); f.Version != 17 || bytes.Contains(data, []byte(`"bgPhotoS"`)) {
 		t.Fatalf("файл v%d:\n%s", f.Version, data)
 	}
 	q, err := salbum.Load(path)
@@ -102,7 +102,7 @@ func TestSaveV10Spine(t *testing.T) {
 		t.Fatal(err)
 	}
 	first, _ := os.ReadFile(path)
-	if f := fileJSON(t, path); f.Version != 16 || !bytes.Contains(first, []byte(`"bgPhotoS"`)) {
+	if f := fileJSON(t, path); f.Version != 17 || !bytes.Contains(first, []byte(`"bgPhotoS"`)) {
 		t.Fatalf("файл v%d без фото корешка", f.Version)
 	}
 	q, err := salbum.Load(path)

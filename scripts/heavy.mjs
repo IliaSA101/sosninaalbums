@@ -37,7 +37,11 @@ const alive = (pid) => {
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 
 // Загрузка CPU, % за ms: os.loadavg на Windows всегда 0, поэтому — по разнице счётчиков os.cpus().
-const busy = () => os.cpus().reduce((a, c) => [a[0] + c.times.idle, a[1] + Object.values(c.times).reduce((s, v) => s + v, 0)], [0, 0])
+// Время nice считается свободным: долгие проверки оркестратора идут с низким приоритетом (ниже) и уступают
+// процессор агентам — значит, и места агентам не держат (замер 0.23-proc-3: быструю проверку агента
+// убил таймаут, пока очередь ждала загрузки ниже порога из-за check --race). На Windows nice всегда 0.
+const busy = () =>
+  os.cpus().reduce((a, c) => [a[0] + c.times.idle + c.times.nice, a[1] + Object.values(c.times).reduce((s, v) => s + v, 0)], [0, 0])
 function cpuLoad(ms) {
   const [i0, t0] = busy()
   sleep(ms)
@@ -92,6 +96,17 @@ function acquire() {
     if (!told) console.error(`heavy: занято ${taken()} из ${slots}, CPU ${load} % (порог ${cpuMax}) — жду очереди…`)
     told = true
     sleep(2000)
+  }
+}
+
+// Не из копии агента (.claude/worktrees/agent-*) — это проверка оркестратора: низкий приоритет, агенты первые
+// (владелец 22.10). Только Linux и macOS: на Windows приоритет процесса устроен иначе, там всё как было.
+const lead = !/[\\/]\.claude[\\/]worktrees[\\/]/.test(process.cwd())
+if (lead && process.platform !== 'win32') {
+  try {
+    os.setPriority(19)
+  } catch {
+    // не дали — идём с обычным приоритетом
   }
 }
 

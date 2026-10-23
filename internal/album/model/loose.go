@@ -2,7 +2,6 @@ package model
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -59,8 +58,12 @@ type LooseFileView struct {
 	Photo string `json:"photo"`
 }
 
-// LooseKey — ключ пути отдельного фото: один файл — один ключ (нижний регистр, Clean).
-func LooseKey(path string) string { return strings.ToLower(filepath.Clean(path)) }
+// LooseKey — ключ пути отдельного фото: один файл — один ключ (paths.Fold, Clean).
+func LooseKey(path string) string { return paths.Fold(filepath.Clean(path)) }
+
+// SamePath — paths.SamePath для областей, которым paths недоступен (series — только model):
+// регистр различается по ОС.
+func SamePath(a, b string) bool { return paths.SamePath(a, b) }
 
 // ValidID — ID записи вида NewID: 12 строчных hex.
 func ValidID(id string) bool {

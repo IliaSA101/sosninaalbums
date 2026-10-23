@@ -7,6 +7,7 @@ import { tip } from '../../base/ui/tip.svelte'
 import { pageAt } from '../../base/geom/sheet'
 import type { SpreadView } from '../../base/core/types'
 import { placesel } from '../places/placesel.svelte'
+import { clip } from '../clip/clip.svelte'
 import { nameEdit } from '../captions/nameedit.svelte'
 import { nameTargetAt, takesNameTarget, targetKey, type NameTarget } from '../captions/nametarget'
 import { edit } from '../text/edit.svelte'
@@ -54,6 +55,8 @@ export class NameTrack {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
     const x = ((e.clientX - r.left) / r.width) * spread.w
     placesel.page = pageAt(spread, x)
+    // Курсор над листом, мм: Ctrl+V берёт страницу под ним (099). Нулевой размер — точки нет.
+    clip.hover = r.width > 0 && r.height > 0 ? { x, y: ((e.clientY - r.top) / r.height) * spread.h } : null
     const t =
       drag.active || nameEdit.cur || !this.takes(e.target) ? null : nameTargetAt(spread, x, ((e.clientY - r.top) / r.height) * spread.h)
     const next = t?.who.length ? t : null
@@ -61,6 +64,7 @@ export class NameTrack {
   }
 
   leave = () => {
+    clip.hover = null
     this.named = null
   }
 

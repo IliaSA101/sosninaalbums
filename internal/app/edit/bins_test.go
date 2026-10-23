@@ -3,6 +3,8 @@ package edit
 import (
 	"slices"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Подборки (083): в членство попадают только фото ленты — ID не из ленты пропускаются, путь от
@@ -11,7 +13,7 @@ func TestSetBinSkipsUnknownIDs(t *testing.T) {
 	k := twoSpreads(t)
 	k.lentPhoto("a")
 	k.lentPhoto("b")
-	v, err := k.NewBin("Обязательно", []string{"a", "призрак", `C:\чужой.jpg`})
+	v, err := k.NewBin("Обязательно", []string{"a", "призрак", testkit.AbsPath("чужой.jpg")})
 	if err != nil || k.calls != 1 || len(v.Bins) != 1 {
 		t.Fatalf("NewBin: err %v, Changed %d, подборок %d", err, k.calls, len(v.Bins))
 	}

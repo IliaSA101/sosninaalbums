@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
@@ -73,11 +74,12 @@ func (a *App) media(next http.Handler) http.Handler {
 // mediaPhoto — фото для /media/<t|p>/<id>: из реестра открытых папок, иначе из проекта, чья папка
 // сейчас не открыта. gone — файла нет (или том не отвечает, и у фото ленты тоже): диск не трогаем;
 // и фото прежнего реестра, которого нет в альбоме (запрос плитки прежнего альбома после смены).
+// Копия (098) — тот же файл: реестр и кэш — по ID файла, миниатюра и превью общие у семьи.
 func (a *App) mediaPhoto(id string) (p library.Photo, ok, gone bool) {
 	a.mu.Lock()
-	p, ok = a.byID[id]
+	p, ok = a.byID[model.BaseID(id)]
 	_, gone = slices.BinarySearch(a.missing, id) // missingOf отдаёт по порядку
-	_, old := a.mediaSt.old[id]
+	_, old := a.mediaSt.old[model.BaseID(id)]
 	a.mu.Unlock()
 	if ok {
 		// Фото ленты из папки недоступного тома (088-4): плитка сразу серая, обработчик не ждёт SMB.
@@ -98,7 +100,7 @@ func (a *App) mediaPhoto(id string) (p library.Photo, ok, gone bool) {
 		return p, false, false
 	}
 	col, prof := readColor(ref.Path) // от цвета зависит ключ кэша и пересчёт
-	return library.Photo{ID: id, Path: ref.Path, Name: filepath.Base(ref.Path), Color: col, Profile: prof}, true, false
+	return library.Photo{ID: model.BaseID(id), Path: ref.Path, Name: filepath.Base(ref.Path), Color: col, Profile: prof}, true, false
 }
 
 // mediaState — снятые запросы миниатюр и прежний реестр фото (090 G2).

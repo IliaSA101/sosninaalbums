@@ -106,10 +106,20 @@ class StickerActions {
   // ---------- правки через Go ----------
 
   // «Стикер» из окна: центр страницы, ¼ ширины; новый выделяется. page — страница под курсором.
-  async add(spread: string, page: 0 | 1, item: string): Promise<boolean> {
+  add(spread: string, page: 0 | 1, item: string): Promise<boolean> {
+    return this.put(() => Api.AddSticker(spread, page, item))
+  }
+
+  // «QR-код по ссылке…»: Go кладёт код в «Мои» и ставит стикером на страницу одним шагом отмены. Ошибка — тост.
+  addQR(spread: string, page: 0 | 1, link: string): Promise<boolean> {
+    return this.put(() => Api.AddQRSticker(spread, page, link))
+  }
+
+  // Ответ Go с новым стикером: вид принимается, стикер выделяется.
+  private async put(call: () => Promise<{ view: unknown; id?: string }>): Promise<boolean> {
     try {
-      const r = await Api.AddSticker(spread, page, item)
-      if (!(await store.take(r.view as unknown as View))) return false
+      const r = await call()
+      if (!(await store.take(r.view as View))) return false
       if (r.id) placesel.pickSticker(r.id, false)
       return true
     } catch (e) {

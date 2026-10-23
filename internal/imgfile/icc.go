@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
-	"os"
 	"unicode"
 	"unicode/utf16"
 )
@@ -45,7 +44,7 @@ var (
 // ReadColor определяет цветовой профиль JPEG по заголовку (ICC, запасной путь — EXIF Interop).
 // Ошибка чтения, не-JPEG и PNG дают ("", ""): считаем sRGB.
 func ReadColor(path string) (Color, string) {
-	f, err := os.Open(path)
+	f, err := OpenRegular(path)
 	if err != nil {
 		return ColorNone, ""
 	}

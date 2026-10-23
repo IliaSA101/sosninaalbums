@@ -16,6 +16,7 @@ import { decor } from '../../panels/decor/decor.svelte'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
 import { edit } from '../../editor/text/edit.svelte'
 import { newDoc } from '../newdoc/newdoc.svelte'
+import { aboutUi } from '../dialogs/about.svelte'
 import * as Bins from '../../panels/bins/binact'
 import { binsel } from '../../panels/bins/binsel.svelte'
 import * as App from '../../../wailsjs/go/app/App'
@@ -76,6 +77,15 @@ describe('команды', () => {
         expect(typeof COMMANDS[it.cmd!], it.id).toBe('function')
       }
     }
+  })
+
+  it('about открывает окно «О программе» и повторный вызов его не ломает (101)', () => {
+    aboutUi.close()
+    COMMANDS.about()
+    expect(aboutUi.open).toBe(true)
+    COMMANDS.about()
+    expect(aboutUi.open).toBe(true)
+    aboutUi.close()
   })
 
   it('у каждой команды каталога клавиш есть обработчик', () => {

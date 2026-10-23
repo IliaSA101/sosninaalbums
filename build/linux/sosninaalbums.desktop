@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Sosnina Albums
+GenericName=Вёрстка фотоальбомов
+Comment=Вёрстка свадебных фотоальбомов: развороты, автосборка, выгрузка JPEG 300 dpi
+Exec=sosninaalbums
+Icon=sosninaalbums
+Categories=Graphics;Photography;
+StartupWMClass=SosninaAlbums
+Terminal=false

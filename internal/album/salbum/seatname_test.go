@@ -59,7 +59,7 @@ func TestV13SeatNameRoundtrip(t *testing.T) {
 	dir := testkit.TempDir(t)
 	path := filepath.Join(dir, "a.salbum")
 	first, q := saveLoad(t, seatProject(dir), path)
-	if f := fileJSON(t, path); f.Version != 16 || bytes.Count(first, []byte(`"person"`)) != 3 {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || bytes.Count(first, []byte(`"person"`)) != 3 {
 		t.Fatalf("файл v%d, табличек в файле %d (ждали 3: ноль не пишется):\n%s", f.Version, bytes.Count(first, []byte(`"person"`)), first)
 	}
 	want := []model.Person{seatPetya, seatOlga, {}, {}, seatPhys}
@@ -75,7 +75,7 @@ func TestV13SeatNameRoundtrip(t *testing.T) {
 	}
 }
 
-// v12 (0.16–0.17) открывается без табличек; первая запись — v13, BackupOld кладёт .v12.bak с
+// v12 (0.16–0.17) открывается без табличек; первая запись — v13, BackupOld кладёт копию «(для 0.17)» с
 // исходником. v14 — отказ: иначе автосохранение затёрло бы чужие поля.
 func TestV12OpensWithoutSeatNames(t *testing.T) {
 	dir := testkit.TempDir(t)
@@ -110,16 +110,16 @@ func TestV12OpensWithoutSeatNames(t *testing.T) {
 			t.Fatalf("место %d: табличка %+v в файле v12", i, who)
 		}
 	}
-	if err := BackupOld(path, q.From()); err != nil {
-		t.Fatal(err)
+	if bak, err := BackupOld(path, q.From()); err != nil || bak != BackupName(path, 12, 1) {
+		t.Fatalf("копия %q: %v", bak, err)
 	}
 	if err := Save(q, path); err != nil {
 		t.Fatal(err)
 	}
-	if bak, err := os.ReadFile(path + ".v12.bak"); err != nil || !bytes.Equal(bak, src) {
-		t.Fatalf(".v12.bak: %v", err)
+	if bak, err := os.ReadFile(BackupName(path, 12, 1)); err != nil || !bytes.Equal(bak, src) {
+		t.Fatalf("копия для %s: %v", LastApp(12), err)
 	}
-	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"person"`)) || fileJSON(t, path).Version != 16 {
+	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"person"`)) || fileJSON(t, path).Version != model.FormatVersion {
 		t.Fatalf("запись v12:\n%s", out)
 	}
 	newer := bytes.Replace(data, cur, fmt.Appendf(nil, `"version": %d,`, model.FormatVersion+1), 1)

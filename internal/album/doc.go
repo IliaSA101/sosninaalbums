@@ -32,6 +32,12 @@
 //     живость по projRev, 078 §8), отбор похожих кадров (similar) до передачи в spreads (078-15);
 //   - ops_salbum.go — перепривязка и Refs (salbum), сборка View (view);
 //   - ops_sheets.go — листы особого вида: обложка (cover, 032) и виньетка (031 G5).
+//   - ops_clip.go — «Копировать и вставить» (099): снимок TakeClip, вырезание CutClip (тела —
+//     grid/clip.go); буфер держит App, Editor его не хранит.
+//   - ops_copies.go — копии фото (098): «где стоит» WhereUsed и сведения файла FileRef; копии
+//     ставят прежние правки по запросу «<ID файла>-new» (model.ResolveCopies).
+//   - ops_albumbg.go — фон альбома (098): SetAlbumBg, ClearAlbumBg, ползунок SetAlbumBgFade
+//     (ключ albumbg:<сессия>), «Не показывать здесь» SetNoAlbumBg; тела — backdrop/album.go.
 //   - ops_markup.go — разметка типографии обложки и разворотов (032, 066): выбор и «Убрать»,
 //     прочитанное о файлах для вида — по слоту на разметку (guides).
 //
@@ -56,5 +62,10 @@
 // SyncGrid до CheckTotals — settle (editor.go): его же зовёт сухой прогон PreviewVignette.
 //
 // Порядок шагов Load — salbum/load.go (decodeFile). Новое поле с данными пользователя — FormatVersion + 1
-// и ветка в migrate.
+// и ветка в migrate. С v17 (098): checkHead (версия и app до полного разбора — *NewerError) →
+// loadSources → loadPhotos (stat один на путь) → AlbumBg + ClampAlbumBg (до первого PruneRefs:
+// фото только фона альбома не теряется) → dropNilPlaces, unionGrid → dedupe → PruneRefs → Rekey
+// (номер копии «-n» из прежнего ID) → EvenFamilies (свойства файла семьи — по первой в ленте) →
+// прежние шаги (ClampDesign зажимает и Asp). Первая запись поверх старого формата — копия
+// «<имя> (для 0.22).salbum» (salbum.BackupName), имя для тоста — Editor.TakeBackup.
 package album

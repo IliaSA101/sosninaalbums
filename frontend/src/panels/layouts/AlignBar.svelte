@@ -1,6 +1,6 @@
 <script lang="ts">
   import { align } from './align.svelte'
-  import { ALIGN_OPS, ALIGN_TO, alignBlock } from './align'
+  import { ALIGN_OPS, ALIGN_TO, alignBlock, alignToBlock } from './align'
   import Icon from '../../base/ui/Icon.svelte'
 
   // Полоса выравнивания (спека 010 U7) вместо «Раскладка: …», пока есть выделение («Полный»; решает LayoutBar).
@@ -28,13 +28,16 @@
   <span class="sep"></span>
   <span class="lbl">Относительно:</span>
   {#each ALIGN_TO as t (t.to)}
+    {@const why = alignToBlock(t.to, n)}
     <button
       class="to"
       class:on={align.to === t.to}
+      class:off={!!why}
       aria-pressed={align.to === t.to}
-      title={t.hint}
+      aria-disabled={!!why}
+      title={why ?? t.hint}
       onpointerdown={stop}
-      onclick={() => align.setTo(t.to)}>{t.label}</button
+      onclick={() => !why && align.setTo(t.to)}>{t.label}</button
     >
   {/each}
 </div>
@@ -91,6 +94,13 @@
   .to {
     padding: 0 7px;
     font-size: 12px;
+  }
+  .to.off {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .to.off:hover {
+    background: transparent;
   }
   .to.on {
     background: var(--accent);

@@ -61,9 +61,9 @@ func TestSeriesCutsNone(t *testing.T) {
 	if c := Cuts(q); c != nil {
 		t.Errorf("пауза 100 с: %v", nonzero(c))
 	}
-	// регистр и разделители в пути — та же папка
+	// регистр в пути — та же папка на Windows и macOS, на Linux — другая (model.SamePath, 101)
 	in := []model.PhotoInfo{{ID: "1", Path: filepath.Join("/съёмка", "Венчание", "1.jpg")}, {ID: "2", Path: filepath.Join("/съёмка", "венчание", "2.jpg")}}
-	if c := Cuts(in); c != nil {
+	if c := Cuts(in); (c == nil) != model.SamePath("Венчание", "венчание") {
 		t.Errorf("папка в другом регистре: %v", c)
 	}
 }

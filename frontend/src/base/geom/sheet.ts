@@ -91,6 +91,10 @@ export const SHEET_PRESETS: readonly { label: string; w: number; h: number }[] =
 // ID листа обложки (032): она не входит в View.spreads и лежит в View.cover.sheet.
 export const COVER_ID = 'cover'
 
+// Фон альбома (098) листу не принадлежит: слой без выделения, своим фоном листа не считается.
+// Свои фото фона и узоры листа — это список без записей с album.
+export const ownBg = <T extends { album?: boolean }>(list: readonly T[] | null | undefined): T[] => (list ?? []).filter((x) => !x.album)
+
 export const isCover = (sv: Pick<SpreadView, 'id'> | null | undefined): boolean => sv?.id === COVER_ID
 
 // Листы вида: [обложка?] + развороты. Жесты и правки ищут лист по id здесь, а не в View.spreads (там обложки нет).

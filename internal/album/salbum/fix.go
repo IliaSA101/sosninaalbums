@@ -50,40 +50,26 @@ func dedupe(p *model.Project) {
 	p.Spreads = out
 }
 
-// Rekey приводит ID фото к idFor(путь) (library.IDFor), своего из библиотеки — к
-// model.LibPhotoID(ключ): альбом переехал — иначе
+// Rekey приводит ID фото к idFor(путь) (library.IDFor) с номером копии из прежнего ID
+// (model.CopyID(idFor(путь), model.CopyNo(старый)), 098), своего из библиотеки — к
+// model.LibPhotoID(ключ) без номера (копий своего не бывает): альбом переехал — иначе
 // лента не узнала бы фото как использованные; а ID, не равный пути, показывал бы
-// на экране одно фото, а в печать отдавал другое. Записи с одним путём сливаются:
+// на экране одно фото, а в печать отдавал другое. Записи с одним путём и номером сливаются:
 // остаётся первая в порядке ленты (с её кадром и подписью), ссылки в разворотах
 // переводятся на новый ID (и в местах сетки — renameRefs), повтор фото в альбоме —
-// первое вхождение (dedupe; слившийся повтор в месте — пустое место).
+// первое вхождение (dedupe; слившийся повтор в месте — пустое место, как в 0.22).
+// Копии одного файла после переезда остаются разными записями: номер живёт в ID.
 func Rekey(p *model.Project, idFor func(string) string) {
-	order := make([]string, 0, len(p.Photos))
-	seen := make(map[string]bool, len(p.Photos))
-	for _, s := range p.Sheets() {
-		for _, id := range s.PhotoIDs() {
-			if _, ok := p.Photos[id]; ok && !seen[id] {
-				seen[id] = true
-				order = append(order, id)
-			}
-		}
-	}
-	// Записи вне лент в альбоме не нужны (pruneRefs), но порядок держим стабильным.
-	for _, id := range slices.Sorted(maps.Keys(p.Photos)) {
-		if !seen[id] {
-			order = append(order, id)
-		}
-	}
 	photos := make(map[string]model.PhotoRef, len(p.Photos))
 	moved := map[string]string{}
 	merged := false
-	for _, id := range order {
+	for _, id := range photoOrder(p) {
 		ref := p.Photos[id]
 		var nid string
 		if ref.Lib != "" {
 			nid = model.LibPhotoID(ref.Lib) // своё: путь к библиотеке на каждом компьютере свой
 		} else {
-			nid = idFor(ref.Path)
+			nid = model.CopyID(idFor(ref.Path), model.CopyNo(id))
 		}
 		if _, taken := photos[nid]; taken {
 			merged = true
@@ -101,6 +87,42 @@ func Rekey(p *model.Project, idFor func(string) string) {
 	}
 }
 
+// photoOrder — ID записей Photos в порядке ленты: сначала по листам (обложка первой, места и
+// фоны), затем записи вне листов по возрастанию ID — стабильно от запуска к запуску. Первая в
+// этом порядке побеждает при слиянии (Rekey) и задаёт свойства файла семьи (EvenFamilies).
+func photoOrder(p *model.Project) []string {
+	order := make([]string, 0, len(p.Photos))
+	seen := make(map[string]bool, len(p.Photos))
+	for _, s := range p.Sheets() {
+		for _, id := range s.PhotoIDs() {
+			if _, ok := p.Photos[id]; ok && !seen[id] {
+				seen[id] = true
+				order = append(order, id)
+			}
+		}
+	}
+	// Записи вне лент в альбоме не нужны (pruneRefs), но порядок держим стабильным.
+	for _, id := range slices.Sorted(maps.Keys(p.Photos)) {
+		if !seen[id] {
+			order = append(order, id)
+		}
+	}
+	return order
+}
+
+// EvenFamilies — свойства файла (Path, Alt, W, H, Size, Lib) у всех записей семьи — как у первой
+// в порядке ленты (decisions 098-16): файл, поправленный руками, или чтение разных W/H у копий не
+// оставят копию растянутой в печати. Свойства использования не трогаются. После Rekey.
+func EvenFamilies(p *model.Project) {
+	done := map[string]bool{}
+	for _, id := range photoOrder(p) {
+		if base := model.BaseID(id); !done[base] {
+			done[base] = true
+			p.SetFile(id, p.Photos[id])
+		}
+	}
+}
+
 // migrate доводит прочитанный проект до текущей версии. v1 → v2: новые поля
 // нулевые, папки-строки разобраны в decode; номер варианта (файлы до ключей)
 // переводится в ключ той же раскладки. v2 → v3, v3 → v4, v4 → v5, v5 → v6, v6 → v7,
@@ -110,7 +132,7 @@ func Rekey(p *model.Project, idFor func(string) string) {
 // строятся как раньше, — фото корешка 061: прежняя «Лицевая + задняя» и есть «Задняя + корешок
 // + лицевая» с пустым корешком). v10 → v11 — шаги 0.15 (migrateV11), v11 → v12 — 0.16 (migrateV12),
 // v12 → v13 — 0.18 (migrateV13), v13 → v14 — 0.20 (migrateV14), v14 → v15 — 0.21 (migrateV15),
-// v15 → v16 — 0.22 (migrateV16).
+// v15 → v16 — 0.22 (migrateV16), v16 → v17 — 0.23 (migrateV17).
 // До v6 (0.10) ничьи раскладок решал порядок перебора по точным битам, с 0.10 — tieQ и
 // ключ (решение 95): «Авто» с Layout "" и номер варианта берутся из ряда в прежнем
 // порядке (layout.LegacyLayouts), и ключ, отличный от нынешней лучшей, записывается —
@@ -158,8 +180,20 @@ func migrate(p *model.Project) {
 	if p.From() < v16From {
 		migrateV16(p)
 	}
+	if p.From() < v17From {
+		migrateV17(p)
+	}
 	p.Version = model.FormatVersion
 }
+
+// migrateV17 — шаги v16 → v17 (общий формат 0.23). Каждая спека 0.23 с полями, которым нужна
+// починка старого файла, добавляет сюда свой шаг. 098 (копии фото, свой кадр asp, фон альбома
+// albumBg/noAlbumBg, версия программы app) — только номер: у старых файлов этих полей нет, нули
+// верны; копий Load не создаёт — записи одного пути v16 сливаются в Rekey, как в 0.22.
+func migrateV17(*model.Project) {}
+
+// v17From — общий формат 0.23: файлы раньше проходят migrateV17.
+const v17From = 17
 
 // migrateV16 — шаги v15 → v16 (общий формат 0.22). Каждая спека 0.22 с полями, которым нужна
 // починка старого файла, добавляет сюда свой шаг. 097 (отдельные фото loose) — только номер: у

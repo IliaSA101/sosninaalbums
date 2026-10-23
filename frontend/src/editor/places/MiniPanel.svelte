@@ -6,6 +6,7 @@
   import { nameEdit } from '../captions/nameedit.svelte'
   import { captionBottom, captionBoxes } from '../captions/nametarget'
   import { prefs } from '../../base/prefs/prefs.svelte'
+  import { isMac } from '../../base/core/platform'
   import { modes } from '../../base/prefs/view.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import { tip, tipped } from '../../base/ui/tip.svelte'
@@ -15,6 +16,7 @@
     miniContext,
     miniItems,
     miniPlace,
+    swapTip,
     throughNext,
     type Mods,
     type ThroughEv,
@@ -215,7 +217,7 @@
         return placesel.deleteSelected()
       case 'swap':
         // Щелчок без переноса — подсказка; перенос уже ушёл в drag.
-        if (drag.clickAllowed()) store.notify('Перетащите на другое место — фото поменяются местами')
+        if (drag.clickAllowed()) store.notify(swapTip(isMac()))
         return
     }
   }
@@ -247,51 +249,54 @@
   onblur={() => (through = throughNext({ type: 'blur' }))}
 />
 
-<span class="anchor" bind:this={anchor}></span>
-
-<!-- Клики полосы не должны снимать выделение: клавиатурных аналогов у самой полосы нет, кнопки внутри фокусируются сами.
+<!-- Полоса — ребёнок якоря: портал уносит её в body, и если бы она была соседом, Svelte при скрытии ветки шёл бы
+     по nextSibling от якоря до «последнего узла» (он уже в body) и сносил соседей справа в .selframe — другие
+     якоря и направляющие (спека 100 п. 5). Ветка из одного span такого обхода не допускает. -->
+<span class="anchor" bind:this={anchor}>
+  <!-- Клики полосы не должны снимать выделение: клавиатурных аналогов у самой полосы нет, кнопки внутри фокусируются сами.
      При любом переносе — сквозная, как при Alt (095 сц. 15): бросок на миниатюры под ней попадает в них. Ряд едет — гаснет. -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div
-  class="minipanel"
-  use:portal
-  class:through={through || drag.active}
-  class:away={row.moving || !org || outside}
-  bind:clientWidth={w}
-  style:top="{(org?.y ?? 0) + place.top * (org?.k ?? 1)}px"
-  style:left="{(org?.x ?? 0) + place.left * (org?.k ?? 1)}px"
-  style:height="{MINI_H}px"
-  role="toolbar"
-  tabindex="-1"
-  aria-label="Действия с выделенным"
-  data-guide="mini-panel"
-  data-chrome
-  data-text-ui
-  onpointerdown={stop}
-  onclick={stop}
-  ondblclick={stop}
->
-  {#each items as it (it.id)}
-    {#if it.sep}<span class="sep"></span>{/if}
-    {#if it.id === 'layer'}
-      <LayerMenu onpick={(op) => placesel.layer(op)} label={it.label} />
-    {:else}
-      <button
-        class:on={it.on}
-        class:del={it.id === 'delete'}
-        class:swap={it.id === 'swap'}
-        aria-label={it.label}
-        aria-pressed={it.on === undefined ? undefined : it.on}
-        {...it.id === 'tilt' ? { 'data-guide': 'tilt-mini' } : {}}
-        use:tipped={{ text: it.label }}
-        onpointerdown={it.id === 'swap' ? swapDown : undefined}
-        onclick={() => run(it.id)}
-      >
-        <Icon name={it.icon} size={14} />{#if it.badge}<span class="badge">{it.badge}</span>{/if}
-      </button>
-    {/if}
-  {/each}
-</div>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    class="minipanel"
+    use:portal
+    class:through={through || drag.active}
+    class:away={row.moving || !org || outside}
+    bind:clientWidth={w}
+    style:top="{(org?.y ?? 0) + place.top * (org?.k ?? 1)}px"
+    style:left="{(org?.x ?? 0) + place.left * (org?.k ?? 1)}px"
+    style:height="{MINI_H}px"
+    role="toolbar"
+    tabindex="-1"
+    aria-label="Действия с выделенным"
+    data-guide="mini-panel"
+    data-chrome
+    data-text-ui
+    onpointerdown={stop}
+    onclick={stop}
+    ondblclick={stop}
+  >
+    {#each items as it (it.id)}
+      {#if it.sep}<span class="sep"></span>{/if}
+      {#if it.id === 'layer'}
+        <LayerMenu onpick={(op) => placesel.layer(op)} label={it.label} />
+      {:else}
+        <button
+          class:on={it.on}
+          class:del={it.id === 'delete'}
+          class:swap={it.id === 'swap'}
+          aria-label={it.label}
+          aria-pressed={it.on === undefined ? undefined : it.on}
+          {...it.id === 'tilt' ? { 'data-guide': 'tilt-mini' } : {}}
+          use:tipped={{ text: it.label }}
+          onpointerdown={it.id === 'swap' ? swapDown : undefined}
+          onclick={() => run(it.id)}
+        >
+          <Icon name={it.icon} size={14} />{#if it.badge}<span class="badge">{it.badge}</span>{/if}
+        </button>
+      {/if}
+    {/each}
+  </div>
+</span>
 
 <style>
   .anchor {

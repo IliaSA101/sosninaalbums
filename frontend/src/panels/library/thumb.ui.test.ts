@@ -17,12 +17,29 @@ describe('Thumb: файл пропал', () => {
     expect(branch?.[2]).toContain('<img')
     expect(branch?.[2]).toContain('onerror={() => lost.mark(p.id)}')
   })
-  it('✓ «Уже в альбоме» и звёзды стоят вне ветки заглушки — остаются при пропаже файла', () => {
+  it('число вхождений (098) и звёзды стоят вне ветки заглушки — остаются при пропаже файла', () => {
     const tail = body.slice(body.indexOf('{/if}', body.indexOf('{:else}')))
-    expect(tail).toContain('store.used.has(p.id)')
+    expect(tail).toContain('uses > 0')
     expect(tail).toContain('class="check"')
     expect(tail).toContain('mark.rating > 0')
     expect(tail).toContain('class="stars"')
+  })
+  it('значок ленты (098-6, 0.23-q8): 1 → ✓, 2 и больше → число, 0 → значка нет; бледность — по store.used', () => {
+    expect(src).toContain('store.useCount(p.id)')
+    expect(body).toContain('{#if uses > 0}')
+    expect(body).toContain("{uses === 1 ? '✓' : uses}</span>")
+    expect(body).toContain('class:used={store.used.has(p.id)}')
+  })
+  it('значок ленты: правило по значению — 1 даёт ✓, 2 и 3 дают число, 0 не даёт значка', () => {
+    const m = body.match(/\{#if uses > 0\}<span[^>]*>\{(uses === 1 \? '✓' : uses)\}<\/span>\{\/if\}/)
+    expect(m).not.toBeNull()
+    const sign = new Function('uses', `return ${m?.[1]}`) as (uses: number) => string | number
+    expect(sign(1)).toBe('✓')
+    expect(sign(2)).toBe(2)
+    expect(sign(3)).toBe(3)
+    expect(sign(12)).toBe(12)
+    const shown = (uses: number) => (uses > 0 ? sign(uses) : null)
+    expect(shown(0)).toBeNull()
   })
   it('подпись «нет файла» под значком; адрес миниатюры несёт метку повтора lost.retryOf', () => {
     expect(body).toMatch(/<MissPhoto[^>]*label="нет файла"/)

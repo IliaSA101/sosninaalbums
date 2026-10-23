@@ -18,6 +18,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -160,10 +161,16 @@ func TestRememberRecentSkipsDraft(t *testing.T) {
 	if r := a.loadConfig().Recent; len(r) != 0 {
 		t.Fatalf("черновик в списке: %v", r)
 	}
-	// Путь черновика сравнивается без учёта регистра, как все пути Windows.
-	a.rememberRecent(strings.ToUpper(a.draftPath()))
-	if r := a.loadConfig().Recent; len(r) != 0 {
-		t.Fatalf("черновик в другом регистре попал в список: %v", r)
+	// Путь черновика сравнивается по paths.Fold: на Windows и macOS без учёта регистра, на Linux
+	// другой регистр — другой файл, он не черновик и в список попадает (101).
+	up := strings.ToUpper(a.draftPath())
+	want := []string{up}
+	if paths.FoldEqual(up, a.draftPath()) {
+		want = nil
+	}
+	a.rememberRecent(up)
+	if r := a.loadConfig().Recent; !slices.Equal(r, want) {
+		t.Fatalf("черновик в другом регистре: %v, ждали %v", r, want)
 	}
 }
 
@@ -179,7 +186,11 @@ func TestRememberRecent(t *testing.T) {
 	if r := a.loadConfig().Recent; !slices.Equal(r, []string{second, first}) {
 		t.Fatalf("список: %v", r)
 	}
-	again := strings.ToUpper(first)
+	// Повтор другим регистром — на Windows и macOS; на Linux это другой альбом (paths.Fold, 101).
+	again, upper := first, strings.ToUpper(first)
+	if paths.FoldEqual(upper, first) {
+		again = upper
+	}
 	a.rememberRecent(again)
 	if r := a.loadConfig().Recent; !slices.Equal(r, []string{again, second}) {
 		t.Fatalf("после повтора: %v", r)
@@ -187,6 +198,12 @@ func TestRememberRecent(t *testing.T) {
 	a.rememberRecent(`\\srv\share\x` + projectExt)
 	if r := a.loadConfig().Recent; len(r) != 2 {
 		t.Fatalf("нелокальный путь попал в список: %v", r)
+	}
+	if again == first {
+		a.rememberRecent(upper)
+		if r := a.loadConfig().Recent; !slices.Equal(r, []string{upper, first, second}) {
+			t.Fatalf("другой регистр на Linux: %v", r)
+		}
 	}
 }
 

@@ -304,6 +304,8 @@ type SpreadView struct {
 	// Waiting — пустые места листа с именем на табличке (071): человек из списка без фото,
 	// в печати его нет — вопрос перед экспортом. Интерфейсу не нужно.
 	Waiting int `json:"-"`
+	// NoAlbumBg — фон альбома на листе скрыт (Spread.NoAlbumBg, 098): «Фон альбома скрыт · Показать».
+	NoAlbumBg bool `json:"noAlbumBg,omitempty"`
 }
 
 // VignetteView — виньетка для панели: параметры, сколько мест они дают (с групповым)
@@ -429,6 +431,8 @@ type View struct {
 	Unnamed  int      `json:"unnamed"`
 	// Cover — обложка (032); nil — её нет. В Spreads её нет: в счёт и нумерацию не входит.
 	Cover *CoverView `json:"cover"`
+	// AlbumBg — фон альбома для строки настроек (098); nil — его нет.
+	AlbumBg *AlbumBgView `json:"albumBg,omitempty"`
 	// PageLimit — предел разворотов типографии альбома (085, LimitOf); nil — типография
 	// неизвестна или у изделия нет предела. omitempty: у альбомов без типографии вид прежний.
 	PageLimit *PageLimitView `json:"pageLimit,omitempty"`
@@ -466,8 +470,18 @@ type PageLimitView struct {
 
 // PhotoUse — одно вхождение фото в альбом для карточки (084): лист и подпись.
 type PhotoUse struct {
-	Sheet int    `json:"sheet"` // индекс в Project.Sheets() — он же store.sheets интерфейса
-	Label string `json:"label"` // «Разворот 3 — место», «Обложка — фон», «Лист 2 — стикер»
+	// Sheet — индекс в Project.Sheets() (он же store.sheets интерфейса); −1 — фон альбома (098).
+	Sheet int    `json:"sheet"`
+	Label string `json:"label"`         // «Разворот 3 — место», «Обложка — фон», «Лист 2 — стикер»
+	Ref   string `json:"ref,omitempty"` // запись вхождения (копия, 098): подсветка места
+}
+
+// UsedAt — «где стоит» фото для окна «Фото уже в альбоме» (098 design §2.4).
+type UsedAt struct {
+	ID     string     `json:"id"`     // ID файла (BaseID переданного)
+	Uses   []PhotoUse `json:"uses"`   // вхождения всех записей семьи; не nil
+	Places int        `json:"places"` // сколько мест у всех записей семьи
+	Move   string     `json:"move"`   // запись единственного места; "" — мест 0 или больше одного
 }
 
 // DefaultSafe — безопасная зона по умолчанию, мм (требование fsfera: значимое не ближе 8 мм).

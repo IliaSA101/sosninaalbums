@@ -30,8 +30,14 @@ xattr -dr com.apple.quarantine /Applications/sosninaalbums.app
 
 Собрать самому — [docs/BUILD-macOS.md](https://github.com/IliaSA101/sosninaalbums/blob/v{{VERSION}}/docs/BUILD-macOS.md).
 
+## Linux
+
+Ubuntu 22.04 и новее, Linux Mint 21+, Debian 12+: скачайте `SosninaAlbums-{{VERSION}}-linux-amd64.deb` и откройте двойным щелчком (или `sudo apt install ./SosninaAlbums-{{VERSION}}-linux-amd64.deb`). Пакет сам поставит GTK 3 и WebKitGTK 4.1, программа появится в меню «Графика» со значком. Обновление — новая `.deb` поверх, удаление — `sudo apt remove sosninaalbums`.
+
+Другие дистрибутивы: `SosninaAlbums-{{VERSION}}-linux-amd64.tar.gz` — распакуйте и запустите `sosninaalbums` из папки `Sosnina Albums {{VERSION}}` (в системе должны быть GTK 3 и WebKitGTK 4.1). Внутри — инструкция «Как установить (Linux)», «Что нового» и лицензии.
+
 ---
 
 Инструкции для каждой системы (`SosninaAlbums-{{VERSION}}-install-guide-…`, docx и pdf) лежат отдельными файлами ниже: их можно прочитать до скачивания архива.
 
-Лицензия — MIT; сторонние компоненты — `THIRD_PARTY_NOTICES.txt` (лежит и в архивах).
+Лицензия — GNU GPL v3 (только версия 3) с дополнительным условием об имени и авторстве, см. `LICENSE` и `NOTICE.md` (версии до 0.22.x выпускались под MIT); сторонние компоненты — `THIRD_PARTY_NOTICES.txt` (лежит и в архивах).

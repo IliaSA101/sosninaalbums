@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -249,13 +250,26 @@ func TestScannerChangedScope(t *testing.T) {
 func TestFingerprintOfOrderFree(t *testing.T) {
 	a := scanFile{key: "/x/a.jpg", size: 1, mod: 2}
 	b := scanFile{key: "/x/b.jpg", size: 3, mod: 4, side: sidecar{path: "/x/b.xmp", size: 5, mod: 6}}
-	f1 := fingerprintOf(Sources{Folders: []string{"/X"}}, []scanFile{a, b})
+	f1 := fingerprintOf(Sources{Folders: []string{"/x"}}, []scanFile{a, b})
 	f2 := fingerprintOf(Sources{Folders: []string{"/x"}}, []scanFile{b, a})
 	if f1 != f2 {
-		t.Fatalf("порядок или регистр папки меняет отпечаток: %+v %+v", f1, f2)
+		t.Fatalf("порядок меняет отпечаток: %+v %+v", f1, f2)
 	}
 	if fingerprintOf(Sources{Folders: []string{"/x"}}, nil) == f1 {
 		t.Fatal("пустой набор совпал с непустым")
+	}
+}
+
+// Ключ отпечатка — по правилу paths.Fold: на Linux списки `/x/Весна` и `/x/ВЕСНА` разные
+// (соседняя по регистру папка не «без изменений»), на Windows и macOS — одинаковые.
+func TestFingerprintKeyFold(t *testing.T) {
+	a := fingerprintOf(Sources{Folders: []string{"/x/Весна"}}, nil)
+	b := fingerprintOf(Sources{Folders: []string{"/x/ВЕСНА"}}, nil)
+	if got := a.key == b.key; got != paths.FoldEqual("/x/Весна", "/x/ВЕСНА") {
+		t.Errorf("ключи %q и %q: совпали = %v", a.key, b.key, got)
+	}
+	if a != fingerprintOf(Sources{Folders: []string{"/x/Весна"}}, nil) {
+		t.Error("ключ нестабилен")
 	}
 }
 

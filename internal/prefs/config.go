@@ -99,6 +99,11 @@ func loadConfig(dir string) Config {
 	return c
 }
 
+// privateMode — права config.json и templates.json на Linux и Mac: недавние папки и имена из
+// альбомов (аудит 0.23-sec), как у резервных копий. library.WriteFileAtomic остаётся 0644:
+// им пишутся выгрузка и альбомы, которые пользователь отдаёт дальше.
+const privateMode os.FileMode = 0o600
+
 // UpdateConfig читает конфиг, применяет fn и пишет обратно атомарно: настройки не должны
 // затирать друг друга (проект и последние папки меняются из разных методов).
 // Чужие ключи (из более новой версии) переписываются как были.
@@ -123,7 +128,7 @@ func UpdateConfig(dir string, fn func(c *Config)) {
 	_ = json.Unmarshal(own, &mine)
 	maps.Copy(raw, mine)
 	data, _ := json.MarshalIndent(raw, "", "  ")
-	if err := library.WriteFileAtomic(path, data); err != nil {
+	if err := library.WriteFileAtomicMode(path, data, privateMode); err != nil {
 		log.Printf("config.json: %v", paths.NoPath(err))
 	}
 }

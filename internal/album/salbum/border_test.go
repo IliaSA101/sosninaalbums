@@ -2,6 +2,7 @@ package salbum
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -73,7 +74,7 @@ func TestSalbumBorderRoundTrip(t *testing.T) {
 	want := borders(p)
 	path := filepath.Join(dir, "a.salbum")
 	first, q := saveLoad(t, p, path)
-	if f := fileJSON(t, path); f.Version != 16 || bytes.Count(first, []byte(`"border"`)) != 6 || bytes.Count(first, []byte(`"fade"`)) != 2 {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || bytes.Count(first, []byte(`"border"`)) != 6 || bytes.Count(first, []byte(`"fade"`)) != 2 {
 		t.Fatalf("файл v%d, рамочек %d, прозрачностей %d:\n%s", f.Version, bytes.Count(first, []byte(`"border"`)), bytes.Count(first, []byte(`"fade"`)), first)
 	}
 	if got := borders(q); !reflect.DeepEqual(got, want) {
@@ -107,7 +108,7 @@ func TestSalbumBorderRoundTrip(t *testing.T) {
 	}
 }
 
-// Файл v13 (0.18) без рамочек открывается как v14: поля нулевые, первая запись делает .v13.bak,
+// Файл v13 (0.18) без рамочек открывается как v14: поля нулевые, первая запись делает копию «(для 0.19)»,
 // в записи рамочек и прозрачности нет.
 func TestV13OpensWithoutBorders(t *testing.T) {
 	dir := testkit.TempDir(t)
@@ -116,7 +117,7 @@ func TestV13OpensWithoutBorders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := bytes.Replace(data, []byte(`"version": 16,`), []byte(`"version": 13,`), 1)
+	src := bytes.Replace(data, fmt.Appendf(nil, `"version": %d,`, model.FormatVersion), []byte(`"version": 13,`), 1)
 	if bytes.Equal(src, data) {
 		t.Fatal("заготовка v13 без номера версии")
 	}
@@ -136,16 +137,16 @@ func TestV13OpensWithoutBorders(t *testing.T) {
 			t.Fatalf("рамочка в файле v13: %+v", b)
 		}
 	}
-	if err := BackupOld(path, q.From()); err != nil {
-		t.Fatal(err)
+	if bak, err := BackupOld(path, q.From()); err != nil || bak != BackupName(path, 13, 1) {
+		t.Fatalf("копия %q: %v", bak, err)
 	}
 	if err := Save(q, path); err != nil {
 		t.Fatal(err)
 	}
-	if bak, err := os.ReadFile(path + ".v13.bak"); err != nil || !bytes.Equal(bak, src) {
-		t.Fatalf(".v13.bak: %v", err)
+	if bak, err := os.ReadFile(BackupName(path, 13, 1)); err != nil || !bytes.Equal(bak, src) {
+		t.Fatalf("копия для %s: %v", LastApp(13), err)
 	}
-	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"border"`)) || bytes.Contains(out, []byte(`"fade"`)) || fileJSON(t, path).Version != 16 {
+	if out, _ := os.ReadFile(path); bytes.Contains(out, []byte(`"border"`)) || bytes.Contains(out, []byte(`"fade"`)) || fileJSON(t, path).Version != model.FormatVersion {
 		t.Fatalf("запись v13:\n%s", out)
 	}
 }

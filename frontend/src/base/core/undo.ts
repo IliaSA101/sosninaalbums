@@ -1,3 +1,4 @@
+import { ownBg } from '../geom/sheet'
 import type { SpreadView } from './types'
 
 // Какой разворот текущий после правки (store.apply). Исчезнувший текущий запоминаем в lost:
@@ -21,5 +22,5 @@ export function pickCurrent(ids: readonly string[], currentId: string, index: nu
 // Склейка двух разворотов оставляет фоны первого, а без них — второго (Go, MergeSpreads): фон второго
 // пропадает, когда у обоих есть фоны. Тогда UI предлагает «Вернуть».
 export function backdropLost(first: SpreadView | undefined, second: SpreadView | undefined): boolean {
-  return !!first?.backdrops?.length && !!second?.backdrops?.length
+  return ownBg(first?.backdrops).length > 0 && ownBg(second?.backdrops).length > 0
 }

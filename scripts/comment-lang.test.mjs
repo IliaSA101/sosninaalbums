@@ -23,6 +23,7 @@ test('английская фраза — провал в Go, TS, Svelte (HTML),
   assert.equal(englishComment(`${HT}${EN} -->`, 'a.svelte'), EN)
   assert.equal(englishComment(` * ${EN}`, 'a.css'), EN)
   assert.equal(englishComment(`# ${EN}`, 'a.ps1'), EN)
+  assert.equal(englishComment(`# ${EN}`, 'a.sh'), EN)
   assert.equal(englishComment(`# ${EN}`, 'a.go'), null) // # вне ps1/py/sh — не комментарий
 })
 
@@ -45,6 +46,16 @@ test('директивы, URL, короткие, коды — ок', () => {
   assert.equal(englishComment(`const u = 'http://example.com' + path + other + words`, 'a.ts'), null)
 })
 
+test('.sh: русский комментарий, shebang, директива shellcheck и lang-ok — ок; файл .sh проверяется', () => {
+  assert.equal(englishComment('# запускает сборку для текущей системы', 'a.sh'), null)
+  assert.equal(englishComment('#!/usr/bin/env bash', 'a.sh'), null)
+  assert.equal(englishComment('# shellcheck disable SC2086 because word splitting is wanted', 'a.sh'), null)
+  assert.equal(englishComment(`# ${EN} lang-ok`, 'a.sh'), null)
+  assert.equal(englishComment(`# ${EN}`, 'scripts/mac/shots.sh'), EN)
+  assert.equal(violations([{ file: 'scripts/b.sh', line: 3, text: `# ${EN}` }]).length, 1)
+  assert.equal(violations([{ file: 'scripts/b.sh', line: 3, text: 'x=1' }]).length, 0)
+})
+
 test('маркер lang-ok снимает строку', () => {
   assert.equal(englishComment(`${SL}${EN} lang-ok`, 'a.go'), null)
 })
@@ -53,7 +64,7 @@ test('isCodeFile: wailsjs, node_modules, dist, bin, .gotmp, testdata — мим�
   for (const f of ['frontend/wailsjs/go/app/App.js', 'frontend/node_modules/x/a.js', 'frontend/dist/a.js', 'build/bin/a.ps1', '.gotmp/a.go', 'testdata/a.go']) {
     assert.equal(isCodeFile(f), false, f)
   }
-  for (const f of ['a.go', 'frontend/src/a.svelte', 'scripts/a.mjs', 'x/a.css', 'a.py', 'a.ps1', 'a.ts', 'a.js']) {
+  for (const f of ['a.go', 'frontend/src/a.svelte', 'scripts/a.mjs', 'x/a.css', 'a.py', 'a.ps1', 'a.ts', 'a.js', 'scripts/a.sh']) {
     assert.equal(isCodeFile(f), true, f)
   }
   assert.equal(isCodeFile('README.md'), false)

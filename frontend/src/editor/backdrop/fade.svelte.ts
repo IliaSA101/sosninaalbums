@@ -48,5 +48,10 @@ export const fadeLive = new FadeLive()
 
 // Те же живые значения у узора (048): прозрачность и масштаб — отдельные экземпляры, чтобы не путаться
 // с фото фона той же области (оно лежит над узором). «fade» здесь — просто число параметра.
+// Прозрачность фона альбома (098): одна на весь альбом — ключ один, живой просмотр виден на всех листах сразу.
+export const ALBUM_FADE = 'album'
+export const albumFadeLive = new FadeLive()
+export const albumFade = (fade: number): number => albumFadeLive.of(ALBUM_FADE, ALBUM_FADE, fade)
+
 export const patFadeLive = new FadeLive()
 export const patScaleLive = new FadeLive()

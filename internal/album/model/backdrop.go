@@ -203,10 +203,13 @@ func (p *Project) OnBorder(id string) bool {
 	return false
 }
 
-// OnDecor — ID фото, стоящих на фонах, в стикерах и рамочках любого листа (с обложкой): «в
-// альбоме» они не считаются — автосборка и «Заполнить пустые» их не берут.
+// OnDecor — ID фото, стоящих на фонах, в стикерах и рамочках любого листа (с обложкой) и на фоне
+// альбома (098): «в альбоме» они не считаются — автосборка и «Заполнить пустые» их не берут.
 func (p *Project) OnDecor() map[string]bool {
 	out := map[string]bool{}
+	if id := p.albumBgPhoto(); id != "" {
+		out[id] = true
+	}
 	for _, s := range p.Sheets() {
 		for _, id := range s.decorPhotos() {
 			out[id] = true

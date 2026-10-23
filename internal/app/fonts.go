@@ -293,7 +293,7 @@ func fontsAddedText(names []string) string {
 // collectPlan — план сбора с файлами своих шрифтов альбома (082-8): начертания гарнитур, которые
 // есть на этом компьютере; остальные — в MissingFonts.
 func (a *App) collectPlan(p *model.Project, extra []string, dir string) (collect.Plan, error) {
-	pl, err := collect.Make(p, extra, dir, os.Stat)
+	pl, err := collect.Make(p, extra, dir, os.Lstat)
 	if err != nil {
 		return pl, err
 	}

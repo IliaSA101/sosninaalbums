@@ -2,7 +2,7 @@
   import { screenDpr } from '../../base/ui/dpr.svelte'
   import type { SpreadView } from '../../base/core/types'
   import { opacityOf } from '../backdrop/fade'
-  import { patFadeLive } from '../backdrop/fade.svelte'
+  import { albumFade, patFadeLive } from '../backdrop/fade.svelte'
   import { layerPx, patternSrc } from './pattern'
 
   // Узор программы (048): прозрачный PNG от Go на своей области, под фото фона. Размер запроса — от ширины области
@@ -20,7 +20,8 @@
   {#if p.known && p.url}
     <img
       class="pat"
-      data-pattern={p.scope}
+      data-pattern={p.album ? undefined : p.scope}
+      data-album-bg={p.album ? p.scope : undefined}
       src={patternSrc(p.url, layerPx(p.area.w, sw, width, dpr))}
       alt=""
       draggable="false"
@@ -28,7 +29,7 @@
       style:top={pct(p.area.y, spread.h)}
       style:width={pct(p.area.w, sw)}
       style:height={pct(p.area.h, spread.h)}
-      style:opacity={opacityOf(patFadeLive.of(spread.id, p.scope, p.pat.fade ?? 0))}
+      style:opacity={opacityOf(p.album ? albumFade(p.pat.fade ?? 0) : patFadeLive.of(spread.id, p.scope, p.pat.fade ?? 0))}
     />
   {/if}
 {/each}

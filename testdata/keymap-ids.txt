@@ -99,3 +99,8 @@ binNew
 binRemove
 binAll
 renameSpread
+about
+cutItems
+copyItems
+pasteItems
+duplicateItems

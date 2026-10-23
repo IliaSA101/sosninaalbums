@@ -57,8 +57,8 @@ func TestLoadV3AsV4(t *testing.T) {
 	if err := e.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(path + ".v3.bak"); err != nil {
-		t.Fatalf("нет .v3.bak: %v", err)
+	if _, err := os.Stat(salbum.BackupName(path, 3, 1)); err != nil {
+		t.Fatalf("нет копии для 0.3: %v", err)
 	}
 	if f := fileJSON(t, path); f.Version != model.FormatVersion {
 		t.Fatalf("версия в файле %d", f.Version)
@@ -101,8 +101,8 @@ func TestMigrateV5ToV6(t *testing.T) {
 	if err := e.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	if bak, err := os.ReadFile(path + ".v5.bak"); err != nil || !bytes.Equal(bak, data) {
-		t.Fatalf(".v5.bak: %v, совпадает с исходником: %v", err, bytes.Equal(bak, data))
+	if bak, err := os.ReadFile(salbum.BackupName(path, 5, 1)); err != nil || !bytes.Equal(bak, data) {
+		t.Fatalf("копия для 0.9: %v, совпадает с исходником: %v", err, bytes.Equal(bak, data))
 	}
 	if f := fileJSON(t, path); f.Version != model.FormatVersion || len(f.Marks) != 2 {
 		t.Fatalf("в файле версия %d, отметок %d", f.Version, len(f.Marks))
@@ -383,7 +383,7 @@ func TestLoadV4Dev(t *testing.T) {
 	}
 }
 
-// Первая запись поверх v2 копирует исходник в .v2.bak, один раз.
+// Первая запись поверх v2 копирует исходник в копию «(для 0.3)», один раз.
 func TestBackupOnFirstSaveV2(t *testing.T) {
 	dir := testkit.TempDir(t)
 	path := writeV2(t, dir, salbum.FilePhoto{PhotoRef: model.PhotoRef{Path: "a.jpg", W: 3, H: 2}})
@@ -396,9 +396,9 @@ func TestBackupOnFirstSaveV2(t *testing.T) {
 	if err := e.Save(""); err != nil {
 		t.Fatal(err)
 	}
-	bak := path + ".v2.bak"
+	bak := salbum.BackupName(path, 2, 1)
 	if got, _ := os.ReadFile(bak); !bytes.Equal(got, orig) {
-		t.Fatal("в .v2.bak не исходные байты")
+		t.Fatal("в копии v2 не исходные байты")
 	}
 	if fileJSON(t, path).Version != model.FormatVersion {
 		t.Fatal("файл не записан в текущей версии")
@@ -411,8 +411,8 @@ func TestBackupOnFirstSaveV2(t *testing.T) {
 	if got, _ := os.ReadFile(bak); string(got) != "метка" {
 		t.Fatal("копия перезаписана")
 	}
-	if _, err := os.Stat(path + ".v1.bak"); err == nil {
-		t.Fatal("лишняя .v1.bak")
+	if _, err := os.Stat(salbum.BackupName(path, 1, 2)); err == nil {
+		t.Fatal("лишняя копия")
 	}
 }
 
@@ -440,7 +440,7 @@ func TestSaveLoadV3Names(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != model.FormatVersion || model.FormatVersion != 16 {
+	if p.Version != model.FormatVersion || model.FormatVersion != 17 {
 		t.Fatalf("версия %d", p.Version)
 	}
 	ta, tb := *edtest.P(e).Spreads[0].Texts[0], *edtest.P(e).Spreads[0].Texts[1]
@@ -496,8 +496,8 @@ func TestLoadOrderRepair(t *testing.T) {
 // открывается с 8 благодаря заполнению DefaultSettings() до разбора; 12 и 0 («без зоны»)
 // переживают запись и чтение.
 func TestLoadSafeDefault(t *testing.T) {
-	if model.FormatVersion != 16 {
-		t.Fatalf("FormatVersion %d: безопасная зона — с v6 (decisions 0.10, запись 2), v7 — vig.own (038), v8 — наклон фона (045), v9 — ключи форм (051), v10 — фото корешка (061), v11 — правило сгиба (064), обрез и разметка разворотов (066), v12 — тон фото (068), v13 — табличка места (071), v14 — рамочки и прозрачность фото (079), v15 — подборки фото (083), v16 — отдельные фото (097)", model.FormatVersion)
+	if model.FormatVersion != 17 {
+		t.Fatalf("FormatVersion %d: безопасная зона — с v6 (decisions 0.10, запись 2), v7 — vig.own (038), v8 — наклон фона (045), v9 — ключи форм (051), v10 — фото корешка (061), v11 — правило сгиба (064), обрез и разметка разворотов (066), v12 — тон фото (068), v13 — табличка места (071), v14 — рамочки и прозрачность фото (079), v15 — подборки фото (083), v16 — отдельные фото (097), v17 — копии фото, свой кадр, фон альбома (098)", model.FormatVersion)
 	}
 	data, err := os.ReadFile(filepath.Join("..", "testdata", "v5.salbum.json"))
 	if err != nil {

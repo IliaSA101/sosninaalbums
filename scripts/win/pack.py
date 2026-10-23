@@ -1,18 +1,21 @@
 """Упаковка выпуска архивом с папкой (спека 039, design §2). Только stdlib, Python >= 3.9.
 
-  pack.py windows --exe E --version X.Y.Z --guide G --changelog C --notices N --out D [--date ISO]
-  pack.py macos   --app-zip Z --version X.Y.Z --guide G --changelog C --notices N --out D [--date ISO]
-  pack.py check   ZIP [--os windows|macos] [--version X.Y.Z]
+  pack.py windows --exe E --version X.Y.Z --guide G --changelog C --notices N --license L --notice M --out D [--date ISO]
+  pack.py macos   --app-zip Z --version X.Y.Z --guide G --changelog C --notices N --license L --notice M --out D [--date ISO]
+  pack.py linux   --bin B [--icon P] --version X.Y.Z --guide G --changelog C --notices N --license L --notice M --out D [--date ISO]
+  pack.py check   ARCHIVE [--os windows|macos|linux] [--version X.Y.Z]
 
 Упаковка: последняя строка stdout — путь к архиву; коды 0 — готово, 1 — ошибка входа или
 проверки (текст в stderr), 2 — неверные аргументы.
-check: 0 — упакован по design §2.2; 3 — «голый» архив прежнего вида (.app или exe в корне);
+Во всех архивах рядом с программой лежат THIRD_PARTY_NOTICES.txt, LICENSE и NOTICE.md (спека 101: GPL).
+check: 0 — упакован по design §2.2 (linux — tar.gz, pack_linux.py); 3 — «голый» архив прежнего вида (.app или exe в корне);
 1 — что-то третье или небезопасное.
 
-Раскладка и имена — только здесь (константы ниже): остальные скрипты зовут pack.py.
+Раскладка и имена — в pack_common.py и здесь: остальные скрипты зовут pack.py.
 """
 
 import argparse
+import calendar
 import datetime
 import hashlib
 import os
@@ -23,47 +26,27 @@ import sys
 import time
 import zipfile
 
-APP = "sosninaalbums.app"
-EXE = "SosninaAlbums.exe"
-NOTICES = "THIRD_PARTY_NOTICES.txt"
-CHANGES = "Что нового.txt"
+# python -I не кладёт каталог скрипта в sys.path — подключаем соседние модули явно
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import pack_linux  # noqa: E402
+from pack_common import (APP, BIN, CHANGES, EXE, GUIDE_EXT, ICON, LEGAL, LICENSE, MAX_UNPACKED,  # noqa: E402
+                         NOTICE_MD, NOTICES, PackError, check_name, folder_name, guide_name)
+
 RSRC = "__MACOSX"
-GUIDE_STEM = {"windows": "Как установить (Windows)", "macos": "Как установить (Mac)"}
-GUIDE_EXT = (".pdf", ".docx")
 ARCHIVE = {
     "windows": "SosninaAlbums-{v}-windows-x64.zip",
     "macos": "SosninaAlbums-{v}-macos-universal.zip",
+    "linux": "SosninaAlbums-{v}-linux-amd64.tar.gz",
 }
 REPO_URL = "https://github.com/IliaSA101/sosninaalbums"
-MAX_UNPACKED = 1 << 30  # несжатый объём, 1 ГБ
 MAX_LINK = 4096
 BARE, BAD = 3, 1
-
-
-class PackError(Exception):
-    """Ошибка входа или проверки: текст уходит в stderr, код 1."""
-
-
-def folder_name(version):
-    return "Sosnina Albums " + version
-
-
-def guide_name(osname, ext):
-    return GUIDE_STEM[osname] + ext
+# Значок по умолчанию для tar.gz: рядом с репозиторием (--icon переопределяет)
+DEFAULT_ICON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "build", "appicon.png")
 
 
 # ---------- безопасность путей ----------
-
-def check_name(name):
-    """Имя записи: относительное, без «..», «.», пустых частей, обратных косых, диска, управляющих."""
-    if not name or name.startswith("/") or "\\" in name:
-        raise PackError("небезопасное имя записи: %r" % name)
-    if any(ord(c) < 32 or c == "\x7f" for c in name):
-        raise PackError("управляющий символ в имени записи: %r" % name)
-    parts = name.rstrip("/").split("/")
-    if any(p in ("", ".", "..") for p in parts) or re.match(r"^[A-Za-z]:", parts[0]):
-        raise PackError("небезопасное имя записи: %r" % name)
-    return parts
 
 
 def mode_of(info):
@@ -245,9 +228,11 @@ def guide_entry(osname, path):
 def pack(args):
     osname, v = args.cmd, args.version
     folder = folder_name(v)
-    now = time.localtime()[:6]
+    # tar хранит UTC (timegm), zip — местное время DOS; без --date берём то, что каждому формату нужно
+    now = (time.gmtime() if osname == "linux" else time.localtime())[:6]
     stamp = args.date or now
     notices = read_file(args.notices, "уведомления")
+    legal = {NOTICES: notices, LICENSE: read_file(args.license, "LICENSE"), NOTICE_MD: read_file(args.notice, "NOTICE.md")}
     guide, guide_data, warn_guide = guide_entry(osname, args.guide)
     newline = "\r\n" if osname == "windows" else "\n"
     if not os.path.isfile(args.changelog):
@@ -255,28 +240,40 @@ def pack(args):
     changes, warn_changes = changes_text(args.changelog, v, newline)
     if osname == "windows":
         src = read_file(args.exe, "exe")
-    else:
-        if not args.app_zip or not os.path.isfile(args.app_zip):
-            raise PackError("нет входного файла (zip программы): %s" % args.app_zip)
+    elif osname == "linux":
+        src = read_file(args.bin, "бинарник")
+        icon = read_file(args.icon or DEFAULT_ICON, "значок")
+    elif not args.app_zip or not os.path.isfile(args.app_zip):
+        raise PackError("нет входного файла (zip программы): %s" % args.app_zip)
     os.makedirs(args.out, exist_ok=True)
     out = os.path.join(args.out, ARCHIVE[osname].format(v=v))
-    w = Writer(out)
-    ok = False
-    try:
-        if osname == "windows":
-            w.add(new_info(folder + "/" + EXE, stamp, 0o755), src)
-        else:
-            copy_app(args.app_zip, folder, args.date, w)
-        w.add(new_info(folder + "/" + guide, stamp, 0o644), guide_data)
-        w.add(new_info(folder + "/" + CHANGES, stamp, 0o644), changes)
-        w.add(new_info(folder + "/" + NOTICES, stamp, 0o644), notices)
-        ok = True
-    finally:
-        w.close(ok)
+    if osname == "linux":
+        # порядок записей фиксирован — архив воспроизводим
+        entries = [(BIN, src, pack_linux.EXEC_MODE), (ICON, icon, pack_linux.FILE_MODE),
+                   (guide, guide_data, pack_linux.FILE_MODE), (CHANGES, changes, pack_linux.FILE_MODE)]
+        entries += [(n, legal[n], pack_linux.FILE_MODE) for n in LEGAL]
+        pack_linux.write_tar(out, folder, entries, calendar.timegm(stamp))
+        listing = [(folder + "/" + n, len(d)) for n, d, _ in entries]
+    else:
+        w = Writer(out)
+        ok = False
+        try:
+            if osname == "windows":
+                w.add(new_info(folder + "/" + EXE, stamp, 0o755), src)
+            else:
+                copy_app(args.app_zip, folder, args.date, w)
+            w.add(new_info(folder + "/" + guide, stamp, 0o644), guide_data)
+            w.add(new_info(folder + "/" + CHANGES, stamp, 0o644), changes)
+            for n in LEGAL:
+                w.add(new_info(folder + "/" + n, stamp, 0o644), legal[n])
+            ok = True
+        finally:
+            w.close(ok)
+        listing = w.listing
     for warn in (warn_guide, warn_changes):
         if warn:
             print("::warning::" + warn)
-    for name, size in w.listing:
+    for name, size in listing:
         print("%10d  %s" % (size, name))
     with open(out, "rb") as f:
         print("sha256  " + hashlib.sha256(f.read()).hexdigest())
@@ -320,8 +317,20 @@ def copy_app(app_zip, folder, date_time, w):
 
 # ---------- check ----------
 
+def is_gzip(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(2) == b"\x1f\x8b"
+    except OSError:
+        return False
+
+
 def check(path, osname, version):
     """Код 0 — упакован; BARE — «голый» архив; ошибки — PackError."""
+    if osname == "linux" or (osname is None and is_gzip(path)):
+        if osname == "linux" and not is_gzip(path):
+            raise PackError("архив Linux — tar.gz, а это не gzip: %s" % path)
+        return pack_linux.check_tar(path, version)
     try:
         zf = zipfile.ZipFile(path)
     except (zipfile.BadZipFile, OSError) as e:
@@ -358,7 +367,7 @@ def check(path, osname, version):
                 inside.setdefault(rest.split("/")[0], []).append(i)
         kind = osname or ("macos" if APP in inside else "windows")
         main_item = APP if kind == "macos" else EXE
-        want = {main_item, CHANGES, NOTICES}
+        want = {main_item, CHANGES, *LEGAL}
         guides = {n for n in inside if n in {guide_name(kind, e) for e in GUIDE_EXT}}
         if len(guides) != 1 or set(inside) != want | guides:
             raise PackError("в папке должно быть ровно: %s и инструкция; найдено: %s"
@@ -381,9 +390,13 @@ def check(path, osname, version):
 def build_parser():
     p = argparse.ArgumentParser(prog="pack.py", description=__doc__.split("\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name in ("windows", "macos"):
+    for name in ("windows", "macos", "linux"):
         s = sub.add_parser(name)
-        s.add_argument("--exe" if name == "windows" else "--app-zip", required=True)
+        s.add_argument({"windows": "--exe", "macos": "--app-zip", "linux": "--bin"}[name], required=True)
+        if name == "linux":
+            s.add_argument("--icon")
+        s.add_argument("--license", required=True)
+        s.add_argument("--notice", required=True)
         s.add_argument("--version", required=True, type=version_arg)
         s.add_argument("--guide", required=True)
         s.add_argument("--changelog", required=True)
@@ -392,7 +405,7 @@ def build_parser():
         s.add_argument("--date", type=parse_date)
     c = sub.add_parser("check")
     c.add_argument("zip")
-    c.add_argument("--os", choices=("windows", "macos"))
+    c.add_argument("--os", choices=("windows", "macos", "linux"))
     c.add_argument("--version", type=version_arg)
     return p
 

@@ -18,6 +18,11 @@ import (
 // заметно слабее мозаики, и в начале ряда её показывать незачем.
 const rowQSlack = 0.25
 
+// centerQSlack — «центр крупнее» (forms.CenterBig) идёт в «Другие варианты», если его Q не хуже Q
+// лучшей раскладки на столько: центр на сгибе штрафуется spineTerm (≈0,12 на 3 вертикальных 2:3),
+// и при rowQSlack он едва не проходил (0,6056 против пола 0,6069).
+const centerQSlack = 0.5
+
 // manySideSlack — «не мельче мозаики» на многих фото (072-2): мельчайшая сторона формы не меньше
 // этой доли той же у Row[0]. Мозаики 2–8-й плиток того же ряда уже бывают на 10–15 % мельче первой,
 // а при 1,0 на 30 фото смеси в трети наборов оставалась одна мозаика.
@@ -30,6 +35,7 @@ type rowEntry struct {
 	kind  map[string]Kind // featured в ряду — их семейство (Pick судит их по Fair, как 041)
 	gen   map[string]bool // вставлены формой (Gen, featured), а не из ряда layout: допуск по Q
 	feats []Feat          // featured вне ряда для «Других вариантов» (bestFeatured), до ManyFrom фото
+	mid   *forms.Cand     // «центр крупнее» (contrast) вне ряда для «Других вариантов» (midBig)
 }
 
 // rowCache — ряды по пропорциям и геометрии: View берёт ряд у каждого разворота на каждый запрос,
@@ -169,6 +175,22 @@ func (b *rowBuild) takePair() bool {
 	return true
 }
 
+// midBig — лучший по Q «центр крупнее» (contrast) вне ряда, не ниже centerQSlack от лучшей
+// раскладки. В ряду форма одна — левое крупное или Q[…|…] выигрывает по Q, и центр не показывался
+// совсем (0.23-q6); в ряд его не ставим: ряд — это выбор автосборки, он зафиксирован (вариант 1 =
+// 0.19.0, variantDigest19), а «Другие варианты» сборка не берёт (ни InRow, ни Formed, ни Air).
+func (b *rowBuild) midBig(first float64) *forms.Cand {
+	for _, c := range b.cands {
+		if quanta(c.Q) < quanta(first-centerQSlack) {
+			break
+		}
+		if c.Form == forms.Contrast && forms.CenterBig(c.Key) && !b.keys[c.Key] {
+			return &c
+		}
+	}
+	return nil
+}
+
 // nextBase — следующий ещё не показанный из ряда layout; false — ряд кончился.
 func (b *rowBuild) nextBase() bool {
 	for ; b.bi < len(b.base); b.bi++ {
@@ -212,6 +234,7 @@ func buildRow(as []float64, p layout.Params, rowLen int, base []layout.Result) r
 	}
 	if len(as) < layout.ManyFrom {
 		b.e.feats = bestFeatured(all, base, cloneSet(b.keys))
+		b.e.mid = b.midBig(first.Q)
 	}
 	return b.e
 }

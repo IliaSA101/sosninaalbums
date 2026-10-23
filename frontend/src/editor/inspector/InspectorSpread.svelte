@@ -16,6 +16,8 @@
   import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
   import { makeVignette } from '../../panels/vignette/vigact'
   import Icon from '../../base/ui/Icon.svelte'
+  import { ALBUM_CARD_EDIT, ALBUM_CARD_HIDE, ALBUM_CARD_NOW, ALBUM_CARD_OFF, ALBUM_CARD_SHOW, albumCard } from '../../panels/decor/albumbg'
+  import { decor } from '../../panels/decor/decor.svelte'
 
   // Карточка «Разворот N», когда ничего не выделено (спека 008, panels.md; 009 D2): название, раздел
   // «Фон» (цвет на весь разворот или по страницам), раскладка «Авто» / «Сетка». «Сетка» закрепляет
@@ -84,6 +86,9 @@
       making = false
     }
   }
+  // Фон альбома (098): строка в разделе «Фон» — виден ли он на этом листе и как его скрыть; сам фон выбирают в настройках альбома.
+  const albumRow = $derived(albumCard(sp, store.view.albumBg))
+  const hideAlbum = (off: boolean) => sp && store.run(Api.SetNoAlbumBg(sp.id, off))
   // ColorPicker зовёт onpick один раз на выбор — один шаг undo. Цвет '' снимает свой цвет.
   const pick = (scope: 'spread' | 'left' | 'right', color: string) => sp && store.run(Api.SetBackground(sp.id, scope, color))
 </script>
@@ -144,6 +149,19 @@
           {/each}
         {/if}
         <button class="ghost" disabled={!own} onclick={() => pick('spread', '')}>Как в альбоме</button>
+      {/if}
+      {#if albumRow}
+        <div class="album">
+          {#if albumRow === 'on'}
+            <span class="lbl">{ALBUM_CARD_NOW}</span>
+            <!-- Без уровня «Фоны» окно не открываем — как «Выбрать…» в AlbumBgRow -->
+            {#if prefs.can('decor')}<button class="ghost mini" onclick={() => decor.showAlbum()}>{ALBUM_CARD_EDIT}</button>{/if}
+            <button class="ghost mini" onclick={() => hideAlbum(true)}>{ALBUM_CARD_HIDE}</button>
+          {:else}
+            <span class="lbl">{ALBUM_CARD_OFF}</span>
+            <button class="ghost mini" onclick={() => hideAlbum(false)}>{ALBUM_CARD_SHOW}</button>
+          {/if}
+        </div>
       {/if}
       <!-- Узор программы (048) — строкой «Узор» над зонами: он лежит под фото фона и от областей зон не зависит -->
       {#if prefs.can('bgPhoto')}<div data-slot="backdrop"><InspectorPattern {sp} /><InspectorBackdrop {sp} {split} /></div>{/if}
@@ -262,6 +280,22 @@
     margin-top: 8px;
     padding: 0 6px;
     font-size: 12px;
+  }
+  .album {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  .album .lbl {
+    flex-basis: 100%;
+  }
+  .ghost.mini {
+    width: auto;
+    margin-top: 0;
+    padding: 0 8px;
   }
   .vig {
     display: flex;

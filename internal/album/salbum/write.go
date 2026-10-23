@@ -1,6 +1,7 @@
 package salbum
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // pathEnc — путь из памяти для записи: path (относительный или абсолютный) и запасной abs ("" —
@@ -47,6 +49,7 @@ func Encode(p *model.Project, base string) ([]byte, error) {
 func encodeWith(p *model.Project, side model.Side, enc pathEnc) ([]byte, error) {
 	f := FileProject{
 		Version:  model.FormatVersion,
+		App:      appField(curApp()),
 		Product:  model.NormProduct(p.Product),
 		Folders:  make([]FileFolder, 0, len(p.Folders)),
 		Settings: p.Settings,
@@ -54,6 +57,7 @@ func encodeWith(p *model.Project, side model.Side, enc pathEnc) ([]byte, error) 
 		Photos:   make(map[string]FilePhoto, len(p.Photos)),
 		Cover:    encodeCover(p.Cover, enc),
 		Fonts:    p.Fonts, // только названия: файлы шрифтов альбом не несёт (082-8)
+		AlbumBg:  p.AlbumBg,
 	}
 	if f.Spreads == nil {
 		f.Spreads = []*model.Spread{}
@@ -130,33 +134,74 @@ func writeEnc(p *model.Project, path string, side model.Side, enc pathEnc) error
 // на постоянное имя ссылка или папка тоже больше не мешают.
 func writeAtomic(path string, data []byte) error { return library.WriteFileAtomic(path, data) }
 
-// backupPath — копия файла старой версии: <путь>.v<from>.bak (from — версия на чтении).
-func backupPath(path string, from int) string { return fmt.Sprintf("%s.v%d.bak", path, from) }
+// maxBackupNo — сколько имён копии пробовать: « 2» … « 99», дальше — ошибка записи.
+const maxBackupNo = 99
 
-// BackupOld копирует файл старой версии перед первой записью поверх него, чтобы
-// можно было вернуться на прежнюю программу. Копия уже есть — не трогаем;
-// исходника нет или он уже новой версии — копировать нечего.
-func BackupOld(path string, from int) error {
-	bak := backupPath(path, from)
-	_, err := os.Lstat(bak)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
+// BackupOld копирует файл старой версии перед первой записью поверх него, чтобы можно было
+// вернуться на прежнюю программу: «<имя> (для 0.22).salbum» рядом (BackupName, design §6).
+// Ответ — имя сделанной копии; "" — копировать нечего: исходника нет, он уже текущей версии
+// или копия с теми же байтами уже лежит. Имя совпало с самим файлом (открыли копию) — дальше;
+// занято другим файлом — « 2», « 3»… (чужой файл не трогаем); все заняты — ошибка, и запись
+// поверх исходника не идёт.
+func BackupOld(path string, from int) (string, error) {
 	data, err := ReadLimited(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return "", nil
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	var head struct {
 		Version int `json:"version"`
 	}
 	if json.Unmarshal(data, &head) == nil && head.Version >= model.FormatVersion {
-		return nil
+		return "", nil
 	}
-	return writeAtomic(bak, data)
+	for k := 1; k <= maxBackupNo; k++ {
+		bak := BackupName(path, from, k)
+		if paths.SamePath(bak, path) {
+			continue
+		}
+		switch busy, err := sameBytes(bak, data); {
+		case err != nil:
+			return "", err
+		case busy == bakFree:
+			return bak, writeAtomic(bak, data)
+		case busy == bakSame:
+			return "", nil
+		}
+	}
+	return "", fmt.Errorf("не удалось сохранить копию для версии %s: все имена заняты", LastApp(from))
+}
+
+// bakState — что лежит на месте имени копии.
+type bakState int
+
+const (
+	bakFree  bakState = iota // ничего нет
+	bakSame                  // файл с теми же байтами: копия уже сделана
+	bakOther                 // другое (чужой файл, папка, ссылка) — не трогаем
+)
+
+// sameBytes — состояние имени bak против байтов исходника data. Ссылку не разыменовываем
+// (Lstat): подложенная ссылка — «чужое».
+func sameBytes(bak string, data []byte) (bakState, error) {
+	st, err := os.Lstat(bak)
+	if errors.Is(err, fs.ErrNotExist) {
+		return bakFree, nil
+	}
+	if err != nil {
+		return bakOther, err
+	}
+	if !st.Mode().IsRegular() || st.Size() != int64(len(data)) {
+		return bakOther, nil
+	}
+	got, err := ReadLimited(bak)
+	if err != nil {
+		return bakOther, err
+	}
+	if bytes.Equal(got, data) {
+		return bakSame, nil
+	}
+	return bakOther, nil
 }

@@ -36,7 +36,7 @@ func wireApp(t *testing.T) (a *App, views func() []model.View, saved func() []an
 	p := model.New()
 	for i, id := range []string{"a", "b", "c"} {
 		p.Spreads = append(p.Spreads, &model.Spread{ID: "s" + strconv.Itoa(i+1), Photos: []string{id}})
-		p.Photos[id] = model.PhotoRef{Path: `C:\` + id + ".jpg", W: 300, H: 200}
+		p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 	}
 	a.ed.Store(mustEditor(t, p, ""))
 	views = func() []model.View { mu.Lock(); defer mu.Unlock(); return append([]model.View{}, vs...) }
@@ -144,7 +144,7 @@ func TestWireLateChangedOldEditor(t *testing.T) {
 	e1 := a.editor()
 	p := model.New()
 	p.Spreads = []*model.Spread{{ID: "n1", Photos: []string{"x"}}}
-	p.Photos["x"] = model.PhotoRef{Path: `C:\x.jpg`, W: 300, H: 200}
+	p.Photos["x"] = model.PhotoRef{Path: testkit.AbsPath("x.jpg"), W: 300, H: 200}
 	e2 := mustEditor(t, p, "")
 	a.ed.Store(e2)
 	st := a.emitState()

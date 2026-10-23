@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // Пределы (решение владельца 2026-10-09).
@@ -78,9 +80,17 @@ func New(root string) *Store {
 }
 
 // DefaultRoot — %LOCALAPPDATA%\<name>\backups (как osx.WebViewDir; name — osx.DataName, у
-// стенда QA своя): копии не ездят с перемещаемым профилем. "" — папки данных нет.
+// стенда QA своя): копии не ездят с перемещаемым профилем. На Linux — $XDG_DATA_HOME
+// (~/.local/share): кэш, где они лежали бы иначе, чистят «уборщики» (101, design §3.1).
+// "" — папки данных нет.
 func DefaultRoot(name string) string {
 	base := os.Getenv("LOCALAPPDATA")
+	if !filepath.IsAbs(base) { // относительный путь копии «в текущую папку» не кладёт
+		base = ""
+	}
+	if base == "" && runtime.GOOS == "linux" {
+		base = xdgDataHome()
+	}
 	if base == "" {
 		base, _ = os.UserCacheDir()
 	}
@@ -90,15 +100,27 @@ func DefaultRoot(name string) string {
 	return filepath.Join(base, name, "backups")
 }
 
-// Key — папка копий альбома: чистое имя файла и 8 hex от sha256 полного пути без регистра
+// Key — папка копий альбома: чистое имя файла и 8 hex от sha256 полного пути (paths.Fold)
 // (два «Альбом.salbum» в разных папках не смешиваются).
 func Key(path string) string {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		abs = path
 	}
-	sum := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(abs))))
+	sum := sha256.Sum256([]byte(paths.Fold(filepath.Clean(abs))))
 	return cleanName(strings.TrimSuffix(filepath.Base(abs), filepath.Ext(abs))) + "-" + hex.EncodeToString(sum[:4])
+}
+
+// xdgDataHome — $XDG_DATA_HOME или ~/.local/share; относительный путь XDG не годится (спецификация
+// XDG велит его пропустить). "" — нет ни того, ни домашней папки.
+func xdgDataHome() string {
+	if d := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(d) {
+		return d
+	}
+	if home, err := os.UserHomeDir(); err == nil && filepath.IsAbs(home) {
+		return filepath.Join(home, ".local", "share")
+	}
+	return ""
 }
 
 // cleanName — имя без запрещённых в Windows знаков и управляющих символов, без точек и
@@ -286,7 +308,7 @@ func (s *Store) Inside(path string) bool {
 	if err1 != nil || err2 != nil {
 		return false
 	}
-	lr, lp := strings.ToLower(filepath.Clean(root)), strings.ToLower(filepath.Clean(p))
+	lr, lp := paths.Fold(filepath.Clean(root)), paths.Fold(filepath.Clean(p))
 	if lp == lr || strings.HasPrefix(lp, strings.TrimSuffix(lr, string(filepath.Separator))+string(filepath.Separator)) {
 		return true
 	}

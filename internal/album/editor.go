@@ -47,10 +47,12 @@ type Editor struct {
 	// подряд идущие правки с тем же ключом — один шаг отмены.
 	lastMerge string
 	// origin, from, backup: файл старой версии перед первой записью в тот же
-	// путь копируется в <путь>.v<from>.bak.
-	origin string
-	from   int
-	backup bool
+	// путь копируется в «<имя> (для 0.22).salbum» (salbum.BackupName); backupMade — имя
+	// сделанной копии до TakeBackup (тост App).
+	origin     string
+	from       int
+	backup     bool
+	backupMade string
 	// marks — свои отметки (ID фото → отметка), не nil; marksRev — из общего счётчика процесса.
 	marks    map[string]model.Mark
 	marksRev int
@@ -280,9 +282,11 @@ func (e *Editor) Save(path string) error {
 	// «Сохранить как» в другой путь копию не делает — исходник и так цел.
 	first := e.backup && paths.SamePath(path, e.origin)
 	if first {
-		if err := salbum.BackupOld(path, e.from); err != nil {
+		bak, err := salbum.BackupOld(path, e.from)
+		if err != nil {
 			return fmt.Errorf("копия файла старой версии: %w", err)
 		}
+		e.keepBackup(bak)
 	}
 	if err := salbum.SaveWith(e.p, path, e.side()); err != nil {
 		return err
@@ -463,16 +467,36 @@ func (e *Editor) Restore(q *model.Project) (model.View, error) {
 // Черновик.
 
 // WriteDraft — WriteCopy для черновика: если проект прочитан из файла старой версии (черновик
-// от прежней программы), первая запись поверх него сначала копирует исходник в <путь>.v<N>.bak,
-// как Save делает для обычного файла: откат на старую программу не теряет черновик.
+// от прежней программы), первая запись поверх него сначала копирует исходник в «черновик (для
+// 0.22).salbum», как Save делает для обычного файла: откат на старую программу не теряет черновик.
 // Копия уже есть или файл уже новой версии — копировать нечего (salbum.BackupOld).
 func (e *Editor) WriteDraft(path string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.from != 0 && e.from < model.FormatVersion {
-		if err := salbum.BackupOld(path, e.from); err != nil {
+		bak, err := salbum.BackupOld(path, e.from)
+		if err != nil {
 			return fmt.Errorf("копия черновика старой версии: %w", err)
 		}
+		e.keepBackup(bak)
 	}
 	return salbum.Write(e.p, path, "", e.side())
+}
+
+// keepBackup запоминает имя сделанной копии старого формата для тоста; "" — копии не было,
+// прежнее имя (ещё не забранное) остаётся. Под e.mu.
+func (e *Editor) keepBackup(bak string) {
+	if bak != "" {
+		e.backupMade = bak
+	}
+}
+
+// TakeBackup — имя копии старого формата, сделанной последней записью (Save, WriteDraft), и
+// забывает его: App показывает тост «Сохранена копия для версии 0.22» один раз. "" — копии не было.
+func (e *Editor) TakeBackup() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	bak := e.backupMade
+	e.backupMade = ""
+	return bak
 }

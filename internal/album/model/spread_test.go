@@ -68,6 +68,8 @@ func TestSpreadEmptyCoversFields(t *testing.T) {
 			v.Set(reflect.MakeSlice(f.Type, 1, 1))
 		case reflect.Int:
 			v.SetInt(1)
+		case reflect.Bool:
+			v.SetBool(true)
 		case reflect.Pointer:
 			v.Set(reflect.New(f.Type.Elem()))
 		default:

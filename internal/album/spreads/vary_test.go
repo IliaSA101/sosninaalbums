@@ -397,7 +397,10 @@ func checkRow(t *testing.T, name string, rows []model.Choice, prm layout.Params)
 	fams := map[string]bool{"dense": true, "hero": true, "air": true, "bleed": true, "strip": true, "figure": true}
 	for i, c := range rows {
 		f := forms.Of(c.Key, c.Rects, prm)
-		if !fams[c.Family] || c.Family != string(variety.FamilyOf(f)) {
+		// Семья плитки — TileFamily; от FamilyOf отличается только «Плотно» у «Двух крупных» (0.23-q7).
+		pairDense := f == forms.Pair && c.Family == string(variety.Dense)
+		if !fams[c.Family] || c.Family != string(variety.TileFamily(f, c.Rects, prm)) ||
+			c.Family != string(variety.FamilyOf(f)) && !pairDense {
 			t.Fatalf("%s %s: семейство %q (форма %s)", name, c.Key, c.Family, f)
 		}
 		if want := forms.Name(f); c.FormName != want || want == "" || f == forms.Mosaic && c.FormName != "Плотно" {

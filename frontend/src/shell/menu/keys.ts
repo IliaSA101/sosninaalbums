@@ -26,6 +26,9 @@ export interface KeyContext {
   placeSelected?: boolean // выделено фото, место или текст группы текущего разворота
   stickerSelected?: boolean // выделены только стикеры (048): стрелки двигают их на любом листе, и на «Авто»
   layerable?: boolean // «Ручная» и выделено место, фото, текст или стикер (или стикер на «Авто»): слои двигать есть что
+  copyable?: boolean // на листе выделено то, что копируется (место, фото, надпись, стикер), и не идёт ввод надписи (099)
+  pasteable?: boolean // буфер не пуст и есть лист, куда вставлять (099)
+  nativeSel?: boolean // выделен текст страницы вне холста (справочник, «О снимке»): Ctrl+C его, а не листа (099)
   zone?: Zone // где было последнее нажатие мыши; не задано — лента фото
   bgMode?: boolean // включён режим фона: его Esc, стрелки и Del
   big?: boolean // крупный просмотр: ленты не видно, отметки клавишами молчат
@@ -65,6 +68,11 @@ const marksOn = (c: KeyContext) => !c.big && !c.galleryOpen
 // Подборки (083): то же, и функция уровня (Go проверяет feature, но когда can не задан — всё доступно).
 const binsOn = (c: KeyContext) => marksOn(c) && (!c.can || c.can('bins'))
 
+// Буфер (099): холст под галереей не виден, в режиме фона и крупном просмотре выделять нечего; выделенный текст страницы — родной.
+const clipOn = (c: KeyContext) => !c.bgMode && !c.galleryOpen && !c.big && !c.nativeSel
+const copyOn = (c: KeyContext) => clipOn(c) && !!c.copyable
+const pasteOn = (c: KeyContext) => clipOn(c) && !!c.pasteable
+
 // Условия команд (прежние when таблицы). Команда без записи — без условий; без клавиши по умолчанию — «пункт меню».
 const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
   markRating0: (c) => marksOn(c) && c.hasSelection, // без выделения 0 остаётся «вписать»
@@ -94,6 +102,10 @@ const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
   prevSpread: (c) => !nudging(c),
   nextSpread: (c) => !nudging(c),
   nudgePlace: nudging,
+  cutItems: copyOn,
+  copyItems: copyOn,
+  duplicateItems: copyOn,
+  pasteItems: pasteOn,
   closeGallery: (c) => c.galleryOpen,
   bgExit: (c) => !c.galleryOpen, // при открытой галерее Esc закрывает её
   addSelected: (c) => c.hasSelection,

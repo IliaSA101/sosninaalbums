@@ -2,6 +2,7 @@ package osx
 
 import (
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 )
 
@@ -46,13 +47,20 @@ func inside(dir, root string) bool {
 // Тексты тоста при запуске не из того места (спека 039, решение 9).
 const (
 	noticeTemp         = "Программа запущена прямо из архива. Закройте её и распакуйте архив: «Извлечь все», затем запускайте SosninaAlbums.exe из распакованной папки."
+	noticeTempLinux    = "Программа запущена прямо из архива. Закройте её, распакуйте архив и запускайте sosninaalbums из распакованной папки или установите пакет .deb."
 	noticeTranslocated = "Программа запущена без переноса из «Загрузок». Закройте её, перетащите sosninaalbums в «Программы» и откройте оттуда."
 )
 
 // Notice — текст для пользователя; для обычного места пустой.
-func (p Place) Notice() string {
+func (p Place) Notice() string { return p.noticeFor(goruntime.GOOS) }
+
+// noticeFor — текст под ОС: на Linux нет exe и «Извлечь все», запуск — из tar.gz или .deb.
+func (p Place) noticeFor(goos string) string {
 	switch p {
 	case PlaceTemp:
+		if goos == "linux" {
+			return noticeTempLinux
+		}
 		return noticeTemp
 	case PlaceTranslocated:
 		return noticeTranslocated

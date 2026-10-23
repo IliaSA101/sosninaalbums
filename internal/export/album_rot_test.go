@@ -9,6 +9,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
 
@@ -18,7 +19,7 @@ func TestExportSpreadsRotation(t *testing.T) {
 	st := text.Style{Font: "montserrat", Size: 14, Color: "#000000", Align: "left"}
 	p := model.New()
 	p.Settings.Bg = "#ffffff"
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200,
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200,
 		Caption: &model.Caption{Text: "Подпись", Style: model.DefaultCaptionStyle()}}
 	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a"},
 		Texts: []*model.TextBlock{{ID: "t1", X: 150, Y: 120, W: 70, Text: "Привет, мир", Rot: 30, Style: st}}}}
@@ -67,8 +68,8 @@ func TestExportSpreadsRotation(t *testing.T) {
 func TestExportSpreadsRotZ(t *testing.T) {
 	st := text.Style{Font: "montserrat", Size: 14, Color: "#000000", Align: "left"}
 	p := model.New()
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200, Frame: &model.Frame{S: 1, R: 100}}
-	p.Photos["b"] = model.PhotoRef{Path: `C:\b.jpg`, W: 300, H: 200}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200, Frame: &model.Frame{S: 1, R: 100}}
+	p.Photos["b"] = model.PhotoRef{Path: testkit.AbsPath("b.jpg"), W: 300, H: 200}
 	p.Spreads = []*model.Spread{{ID: "s1",
 		Grid: []*model.Place{
 			{ID: "p1", X: 40, Y: 40, W: 60, H: 60, Photo: "a", Rot: 30},
@@ -101,9 +102,9 @@ func TestExportSpreadsRotZ(t *testing.T) {
 // кадр View; фон без наклона — ImgRot 0 (прежний путь рендера).
 func TestExportBackdropTilt(t *testing.T) {
 	p := model.New()
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
-	p.Photos["l"] = model.PhotoRef{Path: `C:\l.jpg`, W: 6000, H: 4000}
-	p.Photos["r"] = model.PhotoRef{Path: `C:\r.jpg`, W: 6000, H: 4000}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
+	p.Photos["l"] = model.PhotoRef{Path: testkit.AbsPath("l.jpg"), W: 6000, H: 4000}
+	p.Photos["r"] = model.PhotoRef{Path: testkit.AbsPath("r.jpg"), W: 6000, H: 4000}
 	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a"},
 		BgPhotoL: &model.Backdrop{Photo: "l", W: 300, H: 300, Rot: 10, Frame: &model.Frame{S: 1, R: 4.5}},
 		BgPhotoR: &model.Backdrop{Photo: "r", X: 300, W: 300, H: 300, Frame: &model.Frame{S: 1.5}}}}
@@ -128,7 +129,7 @@ func TestExportBackdropTilt(t *testing.T) {
 func TestExportSpreadsShape(t *testing.T) {
 	p := model.New()
 	for _, id := range []string{"a", "b", "c"} {
-		p.Photos[id] = model.PhotoRef{Path: `C:\` + id + `.jpg`, W: 300, H: 200}
+		p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 	}
 	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a", "b", "c"}, Grid: []*model.Place{
 		{ID: "000000000001", X: 10, Y: 10, W: 80, H: 80, Photo: "a", Shape: model.ShapeOval},

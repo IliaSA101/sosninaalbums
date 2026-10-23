@@ -18,11 +18,15 @@ export function autoAskText(vig?: VigAsk): { title: string; ask: string; ok: str
   return { title: 'Вернуть авто?', ask: `${RESET_WARN} Вернуть авто?`, ok: 'Вернуть авто' }
 }
 
+// Подпись галочки «Вернуть авто?» (098): сколько фото сохранят свой кадр.
+export const keepText = (n: number) => `Сохранить кадр правленых фото: ${n}`
+
 class GridActions {
   // Вопрос «Ваши правки мест сбросятся. Вернуть авто?» (спека 008): разворот и ключ раскладки
   // (пусто — вернуть сохранённый). У ручной виньетки (038) — vig: тот же вопрос про шаблон.
-  // Окно — AutoAskDialog, открыто, пока не null.
-  autoAsk = $state<{ spread: string; key: string; vig?: VigAsk } | null>(null)
+  // Окно — AutoAskDialog, открыто, пока не null. crops — сколько фото получат свой кадр (098, CropsToKeep),
+  // keep — галочка «Сохранить кадр правленых фото» (по умолчанию включена; видна при crops > 0).
+  autoAsk = $state<{ spread: string; key: string; vig?: VigAsk; crops: number; keep: boolean } | null>(null)
   // «Копировать сетку…» (U9): разворот-источник и область, окно CopyGridDialog открыто, пока не null.
   // Окно закрывает себя само; prune сбрасывает флаг, если источник пропал или перестал быть сеткой.
   // mode 'decor' (049 Ф2) — «Копировать оформление…»: то же окно; источнику сетка не нужна.
@@ -68,12 +72,20 @@ class GridActions {
 
   // Назад к «Авто» с сетки: места сбросятся, поэтому спрашиваем (по умолчанию «Отмена»).
   // key — выбранная в галерее раскладка; пусто — вернуть сохранённую. У «Авто» вопрос не нужен.
+  // Число правленых фото спрашиваем у Go до окна: от него зависит, есть ли в окне галочка (098).
   async backToAuto(spread: string, key = '') {
     if (!store.view.spreads.find((s) => s.id === spread)?.grid) {
       if (key) await store.run(Api.SetLayout(spread, key))
       return
     }
-    this.autoAsk = { spread, key }
+    const crops = await Api.CropsToKeep(spread).catch(() => 0)
+    // Пока ждали Go, с разворота могли уйти: вопрос про чужой лист не открываем
+    if (store.currentId !== spread) return
+    this.autoAsk = { spread, key, crops, keep: true }
+  }
+
+  setKeep(on: boolean) {
+    if (this.autoAsk) this.autoAsk.keep = on
   }
 
   // Действие на виньетке: ручная (vig.manual) — сначала вопрос, «Отмена» ничего не меняет; нетронутая —
@@ -83,7 +95,7 @@ class GridActions {
       await run()
       return true
     }
-    this.autoAsk = { spread, key: '', vig: { kind, run } }
+    this.autoAsk = { spread, key: '', vig: { kind, run }, crops: 0, keep: false }
     return false
   }
 
@@ -92,7 +104,8 @@ class GridActions {
     this.autoAsk = null
     if (!a) return
     if (a.vig) await a.vig.run()
-    else await store.run(a.key ? Api.SetLayout(a.spread, a.key) : Api.SetGrid(a.spread, false))
+    // Один вызов вместо SetGrid(false) и SetLayout: Go сначала решает судьбу кадров, потом строит раскладку (098-19)
+    else await store.run(Api.BackToAuto(a.spread, a.key, a.crops > 0 && a.keep))
   }
 
   cancelAuto() {

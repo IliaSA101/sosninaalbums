@@ -217,6 +217,40 @@ func TestMissingPhotosLib(t *testing.T) {
 	}
 }
 
+// Копии (098): пропавший файл считается один раз, сколько бы записей семьи ни было в выборе, и
+// проверяется одним вызовом exists; своё из библиотеки — по записи, как прежде.
+func TestMissingPhotosByFile(t *testing.T) {
+	p := selectProject()
+	for _, id := range []string{"a-2", "a-3", "b-2"} {
+		p.Photos[id] = p.Photos[id[:1]]
+	}
+	delete(p.Photos, "b") // у файла b только копия
+	p.Photos["k1"] = model.PhotoRef{Lib: "my:0123456789abcdef", W: 4, H: 3}
+	p.Photos["k1-2"] = model.PhotoRef{Lib: "my:fedcba9876543210", W: 4, H: 3}
+	sel := map[string]bool{"a": true, "a-2": true, "a-3": true, "b-2": true, "k1": true, "k1-2": true}
+	calls := map[string]int{}
+	gone := func(path string) bool { calls[path]++; return false }
+	err := MissingPhotos(p, sel, gone)
+	if err == nil || !strings.Contains(err.Error(), "не найдены файлы фото: 2 (a.jpg, b.jpg)") ||
+		!strings.Contains(err.Error(), "нет в библиотеке этого компьютера: 2 (свои фоны)") {
+		t.Fatalf("семьи и свои: %v", err)
+	}
+	if calls["/x/a.jpg"] != 1 || calls["/x/b.jpg"] != 1 {
+		t.Errorf("проверки файла: %v", calls)
+	}
+	// Только копии без исходной записи — тот же один файл.
+	if err := MissingPhotos(p, map[string]bool{"a-2": true, "a-3": true}, gone); err == nil ||
+		!strings.Contains(err.Error(), "фото: 1 (a.jpg)") {
+		t.Errorf("две копии: %v", err)
+	}
+	if err := MissingPhotos(p, map[string]bool{}, gone); err != nil {
+		t.Errorf("пустой выбор: %v", err)
+	}
+	if err := MissingPhotos(p, sel, func(string) bool { return true }); err != nil && strings.Contains(err.Error(), "не найдены") {
+		t.Errorf("все файлы на месте: %v", err)
+	}
+}
+
 // Свои стикеры (048) — в выгрузке, как фото фона: страница — если описанная рамка заходит на
 // неё (поворот вокруг центра), прозрачный на 100 % не в счёт, процедурный фото не даёт;
 // обложка — только при обложке в плане.

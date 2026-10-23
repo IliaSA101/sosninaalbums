@@ -197,7 +197,7 @@ jobs:
             }
             if (-not $ver -or -not $gn) { throw "no version or guide for packing (ver='$ver' guide='$gn')" }
             $out = Join-Path $env:RUNNER_TEMP 'packed'
-            $lines = @(python -I "$ws\scripts\win\pack.py" windows --exe $e[0].FullName --version $ver --guide (Join-Path $g $gn) --changelog "$ws\CHANGELOG.md" --notices "$ws\THIRD_PARTY_NOTICES.txt" --out $out)
+            $lines = @(python -I "$ws\scripts\win\pack.py" windows --exe $e[0].FullName --version $ver --guide (Join-Path $g $gn) --changelog "$ws\CHANGELOG.md" --notices "$ws\THIRD_PARTY_NOTICES.txt" --license "$ws\LICENSE" --notice "$ws\NOTICE.md" --out $out)
             $lines | ForEach-Object { Write-Host $_ }
             if ($LASTEXITCODE -ne 0) { throw "pack.py windows exit $LASTEXITCODE" }
             $zip = [string]$lines[-1]

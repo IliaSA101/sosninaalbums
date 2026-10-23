@@ -31,6 +31,7 @@ const anchors = (): Set<string> => {
 const NO_ARTICLE: Record<string, string> = {
   guide: 'сам справочник: открывает это окно, мигать нечем',
   whatsNew: 'окно «Что нового» — список изменений версии, а не функция редактора',
+  about: 'окно «О программе»: версия, автор, лицензия и ссылки, а не функция редактора',
 }
 const uiOf = (spot?: string): string | null => (spot?.startsWith('ui:') ? spot.slice(3) : null)
 
@@ -211,15 +212,23 @@ describe('справочник функций: стражи', () => {
 
   it('077: «Фоны и стикеры» — фон сразу на много листов, слова поиска', () => {
     const a = ARTICLES.find((x) => x.id === 'decor')
-    for (const w of ['на выделенные в ленте', 'на развороты: 3, 5-8', 'на все развороты', 'один шаг отмены'])
+    for (const w of [
+      'строка «На»',
+      'Выделенные',
+      'Номера: 3, 5-8',
+      'Все развороты',
+      'один шаг отмены',
+      '«QR-код по ссылке…»',
+      '«Добавить свой стикер…»',
+    ])
       expect(a?.where, w).toContain(w)
-    for (const w of ['все', 'развороты', 'сразу', 'несколько', 'набор', 'страниц']) expect(a?.words, w).toContain(w)
+    for (const w of ['все', 'развороты', 'сразу', 'несколько', 'набор', 'страниц', 'логотип', 'qr']) expect(a?.words, w).toContain(w)
   })
 
   it('079: «Рамочки» и «Прозрачность фото» — свои функции уровня, якоря карточки, вход в «Правка», слова поиска', () => {
     const b = ARTICLES.find((x) => x.id === 'border')
     expect(b).toMatchObject({ title: 'Рамочки', feature: 'border', menu: ['borderGallery'] })
-    for (const w of ['«Рамочка» ▸ «Выбрать…»', 'Правка ▸ Рамочки…', 'правая кнопка', 'все места разворота', '«Загрузить своё…»'])
+    for (const w of ['«Рамочка» ▸ «Выбрать…»', 'Правка ▸ Рамочки…', 'правая кнопка', 'все места разворота', '«Добавить свою рамочку…»'])
       expect(b?.where, w).toContain(w)
     expect(placesOf(b!).map((p) => p.spot)).toEqual(['ui:border', 'menu:borderGallery'])
     for (const w of ['рамочка', 'рамка', 'паспарту', 'полароид', 'обводка']) expect(b?.words, w).toContain(w)

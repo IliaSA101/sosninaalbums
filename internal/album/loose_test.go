@@ -166,7 +166,13 @@ func (f *foldOps) relink(*testing.T, int) {
 }
 
 func (f *foldOps) relinkDrive(*testing.T, int) {
-	f.e.RelinkDrive(f.from, string(f.vol[0])) // без буквы диска (не Windows) — пустая правка
+	// Без буквы диска (не Windows) тома нет: смена диска с пустой целью — пустая правка,
+	// но сам вызов остаётся в смеси операций.
+	to := ""
+	if f.vol != "" {
+		to = f.vol[:1]
+	}
+	f.e.RelinkDrive(f.from, to)
 }
 
 // Скрытая подпапка (A\.edits) сканер корня не читает: AddFolder при A в списке — отдельный корень,

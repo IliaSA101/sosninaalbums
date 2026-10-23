@@ -260,9 +260,10 @@ func PickPhotos(p *model.Project, ids map[string]bool) *model.Project {
 // MissingPhotos — ошибка со списком пропавших файлов выбранных фото; nil — все на месте.
 // Своё из библиотеки (PhotoRef.Lib, 048) «Найти пропавшие фото…» не ищет: его строка — отдельно,
 // с подсказкой загрузить тот же файл (он найдётся сам, как в MissingBar). Имени у своего нет:
-// путь пуст, когда файла нет в библиотеке.
+// путь пуст, когда файла нет в библиотеке. Копии (098) считаются по файлу: запись семьи — одна
+// (наименьший ID), иначе пропавший файл с копией попал бы в счёт дважды.
 func MissingPhotos(p *model.Project, ids map[string]bool, exists func(string) bool) error {
-	sub := PickPhotos(p, ids).Photos
+	sub := byFile(PickPhotos(p, ids).Photos)
 	// Пустой путь (своё, которого нет в библиотеке) — пропавшее без вызова exists.
 	all := library.MissingOf(sub, func(r model.PhotoRef) string { return r.Path },
 		func(path string) bool { return path != "" && exists(path) })
@@ -301,6 +302,27 @@ func MissingPhotos(p *model.Project, ids map[string]bool, exists func(string) bo
 			n, libWhat(own), libWhere(own)))
 	}
 	return fmt.Errorf("%s — и повторите выгрузку", strings.Join(parts, "; "))
+}
+
+// byFile — по одной записи на файл: из семьи (BaseID) остаётся запись с наименьшим ID; своё из
+// библиотеки копий не имеет и остаётся как есть.
+func byFile(refs map[string]model.PhotoRef) map[string]model.PhotoRef {
+	keep := map[string]string{} // ID файла → оставленная запись
+	for id, r := range refs {
+		if r.Lib != "" {
+			continue
+		}
+		if k, ok := keep[model.BaseID(id)]; !ok || id < k {
+			keep[model.BaseID(id)] = id
+		}
+	}
+	out := make(map[string]model.PhotoRef, len(refs))
+	for id, r := range refs {
+		if r.Lib != "" || keep[model.BaseID(id)] == id {
+			out[id] = r
+		}
+	}
+	return out
 }
 
 // stickerPhotos — ID фото в стикерах проекта (с обложкой): пропавшее своё у них называется

@@ -1,6 +1,7 @@
 // Режим фона (спека 009, design-backdrop §6): чистые решения — что под курсором, что делает щелчок,
 // жив ли режим. Всё в мм разворота; рамка повёрнута по часовой вокруг своего левого верхнего угла.
 import { placeImage } from '../../base/geom/frame'
+import { ownBg } from '../../base/geom/sheet'
 import { rotate, type Pt, type TextBox } from '../../base/geom/textbox'
 import type { BackdropScope, BackdropView, Frame, Rect, SpreadView } from '../../base/core/types'
 
@@ -34,7 +35,7 @@ export function inBox(b: TextBox, p: Pt): boolean {
 
 // Фон, чьё видимое фото под точкой: внутри области (она обрезает) и внутри рамки.
 export function backdropAt(bs: readonly BackdropView[] | null | undefined, p: Pt): BackdropScope | null {
-  for (const b of bs ?? []) if (inRect(b.area, p) && inBox(b.box, p)) return b.scope
+  for (const b of ownBg(bs)) if (inRect(b.area, p) && inBox(b.box, p)) return b.scope
   return null
 }
 
@@ -50,7 +51,7 @@ export function modeClick(at: BackdropScope | null, cur: BackdropScope): 'exit' 
 // иначе Del и стрелки достались бы и выделению, и фону).
 export function keepMode(cur: BgCur | null, spread: SpreadView | null | undefined, selected = false): boolean {
   if (!cur || !spread || spread.id !== cur.spread || selected) return false
-  return !!spread.backdrops?.some((b) => b.scope === cur.scope)
+  return ownBg(spread.backdrops).some((b) => b.scope === cur.scope)
 }
 
 // Фото в осях рамки при предпросмотре: так же, как Go (placeImage по рамке и кадру); пропорции фото —

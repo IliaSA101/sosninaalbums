@@ -202,7 +202,7 @@ jobs:
             out="$RUNNER_TEMP/packed"
             mkdir -p "$out"
             python3 -I scripts/win/pack.py macos --app-zip "$zip" --version "$ver" --guide "${guides[0]}" \
-              --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --out "$out" | tee "$RUNNER_TEMP/pack.log"
+              --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --license LICENSE --notice NOTICE.md --out "$out" | tee "$RUNNER_TEMP/pack.log"
             zip="$(tail -n 1 "$RUNNER_TEMP/pack.log")"
             [ -f "$zip" ] || { echo "::error::pack.py не назвал архив: '$zip'"; exit 1; }
             python3 -I scripts/win/pack.py check "$zip" --os macos --version "$ver"

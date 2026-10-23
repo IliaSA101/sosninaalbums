@@ -1,6 +1,7 @@
 package design_test
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -224,5 +225,25 @@ func TestBaseFrame(t *testing.T) {
 	got.S = 4 // копия: снимок не меняется
 	if f := p0.Photos["a"].FrameOrDefault(); f.S != 1.5 {
 		t.Fatalf("BaseFrame отдал не копию: %+v", f)
+	}
+}
+
+// TestTiltNoLayout — наклон фото на «Авто» без раскладки (фото больше предела листа: layout не
+// считает): правила размера нет, меняется только наклон, приближение прежнее.
+func TestTiltNoLayout(t *testing.T) {
+	p := model.New()
+	s := &model.Spread{ID: "s1"}
+	for i := range model.MaxPhotos + 1 {
+		id := fmt.Sprintf("p%d", i)
+		p.Photos[id] = model.PhotoRef{Path: edtest.Abs(id + ".jpg"), W: 300, H: 200}
+		s.Photos = append(s.Photos, id)
+	}
+	p.Spreads = []*model.Spread{s}
+	if _, _, ok := p.Layout(s); ok {
+		t.Fatal("раскладка построилась: случай не тот")
+	}
+	design.SetFrameAngle(p, "s1", "p0", 5, nil)
+	if f := p.Photos["p0"].FrameOrDefault(); f.R != 5 || f.S != 1 || f.X != 0 || f.Y != 0 {
+		t.Fatalf("кадр: %+v", f)
 	}
 }

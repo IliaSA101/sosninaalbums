@@ -108,6 +108,7 @@ func StraightenPhoto(p *model.Project, spreadID, photoID string, dx, dy float64)
 // TurnPhotos поворачивает фото ids на quarters·90° (quarters ∈ {−1, 1, 2}, иначе
 // холостая правка), одной правкой. Наклон сохраняется; чужие и повторные ID
 // пропускаются. Действующие пропорции меняются — раскладку «Авто» пересоберёт keepLayouts.
+// Свой кадр (098) поворачивается вместе с фото: нечётная четверть — Asp = 1/Asp.
 func TurnPhotos(p *model.Project, ids []string, quarters int) {
 	done := map[string]bool{}
 	for _, id := range ids {
@@ -119,12 +120,22 @@ func TurnPhotos(p *model.Project, ids []string, quarters int) {
 		f := r.FrameOrDefault()
 		f.R = float64(90*quarters) + f.R
 		r.Frame = model.ClampFrame(&f)
+		if quarters%2 != 0 && r.Asp > 0 {
+			r.Asp = model.ClampAsp(1 / r.Asp)
+		}
 		p.Photos[id] = r
 	}
 }
 
-// ResetFrame — кадр по умолчанию; у нетронутого кадра это холостая правка.
-func ResetFrame(p *model.Project, photoID string) { SetFrame(p, photoID, 1, 0, 0) }
+// ResetFrame — кадр по умолчанию и без своего кадра (098: фото снова целое, «Авто» подстроится
+// через keepLayouts); у нетронутого кадра это холостая правка.
+func ResetFrame(p *model.Project, photoID string) {
+	SetFrame(p, photoID, 1, 0, 0)
+	if r, ok := p.Photos[photoID]; ok && r.Asp != 0 {
+		r.Asp = 0
+		p.Photos[photoID] = r
+	}
+}
 
 // SetFlip зеркалит фото ids по оси axis ("h" | "v"): если включено не у всех — всем
 // включается, иначе у всех выключается. Видимая часть кадра остаётся той же, только

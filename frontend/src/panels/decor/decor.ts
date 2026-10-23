@@ -95,18 +95,32 @@ export function themeItems(cat: DecorCatalog | null, theme: string): DecorItem[]
 // Своё из «Все» и «Недавних» кладётся в «Мои» (в выборках лежит не тема, а отбор).
 export const importTheme = (theme: string): string => (theme === ALL || theme === RECENT ? MINE : theme)
 
-// Пустая тема: «Мои» зовут к загрузке, остальные — просто пусто.
+// Кнопка своего в окнах плиток (100-1): одна на три окна, крайняя справа, вид primary.
+export const ADD_OWN: Record<'bg' | 'sticker' | 'frame', string> = {
+  bg: 'Добавить свой фон…',
+  sticker: 'Добавить свой стикер…',
+  frame: 'Добавить свою рамочку…',
+}
+// Логотип и надписи: что принимает «Добавить свой стикер…» (подсказка кнопки и строка над плитками «Мои»).
+export const OWN_TIP_STICKER = 'Логотип и надписи — PNG или SVG с прозрачным фоном; JPEG ляжет с белым прямоугольником'
+// Вид, у которого есть кнопка своего (у «Развороты» — «Сохранить разворот…»).
+export const ownKind = (kind: DecorKind): kind is 'bg' | 'sticker' | 'frame' => kind !== 'spread'
+
+// Пустая тема: «Мои» зовут к загрузке (с именем кнопки), остальные — просто пусто.
 export function emptyText(theme: string, readOnly: boolean, kind: DecorKind = 'bg'): string {
   if (theme === MINE && kind === 'spread')
     return readOnly ? 'Здесь появятся ваши развороты' : 'Сохраните свой разворот кнопкой «Сохранить разворот…»'
-  if (theme === MINE && kind === 'frame') return readOnly ? 'Здесь появятся ваши рамочки' : 'Загрузите свои кнопкой выше'
-  if (theme === MINE) return readOnly ? 'Здесь появятся ваши фоны' : 'Загрузите свои кнопкой выше'
+  if (theme === MINE && ownKind(kind)) {
+    const what = kind === 'sticker' ? 'стикеры' : kind === 'frame' ? 'рамочки' : 'фоны'
+    return readOnly ? `Здесь появятся ваши ${what}` : `Здесь появятся ваши ${what}: нажмите «${ADD_OWN[kind]}»`
+  }
   return 'В этой теме пока пусто'
 }
 
-// Подсказка кнопки «Загрузить своё…»: стикеры принимают и SVG.
+// Подсказка кнопки своего: стикеры принимают и SVG, о логотипе — отдельной фразой.
 export const uploadHint = (kind: DecorKind): string =>
-  `Свои ${kind === 'sticker' ? 'JPEG, PNG и SVG' : kind === 'frame' ? 'PNG с прозрачностью и SVG' : 'JPEG и PNG'}: копия остаётся в библиотеке программы`
+  `Свои ${kind === 'sticker' ? 'JPEG, PNG и SVG' : kind === 'frame' ? 'PNG с прозрачностью и SVG' : 'JPEG и PNG'}: копия остаётся в библиотеке программы` +
+  (kind === 'sticker' ? `. ${OWN_TIP_STICKER}` : '')
 
 export const READ_ONLY_HINT = 'Библиотеку изменила более новая версия программы: свои файлы пока только смотреть'
 

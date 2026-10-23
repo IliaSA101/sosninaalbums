@@ -1,6 +1,6 @@
 <script lang="ts">
   import { screenDpr } from '../../base/ui/dpr.svelte'
-  import { primaryPress } from '../../base/core/platform'
+  import { primaryPress, toggleKey } from '../../base/core/platform'
   import { watchSize } from '../../base/ui/size'
   import type { Frame, Rect, SpreadView } from '../../base/core/types'
   import { drag } from '../../base/drag/drag.svelte'
@@ -106,12 +106,13 @@
   const hiRes = $derived(!mini && wantPreview(spread.photos.length, longSide, screenDpr.value))
 
   // Тело (спека 009, gestures.md): «Авто» — перенос фото (обмен, вставка, другой разворот, лента);
-  // «Ручная» — перенос места: выделяет фото и двигает рамку, у члена группы — всю группу. Кадр двигает ✥.
+  // «Ручная» — перенос места: выделяет фото и двигает рамку, у члена группы — всю группу; с Ctrl/⌘ —
+  // перенос фото (обмен), спека 100 п. 6. Кадр двигает ✥.
   function startCell(e: PointerEvent) {
     const root = el?.closest<HTMLElement>('.spread')
     const here = !!root && spread.id === store.spread?.id
     const inGroup = placesel.isGroup && placesel.refs.includes(id)
-    const act = bodyAction({ grid: !!spread.grid && prefs.can('manual'), selected, inGroup })
+    const act = bodyAction({ grid: !!spread.grid && prefs.can('manual'), selected, inGroup, swap: toggleKey(e) })
     if (act === 'drag' || !here || !root || !primaryPress(e)) {
       drag.start(e, () => ({ kind: 'photos', ids: [id], fromSpread: spread.id }))
       return

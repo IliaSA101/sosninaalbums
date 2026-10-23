@@ -52,9 +52,9 @@ func TestExportSpreads(t *testing.T) {
 	st := text.Style{Font: "montserrat", Size: 14, Color: "#222222", Align: "left"}
 	p := model.New()
 	p.Settings.Bg = "#f6f1e7"
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200, Frame: &model.Frame{S: 2, X: -1, Y: -1},
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200, Frame: &model.Frame{S: 2, X: -1, Y: -1},
 		Caption: &model.Caption{Text: "Подпись", Style: model.DefaultCaptionStyle()}}
-	p.Photos["b"] = model.PhotoRef{Path: `C:\b.jpg`, W: 200, H: 300, FlipH: true}
+	p.Photos["b"] = model.PhotoRef{Path: testkit.AbsPath("b.jpg"), W: 200, H: 300, FlipH: true}
 	p.Spreads = []*model.Spread{
 		{ID: "s1", Photos: []string{"a"}, Texts: []*model.TextBlock{{ID: "t1", X: 20, Y: 30, W: 80, Text: "Привет", Style: st}}},
 		{ID: "s2", Texts: []*model.TextBlock{{ID: "t2", X: 30, Y: 40, W: 90, Text: "Только текст", Style: st}}},
@@ -68,7 +68,7 @@ func TestExportSpreads(t *testing.T) {
 	}
 
 	s1 := got[0]
-	if len(s1.Photos) != 1 || s1.Photos[0].Path != `C:\a.jpg` || s1.Photos[0].Img == s1.Photos[0].Cell {
+	if len(s1.Photos) != 1 || s1.Photos[0].Path != testkit.AbsPath("a.jpg") || s1.Photos[0].Img == s1.Photos[0].Cell {
 		t.Fatalf("фото без кадра: %+v", s1.Photos)
 	}
 	if s1.Photos[0].Img != v.Spreads[0].Frames[0].Img {
@@ -151,7 +151,7 @@ func TestExportNumbering(t *testing.T) {
 // Пустые места: номера разворотов с 1, общее число; в текст вопроса идут не больше 10 номеров.
 func TestEmptyPlacesSummary(t *testing.T) {
 	p := model.New()
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
 	full := func(id string) *model.Spread {
 		return &model.Spread{ID: id, Grid: []*model.Place{{ID: id + "p", X: 10, Y: 10, W: 50, H: 40, Photo: "a"}}}
 	}
@@ -193,7 +193,7 @@ func TestEmptyPlacesSummary(t *testing.T) {
 // Сетка с contain уходит в экспорт ячейкой-местом и фото внутри неё: поля остаются фоном.
 func TestExportGridContain(t *testing.T) {
 	p := model.New()
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
 	p.Spreads = []*model.Spread{{ID: "s1", Grid: []*model.Place{
 		{ID: "p1", X: 10, Y: 10, W: 60, H: 60, Photo: "a", Fit: model.FitContain},
 		{ID: "p2", X: 80, Y: 10, W: 30, H: 30},

@@ -42,3 +42,6 @@ func FontKey(t testing.TB, file string) string {
 
 // FontID — id своей гарнитуры по названию (text.FamilyID): пакетам формата text недоступен.
 func FontID(name string) string { return text.FamilyID(name) }
+
+// FontMissing — свой шрифт id, которого нет на этом компьютере: блоки с ним FitTexts не трогает (082-5).
+func FontMissing(id string) bool { return text.IsCustomID(id) && !text.Available(id) }

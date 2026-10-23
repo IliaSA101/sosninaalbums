@@ -80,6 +80,7 @@ export type FeatureId =
   | 'names'
   | 'allSpreads'
   | 'groupSelect'
+  | 'clipboard' // 099: Ctrl+C, X, V, D
   | 'bgPhoto'
   | 'decor'
   | 'manual'
@@ -181,6 +182,13 @@ export const FEATURES: Feature[] = [
     min: 'standard',
   },
   { id: 'groupSelect', group: 'Холст', title: 'Выделение рамкой, Ctrl+A, удаление группы', short: 'Выделение группы', min: 'standard' },
+  {
+    id: 'clipboard',
+    group: 'Холст',
+    title: 'Копировать и вставить (Ctrl+C, X, V, D)',
+    short: 'Копировать и вставить',
+    min: 'standard',
+  },
   { id: 'rulers', group: 'Холст', title: 'Линейки', short: 'Линейки', min: 'full' },
   { id: 'panels', group: 'Холст', title: 'Плавающие панели', short: 'Плавающие панели', min: 'full', needs: ['manual'] },
   {

@@ -28,17 +28,22 @@ import (
 // само, other — сколько фото с «чужим» профилем (имя профиля → число), их не пересчитываем.
 // Цвет берётся из реестра ленты, а если фото там нет (папка закрыта или чтение не дошло) — из
 // заголовка файла. Нечитаемые файлы пропускаются: экспорт упадёт на них с понятной ошибкой.
+// Счёт — по файлам: копии (098) — тот же файл, без двойного счёта и второго чтения заголовка.
 func (a *App) colorReport(p *model.Project) (adobe int, other map[string]int) {
 	other = map[string]int{}
+	files := make(map[string]model.PhotoRef, len(p.Photos)) // ID файла → любая запись семьи
+	for id, ref := range p.Photos {
+		files[model.BaseID(id)] = ref
+	}
 	a.mu.Lock()
-	known := make(map[string]library.Photo, len(p.Photos))
-	for id := range p.Photos {
+	known := make(map[string]library.Photo, len(files))
+	for id := range files {
 		if ph, ok := a.byID[id]; ok {
 			known[id] = ph
 		}
 	}
 	a.mu.Unlock()
-	for id, ref := range p.Photos {
+	for id, ref := range files {
 		col, prof := known[id].Color, known[id].Profile
 		if _, ok := known[id]; !ok {
 			col, prof = imgfile.ReadColor(ref.Path)
@@ -258,9 +263,12 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 		}
 	}
 	// Пустые развороты — тоже до папки, по тому же доводу (спека 013).
-	white := p.Settings.Bg == "" || p.Settings.Bg == "#ffffff"
+	// Лист только с фоном альбома считается пустым, но белым он не выйдет (0.23-g3g4 G4-4);
+	// обложку фон альбома не красит (098-10) — одна пустая обложка остаётся «белой».
+	blank := export.BlankSpreads(v, &pl)
+	white := (p.Settings.Bg == "" || p.Settings.Bg == "#ffffff") && (p.AlbumBg == nil || len(blank) == 0)
 	blankCover := cover != nil && export.BlankCover(v)
-	if text := export.BlankWarningCover(export.BlankSpreads(v, &pl), blankCover, white); text != "" {
+	if text := export.BlankWarningCover(blank, blankCover, white); text != "" {
 		if ok, err := askYes(a, text); !ok {
 			return false, err
 		}

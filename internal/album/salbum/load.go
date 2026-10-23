@@ -20,7 +20,9 @@ const maxUp = 2
 
 // Файловые типы: в памяти пути абсолютные, относительные живут только здесь.
 type FileProject struct {
-	Version  int                  `json:"version"`
+	Version int `json:"version"`
+	// App — версия программы, записавшей файл (v17, 098 design §6): справочно, в Project не идёт.
+	App      appField             `json:"app,omitempty"`
 	Product  string               `json:"product"`
 	Folders  []FileFolder         `json:"folders"`
 	Settings model.Settings       `json:"settings"`
@@ -40,6 +42,8 @@ type FileProject struct {
 	SpreadGuideAbs string `json:"spreadGuideAbs,omitempty"`
 	// Loose — отдельные фото по добавлениям (v16, 097; loose.go): файл записан как папка.
 	Loose []FileLoose `json:"loose,omitempty"`
+	// AlbumBg — фон альбома (v17, 098 §4; фото — ID записи photos).
+	AlbumBg *model.AlbumBg `json:"albumBg,omitempty"`
 }
 
 // FileFolder — папка: path (относительный или абсолютный) и запасной abs.
@@ -99,7 +103,8 @@ func ReadLimited(path string) ([]byte, error) {
 }
 
 // ErrNewer — файл записан более новой версией программы: его нельзя ни открыть,
-// ни трогать (старая версия молча выбросила бы незнакомые поля). Проверять через errors.Is.
+// ни трогать (старая версия молча выбросила бы незнакомые поля). Проверять через errors.Is:
+// Load отдаёт *NewerError с версией записавшей программы (appver.go).
 var ErrNewer = errors.New("проект сохранён более новой версией программы")
 
 // decodeImpl — сам разбор; в тестах подменяется, чтобы имитировать панику.
@@ -142,16 +147,8 @@ func spreadsWord(n int) string {
 // Порядок шагов сетки (design 007 §2): nil и объединение мест с Photos — до
 // всего, что трогает места; починка мест — последней, по зажатой геометрии.
 func decodeFile(data []byte, base string) (*model.Project, error) {
-	// Версия — до полного разбора (075-12): файл новее программы мог сменить вид поля, и разбор
-	// в структуру этой версии сказал бы «повреждён» вместо «сохранён более новой версией».
-	var head struct {
-		Version int `json:"version"`
-	}
-	if err := json.Unmarshal(data, &head); err != nil {
-		return nil, fmt.Errorf("файл проекта повреждён: %w", err)
-	}
-	if head.Version > model.FormatVersion {
-		return nil, ErrNewer
+	if err := checkHead(data); err != nil {
+		return nil, err
 	}
 	f := FileProject{Settings: model.DefaultSettings()}
 	if err := json.Unmarshal(data, &f); err != nil {
@@ -178,11 +175,16 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	if err := loadPhotos(p, f.Photos, base, v1); err != nil {
 		return nil, err
 	}
+	// Фон альбома — до dedupe и первого PruneRefs (098-21): иначе запись его фото, не стоящего на
+	// листах, удалилась бы при чтении.
+	p.AlbumBg = f.AlbumBg
+	p.ClampAlbumBg()
 	dropNilPlaces(p)
 	unionGrid(p)
 	dedupe(p)
 	p.PruneRefs()
 	Rekey(p, library.IDFor)
+	EvenFamilies(p)
 	p.SplitBig()
 	// После splitBig: деление больших разворотов добавляет новые, а лишние
 	// после Save+Load молча пропали бы.
@@ -211,6 +213,23 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	return p, nil
 }
 
+// checkHead — версия до полного разбора (075-12): файл новее программы мог сменить вид поля, и
+// разбор в структуру этой версии сказал бы «повреждён» вместо «сохранён более новой версией». В
+// «голове» и app (098): текст ошибки называет версию, в которой файл сохранён.
+func checkHead(data []byte) error {
+	var head struct {
+		Version int      `json:"version"`
+		App     appField `json:"app"`
+	}
+	if err := json.Unmarshal(data, &head); err != nil {
+		return fmt.Errorf("файл проекта повреждён: %w", err)
+	}
+	if head.Version > model.FormatVersion {
+		return &NewerError{Version: head.Version, App: string(head.App)}
+	}
+	return nil
+}
+
 // loadSources — папки и отдельные фото из файла. Источники не пересекаются (093-4): любая версия,
 // и файл, поправленный руками.
 func loadSources(p *model.Project, f *FileProject, base string, v1 bool) error {
@@ -225,9 +244,21 @@ func loadSources(p *model.Project, f *FileProject, base string, v1 bool) error {
 }
 
 // loadPhotos — фото из файла. Устройство в пути на этой ОС (paths.ErrDevice, 073-10) — фото
-// недостающее, как ненайденный файл: путь остаётся, к файлу не обращаемся.
+// недостающее, как ненайденный файл: путь остаётся, к файлу не обращаемся. Записи с теми же
+// путями и размерами (копии одного файла, 098) разбираются один раз: stat не множится на
+// сетевом томе.
 func loadPhotos(p *model.Project, list map[string]FilePhoto, base string, v1 bool) error {
 	devs := 0
+	type fileKey struct {
+		path, abs string
+		size      int64
+		w, h      int
+	}
+	type resolved struct {
+		ref model.PhotoRef
+		err error
+	}
+	seen := map[fileKey]resolved{}
 	for id, fp := range list {
 		if fp.Lib != "" { // своё из библиотеки: путь — от искателя (lib.go)
 			if ref, ok := resolveLib(fp); ok {
@@ -235,7 +266,14 @@ func loadPhotos(p *model.Project, list map[string]FilePhoto, base string, v1 boo
 			}
 			continue
 		}
-		ref, err := resolvePhoto(fp, base, v1)
+		key := fileKey{fp.Path, fp.Abs, fp.Size, fp.W, fp.H}
+		r, ok := seen[key]
+		if !ok {
+			r.ref, r.err = resolvePhoto(fp, base, v1)
+			seen[key] = r
+		}
+		ref, err := fp.PhotoRef, r.err
+		ref.Path, ref.Alt, ref.W, ref.H, ref.Size = r.ref.Path, r.ref.Alt, r.ref.W, r.ref.H, r.ref.Size
 		if errors.Is(err, paths.ErrDevice) {
 			devs++
 		} else if err != nil {

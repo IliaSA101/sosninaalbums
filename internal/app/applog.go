@@ -11,10 +11,21 @@ import (
 
 const maxLogSize = 2 << 20
 
+// Права на Linux и Mac (аудит 0.23-sec): в папке данных и log.txt — пути и имена из альбомов,
+// чужим пользователям машины они ни к чему. Существующие файлы и папки не трогаем. На Windows
+// биты прав не действуют.
+const (
+	dataDirMode os.FileMode = 0o700
+	logFileMode os.FileMode = 0o600
+)
+
+// makeDataDir создаёт папку данных (и недостающих родителей) с правами dataDirMode.
+func makeDataDir(dir string) error { return os.MkdirAll(dir, dataDirMode) }
+
 // setupLog пишет лог в файл и, если есть консоль, в stderr; файл больше 2 МБ уходит в .old.
 func setupLog(path string) {
 	rotateLog(path, maxLogSize)
-	if f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+	if f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, logFileMode); err == nil {
 		log.SetOutput(logWriter{file: f, console: os.Stderr})
 	}
 }

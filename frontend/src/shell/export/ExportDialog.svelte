@@ -4,6 +4,7 @@
   import { jobs } from '../../base/core/jobs.svelte'
   import type { PrintPlan } from '../../base/core/types'
   import { edit } from '../../editor/text/edit.svelte'
+  import { fileCount } from '../../panels/library/missing'
   import { parseExportRange, rangeSummary } from './exportrange'
   import ExportRun from './ExportRun.svelte'
   import ExportGroup from './ExportGroup.svelte'
@@ -104,7 +105,8 @@
       print: fs,
     }),
   )
-  const warn = $derived(exportWarnings(store.view, store.missing.length))
+  // Пропавшие — по файлам: копии одного файла — одно фото (098).
+  const warn = $derived(exportWarnings(store.view, fileCount(store.missing)))
   const limit = $derived(limitWarn(store.view, fs))
 
   function setPrefs(p: Partial<ExportPrefs>) {

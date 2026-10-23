@@ -298,9 +298,11 @@ func placed(p *model.Project, s *model.Spread, scope string, sd srcDesign, o put
 	}
 	for _, st := range sd.stickers {
 		c := st.Clone()
-		c.X = st.X + dx
+		// Округление, как у ClampSticker: сумма двух чисел с двумя знаками бывает 120.75999999999999 —
+		// круг записи (clampStickers при чтении) поменял бы её.
+		c.X = geom.Round2(st.X + dx)
 		if o.flip {
-			c.X, c.FlipH, c.Rot = 2*a.X+a.W-c.X-c.W, !c.FlipH, geom.NormDeg(-c.Rot)
+			c.X, c.FlipH, c.Rot = geom.Round2(2*a.X+a.W-c.X-c.W), !c.FlipH, geom.NormDeg(-c.Rot)
 		}
 		if o.decor {
 			if c = p.ClampSticker(s, c); c == nil {

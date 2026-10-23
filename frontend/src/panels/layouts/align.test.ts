@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { ALIGN_OPS, ALIGN_TO, alignBlock, alignNeed, isAlignOp, isDist, normAlignTo } from './align'
+import {
+  ALIGN_OPS,
+  ALIGN_TO,
+  alignBlock,
+  alignNeed,
+  alignSlot,
+  alignToBlock,
+  isAlignOp,
+  isDist,
+  normAlignTo,
+  normAlignToOne,
+} from './align'
 
 describe('выравнивание: минимум как в Go', () => {
   it('к выделению: выравнивание от 2, распределение от 3', () => {
@@ -39,5 +50,27 @@ describe('состав и опора', () => {
     expect(isAlignOp('distV')).toBe(true)
     expect(isAlignOp('center')).toBe(false)
     expect(isAlignOp(undefined)).toBe(false)
+  })
+})
+
+describe('две опоры (спека 100 п. 4)', () => {
+  it('слот по числу выделенных: 0 и 1 — одна, от 2 — много', () => {
+    expect(alignSlot(0)).toBe('one')
+    expect(alignSlot(1)).toBe('one')
+    expect(alignSlot(2)).toBe('many')
+    expect(alignSlot(9)).toBe('many')
+  })
+  it('«Выделения» у одного — блок с подсказкой, у нескольких и прочие опоры — можно', () => {
+    expect(alignToBlock('sel', 1)).toBe('Относительно выделения — от 2 объектов: Shift+щелчок добавит ещё')
+    expect(alignToBlock('sel', 0)).not.toBeNull()
+    expect(alignToBlock('sel', 2)).toBeNull()
+    expect(alignToBlock('page', 1)).toBeNull()
+    expect(alignToBlock('spread', 1)).toBeNull()
+  })
+  it('опора одного: по умолчанию «Страницы», sel и чужое из хранилища — тоже', () => {
+    expect(normAlignToOne(null)).toBe('page')
+    expect(normAlignToOne('sel')).toBe('page')
+    expect(normAlignToOne('чужое')).toBe('page')
+    expect(normAlignToOne('spread')).toBe('spread')
   })
 })

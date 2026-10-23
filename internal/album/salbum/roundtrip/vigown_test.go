@@ -274,8 +274,8 @@ func TestMigrateV6ToV7(t *testing.T) {
 	if err := e.Save(path); err != nil {
 		t.Fatal(err)
 	}
-	if bak, err := os.ReadFile(path + ".v6.bak"); err != nil || !bytes.Equal(bak, data) {
-		t.Fatalf(".v6.bak: %v, совпадает с исходником: %v", err, bytes.Equal(bak, data))
+	if bak, err := os.ReadFile(salbum.BackupName(path, 6, 1)); err != nil || !bytes.Equal(bak, data) {
+		t.Fatalf("копия для 0.10: %v, совпадает с исходником: %v", err, bytes.Equal(bak, data))
 	}
 	saved, _ := os.ReadFile(path)
 	if f := fileJSON(t, path); f.Version != model.FormatVersion || strings.Contains(string(saved), `"own"`) {

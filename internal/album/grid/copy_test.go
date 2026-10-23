@@ -473,3 +473,38 @@ func TestDuplicateGridPattern(t *testing.T) {
 		t.Fatalf("без оформления: %v", got)
 	}
 }
+
+// TestCopyGridStickerRound — «Копировать раскладку» с оформлением: сдвиг стикера на страницу
+// (32.09 + 281 = 313.09000000000003) и отражение (562 − x − w) — числа с двумя знаками, как у
+// ClampSticker: иначе стикер не зажат и чтение файла его поменяет (нашёл TestGridInvariants с
+// шагами буфера 099, seed 1). Два стикера на две цели — прямая копия и зеркальная.
+func TestCopyGridStickerRound(t *testing.T) {
+	e, _, _ := decorEd(t)
+	putStickers(e, "s1", plate(32.09, 60, 40, 20, 0), plate(33.16, 100, 21.19, 20, 15))
+	for _, mirror := range []bool{false, true} {
+		to := []model.GridTarget{{Spread: "s2", Scope: model.ScopeRight}, {Spread: "s3", Scope: model.ScopeRight}}
+		if _, _, err := e.CopyGrid("s1", model.ScopeLeft, to, true, mirror); err != nil {
+			t.Fatal(err)
+		}
+		edtest.MustGrid(t, e) // StickerInvariant: ClampSticker — неподвижная точка
+		want := map[float64]float64{60: 313.09, 100: 314.16}
+		if mirror {
+			want = map[float64]float64{60: 489.91, 100: 507.65}
+		}
+		for _, sp := range []string{"s2", "s3"} {
+			for y, x := range want {
+				i := slices.IndexFunc(sheetOf(e, sp).Stickers, func(st *model.Sticker) bool { return st.Y == y })
+				if i < 0 || sheetOf(e, sp).Stickers[i].X != x {
+					t.Fatalf("зеркально %v, %s, y=%v: x ждали %v, стикеры %s", mirror, sp, y, x, jsonOf(t, sheetOf(e, sp).Stickers))
+				}
+			}
+		}
+		q := edtest.SaveLoad(t, e) // круг записи стикеры не меняет
+		for _, sp := range []string{"s2", "s3"} {
+			_, s := q.Find(sp)
+			if got, was := jsonOf(t, s.Stickers), jsonOf(t, sheetOf(e, sp).Stickers); got != was {
+				t.Fatalf("%s после Save → Load:\n%s\nбыло\n%s", sp, got, was)
+			}
+		}
+	}
+}

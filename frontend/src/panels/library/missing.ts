@@ -1,5 +1,6 @@
 import type { FontFamily, FontUse, SpreadView } from '../../base/core/types'
-import { COVER_ID } from '../../base/geom/sheet'
+import { COVER_ID, ownBg } from '../../base/geom/sheet'
+import { baseOf } from '../../base/core/copies'
 
 // Подсказка смены диска (Api.SuggestDrive); from === '' — подсказки нет.
 export type DriveHint = { from: string; to: string; found: number; total: number }
@@ -28,9 +29,14 @@ export function showMissing(missing: number): boolean {
   return missing > 0
 }
 
-// Сколько фото стоит в альбоме (в развороте нет повторов, лишние в проекте не хранятся).
+// Сколько фото стоит в альбоме: по файлам (098) — копии одного файла считаются за одно фото.
 export function albumPhotos(spreads: Pick<SpreadView, 'photos'>[]): number {
-  return spreads.reduce((n, s) => n + (s.photos?.length ?? 0), 0)
+  return fileCount(spreads.flatMap((s) => s.photos ?? []))
+}
+
+// Сколько файлов в списке записей (ID копий — «<файл>-<n>»): «Не найдено N фото» считает файлы.
+export function fileCount(ids: readonly string[]): number {
+  return new Set(ids.map(baseOf)).size
 }
 
 // where — «разворот 4» (missingWhere); пусто — не знаем, где (фото нет ни на одном листе).
@@ -42,7 +48,7 @@ export function missingText(missing: number, total: number, where = ''): string 
 // Лист для поиска пропавших: ID фото лежат в photos, фоны — в backdrops[].photo, свои стикеры (048) — в
 // stickers[].photo (у процедурного фото нет), рамочки-картинки (079) — в places[].border.photo; кадры и места берут photos.
 type Sheet = Pick<SpreadView, 'id' | 'photos'> & {
-  backdrops?: { photo: string }[] | null
+  backdrops?: { photo: string; album?: boolean }[] | null
   stickers?: { photo?: string }[] | null
   places?: { border?: { photo?: string } }[] | null
 }
@@ -50,7 +56,7 @@ type Unit = { one: string; many: string; cap: string }
 
 const idsOf = (sp: Sheet): string[] => [
   ...(sp.photos ?? []),
-  ...(sp.backdrops ?? []).map((b) => b.photo),
+  ...ownBg(sp.backdrops).map((b) => b.photo), // фото фона альбома — не этого листа (098)
   ...(sp.stickers ?? []).flatMap((s) => s.photo ?? []),
   ...(sp.places ?? []).flatMap((p) => p.border?.photo || []),
 ]

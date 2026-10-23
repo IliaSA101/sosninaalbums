@@ -10,10 +10,12 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/spreads"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Подпапка уже добавленной — холостая (ни шага, ни rev), Within — корень; несколько папок сразу.
+// Подпапка в другом регистре — та же на Windows и macOS, на Linux — новая папка (paths.Fold, 101).
 func TestAddFolderWithin(t *testing.T) {
 	root := testkit.TempDir(t)
 	spring, banket := filepath.Join(root, "Весна 2026"), filepath.Join(root, "Банкет")
@@ -21,30 +23,55 @@ func TestAddFolderWithin(t *testing.T) {
 	edtest.AddFolder(e, spring)
 	edtest.AddFolder(e, banket)
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
-	for sub, want := range map[string]string{
-		filepath.Join(spring, "Март", "Избранное"):     spring,
-		strings.ToUpper(filepath.Join(banket, "Торт")): banket,
-	} {
+	upper := strings.ToUpper(filepath.Join(banket, "Торт"))
+	subs := map[string]string{
+		filepath.Join(spring, "Март", "Избранное"): spring,
+		filepath.Join(banket, "Торт"):              banket,
+	}
+	fold := paths.FoldEqual(upper, filepath.Join(banket, "Торт"))
+	if fold {
+		subs[upper] = banket
+	}
+	for sub, want := range subs {
 		v, r, err := e.AddFolder(sub)
 		if err != nil || r != (model.FolderAdd{Within: want}) || len(v.Folders) != 2 {
 			t.Fatalf("%s: %+v %v, папки %q", sub, r, err, v.Folders)
 		}
 		edtest.Same(t, e, rev, undo, "подпапка")
 	}
+	if fold {
+		return
+	}
+	if v, r, err := e.AddFolder(upper); err != nil || r != (model.FolderAdd{}) || !slices.Equal(v.Folders, []string{spring, banket, upper}) {
+		t.Fatalf("другой регистр на Linux: %+v %v, папки %q", r, err, v.Folders)
+	}
 }
 
-// Та же папка (и в другом регистре) — холостая, Within — она сама.
+// Та же папка (на Windows и macOS — и в другом регистре) — холостая, Within — она сама;
+// на Linux другой регистр — новая папка (paths.Fold, 101).
 func TestAddFolderSame(t *testing.T) {
 	dir := filepath.Join(testkit.TempDir(t), "Весна")
 	e := edtest.Open(t, model.New(), "")
 	edtest.AddFolder(e, dir)
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
-	for _, d := range []string{dir, strings.ToUpper(dir), dir + string(filepath.Separator)} {
+	upper := strings.ToUpper(dir)
+	same := []string{dir, dir + string(filepath.Separator)}
+	fold := paths.FoldEqual(upper, dir)
+	if fold {
+		same = append(same, upper)
+	}
+	for _, d := range same {
 		if _, r, err := e.AddFolder(d); err != nil || r != (model.FolderAdd{Within: dir}) {
 			t.Fatalf("%q: %+v %v", d, r, err)
 		}
 	}
 	edtest.Same(t, e, rev, undo, "та же папка")
+	if fold {
+		return
+	}
+	if v, r, err := e.AddFolder(upper); err != nil || r != (model.FolderAdd{}) || !slices.Equal(v.Folders, []string{dir, upper}) {
+		t.Fatalf("другой регистр на Linux: %+v %v, папки %q", r, err, v.Folders)
+	}
 }
 
 // Родитель над добавленными встаёт на место первой вошедшей; Merged — сколько вошло; чужие
@@ -139,7 +166,12 @@ func TestAddLooseSkips(t *testing.T) {
 	edtest.SetDirty(e, false) // сохранили
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
 	in := filepath.Join(dir, "Избранное", "2.jpg")
-	_, r, err := e.AddLoose([]string{in, strings.ToUpper(old), filepath.Join(dir, "3.jpg")}, 2)
+	// Повтор другим регистром — на Windows и macOS; на Linux это другой файл (проверка ниже).
+	dup, upper := old, strings.ToUpper(old)
+	if paths.FoldEqual(upper, old) {
+		dup = upper
+	}
+	_, r, err := e.AddLoose([]string{in, dup, filepath.Join(dir, "3.jpg")}, 2)
 	if err != nil || r != (model.LooseAdded{InFolder: 2, Folder: filepath.Dir(in), Dup: 1}) {
 		t.Fatalf("всё пропущено: %+v %v", r, err)
 	}
@@ -159,6 +191,11 @@ func TestAddLooseSkips(t *testing.T) {
 	rev = edtest.Rev(e)
 	if v, _, err := e.AddLoose([]string{`\\srv\share\5.jpg`, filepath.Join(root, "5.jpg")}, 5); err == nil || v.Rev != rev {
 		t.Fatalf("UNC: %v, rev %d → %d", err, rev, v.Rev)
+	}
+	if dup == old {
+		if v, r, err := e.AddLoose([]string{upper}, 6); err != nil || r.Added != 1 || r.Dup != 0 || len(v.Loose) != 3 {
+			t.Fatalf("другой регистр на Linux: %+v %v", r, err)
+		}
 	}
 }
 
@@ -203,8 +240,14 @@ func TestRemoveLoose(t *testing.T) {
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
 	e.RemoveLoose("000000000000", "")
 	e.RemoveLoose(r1.Batch, filepath.Join(root, "нет.jpg"))
+	// Другой регистр — тот же файл на Windows и macOS; на Linux — неизвестный (paths.Fold, 101).
+	ua := strings.ToUpper(a)
+	if !paths.FoldEqual(ua, a) {
+		e.RemoveLoose(r1.Batch, ua)
+		ua = a
+	}
 	edtest.Same(t, e, rev, undo, "неизвестное")
-	v := e.RemoveLoose(r1.Batch, strings.ToUpper(a))
+	v := e.RemoveLoose(r1.Batch, ua)
 	if len(v.Loose) != 2 || len(v.Loose[0].Files) != 1 || v.Loose[0].Files[0].Path != b {
 		t.Fatalf("файл: %+v", v.Loose)
 	}

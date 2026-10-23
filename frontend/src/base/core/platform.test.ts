@@ -1,5 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { additive, isLeft, isMac, primaryPress, secondaryPress, setMacForTest, toggleKey } from './platform'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  additive,
+  foldPath,
+  isLeft,
+  isMac,
+  os,
+  primaryPress,
+  revealLabel,
+  secondaryPress,
+  setMacForTest,
+  setOsForTest,
+  toggleKey,
+} from './platform'
 
 const press = (button: number, ctrlKey = false) => ({ button, ctrlKey })
 const mods = (o: Partial<{ shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }> = {}) => ({
@@ -9,7 +21,10 @@ const mods = (o: Partial<{ shiftKey: boolean; ctrlKey: boolean; metaKey: boolean
   ...o,
 })
 
-afterEach(() => setMacForTest(null))
+afterEach(() => {
+  setMacForTest(null)
+  vi.unstubAllGlobals()
+})
 
 describe('isMac', () => {
   it('подмена для тестов и возврат к userAgent (в node его нет — не Mac)', () => {
@@ -75,5 +90,53 @@ describe('additive / toggleKey', () => {
     expect(additive(mods())).toBe(false)
     expect(toggleKey(mods({ ctrlKey: true }))).toBe(false)
     expect(toggleKey(mods({ metaKey: true }))).toBe(true)
+  })
+})
+
+describe('os / revealLabel (101)', () => {
+  const ua = (userAgent: string) => vi.stubGlobal('navigator', { userAgent })
+  it('по userAgent: Mac, Linux (не Android), остальное и пустое — Windows', () => {
+    ua('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15')
+    expect(os()).toBe('mac')
+    ua('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15')
+    expect(os()).toBe('linux')
+    ua('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36')
+    expect(os()).toBe('windows')
+    ua('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+    expect(os()).toBe('windows')
+    vi.stubGlobal('navigator', undefined)
+    expect(os()).toBe('windows')
+  })
+  it('Linux не Mac: Ctrl там — Ctrl', () => {
+    setOsForTest('linux')
+    expect(isMac()).toBe(false)
+    expect(secondaryPress(press(0, true))).toBe(false)
+    expect(toggleKey(mods({ ctrlKey: true }))).toBe(true)
+  })
+  it('подпись «Показать…» по ОС', () => {
+    setOsForTest('windows')
+    expect(revealLabel()).toBe('Показать в Проводнике')
+    setOsForTest('mac')
+    expect(revealLabel()).toBe('Показать в Finder')
+    setOsForTest('linux')
+    expect(revealLabel()).toBe('Показать в папке')
+  })
+  it('подмена снимается: null — снова по userAgent', () => {
+    setOsForTest('linux')
+    setOsForTest(null)
+    vi.stubGlobal('navigator', { userAgent: 'Macintosh' })
+    expect(os()).toBe('mac')
+  })
+})
+
+describe('foldPath', () => {
+  it('Linux — точно, Windows и macOS — нижний регистр', () => {
+    setOsForTest('linux')
+    expect(foldPath('/x/Весна')).toBe('/x/Весна')
+    setOsForTest('windows')
+    expect(foldPath('D:/Весна')).toBe('d:/весна')
+    setOsForTest('mac')
+    expect(foldPath('/X/Весна')).toBe('/x/весна')
+    setOsForTest(null)
   })
 })

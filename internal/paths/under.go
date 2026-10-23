@@ -10,10 +10,10 @@ import (
 	"sync/atomic"
 )
 
-// DirKey — ключ папки для «внутри»: нижний регистр, Clean и разделитель на конце (как
-// library.Under: регистр не важен на любой ОС).
+// DirKey — ключ папки для «внутри»: Fold, Clean и разделитель на конце (как library.Under:
+// регистр не важен на Windows и macOS, на Linux важен).
 func DirKey(dir string) string {
-	k := strings.ToLower(filepath.Clean(dir))
+	k := Fold(filepath.Clean(dir))
 	if !strings.HasSuffix(k, string(filepath.Separator)) {
 		k += string(filepath.Separator)
 	}
@@ -42,7 +42,7 @@ func TopKeys(folders []string) []string {
 func UnderAny(folders []string) func(path string) bool {
 	top := TopKeys(folders)
 	return func(path string) bool {
-		p := strings.ToLower(filepath.Clean(path))
+		p := Fold(filepath.Clean(path))
 		i, found := slices.BinarySearch(top, p)
 		return found || i > 0 && strings.HasPrefix(p, top[i-1])
 	}
@@ -93,7 +93,7 @@ func SetVolumeOracle(live func(root string) bool) (restore func()) {
 // неё опустошила бы ленту (decisions 0.22-sec-1).
 func Reaches(root, path string, file bool, linked func(dir string) bool) bool {
 	root, path = filepath.Clean(root), filepath.Clean(path)
-	if !strings.HasPrefix(strings.ToLower(path), DirKey(root)) {
+	if !strings.HasPrefix(Fold(path), DirKey(root)) {
 		return false
 	}
 	// Элементы, а не срез строки: нижний регистр меняет длину в байтах у части букв.
@@ -138,7 +138,7 @@ func NewCover(folders []string, linked func(dir string) bool) *Cover {
 	if linked != nil {
 		memo := map[string]bool{}
 		c.linked = func(dir string) bool {
-			k := strings.ToLower(dir)
+			k := Fold(dir)
 			v, ok := memo[k]
 			if !ok {
 				v = linked(dir)

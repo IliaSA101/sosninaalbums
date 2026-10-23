@@ -6,11 +6,20 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	goruntime "runtime"
+	"strings"
 )
 
 // startCmd — запуск внешнего процесса; подменяется в тестах (проверка «не запущен»).
-var startCmd = func(cmd *exec.Cmd) error { return cmd.Start() }
+// После удачного запуска процесс подбирается в фоне: без Wait завершённый остаётся зомби.
+var startCmd = func(cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
 
 // quiet — стенд QA не открывает окна ОС на рабочем столе владельца (случай 20.10: QA из
 // браузера вызвал ShowDataFolder и вылезло «Расположение недоступно»). Пишет в журнал
@@ -40,21 +49,23 @@ func OpenURL(url string, open func(url string)) {
 }
 
 // Reveal — запуск файлового менеджера; file — выделить файл в его папке, иначе открыть
-// папку. Ждать завершения не нужно. У стенда QA ничего не запускается (quiet).
+// папку. Ждать завершения не нужно (кроме Linux: ответ dbus нужен для запасного пути).
+// У стенда QA ничего не запускается (quiet).
 func Reveal(path string, file bool) error {
 	if quiet("проводник") {
 		return nil
 	}
+	switch goruntime.GOOS {
+	case "linux":
+		return revealLinux(path, file)
+	case "darwin":
+		return startCmd(argvCmd(revealArgv("darwin", path, file)))
+	}
 	var cmd *exec.Cmd
-	switch {
-	case goruntime.GOOS == "darwin" && file:
-		cmd = exec.Command("open", "-R", path) //nolint:gosec // path — из проекта, проверен paths.CheckLocalPath и Stat
-	case goruntime.GOOS == "darwin":
-		cmd = exec.Command("open", path) //nolint:gosec // см. выше
-	case file:
-		cmd = exec.Command("explorer") //nolint:gosec // см. выше
+	if file {
+		cmd = exec.Command("explorer") //nolint:gosec // path — из проекта, проверен paths.CheckLocalPath и Stat
 		cmd.SysProcAttr = explorerSelectAttr(path)
-	default:
+	} else {
 		cmd = exec.Command("explorer", path) //nolint:gosec // см. выше
 		cmd.SysProcAttr = explorerOpenAttr(path)
 	}
@@ -63,3 +74,74 @@ func Reveal(path string, file bool) error {
 
 // OpenDir открывает папку в файловом менеджере; существование dir вызывающий уже проверил.
 func OpenDir(dir string) error { return Reveal(dir, false) }
+
+// runCmd — запуск с ожиданием; подменяется в тестах.
+var runCmd = func(cmd *exec.Cmd) error { return cmd.Run() }
+
+// argvCmd — процесс из готового argv: без оболочки, путь — отдельным аргументом.
+func argvCmd(argv []string) *exec.Cmd {
+	return exec.Command(argv[0], argv[1:]...) //nolint:gosec // путь — из проекта, проверен paths.CheckLocalPath и Stat; оболочки нет
+}
+
+// revealLinux: файл — dbus-send ShowItems (выделяет файл в Nautilus, Dolphin, Nemo, Caja);
+// нет службы или ошибка — xdg-open папки файла. Папка — сразу xdg-open.
+func revealLinux(path string, file bool) error {
+	if file {
+		if err := runCmd(argvCmd(revealArgv("linux", path, true))); err == nil {
+			return nil
+		}
+		path = filepath.Dir(path)
+	}
+	return startCmd(argvCmd(revealArgv("linux", path, false)))
+}
+
+// revealArgv — команда по ОС (чистая функция, для Linux и Mac). Windows — nil: проводнику
+// командную строку собирает Reveal через SysProcAttr.
+func revealArgv(goos, path string, file bool) []string {
+	switch goos {
+	case "darwin":
+		if file {
+			return []string{"open", "-R", path}
+		}
+		return []string{"open", path}
+	case "linux":
+		if file {
+			return []string{
+				"dbus-send", "--session", "--print-reply", "--reply-timeout=5000",
+				"--dest=org.freedesktop.FileManager1", "/org/freedesktop/FileManager1",
+				"org.freedesktop.FileManager1.ShowItems", "array:string:" + fileURI(path), "string:",
+			}
+		}
+		return []string{"xdg-open", dashSafe(path)}
+	}
+	return nil
+}
+
+// dashSafe — относительный путь с «-» впереди приняли бы за флаг; абсолютные путь не задевает.
+func dashSafe(path string) string {
+	if strings.HasPrefix(path, "-") {
+		return "./" + path
+	}
+	return path
+}
+
+// fileURI — file:// с процент-кодированием всего, кроме безопасных знаков и «/»: запятая тоже,
+// dbus-send делит «array:string:» по запятым.
+func fileURI(path string) string {
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	b.WriteString("file://")
+	for i := 0; i < len(path); i++ {
+		c := path[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9',
+			c == '-', c == '.', c == '_', c == '~', c == '/':
+			b.WriteByte(c)
+		default:
+			b.WriteByte('%')
+			b.WriteByte(hex[c>>4])
+			b.WriteByte(hex[c&15])
+		}
+	}
+	return b.String()
+}

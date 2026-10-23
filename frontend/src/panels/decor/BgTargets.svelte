@@ -1,11 +1,13 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type { BackdropScope } from '../../base/core/types'
   import type { Unit } from '../../base/geom/sheet'
-  import { bgHint, bgSelShown, type BgPick } from './bgtargets'
+  import Seg from '../../base/tpl/Seg.svelte'
+  import { BG_ALBUM_HINT, bgHint, bgPickItems, type BgPick } from './bgtargets'
 
-  // Строка «на этот разворот · на выделенные в ленте (N) · на развороты: [3, 5-8] · на все развороты (N)» под «Куда»
-  // в окне «Фоны» (077). Слова и поле номеров — как в «Копировать оформление». Решения и число листов — у родителя
-  // (decor.svelte.ts), здесь только вид. focus растёт, когда щелчок по плитке пришёл при неверных номерах.
+  // Строка «На: Этот разворот · Все развороты (N) · Весь альбом · Выделенные (N) · Номера [3, 5-8]» под «Куда» в окне «Фоны» (077, 100-7).
+  // Seg, как «Куда» в том же окне. Решения и число листов — у родителя (decor.svelte.ts), здесь только вид.
+  // focus растёт, когда щелчок по плитке пришёл при неверных номерах.
   let {
     pick = $bindable(),
     text = $bindable(),
@@ -33,15 +35,19 @@
     if (focus > 0) field?.focus()
   })
   const bad = $derived(pick === 'nums' && !!error && (text.trim() !== '' || focus > 0))
+  // «Выделенные» могли пропасть (выделение снято): показываем то, что реально сработает
+  const shown = $derived<BgPick>(pick === 'sel' && selN < 2 ? 'this' : pick)
+
+  function choose(p: BgPick) {
+    pick = p
+    if (p === 'nums') void tick().then(() => field?.focus())
+  }
 </script>
 
-<div class="targets" role="radiogroup" aria-label="На какие {unit.many}">
-  <label><input type="radio" name="bg-pick" value="this" bind:group={pick} />на этот {unit.one}</label>
-  {#if bgSelShown(selN)}
-    <label><input type="radio" name="bg-pick" value="sel" bind:group={pick} />на выделенные в ленте ({selN})</label>
-  {/if}
-  <label class="inline"
-    ><input type="radio" name="bg-pick" value="nums" bind:group={pick} />на {unit.many}:
+<div class="targets">
+  <span class="lbl">На</span>
+  <Seg items={bgPickItems(selN, total, unit)} value={shown} onpick={choose} label="На какие {unit.many}" />
+  {#if pick === 'nums'}
     <input
       type="text"
       class="ranges"
@@ -50,11 +56,11 @@
       aria-label="Номера {unit.plural[2]}"
       bind:this={field}
       bind:value={text}
-      onfocus={() => (pick = 'nums')}
-    /></label
-  >
-  <label><input type="radio" name="bg-pick" value="all" bind:group={pick} />на все {unit.many} ({total})</label>
-  {#if pick !== 'this' && n > 0 && !(pick === 'nums' && error)}
+    />
+  {/if}
+  {#if shown === 'album'}
+    <span class="hint">{BG_ALBUM_HINT}</span>
+  {:else if shown !== 'this' && n > 0 && !(pick === 'nums' && error)}
     <span class="hint">{bgHint(n, scope, unit)}</span>
   {/if}
   {#if bad}<span class="err">{error}</span>{/if}
@@ -66,18 +72,12 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 4px 14px;
+    gap: 4px 8px;
     font-size: 13px;
   }
-  label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-  }
-  input[type='radio'] {
-    accent-color: var(--accent);
-    margin: 0;
+  .lbl {
+    color: var(--muted);
+    font-size: 12px;
   }
   .ranges {
     width: 110px;

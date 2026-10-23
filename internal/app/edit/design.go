@@ -249,3 +249,26 @@ func (m *Methods) ClearBackdrop(spreadID, scope string) (v model.View) {
 	defer m.guardEdit("ClearBackdrop", &v, nil)
 	return m.changed(m.editor().ClearBackdrop(spreadID, scope))
 }
+
+// Фон альбома (098 §3): ставит его App.SetAlbumBg (нужен каталог библиотеки), здесь — правки строки
+// «Фон альбома» и карточки листа.
+
+// ClearAlbumBg — «Убрать» фон альбома; свои фоны листов остаются. Нет фона — холостая.
+func (m *Methods) ClearAlbumBg() (v model.View) {
+	defer m.guardEdit("ClearAlbumBg", &v, nil)
+	return m.changed(m.editor().ClearAlbumBg())
+}
+
+// SetAlbumBgFade: прозрачность фона альбома 0..1, зажим и шаг 0.01 — в Go. merge — сессия
+// ползунка: серия — один шаг отмены (вызывать на отпускании).
+func (m *Methods) SetAlbumBgFade(fade float64, merge string) (v model.View) {
+	defer m.guardEdit("SetAlbumBgFade", &v, nil)
+	return m.changed(m.editor().SetAlbumBgFade(fade, merge))
+}
+
+// SetNoAlbumBg — «Не показывать здесь» (off = true) и «Показать» фона альбома на развороте;
+// обложка — холостая.
+func (m *Methods) SetNoAlbumBg(spreadID string, off bool) (v model.View) {
+	defer m.guardEdit("SetNoAlbumBg", &v, nil)
+	return m.changed(m.editor().SetNoAlbumBg(spreadID, off))
+}

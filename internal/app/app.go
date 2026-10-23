@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -53,6 +54,8 @@ type App struct {
 	// ed подменяется при «Новый»/«Открыть», а читается из обработчиков /media,
 	// автосохранения и методов UI одновременно — поэтому только через editor().
 	ed atomic.Pointer[album.Editor]
+	// clip — буфер «Копировать и вставить» (099, clip.go): снимок привязан к Editor.
+	clip clipBuf
 	// markups — кэш превью PSD разметок обложки и разворотов (markup.go), по записи на вид.
 	markups [2]markupCache
 
@@ -216,11 +219,12 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	cfgDir, thumbsDir := dataDirs(a.data)
 	a.cfgDir = cfgDir
-	if err := os.MkdirAll(a.cfgDir, 0o755); err != nil {
+	if err := makeDataDir(a.cfgDir); err != nil {
 		log.Printf("папка настроек: %v", paths.NoPath(err)) // без неё лог и конфиг не пишутся, но программа работает
 	}
 	setupLog(filepath.Join(a.cfgDir, "log.txt"))
 	log.Printf("запуск, версия %s", appVersion(wailsJSON))
+	salbum.SetAppVersion(appVersion(wailsJSON)) // до первого Load и записи: поле app в файле (098)
 	a.loadTemplates()
 	a.startBackups()
 	a.openDecor() // до первого Load: свои фоны альбома находят путь по ключу
@@ -284,12 +288,12 @@ func (a *App) loadStartup(last string) (p *model.Project, path, notice string) {
 		}
 		log.Printf("не открылся проект: %v", paths.NoPath(err))
 		if cand != a.draftPath() {
-			notes = append(notes, "Не открылся проект: "+err.Error()+".")
+			notes = append(notes, "Не открылся проект: "+newerText(err, "альбом")+".")
 			continue
 		}
 		if errors.Is(err, salbum.ErrNewer) {
 			a.draftNewer.Store(true)
-			notes = append(notes, "Черновик сохранён более новой версией программы, здесь он не открывается и не изменится.")
+			notes = append(notes, newerText(err, "Черновик")+". Здесь он не открывается и не изменится.")
 			continue
 		}
 		bad := a.badDraftPath(time.Now())
@@ -489,8 +493,8 @@ func quietTransport(t *http.Transport) {
 
 // Run открывает окно и держит его до закрытия. Это функция, а не метод App:
 // Wails отдаёт интерфейсу все экспортируемые методы App.
-// assets — собранный фронт, wailsCfg — wails.json (оба встраивает main).
-func Run(assets fs.FS, wailsCfg []byte) error {
+// assets — собранный фронт, wailsCfg — wails.json, icon — значок окна Linux (всё встраивает main).
+func Run(assets fs.FS, wailsCfg, icon []byte) error {
 	wailsJSON = wailsCfg
 	if t, ok := http.DefaultTransport.(*http.Transport); ok {
 		quietTransport(t)
@@ -518,6 +522,8 @@ func Run(assets fs.FS, wailsCfg []byte) error {
 		BackgroundColour: &options.RGBA{R: 38, G: 38, B: 40, A: 1},
 		// Данные WebView2 (localStorage) не привязаны к имени exe: у каждой версии оно своё.
 		Windows:     &windows.Options{WebviewUserDataPath: osx.WebViewDir(app.data)},
+		Linux:       linuxOptions(app.data, icon),
+		Menu:        appMenu(runtime.GOOS),
 		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
 		OnStartup:   app.startup,
 		OnDomReady:  app.domReady,

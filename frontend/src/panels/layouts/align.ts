@@ -40,6 +40,20 @@ export function normAlignTo(s: unknown): AlignTo {
   return s === 'page' || s === 'spread' ? s : 'sel'
 }
 
+// Опор две (спека 100 п. 4): отдельная для одного объекта и для двух и больше.
+export type AlignSlot = 'one' | 'many'
+export const alignSlot = (count: number): AlignSlot => (count >= 2 ? 'many' : 'one')
+
+// Для одного «Выделения» не бывает: чужое и 'sel' из хранилища — «Страницы».
+export function normAlignToOne(s: unknown): AlignTo {
+  return s === 'spread' ? 'spread' : 'page'
+}
+
+// Почему кнопка опоры неактивна (подсказка говорит, что делать); null — можно.
+export function alignToBlock(to: AlignTo, count: number): string | null {
+  return to === 'sel' && count < 2 ? 'Относительно выделения — от 2 объектов: Shift+щелчок добавит ещё' : null
+}
+
 // Минимум объектов — как в Go: к выделению выравнивать от 2, распределять от 3;
 // к странице и развороту — от 1 и от 2. Меньше — Go вернёт холостую правку.
 export function alignNeed(op: AlignOp, to: AlignTo): number {

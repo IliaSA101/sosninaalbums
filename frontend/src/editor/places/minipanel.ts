@@ -7,6 +7,11 @@ import type { FeatureId } from '../../base/prefs/levels'
 import type { Rect, SpreadView } from '../../base/core/types'
 import { whoOf } from '../captions/nametarget'
 import { keymap } from '../../base/keys/keymap.svelte'
+import { isMac } from '../../base/core/platform'
+
+// Подсказка ⇄ и тост по щелчку: ⇄ и Ctrl+перетаскивание (⌘ на Mac) делают одно и то же (спека 100 п. 6).
+export const swapTip = (mac: boolean): string =>
+  `Перетащите на другое место — фото поменяются местами (или тащите фото с ${mac ? '⌘' : 'Ctrl'})`
 
 export type MiniId = 'flipH' | 'flipV' | 'turn' | 'tilt' | 'fit' | 'fitPhoto' | 'caption' | 'name' | 'layer' | 'swap' | 'same' | 'delete'
 
@@ -127,7 +132,7 @@ export function miniItems(c: MiniCtx, can: (f: FeatureId) => boolean = () => tru
       icon: 'same-size',
     })
   if (c.grid) arrange.push({ id: 'layer', label: 'Слой', icon: 'layers' })
-  if (c.grid && solo) arrange.push({ id: 'swap', label: 'Перетащите на другое место — фото поменяются местами', icon: 'swap' })
+  if (c.grid && solo) arrange.push({ id: 'swap', label: swapTip(isMac()), icon: 'swap' })
   if (arrange.length > 0) groups.push(arrange)
 
   groups.push([deleteItem(c, n)])

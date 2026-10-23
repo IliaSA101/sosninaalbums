@@ -385,12 +385,12 @@ func (p *Project) IsCover(s *Spread) bool {
 }
 
 // FixCoverSheet — лист обложки из файла: поля Spread, которых у обложки нет, обнуляются
-// (страж — TestCoverSheetFields): «Авто», вариант, название и виньетка (роли мест снимает
-// FixVignettes). «Авто» на обложке не бывает, поэтому в Photos — только фото её мест: фото
+// (страж — TestCoverSheetFields): «Авто», вариант, название, виньетка (роли мест снимает
+// FixVignettes) и скрытие фона альбома (его на обложке нет, 098-10). «Авто» на обложке не бывает, поэтому в Photos — только фото её мест: фото
 // без места с обложки уходит (и не отнимает себя у разворота в dedupe).
 func FixCoverSheet(s *Spread) {
 	s.ID, s.Layout, s.Variant, s.Name = CoverID, "", 0, ""
-	s.Kind, s.Vig = "", nil
+	s.Kind, s.Vig, s.NoAlbumBg = "", nil, false
 	s.Grid = slices.DeleteFunc(s.Grid, func(pl *Place) bool { return pl == nil })
 	seen := make(map[string]bool, len(s.Grid))
 	s.Photos = nil

@@ -14,10 +14,11 @@ import { gallery } from '../../panels/gallery/gallery.svelte'
 import { keysUi } from '../hotkeys/keysui.svelte'
 import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
-import { packsUi } from '../dialogs/packs.svelte'
+import { packsUi } from '../packs/packs.svelte'
 import { tplio } from './tplio.svelte'
 import { namesUi } from '../../panels/names/names.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
+import { clip } from '../../editor/clip/clip.svelte'
 import { straighten } from '../../editor/tilt/straighten.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
 import { naming } from '../../panels/timeline/naming.svelte'
@@ -37,6 +38,7 @@ import { isAlignOp, normAlignTo } from '../../panels/layouts/align'
 import { capFirst, errText } from '../../base/words/errtext'
 import { effH, ZOOM_STEP } from '../../editor/zoom/zoom'
 import { newDoc } from '../newdoc/newdoc.svelte'
+import { aboutUi } from '../dialogs/about.svelte'
 import type { MarkPatch, RecentProject } from '../../base/core/types'
 
 // ev — клавиатурное событие, если команду вызвала клавиша: сдвиг стрелкой и Пробел берут из него клавишу (служебные клавиши).
@@ -146,6 +148,11 @@ const HANDLERS = {
   },
   // Выделен блок текста или подпись — убираем их, иначе выбранное фото или место (placesel.deleteSelected).
   removeCell: () => (edit.sel ? edit.removeSelected() : placesel.deleteSelected()),
+  // 099: буфер Go; куда встанет вставка и что выделено — решает clip. Меню и клавиши зовут одно.
+  cutItems: () => clip.cut(),
+  copyItems: () => clip.copy(),
+  pasteItems: () => clip.paste(),
+  duplicateItems: () => clip.duplicate(),
   addText: () => edit.addText(),
   pasteNames: () => namesUi.show(),
   // Как кнопка в карточке разворота: один шаг SetVignette, тост с «Вернуть». Обложка и виньетка — мимо.
@@ -264,6 +271,7 @@ const HANDLERS = {
     prefs.news = true
     prefs.startOpen = true
   },
+  about: () => aboutUi.show(),
 
   // Только клавиши
   prevSpread: () => row.step(-1),

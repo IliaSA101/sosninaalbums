@@ -117,7 +117,7 @@ func (t *Templates) Store(dir string, list []model.Template, rename func(from, t
 		}
 		t.bad, t.cut = false, false
 	}
-	if err := library.WriteFileAtomic(TemplatesPath(dir), data); err != nil {
+	if err := library.WriteFileAtomicMode(TemplatesPath(dir), data, privateMode); err != nil {
 		log.Printf("templates.json: %v", paths.NoPath(err))
 		return fmt.Errorf("не удалось сохранить шаблоны: %w", err)
 	}

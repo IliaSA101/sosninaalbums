@@ -14,7 +14,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/layout/plan"
 )
 
-// PlanJob — снимок входа автосборки: фото без сеток и фонов, их действующие пропорции и
+// PlanJob — снимок входа автосборки: фото без сеток, фонов и файлов, стоящих копией, их действующие пропорции и
 // оценки, геометрия и число разворотов альбома. Снимается под замком, считается вне его.
 type PlanJob struct {
 	infos []model.PhotoInfo
@@ -31,8 +31,8 @@ type PlanJob struct {
 // AutoBuild после Remember: размеры из photos, поворот — у фото, уже стоящего в проекте.
 // rate — действующие оценки (nil — нет).
 func PlanOf(p *model.Project, photos []model.PhotoInfo, rate Rating) PlanJob {
-	inGrid, onBg := gridPhotoSet(p), p.OnDecor()
-	infos := slices.DeleteFunc(slices.Clone(photos), func(ph model.PhotoInfo) bool { return inGrid[ph.ID] || onBg[ph.ID] })
+	skip, onBg := notForBuild(p), p.OnDecor()
+	infos := slices.DeleteFunc(slices.Clone(photos), func(ph model.PhotoInfo) bool { return skip(ph.ID) || onBg[ph.ID] })
 	tmp := &model.Project{Photos: make(map[string]model.PhotoRef, len(infos))}
 	for _, ph := range infos {
 		if r, ok := p.Photos[ph.ID]; ok {

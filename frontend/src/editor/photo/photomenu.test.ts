@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { menuContext, photoMenu, type MenuCtx } from './photomenu'
+import { afterEach, describe, expect, it } from 'vitest'
+import { setOsForTest } from '../../base/core/platform'
+import { menuContext, photoMenu as photoMenuFull, type MenuCtx } from './photomenu'
 import type { SelBox } from '../../base/geom/gridedit'
 import { can, type FeatureId, type Level } from '../../base/prefs/levels'
 import type { SpreadView } from '../../base/core/types'
@@ -20,7 +21,11 @@ const base: MenuCtx = {
   allOval: false,
   allGray: false,
   framed: false,
+  copyable: true,
+  pasteable: false,
 }
+// Группа буфера (099) — в photomenu.clip.test.ts; здесь меню без неё, чтобы порядок остальных пунктов не заслонялся.
+const photoMenu = (c: MenuCtx, can: (f: FeatureId) => boolean = () => true) => photoMenuFull(c, (f) => f !== 'clipboard' && can(f))
 const ids = (c: Partial<MenuCtx>) => photoMenu({ ...base, ...c }).map((i) => i.id)
 
 describe('photoMenu', () => {
@@ -231,6 +236,16 @@ describe('menuContext', () => {
     expect(b.differ).toBe(true)
     expect(b.framed).toBe(true)
   })
+  it('свой кадр (098): на «Авто» нетронутый масштаб тоже даёт «Сбросить кадр»; на сетке — нет', () => {
+    const own = {
+      ...spread,
+      frames: [{ s: 1, x: 0, y: 0, own: 1.78, img: { x: 0, y: 0, w: 200, h: 100 }, dpi: 300 }],
+    } as unknown as SpreadView
+    expect(menuContext(own, [box('a', 200, 100)], []).framed).toBe(true)
+    expect(menuContext({ ...own, grid: true }, [box('a', 200, 100)], []).framed).toBe(false)
+    const none = { ...own, frames: [{ ...own.frames![0], own: 0 }] } as unknown as SpreadView
+    expect(menuContext(none, [box('a', 200, 100)], []).framed).toBe(false)
+  })
   it('несколько: кадр не сбрасывается, пропавшие считаются', () => {
     const c = menuContext(spread, [box('a', 200, 100), box('b', 100, 100)], ['b'])
     expect(c.framed).toBe(false)
@@ -424,5 +439,25 @@ describe('«Сделать ч/б / цветным» в меню (068)', () => {
     expect(menuContext(s, [box('a')], []).allGray).toBe(true)
     expect(menuContext(s, [box('a'), box('b')], []).allGray).toBe(false)
     expect(menuContext(s, [], []).allGray).toBe(false)
+  })
+})
+
+describe('подпись «Показать…» по платформе (101)', () => {
+  afterEach(() => setOsForTest(null))
+  const label = () => photoMenu(base).find((i) => i.id === 'explorer')?.label
+  it('Windows — Проводник, Mac — Finder, Linux — папка; id один', () => {
+    setOsForTest('windows')
+    expect(label()).toBe('Показать в Проводнике')
+    setOsForTest('mac')
+    expect(label()).toBe('Показать в Finder')
+    setOsForTest('linux')
+    expect(label()).toBe('Показать в папке')
+  })
+  it('пропавшее фото и несколько: пункта нет ни на какой платформе', () => {
+    for (const o of ['windows', 'mac', 'linux'] as const) {
+      setOsForTest(o)
+      expect(photoMenu({ ...base, missing: 1 }).map((i) => i.id)).not.toContain('explorer')
+      expect(photoMenu({ ...base, photos: 2, places: 2 }).map((i) => i.id)).not.toContain('explorer')
+    }
   })
 })

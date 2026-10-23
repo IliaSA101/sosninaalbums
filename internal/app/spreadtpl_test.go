@@ -29,7 +29,7 @@ func spreadApp(t *testing.T) *App {
 	p := model.New()
 	ids := []string{"p1", "p2", "p3", "p4", "p5"}
 	for _, id := range ids {
-		p.Photos[id] = model.PhotoRef{Path: `C:\` + id + `.jpg`, W: 300, H: 200}
+		p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
 	}
 	p.Spreads = []*model.Spread{{ID: "s1", Photos: ids}, {ID: "s2"}, {ID: "s3"}}
 	a.ed.Store(mustEditor(t, p, ""))

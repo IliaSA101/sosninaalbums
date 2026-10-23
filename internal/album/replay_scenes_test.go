@@ -77,13 +77,13 @@ func replayCover(r *replay, ph []model.PhotoInfo) {
 	r.ve("CoverSpineText")(e.CoverSpineText())
 	r.ve("CoverSpineText:повтор")(e.CoverSpineText())
 	r.do("SetCoverSpineBg", e.SetCoverSpineBg("#203040"))
-	r.ve("SetCoverGuide")(e.SetCoverGuide(`Q:\Разметка\cover.png`))
+	r.ve("SetCoverGuide")(e.SetCoverGuide(qPath("Разметка", "cover.png")))
 	r.read("CoverGuidePath", e.CoverGuidePath())
 	r.ve("SetCoverGuide:UNC")(e.SetCoverGuide(`\\server\share\cover.png`))
 	r.do("ClearCoverGuide", e.ClearCoverGuide())
-	r.ve("SetSpreadGuide")(e.SetSpreadGuide(`Q:\Разметка\spread_30x30.psd`)) // 066: разметка разворотов
+	r.ve("SetSpreadGuide")(e.SetSpreadGuide(qPath("Разметка", "spread_30x30.psd"))) // 066: разметка разворотов
 	r.read("SpreadGuidePath", e.SpreadGuidePath())
-	r.ve("SetSpreadGuide:PSB")(e.SetSpreadGuide(`Q:\Разметка\big.psb`))
+	r.ve("SetSpreadGuide:PSB")(e.SetSpreadGuide(qPath("Разметка", "big.psb")))
 	r.do("ClearSpreadGuide", e.ClearSpreadGuide())
 	r.do("ClearSpreadGuide:повтор", e.ClearSpreadGuide())
 	r.ve("AddPlace:обложка")(e.AddPlace(model.CoverID, 1, ""))
@@ -143,7 +143,7 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	r.read("Ref", []any{ref, ok})
 	r.read("Folders", e.Folders())
 	r.read("Path", strings.Replace(e.Path(), r.file, "<album>", 1))
-	r.do("Relink", e.Relink(map[string]string{id(7): `Q:\Перенос\07.jpg`}, `Q:\Перенос`))
+	r.do("Relink", e.Relink(map[string]string{id(7): qPath("Перенос", "07.jpg")}, qPath("Перенос")))
 	// Сменить букву по-настоящему можно только с файлами на двух дисках
 	// (editor_relink_test.go): здесь на R: ничего нет — холостая.
 	r.do("RelinkDrive", e.RelinkDrive("Q", "R"))
@@ -151,7 +151,7 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	r.do("RelinkLib", e.RelinkLib(func(string) (string, bool) { return "", false }))
 	// Своих шрифтов в сценарии нет — холостая (настоящая — TestRefitFontsStep).
 	r.do("RefitFonts", e.RefitFonts())
-	r.do("RemoveFolder", e.RemoveFolder(`Q:\Банкет`))
+	r.do("RemoveFolder", e.RemoveFolder(qPath("Банкет")))
 	r.ve("Restore")(e.Restore(q))
 	r.do("Undo:восстановление", e.Undo())
 
@@ -215,14 +215,14 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	r.do("SetPattern", e.SetPattern(sid, model.ScopeLeft, model.Pattern{Inks: []string{"#aabbcc"}, Scale: 1.5, Fade: 0.2}, "p1"))
 	r.do("SetPattern:слияние", e.SetPattern(sid, model.ScopeLeft, model.Pattern{Inks: []string{"#aabbcc"}, Scale: 1.5, Fade: 0.4}, "p1"))
 	const key = "my:0123456789abcdef"
-	own := model.PhotoInfo{ID: model.LibPhotoID(key), Path: `Q:\Библиотека\Фоны\0123456789abcdef.jpg`, Lib: key, W: 3000, H: 2000, Size: 99}
+	own := model.PhotoInfo{ID: model.LibPhotoID(key), Path: qPath("Библиотека", "Фоны", "0123456789abcdef.jpg"), Lib: key, W: 3000, H: 2000, Size: 99}
 	r.ve("ApplyBackdrop:ключ")(e.ApplyBackdrop(sid, model.ScopeRight, model.PhotoInfo{ID: "x", Path: own.Path, Lib: "my:x"}))
 	r.ve("ApplyBackdrop")(e.ApplyBackdrop(sid, model.ScopeRight, own))
 	r.do("ClearPattern", e.ClearPattern(sid, model.ScopeLeft))
 	// Стикеры (048 Ф2, в конце, как 042): плашка и своё, отказ по рисунку, рамка серией, зеркало,
 	// прозрачность, цвета, замена, слой, удаление. ID стикеров случайны — в шагах их нет.
 	const key2 = "my:fedcba9876543210"
-	mine := model.StickerSrc{Photo: model.PhotoInfo{ID: model.LibPhotoID(key2), Path: `Q:\Библиотека\Стикеры\fedcba9876543210.png`, Lib: key2, W: 800, H: 400}}
+	mine := model.StickerSrc{Photo: model.PhotoInfo{ID: model.LibPhotoID(key2), Path: qPath("Библиотека", "Стикеры", "fedcba9876543210.png"), Lib: key2, W: 800, H: 400}}
 	v, k1, err := e.AddSticker(sid, 0, model.StickerSrc{Art: &model.Art{Kind: "plate"}})
 	r.edit("AddSticker", v, nil, err)
 	v, k2, err := e.AddSticker(sid, 1, mine)
@@ -248,7 +248,7 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	// Автоимя при броске (060, в конце, как 042): лист с шаблоном имени, файл-«человек» и файл со
 	// стоп-словом — имя получает только первый, тем же шагом.
 	r.do("SetSheetCaps:имя", e.SetSheetCaps(sid, true, model.SheetCaps{Style: model.NewCaptionStyle(r.v.Settings.PageH), Text: "{Фамилия} {Имя}"}))
-	who := []model.PhotoInfo{edtest.Lib(`Q:\Свадьба\иванов_петя.jpg`, model.XmpMarks{}), edtest.Lib(`Q:\Свадьба\Свадьба Ивановых.jpg`, model.XmpMarks{})}
+	who := []model.PhotoInfo{edtest.Lib(qPath("Свадьба", "иванов_петя.jpg"), model.XmpMarks{}), edtest.Lib(qPath("Свадьба", "Свадьба Ивановых.jpg"), model.XmpMarks{})}
 	for i := range who {
 		who[i].W, who[i].H = 2000, 3000
 	}
@@ -305,7 +305,7 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	r.do("SetBorder", e.SetBorder(sid, at, model.BorderPatch{Width: 2.5}, "b079"))
 	r.do("SetBorder:слияние", e.SetBorder(sid, at, model.BorderPatch{Inks: []string{"#C8A24A"}}, "b079"))
 	const key3 = "my:00112233445566ff"
-	fr := model.PhotoInfo{ID: model.LibPhotoID(key3), Path: `Q:\Библиотека\Рамочки\00112233445566ff.png`, Lib: key3, W: 3000, H: 4000}
+	fr := model.PhotoInfo{ID: model.LibPhotoID(key3), Path: qPath("Библиотека", "Рамочки", "00112233445566ff.png"), Lib: key3, W: 3000, H: 4000}
 	bv, err = e.ApplyBorder(sid, []string{seat}, model.BorderSrc{Photo: model.PhotoInfo{ID: "x", Lib: "my:x"}})
 	r.read("ApplyBorder:ключ", [2]any{bv.Rev, fmt.Sprint(err)})
 	r.ve("ApplyBorder:своя")(e.ApplyBorder(sid, []string{seat}, model.BorderSrc{Photo: fr, Cut: [4]float64{0.14, 0.14, 0.14, 0.14}}))

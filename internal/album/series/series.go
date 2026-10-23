@@ -4,7 +4,6 @@ import (
 	"math"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 )
@@ -72,7 +71,7 @@ func folderChanged(a, b model.PhotoInfo) bool {
 	if a.Lib != "" || b.Lib != "" {
 		return false
 	}
-	return !strings.EqualFold(filepath.Dir(a.Path), filepath.Dir(b.Path))
+	return !model.SamePath(filepath.Dir(a.Path), filepath.Dir(b.Path))
 }
 
 // gapStrength — сила паузы перед фото j по местной медиане разрывов.

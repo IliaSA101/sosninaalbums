@@ -1,5 +1,6 @@
 ﻿# Сборка выпуска: powershell -File scripts/build.ps1
 # wails build -clean, затем exe переименовывается в «SosninaAlbums-<версия>.exe» — версия из wails.json (productVersion),
+# ПРАВЯТСЯ ВМЕСТЕ с двойником scripts/build.sh (Linux, macOS; там же exe для Windows кросс-сборкой).
 # чтобы у Марины и в GitHub Release было видно, какая это сборка. Работает в Windows PowerShell 5.1 и pwsh 7.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot

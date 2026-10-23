@@ -9,12 +9,14 @@ import (
 // «Убрать имена» снимает его ForgetFileNames.
 
 // WithAuto — тело броска body и автоимена новых фото одним шагом правки (зовёт ядро внутри
-// Editor.try): новые — фото из photos, которых до body не было ни на одном листе (перенос
-// между листами имён не берёт). Возвращает ID фото, получивших имя; ошибка body — nil и она.
+// Editor.try): новые — фото из photos, чьего файла до body не было ни в одном месте листа (перенос
+// между листами и копии имён не берут). Возвращает ID фото, получивших имя; ошибка body — nil и она.
 func WithAuto(p *model.Project, photos []model.PhotoInfo, body func() error) ([]string, error) {
 	var fresh []string
+	files := p.PlacedFiles()
 	for _, ph := range photos {
-		if !p.Placed(ph.ID) {
+		// Копия (098) имя наследует; файл, стоящий в альбоме другой записью, — не новое фото.
+		if !model.IsCopyReq(ph.ID) && !files[model.BaseID(ph.ID)] {
 			fresh = append(fresh, ph.ID)
 		}
 	}

@@ -5,7 +5,6 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync/atomic"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -205,14 +204,14 @@ func (e *Editor) relinkMarks(files, dirs []model.PathPair) []MarkChange {
 	}
 	byFile := make(map[string]string, len(files))
 	for _, pr := range files {
-		byFile[strings.ToLower(filepath.Clean(pr.Old))] = pr.New
+		byFile[paths.Fold(filepath.Clean(pr.Old))] = pr.New
 	}
 	next := map[string]*model.Mark{}
 	for _, id := range slices.Sorted(maps.Keys(e.marks)) {
 		m := e.marks[id]
-		np, ok := byFile[strings.ToLower(filepath.Clean(m.Path))]
+		np, ok := byFile[paths.Fold(filepath.Clean(m.Path))]
 		for i := 0; !ok && i < len(dirs); i++ {
-			np, ok = paths.ReplacePrefix(m.Path, dirs[i].Old, dirs[i].New)
+			np, ok = paths.ReplacePrefixFS(m.Path, dirs[i].Old, dirs[i].New)
 		}
 		if !ok || paths.SamePath(np, m.Path) {
 			continue

@@ -291,9 +291,12 @@ class Store extends Nav {
   // Добавление фото из ленты: после успеха снимает выделение и сообщает
   // о фото, которые были в других листах (into — целевой лист, null — новый). Источник ищется среди всех
   // листов ряда, в том числе в обложке (032).
-  async fromStrip(ids: string[], into: string | null, op: () => Promise<unknown>): Promise<boolean> {
-    const moved = this.movedFrom(ids, into)
-    if (!(await this.run(op()))) return false
+  // 098: фото, уже стоящее в альбоме, сперва проходит ворота (окно копии); op получает ID для Go.
+  async fromStrip(ids: string[], into: string | null, op: (ids: string[]) => Promise<unknown>): Promise<boolean> {
+    const sent = await this.hooks.gate(ids)
+    if (!sent) return false
+    const moved = this.movedFrom(sent, into)
+    if (!(await this.run(op(sent)))) return false
     this.stripDone(moved)
     return true
   }
@@ -318,13 +321,13 @@ class Store extends Nav {
     if (s.id === COVER_ID) return this.notify('На обложку фото бросают на зону или в место')
     // Ручной разворот: места, плитка и вопрос (042) — верх подключает хук; без него прежний путь.
     if (s.grid && (await this.hooks.dropGrid(s.id, ids))) return
-    await this.fromStrip(ids, s.id, () => Api.AddPhotos(s.id, ids, -1))
+    await this.fromStrip(ids, s.id, (sent) => Api.AddPhotos(s.id, sent, -1))
   }
 
   async newSpread(at: number, ids: string[], strip = true) {
     const before = new Set(this.view.spreads.map((s) => s.id))
-    const op = () => Api.NewSpread(at, ids)
-    const ok = strip ? await this.fromStrip(ids, null, op) : await this.run(op())
+    const op = (sent: string[]) => Api.NewSpread(at, sent)
+    const ok = strip ? await this.fromStrip(ids, null, op) : await this.run(op(ids))
     if (ok) this.goNew(before, at)
   }
 

@@ -13,7 +13,8 @@ import (
 const (
 	airLimit   = 12
 	featLimit  = 12
-	ExtraLimit = airLimit + featLimit
+	midLimit   = 1 // «центр крупнее» (forms.CenterBig): одна на разворот, 0.23-q6
+	ExtraLimit = airLimit + featLimit + midLimit
 )
 
 // featSlack — featured хуже потолка лучшей (min(best, heroCap)) по Fair больше этого не выберет
@@ -28,6 +29,7 @@ const extraGen = 5000
 type extraEntry struct {
 	row  []layout.Result
 	kind map[string]Kind
+	mid  string // ключ «центр крупнее» в row ("" — нет)
 }
 
 // extraCache — ряды «Других вариантов» по пропорциям и геометрии: View считает счётчик
@@ -65,10 +67,19 @@ func extraOf(aspects []float64, p layout.Params, rowLen int) extraEntry {
 		e.row = append(e.row, f.Result)
 		e.kind[f.Key] = f.Kind
 	}
+	if m := re.mid; m != nil && !seen[m.Key] && !hasKey(e.row, m.Key) {
+		e.row = append(e.row, m.Result)
+		e.mid = m.Key
+	}
 	byScore(e.row)
 	e.row = slices.Clip(e.row)
 	extraCache.put(key, e)
 	return e
+}
+
+// hasKey — ключ уже в ряду.
+func hasKey(rs []layout.Result, key string) bool {
+	return slices.ContainsFunc(rs, func(r layout.Result) bool { return r.Key == key })
 }
 
 // byScore — по убыванию оценки в квантах, ничья — по ключу.

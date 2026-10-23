@@ -1,5 +1,5 @@
-# Сборка выпуска (спека 025, 039): метка vX.Y.Z на main → exe Windows и .app macOS → два архива с папкой
-# «Sosnina Albums X.Y.Z» (задание pack) → ЧЕРНОВИК релиза. Голого exe на странице выпуска нет.
+# Сборка выпуска (спека 025, 039, 101): метка vX.Y.Z на main → exe Windows, .app macOS и бинарник Linux → два zip
+# и tar.gz с папкой «Sosnina Albums X.Y.Z» и .deb (задание pack) → ЧЕРНОВИК релиза. Голого exe на странице выпуска нет.
 # Публикует владелец руками (Publish) после проверки скачанных файлов. Ручной запуск — пересборка
 # существующей метки исправленным workflow из main (метку не перевешиваем).
 name: Release
@@ -259,6 +259,79 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+  # Спека 101, решение 101-7: собираем на ubuntu-24.04 (22.04 у GitHub выводится из эксплуатации), порог совместимости
+  # со старыми системами держит страж glibc ≤ 2.35; «ставится и запускается на 22.04» проверяет linux-check в контейнере
+  linux:
+    name: Сборка Linux x64
+    needs: prepare
+    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    outputs:
+      sums: ${{ steps.pack.outputs.sums }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+          cache: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: Заголовки GTK 3 и WebKitGTK 4.1
+        run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Wails CLI (версия из go.mod)
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci
+
+      # Биндинги в git и сверены контрактом: не пересоздаём (как scripts/build.sh --native)
+      - name: wails build
+        run: wails build -clean -trimpath -skipbindings -tags webkit2_41
+
+      - name: Страж glibc (не выше 2.35 — Ubuntu 22.04)
+        run: scripts/linux/glibc.sh build/bin/sosninaalbums 2.35
+
+      # -trimpath должен вычистить пути сборки из бинарника (то же делает scripts/build.sh)
+      - name: Страж личных путей
+        run: |
+          for s in "$HOME" "$GITHUB_WORKSPACE"; do
+            if LC_ALL=C grep -aqF -- "$s" build/bin/sosninaalbums; then
+              echo "::error::В бинарнике найдена строка '$s' — пути сборки в выпуске"
+              exit 1
+            fi
+          done
+
+      - name: Имя файла с версией и sha256
+        id: pack
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir out
+          mv build/bin/sosninaalbums "out/SosninaAlbums-$VERSION-linux-amd64"
+          ls -l out
+          # Хеш — в output задания: pack сверит с ним скачанный артефакт
+          {
+            echo "sums<<SUMS_EOF"
+            (cd out && sha256sum --text -- *)
+            echo "SUMS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
   # Спека 029, решение 22: zip прогоняется на настоящем Mac до черновика. Провал smoke.sh — черновика нет.
   # Спека 039: проверяется итоговый архив с папкой (из задания pack), тот самый, что уйдёт в черновик.
   mac-check:
@@ -341,6 +414,99 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  # Спека 101: .deb и tar.gz из задания pack ставятся и запускаются на ubuntu-24.04 (раннер) и ubuntu:22.04 (контейнер:
+  # glibc и GTK/WebKitGTK тех лет). Провал smoke.sh — черновика нет.
+  linux-check:
+    name: Проверка Linux (${{ matrix.name }})
+    needs: [prepare, pack]
+    timeout-minutes: 25
+    runs-on: ubuntu-24.04
+    # Пустая строка у host — без контейнера. Образ закреплён по хешу индекса ubuntu:22.04 (22.10.2026); обновлять руками
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: host
+            container: ""
+          - name: jammy
+            container: ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956
+    steps:
+      # Скрипты — из коммита метки: того же, что собрал пакеты
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: ${{ runner.temp }}/pkg
+
+      - name: Пакеты и их sha256
+        id: pkg
+        env:
+          PKG_DIR: ${{ runner.temp }}/pkg
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SUMS: ${{ needs.pack.outputs.sums }}
+        run: |
+          deb="$PKG_DIR/SosninaAlbums-$VERSION-linux-amd64.deb"
+          tgz="$PKG_DIR/SosninaAlbums-$VERSION-linux-amd64.tar.gz"
+          test -s "$deb" || { echo "::error::Нет $deb"; ls -l "$PKG_DIR"; exit 1; }
+          test -s "$tgz" || { echo "::error::Нет $tgz"; ls -l "$PKG_DIR"; exit 1; }
+          # Проверяем ровно то, что собрал pack (хеши — из output задания, не из артефакта)
+          [ -n "$SUMS" ] || { echo "::error::Задание pack не передало sha256"; exit 1; }
+          (cd "$PKG_DIR" && printf '%s\n' "$SUMS" | grep -F -e "linux-amd64.deb" -e "linux-amd64.tar.gz" | sha256sum --strict --check) ||
+            { echo "::error::sha256 пакетов Linux не совпал с хешем сборки"; exit 1; }
+          echo "deb=$deb" >> "$GITHUB_OUTPUT"
+          echo "tgz=$tgz" >> "$GITHUB_OUTPUT"
+
+      # В контейнере нет sudo (работаем root), на раннере есть. Пакет копируем в /tmp: apt (пользователь _apt) не читает
+      # папки раннера и жаловался бы предупреждением. Зависимости (GTK 3, WebKitGTK 4.1) должен поставить сам .deb.
+      - name: Установка .deb
+        env:
+          DEB: ${{ steps.pkg.outputs.deb }}
+        run: |
+          sudo=()
+          [ "$(id -u)" -eq 0 ] || sudo=(sudo)
+          export DEBIAN_FRONTEND=noninteractive
+          "${sudo[@]}" apt-get -o Acquire::Retries=3 update
+          "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y --no-install-recommends ca-certificates binutils desktop-file-utils xvfb xauth dbus libgl1-mesa-dri fonts-dejavu-core
+          cp "$DEB" /tmp/sosninaalbums.deb
+          "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y /tmp/sosninaalbums.deb
+          dpkg -s sosninaalbums | sed -n '1,/^Description/p'
+          test -x /usr/bin/sosninaalbums
+          desktop-file-validate /usr/share/applications/sosninaalbums.desktop
+
+      - name: Тест сборки .deb (deb.sh, glibc.sh)
+        run: scripts/linux/test_deb.sh
+
+      # Провал валит задание, а с ним и «Черновик релиза»
+      - name: Проверка запуска .deb (smoke.sh)
+        env:
+          DEB: ${{ steps.pkg.outputs.deb }}
+        run: scripts/linux/smoke.sh "$DEB" "$RUNNER_TEMP/linux-out/deb"
+
+      - name: Проверка запуска tar.gz (smoke.sh)
+        env:
+          TGZ: ${{ steps.pkg.outputs.tgz }}
+        run: scripts/linux/smoke.sh "$TGZ" "$RUNNER_TEMP/linux-out/tar"
+
+      - name: Сводка
+        if: always()
+        run: |
+          for f in "$RUNNER_TEMP"/linux-out/deb/summary.md "$RUNNER_TEMP"/linux-out/tar/summary.md; do
+            if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: linux-check-${{ matrix.name }}
+          path: ${{ runner.temp }}/linux-out/
+          if-no-files-found: warn
+          retention-days: 30
+
   # Инструкция по установке (спека 029): docx блокирует выпуск, pdf — если справился LibreOffice
   guide:
     name: Инструкция
@@ -373,9 +539,9 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          # общий файл и пять «личных»: Windows, вся macOS (уходит в архив Mac) и три версии macOS;
+          # общий файл и шесть «личных»: Windows, Linux, вся macOS (уходит в архив Mac) и три версии macOS;
           # сбой любого — провал задания
-          for v in "" win macos 26 15 12-14; do
+          for v in "" win linux macos 26 15 12-14; do
             python -I scripts/guide/build_docx.py docs/install/guide.md --version "$VERSION" ${v:+--variant "$v"} --out "$RUNNER_TEMP/docx"
           done
 
@@ -394,7 +560,7 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           # сбой одного pdf не мешает остальным; недостающие — предупреждение ниже
-          for v in "" win macos 26 15 12-14; do
+          for v in "" win linux macos 26 15 12-14; do
             python -I scripts/guide/build_docx.py docs/install/guide.md --version "$VERSION" --pdf ${v:+--variant "$v"} --out "$RUNNER_TEMP/pdf" || echo "::warning::pdf варианта '${v:-общий}' не собран"
           done
 
@@ -404,7 +570,7 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           mkdir out
-          for mid in "" -windows -macos -macos-26 -macos-15 -macos-12-14; do
+          for mid in "" -windows -linux -macos -macos-26 -macos-15 -macos-12-14; do
             name="SosninaAlbums-$VERSION-install-guide$mid-ru"
             test -s "$RUNNER_TEMP/docx/$name.docx" || { echo "::error::Нет $name.docx"; exit 1; }
             cp "$RUNNER_TEMP/docx/$name.docx" out/
@@ -429,11 +595,11 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Спека 039: два архива с папкой «Sosnina Albums X.Y.Z» (программа, инструкция, «Что нового», лицензии).
-  # Упаковка на ubuntu одним скриптом для обеих ОС; любая ошибка pack.py или check — провал, черновика нет.
+  # Спека 039, 101: три архива с папкой «Sosnina Albums X.Y.Z» (программа, инструкция, «Что нового», лицензии) и .deb.
+  # Упаковка на ubuntu одним скриптом для всех ОС; любая ошибка pack.py, deb.sh или check — провал, черновика нет.
   pack:
     name: Архивы выпуска
-    needs: [prepare, windows, macos, guide]
+    needs: [prepare, windows, macos, linux, guide]
     timeout-minutes: 10
     runs-on: ubuntu-latest
     outputs:
@@ -462,18 +628,23 @@ jobs:
           path: in/macos
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: linux
+          path: in/linux
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
           name: guide
           path: in/guide
 
-      # Вход pack — ровно то, что собрали задания windows, macos и guide: хеши из их outputs,
+      # Вход pack — ровно то, что собрали задания windows, macos, linux и guide: хеши из их outputs,
       # не из артефактов (подмена файла в хранилище между заданиями — провал)
       - name: Сверка sha256 входов
         env:
           WIN_SUMS: ${{ needs.windows.outputs.sums }}
           MAC_SUMS: ${{ needs.macos.outputs.sums }}
+          LINUX_SUMS: ${{ needs.linux.outputs.sums }}
           GUIDE_SUMS: ${{ needs.guide.outputs.sums }}
         run: |
-          for kv in "windows:WIN_SUMS" "macos:MAC_SUMS" "guide:GUIDE_SUMS"; do
+          for kv in "windows:WIN_SUMS" "macos:MAC_SUMS" "linux:LINUX_SUMS" "guide:GUIDE_SUMS"; do
             dir="in/${kv%%:*}"
             v="${kv#*:}"
             [ -n "${!v}" ] || { echo "::error::Задание не передало sha256 ($v)"; exit 1; }
@@ -494,8 +665,10 @@ jobs:
           date="$(git log -1 --format=%cI)"
           exe="in/windows/SosninaAlbums-$VERSION-windows-x64.exe"
           app="in/macos/SosninaAlbums-$VERSION-macos-app.zip"
+          lin="in/linux/SosninaAlbums-$VERSION-linux-amd64"
           test -s "$exe" || { echo "::error::Нет $exe"; ls -lR in; exit 1; }
           test -s "$app" || { echo "::error::Нет $app"; ls -lR in; exit 1; }
+          test -s "$lin" || { echo "::error::Нет $lin"; ls -lR in; exit 1; }
 
           # Инструкция: pdf своего варианта, нет pdf (сбой LibreOffice) — docx; pack.py сам предупредит
           guide() {
@@ -506,22 +679,32 @@ jobs:
           }
           gwin="$(guide windows)"
           gmac="$(guide macos)"
+          glin="$(guide linux)"
 
+          # LICENSE и NOTICE.md кладутся в каждый архив (п. 4 и 6 GPL), pack.py check без них отказывает
           python -I scripts/win/pack.py windows --exe "$exe" --version "$VERSION" --guide "$gwin" \
-            --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --out out --date "$date" | tee "$RUNNER_TEMP/pack-windows.log"
+            --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --license LICENSE --notice NOTICE.md \
+            --out out --date "$date" | tee "$RUNNER_TEMP/pack-windows.log"
           python -I scripts/win/pack.py macos --app-zip "$app" --version "$VERSION" --guide "$gmac" \
-            --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --out out --date "$date" | tee "$RUNNER_TEMP/pack-macos.log"
+            --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --license LICENSE --notice NOTICE.md \
+            --out out --date "$date" | tee "$RUNNER_TEMP/pack-macos.log"
+          python -I scripts/win/pack.py linux --bin "$lin" --version "$VERSION" --guide "$glin" \
+            --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --license LICENSE --notice NOTICE.md \
+            --out out --date "$date" | tee "$RUNNER_TEMP/pack-linux.log"
+          # .deb: dpkg-deb, лицензии внутри (/usr/share/doc/sosninaalbums); время файлов — коммита метки, как у архивов
+          scripts/linux/deb.sh --bin "$lin" --version "$VERSION" --out out --date "$date"
 
-          # Ровно два архива с ожидаемыми именами; последняя строка вывода pack.py — путь к архиву
-          for kv in "windows:windows-x64" "macos:macos-universal"; do
+          # Ровно три архива и .deb с ожидаемыми именами; последняя строка вывода pack.py — путь к архиву
+          for kv in "windows:windows-x64.zip" "macos:macos-universal.zip" "linux:linux-amd64.tar.gz"; do
             os="${kv%%:*}"
-            z="out/SosninaAlbums-$VERSION-${kv#*:}.zip"
+            z="out/SosninaAlbums-$VERSION-${kv#*:}"
             test -s "$z" || { echo "::error::Нет $z"; ls -l out; exit 1; }
             last="$(tail -n 1 "$RUNNER_TEMP/pack-$os.log")"
             [ "$(basename "$last")" = "$(basename "$z")" ] || { echo "::error::pack.py назвал архив иначе: $last"; exit 1; }
             python -I scripts/win/pack.py check "$z" --os "$os" --version "$VERSION"
           done
-          [ "$(find out -mindepth 1 -maxdepth 1 | wc -l)" -eq 2 ] || { echo "::error::В out должно быть два архива"; ls -l out; exit 1; }
+          test -s "out/SosninaAlbums-$VERSION-linux-amd64.deb" || { echo "::error::Нет .deb"; ls -l out; exit 1; }
+          [ "$(find out -mindepth 1 -maxdepth 1 | wc -l)" -eq 4 ] || { echo "::error::В out должно быть три архива и .deb"; ls -l out; exit 1; }
           ls -l out
 
       # Хеши — в output задания: mac-check и release сверят с ними скачанный артефакт packages
@@ -534,7 +717,7 @@ jobs:
             echo "SUMS_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # zip уже сжат: артефакт только переносит его
+      # zip, tar.gz и .deb уже сжаты: артефакт только переносит их
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages
@@ -545,7 +728,7 @@ jobs:
 
   release:
     name: Черновик релиза
-    needs: [prepare, pack, mac-check, guide]
+    needs: [prepare, pack, mac-check, linux-check, guide]
     timeout-minutes: 10
     runs-on: ubuntu-latest
     # Право на запись — только здесь: в этом задании не выполняется код из репозитория и npm
@@ -567,8 +750,8 @@ jobs:
           path: dist
 
       # Хеши пришли из заданий prepare, pack и guide (outputs), а не из артефактов: подмена файла
-      # в хранилище между сборкой и этим заданием — провал, а не выпуск. Цепочка exe и .app:
-      # windows и macos → (их хеши) pack → (PACK_SUMS) → здесь
+      # в хранилище между сборкой и этим заданием — провал, а не выпуск. Цепочка exe, .app и бинарника Linux:
+      # windows, macos и linux → (их хеши) pack → (PACK_SUMS) → здесь
       - name: Сверка sha256 артефактов
         env:
           NOTES_SUMS: ${{ needs.prepare.outputs.sums }}
@@ -596,10 +779,12 @@ jobs:
           files=(
             "dist/SosninaAlbums-$VERSION-windows-x64.zip"
             "dist/SosninaAlbums-$VERSION-macos-universal.zip"
+            "dist/SosninaAlbums-$VERSION-linux-amd64.tar.gz"
+            "dist/SosninaAlbums-$VERSION-linux-amd64.deb"
             "dist/THIRD_PARTY_NOTICES.txt"
           )
-          # Пять вариантов инструкции; вариант macos уходит только внутрь архива Mac (спека 039, запись 4)
-          for mid in "" -windows -macos-26 -macos-15 -macos-12-14; do
+          # Шесть вариантов инструкции; вариант macos уходит только внутрь архива Mac (спека 039, запись 4)
+          for mid in "" -windows -linux -macos-26 -macos-15 -macos-12-14; do
             base="dist/SosninaAlbums-$VERSION-install-guide$mid-ru"
             files+=("$base.docx")
             # pdf инструкции необязателен: LibreOffice мог не справиться (спека 029)

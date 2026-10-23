@@ -30,6 +30,10 @@ export function AddPlace(arg1, arg2, arg3) {
   return window['go']['app']['App']['AddPlace'](arg1, arg2, arg3);
 }
 
+export function AddQRSticker(arg1, arg2, arg3) {
+  return window['go']['app']['App']['AddQRSticker'](arg1, arg2, arg3);
+}
+
 export function AddSticker(arg1, arg2, arg3) {
   return window['go']['app']['App']['AddSticker'](arg1, arg2, arg3);
 }
@@ -98,6 +102,10 @@ export function AutoSimilar(arg1, arg2) {
   return window['go']['app']['App']['AutoSimilar'](arg1, arg2);
 }
 
+export function BackToAuto(arg1, arg2, arg3) {
+  return window['go']['app']['App']['BackToAuto'](arg1, arg2, arg3);
+}
+
 export function Backups() {
   return window['go']['app']['App']['Backups']();
 }
@@ -126,6 +134,10 @@ export function ChooseFolder() {
   return window['go']['app']['App']['ChooseFolder']();
 }
 
+export function ClearAlbumBg() {
+  return window['go']['app']['App']['ClearAlbumBg']();
+}
+
 export function ClearBackdrop(arg1, arg2) {
   return window['go']['app']['App']['ClearBackdrop'](arg1, arg2);
 }
@@ -150,6 +162,10 @@ export function ClearVignette(arg1) {
   return window['go']['app']['App']['ClearVignette'](arg1);
 }
 
+export function ClipState() {
+  return window['go']['app']['App']['ClipState']();
+}
+
 export function Collect(arg1) {
   return window['go']['app']['App']['Collect'](arg1);
 }
@@ -170,6 +186,10 @@ export function CopyGrid(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['App']['CopyGrid'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CopyItems(arg1, arg2) {
+  return window['go']['app']['App']['CopyItems'](arg1, arg2);
+}
+
 export function CoverPresets() {
   return window['go']['app']['App']['CoverPresets']();
 }
@@ -180,6 +200,14 @@ export function CoverSpineText() {
 
 export function CreateCover(arg1, arg2) {
   return window['go']['app']['App']['CreateCover'](arg1, arg2);
+}
+
+export function CropsToKeep(arg1) {
+  return window['go']['app']['App']['CropsToKeep'](arg1);
+}
+
+export function CutItems(arg1, arg2) {
+  return window['go']['app']['App']['CutItems'](arg1, arg2);
 }
 
 export function DecorCatalog(arg1) {
@@ -228,6 +256,10 @@ export function DropPhotos(arg1, arg2, arg3, arg4, arg5) {
 
 export function DuplicateGrid(arg1, arg2, arg3) {
   return window['go']['app']['App']['DuplicateGrid'](arg1, arg2, arg3);
+}
+
+export function DuplicateItems(arg1, arg2) {
+  return window['go']['app']['App']['DuplicateItems'](arg1, arg2);
 }
 
 export function Export(arg1) {
@@ -322,6 +354,10 @@ export function LogUI(arg1) {
   return window['go']['app']['App']['LogUI'](arg1);
 }
 
+export function MarginNote(arg1, arg2) {
+  return window['go']['app']['App']['MarginNote'](arg1, arg2);
+}
+
 export function Marks() {
   return window['go']['app']['App']['Marks']();
 }
@@ -374,6 +410,10 @@ export function OpenFsfera() {
   return window['go']['app']['App']['OpenFsfera']();
 }
 
+export function OpenLink(arg1) {
+  return window['go']['app']['App']['OpenLink'](arg1);
+}
+
 export function OpenProject() {
   return window['go']['app']['App']['OpenProject']();
 }
@@ -384,6 +424,10 @@ export function OpenRecent(arg1) {
 
 export function PagePresets() {
   return window['go']['app']['App']['PagePresets']();
+}
+
+export function PasteItems(arg1) {
+  return window['go']['app']['App']['PasteItems'](arg1);
 }
 
 export function PasteNames(arg1, arg2) {
@@ -460,6 +504,10 @@ export function PrintPlans() {
 
 export function PurgePhotos(arg1) {
   return window['go']['app']['App']['PurgePhotos'](arg1);
+}
+
+export function QRPreview(arg1) {
+  return window['go']['app']['App']['QRPreview'](arg1);
 }
 
 export function Recent() {
@@ -582,6 +630,14 @@ export function ScaleGroupAxes(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['app']['App']['ScaleGroupAxes'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
+export function SetAlbumBg(arg1, arg2) {
+  return window['go']['app']['App']['SetAlbumBg'](arg1, arg2);
+}
+
+export function SetAlbumBgFade(arg1, arg2) {
+  return window['go']['app']['App']['SetAlbumBgFade'](arg1, arg2);
+}
+
 export function SetBackdrop(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetBackdrop'](arg1, arg2, arg3);
 }
@@ -676,6 +732,10 @@ export function SetLibraryNet(arg1, arg2) {
 
 export function SetMarks(arg1, arg2) {
   return window['go']['app']['App']['SetMarks'](arg1, arg2);
+}
+
+export function SetNoAlbumBg(arg1, arg2) {
+  return window['go']['app']['App']['SetNoAlbumBg'](arg1, arg2);
 }
 
 export function SetPattern(arg1, arg2, arg3, arg4) {
@@ -856,4 +916,8 @@ export function VaryLayouts(arg1, arg2, arg3) {
 
 export function VignetteChoices(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['VignetteChoices'](arg1, arg2, arg3, arg4);
+}
+
+export function WhereUsed(arg1) {
+  return window['go']['app']['App']['WhereUsed'](arg1);
 }

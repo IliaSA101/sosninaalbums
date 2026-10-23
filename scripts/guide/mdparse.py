@@ -64,12 +64,13 @@ ONLY_CLOSE_RE = re.compile(r"^<!--\s*/only\s*-->\s*$")
 
 
 # Где виден блок с данной меткой (design 039 §7.1). None — общий документ; "macos" — все версии Mac
-# одним файлом; "win" — только Windows; "26"/"15"/"12-14" — файл одной версии Mac.
+# одним файлом; "win" — только Windows; "linux" — только Linux; "26"/"15"/"12-14" — файл одной версии Mac.
 #   метка        общий  win  macos  26/15/12-14
 #   general       да     —    да     —
 #   both          да     —    —      —    (текст сразу про обе ОС)
 #   win           да     да   —      —    (раздел Windows)
 #   windows       —      да   —      —    (только файл Windows)
+#   linux         —      —    —      —    (только файл Linux; спека 101)
 #   mac           —      —    —      да   (строки для файла одной версии Mac)
 #   26/15/12-14   да     —    да     своя
 #   macos         —      —    да     —    (только файл «все Mac»)
@@ -77,6 +78,7 @@ VERSIONS = ("26", "15", "12-14")
 VARIANT_TAGS = {
     None: {"general", "both", "win", *VERSIONS},
     "win": {"win", "windows"},
+    "linux": {"linux"},
     "macos": {"general", "macos", *VERSIONS},
     **{v: {"mac", v} for v in VERSIONS},
 }

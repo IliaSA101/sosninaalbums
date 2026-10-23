@@ -74,7 +74,7 @@ func TestEditPanicKeepsView(t *testing.T) {
 	a.cfgDir = testkit.TempDir(t)
 	p := model.New()
 	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a"}}}
-	p.Photos["a"] = model.PhotoRef{Path: `C:\a.jpg`, W: 300, H: 200}
+	p.Photos["a"] = model.PhotoRef{Path: testkit.AbsPath("a.jpg"), W: 300, H: 200}
 	a.ed.Store(mustEditor(t, p, ""))
 	// Проект с NaN (снимок для отмены не собирался — паника в try) NewEditor больше не примет
 	// (023 Ш7): паника — из рассылки вида внутри метода правки.
@@ -260,7 +260,7 @@ func TestAppBackdropEditAndExport(t *testing.T) {
 		t.Fatalf("фонов в задании: %d", len(got))
 	}
 	b := got[0]
-	want := render.Backdrop{Area: view.Spreads[1].Backdrops[0].Area, Rot: 30, FlipH: true, Path: `C:\a.jpg`}
+	want := render.Backdrop{Area: view.Spreads[1].Backdrops[0].Area, Rot: 30, FlipH: true, Path: testkit.AbsPath("a.jpg")}
 	if b.Path != want.Path || b.Rot != 30 || !b.FlipH || b.Box.X != 320 || b.Box.W != 200 || b.Area != want.Area || b.Img.W <= b.Box.W || b.ImgRot != 4.5 || view.Spreads[1].Frames[0].Tilt != -4.5 {
 		t.Fatalf("фон в задании: %+v, наклон фото %v", b, view.Spreads[1].Frames[0].Tilt)
 	}
@@ -335,9 +335,9 @@ func marksApp(t *testing.T) (*App, *int) {
 			views++
 		}
 	}
-	a.byID["a"] = library.Photo{ID: "a", Path: `C:\lib\a.jpg`, W: 300, H: 200,
+	a.byID["a"] = library.Photo{ID: "a", Path: testkit.AbsPath("lib/a.jpg"), W: 300, H: 200,
 		Xmp: &library.Marks{Rating: 3, Label: "red"}}
-	a.byID["b"] = library.Photo{ID: "b", Path: `C:\lib\b.jpg`, W: 300, H: 200}
+	a.byID["b"] = library.Photo{ID: "b", Path: testkit.AbsPath("lib/b.jpg"), W: 300, H: 200}
 	return a, &views
 }
 
@@ -371,7 +371,7 @@ func TestAppSetMarksFromLibrary(t *testing.T) {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.Marks) != 1 || f.Marks[0].Path != `C:\lib\b.jpg` && f.Marks[0].Abs != `C:\lib\b.jpg` {
+	if len(f.Marks) != 1 || f.Marks[0].Path != testkit.AbsPath("lib/b.jpg") && f.Marks[0].Abs != testkit.AbsPath("lib/b.jpg") {
 		t.Fatalf("в файле отметки %+v, ждали путь из ленты", f.Marks)
 	}
 }

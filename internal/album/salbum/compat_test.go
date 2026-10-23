@@ -26,6 +26,7 @@ const (
 	v13Shape = "testdata/compat/v13-shape.json" // 0.18 (тег v0.18.0)
 	v14Shape = "testdata/compat/v14-shape.json" // 0.20 (тег v0.20.0)
 	v15Shape = "testdata/compat/v15-shape.json" // 0.21 (тег v0.21.0)
+	v16Shape = "testdata/compat/v16-shape.json" // 0.22 (тег v0.22.0)
 )
 
 func readShape(t *testing.T, path string) map[string]string {
@@ -141,6 +142,29 @@ func TestReadableByV15(t *testing.T) {
 	readableBy(t, "0.21", v15Shape, p, dir, map[string]string{
 		"$.loose": "array", "$.loose[]": "object", "$.loose[].id": "string", "$.loose[].at": "number",
 		"$.loose[].files": "array", "$.loose[].files[]": "object", "$.loose[].files[].path": "string", "$.loose[].files[].abs": "string"})
+}
+
+// Файл формата 17 держит форму ключей, известных 0.22 (098 design §7): 0.22 видит номер 17 и
+// говорит «сохранён более новой версией», а не «повреждён». Новые ключи 17 — версия программы
+// app, фон альбома, скрытый на листе фон альбома и свой кадр — в файле есть, в снимке 0.22 нет;
+// ключи копий «<ID>-n» — строки словаря photos, вид тот же.
+func TestV17ReadableBy022(t *testing.T) {
+	t.Cleanup(func() { SetAppVersion("") })
+	SetAppVersion("0.23.0")
+	dir := testkit.TempDir(t)
+	p := binsProject(dir)
+	a := p.Spreads[0].Grid[0].Photo
+	cp := model.CopyID(a, 2)
+	r := p.Photos[a]
+	r.Asp = 1.5
+	p.Photos[cp] = r
+	p.Spreads[1].Grid[1].Photo = cp
+	p.Spreads[1].Photos = append(p.Spreads[1].Photos, cp)
+	p.Spreads[1].NoAlbumBg = true
+	p.AlbumBg = &model.AlbumBg{Photo: a, Fade: 0.2, Frame: &model.Frame{S: 1.2}}
+	readableBy(t, "0.22", v16Shape, p, dir, map[string]string{
+		"$.app": "string", "$.albumBg": "object", "$.albumBg.photo": "string", "$.albumBg.fade": "number",
+		"$.albumBg.frame": "object", "$.albumBg.frame.s": "number", "$.spreads[].noAlbumBg": "bool", "$.photos{}.asp": "number"})
 }
 
 // readableBy — общее тело: снимок формы выпуска rel (shapePath) против типов FileProject, полного

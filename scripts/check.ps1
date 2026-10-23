@@ -1,4 +1,5 @@
 ﻿# Все проверки перед сдачей одной командой: powershell -File scripts/check.ps1 [-Go] [-Ui] [-Race]
+# ПРАВЯТСЯ ВМЕСТЕ с двойником scripts/check.sh (Linux, macOS): те же шаги, имена и пороги.
 # Без флагов идут и Go, и фронт. -Race — Go-тесты с детектором гонок (нужен gcc, cgo; в конце цикла и перед релизом). Работает в Windows PowerShell 5.1 и pwsh 7.
 param(
     [switch]$Go, # только Go-шаги

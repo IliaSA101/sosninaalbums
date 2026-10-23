@@ -47,6 +47,17 @@ func PrefixMap(oldPath, newPath string) (from, to string, ok bool) {
 // (или быть ею) по элементам, без учёта регистра. Нелокальный результат (to — UNC,
 // устройство) — ok = false: перепривязка не должна уводить на сетевую шару.
 func ReplacePrefix(dir, from, to string) (string, bool) {
+	return replacePrefix(dir, from, to, strings.EqualFold)
+}
+
+// ReplacePrefixFS — ReplacePrefix с регистром элементов по правилу ФС (FoldEqual): на Linux
+// `/x/Весна` и `/x/ВЕСНА` — разные папки, и переезд одной не должен уносить вторую.
+// Для эвристик перепривязки по существованию файла остаётся ReplacePrefix.
+func ReplacePrefixFS(dir, from, to string) (string, bool) {
+	return replacePrefix(dir, from, to, FoldEqual)
+}
+
+func replacePrefix(dir, from, to string, eq func(a, b string) bool) (string, bool) {
 	dv, de := splitVol(dir)
 	fv, fe := splitVol(from)
 	tv, te := splitVol(to)
@@ -54,7 +65,7 @@ func ReplacePrefix(dir, from, to string) (string, bool) {
 		return "", false
 	}
 	for i, el := range fe {
-		if !strings.EqualFold(el, de[i]) {
+		if !eq(el, de[i]) {
 			return "", false
 		}
 	}

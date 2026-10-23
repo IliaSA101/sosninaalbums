@@ -4,7 +4,6 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
@@ -40,10 +39,12 @@ func Relink(p *model.Project, moves map[string]string, addFolder string) (files,
 // RelinkDrive — тело Editor.RelinkDrive над проектом: переехавшие файлы и папки.
 func RelinkDrive(p *model.Project, from, to string) (files, dirs []model.PathPair) {
 	moves := map[string]string{}
+	seen := map[string]bool{} // ID файлов: копии того же файла — одна проверка диска (relink тянет семью)
 	for id, r := range p.Photos {
-		if r.Lib != "" { // своё из библиотеки не лежит на диске фотографа (RelinkLib)
+		if r.Lib != "" || seen[model.BaseID(id)] { // своё из библиотеки не лежит на диске фотографа (RelinkLib)
 			continue
 		}
+		seen[model.BaseID(id)] = true
 		if _, here := fileSize(r.Path); here {
 			continue
 		}
@@ -143,39 +144,40 @@ func eachLoose(p *model.Project, fn func(f *model.LooseFile)) {
 	}
 }
 
-// relink меняет пути фото из moves и пересчитывает ID. Пропускает: неизвестный ID, своё из
-// библиотеки (путь от искателя, RelinkLib), нелокальный путь, путь, уже занятый другим фото (повтор файла в альбоме).
+// relink меняет пути фото из moves и пересчитывает ID. Перепривязка — по файлу (098-20): запись
+// из moves тянет за собой всю семью копий (свойства файла — SetFile), пара — одна на файл.
+// Пропускает: неизвестный ID, своё из библиотеки (путь от искателя, RelinkLib), нелокальный путь,
+// путь, уже занятый файлом другой семьи (повтор файла в альбоме), повтор семьи в moves.
 func relink(p *model.Project, moves map[string]string) []model.PathPair {
-	used := make(map[string]string, len(p.Photos))
+	used := make(map[string]string, len(p.Photos)) // ключ пути → ID файла (BaseID)
 	for id, r := range p.Photos {
-		used[strings.ToLower(filepath.Clean(r.Path))] = id
+		used[paths.Fold(filepath.Clean(r.Path))] = model.BaseID(id)
 	}
-	placed := map[string]bool{}
-	for _, s := range p.Sheets() {
-		for _, id := range s.Photos {
-			placed[id] = true
-		}
-	}
+	files := p.PlacedFiles()
+	done := map[string]bool{}
 	var pairs []model.PathPair
 	for _, id := range slices.Sorted(maps.Keys(moves)) {
 		ref, ok := p.Photos[id]
-		if !ok || ref.Lib != "" || paths.CheckLocalPath(moves[id]) != nil {
+		base := model.BaseID(id)
+		if !ok || ref.Lib != "" || done[base] || paths.CheckLocalPath(moves[id]) != nil {
 			continue
 		}
 		np := filepath.Clean(moves[id])
-		key := strings.ToLower(np)
-		if other, taken := used[key]; taken && other != id {
+		key := paths.Fold(np)
+		if other, taken := used[key]; taken && other != base {
 			continue
 		}
-		pairs = append(pairs, model.PathPair{Old: ref.Path, New: np, BgOnly: !placed[id]})
-		delete(used, strings.ToLower(filepath.Clean(ref.Path)))
-		used[key] = id
+		done[base] = true
+		pairs = append(pairs, model.PathPair{Old: ref.Path, New: np, BgOnly: !files[base]})
+		delete(used, paths.Fold(filepath.Clean(ref.Path)))
+		used[key] = base
 		ref.Path, ref.Alt = np, ""
 		// Файл на месте, но другой длины (перепривязали «по W×H»): размеры — из заголовка.
 		if size, ok := fileSize(np); ok {
 			refresh(&ref, size)
 		}
 		p.Photos[id] = ref
+		p.SetFile(id, ref)
 	}
 	if len(pairs) > 0 {
 		Rekey(p, library.IDFor)

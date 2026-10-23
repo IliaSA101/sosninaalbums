@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // Photo — одна фотография. W и H уже с учётом поворота из EXIF.
@@ -58,13 +59,14 @@ func (p Photo) Aspect() float64 {
 	return float64(p.W) / float64(p.H)
 }
 
-// IDFor — стабильный идентификатор фото по пути к файлу.
+// IDFor — стабильный идентификатор фото по пути к файлу: sha1 от paths.Fold пути (на Linux
+// регистр различает фото, ID старого вида Load переводит через Rekey).
 func IDFor(path string) string {
 	abs, err := filepath.Abs(path)
 	if err == nil {
 		path = abs
 	}
-	sum := sha1.Sum([]byte(strings.ToLower(filepath.Clean(path)))) //nolint:gosec // ключ кэша, не криптография
+	sum := sha1.Sum([]byte(paths.Fold(filepath.Clean(path)))) //nolint:gosec // ключ кэша, не криптография
 	return hex.EncodeToString(sum[:8])
 }
 
@@ -125,10 +127,10 @@ func readHead(path string) (Photo, []byte, error) {
 }
 
 // Under сообщает, лежит ли файл path внутри папки folder (на любой глубине).
-// Сравнение по префиксу с разделителем, без учёта регистра: «C:\Фото2» не внутри «C:\Фото».
+// Сравнение по префиксу с разделителем, регистр — по paths.Fold: «C:\Фото2» не внутри «C:\Фото».
 func Under(path, folder string) bool {
-	p := strings.ToLower(filepath.Clean(path))
-	f := strings.ToLower(filepath.Clean(folder))
+	p := paths.Fold(filepath.Clean(path))
+	f := paths.Fold(filepath.Clean(folder))
 	if !strings.HasSuffix(f, string(filepath.Separator)) {
 		f += string(filepath.Separator)
 	}

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io/fs"
 	"log"
-	"os"
 	"slices"
 	"sync"
 
@@ -123,7 +122,7 @@ func (a *App) PhotoAbout(id string) (out PhotoAbout, err error) {
 // aboutOf — сведения о файле из кэша по (путь, размер, время записи), иначе чтение. Замок кэша
 // не держится на время чтения: два одновременных промаха прочтут файл дважды — безвредно.
 func (a *App) aboutOf(path string) (library.About, error) {
-	st, err := os.Stat(path)
+	st, err := library.StatLocal(path)
 	if err != nil {
 		return library.About{}, err
 	}
