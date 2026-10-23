@@ -19,7 +19,7 @@ const { default: EyedropLayer } = await import('./EyedropLayer.svelte')
 const { default: EyedropBar } = await import('./EyedropBar.svelte')
 const { default: ColorPicker } = await import('../../base/color/ColorPicker.svelte')
 const { eyedrop } = await import('../../base/color/eyedrop.svelte')
-const { mycolors } = await import('../../base/color/mycolors.svelte')
+const { mycolors } = await import('../../base/color/mycolorlist.svelte')
 const { store } = await import('../../base/core/store.svelte')
 const { canvas } = await import('../canvas/canvas.svelte')
 

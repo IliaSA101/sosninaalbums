@@ -16,7 +16,7 @@ vi.mock('../../../wailsjs/go/app/App', () => ({ WhereUsed: m.whereUsed, ShowPhot
 vi.mock('../../editor/photoprops/gouse.svelte', () => ({ goUse: m.goUse }))
 
 const { default: ThumbMenu } = await import('./ThumbMenu.svelte')
-const { thumbmenu } = await import('./thumbmenu.svelte')
+const { thumbmenu } = await import('./thumbmenustate.svelte')
 const { store } = await import('../../base/core/store.svelte')
 const { prefs } = await import('../../base/prefs/prefs.svelte')
 const { lost } = await import('./lost.svelte')

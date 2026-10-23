@@ -12,7 +12,7 @@
   import { binsel } from '../bins/binsel.svelte'
   import { lost } from './lost.svelte'
   import { missTip } from './missing'
-  import { thumbmenu } from './thumbmenu.svelte'
+  import { thumbmenu } from './thumbmenustate.svelte'
 
   // Миниатюра фото в библиотеке. Размер задаёт --size родителя (.grid в Library).
   let { p }: { p: Photo } = $props()

@@ -8,7 +8,7 @@
   import { lost } from './lost.svelte'
   import { lineAt, USE_ROW } from '../../editor/photoprops/usemenu'
   import { thumbMenu } from './thumbmenu'
-  import { thumbmenu } from './thumbmenu.svelte'
+  import { thumbmenu } from './thumbmenustate.svelte'
 
   // Меню правой кнопки у миниатюры ленты (спека 106): «Показать в …», «Копировать имя файла», «Где стоит ▸».
   // Вид, подменю сбоку и клавиши — общий MenuList, пункты — как «Файл ▸» меню фото на холсте (fileGroup).

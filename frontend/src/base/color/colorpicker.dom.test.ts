@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../../../wailsjs/go/app/App', () => api)
 
 const { default: ColorPicker } = await import('./ColorPicker.svelte')
-const { mycolors } = await import('./mycolors.svelte')
+const { mycolors } = await import('./mycolorlist.svelte')
 const { eyedrop } = await import('./eyedrop.svelte')
 const { hsvToHex } = await import('./palette')
 const { tip } = await import('../ui/tip.svelte')

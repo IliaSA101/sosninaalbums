@@ -23,7 +23,7 @@ function useStorage(init: Record<string, string>) {
 // Свежий экземпляр на тест: «один раз за запуск» живёт в модуле.
 async function fresh() {
   vi.resetModules()
-  return (await import('./mycolors.svelte')).mycolors
+  return (await import('./mycolorlist.svelte')).mycolors
 }
 
 beforeEach(() => {

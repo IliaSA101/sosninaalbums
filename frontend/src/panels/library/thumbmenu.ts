@@ -1,5 +1,5 @@
 // Меню правого щелчка по миниатюре ленты (спека 106): пункты «Файл ▸» меню фото (fileGroup, спека 108) и «Где стоит ▸»
-// со строками вхождений (общие с меню холста — editor/photoprops/usemenu). Чистая логика; состояние — thumbmenu.svelte.ts,
+// со строками вхождений (общие с меню холста — editor/photoprops/usemenu). Чистая логика; состояние — thumbmenustate.svelte.ts,
 // разметка — ThumbMenu.svelte (на MenuList).
 import type { FeatureId } from '../../base/prefs/levels'
 import type { MenuNode } from '../../base/ui/menulist'

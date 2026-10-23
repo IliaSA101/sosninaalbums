@@ -9,7 +9,7 @@
   import MyColors from './MyColors.svelte'
   import { colorWords, eyeHint } from './colorwords'
   import { eyedrop } from './eyedrop.svelte'
-  import { mycolors } from './mycolors.svelte'
+  import { mycolors } from './mycolorlist.svelte'
   import { HEX_PREFIX, hexError, loadTab, normalizeHex, PHOTO_TAB, saveTab, SETS } from './palette'
 
   // Своя палитра вместо системного выбора цвета (109, вариант 1): образец-кнопка и окно в пределах окна программы.

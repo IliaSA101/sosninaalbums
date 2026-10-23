@@ -21,7 +21,7 @@
   import LibraryBar from './LibraryBar.svelte'
   import Thumb from './Thumb.svelte'
   import ThumbMenu from './ThumbMenu.svelte'
-  import { thumbmenu } from './thumbmenu.svelte'
+  import { thumbmenu } from './thumbmenustate.svelte'
 
   // Высота библиотеки: по умолчанию LIB_DEF, меняется сплиттером и запоминается.
   // Сохранённая высота (h) — желаемая: при нехватке окна CSS сжимает ленту до одного ряда плиток (D15, 089),
