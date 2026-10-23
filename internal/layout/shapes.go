@@ -17,6 +17,8 @@ func (g geom) fitRoot(kt *keyTree, aspects []float64, box Rect, ax, ay float64, 
 		return fitRows(kt, aspects, box, g.gap, ax, ay, out)
 	case 'L', 'A':
 		return fitLadder(kt, aspects, box, g.gap, ax, ay, out)
+	case 'Z':
+		return fitScatter(kt, aspects, box, g.gap, out)
 	}
 	t := kt.node(aspects, g.gap)
 	h, ok := fitTreeXY(t, box, g.gap, out, ax, ay)
@@ -38,7 +40,7 @@ func (g geom) whole(k parsedKey, aspects []float64, rects []Rect, key string) (R
 	if !ok {
 		return Result{}, false
 	}
-	return Result{rects, score(rects, g.spread, g.spine, depth), key}, true
+	return Result{Rects: rects, Score: score(rects, g.spread, g.spine, depth), Key: key}, true
 }
 
 // rowLeaves — фото ряда G: одно или дети H.
@@ -154,5 +156,5 @@ func (g geom) pairQ(k parsedKey, aspects []float64, out []Rect, key string) (Res
 		}
 		depth = max(depth, d)
 	}
-	return Result{out, pairScore(out, g, depth, h, h, false), key}, true
+	return Result{Rects: out, Score: pairScore(out, g, depth, h, h, false), Key: key}, true
 }

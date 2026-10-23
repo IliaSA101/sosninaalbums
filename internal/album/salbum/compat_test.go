@@ -27,6 +27,7 @@ const (
 	v14Shape = "testdata/compat/v14-shape.json" // 0.20 (тег v0.20.0)
 	v15Shape = "testdata/compat/v15-shape.json" // 0.21 (тег v0.21.0)
 	v16Shape = "testdata/compat/v16-shape.json" // 0.22 (тег v0.22.0)
+	v17Shape = "testdata/compat/v17-shape.json" // 0.23 (тег v0.23.0)
 )
 
 func readShape(t *testing.T, path string) map[string]string {
@@ -165,6 +166,16 @@ func TestV17ReadableBy022(t *testing.T) {
 	readableBy(t, "0.22", v16Shape, p, dir, map[string]string{
 		"$.app": "string", "$.albumBg": "object", "$.albumBg.photo": "string", "$.albumBg.fade": "number",
 		"$.albumBg.frame": "object", "$.albumBg.frame.s": "number", "$.spreads[].noAlbumBg": "bool", "$.photos{}.asp": "number"})
+}
+
+// Файл формата 18 держит форму ключей, известных 0.23 (104 design §1): 0.23 видит номер 18 и
+// говорит «сохранён более новой версией», а не «повреждён». Новый ключ 18 — подрезка settings.crop
+// — в файле есть, в снимке 0.23 нет. Букв ключа раскладки (105) снимок не видит: ключ — строка.
+func TestV18ReadableBy023(t *testing.T) {
+	dir := testkit.TempDir(t)
+	p := binsProject(dir)
+	p.Settings.Crop = 10
+	readableBy(t, "0.23", v17Shape, p, dir, map[string]string{"$.settings.crop": "number"})
 }
 
 // readableBy — общее тело: снимок формы выпуска rel (shapePath) против типов FileProject, полного

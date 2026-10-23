@@ -5,6 +5,8 @@ import {
   centerAt,
   dur,
   easeOut,
+  gapBox,
+  gapTip,
   jumpFrom,
   movePos,
   nearSlot,
@@ -280,5 +282,39 @@ describe('обложка в ряду (032)', () => {
     const tall = slotBox(fit, 3, 2, slotCenters([600, 600, 600, 600]), 1, { w: 600, h: 320 })
     expect(tall.top).toBe(10)
     expect(tall.height).toBe(320)
+  })
+})
+
+describe('gapBox: промежуток между листами (103 §3)', () => {
+  const a = { left: 0, top: 10, width: 400, height: 200 }
+
+  it('зазор GAP между краями, высота — общая часть листов', () => {
+    const b = { left: 400 + GAP, top: 30, width: 400, height: 150 }
+    expect(gapBox(a, b)).toEqual({ left: 400, top: 30, width: GAP, height: 150 })
+  })
+
+  it('листы разной высоты: берётся пересечение', () => {
+    const b = { left: 400 + GAP, top: -20, width: 400, height: 100 }
+    expect(gapBox(a, b)).toEqual({ left: 400, top: 10, width: GAP, height: 70 })
+  })
+
+  it('нет зазора (листы вплотную или внахлёст) — null', () => {
+    expect(gapBox(a, { left: 400, top: 10, width: 400, height: 200 })).toBeNull()
+    expect(gapBox(a, { left: 380, top: 10, width: 400, height: 200 })).toBeNull()
+  })
+
+  it('нет общей высоты — null', () => {
+    expect(gapBox(a, { left: 424, top: 210, width: 400, height: 200 })).toBeNull()
+  })
+})
+
+describe('gapTip', () => {
+  it('Ctrl+щелчок; на Mac — ⌘+щелчок', () => {
+    expect(gapTip(false)).toBe('Ctrl+щелчок — вставить разворот')
+    expect(gapTip(true)).toBe('⌘+щелчок — вставить разворот')
+  })
+
+  it('у альбома листов — «лист»', () => {
+    expect(gapTip(false, { one: 'лист' } as never)).toBe('Ctrl+щелчок — вставить лист')
   })
 })

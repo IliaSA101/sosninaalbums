@@ -17,6 +17,13 @@ describe('norm: что уходит в SetSettings', () => {
   it('строки из полей number становятся числами', () => {
     expect(norm({ ...s, bleed: '3' as never, safe: '8' as never })).toMatchObject({ bleed: 3, safe: 8 })
   })
+  it('подрезка проходит в Go (иначе «Применить» стёр бы её); нет поля и мусор — 0', () => {
+    expect(norm({ ...s, crop: 10 }).crop).toBe(10)
+    expect(norm(s).crop).toBe(0)
+    expect(norm({ ...s, crop: '5' as never }).crop).toBe(5)
+    expect(norm({ ...s, crop: null as never }).crop).toBe(0)
+    expect(norm({ ...s, crop: NaN }).crop).toBe(0)
+  })
   it('режим листа сохраняется', () => {
     expect(norm({ ...s, sheet: true }).sheet).toBe(true)
   })
@@ -27,6 +34,11 @@ describe('same: форма отличается от настроек', () => {
     expect(same(s, { ...s, bleed: 3 })).toBe(false)
     expect(same({ ...s, bleed: 0 }, { ...s, bleed: undefined })).toBe(true)
     expect(same(s, { ...s })).toBe(true)
+  })
+  it('другая подрезка — отличается; нет поля и 0 — одно и то же', () => {
+    expect(same(s, { ...s, crop: 5 })).toBe(false)
+    expect(same({ ...s, crop: 5 }, { ...s, crop: 10 })).toBe(false)
+    expect(same({ ...s, crop: 0 }, { ...s, crop: undefined })).toBe(true)
   })
   it('«любые фото» без layflat не считается отличием', () => {
     expect(same({ ...s, layflat: false, foldAny: true }, { ...s, layflat: false, foldAny: false })).toBe(true)

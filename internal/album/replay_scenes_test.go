@@ -319,3 +319,49 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	r.read("BorderPath", []any{frPath, frOK, phPath, phOK})
 	r.read("BorderIDs", e.BorderIDs()) // 079-40: /media/f сверяет ID адреса с ними
 }
+
+// replaySpreads103 — склейка и разрез через ручной разворот (103): последний разворот сценария
+// закрепляется, режется (Grid → «Авто», два листа), снова закрепляется и склеивается; склейка
+// последнего — холостая; Undo снимает склейку одним шагом. Идёт после replayClipBg: прежние
+// строки эталона не сдвигаются.
+func replaySpreads103(r *replay) {
+	e := r.e
+	s := r.v.Spreads[len(r.v.Spreads)-1].ID
+	r.do("SetGrid:103", e.SetGrid(s, true))
+	r.ve("SplitSpreadAuto")(e.SplitSpreadAuto(s, 1, true))
+	r.do("SetGrid:103 снова", e.SetGrid(s, true))
+	r.ve("MergeSpreadsAuto")(e.MergeSpreadsAuto(s, false))
+	r.ve("MergeSpreadsAuto:холостая")(e.MergeSpreadsAuto(s, false))
+	r.ve("SplitSpreadAuto:холостая")(e.SplitSpreadAuto(s, 99, true))
+	r.do("Undo:103", e.Undo())
+}
+
+// replayCropZ — подрезка (104) и «Разброс» (105) на уровне Editor: настройка crop 10 (и она же
+// снова — холостая), свежий «Авто»-разворот из трёх фото и ручной выбор раскладки Z. Идёт в самом
+// конце сценария: прежние строки эталона не сдвигаются.
+func replayCropZ(r *replay) {
+	e := r.e
+	var feed []model.PhotoInfo
+	for i, k := range []byte("vvv") {
+		feed = append(feed, replayPhoto(61+i, k, model.XmpMarks{}))
+	}
+	r.ve("NewSpread:разброс")(e.NewSpread(-1, feed))
+	s := r.v.Spreads[len(r.v.Spreads)-1].ID
+	st := r.v.Settings
+	st.Crop = 10
+	r.do("SetSettings:подрезка", e.SetSettings(st))
+	r.do("SetSettings:подрезка холостая", e.SetSettings(st))
+	if r.v.Settings.Crop != 10 {
+		r.t.Fatalf("подрезка: %d", r.v.Settings.Crop)
+	}
+	// Ключ плитки «Разброса» берём из «Других вариантов»: SetLayout пускает только ключи подборки.
+	ch := e.LayoutChoices(s)
+	r.read("LayoutChoices:разброс", ch)
+	i := slices.IndexFunc(ch.Whole.Extra, func(c model.Choice) bool { return strings.Contains(c.Key, "Z(") })
+	if i < 0 {
+		r.t.Fatalf("в «Других вариантах» нет «Разброса»: %d плиток", len(ch.Whole.Extra))
+	}
+	key := ch.Whole.Extra[i].Key
+	r.do("SetLayout:разброс", e.SetLayout(s, key))
+	r.do("SetLayout:разброс холостая", e.SetLayout(s, key))
+}

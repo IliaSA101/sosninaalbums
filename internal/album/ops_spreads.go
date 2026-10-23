@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
+	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/names"
 	"github.com/IliaSA101/sosninaalbums/internal/album/spreads"
@@ -228,6 +229,46 @@ func (e *Editor) SplitSpread(id string, at int) (model.View, error) {
 // Договор: нет — пределы проверяет операция.
 func (e *Editor) MergeSpreads(id string) model.View {
 	return e.change(func(p *model.Project) { spreads.MergeSpreads(p, id) })
+}
+
+// MergeSpreadsAuto — склейка через ручной разворот (103): ручным из пары «Вернуть авто»
+// (keep — свой кадр, 098), затем склейка; одна правка, один шаг отмены. Договор: нельзя
+// склеить (виньетка, пределы, последний) — холостая до «Вернуть авто»; ошибка — только отказ settle.
+func (e *Editor) MergeSpreadsAuto(id string, keep bool) (model.View, error) {
+	return e.try("", func(p *model.Project) error { mergeAuto(p, id, keep); return nil })
+}
+
+// SplitSpreadAuto — разрез через ручной разворот (103): «Вернуть авто», затем SplitSpread.
+// Договор: at вне 1..len−1, виньетка — холостая; предел MaxSpreads — ошибка CheckTotals, откат всего.
+func (e *Editor) SplitSpreadAuto(id string, at int, keep bool) (model.View, error) {
+	return e.try("", func(p *model.Project) error { splitAuto(p, id, at, keep); return nil })
+}
+
+// mergeAuto — пределы проверяются до «Вернуть авто»: отказ склейки не должен оставить его
+// отдельной правкой. Области не импортируют друг друга, поэтому сборка — здесь, в ядре.
+func mergeAuto(p *model.Project, id string, keep bool) {
+	i, s := p.Find(id)
+	if s == nil || i+1 >= len(p.Spreads) || !spreads.Mergeable(s, p.Spreads[i+1], true) {
+		return
+	}
+	for _, x := range []*model.Spread{s, p.Spreads[i+1]} {
+		if len(x.Grid) > 0 {
+			grid.BackToAuto(p, x.ID, "", keep)
+		}
+	}
+	spreads.MergeSpreads(p, id)
+}
+
+// splitAuto — разрез по тем же правилам: границы at и виньетка проверяются до «Вернуть авто».
+func splitAuto(p *model.Project, id string, at int, keep bool) {
+	_, s := p.Find(id)
+	if s == nil || s.Kind == model.KindVignette || at < 1 || at >= len(s.Photos) {
+		return
+	}
+	if len(s.Grid) > 0 {
+		grid.BackToAuto(p, id, "", keep)
+	}
+	spreads.SplitSpread(p, id, at)
 }
 
 // SetLayout ставит раскладку по ключу (галерея). Битый ключ, уже стоящая раскладка или

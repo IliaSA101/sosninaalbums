@@ -46,7 +46,7 @@
   })
 </script>
 
-<div class="albumbg" role="group" aria-label={ALBUM_BG}>
+<div class="albumbg" role="group" aria-label={ALBUM_BG} data-guide="album-bg">
   <div class="line">
     <span class="cap">{ALBUM_BG}</span>
     <span class="act">

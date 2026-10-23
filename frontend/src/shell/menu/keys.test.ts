@@ -428,6 +428,13 @@ describe('фокус на виджете (074-19)', () => {
     expect(cmd(ev('f'), w())).toBe('toggleBig')
     expect(cmd(ev('Home', { code: 'Home', ctrlKey: true }), w())).toBeNull() // нет такой команды
   })
+  it('keyCommand: Ctrl+A и Enter на ползунке — команды ленты', () => {
+    // Р7 (110): у input[type=range] нет своих Ctrl+A и Enter — они идут по зоне «лента», как в 0.22.
+    const lib = ctx({ widget: true, zone: 'library' })
+    expect(cmd(ev('a', ctrl), lib)).toBe('selectAll')
+    expect(cmd(ev('Enter'), { ...lib, hasSelection: true })).toBe('addSelected')
+    expect(cmd(ev('Enter'), lib)).toBeNull() // без выделения Enter молчит и на ползунке
+  })
   it('вне виджета стрелки листают', () => {
     expect(cmd(ev('ArrowLeft'), ctx(canvasZone))).toBe('prevSpread')
   })

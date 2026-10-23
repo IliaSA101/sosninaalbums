@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { NOTICE_MUST, changelogSection, checkAll, checkLicense, checkNeeds, checkReadmeMedia, parseJobs } from './release-check.mjs'
+import { NOTICE_MUST, changelogSection, checkAll, checkLicense, checkNeeds, checkReadmeMedia, parseJobs, workflowExec } from './release-check.mjs'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -175,6 +175,64 @@ test('release-check: лицензия GPL-3.0 и условие 7(b)', () => {
     assert.deepEqual(e, [`NOTICE.md: нет условия 7(b): ${what}`])
   }
   assert.equal(lic({ 'NOTICE.md': '' }).length, NOTICE_MUST.length)
+})
+
+// Макет с workflow ci.yml: modes — режимы файлов в «индексе» (путь → режим), остальных в индексе нет.
+const exec = (yml, modes = {}) => {
+  const root = repo({ '.github/workflows/ci.yml': yml })
+  try {
+    return workflowExec(root, (rel) => modes[rel] ?? null)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+}
+
+test('workflowExec: прямой вызов 100644 — ошибка', () => {
+  const yml = 'jobs:\n  a:\n    steps:\n      - run: scripts/x.sh --flag\n'
+  assert.deepEqual(exec(yml, { 'scripts/x.sh': '100644' }), ['ci.yml:4: scripts/x.sh без +x (git update-index --chmod=+x или вызов через bash)'])
+  // файла нет в индексе — тоже ошибка; ключ run без «- » и ./ в начале
+  assert.deepEqual(exec('jobs:\n  a:\n    steps:\n      - name: n\n        run: ./scripts/y.sh\n'), [
+    'ci.yml:5: scripts/y.sh нет в git-индексе (git update-index --chmod=+x или вызов через bash)',
+  ])
+})
+
+test('workflowExec: вызов через bash, sh, python, node, pwsh — ок', () => {
+  const cmds = ['bash scripts/x.sh', 'sh scripts/x.sh', '/bin/bash scripts/x.sh', 'python scripts/x.py', 'python3 -I scripts/x.py', 'node scripts/x.mjs', 'pwsh scripts/x.ps1', 'powershell -File scripts/x.ps1', 'chmod +x scripts/linux/*.sh', 'echo "scripts/x.sh"']
+  for (const c of cmds) assert.deepEqual(exec(`jobs:\n  a:\n    steps:\n      - run: ${c}\n`, { 'scripts/x.sh': '100644' }), [], c)
+  // пустой и закомментированный run, workflow без run — тишина
+  assert.deepEqual(exec('jobs:\n  a:\n    steps:\n      - run:\n      - run: # scripts/x.sh\n'), [])
+  assert.deepEqual(exec('name: пусто\n'), [])
+})
+
+test('workflowExec: прямой вызов 100755 — ок', () => {
+  const yml = 'jobs:\n  a:\n    steps:\n      - run: scripts/x.sh\n      - run: |\n          a=1\n          (scripts/y.sh; true)\n'
+  assert.deepEqual(exec(yml, { 'scripts/x.sh': '100755', 'scripts/y.sh': '100755' }), [])
+})
+
+test('workflowExec: после && в многострочном run — ошибка, несколько файлов и вызовов', () => {
+  const yml = 'jobs:\n  a:\n    steps:\n      - run: |\n          set -e\n          make && scripts/a.sh\n          x | scripts/b.sh || scripts/c.sh\n          bash scripts/d.sh\n      - name: после\n        run: echo ok\n'
+  const modes = { 'scripts/a.sh': '100644', 'scripts/b.sh': '100755', 'scripts/c.sh': '100644', 'scripts/d.sh': '100644' }
+  assert.deepEqual(exec(yml, modes), [
+    'ci.yml:6: scripts/a.sh без +x (git update-index --chmod=+x или вызов через bash)',
+    'ci.yml:7: scripts/c.sh без +x (git update-index --chmod=+x или вызов через bash)',
+  ])
+  // блок кончается на ключе того же отступа: строка вне блока не считается командой
+  const out = exec('jobs:\n  a:\n    steps:\n      - run: |\n          echo\n        env:\n          X: scripts/z.sh\n')
+  assert.deepEqual(out, [])
+})
+
+test('workflowExec: второй workflow и git-репозиторий настоящий', () => {
+  const root = repo({ '.github/workflows/ci.yml': 'jobs: {}\n', '.github/workflows/z.yml': 'jobs:\n  a:\n    steps:\n      - run: scripts/x.sh\n' })
+  try {
+    // макет не репозиторий git: ошибка чтения режима — в списке, а не исключение
+    const e = workflowExec(root)
+    assert.equal(e.length, 1)
+    assert.match(e[0], /^z\.yml:4: scripts\/x\.sh — не прочитан режим/)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+  // текущее дерево репозитория чисто
+  assert.deepEqual(workflowExec(REPO), [])
 })
 
 test('ролики README: заглушка, число адресов, файлы, размеры, старый снимок', () => {

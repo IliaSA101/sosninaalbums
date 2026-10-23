@@ -7,7 +7,7 @@
   import { Reorder, lineSource } from '../../base/drag/reorder.svelte'
   import { canvas } from '../../editor/canvas/canvas.svelte'
   import { tip } from '../../base/ui/tip.svelte'
-  import { H, PAD, cutState, joinState } from './timeline'
+  import { H, PAD, joinState } from './timeline'
   import { cutKey } from './cutkey.svelte'
   import { naming } from './naming.svelte'
   import { afterNav, isHidden, widthsKey } from './chips'
@@ -15,19 +15,16 @@
   import { rowScroll } from '../../editor/spread/spreadrow'
   import { CENTER_SEL, StripFollow } from './stripscroll'
   import FixedTip from '../../base/ui/FixedTip.svelte'
-  import SpreadMenu from './SpreadMenu.svelte'
+  import SpreadMenuHost from './SpreadMenuHost.svelte'
+  import { SpreadMenuCtl } from './menuact.svelte'
   import JoinLine from './JoinLine.svelte'
   import TimelineGroup from './TimelineGroup.svelte'
   import AddColumn from './AddColumn.svelte'
   import CoverTile from '../cover/CoverTile.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { spreadsel } from './spreadsel.svelte'
-  import { COVER_ID, sheetIn, unitOf } from '../../base/geom/sheet'
+  import { COVER_ID, unitOf } from '../../base/geom/sheet'
   import { isSelectClick } from './spreadsel'
-  import { anyVaries } from '../gallery/variants'
-  import { clearVignette, makeVignette } from '../vignette/vigact'
-  import { vigDialog } from '../vignette/vigsession.svelte'
-  import { modes } from '../../base/prefs/view.svelte'
   import { Nearby } from '../../base/ui/nearby.svelte'
 
   // Лента альбома (спека 003): миниатюры фото, сгруппированные по разворотам.
@@ -50,7 +47,8 @@
   const near = new Nearby(() => box ?? null, '0px 1500px')
   let bw = $state(0) // видимая ширина ленты
   // Разворот, у которого сейчас правится название (двойной щелчок по номеру, F2, меню — naming).
-  const renaming = $derived(naming.id)
+  // Поле «Всех разворотов» (where = grid) ленту не касается.
+  const renaming = $derived(naming.where === 'strip' ? naming.id : null)
 
   // Лента едет вместе с рядом разворотов (спека 012 §7): прокрутка — от дробной позиции row.pos,
   // плавность даёт сам ряд, поэтому без smooth. Центры групп (последний — «+») кэшируются: перемер — при смене ширин групп
@@ -148,9 +146,8 @@
     )
   }
 
-  // Меню правого щелчка по группе: удалить именно её, а по выделенной (две и больше) — все выделенные.
-  // photo — номер фото под курсором (-1 — щёлкнули мимо фото): для «Разрезать перед этим фото».
-  let menu = $state<{ x: number; y: number; ids: string[]; photo: number } | null>(null)
+  // Меню правого щелчка по группе — общее с «Всеми разворотами» (103): удалить именно её, а по выделенной (две и больше) — все выделенные.
+  const ctl = new SpreadMenuCtl('strip')
 
   // Щелчок по группе: Ctrl/Cmd — в выделение и обратно, Shift — диапазон; текущий разворот не меняется.
   // Без модификатора выделение снимается и лента переходит к группе.
@@ -170,66 +167,22 @@
   }
 
   function openMenu(e: MouseEvent, id: string) {
+    // Выделение групп трогаем только когда меню откроется (не во время переноса).
     e.preventDefault()
     e.stopPropagation()
     if (drag.active) return
-    tip.hide()
     if (!(spreadsel.has(id) && spreadsel.size >= 2)) spreadsel.clear()
     const ids = spreadsel.size >= 2 ? spreadsel.ordered(spreads.map((s) => s.id)) : [id]
+    // photo — номер фото под курсором (-1 — щёлкнули мимо фото): для «Разрезать перед этим фото».
     const chip = (e.target as Element | null)?.closest?.<HTMLElement>('[data-drop="chip"]')
-    menu = { x: e.clientX, y: e.clientY, ids, photo: chip ? Number(chip.dataset.index) : -1 }
-  }
-
-  // Одна группа под меню: её индекс для разреза и склейки (094 §1.8).
-  const menuAt = $derived(menu?.ids.length === 1 ? spreads.findIndex((s) => s.id === menu?.ids[0]) : -1)
-
-  function cutFromMenu() {
-    const sp = spreads[menuAt]
-    const j = menu?.photo ?? -1
-    menu = null
-    if (sp && cutState(sp, j).ok) void store.split(sp.id, j)
-  }
-
-  function joinFromMenu() {
-    const sp = spreads[menuAt]
-    menu = null
-    if (sp && joinState(spreads, menuAt, max).ok) void store.merge(sp.id)
-  }
-
-  // «Сделать виньеткой» / «Обычный разворот» для группы под курсором (031).
-  function vignetteFromMenu(act: 'make' | 'clear' | 'setup') {
-    const sp = menu && sheetIn(store.view, menu.ids[0])
-    menu = null
-    if (!sp) return
-    if (act === 'setup') vigDialog.open(sp.id)
-    else if (act === 'make') void makeVignette(sp)
-    else void clearVignette(sp.id)
-  }
-
-  // «Разнообразить раскладки» (041) — для выделенных групп или той, по которой щёлкнули.
-  function varyFromMenu() {
-    const ids = menu?.ids ?? []
-    menu = null
-    void store.varyLayouts(ids, modes.varyLevel, modes.autoFamilies)
-  }
-
-  function renameFromMenu() {
-    const id = menu?.ids[0]
-    menu = null
-    if (id) naming.start(id)
+    ctl.open(e, ids, chip ? Number(chip.dataset.index) : -1)
   }
 
   // Пропал разворот с открытым полем (удалён, отменён) — поле не должно ожить, если он вернётся.
   $effect(() => {
-    if (renaming && !spreads.some((s) => s.id === renaming)) naming.stop()
+    const id = naming.id
+    if (id && !spreads.some((s) => s.id === id)) naming.stop()
   })
-
-  function deleteFromMenu() {
-    const ids = menu?.ids ?? []
-    menu = null
-    if (ids.length > 1) store.deleteSpreads(ids)
-    else if (ids.length === 1) store.deleteSpread(ids[0])
-  }
 </script>
 
 <div class="tl" data-guide="timeline" onclickcapture={(e) => naming.capture(e)}>
@@ -246,7 +199,7 @@
     onwheel={wheel}
     onscroll={() => {
       tip.hide()
-      menu = null
+      ctl.close()
     }}
     style:--h="{H}px"
     style:--pad="{PAD}px"
@@ -285,7 +238,7 @@
         onnamed={() => naming.stop(sp.id)}
       />
 
-      {#if i < n - 1}<JoinLine {i} id={sp.id} state={joinState(spreads, i, max)} {cuts} {cutting} />{/if}
+      {#if i < n - 1}<JoinLine {i} id={sp.id} state={joinState(spreads, i, max, unit)} {cuts} {cutting} />{/if}
     {/each}
 
     <AddColumn />
@@ -297,24 +250,7 @@
 </div>
 
 <FixedTip />
-{#if menu}
-  <SpreadMenu
-    x={menu.x}
-    y={menu.y}
-    count={menu.ids.length}
-    kind={sheetIn(store.view, menu.ids[0])?.kind}
-    onVignette={vignetteFromMenu}
-    onVary={varyFromMenu}
-    onRename={renameFromMenu}
-    varies={anyVaries(store.view.spreads, menu.ids)}
-    cut={menuAt >= 0 ? cutState(spreads[menuAt], menu.photo) : undefined}
-    onCut={cutFromMenu}
-    join={menuAt >= 0 && menuAt < n - 1 ? joinState(spreads, menuAt, max) : undefined}
-    onJoin={joinFromMenu}
-    onDelete={deleteFromMenu}
-    onclose={() => (menu = null)}
-  />
-{/if}
+<SpreadMenuHost {ctl} />
 
 <style>
   .tl {

@@ -38,6 +38,12 @@ type Params struct {
 	// Sheet — отдельный лист шириной 2·PageW без корешка (виньетка 031): штрафа корешка
 	// нет, постраничных вариантов (P[…], B[right…], B[pages…]) нет. Требует Layflat.
 	Sheet bool
+	// Crop — подрезка по стороне, чтобы сплошной блок закрыл область в полях (104): 0…MaxFitCrop;
+	// 0 — фото целиком, всё как до 0.24 побитно. Вне предела и NaN — зажим (fitCrop).
+	Crop float64
+	// Lock — бит i: у фото i свой кадр (098), его ячейку не подрезать. При Crop = 0 не действует.
+	// Битом, а не []bool: Params остаётся сравнимым (KeepLayouts, PlanJob.same); MaxPhotos = 64.
+	Lock uint64
 }
 
 // Result — один вариант раскладки. Rects идут в порядке входных фото.
@@ -45,6 +51,7 @@ type Result struct {
 	Rects []Rect
 	Score float64
 	Key   string
+	Crop  float64 // подрезка блока по стороне (наибольшая по страницам); 0 — не растянут
 }
 
 // Сколько фото перебираем всеми деревьями. Дальше число деревьев
@@ -60,6 +67,9 @@ const MaxPhotos = 64
 // aspects — отношение ширины к высоте каждого фото. С ManyFrom фото — быстрые
 // генераторы (manyLayouts): ряд не длиннее ManyCap, меньший limit — его префикс.
 func Layouts(aspects []float64, p Params, limit int) []Result {
+	if fitCrop(p) > 0 {
+		return layoutsCrop(aspects, p, limit)
+	}
 	return layouts(aspects, p, limit, tieOrder)
 }
 
@@ -140,7 +150,7 @@ func layouts(aspects []float64, p Params, limit int, o order) []Result {
 			for _, r := range rs {
 				rects := append(append([]Rect{}, l.Rects...), r.Rects...)
 				s := pairScore(rects, g, max(l.depth, r.depth), l.height, r.height, k == 0 || k == n)
-				all = append(all, Result{rects, s, "P[" + l.Key + "|" + r.Key + "]"})
+				all = append(all, Result{Rects: rects, Score: s, Key: "P[" + l.Key + "|" + r.Key + "]"})
 			}
 		}
 	}
@@ -273,7 +283,7 @@ func bestBlocksIn(o order, aspects []float64, box Rect, gap, spine float64, keep
 		}
 		rects := make([]Rect, n)
 		fitTree(t, box, gap, rects)
-		out = append(out, candidate{Result{rects, x.s, key}, t.depth, x.h, x.i})
+		out = append(out, candidate{Result{Rects: rects, Score: x.s, Key: key}, t.depth, x.h, x.i})
 	}
 	return out, len(roots)
 }
@@ -319,6 +329,7 @@ type node struct {
 	leaf  int // индекс фото; -1 у составного узла
 	horiz bool
 	small bool // лист m<i> ключа (051): фото kappa·h по центру своей ячейки
+	big   bool // с small: лист n<i> (105) — доля kappaN вместо kappa
 	kids  []*node
 	a, b  float64 // высота при ширине w: h = a*w + b
 	depth int
@@ -388,7 +399,11 @@ func (n *node) place(x, y, w, h, gap float64, out []Rect) bool {
 	}
 	if n.leaf >= 0 {
 		if n.small {
-			ph := h * kappa
+			kp := kappa
+			if n.big {
+				kp = kappaN
+			}
+			ph := h * kp
 			if ph < 1 {
 				return false
 			}

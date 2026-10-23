@@ -2,19 +2,23 @@ package variety
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 // Пределы «Других вариантов»: воздуха — не длиннее порции ряда «Авто», раскладок с главным фото
 // (featured) — столько же: по одной на позицию главного, чтобы звезда в любом месте ленты могла
 // стать главной (решения 0.11 №33, №57). Вместе — не длиннее ряда «Авто» (24).
 const (
-	airLimit   = 12
-	featLimit  = 12
-	midLimit   = 1 // «центр крупнее» (forms.CenterBig): одна на разворот, 0.23-q6
-	ExtraLimit = airLimit + featLimit + midLimit
+	airLimit  = 12
+	featLimit = 12
+	midLimit  = 1 // «центр крупнее» (forms.CenterBig): одна на разворот, 0.23-q6
+	// scatterLimit — плитки «Разброса» (forms.Free): по одной на профиль, 105.
+	scatterLimit = 7
+	ExtraLimit   = airLimit + featLimit + midLimit + scatterLimit
 )
 
 // featSlack — featured хуже потолка лучшей (min(best, heroCap)) по Fair больше этого не выберет
@@ -27,9 +31,10 @@ const extraGen = 5000
 
 // extraEntry — «Другие варианты» разворота и семейства featured в них (Pool берёт их оттуда).
 type extraEntry struct {
-	row  []layout.Result
-	kind map[string]Kind
-	mid  string // ключ «центр крупнее» в row ("" — нет)
+	row    []layout.Result
+	kind   map[string]Kind
+	manual map[string]bool // центр крупнее и «Разброс» в row — только ручной выбор (Cand.Manual)
+	hidden int             // раскладок «Разброса» на разворот скрыто сгибом при «Только широкие» (105 В1)
 }
 
 // extraCache — ряды «Других вариантов» по пропорциям и геометрии: View считает счётчик
@@ -37,9 +42,10 @@ type extraEntry struct {
 // запрос, а без кэша это десяток поисков в кэше layout, генератор featured и сортировка.
 var extraCache genCache[extraEntry]
 
-// Extra — «Другие варианты» разворота вне ряда «Авто» Row(aspects, p, rowLen): воздух (≤ airLimit
-// лучших по оценке) и раскладки с главным фото (≤ featLimit, bestFeatured; с 051 — от featLo фото,
-// а не 8), вместе по убыванию оценки (ничья — по ключу). Порядок — и подборки, и листания (Пробел и
+// Extra — «Другие варианты» разворота вне ряда «Авто» Row(aspects, p, rowLen): сначала свободные
+// композиции (105) — центр крупнее и плитки «Разброса» (forms.Free) в порядке профилей, затем воздух
+// (≤ airLimit лучших по оценке) и раскладки с главным фото (≤ featLimit, bestFeatured; с 051 — от
+// featLo фото, а не 8), вместе по убыванию оценки (ничья — по ключу). Порядок — и подборки, и листания (Пробел и
 // ‹ › после ряда «Авто»), и счётчика. Результат общий: не менять.
 func Extra(aspects []float64, p layout.Params, rowLen int) []layout.Result {
 	return extraOf(aspects, p, rowLen).row
@@ -67,14 +73,62 @@ func extraOf(aspects []float64, p layout.Params, rowLen int) extraEntry {
 		e.row = append(e.row, f.Result)
 		e.kind[f.Key] = f.Kind
 	}
-	if m := re.mid; m != nil && !seen[m.Key] && !hasKey(e.row, m.Key) {
-		e.row = append(e.row, m.Result)
-		e.mid = m.Key
-	}
 	byScore(e.row)
-	e.row = slices.Clip(e.row)
+	head := freeHead(aspects, p, re, seen, &e)
+	e.row = slices.Clip(slices.Concat(head, e.row))
 	extraCache.put(key, e)
 	return e
+}
+
+// freeHead — начало «Других вариантов» (105): центр крупнее (n из forms.Free, иначе m из 0.23) и
+// плитки «Разброса». Без ключа и вида (Look) ряда «Авто» и друг друга. Заполняет e.manual и
+// e.hidden. Сборка этих раскладок не берёт (Cand.Manual), порядок задаёт таблица профилей, а не Q.
+func freeHead(aspects []float64, p layout.Params, re rowEntry, seen map[string]bool, e *extraEntry) []layout.Result {
+	fr, hidden := forms.FreeFold(aspects, p)
+	e.hidden = hidden
+	looks := maps.Clone(re.looks)
+	if looks == nil {
+		looks = map[string]bool{}
+	}
+	var head []layout.Result
+	take := func(r layout.Result) bool {
+		l := Look(r.Rects, p)
+		if seen[r.Key] || looks[l] {
+			return false
+		}
+		looks[l] = true
+		head = append(head, r)
+		return true
+	}
+	centered := false
+	for _, c := range fr {
+		if c.Form == forms.Contrast && !centered {
+			centered = take(c.Result)
+		}
+	}
+	// Центр из 0.23 (m): прежнее условие — только ключ, вид ряда не проверяется.
+	if m := re.mid; !centered && m != nil && !seen[m.Key] && !hasKey(e.row, m.Key) {
+		looks[Look(m.Rects, p)] = true
+		head = append(head, m.Result)
+	}
+	for _, c := range fr {
+		if c.Form == forms.Scatter {
+			take(c.Result)
+		}
+	}
+	if len(head) > 0 {
+		e.manual = make(map[string]bool, len(head))
+		for _, r := range head {
+			e.manual[r.Key] = true
+		}
+	}
+	return head
+}
+
+// ExtraFoldHidden — сколько раскладок «Разброса» (центр и Z на разворот) разворота скрыто только
+// правилом сгиба при «Только широкие» (105 В1): с «Любые фото» они встали бы в «Другие варианты».
+func ExtraFoldHidden(aspects []float64, p layout.Params, rowLen int) int {
+	return extraOf(aspects, p, rowLen).hidden
 }
 
 // hasKey — ключ уже в ряду.

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { portal } from '../../base/ui/portal'
   import { token, type Field } from './fields'
 
   // Меню «Вставить поле ▾» (030): поля листа (`fields`, от Go), `{Фамилия}`… Кнопка и пункты не забирают фокус
@@ -12,11 +13,6 @@
   let btn = $state<HTMLElement>()
   let menu = $state<HTMLElement>()
   const keepFocus = (e: MouseEvent) => e.preventDefault()
-
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node)
-    return { destroy: () => node.remove() }
-  }
 
   function toggle() {
     if (!open) {

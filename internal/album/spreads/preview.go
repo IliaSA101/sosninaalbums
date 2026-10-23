@@ -26,7 +26,7 @@ func Preview(c *model.Project, pre Prep, at int, rate Rating) (model.AutoPreview
 	pv.W, pv.H = g.W, g.H
 	prm := c.Params()
 	seen := map[int]bool{}
-	for i, s := range c.Spreads[b.at : b.at+b.made] {
+	for i, s := range b.spreads(c) {
 		r, _, _ := c.Layout(s) // у собранного разворота 1…64 фото — раскладка есть всегда
 		ps := model.PreviewSpread{Choice: describeOne(r, prm), Photos: len(s.Photos), Fallback: i < len(b.fb) && b.fb[i],
 			Gray: i < len(b.gray) && b.gray[i]}
@@ -36,7 +36,8 @@ func Preview(c *model.Project, pre Prep, at int, rate Rating) (model.AutoPreview
 		pv.Spreads = append(pv.Spreads, ps)
 		if n := len(s.Photos); !seen[n] {
 			seen[n] = true
-			pv.Samples = append(pv.Samples, sampleRow(c.Aspects(s.Photos), prm, i))
+			asp, sp := c.LayoutIn(s.Photos)
+			pv.Samples = append(pv.Samples, sampleRow(asp, sp, i))
 		}
 	}
 	// Размеры групп разные (seen), так что порядок однозначен.
@@ -53,9 +54,10 @@ func sampleRow(asp []float64, prm layout.Params, group int) model.SampleRow {
 }
 
 // describeOne — плитка одной раскладки с семейством и формой, как в подборке (describeRows);
-// похожих в ряду «Что соберётся» нет: Twin = −1. Семья — по форме (FamilyOf), как у сборки и её
-// фильтра: «Плотно» по заполнению (TileFamily, 0.23-q7) — только в галерее раскладок.
+// похожих в ряду «Что соберётся» нет: Twin = −1. Семья — плитки (TileFamily, 104): как в галерее
+// и в фильтре окна (variety.ByFamily), «Плотно» по заполнению считается и здесь.
 func describeOne(r layout.Result, prm layout.Params) model.Choice {
 	f := forms.Of(r.Key, r.Rects, prm)
-	return model.Choice{Key: r.Key, Rects: r.Rects, Family: string(variety.FamilyOf(f)), FormName: forms.Name(f), Twin: -1}
+	return model.Choice{Key: r.Key, Rects: r.Rects, Family: string(variety.TileFamily(f, r.Rects, prm)),
+		FormName: forms.Name(f), Twin: -1, Crop: cropPct(r.Crop)}
 }

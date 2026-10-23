@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { portal } from './portal'
   import { untrack, type Snippet } from 'svelte'
   import { BARPOP_OPEN, closesOnPeer, placePopover, type Placed } from './popover'
 
@@ -32,11 +33,6 @@
       placed = null
     }
   })
-
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node)
-    return { destroy: () => node.remove() }
-  }
 
   $effect(() => {
     if (!open || !pop) return

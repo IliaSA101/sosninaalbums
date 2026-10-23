@@ -5,6 +5,7 @@ package album
 // Похожие кадры ищет ядро (album/similar), а spreads получает готовый список (решение 078-15).
 
 import (
+	"cmp"
 	"errors"
 	"time"
 
@@ -26,6 +27,8 @@ type autoChain struct {
 	base *model.Project // альбом до первой сборки — тот же снимок, что в шаге отмены; nil — сборки нет
 	rev  int            // projRev после последней сборки или пересборки
 	ids  []string       // ID разворотов последнего варианта по порядку: пересборка берёт их же
+	// album — цепочка «Весь альбом заново» (107): пересобрать можно только тем же режимом.
+	album bool
 }
 
 // againAlive — пересборка жива: после неё проект не менялся (звёзды и метки не в счёт). Под e.mu.
@@ -37,7 +40,7 @@ func (e *Editor) autoFrom(p *model.Project, o model.AutoOpts) (*model.Project, e
 	if !o.Again {
 		return p, nil
 	}
-	if !e.againAlive() {
+	if !e.againAlive() || o.Album != e.auto.album {
 		return nil, ErrAgainStale
 	}
 	return e.auto.base, nil
@@ -47,7 +50,12 @@ func (e *Editor) autoFrom(p *model.Project, o model.AutoOpts) (*model.Project, e
 // Оценки и флажок «беру» — действующие (свои отметки поверх XMP), поэтому под e.mu.
 func (e *Editor) autoJob(b *model.Project, photos []model.PhotoInfo, o model.AutoOpts) (spreads.PlanJob, []model.SimilarDrop) {
 	rate := e.rating(photos)
-	job := spreads.PlanOf(b, photos, rate)
+	var job spreads.PlanJob
+	if o.Album {
+		job = spreads.AlbumOf(b, photos, rate) // пул — фото голых разворотов, якоря — стенами (107)
+	} else {
+		job = spreads.PlanOf(b, photos, rate)
+	}
 	if o.Similar <= 0 {
 		return job, nil
 	}
@@ -85,6 +93,9 @@ func (e *Editor) autoJob(b *model.Project, photos []model.PhotoInfo, o model.Aut
 // оценок и DP считаются вне его (на тысячах фото — секунды при первом вызове).
 // Пустой хвост альбома (развороты без фото, названия, цвета, сетки) — свободное место:
 // верх ползунка считает его, AutoPlan.Reuse — сколько из него займёт сборка в конец.
+// o.Album (107) — план «Весь альбом заново»: пул — фото голых разворотов по порядку альбома (и
+// свободные из photos), якоря на местах; AutoPlan.Spreads — сколько новых разворотов, состав —
+// AutoPlan.Album; at и пустой хвост не действуют.
 // Договор: photos без повторов (DedupePhotos).
 func (e *Editor) AutoPlan(photos []model.PhotoInfo, o model.AutoOpts) (model.AutoPlan, error) {
 	o = o.Clamp()
@@ -112,6 +123,7 @@ func (e *Editor) AutoSimilar(photos []model.PhotoInfo, o model.AutoOpts) ([]mode
 // Сборка в конец (at < 0 или за непустыми) встаёт на место пустого хвоста, а не после него.
 // Раскладки — по o.Variety с учётом соседей (041), звёзды — из оценок photos и своих отметок.
 // Каждая сборка начинает цепочку «Пересобрать»; o.Again — пересборка (autoAgain).
+// o.Album (107) — «Весь альбом заново» (autoAlbum): at не действует, шаг отмены один.
 // План и пулы раскладок считаются вне замка (autoPrep): под замком — только выбор и запись.
 // Договор: photos без повторов (DedupePhotos).
 func (e *Editor) AutoBuild(photos []model.PhotoInfo, at int, o model.AutoOpts) (model.View, error) {
@@ -127,6 +139,9 @@ func (e *Editor) AutoBuild(photos []model.PhotoInfo, at int, o model.AutoOpts) (
 	if o.Again {
 		return e.autoAgain(in, photos, at, &made)
 	}
+	if o.Album {
+		return e.autoAlbum(in, photos, &made)
+	}
 	key := "auto:" + model.NewID() // уникален: с прошлыми правками не сливается
 	var ids []string
 	return e.editWith(key, false, func(p *model.Project) (err error) {
@@ -136,6 +151,26 @@ func (e *Editor) AutoBuild(photos []model.PhotoInfo, at int, o model.AutoOpts) (
 	}, nil, editOpts{done: func(pushed *model.Project) {
 		if pushed != nil {
 			e.auto = autoChain{key: key, base: pushed, rev: e.projRev, ids: ids}
+		}
+	}})
+}
+
+// autoAlbum — «Весь альбом заново» (107): голые развороты заменяются новыми с прежними ID, якоря
+// и обложка не меняются; цепочка и шаг отмены — как у сборки. Пул пуст — холостая правка.
+// «До правки» для settle — копия без ID голых (spreads.WithoutBare), иначе KeepLayouts сбросил бы
+// раскладки новых разворотов с прежними ID.
+func (e *Editor) autoAlbum(in autoIn, photos []model.PhotoInfo, made *int) (model.View, error) {
+	key := "auto:" + model.NewID()
+	var ids []string
+	rel := new(model.Project)
+	return e.editWith(key, false, func(p *model.Project) (err error) {
+		*rel = *spreads.WithoutBare(p)
+		ids, err = spreads.RebuildAlbum(p, in.pre, e.rating(photos), spreads.BareIDs(p))
+		*made = len(ids)
+		return err
+	}, nil, editOpts{rel: rel, done: func(pushed *model.Project) {
+		if pushed != nil {
+			e.auto = autoChain{key: key, base: pushed, rev: e.projRev, ids: ids, album: true}
 		}
 	}})
 }
@@ -156,10 +191,14 @@ func (e *Editor) autoAgain(in autoIn, photos []model.PhotoInfo, at int, made *in
 		from := p.From()
 		*p = *in.base.Clone()
 		p.SetFrom(from)
-		ids, err = spreads.Rebuild(p, in.pre, at, e.rating(photos), e.auto.ids)
+		if in.rel != nil { // режим альбома (107)
+			ids, err = spreads.RebuildAlbum(p, in.pre, e.rating(photos), e.auto.ids)
+		} else {
+			ids, err = spreads.Rebuild(p, in.pre, at, e.rating(photos), e.auto.ids)
+		}
 		*made = len(ids)
 		return err
-	}, nil, editOpts{rel: in.base, done: func(*model.Project) { e.auto.rev, e.auto.ids = e.projRev, ids }})
+	}, nil, editOpts{rel: cmp.Or(in.rel, in.base), done: func(*model.Project) { e.auto.rev, e.auto.ids = e.projRev, ids }})
 }
 
 // autoIn — вход сборки, снятый под замком: job — без похожих, drops — они сами; base и key —
@@ -170,6 +209,7 @@ type autoIn struct {
 	pre   spreads.Prep
 	base  *model.Project
 	key   string
+	rel   *model.Project // у пересборки альбома: base без ID голых разворотов (для settle, см. autoAlbum)
 }
 
 // autoInput — снимок входа под замком (без плана): проект — текущий или база пересборки.
@@ -182,6 +222,9 @@ func (e *Editor) autoInput(photos []model.PhotoInfo, o model.AutoOpts) (in autoI
 		in.job, in.drops = e.autoJob(b, photos, o)
 		if o.Again {
 			in.base, in.key = b, e.auto.key
+			if o.Album {
+				in.rel = spreads.WithoutBare(b)
+			}
 		}
 	})
 	return in, err

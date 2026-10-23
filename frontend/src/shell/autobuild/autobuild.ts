@@ -117,7 +117,7 @@ export function firstSpreads(
 
 // Откуда фото (034, решение 92). count — сколько фото ушло в запрос, photos — сколько насчитал Go (null — ответа ещё нет).
 export interface Source {
-  from: 'selected' | 'free'
+  from: 'selected' | 'free' | 'album'
   count: number
   inAlbum: number
   skipped: number
@@ -174,6 +174,12 @@ export function albumAfter(have: number, spreads: number, unit: Unit = SPREAD, r
   const s = `В альбоме станет ${spreadsLabel(rest + spreads, unit)}`
   return reuse > 0 ? `${s} — пустые в конце (${reuse}) займёт сборка` : s
 }
+
+// Стрелки и PgUp/PgDn: направление и шаг (PgUp/PgDn — 5).
+export const arrow = (key: string): [number, number] => [
+  key === 'PageUp' || key === 'ArrowUp' ? 1 : key === 'PageDown' || key === 'ArrowDown' ? -1 : 0,
+  key.startsWith('Page') ? 5 : 1,
+]
 
 // Подсказка под ползунком: «от 3 до 6 фото на разворот»; ровные группы — «по 4 фото на разворот». Дробного среднего
 // нигде не показываем (решение владельца): в поле — целое round(n / N).

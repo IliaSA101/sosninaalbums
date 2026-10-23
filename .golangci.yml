@@ -63,6 +63,10 @@ linters:
         - pattern: ^http\.(Get|Head|Post|PostForm|NewRequest|NewRequestWithContext|DefaultClient|DefaultTransport|Client|Transport)$
           pkg: ^net/http$
           msg: "067: сетевой клиент — только в internal/decor/fetch"
+        # 110: os.Stat идёт по ссылке, в том числе на сетевой путь (зависание на недоступном томе); пока — только internal/app
+        - pattern: ^os\.Stat$
+          pkg: ^os$
+          msg: "110: os.Stat идёт по ссылке, в том числе на сетевой путь — library.StatLocal"
     # Границы пакетов (docs/ARCHITECTURE.md «Слои»): у каждого пакета internal/* белый список
     # того, что он вправе импортировать; всё остальное из internal — нарушение. Новый пакет
     # сначала вносится сюда. Имя правила — то, что увидит автор в сообщении линтера.
@@ -707,6 +711,13 @@ linters:
       - path: internal/app/app\.go
         linters: [forbidigo]
         text: "сетевой клиент"
+      # 110: правило os.Stat — только для internal/app (остальные 19 файлов — позже); тесты пакета свободны
+      - path-except: ^internal/app/
+        linters: [forbidigo]
+        text: "110: os.Stat"
+      - path: internal/app/.*_test\.go
+        linters: [forbidigo]
+        text: "110: os.Stat"
 formatters:
   enable:
     - gofmt

@@ -63,6 +63,15 @@ func ExtraRow(asp []float64, prm layout.Params) []layout.Result {
 	return variety.Extra(asp, prm, RowLen(len(asp)))
 }
 
+// ExtraFoldHidden — раскладок «Разброса», скрытых правилом сгиба (variety.ExtraFoldHidden): строка
+// «Ещё N раскладок с фото на сгибе» в галерее. С ManyFrom фото — 0, как и ExtraRow.
+func ExtraFoldHidden(asp []float64, prm layout.Params) int {
+	if len(asp) >= layout.ManyFrom {
+		return 0
+	}
+	return variety.ExtraFoldHidden(asp, prm, RowLen(len(asp)))
+}
+
 func IndexOf(rs []layout.Result, key string) int {
 	for i, r := range rs {
 		if r.Key == key {

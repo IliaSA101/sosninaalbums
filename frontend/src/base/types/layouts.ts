@@ -23,8 +23,8 @@ export interface ChoiceRows {
 export type Variety = 0 | 1 | 2
 
 // Ответ Go на «сколько получится разворотов» (027, design §8; 051: from/to/cuts): ползунок окна автосборки и подсказка.
-// Тип — прямо из биндинга, полей не дублируем.
-export type AutoPlan = model.AutoPlan
+// Тип — прямо из биндинга, полей не дублируем; convertValues (служебный метод класса с вложенным album, 107) в данных нет.
+export type AutoPlan = Omit<model.AutoPlan, 'convertValues'>
 
 // Диапазон «фото на разворот» окна автосборки (051 §8): поля AutoOpts кроме spreads и variety.
 // auto — диапазон от среднего (minPer и maxPer тогда не действуют); series — не разрывать серии съёмки.
@@ -34,7 +34,8 @@ export type AutoRange = Pick<model.AutoOpts, 'auto' | 'minPer' | 'maxPer' | 'ser
 export type AutoPreview = model.AutoPreview
 
 // 078: поля AutoOpts про фото — похожие, возвращённые (keep), ч/б, вариант сборки, пересборка. Окно шлёт их вместе с AutoRange.
-export type PhotoOpts = Pick<model.AutoOpts, 'similar' | 'keep' | 'gray' | 'variant' | 'again'>
+// 107: album — «Весь альбом заново» (в запрос уходит только при true: прежние сборки не меняются).
+export type PhotoOpts = Pick<model.AutoOpts, 'similar' | 'keep' | 'gray' | 'variant' | 'again'> & { album?: boolean }
 
 // Отброшенный как похожий кадр (App.AutoSimilar) и ход подготовки подписей кадров (PrepareSigs, событие sigs:progress).
 export type SimilarDrop = Pick<model.SimilarDrop, 'id' | 'like' | 'dist'>

@@ -154,7 +154,11 @@ func TestUsesFamily(t *testing.T) {
 	edtest.NewSpread(e, -1, ph)
 	e.NewSpread(-1, []model.PhotoInfo{req(ph[0])})
 	uses, used := e.PhotoUses(a2)
-	want := []model.PhotoUse{{Sheet: 0, Label: "Разворот 1 — место", Ref: a}, {Sheet: 1, Label: "Разворот 2 — место"}}
+	sp := edtest.P(e).Spreads
+	want := []model.PhotoUse{
+		{Sheet: 0, Label: "Разворот 1 — место", Kind: model.UsePlace, Spread: sp[0].ID, Page: "Разворот 1", What: "место", Pick: a},
+		{Sheet: 1, Label: "Разворот 2 — место", Kind: model.UsePlace, Spread: sp[1].ID, Page: "Разворот 2", What: "место", Pick: a2},
+	}
 	if !slices.Equal(uses, want) || used != "Использовано 2 раза" {
 		t.Fatalf("вхождения копии: %+v, %q", uses, used)
 	}

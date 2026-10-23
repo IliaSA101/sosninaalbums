@@ -80,7 +80,7 @@
       style:border-radius={shapeCss(p.shape, placesel.liveRadius([p.id], p.radius ?? 0, p.w, p.h), p.w, p.h)}
       style:transform={p.rot ? `rotate(${p.rot}deg)` : undefined}
     >
-      <BorderOverlay border={p.border} {mini} px={borderPx(p.w, sw, width, dpr)} />
+      <BorderOverlay border={p.border} {mini} px={borderPx(p.w, sw, width, dpr)} refs={[p.id]} />
     </div>
   {/if}
 {/each}

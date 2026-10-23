@@ -8,15 +8,17 @@
   import AutoLayouts from './AutoLayouts.svelte'
   import AutoPhotos from './AutoPhotos.svelte'
   import AutoRangeRow from './AutoRangeRow.svelte'
-  import AutoSource from './AutoSource.svelte'
+  import AutoMode from './AutoMode.svelte'
   import AutoVariant from './AutoVariant.svelte'
   import { dropsFn, planFn, previewFn, savedOf, sigsFn } from './autoapi'
+  import { ALBUM_BUILD, albumKept } from './autoalbum'
+  import { goBuild } from './autogo'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { AutoDialog } from './autobuild.svelte'
   import {
     albumAfter,
     anchorField,
-    memOf,
+    arrow,
     otherField,
     perText,
     planHint,
@@ -60,18 +62,8 @@
 
   const close = () => (store.autoDraft = null)
 
-  async function go() {
-    if (!ui || store.autoWaiting) return // пересборка уже ждёт ответа: второй Enter не уходит
-    const u = ui
-    // Запоминаем и собираем то, что подтвердил Go: N после ответа, а не то, что успели набрать.
-    await u.submit((n, range, per, by, variety, families) => {
-      // Без функции «Варианты раскладки» фильтра в окне не было — память семейств не трогаем; так же ч/б без «Ч/б и тон фото»
-      modes.rememberAuto(n, memOf(range), per, by, variety, range.series, famOn ? families : modes.autoFamilies)
-      modes.rememberPhotos(u.ph.similar, grayOn ? u.ph.gray : modes.autoGray)
-      // Вариант совпал с текущим, окно открыто (080-1): показываем следующий
-      return store.autoBuild(n, range, variety, families, u.ph.opts, u.plan?.similar ?? 0, (v) => u.ph.setVariant(v))
-    })
-  }
+  // Пересборка уже ждёт ответа: второй Enter не уходит
+  const go = async () => ui && !store.autoWaiting && goBuild(ui, { famOn, grayOn, unit })
 
   // Пока в поле печатают, в нём остаётся набранное (draft); иначе — фактическое значение, даже при фокусе:
   // ответ Go мог поправить N после открытия, а поле с автофокусом не должно застрять на старом числе.
@@ -95,12 +87,6 @@
   // Поле якоря получает первый фокус (data-autofocus); у второго атрибута нет вовсе — false Svelte пишет строкой.
   const first = (id: 'auto-n' | 'auto-per') => (ui && anchorField(ui.anchor) === id ? '' : undefined)
   const shownPer = () => (ui ? perText(ui.photos, ui.n) : '')
-
-  // Стрелки и PgUp/PgDn: направление и шаг (PgUp/PgDn — 5).
-  const arrow = (key: string): [number, number] => [
-    key === 'PageUp' || key === 'ArrowUp' ? 1 : key === 'PageDown' || key === 'ArrowDown' ? -1 : 0,
-    key.startsWith('Page') ? 5 : 1,
-  ]
 
   // ↑↓ в полях — шаг 1 (в «среднем» — показанное целое на 1, N хотя бы на 1), PgUp/PgDn — 5; на ползунке — только PgUp/PgDn.
   function step(t: HTMLElement, d: number, k: number): boolean {
@@ -129,6 +115,16 @@
 
   const unit = $derived(unitOf(store.view.settings))
   const empty = $derived(!!ui?.plan && ui.plan.photos === 0)
+  // 107: в режиме альбома якоря остаются на месте, новые развороты встают между ними
+  const after = $derived(
+    !ui || !store.autoDraft
+      ? ''
+      : store.autoDraft.from === 'album'
+        ? ui.plan?.album
+          ? albumAfter(albumKept(ui.plan.album), ui.n, unit)
+          : ''
+        : albumAfter(spreadsBefore(store.autoDraft.again, store.view.spreads.length, store.lastAuto), ui.n, unit, ui.plan?.reuse ?? 0),
+  )
   const top = $derived(ui?.plan ? Math.max(1, ui.plan.maxSpreads) : Math.max(1, ui?.n ?? 1))
   const low = $derived(ui?.plan ? Math.max(1, ui.plan.minSpreads) : 1)
   // Ползунок всегда показывает N: пока min двигался вместе с value, браузер прижимал значение к старому
@@ -146,7 +142,7 @@
   {@const d = store.autoDraft}
   <Modal title="Автосборка" onclose={close} width={860}>
     <div class="body" role="presentation" onkeydown={key}>
-      <AutoSource {d} plan={ui.plan} />
+      <AutoMode {d} plan={ui.plan} />
 
       <div class="tiles">
         <div class="pair" role="presentation" onpointerdown={pick} onclick={pick}>
@@ -236,7 +232,7 @@
         aria-label="Число {unit.plural[2]}"
         oninput={(e) => ui?.setSpreads(e.currentTarget.valueAsNumber)}
       />
-      <p class="after">{albumAfter(spreadsBefore(d.again, store.view.spreads.length, store.lastAuto), ui.n, unit, ui.plan?.reuse ?? 0)}</p>
+      <p class="after">{after}</p>
 
       <AutoRangeRow {ui} {unit} {empty} />
 
@@ -259,7 +255,7 @@
         <AutoVariant ph={ui.ph} off={empty || store.autoWaiting} note={sameText(store.autoSame, ui.ph.variant)} />
         <button class="ghost" onclick={close}>Отмена</button>
         <button class="primary" disabled={!ui.canBuild || store.autoWaiting} onclick={go}>
-          {store.autoWaiting ? 'Пересобираю…' : ui.ph.again ? 'Пересобрать' : 'Собрать'}
+          {store.autoWaiting ? 'Пересобираю…' : ui.ph.again ? 'Пересобрать' : ui.ph.album ? ALBUM_BUILD : 'Собрать'}
         </button>
       </div>
     </div>

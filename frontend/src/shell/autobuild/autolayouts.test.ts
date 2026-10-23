@@ -18,7 +18,7 @@ import {
   twinKey,
 } from './autolayouts'
 
-const ch = (key: string, family: Family, twin = -1): Choice => ({ key, rects: [], family, twin, formName: key })
+const ch = (key: string, family: Family, twin = -1): Choice => ({ key, rects: [], family, twin, formName: key, crop: 0 })
 const sample = (photos: number, inOrder: Choice[], extra: Choice[] = []) =>
   model.SampleRow.createFrom({ photos, group: photos, inOrder, extra })
 
@@ -157,6 +157,13 @@ describe('spreadTitle', () => {
     expect(spreadTitle({ formName: 'Лента', fallback: false })).toBe('Лента')
     expect(spreadTitle({ formName: '', fallback: false })).toBeUndefined()
     expect(spreadTitle({ formName: 'Плотно', fallback: true })).toBe('Плотно — нет раскладок выбранных семейств, взята лучшая')
+  })
+  it('подрезка (104): «подрезка до N %» после формы; 0 — без хвоста; у запасной — перед причиной', () => {
+    expect(spreadTitle({ formName: 'Плотно', crop: 2, fallback: false })).toBe('Плотно · подрезка до 2 %')
+    expect(spreadTitle({ formName: 'Плотно', crop: 0, fallback: false })).toBe('Плотно')
+    expect(spreadTitle({ formName: 'Плотно', crop: 3, fallback: true })).toBe(
+      'Плотно · подрезка до 3 % — нет раскладок выбранных семейств, взята лучшая',
+    )
   })
 })
 

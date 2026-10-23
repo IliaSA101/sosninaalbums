@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { UseKind } from '../core/types'
 
 // Окно «Фото уже в альбоме» (098): тексты, «Перенести» только при одном месте, ID для Go по ответу, ссылки, «Отмена» без Go.
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
@@ -15,11 +16,16 @@ vi.stubGlobal('window', globalThis)
 const Api = await import('../../../wailsjs/go/app/App')
 const { store } = await import('../core/store.svelte')
 const { noHooks } = await import('../core/hooks')
-const { askCopy, answerCopy, copyAsk, gateCopy, showWhere } = await import('./copyask.svelte')
-const { copyAskText, sentIds, whereOf, WHERE_MAX } = await import('./copyask')
+const { askCopy, answerCopy, copyAsk, gateCopy } = await import('./copyask.svelte')
+const { copyAskText, sentIds, whereOf, alsoOf, WHERE_MAX, ALSO_MAX } = await import('./copyask')
 
 const WhereUsed = vi.mocked(Api.WhereUsed)
-const use = (sheet: number, label: string, ref?: string) => ({ sheet, label, ...(ref ? { ref } : {}) })
+// Вхождение как от Go: вид по слову (только в тесте), страница и что — части подписи, pick — что выделить.
+const KINDS: Record<string, UseKind> = { место: 'place', фон: 'backdrop', стикер: 'sticker', рамочка: 'border' }
+const use = (sheet: number, label: string, pick = 'p') => {
+  const [page, what = ''] = label.split(' — ')
+  return { sheet, label, kind: KINDS[what] ?? ('albumBg' as const), spread: sheet < 0 ? '' : `s${sheet}`, page, what, pick }
+}
 const at = (id: string, uses: ReturnType<typeof use>[], places: number, move = '') => ({ id, uses, places, move })
 const sp = (id: string, ...photos: string[]) => ({ id, photos, grid: false })
 const view = (rev: number, ...spreads: object[]) => ({ rev, marksRev: 0, folders: [], spreads, settings: { sheet: false } }) as never
@@ -35,9 +41,9 @@ beforeEach(() => {
 
 describe('тексты окна', () => {
   it('одно фото: «Это фото уже стоит:» и строка места', () => {
-    const t = copyAskText(['f1'], [at('f1', [use(0, 'Разворот 1 — место')], 1, 'f1')])
+    const t = copyAskText(['f1'], [at('f1', [use(0, 'Разворот 1 — место', 'f1')], 1, 'f1')])
     expect(t).toMatchObject({ title: 'Фото уже в альбоме', lead: 'Это фото уже стоит:', rest: '', move: true, hint: '' })
-    expect(t.where).toEqual([{ sheet: 0, link: 'Разворот 1', kind: 'место', ref: 'f1' }])
+    expect(t.where).toEqual([{ kind: 'place', spread: 's0', sheet: 0, page: 'Разворот 1', what: 'место', pick: 'f1' }])
   })
 
   it('несколько фото, часть свободна: «2 из 5», остальные встанут', () => {
@@ -88,9 +94,30 @@ describe('тексты окна', () => {
     expect(t.more).toBe(2)
   })
 
-  it('ссылка на копию подсвечивает запись копии (ref), иначе файл', () => {
-    const w = whereOf([at('f1', [use(0, 'Разворот 1 — место', 'f1-2'), use(1, 'Разворот 2 — место')], 2)])
-    expect(w.map((x) => x.ref)).toEqual(['f1-2', 'f1'])
+  it('ссылка на копию несёт запись копии (pick), у файла — свою', () => {
+    const w = whereOf([at('f1', [use(0, 'Разворот 1 — место', 'f1-2'), use(1, 'Разворот 2 — место', 'f1')], 2)])
+    expect(w.map((x) => x.pick)).toEqual(['f1-2', 'f1'])
+  })
+
+  it('«Ещё»: фон, стикер, рамочка, фон альбома — без мест, порядок Go, до трёх и «и ещё N»', () => {
+    const uses = [
+      use(0, 'Разворот 1 — место'),
+      use(4, 'Разворот 5 — фон', 'spread'),
+      use(-1, 'Фон альбома'),
+      use(0, 'Обложка — стикер', 'st1'),
+      use(2, 'Лист 3 — рамочка', 'pl1'),
+    ]
+    const u = [at('f1', uses, 1, 'f1')]
+    expect(alsoOf(u).map((x) => x.kind)).toEqual(['backdrop', 'albumBg', 'sticker', 'border'])
+    const t = copyAskText(['f1'], u)
+    expect(t.also).toHaveLength(ALSO_MAX)
+    expect(t.also[0]).toMatchObject({ page: 'Разворот 5', what: 'фон', pick: 'spread' })
+    expect(t.alsoMore).toBe(1)
+  })
+
+  it('«Ещё»: только места — строки нет; свободное фото (мест 0) в неё не попадает', () => {
+    expect(copyAskText(['f1'], [at('f1', [use(0, 'Разворот 1 — место')], 1, 'f1')]).also).toEqual([])
+    expect(alsoOf([at('f1', [use(0, 'Разворот 1 — фон', 'spread')], 0)])).toEqual([])
   })
 })
 
@@ -172,17 +199,5 @@ describe('askCopy и ворота', () => {
     copyAsk.prune(view(5))
     expect(await p).toBe('cancel')
     expect(copyAsk.cur).toBeNull()
-  })
-
-  it('ссылка «где»: вопрос отменён, лист открыт, место выделено', async () => {
-    WhereUsed.mockResolvedValue([at('f1', [use(1, 'Разворот 2 — место', 'f1-2')], 1, 'f1-2')] as never)
-    const select = vi.fn()
-    store.plug({ ...noHooks, gate: gateCopy, select })
-    const p = askCopy(['f1'])
-    await flush()
-    showWhere(whereOf(copyAsk.cur!.used)[0])
-    expect(await p).toBe('cancel')
-    expect(store.current).toBe(1)
-    expect(select).toHaveBeenCalledWith(['f1-2'])
   })
 })

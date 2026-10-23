@@ -1,6 +1,7 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
-  import ColorPicker from '../../base/ui/ColorPicker.svelte'
+  import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import { decor } from '../../panels/decor/decor.svelte'
   import { tileSrc } from '../../panels/decor/decor'
   import { placesel } from '../places/placesel.svelte'
@@ -81,8 +82,17 @@
           {#each rows.inks as c, i (i)}
             <ColorPicker
               value={c}
+              sheet={sid}
               label="Цвет рамочки {i + 1}"
-              onpick={(hex) => borderAct.ink(sid, rows.inkIds[i], { inks: inkPatch(rows, i, hex) })}
+              onpick={(hex) => colorLive.commit(() => borderAct.ink(sid, rows.inkIds[i], { inks: inkPatch(rows, i, hex) }))}
+              onpreview={(hex) =>
+                hex
+                  ? colorLive.set(
+                      rows.inkIds[i].map((id) => `bd:${id}`),
+                      hex,
+                      i,
+                    )
+                  : colorLive.clear()}
             />
           {/each}
         </div>

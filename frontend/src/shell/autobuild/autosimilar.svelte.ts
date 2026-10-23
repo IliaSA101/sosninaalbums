@@ -18,6 +18,7 @@ export interface PhotosSaved {
   again?: boolean
   variant?: number
   keep?: readonly string[] // «Вернуть» прошлой сборки: пересборка берёт тот же набор фото
+  album?: boolean // 107: «Весь альбом заново»
 }
 
 export const MAX_VARIANT = 9999 // предел Go (Clamp)
@@ -29,6 +30,7 @@ export class PhotosState {
   gray = $state(0)
   variant = $state(1)
   again = false
+  readonly album: boolean // 107: режим альбома — в Go уходит album: true
   // «Вернуть»: кадры, которые пользователь велел не убирать (в окне, между окнами не помнится)
   readonly keep = new SvelteSet<string>()
   sigs = $state<SigState | null>(null)
@@ -56,6 +58,7 @@ export class PhotosState {
     this.similar = norm03(saved.similar)
     this.gray = norm03(saved.gray)
     this.again = saved.again === true
+    this.album = saved.album === true
     this.variant = clampVariant(saved.variant ?? 1)
     for (const id of saved.keep ?? []) this.keep.add(id)
     this.kk = keepKey(this.keep)
@@ -83,7 +86,8 @@ export class PhotosState {
 
   // Что уходит в Go вместе с диапазоном
   get opts(): PhotoOpts {
-    return { similar: this.similar, keep: [...this.keep], gray: this.grayNow, variant: this.variant, again: this.again }
+    const o = { similar: this.similar, keep: [...this.keep], gray: this.grayNow, variant: this.variant, again: this.again }
+    return this.album ? { ...o, album: true } : o
   }
 
   // Часть ключа плана и предпросмотра: значения, от которых зависит ответ Go; ready — чтобы готовые подписи перезапросили план.

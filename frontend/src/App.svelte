@@ -17,6 +17,7 @@
   import DropAskDialog from './shell/ask/DropAskDialog.svelte'
   import CopyAskDialog from './shell/ask/CopyAskDialog.svelte'
   import AutoBuildDialog from './shell/autobuild/AutoBuildDialog.svelte'
+  import RebuildAskDialog from './shell/autobuild/RebuildAskDialog.svelte'
   import KeysDialog from './shell/hotkeys/KeysDialog.svelte'
   import Guide from './shell/guide/Guide.svelte'
   import Spot from './shell/guide/Spot.svelte'
@@ -208,6 +209,7 @@
 <DropAskDialog />
 <CopyAskDialog />
 <AutoBuildDialog />
+<RebuildAskDialog />
 <StartDialog />
 <Guide />
 <KeysDialog />

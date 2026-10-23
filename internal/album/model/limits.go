@@ -95,6 +95,11 @@ func ClampSettings(s Settings) Settings {
 	// У листа шва нет, без layflat через корешок не идёт ничего: поле не действует — нулевое,
 	// иначе одинаковые по смыслу настройки различались бы (холостая правка, сравнение в UI).
 	s.FoldAny = s.FoldAny && s.Layflat && !s.Sheet
+	// Подрезка (104): шаг из CropSteps; у листа (виньетка) блока нет — 0, как у «Фото через корешок».
+	s.Crop = ClampCrop(s.Crop)
+	if s.Sheet {
+		s.Crop = 0
+	}
 	return s
 }
 
@@ -166,8 +171,9 @@ func (p *Project) WarmLayouts(spreads []*Spread) {
 
 // WarmJob — вход прогрева одного разворота, отдельный от проекта: пропорции — своя копия.
 type WarmJob struct {
-	ID  string // для лога паники
-	Asp []float64
+	ID   string // для лога паники
+	Asp  []float64
+	Lock uint64 // свои кадры (104): layout.Params.Lock этого разворота
 }
 
 // WarmJobs — снимок входа прогрева (073-11): берётся под замком Editor, а считает WarmAspects уже
@@ -175,7 +181,8 @@ type WarmJob struct {
 func (p *Project) WarmJobs(spreads []*Spread) []WarmJob {
 	jobs := make([]WarmJob, len(spreads))
 	for i, s := range spreads {
-		jobs[i] = WarmJob{ID: s.ID, Asp: p.Aspects(s.Photos)}
+		asp, prm := p.LayoutIn(s.Photos)
+		jobs[i] = WarmJob{ID: s.ID, Asp: asp, Lock: prm.Lock}
 	}
 	return jobs
 }
@@ -195,10 +202,12 @@ func WarmAspects(jobs []WarmJob, prm layout.Params, done func(n int)) {
 	n := 0
 	Each(len(jobs), func(i int) {
 		j := jobs[i]
+		jp := prm
+		jp.Lock = j.Lock
 		pl.Safely(j.ID, func() {
-			layout.Cached(j.Asp, prm, RowLen(len(j.Asp)))
-			variety.Row(j.Asp, prm, RowLen(len(j.Asp)))
-			ExtraRow(j.Asp, prm)
+			layout.Cached(j.Asp, jp, RowLen(len(j.Asp)))
+			variety.Row(j.Asp, jp, RowLen(len(j.Asp)))
+			ExtraRow(j.Asp, jp)
 		})
 		if done != nil {
 			mu.Lock()

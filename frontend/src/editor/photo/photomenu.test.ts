@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { setOsForTest } from '../../base/core/platform'
-import { menuContext, photoMenu as photoMenuFull, type MenuCtx } from './photomenu'
+import { fileGroup, menuContext, photoMenu as photoMenuFull, type MenuCtx, type MenuItem } from './photomenu'
 import type { SelBox } from '../../base/geom/gridedit'
 import { can, type FeatureId, type Level } from '../../base/prefs/levels'
 import type { SpreadView } from '../../base/core/types'
@@ -23,196 +23,281 @@ const base: MenuCtx = {
   framed: false,
   copyable: true,
   pasteable: false,
+  allFlipH: false,
+  allFlipV: false,
+  tiltOk: true,
+  scopes: [
+    { scope: 'spread', label: 'Весь разворот' },
+    { scope: 'left', label: 'Левая страница' },
+    { scope: 'right', label: 'Правая страница' },
+  ],
+  uses: false,
 }
 // Группа буфера (099) — в photomenu.clip.test.ts; здесь меню без неё, чтобы порядок остальных пунктов не заслонялся.
 const photoMenu = (c: MenuCtx, can: (f: FeatureId) => boolean = () => true) => photoMenuFull(c, (f) => f !== 'clipboard' && can(f))
-const ids = (c: Partial<MenuCtx>) => photoMenu({ ...base, ...c }).map((i) => i.id)
+const menu = (c: Partial<MenuCtx> = {}, can?: (f: FeatureId) => boolean) => photoMenu({ ...base, ...c }, can)
+// Все пункты вместе с вложенными (id подменю — turn, mirror, frame, shape, file).
+const flat = (m: MenuItem[]): MenuItem[] => m.flatMap((i) => [i, ...(i.sub ? flat(i.sub) : [])])
+const ids = (c: Partial<MenuCtx>, can?: (f: FeatureId) => boolean) => flat(menu(c, can)).map((i) => i.id)
+const top = (c: Partial<MenuCtx>, can?: (f: FeatureId) => boolean) => menu(c, can).map((i) => i.id)
+const subIds = (c: Partial<MenuCtx>, group: string, can?: (f: FeatureId) => boolean) =>
+  menu(c, can)
+    .find((i) => i.id === group)
+    ?.sub?.map((i) => i.id)
+const find = (c: Partial<MenuCtx>, id: string, can?: (f: FeatureId) => boolean) => flat(menu(c, can)).find((i) => i.id === id)
 
-describe('photoMenu', () => {
-  it('«Авто», одно фото: просмотр, имя, Проводник, поворот, зеркало, Целиком, подпись, удалить', () => {
-    expect(ids({})).toEqual([
-      'preview',
-      'copy',
-      'explorer',
-      'backdrop',
-      'turnCw',
-      'turnCcw',
-      'straighten',
-      'flipH',
-      'flipV',
-      'gray',
-      'contain',
-      'rounded',
-      'oval',
-      'border',
-      'caption',
-      'delete',
-    ])
-  })
-  it('«Слой ▸» только на сетке и раскрывает подменю', () => {
-    expect(ids({})).not.toContain('layer')
-    expect(ids({ grid: true })).toContain('layer')
-    expect(photoMenu({ ...base, grid: true }).find((i) => i.id === 'layer')?.sub).toBe(true)
-  })
-  it('«На фон ▸» только у одного найденного фото и с подменю', () => {
-    expect(photoMenu(base).find((i) => i.id === 'backdrop')?.sub).toBe(true)
-    expect(ids({ places: 2, photos: 2 })).not.toContain('backdrop')
-    expect(ids({ missing: 1 })).not.toContain('backdrop')
-    expect(ids({ grid: true, photos: 0 })).not.toContain('backdrop')
-  })
-  it('«Зеркало» только у фото, пустое место его не получает', () => {
-    expect(ids({ grid: true, photos: 0 })).not.toContain('flipH')
-    expect(ids({ grid: true, photos: 0 })).not.toContain('flipV')
-    expect(ids({ places: 3, photos: 2 })).toEqual(expect.arrayContaining(['flipH', 'flipV']))
-  })
-  it('«Пропорции под фото» только при разных пропорциях', () => {
-    expect(ids({})).not.toContain('fitPhoto')
-    expect(ids({ differ: true })).toContain('fitPhoto')
-  })
-  it('«Сбросить кадр» только при изменённом кадре', () => {
-    expect(ids({})).not.toContain('resetFrame')
-    expect(ids({ framed: true })).toContain('resetFrame')
-  })
-  it('«Перепривязать» только у пропавшего, без просмотра и Проводника', () => {
-    expect(ids({})).not.toContain('relink')
-    const m = ids({ missing: 1 })
-    expect(m).toContain('relink')
-    expect(m).not.toContain('preview')
-    expect(m).not.toContain('explorer')
-    expect(m).not.toContain('copy')
-  })
-  it('«Перепривязать» и при пропавшей рамочке без библиотеки, даже у пустого места (079 U5)', () => {
-    expect(ids({ borderLost: 1, photos: 0 })).toContain('relink')
-    expect(ids({ borderLost: 0 })).not.toContain('relink')
-  })
-  it('menuContext: borderLost считает только картинки без lib с пропавшим файлом', () => {
-    const b = (over: object) => ({ kind: '', photo: 'f1', lib: '', pic: true, known: true, ...over })
-    const sp = {
-      grid: true,
-      photos: [],
-      frames: [],
-      places: [
-        { id: 'p1', photo: '', border: b({}) },
-        { id: 'p2', photo: '', border: b({ lib: 'my:1' }) },
-        { id: 'p3', photo: '', border: b({ photo: 'f2' }) },
-        { id: 'p4', photo: '' },
-      ],
-    } as unknown as SpreadView
-    const box = (id: string): SelBox => ({ x: 0, y: 0, w: 50, h: 50, ref: id, id, photo: '', fit: '', rot: 0 })
-    const sel = ['p1', 'p2', 'p3', 'p4'].map(box)
-    expect(menuContext(sp, sel, ['f1']).borderLost).toBe(1)
-    expect(menuContext(sp, sel, []).borderLost).toBe(0)
-    expect(menuContext(undefined, sel, ['f1']).borderLost).toBe(0)
-  })
-  it('«Копировать имена» считает только найденные фото', () => {
-    const m = photoMenu({ ...base, places: 2, photos: 2, missing: 1 })
-    expect(m.find((i) => i.id === 'copy')?.label).toBe('Копировать имя файла')
-    expect(photoMenu({ ...base, places: 2, photos: 2, missing: 2 }).map((i) => i.id)).not.toContain('copy')
-  })
-  it('contain: предлагается «С обрезкой», не «Целиком»', () => {
-    const m = ids({ allContain: true, allCover: false })
-    expect(m).toContain('cover')
-    expect(m).not.toContain('contain')
-  })
-  it('вперемешку — оба пункта', () => {
-    const m = ids({ allContain: false, allCover: false })
-    expect(m).toEqual(expect.arrayContaining(['contain', 'cover']))
-  })
-  it('несколько: имена и «Удалить (N)», без просмотра, подписи и Проводника', () => {
-    const m = photoMenu({ ...base, places: 3, photos: 3 })
+describe('photoMenu: дерево М1 (спека 108)', () => {
+  it('М1: одно фото, «Ручная» — 13 строк в порядке групп (владелец 2026-10-23)', () => {
+    const m = photoMenuFull({ ...base, grid: true, pasteable: true })
     expect(m.map((i) => i.id)).toEqual([
-      'copy',
-      'turnCw',
-      'turnCcw',
-      'flipH',
-      'flipV',
+      'preview',
+      'clipCopy',
+      'clipPaste',
+      'turn',
+      'mirror',
+      'frame',
+      'shape',
       'gray',
-      'contain',
-      'rounded',
-      'oval',
-      'border',
+      'backdrop',
+      'layer',
+      'caption',
+      'file',
       'delete',
     ])
-    expect(m[0].label).toBe('Копировать имена файлов')
-    expect(m[10].label).toBe('Удалить (3)')
+    expect(m.filter((i) => i.sub).map((i) => i.id)).toEqual(['turn', 'mirror', 'frame', 'shape', 'backdrop', 'layer', 'file'])
+    expect(m.find((i) => i.id === 'clipCopy')?.sep).toBe(true)
   })
-  it('пустое место: без файловых пунктов и «Целиком»', () => {
-    expect(ids({ grid: true, photos: 0, allCover: true })).toEqual(['rounded', 'oval', 'border', 'layer', 'delete'])
+  it('линии: перед группой Повернуть…, перед «На фон», перед «Файл», перед «Удалить»; первой нет', () => {
+    const m = menu({ grid: true })
+    expect(m[0].sep).toBeFalsy()
+    expect(m.filter((i) => i.sep).map((i) => i.id)).toEqual(['turn', 'backdrop', 'file', 'delete'])
+  })
+  it('«Авто»: слоя нет; «Слой ▸» на «Ручной» — четыре операции с параметром', () => {
+    expect(top({})).not.toContain('layer')
+    const layer = menu({ grid: true }).find((i) => i.id === 'layer')
+    expect(layer?.sub?.map((i) => [i.id, i.arg])).toEqual([
+      ['layer', 'front'],
+      ['layer', 'up'],
+      ['layer', 'down'],
+      ['layer', 'back'],
+    ])
+  })
+  it('«На фон ▸» — только у одного найденного фото, области из контекста', () => {
+    expect(
+      menu()
+        .find((i) => i.id === 'backdrop')
+        ?.sub?.map((i) => [i.arg, i.label]),
+    ).toEqual([
+      ['spread', 'Весь разворот'],
+      ['left', 'Левая страница'],
+      ['right', 'Правая страница'],
+    ])
+    expect(top({ places: 2, photos: 2 })).not.toContain('backdrop')
+    expect(top({ missing: 1 })).not.toContain('backdrop')
+    expect(top({ grid: true, photos: 0 })).not.toContain('backdrop')
+    expect(top({ scopes: [] })).not.toContain('backdrop')
+  })
+  it('«Подпись» — одному фото, в том числе пропавшему', () => {
+    expect(top({})).toContain('caption')
+    expect(top({ missing: 1 })).toContain('caption')
+    expect(top({ places: 2, photos: 2 })).not.toContain('caption')
   })
   it('ничего не выделено — меню нет', () => {
-    expect(ids({ places: 0, photos: 0 })).toEqual([])
-  })
-  it('линия разделяет группы, не стоит первой', () => {
-    const m = photoMenu({ ...base, grid: true, differ: true, framed: true })
-    expect(m[0].sep).toBeFalsy()
-    expect(m.filter((i) => i.sep).map((i) => i.id)).toEqual(['turnCw', 'caption'])
+    expect(top({ places: 0, photos: 0 })).toEqual([])
   })
 })
 
-describe('Удалить у группы с текстами', () => {
-  const label = (c: Partial<MenuCtx>) => photoMenu({ ...base, ...c }).find((i) => i.id === 'delete')?.label
-  it('считает места и тексты вместе', () => {
-    expect(label({ places: 1, texts: 2 })).toBe('Удалить (3)')
-    expect(label({ places: 2, texts: 0 })).toBe('Удалить (2)')
-    expect(label({ places: 1, texts: 0 })).toBe('Удалить')
+describe('Повернуть ▸', () => {
+  it('↻ ↺ выпрямить наклон — у одного фото; «Выпрямить по линии» с текстом в группе нет', () => {
+    expect(subIds({}, 'turn')).toEqual(['turnCw', 'turnCcw', 'straighten', 'tilt'])
+    expect(subIds({ texts: 1, tiltOk: false }, 'turn')).toEqual(['turnCw', 'turnCcw'])
   })
-  it('menuContext принимает число текстов', () => {
-    expect(menuContext(undefined, [], [], 2).texts).toBe(2)
-    expect(menuContext(undefined, [], []).texts).toBe(0)
+  it('у группы — ↻ ↺', () => {
+    expect(subIds({ places: 3, photos: 3, tiltOk: false }, 'turn')).toEqual(['turnCw', 'turnCcw'])
   })
-})
-
-describe('меню стикера (048)', () => {
-  const one = { places: 0, photos: 0, stickers: 1 }
-  const items = (c: Partial<MenuCtx>, can?: (f: FeatureId) => boolean) => photoMenu({ ...base, ...c }, can)
-  it('«Авто», один стикер: заменить, зеркало, слой, удалить', () => {
-    expect(items(one).map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'layer', 'delete'])
-    expect(items(one)[0]).toMatchObject({ label: 'Заменить…' })
-    expect(items(one).find((i) => i.id === 'layer')?.sub).toBe(true)
+  it('у пропавшего — без наклона в рамке', () => {
+    expect(subIds({ missing: 1, tiltOk: false }, 'turn')).toEqual(['turnCw', 'turnCcw', 'straighten'])
   })
-  it('«Авто», стикер + текст: «Слой ▸» и «Удалить (2)»', () => {
-    expect(items({ ...one, texts: 1 }).map((i) => i.id)).toEqual(['layer', 'delete'])
+  it('нет у пустого места', () => {
+    expect(top({ grid: true, photos: 0 })).not.toContain('turn')
   })
-  it('«Ручная»: плюс «Слой ▸»', () => {
-    expect(items({ ...one, grid: true }).map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'layer', 'delete'])
-    expect(items({ ...one, grid: true }).find((i) => i.id === 'layer')?.sub).toBe(true)
+  it('на уровне без turn остаются выпрямить и наклон; без tilt — только повороты; без обоих группы нет', () => {
+    expect(subIds({}, 'turn', (f) => f !== 'turn')).toEqual(['straighten', 'tilt'])
+    expect(subIds({}, 'turn', (f) => f !== 'tilt')).toEqual(['turnCw', 'turnCcw'])
+    expect(top({}, (f) => f !== 'tilt' && f !== 'turn')).not.toContain('turn')
   })
-  it('линии: первый пункт без неё, зеркало и удаление отделены', () => {
-    const m = items({ ...one, grid: true })
-    expect(m[0].sep).toBeFalsy()
-    expect(m.filter((i) => i.sep).map((i) => i.id)).toEqual(['flipH', 'layer', 'delete'])
-  })
-  it('несколько стикеров или стикер с текстом: без «Заменить…» и зеркала, «Удалить (N)»', () => {
-    expect(items({ ...one, stickers: 3, grid: true }).map((i) => i.id)).toEqual(['layer', 'delete'])
-    expect(items({ ...one, stickers: 3 }).find((i) => i.id === 'delete')?.label).toBe('Удалить (3)')
-    expect(items({ ...one, stickers: 1, texts: 1 }).find((i) => i.id === 'delete')?.label).toBe('Удалить (2)')
-    expect(items({ ...one, stickers: 2 })[0].sep).toBeFalsy()
-  })
-  it('уровень: без decor меню нет, без слоёв нет «Слоя»; photoMenu стикеру не нужна', () => {
-    expect(items(one, (f) => f !== 'decor')).toEqual([])
-    expect(items({ ...one, grid: true }, (f) => f !== 'layers').map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'delete'])
-    expect(items(one, (f) => f !== 'layers').map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'delete'])
-    expect(items(one, (f) => f !== 'photoMenu').map((i) => i.id)).toContain('replace')
-    expect(items(one, (f) => can(f, 'simple'))).toEqual([])
-  })
-  it('стикер среди мест: обычное меню места, «Удалить (N)» считает и стикер, выпрямить нельзя', () => {
-    expect(items({ stickers: 1 }).find((i) => i.id === 'delete')?.label).toBe('Удалить (2)')
-    expect(ids({ stickers: 1 })).not.toContain('straighten')
-    expect(ids({ stickers: 1 })).not.toContain('replace')
-  })
-  it('menuContext принимает число стикеров', () => {
-    expect(menuContext(undefined, [], [], 0, 2).stickers).toBe(2)
-    expect(menuContext(undefined, [], []).stickers).toBe(0)
+  it('«Наклон в рамке» стоит последним и зовёт tiltmode.toggle (id tilt)', () => {
+    expect(find({}, 'tilt')).toMatchObject({ id: 'tilt', label: 'Наклон в рамке' })
   })
 })
 
-describe('«Повернуть» в меню', () => {
-  it('есть только у фото, не у пустого места', () => {
-    expect(ids({})).toEqual(expect.arrayContaining(['turnCw', 'turnCcw']))
-    expect(ids({ grid: true, photos: 0 })).not.toContain('turnCw')
+describe('Зеркало ▸', () => {
+  it('галочка только если у всех', () => {
+    const f = (c: Partial<MenuCtx>) =>
+      menu(c)
+        .find((i) => i.id === 'mirror')
+        ?.sub?.map((i) => [i.id, i.mark, i.checked])
+    expect(f({})).toEqual([
+      ['flipH', 'check', false],
+      ['flipV', 'check', false],
+    ])
+    expect(f({ allFlipH: true })).toEqual([
+      ['flipH', 'check', true],
+      ['flipV', 'check', false],
+    ])
   })
-  it('на уровне без turn пунктов нет', () => {
-    expect(photoMenu(base, (f) => f !== 'turn').map((i) => i.id)).not.toContain('turnCw')
+  it('только у фото, пустое место его не получает', () => {
+    expect(top({ grid: true, photos: 0 })).not.toContain('mirror')
+    expect(top({ places: 3, photos: 2 })).toContain('mirror')
+  })
+  it('без функции flip группы нет', () => {
+    expect(top({}, (f) => f !== 'flip')).not.toContain('mirror')
+  })
+})
+
+describe('Кадр ▸', () => {
+  const frame = (c: Partial<MenuCtx>) => subIds(c, 'frame')
+  it('Целиком · С обрезкой; точка у текущего', () => {
+    expect(frame({})).toEqual(['contain', 'cover'])
+    expect(find({}, 'cover')).toMatchObject({ mark: 'radio', checked: true })
+    expect(find({}, 'contain')).toMatchObject({ mark: 'radio', checked: false })
+    expect(find({ allContain: true, allCover: false }, 'contain')).toMatchObject({ checked: true })
+  })
+  it('смешанное — без точки', () => {
+    const c = { allContain: false, allCover: false }
+    expect(find(c, 'contain')?.checked).toBe(false)
+    expect(find(c, 'cover')?.checked).toBe(false)
+  })
+  it('«Подогнать место под фото» — при разных пропорциях, после черты', () => {
+    expect(frame({})).not.toContain('fitPhoto')
+    expect(frame({ differ: true })).toEqual(['contain', 'cover', 'fitPhoto'])
+    expect(find({ differ: true }, 'fitPhoto')).toMatchObject({ label: 'Подогнать место под фото', sep: true })
+  })
+  it('«Сбросить кадр» — когда кадр изменён', () => {
+    expect(frame({})).not.toContain('resetFrame')
+    expect(frame({ framed: true })).toEqual(['contain', 'cover', 'resetFrame'])
+    expect(frame({ framed: true, differ: true })).toEqual(['contain', 'cover', 'fitPhoto', 'resetFrame'])
+  })
+  it('без функции frame группы нет', () => {
+    expect(top({ framed: true }, (f) => f !== 'frame')).not.toContain('frame')
+  })
+})
+
+describe('Форма ▸', () => {
+  const shape = (c: Partial<MenuCtx>) =>
+    menu(c)
+      .find((i) => i.id === 'shape')
+      ?.sub?.map((i) => [i.id, i.checked])
+  it('точка у текущей, «Рамочка…» после черты', () => {
+    expect(shape({})).toEqual([
+      ['rect', true],
+      ['rounded', false],
+      ['oval', false],
+      ['border', undefined],
+    ])
+    expect(find({}, 'border')).toMatchObject({ label: 'Рамочка…', sep: true })
+    expect(shape({ allRect: false, allOval: true })?.slice(0, 3)).toEqual([
+      ['rect', false],
+      ['rounded', false],
+      ['oval', true],
+    ])
+  })
+  it('смесь — все три без точки', () => {
+    expect(
+      shape({ allRect: false })
+        ?.slice(0, 3)
+        .map((x) => x[1]),
+    ).toEqual([false, false, false])
+  })
+  it('у пустого места тоже', () => {
+    expect(subIds({ grid: true, photos: 0 }, 'shape')).toEqual(['rect', 'rounded', 'oval', 'border'])
+  })
+  it('у группы мест — рамочка ставится «Куда: выделенные»', () => {
+    expect(subIds({ places: 3, photos: 3 }, 'shape')).toContain('border')
+  })
+  it('функции независимы: без frame остаётся «Рамочка…», без border — три формы; «Простой» меню не имеет', () => {
+    expect(subIds({}, 'shape', (f) => f !== 'frame')).toEqual(['border'])
+    expect(find({}, 'border', (f) => f !== 'frame')?.sep).toBeFalsy() // черта не первая
+    expect(subIds({}, 'shape', (f) => f !== 'border')).toEqual(['rect', 'rounded', 'oval'])
+    expect(photoMenu(base, (f) => can(f, 'simple'))).toEqual([])
+  })
+  it('у одних стикеров меню стикера без рамочки', () => {
+    expect(ids({ places: 0, photos: 0, stickers: 1 })).not.toContain('border')
+  })
+})
+
+describe('Файл ▸', () => {
+  afterEach(() => setOsForTest(null))
+  const file = (c: Partial<MenuCtx>) => subIds(c, 'file')
+  it('Показать в…, Копировать имя файла; «Где ещё стоит…» выключено', () => {
+    expect(file({})).toEqual(['explorer', 'copy'])
+  })
+  it('«Где ещё стоит…» — одному фото, когда подключено; без него «Файл ▸» не пустеет', () => {
+    expect(file({ uses: true })).toEqual(['explorer', 'copy', 'uses'])
+    expect(file({ uses: true, places: 2, photos: 2 })).toEqual(['copy'])
+  })
+  it('у группы — «Копировать имена файлов», считает только найденные', () => {
+    expect(find({ places: 3, photos: 3 }, 'copy')?.label).toBe('Копировать имена файлов')
+    expect(find({ places: 2, photos: 2, missing: 1 }, 'copy')?.label).toBe('Копировать имя файла')
+    expect(top({ places: 2, photos: 2, missing: 2 })).not.toContain('file')
+  })
+  it('пропавшее фото: «Файл ▸» из одного пункта «Где ещё стоит…», «Перепривязать…» строкой после него', () => {
+    expect(file({ missing: 1, uses: true })).toEqual(['uses'])
+    const m = top({ missing: 1, uses: true })
+    expect(m.slice(m.indexOf('file'), m.indexOf('file') + 2)).toEqual(['file', 'relink'])
+  })
+  it('пропавшее фото без «Где ещё стоит…»: «Файл ▸» нет, «Перепривязать…» остаётся', () => {
+    const m = top({ missing: 1 })
+    expect(m).not.toContain('file')
+    expect(m).toContain('relink')
+    expect(ids({ missing: 1 })).not.toContain('preview')
+    expect(ids({ missing: 1 })).not.toContain('explorer')
+  })
+  it('«Перепривязать…» и при пропавшей рамочке без библиотеки, даже у пустого места (079 U5)', () => {
+    expect(top({ borderLost: 1, photos: 0 })).toContain('relink')
+    expect(top({ borderLost: 0 })).not.toContain('relink')
+  })
+  it('слово «Показать…» по платформе (101): Windows, Mac, Linux', () => {
+    const label = () => find({}, 'explorer')?.label
+    setOsForTest('windows')
+    expect(label()).toBe('Показать в Проводнике')
+    setOsForTest('mac')
+    expect(label()).toBe('Показать в Finder')
+    setOsForTest('linux')
+    expect(label()).toBe('Показать в папке')
+  })
+  it('fileGroup — те же пункты, что «Файл ▸» меню (одно описание с 106)', () => {
+    const c = { photos: 1, missing: 0, one: true, uses: true }
+    expect(fileGroup(c)).toEqual(menu({ uses: true }).find((i) => i.id === 'file')?.sub)
+    expect(fileGroup({ ...c, uses: false }).map((i) => i.id)).toEqual(['explorer', 'copy'])
+    expect(fileGroup({ photos: 0, missing: 0, one: false, uses: true })).toEqual([])
+  })
+})
+
+const file0 = (c: Partial<MenuCtx>) => subIds(c, 'file')
+
+describe('Файл ▸: вхождения (108 U3)', () => {
+  const rows = [{ id: 'use', arg: '0', label: 'Разворот 2 — место' }]
+  const sub = (c: Partial<MenuCtx>) =>
+    menu({ uses: true, usesSub: rows, ...c })
+      .find((i) => i.id === 'file')
+      ?.sub?.map((i) => i.id)
+  it('menuContext включает «Где ещё стоит» для одного фото', () => {
+    expect(menuContext(undefined, [], []).uses).toBe(true)
+  })
+  it('строки идут в «Файл ▸» под серой подписью: глубже второго уровня MenuList не рисует', () => {
+    expect(sub({})).toEqual(['explorer', 'copy', 'usesHead', 'use'])
+    const head = menu({ uses: true, usesSub: rows })
+      .find((i) => i.id === 'file')
+      ?.sub?.find((i) => i.id === 'usesHead')
+    expect(head).toMatchObject({ label: 'Где ещё стоит', kind: 'note', sep: true })
+  })
+  it('пропавшее фото: «Файл ▸» — подпись и строки; группа — без вхождений', () => {
+    expect(sub({ missing: 1 })).toEqual(['usesHead', 'use'])
+    expect(sub({ places: 2, photos: 2 })).toEqual(['copy'])
+  })
+  it('нет строк у ctx — прежний пункт без подменю', () => {
+    expect(file0({ uses: true })).toEqual(['explorer', 'copy', 'uses'])
   })
 })
 
@@ -267,101 +352,52 @@ describe('menuContext', () => {
     expect(c.places).toBe(1)
     expect(c.photos).toBe(0)
   })
-})
-
-describe('photoMenu по уровням (спека 010 U1)', () => {
-  const at = (l: Level) => (f: FeatureId) => can(f, l)
-  const lv = (l: Level, c: Partial<MenuCtx> = {}) => photoMenu({ ...base, ...c }, at(l)).map((i) => i.id)
-
-  it('«Простой»: меню правой кнопки нет', () => {
-    expect(lv('simple')).toEqual([])
+  it('зеркало: allFlipH / allFlipV — у всех выделенных фото; без фото — нет', () => {
+    const s = {
+      ...spread,
+      frames: [
+        { flipH: true, flipV: false, img: { x: 0, y: 0, w: 100, h: 100 }, dpi: 300 },
+        { flipH: true, flipV: true, img: { x: 0, y: 0, w: 100, h: 100 }, dpi: 300 },
+      ],
+    } as unknown as SpreadView
+    const flags = (sel: SelBox[]) => {
+      const c = menuContext(s, sel, [])
+      return [c.allFlipH, c.allFlipV]
+    }
+    expect(flags([box('a', 100, 100)])).toEqual([true, false])
+    expect(flags([box('a', 100, 100), box('b', 100, 100)])).toEqual([true, false])
+    expect(flags([box('b', 100, 100)])).toEqual([true, true])
+    expect(flags([])).toEqual([false, false])
   })
-  it('«Стандартный»: без слоя, с «На фон», зеркалом и кадром', () => {
-    expect(lv('standard', { grid: true })).toEqual([
-      'preview',
-      'copy',
-      'explorer',
-      'backdrop',
-      'turnCw',
-      'turnCcw',
-      'straighten',
-      'flipH',
-      'flipV',
-      'gray',
-      'contain',
-      'rounded',
-      'oval',
-      'border',
-      'caption',
-      'delete',
-    ])
+  it('tiltOk: одно фото на месте, не пропавшее, без текстов и стикеров', () => {
+    const one = [box('a', 200, 100)]
+    expect(menuContext(spread, one, []).tiltOk).toBe(true)
+    expect(menuContext(spread, one, ['a']).tiltOk).toBe(false)
+    expect(menuContext(spread, one, [], 1).tiltOk).toBe(false)
+    expect(menuContext(spread, one, [], 0, 1).tiltOk).toBe(false)
+    expect(menuContext(spread, [...one, box('b', 100, 100)], []).tiltOk).toBe(false)
+    expect(menuContext(spread, [], []).tiltOk).toBe(false)
   })
-  it('«Полный», «Ручная»: слой на месте', () => {
-    expect(lv('full', { grid: true })).toContain('layer')
+  it('borderLost считает только картинки без lib с пропавшим файлом', () => {
+    const b = (over: object) => ({ kind: '', photo: 'f1', lib: '', pic: true, known: true, ...over })
+    const sp = {
+      grid: true,
+      photos: [],
+      frames: [],
+      places: [
+        { id: 'p1', photo: '', border: b({}) },
+        { id: 'p2', photo: '', border: b({ lib: 'my:1' }) },
+        { id: 'p3', photo: '', border: b({ photo: 'f2' }) },
+        { id: 'p4', photo: '' },
+      ],
+    } as unknown as SpreadView
+    const bx = (id: string): SelBox => ({ x: 0, y: 0, w: 50, h: 50, ref: id, id, photo: '', fit: '', rot: 0 })
+    const sel = ['p1', 'p2', 'p3', 'p4'].map(bx)
+    expect(menuContext(sp, sel, ['f1']).borderLost).toBe(1)
+    expect(menuContext(sp, sel, []).borderLost).toBe(0)
+    expect(menuContext(undefined, sel, ['f1']).borderLost).toBe(0)
   })
-  it('без can меню прежнее', () => {
-    expect(photoMenu(base).map((i) => i.id)).toEqual(ids({}))
-  })
-  it('линия первой не стоит и переходит к следующему пункту, когда скрыт первый пункт группы', () => {
-    const items = photoMenu({ ...base, photos: 0, grid: true }, (f) => f !== 'layers')
-    expect(items.map((i) => i.id)).toEqual(['rounded', 'oval', 'border', 'delete'])
-    expect(items[0].sep).toBeFalsy()
-    const all = photoMenu(base, at('standard'))
-    // Зеркала и кадр скрыты (в «Простом» нет меню совсем) — проверяем «Стандартный» без зеркала.
-    const noFlip = photoMenu(base, (f) => f !== 'flip' && f !== 'turn' && f !== 'tilt' && f !== 'adjust')
-    expect(noFlip.find((i) => i.id === 'contain')?.sep).toBe(true)
-    expect(all[0].sep).toBeFalsy()
-  })
-})
-
-describe('«Выпрямить по линии» в меню (спека 045)', () => {
-  it('есть у одного фото сразу после «Повернуть ↺ 90°»', () => {
-    const m = photoMenu(base)
-    const at = m.findIndex((i) => i.id === 'turnCcw')
-    expect(m[at + 1]).toMatchObject({ id: 'straighten', label: 'Выпрямить по линии' })
-  })
-  it('нет у нескольких фото, пустого места и группы с текстом', () => {
-    expect(ids({ places: 3, photos: 3 })).not.toContain('straighten')
-    expect(ids({ grid: true, photos: 0 })).not.toContain('straighten')
-    expect(ids({ texts: 1 })).not.toContain('straighten')
-    expect(ids({ places: 0, photos: 0 })).not.toContain('straighten')
-  })
-  it('только при can(tilt): «Простой» меню не имеет, без tilt пункта нет', () => {
-    expect(photoMenu(base, (f) => f !== 'tilt').map((i) => i.id)).not.toContain('straighten')
-    expect(photoMenu(base, (f) => can(f, 'standard')).map((i) => i.id)).toContain('straighten')
-    expect(photoMenu(base, (f) => can(f, 'simple'))).toEqual([])
-  })
-})
-
-describe('«Прямоугольное» / «Скруглённое» / «Круглое» в меню (спеки 044, 076)', () => {
-  const none = { allRect: false, allRounded: false, allOval: false }
-  const shapeIds = (c: Partial<MenuCtx>) => ids(c).filter((i) => ['rect', 'rounded', 'oval'].includes(i))
-  it('как «Целиком» / «С обрезкой»: показан пункт, которого нет у всех выделенных', () => {
-    expect(shapeIds({})).toEqual(['rounded', 'oval']) // base: у всех прямоугольное
-    expect(shapeIds({ allRect: false, allRounded: true })).toEqual(['rect', 'oval'])
-    expect(shapeIds({ allRect: false, allOval: true })).toEqual(['rect', 'rounded'])
-  })
-  it('смесь — все три, порядок ▭ ▢ ◯', () => {
-    expect(shapeIds(none)).toEqual(['rect', 'rounded', 'oval'])
-  })
-  it('есть и у пустого места (не только у фото)', () => {
-    expect(shapeIds({ grid: true, photos: 0 })).toEqual(['rounded', 'oval'])
-    expect(shapeIds({ grid: true, photos: 0, allRect: false, allOval: true })).toEqual(['rect', 'rounded'])
-  })
-  it('стоят после «С обрезкой», подписи по-русски', () => {
-    const m = photoMenu({ ...base, ...none, allContain: false, allCover: false })
-    const at = m.findIndex((i) => i.id === 'cover')
-    expect(m.slice(at + 1, at + 4).map((i) => [i.id, i.label])).toEqual([
-      ['rect', 'Прямоугольное'],
-      ['rounded', 'Скруглённое'],
-      ['oval', 'Круглое'],
-    ])
-  })
-  it('только при can(frame)', () => {
-    const m = photoMenu(base, (f) => f !== 'frame').map((i) => i.id)
-    for (const id of ['rect', 'rounded', 'oval']) expect(m).not.toContain(id)
-  })
-  it('menuContext: allRect / allRounded / allOval по форме выделенных', () => {
+  it('allRect / allRounded / allOval по форме выделенных', () => {
     const b = (shape: string, round = 0): SelBox => ({
       x: 0,
       y: 0,
@@ -386,46 +422,7 @@ describe('«Прямоугольное» / «Скруглённое» / «Кру
     expect(flags([b('', 25), b('')])).toEqual([false, false, false])
     expect(flags([])).toEqual([false, false, false])
   })
-})
-
-describe('«Сделать ч/б / цветным» в меню (068)', () => {
-  const gray = (c: Partial<MenuCtx> = {}, can?: (f: FeatureId) => boolean) => photoMenu({ ...base, ...c }, can).find((i) => i.id === 'gray')
-
-  it('стоит после «Зеркало ↕», подпись по состоянию', () => {
-    const m = photoMenu(base)
-    expect(m[m.findIndex((i) => i.id === 'flipV') + 1]).toMatchObject({ id: 'gray', label: 'Сделать ч/б' })
-    expect(gray({ allGray: true })?.label).toBe('Сделать цветным')
-  })
-  it('есть у группы фото, нет у пустого места', () => {
-    expect(gray({ places: 3, photos: 3 })).toBeDefined()
-    expect(gray({ grid: true, photos: 0 })).toBeUndefined()
-  })
-  it('только при can(adjust): «Простой» меню не имеет, без adjust пункта нет', () => {
-    expect(gray({}, (f) => f !== 'adjust')).toBeUndefined()
-    expect(gray({}, (f) => can(f, 'standard'))).toBeDefined()
-  })
-  it('линия группы переходит к «Сделать ч/б», когда скрыты поворот и зеркало', () => {
-    const m = photoMenu(base, (f) => f !== 'flip' && f !== 'turn' && f !== 'tilt')
-    expect(m.find((i) => i.id === 'gray')?.sep).toBe(true)
-  })
-  it('«Рамочка…» (079): у фото и у пустого места, после формы; на «Простом» меню нет, без функции — пункта нет', () => {
-    const label = photoMenu(base).find((i) => i.id === 'border')?.label
-    expect(label).toBe('Рамочка…')
-    expect(ids({})).toContain('border')
-    expect(ids({ photos: 0, grid: true })).toEqual(['rounded', 'oval', 'border', 'layer', 'delete'])
-    expect(ids({ places: 3, photos: 3 })).toContain('border') // группа мест: окно ставит «Куда: выделенные»
-    expect(photoMenu(base, (f) => f !== 'border').map((i) => i.id)).not.toContain('border')
-    expect(photoMenu(base, (f) => f !== 'frame').map((i) => i.id)).toContain('border') // форма и рамочка — разные функции
-    expect(photoMenu(base, (f) => can(f, 'simple'))).toEqual([])
-    // порядок: форма · рамочка · «Сбросить кадр»
-    const m = ids({ framed: true })
-    expect(m.indexOf('border')).toBe(m.indexOf('oval') + 1)
-    expect(m.indexOf('resetFrame')).toBe(m.indexOf('border') + 1)
-  })
-  it('«Рамочка…» (079): у одних стикеров меню стикера без неё', () => {
-    expect(ids({ places: 0, photos: 0, stickers: 1 })).not.toContain('border')
-  })
-  it('menuContext: allGray — у всех выделенных фото ч/б', () => {
+  it('allGray — у всех выделенных фото ч/б', () => {
     const s = {
       id: 's1',
       grid: false,
@@ -435,29 +432,149 @@ describe('«Сделать ч/б / цветным» в меню (068)', () => {
         { gray: false, img: { x: 0, y: 0, w: 100, h: 100 }, dpi: 300 },
       ],
     } as unknown as SpreadView
-    const box = (photo: string): SelBox => ({ x: 0, y: 0, w: 100, h: 100, ref: photo, id: photo, photo, fit: '', rot: 0 })
-    expect(menuContext(s, [box('a')], []).allGray).toBe(true)
-    expect(menuContext(s, [box('a'), box('b')], []).allGray).toBe(false)
+    expect(menuContext(s, [box('a', 100, 100)], []).allGray).toBe(true)
+    expect(menuContext(s, [box('a', 100, 100), box('b', 100, 100)], []).allGray).toBe(false)
     expect(menuContext(s, [], []).allGray).toBe(false)
+  })
+  it('принимает число текстов и стикеров', () => {
+    expect(menuContext(undefined, [], [], 2).texts).toBe(2)
+    expect(menuContext(undefined, [], []).texts).toBe(0)
+    expect(menuContext(undefined, [], [], 0, 2).stickers).toBe(2)
+    expect(menuContext(undefined, [], []).stickers).toBe(0)
   })
 })
 
-describe('подпись «Показать…» по платформе (101)', () => {
-  afterEach(() => setOsForTest(null))
-  const label = () => photoMenu(base).find((i) => i.id === 'explorer')?.label
-  it('Windows — Проводник, Mac — Finder, Linux — папка; id один', () => {
-    setOsForTest('windows')
-    expect(label()).toBe('Показать в Проводнике')
-    setOsForTest('mac')
-    expect(label()).toBe('Показать в Finder')
-    setOsForTest('linux')
-    expect(label()).toBe('Показать в папке')
+describe('Удалить', () => {
+  const label = (c: Partial<MenuCtx>) => find(c, 'delete')
+  it('считает места и тексты вместе; Del справа, красный', () => {
+    expect(label({ places: 1, texts: 2 })?.label).toBe('Удалить (3)')
+    expect(label({ places: 2, texts: 0, photos: 2 })?.label).toBe('Удалить (2)')
+    expect(label({ places: 1, texts: 0 })).toMatchObject({ label: 'Удалить', hint: 'Del', danger: true, sep: true })
   })
-  it('пропавшее фото и несколько: пункта нет ни на какой платформе', () => {
-    for (const o of ['windows', 'mac', 'linux'] as const) {
-      setOsForTest(o)
-      expect(photoMenu({ ...base, missing: 1 }).map((i) => i.id)).not.toContain('explorer')
-      expect(photoMenu({ ...base, photos: 2, places: 2 }).map((i) => i.id)).not.toContain('explorer')
-    }
+  it('стоит последней', () => {
+    expect(top({ grid: true }).at(-1)).toBe('delete')
+  })
+})
+
+describe('«Сделать ч/б / цветным» (068)', () => {
+  it('стоит после «Формы», слово по состоянию', () => {
+    const m = top({})
+    expect(m[m.indexOf('shape') + 1]).toBe('gray')
+    expect(find({}, 'gray')?.label).toBe('Сделать ч/б')
+    expect(find({ allGray: true }, 'gray')?.label).toBe('Сделать цветным')
+  })
+  it('есть у группы фото, нет у пустого места', () => {
+    expect(top({ places: 3, photos: 3 })).toContain('gray')
+    expect(top({ grid: true, photos: 0 })).not.toContain('gray')
+  })
+  it('только при can(adjust)', () => {
+    expect(top({}, (f) => f !== 'adjust')).not.toContain('gray')
+    expect(top({}, (f) => can(f, 'standard'))).toContain('gray')
+  })
+})
+
+describe('меню стикера (048)', () => {
+  const one = { places: 0, photos: 0, stickers: 1 }
+  const items = (c: Partial<MenuCtx>, can?: (f: FeatureId) => boolean) => photoMenu({ ...base, ...c }, can)
+  it('«Авто», один стикер: заменить, зеркало, слой, удалить', () => {
+    expect(items(one).map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'layer', 'delete'])
+    expect(items(one)[0]).toMatchObject({ label: 'Заменить…' })
+    expect(items(one).find((i) => i.id === 'layer')?.sub).toHaveLength(4)
+  })
+  it('«Авто», стикер + текст: «Слой ▸» и «Удалить (2)»', () => {
+    expect(items({ ...one, texts: 1 }).map((i) => i.id)).toEqual(['layer', 'delete'])
+  })
+  it('«Ручная»: тот же состав', () => {
+    expect(items({ ...one, grid: true }).map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'layer', 'delete'])
+  })
+  it('линии: первый пункт без неё, зеркало и удаление отделены', () => {
+    const m = items({ ...one, grid: true })
+    expect(m[0].sep).toBeFalsy()
+    expect(m.filter((i) => i.sep).map((i) => i.id)).toEqual(['flipH', 'layer', 'delete'])
+  })
+  it('несколько стикеров или стикер с текстом: без «Заменить…» и зеркала, «Удалить (N)»', () => {
+    expect(items({ ...one, stickers: 3, grid: true }).map((i) => i.id)).toEqual(['layer', 'delete'])
+    expect(items({ ...one, stickers: 3 }).find((i) => i.id === 'delete')?.label).toBe('Удалить (3)')
+    expect(items({ ...one, stickers: 1, texts: 1 }).find((i) => i.id === 'delete')?.label).toBe('Удалить (2)')
+    expect(items({ ...one, stickers: 2 })[0].sep).toBeFalsy()
+  })
+  it('уровень: без decor меню нет, без слоёв нет «Слоя»; photoMenu стикеру не нужна', () => {
+    expect(items(one, (f) => f !== 'decor')).toEqual([])
+    expect(items({ ...one, grid: true }, (f) => f !== 'layers').map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'delete'])
+    expect(items(one, (f) => f !== 'layers').map((i) => i.id)).toEqual(['replace', 'flipH', 'flipV', 'delete'])
+    expect(items(one, (f) => f !== 'photoMenu').map((i) => i.id)).toContain('replace')
+    expect(items(one, (f) => can(f, 'simple'))).toEqual([])
+  })
+  it('стикер среди мест: обычное меню места, «Удалить (N)» считает и стикер, выпрямить нельзя', () => {
+    expect(find({ stickers: 1 }, 'delete')?.label).toBe('Удалить (2)')
+    expect(ids({ stickers: 1 })).not.toContain('straighten')
+    expect(ids({ stickers: 1 })).not.toContain('replace')
+  })
+})
+
+describe('photoMenu по уровням (спека 010 U1)', () => {
+  const at = (l: Level) => (f: FeatureId) => can(f, l)
+  it('«Простой»: меню правой кнопки нет', () => {
+    expect(top({}, at('simple'))).toEqual([])
+  })
+  it('«Стандартный»: без слоя, с «На фон», зеркалом и кадром', () => {
+    expect(top({ grid: true }, at('standard'))).toEqual([
+      'preview',
+      'turn',
+      'mirror',
+      'frame',
+      'shape',
+      'gray',
+      'backdrop',
+      'caption',
+      'file',
+      'delete',
+    ])
+  })
+  it('«Полный», «Ручная»: слой на месте', () => {
+    expect(top({ grid: true }, at('full'))).toContain('layer')
+  })
+  it('подменю без видимых пунктов не показывается, черта не первая', () => {
+    // Скрыты поворот, зеркало, кадр, форма, ч/б: «На фон» берёт на себя линию и не стоит первой.
+    const hidden = (f: FeatureId) => !['turn', 'tilt', 'flip', 'frame', 'border', 'adjust'].includes(f)
+    const m = menu({ grid: true }, hidden)
+    expect(m.map((i) => i.id)).toEqual(['preview', 'backdrop', 'layer', 'caption', 'file', 'delete'])
+    expect(m.filter((i) => i.sep).map((i) => i.id)).toEqual(['backdrop', 'file', 'delete'])
+    const bare = menu({ photos: 0, grid: true }, (f) => f !== 'frame' && f !== 'border' && f !== 'layers')
+    expect(bare.map((i) => i.id)).toEqual(['delete'])
+    expect(bare[0].sep).toBeFalsy()
+  })
+  it('подменю с одним пунктом остаётся подменю', () => {
+    expect(subIds({ photos: 0, grid: true }, 'shape', (f) => f !== 'frame')).toEqual(['border'])
+    expect(top({ photos: 0, grid: true }, (f) => f !== 'frame')).toContain('shape')
+  })
+  it('без can меню прежнее', () => {
+    expect(photoMenu(base).map((i) => i.id)).toEqual(top({}))
+  })
+})
+
+describe('пустое место и группа', () => {
+  it('пустое место (с группой буфера): Форма ▸ · Слой ▸ · Удалить', () => {
+    expect(top({ grid: true, photos: 0 })).toEqual(['shape', 'layer', 'delete'])
+    expect(top({ photos: 0 })).toEqual(['shape', 'delete'])
+  })
+  it('группа фото: без просмотра, подписи и «На фон»; «Удалить (N)» внизу', () => {
+    const m = top({ places: 3, photos: 3, tiltOk: false })
+    expect(m).toEqual(['turn', 'mirror', 'frame', 'shape', 'gray', 'file', 'delete'])
+    expect(find({ places: 3, photos: 3 }, 'delete')?.label).toBe('Удалить (3)')
+  })
+})
+
+describe('клавиши из реестра', () => {
+  it('подпись справа — из hint(cmd) каталога; нет клавиши — нет подписи', () => {
+    const keys: Record<string, string> = { flipH: 'Ctrl+H' }
+    const m = photoMenuFull(
+      base,
+      (f) => f !== 'clipboard',
+      (cmd) => keys[cmd] ?? '',
+    )
+    const mirror = m.find((i) => i.id === 'mirror')?.sub
+    expect(mirror?.[0].hint).toBe('Ctrl+H')
+    expect(mirror?.[1].hint).toBeUndefined()
   })
 })

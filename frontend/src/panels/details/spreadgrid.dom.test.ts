@@ -5,8 +5,9 @@ import { flushSync, tick } from 'svelte'
 
 // «Все развороты» (096 сц. 9–13): тот же жест, что в ленте. Геометрия плиток подставлена (happy-dom её не считает).
 const move = vi.hoisted(() => vi.fn())
+const newSpread = vi.hoisted(() => vi.fn())
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
-vi.mock('../../../wailsjs/go/app/App', () => ({ MoveSpread: move }))
+vi.mock('../../../wailsjs/go/app/App', () => ({ MoveSpread: move, NewSpread: newSpread }))
 vi.stubGlobal(
   'IntersectionObserver',
   class {
@@ -19,6 +20,9 @@ vi.stubGlobal(
 const { default: SpreadGrid } = await import('./SpreadGrid.svelte')
 const { store } = await import('../../base/core/store.svelte')
 const { drag } = await import('../../base/drag/drag.svelte')
+const { spreadsel } = await import('../timeline/spreadsel.svelte')
+const { naming } = await import('../timeline/naming.svelte')
+const { prefs } = await import('../../base/prefs/prefs.svelte')
 
 const sp = (id: string) => ({ id, name: '', photos: [], rects: [], w: 400, h: 200, kind: '' })
 const view = (rev: number, ids: string[]) => ({ ...store.view, rev, spreads: ids.map(sp), settings: {} }) as never
@@ -27,6 +31,14 @@ beforeEach(async () => {
   await new Promise((r) => setTimeout(r, 0))
   store.view = view(1, ['a', 'b', 'c', 'd', 'e'])
   store.go(0)
+  prefs.level = 'full'
+  spreadsel.clear()
+  naming.stop()
+  newSpread.mockImplementation(async (at: number) => {
+    const ids = store.view.spreads.map((x) => x.id)
+    ids.splice(at, 0, 'n')
+    return view(store.view.rev + 1, ids)
+  })
   move.mockImplementation(async (id: string, at: number) => {
     const ids = store.view.spreads.map((s) => s.id).filter((x) => x !== id)
     ids.splice(at, 0, id)
@@ -37,6 +49,7 @@ afterEach(() => {
   drag.cancel()
   cleanup()
   move.mockReset()
+  newSpread.mockReset()
 })
 
 // Сетка 3 в ряд, плитка 100×80, зазор 10: ряды y 0 и 90; на экране — с (0, 0), видна целиком.
@@ -100,5 +113,75 @@ describe('«Все развороты»: порядок перетаскиван
     expect(shifts(container)).toEqual(['', '', '', '', ''])
     ptr('pointerup', 170, 400)
     expect(move).not.toHaveBeenCalled()
+  })
+})
+
+// Меню правого щелчка по плитке (103 §1): то же, что у групп ленты, на одну плитку.
+const items = () => Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+const labels = () => items().map((b) => b.textContent?.replace(/\s+/g, ' ').trim())
+const item = (text: string) => items().find((b) => b.textContent?.includes(text))!
+
+describe('«Все развороты»: меню плитки (103)', () => {
+  it('правый щелчок — меню плитки без «Разрезать»; выделение групп ленты снято', async () => {
+    const { container } = await mount()
+    spreadsel.toggle('a')
+    spreadsel.toggle('c')
+    await fireEvent.contextMenu(tiles(container)[2])
+    flushSync()
+    expect(spreadsel.size).toBe(0)
+    const got = labels()
+    expect(got.some((l) => l?.startsWith('Склеить со следующим'))).toBe(true)
+    expect(got).toContain('Вставить разворот перед')
+    expect(got).toContain('Вставить разворот после')
+    expect(got).toContain('Удалить разворот')
+    expect(got.some((l) => l?.startsWith('Разрезать'))).toBe(false)
+  })
+
+  it('у последней плитки склейки нет', async () => {
+    const { container } = await mount()
+    await fireEvent.contextMenu(tiles(container)[4])
+    flushSync()
+    expect(labels().some((l) => l?.startsWith('Склеить'))).toBe(false)
+  })
+
+  it('«Название…» — поле на месте подписи плитки', async () => {
+    const { container } = await mount()
+    await fireEvent.contextMenu(tiles(container)[1])
+    flushSync()
+    await fireEvent.click(item('Название'))
+    flushSync()
+    expect(naming.where).toBe('grid')
+    const input = container.querySelector<HTMLInputElement>('[data-tile="1"] .num input')
+    expect(input).not.toBeNull()
+    expect(container.querySelectorAll('input')).toHaveLength(1)
+  })
+
+  it('«Вставить разворот после» — NewSpread(i+1) и переход на новый; «перед» — NewSpread(i)', async () => {
+    const { container } = await mount()
+    await fireEvent.contextMenu(tiles(container)[2])
+    flushSync()
+    await fireEvent.click(item('Вставить разворот после'))
+    await vi.waitFor(() => expect(newSpread).toHaveBeenLastCalledWith(3, []))
+    await vi.waitFor(() => expect(store.currentId).toBe('n'))
+    expect(store.view.spreads.map((x) => x.id)).toEqual(['a', 'b', 'c', 'n', 'd', 'e'])
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+
+    store.view = view(10, ['a', 'b', 'c', 'd', 'e'])
+    await tick()
+    await fireEvent.contextMenu(tiles(container)[0])
+    flushSync()
+    await fireEvent.click(item('Вставить разворот перед'))
+    await vi.waitFor(() => expect(newSpread).toHaveBeenLastCalledWith(0, []))
+  })
+
+  it('Esc закрывает меню без действий', async () => {
+    const { container } = await mount()
+    await fireEvent.contextMenu(tiles(container)[0])
+    flushSync()
+    expect(document.querySelector('[role="menu"]')).not.toBeNull()
+    await fireEvent.keyDown(window, { key: 'Escape' })
+    flushSync()
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+    expect(newSpread).not.toHaveBeenCalled()
   })
 })

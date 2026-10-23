@@ -34,6 +34,8 @@ export const MOUSE_HELP: readonly MouseRow[] = [
   // 094: простой щелчок по зазору и черте больше не режет и не клеит — только с Ctrl (на Mac ⌘).
   { show: 'Ctrl+щелчок между фото в ленте', label: 'Разрезать разворот (на Mac — ⌘)', group: 'spreads', feature: 'timeline' },
   { show: 'Ctrl+щелчок по черте между разворотами', label: 'Склеить развороты (на Mac — ⌘)', group: 'spreads', feature: 'timeline' },
+  // 103 §3: промежуток холста; уровень не проверяется (103-9), как у «+ Новый разворот».
+  { show: 'Ctrl+щелчок в промежутке между листами', label: 'Вставить разворот (на Mac — ⌘)', group: 'canvas' },
   { show: 'Двойной щелчок по тексту', label: 'Править текст', group: 'text', feature: 'text' },
   { show: 'Esc / Ctrl+Enter (в тексте)', label: 'Закончить правку текста', group: 'text', feature: 'text' },
   { show: 'Shift (поворот текста)', label: 'Угол кратен 15°', group: 'text', feature: 'textRotate' },

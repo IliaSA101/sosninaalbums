@@ -60,7 +60,7 @@ func (pc *pageCtx) result(c candidate, idx []int) Result {
 	var pg [2]pageGeo
 	pg[pc.side] = pageGeo{h: c.height, depth: c.depth}
 	pg[1-pc.side] = pc.og
-	return Result{rects, pagedScore(rects, pc.g, pg, pc.empty), pc.key(relabel(c.Key, idx))}
+	return Result{Rects: rects, Score: pagedScore(rects, pc.g, pg, pc.empty), Key: pc.key(relabel(c.Key, idx))}
 }
 
 // pageRow — блок страницы, собранный в целый разворот.
@@ -166,13 +166,22 @@ func (pc *pageCtx) variants(aspects []float64, best pageRow) []pageRow {
 // прыгает, когда листают другую страницу. В ряду «в порядке ленты» есть и
 // модификаторы страницы (variants). ok=false, если у key нет страниц (IsPaged) или страница пуста.
 func PageChoices(key string, aspects []float64, p Params, side, limit int) (inOrder, rearranged []Result, block Block, ok bool) {
+	// Подрезка (104): ряды и порядок — как без неё, Rects/Score/Crop строк — из Build(p).
+	orig, crop := p, fitCrop(p) > 0
+	if crop {
+		p = noCrop(p)
+	}
 	pc, ok := newPageCtx(key, aspects, p, side)
 	if !ok {
 		return nil, nil, BlockNone, false
 	}
 	base := pc.inOrder(aspects, limit)
 	r, b := pc.rearranged(aspects, p, limit, base)
-	return results(base), r, b, true
+	in := results(base)
+	if crop {
+		return cropRows(in, aspects, orig), cropRows(r, aspects, orig), b, true
+	}
+	return in, r, b, true
 }
 
 func results(rows []pageRow) []Result {

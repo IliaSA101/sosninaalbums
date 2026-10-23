@@ -360,7 +360,7 @@ func (r *permRun) pairs(m []int, k int) []Result {
 				rects[id].X += r.p.PageW
 			}
 			s := pairScore(rects, r.ps.g, max(lb.depth, rb.depth), lb.height, rb.height, k == 0 || k == r.n)
-			out = append(out, Result{rects, s, "P[" + lk + "|" + rk + "]"})
+			out = append(out, Result{Rects: rects, Score: s, Key: "P[" + lk + "|" + rk + "]"})
 		}
 	}
 	return out
@@ -399,7 +399,7 @@ func (r *permRun) spread() []Result {
 			for j, id := range idx {
 				rects[id] = c.Rects[j]
 			}
-			all = append(all, Result{rects, score(rects, g.spread, g.spine, c.depth), relabel(c.Key, idx)})
+			all = append(all, Result{Rects: rects, Score: score(rects, g.spread, g.spine, c.depth), Key: relabel(c.Key, idx)})
 		}
 		return true
 	})

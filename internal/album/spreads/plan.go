@@ -19,12 +19,18 @@ import (
 type PlanJob struct {
 	infos []model.PhotoInfo
 	asp   []float64
-	rate  []int // действующие оценки infos (nil — нули): любимые развороты ч/б не берёт
-	prm   layout.Params
+	own   []bool        // у фото infos[i] свой кадр (098): подрезка (104) его ячейку не трогает
+	rate  []int         // действующие оценки infos (nil — нули): любимые развороты ч/б не берёт
+	prm   layout.Params // Crop — для раскладок внутри групп; план групп считает без него (planPrm)
 	have  int
 	tail  int // пустые развороты в конце: сборка займёт их первыми (035 U1)
 	// drop — похожие кадры, которых сборка не берёт (078, Without); их ищет ядро (078-15).
 	drop map[string]bool
+	// «Весь альбом заново» (107, album.go): album — вход из AlbumOf; anchors — якоря со стенами в
+	// пуле infos; stat — состав альбома для AutoPlan.Album.
+	album   bool
+	anchors []anchor
+	stat    model.AlbumPlan
 }
 
 // PlanOf — вход автосборки из проекта; photos уже без повторов. Пропорции — как их увидит
@@ -39,7 +45,10 @@ func PlanOf(p *model.Project, photos []model.PhotoInfo, rate Rating) PlanJob {
 			tmp.Photos[ph.ID] = r
 		}
 	}
-	j := PlanJob{infos: infos, asp: tmp.Aspects(model.Remember(tmp, infos)), prm: p.Params(), have: len(p.Spreads), tail: blankTail(p)}
+	rem := model.Remember(tmp, infos)
+	// prm — уровня проекта, без Lock: свои кадры по группам плана ставит groupLocks (104).
+	prm := p.Params()
+	j := PlanJob{infos: infos, asp: tmp.Aspects(rem), own: tmp.OwnFrame(rem), prm: prm, have: len(p.Spreads), tail: blankTail(p)}
 	if rate != nil {
 		j.rate = make([]int, len(infos))
 		for i, ph := range infos {
@@ -61,15 +70,25 @@ func (j PlanJob) Without(drop map[string]bool) PlanJob {
 	if len(drop) == 0 {
 		return j
 	}
-	k := PlanJob{prm: j.prm, have: j.have, tail: j.tail, drop: drop}
+	k := PlanJob{prm: j.prm, have: j.have, tail: j.tail, drop: drop, album: j.album, stat: j.stat}
+	kept := make([]int, len(j.infos)+1) // kept[i] — сколько из первых i фото осталось
 	for i, ph := range j.infos {
+		kept[i+1] = kept[i]
 		if drop[ph.ID] {
 			continue
 		}
+		kept[i+1]++
 		k.infos, k.asp = append(k.infos, ph), append(k.asp, j.asp[i])
+		if j.own != nil {
+			k.own = append(k.own, j.own[i])
+		}
 		if j.rate != nil {
 			k.rate = append(k.rate, j.rate[i])
 		}
+	}
+	for _, a := range j.anchors { // стены в пуле без отброшенных
+		a.wall = kept[a.wall]
+		k.anchors = append(k.anchors, a)
 	}
 	return k
 }
@@ -103,9 +122,10 @@ func (j PlanJob) Plan(o model.AutoOpts) (model.AutoPlan, error) {
 func (j PlanJob) plan(o model.AutoOpts) (model.AutoPlan, plan.Plan, error) {
 	n := len(j.asp)
 	if n == 0 {
-		return model.AutoPlan{}, plan.Plan{}, nil
+		return model.AutoPlan{Album: j.albumPlan()}, plan.Plan{}, nil
 	}
-	ap := model.AutoPlan{Photos: n, Similar: len(j.drop)}
+	ap := model.AutoPlan{Photos: n, Similar: len(j.drop), Album: j.albumPlan()}
+	walls := j.walls() // nil без якорей: пути ниже — прежние функции побитово
 	var cuts []float64
 	if o.Series {
 		cuts = series.Cuts(j.infos)
@@ -116,11 +136,11 @@ func (j PlanJob) plan(o model.AutoOpts) (model.AutoPlan, plan.Plan, error) {
 	var lo, hi int
 	switch {
 	case o.Auto:
-		lo, hi = plan.SpreadRange(n, model.MaxPhotos)
+		lo, hi = plan.SpreadRangeWalls(n, model.MaxPhotos, walls)
 	case ranged:
-		lo, hi = plan.RangeSpreads(n, o.MinPer, m)
+		lo, hi = plan.RangeSpreadsWalls(n, o.MinPer, m, walls)
 	default:
-		lo, hi = plan.SpreadRange(n, m)
+		lo, hi = plan.SpreadRangeWalls(n, m, walls)
 	}
 	hi = min(hi, model.MaxSpreads-(j.have-j.tail))
 	ap.MinSpreads, ap.MaxSpreads = lo, max(hi, 0)
@@ -132,18 +152,38 @@ func (j PlanJob) plan(o model.AutoOpts) (model.AutoPlan, plan.Plan, error) {
 	if ranged {
 		from, to := o.MinPer, m
 		if o.Auto {
-			from, to = plan.AutoPer(n, N)
+			from, to = plan.AutoPerWalls(n, N, walls)
 		}
 		ap.From, ap.To = plan.RangePer(n, N, from, to)
-		pl = plan.PlanRange(j.asp, j.prm, plan.PlanOpts{Spreads: N, MinPer: from, MaxPer: to, Cuts: cuts, Phase: phase(o)})
+		pl = plan.PlanRange(j.asp, j.planPrm(), plan.PlanOpts{Spreads: N, MinPer: from, MaxPer: to, Cuts: cuts, Phase: phase(o), Walls: walls})
 	} else {
 		ap.To = m
-		pl = plan.PlanGroups(j.asp, j.prm, N, m)
+		pl = plan.PlanGroupsWalls(j.asp, j.planPrm(), N, m, walls)
 	}
 	ap.Spreads, ap.Avg, ap.Min, ap.Max = pl.Spreads, pl.Avg, pl.Min, pl.Max
-	ap.Reuse = min(j.tail, ap.Spreads)
+	ap.Reuse = min(j.tail, ap.Spreads) // в режиме альбома хвоста нет: tail = 0
 	ap.Gray = grayCount(j.grayOf(pl, o.Gray))
 	return ap, pl, nil
+}
+
+// planPrm — Params плана групп: без подрезки и своих кадров (104 §Не входит): сколько фото на
+// разворот, не зависит от настройки, подрезка действует только на раскладки внутри групп.
+func (j PlanJob) planPrm() layout.Params {
+	p := j.prm
+	p.Crop, p.Lock = 0, 0
+	return p
+}
+
+// groupLocks — layout.Params.Lock по группам плана: биты своих кадров фото группы (при Crop = 0 — нули).
+func (j PlanJob) groupLocks(groups [][2]int) []uint64 {
+	out := make([]uint64, len(groups))
+	if j.prm.Crop <= 0 || j.own == nil {
+		return out
+	}
+	for i, g := range groups {
+		out[i] = model.LockBits(j.own[g[0]:g[1]])
+	}
+	return out
 }
 
 // phase — сдвиг волны размеров для варианта o.Variant (078 §7): варианты 0 и 1 — без сдвига.
@@ -183,15 +223,32 @@ func Rebuild(p *model.Project, pre Prep, at int, rate Rating, reuse []string) ([
 
 // built — итог build: позиция первого собранного разворота, их число и ID; флаги запасных
 // (разрешённых семейств нет — лучшая; nil — фильтра нет) и ч/б — их читает предпросмотр (Preview).
+// pos — индексы новых разворотов в p.Spreads, когда они не подряд (режим альбома, 107).
 type built struct {
 	at, made int
 	ids      []string
 	fb, gray []bool
+	pos      []int
+}
+
+// spreads — собранные развороты проекта p по порядку сборки.
+func (b built) spreads(p *model.Project) []*model.Spread {
+	if b.pos == nil {
+		return p.Spreads[b.at : b.at+b.made]
+	}
+	out := make([]*model.Spread, len(b.pos))
+	for i, k := range b.pos {
+		out[i] = p.Spreads[k]
+	}
+	return out
 }
 
 // build — тело AutoBuild и Rebuild (reuse — ID для новых разворотов, nil — все новые).
 // Похожие кадры (pre.job.drop) не берутся: тот же отбор, что у плана до замка.
 func build(p *model.Project, pre Prep, at int, rate Rating, reuse []string) (built, error) {
+	if pre.job.album {
+		return buildAlbum(p, pre, rate, reuse)
+	}
 	j := PlanOf(p, pre.photos, rate).Without(pre.job.drop)
 	pl, ready, err := pre.planFor(j)
 	if err != nil || len(pl.Groups) == 0 {

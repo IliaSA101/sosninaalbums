@@ -223,6 +223,11 @@ describe('карточка и панели', () => {
     expect(p.steps).toContainEqual({ do: 'details', section: 'settings' })
     expect(placesOf(articleById('fold')!).map((x) => x.spot)).toEqual(['ui:fold-mode'])
   })
+  it('подрезка (104): «Показать» раскрывает «Настройки альбома» и подсвечивает блок', () => {
+    const p = plan('crop')
+    expect(p.steps).toContainEqual({ do: 'details', section: 'settings' })
+    expect(placesOf(articleById('crop')!).map((x) => x.spot)).toEqual(['ui:crop-mode'])
+  })
 })
 
 describe('сброс вида и меню', () => {

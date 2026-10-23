@@ -1,5 +1,6 @@
 <script lang="ts">
   import Spread from './Spread.svelte'
+  import InsertGap from './InsertGap.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import { store } from '../../base/core/store.svelte'
   import { drag } from '../../base/drag/drag.svelte'
@@ -8,7 +9,8 @@
   import { addVignette } from '../../panels/vignette/vigact'
   import { row } from './spreadrow.svelte'
   import { AUTO_LABEL, emptyCanvas } from './emptycanvas'
-  import { centerAt, pitch, renderRange, slotBox, type SlotBox } from './spreadrow'
+  import { centerAt, gapBox, pitch, renderRange, slotBox, type SlotBox } from './spreadrow'
+  import { gapKey } from '../../panels/timeline/cutkey.svelte'
   import { labelTitle } from '../../panels/timeline/spreadname'
   import { COVER_ID, unitOf, type SheetSize } from '../../base/geom/sheet'
   import type { Settings } from '../../base/core/types'
@@ -63,6 +65,17 @@
   const empty = $derived(emptyCanvas(modes.big, store.photos.length))
   // Слот «новый» соседом справа уходит под плавающую карточку (запас ряда = её зона): виден лишь левый край,
   // текст по центру обрезался бы — там только «+» у ближнего края, полный текст — когда ряд стоит на слоте.
+  // Промежутки «Ctrl+щелчок — вставить разворот» (103): между листами в покое ряда; Ctrl слушаем, пока они возможны.
+  const gaps = $derived(n >= 2 && !zoomed)
+  $effect(() => {
+    if (gaps) return gapKey.attach()
+  })
+  // Промежуток после слота i: оба соседа — листы; после обложки (lead 1) индекс вставки 0.
+  const gapAfter = (i: number): Box | null => {
+    const a = sheets[i]
+    const c = sheets[i + 1]
+    return gaps && !row.moving && a && c ? gapBox(box(i, a), box(i + 1, c)) : null
+  }
   const peek = $derived(!row.atNew && !modes.details && prefs.can('panels'))
 </script>
 
@@ -143,6 +156,8 @@
             ></div>
           {/if}
         </div>
+        {@const g = gapAfter(i)}
+        {#if g}<InsertGap box={g} at={i + 1 - lead} />{/if}
       {:else}
         <div class="slot" style:left="{b.left}px" style:top="{b.top}px" style:width="{b.width}px" style:height="{b.height}px">
           <button

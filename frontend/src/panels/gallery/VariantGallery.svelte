@@ -11,6 +11,7 @@
   import TplRow from '../../base/tpl/TplRow.svelte'
   import TplSep from '../../base/tpl/TplSep.svelte'
   import GalleryHead, { galleryName, galleryTabs } from './GalleryHead.svelte'
+  import { foldLink, foldNote, foldNoteShown } from './foldnote'
   import type { Choice, ChoiceRows, LayoutScope } from '../../base/core/types'
   import {
     activeFamily,
@@ -43,6 +44,8 @@
   // У разворота — столько же, сколько листает счётчик «Раскладка N / M» (без «С перестановкой»).
   const k = $derived(galleryCount(g.scope === 'spread', { inOrder, rearranged, extra }))
   const page = $derived(g.scope === 'spread' ? null : g.scope)
+  // 105: раскладки «Разброса» с фото на сгибе, скрытые правилом «Только широкие»; считает Go, у страницы их нет.
+  const fold = $derived(g.scope === 'spread' ? foldNote(sp?.foldHidden) : null)
 
   const name = $derived(galleryName(g.spread))
   const title = $derived(
@@ -73,6 +76,15 @@
   const row = $derived(galleryRow(lines, gallery.order, { family: fam, current: sp?.layout, openTwins: gallery.openTwins }))
   const tiles = $derived(row.parts.reduce((n, p) => n + p.shown.length + (p.hidden > 0 ? 1 : 0) + (p.more ? 1 : 0), 0))
 
+  // 105-qa-3: «Другие ▸» в шапке — когда на экране есть черта «другие» (не первая часть ряда). Прокручивает ряд к ней.
+  const hasOthers = $derived(row.parts.some((p) => p.line === ROW.extra && !!p.sep))
+  function toOthers(e: MouseEvent) {
+    const root = (e.currentTarget as HTMLElement).closest('header')?.parentElement
+    const sep = root?.querySelector<HTMLElement>('[data-sep="extra"]')
+    const sc = sep?.closest<HTMLElement>('.scroll')
+    if (sep && sc) sc.scrollTo({ left: sep.offsetLeft - 8, behavior: 'smooth' })
+  }
+
   // Плитка «Ещё»: ряд дописывается, первая новая карточка встаёт в начало видимой части.
   async function more(e: MouseEvent) {
     if (!gallery.cur) return
@@ -98,6 +110,9 @@
     {#if famItems.length > 2}
       <Seg items={famItems} value={fam} onpick={(f) => gallery.setFamily(f)} label="Семейство раскладок" />
     {/if}
+    {#if hasOthers}
+      <button type="button" class="others" title="Прокрутить ряд к «Другим вариантам»" onclick={toOthers}>Другие ▸</button>
+    {/if}
   {/snippet}
 </GalleryHead>
 
@@ -106,7 +121,12 @@
     <SideList items={orders} value={gallery.order} onpick={(o) => gallery.setOrder(o)} label="Какой ряд показать" />
   {/snippet}
   {#each row.parts as p (p.line)}
-    {#if p.sep}<TplSep label={p.sep} title="Другие варианты: воздух и с главным фото" />{/if}
+    {#if p.sep}<TplSep key="extra" label={p.sep} title="Другие варианты: воздух и с главным фото" />{/if}
+    {#if fold && p.line === ROW.extra && foldNoteShown(fam)}
+      <p class="foldnote">
+        <span>{fold.text}<button type="button" class="link" onclick={foldLink.open}>{fold.link}</button></span>
+      </p>
+    {/if}
     {#each p.shown as ch (ch.key)}
       <LayoutCard
         rects={ch.rects}
@@ -143,3 +163,38 @@
     {/if}
   {/each}
 </TplRow>
+
+<style>
+  .others {
+    flex: none;
+    height: 26px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  /* Серая заметка в начале «Других вариантов», как пустой ряд (TplRow .empty): высота плитки, текст по центру */
+  .foldnote {
+    flex: none;
+    box-sizing: border-box;
+    width: 230px;
+    height: 80px;
+    margin: 0;
+    display: grid;
+    align-content: center;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  /* Ссылка — как «Готовые развороты» у пустого листа: серая, подчёркнутая */
+  .link {
+    all: unset;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .link:hover {
+    color: var(--text);
+  }
+  .link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+</style>

@@ -220,7 +220,7 @@
         >{/if}
     {/if}
   </div>
-  {#if border}<BorderOverlay {border} px={bpx} {mini} />{/if}
+  {#if border}<BorderOverlay {border} px={bpx} {mini} refs={[place?.id, id]} />{/if}
   <!-- У выделенной ячейки «!» dpi, ✥ и ползунок рисует CellOverlay (выше стека, не обрезаются) -->
   {#if !mini && (!selected || preview) && !missing}<DpiMark dpi={fv?.dpi ?? 0} minDPI={store.view.minDPI} at={dpiAt} />{/if}
 </div>

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
-	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 // Level — уровень разнообразия (зеркало model.Variety: пакет не знает model).
@@ -40,6 +39,9 @@ type Cand struct {
 	// формы (δ_form), а не по оценке layout, которая штрафует воздух лент и лесенок.
 	Formed bool
 	Kind   Kind // семейство генератора featured; NoKind — ряд layout, форма Gen или воздух
+	// Manual — только ручной выбор из «Других вариантов» (центр крупнее, «Разброс», 105): Pick и
+	// ByFamily его не берут, сборка и «Разнообразить» его не видят.
+	Manual bool
 }
 
 // Pool — пул кандидатов разворота: сначала ряд «Авто» Row(aspects, p, rowLen) как есть (префикс
@@ -65,12 +67,12 @@ func Pool(aspects []float64, p layout.Params, rowLen int, lv Level) []Cand {
 	}
 	for _, r := range e.row {
 		in := Describe(r, p)
-		if r.Key == e.mid {
-			// Семейство по форме, как в подборке (FamilyOf): по заполнению он «Воздух», и сборка брала бы
-			// его в такт воздуха. «Центр крупнее» — только для ручного выбора из «Других вариантов».
-			in.Family = FamilyOf(forms.Contrast)
+		if e.manual[r.Key] {
+			// Семейство по форме, как в подборке (FamilyOf): по заполнению центр — «Воздух», и сборка
+			// брала бы его в такт воздуха. Центр и «Разброс» — только ручной выбор из «Других вариантов».
+			in.Family = FamilyOf(in.Form)
 		}
-		out = append(out, Cand{Result: r, Info: in, Kind: e.kind[r.Key]})
+		out = append(out, Cand{Result: r, Info: in, Kind: e.kind[r.Key], Manual: e.manual[r.Key]})
 	}
 	return out
 }

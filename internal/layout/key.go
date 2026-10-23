@@ -155,7 +155,7 @@ func bleedResult(rects []Rect, aspects []float64, g geom, key string) (Result, b
 		return Result{}, false
 	}
 	s := score(rects, g.spread, g.spine, 0) - bleedPenalty(crop)
-	return Result{rects, s, key}, true
+	return Result{Rects: rects, Score: s, Key: key}, true
 }
 
 // Build строит раскладку по ключу. false: ключ не разобрать или он не канонический,
@@ -165,23 +165,47 @@ func bleedResult(rects []Rect, aspects []float64, g geom, key string) (Result, b
 // U/D без заметного сдвига строятся (вид как по центру, как у O/I): порог minShift —
 // дело генераторов, иначе смена формата молча сбрасывала бы выбранную раскладку.
 func Build(key string, aspects []float64, p Params) (Result, bool) {
+	if fitCrop(p) > 0 {
+		return buildCrop(key, aspects, p, true)
+	}
+	return build0(key, aspects, p)
+}
+
+// build0 — Build без подрезки (Params.Crop не действует).
+func build0(key string, aspects []float64, p Params) (Result, bool) {
+	k, ok := checkKey(key, aspects, p, true)
+	if !ok {
+		return Result{}, false
+	}
+	return buildParsed(k, key, aspects, p)
+}
+
+// checkKey — проверки Build без геометрии: входы, разбор, листья, канонический вид
+// (canon=false — только для ключей, которые layout записал сам: запись заведомо каноническая).
+func checkKey(key string, aspects []float64, p Params, canon bool) (parsedKey, bool) {
 	n := len(aspects)
 	if n == 0 || n > MaxPhotos || p.PageW <= 0 || p.PageH <= 0 {
-		return Result{}, false
+		return parsedKey{}, false
 	}
 	for _, a := range aspects {
 		if !(a > 0) || math.IsInf(a, 0) {
-			return Result{}, false
+			return parsedKey{}, false
 		}
 	}
 	k, ok := parseKey(key)
 	if !ok || !leavesOK(k.leaves(), n) || p.Sheet && (IsPaged(key) || k.kind == 'Q') {
-		return Result{}, false
+		return parsedKey{}, false
 	}
 	// Одна раскладка — один ключ (у страниц «в край» без обычной второй страницы — B[…]).
-	if k.String() != key {
-		return Result{}, false
+	if canon && k.String() != key {
+		return parsedKey{}, false
 	}
+	return k, true
+}
+
+// buildParsed — геометрия разобранного и проверенного ключа.
+func buildParsed(k parsedKey, key string, aspects []float64, p Params) (Result, bool) {
+	n := len(aspects)
 	g := newGeom(p)
 	rects := make([]Rect, n)
 	switch k.kind {
@@ -200,11 +224,12 @@ func Build(key string, aspects []float64, p Params) (Result, bool) {
 				empty = true
 				continue
 			}
+			var ok bool
 			if pg[side], ok = g.page(side, k.mods[side], kt, aspects, rects); !ok {
 				return Result{}, false
 			}
 		}
-		return Result{rects, pagedScore(rects, g, pg, empty), key}, true
+		return Result{Rects: rects, Score: pagedScore(rects, g, pg, empty), Key: key}, true
 	}
 	switch {
 	case k.bleed == "full" && p.Layflat:

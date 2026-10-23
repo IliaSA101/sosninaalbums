@@ -166,7 +166,12 @@ if (goFiles.length) {
       const gp = run('go', ['env', 'GOPATH']).out.trim()
       exe = path.join(gp, 'bin', process.platform === 'win32' ? 'golangci-lint.exe' : 'golangci-lint')
     }
-    return res(run('node', ['scripts/heavy.mjs', exe, 'run', '--allow-parallel-runners', `--new-from-rev=${base}`, ...pkgs]))
+    const heavy = (...args) => run('node', ['scripts/heavy.mjs', exe, 'run', '--allow-parallel-runners', ...args, ...pkgs])
+    const fresh = heavy(`--new-from-rev=${base}`)
+    // Линтеры «на функцию» (funlen, gocognit) ставят замечание на заголовок: выросло тело старой функции —
+    // --new-from-rev его отфильтрует, поэтому второй прогон без фильтра по тем же пакетам
+    const perFunc = heavy('--enable-only', 'gocognit,funlen')
+    return res({ code: fresh.code || perFunc.code, out: [fresh.out, perFunc.out].filter((o) => o.trim()).join('\n') })
   })
 }
 

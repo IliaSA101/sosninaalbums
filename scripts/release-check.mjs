@@ -1,11 +1,12 @@
 // Проверка перед меткой выпуска: `node scripts/release-check.mjs [--version X.Y.Z] [--root <папка>]`.
 // Ловит механику выпуска, которую до сих пор находило только ревью: версия в четырёх местах (wails.json,
 // README «Status», «Что нового», CHANGELOG), `needs` публикации в release.yml (0.11), эталоны для arm64,
-// LICENSE = GPL v3 и условие 7(b) в NOTICE.md (0.23).
+// LICENSE = GPL v3 и условие 7(b) в NOTICE.md (0.23), прямой вызов scripts/… из workflow без +x (110, Т3).
 // Без --version берётся productVersion из wails.json (тогда проверяется согласованность остальных мест).
 // Выход ≠ 0 и список ошибок.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -203,6 +204,66 @@ export function checkArm64(root, yml) {
   return errors
 }
 
+// ---- права на скрипты в workflow ----
+
+// Строки команд из `run:` всех workflow: [{ file, line, text }] (line — номер в файле, с 1). Однострочный
+// `run: cmd` и блочный `run: |` / `>`: блок — все строки глубже отступа ключа.
+export function runLines(file, yml) {
+  const out = []
+  const lines = yml.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(\s*)(- )?run:\s*(.*)$/.exec(lines[i])
+    if (!m) continue
+    const indent = m[1].length + (m[2] ? 2 : 0)
+    const val = m[3].trim()
+    if (/^[|>][+-]?\d?$/.test(val)) {
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].trim() === '') continue
+        if (lines[j].length - lines[j].trimStart().length <= indent) break
+        out.push({ file, line: j + 1, text: lines[j] })
+      }
+    } else if (val && !val.startsWith('#')) out.push({ file, line: i + 1, text: val })
+  }
+  return out
+}
+
+// scripts/… первым словом команды: в начале строки, после ; && || | ( и после then/do/else.
+const DIRECT_SCRIPT = /(?:^|[;&|(]|\b(?:then|do|else))\s*(?:\.\/)?(scripts\/[^\s;&|()"'\\]+)/g
+
+// Режим файла в индексе git (`git ls-files -s`): '100755', '100644' или null, если файла в индексе нет.
+function indexMode(root, rel) {
+  const out = execFileSync('git', ['-C', root, 'ls-files', '-s', '--', rel], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  return out ? out.split(/\s+/)[0] : null
+}
+
+// Прямой вызов scripts/… из `run:` требует +x в индексе; через bash/sh/python/node/pwsh +x не нужен (первое
+// слово тогда не scripts/…). Причина — перезапуск метки берёт код из неё, а режим 100644 в метке не исправить.
+// modeOf(rel) подменяется в тестах (макет — не репозиторий git); git вызывается только при прямом вызове.
+export function workflowExec(root, modeOf = (rel) => indexMode(root, rel)) {
+  const dir = path.join(root, '.github/workflows')
+  if (!fs.existsSync(dir)) return []
+  const errors = []
+  for (const name of fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort()) {
+    for (const { file, line, text } of runLines(name, read(root, `.github/workflows/${name}`))) {
+      if (text.trimStart().startsWith('#')) continue
+      for (const m of text.matchAll(DIRECT_SCRIPT)) {
+        let mode
+        try {
+          mode = modeOf(m[1])
+        } catch (e) {
+          errors.push(`${file}:${line}: ${m[1]} — не прочитан режим в git-индексе (${e.message.split('\n')[0]})`)
+          continue
+        }
+        if (mode !== '100755') {
+          const why = mode === null ? 'нет в git-индексе' : 'без +x'
+          errors.push(`${file}:${line}: ${m[1]} ${why} (git update-index --chmod=+x или вызов через bash)`)
+        }
+      }
+    }
+  }
+  return errors
+}
+
 // ---- ролики и снимок README ----
 
 export const WEBP_MAX = 2621440 // 2,5 МБ
@@ -244,6 +305,7 @@ export function checkAll(root, version) {
   errors.push(...checkChangelog(root, version))
   errors.push(...checkLicense(root))
   errors.push(...checkReadmeMedia(root))
+  errors.push(...workflowExec(root))
   const yml = read(root, '.github/workflows/release.yml')
   if (yml === null) errors.push('.github/workflows/release.yml: нет файла')
   else errors.push(...checkNeeds(yml), ...checkArm64(root, yml))

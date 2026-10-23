@@ -1390,6 +1390,30 @@ export namespace model {
 	        this.photo = source["photo"];
 	    }
 	}
+	export class AlbumPlan {
+	    spreads: number;
+	    photos: number;
+	    free: number;
+	    manual: number;
+	    vignettes: number;
+	    decor: number;
+	    blank: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AlbumPlan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.spreads = source["spreads"];
+	        this.photos = source["photos"];
+	        this.free = source["free"];
+	        this.manual = source["manual"];
+	        this.vignettes = source["vignettes"];
+	        this.decor = source["decor"];
+	        this.blank = source["blank"];
+	    }
+	}
 	export class Art {
 	    kind: string;
 	    inks?: string[];
@@ -1419,6 +1443,7 @@ export namespace model {
 	    gray: number;
 	    variant: number;
 	    again: boolean;
+	    album: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new AutoOpts(source);
@@ -1438,6 +1463,7 @@ export namespace model {
 	        this.gray = source["gray"];
 	        this.variant = source["variant"];
 	        this.again = source["again"];
+	        this.album = source["album"];
 	    }
 	}
 	export class AutoPlan {
@@ -1454,6 +1480,7 @@ export namespace model {
 	    cuts: number;
 	    similar?: number;
 	    gray?: number;
+	    album?: AlbumPlan;
 	
 	    static createFrom(source: any = {}) {
 	        return new AutoPlan(source);
@@ -1474,7 +1501,26 @@ export namespace model {
 	        this.cuts = source["cuts"];
 	        this.similar = source["similar"];
 	        this.gray = source["gray"];
+	        this.album = this.convertValues(source["album"], AlbumPlan);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class PreviewSpread {
 	    key: string;
@@ -1482,6 +1528,7 @@ export namespace model {
 	    family: string;
 	    twin: number;
 	    formName: string;
+	    crop: number;
 	    photos: number;
 	    fallback: boolean;
 	    gray: boolean;
@@ -1497,6 +1544,7 @@ export namespace model {
 	        this.family = source["family"];
 	        this.twin = source["twin"];
 	        this.formName = source["formName"];
+	        this.crop = source["crop"];
 	        this.photos = source["photos"];
 	        this.fallback = source["fallback"];
 	        this.gray = source["gray"];
@@ -1526,6 +1574,7 @@ export namespace model {
 	    family: string;
 	    twin: number;
 	    formName: string;
+	    crop: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Choice(source);
@@ -1538,6 +1587,7 @@ export namespace model {
 	        this.family = source["family"];
 	        this.twin = source["twin"];
 	        this.formName = source["formName"];
+	        this.crop = source["crop"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2828,6 +2878,7 @@ export namespace model {
 	    vars: Vars;
 	    fields: string[];
 	    noAlbumBg?: boolean;
+	    foldHidden?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SpreadView(source);
@@ -2866,6 +2917,7 @@ export namespace model {
 	        this.vars = this.convertValues(source["vars"], Vars);
 	        this.fields = source["fields"];
 	        this.noAlbumBg = source["noAlbumBg"];
+	        this.foldHidden = source["foldHidden"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3447,7 +3499,11 @@ export namespace model {
 	export class PhotoUse {
 	    sheet: number;
 	    label: string;
-	    ref?: string;
+	    kind: string;
+	    spread: string;
+	    page: string;
+	    what: string;
+	    pick?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PhotoUse(source);
@@ -3457,7 +3513,11 @@ export namespace model {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sheet = source["sheet"];
 	        this.label = source["label"];
-	        this.ref = source["ref"];
+	        this.kind = source["kind"];
+	        this.spread = source["spread"];
+	        this.page = source["page"];
+	        this.what = source["what"];
+	        this.pick = source["pick"];
 	    }
 	}
 	export class PlaceBox {
@@ -3496,6 +3556,7 @@ export namespace model {
 	    safe: number;
 	    sheet?: boolean;
 	    bleed?: number;
+	    crop?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -3514,6 +3575,7 @@ export namespace model {
 	        this.safe = source["safe"];
 	        this.sheet = source["sheet"];
 	        this.bleed = source["bleed"];
+	        this.crop = source["crop"];
 	    }
 	}
 	

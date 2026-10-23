@@ -4,23 +4,21 @@ package album_test
 // каждый публичный метод хотя бы раз по фикстуре, после правки — View, глубина отмены
 // и возврата, rev и sha256 байтов Save. Ловит дрейф поведения при переносе ядра,
 // который точечные тесты не видят. Эталон — testdata/replay.json.gz (gzip, строка — шаг),
-// перезапись: go test ./internal/album -run Replay -update (флаг общий с marks_file_test.go).
+// перезапись: go test ./internal/album -run Replay -update (флаг общий с marks_file_test.go);
+// на Windows — replay.json.gz, на остальных ОС — replay-unix.json.gz (пути и перевод строк другие).
+// Тесты и сверка с эталоном — replay_golden_test.go.
 //
 // Чтения в сценарии тоже есть (их результат — короткий хэш нормализованного JSON);
 // отдельными шагами не зовутся только View (его отдаёт каждая правка) и Save (после
 // каждой правки). Новый публичный метод без шага роняет тест.
 
 import (
-	"bytes"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
@@ -29,7 +27,6 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
-	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -296,6 +293,12 @@ func replayScenario(t *testing.T) *replay {
 	r.do("RemoveLoose", r.e.RemoveLoose(r.v.Loose[0].ID, ""))
 	// 099 и 098: буфер обмена, фон альбома, «где стоит» — тоже в конце.
 	replayClipBg(r)
+	// 103: склейка и разрез через ручной — последними.
+	replaySpreads103(r)
+	// 107: весь альбом заново — последним.
+	replayAlbum107(r)
+	// 104 и 105: подрезка и «Разброс» через Editor — последними.
+	replayCropZ(r)
 	return r
 }
 
@@ -420,122 +423,4 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	// 098: имя копии старого формата для тоста — у нового альбома копии нет, шаг пишет "".
 	r.read("TakeBackup", e.TakeBackup())
 	return q
-}
-
-func TestEditorReplay(t *testing.T) {
-	edtest.SkipNotWindows(t) // пути фото и папок — с буквой диска
-	// Диск Q: вымышленный: «том на месте» — иначе свёртка источников зависела бы от машины
-	// (нет тома — запись не сворачивается, 0.22-sec-1).
-	t.Cleanup(paths.SetVolumeOracle(func(string) bool { return true }))
-	r := replayScenario(t)
-	// Шаг на каждый публичный метод Editor, кроме View и Save (они идут в каждом
-	// шаге-правке) и ID (номер Editor в процессе, 087-3: зависит от порядка тестов, в эталон
-	// не годится; проверка — TestEditorViewSrc), Close (после него реплей правок не идёт; проверка —
-	// TestEditorClose): новый метод без шага — провал.
-	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true}
-	for _, s := range r.steps {
-		seen[strings.SplitN(s.Step, ":", 2)[0]] = true
-	}
-	typ := reflect.TypeFor[*album.Editor]()
-	for i := range typ.NumMethod() {
-		if name := typ.Method(i).Name; !seen[name] {
-			t.Errorf("метод %s без шага в реплее", name)
-		}
-	}
-	var buf bytes.Buffer
-	buf.WriteString("[\n")
-	for i, s := range r.steps {
-		line, err := json.Marshal(s)
-		if err != nil {
-			t.Fatal(err)
-		}
-		buf.Write(line)
-		if i < len(r.steps)-1 {
-			buf.WriteByte(',')
-		}
-		buf.WriteByte('\n')
-	}
-	buf.WriteString("]\n")
-	compareReplay(t, filepath.Join("testdata", "replay.json.gz"), buf.Bytes())
-}
-
-// readReplayGz читает эталон: gzip → тот же построчный JSON.
-func readReplayGz(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-	zr, err := gzip.NewReader(f)
-	if err != nil {
-		return nil, err
-	}
-	return io.ReadAll(zr)
-}
-
-// writeReplayGz пишет эталон сжатым без имени и времени в заголовке (воспроизводимо).
-func writeReplayGz(path string, data []byte) error {
-	var out bytes.Buffer
-	zw, err := gzip.NewWriterLevel(&out, gzip.BestCompression)
-	if err != nil {
-		return err
-	}
-	if _, err := zw.Write(data); err != nil {
-		return err
-	}
-	if err := zw.Close(); err != nil {
-		return err
-	}
-	return os.WriteFile(path, out.Bytes(), 0o644)
-}
-
-// compareReplay сверяет с эталоном построчно (строка — шаг) и называет первый расходящийся шаг.
-// Эталон хранится сжатым (2 МБ текста не пускает pre-commit); при расхождении текущий
-// реплей лежит несжатым в $GOTMPDIR/replay-got.json — для diff руками.
-func compareReplay(t *testing.T, path string, got []byte) {
-	t.Helper()
-	want, err := readReplayGz(path)
-	if *edtest.Update {
-		// Равное не переписываем: байты gzip зависят от версии Go — лишний шум в git.
-		if err == nil && bytes.Equal(got, want) {
-			return
-		}
-		if err := writeReplayGz(path, got); err != nil {
-			t.Fatal(err)
-		}
-		return
-	}
-	if err != nil {
-		t.Fatalf("%v (создать: -update)", err)
-	}
-	if bytes.Equal(got, want) {
-		return
-	}
-	dump := ""
-	if dir := os.Getenv("GOTMPDIR"); dir != "" {
-		p := filepath.Join(dir, "replay-got.json")
-		if os.WriteFile(p, got, 0o644) == nil {
-			dump = "\nтекущий реплей: " + p
-		}
-	}
-	gl, wl := strings.Split(string(got), "\n"), strings.Split(string(want), "\n")
-	for i := range max(len(gl), len(wl)) {
-		var g, w string
-		if i < len(gl) {
-			g = gl[i]
-		}
-		if i < len(wl) {
-			w = wl[i]
-		}
-		if g == w {
-			continue
-		}
-		at := 0
-		for at < min(len(g), len(w)) && g[at] == w[at] {
-			at++
-		}
-		cut := func(s string) string { return s[max(0, at-150):min(len(s), at+150)] }
-		t.Fatalf("строка %d разошлась с эталоном (символ %d):\nесть:  …%s…\nждали: …%s…%s", i, at, cut(g), cut(w), dump)
-	}
-	t.Fatal("эталон отличается (перевод строк?)" + dump)
 }

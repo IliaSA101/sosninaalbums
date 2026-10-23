@@ -9,7 +9,7 @@
   import { flipCss, photoCss, thumbBox } from '../../base/geom/frame'
   import { outlineOf } from '../../base/geom/shape'
   import type { SpreadView } from '../../base/core/types'
-  import { B, cellW, chipW, cutTip, emptyPlaces, isBlank } from './timeline'
+  import { B, cellW, chipW, cutState, cutTip, emptyPlaces, isBlank } from './timeline'
   import { HOLD_MS, asSheet, sheetThumbW, visibleChips } from './chips'
   import { cutClick, cutKey as cutPress } from './stripact'
   import { cutKey } from './cutkey.svelte'
@@ -119,13 +119,13 @@
             style:filter={adjlive.filterOf(id, sp.frames?.[j])}
           />
         {/if}
-        {#if j > 0 && !sp.grid && cuts}
-          <!-- Разрез перед этим фото: Ctrl+щелчок или Enter (094 §1); без Ctrl зона мышь не ловит -->
+        {#if j > 0 && sp.kind !== 'vignette' && cuts}
+          <!-- Разрез перед этим фото: Ctrl+щелчок или Enter (094 §1); без Ctrl зона мышь не ловит. У ручного — через вопрос (103) -->
           <button
             class="cut"
             aria-label="Разрезать {unit.one} {i + 1} перед фото {j + 1}"
             onpointerdown={stop}
-            use:tipped={{ text: cutKey.held ? cutTip(isMac()) : '' }}
+            use:tipped={{ text: cutKey.held ? cutTip(isMac(), cutState(sp, j, unit).ask) : '' }}
             onclick={(e) => cutClick(e, sp.id, j)}
             onkeydown={(e) => cutPress(e, sp.id, j)}
           ></button>

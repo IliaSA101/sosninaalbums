@@ -176,9 +176,9 @@ class ViewMode {
 
   // Запомнить выбор окна автосборки после «Собрать».
   rememberAuto(
-    spreads: number,
+    spreads: number | null,
     range: AutoMem,
-    per: number,
+    per: number | null,
     by: 'spreads' | 'per',
     variety: Variety = this.autoVariety,
     series: boolean = this.autoSeries,
@@ -189,7 +189,7 @@ class ViewMode {
     this.autoSeries = series
     this.autoVariety = variety
     this.autoFamilies = normFamilies(families)
-    this.autoPer = Number.isFinite(per) ? Math.max(1, Math.min(64, per)) : null
+    this.autoPer = per !== null && Number.isFinite(per) ? Math.max(1, Math.min(64, per)) : null
     this.autoBy = by
     this.save()
   }

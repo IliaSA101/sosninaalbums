@@ -131,6 +131,10 @@ func TplScene(p *model.Project, v model.View) (render.Spread, bool) {
 	return es, true
 }
 
+// SheetScene — сцена листа для кадра пипетки (109): как экспорт листа, без плашек мест.
+// Пути фото — оригиналы; кто рисует из превью, подменяет их сам.
+func SheetScene(p *model.Project, s model.SpreadView) render.Spread { return fromSheet(p, s) }
+
 // fromSheet — задание рендера одного листа (разворота или обложки) из его вида.
 func fromSheet(p *model.Project, s model.SpreadView) render.Spread {
 	es := render.Spread{Bg: [2]color.RGBA{render.ParseHex(s.Bg[0]), render.ParseHex(s.Bg[1])},

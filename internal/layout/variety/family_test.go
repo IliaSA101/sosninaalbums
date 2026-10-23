@@ -29,7 +29,7 @@ func famKeys(cs []Cand) string {
 // семейств сразу; nil — «Все», тот же срез без копии; пустой пул — пусто без запасного.
 func TestByFamilyKeepsOrder(t *testing.T) {
 	pool := famPool(forms.Mosaic, forms.Strip, forms.Hero, forms.Rows, forms.Mosaic, forms.Air, forms.Spine)
-	got, fb := ByFamily(pool, nil)
+	got, fb := ByFamily(pool, nil, layout.Params{})
 	if fb || len(got) != len(pool) || &got[0] != &pool[0] {
 		t.Fatalf("nil: %q fb=%v — ждали тот же пул", famKeys(got), fb)
 	}
@@ -43,11 +43,11 @@ func TestByFamilyKeepsOrder(t *testing.T) {
 		{map[Family]bool{Air: true, Strip: true}, "bdf"},
 	}
 	for _, c := range cases {
-		if got, fb := ByFamily(pool, c.allow); fb || famKeys(got) != c.want {
+		if got, fb := ByFamily(pool, c.allow, layout.Params{}); fb || famKeys(got) != c.want {
 			t.Errorf("%v: %q fb=%v, ждали %q", c.allow, famKeys(got), fb, c.want)
 		}
 	}
-	if got, fb := ByFamily(nil, map[Family]bool{Dense: true}); fb || len(got) != 0 {
+	if got, fb := ByFamily(nil, map[Family]bool{Dense: true}, layout.Params{}); fb || len(got) != 0 {
 		t.Errorf("пустой пул: %q fb=%v", famKeys(got), fb)
 	}
 	if !slices.Equal(Families(), []Family{Dense, Hero, Air, Bleed, Strip, Figure}) {
@@ -59,12 +59,12 @@ func TestByFamilyKeepsOrder(t *testing.T) {
 // а не весь пул (он дал бы ленты и воздух вместо «Плотно»).
 func TestByFamilyFallbackBest(t *testing.T) {
 	pool := famPool(forms.Strip, forms.Air, forms.Ladder)
-	got, fb := ByFamily(pool, map[Family]bool{Dense: true, Bleed: true})
+	got, fb := ByFamily(pool, map[Family]bool{Dense: true, Bleed: true}, layout.Params{})
 	if !fb || famKeys(got) != "a" {
 		t.Fatalf("запасной: %q fb=%v, ждали «a» и true", famKeys(got), fb)
 	}
 	// Пустой набор (не nil) — тоже ничего не разрешено: запасной.
-	if got, fb := ByFamily(pool, map[Family]bool{}); !fb || famKeys(got) != "a" {
+	if got, fb := ByFamily(pool, map[Family]bool{}, layout.Params{}); !fb || famKeys(got) != "a" {
 		t.Errorf("пустой набор: %q fb=%v", famKeys(got), fb)
 	}
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/pack"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -219,7 +220,7 @@ func (a *App) AddPackPath(path string) (res PackAdd, err error) {
 	if !strings.EqualFold(filepath.Ext(path), ".zip") {
 		return res, errPackFile
 	}
-	if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() {
+	if fi, err := library.StatLocal(path); err != nil || !fi.Mode().IsRegular() {
 		return res, errors.New("файл набора не найден")
 	}
 	if !a.packs.lock() {

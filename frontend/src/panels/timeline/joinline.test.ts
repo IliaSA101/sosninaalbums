@@ -9,7 +9,8 @@ vi.stubGlobal('window', globalThis)
 const { store } = await import('../../base/core/store.svelte')
 const { setMacForTest } = await import('../../base/core/platform')
 const { joinClick, joinKey } = await import('./stripact')
-const { joinState, joinTip } = await import('./timeline')
+const { joinState, joinTip, VIG_WHY } = await import('./timeline')
+const { gridAct } = await import('../layouts/gridact.svelte')
 
 const ok = { ok: true, why: '' }
 const click = (ctrlKey = false, metaKey = false) => ({ ctrlKey, metaKey, stopPropagation: vi.fn() })
@@ -17,12 +18,15 @@ const key = (k: string) => ({ key: k, preventDefault: vi.fn(), stopPropagation: 
 const sp = (id: string, n: number, grid = false) => ({ id, photos: Array.from({ length: n }, (_, i) => id + i), rects: [], grid }) as never
 
 let merge: ReturnType<typeof vi.spyOn>
+let askGlue: ReturnType<typeof vi.spyOn>
 beforeEach(() => {
   setMacForTest(false)
   merge = vi.spyOn(store, 'merge').mockResolvedValue(undefined)
+  askGlue = vi.spyOn(gridAct, 'askGlue').mockResolvedValue(undefined)
 })
 afterEach(() => {
   merge.mockRestore()
+  askGlue.mockRestore()
   setMacForTest(null)
 })
 
@@ -56,13 +60,37 @@ describe('черта склейки (094)', () => {
     expect(joinClick(click(false, true), 'a', ok, true)).toBe(true)
   })
 
-  it('сетка — прежняя причина', () => {
-    const st = joinState([sp('a', 2, true), sp('b', 2)], 0, 64)
-    expect(st).toEqual({ ok: false, why: 'Сначала «Вернуть авто»' })
-    expect(joinTip(st, false)).toBe('Сначала «Вернуть авто»')
+  it('ручной: Ctrl+щелчок и Enter открывают вопрос, не клеят (103)', async () => {
+    store.view = { ...store.view, spreads: [sp('a', 2, true), sp('b', 2)] }
+    const st = joinState(store.view.spreads, 0, 64)
+    expect(st).toEqual({ ok: true, why: '', ask: 'У разворота 1 ручная раскладка' })
+    expect(joinTip(st, false)).toBe('Ctrl+щелчок — склеить. У разворота 1 ручная раскладка: места вернутся к «Авто», сначала спросим')
+    expect(joinClick(click(), 'a', st, true)).toBe(false)
+    expect(joinClick(click(true), 'a', st, true)).toBe(true)
+    expect(joinKey(key('Enter'), 'a', st, true)).toBe(true)
+    expect(joinKey(key(' '), 'a', st, true)).toBe(true)
+    expect(merge).not.toHaveBeenCalled()
+    expect(askGlue).toHaveBeenCalledTimes(3)
+    const g = askGlue.mock.calls[0][0]
+    expect(g).toMatchObject({
+      kind: 'join',
+      title: 'Склеить развороты?',
+      ids: ['a', 'b'],
+      ask: 'У разворота 1 ручная раскладка. Ваши правки мест сбросятся. Склеить развороты 1 и 2?',
+    })
+    // «Склеить» в окне — склейка через ручной с галочкой кадра
+    await g.run(true)
+    expect(merge).toHaveBeenCalledExactlyOnceWith('a', true)
+  })
+
+  it('виньетка в паре — причина, вопроса и склейки нет', () => {
+    const st = joinState([{ id: 'a', photos: ['x', 'y'], rects: [], grid: true, kind: 'vignette' } as never, sp('b', 2)], 0, 64)
+    expect(st).toEqual({ ok: false, why: VIG_WHY })
+    expect(joinTip(st, false)).toBe(VIG_WHY)
     expect(joinClick(click(true), 'a', st, true)).toBe(false)
     expect(joinKey(key('Enter'), 'a', st, true)).toBe(false)
     expect(merge).not.toHaveBeenCalled()
+    expect(askGlue).not.toHaveBeenCalled()
   })
 })
 

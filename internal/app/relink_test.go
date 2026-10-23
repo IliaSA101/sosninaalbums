@@ -593,3 +593,60 @@ func TestBackupSkipsUnreachable(t *testing.T) {
 		t.Fatalf("копия с недоступного диска: %+v", list)
 	}
 }
+
+// Свободное фото ленты (106): путь из ленты, не из проекта; копия — путь записи; недоступный том
+// — ошибка без запуска проводника.
+func TestShowPhotoInExplorerLibrary(t *testing.T) {
+	dir := testkit.TempDir(t)
+	path := testkit.JPEG(t, dir, "a.jpg", 10, 10)
+	other := testkit.JPEG(t, dir, "b.jpg", 10, 10)
+	a, calls := revealApp(t, path) // в проекте — только фото «p»
+	a.byID["lib"] = library.Photo{ID: "lib", Path: other, W: 30, H: 20}
+	a.byID["gone"] = library.Photo{ID: "gone", Path: filepath.Join(dir, "нет.jpg"), W: 30, H: 20}
+	a.byID["nowhere"] = library.Photo{ID: "nowhere", Path: filepath.Join(dir, "нет", "c.jpg"), W: 30, H: 20}
+	// Копия (098): запись «<ID файла>-2» есть в проекте, в ленте её нет — путь из проекта.
+	q := library.IDFor(path)
+	ed := a.editor()
+	if _, err := ed.NewSpread(-1, []model.PhotoInfo{{ID: q, Path: path, W: 300, H: 200}}); err != nil {
+		t.Fatal(err)
+	}
+	v, err := ed.NewSpread(-1, []model.PhotoInfo{{ID: model.CopyReq(q), Path: path, W: 300, H: 200}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2 := v.Spreads[len(v.Spreads)-1].Photos[0]
+	if c2 != model.CopyID(q, 2) {
+		t.Fatalf("копия: %q", c2)
+	}
+	steps := []struct{ id, want string }{
+		{"lib", "file:" + other}, // не в альбоме
+		{"p", "file:" + path},    // в альбоме, нет в ленте
+		{c2, "file:" + path},     // копия
+		{"gone", "dir:" + dir},   // файла нет — его папка
+		{"nowhere", ""},          // нет и папки
+		{"нет", ""},              // неизвестный ID
+	}
+	for _, c := range steps {
+		*calls = nil
+		err := a.ShowPhotoInExplorer(c.id)
+		if c.want == "" {
+			if err == nil || len(*calls) != 0 {
+				t.Errorf("%q: err %v, вызовы %v, ждали ошибку без запуска", c.id, err, *calls)
+			}
+			continue
+		}
+		if err != nil || len(*calls) != 1 || (*calls)[0] != c.want {
+			t.Errorf("%q: err %v, вызовы %v, ждали %s", c.id, err, *calls, c.want)
+		}
+	}
+	// Том не отвечает — ошибка без запуска, у всех трёх источников пути.
+	old := reachable
+	t.Cleanup(func() { reachable = old })
+	reachable = func(string) bool { return false }
+	for _, id := range []string{"lib", "p", c2} {
+		*calls = nil
+		if err := a.ShowPhotoInExplorer(id); err == nil || len(*calls) != 0 {
+			t.Errorf("том не отвечает, %q: err %v, вызовы %v", id, err, *calls)
+		}
+	}
+}

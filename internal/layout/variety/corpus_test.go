@@ -255,15 +255,7 @@ func measureCtx(a corpusAlbum, lv Level, c Ctx) metrics {
 		if x.Family == Air {
 			m.air++
 		} else {
-			l := s.Pool[0].Score - x.Score
-			// featured и звезда-главное на 8–16 фото судятся по Fair от потолка (решение 0.11 №30)
-			if x.Kind != NoKind || len(x.Rects) >= FeatMin && s.Star >= 0 && x.Big == s.Star {
-				l = max(0, min(s.Pool[0].Score, heroCap)-x.Fair)
-			}
-			// форма ряда «Авто» (051) судится по Q формы от Q лучшей: оценка layout штрафует её воздух
-			if x.Formed {
-				l = min(l, max(0, s.Pool[0].Q-x.Q))
-			}
+			l := candLoss(s, x)
 			m.loss, m.lossN, m.maxLoss = m.loss+l, m.lossN+1, math.Max(m.maxLoss, l)
 		}
 		if x.Heroes > 0 {
@@ -272,15 +264,35 @@ func measureCtx(a corpusAlbum, lv Level, c Ctx) metrics {
 		if k := a.sizes[i]; k >= FeatMin && k < layout.ManyFrom {
 			m.addBig(s.Star, &x)
 		}
-		if s.Star >= 0 && a.sizes[i] <= 7 {
-			m.stars++
-			if x.Big == s.Star {
-				m.starsBig++
-			}
-		}
+		m.addStar(s.Star, a.sizes[i], &x)
 	}
 	m.looks, m.sigma = len(looks), stddev(fills)
 	return m
+}
+
+// candLoss — потеря варианта x против лучшего в пуле разворота s.
+func candLoss(s Spread, x Cand) float64 {
+	l := s.Pool[0].Score - x.Score
+	// featured и звезда-главное на 8–16 фото судятся по Fair от потолка (решение 0.11 №30)
+	if x.Kind != NoKind || len(x.Rects) >= FeatMin && s.Star >= 0 && x.Big == s.Star {
+		l = max(0, min(s.Pool[0].Score, heroCap)-x.Fair)
+	}
+	// форма ряда «Авто» (051) судится по Q формы от Q лучшей: оценка layout штрафует её воздух
+	if x.Formed {
+		l = min(l, max(0, s.Pool[0].Q-x.Q))
+	}
+	return l
+}
+
+// addStar — разворот ≤ 7 фото со звездой: сколько их и где звезда — главное.
+func (m *metrics) addStar(star, size int, x *Cand) {
+	if star < 0 || size > 7 {
+		return
+	}
+	m.stars++
+	if x.Big == star {
+		m.starsBig++
+	}
 }
 
 // addBig — разворот 8–16 фото (часть 2): главное, пара крупных, звезда.

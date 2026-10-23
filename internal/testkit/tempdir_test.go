@@ -1,11 +1,48 @@
 package testkit
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+// fakeTB перехватывает Errorf: проверить, что паника действия превращается в ошибку с именем и стеком.
+type fakeTB struct {
+	testing.TB
+	msgs []string
+}
+
+func (f *fakeTB) Errorf(format string, args ...any) {
+	f.msgs = append(f.msgs, fmt.Sprintf(format, args...))
+}
+func (f *fakeTB) Name() string { return "TestFake/sub" }
+
+// panicInHook — функция, имя которой должно быть в стеке отчёта.
+func panicInHook() { panic("boom") }
+
+// Паника в одном действии — ошибка с именем теста и стеком, остальные действия всё равно идут.
+func TestHookPanicReported(t *testing.T) {
+	f := &fakeTB{TB: t}
+	var h hooks
+	ran := 0
+	h.fns = []func(){func() { ran++ }, panicInHook, func() { ran++ }, panicInHook}
+	h.run(f)
+	if ran != 2 || len(f.msgs) != 2 {
+		t.Fatalf("выполнено %d, ошибок %d", ran, len(f.msgs))
+	}
+	for _, want := range []string{"TestFake/sub", "boom", "panicInHook"} {
+		if !strings.Contains(f.msgs[0], want) {
+			t.Errorf("в сообщении нет %q: %s", want, f.msgs[0])
+		}
+	}
+	h.run(f) // повторный запуск ничего не делает
+	if ran != 2 || len(f.msgs) != 2 {
+		t.Error("повторный run выполнил действия")
+	}
+}
 
 // BeforeRemove отрабатывает до удаления папки, даже если папка создана после регистрации.
 func TestBeforeRemoveRunsBeforeDirRemoval(t *testing.T) {

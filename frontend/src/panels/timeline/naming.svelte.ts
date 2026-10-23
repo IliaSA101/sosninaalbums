@@ -21,10 +21,13 @@ export type ClickEv = {
 
 class Naming {
   id = $state<string | null>(null)
+  // Где рисуется поле: на ленте или на плитке «Всех разворотов» (103-3); двойной щелчок и F2 — всегда лента.
+  where = $state<'strip' | 'grid'>('strip')
   private first: Click | null = null
 
-  start(id: string) {
+  start(id: string, where: 'strip' | 'grid' = 'strip') {
     this.id = id
+    this.where = where
   }
 
   // Закрывает только своё поле: blur старого после открытия нового не должен гасить новое.

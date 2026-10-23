@@ -42,7 +42,18 @@ describe('zoomLift: полоса внутри у низа', () => {
   })
 })
 
-// Часть Б 070: ползунок масштаба кадра не уходит за край экрана (owner-ux §1.3 «не прячется»).
+// Часть Б 070: ползунок масштаба кадра не уходит за край экрана (owner-ux §1.6 «не прячется»).
+describe('zoomLift: столбец сбоку (108)', () => {
+  const view = { left: 0, top: 0, right: 1000, bottom: 400 }
+  const b = { x: 100, y: -200, w: 400, h: 1000 } // низ 800 px, окно кончается на 400
+  it('zoomLift: столбец сбоку — ползунок у низа видимой части, не над панелью (владелец 2026-10-23)', () => {
+    for (const where of ['right', 'left', 'inright'] as const) expect(zoomLift({ top: 150, where }, b, view), where).toBe(800 - 400 + 16)
+  })
+  it('низ рамки виден — прежние 16 px', () => {
+    expect(zoomLift({ top: 10, where: 'right' }, { x: 100, y: 50, w: 300, h: 200 }, view)).toBe(16)
+  })
+})
+
 describe('zoomLift: видимая часть рамки (070 Б)', () => {
   const view = { left: 0, top: 0, right: 1000, bottom: 400 }
   const below = { top: 0, where: 'above' as const } // панель не внутри: ползунок считается от края видимой области

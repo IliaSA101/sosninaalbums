@@ -3,7 +3,8 @@
   import { gridAct } from '../../panels/layouts/gridact.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { NAME_MAX, nameChanged, normName } from '../../panels/timeline/spreadname'
-  import ColorPicker from '../../base/ui/ColorPicker.svelte'
+  import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import InspectorBackdrop from '../backdrop/InspectorBackdrop.svelte'
   import InspectorPattern from '../pattern/InspectorPattern.svelte'
   import CaptionSheet from '../captions/CaptionSheet.svelte'
@@ -90,7 +91,12 @@
   const albumRow = $derived(albumCard(sp, store.view.albumBg))
   const hideAlbum = (off: boolean) => sp && store.run(Api.SetNoAlbumBg(sp.id, off))
   // ColorPicker зовёт onpick один раз на выбор — один шаг undo. Цвет '' снимает свой цвет.
-  const pick = (scope: 'spread' | 'left' | 'right', color: string) => sp && store.run(Api.SetBackground(sp.id, scope, color))
+  // Показ держится до ответа Go (colorLive.commit): старый фон не мелькает.
+  const pick = (scope: 'spread' | 'left' | 'right', color: string) =>
+    sp && colorLive.commit(() => store.run(Api.SetBackground(sp.id, scope, color)))
+  // Наведение на цвет — фон листа или страницы сразу, без правки (109).
+  const preview = (scope: 'spread' | 'left' | 'right', c: string | null) =>
+    sp && c ? colorLive.set([`bg:${sp.id}:${scope}`], c) : colorLive.clear()
 </script>
 
 {#if sp}
@@ -124,7 +130,13 @@
         {#if !split}
           <div class="row">
             <span class="lbl">{cover ? coverLabel(store.cover, 'spread') : unit.all}</span>
-            <ColorPicker value={sp.bg[0]} label="Цвет фона {unit.one}а" onpick={(c) => pick('spread', c)} />
+            <ColorPicker
+              value={sp.bg[0]}
+              sheet={sp.id}
+              label="Цвет фона {unit.one}а"
+              onpick={(c) => pick('spread', c)}
+              onpreview={(c) => preview('spread', c)}
+            />
           </div>
         {/if}
         {#if !sheet}
@@ -137,7 +149,13 @@
           {#each sides as s (s.scope)}
             <div class="row">
               <span class="lbl">{s.label}</span>
-              <ColorPicker value={sp.bg[s.i]} label="Цвет фона: {s.label.toLowerCase()} страница" onpick={(c) => pick(s.scope, c)} />
+              <ColorPicker
+                value={sp.bg[s.i]}
+                sheet={sp.id}
+                label="Цвет фона: {s.label.toLowerCase()} страница"
+                onpick={(c) => pick(s.scope, c)}
+                onpreview={(c) => preview(s.scope, c)}
+              />
               <button
                 class="reset"
                 disabled={sp.bgSet[s.i] === ''}

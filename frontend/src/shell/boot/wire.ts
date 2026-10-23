@@ -12,7 +12,7 @@ import { modes } from '../../base/prefs/view.svelte'
 import { setBackdrop } from '../../editor/backdrop/backdropact'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { checkFaces, loadAndCheck, loadFonts } from '../../editor/text/fonts'
-import { freePhotos, notRejected, pickFor } from '../../panels/library/freephotos'
+import { autoPick, freePhotos, notRejected, pickFor } from '../../panels/library/freephotos'
 import { sortPhotos } from '../../panels/library/sortphotos'
 import { gallery } from '../../panels/gallery/gallery.svelte'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
@@ -79,6 +79,7 @@ export function wire() {
     visible: (photos) => filterPhotos(photos, ownMarks.map, libfilter),
     free: freePhotos,
     pick: (moveUsed) => pickFor(store, moveUsed, libfilter.active || folderfilter.active, binsel.curName(store.view.bins ?? [])),
+    pickFree: () => autoPick(store.visible, [], store.used, store.backdropUsed, ownMarks.map, true).ids,
     notRejected: (ids) => notRejected(ids, store.byId, ownMarks.map),
     selectedRefs: () => placesel.refs,
     select: (ids) => placesel.select(ids),

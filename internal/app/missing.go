@@ -63,7 +63,7 @@ func (a *App) refreshMissingWith(quiet bool) {
 // известным списком (mergeMissing). quiet — событие только при смене списка (после правки, сверка).
 func (a *App) checkMissing(gen int, refs map[string]string, quiet bool) {
 	a.missPending.Add(1)
-	a.bg.Go(func() {
+	if !a.goBG(func() {
 		defer a.missPending.Add(-1)
 		defer guard("missing")
 		gone := library.MissingOf(refs, func(p string) string { return p }, a.exists)
@@ -84,7 +84,9 @@ func (a *App) checkMissing(gen int, refs map[string]string, quiet bool) {
 		if !quiet || !same {
 			a.emit("missing", ids)
 		}
-	})
+	}) {
+		a.missPending.Add(-1) // фон закрыт: проверка не началась
+	}
 }
 
 // mergeMissing — новый список недостающих по порядку ID: из прежнего cur уходят фото, которых

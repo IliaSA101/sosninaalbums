@@ -200,3 +200,35 @@ func TestMergeSpreadsCaps(t *testing.T) {
 		t.Fatalf("отмена склеек: %+v", s)
 	}
 }
+
+// Mergeable (103): пределы фото, текстов и стикеров — на границе; сетка пропускается только с
+// grids; виньетку не клеит никогда.
+func TestMergeableLimits(t *testing.T) {
+	sp := func(photos, texts, stickers int) *model.Spread {
+		return &model.Spread{Photos: make([]string, photos), Texts: make([]*model.TextBlock, texts), Stickers: make([]*model.Sticker, stickers)}
+	}
+	half := model.MaxPhotos / 2
+	cases := []struct {
+		name       string
+		s, next    *model.Spread
+		grids, ans bool
+	}{
+		{"пустые", sp(0, 0, 0), sp(0, 0, 0), false, true},
+		{"фото ровно предел", sp(half, 0, 0), sp(model.MaxPhotos-half, 0, 0), false, true},
+		{"фото на одно больше", sp(half, 0, 0), sp(model.MaxPhotos-half+1, 0, 0), false, false},
+		{"тексты ровно предел", sp(0, 1, 0), sp(0, model.MaxTexts-1, 0), false, true},
+		{"тексты на один больше", sp(0, 1, 0), sp(0, model.MaxTexts, 0), false, false},
+		{"стикеры ровно предел", sp(0, 0, model.MaxStickers), sp(0, 0, 0), false, true},
+		{"стикеры на один больше", sp(0, 0, model.MaxStickers), sp(0, 0, 1), false, false},
+		{"сетка без grids", &model.Spread{Grid: []*model.Place{{}}}, sp(0, 0, 0), false, false},
+		{"сетка с grids", sp(0, 0, 0), &model.Spread{Grid: []*model.Place{{}}}, true, true},
+		{"сетка с grids, но сверх предела", sp(model.MaxPhotos, 0, 0), &model.Spread{Photos: []string{"x"}, Grid: []*model.Place{{}}}, true, false},
+		{"виньетка с grids", &model.Spread{Kind: model.KindVignette, Grid: []*model.Place{{}}}, sp(0, 0, 0), true, false},
+		{"виньетка второй с grids", sp(0, 0, 0), &model.Spread{Kind: model.KindVignette}, true, false},
+	}
+	for _, c := range cases {
+		if got := spreads.Mergeable(c.s, c.next, c.grids); got != c.ans {
+			t.Errorf("%s: Mergeable = %v, ждали %v", c.name, got, c.ans)
+		}
+	}
+}

@@ -182,11 +182,11 @@ describe('«Автосборка» без свободных фото', () => {
     expect(store.toast).toBeNull()
   })
 
-  it('после Ctrl+Z (не жива) — прежний тост «нет фото»', async () => {
+  it('после Ctrl+Z (не жива) — «Весь альбом заново» вместо тоста «нет фото» (107, сц. 9)', async () => {
     await allPlaced(false)
     store.openAuto()
-    expect(store.autoDraft).toBeNull()
-    expect(store.toast?.text).toBe('Все фото уже в альбоме')
+    expect(store.autoDraft).toMatchObject({ from: 'album', ids: ['a', 'b', 'c', 'd'] })
+    expect(store.toast).toBeNull()
   })
 
   it('есть выделение — обычная новая сборка, даже если пересборка жива', async () => {
@@ -197,8 +197,13 @@ describe('«Автосборка» без свободных фото', () => {
     expect(store.autoDraft?.ids).toEqual(['b'])
   })
 
-  it('первой сборки не было, фото нет — тост как в 0.19', () => {
+  it('первой сборки не было, свободных нет, развороты есть — «Весь альбом заново»; разворотов нет — тост как в 0.19', () => {
     store.apply(view(5, false, [{ id: 's', photos: ['a', 'b', 'c', 'd'] }]) as never)
+    store.openAuto()
+    expect(store.autoDraft?.from).toBe('album')
+    store.autoDraft = null
+    store.apply(view(6, false, []) as never)
+    store.photos = []
     store.openAuto()
     expect(store.autoDraft).toBeNull()
     expect(store.toast?.text).toBe('Все фото уже в альбоме')

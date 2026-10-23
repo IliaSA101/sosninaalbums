@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -44,13 +43,16 @@ func (a *App) SuggestDrive() DriveHint {
 		gone = append(gone, refs[id].Path)
 	}
 	// Буквы дисков тоже через Reachable: отключённая сетевая буква иначе держит подсказку.
-	return DriveHint(library.SuggestDrive(gone, func(p string) bool {
-		if !reachable(p) {
-			return false
-		}
-		_, err := os.Stat(p)
-		return err == nil
-	}))
+	return DriveHint(library.SuggestDrive(gone, driveHas))
+}
+
+// driveHas — файл на кандидате в диски есть: том отвечает, ссылка не уходит на сетевой путь.
+func driveHas(p string) bool {
+	if !reachable(p) {
+		return false
+	}
+	_, err := library.StatLocal(p)
+	return err == nil
 }
 
 // RelinkDrive меняет букву диска у недостающих фото и папок, если файлы нашлись
@@ -96,7 +98,7 @@ func (a *App) RelinkFolderPath(dir string) (res RelinkResult, rerr error) {
 		return res, err
 	}
 	dir = filepath.Clean(dir)
-	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+	if st, err := library.StatLocal(dir); err != nil || !st.IsDir() {
 		return res, fmt.Errorf("не папка: %s", dir)
 	}
 	refs := ed.Refs()
@@ -149,17 +151,27 @@ func oneOfFamily(ids []string) []string {
 	return out
 }
 
-// ShowPhotoInExplorer показывает файл фото альбома в Проводнике. Путь берётся из
-// проекта по ID, от интерфейса не принимается (как ShowInExplorer). Файла нет —
-// открывается его папка; нет и её — ошибка.
+// ShowPhotoInExplorer показывает файл фото в Проводнике. Путь берётся из ленты (свободное
+// фото, 106) или из проекта (запись, в том числе копия), от интерфейса не принимается (как
+// ShowInExplorer). Файла нет — открывается его папка; нет и её (или том не отвечает) — ошибка.
 func (a *App) ShowPhotoInExplorer(id string) error {
-	r, ok := a.editor().Ref(id)
-	if !ok {
-		return errors.New("фото нет в альбоме")
+	a.mu.Lock()
+	ph, inLib := a.byID[id]
+	a.mu.Unlock()
+	src := ph.Path
+	if !inLib {
+		r, ok := a.editor().Ref(id)
+		if !ok {
+			return errors.New("фото не найдено")
+		}
+		src = r.Path
 	}
-	path := filepath.Clean(r.Path)
+	path := filepath.Clean(src)
 	if err := paths.CheckLocalPath(path); err != nil {
 		return errors.New("путь к фото недоступен")
+	}
+	if !reachable(path) { // мёртвый сетевой том: без зависания на Stat
+		return errors.New("файл не найден")
 	}
 	if st, err := library.StatLocal(path); err == nil && !st.IsDir() {
 		return revealPath(path, true)
@@ -175,6 +187,6 @@ func (a *App) ShowPhotoInExplorer(id string) error {
 var revealPath = osx.Reveal
 
 func isDir(p string) bool {
-	st, err := os.Stat(p)
+	st, err := library.StatLocal(p)
 	return err == nil && st.IsDir()
 }

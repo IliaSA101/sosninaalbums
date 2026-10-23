@@ -43,6 +43,9 @@ type Config struct {
 	// Hotkeys — свои горячие клавиши (074): id команды → её сочетания, только отличия от
 	// стандартных (keymap.Overrides). Правила и пределы — internal/keymap, здесь не толкуются.
 	Hotkeys map[string][]string `json:"hotkeys,omitempty"`
+	// MyColors — «Свои цвета» окна выбора цвета (109): "#rrggbb", новые первыми, ≤ MaxMyColors.
+	// Правила списка — colors.go.
+	MyColors []string `json:"myColors,omitempty"`
 }
 
 // configKeys — ключи config.json, которыми владеет эта версия (по тегам Config).

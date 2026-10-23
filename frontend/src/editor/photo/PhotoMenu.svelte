@@ -4,21 +4,29 @@
   import { edit } from '../text/edit.svelte'
   import { photoui } from './photoui.svelte'
   import { straighten } from '../tilt/straighten.svelte'
+  import { tiltmode } from '../tilt/tiltmode.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { keymap } from '../../base/keys/keymap.svelte'
   import { clip } from '../clip/clip.svelte'
-  import { menuContext, photoMenu, sheetMenu, type MenuId } from './photomenu'
-  import { LAYER_OPS, type LayerOp } from '../places/minipanel'
+  import { menuContext, photoMenu, sheetMenu } from './photomenu'
+  import type { ActId } from './photoacts'
+  import type { LayerOp } from '../places/minipanel'
   import { relinkFolder } from '../../panels/library/relink'
   import { decor } from '../../panels/decor/decor.svelte'
   import { sticker } from '../sticker/sticker.svelte'
-  import { errText } from '../../base/words/errtext'
+  import { copyNames, reveal } from './fileact'
   import { scopeLabel, scopesFor } from '../backdrop/backdrop'
   import { setBackdrop } from '../backdrop/backdropact'
   import { coverLabel, coverScopes } from '../cover/cover'
   import { isCover, isSheet } from '../../base/geom/sheet'
+  import MenuList from '../../base/ui/MenuList.svelte'
+  import type { MenuNode } from '../../base/ui/menulist'
   import type { BackdropScope } from '../../base/core/types'
   import type { Pt } from '../clip/clip'
+  import { goUse } from '../photoprops/gouse.svelte'
+  import { UseList } from '../photoprops/uselist.svelte'
+  import { elsewhere, lineAt, USE_ROW, useRows } from '../photoprops/usemenu'
+  import { untrack } from 'svelte'
 
   const sheet = $derived(isSheet(store.view.settings))
   // На обложке (032) фон ставят в области её раскладки, названия — сторонки; в листе (031) — только «Весь лист».
@@ -26,8 +34,8 @@
   const scopes = $derived(cover ? coverScopes(store.cover) : scopesFor(sheet))
   const label = (sc: BackdropScope) => (cover ? coverLabel(store.cover, sc) : scopeLabel(sc, sheet))
 
-  // Меню правого щелчка по фото (спека 008): своё, работает и в браузере. Пункты — photo/photomenu.ts.
-  // Esc и щелчок мимо закрывают; окно держится внутри экрана.
+  // Меню правого щелчка по фото (спека 008, 108): своё, работает и в браузере. Дерево пунктов — photo/photomenu.ts,
+  // список с подменю сбоку и клавишами — base/ui/MenuList. Esc и щелчок мимо закрывают.
   // Выделены одни стикеры (048) — меню стикера: «Копировать», «Вставить», «Заменить…», «Зеркало», «Слой», «Удалить».
   // Одни надписи (099) — своё меню по его образцу; пустой лист (099) — только «Вставить».
   // Одиночная надпись выделена через edit.sel, а не placesel.texts: считается, лишь когда ни мест, ни стикеров.
@@ -37,114 +45,57 @@
         ? 1
         : 0),
   )
+  // «Где ещё стоит ▸» (спека 106, 108): одно фото на месте; вхождения от Go грузятся при открытии меню, текущее место
+  // в списке не показываем («ещё» — кроме этого).
+  const useList = new UseList()
+  const useBox = $derived(
+    photoui.menu?.kind === 'photo' && placesel.selected.length === 1 && texts + placesel.selectedStickers.length === 0
+      ? placesel.selected[0]
+      : undefined,
+  )
+  const useId = $derived(useBox?.photo ?? '')
+  const useLines = $derived(elsewhere(useList.lines, useBox && store.spread ? { spread: store.spread.id, pick: useBox.photo } : undefined))
+  $effect(() => {
+    const id = useId
+    untrack(() => (id ? useList.load(id, () => photoui.close()) : useList.reset()))
+    return () => useList.reset()
+  })
   const items = $derived(
     photoui.menu?.kind === 'sheet'
       ? sheetMenu(clip.canPaste, prefs.can, keymap.hint.bind(keymap))
       : photoMenu(
-          menuContext(store.spread, placesel.selected, store.missing, texts, placesel.selectedStickers.length, {
-            copy: clip.canCopy,
-            paste: clip.canPaste,
-          }),
+          {
+            ...menuContext(store.spread, placesel.selected, store.missing, texts, placesel.selectedStickers.length, {
+              copy: clip.canCopy,
+              paste: clip.canPaste,
+            }),
+            scopes: scopes.map((scope) => ({ scope, label: label(scope) })),
+            usesSub: useRows(useLines, 'Больше нигде не стоит'),
+          },
           prefs.can,
           keymap.hint.bind(keymap),
         ),
   )
-  const GAP = 8 // отступ от края окна, px
-
-  // «Слой ▸» и «На фон ▸» раскрываются списком под пунктом (не боковым окном: не упирается в край экрана).
-  let subOpen = $state<MenuId | null>(null)
-  let box = $state<HTMLElement>()
-  let w = $state(0)
-  let h = $state(0)
-  const pos = $derived.by(() => {
-    const m = photoui.menu
-    if (!m) return { x: 0, y: 0 }
-    return {
-      x: Math.max(GAP, Math.min(m.x, window.innerWidth - w - GAP)),
-      y: Math.max(GAP, Math.min(m.y, window.innerHeight - h - GAP)),
-    }
-  })
 
   // Выделение пропало (правка, смена разворота) — пунктам не на что опираться.
   $effect(() => {
     if (photoui.menu && items.length === 0) photoui.close()
   })
-  // Новое открытие меню — подменю свёрнуты.
-  $effect(() => {
-    if (!photoui.menu) subOpen = null
-  })
-  // Фокус на первый пункт: стрелки и Enter работают сразу.
-  $effect(() => {
-    if (box) box.querySelector<HTMLElement>('button:not(:disabled)')?.focus()
-  })
-
-  function key(e: KeyboardEvent) {
-    if (!photoui.menu) return
-    // Пока меню открыто, горячие клавиши приложения не работают (как в PhotoPreview);
-    // Enter и Пробел отрабатывает кнопка по умолчанию.
-    e.stopPropagation()
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      photoui.close()
-    } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && box) {
-      e.preventDefault()
-      const bs = [...box.querySelectorAll<HTMLElement>('button:not(:disabled)')]
-      const at = bs.indexOf(document.activeElement as HTMLElement)
-      bs[(at + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length]?.focus()
-    }
-  }
-
-  function outside(e: PointerEvent) {
-    if (photoui.menu && box && !box.contains(e.target as Node)) photoui.close()
-  }
 
   const photos = () => placesel.selected.filter((b) => b.photo).map((b) => b.photo)
 
-  async function copyNames() {
-    // Только найденные: у пропавших имени во фронте нет.
-    const names = photos()
-      .filter((id) => !store.missing.includes(id))
-      .map((id) => store.byId.get(id)?.name)
-      .filter((n): n is string => !!n)
-    if (names.length === 0) return
-    try {
-      await navigator.clipboard.writeText(names.join('\n'))
-      store.notify(names.length > 1 ? 'Имена файлов скопированы' : 'Имя файла скопировано', 'info')
-    } catch {
-      // Текст отказа буфера приходит от браузера по-английски — свой.
-      store.notify('Не удалось скопировать в буфер обмена', 'error')
-    }
-  }
+  // Копирование имён и проводник — общие с меню миниатюры (fileact.ts); у холста пропавшие — store.missing.
+  const gone = (id: string) => store.missing.includes(id)
 
-  async function explorer(id: string) {
-    try {
-      await Api.ShowPhotoInExplorer(id)
-    } catch (e) {
-      store.notify(errText(e), 'error')
-    }
-  }
-
-  function layer(op: LayerOp) {
-    photoui.close(true)
-    placesel.layer(op)
-  }
-
-  function toBackdrop(scope: BackdropScope) {
-    const s = store.spread
+  // Выбор пункта: меню закрывается с сохранением выделения, действие получает первое выделенное фото,
+  // точку щелчка (мм) для «Вставить» и параметр пункта подменю.
+  function pick(n: MenuNode) {
     const first = photos()[0]
+    const at = photoui.menu?.at
+    const line = n.id === USE_ROW ? lineAt(useLines, n.arg) : null
     photoui.close(true)
-    if (s && first) setBackdrop(s.id, scope, first)
-  }
-
-  function act(id: MenuId) {
-    if (id === 'layer' || id === 'backdrop') {
-      subOpen = subOpen === id ? null : id
-      return
-    }
-    const first = photos()[0]
-    const at = photoui.menu?.at // точка щелчка, мм — для «Вставить»
-    photoui.close(true)
-    ACTIONS[id]?.(first, at)
+    if (line) goUse(line)
+    else ACTIONS[n.id as ActId]?.(first, at, n.arg)
   }
 
   // «Заменить…» у стикера: то же окно «Стикеры», что и в карточке.
@@ -159,18 +110,26 @@
     if (s) decor.show('frame', s.id, 'spread')
   }
 
-  // Действие пункта; first — первое выделенное фото (у части пунктов оно не нужно).
-  const ACTIONS: Partial<Record<MenuId, (first: string, at?: Pt) => void>> = {
+  // «На фон ▸»: параметр — область (лист или обложка).
+  function toBackdrop(first: string, scope: string | undefined) {
+    const s = store.spread
+    if (s && first && scope) setBackdrop(s.id, scope as BackdropScope, first)
+  }
+
+  // Действие пункта; first — первое выделенное фото (у части пунктов оно не нужно), at — точка щелчка, arg — параметр
+  // пункта подменю («Слой»: операция, «На фон»: область).
+  const ACTIONS: Partial<Record<ActId, (first: string, at?: Pt, arg?: string) => void>> = {
     preview: (first) => (photoui.preview = first),
-    copy: () => void copyNames(),
+    copy: () => void copyNames(photos(), gone),
     clipCopy: () => clip.copy(),
     clipPaste: (_first, at) => clip.paste(at),
-    explorer: (first) => void explorer(first),
+    explorer: (first) => void reveal(first),
     relink: () => void relinkFolder(),
     fitPhoto: () => placesel.arrange('fitPhoto'),
     turnCw: () => placesel.turn(1),
     turnCcw: () => placesel.turn(-1),
     straighten: (first) => straighten.startPhoto(first),
+    tilt: () => tiltmode.toggle(),
     flipH: () => placesel.flip('h'),
     flipV: () => placesel.flip('v'),
     gray: () => placesel.gray(),
@@ -182,108 +141,14 @@
     border: openBorder,
     resetFrame: (first) => void store.run(Api.ResetFrame(first)),
     caption: (first) => edit.editCaption(first),
+    layer: (_first, _at, arg) => placesel.layer(arg as LayerOp),
+    backdrop: (first, _at, arg) => toBackdrop(first, arg),
     replace: replaceSticker,
     // Одиночная надпись (099) живёт в edit.sel, не в placesel: удаляется своим путём (как Del).
     delete: () => (texts === 1 && placesel.texts.length === 0 ? edit.removeSelected() : placesel.deleteSelected()),
   }
 </script>
 
-<svelte:window onkeydowncapture={key} onpointerdowncapture={outside} onresize={() => photoui.close()} onblur={() => photoui.close()} />
-
 {#if photoui.menu && items.length > 0}
-  <div
-    bind:this={box}
-    bind:clientWidth={w}
-    bind:clientHeight={h}
-    class="menu"
-    style:left="{pos.x}px"
-    style:top="{pos.y}px"
-    style:visibility={h ? undefined : 'hidden'}
-    role="menu"
-    tabindex="-1"
-    data-chrome
-    data-text-ui
-    oncontextmenu={(e) => e.preventDefault()}
-  >
-    {#each items as it (it.id)}
-      {#if it.sep}<div class="sep" role="separator"></div>{/if}
-      <button
-        class:danger={it.danger}
-        disabled={it.disabled}
-        role="menuitem"
-        aria-haspopup={it.sub ? 'menu' : undefined}
-        aria-expanded={it.sub ? subOpen === it.id : undefined}
-        onclick={() => act(it.id)}
-      >
-        <span>{it.label}</span>
-        {#if it.hint}<kbd>{it.hint}</kbd>{/if}
-        {#if it.sub}<kbd>{subOpen === it.id ? '▾' : '▸'}</kbd>{/if}
-      </button>
-      {#if it.sub && it.id === 'layer' && subOpen === 'layer'}
-        {#each LAYER_OPS as lo (lo.op)}
-          <button class="sub" role="menuitem" onclick={() => layer(lo.op)}><span>{lo.label}</span></button>
-        {/each}
-      {:else if it.sub && it.id === 'backdrop' && subOpen === 'backdrop'}
-        {#each scopes as sc (sc)}
-          <button class="sub" role="menuitem" onclick={() => toBackdrop(sc)}><span>{label(sc)}</span></button>
-        {/each}
-      {/if}
-    {/each}
-  </div>
+  <MenuList {items} at={{ x: photoui.menu.x, y: photoui.menu.y }} onpick={pick} onclose={() => photoui.close()} />
 {/if}
-
-<style>
-  .menu {
-    position: fixed;
-    z-index: 70;
-    min-width: 200px;
-    padding: 4px;
-    box-sizing: border-box;
-    background: rgba(30, 30, 32, 0.97);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
-    font-size: 13px;
-    user-select: none;
-  }
-  button {
-    width: 100%;
-    height: 28px;
-    padding: 0 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    text-align: left;
-    white-space: nowrap;
-    background: transparent;
-    color: var(--text);
-    border-radius: 4px;
-  }
-  button:disabled {
-    color: var(--muted);
-    cursor: default;
-  }
-  button:hover:not(:disabled),
-  button:focus-visible {
-    background: #38383c;
-    color: #fff;
-  }
-  button.danger:hover,
-  button.danger:focus-visible {
-    color: #ff8a8a;
-  }
-  button.sub {
-    padding-left: 24px;
-  }
-  kbd {
-    font: inherit;
-    font-size: 11px;
-    color: var(--muted);
-  }
-  .sep {
-    height: 1px;
-    margin: 4px 2px;
-    background: var(--line);
-  }
-</style>

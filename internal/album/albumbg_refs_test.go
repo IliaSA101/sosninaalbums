@@ -342,7 +342,11 @@ func TestAlbumBgRefsFamily(t *testing.T) {
 		p.AlbumBg = &model.AlbumBg{Photo: a2}
 	})
 	uses, text := e.PhotoUses(a.ID)
-	want := []model.PhotoUse{{Sheet: -1, Label: "Фон альбома", Ref: a2}, {Sheet: 0, Label: "Разворот 1 — место"}}
+	sp := edtest.P(e).Spreads[0].ID
+	want := []model.PhotoUse{
+		{Sheet: -1, Label: "Фон альбома", Kind: model.UseAlbumBg, Page: "Фон альбома"},
+		{Sheet: 0, Label: "Разворот 1 — место", Kind: model.UsePlace, Spread: sp, Page: "Разворот 1", What: "место", Pick: a.ID},
+	}
 	if !slices.Equal(uses, want) || text != "Использовано 2 раза" {
 		t.Fatalf("вхождения семьи: %+v, %q", uses, text)
 	}

@@ -106,7 +106,8 @@ func GridInput(p *model.Project, spreadID string, n int, scope string) GridSourc
 	if n < 1 {
 		n = len(s.Photos)
 	}
-	return GridSource{found: true, n: n, prm: p.Params(), asp: p.Aspects(s.Photos), inScope: scopePhotos(p, s, scope)}
+	asp, prm := p.LayoutIn(s.Photos)
+	return GridSource{found: true, n: n, prm: prm, asp: asp, inScope: scopePhotos(p, s, scope)}
 }
 
 // scopePhotos — сколько фото в области scope разворота.

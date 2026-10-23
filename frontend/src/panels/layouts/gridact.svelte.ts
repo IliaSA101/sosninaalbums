@@ -12,8 +12,20 @@ export type VigAsk = { kind: 'tpl' | 'reset'; run: () => Promise<unknown> }
 
 export const VIG_MANUAL_TOAST = 'Виньетка стала ручной — «Вернуть авто» в строке над листом вернёт места по шаблону'
 
+// Склейка и разрез через ручной разворот (103): те же окно и галочка кадра, свои тексты и действие.
+// ids — группы пары (при склейке — две подряд, при разрезе — одна); run — вызов Go с галочкой keep.
+export type GlueAsk = {
+  kind: 'join' | 'cut'
+  title: string
+  ask: string
+  ok: string
+  ids: string[]
+  run: (keep: boolean) => Promise<unknown>
+}
+
 // Тексты окна вопроса: заголовок, вопрос и кнопка подтверждения (страница — «Вернуть авто?»).
-export function autoAskText(vig?: VigAsk): { title: string; ask: string; ok: string } {
+export function autoAskText(vig?: VigAsk, glue?: GlueAsk): { title: string; ask: string; ok: string } {
+  if (glue) return glue
   if (vig?.kind === 'tpl') return { title: 'Сменить шаблон?', ask: `${RESET_WARN} Сменить шаблон?`, ok: 'Сменить шаблон' }
   return { title: 'Вернуть авто?', ask: `${RESET_WARN} Вернуть авто?`, ok: 'Вернуть авто' }
 }
@@ -21,12 +33,19 @@ export function autoAskText(vig?: VigAsk): { title: string; ask: string; ok: str
 // Подпись галочки «Вернуть авто?» (098): сколько фото сохранят свой кадр.
 export const keepText = (n: number) => `Сохранить кадр правленых фото: ${n}`
 
+// Вопрос склейки и разреза жив, пока группы на месте (при склейке — подряд) и хоть одна из них ручная.
+function glueAlive(g: GlueAsk, spreads: readonly SpreadView[]): boolean {
+  const at = spreads.findIndex((s) => s.id === g.ids[0])
+  if (at < 0 || g.ids.some((id, k) => spreads[at + k]?.id !== id)) return false
+  return g.ids.some((_, k) => spreads[at + k].grid)
+}
+
 class GridActions {
   // Вопрос «Ваши правки мест сбросятся. Вернуть авто?» (спека 008): разворот и ключ раскладки
   // (пусто — вернуть сохранённый). У ручной виньетки (038) — vig: тот же вопрос про шаблон.
   // Окно — AutoAskDialog, открыто, пока не null. crops — сколько фото получат свой кадр (098, CropsToKeep),
   // keep — галочка «Сохранить кадр правленых фото» (по умолчанию включена; видна при crops > 0).
-  autoAsk = $state<{ spread: string; key: string; vig?: VigAsk; crops: number; keep: boolean } | null>(null)
+  autoAsk = $state<{ spread: string; key: string; vig?: VigAsk; glue?: GlueAsk; crops: number; keep: boolean } | null>(null)
   // «Копировать сетку…» (U9): разворот-источник и область, окно CopyGridDialog открыто, пока не null.
   // Окно закрывает себя само; prune сбрасывает флаг, если источник пропал или перестал быть сеткой.
   // mode 'decor' (049 Ф2) — «Копировать оформление…»: то же окно; источнику сетка не нужна.
@@ -41,7 +60,8 @@ class GridActions {
   prune(spreads: readonly SpreadView[]) {
     const a = this.autoAsk
     // Вопрос виньетки живёт, пока лист остаётся ручной виньеткой (после «Отменить» вопрос не нужен)
-    if (a && !spreads.some((s) => s.id === a.spread && (a.vig ? s.vig?.manual : s.grid))) this.autoAsk = null
+    if (a && !(a.glue ? glueAlive(a.glue, spreads) : spreads.some((s) => s.id === a.spread && (a.vig ? s.vig?.manual : s.grid))))
+      this.autoAsk = null
     const c = this.copyGrid
     // Оформлению сетка не нужна: окно живёт, пока жив сам лист-источник
     if (c && !spreads.some((s) => s.id === c.spread && (c.mode === 'decor' || s.grid))) this.copyGrid = null
@@ -84,6 +104,15 @@ class GridActions {
     this.autoAsk = { spread, key, crops, keep: true }
   }
 
+  // Склейка или разрез через ручной (103): число правленых кадров по ручным из пары — у Go, затем окно.
+  async askGlue(g: GlueAsk) {
+    const manual = g.ids.filter((id) => store.view.spreads.find((s) => s.id === id)?.grid)
+    const crops = (await Promise.all(manual.map((id) => Api.CropsToKeep(id).catch(() => 0)))).reduce((a, n) => a + n, 0)
+    // Пока ждали Go, пара могла измениться (Ctrl+Z, правка): вопрос про исчезнувшее не открываем
+    if (!glueAlive(g, store.view.spreads)) return
+    this.autoAsk = { spread: g.ids[0], key: '', glue: g, crops, keep: true }
+  }
+
   setKeep(on: boolean) {
     if (this.autoAsk) this.autoAsk.keep = on
   }
@@ -103,7 +132,8 @@ class GridActions {
     const a = this.autoAsk
     this.autoAsk = null
     if (!a) return
-    if (a.vig) await a.vig.run()
+    if (a.glue) await a.glue.run(a.crops > 0 && a.keep)
+    else if (a.vig) await a.vig.run()
     // Один вызов вместо SetGrid(false) и SetLayout: Go сначала решает судьбу кадров, потом строит раскладку (098-19)
     else await store.run(Api.BackToAuto(a.spread, a.key, a.crops > 0 && a.keep))
   }

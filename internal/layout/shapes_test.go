@@ -90,30 +90,36 @@ var squareAsp = map[string]bool{"P[E(0)|-]": true, "B[right:0]": true, "B[pages:
 
 func TestKeyGrammar051(t *testing.T) {
 	for _, c := range grammarCases {
-		k, ok := parseKey(c.key)
-		if ok != c.parse {
-			t.Errorf("%q: разбор %v, ждали %v", c.key, ok, c.parse)
-			continue
+		checkGrammarCase(t, c)
+	}
+}
+
+// checkGrammarCase — один случай таблицы: разбор, каноническая запись, Build по трём настройкам.
+func checkGrammarCase(t *testing.T, c grammarCase) {
+	t.Helper()
+	k, ok := parseKey(c.key)
+	if ok != c.parse {
+		t.Errorf("%q: разбор %v, ждали %v", c.key, ok, c.parse)
+		return
+	}
+	// Неканонические записи разбираются, но Build их отвергает.
+	canon := c.key != "P[-|E(0)]" && c.key != "P[E(0)|E(1)]"
+	if ok && (k.String() == c.key) != canon {
+		t.Errorf("%q: каноническая запись %q", c.key, k.String())
+	}
+	asp := grammarAsp(max(1, len(leavesOf(c.key))))
+	if squareAsp[c.key] {
+		for i := range asp {
+			asp[i] = 1
 		}
-		// Неканонические записи разбираются, но Build их отвергает.
-		canon := c.key != "P[-|E(0)]" && c.key != "P[E(0)|E(1)]"
-		if ok && (k.String() == c.key) != canon {
-			t.Errorf("%q: каноническая запись %q", c.key, k.String())
+	}
+	for i, p := range grammarCfg {
+		r, ok := Build(c.key, asp, p)
+		if ok != c.build[i] {
+			t.Errorf("%q: Build %v при %+v, ждали %v", c.key, ok, p, c.build[i])
 		}
-		asp := grammarAsp(max(1, len(leavesOf(c.key))))
-		if squareAsp[c.key] {
-			for i := range asp {
-				asp[i] = 1
-			}
-		}
-		for i, p := range grammarCfg {
-			r, ok := Build(c.key, asp, p)
-			if ok != c.build[i] {
-				t.Errorf("%q: Build %v при %+v, ждали %v", c.key, ok, p, c.build[i])
-			}
-			if ok {
-				checkResult(t, asp, p, r)
-			}
+		if ok {
+			checkResult(t, asp, p, r)
 		}
 	}
 }
@@ -396,6 +402,9 @@ func chainKey(n int) string {
 // go test ./internal/layout -run '^$' -fuzz FuzzParseKey -fuzztime 20s
 func FuzzParseKey(f *testing.F) {
 	for _, c := range grammarCases {
+		f.Add(c.key)
+	}
+	for _, c := range scatterCases {
 		f.Add(c.key)
 	}
 	f.Add(chainKey(MaxPhotos))

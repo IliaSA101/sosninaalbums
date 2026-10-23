@@ -239,6 +239,7 @@ func spreadView(f *fields, s *model.Spread, l Laid) (sv model.SpreadView) {
 	sv.Frames = frameViews(p, s.Photos, l.cur.Rects)
 	sv.Captions, sv.Stubs = captionViews(f, s, s.Photos, l.cur.Rects, nil, nil)
 	sv.Variant, sv.Variants, sv.More, sv.Rearranged, sv.Pages = l.variant, l.variants, l.more, l.rearranged, l.pages
+	sv.FoldHidden = l.foldHidden
 	return sv
 }
 

@@ -24,7 +24,7 @@ const (
 	Air    Family = "air"    // «Воздух»
 	Bleed  Family = "bleed"  // «В край»
 	Strip  Family = "strip"  // «Ленты»: лента, ряды, сетка (только FamilyOf)
-	Figure Family = "figure" // «Фигуры»: лесенка, мелкое — крупное, рамка (у Describe — только лесенка)
+	Figure Family = "figure" // «Фигуры»: лесенка, мелкое — крупное, рамка, «Разброс» (у Describe — лесенка и «Разброс»)
 )
 
 // FamilyOf — сегмент фильтра подборки по форме (design §8): воздух и разные страницы — «Воздух»,
@@ -33,7 +33,7 @@ func FamilyOf(f forms.Form) Family {
 	switch f {
 	case forms.Strip, forms.Rows, forms.Grid:
 		return Strip
-	case forms.Ladder, forms.Contrast, forms.Frame:
+	case forms.Ladder, forms.Contrast, forms.Frame, forms.Scatter:
 		return Figure
 	case forms.Air, forms.Asym:
 		return Air
@@ -137,7 +137,7 @@ func describe(r layout.Result, p layout.Params, f forms.Form, q float64) Info {
 	switch {
 	case f == forms.Bleed:
 		in.Family = Bleed
-	case f == forms.Ladder:
+	case f == forms.Ladder || f == forms.Scatter:
 		// По заполнению лесенка — воздух, и ритм воздуха штрафовал её вне такта: в сборке она
 		// почти не вставала (0.3 % разворотов, 055). Воздух она и не обнуляет.
 		in.Family = Figure

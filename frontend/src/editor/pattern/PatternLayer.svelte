@@ -1,6 +1,7 @@
 <script lang="ts">
   import { screenDpr } from '../../base/ui/dpr.svelte'
   import type { SpreadView } from '../../base/core/types'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import { opacityOf } from '../backdrop/fade'
   import { albumFade, patFadeLive } from '../backdrop/fade.svelte'
   import { layerPx, patternSrc } from './pattern'
@@ -22,7 +23,7 @@
       class="pat"
       data-pattern={p.album ? undefined : p.scope}
       data-album-bg={p.album ? p.scope : undefined}
-      src={patternSrc(p.url, layerPx(p.area.w, sw, width, dpr))}
+      src={patternSrc(p.album ? p.url : colorLive.inkUrl(`pat:${spread.id}:${p.scope}`, p.url), layerPx(p.area.w, sw, width, dpr))}
       alt=""
       draggable="false"
       style:left={pct(p.area.x, sw)}

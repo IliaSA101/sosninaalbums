@@ -274,6 +274,78 @@ func TestSplitSpreadLimit(t *testing.T) {
 	}
 }
 
+// Склейка и разрез через ручной (103): ручной разворот становится «Авто» одной правкой, вид
+// рассылается один раз; один Undo возвращает места; холостая и предел 200 — без шага и рассылки.
+func TestMergeSplitAutoChanged(t *testing.T) {
+	a, views := spreadsMethods(t, []string{"a", "b", "c"}, []string{"d"}, []string{"e"})
+	for _, id := range []string{"s1", "s2"} {
+		if v := a.SetGrid(id, true); len(v.Spreads) != 3 {
+			t.Fatalf("SetGrid %s: %d разворотов", id, len(v.Spreads))
+		}
+	}
+	n := len(views())
+
+	// Разрез ручного: два «Авто»-листа, одна рассылка.
+	v, err := a.SplitSpreadAuto("s1", 1, true)
+	if err != nil || len(v.Spreads) != 4 || v.Spreads[0].Grid || v.Spreads[1].Grid || !v.Spreads[2].Grid {
+		t.Fatalf("SplitSpreadAuto: %v, %v", photosOf(v), err)
+	}
+	if len(views()) != n+1 {
+		t.Fatalf("видов %d, ждали %d", len(views()), n+1)
+	}
+
+	// Склейка ручного с ручным соседом: один разворот, одна рассылка.
+	tail := v.Spreads[1].ID
+	if v, err = a.MergeSpreadsAuto(tail, false); err != nil || len(v.Spreads) != 3 || len(views()) != n+2 {
+		t.Fatalf("MergeSpreadsAuto: %v, %v, видов %d", photosOf(v), err, len(views()))
+	}
+	// «Авто» + ручной: склейка с ручным вторым тем же вызовом.
+	v = a.SetGrid(v.Spreads[1].ID, true)
+	if v, err = a.MergeSpreadsAuto(v.Spreads[0].ID, true); err != nil || len(v.Spreads) != 2 || v.Spreads[0].Grid {
+		t.Fatalf("MergeSpreadsAuto «Авто»+ручной: %v, %v", photosOf(v), err)
+	}
+
+	// Отказы: последний, неизвестный, at вне границ — холостая (rev прежний).
+	r := a.editor().View().Rev
+	last := v.Spreads[len(v.Spreads)-1].ID
+	for _, id := range []string{last, "нет"} {
+		if v, err = a.MergeSpreadsAuto(id, true); err != nil || v.Rev != r {
+			t.Fatalf("MergeSpreadsAuto(%q) изменил проект: %v, rev %d→%d", id, err, r, v.Rev)
+		}
+	}
+	for _, at := range []int{-1, 0, 99} {
+		if v, err = a.SplitSpreadAuto(last, at, true); err != nil || v.Rev != r {
+			t.Fatalf("SplitSpreadAuto(%d) изменил проект: %v, rev %d→%d", at, err, r, v.Rev)
+		}
+	}
+	// Undo возвращает склейку одним шагом: второй разворот снова ручной.
+	if v = a.undo(); len(v.Spreads) != 3 || !v.Spreads[1].Grid {
+		t.Fatalf("Undo склейки: %v", photosOf(v))
+	}
+}
+
+// Разрез через ручной на пределе MaxSpreads (103): ошибка с пределом, вид не рассылается, места целы.
+func TestSplitSpreadAutoLimit(t *testing.T) {
+	p := model.New()
+	for i := range model.MaxSpreads {
+		id := fmt.Sprintf("p%d", i)
+		p.Spreads = append(p.Spreads, &model.Spread{ID: fmt.Sprintf("s%d", i), Photos: []string{id}})
+		p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
+	}
+	p.Spreads[0].Photos = append(p.Spreads[0].Photos, "x")
+	p.Photos["x"] = model.PhotoRef{Path: testkit.AbsPath("x.jpg"), W: 300, H: 200}
+	a, views := newMethods(t, p)
+	a.SetGrid("s0", true)
+	n, rev := len(views()), a.editor().View().Rev
+	v, err := a.SplitSpreadAuto("s0", 1, true)
+	if err == nil || !strings.Contains(err.Error(), "200 разворотов") {
+		t.Fatalf("ждали отказ по пределу: %v", err)
+	}
+	if v.Rev != rev || !v.Spreads[0].Grid || len(views()) != n {
+		t.Fatalf("после отказа: rev %d→%d, ручной %v, видов %d→%d", rev, v.Rev, v.Spreads[0].Grid, n, len(views()))
+	}
+}
+
 // «Убрать из альбома» (075-13): место, фон и свой стикер — один шаг и одна рассылка вида;
 // RemovePhotos фон и стикер фото из места оставляет. Undo возвращает всё.
 func TestPurgePhotosMethod(t *testing.T) {

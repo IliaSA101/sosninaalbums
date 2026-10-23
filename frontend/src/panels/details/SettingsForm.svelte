@@ -8,11 +8,13 @@
   import { Api, store } from '../../base/core/store.svelte'
   import type { PagePreset, Settings } from '../../base/core/types'
   import Seg from '../../base/tpl/Seg.svelte'
-  import ColorPicker from '../../base/ui/ColorPicker.svelte'
+  import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import { SHEET_PRESETS, isSheet, newSheetSize } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import AlbumBgRow from './AlbumBgRow.svelte'
   import MarkupBlock from '../markup/MarkupBlock.svelte'
+  import { CROP_ITEMS, cropChangeNote, cropNote, cropOf } from './crop'
   import { FOLD_ITEMS, foldChangeNote, foldFields, foldNote, foldOf } from './fold'
   import { groupLabel, presetActive, presetFields, presetGroupOf, presetHint, presetRows, exportPx, type Preset } from './presets'
   import { NUMS, norm, same } from './settingsnorm'
@@ -138,7 +140,14 @@
   <label>
     {sheet ? 'Цвет листов' : 'Цвет страниц альбома'}
     <!-- цвет попадает в форму при выборе; применяет «Применить» -->
-    <ColorPicker value={s.bg || '#ffffff'} label={sheet ? 'Цвет листов' : 'Цвет страниц альбома'} onpick={(c) => (s.bg = c)} />
+    <!-- наведение показывает цвет на страницах без своего цвета (109); выбор остаётся в черновике до «Применить» -->
+    <ColorPicker
+      value={s.bg || '#ffffff'}
+      sheet={store.spread?.id}
+      label={sheet ? 'Цвет листов' : 'Цвет страниц альбома'}
+      onpick={(c) => (s.bg = c)}
+      onpreview={(c) => (c ? colorLive.set(['album'], c) : colorLive.clear())}
+    />
   </label>
   <!-- 098: фон альбома — не поле формы, ставится сразу (свой шаг отмены); цвет страниц лежит под ним -->
   <AlbumBgRow />
@@ -152,6 +161,17 @@
       <p class="note">{foldNote(foldOf(s))}</p>
       {#if foldChangeNote(foldOf(store.view.settings), foldOf(s))}
         <p class="note change">{foldChangeNote(foldOf(store.view.settings), foldOf(s))}</p>
+      {/if}
+    </div>
+    <!-- 104: тот же вид, что у «Фото через корешок»; предел подрезки — в черновике формы, применяет «Применить» -->
+    <div class="fold" data-guide="crop-mode">
+      <span class="cap" title="Фото чуть обрезаются по краям, чтобы раскладка дошла до полей">Подрезать фото, чтобы закрыть лист</span>
+      <div class="foldseg">
+        <Seg look="card" label="Подрезать фото, чтобы закрыть лист" items={CROP_ITEMS} value={cropOf(s)} onpick={(c) => (s.crop = c)} />
+      </div>
+      <p class="note">{cropNote(cropOf(s))}</p>
+      {#if cropChangeNote(cropOf(store.view.settings), cropOf(s))}
+        <p class="note change">{cropChangeNote(cropOf(store.view.settings), cropOf(s))}</p>
       {/if}
     </div>
   {/if}

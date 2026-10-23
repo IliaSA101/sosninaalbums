@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { setMacForTest } from '../../base/core/platform'
 import {
   ARC_IN_H,
   ARC_IN_W,
@@ -7,80 +6,20 @@ import {
   arcRoom,
   arcWhere,
   chromeInset,
+  COL_IN_W,
   LAYER_OPS,
   MINI_GAP,
   MINI_H,
   MINI_IN_GAP,
   miniContext,
-  miniItems,
   miniPlace,
   passThrough,
   ROT_KEEP,
-  swapTip,
   visibleArea,
-  type MiniCtx,
 } from './minipanel'
 import { ARC_CMIN, ARC_OUT_GAP, ARC_PHI, KNOB } from '../tilt/tiltdial'
 import type { SelBox } from '../../base/geom/gridedit'
-import { can, type FeatureId, type Level } from '../../base/prefs/levels'
 import type { FrameView, SpreadView } from '../../base/core/types'
-
-const base: MiniCtx = { grid: false, places: 1, photos: 1, differ: false, allContain: false, flipH: false, flipV: false }
-const ids = (c: Partial<MiniCtx>) => miniItems({ ...base, ...c }).map((i) => i.id)
-
-describe('miniItems', () => {
-  it('ничего не выделено — панели нет', () => {
-    expect(ids({ places: 0, photos: 0 })).toEqual([])
-  })
-  it('фото, «Авто»: зеркала, переключатель вида, подпись, ↻ 90°, удалить; без слоя и ⇄', () => {
-    expect(ids({})).toEqual(['flipH', 'flipV', 'fit', 'caption', 'turn', 'tilt', 'delete'])
-  })
-  it('фото, «Ручная»: плюс «Слой» и ⇄ перед «Удалить»', () => {
-    expect(ids({ grid: true })).toEqual(['flipH', 'flipV', 'fit', 'caption', 'turn', 'tilt', 'layer', 'swap', 'delete'])
-  })
-  it('«Под фото» только при разных пропорциях, сразу после переключателя', () => {
-    expect(ids({})).not.toContain('fitPhoto')
-    expect(ids({ differ: true })).toEqual(['flipH', 'flipV', 'fit', 'fitPhoto', 'caption', 'turn', 'tilt', 'delete'])
-  })
-  it('пустое место: слой и удалить', () => {
-    expect(ids({ grid: true, photos: 0 })).toEqual(['layer', 'delete'])
-  })
-  it('группа: зеркала и ↻ 90°, одинаковый размер, слой («Ручная»), удалить (N); без подписи и ⇄', () => {
-    expect(ids({ grid: true, places: 3, photos: 3 })).toEqual(['flipH', 'flipV', 'turn', 'same', 'layer', 'delete'])
-    expect(ids({ grid: false, places: 2, photos: 2 })).toEqual(['flipH', 'flipV', 'turn', 'same', 'delete'])
-  })
-  it('группа из пустых мест: зеркал нет', () => {
-    expect(ids({ grid: true, places: 2, photos: 0 })).toEqual(['same', 'layer', 'delete'])
-  })
-  it('группа с текстами: число в «Удалить (N)» считает и тексты; одно фото с текстом — уже группа', () => {
-    const del = (c: Partial<MiniCtx>) => miniItems({ ...base, ...c }).find((i) => i.id === 'delete')!
-    expect(del({ places: 2, photos: 2, texts: 1 }).badge).toBe('3')
-    expect(ids({ grid: true, places: 1, photos: 1, texts: 1 })).toEqual(['flipH', 'flipV', 'turn', 'layer', 'delete'])
-  })
-  it('только тексты (2+): слой («Ручная») и удалить, без зеркал и «Одинакового размера»', () => {
-    expect(ids({ grid: true, places: 0, photos: 0, texts: 2 })).toEqual(['layer', 'delete'])
-    expect(ids({ grid: false, places: 0, photos: 0, texts: 3 })).toEqual(['delete'])
-  })
-  it('«Удалить (N)» у группы несёт число, у одиночного — нет', () => {
-    const del = (c: Partial<MiniCtx>) => miniItems({ ...base, ...c }).find((i) => i.id === 'delete')!
-    expect(del({ places: 3, photos: 3 }).badge).toBe('3')
-    expect(del({}).badge).toBeUndefined()
-  })
-  it('зеркало и «Целиком» подсвечены по контексту', () => {
-    const m = miniItems({ ...base, flipH: true, allContain: true })
-    expect(m.find((i) => i.id === 'flipH')?.on).toBe(true)
-    expect(m.find((i) => i.id === 'flipV')?.on).toBe(false)
-    expect(m.find((i) => i.id === 'fit')?.on).toBe(true)
-  })
-  it('линия между группами значков, не перед первым; ↻ стоит в группе с подписью', () => {
-    const m = miniItems({ ...base, grid: true })
-    expect(m[0].sep).toBeUndefined()
-    expect(m.filter((i) => i.sep).map((i) => i.id)).toEqual(['fit', 'caption', 'layer', 'delete'])
-  })
-  it('подсказки у всех значков', () => {
-    for (const it of miniItems({ ...base, grid: true, differ: true })) expect(it.label).not.toBe('')
-  })
-})
 
 const fv = (o: Partial<FrameView>): FrameView => ({
   s: 1,
@@ -140,12 +79,7 @@ describe('miniContext', () => {
   })
 })
 
-describe('имя под фото (037)', () => {
-  it('подпись по шаблону с полями имени — «Имя под фото» вместо «Подпись к фото»', () => {
-    const m = miniItems({ ...base, name: true })
-    expect(m.map((i) => i.id)).toEqual(['flipH', 'flipV', 'fit', 'name', 'turn', 'tilt', 'delete'])
-    expect(m.find((i) => i.id === 'name')?.label).toBe('Имя под фото')
-  })
+describe('miniContext: имя под фото (037)', () => {
   it('miniContext: name — у единственного фото с who в подписи или заглушке', () => {
     const cap = { photo: 'a', who: ['last'] }
     const stub = { photo: 'b', place: 'p', who: ['last', 'first'] }
@@ -288,7 +222,7 @@ describe('miniPlace и видимая область холста (0.13.1)', () 
 
 const cap = (x: number, y: number, w: number, h: number) => ({ x, y, w, h }) // бокс подписи, мм
 
-describe('miniPlace внутри у низа (владелец 2026-10-17, owner-ux §1)', () => {
+describe('miniPlace внутри у низа (владелец 2026-10-17, owner-ux §1.10, запасной ряд)', () => {
   const box = { x: 0, y: 0, w: 300, h: 150 } // ppm 2: 600×300 px, лист 600×300
   it('порядок: под → над → внутри у низа (владелец 2026-10-17)', () => {
     const small = { x: 100, y: 40, w: 60, h: 40 } // 120×80 px
@@ -399,6 +333,19 @@ describe('arcRoom', () => {
     // 400×300 px у верха видимой области
     expect(arcRoom({ x: 10, y: 0, w: 200, h: 150 }, 2, 0, view, 'below')).toEqual({ mode: 'in', vx: 200, vy: 0, vw: 400 })
   })
+  it('arcRoom: столбец внутри у правого края сужает место дуги', () => {
+    const box = { x: 10, y: 0, w: 200, h: 150 } // 400×300 px у верха видимой области
+    const r = arcRoom(box, 2, 0, view, 'inright')
+    expect(r).toEqual({ mode: 'in', vx: (400 - COL_IN_W) / 2, vy: 0, vw: 400 - COL_IN_W })
+    // 164 px дуге хватает, пока ширина ≥ 164 + 52
+    expect(arcRoom({ x: 10, y: 0, w: (ARC_IN_W + COL_IN_W) / 2 - 0.5, h: 150 }, 2, 0, view, 'inright').mode).toBe('none')
+    expect(arcRoom({ x: 10, y: 0, w: (ARC_IN_W + COL_IN_W) / 2, h: 150 }, 2, 0, view, 'inright').mode).toBe('in')
+  })
+  it('arcRoom: столбец сбоку — дуга снаружи над рамкой можно', () => {
+    const small = { x: 100, y: 40, w: 60, h: 40 } // тесно внутри, над рамкой 80 px
+    for (const where of ['right', 'left'] as const) expect(arcRoom(small, 2, 0, view, where).mode).toBe('out')
+    expect(arcRoom(small, 2, 0, view, 'above').mode).toBe('none')
+  })
   it('зум: верх и левый край за окном — центр и верх видимой части', () => {
     const v = { left: 100, top: 50, right: 700, bottom: 450 }
     // рамка x −200..900, y −100..700 px; видимая часть 100..700 × 50..450
@@ -498,90 +445,6 @@ describe('visibleArea', () => {
 describe('LAYER_OPS', () => {
   it('четыре действия в порядке меню', () => {
     expect(LAYER_OPS.map((o) => o.op)).toEqual(['front', 'up', 'down', 'back'])
-  })
-})
-
-describe('miniItems по уровням (спека 010 U1)', () => {
-  const at = (l: Level) => (f: FeatureId) => can(f, l)
-  const lv = (l: Level, c: Partial<MiniCtx> = {}) => miniItems({ ...base, ...c }, at(l)).map((i) => i.id)
-
-  it('«Простой»: подпись, ↻ 90° и «Удалить»', () => {
-    expect(lv('simple')).toEqual(['caption', 'turn', 'delete'])
-  })
-  it('«Простой», «Ручная»: слой, ⇄ и зеркала скрыты', () => {
-    expect(lv('simple', { grid: true })).toEqual(['caption', 'turn', 'delete'])
-  })
-  it('«Стандартный»: зеркала, «Целиком / С обрезкой», подпись; слоя и ⇄ нет', () => {
-    expect(lv('standard', { grid: true })).toEqual(['flipH', 'flipV', 'fit', 'caption', 'turn', 'tilt', 'delete'])
-  })
-  it('«Полный» — как без уровня', () => {
-    expect(lv('full', { grid: true })).toEqual(ids({ grid: true }))
-  })
-  it('черта не стоит первой, даже если первая группа скрыта', () => {
-    const items = miniItems({ ...base }, at('simple'))
-    expect(items[0].sep).toBeUndefined()
-    expect(items[1].sep).toBeUndefined() // ↻ в одной группе с подписью
-    expect(items[2].sep).toBe(true)
-  })
-  it('группа в «Простом»: ↻ 90° и «Удалить (N)»', () => {
-    expect(lv('simple', { places: 3, photos: 3 })).toEqual(['turn', 'delete'])
-  })
-})
-
-describe('tilt', () => {
-  const tilt = (c: Partial<MiniCtx>, can?: (f: FeatureId) => boolean) => miniItems({ ...base, ...c }, can).find((i) => i.id === 'tilt')
-  it('кнопка стоит сразу после ↻ 90°, в группе с подписью', () => {
-    const m = miniItems(base)
-    const i = m.findIndex((x) => x.id === 'turn')
-    expect(m[i + 1].id).toBe('tilt')
-    expect(m[i + 1].sep).toBeUndefined()
-    expect(tilt({})?.icon).toBe('tilt')
-  })
-  it('работает в «Авто» и в «Ручной»', () => {
-    expect(tilt({ grid: false })).toBeDefined()
-    expect(tilt({ grid: true })).toBeDefined()
-  })
-  it('нужен уровень с «Наклоном»: в «Простом» нет, в «Стандартном» есть, в «Своём» — по флажку', () => {
-    expect(tilt({}, (f) => can(f, 'simple'))).toBeUndefined()
-    expect(tilt({}, (f) => can(f, 'standard'))).toBeDefined()
-    expect(tilt({}, (f) => f !== 'tilt')).toBeUndefined()
-  })
-  it('нет у группы, пустого места, текста, стикера и пропавшего фото', () => {
-    expect(tilt({ places: 2, photos: 2 })).toBeUndefined() // группа
-    expect(tilt({ places: 1, photos: 1, texts: 1 })).toBeUndefined() // фото и текст
-    expect(tilt({ places: 0, photos: 0, texts: 1 })).toBeUndefined() // текст
-    expect(tilt({ grid: true, photos: 0 })).toBeUndefined() // пустое место
-    expect(tilt({ missing: true })).toBeUndefined() // фото пропало
-  })
-  it('tilt: кнопка не гаснет (нет disabled) — как быть без места, решает tiltmode (владелец 2026-10-17)', () => {
-    // Мелкое фото: дуги нет, но нажатие ведёт к строке «Наклон, °» в карточке (tiltmode) — кнопка не гаснет.
-    const t = tilt({})
-    expect(t).not.toBeUndefined()
-    expect(t).not.toHaveProperty('disabled')
-    expect(t?.label).toBe('Наклон фото в рамке: выпрямить горизонт')
-  })
-  it('on — когда режим включён, и aria-pressed у выключенного ложен, а не пропущен', () => {
-    expect(tilt({ tilt: true })?.on).toBe(true)
-    expect(tilt({ tilt: false })?.on).toBe(false)
-    expect(tilt({})?.on).toBe(false)
-  })
-})
-
-describe('подсказка ⇄ с Ctrl / ⌘ (спека 100 п. 6)', () => {
-  const swapLabel = () => miniItems({ ...base, grid: true }).find((i) => i.id === 'swap')?.label
-  it('текст: Ctrl вне Mac, ⌘ на Mac', () => {
-    expect(swapTip(false)).toBe('Перетащите на другое место — фото поменяются местами (или тащите фото с Ctrl)')
-    expect(swapTip(true)).toBe('Перетащите на другое место — фото поменяются местами (или тащите фото с ⌘)')
-  })
-  it('подпись значка берёт платформу из platform.ts', () => {
-    setMacForTest(false)
-    expect(swapLabel()).toBe(swapTip(false))
-    setMacForTest(true)
-    expect(swapLabel()).toBe(swapTip(true))
-    setMacForTest(null)
-  })
-  it('на «Авто» значка ⇄ нет', () => {
-    expect(ids({ grid: false })).not.toContain('swap')
   })
 })
 

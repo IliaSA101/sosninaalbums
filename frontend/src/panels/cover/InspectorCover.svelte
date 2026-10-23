@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { store } from '../../base/core/store.svelte'
-  import ColorPicker from '../../base/ui/ColorPicker.svelte'
+  import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import { COVER_LAYOUTS } from '../../editor/cover/cover'
   import MarkupBlock from '../markup/MarkupBlock.svelte'
   import { coverAct } from './coveract.svelte'
@@ -144,7 +145,13 @@
         onclick={() => coverAct.spineText()}>{spine.label}</button
       >
       <span class="plate">Плашка</span>
-      <ColorPicker value={cv.spineBg || '#ffffff'} label="Цвет плашки корешка" onpick={(c) => coverAct.setSpineBg(c)} />
+      <ColorPicker
+        value={cv.spineBg || '#ffffff'}
+        sheet={store.spread?.id}
+        label="Цвет плашки корешка"
+        onpick={(c) => colorLive.commit(() => coverAct.setSpineBg(c))}
+        onpreview={(c) => (c ? colorLive.set(['spine'], c) : colorLive.clear())}
+      />
       <button class="reset" disabled={!cv.spineBg} aria-label="Без плашки" title="Без плашки" onclick={() => coverAct.setSpineBg('')}
         >нет</button
       >

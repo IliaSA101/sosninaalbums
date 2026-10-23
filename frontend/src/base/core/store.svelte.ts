@@ -6,9 +6,10 @@ import { errText, withSkipped } from '../words/errtext'
 import { Nav } from './nav.svelte'
 import { jobs } from './jobs.svelte'
 import { AutoRun } from './autorun.svelte'
+import { SpreadOps } from './spreadops.svelte'
 import { Toasts, stepToast, undoToast, type Toast } from './toasts.svelte'
 import type { MarkMap, PickResult } from './hooks'
-import { backdropLost, pickCurrent } from './undo'
+import { pickCurrent } from './undo'
 import { deepFreeze } from './viewdelta'
 import { ViewChain } from './viewchain'
 import { keepSet } from './usedindex'
@@ -62,7 +63,7 @@ class Store extends Nav {
   filter = $state<'all' | 'unused'>('all')
   // Окно автосборки (027): открыто, пока не null; фото уже выбраны (выделенные или свободные без отклонённых).
   autoDraft = $state<PickResult | null>(null)
-  private readonly autorun = new AutoRun(this)
+  readonly autorun = new AutoRun(this)
   busy = $state(false)
   byId = $derived(new Map(this.photos.map((p) => [p.id, p])))
   // Фото на фоне: в used не входят (не «в альбоме»), но автосборка и фильтр их не берут (freephotos.ts).
@@ -343,28 +344,6 @@ class Store extends Nav {
     }
   }
 
-  // Обложка (032): бросок фото на плитку создаёт её с этим фото на лицевой (photoID '' — пустая) — один шаг отмены.
-  // Пока запрос идёт, повторный щелчок по «+ Обложка» ничего не делает (иначе второй вызов — холостая правка с ошибкой).
-  private coverMaking = false
-  async createCover(photoID: string): Promise<boolean> {
-    if (this.cover || this.view.settings?.sheet || this.busy || this.coverMaking) return false
-    this.coverMaking = true
-    try {
-      if (!(await this.run(Api.CreateCover('', photoID)))) return false
-    } finally {
-      this.coverMaking = false
-    }
-    this.goCover()
-    return true
-  }
-
-  // «Удалить обложку»: тост с «Вернуть», как у разворотов. Холостая правка (rev тот же) тоста не даёт.
-  async deleteCover() {
-    const before = this.view.rev
-    if (!(await this.run(Api.DeleteCover())) || this.view.rev === before) return
-    this.undoToast('Обложка удалена', COVER_ID)
-  }
-
   // Тосты «Вернуть» / «Убрать имена» — toasts.svelte.ts.
   undoToast(text: string, back?: string) {
     undoToast(this, text, back)
@@ -420,92 +399,22 @@ class Store extends Nav {
     return this.autorun.build(...a)
   }
 
-  // «Разнообразить раскладки» (041): Go меняет раскладки выбранных разворотов с учётом соседей, один шаг отмены.
-  // families — тот же фильтр, что у автосборки (065). Вид без изменений (rev тот же) — тост вместо немого ничего; иначе — тост с «Вернуть».
-  async varyLayouts(ids: readonly string[], variety: Variety, families: readonly Family[] = []): Promise<boolean> {
-    if (ids.length === 0 || this.busy) return false
-    const was = new Map(this.view.spreads.map((s) => [s.id, s.layout]))
-    const before = this.view.rev
-    if (!(await this.run(Api.VaryLayouts([...ids], variety, [...families])))) return false
-    if (this.view.rev === before) {
-      this.notify('Менять нечего: раскладки уже разные или других подходящих нет')
-      return false
-    }
-    const n = this.view.spreads.filter((s) => was.has(s.id) && was.get(s.id) !== s.layout).length
-    this.undoToast(`Раскладки изменены: ${n}`)
-    return true
+  // ---------- листы альбома ----------
+
+  // Обложка, раскладки, удаление, разрез, склейка и имя — spreadops.svelte.ts; здесь входы с прежними именами.
+  private readonly ops = new SpreadOps(this)
+
+  get delQueue(): Promise<unknown> {
+    return this.ops.delQueue
   }
-
-  // ---------- раскладки ----------
-
-  // Щелчки быстрее ответа Go: каждое удаление ждёт предыдущее, а «текущий» берётся уже после него —
-  // иначе все щелчки уходят с одним id и удаляется один разворот. run ловит ошибки, цепочка не рвётся.
-  delQueue: Promise<unknown> = Promise.resolve()
-
-  // id не задан — текущий разворот на момент выполнения; меню ленты передаёт разворот, по которому щёлкнули.
-  deleteSpread(id?: string): Promise<void> {
-    const next = this.delQueue.then(() => this.deleteNow(id))
-    this.delQueue = next.catch(() => {})
-    return next
-  }
-
-  // Несколько групп ленты (спека 019 F): один запрос, один шаг Ctrl+Z. Очередь общая с deleteSpread.
-  deleteSpreads(ids: readonly string[]): Promise<void> {
-    const next = this.delQueue.then(() => this.deleteManyNow(ids))
-    this.delQueue = next.catch(() => {})
-    return next
-  }
-
-  private async deleteManyNow(ids: readonly string[]) {
-    const gone = this.view.spreads.map((s) => s.id).filter((id) => ids.includes(id))
-    if (gone.length === 0) return
-    const before = this.view.rev
-    if (!(await this.run(Api.DeleteSpreads(gone)))) return
-    this.hooks.spreadsCleared()
-    const left = new Set(this.view.spreads.map((s) => s.id))
-    const n = gone.filter((id) => !left.has(id)).length
-    // Холостая правка (rev тот же): тоста нет, иначе «Вернуть» отменило бы чужую правку.
-    if (n > 0 && this.view.rev !== before) this.undoToast(`Удалено разворотов: ${n}`, gone[0])
-  }
-
-  private async deleteNow(id?: string) {
-    // На обложке «Удалить разворот» — это удаление обложки (Go отвечает отказом на разворот с её id).
-    if (id === COVER_ID || (!id && this.onCover)) return this.deleteCover()
-    const s = id ? this.view.spreads.find((x) => x.id === id) : this.spread
-    if (!s) return
-    const before = this.view.rev
-    // Холостая правка (rev тот же): тоста нет, иначе «Вернуть» отменило бы чужую правку.
-    if (!(await this.run(Api.DeleteSpread(s.id))) || this.view.rev === before) return
-    this.undoToast('Разворот удалён', s.id)
-  }
-
-  // ---------- разрез и склейка (лента альбома, спека 003) ----------
-
-  // Делит разворот: фото [0:at] остаются, остальные — в новый разворот сразу после него.
-  async split(id: string, at: number) {
-    const before = this.view.rev
-    if (!(await this.run(Api.SplitSpread(id, at)))) return
-    if (this.view.rev === before) return
-    this.goId(id)
-    this.undoToast('Разворот разрезан', id)
-  }
-
-  // Клеит разворот со следующим; текущим становится объединённый (второй исчез).
-  async merge(id: string) {
-    const before = this.view.rev
-    const i = this.view.spreads.findIndex((s) => s.id === id)
-    // Фон второго разворота при склейке снимается, если у первого свой: даём «Вернуть».
-    const lost = backdropLost(this.view.spreads[i], this.view.spreads[i + 1])
-    if (!(await this.run(Api.MergeSpreads(id))) || this.view.rev === before) return
-    this.goId(id)
-    // Тост, как у разреза (094 §1.4): склейка больше не тихая; снятый фон — второй фразой того же тоста.
-    this.undoToast(lost ? 'Развороты склеены. Фон второго разворота снят' : 'Развороты склеены', id)
-  }
-
-  // Название разворота; пустое снимает. Правка — шаг undo, то же название — холостая в Go.
-  renameSpread(id: string, name: string) {
-    return this.run(Api.SetSpreadName(id, name))
-  }
+  createCover = (photoID: string) => this.ops.createCover(photoID)
+  deleteCover = () => this.ops.deleteCover()
+  varyLayouts = (ids: readonly string[], variety: Variety, families: readonly Family[] = []) => this.ops.varyLayouts(ids, variety, families)
+  deleteSpread = (id?: string) => this.ops.deleteSpread(id)
+  deleteSpreads = (ids: readonly string[]) => this.ops.deleteSpreads(ids)
+  split = (id: string, at: number, keep?: boolean) => this.ops.split(id, at, keep)
+  merge = (id: string, keep?: boolean) => this.ops.merge(id, keep)
+  renameSpread = (id: string, name: string) => this.ops.rename(id, name)
 
   async setSettings(s: Settings) {
     await this.run(Api.SetSettings(s))

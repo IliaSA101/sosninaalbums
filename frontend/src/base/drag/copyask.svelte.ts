@@ -4,7 +4,7 @@ import * as Api from '../../../wailsjs/go/app/App'
 import { errText } from '../words/errtext'
 import { store } from '../core/store.svelte'
 import type { UsedAt, View } from '../core/types'
-import { filesOf, sentIds, type CopyAnswer, type Where } from './copyask'
+import { filesOf, sentIds, type CopyAnswer } from './copyask'
 
 interface Open {
   ids: string[]
@@ -53,13 +53,6 @@ export async function askCopy(ids: string[]): Promise<CopyAnswer> {
 
 export function answerCopy(a: CopyAnswer) {
   copyAsk.cur?.done(a)
-}
-
-// Строка «где стоит»: бросок отменён, лист открыт, место выделено.
-export function showWhere(w: Where) {
-  answerCopy('cancel')
-  store.goSheet(w.sheet)
-  store.selectedCell = w.ref
 }
 
 // Ворота броска из ленты (StoreHooks.gate): ничего из брошенного не стоит — ids как есть, без вопроса (решает

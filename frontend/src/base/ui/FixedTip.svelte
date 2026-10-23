@@ -13,6 +13,8 @@
 {#if tip.state && !drag.active}
   {#if tip.state.side === 'right'}
     <div class="tip right" style:left="{tip.state.x + 8}px" style:top="{tip.state.y}px">{tip.state.text}</div>
+  {:else if tip.state.side === 'left'}
+    <div class="tip left" style:left="{tip.state.x - 8}px" style:top="{tip.state.y}px">{tip.state.text}</div>
   {:else}
     <div class="tip" bind:clientWidth={tipW} style:left="{tipLeft(tip.state.x, tipW, ww)}px" style:top="{tip.state.y - 8}px">
       {tip.state.text}
@@ -36,5 +38,9 @@
   }
   .tip.right {
     transform: translateY(-50%);
+  }
+  /* Слева от точки: правый край подсказки в x - 8 */
+  .tip.left {
+    transform: translate(-100%, -50%);
   }
 </style>

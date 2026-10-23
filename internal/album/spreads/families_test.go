@@ -19,7 +19,7 @@ var allFamilies = []string{"dense", "hero", "air", "bleed", "strip", "figure"}
 
 // famOf — семейство действующей раскладки, как у плитки подборки (Choice.family).
 func famOf(p *model.Project, r layout.Result) string {
-	return string(variety.FamilyOf(forms.Of(r.Key, r.Rects, p.Params())))
+	return string(variety.TileFamily(forms.Of(r.Key, r.Rects, p.Params()), r.Rects, p.Params()))
 }
 
 // famCheck — у каждого разворота «Авто» с фото раскладка разрешённого семейства или лучшая

@@ -23,7 +23,7 @@ export interface Viewport {
   padB?: number
 }
 
-// «Вписать» (владелец 2026-10-21, owner-ux §1 п. 5): 16 px сверху и снизу — полосы под листом нет, мини-панель
+// «Вписать» (владелец 2026-10-21, owner-ux §1.9): 16 px сверху и снизу — полосы под листом нет, мини-панель
 // у фото у самого низа рисуется поверх ленты разворотов (MiniPanel). Было (2026-10-17): снизу MINI_GAP + MINI_H + 2.
 export const FIT_TOP = 16
 export const FIT_BOTTOM = FIT_TOP
@@ -133,6 +133,11 @@ export interface WheelLike {
 }
 
 export const isZoomWheel = (e: WheelLike): boolean => e.ctrlKey || !!e.metaKey
+
+// Колесо без Ctrl при 100 % листает ряд, если нет жеста правки. В режиме пипетки не листает (109-qa-2): смена разворота
+// сняла бы режим; зум с Ctrl и сдвиг увеличенного листа от этого не зависят.
+export const rowWheelAllowed = (s: { dragging: boolean; busy: boolean; pressed: boolean; eyedrop: boolean }): boolean =>
+  !s.eyedrop && (s.dragging || !(s.busy || s.pressed))
 
 // Сдвиг листа в зуме, px: колесо — по Y, Shift+колесо (Chromium шлёт deltaX) — по X, тачпад — по обеим; строки — по 40 px; содержимое едет против прокрутки.
 export function wheelPan(e: WheelLike): { dx: number; dy: number } {

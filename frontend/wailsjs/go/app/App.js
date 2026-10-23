@@ -286,6 +286,10 @@ export function FlipSticker(arg1, arg2, arg3) {
   return window['go']['app']['App']['FlipSticker'](arg1, arg2, arg3);
 }
 
+export function ForgetColor(arg1) {
+  return window['go']['app']['App']['ForgetColor'](arg1);
+}
+
 export function ForgetFileNames(arg1) {
   return window['go']['app']['App']['ForgetFileNames'](arg1);
 }
@@ -312,6 +316,10 @@ export function HideDecor(arg1, arg2) {
 
 export function HideFont(arg1) {
   return window['go']['app']['App']['HideFont'](arg1);
+}
+
+export function ImportColors(arg1) {
+  return window['go']['app']['App']['ImportColors'](arg1);
 }
 
 export function ImportDecor(arg1, arg2) {
@@ -366,6 +374,10 @@ export function MergeSpreads(arg1) {
   return window['go']['app']['App']['MergeSpreads'](arg1);
 }
 
+export function MergeSpreadsAuto(arg1, arg2) {
+  return window['go']['app']['App']['MergeSpreadsAuto'](arg1, arg2);
+}
+
 export function MirrorGrid(arg1, arg2) {
   return window['go']['app']['App']['MirrorGrid'](arg1, arg2);
 }
@@ -384,6 +396,10 @@ export function MovePhoto(arg1, arg2, arg3) {
 
 export function MoveSpread(arg1, arg2) {
   return window['go']['app']['App']['MoveSpread'](arg1, arg2);
+}
+
+export function MyColors() {
+  return window['go']['app']['App']['MyColors']();
 }
 
 export function NewBin(arg1, arg2) {
@@ -444,6 +460,10 @@ export function PhotoAbout(arg1) {
 
 export function PickBackdropFile(arg1, arg2) {
   return window['go']['app']['App']['PickBackdropFile'](arg1, arg2);
+}
+
+export function PickColorAt(arg1, arg2, arg3) {
+  return window['go']['app']['App']['PickColorAt'](arg1, arg2, arg3);
 }
 
 export function PickCoverGuide() {
@@ -528,6 +548,10 @@ export function RelinkFolder() {
 
 export function RelinkFolderPath(arg1) {
   return window['go']['app']['App']['RelinkFolderPath'](arg1);
+}
+
+export function RememberColor(arg1) {
+  return window['go']['app']['App']['RememberColor'](arg1);
 }
 
 export function RemoveFolder(arg1) {
@@ -868,6 +892,14 @@ export function SortVignette(arg1) {
 
 export function SplitSpread(arg1, arg2) {
   return window['go']['app']['App']['SplitSpread'](arg1, arg2);
+}
+
+export function SplitSpreadAuto(arg1, arg2, arg3) {
+  return window['go']['app']['App']['SplitSpreadAuto'](arg1, arg2, arg3);
+}
+
+export function SpreadPhotoColors(arg1) {
+  return window['go']['app']['App']['SpreadPhotoColors'](arg1);
 }
 
 export function StepLayout(arg1, arg2, arg3) {

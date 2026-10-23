@@ -3,7 +3,7 @@ import { plural } from '../../base/words/plural'
 import type { AutoPreview, Family } from '../../base/core/types'
 import { unitOf, type Unit } from '../../base/geom/sheet'
 import { FAMILY_IDS } from '../../base/prefs/families'
-import { FAMILIES, galleryLines, galleryRow, type FamilyPass, type GalleryRow } from '../../panels/gallery/variants'
+import { FAMILIES, cropTail, galleryLines, galleryRow, tileTitle, type FamilyPass, type GalleryRow } from '../../panels/gallery/variants'
 
 const SPREAD = unitOf(undefined)
 
@@ -74,9 +74,11 @@ export function layoutsStatus(o: { error: boolean; empty: boolean; waiting: bool
   return ''
 }
 
-// Подсказка плитки «Что соберётся»: форма; у запасной — почему она здесь.
-export const spreadTitle = (s: { formName: string; fallback: boolean }): string | undefined =>
-  s.fallback ? `${s.formName || 'Раскладка'} — нет раскладок выбранных семейств, взята лучшая` : s.formName || undefined
+// Подсказка плитки «Что соберётся»: форма и подрезка (104); у запасной — почему она здесь.
+export const spreadTitle = (s: { formName: string; crop?: number; fallback: boolean }): string | undefined =>
+  s.fallback
+    ? `${[s.formName || 'Раскладка', cropTail(s.crop)].filter(Boolean).join(' · ')} — нет раскладок выбранных семейств, взята лучшая`
+    : tileTitle(s)
 
 // Подпись плитки «Что соберётся» (078): число фото и «ч/б», если разворот сборка сделает чёрно-белым.
 export const spreadNote = (s: { photos: number; gray?: boolean }): string => `${s.photos} фото${s.gray ? ' · ч/б' : ''}`

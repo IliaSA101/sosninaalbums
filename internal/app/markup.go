@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -193,7 +192,7 @@ func (c *markupCache) reset() {
 // тоже запоминается: битый файл не разбирается на каждый запрос). Отмена ctx (запрос закрыт)
 // прерывает ожидание и не запоминается: следующий запрос строит превью заново.
 func (c *markupCache) get(ctx context.Context, path string) ([]byte, string, error) {
-	st, err := os.Stat(path)
+	st, err := library.StatLocal(path)
 	if err != nil {
 		return nil, "", err
 	}

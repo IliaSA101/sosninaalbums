@@ -29,12 +29,13 @@ const (
 	Ladder   Form = "ladder"
 	Frame    Form = "frame"
 	Bleed    Form = "bleed"
+	Scatter  Form = "scatter" // «Разброс» (105): корень Z, только «Другие варианты»
 )
 
 var names = map[Form]string{
 	Mosaic: "Плотно", Strip: "Лента", Rows: "Ряды", Grid: "Сетка", Air: "Воздух",
 	Asym: "Разные страницы", Spine: "Через корешок", Hero: "С главным фото", Pair: "Две крупных",
-	Contrast: "Мелкое — крупное", Ladder: "Лесенка", Frame: "Рамка", Bleed: "В край",
+	Contrast: "Мелкое — крупное", Ladder: "Лесенка", Frame: "Рамка", Bleed: "В край", Scatter: "Разброс",
 }
 
 // Name — подпись вида по-русски; неизвестный вид — пусто.
@@ -284,7 +285,7 @@ func hasMod(sides []side) bool {
 	return false
 }
 
-// Of — вид раскладки: порядок проверок — в край, лесенка, мелкое — крупное, лента, разные
+// Of — вид раскладки: порядок проверок — в край, разброс, лесенка, мелкое — крупное, лента, разные
 // страницы, ряды и сетки, рамка, по главному фото (через корешок, главное, пара), воздух, мозаика
 // (рамка раньше главного: один и тот же ключ H(V(…),n,V(…)) — рамка, а не «через корешок»).
 // Ключи разворота без главных и особого вида — мозаика, как и весь ряд Layouts.
@@ -292,9 +293,11 @@ func Of(key string, rects []layout.Rect, p layout.Params) Form {
 	switch {
 	case strings.Contains(key, "B[") || strings.Contains(key, "E("):
 		return Bleed
+	case strings.Contains(key, "Z("):
+		return Scatter
 	case strings.Contains(key, "L(") || strings.Contains(key, "A("):
 		return Ladder
-	case strings.IndexByte(key, 'm') >= 0:
+	case strings.IndexByte(key, 'm') >= 0 || strings.IndexByte(key, 'n') >= 0:
 		return Contrast
 	}
 	kind, sides := shapeOf(key)

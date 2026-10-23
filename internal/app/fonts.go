@@ -13,6 +13,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum/collect"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
 	"github.com/IliaSA101/sosninaalbums/internal/text/fontlib"
@@ -314,5 +315,5 @@ func (a *App) collectPlan(p *model.Project, extra []string, dir string) (collect
 			fonts[id] = append(fonts[id], collect.FontSrc{Path: f.Path, Name: name, Bold: f.Bold, Italic: f.Italic, Restricted: f.Restricted})
 		}
 	}
-	return pl, pl.AddFonts(fonts, missing, dir, os.Stat)
+	return pl, pl.AddFonts(fonts, missing, dir, library.StatLocal)
 }

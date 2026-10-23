@@ -9,6 +9,11 @@
   import { newSheetSize, sheetSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import { labelTitle, spreadLabel } from '../timeline/spreadname'
+  import { SpreadMenuCtl } from '../timeline/menuact.svelte'
+  import SpreadMenuHost from '../timeline/SpreadMenuHost.svelte'
+  import SpreadName from '../timeline/SpreadName.svelte'
+  import { naming } from '../timeline/naming.svelte'
+  import { spreadsel } from '../timeline/spreadsel.svelte'
   import { Nearby } from '../../base/ui/nearby.svelte'
 
   // Ширина панели 400, поля раздела 16, между плитками 8: три колонки.
@@ -42,6 +47,30 @@
       (sx, sy) => reorder.session(gridSource(grid, scroller), i, sx, sy),
     )
   }
+
+  // Меню правого щелчка — то же, что у групп ленты (103 §1); работает на одну плитку, выделение групп ленты снимается:
+  // в сетке его не видно, и удалить невидимое было бы ловушкой (103-2).
+  const ctl = new SpreadMenuCtl('grid')
+  function openMenu(e: MouseEvent, id: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (drag.active) return
+    spreadsel.clear()
+    ctl.open(e, [id], -1)
+  }
+  // Меню — position: fixed и за прокруткой панели не едет: прокрутка его закрывает.
+  $effect(() => {
+    const sc = ctl.menu ? scroller() : null
+    if (!sc) return
+    const close = () => ctl.close()
+    sc.addEventListener('scroll', close, { passive: true })
+    return () => sc.removeEventListener('scroll', close)
+  })
+  // Пропал разворот с открытым полем (удалён, отменён) — поле не должно ожить, если он вернётся.
+  $effect(() => {
+    const id = naming.id
+    if (naming.where === 'grid' && id && !store.view.spreads.some((s) => s.id === id)) naming.stop()
+  })
 
   // Текущая плитка остаётся видимой в панели. Прокручиваем только вертикально
   // и только свой контейнер: scrollIntoView сдвинул бы и панель с overflow: hidden.
@@ -82,6 +111,7 @@
         title={labelTitle(i, sp.name) ?? `${unit.cap} ${i + 1}`}
         onpointerdown={(e) => press(e, i, sp.id)}
         onclick={() => drag.clickAllowed() && store.go(i)}
+        oncontextmenu={(e) => openMenu(e, sp.id)}
         onkeydown={() => {}}
       >
         <div
@@ -97,13 +127,20 @@
         </div>
         <LowDpiBadge count={sp.lowDPI} min={store.view.minDPI} />
         <VigMark kind={sp.kind} />
-        <div class="num">{spreadLabel(i, sp.name)}</div>
+        {#if naming.where === 'grid' && naming.id === sp.id}
+          <!-- Название правится на месте подписи плитки (103-3) -->
+          <div class="num"><SpreadName id={sp.id} name={sp.name} onclose={() => naming.stop(sp.id)} /></div>
+        {:else}
+          <div class="num">{spreadLabel(i, sp.name)}</div>
+        {/if}
       </div>
     {/each}
   </div>
 {:else}
   <div class="empty">{unit.none}</div>
 {/if}
+
+<SpreadMenuHost {ctl} />
 
 <style>
   .grid {

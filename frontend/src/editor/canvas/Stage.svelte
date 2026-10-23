@@ -5,6 +5,8 @@
   import BackdropBar from '../backdrop/BackdropBar.svelte'
   import StraightenBar from '../tilt/StraightenBar.svelte'
   import { straighten } from '../tilt/straighten.svelte'
+  import EyedropBar from '../eyedrop/EyedropBar.svelte'
+  import { eyedrop } from '../../base/color/eyedrop.svelte'
   import ZoomBadge from '../zoom/ZoomBadge.svelte'
   import EditRail from '../inspector/EditRail.svelte'
   import Inspector from '../inspector/Inspector.svelte'
@@ -21,7 +23,7 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { emptyField } from './field'
   import { fieldClick } from '../places/placegesture'
-  import { FIT_BOTTOM, FIT_TOP, fitH, isZoomWheel, placement, wheelFactor, wheelPan } from '../zoom/zoom'
+  import { FIT_BOTTOM, FIT_TOP, fitH, isZoomWheel, placement, rowWheelAllowed, wheelFactor, wheelPan } from '../zoom/zoom'
   import { BAR, railCols, sideReserve } from '../inspector/panels'
 
   let w = $state(0)
@@ -65,6 +67,8 @@
   // Центры слотов: обложка шире разворота, зазор между краями всё равно GAP (слот «новый» — обычного размера).
   const centers = $derived(slotCenters([...store.sheets.map((sp) => k * sp.w), k * base.w]))
   $effect.pre(() => row.geo(P, total, zoomed, centers))
+  // Пипетка (109): текущий разворот сменился — режим снимается, слой стоит только над листом окна цвета.
+  $effect(() => eyedrop.check(store.spread?.id))
   $effect.pre(() => {
     void store.navSeq // go() на тот же разворот (со слота «новый» назад) тоже возвращает ряд
     row.follow(store.sheetIndex)
@@ -117,7 +121,7 @@
       if (!store.spread || busy() || !prefs.can('zoom')) return
       const d = wheelPan(e)
       canvas.panBy(d.dx, d.dy)
-    } else if (drag.active || !(canvas.busy || canvas.pressed)) row.wheel(e)
+    } else if (rowWheelAllowed({ dragging: drag.active, busy: canvas.busy, pressed: canvas.pressed, eyedrop: eyedrop.on })) row.wheel(e)
   }
   // Свой слушатель с passive: false — иначе preventDefault у колеса не сработает.
   $effect(() => {
@@ -238,7 +242,7 @@
         <!-- Рамка: при 100 % — над текущим (‹ ⊞ › над корешком), при зуме — всё окно; в движении ряда гаснет -->
         <div class="frame" class:away style:left={zoomed ? '0' : `${curLeft}px`} style:width={zoomed ? '100%' : `${place.width}px`}>
           <!-- Режим фона или «Выпрямить по линии»: вместо «Раскладка: …» — полоса режима -->
-          {#if straighten.cur}<StraightenBar />{:else if bgmode.cur}<BackdropBar />{:else}<LayoutBar
+          {#if eyedrop.on}<EyedropBar />{:else if straighten.cur}<StraightenBar />{:else if bgmode.cur}<BackdropBar />{:else}<LayoutBar
               spread={store.spread}
               show={hovered}
               compact={zoomed}

@@ -28,7 +28,9 @@ import (
 //	         | "H(" hдет ("," hдет)+ ")"                     не все hдет — m
 //	         | "G(" ряд ("," ряд)+ ")"                       ряды одной высоты (051)
 //	         | ("L"|"A") "(" поз "," поз "," поз ["," поз ["," поз]] ")"   лесенка (051)
-//	hдет     = дерево | "m" поз                              m — фото поменьше в ряду (051)
+//	         | "Z(" зв {"," зв} ")"                          разброс (105): 1–5 фото одной высоты
+//	hдет     = дерево | "m" поз | "n" поз                    m, n — фото поменьше в ряду (051, 105)
+//	зв       = ("a"|"b"|"c"|"d"|"e"|"f"|"g") поз             уровень: доля свободной высоты 0, ¼, ⅓, ½, ⅔, ¾, 1
 //	ряд      = поз | "H(" поз ("," поз)+ ")"
 //	дерево   = поз | ("H"|"V") "(" дерево ("," дерево)+ ")"
 //	поз      = "0" | ненуль {цифра}                          не больше 4 цифр
@@ -49,8 +51,10 @@ const MaxKeyLen = 2048
 
 type keyTree struct {
 	leaf  int  // позиция фото; -1 у составного узла
-	op    byte // составной узел: 'H', 'V', 'G' — ряды одной высоты, 'L'/'A' — лесенка
-	small bool // лист m<i> — поменьше в ряду корня
+	op    byte // составной узел: 'H', 'V', 'G' — ряды одной высоты, 'L'/'A' — лесенка, 'Z' — разброс
+	small bool // лист m<i> или n<i> — поменьше в ряду корня
+	big   bool // лист n<i>: поменьше с долей kappaN (105), только вместе с small
+	lvl   int8 // ребёнок Z: уровень a…g = 1…7; 0 — не ребёнок Z
 	kids  []*keyTree
 }
 
@@ -59,7 +63,12 @@ func (t *keyTree) String() string {
 		return "-"
 	}
 	if t.leaf >= 0 {
-		if t.small {
+		switch {
+		case t.lvl > 0:
+			return string(rune('a'+t.lvl-1)) + strconv.Itoa(t.leaf)
+		case t.big:
+			return "n" + strconv.Itoa(t.leaf)
+		case t.small:
 			return "m" + strconv.Itoa(t.leaf)
 		}
 		return strconv.Itoa(t.leaf)
@@ -85,11 +94,15 @@ func (t *keyTree) leaves(out []int) []int {
 }
 
 // node собирает дерево H/V для расчёта; листья ссылаются на позиции во входе.
-// Лист m — ячейка высоты h шириной kappa·h·a, фото в ней kappa·h по центру (place).
+// Лист m (n) — ячейка высоты h шириной kappa·h·a (kappaN), фото в ней kappa·h по центру (place).
 func (t *keyTree) node(aspects []float64, gap float64) *node {
 	if t.leaf >= 0 {
 		if t.small {
-			return &node{leaf: t.leaf, a: 1 / (kappa * aspects[t.leaf]), small: true, key: t.String()}
+			kp := kappa
+			if t.big {
+				kp = kappaN
+			}
+			return &node{leaf: t.leaf, a: 1 / (kp * aspects[t.leaf]), small: true, big: t.big, key: t.String()}
 		}
 		return &node{leaf: t.leaf, a: 1 / aspects[t.leaf], key: strconv.Itoa(t.leaf)}
 	}
@@ -290,26 +303,41 @@ func (k *keyParser) tree() (*keyTree, bool) {
 	return k.node(c, 2, 0, k.tree)
 }
 
-// root — корень блока: дерево, ряд с листьями m, ряды G или лесенка L/A.
+// zkid — ребёнок Z: уровень a…g и позиция.
+func (k *keyParser) zkid() (*keyTree, bool) {
+	c := k.peek()
+	if c < 'a' || c > 'g' {
+		return nil, false
+	}
+	k.i++
+	t, ok := k.leaf()
+	t.lvl = int8(c-'a') + 1
+	return t, ok
+}
+
+// root — корень блока: дерево, ряд с листьями m и n, ряды G, лесенка L/A или разброс Z.
 func (k *keyParser) root() (*keyTree, bool) {
 	switch c := k.peek(); {
 	case k.open('G'):
 		return k.node('G', 2, 0, k.row)
+	case k.open('Z'):
+		return k.node('Z', 1, 5, k.zkid)
 	case (c == 'L' || c == 'A') && k.open(c):
 		return k.node(c, 3, 5, k.leaf)
 	case k.open('H'):
 		t, ok := k.node('H', 2, 0, k.hkid)
-		// Ряд из одних m — тот же ряд, только мельче: у вида было бы два ключа.
+		// Ряд из одних m и n — тот же ряд, только мельче: у вида было бы два ключа.
 		return t, ok && slices.ContainsFunc(t.kids, func(kid *keyTree) bool { return !kid.small })
 	}
 	return k.tree()
 }
 
-// hkid — ребёнок корневого H: дерево или лист m.
+// hkid — ребёнок корневого H: дерево или лист m / n.
 func (k *keyParser) hkid() (*keyTree, bool) {
-	if k.eat('m') {
+	if c := k.peek(); c == 'm' || c == 'n' {
+		k.i++
 		t, ok := k.leaf()
-		t.small = true
+		t.small, t.big = true, c == 'n'
 		return t, ok
 	}
 	return k.tree()

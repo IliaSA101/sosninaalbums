@@ -1,22 +1,17 @@
 <script lang="ts">
   import { screenDpr } from '../../base/ui/dpr.svelte'
   import { store } from '../../base/core/store.svelte'
-  import { isSheet, sheetIn, unitOf } from '../../base/geom/sheet'
+  import { sheetIn, unitOf } from '../../base/geom/sheet'
   import Modal from '../../base/modal/Modal.svelte'
-  import Seg from '../../base/tpl/Seg.svelte'
   import SideList from '../../base/tpl/SideList.svelte'
   import TplItem from '../../base/tpl/TplItem.svelte'
   import { decor } from './decor.svelte'
   import BgTargets from './BgTargets.svelte'
   import { bgPickShown } from './bgtargets'
-  import { ALBUM_BG, albumStanding, albumWhere, type AlbumWhere } from './albumbg'
+  import { ALBUM_BG } from './albumbg'
+  import DecorHead from './DecorHead.svelte'
   import QrDialog from './QrDialog.svelte'
-  import { QR_OPEN, QR_OPEN_TIP } from './qr'
-  import { qrForm } from './qr.svelte'
   import SpreadSave from './SpreadSave.svelte'
-  import { spreadSave } from './tplsave.svelte'
-  import { packsUi } from '../../shell/packs/packs.svelte'
-  import { frameStanding, frameWhereItems } from './frames'
   import { FILTERED_EMPTY, saveScopes, tileLook, tplNote, tplSideItems, tplSrc, tplTitle, tplVisible } from './spreadtpl'
   import {
     ADD_OWN,
@@ -25,14 +20,11 @@
     NAME_MAX,
     NOUN,
     OWN_TIP_STICKER,
-    READ_ONLY_HINT,
     deleteText,
     emptyText,
     ownKind,
     scopeIn,
     sideItems,
-    standingId,
-    standingSticker,
     themeItems,
     tilePx,
     tileSrc,
@@ -52,7 +44,6 @@
   const sticker = $derived(c?.kind === 'sticker')
   const album = $derived(decor.albumNow()) // 098: плитка ставит фон альбома, а не фон листа
   const albumOnly = $derived(!!c?.album) // окно «Фон альбома»: строки «На» нет
-  const albumPlaces = $derived(albumWhere(isSheet(store.view.settings), unit.all))
   const frame = $derived(c?.kind === 'frame') // 079: «Куда» — выделенные места или весь лист, а не область листа
   const spreads = $derived(c?.kind === 'spread') // 067: плитки готовых разворотов, «Куда» отбирает их
   const themed = $derived(themeItems(decor.cat, decor.theme))
@@ -60,21 +51,10 @@
   const readOnly = $derived(!!decor.cat?.readOnly)
   const px = $derived(tilePx(TILE_W, screenDpr.value))
   // Плитка, что стоит в этой области сейчас: отмечена, как текущая раскладка в галерее ⊞
-  const standing = $derived(
-    album
-      ? albumStanding(store.view.albumBg, decor.cat?.items ?? [])
-      : frame
-        ? frameStanding(sp, decor.frameIds(), decor.cat?.items ?? [])
-        : spreads
-          ? ''
-          : sticker
-            ? standingSticker(sp, c?.replace, decor.cat?.items ?? [])
-            : standingId(sp, scope, decor.cat?.items ?? []),
-  )
+  const standing = $derived(decor.standing(scope))
   // 077: строка «на какие листы» под «Куда» — у «Фонов», не на обложке и не в альбоме из одного разворота
   const manyRow = $derived(c?.kind === 'bg' && !albumOnly && bgPickShown(sp, store.view.spreads.length))
   const bgPlan = $derived(decor.bgPlan())
-  const frameWhere = $derived(frameWhereItems(decor.frameSel().length))
   const noun = $derived(c ? NOUN[c.kind] : 'фон')
   const dpr = $derived(screenDpr.value)
   const emptyMsg = $derived(spreads && themed.length > 0 && !decor.loading ? FILTERED_EMPTY : emptyText(decor.theme, readOnly, c?.kind))
@@ -115,55 +95,7 @@
         />
       </div>
       <div class="main">
-        <div class="bar">
-          {#if frame}
-            <!-- 079: без выделения пункта «Выделенные» нет (owner-ux 2.7) -->
-            <span class="lbl">Куда</span>
-            <Seg items={frameWhere} value={decor.frameWhereNow()} onpick={(w) => decor.setFrameWhere(w)} label="Куда поставить рамочку" />
-          {:else if album}
-            <!-- 098: фон альбома — на весь разворот или на каждую страницу; у листа без шва пункт один -->
-            {#if albumPlaces.length > 1}
-              <span class="lbl">Куда</span>
-              <Seg
-                items={albumPlaces}
-                value={decor.albumPages ? 'pages' : 'spread'}
-                onpick={(w: AlbumWhere) => decor.setAlbumPages(w === 'pages')}
-                label="Куда поставить фон альбома"
-              />
-            {/if}
-          {:else if (c.kind === 'bg' || spreads) && where.length > 1}
-            <span class="lbl">Куда</span>
-            <Seg items={where} value={scope} onpick={(s) => decor.setScope(s)} label="Куда поставить {noun}" />
-          {/if}
-          <span class="grow"></span>
-          <!-- 067 Ф2: те же наборы во всех трёх окнах; окно «Наборы» открывается поверх -->
-          <button class="ghost" title="Наборы библиотеки: добавить из файла, удалить" onclick={() => packsUi.show()}>Наборы…</button>
-          {#if spreads}
-            <button
-              class="ghost"
-              disabled={decor.busy || readOnly}
-              title={readOnly ? READ_ONLY_HINT : 'Сохранить места и оформление этого разворота в «Мои»'}
-              onclick={() => spreadSave.show()}>Сохранить разворот…</button
-            >
-          {:else if ownKind(c.kind)}
-            <!-- 100: код по ссылке — только когда стикер добавляют, а не заменяют -->
-            {#if sticker && !c.replace}
-              <button
-                class="ghost"
-                disabled={decor.busy || readOnly}
-                title={readOnly ? READ_ONLY_HINT : QR_OPEN_TIP}
-                onclick={() => qrForm.show()}>{QR_OPEN}</button
-              >
-            {/if}
-            <!-- 100-1: своё на виду — primary, крайняя справа, одна кнопка на три окна -->
-            <button
-              class="primary"
-              disabled={decor.busy || readOnly}
-              title={readOnly ? READ_ONLY_HINT : uploadHint(c.kind)}
-              onclick={() => decor.upload()}>{ADD_OWN[c.kind]}</button
-            >
-          {/if}
-        </div>
+        <DecorHead {c} {where} {scope} {album} />
         {#if manyRow}
           <BgTargets
             bind:pick={decor.bgPick}
@@ -297,20 +229,6 @@
     flex-direction: column;
     gap: 10px;
   }
-  .bar {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 30px;
-  }
-  .lbl {
-    color: var(--muted);
-    font-size: 12px;
-  }
-  .grow {
-    flex: 1;
-  }
   .tiles {
     flex: 1;
     min-height: 0;
@@ -348,12 +266,16 @@
     object-fit: cover;
     pointer-events: none;
   }
-  /* Стикер: квадратная плитка, рисунок вписан целиком, под ним шашечка (видно прозрачность) */
-  /* Готовый разворот: картинка вписана в кнопку (страница уже листа — по краям подложка) */
-  .tile.tpl img {
+  /* Готовый разворот: картинка вписана в кнопку (страница уже листа — по краям подложка).
+     Рамочка: квадратная плитка, рамка вокруг силуэта вписана целиком */
+  .tile.tpl img,
+  .tile.frm img {
     object-fit: contain;
   }
-  .tile.stk {
+  /* Стикер: квадратная плитка, рисунок вписан целиком, под ним шашечка (видно прозрачность);
+     у рамочки шашечка — только у своих */
+  .tile.stk,
+  .tile.chk {
     background: repeating-conic-gradient(#d4d4d8 0 25%, #f4f4f5 0 50%) 0 0 / 14px 14px;
   }
   .tile.stk img {
@@ -361,13 +283,6 @@
     inset: 6px;
     width: calc(100% - 12px);
     height: calc(100% - 12px);
-  }
-  /* Рамочка: квадратная плитка, рамка вокруг силуэта вписана целиком; шашечка (видно прозрачность) — только у своих */
-  .tile.frm img {
-    object-fit: contain;
-  }
-  .tile.chk {
-    background: repeating-conic-gradient(#d4d4d8 0 25%, #f4f4f5 0 50%) 0 0 / 14px 14px;
   }
   .tip {
     flex: none;

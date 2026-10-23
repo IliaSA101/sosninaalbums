@@ -66,6 +66,8 @@ func probes() []probe {
 		{"DeleteSpreads", kView, func(m *Methods) (model.View, error) { return ok(m.DeleteSpreads([]string{"s1"})) }},
 		{"MoveSpread", kView, func(m *Methods) (model.View, error) { return ok(m.MoveSpread("s1", 1)) }},
 		{"SplitSpread", kErr, func(m *Methods) (model.View, error) { return m.SplitSpread("s1", 1) }},
+		{"MergeSpreadsAuto", kErr, func(m *Methods) (model.View, error) { return m.MergeSpreadsAuto("s1", true) }},
+		{"SplitSpreadAuto", kErr, func(m *Methods) (model.View, error) { return m.SplitSpreadAuto("s1", 1, true) }},
 		{"PurgePhotos", kView, func(m *Methods) (model.View, error) { return ok(m.PurgePhotos(ids)) }},
 		{"MergeSpreads", kView, func(m *Methods) (model.View, error) { return ok(m.MergeSpreads("s1")) }},
 		{"SetLayout", kView, func(m *Methods) (model.View, error) { return ok(m.SetLayout("s1", "x")) }},

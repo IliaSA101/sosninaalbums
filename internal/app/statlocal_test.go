@@ -18,10 +18,16 @@ import (
 // Без подмены цель локальна и ссылка работает как обычный файл (контроль).
 func netLink(t *testing.T, dir, target string, net bool) string {
 	t.Helper()
+	return netLinkNamed(t, dir, "link.jpg", target, net)
+}
+
+// netLinkNamed — netLink с именем ссылки: папке и набору нужны свои имена (расширение .zip).
+func netLinkNamed(t *testing.T, dir, name, target string, net bool) string {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("н/п: ссылки на Windows требуют прав; логика StatLocal общая")
 	}
-	link := filepath.Join(dir, "link.jpg")
+	link := filepath.Join(dir, name)
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("ссылку не создать: %v", err)
 	}

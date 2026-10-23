@@ -26,6 +26,7 @@ const { store } = await import('../../base/core/store.svelte')
 const { drag } = await import('../../base/drag/drag.svelte')
 const { setMacForTest } = await import('../../base/core/platform')
 const { cutClick, cutKey } = await import('./stripact')
+const { gridAct } = await import('../layouts/gridact.svelte')
 
 const click = (ctrlKey = false, metaKey = false) => ({ ctrlKey, metaKey, stopPropagation: vi.fn() })
 const key = (k: string) => ({ key: k, preventDefault: vi.fn(), stopPropagation: vi.fn() })
@@ -91,6 +92,45 @@ describe('зона разреза (094)', () => {
   })
 })
 
+describe('зона разреза у ручного разворота (103)', () => {
+  const photos = ['p1', 'p2', 'p3', 'p4']
+  const spread = (extra: object) => ({ id: 's1', photos, rects: [], ...extra }) as never
+  let askGlue: ReturnType<typeof vi.spyOn>
+  beforeEach(() => {
+    askGlue = vi.spyOn(gridAct, 'askGlue').mockResolvedValue(undefined)
+  })
+  afterEach(() => askGlue.mockRestore())
+
+  it('Ctrl+щелчок и Enter открывают вопрос, не режут; «Разрезать» зовёт split(id, j, keep)', async () => {
+    store.view = { ...store.view, spreads: [spread({ grid: true })] }
+    expect(cutClick(click(true), 's1', 3)).toBe(true)
+    expect(cutKey(key('Enter'), 's1', 3)).toBe(true)
+    expect(split).not.toHaveBeenCalled()
+    expect(askGlue).toHaveBeenCalledTimes(2)
+    const g = askGlue.mock.calls[0][0]
+    expect(g).toMatchObject({
+      kind: 'cut',
+      title: 'Разрезать разворот?',
+      ok: 'Разрезать',
+      ids: ['s1'],
+      ask: 'У разворота 1 ручная раскладка. Ваши правки мест сбросятся. Разрезать разворот 1 перед фото 4?',
+    })
+    await g.run(false)
+    expect(split).toHaveBeenCalledExactlyOnceWith('s1', 3, false)
+  })
+
+  it('«Авто» режет сразу, виньетка — нет', () => {
+    store.view = { ...store.view, spreads: [spread({})] }
+    expect(cutClick(click(true), 's1', 2)).toBe(true)
+    expect(split).toHaveBeenCalledExactlyOnceWith('s1', 2)
+    store.view = { ...store.view, spreads: [spread({ grid: true, kind: 'vignette' })] }
+    expect(cutClick(click(true), 's1', 2)).toBe(false)
+    expect(cutKey(key('Enter'), 's1', 2)).toBe(false)
+    expect(split).toHaveBeenCalledTimes(1)
+    expect(askGlue).not.toHaveBeenCalled()
+  })
+})
+
 // Разметка: без Ctrl зона мышь не ловит, с Ctrl (класс .cutting у ленты) — ловит; 6 px без захода на фото.
 const src = import.meta.glob(['/src/panels/timeline/SpreadChips.svelte', '/src/panels/timeline/Timeline.svelte'], {
   query: '?raw',
@@ -105,6 +145,10 @@ describe('подключение зоны разреза', () => {
   it('щелчок и Enter идут через cutClick / cutKey', () => {
     expect(chips).toContain('onclick={(e) => cutClick(e, sp.id, j)}')
     expect(chips).toContain('onkeydown={(e) => cutPress(e, sp.id, j)}')
+  })
+  it('зона есть и у ручного разворота (не у виньетки)', () => {
+    expect(chips).toContain("{#if j > 0 && sp.kind !== 'vignette' && cuts}")
+    expect(chips).toContain('cutState(sp, j, unit).ask')
   })
   it('зона 6 px слева от рамки, мышь — только при .cutting', () => {
     const cut = rule('.cut')

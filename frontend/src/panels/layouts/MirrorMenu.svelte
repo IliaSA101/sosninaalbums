@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { portal } from '../../base/ui/portal'
   import type { LayoutScope } from '../../base/core/types'
   import { tip, tipped } from '../../base/ui/tip.svelte'
   import Icon, { type IconName } from '../../base/ui/Icon.svelte'
@@ -20,13 +21,6 @@
     { scope: 'spread', label: 'Разворот', icon: 'mirror-spread' },
   ]
   const stop = (e: PointerEvent) => e.stopPropagation()
-
-  // Список переезжает в body: полоса над разворотом обрезается (overflow) и сдвинута transform,
-  // из-за чего position: fixed внутри неё считался бы от группы, а не от окна.
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node)
-    return { destroy: () => node.remove() }
-  }
 
   function toggle() {
     // У листа виньетки страниц нет (Go отказывает left/right): зеркалит сразу весь лист, без меню.

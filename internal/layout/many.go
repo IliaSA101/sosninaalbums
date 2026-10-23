@@ -470,7 +470,7 @@ func (m *manyGen) pick() []Result {
 		if c.r != nil {
 			copy(rects[c.r.lo:c.r.hi], c.r.rects)
 		}
-		out[j] = Result{rects, c.s, c.keyStr()}
+		out[j] = Result{Rects: rects, Score: c.s, Key: c.keyStr()}
 	}
 	return out
 }
@@ -512,7 +512,7 @@ func manyBlocks(asp []float64, box Rect, gap float64, keep int) ([]candidate, in
 		if !ok {
 			continue
 		}
-		out = append(out, candidate{Result{slices.Clone(buf), score(buf, box, -1, t.depth), t.keyStr()}, t.depth, h, i})
+		out = append(out, candidate{Result{Rects: slices.Clone(buf), Score: score(buf, box, -1, t.depth), Key: t.keyStr()}, t.depth, h, i})
 	}
 	slices.SortStableFunc(out, func(a, b candidate) int { return desc(tieQ(a.Score), tieQ(b.Score)) })
 	if keep >= 0 {

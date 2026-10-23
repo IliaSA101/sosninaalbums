@@ -94,11 +94,14 @@ func (a *App) rescanWith(mode scanMode) {
 		a.publish(gen, kept, pr)
 		a.refreshMissing()
 	}
-	a.bg.Go(func() {
+	if !a.goBG(func() {
 		defer guard("сканирование")
 		defer a.scanDone(gen)
 		a.readFolders(ctx, gen, src, kept, quiet, seen)
-	})
+	}) {
+		cancel()
+		a.scanDone(gen) // фон закрыт: чтения не будет, scanning не оставляем
+	}
 }
 
 // readFolders — фоновая часть rescanWith: проба томов, чтение, лог и прогрев миниатюр.
@@ -289,6 +292,7 @@ func (a *App) warmThumbs(gen int, photos []library.Photo) {
 	t0 := time.Now()
 	var lastMu sync.Mutex // колбэк зовут все воркеры прогрева
 	last := time.Time{}
+	var sent monotone // под emitMu: событие со старым done не идёт после нового
 	a.cache.Warm(ctx, photos, func(done, total int) {
 		// Колбэк — после каждого фото, до следующего: здесь воркер и встаёт на паузу.
 		if a.layouts.wait(ctx); ctx.Err() != nil {
@@ -309,7 +313,7 @@ func (a *App) warmThumbs(gen int, photos []library.Photo) {
 		a.mu.Lock()
 		cur := gen == a.scanGen
 		a.mu.Unlock()
-		if cur {
+		if cur && sent.advance(done) {
 			a.emit("thumbs", done, total)
 		}
 	})
@@ -324,6 +328,20 @@ func (a *App) warmThumbs(gen int, photos []library.Photo) {
 		a.warm = nil
 	}
 	a.mu.Unlock()
+}
+
+// monotone — наибольший уже отправленный done прогресса. Воркеры прогрева зовут колбэк
+// параллельно: воркер со старым done мог взять emitMu позже воркера с новым, и полоска
+// после «3 из 3» откатывалась на «2 из 3» (плавал TestThumbsWaitLayouts под -race).
+type monotone struct{ n int }
+
+// advance — true, если done больше прежнего; тогда он запоминается.
+func (m *monotone) advance(done int) bool {
+	if done <= m.n {
+		return false
+	}
+	m.n = done
+	return true
 }
 
 // thumbsLogLine — строка журнала конца прогрева (089 §8 п. 2, разбор — scripts/e2e/report.py); снятые

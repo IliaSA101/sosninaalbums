@@ -273,12 +273,15 @@ describe('автосборка и заполнение мест: что уход
     expect(store.toast?.text).toBe('Отклонённые не взяты: 1')
   })
 
-  it('нечего брать: все свободные отклонены — Go не зовём, тост с причиной', async () => {
+  it('нечего брать: все свободные отклонены — окно «Весь альбом заново» (107), сборка свободных не уходит, тост с причиной остаётся', async () => {
     await setup({ rejected: ['b', 'c', 'd'] })
     store.openAuto()
-    await store.autoBuild(1, RANGE)
-    expect(calls).toEqual([])
+    expect(store.autoDraft).toMatchObject({ from: 'album', ids: ['a'] })
     expect(store.toast?.text).toBe('Отклонённые не взяты: 3')
+    // Само открытие в Go не ходит; «Собрать» в этом окне берёт фото альбома, а не отклонённые свободные.
+    expect(calls).toEqual([])
+    await store.autoBuild(1, RANGE)
+    expect(calls).toEqual([{ name: 'build', ids: ['a'] }])
   })
 
   it('заполнение мест: выделены только стоящие в альбоме — «уже в альбоме»', async () => {

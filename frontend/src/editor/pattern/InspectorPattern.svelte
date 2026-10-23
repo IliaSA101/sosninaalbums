@@ -3,7 +3,8 @@
   import { Api, store } from '../../base/core/store.svelte'
   import type { PatternSpec, PatternView, SpreadView } from '../../base/core/types'
   import { isCover, ownBg } from '../../base/geom/sheet'
-  import ColorPicker from '../../base/ui/ColorPicker.svelte'
+  import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import { coverLabels } from '../cover/cover'
   import { SCOPE_LABEL } from '../backdrop/backdrop'
   import { decor } from '../../panels/decor/decor.svelte'
@@ -74,7 +75,12 @@
     <div class="cap">{patternCaption(p.scope, list.length, labels)}</div>
     <div class="have">
       {#if p.known && p.url}
-        <img src={patternSrc(p.url, patternPx(44, dpr))} style:background={pageBg(p)} alt="" draggable="false" />
+        <img
+          src={patternSrc(colorLive.inkUrl(`pat:${sp.id}:${p.scope}`, p.url), patternPx(44, dpr))}
+          style:background={pageBg(p)}
+          alt=""
+          draggable="false"
+        />
       {:else}
         <span class="ph" aria-hidden="true"></span>
       {/if}
@@ -88,7 +94,13 @@
           <span class="lbl">{p.inks > 1 ? 'Цвета' : 'Цвет'}</span>
           <div class="inks">
             {#each inksOf(p) as c, i (i)}
-              <ColorPicker value={c} label="Цвет узора {i + 1}" onpick={(hex) => setInk(p, i, hex)} />
+              <ColorPicker
+                value={c}
+                sheet={sp.id}
+                label="Цвет узора {i + 1}"
+                onpick={(hex) => colorLive.commit(() => setInk(p, i, hex))}
+                onpreview={(hex) => (hex ? colorLive.set([`pat:${sp.id}:${p.scope}`], hex, i) : colorLive.clear())}
+              />
             {/each}
           </div>
         </div>

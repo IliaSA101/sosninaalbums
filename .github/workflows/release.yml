@@ -1,7 +1,8 @@
 # Сборка выпуска (спека 025, 039, 101): метка vX.Y.Z на main → exe Windows, .app macOS и бинарник Linux → два zip
 # и tar.gz с папкой «Sosnina Albums X.Y.Z» и .deb (задание pack) → ЧЕРНОВИК релиза. Голого exe на странице выпуска нет.
 # Публикует владелец руками (Publish) после проверки скачанных файлов. Ручной запуск — пересборка
-# существующей метки исправленным workflow из main (метку не перевешиваем).
+# существующей метки исправленным workflow из main (метку не перевешиваем). Ручной запуск с dry_run (спека 110, Т4) —
+# пробный прогон по ветке запуска: те же сборки и проверки, без метки и без черновика.
 name: Release
 
 on:
@@ -10,9 +11,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Метка, например v0.9.1"
-        required: true
+        description: "Метка, например v0.9.1 (при dry_run не нужна)"
+        required: false
         type: string
+      dry_run:
+        description: "Пробный прогон по ветке запуска: без метки и без черновика"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -35,17 +41,27 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
-      sha: ${{ steps.sha.outputs.sha }}
+      sha: ${{ inputs.dry_run && github.sha || steps.sha.outputs.sha }}
       # sha256 файлов артефакта notes: «хеш  имя» по строке; сверяет задание release
       sums: ${{ steps.notes.outputs.sums }}
     steps:
+      # dry_run: версия берётся из wails.json ветки запуска, поэтому дерево нужно до шага с меткой
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ inputs.dry_run }}
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Метка и её формат
         id: tag
         env:
           INPUT_TAG: ${{ inputs.tag }}
           REF_NAME: ${{ github.ref_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then tag="$INPUT_TAG"; else tag="$REF_NAME"; fi
+          # dry_run: метки на GitHub нет, "v<версия>" нужна только для имён файлов
+          if [ "$DRY_RUN" = "true" ]; then tag="v$(jq -r .info.productVersion wails.json)"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then tag="$INPUT_TAG"; else tag="$REF_NAME"; fi
           if ! [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "::error::Метка должна быть вида vX.Y.Z, получено: '$tag'"
             exit 1
@@ -54,6 +70,7 @@ jobs:
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
       - name: Метка есть, релиз ещё не опубликован
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
@@ -70,12 +87,14 @@ jobs:
           if ! grep -q "HTTP 404" "$RUNNER_TEMP/err.txt"; then cat "$RUNNER_TEMP/err.txt"; exit 1; fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ !inputs.dry_run }}
         with:
           ref: refs/tags/${{ steps.tag.outputs.tag }}
           persist-credentials: false
 
       - name: Коммит метки
         id: sha
+        if: ${{ !inputs.dry_run }}
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: productVersion в wails.json совпадает с меткой
@@ -742,6 +761,8 @@ jobs:
   release:
     name: Черновик релиза
     needs: [prepare, pack, mac-check, linux-check, guide]
+    # Пробный прогон (dry_run) черновик не создаёт
+    if: ${{ !inputs.dry_run }}
     timeout-minutes: 10
     runs-on: ubuntu-latest
     # Право на запись — только здесь: в этом задании не выполняется код из репозитория и npm

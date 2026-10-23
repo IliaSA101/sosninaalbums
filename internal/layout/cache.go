@@ -34,6 +34,9 @@ func CacheKey(aspects []float64, p Params, n int) string {
 	fold := p.FoldAny && p.Layflat && !p.Sheet
 	b := fmt.Appendf(make([]byte, 0, 48+20*len(aspects)), "%g/%g/%g/%g/%t/%t/%t/%d:",
 		p.PageW, p.PageH, p.Margin, p.Gap, p.Layflat, fold, p.Sheet, n)
+	if c := fitCrop(p); c > 0 {
+		b = fmt.Appendf(b, "c%g/%x:", c, p.Lock)
+	}
 	for _, a := range aspects {
 		b = strconv.AppendFloat(b, a, 'g', -1, 64)
 		b = append(b, ',')
@@ -169,11 +172,16 @@ func CachedPagesInOrder(key string, aspects []float64, p Params, side, limit int
 		return nil, false
 	}
 	e := cached(ck, func() pagesEntry {
-		pc, ok := newPageCtx(key, aspects, p, side)
+		p0 := noCrop(p) // подрезка (104): ряд как без неё, Rects/Score/Crop — из Build(p)
+		pc, ok := newPageCtx(key, aspects, p0, side)
 		if !ok {
 			return pagesEntry{}
 		}
-		return pagesEntry{inOrder: results(pc.inOrder(aspects, limit)), ok: true}
+		in := results(pc.inOrder(aspects, limit))
+		if fitCrop(p) > 0 {
+			in = cropRows(in, aspects, p)
+		}
+		return pagesEntry{inOrder: in, ok: true}
 	})
 	return e.inOrder, e.ok
 }

@@ -1,7 +1,8 @@
 // Ряд разворотов на холсте (спека 012): чистая логика без Svelte. Позиция ряда `pos` — в слотах
 // (дробная), а не в px: ресайз окна, крупный просмотр и галерея раскладок её не сбивают.
 // Слоты 0..n-1 — развороты, слот n — «новый» (точка остановки).
-import { centerScroll } from '../../panels/timeline/timeline'
+import { centerScroll, modClick } from '../../panels/timeline/timeline'
+import type { Unit } from '../../base/geom/sheet'
 import type { WheelLike } from '../zoom/zoom'
 
 export const GAP = 24 // зазор между листами, px
@@ -94,6 +95,19 @@ export function slotBox(
   const cy = fit.top + fit.height / 2
   return { left: Math.round(cx - width / 2), top: Math.round(cy - height / 2), width, height }
 }
+
+// Промежуток между соседними листами (103 §3): от правого края a до левого b, по высоте — общая часть листов.
+// Нет зазора или общей высоты (листы не перекрываются по вертикали) — null.
+export function gapBox(a: SlotBox, b: SlotBox): SlotBox | null {
+  const left = a.left + a.width
+  const width = b.left - left
+  const top = Math.max(a.top, b.top)
+  const height = Math.min(a.top + a.height, b.top + b.height) - top
+  return width > 0 && height > 0 ? { left, top, width, height } : null
+}
+
+// Подсказка промежутка при зажатом Ctrl (на Mac — ⌘).
+export const gapTip = (mac: boolean, u?: Unit) => `${modClick(mac)} — вставить ${u?.one ?? 'разворот'}`
 
 // Последний слот: n при n ≥ 1 (слот «новый»), иначе ряда нет.
 export const rowMax = (n: number) => (n >= 1 ? n : 0)

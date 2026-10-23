@@ -1,17 +1,4 @@
-// Положение меню правого щелчка по группе ленты: у курсора, но целиком внутри окна.
-const GAP = 8 // отступ от края окна, px
-
-export interface MenuSize {
-  w: number
-  h: number
-}
-
-export function menuPos(x: number, y: number, size: MenuSize, view: MenuSize): { x: number; y: number } {
-  return {
-    x: Math.max(GAP, Math.min(x, view.w - size.w - GAP)),
-    y: Math.max(GAP, Math.min(y, view.h - size.h - GAP)),
-  }
-}
+// Пункты меню правого щелчка по группе ленты. Место у курсора — общий placeAtPoint (base/ui/menulist.ts).
 
 // Пункт виньетки (031) в меню правого щелчка: обычный лист → «Сделать виньеткой», виньетка → «Обычный разворот»
 // (у листа-проекта — «Обычный лист»). Только для одной группы: на нескольких выделенных пункта нет.
@@ -67,4 +54,18 @@ export function stripItems(
     cut: strip && cut?.show ? { ok: cut.ok, why: cut.why } : null,
     join: strip && join ? { ok: join.ok, why: join.why } : null,
   }
+}
+
+// «Вставить разворот перед / после» (103 §2): только у одной группы, на всех уровнях (103-9); у альбома листов — «лист».
+export interface InsertItem {
+  where: 'before' | 'after'
+  label: string
+}
+
+export function insertItems(count: number, unit: { one: string }): InsertItem[] {
+  if (count !== 1) return []
+  return [
+    { where: 'before', label: `Вставить ${unit.one} перед` },
+    { where: 'after', label: `Вставить ${unit.one} после` },
+  ]
 }

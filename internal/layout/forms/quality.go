@@ -46,12 +46,12 @@ type band struct{ lo, hi float64 }
 
 var bands = map[Form]band{
 	Mosaic: {0.6, 1}, Strip: {0.12, 0.45}, Rows: {0.3, 0.85}, Grid: {0.3, 0.85},
-	Air: {0.25, 0.6}, Ladder: {0.25, 1}, Contrast: {0.3, 0.8},
+	Air: {0.25, 0.6}, Ladder: {0.25, 1}, Contrast: {0.3, 0.8}, Scatter: {0.25, 1},
 }
 
 // floors — пол мельчайшей стороны фото / высоты страницы по виду (таблица B, design §5).
 var floors = map[Form]float64{
-	Strip: 0.18, Rows: 0.14, Ladder: 0.18, Contrast: 0.12, Air: 0.14, Asym: 0.12, Grid: 0.12,
+	Strip: 0.18, Rows: 0.14, Ladder: 0.18, Scatter: 0.18, Contrast: 0.12, Air: 0.14, Asym: 0.12, Grid: 0.12,
 }
 
 // paged — у ключа блоки по страницам: рамка и заполнение считаются на каждой странице.
@@ -95,6 +95,8 @@ func envelope(key string, f Form, rs []layout.Rect, p layout.Params) (env, share
 		if f == Ladder && i < len(sides) && isLadder(sides[i].root) {
 			box += area
 			air = max(air, stepAir(g, y1-y0))
+		} else if f == Scatter {
+			box += area // воздух — смысл вида (105): рамка блока не мера заполнения
 		} else {
 			box += (x1 - x0) * (y1 - y0)
 		}
@@ -172,13 +174,13 @@ func bandTerm(f Form, share float64) float64 {
 }
 
 // depthOf — глубина дерева ключа, как node.depth у перебора: лист 0, H/V/G/L/A — на уровень
-// больше самого глубокого ребёнка; модификаторы и страницы уровня не добавляют.
+// больше самого глубокого ребёнка (Z — как L/A); модификаторы и страницы уровня не добавляют.
 func depthOf(key string) int {
 	maxd, isOp := []int{0}, []bool{}
 	for i := range len(key) {
 		switch key[i] {
 		case '(':
-			isOp = append(isOp, i > 0 && strings.IndexByte("HVGLA", key[i-1]) >= 0)
+			isOp = append(isOp, i > 0 && strings.IndexByte("HVGLAZ", key[i-1]) >= 0)
 			maxd = append(maxd, 0)
 		case ')':
 			if len(maxd) < 2 {

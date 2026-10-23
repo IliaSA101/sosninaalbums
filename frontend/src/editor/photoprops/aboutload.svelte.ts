@@ -1,4 +1,4 @@
-import type { app, model } from '../../../wailsjs/go/models'
+import type { app } from '../../../wailsjs/go/models'
 
 // Сведения о снимке для карточки (084): загрузка с отбрасыванием поздних ответов и чистые решения.
 
@@ -6,25 +6,6 @@ export type About = app.PhotoAbout
 
 // Вхождений в строке показываем не больше (decisions №6): остальные — «ещё N».
 export const USES_MAX = 6
-
-type Use = Pick<model.PhotoUse, 'sheet' | 'label'>
-
-export interface UseLink {
-  sheet: number
-  link: string // «Разворот 3» — текст ссылки
-  kind: string // «место» — после ссылки обычным текстом
-}
-
-// «Разворот 3 — место» → ссылка «Разворот 3» и вид «место». Без тире — вся подпись ссылкой.
-export function splitUse(u: Use): UseLink {
-  const i = u.label.indexOf(' — ')
-  if (i < 0) return { sheet: u.sheet, link: u.label, kind: '' }
-  return { sheet: u.sheet, link: u.label.slice(0, i), kind: u.label.slice(i + 3) }
-}
-
-export function usesShown(uses: readonly Use[], max = USES_MAX): { shown: UseLink[]; more: number } {
-  return { shown: uses.slice(0, max).map(splitUse), more: Math.max(0, uses.length - max) }
-}
 
 // Фото из ленты для раздела панели деталей: панель открыта и в ленте выделено ровно одно фото. То же фото,
 // что уже показано в карточке выделенного (cardId), второй раз не выводим. Зону последнего нажатия не смотрим:

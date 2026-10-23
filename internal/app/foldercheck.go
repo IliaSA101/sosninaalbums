@@ -55,6 +55,13 @@ func (g *folderCheck) leave(took time.Duration, now time.Time) {
 	g.running, g.end, g.took = false, now, took
 }
 
+// abort снимает running без отметки конца: проверка не началась (фон закрыт), порог не тратится.
+func (g *folderCheck) abort() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.running = false
+}
+
 // CheckFolders сверяет папки проекта с диском и сразу возвращается; работа — в фоне. full —
 // ещё и пересчёт недостающих фото альбома (фокус, показ окна). Изменилось — лента перечитывается
 // тихо (новые встают на места, пропавшие уходят); нет — ни событий, ни записей в журнал.
@@ -82,12 +89,15 @@ func (a *App) beginCheck(full bool) bool {
 	if !ok {
 		return false
 	}
-	a.bg.Go(func() {
+	if !a.goBG(func() {
 		var took time.Duration
 		defer func() { a.check.leave(took, time.Now()) }()
 		defer guard("сверка папок")
 		took = a.checkFolders(eff)
-	})
+	}) {
+		a.check.abort() // фон закрыт: проверка не началась
+		return false
+	}
 	return true
 }
 

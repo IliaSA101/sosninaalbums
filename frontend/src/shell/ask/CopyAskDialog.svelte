@@ -1,13 +1,21 @@
 <script lang="ts">
-  import { answerCopy, copyAsk, showWhere } from '../../base/drag/copyask.svelte'
+  import { answerCopy, copyAsk } from '../../base/drag/copyask.svelte'
   import { copyAskText } from '../../base/drag/copyask'
   import Modal from '../../base/modal/Modal.svelte'
+  import type { UseLine } from '../../base/words/whereuse'
+  import { goUse } from '../../editor/photoprops/gouse.svelte'
 
   // Вопрос при броске на лист фото, уже стоящего в альбоме (098). Правки ещё не было: «Отмена», × и Esc — бросок
   // отменён, Go не зовём. Устроен как DropAskDialog (042): безопасный выбор слева и в фокусе, главный справа.
-  // Строки «где стоит» — ссылки: переход на лист с выделенным местом (бросок при этом отменён).
+  // Строки «где стоит» и «Ещё» — ссылки: переход на лист с выделенным объектом (бросок при этом отменён).
   const a = $derived(copyAsk.cur)
   const t = $derived(a ? copyAskText(a.ids, a.used) : null)
+
+  // Ссылка: бросок отменён, лист открыт, объект выделен (или режим фона)
+  function show(w: UseLine) {
+    answerCopy('cancel')
+    goUse(w)
+  }
 </script>
 
 {#if a && t}
@@ -15,10 +23,16 @@
     <p class="ask">{t.lead}</p>
     <ul class="where">
       {#each t.where as w, i (i)}
-        <li><button type="button" class="link" onclick={() => showWhere(w)}>{w.link}</button> — {w.kind}</li>
+        <li><button type="button" class="link" onclick={() => show(w)}>{w.page}</button> — {w.what}</li>
       {/each}
       {#if t.more > 0}<li class="more">и ещё {t.more}</li>{/if}
     </ul>
+    {#if t.also.length > 0}
+      <p class="note">
+        Ещё: {#each t.also as w, i (i)}{i > 0 ? ', ' : ''}<button type="button" class="link" onclick={() => show(w)}>{w.page}</button
+          >{w.what ? ` — ${w.what}` : ''}{/each}{t.alsoMore > 0 ? `, и ещё ${t.alsoMore}` : ''}
+      </p>
+    {/if}
     {#if t.rest}<p class="note">{t.rest}</p>{/if}
     {#if t.hint}<p class="note">{t.hint}</p>{/if}
     <div class="actions">

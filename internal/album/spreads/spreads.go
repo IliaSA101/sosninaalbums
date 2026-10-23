@@ -229,6 +229,16 @@ func SplitSpread(p *model.Project, id string, at int) {
 	p.Spreads = slices.Insert(p.Spreads, i+1, tail)
 }
 
+// Mergeable — пару s+next можно склеить: пределы фото, текстов, стикеров; grids — пропустить
+// проверку «нет сетки» (склейка через «Вернуть авто», 103). Виньетку не клеит никогда.
+func Mergeable(s, next *model.Spread, grids bool) bool {
+	if s.Kind == model.KindVignette || next.Kind == model.KindVignette || !grids && (len(s.Grid) > 0 || len(next.Grid) > 0) {
+		return false
+	}
+	return len(s.Photos)+len(next.Photos) <= model.MaxPhotos && len(s.Texts)+len(next.Texts) <= model.MaxTexts &&
+		len(s.Stickers)+len(next.Stickers) <= model.MaxStickers
+}
+
 // MergeSpreads — операция над проектом.
 func MergeSpreads(p *model.Project, id string) {
 	i, s := p.Find(id)
@@ -236,9 +246,7 @@ func MergeSpreads(p *model.Project, id string) {
 		return
 	}
 	next := p.Spreads[i+1]
-	if len(s.Grid) > 0 || len(next.Grid) > 0 ||
-		len(s.Photos)+len(next.Photos) > model.MaxPhotos || len(s.Texts)+len(next.Texts) > model.MaxTexts ||
-		len(s.Stickers)+len(next.Stickers) > model.MaxStickers {
+	if !Mergeable(s, next, false) {
 		return
 	}
 	// Стек «Авто» (стикеры и тексты, 048): слои второго — над слоями первого, как и сами списки.

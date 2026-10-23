@@ -20,6 +20,8 @@
   import { watchSize } from '../../base/ui/size'
   import LibraryBar from './LibraryBar.svelte'
   import Thumb from './Thumb.svelte'
+  import ThumbMenu from './ThumbMenu.svelte'
+  import { thumbmenu } from './thumbmenu.svelte'
 
   // Высота библиотеки: по умолчанию LIB_DEF, меняется сплиттером и запоминается.
   // Сохранённая высота (h) — желаемая: при нехватке окна CSS сжимает ленту до одного ряда плиток (D15, 089),
@@ -180,7 +182,10 @@
       bind:this={grid}
       style:--size="{modes.thumbSize}px"
       {@attach (g) => watchSize(g, (w, h) => ((gw = w), (gh = h)))}
-      onscroll={() => (st = grid?.scrollTop ?? 0)}
+      onscroll={() => {
+        st = grid?.scrollTop ?? 0
+        thumbmenu.close()
+      }}
     >
       {#if win.padTop > 0}<div class="spacer" style:height="{win.padTop}px"></div>{/if}
       {#each shown as p (p.id)}
@@ -218,6 +223,7 @@
     {#if drag.over === 'library'}
       <div class="drop-hint">Отпустите, чтобы убрать фото из альбома</div>
     {/if}
+    <ThumbMenu />
   </div>
 </div>
 

@@ -2,6 +2,9 @@ package export
 
 import (
 	"cmp"
+	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
@@ -106,6 +109,41 @@ func (pl Plan) borderPhotoWants(s model.SpreadView, i int, pageW float64, out ma
 			out[pv.Border.Photo] = true
 		}
 	}
+}
+
+// MissingBorderFiles — ошибка, если файл печати рамочки-картинки (BorderView.File: копия из
+// «Рамочек», а не путь записи Photos) не на месте или его том не отвечает. Записи Photos проверяет
+// MissingPhotos; копия лежит в папке данных и там не видна. Без проверки render открыл бы её сам и
+// бросил весь холст (на сетевом томе — после таймаута). exists — как у MissingPhotos (том и файл).
+func (pl Plan) MissingBorderFiles(v model.View, pageW float64, exists func(string) bool) error {
+	seen := map[string]bool{}
+	var gone []string
+	check := func(s model.SpreadView, want func(model.PlaceView) bool) {
+		for _, pv := range s.Places {
+			b := pv.Border
+			if pv.Photo == "" || b == nil || !b.Pic || b.File == "" || !want(pv) || seen[b.File] {
+				continue
+			}
+			seen[b.File] = true
+			if !exists(b.File) {
+				gone = append(gone, filepath.Base(b.File))
+			}
+		}
+	}
+	if pl.Cover != nil && v.Cover != nil {
+		check(v.Cover.Sheet, func(model.PlaceView) bool { return true })
+	}
+	for i, s := range v.Spreads {
+		check(s, func(pv model.PlaceView) bool { return pl.wants(i+1, borderAABB(pv), pageW) })
+	}
+	if len(gone) == 0 {
+		return nil
+	}
+	list := strings.Join(gone[:min(len(gone), 3)], ", ")
+	if len(gone) > 3 {
+		list += fmt.Sprintf(" …и ещё %d", len(gone)-3)
+	}
+	return fmt.Errorf("не найдены картинки рамочек: %d (%s); загрузите их заново в «Рамочки» — и повторите выгрузку", len(gone), list)
 }
 
 // ownBorders — ID записей Photos, на которые ссылаются рамочки мест проекта (с обложкой): пропавшее

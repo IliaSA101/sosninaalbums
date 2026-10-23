@@ -2,8 +2,9 @@ import { untrack } from 'svelte'
 
 // Одна общая подсказка поверх всего: лента с overflow обрезала бы обычные.
 // Рисует её FixedTip.svelte; показывают её через действие use:tipped (гаснет и при удалении элемента).
-// side: 'top' — над элементом по центру, 'right' — справа по середине (лента правки слева).
-export type TipSide = 'top' | 'right'
+// side: 'top' — над элементом по центру, 'right' — справа по середине (лента правки слева),
+// 'left' — слева по середине (столбец мини-панели у правого края, спека 108).
+export type TipSide = 'top' | 'right' | 'left'
 
 class Tip {
   state = $state<{ text: string; x: number; y: number; side: TipSide } | null>(null)
@@ -12,7 +13,10 @@ class Tip {
   showAt(el: HTMLElement, text: string, side: TipSide = 'top') {
     const r = el.getBoundingClientRect()
     this.owner = el
-    this.state = side === 'right' ? { text, x: r.right, y: r.top + r.height / 2, side } : { text, x: r.left + r.width / 2, y: r.top, side }
+    const mid = r.top + r.height / 2
+    if (side === 'right') this.state = { text, x: r.right, y: mid, side }
+    else if (side === 'left') this.state = { text, x: r.left, y: mid, side }
+    else this.state = { text, x: r.left + r.width / 2, y: r.top, side }
   }
 
   hide() {

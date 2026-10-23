@@ -119,7 +119,7 @@ func TestSeatSitesGuard(t *testing.T) {
 		// Пересоздание мест — очередь жильцов.
 		"grid/places.go applyGrid":           "TestApplyGridCarriesSeatNames, TestSpreadTplCarriesSeatNames",
 		"vigsheet/vignette.go placeVignette": "TestVignetteRelayCarriesSeatNames, TestResetGrowVignetteSeatNames",
-		"model/places.go Unfreeze":           "TestUnfreezeSeatNameToPhoto, TestSetLayoutSeatNameToPhoto",
+		"model/gridsync.go Unfreeze":         "TestUnfreezeSeatNameToPhoto, TestSetLayoutSeatNameToPhoto",
 		"model/places.go DeletePlaces":       "TestDeletePlacesDropsSeatName",
 		// Копии мест — без табличек.
 		"model/places.go ClonePlace": "TestClonePlaceDropsPerson",
@@ -128,16 +128,16 @@ func TestSeatSitesGuard(t *testing.T) {
 		// Вставка из буфера (099): табличка только у вырезанного и вставленного места.
 		"grid/paste.go pastePlaces": "TestPasteMovedPhotoRestoresRef",
 		// Новые пустые места и «Авто»: табличек ещё нет.
-		"model/places.go AddPlace": "новое пустое место (TestSeatNamesInvariant: addPlace)",
-		"spreads/drop.go tileRest": "плитка броска — новые места (TestSeatNamesInvariant: drop)",
-		"model/places.go Freeze":   "места из «Авто»",
-		"model/places.go WithGrid": "закрепление без изменений — снова «Авто»",
-		"grid/ops.go MirrorGrid":   "«Авто» после Freeze без изменений",
-		"grid/ops.go SetPlaces":    "проверка рамки, мест не создаёт",
-		"model/order.go SetStack":  "те же места в порядке слоёв (TestSeatNamesInvariant: layers)",
-		"model/places.go SyncGrid": "листу без мест — Grid nil",
+		"model/places.go AddPlace":   "новое пустое место (TestSeatNamesInvariant: addPlace)",
+		"spreads/drop.go tileRest":   "плитка броска — новые места (TestSeatNamesInvariant: drop)",
+		"model/gridsync.go Freeze":   "места из «Авто»",
+		"model/places.go WithGrid":   "закрепление без изменений — снова «Авто»",
+		"grid/ops.go MirrorGrid":     "«Авто» после Freeze без изменений",
+		"grid/ops.go SetPlaces":      "проверка рамки, мест не создаёт",
+		"model/order.go SetStack":    "те же места в порядке слоёв (TestSeatNamesInvariant: layers)",
+		"model/gridsync.go SyncGrid": "листу без мест — Grid nil",
 		// Починка при Load и после ClampGrid: места только отбрасываются.
-		"model/places.go syncSpread":   "починка не смогла добавить место — после ClampGrid не бывает",
+		"model/gridsync.go syncSpread": "починка не смогла добавить место — после ClampGrid не бывает",
 		"model/clamp.go ClampGrid":     "Load: лишние места, запас знаков таблички уже списан (TestLoadClampsSeatName)",
 		"model/cover.go FixCoverSheet": "Load: пустые записи мест",
 		"salbum/fix.go dropNilPlaces":  "Load: пустые записи мест",

@@ -227,7 +227,8 @@ func NewTwo(t *testing.T) (*album.Editor, string, string) {
 // RowsOf — ряд «в порядке ленты» разворота i.
 func RowsOf(e *album.Editor, i int) []layout.Result {
 	s := P(e).Spreads[i]
-	return layout.Cached(P(e).Aspects(s.Photos), P(e).Params(), model.VariantLimit)
+	asp, prm := P(e).LayoutIn(s.Photos)
+	return layout.Cached(asp, prm, model.VariantLimit)
 }
 
 // PickKey — не лучшая раскладка разворота i, подходящая под условие.

@@ -89,11 +89,13 @@ func TestPhotoAboutProjectOnly(t *testing.T) {
 	a := newApp(t)
 	jp := shotJPEG(t, testkit.TempDir(t), "a.jpg", 60, 40)
 	id := library.IDFor(jp)
-	if _, err := a.editor().NewSpread(-1, []model.PhotoInfo{{ID: id, Path: jp, W: 60, H: 40}}); err != nil {
+	v, err := a.editor().NewSpread(-1, []model.PhotoInfo{{ID: id, Path: jp, W: 60, H: 40}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	got := mustAbout(t, a, id)
-	want := []model.PhotoUse{{Sheet: 0, Label: "Разворот 1 — место"}}
+	want := []model.PhotoUse{{Sheet: 0, Label: "Разворот 1 — место", Kind: model.UsePlace, Spread: v.Spreads[0].ID,
+		Page: "Разворот 1", What: "место", Pick: id}}
 	if got.Note != "" || len(got.Shot) != 2 || got.Used != "Использовано 1 раз" || !reflect.DeepEqual(got.Uses, want) {
 		t.Fatalf("%+v", got)
 	}
@@ -268,7 +270,10 @@ func TestPhotoAboutAfterEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := mustAbout(t, a, id)
-	want := []model.PhotoUse{{Sheet: 0, Label: "Разворот 1 — место"}, {Sheet: 1, Label: "Разворот 2 — фон"}}
+	want := []model.PhotoUse{
+		{Sheet: 0, Label: "Разворот 1 — место", Kind: model.UsePlace, Spread: v.Spreads[0].ID, Page: "Разворот 1", What: "место", Pick: id},
+		{Sheet: 1, Label: "Разворот 2 — фон", Kind: model.UseBackdrop, Spread: v.Spreads[1].ID, Page: "Разворот 2", What: "фон", Pick: model.ScopeSpread},
+	}
 	if got.Used != "Использовано 2 раза" || !reflect.DeepEqual(got.Uses, want) {
 		t.Fatalf("после фона: %+v", got)
 	}

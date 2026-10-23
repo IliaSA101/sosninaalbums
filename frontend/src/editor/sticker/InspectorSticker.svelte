@@ -2,7 +2,8 @@
   import { store } from '../../base/core/store.svelte'
   import { thumbUrl } from '../../base/core/media'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import ColorPicker from '../../base/ui/ColorPicker.svelte'
+  import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import { LIB_MISSING_TEXT } from '../../panels/library/missing'
   import { decor } from '../../panels/decor/decor.svelte'
@@ -83,12 +84,16 @@
         {#each inksOf(st) as c, i (i)}
           <ColorPicker
             value={c}
+            sheet={sid}
             label="Цвет стикера {i + 1}"
             onpick={(hex) =>
-              sticker.setInks(
-                st,
-                inksOf(st).map((x, j) => (j === i ? hex : x)),
+              colorLive.commit(() =>
+                sticker.setInks(
+                  st,
+                  inksOf(st).map((x, j) => (j === i ? hex : x)),
+                ),
               )}
+            onpreview={(hex) => (hex ? colorLive.set([`st:${st.id}`], hex, i) : colorLive.clear())}
           />
         {/each}
       </div>

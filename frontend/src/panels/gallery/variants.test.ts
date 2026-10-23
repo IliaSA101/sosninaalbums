@@ -14,6 +14,7 @@ import {
   startOrder,
   stillSpread,
   tileTitle,
+  cropTail,
   twinsLabel,
   variantCounter,
   varies,
@@ -46,7 +47,7 @@ describe('stillSpread', () => {
 })
 
 // ---------- 041 ----------
-const ch = (key: string, family: Choice['family'], twin = -1): Choice => ({ key, rects: [], family, twin, formName: '' })
+const ch = (key: string, family: Choice['family'], twin = -1): Choice => ({ key, rects: [], family, twin, formName: '', crop: 0 })
 // Go шлёт все поля всегда; «без разметки» — пустые family и formName, twin −1.
 const bare = (key: string): Choice => ch(key, '')
 
@@ -83,6 +84,14 @@ describe('051: «Ленты» и «Фигуры»', () => {
   it('подсказка плитки — название формы; у мозаики и без поля — нет', () => {
     expect(tileTitle({ formName: 'Лесенка' })).toBe('Лесенка')
     expect(tileTitle({ formName: '' })).toBeUndefined()
+  })
+  it('подрезка (104): хвост «подрезка до N %» из Go; 0 и нет поля — без хвоста', () => {
+    expect(tileTitle({ formName: 'Плотно', crop: 2 })).toBe('Плотно · подрезка до 2 %')
+    expect(tileTitle({ formName: 'Плотно', crop: 0 })).toBe('Плотно')
+    expect(tileTitle({ formName: '', crop: 0 })).toBeUndefined()
+    expect(tileTitle({ formName: '', crop: 15 })).toBe('подрезка до 15 %')
+    expect(cropTail(undefined)).toBe('')
+    expect(cropTail(-1)).toBe('')
   })
 })
 

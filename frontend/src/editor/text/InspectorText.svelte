@@ -4,7 +4,8 @@
   import { placesel } from '../places/placesel.svelte'
   import { styleSupport } from './fonts'
   import { MAX_SIZE, MIN_SIZE, clampSize } from './textedit'
-  import ColorPicker from '../../base/ui/ColorPicker.svelte'
+  import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import SnapToggle from '../photoprops/SnapToggle.svelte'
@@ -71,7 +72,13 @@
         onclick={() => edit.setStyle({ size: st.size + 1 })}>+</button
       >
     </div>
-    <ColorPicker value={st.color} label="Цвет текста" onpick={(c) => edit.setStyle({ color: c })} />
+    <ColorPicker
+      value={st.color}
+      sheet={edit.spread?.id}
+      label="Цвет текста"
+      onpick={(c) => colorLive.commit(() => edit.setStyle({ color: c }))}
+      onpreview={(c) => edit.previewColor(c)}
+    />
   </div>
 
   <div class="row">

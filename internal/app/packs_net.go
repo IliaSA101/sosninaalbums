@@ -204,7 +204,7 @@ func (a *App) scheduleLibraryCheck() {
 	if !a.net.started.CompareAndSwap(false, true) {
 		return
 	}
-	a.bg.Go(func() {
+	if !a.goBG(func() {
 		defer guard("libraryCheck")
 		t := time.NewTimer(startDelay)
 		defer t.Stop()
@@ -214,7 +214,9 @@ func (a *App) scheduleLibraryCheck() {
 			return
 		}
 		a.startCheck()
-	})
+	}) {
+		a.net.started.Store(false) // фон закрыт: проверка не запущена, раз за сеанс не потрачен
+	}
 }
 
 // startCheck — молча, как кнопка; новое больше startOffer — library:offer без скачивания;

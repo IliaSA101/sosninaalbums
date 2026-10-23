@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +32,7 @@ type exportEnv struct {
 	// и флаг экспорта на момент события (читать после приёма из done).
 	onStep func(done int)
 	last   []any
+	steps  atomic.Int32 // последний готовый номер из export:progress — для отчёта о зависании
 }
 
 func newExportEnv(t *testing.T, n int) *exportEnv {
@@ -51,6 +53,7 @@ func newExportEnv(t *testing.T, n int) *exportEnv {
 	e.a.emit = func(name string, data ...any) {
 		switch name {
 		case "export:progress":
+			e.steps.Store(int32(data[0].(int)))
 			if e.onStep != nil {
 				e.onStep(data[0].(int))
 			}
@@ -78,13 +81,21 @@ func (e *exportEnv) export(t *testing.T, o ExportOptions) string {
 	if err != nil || !ok {
 		t.Fatalf("Export(%+v) = %v, %v", o, ok, err)
 	}
-	select {
-	case msg := <-e.done:
-		return msg
-	case <-time.After(testkit.Limit(30 * time.Second)):
-		t.Fatal("экспорт не закончился")
+	msg, ok := testkit.WaitCh(t, e.done, testkit.Limit(30*time.Second), "экспорт не закончился", e.stuckState)
+	if !ok {
+		t.Fatal("экспорт не закончился (стеки горутин — в логе выше)")
 	}
-	return ""
+	return msg
+}
+
+// stuckState — что известно об экспорте к таймауту: прогресс, флаги, отмена и бюджет декодов
+// (занятый чужой тестовой утечкой бюджет держал бы экспорт вечно).
+func (e *exportEnv) stuckState() string {
+	e.a.mu.Lock()
+	busy, hasCancel := e.a.exporting, e.a.exportCancel != nil
+	e.a.mu.Unlock()
+	return fmt.Sprintf("готово %d; exporting=%v, есть отмена=%v; stopped=%v, stopCtx.Err=%v; DecodeBudget: занято %d пикс., ждут %d",
+		e.steps.Load(), busy, hasCancel, e.a.stopped.Load(), e.a.stopCtx.Err(), imgfile.DecodeBudget.Used(), imgfile.DecodeBudget.Waiting())
 }
 
 // names — файлы папки экспорта, как их видит пользователь. «Призраков» не считаем: на Windows

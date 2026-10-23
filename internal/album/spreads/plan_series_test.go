@@ -67,29 +67,41 @@ func TestAutoOptsZeroIsOld(t *testing.T) {
 			lo, hi := plan.SpreadRange(n, m)
 			for _, series := range []bool{false, true} {
 				o.Series = series
-				ap, got, err := j.plan(o)
-				if err != nil || fmt.Sprint(got) != fmt.Sprint(want) {
-					t.Fatalf("n=%d %+v: %v, ждали %v (%v)", n, o, got, want, err)
-				}
-				if ap.MinSpreads != lo || ap.MaxSpreads != hi || ap.From != 0 || ap.To != m || ap.Spreads != want.Spreads {
-					t.Fatalf("n=%d %+v: подсказка %+v", n, o, ap)
-				}
-				wantCuts := 0
-				if series && n > 1 {
-					wantCuts = 1 // две папки
-				}
-				if ap.Cuts != wantCuts {
-					t.Fatalf("n=%d %+v: границ серий %d, ждали %d", n, o, ap.Cuts, wantCuts)
-				}
-				// 078: нули новых полей и вариант 1 — тот же план, ни похожих, ни ч/б.
-				o1 := o
-				o1.Variant = 1
-				ap1, got1, err := j.plan(o1)
-				if err != nil || fmt.Sprint(got1) != fmt.Sprint(want) || ap1 != ap || ap.Similar != 0 || ap.Gray != 0 {
-					t.Fatalf("n=%d %+v: вариант 1 %+v %v, без него %+v", n, o, ap1, got1, ap)
-				}
+				checkZeroIsOld(t, j, n, o, want, [2]int{lo, hi}, m)
 			}
 		}
+	}
+}
+
+// checkZeroIsOld — одна проверка TestAutoOptsZeroIsOld: план j при o равен want (PlanGroups 0.12),
+// подсказка в пределах [lo, hi] и «до» m, серии считают границы, вариант 1 и режим альбома
+// без Album ничего не меняют.
+func checkZeroIsOld(t *testing.T, j PlanJob, n int, o model.AutoOpts, want plan.Plan, rng [2]int, m int) {
+	t.Helper()
+	ap, got, err := j.plan(o)
+	if err != nil || fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("n=%d %+v: %v, ждали %v (%v)", n, o, got, want, err)
+	}
+	if ap.MinSpreads != rng[0] || ap.MaxSpreads != rng[1] || ap.From != 0 || ap.To != m || ap.Spreads != want.Spreads {
+		t.Fatalf("n=%d %+v: подсказка %+v", n, o, ap)
+	}
+	wantCuts := 0
+	if o.Series && n > 1 {
+		wantCuts = 1 // две папки
+	}
+	if ap.Cuts != wantCuts {
+		t.Fatalf("n=%d %+v: границ серий %d, ждали %d", n, o, ap.Cuts, wantCuts)
+	}
+	// 078: нули новых полей и вариант 1 — тот же план, ни похожих, ни ч/б.
+	o1 := o
+	o1.Variant = 1
+	ap1, got1, err := j.plan(o1)
+	if err != nil || fmt.Sprint(got1) != fmt.Sprint(want) || ap1 != ap || ap.Similar != 0 || ap.Gray != 0 {
+		t.Fatalf("n=%d %+v: вариант 1 %+v %v, без него %+v", n, o, ap1, got1, ap)
+	}
+	// 107: Album = false — режима нет, состава в подсказке нет, якорей и стен тоже.
+	if o.Album || ap.Album != nil || len(j.anchors) != 0 || j.album {
+		t.Fatalf("n=%d %+v: режим альбома без Album: %+v", n, o, ap.Album)
 	}
 }
 

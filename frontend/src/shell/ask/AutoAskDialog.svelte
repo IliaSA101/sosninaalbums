@@ -4,9 +4,9 @@
 
   // Вопрос перед возвратом сетки к «Авто» (спека 008): места сбросятся. По умолчанию — «Отмена».
   // Открыт, пока gridAct.autoAsk не null; ответ — gridAct.confirmAuto / cancelAuto.
-  // Тот же вопрос у ручной виньетки (смена шаблона, «Вернуть авто»): тексты — autoAskText.
-  const t = $derived(autoAskText(gridAct.autoAsk?.vig))
-  // 098: галочка про свой кадр — у страницы и только если правленые фото есть (у виньетки crops = 0)
+  // Тот же вопрос у ручной виньетки (смена шаблона, «Вернуть авто») и у склейки и разреза через ручной разворот (103): тексты — autoAskText.
+  const t = $derived(autoAskText(gridAct.autoAsk?.vig, gridAct.autoAsk?.glue))
+  // 098: галочка про свой кадр — у страницы, склейки и разреза, и только если правленые фото есть (у виньетки crops = 0)
   const crops = $derived(gridAct.autoAsk?.crops ?? 0)
 </script>
 

@@ -3,10 +3,12 @@ import * as Api from '../../../wailsjs/go/app/App'
 import { model } from '../../../wailsjs/go/models'
 import { keymap } from '../keys/keymap.svelte'
 import { unitOf } from '../geom/sheet'
+import { plural } from '../words/plural'
 import { withSimilar, withSkipped } from '../words/errtext'
 import type { PickResult, StoreHooks } from './hooks'
 import type { Toast } from './toasts.svelte'
-import type { AutoRange, Family, PhotoOpts, Variety, View } from './types'
+import type { AutoRange, Family, Photo, PhotoOpts, Variety, View } from './types'
+import { albumIds } from './albumpick'
 
 // Последняя автосборка (078, design §9.3): с чем пересобирать. Живость («Пересобрать…» ещё можно) считает Go (View.again),
 // rev — после ответа, для справки: звёзды и метки пересборку не закрывают, поэтому по rev её не гасим.
@@ -33,7 +35,7 @@ export const againDone = (variant: number): string => `Пересобрано: �
 // Снимок сборки для пересборки: без alt окна, признак пересборки — не часть настроек
 function snapshot(d: PickResult, at: number, have: number, o: LastAuto['opts'], rev: number): LastAuto {
   return {
-    pick: { ...d, again: false, alt: undefined },
+    pick: { ...d, again: false, alt: undefined, base: undefined },
     at,
     have,
     opts: { ...o, ph: { ...o.ph, keep: [...o.ph.keep], again: false } },
@@ -42,10 +44,28 @@ function snapshot(d: PickResult, at: number, have: number, o: LastAuto['opts'], 
   }
 }
 
+// Запрос в Go; режим альбома (107) помечает его album: true (прежние сборки поле не получают)
+function optsOf(
+  d: PickResult,
+  spreads: number,
+  range: AutoRange,
+  variety: Variety,
+  families: readonly Family[],
+  ph?: PhotoOpts,
+): model.AutoOpts {
+  const album = d.from === 'album' ? { album: true } : {}
+  return model.AutoOpts.createFrom({ spreads, ...range, variety, families: [...families], ...ph, ...album })
+}
+
+// Сколько разворотов назвать в тосте пересборки альбома (N окна из плана); обычная сборка считает новые по ID — null
+const albumCount = (d: PickResult, spreads: number): number | null => (d.from === 'album' ? spreads : null)
+
 // Что автосборке нужно от Store (структурный тип: цикла импортов со store нет).
 export interface AutoHost {
   readonly view: View
   readonly hooks: StoreHooks
+  readonly ordered: readonly Photo[] // вся лента в порядке сортировки (107: фото альбома по ленте)
+  readonly used: { has(id: string): boolean }
   readonly selected: { clear(): void }
   busy: boolean
   autoDraft: PickResult | null
@@ -78,22 +98,54 @@ export class AutoRun {
   // «Автосборка»: выбрать фото и открыть окно; пусто — тост с причиной уже показан (080-3).
   // Выделенные — новая сборка (ссылка «Пересобрать прошлую»); свободные после сборки свободных — пересборка
   // (ссылка «Собрать свободные»); пересборка из выделенных — новая сборка свободных; выбора нет, а пересборка жива —
-  // она вместо тоста «нет фото» (сц. 12 078).
+  // она вместо тоста «нет фото» (сц. 12 078); пересборки нет, а развороты есть — «Весь альбом заново» (107, сц. 9).
   open(): void {
     const h = this.h
     if (h.busy) return
     const p = h.hooks.pick(true)
+    // Пересборка альбома ссылкой не предлагается: к ней ведёт строка «Собрать» (107)
     const again = this.againDraft()
+    const alt = again?.from === 'album' ? undefined : again
     this.same = null
-    if (p.from === 'selected' && p.ids.length > 0) h.autoDraft = { ...p, alt: again }
+    if (p.from === 'selected' && p.ids.length > 0) h.autoDraft = { ...p, alt }
     else if (again && this.last?.pick.from === 'free') {
       if (p.ids.length === 0) h.toast = null // тост «нет фото» от pick уже не нужен
       h.autoDraft = { ...again, alt: p.ids.length > 0 ? p : undefined }
-    } else if (p.ids.length > 0) h.autoDraft = { ...p, alt: again }
+    } else if (p.ids.length > 0) h.autoDraft = { ...p, alt }
     else if (this.alive) {
       h.toast = null
       this.openAgain()
+    } else if (h.view.spreads.length > 0) {
+      if (p.skipped === 0) h.toast = null // тост «нет фото» от pick уже не нужен; «Отклонённые не взяты» остаётся
+      h.autoDraft = this.albumDraft()
     }
+  }
+
+  // Окно в режиме «Весь альбом заново» (107). Пересборка альбома жива — сразу она (вариант +1, без вопроса);
+  // иначе новая: фото альбома по ленте, свободные — галочкой (выключена). base — выбор, к которому вернёт строка «Собрать».
+  private albumDraft(base?: PickResult): PickResult {
+    const again = this.last?.pick.from === 'album' ? this.againDraft() : undefined
+    if (again) return { ...again, base }
+    const freeIds = this.h.hooks.pickFree()
+    const ids = albumIds(this.h.ordered, this.h.used, freeIds, false)
+    return { ids, skipped: 0, from: 'album', inAlbum: 0, filtered: false, freeIds, addFree: false, base }
+  }
+
+  // Строка «Собрать: …»: сменить источник — новое состояние окна, как ссылка 080-3. Повторный щелчок по выбранному — ничего.
+  setSource(to: 'base' | 'album'): void {
+    const d = this.h.autoDraft
+    if (!d || this.waiting || this.h.busy) return
+    if (to === 'album' && d.from !== 'album' && this.h.view.spreads.length > 0) this.h.autoDraft = this.albumDraft(d)
+    else if (to === 'base' && d.from === 'album' && d.base) this.h.autoDraft = d.base
+    else return
+    this.same = null
+  }
+
+  // Галочка «Добавить свободные фото ленты»: другой состав фото — новое состояние окна
+  setAddFree(on: boolean): void {
+    const d = this.h.autoDraft
+    if (!d || d.from !== 'album' || d.again || this.waiting || this.h.busy || !!d.addFree === on) return
+    this.h.autoDraft = { ...d, addFree: on, ids: albumIds(this.h.ordered, this.h.used, d.freeIds ?? [], on) }
   }
 
   // Пересборка без отклонённых после сборки; нет (не жива, все отклонены) — undefined
@@ -101,7 +153,8 @@ export class AutoRun {
     const l = this.last
     if (!l || this.h.view.again !== true) return undefined
     const ids = this.h.hooks.notRejected(l.pick.ids)
-    return ids.length > 0 ? { ...l.pick, ids, again: true } : undefined
+    // Альбом ищет фото сам: пустой список для него не помеха
+    return ids.length > 0 || l.pick.from === 'album' ? { ...l.pick, ids, again: true } : undefined
   }
 
   // «Пересобрать…»: те же фото последней сборки без отклонённых после неё; не жива — тост сц. 13
@@ -143,7 +196,7 @@ export class AutoRun {
     const { at, have } = this.origin(again)
     const before = new SvelteSet(h.view.spreads.map((s) => s.id))
     const rev = h.view.rev
-    const opts = model.AutoOpts.createFrom({ spreads, ...range, variety, families: [...families], ...ph })
+    const opts = optsOf(d, spreads, range, variety, families, ph)
     const ok = await this.send(d.ids, at, opts, again)
     // Окно ещё открыто (✕ во время ожидания закрыло бы его: тогда ответ — тостом, как в 0.20)
     const open = again && h.autoDraft === d
@@ -157,17 +210,31 @@ export class AutoRun {
       return true
     }
     this.last = snapshot(d, at, have, { spreads, range, variety, families: [...families], ph: used }, h.view.rev)
-    this.toastDone(again, used.variant, h.view.rev === rev, before, at, (t) => withSkipped(withSimilar(t, dropped), d.skipped))
+    const fin = (t: string) => withSkipped(withSimilar(t, dropped), d.skipped)
+    this.toastDone(again, used.variant, h.view.rev === rev, before, at, fin, albumCount(d, spreads))
     return true
   }
 
   // Тост после сборки: «Пересобрано…» (или «не отличается», если окно закрыли) либо «Собрано разворотов: N» с «Пересобрать…»
-  private toastDone(again: boolean, variant: number, same: boolean, before: Set<string>, at: number, fin: (text: string) => string): void {
+  private toastDone(
+    again: boolean,
+    variant: number,
+    same: boolean,
+    before: Set<string>,
+    at: number,
+    fin: (text: string) => string,
+    album: number | null, // 107: сколько разворотов пересобрано (N из плана окна)
+  ): void {
     const h = this.h
     const more = { label: 'Пересобрать…', run: () => this.openAgain() }
     if (again) {
       // Развороты прошлого варианта сохраняют ID: переход не прыгает
       h.notify(same ? SAME_VARIANT : againDone(variant), 'info', more)
+      return
+    }
+    if (album !== null) {
+      // Развороты сохраняют ID: текущий остаётся на месте, переходить некуда
+      h.notify(fin(`Альбом пересобран: ${album} ${plural(album, unitOf(h.view.settings).plural)}`), 'info', more)
       return
     }
     h.goNew(before, at)
@@ -180,7 +247,7 @@ export class AutoRun {
     // Запрос уже идёт (двойной Enter в окне пересборки: busy ставится в send до первого await): второй не уходит
     if (this.h.busy) return null
     const d = this.h.autoDraft
-    const ok = !!d && d.ids.length > 0
+    const ok = !!d && (d.ids.length > 0 || d.from === 'album')
     if (!again || !ok) this.h.autoDraft = null
     return ok ? d : null
   }

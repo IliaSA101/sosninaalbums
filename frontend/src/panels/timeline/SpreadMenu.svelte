@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from '../../base/ui/Icon.svelte'
-  import { canVary, deleteLabel, menuPos, setupItem, stripItems, varyLabel, vignetteItem } from './spreadmenu'
+  import { canVary, deleteLabel, insertItems, setupItem, stripItems, varyLabel, vignetteItem } from './spreadmenu'
+  import { placeAtPoint } from '../../base/ui/menulist'
   import { modClick } from './timeline'
   import { isMac } from '../../base/core/platform'
   import { store } from '../../base/core/store.svelte'
@@ -10,6 +11,7 @@
   // Меню правого щелчка по группе ленты: название, разрез и склейка (094), виньетка (031) и удаление. Esc и щелчок мимо закрывают;
   // окно держится внутри экрана. Устройство — как у PhotoMenu. count > 1 — выделено несколько групп.
   // label — свой текст пункта удаления (плитка обложки: «Удалить обложку»); у неё пункта виньетки нет.
+  // «Вставить … перед / после» (103) — когда задан onInsert (меню ленты и «Всех разворотов»); unit — «разворот» или «лист».
   let {
     x,
     y,
@@ -25,6 +27,8 @@
     onCut,
     join,
     onJoin,
+    onInsert,
+    unit = { one: 'разворот' },
     onDelete,
     onclose,
   }: {
@@ -42,6 +46,8 @@
     onCut?: () => void
     join?: { ok: boolean; why: string } // склейка со следующей (joinState); у последней группы нет
     onJoin?: () => void
+    onInsert?: (where: 'before' | 'after') => void
+    unit?: { one: string }
     onDelete?: () => void
     onclose: () => void
   } = $props()
@@ -55,12 +61,14 @@
   // Способ мышью справа в пункте — как клавиша в строке меню.
   const how = modClick(isMac())
 
+  const inserts = $derived(onInsert ? insertItems(count, unit) : [])
+
   const setup = $derived(onVignette ? setupItem(count, kind, prefs.can('vignette')) : null)
 
   let box = $state<HTMLElement>()
   let w = $state(0)
   let h = $state(0)
-  const pos = $derived(menuPos(x, y, { w, h }, { w: window.innerWidth, h: window.innerHeight }))
+  const pos = $derived(placeAtPoint({ x, y }, { width: w, height: h }, { width: window.innerWidth, height: window.innerHeight }))
 
   // Фокус на пункт: Enter работает сразу.
   $effect(() => {
@@ -88,8 +96,8 @@
   bind:clientWidth={w}
   bind:clientHeight={h}
   class="menu"
-  style:left="{pos.x}px"
-  style:top="{pos.y}px"
+  style:left="{pos.left}px"
+  style:top="{pos.top}px"
   style:visibility={h ? undefined : 'hidden'}
   role="menu"
   tabindex="-1"
@@ -112,6 +120,11 @@
       <Icon name="merge" size={16} stroke={1.8} /><span class="label">Склеить со следующим</span><kbd>{how}</kbd>
     </button>
   {/if}
+  {#each inserts as it (it.where)}
+    <button role="menuitem" onclick={() => onInsert?.(it.where)}>
+      <Icon name="spread-add" size={16} stroke={1.8} /><span>{it.label}</span>
+    </button>
+  {/each}
   {#if setup}
     <button role="menuitem" onclick={() => onVignette?.(setup.act)}>
       <Icon name="vignette" size={16} stroke={1.8} /><span>{setup.label}</span>

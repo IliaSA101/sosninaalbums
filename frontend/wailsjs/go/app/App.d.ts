@@ -150,6 +150,8 @@ export function FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.
 
 export function FlipSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
+export function ForgetColor(arg1:string):Promise<Array<string>>;
+
 export function ForgetFileNames(arg1:Array<string>):Promise<model.View>;
 
 export function ForgetRecent(arg1:string):Promise<Array<prefs.RecentProject>>;
@@ -163,6 +165,8 @@ export function GridChoices(arg1:string,arg2:number,arg3:string):Promise<model.G
 export function HideDecor(arg1:string,arg2:string):Promise<void>;
 
 export function HideFont(arg1:string):Promise<void>;
+
+export function ImportColors(arg1:Array<string>):Promise<Array<string>>;
 
 export function ImportDecor(arg1:string,arg2:string):Promise<app.DecorImport>;
 
@@ -190,6 +194,8 @@ export function Marks():Promise<Record<string, model.MarkView>>;
 
 export function MergeSpreads(arg1:string):Promise<model.View>;
 
+export function MergeSpreadsAuto(arg1:string,arg2:boolean):Promise<model.View>;
+
 export function MirrorGrid(arg1:string,arg2:string):Promise<model.View>;
 
 export function MissingNames():Promise<Record<string, string>>;
@@ -199,6 +205,8 @@ export function MoreLayouts(arg1:string,arg2:number):Promise<model.Choices>;
 export function MovePhoto(arg1:string,arg2:string,arg3:number):Promise<model.View>;
 
 export function MoveSpread(arg1:string,arg2:number):Promise<model.View>;
+
+export function MyColors():Promise<Array<string>>;
 
 export function NewBin(arg1:string,arg2:Array<string>):Promise<model.View>;
 
@@ -229,6 +237,8 @@ export function Person(arg1:string):Promise<model.PersonView>;
 export function PhotoAbout(arg1:string):Promise<app.PhotoAbout>;
 
 export function PickBackdropFile(arg1:string,arg2:string):Promise<model.View>;
+
+export function PickColorAt(arg1:string,arg2:number,arg3:number):Promise<string>;
 
 export function PickCoverGuide():Promise<model.View>;
 
@@ -271,6 +281,8 @@ export function RelinkDrive(arg1:string,arg2:string):Promise<model.View>;
 export function RelinkFolder():Promise<app.RelinkResult>;
 
 export function RelinkFolderPath(arg1:string):Promise<app.RelinkResult>;
+
+export function RememberColor(arg1:string):Promise<Array<string>>;
 
 export function RemoveFolder(arg1:string):Promise<model.View>;
 
@@ -441,6 +453,10 @@ export function ShowPhotoInExplorer(arg1:string):Promise<void>;
 export function SortVignette(arg1:string):Promise<model.View>;
 
 export function SplitSpread(arg1:string,arg2:number):Promise<model.View>;
+
+export function SplitSpreadAuto(arg1:string,arg2:number,arg3:boolean):Promise<model.View>;
+
+export function SpreadPhotoColors(arg1:string):Promise<Array<string>>;
 
 export function StepLayout(arg1:string,arg2:string,arg3:number):Promise<model.View>;
 

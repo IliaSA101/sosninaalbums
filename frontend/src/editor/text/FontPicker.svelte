@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { portal } from '../../base/ui/portal'
   import { tick } from 'svelte'
   import { placePopover, type Placed } from '../../base/ui/popover'
   import Icon from '../../base/ui/Icon.svelte'
@@ -36,12 +37,6 @@
   // Номер строки в общем списке по группам: группы идут подряд.
   const offsets = $derived(groups.map((_, i) => groups.slice(0, i).reduce((n, g) => n + g.fonts.length, 0)))
   const css = (f: FontFamily) => fontCss({ font: f.id }, fonts).family
-
-  // Окно уходит в body: у карточки свой контекст наложения, лента альбома его перекрыла бы.
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node)
-    return { destroy: () => node.remove() }
-  }
 
   function show() {
     active = Math.max(

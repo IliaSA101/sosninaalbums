@@ -36,6 +36,7 @@ type rowEntry struct {
 	gen   map[string]bool // вставлены формой (Gen, featured), а не из ряда layout: допуск по Q
 	feats []Feat          // featured вне ряда для «Других вариантов» (bestFeatured), до ManyFrom фото
 	mid   *forms.Cand     // «центр крупнее» (contrast) вне ряда для «Других вариантов» (midBig)
+	looks map[string]bool // виды ряда: «Разброс» не повторяет вид ряда «Авто» (105)
 }
 
 // rowCache — ряды по пропорциям и геометрии: View берёт ряд у каждого разворота на каждый запрос,
@@ -235,6 +236,7 @@ func buildRow(as []float64, p layout.Params, rowLen int, base []layout.Result) r
 	if len(as) < layout.ManyFrom {
 		b.e.feats = bestFeatured(all, base, cloneSet(b.keys))
 		b.e.mid = b.midBig(first.Q)
+		b.e.looks = b.looks
 	}
 	return b.e
 }

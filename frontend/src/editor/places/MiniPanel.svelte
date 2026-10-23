@@ -12,23 +12,21 @@
   import { tip, tipped } from '../../base/ui/tip.svelte'
   import {
     arcRoom,
-    chromeInset,
     miniContext,
     miniItems,
-    miniPlace,
     swapTip,
-    throughNext,
-    type Mods,
-    type ThroughEv,
-    visibleArea,
+    type LayerOp,
     sameView,
     zoomLift,
-    arcWhere,
     MINI_H,
     NO_ROOM,
     type MiniId,
     type MiniView,
   } from './minipanel'
+  import { arcWhereOf, colHeightOf, placeMini } from './minicol'
+  import { measureMini, panelOutside, sameOrg, type Org } from './miniview'
+  import { portal } from '../../base/ui/portal'
+  import { MoreList, Through } from './ministate.svelte'
   import { miniSpot } from './minispot.svelte'
   import { canvas } from '../canvas/canvas.svelte'
   import { panels } from '../inspector/panelmode.svelte'
@@ -37,14 +35,15 @@
   import { onMount } from 'svelte'
   import { isTextField } from '../../shell/menu/keys'
   import Icon from '../../base/ui/Icon.svelte'
-  import LayerMenu from './LayerMenu.svelte'
+  import MenuList from '../../base/ui/MenuList.svelte'
+  import type { MenuNode } from '../../base/ui/menulist'
 
-  // Мини-панель выделенного (спека 009, gestures.md «Мини-панель»): полоса значков с подсказками,
-  // вместо текстовой полоски 0.3.0. Состав — places/minipanel.ts. Границы — видимая область холста (серое поле тоже годится): под рамкой
-  // (и под её подписью, 037), иначе над ней выше ⟳, иначе внутри у нижнего края (владелец 2026-10-17), иначе внутри у верха.
-  // Границы — без линеек, ленты «Добавить» и плавающей карточки. box — рамка всего выделенного (у группы описанная).
-  // avoid — центр ⟳ (px): полоса его не закрывает. Одиночное фото сообщает miniSpot'у, где стоит панель и есть ли место
-  // дуге наклона (063).
+  // Мини-панель выделенного (спека 009, 108): столбец значков сбоку от фото (владелец 2026-10-23, owner-ux §1) — справа,
+  // иначе слева, иначе внутри у правого края (minicol.ts); не помещается — прежняя полоса: под рамкой (и под её подписью,
+  // 037), иначе над ней выше ⟳, иначе внутри у нижнего края, иначе внутри у верха (2026-10-17). Состав — minipanel.ts, «⋯» —
+  // общий MenuList. Границы — видимая область холста без линеек, ленты «Добавить» и плавающей карточки. box — рамка всего
+  // выделенного (у группы описанная). avoid — центр ⟳ (px): панель его не закрывает. Одиночное фото сообщает miniSpot'у,
+  // где стоит панель и есть ли место дуге наклона (063).
   let {
     spread,
     box,
@@ -57,14 +56,30 @@
   const photo = $derived(placesel.selected.find((i) => i.photo)?.photo ?? '')
   // Одиночное фото на месте: только ему дуга наклона и ползунок масштаба над панелью.
   const solo = $derived(placesel.selected.length === 1 && !!photo && placesel.texts.length + placesel.selectedStickers.length === 0)
-  let w = $state(0) // ширина полосы, px (замер)
-  // Якорь на месте полосы внутри листа: от его родителя — экранный прямоугольник листа. Сама полоса уходит в body
-  // (095, owner-ux §1.5): окно холста её обрезало бы, а у нижнего фото она встаёт поверх ленты разворотов.
+  // Тексты и стикеры группы мини-панель считает вместе («Удалить выделенное (N)»).
+  const items = $derived(
+    miniItems(
+      {
+        ...miniContext(spread, placesel.selected, placesel.texts.length + placesel.selectedStickers.length),
+        tilt: tiltmode.on,
+        missing: store.missing.includes(photo),
+      },
+      prefs.can,
+    ),
+  )
+
+  let rowW = $state(0) // ширина ряда-запасного, px (замер; у столбца не меряется: он 34 px, и ряд от него не зависит)
+  let rawW = $state(0)
+  $effect(() => {
+    if (!isCol && rawW > 0) rowW = rawW
+  })
+  // Якорь на месте панели внутри листа: от его родителя — экранный прямоугольник листа. Сама панель уходит в body
+  // (095, owner-ux §1.9): окно холста её обрезало бы, а у нижнего фото она встаёт поверх ленты разворотов.
   let anchor = $state<HTMLElement>()
   // Видимая область холста в осях разворота (px) без линеек, ленты и карточки. DOM не реактивен: перемеряем после
   // раскладки при зуме, сдвиге, смене размера окна, листании ряда и смене панелей.
   let view = $state.raw<MiniView>()
-  // Угол листа на экране и px экрана на px листа: полоса стоит position: fixed от него.
+  // Угол листа на экране: панель стоит position: fixed от него.
   let org = $state.raw<Org>()
   $effect(() => {
     void [
@@ -81,66 +96,31 @@
       prefs.level,
       prefs.enabled,
     ]
-    const m = measure()
+    const m = measureMini(anchor?.parentElement, canvas.win, width)
     if (!sameView(m.v, view)) view = m.v
     if (!sameOrg(m.o, org)) org = m.o
   })
-  type Org = { x: number; y: number; k: number }
-  const sameOrg = (a?: Org, b?: Org) => a === b || (!!a && !!b && a.x === b.x && a.y === b.y && a.k === b.k)
-  // Видимая область и угол листа на экране; лента разворотов под холстом — в view.spill.
-  function measure(): { v?: MiniView; o?: Org } {
-    const sheet = anchor?.parentElement?.getBoundingClientRect()
-    const win = canvas.win?.getBoundingClientRect()
-    if (!sheet || !win) return {}
-    const parts = [...(canvas.win?.parentElement?.querySelectorAll<HTMLElement>('[data-mini-edge]') ?? [])].map((n) => ({
-      edge: n.dataset.miniEdge as 'top' | 'left' | 'right',
-      box: n.getBoundingClientRect(),
-    }))
-    const v = visibleArea(sheet, win, width, chromeInset(win, parts))
-    const k = width > 0 ? sheet.width / width : 0
-    if (!v || !(k > 0)) return { v }
-    const sp = spillOf(win, k, sheet.top)
-    return { v: sp === undefined ? v : { ...v, spill: sp }, o: { x: sheet.left, y: sheet.top, k } }
-  }
-  // Низ ленты разворотов в осях листа, если она стоит сразу под окном холста (±2 px); иначе ленты нет.
-  function spillOf(win: DOMRect, k: number, top: number): number | undefined {
-    const tl = document.querySelector('[data-guide="timeline"]')?.getBoundingClientRect()
-    if (!tl || !(tl.height > 0) || Math.abs(tl.top - (win.top + win.height)) > 2) return undefined
-    return (tl.top + tl.height - top) / k
-  }
   const seen = $derived(view ?? { left: 0, top: 0, right: width, bottom: height })
-  // В режиме наклона ⟳ спрятан (стоит на месте дуги): полоса его не обходит.
+  // В режиме наклона ⟳ спрятан (стоит на месте дуги): панель его не обходит.
   const avoidAt = $derived(solo && tiltmode.on ? undefined : avoid)
-  const placeFor = (av?: { x: number; y: number }) =>
-    miniPlace(box, ppm, width, height, w, av, captionBottom(spread, placesel.selected), seen, captionBoxes(spread, placesel.selected))
-  const place = $derived(placeFor(avoidAt))
-  // Полоса целиком вне окна холста (и ленты под ним) — не рисуем: в body её больше ничто не обрезает.
-  const outside = $derived(place.top < seen.top - 0.5 || place.top + MINI_H > Math.max(seen.bottom, seen.spill ?? seen.bottom) + 0.5)
+  const colH = $derived(colHeightOf(items))
+  // Подписи и заглушки выделенного: ряд встаёт под ними, столбец внутри у низа — над ними (037).
+  const capBottom = $derived(captionBottom(spread, placesel.selected))
+  const caps = $derived(captionBoxes(spread, placesel.selected))
+  const place = $derived(placeMini(box, ppm, width, height, rowW, colH, avoidAt, capBottom, seen, caps))
+  const isCol = $derived(place.where === 'right' || place.where === 'left' || place.where === 'inright')
+  const panelH = $derived(isCol ? colH : MINI_H)
+  // Подсказки значков — сбоку от столбца, с противоположной от фото стороны (108-4); у ряда — сверху.
+  const tipSide = $derived(place.where === 'right' ? 'right' : isCol ? 'left' : 'top')
+  // Панель целиком вне окна холста (и ленты под ним) — не рисуем: в body её больше ничто не обрезает.
+  const outside = $derived(panelOutside(place, panelH, isCol, seen))
   // Дуге наклона: повёрнутое место считаем по его осям (box тут — описанный прямоугольник). Где стоит полоса — берём как в режиме
   // наклона (⟳ спрятан), а не как сейчас: иначе при выключенном режиме «есть место» → включили → полоса переехала → «нет» → выход.
   const arc = $derived.by(() => {
     const sel = placesel.selected[0]
     if (!solo || !sel) return NO_ROOM
-    return arcRoom(
-      sel.rot ? sel : box,
-      ppm,
-      sel.rot ?? 0,
-      seen,
-      arcWhere(box, ppm, width, height, w, captionBottom(spread, placesel.selected), seen, captionBoxes(spread, placesel.selected)),
-    )
+    return arcRoom(sel.rot ? sel : box, ppm, sel.rot ?? 0, seen, arcWhereOf(box, ppm, width, height, rowW, colH, capBottom, seen, caps))
   })
-  // Тексты и стикеры группы мини-панель считает вместе («Удалить выделенное (N)»).
-  const items = $derived(
-    miniItems(
-      {
-        ...miniContext(spread, placesel.selected, placesel.texts.length + placesel.selectedStickers.length),
-        tilt: tiltmode.on,
-        missing: store.missing.includes(photo),
-      },
-      prefs.can,
-    ),
-  )
-
   // Рамка места для ползунка кадра: у повёрнутого — оси места (sel — до поворота), иначе рамка выделения.
   const zoomBox = $derived.by(() => {
     const sel = placesel.selected[0]
@@ -149,57 +129,44 @@
   })
 
   $effect(() => {
-    if (solo) {
-      miniSpot.photo = photo
-      miniSpot.where = place.where
-      miniSpot.lift = zoomLift(place, zoomBox, seen)
-      const a = miniSpot.arc
-      if (arc.mode !== a.mode || arc.vx !== a.vx || arc.vy !== a.vy || arc.vw !== a.vw) miniSpot.arc = arc // тот же объект — читатели не гоняются
-    } else clear()
+    if (solo) miniSpot.set(photo, place.where, zoomLift(place, zoomBox, seen), arc)
+    else miniSpot.clear()
   })
-  const clear = () => {
-    miniSpot.photo = ''
-    miniSpot.where = 'below'
-    miniSpot.lift = 0
-    miniSpot.arc = NO_ROOM
-  }
-  onMount(() => clear)
+  onMount(() => () => miniSpot.clear())
 
   const stop = (e: Event) => e.stopPropagation()
 
-  // Полоса — в body (образец — LayerMenu): position: fixed от окна, z-index над лентой разворотов.
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node)
-    return { destroy: () => node.remove() }
-  }
-
-  // Модификатор зажат — панель полупрозрачна и не ловит мышь (QA 0.14.1 №1). Признак не копим по keydown/keyup: каждое
-  // событие указателя несёт настоящее состояние модификаторов (throughNext), а новое положение панели его пересчитывает.
-  let through = $state(false)
-  let lastPtr: Mods | undefined // модификаторы последнего события указателя
-  const flags = (e: KeyboardEvent | PointerEvent): Mods => ({
-    shiftKey: e.shiftKey,
-    ctrlKey: e.ctrlKey,
-    altKey: e.altKey,
-    metaKey: e.metaKey,
-  })
-  function mods(e: KeyboardEvent | PointerEvent) {
-    const m = flags(e)
-    if (e instanceof PointerEvent) lastPtr = m
-    through = throughNext({ type: e.type, ...m } as ThroughEv)
-  }
+  const through = new Through()
   $effect(() => {
     void [place.top, place.left, place.where, photo, placesel.selected.length]
-    through = throughNext({ type: 'place', lastPointer: lastPtr })
+    through.placed()
   })
 
-  function run(id: MiniId) {
+  // Список «⋯»: сбоку от столбца, в сторону подсказок; у ряда-запасного — под кнопкой.
+  const more = new MoreList()
+  const moreNodes = $derived(items.find((i) => i.id === 'more')?.more ?? [])
+  // Панель сдвинулась или «⋯» пропал (другое выделение, уровень) — список закрывается: он стоял бы на старом месте.
+  $effect(() => {
+    void [place.top, place.left, place.where]
+    more.close()
+  })
+  $effect(() => {
+    if (moreNodes.length === 0) more.close()
+  })
+  function pickMore(n: MenuNode) {
+    more.close()
+    if (n.id === 'caption') edit.editCaption(photo)
+    else if (n.id === 'name') nameEdit.openFor(spread, photo)
+    else if (n.id === 'layer') placesel.layer(n.arg as LayerOp)
+  }
+
+  function run(id: MiniId, el: HTMLElement) {
     switch (id) {
       case 'flipH':
         return placesel.flip('h')
       case 'flipV':
         return placesel.flip('v')
-      case 'turn':
+      case 'turnCw':
         return placesel.turn(1)
       case 'tilt':
         return tiltmode.toggle()
@@ -209,10 +176,9 @@
         return placesel.arrange('fitPhoto')
       case 'same':
         return placesel.arrange('same')
-      case 'caption':
-        return edit.editCaption(photo)
-      case 'name':
-        return nameEdit.openFor(spread, photo)
+      case 'more':
+        tip.hide()
+        return more.toggle(el, isCol)
       case 'delete':
         return placesel.deleteSelected()
       case 'swap':
@@ -223,7 +189,7 @@
   }
 
   // Esc на document в фазе всплытия: раньше хоткея «снять выделение» (он на window), но позже всех, кто держит Esc
-  // в захвате на window (меню фото, «Слой ▾», палитра, ✥, дуга, окна): их stopPropagation сюда не пускает, и одно
+  // в захвате на window (меню фото и список «⋯», палитра, ✥, дуга, окна): их stopPropagation сюда не пускает, и одно
   // нажатие — одно действие (059 п.10). Выход из режима наклона, выделение остаётся. Панель живёт, пока выделено
   // фото, поэтому слушает и при мелкой ячейке, где дуги на холсте нет.
   function esc(e: KeyboardEvent) {
@@ -239,14 +205,14 @@
   }
 </script>
 
-<svelte:document onkeydown={esc} onvisibilitychange={() => document.hidden && (through = throughNext({ type: 'hidden' }))} />
+<svelte:document onkeydown={esc} onvisibilitychange={() => document.hidden && through.off('hidden')} />
 <svelte:window
-  onkeydown={mods}
-  onkeyup={mods}
-  onpointermove={mods}
-  onpointerover={mods}
-  onpointerdowncapture={mods}
-  onblur={() => (through = throughNext({ type: 'blur' }))}
+  onkeydown={(e) => through.event(e)}
+  onkeyup={(e) => through.event(e)}
+  onpointermove={(e) => through.event(e)}
+  onpointerover={(e) => through.event(e)}
+  onpointerdowncapture={(e) => through.event(e)}
+  onblur={() => through.off('blur')}
 />
 
 <!-- Полоса — ребёнок якоря: портал уносит её в body, и если бы она была соседом, Svelte при скрытии ветки шёл бы
@@ -259,12 +225,13 @@
   <div
     class="minipanel"
     use:portal
-    class:through={through || drag.active}
+    class:through={through.on || drag.active}
     class:away={row.moving || !org || outside}
-    bind:clientWidth={w}
+    class:col={isCol}
+    bind:clientWidth={rawW}
     style:top="{(org?.y ?? 0) + place.top * (org?.k ?? 1)}px"
     style:left="{(org?.x ?? 0) + place.left * (org?.k ?? 1)}px"
-    style:height="{MINI_H}px"
+    style:height="{panelH}px"
     role="toolbar"
     tabindex="-1"
     aria-label="Действия с выделенным"
@@ -277,26 +244,35 @@
   >
     {#each items as it (it.id)}
       {#if it.sep}<span class="sep"></span>{/if}
-      {#if it.id === 'layer'}
-        <LayerMenu onpick={(op) => placesel.layer(op)} label={it.label} />
-      {:else}
-        <button
-          class:on={it.on}
-          class:del={it.id === 'delete'}
-          class:swap={it.id === 'swap'}
-          aria-label={it.label}
-          aria-pressed={it.on === undefined ? undefined : it.on}
-          {...it.id === 'tilt' ? { 'data-guide': 'tilt-mini' } : {}}
-          use:tipped={{ text: it.label }}
-          onpointerdown={it.id === 'swap' ? swapDown : undefined}
-          onclick={() => run(it.id)}
-        >
-          <Icon name={it.icon} size={14} />{#if it.badge}<span class="badge">{it.badge}</span>{/if}
-        </button>
-      {/if}
+      <button
+        class:on={it.on || (it.id === 'more' && more.open)}
+        class:del={it.id === 'delete'}
+        class:swap={it.id === 'swap'}
+        aria-label={it.label}
+        aria-pressed={it.on === undefined ? undefined : it.on}
+        aria-haspopup={it.id === 'more' ? 'menu' : undefined}
+        aria-expanded={it.id === 'more' ? more.open : undefined}
+        {...it.id === 'tilt' ? { 'data-guide': 'tilt-mini' } : {}}
+        use:tipped={{ text: it.id === 'more' && more.open ? '' : it.label, side: tipSide }}
+        onpointerdown={it.id === 'swap' ? swapDown : undefined}
+        onclick={(e) => run(it.id, e.currentTarget)}
+      >
+        <Icon name={it.icon} size={14} />{#if it.badge}<span class="badge">{it.badge}</span>{/if}
+      </button>
     {/each}
   </div>
 </span>
+
+{#if more.open && moreNodes.length > 0}
+  <MenuList
+    items={moreNodes}
+    at={more.at}
+    side={place.where === 'right' || !isCol ? 'right' : 'left'}
+    keep={more.btn}
+    onpick={pickMore}
+    onclose={() => more.close()}
+  />
+{/if}
 
 <style>
   .anchor {
@@ -320,6 +296,15 @@
     pointer-events: auto;
     cursor: default;
   }
+  /* Столбец (108): 34 px шириной, высота — расчётом colHeight (minicol.ts): кнопка 22, линия 7, зазор 2, рамка 10.
+     Позиция — левый верхний угол, без центровки. */
+  .minipanel.col {
+    transform: none;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 4px 3px;
+    width: 34px;
+  }
   .minipanel.through {
     pointer-events: none;
     opacity: 0.35;
@@ -330,6 +315,7 @@
     pointer-events: none;
   }
   button {
+    position: relative;
     height: 22px;
     min-width: 26px;
     padding: 0 6px;
@@ -341,6 +327,10 @@
     background: transparent;
     color: #cfcfd4;
     border-radius: 4px;
+  }
+  .col button {
+    width: 26px;
+    padding: 0;
   }
   button:hover {
     background: #38383c;
@@ -360,10 +350,30 @@
   .badge {
     font-variant-numeric: tabular-nums;
   }
+  /* В столбце число уголком: кнопка и столбец не шире */
+  .col .badge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 12px;
+    padding: 0 3px;
+    box-sizing: border-box;
+    font-size: 9px;
+    line-height: 12px;
+    text-align: center;
+    color: #1a1a1c;
+    background: var(--accent);
+    border-radius: 6px;
+  }
   .sep {
     width: 1px;
     height: 14px;
     margin: 0 2px;
     background: var(--line);
+  }
+  .col .sep {
+    width: 16px;
+    height: 1px;
+    margin: 3px 0;
   }
 </style>

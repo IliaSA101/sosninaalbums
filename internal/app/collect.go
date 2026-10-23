@@ -138,7 +138,11 @@ func (a *App) Collect(o CollectOptions) (bool, error) {
 	a.mu.Lock()
 	a.collectDir, a.collectCancel = j.dir, cancel
 	a.mu.Unlock()
-	a.bg.Go(func() { a.runCollect(ctx, cancel, j) })
+	if !a.goBG(func() { a.runCollect(ctx, cancel, j) }) {
+		cancel()
+		a.endCollect() // фон закрыт: сбора не будет, флаг не оставляем
+		return false, nil
+	}
 	return true, nil
 }
 
@@ -195,11 +199,11 @@ func inPhotoFolder(dir string, folders []string) bool {
 // sameFile — a и b — один файл под разными именами: строкой не поймать subst, \\?\, 8.3,
 // junction в пути и жёсткую ссылку. Файла нет — не один.
 func sameFile(a, b string) bool {
-	sa, err := os.Stat(a)
+	sa, err := library.StatLocal(a)
 	if err != nil {
 		return false
 	}
-	sb, err := os.Stat(b)
+	sb, err := library.StatLocal(b)
 	return err == nil && os.SameFile(sa, sb)
 }
 
@@ -311,7 +315,7 @@ func (a *App) ShowCollected() {
 // showDir открывает папку в проводнике, если она есть: не открылась — не страшно, ошибку
 // показать нечем.
 func showDir(dir string) {
-	if st, err := os.Stat(dir); dir == "" || err != nil || !st.IsDir() {
+	if st, err := library.StatLocal(dir); dir == "" || err != nil || !st.IsDir() {
 		return
 	}
 	_ = openDir(dir)

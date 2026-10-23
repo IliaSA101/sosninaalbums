@@ -45,7 +45,7 @@ func BackToAuto(p *model.Project, spreadID, key string, keep bool) {
 // прежние: ключ, сохранённый у листа, принимается и через сгиб (как spreads.foldAllowed — ключ
 // старого альбома не отвергается; так «Вернуть авто» без своего кадра остаётся как в 0.22).
 func fits(p *model.Project, s *model.Spread, key string, stand bool) bool {
-	asp, prm := p.Aspects(s.Photos), p.Params()
+	asp, prm := p.LayoutIn(s.Photos)
 	r, ok := layout.Build(key, asp, prm)
 	return ok && (layout.FoldOK(r.Rects, asp, prm) || stand && r.Key == s.Layout)
 }

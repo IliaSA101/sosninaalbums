@@ -76,6 +76,18 @@ func (m *Methods) MergeSpreads(id string) (v model.View) {
 	return m.changed(m.editor().MergeSpreads(id))
 }
 
+// MergeSpreadsAuto — «Склеить» из вопроса о ручном развороте (103): один шаг отмены.
+func (m *Methods) MergeSpreadsAuto(id string, keep bool) (v model.View, err error) {
+	defer m.guardEdit("MergeSpreadsAuto", &v, &err)
+	return m.changedOrErr(m.editor().MergeSpreadsAuto(id, keep))
+}
+
+// SplitSpreadAuto — «Разрезать» из вопроса о ручном развороте (103); предел 200 — ошибка.
+func (m *Methods) SplitSpreadAuto(id string, at int, keep bool) (v model.View, err error) {
+	defer m.guardEdit("SplitSpreadAuto", &v, &err)
+	return m.changedOrErr(m.editor().SplitSpreadAuto(id, at, keep))
+}
+
 // SetLayout ставит раскладку из галереи; битый или уже стоящий ключ — ничего не меняет.
 func (m *Methods) SetLayout(spreadID, key string) (v model.View) {
 	defer m.guardEdit("SetLayout", &v, nil)
@@ -108,7 +120,8 @@ func (m *Methods) SetSettings(s model.Settings) (v model.View) {
 // AutoPlan — подсказка окна автосборки на o.Spreads разворотов по o.MinPer…o.MaxPer фото или
 // «Авто», с сериями или без (всё зажимается; MaxPer — в 1…64; Variety не влияет; нули новых
 // полей — как 0.12). Похожие (078) — без них, число в similar; ч/б — gray; o.again — от альбома
-// до прошлой сборки (не жива — ошибка). Только чтение. Фото нет — пустой
+// до прошлой сборки (не жива — ошибка). o.album (107) — «Весь альбом заново»: пул — фото голых
+// разворотов, якоря на местах; состав — album, at не действует. Только чтение. Фото нет — пустой
 // план; альбом почти полон (MaxSpreads) — ошибка.
 func (m *Methods) AutoPlan(ids []string, o model.AutoOpts) (pl model.AutoPlan, err error) {
 	defer GuardErr("AutoPlan", &err)
@@ -126,6 +139,8 @@ func (m *Methods) AutoSimilar(ids []string, o model.AutoOpts) (out []model.Simil
 // Сверх MaxSpreads разворотов — ошибка, проект не меняется. Variety зажимается в 0…2,
 // семейства — до 16 строк (065: имена и повторы разбирает сборка). o.again = true — пересборка
 // последней сборки (078 §8): тот же шаг отмены, пока после неё не было шагов; не жива — ошибка.
+// o.album (107) — пересборка всего альбома: голые развороты заново, якоря и обложка не меняются;
+// at не действует, один шаг отмены на всю цепочку «Пересобрать».
 func (m *Methods) AutoBuild(ids []string, at int, o model.AutoOpts) (v model.View, err error) {
 	defer m.guardEdit("AutoBuild", &v, &err)
 	v, err = m.changedOrErr(m.editor().AutoBuild(m.infos(ids), at, o.Clamp()))

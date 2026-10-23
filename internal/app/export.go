@@ -255,6 +255,9 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 	if err := export.MissingPhotos(p, sel, a.exists); err != nil {
 		return false, err
 	}
+	if err := pl.MissingBorderFiles(v, opt.PageW, a.exists); err != nil {
+		return false, err
+	}
 	// Профили проверяем тоже до диалога папки: ответ «нет» не должен стоить выбора папки.
 	adobe, other := a.colorReport(export.PickPhotos(p, sel))
 	if text := export.ColorWarning(other); text != "" {
@@ -356,7 +359,11 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 	a.mu.Lock()
 	a.exportDir, a.exportCancel = dir, cancel
 	a.mu.Unlock()
-	a.bg.Go(func() { a.runExport(ctx, cancel, j) })
+	if !a.goBG(func() { a.runExport(ctx, cancel, j) }) {
+		cancel()
+		a.endExport() // фон закрыт: выгрузки не будет, флаг не оставляем
+		return false, nil
+	}
 	return true, nil
 }
 

@@ -94,10 +94,13 @@ func (a *App) PrepareSigs(ids []string) (st SigState) {
 	ctx, cancel := context.WithCancel(a.stopCtx)
 	a.sig.cancel = cancel
 	gen, start := a.sig.gen, st
-	a.bg.Go(func() {
+	if !a.goBG(func() {
 		defer cancel()
 		a.runSigs(ctx, gen, todo, start)
-	})
+	}) {
+		cancel() // фон закрыт: подписи не считаются, отмена прежней работы не нужна
+		a.sig.cancel = nil
+	}
 	return st
 }
 

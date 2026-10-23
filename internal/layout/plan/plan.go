@@ -54,13 +54,25 @@ func planWidth(n, spreads, maxPer int) int {
 // и штрафом за отход от среднего. Один и тот же вход — один и тот же план: подсказка окна
 // и сама сборка совпадают.
 func PlanGroups(aspects []float64, p layout.Params, spreads, maxPer int) Plan {
+	return PlanGroupsWalls(aspects, p, spreads, maxPer, nil)
+}
+
+// PlanGroupsWalls — PlanGroups со стенами (107): ни одна группа не пересекает стену
+// (позиция 1…n−1, см. walls.go). Без стен — прежний счёт побитово. N зажимается в
+// SpreadRangeWalls.
+func PlanGroupsWalls(aspects []float64, p layout.Params, spreads, maxPer int, walls []int) Plan {
 	n := len(aspects)
 	if n == 0 {
 		return Plan{}
 	}
-	lo, hi := SpreadRange(n, maxPer)
+	walls = normWalls(walls, n)
+	lo, hi := SpreadRangeWalls(n, maxPer, walls)
 	spreads = max(lo, min(spreads, hi))
 	k := planWidth(n, spreads, maxPer)
+	var caps []int
+	if len(walls) > 0 {
+		k, caps = max(k, wallsWidth(n, spreads, maxPer, walls)), wallCaps(walls, n)
+	}
 	// Сначала без групп меньше половины среднего: на больших альбомах это почти все окна
 	// до layout.MaxFullTree, самые дорогие. Вместо них — верхняя граница; если лучший путь всё
 	// равно прошёл через такую группу, досчитываются и они (план тот же, см. planDP).
@@ -68,9 +80,9 @@ func PlanGroups(aspects []float64, p layout.Params, spreads, maxPer int) Plan {
 	if !math.IsInf(ub, 1) {
 		lo = max(1, int(float64(n)/float64(spreads)/2))
 	}
-	groups, ok := planDP(planMatrix(aspects, p, lo, k), n, spreads, k, ub)
+	groups, ok := planDPCap(planMatrix(aspects, p, lo, k), n, spreads, k, ub, caps)
 	if !ok {
-		groups, _ = planDP(planMatrix(aspects, p, 1, k), n, spreads, k, ub)
+		groups, _ = planDPCap(planMatrix(aspects, p, 1, k), n, spreads, k, ub, caps)
 	}
 	return planOf(groups, n)
 }
@@ -94,6 +106,9 @@ type PlanOpts struct {
 	// Phase — сдвиг волны размеров для варианта сборки (078): 0 — волна как в 0.19 побитово,
 	// k ≥ 1 — вариант k+1 (первая цель остаётся редкой, остальные идут по кругу со сдвигом).
 	Phase int
+	// Walls — стены (107): возрастающие позиции 1…n−1, группа не пересекает стену; nil —
+	// прежний счёт побитово. В диапазоне «от» мягкое (rangeLow), см. walls.go.
+	Walls []int
 }
 
 // Числа подобраны по TestPlanRangeMetrics (-v); правка — записью в decisions 0.13.
@@ -162,11 +177,14 @@ func AutoPer(n, spreads int) (minPer, maxPer int) {
 // MinPer ≤ 0 — прежний PlanGroups (Cuts не действуют). Один вход — один план.
 func PlanRange(aspects []float64, p layout.Params, o PlanOpts) Plan {
 	if o.MinPer <= 0 {
-		return PlanGroups(aspects, p, o.Spreads, o.MaxPer)
+		return PlanGroupsWalls(aspects, p, o.Spreads, o.MaxPer, o.Walls)
 	}
 	n := len(aspects)
 	if n == 0 {
 		return Plan{}
+	}
+	if walls := normWalls(o.Walls, n); len(walls) > 0 {
+		return planRangeWalls(aspects, p, o, walls)
 	}
 	lo, hi := RangeSpreads(n, o.MinPer, o.MaxPer)
 	N := max(lo, min(o.Spreads, hi))
@@ -302,6 +320,13 @@ func rangeRelax(dst, src, col []float64, row []uint8, kk uint8, pk float64) {
 // большие — не лучше, при настоящих тем более. Иначе (или при неконечных значениях,
 // где монотонность ломается) — false: нужен счёт со всеми столбцами.
 func planDP(cols [][]float64, n, N, K int, ub float64) ([][2]int, bool) {
+	return planDPCap(cols, n, N, K, ub, nil)
+}
+
+// planDPCap — planDP со стенами: caps[j] — самая большая группа, что кончается на j
+// (wallCaps); nil — без стен, прежний planRelax. Клетки, куда со стенами не дойти, остаются
+// −∞ и в путь не входят: путь из (N, n) есть при N в SpreadRangeWalls и K из wallsWidth.
+func planDPCap(cols [][]float64, n, N, K int, ub float64, caps []int) ([][2]int, bool) {
 	virtual := false
 	for k := 1; k <= K; k++ {
 		virtual = virtual || cols[k] == nil
@@ -335,7 +360,11 @@ func planDP(cols [][]float64, n, N, K int, ub float64) ([][2]int, bool) {
 				if cols[k] != nil {
 					col = cols[k][j0-k:]
 				}
-				planRelax(cur[j0:j1+1], prev[j0-k:], col, from[(c-1)*(n+1)+j0:], uint8(k), pen[k], float64(k)*ub)
+				if caps == nil {
+					planRelax(cur[j0:j1+1], prev[j0-k:], col, from[(c-1)*(n+1)+j0:], uint8(k), pen[k], float64(k)*ub)
+				} else {
+					planRelaxCap(cur[j0:j1+1], prev[j0-k:], col, from[(c-1)*(n+1)+j0:], uint8(k), pen[k], float64(k)*ub, caps[j0:])
+				}
 			}
 		}
 		prev, cur = cur, prev

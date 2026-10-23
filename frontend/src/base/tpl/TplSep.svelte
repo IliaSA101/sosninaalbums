@@ -1,9 +1,10 @@
 <script lang="ts">
   // Черта с подписью внутри ряда плиток («другие», «мои», 050): подпись вертикально, высота — как у плитки.
-  let { label, title }: { label: string; title?: string } = $props()
+  // key — метка для поиска черты снаружи (кнопка «Другие ▸» в шапке галереи прокручивает ряд к ней).
+  let { label, title, key }: { label: string; title?: string; key?: string } = $props()
 </script>
 
-<div class="sep" {title}><span>{label}</span></div>
+<div class="sep" {title} data-sep={key}><span>{label}</span></div>
 
 <style>
   .sep {

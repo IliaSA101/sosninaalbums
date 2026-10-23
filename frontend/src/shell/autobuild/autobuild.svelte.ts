@@ -329,9 +329,16 @@ export class AutoDialog {
   // Якорь «среднее» у тронутого N: заново из X по числу фото и пределам ответа (Go мог взять меньше фото, диапазон сдвинул низ).
   private wantN(res: AutoPlan, n: number): number {
     if (this.memRange !== null && this.memRange !== this.rangeKey()) this.memRange = null // диапазон сдвинули — запомненный N уже не держим
+    // 107: «Весь альбом заново» — столько разворотов, сколько голых сейчас (альбом того же размера); пересборка держит свой N
+    if (res.album && !this.nKept && !this.ph.again) return res.album.spreads > 0 ? res.album.spreads : n
     if (!this.nKept && this.memRange === null) return defaultSpreads(res.photos, this.defRange())
     if (this.anchor !== 'per' || this.perTyped === null || res.photos <= 0) return n
     return spreadsForPer(res.photos, this.perTyped, { min: Math.max(1, res.minSpreads), max: Math.max(1, res.maxSpreads) }) ?? n
+  }
+
+  // 107: план мог поднять N выше запрошенного (между якорями развороты не слить) — показываем итог плана
+  private takeRaised(res: AutoPlan, n: number) {
+    if (res.album && res.spreads > 0 && res.spreads !== n) this.n = res.spreads
   }
 
   private async pump() {
@@ -361,6 +368,7 @@ export class AutoDialog {
         }
         this.plan = res
         this.error = ''
+        this.takeRaised(res, n)
         // Якорь «среднее» без ввода (поле только выбрано): X следует за новым N.
         if (!this.nKept && this.memRange === null && this.anchor === 'per' && n > 0) this.perTyped = res.photos / n
         return

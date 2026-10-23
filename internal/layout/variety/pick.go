@@ -324,6 +324,9 @@ func (t tuning) one(s Spread, p layout.Params, n *neighbors) int {
 	mo, moPen, moLoss := -1, 0.0, 0.0
 	for i := range s.Pool {
 		x := &s.Pool[i]
+		if x.Manual {
+			continue // «Разброс» и центр — только ручной выбор из «Других вариантов»
+		}
 		loss := bestQ - quanta(x.Score)
 		var bonus float64
 		var ok bool

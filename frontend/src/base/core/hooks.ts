@@ -8,12 +8,16 @@ import type { FontFamily, MarkView, Photo, View } from './types'
 export interface PickResult {
   ids: string[]
   skipped: number
-  from: 'selected' | 'free'
+  from: 'selected' | 'free' | 'album'
   inAlbum: number
   filtered: boolean
   again?: boolean // 078: окно открыто как «Пересобрать» (те же фото последней сборки)
   alt?: PickResult // 080: второй путь для ссылки в строке источника (у alt своего alt нет)
   bin?: string // 083: без выделения фото взяты из показанной подборки — её имя для строки окна
+  // 107: «Весь альбом заново» (from 'album'). ids — фото альбома по ленте (+ свободные при addFree); Go берёт голые развороты сам.
+  freeIds?: string[] // свободные фото ленты, которые можно добавить галочкой (с фильтром ленты, без отклонённых)
+  addFree?: boolean // галочка «Добавить свободные фото ленты» (выключена)
+  base?: PickResult // откуда пришли: щелчок по «Свободные фото» / «Выделенные» в строке «Собрать» возвращает этот выбор
 }
 
 export type MarkMap = Readonly<Record<string, MarkView>>
@@ -51,6 +55,8 @@ export interface StoreHooks {
   free(photos: Photo[], used: ReadonlySet<string>, backdrop: ReadonlySet<string>): Photo[]
   // Что отдать автосборке / «Заполнить пустые места»; пусто — тост с причиной уже показан.
   pick(moveUsed: boolean): PickResult
+  // 107: свободные фото ленты без учёта выделения (галочка «Добавить свободные» в режиме альбома); тоста нет
+  pickFree(): string[]
   // 078: из фото последней сборки убрать отклонённые (флажок ✕) — в пересборку они не идут
   notRejected(ids: readonly string[]): string[]
 
@@ -84,6 +90,7 @@ export const noHooks: StoreHooks = {
   visible: (photos) => photos,
   free: (photos, used, backdrop) => photos.filter((p) => !used.has(p.id) && !backdrop.has(p.id)),
   pick: () => ({ ids: [], skipped: 0, from: 'free', inAlbum: 0, filtered: false }),
+  pickFree: () => [],
   notRejected: (ids) => [...ids],
   selectedRefs: () => [],
   select: () => {},

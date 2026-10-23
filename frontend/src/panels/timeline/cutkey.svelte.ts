@@ -1,8 +1,9 @@
 import { cutHeldNext, type CutEv } from './chips'
 
 // Признак «зажат Ctrl (⌘)» для ленты (094 §1): пока он есть, проступают пунктиры разреза и черта клеит.
+// Второй экземпляр — gapKey — для промежутков между листами на холсте (103 §3): свои слушатели, пока ряд ≥ 2 листов.
 // Чистое правило — cutHeldNext; здесь только слушатели окна.
-class CutKey {
+export class CutKey {
   held = $state(false)
 
   // Запись только при смене: pointermove частый, лишних обновлений $state не нужно.
@@ -31,3 +32,4 @@ class CutKey {
 }
 
 export const cutKey = new CutKey()
+export const gapKey = new CutKey()

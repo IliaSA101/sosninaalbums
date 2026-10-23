@@ -3,10 +3,10 @@
 [![CI](https://github.com/IliaSA101/sosninaalbums/actions/workflows/ci.yml/badge.svg)](https://github.com/IliaSA101/sosninaalbums/actions/workflows/ci.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-**Sosnina Albums** is a desktop application for laying out wedding photo albums, built for a working photographer. Pick folders with photos, drag frames onto spreads (or let auto-assembly do it), flip through layout variants, and export spreads as 300 dpi JPEGs for the print shop. Layouts are computed exactly and **photos are not cropped without your say**: a frame keeps the photo's aspect ratio unless you choose full bleed (crops up to 30 %) or set your own crop; margins and gaps are set in millimetres.
+**Sosnina Albums** is a desktop application for laying out wedding photo albums, built for a working photographer. Pick folders with photos, drag frames onto spreads (or let auto-assembly do it), flip through layout variants, and export spreads as 300 dpi JPEGs for the print shop. Layouts are computed exactly and **photos are not cropped without your say**: a frame keeps the photo's aspect ratio unless you choose full bleed (crops up to 30 %), crop to fill the sheet (up to 15 %) or set your own crop; margins and gaps are set in millimetres.
 
 - Platform: Windows, macOS, Linux (WebView2, WKWebView, WebKitGTK). Stack: Go 1.26 + [Wails](https://wails.io) v2 + Svelte 5 + TypeScript.
-- Status: version 0.23.0, actively developed; the UI is in Russian.
+- Status: version 0.24.0, actively developed; the UI is in Russian.
 - Built together with photographer Marina Sosnina ([Sosnina films](https://sosnina-films.ru)) and used in her work.
 
 ![Sosnina Albums: auto-build an album, flip through spreads, try layouts](docs/media/demo.webp)
@@ -34,7 +34,7 @@ License: GPL-3.0-only with an additional term under section 7(b) (modified versi
 
 ## О программе
 
-Sosnina Albums — десктопная программа для вёрстки свадебных фотоальбомов. Рассчитана на фотографа: выбираешь папки со снимками, перетаскиваешь кадры на развороты (или отдаёшь всё автосборке), листаешь варианты раскладки и выгружаешь развороты в JPEG 300 dpi для типографии. Раскладка считается точно, и фото не обрезаются без вашего разрешения: кадр сохраняет пропорции снимка, а обрезку включаете вы — «в край» (до 30 %) или свой кадр фото; поля и промежутки заданы в миллиметрах.
+Sosnina Albums — десктопная программа для вёрстки свадебных фотоальбомов. Рассчитана на фотографа: выбираешь папки со снимками, перетаскиваешь кадры на развороты (или отдаёшь всё автосборке), листаешь варианты раскладки и выгружаешь развороты в JPEG 300 dpi для типографии. Раскладка считается точно, и фото не обрезаются без вашего разрешения: кадр сохраняет пропорции снимка, а обрезку включаете вы — «в край» (до 30 %), «подрезать, чтобы закрыть лист» (до 15 %) или свой кадр фото; поля и промежутки заданы в миллиметрах.
 
 Программу делает Илья Соснин (GitHub: IliaSA101) вместе с фотографом Мариной Сосниной ([Sosnina films](https://sosnina-films.ru)); Марина — первый пользователь и источник требований. Об упоминании и логотипе есть согласие.
 

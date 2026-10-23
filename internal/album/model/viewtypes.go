@@ -15,6 +15,8 @@ type Choice struct {
 	Twin   int    `json:"twin"` // индекс более раннего с тем же видом в этом ряду; −1 — нет
 	// FormName — название формы для подписи плитки («Лента», «Лесенка», «Плотно»…); непусто у каждой.
 	FormName string `json:"formName"`
+	// Crop — подрезка раскладки (104): целый процент вверх по стороне, 0 — фото целиком.
+	Crop int `json:"crop"`
 }
 
 type ChoiceRows struct {
@@ -59,6 +61,9 @@ type AutoOpts struct {
 	Gray    int      `json:"gray"`    // ч/б разворотов: 0 нет, 1 — 10 %, 2 — 20 %, 3 — 30 %
 	Variant int      `json:"variant"` // номер варианта: 0 и 1 — как 0.19, 2… — другие границы и раскладки
 	Again   bool     `json:"again"`   // пересобрать последнюю сборку: от альбома до неё (Editor, 078 §8)
+	// Album — «Весь альбом заново» (107): пул — фото голых разворотов «Авто», якоря (ручные,
+	// виньетки, оформленные, пустые) остаются на местах; at не действует. Ноль — сборка 0.23.
+	Album bool `json:"album"`
 }
 
 // MaxAutoLevel — старший уровень «Похожих» и «Ч/б»; MaxVariant — старший номер варианта.
@@ -135,6 +140,21 @@ type AutoPlan struct {
 	Cuts       int     `json:"cuts"`              // границ серий силы ≥ 0.5; 0 — без Series или сигналов нет
 	Similar    int     `json:"similar,omitempty"` // похожих не взято (078), Photos — уже без них; 0 — поля нет: прежний фронт и тесты собираются
 	Gray       int     `json:"gray,omitempty"`    // разворотов станет ч/б (078); 0 — поля нет
+	// Album — состав альбома в режиме «Весь альбом заново» (107); только при AutoOpts.Album.
+	// Spreads в этом режиме — сколько новых разворотов соберётся, якоря в него не входят.
+	Album *AlbumPlan `json:"album,omitempty"`
+}
+
+// AlbumPlan — что режим «Весь альбом заново» (107) пересобирает и что не трогает: числа для
+// строки источника и вопроса окна. Считается по альбому до похожих кадров.
+type AlbumPlan struct {
+	Spreads   int `json:"spreads"`   // голых разворотов сейчас — N по умолчанию в окне
+	Photos    int `json:"photos"`    // фото на них
+	Free      int `json:"free"`      // свободных взято в пул
+	Manual    int `json:"manual"`    // якоря: ручные (сетка)
+	Vignettes int `json:"vignettes"` // виньетки
+	Decor     int `json:"decor"`     // оформленные «Авто» (тексты, стикеры, свой фон, название…)
+	Blank     int `json:"blank"`     // пустые
 }
 
 // SimilarDrop — кадр, который автосборка не возьмёт как похожий (078): Like — оставленный кадр,
@@ -306,6 +326,9 @@ type SpreadView struct {
 	Waiting int `json:"-"`
 	// NoAlbumBg — фон альбома на листе скрыт (Spread.NoAlbumBg, 098): «Фон альбома скрыт · Показать».
 	NoAlbumBg bool `json:"noAlbumBg,omitempty"`
+	// FoldHidden — сколько раскладок «Разброса» скрыто из-за фото на сгибе при «Только широкие»
+	// (105 В1): «Ещё N раскладок с фото на сгибе» в галерее; 0 — нечего показывать.
+	FoldHidden int `json:"foldHidden,omitempty"`
 }
 
 // VignetteView — виньетка для панели: параметры, сколько мест они дают (с групповым)
@@ -468,12 +491,25 @@ type PageLimitView struct {
 	Warn  string `json:"warn"`  // "" — в пределах; иначе текст предупреждения
 }
 
-// PhotoUse — одно вхождение фото в альбом для карточки (084): лист и подпись.
+// Виды вхождения (106): фронт выбирает переход по ним, подпись не разбирает.
+const (
+	UsePlace    = "place"    // место листа (Авто или сетка)
+	UseBackdrop = "backdrop" // фото фона области листа
+	UseSticker  = "sticker"  // фото-стикер
+	UseBorder   = "border"   // картинка рамочки места
+	UseAlbumBg  = "albumBg"  // фон альбома (098)
+)
+
+// PhotoUse — одно вхождение фото в альбом для карточки (084): лист, подпись и вид перехода.
 type PhotoUse struct {
 	// Sheet — индекс в Project.Sheets() (он же store.sheets интерфейса); −1 — фон альбома (098).
-	Sheet int    `json:"sheet"`
-	Label string `json:"label"`         // «Разворот 3 — место», «Обложка — фон», «Лист 2 — стикер»
-	Ref   string `json:"ref,omitempty"` // запись вхождения (копия, 098): подсветка места
+	Sheet  int    `json:"sheet"`
+	Label  string `json:"label"`          // «Разворот 3 — место»; = Page + " — " + What (фон альбома — Page)
+	Kind   string `json:"kind"`           // Use*
+	Spread string `json:"spread"`         // ID листа (обложка — CoverID); "" — фон альбома
+	Page   string `json:"page"`           // «Разворот 3» | «Лист 2» | «Обложка» | «Фон альбома» — текст ссылки
+	What   string `json:"what"`           // «место» | «фон» | «стикер» | «рамочка»; "" — фон альбома
+	Pick   string `json:"pick,omitempty"` // что выделить: запись места, ID стикера, ref места с рамочкой, область фона
 }
 
 // UsedAt — «где стоит» фото для окна «Фото уже в альбоме» (098 design §2.4).

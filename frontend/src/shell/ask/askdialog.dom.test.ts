@@ -8,12 +8,22 @@ import { flushSync } from 'svelte'
 const view = { rev: 2, folders: [], spreads: [], settings: {} }
 const backToAuto = vi.hoisted(() => vi.fn(async () => view))
 const cropsToKeep = vi.hoisted(() => vi.fn(async () => 0))
+const mergeAuto = vi.hoisted(() => vi.fn(async () => ({ rev: 3, folders: [], spreads: [], settings: {} })))
+const splitAuto = vi.hoisted(() => vi.fn(async () => ({ rev: 3, folders: [], spreads: [], settings: {} })))
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
-vi.mock('../../../wailsjs/go/app/App', () => ({ BackToAuto: backToAuto, CropsToKeep: cropsToKeep, SetGrid: vi.fn(), SetLayout: vi.fn() }))
+vi.mock('../../../wailsjs/go/app/App', () => ({
+  BackToAuto: backToAuto,
+  CropsToKeep: cropsToKeep,
+  MergeSpreadsAuto: mergeAuto,
+  SplitSpreadAuto: splitAuto,
+  SetGrid: vi.fn(),
+  SetLayout: vi.fn(),
+}))
 
 const { default: AutoAskDialog } = await import('./AutoAskDialog.svelte')
 const { gridAct } = await import('../../panels/layouts/gridact.svelte')
 const { store } = await import('../../base/core/store.svelte')
+const { glueAsk } = await import('../../panels/timeline/menuact.svelte')
 const { modalStack } = await import('../../base/modal/modalstack.svelte')
 
 const grid = { id: 's1', grid: true, photos: [], rects: [] }
@@ -22,6 +32,8 @@ afterEach(() => {
   cleanup()
   gridAct.cancelAuto()
   backToAuto.mockClear()
+  mergeAuto.mockClear()
+  splitAuto.mockClear()
   cropsToKeep.mockReset()
   cropsToKeep.mockResolvedValue(0)
 })
@@ -171,5 +183,105 @@ describe('AutoAskDialog: «Вернуть авто?»', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.queryByRole('checkbox')).toBeNull()
     expect(cropsToKeep).not.toHaveBeenCalled()
+  })
+})
+
+// Склейка и разрез через ручной разворот (103): то же окно, свои тексты, действие — MergeSpreadsAuto / SplitSpreadAuto.
+describe('AutoAskDialog: склейка и разрез через ручной (103)', () => {
+  const sp = (id: string, grid: boolean) => ({ id, grid, photos: ['p1', 'p2', 'p3'], rects: [] })
+  const setup = (...list: ReturnType<typeof sp>[]) => {
+    store.view = { ...store.view, rev: 1, spreads: list } as never
+    store.currentId = list[0].id
+  }
+  // CropsToKeep асинхронный: окно появляется после ответа Go
+  const ask = async (act: () => void) => {
+    act()
+    await vi.waitFor(() => expect(gridAct.autoAsk).not.toBeNull())
+    flushSync()
+  }
+
+  it('склейка: текст, Отмена с фокусом; «Отмена» — без вызова Go', async () => {
+    render(AutoAskDialog)
+    setup(sp('a', false), sp('b', true))
+    await ask(() => glueAsk.join('a'))
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('Склеить развороты?')
+    expect(screen.getByText('У разворота 2 ручная раскладка. Ваши правки мест сбросятся. Склеить развороты 1 и 2?')).toBeTruthy()
+    expect(document.activeElement?.textContent).toBe('Отмена')
+    expect(cropsToKeep).toHaveBeenCalledExactlyOnceWith('b')
+    await fireEvent.click(screen.getByText('Отмена'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(mergeAuto).not.toHaveBeenCalled()
+  })
+
+  it('N = 0 — галочки нет; «Склеить» → MergeSpreadsAuto(id, false)', async () => {
+    render(AutoAskDialog)
+    setup(sp('a', true), sp('b', false))
+    await ask(() => glueAsk.join('a'))
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    await fireEvent.click(screen.getByText('Склеить', { selector: 'button' }))
+    expect(mergeAuto).toHaveBeenCalledExactlyOnceWith('a', false)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('N > 0 — сумма по ручным из пары, галочка включена; «Склеить» → keep = true, снята → false', async () => {
+    cropsToKeep.mockResolvedValueOnce(2).mockResolvedValueOnce(1)
+    render(AutoAskDialog)
+    setup(sp('a', true), sp('b', true))
+    await ask(() => glueAsk.join('a'))
+    expect(cropsToKeep).toHaveBeenCalledTimes(2)
+    const box = screen.getByRole('checkbox', { name: 'Сохранить кадр правленых фото: 3' }) as HTMLInputElement
+    expect(box.checked).toBe(true)
+    await fireEvent.click(screen.getByText('Склеить', { selector: 'button' }))
+    expect(mergeAuto).toHaveBeenCalledExactlyOnceWith('a', true)
+
+    cropsToKeep.mockResolvedValue(1)
+    setup(sp('a', true), sp('b', false))
+    await ask(() => glueAsk.join('a'))
+    await fireEvent.click(screen.getByRole('checkbox'))
+    await fireEvent.click(screen.getByText('Склеить', { selector: 'button' }))
+    expect(mergeAuto).toHaveBeenLastCalledWith('a', false)
+  })
+
+  it('разрез: «Разрезать» → SplitSpreadAuto(id, j, keep)', async () => {
+    cropsToKeep.mockResolvedValue(1)
+    render(AutoAskDialog)
+    setup(sp('a', true))
+    await ask(() => glueAsk.cut('a', 2))
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('Разрезать разворот?')
+    expect(screen.getByText('У разворота 1 ручная раскладка. Ваши правки мест сбросятся. Разрезать разворот 1 перед фото 3?')).toBeTruthy()
+    await fireEvent.click(screen.getByText('Разрезать', { selector: 'button' }))
+    expect(splitAuto).toHaveBeenCalledExactlyOnceWith('a', 2, true)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('пара перестала быть ручной или пропала — окно закрыто само', async () => {
+    render(AutoAskDialog)
+    setup(sp('a', true), sp('b', false))
+    await ask(() => glueAsk.join('a'))
+    gridAct.prune([sp('a', false), sp('b', false)] as never)
+    flushSync()
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    await ask(() => {
+      setup(sp('a', true), sp('b', false))
+      glueAsk.join('a')
+    })
+    gridAct.prune([sp('a', true), sp('c', false), sp('b', false)] as never) // между ними встал третий
+    flushSync()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(mergeAuto).not.toHaveBeenCalled()
+  })
+
+  it('пара изменилась, пока Go считал кадры, — окно не открывается', async () => {
+    let free!: (n: number) => void
+    cropsToKeep.mockImplementationOnce(() => new Promise<number>((r) => (free = r)))
+    render(AutoAskDialog)
+    setup(sp('a', true), sp('b', false))
+    glueAsk.join('a')
+    store.view = { ...store.view, spreads: [sp('a', false), sp('b', false)] } as never
+    free(2)
+    await new Promise((r) => setTimeout(r, 0))
+    flushSync()
+    expect(gridAct.autoAsk).toBeNull()
   })
 })

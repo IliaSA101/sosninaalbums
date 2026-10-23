@@ -7,6 +7,8 @@
   import CellOverlay from '../photo/CellOverlay.svelte'
   import StraightenLayer from '../tilt/StraightenLayer.svelte'
   import { straighten } from '../tilt/straighten.svelte'
+  import EyedropLayer from '../eyedrop/EyedropLayer.svelte'
+  import { eyedrop } from '../../base/color/eyedrop.svelte'
   import GroupFrame from '../places/GroupFrame.svelte'
   import SelFrame from '../places/SelFrame.svelte'
   import StickerOverlay from '../sticker/StickerOverlay.svelte'
@@ -66,6 +68,8 @@
 {#if bgEdit}<BackdropEditor {spread} {width} />{/if}
 <!-- Режим «Выпрямить по линии» (045): слой ловит мышь над рамками выделения и фона -->
 {#if !mini && !preview && straighten.cur?.spread === spread.id && current}<StraightenLayer {spread} />{/if}
+<!-- Режим «Взять цвет с фото» (109): слой только над листом окна цвета -->
+{#if !mini && !preview && eyedrop.on && eyedrop.sheet === spread.id}<EyedropLayer {spread} />{/if}
 
 <style>
   .namehint {

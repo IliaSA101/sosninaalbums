@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { arcWhere, MINI_GAP, MINI_H, miniPlace, sameView } from './minipanel'
 import { FIT_BOTTOM, FIT_TOP, fit, fitH, placement } from '../zoom/zoom'
 
-// owner-ux §1.5 (владелец 2026-10-21): полосы под листом нет — мини-панель у нижнего фото встаёт под ним поверх ленты
+// owner-ux §1.9 (владелец 2026-10-21): полосы под листом нет — мини-панель у нижнего фото встаёт под ним поверх ленты
 // разворотов (view.spill — низ ленты в осях листа), если низ фото виден на холсте.
 describe('мини-панель поверх ленты разворотов (095)', () => {
   const BAR = 32

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import type { BorderView } from '../../base/core/types'
   import Icon from '../../base/ui/Icon.svelte'
   import { borderSrc } from './border'
@@ -11,8 +12,15 @@
   // U5: вид новее программы (known = false) и картинка без файла — пунктир по рамке места, как у стикера; у пропавшей
   // ещё значок «фото нет» в углу. Подсказку ставит родитель (title на ячейке), потому что мышь накладка не ловит:
   // щелчок, выделение и drag идут сквозь рамочку в место.
-  let { border, px, mini = false }: { border: BorderView; px: number; mini?: boolean } = $props()
+  // refs — места и фото, чьи ключи показа окна цвета (`bd:<id>`) касаются этой рамочки (109): краска подменяется в адресе Go.
+  let {
+    border,
+    px,
+    mini = false,
+    refs = [],
+  }: { border: BorderView; px: number; mini?: boolean; refs?: readonly (string | undefined)[] } = $props()
   const state = $derived(borderState(border, store.missing))
+  const url = $derived(refs.reduce<string>((u, r) => (u === border.url && r ? colorLive.inkUrl(`bd:${r}`, border.url) : u), border.url))
 </script>
 
 {#if state !== 'ok'}
@@ -21,8 +29,8 @@
         ><Icon name="photo-minus" size={16} stroke={2} /></span
       >{/if}
   </div>
-{:else if border.url}
-  <img class="bo" data-border={border.kind || border.photo} src={borderSrc(border.url, px)} alt="" draggable="false" />
+{:else if url}
+  <img class="bo" data-border={border.kind || border.photo} src={borderSrc(url, px)} alt="" draggable="false" />
 {/if}
 
 <style>

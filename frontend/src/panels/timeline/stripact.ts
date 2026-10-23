@@ -4,7 +4,8 @@ import { toggleKey } from '../../base/core/platform'
 import { store } from '../../base/core/store.svelte'
 import { drag } from '../../base/drag/drag.svelte'
 import { tip } from '../../base/ui/tip.svelte'
-import type { CanDo } from './timeline'
+import { glueAsk } from './menuact.svelte'
+import { cutState, type CanDo } from './timeline'
 
 export type PressEv = { ctrlKey: boolean; metaKey: boolean; stopPropagation: () => void }
 export type KeyEv = { key: string; preventDefault: () => void; stopPropagation: () => void }
@@ -18,6 +19,22 @@ function pressKey(e: KeyEv): boolean {
   return true
 }
 
+// Разрез перед фото j: у ручного разворота — через вопрос (103), у «Авто» — сразу. false — разрезать нельзя (виньетка).
+function doCut(id: string, j: number): boolean {
+  const sp = store.view.spreads.find((s) => s.id === id)
+  const st = sp && cutState(sp, j)
+  if (st && !st.ok) return false
+  if (st?.ask) glueAsk.cut(id, j)
+  else void store.split(id, j)
+  return true
+}
+
+// Склейка: у ручного разворота в паре — через вопрос (103), иначе сразу.
+function doJoin(id: string, st: CanDo) {
+  if (st.ask) glueAsk.join(id)
+  else void store.merge(id)
+}
+
 // Щелчок по зоне перед фото j. Без Ctrl событие не трогаем: зона его и не ловит (pointer-events), а если дошло —
 // пусть идёт к миниатюре (выделение). С Ctrl — гасим, иначе миниатюра возьмёт его как «группу в выделение».
 export function cutClick(e: PressEv, id: string, j: number): boolean {
@@ -25,28 +42,26 @@ export function cutClick(e: PressEv, id: string, j: number): boolean {
   e.stopPropagation()
   if (!drag.clickAllowed()) return false
   tip.hide()
-  void store.split(id, j)
-  return true
+  return doCut(id, j)
 }
 
 export function cutKey(e: KeyEv, id: string, j: number): boolean {
   if (!pressKey(e)) return false
   tip.hide()
-  void store.split(id, j)
-  return true
+  return doCut(id, j)
 }
 
 // Черта между группами i и i+1: id — разворот слева, st — можно ли (joinState), cuts — функция на уровне.
 export function joinClick(e: PressEv, id: string, st: CanDo, cuts: boolean): boolean {
   if (!cuts || !toggleKey(e) || !drag.clickAllowed() || !st.ok) return false
   tip.hide()
-  void store.merge(id)
+  doJoin(id, st)
   return true
 }
 
 export function joinKey(e: KeyEv, id: string, st: CanDo, cuts: boolean): boolean {
   if (!cuts || !pressKey(e) || !st.ok) return false
   tip.hide()
-  void store.merge(id)
+  doJoin(id, st)
   return true
 }

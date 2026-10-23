@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { CaptionView, SpreadView } from '../../base/core/types'
   import { store } from '../../base/core/store.svelte'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import { edit } from './edit.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { boxOf, toSpread } from '../../base/geom/textbox'
@@ -25,7 +26,16 @@
 <div class="tover">
   {#each spread.captions as c (c.photo)}
     {#if tg.editing('caption', c.photo)}
-      <TextEditor box={boxOf(c)} auto={false} maxW={store.view.textMaxW} text={editText(c)} style={c.style} {sw} {ph} {k} />
+      <TextEditor
+        box={boxOf(c)}
+        auto={false}
+        maxW={store.view.textMaxW}
+        text={editText(c)}
+        style={colorLive.style(`cap:${c.photo}`, c.style)}
+        {sw}
+        {ph}
+        {k}
+      />
     {:else}
       <!-- Подпись не слой (она при фото), но обводка и «!» должны быть видны, даже если выше лежит фото -->
       {#if tg.selected('caption', c.photo)}
@@ -58,7 +68,16 @@
 
   {#each spread.texts as t (t.id)}
     {#if tg.editing('text', t.id)}
-      <TextEditor box={boxOf(t)} auto={t.auto} maxW={store.view.textMaxW} text={editText(t)} style={t.style} {sw} {ph} {k} />
+      <TextEditor
+        box={boxOf(t)}
+        auto={t.auto}
+        maxW={store.view.textMaxW}
+        text={editText(t)}
+        style={colorLive.style(`text:${t.id}`, t.style)}
+        {sw}
+        {ph}
+        {k}
+      />
     {:else if tg.selected('text', t.id)}
       {@const e = tg.eff(t)}
       <div

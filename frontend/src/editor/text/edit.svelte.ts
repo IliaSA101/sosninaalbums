@@ -2,6 +2,7 @@
 // отложенная отправка набранного, правки стиля. Геометрию и перенос строк считает Go;
 // ответ view во время ввода не трогает DOM редактора (он не привязан к view).
 import { store, Api } from '../../base/core/store.svelte'
+import { colorLive } from '../../base/color/colorlive.svelte'
 import { styleSupport } from './fonts'
 import { clampSize, isBlank, sessionId } from './textedit'
 import { normDeg } from '../../base/geom/textbox'
@@ -212,7 +213,7 @@ class Edit {
 
   // ---------- правки выделенного ----------
 
-  setStyle(patch: Partial<TextStyle>) {
+  setStyle(patch: Partial<TextStyle>): Promise<unknown> | undefined {
     const st = this.style
     const s = this.sel
     if (!st || !s) return
@@ -221,8 +222,21 @@ class Edit {
     const sup = styleSupport(next.font, store.fonts)
     next.bold = !!next.bold && sup.bold
     next.italic = !!next.italic && sup.italic
-    if (s.kind === 'text') store.run(Api.SetTextStyle(s.id, next))
-    else this.putCaption(next, !!this.caption?.over, padOf(this.caption))
+    if (s.kind === 'text') return store.run(Api.SetTextStyle(s.id, next))
+    return this.putCaption(next, !!this.caption?.over, padOf(this.caption))
+  }
+
+  // Живой показ цвета из окна цвета (109): что поменяет setStyle — блок, подпись или (общий стиль листа, 030)
+  // все подписи листа. null — снять. В Go не ходит, шага отмены нет.
+  previewColor(hex: string | null) {
+    const s = this.sel
+    if (hex === null || !s) return colorLive.clear()
+    if (s.kind === 'text') return colorLive.set([`text:${s.id}`], hex)
+    const all = this.caps ? (sheetIn(store.view, s.spread)?.captions ?? []).map((c) => c.photo) : [s.id]
+    colorLive.set(
+      all.map((p) => `cap:${p}`),
+      hex,
+    )
   }
 
   // Подпись под фото / на фото.

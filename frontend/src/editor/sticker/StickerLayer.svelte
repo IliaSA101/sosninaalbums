@@ -12,6 +12,7 @@
   import { photoui } from '../photo/photoui.svelte'
   import { additive } from '../places/gesture'
   import { layerIndex } from '../places/layers'
+  import { colorLive } from '../../base/color/colorlive.svelte'
   import { opacityOf } from '../backdrop/fade'
   import { STICKER_NEWER, artSrc, isLost, longSidePx, stickerPx } from './sticker'
   import { sticker, stickerFadeLive } from './sticker.svelte'
@@ -81,7 +82,7 @@
         >{/if}
     {:else if st.known && st.gen && st.url}
       <img
-        src={artSrc(st.url, stickerPx(longSidePx(st, sw, width), dpr))}
+        src={artSrc(colorLive.inkUrl(`st:${st.id}`, st.url), stickerPx(longSidePx(st, sw, width), dpr))}
         style:transform={st.flipH || st.flipV ? `scale(${st.flipH ? -1 : 1}, ${st.flipV ? -1 : 1})` : undefined}
         alt=""
         draggable="false"

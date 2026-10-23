@@ -14,7 +14,7 @@ func lay(p *model.Project, s *model.Spread) Laid {
 	if !ok {
 		return Laid{done: true}
 	}
-	asp, prm := p.Aspects(s.Photos), p.Params()
+	asp, prm := p.LayoutIn(s.Photos)
 	// 17+ фото: ряд — до порции с текущей раскладкой, more — его можно досчитать.
 	row, i, more := model.AutoRow(asp, prm, cur.Key)
 	// Счётчик — по ряду «Авто» и «Другим вариантам» за ним (решение 0.11 №36), как листание.
@@ -24,7 +24,8 @@ func lay(p *model.Project, s *model.Spread) Laid {
 			i = len(row) + j
 		}
 	}
-	l := Laid{cur: cur, variant: i, variants: len(row) + len(extra), more: more, ok: true, done: true}
+	l := Laid{cur: cur, variant: i, variants: len(row) + len(extra), more: more, ok: true, done: true,
+		foldHidden: model.ExtraFoldHidden(asp, prm)}
 	// Ряды с перестановкой считаются, только если текущая раскладка из них.
 	if l.variant < 0 && layout.IsRearranged(cur.Key) {
 		if rr, _ := layout.CachedRearranged(asp, prm, model.VariantLimit); model.IndexOf(rr, cur.Key) >= 0 {
@@ -67,6 +68,7 @@ type Laid struct {
 	cur                        layout.Result
 	variant, variants          int
 	more, rearranged, ok, done bool
+	foldHidden                 int
 	pages                      []model.PageView
 }
 

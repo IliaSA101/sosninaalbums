@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"log"
 	"math"
 	"math/rand/v2"
@@ -298,6 +299,11 @@ func TestAutoOptsClamp(t *testing.T) {
 	}
 	if (AutoOpts{}).Clamp().Keep != nil || len(AutoOpts{Keep: keep[:3]}.Clamp().Keep) != 3 {
 		t.Fatal("Clamp: короткий и пустой Keep")
+	}
+	// 107: режим альбома зажим не трогает (ни в одну, ни в другую сторону) и приходит из JSON по имени album.
+	var o AutoOpts
+	if err := json.Unmarshal([]byte(`{"spreads":3,"album":true}`), &o); err != nil || !o.Album || !o.Clamp().Album || (AutoOpts{}).Clamp().Album {
+		t.Fatalf("Album: %+v %v", o, err)
 	}
 	if ClampFamilies(nil) != nil || !slices.Equal(ClampFamilies([]string{"dense", "hero"}), []string{"dense", "hero"}) ||
 		len(ClampFamilies(long[:16])) != 16 || len(ClampFamilies([]string{})) != 0 {

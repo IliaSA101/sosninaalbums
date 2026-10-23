@@ -14,6 +14,7 @@ export const norm = (x: Settings): Settings => ({
   dpi: Number(x.dpi),
   safe: Number(x.safe),
   bleed: Number(x.bleed) || 0, // нет поля = 0
+  crop: Number(x.crop) || 0, // 104: подрезка, %; нет поля = 0 (иначе «Применить» стёр бы её)
   layflat: !!x.layflat,
   foldAny: !!x.layflat && !!x.foldAny, // как зажим в Go: без layflat «любых» нет
   bg: x.bg ?? '', // "" — белый
@@ -23,5 +24,5 @@ export const norm = (x: Settings): Settings => ({
 export function same(a: Settings, b: Settings): boolean {
   const x = norm(a)
   const y = norm(b)
-  return x.layflat === y.layflat && x.foldAny === y.foldAny && x.bg === y.bg && NUMS.every((k) => x[k] === y[k])
+  return x.layflat === y.layflat && x.foldAny === y.foldAny && x.crop === y.crop && x.bg === y.bg && NUMS.every((k) => x[k] === y[k])
 }

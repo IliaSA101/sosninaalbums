@@ -43,9 +43,9 @@ func (g *gen) contrastBigs(lo, hi int) []int {
 var flatRow = regexp.MustCompile(`H\(([^()]*)\)`)
 
 // CenterBig — ключ формы contrast с «центр крупнее»: в каждом ряду H от трёх фото обычное одно,
-// и оно в середине (при чётном числе — в одной из двух центральных), прочие — малые (m). Такие
-// ряды ряд «Авто» берёт отдельным слотом: по Q они уступают левому крупному (центр на сгибе
-// штрафуется spineTerm), но владелец просит именно их (0.23-q6).
+// и оно в середине (при чётном числе — в одной из двух центральных), прочие — малые (m; n — боками
+// покрупнее, 105). Такие ряды ряд «Авто» берёт отдельным слотом: по Q они уступают левому крупному
+// (центр на сгибе штрафуется spineTerm), но владелец просит именно их (0.23-q6).
 func CenterBig(key string) bool {
 	found := false
 	for _, m := range flatRow.FindAllStringSubmatch(key, -1) {
@@ -56,7 +56,7 @@ func CenterBig(key string) bool {
 		}
 		big := -1
 		for i, k := range kids {
-			if !strings.HasPrefix(k, "m") {
+			if !strings.HasPrefix(k, "m") && !strings.HasPrefix(k, "n") {
 				if big >= 0 {
 					return false
 				}

@@ -12,6 +12,7 @@
   import { binsel } from '../bins/binsel.svelte'
   import { lost } from './lost.svelte'
   import { missTip } from './missing'
+  import { thumbmenu } from './thumbmenu.svelte'
 
   // Миниатюра фото в библиотеке. Размер задаёт --size родителя (.grid в Library).
   let { p }: { p: Photo } = $props()
@@ -40,6 +41,7 @@
     )}
   onclick={(e) => drag.clickAllowed() && store.click(p.id, e)}
   ondblclick={() => store.addToCurrent([p.id])}
+  oncontextmenu={(e) => thumbmenu.open(e, p.id)}
   onkeydown={() => {}}
 >
   <!-- .im повторяет форму фото и вписан в квадратную ячейку: рамка идёт по самому фото -->

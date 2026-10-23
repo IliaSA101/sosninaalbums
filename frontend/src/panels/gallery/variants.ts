@@ -157,8 +157,12 @@ export function galleryOrders(lines: readonly GalleryLine[], family: FamilyFilte
   ]
 }
 
-// Подсказка плитки (051): название формы от Go; пусто — подсказки нет (у мозаики с 0.14 «Плотно»).
-export const tileTitle = (c: Pick<Choice, 'formName'>): string | undefined => c.formName || undefined
+// Хвост подсказки плитки (104): «подрезка до N %». Процент — целое вверх из Go (Choice.crop, не считаем здесь); 0 и нет поля — без хвоста.
+export const cropTail = (crop?: number): string => (crop && crop > 0 ? `подрезка до ${crop} %` : '')
+
+// Подсказка плитки (051): название формы от Go и, если раскладку подрезали, «· подрезка до N %»; пусто — подсказки нет.
+export const tileTitle = (c: { formName: string; crop?: number }): string | undefined =>
+  [c.formName, cropTail(c.crop)].filter(Boolean).join(' · ') || undefined
 
 // Подпись плитки «Похожие»: свёрнуты — «Похожие: N», раскрыты — «Свернуть».
 export const twinsLabel = (hidden: number, open: boolean): string => (open ? 'Свернуть похожие' : `Похожие: ${hidden}`)

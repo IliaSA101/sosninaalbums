@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 )
 
 // Лог в файл: запись, ротация, прореживание повторов.
@@ -47,7 +49,7 @@ func (w logWriter) Write(p []byte) (int, error) {
 
 // rotateLog переименовывает log.txt в log.old.txt, если он больше limit байт.
 func rotateLog(path string, limit int64) {
-	st, err := os.Stat(path)
+	st, err := library.StatLocal(path)
 	if err != nil || st.Size() <= limit {
 		return
 	}

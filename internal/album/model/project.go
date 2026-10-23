@@ -55,10 +55,13 @@ import (
 // 17 (общий на 0.23, новые поля 0.23 до выпуска ложатся сюда же, без нового номера): копии фото —
 // ключи `photos` вида `<ID файла>-<n>`, свой кадр `photos.*.asp`, фон альбома `albumBg` и
 // `spreads[].noAlbumBg`, версия записавшей программы `app` (спека 098, omitempty) — 0.22 файл не
-// откроет и не сольёт копии автосохранением.
+// откроет и не сольёт копии автосохранением;
+// 18 (общий на 0.24, новые поля 0.24 до выпуска ложатся сюда же, без нового номера): подрезка
+// `settings.crop` (спека 104, omitempty), новые буквы ключа раскладки «Разброс» (спека 105) — 0.23
+// файл не откроет и не выбросит подрезку автосохранением.
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 17
+const FormatVersion = 18
 
 type Settings struct {
 	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
@@ -81,6 +84,9 @@ type Settings struct {
 	// Bleed — обрез (вылет) от края файла по внешним краям разворота, мм (066): только полоса на
 	// экране, геометрию не меняет; 0 — полосы нет.
 	Bleed float64 `json:"bleed,omitempty"`
+	// Crop — подрезать фото, чтобы закрыть лист (104, crop.go): предел подрезки по стороне, %:
+	// 0 | 5 | 10 | 15 (ClampCrop); 0 — фото целиком. У листа (Sheet) — 0.
+	Crop int `json:"crop,omitempty"`
 }
 
 // DefaultSettings — новый альбом: layflat, через корешок «Только широкие» (FoldAny false,
@@ -125,7 +131,7 @@ type Spread struct {
 	// Caps — общий стиль подписей листа (030, fields.go); nil — у каждой подписи свой.
 	Caps *SheetCaps `json:"caps,omitempty"`
 	// Kind — вид разворота (031): "" — обычный, KindVignette — виньетка; Vig — её параметры
-	// (sheet.go). Места виньетки — та же сетка с ролями (Place.Role).
+	// (vignette.go). Места виньетки — та же сетка с ролями (Place.Role).
 	Kind string    `json:"kind,omitempty"`
 	Vig  *Vignette `json:"vig,omitempty"`
 	// Vars — поля шапки листа (031 dialog §4, fields.go); nil — свои пусты (VarsOf).
@@ -260,12 +266,13 @@ func New() *Project {
 
 // Params — геометрия для layout. Раскладка считает лист шириной 2·PageW, поэтому листу
 // (Sheet) отдаётся половина ширины и признак Sheet: без корешка и постраничных вариантов.
+// Lock всегда 0 (уровень проекта): раскладке разворота пару собирает LayoutIn.
 func (p *Project) Params() layout.Params {
 	s := p.Settings
 	if s.Sheet {
 		return layout.Params{PageW: s.PageW / 2, PageH: s.PageH, Margin: s.Margin, Gap: s.Gap, Layflat: true, Sheet: true}
 	}
-	return layout.Params{PageW: s.PageW, PageH: s.PageH, Margin: s.Margin, Gap: s.Gap, Layflat: s.Layflat, FoldAny: s.FoldAny}
+	return layout.Params{PageW: s.PageW, PageH: s.PageH, Margin: s.Margin, Gap: s.Gap, Layflat: s.Layflat, FoldAny: s.FoldAny, Crop: float64(s.Crop) / 100}
 }
 
 // Aspects — пропорции фото в ячейке «Авто»: свой кадр (Asp), иначе действующие пропорции файла
@@ -314,7 +321,7 @@ func (p *Project) aspectOf(id string, kind int) float64 {
 // Layout — действующая раскладка разворота: выбранная, если строится, иначе лучшая
 // в порядке ленты. best — ряд «в порядке ленты» (не пуст, если в развороте есть фото).
 func (p *Project) Layout(s *Spread) (r layout.Result, best []layout.Result, ok bool) {
-	asp, prm := p.Aspects(s.Photos), p.Params()
+	asp, prm := p.LayoutIn(s.Photos)
 	best = layout.Cached(asp, prm, RowLen(len(asp)))
 	if s.Layout != "" {
 		if r, ok := layout.Build(s.Layout, asp, prm); ok {
@@ -330,7 +337,8 @@ func (p *Project) Layout(s *Spread) (r layout.Result, best []layout.Result, ok b
 // SetLayout ставит раскладку; лучшую в порядке ленты храним как "", чтобы выбор
 // уже стоящей раскладки был холостой правкой.
 func (p *Project) SetLayout(s *Spread, key string) {
-	if best := layout.Cached(p.Aspects(s.Photos), p.Params(), RowLen(len(s.Photos))); len(best) > 0 && best[0].Key == key {
+	asp, prm := p.LayoutIn(s.Photos)
+	if best := layout.Cached(asp, prm, RowLen(len(s.Photos))); len(best) > 0 && best[0].Key == key {
 		key = ""
 	}
 	s.Layout = key
@@ -356,7 +364,9 @@ func (p *Project) KeepLayouts(before *Project) {
 			continue
 		}
 		// Фото те же и действующие пропорции те же — трогать нечего.
-		if !settings && slices.Equal(old.Photos, s.Photos) && slices.Equal(before.Aspects(old.Photos), p.Aspects(s.Photos)) {
+		oldAsp, oldPrm := before.LayoutIn(old.Photos)
+		asp, prm := p.LayoutIn(s.Photos)
+		if !settings && slices.Equal(old.Photos, s.Photos) && slices.Equal(oldAsp, asp) && oldPrm.Lock == prm.Lock {
 			continue
 		}
 		todo = append(todo, s)
@@ -378,7 +388,8 @@ func (p *Project) KeepLayouts(before *Project) {
 			s.Layout = ""
 			continue
 		}
-		if _, ok := layout.Build(cur.Key, p.Aspects(s.Photos), p.Params()); ok {
+		asp, prm := p.LayoutIn(s.Photos)
+		if _, ok := layout.Build(cur.Key, asp, prm); ok {
 			p.SetLayout(s, cur.Key)
 		} else {
 			s.Layout = ""

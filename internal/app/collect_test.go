@@ -16,6 +16,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum/collect"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -106,16 +107,17 @@ func (e *collectEnv) run(t *testing.T, all bool) (dir, msg, note string, stopped
 	if err != nil || !ok {
 		t.Fatalf("Collect = %v, %v", ok, err)
 	}
-	select {
-	case d := <-e.done:
-		if d[4].(bool) {
-			t.Fatal("collect:done пришло, пока флаг сбора стоит")
-		}
-		return d[0].(string), d[1].(string), d[2].(string), d[3].(bool)
-	case <-time.After(testkit.Limit(30 * time.Second)):
-		t.Fatal("сбор не закончился")
+	d, ok := testkit.WaitCh(t, e.done, testkit.Limit(30*time.Second), "сбор не закончился", func() string {
+		return fmt.Sprintf("collecting=%v; stopped=%v, stopCtx.Err=%v; DecodeBudget: занято %d пикс., ждут %d",
+			e.busy(), e.a.stopped.Load(), e.a.stopCtx.Err(), imgfile.DecodeBudget.Used(), imgfile.DecodeBudget.Waiting())
+	})
+	if !ok {
+		t.Fatal("сбор не закончился (стеки горутин — в логе выше)")
 	}
-	return
+	if d[4].(bool) {
+		t.Fatal("collect:done пришло, пока флаг сбора стоит")
+	}
+	return d[0].(string), d[1].(string), d[2].(string), d[3].(bool)
 }
 
 // busy — флаг сбора под замком App.

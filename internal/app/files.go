@@ -418,7 +418,7 @@ func (a *App) pruneBackups() {
 	if a.stopped.Load() {
 		return // выход: closeBackground уже ждёт фон
 	}
-	a.bg.Go(func() {
+	a.goBG(func() {
 		defer guard("резервные копии")
 		if err := a.backups.Prune(); err != nil {
 			log.Printf("резервные копии, чистка: %v", paths.NoPath(err))

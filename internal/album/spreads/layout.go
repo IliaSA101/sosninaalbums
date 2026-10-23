@@ -1,6 +1,7 @@
 package spreads
 
 import (
+	"math"
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -13,7 +14,7 @@ func SetLayout(p *model.Project, spreadID, key string) {
 	if s == nil {
 		return
 	}
-	asp, prm := p.Aspects(s.Photos), p.Params()
+	asp, prm := p.LayoutIn(s.Photos)
 	if r, ok := layout.Build(key, asp, prm); ok && foldAllowed(r, s, asp, prm) {
 		p.Unfreeze(s)
 		p.SetLayout(s, key)
@@ -37,7 +38,7 @@ func StepLayout(p *model.Project, spreadID, scope string, delta int) {
 	if !ok {
 		return
 	}
-	asp, prm := p.Aspects(s.Photos), p.Params()
+	asp, prm := p.LayoutIn(s.Photos)
 	var inOrder, rearranged []layout.Result
 	switch scope {
 	case "spread":
@@ -115,7 +116,7 @@ func choices(p *model.Project, spreadID string, have int) model.Choices {
 	if !ok {
 		return c
 	}
-	asp, prm := p.Aspects(s.Photos), p.Params()
+	asp, prm := p.LayoutIn(s.Photos)
 	row, _, more := model.AutoRow(asp, prm, cur.Key)
 	if have >= 0 {
 		if r, m := model.MoreRow(asp, prm, have); len(r) > len(row) {
@@ -135,12 +136,21 @@ func choices(p *model.Project, spreadID string, have int) model.Choices {
 	return c
 }
 
+// cropPct — подрезка раскладки для плитки: целый процент вверх (1,8 % → 2), 0 — без подрезки;
+// допуск гасит шум плавающей точки у ровных долей (0,05 → 5, а не 6).
+func cropPct(c float64) int {
+	if c <= 0 {
+		return 0
+	}
+	return int(math.Ceil(100*c - 1e-9))
+}
+
 // choiceRows — ряды подборки; у плиток семейство и похожие (041), похожие — в пределах ряда.
 func choiceRows(inOrder, rearranged []layout.Result, block layout.Block, prm layout.Params) model.ChoiceRows {
 	conv := func(rs []layout.Result) []model.Choice {
 		out := make([]model.Choice, len(rs))
 		for i, r := range rs {
-			out[i] = model.Choice{Key: r.Key, Rects: r.Rects}
+			out[i] = model.Choice{Key: r.Key, Rects: r.Rects, Crop: cropPct(r.Crop)}
 		}
 		describeRows(out, prm)
 		return out

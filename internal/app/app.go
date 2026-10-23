@@ -116,6 +116,9 @@ type App struct {
 	tplMu sync.Mutex // шаблоны сеток и templates.json (api.go, internal/prefs)
 	tpls  prefs.Templates
 
+	colors colorState // кэш цветов фото «С фото» окна выбора цвета (colors.go, 109)
+	pick   pickCache  // кадры пипетки (pickframe.go, 109)
+
 	// draftLocked — черновик не удалось убрать в .bad: писать в него нельзя, иначе затрём.
 	draftLocked atomic.Bool
 	// draftNewer — черновик записан более новой версией программы: в этой сессии
@@ -132,6 +135,8 @@ type App struct {
 	stopCancel context.CancelFunc
 	stopped    atomic.Bool
 	bg         sync.WaitGroup // сканирование (с прогревом) и экспорт
+	bgMu       sync.Mutex     // порядок goBG и closeBackground: Add не идёт вместе с Wait
+	bgClosed   bool           // closeBackground начат: новый фон не стартует
 	exporting  bool
 	exportDir  string // папка последнего экспорта: её открывает ShowInExplorer
 	// exportCancel — «Остановить» идущего экспорта (073), под mu; nil — выгрузки нет.
@@ -376,10 +381,27 @@ func (a *App) stopBackground() {
 // После него App не трогает диск: тесты удаляют свои папки сразу за этим.
 func (a *App) closeBackground() {
 	a.stopBackground()
+	a.bgMu.Lock()
+	a.bgClosed = true
+	a.bgMu.Unlock()
 	a.bg.Wait()
 	if a.cache != nil {
 		a.cache.Close()
 	}
+}
+
+// goBG запускает фон под ожиданием closeBackground. Голый bg.Go из горутины, не входящей в bg
+// (таймер автосохранения, обработчик окна), мог выполнить Add(1) из нуля в тот миг, когда Wait
+// просыпается, — паника WaitGroup «Add called concurrently with Wait». После closeBackground фон
+// не стартует (false): диск уже освобождён, тесты удаляют папки.
+func (a *App) goBG(fn func()) bool {
+	a.bgMu.Lock()
+	defer a.bgMu.Unlock()
+	if a.bgClosed {
+		return false
+	}
+	a.bg.Go(fn)
+	return true
 }
 
 // Общие с edit: паника в методе — в лог, а не в падение окна; ошибки правок.

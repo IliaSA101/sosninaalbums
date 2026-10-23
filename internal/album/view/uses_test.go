@@ -13,12 +13,12 @@ import (
 
 // Вхождения фото для карточки (084 design §3): порядок листов и видов, подписи, только чтение.
 
-// labels — подписи вхождений и индексы листов одной строкой на вхождение.
+// labels — подписи вхождений и индексы листов одной строкой на вхождение (остальные поля
+// проверяет TestPhotoUsesPick).
 func labels(uses []model.PhotoUse) []string {
 	out := make([]string, len(uses))
 	for i, u := range uses {
-		b, _ := json.Marshal(u)
-		out[i] = string(b)
+		out[i] = use(u.Sheet, u.Label)
 	}
 	return out
 }

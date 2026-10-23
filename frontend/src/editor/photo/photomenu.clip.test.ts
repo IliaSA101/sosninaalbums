@@ -21,6 +21,11 @@ const base: MenuCtx = {
   framed: false,
   copyable: true,
   pasteable: true,
+  allFlipH: false,
+  allFlipV: false,
+  tiltOk: true,
+  scopes: [{ scope: 'spread', label: 'Весь разворот' }],
+  uses: false,
 }
 const KEYS: Record<string, string> = { cutItems: 'Ctrl+X', copyItems: 'Ctrl+C', pasteItems: 'Ctrl+V', duplicateItems: 'Ctrl+D' } // X и D в меню не идут
 const hint = (cmd: string) => KEYS[cmd] ?? ''
@@ -36,20 +41,20 @@ describe('группа буфера в меню фото', () => {
   })
   it('стоит сразу после «Крупного просмотра», отдельной группой', () => {
     const m = menu({})
-    expect(ids(m).slice(0, 4)).toEqual(['preview', ...CLIP, 'copy'])
+    expect(ids(m).slice(0, 4)).toEqual(['preview', ...CLIP, 'turn'])
     expect(m.find((i) => i.id === 'clipCopy')?.sep).toBe(true)
-    expect(m.find((i) => i.id === 'copy')?.sep).toBe(true) // «Копировать имя файла» отделено от группы
+    expect(m.find((i) => i.id === 'turn')?.sep).toBe(true) // «Повернуть ▸» отделено от группы
     expect(m.filter((i) => CLIP.includes(i.id) && i.sep)).toHaveLength(1)
   })
   it('нет просмотра (несколько фото) — группа первая и без линии сверху', () => {
     const m = menu({ places: 2, photos: 2 })
     expect(ids(m).slice(0, 2)).toEqual(CLIP)
     expect(m[0].sep).toBeFalsy()
-    expect(m[2]).toMatchObject({ id: 'copy', sep: true })
+    expect(m[2]).toMatchObject({ id: 'turn', sep: true })
   })
-  it('пустое место: группа первая, файловых пунктов нет, линия перед кадром', () => {
+  it('пустое место: группа первая, файловых пунктов нет, линия перед формой', () => {
     const m = menu({ photos: 0, grid: true })
-    expect(ids(m).slice(0, 3)).toEqual([...CLIP, 'rounded'])
+    expect(ids(m).slice(0, 3)).toEqual([...CLIP, 'shape'])
     expect(m[2].sep).toBe(true)
   })
   it('серость: нечего копировать — серое «Копировать»; буфер пуст — серая «Вставить»', () => {
@@ -65,8 +70,8 @@ describe('группа буфера в меню фото', () => {
   it('нет функции «Копировать и вставить» — группы нет, линия не висит', () => {
     const m = menu({}, (f) => f !== 'clipboard')
     expect(ids(m).some((id) => CLIP.includes(id))).toBe(false)
-    expect(ids(m).slice(0, 2)).toEqual(['preview', 'copy'])
-    expect(m[1].sep).toBeFalsy()
+    expect(ids(m).slice(0, 2)).toEqual(['preview', 'turn'])
+    expect(m[1].sep).toBe(true)
   })
   it('на «Простом» меню нет совсем', () => {
     expect(menu({}, (f) => can(f, 'simple'))).toEqual([])
@@ -120,7 +125,8 @@ describe('меню надписи', () => {
   it('«Ручная»: «Слой ▸» с подменю между группой и «Удалить»', () => {
     const m = menu({ ...t, grid: true })
     expect(ids(m)).toEqual([...CLIP, 'layer', 'delete'])
-    expect(m.find((i) => i.id === 'layer')).toMatchObject({ sub: true, sep: true })
+    expect(m.find((i) => i.id === 'layer')).toMatchObject({ sep: true })
+    expect(m.find((i) => i.id === 'layer')?.sub?.map((i) => i.arg)).toEqual(['front', 'up', 'down', 'back'])
     expect(m[0].sep).toBeFalsy()
   })
   it('без слоёв на уровне — нет «Слоя»; «Удалить (N)» для группы', () => {

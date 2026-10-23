@@ -2,18 +2,12 @@
 // Состояние и вызовы Go — copyask.svelte.ts; окно — shell/ask/CopyAskDialog.svelte.
 import { baseOf, copyReq } from '../core/copies'
 import type { UsedAt } from '../core/types'
+import { lineOf, type UseLine } from '../words/whereuse'
 
 export type CopyAnswer = 'cancel' | 'move' | 'copy'
 
 export const WHERE_MAX = 5 // сколько мест перечислять в окне
-
-// Строка «где стоит»: лист (индекс в ряду холста, как у PhotoUse.sheet), ссылка и вид «место».
-export interface Where {
-  sheet: number
-  link: string // «Разворот 3»
-  kind: string // «место»
-  ref: string // запись места — её выделяем при переходе
-}
+export const ALSO_MAX = 3 // сколько прочих вхождений (фон, стикер…) в строке «Ещё» — окно не растёт
 
 // Стоит ли файл в месте листа: «где стоит» от Go считает места всех копий (Places).
 const placed = (u: UsedAt) => u.places > 0
@@ -23,26 +17,24 @@ export function filesOf(ids: readonly string[]): string[] {
   return [...new Set(ids.map(baseOf))]
 }
 
-// Места (не фоны, стикеры и рамочки: окно про «стоит в месте») всех брошенных фото, по порядку.
-export function whereOf(used: readonly UsedAt[]): Where[] {
-  const out: Where[] = []
-  for (const u of used.filter(placed)) {
-    for (const x of u.uses ?? []) {
-      if (x.sheet < 0) continue
-      const i = x.label.indexOf(' — ')
-      const kind = i < 0 ? '' : x.label.slice(i + 3)
-      if (kind !== 'место') continue
-      out.push({ sheet: x.sheet, link: x.label.slice(0, i), kind, ref: x.ref || u.id })
-    }
-  }
-  return out
+// Вхождения всех стоящих брошенных фото, по порядку Go; keep — какие брать. Вид — по kind, подпись не разбираем.
+function usesOf(used: readonly UsedAt[], keep: (kind: string) => boolean): UseLine[] {
+  return used.filter(placed).flatMap((u) => (u.uses ?? []).filter((x) => keep(x.kind)).map(lineOf))
 }
+
+// Места (не фоны, стикеры и рамочки: окно про «стоит в месте») всех брошенных фото, по порядку.
+export const whereOf = (used: readonly UsedAt[]): UseLine[] => usesOf(used, (k) => k === 'place')
+
+// Остальное, что тоже держит эти фото: фон, стикер, рамочка, фон альбома — для строки «Ещё».
+export const alsoOf = (used: readonly UsedAt[]): UseLine[] => usesOf(used, (k) => k !== 'place')
 
 export interface CopyAskText {
   title: string
   lead: string
-  where: Where[]
+  where: UseLine[]
   more: number // сколько мест не показано
+  also: UseLine[] // ссылки «Ещё: …» (не места), до ALSO_MAX
+  alsoMore: number // сколько из них не показано
   rest: string // про свободные фото; '' — все стоят
   move: boolean // «Перенести сюда» доступно
   hint: string // почему нет «Перенести сюда»; '' — кнопка есть
@@ -53,6 +45,7 @@ export function copyAskText(ids: readonly string[], used: readonly UsedAt[]): Co
   const files = filesOf(ids).length
   const some = used.filter(placed)
   const all = whereOf(used)
+  const also = alsoOf(used)
   // Перенос — только если у каждого стоящего фото ровно одно место: иначе неясно, какое переносить.
   const move = some.length > 0 && some.every((u) => u.move !== '')
   return {
@@ -60,6 +53,8 @@ export function copyAskText(ids: readonly string[], used: readonly UsedAt[]): Co
     lead: files <= 1 ? 'Это фото уже стоит:' : `${some.length} из ${files} фото уже ${some.length === 1 ? 'стоит' : 'стоят'} в альбоме`,
     where: all.slice(0, WHERE_MAX),
     more: Math.max(0, all.length - WHERE_MAX),
+    also: also.slice(0, ALSO_MAX),
+    alsoMore: Math.max(0, also.length - ALSO_MAX),
     rest: files > some.length ? 'Остальные фото встанут в любом случае.' : '',
     move,
     hint: !move && some.length > 0 ? 'Перенести одно из мест — перетащите его на холсте.' : '',

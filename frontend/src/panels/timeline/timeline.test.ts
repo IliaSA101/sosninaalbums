@@ -9,12 +9,15 @@ import {
   chipW,
   cutState,
   cutTip,
+  glueText,
   groupW,
   isBlank,
   joinState,
   joinTip,
   mergeCount,
   tipLeft,
+  VIG_CUT_WHY,
+  VIG_WHY,
 } from './timeline'
 import type { SpreadView } from '../../base/core/types'
 
@@ -79,27 +82,72 @@ describe('tipLeft и centerScroll', () => {
   })
 })
 
-describe('joinState и cutState (094)', () => {
+describe('joinState и cutState (094, 103)', () => {
   const grid = (s: SpreadView): SpreadView => ({ ...s, grid: true }) as SpreadView
+  const vig = (s: SpreadView): SpreadView => ({ ...s, grid: true, kind: 'vignette' }) as SpreadView
+  const sheet = { one: 'лист', of: 'листа', many: 'листы', plural: ['лист', 'листа', 'листов'] } as never
 
-  it('joinState: сетка, сверх максимума, можно — тексты черты', () => {
-    expect(joinState([grid(sp(1)), sp(1)], 0, 64)).toEqual({ ok: false, why: 'Сначала «Вернуть авто»' })
-    expect(joinState([sp(1), grid(sp(1))], 0, 64).why).toBe('Сначала «Вернуть авто»')
-    expect(joinState([sp(3), sp(4)], 0, 6)).toEqual({ ok: false, why: 'Нельзя склеить: вместе 7 фото, максимум 6' })
-    const ok = joinState([sp(3), sp(3)], 0, 6)
-    expect(ok).toEqual({ ok: true, why: '' })
-    expect(joinTip(ok, false)).toBe('Ctrl+щелчок — склеить')
-    expect(joinTip(ok, true)).toBe('⌘+щелчок — склеить')
-    expect(joinTip({ ok: false, why: 'Сначала «Вернуть авто»' }, false)).toBe('Сначала «Вернуть авто»')
-    expect(cutTip(false)).toBe('Ctrl+щелчок — разрезать')
-    expect(cutTip(true)).toBe('⌘+щелчок — разрезать')
+  it('joinState: ручной — ask, виньетка — причина, сверх максимума — причина, «Авто» — просто можно', () => {
+    expect(joinState([grid(sp(1)), sp(1)], 0, 64)).toEqual({ ok: true, why: '', ask: 'У разворота 1 ручная раскладка' })
+    expect(joinState([sp(1), sp(1), grid(sp(1))], 1, 64).ask).toBe('У разворота 3 ручная раскладка')
+    expect(joinState([sp(1), grid(sp(1)), grid(sp(1))], 1, 64).ask).toBe('У разворотов 2 и 3 ручная раскладка')
+    expect(joinState([sp(1), grid(sp(1))], 0, 64, sheet).ask).toBe('У листа 2 ручная раскладка')
+    expect(joinState([vig(sp(1)), sp(1)], 0, 64)).toEqual({ ok: false, why: VIG_WHY })
+    expect(joinState([sp(1), vig(sp(1))], 0, 64).why).toBe(VIG_WHY)
+    expect(joinState([sp(3), grid(sp(4))], 0, 6)).toEqual({ ok: false, why: 'Нельзя склеить: вместе 7 фото, максимум 6' })
+    expect(joinState([sp(3), sp(3)], 0, 6)).toEqual({ ok: true, why: '' })
   })
 
-  it('cutState: первое фото — пункта нет, сетка — серый с причиной', () => {
+  it('joinTip и cutTip: Ctrl / ⌘, у ручного — что будет с местами', () => {
+    const ok = joinState([sp(3), sp(3)], 0, 6)
+    expect(joinTip(ok, false)).toBe('Ctrl+щелчок — склеить')
+    expect(joinTip(ok, true)).toBe('⌘+щелчок — склеить')
+    const man = joinState([sp(1), grid(sp(1)), grid(sp(1))], 1, 64)
+    expect(joinTip(man, false)).toBe('Ctrl+щелчок — склеить. У разворотов 2 и 3 ручная раскладка: места вернутся к «Авто», сначала спросим')
+    expect(joinTip(man, true).startsWith('⌘+щелчок — склеить. ')).toBe(true)
+    expect(joinTip({ ok: false, why: VIG_WHY }, false)).toBe(VIG_WHY)
+    expect(cutTip(false)).toBe('Ctrl+щелчок — разрезать')
+    expect(cutTip(true)).toBe('⌘+щелчок — разрезать')
+    expect(cutTip(false, 'У разворота ручная раскладка')).toBe(
+      'Ctrl+щелчок — разрезать. У разворота ручная раскладка: места вернутся к «Авто», сначала спросим',
+    )
+  })
+
+  it('cutState: первое фото — пункта нет, ручной — ask, виньетка — серый с причиной', () => {
     expect(cutState(sp(3), 0).show).toBe(false)
     expect(cutState(sp(3), -1).show).toBe(false)
     expect(cutState(sp(3), 3).show).toBe(false) // за последним фото резать нечего
     expect(cutState(sp(3), 2)).toEqual({ show: true, ok: true, why: '' })
-    expect(cutState(grid(sp(3)), 1)).toEqual({ show: true, ok: false, why: 'Сначала «Вернуть авто»' })
+    expect(cutState(grid(sp(3)), 1)).toEqual({ show: true, ok: true, why: '', ask: 'У разворота ручная раскладка' })
+    expect(cutState(grid(sp(3)), 1, sheet).ask).toBe('У листа ручная раскладка')
+    expect(cutState(vig(sp(3)), 1)).toEqual({ show: true, ok: false, why: VIG_CUT_WHY })
+  })
+})
+
+describe('glueText (103)', () => {
+  const sheet = { one: 'лист', of: 'листа', many: 'листы', plural: ['лист', 'листа', 'листов'] } as never
+
+  it('развороты: склейка и разрез', () => {
+    expect(glueText('join', [2], 2)).toEqual({
+      title: 'Склеить развороты?',
+      ask: 'У разворота 2 ручная раскладка. Ваши правки мест сбросятся. Склеить развороты 2 и 3?',
+      ok: 'Склеить',
+    })
+    expect(glueText('join', [2, 3], 2).ask).toBe(
+      'У разворотов 2 и 3 ручная раскладка. Ваши правки мест сбросятся. Склеить развороты 2 и 3?',
+    )
+    expect(glueText('cut', [2], 2, undefined, 4)).toEqual({
+      title: 'Разрезать разворот?',
+      ask: 'У разворота 2 ручная раскладка. Ваши правки мест сбросятся. Разрезать разворот 2 перед фото 4?',
+      ok: 'Разрезать',
+    })
+  })
+
+  it('альбом листов: «лист» и «листы»', () => {
+    expect(glueText('join', [1], 1, sheet).title).toBe('Склеить листы?')
+    expect(glueText('join', [1, 2], 1, sheet).ask).toBe('У листов 1 и 2 ручная раскладка. Ваши правки мест сбросятся. Склеить листы 1 и 2?')
+    expect(glueText('cut', [3], 3, sheet, 2).ask).toBe(
+      'У листа 3 ручная раскладка. Ваши правки мест сбросятся. Разрезать лист 3 перед фото 2?',
+    )
   })
 })

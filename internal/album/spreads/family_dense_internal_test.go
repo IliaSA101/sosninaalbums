@@ -33,11 +33,11 @@ func TestChoiceFamilyDense(t *testing.T) {
 		if dense == 0 {
 			t.Errorf("%g/%g: «Плотно» пусто среди %d плиток", mg[0], mg[1], len(rows))
 		}
-		// «Что соберётся» держится семьи сборки (FamilyOf): её фильтр и Pick те же, что были.
+		// «Что соберётся» (104) — семья плитки, как в галерее и в фильтре окна.
 		for _, r := range variety.RowResults(asp, prm, 24) {
 			f := forms.Of(r.Key, r.Rects, prm)
-			if one := describeOne(r, prm); one.Family != string(variety.FamilyOf(f)) {
-				t.Errorf("%g/%g %s: describeOne %q, ждали %q", mg[0], mg[1], r.Key, one.Family, variety.FamilyOf(f))
+			if one := describeOne(r, prm); one.Family != string(variety.TileFamily(f, r.Rects, prm)) {
+				t.Errorf("%g/%g %s: describeOne %q, ждали %q", mg[0], mg[1], r.Key, one.Family, variety.TileFamily(f, r.Rects, prm))
 			}
 		}
 	}

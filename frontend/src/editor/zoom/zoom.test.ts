@@ -16,6 +16,7 @@ import {
   spaceTap,
   wheelFactor,
   isZoomWheel,
+  rowWheelAllowed,
   wheelPan,
   zoomAt,
   zoomPos,
@@ -242,7 +243,7 @@ describe('zoomPos / posZoom', () => {
   })
 })
 
-// «Вписать» без полосы под листом (владелец 2026-10-21, owner-ux §1 п. 5; было 2026-10-17 — полоса MINI_GAP + MINI_H):
+// «Вписать» без полосы под листом (владелец 2026-10-21, owner-ux §1.9; было 2026-10-17 — полоса MINI_GAP + MINI_H):
 // мини-панель у нижнего фото встаёт поверх ленты разворотов (minipanel.test.ts). Механизм padB остаётся — проверка с явными
 // числами ниже.
 describe('вписать: полоса под листом', () => {
@@ -304,3 +305,19 @@ describe('вписать: полоса под листом', () => {
   })
 })
 const v0 = (): Viewport => ({ w: 1000, h: 600, k0: 1, sw: 600, ph: 300 })
+
+describe('rowWheelAllowed', () => {
+  const base = { dragging: false, busy: false, pressed: false, eyedrop: false }
+  it('свободный холст и перенос фото — ряд листается', () => {
+    expect(rowWheelAllowed(base)).toBe(true)
+    expect(rowWheelAllowed({ ...base, dragging: true, busy: true, pressed: true })).toBe(true)
+  })
+  it('жест правки — ряд ждёт', () => {
+    expect(rowWheelAllowed({ ...base, busy: true })).toBe(false)
+    expect(rowWheelAllowed({ ...base, pressed: true })).toBe(false)
+  })
+  it('режим пипетки — ряд не листается (даже при переносе)', () => {
+    expect(rowWheelAllowed({ ...base, eyedrop: true })).toBe(false)
+    expect(rowWheelAllowed({ ...base, eyedrop: true, dragging: true })).toBe(false)
+  })
+})

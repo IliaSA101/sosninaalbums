@@ -22,6 +22,7 @@ vi.mock('../../base/core/store.svelte', () => ({
 }))
 
 import { edit, SEND_DELAY } from './edit.svelte'
+import { colorLive } from '../../base/color/colorlive.svelte'
 import { Api, store } from '../../base/core/store.svelte'
 import type { CaptionView, SheetCaps, SpreadView, TextStyle } from '../../base/core/types'
 
@@ -133,5 +134,43 @@ describe('insertField вне ввода', () => {
     edit.target = null
     await edit.insertField('Имя')
     expect(Api.SetCaption).toHaveBeenLastCalledWith('p1', '{Фамилия}{Имя}', expect.any(String))
+  })
+})
+
+describe('previewColor: живой показ цвета (109)', () => {
+  it('блок текста — только он, без вызовов Go', () => {
+    edit.sel = { kind: 'text', spread: 's1', id: 't1' }
+    edit.previewColor('#aabbcc')
+    expect(colorLive.color('text:t1', '#000000')).toBe('#aabbcc')
+    expect(colorLive.color('text:t2', '#000000')).toBe('#000000')
+    expect(Api.SetTextStyle).not.toHaveBeenCalled()
+    edit.previewColor(null)
+    expect(colorLive.color('text:t1', '#000000')).toBe('#000000')
+  })
+
+  it('подпись без общего стиля — только она', () => {
+    selectCaption(spread({ captions: [caption(), caption({ photo: 'p2' })] }))
+    edit.previewColor('#aabbcc')
+    expect(colorLive.color('cap:p1', '')).toBe('#aabbcc')
+    expect(colorLive.color('cap:p2', '')).toBe('')
+    edit.previewColor(null)
+  })
+
+  it('previewColor при общем стиле листа — все подписи листа', () => {
+    selectCaption(spread({ caps, captions: [caption(), caption({ photo: 'p2' })] }))
+    edit.previewColor('#aabbcc')
+    expect(colorLive.color('cap:p1', '')).toBe('#aabbcc')
+    expect(colorLive.color('cap:p2', '')).toBe('#aabbcc')
+    expect(Api.SetSheetCaps).not.toHaveBeenCalled()
+    edit.previewColor(null)
+    expect(colorLive.color('cap:p2', '')).toBe('')
+  })
+
+  it('ничего не выделено — показа нет; setStyle отдаёт промис правки для commit', async () => {
+    edit.sel = null
+    edit.previewColor('#aabbcc')
+    expect(colorLive.cur).toBeNull()
+    selectCaption(spread())
+    expect(edit.setStyle({ color: '#112233' })).toBeInstanceOf(Promise)
   })
 })

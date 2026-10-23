@@ -1,20 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { canVary, deleteLabel, menuPos, setupItem, stripItems, varyLabel, vignetteItem } from './spreadmenu'
-
-const view = { w: 1000, h: 600 }
-const size = { w: 200, h: 36 }
-
-describe('menuPos', () => {
-  it('влезает — остаётся у курсора', () => {
-    expect(menuPos(300, 200, size, view)).toEqual({ x: 300, y: 200 })
-  })
-  it('у правого и нижнего края — сдвигается внутрь с отступом', () => {
-    expect(menuPos(950, 590, size, view)).toEqual({ x: 792, y: 556 })
-  })
-  it('у левого и верхнего края — не меньше отступа', () => {
-    expect(menuPos(-5, 0, size, view)).toEqual({ x: 8, y: 8 })
-  })
-})
+import { cutState, joinState, VIG_CUT_WHY, VIG_WHY } from './timeline'
+import type { SpreadView } from '../../base/core/types'
+import { canVary, deleteLabel, insertItems, setupItem, stripItems, varyLabel, vignetteItem } from './spreadmenu'
 
 describe('deleteLabel', () => {
   it('одна группа — единственное число, несколько — с числом', () => {
@@ -77,7 +64,7 @@ describe('stripItems (094)', () => {
   const all = () => true
   const cut = { show: true, ok: true, why: '' }
   const join = { ok: true, why: '' }
-  const grayCut = { show: true, ok: false, why: 'Сначала «Вернуть авто»' }
+  const grayCut = { show: true, ok: false, why: VIG_CUT_WHY }
 
   it('Название… / Разрезать перед этим фото / Склеить со следующим: одна группа, по уровню, серые с причиной', () => {
     expect(stripItems(1, all, cut, join)).toEqual({ rename: true, cut: { ok: true, why: '' }, join: { ok: true, why: '' } })
@@ -87,15 +74,44 @@ describe('stripItems (094)', () => {
     // Серые несут причину черты.
     expect(stripItems(1, all, grayCut, { ok: false, why: 'Нельзя склеить: вместе 70 фото, максимум 64' })).toEqual({
       rename: true,
-      cut: { ok: false, why: 'Сначала «Вернуть авто»' },
+      cut: { ok: false, why: VIG_CUT_WHY },
       join: { ok: false, why: 'Нельзя склеить: вместе 70 фото, максимум 64' },
     })
     // Первое фото (show = нет) и последняя группа (join не задан) — пунктов нет.
     expect(stripItems(1, all, { ...cut, show: false }, undefined)).toEqual({ rename: true, cut: null, join: null })
   })
 
+  it('ручной разворот (103): «Склеить» и «Разрезать» активны, виньетка — серые с причиной', () => {
+    const sp = (extra: object) => ({ id: 'a', photos: ['p1', 'p2', 'p3'], rects: [], ...extra }) as unknown as SpreadView
+    const spreads = [sp({ grid: true }), sp({ id: 'b' })]
+    const items = stripItems(1, all, cutState(spreads[0], 1), joinState(spreads, 0, 64))
+    expect(items.cut).toEqual({ ok: true, why: '' })
+    expect(items.join).toEqual({ ok: true, why: '' })
+    const vig = [sp({ grid: true, kind: 'vignette' }), sp({ id: 'b' })]
+    const gray = stripItems(1, all, cutState(vig[0], 1), joinState(vig, 0, 64))
+    expect(gray.cut).toEqual({ ok: false, why: VIG_CUT_WHY })
+    expect(gray.join).toEqual({ ok: false, why: VIG_WHY })
+  })
+
   it('при нескольких выделенных их нет', () => {
     expect(stripItems(2, all, cut, join)).toEqual({ rename: false, cut: null, join: null })
     expect(stripItems(5, all, cut, join)).toEqual({ rename: false, cut: null, join: null })
+  })
+})
+
+describe('insertItems (103)', () => {
+  const spread = { one: 'разворот' }
+  it('одна группа — «перед» и «после», по порядку', () => {
+    expect(insertItems(1, spread)).toEqual([
+      { where: 'before', label: 'Вставить разворот перед' },
+      { where: 'after', label: 'Вставить разворот после' },
+    ])
+  })
+  it('у альбома листов — «лист»', () => {
+    expect(insertItems(1, { one: 'лист' }).map((i) => i.label)).toEqual(['Вставить лист перед', 'Вставить лист после'])
+  })
+  it('несколько выделенных групп — пунктов нет', () => {
+    expect(insertItems(2, spread)).toEqual([])
+    expect(insertItems(0, spread)).toEqual([])
   })
 })

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { portal } from '../../base/ui/portal'
   import { tip, tipped } from '../../base/ui/tip.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import { PLACE_ADD_ITEMS } from './placeadd'
@@ -16,12 +17,6 @@
   const stop = (e: PointerEvent) => e.stopPropagation()
   // Кнопки ленты не забирают фокус у редактора текста: курсор остаётся в нём.
   const keepFocus = (e: MouseEvent) => e.preventDefault()
-
-  // Список переезжает в body: лента обрезается и сдвинута transform (как у MirrorMenu).
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node)
-    return { destroy: () => node.remove() }
-  }
 
   function toggle() {
     if (!open) {

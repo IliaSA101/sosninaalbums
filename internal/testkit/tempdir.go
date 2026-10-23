@@ -3,6 +3,7 @@ package testkit
 import (
 	"os"
 	"regexp"
+	"runtime/debug"
 	"sync"
 	"testing"
 	"time"
@@ -17,13 +18,25 @@ type hooks struct {
 	fns  []func()
 }
 
-// run выполняет действия в обратном порядке регистрации, один раз.
-func (h *hooks) run() {
+// run выполняет действия в обратном порядке регистрации, один раз. Паника действия не валит
+// весь бинарник без имени теста и стека (так терялся след редкой паники closeBackground): она
+// становится ошибкой теста с именем и полным стеком места паники, остальные действия идут дальше.
+func (h *hooks) run(t testing.TB) {
 	h.once.Do(func() {
 		for i := len(h.fns) - 1; i >= 0; i-- {
-			h.fns[i]()
+			runHook(t, h.fns[i])
 		}
 	})
+}
+
+// runHook вызывает fn; паника — t.Errorf с именем теста и стеком.
+func runHook(t testing.TB, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("паника в действии BeforeRemove теста %s: %v\n%s", t.Name(), r, debug.Stack())
+		}
+	}()
+	fn()
 }
 
 var (
@@ -41,7 +54,7 @@ func hooksOf(t testing.TB) *hooks {
 		h = &hooks{}
 		byTest[t] = h
 		t.Cleanup(func() {
-			h.run()
+			h.run(t)
 			hooksMu.Lock()
 			delete(byTest, t)
 			hooksMu.Unlock()
@@ -86,7 +99,7 @@ func TempDir(t testing.TB) string {
 	}
 	h := hooksOf(t)
 	t.Cleanup(func() {
-		h.run()
+		h.run(t)
 		if err := removeAll(dir, removeTimeout); err != nil {
 			t.Errorf("TempDir RemoveAll cleanup: %v", err)
 		}

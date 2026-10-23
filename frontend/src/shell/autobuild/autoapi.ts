@@ -34,16 +34,19 @@ export const sigsFn: SigsFn = (ids) => Api.PrepareSigs([...ids])
 
 // Начальные значения окна: память окна; в пересборке — настройки последней сборки, вариант на 1 больше (078, design §9.3)
 export function savedOf(d: PickResult, famOn: boolean, grayOn: boolean): ConstructorParameters<typeof AutoDialog>[2] {
-  const mem = {
-    spreads: modes.autoSpreads,
+  // 107: режим альбома помнит всё, кроме числа разворотов: оно — столько, сколько голых сейчас (AutoPlan.album)
+  const album = d.from === 'album'
+  const mem: ConstructorParameters<typeof AutoDialog>[2] = {
+    spreads: album ? null : modes.autoSpreads,
     range: modes.autoRange,
     series: modes.autoSeries,
-    per: modes.autoPer,
-    by: modes.autoBy,
+    per: album ? null : modes.autoPer,
+    by: album ? 'spreads' : modes.autoBy,
     variety: modes.autoVariety,
     families: famOn ? modes.autoFamilies : [],
     similar: modes.autoSimilar,
     gray: modes.autoGray,
+    ...(album ? { album } : {}),
   }
   const la = d.again ? store.lastAuto : null
   if (!la) return mem

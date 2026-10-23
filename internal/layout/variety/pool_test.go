@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
+	"github.com/IliaSA101/sosninaalbums/internal/layout/forms"
 )
 
 // TestPoolKeysBuild: каждый ключ пула строится layout.Build на тех же пропорциях и даёт те же
@@ -97,10 +98,10 @@ func checkPoolOrder(t *testing.T, asp []float64, pool []Cand, row, extra []layou
 			}
 		case c.Formed && !c.InRow:
 			t.Errorf("%d фото: форма %q вне ряда «Авто»", len(asp), c.Key)
-		case !c.InRow && c.Key == extraOf(asp, geomSq, 24).mid:
-			// «центр крупнее» (0.23-q6): форма вне ряда без Formed, семейство «Фигуры» — сборка его не берёт
-			if c.Family != Figure {
-				t.Errorf("%d фото: центр %q с семейством %q", len(asp), c.Key, c.Family)
+		case !c.InRow && c.Manual:
+			// «центр крупнее» (0.23-q6) и «Разброс» (105): форма вне ряда без Formed, семейство «Фигуры» — сборка их не берёт
+			if c.Family != Figure || !extraOf(asp, geomSq, 24).manual[c.Key] {
+				t.Errorf("%d фото: ручная %q с семейством %q", len(asp), c.Key, c.Family)
 			}
 		case !c.InRow && (!layout.IsPaged(c.Key) || !pageMod.MatchString(c.Key)):
 			t.Errorf("лишний вариант не страницы с модификатором: %q", c.Key)
@@ -121,17 +122,24 @@ func TestPoolEdges(t *testing.T) {
 
 // checkExtraRow — ряд «Других вариантов» got набора asp: без повторов и ключей ряда «Авто», строится,
 // по убыванию оценки в квантах (ничья — по ключу); каждый — воздух, featured или «центр крупнее».
-// Возвращает, сколько в нём featured и «центров».
-func checkExtraRow(t *testing.T, asp []float64, got []layout.Result) (feat, mid int) {
+// Возвращает, сколько в нём featured, «центров» и плиток «Разброса».
+func checkExtraRow(t *testing.T, asp []float64, got []layout.Result) (feat, mid, scat int) {
 	t.Helper()
 	row := RowResults(asp, geomSq, 24)
 	seen := map[string]bool{}
-	kinds, center := extraOf(asp, geomSq, 24).kind, rowOf(asp, geomSq, 24).mid
-	for i, x := range got {
-		if kinds[x.Key] != NoKind {
+	e := extraOf(asp, geomSq, 24)
+	kinds, manual := e.kind, e.manual
+	var prev layout.Result // прошлый не-ручной: ручные стоят в начале и в порядке оценки не участвуют
+	for _, x := range got {
+		if manual[x.Key] {
+			// центр крупнее (0.23-q6) и «Разброс» (105): свой слот, не воздух и не featured
+			if forms.Of(x.Key, x.Rects, geomSq) == forms.Scatter {
+				scat++
+			} else {
+				mid++
+			}
+		} else if kinds[x.Key] != NoKind {
 			feat++
-		} else if center != nil && center.Key == x.Key {
-			mid++ // «центр крупнее» (0.23-q6): свой слот, не воздух и не featured
 		} else if !pageMod.MatchString(x.Key) {
 			t.Errorf("%d фото: %q — не воздух и не featured", len(asp), x.Key)
 		}
@@ -142,15 +150,17 @@ func checkExtraRow(t *testing.T, asp []float64, got []layout.Result) (feat, mid 
 		if r, ok := layout.Build(x.Key, asp, geomSq); !ok || !slices.Equal(r.Rects, x.Rects) {
 			t.Errorf("%d фото: %q не строится", len(asp), x.Key)
 		}
-		if i == 0 {
+		if manual[x.Key] {
 			continue
 		}
-		prev := got[i-1]
-		if qa, qb := quanta(prev.Score), quanta(x.Score); qa < qb || qa == qb && prev.Key > x.Key {
-			t.Errorf("%d фото: порядок нарушен на %d (%q, %q)", len(asp), i, prev.Key, x.Key)
+		if prev.Key != "" {
+			if qa, qb := quanta(prev.Score), quanta(x.Score); qa < qb || qa == qb && prev.Key > x.Key {
+				t.Errorf("%d фото: порядок нарушен (%q, %q)", len(asp), prev.Key, x.Key)
+			}
 		}
+		prev = x
 	}
-	return feat, mid
+	return feat, mid, scat
 }
 
 // TestExtra: «Другие варианты» — вне ряда «Авто», строятся, по убыванию оценки (ничья — по ключу),
@@ -175,10 +185,10 @@ func TestExtra(t *testing.T) {
 		if !Cached(asp, geomSq, 24) {
 			t.Errorf("%d фото: после Extra ряд не в кэше", len(asp))
 		}
-		feat, mid := checkExtraRow(t, asp, got)
-		longestAir, longestFeat = max(longestAir, len(got)-feat-mid), max(longestFeat, feat)
-		if len(got)-feat-mid > airLimit || feat > featLimit || mid > midLimit || len(got) > ExtraLimit {
-			t.Fatalf("%d фото: «Других вариантов» %d (featured %d, центр %d)", len(asp), len(got), feat, mid)
+		feat, mid, scat := checkExtraRow(t, asp, got)
+		longestAir, longestFeat = max(longestAir, len(got)-feat-mid-scat), max(longestFeat, feat)
+		if len(got)-feat-mid-scat > airLimit || feat > featLimit || mid > midLimit || scat > scatterLimit || len(got) > ExtraLimit {
+			t.Fatalf("%d фото: «Других вариантов» %d (featured %d, центр %d, разброс %d)", len(asp), len(got), feat, mid, scat)
 		}
 		if feat > 0 && len(asp) < featLo {
 			t.Fatalf("%d фото: featured %d у меньше %d фото", len(asp), feat, featLo)

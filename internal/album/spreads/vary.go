@@ -47,7 +47,7 @@ func Prepare(job PlanJob, photos []model.PhotoInfo, o model.AutoOpts) Prep {
 		for i, g := range w.pl.Groups {
 			asps[i] = job.asp[g[0]:g[1]]
 		}
-		w.pools = pools(asps, job.prm, poolLv(level(o.Variety), allowOf(o.Families)), o.Variant >= 2)
+		w.pools = pools(asps, job.groupLocks(w.pl.Groups), job.prm, poolLv(level(o.Variety), allowOf(o.Families)), o.Variant >= 2)
 	}
 	return w
 }
@@ -68,7 +68,7 @@ func (w Prep) planFor(j PlanJob) (plan.Plan, [][]variety.Cand, error) {
 // same — тот же вход плана: пропорции, геометрия, разворотов и пустой хвост, а для серий
 // (051) — папки и время съёмки тех же фото; для ч/б (078) — подписи и оценки.
 func (j PlanJob) same(k PlanJob) bool {
-	return j.prm == k.prm && j.have == k.have && j.tail == k.tail && slices.Equal(j.asp, k.asp) &&
+	return j.prm == k.prm && j.have == k.have && j.tail == k.tail && j.album == k.album && slices.EqualFunc(j.anchors, k.anchors, anchor.same) && slices.Equal(j.asp, k.asp) && slices.Equal(j.own, k.own) &&
 		slices.Equal(j.rate, k.rate) && slices.EqualFunc(j.infos, k.infos, func(a, b model.PhotoInfo) bool {
 		return a.Path == b.Path && a.Lib == b.Lib && a.Taken == b.Taken && a.Sig == b.Sig
 	})
@@ -96,18 +96,20 @@ func poolOf(asp []float64, prm layout.Params, lv variety.Level) []variety.Cand {
 // только прогрев «Других вариантов» (ExtraRow), результат nil; seeded (вариант ≥ 2, 078) — пулы
 // нужны и «Меньше». Паника — только в лог, пул остаётся nil: тот же счёт повторится под замком
 // и поведёт себя как раньше.
-func pools(asps [][]float64, prm layout.Params, lv variety.Level, seeded bool) [][]variety.Cand {
+func pools(asps [][]float64, locks []uint64, prm layout.Params, lv variety.Level, seeded bool) [][]variety.Cand {
 	if !model.ParallelLayouts() || len(asps) == 0 {
 		return nil
 	}
 	out := make([][]variety.Cand, len(asps))
 	var pl model.PanicLog
 	model.Each(len(asps), func(i int) {
+		gp := prm
+		gp.Lock = locks[i] // свои кадры группы (104); при Crop = 0 нули
 		pl.Safely("", func() {
 			if lv > variety.Less || seeded {
-				out[i] = poolOf(asps[i], prm, lv)
+				out[i] = poolOf(asps[i], gp, lv)
 			} else {
-				model.ExtraRow(asps[i], prm)
+				model.ExtraRow(asps[i], gp)
 			}
 		})
 	})
@@ -202,7 +204,8 @@ func lastLadder(p *model.Project, before []*model.Spread) byte {
 		if d == 0 || !varies(s) {
 			continue
 		}
-		if r, ok := layout.Build(s.Layout, p.Aspects(s.Photos), prm); ok && forms.Of(r.Key, r.Rects, prm) == forms.Ladder {
+		asp, sp := p.LayoutIn(s.Photos)
+		if r, ok := layout.Build(s.Layout, asp, sp); ok && forms.Of(r.Key, r.Rects, prm) == forms.Ladder {
 			return d
 		}
 	}
@@ -262,9 +265,10 @@ func pickSeeded(p *model.Project, first, last int, lv variety.Level, rate Rating
 			pool = ready[k]
 		}
 		if pool == nil {
-			pool = poolOf(p.Aspects(s.Photos), prm, poolLv(lv, allow))
+			asp, sp := p.LayoutIn(s.Photos)
+			pool = poolOf(asp, sp, poolLv(lv, allow))
 		}
-		pool, fb[k] = variety.ByFamily(pool, allow)
+		pool, fb[k] = variety.ByFamily(pool, allow, prm)
 		in[k] = variety.Spread{Pool: pool, Star: starOf(s.Photos, rate)}
 		if cur {
 			info, _ := shown(p, s)
@@ -316,12 +320,14 @@ func runs(p *model.Project, ids []string) [][2]int {
 func VaryWarm(p *model.Project, ids []string, v model.Variety) func() {
 	lv, prm := max(variety.Normal, level(v)), p.Params()
 	var asps [][]float64
+	var locks []uint64
 	for _, r := range runs(p, ids) {
 		for _, s := range p.Spreads[r[0] : r[1]+1] {
-			asps = append(asps, p.Aspects(s.Photos))
+			asp, sp := p.LayoutIn(s.Photos)
+			asps, locks = append(asps, asp), append(locks, sp.Lock)
 		}
 	}
-	return func() { pools(asps, prm, lv, false) } // только прогрев кэша: позиции под замком могут сдвинуться
+	return func() { pools(asps, locks, prm, lv, false) } // только прогрев кэша: позиции под замком могут сдвинуться
 }
 
 // VaryLayouts — «Разнообразить раскладки» (041): выделенные развороты «Авто» с фото по
@@ -355,7 +361,7 @@ func extraChoices(asp []float64, prm layout.Params) []model.Choice {
 	rs := model.ExtraRow(asp, prm)
 	out := make([]model.Choice, len(rs))
 	for i, r := range rs {
-		out[i] = model.Choice{Key: r.Key, Rects: r.Rects}
+		out[i] = model.Choice{Key: r.Key, Rects: r.Rects, Crop: cropPct(r.Crop)}
 	}
 	describeRows(out, prm)
 	return out

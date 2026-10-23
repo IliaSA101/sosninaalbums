@@ -61,7 +61,7 @@ func refLayouts(o order, asp []float64, p Params, limit int) []Result {
 			for _, r := range rs {
 				rects := append(append([]Rect{}, l.Rects...), r.Rects...)
 				s := pairScore(rects, g, max(l.depth, r.depth), l.height, r.height, k == 0 || k == n)
-				all = append(all, Result{rects, s, "P[" + l.Key + "|" + r.Key + "]"})
+				all = append(all, Result{Rects: rects, Score: s, Key: "P[" + l.Key + "|" + r.Key + "]"})
 			}
 		}
 	}

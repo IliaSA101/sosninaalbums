@@ -120,7 +120,7 @@ func TestLoadV10FoldWide(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(path)
-	if f := fileJSON(t, path); f.Version != 17 || !bytes.Contains(raw, []byte(`"foldAny": false`)) {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || !bytes.Contains(raw, []byte(`"foldAny": false`)) {
 		t.Fatalf("файл v%d без foldAny", f.Version)
 	}
 	q, err := salbum.Load(path)

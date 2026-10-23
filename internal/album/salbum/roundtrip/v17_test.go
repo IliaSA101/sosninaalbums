@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,14 @@ import (
 // Формат v17 (098): копии фото, свой кадр, фон альбома, версия программы в файле.
 
 var writeGolden17Copies = flag.Bool("golden17copies", false, "перезаписать testdata/v17-copies.salbum.json из copiesGolden")
+
+// verTag — строка версии в файле: `"version": N,`.
+func verTag(n int) []byte { return fmt.Appendf(nil, `"version": %d,`, n) }
+
+// asCurrent — файл с номером версии n, поднятый до текущей (голдены остаются на своей версии).
+func asCurrent(data []byte, n int) []byte {
+	return bytes.Replace(data, verTag(n), verTag(model.FormatVersion), 1)
+}
 
 const (
 	golden17Copies = "v17-copies.salbum.json"
@@ -133,9 +142,9 @@ func wantTail(t *testing.T, p *model.Project, base string) {
 	}
 }
 
-// Голден v17: копии на обложке и двух листах, asp, albumBg, noAlbumBg, app. Encode = голден;
-// Decode → Encode = голден (ID записей — по путям, порядок словаря другой); Save → Load без
-// потерь; альбом с фото переехал в другую папку — копии, кадры и фон целы.
+// Голден v17: копии на обложке и двух листах, asp, albumBg, noAlbumBg, app. Encode = голден с
+// текущим номером версии (формат дальше только добавил поля, 104); Decode → Encode = то же (ID
+// записей — по путям, порядок словаря другой); Save → Load без потерь; альбом с фото переехал в другую папку — копии, кадры и фон целы.
 func TestCopiesGoldenV17(t *testing.T) {
 	withAppVersion(t, "0.23.0")
 	base := albumSetup(t)
@@ -146,7 +155,8 @@ func TestCopiesGoldenV17(t *testing.T) {
 	}
 	enc = norm17(enc, base)
 	if *writeGolden17Copies {
-		if err := os.WriteFile(path, append(enc, '\n'), 0o644); err != nil {
+		old := bytes.Replace(enc, verTag(model.FormatVersion), verTag(17), 1) // голден остаётся на своей версии
+		if err := os.WriteFile(path, append(old, '\n'), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -155,7 +165,11 @@ func TestCopiesGoldenV17(t *testing.T) {
 		t.Fatal(err)
 	}
 	golden = bytes.TrimSuffix(bytes.ReplaceAll(golden, []byte("\r\n"), []byte("\n")), []byte("\n"))
-	if !bytes.Equal(enc, golden) {
+	if bytes.Equal(asCurrent(golden, 17), golden) {
+		t.Fatal("в голдене нет номера версии 17")
+	}
+	// Файл v17 без подрезки: голден = Encode, кроме номера версии.
+	if !bytes.Equal(enc, asCurrent(golden, 17)) {
 		t.Fatalf("Encode отличается от голдена:\n%s", enc)
 	}
 	for _, key := range []string{`"app": "0.23.0"`, `"asp": 1.5`, `"albumBg"`, `"noAlbumBg": true`, `-2"`, `-3"`} {
@@ -185,30 +199,32 @@ func TestCopiesGoldenV17(t *testing.T) {
 	for _, n := range []string{"a.jpg", "b.jpg"} { // ID по пути → заглушки голдена
 		back = bytes.ReplaceAll(back, []byte(library.IDFor(filepath.Join(base, "Март", n))), []byte(fixedIDs(n)))
 	}
-	if canonJSON(t, back) != canonJSON(t, golden) {
+	if canonJSON(t, back) != canonJSON(t, asCurrent(golden, 17)) {
 		t.Fatalf("Decode → Encode отличается от голдена:\n%s", back)
 	}
 	if err := edtest.GridInvariants(p); err != nil {
 		t.Fatal(err)
 	}
 
-	// Save → Load: файл альбома рядом с папкой Март.
+	// Save → Load: файл альбома рядом с папкой Март. Свой формат записи — текущий (копия для 0.23
+	// и переход v17 → v18 — TestMigrateV17ToV18).
+	p.SetFrom(model.FormatVersion)
 	album := filepath.Join(base, "Свадьба.salbum")
 	e := edtest.Open(t, p, album)
 	if err := e.Save(album); err != nil {
 		t.Fatal(err)
 	}
 	if edtest.Backup(e) {
-		t.Fatal("файл v17 не требует копии")
+		t.Fatal("файл текущего формата не требует копии")
 	}
 	q, err := salbum.Load(album)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(model.Marshal(p), model.Marshal(q)) || edtest.From(q) != 17 {
+	if !bytes.Equal(model.Marshal(p), model.Marshal(q)) || edtest.From(q) != model.FormatVersion {
 		t.Fatalf("потери при Save → Load:\n%s\n%s", model.Marshal(p), model.Marshal(q))
 	}
-	if f := fileJSON(t, album); string(f.App) != "0.23.0" || f.AlbumBg == nil || f.Version != 17 {
+	if f := fileJSON(t, album); string(f.App) != "0.23.0" || f.AlbumBg == nil || f.Version != model.FormatVersion {
 		t.Fatalf("в файле: версия %d, app %q, albumBg %+v", f.Version, f.App, f.AlbumBg)
 	}
 
@@ -242,15 +258,15 @@ func v16Bytes(t *testing.T, base string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := bytes.Replace(data, []byte(`"version": 17,`), []byte(`"version": 16,`), 1)
+	out := bytes.Replace(data, verTag(model.FormatVersion), verTag(16), 1)
 	if bytes.Equal(out, data) || bytes.Contains(data, []byte(`"app"`)) {
 		t.Fatalf("v16 из Encode не вышел:\n%s", data)
 	}
 	return out
 }
 
-// v16 на диске: Load → Save делает копию «<имя> (для 0.22).salbum» с байтами исходника, пишет v17
-// с app; имя копии TakeBackup отдаёт один раз; второй Save копию не делает.
+// v16 на диске: Load → Save делает копию «<имя> (для 0.22).salbum» с байтами исходника, пишет
+// текущий формат с app; имя копии TakeBackup отдаёт один раз; второй Save копию не делает.
 func TestMigrateV16ToV17(t *testing.T) {
 	base := albumSetup(t)
 	src := v16Bytes(t, base)
@@ -287,15 +303,15 @@ func TestMigrateV16ToV17(t *testing.T) {
 	if got := e.TakeBackup(); got != "" {
 		t.Fatalf("второй TakeBackup %q: имя отдаётся один раз", got)
 	}
-	if f := fileJSON(t, path); f.Version != 17 || string(f.App) != "0.23.0" {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || string(f.App) != "0.23.0" {
 		t.Fatalf("в файле версия %d, app %q", f.Version, f.App)
 	}
 	q, err := salbum.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(before, model.Marshal(q)) || edtest.From(q) != 17 {
-		t.Fatalf("потери при v16 → v17:\n%s\n%s", before, model.Marshal(q))
+	if !bytes.Equal(before, model.Marshal(q)) || edtest.From(q) != model.FormatVersion {
+		t.Fatalf("потери при v16 → текущий:\n%s\n%s", before, model.Marshal(q))
 	}
 	// Второй Save: копию не делает ни заново, ни « 2», имени нет.
 	if err := os.WriteFile(bakPath, []byte("метка"), 0o644); err != nil {
@@ -311,10 +327,10 @@ func TestMigrateV16ToV17(t *testing.T) {
 	if _, err := os.Stat(salbum.BackupName(path, 16, 2)); err == nil {
 		t.Fatal("лишняя копия « 2»")
 	}
-	// Открыли уже записанный файл заново: v17, копии нет.
+	// Открыли уже записанный файл заново: текущий формат, копии нет.
 	e2 := edtest.Open(t, q, path)
 	if err := e2.Save(path); err != nil || e2.TakeBackup() != "" {
-		t.Fatalf("файл v17 не требует копии: %v", err)
+		t.Fatalf("файл текущего формата не требует копии: %v", err)
 	}
 }
 
@@ -340,7 +356,7 @@ func TestDraftV16ToV17(t *testing.T) {
 	if got, err := os.ReadFile(dbak); err != nil || !bytes.Equal(got, src) || de.TakeBackup() != dbak {
 		t.Fatalf("копия черновика: %v, байты исходника: %v", err, bytes.Equal(got, src))
 	}
-	if f := fileJSON(t, draft); f.Version != 17 {
+	if f := fileJSON(t, draft); f.Version != model.FormatVersion {
 		t.Fatalf("черновик записан в версии %d", f.Version)
 	}
 	if err := de.WriteDraft(draft); err != nil || de.TakeBackup() != "" { // автосохранение дальше
@@ -370,17 +386,18 @@ func TestNoFieldsSameBytes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := strings.Replace(string(plain), "{\n  \"version\": 17,\n", "{\n  \"version\": 17,\n  \"app\": \"0.23.0\",\n", 1)
+		cur := fmt.Sprintf("{\n  \"version\": %d,\n", model.FormatVersion)
+		want := strings.Replace(string(plain), cur, cur+"  \"app\": \"0.23.0\",\n", 1)
 		if string(with) != want || want == string(plain) {
 			t.Fatalf("%s: Encode с app отличается не только строкой app:\n%s", name, with)
 		}
-		for _, key := range []string{`"asp"`, `"albumBg"`, `"noAlbumBg"`, `-2"`} {
+		for _, key := range []string{`"asp"`, `"albumBg"`, `"noAlbumBg"`, `-2"`, `"crop"`} {
 			if bytes.Contains(plain, []byte(key)) {
 				t.Fatalf("%s: в файле без новых полей есть %s", name, key)
 			}
 		}
 		if name == "v16" {
-			if want := bytes.Replace(src, []byte(`"version": 16,`), []byte(`"version": 17,`), 1); !bytes.Equal(plain, want) {
+			if want := asCurrent(src, 16); !bytes.Equal(plain, want) {
 				t.Fatalf("v16 Decode → Encode отличается от исходника:\n%s\nждали\n%s", plain, want)
 			}
 		}

@@ -1,9 +1,11 @@
-// Мини-панель выделенного (спека 009, gestures.md «Мини-панель»): какие значки показать и где
-// поставить полосу. Чистая логика; действия — в MiniPanel.svelte.
+// Мини-панель выделенного (спека 009, 108): какие значки показать и где поставить запасную полосу.
+// Столбец сбоку от фото — minicol.ts. Чистая логика; действия — в MiniPanel.svelte.
 import { canFitPhoto, type SelBox } from '../../base/geom/gridedit'
 import { actualAspect } from '../../base/geom/frame'
 import type { IconName } from '../../base/ui/Icon.svelte'
+import type { MenuNode } from '../../base/ui/menulist'
 import type { FeatureId } from '../../base/prefs/levels'
+import { ACTS, actOk, type ActId } from '../photo/photoacts'
 import type { Rect, SpreadView } from '../../base/core/types'
 import { whoOf } from '../captions/nametarget'
 import { keymap } from '../../base/keys/keymap.svelte'
@@ -13,7 +15,8 @@ import { isMac } from '../../base/core/platform'
 export const swapTip = (mac: boolean): string =>
   `Перетащите на другое место — фото поменяются местами (или тащите фото с ${mac ? '⌘' : 'Ctrl'})`
 
-export type MiniId = 'flipH' | 'flipV' | 'turn' | 'tilt' | 'fit' | 'fitPhoto' | 'caption' | 'name' | 'layer' | 'swap' | 'same' | 'delete'
+// Значок столбца — действие каталога photoacts.ts (слово, значок, функция уровня записаны там один раз).
+export type MiniId = Extract<ActId, 'flipH' | 'flipV' | 'turnCw' | 'tilt' | 'fit' | 'fitPhoto' | 'swap' | 'same' | 'more' | 'delete'>
 
 export interface MiniItem {
   id: MiniId
@@ -22,6 +25,7 @@ export interface MiniItem {
   on?: boolean // включено (зеркало, «Целиком»)
   badge?: string // число рядом со значком («Удалить (N)» у группы)
   sep?: boolean // линия перед значком
+  more?: MenuNode[] // только у 'more': пункты списка «⋯» (подпись, слой, заметка)
 }
 
 // Что выделено на текущем развороте.
@@ -55,93 +59,7 @@ export function miniContext(s: SpreadView | undefined, sel: SelBox[], texts = 0)
   }
 }
 
-// Какой функции уровня принадлежит значок (levels.ts): чужие уровню не показываются.
-// Подпись, ↻ 90° и «Удалить» — с «Простого».
-const FEATURE: Partial<Record<MiniId, FeatureId>> = {
-  flipH: 'flip',
-  flipV: 'flip',
-  turn: 'turn',
-  tilt: 'tilt',
-  fit: 'frame',
-  fitPhoto: 'frame',
-  caption: 'captions',
-  name: 'captions',
-  same: 'manual',
-  layer: 'layers',
-  swap: 'manual',
-}
-
-const TURN: MiniItem = { id: 'turn', label: 'Повернуть фото на 90° по часовой стрелке', icon: 'turn-cw' }
-
-// Значок «Удалить»: подпись зависит от того, что выделено.
-function deleteItem(c: MiniCtx, n: number): MiniItem {
-  if (n > 1) return { id: 'delete', label: keymap.tip(`Удалить выделенное (${n})`, 'removeCell'), icon: 'trash', badge: String(n) }
-  if (c.photos === 0) return { id: 'delete', label: keymap.tip('Убрать пустое место', 'removeCell'), icon: 'trash' }
-  if (c.grid)
-    return {
-      id: 'delete',
-      label: keymap.tip('Убрать фото с места: оно вернётся в ленту, место останется пустым', 'removeCell'),
-      icon: 'trash',
-    }
-  return { id: 'delete', label: keymap.tip('Убрать фото с разворота: оно вернётся в ленту', 'removeCell'), icon: 'trash' }
-}
-
-// Группы значков про фото: зеркало, кадр (одно фото) или только поворот (несколько).
-function photoGroups(c: MiniCtx, solo: boolean): MiniItem[][] {
-  if (c.photos === 0) return []
-  const flips: MiniItem[] = [
-    { id: 'flipH', label: 'Зеркало ↔ (по горизонтали)', icon: 'flip-h', on: c.flipH },
-    { id: 'flipV', label: 'Зеркало ↕ (по вертикали)', icon: 'flip-v', on: c.flipV },
-  ]
-  if (!solo) return [flips, [TURN]]
-  const fit: MiniItem[] = [
-    {
-      id: 'fit',
-      label: c.allContain
-        ? 'Сейчас целиком, поля — фон страницы. Нажмите: заполнять место, лишнее обрезается'
-        : 'Сейчас с обрезкой. Нажмите: фото целиком, поля — фон страницы',
-      icon: 'contain',
-      on: c.allContain,
-    },
-  ]
-  if (c.differ) fit.push({ id: 'fitPhoto', label: 'Подогнать место под пропорции фото', icon: 'fit-photo' })
-  // Подпись по шаблону листа — кнопка ведёт к имени, а не создаёт свою подпись (037).
-  const cap: MiniItem = c.name
-    ? { id: 'name', label: 'Имя под фото', icon: 'caption' }
-    : { id: 'caption', label: 'Подпись к фото', icon: 'caption' }
-  // Дуга наклона (059, 063): одиночному фото на месте; у пропавшего снимка выпрямлять нечего.
-  // Мелкому фото дуга не помещается — кнопка всё равно активна (владелец 2026-10-17): режим покажет угол в карточке.
-  const tilt: MiniItem[] = c.missing
-    ? []
-    : [{ id: 'tilt', label: 'Наклон фото в рамке: выпрямить горизонт', icon: 'tilt', on: c.tilt ?? false }]
-  return [flips, fit, [cap, TURN, ...tilt]]
-}
-
-// Значки слева направо по таблице gestures.md; группы разделяет линия. can — уровень интерфейса
-// (не задан — всё доступно); пустая группа пропадает вместе с чертой.
-export function miniItems(c: MiniCtx, can: (f: FeatureId) => boolean = () => true): MiniItem[] {
-  const n = c.places + (c.texts ?? 0)
-  if (n === 0) return []
-  const solo = n === 1 && c.photos === 1
-  const groups: MiniItem[][] = photoGroups(c, solo)
-  const arrange: MiniItem[] = []
-  if (c.places >= 2)
-    arrange.push({
-      id: 'same',
-      label: 'Одинаковый размер: как у последнего щёлкнутого; при выделении рамкой — как у первого',
-      icon: 'same-size',
-    })
-  if (c.grid) arrange.push({ id: 'layer', label: 'Слой', icon: 'layers' })
-  if (c.grid && solo) arrange.push({ id: 'swap', label: swapTip(isMac()), icon: 'swap' })
-  if (arrange.length > 0) groups.push(arrange)
-
-  groups.push([deleteItem(c, n)])
-
-  const shown = groups.map((g) => g.filter((it) => !FEATURE[it.id] || can(FEATURE[it.id]!))).filter((g) => g.length > 0)
-  return shown.flatMap((g, i) => g.map((it, k) => (i > 0 && k === 0 ? { ...it, sep: true } : it)))
-}
-
-// Порядок значка «Слой ▾» (меню в LayerMenu и пункты «Слой ▸» в меню фото).
+// Порядок пунктов «Слой ▸» (список «⋯» и меню фото).
 export const LAYER_OPS = [
   { op: 'front', label: 'На передний план', icon: 'layer-front' },
   { op: 'up', label: 'Выше', icon: 'layer-up' },
@@ -149,6 +67,86 @@ export const LAYER_OPS = [
   { op: 'back', label: 'На задний план', icon: 'layer-back' },
 ] as const
 export type LayerOp = (typeof LAYER_OPS)[number]['op']
+
+// Строка-заметка в конце «⋯»: остальное — в меню правого щелчка.
+export const MORE_NOTE = 'Всё остальное — правым щелчком по фото'
+
+// Значок каталога со словом подсказки: слово по умолчанию — из ACTS, длинные подсказки задают сами.
+const mk = (id: MiniId, label: string, extra: Partial<MiniItem> = {}): MiniItem => ({ id, label, icon: ACTS[id].icon ?? 'more', ...extra })
+
+const TURN: MiniItem = mk('turnCw', 'Повернуть фото на 90° по часовой стрелке')
+
+// Значок «Удалить»: подпись зависит от того, что выделено.
+function deleteItem(c: MiniCtx, n: number): MiniItem {
+  if (n > 1) return mk('delete', keymap.tip(`Удалить выделенное (${n})`, 'removeCell'), { badge: String(n) })
+  if (c.photos === 0) return mk('delete', keymap.tip('Убрать пустое место', 'removeCell'))
+  if (c.grid) return mk('delete', keymap.tip('Убрать фото с места: оно вернётся в ленту, место останется пустым', 'removeCell'))
+  return mk('delete', keymap.tip('Убрать фото с разворота: оно вернётся в ленту', 'removeCell'))
+}
+
+// Группы значков про фото: зеркало, кадр, поворот и наклон (одно фото) или только зеркало и поворот (несколько).
+function photoGroups(c: MiniCtx, solo: boolean): MiniItem[][] {
+  if (c.photos === 0) return []
+  const flips: MiniItem[] = [
+    mk('flipH', 'Зеркало ↔ (по горизонтали)', { on: c.flipH }),
+    mk('flipV', 'Зеркало ↕ (по вертикали)', { on: c.flipV }),
+  ]
+  if (!solo) return [flips, [TURN]]
+  const fit: MiniItem[] = [
+    mk(
+      'fit',
+      c.allContain
+        ? 'Сейчас целиком, поля — фон страницы. Нажмите: заполнять место, лишнее обрезается'
+        : 'Сейчас с обрезкой. Нажмите: фото целиком, поля — фон страницы',
+      { on: c.allContain },
+    ),
+  ]
+  if (c.differ) fit.push(mk('fitPhoto', ACTS.fitPhoto.label))
+  // Дуга наклона (059, 063): одиночному фото на месте; у пропавшего снимка выпрямлять нечего.
+  // Мелкому фото дуга не помещается — кнопка всё равно активна (владелец 2026-10-17): режим покажет угол в карточке.
+  const tilt: MiniItem[] = c.missing ? [] : [mk('tilt', 'Наклон фото в рамке: выпрямить горизонт', { on: c.tilt ?? false })]
+  return [flips, fit, [TURN, ...tilt]]
+}
+
+// Пункты списка «⋯» (владелец 2026-10-23): подпись одному фото, «Слой ▸» в «Ручной»; редкое — не значками.
+// Подпись по шаблону листа ведёт к имени, а не создаёт свою подпись (037). Заметка — если меню фото есть на уровне.
+function moreNodes(c: MiniCtx, solo: boolean, ok: (id: ActId) => boolean, can: (f: FeatureId) => boolean): MenuNode[] {
+  const nodes: MenuNode[] = []
+  const cap: ActId = c.name ? 'name' : 'caption'
+  if (solo && ok(cap)) nodes.push({ id: cap, label: ACTS[cap].label })
+  if (c.grid && ok('layer'))
+    nodes.push({ id: 'layer', label: ACTS.layer.label, sub: LAYER_OPS.map((o) => ({ id: 'layer', arg: o.op, label: o.label })) })
+  if (nodes.length > 0 && c.places > 0 && can('photoMenu')) nodes.push({ id: 'note', kind: 'note', label: MORE_NOTE, sep: true })
+  return nodes
+}
+
+// Подсказка «⋯» называет то, что в этом списке есть: «Авто» — подпись, группа — слой, «Ручная» — оба.
+function moreTip(more: MenuNode[]): string {
+  const word: Partial<Record<string, string>> = { layer: 'слой', name: 'имя' }
+  const words = more.filter((m) => m.kind !== 'note').map((m) => word[m.id] ?? 'подпись')
+  return `Ещё: ${words.join(', ')}`
+}
+
+// Значки столбца сверху вниз (макет Г, владелец 2026-10-23); группы разделяет линия. can — уровень интерфейса
+// (не задан — всё доступно); пустая группа пропадает вместе с чертой. «⋯» есть, пока в нём есть что-то кроме заметки.
+export function miniItems(c: MiniCtx, can: (f: FeatureId) => boolean = () => true): MiniItem[] {
+  const n = c.places + (c.texts ?? 0)
+  if (n === 0) return []
+  const solo = n === 1 && c.photos === 1
+  const ok = (id: ActId) => actOk(id, can)
+  const groups: MiniItem[][] = photoGroups(c, solo)
+  const arrange: MiniItem[] = []
+  if (c.places >= 2) arrange.push(mk('same', 'Одинаковый размер: как у последнего щёлкнутого; при выделении рамкой — как у первого'))
+  if (c.grid && solo) arrange.push(mk('swap', swapTip(isMac())))
+  if (arrange.length > 0) groups.push(arrange)
+  const more = moreNodes(c, solo, ok, can)
+  if (more.some((m) => m.kind !== 'note')) groups.push([mk('more', moreTip(more), { more })])
+
+  groups.push([deleteItem(c, n)])
+
+  const shown = groups.map((g) => g.filter((it) => ok(it.id))).filter((g) => g.length > 0)
+  return shown.flatMap((g, i) => g.map((it, k) => (i > 0 && k === 0 ? { ...it, sep: true } : it)))
+}
 
 // Пока зажат модификатор, панель пропускает мышь к фото под ней: Shift/Ctrl+щелчок по соседу
 // добавляет его к выделению, а не попадает в кнопку панели (у кнопок вариантов с модификатором нет).
@@ -177,7 +175,7 @@ export function throughNext(ev: ThroughEv): boolean {
 
 export const MINI_GAP = 8 // отступ от рамки, px
 export const MINI_H = 30 // высота полосы, px
-// Внутри у нижнего края (владелец 2026-10-17, owner-ux §1): между полосой и низом рамки — полоса переноса места (10)
+// Внутри у нижнего края (владелец 2026-10-17, owner-ux §1.10): между полосой и низом рамки — полоса переноса места (10)
 // и полручки (4): средний маркер низа остаётся доступным.
 export const MINI_IN_GAP = 14
 export const MINI_IN_H = 160 // внутри — только если видимая часть рамки не ниже: ✥, ползунок и полоса не налезают
@@ -246,7 +244,15 @@ export function chromeInset(win: Box, parts: { edge: 'top' | 'left' | 'right'; b
 export const sameView = (a?: MiniView, b?: MiniView) =>
   a === b || (!!a && !!b && a.left === b.left && a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.spill === b.spill)
 
-export type MiniWhere = 'below' | 'above' | 'inside' | 'top'
+// Столбец (спека 108, minicol.ts): ширина, зазор от правого края фото внутри и место, которое он там занимает
+// (ширина + зазор + 4 px воздуха). Размеры стоят рядом с CSS MiniPanel.svelte.
+export const COL_W = 34
+export const COL_IN_GAP = 14
+export const COL_IN_W = COL_W + COL_IN_GAP + 4
+// Где столбец: справа от фото, слева или внутри у правого края.
+export type ColWhere = 'right' | 'left' | 'inright'
+// Ряд-запасной: под, над, внутри у низа, внутри у верха; столбец — ColWhere.
+export type MiniWhere = 'below' | 'above' | 'inside' | 'top' | ColWhere
 
 // Место полосы внутри у нижнего края видимой части рамки; null — не помещается (уже полосы + 16, ниже 160 px
 // или подпись у самого верха). caps — подписи и заглушки выделенного (мм): та, что пересекает полосу у низа, сдвигает её
@@ -270,13 +276,13 @@ function insideAt(box: Rect, ppm: number, w: number, view: MiniView, caps: Rect[
   return { top, left }
 }
 
-// Нижняя граница полосы «под рамкой»: низ рамки (bottom, px) виден — до низа ленты разворотов (owner-ux §1.5,
+// Нижняя граница полосы «под рамкой»: низ рамки (bottom, px) виден — до низа ленты разворотов (owner-ux §1.9,
 // 2026-10-21), ушёл за край холста — до низа видимой области.
 const floorOf = (view: MiniView, bottom: number): number =>
   view.spill !== undefined && bottom <= view.bottom ? Math.max(view.bottom, view.spill) : view.bottom
 
 // Где стоит полоса (px от угла разворота), всегда по центру рамки (зажим краями видимой области view;
-// не задана — лист). Порядок (владелец 2026-10-17, owner-ux §1): под рамкой (низ рамки виден — до низа ленты разворотов,
+// не задана — лист). Запасной порядок (владелец 2026-10-17, owner-ux §1.10; основной — столбец, minicol.ts): под рамкой (низ рамки виден — до низа ленты разворотов,
 // view.spill; 2026-10-21); нет места до низа видимой области —
 // над рамкой, выше ⟳ (avoid — его центр, px: полоса его не закрывает); и там нет (рамка во весь экран) — внутри
 // у нижнего края видимой части, по центру; не помещается — прежний запасной 0.13.1: внутри у верха, вбок от ⟳.
@@ -351,7 +357,7 @@ function zoomFits(b: ZoomBox, up: number, hw: number, view: MiniView, maxY: numb
 }
 
 // Насколько поднять ползунок масштаба кадра: px от низа рамки места до низа ползунка (не меньше 16 — прежнее место).
-// Ползунок не прячется (owner-ux §1.3): внутри у низа он над полосой; иначе у нижнего края ВИДИМОЙ части рамки, если
+// Ползунок не прячется (owner-ux §1.6): внутри у низа он над полосой; иначе (и у столбца сбоку) у нижнего края ВИДИМОЙ части рамки, если
 // низ рамки за экраном. У повёрнутого места — вдоль оси места до первой точки, где он целиком в видимой области (view);
 // нет такой — прежнее место. Видимой части у рамки нет — прежнее место.
 export const zoomLift = (p: { top: number; where: MiniWhere }, b: ZoomBox, view?: MiniView): number => {
@@ -409,14 +415,16 @@ export function arcRoom(box: Rect, ppm: number, rot: number, view: MiniView, whe
   const bh = box.h * ppm
   // Полоса внутри у верха занимает его: дуга — под ней (отступ + полоса + 4 px зазора), если высоты хватает.
   const down = where === 'top' ? MINI_GAP + MINI_H + 4 : 0
+  // Столбец внутри у правого края (108) занимает его с зазором: дуга справа от него не лезет.
+  const col = where === 'inright' ? COL_IN_W : 0
   // Повёрнутое место: дуга поворачивается с местом, видимую область не считаем; полоса сверху занимает верх и тут.
-  if (rot !== 0) return bw >= ARC_IN_W && bh - down >= ARC_IN_H ? { mode: 'in', vx: bw / 2, vy: down, vw: bw } : NO_ROOM
+  if (rot !== 0) return bw - col >= ARC_IN_W && bh - down >= ARC_IN_H ? { mode: 'in', vx: (bw - col) / 2, vy: down, vw: bw - col } : NO_ROOM
   const bx = box.x * ppm
   const by = box.y * ppm
   const vt = Math.max(by, view.top)
   const vb = Math.min(by + bh, view.bottom)
   const vl = Math.max(bx, view.left)
-  const vr = Math.min(bx + bw, view.right)
+  const vr = Math.min(bx + bw, view.right) - col
   if (vr - vl >= ARC_IN_W && vb - vt - down >= ARC_IN_H) return { mode: 'in', vx: (vl + vr) / 2 - bx, vy: vt - by + down, vw: vr - vl }
   if (by - view.top >= ARC_OUT_H && where !== 'above') return { mode: 'out', vx: bw / 2, vy: 0, vw: bw }
   return NO_ROOM

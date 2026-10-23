@@ -28,6 +28,13 @@ describe('tipped', () => {
     expect(tip.state).toEqual({ text: 'Текст', x: 30, y: 50, side: 'right' })
   })
 
+  it('side left: слева по середине (столбец мини-панели, 108)', () => {
+    const n = fakeNode()
+    tipped(n, { text: 'Корзина', side: 'left' })
+    fire(n, 'pointerenter')
+    expect(tip.state).toEqual({ text: 'Корзина', x: 10, y: 50, side: 'left' })
+  })
+
   it('подсказка гаснет при удалении элемента', () => {
     const n = fakeNode()
     const a = tipped(n, { text: 'Корзина' })

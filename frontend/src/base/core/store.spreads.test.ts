@@ -7,6 +7,7 @@ let mergeAnswer: () => unknown = () => ({})
 
 // Отложенные ответы удаления: тест отпускает их по одному.
 const calls: string[] = []
+const autoCalls: string[] = []
 const pending: Array<{ resolve: (v: unknown) => void; reject: (e: unknown) => void }> = []
 
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
@@ -18,6 +19,15 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
     return a
   },
   MergeSpreads: async () => mergeAnswer(),
+  MergeSpreadsAuto: async (id: string, keep: boolean) => {
+    autoCalls.push(`merge:${id}:${keep}`)
+    return mergeAnswer()
+  },
+  SplitSpread: async () => mergeAnswer(),
+  SplitSpreadAuto: async (id: string, at: number, keep: boolean) => {
+    autoCalls.push(`split:${id}:${at}:${keep}`)
+    return mergeAnswer()
+  },
   DeleteSpread: (id: string) =>
     new Promise((resolve, reject) => {
       calls.push(id)
@@ -165,5 +175,51 @@ describe('store.merge: тост', () => {
     mergeAnswer = () => two(30)
     await store.merge('a')
     expect(store.toast).toBeNull()
+  })
+})
+
+// Склейка и разрез через ручной разворот (103): keep задан — зовутся MergeSpreadsAuto / SplitSpreadAuto, тосты прежние.
+describe('store.merge и store.split с keep (103)', () => {
+  const two = (rev: number) => ({
+    rev,
+    folders: [],
+    spreads: [
+      { id: 'a', photos: ['1'] },
+      { id: 'b', photos: ['2'] },
+    ],
+  })
+  const one = (rev: number) => ({ rev, folders: [], spreads: [{ id: 'a', photos: ['1', '2'] }] })
+
+  beforeEach(() => {
+    store.toast = null
+    store.busy = false
+    autoCalls.length = 0
+  })
+
+  it('merge(id, keep) — MergeSpreadsAuto и тост «Развороты склеены»; без keep — прежний MergeSpreads', async () => {
+    store.apply(two(40) as never)
+    mergeAnswer = () => one(41)
+    await store.merge('a', true)
+    expect(autoCalls).toEqual(['merge:a:true'])
+    expect(store.toast?.text).toBe('Развороты склеены')
+    store.apply(two(50) as never)
+    await store.merge('a')
+    expect(autoCalls).toEqual(['merge:a:true'])
+  })
+
+  it('merge с keep, холостая — тоста нет', async () => {
+    store.apply(two(60) as never)
+    mergeAnswer = () => two(60)
+    await store.merge('a', false)
+    expect(autoCalls).toEqual(['merge:a:false'])
+    expect(store.toast).toBeNull()
+  })
+
+  it('split(id, at, keep) — SplitSpreadAuto и тост «Разворот разрезан»', async () => {
+    store.apply(one(70) as never)
+    mergeAnswer = () => two(71)
+    await store.split('a', 1, false)
+    expect(autoCalls).toEqual(['split:a:1:false'])
+    expect(store.toast?.text).toBe('Разворот разрезан')
   })
 })
