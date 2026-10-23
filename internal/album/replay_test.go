@@ -294,6 +294,8 @@ func replayScenario(t *testing.T) *replay {
 	folders, files := r.e.Sources()
 	r.read("Sources", []any{folders, files})
 	r.do("RemoveLoose", r.e.RemoveLoose(r.v.Loose[0].ID, ""))
+	// 099 и 098: буфер обмена, фон альбома, «где стоит» — тоже в конце.
+	replayClipBg(r)
 	return r
 }
 

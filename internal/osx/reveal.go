@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"path"
 	goruntime "runtime"
 	"strings"
 )
@@ -85,14 +85,15 @@ func argvCmd(argv []string) *exec.Cmd {
 
 // revealLinux: файл — dbus-send ShowItems (выделяет файл в Nautilus, Dolphin, Nemo, Caja);
 // нет службы или ошибка — xdg-open папки файла. Папка — сразу xdg-open.
-func revealLinux(path string, file bool) error {
+func revealLinux(target string, file bool) error {
 	if file {
-		if err := runCmd(argvCmd(revealArgv("linux", path, true))); err == nil {
+		if err := runCmd(argvCmd(revealArgv("linux", target, true))); err == nil {
 			return nil
 		}
-		path = filepath.Dir(path)
+		// path, а не filepath: путь Linux с «/» и на Windows (тест запасного пути идёт на всех ОС).
+		target = path.Dir(target)
 	}
-	return startCmd(argvCmd(revealArgv("linux", path, false)))
+	return startCmd(argvCmd(revealArgv("linux", target, false)))
 }
 
 // revealArgv — команда по ОС (чистая функция, для Linux и Mac). Windows — nil: проводнику
