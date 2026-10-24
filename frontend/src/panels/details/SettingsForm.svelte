@@ -10,7 +10,7 @@
   import Seg from '../../base/tpl/Seg.svelte'
   import ColorPicker from '../../base/color/ColorPicker.svelte'
   import { colorLive } from '../../base/color/colorlive.svelte'
-  import { SHEET_PRESETS, isSheet, newSheetSize } from '../../base/geom/sheet'
+  import { SHEET_PRESETS, isSheet, newSheetSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import AlbumBgRow from './AlbumBgRow.svelte'
   import MarkupBlock from '../markup/MarkupBlock.svelte'
@@ -19,6 +19,8 @@
   import { groupLabel, presetActive, presetFields, presetGroupOf, presetHint, presetRows, exportPx, type Preset } from './presets'
   import { NUMS, norm, same } from './settingsnorm'
   import { marginNoteAsker } from './marginnote'
+  import AlbumOwnAsk from '../albumbg/AlbumOwnAsk.svelte'
+  import { ownAskText, ownColorNums, ownDoneText, type OwnAsk } from '../albumbg/albumown'
 
   // base — настройки, с которыми форма сверялась последний раз.
   let base = $state<Settings>({ ...store.view.settings })
@@ -51,8 +53,24 @@
   })
 
   // Один вызов — один шаг отмены; живое применение забило бы историю пересчётами.
+  // 115: цвет альбома сменился, а у разворотов есть свой цвет — сначала вопрос (правки ещё нет); × оставляет черновик формы.
+  let own = $state<{ ask: OwnAsk; n: Settings; count: number } | null>(null)
+  const colorKey = (c: string | undefined) => (c || '#ffffff').toLowerCase()
   async function apply() {
-    await store.setSettings(norm(s))
+    const n = norm(s)
+    const nums = ownColorNums(store.view)
+    if (nums.length > 0 && colorKey(n.bg) !== colorKey(store.view.settings.bg)) {
+      own = { ask: ownAskText('color', { nums, photos: 0 }, unitOf(store.view.settings)), n, count: nums.length }
+      return
+    }
+    await put(n)
+  }
+  // all — сколько разворотов станут «как в альбоме» (ответ «Как в альбоме»); 0 — прежний SetSettings («Оставить свой»).
+  async function put(n: Settings, all = 0) {
+    own = null
+    if (all > 0) {
+      if (await store.run(Api.SetSettingsToAll(n))) store.notify(ownDoneText('color', all, unitOf(store.view.settings)))
+    } else await store.setSettings(n)
     s = { ...store.view.settings }
     base = { ...store.view.settings }
   }
@@ -192,6 +210,11 @@
   <button class="ghost" disabled={!differs} onclick={reset}>Сбросить</button>
   <button class="accent" disabled={!differs || !valid} onclick={apply}>Применить</button>
 </div>
+
+{#if own}
+  {@const o = own}
+  <AlbumOwnAsk ask={o.ask} onkeep={() => put(o.n)} onall={() => put(o.n, o.count)} onclose={() => (own = null)} />
+{/if}
 
 <!-- Не часть формы: файл выбирается сразу, один шаг отмены (066) -->
 <div class="markup">

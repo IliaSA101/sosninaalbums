@@ -25,7 +25,7 @@ func TestPrefsNormalize(t *testing.T) {
 		}
 	}
 	// Пустой уровень в конфиге — первый запуск; стартовое окно по умолчанию показывается.
-	if p := Of(Config{}); p != (Prefs{Level: LevelSimple, ShowStart: true, First: true}) {
+	if p := Of(Config{}); p != (Prefs{Level: LevelSimple, ShowStart: true, First: true, TourDue: true}) {
 		t.Errorf("первый запуск: %+v", p)
 	}
 	if p := Of(Config{Level: "мусор", HideStart: true}); p != (Prefs{Level: LevelSimple, ShowStart: false}) {

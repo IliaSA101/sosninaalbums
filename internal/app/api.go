@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -34,14 +35,20 @@ func (a *App) GetState() State {
 	photos, scan := a.photos, a.scan
 	notice, info, fresh := a.startNotice, a.startInfo, a.startFresh
 	a.startNotice, a.startInfo, a.startFresh = "", "", nil
+	// Один раз: повторный GetState (после открытия другого альбома) окно «Продолжить» не закрывает.
+	fromFile := a.startFromFile
+	a.startFromFile = false
 	missing := append([]string{}, a.missing...)
+	unread := maps.Clone(a.unread)
+	pending := a.pendingName()
 	a.mu.Unlock()
 	if photos == nil {
 		photos = []library.Photo{}
 	}
 	p, recent := a.prefsAndRecent()
-	return State{View: view, Photos: photos, Scan: scan, Notice: notice, Info: info, FreshFonts: fresh, Missing: missing,
-		Version: appVersion(wailsJSON), Fonts: text.Families(), Prefs: p, Recent: recent, Keymap: a.Keymap()}
+	return State{View: view, Photos: photos, Scan: scan, Notice: notice, Info: info, FreshFonts: fresh, Missing: missing, Unread: unread,
+		Version: appVersion(wailsJSON), Fonts: text.Families(), Prefs: p, Recent: recent, Keymap: a.Keymap(),
+		Pending: pending, Newer: a.takeStartNewer(), Assoc: a.assocView(), FromFile: fromFile, Stand: standOn()}
 }
 
 // notice показывает пользователю текст ошибки тостом (событие `notice`); без окна — только лог.

@@ -113,9 +113,14 @@ function photoGroups(c: MiniCtx, solo: boolean): MiniItem[][] {
 function moreNodes(c: MiniCtx, solo: boolean, ok: (id: ActId) => boolean, can: (f: FeatureId) => boolean): MenuNode[] {
   const nodes: MenuNode[] = []
   const cap: ActId = c.name ? 'name' : 'caption'
-  if (solo && ok(cap)) nodes.push({ id: cap, label: ACTS[cap].label })
+  if (solo && ok(cap)) nodes.push({ id: cap, icon: ACTS[cap].icon, label: ACTS[cap].label })
   if (c.grid && ok('layer'))
-    nodes.push({ id: 'layer', label: ACTS.layer.label, sub: LAYER_OPS.map((o) => ({ id: 'layer', arg: o.op, label: o.label })) })
+    nodes.push({
+      id: 'layer',
+      icon: ACTS.layer.icon,
+      label: ACTS.layer.label,
+      sub: LAYER_OPS.map((o) => ({ id: 'layer', arg: o.op, icon: o.icon, label: o.label })),
+    })
   if (nodes.length > 0 && c.places > 0 && can('photoMenu')) nodes.push({ id: 'note', kind: 'note', label: MORE_NOTE, sep: true })
   return nodes
 }

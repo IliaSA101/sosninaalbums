@@ -22,7 +22,7 @@ import (
 // пакет psd (вход недоверенный), здесь — проверка пути и открытие файла.
 
 // MarkupMaxSide — превью разметки не больше этого по длинной стороне, px (design §2.3). JPEG/PNG
-// до этого размера отдаются файлом как есть.
+// до этого размера отдаются файлом как есть (WebP под .jpg/.png — никогда, см. Big).
 const MarkupMaxSide = 4096
 
 // MarkupInfo — что известно о файле-разметке. У JPEG/PNG направляющих и DPI нет, картинка есть.
@@ -34,6 +34,7 @@ type MarkupInfo struct {
 	DPI    float64       // 0 — неизвестен
 	Guides []MarkupGuide // направляющие PSD, px документа
 	Image  bool          // есть картинка для подложки
+	Format string        // "jpeg" | "png" | "webp" по содержимому; у PSD пусто
 	Note   string        // "" или почему видны только направляющие
 }
 
@@ -44,9 +45,12 @@ type MarkupGuide = psd.Guide
 // IsPSD — разметка в PSD (WebView его не показывает: картинку всегда строит Go).
 func (m MarkupInfo) IsPSD() bool { return strings.EqualFold(filepath.Ext(m.Path), ".psd") }
 
-// Big — картинку подложки строит Go (превью ≤ MarkupMaxSide): PSD и JPEG/PNG длиннее
-// MarkupMaxSide. Остальные JPEG/PNG окно показывает самим файлом.
-func (m MarkupInfo) Big() bool { return m.IsPSD() || max(m.W, m.H) > MarkupMaxSide }
+// Big — картинку подложки строит Go (превью ≤ MarkupMaxSide): PSD, JPEG/PNG длиннее MarkupMaxSide
+// и любой WebP (он проходит под .jpg/.png, а отдавать его байты в WebView2 не нужно: libwebp
+// браузера разбирал бы недоверенный файл). Остальные JPEG/PNG окно показывает самим файлом.
+func (m MarkupInfo) Big() bool {
+	return m.IsPSD() || m.Format == "webp" || max(m.W, m.H) > MarkupMaxSide
+}
 
 // ErrPSB — отказ PSB с текстом для пользователя: salbum проверяет путь тем же текстом, не зная
 // пакета psd.
@@ -74,9 +78,11 @@ func MarkupFile(path string) (MarkupInfo, error) {
 		m.Mod = st.ModTime().UnixNano()
 	}
 	if !m.IsPSD() {
-		if err := imgfile.CheckSize(path); err != nil {
+		d, err := imgfile.FileDims(path, 0) // размер и формат по заголовку, предел MaxPixels
+		if err != nil {
 			return MarkupInfo{}, err
 		}
+		m.Format = d.Format
 		ph, err := ReadInfo(path)
 		if err != nil {
 			return MarkupInfo{}, err

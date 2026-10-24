@@ -20,6 +20,7 @@
     ontab,
     onpick,
     onpreview,
+    inheritOn = false,
   }: {
     shown: string // что показано в шапке: цвет под мышью или текущий
     cur: string
@@ -30,6 +31,7 @@
     ontab: (id: string) => void
     onpick: (hex: string) => void
     onpreview: (hex: string | null) => void
+    inheritOn?: boolean // свой цвет не задан: текущий цвет — цвет альбома, шапка так и зовёт его (115)
   } = $props()
 
   const tabs = $derived([...SETS.map((s) => ({ id: s.id, title: s.title })), ...(withPhoto ? [{ id: PHOTO_TAB, title: 'С фото' }] : [])])
@@ -52,7 +54,7 @@
 <div class="head">
   <div class="cur" style:background={shown || 'transparent'}></div>
   <div class="name">
-    <b>{shown ? nameOf(shown) : 'Цвет не задан'}</b>
+    <b>{shown ? (inheritOn && shown === cur ? 'Как в альбоме' : nameOf(shown)) : 'Цвет не задан'}</b>
     <span>{shown}</span>
   </div>
 </div>

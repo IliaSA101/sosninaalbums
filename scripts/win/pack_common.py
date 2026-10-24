@@ -6,7 +6,7 @@
 import re
 
 APP = "sosninaalbums.app"
-EXE = "SosninaAlbums.exe"
+EXE = "SosninaAlbums.exe"  # имя в установке (постоянное: ярлыки и ассоциация переживают обновление)
 BIN = "sosninaalbums"  # исполняемый файл Linux
 ICON = BIN + ".png"
 NOTICES = "THIRD_PARTY_NOTICES.txt"
@@ -30,6 +30,11 @@ class PackError(Exception):
 
 def folder_name(version):
     return "Sosnina Albums " + version
+
+
+def exe_name(version):
+    """Имя exe в zip: с версией (спека 111) — закреплённый ярлык zip-версии не обманывает, какая это копия."""
+    return "SosninaAlbums-%s.exe" % version
 
 
 def guide_name(osname, ext):

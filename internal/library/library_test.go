@@ -33,7 +33,7 @@ func TestScanSubfoldersAndSymlinkLoop(t *testing.T) {
 			t.Fatalf("EXIF-поворот не учтён: %dx%d", p.W, p.H)
 		}
 	}
-	if len(skipped) != 1 || skipped[0] != bomb {
+	if len(skipped) != 1 || skipped[0].Path != bomb {
 		t.Fatalf("skipped=%v", skipped)
 	}
 }

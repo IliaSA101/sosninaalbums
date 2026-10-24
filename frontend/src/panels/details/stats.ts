@@ -17,6 +17,9 @@ export interface AlbumStats {
   v: number
   sq: number
   adobe: number // фото в Adobe RGB (будут пересчитаны)
+  p3: number // фото в Display P3 (iPhone, Xiaomi под любым именем; будут пересчитаны, 119)
+  icc: number // фото с другим матричным RGB-профилем (будут пересчитаны, 119)
+  iccName: string // единственное имя профиля среди icc; '' — имён несколько или нет
   other: number // фото с другим профилем (не пересчитываются)
 }
 
@@ -53,6 +56,7 @@ interface Item {
   file: string
   o: Orientation
   color: Photo['color'] | undefined
+  profile: string | undefined
 }
 const parts = new WeakMap<SpreadView, { byId: Map<string, Photo>; items: Item[] }>()
 
@@ -64,7 +68,7 @@ function partOf(s: SpreadView, byId: Map<string, Photo>): Item[] {
     // Фото из недоступной папки в библиотеке нет — берём аспект его ячейки. У копии в ленте её ID нет: смотрим файл.
     const lib = byId.get(file)
     const p = lib ?? s.rects?.[i]
-    return { file, o: p ? orientation(p.w, p.h) : 'sq', color: lib?.color }
+    return { file, o: p ? orientation(p.w, p.h) : 'sq', color: lib?.color, profile: lib?.profile }
   })
   parts.set(s, { byId, items })
   return items
@@ -84,8 +88,12 @@ export function albumStats(sheets: SpreadView[], byId: Map<string, Photo>, total
     v: 0,
     sq: 0,
     adobe: 0,
+    p3: 0,
+    icc: 0,
+    iccName: '',
     other: 0,
   }
+  const iccNames = new Set<string>()
   const keys = new Set<string>()
   const seen = new Set<string>()
   for (const [n, s] of sheets.entries()) {
@@ -96,17 +104,25 @@ export function albumStats(sheets: SpreadView[], byId: Map<string, Photo>, total
       st.photos++
       st[it.o]++
       if (it.color === 'adobe') st.adobe++
-      else if (it.color === 'other') st.other++
+      else if (it.color === 'p3') st.p3++
+      else if (it.color === 'icc') {
+        st.icc++
+        iccNames.add(it.profile ?? '')
+      } else if (it.color === 'other') st.other++
     }
   }
+  if (iccNames.size === 1) st.iccName = [...iccNames][0]
   st.layouts = keys.size
   return st
 }
 
 // Строка «Цвет» для сведений об альбоме; null — показывать нечего.
-export function colorLine(st: Pick<AlbumStats, 'adobe' | 'other'>): string | null {
+// p3 — одна строка для iPhone и Xiaomi; у icc одно общее имя профиля стоит вместо «другие RGB-профили» (119).
+export function colorLine(st: Pick<AlbumStats, 'adobe' | 'p3' | 'icc' | 'iccName' | 'other'>): string | null {
   const parts: string[] = []
   if (st.adobe > 0) parts.push(`Adobe RGB — ${st.adobe} (будут пересчитаны)`)
+  if (st.p3 > 0) parts.push(`Display P3 — ${st.p3} (будут пересчитаны)`)
+  if (st.icc > 0) parts.push(`${st.iccName || 'другие RGB-профили'} — ${st.icc} (будут пересчитаны)`)
   if (st.other > 0) parts.push(`другой профиль — ${st.other}`)
   return parts.length ? 'Цвет: ' + parts.join(', ') : null
 }

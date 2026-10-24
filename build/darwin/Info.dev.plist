@@ -23,6 +23,47 @@
         <string>true</string>
         <key>NSHumanReadableCopyright</key>
         <string>{{.Info.Copyright}}</string>
+        <key>CFBundleDocumentTypes</key>
+        <array>
+            <dict>
+                <key>CFBundleTypeName</key>
+                <string>Альбом Sosnina Albums</string>
+                <key>CFBundleTypeRole</key>
+                <string>Editor</string>
+                <key>LSHandlerRank</key>
+                <string>Owner</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                    <string>io.github.iliasa101.salbum</string>
+                </array>
+                <key>CFBundleTypeExtensions</key>
+                <array>
+                    <string>salbum</string>
+                </array>
+                <key>CFBundleTypeIconFile</key>
+                <string>iconfile</string>
+            </dict>
+        </array>
+        <key>UTExportedTypeDeclarations</key>
+        <array>
+            <dict>
+                <key>UTTypeIdentifier</key>
+                <string>io.github.iliasa101.salbum</string>
+                <key>UTTypeDescription</key>
+                <string>Альбом Sosnina Albums</string>
+                <key>UTTypeConformsTo</key>
+                <array>
+                    <string>public.json</string>
+                </array>
+                <key>UTTypeTagSpecification</key>
+                <dict>
+                    <key>public.filename-extension</key>
+                    <array>
+                        <string>salbum</string>
+                    </array>
+                </dict>
+            </dict>
+        </array>
         {{if .Info.FileAssociations}}
         <key>CFBundleDocumentTypes</key>
         <array>

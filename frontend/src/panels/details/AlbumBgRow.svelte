@@ -7,7 +7,7 @@
   import { ALBUM_FADE, albumFadeLive } from '../../editor/backdrop/fade.svelte'
   import { decor } from '../decor/decor.svelte'
   import { tileSrc } from '../decor/decor'
-  import { ALBUM_BG, ALBUM_CLEAR, ALBUM_FADE_CAP, ALBUM_PICK, albumItem, albumName } from '../decor/albumbg'
+  import { ALBUM_BG, ALBUM_CLEAR, ALBUM_FADE_CAP, ALBUM_PICK, albumItem, albumName } from '../albumbg/albumbg'
 
   // Строка «Фон альбома» в «Настройках альбома» (098 §3): образец плитки, «Выбрать…» / «Убрать», ползунок прозрачности.
   // Как «Цвет страниц альбома» рядом, но действует сразу и не ждёт «Применить»: фон — не поле Settings, у него свой шаг отмены.

@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { NOTICE_MUST, changelogSection, checkAll, checkLicense, checkNeeds, checkReadmeMedia, parseJobs, workflowExec } from './release-check.mjs'
+import { NOTICE_MUST, changelogSection, checkAll, checkInstaller, checkLicense, checkNeeds, checkReadmeFeatures, checkReadmeMedia, parseJobs, workflowExec } from './release-check.mjs'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -23,14 +23,20 @@ jobs:
     needs: prepare
   pack:
     needs: [prepare, windows, macos]
+    steps:
+      - run: bash scripts/win/installer.sh --exe x --version 1.2.0 --out out
   mac-check:
     needs:
       - prepare
       - pack
     steps:
       - run: go test ./internal/layout -run '^TestGoldenFirst(16)?$' -count=1
+  win-check:
+    needs: [prepare, pack]
+    steps:
+      - run: pwsh scripts/win/installer-check.ps1 -Setup a -Next b -Version 1.2.0
   release:
-    needs: [prepare, pack, mac-check]
+    needs: [prepare, pack, mac-check, win-check]
 `
 
 const ID_A = 'aaaaaaaa-1111-2222-3333-444444444444'
@@ -38,15 +44,21 @@ const ID_B = 'bbbbbbbb-1111-2222-3333-444444444444'
 const URL = (id) => `https://github.com/user-attachments/assets/${id}\n`
 const MEDIA = URL(ID_A) + URL(ID_B) + URL(ID_A) + URL(ID_B)
 
+const FEATURES = '\n## Возможности\n\n- Старое (1.1): раз.\n- Новое (1.2): два.\n\n## Сборка\n'
+
 const FILES = {
   'docs/media/demo.webp': 'w',
   'docs/media/screenshot.jpg': 'j',
   'docs/media/CREDITS.md': '# Фото\n',
   'wails.json': JSON.stringify({ info: { productVersion: '1.2.0' } }),
-  'README.md': '# X\n\n- Status: version 1.2.0, actively developed\n' + MEDIA,
+  'README.md': '# X\n\n- Status: version 1.2.0, actively developed\n' + MEDIA + FEATURES,
   'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.0'\nexport const WHATS_NEW: readonly string[] = [\n  'раз',\n]\n",
   'CHANGELOG.md': '# История\n\n## 1.2.0 — 2026-01-01\n\n### Добавлено\n\n- Новое (051)\n- Ещё (052)\n\n## 1.1.0 — 2025-12-01\n\n- Старое\n',
   '.github/workflows/release.yml': YML,
+  '.github/release-notes.md': 'Скачайте `SosninaAlbums-{{VERSION}}-windows-x64-setup.exe`. Без установки: `SosninaAlbums-{{VERSION}}.exe` в zip.\n',
+  'docs/install/guide.md': 'В папке `SosninaAlbums-<версия>.exe`.\n',
+  'scripts/win/installer.sh': '#!/bin/sh\n',
+  'scripts/win/installer-check.ps1': '# x\n',
   LICENSE,
   'NOTICE.md': NOTICE,
   'docs/specs/1.2/051-one.md': '# 051\n',
@@ -89,7 +101,7 @@ test('версия: каждое из четырёх мест отдельно',
     assert.match(e[0], part)
   }
   bad({ 'wails.json': JSON.stringify({ info: { productVersion: '1.1.0' } }) }, /wails\.json/)
-  bad({ 'README.md': '- Status: version 1.1.0, x\n' + MEDIA }, /README/)
+  bad({ 'README.md': '- Status: version 1.1.0, x\n' + MEDIA + FEATURES }, /README/)
   bad({ 'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.1.0'\nexport const WHATS_NEW: readonly string[] = ['а']\n" }, /whatsnew/)
   bad({ 'CHANGELOG.md': '## 1.1.0\n\n- а\n' }, /нет раздела/)
 })
@@ -119,17 +131,17 @@ test('спеки: не в таблице README и не упомянутая р�
   assert.deepEqual(no, ['спека 053 (docs/specs/1.2) не упомянута в CHANGELOG 1.2.0'])
   // CHANGELOG без номеров — сверка молчит, патч без своей папки спек тоже
   assert.deepEqual(run({ 'CHANGELOG.md': '## 1.2.0\n\n- а\n' }, '1.2.0').errors, [])
-  assert.deepEqual(run({ 'wails.json': '{"info":{"productVersion":"1.2.1"}}', 'README.md': '- Status: version 1.2.1, x\n' + MEDIA, 'CHANGELOG.md': '## 1.2.1\n\n- а\n', 'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.1'\nexport const WHATS_NEW: readonly string[] = ['а']\n" }).errors, [])
+  assert.deepEqual(run({ 'wails.json': '{"info":{"productVersion":"1.2.1"}}', 'README.md': '- Status: version 1.2.1, x\n' + MEDIA + FEATURES, 'CHANGELOG.md': '## 1.2.1\n\n- а\n', 'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.1'\nexport const WHATS_NEW: readonly string[] = ['а']\n" }).errors, [])
 })
 
 test('needs: все задания в цепочке публикации', () => {
   assert.deepEqual(checkNeeds(YML), [])
-  const lost = YML.replace('needs: [prepare, pack, mac-check]', 'needs: [prepare, pack]')
+  const lost = YML.replace('needs: [prepare, pack, mac-check, win-check]', 'needs: [prepare, pack, win-check]')
   assert.deepEqual(checkNeeds(lost), ['release.yml: «release» не ждёт задание «mac-check» (needs, в том числе через цепочку)'])
   // задание, которое никто не ждёт (забыли добавить в needs новой сборки)
   const extra = YML.replace('  release:', '  linux:\n    needs: prepare\n  release:')
   assert.deepEqual(checkNeeds(extra), ['release.yml: «release» не ждёт задание «linux» (needs, в том числе через цепочку)'])
-  assert.deepEqual(checkNeeds(YML.replace('needs: [prepare, pack, mac-check]', 'needs: [prepare, pack, mac-check, ghost]')), [
+  assert.deepEqual(checkNeeds(YML.replace('needs: [prepare, pack, mac-check, win-check]', 'needs: [prepare, pack, mac-check, win-check, ghost]')), [
     'release.yml: needs ссылается на несуществующее задание «ghost»',
   ])
   assert.deepEqual(checkNeeds('jobs:\n  a:\n    runs-on: x\n'), ['release.yml: нет задания «release»'])
@@ -142,7 +154,8 @@ test('parseJobs: строка, список в скобках, блочный с
     macos: ['prepare'],
     pack: ['prepare', 'windows', 'macos'],
     'mac-check': ['prepare', 'pack'],
-    release: ['prepare', 'pack', 'mac-check'],
+    'win-check': ['prepare', 'pack'],
+    release: ['prepare', 'pack', 'mac-check', 'win-check'],
   })
 })
 
@@ -255,4 +268,42 @@ test('ролики README: заглушка, число адресов, файл
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('установщик: win-check, вызовы скриптов и имя exe в заметках и инструкции', () => {
+  const root = repo()
+  try {
+    assert.deepEqual(checkInstaller(root, YML), [])
+    // нет задания win-check (release.yml ещё без установщика)
+    const no = YML.replace(/  win-check:[\s\S]*?(?=  release:)/, '').replace(', win-check]', ']')
+    assert.deepEqual(checkInstaller(root, no).filter((e) => /win-check/.test(e)), ['release.yml: нет задания «win-check» (проверка установщика на windows-latest)'])
+    // win-check не ждёт pack
+    const nopack = YML.replace('  win-check:\n    needs: [prepare, pack]', '  win-check:\n    needs: [prepare]')
+    assert.deepEqual(checkInstaller(root, nopack), ['release.yml: «win-check» не ждёт «pack» (установщик собирается там)'])
+    // скрипты не вызываются
+    assert.deepEqual(checkInstaller(root, YML.replace('installer-check.ps1', 'other.ps1')), ['release.yml: не вызывается scripts/win/installer-check.ps1'])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+  const bad = (mod) => run(mod, '1.2.0').errors
+  assert.deepEqual(bad({ '.github/release-notes.md': 'Скачайте `SosninaAlbums-{{VERSION}}-windows-x64-setup.exe`. В zip `SosninaAlbums.exe`.\n' }), [
+    '.github/release-notes.md: нет имени exe в zip «SosninaAlbums-{{VERSION}}.exe»',
+  ])
+  assert.deepEqual(bad({ '.github/release-notes.md': 'В zip `SosninaAlbums-{{VERSION}}.exe`.\n' }), [
+    '.github/release-notes.md: нет установщика «SosninaAlbums-{{VERSION}}-windows-x64-setup.exe»',
+  ])
+  assert.deepEqual(bad({ 'docs/install/guide.md': 'В папке `SosninaAlbums.exe`.\n' }), ['docs/install/guide.md: нет имени exe в zip «SosninaAlbums-<версия>.exe»'])
+  assert.deepEqual(bad({ 'docs/install/guide.md': null }), ['docs/install/guide.md: нет файла'])
+  assert.deepEqual(bad({ 'scripts/win/installer.sh': null }), ['scripts/win/installer.sh: нет файла'])
+})
+
+test('«Возможности» в README: пункт текущей версии, диапазон, нет раздела', () => {
+  const head = '- Status: version 1.2.0, x\n' + MEDIA
+  const m = (tail) => run({ 'README.md': head + tail }, '1.2.0').errors
+  assert.deepEqual(m(FEATURES), [])
+  assert.deepEqual(m('## Возможности\n\n- Серия (1.1–1.3): раз.\n'), [])
+  assert.deepEqual(m('## Возможности (1.2.0)\n\n- Вот (1.2): раз.\n'), [])
+  assert.ok(m('## Возможности\n\n- Старое (1.1): раз.\n\n## Сборка\n- Новое (1.2)\n').some((e) => /нет пункта с «\(1\.2\)»/.test(e)))
+  assert.ok(m('## Сборка\n').some((e) => /нет раздела/.test(e)))
+  assert.deepEqual(checkReadmeFeatures('/nonexistent-root', '1.2.0'), ['README.md: нет файла'])
 })

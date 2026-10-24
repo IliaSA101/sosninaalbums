@@ -1,7 +1,9 @@
 // Подсветка места (спека 033): кольцо поверх элемента и подпись. Состояние для Spot.svelte; выбор
 // элемента и геометрия — в spot.ts (под тестом). Кольцо не класс на элементе: overflow:hidden у ленты
 // и холста обрезал бы обводку.
-import { SPOT_HINT_MS, SPOT_MS, isCandidate, pickTarget, revealShift, ringBox, type Box } from './spot'
+import { HOLD_FAST_MS, HOLD_SLOW_MS, SPOT_HINT_MS, SPOT_MS, isCandidate, pickTarget, revealShift, ringBox, type Box } from './spot'
+import { spotId } from './show'
+import type { SpotKey } from './articles'
 
 export const reducedMotion = (): boolean => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -62,11 +64,37 @@ export function choose(els: HTMLElement[]): HTMLElement | null {
   return el
 }
 
+// Основное место, иначе «⋯» полосы фото (кнопка ушла в меню). Общий поиск «Показать» справочника и тура (113):
+// hint — подпись, когда мигает не сама функция (planHint — подсказка плана для найденного основного места).
+export async function seek(key: SpotKey, planHint = ''): Promise<{ el: HTMLElement; hint: string } | null> {
+  const id = spotId(key)
+  const isMenu = key.startsWith('menu:')
+  const sel = isMenu ? `[role="menu"] [data-item="${id}"]` : `[data-guide~="${id}"]`
+  if (!isMenu) spot.reveal(sel) // кнопки, видимые только при наведении, раскрываются до поиска
+  let els = await locate(sel)
+  let hint = planHint
+  if (els.length === 0 && !isMenu) {
+    // Кнопка ушла в «⋯» полосы фото: мигает «⋯».
+    els = await locate(`[data-guide-hold~="${id}"]`, 100)
+    hint = els.length > 0 ? 'В меню «⋯»' : ''
+  }
+  const el = choose(els)
+  return el ? { el, hint } : null
+}
+
+// hold — кольцо тура (113): без таймера, щелчок и клавиша его не гасят, только cancel().
+// onLost — элемент снят из документа (его заменила другая кнопка с тем же data-guide): тур ищет место заново. Зовётся один раз.
+export interface FlashOpts {
+  hold?: boolean
+  onLost?: () => void
+}
+
 interface Cur {
   el: HTMLElement
   label: string
   hint: string
   reduced: boolean
+  hold: boolean
 }
 
 class Spot {
@@ -75,6 +103,7 @@ class Spot {
   box = $state<Box | null>(null)
   private raf = 0
   private timer: ReturnType<typeof setTimeout> | undefined
+  private slow: ReturnType<typeof setTimeout> | undefined
   private off: (() => void) | undefined
   private onEnd: (() => void) | undefined
   // Контейнеры с data-guide-reveal, что прячут кнопки до наведения (LayoutBar): на время поиска и показа
@@ -95,24 +124,46 @@ class Spot {
     }
   }
 
-  flash(el: HTMLElement, label: string, hint = '', onEnd?: () => void) {
+  flash(el: HTMLElement, label: string, hint = '', onEnd?: () => void, opts: FlashOpts = {}) {
     this.cancel()
-    this.cur = { el, label, hint, reduced: reducedMotion() }
+    const hold = !!opts.hold
+    this.cur = { el, label, hint, reduced: reducedMotion(), hold }
     this.onEnd = onEnd
     el.setAttribute('data-spot', '') // кнопки, видимые только при наведении, на время показа не прячутся
     const box = el.closest<HTMLElement>('[data-guide-reveal]')
     if (box) this.hold([box])
-    this.timer = setTimeout(() => this.cancel(), hint ? SPOT_HINT_MS : SPOT_MS)
-    const tick = () => {
+    if (!hold) this.timer = setTimeout(() => this.cancel(), hint ? SPOT_HINT_MS : SPOT_MS)
+    let lost = false
+    const measure = () => {
       const c = this.cur
       if (!c) return
       if (c.el.isConnected) {
         const r = c.el.getBoundingClientRect()
-        this.box = ringBox({ left: r.left, top: r.top, width: r.width, height: r.height })
-      } else this.box = null
-      this.raf = requestAnimationFrame(tick)
+        this.box = ringBox({ left: r.left, top: r.top, width: r.width, height: r.height }, { w: window.innerWidth, h: window.innerHeight })
+      } else {
+        this.box = null
+        if (hold && opts.onLost && !lost) {
+          lost = true
+          setTimeout(() => this.cur?.el === el && opts.onLost?.(), 0)
+        }
+      }
+    }
+    const started = performance.now()
+    // Обычный показ короткий — кадр за кадром. Держащееся кольцо (тур) первые 1,5 с так же (панель выезжает, ряд доезжает),
+    // дальше раз в 250 мс и при изменении размера окна: минута тура не должна жечь кадры.
+    const tick = () => {
+      if (!this.cur) return
+      measure()
+      if (!hold || performance.now() - started < HOLD_FAST_MS) this.raf = requestAnimationFrame(tick)
+      else this.slow = setTimeout(tick, HOLD_SLOW_MS)
     }
     tick()
+    if (hold) {
+      const again = () => measure()
+      window.addEventListener('resize', again)
+      this.off = () => window.removeEventListener('resize', again)
+      return
+    }
     // Щелчок или клавиша гасят подсветку раньше; слушаем со следующего кадра, чтобы не поймать запустивший щелчок.
     void frame().then(() => {
       if (this.cur?.el !== el) return
@@ -129,6 +180,7 @@ class Spot {
   cancel() {
     cancelAnimationFrame(this.raf)
     clearTimeout(this.timer)
+    clearTimeout(this.slow)
     this.off?.()
     this.off = undefined
     this.cur?.el.removeAttribute('data-spot')

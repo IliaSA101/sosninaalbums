@@ -31,14 +31,39 @@ check 'права файлов: бинарник 0755 root, остальное 0
   grep -qE "^-rwxr-xr-x root/root .* \./usr/bin/sosninaalbums$" <<<"$l" &&
   [ "$(grep -E "^-" <<<"$l" | grep -vc "^-rw-r--r-- root/root")" = 1 ]' _ "$deb"
 check 'права каталогов: все 0755 root' bash -c '! dpkg-deb -c "$1" | grep "^d" | grep -v "^drwxr-xr-x root/root"' _ "$deb"
-check 'состав: .desktop, значок, copyright, THIRD_PARTY_NOTICES' bash -c '
-  l=$(dpkg-deb -c "$1"); for f in usr/share/applications/sosninaalbums.desktop usr/share/icons/hicolor/512x512/apps/sosninaalbums.png usr/share/doc/sosninaalbums/copyright usr/share/doc/sosninaalbums/THIRD_PARTY_NOTICES.txt; do grep -q " \./$f$" <<<"$l" || { echo "нет $f"; exit 1; }; done' _ "$deb"
+check 'состав: .desktop, mime-тип, значок, copyright, THIRD_PARTY_NOTICES' bash -c '
+  l=$(dpkg-deb -c "$1"); for f in usr/share/applications/sosninaalbums.desktop usr/share/mime/packages/sosninaalbums.xml usr/share/icons/hicolor/512x512/apps/sosninaalbums.png usr/share/doc/sosninaalbums/copyright usr/share/doc/sosninaalbums/THIRD_PARTY_NOTICES.txt; do grep -q " \./$f$" <<<"$l" || { echo "нет $f"; exit 1; }; done' _ "$deb"
 check 'copyright: условие NOTICE.md и ссылка на GPL-3' bash -c '
   c=$(dpkg-deb --fsys-tarfile "$1" | tar -xO ./usr/share/doc/sosninaalbums/copyright); [[ "$c" == *7* ]] && [[ "$c" == */usr/share/common-licenses/GPL-3* ]]' _ "$deb"
 
+mkdir -p "$WORK/x"
+dpkg-deb -x "$deb" "$WORK/x"
+D="$WORK/x/usr/share/applications/sosninaalbums.desktop"
+M="$WORK/x/usr/share/mime/packages/sosninaalbums.xml"
+# связь .salbum (спека 112-14): .desktop открывает файл и объявляет тип, xml описывает *.salbum
+check '.desktop: Exec с %f' grep -qE '^Exec=sosninaalbums %f$' "$D"
+check '.desktop: MimeType — наш тип' grep -qx 'MimeType=application/x-sosninaalbums;' "$D"
+check 'mime-xml: тип и glob *.salbum' bash -c 'grep -q "type=\"application/x-sosninaalbums\"" "$1" && grep -q "pattern=\"\*.salbum\"" "$1"' _ "$M"
+check 'mime-xml: права 0644 root' bash -c 'dpkg-deb -c "$1" | grep -qE "^-rw-r--r-- root/root .* \./usr/share/mime/packages/sosninaalbums\.xml$"' _ "$deb"
+check 'mime-каталоги: 0755 root' bash -c 'l=$(dpkg-deb -c "$1"); grep -qE "^drwxr-xr-x root/root .* \./usr/share/mime/$" <<<"$l" && grep -qE "^drwxr-xr-x root/root .* \./usr/share/mime/packages/$" <<<"$l"' _ "$deb"
+if command -v xmllint >/dev/null; then
+  check 'mime-xml: well-formed (xmllint)' xmllint --noout "$M"
+else
+  echo 'skip xmllint не установлен'
+fi
+if command -v update-mime-database >/dev/null && command -v xdg-mime >/dev/null; then
+  mkdir -p "$WORK/mh/mime/packages"
+  cp "$M" "$WORK/mh/mime/packages/"
+  update-mime-database "$WORK/mh/mime" >/dev/null 2>&1
+  printf "{}" >"$WORK/Свадьба.salbum"
+  printf "{}" >"$WORK/UPPER.SALBUM"
+  check 'xdg-mime: .salbum — наш тип' bash -c '[ "$(XDG_DATA_HOME=$1 XDG_DATA_DIRS=$1:/usr/share xdg-mime query filetype "$2")" = application/x-sosninaalbums ]' _ "$WORK/mh" "$WORK/Свадьба.salbum"
+  check 'xdg-mime: регистр расширения не важен' bash -c '[ "$(XDG_DATA_HOME=$1 XDG_DATA_DIRS=$1:/usr/share xdg-mime query filetype "$2")" = application/x-sosninaalbums ]' _ "$WORK/mh" "$WORK/UPPER.SALBUM"
+else
+  echo 'skip update-mime-database/xdg-mime не установлены'
+fi
+
 if command -v desktop-file-validate >/dev/null; then
-  mkdir -p "$WORK/x"
-  dpkg-deb -x "$deb" "$WORK/x"
   check '.desktop проходит desktop-file-validate' desktop-file-validate "$WORK/x/usr/share/applications/sosninaalbums.desktop"
 else
   echo 'skip desktop-file-validate не установлен'

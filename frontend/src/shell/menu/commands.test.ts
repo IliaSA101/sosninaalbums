@@ -17,6 +17,7 @@ import { gridAct } from '../../panels/layouts/gridact.svelte'
 import { edit } from '../../editor/text/edit.svelte'
 import { newDoc } from '../newdoc/newdoc.svelte'
 import { aboutUi } from '../dialogs/about.svelte'
+import { tour } from '../tour/tourstate.svelte'
 import * as Bins from '../../panels/bins/binact'
 import { binsel } from '../../panels/bins/binsel.svelte'
 import * as App from '../../../wailsjs/go/app/App'
@@ -41,6 +42,7 @@ vi.mock('../../../wailsjs/go/app/App', async (orig) => ({
   ...(await orig<typeof import('../../../wailsjs/go/app/App')>()),
   OpenRecent: vi.fn(async () => ({ cancelled: true })),
   OpenProject: vi.fn(async () => ({ cancelled: true })),
+  OpenLink: vi.fn(async () => {}),
   NewProject: vi.fn(async () => ({ cancelled: true })),
   NewVignetteSheet: vi.fn(async () => ({ cancelled: true })),
 }))
@@ -77,6 +79,16 @@ describe('команды', () => {
         expect(typeof COMMANDS[it.cmd!], it.id).toBe('function')
       }
     }
+  })
+
+  it('tour открывает приветствие, повтор не ломает; videos зовёт OpenLink(videos) (113)', async () => {
+    COMMANDS.tour()
+    COMMANDS.tour()
+    expect(tour.open).toBe(true)
+    expect(tour.at).toBe('intro')
+    tour.finish('done')
+    await COMMANDS.videos()
+    expect(App.OpenLink).toHaveBeenCalledWith('videos')
   })
 
   it('about открывает окно «О программе» и повторный вызов его не ломает (101)', () => {

@@ -33,6 +33,7 @@ type DecorItem struct {
 	W      int     `json:"w"`
 	H      int     `json:"h"`
 	Color  string  `json:"color,omitempty"` // цвет страниц пресета: подложка плитки
+	Dark   bool    `json:"dark,omitempty"`  // светлый стикер (116): плитке — тёмная шашечка
 	// Pages, Places — у разворота (067): 1 — страница, 2 — разворот; мест в шаблоне.
 	Pages  int    `json:"pages,omitempty"`
 	Places int    `json:"places,omitempty"`
@@ -381,6 +382,19 @@ func (a *App) bgSource(targets []model.GridTarget, itemID string) (model.BgSourc
 // недавние; тот же фон — холостая без шага.
 func (a *App) SetAlbumBg(itemID string, pages bool) (v model.View, err error) {
 	defer a.guardEdit("SetAlbumBg", &v, &err)
+	return a.setAlbumBg(itemID, pages, false)
+}
+
+// SetAlbumBgToAll — то же, что SetAlbumBg, и «Как в альбоме» у разворотов со своим фоном (115): их
+// узоры, фото фона и «Не показывать здесь» сняты тем же шагом отмены; «скрыт» без своего фона и
+// обложка остаются. Ошибки и недавние — как у SetAlbumBg; тот же фон при своих фонах — шаг из снятия.
+func (a *App) SetAlbumBgToAll(itemID string, pages bool) (v model.View, err error) {
+	defer a.guardEdit("SetAlbumBgToAll", &v, &err)
+	return a.setAlbumBg(itemID, pages, true)
+}
+
+// setAlbumBg — общее тело SetAlbumBg и SetAlbumBgToAll; all — снять свои фоны разворотов.
+func (a *App) setAlbumBg(itemID string, pages, all bool) (model.View, error) {
 	ed := a.editor()
 	s, err := a.decorStore()
 	if err != nil {
@@ -390,7 +404,11 @@ func (a *App) SetAlbumBg(itemID string, pages bool) (v model.View, err error) {
 	if err != nil {
 		return ed.View(), err
 	}
-	v, err = ed.SetAlbumBg(model.BgSource{Pattern: bg.Pattern, Photo: bg.Photo}, pages)
+	set := ed.SetAlbumBg
+	if all {
+		set = ed.SetAlbumBgToAll
+	}
+	v, err := set(model.BgSource{Pattern: bg.Pattern, Photo: bg.Photo}, pages)
 	if err != nil {
 		return v, err
 	}

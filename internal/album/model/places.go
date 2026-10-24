@@ -380,6 +380,38 @@ func (p *Project) Swap(a, b string) {
 	}
 }
 
+// ShiftGridPhoto — перестановка фото внутри ручного листа (спека 114): фото id встаёт в щель index
+// порядка GridPhotos (как Spread.Insert у «Авто»: index — щель в нынешнем порядке, −1 и больше
+// числа фото — в конец), места стоят, фото переходят по непустым местам в новом порядке.
+// Фото не из мест листа — ничего. Ответ — изменился ли порядок. Detach не нужен: фото не уходит с
+// листа, «одно фото — одно место» держится (как в Swap, пишем Place.Photo напрямую).
+func (s *Spread) ShiftGridPhoto(id string, index int) bool {
+	photos := GridPhotos(s)
+	j := slices.Index(photos, id)
+	if j < 0 {
+		return false
+	}
+	if index < 0 || index > len(photos) {
+		index = len(photos)
+	}
+	if j < index {
+		index--
+	}
+	if index == j {
+		return false
+	}
+	photos = slices.Insert(slices.Delete(photos, j, j+1), index, id)
+	k := 0
+	for _, pl := range s.Grid {
+		if pl.Photo != "" {
+			pl.Photo = photos[k]
+			k++
+		}
+	}
+	s.Photos = GridPhotos(s)
+	return true
+}
+
 // Мост к internal/geom. Модельные типы (Place, Frame, Settings) лежат в .salbum и
 // в models.ts, поэтому они не алиасы geom: сюда приходят значениями, расчёт — в geom.
 

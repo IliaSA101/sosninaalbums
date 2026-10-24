@@ -103,6 +103,36 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/album$
             - github.com/IliaSA101/sosninaalbums/internal/album/model
             - github.com/IliaSA101/sosninaalbums/internal/app/edit
+        # Пипетка и «С фото» (0.25, долг ревью Go 0.24): за малым Host — только чтение альбома и картинок.
+        # Да владельца 2026-10-23.
+        "app/colorpick: чтение альбома и картинок":
+          files:
+            - "**/internal/app/colorpick/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/colorspace
+            - github.com/IliaSA101/sosninaalbums/internal/export
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/render
+            - github.com/IliaSA101/sosninaalbums/internal/app/colorpick
+        # Обновление (111): сеть только через decor/fetch (подписанный конверт, белый список хостов), место на диске —
+        # osx; ни альбома, ни App. Да владельца 2026-10-23.
+        "update: fetch и osx":
+          files:
+            - "**/internal/update/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch
+            - github.com/IliaSA101/sosninaalbums/internal/osx
+            - github.com/IliaSA101/sosninaalbums/internal/update
         "app/namesfile: model, paths, table":
           files:
             - "**/internal/app/namesfile/**"

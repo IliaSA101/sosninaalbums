@@ -17,7 +17,17 @@
   import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
   import { makeVignette } from '../../panels/vignette/vigact'
   import Icon from '../../base/ui/Icon.svelte'
-  import { ALBUM_CARD_EDIT, ALBUM_CARD_HIDE, ALBUM_CARD_NOW, ALBUM_CARD_OFF, ALBUM_CARD_SHOW, albumCard } from '../../panels/decor/albumbg'
+  import {
+    ALBUM_CARD_EDIT,
+    ALBUM_CARD_HIDE,
+    ALBUM_CARD_NOW,
+    ALBUM_CARD_OFF,
+    ALBUM_CARD_OWN,
+    ALBUM_CARD_SHOW,
+    ALBUM_CARD_TO,
+    ALBUM_CARD_TO_TIP,
+    albumCard,
+  } from '../../panels/albumbg/albumbg'
   import { decor } from '../../panels/decor/decor.svelte'
 
   // Карточка «Разворот N», когда ничего не выделено (спека 008, panels.md; 009 D2): название, раздел
@@ -90,6 +100,10 @@
   // Фон альбома (098): строка в разделе «Фон» — виден ли он на этом листе и как его скрыть; сам фон выбирают в настройках альбома.
   const albumRow = $derived(albumCard(sp, store.view.albumBg))
   const hideAlbum = (off: boolean) => sp && store.run(Api.SetNoAlbumBg(sp.id, off))
+  // 115 Г2: свой узор и фото фона сняты, «Не показывать здесь» тоже — одна правка без вопроса (вернуть — Ctrl+Z)
+  const toAlbum = () => sp && store.run(Api.SpreadBgToAlbum(sp.id))
+  // 115 В: строка «Как в альбоме» в окнах цвета — цвет альбома и «своего цвета нет» (у «всего разворота» — ни на одной странице)
+  const albumHex = $derived(store.view.settings.bg || '#ffffff')
   // ColorPicker зовёт onpick один раз на выбор — один шаг undo. Цвет '' снимает свой цвет.
   // Показ держится до ответа Go (colorLive.commit): старый фон не мелькает.
   const pick = (scope: 'spread' | 'left' | 'right', color: string) =>
@@ -129,11 +143,15 @@
       {#if prefs.can('bgColor')}
         {#if !split}
           <div class="row">
-            <span class="lbl">{cover ? coverLabel(store.cover, 'spread') : unit.all}</span>
+            <span class="lbl"
+              >{cover ? coverLabel(store.cover, 'spread') : unit.all}&#32;<span class="src">· {own ? 'свой' : 'как в альбоме'}</span></span
+            >
             <ColorPicker
               value={sp.bg[0]}
               sheet={sp.id}
               label="Цвет фона {unit.one}а"
+              inherit={{ hex: albumHex, on: !own }}
+              oninherit={() => pick('spread', '')}
               onpick={(c) => pick('spread', c)}
               onpreview={(c) => preview('spread', c)}
             />
@@ -148,11 +166,13 @@
         {#if split}
           {#each sides as s (s.scope)}
             <div class="row">
-              <span class="lbl">{s.label}</span>
+              <span class="lbl">{s.label}&#32;<span class="src">· {sp.bgSet[s.i] === '' ? 'как в альбоме' : 'свой'}</span></span>
               <ColorPicker
                 value={sp.bg[s.i]}
                 sheet={sp.id}
                 label="Цвет фона: {s.label.toLowerCase()} страница"
+                inherit={{ hex: albumHex, on: sp.bgSet[s.i] === '' }}
+                oninherit={() => pick(s.scope, '')}
                 onpick={(c) => pick(s.scope, c)}
                 onpreview={(c) => preview(s.scope, c)}
               />
@@ -175,9 +195,12 @@
             <!-- Без уровня «Фоны» окно не открываем — как «Выбрать…» в AlbumBgRow -->
             {#if prefs.can('decor')}<button class="ghost mini" onclick={() => decor.showAlbum()}>{ALBUM_CARD_EDIT}</button>{/if}
             <button class="ghost mini" onclick={() => hideAlbum(true)}>{ALBUM_CARD_HIDE}</button>
-          {:else}
+          {:else if albumRow === 'off'}
             <span class="lbl">{ALBUM_CARD_OFF}</span>
             <button class="ghost mini" onclick={() => hideAlbum(false)}>{ALBUM_CARD_SHOW}</button>
+          {:else}
+            <span class="lbl">{ALBUM_CARD_OWN}</span>
+            <button class="ghost mini" title={ALBUM_CARD_TO_TIP} onclick={toAlbum}>{ALBUM_CARD_TO}</button>
           {/if}
         </div>
       {/if}
@@ -256,6 +279,9 @@
   .lbl {
     flex: 1;
     color: var(--muted);
+  }
+  .src {
+    opacity: 0.7;
   }
   .link {
     all: unset;

@@ -243,7 +243,7 @@ func TestScanLogNoNames(t *testing.T) {
 	waitScan(t, a)
 	a.bg.Wait() // лог пишется в конце фоновой задачи
 	logged := buf.String()
-	if !strings.Contains(logged, "не читается: 3 файла .jpg, 1 файл .jpeg") {
+	if !strings.Contains(logged, "не читается: 3 файла .jpg (не похоже на картинку), 1 файл .jpeg (не похоже на картинку)") {
 		t.Errorf("сводка по расширениям не найдена: %q", logged)
 	}
 	for _, leak := range []string{"Иванов", "Петрова", "хороший"} {

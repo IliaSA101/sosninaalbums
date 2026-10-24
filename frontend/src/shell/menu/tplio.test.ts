@@ -92,4 +92,15 @@ describe('команды меню', () => {
     await COMMANDS.showData()
     expect(toast()).toMatchObject({ text: 'Не удалось открыть папку данных', kind: 'error' })
   })
+
+  it('showData на стенде: тост «На стенде папки не открываются», Go не зовётся', async () => {
+    store.stand = true
+    try {
+      await COMMANDS.showData()
+      expect(api.ShowDataFolder).not.toHaveBeenCalled()
+      expect(toast()).toMatchObject({ text: 'На стенде папки не открываются' })
+    } finally {
+      store.stand = false
+    }
+  })
 })

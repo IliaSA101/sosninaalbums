@@ -45,18 +45,24 @@ func TestNewerText(t *testing.T) {
 	if plain := errors.New("x"); openErr(plain) != plain {
 		t.Error("openErr меняет чужую ошибку")
 	}
-	// Открытие файла новее программы через openPath — текст с версией.
+	// Открытие файла новее программы через openPath — не ошибка, а State.Newer с версией (112).
+	withVersion(t, "0.23.0")
 	a := newApp(t)
 	a.cfgDir = testkit.TempDir(t)
 	path := filepath.Join(testkit.TempDir(t), "a"+projectExt)
 	if err := os.WriteFile(path, fmt.Appendf(nil, `{"version":%d,"app":"0.25.0"}`, model.FormatVersion+1), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.openPath(path); err == nil || !strings.Contains(err.Error(), "в версии 0.25") {
-		t.Fatalf("openPath: %v", err)
+	st, err := a.openPath(path)
+	if err != nil || !st.Cancelled || st.Newer == nil || st.Newer.Need != "0.25" || st.Newer.Mine != "0.23" {
+		t.Fatalf("openPath: %+v, %v", st, err)
 	}
-	if _, _, notice := a.loadStartup(path); !strings.Contains(notice, "Не открылся проект: альбом сохранён в версии 0.25") {
-		t.Fatalf("старт: %q", notice)
+	// Старт на таком альбоме: заметки нет, окно — в первом GetState один раз.
+	if _, _, notice := a.loadStartup(path); notice != "" {
+		t.Fatalf("старт: заметка %q", notice)
+	}
+	if n := a.GetState().Newer; n == nil || n.Name != "a"+projectExt || n.Need != "0.25" || a.GetState().Newer != nil {
+		t.Fatalf("старт: Newer %+v", n)
 	}
 }
 
@@ -119,5 +125,30 @@ func TestBackupNotice(t *testing.T) {
 	// Имя без хвоста версии — общий текст; пустое — без тоста.
 	if got := backupText(filepath.Join(dir, "x.salbum")); got != "Сохранена копия для прежней версии: «x.salbum»" {
 		t.Errorf("без версии: %q", got)
+	}
+}
+
+// Две цифры совпали (файл 0.25.1, программа 0.25.0) — в тексте три; разошлись — две как раньше;
+// полной версии нет — остаются две.
+func TestShownVers(t *testing.T) {
+	cases := []struct{ theirs, mine, wantT, wantM string }{
+		{"0.25.1", "0.25.0", "0.25.1", "0.25.0"},
+		{"0.25.1-rc2+abc", "0.25.0-dev", "0.25.1", "0.25.0"},
+		{"0.25.0", "0.25.0", "0.25.0", "0.25.0"},
+		{"0.26.0", "0.25.3", "0.26", "0.25"},
+		{"0.25", "0.25.0", "0.25", "0.25"},
+		{"0.25.1", "0.25", "0.25", "0.25"},
+		{"0.25.1", "dev", "0.25", ""},
+		{"", "0.25.0", "", "0.25"},
+		{"dev", "", "", ""},
+	}
+	for _, c := range cases {
+		if gt, gm := shownVers(c.theirs, c.mine); gt != c.wantT || gm != c.wantM {
+			t.Errorf("shownVers(%q, %q) = %q, %q; ждали %q, %q", c.theirs, c.mine, gt, gm, c.wantT, c.wantM)
+		}
+	}
+	err := &salbum.NewerError{Version: model.FormatVersion + 1, App: "0.25.1"}
+	if got, want := newerTextFor(err, "альбом", "0.25.0"), "альбом сохранён в версии 0.25.1. Эта программа — 0.25.0: обновите её"; got != want {
+		t.Errorf("текст: %q, ждали %q", got, want)
 	}
 }

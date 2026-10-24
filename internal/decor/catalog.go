@@ -20,17 +20,20 @@ const (
 	ThemeRecent = "recent"
 	ThemeAll    = "all"
 	ThemeMine   = "mine"
+	// ThemeBrand — фирменные стикеры программы (спека 116): тема только встроенных, свои и наборы
+	// в неё не кладутся (isTheme).
+	ThemeBrand = "brand"
 )
 
 var themeList = []struct{ id, name string }{
 	{ThemeRecent, "Недавние"}, {ThemeAll, "Все"}, {"basic", "Универсальные"}, {"wedding", "Свадьба"},
 	{"kids", "Дети"}, {"kindergarten", "Детский сад"}, {"school", "Школа"}, {"grad", "Выпускной"},
-	{"holiday", "Праздник"}, {ThemeMine, "Мои"},
+	{"holiday", "Праздник"}, {ThemeBrand, "Фирменные"}, {ThemeMine, "Мои"},
 }
 
 // isTheme — тема, в которой может лежать элемент (не выборка).
 func isTheme(id string) bool {
-	if id == ThemeRecent || id == ThemeAll {
+	if id == ThemeRecent || id == ThemeAll || id == ThemeBrand {
 		return false
 	}
 	return slices.ContainsFunc(themeList, func(t struct{ id, name string }) bool { return t.id == id })
@@ -50,6 +53,7 @@ type Item struct {
 	W      int     `json:"w"`
 	H      int     `json:"h"`
 	Color  string  `json:"color,omitempty"` // цвет страниц пресета фона: подложка плитки
+	Dark   bool    `json:"dark,omitempty"`  // светлый стикер (116): плитке — тёмная шашечка, на светлой он не виден
 	// Pages, Places — у разворота (067): 1 — страница, 2 — разворот; мест в шаблоне.
 	Pages  int    `json:"pages,omitempty"`
 	Places int    `json:"places,omitempty"`

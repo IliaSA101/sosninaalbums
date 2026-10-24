@@ -106,7 +106,7 @@ func TestDecorCatalog(t *testing.T) {
 
 	// Стикеры (Ф2): встроенные плитки всех тем; недавние фонов в них не попадают.
 	st, err := s.Catalog(KindSticker, recent, 600, 300)
-	wantThemes := []string{ThemeAll, "basic", "wedding", "kids", "kindergarten", "school", "grad", "holiday", ThemeMine}
+	wantThemes := []string{ThemeAll, "basic", "wedding", "kids", "kindergarten", "school", "grad", "holiday", ThemeBrand, ThemeMine}
 	if err != nil || len(st.Items) != len(stickerPresets) || len(st.Recent) != 0 || !slices.Equal(themeIDs(st), wantThemes) {
 		t.Errorf("стикеры: %+v, %v", st, err)
 	}

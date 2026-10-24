@@ -19,11 +19,13 @@ import (
 const DefaultFolder = "Альбом"
 
 // Plan — готовность к выгрузке для типографии. Format "" — страница не из её таблицы или
-// лист 031: флажка в окне нет, Block объясняет причину.
+// лист 031: Block объясняет причину. Флажок в окне есть и при Format "" (120), кроме листа 031
+// (его отсекает App.PrintPlans); у чужой страницы подсказка флажка — Off.
 type Plan struct {
 	Kind       string   `json:"kind"`       // вид типографии, как в профиле
 	Title      string   `json:"title"`      // «Для Фотосферы Pro» — подпись флажка
-	Format     string   `json:"format"`     // "30×30"
+	Format     string   `json:"format"`     // "30×30"; "" — страница не её формат (или лист 031)
+	Off        string   `json:"off"`        // «страница 300 × 200 мм — не формат Фабрики Фотокниги»; "" — формат свой
 	Pages      string   `json:"pages"`      // бумага изделия обложки («Тонкие», «Картон»); "" — нет обложки типографии
 	Spreads    int      `json:"spreads"`    // разворотов
 	Spine      float64  `json:"spine"`      // корешок, мм; 0 — нет обложки типографии
@@ -61,8 +63,10 @@ func Check(p *model.Project, albumPath string, prof Profile) Plan {
 	f, ok := model.FormatOf(prof.Group, p.Settings)
 	if !ok {
 		pg := p.Geo(nil).Page(0)
-		pl.Block = append(pl.Block, fmt.Sprintf("Страница %s × %s мм — не формат %s. В «Страница» выберите пресет %s",
-			model.MmText(pg.W), model.MmText(pg.H), prof.Gen(), prof.Gen()))
+		size := fmt.Sprintf("%s × %s мм — не формат %s", model.MmText(pg.W), model.MmText(pg.H), prof.Gen())
+		pl.Off = "страница " + size // подсказка у флажка; запрет ниже — та же фраза с заглавной
+		// Путь по интерфейсу: формат выбирают в «Настройках альбома» (типография и кнопка формата).
+		pl.Block = append(pl.Block, "Страница "+size+". В «Настройках альбома» выберите типографию «"+prof.Group+"» и кнопку формата")
 		return pl
 	}
 	pl.Format = f.Name

@@ -117,8 +117,15 @@ BIN="$APP/Contents/MacOS/$EXE"
 [ -n "$EXE" ] && [ -f "$BIN" ] || fail "1 распаковка" "нет исполняемого файла '$EXE'"
 MODE="$(stat -f %Lp "$BIN")"
 [ "$MODE" = "755" ] || fail "1 распаковка" "права $EXE — $MODE, нужно 755"
+# Связь .salbum (спека 112-15): тип документа и экспорт типа объявлены в собранном Info.plist
+PB=/usr/libexec/PlistBuddy
+ext="$($PB -c "Print :CFBundleDocumentTypes:0:CFBundleTypeExtensions:0" "$PLIST" 2>/dev/null)"
+[ "$ext" = "salbum" ] || fail "1 распаковка" "CFBundleDocumentTypes:0:CFBundleTypeExtensions:0 = '$ext', нужно salbum"
+uti="$($PB -c "Print :CFBundleDocumentTypes:0:LSItemContentTypes:0" "$PLIST" 2>/dev/null)"
+[ -n "$uti" ] && [ "$uti" = "$($PB -c "Print :UTExportedTypeDeclarations:0:UTTypeIdentifier" "$PLIST" 2>/dev/null)" ] ||
+  fail "1 распаковка" "LSItemContentTypes не совпадает с UTExportedTypeDeclarations (UTI '$uti')"
 echo "$APP" >"$OUT/logs/app-path.txt"
-pass "1 распаковка" "$(basename "$APP"), $EXE, id $(plist_get "$APP" CFBundleIdentifier), версия ${VERSION:-не из имени zip}"
+pass "1 распаковка" "$(basename "$APP"), $EXE, id $(plist_get "$APP" CFBundleIdentifier), документ .salbum ($uti), версия ${VERSION:-не из имени zip}"
 
 # ---------- 2. Архитектуры и minos ----------
 ARCHS="$(lipo -archs "$BIN" 2>&1)"

@@ -287,3 +287,32 @@ describe('MenuList', () => {
     expect(menus()).toHaveLength(0)
   })
 })
+
+describe('значки пунктов (0.25-menu-icons)', () => {
+  it('ни у одного пункта нет значка — места под значок нет, столбец отметок как был', () => {
+    open()
+    expect(document.body.querySelector('.ico')).toBeNull()
+    expect(document.body.querySelector('button.iconed')).toBeNull()
+    expect(document.body.querySelector('.mark')).not.toBeNull()
+  })
+  it('есть значки — рисуются у пунктов, у пункта без значка пустое место того же размера, отметок нет', () => {
+    open({
+      items: [
+        { id: 'a', label: 'Название', icon: 'text' },
+        { id: 'b', label: 'Без значка' },
+        { id: 'c', label: 'Удалить', icon: 'spread-delete', danger: true },
+      ],
+    })
+    const slots = [...document.body.querySelectorAll('.drop button')].map((b) => b.querySelector('.ico'))
+    expect(slots.every((s) => s)).toBe(true)
+    expect(slots.map((s) => !!s!.querySelector('svg'))).toEqual([true, false, true])
+    expect(document.body.querySelector('.mark')).toBeNull()
+    expect(document.body.querySelector('button.iconed')).not.toBeNull()
+  })
+  it('значки и отметки вместе — оба столбца', () => {
+    open({ items: [{ id: 'a', label: 'А', icon: 'text', mark: 'check', checked: true }] })
+    expect(document.body.querySelector('.mark')?.textContent).toBe('✓')
+    expect(document.body.querySelector('.ico svg')).not.toBeNull()
+    expect(document.body.querySelector('button.iconed')).toBeNull()
+  })
+})

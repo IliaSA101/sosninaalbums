@@ -294,7 +294,8 @@ func (c *Cache) find(key string, preview, isPNG bool) (string, bool) {
 func isPNGPath(path string) bool { return strings.EqualFold(filepath.Ext(path), ".png") }
 
 // cacheKey меняется, если файл перезаписали (другой размер или время). У Adobe-фото
-// к ключу добавлена версия пересчёта в sRGB: старые блёклые копии не подхватятся;
+// к ключу добавлена версия пересчёта в sRGB: старые блёклые копии не подхватятся; у P3 и прочих
+// матричных профилей (119) — своя «icc1», ключи srgb/other/adobe прежние;
 // так же у .png — версия «PNG с альфой»: прежние копии прозрачных картинок были чёрными
 // JPEG. У JPEG ключ прежний, их кэш сохраняется.
 func cacheKey(path string, col imgfile.Color) (string, error) {
@@ -303,8 +304,11 @@ func cacheKey(path string, col imgfile.Color) (string, error) {
 		return "", err
 	}
 	s := fmt.Sprintf("%s|%d|%d", path, st.Size(), st.ModTime().UnixNano())
-	if col == imgfile.ColorAdobe {
+	switch col {
+	case imgfile.ColorAdobe:
 		s += "|srgb1"
+	case imgfile.ColorP3, imgfile.ColorICC:
+		s += "|icc1"
 	}
 	if isPNGPath(path) {
 		s += "|png1"

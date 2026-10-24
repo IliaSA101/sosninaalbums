@@ -83,3 +83,15 @@ func TestStandActive(t *testing.T) {
 		}
 	}
 }
+
+// StandOn: выпуск не видит SA_STAND даже заданным, сборка dev/qa — видит.
+func TestStandOnEnv(t *testing.T) {
+	t.Setenv(StandEnv, "b")
+	if got := StandOn(); got != DevBuild {
+		t.Errorf("StandOn()=%v при SA_STAND=b, DevBuild=%v", got, DevBuild)
+	}
+	t.Setenv(StandEnv, "")
+	if StandOn() {
+		t.Error("StandOn() без SA_STAND должен быть false")
+	}
+}

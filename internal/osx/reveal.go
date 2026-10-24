@@ -35,6 +35,10 @@ func quiet(action string) bool {
 // standOn — стенд QA включён; подменяется в тестах (тег dev в обычном прогоне не задан).
 var standOn = func() bool { return standActive(standEnabled, os.Getenv) }
 
+// StandOn — стенд QA включён (сборка dev/qa и заданный SA_STAND); в выпуске всегда false.
+// Для State.Stand: интерфейс по нему не зовёт Go за ссылками, которые стенд всё равно не откроет.
+func StandOn() bool { return standOn() }
+
 // standActive — задан ли стенд QA; имя не разбираем: неверное тоже значит «не открывать».
 func standActive(enabled bool, getenv func(string) string) bool {
 	return enabled && getenv(StandEnv) != ""

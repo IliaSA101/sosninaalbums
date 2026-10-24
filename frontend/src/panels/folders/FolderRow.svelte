@@ -53,7 +53,7 @@
   class:off={checks && check === 'off'}
   class:flash
   class:sep
-  class:missing={node.missing}
+  class:missing={node.missing || !!node.bad}
   style:padding-left="{4 + depth * 14}px"
   title={rowTitle(node)}
   {@attach seen}
@@ -92,8 +92,8 @@
       >только</button
     >
   {/if}
-  {#if node.missing}
-    <span class="n">нет на диске</span>
+  {#if node.missing || node.bad}
+    <span class="n">{node.bad ? 'не читается' : 'нет на диске'}</span>
   {:else}
     <span class="n"
       >{count.own}{#if count.all}&nbsp;<span class="all">{count.all}</span>{/if}</span

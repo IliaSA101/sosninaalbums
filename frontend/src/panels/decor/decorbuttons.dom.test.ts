@@ -205,6 +205,28 @@ describe('строка «На» (100-7)', () => {
     expect(document.querySelector('.hint')?.textContent).toBe('Затронет 3 разворота')
   })
 
+  it('светлый стикер (dark из Go) — плитка с тёмной шашечкой; у цветного класса нет; в «Заменить…» так же', async () => {
+    const it = (id: string, o: Record<string, unknown> = {}) => ({
+      id,
+      theme: 'basic',
+      name: id,
+      url: `/media/gen/art?k=${id}`,
+      own: false,
+      aspect: 1,
+      w: 0,
+      h: 0,
+      ...o,
+    })
+    const items = [it('sa:white', { dark: true }), it('sa:gold'), it('sa:black', { dark: false })]
+    const dark = () => Array.from(document.querySelectorAll('.tile'), (b) => b.classList.contains('stkdark'))
+    await open('sticker', { items })
+    expect(dark()).toEqual([true, false, false])
+    expect(document.querySelectorAll('.tile.stk')).toHaveLength(3)
+    cleanup()
+    await open('sticker', { items }, 'st1')
+    expect(dark()).toEqual([true, false, false])
+  })
+
   it('у стикеров и в альбоме из одного разворота строки нет', async () => {
     await open('sticker')
     expect(document.querySelector('[aria-label="На какие развороты"]')).toBeNull()

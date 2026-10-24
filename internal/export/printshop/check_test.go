@@ -50,11 +50,12 @@ func TestFsferaCheck(t *testing.T) {
 	for _, c := range []struct {
 		p    *model.Project
 		want string
+		off  string // Plan.Off: у листа 031 пуст
 	}{
-		{album(300, 300, 3, ""), "Страница 300 × 300 мм — не формат Фотосферы. В «Страница» выберите пресет Фотосферы"},
-		{sheet, "Лист виньетки в Фотосферу Pro не выгружается"},
+		{album(300, 300, 3, ""), "Страница 300 × 300 мм — не формат Фотосферы. В «Настройках альбома» выберите типографию «Фотосфера» и кнопку формата", "страница 300 × 300 мм — не формат Фотосферы"},
+		{sheet, "Лист виньетки в Фотосферу Pro не выгружается", ""},
 	} {
-		if pl := Check(c.p, "", Fsfera); pl.Format != "" || !slices.Equal(pl.Block, []string{c.want}) || pl.Folder != DefaultFolder || pl.FixAt != -1 {
+		if pl := Check(c.p, "", Fsfera); pl.Format != "" || !slices.Equal(pl.Block, []string{c.want}) || pl.Folder != DefaultFolder || pl.FixAt != -1 || pl.Off != c.off {
 			t.Errorf("%q: %+v", c.want, pl)
 		}
 	}

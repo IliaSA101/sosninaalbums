@@ -46,6 +46,7 @@ func TestGridInvariants(t *testing.T) {
 	onCover, vigs := 0, 0                           // шагов над местами обложки (032), виньеток (031)
 	bordered := 0                                   // мест с рамочкой по шагам (079)
 	clips := 0                                      // удачных вставок и дублей (099)
+	shifts := 0                                     // сдвигов своего фото по местам ручного листа (114)
 	frSrcs := []model.BorderSrc{{}, {Kind: "line", Width: 2}, {Kind: "polaroid", Inks: []string{"#EEEEEE"}}, {Kind: "future-kind"},
 		{Photo: model.PhotoInfo{ID: model.LibPhotoID(frKey), Path: filepath.Join(dir, "frame.png"), Lib: frKey, W: 3000, H: 4000}, Cut: [4]float64{0.1, 0.2, 0.1, 0.3}},
 		{Kind: "Плохой"}}
@@ -84,6 +85,14 @@ func TestGridInvariants(t *testing.T) {
 			ref = refs[r.IntN(len(refs))]
 		}
 		op := ops[r.IntN(len(ops))]
+		// 114: каждый 5-й шаг — своё фото листа-сетки в щель (без r: прежняя последовательность не сдвигается).
+		if _, own := edtest.P(e).Find(id); step%5 == 0 && own != nil && len(own.Grid) > 0 && len(own.Photos) > 1 {
+			before := slices.Clone(own.Photos)
+			e.MovePhoto(before[step/5%len(before)], id, step/3%(len(before)+2)-1)
+			if _, now := edtest.P(e).Find(id); now != nil && !slices.Equal(before, now.Photos) {
+				shifts++
+			}
+		}
 		switch op {
 		case "set":
 			e.SetGrid(id, r.IntN(3) > 0)
@@ -318,6 +327,9 @@ func TestGridInvariants(t *testing.T) {
 	if clips < need(25) {
 		t.Fatalf("вставок буфера почти не было: %d", clips)
 	}
+	if shifts < need(10) {
+		t.Fatalf("сдвигов фото по местам почти не было: %d", shifts)
+	}
 	if vigs < need(100) {
 		t.Fatalf("виньеток почти не было: %d по шагам", vigs)
 	}
@@ -325,8 +337,8 @@ func TestGridInvariants(t *testing.T) {
 		t.Fatalf("сеток мало: %d разворотов-сеток по шагам, %d фото в местах, %d повёрнутых мест, %d с общим порядком",
 			withGrid, seated, turned, ordered)
 	}
-	t.Logf("сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, вставок %d, разворотов %d",
-		withGrid, seated, turned, ordered, vigs, bordered, clips, len(edtest.P(e).Spreads))
+	t.Logf("сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, вставок %d, сдвигов %d, разворотов %d",
+		withGrid, seated, turned, ordered, vigs, bordered, clips, shifts, len(edtest.P(e).Spreads))
 }
 
 // clipOp — шаг буфера (099) на листе s: выделение — случайная часть мест (фото), надписей и

@@ -15,7 +15,7 @@ const (
 // errUnknownLink — id ссылки вне белого списка linkURL.
 var errUnknownLink = errors.New("неизвестная ссылка")
 
-// linkURL — адрес по id (source, license, telegram, marina, bug, idea); ver — версия программы.
+// linkURL — адрес по id (source, license, telegram, marina, bug, idea, videos, download); ver — версия программы.
 // Ссылки на файлы идут на метку своей версии (v<ver>): код и текст лицензии те же, что в
 // запущенной сборке; у dev метки нет — берётся основная ветка. false — id неизвестен.
 func linkURL(id, ver string) (string, bool) {
@@ -43,12 +43,18 @@ func linkURL(id, ver string) (string, bool) {
 		return repoURL + "/issues/new?" + q.Encode(), true
 	case "idea":
 		return repoURL + "/issues/new?template=idea.yml", true
+	case "download":
+		// Страница последнего выпуска: он откроет любой более старый файл и несёт свежие правки (112).
+		return repoURL + "/releases/latest", true
+	case "videos":
+		// Всегда main: новые ролики появляются на странице без новой версии программы (113).
+		return repoURL + "/blob/main/docs/VIDEOS.md", true
 	}
 	return "", false
 }
 
 // OpenLink открывает в браузере ссылку окна «О программе» по id: source, license, telegram,
-// marina, bug, idea. Адрес берётся только из linkURL — от интерфейса его не принимаем (иначе страница
+// marina, bug, idea, videos, download. Адрес берётся только из linkURL — от интерфейса его не принимаем (иначе страница
 // в окне открывала бы что угодно). Неизвестный id — ошибка, браузер не трогаем.
 func (a *App) OpenLink(id string) error {
 	u, ok := linkURL(id, appVersion(wailsJSON))

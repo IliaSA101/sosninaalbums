@@ -1,5 +1,21 @@
 export namespace app {
 	
+	export class AssocView {
+	    can: boolean;
+	    on: boolean;
+	    ask: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AssocView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.can = source["can"];
+	        this.on = source["on"];
+	        this.ask = source["ask"];
+	    }
+	}
 	export class BackupInfo {
 	    name: string;
 	    time: number;
@@ -106,6 +122,7 @@ export namespace app {
 	    w: number;
 	    h: number;
 	    color?: string;
+	    dark?: boolean;
 	    pages?: number;
 	    places?: number;
 	    pack?: string;
@@ -125,6 +142,7 @@ export namespace app {
 	        this.w = source["w"];
 	        this.h = source["h"];
 	        this.color = source["color"];
+	        this.dark = source["dark"];
 	        this.pages = source["pages"];
 	        this.places = source["places"];
 	        this.pack = source["pack"];
@@ -594,6 +612,26 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class NewerInfo {
+	    name: string;
+	    draft: boolean;
+	    need: string;
+	    mine: string;
+	    have: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NewerInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.draft = source["draft"];
+	        this.need = source["need"];
+	        this.mine = source["mine"];
+	        this.have = source["have"];
+	    }
+	}
 	export class PackInfo {
 	    id: string;
 	    title: string;
@@ -881,12 +919,18 @@ export namespace app {
 	    info?: string;
 	    freshFonts?: string[];
 	    missing: string[];
+	    unread?: Record<string, string>;
 	    version: string;
 	    fonts: text.Family[];
 	    prefs: prefs.Prefs;
 	    recent: prefs.RecentProject[];
 	    keymap: keymap.View;
 	    cancelled?: boolean;
+	    pending?: string;
+	    newer?: NewerInfo;
+	    assoc: AssocView;
+	    fromFile?: boolean;
+	    stand?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new State(source);
@@ -901,12 +945,18 @@ export namespace app {
 	        this.info = source["info"];
 	        this.freshFonts = source["freshFonts"];
 	        this.missing = source["missing"];
+	        this.unread = source["unread"];
 	        this.version = source["version"];
 	        this.fonts = this.convertValues(source["fonts"], text.Family);
 	        this.prefs = this.convertValues(source["prefs"], prefs.Prefs);
 	        this.recent = this.convertValues(source["recent"], prefs.RecentProject);
 	        this.keymap = this.convertValues(source["keymap"], keymap.View);
 	        this.cancelled = source["cancelled"];
+	        this.pending = source["pending"];
+	        this.newer = this.convertValues(source["newer"], NewerInfo);
+	        this.assoc = this.convertValues(source["assoc"], AssocView);
+	        this.fromFile = source["fromFile"];
+	        this.stand = source["stand"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1027,6 +1077,38 @@ export namespace app {
 	        this.canceled = source["canceled"];
 	        this.saved = source["saved"];
 	        this.text = source["text"];
+	    }
+	}
+	export class UpdateInfo {
+	    phase: string;
+	    mode: string;
+	    version: string;
+	    notes: string[];
+	    done: number;
+	    total: number;
+	    error: string;
+	    atStart: boolean;
+	    checked: number;
+	    just: string;
+	    failed: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.phase = source["phase"];
+	        this.mode = source["mode"];
+	        this.version = source["version"];
+	        this.notes = source["notes"];
+	        this.done = source["done"];
+	        this.total = source["total"];
+	        this.error = source["error"];
+	        this.atStart = source["atStart"];
+	        this.checked = source["checked"];
+	        this.just = source["just"];
+	        this.failed = source["failed"];
 	    }
 	}
 
@@ -3923,6 +4005,8 @@ export namespace prefs {
 	    showStart: boolean;
 	    first: boolean;
 	    custom?: CustomLevel;
+	    tourDue: boolean;
+	    tourMore: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Prefs(source);
@@ -3934,6 +4018,8 @@ export namespace prefs {
 	        this.showStart = source["showStart"];
 	        this.first = source["first"];
 	        this.custom = this.convertValues(source["custom"], CustomLevel);
+	        this.tourDue = source["tourDue"];
+	        this.tourMore = source["tourMore"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3981,6 +4067,7 @@ export namespace printshop {
 	    kind: string;
 	    title: string;
 	    format: string;
+	    off: string;
 	    pages: string;
 	    spreads: number;
 	    spine: number;
@@ -4007,6 +4094,7 @@ export namespace printshop {
 	        this.kind = source["kind"];
 	        this.title = source["title"];
 	        this.format = source["format"];
+	        this.off = source["off"];
 	        this.pages = source["pages"];
 	        this.spreads = source["spreads"];
 	        this.spine = source["spine"];

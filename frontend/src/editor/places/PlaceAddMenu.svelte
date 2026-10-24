@@ -34,7 +34,8 @@
 </script>
 
 <svelte:window
-  onpointerdown={(e) => {
+  onpointerdowncapture={(e) => {
+    // Захват: кнопки меню гасят pointerdown (stop — нужен холсту), и в фазе всплытия второе меню щелчка не видит и остаётся открытым.
     const t = e.target as Node
     if (open && !btn?.contains(t) && !menu?.contains(t)) open = false
   }}

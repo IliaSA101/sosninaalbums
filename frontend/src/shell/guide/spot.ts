@@ -17,6 +17,9 @@ export interface Win {
 // после смены уровня и переезда панели (аудит QA 2026-10-14).
 export const SPOT_MS = 4000
 export const SPOT_HINT_MS = 6000
+// Кольцо тура (113) держится, пока открыт шаг: первые 1,5 с замер каждый кадр, дальше раз в 250 мс.
+export const HOLD_FAST_MS = 1500
+export const HOLD_SLOW_MS = 250
 export const PAD = 4 // кольцо шире элемента
 export const GAP = 8 // подпись от элемента и от края окна
 
@@ -63,8 +66,24 @@ export function pickTarget(rects: Box[], win: Win): { index: number; needScroll:
   return big >= 0 ? { index: big, needScroll: true } : null
 }
 
-// Кольцо вокруг элемента.
-export const ringBox = (r: Box): Box => ({ left: r.left - PAD, top: r.top - PAD, width: r.width + 2 * PAD, height: r.height + 2 * PAD })
+export const RING_EDGE = 2 // кольцо от края окна: вырез и обводка не уходят за экран
+
+// Кольцо вокруг элемента; с win — не шире окна с отступом RING_EDGE (элемент вплотную к краю: лента фото у низа окна).
+export function ringBox(r: Box, win?: Win): Box {
+  const l = r.left - PAD
+  const t = r.top - PAD
+  const rt = r.left + r.width + PAD
+  const b = r.top + r.height + PAD
+  if (!win) return { left: l, top: t, width: rt - l, height: b - t }
+  const left = Math.max(l, RING_EDGE)
+  const top = Math.max(t, RING_EDGE)
+  return {
+    left,
+    top,
+    width: Math.max(0, Math.min(rt, win.w - RING_EDGE) - left),
+    height: Math.max(0, Math.min(b, win.h - RING_EDGE) - top),
+  }
+}
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(v, Math.max(lo, hi)))
 

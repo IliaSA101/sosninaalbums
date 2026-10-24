@@ -149,7 +149,7 @@ describe('меню надписи', () => {
 describe('меню пустого листа', () => {
   it('одно «Вставить» с клавишей, без линии', () => {
     const m = sheetMenu(true, () => true, hint)
-    expect(m).toEqual([{ id: 'clipPaste', label: 'Вставить', hint: 'Ctrl+V' }])
+    expect(m).toEqual([{ id: 'clipPaste', label: 'Вставить', icon: 'paste', hint: 'Ctrl+V' }])
   })
   it('буфер пуст — меню нет', () => {
     expect(sheetMenu(false, () => true, hint)).toEqual([])

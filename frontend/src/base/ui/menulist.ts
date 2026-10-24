@@ -1,13 +1,16 @@
 // Общий список меню (спека 108): меню правого щелчка по фото и список «⋯» мини-панели. Чистая часть без DOM;
 // вид и клавиши — как у строки меню программы (shell/menu/MenuBar.svelte), рисует MenuList.svelte.
 import { placeSubmenu, type Box, type Size } from './popover'
+import type { IconName } from './Icon.svelte'
 
 export interface MenuNode {
   id: string // ActId или свой (у пунктов подменю — 'layer', 'backdrop')
   arg?: string // параметр пункта подменю: операция слоя, область фона
   label: string
+  icon?: IconName // значок слева; у меню без значков места под него нет
   kind?: 'item' | 'note' // note — серая строка без действия
   hint?: string // клавиша справа
+  title?: string // подсказка пункта (у серого — причина)
   disabled?: boolean
   danger?: boolean
   sep?: boolean // линия перед пунктом
@@ -15,6 +18,14 @@ export interface MenuNode {
   checked?: boolean
   sub?: MenuNode[] // подменю сбоку; подменю в подменю не рисуется
 }
+
+// Нужен ли столбец значков: хотя бы у одного пункта списка есть значок. Тогда пункты без значка держат пустое место
+// (текст ровно), а меню без значков (меню фото) не сдвигается.
+export const hasIcons = (list: MenuNode[]): boolean => list.some((n) => !!n.icon)
+
+// Столбец отметок (✓ •) рисуется, если отметки есть или значков нет (прежний вид меню фото); в меню со значками
+// без отметок его место занимает столбец значков.
+export const hasMarks = (list: MenuNode[]): boolean => list.some((n) => !!n.mark) || !hasIcons(list)
 
 // Пункт, на который можно встать: не серый и не заметка.
 export const focusable = (n: MenuNode): boolean => !n.disabled && n.kind !== 'note'

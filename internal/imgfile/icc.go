@@ -6,24 +6,27 @@ import (
 	"math"
 	"unicode"
 	"unicode/utf16"
+
+	"github.com/IliaSA101/sosninaalbums/internal/colorspace"
 )
 
 // Color — класс цветового профиля фото. От него зависит, пересчитывать ли цвета
-// при декоде (Adobe RGB → sRGB) или только предупредить.
+// при декоде (Adobe RGB, Display P3 и другие матричные профили → sRGB) или только предупредить.
 type Color string
 
 const (
 	ColorNone  Color = ""      // профиля нет — считаем sRGB
 	ColorSRGB  Color = "srgb"  // sRGB и ч/б: печатается как есть
 	ColorAdobe Color = "adobe" // Adobe RGB (1998): при декоде пересчитывается в sRGB
-	ColorOther Color = "other" // всё остальное: только предупреждение
+	ColorP3    Color = "p3"    // колоранты Display P3 (телефоны, любое имя): при декоде пересчитывается в sRGB
+	ColorICC   Color = "icc"   // прочий матричный RGB-профиль (ProPhoto, Rec. 709, линейный sRGB…): так же
+	ColorOther Color = "other" // всё остальное (CMYK, LUT-профили, мусор): только предупреждение
 )
 
 // Пределы для недоверенного файла: чтение заголовка не должно тратить память и время зря.
 const (
 	iccMaxSegments  = 64      // сегментов JPEG до SOS
 	iccMaxBytes     = 1 << 20 // профиль целиком (сумма кусков)
-	iccMaxTags      = 100     // записей в таблице тегов
 	iccNameRunes    = 64      // длина имени профиля
 	iccUnknownName  = "неизвестный профиль"
 	ICCAdobeEXIF    = "Adobe RGB (по EXIF)"
@@ -31,7 +34,6 @@ const (
 	iccGammaTol     = 0.02
 	iccAdobeGamma   = 2.2
 	iccHeaderLen    = 132 // заголовок профиля + число тегов
-	iccTagEntryLen  = 12
 	iccInteropIndex = 0x0001
 )
 
@@ -39,6 +41,7 @@ const (
 var (
 	srgbXYZ  = [9]float64{0.4361, 0.2225, 0.0139, 0.3851, 0.7169, 0.0971, 0.1431, 0.0606, 0.7141}
 	adobeXYZ = [9]float64{0.6097, 0.3111, 0.0195, 0.2053, 0.6257, 0.0609, 0.1492, 0.0632, 0.7446}
+	p3XYZ    = [9]float64{0.5151, 0.2412, -0.0011, 0.2920, 0.6922, 0.0419, 0.1571, 0.0666, 0.7841}
 )
 
 // ReadColor определяет цветовой профиль JPEG по заголовку (ICC, запасной путь — EXIF Interop).
@@ -81,23 +84,31 @@ func trimNUL(b []byte) []byte {
 	return b
 }
 
-// classifyICC определяет класс и имя профиля. Чистая функция: p — профиль целиком
-// (или первый кусок), любой мусор даёт ColorOther без паники.
+// classifyICC определяет класс и имя профиля (см. classify).
 func classifyICC(p []byte) (Color, string) {
+	c, name, _ := classify(p)
+	return c, name
+}
+
+// classify определяет класс и имя профиля и, для классов с пересчётом, таблицы пересчёта в sRGB.
+// Чистая функция: p — профиль целиком (или первый кусок), любой мусор даёт ColorOther без паники.
+// Профиль распознаётся по содержимому, не по имени: у Xiaomi Display P3 зовётся
+// «sRGB EOTF with DCI-P3 Color Gamut» (спека 119).
+func classify(p []byte) (Color, string, *colorspace.Xform) {
 	if len(p) < iccHeaderLen || string(p[36:40]) != "acsp" {
-		return ColorOther, iccUnknownName
+		return ColorOther, iccUnknownName, nil
 	}
-	tags := iccTags(p)
+	tags := colorspace.ICCTags(p)
 	name := iccName(tags["desc"])
-	other := func() (Color, string) {
+	other := func() (Color, string, *colorspace.Xform) {
 		if name == "" {
 			name = iccUnknownName
 		}
-		return ColorOther, name
+		return ColorOther, name, nil
 	}
 	switch string(p[16:20]) {
 	case "GRAY":
-		return ColorSRGB, name // ч/б печатается как есть
+		return ColorSRGB, name, nil // ч/б печатается как есть
 	case "RGB ":
 	default:
 		return other() // CMYK, Lab…
@@ -106,23 +117,33 @@ func classifyICC(p []byte) (Color, string) {
 	for i, s := range []string{"rXYZ", "gXYZ", "bXYZ"} {
 		t := tags[s]
 		if len(t) < 20 || string(t[:4]) != "XYZ " {
-			return other()
+			return other() // чистые LUT-профили
 		}
 		for k := range 3 {
-			xyz[i*3+k] = s15(t[8+4*k:])
+			xyz[i*3+k] = colorspace.S15(t[8+4*k:])
 		}
-	}
-	if near(xyz, srgbXYZ) { // кривую не проверяем: у sRGB она разная в v2/v4
-		return ColorSRGB, name
 	}
 	if near(xyz, adobeXYZ) {
 		g := iccGamma(tags["rTRC"])
 		if math.Abs(g-iccAdobeGamma) <= iccGammaTol &&
 			iccGamma(tags["gTRC"]) == g && iccGamma(tags["bTRC"]) == g {
-			return ColorAdobe, name
+			return ColorAdobe, name, colorspace.Adobe
 		}
 	}
-	return other()
+	x, err := colorspace.ParseICC(p)
+	switch {
+	case err != nil && near(xyz, srgbXYZ):
+		return ColorSRGB, name, nil // кривую не проверяем: битая кривая у sRGB не мешала и раньше
+	case err != nil:
+		return other() // LUT, битые теги, колоранты не дают белый D50
+	case near(xyz, srgbXYZ) && x.SRGBCurves():
+		// Колоранты sRGB и кривая sRGB: v2/v4 и профили с дрейфом колорантов. Матрицу не сверяем (119-14):
+		// решётка по пикселям теряла настоящие sRGB от сдвига колорантов на 0,0002, и они получали «ICC».
+		return ColorSRGB, name, nil
+	case near(xyz, p3XYZ):
+		return ColorP3, name, x
+	}
+	return ColorICC, name, x
 }
 
 func near(a, b [9]float64) bool {
@@ -134,34 +155,13 @@ func near(a, b [9]float64) bool {
 	return true
 }
 
-// iccTags собирает таблицу тегов. Теги, вышедшие за длину p, пропускаются.
-func iccTags(p []byte) map[string][]byte {
-	tags := map[string][]byte{}
-	n := min(binary.BigEndian.Uint32(p[128:]), iccMaxTags)
-	for i := range int(n) {
-		e := iccHeaderLen + iccTagEntryLen*i
-		if e+iccTagEntryLen > len(p) {
-			break
-		}
-		off, sz := uint64(binary.BigEndian.Uint32(p[e+4:])), uint64(binary.BigEndian.Uint32(p[e+8:]))
-		if off+sz > uint64(len(p)) {
-			continue
-		}
-		sig := string(p[e : e+4])
-		if _, dup := tags[sig]; !dup {
-			tags[sig] = p[off : off+sz]
-		}
-	}
-	return tags
-}
-
 // iccGamma возвращает гамму кривой, заданной одним числом (curv count=1 или para типа 0), иначе 0.
 func iccGamma(t []byte) float64 {
 	if len(t) >= 14 && string(t[:4]) == "curv" && binary.BigEndian.Uint32(t[8:]) == 1 {
 		return float64(binary.BigEndian.Uint16(t[12:])) / 256
 	}
 	if len(t) >= 16 && string(t[:4]) == "para" && binary.BigEndian.Uint16(t[8:]) == 0 {
-		return s15(t[12:])
+		return colorspace.S15(t[12:])
 	}
 	return 0
 }
@@ -207,9 +207,4 @@ func iccName(t []byte) string {
 		}
 	}
 	return string(out)
-}
-
-// s15 читает s15Fixed16 (знаковое с 16 дробными битами) из первых 4 байт b.
-func s15(b []byte) float64 {
-	return float64(int32(binary.BigEndian.Uint32(b))) / 65536 //nolint:gosec // битовое переинтерпретирование знака
 }

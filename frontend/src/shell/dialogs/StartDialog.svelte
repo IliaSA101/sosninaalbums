@@ -7,9 +7,12 @@
   import { tick } from 'svelte'
   import LevelCards from './LevelCards.svelte'
   import LevelMatrix from './LevelMatrix.svelte'
+  import StartAssoc from './StartAssoc.svelte'
+  import { assocUi } from './assoc.svelte'
   import NewProduct from '../newdoc/NewProduct.svelte'
   import { newDoc } from '../newdoc/newdoc.svelte'
   import { guide } from '../guide/guidestate.svelte'
+  import { tour } from '../tour/tourstate.svelte'
   import { recentRows } from './recent'
   import { WHATS_NEW, WHATS_NEW_VERSION } from './whatsnew'
 
@@ -26,6 +29,9 @@
   })
 
   const close = () => prefs.closeStart()
+
+  // 112: окно скрыто, а Go просит спросить про связь .salbum — вопрос уйдёт тостом (иначе его задаёт строка ниже).
+  $effect(() => assocUi.see(prefs.startOpen))
 
   // Матрица и «Что нового» свёрнуты при каждом открытии окна, состояние не запоминается.
   let all = $state(false)
@@ -106,6 +112,8 @@
       <h3>Новое изделие</h3>
       <NewProduct oncreated={close} />
 
+      <StartAssoc />
+
       <div class="foot">
         <span class="links">
           <button class="link" aria-expanded={newsOpen} onclick={() => (newsOpen = !newsOpen)}>
@@ -114,6 +122,8 @@
           </button>
           <!-- Справочник открывается поверх этого окна (стек Modal) -->
           <button class="link" onclick={() => guide.openFresh()}>Справочник функций · F1</button>
+          <!-- Тур закрывает это окно и показывает приветствие (113) -->
+          <button class="link" onclick={() => tour.start('menu')}>Первые шаги</button>
         </span>
         <label class="show">
           <input type="checkbox" checked={prefs.showStart} onchange={(e) => prefs.setShowStart(e.currentTarget.checked)} />

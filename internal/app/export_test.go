@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image/jpeg"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -497,27 +498,37 @@ func TestExportSheetOneFile(t *testing.T) {
 }
 
 // Фото из реестра берут цвет оттуда, остальные — из заголовка файла; нечитаемые пропускаются.
+// 119: пересчитываемые (adobe, p3 любого имени, прочие матричные) идут в conv по имени профиля,
+// в other — только то, что не пересчитывается (LUT, CMYK).
 func TestColorReport(t *testing.T) {
 	dir := testkit.TempDir(t)
-	adobe := testkit.ICCSegment(1, 1, testkit.MatrixProfile(testkit.XYZAdobe, 2.2, testkit.DescV2("Adobe RGB (1998)")))
-	p3 := testkit.ICCSegment(1, 1, testkit.MatrixProfile(testkit.XYZP3, 2.2, testkit.DescV2("Display P3")))
-	fAdobe := testkit.JPEGSegments(t, dir, "adobe.jpg", 20, 10, adobe)
-	fP3 := testkit.JPEGSegments(t, dir, "p3.jpg", 20, 10, p3)
+	seg := func(p []byte) []byte { return testkit.ICCSegment(1, 1, p) }
+	desc := testkit.DescV2
+	fAdobe := testkit.JPEGSegments(t, dir, "adobe.jpg", 20, 10, seg(testkit.MatrixProfile(testkit.XYZAdobe, 2.2, desc("Adobe RGB (1998)"))))
+	fP3 := testkit.JPEGSegments(t, dir, "p3.jpg", 20, 10, seg(testkit.ParaProfile(testkit.XYZP3, 3, testkit.SRGBPara3, desc("Display P3"))))
+	fXiaomi := testkit.JPEGSegments(t, dir, "xiaomi.jpg", 20, 10, seg(testkit.ProfileXiaomiP3(true)))
+	fPro := testkit.JPEGSegments(t, dir, "pro.jpg", 20, 10, seg(testkit.ParaProfile(testkit.XYZProPhoto, 0, []float64{1.8}, desc("ProPhoto RGB"))))
+	fLUT := testkit.JPEGSegments(t, dir, "lut.jpg", 20, 10, seg(testkit.LUTProfile(testkit.XYZP3, desc("Display P3 LUT"))))
+	fSRGB := testkit.JPEGSegments(t, dir, "srgb.jpg", 20, 10, seg(testkit.SRGBProfile(desc("sRGB"))))
 	fPlain := testkit.JPEG(t, dir, "plain.jpg", 20, 10)
 
 	a := newApp(t)
-	a.byID["reg"] = library.Photo{ID: "reg", Color: imgfile.ColorOther, Profile: "ProPhoto RGB"}
+	a.byID["reg"] = library.Photo{ID: "reg", Color: imgfile.ColorOther, Profile: "Fogra39"}
+	a.byID["regicc"] = library.Photo{ID: "regicc", Color: imgfile.ColorICC} // имя пустое
+	a.byID["regp3"] = library.Photo{ID: "regp3", Color: imgfile.ColorP3, Profile: "iPhone P3"}
+	gone := filepath.Join(dir, "нет-файла.jpg") // цвет берётся из реестра, файл не читается
 	pr := model.New()
 	pr.Photos = map[string]model.PhotoRef{
-		"reg":  {Path: filepath.Join(dir, "нет-файла.jpg")}, // цвет берётся из реестра, файл не читается
-		"a":    {Path: fAdobe},
-		"p3":   {Path: fP3},
-		"pl":   {Path: fPlain},
+		"reg": {Path: gone}, "regicc": {Path: gone}, "regp3": {Path: gone},
+		"a": {Path: fAdobe}, "p3": {Path: fP3}, "xi": {Path: fXiaomi}, "pro": {Path: fPro},
+		"lut": {Path: fLUT}, "s": {Path: fSRGB}, "pl": {Path: fPlain},
 		"gone": {Path: filepath.Join(dir, "gone.jpg")},
 	}
-	ad, other := a.colorReport(pr)
-	if ad != 1 || len(other) != 2 || other["Display P3"] != 1 || other["ProPhoto RGB"] != 1 {
-		t.Errorf("adobe=%d other=%v", ad, other)
+	conv, other := a.colorReport(pr)
+	wantConv := map[string]int{"Adobe RGB": 1, "Display P3": 3, "ProPhoto RGB": 1, "RGB-профиль": 1}
+	wantOther := map[string]int{"Fogra39": 1, "Display P3 LUT": 1}
+	if !maps.Equal(conv, wantConv) || !maps.Equal(other, wantOther) {
+		t.Errorf("conv=%v other=%v", conv, other)
 	}
 }
 
@@ -569,7 +580,8 @@ func TestExportColorDecline(t *testing.T) {
 	if _, other := e.a.colorReport(&model.Project{Photos: map[string]model.PhotoRef{"reg": {Path: "x.jpg"}}}); other["неизвестный профиль"] != 1 {
 		t.Fatalf("профиль без имени: %v", other)
 	}
-	p3 := testkit.ICCSegment(1, 1, testkit.MatrixProfile(testkit.XYZP3, 2.2, testkit.DescV2("Display P3")))
+	// 119: сам P3 пересчитывается и вопроса не вызывает; спрашиваем про P3 с таблицей цвета (A2B0)
+	p3 := testkit.ICCSegment(1, 1, testkit.LUTProfile(testkit.XYZP3, testkit.DescV2("Display P3")))
 	src := testkit.JPEGSegments(t, testkit.TempDir(t), "p3.jpg", 60, 40, p3)
 	data, err := os.ReadFile(src)
 	if err != nil {

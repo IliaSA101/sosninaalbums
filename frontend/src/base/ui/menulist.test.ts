@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arrowKey, markText, nextIndex, nodeKey, nodeRole, placeAtPoint, placeBeside, type MenuNode } from './menulist'
+import { arrowKey, hasIcons, hasMarks, markText, nextIndex, nodeKey, nodeRole, placeAtPoint, placeBeside, type MenuNode } from './menulist'
 
 const n = (id: string, extra: Partial<MenuNode> = {}): MenuNode => ({ id, label: id, ...extra })
 
@@ -68,5 +68,18 @@ describe('место', () => {
     expect(placeBeside(far, size, view, 'left')).toEqual({ left: 500, top: 292, flipped: true })
     const edge = { left: 900, top: 100, width: 34, height: 22 }
     expect(placeBeside(edge, size, view, 'right')).toEqual({ left: 700, top: 100, flipped: true }) // как в строке меню
+  })
+})
+
+describe('hasIcons / hasMarks: столбцы значков и отметок', () => {
+  it('нет ни значков, ни отметок — столбец отметок остаётся (меню без значков не сдвигается)', () => {
+    const l: MenuNode[] = [n('a')]
+    expect(hasIcons(l)).toBe(false)
+    expect(hasMarks(l)).toBe(true)
+  })
+  it('значки без отметок — столбец значков вместо отметок; с отметками — оба', () => {
+    expect(hasIcons([n('a'), n('b', { icon: 'text' })])).toBe(true)
+    expect(hasMarks([n('b', { icon: 'text' })])).toBe(false)
+    expect(hasMarks([n('b', { icon: 'text' }), n('c', { mark: 'check' })])).toBe(true)
   })
 })

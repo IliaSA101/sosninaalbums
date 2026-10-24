@@ -75,6 +75,7 @@ func (a *App) rescanWith(mode scanMode) {
 	next := byIDMap(kept)
 	a.mediaSt.forget(a.byID, next) // плитки прежнего альбома из очереди браузера — не промах
 	a.photos, a.byID = kept, next
+	a.unread = prunedUnread(a.unread, src)
 	if !quiet {
 		a.scan = library.ScanProgress{Active: true, Walking: true}
 	}
@@ -139,8 +140,9 @@ func (a *App) readFolders(ctx context.Context, gen int, src library.Sources, kep
 		log.Printf("  на недоступном диске источников: %d — не читались", n)
 	}
 	if len(skipped) > 0 {
-		log.Printf("  не читается: %s", skippedSummary(skipped))
+		log.Printf("  не читается: %s", skippedReasons(skipped))
 	}
+	a.publishUnread(gen, src, skipped)
 	if seen != nil {
 		// Новый срез, не DeleteFunc: photos уже ушёл в реестр и событие финальным списком.
 		var fresh []library.Photo

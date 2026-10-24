@@ -51,7 +51,7 @@ func TestJPEGHeaderExif(t *testing.T) {
 }
 
 func TestJPEGHeaderICCWins(t *testing.T) {
-	srgb := testkit.MatrixProfile(testkit.XYZSRGB, 2.2, testkit.DescV2("sRGB"))
+	srgb := testkit.SRGBProfile(testkit.DescV2("sRGB"))
 	// ICC и EXIF в любом порядке сегментов: профиль важнее R03
 	for _, segs := range [][][]byte{
 		{testkit.ExifColor(false, 6, 0xFFFF, "R03"), testkit.ICCSegment(1, 1, srgb)},
@@ -78,7 +78,7 @@ func TestJPEGHeaderICCChunk2(t *testing.T) {
 
 // Заголовок недоверенного JPEG: без паник, пакет XMP не длиннее сегмента.
 func FuzzJPEGHead(f *testing.F) {
-	srgb := testkit.MatrixProfile(testkit.XYZSRGB, 2.2, testkit.DescV2("sRGB"))
+	srgb := testkit.SRGBProfile(testkit.DescV2("sRGB"))
 	f.Add(testkit.RawJPEG(testkit.ExifColor(false, 6, 0xFFFF, "R03"), xmpSegment(xmpAttrs(`xmp:Rating="4"`)),
 		testkit.ICCSegment(1, 1, srgb)))
 	f.Add(testkit.RawJPEG(testkit.ICCSegment(1, 2, srgb[:100]), testkit.ICCSegment(2, 2, srgb[100:])))

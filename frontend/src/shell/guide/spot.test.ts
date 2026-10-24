@@ -3,6 +3,7 @@ import { reducedMotion } from './spotstate.svelte'
 import {
   GAP,
   PAD,
+  RING_EDGE,
   SPOT_HINT_MS,
   SPOT_MS,
   isCandidate,
@@ -57,6 +58,14 @@ describe('выбор из нескольких', () => {
 describe('кольцо и подпись', () => {
   it('кольцо шире элемента на PAD', () => {
     expect(ringBox(box(100, 100, 50, 30))).toEqual(box(100 - PAD, 100 - PAD, 50 + 2 * PAD, 30 + 2 * PAD))
+  })
+  it('кольцо с окном не выходит за него: элемент у левого и нижнего края (лента фото 1024×700)', () => {
+    const r = ringBox(box(0, 468, 624, 232), { w: 1024, h: 700 })
+    expect(r).toEqual(box(RING_EDGE, 464, 628 - RING_EDGE, 700 - RING_EDGE - 464))
+    expect(r.top + r.height).toBeLessThanOrEqual(700 - RING_EDGE)
+  })
+  it('кольцо с окном внутри окна не меняется', () => {
+    expect(ringBox(box(100, 100, 50, 30), { w: 1024, h: 700 })).toEqual(ringBox(box(100, 100, 50, 30)))
   })
   it('подпись снизу, если там есть место', () => {
     const ring = box(500, 100, 100, 40)

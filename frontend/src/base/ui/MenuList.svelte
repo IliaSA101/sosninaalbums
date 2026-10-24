@@ -1,8 +1,20 @@
 <script lang="ts">
   import { portal } from './portal'
   import { tick } from 'svelte'
-  import { arrowKey, markText, nextIndex, nodeKey, nodeRole, placeAtPoint, placeBeside, type MenuNode } from './menulist'
+  import {
+    arrowKey,
+    hasIcons,
+    hasMarks,
+    markText,
+    nextIndex,
+    nodeKey,
+    nodeRole,
+    placeAtPoint,
+    placeBeside,
+    type MenuNode,
+  } from './menulist'
   import type { Box } from './popover'
+  import Icon from './Icon.svelte'
 
   // Общий список меню (спека 108): меню правого щелчка по фото и список «⋯» мини-панели. Вид и клавиши — как у строки
   // меню программы (MenuBar): подменю сбоку при наведении, у края окна — влево; ← → ↑ ↓ Enter Esc; отметка слева.
@@ -139,6 +151,8 @@
 <svelte:window onkeydowncapture={key} onpointerdowncapture={outside} onresize={onclose} onblur={onclose} />
 
 {#snippet rows(list: MenuNode[], nested: boolean)}
+  {@const icons = hasIcons(list)}
+  {@const marks = hasMarks(list)}
   {#each list as it, i (nodeKey(it))}
     {#if it.sep && i > 0}<div class="sep" role="separator"></div>{/if}
     {#if it.kind === 'note'}
@@ -151,14 +165,19 @@
         aria-haspopup={it.sub ? 'menu' : undefined}
         aria-expanded={it.sub ? sub?.id === nodeKey(it) : undefined}
         class:cur={cur?.nested === nested && cur.i === i}
+        class:iconed={icons && !marks}
         data-i={i}
         data-item={it.id}
+        title={it.title}
         onfocus={() => (cur = { nested, i })}
         disabled={it.disabled}
         onpointerenter={(e) => enter(it, e.currentTarget, nested)}
         onclick={(e) => pick(it, e.currentTarget, e.detail === 0)}
       >
-        <span class="mark" aria-hidden="true">{markText(it)}</span>
+        {#if marks}<span class="mark" aria-hidden="true">{markText(it)}</span>{/if}
+        {#if icons}<span class="ico" aria-hidden="true"
+            >{#if it.icon}<Icon name={it.icon} size={16} stroke={1.8} />{/if}</span
+          >{/if}
         <span class="label">{it.label}</span>
         {#if it.sub}<kbd>▸</kbd>{:else if it.hint}<kbd>{it.hint}</kbd>{/if}
       </button>
@@ -266,6 +285,17 @@
     width: 16px;
     text-align: center;
     color: var(--accent);
+  }
+  /* Меню со значками и без отметок (как у меню разворота 0.24): отступ 10, зазор 8 */
+  button.iconed {
+    padding-left: 10px;
+    gap: 8px;
+  }
+  .ico {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    display: flex;
   }
   .label {
     flex: 1;

@@ -9,7 +9,7 @@
   import Spread from '../../editor/spread/Spread.svelte'
   import { spineNote } from '../../editor/cover/spinenote.svelte'
   import { spreadsel } from '../timeline/spreadsel.svelte'
-  import SpreadMenu from '../timeline/SpreadMenu.svelte'
+  import SpreadMenu from '../spreadmenu/SpreadMenu.svelte'
   import { B, H } from '../timeline/timeline'
 
   // Плитка обложки — первая в ленте (спека 032, п. 1–4). Нет обложки, а развороты есть: пустая плитка «перетащите фото»

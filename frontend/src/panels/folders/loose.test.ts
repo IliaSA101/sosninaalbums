@@ -86,6 +86,7 @@ describe('ask texts', () => {
       { id: 'b2', at: at + 3600, files: [{ path: 'C:/Загрузки/bouquet.jpg', photo: 'q' }] },
     ],
     () => true,
+    () => undefined,
     false,
     NOW,
   )!
@@ -132,6 +133,7 @@ describe('ключи и память', () => {
         { id: 'b1', at: 0, files: [{ path: 'D:/y.jpg', photo: 'p2' }] },
       ],
       () => true,
+      () => undefined,
       false,
       NOW,
     )!
@@ -141,10 +143,28 @@ describe('ключи и память', () => {
   it('cachedLoose: те же добавления, лента и чтение — та же ветка; иначе новая', () => {
     const c = cachedLoose()
     const byId = new Map([['p1', {}]])
-    const a = c(L, byId, false, NOW)
-    expect(c(L, byId, false, NOW)).toBe(a)
-    expect(c(L, byId, true, NOW)).not.toBe(a)
-    expect(c(L, new Map(), true, NOW)?.kids[0].kids[0].own).toBe(0)
-    expect(c([], new Map(), true, NOW)).toBeNull()
+    const none = {}
+    const a = c(L, byId, none, false, NOW)
+    expect(c(L, byId, none, false, NOW)).toBe(a)
+    expect(c(L, byId, none, true, NOW)).not.toBe(a)
+    expect(c(L, new Map(), none, true, NOW)?.kids[0].kids[0].own).toBe(0)
+    expect(c(L, new Map(), { p1: 'файл повреждён' }, false, NOW)?.kids[0].kids[0].bad).toBe('файл повреждён') // причины — в ключе памяти
+    expect(c([], new Map(), none, true, NOW)).toBeNull()
+  })
+
+  it('unreadable file: есть причина — bad, а не missing; число 0; пока идёт чтение и если фото в ленте — ничего', () => {
+    const f = (here: boolean, scanning: boolean, why?: string) =>
+      looseGroup(
+        L,
+        () => here,
+        () => why,
+        scanning,
+        NOW,
+      )!.kids[0].kids[0]
+    const bad = f(false, false, 'файл повреждён')
+    expect([bad.bad, bad.missing, bad.own, bad.total]).toEqual(['файл повреждён', false, 0, 0])
+    expect([f(false, false).bad, f(false, false).missing]).toEqual([undefined, true]) // причины нет — «нет на диске»
+    expect([f(false, true, 'файл повреждён').bad, f(false, true, 'файл повреждён').missing]).toEqual([undefined, false])
+    expect([f(true, false, 'файл повреждён').bad, f(true, false, 'файл повреждён').own]).toEqual([undefined, 1])
   })
 })

@@ -16,9 +16,9 @@ import { edit } from '../../editor/text/edit.svelte'
 import { gallery } from '../../panels/gallery/gallery.svelte'
 import { isVignette } from '../../panels/vignette/vignette'
 import { menuUi } from '../menu/menuui.svelte'
-import { articleById, placesOf, type Article } from './articles'
-import { planShow, spotId, type Plan, type SheetInfo, type ShowCtx, type Step } from './show'
-import { choose, locate, spot } from './spotstate.svelte'
+import { articleById, placesOf, type Article, type SpotKey } from './articles'
+import { planShow, type Plan, type SheetInfo, type ShowCtx, type Step } from './show'
+import { seek, spot } from './spotstate.svelte'
 import { articleText } from './articletext'
 import { joinToast, missToast } from './spot'
 
@@ -67,8 +67,15 @@ const RUN: Runner = {
   menu: (s) => menuUi.ask(s.menu),
 }
 
+// Один шаг плана: тур первых шагов (113) двигает вид теми же шагами, что и «Показать».
+export function runStep(s: Step): void {
+  ;(RUN[s.do] as (s: Step) => void)(s)
+}
+
 class Guide {
   open = $state(false)
+  // «Показать» ещё ведёт план (шаги вида, поиск места): тур в это время кольцо не берёт.
+  busy = $state(false)
   // Запрос и выбор сохраняются между открытиями.
   query = $state('')
   sel = $state('')
@@ -79,6 +86,15 @@ class Guide {
   // F1, меню, ссылка в стартовом окне: прежние запрос и выбор.
   openFresh() {
     this.rowFilter = null // фильтр строки — только от «?» матрицы, к F1 он не липнет
+    this.open = true
+  }
+
+  // Тур и ссылки «Подробнее в справочнике»: окно открывается на статье, запрос пуст.
+  openArticle(id: string) {
+    if (!articleById(id)) return
+    this.rowFilter = null
+    this.query = ''
+    this.sel = id
     this.open = true
   }
 
@@ -116,15 +132,20 @@ class Guide {
     }
   }
 
-  private exec(s: Step) {
-    ;(RUN[s.do] as (s: Step) => void)(s)
-  }
-
   // «Показать»: окна закрываются, интерфейс открывает нужное, место мигает. spotKey — место из кнопки карточки.
   async show(id: string, spotKey?: string) {
     const a = articleById(id)
     if (!a) return
     const my = ++this.seq
+    this.busy = true
+    try {
+      await this.run(a, spotKey, my)
+    } finally {
+      if (my === this.seq) this.busy = false
+    }
+  }
+
+  private async run(a: Article, spotKey: string | undefined, my: number) {
     spot.cancel() // прежняя подсветка (и её закрытие меню) — до новых шагов, иначе закроет только что открытое меню
     this.open = false
     if (prefs.startOpen) prefs.closeStart()
@@ -132,7 +153,7 @@ class Guide {
     const ctx = this.ctx()
     const plan = planShow(a, ctx, spotKey ? placesOf(a).find((p) => p.spot === spotKey) : undefined)
     const prev = prefs.snapshot()
-    for (const s of plan.steps) this.exec(s)
+    for (const s of plan.steps) runStep(s)
     this.announce(plan, prev)
     await tick()
     if (my !== this.seq) return
@@ -147,27 +168,14 @@ class Guide {
     else if (!plan.spot) store.notify(plan.toast)
   }
 
-  // Ищет место: основное, затем «⋯» полосы фото, затем запасное статьи (miss.spot).
+  // Ищет место (seek), затем запасное статьи (miss.spot).
   private async find(a: Article, spotKey: string, planHint: string): Promise<{ el: HTMLElement; hint: string } | null> {
-    const id = spotId(spotKey)
-    const isMenu = spotKey.startsWith('menu:')
-    const sel = isMenu ? `[role="menu"] [data-item="${id}"]` : `[data-guide~="${id}"]`
-    if (!isMenu) spot.reveal(sel) // кнопки, видимые только при наведении, раскрываются до поиска
-    let els = await locate(sel)
-    let hint = planHint
-    if (els.length === 0 && !isMenu) {
-      // Кнопка ушла в «⋯» полосы фото: мигает «⋯».
-      els = await locate(`[data-guide-hold~="${id}"]`, 100)
-      hint = els.length > 0 ? 'В меню «⋯»' : ''
-    }
-    const el = choose(els)
-    if (el) return { el, hint }
+    const found = await seek(spotKey as SpotKey, planHint)
+    if (found) return found
     const alt = a.miss?.spot
-    if (alt && !isMenu) {
-      const s2 = `[data-guide~="${spotId(alt)}"]`
-      spot.reveal(s2)
-      const e2 = choose(await locate(s2, 300))
-      if (e2) return { el: e2, hint: articleText(a.miss?.hint ?? '') }
+    if (alt && !spotKey.startsWith('menu:')) {
+      const f2 = await seek(alt, articleText(a.miss?.hint ?? ''))
+      if (f2) return f2
     }
     return null
   }

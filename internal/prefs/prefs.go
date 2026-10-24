@@ -35,6 +35,9 @@ type Prefs struct {
 	First     bool   `json:"first"`
 	// Custom — набор «Своего»; null — «Свой» не настраивали (и уровень не custom).
 	Custom *CustomLevel `json:"custom"`
+	// Флаги туров (113): только булевы, чтобы Prefs оставалась сравнимой; решает Go (tours.go).
+	TourDue  bool `json:"tourDue"`  // главный тур стартует сам
+	TourMore bool `json:"tourMore"` // предложить продолжение (один раз)
 }
 
 // CustomLevel — набор уровня «Свой»: разница с основой, а не полный список, чтобы функция
@@ -110,6 +113,7 @@ func SanitizeCustom(c CustomLevel) CustomLevel {
 // Of — настройки из конфига; пустой уровень — первый запуск.
 func Of(c Config) Prefs {
 	p := Prefs{Level: NormLevel(c.Level), ShowStart: !c.HideStart, First: c.Level == ""}
+	p.TourDue, p.TourMore = tourFlags(c.Level, c.Tours)
 	switch {
 	case c.Custom != nil:
 		cl := SanitizeCustom(*c.Custom)

@@ -588,3 +588,29 @@ func TestRememberKeepsFrameAndCaption(t *testing.T) {
 		t.Fatalf("размер файла: %d", r.Size)
 	}
 }
+
+// 114: на «Авто» MovePhoto внутри разворота даёт тот же порядок и раскладку, что AddPhotos.
+func TestMovePhotoAutoSameAsAdd(t *testing.T) {
+	for _, idx := range []int{0, 2, 4, -1} {
+		mk := func() (*album.Editor, string) {
+			e := edtest.Open(t, model.New(), "")
+			v := edtest.NewSpread(e, -1, edtest.Photos("a", "b", "c", "d"))
+			return e, v.Spreads[0].ID
+		}
+		e1, s1 := mk()
+		e2, s2 := mk()
+		if _, err := e1.AddPhotos(s1, edtest.Photos("b"), idx); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e2.MovePhoto("b", s2, idx); err != nil {
+			t.Fatal(err)
+		}
+		a, b := edtest.P(e1).Spreads[0], edtest.P(e2).Spreads[0]
+		if !slices.Equal(a.Photos, b.Photos) || a.Layout != b.Layout || len(b.Grid) != 0 {
+			t.Fatalf("index %d: AddPhotos %v/%q, MovePhoto %v/%q", idx, a.Photos, a.Layout, b.Photos, b.Layout)
+		}
+		if edtest.Rev(e1) != edtest.Rev(e2) || edtest.UndoLen(e1) != edtest.UndoLen(e2) {
+			t.Fatalf("index %d: rev %d/%d, undo %d/%d", idx, edtest.Rev(e1), edtest.Rev(e2), edtest.UndoLen(e1), edtest.UndoLen(e2))
+		}
+	}
+}

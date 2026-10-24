@@ -71,3 +71,22 @@ func replayClipBg(r *replay) {
 	r.do("ClearAlbumBg", e.ClearAlbumBg())
 	r.do("ClearAlbumBg:холостая", e.ClearAlbumBg())
 }
+
+// replayColorMass — «Как в альбоме» (115): цвет всем сразу, фон альбома всем сразу и у одного
+// разворота. Идёт в самом конце сценария: прежние строки эталона не сдвигаются.
+func replayColorMass(r *replay) {
+	e := r.e
+	sid := r.v.Spreads[len(r.v.Spreads)-1].ID
+	r.do("SetBackground:115", e.SetBackground(sid, "left", "#ddeedd"))
+	st := r.v.Settings
+	st.Bg = "#eef2e6"
+	r.do("SetSettingsToAll", e.SetSettingsToAll(st))
+	r.do("SetSettingsToAll:холостая", e.SetSettingsToAll(st))
+	dots := model.BgSource{Pattern: &model.Pattern{Kind: "dots", Preset: "sa:dots"}, Color: "#f5efe6"}
+	r.ve("SetAlbumBgToAll")(e.SetAlbumBgToAll(dots, false))
+	r.do("SetNoAlbumBg:115", e.SetNoAlbumBg(sid, true))
+	r.do("SpreadBgToAlbum", e.SpreadBgToAlbum(sid))
+	r.do("SpreadBgToAlbum:холостая", e.SpreadBgToAlbum(sid))
+	r.do("SpreadBgToAlbum:обложка", e.SpreadBgToAlbum(model.CoverID))
+	r.ve("SetAlbumBgToAll:холостая")(e.SetAlbumBgToAll(dots, false))
+}

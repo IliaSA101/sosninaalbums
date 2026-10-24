@@ -466,7 +466,7 @@ func TestStickerPresets(t *testing.T) {
 			t.Errorf("ID %q", p.id)
 		}
 		seen[p.id] = true
-		if !isTheme(p.theme) || p.theme == ThemeMine || p.name == "" {
+		if (!isTheme(p.theme) && p.theme != ThemeBrand) || p.theme == ThemeMine || p.name == "" {
 			t.Errorf("%s: тема %q, имя %q", p.id, p.theme, p.name)
 		}
 		themes[p.theme]++
@@ -477,8 +477,8 @@ func TestStickerPresets(t *testing.T) {
 			t.Errorf("%s: параметры не зажаты: %+v → %+v", p.id, p.spec, got)
 		}
 	}
-	if n := len(stickerPresets); n < 36 || n > 48 {
-		t.Errorf("встроенных стикеров %d, ждали ~40", n)
+	if n := len(stickerPresets); n < 36 || n > 52 {
+		t.Errorf("встроенных стикеров %d, ждали ~40 и 4 фирменных", n)
 	}
 	for _, th := range []string{"basic", "wedding", "kids", "kindergarten", "school", "grad", "holiday"} {
 		if themes[th] < 3 {

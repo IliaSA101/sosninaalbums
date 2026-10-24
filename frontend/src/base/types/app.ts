@@ -167,6 +167,10 @@ export interface Prefs {
   showStart: boolean
   first: boolean
   custom?: { base: string; on: string[]; off: string[] } | null
+  // Первые шаги (113, Api.SetTour): главный тур стартует сам / предложить продолжение (один раз).
+  // Необязательные: Go отдаёт всегда, а тесты и старые ответы их не знают.
+  tourDue?: boolean
+  tourMore?: boolean
 }
 
 // Недавний альбом (State.recent): exists и modified из os.Stat на стороне Go.
@@ -186,7 +190,24 @@ export interface BackupInfo {
   photos: number
 }
 
+// Связь .salbum с программой (112, app.AssocView): can — выпуск на Windows (вопрос и пункт меню есть),
+// on — связь ведёт в эту программу, ask — показать вопрос.
+export interface AssocView {
+  can: boolean
+  on: boolean
+  ask: boolean
+}
+
 // Ответ Api.GetState / OpenProject / NewProject: всё, чем живёт окно.
+// 112: окно «Альбом из новой версии» (Go: app.NewerInfo). Тексты и кнопки собирает shell/ask/newerask.ts.
+export interface NewerInfo {
+  name: string // «Свадьба.salbum»; у черновика пусто
+  draft: boolean // черновик при старте
+  need: string // «0.26»; "" — версия в файле неизвестна
+  mine: string // «0.25» — эта программа
+  have: string // «0.26» — найденная на компьютере новая версия; "" — нет (или не Windows)
+}
+
 export interface State {
   view: View
   photos: Photo[]
@@ -197,8 +218,14 @@ export interface State {
   scan?: ScanProgress
   fonts?: FontFamily[]
   missing?: string[]
+  unread?: Record<string, string> // 117: отдельные файлы, найденные, но не прочитанные: ID → причина; нет ключа — читается
   prefs?: Prefs
   recent?: RecentProject[]
   keymap?: KeymapView | null // горячие клавиши (074); Go начнёт слать с G2 — до этого undefined
   cancelled?: boolean // только OpenProject: диалог закрыт без выбора, состояние прежнее
+  newer?: NewerInfo // 112: файл новее программы — окно «Альбом из новой версии» (вместе с cancelled в ответах открытия)
+  pending?: string // 112: имя .salbum в очереди внешнего открытия (GetState не чистит, чистит OpenExternal)
+  assoc?: AssocView // 112: пересчитывается при каждом GetState
+  fromFile?: boolean // 112: запуск двойным щелчком по альбому и он открыт — стартовое окно не нужно
+  stand?: boolean // стенд QA (сборка dev + SA_STAND): окна ОС и браузер не открываются, ссылки молчат
 }

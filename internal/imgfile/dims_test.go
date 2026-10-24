@@ -38,7 +38,7 @@ func pngHeader(w, h uint32) []byte {
 	return b.Bytes()
 }
 
-func readFile(t *testing.T, p string) []byte {
+func readFile(t testing.TB, p string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(p)
 	if err != nil {
@@ -357,20 +357,27 @@ type errReader struct{ err error }
 
 func (r errReader) Read([]byte) (int, error) { return 0, r.err }
 
-// FuzzDimsOf — любые байты: без паники; принятое — JPEG или PNG с размером в пределе.
+// FuzzDimsOf — любые байты: без паники; принятое — JPEG, PNG или WebP с размером в пределе.
 func FuzzDimsOf(f *testing.F) {
 	f.Add(pngHeader(8, 6))
 	f.Add(pngHeader(15000, 15000))
 	f.Add(testkit.RawJPEG())
 	f.Add([]byte("SAPROBE"))
 	f.Add([]byte{})
+	// WebP: lossy, lossless, VP8X с флагом анимации, VP8X с ALPH, ANIM до кадра, VP8X без кадра.
+	f.Add(readFile(f, filepath.Join("testdata", "lossy16.webp")))
+	f.Add(readFile(f, filepath.Join("testdata", "lossless24x16.webp")))
+	f.Add(riffWebP(vp8xChunk(vp8xAnimation, 4, 4), vp8lChunk(4, 4)))
+	f.Add(riffWebP(vp8xChunk(vp8xAlpha, 6, 5), chunk("ALPH", make([]byte, 7)), vp8Chunk(6, 5)))
+	f.Add(riffWebP(vp8xChunk(0, 4, 4), chunk("ANIM", make([]byte, 6)), vp8lChunk(4, 4)))
+	f.Add(riffWebP(vp8xChunk(0, 4, 4)))
 	const maxPx = 64_000_000
 	f.Fuzz(func(t *testing.T, data []byte) {
 		d, err := DimsOf(bytes.NewReader(data), maxPx)
 		if err != nil {
 			return
 		}
-		if d.Format != "jpeg" && d.Format != "png" {
+		if d.Format != "jpeg" && d.Format != "png" && d.Format != "webp" {
 			t.Fatalf("формат %q", d.Format)
 		}
 		if d.W <= 0 || d.H <= 0 || int64(d.W)*int64(d.H) > maxPx {

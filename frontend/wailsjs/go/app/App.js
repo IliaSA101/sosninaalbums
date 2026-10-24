@@ -86,6 +86,10 @@ export function ArrangePlaces(arg1, arg2, arg3) {
   return window['go']['app']['App']['ArrangePlaces'](arg1, arg2, arg3);
 }
 
+export function AssocLater() {
+  return window['go']['app']['App']['AssocLater']();
+}
+
 export function AutoBuild(arg1, arg2, arg3) {
   return window['go']['app']['App']['AutoBuild'](arg1, arg2, arg3);
 }
@@ -122,8 +126,16 @@ export function CancelLibrary() {
   return window['go']['app']['App']['CancelLibrary']();
 }
 
+export function CancelUpdate() {
+  return window['go']['app']['App']['CancelUpdate']();
+}
+
 export function CheckFolders(arg1) {
   return window['go']['app']['App']['CheckFolders'](arg1);
+}
+
+export function CheckUpdate() {
+  return window['go']['app']['App']['CheckUpdate']();
 }
 
 export function ChooseFiles() {
@@ -246,6 +258,10 @@ export function DeleteText(arg1) {
   return window['go']['app']['App']['DeleteText'](arg1);
 }
 
+export function DownloadUpdate() {
+  return window['go']['app']['App']['DownloadUpdate']();
+}
+
 export function DropFonts(arg1) {
   return window['go']['app']['App']['DropFonts'](arg1);
 }
@@ -346,6 +362,10 @@ export function ImportTemplatesPath(arg1) {
   return window['go']['app']['App']['ImportTemplatesPath'](arg1);
 }
 
+export function InstallUpdate() {
+  return window['go']['app']['App']['InstallUpdate']();
+}
+
 export function Keymap() {
   return window['go']['app']['App']['Keymap']();
 }
@@ -418,12 +438,20 @@ export function NewVignetteSheet(arg1, arg2) {
   return window['go']['app']['App']['NewVignetteSheet'](arg1, arg2);
 }
 
+export function OpenExternal() {
+  return window['go']['app']['App']['OpenExternal']();
+}
+
 export function OpenFabrika() {
   return window['go']['app']['App']['OpenFabrika']();
 }
 
 export function OpenFsfera() {
   return window['go']['app']['App']['OpenFsfera']();
+}
+
+export function OpenInNewer() {
+  return window['go']['app']['App']['OpenInNewer']();
 }
 
 export function OpenLink(arg1) {
@@ -436,6 +464,10 @@ export function OpenProject() {
 
 export function OpenRecent(arg1) {
   return window['go']['app']['App']['OpenRecent'](arg1);
+}
+
+export function OpenUpdatePage() {
+  return window['go']['app']['App']['OpenUpdatePage']();
 }
 
 export function PagePresets() {
@@ -662,6 +694,14 @@ export function SetAlbumBgFade(arg1, arg2) {
   return window['go']['app']['App']['SetAlbumBgFade'](arg1, arg2);
 }
 
+export function SetAlbumBgToAll(arg1, arg2) {
+  return window['go']['app']['App']['SetAlbumBgToAll'](arg1, arg2);
+}
+
+export function SetAssoc(arg1) {
+  return window['go']['app']['App']['SetAssoc'](arg1);
+}
+
 export function SetBackdrop(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetBackdrop'](arg1, arg2, arg3);
 }
@@ -802,6 +842,10 @@ export function SetSettings(arg1) {
   return window['go']['app']['App']['SetSettings'](arg1);
 }
 
+export function SetSettingsToAll(arg1) {
+  return window['go']['app']['App']['SetSettingsToAll'](arg1);
+}
+
 export function SetSheetCaps(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetSheetCaps'](arg1, arg2, arg3);
 }
@@ -854,6 +898,14 @@ export function SetTone(arg1, arg2, arg3) {
   return window['go']['app']['App']['SetTone'](arg1, arg2, arg3);
 }
 
+export function SetTour(arg1, arg2) {
+  return window['go']['app']['App']['SetTour'](arg1, arg2);
+}
+
+export function SetUpdateCheck(arg1) {
+  return window['go']['app']['App']['SetUpdateCheck'](arg1);
+}
+
 export function SetVignette(arg1, arg2) {
   return window['go']['app']['App']['SetVignette'](arg1, arg2);
 }
@@ -898,6 +950,10 @@ export function SplitSpreadAuto(arg1, arg2, arg3) {
   return window['go']['app']['App']['SplitSpreadAuto'](arg1, arg2, arg3);
 }
 
+export function SpreadBgToAlbum(arg1) {
+  return window['go']['app']['App']['SpreadBgToAlbum'](arg1);
+}
+
 export function SpreadPhotoColors(arg1) {
   return window['go']['app']['App']['SpreadPhotoColors'](arg1);
 }
@@ -936,6 +992,10 @@ export function TurnPhotos(arg1, arg2) {
 
 export function Undo() {
   return window['go']['app']['App']['Undo']();
+}
+
+export function UpdateInfo() {
+  return window['go']['app']['App']['UpdateInfo']();
 }
 
 export function UpdateLibrary() {

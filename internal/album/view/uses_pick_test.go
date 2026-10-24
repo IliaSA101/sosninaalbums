@@ -38,12 +38,12 @@ func TestPhotoUsesPick(t *testing.T) {
 	want := []row{
 		{0, model.UseBackdrop, cv, "Обложка", "фон", model.ScopeSpread, "Обложка — фон"},
 		{1, model.UsePlace, s1, "Разворот 1", "место", "x", "Разворот 1 — место"},
-		{1, model.UseBackdrop, s1, "Разворот 1", "фон", model.ScopeLeft, "Разворот 1 — фон"},
-		{1, model.UseBackdrop, s1, "Разворот 1", "фон", model.ScopeRight, "Разворот 1 — фон"},
-		{1, model.UseSticker, s1, "Разворот 1", "стикер", "c0ffee0000a1", "Разворот 1 — стикер"},
-		{1, model.UseSticker, s1, "Разворот 1", "стикер", "c0ffee0000a2", "Разворот 1 — стикер"},
-		{1, model.UseBorder, s1, "Разворот 1", "рамочка", "y", "Разворот 1 — рамочка"},            // место с фото: его запись
-		{1, model.UseBorder, s1, "Разворот 1", "рамочка", "c0ffee0000b1", "Разворот 1 — рамочка"}, // пустое место: само место
+		{1, model.UseBackdrop, s1, "Разворот 1", "фон слева", model.ScopeLeft, "Разворот 1 — фон слева"},
+		{1, model.UseBackdrop, s1, "Разворот 1", "фон справа", model.ScopeRight, "Разворот 1 — фон справа"},
+		{1, model.UseSticker, s1, "Разворот 1", "стикер 1", "c0ffee0000a1", "Разворот 1 — стикер 1"},
+		{1, model.UseSticker, s1, "Разворот 1", "стикер 2", "c0ffee0000a2", "Разворот 1 — стикер 2"},
+		{1, model.UseBorder, s1, "Разворот 1", "рамочка 1", "y", "Разворот 1 — рамочка 1"},            // место с фото: его запись
+		{1, model.UseBorder, s1, "Разворот 1", "рамочка 2", "c0ffee0000b1", "Разворот 1 — рамочка 2"}, // пустое место: само место
 		{2, model.UseBackdrop, s2, "Разворот 2", "фон", model.ScopeSpread, "Разворот 2 — фон"},
 	}
 	if !reflect.DeepEqual(got, want) {

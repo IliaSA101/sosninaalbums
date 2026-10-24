@@ -49,6 +49,12 @@ func TestOpenLinkURLs(t *testing.T) {
 		{"dev", "bug", repo + "/issues/new?template=bug.yml"},
 		{"dev", "telegram", "https://t.me/Ilya_Sosnin"},
 		{"dev", "idea", repo + "/issues/new?template=idea.yml"},
+		// Видео (113): всегда основная ветка, метки версии нет.
+		{"0.25.0", "videos", repo + "/blob/main/docs/VIDEOS.md"},
+		{"dev", "videos", repo + "/blob/main/docs/VIDEOS.md"},
+		// Скачать (112): страница последнего выпуска, без метки версии (она старше файла).
+		{"0.25.0", "download", repo + "/releases/latest"},
+		{"dev", "download", repo + "/releases/latest"},
 	}
 	for _, c := range cases {
 		withVersion(t, c.ver)

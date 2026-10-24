@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
+	"github.com/IliaSA101/sosninaalbums/internal/album/design"
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/names"
@@ -80,7 +81,7 @@ func (e *Editor) NewSpread(at int, photos []model.PhotoInfo) (model.View, error)
 	return e.try("", func(p *model.Project) error { return spreads.NewSpread(p, at, photos) })
 }
 
-// MovePhoto переносит фото внутри разворота или в другой разворот.
+// MovePhoto переносит фото внутри разворота или в другой разворот; внутри ручного — сдвиг по местам (114).
 // Договор: нет — всё проверяет операция (неизвестное фото — холостая правка).
 func (e *Editor) MovePhoto(photoID, toSpread string, index int) (model.View, error) {
 	return e.try("", func(p *model.Project) error { return spreads.MovePhoto(p, photoID, toSpread, index) })
@@ -130,6 +131,20 @@ func (e *Editor) SetSettings(s model.Settings) (v model.View) {
 	t0 := time.Now()
 	defer func() { slow(t0, "настройки: %d разворотов", len(v.Spreads)) }()
 	return e.change(func(p *model.Project) { old := p.Settings; spreads.SetSettings(p, s); cover.FollowFormat(p, old) })
+}
+
+// SetSettingsToAll — SetSettings и снятие своего цвета страниц у всех разворотов (115): тот же
+// цвет никому не пишется, они идут за альбомом. Обложка не трогается. Один шаг отмены.
+// Договор: как у SetSettings; ничего не изменилось — холостая.
+func (e *Editor) SetSettingsToAll(s model.Settings) (v model.View) {
+	t0 := time.Now()
+	defer func() { slow(t0, "настройки для всех: %d разворотов", len(v.Spreads)) }()
+	return e.change(func(p *model.Project) {
+		old := p.Settings
+		spreads.SetSettings(p, s)
+		cover.FollowFormat(p, old)
+		design.ColorsToAlbum(p)
+	})
 }
 
 // SheetSize — мм разворота (у проекта из листов 031 — листа): по ним каталог фонов рисует

@@ -373,7 +373,8 @@ describe('отдельные фото в дереве (097)', () => {
     { path: P2, id: 'l2' },
   ]
   const here = (id: string) => lphotos.some((p) => p.id === id)
-  const group = (scanning = false) => looseGroup(LOOSE, here, scanning, NOW)!
+  const noWhy = () => undefined
+  const group = (scanning = false, why: (id: string) => string | undefined = noWhy) => looseGroup(LOOSE, here, why, scanning, NOW)!
 
   it('loose group: ветка → добавления по порядку → файлы с бледной папкой; ✕ у добавления и файла, у ветки нет', () => {
     const g = group()
@@ -401,7 +402,7 @@ describe('отдельные фото в дереве (097)', () => {
     expect(rowTitle(f1)).toBe(P1)
     expect([removeTitle(f1), removeLabel(f1)]).toEqual(['Убрать из ленты', 'Убрать «IMG_2041.jpg» из ленты'])
     expect([removeTitle(g.kids[0]), removeLabel(g.kids[0])]).toEqual(['Убрать из ленты', 'Убрать «14:05» из ленты'])
-    expect(looseGroup([], here, false, NOW)).toBeNull()
+    expect(looseGroup([], here, noWhy, false, NOW)).toBeNull()
   })
 
   it('missing file: «нет на диске» только после чтения; в числа не входит; флажок серый (total 0)', () => {
@@ -409,6 +410,13 @@ describe('отдельные фото в дереве (097)', () => {
     expect([gone.missing, gone.own, gone.total]).toEqual([true, 0, 0])
     expect(rowTitle(gone)).toBe(GONE + '\nНет на диске')
     expect(group(true).kids[1].kids[0].missing).toBe(false) // идёт чтение — ещё не «нет»
+  })
+
+  it('unread tip: путь, затем «Не читается: причина из Go» без добавок', () => {
+    const bad = group(false, (id) => (id === 'l3' ? 'внутри HEIC, а не JPEG. Совет из Go' : undefined)).kids[1].kids[0]
+    expect(rowTitle(bad)).toBe(GONE + '\nНе читается: внутри HEIC, а не JPEG. Совет из Go')
+    const big = group(false, () => 'слишком большое (больше 250 Мп)').kids[1].kids[0]
+    expect(rowTitle(big)).toBe(GONE + '\nНе читается: слишком большое (больше 250 Мп)')
   })
 
   it('filter loose: флажок файла, «только» у добавления и у папки; фото папок не задеты', () => {

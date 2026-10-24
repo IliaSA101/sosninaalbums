@@ -52,7 +52,7 @@ func wantMarks(t *testing.T, got map[string]*Marks, name string, want *Marks) {
 }
 
 func TestJPEGHeadXMP(t *testing.T) {
-	srgb := testkit.MatrixProfile(testkit.XYZSRGB, 2.2, testkit.DescV2("sRGB"))
+	srgb := testkit.SRGBProfile(testkit.DescV2("sRGB"))
 	packet := xmpAttrs(`xmp:Rating="4"`)
 	data := testkit.RawJPEG(testkit.ExifColor(false, 6, 0, ""), xmpSegment(packet), testkit.ICCSegment(1, 1, srgb),
 		xmpSegment(xmpAttrs(`xmp:Rating="1"`))) // второй пакет не берётся

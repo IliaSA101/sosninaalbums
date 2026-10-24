@@ -393,6 +393,22 @@ describe('отдельные фото (097)', () => {
     expect((screen.getByRole('checkbox', { name: /«gone\.jpg»/ }) as HTMLInputElement).disabled).toBe(true)
   })
 
+  it('unreadable file (117): «не читается» вместо «нет на диске», подсказка с причиной, ✕ на месте', async () => {
+    setLoose([A])
+    store.unread = { l3: 'внутри HEIC, а не JPEG. Совет из Go' }
+    mount()
+    await fireEvent.click(button())
+    const old = screen.getAllByRole('button', { name: 'Раскрыть' })
+    await fireEvent.click(old[old.length - 1])
+    const row = screen.getByRole('checkbox', { name: /«gone\.jpg»/ }).closest('li')!
+    expect(row.className).toContain('missing') // тот же бледный курсив
+    expect(row.textContent).toContain('не читается')
+    expect(row.textContent).not.toContain('нет на диске')
+    expect(row.title).toBe(GONE + '\nНе читается: внутри HEIC, а не JPEG. Совет из Go')
+    expect(screen.getByRole('button', { name: 'Убрать «gone.jpg» из ленты' })).toBeTruthy()
+    store.unread = {}
+  })
+
   it('«+ Добавить фото…»: окно закрывается под выбор, ChooseFiles один раз, затем окно открыто на мигающем добавлении', async () => {
     setLoose([A], [])
     chooseFiles.mockResolvedValue({

@@ -236,6 +236,7 @@ const plan = (o: Partial<PrintPlan> = {}): PrintPlan => ({
   kind: 'fsfera',
   title: 'Для Фотосферы Pro',
   format: '30×30',
+  off: '',
   pages: 'Тонкие',
   spreads: 20,
   spine: 14,
@@ -307,13 +308,24 @@ describe('для типографии: Фотосфера Pro (047), Фабри�
     expect(hasFix({ coverFix: true, fixAt: -1 }, 0)).toBe(false)
     expect(hasFix({ coverFix: false, fixAt: 0 }, 0)).toBe(false)
   })
-  it('activePlan: берёт план выбранной типографии, без формата или не выбрана — нет режима', () => {
+  it('activePlan: берёт план выбранной типографии; не выбрана или плана нет — нет режима', () => {
     expect(activePlan([plan(), fab], 'fabrika')).toBe(fab)
     expect(activePlan([plan(), fab], 'fsfera')).toEqual(plan())
     expect(activePlan([plan(), fab], '')).toBeNull()
     expect(activePlan([plan()], 'fabrika')).toBeNull() // у страницы Фабрики нет: флажка нет, режим выключен
-    expect(activePlan([plan({ format: '' })], 'fsfera')).toBeNull()
     expect(activePlan(null, 'fsfera')).toBeNull()
+  })
+  it('activePlan: план без формата — режим с запретом (120)', () => {
+    const off = plan({
+      format: '',
+      off: 'страница 300 × 200 мм — не формат Фотосферы',
+      block: ['Страница 300 × 200 мм — не формат Фотосферы'],
+    })
+    expect(activePlan([off], 'fsfera')).toBe(off) // режим есть, не обычная выгрузка
+    expect(activePlan([off], 'fabrika')).toBeNull() // другой типографии в списке нет
+    expect(buildOptions('all', 1, '', { ...DEFAULT_PREFS, print: 'fsfera' }, true, false, activePlan([off], 'fsfera'))).toMatchObject({
+      print: 'fsfera',
+    })
   })
   it('two plans one checked: включён не больше одного, повторный щелчок выключает', () => {
     let pref: '' | 'fsfera' | 'fabrika' = ''
@@ -346,8 +358,17 @@ describe('для типографии: Фотосфера Pro (047), Фабри�
     expect(canExport({ ...base, plans: null })).toBe(false) // только открыли окно
     expect(canExport({ ...base, plans: [] })).toBe(true) // страница без типографии: режим выключен
     expect(canExport({ ...base, plans: [plan()] })).toBe(true) // у страницы только Фотосфера
-    expect(canExport({ ...base, plans: [plan({ kind: 'fabrika', format: '' })] })).toBe(true)
+    // спека 120: план чужого формата всегда с запретом
+    expect(canExport({ ...base, plans: [plan({ kind: 'fabrika', format: '', block: ['x'] })] })).toBe(false)
     expect(canExport({ ...base, bad: true, plans: [] })).toBe(false) // неверный диапазон мешает обычной выгрузке
+  })
+  it('canExport: запомненная типография при чужом формате — выгрузка закрыта запретом (120)', () => {
+    const block = ['Страница 300 × 200 мм — не формат Фабрики Фотокниги']
+    const off = plan({ kind: 'fabrika', format: '', off: 'страница 300 × 200 мм — не формат Фабрики Фотокниги', block })
+    const base = { busy: false, bad: false, plans: [plan({ format: '', off: 'x', block: ['x'] }), off] }
+    expect(canExport({ ...base, printPref: 'fabrika' })).toBe(false) // не уходит молча в обычную выгрузку
+    expect(canExport({ ...base, printPref: '' })).toBe(true) // флажок снят — обычная выгрузка
+    expect(canExport({ ...base, printPref: 'fabrika', bad: true })).toBe(false)
   })
   it('запоздавший ответ плана отсекается по номеру запроса', () => {
     expect(planStale(2, 2)).toBe(false)
@@ -392,8 +413,8 @@ describe('тост выгрузки', () => {
     expect(exportDoneText(0)).toBe('Выгрузка готова')
   })
   it('сводка цвета Go — через точку', () => {
-    expect(exportDoneText(3, 'Пересчитано из Adobe RGB в sRGB: 2 фото')).toBe(
-      'Выгружено файлов: 3. Пересчитано из Adobe RGB в sRGB: 2 фото',
+    expect(exportDoneText(3, 'Пересчитано в sRGB: 2 фото (Adobe RGB — 2).')).toBe(
+      'Выгружено файлов: 3. Пересчитано в sRGB: 2 фото (Adobe RGB — 2).',
     )
   })
 })

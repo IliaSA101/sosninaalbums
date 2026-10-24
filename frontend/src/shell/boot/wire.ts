@@ -27,6 +27,8 @@ import { ownMarks } from '../../panels/marks/ownmarks.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
 import { spineNote } from '../../editor/cover/spinenote.svelte'
 import { narrow } from './narrow'
+import { extOpen } from './extopen.svelte'
+import { newerAsk } from '../ask/newerask.svelte'
 
 let wired = false
 const filterFolders = cachedFilterTree()
@@ -89,6 +91,8 @@ export function wire() {
       return true
     },
     gate: gateCopy, // 098: фото, уже стоящее в альбоме, — окно «Фото уже в альбоме»
+    external: (name) => extOpen.request(name), // 112: .salbum, пришедший до подписки на событие
+    newer: (info) => newerAsk.show(info), // 112: альбом из более новой версии
   })
   prefs.narrowed = narrow
   // Предпросмотр галереи мешал бы целиться: раскладка на экране не та, что в проекте.

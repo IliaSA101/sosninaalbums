@@ -21,6 +21,7 @@ export interface TreeNode {
   parent: TreeNode | null
   hint?: string // бледная родительская папка: две добавленные папки с одним именем; у отдельного фото — его папка
   missing?: boolean // отдельное фото: чтение кончилось, а в ленте его нет (097 п. 9)
+  bad?: string // отдельное фото найдено, но не читается: причина от Go (117); тогда missing не ставится
   loose?: { id: string; file: string; photo?: string } // добавление и файл для RemoveLoose (file '' — всё добавление)
 }
 
@@ -339,7 +340,10 @@ export function countParts(n: TreeNode): { own: string; all: string } {
 export function rowTitle(n: TreeNode): string {
   if (n.kind === 'group') return 'Фото, добавленные по одному'
   if (n.kind === 'batch') return 'Добавлено ' + addedWhen(n.name)
-  if (n.kind === 'file') return n.missing ? `${n.path}\nНет на диске` : n.path
+  if (n.kind === 'file') {
+    if (n.bad) return `${n.path}\nНе читается: ${n.bad}` // совет уже в причине из Go
+    return n.missing ? `${n.path}\nНет на диске` : n.path
+  }
   return n.kids.length > 0 ? `${n.path}\n${n.own} — в самой папке, ${n.total} — с подпапками` : n.path
 }
 

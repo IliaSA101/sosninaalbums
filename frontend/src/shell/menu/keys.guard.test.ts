@@ -60,7 +60,6 @@ describe('обработчики клавиш мимо реестра', () => {
     '/src/editor/zoom/ZoomBadge.svelte': 'Esc закрывает бегунок масштаба',
     '/src/panels/layouts/MirrorMenu.svelte': 'навигация и Esc меню',
     '/src/panels/names/NamesDialog.svelte': 'Ctrl+Enter «Вставить» в окне имён',
-    '/src/panels/timeline/SpreadMenu.svelte': 'навигация и Esc меню',
     '/src/shell/guide/spotstate.svelte.ts': 'Esc гасит подсветку места',
     '/src/shell/hotkeys/KeysDialog.svelte':
       'окно «Горячие клавиши»: нажатие выбирает клавишу на карте, при записи его забирает запись (074)',

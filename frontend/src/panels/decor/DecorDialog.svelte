@@ -8,7 +8,8 @@
   import { decor } from './decor.svelte'
   import BgTargets from './BgTargets.svelte'
   import { bgPickShown } from './bgtargets'
-  import { ALBUM_BG } from './albumbg'
+  import { ALBUM_BG } from '../albumbg/albumbg'
+  import AlbumOwnAsk from '../albumbg/AlbumOwnAsk.svelte'
   import DecorHead from './DecorHead.svelte'
   import QrDialog from './QrDialog.svelte'
   import SpreadSave from './SpreadSave.svelte'
@@ -138,6 +139,7 @@
                   class="tile"
                   class:current={it.id === standing}
                   class:stk={sticker}
+                  class:stkdark={sticker && it.dark}
                   class:frm={frame}
                   class:chk={frame && it.own}
                   aria-current={it.id === standing ? 'true' : undefined}
@@ -205,6 +207,14 @@
       <button class="primary" data-autofocus onclick={() => decor.confirmBgMany()}>Поставить</button>
     </div>
   </Modal>
+{:else if c && decor.ask?.kind === 'albumOwn'}
+  <!-- 115: у разворотов свой фон; × возвращает к плиткам, правки нет (как вопрос 077) -->
+  <AlbumOwnAsk
+    ask={decor.ask.own}
+    onkeep={() => decor.answerAlbumOwn(false)}
+    onall={() => decor.answerAlbumOwn(true)}
+    onclose={() => decor.dismiss()}
+  />
 {/if}
 
 <SpreadSave scopes={saveScopes(where)} />
@@ -277,6 +287,10 @@
   .tile.stk,
   .tile.chk {
     background: repeating-conic-gradient(#d4d4d8 0 25%, #f4f4f5 0 50%) 0 0 / 14px 14px;
+  }
+  /* Светлый стикер (116, Go: dark): тот же рисунок, тёмные тона темы */
+  .tile.stk.stkdark {
+    background: repeating-conic-gradient(var(--line) 0 25%, var(--panel2) 0 50%) 0 0 / 14px 14px;
   }
   .tile.stk img {
     object-fit: contain;

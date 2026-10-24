@@ -2,12 +2,13 @@
   import { portal } from '../ui/portal'
   import { onDestroy } from 'svelte'
   import { store } from '../core/store.svelte'
-  import Icon from '../ui/Icon.svelte'
   import { placePopover, type Placed } from '../ui/popover'
+  import ColorEye from './ColorEye.svelte'
+  import ColorInherit from './ColorInherit.svelte'
   import ColorSets, { type PhotoColors } from './ColorSets.svelte'
   import HsvField from './HsvField.svelte'
   import MyColors from './MyColors.svelte'
-  import { colorWords, eyeHint } from './colorwords'
+  import { colorWords } from './colorwords'
   import { eyedrop } from './eyedrop.svelte'
   import { mycolors } from './mycolorlist.svelte'
   import { HEX_PREFIX, hexError, loadTab, normalizeHex, PHOTO_TAB, saveTab, SETS } from './palette'
@@ -18,10 +19,14 @@
   // onpreview(hex) — живой показ на развороте (наведение, фокус, протяжка по полю, правильный HEX в поле), onpreview(null) —
   // снять: уход с образца, закрытие без выбора, вход в режим пипетки, ответ Go после выбора. В историю и файл показ не
   // попадает (109-6). sheet — лист для вкладки «С фото» и пипетки; без него их нет.
+  // inherit + oninherit (115) — строка «Как в альбоме»: hex цвета альбома, on — своего цвета нет. Щелчок снимает свой цвет
+  // (oninherit, как выбор: показ держится до ответа Go) и в «Свои» ничего не кладёт; при on окно просто закрывается.
   let {
     value,
     onpick,
     onpreview,
+    inherit,
+    oninherit,
     sheet,
     label = 'Цвет',
     disabled = false,
@@ -29,6 +34,8 @@
     value: string
     onpick: (hex: string) => unknown
     onpreview?: (hex: string | null) => void
+    inherit?: { hex: string; on: boolean }
+    oninherit?: () => unknown
     sheet?: string
     label?: string
     disabled?: boolean
@@ -130,16 +137,13 @@
     }
   })
 
+  // Выбор отдан родителю: показ держится, пока Go не ответил (старый цвет не мелькает). Ответ (или отказ) снимает его.
   // keep — окно остаётся открытым (поле оттенка: можно тянуть дальше, каждое отпускание — своя правка).
-  function pick(hex: string, keep = false) {
-    const h = normalizeHex(hex)
-    if (!h) return
+  function commit(run: () => unknown, keep = false) {
     if (!keep) open = false
     picked = true
     live = false
-    draft = h
-    // Показ держится, пока Go не ответил: старый цвет не мелькает. Ответ (или отказ) снимает его.
-    new Promise((res) => res(onpick(h))).finally(() => {
+    new Promise((res) => res(run())).finally(() => {
       picked = false
       if (live) {
         live = false // уже идёт новая протяжка — её показ не трогаем
@@ -149,7 +153,20 @@
       shown = null
       onpreview?.(null)
     })
+  }
+
+  function pick(hex: string, keep = false) {
+    const h = normalizeHex(hex)
+    if (!h) return
+    draft = h
+    commit(() => onpick(h), keep)
     void mycolors.remember(h)
+  }
+
+  // «Как в альбоме»: уже так — закрыть без правки; иначе одна правка родителя, в «Свои» ничего не попадает.
+  function inheritPick() {
+    if (inherit?.on) return close()
+    commit(() => oninherit?.())
   }
 
   function applyDraft(force: boolean) {
@@ -259,7 +276,11 @@
       ontab={setTab}
       onpick={(h) => pick(h)}
       onpreview={preview}
+      inheritOn={inherit?.on}
     />
+    {#if inherit && oninherit}
+      <ColorInherit hex={normalizeHex(inherit.hex) ?? '#ffffff'} on={inherit.on} onpick={inheritPick} onpreview={preview} />
+    {/if}
     <MyColors
       list={mycolors.list}
       {cur}
@@ -269,16 +290,7 @@
       onforget={forget}
     />
 
-    {#if sheet}
-      <div class="sep"></div>
-      <button type="button" class="eye" class:on={eye} aria-pressed={eye} onclick={eyedropper}>
-        <Icon name="pipette" size={18} />
-        <span class="txt">
-          <b>Взять цвет с фото</b>
-          <span>{eye ? 'Щёлкните по развороту. Esc — отмена' : eyeHint(words)}</span>
-        </span>
-      </button>
-    {/if}
+    {#if sheet}<ColorEye on={eye} {words} onclick={eyedropper} />{/if}
 
     <div class="hex">
       <input
@@ -339,36 +351,6 @@
     box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
     font-size: 12px;
     outline: none;
-  }
-  .sep {
-    height: 1px;
-    margin: 10px 0 8px;
-    background: var(--line);
-  }
-  .eye {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    min-height: 34px;
-    height: auto;
-    padding: 6px 10px;
-    text-align: left;
-    white-space: normal;
-  }
-  .eye.on {
-    border-color: var(--accent);
-  }
-  .eye b {
-    display: block;
-    font-weight: 600;
-    font-size: 12px;
-  }
-  .eye .txt span {
-    display: block;
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1.3;
   }
   .hex {
     display: flex;

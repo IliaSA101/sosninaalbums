@@ -39,6 +39,8 @@ import { capFirst, errText } from '../../base/words/errtext'
 import { effH, ZOOM_STEP } from '../../editor/zoom/zoom'
 import { newDoc } from '../newdoc/newdoc.svelte'
 import { aboutUi } from '../dialogs/about.svelte'
+import { assocUi } from '../dialogs/assoc.svelte'
+import { tour } from '../tour/tourstate.svelte'
 import type { MarkPatch, RecentProject } from '../../base/core/types'
 
 // ev — клавиатурное событие, если команду вызвала клавиша: сдвиг стрелкой и Пробел берут из него клавишу (служебные клавиши).
@@ -72,7 +74,9 @@ async function showExportFolder() {
 }
 
 // Папка настроек и шаблонов (config.json, templates.json, log.txt): как «Открыть папку экспорта», ошибка — тостом.
+// На стенде QA Go проводник не открывает (osx quiet) — говорим тостом, как ссылки «О программе».
 async function showDataFolder() {
+  if (store.stand) return store.notify('На стенде папки не открываются')
   try {
     await Api.ShowDataFolder()
   } catch (e) {
@@ -126,6 +130,7 @@ const HANDLERS = {
   export: () => edit.idle().then(() => jobs.exportAll()),
   showExport: () => showExportFolder(),
   showData: () => showDataFolder(),
+  toggleAssoc: () => assocUi.toggle(), // 112: связь .salbum, пункт меню без клавиши
   tplExport: () => tplio.save(),
   tplImport: () => tplio.load(),
   settings: () => modes.openSection('settings'),
@@ -260,6 +265,9 @@ const HANDLERS = {
   allSpreads: () => modes.openSection('grid'),
   help: () => keysUi.show(),
   guide: () => guide.openFresh(),
+  // Первые шаги (113): приветствие со списком; видео открывает браузер (адрес зашит в Go).
+  tour: () => tour.start('menu'),
+  videos: () => void aboutUi.link('videos'),
   startWindow: () => (prefs.startOpen = true),
   // «Файл ▸ Новый проект: виньетка-лист…»: стартовое окно сразу на выборе листа (размер и «Создать» — там).
   newSheet: () => {

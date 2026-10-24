@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+
+	"github.com/IliaSA101/sosninaalbums/internal/colorspace"
 )
 
 // Head — то, что фото сообщает о себе в заголовке JPEG до данных изображения.
@@ -14,6 +16,8 @@ type Head struct {
 	Profile string // имя профиля для интерфейса
 	XMP     []byte // основной пакет XMP без префикса; nil — нет. Разбирает только сканер
 	Taken   int64  // EXIF DateTimeOriginal: секунды Unix, местное время камеры как UTC; 0 — нет или мусор
+
+	xf *colorspace.Xform // пересчёт в sRGB для классов adobe, p3 и icc; nil — не нужен
 }
 
 // XMPPrefix — начало APP1 с основным пакетом XMP. Расширенный (`…/xmp/extension/`) не читаем:
@@ -34,9 +38,9 @@ func headOf(s jpegSegs) Head {
 	}
 	switch {
 	case s.icc != nil:
-		h.Color, h.Profile = classifyICC(s.icc)
+		h.Color, h.Profile, h.xf = classify(s.icc)
 	case s.interop == "R03":
-		h.Color, h.Profile = ColorAdobe, ICCAdobeEXIF
+		h.Color, h.Profile, h.xf = ColorAdobe, ICCAdobeEXIF, colorspace.Adobe
 	}
 	return h
 }

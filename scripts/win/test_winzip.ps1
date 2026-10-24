@@ -68,9 +68,13 @@ try {
     Section 'Запись архива'
     $zp = Join-Path $tmp 'e.zip'
     $za = [IO.Compression.ZipFile]::Open($zp, 'Create')
-    $sw = New-Object IO.StreamWriter($za.CreateEntry('Sosnina Albums 1.0.0/SosninaAlbums.exe').Open())
+    $sw = New-Object IO.StreamWriter($za.CreateEntry('Sosnina Albums 1.0.0/SosninaAlbums-1.0.0.exe').Open())
     $sw.Write('12345'); $sw.Dispose(); $za.Dispose()
-    Same 'размер записи архива по имени файла' (Get-ZipEntryLength $zp 'SosninaAlbums.exe') '5'
+    Same 'имя exe в архиве - с версией' (Get-ZipExeName $zp) 'SosninaAlbums-1.0.0.exe'
+    Same 'размер записи архива по найденному имени' (Get-ZipEntryLength $zp (Get-ZipExeName $zp)) '5'
+    Same 'нет архива - имени нет' (Get-ZipExeName (Join-Path $tmp 'no.zip')) ''
+    $rx = & (Get-Module winzip) { $script:ExeItemRx }
+    Check 'окно Проводника: exe с версией, без версии и без расширения узнаются, чужое - нет' (('SosninaAlbums-1.0.0.exe' -match $rx) -and ('SosninaAlbums-1.0.0' -match $rx) -and ('SosninaAlbums.exe' -match $rx) -and ('SosninaAlbums' -match $rx) -and (-not ('SosninaAlbums-setup.exe' -match $rx)) -and (-not ('Sosnina Albums 1.0.0' -match $rx)))
     Same 'записи или архива нет: -1' ((Get-ZipEntryLength $zp 'x.exe') + (Get-ZipEntryLength (Join-Path $tmp 'no.zip') 'a')) '-2'
 
     Section 'win-shots.yml и shots.ps1'

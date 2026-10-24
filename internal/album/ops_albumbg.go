@@ -46,3 +46,16 @@ func (e *Editor) SetAlbumBgFade(fade float64, merge string) model.View {
 func (e *Editor) SetNoAlbumBg(spreadID string, off bool) model.View {
 	return e.change(func(p *model.Project) { backdrop.SetNoAlbumBg(p, spreadID, off) })
 }
+
+// SetAlbumBgToAll — SetAlbumBg и «Как в альбоме» у разворотов со своим фоном (115): узоры, фото
+// фона и «Не показывать здесь» сняты, «скрыт» без своего фона и обложка остаются. Один шаг.
+// Договор: ошибки как у SetAlbumBg, при ошибке снятия нет; тот же фон — шаг только из снятия.
+func (e *Editor) SetAlbumBgToAll(src model.BgSource, pages bool) (model.View, error) {
+	return e.try("", func(p *model.Project) error { return backdrop.SetAlbumBgAll(p, src, pages) })
+}
+
+// SpreadBgToAlbum — карточка разворота: свой узор, фото фона и «Не показывать здесь» сняты
+// одним шагом (115). Договор: фона альбома нет, обложка и неизвестный ID — холостая.
+func (e *Editor) SpreadBgToAlbum(spreadID string) model.View {
+	return e.change(func(p *model.Project) { backdrop.ToAlbum(p, spreadID) })
+}

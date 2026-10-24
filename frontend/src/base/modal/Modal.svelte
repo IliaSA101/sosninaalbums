@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack, type Snippet } from 'svelte'
   import Icon from '../ui/Icon.svelte'
-  import { modalStack } from './modalstack.svelte'
+  import { modalStack, Z_MODAL } from './modalstack.svelte'
   import { escCloses } from './modalesc'
 
   // Окно поверх интерфейса (не нативное — работает и в браузере dev). Esc и клик по фону закрывают;
@@ -64,7 +64,7 @@
 
 <div
   class="back"
-  style:z-index={80 + Math.max(modalStack.depth(me), 0)}
+  style:z-index={Z_MODAL + Math.max(modalStack.depth(me), 0)}
   role="presentation"
   onpointerdown={(e) => e.target === e.currentTarget && onclose()}
 >

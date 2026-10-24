@@ -54,6 +54,8 @@ export function menuCtx(): MenuCtx {
     markup: modes.markup,
     rulers: modes.rulers,
     snap: placesel.snap,
+    assocCan: store.assoc.can,
+    assocOn: store.assoc.on,
     binShown: binsel.active,
     alignCount: align.ids.length,
     alignTo: align.to,

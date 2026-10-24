@@ -5,7 +5,7 @@
   import { row } from '../../editor/spread/spreadrow.svelte'
   import { newSheetSize, unitOf } from '../../base/geom/sheet'
   import { addVignette } from '../vignette/vigact'
-  import SpreadMenu from './SpreadMenu.svelte'
+  import SpreadMenu from '../spreadmenu/SpreadMenu.svelte'
 
   // Колонка «+ Новый разворот» в конце ленты. Как группа: рамка, под ней подпись в строке номера —
   // высота ленты одна и та же. Вся рамка — одна цель «новый пустой разворот» (щелчок и бросок фото);
@@ -39,6 +39,7 @@
       data-drop="new"
       data-at={n}
       style:aspect-ratio={newSheet.w / newSheet.h}
+      aria-label={unit.new}
       title="Щёлкните — новый пустой {unit.one}; или перетащите сюда фото{canVig ? '. Правая кнопка — новая виньетка' : ''}"
       oncontextmenu={openMenu}
       onclick={(e) => e.detail < 2 && drag.clickAllowed() && store.addEmptySpread(n)}

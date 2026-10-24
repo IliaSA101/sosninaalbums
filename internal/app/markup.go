@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -107,7 +106,7 @@ func (a *App) serveMarkup(w http.ResponseWriter, r *http.Request) bool {
 
 // serveGuide — файл-разметка path из проекта (из запроса пути нет: ?r=<rev> лишь сбивает кэш
 // WebView). Каждый раз заново: том отвечает, файл проходит MarkupFile. JPEG/PNG до 4096 px
-// отдаются файлом, PSD и большие JPEG/PNG — превью Go из кэша слота (JPEG, PNG при прозрачности).
+// отдаются файлом, PSD, WebP и большие JPEG/PNG — превью Go из кэша слота (JPEG, PNG при прозрачности).
 // Ошибка — 404 и строка в log.txt без пути.
 func (a *App) serveGuide(w http.ResponseWriter, r *http.Request, slot int, path string) {
 	if path == "" || !reachable(path) {
@@ -126,8 +125,9 @@ func (a *App) serveGuide(w http.ResponseWriter, r *http.Request, slot int, path 
 			http.NotFound(w, r)
 			return
 		}
+		// Тип — по содержимому (Big уже увёл WebP): имя .jpg у PNG и наоборот не сбивает WebView.
 		ct := "image/jpeg"
-		if strings.EqualFold(filepath.Ext(m.Path), ".png") {
+		if m.Format == "png" {
 			ct = "image/png"
 		}
 		w.Header().Set("Content-Type", ct)

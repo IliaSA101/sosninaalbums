@@ -14,35 +14,42 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
 
-// ColorWarning — текст вопроса перед экспортом при фото с «чужим» профилем; "" — предупреждать не о чем.
-// Имён профилей не больше трёх (чаще встречающиеся первыми), дальше «…».
-func ColorWarning(other map[string]int) string {
+// topNames — «имя — число» через запятую: чаще встречающиеся первыми (при равенстве по имени),
+// не больше limit имён, дальше «…». Второй результат — сумма всех чисел.
+func topNames(m map[string]int, limit int) (string, int) {
 	total := 0
-	names := make([]string, 0, len(other))
-	for n, c := range other {
+	names := make([]string, 0, len(m))
+	for n, c := range m {
 		total += c
 		names = append(names, n)
 	}
-	if total == 0 {
-		return ""
-	}
 	slices.SortFunc(names, func(x, y string) int {
-		if other[x] != other[y] {
-			return other[y] - other[x]
+		if m[x] != m[y] {
+			return m[y] - m[x]
 		}
 		return strings.Compare(x, y)
 	})
-	parts := make([]string, 0, 4)
+	parts := make([]string, 0, limit+1)
 	for i, n := range names {
-		if i == 3 {
+		if i == limit {
 			parts = append(parts, "…")
 			break
 		}
-		parts = append(parts, fmt.Sprintf("%s — %d", n, other[n]))
+		parts = append(parts, fmt.Sprintf("%s — %d", n, m[n]))
+	}
+	return strings.Join(parts, ", "), total
+}
+
+// ColorWarning — текст вопроса перед экспортом при фото с «чужим» профилем; "" — предупреждать не о чем.
+// Имён профилей не больше трёх (чаще встречающиеся первыми), дальше «…».
+func ColorWarning(other map[string]int) string {
+	list, total := topNames(other, 3)
+	if total == 0 {
+		return ""
 	}
 	return fmt.Sprintf("Фото с цветовым профилем не sRGB: %d (%s). Программа их не пересчитывает — "+
 		"в печати цвета будут искажены. Лучше пересохранить их в sRGB. Экспортировать всё равно?",
-		total, strings.Join(parts, ", "))
+		total, list)
 }
 
 // emptySummary — номера (с 1) разворотов с пустыми местами сетки и общее число пустых мест.
@@ -88,12 +95,14 @@ func EmptyWarning(spreads []int, n int) string {
 	return fmt.Sprintf("На %s %s пустые места (%d). В файлы они не попадут, там будет фон. Выгрузить?", word, list, n)
 }
 
-// ColorNote — сводка для export:done о пересчёте Adobe RGB в sRGB; "" — пересчёта не было.
-func ColorNote(adobe int) string {
-	if adobe == 0 {
+// ColorNote — сводка для export:done о пересчёте в sRGB: conv — имя профиля (или «Display P3»,
+// «Adobe RGB») → число фото; те же правила имён, что в ColorWarning. "" — пересчёта не было.
+func ColorNote(conv map[string]int) string {
+	list, total := topNames(conv, 3)
+	if total == 0 {
 		return ""
 	}
-	return fmt.Sprintf("Пересчитано из Adobe RGB в sRGB: %d фото.", adobe)
+	return fmt.Sprintf("Пересчитано в sRGB: %d фото (%s).", total, list)
 }
 
 // FromView собирает задание экспорта из View: фото с кадром, фон страниц и текст

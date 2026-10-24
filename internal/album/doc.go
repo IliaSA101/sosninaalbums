@@ -37,7 +37,8 @@
 //   - ops_copies.go — копии фото (098): «где стоит» WhereUsed и сведения файла FileRef; копии
 //     ставят прежние правки по запросу «<ID файла>-new» (model.ResolveCopies).
 //   - ops_albumbg.go — фон альбома (098): SetAlbumBg, ClearAlbumBg, ползунок SetAlbumBgFade
-//     (ключ albumbg:<сессия>), «Не показывать здесь» SetNoAlbumBg; тела — backdrop/album.go.
+//     (ключ albumbg:<сессия>), «Не показывать здесь» SetNoAlbumBg, «Как в альбоме» (115):
+//     SetAlbumBgToAll и SpreadBgToAlbum; тела — backdrop/album.go.
 //   - ops_markup.go — разметка типографии обложки и разворотов (032, 066): выбор и «Убрать»,
 //     прочитанное о файлах для вида — по слоту на разметку (guides).
 //

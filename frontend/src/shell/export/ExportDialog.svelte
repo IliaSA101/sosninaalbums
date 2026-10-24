@@ -148,13 +148,7 @@
     {#if jobs.exporting}
       <ExportRun />
     {:else}
-      <PrintGroup
-        plans={(plans ?? []).filter((p) => p.format)}
-        pref={prefs.print}
-        {plan}
-        {hasCover}
-        setPref={(v) => setPrefs({ print: v })}
-      />
+      <PrintGroup plans={plans ?? []} pref={prefs.print} {plan} {hasCover} setPref={(v) => setPrefs({ print: v })} />
 
       {#if hasCover}
         <ExportGroup cap="Обложка" off={fs}>

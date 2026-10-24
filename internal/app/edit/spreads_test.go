@@ -253,6 +253,37 @@ func TestSetSettings(t *testing.T) {
 	}
 }
 
+// «Как в альбоме» (115): SetSettingsToAll снимает свой цвет у всех разворотов одним шагом, повтор —
+// холостая; SpreadBgToAlbum без фона альбома холостая.
+func TestSetSettingsToAll(t *testing.T) {
+	a, _ := spreadsMethods(t, []string{"a"}, []string{"b"}, []string{"c"})
+	a.SetBackground("s1", "left", "#112233")
+	a.SetBackground("s2", "spread", "#445566")
+	before := a.editor().View()
+
+	s := before.Settings
+	s.Bg = "#eef2e6"
+	v := a.SetSettingsToAll(s)
+	if v.Rev != before.Rev+1 || v.Settings.Bg != "#eef2e6" {
+		t.Fatalf("SetSettingsToAll: rev %d→%d, цвет %q", before.Rev, v.Rev, v.Settings.Bg)
+	}
+	for _, sv := range v.Spreads {
+		if sv.BgSet != [2]string{} {
+			t.Errorf("%s: свой цвет остался: %v", sv.ID, sv.BgSet)
+		}
+	}
+	if again := a.SetSettingsToAll(v.Settings); again.Rev != v.Rev {
+		t.Errorf("повтор — не холостая правка: rev %d→%d", v.Rev, again.Rev)
+	}
+	if back := a.undo(); back.Settings != before.Settings || back.Spreads[0].BgSet[0] != "#112233" || back.Spreads[1].BgSet[1] != "#445566" {
+		t.Errorf("Undo одним шагом: %+v %v", back.Settings, back.Spreads[1].BgSet)
+	}
+	rev := a.editor().View().Rev
+	if v := a.SpreadBgToAlbum("s1"); v.Rev != rev {
+		t.Errorf("SpreadBgToAlbum без фона альбома: rev %d→%d", rev, v.Rev)
+	}
+}
+
 // «Разрезать» на пределе MaxSpreads (075-7): ошибка с пределом, вид не рассылается, проект прежний.
 func TestSplitSpreadLimit(t *testing.T) {
 	p := model.New()
@@ -427,4 +458,44 @@ func TestPhotosForLog(t *testing.T) {
 		t.Fatalf("пустой: err %v, %v", err, infos)
 	}
 	check("пустой", "")
+}
+
+// 114: перестановка своего фото на ручном развороте — один Host.Changed с новым rev и порядком;
+// та же позиция — вид с прежним rev (App.changed такое событие не шлёт, 075-3); Undo — один шаг.
+func TestMovePhotoGridChanged(t *testing.T) {
+	p := model.New()
+	p.Spreads = []*model.Spread{{ID: "s1", Photos: []string{"a", "b", "c"}, Grid: []*model.Place{
+		{ID: "00000000000a", X: 12, Y: 12, W: 100, H: 100, Photo: "a"},
+		{ID: "00000000000b", X: 132, Y: 12, W: 80, H: 100},
+		{ID: "00000000000c", X: 12, Y: 132, W: 100, H: 100, Photo: "b"},
+		{ID: "00000000000d", X: 132, Y: 132, W: 100, H: 100, Photo: "c"},
+	}}}
+	for _, id := range []string{"a", "b", "c"} {
+		p.Photos[id] = model.PhotoRef{Path: testkit.AbsPath(id + ".jpg"), W: 300, H: 200}
+	}
+	m, views := newMethods(t, p)
+	r := m.editor().View().Rev
+
+	v, err := m.MovePhoto("a", "s1", -1)
+	if err != nil || !equalComposition(photosOf(v), []string{"b", "c", "a"}) {
+		t.Fatalf("MovePhoto: %v, %v", photosOf(v), err)
+	}
+	if seen := views(); len(seen) != 1 || seen[0].Rev != v.Rev || seen[0].Rev <= r {
+		t.Fatalf("Host.Changed после перестановки: %d вызовов, rev %d→%d", len(seen), r, v.Rev)
+	}
+	// Своя щель (a теперь последнее): холостая — rev прежний, события с новым rev нет.
+	for _, at := range []int{2, 3} {
+		v2, err := m.MovePhoto("a", "s1", at)
+		if err != nil || v2.Rev != v.Rev || !equalComposition(photosOf(v2), []string{"b", "c", "a"}) {
+			t.Fatalf("холостая at=%d: err %v, rev %d→%d", at, err, v.Rev, v2.Rev)
+		}
+	}
+	for _, w := range views() {
+		if w.Rev > v.Rev {
+			t.Fatalf("холостая правка подняла rev до %d", w.Rev)
+		}
+	}
+	if v = m.undo(); !equalComposition(photosOf(v), []string{"a", "b", "c"}) || v.CanUndo {
+		t.Fatalf("Undo: %v, canUndo %v", photosOf(v), v.CanUndo)
+	}
 }

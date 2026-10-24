@@ -44,7 +44,7 @@ export const FRESH_TEXT = 'Всё уже свежее'
 export const BACKGROUND_TEXT = 'Скачиваем новые наборы…'
 
 // «12 из 40 МБ» — в одних единицах; меньше мегабайта — как sizeLabel.
-function bytesOf(done: number, total: number): string {
+export function bytesOf(done: number, total: number): string {
   if (total < 1048576) return `${sizeLabel(done)} из ${sizeLabel(total)}`
   const mb = (n: number) => String(Math.round(n / 1048576))
   return `${mb(Math.min(done, total))} из ${mb(total)} МБ`

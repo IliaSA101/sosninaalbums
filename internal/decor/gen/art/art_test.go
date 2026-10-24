@@ -16,11 +16,13 @@ import (
 // artPath — путь превью стикера /media/gen/art (в gen он не экспортирован).
 const artPath = "/media/gen/art"
 
-// artKinds — набор стикеров research §2 (30 ключей); выпущенный ключ из набора не пропадает.
+// artKinds — набор стикеров research §2 (30 ключей) и 4 фирменных; выпущенный ключ из набора не пропадает.
 var artKinds = []string{
 	"star", "burst", "sparkle", "heart", "hearts-pair", "circle", "blob", "plate", "banner", "wave-band",
 	"rainbow", "arches", "corner", "brush-stroke", "arrow", "confetti-pile", "flower", "daisy", "leaf",
 	"branch", "sun", "cloud", "balloon", "balloons", "cap", "pencil", "book", "apple", "bell", "rings",
+	// фирменные картинки (спека 116)
+	"brand-albums-black", "brand-albums-white", "brand-films-black", "brand-films-white",
 }
 
 // TestGenArtSet — набор стикеров на месте, у каждого пропорция и цвета; растяжимые — ровно
@@ -34,7 +36,7 @@ func TestGenArtSet(t *testing.T) {
 		if m.Kind != artKinds[i] || !gen.IsArt(m.Kind) || !gen.Known(m.Kind) || m.Aspect < gen.MinAspect || m.Aspect > gen.MaxAspect {
 			t.Errorf("%d: %+v", i, m)
 		}
-		if len(m.Inks) < 1 || len(m.Inks) > 4 || m.Paper {
+		if len(m.Inks) > 4 || m.Paper || (len(m.Inks) == 0) != m.Image || m.Image != strings.HasPrefix(m.Kind, "brand-") {
 			t.Errorf("%s: цветов %d", m.Kind, len(m.Inks))
 		}
 		if m.Stretch != (m.Kind == "plate" || m.Kind == "wave-band") {

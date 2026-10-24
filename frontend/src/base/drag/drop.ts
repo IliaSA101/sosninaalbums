@@ -6,6 +6,8 @@ export type DropPlan =
   // at = -1 — в конец; fromSpread — фото уже в развороте (иначе из ленты: снять выделение, тост о переносе).
   // frac — доля ширины листа под курсором (042): ручному листу она выбирает страницу для новых мест; нет — без точки.
   | { op: 'add'; spread: string; ids: string[]; at: number; fromSpread: boolean; go: boolean; frac?: number }
+  // Своё единственное фото в щель своего разворота в ленте (114): Api.MovePhoto — «Авто» вставляет, ручной сдвигает фото по местам.
+  | { op: 'move'; id: string; spread: string; at: number }
   | { op: 'swap'; a: string; b: string }
   | { op: 'newSpread'; at: number; ids: string[]; strip: boolean }
   | { op: 'remove'; ids: string[] }
@@ -35,6 +37,13 @@ const insertAt = (side: 'before' | 'after' | 'center', index: number) => (side =
 function spreadPlan(p: Extract<Payload, { kind: 'spread' }>, t: Target): DropPlan | null {
   if (t.kind !== 'gap') return null
   return t.to === p.index ? null : { op: 'moveSpread', id: p.id, at: t.to }
+}
+
+// Фото на щель ленты: своё единственное фото своего разворота — move (114), остальное — вставка add.
+function chipPlan(p: PhotoPayload, t: Extract<Target, { kind: 'chip' }>): DropPlan {
+  const at = insertAt(t.side, t.index)
+  if (p.fromSpread === t.spread && p.ids.length === 1) return { op: 'move', id: p.ids[0], spread: t.spread, at }
+  return { op: 'add', spread: t.spread, ids: p.ids, at, fromSpread: !!p.fromSpread, go: false }
 }
 
 // Фото на ячейку: центр — обмен, иначе вставка рядом.
@@ -90,7 +99,7 @@ export function dropPlan(p: Payload, t: Target): DropPlan | null {
   const fromSpread = !!p.fromSpread
   switch (t.kind) {
     case 'chip':
-      return { op: 'add', spread: t.spread, ids, at: insertAt(t.side, t.index), fromSpread, go: false }
+      return chipPlan(p, t)
     case 'cell':
       return cellPlan(p, t)
     case 'spread':

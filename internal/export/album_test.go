@@ -224,8 +224,26 @@ func TestColorWarning(t *testing.T) {
 	if !strings.Contains(got, ": 15 (A — 5, B — 4, C — 3, …)") || strings.Contains(got, "D —") {
 		t.Errorf("получили %q", got)
 	}
-	if ColorNote(0) != "" || ColorNote(3) != "Пересчитано из Adobe RGB в sRGB: 3 фото." {
-		t.Errorf("note: %q %q", ColorNote(0), ColorNote(3))
+}
+
+// Сводка после экспорта (119): имена как в ColorWarning — до трёх, по убыванию, дальше «…».
+func TestColorNote(t *testing.T) {
+	cases := []struct {
+		conv map[string]int
+		want string
+	}{
+		{nil, ""},
+		{map[string]int{}, ""},
+		{map[string]int{"Adobe RGB": 0}, ""},
+		{map[string]int{"Adobe RGB": 3}, "Пересчитано в sRGB: 3 фото (Adobe RGB — 3)."},
+		{map[string]int{"Adobe RGB": 3, "Display P3": 5}, "Пересчитано в sRGB: 8 фото (Display P3 — 5, Adobe RGB — 3)."},
+		{map[string]int{"B": 2, "A": 2, "C": 2, "D": 1}, "Пересчитано в sRGB: 7 фото (A — 2, B — 2, C — 2, …)."},
+		{map[string]int{"Display P3": 1}, "Пересчитано в sRGB: 1 фото (Display P3 — 1)."},
+	}
+	for _, c := range cases {
+		if got := ColorNote(c.conv); got != c.want {
+			t.Errorf("%v: получили %q, ждали %q", c.conv, got, c.want)
+		}
 	}
 }
 

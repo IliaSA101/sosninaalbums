@@ -117,6 +117,13 @@ func (m *Methods) SetSettings(s model.Settings) (v model.View) {
 	return m.changed(m.editor().SetSettings(s))
 }
 
+// SetSettingsToAll — SetSettings и снятие своего цвета страниц у всех разворотов (115): они идут
+// за новым цветом альбома; обложка не трогается. Один шаг отмены.
+func (m *Methods) SetSettingsToAll(s model.Settings) (v model.View) {
+	defer m.guardEdit("SetSettingsToAll", &v, nil)
+	return m.changed(m.editor().SetSettingsToAll(s))
+}
+
 // AutoPlan — подсказка окна автосборки на o.Spreads разворотов по o.MinPer…o.MaxPer фото или
 // «Авто», с сериями или без (всё зажимается; MaxPer — в 1…64; Variety не влияет; нули новых
 // полей — как 0.12). Похожие (078) — без них, число в similar; ч/б — gray; o.again — от альбома

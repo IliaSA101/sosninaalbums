@@ -6,7 +6,7 @@
   import type { SegItem } from '../../base/tpl/Seg.svelte'
   import { packsUi } from '../../shell/packs/packs.svelte'
   import { decor, type DecorCur } from './decor.svelte'
-  import { albumWhere, type AlbumWhere } from './albumbg'
+  import { albumWhere, type AlbumWhere } from '../albumbg/albumbg'
   import { QR_OPEN, QR_OPEN_TIP } from './qr'
   import { qrForm } from './qr.svelte'
   import { spreadSave } from './tplsave.svelte'

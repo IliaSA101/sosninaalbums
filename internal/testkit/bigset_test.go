@@ -1,6 +1,7 @@
 package testkit
 
 import (
+	"bytes"
 	"image"
 	"image/color"
 	"reflect"
@@ -266,5 +267,34 @@ func TestBigSetSegmentsShape(t *testing.T) {
 	}
 	if got := BigSetSegments(BigShot{}); len(got) != 1 {
 		t.Fatalf("пустой план: %d сегментов", len(got))
+	}
+}
+
+// BigSetEncode: настоящий JPEG, а сегменты плана лежат сразу после SOI в порядке BigSetSegments;
+// кадр читается обратно нужного размера.
+func TestBigSetEncode(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 24, 16))
+	for _, n := range []int{1, 31} { // обычный и Adobe (два сегмента)
+		p := BigSetPlan(n, 1)
+		data, err := BigSetEncode(img, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var head []byte
+		head = append(head, 0xFF, 0xD8)
+		for _, s := range BigSetSegments(p) {
+			head = append(head, s...)
+		}
+		if !bytes.HasPrefix(data, head) {
+			t.Errorf("кадр %d: сегменты не сразу после SOI", n)
+		}
+		cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+		if err != nil || cfg.Width != 24 || cfg.Height != 16 {
+			t.Errorf("кадр %d: cfg=%v err=%v", n, cfg, err)
+		}
+	}
+	// кадр шире предела JPEG кодировщик отвергает ошибкой, а не паникой
+	if _, err := BigSetEncode(image.NewRGBA(image.Rect(0, 0, 1<<16, 1)), BigShot{}); err == nil {
+		t.Error("слишком широкий кадр без ошибки")
 	}
 }

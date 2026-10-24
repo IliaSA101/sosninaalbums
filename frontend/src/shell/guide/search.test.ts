@@ -6,6 +6,17 @@ import { fromLatin, grouped, norm, search, stem, tokens } from './search'
 
 const titles = (q: string) => search(q).hits.map((h) => h.a.title)
 
+describe('слова фотографа про промежуток между фото', () => {
+  it('«расстояние между фото» и «белая линия» находят «Настройки альбома»', () => {
+    for (const q of ['расстояние между фото', 'белая линия', 'вплотную', 'стык']) {
+      expect(
+        search(q).hits.map((h) => h.a.id),
+        q,
+      ).toContain('settings')
+    }
+  })
+})
+
 // Клавиши статей — из реестра (074): без него поиск по клавише пуст.
 beforeEach(() => useCatalog())
 afterEach(() => dropCatalog())
@@ -69,6 +80,13 @@ describe('поиск (спека 033)', () => {
         search(q).hits.map((h) => h.a.id),
         q,
       ).toContain('crop')
+  })
+  it('цветовой профиль (119): «xiaomi», «p3», «бледно», «srgb», «профиль» находят «Цветовой профиль фото»', () => {
+    for (const q of ['xiaomi', 'p3', 'бледно', 'srgb', 'профиль', 'iphone'])
+      expect(
+        search(q).hits.map((h) => h.a.id),
+        q,
+      ).toContain('color-profile')
   })
   it('«клавиши» → «Горячие клавиши»', () => {
     expect(titles('клавиши')).toContain('Горячие клавиши')

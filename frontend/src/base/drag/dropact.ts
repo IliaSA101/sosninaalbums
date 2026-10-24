@@ -37,6 +37,10 @@ async function act(plan: DropPlan) {
     case 'add':
       await addPhotos(plan)
       return
+    case 'move':
+      // Без тоста и снятия выделения, как прежний add из разворота; «Авто» или ручной — решает Go.
+      await store.run(Api.MovePhoto(plan.id, plan.spread, plan.at))
+      return
     case 'swap':
       await store.run(Api.SwapPhotos(plan.a, plan.b))
       return

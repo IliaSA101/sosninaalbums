@@ -1,6 +1,8 @@
 # Сборка выпуска (спека 025, 039, 101): метка vX.Y.Z на main → exe Windows, .app macOS и бинарник Linux → два zip
-# и tar.gz с папкой «Sosnina Albums X.Y.Z» и .deb (задание pack) → ЧЕРНОВИК релиза. Голого exe на странице выпуска нет.
-# Публикует владелец руками (Publish) после проверки скачанных файлов. Ручной запуск — пересборка
+# и tar.gz с папкой «Sosnina Albums X.Y.Z», .deb и установщик Windows (задание pack; установщик ставится и удаляется
+# на windows-latest в задании win-check, спека 111) → ЧЕРНОВИК релиза. Голого exe на странице выпуска нет.
+# Перед публикацией владелец подписывает выпуск локально (node scripts/release-sign.mjs vX.Y.Z — файл обновления
+# SosninaAlbums-update.json), публикует руками (Publish) после проверки скачанных файлов. Ручной запуск — пересборка
 # существующей метки исправленным workflow из main (метку не перевешиваем). Ручной запуск с dry_run (спека 110, Т4) —
 # пробный прогон по ветке запуска: те же сборки и проверки, без метки и без черновика.
 name: Release
@@ -179,6 +181,8 @@ jobs:
         run: npm ci
 
       - name: wails build
+        env:
+          CGO_ENABLED: "0"
         run: wails build -clean -trimpath
 
       - name: Имя файла с версией и sha256
@@ -499,7 +503,7 @@ jobs:
           [ "$(id -u)" -eq 0 ] || sudo=(sudo)
           export DEBIAN_FRONTEND=noninteractive
           "${sudo[@]}" apt-get -o Acquire::Retries=3 update
-          "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y --no-install-recommends ca-certificates binutils desktop-file-utils xvfb xauth dbus libgl1-mesa-dri fonts-dejavu-core
+          "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y --no-install-recommends ca-certificates binutils desktop-file-utils xvfb xauth dbus libgl1-mesa-dri fonts-dejavu-core shared-mime-info xdg-utils
           cp "$DEB" /tmp/sosninaalbums.deb
           "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y /tmp/sosninaalbums.deb
           dpkg -s sosninaalbums | sed -n '1,/^Description/p'
@@ -532,6 +536,78 @@ jobs:
         with:
           name: linux-check-${{ matrix.name }}
           path: ${{ runner.temp }}/linux-out/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Спека 111, design §8.1: установщик из задания pack по-настоящему ставится, обновляется поверх (пробный установщик
+  # следующей версии), отказывает в откате и удаляется на чистом раннере. Провал — черновика нет.
+  # Шаги идут в bash (defaults.run): кириллицы в командах PowerShell нет, он вызывается только как pwsh файл.ps1.
+  win-check:
+    name: Проверка установщика Windows
+    needs: [prepare, pack]
+    timeout-minutes: 25
+    runs-on: windows-latest
+    steps:
+      # Скрипты — из коммита метки: того же, что собрал установщик
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: ${{ runner.temp }}/pkg
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: installer-test
+          path: ${{ runner.temp }}/pkg-test
+
+      # Хеши — из outputs pack, не из артефактов: подмена файла в хранилище между заданиями — провал
+      - name: Установщики и их sha256
+        id: setup
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SUMS: ${{ needs.pack.outputs.sums }}
+          TEST_SUMS: ${{ needs.pack.outputs.test_sums }}
+        run: |
+          [ -n "$SUMS" ] && [ -n "$TEST_SUMS" ] || { echo "::error::Задание pack не передало sha256"; exit 1; }
+          tmp="$(cygpath -m "$RUNNER_TEMP")"
+          setup="$tmp/pkg/SosninaAlbums-$VERSION-windows-x64-setup.exe"
+          IFS=. read -r vmaj vmin vpat <<< "$VERSION"
+          next="$tmp/pkg-test/SosninaAlbums-$vmaj.$vmin.$((10#$vpat + 1))-windows-x64-setup.exe"
+          test -s "$setup" || { echo "::error::Нет $setup"; ls -l "$tmp/pkg"; exit 1; }
+          test -s "$next" || { echo "::error::Нет $next"; ls -l "$tmp/pkg-test"; exit 1; }
+          (cd "$tmp/pkg" && printf '%s\n' "$SUMS" | grep -F -e "-windows-x64-setup.exe" | sha256sum --strict --check) ||
+            { echo "::error::sha256 установщика не совпал с хешем сборки"; exit 1; }
+          (cd "$tmp/pkg-test" && printf '%s\n' "$TEST_SUMS" | sha256sum --strict --check) ||
+            { echo "::error::sha256 пробного установщика не совпал с хешем сборки"; exit 1; }
+          echo "setup=$setup" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      # Провал валит задание, а с ним и «Черновик релиза»
+      - name: Проверка установщика (installer-check.ps1)
+        env:
+          SETUP: ${{ steps.setup.outputs.setup }}
+          NEXT: ${{ steps.setup.outputs.next }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          # Папку сводки создаём заранее: скрипт её не создаёт; путь — с «/», его понимают и bash, и pwsh
+          out="$(cygpath -m "$RUNNER_TEMP")/win-check"
+          mkdir -p "$out"
+          pwsh scripts/win/installer-check.ps1 -Setup "$SETUP" -Next "$NEXT" -Version "$VERSION" -Summary "$out/summary.md"
+
+      - name: Сводка
+        if: always()
+        run: |
+          f="$(cygpath -m "$RUNNER_TEMP")/win-check/summary.md"
+          if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; else echo "summary.md нет" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: win-check
+          path: ${{ runner.temp }}/win-check/
           if-no-files-found: warn
           retention-days: 30
 
@@ -623,16 +699,19 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Спека 039, 101: три архива с папкой «Sosnina Albums X.Y.Z» (программа, инструкция, «Что нового», лицензии) и .deb.
-  # Упаковка на ubuntu одним скриптом для всех ОС; любая ошибка pack.py, deb.sh или check — провал, черновика нет.
+  # Спека 039, 101, 111: три архива с папкой «Sosnina Albums X.Y.Z» (программа, инструкция, «Что нового», лицензии), .deb
+  # и установщик Windows (NSIS, makensis -WX). Упаковка на ubuntu одним скриптом для всех ОС; любая ошибка pack.py,
+  # deb.sh, installer.sh или check — провал, черновика нет.
   pack:
     name: Архивы выпуска
     needs: [prepare, windows, macos, linux, guide]
     timeout-minutes: 10
     runs-on: ubuntu-latest
     outputs:
-      # sha256 итоговых архивов: «хеш  имя» по строке; сверяют mac-check и release
+      # sha256 итоговых файлов (архивы, .deb, установщик): «хеш  имя» по строке; сверяют mac-check, win-check и release
       sums: ${{ steps.sums.outputs.sums }}
+      # sha256 пробного установщика следующей версии (артефакт installer-test, в черновик не идёт); сверяет win-check
+      test_sums: ${{ steps.sums.outputs.test_sums }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -646,6 +725,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+
+      # makensis ≥ 3.08 нужен и установщику, и тестам scripts/win (при CI=true его отсутствие — провал)
+      - name: NSIS
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y nsis
+          echo "NSIS: $(makensis -VERSION)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Тесты упаковки
         run: python -I -m unittest discover -s scripts/win -v
@@ -725,6 +810,16 @@ jobs:
             --out out --date "$date" | tee "$RUNNER_TEMP/pack-linux.log"
           # .deb: dpkg-deb, лицензии внутри (/usr/share/doc/sosninaalbums); время файлов — коммита метки, как у архивов
           bash scripts/linux/deb.sh --bin "$lin" --version "$VERSION" --out out --date "$date"
+          # Установщик Windows (спека 111): тот же exe, что в zip. Пробный — следующей версии (патч + 1): им win-check
+          # проверяет обновление поверх; в черновик он не идёт (артефакт installer-test)
+          setup="out/SosninaAlbums-$VERSION-windows-x64-setup.exe"
+          last="$(bash scripts/win/installer.sh --exe "$exe" --version "$VERSION" --out out)"
+          [ "$(basename "$last")" = "$(basename "$setup")" ] || { echo "::error::installer.sh назвал установщик иначе: $last"; exit 1; }
+          IFS=. read -r vmaj vmin vpat <<< "$VERSION"
+          next="$vmaj.$vmin.$((10#$vpat + 1))"
+          bash scripts/win/installer.sh --exe "$exe" --version "$next" --out out-test
+          test -s "$setup" || { echo "::error::Нет $setup"; ls -l out; exit 1; }
+          test -s "out-test/SosninaAlbums-$next-windows-x64-setup.exe" || { echo "::error::Нет пробного установщика"; ls -l out-test; exit 1; }
 
           # Ровно три архива и .deb с ожидаемыми именами; последняя строка вывода pack.py — путь к архиву
           for kv in "windows:windows-x64.zip" "macos:macos-universal.zip" "linux:linux-amd64.tar.gz"; do
@@ -736,20 +831,24 @@ jobs:
             python -I scripts/win/pack.py check "$z" --os "$os" --version "$VERSION"
           done
           test -s "out/SosninaAlbums-$VERSION-linux-amd64.deb" || { echo "::error::Нет .deb"; ls -l out; exit 1; }
-          [ "$(find out -mindepth 1 -maxdepth 1 | wc -l)" -eq 4 ] || { echo "::error::В out должно быть три архива и .deb"; ls -l out; exit 1; }
-          ls -l out
+          [ "$(find out -mindepth 1 -maxdepth 1 | wc -l)" -eq 5 ] || { echo "::error::В out должно быть три архива, .deb и установщик"; ls -l out; exit 1; }
+          [ "$(find out-test -mindepth 1 -maxdepth 1 | wc -l)" -eq 1 ] || { echo "::error::В out-test должен быть один пробный установщик"; ls -l out-test; exit 1; }
+          ls -l out out-test
 
-      # Хеши — в output задания: mac-check и release сверят с ними скачанный артефакт packages
-      - name: sha256 архивов
+      # Хеши — в output задания: mac-check, linux-check, win-check и release сверят с ними скачанные артефакты
+      - name: sha256 файлов выпуска
         id: sums
         run: |
           {
             echo "sums<<SUMS_EOF"
             (cd out && sha256sum --text -- *)
             echo "SUMS_EOF"
+            echo "test_sums<<SUMS_EOF"
+            (cd out-test && sha256sum --text -- *)
+            echo "SUMS_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # zip, tar.gz и .deb уже сжаты: артефакт только переносит их
+      # zip, tar.gz, .deb и установщик уже сжаты: артефакт только переносит их
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages
@@ -758,9 +857,18 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+      # Только для win-check: в черновик не идёт, release его не скачивает
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installer-test
+          path: out-test/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
   release:
     name: Черновик релиза
-    needs: [prepare, pack, mac-check, linux-check, guide]
+    needs: [prepare, pack, mac-check, linux-check, win-check, guide]
     # Пробный прогон (dry_run) черновик не создаёт
     if: ${{ !inputs.dry_run }}
     timeout-minutes: 10
@@ -815,6 +923,7 @@ jobs:
             "dist/SosninaAlbums-$VERSION-macos-universal.zip"
             "dist/SosninaAlbums-$VERSION-linux-amd64.tar.gz"
             "dist/SosninaAlbums-$VERSION-linux-amd64.deb"
+            "dist/SosninaAlbums-$VERSION-windows-x64-setup.exe"
             "dist/THIRD_PARTY_NOTICES.txt"
           )
           # Шесть вариантов инструкции; вариант macos уходит только внутрь архива Mac (спека 039, запись 4)
@@ -826,6 +935,11 @@ jobs:
           done
           ls -l dist
           for f in "${files[@]}" dist/notes.md; do test -s "$f" || { echo "::error::Нет файла $f"; exit 1; }; done
+          # SHA256SUMS.txt — хеши ровно тех файлов, что уйдут в черновик, после сверки цепочки хешей выше: по нему
+          # scripts/release-sign.mjs сверяет установщик перед подписью обновления. Сам в список не входит
+          (cd dist && sha256sum --text -- "${files[@]#dist/}") > dist/SHA256SUMS.txt
+          cat dist/SHA256SUMS.txt
+          files+=("dist/SHA256SUMS.txt")
           title="Sosnina Albums $VERSION"
 
           # Список релизов с правом записи включает черновики (по метке API черновик не отдаёт)
@@ -841,11 +955,21 @@ jobs:
             echo "::error::Черновиков с меткой $TAG несколько ($drafts) — удалите лишние на странице Releases и запустите заново"
             exit 1
           fi
+          resign=false
           if [ "$drafts" -eq 1 ]; then
             gh release edit "$TAG" --title "$title" --notes-file dist/notes.md
+            # Файл обновления прошлой подписи держит sha256 прежнего установщика: после пересборки он не сойдётся у всех
+            # программ. Удаляем (нет такого ассета — не беда) и подписываем заново после этого прогона
+            gh release delete-asset "$TAG" SosninaAlbums-update.json -y || true
+            resign=true
             gh release upload "$TAG" "${files[@]}" --clobber
           else
             gh release create "$TAG" --draft --verify-tag --title "$title" --notes-file dist/notes.md "${files[@]}"
           fi
           url="$(gh release view "$TAG" --json url --jq .url)"
           echo "Черновик: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+          # Подпись выпуска делает владелец локально (закрытый ключ в CI не попадает), до публикации
+          echo "Перед публикацией подпишите выпуск локально: \`node scripts/release-sign.mjs $TAG\` (загрузит SosninaAlbums-update.json в черновик)" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$resign" = true ]; then
+            echo "Черновик пересобран, прежний SosninaAlbums-update.json удалён — подпишите заново: \`node scripts/release-sign.mjs $TAG\`" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi

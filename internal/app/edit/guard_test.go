@@ -75,6 +75,7 @@ func probes() []probe {
 		{"LayoutChoices", kRead, func(m *Methods) (model.View, error) { m.LayoutChoices("s1"); return none(m) }},
 		{"MoreLayouts", kRead, func(m *Methods) (model.View, error) { m.MoreLayouts("s1", 0); return none(m) }},
 		{"SetSettings", kView, func(m *Methods) (model.View, error) { return ok(m.SetSettings(model.Settings{})) }},
+		{"SetSettingsToAll", kView, func(m *Methods) (model.View, error) { return ok(m.SetSettingsToAll(model.Settings{})) }},
 		{"AutoPlan", kReadEr, func(m *Methods) (model.View, error) {
 			_, err := m.AutoPlan(ids, model.AutoOpts{Spreads: 1, MaxPer: 4})
 			return model.View{}, err
@@ -171,6 +172,7 @@ func probes() []probe {
 		{"ClearAlbumBg", kView, func(m *Methods) (model.View, error) { return ok(m.ClearAlbumBg()) }},
 		{"SetAlbumBgFade", kView, func(m *Methods) (model.View, error) { return ok(m.SetAlbumBgFade(0.5, "")) }},
 		{"SetNoAlbumBg", kView, func(m *Methods) (model.View, error) { return ok(m.SetNoAlbumBg("s1", true)) }},
+		{"SpreadBgToAlbum", kView, func(m *Methods) (model.View, error) { return ok(m.SpreadBgToAlbum("s1")) }},
 		// sticker.go
 		{"SetStickerBox", kView, func(m *Methods) (model.View, error) { return ok(m.SetStickerBox("s1", "k", 0, 0, 10, 10, 0, "")) }},
 		{"FlipSticker", kView, func(m *Methods) (model.View, error) { return ok(m.FlipSticker("s1", "k", "h")) }},

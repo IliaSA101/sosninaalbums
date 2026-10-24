@@ -46,6 +46,28 @@ describe('albumStats', () => {
     const st = albumStats([spread(['a', 'b', 'c'], 'k')], byId, 4)
     expect(st).toMatchObject({ adobe: 1, other: 1 })
   })
+  it('119: считает p3 и icc; icc с одним именем — iccName, с несколькими или без имён — пусто', () => {
+    const mk = (list: Partial<Photo>[]) => new Map(list.map((p, i) => [`f${i}`, { ...photo(`f${i}`, 3, 2), ...p } as Photo]))
+    const ids = (n: number) =>
+      spread(
+        Array.from({ length: n }, (_, i) => `f${i}`),
+        'k',
+      )
+    const one = mk([
+      { color: 'p3', profile: 'sRGB EOTF with DCI-P3 Color Gamut' },
+      { color: 'p3', profile: 'Display P3' },
+      { color: 'icc', profile: 'ProPhoto RGB' },
+      { color: 'icc', profile: 'ProPhoto RGB' },
+    ])
+    expect(albumStats([ids(4)], one, 4)).toMatchObject({ p3: 2, icc: 2, iccName: 'ProPhoto RGB', other: 0 })
+    const many = mk([
+      { color: 'icc', profile: 'ProPhoto RGB' },
+      { color: 'icc', profile: 'Apple RGB' },
+    ])
+    expect(albumStats([ids(2)], many, 2)).toMatchObject({ p3: 0, icc: 2, iccName: '' })
+    expect(albumStats([ids(1)], mk([{ color: 'icc' }]), 1)).toMatchObject({ icc: 1, iccName: '' })
+    expect(albumStats([], new Map(), 0)).toMatchObject({ p3: 0, icc: 0, iccName: '' })
+  })
   it('кэш по листу: тот же лист при новой таблице фото считается заново', () => {
     const s = spread(['a'], 'k')
     const v1 = new Map([photo('a', 3, 2)].map((p) => [p.id, p]))
@@ -71,13 +93,23 @@ describe('albumStats', () => {
 })
 
 describe('colorLine', () => {
+  const z = { adobe: 0, p3: 0, icc: 0, iccName: '', other: 0 }
   it('нет цветных фото — строки нет', () => {
-    expect(colorLine({ adobe: 0, other: 0 })).toBeNull()
+    expect(colorLine(z)).toBeNull()
   })
   it('только Adobe, только другой, оба', () => {
-    expect(colorLine({ adobe: 3, other: 0 })).toBe('Цвет: Adobe RGB — 3 (будут пересчитаны)')
-    expect(colorLine({ adobe: 0, other: 2 })).toBe('Цвет: другой профиль — 2')
-    expect(colorLine({ adobe: 3, other: 2 })).toBe('Цвет: Adobe RGB — 3 (будут пересчитаны), другой профиль — 2')
+    expect(colorLine({ ...z, adobe: 3 })).toBe('Цвет: Adobe RGB — 3 (будут пересчитаны)')
+    expect(colorLine({ ...z, other: 2 })).toBe('Цвет: другой профиль — 2')
+    expect(colorLine({ ...z, adobe: 3, other: 2 })).toBe('Цвет: Adobe RGB — 3 (будут пересчитаны), другой профиль — 2')
+  })
+  it('119: сценарий 3 — Adobe, Display P3, другие RGB-профили и не пересчитываемые', () => {
+    expect(colorLine({ adobe: 3, p3: 5, icc: 2, iccName: '', other: 1 })).toBe(
+      'Цвет: Adobe RGB — 3 (будут пересчитаны), Display P3 — 5 (будут пересчитаны), другие RGB-профили — 2 (будут пересчитаны), другой профиль — 1',
+    )
+  })
+  it('119: icc с одним общим именем — имя вместо «другие RGB-профили»; только p3', () => {
+    expect(colorLine({ ...z, icc: 2, iccName: 'ProPhoto RGB' })).toBe('Цвет: ProPhoto RGB — 2 (будут пересчитаны)')
+    expect(colorLine({ ...z, p3: 1 })).toBe('Цвет: Display P3 — 1 (будут пересчитаны)')
   })
 })
 

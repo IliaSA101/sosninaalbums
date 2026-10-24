@@ -104,3 +104,6 @@ cutItems
 copyItems
 pasteItems
 duplicateItems
+tour
+videos
+toggleAssoc

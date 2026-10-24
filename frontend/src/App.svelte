@@ -16,11 +16,14 @@
   import AutoAskDialog from './shell/ask/AutoAskDialog.svelte'
   import DropAskDialog from './shell/ask/DropAskDialog.svelte'
   import CopyAskDialog from './shell/ask/CopyAskDialog.svelte'
+  import NewerAskDialog from './shell/ask/NewerAskDialog.svelte'
+  import { newerAsk } from './shell/ask/newerask.svelte'
   import AutoBuildDialog from './shell/autobuild/AutoBuildDialog.svelte'
-  import RebuildAskDialog from './shell/autobuild/RebuildAskDialog.svelte'
+  import RebuildAskDialog from './shell/autoalbum/RebuildAskDialog.svelte'
   import KeysDialog from './shell/hotkeys/KeysDialog.svelte'
   import Guide from './shell/guide/Guide.svelte'
   import Spot from './shell/guide/Spot.svelte'
+  import Tour from './shell/tour/Tour.svelte'
   import { guide } from './shell/guide/guidestate.svelte'
   import StartDialog from './shell/dialogs/StartDialog.svelte'
   import OpenProgress from './shell/dialogs/OpenProgress.svelte'
@@ -30,6 +33,7 @@
   import PacksDialog from './shell/packs/PacksDialog.svelte'
   import { packsUi } from './shell/packs/packs.svelte'
   import AboutDialog from './shell/dialogs/AboutDialog.svelte'
+  import UpdateWatch from './shell/update/UpdateWatch.svelte'
   import { aboutUi } from './shell/dialogs/about.svelte'
   import NamesDialog from './panels/names/NamesDialog.svelte'
   import VigDialog from './panels/vignette/VigDialog.svelte'
@@ -59,12 +63,14 @@
   import { menuOn } from './shell/menu/menuctx'
   import { eventChord, isSpace } from './base/keys/chord'
   import { modalStack } from './base/modal/modalstack.svelte'
+  import { extOpen } from './shell/boot/extopen.svelte'
   import { zoneOf } from './editor/places/groupsel'
   import { bgmode } from './editor/backdrop/bgmode.svelte'
   import { prefs } from './base/prefs/prefs.svelte'
   import { modes } from './base/prefs/view.svelte'
 
   onMount(() => {
+    const offExt = extOpen.listen() // до init: слежение за окнами должно жить, когда придёт State.pending
     store.init()
     void clip.sync()
     // Сверка папок по фокусу и таймеру (088): удалённые в Проводнике файлы уходят из ленты, новые появляются.
@@ -90,6 +96,7 @@
       offClip()
       autocheck.stop()
       offAdded()
+      offExt()
     }
   })
 
@@ -108,7 +115,7 @@
   const noAutoLayouts = () => !!store.spread?.grid || store.onCover
 
   // Открыт вопрос ручного листа (автораскладка, броски, копия сетки, «Фото уже в альбоме»): под ним F1 молчит.
-  const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!copyAsk.cur || !!gridAct.copyGrid
+  const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!copyAsk.cur || !!newerAsk.cur || !!gridAct.copyGrid
 
   // Открыто окно фоновой работы Go: экспорт, его памятка, сбор в папку (069) или «Открываем альбом» (073: F1 не открывает справочник под ним).
   const jobsOpen = () => jobs.exportOpen || jobs.collectOpen || !!jobs.exportMemo || jobs.openShown
@@ -211,12 +218,15 @@
 <AutoBuildDialog />
 <RebuildAskDialog />
 <StartDialog />
+<!-- После StartDialog: на первом запуске оба окна монтируются за один проход, и «новее» должно лечь поверх стартового (modalstack — по порядку монтирования) -->
+<NewerAskDialog />
 <Guide />
 <KeysDialog />
 <LevelsDialog />
 <BackupsDialog />
 <PacksDialog />
 <AboutDialog />
+<UpdateWatch />
 <NamesDialog />
 <VigDialog />
 <VigTplSave />
@@ -225,6 +235,7 @@
 <PhotoMenu />
 <PhotoPreview />
 <Spot />
+<Tour />
 <!-- Последним: окно хода открытия (073) лежит над стартовым окном -->
 <OpenProgress />
 

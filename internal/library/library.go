@@ -4,9 +4,8 @@ package library
 import (
 	"crypto/sha1" //nolint:gosec // sha1 — только ключ кэша, не защита
 	"encoding/hex"
-	"image"
 	"image/color"
-	_ "image/jpeg" // регистрация декодеров для image.DecodeConfig
+	_ "image/jpeg" // регистрация декодеров (миниатюры, превью)
 	_ "image/png"  // то же
 	"path/filepath"
 	"strings"
@@ -101,22 +100,20 @@ func readHead(path string) (Photo, []byte, error) {
 	if err != nil {
 		return Photo{}, nil, err
 	}
-	cfg, _, err := image.DecodeConfig(f)
+	// Одни ворота с декодом оригинала: что лента приняла, то миниатюра и экспорт прочтут.
+	dims, err := imgfile.DimsOf(f, imgfile.MaxPixels)
 	if err != nil {
-		return Photo{}, nil, err
-	}
-	if err := imgfile.CheckDims(cfg.Width, cfg.Height); err != nil {
-		return Photo{}, nil, err
+		return Photo{}, nil, withWhy(err, f)
 	}
 	head := imgfile.Head{Orient: 1}
 	if _, err := f.Seek(0, 0); err == nil {
 		head = imgfile.Header(f)
 	}
 	col, prof := head.Color, head.Profile
-	if col == imgfile.ColorNone && cfg.ColorModel == color.CMYKModel {
+	if col == imgfile.ColorNone && dims.Color == color.CMYKModel {
 		col, prof = imgfile.ColorOther, "CMYK" // CMYK без ICC: пересчитать нечем, только предупредить
 	}
-	w, h := cfg.Width, cfg.Height
+	w, h := dims.W, dims.H
 	if head.Orient >= 5 {
 		w, h = h, w
 	}

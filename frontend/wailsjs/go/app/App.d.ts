@@ -50,6 +50,8 @@ export function ArrangeLayers(arg1:string,arg2:string,arg3:Array<string>):Promis
 
 export function ArrangePlaces(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>;
 
+export function AssocLater():Promise<app.AssocView>;
+
 export function AutoBuild(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.View>;
 
 export function AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>;
@@ -68,7 +70,11 @@ export function CancelExport():Promise<void>;
 
 export function CancelLibrary():Promise<void>;
 
+export function CancelUpdate():Promise<void>;
+
 export function CheckFolders(arg1:boolean):Promise<void>;
+
+export function CheckUpdate():Promise<app.UpdateInfo>;
 
 export function ChooseFiles():Promise<app.LooseResult>;
 
@@ -130,6 +136,8 @@ export function DeleteSpreads(arg1:Array<string>):Promise<model.View>;
 
 export function DeleteText(arg1:string):Promise<model.View>;
 
+export function DownloadUpdate():Promise<app.UpdateInfo>;
+
 export function DropFonts(arg1:Array<string>):Promise<Array<string>>;
 
 export function DropPhotos(arg1:string,arg2:string,arg3:Array<string>,arg4:number,arg5:string):Promise<app.DropResult>;
@@ -180,6 +188,8 @@ export function ImportTemplates():Promise<app.TplLoad>;
 
 export function ImportTemplatesPath(arg1:string):Promise<app.TplLoad>;
 
+export function InstallUpdate():Promise<void>;
+
 export function Keymap():Promise<keymap.View>;
 
 export function LayoutChoices(arg1:string):Promise<model.Choices>;
@@ -216,15 +226,21 @@ export function NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>;
 
 export function NewVignetteSheet(arg1:number,arg2:number):Promise<app.State>;
 
+export function OpenExternal():Promise<app.State>;
+
 export function OpenFabrika():Promise<void>;
 
 export function OpenFsfera():Promise<void>;
+
+export function OpenInNewer():Promise<void>;
 
 export function OpenLink(arg1:string):Promise<void>;
 
 export function OpenProject():Promise<app.State>;
 
 export function OpenRecent(arg1:string):Promise<app.State>;
+
+export function OpenUpdatePage():Promise<void>;
 
 export function PagePresets():Promise<Array<model.PagePreset>>;
 
@@ -338,6 +354,10 @@ export function SetAlbumBg(arg1:string,arg2:boolean):Promise<model.View>;
 
 export function SetAlbumBgFade(arg1:number,arg2:string):Promise<model.View>;
 
+export function SetAlbumBgToAll(arg1:string,arg2:boolean):Promise<model.View>;
+
+export function SetAssoc(arg1:boolean):Promise<app.AssocView>;
+
 export function SetBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
 export function SetBackdropAngle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>;
@@ -408,6 +428,8 @@ export function SetPlaces(arg1:string,arg2:Array<model.PlaceBox>,arg3:string):Pr
 
 export function SetSettings(arg1:model.Settings):Promise<model.View>;
 
+export function SetSettingsToAll(arg1:model.Settings):Promise<model.View>;
+
 export function SetSheetCaps(arg1:string,arg2:boolean,arg3:model.SheetCaps):Promise<model.View>;
 
 export function SetShowStart(arg1:boolean):Promise<prefs.Prefs>;
@@ -434,6 +456,10 @@ export function SetTextStyle(arg1:string,arg2:text.Style):Promise<model.View>;
 
 export function SetTone(arg1:string,arg2:number,arg3:number):Promise<model.View>;
 
+export function SetTour(arg1:string,arg2:string):Promise<prefs.Prefs>;
+
+export function SetUpdateCheck(arg1:boolean):Promise<app.UpdateInfo>;
+
 export function SetVignette(arg1:string,arg2:model.Vignette):Promise<app.GridResult>;
 
 export function SetupVignette(arg1:string,arg2:model.VigSetup):Promise<app.GridResult>;
@@ -456,6 +482,8 @@ export function SplitSpread(arg1:string,arg2:number):Promise<model.View>;
 
 export function SplitSpreadAuto(arg1:string,arg2:number,arg3:boolean):Promise<model.View>;
 
+export function SpreadBgToAlbum(arg1:string):Promise<model.View>;
+
 export function SpreadPhotoColors(arg1:string):Promise<Array<string>>;
 
 export function StepLayout(arg1:string,arg2:string,arg3:number):Promise<model.View>;
@@ -475,6 +503,8 @@ export function TurnBackdrop(arg1:string,arg2:string,arg3:number,arg4:string):Pr
 export function TurnPhotos(arg1:Array<string>,arg2:number):Promise<model.View>;
 
 export function Undo():Promise<model.View>;
+
+export function UpdateInfo():Promise<app.UpdateInfo>;
 
 export function UpdateLibrary():Promise<app.LibraryUpdate>;
 

@@ -273,3 +273,36 @@ func FuzzParseCatalog(f *testing.F) {
 		}
 	})
 }
+
+// Signed: подписанный конверт любого содержимого — байты body; больше предела, чужая подпись,
+// порча — отказ до разбора (спека 111, манифест обновления).
+func TestFetchSigned(t *testing.T) {
+	l := newTestLib(t)
+	body := []byte(`{"any":"thing"}`)
+	var env []byte
+	l.mux.HandleFunc("/m.json", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(env) })
+	c := l.client()
+	url := l.srv.URL + "/m.json"
+	env = l.envelope(body)
+	got, err := c.Signed(context.Background(), url, 4096)
+	if err != nil || !bytes.Equal(got, body) {
+		t.Fatalf("верный конверт: %v %q", err, got)
+	}
+	if _, err := c.Signed(context.Background(), url, int64(len(env)-1)); !errors.Is(err, ErrCatalog) {
+		t.Errorf("больше предела: %v", err)
+	}
+	env = bytes.Replace(env, []byte(`"body":"`), []byte(`"body":"AA`), 1)
+	if _, err := c.Signed(context.Background(), url, 4096); err == nil {
+		t.Error("порченый body принят")
+	}
+	other, _, _ := ed25519.GenerateKey(rand.Reader)
+	src := l.source()
+	src.Keys = []ed25519.PublicKey{other}
+	env = l.envelope(body)
+	if _, err := New(src).Signed(context.Background(), url, 4096); !errors.Is(err, ErrSignature) {
+		t.Errorf("чужой ключ: %v", err)
+	}
+	if _, err := c.Signed(context.Background(), "https://example.com/m.json", 4096); !errors.Is(err, ErrAddress) {
+		t.Errorf("чужой хост: %v", err)
+	}
+}

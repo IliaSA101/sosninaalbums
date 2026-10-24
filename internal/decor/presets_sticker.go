@@ -64,6 +64,20 @@ var stickerPresets = []preset{
 	{"sa:st-burst-gold", "holiday", "Золотой взрыв", "", art("burst", "#e0a93d", "#f6dc9b")},
 	{"sa:st-confetti-party", "holiday", "Праздничное конфетти", "", art("confetti-pile", "#e85d75", "#f2b134", "#7cc47f", "#4fb0c6")},
 	{"sa:st-balloons-gold", "holiday", "Золотые шары", "", art("balloons", "#e0a93d", "#f3d58a", "#c9a24e")},
+
+	// Фирменные (спека 116): готовые картинки, ключ — gen/art/brand.go; цветов нет.
+	{"sa:st-brand-albums-black", ThemeBrand, "sosnina albums, чёрный", "", art("brand-albums-black")},
+	{"sa:st-brand-albums-white", ThemeBrand, "sosnina albums, белый", "", art("brand-albums-white")},
+	{"sa:st-brand-films-black", ThemeBrand, "sosnina films, чёрный", "", art("brand-films-black")},
+	{"sa:st-brand-films-white", ThemeBrand, "sosnina films, белый", "", art("brand-films-white")},
+}
+
+// lightStickers — стикеры почти белого цвета: на светлой шашечке плитки их не видно, плитка рисует
+// тёмную (Item.Dark, спека 116). Список ведёт TestStickerDarkMatchesPixels по рисунку.
+var lightStickers = map[string]bool{
+	"sa:st-plate-ivory":        true,
+	"sa:st-brand-albums-white": true,
+	"sa:st-brand-films-white":  true,
 }
 
 // Sticker — что ставит щелчок по плитке стикера (AddSticker и ReplaceSticker в App): встроенный —

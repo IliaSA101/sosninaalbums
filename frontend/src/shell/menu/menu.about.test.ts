@@ -45,3 +45,18 @@ describe('«Справка ▸ О программе…» (101-6)', () => {
     expect(help.at(-2)?.id).toBe('whatsNew')
   })
 })
+
+describe('«Справка ▸ Первые шаги» и «Видео о программе» (113)', () => {
+  it('«Первые шаги» вторым, «Видео о программе» третьим — на всех уровнях и без функций', () => {
+    for (const level of ALL_LEVELS) {
+      const custom: Custom = { base: 'simple', on: [], off: ['variants', 'timeline', 'captions', 'turn'] }
+      const can_ = level === 'custom' ? (f: FeatureId) => features('custom', custom).has(f) : (f: FeatureId) => can(f, level)
+      for (const help of [helpOf({ level, can: can_ }), helpOf({ level, can: () => false })]) {
+        expect(help[0].id, level).toBe('guide')
+        expect(help[1], level).toMatchObject({ id: 'tour', label: 'Первые шаги', cmd: 'tour' })
+        expect(help[2], level).toMatchObject({ id: 'videos', label: 'Видео о программе', cmd: 'videos' })
+        expect(help[1].disabled, level).toBeFalsy()
+      }
+    }
+  })
+})

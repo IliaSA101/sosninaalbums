@@ -23,6 +23,7 @@ export interface DecorItem {
   w: number
   h: number
   color?: string // цвет страниц пресета: подложка плитки
+  dark?: boolean // светлый стикер (116): плитке — тёмная шашечка
   pages?: number // 067, только вид spread: 1 — страница, 2 — весь разворот
   places?: number // 067: сколько мест для фото в шаблоне
   pack?: string // 067: название набора, из которого плитка

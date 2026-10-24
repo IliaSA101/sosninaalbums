@@ -3,14 +3,12 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,6 +17,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/app/colorpick"
 	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
@@ -32,6 +31,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -87,6 +87,9 @@ type App struct {
 	// snapRefs — ID → путь фото редактора; подменяется в тестах (порядок снимков).
 	snapRefs func(ed *album.Editor) map[string]string
 
+	// unread — отдельные файлы, найденные, но не прочитанные: ID фото → причина (117, unread.go); под mu.
+	unread map[string]string
+
 	// Сканирование папок (см. rescan): поколение растёт с каждым запуском, отчёты устаревших
 	// поколений отбрасываются. scan и scanGen — под mu.
 	// rescanMu — снимок папок редактора и новое поколение одним куском (порядок: rescanMu →
@@ -107,6 +110,16 @@ type App struct {
 	startNotice string   // см. State.Notice
 	startInfo   string   // см. State.Info
 	startFresh  []string // см. State.FreshFonts
+	// startFromFile — см. State.FromFile; один раз, как startNotice (GetState сбрасывает).
+	startFromFile bool
+
+	// Открытие альбома извне (launch.go, спека 112), под mu: argFile — альбом из аргументов запуска
+	// до startup (argTaken — startup его уже забрал), ext — очередь внешнего открытия (State.Pending).
+	argFile  string
+	argTaken bool
+	ext      string
+	// launchLog — строки лога initLaunch до открытия log.txt (flushLaunchLog в startup).
+	launchLog []string
 
 	// ready закрывает startup, когда редактор, startNotice и первое сканирование готовы.
 	// Wails зовёт методы App параллельно с OnStartup: без него GetState отдал бы пустой
@@ -116,8 +129,7 @@ type App struct {
 	tplMu sync.Mutex // шаблоны сеток и templates.json (api.go, internal/prefs)
 	tpls  prefs.Templates
 
-	colors colorState // кэш цветов фото «С фото» окна выбора цвета (colors.go, 109)
-	pick   pickCache  // кадры пипетки (pickframe.go, 109)
+	colorPick *colorpick.Picker // пипетка и «С фото» окна выбора цвета (colorpick, 109)
 
 	// draftLocked — черновик не удалось убрать в .bad: писать в него нельзя, иначе затрём.
 	draftLocked atomic.Bool
@@ -163,6 +175,11 @@ type App struct {
 	packs packState
 	// net — «Обновить библиотеку»: отмена, проверка при запуске, источник (packs_net.go).
 	net libNet
+	// upd — обновление программы: состояние, проверка при запуске (update.go, спека 111).
+	upd updState
+	// assoc и newer — открытие .salbum двойным щелчком и файл новее программы (112).
+	assoc assocState
+	newer newerState
 }
 
 // State — то, что нужно интерфейсу целиком: альбом и фото из папок.
@@ -183,6 +200,9 @@ type State struct {
 	FreshFonts []string `json:"freshFonts,omitempty"`
 	// Missing — ID недостающих фото (файла нет на диске); обновляется событием `missing`.
 	Missing []string `json:"missing"`
+	// Unread — отдельные файлы, которые найдены, но не читаются: ID фото → готовая причина (117);
+	// обновляется событием `unread` с тем же видом. Нет ключа — файл читается или чтение ещё идёт.
+	Unread map[string]string `json:"unread,omitempty"`
 	// Version — версия программы из wails.json.
 	Version string `json:"version"`
 	// Fonts — гарнитуры (встроенные и свои, 082): интерфейс подключает их по /media/font/<file>;
@@ -197,7 +217,25 @@ type State struct {
 	// Cancelled — пользователь закрыл нативный диалог, проект прежний. Сравнение path+rev
 	// на фронте отмену не отличит: удачное открытие шлёт `view` раньше ответа метода.
 	Cancelled bool `json:"cancelled,omitempty"`
+	// Pending — имя альбома в очереди внешнего открытия (двойной щелчок, 112): событие `open:external`
+	// могло прийти до подписки окна. Не очищается — очередь забирает OpenExternal.
+	Pending string `json:"pending,omitempty"`
+	// Newer — файл (или черновик) сохранён более новой версией: окно «Альбом из новой версии».
+	// В ответах открытия идёт с Cancelled; при старте — в первом GetState, один раз (112).
+	Newer *NewerInfo `json:"newer,omitempty"`
+	// Assoc — открытие .salbum двойным щелчком: вопрос и пункт меню (112).
+	Assoc AssocView `json:"assoc"`
+	// FromFile — запуск двойным щелчком, и альбом из аргумента действительно открылся: стартовое окно
+	// «Продолжить» поверх него лишнее (0.25-q112-start). Берётся из startup, а не из Assoc.FromFile:
+	// тот на не-Windows пуст и ставится в фоне после первого GetState. Только в первом GetState.
+	FromFile bool `json:"fromFile,omitempty"`
+	// Stand — стенд QA (сборка dev/qa + SA_STAND): Go не открывает браузер и проводник, поэтому
+	// интерфейс вместо ссылок показывает тост. В выпуске всегда false.
+	Stand bool `json:"stand,omitempty"`
 }
+
+// standOn — признак стенда QA для State; подменяется в тестах (тег dev в обычном прогоне не задан).
+var standOn = osx.StandOn
 
 func NewApp() *App {
 	a := &App{byID: map[string]library.Photo{}, rename: os.Rename, scanner: library.NewScanner(),
@@ -210,6 +248,7 @@ func NewApp() *App {
 	}
 	a.ed.Store(blankEditor(""))
 	a.Methods = edit.New(a.editHost())
+	a.colorPick = colorpick.New(a.colorHost())
 	return a
 }
 
@@ -229,7 +268,9 @@ func (a *App) startup(ctx context.Context) {
 	}
 	setupLog(filepath.Join(a.cfgDir, "log.txt"))
 	log.Printf("запуск, версия %s", appVersion(wailsJSON))
+	a.flushLaunchLog()                          // строки разбора аргументов, накопленные до открытия log.txt
 	salbum.SetAppVersion(appVersion(wailsJSON)) // до первого Load и записи: поле app в файле (098)
+	a.updateStartup()                           // итог прошлого запуска установщика — до первого UpdateInfo
 	a.loadTemplates()
 	a.startBackups()
 	a.openDecor() // до первого Load: свои фоны альбома находят путь по ключу
@@ -242,116 +283,22 @@ func (a *App) startup(ctx context.Context) {
 	a.cache = c
 
 	// Открываем последний проект, а если его нет — черновик.
+	a.mu.Lock()
+	fromFile := a.argFile != "" // двойной щелчок по альбому: вопрос о связи в этот раз не нужен
+	arg := a.argFile
+	a.mu.Unlock()
 	path, notice := a.startEditor(a.loadStartup(a.loadConfig().LastProject))
 	a.rememberRecent(path)
 	notice = joinLaunchNotice(notice, launchPlace())
 	a.mu.Lock()
 	a.startNotice = notice
+	a.startFromFile = openedArg(arg, path)
 	a.mu.Unlock()
+	a.logLaunchArg(arg, path)
 	a.rescan()
+	a.syncAssoc(fromFile) // связь .salbum (112): в фоне, окно не ждёт
 
 	wr.OnFileDrop(ctx, func(x, y int, ps []string) { a.dropPaths(ps) })
-}
-
-// loadStartup открывает последний проект, а если его нет — черновик; иначе пустой.
-// Файл, который есть, но не открылся, не должен быть затёрт пустым проектом:
-// чужой .salbum остаётся как есть (path пуст, автосохранение пишет только черновик),
-// а сломанный черновик уходит в «черновик.bad-<время>.salbum» рядом. Черновик более новой
-// версии (ErrNewer) не сломан: его не трогаем, а автосохранение черновика на сессию выключаем.
-func (a *App) loadStartup(last string) (p *model.Project, path, notice string) {
-	var notes []string
-	for _, cand := range []string{last, a.draftPath()} {
-		if cand == "" {
-			continue
-		}
-		if cand == last && !reachable(cand) {
-			// Отключённый сетевой диск: Load ждал бы таймаута, окно — пустое. LastProject не трогаем:
-			// со следующим запуском при сети альбом откроется.
-			notes = append(notes, "Диск "+filepath.VolumeName(cand)+" с последним альбомом недоступен. Открыт черновик.")
-			continue
-		}
-		var loaded *model.Project
-		var err error
-		if cand == a.draftPath() || a.backups.Inside(cand) {
-			loaded, err = salbum.Load(cand)
-		} else {
-			var af albumFonts // шрифты папки собранного альбома (082-8): State.Info, не ошибка
-			loaded, af, err = a.loadAlbum(cand)
-			a.keepAlbumFonts(af)
-		}
-		if err == nil {
-			if cand == a.draftPath() {
-				cand = ""
-			}
-			return loaded, cand, strings.Join(notes, " ")
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			if cand == last {
-				notes = append(notes, "Последний проект не найден: "+cand+". Открыт черновик.")
-			}
-			continue
-		}
-		log.Printf("не открылся проект: %v", paths.NoPath(err))
-		if cand != a.draftPath() {
-			notes = append(notes, "Не открылся проект: "+newerText(err, "альбом")+".")
-			continue
-		}
-		if errors.Is(err, salbum.ErrNewer) {
-			a.draftNewer.Store(true)
-			notes = append(notes, newerText(err, "Черновик")+". Здесь он не открывается и не изменится.")
-			continue
-		}
-		bad := a.badDraftPath(time.Now())
-		if rerr := a.rename(cand, bad); rerr != nil {
-			log.Printf("черновик не удалось сохранить отдельно: %v", paths.NoPath(rerr))
-			a.draftLocked.Store(true)
-			notes = append(notes, "Не открылся черновик ("+err.Error()+") и не сохранён отдельно: автосохранение отключено до перезапуска.")
-		} else {
-			notes = append(notes, "Не открылся черновик ("+err.Error()+"). Копия сохранена: "+bad+".")
-		}
-	}
-	return model.New(), "", strings.Join(notes, " ")
-}
-
-// startEditor — редактор для проекта loadStartup; возвращает путь и уведомление. Load отдаёт
-// проверенный проект, и отказ NewEditor сюда не доходит (Load ⊆ Check, FuzzLoad). Если всё же —
-// пустой альбом, а черновик до перезапуска не пишется (draftLocked). Замок ставится и когда
-// отвергнут LastProject при целом черновике: иначе автосохранение пустого альбома затёрло бы
-// черновик; «Новый» потом переименует черновик в .bad.
-// В log.txt — без текста ошибки: в нём путь.
-func (a *App) startEditor(p *model.Project, path, notice string) (string, string) {
-	ed, err := album.NewEditor(p, path)
-	if err == nil {
-		a.ed.Store(ed)
-		return path, notice
-	}
-	log.Printf("проект при запуске не прошёл проверку путей")
-	a.draftLocked.Store(true)
-	a.ed.Store(blankEditor(""))
-	return "", strings.TrimSpace(notice + " Не открылся проект: " + err.Error() + ". Автосохранение отключено до перезапуска.")
-}
-
-// launchPlace — где лежит запущенный exe; ошибка os.Executable — молча «обычное место».
-func launchPlace() osx.Place {
-	exe, err := os.Executable()
-	if err != nil {
-		return osx.PlaceNormal
-	}
-	return osx.LaunchPlace(exe, os.TempDir())
-}
-
-// joinLaunchNotice дописывает к тосту старта подсказку о месте запуска (через пустую строку,
-// если текст уже есть) и пишет её в log.txt; для обычного места возвращает notice как есть.
-func joinLaunchNotice(notice string, place osx.Place) string {
-	extra := place.Notice()
-	if extra == "" {
-		return notice
-	}
-	log.Printf("запуск не из установленного места: %s", place)
-	if notice == "" {
-		return extra
-	}
-	return notice + "\n\n" + extra
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -431,6 +378,7 @@ func (a *App) domReady(ctx context.Context) {
 	defer guard("domReady")
 	a.fitScreen(ctx)
 	a.scheduleLibraryCheck()
+	a.scheduleUpdateCheck()
 }
 
 // Постоянный минимум окна (логические px); на малом экране его уменьшает minSize.
@@ -529,6 +477,8 @@ func Run(assets fs.FS, wailsCfg, icon []byte) error {
 	applyMemoryLimit()
 	app := NewApp()
 	app.data = osx.DataName(stand)
+	app.initLaunch() // файл из аргументов и ожидание прежней версии — до окна
+	app.useSystemAssoc()
 
 	return wails.Run(&options.App{
 		Title:            "Sosnina Albums",
@@ -545,22 +495,17 @@ func Run(assets fs.FS, wailsCfg, icon []byte) error {
 		// Данные WebView2 (localStorage) не привязаны к имени exe: у каждой версии оно своё.
 		Windows:     &windows.Options{WebviewUserDataPath: osx.WebViewDir(app.data)},
 		Linux:       linuxOptions(app.data, icon),
+		Mac:         &mac.Options{OnFileOpen: app.macOpen},
 		Menu:        appMenu(runtime.GOOS),
 		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
 		OnStartup:   app.startup,
 		OnDomReady:  app.domReady,
 		OnShutdown:  app.shutdown,
 		Bind:        []any{app},
-		// Два окна пишут в один черновик и конфиг: второй запуск лишь поднимает первое окно.
+		// Два окна пишут в один черновик и конфиг: второй запуск поднимает первое окно и отдаёт ему альбом.
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: instanceKey(stand),
-			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
-				if app.ctx == nil {
-					return
-				}
-				wr.WindowUnminimise(app.ctx)
-				wr.WindowShow(app.ctx)
-			},
+			UniqueId:               instanceKey(stand),
+			OnSecondInstanceLaunch: app.secondLaunch,
 		},
 	})
 }

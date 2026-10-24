@@ -68,3 +68,52 @@ func SetNoAlbumBg(p *model.Project, spreadID string, off bool) {
 	}
 	p.Spreads[i].NoAlbumBg = off
 }
+
+// ownBg — у листа есть свой фон: узор или фото фона на любой области (фон альбома на нём не виден).
+func ownBg(s *model.Spread) bool { return len(s.Backdrops()) > 0 || len(s.Patterns()) > 0 }
+
+// toAlbum снимает свой фон листа и отметку «Не показывать здесь»: дальше лист идёт за фоном
+// альбома. Цвет страниц не трогается (q115-4): узор из каталога ставит пару, «Как в альбоме»
+// для цвета — отдельная правка. Запись фото фона уйдёт сама (PruneRefs конвейера).
+func toAlbum(s *model.Spread) {
+	s.Pat, s.PatL, s.PatR = nil, nil, nil
+	s.BgPhoto, s.BgPhotoL, s.BgPhotoR, s.BgPhotoS = nil, nil, nil, nil
+	s.NoAlbumBg = false
+}
+
+// SetAlbumBgAll — тело Editor.SetAlbumBgToAll (115): SetAlbumBg, затем AllToAlbum. Ошибка
+// источника — до снятия, проект не тронут.
+func SetAlbumBgAll(p *model.Project, src model.BgSource, pages bool) error {
+	if err := SetAlbumBg(p, src, pages); err != nil {
+		return err
+	}
+	AllToAlbum(p)
+	return nil
+}
+
+// AllToAlbum — часть SetAlbumBgAll (115): у каждого разворота со своим фоном снимает
+// его вместе с «Не показывать здесь». «Скрыт» без своего фона остаётся (q115-5), обложка —
+// вне p.Spreads. Фона альбома нет — холостая.
+func AllToAlbum(p *model.Project) {
+	if p.AlbumBg == nil {
+		return
+	}
+	for _, s := range p.Spreads {
+		if ownBg(s) {
+			toAlbum(s)
+		}
+	}
+}
+
+// ToAlbum — тело Editor.SpreadBgToAlbum (115): один разворот «как в альбоме»; «Не показывать
+// здесь» снимается и без своего фона. Фона альбома нет, обложка и неизвестный ID — холостая.
+func ToAlbum(p *model.Project, spreadID string) {
+	if p.AlbumBg == nil {
+		return
+	}
+	i := slices.IndexFunc(p.Spreads, func(s *model.Spread) bool { return s.ID == spreadID })
+	if i < 0 || p.IsCover(p.Spreads[i]) {
+		return
+	}
+	toAlbum(p.Spreads[i])
+}

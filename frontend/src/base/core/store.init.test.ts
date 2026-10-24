@@ -14,11 +14,13 @@ vi.mock('../../../wailsjs/runtime/runtime', () => ({
 }))
 vi.mock('../../../wailsjs/go/app/App', () => ({
   GetState: () => new Promise((r) => (resolveState = r)),
+  SetLevel: () => Promise.resolve({}),
   MissingNames: () => new Promise<Record<string, string>>((r) => namesCalls.push(r)),
 }))
 
 vi.stubGlobal('window', globalThis) // notify ставит таймер на window
 const { store } = await import('./store.svelte')
+const { prefs } = await import('../prefs/prefs.svelte')
 
 const photos = (n: number) => Array.from({ length: n }, (_, i) => ({ id: 'p' + i }))
 const idle = { active: false, walking: false, found: 0, read: 0 }
@@ -56,6 +58,31 @@ describe('store.init: события раньше ответа GetState', () => 
     expect(store.photos.length).toBe(3)
     expect(store.scan.active).toBe(true)
     expect(store.missing).toEqual(['p0'])
+  })
+})
+
+describe('store.init: unread (117)', () => {
+  it('снимок задаёт причины; событие заменяет целиком; null — пусто', async () => {
+    const done = store.init()
+    resolveState({ view, photos: [], unread: { a: 'файл повреждён' } })
+    await done
+    expect(store.unread).toEqual({ a: 'файл повреждён' })
+    handlers.unread({ b: 'пустой файл' })
+    expect(store.unread).toEqual({ b: 'пустой файл' })
+    handlers.unread(null)
+    expect(store.unread).toEqual({})
+  })
+
+  it('событие раньше ответа свежее устаревшего снимка; без поля в снимке — пусто', async () => {
+    let done = store.init()
+    handlers.unread({ c: 'не картинка' })
+    resolveState({ view, photos: [], unread: {} })
+    await done
+    expect(store.unread).toEqual({ c: 'не картинка' })
+    done = store.init()
+    resolveState({ view, photos: [] })
+    await done
+    expect(store.unread).toEqual({})
   })
 })
 
@@ -120,6 +147,48 @@ describe('store.replaceState: отмена диалога «Открыть»', (
   })
 })
 
+describe('State.newer (112): альбом новее программы', () => {
+  const v = (path: string, rev: number) => ({ spreads: [], folders: [], path, rev })
+  const newer = { name: 'Свадьба.salbum', draft: false, need: '0.26', mine: '0.25', have: '' }
+  const shown: unknown[] = []
+  beforeEach(() => {
+    shown.length = 0
+    store.plug({ ...store.hooks, newer: (i) => void shown.push(i) })
+  })
+
+  it('ответ открытия cancelled + newer: окно показано, альбом не тронут', async () => {
+    store.apply(v('a.salbum', 3) as never)
+    const seq = store.openSeq
+    expect(await store.replaceState(Promise.resolve({ view: v('a.salbum', 3), photos: [], cancelled: true, newer }))).toBe(true)
+    expect(shown).toEqual([newer])
+    expect(store.openSeq).toBe(seq)
+  })
+
+  it('просто cancelled (диалог закрыт) — окна нет', async () => {
+    await store.replaceState(Promise.resolve({ view: v('a.salbum', 3), photos: [], cancelled: true }))
+    expect(shown).toEqual([])
+  })
+
+  it('ошибка открытия — окна нет', async () => {
+    await store.replaceState(Promise.reject('нет файла'))
+    expect(shown).toEqual([])
+  })
+
+  it('старт на альбоме новее: первый GetState показывает окно один раз', async () => {
+    const done = store.init()
+    resolveState({ view, photos: [], missing: [], newer })
+    await done
+    expect(shown).toEqual([newer])
+  })
+
+  it('старт без newer — окна нет', async () => {
+    const done = store.init()
+    resolveState({ view, photos: [], missing: [] })
+    await done
+    expect(shown).toEqual([])
+  })
+})
+
 describe('State.info и freshFonts (082)', () => {
   const fresh: string[][] = []
   beforeEach(() => {
@@ -178,5 +247,77 @@ describe('State.info и freshFonts (082)', () => {
     await store.replaceState(Promise.reject('нет доступа'))
     expect(store.toast).toMatchObject({ kind: 'error' })
     expect(fresh).toHaveLength(0)
+  })
+})
+
+describe('store.init: стенд QA (State.stand)', () => {
+  const start = async (st: Record<string, unknown>) => {
+    const done = store.init()
+    resolveState({ view, photos: [], missing: [], ...st })
+    await done
+  }
+
+  it('stand: true — признак стенда', async () => {
+    await start({ stand: true })
+    expect(store.stand).toBe(true)
+  })
+
+  it('нет поля (выпуск) — не стенд', async () => {
+    store.stand = true
+    await start({})
+    expect(store.stand).toBe(false)
+  })
+})
+
+describe('store.init: запуск двойным щелчком по альбому (112)', () => {
+  const start = async (extra: Record<string, unknown>, p: Record<string, unknown>) => {
+    const done = store.init()
+    resolveState({ view, photos: [], missing: [], prefs: { level: 'simple', showStart: true, first: false, ...p }, ...extra })
+    await done
+  }
+
+  it('fromFile: стартовое окно с «Продолжить: …» не показывается', async () => {
+    await start({ fromFile: true }, {})
+    expect(prefs.startOpen).toBe(false)
+  })
+
+  it('обычный запуск: окно по флажку «Показывать при запуске» остаётся', async () => {
+    await start({}, {})
+    expect(prefs.startOpen).toBe(true)
+  })
+
+  it('fromFile, но флажок снят: окна и так нет', async () => {
+    await start({ fromFile: true }, { showStart: false })
+    expect(prefs.startOpen).toBe(false)
+  })
+
+  it('fromFile на первом запуске: выбор уровня остаётся, окно открыто', async () => {
+    await start({ fromFile: true }, { first: true })
+    expect(prefs.startOpen).toBe(true)
+  })
+
+  const newer = { name: 'Alpha.salbum', draft: false, need: '0.26', mine: '0.25', have: '0.25.1' }
+  const shown: unknown[] = []
+  beforeEach(() => {
+    shown.length = 0
+    store.plug({ ...store.hooks, newer: (i) => void shown.push(i) })
+  })
+
+  it('файл новее программы: окно «новее» показано, стартовое закрыто', async () => {
+    await start({ newer }, {})
+    expect(shown).toEqual([newer])
+    expect(prefs.startOpen).toBe(false)
+  })
+
+  it('файл новее, флажок «Показывать при запуске» снят: стартового и так нет', async () => {
+    await start({ newer }, { showStart: false })
+    expect(shown).toEqual([newer])
+    expect(prefs.startOpen).toBe(false)
+  })
+
+  it('файл новее на первом запуске: выбор уровня остаётся под окном «новее»', async () => {
+    await start({ newer }, { first: true })
+    expect(shown).toEqual([newer])
+    expect(prefs.startOpen).toBe(true)
   })
 })

@@ -4,7 +4,7 @@ import { toggleKey } from '../../base/core/platform'
 import { store } from '../../base/core/store.svelte'
 import { drag } from '../../base/drag/drag.svelte'
 import { tip } from '../../base/ui/tip.svelte'
-import { glueAsk } from './menuact.svelte'
+import { glueAsk } from '../spreadmenu/menuact.svelte'
 import { cutState, type CanDo } from './timeline'
 
 export type PressEv = { ctrlKey: boolean; metaKey: boolean; stopPropagation: () => void }

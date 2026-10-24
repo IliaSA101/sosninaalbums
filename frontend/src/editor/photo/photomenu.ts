@@ -10,7 +10,7 @@ import type { MenuNode } from '../../base/ui/menulist'
 import { borderNeedsRelink } from '../border/borderstate'
 import { revealLabel } from '../../base/core/platform'
 import { LAYER_OPS } from '../places/minipanel'
-import { ACTS, actOk, GROUP_LABEL, type ActId, type GroupId } from './photoacts'
+import { ACTS, actOk, GROUP_ICON, GROUP_LABEL, type ActId, type GroupId } from './photoacts'
 
 // Пункт меню фото — общий узел списка (base/ui/menulist.ts).
 export type MenuItem = MenuNode
@@ -127,22 +127,23 @@ function tidy(rows: Row[]): MenuNode[] {
 // Подменю: без видимых пунктов его нет (уровень, пустое место); с одним остаётся подменю.
 function group(id: GroupId, rows: Row[]): MenuNode | false {
   const sub = tidy(rows)
-  return sub.length > 0 && { id, label: GROUP_LABEL[id], sub }
+  return sub.length > 0 && { id, label: GROUP_LABEL[id], icon: GROUP_ICON[id], sub }
 }
 
 // Пункт каталога: слово — из ACTS, клавиша — из реестра команд (если есть и не снята в настройках).
 function node(id: ActId, hint: HintFn, extra: Partial<MenuNode> = {}): MenuNode {
   const cmd = ACTS[id].cmd
   const key = cmd ? hint(cmd) : ''
-  return { id, label: ACTS[id].label, ...(key ? { hint: key } : {}), ...extra }
+  const icon = ACTS[id].icon
+  return { id, label: ACTS[id].label, ...(icon ? { icon } : {}), ...(key ? { hint: key } : {}), ...extra }
 }
 
 // Пункт отмечен как состояние (✓ или •).
 const check = (on: boolean): Partial<MenuNode> => ({ mark: 'check', checked: on })
 const radio = (on: boolean): Partial<MenuNode> => ({ mark: 'radio', checked: on })
 
-// Пункты подменю «Слой ▸»: id один, операцию различает arg.
-const layerSub = (): MenuNode[] => LAYER_OPS.map((o) => ({ id: 'layer', arg: o.op, label: o.label }))
+// Пункты подменю «Слой ▸»: id один, операцию различает arg; значки — те же, что у «Расположения» в правой панели.
+const layerSub = (): MenuNode[] => LAYER_OPS.map((o) => ({ id: 'layer', arg: o.op, icon: o.icon, label: o.label }))
 
 const deleteLabel = (n: number) => (n > 1 ? `Удалить (${n})` : 'Удалить')
 
@@ -225,7 +226,9 @@ function placeRows(c: MenuCtx, A: MkAct): Row[] {
   const alive = one && c.missing === 0
   return [
     // Фото может стоять и в месте, и на фоне: из места оно не уходит (спека 009).
-    alive && c.scopes.length > 0 && A('backdrop', { sub: c.scopes.map((s) => ({ id: 'backdrop', arg: s.scope, label: s.label })) }),
+    alive &&
+      c.scopes.length > 0 &&
+      A('backdrop', { sub: c.scopes.map((s) => ({ id: 'backdrop', arg: s.scope, icon: ACTS.backdrop.icon, label: s.label })) }),
     c.grid && A('layer', { sub: layerSub() }), // «Слой ▸» — только «Ручная»: у «Авто» места не перекрываются
     one && A('caption'),
   ]

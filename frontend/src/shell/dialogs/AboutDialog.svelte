@@ -2,6 +2,7 @@
   import { store } from '../../base/core/store.svelte'
   import Modal from '../../base/modal/Modal.svelte'
   import logo from '../../assets/logo.png'
+  import UpdateBlock from '../update/UpdateBlock.svelte'
   import { aboutUi, BASED_ON, REPO_TEXT } from './about.svelte'
 </script>
 
@@ -9,7 +10,7 @@
 {#if aboutUi.open}
   <Modal title="О программе" onclose={() => aboutUi.close()} wide>
     <div class="head">
-      <img class="logo" src={logo} alt="Sosnina films" draggable="false" />
+      <img class="logo" src={logo} alt="Sosnina Albums" draggable="false" />
       <div>
         <div class="name">Sosnina Albums {store.version}</div>
         <div class="muted">Вёрстка свадебных фотоальбомов</div>
@@ -29,6 +30,8 @@
       <button class="ghost" onclick={() => void aboutUi.link('source')}>Исходный код</button>
       <button class="ghost" onclick={() => void aboutUi.link('license')}>Текст лицензии</button>
     </div>
+
+    <UpdateBlock />
 
     <div class="feedback">
       <!-- Две строки по макету 101: у каждой свой адресат — Telegram или трекер GitHub (шаблон bug / idea). -->

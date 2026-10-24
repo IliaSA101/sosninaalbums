@@ -5,6 +5,7 @@ vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} })
 vi.mock('../../../wailsjs/go/app/App', () => ({
   MoveSpread: vi.fn(),
   AddPhotos: vi.fn(),
+  MovePhoto: vi.fn(),
   NewSpread: vi.fn(),
   PlacePhotos: vi.fn(),
   DropPhotos: vi.fn(),
@@ -29,7 +30,7 @@ beforeEach(() => {
   gate.mockReset()
   gate.mockImplementation(async (ids: string[]) => ids)
   store.plug({ ...noHooks, gate })
-  for (const f of [Api.AddPhotos, Api.NewSpread, Api.PlacePhotos, Api.DropPhotos]) vi.mocked(f).mockReset()
+  for (const f of [Api.AddPhotos, Api.MovePhoto, Api.NewSpread, Api.PlacePhotos, Api.DropPhotos]) vi.mocked(f).mockReset()
   store.apply(view(1, ['a', 'b', 'c', 'd']))
   store.go(0)
 })
@@ -146,5 +147,33 @@ describe('dropOn: ворота копии (098)', () => {
     await dropOn(strip('f1'), { kind: 'backdrop', spread: 'a', scope: 'spread' })
     expect(Api.CreateCover).toHaveBeenCalledExactlyOnceWith('', 'f1')
     expect(gate).not.toHaveBeenCalled()
+  })
+})
+
+// 114: перенос своего фото в щель своего разворота — одна правка MovePhoto; «Авто» или ручной, решает Go.
+describe('dropOn: перестановка в ленте (114)', () => {
+  const MovePhoto = vi.mocked(Api.MovePhoto)
+  const chip = (spread: string) => ({ kind: 'chip', spread, index: 3, photo: 'x', side: 'before' }) as never
+  const own = (spread: string) => ({ kind: 'photos', ids: ['f1'], fromSpread: spread }) as never
+  const withGrid = (grid: boolean) =>
+    ({ rev: 2, marksRev: 0, folders: [], spreads: [{ id: 'a', photos: ['f1'], grid }], settings: { sheet: false } }) as never
+
+  for (const grid of [true, false]) {
+    it(`move — одна правка MovePhoto (${grid ? 'ручной' : 'Авто'})`, async () => {
+      store.apply({ ...(withGrid(grid) as object), rev: 1 } as never)
+      store.go(0)
+      MovePhoto.mockResolvedValueOnce(withGrid(grid))
+      expect(await dropOn(own('a'), chip('a'))).toBe(true)
+      expect(MovePhoto).toHaveBeenCalledExactlyOnceWith('f1', 'a', 3)
+      expect(Api.DropPhotos).not.toHaveBeenCalled()
+      expect(Api.AddPhotos).not.toHaveBeenCalled()
+    })
+  }
+
+  it('чужое фото в щель — по-прежнему AddPhotos', async () => {
+    vi.mocked(Api.AddPhotos).mockResolvedValueOnce(view(2, ['a', 'b', 'c', 'd']))
+    await dropOn(own('b'), chip('a'))
+    expect(MovePhoto).not.toHaveBeenCalled()
+    expect(Api.AddPhotos).toHaveBeenCalledExactlyOnceWith('a', ['f1'], 3)
   })
 })

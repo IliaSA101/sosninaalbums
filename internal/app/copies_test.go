@@ -223,17 +223,17 @@ func TestColorReportByFile(t *testing.T) {
 	a := newApp(t)
 	a.byID[reg] = library.Photo{ID: reg, Color: imgfile.ColorOther, Profile: "ProPhoto RGB"}
 	pr := model.New()
-	if ad, other := a.colorReport(pr); ad != 0 || len(other) != 0 {
-		t.Fatalf("пустой альбом: %d %v", ad, other)
+	if conv, other := a.colorReport(pr); len(conv) != 0 || len(other) != 0 {
+		t.Fatalf("пустой альбом: %v %v", conv, other)
 	}
 	gone := filepath.Join(dir, "нет-файла.jpg")
 	pr.Photos = map[string]model.PhotoRef{
 		reg: {Path: gone}, model.CopyID(reg, 2): {Path: gone}, model.CopyID(reg, 7): {Path: gone},
 		idA: {Path: fAdobe}, model.CopyID(idA, 2): {Path: fAdobe},
 	}
-	ad, other := a.colorReport(pr)
-	if ad != 1 || len(other) != 1 || other["ProPhoto RGB"] != 1 {
-		t.Errorf("adobe=%d other=%v", ad, other)
+	conv, other := a.colorReport(pr)
+	if len(conv) != 1 || conv["Adobe RGB"] != 1 || len(other) != 1 || other["ProPhoto RGB"] != 1 {
+		t.Errorf("conv=%v other=%v", conv, other)
 	}
 }
 

@@ -8,6 +8,9 @@ import type { Zone } from '../../editor/places/groupsel'
 import { ALL_LEVELS, LEVEL_TITLE, type FeatureId, type Level } from '../../base/prefs/levels'
 import { recentName } from '../dialogs/recent'
 import type { RecentProject } from '../../base/core/types'
+import type { IconName } from '../../base/ui/Icon.svelte'
+import { ACTS, GROUP_ICON } from '../../editor/photo/photoacts'
+import { LAYER_OPS, type LayerOp } from '../../editor/places/minipanel'
 
 // Функция уровня (levels.ts): `can(id)` прячет пункт, чужой уровню.
 export type Feature = FeatureId
@@ -23,7 +26,13 @@ export interface MenuItem {
   sub?: MenuItem[]
   sep?: boolean // линия перед пунктом
   hint?: string // подсказка при наведении (title)
+  icon?: IconName // значок слева: только у пунктов «Правки» с кнопкой-двойником (владелец 23.10)
 }
+
+// Столбцы списка: значки — если есть хоть один; отметки ✓ — если есть хоть одна или значков нет (прежний вид).
+// Так пункты без значка встают ровно по тексту пунктов со значком, как в MenuList.
+export const hasIcons = (list: MenuItem[]): boolean => list.some((i) => !!i.icon)
+export const hasMarks = (list: MenuItem[]): boolean => list.some((i) => i.checked !== undefined) || !hasIcons(list)
 
 export type MenuId = 'file' | 'edit' | 'view' | 'help'
 
@@ -64,6 +73,8 @@ export interface MenuCtx {
   markup?: boolean // подложка разметки типографии включена (066); нет — выключена
   rulers: boolean
   snap: boolean
+  assocCan?: boolean // 112: выпуск на Windows — пункт «Открывать .salbum этой программой» есть; нет — пункта нет
+  assocOn?: boolean // 112: .salbum сейчас открывается этой программой — галочка
   binShown?: boolean // в ленте показана подборка (083): «Показать все фото» без неё серое; не задан — серое
   alignCount?: number // выделено объектов на текущем развороте (места, фото, тексты); нет — 0
   alignTo?: AlignTo // опора «Относительно»; нет — «Выделения»
@@ -110,6 +121,7 @@ function plain(spec: Spec): Partial<MenuItem> {
   if (spec.hint) o.hint = spec.hint
   if (spec.disabled) o.disabled = true
   if (spec.checked !== undefined) o.checked = spec.checked
+  if (spec.icon) o.icon = spec.icon
   return o
 }
 
@@ -155,6 +167,7 @@ function alignMenu(c: MenuCtx): Spec {
         label: a.label,
         cmd: 'align' as const,
         arg: a.op,
+        icon: a.icon, // как у кнопок полосы «Выровнять»
         disabled: alignBlock(a.op, to, n) !== null,
         sep: a.op === 'distH', // перед распределением
       })),
@@ -222,6 +235,10 @@ function fileSpecs(c: MenuCtx): Spec[][] {
           ]
         : []),
       { id: 'showData', label: 'Открыть папку данных', cmd: 'showData' },
+      // 112: связь .salbum — галочка, как «Вид ▸ Безопасная зона»; только Windows-выпуск (Go: assoc.can). Значка нет: «Файл» без значков
+      ...(c.assocCan
+        ? [{ id: 'assoc', label: 'Открывать .salbum этой программой', cmd: 'toggleAssoc' as const, checked: !!c.assocOn }]
+        : []),
     ],
     [
       { id: 'addFolder', label: 'Добавить папку с фото…', cmd: 'addFolder' },
@@ -240,18 +257,87 @@ function clipSpecs(c: MenuCtx): Spec[] {
   const off = c.zone !== 'canvas'
   return [
     { id: 'cutItems', label: 'Вырезать', cmd: 'cutItems', feature: 'clipboard', disabled: off || !c.copyable },
-    { id: 'copyItems', label: 'Копировать', cmd: 'copyItems', feature: 'clipboard', disabled: off || !c.copyable },
-    { id: 'pasteItems', label: 'Вставить', cmd: 'pasteItems', feature: 'clipboard', disabled: off || !c.pasteable },
+    {
+      id: 'copyItems',
+      label: 'Копировать',
+      cmd: 'copyItems',
+      icon: ACTS.clipCopy.icon,
+      feature: 'clipboard',
+      disabled: off || !c.copyable,
+    },
+    {
+      id: 'pasteItems',
+      label: 'Вставить',
+      cmd: 'pasteItems',
+      icon: ACTS.clipPaste.icon,
+      feature: 'clipboard',
+      disabled: off || !c.pasteable,
+    },
     { id: 'duplicateItems', label: 'Дублировать', cmd: 'duplicateItems', feature: 'clipboard', disabled: off || !c.copyable },
   ]
 }
+
+// Операции над выделенным: слой, поворот, зеркало, ч/б, выравнивание — у большинства есть кнопка-двойник со значком.
+function photoOpSpecs(c: MenuCtx): Spec[] {
+  return [
+    {
+      id: 'layer',
+      label: 'Слой',
+      icon: ACTS.layer.icon,
+      feature: 'layers',
+      disabled: !c.layerable,
+      sub: [
+        { id: 'layerFront', label: 'На передний план', cmd: 'layerFront', icon: layerIcon('front') },
+        { id: 'layerUp', label: 'Выше', cmd: 'layerUp', icon: layerIcon('up') },
+        { id: 'layerDown', label: 'Ниже', cmd: 'layerDown', icon: layerIcon('down') },
+        { id: 'layerBack', label: 'На задний план', cmd: 'layerBack', icon: layerIcon('back') },
+      ],
+    },
+    {
+      id: 'turn',
+      label: 'Повернуть',
+      icon: GROUP_ICON.turn,
+      feature: 'turn',
+      disabled: !c.flippable,
+      sub: [
+        { id: 'turnCw', label: '↻ 90°', cmd: 'turnCw', icon: ACTS.turnCw.icon },
+        { id: 'turnCcw', label: '↺ 90°', cmd: 'turnCcw', icon: ACTS.turnCcw.icon },
+        // 045: режим «Выпрямить по линии» для выделенного фото; функция «Наклон фото» (tilt) своего уровня
+        { id: 'straighten', label: 'Выпрямить по линии', cmd: 'straighten', icon: ACTS.straighten.icon, feature: 'tilt', sep: true },
+      ],
+    },
+    {
+      id: 'flip',
+      label: 'Зеркало',
+      icon: GROUP_ICON.mirror,
+      feature: 'flip',
+      disabled: !c.flippable && !c.sticker, // фото или один стикер (048)
+      sub: [
+        { id: 'flipH', label: '↔ По горизонтали', cmd: 'flipH', icon: ACTS.flipH.icon },
+        { id: 'flipV', label: '↕ По вертикали', cmd: 'flipV', icon: ACTS.flipV.icon },
+      ],
+    },
+    {
+      id: 'gray',
+      label: c.allGray ? 'Сделать цветным' : 'Сделать ч/б',
+      icon: ACTS.gray.icon,
+      feature: 'adjust',
+      disabled: !c.flippable,
+      cmd: 'gray',
+    },
+    alignMenu(c),
+  ]
+}
+
+// Значок операции слоя — тот же, что у кнопок «Расположение» и пунктов «⋯» (LAYER_OPS).
+const layerIcon = (op: LayerOp): IconName => LAYER_OPS.filter((o) => o.op === op).map((o) => o.icon)[0]
 
 function editSpecs(c: MenuCtx): Spec[][] {
   const onCanvas = c.zone === 'canvas'
   return [
     [
-      { id: 'undo', label: 'Отменить', cmd: 'undo', disabled: !c.canUndo },
-      { id: 'redo', label: 'Повторить', cmd: 'redo', disabled: !c.canRedo },
+      { id: 'undo', label: 'Отменить', cmd: 'undo', icon: 'undo', disabled: !c.canUndo },
+      { id: 'redo', label: 'Повторить', cmd: 'redo', icon: 'redo', disabled: !c.canRedo },
     ],
     clipSpecs(c),
     [
@@ -263,12 +349,12 @@ function editSpecs(c: MenuCtx): Spec[][] {
         disabled: onCanvas ? !c.hasSpread : c.libraryPhotos === 0,
       },
       { id: 'clearSelection', label: 'Снять выделение', cmd: 'clearSelection', disabled: !c.anySelection },
-      { id: 'removeCell', label: 'Удалить', cmd: 'removeCell', disabled: !c.deletable },
+      { id: 'removeCell', label: 'Удалить', cmd: 'removeCell', icon: ACTS.delete.icon, disabled: !c.deletable },
     ],
     [
-      { id: 'addText', label: 'Добавить текст', cmd: 'addText', feature: 'text', disabled: !c.hasSpread },
+      { id: 'addText', label: 'Добавить текст', cmd: 'addText', icon: 'text', feature: 'text', disabled: !c.hasSpread },
       // 048 Ф2: то же окно «Фоны и стикеры», вид «Стикеры»; стикер встаёт в центр страницы
-      { id: 'addSticker', label: 'Добавить стикер…', cmd: 'addSticker', feature: 'decor', disabled: !c.hasSpread },
+      { id: 'addSticker', label: 'Добавить стикер…', cmd: 'addSticker', icon: 'sticker', feature: 'decor', disabled: !c.hasSpread },
       // 048: окно «Фоны» для текущего листа; область — весь лист (у обложки — первая сторонка)
       { id: 'bgGallery', label: 'Галерея фонов…', cmd: 'bgGallery', feature: 'decor', disabled: !c.hasSpread },
       // 079: окно «Рамочки» — рамочка на выделенные места или на весь лист; сочетания по умолчанию нет
@@ -280,46 +366,18 @@ function editSpecs(c: MenuCtx): Spec[][] {
       { id: 'pasteNames', label: 'Имена из списка…', cmd: 'pasteNames', feature: 'captions', disabled: !c.hasSpread },
       // 094: поле названия текущего разворота в ленте; обложка и пустой альбом — серое (decorable)
       { id: 'renameSpread', label: 'Название разворота…', cmd: 'renameSpread', feature: 'names', disabled: !c.decorable },
-      { id: 'makeVignette', label: 'Сделать разворот виньеткой', cmd: 'makeVignette', feature: 'vignette', disabled: !c.vigable },
+      {
+        id: 'makeVignette',
+        label: 'Сделать разворот виньеткой',
+        cmd: 'makeVignette',
+        icon: 'vignette',
+        feature: 'vignette',
+        disabled: !c.vigable,
+      },
       { id: 'vigSetup', label: 'Настроить виньетку…', cmd: 'vigSetup', feature: 'vignette', disabled: !c.vigSetup },
       // 041: выделенные развороты ленты, нет выделения — текущий; серое, если менять нечего (сетки, виньетки, пустые)
       { id: 'varyLayouts', label: 'Разнообразить раскладки', cmd: 'varyLayouts', feature: 'variants', disabled: !c.varyable },
-      {
-        id: 'layer',
-        label: 'Слой',
-        feature: 'layers',
-        disabled: !c.layerable,
-        sub: [
-          { id: 'layerFront', label: 'На передний план', cmd: 'layerFront' },
-          { id: 'layerUp', label: 'Выше', cmd: 'layerUp' },
-          { id: 'layerDown', label: 'Ниже', cmd: 'layerDown' },
-          { id: 'layerBack', label: 'На задний план', cmd: 'layerBack' },
-        ],
-      },
-      {
-        id: 'turn',
-        label: 'Повернуть',
-        feature: 'turn',
-        disabled: !c.flippable,
-        sub: [
-          { id: 'turnCw', label: '↻ 90°', cmd: 'turnCw' },
-          { id: 'turnCcw', label: '↺ 90°', cmd: 'turnCcw' },
-          // 045: режим «Выпрямить по линии» для выделенного фото; функция «Наклон фото» (tilt) своего уровня
-          { id: 'straighten', label: 'Выпрямить по линии', cmd: 'straighten', feature: 'tilt', sep: true },
-        ],
-      },
-      {
-        id: 'flip',
-        label: 'Зеркало',
-        feature: 'flip',
-        disabled: !c.flippable && !c.sticker, // фото или один стикер (048)
-        sub: [
-          { id: 'flipH', label: '↔ По горизонтали', cmd: 'flipH' },
-          { id: 'flipV', label: '↕ По вертикали', cmd: 'flipV' },
-        ],
-      },
-      { id: 'gray', label: c.allGray ? 'Сделать цветным' : 'Сделать ч/б', feature: 'adjust', disabled: !c.flippable, cmd: 'gray' },
-      alignMenu(c),
+      ...photoOpSpecs(c),
     ],
   ]
 }
@@ -358,6 +416,8 @@ function helpSpecs(): Spec[][] {
   return [
     [
       { id: 'guide', label: 'Справочник функций…', cmd: 'guide' },
+      { id: 'tour', label: 'Первые шаги', cmd: 'tour' },
+      { id: 'videos', label: 'Видео о программе', cmd: 'videos' },
       { id: 'help', label: 'Горячие клавиши', cmd: 'help' },
       { id: 'startWindow', label: 'Стартовое окно', cmd: 'startWindow' },
       { id: 'whatsNew', label: 'Что нового', cmd: 'whatsNew' },

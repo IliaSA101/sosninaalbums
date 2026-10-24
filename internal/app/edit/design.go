@@ -272,3 +272,10 @@ func (m *Methods) SetNoAlbumBg(spreadID string, off bool) (v model.View) {
 	defer m.guardEdit("SetNoAlbumBg", &v, nil)
 	return m.changed(m.editor().SetNoAlbumBg(spreadID, off))
 }
+
+// SpreadBgToAlbum — карточка разворота: свой узор, фото фона и «Не показывать здесь» сняты, фон
+// альбома виден (115). Нет фона альбома, обложка и неизвестный ID — холостая.
+func (m *Methods) SpreadBgToAlbum(spreadID string) (v model.View) {
+	defer m.guardEdit("SpreadBgToAlbum", &v, nil)
+	return m.changed(m.editor().SpreadBgToAlbum(spreadID))
+}

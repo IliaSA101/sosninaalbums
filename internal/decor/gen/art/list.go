@@ -25,12 +25,13 @@ type Def struct {
 	Inks            []string // цвета по умолчанию; len — сколько пикеров
 	Aspect          float64  // ширина/высота (у растяжимого — для первой вставки)
 	Random, Stretch bool     // есть «Перемешать»; рисуется заново в рамке
+	Image           bool     // готовая картинка (brand.go): без цветов
 	Draw            func(c *paint.Canvas, s Spec, ink []color.NRGBA, a float64)
 }
 
 // All — стикеры в порядке каталога (выпущенный ключ не меняется; новый — в конец).
 func All() []Def {
-	return []Def{
+	return append([]Def{
 		{Kind: "star", Name: "Звезда", Inks: []string{"#f2c14e"}, Aspect: 1, Draw: drawStar},
 		{Kind: "burst", Name: "Взрыв", Inks: []string{"#f06a5b", "#ffd166"}, Aspect: 1, Draw: drawBurst},
 		{Kind: "sparkle", Name: "Искра", Inks: []string{"#f2c14e", "#f9e2a0"}, Aspect: 1, Draw: drawSparkle},
@@ -61,5 +62,5 @@ func All() []Def {
 		{Kind: "apple", Name: "Яблоко", Inks: []string{"#e24b4b", "#5f9e5f"}, Aspect: 0.95, Draw: drawApple},
 		{Kind: "bell", Name: "Колокольчик", Inks: []string{"#e0b04a", "#8a6a2a"}, Aspect: 0.95, Draw: drawBell},
 		{Kind: "rings", Name: "Кольца", Inks: []string{"#d9b779", "#c9a24e"}, Aspect: 1.5, Draw: drawRings},
-	}
+	}, brandDefs()...)
 }

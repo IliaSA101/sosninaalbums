@@ -50,6 +50,9 @@ class Prefs {
   startOpen = $state(false)
   // «Что нового» раскрыт в стартовом окне («Справка ▸ Что нового»).
   news = $state(false)
+  // Первые шаги (113): решение «показывать ли» принимает Go, здесь только флаги из его ответов.
+  tourDue = $state(false)
+  tourMore = $state(false)
 
   // Доступные функции: пересчёт только при смене уровня или набора.
   enabled = $derived(features(this.level, this.custom))
@@ -71,6 +74,20 @@ class Prefs {
     this.showStart = p.showStart !== false
     this.first = !!p.first
     this.startOpen = this.showStart || this.first
+    this.tourDue = !!p.tourDue
+    this.tourMore = !!p.tourMore
+  }
+
+  // Состояние тура в config.json; проект и undo не затрагиваются. Ошибка записи — тихо: тур не должен мешать работе,
+  // а следующий запуск просто покажет его снова.
+  async setTour(id: 'first' | 'spread', state: 'pending' | 'done'): Promise<void> {
+    try {
+      const p = await Api.SetTour(id, state)
+      this.tourDue = !!p.tourDue
+      this.tourMore = !!p.tourMore
+    } catch {
+      // без записи тур просто придёт ещё раз
+    }
   }
 
   // Закрытие стартового окна. Первый запуск: уровень записывается, чтобы окно «первого раза» не

@@ -49,6 +49,27 @@ describe('AboutDialog: «О программе»', () => {
     expect(text).toContain('GNU GPL v3')
   })
 
+  it('стенд QA: ссылка молчит в Go, но не в окне — тост, браузер не зовётся', async () => {
+    store.stand = true
+    render(AboutDialog)
+    open()
+    await fireEvent.click(screen.getByText('Исходный код', { selector: 'button' }))
+    await fireEvent.click(screen.getByText('Текст лицензии', { selector: 'button' }))
+    expect(openLink).not.toHaveBeenCalled()
+    expect(store.toast).toMatchObject({ text: 'На стенде ссылки не открываются', kind: 'info' })
+    expect(screen.queryByRole('dialog')).not.toBeNull()
+    store.stand = false
+  })
+
+  it('не стенд: тоста нет, ссылка уходит в Go', async () => {
+    store.stand = false
+    render(AboutDialog)
+    open()
+    await fireEvent.click(screen.getByText('Исходный код', { selector: 'button' }))
+    expect(openLink).toHaveBeenCalledWith('source')
+    expect(store.toast).toBeNull()
+  })
+
   it('семь кнопок зовут OpenLink со своим id', async () => {
     render(AboutDialog)
     open()

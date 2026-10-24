@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pack_linux  # noqa: E402
 from pack_common import (APP, BIN, CHANGES, EXE, GUIDE_EXT, ICON, LEGAL, LICENSE, MAX_UNPACKED,  # noqa: E402
-                         NOTICE_MD, NOTICES, PackError, check_name, folder_name, guide_name)
+                         NOTICE_MD, NOTICES, PackError, check_name, exe_name, folder_name, guide_name)
 
 RSRC = "__MACOSX"
 ARCHIVE = {
@@ -259,7 +259,7 @@ def pack(args):
         ok = False
         try:
             if osname == "windows":
-                w.add(new_info(folder + "/" + EXE, stamp, 0o755), src)
+                w.add(new_info(folder + "/" + exe_name(v), stamp, 0o755), src)
             else:
                 copy_app(args.app_zip, folder, args.date, w)
             w.add(new_info(folder + "/" + guide, stamp, 0o644), guide_data)
@@ -366,7 +366,10 @@ def check(path, osname, version):
             if rest:
                 inside.setdefault(rest.split("/")[0], []).append(i)
         kind = osname or ("macos" if APP in inside else "windows")
-        main_item = APP if kind == "macos" else EXE
+        # exe Windows — с версией из имени папки; прежнее «SosninaAlbums.exe» в zip — отказ (спека 111)
+        main_item = APP if kind == "macos" else exe_name(folder[len("Sosnina Albums "):])
+        if kind == "windows" and EXE in inside:
+            raise PackError("exe в архиве назван %s, ожидалось %s (имя с версией, спека 111)" % (EXE, main_item))
         want = {main_item, CHANGES, *LEGAL}
         guides = {n for n in inside if n in {guide_name(kind, e) for e in GUIDE_EXT}}
         if len(guides) != 1 or set(inside) != want | guides:

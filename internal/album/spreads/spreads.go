@@ -65,6 +65,12 @@ func MovePhoto(p *model.Project, photoID, toSpread string, index int) error {
 	if !ok {
 		return nil
 	}
+	// Своё фото ручного разворота (114): места стоят, фото сдвигаются по ним. Обложка через p.Find
+	// не находится, как у AddPhotos.
+	if _, s := p.Find(toSpread); s != nil && len(s.Grid) > 0 && slices.Contains(model.GridPhotos(s), photoID) {
+		s.ShiftGridPhoto(photoID, index)
+		return nil
+	}
 	return AddPhotos(p, toSpread, []model.PhotoInfo{{ID: photoID, Path: ref.Path, W: ref.W, H: ref.H, Size: ref.Size}}, index)
 }
 

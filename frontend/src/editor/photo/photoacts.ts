@@ -45,9 +45,9 @@ export interface Act {
 }
 
 export const ACTS: Record<ActId, Act> = {
-  preview: { label: 'Крупный просмотр' },
-  clipCopy: { label: 'Копировать', cmd: 'copyItems' },
-  clipPaste: { label: 'Вставить', cmd: 'pasteItems' },
+  preview: { label: 'Крупный просмотр', icon: 'preview' },
+  clipCopy: { label: 'Копировать', icon: 'copy', cmd: 'copyItems' },
+  clipPaste: { label: 'Вставить', icon: 'paste', cmd: 'pasteItems' },
   turnCw: { label: 'Повернуть ↻ 90°', icon: 'turn-cw', feature: 'turn', cmd: 'turnCw' },
   turnCcw: { label: 'Повернуть ↺ 90°', icon: 'turn-ccw', feature: 'turn', cmd: 'turnCcw' },
   straighten: { label: 'Выпрямить по линии', icon: 'level', feature: 'tilt', cmd: 'straighten' },
@@ -56,26 +56,26 @@ export const ACTS: Record<ActId, Act> = {
   flipV: { label: 'Зеркало ↕', icon: 'flip-v', feature: 'flip', cmd: 'flipV' },
   fit: { label: 'Целиком / с обрезкой', icon: 'contain', feature: 'frame' },
   contain: { label: 'Целиком', icon: 'contain', feature: 'frame' },
-  cover: { label: 'С обрезкой', feature: 'frame' },
+  cover: { label: 'С обрезкой', icon: 'cover', feature: 'frame' },
   fitPhoto: { label: 'Подогнать место под фото', icon: 'fit-photo', feature: 'frame' },
   resetFrame: { label: 'Сбросить кадр', icon: 'reset', feature: 'frame' },
-  rect: { label: 'Прямоугольное', feature: 'frame' },
-  rounded: { label: 'Скруглённое', feature: 'frame' },
-  oval: { label: 'Круглое', feature: 'frame' },
-  border: { label: 'Рамочка…', feature: 'border' },
-  gray: { label: 'Сделать ч/б', feature: 'adjust', cmd: 'gray' },
-  backdrop: { label: 'На фон', feature: 'bgPhoto' },
+  rect: { label: 'Прямоугольное', icon: 'shape-rect', feature: 'frame' },
+  rounded: { label: 'Скруглённое', icon: 'shape-round', feature: 'frame' },
+  oval: { label: 'Круглое', icon: 'shape-oval', feature: 'frame' },
+  border: { label: 'Рамочка…', icon: 'frame', feature: 'border' },
+  gray: { label: 'Сделать ч/б', icon: 'gray', feature: 'adjust', cmd: 'gray' },
+  backdrop: { label: 'На фон', icon: 'image', feature: 'bgPhoto' },
   layer: { label: 'Слой', icon: 'layers', feature: 'layers' },
   caption: { label: 'Подпись', icon: 'caption', feature: 'captions' },
   name: { label: 'Имя под фото', icon: 'caption', feature: 'captions' },
   swap: { label: 'Поменять местами', icon: 'swap', feature: 'manual' },
   same: { label: 'Одинаковый размер', icon: 'same-size', feature: 'manual' },
   more: { label: 'Ещё', icon: 'more' },
-  explorer: { label: 'Показать в папке' }, // слово по ОС подставляет дерево меню (revealLabel)
-  copy: { label: 'Копировать имя файла' },
-  uses: { label: 'Где ещё стоит' },
-  relink: { label: 'Перепривязать…' },
-  replace: { label: 'Заменить…' },
+  explorer: { label: 'Показать в папке', icon: 'folder' }, // слово по ОС подставляет дерево меню (revealLabel)
+  copy: { label: 'Копировать имя файла', icon: 'copy-name' },
+  uses: { label: 'Где ещё стоит', icon: 'locate' },
+  relink: { label: 'Перепривязать…', icon: 'link' },
+  replace: { label: 'Заменить…', icon: 'replace' },
   delete: { label: 'Удалить', icon: 'trash' },
 }
 
@@ -92,4 +92,13 @@ export const GROUP_LABEL: Record<GroupId, string> = {
   frame: 'Кадр',
   shape: 'Форма',
   file: 'Файл',
+}
+
+// Значок группы = значок её главного действия (как у кнопки мини-панели и правой панели).
+export const GROUP_ICON: Record<GroupId, IconName> = {
+  turn: 'turn-cw',
+  mirror: 'flip-h',
+  frame: 'contain',
+  shape: 'shape-round',
+  file: 'folder',
 }

@@ -43,8 +43,15 @@ function looseNode(key: string, kind: TreeNode['kind'], name: string, path: stri
 }
 
 // Ветка «Фото отдельно»; нет добавлений — null. has(photo) — фото в ленте; пока идёт чтение, отсутствующее не «нет на диске».
+// why(photo) — причина, по которой найденный файл не прочитан (117): тогда «не читается», а не «нет на диске».
 // Повтор ключа (не бывает при инварианте Go) пропускается: ключ строки в списке окна обязан быть один.
-export function looseGroup(list: readonly LooseView[], has: (photo: string) => boolean, scanning: boolean, now: Date): TreeNode | null {
+export function looseGroup(
+  list: readonly LooseView[],
+  has: (photo: string) => boolean,
+  why: (photo: string) => string | undefined,
+  scanning: boolean,
+  now: Date,
+): TreeNode | null {
   if (list.length === 0) return null
   const g = looseNode(GROUP_KEY, 'group', GROUP_NAME, '', false)
   const labels = batchLabels(list, now)
@@ -63,7 +70,9 @@ export function looseGroup(list: readonly LooseView[], has: (photo: string) => b
       const here = has(f.photo)
       const fn = looseNode(fk, 'file', baseName(f.path), f.path, true)
       fn.own = fn.total = here ? 1 : 0
-      fn.missing = !here && !scanning
+      const bad = here || scanning ? undefined : why(f.photo) // пока идёт чтение, причина может быть прошлой
+      if (bad) fn.bad = bad
+      fn.missing = !here && !scanning && !bad
       const dir = segs(f.path).at(-2)
       if (dir) fn.hint = dir
       fn.loose = { id: b.id, file: f.path, photo: f.photo }
@@ -78,16 +87,28 @@ export function looseGroup(list: readonly LooseView[], has: (photo: string) => b
   return g.kids.length > 0 ? g : null
 }
 
-// looseGroup с памятью: правка альбома без смены добавлений, ленты и чтения — та же ветка.
+// looseGroup с памятью: правка альбома без смены добавлений, ленты, причин и чтения — та же ветка.
 export function cachedLoose() {
   let last: unknown[] = []
   let out: TreeNode | null = null
-  return (list: readonly LooseView[], photos: ReadonlyMap<string, unknown>, scanning: boolean, now = new Date()): TreeNode | null => {
+  return (
+    list: readonly LooseView[],
+    photos: ReadonlyMap<string, unknown>,
+    unread: Readonly<Record<string, string>>,
+    scanning: boolean,
+    now = new Date(),
+  ): TreeNode | null => {
     const day = now.toDateString() // в полночь «14:05» становится «21.10, 14:05»
-    const key = [list, photos, scanning, day]
+    const key = [list, photos, unread, scanning, day]
     if (key.every((k, i) => k === last[i])) return out
     last = key
-    out = looseGroup(list, (id) => photos.has(id), scanning, now)
+    out = looseGroup(
+      list,
+      (id) => photos.has(id),
+      (id) => unread[id],
+      scanning,
+      now,
+    )
     return out
   }
 }

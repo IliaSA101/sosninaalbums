@@ -20,6 +20,9 @@ $script:ZN = @{
     Anyway = @('Выполнить в любом случае', 'Run anyway')
 }
 
+# Имя exe программы в zip и в окне Проводника: с версией (спека 111, SosninaAlbums-0.25.0.exe); прежнее без версии тоже узнаём
+$script:ExeItemRx = '^SosninaAlbums(-\d+\.\d+\.\d+)?(\.exe)?$'
+
 # ---------- чистые функции ----------
 
 # Что качать со страницы выпуска: архив раньше «голого» exe (выпуск 0.10 ещё с exe). Пусто - ни того, ни другого
@@ -79,6 +82,16 @@ function Test-ZoneTree([string]$Root) {
         }
     } catch { Write-Log "Test-ZoneTree: $($_.Exception.Message)" }
     return [pscustomobject]@{ Ok = ($total -gt 0 -and $missing.Count -eq 0); Total = $total; Missing = @($missing) }
+}
+
+# Имя exe программы в архиве (SosninaAlbums-X.Y.Z.exe или прежнее SosninaAlbums.exe); '' - архив не читается или exe нет
+function Get-ZipExeName([string]$Zip) {
+    $z = $null
+    try {
+        $z = [IO.Compression.ZipFile]::OpenRead($Zip)
+        foreach ($e in $z.Entries) { if ($e.Name -cmatch '^SosninaAlbums(-\d+\.\d+\.\d+)?\.exe\z') { return [string]$e.Name } }
+    } catch { Write-Log "zip: $($_.Exception.Message)" } finally { if ($z) { $z.Dispose() } }
+    return ''
 }
 
 # Размер записи архива по имени файла; -1 - архив не читается или записи нет
@@ -146,12 +159,12 @@ function Find-DlgButton($Dlg, [string[]]$Names, [switch]$NoGlobal) {
 # ---------- распаковка ----------
 
 function Find-ExtractedExe([string]$Root) {
-    return (Get-ChildItem -LiteralPath $Root -Recurse -Filter 'SosninaAlbums.exe' -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+    return (Get-ChildItem -LiteralPath $Root -Recurse -Filter 'SosninaAlbums*.exe' -File -ErrorAction SilentlyContinue | Select-Object -First 1)
 }
 
 # Ждёт, пока exe распакуется целиком (размер как в архиве); путь или $null
 function Wait-Extracted([string]$Dest, [string]$Zip, [double]$Timeout = 90) {
-    $want = Get-ZipEntryLength $Zip 'SosninaAlbums.exe'
+    $want = Get-ZipEntryLength $Zip (Get-ZipExeName $Zip)
     $sw = [Diagnostics.Stopwatch]::StartNew()
     do {
         $exe = Find-ExtractedExe $Dest
@@ -260,13 +273,13 @@ function Invoke-ZipFirstRun($C) {
         Close-ExplorerWindows
         Open-ExplorerAt $u.Inner
     }
-    $exeItem = Find-ExplorerItem '^SosninaAlbums(\.exe)?$' 20
+    $exeItem = Find-ExplorerItem $script:ExeItemRx 20
     $clicked = $false
     if ($exeItem) {
-        & $C.Act $exeItem 'Дважды щёлкните по SosninaAlbums.exe' 'dbl' 'win-11-extracted' 0.5 'SosninaAlbums.exe'
+        & $C.Act $exeItem (Format-Caption ('Дважды щёлкните по ' + $exeItem.Name)) 'dbl' 'win-11-extracted' 0.5 $exeItem.Name
         $clicked = $true
     } else {
-        & $C.Missing 'win-11-extracted' 'SosninaAlbums.exe не найден в окне Проводника (UIA)'
+        & $C.Missing 'win-11-extracted' 'exe программы не найден в окне Проводника (UIA)'
     }
     & $C.RunExe $u.Exe 2 3 $clicked
     & $C.AppShot 3 3
@@ -304,7 +317,7 @@ function Watch-ZipOutcome($C) {
 
 # Проба в простое: двойной щелчок по exe в открытом архиве -> нужная кнопка окна -> что открылось
 function Invoke-ZipProbe($C, [string]$Label, [string[]]$Button) {
-    $item = Find-ExplorerItem '^SosninaAlbums(\.exe)?$' 12
+    $item = Find-ExplorerItem $script:ExeItemRx 12
     if (-not $item) { Add-SummaryRow $Label 'нет' 'exe в окне архива не найден'; return }
     Invoke-HitClick $item 'dbl'
     $dlg = Wait-Target -Names $script:ZN.Dialog -Procs @() -Timeout 20 -Skip @('msedge')
@@ -341,13 +354,13 @@ function Invoke-ZipFromArchive($C, [string]$Zip) {
     }
     Add-JStep 2 3 'Запустите программу из архива'
     & $C.Idle
-    $exeItem = Find-ExplorerItem '^SosninaAlbums(\.exe)?$' 15
+    $exeItem = Find-ExplorerItem $script:ExeItemRx 15
     if (-not $exeItem) {
-        & $C.Missing 'win-12-run-from-zip' 'SosninaAlbums.exe не найден в открытом архиве (UIA)'
+        & $C.Missing 'win-12-run-from-zip' 'exe программы не найден в открытом архиве (UIA)'
         Add-SummaryRow 'Запуск из архива' 'нет' 'exe в архиве не найден'
         return
     }
-    & $C.Act $exeItem 'Дважды щёлкните по SosninaAlbums.exe' 'dbl' '' 0.5 'SosninaAlbums.exe'
+    & $C.Act $exeItem (Format-Caption ('Дважды щёлкните по ' + $exeItem.Name)) 'dbl' '' 0.5 $exeItem.Name
     Add-JStep 3 3 'Закройте окно'
     & $C.Idle
     $dlg = Wait-Target -Names $script:ZN.Dialog -Procs @() -Timeout 20 -Skip @('msedge')

@@ -611,3 +611,74 @@ func TestNameFieldsOfSubject(t *testing.T) {
 		t.Fatalf("свадебный лист: %v", got)
 	}
 }
+
+// 114: ShiftGridPhoto — фото встаёт в щель порядка GridPhotos, места стоят, фото идут по
+// непустым местам; пустые места остаются пустыми.
+func TestShiftGridPhoto(t *testing.T) {
+	mk := func(ids ...string) *Spread {
+		s := &Spread{ID: "s"}
+		for i, id := range ids {
+			s.Grid = append(s.Grid, &Place{ID: fmt.Sprintf("p%d", i), X: float64(i), W: 1, H: 1, Photo: id})
+		}
+		s.Photos = GridPhotos(s)
+		return s
+	}
+	place := func(s *Spread) []string {
+		var out []string
+		for _, pl := range s.Grid {
+			out = append(out, pl.Photo)
+		}
+		return out
+	}
+	cases := []struct {
+		name  string
+		from  []string
+		id    string
+		index int
+		want  []string // nil — холостая
+	}{
+		{"a в щель перед d", []string{"a", "b", "", "c", "d"}, "a", 3, []string{"b", "c", "", "a", "d"}},
+		{"d в начало", []string{"a", "b", "", "c", "d"}, "d", 0, []string{"d", "a", "", "b", "c"}},
+		{"-1 — в конец", []string{"a", "b", "", "c", "d"}, "a", -1, []string{"b", "c", "", "d", "a"}},
+		{"99 — в конец", []string{"a", "b", "", "c", "d"}, "b", 99, []string{"a", "c", "", "d", "b"}},
+		{"без пустых", []string{"a", "b", "c"}, "c", 1, []string{"a", "c", "b"}},
+		{"соседние — обмен", []string{"a", "b", "c"}, "a", 2, []string{"b", "a", "c"}},
+		{"щель до своего", []string{"a", "b", "c"}, "b", 1, nil},
+		{"щель после своего", []string{"a", "b", "c"}, "b", 2, nil},
+		{"последнее в конец", []string{"a", "b"}, "b", -1, nil},
+		{"единственное", []string{"a"}, "a", 0, nil},
+		{"чужое фото", []string{"a", "b"}, "x", 0, nil},
+		{"пустой id", []string{"a", "", "b"}, "", 0, nil},
+		{"нет фото", []string{"", ""}, "a", 0, nil},
+	}
+	for _, c := range cases {
+		s := mk(c.from...)
+		geo := make([]Place, len(s.Grid))
+		for i, pl := range s.Grid {
+			geo[i] = *pl
+			geo[i].Photo = ""
+		}
+		got := s.ShiftGridPhoto(c.id, c.index)
+		want := c.want
+		if want == nil {
+			want = c.from
+		}
+		if got != (c.want != nil) || !slices.Equal(place(s), want) {
+			t.Errorf("%s: изменено %v, места %v, ждали %v", c.name, got, place(s), want)
+		}
+		if !slices.Equal(s.Photos, GridPhotos(s)) {
+			t.Errorf("%s: Photos %v ≠ GridPhotos %v", c.name, s.Photos, GridPhotos(s))
+		}
+		for i, pl := range s.Grid {
+			g := *pl
+			g.Photo = ""
+			if g != geo[i] {
+				t.Errorf("%s: место %d изменилось: %+v", c.name, i, g)
+			}
+		}
+	}
+	// Лист без мест («Авто») — ничего.
+	if (&Spread{Photos: []string{"a", "b"}}).ShiftGridPhoto("a", -1) {
+		t.Error("«Авто» не сетка: сдвиг невозможен")
+	}
+}

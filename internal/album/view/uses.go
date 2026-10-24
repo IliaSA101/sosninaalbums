@@ -38,28 +38,68 @@ func Uses(p *model.Project, id string) []model.PhotoUse {
 				page = fmt.Sprintf("Лист %d", n)
 			}
 		}
-		sheetUses(s, func(kind, what, pick, x string) {
+		var here []model.PhotoUse // вхождения листа: подписи различаем после обхода
+		var seats []int           // номер места в ряду мест листа (у остальных видов 0)
+		sheetUses(s, func(kind, what, pick, x string, seat int) {
 			if mine(x) {
-				use(model.PhotoUse{Sheet: i, Kind: kind, Spread: s.ID, Page: page, What: what, Pick: pick})
+				here = append(here, model.PhotoUse{Sheet: i, Kind: kind, Spread: s.ID, Page: page, What: what, Pick: pick})
+				seats = append(seats, seat)
 			}
 		})
+		numberUses(here, seats)
+		for _, u := range here {
+			use(u)
+		}
 	}
 	return out
 }
 
+// scopeWord — область фона в подписи при повторах: слева, справа, корешок, целиком.
+var scopeWord = map[string]string{
+	model.ScopeSpread: "целиком", model.ScopeLeft: "слева", model.ScopeRight: "справа", model.ScopeSpine: "на корешке",
+}
+
+// numberUses — подпись «место 3» вместо «место», если вхождений одного вида на листе два и более
+// (иначе две копии фото на одном развороте неразличимы). Место — по номеру в ряду мест листа
+// (seats), фон — областью (scopeWord), остальные виды — по порядку вхождений; одиночное вхождение подпись не меняет.
+func numberUses(here []model.PhotoUse, seats []int) {
+	count := map[string]int{}
+	for _, u := range here {
+		count[u.Kind]++
+	}
+	next := map[string]int{}
+	for i := range here {
+		u := &here[i]
+		next[u.Kind]++
+		if count[u.Kind] < 2 {
+			continue
+		}
+		n := next[u.Kind]
+		if u.Kind == model.UsePlace {
+			n = seats[i]
+		}
+		if u.Kind == model.UseBackdrop { // у фона различает область, а не номер
+			u.What += " " + scopeWord[u.Pick]
+			continue
+		}
+		u.What = fmt.Sprintf("%s %d", u.What, n)
+	}
+}
+
 // sheetUses — фото листа по порядку: место, фоны областей, стикеры, рамочки-картинки мест; для
-// каждого — вид, «что» подписи, Pick (что выделить при переходе) и запись фото (106).
-func sheetUses(s *model.Spread, add func(kind, what, pick, photo string)) {
-	for _, x := range s.Photos {
-		add(model.UsePlace, "место", x, x)
+// каждого — вид, «что» подписи, Pick (что выделить при переходе), запись фото (106) и номер
+// места в ряду мест листа с 1 (у остальных видов 0).
+func sheetUses(s *model.Spread, add func(kind, what, pick, photo string, seat int)) {
+	for i, x := range s.Photos {
+		add(model.UsePlace, "место", x, x, i+1)
 	}
 	for _, scope := range model.BdScopes() { // порядок как у Backdrops()
 		if b := *s.Slot(scope); b != nil {
-			add(model.UseBackdrop, "фон", scope, b.Photo)
+			add(model.UseBackdrop, "фон", scope, b.Photo, 0)
 		}
 	}
 	for _, st := range s.Stickers {
-		add(model.UseSticker, "стикер", st.ID, st.Photo)
+		add(model.UseSticker, "стикер", st.ID, st.Photo, 0)
 	}
 	for _, pl := range s.Grid {
 		if b := pl.Border; b != nil {
@@ -67,7 +107,7 @@ func sheetUses(s *model.Spread, add func(kind, what, pick, photo string)) {
 			if ref == "" {
 				ref = pl.ID
 			}
-			add(model.UseBorder, "рамочка", ref, b.Photo)
+			add(model.UseBorder, "рамочка", ref, b.Photo, 0)
 		}
 	}
 }

@@ -61,7 +61,7 @@
       />
     {/if}
     {#if uses > 0}<span class="check" aria-label={uses === 1 ? 'Уже в альбоме' : `В альбоме: ${uses}`}>{uses === 1 ? '✓' : uses}</span>{/if}
-    {#if badge}<span class="badge {badge.level}" title={badge.title}>{badge.label}</span>{/if}
+    {#if badge}<span class="badge {badge.level}" data-guide="color-badge" title={badge.title}>{badge.label}</span>{/if}
     {#if mark.label !== ''}<span class="strip {mark.label}"></span>{/if}
     {#if mark.rating > 0}<span class="stars">{stars(mark.rating)}</span>{/if}
     {#if mark.flag === 1}<span class="flag"><Icon name="flag" size={14} /></span>{:else if rejected}<span class="flag"

@@ -299,6 +299,7 @@ func replayScenario(t *testing.T) *replay {
 	replayAlbum107(r)
 	// 104 и 105: подрезка и «Разброс» через Editor — последними.
 	replayCropZ(r)
+	replayColorMass(r)
 	return r
 }
 

@@ -43,6 +43,25 @@ describe('dropPlan: фото', () => {
     const t: Target = { kind: 'chip', spread: 's2', index: 2, photo: 'x', side: 'before' }
     expect(dropPlan(inSpread, t)).toMatchObject({ op: 'add', at: 2, fromSpread: true })
   })
+  it('chip: своё фото своего разворота — move (114)', () => {
+    const t: Target = { kind: 'chip', spread: 's1', index: 3, photo: 'x', side: 'before' }
+    expect(dropPlan(inSpread, t)).toEqual({ op: 'move', id: 'a', spread: 's1', at: 3 })
+    expect(dropPlan(inSpread, { ...t, side: 'after' })).toEqual({ op: 'move', id: 'a', spread: 's1', at: 4 })
+  })
+  it('chip: чужое — add', () => {
+    const t = (spread: string): Target => ({ kind: 'chip', spread, index: 1, photo: 'x', side: 'before' })
+    // из другого разворота
+    expect(dropPlan(inSpread, t('s2'))).toMatchObject({ op: 'add', spread: 's2', fromSpread: true })
+    // из ленты фото (без fromSpread), в том числе одно
+    expect(dropPlan(strip, t('s1'))).toMatchObject({ op: 'add', spread: 's1', fromSpread: false })
+    expect(dropPlan({ kind: 'photos', ids: ['a'] }, t('s1'))).toMatchObject({ op: 'add', fromSpread: false })
+    // группа фото своего разворота
+    expect(dropPlan({ kind: 'photos', ids: ['a', 'b'], fromSpread: 's1' }, t('s1'))).toMatchObject({
+      op: 'add',
+      ids: ['a', 'b'],
+      fromSpread: true,
+    })
+  })
   it('spread/mini: в конец; mini переходит на разворот; на свой — ничего', () => {
     expect(dropPlan(strip, { kind: 'spread', spread: 's2' })).toMatchObject({ op: 'add', at: -1, go: false })
     expect(dropPlan(strip, { kind: 'mini', spread: 's2', index: 0, side: 'before' })).toMatchObject({ at: -1, go: true })

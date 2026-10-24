@@ -130,7 +130,13 @@ func layoutWith(s string, st Style, w float64, sf, fb *sfnt.Font) Box {
 		asc, desc = mm(m.Ascent), mm(m.Descent)
 	}
 	lh := lineHeight * size
-	for _, par := range strings.Split(CleanText(s), "\n") {
+	// Одиночный завершающий \n строки не даёт: так считает HTML/contenteditable
+	// редактора, иначе рамка выше видимого текста на строку.
+	paras := strings.Split(CleanText(s), "\n")
+	if n := len(paras); n > 1 && paras[n-1] == "" {
+		paras = paras[:n-1]
+	}
+	for _, par := range paras {
 		box.Lines = append(box.Lines, wrap(measure(sf, fb, par), mm, w)...)
 	}
 	n := len(box.Lines)

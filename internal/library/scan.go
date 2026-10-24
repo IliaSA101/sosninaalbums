@@ -42,7 +42,7 @@ type memoEntry struct {
 	size, mod int64
 	side      sidecar
 	photo     Photo
-	bad       bool // файл не читается как картинка
+	why       string // файл не читается как картинка: причина; пусто — читается
 }
 
 // Scanner помнит прочитанные заголовки (путь в нижнем регистре → размер, mtime, Photo или «нечитаем»),
@@ -84,11 +84,20 @@ type scanResult struct {
 	retry bool // сайдкар не дочитался: не запоминать
 }
 
+// why — причина «не читается» из ошибки; пусто, если ошибки нет.
+func (r scanResult) why() string {
+	if r.err == nil {
+		return ""
+	}
+	return whyOf(r.err)
+}
+
 // scanRun — состояние одного сканирования. Пишет в него только горутина Scan (сборщик).
 type scanRun struct {
 	files    []scanFile
 	res      []Photo
 	state    []uint8
+	why      []string // причина для файлов в stBad
 	fromMemo []bool
 	unk      []int // индексы файлов, которых в памяти нет
 	next     int   // сколько первых из unk уже обработано подряд
@@ -126,7 +135,7 @@ func (r *scanRun) progress() ScanProgress {
 // prepare подставляет из памяти всё, у чего совпали размер и время.
 func (s *Scanner) prepare(files []scanFile) *scanRun {
 	m := len(files)
-	r := &scanRun{files: files, res: make([]Photo, m), state: make([]uint8, m), fromMemo: make([]bool, m)}
+	r := &scanRun{files: files, res: make([]Photo, m), state: make([]uint8, m), why: make([]string, m), fromMemo: make([]bool, m)}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, f := range files {
@@ -136,8 +145,8 @@ func (s *Scanner) prepare(files []scanFile) *scanRun {
 			continue
 		}
 		r.fromMemo[i], r.memo = true, r.memo+1
-		if e.bad {
-			r.state[i] = stBad
+		if e.why != "" {
+			r.state[i], r.why[i] = stBad, e.why
 			continue
 		}
 		r.state[i] = stOK
@@ -152,7 +161,7 @@ func (s *Scanner) prepare(files []scanFile) *scanRun {
 type Sources struct{ Folders, Files []string }
 
 // Scan находит фото в папках (с подпапками) и отдельных файлах и читает их заголовки.
-// Файлы, которые не удалось прочитать, попадают в skipped.
+// Файлы, которые не удалось прочитать, попадают в skipped с причиной (Why).
 //
 // report вызывается только из горутины Scan, не параллельно: сразу в начале, потом не чаще
 // ProgressEvery, в конце — с final = true. photos != nil — новый список известных фото в порядке
@@ -160,7 +169,7 @@ type Sources struct{ Folders, Files []string }
 // ничего не прыгало. Отмена через ctx: новые задания не выдаются, Scan возвращает ctx.Err()
 // без финального report; уже прочитанное остаётся в памяти.
 func (s *Scanner) Scan(ctx context.Context, src Sources,
-	report func(photos []Photo, pr ScanProgress, final bool)) (photos []Photo, skipped []string, err error) {
+	report func(photos []Photo, pr ScanProgress, final bool)) (photos []Photo, skipped []Skip, err error) {
 	report(nil, ScanProgress{Active: true, Walking: true}, false)
 	s.invalidateLast()
 
@@ -199,7 +208,7 @@ func (s *Scanner) Scan(ctx context.Context, src Sources,
 		case stOK:
 			photos = append(photos, run.res[i])
 		case stBad:
-			skipped = append(skipped, f.path)
+			skipped = append(skipped, Skip{Path: f.path, Why: run.why[i]})
 		}
 	}
 	report(photos, ScanProgress{Found: m, Read: m, Memo: run.memo, WalkTime: walkTime, ReadTime: time.Since(t1)}, true)
@@ -279,7 +288,7 @@ func (s *Scanner) startReaders(ctx context.Context, run *scanRun, xl *xmpLog) <-
 // take записывает результат воркера в run и память; true — префикс новых вырос.
 func (s *Scanner) take(run *scanRun, r scanResult) bool {
 	if r.err != nil {
-		run.state[r.i] = stBad
+		run.state[r.i], run.why[r.i] = stBad, r.why()
 	} else {
 		run.state[r.i], run.res[r.i] = stOK, r.ph
 	}
@@ -300,7 +309,7 @@ func (s *Scanner) remember(f scanFile, r scanResult) {
 	if len(s.memo) >= memoLimit {
 		s.memo = map[string]memoEntry{}
 	}
-	s.memo[f.key] = memoEntry{size: f.size, mod: f.mod, side: f.side, photo: r.ph, bad: r.err != nil}
+	s.memo[f.key] = memoEntry{size: f.size, mod: f.mod, side: f.side, photo: r.ph, why: r.why()}
 }
 
 // walk обходит папки, как раньше: ссылки на папки и скрытые папки пропускаются, дубли тоже.
@@ -430,7 +439,7 @@ func walkEntry(root, p string, d fs.DirEntry) (info fs.FileInfo, file bool, ret 
 }
 
 // Scan — одноразовое сканирование без отчётов и памяти (тесты и простые случаи).
-func Scan(folders []string) ([]Photo, []string) {
+func Scan(folders []string) ([]Photo, []Skip) {
 	photos, skipped, _ := NewScanner().Scan(context.Background(), Sources{Folders: folders}, func([]Photo, ScanProgress, bool) {})
 	return photos, skipped
 }

@@ -4,6 +4,7 @@
   import { store } from '../core/store.svelte'
   import { thumbUrl } from '../core/media'
   import Icon from '../ui/Icon.svelte'
+  import { Z_TOAST } from '../modal/modalstack.svelte'
 
   const ids = $derived(drag.payload?.kind === 'photos' ? drag.payload.ids : [])
 </script>
@@ -25,7 +26,7 @@
 {/if}
 
 {#if store.toast}
-  <div class="toast" class:error={store.toast.kind === 'error'}>
+  <div class="toast" style:z-index={Z_TOAST} class:error={store.toast.kind === 'error'}>
     <span>{store.toast.text}</span>
     {#if store.toast.action}
       {@const a = store.toast.action}
@@ -95,7 +96,6 @@
     left: 50%;
     bottom: 24px;
     transform: translateX(-50%);
-    z-index: 90;
     display: flex;
     align-items: center;
     gap: 12px;

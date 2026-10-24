@@ -1,0 +1,339 @@
+# Проверка Windows-exe на раннере (спека 118, docs/specs/0.25/118-win-qa-ci/design.md): набор qa-kit.sh на ubuntu, затем сценарии
+# на windows-2025 (установщик, окна, снимки, ролики) и сводка report. Запуск только по ветке winqa/<имя> (её строит
+# scripts/winqa-push.mjs: коммит-сирота без кухни проекта) или руками (workflow_dispatch). Секретов и прав записи нет;
+# pull_request не включён: чужие PR не должны запускать задания Windows. Скрипты — из того же коммита, что и этот файл.
+# В run-блоках заданий Windows только ASCII: Windows PowerShell 5.1 читает файл без BOM как ANSI.
+name: "Windows: проверка exe (update.md)"
+
+on:
+  push:
+    branches: ["winqa/**"]
+  workflow_dispatch:
+    inputs:
+      blocks:
+        description: "Блоки сценариев"
+        type: choice
+        default: all
+        options:
+          [
+            all,
+            probe,
+            install,
+            update,
+            open,
+            "probe,install",
+            "install,update",
+            "update,open",
+          ]
+      video:
+        description: "Ролики на отрезках пунктов (5 кадров/с)"
+        type: boolean
+        default: true
+      dpi:
+        description: "Масштабы экрана для снимков мастера"
+        type: choice
+        default: "125,150,175"
+        options: ["125,150,175", "150", "125,150,175,200", "none"]
+      runner:
+        description: "Раннер Windows"
+        type: choice
+        default: windows-2025
+        options: [windows-2025, windows-11-arm]
+      sabotage:
+        description: "Проверка самой проверки: вместо feed — feed-bad-byte (действует с блоком update)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: win-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Входы
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      blocks_json: ${{ steps.plan.outputs.blocks_json }}
+      blocks_csv: ${{ steps.plan.outputs.blocks_csv }}
+      video: ${{ steps.plan.outputs.video }}
+      dpi: ${{ steps.plan.outputs.dpi }}
+      runner: ${{ steps.plan.outputs.runner }}
+      sabotage: ${{ steps.plan.outputs.sabotage }}
+    steps:
+      # При push по ветке winqa/** входов нет — берутся значения по умолчанию
+      - name: Проверка входов
+        id: plan
+        env:
+          BLOCKS: ${{ inputs.blocks }}
+          VIDEO: ${{ inputs.video }}
+          DPI: ${{ inputs.dpi }}
+          RUNNER_IN: ${{ inputs.runner }}
+          SABOTAGE: ${{ inputs.sabotage }}
+        run: |
+          blocks="${BLOCKS:-all}"
+          [ "$blocks" = all ] && blocks="probe,install,update,open"
+          IFS=, read -ra list <<< "$blocks"
+          for b in "${list[@]}"; do
+            [[ "$b" =~ ^(probe|install|update|open)$ ]] || { echo "::error::Неизвестный блок '$b'"; exit 1; }
+          done
+          dpi="${DPI:-125,150,175}"
+          [[ "$dpi" =~ ^(none|[0-9]{3}(,[0-9]{3})*)$ ]] || { echo "::error::dpi: '$dpi'"; exit 1; }
+          runner="${RUNNER_IN:-windows-2025}"
+          [[ "$runner" =~ ^windows-(11-arm|2025)$ ]] || { echo "::error::Раннер '$runner'"; exit 1; }
+          {
+            echo "blocks_json=$(printf '%s\n' "${list[@]}" | jq -R . | jq -sc .)"
+            echo "blocks_csv=$blocks"
+            echo "video=${VIDEO:-true}"
+            echo "dpi=$dpi"
+            echo "runner=$runner"
+            echo "sabotage=${SABOTAGE:-false}"
+          } >> "$GITHUB_OUTPUT"
+
+  # Эталон реплея Windows (спека 110, Т2; docs/RELEASE.md §6, п. 1а): ci.yml гоняет Windows только на main,
+  # а сверить replay.json.gz нужно до publish-main. Не зависит от блоков, идёт при каждом прогоне.
+  replay:
+    name: Реплей Windows
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      - name: go test Replay
+        run: go test ./internal/album -run Replay -count=1 -v
+
+      # Расхождение: задание остаётся красным, но новый эталон Windows выгружается артефактом -
+      # его скачивают `gh run download -n replay-windows`, сверяют с прежним и коммитят в dev (RELEASE §6, п. 1а).
+      - name: go test Replay -update
+        if: failure()
+        run: go test ./internal/album -run '^TestEditorReplay$' -count=1 -update
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: replay-windows
+          path: internal/album/testdata/replay.json.gz
+          retention-days: 3
+          if-no-files-found: error
+
+  kit:
+    name: Набор qa-kit
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: wails
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+
+      - name: makensis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis
+
+      # Тот же набор, что едет на ноутбук: три exe (qa и rel), установщики 0.25.0 и 0.25.1, ленты, альбомы, qa-albums.exe
+      - name: Набор (qa-kit.sh)
+        run: bash scripts/win/qa-kit.sh --out .gotmp/qa-kit-0.25
+
+      - name: Хеш набора
+        id: hash
+        run: echo "hash=$(sha256sum .gotmp/qa-kit-0.25/kit-sha256.txt | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: qa-kit
+          path: .gotmp/qa-kit-0.25/
+          include-hidden-files: true
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+  scenario:
+    name: Windows ${{ matrix.block }}
+    needs: [plan, kit]
+    if: ${{ needs.plan.outputs.blocks_json != '[]' }}
+    strategy:
+      # блоки независимы: сбой одного не отменяет остальные
+      fail-fast: false
+      matrix:
+        block: ${{ fromJSON(needs.plan.outputs.blocks_json) }}
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        # Windows PowerShell 5.1: в нём есть UIAutomationClient (в pwsh 7 его нет)
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      # Сломанные помощники: сценарий бессмыслен, поэтому провал роняет задание
+      - name: Тесты помощников (test_winqa.ps1)
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          & "$env:GITHUB_WORKSPACE\scripts\win\qa\test_winqa.ps1"
+          exit $LASTEXITCODE
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: qa-kit
+          path: ${{ runner.temp }}\kit
+
+      - name: Сверка набора с заданием kit
+        env:
+          WANT: ${{ needs.kit.outputs.hash }}
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'kit\kit-sha256.txt'
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
+          if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
+
+      # ffmpeg BtbN: закреплённый выпуск и sha256 (сверяется до распаковки). Старые выпуски BtbN удаляет - тогда choco
+      - name: ffmpeg
+        if: ${{ needs.plan.outputs.video == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCH: ${{ runner.arch }}
+        run: |
+          $tag = 'autobuild-2026-10-13-13-05'
+          if ($env:ARCH -eq 'ARM64') {
+            $name = 'ffmpeg-N-127507-g24e860f6d3-winarm64-gpl.zip'
+            $sha = '67485ca1bf1da02303178adc9f5545add3c22e1b74f1f43e37854c35e9d40c67'
+          } else {
+            $name = 'ffmpeg-N-127507-g24e860f6d3-win64-gpl.zip'
+            $sha = 'fbb5a21695435f9fb93ad0209ad09c90ffdd54d5bd0659720b14dedda997e2ea'
+          }
+          $dir = Join-Path $env:RUNNER_TEMP 'ffmpeg'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $ff = $null
+          $ErrorActionPreference = 'Continue'
+          gh release download $tag -R BtbN/FFmpeg-Builds -p $name -D $dir --clobber
+          $zip = Join-Path $dir $name
+          if ((Test-Path -LiteralPath $zip) -and ((Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant() -eq $sha)) {
+            tar -xf $zip -C $dir
+            $ff = Join-Path $dir ([IO.Path]::GetFileNameWithoutExtension($name) + '\bin\ffmpeg.exe')
+          } else {
+            Write-Host "::warning::ffmpeg BtbN download or sha256 failed - installing via choco"
+          }
+          if (-not $ff -or -not (Test-Path -LiteralPath $ff)) {
+            choco install ffmpeg -y --no-progress
+            $ff = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
+          }
+          if (-not $ff) { throw 'ffmpeg not installed' }
+          $ver = & $ff -version
+          if ($LASTEXITCODE -ne 0) { throw "ffmpeg -version exit $LASTEXITCODE" }
+          $ver[0]
+          "WIN_FFMPEG=$ff" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
+
+      # Сценарий всегда выходит с кодом 0: провал пункта - строка в results.jsonl, красит прогон задание report
+      - name: Сценарий (run.ps1)
+        # меньше срока задания (40 мин) с запасом на сводку и выгрузку артефактов; сторож run.ps1 снимает завис раньше
+        timeout-minutes: 33
+        env:
+          BLOCK: ${{ matrix.block }}
+          VIDEO: ${{ needs.plan.outputs.video }}
+          DPI: ${{ needs.plan.outputs.dpi }}
+          SABOTAGE: ${{ needs.plan.outputs.sabotage }}
+          RUNNER_LABEL: ${{ needs.plan.outputs.runner }}
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          $a = @{
+            Block = $env:BLOCK
+            Kit = (Join-Path $env:RUNNER_TEMP 'kit')
+            OutDir = (Join-Path $env:RUNNER_TEMP 'win-qa-out')
+            Video = ($env:VIDEO -eq 'true')
+            Dpi = $env:DPI
+            Sabotage = ($env:SABOTAGE -eq 'true')
+            Runner = $env:RUNNER_LABEL
+          }
+          & "$env:GITHUB_WORKSPACE\scripts\win\qa\run.ps1" @a
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'win-qa-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'summary.md missing' }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: win-qa-${{ matrix.block }}
+          path: ${{ runner.temp }}\win-qa-out\
+          if-no-files-found: warn
+          retention-days: 3
+
+  report:
+    name: Сводка прогона
+    needs: [plan, kit, scenario]
+    if: ${{ always() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: win-qa-*
+          path: ${{ runner.temp }}/in
+
+      # Список пунктов — из docs/qa/update.md, а в ветке winqa/* его нет — тогда из scripts/win/qa-items.txt
+      - name: Сводка (qa_report.py)
+        env:
+          BLOCKS: ${{ needs.plan.outputs.blocks_csv }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/in" "$RUNNER_TEMP/report"
+          upd=""
+          [ -f docs/qa/update.md ] && upd="--update docs/qa/update.md"
+          set +e
+          python3 -I scripts/win/qa_report.py $upd --blocks "$BLOCKS" --in "$RUNNER_TEMP/in" --out "$RUNNER_TEMP/report"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          { echo; cat "$RUNNER_TEMP/report/eyes.md"; } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: win-qa-report
+          path: ${{ runner.temp }}/report/
+          if-no-files-found: warn
+          retention-days: 3

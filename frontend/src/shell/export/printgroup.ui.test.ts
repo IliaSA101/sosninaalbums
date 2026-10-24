@@ -11,6 +11,7 @@ const plan = (o: Partial<PrintPlan>): PrintPlan => ({
   kind: 'fsfera',
   title: 'Для Фотосферы Pro',
   format: '21×30',
+  off: '',
   pages: '',
   spreads: 10,
   spine: 0,
@@ -46,7 +47,20 @@ describe('группа «Печать»', () => {
   })
   it('нет планов — группы «Печать» нет', () => {
     expect(src('PrintGroup.svelte')).toMatch(/\{#if plans\.length\}/)
-    expect(src('ExportDialog.svelte')).toContain('filter((p) => p.format)') // без формата флажка нет
+    expect(src('ExportDialog.svelte')).not.toContain('filter((p) => p.format)') // чужой формат тоже показываем (120)
+    expect(src('ExportDialog.svelte')).toContain('plans={plans ?? []}')
+  })
+  it('off: у плана чужого формата подсказка Go вместо «папка…», запрет под включённым флажком (120)', () => {
+    const off = plan({
+      kind: 'fabrika',
+      format: '',
+      off: 'страница 300 × 200 мм — не формат Фабрики Фотокниги',
+      block: ['Страница 300 × 200 мм — не формат Фабрики Фотокниги'],
+    })
+    const g = src('PrintGroup.svelte')
+    expect(g).toContain('p.off ? `(${p.off})` : printHint(p, hasCover)')
+    expect(g).toContain('class="err blocked"')
+    expect(activePlan([off], 'fabrika')).toBe(off)
   })
   it('block with fix: «Исправить» только у строки fixAt и только при обложке', () => {
     const p = plan({ block: ['Обложка не по шаблону', 'Разворотов нет'], coverFix: true, fixAt: 0 })

@@ -128,5 +128,67 @@ class MarkOrderTest(TmpCase):
         self.assertEqual(MARK, "==")
 
 
+class _Loc:
+    """Локатор-заглушка: число совпадений берёт у страницы, focus() запоминает."""
+
+    def __init__(self, page, sel):
+        self.page, self.sel = page, sel
+        self.first = self
+
+    def count(self):
+        return self.page.counts(self.sel)
+
+    def focus(self):
+        self.page.focused.append(self.sel)
+
+
+class _FakePage:
+    """Страница без браузера: диалог стартового окна и карточка тура закрываются по Esc (карточка — только при фокусе в ней)."""
+
+    def __init__(self, start=True, tour=True):
+        self.start, self.tour, self.focused, self.presses = start, tour, [], []
+        self.keyboard = self
+
+    def counts(self, sel):
+        if sel == "[role=dialog]":
+            return int(self.start) + int(self.tour)
+        if sel == "[data-tour-step]":
+            return int(self.tour)
+        return 0
+
+    def locator(self, sel):
+        return _Loc(self, sel)
+
+    def press(self, key):
+        self.presses.append(key)
+        if self.start:
+            self.start = False
+        elif self.tour and self.focused:
+            self.tour = False
+
+    def wait_for_timeout(self, ms):
+        pass
+
+
+class DismissTest(TmpCase):
+    def stand(self, page):
+        st = Stand(34119, self.tmp())
+        st.page = page
+        return st
+
+    def test_dismiss_closes_tour(self):
+        page = _FakePage()
+        self.stand(page).dismiss_start()
+        self.assertFalse(page.start)
+        self.assertFalse(page.tour)
+        self.assertIn("[data-tour-step] [data-primary]", page.focused)
+
+    def test_dismiss_without_tour(self):
+        page = _FakePage(tour=False)
+        self.stand(page).dismiss_start()
+        self.assertFalse(page.start)
+        self.assertEqual(page.focused, [])
+
+
 if __name__ == "__main__":
     unittest.main()

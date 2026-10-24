@@ -7,6 +7,7 @@
   import { run } from './commands'
   import { countLabel } from './topbar'
   import MenuBar from './MenuBar.svelte'
+  import Icon from '../../base/ui/Icon.svelte'
   import LevelBadge from './LevelBadge.svelte'
   import logo from '../../assets/logo.png'
   import { hasSeam, isSheet, pageSize } from '../../base/geom/sheet'
@@ -24,7 +25,7 @@
 
 <header>
   <div class="group">
-    <img class="logo" src={logo} alt="Sosnina films" draggable="false" title={`Sosnina Albums ${store.version}`} />
+    <img class="logo" src={logo} alt="Sosnina Albums" draggable="false" title={`Sosnina Albums ${store.version}`} />
     <!-- Версия видна на скриншотах — по ним понятно, какая сборка у пользователя -->
     {#if store.version}<span class="version">v{store.version}</span>{/if}
     <MenuBar />
@@ -33,8 +34,12 @@
     </span>
     <div class="sep"></div>
     <span class="pair" data-guide="topbar-undo">
-      <button class="icon" disabled={!store.view.canUndo} onclick={() => run('undo')} title={keymap.tip('Отменить', 'undo')}>↶</button>
-      <button class="icon" disabled={!store.view.canRedo} onclick={() => run('redo')} title={keymap.tip('Повторить', 'redo')}>↷</button>
+      <button class="icon" disabled={!store.view.canUndo} onclick={() => run('undo')} title={keymap.tip('Отменить', 'undo')}
+        ><Icon name="undo" size={18} stroke={1.8} /></button
+      >
+      <button class="icon" disabled={!store.view.canRedo} onclick={() => run('redo')} title={keymap.tip('Повторить', 'redo')}
+        ><Icon name="redo" size={18} stroke={1.8} /></button
+      >
     </span>
   </div>
 
@@ -82,7 +87,12 @@
         <path d="M12 3.5v13M14 7h1.5M14 10h1.5" />
       </svg>
     </button>
-    <button class="accent" disabled={exportShut(store.sheets.length, !!jobs.exporting)} onclick={() => run('export')}>
+    <button
+      class="accent"
+      data-guide="topbar-export"
+      disabled={exportShut(store.sheets.length, !!jobs.exporting)}
+      onclick={() => run('export')}
+    >
       {#if jobs.exporting && jobs.exporting.total > 0}
         Экспорт {jobs.exporting.done} / {jobs.exporting.total}
       {:else if jobs.exporting}
@@ -112,6 +122,14 @@
     align-items: center;
     gap: 4px;
   }
+  /* Левая группа уступает место, когда «сводка» уже сжата до нуля (окно 1024): сжимается только название, как и сводка — с «…» */
+  .group:not(.right) {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .group:not(.right) > :not(.title) {
+    flex: none;
+  }
   .pair {
     display: flex;
     gap: 4px;
@@ -121,6 +139,7 @@
     font-weight: 600;
     margin-right: 10px;
     max-width: 130px;
+    min-width: 24px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -176,7 +195,8 @@
   .icon {
     width: 32px;
     padding: 0;
-    font-size: 18px;
+    display: grid;
+    place-items: center;
   }
   .mode {
     width: 32px;

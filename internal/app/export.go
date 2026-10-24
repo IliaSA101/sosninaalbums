@@ -24,13 +24,14 @@ import (
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// colorReport считает фото альбома с не-sRGB профилем: adobe — сколько пересчитается в sRGB
-// само, other — сколько фото с «чужим» профилем (имя профиля → число), их не пересчитываем.
+// colorReport считает фото альбома с не-sRGB профилем: conv — что пересчитается в sRGB само
+// (имя → число: «Adobe RGB», «Display P3» для всех P3 — iPhone и Xiaomi с разными именами, у прочих
+// матричных — имя профиля), other — фото с «чужим» профилем (имя профиля → число), их не пересчитываем.
 // Цвет берётся из реестра ленты, а если фото там нет (папка закрыта или чтение не дошло) — из
 // заголовка файла. Нечитаемые файлы пропускаются: экспорт упадёт на них с понятной ошибкой.
 // Счёт — по файлам: копии (098) — тот же файл, без двойного счёта и второго чтения заголовка.
-func (a *App) colorReport(p *model.Project) (adobe int, other map[string]int) {
-	other = map[string]int{}
+func (a *App) colorReport(p *model.Project) (conv, other map[string]int) {
+	conv, other = map[string]int{}, map[string]int{}
 	files := make(map[string]model.PhotoRef, len(p.Photos)) // ID файла → любая запись семьи
 	for id, ref := range p.Photos {
 		files[model.BaseID(id)] = ref
@@ -50,7 +51,14 @@ func (a *App) colorReport(p *model.Project) (adobe int, other map[string]int) {
 		}
 		switch col {
 		case imgfile.ColorAdobe:
-			adobe++
+			conv["Adobe RGB"]++
+		case imgfile.ColorP3:
+			conv["Display P3"]++
+		case imgfile.ColorICC:
+			if prof == "" {
+				prof = "RGB-профиль"
+			}
+			conv[prof]++
 		case imgfile.ColorOther:
 			if prof == "" {
 				prof = "неизвестный профиль"
@@ -58,7 +66,7 @@ func (a *App) colorReport(p *model.Project) (adobe int, other map[string]int) {
 			other[prof]++
 		}
 	}
-	return adobe, other
+	return conv, other
 }
 
 // askOptions — окно вопроса «Да / Нет». На Mac Wails рисует кнопки строками Buttons как есть
@@ -112,16 +120,18 @@ func (a *App) OpenFabrika() {
 	openURL(a, printshop.Fabrika.URL(p))
 }
 
-// PrintPlans — готовность альбома к выгрузке для типографий, в таблице которых есть страница
-// (Format не пуст; 21×30 — Фотосфера и Фабрика): окно экспорта запрашивает их при открытии и
-// при смене rev, флажок на план (081 №13). Проект не меняется; нет таких — пустой список.
+// PrintPlans — готовность альбома к выгрузке для типографий: окно экспорта запрашивает их при
+// открытии и при смене rev, флажок на план (081 №13). Страница не формат типографии — план всё
+// равно отдаётся (Format "", Off и запрет в Block, 120): иначе запомненный выбор молча уходил
+// в обычную выгрузку. Лист 031 — пустой список. Проект не меняется.
 func (a *App) PrintPlans() []printshop.Plan {
 	p, _ := a.editor().SnapshotSide()
 	out := []printshop.Plan{}
+	if p.Settings.Sheet {
+		return out // типографии такие листы не принимают, флажок только мешал бы
+	}
 	for _, prof := range printshop.Profiles() {
-		if pl := printshop.Check(p, a.editor().Path(), prof); pl.Format != "" {
-			out = append(out, pl)
-		}
+		out = append(out, printshop.Check(p, a.editor().Path(), prof))
 	}
 	return out
 }
@@ -259,7 +269,7 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 		return false, err
 	}
 	// Профили проверяем тоже до диалога папки: ответ «нет» не должен стоить выбора папки.
-	adobe, other := a.colorReport(export.PickPhotos(p, sel))
+	conv, other := a.colorReport(export.PickPhotos(p, sel))
 	if text := export.ColorWarning(other); text != "" {
 		if ok, err := askYes(a, text); !ok {
 			return false, err
@@ -353,7 +363,7 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 
 	spreads := export.FromView(p, v)
 	export.PinFonts(spreads, gen)
-	j := exportJob{spreads: spreads, pl: pl, opt: opt, dir: dir, stale: stale, adobe: adobe, memo: memo}
+	j := exportJob{spreads: spreads, pl: pl, opt: opt, dir: dir, stale: stale, conv: conv, memo: memo}
 	ctx, cancel := context.WithCancel(a.stopCtx)
 	started = true
 	a.mu.Lock()
@@ -373,9 +383,9 @@ type exportJob struct {
 	pl      export.Plan
 	opt     render.Options
 	dir     string
-	stale   []string // прежние файлы: удаляются только после записи всех новых
-	adobe   int      // фото Adobe RGB — для строки о пересчёте цвета
-	memo    []string // памятка типографии; nil — обычный тост
+	stale   []string       // прежние файлы: удаляются только после записи всех новых
+	conv    map[string]int // пересчитанные в sRGB фото по именам профилей — для строки о цвете
+	memo    []string       // памятка типографии; nil — обычный тост
 }
 
 // runExport — фон экспорта и итог export:done (dir, err, note, memo, stopped). Остановка
@@ -413,7 +423,7 @@ func (a *App) runExport(ctx context.Context, cancel context.CancelFunc, j export
 		msg = err.Error()
 		log.Printf("экспорт: %v", paths.NoPath(err))
 	default:
-		note, memo = export.ColorNote(j.adobe), j.memo
+		note, memo = export.ColorNote(j.conv), j.memo
 		log.Printf("экспорт: %d разворотов за %v", len(j.pl.Jobs), time.Since(start).Round(time.Second))
 		album.LogMem("экспорт")
 		if note != "" {

@@ -171,7 +171,9 @@ func TestExportFabrikaBlocked(t *testing.T) {
 		{book(300, 305, 9, "fabrika-photo"), "Разворотов 9 — у Фабрики Фотокниги («Фотобумага») не меньше 10"},
 		{book(300, 305, 41, "netprint-premium"), "Обложка размечена для «Нетпринт · Премиум» — выберите «Фабрика Фотокниги» в карточке обложки. " +
 			"Разворотов 41 — у Фабрики Фотокниги не больше 40"},
-		{book(201, 152, 2, ""), "Страница 201 × 152 мм — не формат Фабрики Фотокниги. В «Страница» выберите пресет Фабрики Фотокниги"},
+		{book(201, 152, 2, ""), "Страница 201 × 152 мм — не формат Фабрики Фотокниги. В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата"},
+		// Альбом Марины (120): страница 300×200 и обложка Фотосферы — запрет вместо тихой обычной выгрузки.
+		{book(300, 200, 40, "fsfera-thin"), "Страница 300 × 200 мм — не формат Фабрики Фотокниги. В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата"},
 		{model.NewSheet(204, 304), "Лист виньетки в Фабрику Фотокниги не выгружается"},
 	} {
 		e.a.ed.Store(mustEditor(t, c.p, ""))
@@ -233,43 +235,108 @@ func TestExportPrintUnknown(t *testing.T) {
 	}
 }
 
-// TestPrintPlans — планы типографий, в таблице которых есть страница: 21×30 — Фотосфера и Фабрика
-// (по порядку), 30×30 Фабрики — одна, 300×300 и лист 031 — пустой список ([] в JSON). Проект не меняется.
+// TestPrintPlans — планы типографий (120): флажок на каждую при любой странице, кроме листа 031.
+// 21×30 — Фотосфера и Фабрика (по порядку), чужая страница — тоже обе, но с Off и запретом;
+// лист 031 — пустой список ([] в JSON). Проект не меняется.
 func TestPrintPlans(t *testing.T) {
 	e, _ := printEnv(t, 2, 208, 296, "fabrika-layflat-card")
 	before := e.a.editor().View()
+	both := []string{"fsfera", "fabrika"}
 	kinds := func() (out []string) {
 		for _, pl := range e.a.PrintPlans() {
 			out = append(out, pl.Kind)
 		}
 		return out
 	}
-	if got := kinds(); !slices.Equal(got, []string{"fsfera", "fabrika"}) {
+	if got := kinds(); !slices.Equal(got, both) {
 		t.Fatalf("21×30: %v", got)
 	}
 	plans := e.a.PrintPlans()
-	if len(plans[0].Block) != 1 || len(plans[1].Block) != 0 || plans[1].Pages != "Картон" || plans[1].Quality != 100 || plans[0].Quality != 0 {
+	if len(plans[0].Block) != 1 || len(plans[1].Block) != 0 || plans[1].Pages != "Картон" || plans[1].Quality != 100 || plans[0].Quality != 0 ||
+		plans[0].Off != "" || plans[1].Off != "" {
 		t.Fatalf("21×30 с обложкой Фабрики: %+v", plans)
 	}
 	if v := e.a.editor().View(); v.Rev != before.Rev || v.CanUndo != before.CanUndo {
 		t.Fatal("планы изменили проект")
 	}
 	for _, c := range []struct {
-		p    *model.Project
-		want []string
+		p       *model.Project
+		off     [2]bool // у какой типографии (Фотосфера, Фабрика) страница чужая
+		formats [2]string
 	}{
-		{book(300, 305, 12, "fabrika-photo"), []string{"fabrika"}},
-		{book(201, 152, 2, ""), []string{"fsfera"}},
-		{book(300, 300, 2, ""), nil},
-		{model.NewSheet(204, 304), nil},
+		{book(300, 305, 12, "fabrika-photo"), [2]bool{true, false}, [2]string{"", "30×30"}},
+		{book(304, 203, 12, ""), [2]bool{true, false}, [2]string{"", "30×20"}},
+		{book(201, 152, 2, ""), [2]bool{false, true}, [2]string{"20×15", ""}},
+		{book(300, 300, 2, ""), [2]bool{true, true}, [2]string{"", ""}},
 	} {
 		e.a.ed.Store(mustEditor(t, c.p, ""))
-		if got := kinds(); !slices.Equal(got, c.want) {
-			t.Errorf("%v×%v: %v, ждали %v", c.p.Settings.PageW, c.p.Settings.PageH, got, c.want)
+		got := e.a.PrintPlans()
+		if k := kinds(); !slices.Equal(k, both) {
+			t.Errorf("%v×%v: %v, ждали обе", c.p.Settings.PageW, c.p.Settings.PageH, k)
+			continue
+		}
+		for i, pl := range got {
+			if (pl.Off != "") != c.off[i] || pl.Format != c.formats[i] || (pl.Off != "") != (pl.Format == "") {
+				t.Errorf("%v×%v %s: format %q, off %q", c.p.Settings.PageW, c.p.Settings.PageH, pl.Kind, pl.Format, pl.Off)
+			}
 		}
 	}
+	e.a.ed.Store(mustEditor(t, model.NewSheet(204, 304), ""))
 	if b, _ := json.Marshal(e.a.PrintPlans()); !bytes.Equal(b, []byte("[]")) {
-		t.Fatalf("пустой список: %s", b)
+		t.Fatalf("лист 031: %s", b)
+	}
+}
+
+// TestPrintPlansOffFormat — альбом Марины (120): страница 300×200 и обложка «Фотосфера · Тонкие
+// листы» — обе типографии отданы с Off и запретом «Страница 300 × 200 мм…», в JSON поле off есть.
+func TestPrintPlansOffFormat(t *testing.T) {
+	e, _ := printEnv(t, 40, 300, 200, "fsfera-thin")
+	plans := e.a.PrintPlans()
+	if len(plans) != 2 {
+		t.Fatalf("планов %d, ждали 2", len(plans))
+	}
+	for _, pl := range plans {
+		gen := map[string]string{"fsfera": "Фотосферы", "fabrika": "Фабрики Фотокниги"}[pl.Kind]
+		group := map[string]string{"fsfera": "Фотосфера", "fabrika": "Фабрика Фотокниги"}[pl.Kind]
+		if want := "страница 300 × 200 мм — не формат " + gen; pl.Off != want {
+			t.Errorf("%s: off %q, ждали %q", pl.Kind, pl.Off, want)
+		}
+		if len(pl.Block) != 1 || !strings.HasPrefix(pl.Block[0], "Страница 300 × 200 мм") ||
+			!strings.HasSuffix(pl.Block[0], "В «Настройках альбома» выберите типографию «"+group+"» и кнопку формата") {
+			t.Errorf("%s: запрет %q", pl.Kind, pl.Block)
+		}
+		if pl.Format != "" || pl.Spreads != 40 || pl.Folder == "" {
+			t.Errorf("%s: %+v", pl.Kind, pl)
+		}
+	}
+	if b, _ := json.Marshal(plans[1]); !strings.Contains(string(b), `"off":"страница 300 × 200 мм — не формат Фабрики Фотокниги"`) {
+		t.Fatalf("JSON: %s", b)
+	}
+}
+
+// TestFabrika30x20Sizes — Фабрика 30×20 (304×203, обложка fabrika-photo, 40 разворотов, 120): план
+// без запрета, файлы 1-00.jpg и 1-01…1-40.jpg, размеры холста — обложка 8031×2835, развороты
+// 7181×2398. Фото не рендерятся: размер даёт render.CanvasSize от тех же настроек, что у Export.
+func TestFabrika30x20Sizes(t *testing.T) {
+	e, _ := printEnv(t, 40, 304, 203, "fabrika-photo")
+	plans := e.a.PrintPlans()
+	pl := plans[1]
+	if pl.Kind != "fabrika" || pl.Format != "30×20" || pl.Off != "" || len(pl.Block) != 0 || pl.Spreads != 40 || pl.CoverName != "1-00.jpg" {
+		t.Fatalf("план Фабрики: %+v", pl)
+	}
+	p, v := e.a.editor().Snapshot()
+	cw, ch := render.CanvasSize(export.NewCoverJob(p, v, 300, 100).Opt)
+	if cw != 8031 || ch != 2835 {
+		t.Errorf("обложка %d×%d, ждали 8031×2835", cw, ch)
+	}
+	g := p.Geo(nil)
+	if w, h := render.CanvasSize(render.Options{PageW: g.W / 2, PageH: g.H, DPI: 300, Quality: 100}); w != 7181 || h != 2398 {
+		t.Errorf("развороты %d×%d, ждали 7181×2398", w, h)
+	}
+	ep := export.NewPlan(nil, 40, false).WithPrefix("1-").WithCover(export.NewCoverJob(p, v, 300, 100))
+	first, last := ep.Jobs[0].Names(40), ep.Jobs[len(ep.Jobs)-1].Names(40)
+	if len(ep.Jobs) != 40 || !slices.Equal(first, []string{"1-01.jpg"}) || !slices.Equal(last, []string{"1-40.jpg"}) || ep.Cover.Name != "1-00.jpg" {
+		t.Fatalf("файлы: %d заданий, %v…%v, обложка %q", len(ep.Jobs), first, last, ep.Cover.Name)
 	}
 }
 

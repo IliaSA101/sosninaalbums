@@ -163,6 +163,13 @@ describe('справочник функций: стражи', () => {
     expect(ARTICLES.find((x) => x.id === 'autobuild')?.where).toContain('Разнообразие раскладок')
   })
 
+  it('119: «Цветовой профиль фото» — группа «Фото и лента», значок в ленте, слова про Xiaomi, P3 и бледные цвета', () => {
+    const a = ARTICLES.find((x) => x.id === 'color-profile')
+    expect(a).toMatchObject({ title: 'Цветовой профиль фото', group: 'photos', feature: 'base', spot: 'ui:color-badge' })
+    for (const w of ['xiaomi', 'p3', 'бледно', 'srgb']) expect(a?.words, w).toContain(w)
+    expect(a?.how).toContain('Lightroom')
+  })
+
   it('078: «Похожие кадры» — блок «Фото» окна автосборки, якорь строки и запасное место; «Автосборка» называет блок и вариант', () => {
     const a = ARTICLES.find((x) => x.id === 'similar')
     expect(a).toMatchObject({ title: 'Похожие кадры', feature: 'base', spot: 'ui:auto-similar', miss: { spot: 'ui:autobuild' } })

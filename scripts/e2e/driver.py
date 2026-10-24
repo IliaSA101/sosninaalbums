@@ -189,12 +189,26 @@ class Stand:
     def dismiss_start(self) -> None:
         """Стартовое окно («Продолжить», «Последние») само открывается при загрузке и закрывает всё остальное: Esc.
 
+        На свежем стенде после него приходит приветствие тура «Первые шаги» (113): оно не модальное, но перекрывает
+        сцену, поэтому закрывается тоже (Esc при фокусе в карточке, config стенда получает done).
         Настройку «Показывать при запуске» не трогаем — она в config.json стенда.
         """
         self.wait_until(lambda: self.page.locator("[role=dialog]").count() > 0, 3, 0.2)
         for _ in range(3):
             if self.page.locator("[role=dialog]").count() == 0:
                 break
+            self.page.keyboard.press("Escape")
+            self.sleep(0.3)
+        self.dismiss_tour()
+
+    def dismiss_tour(self) -> None:
+        """Закрывает карточку тура «Первые шаги», если она есть: фокус на её главной кнопке и Esc (клавиши тура — при фокусе в карточке)."""
+        card = self.page.locator("[data-tour-step]")
+        self.wait_until(lambda: card.count() > 0, 1.5, 0.2)
+        for _ in range(3):
+            if card.count() == 0:
+                break
+            self.page.locator("[data-tour-step] [data-primary]").first.focus()
             self.page.keyboard.press("Escape")
             self.sleep(0.3)
 

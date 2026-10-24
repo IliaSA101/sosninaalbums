@@ -70,7 +70,7 @@ namespace SaWin {
 '@
 }
 
-$script:VK = @{ Enter = 0x0D; Esc = 0x1B; Tab = 0x09; Win = 0x5B; Alt = 0x12; Ctrl = 0x11; Shift = 0x10; D = 0x44; End = 0x23; L = 0x4C; V = 0x56 }
+$script:VK = @{ Enter = 0x0D; Esc = 0x1B; Tab = 0x09; Win = 0x5B; Alt = 0x12; Ctrl = 0x11; Shift = 0x10; D = 0x44; End = 0x23; Left = 0x25; Right = 0x27; L = 0x4C; V = 0x56 }
 
 # Физические пиксели везде (снимки, UIA, SetCursorPos): без этого при масштабе 125 % координаты разъедутся
 function Initialize-Dpi { [void][SaWin.Native]::SetProcessDPIAware() }
@@ -151,7 +151,8 @@ function Move-Cursor([int]$X, [int]$Y, [double]$Dur = 0.6, [int]$Steps = 30) {
     [void][SaWin.Native]::SetCursorPos($X, $Y)
 }
 
-function Invoke-MouseClick([string]$Mode = 'click') {
+# Режим проверяется: неизвестное слово ('double') молча давало одиночный щелчок и ломало сценарий (спека 118)
+function Invoke-MouseClick([ValidateSet('click', 'dbl', 'right')][string]$Mode = 'click') {
     $down = 0x2; $up = 0x4   # левая кнопка
     if ($Mode -eq 'right') { $down = 0x8; $up = 0x10 }
     $n = 1

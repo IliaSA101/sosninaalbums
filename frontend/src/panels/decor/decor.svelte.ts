@@ -19,21 +19,24 @@ import {
   type DecorItem,
   type DecorKind,
 } from './decor'
-import { albumStanding } from './albumbg'
+import { albumStanding } from '../albumbg/albumbg'
 import { bgNums, bgPickDefault, bgPickShown, bgSelShown, bgTargets, type BgPick } from './bgtargets'
 import { spreadsel } from '../timeline/spreadsel.svelte'
 import { mergeImport, rasterSvgs } from './svgraster'
 import { frameStanding, frameTargets, frameWhereDefault, frameWhereIn, type FrameWhere } from './frames'
 import { frameApi } from './frameapi'
 import { DecorPut } from './decorput.svelte'
+import type { OwnAsk } from '../albumbg/albumown'
 
 // put (067) — вопрос перед постановкой разворота: уходят фото в ленту или заменяются стикеры и надписи.
 // bgMany (077) — то же для фона на набор листов: уходят фото фона.
+// albumOwn (115) — фон альбома, а у count разворотов свой фон: оставить или сделать их как в альбоме.
 export type DecorAsk =
   | { kind: 'rename'; id: string }
   | { kind: 'hide'; id: string; name: string }
   | { kind: 'put'; id: string; text: string }
   | { kind: 'bgMany'; id: string; text: string; targets: GridTarget[] }
+  | { kind: 'albumOwn'; id: string; pages: boolean; own: OwnAsk; count: number }
 
 // Открытое окно: что ставим (вид), на каком листе и в какую область. replace — ID стикера, которому ищут замену
 // («Заменить…» в карточке «Стикер»); нет — стикер добавляется.
@@ -288,6 +291,9 @@ class DecorUi {
   // «Поставить» в вопросах о фоне на набор и о развороте
   confirmBgMany(): Promise<void> {
     return this.put.confirmBgMany()
+  }
+  answerAlbumOwn(all: boolean): Promise<void> {
+    return this.put.answerAlbumOwn(all)
   }
   confirmPut(): Promise<void> {
     return this.put.confirmPut()

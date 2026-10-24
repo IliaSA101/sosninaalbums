@@ -98,7 +98,7 @@ func TestPrefsRoundTrip(t *testing.T) {
 	if p, _ := a.prefsAndRecent(); !p.First || p.Level != prefs.LevelSimple || !p.ShowStart {
 		t.Fatalf("до записи: %+v", p)
 	}
-	if got := a.SetShowStart(false); got != (prefs.Prefs{Level: prefs.LevelSimple, First: true}) {
+	if got := a.SetShowStart(false); got != (prefs.Prefs{Level: prefs.LevelSimple, First: true, TourDue: true}) {
 		t.Fatalf("SetShowStart вернул %+v", got)
 	}
 	got := a.SetLevel("full")
@@ -149,6 +149,14 @@ func TestPrefsFieldsIndependent(t *testing.T) {
 	a.SetLevel("standard")
 	if p := a.GetState().Prefs; p != (prefs.Prefs{Level: prefs.LevelStandard}) {
 		t.Fatalf("устаревший клиент затёр чужое поле: %+v", p)
+	}
+	// Тур (113) — своё поле: ни уровень, ни флажок не меняются, и наоборот.
+	if p := a.SetTour("first", "done"); p != (prefs.Prefs{Level: prefs.LevelStandard, TourMore: true}) {
+		t.Fatalf("SetTour затёр чужое поле: %+v", p)
+	}
+	a.SetShowStart(true)
+	if p := a.SetLevel("full"); p != (prefs.Prefs{Level: prefs.LevelFull, ShowStart: true, TourMore: true}) {
+		t.Fatalf("SetLevel затёр tours: %+v", p)
 	}
 }
 

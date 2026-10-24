@@ -23,6 +23,7 @@ import {
   type BgResult,
 } from './bgtargets'
 import { putQuestion, putToast } from './spreadtpl'
+import { ownAskText, ownBgOf, ownDoneText } from '../albumbg/albumown'
 import { FRAME_NO_PLACES } from './frames'
 import { frameApi } from './frameapi'
 import type { DecorAsk, DecorCur } from './decor.svelte'
@@ -83,6 +84,18 @@ export class DecorPut {
     if (this.h.albumNow()) {
       // 098: одна правка Go — один шаг отмены; тот же фон повторно холостой (rev не меняется)
       const pages = this.h.albumPages && !isSheet(store.view.settings)
+      // 115: у разворотов свой фон, и фон альбома на них не виден — сначала вопрос в этом же окне (тот же фон тоже спрашивает)
+      const own = ownBgOf(store.view)
+      if (own.nums.length > 0) {
+        this.h.ask = {
+          kind: 'albumOwn',
+          id: item.id,
+          pages,
+          own: ownAskText('bg', own, unitOf(store.view.settings)),
+          count: own.nums.length,
+        }
+        return
+      }
       this.h.close()
       await store.run(Api.SetAlbumBg(item.id, pages))
       return
@@ -168,6 +181,18 @@ export class DecorPut {
     } finally {
       this.h.busy = false
     }
+  }
+
+  // Ответ на вопрос 115: «Оставить свой» — прежний SetAlbumBg, «Как в альбоме» — SetAlbumBgToAll и тост; × — dismiss, правки нет.
+  async answerAlbumOwn(all: boolean) {
+    const a = this.h.ask
+    if (a?.kind !== 'albumOwn') return
+    this.h.close()
+    if (!all) {
+      await store.run(Api.SetAlbumBg(a.id, a.pages))
+      return
+    }
+    if (await store.run(Api.SetAlbumBgToAll(a.id, a.pages))) store.notify(ownDoneText('bg', a.count, unitOf(store.view.settings)))
   }
 
   // «Поставить» в вопросе о фоне на набор.

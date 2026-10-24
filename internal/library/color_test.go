@@ -49,7 +49,7 @@ func TestOpenOrientedConvertsAdobe(t *testing.T) {
 	dir := testkit.TempDir(t)
 	src := color.RGBA{200, 100, 50, 255}
 	adobe := testkit.ICCSegment(1, 1, testkit.MatrixProfile(testkit.XYZAdobe, 2.2, testkit.DescV2("Adobe RGB (1998)")))
-	srgb := testkit.ICCSegment(1, 1, testkit.MatrixProfile(testkit.XYZSRGB, 2.2, testkit.DescV2("sRGB")))
+	srgb := testkit.ICCSegment(1, 1, testkit.SRGBProfile(testkit.DescV2("sRGB")))
 
 	cases := []struct {
 		name string
@@ -59,6 +59,10 @@ func TestOpenOrientedConvertsAdobe(t *testing.T) {
 	}{
 		{"adobe icc", [][]byte{adobe}, color.RGBA{227, 100, 42, 255}, 2 * 40 * 30},
 		{"adobe по EXIF R03", [][]byte{testkit.ExifColor(false, 0, 0xFFFF, "R03")}, color.RGBA{227, 100, 42, 255}, 2 * 40 * 30},
+		// 119: опорные значения LittleCMS (design §6); P3 и прочие матричные профили — тоже вдвое в бюджете
+		{"p3 как у Xiaomi", [][]byte{testkit.ICCSegment(1, 1, testkit.ProfileXiaomiP3(true))}, color.RGBA{215, 93, 31, 255}, 2 * 40 * 30},
+		{"prophoto", [][]byte{testkit.ICCSegment(1, 1, testkit.ParaProfile(testkit.XYZProPhoto, 0, []float64{117965.0 / 65536}, testkit.DescV2("ProPhoto RGB")))}, color.RGBA{255, 80, 47, 255}, 2 * 40 * 30},
+		{"p3 с таблицей A2B0 не трогается", [][]byte{testkit.ICCSegment(1, 1, testkit.LUTProfile(testkit.XYZP3Exact, testkit.DescV2("P3 LUT")))}, src, 40 * 30},
 		{"srgb", [][]byte{srgb}, src, 40 * 30},
 		{"без профиля", nil, src, 40 * 30},
 	}
@@ -126,5 +130,19 @@ func TestCacheKeyColor(t *testing.T) {
 	}
 	if again, _ := cacheKey(p, imgfile.ColorAdobe); again != adobe {
 		t.Error("ключ нестабилен")
+	}
+	// 119: p3 и icc — соль «icc1», у adobe остаётся «srgb1» (эталоны и кэш не меняются)
+	salted := func(salt string) string {
+		sum := sha1.Sum(fmt.Appendf(nil, "%s|%d|%d%s", p, st.Size(), st.ModTime().UnixNano(), salt)) //nolint:gosec // как в cacheKey
+		return hex.EncodeToString(sum[:10])
+	}
+	if adobe != salted("|srgb1") {
+		t.Errorf("ключ Adobe изменился: %s, ждали %s", adobe, salted("|srgb1"))
+	}
+	for _, c := range []imgfile.Color{imgfile.ColorP3, imgfile.ColorICC} {
+		got, err := cacheKey(p, c)
+		if err != nil || got != salted("|icc1") || got == want || got == adobe {
+			t.Errorf("цвет %q: ключ %s (%v), ждали %s", c, got, err, salted("|icc1"))
+		}
 	}
 }

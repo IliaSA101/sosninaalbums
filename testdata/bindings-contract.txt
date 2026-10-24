@@ -19,6 +19,7 @@ method ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Prom
 method ApplySpreadTpl(arg1:string,arg2:string,arg3:string):Promise<APP.TplResult>
 method ArrangeLayers(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>
 method ArrangePlaces(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>
+method AssocLater():Promise<APP.AssocView>
 method AutoBuild(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.View>
 method AutoPlan(arg1:Array<string>,arg2:model.AutoOpts):Promise<model.AutoPlan>
 method AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<model.AutoPreview>
@@ -28,7 +29,9 @@ method Backups():Promise<Array<APP.BackupInfo>>
 method CancelCollect():Promise<void>
 method CancelExport():Promise<void>
 method CancelLibrary():Promise<void>
+method CancelUpdate():Promise<void>
 method CheckFolders(arg1:boolean):Promise<void>
+method CheckUpdate():Promise<APP.UpdateInfo>
 method ChooseFiles():Promise<APP.LooseResult>
 method ChooseFolder():Promise<model.View>
 method ClearAlbumBg():Promise<model.View>
@@ -59,6 +62,7 @@ method DeleteSelection(arg1:string,arg2:Array<string>,arg3:Array<string>,arg4:Ar
 method DeleteSpread(arg1:string):Promise<model.View>
 method DeleteSpreads(arg1:Array<string>):Promise<model.View>
 method DeleteText(arg1:string):Promise<model.View>
+method DownloadUpdate():Promise<APP.UpdateInfo>
 method DropFonts(arg1:Array<string>):Promise<Array<string>>
 method DropPhotos(arg1:string,arg2:string,arg3:Array<string>,arg4:number,arg5:string):Promise<APP.DropResult>
 method DuplicateGrid(arg1:string,arg2:number,arg3:boolean):Promise<model.View>
@@ -84,6 +88,7 @@ method ImportFontPaths(arg1:Array<string>):Promise<APP.FontImport>
 method ImportFonts():Promise<APP.FontImport>
 method ImportTemplates():Promise<APP.TplLoad>
 method ImportTemplatesPath(arg1:string):Promise<APP.TplLoad>
+method InstallUpdate():Promise<void>
 method Keymap():Promise<keymap.View>
 method LayoutChoices(arg1:string):Promise<model.Choices>
 method LibraryPacks():Promise<APP.PackList>
@@ -102,11 +107,14 @@ method NewBin(arg1:string,arg2:Array<string>):Promise<model.View>
 method NewProject(arg1:string):Promise<APP.State>
 method NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>
 method NewVignetteSheet(arg1:number,arg2:number):Promise<APP.State>
+method OpenExternal():Promise<APP.State>
 method OpenFabrika():Promise<void>
 method OpenFsfera():Promise<void>
+method OpenInNewer():Promise<void>
 method OpenLink(arg1:string):Promise<void>
 method OpenProject():Promise<APP.State>
 method OpenRecent(arg1:string):Promise<APP.State>
+method OpenUpdatePage():Promise<void>
 method PagePresets():Promise<Array<model.PagePreset>>
 method PasteItems(arg1:model.PasteReq):Promise<APP.PasteResult>
 method PasteNames(arg1:string,arg2:model.NamesOpts):Promise<APP.NamesResult>
@@ -163,6 +171,8 @@ method SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>
 method ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>
 method SetAlbumBg(arg1:string,arg2:boolean):Promise<model.View>
 method SetAlbumBgFade(arg1:number,arg2:string):Promise<model.View>
+method SetAlbumBgToAll(arg1:string,arg2:boolean):Promise<model.View>
+method SetAssoc(arg1:boolean):Promise<APP.AssocView>
 method SetBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method SetBackdropAngle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>
 method SetBackdropBox(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:string):Promise<model.View>
@@ -198,6 +208,7 @@ method SetPlaceRound(arg1:string,arg2:Array<string>,arg3:number):Promise<model.V
 method SetPlaceShape(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
 method SetPlaces(arg1:string,arg2:Array<model.PlaceBox>,arg3:string):Promise<model.View>
 method SetSettings(arg1:model.Settings):Promise<model.View>
+method SetSettingsToAll(arg1:model.Settings):Promise<model.View>
 method SetSheetCaps(arg1:string,arg2:boolean,arg3:model.SheetCaps):Promise<model.View>
 method SetShowStart(arg1:boolean):Promise<prefs.Prefs>
 method SetSpreadName(arg1:string,arg2:string):Promise<model.View>
@@ -211,6 +222,8 @@ method SetTextBox(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model
 method SetTextScale(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>
 method SetTextStyle(arg1:string,arg2:text.Style):Promise<model.View>
 method SetTone(arg1:string,arg2:number,arg3:number):Promise<model.View>
+method SetTour(arg1:string,arg2:string):Promise<prefs.Prefs>
+method SetUpdateCheck(arg1:boolean):Promise<APP.UpdateInfo>
 method SetVignette(arg1:string,arg2:model.Vignette):Promise<APP.GridResult>
 method SetupVignette(arg1:string,arg2:model.VigSetup):Promise<APP.GridResult>
 method ShowBackups():Promise<void>
@@ -222,6 +235,7 @@ method ShowPhotoInExplorer(arg1:string):Promise<void>
 method SortVignette(arg1:string):Promise<model.View>
 method SplitSpread(arg1:string,arg2:number):Promise<model.View>
 method SplitSpreadAuto(arg1:string,arg2:number,arg3:boolean):Promise<model.View>
+method SpreadBgToAlbum(arg1:string):Promise<model.View>
 method SpreadPhotoColors(arg1:string):Promise<Array<string>>
 method StepLayout(arg1:string,arg2:string,arg3:number):Promise<model.View>
 method StraightenBackdrop(arg1:string,arg2:string,arg3:number,arg4:number):Promise<model.View>
@@ -232,10 +246,15 @@ method TransformGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg
 method TurnBackdrop(arg1:string,arg2:string,arg3:number,arg4:string):Promise<model.View>
 method TurnPhotos(arg1:Array<string>,arg2:number):Promise<model.View>
 method Undo():Promise<model.View>
+method UpdateInfo():Promise<APP.UpdateInfo>
 method UpdateLibrary():Promise<APP.LibraryUpdate>
 method VaryLayouts(arg1:Array<string>,arg2:number,arg3:Array<string>):Promise<model.View>
 method VignetteChoices(arg1:string,arg2:number,arg3:number,arg4:string):Promise<Array<model.VigChoice>>
 method WhereUsed(arg1:Array<string>):Promise<Array<model.UsedAt>>
+type APP.AssocView
+  can: boolean
+  on: boolean
+  ask: boolean
 type APP.BackupInfo
   name: string
   time: number
@@ -270,6 +289,7 @@ type APP.DecorItem
   w: number
   h: number
   color?: string
+  dark?: boolean
   pages?: number
   places?: number
   pack?: string
@@ -357,6 +377,12 @@ type APP.NamesResult
   missing: number
   named: number
   seats: number
+type APP.NewerInfo
+  name: string
+  draft: boolean
+  need: string
+  mine: string
+  have: string
 type APP.PackAdd
   pack: PackInfo
   ask: string
@@ -423,12 +449,18 @@ type APP.State
   info?: string
   freshFonts?: string[]
   missing: string[]
+  unread?: Record<string, string>
   version: string
   fonts: text.Family[]
   prefs: prefs.Prefs
   recent: prefs.RecentProject[]
   keymap: keymap.View
   cancelled?: boolean
+  pending?: string
+  newer?: NewerInfo
+  assoc: AssocView
+  fromFile?: boolean
+  stand?: boolean
 type APP.StickerResult
   view: model.View
   id: string
@@ -446,6 +478,18 @@ type APP.TplSave
   canceled: boolean
   saved: number
   text: string
+type APP.UpdateInfo
+  phase: string
+  mode: string
+  version: string
+  notes: string[]
+  done: number
+  total: number
+  error: string
+  atStart: boolean
+  checked: number
+  just: string
+  failed: string
 type collect.Info
   photos: number
   extra: number
@@ -1168,6 +1212,8 @@ type prefs.Prefs
   showStart: boolean
   first: boolean
   custom?: CustomLevel
+  tourDue: boolean
+  tourMore: boolean
 type prefs.RecentProject
   path: string
   name: string
@@ -1177,6 +1223,7 @@ type printshop.Plan
   kind: string
   title: string
   format: string
+  off: string
   pages: string
   spreads: number
   spine: number

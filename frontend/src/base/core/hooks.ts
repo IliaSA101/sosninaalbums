@@ -2,7 +2,7 @@
 // импортирует (docs/STRUCTURE.md, правило 9). Подключение — shell/boot/wire.ts (wire() в main.ts и в
 // тестах, которым нужен верх). Без него store работает «голым»: хуки пустые, ленты не фильтруются.
 import type { KeymapView } from '../types/keys'
-import type { FontFamily, MarkView, Photo, View } from './types'
+import type { FontFamily, MarkView, NewerInfo, Photo, View } from './types'
 
 // Что выбрано для автосборки (034): откуда фото и сколько из них уже в альбоме — для строки окна.
 export interface PickResult {
@@ -72,6 +72,12 @@ export interface StoreHooks {
   // Ворота броска из ленты: ids фото, уже стоящих в альбоме, — вопрос «Фото уже в альбоме». Ответ — ID для Go
   // (запрос копии `<id>-new` или запись переносимого места); null — «Отмена», правки не будет. Нечего спрашивать — ids как есть.
   gate(ids: string[]): Promise<string[] | null>
+
+  // --- открытие .salbum извне (112) ---
+  // State.pending: файл в очереди Go пришёл раньше подписки на событие `open:external`. name — имя без пути.
+  external(name: string): void
+  // State.newer: файл новее программы — окно «Альбом из новой версии» (в ответах открытия приходит вместе с cancelled).
+  newer(info: NewerInfo): void
 }
 
 // Пустые хуки: основа без верха.
@@ -96,4 +102,6 @@ export const noHooks: StoreHooks = {
   select: () => {},
   dropGrid: async () => false,
   gate: async (ids) => ids,
+  external: () => {},
+  newer: () => {},
 }

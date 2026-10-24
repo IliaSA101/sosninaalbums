@@ -1,7 +1,8 @@
 // Проверка перед меткой выпуска: `node scripts/release-check.mjs [--version X.Y.Z] [--root <папка>]`.
 // Ловит механику выпуска, которую до сих пор находило только ревью: версия в четырёх местах (wails.json,
 // README «Status», «Что нового», CHANGELOG), `needs` публикации в release.yml (0.11), эталоны для arm64,
-// LICENSE = GPL v3 и условие 7(b) в NOTICE.md (0.23), прямой вызов scripts/… из workflow без +x (110, Т3).
+// LICENSE = GPL v3 и условие 7(b) в NOTICE.md (0.23), прямой вызов scripts/… из workflow без +x (110, Т3),
+// установщик Windows: задание win-check и имя exe в zip с версией (111, Т3).
 // Без --version берётся productVersion из wails.json (тогда проверяется согласованность остальных мест).
 // Выход ≠ 0 и список ошибок.
 import crypto from 'node:crypto'
@@ -37,6 +38,24 @@ export function checkVersions(root, version) {
   need('whatsnew.ts → WHATS_NEW_VERSION', wn?.match(/WHATS_NEW_VERSION\s*=\s*'([^']+)'/)?.[1])
   if (wn !== null && !/export const WHATS_NEW[^=]*=\s*\[\s*['"`]/.test(wn)) errors.push('whatsnew.ts: список WHATS_NEW пуст')
   return errors
+}
+
+// ---- «Возможности» в README ----
+
+// В разделе «## Возможности» должен быть пункт текущей версии «(X.Y)» (допустим и диапазон «(X.Y–X.Z)»), чтобы список не отставал.
+export function checkReadmeFeatures(root, version) {
+  const readme = read(root, 'README.md')
+  if (readme === null) return ['README.md: нет файла']
+  const m = readme.match(/^## Возможности[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m)
+  if (!m) return ['README.md: нет раздела «## Возможности»']
+  const [maj, min] = version.split('.')
+  const re = new RegExp(`\\(${maj}\\.(\\d+)(?:–${maj}\\.(\\d+))?\\)`, 'g')
+  for (const x of m[1].matchAll(re)) {
+    const lo = Number(x[1])
+    const hi = x[2] === undefined ? lo : Number(x[2])
+    if (lo <= Number(min) && Number(min) <= hi) return []
+  }
+  return [`README.md, «## Возможности»: нет пункта с «(${maj}.${min})» — допишите пункт про версию ${maj}.${min}`]
 }
 
 // ---- CHANGELOG ----
@@ -264,6 +283,31 @@ export function workflowExec(root, modeOf = (rel) => indexMode(root, rel)) {
   return errors
 }
 
+// ---- установщик Windows и имя exe (111) ----
+
+// Задание win-check (установка на раннере) ждёт pack и зовёт сборку и проверку установщика; публикацию без него
+// checkNeeds уже не пропустит (release ждёт все задания). Имя exe в zip — с версией: релизные заметки и инструкция
+// называют его так, иначе фотограф ищет в папке файл, которого там нет.
+export function checkInstaller(root, yml) {
+  const errors = []
+  const jobs = parseJobs(yml)
+  if (!('win-check' in jobs)) errors.push('release.yml: нет задания «win-check» (проверка установщика на windows-latest)')
+  else if (!jobs['win-check'].includes('pack')) errors.push('release.yml: «win-check» не ждёт «pack» (установщик собирается там)')
+  for (const f of ['installer.sh', 'installer-check.ps1']) {
+    if (!yml.includes(f)) errors.push(`release.yml: не вызывается scripts/win/${f}`)
+    if (!fs.existsSync(path.join(root, 'scripts/win', f))) errors.push(`scripts/win/${f}: нет файла`)
+  }
+  const need = (rel, needle, what) => {
+    const text = read(root, rel)
+    if (text === null) errors.push(`${rel}: нет файла`)
+    else if (!text.includes(needle)) errors.push(`${rel}: нет ${what} «${needle}»`)
+  }
+  need('.github/release-notes.md', 'SosninaAlbums-{{VERSION}}.exe', 'имени exe в zip')
+  need('.github/release-notes.md', 'SosninaAlbums-{{VERSION}}-windows-x64-setup.exe', 'установщика')
+  need('docs/install/guide.md', 'SosninaAlbums-<версия>.exe', 'имени exe в zip')
+  return errors
+}
+
 // ---- ролики и снимок README ----
 
 export const WEBP_MAX = 2621440 // 2,5 МБ
@@ -303,12 +347,13 @@ export function checkAll(root, version) {
   if (!/^\d+\.\d+\.\d+$/.test(version)) return { version, errors: [`версия «${version}» — ждали X.Y.Z`] }
   errors.push(...checkVersions(root, version))
   errors.push(...checkChangelog(root, version))
+  errors.push(...checkReadmeFeatures(root, version))
   errors.push(...checkLicense(root))
   errors.push(...checkReadmeMedia(root))
   errors.push(...workflowExec(root))
   const yml = read(root, '.github/workflows/release.yml')
   if (yml === null) errors.push('.github/workflows/release.yml: нет файла')
-  else errors.push(...checkNeeds(yml), ...checkArm64(root, yml))
+  else errors.push(...checkNeeds(yml), ...checkArm64(root, yml), ...checkInstaller(root, yml))
   return { version, errors }
 }
 

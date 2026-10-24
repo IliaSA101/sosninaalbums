@@ -3,7 +3,7 @@
   import { store } from '../../base/core/store.svelte'
   import type { AutoPlan } from '../../base/core/types'
   import { unitOf } from '../../base/geom/sheet'
-  import { albumLine } from './autoalbum'
+  import { albumLine } from '../autoalbum/autoalbum'
   import { altLabel, sourceLine } from './autobuild'
 
   // Строка источника окна «Автосборка» (034) со ссылкой на второй путь (080-3): «· Собрать свободные: N» в окне

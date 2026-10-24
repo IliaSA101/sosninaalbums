@@ -27,6 +27,7 @@ const ctx: MenuCtx = {
   safe: false,
   rulers: true,
   snap: true,
+  assocCan: true, // 112: пункт «Открывать .salbum этой программой» (команда каталога без клавиши)
   recent: [{ path: 'a.salbum', name: 'a', exists: true, modified: 1 }],
 }
 const flat = (items: MenuItem[]): MenuItem[] => items.flatMap((i) => [i, ...(i.sub ? flat(i.sub) : [])])

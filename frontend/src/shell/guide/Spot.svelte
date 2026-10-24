@@ -14,7 +14,7 @@
 <svelte:window bind:innerWidth={winW} bind:innerHeight={winH} />
 
 <div class="sr" role="status" aria-live="polite">
-  {#if spot.cur}{spot.cur.label}. {spot.cur.hint}{/if}
+  {#if spot.cur && (spot.cur.label || spot.cur.hint)}{spot.cur.label}. {spot.cur.hint}{/if}
 </div>
 
 {#if spot.cur && spot.box}
@@ -27,18 +27,20 @@
     style:height="{spot.box.height}px"
     aria-hidden="true"
   ></div>
-  <div
-    class="label"
-    bind:clientWidth={lw}
-    bind:clientHeight={lh}
-    style:left="{at?.left ?? 0}px"
-    style:top="{at?.top ?? 0}px"
-    style:visibility={lh ? undefined : 'hidden'}
-    aria-hidden="true"
-  >
-    <b>{spot.cur.label}</b>
-    {#if spot.cur.hint}<span>{spot.cur.hint}</span>{/if}
-  </div>
+  {#if spot.cur.label || spot.cur.hint}
+    <div
+      class="label"
+      bind:clientWidth={lw}
+      bind:clientHeight={lh}
+      style:left="{at?.left ?? 0}px"
+      style:top="{at?.top ?? 0}px"
+      style:visibility={lh ? undefined : 'hidden'}
+      aria-hidden="true"
+    >
+      <b>{spot.cur.label}</b>
+      {#if spot.cur.hint}<span>{spot.cur.hint}</span>{/if}
+    </div>
+  {/if}
 {/if}
 
 <style>

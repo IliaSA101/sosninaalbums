@@ -87,9 +87,9 @@ describe('export:done (047)', () => {
 
   it('с памяткой — окно «Готово для Фотосферы», тоста нет; сводка цвета остаётся', async () => {
     await ready()
-    handlers['export:done']('C:/out/Иванов', '', 'Пересчитано из Adobe RGB в sRGB: 2 фото', memo)
+    handlers['export:done']('C:/out/Иванов', '', 'Пересчитано в sRGB: 2 фото (Adobe RGB — 2).', memo)
     expect(jobs.exportMemo).toEqual(memo)
-    expect(jobs.exportNote).toBe('Пересчитано из Adobe RGB в sRGB: 2 фото')
+    expect(jobs.exportNote).toBe('Пересчитано в sRGB: 2 фото (Adobe RGB — 2).')
     expect(store.toast).toBeNull()
   })
 

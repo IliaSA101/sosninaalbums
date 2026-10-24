@@ -233,6 +233,19 @@ func (c *Client) Catalog(ctx context.Context, minSeq int64) (Catalog, error) {
 	return cat, nil
 }
 
+// Signed — подписанный конверт по адресу raw (из белого списка источника): не больше limit байт,
+// подпись ключами источника проверяется до разбора; итог — байты body. Для файлов, которые не
+// каталог наборов (манифест обновления программы, спека 111): разбор и пределы — у вызывающего.
+func (c *Client) Signed(ctx context.Context, raw string, limit int64) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, smallTimeout)
+	defer cancel()
+	env, err := c.small(ctx, raw, limit)
+	if err != nil {
+		return nil, err
+	}
+	return Open(env, c.src.Keys)
+}
+
 // small — маленький файл целиком: больше limit — ErrCatalog (тело дальше не читается).
 func (c *Client) small(ctx context.Context, raw string, limit int64) ([]byte, error) {
 	resp, err := c.get(ctx, raw)

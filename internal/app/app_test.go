@@ -111,8 +111,12 @@ func TestLoadStartupNewerDraftUntouched(t *testing.T) {
 	os.WriteFile(a.draftPath(), raw, 0o644)
 
 	p, path, notice := a.loadStartup("")
-	if p == nil || path != "" || !strings.Contains(notice, "более новой версией программы") {
+	if p == nil || path != "" || notice != "" {
 		t.Fatalf("проект %v, путь %q, уведомление %q", p, path, notice)
+	}
+	// Вместо заметки — окно «Черновик из новой версии» (112): State.Newer, один раз.
+	if n := a.GetState().Newer; n == nil || !n.Draft || n.Name != "" || n.Need != "" || a.GetState().Newer != nil {
+		t.Fatalf("State.Newer черновика: %+v", n)
 	}
 	if !a.draftNewer.Load() {
 		t.Fatal("флаг draftNewer не поднят")

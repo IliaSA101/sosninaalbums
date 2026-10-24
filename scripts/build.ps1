@@ -2,6 +2,9 @@
 # wails build -clean, затем exe переименовывается в «SosninaAlbums-<версия>.exe» — версия из wails.json (productVersion),
 # ПРАВЯТСЯ ВМЕСТЕ с двойником scripts/build.sh (Linux, macOS; там же exe для Windows кросс-сборкой).
 # чтобы у Марины и в GitHub Release было видно, какая это сборка. Работает в Windows PowerShell 5.1 и pwsh 7.
+# -Installer: ещё и установщик build/bin/SosninaAlbums-<версия>-windows-x64-setup.exe (нужны makensis и bash из Git for Windows;
+# scripts/win/installer.sh, спека 111). Выпускной установщик собирает CI.
+param([switch]$Installer)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -21,6 +24,9 @@ $env:GOLANGCI_LINT_CACHE = Join-Path (Join-Path $main '.gotmp') 'cache-golangci'
 $ver = (Get-Content (Join-Path $root 'wails.json') -Raw -Encoding UTF8 | ConvertFrom-Json).info.productVersion
 if (-not $ver) { throw 'нет info.productVersion в wails.json' }
 
+# CGO выключен, как в кросс-сборке build.sh и CI: иначе в exe другой build ID и пометка CGO, и независимая пересборка
+# установщика (release-sign.mjs) не сойдётся побайтно
+$env:CGO_ENABLED = '0'
 wails build -clean -trimpath
 if ($LASTEXITCODE -ne 0) { throw "wails build: код $LASTEXITCODE" }
 
@@ -36,3 +42,11 @@ foreach ($s in @("Users\$env:USERNAME", "Users/$env:USERNAME", $root, $rootFwd))
     if ($text.Contains($s)) { throw "в exe найдена строка '$s' — личные данные в сборке, публиковать нельзя" }
 }
 Write-Host "Готово: $out"
+
+if ($Installer) {
+    $bash = Get-Command bash -ErrorAction SilentlyContinue
+    if (-not $bash) { throw 'для -Installer нужен bash (Git for Windows) и makensis в PATH' }
+    # bash из Git for Windows путей с обратными косыми не разбирает
+    & $bash.Source ((Join-Path $root 'scripts/win/installer.sh') -replace '\\', '/') --exe ($out -replace '\\', '/') --version $ver --out ($bin -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "installer.sh: код $LASTEXITCODE" }
+}

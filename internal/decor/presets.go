@@ -23,7 +23,7 @@ func (p preset) item(w, h float64) Item {
 			name = m.Name
 		}
 	}
-	it := Item{ID: p.id, Theme: p.theme, Name: name, URL: gen.Query(p.spec, w, h), Color: p.color}
+	it := Item{ID: p.id, Theme: p.theme, Name: name, URL: gen.Query(p.spec, w, h), Color: p.color, Dark: lightStickers[p.id]}
 	if gen.IsArt(p.spec.Kind) { // стикер: плитка в его пропорции; узор заполняет область — 0
 		rs, _ := gen.Resolve(p.spec)
 		it.Aspect = rs.Aspect

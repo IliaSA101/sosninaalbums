@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -55,10 +56,115 @@ func TestReorderInGridNoop(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(12, 12, 127, 127, "a"), edtest.Gp(142, 12, 127, 127, "b")})
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
 	edtest.AddPhotos(e, "s1", []model.PhotoInfo{edtest.Photo("b")}, 0)
-	if _, err := e.MovePhoto("b", "s1", 0); err != nil {
+	// MovePhoto внутри сетки — сдвиг (114), см. TestMoveInGridShifts; здесь бросок своего фото на свой лист.
+	if _, _, err := e.DropPhotos("s1", "", []model.PhotoInfo{edtest.Photo("b")}, -1, ""); err != nil {
 		t.Fatal(err)
 	}
 	edtest.Same(t, e, rev, undo, "перестановка в сетке")
+}
+
+// 114: MovePhoto своего фото ручного разворота — сдвиг по местам: места (геометрия, форма, «Целиком»,
+// поворот, табличка) стоят, фото (кадр, зеркало, тон, прозрачность, подпись) едут; шаг один, своя
+// щель и обложка — холостые.
+func TestMoveInGridShifts(t *testing.T) {
+	places := []*model.Place{
+		edtest.Gp(12, 12, 100, 80, "a"), edtest.Gp(130, 12, 60, 60, "b"), edtest.Gp(200, 12, 50, 90, ""),
+		edtest.Gp(12, 120, 90, 70, "c"), edtest.Gp(120, 120, 120, 50, "d"),
+	}
+	e := edtest.GridEd(t, places)
+	ids := []string{}
+	for _, pl := range edtest.P(e).Spreads[0].Grid {
+		ids = append(ids, pl.ID)
+	}
+	e.SetPlaceFit("s1", ids[:1], model.FitContain)
+	e.SetPlaceShape("s1", ids[:1], model.ShapeOval)
+	e.SetPlaceAngle("s1", ids[0], 10)
+	e.SetPlacePerson("s1", ids[0], model.Person{Last: "Иванов"}, "")
+	e.SetFrame("a", 2, 0.3, -0.2)
+	e.SetFlip([]string{"a"}, "h")
+	e.SetTone("a", 10, -5)
+	e.SetPhotoFade([]string{"a"}, 0.4, "")
+	e.SetCaption("a", "подпись", "")
+	edtest.MustGrid(t, e)
+
+	geo := func() []model.Place {
+		var out []model.Place
+		for _, pl := range edtest.P(e).Spreads[0].Grid {
+			c := *pl
+			c.Photo = ""
+			out = append(out, c)
+		}
+		return out
+	}
+	was, refA := geo(), edtest.P(e).Photos["a"]
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+
+	if _, err := e.MovePhoto("a", "s1", 3); err != nil {
+		t.Fatal(err)
+	}
+	edtest.MustGrid(t, e)
+	if got := edtest.PhotosOf(e, 0); !slices.Equal(got, []string{"b", "c", "", "a", "d"}) {
+		t.Fatalf("места: %v", got)
+	}
+	if got := edtest.P(e).Spreads[0].Photos; !slices.Equal(got, []string{"b", "c", "a", "d"}) {
+		t.Fatalf("Photos: %v", got)
+	}
+	if !reflect.DeepEqual(geo(), was) {
+		t.Fatalf("места сдвинулись:\n%+v\n%+v", geo(), was)
+	}
+	if !reflect.DeepEqual(edtest.P(e).Photos["a"], refA) {
+		t.Fatalf("свойства фото не поехали: %+v ≠ %+v", edtest.P(e).Photos["a"], refA)
+	}
+	if edtest.Rev(e) != rev+1 || edtest.UndoLen(e) != undo+1 {
+		t.Fatalf("rev %d→%d, undo %d→%d", rev, edtest.Rev(e), undo, edtest.UndoLen(e))
+	}
+
+	// Своя щель (сразу до и после фото; a теперь третье из четырёх) — холостая.
+	rev, undo = edtest.Rev(e), edtest.UndoLen(e)
+	for _, at := range []int{2, 3} {
+		if _, err := e.MovePhoto("a", "s1", at); err != nil {
+			t.Fatal(err)
+		}
+		edtest.Same(t, e, rev, undo, fmt.Sprintf("своя щель %d", at))
+	}
+	// Неизвестное фото — не правка.
+	if _, err := e.MovePhoto("zz", "s1", 0); err != nil {
+		t.Fatal(err)
+	}
+	edtest.Same(t, e, rev, undo, "неизвестное фото")
+
+	// −1 и больше числа фото — в конец.
+	e.Undo()
+	if got := edtest.PhotosOf(e, 0); !slices.Equal(got, []string{"a", "b", "", "c", "d"}) {
+		t.Fatalf("Undo: %v", got)
+	}
+	edtest.MustGrid(t, e)
+	for _, at := range []int{-1, 99} {
+		if _, err := e.MovePhoto("a", "s1", at); err != nil {
+			t.Fatal(err)
+		}
+		if got := edtest.PhotosOf(e, 0); !slices.Equal(got, []string{"b", "c", "", "d", "a"}) {
+			t.Fatalf("в конец (%d): %v", at, got)
+		}
+		e.Undo()
+	}
+	e.Redo() // Redo возвращает последний сдвиг в конец
+	if got := edtest.PhotosOf(e, 0); !slices.Equal(got, []string{"b", "c", "", "d", "a"}) {
+		t.Fatalf("Redo: %v", got)
+	}
+}
+
+// 114: обложка не переставляется MovePhoto — через p.Find её нет, фото обложки идёт путём AddPhotos.
+func TestMoveCoverPhotoNoop(t *testing.T) {
+	e := edtest.CoverEd(t, "cover", []*model.Place{edtest.Gp(12, 12, 127, 127, "a"), edtest.Gp(142, 12, 127, 127, "b")})
+	rev, undo := edtest.Rev(e), edtest.UndoLen(e)
+	if _, err := e.MovePhoto("cover", model.CoverID, 0); err != nil {
+		t.Fatal(err)
+	}
+	edtest.Same(t, e, rev, undo, "обложка")
+	if got := edtest.P(e).Cover.Sheet.Photos; !slices.Equal(got, []string{"cover"}) {
+		t.Fatalf("обложка: %v", got)
+	}
 }
 
 func TestRemoveEmptiesPlace(t *testing.T) {

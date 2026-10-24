@@ -44,7 +44,7 @@ var artGens = func() []*gen {
 
 // artGen — генератор стикера: Draw рисует в пространстве (0..a)×(0..1), a — пропорция рамки.
 func artGen(d art.Def) *gen {
-	meta := Meta{Kind: d.Kind, Name: d.Name, Inks: d.Inks, Aspect: d.Aspect, Random: d.Random, Stretch: d.Stretch}
+	meta := Meta{Kind: d.Kind, Name: d.Name, Inks: d.Inks, Aspect: d.Aspect, Random: d.Random, Stretch: d.Stretch, Image: d.Image}
 	return &gen{meta: meta, art: true, draw: func(c *canvas, s Spec) {
 		a := meta.Aspect
 		if meta.Stretch {

@@ -201,3 +201,11 @@ func SetBackground(p *model.Project, spreadID, scope, c string) {
 		s.BgR = c
 	}
 }
+
+// ColorsToAlbum — часть Editor.SetSettingsToAll (115): снимает свой цвет страниц у всех
+// разворотов, дальше они идут за цветом альбома. Обложка — вне p.Spreads, её цвет остаётся (q115-3).
+func ColorsToAlbum(p *model.Project) {
+	for _, s := range p.Spreads {
+		s.BgL, s.BgR = "", ""
+	}
+}

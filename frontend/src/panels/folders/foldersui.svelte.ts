@@ -44,7 +44,7 @@ class FoldersUi {
   // Дерево по текущим папкам и фото, ветка «Фото отдельно» — последней (с памятью: окно и обработчики зовут его часто).
   forest(): TreeNode[] {
     const folders = this.tree(store.view.folders, store.photos, store.view.loose ?? [])
-    const group = this.loose(store.view.loose ?? [], store.byId, store.scan.active)
+    const group = this.loose(store.view.loose ?? [], store.byId, store.unread, store.scan.active)
     const l = this.last
     if (l && l.folders === folders && l.group === group) return l.out
     const out = group ? [...folders, group] : folders

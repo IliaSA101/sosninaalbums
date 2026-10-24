@@ -74,7 +74,7 @@
       {/each}
     </div>
 
-    <div class="group" role="group" aria-label="Флажок">
+    <div class="group flags" role="group" aria-label="Флажок">
       <button
         class="flag"
         class:on={shared.flag === 1}
@@ -136,6 +136,10 @@
   .group {
     display: inline-flex;
     flex-wrap: nowrap;
+  }
+  /* Две кнопки флажков по 26 px вплотную сливались в одну — разводим. */
+  .flags {
+    gap: 4px;
   }
   .ico {
     width: 16px;

@@ -116,9 +116,10 @@ export function coverAvailable(v: Pick<View, 'cover' | 'settings'>): boolean {
   return !!v.cover && !v.settings.sheet
 }
 
-// План включённой типографии: выбор запомнен, и у страницы такой план есть (флажок показан). Иначе null — режима нет.
+// План включённой типографии: выбор запомнен, и такой план пришёл (флажок показан). Иначе null — режима нет.
+// План чужого формата (format "") тоже берём: в block у него запрет, и тихо уйти в обычную выгрузку нельзя (120).
 export function activePlan(plans: readonly PrintPlan[] | null, pref: '' | PrintKind): PrintPlan | null {
-  return (pref && plans?.find((p) => p.kind === pref && p.format)) || null
+  return (pref && plans?.find((p) => p.kind === pref)) || null
 }
 
 // Щелчок по флажку типографии: включённый выключается, другой переключает (включён не больше одного).

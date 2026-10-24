@@ -5,7 +5,7 @@ import { toggleKey } from './platform'
 import { errText, withSkipped } from '../words/errtext'
 import { Nav } from './nav.svelte'
 import { jobs } from './jobs.svelte'
-import { AutoRun } from './autorun.svelte'
+import { AutoRun } from '../auto/autorun.svelte'
 import { SpreadOps } from './spreadops.svelte'
 import { Toasts, stepToast, undoToast, type Toast } from './toasts.svelte'
 import type { MarkMap, PickResult } from './hooks'
@@ -17,7 +17,20 @@ import { mergeSnapshot, noEvents } from './startstate'
 import { movedFrom, movedText, type Moved } from './strip'
 import { prefs } from '../prefs/prefs.svelte'
 import { COVER_ID } from '../geom/sheet'
-import type { Family, FontFamily, GridResult, Photo, RecentProject, ScanProgress, Settings, State, Variety, View, Zone } from './types'
+import type {
+  AssocView,
+  Family,
+  FontFamily,
+  GridResult,
+  Photo,
+  RecentProject,
+  ScanProgress,
+  Settings,
+  State,
+  Variety,
+  View,
+  Zone,
+} from './types'
 
 class Store extends Nav {
   photos = $state<Photo[]>([])
@@ -26,12 +39,17 @@ class Store extends Nav {
   loaded = $state(false)
   // Версия программы из wails.json (Go отдаёт в GetState)
   version = $state('')
+  stand = $state(false) // стенд QA: Go не открывает браузер и проводник (State.stand)
   // Шрифты текстовых блоков (State.fonts, спека 006); зарегистрированы в document.fonts.
   fonts = $state<FontFamily[]>([])
   // Недавние альбомы (State.recent): список «Файл ▸ Последние» и стартового окна (U2).
   recent = $state<RecentProject[]>([])
+  // Связь .salbum (State.assoc, 112): вопрос в стартовом окне и пункт «Файл»; меняют SetAssoc/AssocLater (shell/dialogs/assoc).
+  assoc = $state<AssocView>({ can: false, on: false, ask: false })
   // ID фото, которых нет на диске (State.missing и событие missing).
   missing = $state<string[]>([])
+  // 117: отдельные файлы, которые найдены, но не читаются (ID → готовая фраза причины); State.unread и событие unread.
+  unread = $state<Record<string, string>>({})
   // Имена файлов пропавших фото (ID → имя): в ленте их нет, берём у Go при смене missing (setMissing).
   missingNames = $state<Record<string, string>>({})
   private namesReq = 0
@@ -99,6 +117,7 @@ class Store extends Nav {
 
   // События photos/scan/missing, пришедшие, пока ждём снимок состояния (startstate.ts).
   private seen = noEvents()
+  private unreadSeen = false // событие unread пришло раньше снимка
 
   // Альбом заменён целиком: отметки и прошлая автосборка прежнего не нужны.
   private reloaded() {
@@ -108,6 +127,7 @@ class Store extends Nav {
 
   async init() {
     this.seen = noEvents()
+    this.unreadSeen = false
     EventsOn('library', (photos: Photo[]) => {
       this.seen.photos = true
       this.photos = photos ?? []
@@ -125,6 +145,11 @@ class Store extends Nav {
     EventsOn('missing', (ids: string[] | null) => {
       this.seen.missing = true
       this.setMissing(ids ?? [])
+    })
+    // 117: полная замена, не слияние; после смены добавлений Go шлёт заново
+    EventsOn('unread', (m: Record<string, string> | null) => {
+      this.unreadSeen = true
+      this.unread = m ?? {}
     })
     // 082: полный список шрифтов (загрузка, ×, откат, шрифты из папки собранного альбома) заменяет прежний
     EventsOn('fonts', (list: FontFamily[] | null) => {
@@ -144,20 +169,35 @@ class Store extends Nav {
       this.photos = m.photos
       this.scan = m.scan
       this.setMissing(m.missing)
+      if (!this.unreadSeen) this.unread = st.unread ?? {}
       this.version = st.version ?? ''
+      this.stand = st.stand === true
       this.fonts = st.fonts ?? []
       prefs.load(st.prefs)
+      this.settleStartWindow(st)
       if (st.keymap) this.hooks.keymapLoaded(st.keymap)
       this.recent = st.recent ?? []
+      if (st.assoc) this.assoc = st.assoc
       // Не ждём: ошибка шрифта не должна мешать старту, текст пока рисуется запасным.
       this.hooks.fontsLoaded(this.fonts)
       // Ошибка открытия последнего проекта при старте: событие пришло бы до подписки
       if (st.notice) this.notify(st.notice, 'error')
       this.afterOpen(st)
+      // 112: файл пришёл до подписки окна на `open:external` — очередь в State, а не событие.
+      if (st.pending) this.hooks.external(st.pending)
+      if (st.newer) this.hooks.newer(st.newer) // 112: старт на альбоме новее программы
     } finally {
       this.loaded = true
       jobs.endOpening() // альбом открыт: окно хода (073) гаснет, даже если (total, total) потерялось
     }
+  }
+
+  // Стартовое окно «Продолжить: …» поверх открытого файла лишнее (112): запуск по двойному щелчку — человек уже выбрал
+  // альбом; файл новее программы не открылся, и окно «Альбом из новой версии» важнее (иначе оно лежало бы под
+  // стартовым). Первый запуск (уровень ещё не выбран) окно сохраняет: «новее» ложится поверх него
+  // (App.svelte: NewerAskDialog после StartDialog).
+  private settleStartWindow(st: State) {
+    if ((st.fromFile || st.newer) && !prefs.first) prefs.closeStart()
   }
 
   // Разовое после открытия альбома (запуск и меню): тост info (шрифты из папки альбома) и проверка свежих начертаний окном.
@@ -369,7 +409,7 @@ class Store extends Nav {
     }
   }
 
-  // «Автосборка» и «Пересобрать…» (078) — autorun.svelte.ts; здесь входы для окон, меню и тостов.
+  // «Автосборка» и «Пересобрать…» (078) — base/auto/autorun.svelte.ts; здесь входы для окон, меню и тостов.
   openAuto() {
     this.autorun.open()
   }
@@ -443,14 +483,18 @@ class Store extends Nav {
   async replaceState(p: Promise<unknown>): Promise<boolean> {
     // События, пришедшие до ответа (rescan после Open/New), свежее снимка.
     this.seen = noEvents()
+    this.unreadSeen = false
     try {
       const st = (await p) as State
+      // 112: файл новее программы — Go шлёт окно вместе с cancelled; смотрим до раннего возврата.
+      if (st.newer) this.hooks.newer(st.newer)
       if (st.cancelled === true) return true
       this.reloaded() // другой альбом: отметки перечитать, даже если marksRev тот же
       this.apply(st.view)
       const cur = { photos: this.photos, scan: this.scan, missing: this.missing }
       this.photos = mergeSnapshot(cur, { photos: st.photos ?? [] }, this.seen).photos
       if (st.recent) this.recent = st.recent
+      if (!this.unreadSeen) this.unread = st.unread ?? {} // другой альбом — чужие причины не остаются
       this.afterOpen(st)
       this.selected.clear()
       this.hooks.spreadsCleared()

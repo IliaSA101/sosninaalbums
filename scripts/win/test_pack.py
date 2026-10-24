@@ -22,6 +22,7 @@ import pack  # noqa: E402
 
 V = "1.2.3"
 FOLDER = "Sosnina Albums " + V
+EXE_IN_ZIP = "SosninaAlbums-%s.exe" % V  # имя exe в zip — с версией (спека 111)
 DATE = "2026-10-20T12:00:00Z"
 CHANGELOG = """# История изменений
 
@@ -138,29 +139,50 @@ class TestPack(Base):
         self.assertEqual(os.path.basename(path), "SosninaAlbums-1.2.3-windows-x64.zip")
         with zipfile.ZipFile(path) as z:
             self.assertEqual(z.namelist(), [
-                FOLDER + "/SosninaAlbums.exe",
+                FOLDER + "/" + EXE_IN_ZIP,
                 FOLDER + "/Как установить (Windows).pdf",
                 FOLDER + "/Что нового.txt",
                 FOLDER + "/THIRD_PARTY_NOTICES.txt",
                 FOLDER + "/LICENSE",
                 FOLDER + "/NOTICE.md",
             ])
-            self.assertEqual(z.read(FOLDER + "/SosninaAlbums.exe"), b"MZ" + b"\x00" * 5000)
+            self.assertEqual(z.read(FOLDER + "/" + EXE_IN_ZIP), b"MZ" + b"\x00" * 5000)
             self.assertEqual(z.read(FOLDER + "/Как установить (Windows).pdf"), b"%PDF-1.7 pdf")
             self.assertEqual(z.read(FOLDER + "/THIRD_PARTY_NOTICES.txt"), "Уведомления\n".encode("utf-8"))
             for i in z.infolist():
                 self.assertEqual(i.create_system, 3)
                 self.assertEqual(i.compress_type, zipfile.ZIP_DEFLATED)
                 self.assertEqual(i.date_time, (2026, 10, 20, 12, 0, 0))
-            self.assertEqual(z.getinfo(FOLDER + "/SosninaAlbums.exe").external_attr >> 16, stat.S_IFREG | 0o755)
+            self.assertEqual(z.getinfo(FOLDER + "/" + EXE_IN_ZIP).external_attr >> 16, stat.S_IFREG | 0o755)
             self.assertEqual(z.getinfo(FOLDER + "/Что нового.txt").external_attr >> 16, stat.S_IFREG | 0o644)
         # stdout: список записей, sha256, затем путь последней строкой
         lines = out.strip().splitlines()
-        self.assertIn(FOLDER + "/SosninaAlbums.exe", out)
+        self.assertIn(FOLDER + "/" + EXE_IN_ZIP, out)
         with open(path, "rb") as f:
             self.assertIn("sha256  " + hashlib.sha256(f.read()).hexdigest(), lines[-2])
         self.assertEqual(self.check_code(path), 0)
         self.assertEqual(self.check_code(path, "--os", "windows", "--version", V), 0)
+
+    def test_windows_old_exe_name_rejected(self):
+        # прежнее имя без версии и чужая версия в имени — отказ check, у Mac и Linux имена прежние
+        path, _ = self.pack_windows()
+        for bad in ("SosninaAlbums.exe", "SosninaAlbums-9.9.9.exe"):
+            renamed = os.path.join(self.dir, "old-" + bad + ".zip")
+            with zipfile.ZipFile(path) as zin, zipfile.ZipFile(renamed, "w") as zout:
+                for i in zin.infolist():
+                    zi = zipfile.ZipInfo(i.filename.replace(EXE_IN_ZIP, bad), i.date_time)
+                    zi.external_attr = i.external_attr
+                    zout.writestr(zi, zin.read(i))
+            code, _, err = self.run_pack("check", renamed, "--os", "windows")
+            self.assertEqual(code, 1, bad)
+            self.assertIn(EXE_IN_ZIP, err)
+        # exe рядом нет вовсе — тоже отказ
+        no_exe = os.path.join(self.dir, "noexe.zip")
+        with zipfile.ZipFile(path) as zin, zipfile.ZipFile(no_exe, "w") as zout:
+            for i in zin.infolist():
+                if not i.filename.endswith(".exe"):
+                    zout.writestr(i, zin.read(i))
+        self.assertEqual(self.check_code(no_exe, "--os", "windows"), 1)
 
     def test_macos_layout_and_check(self):
         path, _ = self.pack_macos()

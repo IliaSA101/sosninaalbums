@@ -130,6 +130,16 @@
         "custom": false
       },
       {
+        "id": "toggleAssoc",
+        "label": "Открывать .salbum этой программой",
+        "short": "Связь",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
         "id": "addFolder",
         "label": "Добавить папку с фото…",
         "short": "Папка фото",
@@ -400,6 +410,26 @@
         "keys": [
           "F1"
         ],
+        "custom": false
+      },
+      {
+        "id": "tour",
+        "label": "Первые шаги",
+        "short": "Шаги",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "videos",
+        "label": "Видео о программе",
+        "short": "Видео",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
         "custom": false
       },
       {

@@ -158,3 +158,39 @@ func BenchmarkLayout1000(b *testing.B) {
 		})
 	}
 }
+
+// Одиночный завершающий \n строки не даёт (как HTML/contenteditable редактора).
+func TestLayoutTrailingNewline(t *testing.T) {
+	st := Style{Font: "greatvibes", Size: 80, Color: "#222222", Align: "left"}
+	for _, c := range []struct {
+		s    string
+		want int
+	}{
+		{"", 1},
+		{"а", 1},
+		{"а\n", 1},
+		{"а\n\n", 2},
+		{"а\n\n\n", 3},
+		{"\n", 1},
+		{"\n\n", 2},
+		{"a\nb", 2},
+		{"a\nb\n", 2},
+		{"a\n\nb", 3},
+		{"а\r\n", 1},
+	} {
+		if n := len(Layout(c.s, st, 200).Lines); n != c.want {
+			t.Errorf("%q: строк %d, нужно %d", c.s, n, c.want)
+		}
+	}
+	h := func(s string) float64 { return Layout(s, st, 200).H }
+	if a, b := h("Сава и Вася\n"), h("Сава и Вася"); a != b {
+		t.Errorf("H с \\n в конце %.3f, без %.3f", a, b)
+	}
+	if !(h("Сава и Вася\n\n") > h("Сава и Вася")) {
+		t.Error("пустая строка после Enter должна расти рамку")
+	}
+	// кэш и прямой расчёт согласованы
+	if a, b := Cached("Сава и Вася\n", st, 200).H, h("Сава и Вася"); a != b {
+		t.Errorf("Cached H %.3f, нужно %.3f", a, b)
+	}
+}

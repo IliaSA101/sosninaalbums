@@ -23,7 +23,7 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
 const { default: AutoAskDialog } = await import('./AutoAskDialog.svelte')
 const { gridAct } = await import('../../panels/layouts/gridact.svelte')
 const { store } = await import('../../base/core/store.svelte')
-const { glueAsk } = await import('../../panels/timeline/menuact.svelte')
+const { glueAsk } = await import('../../panels/spreadmenu/menuact.svelte')
 const { modalStack } = await import('../../base/modal/modalstack.svelte')
 
 const grid = { id: 's1', grid: true, photos: [], rects: [] }

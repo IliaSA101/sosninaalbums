@@ -10,8 +10,6 @@ import (
 	"os"
 
 	"github.com/disintegration/imaging"
-
-	"github.com/IliaSA101/sosninaalbums/internal/colorspace"
 )
 
 // MaxPixels — предел размера оригинала. Полный декод 250 Мп — это ~1 ГБ RGBA;
@@ -45,43 +43,58 @@ func OpenRegular(path string) (*os.File, error) {
 }
 
 // checkFile — CheckSize, но возвращает ещё и вес декода в бюджете памяти (decodeWeight)
-// и класс цветового профиля (Adobe RGB пересчитывается при декоде).
+// и класс цветового профиля (Adobe RGB, P3 и прочие матричные профили пересчитываются при декоде).
 func checkFile(path string) (int64, Color, error) {
 	f, err := OpenRegular(path)
 	if err != nil {
 		return 0, ColorNone, err
 	}
 	defer f.Close() //nolint:errcheck // чтение: ошибка закрытия ничего не теряет
-	return checkOpened(f)
+	n, h, err := checkOpened(f)
+	return n, h.Color, err
 }
 
 // checkOpened — проверка заголовка уже открытого файла; указатель после неё не определён.
-func checkOpened(f *os.File) (int64, Color, error) {
+func checkOpened(f *os.File) (int64, Head, error) {
 	d, err := DimsOf(f, MaxPixels)
 	if err != nil {
-		return 0, ColorNone, err
+		return 0, Head{Orient: 1}, err
 	}
 	h := Head{Orient: 1}
 	if _, err := f.Seek(0, io.SeekStart); err == nil {
 		h = Header(f)
 	}
-	return decodeWeight(d, h), h.Color, nil
+	return decodeWeight(d, h), h, nil
 }
 
 // decodeWeight — сколько единиц бюджета (~4 байта на пиксель) занимает декод: 16-битный PNG
 // декодируется в RGBA64/NRGBA64 (8 байт на пиксель), а EXIF-поворот (AutoOrientation) и пересчёт
-// Adobe RGB держат оригинал и NRGBA-копию одновременно. Пересчёт идёт по повёрнутой NRGBA на месте,
-// так что поворот и Adobe вместе — одна лишняя копия, не две.
+// профиля (Adobe RGB, P3…) держат оригинал и NRGBA-копию одновременно. Пересчёт идёт по повёрнутой NRGBA на месте,
+// так что поворот и Adobe вместе — одна лишняя копия, не две. WebP по замеру (8000×8000, аллокации декода
+// к 4 байтам на пиксель): lossy — 0,4; lossless — 1,0 (палитра 16 цветов — 1,5); lossy с альфой — 2,1
+// (NYCbCrA плюс временный NRGBA декодера ALPH). Отсюда ×2 для lossless и ×2,25 для альфы.
 func decodeWeight(d Dims, h Head) int64 {
 	n := int64(d.W) * int64(d.H)
 	if d.Color == color.RGBA64Model || d.Color == color.NRGBA64Model {
 		n *= 2
 	}
-	if h.Color == ColorAdobe || h.Orient >= 2 {
+	if d.Format == "webp" {
+		switch d.Color {
+		case color.YCbCrModel:
+		case color.NYCbCrAModel:
+			n = n * 9 / 4
+		default:
+			n *= 2
+		}
+	}
+	if h.Color.converts() || h.Orient >= 2 {
 		n *= 2
 	}
 	return n
 }
+
+// converts — класс, цвета которого пересчитываются в sRGB при декоде.
+func (c Color) converts() bool { return c == ColorAdobe || c == ColorP3 || c == ColorICC }
 
 func CheckDims(w, h int) error {
 	if w <= 0 || h <= 0 {
@@ -95,7 +108,7 @@ func CheckDims(w, h int) error {
 
 // OpenOriented — единственный способ декодировать оригинал: сначала проверка размера
 // по заголовку, потом место в общем бюджете памяти и полный декод с учётом EXIF-поворота.
-// Фото в Adobe RGB пересчитывается в sRGB сразу после декода, до любого уменьшения:
+// Фото в Adobe RGB, Display P3 и другом матричном профиле пересчитывается в sRGB сразу после декода, до любого уменьшения:
 // миниатюры, превью и экспорт получают одинаковые цвета. Вызывающий обязан вызвать release,
 // когда изображение больше не нужно.
 func OpenOriented(path string) (img image.Image, release func(), err error) {
@@ -128,11 +141,11 @@ func OpenOrientedCtx(ctx context.Context, path string) (img image.Image, release
 	// Заголовок сверяется ещё раз на дескрипторе, с которого идёт декод: файл,
 	// подменённый (переименованием или заменой) между проверкой и открытием, не обходит
 	// лимиты. Перезапись на месте при FILE_SHARE_WRITE после этой проверки не закрывается.
-	n2, col2, err := checkOpened(f)
+	n2, h2, err := checkOpened(f)
 	if err != nil {
 		return nil, nil, err
 	}
-	if n2 != n || col2 != col {
+	if n2 != n || h2.Color != col {
 		return nil, nil, errors.New("файл изменился во время чтения")
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
@@ -142,8 +155,8 @@ func OpenOrientedCtx(ctx context.Context, path string) (img image.Image, release
 	if err != nil {
 		return nil, nil, err
 	}
-	if col == ColorAdobe {
-		img = colorspace.AdobeToSRGB(img)
+	if h2.xf != nil { // таблицы — из заголовка с того же дескриптора, что и декод
+		img = h2.xf.ToSRGB(img)
 	}
 	done = true
 	return img, func() { DecodeBudget.Release(n) }, nil

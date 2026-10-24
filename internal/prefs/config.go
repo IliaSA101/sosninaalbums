@@ -46,6 +46,16 @@ type Config struct {
 	// MyColors — «Свои цвета» окна выбора цвета (109): "#rrggbb", новые первыми, ≤ MaxMyColors.
 	// Правила списка — colors.go.
 	MyColors []string `json:"myColors,omitempty"`
+	// Tours — состояние туров обучения (113): id → "pending" | "done" (tours.go). Чужие id
+	// (новая версия) при записи сохраняются; чистка — только при чтении в Of.
+	Tours map[string]string `json:"tours,omitempty"`
+	// Update — проверка и установка обновления программы (111, update.go).
+	Update *Update `json:"update,omitempty"`
+	// Assoc — открытие .salbum двойным щелчком (112): "" — не решено (стартовое окно спросит),
+	// "on" — согласие (связь обновляется сама), "off" — не спрашивать и не регистрировать.
+	Assoc string `json:"assoc,omitempty"`
+	// AssocLater — версия major.minor, на которой нажали «Не сейчас»: вопрос вернётся в следующей.
+	AssocLater string `json:"assocLater,omitempty"`
 }
 
 // configKeys — ключи config.json, которыми владеет эта версия (по тегам Config).

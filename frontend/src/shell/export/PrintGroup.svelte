@@ -5,8 +5,8 @@
   import ExportGroup from './ExportGroup.svelte'
   import { hasFix, memoLine, printHint, togglePrint } from './exportopts'
 
-  // Группа «Печать» окна «Экспорт» (047, 081; вынесено из ExportDialog): по флажку на типографию, у которой для страницы
-  // есть план; включён не больше одного. Под флажками — памятка, запреты Go и предупреждения включённой типографии.
+  // Группа «Печать» окна «Экспорт» (047, 081; вынесено из ExportDialog): по флажку на каждую типографию из планов Go (страница чужого
+  // формата — тоже, с подсказкой off и запретом под включённым флажком); включён не больше одного. Под флажками — памятка, запреты Go и предупреждения включённой типографии.
   // Все тексты и проверки приходят из Go; здесь только рисуем.
   let {
     plans,
@@ -32,7 +32,7 @@
           checked={pref === p.kind}
           onchange={(e) => setPref(togglePrint(pref, p.kind, e.currentTarget.checked))}
         />{p.title}
-        <span class="hint">{printHint(p, hasCover)}</span></label
+        <span class="hint">{p.off ? `(${p.off})` : printHint(p, hasCover)}</span></label
       >
     {/each}
   </ExportGroup>

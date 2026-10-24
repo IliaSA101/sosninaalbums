@@ -4,7 +4,8 @@
   import { run } from './commands'
   import { menuUi } from './menuui.svelte'
   import { menuCtx } from './menuctx'
-  import { buildMenu, type MenuId, type MenuItem } from './menu'
+  import { buildMenu, hasIcons, hasMarks, type MenuId, type MenuItem } from './menu'
+  import Icon from '../../base/ui/Icon.svelte'
   import { placePopover, placeSubmenu, type Box } from '../../base/ui/popover'
 
   // Своя строка меню (не системная, спека 010): щелчок открывает, наведение переключает соседнее меню,
@@ -168,6 +169,8 @@
 <svelte:window onkeydowncapture={key} onpointerdowncapture={outside} onresize={close} onblur={close} />
 
 {#snippet items(list: MenuItem[], nested: boolean)}
+  {@const icons = hasIcons(list)}
+  {@const marks = hasMarks(list)}
   {#each list as it (it.id)}
     {#if it.sep}<div class="sep" role="separator"></div>{/if}
     <button
@@ -175,13 +178,17 @@
       aria-checked={it.checked}
       aria-haspopup={it.sub ? 'menu' : undefined}
       aria-expanded={it.sub ? sub?.id === it.id : undefined}
+      class:iconed={icons && !marks}
       data-item={it.id}
       disabled={it.disabled}
       title={it.hint}
       onpointerenter={(e) => enter(it, e.currentTarget, nested)}
       onclick={(e) => pick(it, e.currentTarget, e.detail === 0)}
     >
-      <span class="mark" aria-hidden="true">{it.checked ? '✓' : ''}</span>
+      {#if marks}<span class="mark" aria-hidden="true">{it.checked ? '✓' : ''}</span>{/if}
+      {#if icons}<span class="ico" aria-hidden="true"
+          >{#if it.icon}<Icon name={it.icon} size={16} stroke={1.8} />{/if}</span
+        >{/if}
       <span class="label">{it.label}</span>
       {#if it.sub}<kbd>▸</kbd>{:else if it.keys}<kbd>{it.keys}</kbd>{/if}
     </button>
@@ -286,6 +293,17 @@
     width: 16px;
     text-align: center;
     color: var(--accent);
+  }
+  /* Список со значками и без отметок — как MenuList (меню фото): отступ 10, зазор 8 */
+  .drop button.iconed {
+    padding-left: 10px;
+    gap: 8px;
+  }
+  .ico {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    display: flex;
   }
   .label {
     flex: 1;

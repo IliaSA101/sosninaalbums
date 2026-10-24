@@ -28,7 +28,7 @@ func TestGenCatalog(t *testing.T) {
 			t.Errorf("%+v: повтор, грамматика, Known или имя", m)
 		}
 		seen[m.Kind] = true
-		if len(m.Inks) > MaxInks || (len(m.Inks) == 0) != m.Paper {
+		if len(m.Inks) > MaxInks || (len(m.Inks) == 0) != (m.Paper || m.Image) {
 			t.Errorf("%s: цветов %d (текстура %v)", m.Kind, len(m.Inks), m.Paper)
 		}
 		for _, v := range m.Inks {

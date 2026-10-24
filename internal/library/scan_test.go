@@ -40,7 +40,10 @@ func TestScanColor(t *testing.T) {
 	testkit.JPEGSegments(t, dir, "adobe_icc.jpg", 40, 30, icc(testkit.XYZAdobe, 2.2, testkit.DescV2("Adobe RGB (1998)")))
 	testkit.JPEGSegments(t, dir, "adobe_exif.jpg", 40, 30, testkit.ExifColor(false, 0, 0xFFFF, "R03"))
 	testkit.JPEGSegments(t, dir, "p3.jpg", 40, 30, icc(testkit.XYZP3, 2.2, testkit.DescV4("Display P3")))
-	testkit.JPEGSegments(t, dir, "srgb.jpg", 40, 30, icc(testkit.XYZSRGB, 2.2, testkit.DescV2("sRGB IEC61966-2.1")))
+	testkit.JPEGSegments(t, dir, "xiaomi.jpg", 40, 30, testkit.ICCSegment(1, 1, testkit.ProfileXiaomiP3(false)))
+	testkit.JPEGSegments(t, dir, "prophoto.jpg", 40, 30, testkit.ICCSegment(1, 1, testkit.ParaProfile(testkit.XYZProPhoto, 0, []float64{1.8}, testkit.DescV2("ProPhoto RGB"))))
+	testkit.JPEGSegments(t, dir, "p3lut.jpg", 40, 30, testkit.ICCSegment(1, 1, testkit.LUTProfile(testkit.XYZP3, testkit.DescV2("P3 LUT"))))
+	testkit.JPEGSegments(t, dir, "srgb.jpg", 40, 30, testkit.ICCSegment(1, 1, testkit.SRGBProfile(testkit.DescV2("sRGB IEC61966-2.1"))))
 	testkit.JPEGSegments(t, dir, "rot.jpg", 40, 30, testkit.ExifColor(true, 6, 0xFFFF, "R03"))
 	testkit.JPEG(t, dir, "plain.jpg", 40, 30)
 	testkit.CMYKJPEG(t, dir, "cmyk.jpg", 40, 30)
@@ -55,7 +58,10 @@ func TestScanColor(t *testing.T) {
 	}{
 		"adobe_icc.jpg":  {imgfile.ColorAdobe, "Adobe RGB (1998)"},
 		"adobe_exif.jpg": {imgfile.ColorAdobe, imgfile.ICCAdobeEXIF},
-		"p3.jpg":         {imgfile.ColorOther, "Display P3"},
+		"p3.jpg":         {imgfile.ColorP3, "Display P3"}, // 119: P3 пересчитывается (было other)
+		"xiaomi.jpg":     {imgfile.ColorP3, testkit.XiaomiP3Name},
+		"prophoto.jpg":   {imgfile.ColorICC, "ProPhoto RGB"},
+		"p3lut.jpg":      {imgfile.ColorOther, "P3 LUT"},
 		"srgb.jpg":       {imgfile.ColorSRGB, "sRGB IEC61966-2.1"},
 		"rot.jpg":        {imgfile.ColorAdobe, imgfile.ICCAdobeEXIF},
 		"plain.jpg":      {imgfile.ColorNone, ""},
@@ -240,7 +246,7 @@ func TestScanMemo(t *testing.T) {
 	a := testkit.JPEG(t, dir, "a.jpg", 40, 30)
 	testkit.JPEG(t, dir, "b.jpg", 30, 40)
 	s := NewScanner()
-	scan := func() (photos []Photo, skipped []string, memo int) {
+	scan := func() (photos []Photo, skipped []Skip, memo int) {
 		var fin ScanProgress
 		photos, skipped, err := s.Scan(context.Background(), Sources{Folders: []string{dir}}, func(_ []Photo, pr ScanProgress, final bool) {
 			if final {
@@ -276,7 +282,7 @@ func TestScanMemo(t *testing.T) {
 		t.Fatal(err)
 	}
 	photos, skipped, memo := scan()
-	if len(photos) != 1 || len(skipped) != 1 || skipped[0] != a || memo != 1 {
+	if len(photos) != 1 || len(skipped) != 1 || skipped[0].Path != a || memo != 1 {
 		t.Fatalf("после смены времени: фото %d, пропущено %v, из памяти %d", len(photos), skipped, memo)
 	}
 	// «нечитаемый» тоже запомнен, пока файл не меняется
@@ -494,7 +500,7 @@ func TestScannerTake(t *testing.T) {
 	if run.state[0] != stBad || run.state[1] != stOK || run.res[1].Name != "b" || run.read != 2 {
 		t.Errorf("состояние %v, res[1] %q, прочитано %d", run.state, run.res[1].Name, run.read)
 	}
-	if e, ok := s.memo["a"]; !ok || !e.bad {
+	if e, ok := s.memo["a"]; !ok || e.why == "" {
 		t.Errorf("память для битого: %+v %v", e, ok)
 	}
 }

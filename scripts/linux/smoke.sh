@@ -81,6 +81,7 @@ if [ "$KIND" = deb ]; then
   want() { grep -E -- "$1" <<<"$list" >/dev/null || fail "1 пакет" "в пакете нет записи $2"; }
   want '^-rwxr-xr-x root/root +[0-9]+ .* \./usr/bin/sosninaalbums$' "/usr/bin/sosninaalbums с правами 0755 от root"
   want '^-rw-r--r-- root/root +[0-9]+ .* \./usr/share/applications/sosninaalbums\.desktop$' "sosninaalbums.desktop (0644)"
+  want '^-rw-r--r-- root/root +[0-9]+ .* \./usr/share/mime/packages/sosninaalbums\.xml$' "mime-тип .salbum (0644)"
   want '^-rw-r--r-- root/root +[0-9]+ .* \./usr/share/icons/hicolor/512x512/apps/sosninaalbums\.png$' "значок 512x512 (0644)"
   want '^-rw-r--r-- root/root +[0-9]+ .* \./usr/share/doc/sosninaalbums/copyright$' "doc/copyright"
   want '^-rw-r--r-- root/root +[0-9]+ .* \./usr/share/doc/sosninaalbums/THIRD_PARTY_NOTICES\.txt$' "doc/THIRD_PARTY_NOTICES.txt"
@@ -100,6 +101,25 @@ if [ "$KIND" = deb ]; then
     echo "::warning::$dv"
   fi
   pass "1 пакет" "$(field Package) $VERSION amd64, Depends GTK 3 и WebKitGTK 4.1, права 0755/0644, $dv"
+
+  # ---------- 1б. Связь .salbum (спека 112-14) ----------
+  # .desktop: открывает файл (%f) и объявляет наш тип
+  grep -qE '^Exec=.* %f$' "$DESKTOP" || fail "1б mime" "в Exec .desktop нет %f"
+  grep -qE '^MimeType=(.*;)?application/x-sosninaalbums;' "$DESKTOP" || fail "1б mime" "в .desktop нет MimeType=application/x-sosninaalbums"
+  # Установка в контейнере не нужна: базу mime собираем из xml пакета в своей XDG_DATA_HOME, система владельца не затрагивается
+  if command -v update-mime-database >/dev/null && command -v xdg-mime >/dev/null; then
+    MIMEHOME="$WORK/mimehome"
+    mkdir -p "$MIMEHOME/mime/packages"
+    cp "$WORK/root/usr/share/mime/packages/sosninaalbums.xml" "$MIMEHOME/mime/packages/" || fail "1б mime" "в пакете нет mime-файла"
+    update-mime-database "$MIMEHOME/mime" >"$OUT/logs/smoke-mime.txt" 2>&1 || fail "1б mime" "update-mime-database: $(head -n 1 "$OUT/logs/smoke-mime.txt")"
+    printf '{}' >"$WORK/a.salbum"
+    got=$(XDG_DATA_HOME="$MIMEHOME" XDG_DATA_DIRS="$MIMEHOME:/usr/share" xdg-mime query filetype "$WORK/a.salbum" 2>>"$OUT/logs/smoke-mime.txt")
+    [ "$got" = application/x-sosninaalbums ] || fail "1б mime" "xdg-mime query filetype = '$got', нужен application/x-sosninaalbums"
+    pass "1б mime" "xdg-mime: a.salbum = $got, в .desktop %f и MimeType"
+  else
+    row "1б mime" "пропуск" "нет update-mime-database или xdg-mime; .desktop проверен (%f, MimeType)"
+    echo "::warning::нет update-mime-database/xdg-mime — тип .salbum не проверен"
+  fi
 else
   mkdir -p "$WORK/root"
   tar -xzf "$PKG" -C "$WORK/root" || fail "1 архив" "tar не распаковал $(basename "$PKG")"

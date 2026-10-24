@@ -186,7 +186,9 @@ func DescV4(s string) []byte {
 // BuildICC собирает профиль в памяти: заголовок, таблица тегов, данные.
 func BuildICC(space string, tags ...ICCTag) []byte {
 	hdr := make([]byte, iccHeaderLen)
+	copy(hdr[12:], "mntr") // класс: монитор
 	copy(hdr[16:], space)
+	copy(hdr[20:], "XYZ ") // PCS
 	copy(hdr[36:], "acsp")
 	binary.BigEndian.PutUint32(hdr[128:], uint32(len(tags))) //nolint:gosec // единицы
 	off := iccHeaderLen + iccTagEntryLen*len(tags)
