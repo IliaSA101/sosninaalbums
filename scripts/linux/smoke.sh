@@ -107,19 +107,26 @@ if [ "$KIND" = deb ]; then
   grep -qE '^Exec=.* %f$' "$DESKTOP" || fail "1б mime" "в Exec .desktop нет %f"
   grep -qE '^MimeType=(.*;)?application/x-sosninaalbums;' "$DESKTOP" || fail "1б mime" "в .desktop нет MimeType=application/x-sosninaalbums"
   # Установка в контейнере не нужна: базу mime собираем из xml пакета в своей XDG_DATA_HOME, система владельца не затрагивается
-  if command -v update-mime-database >/dev/null && command -v xdg-mime >/dev/null; then
-    MIMEHOME="$WORK/mimehome"
-    mkdir -p "$MIMEHOME/mime/packages"
-    cp "$WORK/root/usr/share/mime/packages/sosninaalbums.xml" "$MIMEHOME/mime/packages/" || fail "1б mime" "в пакете нет mime-файла"
-    update-mime-database "$MIMEHOME/mime" >"$OUT/logs/smoke-mime.txt" 2>&1 || fail "1б mime" "update-mime-database: $(head -n 1 "$OUT/logs/smoke-mime.txt")"
-    printf '{}' >"$WORK/a.salbum"
-    got=$(XDG_DATA_HOME="$MIMEHOME" XDG_DATA_DIRS="$MIMEHOME:/usr/share" xdg-mime query filetype "$WORK/a.salbum" 2>>"$OUT/logs/smoke-mime.txt")
-    [ "$got" = application/x-sosninaalbums ] || fail "1б mime" "xdg-mime query filetype = '$got', нужен application/x-sosninaalbums"
-    pass "1б mime" "xdg-mime: a.salbum = $got, в .desktop %f и MimeType"
+  # Тип спрашиваем у инструмента, читающего базу shared-mime-info: xdg-mime без рабочего стола (CI) смотрит в содержимое
+  # файла ({} = application/json), а не в glob — поэтому gio (libglib2.0-bin) или mimetype
+  if command -v gio >/dev/null; then
+    mime_of() { gio info -a standard::content-type "$1" | sed -n 's/^ *standard::content-type: //p'; }
+    mime_tool=gio
+  elif command -v mimetype >/dev/null; then
+    mime_of() { mimetype -b "$1"; }
+    mime_tool=mimetype
   else
-    row "1б mime" "пропуск" "нет update-mime-database или xdg-mime; .desktop проверен (%f, MimeType)"
-    echo "::warning::нет update-mime-database/xdg-mime — тип .salbum не проверен"
+    fail "1б mime" "нет gio (libglib2.0-bin) и mimetype — тип .salbum проверить нечем"
   fi
+  command -v update-mime-database >/dev/null || fail "1б mime" "нет update-mime-database (shared-mime-info) — тип .salbum проверить нечем"
+  MIMEHOME="$WORK/mimehome"
+  mkdir -p "$MIMEHOME/mime/packages"
+  cp "$WORK/root/usr/share/mime/packages/sosninaalbums.xml" "$MIMEHOME/mime/packages/" || fail "1б mime" "в пакете нет mime-файла"
+  update-mime-database "$MIMEHOME/mime" >"$OUT/logs/smoke-mime.txt" 2>&1 || fail "1б mime" "update-mime-database: $(head -n 1 "$OUT/logs/smoke-mime.txt")"
+  printf '{}' >"$WORK/a.salbum"
+  got=$(XDG_DATA_HOME="$MIMEHOME" XDG_DATA_DIRS="$MIMEHOME:/usr/share" mime_of "$WORK/a.salbum" 2>>"$OUT/logs/smoke-mime.txt")
+  [ "$got" = application/x-sosninaalbums ] || fail "1б mime" "$mime_tool: тип a.salbum = '$got', нужен application/x-sosninaalbums"
+  pass "1б mime" "$mime_tool: a.salbum = $got, в .desktop %f и MimeType"
 else
   mkdir -p "$WORK/root"
   tar -xzf "$PKG" -C "$WORK/root" || fail "1 архив" "tar не распаковал $(basename "$PKG")"
