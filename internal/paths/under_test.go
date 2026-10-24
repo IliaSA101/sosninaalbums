@@ -168,7 +168,7 @@ func TestCoverRoot(t *testing.T) {
 // Linked на диске: обычная папка и пропавший путь — нет; ссылка или junction — да (Windows без
 // прав на ссылку — junction, его создаёт любой пользователь; не вышло — Skip).
 func TestLinked(t *testing.T) {
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	plain := filepath.Join(dir, "real")
 	if err := os.Mkdir(plain, 0o755); err != nil {
 		t.Fatal(err)

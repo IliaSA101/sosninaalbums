@@ -4,6 +4,9 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -74,4 +77,37 @@ func gridSheet(cols, rows, cell int) *image.NRGBA {
 		}
 	}
 	return img
+}
+
+// tempDir — как t.TempDir(), но в os.TempDir(), а не в GOTMPDIR внутри модуля: иначе имя папки
+// каждый раз новое и go test не кэширует пакет. testkit сюда нельзя (depguard: devtools не
+// тянет internal), поэтому копия его TempDir без повтора удаления.
+func tempDir(t testing.TB) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "sheetcut-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+// selfExe — символическая ссылка на тестовый бинарь вне модуля (приём TestHelperProcess): запуск
+// самого бинаря из .gotmp иначе попадает в ключ кэша go test. Без ссылки — os.Args[0].
+// Копия testkit.SelfExe (devtools не импортирует internal, depguard): ветка Windows та же —
+// ссылка без .exe там не запускается. Страж TestNoOwnBinaryLink в testkit держит обе копии.
+func selfExe(t testing.TB) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return os.Args[0]
+	}
+	exe, err := filepath.Abs(os.Args[0])
+	if err != nil {
+		return os.Args[0]
+	}
+	link := filepath.Join(tempDir(t), "selfexe")
+	if os.Symlink(exe, link) != nil {
+		return os.Args[0]
+	}
+	return link
 }

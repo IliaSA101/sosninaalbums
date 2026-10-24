@@ -1,4 +1,4 @@
-"""win-qa.yml (спека 118): триггеры, задания и права, закреплённые действия, срок артефактов. Нужен PyYAML (нет - тест пропускается)."""
+"""win-qa.yml (спека 118): триггеры, задания и права, закреплённые действия, срок артефактов. Нужен PyYAML: вне CI без него тест пропускается, в CI (переменная CI) - провал."""
 
 import os
 import re
@@ -18,14 +18,21 @@ def steps(job):
     return job.get("steps", [])
 
 
-@unittest.skipUnless(yaml is not None and os.path.isfile(WORKFLOW), "нужны PyYAML и .github/workflows/win-qa.yml")
+# Как makensis в test_installer: в CI PyYAML обязателен (scripts/win/requirements.txt), иначе страж молча ничего не проверял бы
+@unittest.skipUnless(yaml is not None or os.environ.get("CI"), "нужен PyYAML (pip install -r scripts/win/requirements.txt)")
+@unittest.skipUnless(os.path.isfile(WORKFLOW), "нет .github/workflows/win-qa.yml")
 class WinQaWorkflow(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if yaml is None:  # в CI провал даёт setUp; вне CI класс уже пропущен
+            return
         with open(WORKFLOW, encoding="utf-8") as f:
             cls.text = f.read()
         cls.doc = yaml.safe_load(cls.text)
         cls.on = cls.doc.get("on", cls.doc.get(True))
+
+    def setUp(self):
+        self.assertIsNotNone(yaml, "в CI PyYAML обязателен (pip install --require-hashes -r scripts/win/requirements.txt)")
 
     def test_triggers_only_winqa_branches_and_dispatch(self):
         self.assertEqual(set(self.on), {"push", "workflow_dispatch"})

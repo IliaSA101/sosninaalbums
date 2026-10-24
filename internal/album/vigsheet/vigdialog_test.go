@@ -449,6 +449,7 @@ func TestVignettePreviewFast(t *testing.T) {
 	}
 	slices.Sort(ds)
 	t.Logf("предпросмотр, 101 разворот, 64 места: медиана %v, мин %v", ds[len(ds)/2], ds[0])
+	testkit.CostTest(t)
 	if lim := testkit.Limit(25 * time.Millisecond); ds[len(ds)/2] > lim {
 		t.Fatalf("медиана %v, предел %v", ds[len(ds)/2], lim)
 	}

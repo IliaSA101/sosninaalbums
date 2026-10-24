@@ -6,7 +6,7 @@ export type LinkId = 'source' | 'license' | 'telegram' | 'marina' | 'bug' | 'ide
 
 // Условие 7(b) лицензии (NOTICE.md): изменённые версии показывают эту строку и адрес в этом окне.
 export const BASED_ON = 'Основано на Sosnina Albums, автор Илья Соснин'
-export const REPO_TEXT = 'github.com/IliaSA101/sosninaalbums'
+export const REPO_TEXT = 'github.com/IliaSA101/sosninaalbums' // caps-ok: адрес репозитория
 
 export const STAND_LINK_TEXT = 'На стенде ссылки не открываются'
 

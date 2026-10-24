@@ -166,3 +166,39 @@ describe('тур: ловушка и открытые окна', () => {
     expect(trapsOn()).toBe(true)
   })
 })
+
+describe('тур: области, которых карточка не закрывает (122)', () => {
+  const at = (el: HTMLElement, r: { left: number; top: number; width: number; height: number }) => {
+    el.getBoundingClientRect = () => ({ ...r, right: r.left + r.width, bottom: r.top + r.height, x: r.left, y: r.top, toJSON: () => ({}) })
+  }
+
+  it('селекторы avoid всех шагов принимает querySelector', async () => {
+    const { TOUR } = await import('./steps')
+    for (const s of TOUR) for (const sel of s.avoid ?? []) expect(() => document.querySelector(sel), `${s.id}: ${sel}`).not.toThrow()
+  })
+
+  it('шаг 1: avoid — рамка ленты фото, обрезанная по окну; без кольца и на шаге без avoid — пусто', async () => {
+    prefs.load({ level: 'full', showStart: false, first: false, custom: null, tourDue: false })
+    store.loaded = true
+    render(Tour)
+    tour.start('menu')
+    flushSync()
+    expect(tour.avoid).toEqual([]) // приветствие: кольца нет
+    tour.go(0)
+    flushSync()
+    anchor()
+    const lib = document.createElement('div')
+    lib.setAttribute('data-guide', 'library')
+    at(lib, { left: 0, top: window.innerHeight - 200, width: window.innerWidth + 300, height: 400 })
+    document.body.append(lib)
+    await wait(100)
+    flushSync()
+    expect(tour.ring).not.toBeNull()
+    expect(tour.avoid).toEqual([{ left: 0, top: window.innerHeight - 200, width: window.innerWidth, height: 200 }])
+    lib.remove() // области нет на экране — пропуск
+    expect(tour.avoid).toEqual([])
+    tour.go(1) // шаг «Лента фото»: avoid не задан
+    flushSync()
+    expect(tour.avoid).toEqual([])
+  })
+})

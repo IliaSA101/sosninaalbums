@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/decor/fetch"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Командная строка установщика: тихо, с перезапуском и /D= без кавычек даже при пробелах в
@@ -48,11 +49,11 @@ func TestInstallerCmdLine(t *testing.T) {
 }
 
 func TestModeOf(t *testing.T) {
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "uninstall.exe"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	other := t.TempDir() // переносная: uninstall.exe нет
+	other := testkit.TempDir(t) // переносная: uninstall.exe нет
 	exe := func(d, n string) string { return filepath.Join(d, n) }
 	for name, c := range map[string]struct {
 		goos, exe string
@@ -73,7 +74,7 @@ func TestModeOf(t *testing.T) {
 		}
 	}
 	// Папка с именем uninstall.exe — не файл.
-	d := t.TempDir()
+	d := testkit.TempDir(t)
 	if err := os.Mkdir(filepath.Join(d, "uninstall.exe"), 0o700); err != nil {
 		t.Fatal(err)
 	}

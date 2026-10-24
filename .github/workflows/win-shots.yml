@@ -53,7 +53,7 @@ jobs:
   pick:
     name: Входы
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         shell: bash

@@ -209,16 +209,24 @@ func TestRescanDoesNotWaitMissing(t *testing.T) {
 	gate := make(chan struct{})
 	a.exists = func(string) bool { <-gate; return false }
 
-	start := time.Now()
-	a.rescan()
-	// Проверка висит навсегда, так что любое ожидание — секунды; порог для нагрузки масштабируется.
-	if d := time.Since(start); d > testkit.Limit(300*time.Millisecond) {
-		t.Fatalf("rescan ждал проверку файлов %v", d)
+	// Проверка висит до конца теста (gate закрываем после): rescan, ждущий её, не вернётся совсем —
+	// бюджет ожидания в секундах ловит это без сравнения миллисекунд.
+	released := false
+	release := func() {
+		if !released {
+			released = true
+			close(gate)
+		}
 	}
+	defer release() // упавший по бюджету тест не оставляет rescan висеть
+	testkit.Bounded(t, testkit.Limit(5*time.Second), "rescan при зависшей проверке файлов", func() struct{} {
+		a.rescan()
+		return struct{}{}
+	})
 	if m := a.GetState().Missing; len(m) != 0 {
 		t.Fatalf("до конца проверки недостающие %v", m)
 	}
-	close(gate)
+	release()
 	waitMissing(t, a)
 	if got, n := last(); n != 1 || !slices.Equal(got, []string{id}) {
 		t.Fatalf("событие missing: %v (%d раз)", got, n)

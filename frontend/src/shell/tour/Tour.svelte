@@ -34,6 +34,12 @@
     untrack(() => (blocked ? tour.release() : void tour.place()))
   })
 
+  // Список шагов сократился (смена уровня на «Свой» при открытом туре) — номер шага возвращается в пределы.
+  $effect(() => {
+    const n = tour.steps.length
+    untrack(() => tour.fit(n))
+  })
+
   // «Показать» справочника погасло — кольцо возвращается к шагу.
   $effect(() => {
     const cur = spot.cur

@@ -294,7 +294,7 @@ func TestSaveRoundTripAndPreview(t *testing.T) {
 	o := plain()
 	o.Cols, o.Rows = 3, 2
 	res := mustCut(t, gridSheet(3, 2, 200), o)
-	dir := filepath.Join(t.TempDir(), "out")
+	dir := filepath.Join(tempDir(t), "out")
 	if err := Save(res, dir); err != nil {
 		t.Fatal(err)
 	}
@@ -459,7 +459,7 @@ func TestGlueZeroMeansTouchingOnly(t *testing.T) {
 
 // Save удаляет только остатки прошлого прогона вида NN.png с номером больше числа стикеров.
 func TestSaveRemovesOnlyStaleStickerFiles(t *testing.T) {
-	dir := t.TempDir()
+	dir := tempDir(t)
 	keep := []string{"notes.txt", "1.png", "a05.png", "05.png.bak", PreviewDark}
 	stale := []string{"03.png", "05.png", "12.png", "100.png"}
 	all := append(append(append([]string{}, keep...), stale...), "01.png", "02.png")

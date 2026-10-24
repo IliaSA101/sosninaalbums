@@ -411,6 +411,7 @@ func TestFeaturedTiesNoise(t *testing.T) {
 // перебора. Цель design §10 (≤ 2 мс) — у BenchmarkFeatured16: обычно 1–1,6 мс, и предел 2 мс в тесте
 // падал от шума (2,1 мс; под -race 63 мс), поэтому здесь 40 мс.
 func TestFeaturedSpeed(t *testing.T) {
+	testkit.CostTest(t)
 	as := mixedAspects(16, 3)
 	d := testkit.Fastest(5, func() { featured(as, geomSq) })
 	t.Logf("featured 16: %v", d)

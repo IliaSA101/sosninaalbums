@@ -199,6 +199,13 @@ try {
     [System.IO.File]::WriteAllText($alb, 'не json', $utf8)
     Same 'не json - минус один' (Get-QaSpreadCount $alb) -1
 
+    Section 'Test-QaSameRect'
+    Check 'одинаковые прямоугольники' (Test-QaSameRect @(10, 20, 30, 40) @(10, 20, 30, 40))
+    Check 'кнопка сдвинулась - нет' (-not (Test-QaSameRect @(10, 20, 30, 40) @(10, 25, 30, 40)))
+    Check 'изменился размер - нет' (-not (Test-QaSameRect @(10, 20, 30, 40) @(10, 20, 31, 40)))
+    Check 'первое чтение пусто - нет' (-not (Test-QaSameRect $null @(10, 20, 30, 40)))
+    Check 'оба чтения пусты - нет' (-not (Test-QaSameRect $null $null))
+
     Section 'Get-QaNewerLeadRegex, Get-QaNewerNextRegex'
     # строки собраны так же, как в frontend/src/shell/ask/newerask.ts
     $lead1 = '«NewerTest-0.25.1.salbum» сохранён в Sosnina Albums 0.25.1, а эта программа — 0.25.0. Открыть его может версия 0.25.1 или новее.'

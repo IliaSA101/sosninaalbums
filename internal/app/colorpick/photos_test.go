@@ -273,6 +273,7 @@ func TestSpreadPhotoColorsCost(t *testing.T) {
 	}
 	d := testkit.Fastest(3, func() { _, _ = a.PhotoColors("s1") })
 	t.Logf("64 фото, миниатюры готовы: %v", d)
+	testkit.CostTest(t)
 	if lim := testkit.Limit(300 * time.Millisecond); d > lim {
 		t.Errorf("64 фото: %v > %v", d, lim)
 	}

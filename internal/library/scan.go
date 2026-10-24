@@ -33,6 +33,9 @@ type ScanProgress struct {
 	Memo     int           `json:"-"` // сколько файлов взято из памяти
 	WalkTime time.Duration `json:"-"`
 	ReadTime time.Duration `json:"-"`
+	// Ours — пути файлов выгрузки программы (метка в заголовке), найденных обходом папок: в ленту
+	// не взяты (121). Отдельные файлы (097) сюда не попадают.
+	Ours []string `json:"-"`
 }
 
 // memoEntry — прочитанный заголовок файла; верен, пока не изменились размер и время
@@ -69,12 +72,14 @@ type scanFile struct {
 	low       string  // путь в нижнем регистре — порядок ленты (naturalLess)
 	size, mod int64   // size < 0: размер неизвестен, в память не смотрим и не пишем
 	side      sidecar // .xmp рядом; пустой — нет
+	loose     bool    // отдельный файл (Sources.Files, 097): выбран явно, метка выгрузки его не скрывает
 }
 
 const (
 	stPending = iota
 	stOK
 	stBad
+	stOurs // выгрузка программы из обхода папки: не в ленте и не «не читается» (121)
 )
 
 type scanResult struct {
@@ -149,12 +154,20 @@ func (s *Scanner) prepare(files []scanFile) *scanRun {
 			r.state[i], r.why[i] = stBad, e.why
 			continue
 		}
-		r.state[i] = stOK
+		r.state[i] = okState(f, e.photo)
 		r.res[i] = e.photo
 		r.res[i].Path, r.res[i].Name = f.path, filepath.Base(f.path) // регистр пути мог быть другим
 	}
 	r.read = r.memo
 	return r
+}
+
+// okState — состояние прочитанного фото: файл с меткой выгрузки из обхода папки — stOurs.
+func okState(f scanFile, ph Photo) uint8 {
+	if ph.ours && !f.loose {
+		return stOurs
+	}
+	return stOK
 }
 
 // Sources — источники ленты: папки (с подпапками) и отдельные файлы (097).
@@ -203,15 +216,18 @@ func (s *Scanner) Scan(ctx context.Context, src Sources,
 	s.setLast(fingerprintOf(src, files))
 	m := len(files)
 	photos = make([]Photo, 0, m)
+	var ours []string
 	for i, f := range files {
 		switch run.state[i] {
 		case stOK:
 			photos = append(photos, run.res[i])
 		case stBad:
 			skipped = append(skipped, Skip{Path: f.path, Why: run.why[i]})
+		case stOurs:
+			ours = append(ours, f.path)
 		}
 	}
-	report(photos, ScanProgress{Found: m, Read: m, Memo: run.memo, WalkTime: walkTime, ReadTime: time.Since(t1)}, true)
+	report(photos, ScanProgress{Found: m, Read: m, Memo: run.memo, WalkTime: walkTime, ReadTime: time.Since(t1), Ours: ours}, true)
 	return photos, skipped, nil
 }
 
@@ -290,7 +306,7 @@ func (s *Scanner) take(run *scanRun, r scanResult) bool {
 	if r.err != nil {
 		run.state[r.i], run.why[r.i] = stBad, r.why()
 	} else {
-		run.state[r.i], run.res[r.i] = stOK, r.ph
+		run.state[r.i], run.res[r.i] = okState(run.files[r.i], r.ph), r.ph
 	}
 	run.read++
 	s.remember(run.files[r.i], r)
@@ -375,18 +391,18 @@ type scanWalk struct {
 
 // addImage берёт файл-фото, если он ещё не встречался; info == nil — из d.Info().
 func (w *scanWalk) addImage(p string, d fs.DirEntry, info fs.FileInfo) {
-	w.add(p, d.Name(), info, func() fs.FileInfo { i, _ := d.Info(); return i })
+	w.add(p, d.Name(), info, func() fs.FileInfo { i, _ := d.Info(); return i }, false)
 }
 
 // add — общее тело addImage и addLoose; load отдаёт сведения о файле, когда info == nil.
-func (w *scanWalk) add(p, name string, info fs.FileInfo, load func() fs.FileInfo) {
+func (w *scanWalk) add(p, name string, info fs.FileInfo, load func() fs.FileInfo, loose bool) {
 	key := paths.Fold(p)
 	if !isImage(name) || w.seen[key] {
 		return
 	}
 	w.seen[key] = true
 	// ToLower ключа: на Windows и macOS он уже в нижнем регистре — без новой строки.
-	f := scanFile{path: p, key: key, low: strings.ToLower(key), size: -1}
+	f := scanFile{path: p, key: key, low: strings.ToLower(key), size: -1, loose: loose}
 	if info == nil {
 		info = load()
 	}

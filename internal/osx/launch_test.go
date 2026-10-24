@@ -6,11 +6,13 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 func TestLaunchPlace(t *testing.T) {
-	tmp := t.TempDir()
-	other := t.TempDir() // отдельная папка рядом: не внутри tmp
+	tmp := testkit.TempDir(t)
+	other := testkit.TempDir(t) // отдельная папка рядом: не внутри tmp
 	sub := filepath.Join(tmp, "Temp1_album.zip")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)

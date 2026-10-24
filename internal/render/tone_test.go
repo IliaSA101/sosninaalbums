@@ -176,6 +176,8 @@ func TestRenderToneRotatedPath(t *testing.T) {
 // ≤ 80 мс) — по BenchmarkRenderTone на спокойной машине (3,3 мс); здесь порог с запасом ×5:
 // под параллельными прогонами пакетов 2 Мп доходит до 11 мс, а порог 10 мс ронял бы тест зря.
 func TestToneCost(t *testing.T) {
+	testkit.CostTest(t)
+	// Чистый счёт в одной горутине: под -race мерить нечего, а ×5 под нагрузкой ЦП пробивает предел (24.10: 404 мс при 250)
 	sizes := []struct {
 		w, h int
 		lim  time.Duration

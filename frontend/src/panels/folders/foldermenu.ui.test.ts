@@ -53,6 +53,7 @@ const { wire } = await import('../../shell/boot/wire')
 const { foldersUi } = await import('./foldersui.svelte')
 const { folderfilter } = await import('./folderfilter.svelte')
 const { buttonText, buttonTitle, findNode, nodeKey } = await import('./tree')
+const { exportsText } = await import('./scan')
 const { GROUP_KEY, batchKey, fileKey } = await import('./loose')
 
 const ph = (id: string, dir: string) => ({ id, path: `${dir}\\${id}.jpg`, name: id, w: 100, h: 100 })
@@ -162,9 +163,21 @@ describe('событие folders:added', () => {
     expect(foldersUi.flash).toBe(nodeKey('D:/new'))
   })
 
+  it('exports:skipped (121): событие → тост info; n = 0 и пустое событие — без тоста', () => {
+    const fire = handlers.get('exports:skipped')!
+    fire({ n: 0, dir: 'ФА25' })
+    fire(undefined)
+    fire(null)
+    expect(store.toast).toBeNull()
+    fire({ n: 3, dir: 'ФА25' })
+    expect(store.toast?.text).toBe(exportsText(3, 'ФА25'))
+    expect(store.toast?.kind).toBe('info')
+  })
+
   it('отписка снимает обработчик', () => {
     off()
     expect(handlers.has('folders:added')).toBe(false)
+    expect(handlers.has('exports:skipped')).toBe(false)
     foldersUi.listen()
   })
 })

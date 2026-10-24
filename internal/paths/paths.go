@@ -49,21 +49,29 @@ func CheckLocalPath(path string) error {
 		return fmt.Errorf("пустой или недопустимый путь")
 	}
 	if runtime.GOOS == "windows" {
-		ok := len(path) >= 3 && path[1] == ':' && IsSep(path[2]) &&
-			(path[0] >= 'A' && path[0] <= 'Z' || path[0] >= 'a' && path[0] <= 'z') &&
-			!strings.ContainsRune(path[2:], ':')
-		if !ok {
-			return notLocal("поддерживаются только локальные пути вида C:\\папка: %s", path)
-		}
-		for _, el := range strings.FieldsFunc(path[3:], IsSepRune) {
-			if DeviceElem(el) {
-				return &notLocalError{msg: fmt.Sprintf("имя «%s» зарезервировано Windows", el), dev: true}
-			}
-		}
-		return nil
+		return windowsLocalRule(path, osDeviceExt)
 	}
 	if !filepath.IsAbs(path) || strings.HasPrefix(path, "//") {
 		return notLocal("путь должен быть абсолютным и локальным: %s", path)
+	}
+	return nil
+}
+
+// windowsLocalRule — правило Windows из CheckLocalPath без обращения к ОС (проверяется таблицей
+// на любой ОС): белый список `X:\…`, без второго двоеточия, имя устройства в любом элементе — отказ
+// с ErrDevice. devExt судит элемент с расширением («CON.jpg»): на Windows — osDeviceExt.
+// Длину и пустоту CheckLocalPath проверил раньше, это общее для всех ОС.
+func windowsLocalRule(path string, devExt func(el string) bool) error {
+	ok := len(path) >= 3 && path[1] == ':' && IsSep(path[2]) &&
+		(path[0] >= 'A' && path[0] <= 'Z' || path[0] >= 'a' && path[0] <= 'z') &&
+		!strings.ContainsRune(path[2:], ':')
+	if !ok {
+		return notLocal("поддерживаются только локальные пути вида C:\\папка: %s", path)
+	}
+	for _, el := range strings.FieldsFunc(path[3:], IsSepRune) {
+		if deviceElemRule(true, el, devExt) {
+			return &notLocalError{msg: fmt.Sprintf("имя «%s» зарезервировано Windows", el), dev: true}
+		}
 	}
 	return nil
 }

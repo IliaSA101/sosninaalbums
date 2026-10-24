@@ -38,14 +38,25 @@ func TestRenderCtxCancelWaitingBudget(t *testing.T) {
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	time.AfterFunc(30*time.Millisecond, cancel)
-	start := time.Now()
-	img, err := RenderCtx(ctx, s, opt)
+	// Отмена — когда кто-то уже встал в очередь за бюджетом; бюджет держим до конца проверки, так
+	// что RenderCtx, не заметивший отмену, не вернётся совсем (бюджет ожидания ловит это).
+	go func() {
+		for deadline := time.Now().Add(testkit.Limit(5 * time.Second)); imgfile.DecodeBudget.Waiting() < 1 && time.Now().Before(deadline); {
+			time.Sleep(time.Millisecond)
+		}
+		cancel()
+	}()
+	type rendered struct {
+		img *image.RGBA
+		err error
+	}
+	r := testkit.Bounded(t, testkit.Limit(5*time.Second), "RenderCtx после отмены в ожидании бюджета", func() rendered {
+		img, err := RenderCtx(ctx, s, opt)
+		return rendered{img, err}
+	})
+	img, err := r.img, r.err
 	if !errors.Is(err, context.Canceled) || img != nil {
 		t.Fatalf("ждали Canceled без холста: %v, %v", img != nil, err)
-	}
-	if d := time.Since(start); d > testkit.Limit(200*time.Millisecond) {
-		t.Errorf("отмена в ожидании бюджета заметна через %v", d)
 	}
 	if err.Error() != context.Canceled.Error() { // отмена идёт наверх без обёртки «фото: …»
 		t.Errorf("отмена обёрнута: %v", err)

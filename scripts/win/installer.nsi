@@ -1,11 +1,14 @@
 ; Установщик Sosnina Albums (спека 111): на пользователя, без прав администратора и без выбора папки.
-; Сборка — scripts/win/installer.sh (makensis 3.08+, -WX): -DVERSION=X.Y.Z -DEXE_SRC=<exe> -DICON=<ico> -DWIZARD=<bmp> -DHEADER=<bmp> -DOUT=<файл>.
+; Сборка — scripts/win/installer.sh (makensis 3.08+, -WX): -DVERSION=X.Y.Z -DEXE_SRC=<exe> -DICON=<ico> -DWIZARD=<bmp> -DWIZARD_DPI=<папка с wizard-100/125/150/175.bmp> -DHEADER=<bmp> -DOUT=<файл>.
 ; Коды выхода (контракт с installer-check.ps1 и программой): 0 готово; 1 отмена; 2 ошибка NSIS;
 ; 3 откат отклонён (установлена новее); 4 та же версия (тихо); 5 программа не закрылась;
 ; 6 не удалось заменить exe (занят антивирусом; прежняя программа и версия в реестре целы); 64 система не та.
 ; Параметры: /S тихо, /D=<папка> (без кавычек, последним), /relaunch — открыть программу по окончании;
 ; при отказе (3, 4, сбой) /relaunch открывает прежний exe. Других параметров установщик не читает.
 Unicode true
+; Время файлов в установщик не пишем нигде (ни exe, ни картинки MUI2 в .onInit/un.onInit): иначе байты зависят от mtime
+; на сборщике (CI и пересборка release-sign.mjs берут файлы в разное время) и побайтная сверка не сходится
+SetDateSave off
 SetCompressor /SOLID lzma
 RequestExecutionLevel user
 ManifestDPIAware true
@@ -21,6 +24,9 @@ ManifestDPIAware true
 !endif
 !ifndef WIZARD
   !error "нужен -DWIZARD=путь к wizard.bmp (328x628 = 164x314 в 2x, make_wizard_bmp.py)"
+!endif
+!ifndef WIZARD_DPI
+  !error "нужен -DWIZARD_DPI=папка с wizard-100.bmp, wizard-125.bmp, wizard-150.bmp, wizard-175.bmp (make_wizard_bmp.py)"
 !endif
 !ifndef HEADER
   !error "нужен -DHEADER=путь к header.bmp (114x114, make_wizard_bmp.py)"
@@ -61,12 +67,15 @@ VIAddVersionKey /LANG=1049 "LegalCopyright" "© 2026 Илья Соснин. GPL-
 !define MUI_ICON "${ICON}"
 !define MUI_UNICON "${ICON}"
 !define MUI_ABORTWARNING
-; Картинки — свои, в 2x (scripts/win/make_wizard_bmp.py): при DPI 125-200 % NSIS сжимает их в контрол,
-; а не растягивает 1x. AspectFitHeight держит пропорции (FitControl по умолчанию искажал бы их при другой
-; ширине контрола). Слева на первой странице и на странице завершения — WIZARD, справа в шапке
+; Картинки — свои (scripts/win/make_wizard_bmp.py). WIZARD — 2x, для 200 % и выше: при масштабе NSIS сжимает её
+; в контрол без сглаживания. На 100-175 % WizardForDpi подменяет её картинкой точно под высоту контрола,
+; тогда AspectFitHeight ничего не тянет. Он же держит пропорции при другой ширине контрола (FitControl
+; по умолчанию искажал бы их). Слева на первой странице и на странице завершения — WIZARD, справа в шапке
 ; внутренних страниц вместо значка установщика — HEADER (значок 32 px при масштабе размывался)
 !define MUI_WELCOMEFINISHPAGE_BITMAP "${WIZARD}"
 !define MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH AspectFitHeight
+; Вызывается из .onGUIInit после того, как MUI2 положил $PLUGINSDIR\modern-wizard.bmp, и до создания первой страницы
+!define MUI_CUSTOMFUNCTION_GUIINIT WizardForDpi
 !define MUI_HEADERIMAGE
 !define MUI_HEADERIMAGE_RIGHT
 !define MUI_HEADERIMAGE_BITMAP "${HEADER}"
@@ -90,6 +99,36 @@ Var WelcomeText
 
 Var Relaunch
 Var FailCode
+
+; Картинка мастера под масштаб экрана: система DPI-aware (ManifestDPIAware), высота контрола картинки на
+; 100/125/150/175 % — 314/386/458/555 px (измерено на снимках CI). Пороги — 96/120/144/168 dpi; промежуточный
+; масштаб берёт ближайшую бо́льшую картинку, 200 % и выше остаются с 2x от MUI2. Не вышло прочитать DPI — 2x.
+Function WizardForDpi
+  Push $0
+  Push $1
+  System::Call 'user32::GetDC(p 0) p .r0'
+  ${If} $0 P<> 0
+    System::Call 'gdi32::GetDeviceCaps(p r0, i 90) i .r1'
+    System::Call 'user32::ReleaseDC(p 0, p r0)'
+    ${If} $1 > 0
+      ${If} $1 <= 96
+        File "/oname=$PLUGINSDIR\modern-wizard.bmp" "${WIZARD_DPI}/wizard-100.bmp"
+        !pragma verifyloadimage "${WIZARD_DPI}/wizard-100.bmp"
+      ${ElseIf} $1 <= 120
+        File "/oname=$PLUGINSDIR\modern-wizard.bmp" "${WIZARD_DPI}/wizard-125.bmp"
+        !pragma verifyloadimage "${WIZARD_DPI}/wizard-125.bmp"
+      ${ElseIf} $1 <= 144
+        File "/oname=$PLUGINSDIR\modern-wizard.bmp" "${WIZARD_DPI}/wizard-150.bmp"
+        !pragma verifyloadimage "${WIZARD_DPI}/wizard-150.bmp"
+      ${ElseIf} $1 <= 168
+        File "/oname=$PLUGINSDIR\modern-wizard.bmp" "${WIZARD_DPI}/wizard-175.bmp"
+        !pragma verifyloadimage "${WIZARD_DPI}/wizard-175.bmp"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  Pop $1
+  Pop $0
+FunctionEnd
 
 ; Тихое обновление (/relaunch) не поставилось — открыть прежнюю программу: она увидит, что
 ; версия не та, что ждали (pending), и скажет «Обновление не установилось»
@@ -250,9 +289,6 @@ Section "main"
   ; Новая копия рядом, затем замена (ReplaceExe): сбой не оставляет ни битый, ни пропавший exe;
   ; реестр пишется только после успешной замены
   Delete "$INSTDIR\${EXE}.new"
-  ; Время файла в установщик не пишем: иначе его байты зависят от mtime exe на сборщике (CI и пересборка release-sign.mjs
-  ; скачивают/собирают файл в разное время) и побайтная сверка не сходится
-  SetDateSave off
   File "/oname=${EXE}.new" "${EXE_SRC}"
   Call ReplaceExe
   WriteUninstaller "$INSTDIR\uninstall.exe"

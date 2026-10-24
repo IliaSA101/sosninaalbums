@@ -121,8 +121,9 @@ func shifted(src *image.NRGBA) image.Image {
 
 // TestFrameWindowFast — разбор декодированной 4096² ≤ Limit(200 ms).
 func TestFrameWindowFast(t *testing.T) {
-	if testing.Short() || testkit.Race {
-		t.Skip("замер времени: обычный прогон без -short и -race")
+	testkit.CostTest(t)
+	if testing.Short() {
+		t.Skip("замер времени: обычный прогон без -short")
 	}
 	img := frameImage(4096, 4096, rectHole(600, 600, 3500, 3500))
 	if best := testkit.Fastest(3, func() { FrameWindow(img) }); best > testkit.Limit(200*time.Millisecond) {

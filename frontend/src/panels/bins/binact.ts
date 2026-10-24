@@ -1,7 +1,7 @@
 // Действия с подборками (083): вызовы Go и тосты. Правка идёт через store.take (цепочка видов, undo — общий ряд);
 // ошибки create/rename возвращаются текстом — окно показывает их под полем, а не тостом.
 import { store } from '../../base/core/store.svelte'
-import { errText } from '../../base/words/errtext'
+import { capFirst, errText } from '../../base/words/errtext'
 import type { View } from '../../base/core/types'
 import * as Bins from './binapi'
 import {
@@ -31,7 +31,7 @@ async function call(p: Promise<View>): Promise<BinResult> {
   try {
     return { ok: await store.take(await p) }
   } catch (e) {
-    return { ok: false, err: errText(e) }
+    return { ok: false, err: capFirst(errText(e)) }
   }
 }
 

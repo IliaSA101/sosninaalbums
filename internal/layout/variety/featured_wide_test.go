@@ -139,6 +139,7 @@ func TestFeaturedExtraWide(t *testing.T) {
 
 // TestFeaturedWideSpeed — страж: генератор на 40 фото не взрывается (цель — BenchmarkFeatured40).
 func TestFeaturedWideSpeed(t *testing.T) {
+	testkit.CostTest(t)
 	as := mixedAspects(40, 3)
 	d := testkit.Fastest(5, func() { featured(as, geomSq) })
 	t.Logf("featured 40: %v", d)

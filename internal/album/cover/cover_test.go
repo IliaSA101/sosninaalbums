@@ -94,6 +94,27 @@ func TestCoverPlaceTakesPhoto(t *testing.T) {
 	edtest.MustGrid(t, e)
 }
 
+// TestCreateCoverDefaultByPage: пустой пресет — изделие типографии страницы (Фабрика 30×20 →
+// «Фотобумага», сторонка и заворот из её формата), не «Фотосфера · Тонкие листы»; один шаг отмены.
+func TestCreateCoverDefaultByPage(t *testing.T) {
+	p := model.New()
+	p.Settings.PageW, p.Settings.PageH, p.Settings.Safe, p.Settings.Bleed = 304, 203, 10, 3
+	e := edtest.Open(t, p, "")
+	if _, err := e.CreateCover("", nil); err != nil {
+		t.Fatal(err)
+	}
+	c := edtest.P(e).Cover
+	if c == nil || c.Spec.Preset != "fabrika-photo" || c.Spec.W != 310 || c.Spec.H != 206 || c.Spec.Wrap != 17 {
+		t.Fatalf("обложка на 304×203: %+v", c)
+	}
+	if edtest.UndoLen(e) != 1 {
+		t.Fatalf("шагов отмены %d, ждали 1", edtest.UndoLen(e))
+	}
+	if e.Undo(); edtest.P(e).Cover != nil {
+		t.Fatal("отмена не сняла обложку")
+	}
+}
+
 func TestCoverCreateErrors(t *testing.T) {
 	e := coverAlbum(t, 2)
 	rev, undo := edtest.Rev(e), edtest.UndoLen(e)

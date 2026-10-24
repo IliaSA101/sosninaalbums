@@ -21,7 +21,7 @@ var (
 	ErrLayout = errors.New("неизвестная раскладка обложки")
 )
 
-// Create — новая пустая обложка: пресет preset ("" — CoverDefault), сторонка — страница
+// Create — новая пустая обложка: пресет preset ("" — изделие типографии страницы, CoverDefaultFor), сторонка — страница
 // альбома, «Фото на лицевой». В проекте-листе 031 обложки не бывает. Есть — ErrExists.
 func Create(p *model.Project, preset string) error {
 	switch {
@@ -31,7 +31,7 @@ func Create(p *model.Project, preset string) error {
 		return ErrExists
 	}
 	if preset == "" {
-		preset = model.CoverDefault
+		preset = model.CoverDefaultFor(p.Settings)
 	}
 	pr, ok := model.CoverPresetFor(preset, p.Settings)
 	if !ok {

@@ -19,7 +19,7 @@ import (
 )
 
 // Marker — текст COM-сегмента: по нему программа узнаёт свои файлы в папке экспорта.
-const Marker = "Sosnina Albums"
+const Marker = imgfile.ExportMarker
 
 // FileName — имя файла i-го (с нуля) разворота: 01.jpg, при 100+ разворотах 001.jpg.
 // Номер 00 остаётся под обложку, программа его не пишет.

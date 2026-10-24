@@ -442,6 +442,7 @@ func TestPickStarFour(t *testing.T) {
 
 // TestPickSpeed: Pick на 100 разворотах (тёплые пулы) — design §10, ≤ 50 мс.
 func TestPickSpeed(t *testing.T) {
+	testkit.CostTest(t)
 	if testing.Short() {
 		t.Skip("замер на 100 разворотах с долгой подготовкой набора: полный прогон")
 	}

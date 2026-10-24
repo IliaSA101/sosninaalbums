@@ -13,6 +13,7 @@ import {
   isLive,
   resolve,
   shouldAutostart,
+  visibleBox,
   withMissing,
   type AutoState,
   type Box,
@@ -147,7 +148,7 @@ describe('живое место', () => {
   })
 
   it('шаг 5 живой на «Авто»; шаг 6 без выделения — холст', () => {
-    expect(resolve(step('layouts'), ctx())).toMatchObject({ live: true, spot: 'ui:layout-all' })
+    expect(resolve(step('layouts'), ctx())).toMatchObject({ live: true, spot: 'ui:layout-auto' })
     expect(resolve(step('layouts'), ctx({ spreads: [sheet({ grid: true })] }))).toMatchObject({ live: false, spot: 'ui:canvas' })
     expect(resolve(step('photo'), ctx({ selPhoto: true }))).toMatchObject({ live: true, spot: 'ui:mini-panel' })
     const none = resolve(step('photo'), ctx())
@@ -241,6 +242,140 @@ describe('карточка', () => {
     const p = cardPlace({ left: win.w - 60, top: 4, width: 56, height: 36 }, card, win)
     expect(p.left + card.w).toBeLessThanOrEqual(win.w - 8)
     expect(p.top).toBeGreaterThanOrEqual(40)
+  })
+})
+
+describe('карточка и области avoid (122)', () => {
+  const crosses = (p: { left: number; top: number }, size: { w: number; h: number }, b: Box) =>
+    p.left < b.left + b.width && p.left + size.w > b.left && p.top < b.top + b.height && p.top + size.h > b.top
+  const inWin = (p: { left: number; top: number }, size: { w: number; h: number }, win: { w: number; h: number }) =>
+    p.left >= 8 && p.top >= 8 && p.left + size.w <= win.w - 8 && p.top + size.h <= win.h - 8
+
+  // 122-1: прежний cardPlace, таблица снята с кода до правки (карточка 320×200).
+  it('без avoid как раньше: 12 положений цели', () => {
+    const wins = [
+      { w: 1200, h: 640 },
+      { w: 1024, h: 700 },
+    ]
+    const rings = (win: { w: number; h: number }): Record<string, Box> => ({
+      export: { left: win.w - 100, top: 4, width: 90, height: 40 },
+      layoutAll: { left: win.w / 2 - 14, top: 52, width: 28, height: 28 },
+      miniPanel: { left: win.w / 2 + 100, top: 150, width: 40, height: 200 },
+      timeline: { left: 4, top: win.h - 210, width: win.w - 8, height: 78 },
+      library: { left: 4, top: win.h - 130, width: win.w - 8, height: 126 },
+      folders: { left: 8, top: win.h - 172, width: 140, height: 32 },
+    })
+    const want: Record<string, { left: number; top: number }> = {
+      '1200x640 export': { left: 872, top: 56 },
+      '1200x640 layoutAll': { left: 440, top: 92 },
+      '1200x640 miniPanel': { left: 560, top: 362 },
+      '1200x640 timeline': { left: 440, top: 218 },
+      '1200x640 library': { left: 440, top: 298 },
+      '1200x640 folders': { left: 8, top: 256 },
+      '1024x700 export': { left: 696, top: 56 },
+      '1024x700 layoutAll': { left: 352, top: 92 },
+      '1024x700 miniPanel': { left: 472, top: 362 },
+      '1024x700 timeline': { left: 352, top: 278 },
+      '1024x700 library': { left: 352, top: 358 },
+      '1024x700 folders': { left: 8, top: 316 },
+    }
+    for (const win of wins)
+      for (const [name, ring] of Object.entries(rings(win))) {
+        const key = `${win.w}x${win.h} ${name}`
+        expect(cardPlace(ring, { w: 320, h: 200 }, win), key).toEqual(want[key])
+        expect(cardPlace(ring, { w: 320, h: 200 }, win, []), `${key} (пустой avoid)`).toEqual(want[key])
+      }
+  })
+
+  // 122-2: шаг 1 — кнопка «Папки» у левого верха ленты фото; карточка не ложится на ленту.
+  it('шаг 1: карточка не пересекает ленту фото и кольцо, лежит в окне', () => {
+    const win = { w: 1280, h: 760 }
+    const lib: Box = { left: 0, top: 520, width: 1280, height: 240 }
+    const ring: Box = { left: 8, top: 528, width: 150, height: 32 }
+    for (const h of [150, 200]) {
+      const size = { w: 320, h }
+      const p = cardPlace(ring, size, win, [lib])
+      expect(inWin(p, size, win), `h=${h}: в окне`).toBe(true)
+      expect(crosses(p, size, lib), `h=${h}: лента`).toBe(false)
+      expect(crosses(p, size, ring), `h=${h}: кольцо`).toBe(false)
+    }
+    // без avoid (как было) карточка ложилась на ленту: страж, что тест что-то проверяет
+    expect(crosses(cardPlace(ring, { w: 320, h: 150 }, win), { w: 320, h: 150 }, lib)).toBe(true)
+  })
+
+  // 122-3: шаг 5 — кольцо группы у верха холста по центру, разворот почти на весь холст.
+  it('шаг 5: карточка не пересекает разворот и кольцо', () => {
+    for (const win of [
+      { w: 1280, h: 760 },
+      { w: 1024, h: 700 },
+    ]) {
+      const ring: Box = { left: win.w / 2 - 110, top: 44, width: 220, height: 36 }
+      const spread: Box = { left: 60, top: 90, width: win.w - 120, height: win.h - 330 }
+      const size = { w: 320, h: 170 }
+      const p = cardPlace(ring, size, win, [spread])
+      expect(inWin(p, size, win)).toBe(true)
+      expect(crosses(p, size, spread), `${win.w}: разворот`).toBe(false)
+      expect(crosses(p, size, ring), `${win.w}: кольцо`).toBe(false)
+    }
+  })
+
+  it('свободного места нет: наименьшее пересечение, в окне, кольцо не задето', () => {
+    const win = { w: 1024, h: 700 }
+    const ring: Box = { left: 400, top: 44, width: 220, height: 36 }
+    const spread: Box = { left: 0, top: 90, width: 1024, height: 520 }
+    const lenta: Box = { left: 0, top: 610, width: 1024, height: 90 }
+    const size = { w: 320, h: 170 }
+    const p = cardPlace(ring, size, win, [spread, lenta])
+    expect(inWin(p, size, win)).toBe(true)
+    expect(crosses(p, size, ring)).toBe(false)
+    type Place = { left: number; top: number }
+    const area = (q: Place, r: Box) => {
+      const w = Math.min(q.left + size.w, r.left + r.width) - Math.max(q.left, r.left)
+      const h = Math.min(q.top + size.h, r.top + r.height) - Math.max(q.top, r.top)
+      return w > 0 && h > 0 ? w * h : 0
+    }
+    const cost = (q: Place) => area(q, spread) + area(q, lenta)
+    // все кандидаты cardPlace: четыре стороны кольца (отступ 12, от края окна 8) и четыре угла окна
+    const at = (x: number, y: number): Place => ({
+      left: Math.max(8, Math.min(x, win.w - size.w - 8)),
+      top: Math.max(8, Math.min(y, win.h - size.h - 8)),
+    })
+    const midX = ring.left + ring.width / 2 - size.w / 2
+    const midY = ring.top + ring.height / 2 - size.h / 2
+    const all: Place[] = [
+      at(midX, ring.top + ring.height + 12),
+      at(midX, ring.top - 12 - size.h),
+      at(ring.left + ring.width + 12, midY),
+      at(ring.left - 12 - size.w, midY),
+      at(0, 0),
+      at(win.w, 0),
+      at(0, win.h),
+      at(win.w, win.h),
+    ]
+    // допустимы те, что не задевают кольцо с отступом 12
+    const halo: Box = { left: ring.left - 12, top: ring.top - 12, width: ring.width + 24, height: ring.height + 24 }
+    const ok = all.filter((q) => area(q, halo) === 0)
+    expect(ok.length).toBeGreaterThan(1)
+    const best = Math.min(...ok.map(cost))
+    expect(best).toBeGreaterThan(0) // иначе это не случай «свободного места нет»
+    expect(cost(p)).toBe(best)
+    // страж: выбор не тривиален — среди допустимых есть заметно худшие
+    expect(Math.max(...ok.map(cost))).toBeGreaterThan(best)
+  })
+
+  it('цель больше 60 % окна — как раньше, avoid не вмешивается', () => {
+    const win = { w: 1200, h: 640 }
+    const canvas: Box = { left: 4, top: 40, width: win.w - 8, height: win.h - 160 }
+    expect(cardPlace(canvas, { w: 320, h: 200 }, win, [{ left: 0, top: 0, width: 50, height: 50 }])).toEqual(
+      cardPlace(canvas, { w: 320, h: 200 }, win),
+    )
+  })
+
+  it('visibleBox: обрезка по окну, невидимое — null', () => {
+    const win = { w: 1000, h: 600 }
+    expect(visibleBox({ left: -20, top: 500, width: 100, height: 200 }, win)).toEqual({ left: 0, top: 500, width: 80, height: 100 })
+    expect(visibleBox({ left: 1000, top: 0, width: 50, height: 50 }, win)).toBeNull()
+    expect(visibleBox({ left: 10, top: 10, width: 0, height: 20 }, win)).toBeNull()
   })
 })
 

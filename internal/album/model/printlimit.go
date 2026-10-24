@@ -48,6 +48,18 @@ func PrintGroupOf(name string) (PrintGroup, bool) {
 	return PrintGroup{}, false
 }
 
+// CoverDefaultFor — изделие новой обложки «по умолчанию» для страницы s: изделие по умолчанию
+// типографии, чья кнопка страницы подходит (PagePresetOf). Без этого обложка на странице Фабрики
+// получала бы «Фотосферу · Тонкие листы» (CoverDefault). Страница вне рядов — CoverDefault.
+func CoverDefaultFor(s Settings) string {
+	if pg, ok := PagePresetOf(s); ok {
+		if g, ok := PrintGroupOf(pg.Group); ok {
+			return g.Default
+		}
+	}
+	return CoverDefault
+}
+
 // PrintLimits — пределы изделий. Фотосфера — последняя строка таблицы корешка (один источник:
 // за таблицей корешок не посчитать); Нетпринт — сайт 19.10 (design 085 §0). Нижнего предела
 // Фотосферы и пределов мягкой обложки Нетпринта на сайтах нет — строк нет (decisions №6).

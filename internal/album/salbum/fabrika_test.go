@@ -37,6 +37,17 @@ func TestSalbumFabrikaPreset(t *testing.T) {
 			t.Errorf("%s: предел после Load %+v (%v)", id, lim, ok)
 		}
 	}
+	// 30×20 / 2 мм: десять разворотов, ступень «10 — 24 мм» переживает Save → Load, обложка по шаблону.
+	p.Settings.PageW, p.Settings.PageH = 304, 203
+	pr, _ := model.CoverPresetFor("fabrika-photo-2", p.Settings)
+	p.Cover.Spec = pr.Spec
+	_, q := saveLoad(t, p, filepath.Join(dir, "30x20.salbum"))
+	if st := q.Cover.Spec.Steps; len(st) != 9 || st[8] != (model.SpineStep{Upto: 10, Mm: 24}) || model.CoverFixText(q) != "" {
+		t.Errorf("30×20 / 2 мм после Load: %+v, %q", q.Cover.Spec.Steps, model.CoverFixText(q))
+	}
+	if lim, ok := model.LimitOf(q); !ok || lim.Max != 10 {
+		t.Errorf("30×20 / 2 мм: предел %+v (%v)", lim, ok)
+	}
 	// Незнакомый id — «Свои размеры» с теми же числами.
 	cover := `,"cover":{"spec":{"preset":"fabrika-future","w":312,"h":306,"wrap":12,"steps":[{"upto":40,"mm":26}]}}`
 	r := mustDecode(t, coverJSON(dir, `[{"id":"s1","photos":["p"]}]`, cover), dir)

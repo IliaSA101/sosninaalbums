@@ -242,7 +242,8 @@ func netprintPresets() []PagePreset {
 // CoverPresetFor — пресет id для страницы s. У шаблонной группы («Фотосфера», «Фабрика
 // Фотокниги») сторонка и заворот — всегда числа шаблона: формат страницы из таблицы, на прочей
 // странице — ближайший формат (FormatNear, 070 Е, decisions 0.16 №28); W/H 0 («из страницы»)
-// пресет не даёт. Остальные пресеты — как CoverPresetOf.
+// пресет не даёт. У Фабрики таблица корешка тоже зависит от формата (fabrikaStepsFor). Остальные
+// пресеты — как CoverPresetOf.
 func CoverPresetFor(id string, s Settings) (CoverPreset, bool) {
 	pr, ok := CoverPresetOf(id)
 	if !ok {
@@ -253,6 +254,9 @@ func CoverPresetFor(id string, s Settings) (CoverPreset, bool) {
 	}
 	f := FormatNear(pr.Group, s)
 	pr.Spec.W, pr.Spec.H, pr.Spec.Wrap = f.SideW, f.SideH, f.Wrap
+	if pr.Group == CoverGroupFabrika {
+		pr.Spec.Steps = fabrikaStepsFor(pr.ID, f.Name, pr.Spec.Steps)
+	}
 	return pr, true
 }
 

@@ -144,11 +144,17 @@ func TestEditorCloseWaitsEdit(t *testing.T) {
 		e.Close()
 		close(done)
 	}()
+	// Замок держим до конца проверки: Close должен встать на нём (стоящая горутина — доказательство
+	// «ждёт», без паузы-угадайки); вернувшийся Close — регресс.
+	if !testkit.WaitBlocked(t, "(*Editor).Close", testkit.Limit(3*time.Second)) {
+		mu.Unlock()
+		t.Fatal("Close не встал на замок правки (вернулся, не дождавшись)")
+	}
 	select {
 	case <-done:
 		mu.Unlock()
 		t.Fatal("Close не ждёт замок правки")
-	case <-time.After(testkit.Limit(50 * time.Millisecond)):
+	default:
 	}
 	mu.Unlock()
 	select {

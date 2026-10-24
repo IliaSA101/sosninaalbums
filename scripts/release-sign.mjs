@@ -3,7 +3,7 @@
 // (docs/RELEASE.md) делает ассет SosninaAlbums-update.json — конверт {"sig", "body"} как у каталога библиотеки
 // (fetch.Open): sig — base64 ed25519 по байтам body, body — base64 JSON. Только node:* и gh/git, без зависимостей.
 //
-//   node scripts/release-sign.mjs vX.Y.Z [--key docs/private/release-key.pem] [--dry] [--min-auto X.Y.Z]
+//   node scripts/release-sign.mjs vX.Y.Z [--key docs/private/release-key.pem] [--dry] [--min-auto X.Y.Z] [--bmp-mtime <unix-сек>]
 //       (перед подписью пересобирает установщик из метки на этой машине, ~2–4 мин)
 //   node scripts/release-sign.mjs --new-key <путь.pem>    создаёт пару, печатает открытый ключ (base64, 32 байта)
 //   node scripts/release-sign.mjs --test-key [путь.pem]   одноразовый ключ в .gotmp/ для тестов и QA (design §9)
@@ -18,6 +18,8 @@
 // --dry — всё, кроме загрузки; --from и --whatsnew тоже ничего не загружают. --skip-rebuild (без пересборки) принимается
 // только вместе с --from: это QA на заготовленных файлах; настоящая подпись без пересборки невозможна.
 //
+// --bmp-mtime <unix-сек> (или SA_INSTALLER_BMP_MTIME) — для выпусков до 0.25.1: их установщик хранит mtime wizard.bmp и
+// header.bmp (момент checkout в pack CI); в копии метки время выставляется перед сборкой, остальная сверка — побайтно.
 // Закрытый ключ в вывод не печатается и не копируется; --new-key не перезаписывает существующий файл.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -250,12 +252,24 @@ export function programKeys(file) {
   return [...text.matchAll(/"([A-Za-z0-9+/]{43}=)"/g)].map((m) => m[1]).filter((k) => Buffer.from(k, 'base64').length === 32)
 }
 
+// ---- время BMP установщика ----
+
+/**
+ * Разбирает --bmp-mtime / SA_INSTALLER_BMP_MTIME: целые unix-секунды. Пусто — undefined (поведение прежнее).
+ * Нужен для выпусков до 0.25.1: их установщик хранит mtime wizard.bmp и header.bmp (= момент checkout в pack CI).
+ */
+export function parseBmpMtime(v) {
+  if (v === undefined || v === '') return undefined
+  if (!/^\d{1,12}$/.test(String(v))) throw new SignError(`--bmp-mtime: ждали unix-секунды (целое число), получено «${v}»`, 2)
+  return Number(v)
+}
+
 // ---- выпуск ----
 
 /**
- * Подписывает выпуск tag. deps: gh(args) и git(args) -> строка/Buffer, rebuild({tag, version, work}) -> путь к
+ * Подписывает выпуск tag. deps: gh(args) и git(args) -> строка/Buffer, rebuild({tag, version, work, bmpMtime}) -> путь к
  * установщику, пересобранному из метки (в тестах подменяются).
- * opts: {tag, keyPath, dry, minAuto, from, whatsnew, date, keysFile, work, skipRebuild}. Возвращает {file, version, size, sha256, uploaded}.
+ * opts: {tag, keyPath, dry, minAuto, from, whatsnew, date, keysFile, work, skipRebuild, bmpMtime}. Возвращает {file, version, size, sha256, uploaded}.
  */
 export function signRelease(opts, deps) {
   const m = TAG_RE.exec(opts.tag ?? '')
@@ -291,7 +305,7 @@ export function signRelease(opts, deps) {
 
   if (!opts.skipRebuild) {
     // независимая сверка: установщик собран здесь из метки, а не взят на веру у CI (design §5.4, §10)
-    const rebuilt = deps.rebuild({ tag: opts.tag, version, work })
+    const rebuilt = deps.rebuild({ tag: opts.tag, version, work, bmpMtime: opts.bmpMtime })
     if (path.basename(rebuilt) !== name) throw new SignError(`пересборка дала ${path.basename(rebuilt)}, ждали ${name}`)
     compareRebuilt(opts.tag, name, data, fs.readFileSync(rebuilt))
   }
@@ -363,7 +377,10 @@ const external = (cmd, args) => {
 const realDeps = {
   gh: (args) => external('gh', args),
   git: (args) => external('git', args),
-  rebuild: ({ tag, version, work }) => rebuildSetup({ tag, version, work, repo: root, fail: (m) => new SignError(m) }),
+  rebuild: ({ tag, version, work, bmpMtime }) => {
+    if (bmpMtime !== undefined) console.error(`release-sign: mtime wizard.bmp и header.bmp в копии метки выставлен: ${bmpMtime} (${new Date(bmpMtime * 1000).toISOString()})`)
+    return rebuildSetup({ tag, version, work, repo: root, bmpMtime, fail: (m) => new SignError(m) })
+  },
 }
 
 function main(argv) {
@@ -384,10 +401,15 @@ function main(argv) {
     return
   }
   const tag = argv.find((a, i) => /^v\d/.test(a) && (i === 0 || !argv[i - 1].startsWith('--')))
-  if (!tag) throw new SignError('использование: node scripts/release-sign.mjs vX.Y.Z [--key pem] [--dry] [--min-auto X.Y.Z] [--from папка --skip-rebuild] | --new-key <путь> | --test-key', 2)
+  if (!tag) throw new SignError('использование: node scripts/release-sign.mjs vX.Y.Z [--key pem] [--dry] [--min-auto X.Y.Z] [--bmp-mtime сек] [--from папка --skip-rebuild] | --new-key <путь> | --test-key', 2)
+  // флаг без значения (последний или перед другим флагом) — отказ, а не молчаливое «не задано»
+  const bi = argv.indexOf('--bmp-mtime')
+  if (bi >= 0 && (bi + 1 >= argv.length || argv[bi + 1].startsWith('--'))) throw new SignError('--bmp-mtime: не указано значение (unix-секунды)', 2)
+  const bmpMtime = parseBmpMtime(arg(argv, '--bmp-mtime', process.env.SA_INSTALLER_BMP_MTIME))
   const r = signRelease(
     {
       tag,
+      bmpMtime,
       keyPath: path.resolve(arg(argv, '--key', path.join(root, 'docs', 'private', 'release-key.pem'))),
       dry: argv.includes('--dry'),
       skipRebuild: argv.includes('--skip-rebuild'),

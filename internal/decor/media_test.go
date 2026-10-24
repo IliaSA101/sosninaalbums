@@ -277,7 +277,7 @@ func FuzzMediaGenQuery(f *testing.F) {
 	} {
 		f.Add(true, q)
 	}
-	s := Open(f.TempDir())
+	s := Open(testkit.TempDir(f))
 	h := s.Handler(nil)
 	f.Fuzz(func(t *testing.T, art bool, q string) {
 		path := "/media/gen/pat"

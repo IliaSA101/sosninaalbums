@@ -1,6 +1,9 @@
 package model
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // «Фабрика Фотокниги» (081): форматы Лайфлата и «Фотокниги на фотобумаге», шесть изделий для
 // обложки и строки предела разворотов. Сайт 19.10 (docs/research/fabrika-requirements.md): лист
@@ -35,7 +38,7 @@ func FabrikaFormats() []PrintFormat {
 }
 
 // fabrikaCoverPresets — изделия Фабрики: корешок зависит от бумаги и прослойки, а не от формата
-// (таблица сайта на изделие). Safe и SpineSafe 0 — безопасная зона из настроек альбома;
+// (таблица сайта на изделие), кроме 30×20 / 2 мм — fabrikaStepsFor. Safe и SpineSafe 0 — безопасная зона из настроек альбома;
 // сторонку и заворот по формату страницы подставляет CoverPresetFor.
 func fabrikaCoverPresets() []CoverPreset {
 	fb := func(id, name string, st []SpineStep) CoverPreset {
@@ -62,27 +65,37 @@ func fabrikaPagePresets() []PagePreset {
 	return out
 }
 
-// fabrikaLimits — строки предела (081 С1–С2). Max — последняя строка таблицы корешка изделия
-// (один источник, как у Фотосферы); «от 1» сайта — Min 0. Нет строки у формата — изделия нет
-// (лайфлат только 20×20 и 21×30, прослойка 2 мм — без 30×30): LimitFor не находит ничего.
-func fabrikaLimits() []PrintLimit {
-	top := map[string]int{}
-	for _, c := range fabrikaCoverPresets() {
-		top[c.ID] = c.Spec.Steps[len(c.Spec.Steps)-1].Upto
+// fabrikaStepsFor — таблица корешка изделия id для формата page. Таблица общая для форматов, кроме
+// одного: у 30×20 прослойка 2 мм идёт до 10 разворотов (корешок 24), у остальных — до 9 (PSD-шаблоны
+// Фабрики 24.10, CSV «Photobook 30x20.csv»). Остальным форматам таблица изделия не меняется — обложки
+// с ней не становятся «не по шаблону».
+func fabrikaStepsFor(id, page string, base []SpineStep) []SpineStep {
+	if id == "fabrika-photo-2" && page == "30×20" {
+		return append(slices.Clone(base), SpineStep{Upto: 10, Mm: 24})
 	}
-	row := func(id, format string, from int) PrintLimit {
-		return PrintLimit{Product: id, Format: format, Min: from, Max: top[id]}
+	return base
+}
+
+// fabrikaLimits — строки предела (081 С1–С2) по CSV шаблонов Фабрики (TestFabrikaSpineMatchesPSD).
+// Max задан явно и равен последней строке таблицы корешка формата (fabrikaStepsFor); «от 1» сайта —
+// Min 0. Прослойка 1 и 2 мм у 20×20, 21×30, 25×25 — с 2 разворотов, у 30×20 — с 1. Нет строки у
+// формата — изделия нет (лайфлат только 20×20 и 21×30, прослойка 2 мм — без 30×30): LimitFor
+// не находит ничего.
+func fabrikaLimits() []PrintLimit {
+	row := func(id, format string, from, to int) PrintLimit {
+		return PrintLimit{Product: id, Format: format, Min: from, Max: to}
 	}
 	// 30×30 принимает от 10 разворотов на любой бумаге, где он бывает.
 	out := []PrintLimit{
-		row("fabrika-photo", "", 0), row("fabrika-photo", "30×30", 10),
-		row("fabrika-photo-1", "", 0), row("fabrika-photo-1", "30×30", 10),
+		row("fabrika-photo", "", 0, 40), row("fabrika-photo", "30×30", 10, 40),
+		row("fabrika-photo-1", "", 0, 30), row("fabrika-photo-1", "30×30", 10, 30),
 	}
-	for _, f := range []string{"20×20", "21×30", "25×25", "30×20"} {
-		out = append(out, row("fabrika-photo-2", f, 0))
+	for _, f := range []string{"20×20", "21×30", "25×25"} {
+		out = append(out, row("fabrika-photo-1", f, 2, 30), row("fabrika-photo-2", f, 2, 9))
 	}
+	out = append(out, row("fabrika-photo-2", "30×20", 0, 10))
 	for _, f := range []string{"20×20", "21×30"} {
-		out = append(out, row("fabrika-layflat-paper", f, 10), row("fabrika-layflat-card", f, 2), row("fabrika-layflat-card-1", f, 2))
+		out = append(out, row("fabrika-layflat-paper", f, 10, 30), row("fabrika-layflat-card", f, 2, 20), row("fabrika-layflat-card-1", f, 2, 12))
 	}
 	return out
 }

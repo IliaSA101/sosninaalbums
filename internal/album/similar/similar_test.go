@@ -456,6 +456,7 @@ func TestDropsSpeed(t *testing.T) {
 	if n < 2000 {
 		t.Errorf("убрано %d из 3200, ждали ≥ 2000 (три из четырёх в серии)", n)
 	}
+	testkit.CostTest(t)
 	if lim := testkit.Limit(50 * time.Millisecond); d > lim {
 		t.Errorf("Drops %v > %v", d, lim)
 	}

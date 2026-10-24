@@ -9,6 +9,9 @@ export GOTMPDIR="$root/.gotmp"
 mkdir -p "$GOTMPDIR"
 export GOCACHE="$main/.gotmp/cache-go"
 export GOLANGCI_LINT_CACHE="$main/.gotmp/cache-golangci"
+# Кэши prettier и eslint — в .gotmp своей копии (не в дереве и не в общем node_modules: пути файлов у копий разные).
+prettier_cache="$GOTMPDIR/cache-prettier"
+eslint_cache="$GOTMPDIR/cache-eslint"
 
 # Тулчейн — ровно из go.mod (toolchain), как в CI: машина с более новым Go иначе проверяла бы и собирала своим,
 # и сборки двух машин не сошлись бы побайтно.
@@ -19,6 +22,8 @@ tc=$(awk '$1 == "toolchain" { print $2; exit }' "$root/go.mod")
 ci="$root/.github/workflows/ci.yml"
 node_want=$(sed -n 's/.*node-version: *"\{0,1\}\([0-9.]*\)"\{0,1\}.*/\1/p' "$ci" | head -n 1)
 gcl_want=$(awk '/golangci-lint-action/ { f = 1 } f && $1 == "version:" { print $2; exit }' "$ci")
+# actionlint — версия из задания workflows в ci.yml (запуск go run ...@версия, ставить не нужно).
+actionlint_want=$(sed -n 's#.*rhysd/actionlint/cmd/actionlint@\(v[0-9.]*\).*#\1#p' "$ci" | head -n 1)
 # Node нужной версии из nvm — впереди PATH (у nvm по умолчанию может стоять другая, например у соседнего проекта).
 if [ -n "$node_want" ] && [ "$(node -v 2>/dev/null)" != "v$node_want" ] && [ -d "$HOME/.nvm/versions/node/v$node_want/bin" ]; then
   PATH="$HOME/.nvm/versions/node/v$node_want/bin:$PATH"

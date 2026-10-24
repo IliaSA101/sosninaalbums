@@ -320,9 +320,6 @@ func TestVignetteChoicesFast(t *testing.T) {
 	d := testkit.Fastest(7, func() { cs = e.VignetteChoices(sid, 4, 60, "3:4", nil) })
 	// Предел ×50 над обычным временем: страж от квадратичного роста, а не от шума нагрузки.
 	// 049: 33 превью ~0,5 мс; 5 мс из спеки не взяты — на 5 мс всплеск нагрузки ронял тест.
-	if lim := testkit.Limit(25 * time.Millisecond); d > lim {
-		t.Fatalf("33 превью за %v, предел %v", d, lim)
-	}
 	if len(cs) != 33 {
 		t.Fatalf("превью %d", len(cs))
 	}
@@ -342,6 +339,10 @@ func TestVignetteChoicesFast(t *testing.T) {
 	}
 	if cs := sh.VignetteChoices("нет", 1, 24, "", nil); cs != nil {
 		t.Fatal("превью неизвестного разворота")
+	}
+	testkit.CostTest(t)
+	if lim := testkit.Limit(25 * time.Millisecond); d > lim {
+		t.Fatalf("33 превью за %v, предел %v", d, lim)
 	}
 }
 

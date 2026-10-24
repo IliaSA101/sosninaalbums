@@ -25,6 +25,11 @@ except ImportError:
     HAVE_PIL = False
 
 
+# картинки мастера (make_wizard_bmp.py): installer.sh берёт их рядом с собой
+WIZARD_BMPS = ("wizard.bmp", "wizard-100.bmp", "wizard-125.bmp", "wizard-150.bmp", "wizard-175.bmp", "header.bmp")
+HAVE_7Z = shutil.which("7z") is not None
+
+
 def read_nsi():
     with open(NSI, encoding="utf-8") as f:
         return f.read()
@@ -112,9 +117,12 @@ class TestScript(unittest.TestCase):
         self.assertRegex(after[:60], r"\s*SetErrorLevel 5\s+Quit")
 
     def test_wizard_bmp(self):
-        # картинки мастера в 2x (при DPI 125-200 % NSIS сжимает, а не растягивает): BMP 24 бита,
-        # пропорции 1x: 164x314 слева на первой и последней страницах, 57x57 справа в шапке
-        for name, size in (("wizard.bmp", (164 * 2, 314 * 2)), ("header.bmp", (57 * 2, 57 * 2))):
+        # картинки мастера: 2x (200 % и выше) и по одной точно под высоту контрола на 100/125/150/175 %
+        # (314/386/458/555 px, измерено на снимках CI; ширина — по пропорции 164x314), 57x57 в 2x в шапке; BMP 24 бита
+        sizes = (("wizard.bmp", (328, 628)), ("wizard-100.bmp", (164, 314)), ("wizard-125.bmp", (202, 386)),
+                 ("wizard-150.bmp", (239, 458)), ("wizard-175.bmp", (290, 555)), ("header.bmp", (114, 114)))
+        self.assertEqual([n for n, _ in sizes], list(WIZARD_BMPS))
+        for name, size in sizes:
             path = os.path.join(HERE, name)
             self.assertLess(os.path.getsize(path), 700_000, name)
             with open(path, "rb") as f:
@@ -133,6 +141,28 @@ class TestScript(unittest.TestCase):
                        '!define MUI_HEADERIMAGE_BITMAP "${HEADER}"',
                        "!define MUI_HEADERIMAGE_BITMAP_STRETCH AspectFitHeight"):
             self.assertIn(needle, self.nsi)
+
+    def test_wizard_for_dpi(self):
+        # подмена картинки по системному DPI: после MUI2 (.onGUIInit), пороги 96/120/144/168 по возрастанию,
+        # на каждый масштаб своя картинка; выше 168 и при сбое чтения DPI остаётся 2x от MUI2
+        self.assertIn("!define MUI_CUSTOMFUNCTION_GUIINIT WizardForDpi", self.nsi)
+        body = self.nsi[self.nsi.index("Function WizardForDpi"):]
+        body = body[:body.index("FunctionEnd")]
+        self.assertIn("gdi32::GetDeviceCaps(p r0, i 90)", body)  # 90 = LOGPIXELSY
+        self.assertIn("user32::ReleaseDC", body)
+        picks = re.findall(r'\$1 <= (\d+)\n\s+File "/oname=\$PLUGINSDIR\\modern-wizard.bmp" "\$\{WIZARD_DPI\}/(wizard-\d+)\.bmp"',
+                           body)
+        self.assertEqual(picks, [("96", "wizard-100"), ("120", "wizard-125"), ("144", "wizard-150"),
+                                 ("168", "wizard-175")])
+        self.assertEqual(body.count("!pragma verifyloadimage"), 4)
+        self.assertNotIn("${Else}\n", body)
+        self.assertIn("!ifndef WIZARD_DPI", self.nsi)
+
+    def test_set_date_save_first(self):
+        # SetDateSave off — первая команда после Unicode true: ни одна картинка и exe не попадут в установщик с mtime
+        lines = [ln for ln in self.nsi.splitlines() if ln.strip() and not ln.lstrip().startswith(";")]
+        self.assertEqual(lines[0], "Unicode true")
+        self.assertEqual(lines[1], "SetDateSave off")
 
     def test_no_straight_quotes_in_visible_text(self):
         # стандартные русские строки NSIS пишут «Готово», «Удалить» в прямых кавычках: страницы мастера и
@@ -163,20 +193,22 @@ class TestScript(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_PIL, "нет Pillow")
     def test_wizard_bmp_reproducible(self):
-        # скрипт картинок детерминирован: два прогона — те же байты (обе картинки)
+        # скрипт картинок детерминирован: два прогона в разные папки — те же байты всех шести файлов,
+        # размеры совпадают с файлами в git (байты в git зависят от версии Pillow, размеры — нет)
         outs = []
         with tempfile.TemporaryDirectory() as d:
             for n in ("a", "b"):
-                paths = [os.path.join(d, n + ".bmp"), os.path.join(d, n + "-header.bmp")]
-                subprocess.run([sys.executable, "-I", os.path.join(HERE, "make_wizard_bmp.py"), *paths], check=True)
-                got = []
-                for p in paths:
-                    with open(p, "rb") as f:
-                        got.append(f.read())
+                out = os.path.join(d, n)
+                subprocess.run([sys.executable, "-I", os.path.join(HERE, "make_wizard_bmp.py"), out], check=True)
+                self.assertEqual(sorted(os.listdir(out)), sorted(WIZARD_BMPS))
+                got = {}
+                for name in WIZARD_BMPS:
+                    with open(os.path.join(out, name), "rb") as f:
+                        got[name] = f.read()
                 outs.append(got)
         self.assertEqual(outs[0], outs[1])
-        for data, name in zip(outs[0], ("wizard.bmp", "header.bmp")):
-            self.assertEqual(len(data), os.path.getsize(os.path.join(HERE, name)), name)
+        for name in WIZARD_BMPS:
+            self.assertEqual(len(outs[0][name]), os.path.getsize(os.path.join(HERE, name)), name)
 
 
 @unittest.skipUnless(BASH, "нет bash")
@@ -243,6 +275,59 @@ class TestInstallerSh(unittest.TestCase):
         b = self.build("b", exe=other)
         with open(a, "rb") as fa, open(b, "rb") as fb:
             self.assertEqual(fa.read(), fb.read(), "mtime и путь exe не должны влиять на байты установщика")
+
+    @unittest.skipUnless(HAVE_MAKENSIS or os.environ.get("CI"), "нет makensis")
+    def test_reproducible_across_bitmap_mtime(self):
+        # MUI2 и WizardForDpi кладут wizard*.bmp и header.bmp командой File в .onGUIInit; без SetDateSave off в начале скрипта
+        # их mtime (момент git checkout) попадал в установщик, и сверка release-sign.mjs с CI не сходилась (0.25.0)
+        self.assertTrue(HAVE_MAKENSIS, "в CI makensis обязателен (apt install nsis)")
+        a = self.build("a")
+        # копия скрипта с картинками: installer.sh берёт их по своему расположению
+        win = os.path.join(self.dir, "repo", "scripts", "win")
+        os.makedirs(win)
+        for name in ("installer.sh", "installer.nsi", *WIZARD_BMPS):
+            shutil.copyfile(os.path.join(HERE, name), os.path.join(win, name))
+        for name in WIZARD_BMPS:
+            os.utime(os.path.join(win, name), (1_000_000_000, 1_000_000_000))  # 2001 год
+        out = os.path.join(self.dir, "b")
+        p = subprocess.run([BASH, os.path.join(win, "installer.sh"), "--exe", self.exe, "--version", "1.2.3",
+                            "--out", out, "--icon", os.path.join(HERE, "..", "..", "build", "windows", "icon.ico")],
+                           capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        b = p.stdout.strip().splitlines()[-1]
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            self.assertEqual(fa.read(), fb.read(), "mtime картинок мастера не должен влиять на байты установщика")
+
+    @unittest.skipUnless(HAVE_MAKENSIS or os.environ.get("CI"), "нет makensis")
+    @unittest.skipUnless(HAVE_7Z, "нет 7z: содержимое установщика не прочитать")
+    def test_all_wizard_images_inside(self):
+        # в установщике лежат все пять картинок мастера (2x и четыре под DPI), по одной на ветку WizardForDpi, и шапка
+        self.assertTrue(HAVE_MAKENSIS, "в CI makensis обязателен (apt install nsis)")
+        setup = self.build("a")
+        p = subprocess.run(["7z", "l", "-slt", setup], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        sizes = {}
+        for block in p.stdout.split("\n\n"):
+            fields = dict(ln.split(" = ", 1) for ln in block.splitlines() if " = " in ln)
+            if fields.get("Path", "").startswith("$PLUGINSDIR"):
+                sizes.setdefault(fields["Path"], []).append(int(fields["Size"]))
+        want = sorted(os.path.getsize(os.path.join(HERE, n)) for n in WIZARD_BMPS[:5])
+        self.assertEqual(sorted(sizes["$PLUGINSDIR/modern-wizard.bmp"]), want)
+        self.assertEqual(sizes["$PLUGINSDIR/modern-header.bmp"], [os.path.getsize(os.path.join(HERE, "header.bmp"))])
+
+    def test_missing_dpi_image(self):
+        # нет любой из картинок под DPI — установщик не собирается, не молча без неё (до makensis)
+        for gone in WIZARD_BMPS[1:5]:
+            win = os.path.join(self.dir, "repo-" + gone, "scripts", "win")
+            os.makedirs(win)
+            for name in ("installer.sh", "installer.nsi", *WIZARD_BMPS):
+                if name != gone:
+                    shutil.copyfile(os.path.join(HERE, name), os.path.join(win, name))
+            p = subprocess.run([BASH, os.path.join(win, "installer.sh"), "--exe", self.exe, "--version", "1.2.3",
+                                "--out", os.path.join(self.dir, "o-" + gone), "--icon", self.exe],
+                               capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(p.returncode, 1, gone)
+            self.assertIn(gone, p.stderr)
 
     @unittest.skipUnless(HAVE_MAKENSIS or os.environ.get("CI"), "нет makensis")
     def test_versions_and_empty_exe(self):

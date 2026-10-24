@@ -34,7 +34,7 @@ func pageBare(t *testing.T) *image.RGBA {
 // Рамочки, которым нечего рисовать, не дают ни ошибки, ни пикселя — и не открывают файл
 // (пути заведомо нет: прочитай его — вышла бы ошибка).
 func TestRenderBorderNothingToDraw(t *testing.T) {
-	gone := filepath.Join(t.TempDir(), "нет.png")
+	gone := filepath.Join(testkit.TempDir(t), "нет.png")
 	ok := layout.Rect{X: 20, Y: 10, W: 40, H: 30}
 	nan, inf := math.NaN(), math.Inf(1)
 	cases := []struct {

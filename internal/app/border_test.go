@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/binary"
 	"hash/crc32"
@@ -17,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
@@ -64,9 +64,9 @@ func ringFrame(t testing.TB, dir string, w, h, l, top, r, b int, c color.NRGBA) 
 	return path
 }
 
-// pngHeaderOnly — PNG с настоящим IHDR w×h и без данных: DecodeConfig его читает, а гигантская
-// картинка в памяти теста не нужна.
-func pngHeaderOnly(t testing.TB, path string, w, h int) {
+// pngTruncated — PNG с заголовком и началом данных (одна строка, поток zlib не закрыт): декод
+// такого файла выделил бы весь холст w×h до первой же ошибки, так что выделенная память видит, был ли декод.
+func pngTruncated(t testing.TB, path string, w, h int) {
 	t.Helper()
 	var ihdr [13]byte
 	binary.BigEndian.PutUint32(ihdr[0:], uint32(w))
@@ -74,10 +74,18 @@ func pngHeaderOnly(t testing.TB, path string, w, h int) {
 	ihdr[8], ihdr[9] = 8, 6 // 8 бит, RGBA
 	var buf bytes.Buffer
 	buf.WriteString("\x89PNG\r\n\x1a\n")
-	_ = binary.Write(&buf, binary.BigEndian, uint32(len(ihdr)))
-	chunk := append([]byte("IHDR"), ihdr[:]...)
-	buf.Write(chunk)
-	_ = binary.Write(&buf, binary.BigEndian, crc32.ChecksumIEEE(chunk))
+	put := func(name string, data []byte) {
+		_ = binary.Write(&buf, binary.BigEndian, uint32(len(data)))
+		chunk := append([]byte(name), data...)
+		buf.Write(chunk)
+		_ = binary.Write(&buf, binary.BigEndian, crc32.ChecksumIEEE(chunk))
+	}
+	put("IHDR", ihdr[:])
+	var z bytes.Buffer
+	zw := zlib.NewWriter(&z)
+	_, _ = zw.Write(make([]byte, 1+w*4)) // фильтр + строка нулей
+	_ = zw.Flush()                       // без Close: поток оборван
+	put("IDAT", z.Bytes())
 	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -290,16 +298,20 @@ func TestMediaFrameRefuses(t *testing.T) {
 	// Огромная по заголовку — отказ без декода (079-35), быстро.
 	reachable = old
 	huge := filepath.Join(dir, "огромная.png")
-	pngHeaderOnly(t, huge, 15000, 15000)
+	pngTruncated(t, huge, 15000, 15000)
 	p, _ := a.editor().Snapshot()
 	p.Photos[brFrame] = model.PhotoRef{Path: huge, W: 300, H: 200}
 	a.ed.Store(mustEditor(t, p, ""))
-	t0 := time.Now()
+	// Отказ «до декода» мерим не временем, а выделенной памятью: декод заголовка 15000² занял бы
+	// ~900 МБ под холст, отказ — килобайты (не зависит от нагрузки машины).
+	var m0, m1 runtime.MemStats
+	runtime.ReadMemStats(&m0)
 	if rec := getMedia(a, url+"&px=256"); rec.Code != http.StatusNotFound {
 		t.Fatalf("15000²: %d", rec.Code)
 	}
-	if d := time.Since(t0); d > testkit.Limit(200*time.Millisecond) {
-		t.Fatalf("15000²: отказ за %v", d)
+	runtime.ReadMemStats(&m1)
+	if extra := m1.TotalAlloc - m0.TotalAlloc; extra > 64<<20 {
+		t.Fatalf("15000²: отказ выделил %d МБ (декод до отказа?)", extra>>20)
 	}
 
 	// Имя устройства (C:\a\CON.png): отказ CheckLocalPath, до проверки тома и файла (на Windows 11

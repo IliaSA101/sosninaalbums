@@ -35,6 +35,8 @@ type Photo struct {
 	Profile string        `json:"profile,omitempty"`
 	// Xmp — отметки из файла (XMP в JPEG и сайдкар); nil — нет, чтобы не раздувать событие library.
 	Xmp *Marks `json:"xmp,omitempty"`
+
+	ours bool // в заголовке метка выгрузки программы (imgfile.Head.Ours): сканер не берёт такой файл из папки (121)
 }
 
 // ShotKey — ключ порядка по дате съёмки: время EXIF (taken, уже «стенное» время камеры как UTC),
@@ -119,7 +121,7 @@ func readHead(path string) (Photo, []byte, error) {
 	}
 	return Photo{
 		ID: IDFor(path), Path: path, Name: filepath.Base(path), W: w, H: h,
-		Rotate: head.Orient, Taken: head.Taken, Shot: ShotKey(head.Taken, st.ModTime()), Size: st.Size(), Color: col, Profile: prof,
+		Rotate: head.Orient, Taken: head.Taken, Shot: ShotKey(head.Taken, st.ModTime()), Size: st.Size(), Color: col, Profile: prof, ours: head.Ours,
 	}, head.XMP, nil
 }
 

@@ -221,7 +221,7 @@
       {/if}
     </div>
   {:else}
-    <div class="group spine" style:left="50%">
+    <div class="group spine" style:left="50%" data-guide="layout-auto">
       {#if variants}
         <button
           class="arrow"

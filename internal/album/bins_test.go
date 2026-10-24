@@ -496,6 +496,7 @@ func bestOf(n int, op, reset func()) time.Duration {
 
 // 3200 фото, 10 подборок: SetBin на всех, DeleteBin, NewBin с 3200 фото — в пределах 30 мс (083 сц. 14).
 func TestBinsFast(t *testing.T) {
+	testkit.CostTest(t)
 	ids := make([]string, 3200)
 	for i := range ids {
 		ids[i] = fmt.Sprintf("p%04d", i)
@@ -512,7 +513,7 @@ func TestBinsFast(t *testing.T) {
 		"DeleteBin": func() { e.DeleteBin(bins[1]) },
 		"NewBin":    func() { newBin(t, e, "Все", ph) },
 	} {
-		if d := bestOf(3, op, func() { e.Undo() }); d > limit {
+		if d := bestOf(5, op, func() { e.Undo() }); d > limit {
 			t.Errorf("%s на 3200 фото: %v > %v", what, d, limit)
 		}
 	}

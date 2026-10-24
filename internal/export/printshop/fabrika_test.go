@@ -55,6 +55,9 @@ func TestFabrikaCheck(t *testing.T) {
 	if !strings.HasPrefix(offFix, "Не по шаблону Фабрики Фотокниги 30×30: ") {
 		t.Fatalf("строка «не по шаблону»: %q", offFix)
 	}
+	// Обложка 30×20 / 2 мм из 0.25.0: девять разворотов в таблице, на десяти лист короче шаблона.
+	old30 := album(304, 203, 10, "fabrika-photo-2")
+	old30.Cover.Spec.Steps = old30.Cover.Spec.Steps[:8]
 	flat25 := album(250, 254, 12, "fabrika-layflat-paper")
 	flat25.Cover.Spec.Wrap = 15
 	for _, c := range []struct {
@@ -70,6 +73,9 @@ func TestFabrikaCheck(t *testing.T) {
 		{"лайфлат 25×25", album(250, 254, 12, "fabrika-layflat-paper"), []string{"«Лайфлат, бумага» не бывает 25×25 — выберите другую обложку"}, -1},
 		{"прослойка 2 мм 30×30", album(300, 305, 50, "fabrika-photo-2"), []string{"«Фотобумага, прослойка 2 мм» не бывает 30×30 — выберите другую обложку"}, -1},
 		{"не по шаблону и не бывает", flat25, []string{model.CoverFixText(flat25), "«Лайфлат, бумага» не бывает 25×25 — выберите другую обложку"}, 0},
+		{"1 разворот, прослойка 1 мм, 20×20", album(200, 203, 1, "fabrika-photo-1"), []string{"Разворотов 1 — у Фабрики Фотокниги («Фотобумага, прослойка 1 мм») не меньше 2"}, -1},
+		{"10 разворотов, 30×20 / 2 мм", album(304, 203, 10, "fabrika-photo-2"), []string{}, -1},
+		{"старая обложка 30×20 / 2 мм", old30, []string{model.CoverFixText(old30)}, 0},
 		{"41 фотобумага", album(200, 203, 41, "fabrika-photo"), []string{"Разворотов 41 — у Фабрики Фотокниги («Фотобумага») не больше 40"}, -1},
 		{"9 фотобумага 30×30", album(300, 305, 9, "fabrika-photo"), []string{"Разворотов 9 — у Фабрики Фотокниги («Фотобумага») не меньше 10"}, -1},
 		{"5 лайфлат бумага", album(200, 203, 5, "fabrika-layflat-paper"), []string{"Разворотов 5 — у Фабрики Фотокниги («Лайфлат, бумага») не меньше 10"}, -1},
@@ -92,7 +98,8 @@ func TestFabrikaCheck(t *testing.T) {
 	}{
 		{album(200, 203, 5, "fabrika-layflat-card-1"), 2, 12},
 		{album(300, 305, 5, "fabrika-photo-1"), 10, 30},
-		{album(200, 203, 5, "fabrika-photo-2"), 0, 9},
+		{album(200, 203, 5, "fabrika-photo-2"), 2, 9},  // прослойка с 2 разворотов (CSV шаблонов)
+		{album(304, 203, 5, "fabrika-photo-2"), 0, 10}, // 30×20 — до 10 разворотов, корешок 24
 		{album(304, 203, 5, ""), 0, 40},
 		{album(250, 254, 5, "fabrika-layflat-card"), 0, 0},
 	} {

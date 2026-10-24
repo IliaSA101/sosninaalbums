@@ -286,6 +286,16 @@ jobs:
           if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
           else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'summary.md missing' }
 
+      # log.txt программы (rel пишет в профиль APPDATA): по нему видно, дошла ли правка и второй запуск до программы
+      - name: Журнал программы (open)
+        if: ${{ always() && matrix.block == 'open' }}
+        run: |
+          $src = Join-Path $env:APPDATA 'SosninaAlbums\log.txt'
+          $dst = Join-Path $env:RUNNER_TEMP 'win-qa-out\logs'
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $dst 'app-log.txt') -Force }
+          else { Write-Host 'log.txt not found' }
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

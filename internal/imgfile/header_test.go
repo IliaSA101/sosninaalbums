@@ -2,6 +2,7 @@ package imgfile
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -85,6 +86,8 @@ func FuzzJPEGHead(f *testing.F) {
 	f.Add(testkit.RawJPEG(testkit.ExifTaken(false, "2024:06:15 14:30:05", "2024:06:15 14:30:06"), testkit.ICCSegment(1, 1, srgb)))
 	f.Add(testkit.RawJPEG(testkit.ExifTaken(true, "", "0000:00:00 00:00:00")))
 	f.Add([]byte{0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x01})
+	f.Add(testkit.RawJPEG(testkit.Segment(0xFE, []byte(ExportMarker))))
+	f.Add([]byte{0xFF, 0xD8, 0xFF, 0xFE, 0, 16, 'S', 'o', 's'}) // COM обрезан посреди метки
 	f.Fuzz(func(t *testing.T, data []byte) {
 		h := Header(bytes.NewReader(data))
 		if h.Orient < 1 || h.Orient > 8 || len(h.XMP) > 65533-len(XMPPrefix) {
@@ -94,4 +97,54 @@ func FuzzJPEGHead(f *testing.F) {
 			t.Fatalf("время вне пределов: %d", h.Taken)
 		}
 	})
+}
+
+// Метка выгрузки (121): COM «Sosnina Albums» до SOS и только он; остальные поля заголовка от неё не зависят.
+func TestHeaderOurs(t *testing.T) {
+	com := func(s string) []byte { return testkit.Segment(0xFE, []byte(s)) }
+	jfif := testkit.Segment(0xE0, []byte{'J', 'F', 'I', 'F', 0, 1, 1, 1, 0, 0, 0, 0, 0, 0})
+	exif := testkit.ExifColor(false, 6, 0xFFFF, "R03")
+	xmp := xmpSegment(xmpAttrs(`xmp:Rating="4"`))
+	cases := []struct {
+		name string
+		data []byte
+		want bool
+	}{
+		{"COM после APP0", testkit.RawJPEG(jfif, com(ExportMarker)), true},
+		{"COM первым сегментом", testkit.RawJPEG(com(ExportMarker)), true},
+		{"COM после EXIF и XMP", testkit.RawJPEG(exif, xmp, com(ExportMarker)), true},
+		{"второй COM с меткой", testkit.RawJPEG(jfif, com("другой"), com(ExportMarker)), true},
+		{"COM другой программы", testkit.RawJPEG(jfif, com("Created by GIMP")), false},
+		{"пустой COM", testkit.RawJPEG(jfif, com("")), false},
+		{"метка с хвостом", testkit.RawJPEG(jfif, com(ExportMarker+"!")), false},
+		{"метка без последней буквы", testkit.RawJPEG(jfif, com(ExportMarker[:len(ExportMarker)-1])), false},
+		{"COM ровно 64 байта, метка внутри", testkit.RawJPEG(jfif, com(ExportMarker+strings.Repeat(" ", 50))), false},
+		{"COM длиннее 64 байт", testkit.RawJPEG(jfif, com(strings.Repeat("x", 70)+ExportMarker)), false},
+		{"метка в APP1", testkit.RawJPEG(jfif, testkit.Segment(0xE1, []byte("Exif\x00\x00"+ExportMarker))), false},
+		{"метка в XMP", testkit.RawJPEG(jfif, xmpSegment([]byte(ExportMarker))), false},
+		{"метка после SOS", append(testkit.RawJPEG(jfif), com(ExportMarker)...), false},
+		{"обрезанный COM", []byte{0xFF, 0xD8, 0xFF, 0xFE, 0, 16, 'S', 'o', 's'}, false},
+		{"нет сегментов", testkit.RawJPEG(), false},
+		{"PNG", append([]byte("\x89PNG\r\n\x1a\n"), com(ExportMarker)...), false},
+		{"мусор", []byte("Sosnina Albums"), false},
+		{"пусто", nil, false},
+	}
+	for _, c := range cases {
+		if got := Header(bytes.NewReader(c.data)).Ours; got != c.want {
+			t.Errorf("%s: Ours = %v, ждали %v", c.name, got, c.want)
+		}
+	}
+
+	// Метка не меняет остальное: ориентация, цвет, XMP, время — как без COM.
+	plain := Header(bytes.NewReader(testkit.RawJPEG(jfif, exif, xmp)))
+	marked := Header(bytes.NewReader(testkit.RawJPEG(jfif, com(ExportMarker), exif, xmp, com(ExportMarker))))
+	if !marked.Ours || plain.Ours {
+		t.Fatalf("Ours: с меткой %v, без %v", marked.Ours, plain.Ours)
+	}
+	marked.Ours = false
+	if marked.Orient != 6 || marked.Color != ColorAdobe || len(marked.XMP) == 0 ||
+		marked.Orient != plain.Orient || marked.Color != plain.Color || marked.Profile != plain.Profile ||
+		marked.Taken != plain.Taken || !bytes.Equal(marked.XMP, plain.XMP) {
+		t.Errorf("с меткой %+v, без неё %+v", marked, plain)
+	}
 }

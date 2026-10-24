@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // TestHelperChild — не тест: тело дочернего процесса, запускаемого тестами ниже (роль задаёт
@@ -30,7 +32,7 @@ func TestHelperChild(t *testing.T) {
 // child — дочерний процесс-«спальщик»; Wait в фоне подбирает зомби (kill(pid,0) видит его живым).
 func child(t *testing.T, sleep string) (cmd *exec.Cmd, done chan struct{}) {
 	t.Helper()
-	cmd = exec.Command(os.Args[0], "-test.run=^TestHelperChild$")
+	cmd = exec.Command(testkit.SelfExe(t), "-test.run=^TestHelperChild$")
 	cmd.Env = append(os.Environ(), "SA_OSX_CHILD=sleep", "SA_OSX_CHILD_ARG="+sleep)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -80,10 +82,10 @@ func TestWaitExit(t *testing.T) {
 
 // Start: процесс запускается с аргументами и без ожидания; нет exe — ошибка.
 func TestStart(t *testing.T) {
-	mark := filepath.Join(t.TempDir(), "mark")
+	mark := filepath.Join(testkit.TempDir(t), "mark")
 	t.Setenv("SA_OSX_CHILD", "write")
 	t.Setenv("SA_OSX_CHILD_ARG", mark)
-	if err := Start(os.Args[0], "-test.run=^TestHelperChild$"); err != nil {
+	if err := Start(testkit.SelfExe(t), "-test.run=^TestHelperChild$"); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(30 * time.Second)
@@ -96,7 +98,7 @@ func TestStart(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if err := Start(filepath.Join(t.TempDir(), "нет-такого.exe")); err == nil {
+	if err := Start(filepath.Join(testkit.TempDir(t), "нет-такого.exe")); err == nil {
 		t.Error("Start несуществующего exe без ошибки")
 	}
 }

@@ -96,3 +96,28 @@ func TestPagePresetIn(t *testing.T) {
 		t.Errorf("чужие поля: %+v", pr)
 	}
 }
+
+// TestCoverDefaultFor: изделие новой обложки по странице — по умолчанию типографии, чья кнопка
+// подошла (зона и обрез различают 21×30 Фабрики и Фотосферы); вне рядов — CoverDefault.
+func TestCoverDefaultFor(t *testing.T) {
+	for _, c := range []struct {
+		name        string
+		w, h        float64
+		safe, bleed float64
+		want        string
+	}{
+		{"30×20 Фабрики", 304, 203, 10, 3, "fabrika-photo"},
+		{"300×300 вне рядов", 300, 300, 10, 3, CoverDefault},
+		{"30×20 Фотосферы", 286, 203, 10, 3, "fsfera-thin"},
+		{"300×305 общий размер — Нетпринт", 300, 305, 10, 3, "netprint-premium"},
+		{"21×30 с полями Фабрики", 208, 296, 10, 3, "fabrika-photo"},
+		{"21×30 с полями Фотосферы", 208, 296, 8, 2, "fsfera-thin"},
+	} {
+		if got := CoverDefaultFor(sharedBook(c.w, c.h, 1, "", c.safe, c.bleed).Settings); got != c.want {
+			t.Errorf("%s: %q, ждали %q", c.name, got, c.want)
+		}
+	}
+	if got := CoverDefaultFor(NewSheet(304, 203).Settings); got != CoverDefault {
+		t.Errorf("лист 031: %q", got)
+	}
+}

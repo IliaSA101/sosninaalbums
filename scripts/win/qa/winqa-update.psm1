@@ -179,9 +179,44 @@ function Get-QaCount([int]$ProcId, [string]$Type) {
     return $n
 }
 
-# Нажать кнопку по точному имени: $true, если нашли
-function Invoke-QaButton([int]$ProcId, [string]$Name, [double]$Timeout = 10, [switch]$Mouse) {
-    $el = Find-AppEl -ProcId $ProcId -Name $Name -Type 'Button' -Timeout $Timeout
+# Прямоугольник элемента @(X, Y, W, H) или $null (элемент исчез, прямоугольник пустой или бесконечный)
+function Get-QaRectSafe($El) {
+    try {
+        $r = Get-ElRect $El
+        if ($r[2] -gt 0 -and $r[3] -gt 0) { return $r }
+    } catch { }
+    return $null
+}
+
+# Два прямоугольника одинаковые и не пустые (кнопка не едет: лента отстроена, окно не анимируется)
+function Test-QaSameRect($A, $B) {
+    if ($null -eq $A -or $null -eq $B) { return $false }
+    return (@($A) -join ',') -ceq (@($B) -join ',')
+}
+
+# Кнопка с прямоугольником, не менявшимся между двумя чтениями с шагом 0,3 с; найдена заново прямо перед возвратом.
+# Сразу после смены альбома или разворачивания окна прямоугольник из первого чтения бывает старым, и щелчок уходит мимо
+function Find-QaStableEl {
+    param([int]$ProcId, [string]$Name, [string]$Type = 'Button', [double]$Timeout = 15)
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        $el = Find-AppEl -ProcId $ProcId -Name $Name -Type $Type -Timeout 1
+        if ($el) {
+            $r1 = Get-QaRectSafe $el
+            Start-Sleep -Milliseconds 300
+            $el2 = Find-AppEl -ProcId $ProcId -Name $Name -Type $Type -Timeout 1
+            if ($el2 -and (Test-QaSameRect $r1 (Get-QaRectSafe $el2))) { return $el2 }
+        }
+    } while ($sw.Elapsed.TotalSeconds -lt $Timeout)
+    return $null
+}
+
+# Нажать кнопку по точному имени: $true, если нашли. -Stable - сначала дождаться неподвижной кнопки (после смены альбома,
+# разворачивания или появления окна); не дождались - нажимаем найденную как есть
+function Invoke-QaButton([int]$ProcId, [string]$Name, [double]$Timeout = 10, [switch]$Mouse, [switch]$Stable) {
+    $el = $null
+    if ($Stable) { $el = Find-QaStableEl -ProcId $ProcId -Name $Name -Timeout $Timeout }
+    if (-not $el) { $el = Find-AppEl -ProcId $ProcId -Name $Name -Type 'Button' -Timeout $Timeout }
     if (-not $el) { return $false }
     [void](Invoke-AppEl -El $el -Mouse:$Mouse)
     return $true

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // shortPath — имя 8.3 для существующего пути; пусто, если на томе короткие имена выключены.
@@ -35,7 +37,7 @@ func longTemp(t *testing.T) string {
 			return d
 		}
 	}
-	return t.TempDir()
+	return testkit.TempDir(t)
 }
 
 // %TEMP% в виде 8.3 при длинном имени exe (и наоборот) — всё равно «во временной папке».
@@ -69,7 +71,7 @@ func TestLaunchPlaceShortNames(t *testing.T) {
 	if got := LaunchPlace(filepath.Join(shortSub, "a", "b", "x.exe"), shortTmp); got != PlaceTemp {
 		t.Errorf("оба в 8.3, подпапок нет: %q", got)
 	}
-	other := t.TempDir()
+	other := testkit.TempDir(t)
 	if got := LaunchPlace(filepath.Join(shortPath(other), "x.exe"), shortTmp); got != PlaceNormal {
 		t.Errorf("чужая папка в 8.3 не должна совпасть: %q", got)
 	}
@@ -78,7 +80,7 @@ func TestLaunchPlaceShortNames(t *testing.T) {
 // Короткая форма раскрывается, длинная остаётся: t.TempDir на раннере CI лежит в 8.3
 // («C:\Users\RUNNER~1\…»), поэтому «путь не меняется» верно только для длинной формы.
 func TestLongPathKeepsPath(t *testing.T) {
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	long := longPath(dir)
 	if got := longPath(long); !strings.EqualFold(got, long) {
 		t.Errorf("не идемпотентно: %q → %q", long, got)

@@ -547,9 +547,6 @@ func TestVignetteChoicesOwnFast(t *testing.T) {
 	d := testkit.Fastest(7, func() { cs = e.VignetteChoices(sid, 4, 60, "3:4", tpls) })
 	// Обычно ~0,5 мс; предел 25 мс (×50) — страж от квадратичного роста, а не от шума
 	// параллельных прогонов (на 5 мс всплеск нагрузки ронял тест).
-	if lim := testkit.Limit(25 * time.Millisecond); d > lim {
-		t.Fatalf("33+50 превью за %v, предел %v", d, lim)
-	}
 	if len(cs) != 83 {
 		t.Fatalf("превью %d, ждали 33 + 50", len(cs))
 	}
@@ -557,6 +554,10 @@ func TestVignetteChoicesOwnFast(t *testing.T) {
 		if !c.Own || c.Gone || len(c.Boxes) != 64 || c.PupilW <= 0 || !strings.HasPrefix(c.ID, "my:") || c.Ratio != "3:4" {
 			t.Fatalf("свой %+v", c)
 		}
+	}
+	testkit.CostTest(t)
+	if lim := testkit.Limit(25 * time.Millisecond); d > lim {
+		t.Fatalf("33+50 превью за %v, предел %v", d, lim)
 	}
 }
 

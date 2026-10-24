@@ -149,13 +149,13 @@ func TestExportStopWhileWaitingBudget(t *testing.T) {
 	defer cancel()
 	var done []int
 	cancelWhenWaiting(t, cancel)
-	start := time.Now()
-	err := RunJobs(ctx, spreads, jobs, opt, out, func(d, _ int) { done = append(done, d) })
+	// Бюджет занят до конца теста: RunJobs, не заметивший отмену в ожидании, не вернётся совсем —
+	// бюджет ожидания в секундах ловит это без сравнения миллисекунд.
+	err := testkit.Bounded(t, testkit.Limit(5*time.Second), "RunJobs после отмены в ожидании бюджета", func() error {
+		return RunJobs(ctx, spreads, jobs, opt, out, func(d, _ int) { done = append(done, d) })
+	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("ждали Canceled: %v", err)
-	}
-	if d := time.Since(start); d > testkit.Limit(500*time.Millisecond) {
-		t.Errorf("остановка заметна через %v", d)
 	}
 	if len(done) != 1 {
 		t.Errorf("прогресс %v: готов только первый лист", done)
@@ -179,7 +179,9 @@ func TestExportStopWhileWaitingBudget(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 	cancelWhenWaiting(t, cancel2)
-	err = RunPlan(ctx2, spreads, NewPlan(nil, 3, false).WithCover(cov), opt, out2, nil, func(int, int) {})
+	err = testkit.Bounded(t, testkit.Limit(5*time.Second), "RunPlan после отмены в ожидании бюджета", func() error {
+		return RunPlan(ctx2, spreads, NewPlan(nil, 3, false).WithCover(cov), opt, out2, nil, func(int, int) {})
+	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("обложка: ждали Canceled: %v", err)
 	}

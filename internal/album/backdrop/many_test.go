@@ -334,6 +334,7 @@ func TestApplyBackgroundToFast(t *testing.T) {
 	}
 	dp := testkit.Fastest(5, func() { _, _ = e.PlanBackgroundTo(ts, preset(kinds[k%2])) })
 	t.Logf("правка %v, план %v", d, dp)
+	testkit.CostTest(t)
 	if lim := testkit.Limit(50 * time.Millisecond); d > lim {
 		t.Fatalf("фон на 200 разворотов %v, порог %v", d, lim)
 	}

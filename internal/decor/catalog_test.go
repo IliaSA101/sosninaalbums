@@ -178,6 +178,7 @@ func TestDecorCatalogFast(t *testing.T) {
 	if len(cat.Items) != 500+countBuiltin() {
 		t.Fatalf("плиток %d", len(cat.Items))
 	}
+	testkit.CostTest(t)
 	if limit := testkit.Limit(150 * time.Millisecond); d > limit {
 		t.Errorf("каталог %v, предел %v", d, limit)
 	}

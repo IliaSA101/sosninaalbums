@@ -19,7 +19,7 @@
   const step = $derived(tour.step)
   const num = $derived(typeof tour.at === 'number' ? tour.at + 1 : 0)
   const last = $derived(num === tour.steps.length)
-  const at = $derived(cardPlace(tour.ring, { w, h }, { w: winW, h: winH }))
+  const at = $derived(cardPlace(tour.ring, { w, h }, { w: winW, h: winH }, tour.avoid))
   const text = $derived(tour.res ? withMissing(tour.res.text, tour.missing) : '')
 
   // Размер карточки — по границам (offset, не client: рамка 1 px). Меряем после отрисовки нового текста, до кадра:

@@ -20,6 +20,7 @@ import { publicRaw, verifyBytes } from './library-pack.mjs'
 import {
   ASSET,
   SignError,
+  parseBmpMtime,
   buildBody,
   cleanNote,
   keyFromSeed,
@@ -417,4 +418,33 @@ test('QA-режим --from с --skip-rebuild пересборку не зовё�
   assert.ok(!r.calls.some((c) => c[0] === 'rebuild'))
   signRelease(qa, r.deps)
   assert.equal(r.calls.filter((c) => c[0] === 'rebuild').length, 1)
+})
+
+test('--bmp-mtime: разбор (целое число, пусто — не задано, мусор — отказ с кодом 2) и передача в пересборку', () => {
+  assert.equal(parseBmpMtime(undefined), undefined)
+  assert.equal(parseBmpMtime(''), undefined)
+  assert.equal(parseBmpMtime('1792809130'), 1792809130)
+  assert.equal(parseBmpMtime('0'), 0)
+  for (const bad of ['abc', '-5', '1.5', '12e3', ' 7', '1792809130000000']) {
+    assert.throws(() => parseBmpMtime(bad), (e) => e instanceof SignError && e.code === 2 && /bmp-mtime/.test(e.message), bad)
+  }
+  // в пересборку уходит как задано; без параметра — undefined
+  const seen = []
+  for (const bmpMtime of [1792809130, undefined]) {
+    const r = release({ opts: { bmpMtime } })
+    const rebuild = r.deps.rebuild
+    r.deps.rebuild = (a) => (seen.push(a.bmpMtime), rebuild(a))
+    signRelease(r.opts, r.deps)
+  }
+  assert.deepEqual(seen, [1792809130, undefined])
+  // CLI: не число — код 2 до всякой работы
+  const p = spawnSync(process.execPath, [path.join(REPO, 'scripts', 'release-sign.mjs'), TAG, '--dry', '--bmp-mtime', 'вчера'], { encoding: 'utf8' })
+  assert.equal(p.status, 2)
+  assert.match(p.stderr, /bmp-mtime/)
+  // флаг без значения: последний аргумент или перед другим флагом
+  for (const tail of [['--bmp-mtime'], ['--bmp-mtime', '--dry']]) {
+    const q = spawnSync(process.execPath, [path.join(REPO, 'scripts', 'release-sign.mjs'), TAG, ...tail], { encoding: 'utf8' })
+    assert.equal(q.status, 2, tail.join(' '))
+    assert.match(q.stderr, /не указано значение/)
+  }
 })

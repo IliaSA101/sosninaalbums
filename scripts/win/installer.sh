@@ -23,6 +23,9 @@ done
 printf '%s' "$ver" | grep -Eq '^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$' || { echo "версия «$ver» — ждали X.Y.Z" >&2; exit 2; }
 [ -f "$exe" ] || { echo "нет файла exe: $exe" >&2; exit 1; }
 [ -f "$root/scripts/win/wizard.bmp" ] || { echo "нет картинки мастера scripts/win/wizard.bmp (make_wizard_bmp.py)" >&2; exit 1; }
+for dpi in 100 125 150 175; do
+  [ -f "$root/scripts/win/wizard-$dpi.bmp" ] || { echo "нет картинки мастера scripts/win/wizard-$dpi.bmp (make_wizard_bmp.py)" >&2; exit 1; }
+done
 [ -f "$root/scripts/win/header.bmp" ] || { echo "нет картинки шапки scripts/win/header.bmp (make_wizard_bmp.py)" >&2; exit 1; }
 [ -f "$icon" ] || { echo "нет значка: $icon" >&2; exit 1; }
 
@@ -41,6 +44,6 @@ setup="$out_abs/SosninaAlbums-$ver-windows-x64-setup.exe"
 abs() { printf '%s/%s' "$(CDPATH='' cd -- "$(dirname -- "$1")" && pwd)" "$(basename -- "$1")"; }
 
 # -V2: только предупреждения и ошибки; -WX: предупреждение = провал
-makensis -WX -V2 "-DVERSION=$ver" "-DEXE_SRC=$(abs "$exe")" "-DICON=$(abs "$icon")" "-DWIZARD=$root/scripts/win/wizard.bmp" "-DHEADER=$root/scripts/win/header.bmp" "-DOUT=$setup" "$root/scripts/win/installer.nsi" >&2
+makensis -WX -V2 "-DVERSION=$ver" "-DEXE_SRC=$(abs "$exe")" "-DICON=$(abs "$icon")" "-DWIZARD=$root/scripts/win/wizard.bmp" "-DWIZARD_DPI=$root/scripts/win" "-DHEADER=$root/scripts/win/header.bmp" "-DOUT=$setup" "$root/scripts/win/installer.nsi" >&2
 [ -s "$setup" ] || { echo "установщик не создан: $setup" >&2; exit 1; }
 echo "$setup"

@@ -6,6 +6,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Круг Save → Load после правок через методы разных областей сразу: обложка с фото и
@@ -38,7 +39,7 @@ func TestSaveLoadAfterEdits(t *testing.T) {
 	}
 	wantMarks := k.Marks()
 
-	path := filepath.Join(t.TempDir(), "x.salbum")
+	path := filepath.Join(testkit.TempDir(t), "x.salbum")
 	if err := k.ed.Save(path); err != nil {
 		t.Fatal(err)
 	}

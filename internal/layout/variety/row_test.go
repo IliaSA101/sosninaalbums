@@ -438,6 +438,7 @@ func BenchmarkRow16(b *testing.B) {
 
 // TestRowSpeed — страж BenchmarkRow16: холодный ряд на 16 и 40 фото не взрывается.
 func TestRowSpeed(t *testing.T) {
+	testkit.CostTest(t)
 	t.Cleanup(ResetCache)
 	for _, n := range []int{16, 40} {
 		as := mixedAspects(n, 3)

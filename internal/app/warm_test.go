@@ -257,7 +257,6 @@ func TestGetStateConcurrentWarm(t *testing.T) {
 // стоит на первом событии хода, пока идут замеры; до 073-11 оба ждали конца прогрева.
 func TestFoldersDuringWarm(t *testing.T) {
 	coldLayouts(t)
-	limit := testkit.Limit(50 * time.Millisecond)
 	started, resume := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	a, _ := progressApp(t, func() {
@@ -289,20 +288,23 @@ func TestFoldersDuringWarm(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("прогрев не дошёл до первого события хода")
 	}
-	// Ответ — в канал, а не t.Errorf из горутины: упавший замер договаривает после теста.
-	timed := func(f func() string) (string, chan string) {
+	// Прогрев стоит на первом событии до конца обоих запросов (resume закрываем после): запрос, ждущий
+	// конца прогрева, не ответит совсем — бюджет в секундах ловит это без сравнения миллисекунд.
+	// Бюджет исчерпан — прогрев отпускается (иначе горутины висели бы), тест падает.
+	budget := testkit.Limit(5 * time.Second)
+	timed := func(what string, f func() string) string {
 		ch := make(chan string, 1)
 		go func() { ch <- f() }()
-		select {
-		case got := <-ch:
-			return got, nil
-		case <-time.After(limit):
-			return "", ch
+		got, ok := testkit.WaitCh(t, ch, budget, what, nil)
+		if !ok {
+			close(resume)
+			t.Fatalf("%s во время прогрева не ответил за %v: ждёт конца прогрева", what, budget)
 		}
+		return got
 	}
-	folders, late1 := timed(func() string { return fmt.Sprint(len(ed.Folders())) })
+	folders := timed("Folders", func() string { return fmt.Sprint(len(ed.Folders())) })
 	h := a.media(http.NotFoundHandler())
-	media, late2 := timed(func() string {
+	media := timed("/media фото не из ленты", func() string {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest("GET", "/media/t/p7-000-00", nil))
 		return fmt.Sprint(rec.Code)
@@ -311,14 +313,10 @@ func TestFoldersDuringWarm(t *testing.T) {
 	if st := <-state; len(st.View.Spreads) != 7 {
 		t.Fatalf("GetState: %d разворотов, ждали 7", len(st.View.Spreads))
 	}
-	if late1 != nil {
-		t.Errorf("Folders во время прогрева дольше %v (ответ после прогрева: %s)", limit, <-late1)
-	} else if folders != "2" {
+	if folders != "2" {
 		t.Errorf("Folders во время прогрева: %s папок, ждали 2", folders)
 	}
-	if late2 != nil {
-		t.Errorf("/media фото не из ленты во время прогрева дольше %v (ответ после: %s)", limit, <-late2)
-	} else if media != "404" {
+	if media != "404" {
 		t.Errorf("/media недоступного фото: код %s, ждали 404", media)
 	}
 }
@@ -472,13 +470,17 @@ func TestRescanEditorBusyOutsideLock(t *testing.T) {
 	<-entered
 	done := make(chan struct{})
 	go func() { a.rescan(); close(done) }()
+	// Правка держит замок редактора до конца проверки; rescan встаёт на нём (стоящая горутина —
+	// «вошёл и ждёт», без окна-угадайки) и в этот момент App.mu должен быть свободен. До правки
+	// rescan успевал взять App.mu раньше замка редактора и держал его на время ожидания.
+	if !testkit.WaitBlocked(t, "(*App).rescanWith", testkit.Limit(5*time.Second)) {
+		close(release)
+		t.Fatal("rescan не встал на замок редактора")
+	}
 	held := 0
-	// Окно, за которое rescan до правки успевал взять App.mu и встать на замке редактора.
-	for end := time.Now().Add(testkit.Limit(150 * time.Millisecond)); time.Now().Before(end); {
-		if !a.mu.TryLock() {
-			held++
-			continue
-		}
+	if !a.mu.TryLock() {
+		held++
+	} else {
 		a.mu.Unlock()
 	}
 	close(release)

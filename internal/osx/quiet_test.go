@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // fakeStand подменяет признак стенда, запуск процессов и журнал; возвращает счётчик запусков.
@@ -37,10 +39,10 @@ func TestRevealStand(t *testing.T) {
 		}
 	}
 	started, logs := fakeStand(t, false)
-	if err := Reveal(t.TempDir(), false); err != nil || *started != 1 || logs.Len() != 0 {
+	if err := Reveal(testkit.TempDir(t), false); err != nil || *started != 1 || logs.Len() != 0 {
 		t.Errorf("без стенда: err=%v, запусков %d, журнал %q; ждали 1 запуск и пустой журнал", err, *started, logs)
 	}
-	if err := OpenDir(t.TempDir()); err != nil || *started != 2 {
+	if err := OpenDir(testkit.TempDir(t)); err != nil || *started != 2 {
 		t.Errorf("OpenDir без стенда: err=%v, запусков %d", err, *started)
 	}
 }
@@ -48,7 +50,7 @@ func TestRevealStand(t *testing.T) {
 // OpenDir у стенда — тот же путь через Reveal: ничего не запускается.
 func TestOpenDirStand(t *testing.T) {
 	started, _ := fakeStand(t, true)
-	if err := OpenDir(t.TempDir()); err != nil || *started != 0 {
+	if err := OpenDir(testkit.TempDir(t)); err != nil || *started != 0 {
 		t.Errorf("стенд: err=%v, запусков %d; ждали 0", err, *started)
 	}
 }

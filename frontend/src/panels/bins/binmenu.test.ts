@@ -105,6 +105,6 @@ describe('переименование', () => {
     }
     m.startEdit('b2')
     await m.submitRename('b2', 'Резерв')
-    expect(m.err).toBe('подборки больше нет')
+    expect(m.err).toBe('Подборки больше нет')
   })
 })

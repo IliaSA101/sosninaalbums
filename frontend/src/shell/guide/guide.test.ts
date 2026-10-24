@@ -7,6 +7,7 @@ import { ARTICLES, GUIDE_GROUPS, placesOf } from './articles'
 import { articleText } from './articletext'
 import { levelMarks, nestedLevels } from './leveltext'
 import { HINT_SPOTS, menuPath, menus } from './show'
+import { TOUR } from '../tour/steps'
 
 // Стражи справочника (спека 033, design §9): справка не устаревает молча. Новая функция без статьи роняет
 // первый, переименованный или удалённый элемент разметки, пункт меню или клавиша — остальные.
@@ -62,6 +63,8 @@ describe('справочник функций: стражи', () => {
 
   it('нет лишних якорей', () => {
     const used = new Set<string>(HINT_SPOTS.map((s) => s.slice(3)))
+    // Якорь только для кольца тура (122: layout-auto — вся группа раскладок) тоже нужен.
+    for (const t of TOUR) for (const s of [t.spot, t.emptySpot]) if (s) used.add(s.slice(3))
     for (const a of ARTICLES) {
       for (const s of [...placesOf(a).map((p) => p.spot), a.miss?.spot]) {
         const id = uiOf(s)

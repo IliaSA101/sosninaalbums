@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // offerFor — предложение версии ver с установщиком data (по записи file).
@@ -37,7 +39,7 @@ func TestDownloadOK(t *testing.T) {
 	f := newFeed(t)
 	data, file := setup("0.25.1", MinSetup)
 	f.serveSetup("0.25.1", data)
-	dir := filepath.Join(t.TempDir(), "Updates") // папки ещё нет — создаётся
+	dir := filepath.Join(testkit.TempDir(t), "Updates") // папки ещё нет — создаётся
 	var last int64
 	path, err := Fetch(context.Background(), f.client(), offerFor("0.25.1", file), dir, freeOf(1<<40), func(d int64) { last = d })
 	if err != nil || path != filepath.Join(dir, SetupName("0.25.1")) {
@@ -72,7 +74,7 @@ func TestDownloadVerify(t *testing.T) {
 	for name, body := range cases {
 		f := newFeed(t)
 		f.serveSetup("0.25.1", body)
-		dir := t.TempDir()
+		dir := testkit.TempDir(t)
 		_, err := Fetch(context.Background(), f.client(), offerFor("0.25.1", file), dir, freeOf(1<<40), nil)
 		if !errors.Is(err, ErrVerify) {
 			t.Errorf("%s: %v", name, err)
@@ -83,7 +85,7 @@ func TestDownloadVerify(t *testing.T) {
 	}
 	// Ассета нет (404) — слова про файл, не про библиотеку.
 	f := newFeed(t)
-	if _, err := Fetch(context.Background(), f.client(), offerFor("0.25.1", file), t.TempDir(), freeOf(1<<40), nil); !errors.Is(err, ErrNoFile) {
+	if _, err := Fetch(context.Background(), f.client(), offerFor("0.25.1", file), testkit.TempDir(t), freeOf(1<<40), nil); !errors.Is(err, ErrNoFile) {
 		t.Errorf("404: %v", err)
 	}
 }
@@ -93,7 +95,7 @@ func TestDownloadReuse(t *testing.T) {
 	f := newFeed(t)
 	data, file := setup("0.25.1", MinSetup)
 	f.serveSetup("0.25.1", data)
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	c := f.client()
 	if _, err := Fetch(context.Background(), c, offerFor("0.25.1", file), dir, freeOf(1<<40), nil); err != nil {
 		t.Fatal(err)
@@ -125,7 +127,7 @@ func TestDownloadHosts(t *testing.T) {
 		f.mux.HandleFunc("/releases/download/v0.25.1/"+SetupName("0.25.1"), func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, to, http.StatusFound)
 		})
-		dir := t.TempDir()
+		dir := testkit.TempDir(t)
 		_, err := Fetch(context.Background(), f.client(), offerFor("0.25.1", file), dir, freeOf(1<<40), nil)
 		if !errors.Is(err, ErrAddress) {
 			t.Errorf("переход на %s: %v", to, err)
@@ -141,7 +143,7 @@ func TestDownloadNoSpace(t *testing.T) {
 	f := newFeed(t)
 	data, file := setup("0.25.1", 8<<20+1)
 	f.serveSetup("0.25.1", data)
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	for _, free := range []uint64{0, 1, uint64(file.Size*2 - 1)} {
 		_, err := Fetch(context.Background(), f.client(), offerFor("0.25.1", file), dir, freeOf(free), nil)
 		var ns *NoSpaceError
@@ -163,7 +165,7 @@ func TestDownloadNoSpace(t *testing.T) {
 	g := newFeed(t)
 	g.serveSetup("0.25.1", data)
 	bad := func(string) (uint64, error) { return 0, os.ErrNotExist }
-	if _, err := Fetch(context.Background(), g.client(), offerFor("0.25.1", file), t.TempDir(), bad, nil); err != nil {
+	if _, err := Fetch(context.Background(), g.client(), offerFor("0.25.1", file), testkit.TempDir(t), bad, nil); err != nil {
 		t.Errorf("ошибка места: %v", err)
 	}
 }
@@ -172,7 +174,7 @@ func TestDownloadNoSpace(t *testing.T) {
 func TestDownloadNoInstaller(t *testing.T) {
 	f := newFeed(t)
 	_, file := setup("0.25.1", MinSetup)
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	bad := file
 	bad.Name = "evil.exe"
 	for name, o := range map[string]Offer{
@@ -196,7 +198,7 @@ func TestDownloadCancel(t *testing.T) {
 	f.serveSetup("0.25.1", data)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	if _, err := Fetch(ctx, f.client(), offerFor("0.25.1", file), dir, freeOf(1<<40), nil); !errors.Is(err, ErrCancelled) {
 		t.Errorf("отмена: %v", err)
 	}
@@ -207,7 +209,7 @@ func TestDownloadCancel(t *testing.T) {
 
 // Verify: размер, байты, не обычный файл — отказ.
 func TestVerify(t *testing.T) {
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	data, file := setup("0.25.1", 5000)
 	p := filepath.Join(dir, "a.exe")
 	if err := os.WriteFile(p, data, 0o600); err != nil {
@@ -242,7 +244,7 @@ func TestVerify(t *testing.T) {
 
 // Clean: только свои устаревшие имена; чужое, новее текущей, папки и ссылки не трогает.
 func TestCleanOld(t *testing.T) {
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	mk := func(name string) {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)

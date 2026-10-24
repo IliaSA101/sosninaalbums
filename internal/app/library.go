@@ -143,6 +143,7 @@ func (a *App) readFolders(ctx context.Context, gen int, src library.Sources, kep
 		log.Printf("  не читается: %s", skippedReasons(skipped))
 	}
 	a.publishUnread(gen, src, skipped)
+	a.publishOurs(gen, fin.Ours, dead)
 	if seen != nil {
 		// Новый срез, не DeleteFunc: photos уже ушёл в реестр и событие финальным списком.
 		var fresh []library.Photo

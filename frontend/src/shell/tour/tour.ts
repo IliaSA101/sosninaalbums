@@ -130,9 +130,30 @@ const BIG = 0.6 // доля окна, с которой цель считает�
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(v, Math.max(lo, hi)))
 
+type Place = { left: number; top: number }
+
+// Площадь пересечения карточки в точке p с рамкой.
+function crossArea(p: Place, size: { w: number; h: number }, b: Box): number {
+  const w = Math.min(p.left + size.w, b.left + b.width) - Math.max(p.left, b.left)
+  const h = Math.min(p.top + size.h, b.top + b.height) - Math.max(p.top, b.top)
+  return w > 0 && h > 0 ? w * h : 0
+}
+
+// Видимая в окне часть рамки элемента; ничего не видно — null (область шага пропускается).
+export function visibleBox(r: Box, win: { w: number; h: number }): Box | null {
+  const left = Math.max(0, r.left)
+  const top = Math.max(0, r.top)
+  const right = Math.min(win.w, r.left + r.width)
+  const bottom = Math.min(win.h, r.top + r.height)
+  return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } : null
+}
+
 // Где карточка: рядом с кольцом (снизу → сверху → справа → слева), кольцо не перекрывает; цель больше 60 % окна или
 // рядом места нет — внутри у правого нижнего угла цели; без кольца — по центру. Всегда в окне.
-export function cardPlace(ring: Box | null, size: { w: number; h: number }, win: { w: number; h: number }): { left: number; top: number } {
+// avoid (122) — области, которые карточка не закрывает (лента фото, текущий разворот): к сторонам кольца добавляются
+// углы окна (ближние к кольцу первыми), берётся первое место без пересечения, иначе с наименьшим; кольцо не задето.
+// Без avoid результат прежний.
+export function cardPlace(ring: Box | null, size: { w: number; h: number }, win: { w: number; h: number }, avoid: Box[] = []): Place {
   const at = (x: number, y: number) => ({ left: clamp(x, EDGE, win.w - size.w - EDGE), top: clamp(y, EDGE, win.h - size.h - EDGE) })
   if (!ring) return at((win.w - size.w) / 2, (win.h - size.h) / 2)
   const midX = ring.left + ring.width / 2 - size.w / 2
@@ -141,11 +162,20 @@ export function cardPlace(ring: Box | null, size: { w: number; h: number }, win:
   const bottom = ring.top + ring.height
   const corner = at(right - size.w - INSIDE, bottom - size.h - INSIDE)
   if (ring.width * ring.height > BIG * win.w * win.h) return corner
-  if (bottom + GAP + size.h <= win.h - EDGE) return at(midX, bottom + GAP)
-  if (ring.top - GAP - size.h >= EDGE) return at(midX, ring.top - GAP - size.h)
-  if (right + GAP + size.w <= win.w - EDGE) return at(right + GAP, midY)
-  if (ring.left - GAP - size.w >= EDGE) return at(ring.left - GAP - size.w, midY)
-  return corner
+  const sides: Place[] = []
+  if (bottom + GAP + size.h <= win.h - EDGE) sides.push(at(midX, bottom + GAP))
+  if (ring.top - GAP - size.h >= EDGE) sides.push(at(midX, ring.top - GAP - size.h))
+  if (right + GAP + size.w <= win.w - EDGE) sides.push(at(right + GAP, midY))
+  if (ring.left - GAP - size.w >= EDGE) sides.push(at(ring.left - GAP - size.w, midY))
+  if (avoid.length === 0) return sides[0] ?? corner
+  const dist = (p: Place) => Math.hypot(p.left + size.w / 2 - (midX + size.w / 2), p.top + size.h / 2 - (midY + size.h / 2))
+  const corners = [at(0, 0), at(win.w, 0), at(0, win.h), at(win.w, win.h)].sort((a, b) => dist(a) - dist(b))
+  // Кольцо с отступом GAP: углы окна могут лечь на него, стороны — нет (отступ ровно GAP).
+  const halo = { left: ring.left - GAP, top: ring.top - GAP, width: ring.width + 2 * GAP, height: ring.height + 2 * GAP }
+  const free = [...sides, ...corners].filter((p) => crossArea(p, size, halo) === 0)
+  if (free.length === 0) return sides[0] ?? corner
+  const cost = (p: Place) => avoid.reduce((sum, b) => sum + crossArea(p, size, b), 0)
+  return free.reduce((best, p) => (cost(p) < cost(best) ? p : best))
 }
 
 // Текст шага, когда места на экране нет: к тексту добавляется пояснение.

@@ -332,6 +332,7 @@ func openTemp2(f *testing.F) (*Store, string) {
 // TestMediaFrameFast — плитка встроенной 256 px у каждого вида быстрее Limit(30 ms); картинка
 // (источник в памяти) на месте 30×40 мм, 256 px — быстрее Limit(60 ms) (design §12).
 func TestMediaFrameFast(t *testing.T) {
+	testkit.CostTest(t)
 	s, _ := openTemp(t)
 	for _, p := range framePresets {
 		_, q, _ := strings.Cut(s.tileURL(t, p.id), "?")

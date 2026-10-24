@@ -98,6 +98,7 @@ export async function rasterSvgs(
     try {
       added.push(await send(job.token, await render(job, env, opts.timeoutMs ?? RASTER_TIMEOUT)))
     } catch (e) {
+      // caps-ok: причина встаёт после имени файла, в середине фразы
       skipped.push({ name: job.name, why: e instanceof RasterError ? e.why : errText(e) || WHY.draw })
     }
   }

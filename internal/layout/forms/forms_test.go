@@ -332,6 +332,7 @@ func TestGenDoesNotChangeInput(t *testing.T) {
 // TestGenSpeed: холодный Gen на 16 и 40 фото — страж от взрыва (цель design §12: ≤ 5 / ≤ 10 мс
 // у BenchmarkForms16/40; в тесте запас на шум и занятую машину).
 func TestGenSpeed(t *testing.T) {
+	testkit.CostTest(t)
 	for _, c := range []struct {
 		n   int
 		lim time.Duration

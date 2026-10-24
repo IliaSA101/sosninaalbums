@@ -367,6 +367,7 @@ func TestDecorSpreadCatalogFast(t *testing.T) {
 	if len(cold) != n+len(spreadPresets) {
 		t.Fatalf("плиток %d", len(cold))
 	}
+	testkit.CostTest(t)
 	if limit := testkit.Limit(300 * time.Millisecond); d > limit {
 		t.Errorf("первое открытие %v, предел %v", d, limit)
 	}

@@ -289,6 +289,7 @@ func TestMediaTplFast(t *testing.T) {
 		})
 		worst = max(worst, d)
 	}
+	testkit.CostTest(t)
 	if limit := testkit.Limit(30 * time.Millisecond); worst > limit {
 		t.Errorf("плитка %v, предел %v", worst, limit)
 	}

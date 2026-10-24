@@ -45,6 +45,8 @@ export const setupOf = (f: VigForm, v: VarsForm): VigSetup => ({ vig: paramsOf(f
 
 const TEACHERS: [string, string, string] = ['учитель', 'учителя', 'учителей']
 const PUPILS: [string, string, string] = ['ученик', 'ученика', 'учеников']
+// «Не больше N мест»: после «не больше» — родительный (1 места, 2 мест).
+const MAX_PLACES: [string, string, string] = ['места', 'мест', 'мест']
 
 // «1 учитель · 23 ученика · групповое»: учителей 0 — без этой части.
 export function countsText(v: Pick<VignetteView, 'teachers' | 'pupils' | 'group'>): string {
@@ -79,7 +81,7 @@ export const resetWarning = (manual: boolean | undefined, unchanged: boolean): s
 export function dialogBlock(a: { busy: boolean; tpl: string; total: number; max: number; same: boolean }): string | null {
   if (a.busy) return 'Идёт пересборка…'
   if (!a.tpl) return 'Выберите шаблон'
-  if (a.total > a.max) return `Не больше ${a.max} мест на листе: уменьшите число учителей или учеников`
+  if (a.total > a.max) return `Не больше ${a.max} ${plural(a.max, MAX_PLACES)} на листе: уменьшите число учителей или учеников`
   if (a.same) return 'Ничего не изменилось'
   return null
 }

@@ -123,7 +123,7 @@ func TestScatterSetLayoutUndo(t *testing.T) {
 	if e.SetLayout(s1, key).Rev != rev || edtest.UndoLen(e) != undo+1 {
 		t.Error("повторный SetLayout того же ключа не холостой")
 	}
-	path := filepath.Join(t.TempDir(), "a.salbum")
+	path := filepath.Join(testkit.TempDir(t), "a.salbum")
 	if err := e.Save(path); err != nil {
 		t.Fatal(err)
 	}

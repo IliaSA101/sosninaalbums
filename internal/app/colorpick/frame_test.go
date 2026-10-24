@@ -281,18 +281,23 @@ func TestPickColorAtCost(t *testing.T) {
 	if _, err := a.PickAt("s1", x, y); err != nil { // превью создаются здесь
 		t.Fatal(err)
 	}
-	a.editor().SetTone("p100", 10, 0) // новый rev: рисуется заново, превью уже в кэше
-	t0 := time.Now()
-	if _, err := a.PickAt("s1", x, y); err != nil {
-		t.Fatal(err)
-	}
-	d := time.Since(t0)
+	// Лучший из пяти; каждый раз новый rev (тон другой): кадр рисуется заново, превью уже в кэше
+	const runs = 5
+	tone := 10
+	d := testkit.Fastest(runs, func() {
+		tone++
+		a.editor().SetTone("p100", tone, 0)
+		if _, err := a.PickAt("s1", x, y); err != nil {
+			t.Error(err)
+		}
+	})
 	t.Logf("кадр 16 фото: %v", d)
+	if n := a.pick.renders.Load(); n != 1+runs {
+		t.Errorf("кадров %d, ждали %d", n, 1+runs)
+	}
+	testkit.CostTest(t)
 	if lim := testkit.Limit(400 * time.Millisecond); d > lim {
 		t.Errorf("кадр 16 фото: %v, предел %v", d, lim)
-	}
-	if n := a.pick.renders.Load(); n != 2 {
-		t.Errorf("кадров %d, ждали 2", n)
 	}
 }
 

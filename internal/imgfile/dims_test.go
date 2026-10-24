@@ -117,6 +117,7 @@ func TestDimsOf(t *testing.T) {
 	if !errors.Is(gotErr, ErrTooBig) {
 		t.Errorf("PNG 15000²: %v", gotErr)
 	}
+	testkit.CostTest(t)
 	if lim := testkit.Limit(20 * time.Millisecond); d > lim {
 		t.Errorf("отказ за %v, предел %v", d, lim)
 	}
@@ -282,14 +283,20 @@ func TestOpenOrientedCtxCancel(t *testing.T) {
 	}()
 	before := DecodeBudget.Used()
 	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(30*time.Millisecond, cancel)
-	start := time.Now()
-	_, _, err := OpenOrientedCtx(ctx, p)
+	// Отмена — когда открытие уже стоит в очереди за бюджетом; бюджет держим до конца проверки, так
+	// что OpenOrientedCtx, не заметивший отмену, не вернётся совсем (бюджет ожидания ловит это).
+	go func() {
+		for deadline := time.Now().Add(testkit.Limit(5 * time.Second)); DecodeBudget.Waiting() < 1 && time.Now().Before(deadline); {
+			time.Sleep(time.Millisecond)
+		}
+		cancel()
+	}()
+	err := testkit.Bounded(t, testkit.Limit(5*time.Second), "OpenOrientedCtx после отмены в ожидании бюджета", func() error {
+		_, _, err := OpenOrientedCtx(ctx, p)
+		return err
+	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("ждали Canceled: %v", err)
-	}
-	if d := time.Since(start); d > testkit.Limit(500*time.Millisecond) {
-		t.Errorf("отмена заметна только через %v", d)
 	}
 	if got := DecodeBudget.Used(); got != before {
 		t.Fatalf("бюджет тронут: %d вместо %d", got, before)

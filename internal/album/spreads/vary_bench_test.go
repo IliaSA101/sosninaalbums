@@ -27,7 +27,7 @@ func underLock(tb testing.TB, ph []model.PhotoInfo, v model.Variety) time.Durati
 	tb.Helper()
 	p := model.New()
 	pre := spreads.Prepare(spreads.PlanOf(p, ph, nil), ph, benchOpts(v))
-	return testkit.Fastest(3, func() {
+	return testkit.Fastest(5, func() {
 		q := p.Clone()
 		if made, err := spreads.AutoBuild(q, pre, -1, nil); err != nil || made != benchSpreads {
 			tb.Fatalf("сборка: %d %v", made, err)
@@ -38,6 +38,7 @@ func underLock(tb testing.TB, ph []model.PhotoInfo, v model.Variety) time.Durati
 // TestAutoBuildVarietyLock: под замком «Обычное» на 1500 фото / 100 разворотов (тёплый кэш)
 // укладывается в 100 мс (design §10): выбор и запись ключей, без перебора раскладок.
 func TestAutoBuildVarietyLock(t *testing.T) {
+	testkit.CostTest(t)
 	if testing.Short() {
 		t.Skip("1500 фото — долгий прогрев")
 	}

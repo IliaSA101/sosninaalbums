@@ -10,7 +10,7 @@ import { hasSources } from '../../panels/folders/folders'
 import { aboutUi } from '../dialogs/about.svelte'
 import { guide, runStep } from '../guide/guidestate.svelte'
 import { seek, spot } from '../guide/spotstate.svelte'
-import { activeSteps, enterSteps, hasPhotoOnSpread, resolve, type Box, type TourCtx, type TourFrom } from './tour'
+import { activeSteps, enterSteps, hasPhotoOnSpread, resolve, visibleBox, type Box, type TourCtx, type TourFrom } from './tour'
 import { MORE_TOAST, SKIP_TOAST } from './steps'
 
 // Строка в log.txt через App.LogUI; без рантайма Go (браузер, тесты) молча.
@@ -72,6 +72,21 @@ class Tour {
     return this.open && !this.hidden && spot.cur?.hold ? spot.box : null
   }
 
+  // Области шага, которых карточка не закрывает (step.avoid), в px окна: видимая часть, нет на экране — пропуск.
+  // Читает ring, поэтому пересчитывается вместе с кольцом (тики spot.box) и при resize окна.
+  get avoid(): Box[] {
+    if (!this.ring || !this.step?.avoid) return []
+    const win = { w: window.innerWidth, h: window.innerHeight }
+    const out: Box[] = []
+    for (const sel of this.step.avoid)
+      for (const el of document.querySelectorAll<HTMLElement>(sel)) {
+        const r = el.getBoundingClientRect()
+        const b = visibleBox({ left: r.left, top: r.top, width: r.width, height: r.height }, win)
+        if (b) out.push(b)
+      }
+    return out
+  }
+
   // from: 'auto' — первый запуск (пишет pending), 'menu' — «Справка ▸ Первые шаги» и стартовое окно, 'more' — продолжение.
   start(from: TourFrom) {
     if (prefs.startOpen) prefs.closeStart()
@@ -106,6 +121,14 @@ class Tour {
     for (const s of plan) runStep(s)
     // Выделение, поставленное самим туром, на закрытии снимается; своё человек не теряет.
     if (select && !ctx.selPhoto) this.ownSel = store.selectedCell
+  }
+
+  // Число шагов изменилось (уровень «Свой» выключил часть функций): номер шага зажимается в список.
+  // Шагов не осталось — тур закрывается как пропущенный (done не пишется, если тур не был первым).
+  fit(count: number) {
+    if (!this.open || typeof this.at !== 'number' || this.at < count) return
+    if (count === 0) this.finish('skip')
+    else this.go(count - 1)
   }
 
   next() {

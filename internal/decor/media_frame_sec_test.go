@@ -45,6 +45,7 @@ func spyPic(t *testing.T) (cfgs, decodes *int) {
 // бюджета; отказ помнится по (путь, размер, время): повтор не открывает файл, а замена файла —
 // проверяется заново.
 func TestFramePicHugeRefused(t *testing.T) {
+	testkit.CostTest(t)
 	cfgs, decodes := spyPic(t)
 	dir := testkit.TempDir(t)
 	q := "w=60&h=80&c=0.2,0.2,0.2,0.2&v=1&px=120"

@@ -31,6 +31,15 @@ describe('шаги тура: стражи', () => {
       for (const spot of [s.spot, s.emptySpot]) if (spot) expect(have.has(spot.replace(/^ui:/, '')), `${s.id}: ${spot}`).toBe(true)
   })
 
+  // 122-4: avoid — непустые строки (что querySelector их принимает, проверяет tourfix.dom.test); якорь группы «Авто» шага 5 есть в разметке.
+  it('avoid: непустые селекторы; шаг 5 обводит группу layout-auto', () => {
+    for (const s of TOUR) for (const sel of s.avoid ?? []) expect(sel.trim().length, `${s.id}: пустой селектор`).toBeGreaterThan(0)
+    expect(TOUR.find((s) => s.id === 'folders')?.avoid).toEqual(['[data-guide~="library"]'])
+    expect(TOUR.find((s) => s.id === 'layouts')?.avoid).toEqual(['[data-current] > .spread'])
+    expect(TOUR.find((s) => s.id === 'layouts')?.spot).toBe('ui:layout-auto')
+    expect(anchorIds().has('layout-auto')).toBe(true)
+  })
+
   it('место только ui:, id шагов уникальны, заголовок ≤ 32 знаков', () => {
     expect(new Set(TOUR.map((s) => s.id)).size).toBe(TOUR.length)
     for (const s of TOUR) {

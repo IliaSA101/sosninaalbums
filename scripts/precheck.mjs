@@ -3,8 +3,9 @@
 // (только новое), go test -short изменённых пакетов, покрытие дерева album (при правке internal/album/**) против эталона,
 // prettier, eslint, svelte-check, vitest related + стражи (тесты со сканом дерева), язык комментариев, размер файлов, лимит файлов в папке. Полный go test и test-baseline
 // остаются шагом оркестратора (check.ps1 без -short: эталоны и большие наборы там).
+// go test -short — с кэшем go (теги как в check.sh); Go и фронт идут параллельно (фронт — дочерний процесс --part fe).
 // Пределы размера и папок — scripts/limits.mjs (один источник с check.ps1, pre-commit и хуком file-size).
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,18 +13,30 @@ import { GO_BASELINE, GO_KEY, PRECHECK_SLACK, TREE_KEY, compareTree, isTree, tre
 import { withGoCaches } from './goenv.mjs'
 import { checkFolders, checkSizes } from './limits.mjs'
 import { collect as collectAdded, violations as langViolations } from './comment-lang.mjs'
+import { NO_DESKTOP, affectedScriptTests } from './script-tests.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(root)
 const gotmp = path.join(root, '.gotmp') // антивирус: exe go только сюда (как в check.ps1)
 fs.mkdirSync(gotmp, { recursive: true })
-const env = withGoCaches({ ...process.env, GOTMPDIR: gotmp }, root)
+const env = withGoCaches({ ...process.env, GOTMPDIR: gotmp, SA_TEST_SHORT: '1' }, root) // SA_TEST_SHORT: цепочки состояний по 50 шагов
+// Теги сборки, как в check.sh (scripts/env.sh): иначе ключ кэша go test другой и результаты precheck и check.sh не делятся.
+// Для internal/... тег ничего не меняет, но ключ у go test включает его.
+if (process.platform === 'linux' && !(env.GOFLAGS || '').includes('webkit2_41')) {
+  env.GOFLAGS = `${env.GOFLAGS ? `${env.GOFLAGS} ` : ''}-tags=webkit2_41`
+}
 
 // Пакеты модуля: не ./... — тот заходит в frontend/node_modules (flatted/golang). Один шаблон для всех скриптов и CI.
 const MODULE_PKGS = ['.', './internal/...']
 
+// Пакеты, чьи тесты читают файлы вне модуля (.testphotos/stock и docs/refs/fsfera-psd ищутся вверх от папки теста,
+// в worktree они в основном дереве): go кладёт в ключ кэша только файлы модуля, поэтому всегда -count=1.
+const NO_CACHE = ['./internal/library/imgsig', './internal/library/psd']
+
 const argv = process.argv.slice(2)
 const bi = argv.indexOf('--base')
+// --part fe — только фронт: так precheck запускает сам себя дочерним процессом, чтобы Go и фронт шли параллельно
+const part = argv[argv.indexOf('--part') + 1] === 'fe' ? 'fe' : ''
 
 const run = (cmd, args, opts = {}) => {
   const r = spawnSync(cmd, args, { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28, ...opts })
@@ -89,6 +102,12 @@ if (changed.length === 0) {
   process.exit(0)
 }
 
+// Файлы фронта (пути от frontend/)
+const fe = changed
+  .filter((f) => /^frontend\//.test(f) && !/^frontend\/(wailsjs|dist)\//.test(f) && !/package(-lock)?\.json$/.test(f))
+  .filter((f) => /\.(ts|js|svelte|css|html|json)$/.test(f))
+  .map((f) => f.slice('frontend/'.length))
+
 const failed = []
 const total = Date.now()
 const step = (name, fn) => {
@@ -117,7 +136,20 @@ const res = (r, emptyOut = false) => ({ ok: r.code === 0 && !(emptyOut && r.out.
 
 // ---- Go ----
 const goFiles = changed.filter((f) => f.endsWith('.go'))
-if (goFiles.length) {
+// Go и фронт не зависят друг от друга: фронт идёт дочерним процессом, пока Go занят (вывод — в файл, а не в pipe)
+let feJob = null
+if (part === '' && goFiles.length && fe.length) {
+  const log = path.join(gotmp, `precheck-fe-${process.pid}.log`)
+  const fd = fs.openSync(log, 'w')
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--part', 'fe', '--base', base], {
+    cwd: root,
+    env: process.env,
+    stdio: ['ignore', fd, fd],
+  })
+  fs.closeSync(fd)
+  feJob = { log, done: new Promise((resolve) => child.on('close', (code) => resolve(code ?? 1))) }
+}
+if (part !== 'fe' && goFiles.length) {
   // Разовые скрипты с //go:build ignore (scripts/*.go) — не пакет: go test и golangci-lint на их папке падают
   const ignored = (f) => /^\/\/go:build ignore\b/m.test(fs.readFileSync(path.join(root, f), 'utf8').slice(0, 400))
   const built = goFiles.filter((f) => !ignored(f))
@@ -128,9 +160,16 @@ if (goFiles.length) {
   step('go vet', () => res(run('go', ['vet', ...MODULE_PKGS])))
   step('go test -short', () => {
     if (!pkgs.length) return res({ code: 0, out: '' })
+    // Без -count=1: нетронутые пакеты берутся из кэша go test (повторный precheck не гоняет их заново).
+    // Исключение — NO_CACHE: их тесты читают файлы вне модуля, кэш вернул бы устаревший результат.
+    const fresh = pkgs.filter((p) => NO_CACHE.includes(p))
+    const cached = pkgs.filter((p) => !NO_CACHE.includes(p))
     // Больше трёх пакетов — через очередь: go test занимает все ядра
-    const goTest = ['test', '-short', '-count=1', ...pkgs]
-    return res(pkgs.length > 3 ? run('node', ['scripts/heavy.mjs', 'go', ...goTest]) : run('go', goTest))
+    const exec = (args, n) => (n > 3 ? run('node', ['scripts/heavy.mjs', 'go', ...args]) : run('go', args))
+    const parts = []
+    if (cached.length) parts.push(exec(['test', '-short', ...cached], cached.length))
+    if (fresh.length) parts.push(exec(['test', '-short', '-count=1', ...fresh], fresh.length))
+    return res({ code: parts.find((r) => r.code !== 0)?.code ?? 0, out: parts.map((r) => r.out).join('\n') })
   })
   if (goFiles.some((f) => isTree(path.posix.dirname(f)))) {
     step('покрытие дерева album', () => {
@@ -191,11 +230,7 @@ function scanGuards(dir) {
   walk(dir)
   return res.sort()
 }
-const fe = changed
-  .filter((f) => /^frontend\//.test(f) && !/^frontend\/(wailsjs|dist)\//.test(f) && !/package(-lock)?\.json$/.test(f))
-  .filter((f) => /\.(ts|js|svelte|css|html|json)$/.test(f))
-  .map((f) => f.slice('frontend/'.length))
-if (fe.length) {
+if (fe.length && (part === 'fe' || !feJob)) {
   const npx = (parts) => {
     let out = ''
     let code = 0
@@ -223,12 +258,22 @@ if (fe.length) {
   }
 }
 
+// Дочерний процесс фронта (--part fe): остальное делает родитель, итог читает он же
+if (part === 'fe') {
+  console.log(failed.length ? `ИТОГО: FAIL - ${failed.join(', ')}` : 'ИТОГО: OK')
+  process.exit(failed.length ? 1 : 0)
+}
+
 // ---- Python: скрипты с юнит-тестами (e2e 089, win 039, demo 102) ----
 // Юнит-тесты чистых частей каталогов, где правился .py. Интерпретатор — python3 (Ubuntu, macOS), затем python (Windows);
 // нет ни того ни другого — WARN, а не молчаливый пропуск (на Ubuntu `python` нет, тесты годами не запускались).
 const PY_DIRS = ['scripts/e2e', 'scripts/win', 'scripts/demo']
+// Тесты скриптов по затронутым файлам: scripts/win — и при правке любого файла папки или workflow (0.25.0: правка одного yml ломала тест)
+const scriptTests = affectedScriptTests(changed, (f) => fs.existsSync(path.join(root, f)))
 const pyTouched = PY_DIRS.filter(
-  (d) => fs.existsSync(path.join(root, d)) && changed.some((f) => f.startsWith(`${d}/`) && f.endsWith('.py')),
+  (d) =>
+    fs.existsSync(path.join(root, d)) &&
+    ((d === 'scripts/win' && scriptTests.win) || changed.some((f) => f.startsWith(`${d}/`) && f.endsWith('.py'))),
 )
 if (pyTouched.length) {
   const py = ['python3', 'python'].find((c) => spawnSync(c, ['--version'], { encoding: 'utf8' }).status === 0)
@@ -237,6 +282,18 @@ if (pyTouched.length) {
   } else {
     step('python unittest', () => ({ ok: true, warn: `нет python3 и python в PATH: тесты ${pyTouched.join(', ')} не запущены` }))
   }
+}
+
+// ---- Скрипты: node --test и test_deb.sh по затронутым файлам ----
+if (scriptTests.node.length) step('node --test скриптов', () => res(run('node', ['--test', ...scriptTests.node])))
+if (scriptTests.deb) {
+  const hasDpkg = process.platform !== 'win32' && spawnSync('dpkg-deb', ['--version'], { encoding: 'utf8' }).status === 0
+  if (hasDpkg) {
+    // Без рабочего стола, как на раннере CI: xdg-mime при DISPLAY смотрит не туда (0.25.0)
+    const clean = { ...env }
+    for (const k of NO_DESKTOP) delete clean[k]
+    step('test_deb.sh', () => res(run('bash', ['scripts/linux/test_deb.sh'], { env: clean })))
+  } else step('test_deb.sh', () => ({ ok: true, warn: 'нет dpkg-deb (или Windows): scripts/linux/test_deb.sh не запущен' }))
 }
 
 // ---- Всегда ----
@@ -265,6 +322,19 @@ step('folder limit', () => {
   const out = checkFolders(tracked, root)
   return { ok: out.length === 0, out: out.join('\n') }
 })
+
+// Фронт, шедший параллельно с Go: его вывод — блоком после шагов Go
+if (feJob) {
+  const code = await feJob.done
+  const text = fs.readFileSync(feJob.log, 'utf8')
+  fs.rmSync(feJob.log, { force: true })
+  console.log('--- фронт (шёл параллельно с Go) ---')
+  for (const l of text.split('\n')) if (l.trim() && !l.startsWith('ИТОГО')) console.log(l)
+  if (code !== 0) {
+    const m = /^ИТОГО: FAIL - (.*)$/m.exec(text)
+    failed.push(...(m ? m[1].split(', ') : ['фронт']))
+  }
+}
 
 const time = `${((Date.now() - total) / 1000).toFixed(1)}s`
 if (failed.length) {

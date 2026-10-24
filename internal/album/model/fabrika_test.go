@@ -193,22 +193,26 @@ func TestCoverFixTextFabrika(t *testing.T) {
 	}
 }
 
-// TestFabrikaLimits (081 С1–С2, С7): 14 строк; Max — последняя строка таблицы корешка; «от 1» сайта —
-// Min 0; 30×30 фотобумаги — от 10; изделия нет у формата — строки нет; без обложки изделие
+// TestFabrikaLimits (081 С1–С2, С7): 17 строк; Max — последняя строка таблицы корешка формата; «от 1» сайта —
+// Min 0; прослойка 1 и 2 мм — с 2 разворотов, у 30×20 с 1; 30×30 фотобумаги — от 10; изделия нет у формата — строки нет; без обложки изделие
 // по умолчанию «Фотобумага» без названия.
 func TestFabrikaLimits(t *testing.T) {
 	var rows []PrintLimit
 	for _, l := range PrintLimits() {
 		if pr, _ := CoverPresetOf(l.Product); pr.Group == CoverGroupFabrika {
 			rows = append(rows, l)
-			st := pr.Spec.Steps
-			if l.Max != st[len(st)-1].Upto || l.Pages || l.Min < 0 || l.Min > l.Max {
+			pf, _ := CoverPresetFor(l.Product, Settings{PageW: 304, PageH: 203}) // 30×20: самая длинная таблица
+			if l.Format != "30×20" && l.Format != "" {
+				f := FabrikaFormats()[slices.IndexFunc(FabrikaFormats(), func(f PrintFormat) bool { return f.Name == l.Format })]
+				pf, _ = CoverPresetFor(l.Product, Settings{PageW: f.PageW, PageH: f.PageH})
+			}
+			if st := pf.Spec.Steps; l.Max != st[len(st)-1].Upto || l.Pages || l.Min < 0 || l.Min > l.Max {
 				t.Errorf("строка %+v: таблица до %d", l, st[len(st)-1].Upto)
 			}
 		}
 	}
-	if len(rows) != 14 {
-		t.Fatalf("строк %d, ждали 14: %+v", len(rows), rows)
+	if len(rows) != 17 {
+		t.Fatalf("строк %d, ждали 17: %+v", len(rows), rows)
 	}
 	for _, c := range []struct {
 		product, format string
@@ -216,8 +220,9 @@ func TestFabrikaLimits(t *testing.T) {
 		ok              bool
 	}{
 		{"fabrika-photo", "30×30", 10, 40, true}, {"fabrika-photo", "20×20", 0, 40, true}, {"fabrika-photo", "", 0, 40, true},
-		{"fabrika-photo-1", "30×30", 10, 30, true}, {"fabrika-photo-1", "25×25", 0, 30, true},
-		{"fabrika-photo-2", "20×20", 0, 9, true}, {"fabrika-photo-2", "30×20", 0, 9, true},
+		{"fabrika-photo-1", "30×30", 10, 30, true}, {"fabrika-photo-1", "25×25", 2, 30, true},
+		{"fabrika-photo-1", "30×20", 0, 30, true}, {"fabrika-photo-1", "", 0, 30, true},
+		{"fabrika-photo-2", "20×20", 2, 9, true}, {"fabrika-photo-2", "30×20", 0, 10, true},
 		{"fabrika-photo-2", "30×30", 0, 0, false}, // прослойки 2 мм у 30×30 нет
 		{"fabrika-layflat-paper", "21×30", 10, 30, true}, {"fabrika-layflat-paper", "25×25", 0, 0, false},
 		{"fabrika-layflat-card", "20×20", 2, 20, true}, {"fabrika-layflat-card", "30×30", 0, 0, false},

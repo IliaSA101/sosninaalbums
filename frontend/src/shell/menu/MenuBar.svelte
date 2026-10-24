@@ -6,7 +6,7 @@
   import { menuCtx } from './menuctx'
   import { buildMenu, hasIcons, hasMarks, type MenuId, type MenuItem } from './menu'
   import Icon from '../../base/ui/Icon.svelte'
-  import { placePopover, placeSubmenu, type Box } from '../../base/ui/popover'
+  import { placeMenu, placeSubmenuFit, type Box } from '../../base/ui/popover'
 
   // Своя строка меню (не системная, спека 010): щелчок открывает, наведение переключает соседнее меню,
   // Esc и щелчок мимо закрывают, ← → ↑ ↓ Enter работают. Пункты и серые — menu/menu.ts.
@@ -22,12 +22,16 @@
   let h = $state(0)
   let sw = $state(0)
   let sh = $state(0)
+  // Естественная высота списков без max-height: h/sh после ограничения уже урезаны, а размер для расчёта нужен полный.
+  let nh = $state(0)
+  let snh = $state(0)
 
   const menu = $derived(menus.find((m) => m.id === openId))
   const subItems = $derived(sub ? (menu?.items.find((i) => i.id === sub!.id)?.sub ?? []) : [])
   const view = () => ({ width: window.innerWidth, height: window.innerHeight })
-  const pos = $derived(placePopover(anchor, { width: w, height: h }, view(), 0))
-  const subPos = $derived(sub ? placeSubmenu(sub.anchor, { width: sw, height: sh }, view()) : null)
+  const pos = $derived(placeMenu(anchor, { width: w, height: nh }, view()))
+  // Подменю не выше низа строки меню: якорь верхнего меню — его кнопка.
+  const subPos = $derived(sub ? placeSubmenuFit(sub.anchor, { width: sw, height: snh }, view(), anchor.top + anchor.height) : null)
 
   const box = (el: Element): Box => {
     const r = el.getBoundingClientRect()
@@ -37,17 +41,39 @@
   function close() {
     menuUi.openId = null
     sub = null
-    w = h = sw = sh = 0
+    w = h = sw = sh = nh = snh = 0
+  }
+
+  // Полная высота списка вместе с рамкой: scrollHeight не зависит от max-height.
+  const natural = (el: HTMLElement) => el.scrollHeight + el.offsetHeight - el.clientHeight
+  $effect(() => {
+    void [menu, h]
+    if (drop && h) nh = natural(drop)
+  })
+  $effect(() => {
+    void [subItems, sh]
+    if (subDrop && sh) snh = natural(subDrop)
+  })
+
+  // Список прокручен — подменю остаётся у своего пункта, а не у места, где пункт был.
+  function followSub() {
+    const el = sub && drop?.querySelector<HTMLElement>(`[data-item="${sub.id}"]`)
+    if (sub && el) sub = { id: sub.id, anchor: box(el) }
   }
 
   const enabled = (c: HTMLElement | undefined) => [...(c?.querySelectorAll<HTMLElement>('button:not(:disabled)') ?? [])]
   // Контейнер читаем после tick: подменю только что отрисовано, и bind:this к вызову ещё пуст.
-  const focusFirst = (get: () => HTMLElement | undefined) => tick().then(() => enabled(get())[0]?.focus())
+  const focusFirst = (get: () => HTMLElement | undefined) => tick().then(() => reach(enabled(get())[0]))
+  // Фокус на пункт и прокрутка списка к нему (в длинном списке пункт может быть за краем).
+  function reach(el: HTMLElement | undefined) {
+    el?.focus()
+    el?.scrollIntoView?.({ block: 'nearest' })
+  }
 
   function openMenu(id: MenuId, btn: Element, focus: boolean) {
     anchor = box(btn)
     sub = null
-    w = h = 0
+    w = h = nh = 0
     menuUi.openId = id
     if (id === 'file') void store.refreshRecent()
     if (focus) focusFirst(() => drop)
@@ -84,7 +110,7 @@
   function openSub(it: MenuItem, el: Element, focus: boolean) {
     if (it.disabled) return
     sub = { id: it.id, anchor: box(el) }
-    sw = sh = 0
+    sw = sh = snh = 0
     if (focus) focusFirst(() => subDrop)
   }
 
@@ -107,13 +133,15 @@
     run(cmd, undefined, it.arg)
   }
 
-  function move(delta: number) {
+  // delta — шаг по кругу; 'first'/'last' — Home/End.
+  function move(delta: number | 'first' | 'last') {
     const inSub = !!subDrop && subDrop.contains(document.activeElement)
     const list = enabled(inSub ? subDrop : drop)
     if (list.length === 0) return
+    if (delta === 'first' || delta === 'last') return reach(list[delta === 'first' ? 0 : list.length - 1])
     const at = list.indexOf(document.activeElement as HTMLElement)
     const to = at < 0 ? (delta > 0 ? 0 : list.length - 1) : (at + delta + list.length) % list.length
-    list[to].focus()
+    reach(list[to])
   }
 
   // →: на пункте с подменю — войти в него, иначе соседнее меню; внутри подменю ничего.
@@ -128,7 +156,7 @@
     if (!inSub) return switchMenu(-1)
     const parent = drop?.querySelector<HTMLElement>(`[data-item="${sub?.id}"]`)
     sub = null
-    parent?.focus()
+    reach(parent ?? undefined)
   }
 
   function key(e: KeyboardEvent) {
@@ -149,6 +177,11 @@
       case 'ArrowUp':
         e.preventDefault()
         move(e.key === 'ArrowDown' ? 1 : -1)
+        break
+      case 'Home':
+      case 'End':
+        e.preventDefault()
+        move(e.key === 'Home' ? 'first' : 'last')
         break
       case 'ArrowRight':
         e.preventDefault()
@@ -220,7 +253,9 @@
       bind:clientHeight={h}
       style:left="{pos.left}px"
       style:top="{pos.top}px"
-      style:visibility={h ? undefined : 'hidden'}
+      style:max-height={pos.maxHeight === null ? undefined : `${pos.maxHeight}px`}
+      style:visibility={h && nh ? undefined : 'hidden'}
+      onscroll={followSub}
     >
       {@render items(menu.items, false)}
     </div>
@@ -236,7 +271,8 @@
       bind:clientHeight={sh}
       style:left="{subPos?.left ?? 0}px"
       style:top="{subPos?.top ?? 0}px"
-      style:visibility={sh ? undefined : 'hidden'}
+      style:max-height={subPos?.maxHeight == null ? undefined : `${subPos.maxHeight}px`}
+      style:visibility={sh && snh ? undefined : 'hidden'}
     >
       {@render items(subItems, true)}
     </div>
@@ -262,6 +298,11 @@
     z-index: 70;
     min-width: 220px;
     padding: 4px;
+    /* Не влезло в окно — max-height из popover.ts (placeMenu), список прокручивается внутри */
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
     background: rgba(30, 30, 32, 0.97);
     border: 1px solid var(--line);
     border-radius: 6px;

@@ -22,16 +22,17 @@ var lastFake *exec.Cmd // последняя собранная фальшива
 func fakeRembg(t *testing.T, mode string) *[][]string {
 	t.Helper()
 	// Временные файлы rembg — в папке теста: проверки не зависят от чужого содержимого TEMP.
-	tmp := t.TempDir()
+	tmp := tempDir(t)
 	t.Setenv("TMP", tmp)
 	t.Setenv("TEMP", tmp)
 	t.Setenv("TMPDIR", tmp)
+	self := selfExe(t)
 	var calls [][]string
 	old := rembgCommand
 	t.Cleanup(func() { rembgCommand = old })
 	rembgCommand = func(ctx context.Context, cmd string, args ...string) *exec.Cmd {
 		calls = append(calls, append([]string{cmd}, args...))
-		c := exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=TestHelperProcess", "--"}, args...)...)
+		c := exec.CommandContext(ctx, self, append([]string{"-test.run=TestHelperProcess", "--"}, args...)...)
 		c.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1", "FAKE_REMBG="+mode)
 		lastFake = c
 		return c
@@ -145,7 +146,7 @@ func TestDefringeClamps(t *testing.T) {
 
 func TestRembgCutsWhiteSheet(t *testing.T) {
 	calls := fakeRembg(t, "ok")
-	tmp := t.TempDir() // после fakeRembg: свой TEMP, чтобы проверить, что папка убрана
+	tmp := tempDir(t) // после fakeRembg: свой TEMP, чтобы проверить, что папка убрана
 	t.Setenv("TMP", tmp)
 	t.Setenv("TEMP", tmp)
 	t.Setenv("TMPDIR", tmp)

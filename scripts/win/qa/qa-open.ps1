@@ -226,19 +226,36 @@ Invoke-QaItem 'Б5' -Budget 240 {
     if (-not (Ensure-Open $st.Beta)) { Add-QaResult -Id 'Б5' -Status fail -Detail 'Beta не открылась'; return }
     $id = $st.Pid
     $n0 = Get-QaSpreadCount $st.Beta
+    # После Б4 альбом сменился, пока окно было свёрнуто: ждём ленту Beta (колонки «Разворот N» = числу в файле)
+    Step-Qa 'жду ленту Beta'
+    $stripRe = '^Разворот \d+$'
+    $strip = Wait-QaCond { (Get-QaCountRe $id 'Button' $stripRe) -eq $n0 } 15
+    $cols0 = Get-QaCountRe $id 'Button' $stripRe
     $mark = Get-LogMark $P.Log
     Step-Qa 'правка: "+ Новый разворот"'
-    $plus = Find-AppEl -ProcId $id -Name 'Новый разворот' -Type 'Button' -Timeout 15
-    if (-not $plus) { Add-QaResult -Id 'Б5' -Status fail -Detail "кнопка «Новый разворот» («+» в ленте) не найдена по имени: проверьте aria-label у кнопки в AddColumn.svelte"; return }
-    [void](Invoke-AppEl -El $plus -Mouse)
-    Start-Sleep -Seconds 2
+    # Нажимаем через UIA Invoke: пункт проверяет не щелчок мыши, а то, что правка не теряется вторым запуском. Кнопку ищем заново
+    # перед каждым нажатием; повтор - только если лента всё ещё Beta (иначе нажатие могло сработать, и повтор добавил бы второй разворот)
+    $edited = $false
+    $rect = ''
+    $tries = 0
+    for ($try = 1; $try -le 2 -and -not $edited; $try++) {
+        $tries = $try
+        $plus = Find-QaStableEl -ProcId $id -Name 'Новый разворот' -Timeout 15
+        if (-not $plus) { Add-QaResult -Id 'Б5' -Status fail -Detail "кнопка «Новый разворот» («+» в ленте) не найдена или не стоит на месте (попытка $try; лента Beta: $strip, колонок $cols0): проверьте aria-label у кнопки в AddColumn.svelte"; return }
+        $rect = (Get-QaRectSafe $plus) -join ','
+        [void](Invoke-AppEl -El $plus)
+        $edited = Wait-QaCond { (Get-QaSpreadCount $st.Beta) -eq $n0 + 1 } 8
+        if (-not $edited -and -not ($strip -and ((Get-QaCountRe $id 'Button' $stripRe) -le $cols0))) { break }
+    }
+    $diag = ''
+    if (-not $edited) { $diag = "; прямоугольник кнопки: $rect; PID окна программы: $id, на переднем плане: $(Get-QaForegroundPid); попыток: $tries" }
     Step-Qa 'двойной щелчок по тому же альбому'
     $clicked = Invoke-QaAlbumDblClick $st.Beta
     $already = Wait-QaCond { (Get-LogSince $mark) -match 'альбом из командной строки: уже открыт' } 10
     $alive = Test-Alive $id
     $how = Stop-QaApp -ProcId $id
     $n1 = Get-QaSpreadCount $st.Beta
-    Done 'Б5' ($clicked -and $alive -and ($n0 -ge 0) -and ($n1 -eq $n0 + 1)) "щелчок: $clicked; процесс жив: $alive; строка 'уже открыт': $already; программа $how; разворотов в Beta: $n0 -> $n1 (ждали +1)"
+    Done 'Б5' ($clicked -and $alive -and ($n0 -ge 0) -and ($n1 -eq $n0 + 1)) "щелчок: $clicked; процесс жив: $alive; строка 'уже открыт': $already; программа $how; разворотов в Beta: $n0 -> $n1 (ждали +1); лента Beta до нажатия: $strip; правка записана до второго щелчка: $edited$diag"
 }
 
 Invoke-QaItem 'Б6' -Budget 240 {

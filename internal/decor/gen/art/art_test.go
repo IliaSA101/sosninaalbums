@@ -229,8 +229,9 @@ func TestGenArtQuery(t *testing.T) {
 // TestGenArtFast — плитка стикера 160 px — Limit(10 ms); стикер 100 мм при 300 dpi (1181 px) —
 // Limit(150 ms) (замер аналитика: 6–21 мс).
 func TestGenArtFast(t *testing.T) {
-	if testing.Short() || testkit.Race {
-		t.Skip("замер времени: обычный прогон без -short и -race")
+	testkit.CostTest(t)
+	if testing.Short() {
+		t.Skip("замер времени: обычный прогон без -short")
 	}
 	for _, m := range gen.Arts() {
 		tile := image.NewRGBA(image.Rect(0, 0, 160, 160))

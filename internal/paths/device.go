@@ -30,12 +30,25 @@ func SetDeviceOracle(dev func(el string) bool) (restore func()) {
 // («CON.jpg», «aux.2024») — как судит сама ОС: Windows 10 считает устройством, 11 — обычным
 // файлом. «.» и «..» — не устройства; на других ОС устройств нет.
 func DeviceElem(el string) bool {
-	if runtime.GOOS != "windows" || el == "." || el == ".." {
+	return deviceElemRule(runtime.GOOS == "windows", el, osDeviceExt)
+}
+
+// deviceElemRule — DeviceElem без обращения к ОС: windows — правило Windows (на других устройств
+// нет), devExt судит элемент с расширением. Проверяется таблицей на любой ОС.
+func deviceElemRule(windows bool, el string, devExt func(el string) bool) bool {
+	if !windows || el == "." || el == ".." {
 		return false
 	}
 	if bare := strings.TrimRight(el, ". "); !strings.Contains(bare, ".") {
 		return reservedName(bare)
 	}
+	return devExt(el)
+}
+
+// osDeviceExt — суждение ОС об элементе с расширением: подмена теста или filepath.IsLocal
+// (на Windows внутри RtlIsDosDeviceName_U). Ветку `!filepath.IsLocal` проверяет только раннер
+// Windows 10 / Server 2019–2022; на Windows 11 её судит сама ОС.
+func osDeviceExt(el string) bool {
 	if f := deviceOracle.Load(); f != nil {
 		return (*f)(el)
 	}

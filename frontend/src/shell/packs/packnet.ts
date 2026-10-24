@@ -86,4 +86,5 @@ export function updateText(r: LibraryUpdate): string {
 export const offerText = (o: LibraryOffer): string => `Есть новые наборы: ${o.count} (${sizeLabel(o.bytes)})`
 
 // «Отменить»: Go отвечает ошибкой «обновление библиотеки отменено» — это не сбой.
+// caps-ok: сверка по тексту, не показ
 export const isCancelled = (e: unknown): boolean => /обновление библиотеки отменено/i.test(errText(e))

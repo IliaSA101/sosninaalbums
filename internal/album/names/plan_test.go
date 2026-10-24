@@ -386,6 +386,7 @@ func TestPreviewNamesFast(t *testing.T) {
 	if plan.Named != model.MaxPhotos || plan.Extra != names.MaxPasteLines-1-model.MaxPhotos {
 		t.Fatalf("план: подписано %d, лишних %d", plan.Named, plan.Extra)
 	}
+	testkit.CostTest(t)
 	if lim := testkit.Limit(15 * time.Millisecond); d > lim {
 		t.Fatalf("предпросмотр %v, порог %v", d, lim)
 	}

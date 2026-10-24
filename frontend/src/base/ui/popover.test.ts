@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { closesOnPeer, placePopover, placeSubmenu, type Box } from './popover'
+import { closesOnPeer, placeMenu, placePopover, placeSubmenu, placeSubmenuFit, type Box } from './popover'
 
 const view = { width: 1280, height: 760 }
 const size = { width: 240, height: 300 }
@@ -80,6 +80,63 @@ describe('placeSubmenu', () => {
   })
   it('с обеих сторон тесно — остаётся справа', () => {
     expect(placeSubmenu({ left: 10, top: 0, width: 220, height: 28 }, { width: 1200, height: 60 }, view).flipped).toBe(false)
+  })
+})
+
+// Меню «Правка»: 25 пунктов по 28 px (+ рамка, отступы, разделители) ≈ 735 px; строка меню кончается на 32.
+describe('placeMenu (выпадающий список строки меню)', () => {
+  const bar: Box = { left: 100, top: 4, width: 60, height: 28 }
+  const barBottom = bar.top + bar.height
+  const list = { width: 240, height: 25 * 28 + 35 }
+
+  it.each([760, 700, 640])('окно %i px: не выше строки меню, низ в окне, нужна прокрутка', (h) => {
+    const p = placeMenu(bar, list, { width: 1280, height: h })
+    expect(p.top).toBeGreaterThanOrEqual(barBottom)
+    expect(p.maxHeight).not.toBeNull()
+    expect(p.top + p.maxHeight!).toBeLessThanOrEqual(h - 8)
+    expect(p.maxHeight!).toBeLessThan(list.height)
+  })
+  it('1080 px: влезает, прокрутки нет', () => {
+    const p = placeMenu(bar, list, { width: 1280, height: 1080 })
+    expect(p.maxHeight).toBeNull()
+    expect(p.top).toBe(barBottom)
+  })
+  it('короткий список в низком окне прокрутки не просит', () => {
+    const p = placeMenu(bar, { width: 240, height: 200 }, { width: 1280, height: 640 })
+    expect(p).toEqual({ left: 100, top: barBottom, maxHeight: null })
+  })
+  it('у правого края окна сдвигается влево', () => {
+    expect(placeMenu({ ...bar, left: 1250 }, list, { width: 1280, height: 1080 }).left).toBe(1280 - 240 - 8)
+  })
+})
+
+describe('placeSubmenuFit (подменю строки меню)', () => {
+  const minTop = 32
+  const view640 = { width: 1280, height: 640 }
+  const sub = { width: 180, height: 6 * 28 + 8 }
+  it('стоит у своего пункта, в том числе у прокрученного родителя', () => {
+    const item: Box = { left: 100, top: 300, width: 240, height: 28 }
+    expect(placeSubmenuFit(item, sub, view640, minTop)).toEqual({ left: 340, top: 300, flipped: false, maxHeight: null })
+  })
+  it('пункт у низа окна: подменю поднято, низ в окне', () => {
+    const item: Box = { left: 100, top: 610, width: 240, height: 28 }
+    const p = placeSubmenuFit(item, sub, view640, minTop)
+    expect(p.top + sub.height).toBeLessThanOrEqual(640 - 8)
+    expect(p.top).toBeGreaterThanOrEqual(minTop)
+    expect(p.maxHeight).toBeNull()
+  })
+  it('пункт прокручен выше строки меню: подменю не заходит на неё', () => {
+    const p = placeSubmenuFit({ left: 100, top: 10, width: 240, height: 28 }, sub, view640, minTop)
+    expect(p.top).toBe(minTop)
+  })
+  it('подменю выше окна — ограничено и прокручивается', () => {
+    const p = placeSubmenuFit({ left: 100, top: 300, width: 240, height: 28 }, { width: 180, height: 900 }, view640, minTop)
+    expect(p.top).toBe(minTop)
+    expect(p.maxHeight).toBe(640 - 8 - minTop)
+  })
+  it('у правого края — слева от пункта', () => {
+    const p = placeSubmenuFit({ left: 1100, top: 300, width: 240, height: 28 }, sub, view640, minTop)
+    expect(p.flipped).toBe(true)
   })
 })
 

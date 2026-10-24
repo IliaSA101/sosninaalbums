@@ -30,7 +30,7 @@ func (w *scanWalk) addLoose(p string) {
 	} else if !info.Mode().IsRegular() {
 		return
 	}
-	w.add(p, name, info, nil)
+	w.add(p, name, info, nil, true)
 	w.looseSidecar(p)
 }
 

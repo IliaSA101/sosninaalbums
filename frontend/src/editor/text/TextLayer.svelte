@@ -107,9 +107,11 @@
   $effect(() => {
     if (!mini && edit.sel?.spread === spread.id) edit.dropIfGone()
   })
-  // Выделение фото и текста взаимоисключающие: фото выбрали — текст отпускаем.
+  // Выделение фото (места) и текста взаимоисключающие: выбрали фото или пустое место — текст отпускаем.
+  // Смотрим на refs, а не на selectedCell: у пустого места тот null. Вместе с текстом refs не живут
+  // (groupsel.normalize), так что Shift/Ctrl-перенос текста в группу эффект не задевает.
   $effect(() => {
-    if (!mini && store.selectedCell && edit.sel) untrack(() => edit.clear())
+    if (!mini && placesel.refs.length > 0 && edit.sel) untrack(() => edit.clear())
   })
 </script>
 

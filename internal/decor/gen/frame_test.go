@@ -387,8 +387,9 @@ func TestFrameMask(t *testing.T) {
 
 // TestFrameFast — плитка 256 px любого вида ≤ Limit(30 ms); экран 6 px/мм на 100×150 — Limit(300 ms).
 func TestFrameFast(t *testing.T) {
-	if testing.Short() || testkit.Race {
-		t.Skip("замер времени: обычный прогон без -short и -race")
+	testkit.CostTest(t)
+	if testing.Short() {
+		t.Skip("замер времени: обычный прогон без -short")
 	}
 	for _, m := range Frames() {
 		s := frameGoldenSpec(m.Kind, 0, false, 0)

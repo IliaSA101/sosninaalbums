@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // copyProj — лист с фото файла a (запись a стоит), файл b нигде не стоит. Пути абсолютные, ID — по пути.
@@ -58,7 +59,7 @@ func TestFitFile(t *testing.T) {
 		t.Fatalf("после FitFile: %+v", got)
 	}
 	p.FitFile("нет-записи") // нет записи — паники нет
-	solo := PhotoRef{Path: filepath.Join(t.TempDir(), "solo.jpg"), W: 5, H: 6}
+	solo := PhotoRef{Path: filepath.Join(testkit.TempDir(t), "solo.jpg"), W: 5, H: 6}
 	sid := library.IDFor(solo.Path)
 	p.Photos[sid] = solo
 	p.FitFile(sid)

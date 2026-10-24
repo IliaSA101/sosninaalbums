@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/decor/fetch"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Detail: пользователю — слова обновления, в лог — причина; Is видит обе; чужая ошибка — как есть.
@@ -57,7 +58,7 @@ func TestDetail(t *testing.T) {
 
 // Verify называет, что не сошлось: размер, sha256, не файл.
 func TestVerifyReason(t *testing.T) {
-	dir := t.TempDir()
+	dir := testkit.TempDir(t)
 	data, file := setup("0.25.1", 5000)
 	p := filepath.Join(dir, "a.exe")
 	if err := os.WriteFile(p, data, 0o600); err != nil {

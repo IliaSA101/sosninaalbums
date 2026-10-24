@@ -7,11 +7,12 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { filterIndex, isExcluded, parseExclude } from './public-tree.mjs'
 
 const args = process.argv.slice(2)
 const flag = (f) => args.includes(f)
 // `--only <путь>…` — служебный коммит поверх main: из <ref> берутся только указанные файлы/папки,
-// остальное дерево — как в main (docs/specs/0.10/029-install-guide/design.md §2).
+// остальное дерево — как в main (docs/specs/archive/0.10/029-install-guide/design.md §2).
 const onlyAt = args.indexOf('--only')
 const only = []
 if (onlyAt >= 0) {
@@ -33,12 +34,8 @@ const index = path.join(os.tmpdir(), `publish-index-${process.pid}`)
 const git = (a, env = {}) => execFileSync('git', a, { cwd: root, encoding: 'utf8', env: { ...process.env, ...env } }).trim()
 const gi = (a) => git(a, { GIT_INDEX_FILE: index })
 
-const exclude = fs
-  .readFileSync(path.join(root, 'scripts', 'publish-exclude.txt'), 'utf8')
-  .split('\n')
-  .map((l) => l.trim())
-  .filter((l) => l && !l.startsWith('#'))
-const excluded = (p) => exclude.some((e) => (e.endsWith('/') ? p.startsWith(e) : p === e))
+const exclude = parseExclude(fs.readFileSync(path.join(root, 'scripts', 'publish-exclude.txt'), 'utf8'))
+const excluded = (p) => isExcluded(exclude, p)
 
 // Служебный коммит: main + только указанные пути из ref.
 function publishOnly() {
@@ -108,11 +105,7 @@ try {
     fs.rmSync(index, { force: true })
     process.exit(0)
   }
-  gi(['read-tree', ref])
-  const all = gi(['ls-files']).split('\n').filter(Boolean)
-  const drop = all.filter(excluded)
-  for (let i = 0; i < drop.length; i += 200) gi(['update-index', '--force-remove', '--', ...drop.slice(i, i + 200)])
-  const files = gi(['ls-files']).split('\n').filter(Boolean)
+  const { files, drop } = filterIndex(gi, ref, exclude)
   const have = new Set(files)
   const dirs = new Set(
     files.flatMap((f) =>
@@ -134,7 +127,6 @@ try {
       if (!have.has(target) && !dirs.has(target.replace(/\/$/, ''))) broken.push(`${f}: ${link}`)
     }
   }
-  if (files.some(excluded)) throw new Error('в дереве остались исключённые пути')
   if (broken.length) {
     console.error(`битые ссылки в публикуемом (${broken.length}):\n  ` + broken.join('\n  '))
     process.exit(1)

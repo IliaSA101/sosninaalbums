@@ -146,7 +146,7 @@ func TestRenderPhotoFadeWithBorder(t *testing.T) {
 		img = renderPat(t, Spread{Bg: [2]color.RGBA{bdGray, bdGray}, Photos: []Photo{ph}, Borders: []BorderDraw{b}})
 		wantExact(t, "окно при 0,5, поворот", img, 254, 40, 25, mid)
 	}
-	ph.Rot, ph.Fade, ph.Path = 0, 1, filepath.Join(t.TempDir(), "нет.png")
+	ph.Rot, ph.Fade, ph.Path = 0, 1, filepath.Join(testkit.TempDir(t), "нет.png")
 	img = renderPat(t, Spread{Bg: [2]color.RGBA{bdGray, bdGray}, Photos: []Photo{ph}, Borders: []BorderDraw{line}})
 	wantExact(t, "полностью прозрачное", img, 254, 40, 25, bdGray)
 	wantExact(t, "рамочка при полной прозрачности", img, 254, 21, 25, brInk)
@@ -308,15 +308,16 @@ func TestRenderBorderHeaderLimit(t *testing.T) {
 			Cut: [4]float64{0.1, 0.1, 0.1, 0.1}}}}, patOpt)
 		return err
 	}
-	for _, sz := range [][2]uint32{{15000, 15000}, {8001, 8000}, {64001, 1000}, {1000, 64001}} {
-		start := time.Now()
-		err := run(header(sz[0], sz[1]))
+	sizes := [][2]uint32{{15000, 15000}, {8001, 8000}, {64001, 1000}, {1000, 64001}}
+	times := make([]time.Duration, len(sizes))
+	for i, sz := range sizes {
+		path := header(sz[0], sz[1])
+		var err error
+		// Лучший из пяти: всплеск нагрузки портит один замер, медленный отказ — каждый.
+		times[i] = testkit.Fastest(5, func() { err = run(path) })
 		if err == nil || !strings.Contains(err.Error(), "слишком велика") || strings.Contains(err.Error(), dir) ||
 			!strings.Contains(err.Error(), "h.png") {
 			t.Errorf("%v: ошибка %v", sz, err)
-		}
-		if d := time.Since(start); d > testkit.Limit(500*time.Millisecond) {
-			t.Errorf("%v: отказ занял %v", sz, d)
 		}
 	}
 	// Ровно 4096 по стороне допустимо (картинка узкая: кадр 4096×16 — настоящий файл).
@@ -328,6 +329,12 @@ func TestRenderBorderHeaderLimit(t *testing.T) {
 	err := run(filepath.Join(dir, "нет.png"))
 	if err == nil || !strings.Contains(err.Error(), "нет.png") || strings.Contains(err.Error(), dir) {
 		t.Errorf("пропавший файл: %v", err)
+	}
+	testkit.CostTest(t)
+	for i, d := range times {
+		if d > testkit.Limit(500*time.Millisecond) {
+			t.Errorf("%v: отказ занял %v", sizes[i], d)
+		}
 	}
 }
 

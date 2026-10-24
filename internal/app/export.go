@@ -311,7 +311,11 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 	if err != nil || dir == "" {
 		return false, err
 	}
-	a.rememberDir(prefs.DirExport, dir)
+	dir, mkOut, ok, err := a.outsideAlbum(dir) // 121: в папке фото альбома — вопрос «выгрузить рядом?»
+	if !ok || err != nil {
+		return false, err // «Нет» — err == nil: ничего не пишем и не создаём
+	}
+	a.rememberDir(prefs.DirExport, dir)  // с этого места dir — уже соседняя
 	dir, mkBook, err := bookDir(pj, dir) // дальше dir — папка книги; mkBook — создать её
 	if err != nil {
 		return false, err
@@ -324,7 +328,7 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 	}
 
 	var ours, foreign []export.DirFile
-	if mkBook == "" { // новой папки книги ещё нет: читать нечего
+	if mkOut == "" && mkBook == "" { // новых папок ещё нет: читать нечего
 		if ours, foreign, err = export.PlanDirPrefix(dir, pl.Prefix); err != nil {
 			return false, fmt.Errorf("не удалось прочитать папку экспорта: %w", err)
 		}
@@ -348,6 +352,12 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 			if ok, err := askYes(a, text); !ok {
 				return false, err
 			}
+		}
+	}
+	if mkOut != "" { // соседняя папка выгрузки (121): раньше папки книги внутри неё
+		if err := os.Mkdir(mkOut, 0o755); err != nil {
+			log.Printf("экспорт: папка выгрузки: %v", paths.NoPath(err))
+			return false, fmt.Errorf("не удалось создать папку выгрузки: %w", err)
 		}
 	}
 	if mkBook != "" { // после всех вопросов: «нет» не оставляет пустой папки

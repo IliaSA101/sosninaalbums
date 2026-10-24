@@ -69,7 +69,7 @@ describe('create', () => {
     answer = async () => {
       throw new Error('подборок не больше 50')
     }
-    expect(await create('Новая', [])).toEqual({ ok: false, err: 'подборок не больше 50' })
+    expect(await create('Новая', [])).toEqual({ ok: false, err: 'Подборок не больше 50' })
     expect(binsel.target).toBe('')
   })
 })

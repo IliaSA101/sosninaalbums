@@ -83,7 +83,7 @@ Invoke-QaItem 'Д2' -Budget 300 {
     $again = Wait-NewerLead $id $lead251 30
     $edge0 = @(Get-Process -Name 'msedge' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
     Step-Qa 'нажимаю "Скачать"'
-    $down = $again -and (Invoke-QaButton $id 'Скачать' 8 -Mouse)
+    $down = $again -and (Invoke-QaButton $id 'Скачать' 8 -Mouse -Stable)
     $edge = $null
     $sw = [Diagnostics.Stopwatch]::StartNew()
     while ($down -and -not $edge -and $sw.Elapsed.TotalSeconds -lt 30) {
@@ -112,7 +112,7 @@ try {
         $before = @(Get-AppProcs $P.Exe | ForEach-Object { $_.Id })
         $sw = [Diagnostics.Stopwatch]::StartNew()
         Step-Qa 'нажимаю "Открыть в 0.25.1"'
-        $clicked = Invoke-QaButton $id 'Открыть в 0.25.1' 10 -Mouse
+        $clicked = Invoke-QaButton $id 'Открыть в 0.25.1' 10 -Mouse -Stable
         Step-Qa 'жду выход rel и запуск установленной'
         $relGone = Wait-QaCond { -not (Test-Alive $id) } 40
         $inst = Wait-QaNewApp $P.Exe $before 60

@@ -66,7 +66,8 @@ export function treeCover({ root, env, heavy = false }) {
   const gotmp = env.GOTMPDIR || path.join(root, '.gotmp')
   fs.mkdirSync(gotmp, { recursive: true })
   const prof = path.join(gotmp, `${process.pid}-tree-cover.out`)
-  const goArgs = ['test', '-count=1', `-coverpkg=${measured.join(',')}`, `-coverprofile=${prof}`, ...pkgs]
+  // Без -count=1: нетронутые пакеты берутся из кэша go test (повторный check не гоняет дерево заново); профиль при попадании в кэш тот же.
+  const goArgs = ['test', `-coverpkg=${measured.join(',')}`, `-coverprofile=${prof}`, ...pkgs]
   const [cmd, args] = heavy ? ['node', ['scripts/heavy.mjs', 'go', ...goArgs]] : ['go', goArgs]
   const r = spawnSync(cmd, args, { cwd: root, env, encoding: 'utf8', maxBuffer: 64 << 20 })
   if (r.status !== 0) {

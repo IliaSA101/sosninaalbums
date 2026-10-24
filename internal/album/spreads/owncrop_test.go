@@ -141,6 +141,7 @@ func stepOwnCrop(tb testing.TB, n int) time.Duration {
 // TestStepLayoutOwnCropTime: листание разворота со своими кадрами на холодном кэше — в пределе
 // (design §3.3: тот же порядок, что поворот фото на 90°).
 func TestStepLayoutOwnCropTime(t *testing.T) {
+	testkit.CostTest(t)
 	for _, c := range []struct {
 		n    int
 		base time.Duration

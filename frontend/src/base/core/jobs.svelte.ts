@@ -1,6 +1,6 @@
 import * as Api from '../../../wailsjs/go/app/App'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
-import { collectDoneText, errText, exportDoneText, exportStoppedText } from '../words/errtext'
+import { capFirst, collectDoneText, errText, exportDoneText, exportStoppedText } from '../words/errtext'
 import type { Toast } from './toasts.svelte'
 import type { ExportOpts, PrintPlan } from './types'
 
@@ -133,7 +133,7 @@ class Jobs {
       }
       return { started, error: '' }
     } catch (e) {
-      return { started: false, error: errText(e) }
+      return { started: false, error: capFirst(errText(e)) }
     }
   }
 

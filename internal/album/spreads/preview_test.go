@@ -225,6 +225,7 @@ func TestAutoPreviewReadOnly(t *testing.T) {
 // TestAutoPreviewCost (design §3): 300 фото / 60 разворотов на тёплом кэше — в пределах
 // 150 мс: копия проекта, план и выбор, без перебора раскладок.
 func TestAutoPreviewCost(t *testing.T) {
+	testkit.CostTest(t)
 	e, ph := previewCost(t)
 	o := model.AutoOpts{Spreads: 60, MaxPer: 9, Variety: model.VarietyNormal, Families: []string{"dense", "hero"}}
 	if _, err := e.AutoPreview(ph, -1, o); err != nil { // прогрев кэша рядов

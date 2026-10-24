@@ -4,6 +4,7 @@ import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import { store, Api } from '../../base/core/store.svelte'
 import type { LooseAdded, View } from '../../base/core/types'
 import { errText } from '../../base/words/errtext'
+import { exportsText, type ExportsSkipped } from './scan'
 import { folderfilter } from './folderfilter.svelte'
 import { GROUP_KEY, batchKey, cachedLoose, looseAskText, looseInAlbum, looseToast } from './loose'
 import {
@@ -55,9 +56,14 @@ class FoldersUi {
   listen(): () => void {
     const offFolders = EventsOn('folders:added', (e: FolderAdded) => e && this.added(e))
     const offLoose = EventsOn('loose:added', (e: LooseAdded) => e && this.looseAdded(e, false))
+    // Выгрузка программы в папке альбома в ленту не берётся (121); Go шлёт событие, только когда файлы новые.
+    const offSkipped = EventsOn('exports:skipped', (e?: ExportsSkipped) => {
+      if (e && e.n > 0) store.notify(exportsText(e.n, e.dir), 'info')
+    })
     return () => {
       offFolders()
       offLoose()
+      offSkipped()
     }
   }
 

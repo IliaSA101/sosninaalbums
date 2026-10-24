@@ -24,8 +24,9 @@ const (
 // TestGenCoverFast — каждый узор на обложку 300 dpi быстрее Limit(3 s) и без лишней памяти
 // сверх холста (полосы маски, мягкий слой, текстура — ≤ 64 МБ); плитка 160 px — Limit(10 ms).
 func TestGenCoverFast(t *testing.T) {
-	if testing.Short() || testkit.Race {
-		t.Skip("замер времени: обычный прогон без -short и -race")
+	testkit.CostTest(t)
+	if testing.Short() {
+		t.Skip("замер времени: обычный прогон без -short")
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, coverW, coverH))
 	var slowest time.Duration
