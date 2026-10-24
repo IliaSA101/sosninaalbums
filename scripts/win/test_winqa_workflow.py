@@ -45,7 +45,7 @@ class WinQaWorkflow(unittest.TestCase):
 
     def test_jobs_and_needs(self):
         jobs = self.doc["jobs"]
-        self.assertEqual(set(jobs), {"plan", "kit", "scenario", "report"})
+        self.assertEqual(set(jobs), {"plan", "replay", "kit", "scenario", "report"})
         self.assertEqual(jobs["kit"]["needs"], "plan")
         self.assertEqual(set(jobs["scenario"]["needs"]), {"plan", "kit"})
         self.assertEqual(set(jobs["report"]["needs"]), {"plan", "kit", "scenario"})

@@ -320,10 +320,10 @@ jobs:
           BLOCKS: ${{ needs.plan.outputs.blocks_csv }}
         run: |
           mkdir -p "$RUNNER_TEMP/in" "$RUNNER_TEMP/report"
-          upd=""
-          [ -f docs/qa/update.md ] && upd="--update docs/qa/update.md"
+          upd=()
+          if [ -f docs/qa/update.md ]; then upd=(--update docs/qa/update.md); fi
           set +e
-          python3 -I scripts/win/qa_report.py $upd --blocks "$BLOCKS" --in "$RUNNER_TEMP/in" --out "$RUNNER_TEMP/report"
+          python3 -I scripts/win/qa_report.py "${upd[@]}" --blocks "$BLOCKS" --in "$RUNNER_TEMP/in" --out "$RUNNER_TEMP/report"
           code=$?
           set -e
           cat "$RUNNER_TEMP/report/summary.md" >> "$GITHUB_STEP_SUMMARY"

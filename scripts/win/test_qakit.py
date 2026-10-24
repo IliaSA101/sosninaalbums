@@ -14,6 +14,7 @@ import zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 KIT = os.path.join(HERE, "qa-kit.sh")
+UPDATE = os.path.join(ROOT, "docs", "qa", "update.md")
 SETUP = "SosninaAlbums-0.25.1-windows-x64-setup.exe"
 
 
@@ -41,9 +42,13 @@ class QaKitFake(unittest.TestCase):
         self.assertIn("подписи и хеши как задумано", self.res.stderr)
 
     def test_layout(self):
-        for name in ("README.txt", "update.md", "pub.txt", "run-feed.cmd", "start-0.25.0.cmd", "start-installed.cmd",
-                     "installer-check.ps1", "kit-sha256.txt", "zip/SosninaAlbums-0.25.0-rel-windows-x64.zip",
-                     "setup/SosninaAlbums-0.25.0-windows-x64-setup.exe", "setup/" + SETUP):
+        names = ["README.txt", "pub.txt", "run-feed.cmd", "start-0.25.0.cmd", "start-installed.cmd",
+                 "installer-check.ps1", "kit-sha256.txt", "zip/SosninaAlbums-0.25.0-rel-windows-x64.zip",
+                 "setup/SosninaAlbums-0.25.0-windows-x64-setup.exe", "setup/" + SETUP]
+        # update.md кладётся из docs/qa, а в публичном дереве и ветке winqa/* его нет (qa-kit.sh это допускает)
+        if os.path.isfile(UPDATE):
+            names.append("update.md")
+        for name in names:
             self.assertTrue(os.path.isfile(self.p(*name.split("/"))), name)
         for feed in ("feed", "feed-bad-byte", "feed-wrong-key", "feed-old-setup"):
             self.assertTrue(os.path.isfile(self.p(feed, "SosninaAlbums-update.json")), feed)

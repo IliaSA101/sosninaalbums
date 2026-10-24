@@ -571,7 +571,10 @@ jobs:
           SUMS: ${{ needs.pack.outputs.sums }}
           TEST_SUMS: ${{ needs.pack.outputs.test_sums }}
         run: |
-          [ -n "$SUMS" ] && [ -n "$TEST_SUMS" ] || { echo "::error::Задание pack не передало sha256"; exit 1; }
+          if [ -z "$SUMS" ] || [ -z "$TEST_SUMS" ]; then
+            echo "::error::Задание pack не передало sha256"
+            exit 1
+          fi
           tmp="$(cygpath -m "$RUNNER_TEMP")"
           setup="$tmp/pkg/SosninaAlbums-$VERSION-windows-x64-setup.exe"
           IFS=. read -r vmaj vmin vpat <<< "$VERSION"

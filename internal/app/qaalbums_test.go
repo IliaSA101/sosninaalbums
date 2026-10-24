@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -31,6 +32,9 @@ func buildQaGen(t *testing.T, tmp string) qaGen {
 		t.Fatal(err)
 	}
 	g := qaGen{exe: filepath.Join(tmp, "qa-albums")}
+	if runtime.GOOS == "windows" {
+		g.exe += ".exe" // без суффикса Windows не находит собранный файл при запуске
+	}
 	if b, err := exec.Command(goBin, "build", "-o", g.exe, script).CombinedOutput(); err != nil {
 		t.Fatalf("сборка: %v\n%s", err, b)
 	}

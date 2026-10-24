@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -166,6 +167,9 @@ func TestInstallLogNoPath(t *testing.T) {
 	}
 
 	// Путь с кавычкой: CmdLine отказывает (ErrPath), в логе слова без пути.
+	if runtime.GOOS == "windows" {
+		return // в Windows кавычка в имени папки запрещена: такой путь не создать, случай невозможен
+	}
 	buf.Reset()
 	q := newUpdApp(t)
 	q.f.publish(t, "0.25.1", update.MinSetup, nil)
