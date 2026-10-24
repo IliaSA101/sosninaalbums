@@ -164,7 +164,8 @@ test('--new-key: файл 0600, открытый ключ 32 байта, сущ�
   const file = path.join(dir, 'sub', 'k.pem')
   const pub = newKey(file)
   assert.equal(Buffer.from(pub, 'base64').length, 32)
-  assert.equal(fs.statSync(file).mode & 0o077, 0)
+  // на Windows права файла режимом 0600 не задаются (доступ — по ACL профиля), mode там всегда 0o666
+  if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o077, 0)
   assert.equal(publicRaw(loadKey(file)), pub)
   const before = fs.readFileSync(file)
   throwsSign(() => newKey(file), /не перезаписывается/)
