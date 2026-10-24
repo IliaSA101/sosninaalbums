@@ -1,0 +1,55 @@
+# Сборка
+build/bin/
+node_modules
+frontend/dist/*
+!frontend/dist/gitkeep
+frontend/package.json.md5
+frontend/wailsjs/go/models.ts.bak
+frontend/.vite/
+*.exe
+*.dll
+
+# Go: временные файлы (GOTMPDIR), тестовые бинарники, профили, покрытие, отладчик
+.gotmp/
+*.test
+*.prof
+*.out
+coverage/
+coverage.*
+__debug_bin*
+
+# Инструкции и настройки агентов (Claude Code) — локальные, в репозиторий не идут
+CLAUDE.md
+.claude/
+
+# Проекты, черновики и данные пользователя
+*.salbum
+*.tmp
+*.bak
+*.log
+.testphotos/
+.testguides/
+docs/private/
+
+# Референс-видео: чужая программа и чужие фото, в публичный репозиторий нельзя
+docs/refs/
+docs/refs.mp4
+
+# Секреты
+.env
+.env.*
+
+# Редакторы и ОС
+.vs/
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
+.testphotos-big/
+.testphotos-e2e/
+
+# Python (движок инструкции scripts/guide)
+__pycache__/
+*.pyc

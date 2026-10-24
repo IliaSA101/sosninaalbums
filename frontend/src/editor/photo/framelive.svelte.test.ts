@@ -1,0 +1,45 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { framelive } from './framelive.svelte'
+
+const F = { s: 1.2, x: 0, y: 0, r: 3 }
+
+// Живой угол шкалы (059): карточка читает его на ходу (InspectorFrame: angleOf(id) ?? fv.tilt).
+describe('framelive angle', () => {
+  beforeEach(() => framelive.clear())
+
+  it('while dragging the card sees the live angle', () => {
+    framelive.set('a', F, true, false, 3.2)
+    expect(framelive.angleOf('a')).toBe(3.2)
+    framelive.set('a', { ...F, r: 4.5 }, true, false, 4.5)
+    expect(framelive.angleOf('a')).toBe(4.5)
+  })
+
+  it('zero angle is a live value, not "none"', () => {
+    framelive.set('a', F, true, false, 0)
+    expect(framelive.angleOf('a')).toBe(0)
+  })
+
+  it('after cancel (Esc) the card falls back to the View value', () => {
+    framelive.set('a', F, true, false, 3.2)
+    framelive.clear()
+    expect(framelive.angleOf('a')).toBeNull()
+  })
+
+  it('another photo does not see it', () => {
+    framelive.set('a', F, true, false, 3.2)
+    expect(framelive.angleOf('b')).toBeNull()
+  })
+
+  it('zoom/pan preview has no angle', () => {
+    framelive.set('a', F)
+    expect(framelive.angleOf('a')).toBeNull()
+    framelive.set('a', F, false, true)
+    expect(framelive.angleOf('a')).toBeNull()
+  })
+
+  it('frame kept until Go answers still carries the angle', () => {
+    framelive.set('a', F, false, false, 3.2)
+    expect(framelive.angleOf('a')).toBe(3.2)
+    expect(framelive.tilting('a')).toBe(false)
+  })
+})
