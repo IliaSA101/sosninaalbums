@@ -102,6 +102,7 @@ linters:
             - $gostd
             - github.com/IliaSA101/sosninaalbums/internal/album$
             - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
             - github.com/IliaSA101/sosninaalbums/internal/app/edit
         # Пипетка и «С фото» (0.25, долг ревью Go 0.24): за малым Host — только чтение альбома и картинок.
         # Да владельца 2026-10-23.
@@ -144,6 +145,59 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/paths
             - github.com/IliaSA101/sosninaalbums/internal/table
             - github.com/IliaSA101/sosninaalbums/internal/app/namesfile
+        # 126: общие помощники служб App (защита от паники, адрес репозитория) — только stdlib. Да владельца 2026-10-24.
+        "app/appkit: только stdlib":
+          files:
+            - "**/internal/app/appkit/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+        # 126: службы App за узким Host (образец colorpick): без Wails, без App и без других служб.
+        "app/updater: update, prefs, paths":
+          files:
+            - "**/internal/app/updater/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/updater$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/prefs$
+            - github.com/IliaSA101/sosninaalbums/internal/update$
+        "app/assoc: osx, update, salbum":
+          files:
+            - "**/internal/app/assoc/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/salbum$
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/assoc$
+            - github.com/IliaSA101/sosninaalbums/internal/osx$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/prefs$
+            - github.com/IliaSA101/sosninaalbums/internal/update$
+        "app/exporter: export, printshop, render":
+          files:
+            - "**/internal/app/exporter/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model/printprof$
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/exporter$
+            - github.com/IliaSA101/sosninaalbums/internal/export$
+            - github.com/IliaSA101/sosninaalbums/internal/export/printshop$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/render$
+            - github.com/IliaSA101/sosninaalbums/internal/text$
         # devtools — инструменты разработчика (нарезка листа стикеров и т. п.): в exe не входят, запускают
         # внешние команды (rembg). Импортирует их только CLI в scripts/ (//go:build ignore); да владельца 19.10.
         "devtools — не в программу":
@@ -697,9 +751,9 @@ linters:
       # statements 50 / cognitive 30). Список только сокращается; новые функции в него не вносить.
       # Разрез перенесён на 0.9 (спека 023 «Не входит», BACKLOG «Сводное ревью 0.8.0»); строки удалять по мере разреза.
       # funlen пишет «Function 'имя' …», gocognit — «of func `(*Тип).имя`».
-      - path: internal/app/export\.go
+      - path: internal/app/exporter/export\.go
         linters: [funlen, gocognit]
-        text: "Function 'Export' |func `\\(\\*App\\)\\.Export`"
+        text: "Function 'Export' |func `\\(\\*Service\\)\\.Export`"
       # 023: шаблоны верны и до переноса, и после (R3, экспорт ClampGrid, новые файлы, album) — design §5
       - path: internal/album/editor\.go
         linters: [funlen]

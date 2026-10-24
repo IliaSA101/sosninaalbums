@@ -25,9 +25,9 @@ func TestFabrikaCheck(t *testing.T) {
 	if !bytes.Equal(before, model.Marshal(p)) {
 		t.Fatal("Check изменил проект")
 	}
-	want := Plan{Kind: "fabrika", Title: "Для Фабрики Фотокниги", Format: "30×30", Pages: "Фотобумага", Spreads: 20, Spine: 14, Min: 10, Max: 40,
+	want := Plan{Kind: "fabrika", Title: "Для Фабрики Фотокниги", Format: "30×30", Px: "7087×3602 px", Pages: "Фотобумага", Spreads: 20, Spine: 14, Min: 10, Max: 40,
 		Folder: "Иванов", CoverName: "1-00.jpg", Quality: 100, Block: []string{}, FixAt: -1, Warn: []string{},
-		Memo: []string{"Фотокнига на фотобумаге 30×30", "Разворот: Фотобумага", "Разворотов: 20 (корешок 14 мм)", "Папка: Иванов — 1-00.jpg и 1-01…1-20.jpg"},
+		Memo: []string{"Фотокнига на фотобумаге 30×30", "Разворот: Фотобумага", "Разворотов: 20 (корешок 14 мм)", "Файлы: 7087×3602 px", "Папка: Иванов — 1-00.jpg и 1-01…1-20.jpg"},
 		Done: "Готово для Фабрики Фотокниги", SiteButton: "Открыть Фабрику Фотокниги",
 		Site: "На сайте: Фотокниги → «Фотокнига на фотобумаге» → эти параметры → «Создать заказ» → файлы папки «Иванов»."}
 	if got, _ := json.Marshal(pl); !bytes.Equal(got, mustJSON(t, want)) {
@@ -40,8 +40,10 @@ func TestFabrikaCheck(t *testing.T) {
 		want string
 		off  string // Plan.Off: у листа 031 пуст
 	}{
-		{album(300, 300, 3, ""), "Страница 300 × 300 мм — не формат Фабрики Фотокниги. В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата", "страница 300 × 300 мм — не формат Фабрики Фотокниги"},
-		{album(201, 152, 3, ""), "Страница 201 × 152 мм — не формат Фабрики Фотокниги. В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата", "страница 201 × 152 мм — не формат Фабрики Фотокниги"},
+		{album(300, 300, 3, ""), "Страница 300 × 300 мм — не формат Фабрики Фотокниги: разворот выйдет 7087 × 3543 px, у 30×30 — 7087 × 3602 (300 × 305 мм). " +
+			"В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата или введите px файла", "страница 300 × 300 мм — не формат Фабрики Фотокниги"},
+		{album(201, 152, 3, ""), "Страница 201 × 152 мм — не формат Фабрики Фотокниги: разворот выйдет 4748 × 1795 px, у 20×20 — 4724 × 2398 (200 × 203 мм). " +
+			"В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата или введите px файла", "страница 201 × 152 мм — не формат Фабрики Фотокниги"},
 		{model.NewSheet(204, 304), "Лист виньетки в Фабрику Фотокниги не выгружается", ""},
 	} {
 		if pl := Check(c.p, "", Fabrika); pl.Format != "" || !slices.Equal(pl.Block, []string{c.want}) || pl.FixAt != -1 || pl.Off != c.off {
@@ -116,12 +118,12 @@ func TestFabrikaCheck(t *testing.T) {
 		"Безопасная зона 8 мм — у Фабрики Фотокниги 10 мм: проверьте края (Вид ▸ Безопасная зона)"}) || len(pl.Block) != 0 {
 		t.Errorf("без обложки: Warn %q, Block %q", pl.Warn, pl.Block)
 	}
-	if !slices.Equal(pl.Memo, []string{"Фотокнига 20×20", "Разворотов: 1", "Папка: Альбом — 1-01.jpg"}) ||
+	if !slices.Equal(pl.Memo, []string{"Фотокнига 20×20", "Разворотов: 1", "Файлы: 4724×2398 px", "Папка: Альбом — 1-01.jpg"}) ||
 		pl.Site != "На сайте: Фотокниги → изделие → эти параметры → «Создать заказ» → файлы папки «Альбом»." {
 		t.Errorf("памятка без обложки: %q, %q", pl.Memo, pl.Site)
 	}
 	flat := Check(album(200, 203, 12, "fabrika-layflat-card"), "", Fabrika)
-	if !slices.Equal(flat.Memo, []string{"Лайфлат 20×20", "Разворот: Картон", "Разворотов: 12 (корешок 12 мм)", "Папка: Альбом — 1-00.jpg и 1-01…1-12.jpg"}) ||
+	if !slices.Equal(flat.Memo, []string{"Лайфлат 20×20", "Разворот: Картон", "Разворотов: 12 (корешок 12 мм)", "Файлы: 4724×2398 px", "Папка: Альбом — 1-00.jpg и 1-01…1-12.jpg"}) ||
 		!strings.Contains(flat.Site, "→ «Лайфлат» →") || len(flat.Block) != 0 {
 		t.Errorf("лайфлат: %+v", flat)
 	}
@@ -150,7 +152,7 @@ func TestProfilesProductsHaveLimits(t *testing.T) {
 				continue
 			}
 			ids = append(ids, pr.ID)
-			if !slices.ContainsFunc(prof.Formats(), func(f model.PrintFormat) bool { _, ok := model.LimitFor(pr.ID, f.Name); return ok }) {
+			if !slices.ContainsFunc(model.GroupFormats(prof.Group), func(f model.PrintFormat) bool { _, ok := model.LimitFor(pr.ID, f.Name); return ok }) {
 				t.Errorf("%s: у «%s» нет строки предела ни в одном формате", prof.Kind, pr.Name)
 			}
 			if _, ok := prof.products[pr.ID]; !ok {
@@ -173,7 +175,7 @@ func TestProfilesProductsHaveLimits(t *testing.T) {
 }
 
 // TestFabrikaURL — страница сайта по обложке: лайфлат, фотобумага, иначе каталог; Фотосфера
-// адресом профиля не открывается (её кнопка — App.OpenFsfera).
+// адресом профиля не открывается (её кнопка — App.OpenPrintSite).
 func TestFabrikaURL(t *testing.T) {
 	for preset, want := range map[string]string{
 		"fabrika-layflat-card-1": "https://fabrika-fotoknigi.com/layflat",

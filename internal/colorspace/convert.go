@@ -12,6 +12,7 @@ import (
 	"math"
 	"runtime"
 	"sync"
+	"sync/atomic"
 )
 
 // adobeGamma — гамма из самого профиля Adobe RGB (1998): 563/256 = 2.19921875.
@@ -136,8 +137,9 @@ func rows(h int, f func(y0, y1 int)) {
 func AdobeToSRGB(img image.Image) *image.NRGBA { return Adobe.ToSRGB(img) }
 
 // ToSRGB возвращает картинку в sRGB. Быстрые пути: *image.NRGBA
-// пересчитывается на месте (возвращается тот же указатель), *image.YCbCr
-// переводится в новое NRGBA сразу с пересчётом; остальное — через draw.
+// пересчитывается на месте (возвращается тот же указатель), *image.RGBA без
+// прозрачности — тоже на месте, в том же буфере (результат — NRGBA над ним),
+// *image.YCbCr переводится в новое NRGBA сразу с пересчётом; остальное — через draw.
 func (x *Xform) ToSRGB(img image.Image) *image.NRGBA {
 	switch m := img.(type) {
 	case *image.NRGBA:
@@ -145,12 +147,39 @@ func (x *Xform) ToSRGB(img image.Image) *image.NRGBA {
 		return m
 	case *image.YCbCr:
 		return x.fromYCbCr(m)
+	case *image.RGBA:
+		// Байты непрозрачных RGBA и NRGBA совпадают; с альфой нужно распремножение — его
+		// делает draw, своей ветки для этого нет (image/png отдаёт RGBA только непрозрачной).
+		if opaqueRGBA(m) {
+			n := &image.NRGBA{Pix: m.Pix, Stride: m.Stride, Rect: m.Rect}
+			x.convertNRGBA(n)
+			return n
+		}
 	}
 	b := img.Bounds()
 	dst := image.NewNRGBA(b)
 	draw.Draw(dst, b, img, b.Min, draw.Src)
 	x.convertNRGBA(dst)
 	return dst
+}
+
+// opaqueRGBA — у всех пикселей альфа 255. Параллельно; найденный прозрачный пиксель
+// останавливает остальные строки.
+func opaqueRGBA(m *image.RGBA) bool {
+	b := m.Bounds()
+	var bad atomic.Bool
+	rows(b.Dy(), func(y0, y1 int) {
+		for y := y0; y < y1 && !bad.Load(); y++ {
+			row := m.Pix[y*m.Stride : y*m.Stride+b.Dx()*4]
+			for i := 3; i < len(row); i += 4 {
+				if row[i] != 255 {
+					bad.Store(true)
+					return
+				}
+			}
+		}
+	})
+	return !bad.Load()
 }
 
 // convertNRGBA пересчитывает цвета на месте, альфа не трогается.

@@ -67,7 +67,7 @@ func TestRemoveStaleTmp(t *testing.T) {
 	if err := os.Chtimes(sub, old, old); err != nil {
 		t.Fatal(err)
 	}
-	removeStaleTmp(dir, now)
+	removeStaleTmp(dir, "1-", now)
 	for n, gone := range files {
 		_, err := os.Stat(filepath.Join(dir, n))
 		if gone != os.IsNotExist(err) {
@@ -76,5 +76,37 @@ func TestRemoveStaleTmp(t *testing.T) {
 	}
 	if _, err := os.Stat(sub); err != nil {
 		t.Errorf("папка удалена: %v", err)
+	}
+}
+
+// TestRemoveStaleTmpPrefix (123 Б1): остаток выгрузки типографии со своим началом имени (Ab_)
+// убирается, как «1-»; чужие префиксы и регулярное выражение из спецзнаков — нет, QuoteMeta.
+func TestRemoveStaleTmpPrefix(t *testing.T) {
+	dir := testkit.TempDir(t)
+	now := time.Now()
+	old := now.Add(-2 * time.Hour)
+	files := map[string]bool{
+		"Ab_03.jpg.5.tmp": true, "ab_04.jpg.5.tmp": true, "03.jpg.6.tmp": true,
+		"1-03.jpg.5.tmp": false, "Ab-03.jpg.5.tmp": false, "xAb_03.jpg.5.tmp": false, "A.03.jpg.5.tmp": false,
+	}
+	for n := range files {
+		p := filepath.Join(dir, n)
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	removeStaleTmp(dir, "Ab_", now)
+	for n, gone := range files {
+		if _, err := os.Stat(filepath.Join(dir, n)); gone != os.IsNotExist(err) {
+			t.Errorf("%s: удалён=%v, ждали %v", n, os.IsNotExist(err), gone)
+		}
+	}
+	// Префикс с точкой — буквально, а не «любой знак».
+	dot := tmpRe("A.")
+	if !dot.MatchString("A.03.jpg.5.tmp") || dot.MatchString("AX03.jpg.5.tmp") {
+		t.Error("спецзнак префикса не экранирован")
 	}
 }

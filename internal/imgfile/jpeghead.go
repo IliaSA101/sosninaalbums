@@ -9,7 +9,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/colorspace"
 )
 
-// Head — то, что фото сообщает о себе в заголовке JPEG до данных изображения.
+// Head — то, что фото сообщает о себе в заголовке до данных изображения (JPEG целиком; у PNG и WebP — профиль).
 type Head struct {
 	Orient  int    // EXIF Orientation, 1 — нет тега или не JPEG
 	Color   Color  // класс профиля
@@ -33,9 +33,31 @@ const comMaxBytes = 64
 
 // Header читает ориентацию, время съёмки, цветовой профиль и XMP за один проход по сегментам
 // (ICC важнее EXIF Interop: так камеры Canon/Nikon помечают Adobe RGB без профиля).
-// CMYK без ICC здесь не виден — его определяет readInfo по DecodeConfig.
-// Ошибка чтения не-JPEG и мусор дают {1, "", "", nil}.
-func Header(r io.Reader) Head { return headOf(jpegSegments(r)) }
+// Формат — по подписи (как DimsOf): у PNG берётся профиль iCCP, у WebP — ICCP (125); остальное у них —
+// нули. CMYK без ICC здесь не виден — его определяет readInfo по DecodeConfig.
+// Ошибка чтения, мусор и неизвестный формат дают {1, "", "", nil}.
+func Header(r io.Reader) Head {
+	h, rest, done := headBySignature(r)
+	if done {
+		return h
+	}
+	return headOf(jpegSegments(rest))
+}
+
+// headBySignature читает до magicLen байт подписи: PNG и WebP разбираются здесь (done), для остального
+// возвращается поток с уже прочитанным началом — путь JPEG. Подпись короче magicLen — тоже JPEG
+// (сид FuzzJPEGHead короче 12 байт).
+func headBySignature(r io.Reader) (h Head, rest io.Reader, done bool) {
+	var magic [magicLen]byte
+	k, _ := io.ReadFull(r, magic[:]) // ошибка чтения не мешает: дальше она повторится в разборе
+	switch {
+	case k == magicLen && string(magic[:len(pngMagic)]) == pngMagic:
+		return pngHead(r, magic[len(pngMagic):]), nil, true
+	case k == magicLen && string(magic[:4]) == riffMagic && string(magic[8:]) == webpMagic:
+		return webpICCHead(r), nil, true
+	}
+	return Head{}, io.MultiReader(bytes.NewReader(magic[:k]), r), false
+}
 
 // headOf собирает Head из уже прочитанных сегментов.
 func headOf(s jpegSegs) Head {

@@ -31,8 +31,9 @@ export interface KeyContext {
   nativeSel?: boolean // выделен текст страницы вне холста (справочник, «О снимке»): Ctrl+C его, а не листа (099)
   zone?: Zone // где было последнее нажатие мыши; не задано — лента фото
   bgMode?: boolean // включён режим фона: его Esc, стрелки и Del
-  big?: boolean // крупный просмотр: ленты не видно, отметки клавишами молчат
+  big?: boolean // «Во весь экран» (F): ленты не видно, отметки клавишами молчат
   dialog?: DialogState // открыто окно (074-18, 074-28)
+  preview?: 'library' | 'canvas' // открыт крупный просмотр (128): откуда; из ленты под окном проходят отметки
   can?: (feature: FeatureId) => boolean // уровень интерфейса: команда с чужой функцией молчит; не задано — всё доступно
   menuOn?: (id: string) => boolean // пункт меню команды виден на уровне и не серый; не задано — да
 }
@@ -63,15 +64,21 @@ const gridNudging = (c: KeyContext) => !c.bgMode && !!c.gridSpread && !!c.placeS
 // Стикеры (048) раскладку не закрепляют, поэтому стрелки двигают их и на «Авто» (функция «Фоны и стикеры»).
 const stickerNudging = (c: KeyContext) => !c.bgMode && !!c.stickerSelected && (!c.can || c.can('decor'))
 const nudging = (c: KeyContext) => gridNudging(c) || stickerNudging(c)
-// Отметки (004): не в крупном просмотре и не при открытой галерее (лента свёрнута и inert). Зону решает область library.
+// Отметки (004): не в «Во весь экран» и не при открытой галерее (лента свёрнута и inert). Зону решает область library.
 const marksOn = (c: KeyContext) => !c.big && !c.galleryOpen
 // Подборки (083): то же, и функция уровня (Go проверяет feature, но когда can не задан — всё доступно).
 const binsOn = (c: KeyContext) => marksOn(c) && (!c.can || c.can('bins'))
 
-// Буфер (099): холст под галереей не виден, в режиме фона и крупном просмотре выделять нечего; выделенный текст страницы — родной.
+// Буфер (099): холст под галереей не виден, в режиме фона и в «Во весь экран» выделять нечего; выделенный текст страницы — родной.
 const clipOn = (c: KeyContext) => !c.bgMode && !c.galleryOpen && !c.big && !c.nativeSel
 const copyOn = (c: KeyContext) => clipOn(c) && !!c.copyable
 const pasteOn = (c: KeyContext) => clipOn(c) && !!c.pasteable
+
+// Крупный просмотр (128): в зоне ленты — как отметки (не в «Во весь экран» и не при галерее), на холсте — без галереи и
+// режима фона. Нечего открыть — команда сама скажет тостом.
+const previewOn = (c: KeyContext) => (c.zone === 'canvas' ? !c.galleryOpen && !c.bgMode : marksOn(c))
+// Под окном просмотра из ленты проходят отметки показанному фото (0.26-128-6); 0 остаётся окну («вписать»).
+const previewMark = (cmd: KeymapEntry, c: KeyContext) => c.preview === 'library' && cmd.group === 'marks' && cmd.id !== 'markRating0'
 
 // Условия команд (прежние when таблицы). Команда без записи — без условий; без клавиши по умолчанию — «пункт меню».
 const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
@@ -94,6 +101,8 @@ const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
       'markUnflag',
     ].map((id) => [id, marksOn]),
   ),
+  photoPreview: previewOn,
+  findPhotos: marksOn, // поле поиска в ленте: в «Во весь экран» и при галерее ленты нет (0.26-124-10)
   // Подборки (083): как отметки, плюс уровень; Del — только с выделением (без него в ленте Del молчит, как раньше).
   binToggle: (c) => binsOn(c),
   binNew: (c) => binsOn(c),
@@ -115,9 +124,14 @@ const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
   ),
 }
 
+// Область действует. Отметки показанному фото — и когда последнее нажатие было на холсте (окно открыли с ленты, 128).
+const scopeOk = (cmd: KeymapEntry, c: KeyContext) => active(cmd.scope, c) || previewMark(cmd, c)
+
+// Под окном: «Отменить»/«Повторить» только под окнами правки (074-28), плюс отметки под просмотром из ленты (128).
+const dialogOk = (cmd: KeymapEntry, c: KeyContext) => !c.dialog || (c.dialog === 'undo' && !!(cmd.dialogs || previewMark(cmd, c)))
+
 function allowed(cmd: KeymapEntry, e: KeyEvent, c: KeyContext): boolean {
-  if (!active(cmd.scope, c)) return false
-  if (c.dialog && !(c.dialog === 'undo' && cmd.dialogs)) return false
+  if (!scopeOk(cmd, c) || !dialogOk(cmd, c)) return false
   if (e.repeat && !cmd.repeat) return false // удержание повторяет только сдвиг, масштаб, отмену, слои и листание
   if (cmd.feature && c.can && !c.can(cmd.feature as FeatureId)) return false
   const when = WHEN[cmd.id]

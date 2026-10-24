@@ -49,6 +49,7 @@ var (
 type PackManifest struct {
 	ID, Title, About, Author, License, Source string
 	Version                                   int
+	MinApp                                    string // x.y.z
 	Items                                     []PackItem
 }
 
@@ -120,7 +121,7 @@ func (st *Staged) Info() PackInfo {
 func (st *Staged) reg(installed int64) *packReg {
 	r := &packReg{V: packRegV, ID: st.m.ID, Version: st.m.Version, Title: cleanName(st.m.Title), About: cleanText(st.m.About, 300),
 		Author: cleanName(st.m.Author), License: cleanText(st.m.License, 40), Source: cleanText(st.m.Source, 200),
-		Origin: st.origin, Installed: installed, Zip: st.zip, Items: make([]packEntry, 0, len(st.items))}
+		Origin: st.origin, MinApp: st.m.MinApp, Installed: installed, Zip: st.zip, Items: make([]packEntry, 0, len(st.items))}
 	if r.Title == "" {
 		r.Title = st.m.ID
 	}
@@ -197,6 +198,8 @@ func (s *Store) stageItems(st *Staged, src PackSource) error {
 			si, why, err = s.stageImage(i, it, src)
 		case KindSpread:
 			si, why, err = stageTpl(i, src)
+		case KindPrint:
+			si, why, err = s.stagePrint(i, src, st)
 		default:
 			why = "незнакомый вид — нужна новая версия программы"
 		}

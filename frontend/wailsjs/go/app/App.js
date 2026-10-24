@@ -66,12 +66,20 @@ export function ApplyBorder(arg1, arg2, arg3) {
   return window['go']['app']['App']['ApplyBorder'](arg1, arg2, arg3);
 }
 
+export function ApplyCoverGrid(arg1, arg2) {
+  return window['go']['app']['App']['ApplyCoverGrid'](arg1, arg2);
+}
+
 export function ApplyCoverPreset(arg1) {
   return window['go']['app']['App']['ApplyCoverPreset'](arg1);
 }
 
 export function ApplyGrid(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['ApplyGrid'](arg1, arg2, arg3, arg4);
+}
+
+export function ApplyPrint(arg1, arg2) {
+  return window['go']['app']['App']['ApplyPrint'](arg1, arg2);
 }
 
 export function ApplySpreadTpl(arg1, arg2, arg3) {
@@ -134,6 +142,10 @@ export function CheckFolders(arg1) {
   return window['go']['app']['App']['CheckFolders'](arg1);
 }
 
+export function CheckPrintProfile(arg1) {
+  return window['go']['app']['App']['CheckPrintProfile'](arg1);
+}
+
 export function CheckUpdate() {
   return window['go']['app']['App']['CheckUpdate']();
 }
@@ -186,6 +198,10 @@ export function CollectInfo(arg1) {
   return window['go']['app']['App']['CollectInfo'](arg1);
 }
 
+export function ConfirmImportPrintProfile(arg1) {
+  return window['go']['app']['App']['ConfirmImportPrintProfile'](arg1);
+}
+
 export function ConfirmPack(arg1) {
   return window['go']['app']['App']['ConfirmPack'](arg1);
 }
@@ -200,6 +216,10 @@ export function CopyGrid(arg1, arg2, arg3, arg4, arg5) {
 
 export function CopyItems(arg1, arg2) {
   return window['go']['app']['App']['CopyItems'](arg1, arg2);
+}
+
+export function CoverGridChoices(arg1, arg2) {
+  return window['go']['app']['App']['CoverGridChoices'](arg1, arg2);
 }
 
 export function CoverPresets() {
@@ -240,6 +260,10 @@ export function DeleteGridTemplate(arg1) {
 
 export function DeletePlaces(arg1, arg2) {
   return window['go']['app']['App']['DeletePlaces'](arg1, arg2);
+}
+
+export function DeletePrintProfile(arg1) {
+  return window['go']['app']['App']['DeletePrintProfile'](arg1);
 }
 
 export function DeleteSelection(arg1, arg2, arg3, arg4) {
@@ -354,6 +378,10 @@ export function ImportFonts() {
   return window['go']['app']['App']['ImportFonts']();
 }
 
+export function ImportPrintProfile() {
+  return window['go']['app']['App']['ImportPrintProfile']();
+}
+
 export function ImportTemplates() {
   return window['go']['app']['App']['ImportTemplates']();
 }
@@ -442,20 +470,16 @@ export function OpenExternal() {
   return window['go']['app']['App']['OpenExternal']();
 }
 
-export function OpenFabrika() {
-  return window['go']['app']['App']['OpenFabrika']();
-}
-
-export function OpenFsfera() {
-  return window['go']['app']['App']['OpenFsfera']();
-}
-
 export function OpenInNewer() {
   return window['go']['app']['App']['OpenInNewer']();
 }
 
 export function OpenLink(arg1) {
   return window['go']['app']['App']['OpenLink'](arg1);
+}
+
+export function OpenPrintSite(arg1) {
+  return window['go']['app']['App']['OpenPrintSite'](arg1);
 }
 
 export function OpenProject() {
@@ -472,6 +496,10 @@ export function OpenUpdatePage() {
 
 export function PagePresets() {
   return window['go']['app']['App']['PagePresets']();
+}
+
+export function PagePx(arg1, arg2) {
+  return window['go']['app']['App']['PagePx'](arg1, arg2);
 }
 
 export function PasteItems(arg1) {
@@ -550,8 +578,16 @@ export function PreviewVignette(arg1, arg2) {
   return window['go']['app']['App']['PreviewVignette'](arg1, arg2);
 }
 
-export function PrintPlans() {
-  return window['go']['app']['App']['PrintPlans']();
+export function PrintPlans(arg1) {
+  return window['go']['app']['App']['PrintPlans'](arg1);
+}
+
+export function PrintProfileEdit(arg1) {
+  return window['go']['app']['App']['PrintProfileEdit'](arg1);
+}
+
+export function PrintProfiles() {
+  return window['go']['app']['App']['PrintProfiles']();
 }
 
 export function PurgePhotos(arg1) {
@@ -666,6 +702,10 @@ export function SaveGridTemplate(arg1, arg2, arg3) {
   return window['go']['app']['App']['SaveGridTemplate'](arg1, arg2, arg3);
 }
 
+export function SavePrintProfile(arg1, arg2) {
+  return window['go']['app']['App']['SavePrintProfile'](arg1, arg2);
+}
+
 export function SaveProject() {
   return window['go']['app']['App']['SaveProject']();
 }
@@ -744,6 +784,10 @@ export function SetCaptionStyle(arg1, arg2, arg3, arg4) {
 
 export function SetCoverLayout(arg1) {
   return window['go']['app']['App']['SetCoverLayout'](arg1);
+}
+
+export function SetCoverPx(arg1, arg2) {
+  return window['go']['app']['App']['SetCoverPx'](arg1, arg2);
 }
 
 export function SetCoverSpec(arg1) {
@@ -914,6 +958,10 @@ export function SetupVignette(arg1, arg2) {
   return window['go']['app']['App']['SetupVignette'](arg1, arg2);
 }
 
+export function SharePrintProfile(arg1) {
+  return window['go']['app']['App']['SharePrintProfile'](arg1);
+}
+
 export function ShowBackups() {
   return window['go']['app']['App']['ShowBackups']();
 }
@@ -956,6 +1004,10 @@ export function SpreadBgToAlbum(arg1) {
 
 export function SpreadPhotoColors(arg1) {
   return window['go']['app']['App']['SpreadPhotoColors'](arg1);
+}
+
+export function StepCoverGrid(arg1, arg2) {
+  return window['go']['app']['App']['StepCoverGrid'](arg1, arg2);
 }
 
 export function StepLayout(arg1, arg2, arg3) {

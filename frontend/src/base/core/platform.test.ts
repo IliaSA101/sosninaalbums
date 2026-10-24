@@ -5,6 +5,7 @@ import {
   isLeft,
   isMac,
   os,
+  peekPress,
   primaryPress,
   revealLabel,
   secondaryPress,
@@ -34,6 +35,23 @@ describe('isMac', () => {
     expect(isMac()).toBe(false)
     setMacForTest(null)
     expect(isMac()).toBe(false)
+  })
+})
+
+describe('peekPress: крупный просмотр из ленты (128)', () => {
+  const ev = (button: number, o: Partial<{ ctrlKey: boolean; metaKey: boolean }> = {}) => ({ button, ctrlKey: false, metaKey: false, ...o })
+  it('Windows: Ctrl+правая — просмотр; правая и Ctrl+левая — нет', () => {
+    setMacForTest(false)
+    expect(peekPress(ev(2, { ctrlKey: true }))).toBe(true)
+    expect(peekPress(ev(2))).toBe(false)
+    expect(peekPress(ev(0, { ctrlKey: true }))).toBe(false)
+  })
+  it('Mac: ⌘+правая — просмотр; Ctrl+правая и Ctrl+левая (это меню) — нет', () => {
+    setMacForTest(true)
+    expect(peekPress(ev(2, { metaKey: true }))).toBe(true)
+    expect(peekPress(ev(2, { ctrlKey: true }))).toBe(false)
+    expect(peekPress(ev(0, { ctrlKey: true }))).toBe(false)
+    expect(peekPress(ev(0, { metaKey: true }))).toBe(false)
   })
 })
 

@@ -1,8 +1,8 @@
 // Карточка обложки (спека 032, п. 9–13): чистые решения — группы типографий, строки «Итог» и «Корешок»,
 // сборка CoverSpec из поля. Числа считает Go (View.cover); здесь только подписи и разбор ввода.
 import { plural } from '../../base/words/plural'
-import type { CoverPreset, CoverSpec, CoverView } from '../../base/core/types'
-import { mmText } from '../../editor/cover/cover'
+import type { CoverLayout, CoverPreset, CoverSpec, CoverView } from '../../base/core/types'
+import { COVER_LAYOUTS, mmText } from '../../editor/cover/cover'
 
 export const CUSTOM_ID = 'custom'
 
@@ -94,4 +94,20 @@ export function fieldValue(cv: Pick<CoverView, 'spec' | 'zones'>, field: SpecFie
 // Кнопка строки «Корешок» (058 В): надписи нет — «Надпись» добавляет; есть (Go прислал её ID) — выделяет.
 export function spineAction(cv: Pick<CoverView, 'spineText'> | null | undefined): { label: string; kind: 'add' | 'select' } {
   return cv?.spineText ? { label: 'Выделить надпись', kind: 'select' } : { label: 'Надпись', kind: 'add' }
+}
+
+// Подпись строки «Файл обложки, px» (123): px зависят от числа разворотов через корешок —
+// «при 40 разворотах (корешок 26 мм)».
+export const coverPxNote = (cv: Pick<CoverView, 'spine' | 'n'>): string =>
+  `при ${cv.n} ${plural(cv.n, ['развороте', 'разворотах', 'разворотах'])} (корешок ${mmText(cv.spine)} мм)`
+
+// Подпись раскладки в свёрнутой группе: в узкой карточке — короткое слово (место под значением мало).
+export function layoutLabel(kind: CoverLayout, narrow: boolean): string {
+  const l = COVER_LAYOUTS.find((x) => x.kind === kind)
+  return l ? (narrow ? l.short : l.label) : ''
+}
+
+// Название типографии для свёрнутой группы «Размеры»: из списка Go; «Свои размеры» — у custom; нет в списке — как есть.
+export function presetName(list: readonly Pick<CoverPreset, 'id' | 'name'>[], id: string): string {
+  return list.find((p) => p.id === id)?.name ?? (id === CUSTOM_ID ? 'Свои размеры' : id)
 }

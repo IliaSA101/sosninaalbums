@@ -6,8 +6,8 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"testing"
 
@@ -214,14 +214,9 @@ func TestWireSaveAndSaved(t *testing.T) {
 	}
 }
 
-// viewSends — функции файла, где в вызов первым или вторым аргументом передано имя "view"
-// (a.emit("view", …), wr.EventsEmit(ctx, "view", …)), и места этих вызовов.
-func viewSends(t *testing.T, fset *token.FileSet, file string) (fns []string, at []token.Position) {
-	t.Helper()
-	f, err := parser.ParseFile(fset, file, nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+// viewSendsIn — функции файла f, где в вызов первым или вторым аргументом передано имя "view"
+// (a.emit("view", …), s.h.Emit("view", …), wr.EventsEmit(ctx, "view", …)), и места этих вызовов.
+func viewSendsIn(fset *token.FileSet, f *ast.File) (fns []string, at []token.Position) {
 	for _, d := range f.Decls {
 		fn, ok := d.(*ast.FuncDecl)
 		if !ok || fn.Body == nil {
@@ -244,24 +239,18 @@ func viewSends(t *testing.T, fset *token.FileSet, file string) (fns []string, at
 }
 
 // TestViewPathsInChain — событие view шлют только функции цепочки (wire.go): вид мимо неё
-// пришёл бы фронту без seq, и тот каждый раз просил бы полный (design 075 §12).
+// пришёл бы фронту без seq, и тот каждый раз просил бы полный (design 075 §12). Смотрит и
+// подпакеты: служба шлёт вид только полями Host Changed/Out, а не своим Emit("view", …).
 func TestViewPathsInChain(t *testing.T) {
 	allowed := map[string]bool{"changed": true, "out": true, "emitState": true}
 	fset := token.NewFileSet()
-	names, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	more, err := filepath.Glob(filepath.Join("edit", "*.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	found := 0
-	for _, file := range append(names, more...) {
-		if strings.HasSuffix(file, "_test.go") {
-			continue
+	for _, file := range appSources(t) {
+		f, err := parser.ParseFile(fset, file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
 		}
-		fns, at := viewSends(t, fset, file)
+		fns, at := viewSendsIn(fset, f)
 		found += len(fns)
 		for i, fn := range fns {
 			if !allowed[fn] {
@@ -271,5 +260,22 @@ func TestViewPathsInChain(t *testing.T) {
 	}
 	if found < 3 {
 		t.Fatalf("отправок view найдено %d: разбор не тот", found)
+	}
+}
+
+// TestViewPathsSeeServices — самопроверка стража: отправка вида из функции службы через поле Host
+// (s.h.Emit("view", …)) попадает в разбор и не входит в цепочку.
+func TestViewPathsSeeServices(t *testing.T) {
+	src := `package x
+func (s *S) Refresh() { s.h.Emit("view", v) }
+func (a *App) changed() { a.emit("view", v) }`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "x.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fns, _ := viewSendsIn(fset, f)
+	if !slices.Equal(fns, []string{"Refresh", "changed"}) {
+		t.Fatalf("отправки view в подставном файле: %v", fns)
 	}
 }

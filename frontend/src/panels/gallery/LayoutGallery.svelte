@@ -2,10 +2,12 @@
   import { slide } from 'svelte/transition'
   import { store } from '../../base/core/store.svelte'
   import { gallery } from './gallery.svelte'
+  import CoverGridGallery from './CoverGridGallery.svelte'
   import GridGallery from './GridGallery.svelte'
   import VariantGallery from './VariantGallery.svelte'
   import VigGallery from '../vignette/VigGallery.svelte'
   import { isVignette } from '../vignette/vignette'
+  import { COVER_ID } from '../../base/geom/sheet'
 
   // Рамка галереи (050): одна высота на всех вкладках, тело — по вкладке; шапку рисует само тело (GalleryHead).
   // Пока галерея уезжает после закрытия, gallery.cur уже null — держим последнюю.
@@ -24,6 +26,8 @@
 <section class="gallery" transition:slide={{ duration: 180 }}>
   {#if vig}
     <VigGallery sp={vig} />
+  {:else if g.spread === COVER_ID}
+    <CoverGridGallery {g} />
   {:else if g.tab === 'grids'}
     <GridGallery {g} />
   {:else}

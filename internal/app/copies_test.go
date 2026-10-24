@@ -31,6 +31,9 @@ func copiesApp(t *testing.T) (a *App, x, y string) {
 	}
 	a.rescan()
 	waitScan(t, a)
+	// Scan.Active гаснет раньше хвоста чтения (warmThumbs читает a.cache): тесты сами ставят a.cache
+	// после этой функции, поэтому ждём scanning=false под a.mu — иначе гонка записи с чтением фона.
+	waitIdle(t, a)
 	return a, library.IDFor(px), library.IDFor(py)
 }
 

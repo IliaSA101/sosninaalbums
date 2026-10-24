@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -96,7 +98,7 @@ func TestExportFabrika(t *testing.T) {
 	if got := e.names(t); !slices.Equal(got, []string{"1-00.jpg", "1-01.jpg", "1-02.jpg"}) {
 		t.Fatalf("файлы книги %v", got)
 	}
-	if want := []string{"Фотокнига на фотобумаге 20×20", "Разворот: Фотобумага", "Разворотов: 2 (корешок 8 мм)", "Папка: Альбом — 1-00.jpg и 1-01…1-02.jpg"}; !slices.Equal(*memo, want) {
+	if want := []string{"Фотокнига на фотобумаге 20×20", "Разворот: Фотобумага", "Разворотов: 2 (корешок 8 мм)", "Файлы: 4724×2398 px", "Папка: Альбом — 1-00.jpg и 1-01…1-02.jpg"}; !slices.Equal(*memo, want) {
 		t.Fatalf("памятка %q", *memo)
 	}
 	// Повтор из родительской папки: вопрос о замене своих 1-NN.jpg, посторонних нет.
@@ -120,7 +122,7 @@ func TestExportFabrika(t *testing.T) {
 	if ok, err := e.a.Export(o); ok || err != nil || len(e.asked) != 2 || e.asked[1] != want {
 		t.Fatalf("посторонние: %v %v, вопросы %q", ok, err, e.asked)
 	}
-	if e.rewritten(t, "1-01.jpg") || e.rewritten(t, "01.jpg") || e.a.exporting {
+	if e.rewritten(t, "1-01.jpg") || e.rewritten(t, "01.jpg") || e.exportBusy() {
 		t.Fatal("«нет» — а файлы переписаны или экспорт не снят")
 	}
 }
@@ -134,7 +136,7 @@ func TestExportFabrikaNoCover(t *testing.T) {
 		t.Fatalf("без обложки: %q, вопросы %q", msg, e.asked)
 	}
 	e.dir = filepath.Join(e.dir, "Альбом")
-	if !slices.Equal(e.names(t), []string{"1-01.jpg"}) || !slices.Equal(*memo, []string{"Фотокнига 30×20", "Разворотов: 1", "Папка: Альбом — 1-01.jpg"}) {
+	if !slices.Equal(e.names(t), []string{"1-01.jpg"}) || !slices.Equal(*memo, []string{"Фотокнига 30×20", "Разворотов: 1", "Файлы: 7181×2398 px", "Папка: Альбом — 1-01.jpg"}) {
 		t.Fatalf("файлы %v, памятка %q", e.names(t), *memo)
 	}
 	ours, err := os.ReadFile(filepath.Join(e.dir, "1-01.jpg"))
@@ -171,9 +173,9 @@ func TestExportFabrikaBlocked(t *testing.T) {
 		{book(300, 305, 9, "fabrika-photo"), "Разворотов 9 — у Фабрики Фотокниги («Фотобумага») не меньше 10"},
 		{book(300, 305, 41, "netprint-premium"), "Обложка размечена для «Нетпринт · Премиум» — выберите «Фабрика Фотокниги» в карточке обложки. " +
 			"Разворотов 41 — у Фабрики Фотокниги не больше 40"},
-		{book(201, 152, 2, ""), "Страница 201 × 152 мм — не формат Фабрики Фотокниги. В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата"},
+		{book(201, 152, 2, ""), "Страница 201 × 152 мм — не формат Фабрики Фотокниги: разворот выйдет 4748 × 1795 px, у 20×20 — 4724 × 2398 (200 × 203 мм). В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата или введите px файла"},
 		// Альбом Марины (120): страница 300×200 и обложка Фотосферы — запрет вместо тихой обычной выгрузки.
-		{book(300, 200, 40, "fsfera-thin"), "Страница 300 × 200 мм — не формат Фабрики Фотокниги. В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата"},
+		{book(300, 200, 40, "fsfera-thin"), "Страница 300 × 200 мм — не формат Фабрики Фотокниги: разворот выйдет 7087 × 2362 px, у 30×20 — 7181 × 2398 (304 × 203 мм). В «Настройках альбома» выберите типографию «Фабрика Фотокниги» и кнопку формата или введите px файла"},
 		{model.NewSheet(204, 304), "Лист виньетки в Фабрику Фотокниги не выгружается"},
 	} {
 		e.a.ed.Store(mustEditor(t, c.p, ""))
@@ -181,8 +183,8 @@ func TestExportFabrikaBlocked(t *testing.T) {
 			t.Errorf("%q: %v %v", c.want, ok, err)
 		}
 	}
-	if picked != 0 || len(e.asked) != 0 || e.a.exporting {
-		t.Fatalf("выбор папки %d, вопросы %q, экспорт идёт %v", picked, e.asked, e.a.exporting)
+	if picked != 0 || len(e.asked) != 0 || e.exportBusy() {
+		t.Fatalf("выбор папки %d, вопросы %q, экспорт идёт %v", picked, e.asked, e.exportBusy())
 	}
 }
 
@@ -199,7 +201,7 @@ func TestExportFabrikaReplace(t *testing.T) {
 	if ok, err := e.a.Export(ExportOptions{Print: "fabrika"}); ok || err == nil || err.Error() != want || len(e.asked) != 0 {
 		t.Fatalf("чужой 1-03.jpg: %v %v, вопросы %q", ok, err, e.asked)
 	}
-	if e.dir = bk; !slices.Equal(e.names(t), []string{"1-03.jpg"}) || e.a.exporting {
+	if e.dir = bk; !slices.Equal(e.names(t), []string{"1-03.jpg"}) || e.exportBusy() {
 		t.Fatalf("после отказа: %v", e.names(t))
 	}
 	if err := os.Remove(filepath.Join(bk, "1-03.jpg")); err != nil {
@@ -230,8 +232,8 @@ func TestExportPrintUnknown(t *testing.T) {
 			t.Errorf("%q: %v %v", kind, ok, err)
 		}
 	}
-	if picked != 0 || len(e.asked) != 0 || e.a.exporting {
-		t.Fatalf("выбор папки %d, вопросы %q, экспорт идёт %v", picked, e.asked, e.a.exporting)
+	if picked != 0 || len(e.asked) != 0 || e.exportBusy() {
+		t.Fatalf("выбор папки %d, вопросы %q, экспорт идёт %v", picked, e.asked, e.exportBusy())
 	}
 }
 
@@ -243,7 +245,7 @@ func TestPrintPlans(t *testing.T) {
 	before := e.a.editor().View()
 	both := []string{"fsfera", "fabrika"}
 	kinds := func() (out []string) {
-		for _, pl := range e.a.PrintPlans() {
+		for _, pl := range e.a.PrintPlans("") {
 			out = append(out, pl.Kind)
 		}
 		return out
@@ -251,7 +253,7 @@ func TestPrintPlans(t *testing.T) {
 	if got := kinds(); !slices.Equal(got, both) {
 		t.Fatalf("21×30: %v", got)
 	}
-	plans := e.a.PrintPlans()
+	plans := e.a.PrintPlans("")
 	if len(plans[0].Block) != 1 || len(plans[1].Block) != 0 || plans[1].Pages != "Картон" || plans[1].Quality != 100 || plans[0].Quality != 0 ||
 		plans[0].Off != "" || plans[1].Off != "" {
 		t.Fatalf("21×30 с обложкой Фабрики: %+v", plans)
@@ -270,7 +272,7 @@ func TestPrintPlans(t *testing.T) {
 		{book(300, 300, 2, ""), [2]bool{true, true}, [2]string{"", ""}},
 	} {
 		e.a.ed.Store(mustEditor(t, c.p, ""))
-		got := e.a.PrintPlans()
+		got := e.a.PrintPlans("")
 		if k := kinds(); !slices.Equal(k, both) {
 			t.Errorf("%v×%v: %v, ждали обе", c.p.Settings.PageW, c.p.Settings.PageH, k)
 			continue
@@ -282,7 +284,7 @@ func TestPrintPlans(t *testing.T) {
 		}
 	}
 	e.a.ed.Store(mustEditor(t, model.NewSheet(204, 304), ""))
-	if b, _ := json.Marshal(e.a.PrintPlans()); !bytes.Equal(b, []byte("[]")) {
+	if b, _ := json.Marshal(e.a.PrintPlans("")); !bytes.Equal(b, []byte("[]")) {
 		t.Fatalf("лист 031: %s", b)
 	}
 }
@@ -291,7 +293,7 @@ func TestPrintPlans(t *testing.T) {
 // листы» — обе типографии отданы с Off и запретом «Страница 300 × 200 мм…», в JSON поле off есть.
 func TestPrintPlansOffFormat(t *testing.T) {
 	e, _ := printEnv(t, 40, 300, 200, "fsfera-thin")
-	plans := e.a.PrintPlans()
+	plans := e.a.PrintPlans("")
 	if len(plans) != 2 {
 		t.Fatalf("планов %d, ждали 2", len(plans))
 	}
@@ -302,7 +304,8 @@ func TestPrintPlansOffFormat(t *testing.T) {
 			t.Errorf("%s: off %q, ждали %q", pl.Kind, pl.Off, want)
 		}
 		if len(pl.Block) != 1 || !strings.HasPrefix(pl.Block[0], "Страница 300 × 200 мм") ||
-			!strings.HasSuffix(pl.Block[0], "В «Настройках альбома» выберите типографию «"+group+"» и кнопку формата") {
+			!strings.HasSuffix(pl.Block[0], "В «Настройках альбома» выберите типографию «"+group+"» и кнопку формата или введите px файла") ||
+			!strings.Contains(pl.Block[0], "разворот выйдет 7087 × 2362 px, у ") {
 			t.Errorf("%s: запрет %q", pl.Kind, pl.Block)
 		}
 		if pl.Format != "" || pl.Spreads != 40 || pl.Folder == "" {
@@ -319,7 +322,7 @@ func TestPrintPlansOffFormat(t *testing.T) {
 // 7181×2398. Фото не рендерятся: размер даёт render.CanvasSize от тех же настроек, что у Export.
 func TestFabrika30x20Sizes(t *testing.T) {
 	e, _ := printEnv(t, 40, 304, 203, "fabrika-photo")
-	plans := e.a.PrintPlans()
+	plans := e.a.PrintPlans("")
 	pl := plans[1]
 	if pl.Kind != "fabrika" || pl.Format != "30×20" || pl.Off != "" || len(pl.Block) != 0 || pl.Spreads != 40 || pl.CoverName != "1-00.jpg" {
 		t.Fatalf("план Фабрики: %+v", pl)
@@ -347,13 +350,38 @@ func TestOpenFabrikaURL(t *testing.T) {
 	t.Cleanup(func() { openURL = old })
 	openURL = func(_ *App, url string) { opened = append(opened, url) }
 	e, _ := printEnv(t, 1, 200, 203, "fabrika-layflat-card")
-	e.a.OpenFabrika()
+	e.a.OpenPrintSite("fabrika")
 	for _, preset := range []string{"fabrika-photo-1", "", "netprint-premium"} {
 		e.a.ed.Store(mustEditor(t, book(200, 203, 1, preset), ""))
-		e.a.OpenFabrika()
+		e.a.OpenPrintSite("fabrika")
 	}
 	if want := []string{"https://fabrika-fotoknigi.com/layflat", "https://fabrika-fotoknigi.com/photobook-photopaper",
 		"https://fabrika-fotoknigi.com/photo-books", "https://fabrika-fotoknigi.com/photo-books"}; !slices.Equal(opened, want) {
 		t.Fatalf("открыто %q", opened)
+	}
+	// Каждое изделие каждой типографии ведёт на свой адрес из профиля (сам адрес зафиксирован в
+	// printprof.TestBuiltinURLs), без обложки и у чужого изделия — на общий.
+	opened = nil
+	var want []string
+	for _, p := range printprof.Builtin().Profiles() {
+		if p.Export == nil {
+			continue
+		}
+		for _, pr := range p.Products {
+			e.a.ed.Store(mustEditor(t, book(200, 203, 1, pr.ID), ""))
+			e.a.OpenPrintSite(p.ID)
+			want = append(want, cmp.Or(pr.URL, p.Export.URL))
+		}
+	}
+	if len(want) < 9 || !slices.Equal(opened, want) {
+		t.Fatalf("адреса изделий: открыто %q, ждали %q", opened, want)
+	}
+	// Неизвестная типография, типография без выгрузки и пустой id — ничего (адрес не от интерфейса).
+	n := len(opened)
+	for _, id := range []string{"", "netprint", "nope", "https://evil.example"} {
+		e.a.OpenPrintSite(id)
+	}
+	if len(opened) != n {
+		t.Fatalf("лишнее открыто: %q", opened[n:])
 	}
 }

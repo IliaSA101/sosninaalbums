@@ -7,7 +7,7 @@
 - `internal/update` — stdlib, `decor/fetch`, `osx`. Версии: `ParseVersion`, `Version.Compare`, `Newer` (x.y.z по 1…4 цифры; не версия — «не новее»; те же функции использует спека 112). Манифест: `Parse` (строгий разбор body подписанного конверта), `SetupName(ver)` (имя установщика только из проверенной версии). Источник: `GitHub()`, `Stand` / `Default` (`SA_UPDATE_URL`, `SA_UPDATE_KEY` — только в сборке с тегом `dev`). Проверка: `Check(ctx, c, cur, seen)` → `Result{Offer, Seen, Rollback}`. Скачивание: `Fetch`, `Verify`, `Clean`, `Dir`. Запуск: `ModeOf`, `CmdLine`, `Start` (Windows — отсоединённый процесс, остальные ОС — отказ).
 - `internal/decor/fetch` — `Client.Signed(ctx, url, limit)`: подписанный конверт любого содержимого (подпись до разбора).
 - `internal/prefs/update.go` — ключ `update` в config.json: `off`, `checked`, `seen`, `pending`, `pendingAt`.
-- `internal/app/update.go` — методы `App`, фазы, события, расписание.
+- `internal/app/updater` — служба: фазы, проверка, скачивание, установщик, события, расписание; за узким `Host` (поля-функции, замыкания над `App`), без Wails. `internal/app/update.go` — фасад: 7 методов `App` и тип `UpdateInfo` (определён от `updater.Info`, поэтому `models.ts` в пространстве `app`), `updHost()`. Сквозные тесты остаются в `app` (`update_test.go`, `update_rev_test.go`): сборщик `newUpdApp` пересобирает службу с подменами Host до первого вызова. Разрез — спека 126, Ш1.
 
 ## Ключи подписи
 
@@ -19,4 +19,4 @@
 
 ## События
 
-`update:offer` (`UpdateInfo`, проверка при запуске нашла новее), `update:state` (`UpdateInfo` при смене фазы), `update:progress` (`{done,total}`, не чаще 4 раз в секунду) — см. `events.md`.
+`update:offer` (`updater.Info`, проверка при запуске нашла новее), `update:state` (`updater.Info` при смене фазы), `update:progress` (`{done,total}`, не чаще 4 раз в секунду) — см. `events.md`.

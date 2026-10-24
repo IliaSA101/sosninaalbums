@@ -81,7 +81,7 @@ func TestApplyPresetFabrika(t *testing.T) {
 	}
 	// Тот же id пресета с неверными числами (как после правки таблицы) — «Не по шаблону» и «Исправить».
 	edtest.Change(e, func(p *model.Project) { p.Cover.Spec.Preset = "fabrika-photo" })
-	if got := e.View().Cover.Fix; got != "Не по шаблону Фабрики Фотокниги 30×30: 658 × 330 мм, нужно 662 × 330" {
+	if got := e.View().Cover.Fix; got != "Не по шаблону Фабрики Фотокниги 30×30: 658 × 330 мм, нужно 662 × 330 (файл 7772 × 3898 px, нужен 7819 × 3898)" {
 		t.Fatalf("строка: %q", got)
 	}
 	undo := edtest.UndoLen(e)
@@ -115,7 +115,7 @@ func TestCoverFabrikaLayer2On30x20(t *testing.T) {
 	}
 	old, _ := model.CoverPresetOf("fabrika-photo-2") // таблица 0.25.0: девять разворотов
 	edtest.Change(e, func(p *model.Project) { p.Cover.Spec.Steps = old.Spec.Steps })
-	if got := e.View().Cover.Fix; got != "Не по шаблону Фабрики Фотокниги 30×20: 676 × 240 мм, нужно 678 × 240" {
+	if got := e.View().Cover.Fix; got != "Не по шаблону Фабрики Фотокниги 30×20: 676 × 240 мм, нужно 678 × 240 (файл 7984 × 2835 px, нужен 8008 × 2835)" {
 		t.Fatalf("старая таблица: %q", got)
 	}
 	undo := edtest.UndoLen(e)
@@ -165,7 +165,7 @@ func TestOldCover30x20NotFollowsFormat(t *testing.T) {
 	if c := spec(e); c.W != before.W || c.H != before.H || c.Wrap != before.Wrap || len(c.Steps) != 8 || edtest.UndoLen(e) != undo+1 {
 		t.Fatalf("числа старой обложки сдвинулись: %+v", c)
 	}
-	if got := e.View().Cover.Fix; got != "Не по шаблону Фабрики Фотокниги 20×20: 668 × 240 мм, нужно 460 × 240" {
+	if got := e.View().Cover.Fix; got != "Не по шаблону Фабрики Фотокниги 20×20: 668 × 240 мм, нужно 460 × 240 (файл 7890 × 2835 px, нужен 5433 × 2835)" {
 		t.Fatalf("строка: %q", got)
 	}
 	if _, err := e.ApplyCoverPreset("fabrika-photo-2"); err != nil || e.View().Cover.Fix != "" || spec(e).W != 206 {

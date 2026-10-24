@@ -4,14 +4,20 @@ import * as Api from '../../../wailsjs/go/app/App'
 import { errText } from '../../base/words/errtext'
 import { store } from '../../base/core/store.svelte'
 import { gridAct } from '../layouts/gridact.svelte'
-import { hasSeam, isCover } from '../../base/geom/sheet'
+import { coverAct } from '../layouts/coverbar'
+import { COVER_ID, hasSeam, isCover } from '../../base/geom/sheet'
 import { startOrder, type FamilyFilter, type RowOrder } from './variants'
 import type { TplSource } from '../../base/tpl/tplsource'
 import type { VigFamilyFilter } from '../../base/tpl/tplfilter'
 import type { FormFilter } from '../vignette/vigform'
 import { stepVignette } from '../vignette/vigact'
 import { isVignette } from '../vignette/vignette'
-import type { Choices, GalleryTab, LayoutScope, PageView, RotRect, SpreadView } from '../../base/core/types'
+import type { Choices, CoverSide, GalleryTab, LayoutScope, PageView, RotRect, SpreadView } from '../../base/core/types'
+
+// Сторонка обложки (127) с этим scope из вида Go; обложки или сторонки нет — undefined.
+function coverSide(scope: LayoutScope): CoverSide | undefined {
+  return store.cover?.sides?.find((x) => x.scope === scope)
+}
 
 // У страницы есть что выбирать: ⊞, листание и галерея страницы. Раскладка вне рядов
 // (variant −1) при ≥ 2 фото тоже считается — листание вернёт её в ряд.
@@ -60,14 +66,31 @@ class Gallery {
     await store.run(Api.StepLayout(s.id, scope, delta))
   }
 
+  // Листание раскладок сторонки обложки (127: ‹ ›, Пробел). Решает coverAct по виду Go (0.26-127-15):
+  // места не узнаны или их нет — открыть ▦ (повторно её не закрываем); в ряду одна раскладка — тост;
+  // иначе Go листает «По фото» по кругу, серия — один шаг отмены.
+  async coverStep(scope: LayoutScope, delta: number) {
+    const side = coverSide(scope)
+    if (!side) return
+    const act = coverAct(side)
+    if (act.kind === 'toast') store.notify(act.text)
+    else if (act.kind === 'open') {
+      const g = this.cur
+      if (!(g?.spread === COVER_ID && g.scope === scope && g.tab === 'grids')) this.open(scope, 'grids')
+    } else await store.run(Api.StepCoverGrid(scope, delta))
+  }
+
   // Повторный вызов той же области закрывает галерею, другой — переключает на неё.
   // Вкладка 'grids' открывается у любого разворота (область — 'spread', её меняет сама вкладка),
-  // 'layouts' — только у «Авто».
+  // 'layouts' — только у «Авто». У обложки (127) — только 'grids' и только на left/right: галерея сторонки.
   open(scope: LayoutScope, tab: GalleryTab = 'layouts') {
     const s = store.spread
     // На сетке раскладки открываются тоже: выбор спросит «Вернуть авто?» (backToAuto).
-    // У обложки (032) раскладок «Авто», шаблонов и копирования сетки нет.
-    if (!s || isCover(s) || (tab === 'layouts' && !s.layout && !s.grid)) return
+    // У обложки (032) раскладок «Авто» и копирования сетки нет; есть галерея сторонки (127).
+    if (!s) return
+    if (isCover(s)) {
+      if (tab !== 'grids' || !coverSide(scope)) return
+    } else if (tab === 'layouts' && !s.layout && !s.grid) return
     // У виньетки одна галерея — шаблоны виньетки (LayoutGallery подменяет содержимое); шаблонов сетки нет.
     if (isVignette(s)) {
       if (tab !== 'layouts') return
@@ -169,6 +192,8 @@ class Gallery {
   sync() {
     const g = this.cur
     if (!g) return
+    // Обложки нет в View.spreads: галерея сторонки живёт, пока в виде есть эта сторонка.
+    if (g.spread === COVER_ID) return coverSide(g.scope) ? undefined : this.close()
     const s = store.view.spreads.find((x) => x.id === g.spread)
     // Шаблоны виньетки галерея запрашивает сама (VigGallery): тут только следим, чтобы лист был на месте.
     if (isVignette(s)) return

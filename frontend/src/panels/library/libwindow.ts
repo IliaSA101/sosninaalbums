@@ -69,6 +69,15 @@ export function anchorTop(index: number, cols: number, size: number, cy: number,
   return Math.max(0, top - (cy - fy * size))
 }
 
+// Куда прокрутить ленту, чтобы ряд фото с номером index был виден целиком (128): у ближнего края, с полем PAD_Y.
+// null — ряд уже виден, прокручивать не надо.
+export function revealTop(index: number, scrollTop: number, height: number, width: number, size: number): number | null {
+  const top = PAD_Y + Math.floor(index / colsOf(width, size)) * (size + GAP)
+  const bottom = top + size
+  if (top >= scrollTop && bottom <= scrollTop + height) return null
+  return top < scrollTop ? Math.max(0, top - PAD_Y) : Math.max(0, bottom + PAD_Y - height)
+}
+
 // Новый список ленты (088): куда встало верхнее видимое фото прежнего. Пропало — ближайшее следующее
 // из уцелевших; таких нет — прежний номер, зажатый в список; список пуст — 0.
 export function anchorAfter(prev: string[], next: string[], topIndex: number): number {

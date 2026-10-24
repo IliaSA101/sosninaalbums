@@ -88,6 +88,13 @@ describe('поиск (спека 033)', () => {
         q,
       ).toContain('color-profile')
   })
+  it('цветовой профиль PNG (125): «png» и «скриншот» находят «Цветовой профиль фото»', () => {
+    for (const q of ['png', 'скриншот'])
+      expect(
+        search(q).hits.map((h) => h.a.id),
+        q,
+      ).toContain('color-profile')
+  })
   it('«клавиши» → «Горячие клавиши»', () => {
     expect(titles('клавиши')).toContain('Горячие клавиши')
   })

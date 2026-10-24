@@ -60,11 +60,12 @@ export const coverLabels = (cv: Pick<CoverView, 'scopes'> | null | undefined): R
   spine: coverLabel(cv, 'spine'),
 })
 
-// Кнопки раскладки обложки: порядок и подписи по спеке 061 (ключи прежние).
-export const COVER_LAYOUTS: readonly { kind: CoverLayout; label: string }[] = [
-  { kind: 'front', label: 'Лицевая' },
-  { kind: 'wrap', label: 'Одно фото через корешок' },
-  { kind: 'both', label: 'Задняя + корешок + лицевая' },
+// Кнопки раскладки обложки: порядок и подписи по спеке 061 (ключи прежние). short — слово под схемой в узкой
+// карточке (плитка ≈ 55 px, 0.26-124-30); полная подпись остаётся в title и aria-label.
+export const COVER_LAYOUTS: readonly { kind: CoverLayout; label: string; short: string }[] = [
+  { kind: 'front', label: 'Лицевая', short: 'Лицевая' },
+  { kind: 'wrap', label: 'Одно фото через корешок', short: 'Через корешок' },
+  { kind: 'both', label: 'Задняя + корешок + лицевая', short: 'Три части' },
 ]
 
 export const zonesOf = (cv: Pick<CoverView, 'zones'>, kind: string): CoverZone[] => cv.zones.filter((z) => z.kind === kind)

@@ -1,4 +1,4 @@
-// Строка меню «Файл · Правка · Вид · Справка» (спека 010, design-ui §2). Чистая логика: что показать
+// Строка меню «Файл · Правка · Разворот · Вид · Справка» (спека 010, design-ui §2). Чистая логика: что показать
 // и что серое по ситуации; выполняет команду `commands.run`, рисует MenuBar.svelte.
 // Клавиши берутся из реестра (base/keys) — один список на клавиши, справку и меню.
 import type { Command } from './commands'
@@ -26,7 +26,7 @@ export interface MenuItem {
   sub?: MenuItem[]
   sep?: boolean // линия перед пунктом
   hint?: string // подсказка при наведении (title)
-  icon?: IconName // значок слева: только у пунктов «Правки» с кнопкой-двойником (владелец 23.10)
+  icon?: IconName // значок слева: только у пунктов «Правки» и «Разворота» с кнопкой-двойником (владелец 23.10)
 }
 
 // Столбцы списка: значки — если есть хоть один; отметки ✓ — если есть хоть одна или значков нет (прежний вид).
@@ -34,7 +34,7 @@ export interface MenuItem {
 export const hasIcons = (list: MenuItem[]): boolean => list.some((i) => !!i.icon)
 export const hasMarks = (list: MenuItem[]): boolean => list.some((i) => i.checked !== undefined) || !hasIcons(list)
 
-export type MenuId = 'file' | 'edit' | 'view' | 'help'
+export type MenuId = 'file' | 'edit' | 'spread' | 'view' | 'help'
 
 export interface Menu {
   id: MenuId
@@ -190,7 +190,7 @@ function fileSpecs(c: MenuCtx): Spec[][] {
   return [
     [
       { id: 'new', label: 'Новый альбом', cmd: 'new' },
-      // Отдельный проект-лист, не виньетка в альбоме (отзыв 14.10): та — «Правка ▸ Сделать разворот виньеткой».
+      // Отдельный проект-лист, не виньетка в альбоме (отзыв 14.10): та — «Разворот ▸ Сделать разворот виньеткой».
       {
         id: 'newSheet',
         label: 'Новый проект: виньетка-лист…',
@@ -351,10 +351,20 @@ function editSpecs(c: MenuCtx): Spec[][] {
       { id: 'clearSelection', label: 'Снять выделение', cmd: 'clearSelection', disabled: !c.anySelection },
       { id: 'removeCell', label: 'Удалить', cmd: 'removeCell', icon: ACTS.delete.icon, disabled: !c.deletable },
     ],
+    photoOpSpecs(c),
+  ]
+}
+
+// «Разворот» (владелец 2026-10-24, 0.26-124-1): всё, что правит лист целиком. Четыре группы по макету владельца;
+// id, клавиши и условия серого прежние — меняется только меню (снимок menu.parity.test.ts).
+function spreadSpecs(c: MenuCtx): Spec[][] {
+  return [
     [
       { id: 'addText', label: 'Добавить текст', cmd: 'addText', icon: 'text', feature: 'text', disabled: !c.hasSpread },
       // 048 Ф2: то же окно «Фоны и стикеры», вид «Стикеры»; стикер встаёт в центр страницы
       { id: 'addSticker', label: 'Добавить стикер…', cmd: 'addSticker', icon: 'sticker', feature: 'decor', disabled: !c.hasSpread },
+    ],
+    [
       // 048: окно «Фоны» для текущего листа; область — весь лист (у обложки — первая сторонка)
       { id: 'bgGallery', label: 'Галерея фонов…', cmd: 'bgGallery', feature: 'decor', disabled: !c.hasSpread },
       // 079: окно «Рамочки» — рамочка на выделенные места или на весь лист; сочетания по умолчанию нет
@@ -363,9 +373,15 @@ function editSpecs(c: MenuCtx): Spec[][] {
       { id: 'copyDecor', label: 'Копировать оформление…', cmd: 'copyDecor', feature: 'decor', disabled: !c.decorable },
       // 067: окно «Развороты» — места и оформление готовых разворотов; обложка не цель (серое)
       { id: 'spreadTpl', label: 'Готовые развороты…', cmd: 'spreadTpl', feature: 'decor', disabled: !c.decorable },
-      { id: 'pasteNames', label: 'Имена из списка…', cmd: 'pasteNames', feature: 'captions', disabled: !c.hasSpread },
+    ],
+    [
       // 094: поле названия текущего разворота в ленте; обложка и пустой альбом — серое (decorable)
       { id: 'renameSpread', label: 'Название разворота…', cmd: 'renameSpread', feature: 'names', disabled: !c.decorable },
+      { id: 'pasteNames', label: 'Имена из списка…', cmd: 'pasteNames', feature: 'captions', disabled: !c.hasSpread },
+      // 041: выделенные развороты ленты, нет выделения — текущий; серое, если менять нечего (сетки, виньетки, пустые)
+      { id: 'varyLayouts', label: 'Разнообразить раскладки', cmd: 'varyLayouts', feature: 'variants', disabled: !c.varyable },
+    ],
+    [
       {
         id: 'makeVignette',
         label: 'Сделать разворот виньеткой',
@@ -375,9 +391,6 @@ function editSpecs(c: MenuCtx): Spec[][] {
         disabled: !c.vigable,
       },
       { id: 'vigSetup', label: 'Настроить виньетку…', cmd: 'vigSetup', feature: 'vignette', disabled: !c.vigSetup },
-      // 041: выделенные развороты ленты, нет выделения — текущий; серое, если менять нечего (сетки, виньетки, пустые)
-      { id: 'varyLayouts', label: 'Разнообразить раскладки', cmd: 'varyLayouts', feature: 'variants', disabled: !c.varyable },
-      ...photoOpSpecs(c),
     ],
   ]
 }
@@ -394,7 +407,7 @@ function viewSpecs(c: MenuCtx): Spec[][] {
       { id: 'compareLevels', label: 'Уровни и функции…', cmd: 'compareLevels' },
     ],
     [
-      { id: 'big', label: 'Крупный просмотр', cmd: 'toggleBig', feature: 'timeline', checked: c.big },
+      { id: 'big', label: 'Во весь экран', cmd: 'toggleBig', feature: 'timeline', checked: c.big },
       { id: 'details', label: 'Панель деталей', cmd: 'toggleDetails', checked: c.details },
       { id: 'safe', label: 'Безопасная зона', cmd: 'toggleSafe', checked: c.safe },
       { id: 'markup', label: 'Разметка типографии', cmd: 'toggleMarkup', checked: !!c.markup },
@@ -427,12 +440,16 @@ function helpSpecs(): Spec[][] {
   ]
 }
 
+// Меню без видимых на уровне пунктов в строку не попадает (как группа и подменю в build).
 export function buildMenu(c: MenuCtx): Menu[] {
   const can = c.can ?? (() => true)
-  return [
+  const all: Menu[] = [
     { id: 'file', label: 'Файл', items: build(fileSpecs(c), can) },
     { id: 'edit', label: 'Правка', items: build(editSpecs(c), can) },
+    // Название постоянное, и в проекте «виньетка-лист» (0.26-124-1)
+    { id: 'spread', label: 'Разворот', items: build(spreadSpecs(c), can) },
     { id: 'view', label: 'Вид', items: build(viewSpecs(c), can) },
     { id: 'help', label: 'Справка', items: build(helpSpecs(), can) },
   ]
+  return all.filter((m) => m.items.length > 0)
 }

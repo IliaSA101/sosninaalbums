@@ -32,6 +32,8 @@ const info = (o: Record<string, unknown> = {}) => ({
   bg: 12,
   sticker: 0,
   spread: 8,
+  frame: 0,
+  print: 0,
   bytes: 1048576,
   removable: true,
   ...o,

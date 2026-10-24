@@ -6,6 +6,8 @@
   import { PersonSend } from './personsend'
   import { personOf } from './names'
   import { cardOf, loadPerson, savePerson, type PersonTarget, type PlaceRef } from './personapi'
+  import { useCard } from '../../base/prefs/cardgroups.svelte'
+  import { nameSum } from '../../editor/inspector/groupsum'
 
   // Имя на фото (спека 030) в карточке фото: Фамилия, Имя, Отчество, у учителя виньетки ещё Предмет (049). Пока своего имени нет, значения берутся
   // из имени файла и видны серым («из имени файла»); все три поля очищены — снова имя из файла. Набор уходит в Go
@@ -14,29 +16,50 @@
   // У фото на месте с табличкой поля показывают её же («Имя места — останется здесь…»; у таблички только с предметом — «Предмет места…»).
   // inline — окошко имени на холсте (037): без заголовка, показаны только поля из only, фокус — в первом,
   // Enter ведёт к следующему полю (на последнем — ondone), вся сессия набора — один шаг отмены.
+  // row (спека 124, 0.26-124-3): Фамилия, Имя, Отчество одной строкой, Предмет — строкой ниже. В узкой карточке (200 px) в полях
+  // короткие подсказки «Фам.», «Имя», «Отч.» (полные слова — в aria-label), title поля — его значение, поле в фокусе шире соседних.
+  // cap=false — подпись даёт группа карточки; onsummary — значение для свёрнутой группы («Иванов Иван» или «нет»).
   let {
     photo,
     place,
     only,
     inline = false,
+    row = false,
+    cap = true,
+    onsummary,
     ondone,
-  }: { photo: string; place?: PlaceRef; only?: readonly string[]; inline?: boolean; ondone?: () => void } = $props()
+  }: {
+    photo: string
+    place?: PlaceRef
+    only?: readonly string[]
+    inline?: boolean
+    row?: boolean
+    cap?: boolean
+    onsummary?: (text: string) => void
+    ondone?: () => void
+  } = $props()
+  const card = useCard()
+  const narrow = $derived(row && card.narrow)
   const target = (): PersonTarget => ({ photo, place })
   const title = $derived(place ? 'Имя на месте' : 'Имя на фото')
 
   const DELAY = 500
   // k — ключ Person, w — имя поля в who шаблона (у предмета они разные: subj / subject).
   const ALL = [
-    { k: 'last', w: 'last', label: 'Фамилия' },
-    { k: 'first', w: 'first', label: 'Имя' },
-    { k: 'middle', w: 'middle', label: 'Отчество' },
-    { k: 'subj', w: 'subject', label: 'Предмет' },
+    { k: 'last', w: 'last', label: 'Фамилия', short: 'Фам.' },
+    { k: 'first', w: 'first', label: 'Имя', short: 'Имя' },
+    { k: 'middle', w: 'middle', label: 'Отчество', short: 'Отч.' },
+    { k: 'subj', w: 'subject', label: 'Предмет', short: 'Предм.' },
   ] as const
   // Предмет в карточке — у учителя виньетки или если он уже задан; раз показанное поле не пропадает под курсором.
   let subjectShown = $state(false)
   const FIELDS = $derived(only ? ALL.filter((f) => only.includes(f.w)) : ALL.filter((f) => f.k !== 'subj' || subjectShown))
 
   let draft = $state({ last: '', first: '', middle: '', subj: '' })
+  // Значение свёрнутой группы (имя из файла тоже в draft — оно и есть действующее).
+  $effect(() => {
+    onsummary?.(nameSum({ last: draft.last, first: draft.first, patr: draft.middle }))
+  })
   let fromFile = $state(false)
   let seatNote = $state('') // подсказка, если у фото видна табличка места
   let dirty = $state(false)
@@ -133,22 +156,41 @@
   }
 </script>
 
-<div bind:this={root} class="person" class:inline role="group" aria-label={title} {...inline || place ? {} : { 'data-guide': 'person' }}>
-  {#if !inline}<div class="cap">{title}</div>{/if}
-  {#each FIELDS as f (f.k)}
-    <input
-      type="text"
-      class:file={fromFile && f.k !== 'subj'}
-      maxlength="60"
-      placeholder={f.label}
-      aria-label={f.label}
-      value={draft[f.k]}
-      onfocus={focus}
-      oninput={(e) => input(f.k, e.currentTarget.value)}
-      onkeydown={key}
-      onblur={() => void sender.flush(prepare(target()))}
-    />
-  {/each}
+{#snippet fld(f: (typeof ALL)[number])}
+  <input
+    type="text"
+    class:file={fromFile && f.k !== 'subj'}
+    maxlength="60"
+    placeholder={narrow ? f.short : f.label}
+    aria-label={f.label}
+    title={row ? draft[f.k] || f.label : undefined}
+    value={draft[f.k]}
+    onfocus={focus}
+    oninput={(e) => input(f.k, e.currentTarget.value)}
+    onkeydown={key}
+    onblur={() => void sender.flush(prepare(target()))}
+  />
+{/snippet}
+
+<div
+  bind:this={root}
+  class="person"
+  class:inline
+  class:row
+  class:bare={row && !cap}
+  role="group"
+  aria-label={title}
+  {...inline || place ? {} : { 'data-guide': 'person' }}
+>
+  {#if !inline && cap}<div class="cap">{title}</div>{/if}
+  {#if row}
+    <div class="fio">
+      {#each FIELDS.filter((f) => f.k !== 'subj') as f (f.k)}{@render fld(f)}{/each}
+    </div>
+    {#each FIELDS.filter((f) => f.k === 'subj') as f (f.k)}{@render fld(f)}{/each}
+  {:else}
+    {#each FIELDS as f (f.k)}{@render fld(f)}{/each}
+  {/if}
   {#if fromFile}<div class="note">из имени файла</div>{/if}
   {#if seatNote}<div class="note">{seatNote}</div>{/if}
 </div>
@@ -160,6 +202,25 @@
     border-top: 1px solid var(--line);
     display: grid;
     gap: 4px;
+  }
+  /* Группа «Имя на фото» подписана заголовком: своих линии и отступа нет */
+  .person.bare {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  /* Три поля в строку; поле в фокусе шире соседних (0.26-124-22), остальные сжимаются, но не до нуля */
+  .fio {
+    display: flex;
+    gap: 4px;
+  }
+  .row .fio input {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 4px;
+  }
+  .row .fio input:focus {
+    flex-grow: 3;
   }
   .person.inline {
     margin: 0;

@@ -166,4 +166,9 @@ describe('zoneOf', () => {
     expect(zoneOf(el('.other'))).toBeNull()
     expect(zoneOf(null)).toBeNull()
   })
+  it('внутри модального окна зона не меняется, даже под .stage или .library', () => {
+    const inModal = (outer: string) => ({ closest: (q: string) => (q.includes('aria-modal') || q.includes(outer) ? {} : null) })
+    expect(zoneOf(inModal('.stage'))).toBeNull()
+    expect(zoneOf(inModal('.library'))).toBeNull()
+  })
 })

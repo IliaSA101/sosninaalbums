@@ -29,6 +29,8 @@ export const MOUSE_HELP: readonly MouseRow[] = [
     group: 'spreads',
   },
   { show: 'Ctrl+колесо, Alt+колесо над лентой', label: 'Размер миниатюр', group: 'photos' },
+  // 128: жест крупного просмотра — на всех уровнях, как и сам просмотр; клавиша Z — команда photoPreview.
+  { show: 'Ctrl+правый щелчок по фото в ленте', label: 'Крупный просмотр фото (на Mac — ⌘)', group: 'photos' },
   { show: 'Перетащить соседний разворот, Пробел+мышь', label: 'Прокрутить ряд разворотов', group: 'canvas' },
   { show: 'Зажатое колёсико', label: 'Двигать увеличенный разворот', group: 'canvas', feature: 'zoom' },
   { show: 'Двойной щелчок по фону', label: 'Вписать разворот в окно', group: 'canvas', feature: 'zoom' },

@@ -8,11 +8,12 @@ import type { BackdropScope } from '../../base/core/types'
 
 // После правки с постановкой фото: фон появился или сменился (rev вырос) — сразу в режим фона
 // (владелец: кадр по умолчанию почти всегда хочется поправить). Отказ диалога rev не меняет.
-async function putThenEdit(spread: string, scope: BackdropScope, op: () => Promise<unknown>) {
+// Результат — Go принял вызов (даже холостой): бросок фото на зону оставляет группу карточки открытой.
+async function putThenEdit(spread: string, scope: BackdropScope, op: () => Promise<unknown>): Promise<boolean> {
   const rev = store.view.rev
-  if (!(await store.run(op()))) return
-  if (store.view.rev === rev) return
-  if (backdropOf(sheetIn(store.view, spread), scope)) bgmode.enter(spread, scope)
+  if (!(await store.run(op()))) return false
+  if (store.view.rev !== rev && backdropOf(sheetIn(store.view, spread), scope)) bgmode.enter(spread, scope)
+  return true
 }
 
 export const setBackdrop = (spread: string, scope: BackdropScope, photo: string) =>

@@ -32,6 +32,7 @@
     step={1}
     guide="round"
     id="round"
+    reset
     onlive={(v) => (placesel.liveRound = v)}
     oncommit={(v) => placesel.setRound(v)}
     onend={() => (placesel.liveRound = null)}

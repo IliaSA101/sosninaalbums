@@ -9,7 +9,7 @@
   import { libPhotoOf } from '../../editor/photoprops/aboutload.svelte'
   import { store } from '../../base/core/store.svelte'
   import { edgeScroll } from '../../base/drag/edgescroll'
-  import { newSheetSize, pageSize, unitOf } from '../../base/geom/sheet'
+  import { cmText, newSheetSize, pageSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { panels } from '../../editor/inspector/panelmode.svelte'
@@ -21,8 +21,6 @@
   const page = $derived(pageSize(s))
   const sheet = $derived(newSheetSize(s))
   const unit = $derived(unitOf(s))
-  // Без лишних нулей: 21.5, а не 21.50.
-  const num = (n: number) => String(Math.round(n * 100) / 100)
 
   // Раздел «Фото из ленты» (084): одно выделенное в ленте фото при открытой панели.
   const libId = $derived(libPhotoOf(store.selectedIds, modes.details, store.selectedCell ?? ''))
@@ -93,9 +91,9 @@
       <Section name="photo" title="Фото из ленты"><div data-guide="photo-section"><PhotoAbout id={libId} head /></div></Section>
     {/if}
     <div class="format">
-      <div class="name">{num(page.w / 10)}×{num(page.h / 10)}</div>
+      <div class="name">{cmText(page.w)}×{cmText(page.h)}</div>
       <div class="sub">
-        {sheet.mid > 0 ? `разворот ${num(sheet.w / 10)}×${num(sheet.h / 10)} см` : 'один лист без корешка'}, {s.dpi} dpi
+        {sheet.mid > 0 ? `разворот ${cmText(sheet.w)}×${cmText(sheet.h)} см` : 'один лист без корешка'}, {s.dpi} dpi
       </div>
     </div>
     <Section name="info" title="Сведения об альбоме"><AlbumInfo /></Section>
@@ -126,6 +124,7 @@
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
+    overflow-anchor: none; /* раскрытие группы выше видимого места не должно само сдвигать прокрутку (зона броска уходила вверх) */
     padding-left: 1px;
   }
   .format {

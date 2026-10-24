@@ -100,7 +100,17 @@ type Options struct {
 	Quality      int
 	// Split — холст из двух равных страниц (режим «По страницам»), см. CanvasSize.
 	Split bool
+	// FitW, FitH — подгонка файла (123 §5): холст FitW×FitH px вместо CanvasSize, сцена в прежних
+	// координатах, лишнее срезается, недостающие полосы повторяют крайний ряд. 0 — без подгонки
+	// (прежний путь). Не действует со Split. Расхождение с сценой больше FitTolPx — ошибка.
+	FitW, FitH int
 }
+
+// FitTolMm — допуск подгонки, мм: model.PageTol (паритет — TestPxParity); render model не импортирует.
+const FitTolMm = 0.25
+
+// FitTolPx — наибольшее расхождение подгонки по оси, px: допуск на оба края разворота.
+func FitTolPx(dpi int) int { return px(2*FitTolMm, dpi) }
 
 // Пределы холста: JPEG не бывает больше 65535 px по стороне, а RGBA на 400 Мп — это 1.6 ГБ.
 const (
@@ -121,10 +131,21 @@ func CheckSize(w, h int) error {
 
 func px(mm float64, dpi int) int { return int(math.Round(mm / 25.4 * float64(dpi))) }
 
-// CanvasSize — размер холста в px. Обычный — px(2·PageW); со Split — две равные страницы
+// CanvasSize — размер холста (файла) в px. Обычный — px(2·PageW); со Split — две равные страницы
 // 2·px(PageW): иначе при 300 мм и 300 dpi (px(600) = 7087, корешок 3543) правая вышла бы
-// на пиксель шире левой.
+// на пиксель шире левой. С подгонкой (Fit, без Split) — FitW×FitH.
 func CanvasSize(opt Options) (w, h int) {
+	if opt.fitted() {
+		return opt.FitW, opt.FitH
+	}
+	return sceneSize(opt)
+}
+
+// fitted — подгонка включена: заданы оба размера, холст не из двух страниц.
+func (o Options) fitted() bool { return !o.Split && o.FitW > 0 && o.FitH > 0 }
+
+// sceneSize — размер сцены в px: по нему считаются все координаты разворота.
+func sceneSize(opt Options) (w, h int) {
 	if opt.Split {
 		return 2 * px(opt.PageW, opt.DPI), px(opt.PageH, opt.DPI)
 	}

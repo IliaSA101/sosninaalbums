@@ -56,3 +56,58 @@ describe('tplSources', () => {
     expect(tplSources([], m, 'builtin', t)).toMatchObject({ parts: [], empty: 'нет встроенных' })
   })
 })
+
+// 127-18: ряд «По фото» галереи сторонки обложки — третий список; без него всё как прежде.
+describe('tplSources: «По фото»', () => {
+  const tt = {
+    empty: { ...t.empty, byPhoto: 'нет по фото' },
+    off: { ...t.off, byPhoto: 'причина по фото' },
+  }
+  const p = ['p1', 'p2']
+
+  it('пункт идёт первым после «Все», в счёте «Все» учтён', () => {
+    const v = tplSources(b, m, 'all', tt, p)
+    expect(v.items.map((i) => [i.id, i.count])).toEqual([
+      ['all', 6],
+      ['byPhoto', 2],
+      ['builtin', 3],
+      ['mine', 1],
+    ])
+  })
+
+  it('«Все» — по фото, черта «встроенные», черта «мои»', () => {
+    expect(tplSources(b, m, 'all', tt, p).parts).toEqual([
+      { sep: '', list: p },
+      { sep: 'встроенные', list: b },
+      { sep: 'мои', list: m },
+    ])
+  })
+
+  it('«По фото» пуст — первая часть без черты, пункт серый с причиной', () => {
+    const v = tplSources(b, m, 'all', tt, [])
+    expect(v.parts).toEqual([
+      { sep: '', list: b },
+      { sep: 'мои', list: m },
+    ])
+    expect(v.items.find((i) => i.id === 'byPhoto')).toMatchObject({ off: true, count: 0, title: 'причина по фото' })
+  })
+
+  it('«По фото» одно — без черт; пустое — текст пустого ряда', () => {
+    expect(tplSources(b, m, 'byPhoto', tt, p).parts).toEqual([{ sep: '', list: p }])
+    expect(tplSources(b, m, 'byPhoto', tt, [])).toMatchObject({ parts: [], empty: 'нет по фото' })
+    expect(tplSources(b, [], 'all', tt, p).parts).toEqual([
+      { sep: '', list: p },
+      { sep: 'встроенные', list: b },
+    ])
+  })
+
+  it('без третьего списка — пункта нет, части и черты прежние', () => {
+    const v = tplSources(b, m, 'all', t)
+    expect(v.items.map((i) => i.id)).toEqual(['all', 'builtin', 'mine'])
+    expect(v.parts).toEqual([
+      { sep: '', list: b },
+      { sep: 'мои', list: m },
+    ])
+    expect(tplSources(b, m, 'byPhoto', t)).toMatchObject({ parts: [], empty: '' })
+  })
+})

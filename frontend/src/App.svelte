@@ -32,6 +32,8 @@
   import { backupsUi } from './shell/dialogs/backups.svelte'
   import PacksDialog from './shell/packs/PacksDialog.svelte'
   import { packsUi } from './shell/packs/packs.svelte'
+  import PrintProfileDialog from './shell/printprof/PrintProfileDialog.svelte'
+  import { printEdit } from './shell/printprof/printedit.svelte'
   import AboutDialog from './shell/dialogs/AboutDialog.svelte'
   import UpdateWatch from './shell/update/UpdateWatch.svelte'
   import { aboutUi } from './shell/dialogs/about.svelte'
@@ -65,6 +67,7 @@
   import { modalStack } from './base/modal/modalstack.svelte'
   import { extOpen } from './shell/boot/extopen.svelte'
   import { zoneOf } from './editor/places/groupsel'
+  import { photoui } from './editor/photo/photoui.svelte'
   import { bgmode } from './editor/backdrop/bgmode.svelte'
   import { prefs } from './base/prefs/prefs.svelte'
   import { modes } from './base/prefs/view.svelte'
@@ -111,7 +114,7 @@
     if (z) store.zone = z
   }
 
-  // Пробел листает раскладки «Авто»: у сетки их нет, у обложки (032) тоже.
+  // Стрелки двигают место у сетки и на обложке (032). Пробел на обложке листает лицевую (127), у сетки раскладок нет.
   const noAutoLayouts = () => !!store.spread?.grid || store.onCover
 
   // Открыт вопрос ручного листа (автораскладка, броски, копия сетки, «Фото уже в альбоме»): под ним F1 молчит.
@@ -129,8 +132,10 @@
       keysUi.open ||
       backupsUi.open ||
       packsUi.open ||
+      printEdit.open ||
       aboutUi.open ||
       namesUi.open ||
+      !!photoui.preview || // окно z 85 перекрыло бы справочник (z 80+)
       !!vigDialog.id ||
       !!store.autoDraft ||
       jobsOpen() ||
@@ -167,6 +172,7 @@
       bgMode: !!bgmode.cur,
       big: modes.big,
       dialog: dialogState(),
+      preview: photoui.preview?.from,
       can: prefs.can,
       menuOn,
     })
@@ -225,6 +231,7 @@
 <LevelsDialog />
 <BackupsDialog />
 <PacksDialog />
+<PrintProfileDialog />
 <AboutDialog />
 <UpdateWatch />
 <NamesDialog />

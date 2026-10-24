@@ -8,7 +8,9 @@
 //
 // Набор: icc-p3-1…3 (Display P3; третий — с именем Xiaomi «sRGB EOTF with DCI-P3 Color Gamut»),
 // icc-prophoto-1…2, icc-lut (P3 с пустой таблицей A2B0 — значок «!», не пересчитывается),
-// icc-linear (линейный sRGB). Папку вывода скрипт не очищает: пишет только свои icc-*.jpg и
+// icc-linear (линейный sRGB). PNG с iCCP (спека 125): icc-p3.png, icc-prophoto.png, icc-lut.png и
+// icc-p3-alpha.png (P3 с плавным градиентом альфы по ширине) — из первых фото папки. WebP в набор не входит
+// (проверяется тестами). Папку вывода скрипт не очищает: пишет только свои icc-*.jpg и icc-*.png и
 // отказывается работать «на месте». Профили собирает testkit — скрипт запускается только вручную.
 package main
 
@@ -18,6 +20,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"image/png"
 	"math"
 	"os"
 	"path/filepath"
@@ -98,6 +101,20 @@ func run(srcDir, outDir string) error {
 		}
 		fmt.Println(s.file, "←", names[i], "("+s.t.name+")")
 	}
+	// PNG: те же приёмы, что у JPEG, профиль в iCCP сразу после IHDR.
+	pngSet := []struct {
+		file  string
+		t     target
+		alpha bool
+	}{
+		{"icc-p3.png", p3, false}, {"icc-prophoto.png", pro, false}, {"icc-lut.png", lut, false}, {"icc-p3-alpha.png", p3, true},
+	}
+	for i, s := range pngSet {
+		if err := writePNG(filepath.Join(src, names[i]), filepath.Join(out, s.file), s.t, s.alpha); err != nil {
+			return err
+		}
+		fmt.Println(s.file, "←", names[i], "("+s.t.name+")")
+	}
 	return nil
 }
 
@@ -118,9 +135,47 @@ func photoNames(dir string) ([]string, error) {
 
 // write переводит sRGB-фото в пространство профиля и пишет JPEG q95 с профилем в APP2.
 func write(from, to string, t target) error {
-	img, err := imaging.Open(from, imaging.AutoOrientation(true))
+	dst, err := convert(from, t)
 	if err != nil {
 		return err
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 95}); err != nil {
+		return err
+	}
+	data := buf.Bytes()
+	res := append(append(append([]byte{}, data[:2]...), testkit.ICCSegment(1, 1, t.profile)...), data[2:]...)
+	return os.WriteFile(to, res, 0o644)
+}
+
+// writePNG — то же в PNG с чанком iCCP; alpha — непрозрачность растёт слева направо (альфа 30…255, слева почти прозрачно)
+// (цвет не премножен: альфа программе не должна меняться).
+func writePNG(from, to string, t target, alpha bool) error {
+	dst, err := convert(from, t)
+	if err != nil {
+		return err
+	}
+	if alpha {
+		w := dst.Bounds().Dx()
+		for y := range dst.Bounds().Dy() {
+			for x := range w {
+				dst.Pix[y*dst.Stride+x*4+3] = uint8(30 + 225*x/max(w-1, 1))
+			}
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, dst); err != nil {
+		return err
+	}
+	res := testkit.PNGWithChunks(buf.Bytes(), testkit.PNGChunk("iCCP", testkit.PNGICCData(t.profile)))
+	return os.WriteFile(to, res, 0o644)
+}
+
+// convert переводит sRGB-фото в пространство профиля t (до 1600 px по ширине), альфа 255.
+func convert(from string, t target) (*image.NRGBA, error) {
+	img, err := imaging.Open(from, imaging.AutoOrientation(true))
+	if err != nil {
+		return nil, err
 	}
 	if b := img.Bounds(); b.Dx() > 1600 {
 		img = imaging.Resize(img, 1600, 0, imaging.Lanczos) // для QA хватает, файлы легче
@@ -148,13 +203,7 @@ func write(from, to string, t target) error {
 		}
 		dst.Pix[i+3] = 255
 	}
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 95}); err != nil {
-		return err
-	}
-	data := buf.Bytes()
-	res := append(append(append([]byte{}, data[:2]...), testkit.ICCSegment(1, 1, t.profile)...), data[2:]...)
-	return os.WriteFile(to, res, 0o644)
+	return dst, nil
 }
 
 // inv3 — обратная матрица 3×3 (колоранты невырожденные).

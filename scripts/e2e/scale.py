@@ -41,13 +41,13 @@ WINDOWS = [
     ("export", ("Файл", "export")),
     ("guide", ("Справка", "guide")),
     ("help", ("Справка", "help")),
-    ("bg-gallery", ("Правка", "bgGallery")),
-    ("borders", ("Правка", "borderGallery")),
+    ("bg-gallery", ("Разворот", "bgGallery")),
+    ("borders", ("Разворот", "borderGallery")),
     ("start", ("Справка", "startWindow")),
     ("levels", ("Вид", "compareLevels")),
     ("bins", ("bar", "bins")),
 ]
-MENUS = [("Файл", "file"), ("Правка", "edit"), ("Вид", "view"), ("Справка", "help")]
+MENUS = [("Файл", "file"), ("Правка", "edit"), ("Разворот", "spread"), ("Вид", "view"), ("Справка", "help")]
 LONG_TEXT = "Очень длинная строка текста для проверки рамки блока при масштабе экрана 125 и 150 процентов"
 S7_FACTOR = 1.5
 

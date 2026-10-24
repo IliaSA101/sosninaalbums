@@ -145,7 +145,7 @@ test('рамочка (079): kind frame — PNG в пределах, counts.frame
   fs.writeFileSync(p, JSON.stringify(src))
   const { manifest } = buildPack(d)
   assert.equal(manifest.items[2].kind, 'frame')
-  assert.deepEqual(catalogRow(manifest, Buffer.from('zip'), 'v1').counts, { bg: 1, sticker: 0, spread: 1, frame: 1 })
+  assert.deepEqual(catalogRow(manifest, Buffer.from('zip'), 'v1').counts, { bg: 1, sticker: 0, spread: 1, frame: 1, print: 0 })
   fs.writeFileSync(path.join(d, 'frames', 'ring.jpg'), crypto.randomBytes(700))
   src.items[2].file = 'frames/ring.jpg'
   fs.writeFileSync(p, JSON.stringify(src))
@@ -186,4 +186,56 @@ test('рамочка (079-35): minApp ниже 0.20.0 и сторона PNG бо
   // набор без рамочек старого minApp по-прежнему собирается
   const d2 = setDir()
   assert.equal(buildPack(d2).manifest.minApp, '0.16.0')
+})
+
+test('типография (123): kind print — .saprint, JSON-объект ≤ 64 КБ, minApp не ниже 0.26.0, counts.print', () => {
+  const d = setDir()
+  fs.mkdirSync(path.join(d, 'prints'))
+  const p = path.join(d, 'manifest.src.json')
+  const src = JSON.parse(fs.readFileSync(p, 'utf8'))
+  src.items.push({ file: 'prints/fabrika.saprint', kind: 'print', name: 'Фабрика' })
+  const put = (minApp, data, file = 'prints/fabrika.saprint') => {
+    src.minApp = minApp
+    src.items[2].file = file
+    fs.writeFileSync(path.join(d, ...file.split('/')), data)
+    fs.writeFileSync(p, JSON.stringify(src))
+  }
+  const profile = (extra = {}) => JSON.stringify({ format: 1, id: 'fabrika', version: 2, name: 'Фабрика Фотокниги', ...extra })
+
+  put('0.26.0', profile())
+  const { manifest, files } = buildPack(d)
+  assert.equal(manifest.items[2].kind, 'print')
+  assert.deepEqual(catalogRow(manifest, Buffer.from('zip'), 'v1').counts, { bg: 1, sticker: 0, spread: 1, frame: 0, print: 1 })
+  assert.equal(readZip(makeZip(files)).get('prints/fabrika.saprint').toString(), profile()) // круг через zip
+
+  put('0.25.1', profile()) // минимум по версии, числовое сравнение
+  assert.throws(() => buildPack(d), /minApp не ниже 0\.26\.0/)
+  put('0.9.0', profile())
+  assert.throws(() => buildPack(d), /minApp не ниже/)
+  put('1.0.0', profile()) // выше минимума — можно
+  assert.equal(buildPack(d).manifest.items[2].kind, 'print')
+
+  put('0.26.0', profile(), 'prints/fabrika.json')
+  assert.throws(() => buildPack(d), /только \.saprint/)
+  put('0.26.0', '{не json')
+  assert.throws(() => buildPack(d), /не JSON/)
+  put('0.26.0', '')
+  assert.throws(() => buildPack(d), /размер вне предела/)
+  for (const bad of ['[]', 'null', '"x"', '42']) {
+    put('0.26.0', bad)
+    assert.throws(() => buildPack(d), /не JSON-объект/, bad)
+  }
+  put('0.26.0', profile({ format: 2 }))
+  assert.throws(() => buildPack(d), /format профиля/)
+  put('0.26.0', profile({ id: 'Fab' }))
+  assert.throws(() => buildPack(d), /id профиля/)
+  put('0.26.0', profile({ name: '  ' }))
+  assert.throws(() => buildPack(d), /нет name/)
+  put('0.26.0', profile({ pad: 'x'.repeat(64 << 10) })) // за пределом 64 КБ
+  assert.throws(() => buildPack(d), /размер вне предела/)
+  const head = Buffer.from(profile({ pad: '' }))
+  const fill = (64 << 10) - head.length // с этим добавком файл ровно 64 КБ
+  put('0.26.0', profile({ pad: 'x'.repeat(fill) }))
+  assert.equal(fs.statSync(path.join(d, 'prints', 'fabrika.saprint')).size, 64 << 10)
+  assert.equal(buildPack(d).manifest.items[2].size, 64 << 10) // предел включительно
 })

@@ -6,6 +6,7 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { BAR, INSP_W, M, cardTitle, inspectorMaxH, type PanelMode } from './panels'
   import { modes } from '../../base/prefs/view.svelte'
+  import { provideCard } from '../../base/prefs/cardgroups.svelte'
   import { edit } from '../text/edit.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { store } from '../../base/core/store.svelte'
@@ -21,6 +22,8 @@
   // «Разворот N» (InspectorSpread). В панели деталей карточка сворачивается (modes.sections.card, 028 Б):
   // заголовок — кнопка, тело не размонтируется. reveal — «показать элемент» от прокручиваемой панели.
   let { docked = false, reveal }: { docked?: boolean; reveal?: (el: HTMLElement) => void } = $props()
+  // Хост групп и «узкая» карточка (спека 124, 0.26-124-4): панель деталей — 'd', плавающая 200 px — 'f' и узкая
+  provideCard(() => docked)
 
   const BODIES: Partial<Record<NonNullable<PanelMode>, Component<{ head?: boolean }>>> = {
     idle: InspectorSpread,
@@ -120,6 +123,7 @@
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
     overflow-x: hidden;
     overflow-y: auto;
+    overflow-anchor: none; /* как у панели деталей: рост группы выше видимого не двигает прокрутку */
     scrollbar-width: thin;
     cursor: default;
   }

@@ -182,7 +182,7 @@ func TestCoverFixLegacy(t *testing.T) {
 	}
 	e := edtest.Open(t, q, path)
 	cv := e.View().Cover
-	if cv.Fix != "Не по шаблону Фотосферы 30×30: 623 × 331 мм, нужно 626 × 326" {
+	if cv.Fix != "Не по шаблону Фотосферы 30×30: 623 × 331 мм, нужно 626 × 326 (файл 7358 × 3909 px, нужен 7394 × 3850)" {
 		t.Fatalf("строка: %q", cv.Fix)
 	}
 	x0, undo := sheet(e).BgPhotoR.X, edtest.UndoLen(e)

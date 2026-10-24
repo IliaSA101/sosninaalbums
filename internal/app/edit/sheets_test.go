@@ -180,3 +180,63 @@ func TestCoverSpineTextWiring(t *testing.T) {
 		t.Error("Undo не снял надпись: холостая правка заняла шаг?")
 	}
 }
+
+// SetCoverPx (123): правка доходит до Changed ровно раз, сторонка меняется; ошибка подбора и
+// обложки нет — ошибка без Changed, вид прежний; тот же ввод — вид не меняется.
+func TestSetCoverPxWiring(t *testing.T) {
+	k := twoSpreads(t)
+	if _, err := k.SetCoverPx(5000, 2800); err == nil || k.calls != 0 {
+		t.Fatalf("без обложки: err %v, Changed %d", err, k.calls)
+	}
+	v, err := k.CreateCover("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := k.calls
+	v, err = k.SetCoverPx(5000, 2800)
+	if err != nil || k.calls != calls+1 || model.Px(v.Cover.Sheet.W, 300) != 5000 || model.Px(v.Cover.Sheet.H, 300) != 2800 {
+		t.Fatalf("SetCoverPx: err %v, Changed %d, лист %v×%v мм", err, k.calls-calls, v.Cover.Sheet.W, v.Cover.Sheet.H)
+	}
+	rev := v.Rev
+	if v, err = k.SetCoverPx(5000, 2800); err != nil || v.Rev != rev {
+		t.Errorf("тот же ввод: err %v, rev %d → %d", err, rev, v.Rev)
+	}
+	calls = k.calls
+	if v, err = k.SetCoverPx(0, 2800); err == nil || k.calls != calls || v.Rev != rev {
+		t.Errorf("ноль px: err %v, Changed %d, rev %d", err, k.calls-calls, v.Rev)
+	}
+}
+
+// Раскладки сторонки обложки (127): галерея — чтение с шаблонами из Host (без правки и события),
+// StepCoverGrid зовёт Changed, листает узнанную форму и молчит над неузнанной (rev прежний).
+func TestCoverGridWiring(t *testing.T) {
+	k := twoSpreads(t)
+	if _, err := k.CreateCover("", ""); err != nil {
+		t.Fatal(err)
+	}
+	tplCalls := 0
+	k.h.Templates = func() []model.Template {
+		tplCalls++
+		return []model.Template{{ID: "m2", Name: "Два", Scope: model.TplPage, Boxes: []model.Box{{X: 0.1, Y: 0.1, W: 0.4, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.4, H: 0.8}}}}
+	}
+	r, calls := k.rev(), k.calls
+	ch := k.CoverGridChoices(model.ScopeRight, 2)
+	if ch.Scope != model.ScopeRight || ch.N != 2 || len(ch.Builtin) == 0 || len(ch.Mine) != 1 || tplCalls != 1 {
+		t.Fatalf("CoverGridChoices: %+v, шаблоны %d раз", ch, tplCalls)
+	}
+	if k.rev() != r || k.calls != calls {
+		t.Fatalf("чтение изменило проект: rev %d → %d, Changed %d → %d", r, k.rev(), calls, k.calls)
+	}
+
+	// Форма не узнана (одно место из CreateCover не стоит ни в одном ряду): холостая, rev прежний.
+	if v := k.StepCoverGrid(model.ScopeRight, 1); v.Rev != r || k.calls != calls+1 {
+		t.Errorf("StepCoverGrid над неузнанной: rev %d → %d, Changed %d → %d", r, v.Rev, calls, k.calls)
+	}
+	if _, _, err := k.ed.ApplyCoverGrid(model.ScopeRight, ch.Mine[0].Boxes); err != nil {
+		t.Fatal(err)
+	}
+	v := k.StepCoverGrid(model.ScopeRight, 1) // свой шаблон узнан по памяти Editor
+	if v.Rev <= r+1 || !v.Cover.Sides[1].Known {
+		t.Errorf("StepCoverGrid над узнанной: rev %d, сторонка %+v", v.Rev, v.Cover.Sides[1])
+	}
+}

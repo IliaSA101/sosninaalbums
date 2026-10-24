@@ -22,6 +22,12 @@ class BorderAct {
     return borderlive.commit(() => store.run(frameApi.set(spread, ids, patch, merge)))
   }
 
+  // ⊗ строки: свой шаг, серия после него не открыта — следующая протяжка не сольётся со сбросом.
+  async reset(spread: string, row: 'width' | 'size', ids: string[], patch: BorderPatch) {
+    await this.series(spread, row, ids, patch)
+    this.session.end()
+  }
+
   // Цвет: шаг на выбор, без серии.
   ink(spread: string, ids: string[], patch: BorderPatch) {
     return store.run(frameApi.set(spread, ids, patch, ''))

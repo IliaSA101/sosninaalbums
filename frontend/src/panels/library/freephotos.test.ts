@@ -133,3 +133,40 @@ describe('allInAlbumText (054)', () => {
     expect(allInAlbumText(true)).toBe('Все фото показанных папок уже в альбоме')
   })
 })
+
+describe('поиск по имени как фильтр ленты (0.26-124)', () => {
+  // store.visible после поиска — найденные; дальше те же правила, что у фильтра папок и отметок.
+  const found = ['IMG_0801', 'IMG_0805', 'IMG_0810'].map(ph)
+  const host = (visible: Photo[], used = new Set<string>(), notify: (t: string) => void = () => {}): PickHost => ({
+    visible,
+    selectedIds: [],
+    used,
+    backdropUsed: new Set(),
+    marks: {},
+    notify,
+  })
+
+  it('автосборка без выделения берёт найденные свободные, filtered: true', () => {
+    expect(pickFor(host(found, new Set(['IMG_0805'])), true, true)).toMatchObject({
+      ids: ['IMG_0801', 'IMG_0810'],
+      from: 'free',
+      filtered: true,
+    })
+  })
+
+  it('отклонённые среди найденных пропускаются', () => {
+    const h = { ...host(found), marks: { IMG_0805: { flag: -1 as const } } }
+    expect(pickFor(h, true, true)).toMatchObject({ ids: ['IMG_0801', 'IMG_0810'], filtered: true })
+  })
+
+  it('нашлись только стоящие в альбоме — пусто и тост про фильтр', () => {
+    const toasts: string[] = []
+    const r = pickFor(
+      host(found, new Set(found.map((p) => p.id)), (t) => toasts.push(t)),
+      true,
+      true,
+    )
+    expect(r.ids).toEqual([])
+    expect(toasts).toEqual(['Под фильтр не подходит ни одно свободное фото'])
+  })
+})

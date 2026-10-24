@@ -17,8 +17,12 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
+	"github.com/IliaSA101/sosninaalbums/internal/app/assoc"
 	"github.com/IliaSA101/sosninaalbums/internal/app/colorpick"
 	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
+	"github.com/IliaSA101/sosninaalbums/internal/app/exporter"
+	"github.com/IliaSA101/sosninaalbums/internal/app/updater"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/keymap"
@@ -151,10 +155,6 @@ type App struct {
 	bg         sync.WaitGroup // сканирование (с прогревом) и экспорт
 	bgMu       sync.Mutex     // порядок goBG и closeBackground: Add не идёт вместе с Wait
 	bgClosed   bool           // closeBackground начат: новый фон не стартует
-	exporting  bool
-	exportDir  string // папка последнего экспорта: её открывает ShowInExplorer
-	// exportCancel — «Остановить» идущего экспорта (073), под mu; nil — выгрузки нет.
-	exportCancel context.CancelFunc
 	// Сбор в папку (069, collect.go), под mu: идёт ли, отмена идущего, папка последнего (ShowCollected).
 	collecting    bool
 	collectCancel context.CancelFunc
@@ -173,15 +173,20 @@ type App struct {
 	// fontsMu — набор библиотеки → регистрация в text → событие `fonts` одним шагом: два
 	// параллельных publishFonts иначе отдали бы окну старый список последним.
 	fontsMu sync.Mutex
+	// prints — свои типографии и вопрос «Заменить?» (printprof.go, 123 Б1).
+	prints printState
 	// packs — одна операция наборов за раз и набор, ждущий «Заменить» (packs.go).
 	packs packState
 	// net — «Обновить библиотеку»: отмена, проверка при запуске, источник (packs_net.go).
 	net libNet
-	// upd — обновление программы: состояние, проверка при запуске (update.go, спека 111).
-	upd updState
-	// assoc и newer — открытие .salbum двойным щелчком и файл новее программы (112).
-	assoc assocState
-	newer newerState
+	// exp — служба выгрузки (internal/app/exporter; фасад — export.go, спеки 013 и 123).
+	exp *exporter.Service
+	// upd — служба обновления программы (internal/app/updater; фасад — update.go, спека 111).
+	upd *updater.Service
+	// assoc — открытие .salbum двойным щелчком и файл новее программы (internal/app/assoc; фасад —
+	// assoc.go, спеки 112 и 098); assocReg — реестр, настоящий ставит Run, nil — «не поддерживается».
+	assoc    *assoc.Service
+	assocReg assoc.Registry
 }
 
 // State — то, что нужно интерфейсу целиком: альбом и фото из папок.
@@ -251,6 +256,9 @@ func NewApp() *App {
 	a.ed.Store(blankEditor(""))
 	a.Methods = edit.New(a.editHost())
 	a.colorPick = colorpick.New(a.colorHost())
+	a.upd = updater.New(a.updHost())
+	a.assoc = assoc.New(a.assocHost())
+	a.exp = exporter.New(a.expHost())
 	return a
 }
 
@@ -272,11 +280,12 @@ func (a *App) startup(ctx context.Context) {
 	log.Printf("запуск, версия %s", appVersion(wailsJSON))
 	a.flushLaunchLog()                          // строки разбора аргументов, накопленные до открытия log.txt
 	salbum.SetAppVersion(appVersion(wailsJSON)) // до первого Load и записи: поле app в файле (098)
-	a.updateStartup()                           // итог прошлого запуска установщика — до первого UpdateInfo
+	a.upd.Startup()                             // итог прошлого запуска установщика — до первого UpdateInfo
 	a.loadTemplates()
 	a.startBackups()
-	a.openDecor() // до первого Load: свои фоны альбома находят путь по ключу
-	a.openFonts() // до первого Load: ширины «по тексту» — своими шрифтами
+	a.openDecor()    // до первого Load: свои фоны альбома находят путь по ключу
+	a.reloadPrints() // и свои типографии: обложка со своим изделием читается при открытии
+	a.openFonts()    // до первого Load: ширины «по тексту» — своими шрифтами
 
 	c, err := library.NewCache(thumbsDir)
 	if err != nil {
@@ -339,6 +348,13 @@ func (a *App) closeBackground() {
 	}
 }
 
+// quitWindow закрывает программу (shutdown сохранит альбом); без окна — ничего.
+func (a *App) quitWindow() {
+	if a.ctx != nil {
+		wr.Quit(a.ctx)
+	}
+}
+
 // goBG запускает фон под ожиданием closeBackground. Голый bg.Go из горутины, не входящей в bg
 // (таймер автосохранения, обработчик окна), мог выполнить Add(1) из нуля в тот миг, когда Wait
 // просыпается, — паника WaitGroup «Add called concurrently with Wait». После closeBackground фон
@@ -353,11 +369,11 @@ func (a *App) goBG(fn func()) bool {
 	return true
 }
 
-// Общие с edit: паника в методе — в лог, а не в падение окна; ошибки правок.
+// Общие с edit и службами: паника в методе — в лог, а не в падение окна (appkit); ошибки правок.
 var (
-	guard            = edit.Guard
-	guardErr         = edit.GuardErr
-	errInternal      = edit.ErrInternal
+	guard            = appkit.Guard
+	guardErr         = appkit.GuardErr
+	errInternal      = appkit.ErrInternal
 	errNoPhoto       = edit.ErrNoPhoto
 	errBackdropScope = edit.ErrBackdropScope
 )
@@ -380,7 +396,7 @@ func (a *App) domReady(ctx context.Context) {
 	defer guard("domReady")
 	a.fitScreen(ctx)
 	a.scheduleLibraryCheck()
-	a.scheduleUpdateCheck()
+	a.upd.Schedule()
 }
 
 // Постоянный минимум окна (логические px); на малом экране его уменьшает minSize.

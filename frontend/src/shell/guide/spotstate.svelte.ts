@@ -4,6 +4,8 @@
 import { HOLD_FAST_MS, HOLD_SLOW_MS, SPOT_HINT_MS, SPOT_MS, isCandidate, pickTarget, revealShift, ringBox, type Box } from './spot'
 import { spotId } from './show'
 import type { SpotKey } from './articles'
+import { cardGroups, isGroupHost, isGroupId } from '../../base/prefs/cardgroups.svelte'
+import { modes } from '../../base/prefs/view.svelte'
 
 export const reducedMotion = (): boolean => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -29,10 +31,26 @@ function usable(el: HTMLElement): boolean {
   })
 }
 
+// Группа карточки (спека 124 §4.4): искомое лежит в свёрнутой группе — раскрыть её и запомнить открытой (как «Показать»
+// у раздела панели деталей). Без этого locate отбросит элемент под inert. true — раскрыли хоть одну.
+export function unfoldFor(selector: string): boolean {
+  let any = false
+  for (const el of document.querySelectorAll<HTMLElement>(selector)) {
+    const g = el.closest<HTMLElement>('[data-group]')
+    const id = g?.dataset.group
+    const host = g?.dataset.groupHost
+    if (isGroupId(id) && isGroupHost(host) && cardGroups.open(host, id)) any = true
+  }
+  return any
+}
+
 // Ищем элементы по селектору до ms миллисекунд: панель деталей выезжает, ряд доезжает, меню рисуется после tick.
-export async function locate(selector: string, ms = 600): Promise<HTMLElement[]> {
+// unfold — раскрывать свёрнутые группы карточек: зовём в каждом круге, не один раз до поиска, чтобы не зависеть от того,
+// успел ли элемент смонтироваться. unfolded (если дан) получает true, когда что-то раскрыто.
+export async function locate(selector: string, ms = 600, unfold?: { done: boolean }): Promise<HTMLElement[]> {
   const end = performance.now() + ms
   for (;;) {
+    if (unfold && unfoldFor(selector)) unfold.done = true
     const found = [...document.querySelectorAll<HTMLElement>(selector)].filter(usable)
     if (found.length > 0 || performance.now() >= end) return found
     await frame()
@@ -64,6 +82,31 @@ export function choose(els: HTMLElement[]): HTMLElement | null {
   return el
 }
 
+// Раскрытая группа или раздел панели растёт 0,45 с (--move), панель выезжает; choose() прокрутил предков один раз, пока
+// высота была старой: нижний элемент остался бы за краем (F1 «Показать» при закрытой панели, спека 123 QA). Повторяем
+// подводку каждый кадр 1,2 с — образец Inspector.svelte (зона «Фото фона»). Свою прокрутку к разделу панель деталей
+// (modes.reveal) на это время отдаёт: она целит в верх раздела и тянула бы поле обратно. Колесо и щелчок пользователя обрывают.
+const FOLLOW_MS = 1200
+function follow(el: HTMLElement): void {
+  const t0 = performance.now()
+  let raf = 0
+  const stop = () => {
+    cancelAnimationFrame(raf)
+    window.removeEventListener('wheel', stop, true)
+    window.removeEventListener('pointerdown', stop, true)
+  }
+  const step = () => {
+    if (!el.isConnected) return stop()
+    revealInView(el)
+    if (performance.now() - t0 < FOLLOW_MS) raf = requestAnimationFrame(step)
+    else stop()
+  }
+  modes.reveal = null
+  window.addEventListener('wheel', stop, { capture: true, passive: true })
+  window.addEventListener('pointerdown', stop, true)
+  raf = requestAnimationFrame(step)
+}
+
 // Основное место, иначе «⋯» полосы фото (кнопка ушла в меню). Общий поиск «Показать» справочника и тура (113):
 // hint — подпись, когда мигает не сама функция (planHint — подсказка плана для найденного основного места).
 export async function seek(key: SpotKey, planHint = ''): Promise<{ el: HTMLElement; hint: string } | null> {
@@ -71,7 +114,8 @@ export async function seek(key: SpotKey, planHint = ''): Promise<{ el: HTMLEleme
   const isMenu = key.startsWith('menu:')
   const sel = isMenu ? `[role="menu"] [data-item="${id}"]` : `[data-guide~="${id}"]`
   if (!isMenu) spot.reveal(sel) // кнопки, видимые только при наведении, раскрываются до поиска
-  let els = await locate(sel)
+  const unfold = { done: false }
+  let els = await locate(sel, 600, isMenu ? undefined : unfold)
   let hint = planHint
   if (els.length === 0 && !isMenu) {
     // Кнопка ушла в «⋯» полосы фото: мигает «⋯».
@@ -79,6 +123,8 @@ export async function seek(key: SpotKey, planHint = ''): Promise<{ el: HTMLEleme
     hint = els.length > 0 ? 'В меню «⋯»' : ''
   }
   const el = choose(els)
+  // Подводим и без раскрытия группы: панель деталей и раздел «Настроек» могли открыться этим же «Показать».
+  if (el && !isMenu) follow(el)
   return el ? { el, hint } : null
 }
 

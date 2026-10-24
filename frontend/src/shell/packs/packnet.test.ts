@@ -82,6 +82,8 @@ const builtin = {
   bg: 1,
   sticker: 0,
   spread: 0,
+  frame: 0,
+  print: 0,
   bytes: 0,
 }
 const netOf = (o: Record<string, unknown> = {}) => ({ allowed: false, atStart: false, checked: 0, skipped: 0, ...o })

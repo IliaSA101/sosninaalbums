@@ -300,6 +300,8 @@ func replayScenario(t *testing.T) *replay {
 	// 104 и 105: подрезка и «Разброс» через Editor — последними.
 	replayCropZ(r)
 	replayColorMass(r)
+	// 127: раскладки сторонки обложки — последними.
+	replayCoverGrid(r)
 	return r
 }
 

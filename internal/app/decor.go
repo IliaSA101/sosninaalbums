@@ -102,6 +102,7 @@ var openFilesDialog = wr.OpenMultipleFilesDialog
 // openDecor открывает библиотеку и ставит искатель своих для salbum — до первого Load (startup).
 func (a *App) openDecor() {
 	s := decor.Open(a.cfgDir)
+	s.SetPrintCheck(checkPrintData)
 	a.decorLib.Store(s)
 	salbum.SetLibFinder(s.Find)
 	salbum.SetFrameFinder(s.FindFrame)

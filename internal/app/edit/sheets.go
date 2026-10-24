@@ -36,10 +36,25 @@ func (m *Methods) ApplyCoverPreset(id string) (v model.View, err error) {
 	return m.changedOrErr(m.editor().ApplyCoverPreset(id))
 }
 
+// ApplyPrint — кнопка формата типографии и изделие обложки одним шагом отмены (123 Б1): настройки
+// страницы, обложка по шаблону прежнего формата идёт за страницей, затем числа изделия preset.
+// Неизвестное изделие — ошибка тостом, без правки.
+func (m *Methods) ApplyPrint(s model.Settings, preset string) (v model.View, err error) {
+	defer m.guardEdit("ApplyPrint", &v, &err)
+	return m.changedOrErr(m.editor().ApplyPrint(s, preset))
+}
+
 // SetCoverSpec — свои числа обложки (зажим в Go); не совпали с пресетом — «Свои размеры».
 func (m *Methods) SetCoverSpec(s model.CoverSpec) (v model.View, err error) {
 	defer m.guardEdit("SetCoverSpec", &v, &err)
 	return m.changedOrErr(m.editor().SetCoverSpec(s))
+}
+
+// SetCoverPx — «Файл обложки, px»: сторонка, при которой лист обложки выходит ровно w × h px
+// при 300 dpi (123); изделие остаётся, если в допуске шаблона. Ошибка подбора — тостом.
+func (m *Methods) SetCoverPx(w, h int) (v model.View, err error) {
+	defer m.guardEdit("SetCoverPx", &v, &err)
+	return m.changedOrErr(m.editor().SetCoverPx(w, h))
 }
 
 // SetCoverLayout — раскладка обложки: front | both | wrap.
@@ -70,6 +85,14 @@ func (m *Methods) ClearCoverGuide() (v model.View) {
 func (m *Methods) ClearSpreadGuide() (v model.View) {
 	defer m.guardEdit("ClearSpreadGuide", &v, nil)
 	return m.changed(m.editor().ClearSpreadGuide())
+}
+
+// StepCoverGrid — ‹ › и Пробел над сторонкой обложки (127): scope "left" | "right", delta ±1; листает
+// «По фото», если форма мест узнана, иначе правки нет (rev прежний — UI открывает ▦ по Known и Alone).
+// Серия по сторонке — один шаг отмены.
+func (m *Methods) StepCoverGrid(scope string, delta int) (v model.View) {
+	defer m.guardEdit("StepCoverGrid", &v, nil)
+	return m.changed(m.editor().StepCoverGrid(scope, delta))
 }
 
 // VignetteChoices — превью шаблонов виньетки для чисел и пропорции панели (без правки).

@@ -22,9 +22,6 @@ export function signed(v: number): string {
   return '0'
 }
 
-// ⊗ сброса строки неактивна при 0.
-export const canReset = (v: number): boolean => v !== 0
-
 // Значение ползунка в допустимые пределы (range и так держит, но событие бывает извне).
 export const clampRow = (v: number): number => (Number.isFinite(v) ? Math.min(MAX_TONE, Math.max(-MAX_TONE, Math.round(v))) : 0)
 

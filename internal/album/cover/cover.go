@@ -64,7 +64,7 @@ func ApplyPreset(p *model.Project, id string) error {
 		cur := p.Cover.Spec
 		spec.W, spec.H = cur.W, cur.H
 		if was, ok := model.CoverPresetFor(cur.Preset, p.Settings); ok && (was.Spec.W > 0 || was.Spec.H > 0) &&
-			was.Spec.W == cur.W && was.Spec.H == cur.H {
+			model.SameMm(was.Spec.W, cur.W) && model.SameMm(was.Spec.H, cur.H) {
 			spec.W, spec.H = 0, 0
 		}
 	}
@@ -88,8 +88,25 @@ func SetSpec(p *model.Project, s model.CoverSpec) error {
 	return nil
 }
 
+// SetPx — «Файл обложки, px» (123 §1.3): сторонка, при которой лист обложки выходит ровно w × h px
+// при 300 dpi, с текущим заворотом, расставом и корешком (на текущем числе разворотов). Дальше —
+// как SetSpec: изделие остаётся, если сторонка в допуске шаблона, иначе «Свои размеры».
+// Отказ подбора (вне 50…1000 мм) — ошибка с текстом для уведомления.
+func SetPx(p *model.Project, w, h int) error {
+	if p.Cover == nil {
+		return ErrNone
+	}
+	spec := p.Cover.Spec
+	sw, sh, err := model.SideFromPx(w, h, model.PrintDPI, spec, p.CoverGeo().Spine)
+	if err != nil {
+		return err
+	}
+	spec.W, spec.H = sw, sh
+	return SetSpec(p, spec)
+}
+
 // samePreset — числа s — ровно пресет s.Preset для страницы альбома (CoverPresetFor). Сторонка
-// в счёт, только если её задаёт шаблон (Фотосфера): сравнивается действующая, 0 — страница.
+// в счёт, только если её задаёт шаблон (Фотосфера): сравнивается действующая, 0 — страница, в допуске PageTol.
 // Безопасные линии — нет: это направляющие пресета.
 func samePreset(p *model.Project, s model.CoverSpec) bool {
 	pr, ok := model.CoverPresetFor(s.Preset, p.Settings)
@@ -105,7 +122,7 @@ func samePreset(p *model.Project, s model.CoverSpec) bool {
 			}
 			return v
 		}
-		if side(s.W, page.W) != side(d.W, page.W) || side(s.H, page.H) != side(d.H, page.H) {
+		if !model.SameMm(side(s.W, page.W), side(d.W, page.W)) || !model.SameMm(side(s.H, page.H), side(d.H, page.H)) {
 			return false
 		}
 	}
@@ -130,9 +147,26 @@ func FollowFormat(p *model.Project, old model.Settings) {
 	c.Spec = now.Spec
 }
 
-// sameSpec — те же числа обложки (id и безопасные линии не в счёт: это направляющие).
+// ApplyPrint — кнопка формата типографии вместе с её изделием (123 Б1): обложка по шаблону прежнего
+// формата сначала переходит на шаблон нового (FollowFormat; old — настройки до смены страницы),
+// затем берёт числа изделия preset (ApplyPreset). Зовёт Editor.ApplyPrint тем же шагом отмены,
+// что и смену страницы. Неизвестное изделие — ErrPreset (обёртка откатывает правку); обложки нет —
+// меняется только формат, изделие лишь проверяется.
+func ApplyPrint(p *model.Project, old model.Settings, preset string) error {
+	if _, ok := model.CoverPresetFor(preset, p.Settings); !ok {
+		return ErrPreset
+	}
+	FollowFormat(p, old)
+	if p.Cover == nil {
+		return nil
+	}
+	return ApplyPreset(p, preset)
+}
+
+// sameSpec — те же числа обложки; сторонка — в допуске PageTol (id и безопасные линии не в счёт:
+// это направляющие).
 func sameSpec(a, b model.CoverSpec) bool {
-	return a.W == b.W && a.H == b.H && a.Wrap == b.Wrap && a.Hinge == b.Hinge && a.A == b.A && a.B == b.B &&
+	return model.SameMm(a.W, b.W) && model.SameMm(a.H, b.H) && a.Wrap == b.Wrap && a.Hinge == b.Hinge && a.A == b.A && a.B == b.B &&
 		slices.Equal(a.Steps, b.Steps)
 }
 

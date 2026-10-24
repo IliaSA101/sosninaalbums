@@ -58,6 +58,11 @@
     await bgmode.setAngle(t, backdropTilt.keep(key, b.frame, store.view.rev).id)
     backdropTilt.settle(store.view.rev)
   }
+  // ⊗: свой шаг; сессия после него закрыта, чтобы следующая протяжка не слилась со сбросом.
+  async function tiltReset() {
+    await tiltCommit(0)
+    backdropTilt.end()
+  }
   // Другая область или уход панели закрывают сессию.
   $effect(() => {
     void key
@@ -81,6 +86,8 @@
 {#if prefs.can('tilt')}
   <TiltRow
     tilt={b.frame.r ?? 0}
+    reset
+    onreset={tiltReset}
     onlive={tiltLive}
     oncommit={tiltCommit}
     onend={() => (bgmode.live = null)}

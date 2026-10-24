@@ -319,7 +319,7 @@ Section "main"
 
   ; .salbum за текущим пользователем (подробно — спека 112). Связь пишем, только если расширение
   ; свободно или уже наше и пользователь её не выключал (AssocOff — SetAssoc(false)): тихое
-  ; обновление не должно снимать его выбор и перетирать чужой ProgID (его assocPlan не трогает)
+  ; обновление не должно снимать его выбор и перетирать чужой ProgID (его assoc.plan в internal/app/assoc не трогает)
   ReadRegStr $R0 HKCU "Software\Classes\.salbum" ""
   ReadRegStr $R1 HKCU "${REGKEY}" "AssocOff"
   ${If} $R1 != 1

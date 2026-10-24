@@ -38,7 +38,7 @@
 {#if prefs.can('border') && placesel.selected.length > 0}<InspectorBorder />{/if}
 {#if seat && sid && prefs.can('captions')}
   <!-- По месту пересоздаётся: набранное уходит на своё место -->
-  {#key seat}<PersonFields photo="" place={seatRef} />{/key}
+  {#key seat}<PersonFields photo="" place={seatRef} row />{/key}
 {/if}
 
 <style>

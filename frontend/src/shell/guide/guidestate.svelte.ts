@@ -41,7 +41,7 @@ const RUN: Runner = {
   closeGallery: () => gallery.close(),
   closeMenus: () => {
     photoui.menu = null
-    photoui.preview = null
+    photoui.closePreview()
   },
   cover: () => store.goCover(),
   go: (s) => store.go(s.index),
@@ -122,6 +122,7 @@ class Guide {
       selText: edit.sel?.kind === 'text' && edit.sel.spread === sp?.id,
       selAny: placesel.refs.length > 0 || placesel.texts.length > 0 || placesel.stickers.length > 0 || !!edit.sel,
       libPhotos: store.visible.length,
+      libAll: store.photos.length,
       libSel: store.selectedIds.length > 0,
       cardBody: !!sp,
       big: modes.big,

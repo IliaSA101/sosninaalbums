@@ -229,8 +229,8 @@
       },
       {
         "id": "toggleBig",
-        "label": "Крупный просмотр",
-        "short": "Крупно",
+        "label": "Во весь экран",
+        "short": "Весь экран",
         "group": "view",
         "scope": "app",
         "feature": "timeline",
@@ -239,6 +239,20 @@
         ],
         "keys": [
           "KeyF"
+        ],
+        "custom": false
+      },
+      {
+        "id": "photoPreview",
+        "label": "Крупный просмотр фото",
+        "short": "Крупно",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "KeyZ"
+        ],
+        "keys": [
+          "KeyZ"
         ],
         "custom": false
       },
@@ -638,6 +652,20 @@
         ],
         "keys": [
           "Mod+KeyA"
+        ],
+        "custom": false
+      },
+      {
+        "id": "findPhotos",
+        "label": "Найти фото по имени",
+        "short": "Найти",
+        "group": "photos",
+        "scope": "app",
+        "defaults": [
+          "Mod+KeyF"
+        ],
+        "keys": [
+          "Mod+KeyF"
         ],
         "custom": false
       },

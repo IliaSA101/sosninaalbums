@@ -62,8 +62,12 @@ func TestFabrikaFormats(t *testing.T) {
 	if _, ok := FormatOf(CoverGroupFabrika, Settings{PageW: 300, PageH: 305, Sheet: true}); ok {
 		t.Error("лист 031 принят за фотокнигу")
 	}
-	if _, ok := FormatOf(CoverGroupFabrika, Settings{PageW: 300.01, PageH: 305}); ok {
-		t.Error("300,01 × 305 принят за 30×30")
+	// Допуск PageTol (123): 0,01 мм — тот же формат, 0,3 мм (> допуска) — уже нет.
+	if _, ok := FormatOf(CoverGroupFabrika, Settings{PageW: 300.01, PageH: 305}); !ok {
+		t.Error("300,01 × 305 не принят за 30×30")
+	}
+	if _, ok := FormatOf(CoverGroupFabrika, Settings{PageW: 300.3, PageH: 305}); ok {
+		t.Error("300,3 × 305 принят за 30×30")
 	}
 	if _, ok := FormatOf(CoverGroupNetprint, Settings{PageW: 300, PageH: 305}); ok {
 		t.Error("у Нетпринта шаблона по формату нет")
@@ -168,7 +172,7 @@ func TestCoverFixTextFabrika(t *testing.T) {
 		want string
 	}{
 		{good.Spec, ""},
-		{wide, "Не по шаблону Фабрики Фотокниги 30×30: 660 × 330 мм, нужно 662 × 330"},
+		{wide, "Не по шаблону Фабрики Фотокниги 30×30: 660 × 330 мм, нужно 662 × 330 (файл 7795 × 3898 px, нужен 7819 × 3898)"},
 		{wrap, "Не по шаблону Фабрики Фотокниги 30×30: заворот 14 мм, нужно 12"},
 		{tab, "Не по шаблону Фабрики Фотокниги 30×30: корешок или расстав не по таблице"},
 	} {
@@ -188,7 +192,7 @@ func TestCoverFixTextFabrika(t *testing.T) {
 	pr, _ := CoverPresetFor("fabrika-photo", Settings{PageW: 300, PageH: 305})
 	spec := pr.Spec
 	spec.W = 310
-	if got := CoverFixText(fsferaProject(300, 300, 20, spec)); got != "Не по шаблону Фабрики Фотокниги 30×30: 658 × 330 мм, нужно 662 × 330" {
+	if got := CoverFixText(fsferaProject(300, 300, 20, spec)); got != "Не по шаблону Фабрики Фотокниги 30×30: 658 × 330 мм, нужно 662 × 330 (файл 7772 × 3898 px, нужен 7819 × 3898)" {
 		t.Errorf("вне таблицы: %q", got)
 	}
 }

@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def go_cases():
-    src = (ROOT / "internal/app/newer_test.go").read_text(encoding="utf-8")
+    src = (ROOT / "internal/app/assoc/version_test.go").read_text(encoding="utf-8")
     body = src.split("func TestShownVers", 1)[1].split("for _, c := range cases", 1)[0]
     return re.findall(r'\{"([^"]*)", "([^"]*)", "([^"]*)", "([^"]*)"\}', body)
 

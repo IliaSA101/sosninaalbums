@@ -11,7 +11,7 @@ import (
 // Связь .salbum с программой (спека 112, design §2). Ключи — те же, что пишет установщик 111
 // (scripts/win/installer.nsi): ProgID и раздел установки общие, поэтому zip-копия и установленная
 // не воюют за расширение. Только HKCU\Software\Classes; в HKLM не пишем и не читаем. Решений
-// (кому принадлежит связь, когда писать) здесь нет — они в internal/app (assocPlan), osx лишь
+// (кому принадлежит связь, когда писать) здесь нет — они в internal/app/assoc (assoc.plan), osx лишь
 // читает и пишет реестр и версий не сравнивает.
 
 const (
@@ -142,7 +142,7 @@ func (r Reg) progKey() string { return r.classes + `\` + AssocProgID }
 
 // Write пишет ProgID целиком, и лишь потом расширение на него: расширение никогда не ведёт
 // на ProgID без команды открытия. Прежнее значение расширения (чужой ProgID) перезаписывается —
-// решает вызывающий (assocPlan).
+// решает вызывающий (assoc.plan).
 func (r Reg) Write(exe, version string) error {
 	if r.be == nil {
 		return nil

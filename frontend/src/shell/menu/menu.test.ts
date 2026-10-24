@@ -32,11 +32,16 @@ const ctx = (o: Partial<MenuCtx> = {}): MenuCtx => ({ ...base, ...o })
 
 const flat = (items: MenuItem[]): MenuItem[] => items.flatMap((i) => [i, ...(i.sub ? flat(i.sub) : [])])
 const find = (menus: Menu[], id: string): MenuItem | undefined => menus.flatMap((m) => flat(m.items)).find((i) => i.id === id)
-const ids = (menus: Menu[], menu: string) => flat(menus.find((m) => m.id === menu)!.items).map((i) => i.id)
+// Меню нет — ошибка: иначе проверка «пункта нет в меню» прошла бы и для чужого, и для несуществующего (0.26-124-20).
+const ids = (menus: Menu[], menu: string) => {
+  const m = menus.find((x) => x.id === menu)
+  if (!m) throw new Error(`меню «${menu}» нет в строке`)
+  return flat(m.items).map((i) => i.id)
+}
 
 describe('buildMenu', () => {
-  it('четыре меню по порядку', () => {
-    expect(buildMenu(ctx()).map((m) => m.label)).toEqual(['Файл', 'Правка', 'Вид', 'Справка'])
+  it('пять меню по порядку', () => {
+    expect(buildMenu(ctx()).map((m) => m.label)).toEqual(['Файл', 'Правка', 'Разворот', 'Вид', 'Справка'])
   })
 
   it('состав «Файл» и клавиши берутся из реестра', () => {
@@ -152,6 +157,13 @@ describe('buildMenu', () => {
     expect(flip?.sub?.map((i) => i.cmd)).toEqual(['flipH', 'flipV'])
   })
 
+  it('режим F в «Виде» называется «Во весь экран», не «Крупный просмотр» (128-11, Т7)', () => {
+    const m = buildMenu(ctx())
+    expect(find(m, 'big')?.label).toBe('Во весь экран')
+    expect(find(m, 'big')?.cmd).toBe('toggleBig')
+    expect(JSON.stringify(m)).not.toContain('Крупный просмотр')
+  })
+
   it('переключатели вида показывают состояние', () => {
     const m = buildMenu(ctx({ big: true, safe: true, details: false, snap: false }))
     expect(find(m, 'big')?.checked).toBe(true)
@@ -213,7 +225,7 @@ describe('уровень: точка расширения can()', () => {
     expect(edit.items.map((i) => i.id)).toEqual(['undo', 'redo', 'clearSelection', 'removeCell'])
     expect(edit.items.filter((i) => i.sep)).toHaveLength(1)
     const view = m.find((x) => x.id === 'view')!
-    // Группы «Уровень», «Крупный просмотр…» и «Вписать» — две черты.
+    // Группы «Уровень», «Во весь экран…» и «Вписать» — две черты.
     expect(view.items.filter((i) => i.sep)).toHaveLength(2)
   })
 })
@@ -238,70 +250,6 @@ describe('уровень в меню (спека 010 U1)', () => {
       cmd: 'newSheet',
       hint: 'Отдельный плакат класса 20×30 или 30×40 — без альбома',
     })
-  })
-  it('«Правка ▸ Сделать разворот виньеткой» — со «Стандартного», серое без обычного разворота (отзыв 14.10)', () => {
-    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('makeVignette')
-    const std = buildMenu({ ...at('standard'), vigable: true })
-    expect(find(std, 'makeVignette')).toMatchObject({ label: 'Сделать разворот виньеткой', cmd: 'makeVignette' })
-    expect(find(std, 'makeVignette')?.disabled).toBeUndefined()
-    expect(find(buildMenu(at('standard')), 'makeVignette')?.disabled).toBe(true)
-    expect(find(buildMenu({ ...at('full'), vigable: false }), 'makeVignette')?.disabled).toBe(true)
-  })
-  it('Правка ▸ Название разворота…: F2, серое без разворотов и на обложке', () => {
-    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('renameSpread') // «Названия» — со «Стандартного»
-    const std = buildMenu({ ...at('standard'), decorable: true })
-    expect(find(std, 'renameSpread')).toMatchObject({ label: 'Название разворота…', cmd: 'renameSpread', keys: 'F2' })
-    expect(find(std, 'renameSpread')?.disabled).toBeUndefined()
-    // Перед «Сделать разворот виньеткой»: рядом с прочими пунктами разворота.
-    const edit = ids(std, 'edit')
-    expect(edit.indexOf('renameSpread')).toBe(edit.indexOf('makeVignette') - 1)
-    // decorable не задан — обложка или нет листа.
-    expect(find(buildMenu(at('standard')), 'renameSpread')?.disabled).toBe(true)
-    expect(find(buildMenu({ ...at('full'), decorable: false, spreads: 0, hasSpread: false }), 'renameSpread')?.disabled).toBe(true)
-  })
-  it('«Правка ▸ Разнообразить раскладки» (041) — с уровня «Простой», серое, когда менять нечего', () => {
-    expect(find(buildMenu(at('simple')), 'varyLayouts')).toMatchObject({ label: 'Разнообразить раскладки', cmd: 'varyLayouts' })
-    expect(find(buildMenu(at('full')), 'varyLayouts')?.disabled).toBeUndefined()
-    expect(find(buildMenu({ ...at('full'), varyable: false }), 'varyLayouts')?.disabled).toBe(true)
-    expect(ids(buildMenu(at('full')), 'edit')).toContain('varyLayouts')
-  })
-  it('«Правка ▸ Настроить виньетку…» — со «Стандартного», серое, пока лист не виньетка', () => {
-    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('vigSetup')
-    const on = buildMenu({ ...at('standard'), vigSetup: true })
-    expect(find(on, 'vigSetup')).toMatchObject({ label: 'Настроить виньетку…', cmd: 'vigSetup' })
-    expect(find(on, 'vigSetup')?.disabled).toBeUndefined()
-    expect(find(buildMenu(at('standard')), 'vigSetup')?.disabled).toBe(true)
-  })
-  it('«Правка ▸ Галерея фонов…» (048) — после «Добавить стикер…», со «Стандартного», серое без листа', () => {
-    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('bgGallery')
-    const std = buildMenu(at('standard'))
-    expect(find(std, 'bgGallery')).toMatchObject({ label: 'Галерея фонов…', cmd: 'bgGallery' })
-    expect(find(std, 'bgGallery')?.disabled).toBeUndefined()
-    const edit = ids(std, 'edit')
-    expect(edit.indexOf('bgGallery')).toBe(edit.indexOf('addSticker') + 1)
-    expect(find(buildMenu({ ...at('full'), hasSpread: false }), 'bgGallery')?.disabled).toBe(true)
-  })
-  it('«Правка ▸ Рамочки…» (079) — сразу после «Галереи фонов…», со «Стандартного», серое без листа, клавиши по умолчанию нет', () => {
-    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('borderGallery')
-    const std = buildMenu(at('standard'))
-    expect(find(std, 'borderGallery')).toMatchObject({ label: 'Рамочки…', cmd: 'borderGallery' })
-    expect(find(std, 'borderGallery')?.disabled).toBeUndefined()
-    expect(find(std, 'borderGallery')?.keys).toBeFalsy()
-    const edit = ids(std, 'edit')
-    expect(edit.indexOf('borderGallery')).toBe(edit.indexOf('bgGallery') + 1)
-    expect(find(buildMenu({ ...at('full'), hasSpread: false }), 'borderGallery')?.disabled).toBe(true)
-    // «Свой» без функции «Фоны, стикеры и рамочки»: пункта нет
-    expect(ids(buildMenu({ ...at('full'), can: (f) => f !== 'border' }), 'edit')).not.toContain('borderGallery')
-  })
-  it('«Правка ▸ Копировать оформление…» (049 Ф2) — после «Галереи фонов…», со «Стандартного», серое на обложке и без листа', () => {
-    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('copyDecor')
-    const std = buildMenu({ ...at('standard'), decorable: true })
-    expect(find(std, 'copyDecor')).toMatchObject({ label: 'Копировать оформление…', cmd: 'copyDecor' })
-    expect(find(std, 'copyDecor')?.disabled).toBeUndefined()
-    const edit = ids(std, 'edit')
-    expect(edit.indexOf('copyDecor')).toBe(edit.indexOf('borderGallery') + 1)
-    expect(find(buildMenu(at('standard')), 'copyDecor')?.disabled).toBe(true) // обложка / нет листа: decorable не задан
-    expect(find(buildMenu({ ...at('full'), decorable: false }), 'copyDecor')?.disabled).toBe(true)
   })
   it('«Файл ▸ Наборы библиотеки…» (067 Ф2) — сразу после «Резервных копий…», со «Стандартного»', () => {
     expect(ids(buildMenu(at('simple')), 'file')).not.toContain('packs')
@@ -343,25 +291,6 @@ describe('уровень в меню (спека 010 U1)', () => {
     const simple = ids(buildMenu(at('simple')), 'file')
     expect(simple.indexOf('showData')).toBe(simple.indexOf('backups') + 1) // нет ни наборов, ни шаблонов
   })
-  it('«Правка ▸ Готовые развороты…» (067) — сразу после «Копировать оформление…», со «Стандартного», серое на обложке и без листа', () => {
-    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('spreadTpl')
-    const std = buildMenu({ ...at('standard'), decorable: true })
-    expect(find(std, 'spreadTpl')).toMatchObject({ label: 'Готовые развороты…', cmd: 'spreadTpl' })
-    expect(find(std, 'spreadTpl')?.disabled).toBeUndefined()
-    const edit = ids(std, 'edit')
-    expect(edit.indexOf('spreadTpl')).toBe(edit.indexOf('copyDecor') + 1)
-    expect(find(buildMenu(at('standard')), 'spreadTpl')?.disabled).toBe(true) // обложка / нет листа: decorable не задан
-    expect(find(buildMenu({ ...at('full'), decorable: false }), 'spreadTpl')?.disabled).toBe(true)
-  })
-  it('«Правка ▸ Добавить стикер…» (048 Ф2) — сразу после «Добавить текст», со «Стандартного», серое без листа', () => {
-    expect(ids(buildMenu(at('simple')), 'edit')).not.toContain('addSticker')
-    const std = buildMenu(at('standard'))
-    expect(find(std, 'addSticker')).toMatchObject({ label: 'Добавить стикер…', cmd: 'addSticker' })
-    expect(find(std, 'addSticker')?.disabled).toBeUndefined()
-    const edit = ids(std, 'edit')
-    expect(edit.indexOf('addSticker')).toBe(edit.indexOf('addText') + 1)
-    expect(find(buildMenu({ ...at('full'), hasSpread: false }), 'addSticker')?.disabled).toBe(true)
-  })
   it('«Правка ▸ Зеркало» (048): включено при выделенном стикере и без фото', () => {
     const base = { ...at('full'), flippable: false }
     expect(find(buildMenu(base), 'flip')?.disabled).toBe(true)
@@ -397,11 +326,17 @@ describe('уровень в меню (спека 010 U1)', () => {
   it('линеек нет в «Простом» и «Стандартном»', () => {
     for (const l of ['simple', 'standard'] as const) expect(viewIds(l), l).not.toContain('rulers')
   })
-  it('«Правка»: «Простой» без текста, зеркала и выделения всего на холсте; «Стандартный» с ними', () => {
+  it('«Правка»: «Простой» без зеркала и выделения всего на холсте; «Стандартный» с ними', () => {
     const simple = ids(buildMenu(at('simple')), 'edit')
-    for (const id of ['addText', 'flip', 'selectAll']) expect(simple, id).not.toContain(id)
+    for (const id of ['flip', 'selectAll']) expect(simple, id).not.toContain(id)
     const std = ids(buildMenu(at('standard')), 'edit')
-    for (const id of ['addText', 'flip', 'selectAll']) expect(std, id).toContain(id)
+    for (const id of ['flip', 'selectAll']) expect(std, id).toContain(id)
+  })
+  it('«Разворот»: «Простой» без текста, стикера и виньетки; «Стандартный» с ними', () => {
+    const simple = ids(buildMenu(at('simple')), 'spread')
+    for (const id of ['addText', 'addSticker', 'makeVignette']) expect(simple, id).not.toContain(id)
+    const std = ids(buildMenu(at('standard')), 'spread')
+    for (const id of ['addText', 'addSticker', 'makeVignette']) expect(std, id).toContain(id)
   })
   it('«Выделить всё» в ленте есть и в «Простом»', () => {
     expect(find(buildMenu(ctx({ ...at('simple'), zone: 'library' })), 'selectAll')?.cmd).toBe('selectAll')
@@ -420,7 +355,7 @@ describe('«Свой» в меню (спека 011 U2)', () => {
     const sub = find(buildMenu(at(simpleOff)), 'level')!.sub!
     expect(sub.map((i) => i.checked)).toEqual([false, false, false, true])
   })
-  it('без «Разреза и склейки» нет «Крупного просмотра», на «Простом» он есть', () => {
+  it('без «Разреза и склейки» нет «Во весь экран», на «Простом» он есть', () => {
     expect(find(buildMenu(at(simpleOff)), 'big')).toBeUndefined()
     expect(find(buildMenu(ctx({ level: 'simple', can: (f) => can(f, 'simple') })), 'big')).toBeDefined()
   })

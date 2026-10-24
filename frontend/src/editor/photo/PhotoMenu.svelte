@@ -119,7 +119,7 @@
   // Действие пункта; first — первое выделенное фото (у части пунктов оно не нужно), at — точка щелчка, arg — параметр
   // пункта подменю («Слой»: операция, «На фон»: область).
   const ACTIONS: Partial<Record<ActId, (first: string, at?: Pt, arg?: string) => void>> = {
-    preview: (first) => (photoui.preview = first),
+    preview: (first) => photoui.openCanvas(first),
     copy: () => void copyNames(photos(), gone),
     clipCopy: () => clip.copy(),
     clipPaste: (_first, at) => clip.paste(at),

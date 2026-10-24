@@ -3,16 +3,16 @@ import { coverGuideUrl, spreadGuideUrl, previewUrl, thumbUrl, warmable, wantPrev
 
 describe('media', () => {
   it('обычный id', () => {
-    expect(thumbUrl('ab12')).toBe('/media/t/ab12?v=4')
-    expect(previewUrl('ab12')).toBe('/media/p/ab12?v=4')
+    expect(thumbUrl('ab12')).toBe('/media/t/ab12?v=5')
+    expect(previewUrl('ab12')).toBe('/media/p/ab12?v=5')
   })
   it('повторная загрузка миниатюры (088): метка r сбивает кэш, 0 — адрес прежний', () => {
-    expect(thumbUrl('ab12', 0)).toBe('/media/t/ab12?v=4')
-    expect(thumbUrl('ab12', 2)).toBe('/media/t/ab12?v=4&r=2')
+    expect(thumbUrl('ab12', 0)).toBe('/media/t/ab12?v=5')
+    expect(thumbUrl('ab12', 2)).toBe('/media/t/ab12?v=5&r=2')
   })
   it('id экранируется: ни путь, ни запрос не подменяются', () => {
-    expect(thumbUrl('a/../b?x')).toBe('/media/t/a%2F..%2Fb%3Fx?v=4')
-    expect(previewUrl('a b#c')).toBe('/media/p/a%20b%23c?v=4')
+    expect(thumbUrl('a/../b?x')).toBe('/media/t/a%2F..%2Fb%3Fx?v=5')
+    expect(previewUrl('a b#c')).toBe('/media/p/a%20b%23c?v=5')
   })
 })
 

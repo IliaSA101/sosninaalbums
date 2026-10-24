@@ -138,6 +138,9 @@ function node(id: ActId, hint: HintFn, extra: Partial<MenuNode> = {}): MenuNode 
   return { id, label: ACTS[id].label, ...(icon ? { icon } : {}), ...(key ? { hint: key } : {}), ...extra }
 }
 
+// «Крупный просмотр» для меню ленты (128): тот же пункт и клавиша справа, что у меню фото на холсте.
+export const previewItem = (hint: HintFn): MenuNode => node('preview', hint)
+
 // Пункт отмечен как состояние (✓ или •).
 const check = (on: boolean): Partial<MenuNode> => ({ mark: 'check', checked: on })
 const radio = (on: boolean): Partial<MenuNode> => ({ mark: 'radio', checked: on })

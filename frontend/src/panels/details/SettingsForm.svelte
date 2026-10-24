@@ -1,22 +1,30 @@
 <script lang="ts" module>
-  // Пресеты страницы статичны: Go отдаёт их списком, читаем один раз за запуск (как coverAct.loadPresets).
+  // Пресеты страницы Go отдаёт списком: читаем один раз за запуск и заново после print:changed (123 Б3; как coverAct.loadPresets).
   let loaded: PagePreset[] | null = null
+  let loadedRev = 0
+  // Номер последнего запроса: два print:changed подряд дают два PagePresets, поздний ответ первого затёр бы свежий.
+  let loadSeq = 0
 </script>
 
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
+  import { untrack } from 'svelte'
   import { Api, store } from '../../base/core/store.svelte'
-  import type { PagePreset, Settings } from '../../base/core/types'
+  import type { PagePreset, PagePxView, Settings } from '../../base/core/types'
   import Seg from '../../base/tpl/Seg.svelte'
   import ColorPicker from '../../base/color/ColorPicker.svelte'
   import { colorLive } from '../../base/color/colorlive.svelte'
-  import { SHEET_PRESETS, isSheet, newSheetSize, unitOf } from '../../base/geom/sheet'
+  import { SHEET_PRESETS, cmText, isSheet, newSheetSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
   import AlbumBgRow from './AlbumBgRow.svelte'
+  import PagePxRow from './PagePxRow.svelte'
+  import { PxAsker } from './pagepx'
   import MarkupBlock from '../markup/MarkupBlock.svelte'
   import { CROP_ITEMS, cropChangeNote, cropNote, cropOf } from './crop'
   import { FOLD_ITEMS, foldChangeNote, foldFields, foldNote, foldOf } from './fold'
-  import { groupLabel, presetActive, presetFields, presetGroupOf, presetHint, presetRows, exportPx, type Preset } from './presets'
+  import { printEdit } from '../../shell/printprof/printedit.svelte'
+  import { printList } from '../../shell/printprof/printlist.svelte'
+  import { NEW_ITEM, NEW_VALUE } from '../../shell/printprof/printwords'
+  import { groupLabel, presetActive, presetFields, presetGroupOf, presetHint, presetRows, exportPx, FILE_DPI, type Preset } from './presets'
   import { NUMS, norm, same } from './settingsnorm'
   import { marginNoteAsker } from './marginnote'
   import AlbumOwnAsk from '../albumbg/AlbumOwnAsk.svelte'
@@ -47,7 +55,11 @@
     const cur = store.view.settings
     untrack(() => {
       if (same(cur, base)) return
-      if (!edited) s = { ...cur }
+      // Список «Типография» следует за альбомом: ручной выбор до применения (picked) к чужой смене настроек не относится.
+      if (!edited) {
+        s = { ...cur }
+        picked = null
+      }
       base = { ...cur }
     })
   })
@@ -57,6 +69,7 @@
   let own = $state<{ ask: OwnAsk; n: Settings; count: number } | null>(null)
   const colorKey = (c: string | undefined) => (c || '#ffffff').toLowerCase()
   async function apply() {
+    await pxAsk.settled() // ввод px ещё у Go — страница в форме должна успеть обновиться
     const n = norm(s)
     const nums = ownColorNums(store.view)
     if (nums.length > 0 && colorKey(n.bg) !== colorKey(store.view.settings.bg)) {
@@ -75,6 +88,12 @@
     base = { ...store.view.settings }
   }
 
+  // Файл разворота в px (123): страницу по введённым px считает Go, форма только принимает её.
+  const pxAsk = new PxAsker()
+  function fillPage(r: PagePxView) {
+    s = { ...s, pageW: r.pageW, pageH: r.pageH }
+  }
+
   // Пресет только заполняет форму; применяет «Применить» — один шаг undo.
   function pick(p: Preset) {
     s = { ...s, ...presetFields(p) }
@@ -86,18 +105,35 @@
   const allRows = $derived(presetRows(presets))
   // Список «Типография» (058): выбранное вручную главнее; иначе группа подсвеченного пресета или последняя выбранная.
   let picked = $state<string | null>(null)
-  const group = $derived(picked ?? presetGroupOf(presets, s, modes.presetGroup))
+  // Выбранной вручную типографии могло не стать (удалена своя): тогда по пресету.
+  const group = $derived(picked !== null && allRows.some((r) => r.group === picked) ? picked : presetGroupOf(presets, s, modes.presetGroup))
   const rows = $derived(sheet ? [{ group: '', items: [...SHEET_PRESETS] }] : allRows.filter((r) => r.group === group))
-  function pickGroup(g: string) {
+  // Последний пункт списка — «Своя типография…»: окно на основе выбранной типографии; список остаётся на ней.
+  function pickGroup(g: string, el: HTMLSelectElement) {
+    if (g === NEW_VALUE) {
+      el.value = group
+      void printEdit.show(printList.byName(group)?.id ?? '')
+      return
+    }
     picked = g
     modes.setPresetGroup(g)
   }
+  // Сохранённая в окне своя типография поставлена альбому: список встаёт на неё по форме, а не по прежнему выбору.
+  $effect(() => {
+    void printList.saves
+    picked = null
+  })
 
-  // Не удалось получить — формы это не мешает: остаётся ввод руками.
-  onMount(() => {
-    if (loaded) return
+  // Не удалось получить — формы это не мешает: остаётся ввод руками. Реестр сменился (print:changed) — читаем заново.
+  $effect(() => {
+    const rev = printList.rev
+    if (loaded && loadedRev === rev) return
+    loadedRev = rev
+    const my = ++loadSeq
     Api.PagePresets()
-      .then((l) => (presets = loaded = (l ?? []) as PagePreset[]))
+      .then((l) => {
+        if (my === loadSeq) presets = loaded = (l ?? []) as PagePreset[]
+      })
       .catch(() => {})
   })
 
@@ -120,8 +156,11 @@
 {#if !sheet && allRows.length > 0}
   <div class="group" data-guide="fsfera-presets">
     <label class="cap" for="preset-group">Типография</label>
-    <select id="preset-group" value={group} onchange={(e) => pickGroup(e.currentTarget.value)}>
-      {#each allRows as r (r.group)}<option value={r.group}>{groupLabel(r.group)}</option>{/each}
+    <select id="preset-group" value={group} onchange={(e) => pickGroup(e.currentTarget.value, e.currentTarget)}>
+      {#each allRows as r (r.group)}<option value={r.group}>{r.group ? printList.label(r.group) : groupLabel(r.group)}</option>{/each}
+      <!-- черта перед «Своей типографией…» (макет 123 Б3) -->
+      <hr />
+      <option value={NEW_VALUE}>{NEW_ITEM}</option>
     </select>
   </div>
 {/if}
@@ -197,9 +236,12 @@
 {#if valid}
   {@const sh = newSheetSize({ pageW: +s.pageW, pageH: +s.pageH, sheet: s.sheet })}
   <p class="note">
-    {sh.mid > 0 ? 'Разворот = две страницы' : 'Лист'}: {sh.w / 10} × {sh.h / 10} см, при экспорте {exportPx(sh.w, +s.dpi)} ×
+    {sh.mid > 0 ? 'Разворот = две страницы' : 'Лист'}: {cmText(sh.w)} × {cmText(sh.h)} см, при экспорте {exportPx(sh.w, +s.dpi)} ×
     {exportPx(sh.h, +s.dpi)} px.
   </p>
+  {#if !sheet}
+    <PagePxRow px={exportPx(sh.w, FILE_DPI)} py={exportPx(sh.h, FILE_DPI)} asker={pxAsk} onfill={fillPage} />
+  {/if}
   {#if activeHint}<p class="note">{activeHint}</p>{/if}
   {#if marginText}<p class="note">{marginText}</p>{/if}
 {:else}

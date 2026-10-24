@@ -1,0 +1,122 @@
+// Состояние лупы окна крупного просмотра (128): жесты мыши и колесо поверх чистых функций loupe.ts.
+// Живёт столько же, сколько окно: экземпляр создаёт PhotoPreview.svelte, на закрытии reset().
+import { primaryPress } from '../../base/core/platform'
+import { isZoomWheel, wheelFactor } from '../zoom/zoom'
+import { carry, fitScale, FIT, isClick, MAX_SCALE, pan, place, toggle, zoomAt, zoomLabel, type Loupe, type Pt, type Size } from './loupe'
+
+const NONE: Size = { w: 0, h: 0 }
+
+// Что известно окну о показанном кадре: size — размер загруженной картинки с учётом четверти поворота (0 — не загружена),
+// guess — размер по данным фото (до загрузки, только для рамки), off — картинки нет (заглушка «нет файла»).
+export interface Src {
+  size: Size
+  guess: Size
+  off: boolean
+}
+
+export class PreviewLoupe {
+  l = $state<Loupe>(FIT)
+  box = $state<Size>({ w: 0, h: 0 }) // окно под кадром, px (bind:clientWidth/Height)
+  stage = $state<HTMLElement>()
+  panning = $state(false)
+  private last: Size = NONE // размер прошлого загруженного кадра: для переноса при листании
+  private mouse: Pt | null = null // последняя точка курсора в окне; нет — зум в центре
+  private press: { x: number; y: number; start: Loupe; moved: boolean } | null = null
+
+  constructor(private src: () => Src) {}
+
+  // Размер для расчёта: загруженный; пока грузится соседний кадр — прошлый (картинка на экране прежняя); до первой — по фото.
+  private dim(): Size {
+    const { size, guess } = this.src()
+    return size.w > 0 && size.h > 0 ? size : this.last.w > 0 ? this.last : guess
+  }
+  // Размер настоящий и картинка есть: до этого щелчок и зум ничего не делают.
+  private ready(): boolean {
+    const { size, off } = this.src()
+    return !off && size.w > 0 && size.h > 0
+  }
+
+  get at(): { left: number; top: number; w: number; h: number } {
+    return place(this.l, this.dim(), this.box)
+  }
+  get zoomed(): boolean {
+    const f = fitScale(this.dim(), this.box)
+    return f > 0 && this.l.s > f + 1e-6
+  }
+  // Есть куда увеличивать (кадр, который и так не меньше 1:1, остаётся вписанным).
+  get canZoom(): boolean {
+    const f = fitScale(this.dim(), this.box)
+    return f > 0 && f < MAX_SCALE
+  }
+  get label(): string {
+    return this.ready() ? zoomLabel(this.l, this.dim(), this.box) : ''
+  }
+
+  reset() {
+    this.l = FIT
+    this.last = NONE
+    this.mouse = null
+    this.press = null
+    this.panning = false
+  }
+
+  // Картинка загрузилась: при листании зум и точка остаются, если пропорции те же.
+  loaded(next: Size) {
+    this.l = carry(this.l, this.last, next)
+    this.last = next
+  }
+
+  fit() {
+    this.l = FIT
+  }
+  toggleAt(at?: Pt | null) {
+    if (this.ready()) this.l = toggle(this.l, this.dim(), this.box, at ?? this.mouse, MAX_SCALE)
+  }
+  zoomBy(k: number, at?: Pt | null) {
+    if (this.ready()) this.l = zoomAt(this.l, k, this.dim(), this.box, at ?? this.mouse, MAX_SCALE)
+  }
+
+  private pt(e: { clientX: number; clientY: number }): Pt {
+    const r = this.stage?.getBoundingClientRect()
+    return { x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) }
+  }
+
+  // Нажатие на кадр: щелчок или перетаскивание решается при отпускании. true — жест начат.
+  down(e: PointerEvent): boolean {
+    if (!primaryPress(e) || !this.ready()) return false
+    this.mouse = this.pt(e)
+    this.press = { x: e.clientX, y: e.clientY, start: this.l, moved: false }
+    this.stage?.setPointerCapture?.(e.pointerId)
+    return true
+  }
+  move(e: PointerEvent) {
+    this.mouse = this.pt(e)
+    const p = this.press
+    if (!p) return
+    const dx = e.clientX - p.x
+    const dy = e.clientY - p.y
+    if (!p.moved && isClick(dx, dy)) return
+    p.moved = true
+    if (p.start.s <= 0) return // вписанный кадр не двигается
+    this.panning = true
+    this.l = pan(p.start, dx, dy, this.dim(), this.box)
+  }
+  up(e: PointerEvent) {
+    const p = this.press
+    if (!p) return
+    this.press = null
+    this.panning = false
+    if (!p.moved) this.toggleAt(this.pt(e))
+  }
+  cancel() {
+    this.press = null
+    this.panning = false
+  }
+
+  // Ctrl+колесо и щипок — зум у курсора; без Ctrl ничего (тачпад иначе проскакивал бы кадры).
+  wheel(e: WheelEvent) {
+    e.preventDefault()
+    if (!isZoomWheel(e)) return
+    this.zoomBy(wheelFactor(e.deltaY, e.deltaMode), this.pt(e))
+  }
+}

@@ -43,6 +43,7 @@ const (
 	webpMagic = "WEBP"
 	// Флаги в первом байте данных чанка VP8X.
 	vp8xAnimation = 0x02
+	vp8xICC       = 0x20
 	vp8xAlpha     = 0x10
 )
 

@@ -1,6 +1,6 @@
 import type { app, model } from '../../../wailsjs/go/models'
 import type { View } from './app'
-import type { Box } from './sheet'
+import type { Box, Rect } from './sheet'
 
 // Варианты для галереи раскладок (Api.LayoutChoices). Rects — весь разворот в порядке photos.
 // Семейство раскладки (041, 051): подпись для фильтра подборки; Go шлёт строкой, пусто — без семейства.
@@ -99,4 +99,16 @@ export interface GridChoices {
   n: number
   builtin: GridChoice[] // «Из раскладок»
   mine: GridChoice[] // «Мои шаблоны»
+}
+
+// Ряды галереи сторонки обложки (127, App.CoverGridChoices). boxes всех рядов — доли box (безопасной зоны, мм листа).
+export interface CoverGridChoices {
+  scope: 'left' | 'right'
+  n: number // вкладка 1..7
+  box: Rect // пустая — сторонки нет
+  places: number // мест на сторонке
+  photos: number // фото на сторонке
+  byPhoto: GridChoice[] // [] — ряда нет
+  builtin: GridChoice[]
+  mine: GridChoice[]
 }

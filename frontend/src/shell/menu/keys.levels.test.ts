@@ -75,7 +75,7 @@ describe('клавиши «Своего» (спека 011 U2)', () => {
   const ctxOf = (c: Custom, o: Partial<KeyContext> = {}): KeyContext => ctx({ can: (f: FeatureId) => custom(c).has(f), ...o })
   const full: Custom = { base: 'full', on: [], off: [] }
 
-  it('F (крупный просмотр) молчит без «Разреза и склейки», I и G остаются', () => {
+  it('F («Во весь экран») молчит без «Разреза и склейки», I и G остаются', () => {
     const c: Custom = { base: 'simple', on: [], off: ['timeline'] }
     expect(cmd(ev('f'), ctxOf(c))).toBeNull()
     expect(cmd(ev('f'), ctxOf({ base: 'simple', on: [], off: [] }))).toBe('toggleBig')
@@ -137,7 +137,7 @@ describe('keyCommand: отметки (спека 004 U2)', () => {
     expect(act('u')).toBe('markUnflag')
     expect(act('г')).toBe('markUnflag')
   })
-  it('молчат с Ctrl/Alt/Shift, при автоповторе, на холсте, под окном, в крупном просмотре, при галерее', () => {
+  it('молчат с Ctrl/Alt/Shift, при автоповторе, на холсте, под окном, во весь экран, при галерее', () => {
     for (const k of ['4', ']', '6', 'p', 'x', 'u']) {
       expect(String(act(k, lib, { ctrlKey: true })), `Ctrl+${k}`).not.toMatch(/^mark/)
       expect(act(k, lib, { altKey: true }), `Alt+${k}`).toBeNull()

@@ -22,6 +22,7 @@ import { filterBin } from '../../panels/bins/bins'
 import { folderfilter } from '../../panels/folders/folderfilter.svelte'
 import { cachedFilterTree } from '../../panels/folders/tree'
 import { libfilter } from '../../panels/marks/libfilter.svelte'
+import { nameSearch } from '../../panels/marks/namefind.svelte'
 import { filterPhotos } from '../../panels/marks/marks'
 import { ownMarks } from '../../panels/marks/ownmarks.svelte'
 import { spreadsel } from '../../panels/timeline/spreadsel.svelte'
@@ -59,6 +60,7 @@ export function wire() {
     reloaded: () => {
       binsel.reset() // подборки у каждого альбома свои (083)
       folderfilter.reset() // список папок у каждого альбома свой: скрытые от прежнего не переносим (054)
+      nameSearch.reset() // поиск по имени — состояние окна: другой альбом начинает без него (0.26-124)
       ownMarks.invalidate()
       spineNote.reset()
     },
@@ -79,8 +81,11 @@ export function wire() {
     // Подборка (083): после папок; без неё и на «Простом» — тот же массив.
     bin: (photos) => (binsel.shown ? filterBin(photos, binsel.shown, binsel.index) : photos),
     visible: (photos) => filterPhotos(photos, ownMarks.map, libfilter),
+    named: (photos) => nameSearch.apply(photos),
     free: freePhotos,
-    pick: (moveUsed) => pickFor(store, moveUsed, libfilter.active || folderfilter.active, binsel.curName(store.view.bins ?? [])),
+    // Поиск по имени — тоже фильтр ленты: автосборка берёт найденные, итог «(фильтр ленты)» (0.26-124 §8.5)
+    pick: (moveUsed) =>
+      pickFor(store, moveUsed, libfilter.active || folderfilter.active || nameSearch.active, binsel.curName(store.view.bins ?? [])),
     pickFree: () => autoPick(store.visible, [], store.used, store.backdropUsed, ownMarks.map, true).ids,
     notRejected: (ids) => notRejected(ids, store.byId, ownMarks.map),
     selectedRefs: () => placesel.refs,

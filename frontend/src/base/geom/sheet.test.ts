@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { bdLines } from './bdbox'
 import {
   BORDER_NOTE,
+  cmText,
   SHEET_PRESETS,
   hasBorders,
   hasSeam,
@@ -64,6 +65,21 @@ describe('режим листа', () => {
   })
 })
 
+describe('cmText — размер в см для подписей', () => {
+  it('до сотых, запятая, без float-хвостов (страница 303,95 × 202,95 из px)', () => {
+    expect(cmText(303.95)).toBe('30,4')
+    expect(cmText(202.95)).toBe('20,29')
+    expect(cmText(2 * 303.95)).toBe('60,79')
+    expect(cmText(202.95 * 2)).toBe('40,59')
+  })
+  it('целые и круглые без хвостов', () => {
+    expect(cmText(300)).toBe('30')
+    expect(cmText(304)).toBe('30,4')
+    expect(cmText(215)).toBe('21,5')
+    expect(cmText(0)).toBe('0')
+  })
+})
+
 describe('линии прилипания без шва', () => {
   it('snapLines разворота — как раньше (шов и центры страниц)', () => {
     const l = snapLines({ w: 560, h: 280, mid: 280, margin: 12, rects: [] })
@@ -89,7 +105,9 @@ describe('чтения pageW', () => {
   const ALLOWED = [
     '/src/base/geom/sheet.ts',
     '/src/base/types/app.ts', // описание Settings
+    '/src/base/types/print.ts', // описание PagePxView (ответ App.PagePx: страница в мм для полей этой формы)
     '/src/base/core/nav.svelte.ts', // значения по умолчанию до первого ответа Go (emptyView)
+    '/src/shell/printprof/printwords.ts', // ячейка «= страница, мм» окна «Своя типография» (ответ App.CheckPrintProfile: страница из px формата, не настройки альбома)
     '/src/panels/details/SettingsForm.svelte', // форма правки настроек альбома
     '/src/panels/details/presets.ts', // пресеты форматов — поля той же формы
     '/src/panels/details/settingsnorm.ts', // нормализация полей той же формы (вынесена из SettingsForm, 066)

@@ -310,6 +310,8 @@ func TestRotateLog(t *testing.T) {
 func newApp(t testing.TB) *App {
 	a := NewApp()
 	close(a.ready) // startup в тестах не вызывается
+	// Без папки данных prefs пишут config.json в рабочую папку пакета (так в git попал internal/app/config.json).
+	a.cfgDir = testkit.TempDir(t)
 	testkit.BeforeRemove(t, a.closeBackground)
 	return a
 }
@@ -545,14 +547,25 @@ func TestAppMethodsDoNotShadowEdit(t *testing.T) {
 }
 
 // editHost отдаёт все поля Host: пустое поле — nil-вызов посреди правки пользователя
-// (edit.New тоже отказывается от такого Host паникой с именем поля).
+// (edit.New тоже отказывается от такого Host паникой с именем поля). Шаблон служб — testkit.HostComplete.
 func TestEditHostComplete(t *testing.T) {
-	h := reflect.ValueOf(newApp(t).editHost())
-	for i := range h.NumField() {
-		if h.Field(i).IsNil() {
-			t.Errorf("поле Host.%s не задано", h.Type().Field(i).Name)
-		}
-	}
+	testkit.HostComplete(t, newApp(t).editHost())
+}
+
+// Фасад обновления задаёт все поля Host службы updater (пустое поле — паника New; не-функция ломает
+// проверку IsNil). Шаблон служб — testkit.HostComplete.
+func TestUpdaterHostComplete(t *testing.T) {
+	testkit.HostComplete(t, newApp(t).updHost())
+}
+
+// Фасад связи .salbum задаёт все поля Host службы assoc (126 Ш2).
+func TestAssocHostComplete(t *testing.T) {
+	testkit.HostComplete(t, newApp(t).assocHost())
+}
+
+// Фасад выгрузки задаёт все поля Host службы exporter (126 Ш3).
+func TestExporterHostComplete(t *testing.T) {
+	testkit.HostComplete(t, newApp(t).expHost())
 }
 
 // AutoOpts 051 из UI по именам JSON; время съёмки из ленты доходит до плана: одна папка, две

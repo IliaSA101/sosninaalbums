@@ -16,10 +16,14 @@ import (
 var (
 	oldSpreadRe = regexp.MustCompile(`(?i)^spread_(\d+)\.jpg$`)         // экспорт v0.2: наш, метки в нём нет
 	numberedRe  = regexp.MustCompile(`(?i)^(\d{2,})(?:-([12]))?\.jpg$`) // 01.jpg, 01-1.jpg…, 0001.jpg: наш только с COM-меткой
-	// остаток WriteFileAtomic: 05.jpg.<число>.tmp; с префиксом плана — 1-05.jpg.<число>.tmp (081 №9).
-	// Префикс только «1-», не любое число: чужой 2024-05.jpg.7.tmp не наш.
-	tmpRe = regexp.MustCompile(`(?i)^(?:1-)?(\d{2,})(?:-[12])?\.jpg\.\d+\.tmp$`)
 )
+
+// tmpRe — остаток WriteFileAtomic: 05.jpg.<число>.tmp; с префиксом плана — 1-05.jpg.<число>.tmp
+// (081 №9). Префикс — только плана (из профиля типографии, QuoteMeta), не любое число: чужой
+// 2024-05.jpg.7.tmp не наш. Без префикса плана остаток без префикса тоже наш.
+func tmpRe(prefix string) *regexp.Regexp {
+	return regexp.MustCompile(`(?i)^(?:` + regexp.QuoteMeta(prefix) + `)?(\d{2,})(?:-[12])?\.jpg\.\d+\.tmp$`)
+}
 
 // DirFile — файл папки экспорта: Spread — номер разворота из имени (с 1, ширина не важна),
 // Page — 0 (разворот целиком), 1 или 2 (страница).
@@ -127,7 +131,7 @@ func StaleNames(hit []DirFile, written []string) []string {
 // сбой посреди выгрузки не должен стоить прежнего экспорта.
 func RunPlan(ctx context.Context, spreads []render.Spread, pl Plan, opt render.Options, dir string,
 	stale []string, progress func(done, total int)) error {
-	removeStaleTmp(dir, time.Now())
+	removeStaleTmp(dir, pl.Prefix, time.Now())
 	if err := runCoverPlan(ctx, spreads, pl, opt, dir, progress); err != nil {
 		return err
 	}
@@ -149,13 +153,14 @@ const tmpMaxAge = time.Hour
 // removeStaleTmp убирает остатки WriteFileAtomic (05.jpg.<число>.tmp) старше tmpMaxAge:
 // имя случайное, поэтому после сбоев они копились бы в папке. Ошибки не мешают экспорту.
 // Остаток записи обложки (00.jpg.<число>.tmp, 1-00.jpg.<число>.tmp) не трогаем: он не отличим от чужого файла типографии.
-func removeStaleTmp(dir string, now time.Time) {
+func removeStaleTmp(dir, prefix string, now time.Time) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
+	re := tmpRe(prefix)
 	for _, e := range entries {
-		m := tmpRe.FindStringSubmatch(e.Name())
+		m := re.FindStringSubmatch(e.Name())
 		if m == nil || strings.Trim(m[1], "0") == "" || !e.Type().IsRegular() {
 			continue
 		}

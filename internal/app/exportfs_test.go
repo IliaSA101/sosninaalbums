@@ -75,11 +75,11 @@ func TestExportFsfera(t *testing.T) {
 	if got := e.names(t); !slices.Equal(got, []string{"00.jpg", "01.jpg", "02.jpg"}) {
 		t.Fatalf("файлы книги %v", got)
 	}
-	if want := []string{"Фотокнига 20×15, обложка «Фото»", "Страницы: Тонкие", "Разворотов: 2 (корешок 6 мм)", "Папка: Альбом — 00.jpg и 01…02.jpg"}; !slices.Equal(*memo, want) {
+	if want := []string{"Фотокнига 20×15, обложка «Фото»", "Страницы: Тонкие", "Разворотов: 2 (корешок 6 мм)", "Файлы: 4748×1795 px", "Папка: Альбом — 00.jpg и 01…02.jpg"}; !slices.Equal(*memo, want) {
 		t.Fatalf("памятка %q", *memo)
 	}
-	if e.a.exportDir != book {
-		t.Fatalf("«Открыть папку» — %q", e.a.exportDir)
+	if e.a.exp.LastDir() != book {
+		t.Fatalf("«Открыть папку» — %q", e.a.exp.LastDir())
 	}
 	// Повтор в ту же папку (выбрана родительская): только вопрос о замене своих файлов.
 	e.oldify(t)
@@ -109,7 +109,7 @@ func TestExportFsfera(t *testing.T) {
 	if ok, err := e.a.Export(o); ok || err != nil || len(e.asked) != 2 || e.asked[1] != want {
 		t.Fatalf("посторонние: %v %v, вопросы %q", ok, err, e.asked)
 	}
-	if e.rewritten(t, "01.jpg") || e.a.exporting {
+	if e.rewritten(t, "01.jpg") || e.exportBusy() {
 		t.Fatal("«нет» — а файлы переписаны или экспорт не снят")
 	}
 }
@@ -129,7 +129,7 @@ func TestExportFsferaBlocked(t *testing.T) {
 	}{
 		{nil, "Обложка размечена для «Нетпринт · Премиум» — выберите «Фотосфера» в карточке обложки"},
 		{sheet, "Лист виньетки в Фотосферу Pro не выгружается"},
-		{wide, "Страница 300 × 300 мм — не формат Фотосферы. В «Настройках альбома» выберите типографию «Фотосфера» и кнопку формата"},
+		{wide, "Страница 300 × 300 мм — не формат Фотосферы: разворот выйдет 7087 × 3543 px, у 30×30 — 6638 × 3354 (281 × 284 мм). В «Настройках альбома» выберите типографию «Фотосфера» и кнопку формата или введите px файла"},
 	} {
 		if c.p != nil {
 			e.a.ed.Store(mustEditor(t, c.p, ""))
@@ -138,8 +138,8 @@ func TestExportFsferaBlocked(t *testing.T) {
 			t.Errorf("%q: %v %v", c.want, ok, err)
 		}
 	}
-	if picked != 0 || len(e.asked) != 0 || e.a.exporting {
-		t.Fatalf("выбор папки %d, вопросы %q, экспорт идёт %v", picked, e.asked, e.a.exporting)
+	if picked != 0 || len(e.asked) != 0 || e.exportBusy() {
+		t.Fatalf("выбор папки %d, вопросы %q, экспорт идёт %v", picked, e.asked, e.exportBusy())
 	}
 }
 
@@ -168,7 +168,7 @@ func TestExportFsferaAsk(t *testing.T) {
 	if msg := e.export(t, ExportOptions{Print: "fsfera"}); msg != "" || picked != 1 {
 		t.Fatalf("«да»: %q, выбор папки %d", msg, picked)
 	}
-	if e.dir = filepath.Join(e.dir, "Альбом"); !slices.Equal(e.names(t), []string{"01.jpg"}) || !slices.Equal(*memo, []string{"Фотокнига 20×15", "Разворотов: 1", "Папка: Альбом — 01.jpg"}) {
+	if e.dir = filepath.Join(e.dir, "Альбом"); !slices.Equal(e.names(t), []string{"01.jpg"}) || !slices.Equal(*memo, []string{"Фотокнига 20×15", "Разворотов: 1", "Файлы: 4748×1795 px", "Папка: Альбом — 01.jpg"}) {
 		t.Fatalf("без обложки: файлы %v, памятка %q", e.names(t), *memo)
 	}
 	ours, err := os.ReadFile(filepath.Join(e.dir, "01.jpg")) // с меткой программы
@@ -206,7 +206,7 @@ func TestExportFsferaBookLast(t *testing.T) {
 	if ok, err := e.a.Export(ExportOptions{Print: "fsfera"}); ok || err != nil || len(e.asked) != 1 || !strings.Contains(e.asked[0], "пустые места") {
 		t.Fatalf("пустое место: %v %v, вопросы %q", ok, err, e.asked)
 	}
-	if _, err := os.Lstat(filepath.Join(e.dir, "Альбом")); !errors.Is(err, fs.ErrNotExist) || e.a.exporting {
+	if _, err := os.Lstat(filepath.Join(e.dir, "Альбом")); !errors.Is(err, fs.ErrNotExist) || e.exportBusy() {
 		t.Fatalf("«нет» оставил папку книги (%v) или экспорт не снят", err)
 	}
 }
@@ -237,13 +237,13 @@ func TestExportCoverOffTemplateAsk(t *testing.T) {
 }
 
 // TestFsferaPlan — план через App: имя папки по файлу альбома, rev и отмена не меняются;
-// OpenFsfera открывает только адрес-константу; PagePresets — таблица модели.
+// OpenPrintSite открывает только адрес-константу; PagePresets — таблица модели.
 func TestFsferaPlan(t *testing.T) {
 	e, _ := fsferaEnv(t, 2, "fsfera-card")
 	p, _ := e.a.editor().Snapshot()
 	e.a.ed.Store(mustEditor(t, p, filepath.Join(testkit.TempDir(t), "Иванов.salbum")))
 	before := e.a.editor().View()
-	pl := e.a.PrintPlans()[0] // 20×15 — формат только Фотосферы: план один
+	pl := e.a.PrintPlans("")[0] // 20×15 — формат только Фотосферы: план один
 	if pl.Format != "20×15" || pl.Folder != "Иванов" || pl.Pages != "Картон" || len(pl.Block) != 0 {
 		t.Fatalf("план %+v", pl)
 	}
@@ -254,7 +254,7 @@ func TestFsferaPlan(t *testing.T) {
 	old := openURL
 	t.Cleanup(func() { openURL = old })
 	openURL = func(_ *App, url string) { opened = append(opened, url) }
-	e.a.OpenFsfera()
+	e.a.OpenPrintSite("fsfera")
 	if !slices.Equal(opened, []string{"https://fsfera.ru/order_pro/calculator/"}) {
 		t.Fatalf("открыто %q", opened)
 	}

@@ -30,10 +30,8 @@ func (e *exportEnv) cancelAt(k int) {
 // exportIdle — экспорта нет: флаг и отмена сняты.
 func (e *exportEnv) exportIdle(t *testing.T) {
 	t.Helper()
-	e.a.mu.Lock()
-	defer e.a.mu.Unlock()
-	if e.a.exporting || e.a.exportCancel != nil {
-		t.Fatalf("экспорт не снят: идёт %v, отмена %v", e.a.exporting, e.a.exportCancel != nil)
+	if busy, cancelable := e.a.exp.Busy(); busy || cancelable {
+		t.Fatalf("экспорт не снят: идёт %v, отмена %v", busy, cancelable)
 	}
 }
 

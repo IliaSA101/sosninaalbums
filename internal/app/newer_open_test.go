@@ -10,6 +10,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/app/assoc"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -42,18 +43,14 @@ func newerExes(t *testing.T, names ...string) []string {
 
 // newerApp — App 0.25.0 с реестром в памяти; временной считается несуществующая папка (тестовые
 // файлы лежат в TMPDIR, и иначе их приняли бы за запуск из архива).
-func newerApp(t *testing.T, reg *fakeReg) *App {
+func newerApp(t *testing.T, reg *fakeReg) *assocRig {
 	t.Helper()
-	withVersion(t, "0.25.0")
-	a := newApp(t)
-	a.cfgDir = testkit.TempDir(t)
-	a.emit = func(string, ...any) {}
 	reg.self = myExe
-	a.assoc.reg = reg
-	a.newer.temp = func() string {
+	r := newAssocRig(t, reg)
+	r.tempFn = func() string {
 		return filepath.Join(string(filepath.Separator), "нет-такой-временной")
 	}
-	return a
+	return r
 }
 
 // Файл новее программы: OpenProject/OpenRecent/OpenExternal (общий openPath) отвечают
@@ -88,7 +85,7 @@ func TestOpenNewerState(t *testing.T) {
 			t.Errorf("%s: %+v, %v", c.name, st, err)
 			continue
 		}
-		want := NewerInfo{Name: "Свадьба" + projectExt, Need: shortVer(c.app), Mine: "0.25", Have: c.have}
+		want := NewerInfo{Name: "Свадьба" + projectExt, Need: assoc.ShortVer(c.app), Mine: "0.25", Have: c.have}
 		if *st.Newer != want {
 			t.Errorf("%s: %+v, ждали %+v", c.name, *st.Newer, want)
 		}
@@ -120,7 +117,7 @@ func TestOpenNewerState(t *testing.T) {
 	if b.GetState().Newer != nil {
 		t.Error("Newer без отказа")
 	}
-	b.holdStartNewer(b.setNewer("", true, &salbum.NewerError{Version: model.FormatVersion + 1, App: "0.26.0"}))
+	b.startNewer("", true, &salbum.NewerError{Version: model.FormatVersion + 1, App: "0.26.0"})
 	first, second := b.GetState(), b.GetState()
 	if first.Newer == nil || !first.Newer.Draft || first.Newer.Name != "" || first.Newer.Need != "0.26" || second.Newer != nil {
 		t.Errorf("старт: %+v, повтор %+v", first.Newer, second.Newer)
@@ -174,19 +171,19 @@ func TestOpenInNewer(t *testing.T) {
 		args  [][]string
 		quits int
 	}
-	run := func(a *App) {
+	run := func(a *assocRig) {
 		rec.args, rec.quits = nil, 0
-		a.newer.startFn = func(e string, as ...string) error {
+		a.startFn = func(e string, as ...string) error {
 			rec.args = append(rec.args, append([]string{e}, as...))
 			return nil
 		}
-		a.newer.quitFn = func() { rec.quits++ }
+		a.quitFn = func() { rec.quits++ }
 	}
 
 	// Нет отказа — нечего открывать.
 	a := newerApp(t, reg)
 	run(a)
-	if err := a.OpenInNewer(); !errors.Is(err, errNoNewer) || len(rec.args) != 0 || rec.quits != 0 {
+	if err := a.OpenInNewer(); !errors.Is(err, assoc.ErrNoNewer) || len(rec.args) != 0 || rec.quits != 0 {
 		t.Errorf("без отказа: %v, запусков %d, выходов %d", err, len(rec.args), rec.quits)
 	}
 
@@ -219,7 +216,7 @@ func TestOpenInNewer(t *testing.T) {
 	a.setNewer(path, false, newerErr)
 	before := a.editor()
 	rec.quits = 0
-	a.newer.startFn = func(string, ...string) error { return errors.New("отказ ОС") }
+	a.startFn = func(string, ...string) error { return errors.New("отказ ОС") }
 	if err := a.OpenInNewer(); err == nil || rec.quits != 0 || a.editor() != before {
 		t.Errorf("сбой запуска: %v, выходов %d", err, rec.quits)
 	}
@@ -229,14 +226,14 @@ func TestOpenInNewer(t *testing.T) {
 	if err := os.Remove(exe); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.OpenInNewer(); !errors.Is(err, errNoNewer) || len(rec.args) != 0 || rec.quits != 0 {
+	if err := a.OpenInNewer(); !errors.Is(err, assoc.ErrNoNewer) || len(rec.args) != 0 || rec.quits != 0 {
 		t.Errorf("exe пропал: %v, запусков %d, выходов %d", err, len(rec.args), rec.quits)
 	}
 
 	// Найденная во временной папке (запуск из архива) не запускается.
 	tmpExe := newerExes(t, "SosninaAlbums-0.26.0.exe")[0]
 	b := newerApp(t, &fakeReg{st: osx.AssocState{ProgID: progOurs, Exe: tmpExe, AppVersion: "0.26.0"}})
-	b.newer.temp = func() string { return filepath.Dir(tmpExe) }
+	b.tempFn = func() string { return filepath.Dir(tmpExe) }
 	if info := b.setNewer(path, false, newerErr); info.Have != "" {
 		t.Errorf("exe во временной папке предложен: %+v", info)
 	}

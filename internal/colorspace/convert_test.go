@@ -1,11 +1,14 @@
 package colorspace
 
 import (
+	"bytes"
 	"image"
 	"image/draw"
 	"math/rand"
 	"os"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 func abs(d int) int {
@@ -136,5 +139,122 @@ func BenchmarkAdobeToSRGB24Mp(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		AdobeToSRGB(m)
+	}
+}
+
+// noiseRGBA — RGBA с шумом; alpha 255 везде, кроме явно заданных точек.
+func noiseRGBA(r image.Rectangle, seed int64) *image.RGBA {
+	m := image.NewRGBA(r)
+	rnd := rand.New(rand.NewSource(seed))
+	for i := range m.Pix {
+		m.Pix[i] = uint8(rnd.Intn(256))
+		if i%4 == 3 {
+			m.Pix[i] = 255
+		}
+	}
+	return m
+}
+
+// viaDraw — прежний путь: draw в новый NRGBA и пересчёт на месте; вход не меняется.
+func viaDraw(x *Xform, src image.Image) *image.NRGBA {
+	b := src.Bounds()
+	dst := image.NewNRGBA(b)
+	draw.Draw(dst, b, src, b.Min, draw.Src)
+	x.convertNRGBA(dst)
+	return dst
+}
+
+// Непрозрачный RGBA пересчитывается на месте, в том же буфере, байт в байт как через draw;
+// RGBA с альфой меньше 255 идёт через draw: новый буфер, вход цел.
+func TestToSRGBRGBA(t *testing.T) {
+	xs := map[string]*Xform{"adobe": Adobe, "p3": xfOf(t, testkit.ProfileXiaomiP3(true))}
+	big := noiseRGBA(image.Rect(0, 0, 40, 33), 3)
+	cases := map[string]*image.RGBA{
+		"от нуля":        noiseRGBA(image.Rect(0, 0, 13, 9), 1),
+		"смещённый Rect": noiseRGBA(image.Rect(7, 3, 20, 14), 2),
+		"SubImage":       big.SubImage(image.Rect(5, 4, 29, 25)).(*image.RGBA),
+		"SubImage узкий": big.SubImage(image.Rect(39, 32, 40, 33)).(*image.RGBA),
+		"одна строка":    noiseRGBA(image.Rect(0, 0, 50, 1), 4),
+		"один столбец":   noiseRGBA(image.Rect(0, 0, 1, 50), 5),
+		"1×1":            noiseRGBA(image.Rect(0, 0, 1, 1), 6),
+		"пустой":         image.NewRGBA(image.Rect(0, 0, 0, 0)),
+		"пустой Rect":    image.NewRGBA(image.Rect(5, 5, 5, 9)),
+	}
+	if big.Stride <= 4*24 {
+		t.Fatal("для SubImage нужен Stride больше 4·W")
+	}
+	for xn, x := range xs {
+		for name, in := range cases {
+			want := viaDraw(x, in)
+			pix0, orig := in.Pix, bytes.Clone(in.Pix)
+			out := x.ToSRGB(in)
+			if out.Rect != in.Rect || out.Stride != in.Stride || len(out.Pix) != len(pix0) {
+				t.Errorf("%s/%s: геометрия %v/%d, ждали %v/%d", xn, name, out.Rect, out.Stride, in.Rect, in.Stride)
+				continue
+			}
+			if len(out.Pix) == 0 {
+				continue
+			}
+			if &out.Pix[0] != &pix0[0] {
+				t.Errorf("%s/%s: буфер новый, ждали тот же", xn, name)
+			}
+			sameRows(t, xn+"/"+name, out, want, in, orig)
+		}
+	}
+	toSRGBRGBAAlpha(t)
+}
+
+// toSRGBRGBAAlpha — RGBA с альфой меньше 255 идёт через draw: новый буфер, вход цел.
+func toSRGBRGBAAlpha(t *testing.T) {
+	t.Helper()
+	// Точки: первая и последняя строки, чтобы ловить любую долю rows; a = 0 и 254.
+	for _, pt := range [][2]int{{0, 0}, {12, 8}, {6, 4}} {
+		for _, a := range []uint8{0, 254} {
+			in := noiseRGBA(image.Rect(0, 0, 13, 9), 7)
+			in.Pix[pt[1]*in.Stride+pt[0]*4+3] = a
+			orig := bytes.Clone(in.Pix)
+			want := viaDraw(Adobe, in)
+			out := Adobe.ToSRGB(in)
+			if &out.Pix[0] == &in.Pix[0] {
+				t.Errorf("%v a=%d: буфер общий, ждали draw-путь", pt, a)
+			}
+			if !bytes.Equal(in.Pix, orig) {
+				t.Errorf("%v a=%d: вход изменён", pt, a)
+			}
+			if !bytes.Equal(out.Pix, want.Pix) {
+				t.Errorf("%v a=%d: байты расходятся с draw", pt, a)
+			}
+		}
+	}
+}
+
+// sameRows сверяет результат с draw-путём по строкам: у SubImage Stride шире строки,
+// а хвост строки (вне Rect) должен остаться нетронутым.
+func sameRows(t *testing.T, name string, out, want *image.NRGBA, in *image.RGBA, orig []byte) {
+	t.Helper()
+	w := in.Rect.Dx() * 4
+	for y := range in.Rect.Dy() {
+		got, ref := out.Pix[y*out.Stride:], want.Pix[y*want.Stride:]
+		if !bytes.Equal(got[:w], ref[:w]) {
+			t.Errorf("%s: строка %d расходится с draw-путём", name, y)
+			return
+		}
+		end := min((y+1)*out.Stride, len(orig))
+		if !bytes.Equal(out.Pix[y*out.Stride+w:end], orig[y*out.Stride+w:end]) {
+			t.Errorf("%s: строка %d: изменены байты вне Rect", name, y)
+			return
+		}
+	}
+}
+
+// Замер 48 Мп быстрого пути RGBA; только под SA_BENCH, порога нет (разброс 2,5 раза).
+func BenchmarkToSRGBRGBA(b *testing.B) {
+	if os.Getenv("SA_BENCH") == "" {
+		b.Skip("задайте SA_BENCH=1")
+	}
+	m := noiseRGBA(image.Rect(0, 0, 8000, 6000), 9)
+	b.ResetTimer()
+	for b.Loop() {
+		Adobe.ToSRGB(m)
 	}
 }

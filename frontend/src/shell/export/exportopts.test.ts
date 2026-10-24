@@ -12,12 +12,15 @@ import {
   activePlan,
   printHint,
   printQuality,
-  togglePrint,
+  kindOf,
+  defaultKind,
   canExport,
   planStale,
   loadPrefs,
   memoLine,
   sampleName,
+  coverFile,
+  filePrefix,
   savePrefs,
   sizeSummary,
 } from './exportopts'
@@ -135,7 +138,7 @@ describe('prefs в localStorage', () => {
   it('порченое и чужое отбрасывается', () => {
     localStorage.setItem(
       'exportOpts',
-      JSON.stringify({ quality: 50, dpi: 5, pages: 'да', cover: 1, coverOnly: 'да', print: 'xerox', fsfera: 1 }),
+      JSON.stringify({ quality: 50, dpi: 5, pages: 'да', cover: 1, coverOnly: 'да', print: 'Xerox!', fsfera: 1 }),
     )
     expect(loadPrefs()).toEqual(DEFAULT_PREFS)
     localStorage.setItem('exportOpts', '{не json')
@@ -145,6 +148,22 @@ describe('prefs в localStorage', () => {
     useStorage(true)
     expect(() => savePrefs(DEFAULT_PREFS)).not.toThrow()
     expect(loadPrefs()).toEqual(DEFAULT_PREFS)
+  })
+})
+
+describe('имена типографии из плана', () => {
+  it('coverFile и filePrefix берут префикс у coverName плана Go, без плана — прежнее', () => {
+    expect(coverFile({ coverName: '1-00.jpg' })).toBe('1-00.jpg')
+    expect(filePrefix({ coverName: '1-00.jpg' })).toBe('1-')
+    expect(coverFile(null)).toBe('00.jpg')
+    expect(filePrefix(null)).toBe('')
+    expect(filePrefix({ coverName: '00.jpg' })).toBe('')
+    expect(filePrefix({ coverName: '' })).toBe('') // старый Go без поля
+    expect(filePrefix({ coverName: 'чужое.jpg' })).toBe('')
+  })
+  it('sampleName с префиксом: (1-01.jpg)', () => {
+    expect(sampleName(1, 12, false, '1-')).toBe('(1-01.jpg)')
+    expect(sampleName(3, 12, true, '1-')).toBe('(1-03-1.jpg, 1-03-2.jpg)')
   })
 })
 
@@ -253,6 +272,8 @@ const plan = (o: Partial<PrintPlan> = {}): PrintPlan => ({
   done: 'Готово для Фотосферы',
   site: '',
   siteButton: 'Открыть Фотосферу',
+  default: false,
+  px: '',
   ...o,
 })
 const fab = plan({ kind: 'fabrika', title: 'Для Фабрики Фотокниги', quality: 100, coverName: '1-00.jpg' })
@@ -293,14 +314,25 @@ describe('для типографии: Фотосфера Pro (047), Фабри�
     expect(printHint(fab, false)).toBe('(папка «Иванов», 300 dpi, качество 100)')
     expect(printHint(fab, true)).toBe('(папка «Иванов», 300 dpi, качество 100, с обложкой)')
   })
-  it('памятка: первые три строки', () => {
+  it('памятка: четыре строки, включая «Файлы» с px, без «Папка»', () => {
     const memo = [
       'Фотокнига 30×30, обложка «Фото»',
       'Страницы: Тонкие',
       'Разворотов: 20 (корешок 14 мм)',
+      'Файлы: 7181×2398 px',
       'Папка: Иванов — Петрова — 00.jpg и 01…20.jpg',
     ]
-    expect(memoLine(memo)).toBe('Фотокнига 30×30, обложка «Фото» · Страницы: Тонкие · Разворотов: 20 (корешок 14 мм)')
+    expect(memoLine(memo)).toBe('Фотокнига 30×30, обложка «Фото» · Страницы: Тонкие · Разворотов: 20 (корешок 14 мм) · Файлы: 7181×2398 px')
+  })
+  it('памятка без строки «Страницы»: «Папка» не прорывается на её место, «Файлы» видны', () => {
+    const memo = ['Фотокнига 21×30', 'Разворотов: 10', 'Файлы: 4960×3543 px', 'Папка: Иванов — 01…10.jpg']
+    expect(memoLine(memo)).toBe('Фотокнига 21×30 · Разворотов: 10 · Файлы: 4960×3543 px')
+    expect(memoLine(['Фотокнига 21×30', 'Разворотов: 10', 'Папка: Иванов'])).toBe('Фотокнига 21×30 · Разворотов: 10')
+  })
+  it('памятка: последняя строка (папка и имена файлов «— 1-01…1-20.jpg») отрезается по месту, не по тексту', () => {
+    const memo = ['Фотокнига 21×30', 'Разворотов: 20', 'Файлы: 4960×3543 px', 'Каталог: Иванов — 1-01…1-20.jpg']
+    expect(memoLine(memo)).toBe('Фотокнига 21×30 · Разворотов: 20 · Файлы: 4960×3543 px')
+    expect(memoLine([])).toBe('')
   })
   it('«Исправить» — у строки с номером fixAt, не по тексту', () => {
     const fix = { coverFix: true, fixAt: 1 }
@@ -327,17 +359,20 @@ describe('для типографии: Фотосфера Pro (047), Фабри�
       print: 'fsfera',
     })
   })
-  it('two plans one checked: включён не больше одного, повторный щелчок выключает', () => {
-    let pref: '' | 'fsfera' | 'fabrika' = ''
-    pref = togglePrint(pref, 'fsfera', true)
-    expect(pref).toBe('fsfera')
-    pref = togglePrint(pref, 'fabrika', true) // второй флажок переключает
-    expect(pref).toBe('fabrika')
-    expect(activePlan([plan(), fab], pref)).toBe(fab)
-    pref = togglePrint(pref, 'fsfera', false) // снятие чужого флажка выбор не меняет
-    expect(pref).toBe('fabrika')
-    pref = togglePrint(pref, 'fabrika', false)
-    expect(pref).toBe('')
+  it('kindOf: значение списка «Печать» — тип плана; «Обычная» и неизвестное — пусто', () => {
+    const plans = [plan(), fab]
+    expect(kindOf('fsfera', plans)).toBe('fsfera')
+    expect(kindOf('fabrika', plans)).toBe('fabrika') // повторный выбор того же пункта — тот же выбор, не выключение
+    expect(kindOf('', plans)).toBe('')
+    expect(kindOf('fabrika', [plan()])).toBe('') // пункта нет в списке страницы
+    expect(kindOf('netprint', plans)).toBe('')
+    expect(activePlan(plans, kindOf('fabrika', plans))).toBe(fab)
+  })
+  it('defaultKind: пункт, отмеченный Go; ни один — «Обычная»; планов нет — запомненный выбор остаётся', () => {
+    expect(defaultKind([plan({ default: false }), { ...fab, default: true }])).toBe('fabrika')
+    expect(defaultKind([plan({ default: false }), { ...fab, default: false }])).toBe('') // «Обычная»
+    expect(defaultKind([])).toBeUndefined()
+    expect(defaultKind(null)).toBeUndefined()
   })
   it('допуск «Выгрузить»: занято, диапазон, блок, планы не пришли', () => {
     const ok = plan()
@@ -378,6 +413,17 @@ describe('для типографии: Фотосфера Pro (047), Фабри�
 
 describe('prefs печати', () => {
   beforeEach(() => useStorage())
+  it('любая типография реестра помнится по виду id; чужой вид id — нет', () => {
+    const put = (print: unknown) => localStorage.setItem('exportOpts', JSON.stringify({ quality: 80, print }))
+    for (const id of ['own-3f9a1c2e', 'own-3f9a1c2e-1', 'pack-album-7', 'fabrika', 'fsfera', 'a', 'a'.repeat(64)]) {
+      put(id)
+      expect(loadPrefs().print, id).toBe(id)
+    }
+    for (const bad of ['own-3F9A1C2E', 'a'.repeat(65), 'a b', 'own_1', 'a/b', '', 7, null]) {
+      put(bad)
+      expect(loadPrefs().print, String(bad)).toBe('')
+    }
+  })
   it('loadPrefs migrates fsfera: прежний флажок fsfera: true становится print «fsfera»', () => {
     localStorage.setItem('exportOpts', JSON.stringify({ quality: 80, fsfera: true }))
     expect(loadPrefs()).toMatchObject({ quality: 80, print: 'fsfera' })
@@ -387,7 +433,7 @@ describe('prefs печати', () => {
   it('print главнее старого fsfera; неизвестное значение — выключено', () => {
     localStorage.setItem('exportOpts', JSON.stringify({ print: 'fabrika', fsfera: true }))
     expect(loadPrefs().print).toBe('fabrika')
-    localStorage.setItem('exportOpts', JSON.stringify({ print: 'xerox', fsfera: true }))
+    localStorage.setItem('exportOpts', JSON.stringify({ print: 'Xerox!', fsfera: true }))
     expect(loadPrefs().print).toBe('')
   })
   it('в сохранённое старое поле fsfera не пишется', () => {

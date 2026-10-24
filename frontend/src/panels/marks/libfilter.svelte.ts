@@ -1,5 +1,5 @@
 // Фильтр ленты по отметкам (спека 004). Настройка окна: в .salbum, undo и localStorage не попадает,
-// после перезапуска сброшен. Условия читает store.visible (library/marks.ts: filterPhotos).
+// после перезапуска сброшен. Условия читает store.marked (library/marks.ts: filterPhotos).
 import { SvelteSet } from 'svelte/reactivity'
 import type { Label } from '../../base/core/types'
 import { filterSummary, isActive, type FlagFilter, type MarkFilter } from './marks'

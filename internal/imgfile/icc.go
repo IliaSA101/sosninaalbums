@@ -44,8 +44,9 @@ var (
 	p3XYZ    = [9]float64{0.5151, 0.2412, -0.0011, 0.2920, 0.6922, 0.0419, 0.1571, 0.0666, 0.7841}
 )
 
-// ReadColor определяет цветовой профиль JPEG по заголовку (ICC, запасной путь — EXIF Interop).
-// Ошибка чтения, не-JPEG и PNG дают ("", ""): считаем sRGB.
+// ReadColor определяет цветовой профиль по заголовку: JPEG — ICC, запасной путь EXIF Interop; PNG — iCCP;
+// WebP — ICCP при флаге в VP8X (формат по подписи, не по расширению: 117). Ошибка чтения, мусор и
+// файл без профиля дают ("", ""): считаем sRGB.
 func ReadColor(path string) (Color, string) {
 	f, err := OpenRegular(path)
 	if err != nil {

@@ -1,6 +1,7 @@
 // Состояние меню миниатюры ленты (спека 106): где открыто, на каких фото, и ответ «где стоит» от Go.
 import { store } from '../../base/core/store.svelte'
 import { drag } from '../../base/drag/drag.svelte'
+import { photoui } from '../../editor/photo/photoui.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import type { UseSrc } from '../../base/words/whereuse'
 import { UseList } from '../../editor/photoprops/uselist.svelte'
@@ -21,17 +22,30 @@ class ThumbMenuState {
     return this.list.lines
   }
 
-  // Правый щелчок по плитке: выделенное остаётся, если щёлкнули по нему; иначе выделяется только она (как на холсте).
-  // «Простой» уровень — меню нет, плитка не трогается.
+  // Выделенное остаётся, если щёлкнули по нему; иначе выделяется только плитка (как на холсте).
+  private pick(id: string) {
+    if (store.selected.has(id)) return
+    store.selected.clear()
+    store.selected.add(id)
+    store.anchor = id
+  }
+
+  // Ctrl+правый щелчок (128): крупный просмотр вместо меню. Выделение — по тому же правилу, что у меню; на любом уровне.
+  peek(e: MouseEvent, id: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (drag.active) return
+    this.close()
+    this.pick(id)
+    photoui.openLibrary(id)
+  }
+
+  // Правый щелчок по плитке. «Простой» уровень — меню нет, плитка не трогается.
   open(e: MouseEvent, id: string) {
     e.preventDefault()
     e.stopPropagation()
     if (drag.active || !prefs.can('photoMenu')) return
-    if (!store.selected.has(id)) {
-      store.selected.clear()
-      store.selected.add(id)
-      store.anchor = id
-    }
+    this.pick(id)
     const ids = store.selectedIds
     this.menu = { x: e.clientX, y: e.clientY, ids }
     // Вхождения нужны только одному фото, которое где-то стоит (число на плитке > 0).

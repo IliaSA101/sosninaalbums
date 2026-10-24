@@ -113,7 +113,9 @@ var catalog = []Command{
 	c("album", "undo", "Отменить", "Отменить", "", "Mod+KeyZ").repeat().dialogs(),
 	c("album", "redo", "Повторить", "Повторить", "", "Mod+KeyY", "Mod+Shift+KeyZ").repeat().dialogs(),
 
-	c("view", "toggleBig", "Крупный просмотр", "Крупно", "timeline", "KeyF"),
+	// «Во весь экран» (режим F) и «Крупный просмотр фото» (окно, Z) — разные вещи (0.26-128-15).
+	c("view", "toggleBig", "Во весь экран", "Весь экран", "timeline", "KeyF"),
+	c("view", "photoPreview", "Крупный просмотр фото", "Крупно", "", "KeyZ"),
 	c("view", "toggleDetails", "Панель деталей", "Детали", "", "KeyI"),
 	c("view", "toggleSafe", "Безопасная зона", "Зона", "", "KeyG"),
 	c("view", "toggleMarkup", "Разметка типографии", "Разметка", ""),
@@ -150,6 +152,8 @@ var catalog = []Command{
 	c("photos", "selectSpread", "Выделить всё на развороте", "Выделить", "groupSelect", "Mod+KeyA").
 		hint("Все фото, места и тексты разворота").in(ScopeCanvas),
 	c("photos", "selectAll", "Выделить все фото в ленте", "Все фото", "", "Mod+KeyA").in(ScopeLibrary),
+	// Поиск по имени в ленте (0.26-124-10): без пункта меню — Wails гасит поиск браузера (0.26-124-24).
+	c("photos", "findPhotos", "Найти фото по имени", "Найти", "", "Mod+KeyF"),
 	c("photos", "clearSelection", "Снять выделение", "Снять", "", "Escape").fixed(),
 	c("photos", "removeCell", "Удалить выбранное", "Удалить", "", "Delete", "Backspace").
 		hint("Фото — в ленту (в ручной раскладке место остаётся, второй раз — убрать место); " +

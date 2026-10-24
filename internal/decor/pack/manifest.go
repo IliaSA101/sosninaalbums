@@ -29,6 +29,7 @@ const (
 	MaxSticker  = 30 << 20  // стикер
 	MaxFrame    = 30 << 20  // рамочка-картинка (079)
 	MaxSpread   = 256 << 10 // шаблон разворота (= model.MaxTplFile)
+	MaxPrint    = 64 << 10  // профиль типографии (= printprof.MaxSize)
 	// ManifestName — манифест в корне архива.
 	ManifestName = "manifest.json"
 )
@@ -39,6 +40,7 @@ const (
 	KindSticker = "sticker"
 	KindSpread  = "spread"
 	KindFrame   = "frame" // рамочка-картинка (079): только PNG с прозрачным окном
+	KindPrint   = "print" // профиль типографии .saprint (123): ставит только набор из подписанного каталога
 )
 
 // Ошибки для интерфейса: по-русски, без путей.
@@ -196,6 +198,10 @@ func itemSkip(it Item) string {
 		if ext != ".json" {
 			return "шаблон разворота — не .json"
 		}
+	case KindPrint:
+		if ext != ".saprint" {
+			return "типография в наборе — не .saprint"
+		}
 	default:
 		return "незнакомый вид — нужна новая версия программы"
 	}
@@ -216,6 +222,8 @@ func KindLimit(kind string) int64 {
 		return MaxSpread
 	case KindFrame:
 		return MaxFrame
+	case KindPrint:
+		return MaxPrint
 	}
 	return 0
 }

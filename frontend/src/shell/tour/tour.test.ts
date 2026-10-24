@@ -37,6 +37,7 @@ const ctx = (o: Partial<TourCtx> = {}): TourCtx => ({
   selText: false,
   selAny: false,
   libPhotos: 3,
+  libAll: 3,
   libSel: false,
   cardBody: true,
   big: false,
@@ -47,7 +48,7 @@ const ctx = (o: Partial<TourCtx> = {}): TourCtx => ({
   sources: true,
   ...o,
 })
-const empty = (o: Partial<TourCtx> = {}) => ctx({ spreads: [], index: -1, libPhotos: 0, sources: false, ...o })
+const empty = (o: Partial<TourCtx> = {}) => ctx({ spreads: [], index: -1, libPhotos: 0, libAll: 0, sources: false, ...o })
 const kinds = (c: TourCtx, id: string, first = false) => enterSteps(step(id), c, first).map((s) => s.do)
 
 beforeEach(() => useCatalog())

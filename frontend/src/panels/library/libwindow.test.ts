@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EXTRA, GAP, PAD_Y, anchorAfter, anchorTop, colsOf, keepScroll, libWindow, photoAt } from './libwindow'
+import { EXTRA, GAP, PAD_X, PAD_Y, anchorAfter, anchorTop, colsOf, keepScroll, libWindow, photoAt, revealTop } from './libwindow'
 
 const base = { n: 3200, width: 1000, height: 300, size: 100 }
 // Высота содержимого, как её даёт CSS .grid: поля + ряды с зазорами.
@@ -165,5 +165,27 @@ describe('keepScroll', () => {
     const prev = ids(300)
     const to = keepScroll(prev, prev.slice(1), PAD_Y + 10, width, size)!
     expect(to).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('revealTop: прокрутка ленты к показанному (128)', () => {
+  // Плитка 100, ширина на 3 колонки, высота окна 300: ряд i занимает [12 + 116·i, +100].
+  const W = 2 * PAD_X + 3 * 100 + 2 * GAP
+  const rev = (index: number, st: number) => revealTop(index, st, 300, W, 100)
+  it('ряд уже виден — null', () => {
+    expect(rev(0, 0)).toBeNull()
+    expect(rev(4, 0)).toBeNull() // ряд 1: 128…228
+    expect(rev(7, 116)).toBeNull()
+  })
+  it('ряд выше окна — прокрутка к нему с полем сверху', () => {
+    expect(rev(0, 500)).toBe(0)
+    expect(rev(6, 700)).toBe(12 + 2 * 116 - PAD_Y) // ряд 2
+  })
+  it('ряд ниже окна — он оказывается у нижнего края с полем', () => {
+    // ряд 5: top = 12 + 580 = 592, bottom = 692; scrollTop = 692 + 12 − 300
+    expect(rev(15, 0)).toBe(404)
+  })
+  it('ряд виден лишь частично — подтягивается', () => {
+    expect(rev(9, 116)).toBe(12 + 3 * 116 + 100 + PAD_Y - 300) // ряд 3 торчит снизу: 360…460 при окне 116…416
   })
 })

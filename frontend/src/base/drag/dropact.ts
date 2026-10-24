@@ -2,6 +2,7 @@
 import * as Api from '../../../wailsjs/go/app/App'
 import { dropPlan, type DropPlan } from './drop'
 import { dropGrid } from './dropgrid.svelte'
+import { dropLanded } from '../prefs/cardgroups.svelte'
 import { COVER_ID } from '../geom/sheet'
 import { isCopyReq } from '../core/copies'
 import { store } from '../core/store.svelte'
@@ -10,7 +11,8 @@ import type { BackdropScope, GridResult, Payload, Target } from '../core/types'
 
 // Фото на фон — действие редактора (editor/backdrop/backdropact.ts); подключает shell/boot/wire.ts.
 export const dropHooks = {
-  setBackdrop: async (_spread: string, _scope: BackdropScope, _photo: string): Promise<void> => {},
+  // true — Go принял бросок (группа «Фон» карточки остаётся открытой, 0.26-124-23)
+  setBackdrop: async (_spread: string, _scope: BackdropScope, _photo: string): Promise<boolean> => false,
   // Фото на кнопку «Подборки» (083) — panels/bins/binact.ts; основа панели не импортирует.
   bin: async (_ids: string[]): Promise<void> => {},
 }
@@ -57,7 +59,7 @@ async function act(plan: DropPlan) {
       store.notify(plan.text)
       return
     case 'backdrop':
-      await dropHooks.setBackdrop(plan.spread, plan.scope, plan.photo)
+      if (await dropHooks.setBackdrop(plan.spread, plan.scope, plan.photo)) dropLanded.notify(plan.spread, plan.scope)
       return
     case 'bin':
       await dropHooks.bin(plan.ids)

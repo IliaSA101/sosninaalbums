@@ -123,7 +123,7 @@ export const FEATURES: Feature[] = [
   },
   { id: 'menu', group: 'Основа', title: 'Строка меню, стартовое окно, окно уровней', short: 'Строка меню', min: 'simple' },
   { id: 'variants', group: 'Основа', title: 'Варианты раскладки, раскладки страниц', short: 'Варианты раскладки', min: 'simple' },
-  { id: 'timeline', group: 'Основа', title: 'Разрез и склейка, крупный просмотр', short: 'Разрез и склейка', min: 'simple' },
+  { id: 'timeline', group: 'Основа', title: 'Разрез и склейка, режим «Во весь экран»', short: 'Разрез и склейка', min: 'simple' },
   {
     id: 'captions',
     also: ['bgColor'],

@@ -33,17 +33,19 @@ func safeZone(g model.Geo, m float64) []layout.Rect {
 	return out
 }
 
-// bleedStrips — полосы обреза m мм по внешнему краю листа g (066): верх и низ во всю ширину,
+// bleedStrips — полосы обреза по внешнему краю листа g (066): верх и низ во всю ширину,
 // лево и право — между ними. У сгиба полос нет ни с layflat, ни без: обрез — край файла.
-func bleedStrips(g model.Geo, m float64) []layout.Rect {
-	m = min(m, g.W/2, g.H/2)
-	if m <= 0 {
+// mx — у бока, my — сверху и снизу (123 Б5: у 25×25 Фабрики 3 / 3,5).
+func bleedStrips(g model.Geo, mx, my float64) []layout.Rect {
+	lim := min(g.W/2, g.H/2) // как раньше: общий предел обеих осей
+	mx, my = min(mx, lim), min(my, lim)
+	if mx <= 0 && my <= 0 {
 		return nil
 	}
-	side := max(g.H-2*m, 0)
+	side := max(g.H-2*my, 0)
 	return []layout.Rect{
-		{W: g.W, H: m}, {Y: g.H - m, W: g.W, H: m},
-		{Y: m, W: m, H: side}, {X: g.W - m, Y: m, W: m, H: side},
+		{W: g.W, H: my}, {Y: g.H - my, W: g.W, H: my},
+		{Y: my, W: mx, H: side}, {X: g.W - mx, Y: my, W: mx, H: side},
 	}
 }
 
@@ -66,10 +68,14 @@ type State struct {
 	// CoverGuide, SpreadGuide — что Editor прочитал о файлах-разметках обложки и разворотов
 	// (один раз на путь, 066).
 	CoverGuide, SpreadGuide Guide
+	// CoverSides — состояние сторонок обложки (127): мест, узнана ли форма, одна ли раскладка;
+	// считает grid, view его не импортирует. Индекс 0 — left (задняя), 1 — right (лицевая).
+	CoverSides [2]model.CoverSideState
 }
 
 // BuildView — вид проекта p с состоянием редактора st (вызов под замком Editor).
 func BuildView(p *model.Project, st State) model.View {
+	bx, by := model.BleedAxes(p.Settings)
 	v := model.View{
 		Product:  p.Product,
 		Settings: p.Settings,
@@ -84,7 +90,7 @@ func BuildView(p *model.Project, st State) model.View {
 
 		MaxSpreadPhotos: model.MaxPhotos,
 		Safe:            safeZone(p.Geo(nil), p.Settings.Safe),
-		Bleed:           bleedStrips(p.Geo(nil), p.Settings.Bleed),
+		Bleed:           bleedStrips(p.Geo(nil), bx, by),
 		MinDPI:          min(lowDPILimit, p.Settings.DPI),
 		TextMaxW:        p.TextMaxW(nil),
 		BackdropUsed:    []string{},

@@ -51,6 +51,8 @@ export interface StoreHooks {
   bin(photos: Photo[]): Photo[]
   // Лента после фильтра по отметкам.
   visible(photos: Photo[]): Photo[]
+  // Лента после поиска по имени (0.26-124): последняя стадия, store.visible; без поиска — тот же массив.
+  named(photos: Photo[]): Photo[]
   // Фото не в местах и не на фоне (автосборка, фильтр «Неиспользованные»).
   free(photos: Photo[], used: ReadonlySet<string>, backdrop: ReadonlySet<string>): Photo[]
   // Что отдать автосборке / «Заполнить пустые места»; пусто — тост с причиной уже показан.
@@ -94,6 +96,7 @@ export const noHooks: StoreHooks = {
   folders: (photos) => photos,
   bin: (photos) => photos,
   visible: (photos) => photos,
+  named: (photos) => photos,
   free: (photos, used, backdrop) => photos.filter((p) => !used.has(p.id) && !backdrop.has(p.id)),
   pick: () => ({ ids: [], skipped: 0, from: 'free', inAlbum: 0, filtered: false }),
   pickFree: () => [],

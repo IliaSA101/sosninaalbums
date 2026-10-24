@@ -33,7 +33,7 @@ export function phrase(chord: string, mac: boolean): string {
 export const askText = (chord: string, holder: string, visible: boolean, mac: boolean): string =>
   `${phrase(chord, mac)} уже у ${q(holder)}${hid(visible)}. Если заменить, у ${q(holder)} этой клавиши не будет.`
 
-// Статус после назначения: «B — «Крупный просмотр» (у «X» больше нет)».
+// Статус после назначения: «B — «Во весь экран» (у «X» больше нет)».
 export function assignedText(chord: string, label: string, replaced: { label: string; visible: boolean } | null, mac: boolean): string {
   const t = `${chordText(chord, mac)} — ${q(label)}`
   return replaced ? `${t} (у ${q(replaced.label)}${hid(replaced.visible)} больше нет)` : t

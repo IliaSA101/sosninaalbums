@@ -116,6 +116,11 @@ export const INTENDED_DIFFS: readonly Diff[] = [
     now: 'cutItems',
     why: '074-24 (099): Ctrl+X — вырезать выделенное, с уровня «Стандартный»',
   })),
+  // Поиск в ленте (0.26-124, каталог G1): Ctrl+F раньше молчал. Токены матрицы строчные и с русской раскладкой, при CapsLock — заглавные.
+  { ctx: '*', token: /^ctrl\+[fFаА]$/, was: null, now: 'findPhotos', why: '0.26-124-10: Ctrl+F — поиск в ленте' },
+  // Крупный просмотр (0.26-128, каталог G1): буква Z без модификаторов раньше молчала. Лента — выделенное, холст — одно выделенное
+  // фото, иначе тост; в «Во весь экран» (лента), при галерее и в режиме фона команда молчит сама (previewOn).
+  { ctx: '*', token: /^[zяZЯ]$/, was: null, now: 'photoPreview', why: '0.26-128-2: Z — крупный просмотр фото' },
   // Ctrl+R без «Полного»: reload-no-op ушёл из таблицы, страж браузера гасит перезагрузку (проверка ниже).
   { ctx: '*', token: /^ctrl\+[rк]$/i, was: 'reload', now: null, why: '074-8: reload ушёл из таблицы — Ctrl+R гасит страж браузера' },
 ]
@@ -343,7 +348,7 @@ describe('паритет клавиш: новый диспетчер проти�
   it('каждая запись INTENDED_DIFFS встречается (нет мёртвых правил) и имеет причину с номером решения', () => {
     const found = diffs(cases)
     for (const r of INTENDED_DIFFS) {
-      expect(r.why, String(r.token)).toMatch(/^074-\d+/)
+      expect(r.why, String(r.token)).toMatch(/^(074|0\.26-(124|128))-\d+/)
       expect(
         found.some((f) => ruleMatches(r, f)),
         `${r.ctx} | ${String(r.token)}: ${r.was} → ${r.now}`,

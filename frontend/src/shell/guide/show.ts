@@ -31,7 +31,8 @@ export interface ShowCtx {
   selPhoto: boolean
   selText: boolean
   selAny: boolean // выделено что угодно на текущем листе (места, фото, тексты)
-  libPhotos: number // фото в ленте с учётом фильтра
+  libPhotos: number // фото в ленте с учётом фильтра и поиска
+  libAll: number // фото в библиотеке вообще: libPhotos = 0 при libAll > 0 — их скрыл поиск или фильтр
   libSel: boolean // в ленте выделено фото
   cardBody: boolean // у текущего листа есть карточка (разворот есть, галерея закрыта)
   big: boolean
@@ -325,6 +326,13 @@ function notvigNeed(w: Walk, needs: Set<Need>): Plan | null {
 // Полоса отметок появляется над лентой, когда в ней выделено фото.
 function libNeed(w: Walk, needs: Set<Need>): Plan | null {
   if (!needs.has('libsel') || w.ctx.libSel) return null
+  if (w.ctx.libPhotos === 0 && w.ctx.libAll > 0)
+    return stop(
+      w,
+      'ui:library',
+      'Лента пуста из-за поиска или фильтра: сбросьте их',
+      'Сейчас поиск или фильтр скрыл все фото ленты — покажу ленту',
+    )
   if (w.ctx.libPhotos === 0) return stop(w, 'ui:library', 'В ленте пока нет фото: добавьте папку', 'Сейчас в ленте нет фото — покажу ленту')
   w.steps.push({ do: 'selectLibrary' })
   return null
@@ -347,7 +355,7 @@ function textNeed(w: Walk, needs: Set<Need>): Plan | null {
     return null
   }
   const to = w.can('panels') ? 'ui:rail' : 'menu:addText'
-  if (to.startsWith('menu:')) w.steps.push({ do: 'menu', menu: menuOf('addText') ?? 'edit' })
+  if (to.startsWith('menu:')) w.steps.push({ do: 'menu', menu: menuOf('addText') ?? 'spread' })
   return stop(w, to, 'Добавьте текст', 'Сейчас на листе нет текста — покажу, где его добавить')
 }
 

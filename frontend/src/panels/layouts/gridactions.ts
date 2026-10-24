@@ -24,6 +24,17 @@ export async function applyChoice(spread: string, scope: LayoutScope, ch: GridCh
   }
 }
 
+// Плитка галереи сторонки обложки (127): доли зоны ставятся как есть, лишние фото — в ленту с «Вернуть».
+export async function applyCoverChoice(scope: LayoutScope, ch: GridChoice) {
+  try {
+    const r = (await Api.ApplyCoverGrid(scope, ch.boxes)) as unknown as GridResult
+    if (!(await store.take(r.view))) return
+    if (r.left > 0) notifyUndo(leftText(r.left))
+  } catch (e) {
+    store.notify(errText(e), 'error')
+  }
+}
+
 // Правка шаблонов: true — выполнено. Ошибка «новее программы» объясняется понятным текстом.
 export async function tplCall(p: Promise<unknown>): Promise<boolean> {
   try {

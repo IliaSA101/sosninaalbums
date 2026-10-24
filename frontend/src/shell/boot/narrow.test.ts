@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Сужение набора функций сбрасывает состояния верхних групп (narrow.ts). Go и события Wails подменены;
 // notify ставит таймер через window (тест идёт в окружении node).
@@ -45,7 +45,7 @@ describe('prefs: набор «Своего» (спека 011 U2)', () => {
     clear.mockRestore()
   })
 
-  it('потеря «Вариантов» закрывает галерею, «Разреза и склейки» — крупный просмотр', async () => {
+  it('потеря «Вариантов» закрывает галерею, «Разреза и склейки» — «Во весь экран»', async () => {
     gallery.cur = { spread: 's1', scope: 'spread', tab: 'layouts' }
     modes.big = true
     prefs.toggle('variants', false)
@@ -83,5 +83,40 @@ describe('prefs: набор «Своего» (спека 011 U2)', () => {
     prefs.toggle('marks', false)
     await tick()
     expect(libfilter.active).toBe(false)
+  })
+
+  // 127: на обложке gallery.open('spread', …) молчит, поэтому галерею сторонки сужают отдельно.
+  describe('галерея сторонки обложки (127)', () => {
+    beforeEach(() => {
+      prefs.load({ level: 'full', showStart: false, first: false, custom: null })
+      gallery.source = 'all'
+      gallery.cur = { spread: 'cover', scope: 'right', tab: 'grids' }
+    })
+    afterEach(() => {
+      gallery.cur = null
+      gallery.source = 'all'
+    })
+
+    it('потеря «Шаблонов» оставляет галерею и убирает «Мои»: источник — «Все»', async () => {
+      gallery.source = 'mine'
+      prefs.toggle('templates', false)
+      await tick()
+      expect(gallery.cur).toEqual({ spread: 'cover', scope: 'right', tab: 'grids' })
+      expect(gallery.source).toBe('all')
+    })
+
+    it('потеря «Шаблонов» не трогает другой источник', async () => {
+      gallery.source = 'builtin'
+      prefs.toggle('templates', false)
+      await tick()
+      expect(gallery.cur?.spread).toBe('cover')
+      expect(gallery.source).toBe('builtin')
+    })
+
+    it('потеря «Вариантов» закрывает галерею сторонки', async () => {
+      prefs.toggle('variants', false)
+      await tick()
+      expect(gallery.cur).toBeNull()
+    })
   })
 })

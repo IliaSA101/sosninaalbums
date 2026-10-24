@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/assoc"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -20,7 +21,7 @@ import (
 
 // afterPIDFlag — флаг «Открыть в 0.X»: новая версия ждёт выхода старой (по pid) и открывает файл.
 // Контракт между версиями (0.25 запускает 0.26+): менять нельзя, сторож — TestAfterPidContract.
-const afterPIDFlag = "--after-pid"
+const afterPIDFlag = assoc.AfterPIDFlag
 
 // afterPIDWait — сколько новая версия ждёт выхода старой: замок единственного экземпляра занят
 // до её выхода. Вышел предел — идём дальше (файл тогда уйдёт старой, и она снова покажет окно).

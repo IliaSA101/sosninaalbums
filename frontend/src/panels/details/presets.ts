@@ -7,11 +7,27 @@ export type Preset = Pick<PagePreset, 'label' | 'w' | 'h' | 'dpi' | 'layflat' | 
 // Та же формула, что px() в internal/export.
 export const exportPx = (mm: number, dpi: number) => Math.round((mm / 25.4) * dpi)
 
+// Файл для типографии всегда 300 dpi (design §1.3): px вводятся и показываются при нём, а не при dpi альбома.
+export const FILE_DPI = 300
+
+// Целые px из поля: пусто, мусор, дробь, ноль и минус — null (поле вернёт прежнее значение, как в карточке обложки).
+export function parsePx(text: string): number | null {
+  const t = text.trim()
+  if (!/^\d+$/.test(t)) return null
+  const v = Number(t)
+  return Number.isSafeInteger(v) && v > 0 ? v : null
+}
+
 type Form = Pick<Settings, 'pageW' | 'pageH' | 'dpi' | 'layflat' | 'safe' | 'bleed'>
 
-// Пресет подсвечен, когда совпадают все заданные в нём поля.
+// Допуск формата, мм (123, design §1.2): страница на ≤ 0,25 мм от кнопки — этот формат (303,95 × 202,95 из px — Фабрика 30×20).
+// Равен model.PageTol в Go; паритет — testdata/parity/pagetol.json. Ближайшие чужие форматы отстоят на 1 мм.
+export const PAGE_TOL = 0.25
+export const sameMm = (a: number, b: number): boolean => Math.abs(a - b) <= PAGE_TOL
+
+// Пресет подсвечен, когда совпадают все заданные в нём поля (размер — с допуском PAGE_TOL).
 export function presetActive(p: Preset, s: Form): boolean {
-  if (+s.pageW !== p.w || +s.pageH !== p.h) return false
+  if (!sameMm(+s.pageW, p.w) || !sameMm(+s.pageH, p.h)) return false
   if (p.dpi && +s.dpi !== p.dpi) return false
   if (p.layflat && !s.layflat) return false
   if (p.safe && +s.safe !== p.safe) return false

@@ -15,13 +15,14 @@ const sources = import.meta.glob('/src/**/*.svelte', { query: '?raw', import: 'd
 
 // Якоря в разметке: только литералом data-guide="…" (несколько id — через пробел) или литералом в спреде
 // {...cond ? { 'data-guide': '…' } : {}} (якорь только у части экземпляров: текущий номер, плавающая карточка).
-// Динамический data-guide={…} запрещён.
-const ANCHOR = /(?<![\w-])(?:data-guide="([^"]*)"|'data-guide': '([^']*)')/g
+// Динамический data-guide={…} запрещён. Третья форма — запасной якорь «⋯» группы карточки: moreGuide="…" литералом
+// (CardGroup кладёт его в data-guide-hold; кнопка ушла в «⋯», основного места в разметке нет — спека 124 U5, vig-save).
+const ANCHOR = /(?<![\w-])(?:data-guide="([^"]*)"|'data-guide': '([^']*)'|moreGuide="([^"]*)")/g
 const anchors = (): Set<string> => {
   const out = new Set<string>()
   for (const src of Object.values(sources))
     for (const m of src.matchAll(ANCHOR))
-      (m[1] ?? m[2])
+      (m[1] ?? m[2] ?? m[3])
         .split(/\s+/)
         .filter(Boolean)
         .forEach((id) => out.add(id))
@@ -158,7 +159,7 @@ describe('справочник функций: стражи', () => {
     expect(bad).toEqual([])
   })
 
-  it('041: статья про разнообразие раскладок — ручка, команда в «Правка» и галерея; в «Автосборке» — строка про ручку', () => {
+  it('041: статья про разнообразие раскладок — ручка, команда в «Разворот» и галерея; в «Автосборке» — строка про ручку', () => {
     const a = ARTICLES.find((x) => x.id === 'variety')
     expect(a).toMatchObject({ title: 'Разнообразие раскладок', feature: 'variants', menu: ['varyLayouts'] })
     for (const w of ['Автосборка', 'Раскладки', 'Разнообразить раскладки', 'Похожие', 'Другие варианты']) expect(a?.where, w).toContain(w)
@@ -220,10 +221,10 @@ describe('справочник функций: стражи', () => {
     expect(v?.words).toContain('лесенка')
   })
 
-  it('067: «Готовые развороты» — на функции «Фоны и стикеры», вход в «Фон» карточки и в «Правка»', () => {
+  it('067: «Готовые развороты» — на функции «Фоны и стикеры», вход в «Фон» карточки и в «Разворот»', () => {
     const a = ARTICLES.find((x) => x.id === 'spread-tpl')
     expect(a).toMatchObject({ title: 'Готовые развороты', feature: 'decor', menu: ['spreadTpl'] })
-    for (const w of ['«Фон»', 'Правка ▸ Готовые развороты…', '«Левую» и «Правую»']) expect(a?.where, w).toContain(w)
+    for (const w of ['«Фон»', 'Разворот ▸ Готовые развороты…', '«Левую» и «Правую»']) expect(a?.where, w).toContain(w)
     expect(placesOf(a!).map((p) => p.spot)).toEqual(['ui:spread-tpl', 'menu:spreadTpl'])
   })
 
@@ -242,10 +243,10 @@ describe('справочник функций: стражи', () => {
     for (const w of ['все', 'развороты', 'сразу', 'несколько', 'набор', 'страниц', 'логотип', 'qr']) expect(a?.words, w).toContain(w)
   })
 
-  it('079: «Рамочки» и «Прозрачность фото» — свои функции уровня, якоря карточки, вход в «Правка», слова поиска', () => {
+  it('079: «Рамочки» и «Прозрачность фото» — свои функции уровня, якоря карточки, вход в «Разворот», слова поиска', () => {
     const b = ARTICLES.find((x) => x.id === 'border')
     expect(b).toMatchObject({ title: 'Рамочки', feature: 'border', menu: ['borderGallery'] })
-    for (const w of ['«Рамочка» ▸ «Выбрать…»', 'Правка ▸ Рамочки…', 'правая кнопка', 'все места разворота', '«Добавить свою рамочку…»'])
+    for (const w of ['«Рамочка» ▸ «Выбрать…»', 'Разворот ▸ Рамочки…', 'правая кнопка', 'все места разворота', '«Добавить свою рамочку…»'])
       expect(b?.where, w).toContain(w)
     expect(placesOf(b!).map((p) => p.spot)).toEqual(['ui:border', 'menu:borderGallery'])
     for (const w of ['рамочка', 'рамка', 'паспарту', 'полароид', 'обводка']) expect(b?.words, w).toContain(w)

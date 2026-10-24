@@ -134,7 +134,7 @@ func TestHotkeysRestore(t *testing.T) {
 	}
 	prev := v.Custom
 
-	// Стандартное F у «Крупного просмотра» теперь у «Панели деталей» — вопрос, файл прежний.
+	// Стандартное F у «Во весь экран» теперь у «Панели деталей» — вопрос, файл прежний.
 	r, err := a.ResetHotkey("toggleBig", false)
 	if err != nil || r.Conflict == nil || r.Conflict.ID != "toggleDetails" || !reflect.DeepEqual(fileHotkeys(a), map[string][]string(prev)) {
 		t.Fatalf("ResetHotkey без замены: %v %+v, файл %v", err, r.Conflict, fileHotkeys(a))
@@ -171,7 +171,7 @@ func TestHotkeysTwoInstances(t *testing.T) {
 	b.cfgDir = a.cfgDir
 	staleA, staleB := a.Keymap(), b.Keymap()
 	mustSet(t, a, "toggleBig", "KeyF", "KeyB", false)
-	// b не видел правку a: «B» для «Безопасной зоны» — вопрос о «Крупном просмотре».
+	// b не видел правку a: «B» для «Безопасной зоны» — вопрос о «Во весь экран».
 	r := mustSet(t, b, "toggleSafe", "KeyG", "KeyB", false)
 	if r.Conflict == nil || r.Conflict.ID != "toggleBig" {
 		t.Fatalf("конфликт по файлу не найден: %+v", r)

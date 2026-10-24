@@ -7,7 +7,9 @@ import { bgmode } from '../../editor/backdrop/bgmode.svelte'
 import { canvas } from '../../editor/canvas/canvas.svelte'
 import { row } from '../../editor/spread/spreadrow.svelte'
 import { edit } from '../../editor/text/edit.svelte'
-import { ownMarks } from '../../panels/marks/ownmarks.svelte'
+import { nameSearch } from '../../panels/marks/namefind.svelte'
+import { ownMarks, type MarkHost } from '../../panels/marks/ownmarks.svelte'
+import { photoui } from '../../editor/photo/photoui.svelte'
 import { openNew, removeSelected, toggleSelected } from '../../panels/bins/binact'
 import { binsel } from '../../panels/bins/binsel.svelte'
 import { gallery } from '../../panels/gallery/gallery.svelte'
@@ -51,10 +53,12 @@ type Handler = (ev?: KeyboardEvent, arg?: string) => unknown
 const afterEdit = (op: () => Promise<unknown>) => edit.idle().then(() => store.run(op()))
 
 // Листание раскладок Пробелом: у сетки и в режиме фона раскладок нет. У виньетки (сетка по сути) листаются
-// её шаблоны (решение 80).
+// её шаблоны (решение 80). На обложке (127) Пробел листает лицевую (задняя — только ‹ ›); шаг, ▦ или тост
+// решает gallery.coverStep — одно место с кнопкой ›.
 function layoutStep(delta: number) {
   const s = store.spread
-  if (!prefs.can('variants') || !s || store.onCover || bgmode.cur) return
+  if (!prefs.can('variants') || !s || bgmode.cur) return
+  if (store.onCover) return void gallery.coverStep('right', delta)
   if (isVignette(s) || !s.grid) gallery.step('spread', delta)
 }
 
@@ -106,7 +110,14 @@ async function clearRecent() {
 }
 
 // Отметка выделенным фото ленты: свой id у каждой клавиши (074-7), событие не нужно. Тост без выделения — в ownMarks.setMarks.
-const mark = (patch: MarkPatch) => () => void ownMarks.setMarks(store, patch)
+// Под окном крупного просмотра из ленты отметка идёт показанному фото, выделение ленты не меняется (0.26-128-5).
+// Разворот { ...store } не годится: методы класса лежат в прототипе и при развороте теряются.
+const markHost = (): MarkHost => {
+  const id = photoui.preview?.from === 'library' ? photoui.previewId : null
+  if (!id) return store
+  return { selectedIds: [id], run: (p) => store.run(p), notify: (t) => store.notify(t) }
+}
+const mark = (patch: MarkPatch) => () => void ownMarks.setMarks(markHost(), patch)
 const rate = (n: number) => mark({ rating: n })
 const label = (l: 'red' | 'yellow' | 'green' | 'blue') => mark({ label: l, toggle: true })
 const alignOp = (op: Parameters<typeof align.run>[0]) => () => align.run(op)
@@ -138,6 +149,8 @@ const HANDLERS = {
   // Правка
   undo: () => edit.idle().then(() => store.runHistory(Api.Undo())),
   redo: () => edit.idle().then(() => store.runHistory(Api.Redo())),
+  // Поиск в ленте (0.26-124-10): раскрыть поле и поставить в него фокус; пункта меню нет. Пустая лента, «Во весь экран», галерея — молчим.
+  findPhotos: () => nameSearch.focus(),
   selectAll: () => {
     for (const p of store.visible) store.selected.add(p.id)
   },
@@ -239,6 +252,8 @@ const HANDLERS = {
   // Окно уровней рисует LevelsDialog (читает prefs.compare).
   compareLevels: () => (prefs.compare = true),
   fitZoom: () => canvas.fit(),
+  // Крупный просмотр фото (128): лента — выделенное, холст — одно выделенное фото разворота; нечего открыть — тост.
+  photoPreview: () => photoui.openByKey(),
   // Отметки фото ленты (004)
   markRating0: rate(0),
   markRating1: rate(1),

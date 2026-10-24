@@ -370,6 +370,16 @@ func (a *App) ApplyGrid(spreadID, scope, tplScope string, boxes []model.Box) (r 
 	return r, err
 }
 
+// ApplyCoverGrid ставит раскладку на сторонку обложки (127): boxes — доли её безопасной зоны
+// (model.CoverGridChoices.Box), scope — left | right; Left — фото, ушедшие в ленту (тост «Вернуть»).
+func (a *App) ApplyCoverGrid(scope string, boxes []model.Box) (r GridResult, err error) {
+	defer a.guardEdit("ApplyCoverGrid", &r.View, &err)
+	v, left, err := a.editor().ApplyCoverGrid(scope, boxes)
+	r.View, err = a.changedOrErr(v, err)
+	r.Left = left
+	return r, err
+}
+
 // infosOrRefs — сведения о фото из ленты, а для фото альбома, чьей папки нет в
 // ленте, — из проекта (как MovePhoto); запрос копии (098) — сведения файла из любой записи семьи.
 func (a *App) infosOrRefs(ids []string) []model.PhotoInfo {

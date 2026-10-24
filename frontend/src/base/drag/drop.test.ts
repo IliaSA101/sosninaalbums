@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { backdropAccepts, dropPlan } from './drop'
+import { BACKDROP_ONE, backdropAccepts, COVER_BG_MANY, dropPlan } from './drop'
 import type { Payload, Target } from '../core/types'
 
 const strip: Payload = { kind: 'photos', ids: ['a', 'b'] }
@@ -178,6 +178,25 @@ describe('dropPlan: зона фона обложки', () => {
   it('фото на сторонку — фон области, как у разворота (id листа «cover»)', () => {
     const t: Target = { kind: 'backdrop', spread: 'cover', scope: 'right' }
     expect(dropPlan({ kind: 'photos', ids: ['a'] }, t)).toEqual({ op: 'backdrop', spread: 'cover', scope: 'right', photo: 'a' })
+  })
+})
+
+describe('dropPlan: 2+ фото на фон (127-20)', () => {
+  const many: Payload = { kind: 'photos', ids: ['a', 'b'] }
+  it('на зону фона обложки — текст со ссылкой на ▦, для любой зоны листа', () => {
+    for (const scope of ['left', 'right', 'spread', 'spine'] as const) {
+      expect(dropPlan(many, { kind: 'backdrop', spread: 'cover', scope })).toEqual({ op: 'reject', text: COVER_BG_MANY })
+    }
+    expect(COVER_BG_MANY).toBe('На фон — только одно фото. Для нескольких — ▦ над сторонкой')
+  })
+  it('на зону фона разворота и листа виньетки — прежний текст', () => {
+    expect(dropPlan(many, { kind: 'backdrop', spread: 's1', scope: 'left' })).toEqual({ op: 'reject', text: BACKDROP_ONE })
+    expect(dropPlan(many, { kind: 'backdrop', spread: 'v1', scope: 'spread' })).toEqual({ op: 'reject', text: 'На фон — только одно фото' })
+  })
+  it('одно фото на обложку — по-прежнему план backdrop, пустой набор — ничего', () => {
+    const t: Target = { kind: 'backdrop', spread: 'cover', scope: 'left' }
+    expect(dropPlan({ kind: 'photos', ids: ['a'] }, t)).toEqual({ op: 'backdrop', spread: 'cover', scope: 'left', photo: 'a' })
+    expect(dropPlan({ kind: 'photos', ids: [] }, t)).toBeNull()
   })
 })
 

@@ -2,16 +2,17 @@
   import { untrack } from 'svelte'
   import { Api, store } from '../../base/core/store.svelte'
   import { jobs } from '../../base/core/jobs.svelte'
-  import type { PrintPlan } from '../../base/core/types'
+  import type { PrintKind, PrintPlan } from '../../base/core/types'
   import { edit } from '../../editor/text/edit.svelte'
   import { fileCount } from '../../panels/library/missing'
   import { parseExportRange, rangeSummary } from './exportrange'
   import ExportRun from './ExportRun.svelte'
   import ExportGroup from './ExportGroup.svelte'
   import ExportQuality from './ExportQuality.svelte'
-  import PrintGroup from './PrintGroup.svelte'
+  import PrintSelect from './PrintSelect.svelte'
   import {
     activePlan,
+    defaultKind,
     buildOptions,
     canExport,
     coverAvailable,
@@ -22,6 +23,8 @@
     planStale,
     printQuality,
     sampleName,
+    coverFile,
+    filePrefix,
     savePrefs,
     sizeSummary,
     type ExportPrefs,
@@ -52,14 +55,31 @@
     void store.view.rev
     if (!jobs.exportOpen) return
     const my = ++planReq
-    Api.PrintPlans()
+    // last — выбор, запомненный в окне: Go по нему и обложке альбома отмечает пункт при открытии (123 А2)
+    const asked = Api.PrintPlans(loadPrefs().print) as unknown as Promise<PrintPlan[] | null>
+    asked
       .then((p) => {
-        if (!planStale(my, planReq)) plans = (p ?? []) as PrintPlan[]
+        if (planStale(my, planReq)) return
+        plans = p ?? []
+        applyDefault(plans)
       })
       .catch(() => {
         if (!planStale(my, planReq)) plans = [] // без планов окно работает как обычно
       })
   })
+  // Первый ответ после открытия ставит пункт, отмеченный Go (Plan.default); выбор фотографа раньше ответа и правки альбома
+  // при открытом окне его не трогают. В хранилище пункт попадёт при выгрузке или при выборе руками.
+  let fresh = false
+  function applyDefault(list: PrintPlan[]) {
+    if (!fresh) return
+    fresh = false
+    const d = defaultKind(list)
+    if (d !== undefined && d !== prefs.print) prefs = { ...prefs, print: d }
+  }
+  function choose(v: '' | PrintKind) {
+    fresh = false
+    setPrefs({ print: v })
+  }
   // Каждое открытие — заново: выбор из localStorage, диапазон «Все».
   $effect(() => {
     if (!jobs.exportOpen) return
@@ -69,10 +89,11 @@
       prefs = loadPrefs()
       busy = false
       plans = null // планы прошлого открытия не показываем и не берём в расчёт
+      fresh = true
     })
   })
 
-  // Режим печати включён: у страницы есть план этой типографии (формат из её таблицы, не лист 031) и флажок выбран.
+  // Режим печати включён: у страницы есть план этой типографии (формат из её таблицы, не лист 031) и пункт списка «Печать» выбран.
   const plan = $derived(activePlan(plans, prefs.print))
   const fs = $derived(!!plan)
 
@@ -130,6 +151,7 @@
     busy = true
     const printPlan = plan // план этого запуска — для окна «Готово» (заголовок, сайт, папка)
     await edit.idle() // набранное в тексте должно попасть в файл
+    savePrefs(prefs) // выбор, который Go отметил при открытии, станет «последним выбором» для следующего раза
     jobs.exportPrint = printPlan
     // Окно остаётся: при успехе в нём пойдёт ход (jobs.exporting), при отказе Go — прежние настройки.
     await jobs.runExport(buildOptions(scope, current, text, sheet ? { ...prefs, pages: false } : prefs, hasCover, store.onCover, printPlan))
@@ -148,7 +170,7 @@
     {#if jobs.exporting}
       <ExportRun />
     {:else}
-      <PrintGroup plans={plans ?? []} pref={prefs.print} {plan} {hasCover} setPref={(v) => setPrefs({ print: v })} />
+      <PrintSelect plans={plans ?? []} {plan} {hasCover} setPref={choose} />
 
       {#if hasCover}
         <ExportGroup cap="Обложка" off={fs}>
@@ -158,7 +180,7 @@
               checked={fs || prefs.cover || only}
               disabled={only || fs}
               onchange={(e) => setPrefs({ cover: e.currentTarget.checked })}
-            />Обложка <span class="hint">(00.jpg)</span></label
+            />Обложка <span class="hint">({coverFile(plan)})</span></label
           >
           <label
             ><input
@@ -220,11 +242,11 @@
         <ExportGroup cap="Вид" off={fs} role="radiogroup" label="Вид">
           <label
             ><input type="radio" name="ex-pages" checked={!pagesNow} disabled={fs} onchange={() => setPrefs({ pages: false })} />Разворотами
-            <span class="hint">{sampleName(current, spreads.length, false)}</span></label
+            <span class="hint">{sampleName(current, spreads.length, false, filePrefix(plan))}</span></label
           >
           <label
             ><input type="radio" name="ex-pages" checked={pagesNow} disabled={fs} onchange={() => setPrefs({ pages: true })} />По страницам
-            <span class="hint">{sampleName(current, spreads.length, true)}</span></label
+            <span class="hint">{sampleName(current, spreads.length, true, filePrefix(plan))}</span></label
           >
         </ExportGroup>
       {/if}

@@ -3,7 +3,9 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import MenuList from '../../base/ui/MenuList.svelte'
   import type { MenuNode } from '../../base/ui/menulist'
+  import { keymap } from '../../base/keys/keymap.svelte'
   import { copyNames, reveal } from '../../editor/photo/fileact'
+  import { photoui } from '../../editor/photo/photoui.svelte'
   import { goUse } from '../../editor/photoprops/gouse.svelte'
   import { lost } from './lost.svelte'
   import { lineAt, USE_ROW } from '../../editor/photoprops/usemenu'
@@ -25,6 +27,7 @@
             lines: thumbmenu.uses,
           },
           prefs.can,
+          keymap.hint.bind(keymap),
         )
       : [],
   )
@@ -47,7 +50,8 @@
     const ids = m.ids
     const line = n.id === USE_ROW ? lineAt(thumbmenu.uses, n.arg) : null
     thumbmenu.close()
-    if (n.id === 'explorer') void reveal(ids[0])
+    if (n.id === 'preview') photoui.openLibrary(ids[0])
+    else if (n.id === 'explorer') void reveal(ids[0])
     else if (n.id === 'copy') void copyNames(ids, gone)
     else if (line) goUse(line)
   }

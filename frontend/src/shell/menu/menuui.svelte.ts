@@ -3,7 +3,7 @@
 import type { MenuId } from './menu'
 
 class MenuUi {
-  // Какое из меню «Файл · Правка · Вид · Справка» раскрыто; null — ни одно.
+  // Какое из меню «Файл · Правка · Разворот · Вид · Справка» раскрыто; null — ни одно.
   openId = $state<MenuId | null>(null)
   // Запрос раскрыть меню: счётчик, чтобы повторный запрос того же меню тоже сработал. Берёт MenuBar.
   req = $state<{ id: MenuId; n: number } | null>(null)

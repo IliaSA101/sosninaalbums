@@ -2,9 +2,11 @@ package app
 
 import (
 	"errors"
+	"os"
 	"slices"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/assoc"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -53,6 +55,12 @@ func (f *fakeReg) DropUserChoice() (bool, error) {
 }
 func (f *fakeReg) SelfExe() (string, error) { return f.self, nil }
 
+// Значения config.assoc записаны в config.json: тест держит их литералами, а не константами службы.
+const (
+	assocOn  = "on"
+	assocOff = "off"
+)
+
 const (
 	myExe       = "/prog/me/SosninaAlbums-0.25.0.exe"
 	oldExe      = "/prog/old/SosninaAlbums-0.24.0.exe"
@@ -64,131 +72,54 @@ const (
 	progOurs    = osx.AssocProgID
 )
 
-// assocApp — App версии 0.25.0 с реестром в памяти; live — какие exe «лежат на диске».
-func assocApp(t *testing.T, reg *fakeReg, live ...string) *App {
+// assocRig — App с пересобранной службой связи: подмены Host (реестр, место запуска, сборка dev,
+// временная папка, запуск и выход) — поля рига, Host читает их при каждом вызове. Служба
+// собирается в newAssocRig, до первого вызова и до фона (126-19); поля App доступны через встраивание.
+type assocRig struct {
+	*App
+	reg     assoc.Registry // nil — связь не поддерживается
+	placeFn func() osx.Place
+	devFlag bool
+	tempFn  func() string
+	startFn func(exe string, args ...string) error
+	quitFn  func()
+}
+
+func newAssocRig(t *testing.T, reg assoc.Registry) *assocRig {
 	t.Helper()
 	withVersion(t, "0.25.0")
 	a := newApp(t)
 	a.cfgDir = testkit.TempDir(t)
 	a.emit = func(string, ...any) {}
+	r := &assocRig{App: a, reg: reg, placeFn: a.assocHost().Place, tempFn: os.TempDir,
+		startFn: osx.Start, quitFn: a.quitWindow}
+	h := a.assocHost()
+	h.Reg = func() assoc.Registry { return r.reg }
+	h.Place = func() osx.Place { return r.placeFn() }
+	h.DevBuild = func() bool { return r.devFlag }
+	h.Temp = func() string { return r.tempFn() }
+	h.Start = func(exe string, args ...string) error { return r.startFn(exe, args...) }
+	h.Quit = func() { r.quitFn() }
+	a.assoc = assoc.New(h)
+	return r
+}
+
+// run — тело фоновой синхронизации связи, дождавшись фона.
+func (r *assocRig) run() {
+	r.syncAssoc(false)
+	r.bg.Wait()
+}
+
+// assocApp — App версии 0.25.0 с реестром в памяти; live — какие exe «лежат на диске».
+func assocApp(t *testing.T, reg *fakeReg, live ...string) *assocRig {
+	t.Helper()
 	if reg.self == "" {
 		reg.self = myExe
 	}
-	a.assoc.reg = reg
-	a.assoc.place = func() osx.Place { return osx.PlaceNormal }
-	a.exists = func(p string) bool { return slices.Contains(live, p) }
-	return a
-}
-
-func TestAssocPlan(t *testing.T) {
-	live := func(ps ...string) func(string) bool {
-		return func(p string) bool { return slices.Contains(ps, p) }
-	}
-	ours := func(exe, ver string) osx.AssocState {
-		return osx.AssocState{ProgID: progOurs, Exe: exe, AppVersion: ver}
-	}
-	cases := []struct {
-		name       string
-		st         osx.AssocState
-		exe, ver   string
-		live       []string
-		write      bool
-		foreignAct bool
-		drop       bool
-	}{
-		{"пусто", osx.AssocState{}, myExe, "0.25.0", nil, true, false, false},
-		{"ProgID наш, команды нет", osx.AssocState{ProgID: progOurs}, myExe, "0.25.0", nil, true, false, false},
-		{"exe из команды пропал", ours(oldExe, "0.26.0"), myExe, "0.25.0", nil, true, false, false},
-		{"моя версия новее", ours(oldExe, "0.24.0"), myExe, "0.25.0", []string{oldExe}, true, false, false},
-		{"моя версия старее", ours(oldExe, "0.26.0"), myExe, "0.25.0", []string{oldExe}, false, false, false},
-		{"равны, обе zip", ours(oldExe, "0.25.0"), myExe, "0.25.0", []string{oldExe}, false, false, false},
-		{"равны, это же exe", ours(myExe, "0.25.0"), myExe, "0.25.0", []string{myExe}, false, false, false},
-		{"пред-выпуск ниже выпуска", ours(oldExe, "0.25.0-rc2"), myExe, "0.25.0", []string{oldExe}, true, false, false},
-		{"я пред-выпуск, у них выпуск", ours(oldExe, "0.25.0"), myExe, "0.25.0-rc2", []string{oldExe}, false, false, false},
-		{"0.9 против 0.10 числом", ours(oldExe, "0.9.0"), myExe, "0.10.0", []string{oldExe}, true, false, false},
-		// Их версия не разбирается, моя — да: update.Newer тут дал бы false, а план пишет.
-		{"их версия не разбирается", ours(oldExe, "dev"), myExe, "0.25.0", []string{oldExe}, true, false, false},
-		{"их версии нет вовсе", ours(oldExe, ""), myExe, "0.25.0", []string{oldExe}, true, false, false},
-		{"моя не разбирается, их да", ours(oldExe, "0.1.0"), myExe, "dev", []string{oldExe}, false, false, false},
-		{"обе не разбираются", ours(oldExe, "dev"), myExe, "dev", []string{oldExe}, false, false, false},
-		{"чужой ProgID", osx.AssocState{ProgID: foreignProg}, myExe, "0.25.0", nil, false, true, false},
-		{"чужой ProgID и наш выбор «всегда»", osx.AssocState{ProgID: foreignProg, UserChoice: appsOld}, myExe, "0.25.0", nil, false, true, true},
-		{"равны: я установлена, они zip", osx.AssocState{ProgID: progOurs, Exe: oldExe, AppVersion: "0.25.0", InstallDir: instDir},
-			instExe, "0.25.0", []string{oldExe, instExe}, true, false, false},
-		{"равны: я zip, они установлены", osx.AssocState{ProgID: progOurs, Exe: instExe, AppVersion: "0.25.0", InstallDir: instDir},
-			myExe, "0.25.0", []string{instExe, myExe}, false, false, false},
-		{"равны: обе установлены", osx.AssocState{ProgID: progOurs, Exe: instExe, AppVersion: "0.25.0", InstallDir: instDir},
-			instExe, "0.25.0", []string{instExe}, false, false, false},
-		// AppVersion нет (записал установщик без неё) — версия установки.
-		{"версия из установки: новее", osx.AssocState{ProgID: progOurs, Exe: instExe, InstallDir: instDir, InstallVersion: "0.26.0"},
-			myExe, "0.25.0", []string{instExe}, false, false, false},
-		{"версия из установки: старее", osx.AssocState{ProgID: progOurs, Exe: instExe, InstallDir: instDir, InstallVersion: "0.24.0"},
-			myExe, "0.25.0", []string{instExe}, true, false, false},
-		{"выбор «всегда» на старой версии", osx.AssocState{ProgID: progOurs, Exe: myExe, AppVersion: "0.25.0", UserChoice: appsOld},
-			myExe, "0.25.0", []string{myExe}, false, false, true},
-		{"чужой выбор не трогаем", osx.AssocState{ProgID: progOurs, Exe: oldExe, AppVersion: "0.24.0", UserChoice: appsEtc},
-			myExe, "0.25.0", []string{oldExe}, true, false, false},
-	}
-	for _, c := range cases {
-		got := assocPlan(assocIn{St: c.st, Exe: c.exe, Ver: c.ver, Exists: live(c.live...)})
-		want := assocAct{Write: c.write, Foreign: c.foreignAct, Drop: c.drop}
-		if got != want {
-			t.Errorf("%s: %+v, ждали %+v", c.name, got, want)
-		}
-	}
-}
-
-func TestCmpVer(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"0.26.0", "0.25.3", 1},
-		{"0.25.3", "0.26.0", -1},
-		{"0.25.0", "0.25.0", 0},
-		{"0.25.0", "0.25.0-rc2", 1},
-		{"0.25.0-rc2", "0.25.0", -1},
-		{"0.25.0-rc2", "0.25.0-rc10", 1}, // пред-выпуски — по строке: порядок rc важен лишь внутри одной версии
-		{"0.25.0+abc", "0.25.0", 0},
-		{"0.10.0", "0.9.9", 1},
-		{"dev", "0.0.1", -1},
-		{"0.0.1", "dev", 1},
-		{"", "0.0.1", -1},
-		{"dev", "", 0},
-		{"1.0", "0.9.0", -1}, // «1.0» не x.y.z: не версия
-	}
-	for _, c := range cases {
-		if got := cmpVer(c.a, c.b); got != c.want {
-			t.Errorf("cmpVer(%q, %q) = %d, ждали %d", c.a, c.b, got, c.want)
-		}
-	}
-}
-
-func TestUserChoiceOurs(t *testing.T) {
-	ex := func(ps ...string) func(string) bool {
-		return func(p string) bool { return slices.Contains(ps, p) }
-	}
-	cases := []struct {
-		name string
-		st   osx.AssocState
-		live []string
-		want bool
-	}{
-		{"выбора нет", osx.AssocState{}, nil, false},
-		{"exe старой версии", osx.AssocState{UserChoice: appsOld}, nil, true},
-		{"exe без версии в имени, регистр", osx.AssocState{UserChoice: `applications\SOSNINAALBUMS.EXE`}, nil, true},
-		{"чужой exe", osx.AssocState{UserChoice: appsEtc}, nil, false},
-		{"чужой ProgID", osx.AssocState{UserChoice: "Other.Album"}, nil, false},
-		{"имя похоже, но не наше", osx.AssocState{UserChoice: `Applications\notsosninaalbums.exe`}, nil, false},
-		{"наш ProgID, команда жива", osx.AssocState{UserChoice: progOurs, Exe: myExe}, []string{myExe}, false},
-		{"наш ProgID, exe пропал", osx.AssocState{UserChoice: progOurs, Exe: myExe}, nil, true},
-		{"наш ProgID, команды нет", osx.AssocState{UserChoice: progOurs}, nil, true},
-	}
-	for _, c := range cases {
-		if got := userChoiceOurs(c.st, ex(c.live...)); got != c.want {
-			t.Errorf("%s: %v, ждали %v", c.name, got, c.want)
-		}
-	}
+	r := newAssocRig(t, reg)
+	r.placeFn = func() osx.Place { return osx.PlaceNormal }
+	r.exists = func(p string) bool { return slices.Contains(live, p) }
+	return r
 }
 
 // Без регистрации: нет реестра, не Windows, dev, стенд, временная папка, assoc: off — связь не
@@ -196,18 +127,18 @@ func TestUserChoiceOurs(t *testing.T) {
 func TestAssocSkip(t *testing.T) {
 	cases := []struct {
 		name string
-		set  func(a *App, r *fakeReg)
+		set  func(a *assocRig, r *fakeReg)
 		view AssocView
 	}{
-		{"нет реестра", func(a *App, _ *fakeReg) { a.assoc.reg = nil }, AssocView{}},
-		{"не Windows", func(_ *App, r *fakeReg) { r.unsupported = true }, AssocView{}},
-		{"сборка dev", func(a *App, _ *fakeReg) { a.assoc.devBuild = true }, AssocView{}},
-		{"стенд QA", func(a *App, _ *fakeReg) { a.data = "SosninaAlbums-stand-b" }, AssocView{}},
-		{"запуск из архива", func(a *App, _ *fakeReg) {
-			a.assoc.place = func() osx.Place { return osx.PlaceTemp }
+		{"нет реестра", func(a *assocRig, _ *fakeReg) { a.reg = nil }, AssocView{}},
+		{"не Windows", func(_ *assocRig, r *fakeReg) { r.unsupported = true }, AssocView{}},
+		{"сборка dev", func(a *assocRig, _ *fakeReg) { a.devFlag = true }, AssocView{}},
+		{"стенд QA", func(a *assocRig, _ *fakeReg) { a.data = "SosninaAlbums-stand-b" }, AssocView{}},
+		{"запуск из архива", func(a *assocRig, _ *fakeReg) {
+			a.placeFn = func() osx.Place { return osx.PlaceTemp }
 		}, AssocView{}},
 		// off: Can есть (пункт меню включит), вопроса нет, связь не пишется и не возвращается.
-		{"assoc off", func(a *App, _ *fakeReg) {
+		{"assoc off", func(a *assocRig, _ *fakeReg) {
 			a.updateConfig(func(c *prefs.Config) { c.Assoc = assocOff })
 		}, AssocView{Can: true, On: true}},
 	}
@@ -240,7 +171,7 @@ func TestAssocSkip(t *testing.T) {
 	a := assocApp(t, reg, oldExe)
 	reg.st = osx.AssocState{ProgID: progOurs, Exe: oldExe, AppVersion: "0.24.0", UserChoice: appsOld}
 	a.updateConfig(func(cf *prefs.Config) { cf.Assoc = assocOn })
-	a.runAssoc()
+	a.run()
 	if len(reg.writes) != 1 || reg.drops != 1 {
 		t.Errorf("контроль: записей %d, выборов %d", len(reg.writes), reg.drops)
 	}
@@ -258,7 +189,7 @@ func TestAssocAsk(t *testing.T) {
 	if st := a.GetState(); st.Assoc != a.assocView() || !st.Assoc.Ask {
 		t.Errorf("State.Assoc: %+v", st.Assoc)
 	}
-	a.runAssoc()
+	a.run()
 	if len(reg.writes) != 0 {
 		t.Fatalf("без согласия записано: %v", reg.writes)
 	}
@@ -299,13 +230,13 @@ func TestAssocAsk(t *testing.T) {
 	if v := a.assocView(); v.Ask {
 		t.Errorf("вопрос после off: %+v", v)
 	}
-	// Связь уже наша (установщик или прошлая версия): вопроса нет, runAssoc принимает её как согласие.
+	// Связь уже наша (установщик или прошлая версия): вопроса нет, Service.run принимает её как согласие.
 	reg2 := &fakeReg{st: osx.AssocState{ProgID: progOurs, Exe: oldExe, AppVersion: "0.24.0"}}
 	b := assocApp(t, reg2, oldExe)
 	if v := b.assocView(); v != (AssocView{Can: true, On: true}) {
 		t.Errorf("связь уже наша: %+v", v)
 	}
-	b.runAssoc()
+	b.run()
 	if c := b.loadConfig(); c.Assoc != assocOn {
 		t.Errorf("согласие не записано: %q", c.Assoc)
 	}
@@ -320,7 +251,7 @@ func TestAssocAsk(t *testing.T) {
 	}
 }
 
-// runAssoc по согласию: план применяется (моя версия новее — пишем, старее — нет, чужой ProgID —
+// Service.run (internal/app/assoc) по согласию: план применяется (моя версия новее — пишем, старее — нет, чужой ProgID —
 // нет), «всегда» от нашей старой версии снимается, чужой выбор нет.
 func TestAssocSync(t *testing.T) {
 	cases := []struct {
@@ -341,7 +272,7 @@ func TestAssocSync(t *testing.T) {
 		reg := &fakeReg{st: c.st}
 		a := assocApp(t, reg, oldExe)
 		a.updateConfig(func(cf *prefs.Config) { cf.Assoc = assocOn })
-		a.runAssoc()
+		a.run()
 		if len(reg.writes) != c.writes || reg.drops != c.drops || reg.st.UserChoice != c.choiceL {
 			t.Errorf("%s: записей %d (ждали %d), выборов %d (ждали %d), выбор %q", c.name, len(reg.writes), c.writes, reg.drops, c.drops, reg.st.UserChoice)
 		}
@@ -350,7 +281,7 @@ func TestAssocSync(t *testing.T) {
 	reg := &fakeReg{writeErr: errors.New("отказ")}
 	a := assocApp(t, reg)
 	a.updateConfig(func(cf *prefs.Config) { cf.Assoc = assocOn })
-	a.runAssoc()
+	a.run()
 	if c := a.loadConfig(); c.Assoc != assocOn {
 		t.Errorf("config после отказа записи: %+v", c)
 	}

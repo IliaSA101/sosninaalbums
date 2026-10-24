@@ -33,11 +33,14 @@ func RenderCtx(ctx context.Context, s Spread, opt Options) (*image.RGBA, error) 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	W, H := CanvasSize(opt)
+	W, H := sceneSize(opt)
 	if err := CheckSize(W, H); err != nil {
 		return nil, err
 	}
-	canvas := image.NewRGBA(image.Rect(0, 0, W, H))
+	canvas, err := newCanvas(opt, W, H)
+	if err != nil {
+		return nil, err
+	}
 	// Страницы красим двумя половинами; корешок — граница между ними.
 	mid := min(max(px(opt.PageW, opt.DPI), 0), W)
 	fill(canvas, image.Rect(0, 0, mid, H), s.Bg[0])
@@ -89,13 +92,64 @@ func RenderCtx(ctx context.Context, s Spread, opt Options) (*image.RGBA, error) 
 	}
 	// Фоны — под всем; остальное по слоям, при равных Z — прежний порядок (фото, затем тексты).
 	slices.SortStableFunc(items[nb:], func(a, b item) int { return cmp.Compare(a.z, b.z) })
-	if err := drawItems(ctx, canvas, items, opt.DPI); err != nil {
+	// Подгонка: элементы считаются по сцене, а не по холсту — пиксели те же, что без подгонки,
+	// а полосы за сценой остаются для fitEdges.
+	if err := drawItemsIn(ctx, canvas, image.Rect(0, 0, W, H), items, opt.DPI); err != nil {
 		if cerr := ctx.Err(); cerr != nil { // отмена важнее обёртки «фото: …» от того, кто упал первым
 			return nil, cerr
 		}
 		return nil, err
 	}
+	fitEdges(canvas, W, H)
 	return canvas, nil
+}
+
+// newCanvas — холст разворота: сцена W×H на Rect(0,0,W,H); с подгонкой (Fit) — холст FitW×FitH
+// на том же буфере со сдвигом Rect.Min, чтобы сцена осталась в прежних координатах (123 §5).
+// Лишнее срезается поровну по краям, недостающие полосы (≤ FitTolPx/2 на край) закрывает fitEdges.
+func newCanvas(opt Options, W, H int) (*image.RGBA, error) {
+	if !opt.fitted() {
+		return image.NewRGBA(image.Rect(0, 0, W, H)), nil
+	}
+	if err := CheckSize(opt.FitW, opt.FitH); err != nil {
+		return nil, err
+	}
+	tol := FitTolPx(opt.DPI)
+	if dw, dh := opt.FitW-W, opt.FitH-H; dw > tol || dw < -tol || dh > tol || dh < -tol {
+		return nil, fmt.Errorf("подгонка %d×%d px к разворотам %d×%d px больше допуска %d px", opt.FitW, opt.FitH, W, H, tol)
+	}
+	x0, y0 := -(opt.FitW-W)/2, -(opt.FitH-H)/2 // усечение к нулю: полоса с краю на пиксель шире справа/снизу
+	return image.NewRGBA(image.Rect(x0, y0, x0+opt.FitW, y0+opt.FitH)), nil
+}
+
+// fitEdges закрывает полосы подгонки (холст шире сцены W×H): строки и столбцы за сценой
+// повторяют крайний ряд. Холст без сдвига — ничего не делает (прежний путь).
+func fitEdges(c *image.RGBA, W, H int) {
+	b := c.Rect
+	if b.Min.X >= 0 && b.Min.Y >= 0 && b.Max.X <= W && b.Max.Y <= H {
+		return
+	}
+	scene := b.Intersect(image.Rect(0, 0, W, H))
+	if scene.Empty() {
+		return
+	}
+	row := func(y int) []uint8 { o := c.PixOffset(b.Min.X, y); return c.Pix[o : o+4*b.Dx()] }
+	for y := scene.Min.Y; y < scene.Max.Y; y++ { // по краям строки сцены — крайние пиксели
+		r := row(y)
+		l, rt := 4*(scene.Min.X-b.Min.X), 4*(scene.Max.X-1-b.Min.X)
+		for x := 0; x < l; x += 4 {
+			copy(r[x:x+4], r[l:l+4])
+		}
+		for x := rt + 4; x < len(r); x += 4 {
+			copy(r[x:x+4], r[rt:rt+4])
+		}
+	}
+	for y := b.Min.Y; y < scene.Min.Y; y++ { // строки выше и ниже сцены — крайняя строка целиком
+		copy(row(y), row(scene.Min.Y))
+	}
+	for y := scene.Max.Y; y < b.Max.Y; y++ {
+		copy(row(y), row(scene.Max.Y-1))
+	}
 }
 
 // item — элемент стека разворота: фото (место, фон или свой стикер), процедурный стикер,
@@ -162,6 +216,12 @@ func window(src image.Image, r image.Rectangle) image.Image {
 // младший индекс всегда получает слот раньше старших и тех, кто его ждёт, не блокирует.
 // Тексту слот не нужен: памяти он не держит.
 func drawItems(ctx context.Context, canvas *image.RGBA, items []item, dpi int) error {
+	return drawItemsIn(ctx, canvas, canvas.Bounds(), items, dpi)
+}
+
+// drawItemsIn — drawItems с областью сцены scene: по ней обрезаются фото и рамочки (холст
+// подгонки отличается от сцены сдвигом и размером).
+func drawItemsIn(ctx context.Context, canvas *image.RGBA, scene image.Rectangle, items []item, dpi int) error {
 	sem := make(chan struct{}, photoSlots())
 	errs := make([]error, len(items))
 	done := make([]chan struct{}, len(items))
@@ -186,7 +246,7 @@ func drawItems(ctx context.Context, canvas *image.RGBA, items []item, dpi int) e
 				defer func() { <-sem }()
 			}
 			defer close(done[i]) // и при ошибке: иначе следующий ждал бы вечно
-			paint, err := preparePaint(ctx, it, photo, canvas.Bounds(), dpi)
+			paint, err := preparePaint(ctx, it, photo, scene, dpi)
 			if i > 0 {
 				<-done[i-1]
 			}
@@ -238,7 +298,10 @@ func preparePaint(ctx context.Context, it item, photo bool, canvas image.Rectang
 		if t.Gen != 0 && t.Gen != text.Gen() {
 			t.Box = text.Cached(t.Text, t.Style, t.Box.W)
 		}
-		text.Draw(c, t.Box, t.Style, t.X, t.Y, t.Rot, dpi)
+		// text.Draw отсчитывает от Rect.Min холста; у холста подгонки Min сдвинут, а текст задан в
+		// координатах сцены.
+		pxmm, o := float64(dpi)/25.4, c.Rect.Min
+		text.Draw(c, t.Box, t.Style, t.X-float64(o.X)/pxmm, t.Y-float64(o.Y)/pxmm, t.Rot, dpi)
 		return nil
 	}, nil
 }

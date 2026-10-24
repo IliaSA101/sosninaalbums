@@ -33,6 +33,12 @@ export function pageSize(st: Pick<Settings, 'pageW' | 'pageH'>): { w: number; h:
   return { w: st.pageW, h: st.pageH }
 }
 
+// Размер в см для подписей: мм → см, до сотых, без хвостов и с запятой («60,79», «30»).
+// Округляем после деления: float-хвост 20.294999999999998 в подпись не попадает.
+export function cmText(mm: number): string {
+  return String(Math.round((mm / 10) * 100) / 100).replace('.', ',')
+}
+
 // Страница под точкой x (мм листа): 0 — левая, 1 — правая; без шва страница одна.
 export function pageAt(sv: Pick<SpreadView, 'mid'>, x: number): 0 | 1 {
   return sv.mid > 0 && x >= sv.mid ? 1 : 0

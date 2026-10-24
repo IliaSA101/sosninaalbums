@@ -17,17 +17,34 @@ const use = (i: number, what = 'место'): UseSrc => ({
 })
 
 describe('thumbMenu: состав', () => {
-  it('одно стоящее фото: «Показать в …» (слово по ОС), «Копировать имя файла», «Где стоит ▸»', () => {
+  it('одно стоящее фото: «Крупный просмотр», «Показать в …» (слово по ОС), «Копировать имя файла», «Где стоит ▸»', () => {
     const m = thumbMenu(ctx())
-    expect(m.map((n) => n.id)).toEqual(['explorer', 'copy', 'uses'])
-    expect(m[0].label).toBe(revealLabel())
-    expect(m[1].label).toBe('Копировать имя файла')
-    expect(m[2].label).toBe('Где стоит')
-    expect(m[2].sub).toBeTruthy()
+    expect(m.map((n) => n.id)).toEqual(['preview', 'explorer', 'copy', 'uses'])
+    expect(m[1].label).toBe(revealLabel())
+    expect(m[2].label).toBe('Копировать имя файла')
+    expect(m[3].label).toBe('Где стоит')
+    expect(m[3].sub).toBeTruthy()
+  })
+
+  it('«Крупный просмотр» первым, с клавишей справа из реестра, и черта под ним (128-8)', () => {
+    const m = thumbMenu(ctx(), undefined, (cmd) => (cmd === 'photoPreview' ? 'Z' : ''))
+    expect(m[0]).toMatchObject({ id: 'preview', label: 'Крупный просмотр', hint: 'Z' })
+    expect(m[0].sep).toBeUndefined()
+    expect(m[1]).toMatchObject({ id: 'explorer', sep: true })
+  })
+
+  it('клавишу сняли — пункт без подписи справа', () => {
+    expect(thumbMenu(ctx())[0].hint).toBeUndefined()
+  })
+
+  it('2+ фото и пропавший файл — «Крупного просмотра» нет', () => {
+    expect(ids(ctx({ photos: 2, used: 0 }))).not.toContain('preview')
+    expect(ids(ctx({ missing: 1 }))).not.toContain('preview')
+    expect(ids(ctx({ photos: 3, missing: 1, used: 0 }))).not.toContain('preview')
   })
 
   it('одно фото, которое нигде не стоит (числа нет) — без «Где стоит»; не серый, а скрыт', () => {
-    expect(ids(ctx({ used: 0 }))).toEqual(['explorer', 'copy'])
+    expect(ids(ctx({ used: 0 }))).toEqual(['preview', 'explorer', 'copy'])
   })
 
   it('несколько фото: только «Копировать имена файлов»', () => {
@@ -97,7 +114,9 @@ const files = import.meta.glob('/src/panels/library/{Thumb,Library}.svelte', { q
 >
 describe('проводка', () => {
   it('плитка открывает меню правой кнопкой; прокрутка ленты закрывает; ThumbMenu стоит в ленте', () => {
-    expect(files['/src/panels/library/Thumb.svelte']).toContain('oncontextmenu={(e) => thumbmenu.open(e, p.id)}')
+    expect(files['/src/panels/library/Thumb.svelte']).toContain(
+      'oncontextmenu={(e) => (peekPress(e) ? thumbmenu.peek(e, p.id) : thumbmenu.open(e, p.id))}',
+    )
     const lib = files['/src/panels/library/Library.svelte']
     expect(lib).toMatch(/onscroll=\{\(\) => \{[^}]*thumbmenu\.close\(\)/)
     expect(lib).toContain('<ThumbMenu />')

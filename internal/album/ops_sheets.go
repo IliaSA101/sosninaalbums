@@ -10,6 +10,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/backdrop"
 	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/spreads"
 	"github.com/IliaSA101/sosninaalbums/internal/album/view"
 	"github.com/IliaSA101/sosninaalbums/internal/album/vignette"
 	"github.com/IliaSA101/sosninaalbums/internal/album/vigsheet"
@@ -48,9 +49,25 @@ func (e *Editor) ApplyCoverPreset(id string) (model.View, error) {
 	return e.try("", func(p *model.Project) error { return cover.ApplyPreset(p, id) })
 }
 
+// ApplyPrint — кнопка формата типографии и её изделие одним шагом отмены (123 Б1): настройки s
+// (как SetSettings), обложка по шаблону прежнего формата идёт за страницей, затем берёт числа
+// изделия preset. Неизвестное изделие — ошибка без правки; тот же формат и то же изделие — холостая.
+func (e *Editor) ApplyPrint(s model.Settings, preset string) (model.View, error) {
+	return e.try("", func(p *model.Project) error {
+		old := p.Settings
+		spreads.SetSettings(p, s)
+		return cover.ApplyPrint(p, old, preset)
+	})
+}
+
 // SetCoverSpec — свои числа обложки (зажим); не совпали с пресетом — «Свои размеры».
 func (e *Editor) SetCoverSpec(s model.CoverSpec) (model.View, error) {
 	return e.try("", func(p *model.Project) error { return cover.SetSpec(p, s) })
+}
+
+// SetCoverPx — сторонка обложки по размеру файла w × h px (300 dpi); одна правка, один шаг отмены.
+func (e *Editor) SetCoverPx(w, h int) (model.View, error) {
+	return e.try("", func(p *model.Project) error { return cover.SetPx(p, w, h) })
 }
 
 // SetCoverLayout — раскладка обложки front | both | wrap: фото фона переходят в новые зоны.

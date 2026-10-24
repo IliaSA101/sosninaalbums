@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Перенос разворота (096 сц. 5): одна правка MoveSpread, перенесённый — текущий; dropOn сообщает, прошла ли правка.
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
@@ -16,7 +16,8 @@ vi.stubGlobal('window', globalThis)
 
 const Api = await import('../../../wailsjs/go/app/App')
 const { store } = await import('../core/store.svelte')
-const { dropOn } = await import('./dropact')
+const { dropOn, dropHooks } = await import('./dropact')
+const { dropLanded } = await import('../prefs/cardgroups.svelte')
 const { noHooks } = await import('../core/hooks')
 
 const MoveSpread = vi.mocked(Api.MoveSpread)
@@ -175,5 +176,30 @@ describe('dropOn: перестановка в ленте (114)', () => {
     await dropOn(own('b'), chip('a'))
     expect(MovePhoto).not.toHaveBeenCalled()
     expect(Api.AddPhotos).toHaveBeenCalledExactlyOnceWith('a', ['f1'], 3)
+  })
+})
+
+// 0.26-124-23: группа «Фон» карточки узнаёт об удачном броске по dropLanded; отказ Go её не трогает.
+describe('dropOn: бросок фото на фон', () => {
+  const photo = { kind: 'photos', ids: ['f1'] } as never
+  const zone = { kind: 'backdrop', spread: 'a', scope: 'left' } as never
+  const saved = dropHooks.setBackdrop
+  afterEach(() => {
+    dropHooks.setBackdrop = saved
+  })
+
+  it('Go принял — dropLanded.n растёт, со спредом и областью', async () => {
+    dropHooks.setBackdrop = vi.fn(async () => true)
+    const n = dropLanded.n
+    await dropOn(photo, zone)
+    expect(dropHooks.setBackdrop).toHaveBeenCalledExactlyOnceWith('a', 'left', 'f1')
+    expect([dropLanded.n, dropLanded.spread, dropLanded.scope]).toEqual([n + 1, 'a', 'left'])
+  })
+
+  it('правка не прошла — счётчик на месте', async () => {
+    dropHooks.setBackdrop = vi.fn(async () => false)
+    const n = dropLanded.n
+    await dropOn(photo, zone)
+    expect(dropLanded.n).toBe(n)
   })
 })

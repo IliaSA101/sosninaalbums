@@ -18,8 +18,10 @@ vi.mock('../../editor/photoprops/gouse.svelte', () => ({ goUse: m.goUse }))
 const { default: ThumbMenu } = await import('./ThumbMenu.svelte')
 const { thumbmenu } = await import('./thumbmenustate.svelte')
 const { store } = await import('../../base/core/store.svelte')
+const { photoui } = await import('../../editor/photo/photoui.svelte')
 const { prefs } = await import('../../base/prefs/prefs.svelte')
 const { lost } = await import('./lost.svelte')
+const { autocheck } = await import('../folders/autocheck')
 
 const photo = (id: string) => ({ id, name: `${id}.jpg`, w: 3, h: 2 })
 const use = (i: number, page: string, what: string, kind = 'place') => ({
@@ -73,7 +75,7 @@ describe('ThumbMenu', () => {
     await open('a', e)
     expect(e.defaultPrevented).toBe(true)
     expect([...store.selected]).toEqual(['a'])
-    expect(items()).toEqual(['explorer', 'copy', 'uses'])
+    expect(items()).toEqual(['preview', 'explorer', 'copy', 'uses'])
     expect(screen.getByText(reveal)).toBeTruthy()
   })
 
@@ -100,8 +102,17 @@ describe('ThumbMenu', () => {
 
   it('фото нигде не стоит — «Где стоит» нет, Go за вхождениями не зовём', async () => {
     await open('c')
-    expect(items()).toEqual(['explorer', 'copy'])
+    expect(items()).toEqual(['preview', 'explorer', 'copy'])
     expect(m.whereUsed).not.toHaveBeenCalled()
+  })
+
+  it('«Крупный просмотр» открывает окно с листанием ленты и закрывает меню (128)', async () => {
+    await open('b')
+    await fireEvent.click(screen.getByText('Крупный просмотр'))
+    expect(photoui.preview).toMatchObject({ from: 'library', ids: ['a', 'b', 'c'], at: 1 })
+    expect(thumbmenu.menu).toBeNull()
+    expect(document.body.querySelector('.drop')).toBeNull()
+    photoui.preview = null
   })
 
   it('«Показать в …» зовёт Go по ID ленты и закрывает меню; ошибка — тост', async () => {
@@ -114,7 +125,10 @@ describe('ThumbMenu', () => {
   })
 
   it('пропавший файл: «Показать в …» и «Копировать» нет', async () => {
+    // lost.mark просит сверку папок через 300 мс; настоящий таймер дошёл бы до не заданного в моке CheckFolders
+    const soon = vi.spyOn(autocheck, 'soon').mockImplementation(() => {})
     lost.mark('a')
+    expect(soon).toHaveBeenCalledOnce()
     await open('a')
     expect(items()).toEqual(['uses'])
     lost.clear()
@@ -157,11 +171,11 @@ describe('ThumbMenu', () => {
   it('↑/↓ ходят по пунктам', async () => {
     await open('a')
     const first = document.activeElement as HTMLElement
-    await vi.waitFor(() => expect(first?.dataset.item).toBe('explorer'))
+    await vi.waitFor(() => expect(first?.dataset.item).toBe('preview'))
     await fireEvent.keyDown(first, { key: 'ArrowDown' })
-    expect((document.activeElement as HTMLElement).dataset.item).toBe('copy')
-    await fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowUp' })
     expect((document.activeElement as HTMLElement).dataset.item).toBe('explorer')
+    await fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowUp' })
+    expect((document.activeElement as HTMLElement).dataset.item).toBe('preview')
   })
 
   it('поздний ответ закрытого меню отбрасывается', async () => {

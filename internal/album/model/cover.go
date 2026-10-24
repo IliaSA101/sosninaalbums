@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
@@ -73,63 +74,43 @@ type CoverPreset struct {
 	Spec  CoverSpec `json:"spec"` // без W/H: сторонку задаёт пользователь
 }
 
-// steps — таблица корешка из пар (до n разворотов, мм).
-func steps(pairs ...float64) []SpineStep {
-	out := make([]SpineStep, 0, len(pairs)/2)
-	for i := 0; i+1 < len(pairs); i += 2 {
-		out = append(out, SpineStep{Upto: int(pairs[i]), Mm: pairs[i+1]})
-	}
-	return out
-}
-
-// CoverPresets — пресеты (design 032 §1; таблицы Фотосферы сверены с fsfera.ru 2026-10-13,
-// заворот 20 — по PSD и JSON калькулятора, 047 решение 48; заворот и расстав Нетпринта
-// Премиум/Royal/мягкой — гипотеза). У Фотосферы сторонку по формату страницы даёт CoverPresetFor. Функция, а не переменная:
-// снаружи таблицу не подменить. id после выпуска не меняются.
+// CoverPresets — пресеты типографий из профилей (design 032 §1; 123: таблицы лежат в
+// printprof/builtin/*.json — Фотосфера сверена с fsfera.ru 2026-10-13, заворот 20 по PSD и JSON
+// калькулятора, 047 решение 48; заворот и расстав Нетпринта Премиум/Royal/мягкой — гипотеза) и
+// «Свои размеры» последним. У шаблонных групп сторонку по формату страницы даёт CoverPresetFor.
+// Функция, а не переменная: снаружи таблицу не подменить (отдаются копии). id после выпуска не меняются.
 func CoverPresets() []CoverPreset {
-	fs := func(id, name string, st []SpineStep) CoverPreset {
-		return CoverPreset{ID: id, Name: name, Group: CoverGroupFsfera, Spec: CoverSpec{Preset: id, Wrap: fsferaWrap, Steps: st, Safe: fsferaCoverSafe, SpineSafe: fsferaSpineSafe}}
+	src := tables().covers
+	out := make([]CoverPreset, 0, len(src)+1)
+	for _, c := range src {
+		out = append(out, cloneCover(c))
 	}
-	np := func(id, name string, wrap, hinge, a, b float64) CoverPreset {
-		return CoverPreset{ID: id, Name: name, Group: CoverGroupNetprint, Spec: CoverSpec{Preset: id, Wrap: wrap, Hinge: hinge, A: a, B: b}}
-	}
-	out := []CoverPreset{
-		fs("fsfera-thin", "Тонкие листы", steps(5, 6, 9, 8, 13, 10, 17, 12, 22, 14, 26, 16, 30, 18, 34, 20, 38, 22, 42, 24, 47, 26, 52, 28, 57, 30)),
-		fs("fsfera-card", "Картон", steps(3, 6, 5, 8, 7, 10, 9, 12, 12, 14, 15, 16, 17, 18, 20, 20, 22, 22, 24, 24, 26, 26, 28, 28, 30, 30)),
-		fs("fsfera-double", "Двойной картон", steps(1, 6, 2, 8, 4, 10, 6, 12, 7, 14, 9, 16, 10, 18, 12, 20, 13, 22, 15, 24, 16, 26, 18, 28, 20, 30)),
-		np("netprint-premium", "Премиум", 15, 9, 5.4, 0.39),
-		np("netprint-royal", "Royal", 15, 9, 5.4, 0.8),
-		np("netprint-soft", "Мягкая", 10, 0, 0.39, 0.39),
-	}
-	out = append(out, fabrikaCoverPresets()...)
-	return append(out, CoverPreset{ID: CoverCustom, Name: "Свои размеры", Spec: CoverSpec{Preset: CoverCustom, Wrap: 15, A: 10}})
+	return append(out, customPreset())
 }
 
 // CoverPresetOf — пресет по id; ok=false — неизвестный. Для новой обложки и правок — CoverPresetFor.
-func CoverPresetOf(id string) (CoverPreset, bool) {
-	all := CoverPresets()
-	if i := slices.IndexFunc(all, func(c CoverPreset) bool { return c.ID == id }); i >= 0 {
-		return all[i], true
+func CoverPresetOf(id string) (CoverPreset, bool) { return tables().coverPresetOf(id) }
+
+// coverPresetOf — CoverPresetOf по таблицам t.
+func (t *printTables) coverPresetOf(id string) (CoverPreset, bool) {
+	if id == CoverCustom {
+		return customPreset(), true
+	}
+	if i := slices.IndexFunc(t.covers, func(c CoverPreset) bool { return c.ID == id }); i >= 0 {
+		return cloneCover(t.covers[i]), true
 	}
 	return CoverPreset{}, false
 }
 
 // Фотосфера Pro (047): таблица форматов фотокниги, шаблон обложки по формату и пресеты страницы.
 
-// CoverGroupFsfera — группа пресетов обложки и ряд пресетов страницы Фотосферы.
-const CoverGroupFsfera = "Фотосфера"
-
-// CoverGroupNetprint — группа пресетов обложки и ряд пресетов страницы Нетпринта (058).
-const CoverGroupNetprint = "Нетпринт"
-
-// Шаблон обложки Фотосферы (PSD): заворот вне таблицы форматов (решение 48) и безопасные
-// линии — от линии загиба и от края корешка.
+// Имена групп пресетов обложки и рядов страницы — Name встроенных профилей (страж
+// TestGroupNamesMatchProfiles). Строки нужны коду, который называет типографию без реестра.
 const (
-	fsferaWrap                       = 20.0
-	fsferaCoverSafe, fsferaSpineSafe = 8.0, 12.0
-	// fsferaBleed — обрез разворота: в PSD 20×30, 25×25, 30×30 — 2 мм (066 research §2.1);
-	// у прочих форматов — по исследованию 047 («2 мм у всех»).
-	fsferaBleed = 2.0
+	CoverGroupFsfera   = "Фотосфера"
+	CoverGroupNetprint = "Нетпринт"
+	// CoverGroupFabrika — Фабрика Фотокниги (081).
+	CoverGroupFabrika = "Фабрика Фотокниги"
 )
 
 // PrintFormat — формат изделия типографии: страница альбома и шаблон обложки, мм.
@@ -141,48 +122,66 @@ type PrintFormat struct {
 	Bleed        float64 // обрез разворота от края файла (066: розовое поле PSD)
 	SideW, SideH float64 // сторонка обложки
 	Wrap         float64 // заворот
+	// Px — цель в пикселях файла разворота (PrintDPI) из профиля; {0,0} — нет, формат задан мм.
+	// Есть — совпадение формата и подгонка холста идут по ней (FormatOf, FitPx, 123 §5). Вне
+	// JSON: эталон таблиц встроенных (TestBuiltinTablesSnapshot) от неё не меняется, у встроенных её нет.
+	Px [2]int `json:"-"`
+	// Guide — направляющие экрана по шаблону (123 Б5, PSD Фабрики); нулевая — прежние линии. Вне JSON,
+	// как Px: числа закреплены отдельной секцией эталона (TestBuiltinTablesSnapshot), а таблицы для
+	// интерфейса не меняются.
+	Guide PrintGuide `json:"-"`
 }
+
+// PrintGuide — направляющие формата по осям, мм. Нули — «нет»: BleedX/BleedY — полоса обреза разворота
+// у бока и сверху-снизу; FoldX/FoldY — линия загиба обложки от края листа; FoldSafe — безопасная линия
+// от загиба внутрь, SpineSafe — от края корешка (0 — Settings.Safe, как у обложки без направляющих).
+// Лист, файл и .salbum от них не зависят.
+type PrintGuide struct {
+	BleedX, BleedY      float64
+	FoldX, FoldY        float64
+	FoldSafe, SpineSafe float64
+}
+
+// HasFold — у формата есть линия загиба.
+func (g PrintGuide) HasFold() bool { return g.FoldX > 0 && g.FoldY > 0 }
+
+// HasBleed — у формата есть полоса обреза по осям.
+func (g PrintGuide) HasBleed() bool { return g.BleedX > 0 || g.BleedY > 0 }
 
 // templateGroup — типография с таблицей форматов: сторонка и заворот обложки её пресетов — числа
 // шаблона формата страницы (047, 081). Gen — родительный падеж для «Не по шаблону …».
 type templateGroup struct {
 	Group, Gen string
-	Formats    func() []PrintFormat
-}
-
-// templateGroups — шаблонные группы; остальные пресеты сторонку задают сами.
-func templateGroups() []templateGroup {
-	return []templateGroup{
-		{CoverGroupFsfera, "Фотосферы", FsferaFormats},
-		{CoverGroupFabrika, "Фабрики Фотокниги", FabrikaFormats},
-	}
+	Formats    func() []PrintFormat // копия таблицы
+	list       []PrintFormat        // сама таблица, только чтение: FormatOf не копирует её на каждый вызов
 }
 
 // templateGroupOf — шаблонная группа по имени; ok=false — у группы шаблона по формату нет.
-func templateGroupOf(group string) (templateGroup, bool) {
-	all := templateGroups()
-	if i := slices.IndexFunc(all, func(g templateGroup) bool { return g.Group == group }); i >= 0 && group != "" {
-		return all[i], true
+func templateGroupOf(group string) (templateGroup, bool) { return tables().templateGroupOf(group) }
+
+// templateGroupOf — templateGroupOf по таблицам t.
+func (t *printTables) templateGroupOf(group string) (templateGroup, bool) {
+	if i := slices.IndexFunc(t.groups, func(g templateGroup) bool { return g.Group == group }); i >= 0 && group != "" {
+		return t.groups[i], true
 	}
 	return templateGroup{}, false
 }
 
 // FsferaFormats — форматы фотокниги Фотосферы в порядке калькулятора (research §2; Safe — по PSD,
 // решение 50; 30×20 — по PSD, решение 49). Функция, а не переменная, как CoverPresets.
-func FsferaFormats() []PrintFormat {
-	f := func(name string, pw, ph, safe, sw, sh, wrap float64) PrintFormat {
-		return PrintFormat{ID: "fsfera-" + strings.ReplaceAll(name, "×", "x"), Name: name,
-			PageW: pw, PageH: ph, Safe: safe, Bleed: fsferaBleed, SideW: sw, SideH: sh, Wrap: wrap}
+func FsferaFormats() []PrintFormat { return GroupFormats(CoverGroupFsfera) }
+
+// FabrikaFormats — форматы Фабрики в порядке сайта. Страница — половина разворота сайта
+// (30×30 → 600×305), сторонка и заворот делят лист обложки «основа + корешок» (20×20 → 446×240
+// при корешке 0).
+func FabrikaFormats() []PrintFormat { return GroupFormats(CoverGroupFabrika) }
+
+// GroupFormats — форматы шаблонной группы по её названию (копия); у группы без шаблона — nil.
+func GroupFormats(group string) []PrintFormat {
+	if tg, ok := templateGroupOf(group); ok {
+		return tg.Formats()
 	}
-	return []PrintFormat{
-		f("20×15", 201, 152, 10, 206, 156, 20),
-		f("20×20", 201, 203, 10, 206, 206, 20),
-		f("20×30", 201, 273, 10, 206, 276, 20),
-		f("30×20", 286, 203, 10, 289, 206, 20),
-		f("25×25", 251, 254, 8, 256, 256, 20),
-		f("30×30", 281, 284, 10, 286, 286, 20),
-		f("21×30", 208, 296, 8, 211, 296, 16),
-	}
+	return nil
 }
 
 // PagePreset — кнопка размера страницы в «Настройках альбома». 0/false — поле пресет не задаёт.
@@ -198,65 +197,46 @@ type PagePreset struct {
 	Hint    string  `json:"hint,omitempty"`
 }
 
-// PagePresets — общий ряд (прежние кнопки presets.ts без «Фотосфера 30×30»), ряд Фотосферы
-// из FsferaFormats (решение 54: один источник — Go), ряды Нетпринта и Фабрики Фотокниги (081);
-// порядок групп — порядок списка «Типография» в окне (058).
+// PagePresets — общий ряд (прежние кнопки presets.ts без «Фотосфера 30×30») и ряды типографий из
+// профилей (решение 54: один источник — Go; Нетпринт: 058 №16, netprint.ru «Технические размеры
+// фотокниг Премиум», 17.10, зона и обрез — гипотеза до шаблона, 066 decisions №5); порядок групп —
+// порядок списка «Типография» в окне (058).
 func PagePresets() []PagePreset {
-	out := []PagePreset{
-		{Label: "30×30 (квадрат)", W: 300, H: 300},
-		{Label: "25×25", W: 250, H: 250},
-		{Label: "20×20", W: 200, H: 200},
-		{Label: "30×20 (альбомный)", W: 300, H: 200},
-		{Label: "20×30 (книжный)", W: 200, H: 300},
-		{Label: "40×30", W: 400, H: 300},
-	}
-	for _, f := range FsferaFormats() {
-		out = append(out, PagePreset{Label: f.Name, Group: CoverGroupFsfera, W: f.PageW, H: f.PageH, DPI: 300, Layflat: true, Safe: f.Safe, Bleed: f.Bleed,
-			Hint: "Фотосфера Pro: JPEG sRGB 300 dpi, 00.jpg — обложка, 01.jpg… — развороты; важное — не ближе " + MmText(f.Safe) + " мм к краю"})
-	}
-	out = append(out, netprintPresets()...)
-	return append(out, fabrikaPagePresets()...)
-}
-
-// netprintPresets — Нетпринт «Премиум» твёрдой обложки (058 №16, netprint.ru «Технические размеры
-// фотокниг Премиум», 17.10): страница — половина дообрезного разворота; важное — 10 мм от края
-// (3 мм обреза + 7 мм зоны возможной обрезки; гипотеза — сверить при QA). Обрез 3 мм — тоже
-// гипотеза (066 decisions №5): сверить по шаблону Нетпринта, когда будет.
-func netprintPresets() []PagePreset {
-	const safe, bleed = 10.0, 3.0
-	rows := []struct {
-		label string
-		w, h  float64
-	}{
-		{"15×20", 153, 203}, {"20×15", 200, 156}, {"18×13", 182.5, 127}, {"20×20", 200, 203},
-		{"20×28", 200, 270}, {"28×20", 285, 203}, {"25×25", 250, 254}, {"30×30", 300, 305},
-	}
-	out := make([]PagePreset, len(rows))
-	for i, r := range rows {
-		out[i] = PagePreset{Label: r.label, Group: CoverGroupNetprint, W: r.w, H: r.h, DPI: 300, Layflat: true, Safe: safe, Bleed: bleed,
-			Hint: "Нетпринт Премиум: JPEG 300 dpi, разворотами; важное — не ближе " + MmText(safe) + " мм к краю"}
-	}
-	return out
+	rows := tables().pages
+	out := make([]PagePreset, 0, 6+len(rows))
+	out = append(out,
+		PagePreset{Label: "30×30 (квадрат)", W: 300, H: 300},
+		PagePreset{Label: "25×25", W: 250, H: 250},
+		PagePreset{Label: "20×20", W: 200, H: 200},
+		PagePreset{Label: "30×20 (альбомный)", W: 300, H: 200},
+		PagePreset{Label: "20×30 (книжный)", W: 200, H: 300},
+		PagePreset{Label: "40×30", W: 400, H: 300},
+	)
+	return append(out, rows...)
 }
 
 // CoverPresetFor — пресет id для страницы s. У шаблонной группы («Фотосфера», «Фабрика
 // Фотокниги») сторонка и заворот — всегда числа шаблона: формат страницы из таблицы, на прочей
 // странице — ближайший формат (FormatNear, 070 Е, decisions 0.16 №28); W/H 0 («из страницы»)
-// пресет не даёт. У Фабрики таблица корешка тоже зависит от формата (fabrikaStepsFor). Остальные
+// пресет не даёт. У Фабрики таблица корешка тоже зависит от формата (spineBy профиля). Остальные
 // пресеты — как CoverPresetOf.
 func CoverPresetFor(id string, s Settings) (CoverPreset, bool) {
-	pr, ok := CoverPresetOf(id)
+	return tables().coverPresetFor(id, s)
+}
+
+// coverPresetFor — CoverPresetFor по таблицам t: пресет, группа, формат и корешок из одного снимка.
+func (t *printTables) coverPresetFor(id string, s Settings) (CoverPreset, bool) {
+	pr, ok := t.coverPresetOf(id)
 	if !ok {
 		return pr, false
 	}
-	if _, tpl := templateGroupOf(pr.Group); !tpl {
+	tg, tpl := t.templateGroupOf(pr.Group)
+	if !tpl {
 		return pr, true
 	}
-	f := FormatNear(pr.Group, s)
+	f := tg.near(s)
 	pr.Spec.W, pr.Spec.H, pr.Spec.Wrap = f.SideW, f.SideH, f.Wrap
-	if pr.Group == CoverGroupFabrika {
-		pr.Spec.Steps = fabrikaStepsFor(pr.ID, f.Name, pr.Spec.Steps)
-	}
+	pr.Spec.Steps = t.stepsFor(pr.ID, f.Name, pr.Spec.Steps)
 	return pr, true
 }
 
@@ -266,44 +246,81 @@ func CoverPresetFor(id string, s Settings) (CoverPreset, bool) {
 // шаблона: страница из таблицы или ближайший к ней (070 Е).
 // Пресет не шаблонной группы или обложки нет — off=false.
 func (p *Project) CoverOffTemplate() (have, want [2]float64, format PrintFormat, off bool) {
+	return p.coverOffTemplate(tables())
+}
+
+// coverOffTemplate — CoverOffTemplate по таблицам t.
+func (p *Project) coverOffTemplate(t *printTables) (have, want [2]float64, format PrintFormat, off bool) {
 	if p.Cover == nil {
 		return have, want, format, false
 	}
 	c := p.Cover.Spec
-	pr, ok := CoverPresetFor(c.Preset, p.Settings)
-	if _, tpl := templateGroupOf(pr.Group); !ok || !tpl {
+	pr, ok := t.coverPresetFor(c.Preset, p.Settings)
+	tg, isTpl := t.templateGroupOf(pr.Group)
+	if !ok || !isTpl {
 		return have, want, format, false
 	}
-	format = FormatNear(pr.Group, p.Settings)
+	format = tg.near(p.Settings)
 	d := pr.Spec
 	// Шаблон считает та же CoverGeo: числа строки и «Итог» карточки сходятся до 0,01.
 	cg := p.CoverGeo()
 	tpl := (&Project{Settings: p.Settings, Spreads: p.Spreads, Cover: &Cover{Spec: d}}).CoverGeo()
 	have, want = [2]float64{cg.X[7], cg.Y[3]}, [2]float64{tpl.X[7], tpl.Y[3]}
-	sideOK := cg.X[2]-cg.X[1] == tpl.X[2]-tpl.X[1] && cg.Y[2]-cg.Y[1] == tpl.Y[2]-tpl.Y[1]
+	// Сторонка в допуске PageTol: обложка из px (SetCoverPx) отстоит от шаблона на ≤ 1 px.
+	sideOK := SameMm(cg.X[2]-cg.X[1], tpl.X[2]-tpl.X[1]) && SameMm(cg.Y[2]-cg.Y[1], tpl.Y[2]-tpl.Y[1])
 	off = !sideOK || c.Wrap != d.Wrap || c.Hinge != d.Hinge || !slices.Equal(c.Steps, d.Steps)
 	return have, want, format, off
+}
+
+// CoverGuide — направляющие обложки по шаблону типографии (123 Б5): обложка по шаблону (CoverOffTemplate
+// = false), у формата шаблона есть линия загиба, а пользователь не задавал свои безопасные линии
+// (CoverSpec.Safe и SpineSafe = 0). Иначе false — прежний расчёт от Settings.Safe. Производные данные:
+// лист, файл и .salbum от них не зависят.
+func (p *Project) CoverGuide() (PrintGuide, bool) {
+	if p.Cover == nil || p.Cover.Spec.Safe != 0 || p.Cover.Spec.SpineSafe != 0 {
+		return PrintGuide{}, false
+	}
+	_, _, f, off := p.coverOffTemplate(tables())
+	if off || !f.Guide.HasFold() {
+		return PrintGuide{}, false
+	}
+	return f.Guide, true
 }
 
 // CoverFixText — строка «Не по шаблону Фотосферы 30×30: 623 × 331 мм, нужно 626 × 326» для
 // карточки обложки и проверки выгрузки; "" — по шаблону или группа не шаблонная. Размер листа совпал
 // (другая таблица корешка) — называется заворот, иначе корешок и расстав.
 func CoverFixText(p *Project) string {
-	have, want, f, off := p.CoverOffTemplate()
+	t := tables()
+	have, want, f, off := p.coverOffTemplate(t)
 	if !off {
 		return ""
 	}
-	pr, _ := CoverPresetFor(p.Cover.Spec.Preset, p.Settings)
-	tg, _ := templateGroupOf(pr.Group)
+	pr, _ := t.coverPresetFor(p.Cover.Spec.Preset, p.Settings)
+	tg, _ := t.templateGroupOf(pr.Group)
 	head := "Не по шаблону " + tg.Gen + " " + f.Name // формат есть всегда: точный или ближайший
 	if have != want {
-		return fmt.Sprintf("%s: %s × %s мм, нужно %s × %s", head, MmText(have[0]), MmText(have[1]), MmText(want[0]), MmText(want[1]))
+		return fmt.Sprintf("%s: %s × %s мм, нужно %s × %s%s", head, MmText(have[0]), MmText(have[1]), MmText(want[0]), MmText(want[1]), coverFixPx(have, want))
 	}
 	c := p.Cover.Spec
 	if c.Wrap != pr.Spec.Wrap {
 		return fmt.Sprintf("%s: заворот %s мм, нужно %s", head, MmText(c.Wrap), MmText(pr.Spec.Wrap))
 	}
 	return head + ": корешок или расстав не по таблице"
+}
+
+// CoverFixPxMark — начало хвоста с px в CoverFixText; вопрос обычного экспорта его отрезает.
+const CoverFixPxMark = " (файл "
+
+// coverFixPx — хвост « (файл 7583 × 2906 px, нужен 8031 × 2835)» (123 §1.4): размер файла обложки
+// для типографии при PrintDPI, чтобы сверить с отказом загрузчика. Пусто, когда px сошлись: сторонка
+// на ≤ 0,01 мм не меняет файл, а строка «файл X, нужен X» только путала бы.
+func coverFixPx(have, want [2]float64) string {
+	hw, hh, ww, wh := Px(have[0], PrintDPI), Px(have[1], PrintDPI), Px(want[0], PrintDPI), Px(want[1], PrintDPI)
+	if hw == ww && hh == wh {
+		return ""
+	}
+	return fmt.Sprintf("%s%d × %d px, нужен %d × %d)", CoverFixPxMark, hw, hh, ww, wh)
 }
 
 // MmText — миллиметры для подписи: «14», «13,2», «23,5» (десятые, запятая).
@@ -350,7 +367,10 @@ func ClampCoverSpec(c CoverSpec) CoverSpec {
 		Safe:      fix(c.Safe, 0, coverMaxSafe),
 		SpineSafe: fix(c.SpineSafe, 0, coverMaxSafe),
 	}
-	if _, ok := CoverPresetOf(out.Preset); !ok {
+	// Id типографии, которой здесь нет (своя на чужом компьютере, 123 §4), сохраняется: иначе
+	// автосохранение стёрло бы пометку изделия. Обложка при этом ведёт себя как «Свои размеры»
+	// (CoverMissing). Мусорный id — «Свои размеры».
+	if _, ok := CoverPresetOf(out.Preset); !ok && !printprof.ValidID(out.Preset) {
 		out.Preset = CoverCustom
 	}
 	st := slices.Clone(c.Steps[:min(len(c.Steps), MaxSpineSteps)])
@@ -364,6 +384,15 @@ func ClampCoverSpec(c CoverSpec) CoverSpec {
 		out.Steps = st
 	}
 	return out
+}
+
+// CoverMissing — «Типография не найдена: <id>» для обложки с id изделия, которого нет в реестре
+// (своя типография с другого компьютера); "" — пресет известен или это «Свои размеры».
+func CoverMissing(preset string) string {
+	if _, ok := CoverPresetOf(preset); ok || preset == "" {
+		return ""
+	}
+	return "Типография не найдена: " + preset
 }
 
 // Spine — корешок при n разворотах, мм (шаг 0,01); over — n больше таблицы (берётся
@@ -434,12 +463,18 @@ type CoverView struct {
 	// «по тексту» на обложке: у разворотов свои в View.
 	Safe     []layout.Rect `json:"safe"`
 	TextMaxW float64       `json:"textMaxW"`
+	// Sides — сторонки с безопасной зоной (CoverSides, 127 G1): Safe строится из их Box, раскладки
+	// сторонки (127) рисуют по ним полосу ‹ ▦ ›. Всегда список.
+	Sides []CoverSide `json:"sides"`
 	// Markup — разметка типографии обложки (066, markup.go); nil — файла нет.
 	Markup *GuideView `json:"markup"`
 	PxW    int        `json:"pxW"` // 00.jpg при dpi альбома
 	PxH    int        `json:"pxH"`
 	// Fix — «Не по шаблону Фотосферы 30×30: …» (CoverFixText, 047, 081); "" — по шаблону или не шаблонная группа.
 	Fix string `json:"fix"`
+	// Missing — «Типография не найдена: own-0a1b2c3d»: id изделия обложки без профиля в реестре;
+	// числа Spec остаются, обложка ведёт себя как «Свои размеры». "" — всё известно.
+	Missing string `json:"missing"`
 }
 
 // CoverZone — направляющая или зона броска, мм листа обложки.

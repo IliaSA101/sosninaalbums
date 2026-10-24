@@ -1,5 +1,6 @@
 // Что делать, когда payload брошен на цель: чистый план, исполняет его store.drop.
 import type { BackdropScope, Payload, Target } from '../core/types'
+import { COVER_ID } from '../geom/sheet'
 
 export type DropPlan =
   | { op: 'moveSpread'; id: string; at: number }
@@ -23,6 +24,8 @@ export type DropPlan =
   | { op: 'reject'; text: string }
 
 export const BACKDROP_ONE = 'На фон — только одно фото'
+// Обложка (127): отказ ведёт к ▦ над сторонкой — там несколько фото ложатся местами, а не фоном.
+export const COVER_BG_MANY = 'На фон — только одно фото. Для нескольких — ▦ над сторонкой'
 export const COVER_ONE = 'На обложку — только одно фото'
 
 // Зона фона принимает ровно одно фото; несколько — не подсвечиваем, но при броске объясняем.
@@ -65,11 +68,13 @@ function placePlan(p: PhotoPayload, t: Extract<Target, { kind: 'place' }>): Drop
   return { op: 'place', spread: t.spread, place: t.place, ids, fromSpread: !!p.fromSpread }
 }
 
-// Фото на фон: ровно одно, с несколькими — тост.
+// Фото на фон: ровно одно, с несколькими — тост (на обложке со ссылкой на ▦, 127).
 function backdropPlan(p: PhotoPayload, t: Extract<Target, { kind: 'backdrop' }>): DropPlan | null {
   const ids = p.ids
   if (ids.length === 0) return null
-  return ids.length === 1 ? { op: 'backdrop', spread: t.spread, scope: t.scope, photo: ids[0] } : { op: 'reject', text: BACKDROP_ONE }
+  return ids.length === 1
+    ? { op: 'backdrop', spread: t.spread, scope: t.scope, photo: ids[0] }
+    : { op: 'reject', text: t.spread === COVER_ID ? COVER_BG_MANY : BACKDROP_ONE }
 }
 
 // Фото на весь лист (фон листа, соседний разворот, миниатюра): в конец; mini ещё и открывает лист.

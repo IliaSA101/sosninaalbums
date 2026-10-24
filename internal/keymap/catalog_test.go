@@ -158,3 +158,72 @@ func TestRenameSpreadF2(t *testing.T) {
 		}
 	}
 }
+
+// 0.26-124-10: «Найти фото по имени» — Ctrl/⌘+F, группа фото, везде, без функции, переназначаемая;
+// одинокий KeyF («Во весь экран») — другое сочетание.
+func TestFindPhotosModF(t *testing.T) {
+	i, ok := byID["findPhotos"]
+	if !ok {
+		t.Fatal("в каталоге нет findPhotos")
+	}
+	x := catalog[i]
+	if x.Group != "photos" || x.Feature != "" || x.Scope != ScopeApp || x.Fixed || x.Dialogs {
+		t.Errorf("findPhotos: %+v", x)
+	}
+	if x.Label != "Найти фото по имени" || x.Short != "Найти" {
+		t.Errorf("подписи findPhotos: %q / %q", x.Label, x.Short)
+	}
+	if len(x.Defaults) != 1 || x.Defaults[0] != "Mod+KeyF" {
+		t.Errorf("клавиши по умолчанию %v, ждали [Mod+KeyF]", x.Defaults)
+	}
+	for _, o := range catalog {
+		if o.ID != x.ID && slices.Contains(o.Defaults, "Mod+KeyF") {
+			t.Errorf("Mod+KeyF занята и командой %s", o.ID)
+		}
+	}
+	if big := catalog[byID["toggleBig"]]; !slices.Equal(big.Defaults, []string{"KeyF"}) {
+		t.Errorf("toggleBig изменился: %v", big.Defaults)
+	}
+}
+
+// 0.26-128-2: «Крупный просмотр фото» — Z, группа «Вид», везде, без функции уровня, переназначаемая;
+// Z не занята ничем, кроме Mod+Z/Mod+Shift+Z (другие сочетания).
+func TestPhotoPreviewKeyZ(t *testing.T) {
+	i, ok := byID["photoPreview"]
+	if !ok {
+		t.Fatal("в каталоге нет photoPreview")
+	}
+	x := catalog[i]
+	if x.Group != "view" || x.Feature != "" || x.Scope != ScopeApp || x.Fixed || x.Dialogs || x.Repeat {
+		t.Errorf("photoPreview: %+v", x)
+	}
+	if x.Label != "Крупный просмотр фото" || x.Short != "Крупно" || utf8.RuneCountInString(x.Short) > 10 {
+		t.Errorf("подписи photoPreview: %q / %q", x.Label, x.Short)
+	}
+	if !slices.Equal(x.Defaults, []string{"KeyZ"}) {
+		t.Errorf("клавиши по умолчанию %v, ждали [KeyZ]", x.Defaults)
+	}
+	for _, o := range catalog {
+		if o.ID != x.ID && slices.Contains(o.Defaults, "KeyZ") {
+			t.Errorf("KeyZ занята и командой %s", o.ID)
+		}
+	}
+}
+
+// 0.26-128-15: режим F называется «Во весь экран»; id, клавиша и функция прежние, Aliases не нужен.
+func TestToggleBigFullScreen(t *testing.T) {
+	i, ok := byID["toggleBig"]
+	if !ok {
+		t.Fatal("в каталоге нет toggleBig")
+	}
+	x := catalog[i]
+	if x.Label != "Во весь экран" || x.Short != "Весь экран" {
+		t.Errorf("подписи toggleBig: %q / %q", x.Label, x.Short)
+	}
+	if x.Group != "view" || x.Feature != "timeline" || !slices.Equal(x.Defaults, []string{"KeyF"}) {
+		t.Errorf("toggleBig: %+v", x)
+	}
+	if _, ok := Aliases["toggleBig"]; ok {
+		t.Error("toggleBig не должен быть в Aliases")
+	}
+}

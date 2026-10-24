@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "id": "netprint",
+  "version": 1,
+  "name": "Нетпринт",
+  "gen": "Нетпринта",
+  "page": {
+    "dpi": 300, "layflat": true, "safe": 10, "bleed": 3,
+    "hint": "Нетпринт Премиум: JPEG 300 dpi, разворотами; важное — не ближе {safe} мм к краю"
+  },
+  "formats": [
+    {"name": "15×20", "page": [153, 203]}, {"name": "20×15", "page": [200, 156]},
+    {"name": "18×13", "page": [182.5, 127]}, {"name": "20×20", "page": [200, 203]},
+    {"name": "20×28", "page": [200, 270]}, {"name": "28×20", "page": [285, 203]},
+    {"name": "25×25", "page": [250, 254]}, {"name": "30×30", "page": [300, 305]}
+  ],
+  "products": [
+    {"id": "netprint-premium", "name": "Премиум", "wrap": 15, "hinge": 9, "a": 5.4, "b": 0.39,
+     "limits": [{"min": 10, "max": 60}]},
+    {"id": "netprint-royal", "name": "Royal", "wrap": 15, "hinge": 9, "a": 5.4, "b": 0.8,
+     "limits": [{"min": 8, "max": 30}, {"format": "20×20", "min": 10, "max": 30}]},
+    {"id": "netprint-soft", "name": "Мягкая", "wrap": 10, "a": 0.39, "b": 0.39}
+  ],
+  "default": "netprint-premium",
+  "nameDefault": true
+}

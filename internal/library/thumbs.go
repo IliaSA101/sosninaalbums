@@ -295,7 +295,8 @@ func isPNGPath(path string) bool { return strings.EqualFold(filepath.Ext(path), 
 
 // cacheKey меняется, если файл перезаписали (другой размер или время). У Adobe-фото
 // к ключу добавлена версия пересчёта в sRGB: старые блёклые копии не подхватятся; у P3 и прочих
-// матричных профилей (119) — своя «icc1», ключи srgb/other/adobe прежние;
+// матричных профилей (119) — своя «icc1», ключи srgb/other/adobe прежние. Класс PNG и WebP (125) берётся
+// из того же Header: PNG с P3 был «без профиля», стал p3 — ключ сменился сам, у PNG без профиля прежний;
 // так же у .png — версия «PNG с альфой»: прежние копии прозрачных картинок были чёрными
 // JPEG. У JPEG ключ прежний, их кэш сохраняется.
 func cacheKey(path string, col imgfile.Color) (string, error) {

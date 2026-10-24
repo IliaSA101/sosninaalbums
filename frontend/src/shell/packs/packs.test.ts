@@ -28,6 +28,8 @@ const pack = (o: Partial<PackInfo> = {}): PackInfo => ({
   bg: 12,
   sticker: 30,
   spread: 8,
+  frame: 0,
+  print: 0,
   bytes: 41 * 1048576,
   removable: true,
   ...o,
@@ -39,6 +41,32 @@ describe('строки списка', () => {
     expect(contentsLabel(pack())).toBe('12 фонов, 30 стикеров, 8 разворотов')
     expect(contentsLabel(pack({ bg: 1, sticker: 0, spread: 22 }))).toBe('1 фон, 22 разворота')
     expect(contentsLabel(pack({ bg: 0, sticker: 0, spread: 0 }))).toBe('')
+  })
+
+  it('типографии: в конце состава, склонение 1/2/5/11/21', () => {
+    const only = (n: number) => contentsLabel(pack({ bg: 0, sticker: 0, spread: 0, print: n }))
+    expect(only(1)).toBe('1 типография')
+    expect(only(2)).toBe('2 типографии')
+    expect(only(5)).toBe('5 типографий')
+    expect(only(11)).toBe('11 типографий')
+    expect(only(21)).toBe('21 типография')
+    expect(only(0)).toBe('')
+    expect(contentsLabel(pack({ print: 3 }))).toBe('12 фонов, 30 стикеров, 8 разворотов, 3 типографии')
+    expect(metaLine(pack({ bg: 0, sticker: 0, spread: 0, print: 2 }))).toBe('версия 3 · 2 типографии · 41,0 МБ')
+    expect(addedText(add({ pack: pack({ bg: 0, sticker: 0, spread: 0, print: 5 }) }), false)).toBe('Набор «Айвори» добавлен: 5 типографий')
+  })
+
+  it('рамочки: после разворотов, перед типографиями, склонение 1/2/5/11/21', () => {
+    const only = (n: number) => contentsLabel(pack({ bg: 0, sticker: 0, spread: 0, frame: n }))
+    expect(only(1)).toBe('1 рамочка')
+    expect(only(2)).toBe('2 рамочки')
+    expect(only(5)).toBe('5 рамочек')
+    expect(only(11)).toBe('11 рамочек')
+    expect(only(21)).toBe('21 рамочка')
+    expect(only(0)).toBe('')
+    expect(contentsLabel(pack({ frame: 4, print: 3 }))).toBe('12 фонов, 30 стикеров, 8 разворотов, 4 рамочки, 3 типографии')
+    expect(metaLine(pack({ bg: 0, sticker: 0, spread: 0, frame: 2 }))).toBe('версия 3 · 2 рамочки · 41,0 МБ')
+    expect(addedText(add({ pack: pack({ bg: 0, sticker: 0, spread: 0, frame: 5 }) }), false)).toBe('Набор «Айвори» добавлен: 5 рамочек')
   })
 
   it('метаданные: версия, состав, размер; у встроенного версии и размера нет', () => {
@@ -120,6 +148,8 @@ describe('вопрос «Удалить набор?»', () => {
     expect(removeQuestion(pack({ sticker: 0, spread: 0 }))).toContain('Его фоны пропадут')
     expect(removeQuestion(pack({ sticker: 0 }))).toContain('Его фоны и развороты пропадут')
     expect(removeQuestion(pack({ bg: 0, sticker: 0, spread: 0 }))).toContain('Его содержимое пропадёт')
+    expect(removeQuestion(pack({ frame: 1, print: 2 }))).toContain('Его фоны, стикеры, развороты, рамочки и типографии пропадут')
+    expect(removeQuestion(pack({ print: 2 }))).toContain('Его фоны, стикеры, развороты и типографии пропадут')
   })
 
   it('числа Go: сколько освободится и сколько файлов остаётся', () => {

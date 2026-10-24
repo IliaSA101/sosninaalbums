@@ -10,7 +10,7 @@
   import Icon from '../../base/ui/Icon.svelte'
   import LevelBadge from './LevelBadge.svelte'
   import logo from '../../assets/logo.png'
-  import { hasSeam, isSheet, pageSize } from '../../base/geom/sheet'
+  import { cmText, hasSeam, isSheet, pageSize } from '../../base/geom/sheet'
   import { topLimit } from '../../panels/details/stats'
 
   // Страниц: у листа со швом две, у отдельного листа (шва нет) одна.
@@ -56,7 +56,7 @@
     <LevelBadge />
     <button class="ghost" onclick={() => modes.openSection('settings')} title="Настройки альбома в панели деталей">
       {isSheet(store.view.settings) ? 'Лист' : 'Формат'}
-      {page.w / 10}×{page.h / 10} см
+      {cmText(page.w)}×{cmText(page.h)} см
     </button>
     {#if prefs.can('timeline')}
       <button
@@ -65,8 +65,8 @@
         class:on={modes.big}
         aria-pressed={modes.big}
         onclick={() => modes.toggleBig()}
-        title={keymap.tip('Крупный просмотр', 'toggleBig')}
-        aria-label="Крупный просмотр"
+        title={keymap.tip('Во весь экран', 'toggleBig')}
+        aria-label="Во весь экран"
       >
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5" />

@@ -1,6 +1,7 @@
 package album
 
 import (
+	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/album/view"
@@ -111,6 +112,7 @@ func (e *Editor) state(forPrint bool) view.State {
 		CanRedo: len(e.redo) > 0, Rev: e.rev, MarksRev: e.marksRev, Print: forPrint}
 	if !forPrint {
 		e.markupState(&st)
+		st.CoverSides = grid.CoverSideStates(e.p, e.coverLast)
 	}
 	return st
 }

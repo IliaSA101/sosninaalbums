@@ -35,6 +35,7 @@ const ctx = (o: Partial<ShowCtx> = {}): ShowCtx => ({
   selText: false,
   selAny: false,
   libPhotos: 3,
+  libAll: 3,
   libSel: false,
   cardBody: true,
   big: false,
@@ -181,9 +182,15 @@ describe('отметки в ленте и виньетка', () => {
     expect(kinds(plan('marks', { libSel: true }))).not.toContain('selectLibrary')
   })
   it('«Звёзды и метки»: лента пуста — мигает лента с подсказкой', () => {
-    const p = plan('marks', { libPhotos: 0 })
+    const p = plan('marks', { libPhotos: 0, libAll: 0 })
     expect(p.spot).toBe('ui:library')
     expect(p.hint).toMatch(/добавьте папку/)
+  })
+  it('«Звёзды и метки»: лента пуста из-за поиска или фильтра — подсказка про сброс, а не «добавьте папку»', () => {
+    const p = plan('marks', { libPhotos: 0, libAll: 255 })
+    expect(p.spot).toBe('ui:library')
+    expect(p.hint).toBe('Лента пуста из-за поиска или фильтра: сбросьте их')
+    expect(kinds(p)).not.toContain('selectLibrary')
   })
   it('«Виньетка в альбоме»: виньетка есть — переход и мигает она; нет — место создания', () => {
     const p = plan('vignette', { spreads: [sheet(), sheet({ kind: 'vignette' })] })
@@ -223,6 +230,12 @@ describe('карточка и панели', () => {
     expect(p.steps).toContainEqual({ do: 'details', section: 'settings' })
     expect(placesOf(articleById('fold')!).map((x) => x.spot)).toEqual(['ui:fold-mode'])
   })
+  it('точные px (123): у «Файла разворота» и «Файла обложки» свои якоря, не вся форма', () => {
+    expect(placesOf(articleById('print-px')!).map((x) => x.spot)).toEqual(['menu:export', 'ui:page-px', 'ui:cover-px'])
+    const [, page] = placesOf(art('print-px'))
+    expect(planShow(art('print-px'), ctx(), page).steps).toContainEqual({ do: 'details', section: 'settings' })
+    expect(planShow(art('print-px'), ctx(), page).spot).toBe('ui:page-px')
+  })
   it('подрезка (104): «Показать» раскрывает «Настройки альбома» и подсвечивает блок', () => {
     const p = plan('crop')
     expect(p.steps).toContainEqual({ do: 'details', section: 'settings' })
@@ -231,7 +244,7 @@ describe('карточка и панели', () => {
 })
 
 describe('сброс вида и меню', () => {
-  it('крупный просмотр, режим фона, галерея и меню фото закрываются', () => {
+  it('«Во весь экран», режим фона, галерея и меню фото закрываются', () => {
     const p = plan('frame', { big: true, bgMode: true, galleryOpen: true, menusOpen: true })
     expect(kinds(p).slice(0, 4)).toEqual(['unbig', 'bgExit', 'closeGallery', 'closeMenus'])
   })
@@ -251,6 +264,14 @@ describe('вспомогательное', () => {
     expect(menuOf('нет такого')).toBeNull()
     expect(menuPath('export')).toMatch(/^Файл ▸ Экспорт/)
     expect(menuPath('guide')).toBe('Справка ▸ Справочник функций…')
+  })
+  it('пункты «Разворота» ведут в «Разворот», а не в «Правку» (124 U1)', () => {
+    expect(menuOf('bgGallery')).toBe('spread')
+    expect(menuOf('makeVignette')).toBe('spread')
+    expect(menuOf('undo')).toBe('edit')
+    expect(menuOf('flip')).toBe('edit')
+    expect(menuPath('borderGallery')).toBe('Разворот ▸ Рамочки…')
+    expect(menuPath('removeCell')).toBe('Правка ▸ Удалить')
   })
   it('keyRows: по id команды (текущие клавиши) и по справочной строке мыши', () => {
     useCatalog()
@@ -324,7 +345,7 @@ describe('несколько мест у статьи (решение 133)', () 
     const a = art('text')
     const [menu, rail] = placesOf(a)
     expect(planShow(a, ctx(), menu).spot).toBe('menu:addText')
-    expect(planShow(a, ctx(), menu).steps).toContainEqual({ do: 'menu', menu: 'edit' })
+    expect(planShow(a, ctx(), menu).steps).toContainEqual({ do: 'menu', menu: 'spread' })
     const p = planShow(a, ctx(), rail)
     expect(p.spot).toBe('ui:rail-text')
     expect(kinds(p)).not.toContain('menu')

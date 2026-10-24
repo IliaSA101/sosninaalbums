@@ -7,6 +7,8 @@
   import { fitGroups, type RowGroup } from '../../base/ui/fitrow'
   import MarkBar from '../marks/MarkBar.svelte'
   import MarkFilter from '../marks/MarkFilter.svelte'
+  import NameSearch from '../marks/NameSearch.svelte'
+  import { nameSearch } from '../marks/namefind.svelte'
   import FolderMenu from '../folders/FolderMenu.svelte'
   import { hasSources } from '../folders/folders'
   import BinMenu from '../bins/BinMenu.svelte'
@@ -31,8 +33,20 @@
 
   // Порядок слева направо: до растяжки и после неё.
   const LEFT = ['folders', 'bins', 'auto', 'fill']
-  const RIGHT = ['status', 'marks', 'filter', 'size']
-  const PRIO: Record<string, number> = { folders: 60, bins: 55, auto: Infinity, fill: 40, status: 20, marks: 70, filter: 50, size: 10 }
+  const RIGHT = ['status', 'marks', 'search', 'filter', 'size']
+  const PRIO: Record<string, number> = {
+    folders: 60,
+    bins: 55,
+    auto: Infinity,
+    fill: 40,
+    status: 20,
+    marks: 70,
+    search: 45,
+    filter: 50,
+    size: 10,
+  }
+  // Открытое или непустое поле поиска не уходит в «⋯» (иначе оно исчезло бы под курсором, а запрос продолжал бы сужать ленту); пустое уходит раньше «Все N ▾»
+  const prio = (id: string) => (id === 'search' && nameSearch.held ? Infinity : PRIO[id])
 
   // Какие группы есть сейчас (пустые не занимают места).
   const present = $derived(
@@ -59,7 +73,7 @@
   let barW = $state(0)
   const hidden = $derived.by(() => {
     if (barW <= 0) return new Set<string>() // ширина полосы ещё неизвестна — показываем всё
-    const groups: RowGroup[] = present.map((id) => ({ id, w: widths.get(id), prio: PRIO[id] }))
+    const groups: RowGroup[] = present.map((id) => ({ id, w: widths.get(id), prio: prio(id) }))
     return fitGroups(groups, barW - PAD - SPACER, GAP, MORE_W)
   })
   const inMore = $derived(present.filter((id) => hidden.has(id)))
@@ -92,6 +106,7 @@
     bins: 'bins',
     fill: 'fill-empty',
     marks: 'mark-bar',
+    search: 'name-search',
     filter: 'mark-filter',
     size: 'thumb-size',
   }
@@ -145,6 +160,8 @@
     {/if}
   {:else if id === 'marks'}
     <MarkBar />
+  {:else if id === 'search'}
+    <NameSearch />
   {:else if id === 'filter'}
     <MarkFilter />
   {:else if id === 'size'}

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { Api, store } from '../../base/core/store.svelte'
   import { adjlive } from '../photo/adjlive.svelte'
-  import { toneCss } from '../../base/geom/tone'
-  import Icon from '../../base/ui/Icon.svelte'
-  import { canReset, clampRow, needsGray, pendingGate, signed, toneArgs, toneOf, withRow, type ToneRow } from './adjustrows'
+  import { MAX_TONE, toneCss } from '../../base/geom/tone'
+  import TiltRow from './TiltRow.svelte'
+  import { clampRow, needsGray, pendingGate, toneArgs, toneOf, withRow, type ToneRow } from './adjustrows'
 
-  // «Цвет | Ч/б», «Яркость» и «Контраст» выделенного фото (спека 068): образец — «Масштаб» (число, ⊗, ползунок) и
-  // «Целиком / С обрезкой». Тянут — живой показ через adjlive (Go не зовём), отпустили — один SetTone (один шаг отмены).
+  // «Цвет | Ч/б», «Яркость» и «Контраст» выделенного фото (спека 068): образец — «Масштаб» и «Целиком / С обрезкой».
+  // Ползунки — общая строка TiltRow с числом и ⊗ (124 U4). Тянут — живой показ через adjlive (Go не зовём),
+  // отпустили — один SetTone (один шаг отмены).
   let { id }: { id: string } = $props()
 
   const sp = $derived(store.spread)
@@ -21,31 +22,21 @@
 
   // Пока SetTone/SetGray не вернулся — новые щелчки и отпускания игнорируем (двойной «Ч/б» переключил бы дважды).
   const gate = pendingGate()
-  const val = (e: Event) => clampRow(+(e.currentTarget as HTMLInputElement).value)
-
-  function liveSet(row: ToneRow, e: Event) {
-    adjlive.set(id, withRow(base, row, val(e)))
+  function liveSet(row: ToneRow, v: number) {
+    adjlive.set(id, withRow(base, row, clampRow(v)))
   }
-  // Отпустили: если значение изменилось — один SetTone; просмотр гасим после ответа Go (иначе кадр моргнёт).
-  async function commit(row: ToneRow, e: Event) {
-    const args = toneArgs(base, row, val(e))
-    const ran = await gate.run(async () => {
+  // Отпустили: если значение изменилось — один SetTone; просмотр гасит onend после ответа Go (иначе кадр моргнёт),
+  // в том числе когда правку при чужом вызове отбросили — просмотр не залипает. ⊗ — тот же путь со значением 0.
+  async function commit(row: ToneRow, v: number) {
+    const args = toneArgs(base, row, v)
+    await gate.run(async () => {
       if (args) await store.run(Api.SetTone(id, args[0], args[1]))
-      adjlive.clear()
     })
-    if (!ran) adjlive.clear() // правку при чужом вызове отбросили — просмотр не залипает
   }
   // Chromium не шлёт change, если при отпускании значение вернулось к исходному: просмотр не должен залипнуть.
   // Если значение отличается — change на подходе, просмотр гасит он.
   function blur() {
     if (toneCss(adjlive.of(id)) === toneCss(base)) adjlive.clear()
-  }
-  async function reset(row: ToneRow) {
-    const args = toneArgs(base, row, 0)
-    await gate.run(async () => {
-      if (args) await store.run(Api.SetTone(id, args[0], args[1]))
-      adjlive.clear()
-    })
   }
   async function setGray(want: boolean) {
     if (!needsGray(base, want)) return
@@ -64,29 +55,22 @@
     <button class:on={cur.gray} aria-pressed={cur.gray} title="Чёрно-белое фото" onclick={() => setGray(true)}>Ч/б</button>
   </div>
   {#each ROWS as { row, label } (row)}
-    <div class="row">
-      <span class="lbl">{label}</span>
-      <span class="num">{signed(cur[row])}</span>
-      <button
-        class="reset"
-        disabled={!canReset(cur[row])}
-        onclick={() => reset(row)}
-        aria-label="Сбросить: {label.toLowerCase()}"
-        title="Сбросить: {label.toLowerCase()}"><Icon name="reset" size={16} /></button
-      >
-    </div>
-    <input
-      type="range"
-      min="-50"
-      max="50"
-      step="1"
-      value={cur[row]}
-      aria-label={label}
-      aria-valuetext={signed(cur[row])}
-      oninput={(e) => liveSet(row, e)}
-      onchange={(e) => commit(row, e)}
-      onblur={blur}
-      onpointerup={(e) => e.currentTarget.blur()}
+    <TiltRow
+      tilt={base[row]}
+      {label}
+      numLabel="{label}, значение"
+      rangeLabel={label}
+      rangeTitle="{label}; двойной щелчок — сбросить"
+      min={-MAX_TONE}
+      max={MAX_TONE}
+      step={1}
+      guide=""
+      id="tone-{row}"
+      reset
+      onlive={(v) => liveSet(row, v)}
+      oncommit={(v) => commit(row, v)}
+      onend={() => adjlive.clear()}
+      onleave={blur}
     />
   {/each}
 </div>
@@ -116,35 +100,5 @@
   }
   .seg button.on:hover {
     background: #ffe53a;
-  }
-  .row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 10px;
-    font-size: 12px;
-  }
-  .lbl {
-    color: var(--muted);
-    flex: 1;
-  }
-  .num {
-    min-width: 28px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-  .reset {
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    background: transparent;
-    color: #cfcfd4;
-    border-radius: 4px;
-  }
-  input[type='range'] {
-    width: 100%;
-    margin: 6px 0 0;
   }
 </style>

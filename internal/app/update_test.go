@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
+	"github.com/IliaSA101/sosninaalbums/internal/app/updater"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/fetch"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -38,6 +40,7 @@ type updFeed struct {
 	env   []byte
 	data  []byte
 	block chan struct{} // не nil — установщик отдаёт половину и ждёт
+	gate  chan struct{} // не nil — манифест ждёт закрытия (ручная проверка «стоит» в фазе checking)
 }
 
 func newUpdFeed(t *testing.T) *updFeed {
@@ -58,8 +61,14 @@ func newUpdFeed(t *testing.T) *updFeed {
 func (f *updFeed) serve(w http.ResponseWriter, r *http.Request) {
 	f.hits.Add(1)
 	f.mu.Lock()
-	env, data, block := f.env, f.data, f.block
+	env, data, block, gate := f.env, f.data, f.block, f.gate
 	f.mu.Unlock()
+	if gate != nil && strings.HasSuffix(r.URL.Path, update.ManifestName) {
+		select {
+		case <-gate:
+		case <-r.Context().Done():
+		}
+	}
 	switch {
 	case strings.HasSuffix(r.URL.Path, update.ManifestName) && env != nil:
 		_, _ = w.Write(env)
@@ -109,13 +118,21 @@ func (f *updFeed) publish(t *testing.T, ver string, size int, rest map[string]an
 // updApp — App с обновлением на feed: версия 0.25.0, Windows, установленная копия (рядом
 // uninstall.exe), свои папки; события собираются; запуск установщика и выход записываются.
 type updRig struct {
-	a      *App
-	f      *updFeed
-	ev     *capture
-	exeDir string
-	starts [][2]string // (установщик, командная строка)
-	quits  atomic.Int32
-	auto   bool
+	a       *App
+	f       *updFeed
+	ev      *capture
+	exeDir  string
+	starts  [][2]string // (установщик, командная строка)
+	quits   atomic.Int32
+	auto    bool
+	bgCalls atomic.Int32  // сколько раз служба просила фон (Host.GoBG)
+	gate    chan struct{} // не nil: фон службы стартует после закрытия канала (без таймеров в тесте)
+
+	// Подмены, которые тест меняет по ходу; Host читает их при каждом вызове.
+	version, goos, dir string
+	exe                func() (string, error)
+	free               func(dir string) (uint64, error)
+	start              func(setup, cmdline string) error
 }
 
 func newUpdApp(t *testing.T) *updRig {
@@ -129,20 +146,48 @@ func newUpdApp(t *testing.T) *updRig {
 	if err := os.WriteFile(filepath.Join(r.exeDir, "uninstall.exe"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	a.upd.client = func() (*update.Client, bool) { return update.New(r.f.src), r.auto }
-	a.upd.version, a.upd.goos = "0.25.0", "windows"
-	a.upd.exe = func() (string, error) { return filepath.Join(r.exeDir, "SosninaAlbums.exe"), nil }
-	a.upd.dir = filepath.Join(testkit.TempDir(t), "Updates")
-	a.upd.free = func(string) (uint64, error) { return 1 << 40, nil }
-	a.upd.start = func(setup, cmd string) error { r.starts = append(r.starts, [2]string{setup, cmd}); return nil }
-	a.upd.quit = func() { r.quits.Add(1) }
+	r.version, r.goos = "0.25.0", "windows"
+	r.exe = func() (string, error) { return filepath.Join(r.exeDir, "SosninaAlbums.exe"), nil }
+	r.dir = filepath.Join(testkit.TempDir(t), "Updates")
+	r.free = func(string) (uint64, error) { return 1 << 40, nil }
+	r.start = func(setup, cmd string) error { r.starts = append(r.starts, [2]string{setup, cmd}); return nil }
+	a.upd = updater.New(r.host(a.updHost()))
 	return r
+}
+
+// host — Host службы с подменами рига: поля читают поля r, их тест меняет по ходу. Служба
+// собирается здесь, до первого вызова и до фона; заменять a.upd позже — гонка (126-19).
+func (r *updRig) host(h updater.Host) updater.Host {
+	h.Client = func() (*update.Client, bool) { return update.New(r.f.src), r.auto }
+	h.Version = func() string { return r.version }
+	h.GOOS = func() string { return r.goos }
+	h.Exe = func() (string, error) { return r.exe() }
+	h.Dir = func() string { return r.dir }
+	h.Free = func(d string) (uint64, error) { return r.free(d) }
+	h.Start = func(setup, cmd string) error { return r.start(setup, cmd) }
+	h.Quit = func() { r.quits.Add(1) }
+	h.GoBG = func(fn func()) bool {
+		r.bgCalls.Add(1)
+		if g := r.gate; g != nil {
+			inner := fn
+			fn = func() { <-g; inner() }
+		}
+		return r.a.goBG(fn)
+	}
+	return h
+}
+
+// newSession — «новый запуск программы»: служба с чистым состоянием (фаза, предложение, раз за
+// сеанс) и теми же подменами. Только когда фон прошлой службы уже закончен (a.bg.Wait).
+func (r *updRig) newSession() {
+	r.a.bg.Wait()
+	r.a.upd = updater.New(r.host(r.a.updHost()))
 }
 
 func (r *updRig) states() []UpdateInfo {
 	var out []UpdateInfo
 	for _, d := range r.ev.of("update:state") {
-		out = append(out, d.(UpdateInfo))
+		out = append(out, UpdateInfo(d.(updater.Info)))
 	}
 	return out
 }
@@ -175,13 +220,13 @@ func TestUpdateFlow(t *testing.T) {
 		t.Fatalf("скачивание: %v %+v", err, info)
 	}
 	prog := r.ev.of("update:progress")
-	if len(prog) == 0 || prog[len(prog)-1].(updProgressEvent) != (updProgressEvent{Done: int64(len(data)), Total: int64(len(data))}) {
+	if len(prog) == 0 || prog[len(prog)-1].(updater.Progress) != (updater.Progress{Done: int64(len(data)), Total: int64(len(data))}) {
 		t.Errorf("ход: %v", prog)
 	}
 	if err := a.InstallUpdate(); err != nil {
 		t.Fatal(err)
 	}
-	setupPath := filepath.Join(a.upd.dir, update.SetupName("0.25.1"))
+	setupPath := filepath.Join(r.dir, update.SetupName("0.25.1"))
 	want := `"` + setupPath + `" /S /relaunch /D=` + r.exeDir
 	if len(r.starts) != 1 || r.starts[0] != [2]string{setupPath, want} || r.quits.Load() != 1 {
 		t.Fatalf("запуск: %v, выходов %d", r.starts, r.quits.Load())
@@ -198,7 +243,7 @@ func TestUpdateModes(t *testing.T) {
 	a := r.a
 	r.f.publish(t, "0.25.1", update.MinSetup, nil)
 	r.exeDir = filepath.Join(testkit.TempDir(t), "Sosnina Albums 0.25.0") // переносная: uninstall.exe нет
-	a.upd.exe = func() (string, error) { return filepath.Join(r.exeDir, "SosninaAlbums-0.25.0.exe"), nil }
+	r.exe = func() (string, error) { return filepath.Join(r.exeDir, "SosninaAlbums-0.25.0.exe"), nil }
 	if info, _ := a.CheckUpdate(); info.Mode != "setup" || info.Phase != "available" {
 		t.Fatalf("переносная: %+v", info)
 	}
@@ -209,8 +254,8 @@ func TestUpdateModes(t *testing.T) {
 		t.Fatalf("мастер: %v %v", err, r.starts)
 	}
 	for name, mut := range map[string]func(*updRig){
-		"linux":   func(r *updRig) { r.a.upd.goos = "linux" },
-		"darwin":  func(r *updRig) { r.a.upd.goos = "darwin" },
+		"linux":   func(r *updRig) { r.goos = "linux" },
+		"darwin":  func(r *updRig) { r.goos = "darwin" },
 		"minAuto": func(r *updRig) { r.f.publish(t, "0.25.1", update.MinSetup, map[string]any{"minAuto": "0.25.5"}) },
 		"без Windows": func(r *updRig) {
 			r.f.publish(t, "0.25.1", update.MinSetup, map[string]any{"files": map[string]any{}})
@@ -237,7 +282,7 @@ func TestUpdateModes(t *testing.T) {
 	if info, err := q.a.DownloadUpdate(); err != nil || info.Phase != "idle" || info.Version != "" || q.f.hits.Load() != 0 {
 		t.Errorf("без предложения: %v %+v, запросов %d", err, info, q.f.hits.Load())
 	}
-	if err := q.a.InstallUpdate(); !errors.Is(err, errUpdNotRdy) || len(q.starts) != 0 {
+	if err := q.a.InstallUpdate(); !errors.Is(err, updater.ErrNotReady) || len(q.starts) != 0 {
 		t.Errorf("не скачано: %v", err)
 	}
 }
@@ -253,7 +298,7 @@ func TestInstallRehash(t *testing.T) {
 	if info, err := a.DownloadUpdate(); err != nil || info.Phase != "ready" {
 		t.Fatalf("скачивание: %v %+v", err, info)
 	}
-	path := filepath.Join(a.upd.dir, update.SetupName("0.25.1"))
+	path := filepath.Join(r.dir, update.SetupName("0.25.1"))
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -277,7 +322,7 @@ func TestInstallRehash(t *testing.T) {
 func TestInstallStartFails(t *testing.T) {
 	r := newUpdApp(t)
 	r.f.publish(t, "0.25.1", update.MinSetup, nil)
-	r.a.upd.start = func(string, string) error { return &os.PathError{Op: "fork", Path: r.a.upd.dir, Err: os.ErrPermission} }
+	r.start = func(string, string) error { return &os.PathError{Op: "fork", Path: r.dir, Err: os.ErrPermission} }
 	if _, err := r.a.CheckUpdate(); err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +330,7 @@ func TestInstallStartFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := r.a.InstallUpdate()
-	if !errors.Is(err, errUpdStart) || strings.Contains(err.Error(), r.a.upd.dir) {
+	if !errors.Is(err, updater.ErrStart) || strings.Contains(err.Error(), r.dir) {
 		t.Fatalf("ошибка: %v", err)
 	}
 	if r.quits.Load() != 0 || prefs.UpdateOf(r.a.cfgDir).Pending != "" {
@@ -304,7 +349,7 @@ func TestUpdateCheckErrors(t *testing.T) {
 		t.Error("checked записан после неудачи")
 	}
 	r2 := newUpdApp(t)
-	r2.a.checkUpdate(true)
+	r2.a.upd.CheckSilent()
 	if info := r2.a.UpdateInfo(); info.Phase != "idle" || info.Error != "" {
 		t.Errorf("тихая: %+v", info)
 	}
@@ -337,7 +382,7 @@ func TestUpdateNoRollback(t *testing.T) {
 		t.Errorf("config: %+v", u)
 	}
 	// Своя версия новее файла — тоже «последняя».
-	r.a.upd.version = "0.25.1"
+	r.version = "0.25.1"
 	prefs.UpdateUpdate(r.a.cfgDir, func(u *prefs.Update) { u.Seen = "" })
 	if info, _ := r.a.CheckUpdate(); info.Phase != "latest" {
 		t.Errorf("та же версия: %+v", info)
@@ -373,7 +418,7 @@ func TestUpdateCancel(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("скачивание не оборвалось")
 	}
-	if list, _ := os.ReadDir(r.a.upd.dir); len(list) != 0 {
+	if list, _ := os.ReadDir(r.dir); len(list) != 0 {
 		t.Errorf("в папке %v", list)
 	}
 	r.a.CancelUpdate() // отмена без операции — тихо
@@ -397,7 +442,7 @@ func TestUpdateReuse(t *testing.T) {
 	// Мало места: ошибка с числом, сети нет.
 	q := newUpdApp(t)
 	q.f.publish(t, "0.25.1", update.MinSetup, nil)
-	q.a.upd.free = func(string) (uint64, error) { return 10, nil }
+	q.free = func(string) (uint64, error) { return 10, nil }
 	if _, err := q.a.CheckUpdate(); err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +466,7 @@ func TestUpdatePending(t *testing.T) {
 		"прежняя недавно":        {"0.25.0", "0.25.1", now.Add(-time.Minute), "", "0.25.1"},
 		"прежняя давно":          {"0.25.0", "0.25.1", now.Add(-2 * time.Hour), "", ""},
 		"часы назад":             {"0.25.0", "0.25.1", now.Add(time.Hour), "", ""},
-		"граница часа":           {"0.25.0", "0.25.1", now.Add(-updFailWindow - time.Second), "", ""},
+		"граница часа":           {"0.25.0", "0.25.1", now.Add(-updater.FailWindow - time.Second), "", ""},
 		"dev: сравнить нечем":    {"dev", "0.25.1", now.Add(-time.Minute), "", ""},
 		"нет итога":              {"0.25.0", "", now, "", ""},
 		"мусор в pending":        {"0.25.0", "скоро", now, "", ""},
@@ -431,9 +476,11 @@ func TestUpdatePending(t *testing.T) {
 	} {
 		a := newApp(t)
 		a.cfgDir = testkit.TempDir(t)
-		a.upd.version = c.cur
+		h := a.updHost()
+		h.Version = func() string { return c.cur }
+		a.upd = updater.New(h)
 		prefs.UpdateUpdate(a.cfgDir, func(u *prefs.Update) { u.Pending, u.PendingAt = c.pending, c.at.UnixMilli() })
-		a.updateStartup()
+		a.upd.Startup()
 		info := a.UpdateInfo()
 		if info.Just != c.wantJust || info.Failed != c.wantBad {
 			t.Errorf("%s: just %q failed %q", name, info.Just, info.Failed)
@@ -455,10 +502,9 @@ func TestUpdateSchedule(t *testing.T) {
 	a := r.a
 	r.f.publish(t, "0.25.1", update.MinSetup, nil)
 	run := func() int32 {
-		a.upd.started.Store(false)
-		a.upd.phase = "" // новый сеанс: тихая проверка не идёт, если фаза уже есть
+		r.newSession() // новый сеанс: чистая фаза (тихая проверка не идёт, если фаза уже есть) и «раз за сеанс»
 		before := r.f.hits.Load()
-		a.scheduleUpdateCheck()
+		a.upd.Schedule()
 		a.bg.Wait()
 		return r.f.hits.Load() - before
 	}
@@ -479,12 +525,12 @@ func TestUpdateSchedule(t *testing.T) {
 	if n := run(); n != 1 {
 		t.Fatalf("пора: запросов %d", n)
 	}
-	if offers := r.ev.of("update:offer"); len(offers) != 1 || offers[0].(UpdateInfo).Version != "0.25.1" || offers[0].(UpdateInfo).Phase != "available" {
+	if offers := r.ev.of("update:offer"); len(offers) != 1 || offers[0].(updater.Info).Version != "0.25.1" || offers[0].(updater.Info).Phase != "available" {
 		t.Errorf("update:offer: %+v", offers)
 	}
 	// Раз за сеанс: второй вызов (перезагрузка окна) не идёт в сеть.
 	hits := r.f.hits.Load()
-	a.scheduleUpdateCheck()
+	a.upd.Schedule()
 	a.bg.Wait()
 	if r.f.hits.Load() != hits {
 		t.Error("повторная проверка за сеанс")
@@ -496,7 +542,7 @@ func TestUpdateSchedule(t *testing.T) {
 	}
 	// «Последняя»: тоста нет.
 	r.ev = captureEvents(a)
-	a.upd.version = "0.25.1"
+	r.version = "0.25.1"
 	prefs.UpdateUpdate(a.cfgDir, func(u *prefs.Update) { u.Checked = 0 })
 	if n := run(); n != 1 || len(r.ev.of("update:offer")) != 0 {
 		t.Errorf("последняя: запросов %d, offer %d", n, len(r.ev.of("update:offer")))
@@ -509,7 +555,7 @@ func TestUpdateScheduleCancel(t *testing.T) {
 	r := newUpdApp(t)
 	a := r.a
 	r.f.publish(t, "0.25.1", update.MinSetup, nil)
-	a.scheduleUpdateCheck()
+	a.upd.Schedule()
 	if info := a.SetUpdateCheck(false); info.AtStart {
 		t.Fatalf("флажок: %+v", info)
 	}
@@ -518,23 +564,27 @@ func TestUpdateScheduleCancel(t *testing.T) {
 	if r.f.hits.Load() != 0 {
 		t.Error("проверка после выхода")
 	}
-	// Флажок снят за время короткой задержки: перечитывается после ожидания.
-	startDelay = 100 * time.Millisecond
+	// Флажок снят за время задержки: перечитывается после ожидания. Задержка нулевая, а фон
+	// держит ворота: флажок снимается до его старта по порядку, а не по таймеру (под нагрузкой
+	// запись config.json дольше любой короткой задержки).
+	startDelay = 0
 	b := newUpdApp(t)
+	b.gate = make(chan struct{})
 	b.f.publish(t, "0.25.1", update.MinSetup, nil)
-	b.a.scheduleUpdateCheck()
-	if !b.a.upd.started.Load() {
+	b.a.upd.Schedule()
+	if b.bgCalls.Load() != 1 {
 		t.Fatal("проверка не запланирована")
 	}
 	b.a.SetUpdateCheck(false)
+	close(b.gate)
 	b.a.bg.Wait()
 	if b.f.hits.Load() != 0 {
 		t.Error("проверка при снятом флажке")
 	}
-	// Без снятия та же задержка приводит к запросу (тест не пуст).
+	// Без снятия то же приводит к запросу (тест не пуст).
 	c := newUpdApp(t)
 	c.f.publish(t, "0.25.1", update.MinSetup, nil)
-	c.a.scheduleUpdateCheck()
+	c.a.upd.Schedule()
 	c.a.bg.Wait()
 	if c.f.hits.Load() != 1 {
 		t.Errorf("без снятия: запросов %d", c.f.hits.Load())
@@ -579,7 +629,7 @@ func TestOpenUpdatePage(t *testing.T) {
 	if err := r.a.OpenUpdatePage(); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{repoURL + "/releases/latest", repoURL + "/releases/tag/v0.25.1"}
+	want := []string{appkit.RepoURL + "/releases/latest", appkit.RepoURL + "/releases/tag/v0.25.1"}
 	if len(opened) != 2 || opened[0] != want[0] || opened[1] != want[1] {
 		t.Errorf("адреса %v", opened)
 	}
@@ -589,18 +639,18 @@ func TestOpenUpdatePage(t *testing.T) {
 func TestUpdateCleanAtStart(t *testing.T) {
 	defer setStart(time.Hour, 20*time.Hour)()
 	r := newUpdApp(t)
-	if err := os.MkdirAll(r.a.upd.dir, 0o700); err != nil {
+	if err := os.MkdirAll(r.dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	for _, n := range []string{update.SetupName("0.25.0"), update.SetupName("0.25.1"), update.SetupName("0.25.1") + ".part", "чужое.txt"} {
-		if err := os.WriteFile(filepath.Join(r.a.upd.dir, n), []byte("x"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(r.dir, n), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	r.a.scheduleUpdateCheck()
+	r.a.upd.Schedule()
 	r.a.stopCancel()
 	r.a.bg.Wait()
-	list, _ := os.ReadDir(r.a.upd.dir)
+	list, _ := os.ReadDir(r.dir)
 	var got []string
 	for _, e := range list {
 		got = append(got, e.Name())

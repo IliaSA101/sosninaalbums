@@ -12,8 +12,9 @@
 
   // Фильтр ленты (спеки 004 п. 14–15, 024): кнопка со счётом и окошко. «Все фото / Не в альбоме» — всегда,
   // условия отметок — по уровню. M — сколько фото в ленте до фильтра по отметкам.
+  // Счёт отметок поиск по имени не меняет (0.26-124-27): N — store.marked, а не store.visible.
   const total = $derived(store.beforeMarks.length)
-  const label = $derived(filterLabel(store.filter, total, store.visible.length, libfilter.active))
+  const label = $derived(filterLabel(store.filter, total, store.marked.length, libfilter.active))
   const marks = $derived(prefs.can('marks'))
 
   const RATINGS: { v: number; text: string; title: string }[] = [
@@ -157,7 +158,7 @@
       </div>
 
       <div class="foot">
-        <span class="count" role="status">Показано {store.visible.length} из {total}</span>
+        <span class="count" role="status">Показано {store.marked.length} из {total}</span>
         <button type="button" class="ghost" disabled={!libfilter.active} onclick={() => libfilter.reset()}>Сбросить</button>
       </div>
     {/if}

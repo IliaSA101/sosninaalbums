@@ -577,4 +577,10 @@ describe('клавиши из реестра', () => {
     expect(mirror?.[0].hint).toBe('Ctrl+H')
     expect(mirror?.[1].hint).toBeUndefined()
   })
+
+  it('«Крупный просмотр» в М1 показывает клавишу photoPreview; сняли — подписи нет (128-8)', () => {
+    const first = (hint: (cmd: string) => string) => photoMenuFull(base, (f) => f !== 'clipboard', hint)[0]
+    expect(first((cmd) => (cmd === 'photoPreview' ? 'Z' : ''))).toMatchObject({ id: 'preview', label: 'Крупный просмотр', hint: 'Z' })
+    expect(first(() => '').hint).toBeUndefined()
+  })
 })

@@ -167,26 +167,7 @@ func builtinGrids(prm layout.Params, photoAsp []float64, n int) []model.GridChoi
 	if prm.PageW <= 0 || prm.PageH <= 0 {
 		return nil
 	}
-	same := func(a float64) []float64 {
-		s := make([]float64, n)
-		for i := range s {
-			s[i] = a
-		}
-		return s
-	}
-	mixed := make([]float64, n)
-	for i := range mixed {
-		mixed[i] = []float64{3.0 / 2, 2.0 / 3}[i%2]
-	}
-	var sets [][]float64
-	if len(photoAsp) == n {
-		sets = append(sets, photoAsp)
-	}
-	for _, a := range [][]float64{same(3.0 / 2), same(2.0 / 3), same(1), mixed} {
-		if !slices.ContainsFunc(sets, func(b []float64) bool { return slices.Equal(a, b) }) {
-			sets = append(sets, a)
-		}
-	}
+	sets := builtinSets(photoAsp, n)
 	results := make([][]layout.Result, len(sets))
 	var wg sync.WaitGroup
 	for i, a := range sets {
@@ -235,6 +216,33 @@ func builtinGrids(prm layout.Params, photoAsp []float64, n int) []model.GridChoi
 		out = append(out, model.GridChoice{ID: id, Scope: model.TplSpread, Boxes: spreadFractions(c.res.Rects, prm)})
 	}
 	return out
+}
+
+// builtinSets — наборы пропорций встроенных сеток на n мест: сначала фото разворота (если их
+// ровно n), затем все 3:2, все 2:3, все 1:1 и чередование. Один источник для галереи и для
+// узнавания формы сторонки обложки (127).
+func builtinSets(photoAsp []float64, n int) [][]float64 {
+	same := func(a float64) []float64 {
+		s := make([]float64, n)
+		for i := range s {
+			s[i] = a
+		}
+		return s
+	}
+	mixed := make([]float64, n)
+	for i := range mixed {
+		mixed[i] = []float64{3.0 / 2, 2.0 / 3}[i%2]
+	}
+	var sets [][]float64
+	if len(photoAsp) == n {
+		sets = append(sets, photoAsp)
+	}
+	for _, a := range [][]float64{same(3.0 / 2), same(2.0 / 3), same(1), mixed} {
+		if !slices.ContainsFunc(sets, func(b []float64) bool { return slices.Equal(a, b) }) {
+			sets = append(sets, a)
+		}
+	}
+	return sets
 }
 
 // layoutsImpl — перебор раскладок; в тестах подменяется, чтобы имитировать панику.

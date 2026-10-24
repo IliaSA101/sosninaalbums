@@ -6,12 +6,17 @@ import { COVER_ID } from '../../base/geom/sheet'
 import { CUSTOM_ID, customSpec, spineAction } from './coverpanel'
 
 class CoverActions {
-  // Пресеты типографий статичны: Go отдаёт их списком, читаем один раз.
+  // Пресеты типографий Go отдаёт списком: читаем один раз и заново после print:changed (123 Б3).
   presets = $state<CoverPreset[]>([])
   private loading = false
+  private again = false
 
-  async loadPresets() {
-    if (this.presets.length > 0 || this.loading) return
+  async loadPresets(force = false) {
+    if (this.loading) {
+      this.again ||= force // реестр сменился, пока шёл прежний запрос: после него — ещё раз
+      return
+    }
+    if (this.presets.length > 0 && !force) return
     this.loading = true
     try {
       this.presets = ((await Api.CoverPresets()) ?? []) as unknown as CoverPreset[]
@@ -20,6 +25,15 @@ class CoverActions {
     } finally {
       this.loading = false
     }
+    if (this.again) {
+      this.again = false
+      await this.loadPresets(true)
+    }
+  }
+
+  // Список типографий сменился (print:changed, 123 Б3): читаем заново.
+  reloadPresets() {
+    return this.loadPresets(true)
   }
 
   applyPreset(id: string) {

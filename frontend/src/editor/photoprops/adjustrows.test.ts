@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canReset, clampRow, needsGray, pendingGate, signed, toneArgs, toneOf, withRow } from './adjustrows'
+import { clampRow, needsGray, pendingGate, signed, toneArgs, toneOf, withRow } from './adjustrows'
 
 describe('adjustrows: подпись числа', () => {
   it('со знаком, минус U+2212, ноль без знака', () => {
@@ -8,11 +8,6 @@ describe('adjustrows: подпись числа', () => {
     expect(signed(0)).toBe('0')
     expect(signed(50)).toBe('+50')
     expect(signed(-50)).toBe('−50')
-  })
-  it('⊗ неактивна при 0', () => {
-    expect(canReset(0)).toBe(false)
-    expect(canReset(3)).toBe(true)
-    expect(canReset(-1)).toBe(true)
   })
 })
 

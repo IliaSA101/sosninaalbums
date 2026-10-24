@@ -22,11 +22,11 @@ describe('тексты окна клавиш', () => {
     expect(askText('Mod+KeyD', 'Линейки', false, false)).toContain('«Линейки» (скрыта на этом уровне)')
   })
   it('статусы: назначено, с заменой, убрано, сброс всех', () => {
-    expect(assignedText('KeyB', 'Крупный просмотр', null, false)).toBe('B — «Крупный просмотр»')
+    expect(assignedText('KeyB', 'Во весь экран', null, false)).toBe('B — «Во весь экран»')
     expect(assignedText('Mod+KeyD', 'Дублировать', { label: 'Линейки', visible: false }, false)).toBe(
       'Ctrl+D — «Дублировать» (у «Линейки» (скрыта на этом уровне) больше нет)',
     )
-    expect(removedText('KeyF', 'Крупный просмотр', false)).toBe('F убрана у «Крупный просмотр»')
+    expect(removedText('KeyF', 'Во весь экран', false)).toBe('F убрана у «Во весь экран»')
     expect(resetAllText(7)).toBe('Все клавиши — как было (своих было 7)')
   })
   it('перекрытие: у кого область главнее, та и сработает; если главнее наша — об этом', () => {

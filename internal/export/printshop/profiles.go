@@ -1,12 +1,15 @@
 package printshop
 
 import (
+	"strings"
+
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
 )
 
 // Profile — типография с выгрузкой «для печати» (047, 081 №7): чем она отличается от соседей —
-// имена, тексты, качество и таблица форматов. Третья типография — ещё один профиль.
+// имена, тексты и качество (форматы — в model.GroupFormats по Group). Третья типография — ещё один профиль.
 type Profile struct {
 	Kind    string // вид типографии: Plan.Kind и ExportOptions.Print
 	Group   string // model.CoverGroup…: группа пресетов обложки и предела 085; она же — имя в текстах
@@ -14,7 +17,6 @@ type Profile struct {
 	Title   string // подпись флажка окна экспорта
 	Prefix  string // перед именем файла: "" — 00.jpg, 01.jpg; «1-» — 1-00.jpg, 1-01.jpg (081 №9)
 	Quality int    // качество JPEG; 0 — как выбрано в окне (Фабрика — 100, 081 №10)
-	Formats func() []model.PrintFormat
 
 	coverWord  string                   // «фотообложки» | «обложки» — в строке «Обложки нет…»
 	pagesCap   string                   // подпись бумаги в памятке
@@ -23,64 +25,62 @@ type Profile struct {
 	withCover  string                   // хвост заголовка памятки, когда обложка есть (Фотосфера)
 	done       string                   // заголовок окна «Готово»
 	site       func(name string) string // путь на сайте до файлов; name — изделие обложки, "" — нет
-	siteButton string
-	url        string // адрес, когда у изделия обложки своего нет
+	siteButton string                   // подпись кнопки сайта окна «Готово»; у невстроенных — хост (siteButtonOf)
+	url        string                   // адрес, когда у изделия обложки своего нет
 }
 
 // product — изделие типографии по пресету обложки: бумага для памятки, название изделия
 // (заголовок памятки и путь на сайте) и его страница на сайте.
 type product struct{ pages, name, url string }
 
-// Адреса — только отсюда: интерфейс адрес не передаёт (047).
-const (
-	fabrikaURL         = "https://fabrika-fotoknigi.com/photo-books"
-	fabrikaLayflatURL  = "https://fabrika-fotoknigi.com/layflat"
-	fabrikaPhotoURL    = "https://fabrika-fotoknigi.com/photobook-photopaper"
-	fabrikaLayflatName = "Лайфлат"
-	fabrikaPhotoName   = "Фотокнига на фотобумаге"
-)
-
-// Fsfera — Фотосфера Pro (047): тексты прежние, байт в байт.
-var Fsfera = Profile{
-	Kind: "fsfera", Group: model.CoverGroupFsfera, Acc: "Фотосферу Pro", Title: "Для Фотосферы Pro",
-	Formats: model.FsferaFormats, coverWord: "фотообложки", pagesCap: "Страницы: ",
-	products: map[string]product{
-		"fsfera-thin": {pages: "Тонкие"}, "fsfera-card": {pages: "Картон"}, "fsfera-double": {pages: "Двойной картон"},
-	},
-	plain: "Фотокнига", withCover: ", обложка «Фото»", done: "Готово для Фотосферы",
-	site: func(string) string {
-		return "калькулятор Pro → эти параметры → «Загрузить»"
-	}, siteButton: "Открыть Фотосферу",
-}
-
-// Fabrika — Фабрика Фотокниги (081): имена 1-NN.jpg для их загрузчика, качество 100.
-var Fabrika = Profile{
-	Kind: "fabrika", Group: model.CoverGroupFabrika, Acc: "Фабрику Фотокниги", Title: "Для Фабрики Фотокниги",
-	Prefix: "1-", Quality: 100, Formats: model.FabrikaFormats, coverWord: "обложки", pagesCap: "Разворот: ",
-	products: map[string]product{
-		"fabrika-photo":          {"Фотобумага", fabrikaPhotoName, fabrikaPhotoURL},
-		"fabrika-photo-1":        {"Фотобумага, прослойка 1 мм", fabrikaPhotoName, fabrikaPhotoURL},
-		"fabrika-photo-2":        {"Фотобумага, прослойка 2 мм", fabrikaPhotoName, fabrikaPhotoURL},
-		"fabrika-layflat-paper":  {"Бумага", fabrikaLayflatName, fabrikaLayflatURL},
-		"fabrika-layflat-card":   {"Картон", fabrikaLayflatName, fabrikaLayflatURL},
-		"fabrika-layflat-card-1": {"Картон, прослойка 1 мм", fabrikaLayflatName, fabrikaLayflatURL},
-	},
-	plain: "Фотокнига", done: "Готово для Фабрики Фотокниги",
-	site: fabrikaSite, siteButton: "Открыть Фабрику Фотокниги", url: fabrikaURL,
-}
-
-// fabrikaSite — путь до загрузки на сайте Фабрики: изделие в кавычках, без обложки — «изделие».
-func fabrikaSite(name string) string {
-	if name == "" {
-		name = "изделие"
-	} else {
-		name = "«" + name + "»"
+// fromProfile — профиль выгрузки из секции export профиля типографии (123 (В)): тексты, префикс,
+// качество и адреса лежат в данных. Профиль без export в «Печати» не участвует (Нетпринт).
+// builtin — профиль из встроенных: только им верим подпись кнопки сайта из файла.
+func fromProfile(p printprof.Profile, builtin bool) Profile {
+	e := p.Export
+	pf := Profile{
+		Kind: p.ID, Group: p.Name, Acc: e.Acc, Title: e.Title, Prefix: e.Prefix, Quality: e.Quality,
+		coverWord: e.CoverWord, pagesCap: e.PagesCap, plain: e.Plain, withCover: e.WithCover, done: e.Done,
+		siteButton: siteButtonOf(p, builtin), url: e.URL, products: make(map[string]product, len(p.Products)),
 	}
-	return "Фотокниги → " + name + " → эти параметры → «Создать заказ»"
+	for _, pr := range p.Products {
+		pf.products[pr.ID] = product{pages: pr.Pages, name: pr.Item, url: pr.URL}
+	}
+	pf.site = func(name string) string {
+		if name == "" {
+			return strings.ReplaceAll(e.Site, "{item}", e.SiteNoItem)
+		}
+		return strings.ReplaceAll(e.Site, "{item}", "«"+name+"»")
+	}
+	return pf
 }
 
-// Profiles — типографии в порядке флажков окна экспорта.
-func Profiles() []Profile { return []Profile{Fsfera, Fabrika} }
+// siteButtonOf — подпись кнопки сайта окна «Готово» (повторный аудит 123 №3, решение 0.26-123-51):
+// у своей и библиотечной — «Открыть <хост>», как в редакторе своей (App.exportOf), иначе чужой
+// файл с хостом evil.example подписал бы кнопку «Открыть Фабрику Фотокниги». Текст из файла —
+// только у встроенных.
+func siteButtonOf(p printprof.Profile, builtin bool) string {
+	switch host := p.SiteHost(); {
+	case builtin:
+		return p.Export.SiteButton
+	case host != "":
+		return "Открыть " + host
+	}
+	return "Открыть сайт типографии"
+}
+
+// Profiles — типографии с выгрузкой в порядке пунктов окна «Печать»: профили действующего снимка
+// с секцией export. Пересчёт по каждому вызову дёшев (профилей три), зато слои видны сразу.
+func Profiles() []Profile {
+	var out []Profile
+	snap := printprof.Current()
+	for _, p := range snap.Profiles() {
+		if p.Export != nil {
+			out = append(out, fromProfile(p, snap.Source(p.ID) == printprof.SourceBuiltin))
+		}
+	}
+	return out
+}
 
 // ProfileOf — профиль по Kind; ok=false — такой типографии нет.
 func ProfileOf(kind string) (Profile, bool) {

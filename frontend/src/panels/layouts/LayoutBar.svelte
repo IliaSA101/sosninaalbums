@@ -11,6 +11,8 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { align } from './align.svelte'
   import AlignBar from './AlignBar.svelte'
+  import CoverLayoutBar from './CoverLayoutBar.svelte'
+  import { barGroups } from './coverbar'
   import { formOf, isVignette } from '../vignette/vignette'
   import { isOwnTpl, resetVignette, tplLabel } from '../vignette/vigown'
   import { vigOwn } from '../vignette/vigown.svelte'
@@ -60,8 +62,12 @@
       ? []
       : (['left', 'right'] as const).map((side, i) => ({ side, page: spread.pages?.[i] })).filter((p) => pageSwitchable(p.page)),
   )
+  // Обложка (127): «‹ ▦ ›» над задней и лицевой; при зуме групп нет, выравнивание выделенного главнее (ветка ниже).
+  const coverGroups = $derived(cover && variants && !compact ? barGroups(store.cover?.sides, spread.w) : [])
   const visible = $derived(
-    !drag.active && (cover ? aligning : !!spread.layout || spread.grid) && (show || gallery.cur?.spread === spread.id),
+    !drag.active &&
+      (cover ? aligning || coverGroups.length > 0 : !!spread.layout || spread.grid) &&
+      (show || gallery.cur?.spread === spread.id),
   )
   // Листать нечего: в ряду одна раскладка, и она уже стоит.
   const still = (variant: number, variants: number) => variant >= 0 && variants <= 1
@@ -124,7 +130,7 @@
   {#if aligning}
     <AlignBar />
   {:else if cover}
-    <!-- без пунктов -->
+    <CoverLayoutBar groups={coverGroups} />
   {:else if vig}
     <!-- Как у страницы: «‹ Виньетка: имя ▦ ›», у ручной — «‹ Виньетка: имя · Ручная · Вернуть авто › ▦» -->
     {@const manual = !!spread.vig?.manual}

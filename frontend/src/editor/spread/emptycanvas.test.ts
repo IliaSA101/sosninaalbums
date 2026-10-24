@@ -18,16 +18,16 @@ describe('пустой холст', () => {
     expect(c.hint).toEqual(['Сначала добавьте папку с фотографиями (кнопка внизу)', 'или перетащите папку в окно'])
   })
 
-  it('крупный просмотр: подсказка с клавишей из реестра, главная зависит от фото', () => {
+  it('«Во весь экран»: подсказка с клавишей из реестра, главная зависит от фото', () => {
     useCatalog()
-    expect(emptyCanvas(true, 0)).toEqual({ hint: ['Выключите крупный просмотр (F), чтобы добавить фото'], primary: 'spread' })
+    expect(emptyCanvas(true, 0)).toEqual({ hint: ['Выйдите из режима «Во весь экран» (F), чтобы добавить фото'], primary: 'spread' })
     expect(emptyCanvas(true, 3).primary).toBe('auto')
   })
 
   it('своя клавиша видна в подсказке сразу; нет клавиши — без скобок', () => {
     useCatalog({ toggleBig: ['KeyB'] })
-    expect(emptyCanvas(true, 0).hint).toEqual(['Выключите крупный просмотр (B), чтобы добавить фото'])
+    expect(emptyCanvas(true, 0).hint).toEqual(['Выйдите из режима «Во весь экран» (B), чтобы добавить фото'])
     useCatalog({ toggleBig: [] })
-    expect(emptyCanvas(true, 0).hint).toEqual(['Выключите крупный просмотр, чтобы добавить фото'])
+    expect(emptyCanvas(true, 0).hint).toEqual(['Выйдите из режима «Во весь экран», чтобы добавить фото'])
   })
 })

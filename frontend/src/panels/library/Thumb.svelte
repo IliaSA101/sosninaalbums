@@ -1,5 +1,7 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
+  import { isMac, peekPress } from '../../base/core/platform'
+  import { keymap } from '../../base/keys/keymap.svelte'
   import { drag } from '../../base/drag/drag.svelte'
   import type { Photo } from '../../base/core/types'
   import Icon from '../../base/ui/Icon.svelte'
@@ -8,7 +10,7 @@
   import { cancelOnUnmount } from '../../base/ui/imgcancel'
   import { colorBadge } from '../../editor/photo/color'
   import { markOf } from '../marks/marks'
-  import { markTitle, stars } from '../marks/thumbmark'
+  import { peekTip, stars, thumbTitle } from '../marks/thumbmark'
   import { binsel } from '../bins/binsel.svelte'
   import { lost } from './lost.svelte'
   import { missTip } from './missing'
@@ -32,7 +34,7 @@
   class:rejected
   role="button"
   tabindex="-1"
-  title={markTitle(p.name, mark, binsel.namesOf(store.marks[p.id]?.bins))}
+  title={thumbTitle(p.name, mark, binsel.namesOf(store.marks[p.id]?.bins), peekTip(isMac(), keymap.hint('photoPreview')))}
   onpointerdown={(e) =>
     drag.start(
       e,
@@ -41,7 +43,7 @@
     )}
   onclick={(e) => drag.clickAllowed() && store.click(p.id, e)}
   ondblclick={() => store.addToCurrent([p.id])}
-  oncontextmenu={(e) => thumbmenu.open(e, p.id)}
+  oncontextmenu={(e) => (peekPress(e) ? thumbmenu.peek(e, p.id) : thumbmenu.open(e, p.id))}
   onkeydown={() => {}}
 >
   <!-- .im повторяет форму фото и вписан в квадратную ячейку: рамка идёт по самому фото -->

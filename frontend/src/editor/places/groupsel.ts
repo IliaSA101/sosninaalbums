@@ -79,7 +79,9 @@ export function pruneSel(s: GroupSel, spread: SpreadView | undefined): GroupSel 
 }
 
 // Зона по элементу под курсором; null — нажатие вне библиотеки, холста и ленты (зона не меняется).
+// Модальное окно (просмотр, диалоги) зону не меняет, даже если по DOM лежит внутри холста.
 export function zoneOf(el: { closest(sel: string): unknown } | null | undefined): Zone | null {
+  if (el?.closest('[aria-modal="true"]')) return null
   if (el?.closest('.library')) return 'library'
   if (el?.closest('.stage, .tl')) return 'canvas'
   return null

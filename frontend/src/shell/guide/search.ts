@@ -2,12 +2,13 @@
 // раскладка не важны. Индекс строится при первом поиске и заново, когда клавиши реестра сменились (074).
 import { keymap } from '../../base/keys/keymap.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
+import { fromLatin, norm } from '../../base/words/kbdlayout'
 import { articleText } from './articletext'
 import { keyRows } from './show'
 import { ARTICLES, GUIDE_GROUPS, type Article } from './articles'
 
-// Нижний регистр и «ё → е».
-export const norm = (s: string): string => s.toLowerCase().replace(/ё/g, 'е')
+// Нижний регистр, «ё → е» и раскладка — общие с поиском фото (base/words/kbdlayout.ts).
+export { fromLatin, norm }
 
 // Плюс остаётся в слове: «ctrl+z».
 const TOKEN = /[^a-zа-я0-9+]+/
@@ -18,18 +19,6 @@ export function stem(w: string): string {
   if (w.length >= 6) return w.slice(0, -2)
   if (w.length >= 4) return w.slice(0, -1)
   return w
-}
-
-// Клавиши ЙЦУКЕН по латинской раскладке: «j,kj;rf» набрано вместо «обложка».
-const LATIN = "qwertyuiop[]asdfghjkl;'zxcvbnm,.`"
-const CYR = 'йцукенгшщзхъфывапролджэячсмитьбюё'
-export function fromLatin(q: string): string {
-  let out = ''
-  for (const ch of q.toLowerCase()) {
-    const i = LATIN.indexOf(ch)
-    out += i >= 0 ? CYR[i] : ch
-  }
-  return out
 }
 
 export interface Hit {

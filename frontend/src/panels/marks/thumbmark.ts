@@ -38,3 +38,10 @@ export function markTitle(name: string, m: Mark, bins: readonly string[] = []): 
   if (bins.length > 0) parts.push(binTip(bins))
   return parts.join(' · ')
 }
+
+// Вторая строка подсказки плитки (128, 0.26-128-16): жест крупного просмотра. mac и key (клавиша из реестра) приходят снаружи;
+// клавиша снята — без скобок.
+export const peekTip = (mac: boolean, key: string): string => `${mac ? '⌘' : 'Ctrl'}+правый щелчок — крупно${key ? ` (${key})` : ''}`
+
+// Подсказка плитки целиком: отметки, вторая строка — про жест (родной title показывает перенос строки).
+export const thumbTitle = (name: string, m: Mark, bins: readonly string[], peek: string): string => `${markTitle(name, m, bins)}\n${peek}`

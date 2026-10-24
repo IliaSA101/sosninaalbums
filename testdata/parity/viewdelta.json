@@ -1745,10 +1745,12 @@
         "scopes": null,
         "safe": null,
         "textMaxW": 0,
+        "sides": null,
         "markup": null,
         "pxW": 0,
         "pxH": 0,
-        "fix": ""
+        "fix": "",
+        "missing": ""
       },
       "again": false,
       "seq": 11,
@@ -1771,6 +1773,7 @@
         "fix": "",
         "layout": "",
         "markup": null,
+        "missing": "",
         "n": 3,
         "over": false,
         "preset": "",
@@ -1816,6 +1819,7 @@
           "vars": {},
           "w": 600
         },
+        "sides": null,
         "spec": {
           "preset": "",
           "wrap": 0

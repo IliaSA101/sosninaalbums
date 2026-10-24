@@ -8,7 +8,7 @@ import (
 // Предел разворотов типографии (085): таблица изделий и готовые строки для «Сведений об альбоме»
 // и окна «Экспорт». Типография не хранится, а выводится из пресета обложки и формата страницы
 // (decisions 085 №1): формат файла не меняется, старые альбомы получают строку сразу.
-// Новая типография — строка PrintGroup и строки PrintLimit (страж TestPrintGroupsCoverGroups).
+// Новая типография — профиль printprof (изделия, limits); страж TestPrintGroupsCoverGroups.
 
 // PrintGroup — типография для предела разворотов: имя ряда пресетов, родительный падеж для
 // строки предупреждения и изделие по умолчанию (когда обложки этой типографии нет).
@@ -29,21 +29,16 @@ type PrintLimit struct {
 	Pages    bool   // типография считает страницы: числа и текст в страницах (разворот = 2)
 }
 
-// PrintGroups — типографии с пределом. Функция, а не переменная, как CoverPresets.
-func PrintGroups() []PrintGroup {
-	return []PrintGroup{
-		{Name: CoverGroupFsfera, Gen: "Фотосферы", Default: "fsfera-thin"},
-		{Name: CoverGroupNetprint, Gen: "Нетпринта", Default: "netprint-premium", NameDefault: true},
-		// Без обложки Фабрики изделие неизвестно (бумага или лайфлат) — не названо (081 С1).
-		{Name: CoverGroupFabrika, Gen: "Фабрики Фотокниги", Default: "fabrika-photo"},
-	}
-}
+// PrintGroups — типографии с пределом, из профилей по порядку. Функция, а не переменная, как CoverPresets.
+func PrintGroups() []PrintGroup { return slices.Clone(tables().pgroups) }
 
 // PrintGroupOf — типография по имени группы пресетов; ok=false — предела у группы нет.
-func PrintGroupOf(name string) (PrintGroup, bool) {
-	all := PrintGroups()
-	if i := slices.IndexFunc(all, func(g PrintGroup) bool { return g.Name == name }); i >= 0 && name != "" {
-		return all[i], true
+func PrintGroupOf(name string) (PrintGroup, bool) { return tables().printGroupOf(name) }
+
+// printGroupOf — PrintGroupOf по таблицам t.
+func (t *printTables) printGroupOf(name string) (PrintGroup, bool) {
+	if i := slices.IndexFunc(t.pgroups, func(g PrintGroup) bool { return g.Name == name }); i >= 0 && name != "" {
+		return t.pgroups[i], true
 	}
 	return PrintGroup{}, false
 }
@@ -60,33 +55,22 @@ func CoverDefaultFor(s Settings) string {
 	return CoverDefault
 }
 
-// PrintLimits — пределы изделий. Фотосфера — последняя строка таблицы корешка (один источник:
-// за таблицей корешок не посчитать); Нетпринт — сайт 19.10 (design 085 §0). Нижнего предела
-// Фотосферы и пределов мягкой обложки Нетпринта на сайтах нет — строк нет (decisions №6).
-// Фабрика — fabrikaLimits (081).
-func PrintLimits() []PrintLimit {
-	var out []PrintLimit
-	for _, c := range CoverPresets() {
-		if st := c.Spec.Steps; c.Group == CoverGroupFsfera && len(st) > 0 {
-			out = append(out, PrintLimit{Product: c.ID, Max: st[len(st)-1].Upto})
-		}
-	}
-	out = append(out,
-		// Верх «Премиум» 20×20 и 18×13 на сайте не указан — 60, как у остальных (гипотеза, decisions №5).
-		PrintLimit{Product: "netprint-premium", Min: 10, Max: 60},
-		PrintLimit{Product: "netprint-royal", Min: 8, Max: 30},
-		PrintLimit{Product: "netprint-royal", Format: "20×20", Min: 10, Max: 30},
-	)
-	return append(out, fabrikaLimits()...)
-}
+// PrintLimits — пределы изделий из профилей (строки limits). Верх, не заданный в профиле, — последняя
+// строка таблицы корешка (один источник: за таблицей корешок не посчитать). Нижнего предела Фотосферы
+// и пределов мягкой обложки Нетпринта на сайтах нет — строк нет (decisions №6); верх «Премиум»
+// 20×20 и 18×13 на сайте не указан — 60, как у остальных (гипотеза, decisions №5). Фабрика — CSV
+// шаблонов (081, TestFabrikaSpineMatchesPSD).
+func PrintLimits() []PrintLimit { return slices.Clone(tables().limits) }
 
 // LimitFor — предел изделия product в формате format: сначала строка формата, затем общая.
 // Нет ни той, ни другой — изделия у формата нет (081 С2: лайфлат Фабрики 25×25).
-func LimitFor(product, format string) (PrintLimit, bool) {
-	all := PrintLimits()
+func LimitFor(product, format string) (PrintLimit, bool) { return tables().limitFor(product, format) }
+
+// limitFor — LimitFor по таблицам t.
+func (t *printTables) limitFor(product, format string) (PrintLimit, bool) {
 	for _, f := range []string{format, ""} {
-		if i := slices.IndexFunc(all, func(l PrintLimit) bool { return l.Product == product && l.Format == f }); i >= 0 {
-			return all[i], true
+		if i := slices.IndexFunc(t.limits, func(l PrintLimit) bool { return l.Product == product && l.Format == f }); i >= 0 {
+			return t.limits[i], true
 		}
 	}
 	return PrintLimit{}, false
@@ -99,22 +83,23 @@ func LimitOf(p *Project) (PageLimitView, bool) {
 	if p.Settings.Sheet {
 		return PageLimitView{}, false
 	}
+	t := tables() // одна справка на всю операцию: пресет, группа, кнопка и предел — из одного снимка
 	group := ""
 	if c := p.Cover; c != nil {
-		if pr, ok := CoverPresetOf(c.Spec.Preset); ok {
-			if _, ok := PrintGroupOf(pr.Group); ok {
+		if pr, ok := t.coverPresetOf(c.Spec.Preset); ok {
+			if _, ok := t.printGroupOf(pr.Group); ok {
 				group = pr.Group
 			}
 		}
 	}
 	if group == "" {
-		page, ok := PagePresetOf(p.Settings)
+		page, ok := t.pagePresetOf(p.Settings)
 		if !ok {
 			return PageLimitView{}, false
 		}
 		group = page.Group
 	}
-	return LimitIn(p, group)
+	return t.limitIn(p, group)
 }
 
 // LimitIn — предел, если книга p идёт в типографию group (выгрузка «для Фабрики» берёт его
@@ -122,27 +107,30 @@ func LimitOf(p *Project) (PageLimitView, bool) {
 // иначе изделие по умолчанию (названо по NameDefault); формат строки — кнопка ряда group с
 // размером страницы (PagePresetIn), нет её — общая строка. ok=false — у группы нет предела,
 // у изделия нет строки (изделия у формата нет) или это лист 031.
-func LimitIn(p *Project, group string) (PageLimitView, bool) {
-	g, ok := PrintGroupOf(group)
+func LimitIn(p *Project, group string) (PageLimitView, bool) { return tables().limitIn(p, group) }
+
+// limitIn — LimitIn по таблицам t.
+func (t *printTables) limitIn(p *Project, group string) (PageLimitView, bool) {
+	g, ok := t.printGroupOf(group)
 	if !ok || p.Settings.Sheet {
 		return PageLimitView{}, false
 	}
 	product, name := g.Default, ""
 	if c := p.Cover; c != nil {
-		if pr, ok := CoverPresetOf(c.Spec.Preset); ok && pr.Group == group {
+		if pr, ok := t.coverPresetOf(c.Spec.Preset); ok && pr.Group == group {
 			product, name = pr.ID, pr.Name
 		}
 	}
 	if name == "" && g.NameDefault {
-		if pr, ok := CoverPresetOf(g.Default); ok {
+		if pr, ok := t.coverPresetOf(g.Default); ok {
 			name = pr.Name
 		}
 	}
 	format := ""
-	if page, ok := PagePresetIn(p.Settings, group); ok {
+	if page, ok := t.pagePresetIn(p.Settings, group); ok {
 		format = page.Label
 	}
-	l, ok := LimitFor(product, format)
+	l, ok := t.limitFor(product, format)
 	if !ok {
 		return PageLimitView{}, false
 	}

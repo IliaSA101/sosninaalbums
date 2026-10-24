@@ -14,7 +14,7 @@ export interface ClipDomCtx {
   nativeSel: boolean // выделен текст страницы вне холста (справочник, «О снимке»)
   canvas: boolean // последнее нажатие мыши было на холсте (store.zone)
   clipboardOn: boolean // функция clipboard есть на уровне интерфейса
-  off: boolean // режим фона, галерея раскладок или крупный просмотр
+  off: boolean // режим фона, галерея раскладок или «Во весь экран»
   copyable: boolean
   pasteable: boolean
   now: number

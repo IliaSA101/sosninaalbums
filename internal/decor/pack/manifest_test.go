@@ -198,6 +198,7 @@ func FuzzParseManifest(f *testing.F) {
 	f.Add(manifestJSON(f, nil), "0.16.0")
 	f.Add([]byte(`{"format":1,"id":"abc","version":1,"minApp":"0.0.1","title":"x","items":[{"file":"a.png","kind":"bg","sha256":"`+sumA+`","size":1}]}`), "dev")
 	f.Add([]byte(`{"format":1e9,"items":[null]}`), "")
+	f.Add([]byte(`{"format":1,"id":"abc","version":1,"minApp":"0.26.0","title":"x","items":[{"file":"fabrika.saprint","kind":"print","sha256":"`+sumA+`","size":65536}]}`), "0.26.0")
 	f.Fuzz(func(t *testing.T, data []byte, app string) {
 		m, err := ParseManifest(data, app)
 		if err != nil {
@@ -241,5 +242,36 @@ func TestParseManifestFrame(t *testing.T) {
 	}
 	if KindLimit(KindFrame) != MaxFrame {
 		t.Errorf("предел рамочки %d", KindLimit(KindFrame))
+	}
+}
+
+// Типография в наборе (123 Б4): .saprint до 64 КБ; другое расширение и больше предела — пропуск
+// с причиной; набор из одних плохих типографий — «нечего ставить». Откуда набор — решает decor.
+func TestParseManifestPrint(t *testing.T) {
+	m, err := ParseManifest(manifestJSON(t, func(m map[string]any) {
+		m["items"] = append(m["items"].([]any),
+			map[string]any{"file": "prints/fabrika.saprint", "kind": "print", "name": "Фабрика", "sha256": sumA, "size": MaxPrint},
+			map[string]any{"file": "prints/big.saprint", "kind": "print", "sha256": sumA, "size": MaxPrint + 1},
+			map[string]any{"file": "prints/fabrika.json", "kind": "print", "sha256": sumA, "size": 10},
+			map[string]any{"file": "prints/vec.svg", "kind": "print", "sha256": sumA, "size": 10},
+		)
+	}), "0.26.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Items) != 3 || m.Items[2].Kind != KindPrint || len(m.Skipped) != 3 {
+		t.Fatalf("предметы %+v, пропуски %+v", m.Items, m.Skipped)
+	}
+	if !strings.Contains(m.Skipped[0].Why, "64 КБ") || !strings.Contains(m.Skipped[1].Why, ".saprint") || !strings.Contains(m.Skipped[2].Why, ".saprint") {
+		t.Errorf("причины: %+v", m.Skipped)
+	}
+	_, err = ParseManifest(manifestJSON(t, func(m map[string]any) {
+		m["items"] = []any{map[string]any{"file": "p.saprint", "kind": "print", "sha256": sumA, "size": 0}}
+	}), "0.26.0")
+	if err == nil {
+		t.Error("профиль нулевого размера принят")
+	}
+	if KindLimit(KindPrint) != 64<<10 {
+		t.Errorf("предел типографии %d", KindLimit(KindPrint))
 	}
 }

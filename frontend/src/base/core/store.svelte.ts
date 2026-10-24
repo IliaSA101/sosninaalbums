@@ -101,9 +101,10 @@ class Store extends Nav {
   inBin = $derived(this.hooks.bin(this.inFolders))
   // Не в местах и не на фоне (среди показанных папок и подборки).
   free = $derived(this.hooks.free(this.inBin, this.used, this.backdropUsed))
-  // Лента до фильтра по отметкам (длина — «из M» в MarkFilter) и после него (libfilter).
+  // Лента до фильтра по отметкам (длина — «из M» в MarkFilter), после него (libfilter) и после поиска по имени (0.26-124).
   beforeMarks = $derived(this.filter === 'unused' ? this.free : this.inBin)
-  visible = $derived(this.hooks.visible(this.beforeMarks))
+  marked = $derived(this.hooks.visible(this.beforeMarks))
+  visible = $derived(this.hooks.named(this.marked))
   // Выделенные и при этом видимые (с учётом фильтра) фото — в порядке ленты.
   selectedIds = $derived(this.visible.filter((p) => this.selected.has(p.id)).map((p) => p.id))
   projectName = $derived(

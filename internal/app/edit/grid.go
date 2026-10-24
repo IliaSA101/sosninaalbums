@@ -171,3 +171,11 @@ func (m *Methods) GridChoices(spreadID string, n int, scope string) model.GridCh
 	defer Guard("GridChoices")
 	return m.editor().GridChoices(spreadID, n, scope, m.templateList())
 }
+
+// CoverGridChoices — галерея сторонки обложки (127): «По фото», встроенные и «Мои» на n мест
+// (0 — число мест сторонки); scope "left" | "right". Доли рядов — доли model.CoverGridChoices.Box.
+// Только чтение.
+func (m *Methods) CoverGridChoices(scope string, n int) model.CoverGridChoices {
+	defer Guard("CoverGridChoices")
+	return m.editor().CoverGridChoices(scope, n, m.templateList())
+}

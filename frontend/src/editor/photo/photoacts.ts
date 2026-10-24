@@ -45,7 +45,7 @@ export interface Act {
 }
 
 export const ACTS: Record<ActId, Act> = {
-  preview: { label: 'Крупный просмотр', icon: 'preview' },
+  preview: { label: 'Крупный просмотр', icon: 'preview', cmd: 'photoPreview' },
   clipCopy: { label: 'Копировать', icon: 'copy', cmd: 'copyItems' },
   clipPaste: { label: 'Вставить', icon: 'paste', cmd: 'pasteItems' },
   turnCw: { label: 'Повернуть ↻ 90°', icon: 'turn-cw', feature: 'turn', cmd: 'turnCw' },

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -120,4 +121,46 @@ func StatLocal(p string) (fs.FileInfo, error) {
 	}
 	_, st, err = LinkTarget(p)
 	return st, err
+}
+
+// openLocalHook — только для тестов: зовётся между проверкой и открытием в OpenLocal (подмена файла).
+var openLocalHook func(p string)
+
+// ErrFileChanged — файл подменили между проверкой и открытием.
+var ErrFileChanged = errors.New("файл сменился во время открытия")
+
+// OpenLocal — открыть для чтения обычный файл по пути от пользователя (аудит 123 №8): та же
+// проверка, что StatLocal, затем открывается проверенная цель (у ссылки — цель LinkTarget, а не
+// сама ссылка, которую успели бы перенаправить на \\host), без ожидания на канале
+// (imgfile.OpenRegular), и os.SameFile сверяет открытое с проверенным. Сведения — открытого файла.
+func OpenLocal(p string) (*os.File, fs.FileInfo, error) {
+	st, err := os.Lstat(p)
+	if err != nil {
+		return nil, nil, err
+	}
+	target := p
+	if st.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
+		if target, st, err = LinkTarget(p); err != nil {
+			return nil, nil, err
+		}
+	}
+	if !st.Mode().IsRegular() {
+		return nil, nil, errors.New("не обычный файл")
+	}
+	// На Windows Lstat/Stat обычного файла номер файла не читают: SameFile дочитал бы его лениво
+	// по пути уже после открытия и сравнил подменённый файл сам с собой. Читаем номер сейчас.
+	_ = os.SameFile(st, st)
+	if openLocalHook != nil {
+		openLocalHook(target)
+	}
+	f, err := imgfile.OpenRegular(target)
+	if err != nil {
+		return nil, nil, err
+	}
+	got, err := f.Stat()
+	if err != nil || !os.SameFile(st, got) {
+		_ = f.Close()
+		return nil, nil, ErrFileChanged
+	}
+	return f, got, nil
 }

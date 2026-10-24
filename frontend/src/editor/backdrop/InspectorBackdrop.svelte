@@ -10,6 +10,7 @@
   import { clearBackdrop, editBackdrop, pickBackdropFile } from './backdropact'
   import { thumbUrl } from '../../base/core/media'
   import { prefs } from '../../base/prefs/prefs.svelte'
+  import { useCard } from '../../base/prefs/cardgroups.svelte'
   import { decor } from '../../panels/decor/decor.svelte'
   import { bgmode } from './bgmode.svelte'
   import { LIB_MISSING_TEXT } from '../../panels/library/missing'
@@ -18,7 +19,10 @@
 
   // «Фото фона» в разделе «Фон» карточки разворота (спека 009): зона броска на каждую область,
   // «Галерея фонов…» и «Свой файл…», «Править» (входит в режим фона) и «Убрать». split — цвета показаны по страницам.
+  // Пары кнопок («Галерея · Свой файл», «Копировать оформление · Готовые развороты») — строкой по две; в узкой
+  // плавающей карточке (200 px) слова не сокращаются, поэтому столбцом (спека 124 U5).
   let { sp, split }: { sp: SpreadView; split: boolean } = $props()
+  const narrow = useCard().narrow
 
   // Обложка (032): зоны броска задаёт её раскладка, а не цвета страниц; названия — сторонки.
   const cover = $derived(isCover(sp))
@@ -75,7 +79,7 @@
       {:else}
         <div class="hint">Перетащите фото сюда</div>
       {/if}
-      <div class="files">
+      <div class="files" class:narrow class:one={!prefs.can('decor')}>
         {#if prefs.can('decor')}
           <button class="ghost" data-guide="bg-gallery" title="Узоры и фоны из библиотеки" onclick={() => decor.show('bg', sp.id, scope)}
             >Галерея фонов…</button
@@ -87,20 +91,22 @@
   {/each}
 </div>
 {#if prefs.can('decor') && !cover}
-  <!-- 049 Ф2: одно окно на лист, а не на область фона; открывается тем же путём, что «Правка ▸ Копировать оформление…» -->
-  <button
-    class="ghost copy"
-    data-guide="copy-decor"
-    title="Поставить такое же оформление на другие {unit.many}"
-    onclick={() => gridAct.openDecor(sp.id)}>Копировать оформление…</button
-  >
-  <!-- 067: готовые развороты — места и оформление одним щелчком; окно то же, что «Правка ▸ Готовые развороты…» -->
-  <button
-    class="ghost copy"
-    data-guide="spread-tpl"
-    title="Поставить готовый разворот: места для фото и оформление"
-    onclick={() => decor.show('spread', sp.id, 'spread')}>Готовые развороты…</button
-  >
+  <div class="files copies" class:narrow>
+    <!-- 049 Ф2: одно окно на лист, а не на область фона; открывается тем же путём, что «Разворот ▸ Копировать оформление…» -->
+    <button
+      class="ghost"
+      data-guide="copy-decor"
+      title="Поставить такое же оформление на другие {unit.many}"
+      onclick={() => gridAct.openDecor(sp.id)}>Копировать оформление…</button
+    >
+    <!-- 067: готовые развороты — места и оформление одним щелчком; окно то же, что «Разворот ▸ Готовые развороты…» -->
+    <button
+      class="ghost"
+      data-guide="spread-tpl"
+      title="Поставить готовый разворот: места для фото и оформление"
+      onclick={() => decor.show('spread', sp.id, 'spread')}>Готовые развороты…</button
+    >
+  </div>
 {/if}
 
 <style>
@@ -175,22 +181,19 @@
     font-size: 12px;
   }
   .files {
-    display: flex;
-    flex-wrap: wrap; /* узкая колонка: кнопки переносятся, а не сжимаются */
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 6px;
     margin-top: 6px;
   }
+  .files.narrow,
+  .files.one {
+    grid-template-columns: 1fr;
+  }
   .files button {
-    flex: 1 0 auto;
+    min-width: 0;
     white-space: nowrap;
     height: 24px;
-    padding: 0 6px;
-    font-size: 12px;
-  }
-  .copy {
-    width: 100%;
-    height: 24px;
-    margin-top: 6px;
     padding: 0 6px;
     font-size: 12px;
   }

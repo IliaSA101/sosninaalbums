@@ -3,11 +3,12 @@ package app
 import (
 	"errors"
 	"net/url"
+
+	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
 )
 
-// Адреса окна «О программе» (101). Зашиты здесь: интерфейс передаёт только id, как у OpenFsfera.
+// Адреса окна «О программе» (101). Зашиты здесь: интерфейс передаёт только id, как у OpenPrintSite.
 const (
-	repoURL     = "https://github.com/IliaSA101/sosninaalbums"
 	telegramURL = "https://t.me/Ilya_Sosnin"
 	marinaURL   = "https://sosnina-films.ru/contacts"
 )
@@ -23,14 +24,14 @@ func linkURL(id, ver string) (string, bool) {
 	switch id {
 	case "source":
 		if tagged {
-			return repoURL + "/tree/" + url.PathEscape("v"+ver), true
+			return appkit.RepoURL + "/tree/" + url.PathEscape("v"+ver), true
 		}
-		return repoURL, true
+		return appkit.RepoURL, true
 	case "license":
 		if tagged {
-			return repoURL + "/blob/" + url.PathEscape("v"+ver) + "/NOTICE.md", true
+			return appkit.RepoURL + "/blob/" + url.PathEscape("v"+ver) + "/NOTICE.md", true
 		}
-		return repoURL + "/blob/main/NOTICE.md", true
+		return appkit.RepoURL + "/blob/main/NOTICE.md", true
 	case "telegram":
 		return telegramURL, true
 	case "marina":
@@ -40,15 +41,15 @@ func linkURL(id, ver string) (string, bool) {
 		if tagged {
 			q.Set("version", ver) // поле «Версия» формы уже заполнено
 		}
-		return repoURL + "/issues/new?" + q.Encode(), true
+		return appkit.RepoURL + "/issues/new?" + q.Encode(), true
 	case "idea":
-		return repoURL + "/issues/new?template=idea.yml", true
+		return appkit.RepoURL + "/issues/new?template=idea.yml", true
 	case "download":
 		// Страница последнего выпуска: он откроет любой более старый файл и несёт свежие правки (112).
-		return repoURL + "/releases/latest", true
+		return appkit.RepoURL + "/releases/latest", true
 	case "videos":
 		// Всегда main: новые ролики появляются на странице без новой версии программы (113).
-		return repoURL + "/blob/main/docs/VIDEOS.md", true
+		return appkit.RepoURL + "/blob/main/docs/VIDEOS.md", true
 	}
 	return "", false
 }

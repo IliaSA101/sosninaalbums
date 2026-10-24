@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Mark } from '../../base/core/types'
-import { markTitle, stars } from './thumbmark'
+import { markTitle, peekTip, stars, thumbTitle } from './thumbmark'
 
 const none: Mark = { rating: 0, label: '', flag: 0 }
 
@@ -46,5 +46,22 @@ describe('markTitle', () => {
     expect(markTitle('a.jpg', { rating: 3, label: '', flag: 0, lr: { rating: 3, label: 'red', flag: 0 } })).toBe(
       'a.jpg · ★★★ · в Lightroom: метка: красная',
     )
+  })
+})
+
+describe('подсказка о крупном просмотре (128-9, 0.26-128-16)', () => {
+  it('вторая строка title: жест и клавиша (Т4)', () => {
+    expect(peekTip(false, 'Z')).toBe('Ctrl+правый щелчок — крупно (Z)')
+    expect(thumbTitle('a.jpg', none, [], peekTip(false, 'Z'))).toBe('a.jpg\nCtrl+правый щелчок — крупно (Z)')
+    expect(thumbTitle('a.jpg', { rating: 4, label: '', flag: 0 }, [], peekTip(false, 'Z'))).toBe(
+      'a.jpg · ★★★★\nCtrl+правый щелчок — крупно (Z)',
+    )
+  })
+  it('на Mac — ⌘', () => {
+    expect(peekTip(true, 'Z')).toBe('⌘+правый щелчок — крупно (Z)')
+  })
+  it('клавиша снята — без скобок', () => {
+    expect(peekTip(false, '')).toBe('Ctrl+правый щелчок — крупно')
+    expect(thumbTitle('a.jpg', none, [], peekTip(false, ''))).toBe('a.jpg\nCtrl+правый щелчок — крупно')
   })
 })

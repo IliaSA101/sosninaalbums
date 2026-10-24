@@ -11,6 +11,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/app/assoc"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -35,7 +36,7 @@ func TestNewerText(t *testing.T) {
 		{errors.New("файл проекта повреждён"), "альбом", "0.23.0", "файл проекта повреждён"},
 	}
 	for _, c := range cases {
-		if got := newerTextFor(c.err, c.what, c.mine); got != c.want {
+		if got := assoc.NewerText(c.err, c.what, c.mine); got != c.want {
 			t.Errorf("%v (%q, %q):\n%q\nждали\n%q", c.err, c.what, c.mine, got, c.want)
 		}
 	}
@@ -125,30 +126,5 @@ func TestBackupNotice(t *testing.T) {
 	// Имя без хвоста версии — общий текст; пустое — без тоста.
 	if got := backupText(filepath.Join(dir, "x.salbum")); got != "Сохранена копия для прежней версии: «x.salbum»" {
 		t.Errorf("без версии: %q", got)
-	}
-}
-
-// Две цифры совпали (файл 0.25.1, программа 0.25.0) — в тексте три; разошлись — две как раньше;
-// полной версии нет — остаются две.
-func TestShownVers(t *testing.T) {
-	cases := []struct{ theirs, mine, wantT, wantM string }{
-		{"0.25.1", "0.25.0", "0.25.1", "0.25.0"},
-		{"0.25.1-rc2+abc", "0.25.0-dev", "0.25.1", "0.25.0"},
-		{"0.25.0", "0.25.0", "0.25.0", "0.25.0"},
-		{"0.26.0", "0.25.3", "0.26", "0.25"},
-		{"0.25", "0.25.0", "0.25", "0.25"},
-		{"0.25.1", "0.25", "0.25", "0.25"},
-		{"0.25.1", "dev", "0.25", ""},
-		{"", "0.25.0", "", "0.25"},
-		{"dev", "", "", ""},
-	}
-	for _, c := range cases {
-		if gt, gm := shownVers(c.theirs, c.mine); gt != c.wantT || gm != c.wantM {
-			t.Errorf("shownVers(%q, %q) = %q, %q; ждали %q, %q", c.theirs, c.mine, gt, gm, c.wantT, c.wantM)
-		}
-	}
-	err := &salbum.NewerError{Version: model.FormatVersion + 1, App: "0.25.1"}
-	if got, want := newerTextFor(err, "альбом", "0.25.0"), "альбом сохранён в версии 0.25.1. Эта программа — 0.25.0: обновите её"; got != want {
-		t.Errorf("текст: %q, ждали %q", got, want)
 	}
 }

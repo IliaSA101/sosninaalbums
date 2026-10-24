@@ -49,7 +49,7 @@ describe('обработчики клавиш мимо реестра', () => {
     '/src/editor/captions/FieldMenu.svelte': 'навигация и Esc меню',
     '/src/editor/eyedrop/EyedropLayer.svelte': 'Esc выходит из пипетки',
     '/src/editor/photo/FrameControls.svelte': 'Esc жеста кадра',
-    '/src/editor/photo/PhotoPreview.svelte': 'Esc закрывает крупный просмотр; остальные клавиши страницу не трогают',
+    '/src/editor/photo/PhotoPreview.svelte': 'Esc и ← → окна просмотра; свои клавиши окна гасятся, остальные идут диспетчеру (128)',
     '/src/editor/places/MiniPanel.svelte': 'Esc наклона и модификатор Alt/Shift панели (owner-ux §2)',
     '/src/editor/places/PlaceAddMenu.svelte': 'навигация и Esc меню',
     '/src/editor/places/placegesture.ts': 'Esc отменяет жест места',

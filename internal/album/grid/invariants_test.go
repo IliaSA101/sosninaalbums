@@ -39,13 +39,14 @@ func TestGridInvariants(t *testing.T) {
 	edtest.NewSpread(e, -1, pool[:3])
 	scopes := []string{model.ScopeLeft, model.ScopeRight, model.ScopeSpread}
 	ops := []string{"set", "add", "move", "swap", "remove", "new", "place", "fill", "addPlace", "setPlaces", "delete",
-		"arrange", "layers", "group", "fit", "shape", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop", "border", "border", "clip", "clip", "copies"}
+		"arrange", "layers", "group", "fit", "shape", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop", "border", "border", "clip", "clip", "copies", "coverGrid", "coverGrid", "coverGrid"}
 	arr := []string{"same", "sameW", "fitPhoto", "splitH", "splitV", "front", "back"}
 	vigTpls := []string{"grid", "head-t-left", "g-top", "t-top-g", "split-tg", "нет такого"}
 	withGrid, seated, turned, ordered := 0, 0, 0, 0 // тест не должен выродиться в прогон одного «Авто»
 	onCover, vigs := 0, 0                           // шагов над местами обложки (032), виньеток (031)
 	bordered := 0                                   // мест с рамочкой по шагам (079)
 	clips := 0                                      // удачных вставок и дублей (099)
+	coverGrids := 0                                 // удачных плиток и шагов раскладки сторонки обложки (127)
 	shifts := 0                                     // сдвигов своего фото по местам ручного листа (114)
 	frSrcs := []model.BorderSrc{{}, {Kind: "line", Width: 2}, {Kind: "polaroid", Inks: []string{"#EEEEEE"}}, {Kind: "future-kind"},
 		{Photo: model.PhotoInfo{ID: model.LibPhotoID(frKey), Path: filepath.Join(dir, "frame.png"), Lib: frKey, W: 3000, H: 4000}, Cut: [4]float64{0.1, 0.2, 0.1, 0.3}},
@@ -220,6 +221,8 @@ func TestGridInvariants(t *testing.T) {
 			sp := edtest.P(e).Cover.Spec
 			sp.W, sp.Hinge = float64(r.IntN(2)*(150+r.IntN(300))), float64(r.IntN(10))
 			_, _ = e.SetCoverSpec(sp)
+		case "coverGrid": // 127: плитка из галереи сторонки и листание ‹ ›
+			coverGrids += coverGridOp(e, r)
 		case "vignette": // 031: «Применить» (и пересборка при смене настроек — шаг «settings»)
 			switch r.IntN(5) {
 			case 0, 1:
@@ -330,6 +333,9 @@ func TestGridInvariants(t *testing.T) {
 	if shifts < need(10) {
 		t.Fatalf("сдвигов фото по местам почти не было: %d", shifts)
 	}
+	if coverGrids < need(20) {
+		t.Fatalf("раскладок сторонки обложки почти не было: %d", coverGrids)
+	}
 	if vigs < need(100) {
 		t.Fatalf("виньеток почти не было: %d по шагам", vigs)
 	}
@@ -337,8 +343,36 @@ func TestGridInvariants(t *testing.T) {
 		t.Fatalf("сеток мало: %d разворотов-сеток по шагам, %d фото в местах, %d повёрнутых мест, %d с общим порядком",
 			withGrid, seated, turned, ordered)
 	}
-	t.Logf("сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, вставок %d, сдвигов %d, разворотов %d",
-		withGrid, seated, turned, ordered, vigs, bordered, clips, shifts, len(edtest.P(e).Spreads))
+	t.Logf("раскладок сторонки %d, сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, вставок %d, сдвигов %d, разворотов %d",
+		coverGrids, withGrid, seated, turned, ordered, vigs, bordered, clips, shifts, len(edtest.P(e).Spreads))
+}
+
+// coverGridOp — шаг раскладки сторонки обложки (127): плитка случайного ряда на вкладке 1…7 (со
+// случайной сторонкой, в том числе нерабочей) или шаг ‹ › любой длины; обложки нет — создаётся.
+// Итог — 1, если проект изменился.
+func coverGridOp(e *album.Editor, r *rand.Rand) int {
+	if edtest.P(e).Cover == nil {
+		_, _ = e.CreateCover("", nil)
+		return 0
+	}
+	if sp := edtest.P(e).Cover.Spec; len(edtest.P(e).CoverSides()) == 0 { // сторонки нет (W = 0): задаём, иначе шаг пуст
+		sp.W = 150 + float64(r.IntN(300))
+		_, _ = e.SetCoverSpec(sp)
+	}
+	sc := []string{model.ScopeLeft, model.ScopeRight, model.ScopeLeft, model.ScopeRight, model.ScopeSpine}[r.IntN(5)]
+	rev := edtest.Rev(e)
+	if r.IntN(2) == 0 {
+		ch := e.CoverGridChoices(sc, r.IntN(9)-1, nil)
+		if rows := slices.Concat(ch.ByPhoto, ch.Builtin); len(rows) > 0 {
+			_, _, _ = e.ApplyCoverGrid(sc, rows[r.IntN(len(rows))].Boxes)
+		}
+	} else {
+		e.StepCoverGrid(sc, r.IntN(5)-2)
+	}
+	if edtest.Rev(e) != rev {
+		return 1
+	}
+	return 0
 }
 
 // clipOp — шаг буфера (099) на листе s: выделение — случайная часть мест (фото), надписей и

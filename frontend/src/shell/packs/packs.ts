@@ -16,6 +16,8 @@ export interface PackInfo {
   bg: number
   sticker: number
   spread: number
+  frame: number // рамочки-картинки (079)
+  print: number // типографии (профили печати)
   bytes: number
   removable: boolean
 }
@@ -63,14 +65,16 @@ export const WHY_MAX = 3 // сколько пропущенных предмет
 
 const ORIGIN: Record<string, string> = { file: 'Из файла', net: 'Из сети', builtin: 'Рисует программа' }
 
-const PART: [keyof Pick<PackInfo, 'bg' | 'sticker' | 'spread'>, [string, string, string]][] = [
+const PART: [keyof Pick<PackInfo, 'bg' | 'sticker' | 'spread' | 'frame' | 'print'>, [string, string, string]][] = [
   ['bg', ['фон', 'фона', 'фонов']],
   ['sticker', ['стикер', 'стикера', 'стикеров']],
   ['spread', ['разворот', 'разворота', 'разворотов']],
+  ['frame', ['рамочка', 'рамочки', 'рамочек']],
+  ['print', ['типография', 'типографии', 'типографий']],
 ]
 
 // «12 фонов, 8 разворотов» — только то, что есть в наборе.
-export function contentsLabel(p: Pick<PackInfo, 'bg' | 'sticker' | 'spread'>, sep = ', '): string {
+export function contentsLabel(p: Pick<PackInfo, 'bg' | 'sticker' | 'spread' | 'frame' | 'print'>, sep = ', '): string {
   return PART.filter(([k]) => p[k] > 0)
     .map(([k, forms]) => `${p[k]} ${plural(p[k], forms)}`)
     .join(sep)
@@ -137,7 +141,7 @@ export const cancelled = (r: PackAdd | null | undefined): boolean => !r || (!r.p
 export const replaceQuestion = (r: PackAdd): string => `Заменить набор «${r.pack.title}» версии ${r.fromVersion} версией ${r.pack.version}?`
 
 // «Удалить набор «Айвори»?»: что пропадёт, что останется и почему (числа — PlanRemovePack).
-export function removeQuestion(p: Pick<PackInfo, 'title' | 'bg' | 'sticker' | 'spread'>): string {
+export function removeQuestion(p: Pick<PackInfo, 'title' | 'bg' | 'sticker' | 'spread' | 'frame' | 'print'>): string {
   return (
     `Удалить набор «${p.title}»? ${goneText(p)} ` +
     'В открытом альбоме всё останется; в других альбомах — станет пропавшим и вернётся при повторной загрузке набора.'
@@ -145,8 +149,10 @@ export function removeQuestion(p: Pick<PackInfo, 'title' | 'bg' | 'sticker' | 's
 }
 
 // «Его фоны, стикеры и развороты пропадут из окон.» — по составу набора. Состав пуст — «Его содержимое пропадёт…».
-function goneText(p: Pick<PackInfo, 'bg' | 'sticker' | 'spread'>): string {
-  const names = PART.filter(([k]) => p[k] > 0).map(([k]) => ({ bg: 'фоны', sticker: 'стикеры', spread: 'развороты' })[k])
+function goneText(p: Pick<PackInfo, 'bg' | 'sticker' | 'spread' | 'frame' | 'print'>): string {
+  const names = PART.filter(([k]) => p[k] > 0).map(
+    ([k]) => ({ bg: 'фоны', sticker: 'стикеры', spread: 'развороты', frame: 'рамочки', print: 'типографии' })[k],
+  )
   if (names.length === 0) return 'Его содержимое пропадёт из окон.'
   const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} и ${names[names.length - 1]}` : names[0]
   return `Его ${list} пропадут из окон.`

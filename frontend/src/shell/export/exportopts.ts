@@ -116,15 +116,21 @@ export function coverAvailable(v: Pick<View, 'cover' | 'settings'>): boolean {
   return !!v.cover && !v.settings.sheet
 }
 
-// План включённой типографии: выбор запомнен, и такой план пришёл (флажок показан). Иначе null — режима нет.
+// План включённой типографии: выбор запомнен, и такой план пришёл (пункт списка показан). Иначе null — режима нет.
 // План чужого формата (format "") тоже берём: в block у него запрет, и тихо уйти в обычную выгрузку нельзя (120).
 export function activePlan(plans: readonly PrintPlan[] | null, pref: '' | PrintKind): PrintPlan | null {
   return (pref && plans?.find((p) => p.kind === pref)) || null
 }
 
-// Щелчок по флажку типографии: включённый выключается, другой переключает (включён не больше одного).
-export const togglePrint = (pref: '' | PrintKind, kind: PrintKind, checked: boolean): '' | PrintKind =>
-  checked ? kind : pref === kind ? '' : pref
+// Значение списка «Печать» → выбор: пункт, которого нет среди планов (или «Обычная»), — '' (режима печати нет).
+export const kindOf = (value: string, plans: readonly PrintPlan[]): '' | PrintKind => plans.find((p) => p.kind === value)?.kind ?? ''
+
+// Выбор при открытии окна (123 А2): пункт, который Go отметил Plan.default; ни один не отмечен — «Обычная» ('').
+// Планов нет (null или []) — undefined: режима печати нет, запомненный выбор не трогаем.
+export function defaultKind(plans: readonly PrintPlan[] | null): '' | PrintKind | undefined {
+  if (!plans?.length) return undefined
+  return plans.find((p) => p.default)?.kind ?? ''
+}
 
 // Качество в режиме печати: у плана с quality > 0 оно своё (Go игнорирует выбор окна), иначе — выбор.
 export function printQuality(plan: Pick<PrintPlan, 'quality'> | null, q: Quality): Quality {
@@ -132,7 +138,7 @@ export function printQuality(plan: Pick<PrintPlan, 'quality'> | null, q: Quality
   return plan.quality >= 100 ? 100 : plan.quality >= 95 ? 95 : 80
 }
 
-// Подсказка у флажка: «(папка «Иванов», 300 dpi, качество 100, с обложкой)».
+// Подсказка у списка «Печать»: «(папка «Иванов», 300 dpi, качество 100, с обложкой)».
 export function printHint(plan: Pick<PrintPlan, 'folder' | 'quality'>, hasCover: boolean): string {
   const q = plan.quality > 0 ? `, качество ${plan.quality}` : ''
   return `(папка «${plan.folder}», ${PRINT_DPI} dpi${q}${hasCover ? ', с обложкой' : ''})`
@@ -161,8 +167,10 @@ export function buildOptions(
   return { range, quality: p.quality, dpi: p.dpi, pages: p.pages, cover: hasCover && (p.cover || only), coverOnly: only, print: '' }
 }
 
-// Строки памятки в окне экспорта: первые три через « · » (формат, страницы, развороты), остальное — в окне «Готово».
-export const memoLine = (memo: readonly string[]): string => memo.slice(0, 3).join(' · ')
+// Строки памятки в окне экспорта: первые четыре через « · » (изделие, страницы, развороты, «Файлы: px» — их фотограф
+// сверяет с загрузчиком), без последней «Папка: …» (папка уже в подсказке; Go закрепляет тестом, что она всегда последняя,
+// имена файлов «— 1-01…1-20.jpg» — её хвост), остальное — в окне «Готово».
+export const memoLine = (memo: readonly string[]): string => memo.slice(0, -1).slice(0, 4).join(' · ')
 
 // «Исправить» стоит у строки блока с номером plan.fixAt (Go: -1 — такой строки нет); по тексту строки не ищем.
 export const hasFix = (plan: { coverFix: boolean; fixAt: number }, i: number): boolean => plan.coverFix && i === plan.fixAt
@@ -179,18 +187,32 @@ export function canExport(o: { busy: boolean; bad: boolean; printPref: '' | Prin
 // Запоздавший ответ плана: номер запроса уже не последний.
 export const planStale = (mine: number, last: number): boolean => mine !== last
 
-// Образец имени файла для окна: номер разворота с нулями до ширины Go (internal/export: max(2, цифр в total)).
-export function sampleName(n: number, total: number, pages: boolean): string {
+// Имя обложки в окне: у типографии — из плана Go (1-00.jpg), иначе прежнее 00.jpg.
+export const COVER_FILE = '00.jpg'
+export const coverFile = (plan: Pick<PrintPlan, 'coverName'> | null | undefined): string => plan?.coverName || COVER_FILE
+
+// Префикс имён типографии (1- у Фабрики) — хвост имени обложки до «00.jpg»; своего списка префиксов UI не держит.
+export function filePrefix(plan: Pick<PrintPlan, 'coverName'> | null | undefined): string {
+  const c = coverFile(plan)
+  return c.endsWith(COVER_FILE) ? c.slice(0, -COVER_FILE.length) : ''
+}
+
+// Образец имени файла для окна: номер разворота с нулями до ширины Go (internal/export: max(2, цифр в total)),
+// prefix — префикс плана типографии.
+export function sampleName(n: number, total: number, pages: boolean, prefix = ''): string {
   const w = Math.max(2, String(Math.max(total, n, 1)).length)
-  const num = String(Math.max(1, n)).padStart(w, '0')
+  const num = prefix + String(Math.max(1, n)).padStart(w, '0')
   return pages ? `(${num}-1.jpg, ${num}-2.jpg)` : `(${num}.jpg)`
 }
 
 const KEY = 'exportOpts'
 
+// Любая типография реестра (встроенная, своя own-<8 hex>, из набора библиотеки): id по виду ^[a-z0-9-]{1,64}$; годность решает Go.
+const PRINT_ID = /^[a-z0-9-]{1,64}$/
+
 // Выбор типографии из хранилища. Прежняя редакция (до 081) хранила флажок fsfera: true; чужое значение print — «выключено».
 function printOf(v: { print?: unknown; fsfera?: unknown }): ExportPrefs['print'] {
-  if (v.print === 'fsfera' || v.print === 'fabrika') return v.print
+  if (typeof v.print === 'string' && PRINT_ID.test(v.print)) return v.print // типография реестра (123 Б3): своя, набор, встроенная
   return v.print === undefined && v.fsfera === true ? 'fsfera' : ''
 }
 

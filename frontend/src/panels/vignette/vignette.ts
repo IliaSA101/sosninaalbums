@@ -156,7 +156,7 @@ export function stepTpl(list: readonly Pick<VigChoice, 'id' | 'over'>[], cur: st
   return null
 }
 
-// «Сделать виньеткой» (карточка, меню «Правка»): обычный разворот на уровне с виньеткой; не обложка и не виньетка.
+// «Сделать виньеткой» (карточка, меню «Разворот»): обычный разворот на уровне с виньеткой; не обложка и не виньетка.
 export function canMakeVignette(sp: Pick<SpreadView, 'id' | 'kind' | 'vig'> | null | undefined, can: (f: FeatureId) => boolean): boolean {
   return !!sp && !isCover(sp) && !isVignette(sp) && can('vignette')
 }

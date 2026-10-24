@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { PagePreset } from '../../base/core/types'
 import { foldOf } from './fold'
-import { exportPx, groupLabel, presetActive, presetFields, presetGroupOf, presetHint, presetRows } from './presets'
+import {
+  FILE_DPI,
+  PAGE_TOL,
+  exportPx,
+  groupLabel,
+  presetActive,
+  presetFields,
+  presetGroupOf,
+  presetHint,
+  presetRows,
+  parsePx,
+  sameMm,
+} from './presets'
 
 // Как отдаёт Go (App.PagePresets): общий ряд без dpi/layflat, ряд Фотосферы — с ними.
 const sq: PagePreset = { label: '25×25', group: '', w: 250, h: 250 }
@@ -158,5 +170,61 @@ describe('подсказка пресета по выбранной типогр
     expect(presetHint([nk, fk], { ...form, pageW: 123 }, 'Нетпринт')).toBeUndefined()
     expect(presetHint([{ ...nk, hint: undefined }], form, 'Нетпринт')).toBeUndefined()
     expect(presetHint([], form, '')).toBeUndefined()
+  })
+})
+
+// Допуск формата (123 §1.2): 303,95 × 202,95 — Фабрика 30×20; чужие форматы на 1 мм не сходят за свои.
+describe('допуск формата PAGE_TOL (123)', () => {
+  const f3020: PagePreset = { label: '30×20', group: 'Фабрика Фотокниги', w: 304, h: 203, dpi: 300, layflat: true, safe: 10, bleed: 3 }
+  const form = { pageW: 303.95, pageH: 202.95, dpi: 300, layflat: true, safe: 10, bleed: 3 }
+  it('страница на 1 px от шаблона подсвечивает кнопку; на краю допуска — да, за краем — нет', () => {
+    expect(presetActive(f3020, form)).toBe(true)
+    expect(presetActive(f3020, { ...form, pageW: 303.75, pageH: 203.25 })).toBe(true)
+    expect(presetActive(f3020, { ...form, pageW: 303.74 })).toBe(false)
+    expect(presetActive(f3020, { ...form, pageH: 203.26 })).toBe(false)
+  })
+  it('соседние форматы (1 мм): 201×203, 251×254, 200×200 — не 30×20 / Фотосфера', () => {
+    expect(presetActive(f3020, { ...form, pageW: 303, pageH: 203 })).toBe(false)
+    expect(presetActive(fs25, { pageW: 250, pageH: 254, dpi: 300, layflat: true, safe: 8 })).toBe(false)
+    expect(presetActive(np20, { pageW: 200, pageH: 200, dpi: 300, layflat: true, safe: 10 })).toBe(false)
+  })
+  it('допуск только у размера: dpi, зона и обрез остаются точными', () => {
+    expect(presetActive(f3020, { ...form, dpi: 250 })).toBe(false)
+    expect(presetActive(f3020, { ...form, safe: 8 })).toBe(false)
+    expect(presetActive(f3020, { ...form, bleed: 2 })).toBe(false)
+  })
+  it('значения из полей-строк тоже сравниваются с допуском', () => {
+    expect(presetActive(f3020, { ...form, pageW: '303.95', pageH: '202.95' } as never)).toBe(true)
+  })
+})
+
+// Паритет с Go (model.SameMm): вектор пишет Go-тест `-update`; нет файла — тест падает.
+const vectors = import.meta.glob('../../../../testdata/parity/pagetol.json', { eager: true, import: 'default' }) as Record<
+  string,
+  { tol: number; cases: { a: number; b: number; same: boolean }[] }
+>
+const vec = Object.values(vectors)[0]
+describe('паритет допуска с Go (testdata/parity/pagetol.json)', () => {
+  it('PAGE_TOL равен допуску Go и sameMm даёт те же ответы на всех парах', () => {
+    expect(PAGE_TOL).toBe(vec.tol)
+    expect(vec.cases.length).toBeGreaterThan(0)
+    for (const c of vec.cases) expect(sameMm(c.a, c.b), `${c.a} и ${c.b}`).toBe(c.same)
+  })
+})
+
+describe('parsePx: ввод в поле «Файл … px»', () => {
+  it('целое положительное число, пробелы по краям допустимы', () => {
+    expect(parsePx('7181')).toBe(7181)
+    expect(parsePx(' 2398 ')).toBe(2398)
+    expect(parsePx('1')).toBe(1)
+  })
+  it('пусто, ноль, минус, дробь, буквы, экспонента — null', () => {
+    for (const t of ['', ' ', '0', '-1', '12.5', '12,5', 'abc', '1e3', '+5', '7 181']) expect(parsePx(t), `«${t}»`).toBeNull()
+  })
+  it('число за пределами целого — null', () => {
+    expect(parsePx('99999999999999999999')).toBeNull()
+  })
+  it('файл типографии — всегда 300 dpi', () => {
+    expect(FILE_DPI).toBe(300)
   })
 })

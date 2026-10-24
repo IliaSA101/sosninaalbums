@@ -106,6 +106,16 @@ func SaveLoad(t testing.TB, e *album.Editor) *model.Project {
 	return q
 }
 
+// LoadFile — salbum.Load файла path; ошибка — провал теста.
+func LoadFile(t testing.TB, path string) *model.Project {
+	t.Helper()
+	q, err := salbum.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return q
+}
+
 var Update = flag.Bool("update", false, "перезаписать голдены: testdata/parity/marks.json, testdata/replay.json.gz")
 
 // Reopen — повторное открытие не меняет альбом: Decode(Encode(p)) даёт тот же JSON (пути

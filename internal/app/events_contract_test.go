@@ -8,8 +8,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,57 +22,122 @@ import (
 // Убрать запись, когда строка появится в таблице: тест сам напомнит.
 var undocumentedEvents = map[string]bool{}
 
-// emittedArity разбирает исходники пакета (без тестов): имя события → число данных в каждой отправке.
-// Отправки с именем не литералом (обёртка a.emit в app.go) и с `data...` пропускаются.
-func emittedArity(t *testing.T) map[string][]int {
+// appSources — файлы кода (без тестов) internal/app и всех подпакетов, кроме testdata: службы
+// (updater, assoc, exporter) шлют события и вид через поля Host, и страж смотрит и туда.
+func appSources(t *testing.T) []string {
 	t.Helper()
-	fset := token.NewFileSet()
-	names, err := filepath.Glob("*.go")
+	var files []string
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return err
+		case d.IsDir() && d.Name() == "testdata":
+			return filepath.SkipDir
+		case !d.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go"):
+			files = append(files, path)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := map[string][]int{}
-	for _, file := range names {
-		if strings.HasSuffix(file, "_test.go") {
-			continue
+	return files
+}
+
+// emitsIn добавляет в out отправки событий из f: a.emit(name, …), s.h.Emit(name, …) (поле Host
+// службы) и wr.EventsEmit(ctx, name, …). Имя не литералом (обёртка a.emit в app.go) и `data...`
+// пропускаются.
+func emitsIn(f *ast.File, out map[string][]int) error {
+	var bad error
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || call.Ellipsis != token.NoPos {
+			return true
 		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		first := 0 // индекс аргумента-имени: a.emit(name, …) / wr.EventsEmit(ctx, name, …)
+		switch sel.Sel.Name {
+		case "emit", "Emit":
+		case "EventsEmit":
+			first = 1
+		default:
+			return true
+		}
+		if len(call.Args) <= first {
+			return true
+		}
+		lit, ok := call.Args[first].(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		name, err := strconv.Unquote(lit.Value)
+		if err != nil {
+			bad = err
+			return false
+		}
+		out[name] = append(out[name], len(call.Args)-first-1)
+		return true
+	})
+	return bad
+}
+
+// emittedArity разбирает исходники internal/app/** (без тестов): имя события → число данных в
+// каждой отправке.
+func emittedArity(t *testing.T) map[string][]int {
+	t.Helper()
+	fset := token.NewFileSet()
+	out := map[string][]int{}
+	for _, file := range appSources(t) {
 		f, err := parser.ParseFile(fset, file, nil, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok || call.Ellipsis != token.NoPos {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			first := 0 // индекс аргумента-имени: a.emit(name, …) / wr.EventsEmit(ctx, name, …)
-			switch sel.Sel.Name {
-			case "emit":
-			case "EventsEmit":
-				first = 1
-			default:
-				return true
-			}
-			if len(call.Args) <= first {
-				return true
-			}
-			lit, ok := call.Args[first].(*ast.BasicLit)
-			if !ok || lit.Kind != token.STRING {
-				return true
-			}
-			name, err := strconv.Unquote(lit.Value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			out[name] = append(out[name], len(call.Args)-first-1)
-			return true
-		})
+		if err := emitsIn(f, out); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return out
+}
+
+// До разреза (Ш0) в коде было 27 событий и 36 отправок; разрез переносит отправки в службы и
+// не должен их терять из виду страж.
+const minEventNames, minEventSends = 27, 36
+
+// TestEmitsSeenThroughHost — самопроверка стража: вызов поля Host.Emit службы виден, как и a.emit,
+// а сам разбор не стал слепее, чем до разреза.
+func TestEmitsSeenThroughHost(t *testing.T) {
+	src := `package x
+func (s *S) f() {
+	s.h.Emit("a:one", 1, 2)
+	s.h.Emit("a:two")
+	s.h.Emit(name, 1)
+	s.h.Emit("a:spread", xs...)
+	a.emit("a:one", 3, 4)
+	wr.EventsEmit(ctx, "a:three", 5)
+}`
+	f, err := parser.ParseFile(token.NewFileSet(), "x.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][]int{}
+	if err := emitsIn(f, got); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]int{"a:one": {2, 2}, "a:two": {0}, "a:three": {1}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("разобрано %v, ждали %v", got, want)
+	}
+	fact := emittedArity(t)
+	sends := 0
+	for _, v := range fact {
+		sends += len(v)
+	}
+	if len(fact) < minEventNames || sends < minEventSends {
+		t.Fatalf("событий %d, отправок %d: меньше, чем до разреза (%d и %d)", len(fact), sends, minEventNames, minEventSends)
+	}
 }
 
 // dataArity — число значений в ячейке «Данные»: верхнеуровневые запятые вне скобок и обратных кавычек.

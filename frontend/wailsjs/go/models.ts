@@ -645,6 +645,7 @@ export namespace app {
 	    sticker: number;
 	    spread: number;
 	    frame: number;
+	    print: number;
 	    bytes: number;
 	    removable: boolean;
 	
@@ -666,6 +667,7 @@ export namespace app {
 	        this.sticker = source["sticker"];
 	        this.spread = source["spread"];
 	        this.frame = source["frame"];
+	        this.print = source["print"];
 	        this.bytes = source["bytes"];
 	        this.removable = source["removable"];
 	    }
@@ -761,6 +763,22 @@ export namespace app {
 	        this.bytes = source["bytes"];
 	    }
 	}
+	export class PagePxView {
+	    pageW: number;
+	    pageH: number;
+	    err: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PagePxView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pageW = source["pageW"];
+	        this.pageH = source["pageH"];
+	        this.err = source["err"];
+	    }
+	}
 	export class PasteResult {
 	    view: model.View;
 	    refs: string[];
@@ -842,6 +860,229 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+	export class PrintCheckRow {
+	    pageW: number;
+	    pageH: number;
+	    sideW: number;
+	    sideH: number;
+	    err: string;
+	    field: string;
+	    hit: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PrintCheckRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pageW = source["pageW"];
+	        this.pageH = source["pageH"];
+	        this.sideW = source["sideW"];
+	        this.sideH = source["sideH"];
+	        this.err = source["err"];
+	        this.field = source["field"];
+	        this.hit = source["hit"];
+	    }
+	}
+	export class PrintEditFormat {
+	    name: string;
+	    pxW: number;
+	    pxH: number;
+	    coverW: number;
+	    coverH: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PrintEditFormat(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.pxW = source["pxW"];
+	        this.pxH = source["pxH"];
+	        this.coverW = source["coverW"];
+	        this.coverH = source["coverH"];
+	    }
+	}
+	export class PrintEdit {
+	    name: string;
+	    base: string;
+	    dpi: number;
+	    layflat: boolean;
+	    safe: number;
+	    bleed: number;
+	    formats: PrintEditFormat[];
+	    spreads: number;
+	    prefix: string;
+	    quality: number;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PrintEdit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.base = source["base"];
+	        this.dpi = source["dpi"];
+	        this.layflat = source["layflat"];
+	        this.safe = source["safe"];
+	        this.bleed = source["bleed"];
+	        this.formats = this.convertValues(source["formats"], PrintEditFormat);
+	        this.spreads = source["spreads"];
+	        this.prefix = source["prefix"];
+	        this.quality = source["quality"];
+	        this.url = source["url"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PrintEditCheck {
+	    ok: boolean;
+	    errs: Record<string, string>;
+	    formats: PrintCheckRow[];
+	    spine: number;
+	    lines: string[];
+	    names: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PrintEditCheck(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ok = source["ok"];
+	        this.errs = source["errs"];
+	        this.formats = this.convertValues(source["formats"], PrintCheckRow);
+	        this.spine = source["spine"];
+	        this.lines = source["lines"];
+	        this.names = source["names"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class PrintImport {
+	    canceled: boolean;
+	    info: printprof.Info;
+	    ask: string;
+	    question: string;
+	    token: string;
+	    copied: boolean;
+	    lines: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PrintImport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.canceled = source["canceled"];
+	        this.info = this.convertValues(source["info"], printprof.Info);
+	        this.ask = source["ask"];
+	        this.question = source["question"];
+	        this.token = source["token"];
+	        this.copied = source["copied"];
+	        this.lines = source["lines"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PrintSaved {
+	    id: string;
+	    view: model.View;
+	
+	    static createFrom(source: any = {}) {
+	        return new PrintSaved(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.view = this.convertValues(source["view"], model.View);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PrintShare {
+	    canceled: boolean;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PrintShare(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.canceled = source["canceled"];
+	        this.name = source["name"];
+	    }
 	}
 	export class QRInfo {
 	    text: string;
@@ -2165,6 +2406,88 @@ export namespace model {
 	        this.stickers = source["stickers"];
 	    }
 	}
+	export class GridChoice {
+	    id: string;
+	    name: string;
+	    scope: string;
+	    boxes: Box[];
+	    drop: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new GridChoice(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.scope = source["scope"];
+	        this.boxes = this.convertValues(source["boxes"], Box);
+	        this.drop = source["drop"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CoverGridChoices {
+	    scope: string;
+	    n: number;
+	    box: layout.Rect;
+	    places: number;
+	    photos: number;
+	    byPhoto: GridChoice[];
+	    builtin: GridChoice[];
+	    mine: GridChoice[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CoverGridChoices(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
+	        this.n = source["n"];
+	        this.box = this.convertValues(source["box"], layout.Rect);
+	        this.places = source["places"];
+	        this.photos = source["photos"];
+	        this.byPhoto = this.convertValues(source["byPhoto"], GridChoice);
+	        this.builtin = this.convertValues(source["builtin"], GridChoice);
+	        this.mine = this.convertValues(source["mine"], GridChoice);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SpineStep {
 	    upto: number;
 	    mm: number;
@@ -2276,6 +2599,46 @@ export namespace model {
 	        this.scope = source["scope"];
 	        this.label = source["label"];
 	    }
+	}
+	export class CoverSide {
+	    scope: string;
+	    label: string;
+	    box: layout.Rect;
+	    places: number;
+	    known: boolean;
+	    alone: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CoverSide(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
+	        this.label = source["label"];
+	        this.box = this.convertValues(source["box"], layout.Rect);
+	        this.places = source["places"];
+	        this.known = source["known"];
+	        this.alone = source["alone"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	export class GuideLine {
@@ -3035,10 +3398,12 @@ export namespace model {
 	    scopes: CoverScope[];
 	    safe: layout.Rect[];
 	    textMaxW: number;
+	    sides: CoverSide[];
 	    markup?: GuideView;
 	    pxW: number;
 	    pxH: number;
 	    fix: string;
+	    missing: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new CoverView(source);
@@ -3060,10 +3425,12 @@ export namespace model {
 	        this.scopes = this.convertValues(source["scopes"], CoverScope);
 	        this.safe = this.convertValues(source["safe"], layout.Rect);
 	        this.textMaxW = source["textMaxW"];
+	        this.sides = this.convertValues(source["sides"], CoverSide);
 	        this.markup = this.convertValues(source["markup"], GuideView);
 	        this.pxW = source["pxW"];
 	        this.pxH = source["pxH"];
 	        this.fix = source["fix"];
+	        this.missing = source["missing"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3101,44 +3468,7 @@ export namespace model {
 	}
 	
 	
-	export class GridChoice {
-	    id: string;
-	    name: string;
-	    scope: string;
-	    boxes: Box[];
-	    drop: number;
 	
-	    static createFrom(source: any = {}) {
-	        return new GridChoice(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.scope = source["scope"];
-	        this.boxes = this.convertValues(source["boxes"], Box);
-	        this.drop = source["drop"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class GridChoices {
 	    n: number;
 	    builtin: GridChoice[];
@@ -4061,6 +4391,71 @@ export namespace prefs {
 
 }
 
+export namespace printprof {
+	
+	export class InfoFormat {
+	    name: string;
+	    pageW: number;
+	    pageH: number;
+	    pxW?: number;
+	    pxH?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new InfoFormat(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.pageW = source["pageW"];
+	        this.pageH = source["pageH"];
+	        this.pxW = source["pxW"];
+	        this.pxH = source["pxH"];
+	    }
+	}
+	export class Info {
+	    id: string;
+	    name: string;
+	    source: string;
+	    version: number;
+	    hasExport: boolean;
+	    formats: InfoFormat[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.source = source["source"];
+	        this.version = source["version"];
+	        this.hasExport = source["hasExport"];
+	        this.formats = this.convertValues(source["formats"], InfoFormat);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace printshop {
 	
 	export class Plan {
@@ -4069,6 +4464,8 @@ export namespace printshop {
 	    format: string;
 	    off: string;
 	    pages: string;
+	    px: string;
+	    default: boolean;
 	    spreads: number;
 	    spine: number;
 	    min: number;
@@ -4096,6 +4493,8 @@ export namespace printshop {
 	        this.format = source["format"];
 	        this.off = source["off"];
 	        this.pages = source["pages"];
+	        this.px = source["px"];
+	        this.default = source["default"];
 	        this.spreads = source["spreads"];
 	        this.spine = source["spine"];
 	        this.min = source["min"];

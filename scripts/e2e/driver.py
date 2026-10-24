@@ -327,7 +327,7 @@ class Stand:
     # ---- меню и окна (по data-item / ролям, не по координатам) ----
 
     def menu_item(self, top: str, item: str) -> None:
-        """Файл/Правка/Вид/Справка ▸ пункт по data-item."""
+        """Файл/Правка/Разворот/Вид/Справка ▸ пункт по data-item."""
         self.page.locator("[role=menubar] button", has_text=top).first.click()
         self.page.locator(f'[role=menu] [data-item="{item}"]').first.click(timeout=5000)
 

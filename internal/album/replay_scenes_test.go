@@ -70,6 +70,14 @@ func replayCover(r *replay, ph []model.PhotoInfo) {
 	spec := r.v.Cover.Spec
 	spec.W, spec.Hinge = 290, 6
 	r.ve("SetCoverSpec")(e.SetCoverSpec(spec))
+	r.ve("SetCoverPx")(e.SetCoverPx(5000, 2800))   // 123: сторонка из px файла; отмена — дальше сценарий прежний
+	r.ve("SetCoverPx:ноль")(e.SetCoverPx(0, 2800)) // ошибка подбора без шага
+	r.do("Undo:SetCoverPx", e.Undo())
+	st := r.v.Settings
+	st.PageW += 2
+	r.ve("ApplyPrint")(e.ApplyPrint(st, "netprint-royal")) // 123 Б1: формат и изделие одним шагом
+	r.ve("ApplyPrint:неизвестное")(e.ApplyPrint(st, "nope-1"))
+	r.do("Undo:ApplyPrint", e.Undo())
 	r.ve("SetCoverLayout")(e.SetCoverLayout("wrap"))
 	r.ve("SetCoverLayout:обе")(e.SetCoverLayout("both"))
 	r.ve("SetBackdrop:корешок")(e.SetBackdrop(model.CoverID, model.ScopeSpine, ph[15])) // 061: надпись ниже — без плашки
@@ -90,6 +98,27 @@ func replayCover(r *replay, ph []model.PhotoInfo) {
 	r.vnne("PlacePhotos:обложка")(e.PlacePhotos(model.CoverID, r.v.Cover.Sheet.Places[0].ID, ph[18:19]))
 	r.do("DeleteCover", e.DeleteCover())
 	r.do("Undo:обложка", e.Undo())
+}
+
+// replayCoverGrid — раскладки сторонки обложки (127): галерея, плитка, листание серией, холостые и
+// отказы; шаги отменены. Идёт последней: прежние строки эталона не сдвигаются (ID мест и rev).
+func replayCoverGrid(r *replay) {
+	e := r.e
+	if r.v.Cover == nil || len(r.v.Cover.Sides) != 2 {
+		r.t.Fatalf("replayCoverGrid: нет обложки с двумя сторонками: %+v", r.v.Cover)
+	}
+	two := e.CoverGridChoices(model.ScopeRight, 2, nil)
+	r.read("CoverGridChoices", two)
+	r.vne("ApplyCoverGrid")(e.ApplyCoverGrid(model.ScopeRight, two.Builtin[0].Boxes))
+	r.vne("ApplyCoverGrid:повтор")(e.ApplyCoverGrid(model.ScopeRight, two.Builtin[0].Boxes))
+	r.do("StepCoverGrid", e.StepCoverGrid(model.ScopeRight, 1))
+	r.do("StepCoverGrid:назад", e.StepCoverGrid(model.ScopeRight, -1))
+	r.do("StepCoverGrid:задняя", e.StepCoverGrid(model.ScopeLeft, 1)) // мест нет — холостая
+	r.do("StepCoverGrid:scope", e.StepCoverGrid("spine", 1))
+	r.vne("ApplyCoverGrid:scope")(e.ApplyCoverGrid("spine", two.Builtin[0].Boxes))
+	r.vne("ApplyCoverGrid:пусто")(e.ApplyCoverGrid(model.ScopeRight, nil))
+	r.do("Undo:StepCoverGrid", e.Undo())
+	r.do("Undo:ApplyCoverGrid", e.Undo())
 }
 
 // replayVignette — виньетка (031): новая по умолчанию, превью, «Применить» с фото и сверх

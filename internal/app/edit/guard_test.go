@@ -42,12 +42,15 @@ func probes() []probe {
 		{"CreateCover", kErr, func(m *Methods) (model.View, error) { return m.CreateCover("", "") }},
 		{"DeleteCover", kView, func(m *Methods) (model.View, error) { return ok(m.DeleteCover()) }},
 		{"ApplyCoverPreset", kErr, func(m *Methods) (model.View, error) { return m.ApplyCoverPreset("x") }},
+		{"ApplyPrint", kErr, func(m *Methods) (model.View, error) { return m.ApplyPrint(model.Settings{}, "x") }},
 		{"SetCoverSpec", kErr, func(m *Methods) (model.View, error) { return m.SetCoverSpec(model.CoverSpec{}) }},
+		{"SetCoverPx", kErr, func(m *Methods) (model.View, error) { return m.SetCoverPx(8031, 2835) }},
 		{"SetCoverLayout", kErr, func(m *Methods) (model.View, error) { return m.SetCoverLayout("front") }},
 		{"CoverSpineText", kErr, func(m *Methods) (model.View, error) { return m.CoverSpineText() }},
 		{"SetCoverSpineBg", kView, func(m *Methods) (model.View, error) { return ok(m.SetCoverSpineBg("#112233")) }},
 		{"ClearCoverGuide", kView, func(m *Methods) (model.View, error) { return ok(m.ClearCoverGuide()) }},
 		{"ClearSpreadGuide", kView, func(m *Methods) (model.View, error) { return ok(m.ClearSpreadGuide()) }},
+		{"StepCoverGrid", kView, func(m *Methods) (model.View, error) { return ok(m.StepCoverGrid("right", 1)) }},
 		{"VignetteChoices", kRead, func(m *Methods) (model.View, error) { m.VignetteChoices("s1", 1, 1, "2:3"); return none(m) }},
 		{"PreviewVignette", kReadEr, func(m *Methods) (model.View, error) {
 			_, err := m.PreviewVignette("s1", model.VigSetup{})
@@ -126,6 +129,7 @@ func probes() []probe {
 		{"DuplicateGrid", kErr, func(m *Methods) (model.View, error) { return m.DuplicateGrid("s1", 1, false) }},
 		{"PlanCopyGrid", kRead, func(m *Methods) (model.View, error) { m.PlanCopyGrid("s1", "s1", nil, false, false); return none(m) }},
 		{"PlanCopyDecor", kRead, func(m *Methods) (model.View, error) { m.PlanCopyDecor("s1", "s1", nil, false, false); return none(m) }},
+		{"CoverGridChoices", kRead, func(m *Methods) (model.View, error) { m.CoverGridChoices("right", 2); return none(m) }},
 		{"GridChoices", kRead, func(m *Methods) (model.View, error) { m.GridChoices("s1", 2, "spread"); return none(m) }},
 		// design.go
 		{"SetFrame", kView, func(m *Methods) (model.View, error) { return ok(m.SetFrame("a", 2, 0, 0)) }},

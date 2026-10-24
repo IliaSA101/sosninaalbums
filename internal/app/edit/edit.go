@@ -17,6 +17,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
 )
 
 // Host — что правкам нужно от App; поля задаёт App.NewApp (все обязательны).
@@ -45,8 +46,8 @@ func New(h Host) *Methods {
 }
 
 var (
-	// ErrInternal — правка упала с паникой: проект не изменён, подробности в log.txt.
-	ErrInternal = errors.New("внутренняя ошибка: правка не применена, подробности в журнале")
+	// ErrInternal — правка упала с паникой: проект не изменён, подробности в log.txt (общая с appkit).
+	ErrInternal = appkit.ErrInternal
 	// ErrNoPhoto — фото нет ни в ленте, ни в альбоме.
 	ErrNoPhoto = errors.New("фото не найдено")
 	// ErrBackdropScope — область фона не "spread" | "left" | "right" | "spine" (у узоров — без "spine").
@@ -91,21 +92,12 @@ func Fail(h Host, r any, name string, v *model.View, err *error) {
 	h.Notice(ErrInternal.Error())
 }
 
-// Guard — для `defer`: паника метода уходит в лог, а не роняет программу.
-func Guard(name string) {
-	if r := recover(); r != nil {
-		log.Printf("ПАНИКА в %s: %v\n%s", name, r, debug.Stack())
-	}
-}
-
-// GuardErr — Guard для методов с ошибкой: вызывающий получает ErrInternal, а не nil
-// (иначе интерфейс счёл бы операцию успешной).
-func GuardErr(name string, err *error) {
-	if r := recover(); r != nil {
-		log.Printf("ПАНИКА в %s: %v\n%s", name, r, debug.Stack())
-		*err = ErrInternal
-	}
-}
+// Guard и GuardErr — защита от паники, одна на все службы App (appkit); здесь — для коротких
+// вызовов в методах пакета и для app. Это те же функции, не обёртки: recover работает в defer.
+var (
+	Guard    = appkit.Guard
+	GuardErr = appkit.GuardErr
+)
 
 // PhotosFor — сведения о фото для правки op через get (InfosOrRefs). Не найдено ни одного из
 // непустого ids — ErrNoPhoto; не найдена часть — правка идёт с найденными. В обоих случаях —

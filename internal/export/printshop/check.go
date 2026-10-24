@@ -13,6 +13,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
+	"github.com/IliaSA101/sosninaalbums/internal/render"
 )
 
 // DefaultFolder — папка книги несохранённого альбома или с негодным именем файла.
@@ -27,6 +28,8 @@ type Plan struct {
 	Format     string   `json:"format"`     // "30×30"; "" — страница не её формат (или лист 031)
 	Off        string   `json:"off"`        // «страница 300 × 200 мм — не формат Фабрики Фотокниги»; "" — формат свой
 	Pages      string   `json:"pages"`      // бумага изделия обложки («Тонкие», «Картон»); "" — нет обложки типографии
+	Px         string   `json:"px"`         // «7181×2398 px» — файл разворота при выгрузке; "" — страница не формат
+	Default    bool     `json:"default"`    // окно открывается на этом пункте (DefaultKind); без omitempty: поле есть всегда, это контракт с UI
 	Spreads    int      `json:"spreads"`    // разворотов
 	Spine      float64  `json:"spine"`      // корешок, мм; 0 — нет обложки типографии
 	Min        int      `json:"min"`        // нижний предел разворотов (085); 0 — нет
@@ -42,6 +45,11 @@ type Plan struct {
 	Done       string   `json:"done"`       // заголовок окна «Готово»
 	Site       string   `json:"site"`       // «На сайте: …» окна «Готово»
 	SiteButton string   `json:"siteButton"` // кнопка сайта окна «Готово»
+	// FitW, FitH — размер файла разворота, к которому выгрузка подгоняет холст (render.Options.Fit,
+	// 123 §5); 0 — без подгонки. Fit — на сколько px по оси; для памятки. В интерфейс не идут.
+	FitW int `json:"-"`
+	FitH int `json:"-"`
+	Fit  int `json:"-"`
 }
 
 // Check — готовность проекта p к выгрузке для типографии prof (albumPath — файл альбома,
@@ -60,16 +68,23 @@ func Check(p *model.Project, albumPath string, prof Profile) Plan {
 	if hasLim {
 		pl.Min, pl.Max = lim.Min, lim.Max
 	}
+	pg := p.Geo(nil).Page(0) // страницу читает только геометрия листа (TestPageWReaders)
 	f, ok := model.FormatOf(prof.Group, p.Settings)
 	if !ok {
-		pg := p.Geo(nil).Page(0)
 		size := fmt.Sprintf("%s × %s мм — не формат %s", model.MmText(pg.W), model.MmText(pg.H), prof.Gen())
 		pl.Off = "страница " + size // подсказка у флажка; запрет ниже — та же фраза с заглавной
-		// Путь по интерфейсу: формат выбирают в «Настройках альбома» (типография и кнопка формата).
-		pl.Block = append(pl.Block, "Страница "+size+". В «Настройках альбома» выберите типографию «"+prof.Group+"» и кнопку формата")
+		// Путь по интерфейсу: формат выбирают в «Настройках альбома» (типография и кнопка формата) или вводят px файла.
+		pl.Block = append(pl.Block, "Страница "+size+": "+notFormatPx(pg.W, pg.H, p.Settings, prof)+
+			". В «Настройках альбома» выберите типографию «"+prof.Group+"» и кнопку формата или введите px файла")
 		return pl
 	}
 	pl.Format = f.Name
+	pl.Px = pxText(pg.W, pg.H)
+	if fw, fh, ok := f.FitPx(pg.W, pg.H); ok { // формат с px: файл строго по цели, а не по мм страницы
+		nw, nh := pxFile(pg.W, pg.H)
+		pl.FitW, pl.FitH, pl.Fit = fw, fh, max(abs(fw-nw), abs(fh-nh))
+		pl.Px = fmt.Sprintf("%d×%d px", fw, fh)
+	}
 	if n == 0 {
 		pl.Block = append(pl.Block, "В альбоме нет разворотов")
 	}
@@ -93,6 +108,35 @@ func Check(p *model.Project, albumPath string, prof Profile) Plan {
 	return pl
 }
 
+// pxFile — размер файла разворота страницы w × h мм при выгрузке для типографии (всегда PrintDPI):
+// тот же холст, что рисует экспорт (render.CanvasSize).
+func pxFile(w, h float64) (pw, ph int) {
+	return render.CanvasSize(render.Options{PageW: w, PageH: h, DPI: model.PrintDPI})
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// pxText — «7181×2398 px» для памятки.
+func pxText(w, h float64) string {
+	pw, ph := pxFile(w, h)
+	return fmt.Sprintf("%d×%d px", pw, ph)
+}
+
+// notFormatPx — хвост запрета «не формат» (123 §1.4): сколько px выйдет у страницы и сколько у
+// ближайшего формата типографии: «разворот выйдет 7087 × 2362 px, у 30×20 — 7181 × 2398 (304 × 203 мм)».
+func notFormatPx(w, h float64, s model.Settings, prof Profile) string {
+	near := model.FormatNear(prof.Group, s)
+	pw, ph := pxFile(w, h)
+	nw, nh := pxFile(near.PageW, near.PageH)
+	return fmt.Sprintf("разворот выйдет %d × %d px, у %s — %d × %d (%s × %s мм)", pw, ph, near.Name, nw, nh,
+		model.MmText(near.PageW), model.MmText(near.PageH))
+}
+
 // coverRules — запреты по обложке (правила 4–6): свои размеры, чужая группа, не по шаблону,
 // изделия нет у формата. missing — последнее: строка предела тогда не пишется.
 func (pl *Plan) coverRules(p *model.Project, prof Profile, pr model.CoverPreset, own bool, f model.PrintFormat) (missing bool) {
@@ -100,6 +144,9 @@ func (pl *Plan) coverRules(p *model.Project, prof Profile, pr model.CoverPreset,
 	switch {
 	case c != nil && c.Spec.Preset == model.CoverCustom:
 		pl.Block = append(pl.Block, "Обложка со своими размерами — выберите «"+prof.Group+"» в карточке обложки")
+	case c != nil && model.CoverMissing(c.Spec.Preset) != "":
+		// Изделия нет в реестре (своя типография с другого компьютера): без этой ветки вышло бы «для « · »».
+		pl.Block = append(pl.Block, "Обложка размечена для типографии, которой нет на этом компьютере ("+c.Spec.Preset+")")
 	case c != nil && !own:
 		pl.Block = append(pl.Block, fmt.Sprintf("Обложка размечена для «%s · %s» — выберите «%s» в карточке обложки", pr.Group, pr.Name, prof.Group))
 	case own:
@@ -145,6 +192,13 @@ func memo(pl Plan, prof Profile, item product, cover bool) []string {
 		spreads += fmt.Sprintf(" (корешок %s мм)", model.MmText(pl.Spine))
 	}
 	out = append(out, spreads)
+	if pl.Px != "" {
+		files := "Файлы: " + pl.Px // размер файла разворота: сверить с требованием сайта
+		if pl.Fit > 0 {
+			files += fmt.Sprintf(" (подогнано на %d px по обрезу)", pl.Fit)
+		}
+		out = append(out, files)
+	}
 	var files []string
 	if cover {
 		files = append(files, pl.CoverName)
@@ -175,6 +229,7 @@ func FolderName(albumPath string) string {
 // CoverFixQuestion — вопрос обычного экспорта по строке CoverView.Fix: «Обложка не по шаблону
 // Фотосферы 30×30 (623 × 331 мм, нужно 626 × 326). Выгрузить как есть?»
 func CoverFixQuestion(fix string) string {
+	fix, _, _ = strings.Cut(fix, model.CoverFixPxMark) // px файла — для выгрузки в типографию, в обычной dpi другой
 	head, tail, ok := strings.Cut(fix, ": ")
 	q := "Обложка " + strings.Replace(head, "Не по", "не по", 1)
 	if ok {

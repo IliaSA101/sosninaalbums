@@ -191,9 +191,7 @@ func testExportAlbumTwice(t *testing.T) {
 		if got := listing(t, album); !slices.Equal(got, before) {
 			t.Fatalf("выгрузка %d: в папке фото было %v, стало %v", i+1, before, got)
 		}
-		e.a.mu.Lock()
-		dir := e.a.exportDir
-		e.a.mu.Unlock()
+		dir := e.a.exp.LastDir()
 		if got := prefs.LoadConfig(e.a.cfgDir).LastDirs[prefs.DirExport]; dir != next || got != next {
 			t.Fatalf("выгрузка %d: exportDir %q, запомнено %q; ждали %q", i+1, dir, got, next)
 		}

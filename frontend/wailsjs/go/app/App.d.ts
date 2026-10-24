@@ -6,6 +6,7 @@ import {prefs} from '../models';
 import {collect} from '../models';
 import {keymap} from '../models';
 import {printshop} from '../models';
+import {printprof} from '../models';
 import {text} from '../models';
 
 export function AddDecorPNG(arg1:string,arg2:string):Promise<app.DecorItem>;
@@ -40,9 +41,13 @@ export function ApplyBackgroundTo(arg1:Array<model.GridTarget>,arg2:string):Prom
 
 export function ApplyBorder(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>;
 
+export function ApplyCoverGrid(arg1:string,arg2:Array<model.Box>):Promise<app.GridResult>;
+
 export function ApplyCoverPreset(arg1:string):Promise<model.View>;
 
 export function ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<app.GridResult>;
+
+export function ApplyPrint(arg1:model.Settings,arg2:string):Promise<model.View>;
 
 export function ApplySpreadTpl(arg1:string,arg2:string,arg3:string):Promise<app.TplResult>;
 
@@ -74,6 +79,8 @@ export function CancelUpdate():Promise<void>;
 
 export function CheckFolders(arg1:boolean):Promise<void>;
 
+export function CheckPrintProfile(arg1:app.PrintEdit):Promise<app.PrintEditCheck>;
+
 export function CheckUpdate():Promise<app.UpdateInfo>;
 
 export function ChooseFiles():Promise<app.LooseResult>;
@@ -100,6 +107,8 @@ export function Collect(arg1:app.CollectOptions):Promise<boolean>;
 
 export function CollectInfo(arg1:boolean):Promise<collect.Info>;
 
+export function ConfirmImportPrintProfile(arg1:string):Promise<app.PrintImport>;
+
 export function ConfirmPack(arg1:string):Promise<app.PackAdd>;
 
 export function CopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<app.GridResult>;
@@ -107,6 +116,8 @@ export function CopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,a
 export function CopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<app.GridResult>;
 
 export function CopyItems(arg1:string,arg2:model.ClipSel):Promise<model.ClipInfo>;
+
+export function CoverGridChoices(arg1:string,arg2:number):Promise<model.CoverGridChoices>;
 
 export function CoverPresets():Promise<Array<model.CoverPreset>>;
 
@@ -127,6 +138,8 @@ export function DeleteCover():Promise<model.View>;
 export function DeleteGridTemplate(arg1:string):Promise<void>;
 
 export function DeletePlaces(arg1:string,arg2:Array<string>):Promise<model.View>;
+
+export function DeletePrintProfile(arg1:string):Promise<model.View>;
 
 export function DeleteSelection(arg1:string,arg2:Array<string>,arg3:Array<string>,arg4:Array<string>):Promise<model.View>;
 
@@ -184,6 +197,8 @@ export function ImportFontPaths(arg1:Array<string>):Promise<app.FontImport>;
 
 export function ImportFonts():Promise<app.FontImport>;
 
+export function ImportPrintProfile():Promise<app.PrintImport>;
+
 export function ImportTemplates():Promise<app.TplLoad>;
 
 export function ImportTemplatesPath(arg1:string):Promise<app.TplLoad>;
@@ -228,13 +243,11 @@ export function NewVignetteSheet(arg1:number,arg2:number):Promise<app.State>;
 
 export function OpenExternal():Promise<app.State>;
 
-export function OpenFabrika():Promise<void>;
-
-export function OpenFsfera():Promise<void>;
-
 export function OpenInNewer():Promise<void>;
 
 export function OpenLink(arg1:string):Promise<void>;
+
+export function OpenPrintSite(arg1:string):Promise<void>;
 
 export function OpenProject():Promise<app.State>;
 
@@ -243,6 +256,8 @@ export function OpenRecent(arg1:string):Promise<app.State>;
 export function OpenUpdatePage():Promise<void>;
 
 export function PagePresets():Promise<Array<model.PagePreset>>;
+
+export function PagePx(arg1:number,arg2:number):Promise<app.PagePxView>;
 
 export function PasteItems(arg1:model.PasteReq):Promise<app.PasteResult>;
 
@@ -282,7 +297,11 @@ export function PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.Nam
 
 export function PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>;
 
-export function PrintPlans():Promise<Array<printshop.Plan>>;
+export function PrintPlans(arg1:string):Promise<Array<printshop.Plan>>;
+
+export function PrintProfileEdit(arg1:string):Promise<app.PrintEdit>;
+
+export function PrintProfiles():Promise<Array<printprof.Info>>;
 
 export function PurgePhotos(arg1:Array<string>):Promise<model.View>;
 
@@ -340,6 +359,8 @@ export function RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:numb
 
 export function SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function SavePrintProfile(arg1:app.PrintEdit,arg2:boolean):Promise<app.PrintSaved>;
+
 export function SaveProject():Promise<model.View>;
 
 export function SaveProjectAs():Promise<model.View>;
@@ -379,6 +400,8 @@ export function SetCaption(arg1:string,arg2:string,arg3:string):Promise<model.Vi
 export function SetCaptionStyle(arg1:string,arg2:text.Style,arg3:boolean,arg4:number):Promise<model.View>;
 
 export function SetCoverLayout(arg1:string):Promise<model.View>;
+
+export function SetCoverPx(arg1:number,arg2:number):Promise<model.View>;
 
 export function SetCoverSpec(arg1:model.CoverSpec):Promise<model.View>;
 
@@ -464,6 +487,8 @@ export function SetVignette(arg1:string,arg2:model.Vignette):Promise<app.GridRes
 
 export function SetupVignette(arg1:string,arg2:model.VigSetup):Promise<app.GridResult>;
 
+export function SharePrintProfile(arg1:string):Promise<app.PrintShare>;
+
 export function ShowBackups():Promise<void>;
 
 export function ShowCollected():Promise<void>;
@@ -485,6 +510,8 @@ export function SplitSpreadAuto(arg1:string,arg2:number,arg3:boolean):Promise<mo
 export function SpreadBgToAlbum(arg1:string):Promise<model.View>;
 
 export function SpreadPhotoColors(arg1:string):Promise<Array<string>>;
+
+export function StepCoverGrid(arg1:string,arg2:number):Promise<model.View>;
 
 export function StepLayout(arg1:string,arg2:string,arg3:number):Promise<model.View>;
 

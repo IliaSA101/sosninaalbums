@@ -314,6 +314,8 @@ func MirrorGrid(p *model.Project, spreadID, scope string) {
 // left); на пустое — перенос откуда угодно. Остальные — в следующие пустые
 // места разворота после целевого, потом с начала; не хватило — left, фото
 // остаются где были. Одна правка. Неизвестное место — холостая правка.
+// На листе обложки «следующие» ищутся только на сторонке целевого места (127 G4,
+// 0.26-127-12): лицевая не занимает заднюю; целевое на корешке — только оно само.
 func PlacePhotos(p *model.Project, spreadID, placeID string, photos []model.PhotoInfo) (left int, err error) {
 	photos = model.DedupePhotos(photos)
 	s := p.GridSpread(spreadID)
@@ -333,11 +335,12 @@ func PlacePhotos(p *model.Project, spreadID, placeID string, photos []model.Phot
 	if p.DropOn(s, pl, ids[0], inAlbum) {
 		left++ // замена: прежний хозяин места возвращается в ленту
 	}
+	side := sideOf(p, s, pl)
 	for _, id := range ids[1:] {
-		if slices.Contains(model.GridPhotos(s), id) {
-			continue // уже в этой сетке: порядок задают места
+		if slices.Contains(side.photos(s), id) {
+			continue // уже в этой сетке (на обложке — на этой сторонке): порядок задают места
 		}
-		dst := s.NextEmpty(at)
+		dst := side.nextEmpty(s, at)
 		if dst == nil {
 			left++
 			continue
@@ -345,6 +348,63 @@ func PlacePhotos(p *model.Project, spreadID, placeID string, photos []model.Phot
 		p.Put(s, dst, id)
 	}
 	return left, nil
+}
+
+// placeSide — где ищутся места броска: весь лист (разворот, страница) или сторонка обложки.
+type placeSide struct {
+	p     *model.Project
+	scope string       // left | right — сторонка обложки
+	only  *model.Place // место на корешке: сторонки нет, годится только оно
+}
+
+// sideOf — сторонка места pl на листе обложки; центр на корешке — только само место pl
+// (корешок не относится ни к одной сторонке); у разворота — весь лист.
+func sideOf(p *model.Project, s *model.Spread, pl *model.Place) placeSide {
+	if !p.IsCover(s) {
+		return placeSide{}
+	}
+	for _, sc := range []string{model.ScopeLeft, model.ScopeRight} {
+		if InArea(p, s, pl.X, pl.W, sc) {
+			return placeSide{p: p, scope: sc}
+		}
+	}
+	return placeSide{only: pl}
+}
+
+// has — место pl входит в сторонку.
+func (d placeSide) has(s *model.Spread, pl *model.Place) bool {
+	switch {
+	case d.only != nil:
+		return pl == d.only
+	case d.scope == "":
+		return true
+	}
+	return InArea(d.p, s, pl.X, pl.W, d.scope)
+}
+
+// photos — фото мест сторонки.
+func (d placeSide) photos(s *model.Spread) (out []string) {
+	for _, pl := range s.Grid {
+		if pl.Photo != "" && d.has(s, pl) {
+			out = append(out, pl.Photo)
+		}
+	}
+	return out
+}
+
+// nextEmpty — первое пустое место сторонки после позиции at, потом с начала; нет — nil.
+// Для всего листа — прежний Spread.NextEmpty.
+func (d placeSide) nextEmpty(s *model.Spread, at int) *model.Place {
+	if d.scope == "" && d.only == nil {
+		return s.NextEmpty(at)
+	}
+	n := len(s.Grid)
+	for k := 1; k <= n; k++ {
+		if pl := s.Grid[((at+k)%n+n)%n]; pl.Photo == "" && d.has(s, pl) {
+			return pl
+		}
+	}
+	return nil
 }
 
 // FillPlaces — «Заполнить пустые места»: фото не из альбома по порядку садятся в

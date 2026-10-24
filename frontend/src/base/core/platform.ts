@@ -54,3 +54,6 @@ export const toggleKey = (e: { ctrlKey: boolean; metaKey: boolean }): boolean =>
 
 // Shift или Ctrl/Cmd на щелчке — добавить к выделению или убрать из него.
 export const additive = (e: Mods): boolean => e.shiftKey || toggleKey(e)
+
+// Крупный просмотр из ленты (128): Ctrl+правая кнопка (Mac — ⌘+правая). Ctrl+левая на Mac — обычное меню (secondaryPress).
+export const peekPress = (e: Press & { metaKey: boolean }): boolean => e.button === 2 && toggleKey(e)

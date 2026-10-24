@@ -218,7 +218,7 @@ try {
     Check 'вторая строка: «есть» не подходит под «нет»' (-not ('Версия 0.25.1 уже есть на компьютере. Эта программа закроется, альбом откроется в 0.25.1.' -match (Get-QaNewerNextRegex '')))
 
     Section 'Get-QaShownVers'
-    # таблица совпадает с TestShownVers в internal/app/newer_test.go (сверяет scripts/win/test_shownvers.py)
+    # таблица совпадает с TestShownVers в internal/app/assoc/version_test.go (сверяет scripts/win/test_shownvers.py)
     foreach ($c in @(
         @('0.25.1', '0.25.0', '0.25.1', '0.25.0'),
         @('0.25.1-rc2+abc', '0.25.0-dev', '0.25.1', '0.25.0'),

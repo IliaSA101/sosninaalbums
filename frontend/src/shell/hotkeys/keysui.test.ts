@@ -207,7 +207,7 @@ describe('запись сочетания', () => {
     await flush()
     expect(api.SetHotkey).toHaveBeenCalledWith('toggleBig', 'KeyF', 'KeyB', false)
     expect(keysUi.rec).toBeNull()
-    expect(keysUi.status?.text).toBe('B — «Крупный просмотр»')
+    expect(keysUi.status?.text).toBe('B — «Во весь экран»')
     expect(keysUi.status?.prev).toEqual({})
     expect(keymap.keys('toggleBig')).toEqual(['KeyB'])
   })
@@ -323,7 +323,7 @@ describe('«Заменить?»', () => {
     await flush()
     expect(api.SetHotkey).toHaveBeenLastCalledWith('toggleBig', 'KeyF', 'KeyG', true)
     expect(keysUi.ask).toBeNull()
-    expect(keysUi.status?.text).toBe('G — «Крупный просмотр» (у «Безопасная зона» больше нет)')
+    expect(keysUi.status?.text).toBe('G — «Во весь экран» (у «Безопасная зона» больше нет)')
     api.RestoreHotkeys.mockResolvedValue(catalogView)
     await keysUi.restore()
     expect(api.RestoreHotkeys).toHaveBeenCalledWith({})
@@ -425,7 +425,7 @@ describe('«Убрать», «Стандартное», «Сбросить вс�
     api.RemoveHotkey.mockResolvedValue(catalogWith({ toggleBig: [] }))
     await keysUi.remove('toggleBig', 'KeyF')
     expect(api.RemoveHotkey).toHaveBeenCalledWith('toggleBig', 'KeyF')
-    expect(keysUi.status?.text).toBe('F убрана у «Крупный просмотр»')
+    expect(keysUi.status?.text).toBe('F убрана у «Во весь экран»')
     expect(keymap.keys('toggleBig')).toEqual([])
     api.RestoreHotkeys.mockResolvedValue(catalogView)
     await keysUi.restore()
@@ -436,7 +436,7 @@ describe('«Убрать», «Стандартное», «Сбросить вс�
     api.ResetHotkey.mockResolvedValue(ok(catalogView))
     await keysUi.resetOne('toggleBig')
     expect(api.ResetHotkey).toHaveBeenCalledWith('toggleBig', false)
-    expect(keysUi.status?.text).toBe('«Крупный просмотр» — стандартные клавиши')
+    expect(keysUi.status?.text).toBe('«Во весь экран» — стандартные клавиши')
     expect(keysUi.status?.prev).toEqual({ toggleBig: ['KeyB'] })
   })
   it('«Стандартное», упёршееся в чужое сочетание, — тот же вопрос; «Заменить» → ResetHotkey(id, true)', async () => {
@@ -450,7 +450,7 @@ describe('«Убрать», «Стандартное», «Сбросить вс�
     keysUi.confirmAsk()
     await flush()
     expect(api.ResetHotkey).toHaveBeenLastCalledWith('toggleBig', true)
-    expect(keysUi.status?.text).toBe('«Крупный просмотр» — стандартные клавиши')
+    expect(keysUi.status?.text).toBe('«Во весь экран» — стандартные клавиши')
   })
   it('«Сбросить всё как было» без вопроса: «своих было N», «Вернуть» отдаёт своё', async () => {
     useCatalog({ toggleBig: ['KeyB'], toggleSafe: ['KeyS'], undo: [] })
@@ -491,6 +491,14 @@ describe('перекрытия в карточке', () => {
     const notes = keysUi.notesFor(fit)
     expect(notes.some((n) => n.includes('«Звёзды: убрать»'))).toBe(true)
     expect(keysUi.notesFor(keymap.entry('toggleBig')!)).toEqual([])
+  })
+})
+
+describe('имена команд в «Горячих клавишах» (128-11, Т7)', () => {
+  it('F — «Во весь экран» / «Весь экран», Z — «Крупный просмотр фото» / «Крупно»', () => {
+    expect(keymap.entry('toggleBig')).toMatchObject({ label: 'Во весь экран', short: 'Весь экран' })
+    expect(keymap.entry('photoPreview')).toMatchObject({ label: 'Крупный просмотр фото', short: 'Крупно' })
+    expect(keymap.entry('toggleBig')?.keys).toEqual(['KeyF'])
   })
 })
 

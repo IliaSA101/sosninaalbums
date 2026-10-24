@@ -19,8 +19,9 @@ describe('окно «Готово» типографии', () => {
       .match(/Фотосфер|Фабрик/g)
     expect(own).toBeNull()
   })
-  it('кнопка сайта: Фабрика — OpenFabrika, иначе OpenFsfera; «Открыть папку» и «Готово» остаются', () => {
-    expect(done).toMatch(/plan\?\.kind === 'fabrika' \? Api\.OpenFabrika\(\) : Api\.OpenFsfera\(\)/)
+  it('кнопка сайта: OpenPrintSite(plan.kind) для любой типографии; «Открыть папку» и «Готово» остаются', () => {
+    expect(done).toContain("Api.OpenPrintSite(plan?.kind ?? '')")
+    expect(done).not.toMatch(/OpenFabrika|OpenFsfera/)
     expect(done).toContain('Api.ShowInExplorer()')
     expect(done).toContain('Готово</button>')
   })

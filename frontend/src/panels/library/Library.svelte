@@ -9,6 +9,8 @@
   import { scanText } from '../folders/scan'
   import { allInAlbum, allInAlbumText } from './freephotos'
   import { libfilter } from '../marks/libfilter.svelte'
+  import { shortQuery } from '../marks/namequery'
+  import { nameSearch } from '../marks/namefind.svelte'
   import { keymap } from '../../base/keys/keymap.svelte'
   import { binsel } from '../bins/binsel.svelte'
   import { binsOf, emptyBinText, filterBin, hiddenBinText } from '../bins/bins'
@@ -16,12 +18,14 @@
   import { hasSources } from '../folders/folders'
   import { foldersUi } from '../folders/foldersui.svelte'
   import { isThumbWheel, thumbWheelAcc } from './thumbzoom'
-  import { LIB_DEF, PAD_X, SPLITTER, anchorTop, colsOf, keepScroll, libFloor, libWindow, photoAt } from './libwindow'
+  import { LIB_DEF, PAD_X, SPLITTER, anchorTop, colsOf, keepScroll, libFloor, libWindow, photoAt, revealTop } from './libwindow'
+  import { photoui } from '../../editor/photo/photoui.svelte'
   import { watchSize } from '../../base/ui/size'
   import LibraryBar from './LibraryBar.svelte'
   import Thumb from './Thumb.svelte'
   import ThumbMenu from './ThumbMenu.svelte'
   import { thumbmenu } from './thumbmenustate.svelte'
+  import { peekKey } from '../timeline/cutkey.svelte'
 
   // Высота библиотеки: по умолчанию LIB_DEF, меняется сплиттером и запоминается.
   // Сохранённая высота (h) — желаемая: при нехватке окна CSS сжимает ленту до одного ряда плиток (D15, 089),
@@ -33,7 +37,7 @@
   let h = $state(load())
   // Пока тянут сплиттер, высота без анимации, иначе лента отстаёт от мыши.
   let resizing = $state(false)
-  // Крупный просмотр и открытая галерея раскладок сворачивают ленту: галерея
+  // Режим «Во весь экран» и открытая галерея раскладок сворачивают ленту: галерея
   // отнимает высоту у разворота, и без этого он сжимается до нечитаемого.
   const collapsed = $derived(modes.big || !!gallery.cur)
   const eff = $derived(Math.max(MIN_H, Math.min(h, Math.max(MIN_H, wh * 0.6))))
@@ -115,6 +119,23 @@
     })
   })
 
+  // Слушатели Ctrl (⌘) для курсора-лупы над плитками (128, 0.26-128-16): пока лента смонтирована.
+  $effect(() => peekKey.attach())
+
+  // Крупный просмотр закрыт (128): лента прокручивается к показанному. Лента виртуальная — считаем по номеру, а не по элементу.
+  $effect(() => {
+    const r = photoui.reveal
+    if (!r) return
+    untrack(() => {
+      const i = store.visible.findIndex((p) => p.id === r.id)
+      if (i < 0 || !grid) return
+      const to = revealTop(i, grid.scrollTop, grid.clientHeight, grid.clientWidth, modes.thumbSize)
+      if (to === null) return
+      grid.scrollTop = to
+      st = grid.scrollTop
+    })
+  })
+
   // Якорь зума — индекс фото под курсором (элемент мог уйти из окна); вне сетки — верхний видимый ряд.
   function anchor(g: HTMLElement): { index: number; cy: number; fy: number } | null {
     const r = g.getBoundingClientRect()
@@ -179,6 +200,7 @@
 
     <div
       class="grid"
+      class:peek={peekKey.held}
       bind:this={grid}
       style:--size="{modes.thumbSize}px"
       {@attach (g) => watchSize(g, (w, h) => ((gw = w), (gh = h)))}
@@ -211,6 +233,9 @@
           {:else if allInAlbum(store.filter, store.free.length, store.inBin.length)}
             {allInAlbumText(folderfilter.active, binsel.curName(binsOf(store.view)))}
             <button class="reset" onclick={() => (store.filter = 'all')}>Показать все</button>
+          {:else if nameSearch.empty}
+            По «{shortQuery(nameSearch.applied)}» ничего не найдено
+            <button class="reset" onclick={() => nameSearch.close()}>Сбросить поиск</button>
           {:else if prefs.can('marks') && libfilter.active && store.inBin.length > 0}
             Ни одно фото не подходит под фильтр
             <button class="reset" onclick={() => libfilter.reset()}>Сбросить фильтр</button>
@@ -276,6 +301,10 @@
     align-content: flex-start;
     gap: 16px;
     padding: 12px 16px;
+  }
+  /* Зажат Ctrl (⌘): Ctrl+правый щелчок откроет крупный просмотр — курсор-лупа (0.26-128-16) */
+  .grid.peek :global(.thumb) {
+    cursor: zoom-in;
   }
   /* Заменяет пропущенные ряды окна: на всю строку, высота — по числу рядов (libwindow.ts) */
   .spacer {

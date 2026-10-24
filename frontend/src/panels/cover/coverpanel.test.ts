@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CoverPreset, CoverSpec, CoverView } from '../../base/core/types'
 import {
+  coverPxNote,
   customSpec,
   fieldValue,
   hasTable,
@@ -139,5 +140,13 @@ describe('кнопка строки «Корешок»', () => {
   })
   it('надпись есть — «Выделить надпись» выделяет', () => {
     expect(spineAction(cv({ spineText: 't7' }))).toEqual({ label: 'Выделить надпись', kind: 'select' })
+  })
+})
+
+describe('coverPxNote (123)', () => {
+  it('«при 40 разворотах (корешок 26 мм)»; склонение и дробный корешок', () => {
+    expect(coverPxNote({ n: 40, spine: 26 })).toBe('при 40 разворотах (корешок 26 мм)')
+    expect(coverPxNote({ n: 1, spine: 6 })).toBe('при 1 развороте (корешок 6 мм)')
+    expect(coverPxNote({ n: 5, spine: 13.5 })).toBe('при 5 разворотах (корешок 13,5 мм)')
   })
 })

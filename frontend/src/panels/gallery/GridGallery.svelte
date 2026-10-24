@@ -2,10 +2,9 @@
   import { store, Api } from '../../base/core/store.svelte'
   import { gallery } from './gallery.svelte'
   import { errText } from '../../base/words/errtext'
-  import { plural } from '../../base/words/plural'
   import { tplio } from '../../shell/menu/tplio.svelte'
   import { applyChoice, tplCall } from '../layouts/gridactions'
-  import { builtinOf, cardBoxes, defaultN, dropTitle, gridSourceTexts, MAX_N, mineOf, previewRects } from './gridgallery'
+  import { builtinOf, cardBoxes, defaultN, dropTitle, gridSourceTexts, mineOf, N_ITEMS, previewRects } from './gridgallery'
   import type { GridChoice, GridChoices, LayoutScope } from '../../base/core/types'
   import { BORDER_NOTE, hasBorders, isSheet, newSheetSize, sheetIn, sheetSize, unitOf } from '../../base/geom/sheet'
   import Modal from '../../base/modal/Modal.svelte'
@@ -90,11 +89,6 @@
   )
   // Галерея остаётся открытой, источник не сбрасывается (rescope, а не open)
   const setScope = (next: LayoutScope) => gallery.rescope(next)
-  const nItems = Array.from({ length: MAX_N }, (_, i) => ({
-    id: i + 1,
-    label: i + 1 === MAX_N ? '7+' : String(i + 1),
-    title: i + 1 === MAX_N ? 'Шаблоны на 7 мест и больше' : `Шаблоны на ${i + 1} ${plural(i + 1, ['место', 'места', 'мест'])}`,
-  }))
 
   // Пока галерея уезжает (slide), компонент уже inert: чтение его $derived (scope, sheet) в обработчике даёт
   // derived_inert, а повторный щелчок применил бы шаблон дважды. Закрыта — обработчики ничего не читают.
@@ -160,7 +154,7 @@
 >
   {#snippet filters()}
     {#if pages.length > 1}<Seg items={pages} value={scope} onpick={setScope} label="Область" />{/if}
-    <Seg items={nItems} value={nWant} onpick={(n) => (nPick = n)} label="Число мест" />
+    <Seg items={N_ITEMS} value={nWant} onpick={(n) => (nPick = n)} label="Число мест" />
   {/snippet}
 </GalleryHead>
 

@@ -31,6 +31,7 @@ const (
 	KindSticker = "sticker"
 	KindSpread  = "spread" // готовые развороты (067): файл — шаблон JSON, не картинка
 	KindFrame   = "frame"  // рамочки-картинки (079): только PNG с прозрачным окном
+	KindPrint   = "print"  // свои типографии (123 Б1): файл — профиль .saprint, не картинка (prints.go)
 )
 
 // RootName — папка библиотеки в папке данных (решение №79); regFile — реестр.
@@ -88,10 +89,12 @@ type Store struct {
 	frame frameMeta // окна рамочек-картинок: нужны импорту и Frame (frame.go)
 
 	cancelled atomic.Int64 // запросы /media/lib, снятые клиентом (Cancelled)
+
+	printCheck atomic.Pointer[func([]byte) error] // проверка профиля типографии набора (packs_print.go)
 }
 
 // kindDirs — папка вида; имя файла внутри — только <16 hex>.<ext> от ключа.
-var kindDirs = map[string]string{KindBg: "Фоны", KindSticker: "Стикеры", KindSpread: "Развороты", KindFrame: "Рамочки"}
+var kindDirs = map[string]string{KindBg: "Фоны", KindSticker: "Стикеры", KindSpread: "Развороты", KindFrame: "Рамочки", KindPrint: "Типографии"}
 
 // Open открывает библиотеку в <cfgDir>/Библиотека: читает реестр и ищет файлы. Ошибки чтения
 // не мешают работе: битый реестр уходит в .bad, библиотека пуста (строка в log.txt).
@@ -152,12 +155,25 @@ func (s *Store) scan() {
 // папке рамочек — только <16 hex>.png; иначе ok = false.
 func keyOfFile(kind, name string) (string, bool) {
 	base, ext, ok := strings.Cut(name, ".")
-	if !ok || (kind == KindSpread) != (ext == "json") || ext != "json" && ext != "jpg" && ext != "png" ||
-		kind == KindFrame && ext != "png" {
+	if !ok || !extOK(kind, ext) {
 		return "", false
 	}
 	key := libPrefix + base
 	return key, model.ValidLibKey(key)
+}
+
+// extOK — расширение файла вида kind: шаблон — json, типография — saprint, рамочка — png, фон и
+// стикер — jpg или png.
+func extOK(kind, ext string) bool {
+	switch kind {
+	case KindSpread:
+		return ext == "json"
+	case KindPrint:
+		return ext == printExt
+	case KindFrame:
+		return ext == "png"
+	}
+	return ext == "jpg" || ext == "png"
 }
 
 const libPrefix = "my:"
@@ -166,7 +182,7 @@ const libPrefix = "my:"
 // имени от ключа: чужие файлы в папке вида не трогаются.
 func atomicLeft(name string) bool {
 	base, rest, _ := strings.Cut(name, ".")
-	return strings.HasPrefix(rest, "json.") && strings.HasSuffix(rest, ".tmp") && model.ValidLibKey(libPrefix+base)
+	return (strings.HasPrefix(rest, "json.") || strings.HasPrefix(rest, printExt+".")) && strings.HasSuffix(rest, ".tmp") && model.ValidLibKey(libPrefix+base)
 }
 
 // load читает library.json. Нет файла — пустой реестр; битый (разбор, версия, размер) — в .bad;

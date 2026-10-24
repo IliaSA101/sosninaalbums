@@ -48,12 +48,12 @@
   })
 </script>
 
-<div class="bd" role="group" aria-label="Рамочка" data-guide="border">
+<div class="bd" class:empty={!rows} role="group" aria-label="Рамочка" data-guide="border">
   <div class="cap">Рамочка</div>
   {#if !rows}
-    <div class="btns">
-      <button onclick={choose} title="Рамочки из библиотеки: линии, паспарту, полароид, свои картинки">Выбрать…</button>
-    </div>
+    <!-- Нет рамочки: одна строка «Рамочка · нет · Выбрать…» (спека 124), без коробки -->
+    <span class="none">нет</span>
+    <button class="pick" onclick={choose} title="Рамочки из библиотеки: линии, паспарту, полароид, свои картинки">Выбрать…</button>
   {:else}
     <div class="have" class:newer={rows.newer}>
       {#if item && !blank}
@@ -111,6 +111,8 @@
         step={WIDTH.step}
         guide=""
         id="border-width"
+        reset
+        onreset={() => rows.defWidth !== null && borderAct.reset(sid, 'width', rows.widthIds, { width: rows.defWidth })}
         dflt={rows.defWidth}
         onlive={(v) => borderlive.set({ spread: sid, ids: rows.widthIds, width: v })}
         oncommit={(v) => borderAct.series(sid, 'width', rows.widthIds, { width: v })}
@@ -131,6 +133,8 @@
         step={SIZE.step}
         guide=""
         id="border-size"
+        reset
+        onreset={() => borderAct.reset(sid, 'size', rows.sizeIds, { scale: SIZE.dflt / 100 })}
         dflt={SIZE.dflt}
         onlive={(v) => borderlive.set({ spread: sid, ids: rows.sizeIds, scale: v / 100 })}
         oncommit={(v) => borderAct.series(sid, 'size', rows.sizeIds, { scale: v / 100 })}
@@ -155,6 +159,25 @@
   }
   .cap {
     font-weight: 600;
+  }
+  .bd.empty {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+  }
+  .none {
+    flex: 1;
+    min-width: 0;
+    color: var(--muted);
+  }
+  .pick {
+    flex: none;
+    height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+    white-space: nowrap;
   }
   .have {
     display: flex;

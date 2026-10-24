@@ -14,8 +14,10 @@ method AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Prom
 method ApplyBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method ApplyBackgroundTo(arg1:Array<model.GridTarget>,arg2:string):Promise<APP.BgResult>
 method ApplyBorder(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
+method ApplyCoverGrid(arg1:string,arg2:Array<model.Box>):Promise<APP.GridResult>
 method ApplyCoverPreset(arg1:string):Promise<model.View>
 method ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<APP.GridResult>
+method ApplyPrint(arg1:model.Settings,arg2:string):Promise<model.View>
 method ApplySpreadTpl(arg1:string,arg2:string,arg3:string):Promise<APP.TplResult>
 method ArrangeLayers(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>
 method ArrangePlaces(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>
@@ -31,6 +33,7 @@ method CancelExport():Promise<void>
 method CancelLibrary():Promise<void>
 method CancelUpdate():Promise<void>
 method CheckFolders(arg1:boolean):Promise<void>
+method CheckPrintProfile(arg1:APP.PrintEdit):Promise<APP.PrintEditCheck>
 method CheckUpdate():Promise<APP.UpdateInfo>
 method ChooseFiles():Promise<APP.LooseResult>
 method ChooseFolder():Promise<model.View>
@@ -44,10 +47,12 @@ method ClearVignette(arg1:string):Promise<model.View>
 method ClipState():Promise<model.ClipInfo>
 method Collect(arg1:APP.CollectOptions):Promise<boolean>
 method CollectInfo(arg1:boolean):Promise<collect.Info>
+method ConfirmImportPrintProfile(arg1:string):Promise<APP.PrintImport>
 method ConfirmPack(arg1:string):Promise<APP.PackAdd>
 method CopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<APP.GridResult>
 method CopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<APP.GridResult>
 method CopyItems(arg1:string,arg2:model.ClipSel):Promise<model.ClipInfo>
+method CoverGridChoices(arg1:string,arg2:number):Promise<model.CoverGridChoices>
 method CoverPresets():Promise<Array<model.CoverPreset>>
 method CoverSpineText():Promise<model.View>
 method CreateCover(arg1:string,arg2:string):Promise<model.View>
@@ -58,6 +63,7 @@ method DeleteBin(arg1:string):Promise<model.View>
 method DeleteCover():Promise<model.View>
 method DeleteGridTemplate(arg1:string):Promise<void>
 method DeletePlaces(arg1:string,arg2:Array<string>):Promise<model.View>
+method DeletePrintProfile(arg1:string):Promise<model.View>
 method DeleteSelection(arg1:string,arg2:Array<string>,arg3:Array<string>,arg4:Array<string>):Promise<model.View>
 method DeleteSpread(arg1:string):Promise<model.View>
 method DeleteSpreads(arg1:Array<string>):Promise<model.View>
@@ -86,6 +92,7 @@ method ImportDecor(arg1:string,arg2:string):Promise<APP.DecorImport>
 method ImportDecorPaths(arg1:string,arg2:string,arg3:Array<string>):Promise<APP.DecorImport>
 method ImportFontPaths(arg1:Array<string>):Promise<APP.FontImport>
 method ImportFonts():Promise<APP.FontImport>
+method ImportPrintProfile():Promise<APP.PrintImport>
 method ImportTemplates():Promise<APP.TplLoad>
 method ImportTemplatesPath(arg1:string):Promise<APP.TplLoad>
 method InstallUpdate():Promise<void>
@@ -108,14 +115,14 @@ method NewProject(arg1:string):Promise<APP.State>
 method NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>
 method NewVignetteSheet(arg1:number,arg2:number):Promise<APP.State>
 method OpenExternal():Promise<APP.State>
-method OpenFabrika():Promise<void>
-method OpenFsfera():Promise<void>
 method OpenInNewer():Promise<void>
 method OpenLink(arg1:string):Promise<void>
+method OpenPrintSite(arg1:string):Promise<void>
 method OpenProject():Promise<APP.State>
 method OpenRecent(arg1:string):Promise<APP.State>
 method OpenUpdatePage():Promise<void>
 method PagePresets():Promise<Array<model.PagePreset>>
+method PagePx(arg1:number,arg2:number):Promise<APP.PagePxView>
 method PasteItems(arg1:model.PasteReq):Promise<APP.PasteResult>
 method PasteNames(arg1:string,arg2:model.NamesOpts):Promise<APP.NamesResult>
 method Person(arg1:string):Promise<model.PersonView>
@@ -135,7 +142,9 @@ method PlanSpreadTpl(arg1:string,arg2:string,arg3:string):Promise<model.GridPlan
 method PrepareSigs(arg1:Array<string>):Promise<APP.SigState>
 method PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.NamesPlan>
 method PreviewVignette(arg1:string,arg2:model.VigSetup):Promise<model.VigPreview>
-method PrintPlans():Promise<Array<printshop.Plan>>
+method PrintPlans(arg1:string):Promise<Array<printshop.Plan>>
+method PrintProfileEdit(arg1:string):Promise<APP.PrintEdit>
+method PrintProfiles():Promise<Array<printprof.Info>>
 method PurgePhotos(arg1:Array<string>):Promise<model.View>
 method QRPreview(arg1:string):Promise<APP.QRInfo>
 method Recent():Promise<Array<prefs.RecentProject>>
@@ -164,6 +173,7 @@ method RestoreBackup(arg1:string):Promise<model.View>
 method RestoreHotkeys(arg1:Record<string, Array<string>>):Promise<keymap.View>
 method RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>
 method SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<void>
+method SavePrintProfile(arg1:APP.PrintEdit,arg2:boolean):Promise<APP.PrintSaved>
 method SaveProject():Promise<model.View>
 method SaveProjectAs():Promise<model.View>
 method SaveSpreadTpl(arg1:string,arg2:string,arg3:string,arg4:string,arg5:boolean,arg6:boolean):Promise<APP.DecorItem>
@@ -184,6 +194,7 @@ method SetBorder(arg1:string,arg2:Array<string>,arg3:model.BorderPatch,arg4:stri
 method SetCaption(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method SetCaptionStyle(arg1:string,arg2:text.Style,arg3:boolean,arg4:number):Promise<model.View>
 method SetCoverLayout(arg1:string):Promise<model.View>
+method SetCoverPx(arg1:number,arg2:number):Promise<model.View>
 method SetCoverSpec(arg1:model.CoverSpec):Promise<model.View>
 method SetCoverSpineBg(arg1:string):Promise<model.View>
 method SetCustom(arg1:prefs.CustomLevel):Promise<prefs.Prefs>
@@ -226,6 +237,7 @@ method SetTour(arg1:string,arg2:string):Promise<prefs.Prefs>
 method SetUpdateCheck(arg1:boolean):Promise<APP.UpdateInfo>
 method SetVignette(arg1:string,arg2:model.Vignette):Promise<APP.GridResult>
 method SetupVignette(arg1:string,arg2:model.VigSetup):Promise<APP.GridResult>
+method SharePrintProfile(arg1:string):Promise<APP.PrintShare>
 method ShowBackups():Promise<void>
 method ShowCollected():Promise<void>
 method ShowDataFolder():Promise<void>
@@ -237,6 +249,7 @@ method SplitSpread(arg1:string,arg2:number):Promise<model.View>
 method SplitSpreadAuto(arg1:string,arg2:number,arg3:boolean):Promise<model.View>
 method SpreadBgToAlbum(arg1:string):Promise<model.View>
 method SpreadPhotoColors(arg1:string):Promise<Array<string>>
+method StepCoverGrid(arg1:string,arg2:number):Promise<model.View>
 method StepLayout(arg1:string,arg2:string,arg3:number):Promise<model.View>
 method StraightenBackdrop(arg1:string,arg2:string,arg3:number,arg4:number):Promise<model.View>
 method StraightenPhoto(arg1:string,arg2:string,arg3:number,arg4:number):Promise<model.View>
@@ -402,6 +415,7 @@ type APP.PackInfo
   sticker: number
   spread: number
   frame: number
+  print: number
   bytes: number
   removable: boolean
 type APP.PackList
@@ -413,6 +427,10 @@ type APP.PackRemove
   files: number
   kept: number
   bytes: number
+type APP.PagePxView
+  pageW: number
+  pageH: number
+  err: string
 type APP.PasteResult
   view: model.View
   refs: string[]
@@ -428,6 +446,53 @@ type APP.PhotoAbout
   note: string
   used: string
   uses: model.PhotoUse[]
+type APP.PrintCheckRow
+  pageW: number
+  pageH: number
+  sideW: number
+  sideH: number
+  err: string
+  field: string
+  hit: boolean
+type APP.PrintEdit
+  name: string
+  base: string
+  dpi: number
+  layflat: boolean
+  safe: number
+  bleed: number
+  formats: PrintEditFormat[]
+  spreads: number
+  prefix: string
+  quality: number
+  url: string
+type APP.PrintEditCheck
+  ok: boolean
+  errs: Record<string, string>
+  formats: PrintCheckRow[]
+  spine: number
+  lines: string[]
+  names: string
+type APP.PrintEditFormat
+  name: string
+  pxW: number
+  pxH: number
+  coverW: number
+  coverH: number
+type APP.PrintImport
+  canceled: boolean
+  info: printprof.Info
+  ask: string
+  question: string
+  token: string
+  copied: boolean
+  lines: string[]
+type APP.PrintSaved
+  id: string
+  view: model.View
+type APP.PrintShare
+  canceled: boolean
+  name: string
 type APP.QRInfo
   text: string
   side: number
@@ -736,6 +801,15 @@ type model.ClipSel
   refs: string[]
   texts: string[]
   stickers: string[]
+type model.CoverGridChoices
+  scope: string
+  n: number
+  box: layout.Rect
+  places: number
+  photos: number
+  byPhoto: GridChoice[]
+  builtin: GridChoice[]
+  mine: GridChoice[]
 type model.CoverPreset
   id: string
   name: string
@@ -744,6 +818,13 @@ type model.CoverPreset
 type model.CoverScope
   scope: string
   label: string
+type model.CoverSide
+  scope: string
+  label: string
+  box: layout.Rect
+  places: number
+  known: boolean
+  alone: boolean
 type model.CoverSpec
   preset: string
   w?: number
@@ -770,10 +851,12 @@ type model.CoverView
   scopes: CoverScope[]
   safe: layout.Rect[]
   textMaxW: number
+  sides: CoverSide[]
   markup?: GuideView
   pxW: number
   pxH: number
   fix: string
+  missing: string
 type model.CoverZone
   kind: string
   rect: layout.Rect
@@ -1219,12 +1302,27 @@ type prefs.RecentProject
   name: string
   exists: boolean
   modified: number
+type printprof.Info
+  id: string
+  name: string
+  source: string
+  version: number
+  hasExport: boolean
+  formats: InfoFormat[]
+type printprof.InfoFormat
+  name: string
+  pageW: number
+  pageH: number
+  pxW?: number
+  pxH?: number
 type printshop.Plan
   kind: string
   title: string
   format: string
   off: string
   pages: string
+  px: string
+  default: boolean
   spreads: number
   spine: number
   min: number

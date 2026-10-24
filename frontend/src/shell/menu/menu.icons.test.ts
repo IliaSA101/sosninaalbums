@@ -4,8 +4,8 @@ import type { IconName } from '../../base/ui/Icon.svelte'
 import { ALIGN_OPS } from '../../panels/layouts/align'
 import { buildMenu, hasIcons, hasMarks, type Menu, type MenuCtx, type MenuItem } from './menu'
 
-// Значки главного меню (владелец 23.10): только у пунктов «Правки», у которых есть кнопка-двойник со значком;
-// значок — тот же, что у кнопки. «Файл», «Вид», «Справка» — без значков.
+// Значки главного меню (владелец 23.10): только у пунктов «Правки» и «Разворота» (с 2026-10-24 второе меню), у которых
+// есть кнопка-двойник со значком; значок — тот же, что у кнопки. «Файл», «Вид», «Справка» — без значков.
 beforeEach(() => useCatalog())
 afterEach(() => dropCatalog())
 
@@ -38,7 +38,9 @@ const ctx: MenuCtx = {
 
 const flat = (items: MenuItem[]): MenuItem[] => items.flatMap((i) => [i, ...(i.sub ? flat(i.sub) : [])])
 const items = (menus: Menu[], id: string) => flat(menus.find((m) => m.id === id)!.items)
-const iconOf = (menus: Menu[], id: string) => items(menus, 'edit').find((i) => i.id === id)?.icon
+// «Правка» и «Разворот» вместе: двойники и «без значка» проверяются по обоим меню.
+const editLike = (menus: Menu[]) => [...items(menus, 'edit'), ...items(menus, 'spread')]
+const iconOf = (menus: Menu[], id: string) => editLike(menus).find((i) => i.id === id)?.icon
 
 // Исходники кнопок-двойников: значок у них записан литералом в разметке.
 const src = import.meta.glob('/src/**/*.{ts,svelte}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
@@ -71,7 +73,7 @@ const TWINS: [string, IconName][] = [
 ]
 
 describe('значки главного меню', () => {
-  it('у пунктов «Правки» с двойником значок равен значку двойника', () => {
+  it('у пунктов «Правки» и «Разворота» с двойником значок равен значку двойника', () => {
     const m = buildMenu(ctx)
     for (const [id, icon] of TWINS) expect(iconOf(m, id), id).toBe(icon)
   })
@@ -81,12 +83,15 @@ describe('значки главного меню', () => {
   })
 
   it('пункты без двойника остаются без значка', () => {
-    const edit = items(buildMenu(ctx), 'edit')
+    const edit = editLike(buildMenu(ctx))
     const twin = new Set(TWINS.map(([id]) => id))
     // Значок есть ровно у пунктов таблицы: лишнего не придумано.
     expect(edit.filter((i) => i.icon).map((i) => i.id)).toEqual(edit.filter((i) => twin.has(i.id)).map((i) => i.id))
     // «Выровнять ▸» — полоса без одной кнопки с таким действием; опоры — текстовые кнопки.
-    const bare = ['cutItems', 'duplicateItems', 'selectAll', 'clearSelection', 'bgGallery', 'borderGallery', 'copyDecor', 'spreadTpl']
+    const bare = [
+      ...['cutItems', 'duplicateItems', 'selectAll', 'clearSelection'],
+      ...['bgGallery', 'borderGallery', 'copyDecor', 'spreadTpl', 'renameSpread', 'pasteNames', 'varyLayouts', 'vigSetup'],
+    ]
     for (const id of [...bare, 'align', 'alignTo-sel']) expect(edit.find((i) => i.id === id)?.icon, id).toBeUndefined()
   })
 
@@ -108,6 +113,8 @@ describe('значки главного меню', () => {
     expect([hasIcons(top), hasMarks(top)]).toEqual([true, false])
     const file = m.find((x) => x.id === 'file')!.items
     expect([hasIcons(file), hasMarks(file)]).toEqual([false, true])
+    const spread = m.find((x) => x.id === 'spread')!.items
+    expect([hasIcons(spread), hasMarks(spread)]).toEqual([true, false])
     const align = top.find((i) => i.id === 'align')!.sub!
     expect([hasIcons(align), hasMarks(align)]).toEqual([true, true])
   })

@@ -18,6 +18,7 @@ const (
 var (
 	errWebPBroken = errors.New("повреждённый заголовок WebP")
 	errWebPAnim   = errors.New("анимированный WebP не поддерживается")
+	errICCTooBig  = errors.New("профиль ICCP WebP больше предела")
 )
 
 // webpHead — размер кадра и модель декода WebP по заголовкам чанков.
@@ -35,6 +36,11 @@ type webpWalk struct {
 	found        bool
 	w, h         int
 	skipped      int64
+	wantICC      bool   // Header: брать ICCP (DimsOf профиль не читает)
+	flagICC      bool   // в VP8X стоит флаг ICC
+	icc          []byte // первый ICCP при флаге
+	haveICC      bool
+	iccBad       bool // ICCP заявлен, но длиннее iccMaxBytes
 }
 
 // readWebPHead обходит чанки RIFF (r стоит сразу за 12-байтным заголовком RIFF/WEBP) до первого
@@ -42,13 +48,8 @@ type webpWalk struct {
 // обязан совпасть с холстом VP8X (Decode проверяет то же, но только после выделения памяти).
 func readWebPHead(r io.Reader) (webpHead, error) {
 	var wk webpWalk
-	for i := 0; i < webpMaxChunks && !wk.found; i++ {
-		if err := wk.chunk(r, i == 0); err != nil {
-			return webpHead{}, err
-		}
-	}
-	if !wk.found {
-		return webpHead{}, errors.New("в WebP нет кадра")
+	if err := wk.walk(r); err != nil {
+		return webpHead{}, err
 	}
 	if wk.w <= 0 || wk.h <= 0 {
 		return webpHead{}, fmt.Errorf("некорректный размер изображения %dx%d", wk.w, wk.h)
@@ -64,6 +65,34 @@ func readWebPHead(r io.Reader) (webpHead, error) {
 		h.model = color.NYCbCrAModel
 	}
 	return h, nil
+}
+
+// walk обходит чанки до первого кадра (не больше webpMaxChunks).
+func (wk *webpWalk) walk(r io.Reader) error {
+	for i := 0; i < webpMaxChunks && !wk.found; i++ {
+		if err := wk.chunk(r, i == 0); err != nil {
+			return err
+		}
+	}
+	if !wk.found {
+		return errors.New("в WebP нет кадра")
+	}
+	return nil
+}
+
+// webpICCHead — Head WebP для Header: класс профиля из ICCP (только при флаге ICC в VP8X, как у Chromium).
+// Ошибка обхода (анимация, битый чанк, нет кадра) — «без профиля»: такой файл DimsOf и так отвергает.
+func webpICCHead(r io.Reader) Head {
+	h := Head{Orient: 1}
+	wk := webpWalk{wantICC: true}
+	err := wk.walk(r)
+	switch {
+	case wk.iccBad: // профиль заявлен, но не прочитан: обход остановлен на нём
+		h.Color, h.Profile = ColorOther, iccUnknownName
+	case err == nil && wk.icc != nil:
+		h.Color, h.Profile, h.xf = classify(wk.icc)
+	}
+	return h
 }
 
 // chunk читает один чанк: заголовок кадра разбирается, остальные пропускаются.
@@ -84,6 +113,10 @@ func (wk *webpWalk) chunk(r io.Reader, first bool) error {
 		return wk.readVP8L(r, n)
 	case "ALPH":
 		wk.alpha = true
+	case "ICCP":
+		if wk.wantICC && wk.flagICC && !wk.haveICC {
+			return wk.readICCP(r, n)
+		}
 	}
 	wk.skipped += n + n&1 // данные выровнены до чётного
 	if wk.skipped > webpMaxSkip {
@@ -92,6 +125,24 @@ func (wk *webpWalk) chunk(r io.Reader, first bool) error {
 	if err := skipBytes(r, n+n&1); err != nil {
 		return errWebPBroken
 	}
+	return nil
+}
+
+// readICCP — профиль первого ICCP при флаге ICC (VP8X уже прочитан). Сначала длина: больше
+// iccMaxBytes — ColorOther без чтения (обход на этом останавливается), иначе читается целиком вместе
+// с байтом выравнивания.
+func (wk *webpWalk) readICCP(r io.Reader, n int64) error {
+	wk.haveICC = true
+	if n > iccMaxBytes {
+		wk.iccBad = true
+		return errICCTooBig
+	}
+	wk.skipped += n + n&1
+	buf := make([]byte, n+n&1)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return errWebPBroken
+	}
+	wk.icc = buf[:n]
 	return nil
 }
 
@@ -109,6 +160,7 @@ func (wk *webpWalk) readVP8X(r io.Reader, first bool, n int64) error {
 	}
 	wk.vp8x = true
 	wk.alpha = b[0]&vp8xAlpha != 0
+	wk.flagICC = b[0]&vp8xICC != 0
 	wk.canvW = (int(b[4]) | int(b[5])<<8 | int(b[6])<<16) + 1
 	wk.canvH = (int(b[7]) | int(b[8])<<8 | int(b[9])<<16) + 1
 	return nil

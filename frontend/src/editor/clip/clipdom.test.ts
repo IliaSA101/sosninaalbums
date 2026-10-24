@@ -31,7 +31,7 @@ describe('domCommand', () => {
     ['выделен текст вне холста', { nativeSel: true }],
     ['зона — не холст (лента фото)', { canvas: false }],
     ['функции нет на уровне', { clipboardOn: false }],
-    ['режим фона, галерея или крупный просмотр', { off: true }],
+    ['режим фона, галерея или «Во весь экран»', { off: true }],
   ])('молчит: %s', (_n, o) => {
     for (const k of ['copy', 'cut', 'paste'] as const) expect(domCommand(k, ctx(o))).toBeNull()
   })

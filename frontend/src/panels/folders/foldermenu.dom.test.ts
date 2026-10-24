@@ -107,7 +107,7 @@ describe('окно «Папки»: открытие и закрытие', () => 
     expect(popup()).toBeTruthy()
   })
 
-  it('крупный просмотр (modes.big) закрывает открытое окно', async () => {
+  it('«Во весь экран» (modes.big) закрывает открытое окно', async () => {
     mount()
     await fireEvent.click(button())
     modes.big = true

@@ -550,7 +550,7 @@ describe('подборки фото (083)', () => {
     expect(cmd(ev('b', KEY_B), ctx({ zone: 'canvas' }))).toBeNull()
     expect(cmd(ev('Delete'), ctx({ zone: 'canvas', bgMode: true, hasSelection: true }))).toBe('bgRemove')
   })
-  it('крупный просмотр, галерея, поле ввода, окно: клавиши подборок молчат', () => {
+  it('«Во весь экран», галерея, поле ввода, окно: клавиши подборок молчат', () => {
     for (const o of [{ big: true }, { galleryOpen: true }, { inTextField: true }, { dialog: 'shut' as const }])
       expect(cmd(ev('b', KEY_B), ctx({ ...lib, ...o })), JSON.stringify(o)).toBeNull()
   })
@@ -563,5 +563,31 @@ describe('подборки фото (083)', () => {
   })
   it('повтор клавиши удержанием не срабатывает (сдвиг и отмена — только они)', () => {
     expect(cmd(ev('b', { ...KEY_B, repeat: true }), ctx(lib))).toBeNull()
+  })
+})
+
+describe('Ctrl+F — поиск фото в ленте (0.26-124-10)', () => {
+  const F = { ctrlKey: true, code: 'KeyF' }
+  it('работает и с ленты, и с холста; по-русски (А на той же клавише) — то же', () => {
+    for (const zone of ['library', 'canvas'] as const) {
+      expect(cmd(ev('f', F), ctx({ zone }))).toBe('findPhotos')
+      expect(cmd(ev('а', F), ctx({ zone }))).toBe('findPhotos')
+    }
+    expect(cmd(ev('f', F))).toBe('findPhotos') // зоны ещё нет (после запуска)
+  })
+  it('«Во весь экран», галерея, поле ввода, окно: молчит', () => {
+    for (const o of [{ big: true }, { galleryOpen: true }, { inTextField: true }, { dialog: 'shut' as const }])
+      expect(cmd(ev('f', F), ctx(o)), JSON.stringify(o)).toBeNull()
+  })
+  it('гасит поиск браузера (стенд), удержание не повторяет', () => {
+    expect(preventsDefault('findPhotos', ev('f', F))).toBe(true)
+    expect(cmd(ev('f', { ...F, repeat: true }))).toBeNull()
+  })
+  it('назначается в «Горячих клавишах»: снятая клавиша молчит, новая работает', () => {
+    useCatalog({ findPhotos: [] })
+    expect(cmd(ev('f', F))).toBeNull()
+    useCatalog({ findPhotos: ['Mod+KeyG'] })
+    expect(cmd(ev('f', F))).toBeNull()
+    expect(cmd(ev('g', { ctrlKey: true, code: 'KeyG' }))).toBe('findPhotos')
   })
 })

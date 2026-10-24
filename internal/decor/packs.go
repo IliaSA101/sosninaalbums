@@ -46,8 +46,9 @@ type packReg struct {
 	License   string      `json:"license"`
 	Source    string      `json:"source"`
 	Origin    string      `json:"origin"`
-	Installed int64       `json:"installed"` // unix мс; порядок наборов в каталоге
-	Zip       string      `json:"zip"`       // sha256 архива
+	MinApp    string      `json:"minApp,omitempty"` // x.y.z; нужен слою типографий (понизили программу — набор не действует)
+	Installed int64       `json:"installed"`        // unix мс; порядок наборов в каталоге
+	Zip       string      `json:"zip"`              // sha256 архива
 	Items     []packEntry `json:"items"`
 }
 
@@ -75,6 +76,7 @@ type PackInfo struct {
 	Sticker   int    `json:"sticker"`
 	Spread    int    `json:"spread"`
 	Frame     int    `json:"frame"`
+	Print     int    `json:"print"` // 123: профили типографий (.saprint)
 	Bytes     int64  `json:"bytes"`
 	Removable bool   `json:"removable"`
 }
@@ -137,6 +139,9 @@ func readPackReg(path, id string) (*packReg, error) {
 		return nil, errors.New("нет версии или чужой id")
 	}
 	reg.Version = max(reg.Version, 1)
+	if !validVer(reg.MinApp) {
+		reg.MinApp = ""
+	}
 	if reg.Title = cleanName(reg.Title); reg.Title == "" {
 		reg.Title = id
 	}
@@ -282,6 +287,8 @@ func (r *packReg) info() PackInfo {
 			p.Spread++
 		case KindFrame:
 			p.Frame++
+		case KindPrint:
+			p.Print++
 		}
 		p.Bytes += e.Bytes
 	}

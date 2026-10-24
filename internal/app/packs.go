@@ -40,6 +40,7 @@ type PackInfo struct {
 	Sticker   int    `json:"sticker"`
 	Spread    int    `json:"spread"`
 	Frame     int    `json:"frame"` // 079: рамочки-картинки
+	Print     int    `json:"print"` // 123: профили типографий
 	Bytes     int64  `json:"bytes"`
 	Removable bool   `json:"removable"`
 }
@@ -220,15 +221,17 @@ func (a *App) AddPackPath(path string) (res PackAdd, err error) {
 	if !strings.EqualFold(filepath.Ext(path), ".zip") {
 		return res, errPackFile
 	}
-	if fi, err := library.StatLocal(path); err != nil || !fi.Mode().IsRegular() {
-		return res, errors.New("файл набора не найден")
-	}
 	if !a.packs.lock() {
 		return res, errPackBusy
 	}
 	defer a.packs.unlock()
 	a.packs.dropPending()
-	arc, err := pack.Open(path, appVersion(wailsJSON))
+	// Проверенная цель и сверка с открытым (как readPrintFile, аудит 123 №8).
+	f, _, err := library.OpenLocal(path)
+	if err != nil {
+		return res, errors.New("файл набора не найден")
+	}
+	arc, err := pack.OpenFile(f, appVersion(wailsJSON))
 	if err != nil {
 		return res, err
 	}
@@ -375,7 +378,7 @@ func packEmptyErr(err error, skips []DecorSkip) error {
 
 // decorManifest — манифест pack в decor (поля как есть: проверены ParseManifest).
 func decorManifest(m pack.Manifest) decor.PackManifest {
-	out := decor.PackManifest{ID: m.ID, Version: m.Version, Title: m.Title, About: m.About, Author: m.Author,
+	out := decor.PackManifest{ID: m.ID, Version: m.Version, MinApp: m.MinApp, Title: m.Title, About: m.About, Author: m.Author,
 		License: m.License, Source: m.Source, Items: make([]decor.PackItem, len(m.Items))}
 	for i, it := range m.Items {
 		out.Items[i] = decor.PackItem{File: it.File, Kind: it.Kind, Theme: it.Theme, Name: it.Name, Size: it.Size}

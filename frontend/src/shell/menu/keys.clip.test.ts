@@ -68,7 +68,7 @@ describe('копировать и вставить (099)', () => {
     expect(cmd(ev('v', ctrl), ctx(none))).toBe('pasteItems')
     expect(cmd(ev('v', ctrl), ctx({ ...canvasZone, copyable: true }))).toBeNull() // буфер пуст
   })
-  it('молчат: режим фона, крупный просмотр, галерея раскладок, окно, выделен текст страницы', () => {
+  it('молчат: режим фона, «Во весь экран», галерея раскладок, окно, выделен текст страницы', () => {
     for (const o of [{ bgMode: true }, { big: true }, { galleryOpen: true }, { dialog: 'shut' as const }, { nativeSel: true }])
       for (const [k] of KEYS) expect(cmd(ev(k, ctrl), ctx({ ...sel, ...o })), `${k} ${JSON.stringify(o)}`).toBeNull()
   })

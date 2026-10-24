@@ -11,7 +11,7 @@
   import FitToggle from '../photoprops/FitToggle.svelte'
   import ShapeToggle from '../photoprops/ShapeToggle.svelte'
   import SnapToggle from '../photoprops/SnapToggle.svelte'
-  import FlipToggle from '../photoprops/FlipToggle.svelte'
+  import TurnFlipRow from '../photoprops/TurnFlipRow.svelte'
   import AdjustRows from '../photoprops/AdjustRows.svelte'
   import PhotoFade from '../border/PhotoFade.svelte'
   import InspectorBorder from '../border/InspectorBorder.svelte'
@@ -22,9 +22,17 @@
   import { placesel } from '../places/placesel.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import PersonFields from '../../panels/names/PersonFields.svelte'
+  import CardGroup from './CardGroup.svelte'
+  import { aboutSum, frameSum, placeSum, shapeSum, toneSum } from './groupsum'
+  import { toneOf } from '../photoprops/adjustrows'
+  import { borderRows, fadeRow, targetsOf } from '../border/borderrows'
+  import { decor } from '../../panels/decor/decor.svelte'
+  import { shapeKey } from '../../base/geom/shape'
 
-  // Карточка выделенного фото (спека 006 → 008): имя файла, рамка места X/Y/Ш/В с замком, масштаб кадра
-  // 100–400 % с ⊗ сброса, «Целиком / С обрезкой», dpi и размер в px, профиль (не sRGB). Ползунок ведёт предпросмотр в Cell через framelive, SetFrame — при отпускании.
+  // Карточка выделенного фото (спека 006 → 008 → 124): имя файла и справа dpi, дальше сворачиваемые группы — «Кадр»
+  // (масштаб 100–400 % с ⊗ сброса, наклон, «Целиком / С обрезкой», «Повернуть · Зеркало»), «Цвет и тон», «Форма и рамочка»,
+  // «Имя на фото», «Место» (X/Y/Ш/В с замком), «О снимке» (px, профиль, съёмка). Ползунок ведёт предпросмотр в Cell через
+  // framelive, SetFrame — при отпускании. Что видно на уровне, решает groupShown (groupsum.ts) теми же prefs.can, что и тело.
   const sp = $derived(store.spread)
   const id = $derived(store.selectedCell ?? '')
   const i = $derived(sp ? sp.photos.indexOf(id) : -1)
@@ -39,14 +47,14 @@
   const info = $derived(store.byId.get(id))
   const px = $derived(info && info.w > 0 && info.h > 0 ? `${info.w}×${info.h} px` : '')
   const minDPI = $derived(store.view.minDPI)
-  const pct = $derived(Math.round(cur.s * 100))
+  const pct = $derived(Math.round(frame.s * 100))
+  const tilt = $derived(framelive.angleOf(id) ?? fv?.tilt ?? 0)
   const profile = $derived(profileLine(store.byId.get(id)))
 
-  const value = (e: Event) => +(e.currentTarget as HTMLInputElement).value / 100
-  async function change(e: Event) {
-    const f = zoomFrame(frame, value(e))
+  // Масштаб: TiltRow ведёт предпросмотр через framelive, SetFrame — на отпускании (onend гасит просмотр)
+  async function zoom(pct: number) {
+    const f = zoomFrame(frame, pct / 100)
     await store.run(Api.SetFrame(id, f.s, f.x, f.y))
-    framelive.clear()
   }
   // Наклон (010 U5 → 045 → 057): строка TiltRow ведёт предпросмотр на ячейке, SetFrameAngle уходит на отпускании.
   // Наклон держит приближение (057): кадр считает liveTilt от кадра начала сессии — тот же расчёт, что у Go.
@@ -66,113 +74,147 @@
     void id
     return () => photoTilt.end()
   })
-  async function turn(quarters: -1 | 1) {
-    await store.run(Api.TurnPhotos([id], quarters))
-  }
+  // Значения свёрнутых групп (groupsum.ts): считаются из тех же данных, что и строки тела.
+  const sample = $derived(placesel.selected[0])
+  const border = $derived(
+    borderRows(
+      targetsOf(
+        sp,
+        placesel.selected.map((b) => b.id),
+      ),
+      { missing: store.missing, nameOf: (lib) => decor.frameItem(lib)?.name },
+    ),
+  )
+  const tone = $derived(toneOf(fv))
+  const sums = $derived({
+    frame: frameSum({ pct, contain, tilt }),
+    tone: toneSum({ ...tone, fade: fadeRow(sp, [id]).pct }),
+    shape: sample ? shapeSum({ shape: shapeKey(sample), border: border?.name ?? '' }) : '',
+    place: sample ? placeSum(sample) : '',
+    about: aboutSum({ w: info?.w ?? 0, h: info?.h ?? 0 }),
+  })
+  let nameText = $state('')
+  const lowDpi = $derived(dpi > 0 && dpi < minDPI)
+  // Подсказка dpi: размер снимка в px (в строке его нет) и порог печати
+  const dpiTip = $derived([px, lowDpi ? `Нужно от ${minDPI} dpi` : 'dpi при печати'].filter(Boolean).join(' · '))
+  const showPlace = $derived(prefs.can('manual') || (!!sp?.grid && prefs.can('layers')))
   async function reset() {
     await store.run(Api.ResetFrame(id))
     framelive.clear()
   }
 </script>
 
-<div class="name" title={name}>{name}</div>
-{#if prefs.can('manual')}
-  <PlaceFields />
-  <SnapToggle />
-{/if}
-<div class="gap"></div>
-{#if !prefs.can('frame')}
-  <!-- «Простой»: кадр и «Целиком / С обрезкой» не показываются -->
-{:else if contain}
-  <div class="note">Вписано целиком</div>
-{:else}
-  <div class="row">
-    <span class="lbl">Масштаб</span>
-    <span class="pct">{pct} %</span>
-    <button
-      class="reset"
-      disabled={isDefaultFrame(cur) && !own}
-      onclick={reset}
-      aria-label="Сбросить кадр"
-      title="Сбросить кадр: фото целиком в месте"><Icon name="reset" size={16} /></button
-    >
-  </div>
-  <input
-    type="range"
-    min="100"
-    max="400"
-    step="1"
-    value={pct}
-    aria-label="Масштаб кадра"
-    oninput={(e) => framelive.set(id, zoomFrame(frame, value(e)))}
-    onchange={change}
-    onpointerup={(e) => e.currentTarget.blur()}
-  />
-  {#if own}
-    <!-- Свой кадр (098): раскладки «Авто» строятся под эти пропорции; сброс снимает и кадр, и пропорции -->
-    <div class="row own" data-testid="own-crop">
-      <span class="lbl">Свой кадр {ownLabel(own)}</span>
-      <button class="reset" onclick={reset} aria-label="Сбросить кадр" title="Сбросить кадр: фото снова целое, раскладка подстроится"
-        ><Icon name="reset" size={16} /></button
-      >
-    </div>
+<div class="top">
+  <div class="name" title={name}>{name}</div>
+  {#if dpi > 0}<div class="dpi" class:low={lowDpi} title={dpiTip}>≈ {dpi} dpi</div>{/if}
+</div>
+
+<CardGroup id="photo.frame" title="Кадр" summary={sums.frame}>
+  {#if !prefs.can('frame')}
+    <!-- «Простой»: кадр и «Целиком / С обрезкой» не показываются -->
+  {:else if contain}
+    <div class="note">Вписано целиком</div>
+  {:else}
+    <TiltRow
+      tilt={Math.round(frame.s * 100)}
+      label="Масштаб, %"
+      numLabel="Масштаб кадра, процент"
+      rangeLabel="Масштаб кадра"
+      rangeTitle="Масштаб кадра; двойной щелчок — 100 %"
+      min={100}
+      max={400}
+      step={1}
+      guide=""
+      id="zoom"
+      dflt={100}
+      reset
+      resetLabel="Сбросить кадр"
+      resetTitle="Сбросить кадр: фото целиком в месте"
+      resetOff={isDefaultFrame(cur) && !own}
+      onlive={(v) => framelive.set(id, zoomFrame(frame, v / 100))}
+      oncommit={zoom}
+      onreset={reset}
+      onend={() => framelive.clear()}
+    />
+    {#if own}
+      <!-- Свой кадр (098): раскладки «Авто» строятся под эти пропорции; сброс снимает и кадр, и пропорции -->
+      <div class="row own" data-testid="own-crop">
+        <span class="lbl">Свой кадр {ownLabel(own)}</span>
+        <button class="reset" onclick={reset} aria-label="Сбросить кадр" title="Сбросить кадр: фото снова целое, раскладка подстроится"
+          ><Icon name="reset" size={16} /></button
+        >
+      </div>
+    {/if}
   {/if}
+  {#if prefs.can('tilt')}
+    <TiltRow
+      {tilt}
+      reset
+      onlive={tiltLive}
+      oncommit={tiltCommit}
+      onend={() => framelive.clear()}
+      onleave={() => photoTilt.end()}
+      onstraighten={() => straighten.startPhoto(id)}
+    />
+  {/if}
+  {#if prefs.can('frame')}<FitToggle />{/if}
+  <!-- Последняя строка «Кадра»; сразу за ней «Цвет | Ч/б» (владелец 2026-10-18, страж photocard.order.dom.test.ts) -->
+  {#if prefs.can('turn') || prefs.can('flip')}<TurnFlipRow {id} />{/if}
+</CardGroup>
+
+{#if fv}
+  <CardGroup id="photo.tone" title="Цвет и тон" summary={sums.tone}>
+    {#if prefs.can('adjust')}<AdjustRows {id} />{/if}
+    {#if prefs.can('photoFade')}<PhotoFade photos={[id]} />{/if}
+  </CardGroup>
 {/if}
-{#if prefs.can('turn')}
-  <div class="row turn">
-    <span class="lbl">Повернуть</span>
-    <button class="reset" onclick={() => turn(-1)} aria-label="Повернуть на 90° против часовой" title="↺ 90°"
-      ><Icon name="turn-ccw" size={16} /></button
-    >
-    <button class="reset" onclick={() => turn(1)} aria-label="Повернуть на 90° по часовой" title="↻ 90°"
-      ><Icon name="turn-cw" size={16} /></button
-    >
-  </div>
-{/if}
-{#if prefs.can('tilt')}
-  <TiltRow
-    tilt={framelive.angleOf(id) ?? fv?.tilt ?? 0}
-    onlive={tiltLive}
-    oncommit={tiltCommit}
-    onend={() => framelive.clear()}
-    onleave={() => photoTilt.end()}
-    onstraighten={() => straighten.startPhoto(id)}
-  />
-{/if}
-{#if prefs.can('frame')}<FitToggle /><ShapeToggle />{/if}
-{#if prefs.can('flip')}<FlipToggle />{/if}
-{#if prefs.can('adjust') && fv}<AdjustRows {id} />{/if}
-{#if prefs.can('photoFade') && fv}<PhotoFade photos={[id]} />{/if}
-{#if prefs.can('border')}<InspectorBorder />{/if}
-{#if sp?.grid && prefs.can('layers')}
-  <LayerRow onpick={(op) => placesel.layer(op)} />
-{/if}
-{#if dpi > 0 || px}
-  <div
-    class="dpi"
-    class:low={dpi > 0 && dpi < minDPI}
-    title={dpi > 0 && dpi < minDPI ? `Нужно от ${minDPI} dpi` : 'dpi при печати и размер снимка'}
-  >
-    {[dpi > 0 ? `≈ ${dpi} dpi` : '', px].filter(Boolean).join(' · ')}
-  </div>
-{/if}
+
+<CardGroup id="photo.shape" title="Форма и рамочка" summary={sums.shape}>
+  {#if prefs.can('frame')}<ShapeToggle />{/if}
+  {#if prefs.can('border')}<InspectorBorder />{/if}
+</CardGroup>
+
 {#if prefs.can('captions') && id}
   <!-- Имя для полей {Фамилия}… в подписях (030); по фото пересоздаётся: набранное уходит на своё фото -->
-  {#key id}<PersonFields photo={id} />{/key}
+  <CardGroup id="photo.name" title="Имя на фото" summary={nameText}>
+    {#key id}<PersonFields photo={id} row cap={false} onsummary={(t) => (nameText = t)} />{/key}
+  </CardGroup>
 {/if}
-{#if profile}
-  <div class="profile" class:warn={profile.level === 'warn'} title={profile.title}>{profile.text}</div>
+
+{#if showPlace}
+  <CardGroup id="photo.place" title="Место" summary={sums.place}>
+    {#if prefs.can('manual')}
+      <PlaceFields />
+      <SnapToggle />
+    {/if}
+    {#if sp?.grid && prefs.can('layers')}
+      <LayerRow onpick={(op) => placesel.layer(op)} />
+    {/if}
+  </CardGroup>
 {/if}
-{#if id}<div data-guide="photo-about"><PhotoAbout {id} /></div>{/if}
+
+<CardGroup id="photo.about" title="О снимке" summary={sums.about}>
+  {#if px}<div class="px">{px}</div>{/if}
+  {#if profile}
+    <div class="profile" class:warn={profile.level === 'warn'} title={profile.title}>{profile.text}</div>
+  {/if}
+  {#if id}<div data-guide="photo-about"><PhotoAbout {id} /></div>{/if}
+</CardGroup>
 
 <style>
+  .top {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
   .name {
+    flex: 1;
+    min-width: 0;
     font-size: 13px;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin-bottom: 8px;
   }
   .note {
     font-size: 12px;
@@ -188,10 +230,6 @@
     color: var(--muted);
     flex: 1;
   }
-  .pct {
-    font-variant-numeric: tabular-nums;
-  }
-  .turn,
   .own {
     margin-top: 8px;
   }
@@ -205,17 +243,15 @@
     color: #cfcfd4;
     border-radius: 4px;
   }
-  input[type='range'] {
-    width: 100%;
-    margin: 6px 0 0;
-  }
   .dpi {
-    margin-top: 8px;
+    flex: none;
     font-size: 12px;
     color: var(--muted);
   }
-  .gap {
-    height: 8px;
+  .px {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
   }
   .profile {
     margin-top: 8px;

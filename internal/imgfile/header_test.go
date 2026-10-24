@@ -2,6 +2,10 @@ package imgfile
 
 import (
 	"bytes"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -95,6 +99,55 @@ func FuzzJPEGHead(f *testing.F) {
 		}
 		if h.Taken < 0 || h.Taken > unix(2200, 12, 31, 23, 59, 59) {
 			t.Fatalf("время вне пределов: %d", h.Taken)
+		}
+	})
+}
+
+// Заголовок недоверенного PNG, WebP и JPEG разом: Header выбирает разбор по подписи. Без паник, класс из набора,
+// имя не длиннее предела, ориентация в пределах. Сиды — PNG и WebP с профилями, обрывками и бомбой.
+func FuzzHeader(f *testing.F) {
+	p3 := testkit.ProfileXiaomiP3(true)
+	var pngBase bytes.Buffer
+	_ = png.Encode(&pngBase, image.NewRGBA(image.Rect(0, 0, 8, 6)))
+	good := testkit.PNGWithChunks(pngBase.Bytes(), testkit.PNGChunk("iCCP", testkit.PNGICCData(p3)))
+	f.Add(good)
+	f.Add(good[:60])
+	f.Add(testkit.PNGWithChunks(pngBase.Bytes(), testkit.PNGChunk("iCCP", append([]byte("x\x00\x00"), 0x78, 0xBB, 0, 0, 0, 1))))
+	f.Add(testkit.PNGWithChunks(pngBase.Bytes(), testkit.PNGChunk("tEXt", nil), testkit.PNGChunk("sRGB", []byte{0})))
+	f.Add(append(pngBase.Bytes()[:33:33], 0x80, 0, 0, 0, 'i', 'C', 'C', 'P'))
+	f.Add(append(pngBase.Bytes()[:33:33], 0xFF, 0xFF, 0xFF, 0xFF, 't', 'E', 'X', 't'))
+	f.Add([]byte("\x89PNG\r\n\x1a\n\x00\x00\x00\x0d"))
+	for _, name := range []string{"lossy16.webp", "lossless24x16.webp", "mem_alpha.webp"} {
+		src, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(src)
+		f.Add(testkit.WebPWithICC(src, p3, true))
+		f.Add(testkit.WebPWithICC(src, p3, false))
+		f.Add(testkit.WebPWithICC(src, p3[:50], true))
+	}
+	f.Add([]byte("RIFF\x00\x00\x00\x00WEBPVP8X\x0a\x00\x00\x00\x20\x00\x00\x00\x00\x00\x00\x00\x00\x00ICCP\xff\xff\xff\xff"))
+	f.Add(testkit.RawJPEG(testkit.ICCSegment(1, 1, p3)))
+	f.Add([]byte{0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x01})
+	f.Fuzz(func(t *testing.T, data []byte) {
+		h, s := HeaderShot(bytes.NewReader(data))
+		switch h.Color {
+		case ColorNone, ColorSRGB, ColorAdobe, ColorP3, ColorICC, ColorOther:
+		default:
+			t.Fatalf("класс %q", h.Color)
+		}
+		if h.Orient < 1 || h.Orient > 8 || len([]rune(h.Profile)) > max(iccNameRunes, len([]rune(iccUnknownName))) {
+			t.Fatalf("%d %q", h.Orient, h.Profile)
+		}
+		if h.Color.converts() != (h.xf != nil) {
+			t.Fatalf("класс %q и таблицы %v расходятся", h.Color, h.xf)
+		}
+		if h2 := Header(bytes.NewReader(data)); h2.Color != h.Color || h2.Profile != h.Profile || h2.Orient != h.Orient {
+			t.Fatalf("Header и HeaderShot разошлись: %+v %+v", h2, h)
+		}
+		if !s.Empty() && !bytes.HasPrefix(data, []byte{0xFF, 0xD8}) {
+			t.Fatalf("съёмка у не-JPEG: %+v", s)
 		}
 	})
 }

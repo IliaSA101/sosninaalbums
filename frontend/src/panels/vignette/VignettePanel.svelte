@@ -1,12 +1,11 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
   import { errText } from '../../base/words/errtext'
-  import { sheetSize, unitOf } from '../../base/geom/sheet'
+  import { sheetSize } from '../../base/geom/sheet'
   import type { SpreadView, VigChoice, VignetteView } from '../../base/core/types'
   import VigCard from './VigCard.svelte'
   import { gallery } from '../gallery/gallery.svelte'
-  import { prefs } from '../../base/prefs/prefs.svelte'
-  import { clearVignette, sortVignette, vigChoices } from './vigact'
+  import { sortVignette, vigChoices } from './vigact'
   import { emptyPlaces, fitBox, summaryText } from './vigdialog'
   import { tplLabel } from './vigown'
   import { vigOwn } from './vigown.svelte'
@@ -16,9 +15,9 @@
   // Раздел «Виньетка» карточки справа — только сводка и кнопки (031 dialog §2, отзыв 14.10): схема шаблона,
   // имя, числа и размер портрета. Все параметры — в окне «Настроить виньетку» (VigDialog).
   // Схему и размер портрета считает Go (VignetteChoices); здесь перевод долей листа в проценты.
-  let { sp }: { sp: SpreadView & { vig: VignetteView } } = $props()
+  // «Сохранить как шаблон…» и «Обычный разворот» — в «⋯» группы (vigmenu.ts); onsummary — строка группы в свёрнутом виде.
+  let { sp, onsummary }: { sp: SpreadView & { vig: VignetteView }; onsummary?: (text: string) => void } = $props()
 
-  const unit = $derived(unitOf(store.view.settings))
   const vig = $derived(sp.vig)
   const MAX_H = 120 // высота схемы не больше, px
 
@@ -40,6 +39,9 @@
   })
   const now = $derived(choiceOf(items, vig.tpl))
   const empty = $derived(emptyPlaces(sp))
+  $effect(() => {
+    onsummary?.(summaryText(vig, now))
+  })
 
   // Схема на всю ширину карточки, но не выше MAX_H; пропорция листа та же.
   let boxW = $state(0)
@@ -76,22 +78,6 @@
       title="Ученики по алфавиту: фамилия, имя; без имени — в конце">Сортировать по фамилии</button
     >
   </div>
-  {#if prefs.can('templates')}
-    <button
-      type="button"
-      class="ghost plain"
-      data-guide="vig-save"
-      onclick={() => vigOwn.save(sp.id)}
-      title="Запомнить места, шапку и стиль подписей этого листа как свой шаблон: потом его можно поставить на другой лист"
-      >Сохранить как шаблон…</button
-    >
-  {/if}
-  <button
-    type="button"
-    class="ghost plain"
-    onclick={() => clearVignette(sp.id)}
-    title="Места, фото и подписи остаются, раскладка становится «Ручной»; пропадают только параметры виньетки">Обычный {unit.one}</button
-  >
 </div>
 
 <style>
@@ -159,9 +145,5 @@
   }
   .tools button[aria-pressed='true'] {
     border-color: var(--accent);
-  }
-  .plain {
-    height: 26px;
-    font-size: 12px;
   }
 </style>

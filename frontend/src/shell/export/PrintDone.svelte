@@ -23,8 +23,8 @@
       store.notify(errText(e), 'error')
     }
   }
-  // Кнопка сайта — по типографии плана.
-  const openSite = () => open(() => (plan?.kind === 'fabrika' ? Api.OpenFabrika() : Api.OpenFsfera()))
+  // Кнопка сайта — по типографии плана: адрес Go берёт из её профиля (неизвестный id и Нетпринт — ничего не открывает).
+  const openSite = () => open(() => Api.OpenPrintSite(plan?.kind ?? ''))
 </script>
 
 {#if jobs.exportMemo}

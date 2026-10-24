@@ -42,6 +42,7 @@ func (a *App) emitChanged(titles ...string) {
 	if titles == nil {
 		titles = []string{}
 	}
+	a.libraryPrintsChanged() // набор мог принести или унести типографию: реестр — до события окна
 	a.emit("library:changed", libChanged{Installed: titles})
 }
 

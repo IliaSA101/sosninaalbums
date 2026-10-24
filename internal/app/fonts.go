@@ -69,9 +69,6 @@ func (a *App) openFonts() {
 	text.SetCustom(s.Families(), s.Load)
 }
 
-// fontGen — поколение набора шрифтов для выгрузки (export.go: в нём имя text занято вопросами).
-func fontGen() uint64 { return text.Gen() }
-
 func (a *App) fontStore() (*fontlib.Store, error) {
 	if s := a.fontLib.Load(); s != nil {
 		return s, nil

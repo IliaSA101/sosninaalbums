@@ -31,7 +31,12 @@ const ctx = (o: Partial<MenuCtx> = {}): MenuCtx => ({ ...base, ...o })
 
 const flat = (items: MenuItem[]): MenuItem[] => items.flatMap((i) => [i, ...(i.sub ? flat(i.sub) : [])])
 const find = (menus: Menu[], id: string): MenuItem | undefined => menus.flatMap((m) => flat(m.items)).find((i) => i.id === id)
-const ids = (menus: Menu[], menu: string) => flat(menus.find((m) => m.id === menu)!.items).map((i) => i.id)
+// Меню нет — ошибка: иначе проверка «пункта нет в меню» прошла бы и для несуществующего (0.26-124-20).
+const ids = (menus: Menu[], menu: string) => {
+  const m = menus.find((x) => x.id === menu)
+  if (!m) throw new Error(`меню «${menu}» нет в строке`)
+  return flat(m.items).map((i) => i.id)
+}
 
 describe('копировать и вставить в «Правке» (099)', () => {
   const at = (level: Level, o: Partial<MenuCtx> = {}) => ctx({ level, can: (f) => can(f, level), ...o })

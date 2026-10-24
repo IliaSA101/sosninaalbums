@@ -37,9 +37,13 @@ func (s Shot) Empty() bool { return s == Shot{} }
 func ReadShot(r io.Reader) Shot { return parseShot(jpegSegments(r).exif) }
 
 // HeaderShot — Header и ReadShot за один проход по сегментам (карточке фото нужны и ориентация,
-// и съёмка: заголовок не читается дважды).
+// и съёмка: заголовок не читается дважды). У PNG и WebP — тот же Head, что у Header, и Shot{}.
 func HeaderShot(r io.Reader) (Head, Shot) {
-	s := jpegSegments(r)
+	h, rest, done := headBySignature(r)
+	if done {
+		return h, Shot{}
+	}
+	s := jpegSegments(rest)
 	return headOf(s), parseShot(s.exif)
 }
 

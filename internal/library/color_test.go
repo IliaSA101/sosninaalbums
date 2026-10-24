@@ -146,3 +146,83 @@ func TestCacheKeyColor(t *testing.T) {
 		}
 	}
 }
+
+// Профиль PNG и WebP (125): лента, ReadInfo и сканер видят класс по содержимому, а не по расширению;
+// ключ кэша PNG с матричным профилем меняется (соль по классу), у PNG без профиля и с «other» остаётся прежним.
+func TestReadHeadColorPNGWebP(t *testing.T) {
+	dir := testkit.TempDir(t)
+	desc := testkit.DescV2
+	img := image.NewNRGBA(image.Rect(0, 0, 16, 12))
+	p3 := testkit.ParaProfile(testkit.XYZP3Exact, 3, testkit.SRGBPara3, desc("Display P3"))
+	pro := testkit.ParaProfile(testkit.XYZProPhoto, 0, []float64{1.8}, desc("ProPhoto RGB"))
+	adobe := testkit.MatrixProfile(testkit.XYZAdobe, 2.2, desc("Adobe RGB (1998)"))
+	webp, err := os.ReadFile(filepath.Join("..", "imgfile", "testdata", "lossy16.webp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(name string, data []byte) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	cases := []struct {
+		path    string
+		color   imgfile.Color
+		profile string
+	}{
+		{testkit.PNGWithICC(t, dir, "p3.png", img, p3), imgfile.ColorP3, "Display P3"},
+		{testkit.PNGWithICC(t, dir, "xiaomi.png", img, testkit.ProfileXiaomiP3(true)), imgfile.ColorP3, testkit.XiaomiP3Name},
+		{testkit.PNGWithICC(t, dir, "pro.png", img, pro), imgfile.ColorICC, "ProPhoto RGB"},
+		{testkit.PNGWithICC(t, dir, "adobe.png", img, adobe), imgfile.ColorAdobe, "Adobe RGB (1998)"},
+		{testkit.PNGWithICC(t, dir, "srgb.png", img, testkit.SRGBProfile(desc("sRGB"))), imgfile.ColorSRGB, "sRGB"},
+		{testkit.PNGWithICC(t, dir, "lut.png", img, testkit.LUTProfile(testkit.XYZP3, desc("P3 LUT"))), imgfile.ColorOther, "P3 LUT"},
+		{testkit.PNGWithICC(t, dir, "bad.png", img, []byte("мусор")), imgfile.ColorOther, "неизвестный профиль"},
+		{testkit.PNG(t, dir, "plain.png", 16, 12, color.NRGBA{200, 10, 30, 255}), imgfile.ColorNone, ""},
+		{write("webp-under.jpg", testkit.WebPWithICC(webp, p3, true)), imgfile.ColorP3, "Display P3"},
+		{write("webp-under.png", testkit.WebPWithICC(webp, pro, true)), imgfile.ColorICC, "ProPhoto RGB"},
+		{write("webp-noflag.jpg", testkit.WebPWithICC(webp, p3, false)), imgfile.ColorNone, ""},
+	}
+	for _, c := range cases {
+		ph, err := ReadInfo(c.path)
+		if err != nil {
+			t.Fatalf("%s: %v", c.path, err)
+		}
+		if ph.Color != c.color || ph.Profile != c.profile {
+			t.Errorf("%s: %q %q, ждали %q %q", filepath.Base(c.path), ph.Color, ph.Profile, c.color, c.profile)
+		}
+	}
+	// Сканер той же папки отдаёт тот же класс (PNG и WebP под .png; .webp по расширению не берётся).
+	write("skipped.webp", testkit.WebPWithICC(webp, p3, true))
+	photos, _ := Scan([]string{dir})
+	seen := map[string]imgfile.Color{}
+	for _, ph := range photos {
+		seen[ph.Name] = ph.Color
+	}
+	if len(seen) != len(cases) || seen["p3.png"] != imgfile.ColorP3 || seen["webp-under.jpg"] != imgfile.ColorP3 || seen["plain.png"] != imgfile.ColorNone {
+		t.Errorf("сканер: %v", seen)
+	}
+	if _, ok := seen["skipped.webp"]; ok {
+		t.Error(".webp по расширению попал в ленту")
+	}
+
+	// Ключ кэша PNG: соль класса поверх «png1»; без профиля и other — прежний.
+	p := cases[0].path
+	st, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := func(salt string) string {
+		sum := sha1.Sum(fmt.Appendf(nil, "%s|%d|%d%s|png1", p, st.Size(), st.ModTime().UnixNano(), salt)) //nolint:gosec // как в cacheKey
+		return hex.EncodeToString(sum[:10])
+	}
+	for col, want := range map[imgfile.Color]string{
+		imgfile.ColorNone: key(""), imgfile.ColorOther: key(""), imgfile.ColorSRGB: key(""),
+		imgfile.ColorP3: key("|icc1"), imgfile.ColorICC: key("|icc1"), imgfile.ColorAdobe: key("|srgb1"),
+	} {
+		if got, err := cacheKey(p, col); err != nil || got != want {
+			t.Errorf("PNG, класс %q: ключ %s (%v), ждали %s", col, got, err, want)
+		}
+	}
+}

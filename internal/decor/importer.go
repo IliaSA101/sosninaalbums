@@ -47,7 +47,7 @@ type ImportResult struct {
 // «уже есть», скрытый — возвращается. Ошибка — только когда библиотека закрыта целиком.
 func (s *Store) Import(kind, theme string, files []string) (ImportResult, error) {
 	res := ImportResult{Added: []Item{}, Skipped: []Skip{}, Svg: []SvgJob{}}
-	if _, ok := kindDirs[kind]; !ok || kind == KindSpread { // шаблон разворота — SaveSpreadTpl
+	if _, ok := kindDirs[kind]; !ok || kind == KindSpread || kind == KindPrint { // шаблон разворота — SaveSpreadTpl, типография — SavePrint
 		return res, ErrKind
 	}
 	if !isTheme(theme) {

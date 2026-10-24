@@ -3,10 +3,18 @@
 // и в доли карточки для рисунка, а также тексты вопросов.
 import { plural } from '../../base/words/plural'
 import type { SheetSize } from '../../base/geom/sheet'
-import type { TplSource } from '../../base/tpl/tplsource'
+import type { TplTexts } from '../../base/tpl/tplsource'
 import type { Box, GridChoice, GridChoices, GridPlan, GridTarget, LayoutScope, PlaceView, Rect, RotRect } from '../../base/core/types'
 
 export const MAX_N = 7 // фильтр «7+»
+export const BY_PHOTO_MAX = 16 // «По фото» на сторонке обложки — до стольких мест (127-7)
+
+// Кнопки фильтра «Число мест» 1…7+: общие для сеток разворота и галереи сторонки.
+export const N_ITEMS = Array.from({ length: MAX_N }, (_, i) => ({
+  id: i + 1,
+  label: i + 1 === MAX_N ? '7+' : String(i + 1),
+  title: i + 1 === MAX_N ? 'Шаблоны на 7 мест и больше' : `Шаблоны на ${i + 1} ${plural(i + 1, ['место', 'места', 'мест'])}`,
+}))
 
 const clampN = (n: number) => Math.max(1, Math.min(MAX_N, Math.round(n) || 1))
 
@@ -62,11 +70,68 @@ export function previewRects(ch: GridChoice, scope: LayoutScope, sheet: SheetSiz
 
 // Тексты источника шаблонов (050): пустой ряд и причина серого пункта — одни и те же слова.
 // n — число мест в фильтре (7 = «7 мест и больше»), unitOne — «разворот» / «лист».
-export function gridSourceTexts(scope: LayoutScope, n: number, unitOne: string) {
-  const mineN = `Нет своих шаблонов на ${n === MAX_N ? '7 мест и больше' : `${n} ${plural(n, ['место', 'места', 'мест'])}`}`
+export function gridSourceTexts(scope: LayoutScope, n: number, unitOne: string): TplTexts {
+  const mineN = noMine(n)
   const builtin = scope === 'spread' ? 'Нет шаблонов на такое число мест' : `Встроенные шаблоны ставятся только на весь ${unitOne}`
-  const empty: Record<TplSource, string> = { all: scope === 'spread' ? builtin : mineN, builtin, mine: mineN }
+  const empty = { all: scope === 'spread' ? builtin : mineN, builtin, mine: mineN }
   return { empty, off: { builtin, mine: mineN } }
+}
+
+const noMine = (n: number) => `Нет своих шаблонов на ${n === MAX_N ? '7 мест и больше' : `${n} ${plural(n, ['место', 'места', 'мест'])}`}`
+
+// ---------- сторонка обложки (127) ----------
+
+// Рамка сторонки (мм листа) × доли ряда → прямоугольники предпросмотра в мм листа. Угол и форма — вместе с коробкой.
+export function boxRects(ch: Pick<GridChoice, 'boxes'>, box: Rect): RotRect[] {
+  return ch.boxes.map((b) => withRot({ x: box.x + b.x * box.w, y: box.y + b.y * box.h, w: b.w * box.w, h: b.h * box.h }, b))
+}
+
+// Ушедшее в ленту фото схлопывается в точку: Spread рисует слот по индексу фото, а нулевой размер ломает деление в Cell.
+const GONE: RotRect = { x: 0, y: 0, w: 0.01, h: 0.01 }
+
+// Центр места внутри рамки сторонки из Go (мм листа). Не геометрия, а проверка принадлежности: на корешке
+// и в расставе центр вне обеих рамок, и такое место не относится ни к одной сторонке (как InArea у Go).
+const inBox = (r: Rect, b: Rect) => {
+  const cx = r.x + r.w / 2
+  const cy = r.y + r.h / 2
+  return cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h
+}
+
+// Предпросмотр плитки сторонки на всём листе обложки: Spread сопоставляет rects с фото по индексу, поэтому
+// массив во всю длину — фото сторонки (центр в её рамке) по порядку встают в новые места, лишние схлопываются;
+// остальные остаются как были, с углом из frames: в rects его нет, а Spread в предпросмотре берёт его из rect.
+export function coverPreview(
+  ch: Pick<GridChoice, 'boxes'>,
+  box: Rect,
+  sheet: { rects: readonly RotRect[]; frames?: readonly { cellRot?: number }[] },
+): RotRect[] {
+  const fresh = boxRects(ch, box)
+  let k = 0
+  return sheet.rects.map((r, i) => {
+    if (!inBox(r, box)) {
+      const rot = r.rot ? 0 : sheet.frames?.[i]?.cellRot
+      return rot ? { ...r, rot } : r
+    }
+    return fresh[k++] ?? GONE
+  })
+}
+
+// Тексты галереи сторонки: серый «По фото» с причиной (design §7), пустые ряды — как у сеток.
+export function coverSourceTexts(places: number, n: number): TplTexts {
+  const mineN = noMine(n)
+  const builtin = 'Нет шаблонов на такое число мест'
+  const byPhoto = byPhotoReason(places, n)
+  return { empty: { all: mineN, byPhoto, builtin, mine: mineN }, off: { byPhoto, builtin, mine: mineN } }
+}
+
+function byPhotoReason(places: number, n: number): string {
+  if (places <= 0) return 'На сторонке нет мест: выберите раскладку во «Встроенных»'
+  if (places > BY_PHOTO_MAX) return `Раскладки по фото — до ${BY_PHOTO_MAX} мест на сторонке`
+  if (clampN(places) !== n) {
+    const tab = places >= MAX_N ? '7+' : String(places)
+    return `На сторонке ${places} ${plural(places, ['место', 'места', 'мест'])} — откройте вкладку «${tab}»`
+  }
+  return 'Для этих фото раскладок по фото нет'
 }
 
 // Подсказка у значка «−N».

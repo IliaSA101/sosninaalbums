@@ -35,6 +35,13 @@ func Open(path, app string) (*Archive, error) {
 	if err != nil {
 		return nil, errors.New("файл набора не открывается")
 	}
+	return OpenFile(f, app)
+}
+
+// OpenFile — Open над уже открытым файлом: путь от пользователя проверяет и открывает вызывающий
+// (library.OpenLocal — без хода по подменённой ссылке). f закрывается вместе с архивом, при
+// ошибке — сразу.
+func OpenFile(f *os.File, app string) (*Archive, error) {
 	a, err := openFile(f, app)
 	if err != nil {
 		_ = f.Close()

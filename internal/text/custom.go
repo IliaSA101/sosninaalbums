@@ -26,6 +26,11 @@ func FamilyID(name string) string {
 	return "my:" + hex.EncodeToString(h[:8])
 }
 
+// NFKC — совместимая нормальная форма: «Й» из двух знаков, буквы во всю ширину и лигатуры
+// сводятся к обычным. Для сравнения названий типографий (printprof.NameKey): пакетам модели
+// x/text напрямую не положен (depguard), а text его уже тянет.
+func NFKC(s string) string { return norm.NFKC.String(s) }
+
 // IsCustomID — id своей гарнитуры: «my:» и 16 знаков hex в нижнем регистре.
 func IsCustomID(id string) bool {
 	return len(id) == 19 && strings.HasPrefix(id, "my:") && isHex16(id[3:])

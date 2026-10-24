@@ -3,6 +3,8 @@ package app
 import (
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
 	"image/jpeg"
 	"maps"
 	"os"
@@ -59,9 +61,7 @@ func newExportEnv(t *testing.T, n int) *exportEnv {
 				e.onStep(data[0].(int))
 			}
 		case "export:done":
-			e.a.mu.Lock()
-			busy := e.a.exporting
-			e.a.mu.Unlock()
+			busy, _ := e.a.exp.Busy()
 			e.last = append(data, busy)
 			e.done <- data[1].(string)
 		}
@@ -89,12 +89,16 @@ func (e *exportEnv) export(t *testing.T, o ExportOptions) string {
 	return msg
 }
 
+// exportBusy — выгрузка идёт (чтение флага службы).
+func (e *exportEnv) exportBusy() bool {
+	busy, _ := e.a.exp.Busy()
+	return busy
+}
+
 // stuckState — что известно об экспорте к таймауту: прогресс, флаги, отмена и бюджет декодов
 // (занятый чужой тестовой утечкой бюджет держал бы экспорт вечно).
 func (e *exportEnv) stuckState() string {
-	e.a.mu.Lock()
-	busy, hasCancel := e.a.exporting, e.a.exportCancel != nil
-	e.a.mu.Unlock()
+	busy, hasCancel := e.a.exp.Busy()
 	return fmt.Sprintf("готово %d; exporting=%v, есть отмена=%v; stopped=%v, stopCtx.Err=%v; DecodeBudget: занято %d пикс., ждут %d",
 		e.steps.Load(), busy, hasCancel, e.a.stopped.Load(), e.a.stopCtx.Err(), imgfile.DecodeBudget.Used(), imgfile.DecodeBudget.Waiting())
 }
@@ -253,10 +257,7 @@ func TestExportMissingPhotoRefuses(t *testing.T) {
 		t.Fatalf("файлы %v", e.names(t))
 	}
 	// Флаг «идёт экспорт» сброшен отказом.
-	e.a.mu.Lock()
-	busy := e.a.exporting
-	e.a.mu.Unlock()
-	if busy {
+	if busy, _ := e.a.exp.Busy(); busy {
 		t.Fatal("флаг exporting остался после отказа")
 	}
 }
@@ -529,6 +530,22 @@ func TestColorReport(t *testing.T) {
 	wantOther := map[string]int{"Fogra39": 1, "Display P3 LUT": 1}
 	if !maps.Equal(conv, wantConv) || !maps.Equal(other, wantOther) {
 		t.Errorf("conv=%v other=%v", conv, other)
+	}
+
+	// PNG вне реестра (125): тот же отчёт по профилю iCCP, по содержимому, а не по расширению.
+	img := image.NewNRGBA(image.Rect(0, 0, 8, 6))
+	pngP3 := testkit.PNGWithICC(t, dir, "p3.png", img, testkit.ProfileXiaomiP3(true))
+	pngPro := testkit.PNGWithICC(t, dir, "pro.png", img, testkit.ParaProfile(testkit.XYZProPhoto, 0, []float64{1.8}, desc("ProPhoto RGB")))
+	pngLUT := testkit.PNGWithICC(t, dir, "lut.png", img, testkit.LUTProfile(testkit.XYZP3, desc("P3 LUT")))
+	pngSRGB := testkit.PNGWithICC(t, dir, "srgb.png", img, testkit.SRGBProfile(desc("sRGB")))
+	pr = model.New()
+	pr.Photos = map[string]model.PhotoRef{
+		"p3": {Path: pngP3}, "pro": {Path: pngPro}, "lut": {Path: pngLUT}, "s": {Path: pngSRGB},
+		"pl": {Path: testkit.PNG(t, dir, "plain.png", 8, 6, color.NRGBA{1, 2, 3, 255})},
+	}
+	conv, other = a.colorReport(pr)
+	if !maps.Equal(conv, map[string]int{"Display P3": 1, "ProPhoto RGB": 1}) || !maps.Equal(other, map[string]int{"P3 LUT": 1}) {
+		t.Errorf("PNG: conv=%v other=%v", conv, other)
 	}
 }
 
