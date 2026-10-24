@@ -51,16 +51,28 @@ if command -v xmllint >/dev/null; then
 else
   echo 'skip xmllint не установлен'
 fi
-if command -v update-mime-database >/dev/null && command -v xdg-mime >/dev/null; then
+# Тип спрашиваем у инструмента, читающего базу shared-mime-info: xdg-mime без рабочего стола (CI) уходит в
+# generic-ветку и без mimetype смотрит в содержимое файла, а не в glob — поэтому gio (libglib2.0-bin) или mimetype.
+have_mime=1
+if command -v gio >/dev/null; then
+  mime_of() { gio info -a standard::content-type "$1" | sed -n 's/^ *standard::content-type: //p'; }
+elif command -v mimetype >/dev/null; then
+  mime_of() { mimetype -b "$1"; }
+else
+  have_mime=0
+fi
+if command -v update-mime-database >/dev/null && [ "$have_mime" = 1 ]; then
+  export -f mime_of
   mkdir -p "$WORK/mh/mime/packages"
   cp "$M" "$WORK/mh/mime/packages/"
   update-mime-database "$WORK/mh/mime" >/dev/null 2>&1
   printf "{}" >"$WORK/Свадьба.salbum"
   printf "{}" >"$WORK/UPPER.SALBUM"
-  check 'xdg-mime: .salbum — наш тип' bash -c '[ "$(XDG_DATA_HOME=$1 XDG_DATA_DIRS=$1:/usr/share xdg-mime query filetype "$2")" = application/x-sosninaalbums ]' _ "$WORK/mh" "$WORK/Свадьба.salbum"
-  check 'xdg-mime: регистр расширения не важен' bash -c '[ "$(XDG_DATA_HOME=$1 XDG_DATA_DIRS=$1:/usr/share xdg-mime query filetype "$2")" = application/x-sosninaalbums ]' _ "$WORK/mh" "$WORK/UPPER.SALBUM"
+  export XDG_DATA_HOME="$WORK/mh" XDG_DATA_DIRS="$WORK/mh:/usr/share"
+  check 'mime-база: .salbum — наш тип' bash -c '[ "$(mime_of "$1")" = application/x-sosninaalbums ]' _ "$WORK/Свадьба.salbum"
+  check 'mime-база: регистр расширения не важен' bash -c '[ "$(mime_of "$1")" = application/x-sosninaalbums ]' _ "$WORK/UPPER.SALBUM"
 else
-  echo 'skip update-mime-database/xdg-mime не установлены'
+  echo 'skip update-mime-database или gio/mimetype не установлены'
 fi
 
 if command -v desktop-file-validate >/dev/null; then

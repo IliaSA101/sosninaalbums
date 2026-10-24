@@ -503,7 +503,7 @@ jobs:
           [ "$(id -u)" -eq 0 ] || sudo=(sudo)
           export DEBIAN_FRONTEND=noninteractive
           "${sudo[@]}" apt-get -o Acquire::Retries=3 update
-          "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y --no-install-recommends ca-certificates binutils desktop-file-utils xvfb xauth dbus libgl1-mesa-dri fonts-dejavu-core shared-mime-info xdg-utils
+          "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y --no-install-recommends ca-certificates binutils desktop-file-utils xvfb xauth dbus libgl1-mesa-dri fonts-dejavu-core shared-mime-info xdg-utils libglib2.0-bin
           cp "$DEB" /tmp/sosninaalbums.deb
           "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y /tmp/sosninaalbums.deb
           dpkg -s sosninaalbums | sed -n '1,/^Description/p'
