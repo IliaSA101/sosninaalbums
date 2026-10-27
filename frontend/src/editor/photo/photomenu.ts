@@ -7,6 +7,7 @@ import { allGray } from '../../base/geom/tone'
 import type { FeatureId } from '../../base/prefs/levels'
 import type { BackdropScope, FrameView, SpreadView } from '../../base/core/types'
 import type { MenuNode } from '../../base/ui/menulist'
+import { isVignette } from '../../panels/vignette/vignette'
 import { borderNeedsRelink } from '../border/borderstate'
 import { revealLabel } from '../../base/core/platform'
 import { LAYER_OPS } from '../places/minipanel'
@@ -33,6 +34,7 @@ export interface MenuCtx {
   allRounded: boolean // у всех скруглённое
   allOval: boolean // у всех круг
   allGray: boolean // 068: все выделенные фото уже ч/б — пункт «Сделать цветным»
+  faceRef?: boolean // 130 U2: одно фото на листе-виньетке — «Остальные — как это лицо» в «Кадр ▸»
   framed: boolean // одно фото и его кадр изменён или у него свой кадр (098)
   copyable: boolean // 099: есть что копировать (как в «Правке»)
   pasteable: boolean // 099: буфер не пуст
@@ -92,6 +94,7 @@ export function menuContext(
       s,
       withPhoto.map((b) => b.photo),
     ),
+    faceRef: sel.length === 1 && withPhoto.length === 1 && isVignette(s),
     framed: !!fv && isFramed(fv, !!s?.grid),
     copyable: clip.copy,
     pasteable: clip.paste,
@@ -192,6 +195,9 @@ function usesRows(c: FileCtx, ok: boolean, none: HintFn): Row[] {
 // Выпрямлять можно одно фото: режим привязан к выделенному фото, группа с текстом ему мешает.
 const canStraighten = (c: MenuCtx) => c.places === 1 && c.photos === 1 && c.texts === 0 && c.stickers === 0
 
+// Подсказка пункта «Остальные — как это лицо» (макет 130-m1-menu).
+export const FACE_REF_TIP = 'Как у этого фото — размер лица и линия глаз у всех на листе'
+
 type MkAct = (id: ActId, extra?: Partial<MenuNode>) => MenuNode | false
 
 // Правка фото и места: поворот, зеркало, кадр, форма, ч/б.
@@ -214,6 +220,9 @@ function editRows(c: MenuCtx, A: MkAct): Row[] {
         SEP,
         c.differ && A('fitPhoto'),
         c.framed && A('resetFrame'),
+        // Команда над листом, а не свойство фото: отдельной группой под чертой (130 U2).
+        SEP,
+        !!c.faceRef && A('faceRef', { title: FACE_REF_TIP }),
       ]),
     // Форма (044, 076) и рамочка (079) — у любого места, в том числе пустого.
     c.places > 0 &&

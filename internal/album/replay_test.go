@@ -302,6 +302,8 @@ func replayScenario(t *testing.T) *replay {
 	replayColorMass(r)
 	// 127: раскладки сторонки обложки — последними.
 	replayCoverGrid(r)
+	// 130: подгон по лицам — последним.
+	replayFitFaces(r)
 	return r
 }
 

@@ -71,6 +71,19 @@ describe('TiltRow: раскладка', () => {
   })
 })
 
+describe('TiltRow: вернули к исходному', () => {
+  it('ползунок на исходном значении: onlive не зовётся, предпросмотр гасится через onend (change не придёт)', async () => {
+    const p = props()
+    render(TiltRow, { ...docked, props: p })
+    await fireEvent.input(range(), { target: { value: '30' } })
+    expect(p.onlive).toHaveBeenCalledExactlyOnceWith(30)
+    await fireEvent.input(range(), { target: { value: '20' } })
+    expect(p.onlive).toHaveBeenCalledTimes(1)
+    expect(p.onend).toHaveBeenCalledTimes(1)
+    expect(p.oncommit).not.toHaveBeenCalled()
+  })
+})
+
 describe('TiltRow: ⊗', () => {
   it('сбрасывает в dflt: сессия серии кончается, один oncommit(dflt), потом onend', async () => {
     const p = props({ reset: true, dflt: 0 })

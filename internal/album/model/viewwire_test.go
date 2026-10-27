@@ -15,7 +15,7 @@ var update = flag.Bool("update", false, "перезаписать testdata/parit
 
 // wv — маленький вид: развороты с ID и фото, шапка с rev.
 func wv(rev int, spreads ...SpreadView) View {
-	return View{Product: ProductAlbum, Rev: rev, Spreads: spreads, Folders: []string{}}
+	return View{Product: ProductAlbum, Rev: rev, Spreads: spreads, Folders: []string{}, FillFrom: []int{}}
 }
 
 func sv(id string, photos ...string) SpreadView {
@@ -208,6 +208,8 @@ func deltaCases(t *testing.T) []deltaCase {
 	cover.Cover = &CoverView{Sheet: sv("cover", "p7"), N: 3}
 	fonts := wv(5, sv("a", "p1"), sv("b", "p2"), sv("c", "p3")) // шапка с albumFonts (082)
 	fonts.AlbumFonts = []FontUse{{ID: "my:0123456789abcdef", Name: "Lato"}, {ID: "my:fedcba9876543210"}}
+	fill := wv(5, sv("a", "p1"), sv("b", "p2"), sv("c", "p3")) // шапка с числами «Заполнить» (132): развороты те же
+	fill.FillFrom, fill.CoverFill = []int{3, 2, 1}, 4
 	other := wv(4, sv("x", "p1"))
 	other.Seq = 10
 	foreign, _ := Wire(&other, wv(5, sv("x", "p1"), sv("y")), 10, 11)
@@ -218,6 +220,7 @@ func deltaCases(t *testing.T) []deltaCase {
 		mk("порядок", wv(5, sv("c", "p3"), sv("a", "p1"), sv("b", "p2"))),
 		mk("только шапка (обложка)", cover),
 		mk("только шапка (свои шрифты)", fonts),
+		mk("только шапка (числа заполнения)", fill),
 		mk("все удалены", wv(5)),
 		{Name: "пустая дельта", Prev: raw(prev), Delta: raw(Unchanged(prev, prev.Seq)), Want: raw(full(t, prev, prev.Seq))},
 		{Name: "дельта к чужому виду", Prev: raw(prev), Delta: raw(foreign), Want: json.RawMessage("null")},

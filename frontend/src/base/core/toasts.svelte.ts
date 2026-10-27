@@ -9,7 +9,7 @@ export type Toast = { text: string; kind: 'info' | 'error'; action?: { label: st
 export interface ToastHost {
   readonly view: { rev: number }
   readonly delQueue: Promise<unknown>
-  notify(text: string, kind?: Toast['kind'], action?: Toast['action']): void
+  notify(text: string, kind?: Toast['kind'], action?: Toast['action'], ms?: number): void
   run(p: Promise<unknown>): Promise<boolean>
   goId(id: string): void
   toast: Toast | null
@@ -20,11 +20,12 @@ export class Toasts {
   toast = $state<Toast | null>(null)
   private timer = 0
 
-  notify(text: string, kind: Toast['kind'] = 'info', action?: Toast['action']) {
+  // ms — сколько держать тост; без него 8 с с кнопкой и 4 с без (итог подгона по лицам читают дольше — 20 с).
+  notify(text: string, kind: Toast['kind'] = 'info', action?: Toast['action'], ms?: number) {
     // Ошибки Go пишутся со строчной буквы.
     this.toast = { text: kind === 'error' ? capFirst(text) : text, kind, action }
     clearTimeout(this.timer)
-    this.timer = window.setTimeout(() => (this.toast = null), action ? 8000 : 4000)
+    this.timer = window.setTimeout(() => (this.toast = null), ms ?? (action ? 8000 : 4000))
   }
 }
 

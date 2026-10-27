@@ -171,6 +171,7 @@ func TestParseCatalog(t *testing.T) {
 	long := ok("long")
 	long["title"] = "  Очень\tдлинное\x00 " + strings.Repeat("я", 100)
 	long["counts"] = map[string]int{"bg": -5, "sticker": 1 << 30, "frame": -1}
+	addon := with("ivory-addon", "needs", "ivory")
 	data := catalogJSON(t, ok("ivory"), long,
 		with("Bad", "id", "Bad"), with("ab", "id", "ab"),
 		with("v0", "version", 0), with("vbig", "version", 1000000),
@@ -184,6 +185,7 @@ func TestParseCatalog(t *testing.T) {
 		with("deep", "url", AssetPrefix+"a/b/c.zip"),
 		with("ivory", "version", 2), // повтор id
 		with("notitle", "title", "\u200b"),
+		addon, with("badneeds", "needs", "Bad Id"), with("selfneeds", "needs", "selfneeds"), with("longneeds", "needs", strings.Repeat("a", 41)),
 	)
 	cat, err := ParseCatalog(data, src)
 	if err != nil {
@@ -193,10 +195,10 @@ func TestParseCatalog(t *testing.T) {
 	for _, e := range cat.Packs {
 		ids = append(ids, e.ID)
 	}
-	if strings.Join(ids, ",") != "ivory,long,notitle" || cat.Packs[0].Version != 1 {
+	if strings.Join(ids, ",") != "ivory,long,notitle,ivory-addon" || cat.Packs[0].Version != 1 {
 		t.Fatalf("строки: %v", ids)
 	}
-	if n := len(cat.Skipped); n != 15 {
+	if n := len(cat.Skipped); n != 18 {
 		t.Fatalf("отброшено %d: %+v", n, cat.Skipped)
 	}
 	if cat.Skipped[0].ID != "#3" || cat.Skipped[0].Why == "" { // плохой id не попадает в лог как есть
@@ -209,6 +211,9 @@ func TestParseCatalog(t *testing.T) {
 	}
 	if cat.Packs[2].Title != "notitle" {
 		t.Errorf("пустое название: %q", cat.Packs[2].Title)
+	}
+	if cat.Packs[3].Needs != "ivory" || cat.Packs[0].Needs != "" {
+		t.Errorf("needs: %q / %q", cat.Packs[3].Needs, cat.Packs[0].Needs)
 	}
 	// Шапка: формат новее, нет формата, не JSON, больше 500 наборов; пустой список — годен.
 	for name, tc := range map[string]struct {

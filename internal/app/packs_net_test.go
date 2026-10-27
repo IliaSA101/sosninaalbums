@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/fetch"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -127,12 +128,31 @@ func (l *netLib) publish(t *testing.T, mut func(row map[string]any), zips ...str
 	l.sig = []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(l.priv, l.cat)))
 }
 
+// attach — сетевой клиент службы наборов a ходит в netLib. Служба пересобирается с подменой Host
+// до первого вызова (126 Ш4: тест подменяет поле, а не поле службы).
+func (l *netLib) attach(t *testing.T, a *App) {
+	rebuildPacks(t, a, func(h *libpacks.Host) { h.Fetcher = func() *fetch.Client { return fetch.New(l.src) } })
+}
+
+// rebuildPacks — служба наборов с Host App, поправленным mut; до первого вызова метода. Клиент по
+// умолчанию — отказ: настоящий fetch.Default() ходил бы в сеть, сеть — только через явный Fetcher.
+func rebuildPacks(t *testing.T, a *App, mut func(h *libpacks.Host)) {
+	t.Helper()
+	h := a.packsHost()
+	h.Fetcher = func() *fetch.Client {
+		t.Error("тест пошёл в сеть: Fetcher не задан (attach или mut)")
+		return fetch.New(fetch.Source{}) // пустой источник: ни один адрес не пройдёт белый список
+	}
+	mut(&h)
+	a.libp = libpacks.New(h)
+}
+
 // netApp — App с библиотекой и источником netLib; согласие — по allowed.
 func netApp(t *testing.T, allowed bool) (*App, *netLib) {
 	t.Helper()
 	a := decorApp(t)
 	l := newNetLib(t)
-	a.net.client = func() *fetch.Client { return fetch.New(l.src) }
+	l.attach(t, a)
 	if allowed {
 		if _, err := a.SetLibraryNet(true, false); err != nil {
 			t.Fatal(err)
@@ -191,20 +211,20 @@ func TestNoNetWithoutConsent(t *testing.T) {
 	a, l := netApp(t, false)
 	l.publish(t, nil, d1Zip(t))
 	defer setStart(0, time.Hour)()
-	if _, err := a.UpdateLibrary(); !errors.Is(err, errNoConsent) {
+	if _, err := a.UpdateLibrary(); !errors.Is(err, libpacks.ErrNoConsent) {
 		t.Fatalf("без согласия: %v", err)
 	}
 	n, err := a.SetLibraryNet(false, true)
 	if err != nil || n.Allowed || n.AtStart {
 		t.Fatalf("флажок без согласия: %v %+v", err, n)
 	}
-	a.scheduleLibraryCheck()
+	a.libp.ScheduleCheck()
 	raw := `{"libraryNet":{"atStart":true}}`
 	if err := os.WriteFile(prefs.ConfigPath(a.cfgDir), []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a.scheduleLibraryCheck()
-	a.startCheck()
+	a.libp.ScheduleCheck()
+	a.libp.StartCheck()
 	a.bg.Wait()
 	if list, err := a.LibraryPacks(); err != nil || list.Net.Allowed || list.Net.AtStart || len(list.Packs) != 1 {
 		t.Fatalf("список: %v %+v", err, list)
@@ -237,7 +257,7 @@ func TestUpdateLibrary(t *testing.T) {
 	}
 	stages := map[string]bool{}
 	for _, d := range ev.of("library:progress") {
-		p := d.(LibraryProgress)
+		p := d.(libpacks.Progress)
 		stages[p.Stage] = true
 		if p.Stage == "download" && (p.Title != "Свадьба — айвори" || p.Total != fi.Size() || p.Done > p.Total) {
 			t.Errorf("ход: %+v", p)
@@ -416,11 +436,14 @@ func TestUpdateLibraryErrors(t *testing.T) {
 		t.Fatalf("библиотека изменилась: %+v", list)
 	}
 	// Занято другой операцией наборов.
-	a.packs.lock()
-	if _, err := a.UpdateLibrary(); !errors.Is(err, errPackBusy) {
+	release, ok := a.libp.Hold()
+	if !ok {
+		t.Fatal("занято с начала")
+	}
+	if _, err := a.UpdateLibrary(); !errors.Is(err, libpacks.ErrBusy) {
 		t.Fatalf("занято: %v", err)
 	}
-	a.packs.unlock()
+	release()
 	// Набор новее программы — пропуск с причиной, без скачивания.
 	defer func(old []byte) { wailsJSON = old }(wailsJSON)
 	wailsJSON = []byte(`{"info":{"productVersion":"0.17.0"}}`)
@@ -455,9 +478,9 @@ func TestStartCheckOnce(t *testing.T) {
 	l.mu.Lock()
 	l.sig = nil
 	l.mu.Unlock()
-	a.scheduleLibraryCheck()
+	a.libp.ScheduleCheck()
 	a.bg.Wait()
-	a.scheduleLibraryCheck()
+	a.libp.ScheduleCheck()
 	a.bg.Wait()
 	if l.hits.Load() != 1 || len(ev.of("notice")) != 0 || prefs.LibraryNetOf(a.cfgDir).Checked != 0 {
 		t.Fatalf("неудачная проверка: запросов %d, тостов %d", l.hits.Load(), len(ev.of("notice")))
@@ -465,16 +488,16 @@ func TestStartCheckOnce(t *testing.T) {
 	l.mu.Lock()
 	l.sig = good
 	l.mu.Unlock()
-	a.net.started.Store(false) // следующий сеанс
+	a.libp.ResetSession() // следующий сеанс
 	l.hits.Store(0)
-	a.scheduleLibraryCheck()
-	a.scheduleLibraryCheck()
+	a.libp.ScheduleCheck()
+	a.libp.ScheduleCheck()
 	a.bg.Wait()
 	if l.hits.Load() != 2 || l.archives.Load() != 1 || len(ev.of("library:updated")) != 1 || len(ev.of("notice")) != 0 || len(ev.of("library:changed")) != 1 {
 		t.Fatalf("запросов %d, архивов %d, итогов %d", l.hits.Load(), l.archives.Load(), len(ev.of("library:updated")))
 	}
 	// Фразу собирает фронт; Go отдаёт числа и тот же LibraryUpdate, что кнопка (073-2).
-	if u := ev.of("library:updated")[0].(LibraryUpdate); u.Added != 1 || u.Updated != 0 {
+	if u := ev.of("library:updated")[0].(libpacks.Update); u.Added != 1 || u.Updated != 0 {
 		t.Errorf("итог: %+v", u)
 	}
 	for name, tc := range map[string]struct {
@@ -487,12 +510,12 @@ func TestStartCheckOnce(t *testing.T) {
 		"из будущего": {-time.Hour, true, 1},
 		"без флажка":  {21 * time.Hour, false, 0},
 	} {
-		a.net.started.Store(false)
+		a.libp.ResetSession()
 		prefs.UpdateLibraryNet(a.cfgDir, func(n *prefs.LibraryNet) {
 			n.AtStart, n.Checked = tc.atStart, time.Now().Add(-tc.checked).UnixMilli()
 		})
 		hits := l.hits.Load()
-		a.scheduleLibraryCheck()
+		a.libp.ScheduleCheck()
 		a.bg.Wait()
 		if got := l.hits.Load() - hits; got != tc.want {
 			t.Errorf("%s: запросов %d, ждали %d", name, got, tc.want)
@@ -500,10 +523,10 @@ func TestStartCheckOnce(t *testing.T) {
 	}
 	// Выход программы до задержки — проверки нет.
 	defer setStart(time.Hour, 20*time.Hour)()
-	a.net.started.Store(false)
+	a.libp.ResetSession()
 	prefs.UpdateLibraryNet(a.cfgDir, func(n *prefs.LibraryNet) { n.Checked = 0 })
 	hits := l.hits.Load()
-	a.scheduleLibraryCheck()
+	a.libp.ScheduleCheck()
 	a.stopCancel()
 	a.bg.Wait()
 	if l.hits.Load() != hits {
@@ -521,9 +544,9 @@ func TestUpdateLibraryOffer(t *testing.T) {
 	l.publish(t, nil, zip)
 	fi, _ := os.Stat(zip)
 	startOffer = fi.Size() - 1
-	a.startCheck()
+	a.libp.StartCheck()
 	offers := ev.of("library:offer")
-	if len(offers) != 1 || offers[0].(LibraryOffer) != (LibraryOffer{Count: 1, Bytes: fi.Size()}) || l.archives.Load() != 0 {
+	if len(offers) != 1 || offers[0].(libpacks.Offer) != (libpacks.Offer{Count: 1, Bytes: fi.Size()}) || l.archives.Load() != 0 {
 		t.Fatalf("предложение: %+v, архивов %d", offers, l.archives.Load())
 	}
 	if list, _ := a.LibraryPacks(); len(list.Packs) != 1 || list.Net.Checked == 0 || len(ev.of("notice")) != 0 {
@@ -536,49 +559,9 @@ func TestUpdateLibraryOffer(t *testing.T) {
 	l.mu.Lock()
 	l.sig = nil
 	l.mu.Unlock()
-	a.startCheck()
+	a.libp.StartCheck()
 	if len(ev.of("notice")) != 0 || len(ev.of("library:offer")) != 1 {
 		t.Fatalf("ошибка при запуске дала тост")
-	}
-}
-
-// Отзыв согласия: флажок снят, идущее обновление отменено, LibraryPacks показывает настройки.
-func TestSetLibraryNet(t *testing.T) {
-	a, _ := netApp(t, false)
-	n, err := a.SetLibraryNet(true, true)
-	if err != nil || !n.Allowed || !n.AtStart {
-		t.Fatalf("разрешить: %v %+v", err, n)
-	}
-	ctx, done := a.net.begin(a.stopCtx)
-	defer done()
-	n, _ = a.SetLibraryNet(false, true)
-	if n.Allowed || n.AtStart || ctx.Err() == nil {
-		t.Fatalf("отзыв: %+v, отменено %v", n, ctx.Err())
-	}
-	if list, _ := a.LibraryPacks(); list.Net != n {
-		t.Fatalf("список: %+v", list.Net)
-	}
-	a.CancelLibrary() // без идущего — ничего
-}
-
-// Ход: смена этапа и конец — сразу, байты подряд — не чаще progressGap.
-func TestLibraryProgress(t *testing.T) {
-	a := decorApp(t)
-	ev := captureEvents(a)
-	prog := a.libProgress()
-	prog("catalog", "", 0, 0)
-	for i := range 1000 {
-		prog("download", "А", int64(i), 1000)
-	}
-	prog("download", "А", 1000, 1000)
-	prog("download", "Б", 1, 1000)
-	prog("install", "Б", 0, 0)
-	got := ev.of("library:progress")
-	if len(got) < 5 || len(got) > 10 {
-		t.Fatalf("событий %d", len(got))
-	}
-	if p := got[len(got)-3].(LibraryProgress); p.Done != 1000 || p.Title != "А" {
-		t.Errorf("конец набора: %+v", p)
 	}
 }
 
@@ -649,7 +632,7 @@ func TestUpdateLibrarySeq(t *testing.T) {
 	if _, err := a.UpdateLibrary(); !errors.Is(err, fetch.ErrSignature) || l.archives.Load() != 0 || seq() != 5 {
 		t.Fatalf("seq 4: %v, архивов %d, сохранён %d", err, l.archives.Load(), seq())
 	}
-	a.startCheck()
+	a.libp.StartCheck()
 	if l.archives.Load() != 0 || seq() != 5 {
 		t.Fatalf("seq 4 при запуске: архивов %d", l.archives.Load())
 	}
@@ -705,33 +688,36 @@ func TestUpdateLibraryDiskError(t *testing.T) {
 func TestRevokeBeforeBegin(t *testing.T) {
 	a, l := netApp(t, true)
 	l.publish(t, nil, d1Zip(t))
-	old := beforeBegin
-	t.Cleanup(func() { beforeBegin = old })
-	beforeBegin = func() {
-		if _, err := a.SetLibraryNet(false, false); err != nil {
-			t.Error(err)
+	revoke := true
+	rebuildPacks(t, a, func(h *libpacks.Host) {
+		h.Fetcher = func() *fetch.Client { return fetch.New(l.src) } // пересборка начинается с Host App: клиент — свой
+		h.BeforeBegin = func() {
+			if !revoke {
+				return
+			}
+			if _, err := a.SetLibraryNet(false, false); err != nil {
+				t.Error(err)
+			}
 		}
-	}
-	if _, err := a.UpdateLibrary(); !errors.Is(err, errNoConsent) {
+	})
+	if _, err := a.UpdateLibrary(); !errors.Is(err, libpacks.ErrNoConsent) {
 		t.Fatalf("кнопка: %v", err)
 	}
 	if _, err := a.SetLibraryNet(true, true); err != nil {
 		t.Fatal(err)
 	}
-	a.startCheck()
+	a.libp.StartCheck()
 	if l.hits.Load() != 0 {
 		t.Fatalf("запросов после отзыва: %d", l.hits.Load())
 	}
-	beforeBegin = old
+	revoke = false
 	if _, err := a.SetLibraryNet(true, false); err != nil {
 		t.Fatal(err)
 	}
 	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
 		t.Fatalf("после отзыва и согласия: %v %+v", err, res)
 	}
-	a.net.mu.Lock()
-	defer a.net.mu.Unlock()
-	if a.net.cancel != nil {
+	if a.libp.Cancelable() {
 		t.Error("отмена операции осталась")
 	}
 }

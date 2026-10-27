@@ -38,6 +38,9 @@ func TestOpenLinkURLs(t *testing.T) {
 		{"0.23.0", "license", repo + "/blob/v0.23.0/NOTICE.md"},
 		{"0.23.0", "telegram", "https://t.me/Ilya_Sosnin"},
 		{"0.23.0", "marina", "https://sosnina-films.ru/contacts"},
+		// «Об авторах» (129 §6): README библиотеки, раздел «Авторы»; метки версии нет.
+		{"0.27.0", "authors", "https://github.com/IliaSA101/sosninaalbums-library#%D0%B0%D0%B2%D1%82%D0%BE%D1%80%D1%8B"},
+		{"dev", "authors", "https://github.com/IliaSA101/sosninaalbums-library#%D0%B0%D0%B2%D1%82%D0%BE%D1%80%D1%8B"},
 		{"0.23.0", "bug", repo + "/issues/new?template=bug.yml&version=0.23.0"},
 		{"0.23.0", "idea", repo + "/issues/new?template=idea.yml"},
 		// Версия с символами адреса не ломает ни путь, ни запрос.
@@ -95,7 +98,7 @@ func TestOpenLinkUnknown(t *testing.T) {
 	opened := captureOpen(t)
 	a := NewApp()
 	for _, id := range []string{"", " ", "Source", "source ", "bug.yml", "../license", "https://evil.example/",
-		"javascript:alert(1)", "file:///etc/passwd", "github", "tg"} {
+		"javascript:alert(1)", "file:///etc/passwd", "github", "tg", "Authors", "authors ", "author"} {
 		err := a.OpenLink(id)
 		if !errors.Is(err, errUnknownLink) {
 			t.Errorf("id %q: ошибка %v, нужна errUnknownLink", id, err)

@@ -79,6 +79,42 @@ func (e *Editor) SetFlip(ids []string, axis string) model.View {
 	return e.change(func(p *model.Project) { design.SetFlip(p, ids, axis) })
 }
 
+// FaceSlots — места листа spreadID с фото (без группового) для поиска лиц: снимок под замком,
+// чтобы поиск шёл без него. Только чтение: шага отмены и rev нет. false — листа нет.
+func (e *Editor) FaceSlots(spreadID string) (hits []model.FaceHit, ok bool) {
+	e.read(func(p *model.Project) { hits, ok = design.FaceSlots(p, spreadID) })
+	return hits, ok
+}
+
+// FaceWindow — окно места с фото photoID на листе spreadID (мм) для силуэта под лицо: чтение
+// под замком, шага отмены и rev нет. ok = false — лист не виньетка, места нет, оно групповое или «Целиком».
+func (e *Editor) FaceWindow(spreadID, photoID string) (w, h float64, ok bool) {
+	e.read(func(p *model.Project) { w, h, ok = design.FaceWindow(p, spreadID, photoID) })
+	return w, h, ok
+}
+
+// BaseFaceNorm — норма листа для силуэта: память листа (nil — нет) или начальная 0,35 / 0,32;
+// та же, что берёт FitFaces. Пакет app тело правок design не видит (depguard), поэтому здесь.
+func BaseFaceNorm(norm *geom.FaceNorm) geom.FaceNorm { return design.BaseFaceNorm(norm) }
+
+// FitFaces — «Подогнать по лицам» (спека 130): кадры фото листа spreadID по лицам hits одним
+// шагом отмены; ref — место-образец «Остальные — как это лицо» (норма по нему), mode — ответ на
+// вопрос о правленых кадрах. Вторым ответом отчёт (Set — поставленные кадры для fitted App),
+// третьим — норма, по которой считали (App помнит её для листа, если RefErr пуст).
+// Договор: mode ∈ {"", "keep", "all"}, иначе холостая правка; негодная norm — как nil; hits,
+// norm и fitted только читаются под замком Editor (вызывающий отдаёт копии); остальное проверяет тело.
+func (e *Editor) FitFaces(spreadID string, hits []model.FaceHit, ref, mode string,
+	norm *geom.FaceNorm, fitted map[string]model.Frame) (model.View, model.FaceReport, geom.FaceNorm) {
+	rep, used := model.NewFaceReport(), design.BaseFaceNorm(norm)
+	if mode != design.FacesAsk && mode != design.FacesKeep && mode != design.FacesAll {
+		return e.View(), rep, used
+	}
+	v := e.change(func(p *model.Project) {
+		rep, used = design.FitFaces(p, spreadID, hits, ref, mode, norm, fitted)
+	})
+	return v, rep, used
+}
+
 // Договор: проверок нет; чужие и повторные ID пропускает тело.
 func (e *Editor) SetGray(ids []string) model.View {
 	return e.change(func(p *model.Project) { design.SetGray(p, ids) })

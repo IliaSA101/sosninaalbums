@@ -12,7 +12,7 @@ import { modes } from '../../base/prefs/view.svelte'
 import { setBackdrop } from '../../editor/backdrop/backdropact'
 import { placesel } from '../../editor/places/placesel.svelte'
 import { checkFaces, loadAndCheck, loadFonts } from '../../editor/text/fonts'
-import { autoPick, freePhotos, notRejected, pickFor } from '../../panels/library/freephotos'
+import { autoPick, fillBlock, fillLead, freePhotos, notRejected, pickFor } from '../../panels/library/freephotos'
 import { sortPhotos } from '../../panels/library/sortphotos'
 import { gallery } from '../../panels/gallery/gallery.svelte'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
@@ -86,6 +86,8 @@ export function wire() {
     // Поиск по имени — тоже фильтр ленты: автосборка берёт найденные, итог «(фильтр ленты)» (0.26-124 §8.5)
     pick: (moveUsed) =>
       pickFor(store, moveUsed, libfilter.active || folderfilter.active || nameSearch.active, binsel.curName(store.view.bins ?? [])),
+    fillBlock,
+    fillLead,
     pickFree: () => autoPick(store.visible, [], store.used, store.backdropUsed, ownMarks.map, true).ids,
     notRejected: (ids) => notRejected(ids, store.byId, ownMarks.map),
     selectedRefs: () => placesel.refs,

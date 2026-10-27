@@ -3,7 +3,7 @@
   import PrintProfileForm from './PrintProfileForm.svelte'
   import { printEdit as ui } from './printedit.svelte'
   import { printList } from './printlist.svelte'
-  import { IMPORT_HINT, NOT_OWN_HINT, SAVE_BAD_HINT, WINDOW_TITLE, removeHint, shareHint } from './printwords'
+  import { ASK_TITLE, IMPORT_HINT, NOT_OWN_HINT, SAVE_BAD_HINT, WINDOW_TITLE, removeHint, shareHint } from './printwords'
 
   // Окно «Своя типография» (123 Б3). Смонтировано всегда (как «Наборы библиотеки»): список типографий для меню и настроек
   // живёт и при закрытом окне — print:changed обновляет его. «Сохранить» создаёт новую типографию и ставит её альбому;
@@ -49,13 +49,15 @@
 
 {#if ui.open && ui.ask}
   <!-- Вопросы поверх окна: «Отмена» слева, действие справа (как в «Наборах библиотеки») -->
-  <Modal title={ui.ask.kind === 'replace' ? 'Заменить типографию?' : 'Удалить типографию?'} onclose={() => ui.dismiss()} wide>
+  <Modal title={ASK_TITLE[ui.ask.kind]} onclose={() => ui.dismiss()} wide>
     <p>{ui.ask.text}</p>
     {#if ui.ask.note}<p class="meta">{ui.ask.note}</p>{/if}
     <div class="actions">
       <button class="ghost" type="button" onclick={() => ui.dismiss()}>Отмена</button>
       {#if ui.ask.kind === 'replace'}
         <button class="primary" type="button" data-autofocus onclick={() => ui.confirmReplace()}>Заменить</button>
+      {:else if ui.ask.kind === 'base'}
+        <button class="primary" type="button" data-autofocus onclick={() => ui.confirmBase()}>Сменить</button>
       {:else}
         <button class="primary" type="button" data-autofocus onclick={() => ui.confirmRemove()}>Удалить</button>
       {/if}

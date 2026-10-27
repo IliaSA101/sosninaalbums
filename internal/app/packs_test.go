@@ -15,11 +15,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/pack"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -187,7 +189,7 @@ func TestConfirmPack(t *testing.T) {
 	if ev.count("library:changed") != 1 || len(packBgIDs(t, a)) != 2 {
 		t.Fatal("до ответа набор уже заменён")
 	}
-	if _, err := a.ConfirmPack("чужой"); !errors.Is(err, errPackStale) {
+	if _, err := a.ConfirmPack("чужой"); !errors.Is(err, libpacks.ErrStale) {
 		t.Errorf("чужой токен: %v", err)
 	}
 	// Чужой токен вопрос не снимает — «Заменить» по настоящему проходит.
@@ -198,7 +200,7 @@ func TestConfirmPack(t *testing.T) {
 	if got := packBgIDs(t, a); !slices.Equal(got, before[:1]) {
 		t.Errorf("после замены плитки %v, ждали %v", got, before[:1])
 	}
-	if _, err := a.ConfirmPack(res.Token); !errors.Is(err, errPackStale) {
+	if _, err := a.ConfirmPack(res.Token); !errors.Is(err, libpacks.ErrStale) {
 		t.Errorf("второй ответ: %v", err)
 	}
 	// Старая версия поверх новой — «стоит новее», ничего не меняется.
@@ -214,7 +216,7 @@ func TestConfirmPack(t *testing.T) {
 	if _, err := a.RemovePack("nope"); !errors.Is(err, decor.ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err := a.ConfirmPack(r3.Token); !errors.Is(err, errPackStale) {
+	if _, err := a.ConfirmPack(r3.Token); !errors.Is(err, libpacks.ErrStale) {
 		t.Errorf("вопрос пережил другую операцию: %v", err)
 	}
 	assertNoTmpLib(t, a)
@@ -235,9 +237,13 @@ func assertNoTmpLib(t *testing.T, a *App) {
 	})
 }
 
-// Просроченный вопрос не ставит набор (10 минут — подменяем срок).
+// Просроченный вопрос не ставит набор (10 минут — уводим часы службы вперёд через Host.Now).
 func TestConfirmPackExpired(t *testing.T) {
 	a := decorApp(t)
+	var shift atomic.Int64 // сдвиг часов вопроса, нс
+	rebuildPacks(t, a, func(h *libpacks.Host) {
+		h.Now = func() time.Time { return time.Now().Add(time.Duration(shift.Load())) }
+	})
 	v1 := d1Zip(t)
 	if _, err := a.AddPackPath(v1); err != nil {
 		t.Fatal(err)
@@ -246,10 +252,8 @@ func TestConfirmPackExpired(t *testing.T) {
 	if err != nil || res.Token == "" {
 		t.Fatal(err)
 	}
-	a.packs.pendMu.Lock()
-	a.packs.pending.until = time.Now().Add(-time.Second)
-	a.packs.pendMu.Unlock()
-	if _, err := a.ConfirmPack(res.Token); !errors.Is(err, errPackStale) {
+	shift.Store(int64(libpacks.TTL + time.Second))
+	if _, err := a.ConfirmPack(res.Token); !errors.Is(err, libpacks.ErrStale) {
 		t.Errorf("просроченный: %v", err)
 	}
 	if list, _ := a.LibraryPacks(); list.Packs[1].Version != 1 {
@@ -292,23 +296,24 @@ func TestAddPackPathChecks(t *testing.T) {
 		if strings.Contains(err.Error(), dir) || strings.Contains(err.Error(), p) {
 			t.Errorf("%s: путь в тексте ошибки: %v", name, err)
 		}
-		if (name == "сетевой" || name == "относительный") && !errors.Is(err, errPackRemote) {
+		if (name == "сетевой" || name == "относительный") && !errors.Is(err, libpacks.ErrRemote) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if !a.packs.lock() {
+	release, ok := a.libp.Hold()
+	if !ok {
 		t.Fatal("занято с начала")
 	}
-	if _, err := a.AddPackPath(d1Zip(t)); !errors.Is(err, errPackBusy) {
+	if _, err := a.AddPackPath(d1Zip(t)); !errors.Is(err, libpacks.ErrBusy) {
 		t.Errorf("занято: %v", err)
 	}
 	if list, _ := a.LibraryPacks(); !list.Busy {
 		t.Error("список не видит занятость")
 	}
-	if _, err := a.RemovePack("ivory"); !errors.Is(err, errPackBusy) {
+	if _, err := a.RemovePack("ivory"); !errors.Is(err, libpacks.ErrBusy) {
 		t.Errorf("удаление при занятости: %v", err)
 	}
-	a.packs.unlock()
+	release()
 	if list, _ := a.LibraryPacks(); len(list.Packs) != 1 || list.Busy {
 		t.Errorf("библиотека изменилась: %+v", list)
 	}
@@ -514,13 +519,6 @@ func TestAddPackEmpty(t *testing.T) {
 		t.Errorf("пустой набор поставился: %+v", list.Packs)
 	}
 	assertNoTmpLib(t, a)
-	// Другие ошибки packEmptyErr не трогает; без причин — ошибка как есть.
-	if err := packEmptyErr(errPackBusy, []DecorSkip{{Name: "x", Why: "y"}}); err.Error() != errPackBusy.Error() {
-		t.Errorf("чужая ошибка: %v", err)
-	}
-	if err := packEmptyErr(decor.ErrPackEmpty, nil); err.Error() != decor.ErrPackEmpty.Error() {
-		t.Errorf("без причин: %v", err)
-	}
 }
 
 // Манифест отбросил все предметы (SVG): текст ошибки AddPackPath несёт первую причину и «и ещё N»,

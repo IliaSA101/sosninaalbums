@@ -98,8 +98,16 @@
 
   // Ползунок масштаба: предпросмотр через framelive, SetFrame — на отпускании.
   const zoomValue = (e: Event) => +(e.currentTarget as HTMLInputElement).value / 100
+  // Вернули к исходному масштабу: change не придёт, предпросмотр (и силуэт) гасим сразу.
+  function zoomLive(e: Event) {
+    const f = zoomFrame(frame, zoomValue(e))
+    const same = Math.round(f.s * 100) === Math.round(frame.s * 100) // шаг ползунка — 1 %
+    if (same) framelive.clear()
+    else framelive.setZoom(id, f)
+  }
   async function zoomCommit(e: Event) {
     const f = zoomFrame(frame, zoomValue(e))
+    framelive.set(id, f) // кадр остаётся до ответа Go, силуэт гаснет на отпускании
     await store.run(Api.SetFrame(id, f.s, f.x, f.y))
     framelive.clear()
   }
@@ -133,7 +141,7 @@
     value={Math.round(cur.s * 100)}
     aria-label="Масштаб кадра"
     title="Масштаб кадра"
-    oninput={(e) => framelive.set(id, zoomFrame(frame, zoomValue(e)))}
+    oninput={zoomLive}
     onchange={zoomCommit}
     onpointerdown={(e) => e.stopPropagation()}
     onpointerup={(e) => e.currentTarget.blur()}

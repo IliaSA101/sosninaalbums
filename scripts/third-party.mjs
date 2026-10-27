@@ -3,7 +3,8 @@
 // у модуля пометка ОС, если он не во всех трёх; текст — ближайший к пакету файл LICENSE в кэше модулей
 // (как у go-licenses, но без него: go-licenses работает только под ОС машины); лицензия стандартной
 // библиотеки — из GOROOT; npm-пакеты — список NPM ниже (рантайм Svelte и его зависимости; тексты — из
-// frontend/node_modules); шрифты — internal/text/fonts. Только Node. Запуск из корня:
+// frontend/node_modules); шрифты — internal/text/fonts; веса нейросетей — список MODELS ниже (текст лицензии
+// лежит рядом с весами в internal/faces). Только Node. Запуск из корня:
 // node scripts/third-party.mjs (нужны go и frontend/node_modules; GOTMPDIR задан в окружении).
 // При смене состава сборки обновить NPM и проверить diff.
 import fs from 'fs'
@@ -45,6 +46,20 @@ const NPM = [
   ['svelte', 'MIT'],
   ['zimmerframe', 'MIT'],
 ]
+// Веса моделей, вшитые в программу: [имя, версия, лицензия, правообладатель, источник, файл лицензии от корня,
+// пояснение]. Текст лицензии берётся из файла рядом с весами и должен совпадать с лицензией вида: незнакомая
+// или не та — ошибка (новую модель проверить глазами, design 130 §9).
+const MODELS = [
+  [
+    'YuNet (face_detection_yunet_2023mar.onnx)',
+    '2023mar',
+    'MIT',
+    '© 2020 Shiqi Yu',
+    'OpenCV Zoo, https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet',
+    'internal/faces/LICENSE-yunet',
+    'Веса вшиты в программу (internal/faces), вывод сети — собственный код проекта на Go; код OpenCV не используется.',
+  ],
+]
 const norm = (t) =>
   t
     .replace(/\r\n/g, '\n')
@@ -63,7 +78,7 @@ function add(name, ver, lic, text) {
   g.lic.add(lic)
   if (!g.items.includes(`${name} ${ver}`)) g.items.push(`${name} ${ver}`)
 }
-const section = { go: [], npm: [] }
+const section = { go: [], npm: [], models: [] }
 // Вид лицензии по тексту; незнакомый — ошибка (новый модуль проверить глазами и дополнить).
 // Файл с несколькими лицензиями (MIT + Apache) помечается всеми; BSD-4 (пункт о рекламе) — ошибка.
 function classify(text, where) {
@@ -143,6 +158,16 @@ Copyright (c) ${au}
   }
   add(name, pj.version, lic, fs.readFileSync(dir + '/' + f, 'utf8'))
 }
+// Модели: текст лицензии из файла рядом с весами; MIT-тексты разных правообладателей остаются отдельными.
+for (const [name, ver, lic, holder, source, file, note] of MODELS) {
+  const full = R + '/' + file
+  if (!fs.existsSync(full)) throw new Error('нет файла лицензии модели: ' + file)
+  const text = fs.readFileSync(full, 'utf8')
+  const kind = classify(text, file)
+  if (kind !== lic) throw new Error(`лицензия модели ${name}: в файле ${kind}, в списке MODELS ${lic}`)
+  section.models.push(`${name}, ${ver} (${lic}, ${holder})\n    Источник: ${source}\n    ${note}`)
+  add(name, ver, lic, text)
+}
 const fontsDir = W + '/internal/text/fonts/'
 // Гарнитуры: [имя, файл лицензии, автор, зарезервированное имя, изменения]. Число гарнитур и файлов
 // в заголовке раздела 3 считается ниже по этому массиву и по *.ttf в папке.
@@ -191,7 +216,7 @@ Sosnina Albums — программа вёрстки свадебных фото
 распространяется по лицензии GNU General Public License версии 3 (только этой версии,
 GPL-3.0-only) с дополнительным условием по п. 7(b) — файлы LICENSE и NOTICE.md; версии
 до 0.22.x включительно выпущены по лицензии MIT. В программу и её исполняемый файл
-входят сторонние компоненты — Go-модули, npm-пакеты фронтенда и шрифты; их авторы,
+входят сторонние компоненты — Go-модули, npm-пакеты фронтенда, шрифты и веса нейросети; их авторы,
 версии и лицензии перечислены ниже, полные тексты лицензий приведены в конце файла.
 Все они допускают распространение вместе с программой под GPL-3.0 (Apache-2.0
 совместима с GPL версии 3). Список составлен по go list для сборок Windows, macOS
@@ -201,8 +226,9 @@ GPL-3.0-only) с дополнительным условием по п. 7(b) —
   1. Go-модули в исполняемом файле
   2. npm-пакеты в сборке интерфейса
   3. Шрифты (SIL Open Font License 1.1)
-  4. Прочее (системные библиотеки)
-  5. Тексты лицензий
+  4. Модели (веса нейросети)
+  5. Прочее (системные библиотеки)
+  6. Тексты лицензий
 
 1. Go-модули в исполняемом файле (${section.go.length})
 -------------------------------------------
@@ -244,7 +270,15 @@ for (const [n, f] of fonts.map((x) => [x[0], x[1]])) {
   // тело OFL общее: сверяем сравнением после нормализации
   add(n, '(шрифт)', 'OFL-1.1', body)
 }
-out.push(`4. Прочее (системные библиотеки)
+out.push(`4. Модели (${section.models.length}; веса вшиты в программу)
+----------------------------------------
+Нейросеть находит лица на фото для кнопки «Подогнать по лицам». Веса — данные, не код.
+${section.models.map((x) => '  ' + x).join('\n')}
+Код обучения сети (libfacedetection.train) — BSD-3-Clause, в программу не входит. Данные обучения
+(WIDER FACE) предназначены для исследований; на веса под MIT это прямо не переносится — у любого
+открытого детектора вопрос тот же.
+`)
+out.push(`5. Прочее (системные библиотеки)
 ---------------------------------
 Не входят в поставку, подключаются из системы:
   Windows — Microsoft WebView2 (Evergreen Bootstrapper и WebView2Loader.dll встроены через
@@ -254,7 +288,7 @@ out.push(`4. Прочее (системные библиотеки)
   Linux — GTK 3, WebKitGTK 4.1 и libsoup 3 (LGPL-2.1 и новее, BSD); динамическое подключение,
     ставятся из репозитория дистрибутива как зависимости пакета .deb.
 `)
-out.push(`5. Тексты лицензий
+out.push(`6. Тексты лицензий
 ------------------`)
 let i = 0
 for (const [t, g] of groups) {
@@ -271,6 +305,7 @@ fs.writeFileSync(
 console.log(
   section.go.length,
   section.npm.length,
+  section.models.length,
   groups.size,
   [...groups.values()].map((g) => [...g.lic].join('/') + ':' + g.items.length).join(' | '),
 )

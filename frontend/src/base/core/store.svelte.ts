@@ -217,8 +217,8 @@ class Store extends Nav {
     }
   }
 
-  notify(text: string, kind: Toast['kind'] = 'info', action?: Toast['action']) {
-    this.toasts.notify(text, kind, action)
+  notify(text: string, kind: Toast['kind'] = 'info', action?: Toast['action'], ms?: number) {
+    this.toasts.notify(text, kind, action, ms)
   }
 
   // Все правки идут сюда: Go возвращает новое состояние альбома.
@@ -394,16 +394,23 @@ class Store extends Nav {
     stepToast(this, lead, notes, named)
   }
 
-  // «Заполнить пустые места»: выделенные фото (иначе все не в альбоме) — в пустые места, начиная с текущего разворота.
+  // «Заполнить пустые места»: выделенные фото (иначе все не в альбоме) — в пустые места, начиная с текущего листа
+  // (с обложки — сначала обложка). Отсюда мест нет, хотя в альбоме они есть, — тост «где», Go не зовём (132-16).
   async fillPlaces() {
+    const where = this.view.emptyPlaces > 0 ? this.hooks.fillBlock(this.view, this.onCover, this.current) : ''
+    if (where) return this.notify(where)
     const { ids, skipped } = this.hooks.pick(false)
     if (ids.length === 0) return
+    const before = this.view
+    const picked = this.selectedIds.length > 0 // выделение сбрасывается после правки, а остаток важен только ему
     try {
       const r = (await Api.FillPlaces(ids, this.spread?.id ?? '')) as unknown as GridResult
       this.apply(r.view)
       this.selected.clear()
-      const lead =
-        r.left > 0 || skipped > 0 ? withSkipped(r.left > 0 ? `Не хватило мест: ${r.left} фото остались в ленте` : '', skipped) : ''
+      // Числа тоста — разность видов, а не счёт по выделению: выделенное фото с фона Go пропускает.
+      // Остаток ленты — только при выделении: выделенное не влезло. Без выделения «фото остались» — очевидное (132-22).
+      const left = picked && r.left > 0 ? `Не хватило мест: ${r.left} фото остались в ленте` : ''
+      const lead = withSkipped([this.hooks.fillLead(before, this.view), left].filter(Boolean).join('. '), skipped)
       this.stepToast(lead, [], r.named ?? [])
     } catch (e) {
       this.notify(errText(e), 'error')

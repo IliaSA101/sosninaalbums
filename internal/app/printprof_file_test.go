@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
+	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -105,11 +105,11 @@ func TestImportBuiltinIdCopies(t *testing.T) {
 		t.Errorf("событий %d, своих %d", ev.count("print:changed"), ownCount(a))
 	}
 	// Тот же файл ещё раз: название уже занято копией.
-	if _, err := a.importPrintPath(path); err == nil || err.Error() != "Такое название уже есть" || ownCount(a) != 1 {
+	if _, err := a.ownp.ImportPath(path); err == nil || err.Error() != "Такое название уже есть" || ownCount(a) != 1 {
 		t.Errorf("повтор: %v, своих %d", err, ownCount(a))
 	}
 	// Название встроенной в файле с id встроенной — тоже отказ.
-	if _, err := a.importPrintPath(profileFile(t, "g.saprint", encoded(t, builtinCopy(t, "fsfera", "Фотосфера")))); err == nil {
+	if _, err := a.ownp.ImportPath(profileFile(t, "g.saprint", encoded(t, builtinCopy(t, "fsfera", "Фотосфера")))); err == nil {
 		t.Error("название встроенной принято")
 	}
 	// Любой чужой id (не own-…) — копия.
@@ -119,7 +119,7 @@ func TestImportBuiltinIdCopies(t *testing.T) {
 		other.Products[i].ID = "mytypo-" + strings.TrimPrefix(other.Products[i].ID, "fabrika-")
 	}
 	other.Default = other.Products[0].ID
-	r2, err := a.importPrintPath(profileFile(t, "h.saprint", encoded(t, other)))
+	r2, err := a.ownp.ImportPath(profileFile(t, "h.saprint", encoded(t, other)))
 	if err != nil || !r2.Copied || !printprof.ValidOwnID(r2.Info.ID) {
 		t.Errorf("чужой id: %+v %v", r2, err)
 	}
@@ -130,7 +130,7 @@ func TestImportBuiltinIdCopies(t *testing.T) {
 func TestImportOwnKeepsID(t *testing.T) {
 	a, _ := printApp(t)
 	p := ownFile(t, a, "own-1a2b3c4d", "От подруги", 1)
-	res, err := a.importPrintPath(profileFile(t, "o.saprint", encoded(t, p)))
+	res, err := a.ownp.ImportPath(profileFile(t, "o.saprint", encoded(t, p)))
 	if err != nil || res.Copied || res.Info.ID != "own-1a2b3c4d" {
 		t.Fatalf("импорт: %+v %v", res, err)
 	}
@@ -140,7 +140,7 @@ func TestImportOwnKeepsID(t *testing.T) {
 		bad.Products[i].ID = "own-2b3c4d5e-x" + string(rune('a'+i))
 	}
 	bad.Default = bad.Products[0].ID
-	r2, err := a.importPrintPath(profileFile(t, "b.saprint", encoded(t, bad)))
+	r2, err := a.ownp.ImportPath(profileFile(t, "b.saprint", encoded(t, bad)))
 	if err != nil || !r2.Copied || r2.Info.ID == "own-2b3c4d5e" {
 		t.Fatalf("чужие изделия: %+v %v", r2, err)
 	}
@@ -153,7 +153,7 @@ func TestImportOwnKeepsID(t *testing.T) {
 func TestImportReplaceOwn(t *testing.T) {
 	a, ev := printApp(t)
 	v1 := ownFile(t, a, "own-aaaa0001", "Общая", 1)
-	if _, err := a.importPrintPath(profileFile(t, "1.saprint", encoded(t, v1))); err != nil {
+	if _, err := a.ownp.ImportPath(profileFile(t, "1.saprint", encoded(t, v1))); err != nil {
 		t.Fatal(err)
 	}
 	keys := func() []string {
@@ -167,7 +167,7 @@ func TestImportReplaceOwn(t *testing.T) {
 	v2 := v1
 	v2.Version, v2.Page.Bleed = 2, 5
 	path := profileFile(t, "2.saprint", encoded(t, v2))
-	res, err := a.importPrintPath(path)
+	res, err := a.ownp.ImportPath(path)
 	want := "Заменить типографию «Общая» (версия 1) типографией из файла (версия 2)?"
 	if err != nil || res.Ask != "replace" || res.Question != want || res.Token == "" {
 		t.Fatalf("вопрос: %+v %v", res, err)
@@ -177,11 +177,11 @@ func TestImportReplaceOwn(t *testing.T) {
 	}
 	// Чужой токен и пустой — устарело; вопрос от этого не пропал.
 	for _, tok := range []string{"", "неверный"} {
-		if _, err := a.ConfirmImportPrintProfile(tok); err != errPrintStale {
+		if _, err := a.ConfirmImportPrintProfile(tok); err != ownprint.ErrStale {
 			t.Errorf("токен %q: %v", tok, err)
 		}
 	}
-	res, err = a.importPrintPath(path) // повторный вопрос вытеснил прежний токен
+	res, err = a.ownp.ImportPath(path) // повторный вопрос вытеснил прежний токен
 	if err != nil || res.Ask != "replace" {
 		t.Fatal(err)
 	}
@@ -198,11 +198,11 @@ func TestImportReplaceOwn(t *testing.T) {
 	if ev.count("print:changed") != 2 {
 		t.Errorf("событий %d", ev.count("print:changed"))
 	}
-	if _, err := a.ConfirmImportPrintProfile(res.Token); err != errPrintStale {
+	if _, err := a.ConfirmImportPrintProfile(res.Token); err != ownprint.ErrStale {
 		t.Errorf("второй ответ: %v", err)
 	}
 	// Те же данные — «такая уже есть», токена нет.
-	same, err := a.importPrintPath(path)
+	same, err := a.ownp.ImportPath(path)
 	if err != nil || same.Ask != "same" || same.Token != "" {
 		t.Errorf("то же: %+v %v", same, err)
 	}
@@ -212,7 +212,7 @@ func TestImportReplaceOwn(t *testing.T) {
 func TestImportReplaceStale(t *testing.T) {
 	a, _ := printApp(t)
 	v1 := ownFile(t, a, "own-bbbb0001", "Исходная", 1)
-	if _, err := a.importPrintPath(profileFile(t, "1.saprint", encoded(t, v1))); err != nil {
+	if _, err := a.ownp.ImportPath(profileFile(t, "1.saprint", encoded(t, v1))); err != nil {
 		t.Fatal(err)
 	}
 	v2 := v1
@@ -220,34 +220,34 @@ func TestImportReplaceStale(t *testing.T) {
 	path := profileFile(t, "2.saprint", encoded(t, v2))
 	ask := func() string {
 		t.Helper()
-		r, err := a.importPrintPath(path)
+		r, err := a.ownp.ImportPath(path)
 		if err != nil || r.Ask != "replace" {
 			t.Fatalf("вопрос: %+v %v", r, err)
 		}
 		return r.Token
 	}
 	tok := ask()
-	a.prints.pend.until = time.Now().Add(-time.Second)
-	if _, err := a.ConfirmImportPrintProfile(tok); err != errPrintStale {
+	a.ownp.ExpirePending()
+	if _, err := a.ConfirmImportPrintProfile(tok); err != ownprint.ErrStale {
 		t.Errorf("просрочен: %v", err)
 	}
 	tok = ask()
 	if _, err := a.DeletePrintProfile("own-bbbb0001"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.ConfirmImportPrintProfile(tok); err != errPrintStale || ownCount(a) != 0 {
+	if _, err := a.ConfirmImportPrintProfile(tok); err != ownprint.ErrStale || ownCount(a) != 0 {
 		t.Errorf("удалена: %v, своих %d", err, ownCount(a))
 	}
 	// Название файла занято другой своей — отказ уже на вопросе.
-	if _, err := a.importPrintPath(profileFile(t, "1.saprint", encoded(t, v1))); err != nil {
+	if _, err := a.ownp.ImportPath(profileFile(t, "1.saprint", encoded(t, v1))); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.importPrintPath(profileFile(t, "x.saprint", encoded(t, ownFile(t, a, "own-bbbb0002", "Занятое", 1)))); err != nil {
+	if _, err := a.ownp.ImportPath(profileFile(t, "x.saprint", encoded(t, ownFile(t, a, "own-bbbb0002", "Занятое", 1)))); err != nil {
 		t.Fatal(err)
 	}
 	clash := v2
 	clash.Name, clash.Gen = "Занятое", "Занятое"
-	if _, err := a.importPrintPath(profileFile(t, "c.saprint", encoded(t, clash))); err == nil || err.Error() != "Такое название уже есть" {
+	if _, err := a.ownp.ImportPath(profileFile(t, "c.saprint", encoded(t, clash))); err == nil || err.Error() != "Такое название уже есть" {
 		t.Errorf("название другой своей: %v", err)
 	}
 }
@@ -279,7 +279,7 @@ func TestImportBadFiles(t *testing.T) {
 		{"пустой путь", "", "не на локальном диске"},
 	}
 	for _, c := range cases {
-		_, err := a.importPrintPath(c.path)
+		_, err := a.ownp.ImportPath(c.path)
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, ждали %q", c.name, err, c.want)
 			continue
@@ -293,7 +293,7 @@ func TestImportBadFiles(t *testing.T) {
 	}
 	// Ровно предел и годный профиль, дополненный пробелами до 64 КБ, читается.
 	padded := append(append([]byte{}, good...), []byte(strings.Repeat(" ", printprof.MaxSize-len(good)))...)
-	if r, err := a.importPrintPath(profileFile(t, "pad.saprint", padded)); err != nil || r.Info.ID != "own-cccc0001" {
+	if r, err := a.ownp.ImportPath(profileFile(t, "pad.saprint", padded)); err != nil || r.Info.ID != "own-cccc0001" {
 		t.Errorf("ровно предел: %+v %v", r, err)
 	}
 }
@@ -337,7 +337,7 @@ func TestSharePrintProfile(t *testing.T) {
 	if err != nil || sh.Name != "Для друга.saprint" {
 		t.Fatalf("поделиться: %+v %v", sh, err)
 	}
-	if _, err := a.SharePrintProfile(res.ID); err != errPrintExists {
+	if _, err := a.SharePrintProfile(res.ID); err != ownprint.ErrExists {
 		t.Errorf("повтор с дописанным именем: %v", err)
 	}
 	pickSave(t, filepath.Join(dir, "Для друга.saprint")) // подтверждённая диалогом замена — можно
@@ -354,7 +354,7 @@ func TestSharePrintProfile(t *testing.T) {
 	}
 	// Встроенную, чужой id и пустой — нельзя.
 	for _, id := range []string{"fabrika", "fsfera", "netprint", "нет", ""} {
-		if _, err := a.SharePrintProfile(id); err != errPrintNotOwn {
+		if _, err := a.SharePrintProfile(id); err != ownprint.ErrNotOwn {
 			t.Errorf("«Поделиться» %q: %v", id, err)
 		}
 	}
@@ -363,8 +363,8 @@ func TestSharePrintProfile(t *testing.T) {
 	b.cfgDir, b.emit = testkit.TempDir(t), func(string, ...any) {}
 	b.openDecor()
 	t.Cleanup(func() { printprof.Install(nil) })
-	b.reloadPrints()
-	if _, err := b.importPrintPath(filepath.Join(dir, "Для друга.saprint")); err != nil {
+	b.ownp.Reload()
+	if _, err := b.ownp.ImportPath(filepath.Join(dir, "Для друга.saprint")); err != nil {
 		t.Fatal(err)
 	}
 	got, ok := printprof.Current().ByID(res.ID)
@@ -378,7 +378,7 @@ func TestShareRemotePath(t *testing.T) {
 	a, _ := printApp(t)
 	res := saved(t, a, editOf(t, a, "fabrika", "Сетевая"))
 	pickSave(t, "относительный.saprint")
-	if _, err := a.SharePrintProfile(res.ID); err != errPrintRemote {
+	if _, err := a.SharePrintProfile(res.ID); err != ownprint.ErrRemote {
 		t.Errorf("относительный путь: %v", err)
 	}
 }
@@ -407,15 +407,15 @@ func FuzzImportSaprint(f *testing.F) {
 	a.cfgDir, a.emit = testkit.TempDir(f), func(string, ...any) {}
 	a.openDecor()
 	f.Cleanup(func() { a.closeBackground(); printprof.Install(nil) })
-	a.reloadPrints()
+	a.ownp.Reload()
 	path := filepath.Join(dir, "f.saprint")
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if err := os.WriteFile(path, data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		parsed, perr := printprof.Parse(data)
-		free := perr == nil && !nameTaken(printprof.Current(), parsed.Name, "")
-		res, err := a.importPrintPath(path)
+		free := perr == nil && !ownprint.NameTaken(printprof.Current(), parsed.Name, "")
+		res, err := a.ownp.ImportPath(path)
 		switch {
 		case err != nil:
 			if strings.Contains(err.Error(), dir) {
@@ -434,12 +434,12 @@ func FuzzImportSaprint(f *testing.F) {
 				t.Fatal(derr)
 			}
 		}
-		a.prints.pend = nil
+		a.ownp.DropPending()
 	})
 }
 
 // fuzzReimport — принятая своя p: тот же файл даёт «same», версия выше — вопрос о замене; ответ
-// с чужим, просроченным и повторным токеном — errPrintStale, верный — замена.
+// с чужим, просроченным и повторным токеном — ownprint.ErrStale, верный — замена.
 func fuzzReimport(t *testing.T, a *App, path string, p printprof.Profile) {
 	t.Helper()
 	write := func(data []byte) {
@@ -452,7 +452,7 @@ func fuzzReimport(t *testing.T, a *App, path string, p printprof.Profile) {
 		t.Fatal(err)
 	}
 	write(data)
-	if res, err := a.importPrintPath(path); err != nil || res.Ask != "same" {
+	if res, err := a.ownp.ImportPath(path); err != nil || res.Ask != "same" {
 		t.Fatalf("повтор того же файла: %q, %v", res.Ask, err)
 	}
 	p.Version++
@@ -460,27 +460,27 @@ func fuzzReimport(t *testing.T, a *App, path string, p printprof.Profile) {
 		return // версия на пределе — вопроса не будет
 	}
 	write(data)
-	ask := func() PrintImport {
-		res, err := a.importPrintPath(path)
+	ask := func() ownprint.Import {
+		res, err := a.ownp.ImportPath(path)
 		if err != nil || res.Ask != "replace" || res.Token == "" {
 			t.Fatalf("вопрос о замене: %q, %v", res.Ask, err)
 		}
 		return res
 	}
 	res := ask()
-	if _, err := a.ConfirmImportPrintProfile(res.Token + "0"); err != errPrintStale {
+	if _, err := a.ConfirmImportPrintProfile(res.Token + "0"); err != ownprint.ErrStale {
 		t.Fatalf("чужой токен: %v", err)
 	}
 	res = ask()
-	a.prints.pend.until = time.Now().Add(-time.Second)
-	if _, err := a.ConfirmImportPrintProfile(res.Token); err != errPrintStale {
+	a.ownp.ExpirePending()
+	if _, err := a.ConfirmImportPrintProfile(res.Token); err != ownprint.ErrStale {
 		t.Fatalf("просроченный токен: %v", err)
 	}
 	res = ask()
 	if _, err := a.ConfirmImportPrintProfile(res.Token); err != nil {
 		t.Fatalf("замена: %v", err)
 	}
-	if _, err := a.ConfirmImportPrintProfile(res.Token); err != errPrintStale {
+	if _, err := a.ConfirmImportPrintProfile(res.Token); err != ownprint.ErrStale {
 		t.Fatalf("повторный токен: %v", err)
 	}
 	if cur, ok := printprof.Current().ByID(p.ID); !ok || cur.Version != p.Version {

@@ -364,6 +364,38 @@ export namespace app {
 	        this.print = source["print"];
 	    }
 	}
+	export class FacesResult {
+	    view: model.View;
+	    report: model.FaceReport;
+	
+	    static createFrom(source: any = {}) {
+	        return new FacesResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.view = this.convertValues(source["view"], model.View);
+	        this.report = this.convertValues(source["report"], model.FaceReport);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class FontAdded {
 	    id: string;
 	    name: string;
@@ -3452,6 +3484,64 @@ export namespace model {
 		}
 	}
 	
+	export class FaceGuide {
+	    on: boolean;
+	    w: number;
+	    h: number;
+	    eyeY: number;
+	    path: number[][];
+	
+	    static createFrom(source: any = {}) {
+	        return new FaceGuide(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.on = source["on"];
+	        this.w = source["w"];
+	        this.h = source["h"];
+	        this.eyeY = source["eyeY"];
+	        this.path = source["path"];
+	    }
+	}
+	export class FaceReport {
+	    fitted: number;
+	    noFace: number;
+	    many: number;
+	    missing: number;
+	    small: number;
+	    big: number;
+	    edge: number;
+	    contain: number;
+	    manual: number;
+	    changed: number;
+	    check: string[];
+	    short: string[];
+	    asked: boolean;
+	    refErr?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FaceReport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fitted = source["fitted"];
+	        this.noFace = source["noFace"];
+	        this.many = source["many"];
+	        this.missing = source["missing"];
+	        this.small = source["small"];
+	        this.big = source["big"];
+	        this.edge = source["edge"];
+	        this.contain = source["contain"];
+	        this.manual = source["manual"];
+	        this.changed = source["changed"];
+	        this.check = source["check"];
+	        this.short = source["short"];
+	        this.asked = source["asked"];
+	        this.refErr = source["refErr"];
+	    }
+	}
 	export class FontUse {
 	    id: string;
 	    name: string;
@@ -4067,6 +4157,8 @@ export namespace model {
 	    minDPI: number;
 	    lowDPI: number;
 	    emptyPlaces: number;
+	    fillFrom: number[];
+	    coverFill: number;
 	    textMaxW: number;
 	    backdropUsed: string[];
 	    libPhotos: string[];
@@ -4106,6 +4198,8 @@ export namespace model {
 	        this.minDPI = source["minDPI"];
 	        this.lowDPI = source["lowDPI"];
 	        this.emptyPlaces = source["emptyPlaces"];
+	        this.fillFrom = source["fillFrom"];
+	        this.coverFill = source["coverFill"];
 	        this.textMaxW = source["textMaxW"];
 	        this.backdropUsed = source["backdropUsed"];
 	        this.libPhotos = source["libPhotos"];

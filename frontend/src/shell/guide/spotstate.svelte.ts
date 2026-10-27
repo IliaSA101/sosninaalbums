@@ -3,7 +3,7 @@
 // и холста обрезал бы обводку.
 import { HOLD_FAST_MS, HOLD_SLOW_MS, SPOT_HINT_MS, SPOT_MS, isCandidate, pickTarget, revealShift, ringBox, type Box } from './spot'
 import { spotId } from './show'
-import type { SpotKey } from './articles'
+import type { SpotKey } from '../guidetext/articles'
 import { cardGroups, isGroupHost, isGroupId } from '../../base/prefs/cardgroups.svelte'
 import { modes } from '../../base/prefs/view.svelte'
 

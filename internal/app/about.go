@@ -11,12 +11,14 @@ import (
 const (
 	telegramURL = "https://t.me/Ilya_Sosnin"
 	marinaURL   = "https://sosnina-films.ru/contacts"
+	// authorsURL — «Об авторах» в окне «Наборы» (129 §6): README библиотеки, раздел «Авторы» (#авторы).
+	authorsURL = "https://github.com/IliaSA101/sosninaalbums-library#%D0%B0%D0%B2%D1%82%D0%BE%D1%80%D1%8B"
 )
 
 // errUnknownLink — id ссылки вне белого списка linkURL.
 var errUnknownLink = errors.New("неизвестная ссылка")
 
-// linkURL — адрес по id (source, license, telegram, marina, bug, idea, videos, download); ver — версия программы.
+// linkURL — адрес по id (source, license, telegram, marina, authors, bug, idea, videos, download); ver — версия программы.
 // Ссылки на файлы идут на метку своей версии (v<ver>): код и текст лицензии те же, что в
 // запущенной сборке; у dev метки нет — берётся основная ветка. false — id неизвестен.
 func linkURL(id, ver string) (string, bool) {
@@ -36,6 +38,8 @@ func linkURL(id, ver string) (string, bool) {
 		return telegramURL, true
 	case "marina":
 		return marinaURL, true
+	case "authors":
+		return authorsURL, true
 	case "bug":
 		q := url.Values{"template": {"bug.yml"}}
 		if tagged {

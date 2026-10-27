@@ -2,7 +2,7 @@
 import { Api, store } from '../../base/core/store.svelte'
 import { errText } from '../../base/words/errtext'
 
-export type LinkId = 'source' | 'license' | 'telegram' | 'marina' | 'bug' | 'idea' | 'videos' | 'download'
+export type LinkId = 'source' | 'license' | 'telegram' | 'marina' | 'authors' | 'bug' | 'idea' | 'videos' | 'download'
 
 // Условие 7(b) лицензии (NOTICE.md): изменённые версии показывают эту строку и адрес в этом окне.
 export const BASED_ON = 'Основано на Sosnina Albums, автор Илья Соснин'

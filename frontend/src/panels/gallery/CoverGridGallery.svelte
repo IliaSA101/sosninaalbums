@@ -5,7 +5,7 @@
   import { errText } from '../../base/words/errtext'
   import { tplio } from '../../shell/menu/tplio.svelte'
   import { applyCoverChoice } from '../layouts/gridactions'
-  import { coverPreview, coverSourceTexts, dropTitle, N_ITEMS } from './gridgallery'
+  import { coverAreas, coverHasBorders, coverPreview, coverSourceTexts, dropTitle, N_ITEMS } from './gridgallery'
   import type { CoverGridChoices, GridChoice, LayoutScope } from '../../base/core/types'
   import TplRow from '../../base/tpl/TplRow.svelte'
   import TplItem from '../../base/tpl/TplItem.svelte'
@@ -15,10 +15,12 @@
   import { openN } from '../layouts/coverbar'
   import { tplSources } from '../../base/tpl/tplsource'
   import GalleryHead from './GalleryHead.svelte'
+  import GridTplModals from './GridTplModals.svelte'
   import { liveRadius, shapeCss } from '../../base/geom/shape'
 
-  // Галерея раскладок сторонки обложки (127): та же полоса «Шаблоны», что у разворота (0.26-127-13), но без вкладок
-  // и «Сохранить как шаблон…». Ряды «По фото · Встроенные · Мои» и доли зоны приходят от Go (CoverGridChoices);
+  // Галерея раскладок сторонки обложки (127): та же полоса «Шаблоны», что у разворота (0.26-127-13), но без вкладок;
+  // «Сохранить как шаблон…», ✎ и × у «Моих» — те же окна, что у разворота (132, GridTplModals).
+  // Ряды «По фото · Встроенные · Мои» и доли зоны приходят от Go (CoverGridChoices);
   // здесь только перевод долей в проценты карточки и в мм листа для предпросмотра.
   const H = 80 // высота карточки
   // g приходит от LayoutGallery: пока галерея уезжает, gallery.cur уже null.
@@ -41,13 +43,14 @@
   // Ответ Go; ключ — для какой сторонки и вкладки он посчитан.
   let c = $state<{ key: string; res: CoverGridChoices } | null>(null)
   let loading = $state(false)
+  let again = $state(0) // перезапрос после правки шаблонов
   let req = 0
   const key = $derived(`${scope}|${nWant}`)
   $effect(() => {
     const k = key
     const sc = scope
     const n = nWant
-    void [store.view.rev, tplio.seq] // правка вида или шаблоны из файла — перезапрос
+    void [again, store.view.rev, tplio.seq] // правка вида, своих шаблонов или шаблоны из файла — перезапрос
     const my = ++req
     loading = true
     Api.CoverGridChoices(sc, n)
@@ -77,6 +80,7 @@
       canVar ? (r?.byPhoto ?? []) : undefined,
     )
   const view = $derived(build(res))
+  const mine = $derived(canTpl ? (res?.mine ?? []) : [])
   // Пока ответ на новую вкладку не пришёл, пункты считаются по прежнему ответу: иначе на миг серые с ложной причиной.
   // Первая загрузка: пункты без чисел и не серые.
   const shown = $derived(res ? view.items : c ? build(c.res).items : view.items.map(({ id, label }) => ({ id, label })))
@@ -96,9 +100,18 @@
     gallery.close()
     void applyCoverChoice(sc, ch)
   }
+
+  // Окна своих шаблонов. Рамочки — у мест своей половины листа (как InArea у Go).
+  let modals: ReturnType<typeof GridTplModals>
+  const areas = $derived(coverAreas(store.cover?.sides))
+  const borders = (sc: LayoutScope) => coverHasBorders(store.cover?.sheet.places, store.cover?.sides?.find((x) => x.scope === sc)?.box, sc)
 </script>
 
-<GalleryHead tabs={false} {title}>
+<GalleryHead
+  tabs={false}
+  {title}
+  save={canTpl ? { title: 'Запомнить места этой сторонки как шаблон', onclick: () => modals.openSave(scope) } : undefined}
+>
   {#snippet filters()}
     <Seg items={N_ITEMS} value={nWant} onpick={(n) => (nPick = n)} label="Число мест" />
   {/snippet}
@@ -111,12 +124,18 @@
   {#each view.parts as p, pi (pi)}
     {#if p.sep}<TplSep label={p.sep} />{/if}
     {#each p.list as ch (ch.id)}
-      <TplItem>
+      {@const own = p.list === mine}
+      <TplItem
+        name={own ? ch.name : undefined}
+        onrename={own ? () => (modals.openRename(ch), hover(null)) : undefined}
+        ondelete={own ? () => (modals.openDelete(ch), hover(null)) : undefined}
+      >
         <button
           class="card"
           class:dim={loading}
           style:width="{cardW}px"
           style:height="{H}px"
+          title={ch.name || undefined}
           onmouseenter={() => hover(ch)}
           onmouseleave={() => hover(null)}
           onclick={() => pick(ch)}
@@ -138,6 +157,16 @@
     {/each}
   {/each}
 </TplRow>
+
+<GridTplModals
+  bind:this={modals}
+  spread="cover"
+  {areas}
+  hint="Запоминаются только места в пределах пунктира, без фото. Получится шаблон страницы."
+  {borders}
+  applied="Обложка и развороты"
+  ondone={() => again++}
+/>
 
 <style>
   .card {

@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { allInAlbum, allInAlbumText, emptyReason, freePhotos, pickFor, type PickHost } from './freephotos'
+import {
+  allInAlbum,
+  allInAlbumText,
+  emptyReason,
+  fillBlock,
+  fillCount,
+  fillDigits,
+  fillLead,
+  fillTitle,
+  fillWhere,
+  freePhotos,
+  pickFor,
+  type PickHost,
+} from './freephotos'
+import { unitOf } from '../../base/geom/sheet'
+import type { View } from '../../base/core/types'
 import { filterTree } from '../folders/tree'
 import type { Photo } from '../../base/core/types'
 
@@ -168,5 +183,83 @@ describe('поиск по имени как фильтр ленты (0.26-124)',
     )
     expect(r.ids).toEqual([])
     expect(toasts).toEqual(['Под фильтр не подходит ни одно свободное фото'])
+  })
+})
+
+describe('132: «Заполнить места» — числа и тексты «отсюда»', () => {
+  const spread = unitOf(undefined)
+  const sheet = unitOf({ sheet: true } as never)
+  const sp = (free: number) => ({ places: Array.from({ length: free }, () => ({})) })
+  const v = (o: object) => o as View
+
+  it('fillCount: обложка — coverFill, разворот — fillFrom[i]; поля нет или короче — 0', () => {
+    const view = { coverFill: 7, fillFrom: [4, 3, 1] }
+    expect(fillCount(view, true, 2)).toBe(7)
+    expect(fillCount(view, false, 0)).toBe(4)
+    expect(fillCount(view, false, 2)).toBe(1)
+    expect(fillCount(view, false, 3)).toBe(0)
+    expect(fillCount({}, true, 0)).toBe(0)
+    expect(fillCount({ fillFrom: [] }, false, 0)).toBe(0)
+  })
+
+  it('fillTitle: с обложки — порядок «лицевая, задняя, затем развороты», с разворота — прежний текст', () => {
+    expect(fillTitle(true, 5, spread)).toBe(
+      'Заполнить пустые места (5): положить выделенные фото (или все, что ещё не в альбоме) в пустые места, начиная с обложки: лицевая, задняя, затем развороты. Без выделения — первые свободные фото ленты, отклонённые пропускаются',
+    )
+    expect(fillTitle(false, 2, spread)).toBe(
+      'Заполнить пустые места (2): положить выделенные фото (или все, что ещё не в альбоме) в пустые места разворотов-сеток, начиная с этого разворота. Без выделения отклонённые пропускаются',
+    )
+    expect(fillTitle(false, 2, sheet)).toContain('листов-сеток, начиная с этого листа')
+  })
+
+  it('fillWhere: обложка и разворот; несколько — «и», больше трёх — «и ещё N»; листы', () => {
+    const base = { coverFill: 3, fillFrom: [1, 1, 1] }
+    expect(fillWhere({ ...base, spreads: [sp(0), sp(0), sp(1)] } as never, spread)).toBe('Пустые места — на обложке, в развороте 3')
+    expect(fillWhere({ coverFill: 0, fillFrom: [0, 0, 0], spreads: [sp(1), sp(0), sp(1)] } as never, spread)).toBe(
+      'Пустые места — в разворотах 1 и 3',
+    )
+    expect(fillWhere({ coverFill: 0, spreads: [sp(1), sp(1), sp(1)] } as never, spread)).toBe('Пустые места — в разворотах 1, 2 и 3')
+    expect(fillWhere({ coverFill: 0, spreads: [sp(1), sp(1), sp(1), sp(1), sp(1)] } as never, spread)).toBe(
+      'Пустые места — в разворотах 1, 2, 3 и ещё 2',
+    )
+    expect(fillWhere({ coverFill: 1, fillFrom: [0], spreads: [sp(0)] } as never, sheet)).toBe('Пустые места — на обложке')
+    expect(fillWhere({ coverFill: 0, spreads: [sp(0), sp(2)] } as never, sheet)).toBe('Пустые места — в листе 2')
+  })
+
+  it('fillWhere: части через запятую, «и» — только внутри перечня номеров', () => {
+    expect(fillWhere({ coverFill: 3, fillFrom: [1], spreads: [sp(1), sp(0), sp(1)] } as never, spread)).toBe(
+      'Пустые места — на обложке, в разворотах 1 и 3',
+    )
+    expect(fillWhere({ coverFill: 3, fillFrom: [1], spreads: [sp(1), sp(1), sp(1), sp(1), sp(1)] } as never, spread)).toBe(
+      'Пустые места — на обложке, в разворотах 1, 2, 3 и ещё 2',
+    )
+  })
+
+  it('fillDigits: разряды по пустым местам альбома, не меньше разрядов числа; нет поля — 1', () => {
+    expect(fillDigits(12, 0)).toBe(2)
+    expect(fillDigits(9, 3)).toBe(1)
+    expect(fillDigits(100, 5)).toBe(3)
+    expect(fillDigits(undefined, 0)).toBe(1)
+    expect(fillDigits(3, 12)).toBe(2)
+  })
+
+  it('fillWhere: назвать нечем (печать: полей нет, мест у разворотов нет) — не молчит', () => {
+    expect(fillWhere({ spreads: [] } as never, spread)).toBe('Пустые места — в другом месте альбома')
+  })
+
+  it('fillBlock: отсюда есть места — пусто; нет — текст «где»', () => {
+    const view = v({ coverFill: 2, fillFrom: [1, 0], spreads: [sp(1), sp(0)], settings: {} })
+    expect(fillBlock(view, false, 0)).toBe('')
+    expect(fillBlock(view, false, 1)).toBe('Пустые места — на обложке, в развороте 1')
+  })
+
+  it('fillLead: разность видов; одно из двух или ничего — пусто', () => {
+    const before = v({ coverFill: 7, fillFrom: [4, 2], settings: {} })
+    expect(fillLead(before, v({ coverFill: 0, fillFrom: [0, 0], settings: {} }))).toBe('На обложку: 3, в развороты: 4')
+    expect(fillLead(before, v({ coverFill: 4, fillFrom: [4, 2], settings: {} }))).toBe('') // только обложка
+    expect(fillLead(before, v({ coverFill: 5, fillFrom: [0, 0], settings: {} }))).toBe('') // только развороты
+    expect(fillLead(before, before)).toBe('')
+    expect(fillLead(v({}), v({}))).toBe('') // полей нет
+    expect(fillLead(before, v({ coverFill: 2, fillFrom: [2, 0], settings: { sheet: true } }))).toBe('На обложку: 3, в листы: 2')
   })
 })

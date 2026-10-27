@@ -90,12 +90,12 @@ func TestSavePrintProfileApplyTwice(t *testing.T) {
 	if v := a.editor().View(); v.Cover.Preset != first.View.Cover.Preset || !v.CanUndo {
 		t.Fatalf("после отмены второго: %q undo=%v", v.Cover.Preset, v.CanUndo)
 	}
-	// applyPrint той же типографии подряд — холостая: rev и история не растут.
-	if _, err := a.applyPrint(first.ID); err != nil {
+	// ownp.Apply той же типографии подряд — холостая: rev и история не растут.
+	if _, err := a.ownp.Apply(first.ID); err != nil {
 		t.Fatal(err)
 	}
 	rev := a.editor().View().Rev
-	if v, err := a.applyPrint(first.ID); err != nil || v.Rev != rev {
+	if v, err := a.ownp.Apply(first.ID); err != nil || v.Rev != rev {
 		t.Fatalf("повтор: rev %d→%d %v", rev, v.Rev, err)
 	}
 }
@@ -125,7 +125,7 @@ func TestApplyPrintUndoChain(t *testing.T) {
 	presets := []string{start.Cover.Preset}
 	views := []model.View{start}
 	for _, id := range []string{"netprint", "fabrika"} {
-		v, err := a.applyPrint(id)
+		v, err := a.ownp.Apply(id)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -156,7 +156,7 @@ func TestApplyPrintUndoChain(t *testing.T) {
 func TestSavePrintProfileApplySameNumbers(t *testing.T) {
 	a, _ := printApp(t)
 	before := a.editor().View()
-	fab, err := a.applyPrint("fabrika")
+	fab, err := a.ownp.Apply("fabrika")
 	if err != nil || fab.Rev == before.Rev {
 		t.Fatalf("Фабрика: %v", err)
 	}

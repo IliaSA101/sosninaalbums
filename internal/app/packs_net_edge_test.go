@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/fetch"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -131,7 +132,7 @@ func TestUpdateLibraryReadOnly(t *testing.T) {
 	if _, err := a.SetLibraryNet(true, true); err != nil {
 		t.Fatal(err)
 	}
-	a.scheduleLibraryCheck()
+	a.libp.ScheduleCheck()
 	a.bg.Wait()
 	if l.hits.Load() != 0 || prefs.LibraryNetOf(a.cfgDir).Checked != 0 || len(ev.of("notice")) != 0 || len(ev.of("library:progress")) != 0 {
 		t.Fatalf("только чтение: запросов %d, checked %d", l.hits.Load(), prefs.LibraryNetOf(a.cfgDir).Checked)
@@ -143,7 +144,7 @@ func TestUpdateLibraryReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.openDecor()
-	a.scheduleLibraryCheck()
+	a.libp.ScheduleCheck()
 	a.bg.Wait()
 	if l.hits.Load() != 0 {
 		t.Fatalf("повтор в том же сеансе: запросов %d", l.hits.Load())
@@ -208,8 +209,7 @@ func TestNetQuotaAtLimit(t *testing.T) {
 	}
 
 	// Новый набор: стоящей версии нет — вычитать нечего.
-	b := fresh(t)
-	b.net.client = a.net.client
+	b := fresh(t, l)
 	sage := rezip(t, zip, func(m map[string]any) { m["id"], m["title"] = "sage", "Шалфей" })
 	l.publish(t, nil, sage)
 	size = fileSize(t, sage)
@@ -228,41 +228,14 @@ func TestNetQuotaAtLimit(t *testing.T) {
 }
 
 // fresh — второй App с библиотекой и согласием (источник — от вызывающего).
-func fresh(t *testing.T) *App {
+func fresh(t *testing.T, l *netLib) *App {
 	t.Helper()
 	b := decorApp(t)
+	l.attach(t, b) // служба наборов пересобирается до первого вызова, SetLibraryNet — уже на ней
 	if _, err := b.SetLibraryNet(true, false); err != nil {
 		t.Fatal(err)
 	}
 	return b
-}
-
-// Совпадение id со встроенным — своя причина, и для версии 1 (встроенный — версия 1); набор
-// из файла — прежняя причина; без скачивания. Через сеть строки с таким id не бывает (fetch
-// отбрасывает id не по грамматике) — план проверяется напрямую.
-func TestNetPlanBuiltin(t *testing.T) {
-	a, _ := netApp(t, true)
-	src := d1Zip(t)
-	if _, err := a.AddPackPath(src); err != nil {
-		t.Fatal(err)
-	}
-	s, _ := a.decorStore()
-	cat := fetch.Catalog{Packs: []fetch.Entry{
-		{ID: decor.BuiltinPack, Version: 1, MinApp: "0.1.0", Title: "Встроенные-1", Size: 10},
-		{ID: decor.BuiltinPack, Version: 7, MinApp: "0.1.0", Title: "Встроенные-7", Size: 10},
-		{ID: "ivory", Version: 2, MinApp: "0.1.0", Title: "Айвори", Size: 10},
-	}}
-	var res LibraryUpdate
-	todo, need := a.netPlan(s, cat, &res)
-	if len(todo) != 0 || need != 0 || len(res.Skipped) != 3 {
-		t.Fatalf("план: %v %d %+v", todo, need, res.Skipped)
-	}
-	want := []DecorSkip{{Name: "Встроенные-1", Why: whyBuiltin}, {Name: "Встроенные-7", Why: whyBuiltin}, {Name: "Айвори", Why: whyFromFile}}
-	for i, k := range res.Skipped {
-		if k != want[i] {
-			t.Errorf("пропуск %d: %+v", i, k)
-		}
-	}
 }
 
 // Ветки netInstall: архив подлинный, но о другом наборе (id или версия) — пропуск; архив не
@@ -325,36 +298,6 @@ func TestNetInstallSecondFails(t *testing.T) {
 	}
 }
 
-// Порядок отзыва «запись → stop»: операция, вставшая в begin между записью и stop, перечитывает
-// согласие и не идёт в сеть. Обратный порядок (stop → запись) пустил бы её: stop ещё нечего
-// отменять, а согласие ещё не снято.
-func TestRevokeWriteBeforeStop(t *testing.T) {
-	a, l := netApp(t, true)
-	l.publish(t, nil, d1Zip(t))
-	old := afterNetWrite
-	t.Cleanup(func() { afterNetWrite = old })
-	var got error
-	calls := 0
-	afterNetWrite = func() {
-		calls++
-		ctx, done, err := a.beginNet()
-		if err == nil {
-			defer done()
-			if ctx.Err() == nil {
-				got = errors.New("операция прошла после отзыва")
-				return
-			}
-		}
-		got = err
-	}
-	if _, err := a.SetLibraryNet(false, false); err != nil {
-		t.Fatal(err)
-	}
-	if calls != 1 || !errors.Is(got, errNoConsent) || l.hits.Load() != 0 {
-		t.Fatalf("отзыв: вызовов %d, %v, запросов %d", calls, got, l.hits.Load())
-	}
-}
-
 // Предмет в скачанном архиве не сходится с манифестом, а sha архива в каталоге верный (ошибка
 // издателя): тост «скачался с ошибкой», не «на диск»; без путей; в log.txt — тип; набор не
 // поставлен.
@@ -393,7 +336,7 @@ func installedOf(t *testing.T, ev *capture, n int) []string {
 	if len(all) != n {
 		t.Fatalf("library:changed: событий %d, ждали %d", len(all), n)
 	}
-	c, ok := all[n-1].(libChanged)
+	c, ok := all[n-1].(libpacks.Changed)
 	if !ok || c.Installed == nil {
 		t.Fatalf("library:changed: %#v — нужен libChanged со списком (не null)", all[n-1])
 	}
@@ -425,7 +368,7 @@ func TestLibraryChangedInstalled(t *testing.T) {
 		t.Fatalf("обновление, названия: %v", got)
 	}
 	// Холостая проверка: ничего нового — ни library:changed, ни library:updated (запуск).
-	a.startCheck()
+	a.libp.StartCheck()
 	if len(ev.of("library:changed")) != 2 || len(ev.of("library:updated")) != 0 {
 		t.Fatalf("холостая проверка дала события: %d / %d", len(ev.of("library:changed")), len(ev.of("library:updated")))
 	}
@@ -437,7 +380,7 @@ func TestLibraryChangedInstalled(t *testing.T) {
 	if len(all) != 3 {
 		t.Fatalf("удаление: событий %d", len(all))
 	}
-	last, ok := all[2].(libChanged)
+	last, ok := all[2].(libpacks.Changed)
 	if !ok || last.Installed == nil || len(last.Installed) != 0 {
 		t.Fatalf("удаление: %#v", all[2])
 	}
@@ -512,7 +455,7 @@ func TestLibraryLogSummary(t *testing.T) {
 	}
 	// Ноль — тоже строка (запуск).
 	buf.Reset()
-	a.startCheck()
+	a.libp.StartCheck()
 	if out := buf.String(); !strings.Contains(out, "библиотека: итог — новых 0, обновлено 0, пропущено 0") {
 		t.Fatalf("при нуле: %q", out)
 	}
@@ -543,5 +486,52 @@ func TestLibraryLogSummary(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "итог") {
 		t.Errorf("итог после ошибки: %q", buf.String())
+	}
+}
+
+// Дополнение (needs, 129 Т8): донор в плане, но не встал (архив не о том наборе) — дополнение не
+// скачивается и не ставится, иначе его шаблоны ссылались бы на картинки донора, которых нет.
+func TestNetAddonDonorNotInstalled(t *testing.T) {
+	a, l := netApp(t, true)
+	zip := d1Zip(t)
+	add := rezip(t, zip, func(m map[string]any) { m["id"], m["title"] = "ivory-add", "Айвори+" })
+	l.publish(t, func(r map[string]any) {
+		switch r["id"] {
+		case "ivory":
+			r["version"] = 2 // архив v1 не совпадает со строкой каталога: донор пропущен
+		case "ivory-add":
+			r["needs"] = "ivory"
+		}
+	}, zip, add)
+	res, err := a.UpdateLibrary()
+	if err != nil || res.Added+res.Updated != 0 || l.archives.Load() != 1 {
+		t.Fatalf("итог: %v %+v, архивов %d", err, res, l.archives.Load())
+	}
+	if len(res.Skipped) != 1 || res.Skipped[0].Why != "архив не совпадает со списком наборов" {
+		t.Errorf("пропуски (причина у донора, у дополнения молчок): %+v", res.Skipped)
+	}
+	if list, _ := a.LibraryPacks(); len(list.Packs) != 1 {
+		t.Fatalf("библиотека изменилась: %+v", list.Packs)
+	}
+	noDownloadLeft(t, a)
+}
+
+// Дополнение стоит в каталоге раньше донора: оба ставятся за одно «Обновить», донор первым.
+func TestNetAddonBeforeDonor(t *testing.T) {
+	a, l := netApp(t, true)
+	zip := d1Zip(t)
+	add := rezip(t, zip, func(m map[string]any) { m["id"], m["title"] = "ivory-add", "Айвори+" })
+	l.publish(t, func(r map[string]any) {
+		if r["id"] == "ivory-add" {
+			r["needs"] = "ivory"
+		}
+	}, add, zip)
+	res, err := a.UpdateLibrary()
+	if err != nil || res.Added != 2 || len(res.Skipped) != 0 {
+		t.Fatalf("итог: %v %+v", err, res)
+	}
+	list, _ := a.LibraryPacks()
+	if len(list.Packs) != 3 || list.Packs[1].ID != "ivory" || list.Packs[2].ID != "ivory-add" {
+		t.Fatalf("библиотека: %+v", list.Packs)
 	}
 }

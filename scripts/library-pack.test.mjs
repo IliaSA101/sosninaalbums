@@ -5,13 +5,15 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import { buildPack, catalogRow, makeZip, publicRaw, readCatalogFile, readZip, requireBase, sealCatalog, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { assertZipSize, buildPack, catalogRow, checkPrev, checkPublish, imageInfo, jpegSize, makeZip, orderWarnings, publicRaw, readCatalogFile, readPrev, readZip, requireBase, sealCatalog, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
 
 function setDir() {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'libpack-'))
   fs.mkdirSync(path.join(d, 'bg'))
   fs.mkdirSync(path.join(d, 'spreads'))
-  fs.writeFileSync(path.join(d, 'bg', 'one.png'), crypto.randomBytes(500))
+  fs.writeFileSync(path.join(d, 'bg', 'one.png'), pngStub(64, 64, true))
   fs.writeFileSync(path.join(d, 'spreads', 'hero.json'), JSON.stringify({ v: 1, pages: 2 }))
   fs.writeFileSync(
     path.join(d, 'manifest.src.json'),
@@ -123,9 +125,10 @@ test('нет файла каталога: отказ без --new; с --new — 
   assert.throws(() => requireBase(cat, true), /уже есть/)
 })
 
-/** PNG-заглушка: сигнатура и IHDR нужного размера (остальное для проверки заголовка не нужно). */
-function pngStub(w, h) {
+/** PNG-заглушка: сигнатура и IHDR нужного размера (остальное для проверки заголовка не нужно); noise — случайный хвост (другой sha256). */
+function pngStub(w, h, noise = false) {
   const b = Buffer.alloc(700)
+  if (noise) crypto.randomBytes(600).copy(b, 33)
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b)
   b.writeUInt32BE(13, 8)
   b.write('IHDR', 12, 'latin1')
@@ -238,4 +241,309 @@ test('типография (123): kind print — .saprint, JSON-объект ≤
   put('0.26.0', profile({ pad: 'x'.repeat(fill) }))
   assert.equal(fs.statSync(path.join(d, 'prints', 'fabrika.saprint')).size, 64 << 10)
   assert.equal(buildPack(d).manifest.items[2].size, 64 << 10) // предел включительно
+})
+
+test('rejects zip over 70 MB', () => {
+  assert.doesNotThrow(() => assertZipSize(Buffer.alloc(70 << 20)))
+  assert.throws(() => assertZipSize(Buffer.alloc((70 << 20) + 1)), /больше предела 70 МБ/)
+})
+
+test('keeps keys of previous version: пропавший sha256 — отказ, --drop разрешает, перепаковка даёт те же ключи', () => {
+  const d = setDir()
+  const prev = buildPack(d).manifest
+  // перепаковка той же папки: sha256 те же (регресс на наборах 0.17)
+  const again = buildPack(d).manifest
+  assert.deepEqual(
+    again.items.map((i) => i.sha256),
+    prev.items.map((i) => i.sha256),
+  )
+  assert.doesNotThrow(() => checkPrev(prev, again))
+  // v2: картинку заменили, макет (spread) не ключ
+  fs.writeFileSync(path.join(d, 'bg', 'one.png'), pngStub(64, 64, true))
+  const next = buildPack(d).manifest
+  assert.throws(() => checkPrev(prev, next), /пропали ключи прежней \(1\): bg\/one\.png/)
+  assert.doesNotThrow(() => checkPrev(prev, next, ['bg/one.png']))
+  assert.throws(() => checkPrev(prev, next, ['нет/такого.png']), /нет в прежней версии/)
+  // потеря spread ключом не считается
+  const noSpread = { ...prev, items: prev.items.filter((i) => i.kind !== 'spread') }
+  assert.doesNotThrow(() => checkPrev(prev, noSpread))
+})
+
+test('каталог не сортируется: прежние на месте, новая в конец, замена сохраняет позицию', () => {
+  const { manifest, files } = buildPack(setDir())
+  const zip = makeZip(files)
+  const row = (id, version = 1) => ({ ...catalogRow({ ...manifest, id, version }, zip, `${id}.zip`) })
+  let cat = upsertCatalog(null, row('wedding-navy'))
+  cat = upsertCatalog(cat, row('school-autumn'))
+  cat = upsertCatalog(cat, row('aaa-first'))
+  assert.deepEqual(
+    cat.packs.map((p) => p.id),
+    ['wedding-navy', 'school-autumn', 'aaa-first'],
+  )
+  cat = upsertCatalog(cat, row('school-autumn', 2))
+  assert.deepEqual(
+    cat.packs.map((p) => `${p.id}:${p.version}`),
+    ['wedding-navy:1', 'school-autumn:2', 'aaa-first:1'],
+  )
+})
+
+test('writes needs: поле в строке каталога, не в манифесте; minApp от 0.27.0; без needs поля нет', () => {
+  const d = setDir()
+  const p = path.join(d, 'manifest.src.json')
+  const src = JSON.parse(fs.readFileSync(p, 'utf8'))
+  const build = (patch) => {
+    fs.writeFileSync(p, JSON.stringify({ ...src, ...patch }))
+    return buildPack(d)
+  }
+  const plain = build({})
+  assert.equal(plain.needs, undefined)
+  assert.ok(!('needs' in catalogRow(plain.manifest, makeZip(plain.files), 'a.zip', plain.needs)))
+  const ok = build({ minApp: '0.27.0', needs: 'wedding-navy-watercolor' })
+  const row = catalogRow(ok.manifest, makeZip(ok.files), 'a.zip', ok.needs)
+  assert.equal(row.needs, 'wedding-navy-watercolor')
+  assert.ok(!('needs' in ok.manifest))
+  assert.throws(() => build({ minApp: '0.26.0', needs: 'wedding-navy-watercolor' }), /minApp не ниже 0\.27\.0/)
+  assert.throws(() => build({ minApp: '0.27.0', needs: 'Плохой id' }), /needs/)
+  assert.throws(() => build({ minApp: '0.27.0', needs: 'test-set' }), /сам набор/)
+})
+
+/** JPEG-заглушка: SOI, APP0, SOF0 нужного размера, SOS и конец (декодировать её нельзя — заголовок читается). */
+function jpegStub(w, h, noise = false) {
+  const app0 = Buffer.from([0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 1, 1, 0, 0, 1, 0, 1, 0, 0])
+  const sof = Buffer.from([0xff, 0xc0, 0x00, 0x0b, 8, h >> 8, h & 255, w >> 8, w & 255, 1, 1, 0x11, 0])
+  const sos = Buffer.from([0xff, 0xda, 0x00, 0x08, 1, 1, 0, 0, 0x3f, 0, ...(noise ? crypto.randomBytes(300) : [])])
+  return Buffer.concat([Buffer.from([0xff, 0xd8]), app0, sof, sos, Buffer.from([0xff, 0xd9])])
+}
+
+/** Папка набора с одним фоном и стикером нужных размеров. */
+function rasterSet(bg, sticker, bgFile = 'bg/a.png', stFile = 'stickers/s.png') {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'libpack-r-'))
+  fs.mkdirSync(path.join(d, 'bg'))
+  fs.mkdirSync(path.join(d, 'stickers'))
+  fs.writeFileSync(path.join(d, bgFile), bg)
+  fs.writeFileSync(path.join(d, stFile), sticker)
+  fs.writeFileSync(
+    path.join(d, 'manifest.src.json'),
+    JSON.stringify({
+      id: 'raster-set',
+      version: 1,
+      minApp: '0.16.0',
+      title: 'Растры',
+      items: [
+        { file: bgFile, kind: 'bg', name: 'Фон' },
+        { file: stFile, kind: 'sticker', name: 'Стикер' },
+      ],
+    }),
+  )
+  return d
+}
+
+test('rejects sticker side over 4096', () => {
+  assert.equal(buildPack(rasterSet(pngStub(100, 100), pngStub(4096, 4096))).manifest.items.length, 2) // предел включительно
+  assert.throws(() => buildPack(rasterSet(pngStub(100, 100), pngStub(4097, 10))), /сторона стикера 4097×10/)
+  assert.throws(() => buildPack(rasterSet(pngStub(100, 100), pngStub(10, 4097))), /сторона стикера/)
+  assert.throws(() => buildPack(rasterSet(pngStub(100, 100), pngStub(70000, 70000))), /сторона стикера/)
+  // то же для JPEG по SOF
+  const j = (w, h) => rasterSet(pngStub(100, 100), jpegStub(w, h), 'bg/a.png', 'stickers/s.jpg')
+  assert.equal(buildPack(j(4096, 100)).manifest.items[1].file, 'stickers/s.jpg')
+  assert.throws(() => buildPack(j(4097, 100)), /сторона стикера 4097×100/)
+  assert.throws(() => buildPack(j(100, 5000)), /сторона стикера/)
+})
+
+test('rejects bg over 100 Mp', () => {
+  assert.equal(buildPack(rasterSet(pngStub(10000, 10000), pngStub(10, 10))).manifest.items.length, 2) // ровно 100 Мп — можно
+  assert.throws(() => buildPack(rasterSet(pngStub(10000, 10001), pngStub(10, 10))), /больше 100 Мп/)
+  assert.throws(() => buildPack(rasterSet(pngStub(70000, 70000), pngStub(10, 10))), /больше 100 Мп/)
+  const j = (w, h) => rasterSet(jpegStub(w, h), pngStub(10, 10), 'bg/a.jpg')
+  assert.equal(buildPack(j(10000, 10000)).manifest.items.length, 2)
+  assert.throws(() => buildPack(j(10001, 10000)), /фон 10001×10000 больше 100 Мп/)
+  // сторона фона не ограничена, только площадь
+  assert.equal(buildPack(rasterSet(pngStub(65535, 1500), pngStub(10, 10))).manifest.items.length, 2)
+})
+
+test('растр: пустой, усечённый, чужой по расширению и огромный файл — ошибка, не паника и не чтение в память', () => {
+  const put = (bg, name = 'bg/a.png') => rasterSet(bg, pngStub(10, 10), name)
+  assert.throws(() => buildPack(put(Buffer.alloc(0))), /размер вне предела/)
+  assert.throws(() => buildPack(put(pngStub(10, 10).subarray(0, 20))), /PNG/)
+  assert.throws(() => buildPack(put(jpegStub(10, 10).subarray(0, 5), 'bg/a.jpg')), /JPEG/)
+  assert.throws(() => buildPack(put(jpegStub(10, 10), 'bg/a.png')), /не совпадает с расширением/)
+  assert.throws(() => buildPack(put(pngStub(10, 10), 'bg/a.jpg')), /не совпадает с расширением/)
+  assert.throws(() => buildPack(put(Buffer.from('GIF89a'.repeat(100)))), /не PNG и не JPEG/)
+  assert.throws(() => buildPack(put(pngStub(0, 10))), /размер картинки 0×10/)
+  const d = put(pngStub(10, 10))
+  fs.truncateSync(path.join(d, 'bg', 'a.png'), (60 << 20) + 1) // разреженный файл больше предела фона: не читается
+  assert.throws(() => buildPack(d), /размер вне предела/)
+  const big = put(pngStub(10, 10))
+  fs.truncateSync(path.join(big, 'manifest.src.json'), 2 << 20)
+  assert.throws(() => buildPack(big), /больше предела/)
+})
+
+test('jpegSize: SOF после APP и заполнителей; битые и усечённые заголовки — исключение, на случайных входах без зависаний', () => {
+  assert.deepEqual(jpegSize(jpegStub(321, 123)), { w: 321, h: 123 })
+  const fill = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xff, 0xff]), jpegStub(5, 6).subarray(2)])
+  assert.deepEqual(jpegSize(fill), { w: 5, h: 6 })
+  assert.throws(() => jpegSize(Buffer.from([0xff, 0xd8])), /нет SOF|заголовка/)
+  assert.throws(() => jpegSize(Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 8])), /усечённый/)
+  assert.throws(() => jpegSize(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x01, 0, 0])), /длина/)
+  assert.throws(() => jpegSize(Buffer.from([0xff, 0xd8, 0x00, 0x00, 0x00, 0x00])), /разметка/)
+  assert.throws(() => imageInfo(Buffer.alloc(0)), /не PNG/)
+  for (let i = 0; i < 2000; i++) {
+    const b = Buffer.concat([Buffer.from([0xff, 0xd8]), crypto.randomBytes(1 + (i % 64))])
+    try {
+      jpegSize(b)
+    } catch (e) {
+      assert.ok(e instanceof Error && !(e instanceof RangeError), `${e}`) // чтение за краем — не RangeError
+    }
+  }
+})
+
+test('checkPublish: набор уже в каталоге — нужен --prev с тем же id и sha256 строки каталога', () => {
+  const d = setDir()
+  const v1 = buildPack(d)
+  const zip1 = makeZip(v1.files)
+  const cat = upsertCatalog(null, catalogRow(v1.manifest, zip1, 'a.zip'))
+  const prev = readPrev(zip1)
+  const next = { ...v1.manifest, version: 3 }
+  assert.throws(() => checkPublish(cat, next, undefined, undefined), /нужен --prev/)
+  assert.doesNotThrow(() => checkPublish(cat, next, undefined, prev))
+  assert.doesNotThrow(() => checkPublish(null, next, undefined, undefined)) // нового набора прежнего нет
+  assert.throws(() => checkPublish(cat, next, undefined, { ...prev, manifest: { ...prev.manifest, id: 'other-set' } }), /архив набора other-set/)
+  assert.throws(() => checkPublish(cat, next, undefined, { ...prev, sha256: '0'.repeat(64) }), /не совпадает со строкой каталога/)
+  // --prev проверяет и ключи
+  assert.throws(() => checkPublish(cat, { ...next, items: [] }, undefined, prev), /пропали ключи/)
+})
+
+test('checkPublish: needs — донор в каталоге и раньше по порядку', () => {
+  const { manifest, files } = buildPack(setDir())
+  const zip = makeZip(files)
+  const row = (id) => catalogRow({ ...manifest, id }, zip, `${id}.zip`)
+  let cat = upsertCatalog(null, row('donor-set'))
+  cat = upsertCatalog(cat, row('other-set'))
+  const addon = { ...manifest, id: 'addon-set' }
+  assert.doesNotThrow(() => checkPublish(cat, addon, 'donor-set', undefined))
+  assert.throws(() => checkPublish(cat, addon, 'ghost-set', undefined), /донора ghost-set нет в каталоге/)
+  assert.throws(() => checkPublish(null, addon, 'donor-set', undefined), /донора donor-set нет/)
+  // дополнение уже стоит раньше донора: переставить строки нельзя
+  const early = upsertCatalog(upsertCatalog(null, row('addon-set')), row('donor-set'))
+  const prev = readPrev(zip)
+  const early2 = { ...early, packs: early.packs.map((p) => (p.id === 'addon-set' ? { ...p, sha256: prev.sha256 } : p)) }
+  assert.throws(() => checkPublish(early2, { ...addon, items: manifest.items }, 'donor-set', { ...prev, manifest: { ...manifest, id: 'addon-set' } }), /после addon-set/)
+  assert.doesNotThrow(() => checkPublish(cat, addon, 'other-set', undefined))
+})
+
+test('orderWarnings: дополнение раньше донора — предупреждение; порядок донор → дополнение, без needs и без каталога — тихо', () => {
+  const { manifest, files } = buildPack(setDir())
+  const zip = makeZip(files)
+  const row = (id, needs) => catalogRow({ ...manifest, id }, zip, `${id}.zip`, needs)
+  const good = upsertCatalog(upsertCatalog(null, row('donor-set')), row('addon-set', 'donor-set'))
+  assert.deepEqual(orderWarnings(good), [])
+  assert.deepEqual(orderWarnings(null), [])
+  assert.deepEqual(orderWarnings({ packs: [] }), [])
+  const bad = upsertCatalog(upsertCatalog(upsertCatalog(null, row('addon-b', 'donor-set')), row('addon-a', 'donor-set')), row('donor-set'))
+  assert.deepEqual(orderWarnings(bad), ['дополнение addon-b стоит в каталоге раньше донора donor-set', 'дополнение addon-a стоит в каталоге раньше донора donor-set'])
+  // донор отсутствует — порядок не нарушен (это отказ checkPublish, не предупреждение)
+  assert.deepEqual(orderWarnings(upsertCatalog(null, row('addon-set', 'ghost-set'))), [])
+})
+
+// ---- CLI целиком (child_process): связка main ----
+
+const SCRIPT = fileURLToPath(new URL('./library-pack.mjs', import.meta.url))
+
+/** Временная папка с тестовым ключом ed25519 (боевой docs/private не нужен). */
+function cliEnv() {
+  const w = fs.mkdtempSync(path.join(os.tmpdir(), 'libpack-cli-'))
+  const { privateKey } = crypto.generateKeyPairSync('ed25519')
+  fs.writeFileSync(path.join(w, 'key.pem'), privateKey.export({ type: 'pkcs8', format: 'pem' }))
+  const out = path.join(w, 'out')
+  const run = (...args) => {
+    const r = spawnSync(process.execPath, [SCRIPT, ...args, '--key', path.join(w, 'key.pem'), '--out', out], { encoding: 'utf8' })
+    return { code: r.status, text: r.stdout + r.stderr }
+  }
+  const listing = () => (fs.existsSync(out) ? fs.readdirSync(out).sort() : [])
+  const catalog = () => readCatalogFile(path.join(out, 'catalog.json'))
+  return { w, out, run, listing, catalog }
+}
+
+const fixedBg = pngStub(64, 64, true) // один и тот же фон во всех версиях: ключи сходятся
+
+/** Папка набора: id, версия, minApp, needs; seed меняет LICENSE.txt (другой архив). */
+function cliSet(id, version, extra = {}, seed = '') {
+  const d = setDir()
+  fs.writeFileSync(path.join(d, 'bg', 'one.png'), fixedBg)
+  const p = path.join(d, 'manifest.src.json')
+  fs.writeFileSync(p, JSON.stringify({ ...JSON.parse(fs.readFileSync(p, 'utf8')), id, version, ...extra }))
+  if (seed) fs.writeFileSync(path.join(d, 'LICENSE.txt'), seed)
+  return d
+}
+
+test('CLI: набор уже в каталоге — без --prev отказ до записи; с чужим и не тем архивом отказ; с опубликованным — выпуск', () => {
+  const e = cliEnv()
+  const first = e.run(cliSet('my-set', 1), '--new')
+  assert.equal(first.code, 0, first.text)
+  const state = () => ({ files: e.listing(), cat: fs.readFileSync(path.join(e.out, 'catalog.json'), 'utf8') })
+  const before = state()
+  const v2 = cliSet('my-set', 2)
+
+  const noPrev = e.run(v2)
+  assert.equal(noPrev.code, 1)
+  assert.match(noPrev.text, /нужен --prev/)
+  assert.deepEqual(state(), before) // ни v2-zip, ни новой подписи
+
+  const published = path.join(e.out, 'my-set-1.zip')
+  const stranger = path.join(e.w, 'stranger.zip') // другой набор: id не совпадает
+  fs.writeFileSync(stranger, makeZip(buildPack(cliSet('other-set', 1)).files))
+  const wrongId = e.run(v2, '--prev', stranger)
+  assert.equal(wrongId.code, 1)
+  assert.match(wrongId.text, /архив набора other-set/)
+
+  const repacked = path.join(e.w, 'repacked.zip') // тот же id, но не опубликованный архив (другие байты)
+  fs.writeFileSync(repacked, makeZip(buildPack(cliSet('my-set', 1, {}, 'другая лицензия')).files))
+  const wrongSha = e.run(v2, '--prev', repacked)
+  assert.equal(wrongSha.code, 1)
+  assert.match(wrongSha.text, /sha256 архива не совпадает/)
+  assert.deepEqual(state(), before)
+
+  const ok = e.run(v2, '--prev', published)
+  assert.equal(ok.code, 0, ok.text)
+  assert.deepEqual(e.listing(), ['catalog.json', 'my-set-1.zip', 'my-set-2.zip'])
+  assert.deepEqual(e.catalog().packs.map((p) => `${p.id}:${p.version}`), ['my-set:2'])
+  assert.equal(e.catalog().seq, 2)
+})
+
+test('CLI: needs без донора в каталоге — отказ, папка вывода пуста; с донором — выпуск; донор не раньше — отказ', () => {
+  const e = cliEnv()
+  const addon = (id) => cliSet(id, 1, { minApp: '0.27.0', needs: 'donor-set' })
+  const noCatalog = e.run(addon('addon-set'), '--new') // донор не выпущен: каталога ещё нет
+  assert.equal(noCatalog.code, 1)
+  assert.match(noCatalog.text, /донора donor-set нет в каталоге/)
+  assert.deepEqual(e.listing(), []) // до записи: папка вывода не создана или пуста
+
+  assert.equal(e.run(cliSet('donor-set', 1), '--new').code, 0)
+  const before = e.listing()
+  const ghost = e.run(cliSet('addon-set', 1, { minApp: '0.27.0', needs: 'ghost-set' }))
+  assert.equal(ghost.code, 1)
+  assert.match(ghost.text, /донора ghost-set нет/)
+  assert.deepEqual(e.listing(), before)
+
+  const ok = e.run(addon('addon-set'))
+  assert.equal(ok.code, 0, ok.text)
+  assert.deepEqual(e.catalog().packs.map((p) => `${p.id}${p.needs ? '>' + p.needs : ''}`), ['donor-set', 'addon-set>donor-set'])
+})
+
+test('CLI: отказ по содержимому набора и по ключам — до записи; булев ключ перед папкой; неизвестный ключ и ключ без значения', () => {
+  const e = cliEnv()
+  const bad = rasterSet(pngStub(100, 100), pngStub(4097, 10))
+  const r = e.run(bad, '--new')
+  assert.equal(r.code, 1)
+  assert.match(r.text, /сторона стикера/)
+  assert.deepEqual(e.listing(), [])
+
+  assert.equal(e.run('--new', cliSet('my-set', 1)).code, 0) // --new стоит перед папкой
+  assert.equal(e.run(cliSet('my-set', 2), '--bogus').code, 2)
+  const noVal = spawnSync(process.execPath, [SCRIPT, cliSet('my-set', 2), '--prev'], { encoding: 'utf8' })
+  assert.equal(noVal.status, 2)
+  assert.match(noVal.stderr, /--prev: нужно значение/)
+  const help = spawnSync(process.execPath, [SCRIPT, '--help'], { encoding: 'utf8' })
+  assert.equal(help.status, 0)
+  assert.match(help.stdout, /--test-key/)
 })

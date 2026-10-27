@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
 import { prefs } from '../../base/prefs/prefs.svelte'
-import { ARTICLES } from './articles'
+import { ARTICLES } from '../guidetext/articles'
 import { fromLatin, grouped, norm, search, stem, tokens } from './search'
 
 const titles = (q: string) => search(q).hits.map((h) => h.a.title)

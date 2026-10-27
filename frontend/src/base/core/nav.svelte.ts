@@ -18,6 +18,8 @@ export const emptyView: View = {
   minDPI: 200,
   lowDPI: 0,
   emptyPlaces: 0,
+  fillFrom: [],
+  coverFill: 0,
   textMaxW: 284,
   backdropUsed: [],
   marksRev: 0,

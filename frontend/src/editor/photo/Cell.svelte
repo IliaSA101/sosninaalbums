@@ -27,6 +27,8 @@
   import { additive, bodyAction } from '../places/gesture'
   import MissPhoto from '../../base/ui/MissPhoto.svelte'
   import DpiMark from './DpiMark.svelte'
+  import FaceGuide from './FaceGuide.svelte'
+  import { modes } from '../../base/prefs/view.svelte'
   import { missTip } from '../../panels/library/missing'
   import { autocheck } from '../../panels/folders/autocheck'
 
@@ -96,6 +98,10 @@
   const tone = $derived(adjlive.filterOf(id, fv))
 
   const selected = $derived(!mini && store.selectedCell === id)
+  // Силуэт под лицо (130): виньетка, фото выделено, «Вид ▸ Силуэт под лицо». guideOn — Go прислал силуэт для места
+  // (групповое фото и «Целиком» без него); тогда он заменяет сетку третей при сдвиге.
+  const guided = $derived(!mini && !preview && selected && spread.kind === 'vignette' && modes.faceGuide)
+  let guideOn = $state(false)
   const missing = $derived(store.missing.includes(id))
 
   let el = $state<HTMLDivElement>()
@@ -203,13 +209,14 @@
         <span class="v" class:third={k % 3 === 0} class:ninth={k % 3 !== 0} style:left="{(k * 100) / 9}%"></span>
         <span class="h" class:third={k % 3 === 0} class:ninth={k % 3 !== 0} style:top="{(k * 100) / 9}%"></span>
       {/each}
-    {:else if framelive.panning(id)}
+    {:else if framelive.panning(id) && !(guided && guideOn)}
       <!-- Сетка третей: пока идёт сдвиг кадра -->
       <span class="third v" style:left="33.333%"></span>
       <span class="third v" style:left="66.666%"></span>
       <span class="third h" style:top="33.333%"></span>
       <span class="third h" style:top="66.666%"></span>
     {/if}
+    {#if guided}<FaceGuide spreadId={spread.id} photo={id} show={framelive.fitting(id)} onhave={(v) => (guideOn = v)} />{/if}
     {#if !mini}
       {@const badge = colorBadge(store.byId.get(id))}
       {#if badge}<span

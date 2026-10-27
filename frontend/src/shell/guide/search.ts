@@ -3,9 +3,9 @@
 import { keymap } from '../../base/keys/keymap.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { fromLatin, norm } from '../../base/words/kbdlayout'
-import { articleText } from './articletext'
+import { articleText } from '../guidetext/articletext'
 import { keyRows } from './show'
-import { ARTICLES, GUIDE_GROUPS, type Article } from './articles'
+import { ARTICLES, GUIDE_GROUPS, type Article } from '../guidetext/articles'
 
 // Нижний регистр, «ё → е» и раскладка — общие с поиском фото (base/words/kbdlayout.ts).
 export { fromLatin, norm }

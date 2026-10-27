@@ -321,6 +321,17 @@
         "custom": false
       },
       {
+        "id": "toggleFaceGuide",
+        "label": "Силуэт под лицо",
+        "short": "Силуэт",
+        "group": "view",
+        "scope": "app",
+        "feature": "vignette",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
         "id": "allSpreads",
         "label": "Все развороты",
         "short": "Все разв.",

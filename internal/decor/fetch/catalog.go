@@ -47,6 +47,8 @@ type Entry struct {
 	SHA256  string `json:"sha256"`
 	URL     string `json:"url"`
 	Counts  Counts `json:"counts"`
+	// Needs — id набора-донора у дополнения (0.27): без донора netPlan его не ставит. Пусто — обычный набор.
+	Needs string `json:"needs,omitempty"`
 }
 
 // Counts — сколько предметов каждого вида (для строки окна до скачивания).
@@ -165,6 +167,8 @@ func entrySkip(e *Entry, src Source) string {
 		return "нет sha256"
 	case !src.assetURL(e.URL):
 		return "адрес не из библиотеки"
+	case e.Needs != "" && (!validID(e.Needs) || e.Needs == e.ID):
+		return "недопустимый needs"
 	}
 	if e.Title = cleanText(e.Title, 60); e.Title == "" {
 		e.Title = e.ID

@@ -27,6 +27,7 @@
   import { UseList } from '../photoprops/uselist.svelte'
   import { elsewhere, lineAt, USE_ROW, useRows } from '../photoprops/usemenu'
   import { untrack } from 'svelte'
+  import { vigFaces } from '../../panels/vignette/vigfaces.svelte'
 
   const sheet = $derived(isSheet(store.view.settings))
   // На обложке (032) фон ставят в области её раскладки, названия — сторонки; в листе (031) — только «Весь лист».
@@ -140,6 +141,12 @@
     oval: () => placesel.setShape('oval'),
     border: openBorder,
     resetFrame: (first) => void store.run(Api.ResetFrame(first)),
+    // 130 U2: норма с места этого фото (ref — ID места), те же тост и ход, что у кнопки карточки; одна правка в Go.
+    faceRef: () => {
+      const id = store.spread?.id
+      const place = placesel.selected[0]?.id
+      if (id && place) void vigFaces.fit(id, '', place)
+    },
     caption: (first) => edit.editCaption(first),
     layer: (_first, _at, arg) => placesel.layer(arg as LayerOp),
     backdrop: (first, _at, arg) => toBackdrop(first, arg),

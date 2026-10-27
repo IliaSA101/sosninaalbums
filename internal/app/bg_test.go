@@ -55,11 +55,11 @@ func TestGoBGRefusalRollsBackFlags(t *testing.T) {
 	if _, ok := a.check.enter(false, time.Now()); !ok {
 		t.Error("check.running остался после отказа")
 	}
-	a.net.started.Store(false)
+	a.libp.ResetSession()
 	a.cfgDir = testkit.TempDir(t)
 	prefs.UpdateLibraryNet(a.cfgDir, func(n *prefs.LibraryNet) { n.Allowed, n.AtStart = true, true })
-	a.scheduleLibraryCheck()
-	if a.net.started.Load() {
+	a.libp.ScheduleCheck()
+	if a.libp.Started() {
 		t.Error("net.started остался после отказа")
 	}
 }

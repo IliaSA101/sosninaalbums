@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { fillKeys } from '../../base/keys/keytext'
-import { carry, CLICK_PX, FIT, fitScale, hintLine, isClick, pan, place, toggle, zoomAt, zoomLabel, type Loupe, type Pt } from './loupe'
+import {
+  carry,
+  CLICK_PX,
+  FIT,
+  fitScale,
+  hintLine,
+  isClick,
+  origMax,
+  origWhy,
+  pan,
+  place,
+  sameShape,
+  toggle,
+  zoomAt,
+  zoomLabel,
+  type Loupe,
+  type Pt,
+} from './loupe'
 
 // Лупа окна крупного просмотра (128-4): вписано ↔ 1:1 в точке, зум у курсора, сдвиг, перенос при листании.
 const nat = { w: 2048, h: 1365 }
@@ -187,5 +204,55 @@ describe('строка клавиш', () => {
   })
   it('клавиши сняты — куски опускаются, строка не врёт', () => {
     expect(fill(false, 'Ctrl', {})).toBe('щелчок — 1:1 · Ctrl+колесо — зум · Esc — закрыть')
+  })
+})
+
+// Ступень 2 (128-14): предел зума выше 1:1 по превью, пока есть оригинал.
+describe('предел выше 1:1 (оригинал)', () => {
+  const at = { x: 600, y: 300 }
+  it('origMax: ширина оригинала к ширине превью; не меньше 1', () => {
+    expect(origMax({ w: 4096, h: 2730 }, nat)).toBe(2)
+    expect(origMax({ w: 4096, h: 2730, color: 'srgb' }, nat)).toBe(2)
+    expect(origMax({ w: 1500, h: 1000 }, nat)).toBe(1) // оригинал меньше превью — не уменьшать
+  })
+  it('origMax: профиль, > 100 Мп, неизвестные размеры — 1', () => {
+    expect(origMax({ w: 4096, h: 2730, color: 'adobe' }, nat)).toBe(1)
+    expect(origMax({ w: 12000, h: 9000 }, nat)).toBe(1)
+    expect(origMax({ w: 0, h: 0 }, nat)).toBe(1) // у фото проекта размеров нет
+    expect(origMax({ w: 4096, h: 2730 }, { w: 0, h: 0 })).toBe(1)
+    expect(origMax(undefined, nat)).toBe(1)
+  })
+  it('origWhy: причина отказа; ровно 100 Мп ещё можно', () => {
+    expect(origWhy({ w: 4096, h: 2730 })).toBe('')
+    expect(origWhy({ w: 4096, h: 2730, color: 'srgb' })).toBe('')
+    expect(origWhy({ w: 4096, h: 2730, color: 'adobe' })).toBe('adobe')
+    expect(origWhy({ w: 4096, h: 2730, color: 'p3' })).toBe('p3')
+    expect(origWhy({ w: 4096, h: 2730, color: 'icc' })).toBe('icc')
+    expect(origWhy({ w: 4096, h: 2730, color: 'other' })).toBe('other')
+    expect(origWhy({ w: 10000, h: 10000 })).toBe('')
+    expect(origWhy({ w: 10001, h: 10000 })).toBe('big')
+    expect(origWhy(undefined)).toBe('')
+  })
+  it('zoomAt при max > 1 идёт выше 1:1 и упирается в max; точка под курсором на месте', () => {
+    const before = under(FIT, nat, at)
+    const l = zoomAt({ s: 1, cx: 0.5, cy: 0.5 }, 1.5, nat, box, at, 2)
+    expect(l.s).toBeCloseTo(1.5, 6)
+    expect(zoomAt(l, 100, nat, box, at, 2).s).toBe(2)
+    expect(zoomAt(l, 100, nat, box, at, 1).s).toBe(1) // без оригинала предел прежний
+    const up = zoomAt(FIT, 1 / fit, nat, box, at, 2)
+    const after = under(up, nat, at)
+    expect(after.x).toBeCloseTo(before.x, 6)
+    expect(after.y).toBeCloseTo(before.y, 6)
+  })
+  it('значок выше 1:1 — проценты от превью; щелчок из зума выше 1:1 возвращает во вписано', () => {
+    const l = { s: 1.5, cx: 0.5, cy: 0.5 }
+    expect(zoomLabel(l, nat, box)).toBe('150 %')
+    expect(toggle(l, nat, box, at, 1)).toEqual(FIT)
+  })
+  it('sameShape: ±1 %', () => {
+    expect(sameShape(nat, { w: 4096, h: 2730 })).toBe(true)
+    expect(sameShape(nat, { w: 4096, h: 2736 })).toBe(true)
+    expect(sameShape(nat, { w: 1365, h: 2048 })).toBe(false)
+    expect(sameShape(nat, { w: 0, h: 0 })).toBe(false)
   })
 })

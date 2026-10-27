@@ -52,6 +52,7 @@ export function menuCtx(): MenuCtx {
     details: modes.details,
     safe: modes.safe,
     markup: modes.markup,
+    faceGuide: modes.faceGuide,
     rulers: modes.rulers,
     snap: placesel.snap,
     assocCan: store.assoc.can,

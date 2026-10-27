@@ -57,6 +57,10 @@ export interface StoreHooks {
   free(photos: Photo[], used: ReadonlySet<string>, backdrop: ReadonlySet<string>): Photo[]
   // Что отдать автосборке / «Заполнить пустые места»; пусто — тост с причиной уже показан.
   pick(moveUsed: boolean): PickResult
+  // 132: «Заполнить места» с открытого листа. block — пусто, если отсюда есть что заполнять, иначе текст «где» («Пустые места —
+  // на обложке и в развороте 3»); lead — «На обложку: N, в развороты: M» разностью видов до и после правки (пусто — не оба).
+  fillBlock(view: View, onCover: boolean, current: number): string
+  fillLead(before: View, after: View): string
   // 107: свободные фото ленты без учёта выделения (галочка «Добавить свободные» в режиме альбома); тоста нет
   pickFree(): string[]
   // 078: из фото последней сборки убрать отклонённые (флажок ✕) — в пересборку они не идут
@@ -100,6 +104,8 @@ export const noHooks: StoreHooks = {
   free: (photos, used, backdrop) => photos.filter((p) => !used.has(p.id) && !backdrop.has(p.id)),
   pick: () => ({ ids: [], skipped: 0, from: 'free', inAlbum: 0, filtered: false }),
   pickFree: () => [],
+  fillBlock: () => '',
+  fillLead: () => '',
   notRejected: (ids) => [...ids],
   selectedRefs: () => [],
   select: () => {},

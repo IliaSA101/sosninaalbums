@@ -3,7 +3,19 @@
   import Modal from '../../base/modal/Modal.svelte'
   import { READ_ONLY_HINT } from '../../panels/decor/decor'
   import { packsUi } from './packs.svelte'
-  import { ADD_HINT, BUILTIN_NOTE, BUSY_HINT, EMPTY_TEXT, creditLine, metaLine, onlyBuiltin } from './packs'
+  import {
+    ADD_HINT,
+    AUTHORS_LINK,
+    AUTHORS_TEXT,
+    BUILTIN_NOTE,
+    BUSY_HINT,
+    EMPTY_TEXT,
+    creditLine,
+    hasNet,
+    metaLine,
+    onlyBuiltin,
+  } from './packs'
+  import { aboutUi } from '../dialogs/about.svelte'
   import {
     CONSENT_TEXT,
     CONSENT_TITLE,
@@ -57,7 +69,8 @@
               <span class="when">{p.title}</span>
               {#if metaLine(p)}<span class="meta">{metaLine(p)}</span>{/if}
               {#if creditLine(p)}<span class="meta">{creditLine(p)}</span>{/if}
-              {#if p.about}<span class="meta about">{p.about}</span>{/if}
+              <!-- Полный текст в title: в строке он обрезан line-clamp: 2 (design 129 §6) -->
+              {#if p.about}<span class="meta about" title={p.about}>{p.about}</span>{/if}
             </div>
             {#if p.removable}
               <button disabled={locked} title={lockHint || `Удалить набор «${p.title}»`} onclick={() => packsUi.askRemove(p)}
@@ -70,6 +83,13 @@
         {/each}
       </ul>
       {#if onlyBuiltin(packsUi.packs) && !packsUi.error}<p class="note">{EMPTY_TEXT}</p>{/if}
+    {/if}
+    {#if hasNet(packsUi.packs)}
+      <!-- Подпись каталога (129 §6): только если стоит набор из сети; ссылка — как в «О программе» -->
+      <p class="skip">
+        {AUTHORS_TEXT} ·
+        <button class="link" onclick={() => void aboutUi.link('authors')}>{AUTHORS_LINK}</button>
+      </p>
     {/if}
     {#if net.net.skipped > 0}
       <!-- Удалённые сетевые наборы в пропуске (решение 0.17 №3): видно, почему набора нет, и возврат одним щелчком -->

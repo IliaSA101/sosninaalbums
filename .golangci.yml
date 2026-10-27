@@ -198,6 +198,41 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/paths$
             - github.com/IliaSA101/sosninaalbums/internal/render$
             - github.com/IliaSA101/sosninaalbums/internal/text$
+        # 126 Ш4: наборы библиотеки за узким Host (образец updater/assoc/exporter): без Wails, без App и без других служб.
+        # Да владельца 2026-10-25 (0.27-owner-25).
+        "app/libpacks: decor, library, paths, prefs":
+          files:
+            - "**/internal/app/libpacks/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/libpacks$
+            - github.com/IliaSA101/sosninaalbums/internal/decor$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/pack$
+            - github.com/IliaSA101/sosninaalbums/internal/library$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/prefs$
+        # 126 Ш5: свои типографии за узким Host (образец libpacks): без Wails, без App и без других служб.
+        # Да владельца 2026-10-25 (0.27-owner-25): правило и golang.org/x/net/idna.
+        "app/ownprint: model, printprof, decor, library, paths, export, idna":
+          files:
+            - "**/internal/app/ownprint/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/model$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model/printprof$
+            - github.com/IliaSA101/sosninaalbums/internal/app/ownprint$
+            - github.com/IliaSA101/sosninaalbums/internal/decor$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch$
+            - github.com/IliaSA101/sosninaalbums/internal/export$
+            - github.com/IliaSA101/sosninaalbums/internal/library$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - golang.org/x/net/idna$
         # devtools — инструменты разработчика (нарезка листа стикеров и т. п.): в exe не входят, запускают
         # внешние команды (rembg). Импортирует их только CLI в scripts/ (//go:build ignore); да владельца 19.10.
         "devtools — не в программу":

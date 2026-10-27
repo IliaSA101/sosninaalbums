@@ -12,6 +12,7 @@ function makeRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winqa-push-'))
   const g = (...a) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.invalid', ...a], { cwd: dir, encoding: 'utf8' })
   g('init', '-q')
+  g('config', 'core.autocrlf', 'false') // не зависеть от CRLF-настроек машины
   const put = (p, t) => {
     fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true })
     fs.writeFileSync(path.join(dir, p), t)

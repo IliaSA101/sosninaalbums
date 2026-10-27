@@ -4,9 +4,12 @@ import { modes } from '../../base/prefs/view.svelte'
 import { capFirst, errText } from '../../base/words/errtext'
 import { printList } from './printlist.svelte'
 import {
+  BASE_NONE,
   MAX_FORMATS,
   COPIED_LINE,
   addedTitle,
+  baseQuestion,
+  BASE_NOTE,
   isOwnId,
   removeQuestion,
   removedText,
@@ -22,6 +25,7 @@ import {
 export type PrintAsk =
   | { kind: 'replace'; token: string; title: string; text: string; note: string }
   | { kind: 'remove'; id: string; title: string; text: string; note: string }
+  | { kind: 'base'; id: string; title: string; text: string; note: string }
 
 // Блок «добавлено из файла» над полями.
 export interface PrintMade {
@@ -82,6 +86,13 @@ class PrintEditUi {
   made = $state<PrintMade | null>(null)
   private checkReq = 0
   private loadReq = 0
+  // Поля в том виде, как их заполнила основа: от этого снимка считается «правили ли».
+  private filled = ''
+
+  // Поля правили после последнего заполнения из основы (по значениям, не по событиям: правка и откат — не правка).
+  get dirty(): boolean {
+    return JSON.stringify(toEdit(this.e)) !== this.filled
+  }
 
   get ownBase(): boolean {
     return isOwnId(printList.infos, this.e.base)
@@ -114,6 +125,7 @@ class PrintEditUi {
       const e = (await Api.PrintProfileEdit(base)) as unknown as PrintEdit
       if (my !== this.loadReq) return false
       this.e = { ...blank(), ...e, formats: e.formats ?? [] }
+      this.filled = JSON.stringify(toEdit(this.e))
       this.check = null
       this.ask = null
       this.made = made
@@ -126,10 +138,23 @@ class PrintEditUi {
     }
   }
 
-  // «Основа» сменилась: поля заново из новой основы (как в макете).
+  // «Основа» сменилась: поля заново из новой основы. Правки — под вопрос (0.27-m-11): отказ оставляет и основу, и поля.
   async setBase(id: string) {
     if (id === this.e.base) return
+    if (this.dirty) {
+      const name = printList.infos.find((i) => i.id === id)?.name ?? BASE_NONE
+      this.ask = { kind: 'base', id, title: name, text: baseQuestion(name), note: BASE_NOTE }
+      return
+    }
     await this.fill(id, null)
+  }
+
+  // «Сменить» в вопросе: поля заново из новой основы.
+  async confirmBase() {
+    const a = this.ask
+    if (a?.kind !== 'base') return
+    this.ask = null
+    await this.fill(a.id, null)
   }
 
   // Живой расчёт у Go; ответ прежнего запроса отбрасывается.

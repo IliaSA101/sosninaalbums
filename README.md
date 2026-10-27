@@ -6,7 +6,7 @@
 **Sosnina Albums** is a desktop application for laying out wedding photo albums, built for a working photographer. Pick folders with photos, drag frames onto spreads (or let auto-assembly do it), flip through layout variants, and export spreads as 300 dpi JPEGs for the print shop. Layouts are computed exactly and **photos are not cropped without your say**: a frame keeps the photo's aspect ratio unless you choose full bleed (crops up to 30 %), crop to fill the sheet (up to 15 %) or set your own crop; margins and gaps are set in millimetres.
 
 - Platform: Windows, macOS, Linux (WebView2, WKWebView, WebKitGTK). Stack: Go 1.26 + [Wails](https://wails.io) v2 + Svelte 5 + TypeScript.
-- Status: version 0.26.0, actively developed; the UI is in Russian.
+- Status: version 0.27.0, actively developed; the UI is in Russian.
 - Built together with photographer Marina Sosnina ([Sosnina films](https://sosnina-films.ru)) and used in her work.
 
 ![Sosnina Albums: auto-build an album, flip through spreads, try layouts](docs/media/demo.webp)
@@ -77,6 +77,7 @@ https://github.com/user-attachments/assets/21096f35-4c1b-4954-b130-9b8cecf1a5b1
 - Развороты и раскладки (0.24): меню разворота во «Всех разворотах», вставка разворота между существующими, подрезка фото до закрытия листа, свободные композиции «Разброс», «Весь альбом заново» в автосборке, удобнее окно выбора цвета, меню фото собрано в группы.
 - Установка и первые шаги (0.25): установщик Windows и автообновление, альбом открывается двойным щелчком по файлу `.salbum`, тур «Первые шаги» при первом запуске, перестановка фото на ручном развороте, цвет и фон альбома с выбором «Оставить свой» или «Как в альбоме» для разворотов, пересчёт фото Display P3 и других профилей RGB в sRGB, фото WebP под именем `.jpg`, флажки типографий с подсказкой при чужом формате страницы.
 - Типографии, обложка и просмотр (0.26): свои типографии и точные размеры файла в пикселях, меню «Разворот» и сворачиваемые группы в карточках, поиск фото по имени, раскладки на обложке, крупный просмотр фото из ленты, цветовые профили в PNG и WebP.
+- Виньетка, наборы и обложка (0.27): подгон мест виньетки по лицам одной кнопкой, силуэт под лицо при сдвиге кадра (овал головы, плечи, линия глаз на белой вуали; «Вид ▸ Силуэт под лицо»), оригинал фото при большом увеличении в крупном просмотре, «Сохранить как шаблон…» со сторонки и раскладки на обложке, окно «Наборы» со строкой «Наборы каталога… · Об авторах», новые наборы библиотеки и более надёжная установка дополнений.
 
 ### Уровни интерфейса
 

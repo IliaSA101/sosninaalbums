@@ -56,7 +56,7 @@ func (a *App) updHost() updater.Host {
 		StopCtx: func() context.Context { return a.stopCtx },
 		Quit:    a.quitWindow,
 		OpenURL: func(u string) { openURL(a, u) },
-		// Общие с проверкой библиотеки (packs_net.go): тесты ставят их через setStart.
+		// Общие с проверкой библиотеки (packs.go): тесты ставят их через setStart.
 		StartTimes: func() (time.Duration, time.Duration) { return startDelay, startEvery },
 		Client: func() (*update.Client, bool) {
 			src, auto := update.Default()

@@ -173,6 +173,15 @@ describe('buildMenu', () => {
     expect(find(m, 'fit')?.checked).toBeUndefined()
   })
 
+  it('«Вид ▸ Силуэт под лицо» (130): после «Привязки», галочка по состоянию, без клавиши', () => {
+    const on = buildMenu(ctx({ faceGuide: true }))
+    expect(find(on, 'faceGuide')).toMatchObject({ label: 'Силуэт под лицо', cmd: 'toggleFaceGuide', checked: true })
+    expect(find(on, 'faceGuide')?.keys).toBeUndefined()
+    expect(find(buildMenu(ctx({ faceGuide: false })), 'faceGuide')?.checked).toBe(false)
+    const view = ids(on, 'view')
+    expect(view.indexOf('faceGuide')).toBe(view.indexOf('snap') + 1)
+  })
+
   it('«Вид ▸ Разметка типографии» (066): сразу после «Безопасной зоны», галочка по состоянию, без клавиши', () => {
     const on = buildMenu(ctx({ markup: true }))
     expect(find(on, 'markup')).toMatchObject({ label: 'Разметка типографии', cmd: 'toggleMarkup', checked: true })

@@ -430,6 +430,12 @@ type View struct {
 	LowDPI int `json:"lowDPI"`
 	// EmptyPlaces — пустых мест сетки во всём альбоме.
 	EmptyPlaces int `json:"emptyPlaces"`
+	// FillFrom — сколько мест займёт «Заполнить места» с разворота i (FillCounts), индекс как у
+	// Spreads; всегда список (nil ушёл бы null), у вида печати — пустой. Не в SpreadView: дельта
+	// (075) пересылала бы все развороты при каждой посадке. EmptyPlaces остаётся для «Сведений».
+	FillFrom []int `json:"fillFrom"`
+	// CoverFill — то же с обложки (обложка и все развороты); без обложки и в виде печати — 0.
+	CoverFill int `json:"coverFill"`
 	// TextMaxW — предел ширины блока «по тексту», мм (страница без безопасных полей).
 	TextMaxW float64 `json:"textMaxW"`
 	// BackdropUsed — ID фото, стоящих на фонах и в своих стикерах (по возрастанию): автосборка,

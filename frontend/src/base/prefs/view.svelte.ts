@@ -43,6 +43,8 @@ class ViewMode {
   safe = $state(false)
   // Разметка типографии (066): подложка обложки и разворотов; по умолчанию включена, файл остаётся при выключении.
   markup = $state(true)
+  // Силуэт под лицо (130): на виньетке, пока тянут кадр; по умолчанию включён.
+  faceGuide = $state(true)
   // Линейки (спека 010): по умолчанию включены, видны на уровне «Полный».
   rulers = $state(true)
   sections = $state<Sections>({ card: true, photo: true, info: true, settings: false, grid: true })
@@ -89,6 +91,7 @@ class ViewMode {
       this.details = v.details === true
       this.safe = v.safe === true
       this.markup = v.markup !== false
+      this.faceGuide = v.faceGuide !== false
       this.rulers = v.rulers !== false
       const t = v.thumbSize
       if (Number.isInteger(t) && t >= THUMB_MIN && t <= THUMB_MAX) this.thumbSize = t
@@ -131,6 +134,7 @@ class ViewMode {
           details: this.details,
           safe: this.safe,
           markup: this.markup,
+          faceGuide: this.faceGuide,
           rulers: this.rulers,
           thumbSize: this.thumbSize,
           libSort: this.libSort,
@@ -166,6 +170,11 @@ class ViewMode {
 
   toggleMarkup() {
     this.markup = !this.markup
+    this.save()
+  }
+
+  toggleFaceGuide() {
+    this.faceGuide = !this.faceGuide
     this.save()
   }
 

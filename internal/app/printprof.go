@@ -1,93 +1,91 @@
 package app
 
 import (
-	"errors"
-	"log"
-	"slices"
-	"sync"
-	"time"
-
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
-	"github.com/IliaSA101/sosninaalbums/internal/decor"
-	"github.com/IliaSA101/sosninaalbums/internal/paths"
+	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
+	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// Свои типографии в App (123 Б1, design §4, §7): реестр printprof собирается из встроенных и
-// своих профилей хранилища decor; правка своих — Save/Delete/Import — пересобирает его и шлёт
-// `print:changed`. Окно Б3 получает от Go поля, расчёт и ошибки (printprof_edit.go), файл
-// .saprint читает и пишет printprof_file.go.
+// Свои типографии (123 Б1, Б3, Б4; разрез 126 Ш5): тело — internal/app/ownprint, здесь фасад с
+// прежними методами для интерфейса, типы ответов и Host службы. Плоские типы определены (не
+// псевдонимы) от типов службы: поля и теги те же, а models.ts остаётся в пространстве app
+// (126-2). Вложенные — PrintEdit и PrintEditCheck — написаны в app заново; пару стережёт
+// TestDTOPairs. PrintEdit — ещё и вход CheckPrintProfile/SavePrintProfile.
 
-// printState — свои типографии: один писатель за раз, ключи файлов в хранилище и ждущий ответа
-// вопрос «Заменить типографию?».
-type printState struct {
-	mu  sync.Mutex
-	own map[string]ownPrint // id профиля → ключ в decor и сам профиль; только принятые реестром
-	// stored — id всех разобранных файлов хранилища, и отвергнутых реестром: файл с таким id
-	// импортируется копией под новым, иначе в хранилище стало бы два файла одного id.
-	stored map[string]bool
-	pend   *pendingPrint
+// dirPrint — своя последняя папка у диалогов файла типографии.
+const dirPrint = "print"
+
+var printFilter = []wr.FileFilter{{DisplayName: "Типография (*" + ownprint.Ext + ")", Pattern: "*" + ownprint.Ext}}
+
+// PrintEdit — поля окна «Своя типография». Числа — как ввёл пользователь; id у своей всегда новый.
+type PrintEdit struct {
+	Name    string            `json:"name"`
+	Base    string            `json:"base"` // id типографии-основы (изделия, корешки, пределы); "" — без обложки
+	DPI     int               `json:"dpi"`
+	Layflat bool              `json:"layflat"`
+	Safe    float64           `json:"safe"`  // безопасная зона страницы, мм
+	Bleed   float64           `json:"bleed"` // обрез, мм
+	Formats []PrintEditFormat `json:"formats"`
+	Spreads int               `json:"spreads"` // число разворотов, при котором введены px обложки (корешок); 0 — как в альбоме
+	Prefix  string            `json:"prefix"`  // начало имён файлов выгрузки: «1-»
+	Quality int               `json:"quality"` // JPEG при выгрузке: 100 | 95 | 0 («как выбрано в окне»)
+	URL     string            `json:"url"`     // сайт типографии, https; "" — без кнопки
 }
 
-// ownPrint — своя типография, принятая реестром.
-type ownPrint struct {
-	key string
-	p   printprof.Profile
+// PrintEditFormat — строка «подпись · разворот px · обложка px».
+type PrintEditFormat ownprint.EditFormat
+
+// PrintEditCheck — расчёт окна: чистая функция полей, проект и файлы не трогаются.
+type PrintEditCheck struct {
+	OK      bool              `json:"ok"`      // можно сохранять
+	Errs    map[string]string `json:"errs"`    // поле → текст под полем
+	Formats []PrintCheckRow   `json:"formats"` // по строке формата
+	Spine   float64           `json:"spine"`   // корешок основы при Spreads, мм; 0 — нет
+	Lines   []string          `json:"lines"`   // «Сейчас альбом даёт …»
+	Names   string            `json:"names"`   // пример имён: «1-00.jpg — обложка, 1-01.jpg…1-12.jpg»
 }
 
-var (
-	errPrintDup      = errors.New("Такое название уже есть")                                               //nolint:staticcheck // текст уходит пользователю тостом как есть
-	errPrintDupLabel = errors.New("В списках это название выглядит так же, как у другой своей типографии") //nolint:staticcheck // текст уходит пользователю тостом как есть
-	errPrintNotOwn   = errors.New("это не своя типография — её нельзя удалить или отправить файлом")
-	errPrintRejected = errors.New("реестр не принял типографию — подробности в log.txt")
-)
+// PrintCheckRow — итог строки формата: страница и сторонка в мм из px либо ошибка под строкой.
+type PrintCheckRow ownprint.CheckRow
 
-// reloadPrints собирает реестр заново из встроенных, наборов и своих (хранилище decor) и публикует его;
-// строки пропущенных — в log.txt. Библиотечный слой — профили установленных наборов (printprof_lib.go).
-// Вызов на старте после openDecor — без событий, окна ещё нет.
-func (a *App) reloadPrints() {
-	a.prints.mu.Lock()
-	defer a.prints.mu.Unlock()
-	a.reloadPrintsLocked()
-}
+// PrintSaved — итог «Сохранить»: id новой типографии и вид альбома после применения.
+type PrintSaved ownprint.Saved
 
-func (a *App) reloadPrintsLocked() {
-	var own, lib []printprof.Profile
-	var keys []string // ключ файла own[i]
-	a.prints.stored = map[string]bool{}
-	s, err := a.decorStore()
-	if err == nil {
-		for _, f := range s.Prints() {
-			p, err := printprof.Parse(f.Data)
-			if err != nil {
-				log.Printf("типография %q пропущена: %v", f.Key, paths.NoPath(err))
-				continue
-			}
-			own, keys = append(own, p), append(keys, f.Key)
-			a.prints.stored[p.ID] = true
-		}
-		lib = libraryPrints(s, own)
+// PrintImport — итог «Добавить из файла».
+type PrintImport ownprint.Import
+
+// PrintShare — итог «Поделиться файлом»: имя записанного файла (без пути).
+type PrintShare ownprint.Share
+
+// mapSlice — срез с преобразованием элементов; nil остаётся nil (в JSON null и [] не путаются).
+func mapSlice[A, B any](in []A, f func(A) B) []B {
+	if in == nil {
+		return nil
 	}
-	snap, skipped := printprof.Compose(lib, own)
-	for _, line := range skipped {
-		log.Print(line)
+	out := make([]B, len(in))
+	for i, v := range in {
+		out[i] = f(v)
 	}
-	printprof.Install(snap)
-	a.prints.own = map[string]ownPrint{}
-	for i, p := range own {
-		// Ключ — только у файла, который реестр принял (аудит 123 №6): отвергнутый первый файл
-		// того же id невидим, и «Удалить» не должно стирать его вместо видимого.
-		if n, ok := snap.OwnIndex(p.ID); ok && n == i {
-			a.prints.own[p.ID] = ownPrint{key: keys[i], p: p}
-		}
-	}
+	return out
 }
 
-// printsChanged — после смены своих: событие `print:changed` и вид (пределы и запреты считаются
-// от нового реестра); вид уходит в цепочку «без правки», событие view — если он сменился.
-func (a *App) printsChanged() model.View {
-	a.emit("print:changed")
-	return a.out(a.editor().View())
+func editIn(e PrintEdit) ownprint.Edit {
+	return ownprint.Edit{Name: e.Name, Base: e.Base, DPI: e.DPI, Layflat: e.Layflat, Safe: e.Safe, Bleed: e.Bleed,
+		Formats: mapSlice(e.Formats, func(f PrintEditFormat) ownprint.EditFormat { return ownprint.EditFormat(f) }),
+		Spreads: e.Spreads, Prefix: e.Prefix, Quality: e.Quality, URL: e.URL}
+}
+
+func editOut(e ownprint.Edit) PrintEdit {
+	return PrintEdit{Name: e.Name, Base: e.Base, DPI: e.DPI, Layflat: e.Layflat, Safe: e.Safe, Bleed: e.Bleed,
+		Formats: mapSlice(e.Formats, func(f ownprint.EditFormat) PrintEditFormat { return PrintEditFormat(f) }),
+		Spreads: e.Spreads, Prefix: e.Prefix, Quality: e.Quality, URL: e.URL}
+}
+
+func checkOut(c ownprint.EditCheck) PrintEditCheck {
+	return PrintEditCheck{OK: c.OK, Errs: c.Errs,
+		Formats: mapSlice(c.Formats, func(r ownprint.CheckRow) PrintCheckRow { return PrintCheckRow(r) }),
+		Spine:   c.Spine, Lines: c.Lines, Names: c.Names}
 }
 
 // PrintProfiles — типографии реестра по порядку: встроенные, библиотечные, свои. Для списка
@@ -97,101 +95,85 @@ func (a *App) PrintProfiles() []printprof.Info {
 	return printprof.Current().Infos()
 }
 
-// DeletePrintProfile удаляет свою типографию. Альбомы со ссылкой на неё не меняются: пометка
-// изделия обложки остаётся, карточка пишет «Типография не найдена» (123 сц. 11). Шага отмены нет —
-// профили вне undo.
+// DeletePrintProfile удаляет свою типографию (альбомы со ссылкой на неё не меняются; шага отмены нет).
 func (a *App) DeletePrintProfile(id string) (v model.View, err error) {
 	defer guardErr("DeletePrintProfile", &err)
-	s, err := a.decorStore()
-	if err != nil {
-		return v, err
-	}
-	a.prints.mu.Lock()
-	o, ok := a.prints.own[id]
-	if !ok {
-		a.prints.mu.Unlock()
-		return a.editor().View(), errPrintNotOwn
-	}
-	err = s.DeletePrint(o.key)
-	a.reloadPrintsLocked()
-	a.prints.mu.Unlock()
-	if err != nil && !errors.Is(err, decor.ErrNotFound) {
-		return a.editor().View(), err
-	}
-	return a.printsChanged(), nil
+	return a.ownp.Delete(id)
 }
 
-// applyPrint — «Сохранить с применением»: альбому ставится первая кнопка формата типографии id
-// и изделие её обложки (Default, иначе первое) одним шагом отмены, как нажатие кнопки в окне
-// «Настройки». Поля кнопки — как presetFields на фронте: размер, dpi, layflat, зона, обрез;
-// поля, промежуток и цвет остаются. Нет изделий — меняется только формат. Тот же формат и то же
-// изделие — холостая правка без шага. Сохранённая типография от исхода не зависит.
-func (a *App) applyPrint(id string) (model.View, error) {
-	pr, ok := printprof.Current().ByID(id)
-	if !ok || len(pr.Formats) == 0 {
-		return a.editor().View(), errPrintRejected
-	}
-	f := pr.Formats[0]
-	p, _ := a.editor().SnapshotSide()
-	s := p.Settings
-	s.PageW, s.PageH = f.Page[0], f.Page[1]
-	if pr.Page.DPI != 0 {
-		s.DPI = pr.Page.DPI
-	}
-	s.Layflat = s.Layflat || pr.Page.Layflat
-	if v := f.SafeIn(pr); v != 0 {
-		s.Safe = v
-	}
-	if v := f.BleedIn(pr); v != 0 {
-		s.Bleed = v
-	}
-	preset := pr.Default
-	if preset == "" && len(pr.Products) > 0 {
-		preset = pr.Products[0].ID
-	}
-	if preset == "" {
-		return a.changed(a.editor().SetSettings(s)), nil
-	}
-	return a.changedOrErr(a.editor().ApplyPrint(s, preset))
+// ImportPrintProfile — «Добавить из файла…»: диалог *.saprint в Go. Отказ от диалога — Canceled.
+func (a *App) ImportPrintProfile() (res PrintImport, err error) {
+	defer guardErr("ImportPrintProfile", &err)
+	r, err := a.ownp.ImportFile()
+	return PrintImport(r), err
 }
 
-// printTaken — id занят: профилем реестра, своей, ждущей перезагрузки, или файлом хранилища,
-// который реестр отверг.
-func (a *App) printTaken(id string) bool {
-	if _, ok := printprof.Current().ByID(id); ok {
-		return true
-	}
-	_, ok := a.prints.own[id]
-	return ok || a.prints.stored[id]
+// ConfirmImportPrintProfile — «Заменить» на вопрос ImportPrintProfile.
+func (a *App) ConfirmImportPrintProfile(token string) (res PrintImport, err error) {
+	defer guardErr("ConfirmImportPrintProfile", &err)
+	r, err := a.ownp.ConfirmImport(token)
+	return PrintImport(r), err
 }
 
-// nameClash — чем название своей типографии спорит с реестром (кроме except): errPrintDup —
-// двойник названия любого профиля (printprof.SameName: регистр, пробелы, невидимые знаки и
-// латинские двойники не в счёт); errPrintDupLabel — подпись в списках («QA тест 1» и «QA тест 1
-// (своя)» обе показываются «QA тест 1 (своя)») совпадает с подписью другой своей. У встроенных и
-// библиотечных пометки нет, им подпись не проверяется. nil — название свободно.
-func nameClash(snap *printprof.Snapshot, name, except string) error {
-	ps := snap.Profiles()
-	if slices.ContainsFunc(ps, func(p printprof.Profile) bool { return p.ID != except && printprof.SameName(p.Name, name) }) {
-		return errPrintDup
-	}
-	if slices.ContainsFunc(ps, func(p printprof.Profile) bool {
-		return p.ID != except && snap.Source(p.ID) == printprof.SourceOwn && printprof.SameOwnLabel(p.Name, name)
-	}) {
-		return errPrintDupLabel
-	}
-	return nil
+// SharePrintProfile — «Поделиться файлом…»: своя типография в <название>.saprint (диалог Go).
+func (a *App) SharePrintProfile(id string) (res PrintShare, err error) {
+	defer guardErr("SharePrintProfile", &err)
+	r, err := a.ownp.ShareFile(id)
+	return PrintShare(r), err
 }
 
-// nameTaken — название занято (nameClash != nil).
-func nameTaken(snap *printprof.Snapshot, name, except string) bool {
-	return nameClash(snap, name, except) != nil
+// PrintProfileEdit — заготовка окна на основе типографии base; "" — пустая заготовка.
+func (a *App) PrintProfileEdit(base string) (e PrintEdit, err error) {
+	defer guardErr("PrintProfileEdit", &err)
+	r, err := a.ownp.Draft(base)
+	return editOut(r), err
 }
 
-// pendingPrint — вопрос «Заменить типографию?»: файл разобран, ждёт ответа packTTL.
-type pendingPrint struct {
-	token string
-	key   string // ключ своей в decor, чью запись заменит файл
-	p     printprof.Profile
-	until time.Time
+// CheckPrintProfile — живой расчёт окна: ошибки полей, мм на строку формата, корешок, пример имён.
+func (a *App) CheckPrintProfile(e PrintEdit) (c PrintEditCheck) {
+	defer guard("CheckPrintProfile")
+	return checkOut(a.ownp.Check(editIn(e)))
+}
+
+// SavePrintProfile записывает новую свою типографию; apply — ещё и поставить её альбому.
+func (a *App) SavePrintProfile(e PrintEdit, apply bool) (res PrintSaved, err error) {
+	defer guardErr("SavePrintProfile", &err)
+	r, err := a.ownp.Save(editIn(e), apply)
+	return PrintSaved(r), err
+}
+
+// printsHost — что службе типографий нужно от App. Поля — замыкания над a: тесты подменяют
+// a.emit, openFileDialog и saveFileDialog уже после NewApp.
+func (a *App) printsHost() ownprint.Host {
+	return ownprint.Host{
+		Store:    a.decorStore,
+		Emit:     func(name string, data ...any) { a.emit(name, data...) },
+		Version:  func() string { return appVersion(wailsJSON) },
+		Snapshot: func() *model.Project { p, _ := a.editor().SnapshotSide(); return p },
+		View:     func() model.View { return a.editor().View() },
+		Changed:  func(v model.View) model.View { return a.changed(v) },
+		Out:      func(v model.View) model.View { return a.out(v) },
+		SetSettings: func(s model.Settings) model.View {
+			return a.editor().SetSettings(s)
+		},
+		ApplyPrint: func(s model.Settings, preset string) (model.View, error) {
+			return a.editor().ApplyPrint(s, preset)
+		},
+		PickOpen: func() (string, error) {
+			return openFileDialog(a.ctx, wr.OpenDialogOptions{
+				Title:            "Файл типографии",
+				DefaultDirectory: a.dialogDir(dirPrint),
+				Filters:          printFilter,
+			})
+		},
+		PickSave: func(name string) (string, error) {
+			return saveFileDialog(a.ctx, wr.SaveDialogOptions{
+				Title:            "Поделиться типографией",
+				DefaultDirectory: a.dialogDir(dirPrint),
+				DefaultFilename:  name,
+				Filters:          printFilter,
+			})
+		},
+		RememberDir: func(dir string) { a.rememberDir(dirPrint, dir) },
+	}
 }

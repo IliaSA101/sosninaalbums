@@ -33,7 +33,7 @@ func TestImportFifoRejected(t *testing.T) {
 	for _, path := range []string{fifo, link} {
 		done := make(chan error, 1)
 		go func() {
-			_, err := a.importPrintPath(path)
+			_, err := a.ownp.ImportPath(path)
 			done <- err
 		}()
 		select {

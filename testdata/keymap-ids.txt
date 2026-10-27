@@ -109,3 +109,4 @@ videos
 toggleAssoc
 findPhotos
 photoPreview
+toggleFaceGuide

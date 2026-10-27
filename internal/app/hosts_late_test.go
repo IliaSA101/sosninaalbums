@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 // Хосты берём сразу после NewApp и только потом меняем App.
 func TestHostsLateBound(t *testing.T) {
 	a := newApp(t)
-	uh, ah, eh := a.updHost(), a.assocHost(), a.expHost()
+	uh, ah, eh, ph, oh := a.updHost(), a.assocHost(), a.expHost(), a.packsHost(), a.printsHost()
 
 	// Подмены после сборки Host.
 	dir := testkit.TempDir(t)
@@ -45,11 +46,19 @@ func TestHostsLateBound(t *testing.T) {
 	if d, e := uh.StartTimes(); d != 7*time.Second || e != 9*time.Hour {
 		t.Errorf("StartTimes = %v %v, ждали 7s 9h", d, e)
 	}
+	if got := ph.CfgDir(); got != dir {
+		t.Errorf("libpacks CfgDir = %q, ждали %q", got, dir)
+	}
+	if d, e, o := ph.Start(); d != 7*time.Second || e != 9*time.Hour || o != startOffer {
+		t.Errorf("libpacks Start = %v %v %v, ждали 7s 9h %v", d, e, o, startOffer)
+	}
+	ph.Emit("p")
+	oh.Emit("o")
 
 	uh.Emit("u")
 	eh.Emit("e")
 	ah.Notice("n")
-	if want := []string{"u", "e", "notice"}; len(events) != 3 || events[0] != want[0] || events[1] != want[1] || events[2] != want[2] {
+	if want := []string{"p", "o", "u", "e", "notice"}; !slices.Equal(events, want) {
 		t.Errorf("события = %v, ждали %v", events, want)
 	}
 
@@ -63,11 +72,21 @@ func TestHostsLateBound(t *testing.T) {
 		t.Errorf("a.exists вызвана %v", asked)
 	}
 
+	if sp, v := oh.Snapshot(), oh.View(); sp == nil || len(sp.Spreads) != len(ed.View().Spreads) || len(v.Spreads) != len(ed.View().Spreads) {
+		t.Error("ownprint Snapshot/View не читают текущий редактор")
+	}
 	if eh.Editor() != ed {
 		t.Error("exporter Editor не текущий редактор App")
 	}
-	ed2 := mustEditor(t, model.New(), "")
+	// Новый редактор отличаем числом разворотов: Rev у пустых одинаков, раннее связывание не видно.
+	p2 := model.New()
+	p2.Spreads = []*model.Spread{{ID: "s1"}, {ID: "s2"}, {ID: "s3"}}
+	ed2 := mustEditor(t, p2, "")
 	a.ed.Store(ed2)
+	n2 := len(ed2.View().Spreads)
+	if sp, v := oh.Snapshot(), oh.View(); n2 == len(ed.View().Spreads) || sp == nil || len(sp.Spreads) != n2 || len(v.Spreads) != n2 {
+		t.Errorf("ownprint Snapshot/View закэшированы при сборке Host (разворотов %d, ждали %d)", len(v.Spreads), n2)
+	}
 	if eh.Editor() != ed2 {
 		t.Error("exporter Editor закэширован при сборке Host")
 	}

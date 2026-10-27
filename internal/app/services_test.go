@@ -1,7 +1,7 @@
 package app
 
 // Страж служб App (126-4): фон службы запускается только через Host.GoBG (там WaitGroup App,
-// закрытие и guard), поэтому в коде updater, assoc, exporter нет ни `go`, ни time.AfterFunc
+// закрытие и guard), поэтому в коде updater, assoc, exporter, libpacks, ownprint нет ни `go`, ни time.AfterFunc
 // (таймер, сработавший после закрытия, жил бы дольше App).
 
 import (
@@ -14,12 +14,12 @@ import (
 	"testing"
 )
 
-// serviceDirs — папки служб разреза 126 (Ш1–Ш3). Нет папки — шаг ещё не сделан, страж её пропускает.
-var serviceDirs = []string{"updater", "assoc", "exporter"}
+// serviceDirs — папки служб разреза 126 (Ш1–Ш5). Нет папки — шаг ещё не сделан, страж её пропускает.
+var serviceDirs = []string{"updater", "assoc", "exporter", "libpacks", "ownprint"}
 
 // minServices — сколько служб должно быть найдено: поднимается с каждым шагом (Ш1 → 1, Ш2 → 2,
-// Ш3 → 3), чтобы страж не «ослеп» молча после переноса или переименования папки.
-const minServices = 3
+// Ш3 → 3, Ш4 → 4, Ш5 → 5), чтобы страж не «ослеп» молча после переноса или переименования папки.
+const minServices = 5
 
 // bareGoExceptions — файл службы → причина, по которой в нём разрешён голый go/AfterFunc. Пусто.
 var bareGoExceptions = map[string]string{}

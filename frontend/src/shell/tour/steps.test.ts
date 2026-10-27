@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { dropCatalog, useCatalog, catalogView } from '../../base/keys/keymap.fixture'
 import { FEATURES, can, type FeatureId, type Level } from '../../base/prefs/levels'
-import { ARTICLES, placesOf } from '../guide/articles'
-import { articleText } from '../guide/articletext'
+import { ARTICLES, placesOf } from '../guidetext/articles'
+import { articleText } from '../guidetext/articletext'
 import { FINAL, INTRO, MORE_IDS, MORE_TOAST, SKIP_TOAST, TOUR } from './steps'
 
 // Стражи шагов тура (113-9): место, статья, уровень, длина текста и метки.

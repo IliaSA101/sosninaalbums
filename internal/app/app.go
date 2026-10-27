@@ -22,6 +22,8 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/app/colorpick"
 	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/app/exporter"
+	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
+	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 	"github.com/IliaSA101/sosninaalbums/internal/app/updater"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
@@ -173,14 +175,14 @@ type App struct {
 	// fontsMu — набор библиотеки → регистрация в text → событие `fonts` одним шагом: два
 	// параллельных publishFonts иначе отдали бы окну старый список последним.
 	fontsMu sync.Mutex
-	// prints — свои типографии и вопрос «Заменить?» (printprof.go, 123 Б1).
-	prints printState
-	// packs — одна операция наборов за раз и набор, ждущий «Заменить» (packs.go).
-	packs packState
-	// net — «Обновить библиотеку»: отмена, проверка при запуске, источник (packs_net.go).
-	net libNet
+	// ownp — служба своих типографий (internal/app/ownprint; фасад — printprof.go).
+	ownp *ownprint.Service
+	// libp — служба наборов библиотеки (internal/app/libpacks; фасад — packs.go).
+	libp *libpacks.Service
 	// exp — служба выгрузки (internal/app/exporter; фасад — export.go, спеки 013 и 123).
 	exp *exporter.Service
+	// faceSt — подгон по лицам (faces.go, спека 130): занятость, кэш точек, память сессии.
+	faceSt faceState
 	// upd — служба обновления программы (internal/app/updater; фасад — update.go, спека 111).
 	upd *updater.Service
 	// assoc — открытие .salbum двойным щелчком и файл новее программы (internal/app/assoc; фасад —
@@ -259,6 +261,8 @@ func NewApp() *App {
 	a.upd = updater.New(a.updHost())
 	a.assoc = assoc.New(a.assocHost())
 	a.exp = exporter.New(a.expHost())
+	a.libp = libpacks.New(a.packsHost())
+	a.ownp = ownprint.New(a.printsHost())
 	return a
 }
 
@@ -283,9 +287,9 @@ func (a *App) startup(ctx context.Context) {
 	a.upd.Startup()                             // итог прошлого запуска установщика — до первого UpdateInfo
 	a.loadTemplates()
 	a.startBackups()
-	a.openDecor()    // до первого Load: свои фоны альбома находят путь по ключу
-	a.reloadPrints() // и свои типографии: обложка со своим изделием читается при открытии
-	a.openFonts()    // до первого Load: ширины «по тексту» — своими шрифтами
+	a.openDecor()   // до первого Load: свои фоны альбома находят путь по ключу
+	a.ownp.Reload() // и свои типографии: обложка со своим изделием читается при открытии
+	a.openFonts()   // до первого Load: ширины «по тексту» — своими шрифтами
 
 	c, err := library.NewCache(thumbsDir)
 	if err != nil {
@@ -395,7 +399,7 @@ func (a *App) editHost() edit.Host {
 func (a *App) domReady(ctx context.Context) {
 	defer guard("domReady")
 	a.fitScreen(ctx)
-	a.scheduleLibraryCheck()
+	a.libp.ScheduleCheck()
 	a.upd.Schedule()
 }
 

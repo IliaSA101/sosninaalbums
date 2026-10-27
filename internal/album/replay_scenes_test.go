@@ -10,6 +10,8 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/geom"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
 // replayGrid — сетка: места, группа, выравнивание, шаблоны, копия и размножение.
@@ -117,6 +119,13 @@ func replayCoverGrid(r *replay) {
 	r.do("StepCoverGrid:scope", e.StepCoverGrid("spine", 1))
 	r.vne("ApplyCoverGrid:scope")(e.ApplyCoverGrid("spine", two.Builtin[0].Boxes))
 	r.vne("ApplyCoverGrid:пусто")(e.ApplyCoverGrid(model.ScopeRight, nil))
+	// 132: «Заполнить места» с обложки — сначала места обложки (лицевая, задняя), потом развороты.
+	fresh := []model.PhotoInfo{replayPhoto(50, 'h', model.XmpMarks{}), replayPhoto(51, 'v', model.XmpMarks{})}
+	r.vnn("FillPlaces:обложка")(e.FillPlaces(fresh, model.CoverID))
+	if !slices.ContainsFunc(r.v.Cover.Sheet.Places, func(pl model.PlaceView) bool { return pl.Photo == fresh[0].ID }) {
+		r.t.Fatalf("FillPlaces с обложки: первое фото не на обложке: %+v", r.v.Cover.Sheet.Places)
+	}
+	r.do("Undo:FillPlaces", e.Undo())
 	r.do("Undo:StepCoverGrid", e.Undo())
 	r.do("Undo:ApplyCoverGrid", e.Undo())
 }
@@ -393,4 +402,54 @@ func replayCropZ(r *replay) {
 	key := ch.Whole.Extra[i].Key
 	r.do("SetLayout:разброс", e.SetLayout(s, key))
 	r.do("SetLayout:разброс холостая", e.SetLayout(s, key))
+}
+
+// replayFitFaces — «Подогнать по лицам» (130): лица подставлены вместо детектора. Подгон одним
+// шагом, повтор с памятью — холостой, ошибка образца без правки, отмена. Идёт последней: прежние
+// строки эталона не сдвигаются.
+func replayFitFaces(r *replay) {
+	e := r.e
+	r.ve("AddVignette:подгон")(e.AddVignette(-1))
+	sid := r.v.Spreads[len(r.v.Spreads)-1].ID
+	fresh := make([]model.PhotoInfo, 4)
+	for i := range fresh {
+		fresh[i] = replayPhoto(40+i, 'v', model.XmpMarks{})
+	}
+	r.vnn("FillPlaces:подгон")(e.FillPlaces(fresh, sid))
+	// Снимок мест с лицами: кадр в нём тот, что стоит сейчас.
+	snap := func() []model.FaceHit {
+		p, _ := e.Snapshot()
+		var hits []model.FaceHit
+		for i, pl := range p.Sheet(sid).Grid {
+			if pl.Photo == "" || model.RoleOf(pl) == model.RoleGroup {
+				continue
+			}
+			h := 0.18 + 0.01*float64(i%8)
+			box := layout.Rect{X: 0.5 - h*0.375, Y: 0.22, W: h * 0.75, H: h}
+			hits = append(hits, model.FaceHit{Place: pl.ID, Photo: pl.Photo, Frame: p.Photos[pl.Photo].FrameOrDefault(),
+				Box: box, Eye: geom.Pt{X: 0.5, Y: box.Y + 0.38*h}})
+		}
+		return hits
+	}
+	hits := snap()
+	if len(hits) == 0 {
+		r.t.Fatal("replayFitFaces: на виньетке нет фото")
+	}
+	v, rep, norm := e.FitFaces(sid, hits, "", "", nil, nil)
+	r.voe("FitFaces")(v, []any{rep, norm}, nil)
+	v, again, _ := e.FitFaces(sid, snap(), "", "", &norm, rep.Set)
+	r.voe("FitFaces:повтор")(v, again, nil)
+	v, bad, _ := e.FitFaces(sid, hits, "нет-места", "all", nil, nil)
+	r.voe("FitFaces:образец")(v, bad, nil)
+	r.do("Undo:FitFaces", e.Undo())
+	// G4: места листа для поиска лиц — чтение под замком, без шага отмены.
+	slots, ok := e.FaceSlots(sid)
+	r.read("FaceSlots", []any{slots, ok})
+	_, ok = e.FaceSlots("нет-такого")
+	r.read("FaceSlots:чужой", ok)
+	// Силуэт под лицо: окно места с фото — чтение под замком, без шага отмены.
+	w, h, ok := e.FaceWindow(sid, hits[0].Photo)
+	r.read("FaceWindow", []any{w, h, ok})
+	_, _, ok = e.FaceWindow(sid, "нет-такого")
+	r.read("FaceWindow:чужое", ok)
 }

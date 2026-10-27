@@ -75,8 +75,10 @@ method DuplicateGrid(arg1:string,arg2:number,arg3:boolean):Promise<model.View>
 method DuplicateItems(arg1:string,arg2:model.ClipSel):Promise<APP.PasteResult>
 method Export(arg1:APP.ExportOptions):Promise<boolean>
 method ExportTemplates():Promise<APP.TplSave>
+method FaceGuide(arg1:string,arg2:string):Promise<model.FaceGuide>
 method FillPlaces(arg1:Array<string>,arg2:string):Promise<APP.GridResult>
 method FitBackdrop(arg1:string,arg2:string):Promise<model.View>
+method FitFaces(arg1:string,arg2:string,arg3:string):Promise<APP.FacesResult>
 method FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method FlipSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method ForgetColor(arg1:string):Promise<Array<string>>
@@ -343,6 +345,9 @@ type APP.ExportOptions
   cover: boolean
   coverOnly: boolean
   print: string
+type APP.FacesResult
+  view: model.View
+  report: model.FaceReport
 type APP.FontAdded
   id: string
   name: string
@@ -861,6 +866,27 @@ type model.CoverZone
   kind: string
   rect: layout.Rect
   label: string
+type model.FaceGuide
+  on: boolean
+  w: number
+  h: number
+  eyeY: number
+  path: number[][]
+type model.FaceReport
+  fitted: number
+  noFace: number
+  many: number
+  missing: number
+  small: number
+  big: number
+  edge: number
+  contain: number
+  manual: number
+  changed: number
+  check: string[]
+  short: string[]
+  asked: boolean
+  refErr?: string
 type model.FontUse
   id: string
   name: string
@@ -1214,6 +1240,8 @@ type model.View
   minDPI: number
   lowDPI: number
   emptyPlaces: number
+  fillFrom: number[]
+  coverFill: number
   textMaxW: number
   backdropUsed: string[]
   libPhotos: string[]

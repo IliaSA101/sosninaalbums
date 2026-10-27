@@ -25,7 +25,7 @@ import (
 var readColor = imgfile.ReadColor
 
 // media отдаёт миниатюры: /media/t/<id> и /media/p/<id>; рамочки-картинки — /media/f/<id>
-// (serveFramePic); шрифты — /media/font/<файл>;
+// (serveFramePic); оригинал фото как есть — /media/o/<id> (serveOriginal); шрифты — /media/font/<файл>;
 // библиотека фонов — /media/gen/*, /media/lib/* (serveDecor), плитки разворотов — /media/tpl/*
 // (serveTpl); разметки — /media/cover-guide и
 // /media/spread-guide (serveMarkup).
@@ -49,6 +49,10 @@ func (a *App) media(next http.Handler) http.Handler {
 		// До общего разбора /media/<t|p>/<id>: иначе «f» ушло бы в миниатюру.
 		if id, ok := strings.CutPrefix(r.URL.Path, "/media/f/"); ok {
 			a.serveFramePic(w, r, id)
+			return
+		}
+		if id, ok := originalID(r.URL.Path); ok { // оригинал: тоже до разбора t|p
+			a.serveOriginal(w, r, id)
 			return
 		}
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/media/"), "/")

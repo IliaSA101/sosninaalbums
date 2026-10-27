@@ -16,10 +16,10 @@ import { edit } from '../../editor/text/edit.svelte'
 import { gallery } from '../../panels/gallery/gallery.svelte'
 import { isVignette } from '../../panels/vignette/vignette'
 import { menuUi } from '../menu/menuui.svelte'
-import { articleById, placesOf, type Article, type SpotKey } from './articles'
+import { articleById, placesOf, type Article, type SpotKey } from '../guidetext/articles'
 import { planShow, type Plan, type SheetInfo, type ShowCtx, type Step } from './show'
 import { seek, spot } from './spotstate.svelte'
-import { articleText } from './articletext'
+import { articleText } from '../guidetext/articletext'
 import { joinToast, missToast } from './spot'
 
 const info = (s: SpreadView): SheetInfo => ({

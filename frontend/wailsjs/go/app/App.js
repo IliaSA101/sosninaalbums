@@ -310,12 +310,20 @@ export function ExportTemplates() {
   return window['go']['app']['App']['ExportTemplates']();
 }
 
+export function FaceGuide(arg1, arg2) {
+  return window['go']['app']['App']['FaceGuide'](arg1, arg2);
+}
+
 export function FillPlaces(arg1, arg2) {
   return window['go']['app']['App']['FillPlaces'](arg1, arg2);
 }
 
 export function FitBackdrop(arg1, arg2) {
   return window['go']['app']['App']['FitBackdrop'](arg1, arg2);
+}
+
+export function FitFaces(arg1, arg2, arg3) {
+  return window['go']['app']['App']['FitFaces'](arg1, arg2, arg3);
 }
 
 export function FlipBackdrop(arg1, arg2, arg3) {

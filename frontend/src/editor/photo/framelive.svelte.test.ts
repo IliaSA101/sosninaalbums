@@ -43,3 +43,47 @@ describe('framelive angle', () => {
     expect(framelive.tilting('a')).toBe(false)
   })
 })
+
+// Подгонка кадра (130): силуэт на виньетке виден, пока сдвигают кадр или тянут масштаб; наклон и отпускание его гасят.
+describe('framelive fitting', () => {
+  beforeEach(() => framelive.clear())
+
+  it('без сессии подгонки нет', () => {
+    expect(framelive.fitting('a')).toBe(false)
+  })
+
+  it('сдвиг за ✥ — подгонка, только у этого фото', () => {
+    framelive.set('a', F, false, true)
+    expect(framelive.fitting('a')).toBe(true)
+    expect(framelive.fitting('b')).toBe(false)
+  })
+
+  it('масштаб (ползунок на фото и в карточке) — подгонка', () => {
+    framelive.setZoom('a', F)
+    expect(framelive.fitting('a')).toBe(true)
+    expect(framelive.panning('a')).toBe(false)
+    expect(framelive.of('a')).toEqual(F)
+  })
+
+  it('отпускание гасит: кадр остаётся до ответа Go, подгонки нет', () => {
+    framelive.setZoom('a', F)
+    framelive.set('a', F)
+    expect(framelive.fitting('a')).toBe(false)
+    expect(framelive.of('a')).toEqual(F)
+    framelive.set('a', F, false, true)
+    framelive.clear()
+    expect(framelive.fitting('a')).toBe(false)
+  })
+
+  it('наклон — не подгонка (там сетка 9×9)', () => {
+    framelive.set('a', F, true, false, 2)
+    expect(framelive.fitting('a')).toBe(false)
+    expect(framelive.tilting('a')).toBe(true)
+  })
+
+  it('смена нормы листа поднимает счётчик', () => {
+    const n = framelive.normRev
+    framelive.bumpNorm()
+    expect(framelive.normRev).toBe(n + 1)
+  })
+})

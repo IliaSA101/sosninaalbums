@@ -1,6 +1,6 @@
 // Подсветка места (спека 033, design §5): какой из подходящих элементов мигает и где подпись.
 // Чистая геометрия в px окна, без DOM.
-import { articleText } from './articletext'
+import { articleText } from '../guidetext/articletext'
 
 export interface Box {
   left: number

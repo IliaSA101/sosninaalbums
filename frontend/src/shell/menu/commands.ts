@@ -244,6 +244,7 @@ const HANDLERS = {
   toggleSafe: () => modes.toggleSafe(),
   toggleRulers: () => modes.toggleRulers(),
   toggleMarkup: () => modes.toggleMarkup(),
+  toggleFaceGuide: () => modes.toggleFaceGuide(),
   toggleSnap: () => placesel.toggleSnap(),
   levelSimple: () => prefs.set('simple'),
   levelStandard: () => prefs.set('standard'),

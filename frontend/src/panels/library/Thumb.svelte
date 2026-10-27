@@ -105,8 +105,16 @@
     box-sizing: border-box;
     user-select: none;
   }
-  .thumb.selected img {
-    border-color: var(--accent);
+  /* Выбранное (0.27-m-11): рамка акцента 4 px и лёгкая заливка поверх фото. Слой ::before идёт раньше значков в DOM,
+     поэтому ✓, флажок, звёзды и профиль лежат над ним; одной тонкой рамки хватало, чтобы не заметить Ctrl+щелчок. */
+  .thumb.selected .im::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    border: 4px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    pointer-events: none;
   }
   /* Заглушка «нет файла» в форме фото: белая рамка 2 px, как у img; бледность used/rejected к ней не применяется */
   .gone {
@@ -117,7 +125,7 @@
     overflow: hidden;
   }
   .thumb.selected .gone {
-    border-color: var(--accent);
+    border: 4px solid var(--accent);
   }
   /* Уже в альбоме: число в углу и чуть бледнее. Одной бледности мало — на ярких
      и блёклых снимках её не отличить от самого фото (отзыв пользователя 2026-10-08) */
@@ -151,6 +159,12 @@
     bottom: 2px;
     height: 4px;
     background: var(--lbl-other);
+  }
+  /* У выбранного рамка толще (4 px): полоса не заходит на неё */
+  .thumb.selected .strip {
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
   }
   .strip.red {
     background: var(--lbl-red);

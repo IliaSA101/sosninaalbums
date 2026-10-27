@@ -1,6 +1,6 @@
 <script lang="ts">
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import { articleText } from '../guide/articletext'
+  import { articleText } from '../guidetext/articletext'
   import { FINAL, INTRO } from './steps'
   import { cardPlace, introText, withMissing } from './tour'
   import { tour } from './tourstate.svelte'

@@ -2,6 +2,7 @@
 # планы, спеки, журналы развилок, история циклов, сценарии QA, исследования.
 # Строка — путь от корня; с «/» на конце — вся папка. Читает scripts/publish-main.mjs.
 docs/BACKLOG.md
+docs/backlog/
 docs/QA.md
 docs/specs/
 docs/history/

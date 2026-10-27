@@ -1,10 +1,10 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import { articleText } from './articletext'
+  import { articleText } from '../guidetext/articletext'
   import { shortOf } from '../../base/prefs/levelcustom'
   import { LEVEL_TITLE, minLevel, rowOf } from '../../base/prefs/levels'
-  import type { Article } from './articles'
+  import type { Article } from '../guidetext/articles'
   import { guide } from './guidestate.svelte'
   import { closedLine, closedPlaces, keyRows, levelNeed, menuPath, openPlaces, planShow } from './show'
 

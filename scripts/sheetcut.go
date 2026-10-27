@@ -23,6 +23,17 @@
 // белые области (внутри колец) — тоже фон, белое с фактурой (крылья, бумага) остаётся, у границы мягкий
 // край с восстановлением цвета (defringe уже внутри).
 //
+// Рамки, уголки, разделители (RGB без альфы, края 249–254; PNG и JPEG) — режимы с фоном seed
+// (0.27-129-3): порог «почти белого» по листу (-thr вручную), окно — заливка от центра, как в программе,
+// замкнутые белые области по -holes (clean — по умолчанию, all — клинья между ветками, none — паспарту),
+// мягкий край 2 px. Белое на белом (облака) — явный -bg rembg.
+//   - -frame: одна рамка, обрезка по непрозрачному (поле иначе стало бы прозрачной полосой у края
+//     места), отчёт: окно, срез, «тянется, %» — центр 9-среза и неровное вдоль стороны в боковых полосах
+//     (ровная планка не штрафуется; больше 20 % — флаг, не отсев);
+//   - -quarters: лист 2x2, четверти <имя>-tl/-tr/-bl/-br, у каждой фон без окна;
+//   - -rows N|auto: разделители по проекции альфы; N — N−1 самых широких промежутков, auto — склейка
+//     промежутков уже -rowgap (12 px). Файлы <имя>-1.png…; -name задаёт <имя> (по умолчанию имя входа).
+//
 // Порядок: фон -> -dense (альфа ≥ порога → 255; листы Magnific просвечивают, видимое 224–254; 0 —
 // выкл.) -> связные области по -alpha -> мусор меньше -minarea прочь -> склейка в стикеры:
 //   - -grid КОЛОНКИxРЯДЫ (3x4): область относится к ячейке по центру рамки, все области ячейки —
@@ -45,13 +56,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"image/png"
+	"image"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/devtools/sheetcut"
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 func main() {
@@ -64,7 +77,7 @@ func main() {
 func run() error {
 	d := sheetcut.DefaultOptions()
 	out := flag.String("out", "", "папка вывода (по умолчанию «<вход>-cut» рядом с входом)")
-	bg := flag.String("bg", d.BG, "фон: auto, none (альфа как есть), own (белый фон снять самим), rembg")
+	bg := flag.String("bg", d.BG, "фон: auto, none (альфа как есть), own (белый фон снять самим), seed (рамки, уголки, разделители), rembg")
 	rembg := flag.String("rembg", os.Getenv("SHEETCUT_REMBG"), "команда rembg (путь к rembg.exe/rembg.cmd); по умолчанию SHEETCUT_REMBG")
 	model := flag.String("model", d.Model, "-bg rembg: модель (bria-rmbg отклоняется — лицензия)")
 	defringe := flag.Bool("defringe", d.Defringe, "-bg rembg: убрать светлую кайму (цвет полупрозрачных пикселей — от белого)")
@@ -79,7 +92,19 @@ func run() error {
 	edge := flag.Int("edge", d.Edge, "-bg own: полоса мягкого края, px")
 	preview := flag.Bool("preview", false, "контактные листы preview-dark.png и preview-color.png")
 	asJSON := flag.Bool("json", false, "отчёт в JSON")
+	frame := flag.Bool("frame", false, "рамка: фон seed, окно от центра, обрезка по непрозрачному, мера «тянется»")
+	quarters := flag.Bool("quarters", false, "уголки 2x2: четверти -tl -tr -bl -br, фон seed без окна")
+	rows := flag.String("rows", "", "разделители: N рядов или auto (по проекции альфы)")
+	rowGap := flag.Int("rowgap", sheetcut.DefaultRowGap, "-rows auto: промежутки уже этого числа px склеиваются")
+	thr := flag.Int("thr", 0, "-bg seed: «почти белый» вручную, 225…248 (0 — по листу)")
+	holes := flag.String("holes", sheetcut.HolesClean, "-bg seed: замкнутые белые области — clean, all, none")
+	name := flag.String("name", "", "рамка, уголки, ряды: имя файлов без расширения (по умолчанию — имя входа)")
 	flag.Parse()
+	outSet := false
+	flag.Visit(func(f *flag.Flag) { outSet = outSet || f.Name == "out" })
+	if outSet && strings.TrimSpace(*out) == "" {
+		return fmt.Errorf("-out пуст: нужна папка вывода")
+	}
 	if flag.NArg() != 1 {
 		return fmt.Errorf("нужен один входной PNG; флаги — перед именем файла")
 	}
@@ -92,6 +117,16 @@ func run() error {
 	if o.Cols, o.Rows, err = sheetcut.ParseGrid(*grid); err != nil {
 		return err
 	}
+	o.Thr, o.Holes, o.RowGap = uint8(min(255, max(0, *thr))), *holes, *rowGap
+	if o.Mode, o.SplitRows, err = pickMode(*frame, *quarters, *rows); err != nil {
+		return err
+	}
+	if o.Mode != sheetcut.ModeSheet {
+		o.Stem = *name
+		if o.Stem == "" {
+			o.Stem = strings.TrimSuffix(filepath.Base(in), filepath.Ext(in))
+		}
+	}
 	dir := *out
 	if dir == "" {
 		dir = strings.TrimSuffix(in, filepath.Ext(in)) + "-cut"
@@ -99,16 +134,73 @@ func run() error {
 	return process(in, dir, o, *preview, *asJSON)
 }
 
-func process(in, dir string, o sheetcut.Options, preview, asJSON bool) error {
-	t0 := time.Now()
-	f, err := os.Open(in)
+// pickMode — режим по флагам -frame, -quarters, -rows (не больше одного) и число рядов.
+func pickMode(frame, quarters bool, rows string) (mode string, n int, err error) {
+	set := 0
+	for _, b := range []bool{frame, quarters, rows != ""} {
+		if b {
+			set++
+		}
+	}
+	switch {
+	case set > 1:
+		return "", 0, fmt.Errorf("-frame, -quarters и -rows — по одному")
+	case frame:
+		return sheetcut.ModeFrame, 0, nil
+	case quarters:
+		return sheetcut.ModeQuarters, 0, nil
+	case rows == "auto":
+		return sheetcut.ModeRows, 0, nil
+	case rows != "":
+		if n, err = strconv.Atoi(rows); err != nil || n < 1 {
+			return "", 0, fmt.Errorf("-rows %q: нужно число рядов от 1 или auto", rows)
+		}
+		return sheetcut.ModeRows, n, nil
+	}
+	return sheetcut.ModeSheet, 0, nil
+}
+
+// localPath — путь от пользователя: абсолютный и локальный (не сетевой, не устройство).
+func localPath(p string) error {
+	abs, err := filepath.Abs(p)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	img, err := png.Decode(f)
+	return paths.CheckLocalPath(abs)
+}
+
+// decodeSheet читает PNG или JPEG листа: путь — локальный, размер и пиксели проверяет sheetcut.DecodeSheet.
+func decodeSheet(path string) (image.Image, error) {
+	if err := localPath(path); err != nil {
+		return nil, err
+	}
+	st, err := os.Stat(path)
 	if err != nil {
-		return fmt.Errorf("%s: %w", in, err)
+		return nil, err
+	}
+	if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: не обычный файл", path)
+	}
+	f, err := os.Open(path) //nolint:gosec // путь проверен CheckLocalPath, размер проверит DecodeSheet
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	img, err := sheetcut.DecodeSheet(f, st.Size())
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return img, nil
+}
+
+func process(in, dir string, o sheetcut.Options, preview, asJSON bool) error {
+	t0 := time.Now()
+	if err := localPath(dir); err != nil {
+		return err
+	}
+	img, err := decodeSheet(in)
+	if err != nil {
+		return err
 	}
 	res, err := sheetcut.Cut(img, o)
 	if err != nil {

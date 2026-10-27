@@ -87,6 +87,12 @@
     const v = tiltOf(e)
     if (!Number.isFinite(v)) return
     draft = clampTilt(v)
+    // Вернули к исходному: браузер change не пришлёт, поэтому предпросмотр гасим здесь (иначе сетка или силуэт залипнут).
+    if (!mixed && draft === tilt) {
+      draft = null
+      onend()
+      return
+    }
     onlive(draft)
   }
   async function commit(e: Event) {

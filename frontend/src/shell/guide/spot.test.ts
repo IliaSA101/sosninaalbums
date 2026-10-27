@@ -17,7 +17,7 @@ import {
   type Box,
   type Probe,
 } from './spot'
-import { ARTICLES } from './articles'
+import { ARTICLES } from '../guidetext/articles'
 
 const win = { w: 1280, h: 760 }
 const box = (left: number, top: number, width: number, height: number): Box => ({ left, top, width, height })

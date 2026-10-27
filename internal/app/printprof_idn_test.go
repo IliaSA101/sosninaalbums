@@ -4,10 +4,12 @@ import (
 	"math/rand/v2"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"golang.org/x/net/idna"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
+	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 )
 
 // Кириллический адрес в окне «Своя типография» (123 Б3, 0.26-123-52).
@@ -25,7 +27,7 @@ func TestIdnURL(t *testing.T) {
 		{"http://фабрика.рф/", "http://фабрика.рф/"}, // схема не https — решит CheckURL
 		{"https://user@фабрика.рф/", "https://user@фабрика.рф/"},
 	} {
-		got, why := idnURL(c.in)
+		got, why := ownprint.IDNURL(c.in)
 		if got != c.want || why != "" {
 			t.Errorf("%q → %q (%s), ждали %q", c.in, got, why, c.want)
 		}
@@ -42,7 +44,7 @@ func TestIdnURL(t *testing.T) {
 		"https://ф\u200bабрика.рф/",                   // невидимый знак
 		"https://" + strings.Repeat("ф", 64) + ".рф/", // метка длиннее 63 после перевода
 	} {
-		if got, why := idnURL(in); why == "" {
+		if got, why := ownprint.IDNURL(in); why == "" {
 			t.Errorf("%q принят: %q", in, got)
 		} else if !strings.ContainsAny(why, "абвгде") {
 			t.Errorf("%q: текст не по-русски: %q", in, why)
@@ -82,7 +84,7 @@ func TestSavePrintProfileCyrillicSite(t *testing.T) {
 		t.Fatalf("Parse(Encode): %v %q", err, back.Export.URL)
 	}
 	// Реестр после перезагрузки с диска.
-	a.reloadPrints()
+	a.ownp.Reload()
 	if q, ok := printprof.Current().ByID(res.ID); !ok || q.Export.URL != p.Export.URL {
 		t.Fatalf("после перезагрузки реестра: %v %+v", ok, q.Export)
 	}
@@ -156,7 +158,7 @@ func TestIdnShowKeepsDangerous(t *testing.T) {
 		"":                                    "",
 		"https://xn--/":                       "https://xn--/",
 	} {
-		if got := idnShow(in); got != want {
+		if got := ownprint.IDNShow(in); got != want {
 			t.Errorf("%q → %q, ждали %q", in, got, want)
 		}
 	}
@@ -188,8 +190,8 @@ func diffIdna(t *testing.T, h string) {
 	if shown == low {
 		return
 	}
-	uni, err := idnProfile.ToUnicode(low)
-	back, err2 := idnProfile.ToASCII(shown)
+	uni, err := ownprint.IDNProfile().ToUnicode(low)
+	back, err2 := ownprint.IDNProfile().ToASCII(shown)
 	if err != nil || uni != shown || err2 != nil || back != low {
 		t.Errorf("%s показан %q; x/net: %q %v, обратно %q %v", h, shown, uni, err, back, err2)
 	}
@@ -239,7 +241,7 @@ func TestDisplayHostDiffIdna(t *testing.T) {
 			r[i] = cyr[rng.IntN(len(cyr))]
 		}
 		u := string(r) + ".рф"
-		a, err := idnProfile.ToASCII(u)
+		a, err := ownprint.IDNProfile().ToASCII(u)
 		if err != nil {
 			continue
 		}
@@ -262,12 +264,12 @@ func FuzzIdnURL(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		out, why := idnURL(s)
-		_ = idnShow(s)
+		out, why := ownprint.IDNURL(s)
+		_ = ownprint.IDNShow(s)
 		if why != "" {
 			return
 		}
-		_, host, _, ok := splitHost(out)
+		_, host, _, ok := ownprint.SplitHost(out)
 		cerr := printprof.CheckURL(out)
 		switch {
 		case ok && !isASCII(host) && cerr == nil:
@@ -275,9 +277,19 @@ func FuzzIdnURL(f *testing.F) {
 		case cerr != nil:
 			return
 		}
-		back, why2 := idnURL(idnShow(out))
+		back, why2 := ownprint.IDNURL(ownprint.IDNShow(out))
 		if why2 != "" || !strings.EqualFold(back, out) {
-			t.Fatalf("%q → %q → показ %q → %q (%s)", s, out, idnShow(out), back, why2)
+			t.Fatalf("%q → %q → показ %q → %q (%s)", s, out, ownprint.IDNShow(out), back, why2)
 		}
 	})
+}
+
+// isASCII — все знаки строки ASCII (свой помощник теста: у службы он закрытый).
+func isASCII(s string) bool {
+	for i := range len(s) {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }

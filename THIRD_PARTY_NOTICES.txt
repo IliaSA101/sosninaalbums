@@ -5,7 +5,7 @@ Sosnina Albums — программа вёрстки свадебных фото
 распространяется по лицензии GNU General Public License версии 3 (только этой версии,
 GPL-3.0-only) с дополнительным условием по п. 7(b) — файлы LICENSE и NOTICE.md; версии
 до 0.22.x включительно выпущены по лицензии MIT. В программу и её исполняемый файл
-входят сторонние компоненты — Go-модули, npm-пакеты фронтенда и шрифты; их авторы,
+входят сторонние компоненты — Go-модули, npm-пакеты фронтенда, шрифты и веса нейросети; их авторы,
 версии и лицензии перечислены ниже, полные тексты лицензий приведены в конце файла.
 Все они допускают распространение вместе с программой под GPL-3.0 (Apache-2.0
 совместима с GPL версии 3). Список составлен по go list для сборок Windows, macOS
@@ -15,8 +15,9 @@ GPL-3.0-only) с дополнительным условием по п. 7(b) —
   1. Go-модули в исполняемом файле
   2. npm-пакеты в сборке интерфейса
   3. Шрифты (SIL Open Font License 1.1)
-  4. Прочее (системные библиотеки)
-  5. Тексты лицензий
+  4. Модели (веса нейросети)
+  5. Прочее (системные библиотеки)
+  6. Тексты лицензий
 
 1. Go-модули в исполняемом файле (25)
 -------------------------------------------
@@ -253,7 +254,17 @@ zimmerframe 1.1.5 (MIT)
   [Underdog]
     Copyright (c) 2012, Sergey Steblina (sergey@steblina.com), Jovanny Lemonad (lemonad@jovanny.ru), with Reserved Font Name 'Underdog'
 
-4. Прочее (системные библиотеки)
+4. Модели (1; веса вшиты в программу)
+----------------------------------------
+Нейросеть находит лица на фото для кнопки «Подогнать по лицам». Веса — данные, не код.
+  YuNet (face_detection_yunet_2023mar.onnx), 2023mar (MIT, © 2020 Shiqi Yu)
+    Источник: OpenCV Zoo, https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet
+    Веса вшиты в программу (internal/faces), вывод сети — собственный код проекта на Go; код OpenCV не используется.
+Код обучения сети (libfacedetection.train) — BSD-3-Clause, в программу не входит. Данные обучения
+(WIDER FACE) предназначены для исследований; на веса под MIT это прямо не переносится — у любого
+открытого детектора вопрос тот же.
+
+5. Прочее (системные библиотеки)
 ---------------------------------
 Не входят в поставку, подключаются из системы:
   Windows — Microsoft WebView2 (Evergreen Bootstrapper и WebView2Loader.dll встроены через
@@ -263,7 +274,7 @@ zimmerframe 1.1.5 (MIT)
   Linux — GTK 3, WebKitGTK 4.1 и libsoup 3 (LGPL-2.1 и новее, BSD); динамическое подключение,
     ставятся из репозитория дистрибутива как зависимости пакета .deb.
 
-5. Тексты лицензий
+6. Тексты лицензий
 ------------------
 
 === Лицензия 1: MIT ===
@@ -1771,7 +1782,34 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 38: OFL-1.1 ===
+=== Лицензия 38: MIT ===
+Применяется к:
+  - YuNet (face_detection_yunet_2023mar.onnx) 2023mar
+
+MIT License
+
+Copyright (c) 2020 Shiqi Yu <shiqi.yu@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+=== Лицензия 39: OFL-1.1 ===
 Применяется к:
   - Bad Script (шрифт)
   - Caveat (шрифт)

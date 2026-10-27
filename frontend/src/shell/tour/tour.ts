@@ -1,8 +1,8 @@
 // Первые шаги (спека 113, design §4.3–4.5): чистая логика тура — какие шаги идут на этом уровне, что сделать с видом
 // при входе, живое ли место и где встанет карточка. Без DOM и Svelte; исполняет tourstate.svelte.ts.
 import type { FeatureId } from '../../base/prefs/levels'
-import { articleText } from '../guide/articletext'
-import type { SpotKey } from '../guide/articles'
+import { articleText } from '../guidetext/articletext'
+import type { SpotKey } from '../guidetext/articles'
 import type { SheetInfo, ShowCtx, Step } from '../guide/show'
 import { MISSING, MORE_IDS, TOUR, type TourId, type TourStep } from './steps'
 

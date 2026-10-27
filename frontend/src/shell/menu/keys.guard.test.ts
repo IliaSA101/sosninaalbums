@@ -3,7 +3,7 @@ import { COMMANDS } from './commands'
 import { MOUSE_HELP } from './mousehelp'
 import { catalogView } from '../../base/keys/keymap.fixture'
 import { keyMarks } from '../../base/keys/keytext'
-import { ARTICLES } from '../guide/articles'
+import { ARTICLES } from '../guidetext/articles'
 
 // Страж 074: командные клавиши живут в одном месте — в реестре (каталог Go + свои), а не в обработчиках и текстах.
 // Иначе после переназначения подсказка врёт, а второй обработчик ловит ту же клавишу. По образцу platform.guard.test.ts.

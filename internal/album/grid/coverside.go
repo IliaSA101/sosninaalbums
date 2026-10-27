@@ -27,6 +27,9 @@ const (
 // errNoZone — у сторонки нет безопасной зоны (поля больше сторонки).
 var errNoZone = errors.New("Безопасная зона сторонки пуста: проверьте поля в «Размерах для типографии»") //nolint:staticcheck // текст уходит пользователю как есть
 
+// errNoCover — «Сохранить как шаблон» со сторонки в альбоме без обложки.
+var errNoCover = errors.New("Обложки нет") //nolint:staticcheck // текст уходит пользователю как есть
+
 // CoverSideIndex — номер сторонки в паре состояний и памяти формы: 0 — left (задняя), 1 — right.
 func CoverSideIndex(scope string) (int, bool) {
 	switch scope {
@@ -156,6 +159,65 @@ func holdRotated(b model.Box, z layout.Rect) model.Box {
 	b.X += geom.ClampF(bb.X, z.X, z.X+z.W-bb.W) - bb.X
 	b.Y += geom.ClampF(bb.Y, z.Y, z.Y+z.H-bb.H) - bb.Y
 	return b
+}
+
+// holdInZone — место b (мм листа) целиком в зоне z: неповёрнутое обрезается по ней, а не сдвигается
+// (сдвиг свёл бы соседей внахлёст, 0.27-132-15); повёрнутое удерживается holdRotated.
+func holdInZone(b model.Box, z layout.Rect) model.Box {
+	if b.Rot != 0 {
+		return holdRotated(b, z)
+	}
+	b.X, b.W = clipSpan(b.X, b.W, z.X, z.W)
+	b.Y, b.H = clipSpan(b.Y, b.H, z.Y, z.H)
+	return b
+}
+
+// clipSpan — отрезок [a, a+w] по отрезку [lo, lo+size]: пересечение; пусто или короче MinPlace —
+// MinPlace у ближнего края (не больше самого отрезка).
+func clipSpan(a, w, lo, size float64) (float64, float64) {
+	s, e := max(a, lo), min(a+w, lo+size)
+	if e-s >= geom.MinPlace {
+		return s, e - s
+	}
+	w = min(geom.MinPlace, size)
+	return geom.ClampF(s, lo, lo+size-w), w
+}
+
+// coverFrame — рамка шаблона сторонки: безопасная зона и поле альбома m с каждой стороны. Шаблон
+// страницы (0.26) уже живёт в долях страницы с тем же полем, поэтому «страница → сторонка» и
+// «сторонка → страница» не удваивают и не теряют его (0.27-132-2). m = 0 — сама зона.
+func coverFrame(box layout.Rect, m float64) layout.Rect {
+	return layout.Rect{X: box.X - m, Y: box.Y - m, W: box.W + 2*m, H: box.H + 2*m}
+}
+
+// coverPlaceBoxes — места сторонки scope в долях рамки coverFrame, область шаблона — page: для
+// «Сохранить как шаблон» со сторонки. Места держатся в зоне (holdInZone), поэтому плитка «Мои»
+// равна тому, что встанет. Корешок не входит. Нет обложки, сторонки или мест — ошибка. Только чтение.
+func coverPlaceBoxes(p *model.Project, scope string) ([]model.Box, string, error) {
+	if p.Cover == nil || p.Cover.Sheet == nil {
+		return nil, "", errNoCover
+	}
+	if _, ok := CoverSideIndex(scope); !ok {
+		return nil, "", errors.New("неизвестная область")
+	}
+	c, ok := coverSideOf(p, scope)
+	if !ok {
+		return nil, "", errNoZone
+	}
+	f := coverFrame(c.box, p.Settings.Margin)
+	boxes := make([]model.Box, 0, len(c.places))
+	for _, pl := range c.places {
+		b := holdInZone(model.Box{X: pl.X, Y: pl.Y, W: pl.W, H: pl.H, Rot: pl.Rot, Shape: pl.Shape, Round: pl.Round}, c.box)
+		boxes = append(boxes, model.Box{X: (b.X - f.X) / f.W, Y: (b.Y - f.Y) / f.H, W: b.W / f.W, H: b.H / f.H,
+			Rot: b.Rot, Shape: b.Shape, Round: b.Round})
+	}
+	if boxes = model.ClampBoxes(boxes); len(boxes) == 0 {
+		if scope == model.ScopeLeft {
+			return nil, "", model.NoPlacesError("На задней нет мест")
+		}
+		return nil, "", model.NoPlacesError("На лицевой нет мест")
+	}
+	return boxes, model.TplPage, nil
 }
 
 // fracOf — прямоугольники в мм от угла зоны → доли зоны (зажим как у встроенных сеток).
@@ -342,6 +404,7 @@ type CoverSource struct {
 	found  bool
 	scope  string
 	box    layout.Rect
+	margin float64 // поле альбома: рамка шаблона страницы — зона плюс оно (coverFrame)
 	prm    layout.Params
 	asp    []float64
 	places int
@@ -354,13 +417,27 @@ func CoverInput(p *model.Project, scope string) CoverSource {
 	if !ok {
 		return CoverSource{scope: scope}
 	}
-	return CoverSource{found: true, scope: scope, box: c.box, prm: c.prm, asp: c.aspects(p), places: len(c.places), photos: c.photos()}
+	return CoverSource{found: true, scope: scope, box: c.box, margin: p.Settings.Margin, prm: c.prm, asp: c.aspects(p), places: len(c.places), photos: c.photos()}
+}
+
+// fromFrame — шаблон страницы (доли рамки coverFrame) → доли зоны: места переводятся в мм, обрезаются
+// по зоне (holdInZone, 0.27-132-15) и снова делятся на зону — как их примет ApplyCoverGrid.
+func (in CoverSource) fromFrame(frac []model.Box) []model.Box {
+	f, z := coverFrame(in.box, in.margin), in.box
+	out := make([]model.Box, len(frac))
+	for i, t := range frac {
+		b := holdInZone(model.Box{X: f.X + t.X*f.W, Y: f.Y + t.Y*f.H, W: t.W * f.W, H: t.H * f.H, Rot: t.Rot, Shape: t.Shape, Round: t.Round}, z)
+		out[i] = model.Box{X: (b.X - z.X) / z.W, Y: (b.Y - z.Y) / z.H, W: b.W / z.W, H: b.H / z.H, Rot: b.Rot, Shape: b.Shape, Round: b.Round,
+			Border: t.Border.Clone()}
+	}
+	return model.ClampBoxes(out)
 }
 
 // CoverGridChoicesOf считает галерею сторонки для вкладки n (зажимается в 1..7, меньше 1 — число
 // мест сторонки, 0 мест — 1; в 7 входят и 8+ мест). «По фото» есть на вкладке, где сторонка
 // сейчас (1…16 мест); «Встроенные» — сетки на n мест под пропорции зоны без форм «По фото»; «Мои» —
-// шаблоны страницы на n мест (7 — от 7), шаблоны разворота и виньетки не берутся (0.26-127-16).
+// шаблоны страницы на n мест (7 — от 7), шаблоны разворота и виньетки не берутся (0.26-127-16); их
+// доли переведены из рамки «зона + поле» в доли зоны (fromFrame), как и все ряды.
 // Drop у «По фото» 0, у остальных — фото сторонки минус места. Только чтение; нет сторонки — пустые ряды.
 func CoverGridChoicesOf(in CoverSource, n int, tpls []model.Template) model.CoverGridChoices {
 	if n < 1 {
@@ -391,7 +468,7 @@ func CoverGridChoicesOf(in CoverSource, n int, tpls []model.Template) model.Cove
 			continue
 		}
 		if len(t.Boxes) == n || (n == maxBuiltinN && len(t.Boxes) > n) {
-			c.Mine = append(c.Mine, model.GridChoice{ID: t.ID, Name: t.Name, Scope: t.Scope, Boxes: t.Boxes,
+			c.Mine = append(c.Mine, model.GridChoice{ID: t.ID, Name: t.Name, Scope: t.Scope, Boxes: in.fromFrame(t.Boxes),
 				Drop: dropCount(in.photos, len(t.Boxes), t.Scope, in.scope)})
 		}
 	}

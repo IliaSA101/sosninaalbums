@@ -17,6 +17,7 @@ const (
 	BGAuto  = "auto"  // есть содержательная альфа — none; белый лист — rembg, если команда задана, иначе own
 	BGNone  = "none"  // альфа как есть
 	BGOwn   = "own"   // белый фон снять своим алгоритмом (RemoveBackground)
+	BGSeed  = "seed"  // рамки, уголки, разделители: порог по листу, окно от центра, holes (RemoveBackgroundSeed)
 	BGRembg = "rembg" // внешняя команда rembg (runRembg)
 )
 
@@ -50,6 +51,13 @@ type Options struct {
 	MinArea   int     // мусор меньше этой площади, px (авто: 1/10000 листа)
 	Pad       int     // прозрачное поле вокруг предмета, px
 	MaxSide   int     // длинная сторона выхода, больше — уменьшить (4096)
+
+	Mode      string // ModeSheet (по умолчанию), ModeFrame, ModeQuarters, ModeRows
+	Thr       uint8  // BGSeed: «почти белый»; 0 — по листу (AdaptiveThr), в рецепте — вручную
+	Holes     string // BGSeed: HolesClean (по умолчанию), HolesAll, HolesNone
+	SplitRows int    // ModeRows: сколько рядов (N−1 самых широких промежутков); 0 — auto по RowGap
+	RowGap    int    // ModeRows, auto: промежутки уже этого числа px склеиваются (DefaultRowGap)
+	Stem      string // имя файлов режимов: <Stem>.png, <Stem>-tl.png, <Stem>-1.png; пусто — NN.png
 }
 
 // DefaultOptions — умолчания CLI.
@@ -80,6 +88,9 @@ func (o Options) normalized(w, h int) Options {
 		o.MaxSide = MaxSidePx
 	}
 	o.Pad = max(0, o.Pad)
+	if o.RowGap <= 0 {
+		o.RowGap = DefaultRowGap
+	}
 	return o
 }
 
@@ -110,6 +121,8 @@ type Sticker struct {
 	Area     int          `json:"area"`            // площадь видимых пикселей предмета в листе
 	Scaled   bool         `json:"scaled"`          // уменьшен до MaxSide
 	Bytes    int          `json:"bytes,omitempty"` // размер PNG (после записи)
+	File     string       `json:"file,omitempty"`  // имя файла режимов frame, quarters, rows; пусто — NN.png
+	Frame    *FrameInfo   `json:"frame,omitempty"` // только ModeFrame: окно, срез, «тянется»
 	Warnings []string     `json:"warnings,omitempty"`
 	Img      *image.NRGBA `json:"-"`
 }
@@ -137,16 +150,21 @@ func Cut(src image.Image, o Options) (*Result, error) {
 	if (o.Cols > 0) != (o.Rows > 0) || o.Cols < 0 || o.Rows < 0 {
 		return nil, errors.New("sheetcut: сетка — обе стороны больше нуля")
 	}
+	if err := o.checkMode(); err != nil {
+		return nil, err
+	}
 	o = o.normalized(w, h)
 	img := toNRGBA(src)
 	res := &Result{Sheet: [2]int{w, h}}
 	switch o.BG {
-	case BGNone, BGOwn, BGRembg:
+	case BGNone, BGOwn, BGSeed, BGRembg:
 		res.BG = o.BG
 	case BGAuto:
 		switch {
 		case hasContentAlpha(img):
 			res.BG = BGNone
+		case o.Mode != ModeSheet:
+			res.BG = BGSeed // rembg для рамок и разделителей — только явным bg: тонкие линии он съедает
 		case o.Rembg != "":
 			res.BG = BGRembg
 		default:
@@ -156,20 +174,16 @@ func Cut(src image.Image, o Options) (*Result, error) {
 	default:
 		return nil, fmt.Errorf("sheetcut: неизвестный режим фона %q", o.BG)
 	}
-	switch res.BG {
-	case BGOwn:
-		st := RemoveBackground(img, BGOptions{White: o.White, HoleMin: o.HoleMin, Edge: o.Edge})
-		res.BGInfo = &st // мягкий край уже с восстановлением цвета (unmatte): defringe не нужен
-	case BGRembg:
-		var err error
-		if img, err = runRembg(img, o.Rembg, o.Model); err != nil {
+	if o.Mode != ModeSheet {
+		if err := cutMode(img, o, res); err != nil {
 			return nil, err
 		}
-		if o.Defringe {
-			defringe(img)
-		}
+		return res, nil
 	}
-	densify(img, o.Dense)
+	var err error
+	if img, err = applyBG(img, o, res, false); err != nil {
+		return nil, err
+	}
 	cutRegions(img, o, res)
 	return res, nil
 }

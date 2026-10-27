@@ -70,6 +70,7 @@ export interface MenuCtx {
   big: boolean
   details: boolean
   safe: boolean
+  faceGuide?: boolean // 130: силуэт под лицо включён («Вид ▸ Силуэт под лицо»)
   markup?: boolean // подложка разметки типографии включена (066); нет — выключена
   rulers: boolean
   snap: boolean
@@ -413,6 +414,7 @@ function viewSpecs(c: MenuCtx): Spec[][] {
       { id: 'markup', label: 'Разметка типографии', cmd: 'toggleMarkup', checked: !!c.markup },
       { id: 'rulers', label: 'Линейки', cmd: 'toggleRulers', feature: 'rulers', checked: c.rulers },
       { id: 'snap', label: 'Привязка', cmd: 'toggleSnap', feature: 'manual', checked: c.snap },
+      { id: 'faceGuide', label: 'Силуэт под лицо', cmd: 'toggleFaceGuide', feature: 'vignette', checked: !!c.faceGuide },
     ],
     [
       { id: 'fit', label: 'Вписать', cmd: 'fitZoom', disabled: !c.hasSpread },

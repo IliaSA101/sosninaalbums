@@ -9,6 +9,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -102,7 +103,7 @@ var openFilesDialog = wr.OpenMultipleFilesDialog
 // openDecor открывает библиотеку и ставит искатель своих для salbum — до первого Load (startup).
 func (a *App) openDecor() {
 	s := decor.Open(a.cfgDir)
-	s.SetPrintCheck(checkPrintData)
+	s.SetPrintCheck(ownprint.CheckData)
 	a.decorLib.Store(s)
 	salbum.SetLibFinder(s.Find)
 	salbum.SetFrameFinder(s.FindFrame)

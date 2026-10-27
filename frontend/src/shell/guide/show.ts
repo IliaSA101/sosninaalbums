@@ -9,7 +9,7 @@ import { MOUSE_HELP } from '../menu/mousehelp'
 import { features, fromBase, shortOf, toggle } from '../../base/prefs/levelcustom'
 import { LEVEL_TITLE, RANK, minLevel, rowOf, type Base, type Custom, type FeatureId, type Level, type RowId } from '../../base/prefs/levels'
 import type { SectionName } from '../../base/prefs/view.svelte'
-import { placesOf, type Article, type Need, type Place } from './articles'
+import { placesOf, type Article, type Need, type Place } from '../guidetext/articles'
 
 // Что известно о листе (разворот или обложка): хватает, чтобы решить про вид, не обращаясь к View.
 export interface SheetInfo {

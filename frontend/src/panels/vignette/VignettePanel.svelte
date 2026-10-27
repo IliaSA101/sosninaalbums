@@ -10,6 +10,8 @@
   import { tplLabel } from './vigown'
   import { vigOwn } from './vigown.svelte'
   import { vigDialog } from './vigsession.svelte'
+  import { vigFaces } from './vigfaces.svelte'
+  import { facesLabel, facesTip } from './vigfaces'
   import { choiceOf, formOf } from './vignette'
 
   // Раздел «Виньетка» карточки справа — только сводка и кнопки (031 dialog §2, отзыв 14.10): схема шаблона,
@@ -48,6 +50,8 @@
   const dims = $derived(fitBox(sheetSize(sp).w, sheetSize(sp).h, boxW, MAX_H))
   const galleryOpen = $derived(gallery.cur?.spread === sp.id && gallery.cur.tab === 'layouts')
   const setup = () => vigDialog.open(sp.id)
+  // Подгон по лицам (130): пока идёт поиск, кнопка aria-disabled и показывает ход; Go ищет по одному листу за раз.
+  const faces = $derived(vigFaces.progress(sp.id))
 </script>
 
 <div class="vp" role="group" aria-label="Виньетка">
@@ -76,6 +80,14 @@
       data-guide="vig-sort"
       onclick={() => sortVignette(sp.id)}
       title="Ученики по алфавиту: фамилия, имя; без имени — в конце">Сортировать по фамилии</button
+    >
+    <button
+      type="button"
+      class="faces"
+      data-guide="vig-faces"
+      aria-disabled={vigFaces.busy}
+      onclick={() => vigFaces.fit(sp.id)}
+      title={facesTip()}>{facesLabel(faces)}</button
     >
   </div>
 </div>
@@ -142,6 +154,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 12px;
+  }
+  /* Подпись «Лица 12 / 25» короче «Подогнать по лицам»: ширина по длинной, чтобы ряд не прыгал (как «Экспорт 12 / 40») */
+  .tools button.faces {
+    min-width: 17ch;
+  }
+  .tools button[aria-disabled='true'] {
+    opacity: 0.55;
+    cursor: default;
   }
   .tools button[aria-pressed='true'] {
     border-color: var(--accent);

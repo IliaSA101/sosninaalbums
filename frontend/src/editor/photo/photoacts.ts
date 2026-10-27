@@ -18,6 +18,7 @@ export type ActId =
   | 'cover'
   | 'fitPhoto'
   | 'resetFrame'
+  | 'faceRef'
   | 'rect'
   | 'rounded'
   | 'oval'
@@ -59,6 +60,7 @@ export const ACTS: Record<ActId, Act> = {
   cover: { label: 'С обрезкой', icon: 'cover', feature: 'frame' },
   fitPhoto: { label: 'Подогнать место под фото', icon: 'fit-photo', feature: 'frame' },
   resetFrame: { label: 'Сбросить кадр', icon: 'reset', feature: 'frame' },
+  faceRef: { label: 'Остальные — как это лицо', icon: 'vignette', feature: 'vignette' },
   rect: { label: 'Прямоугольное', icon: 'shape-rect', feature: 'frame' },
   rounded: { label: 'Скруглённое', icon: 'shape-round', feature: 'frame' },
   oval: { label: 'Круглое', icon: 'shape-oval', feature: 'frame' },

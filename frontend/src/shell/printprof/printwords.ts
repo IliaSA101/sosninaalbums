@@ -114,5 +114,12 @@ export const COPIED_LINE = 'Номер из файла уже занят — д�
 export const removeQuestion = (name: string, id: string): string =>
   `Удалить типографию «${name}»? Альбомы, где она выбрана, не изменятся: в карточке обложки будет написано «Типография не найдена: ${id}». Отменить удаление нельзя.`
 
+// Заголовки вопросов поверх окна.
+export const ASK_TITLE = { replace: 'Заменить типографию?', remove: 'Удалить типографию?', base: 'Сменить основу?' } as const
+
+// Вопрос при смене «Основы» после правок полей (0.27-m-11).
+export const baseQuestion = (name: string): string => `Сменить основу на «${name}»? Поля окна заполнятся заново из этой типографии.`
+export const BASE_NOTE = 'Введённые вами правки пропадут'
+
 // Сводка файла в вопросе: «Форматы: … · Файлы: … · Сайт: …».
 export const summaryLine = (lines: readonly string[]): string => lines.join(' · ')

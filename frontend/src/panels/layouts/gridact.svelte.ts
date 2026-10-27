@@ -14,8 +14,9 @@ export const VIG_MANUAL_TOAST = 'Виньетка стала ручной — «
 
 // Склейка и разрез через ручной разворот (103): те же окно и галочка кадра, свои тексты и действие.
 // ids — группы пары (при склейке — две подряд, при разрезе — одна); run — вызов Go с галочкой keep.
+// faces (130) — «Подогнать по лицам?» на виньетке: то же окно, число правленых кадров приходит в отчёте Go.
 export type GlueAsk = {
-  kind: 'join' | 'cut'
+  kind: 'join' | 'cut' | 'faces'
   title: string
   ask: string
   ok: string
@@ -111,6 +112,11 @@ class GridActions {
     // Пока ждали Go, пара могла измениться (Ctrl+Z, правка): вопрос про исчезнувшее не открываем
     if (!glueAlive(g, store.view.spreads)) return
     this.autoAsk = { spread: g.ids[0], key: '', glue: g, crops, keep: true }
+  }
+
+  // То же окно, когда число правленых кадров уже известно (подгон по лицам, 130): Go считает его в отчёте.
+  openAsk(g: GlueAsk, crops: number) {
+    if (glueAlive(g, store.view.spreads)) this.autoAsk = { spread: g.ids[0], key: '', glue: g, crops, keep: true }
   }
 
   setKeep(on: boolean) {

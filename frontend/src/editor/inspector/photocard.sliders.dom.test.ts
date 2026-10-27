@@ -112,10 +112,40 @@ describe('Масштаб', () => {
     const r = slider('Масштаб кадра')
     for (const v of ['130', '160', '200']) await fireEvent.input(r, { target: { value: v } })
     expect(framelive.of('a')!.s).toBe(2)
+    expect(framelive.fitting('a')).toBe(true) // на ходу виден силуэт под лицо (130)
     expect(api.SetFrame).not.toHaveBeenCalled()
     await fireEvent.change(r, { target: { value: '200' } })
     await settleFrame()
     expect(api.SetFrame).toHaveBeenCalledTimes(1)
+    expect(framelive.fitting('a')).toBe(false)
+  })
+
+  it('силуэт гаснет сразу на отпускании, не дожидаясь ответа Go', async () => {
+    setup()
+    let done!: () => void
+    api.SetFrame.mockImplementationOnce(() => new Promise((res) => (done = () => res(undefined))))
+    render(InspectorFrame, docked)
+    const r = slider('Масштаб кадра')
+    await fireEvent.input(r, { target: { value: '200' } })
+    expect(framelive.fitting('a')).toBe(true)
+    void fireEvent.change(r, { target: { value: '200' } })
+    await Promise.resolve()
+    expect(api.SetFrame).toHaveBeenCalledTimes(1)
+    expect(framelive.fitting('a')).toBe(false) // кадр ещё держится до ответа, но не как подгонка
+    expect(framelive.of('a')!.s).toBe(2)
+    done()
+  })
+
+  it('потянули и вернули к исходному: change не приходит, просмотр и силуэт всё равно гаснут', async () => {
+    setup({ s: 1.2 })
+    render(InspectorFrame, docked)
+    const r = slider('Масштаб кадра')
+    await fireEvent.input(r, { target: { value: '170' } })
+    expect(framelive.fitting('a')).toBe(true)
+    await fireEvent.input(r, { target: { value: '120' } })
+    expect(framelive.fitting('a')).toBe(false)
+    expect(framelive.of('a')).toBeNull()
+    expect(api.SetFrame).not.toHaveBeenCalled()
   })
 
   it('⊗ зовёт ResetFrame один раз; на масштабе по умолчанию без своего кадра — серая', async () => {
@@ -215,6 +245,21 @@ describe('Прозрачность', () => {
     setup({ fade: 0 })
     render(InspectorFrame, docked)
     expect(rst('Сбросить: прозрачность').disabled).toBe(true)
+  })
+})
+
+describe('Наклон: протяжка', () => {
+  it('потянули и вернули к исходному: сетка (framelive) гаснет без change', async () => {
+    setup({ tilt: 2.5 })
+    render(InspectorFrame, docked)
+    const r = slider('Наклон')
+    await fireEvent.input(r, { target: { value: '5' } })
+    framelive.set('a', { s: 1.2, x: 0.1, y: 0.2, r: 5 }, true) // кадр на ходу считает liveTilt по геометрии; здесь — как будто посчитал
+    expect(framelive.tilting('a')).toBe(true)
+    await fireEvent.input(r, { target: { value: '2.5' } })
+    expect(framelive.tilting('a')).toBe(false)
+    expect(framelive.of('a')).toBeNull()
+    expect(api.SetFrameAngle).not.toHaveBeenCalled()
   })
 })
 

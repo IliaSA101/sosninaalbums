@@ -213,6 +213,29 @@ describe('modes.presetGroup (058)', () => {
   })
 })
 
+describe('modes.faceGuide (130)', () => {
+  beforeEach(useStorage)
+
+  it('по умолчанию включён', async () => {
+    expect((await fresh()).faceGuide).toBe(true)
+  })
+  it('выключение запоминается и возвращается обратно', async () => {
+    const m = await fresh()
+    m.toggleFaceGuide()
+    expect(m.faceGuide).toBe(false)
+    const n = await fresh()
+    expect(n.faceGuide).toBe(false)
+    n.toggleFaceGuide()
+    expect((await fresh()).faceGuide).toBe(true)
+  })
+  it('старая запись без поля и мусор вместо флажка дают true', async () => {
+    localStorage.setItem('viewMode', JSON.stringify({ safe: true }))
+    expect((await fresh()).faceGuide).toBe(true)
+    localStorage.setItem('viewMode', JSON.stringify({ faceGuide: 'нет' }))
+    expect((await fresh()).faceGuide).toBe(true)
+  })
+})
+
 describe('modes.markup (066)', () => {
   beforeEach(useStorage)
 

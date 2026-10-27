@@ -3,6 +3,8 @@ import {
   builtinOf,
   cardBoxes,
   copyTargets,
+  coverAreas,
+  coverHasBorders,
   defaultN,
   fits,
   mineOf,
@@ -241,5 +243,52 @@ describe('gridSourceTexts', () => {
   it('7+ — «7 мест и больше», лист — «на весь лист»', () => {
     expect(gridSourceTexts('spread', 7, 'лист').empty.mine).toBe('Нет своих шаблонов на 7 мест и больше')
     expect(gridSourceTexts('right', 2, 'лист').empty.builtin).toBe('Встроенные шаблоны ставятся только на весь лист')
+  })
+})
+
+describe('coverAreas — пункты «Область» окна сохранения на обложке', () => {
+  it('«Задняя · Лицевая» по сторонкам вида, подписи от Go', () => {
+    expect(
+      coverAreas([
+        { scope: 'right', label: 'Лицевая' },
+        { scope: 'left', label: 'Задняя' },
+      ]),
+    ).toEqual([
+      { id: 'left', label: 'Задняя' },
+      { id: 'right', label: 'Лицевая' },
+    ])
+  })
+  it('одна сторонка — один пункт; нет сторонок — пусто', () => {
+    expect(coverAreas([{ scope: 'right', label: 'Лицевая' }])).toEqual([{ id: 'right', label: 'Лицевая' }])
+    expect(coverAreas(undefined)).toEqual([])
+  })
+})
+
+describe('coverHasBorders — рамочки мест сторонки', () => {
+  // Лицевая: рамка x 100…200; задняя: 0…90 (корешок 90…100)
+  const front = r(100, 0, 100, 200)
+  const back = r(0, 0, 90, 200)
+  const border = { width: 1, color: '#000' } as never
+  it('центр места на половине сторонки и есть рамочка — да', () => {
+    expect(coverHasBorders([{ ...r(110, 10, 40, 40), border }], front, 'right')).toBe(true)
+    expect(coverHasBorders([{ ...r(10, 10, 40, 40), border }], back, 'left')).toBe(true)
+  })
+  it('рамочка на другой сторонке, место без рамочки, нет мест или рамки — нет', () => {
+    expect(coverHasBorders([{ ...r(10, 10, 40, 40), border }], front, 'right')).toBe(false)
+    expect(coverHasBorders([{ ...r(110, 10, 40, 40), border }], back, 'left')).toBe(false)
+    expect(coverHasBorders([r(110, 10, 40, 40)], front, 'right')).toBe(false)
+    expect(coverHasBorders(null, front, 'right')).toBe(false)
+    expect(coverHasBorders([{ ...r(110, 10, 40, 40), border }], undefined, 'right')).toBe(false)
+  })
+  it('место за пунктиром, но на своей половине листа — да (как InArea у Go)', () => {
+    // центры за рамкой по X и по Y, но на своей половине
+    expect(coverHasBorders([{ ...r(210, 10, 40, 40), border }], front, 'right')).toBe(true) // центр 230 правее рамки
+    expect(coverHasBorders([{ ...r(110, 250, 40, 40), border }], front, 'right')).toBe(true) // центр ниже рамки
+    expect(coverHasBorders([{ ...r(-30, 10, 40, 40), border }], back, 'left')).toBe(true) // центр -10 левее рамки
+  })
+  it('центр на корешке — ничьё место', () => {
+    const spine = { ...r(85, 10, 20, 20), border } // центр 95: не левее 90 и не правее 100
+    expect(coverHasBorders([spine], back, 'left')).toBe(false)
+    expect(coverHasBorders([spine], front, 'right')).toBe(false)
   })
 })

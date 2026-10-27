@@ -3,6 +3,7 @@ package sheetcut
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -63,6 +64,9 @@ func removeStale(dir string, count int) ([]string, error) {
 // прогона (NN.png с номером больше числа стикеров) и отмечает их в Result.Notes; другие файлы
 // папки не трогает.
 func Save(res *Result, dir string) error {
+	if strings.TrimSpace(dir) == "" {
+		return errors.New("sheetcut: папка вывода не задана") // пусто = текущая папка, а в Windows корень диска
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -83,11 +87,19 @@ func Save(res *Result, dir string) error {
 		if s.Bytes > MaxFileBytes {
 			s.Warnings = append(s.Warnings, fmt.Sprintf("файл %d МБ больше предела набора %d МБ", s.Bytes>>20, MaxFileBytes>>20))
 		}
-		if err := os.WriteFile(filepath.Join(dir, StickerName(s.Index)), buf.Bytes(), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, s.fileName()), buf.Bytes(), 0o644); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// fileName — имя файла стикера: заданное режимом или NN.png по номеру.
+func (s *Sticker) fileName() string {
+	if s.File != "" {
+		return s.File
+	}
+	return StickerName(s.Index)
 }
 
 // SavePreview пишет два контактных листа: на тёмном и на цветном фоне.
@@ -131,13 +143,18 @@ func (r *Result) JSON() ([]byte, error) { return json.MarshalIndent(r, "", "  ")
 func (r *Result) Text() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "лист %d×%d, фон: %s, областей %d, мусора %d, стикеров %d\n", r.Sheet[0], r.Sheet[1], r.BG, r.Regions, r.Noise, len(r.Stickers))
-	if r.BGInfo != nil {
+	if r.BGInfo != nil && r.BGInfo.Thr > 0 {
+		fmt.Fprintf(&b, "снятие фона seed: порог %d, окно %d px, замкнутых белых областей снято %d, оставлено %d\n", r.BGInfo.Thr, r.BGInfo.WindowPx, r.BGInfo.Holes, r.BGInfo.HolesKept)
+	} else if r.BGInfo != nil {
 		fmt.Fprintf(&b, "своё снятие фона: замкнутых белых областей снято %d, оставлено %d\n", r.BGInfo.Holes, r.BGInfo.HolesKept)
 	}
 	for _, s := range r.Stickers {
-		fmt.Fprintf(&b, "%s  %d×%d px  %.1f×%.1f см@300dpi  кусков %d", StickerName(s.Index), s.W, s.H, s.CmW, s.CmH, s.Pieces)
+		fmt.Fprintf(&b, "%s  %d×%d px  %.1f×%.1f см@300dpi  кусков %d", s.fileName(), s.W, s.H, s.CmW, s.CmH, s.Pieces)
 		if s.Bytes > 0 {
 			fmt.Fprintf(&b, "  %d КБ", s.Bytes>>10)
+		}
+		if f := s.Frame; f != nil && f.Window {
+			fmt.Fprintf(&b, "  тянется %.0f %%", f.Stretch)
 		}
 		b.WriteByte('\n')
 		for _, w := range s.Warnings {

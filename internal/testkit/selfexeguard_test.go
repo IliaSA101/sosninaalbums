@@ -12,12 +12,6 @@ import (
 	"testing"
 )
 
-// ownBinaryExceptions — тесты, которым нельзя импортировать testkit (depguard), поэтому у них своя
-// копия SelfExe; в такой копии обязана быть ветка Windows (ссылка без .exe там не запускается).
-var ownBinaryExceptions = map[string]bool{
-	filepath.Join("..", "devtools", "sheetcut", "testutil_test.go"): true,
-}
-
 // Страж: тест не берёт путь к своему бинарю сам (os.Args[0], os.Executable) — только
 // testkit.SelfExe. Ссылка os.Symlink(exe, ".../selfexe") без .exe на Linux работает, а на Windows
 // нет: так CI уронил sheetcut (24.10). На Linux это ловится только разбором исходников.
@@ -45,12 +39,7 @@ func TestNoOwnBinaryLink(t *testing.T) {
 		if !first.IsValid() {
 			return nil
 		}
-		switch {
-		case !ownBinaryExceptions[path]:
-			t.Errorf("%s: путь к своему бинарю — только testkit.SelfExe(t) (на Windows ссылка без .exe не запускается)", fset.Position(first))
-		case !bytes.Contains(src, []byte(`runtime.GOOS == "windows"`)):
-			t.Errorf("%s: копия SelfExe без ветки Windows (return os.Args[0])", fset.Position(first))
-		}
+		t.Errorf("%s: путь к своему бинарю — только testkit.SelfExe(t) (на Windows ссылка без .exe не запускается; в devtools — devtest.SelfExe)", fset.Position(first))
 		return nil
 	})
 	if err != nil {

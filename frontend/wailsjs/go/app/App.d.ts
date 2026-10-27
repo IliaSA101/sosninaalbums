@@ -163,9 +163,13 @@ export function Export(arg1:app.ExportOptions):Promise<boolean>;
 
 export function ExportTemplates():Promise<app.TplSave>;
 
+export function FaceGuide(arg1:string,arg2:string):Promise<model.FaceGuide>;
+
 export function FillPlaces(arg1:Array<string>,arg2:string):Promise<app.GridResult>;
 
 export function FitBackdrop(arg1:string,arg2:string):Promise<model.View>;
+
+export function FitFaces(arg1:string,arg2:string,arg3:string):Promise<app.FacesResult>;
 
 export function FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 

@@ -408,23 +408,21 @@ func (d placeSide) nextEmpty(s *model.Spread, at int) *model.Place {
 }
 
 // FillPlaces — «Заполнить пустые места»: фото не из альбома по порядку садятся в
-// пустые места разворотов-сеток, начиная с fromSpread (неизвестный — с начала)
-// и дальше по альбому. Фото из альбома (и стоящие только копией, 098-17), с фонов и стикеров
-// пропускаются. left — сколько не встало.
+// пустые места (порядок — model.FillSeats): с fromSpread (неизвестный — с первого разворота)
+// и дальше по альбому; с обложки (model.CoverID) — сначала обложка. Фото из альбома (и стоящие
+// только копией, 098-17), с фонов и стикеров пропускаются. left — сколько не встало.
 func FillPlaces(p *model.Project, photos []model.PhotoInfo, fromSpread string) (left int) {
 	photos = model.DedupePhotos(photos)
 	onBg, files := p.OnDecor(), p.PlacedFiles()
 	fresh := slices.DeleteFunc(slices.Clone(photos), func(ph model.PhotoInfo) bool { return files[model.BaseID(ph.ID)] || onBg[ph.ID] })
 	ids := model.Remember(p, fresh)
-	start, _ := p.Find(fromSpread)
 	k := 0
-	for _, s := range p.Spreads[max(start, 0):] {
-		for _, pl := range s.Grid {
-			if k < len(ids) && pl.Photo == "" {
-				p.Put(s, pl, ids[k])
-				k++
-			}
+	for _, st := range p.FillSeats(fromSpread) {
+		if k == len(ids) {
+			break
 		}
+		p.Put(st.Sheet, st.Place, ids[k])
+		k++
 	}
 	return len(ids) - k
 }

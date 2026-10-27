@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/IliaSA101/sosninaalbums/internal/devtools/devtest"
 )
 
 // Фальшивый rembg — приём TestHelperProcess: команда — сам тестовый бинарь с -test.run.
@@ -26,7 +28,7 @@ func fakeRembg(t *testing.T, mode string) *[][]string {
 	t.Setenv("TMP", tmp)
 	t.Setenv("TEMP", tmp)
 	t.Setenv("TMPDIR", tmp)
-	self := selfExe(t)
+	self := devtest.SelfExe(t)
 	var calls [][]string
 	old := rembgCommand
 	t.Cleanup(func() { rembgCommand = old })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MenuItem } from '../menu/menu'
 import { TOUR } from '../tour/steps'
-import { ARTICLES } from './articles'
+import { ARTICLES } from '../guidetext/articles'
 import { menus } from './show'
 
 // Страж путей «Правка ▸ …» и «Разворот ▸ …» в статьях справочника и шагах тура (124 U1, 0.26-124-26): пункт

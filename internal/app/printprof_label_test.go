@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
+	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 )
 
 // 0.26-123-57: две свои, чьи подписи в списках («<название> (своя)») совпадают, не сохраняются.
@@ -14,10 +15,10 @@ func TestSaveOwnLabelClash(t *testing.T) {
 		a, ev := printApp(t)
 		saved(t, a, editOf(t, a, "fabrika", order[0]))
 		e := editOf(t, a, "fabrika", order[1])
-		if c := a.CheckPrintProfile(e); c.OK || c.Errs["name"] != errPrintDupLabel.Error() {
+		if c := a.CheckPrintProfile(e); c.OK || c.Errs["name"] != ownprint.ErrDupLabel.Error() {
 			t.Errorf("%q после %q: расчёт %+v", order[1], order[0], c.Errs)
 		}
-		if _, err := a.SavePrintProfile(e, false); err == nil || err.Error() != errPrintDupLabel.Error() {
+		if _, err := a.SavePrintProfile(e, false); err == nil || err.Error() != ownprint.ErrDupLabel.Error() {
 			t.Errorf("%q после %q: %v", order[1], order[0], err)
 		}
 		if ownCount(a) != 1 || ev.count("print:changed") != 1 || len(a.mustStore(t).Prints()) != 1 {
@@ -36,12 +37,12 @@ func TestSaveOwnLabelAllowed(t *testing.T) {
 		t.Fatalf("своих %d, ждали 4", ownCount(a))
 	}
 	// Круг Save→Load: после перечитывания хранилища все четыре на месте.
-	a.reloadPrints()
+	a.ownp.Reload()
 	if ownCount(a) != 4 {
 		t.Errorf("после перезагрузки реестра своих %d", ownCount(a))
 	}
 	// Само название встроенной остаётся отказом — это двойник, а не спор подписей.
-	if _, err := a.SavePrintProfile(editOf(t, a, "fabrika", "Фотосфера"), false); err == nil || err.Error() != errPrintDup.Error() {
+	if _, err := a.SavePrintProfile(editOf(t, a, "fabrika", "Фотосфера"), false); err == nil || err.Error() != ownprint.ErrDup.Error() {
 		t.Errorf("название встроенной: %v", err)
 	}
 }
@@ -51,14 +52,11 @@ func TestReloadKeepsStoredLabelPair(t *testing.T) {
 	a, _ := printApp(t)
 	for i, name := range []string{"Пара", "Пара (своя)"} {
 		p := ownFile(t, a, "own-abcd000"+string(rune('1'+i)), name, 1)
-		a.prints.mu.Lock()
-		err := a.storeOwn(a.mustStore(t), "", p, nil)
-		a.prints.mu.Unlock()
-		if err != nil {
+		if _, err := a.mustStore(t).SavePrint("", name, encoded(t, p)); err != nil { // в хранилище минуя проверки названий
 			t.Fatal(err)
 		}
 	}
-	a.reloadPrints()
+	a.ownp.Reload()
 	if ownCount(a) != 2 {
 		t.Errorf("своих %d, ждали 2", ownCount(a))
 	}
@@ -92,12 +90,12 @@ func TestImportOwnLabelClash(t *testing.T) {
 	for i, name := range []string{"QA тест 1 (своя)", "QA\u00a0тест 1  (своя)"} {
 		p := ownFile(t, a, "own-eeee000"+string(rune('1'+i)), "Временная", 1)
 		p.Name, p.Gen = name, name
-		if _, err := a.importPrintPath(profileFile(t, "x.saprint", encoded(t, p))); err != errPrintDupLabel {
+		if _, err := a.ownp.ImportPath(profileFile(t, "x.saprint", encoded(t, p))); err != ownprint.ErrDupLabel {
 			t.Errorf("%q: %v", name, err)
 		}
 	}
 	bi := builtinCopy(t, "fabrika", "QA тест 1 (своя)") // id встроенной → импорт делает копию
-	if _, err := a.importPrintPath(profileFile(t, "b.saprint", encoded(t, bi))); err != errPrintDupLabel {
+	if _, err := a.ownp.ImportPath(profileFile(t, "b.saprint", encoded(t, bi))); err != ownprint.ErrDupLabel {
 		t.Errorf("копия: %v", err)
 	}
 	if ownCount(a) != 1 || ev.count("print:changed") != 1 {
@@ -105,7 +103,7 @@ func TestImportOwnLabelClash(t *testing.T) {
 	}
 	// Подпись другая — принимается.
 	ok := ownFile(t, a, "own-eeee0009", "QA тест 1 (своя 2)", 1)
-	if _, err := a.importPrintPath(profileFile(t, "ok.saprint", encoded(t, ok))); err != nil || ownCount(a) != 2 {
+	if _, err := a.ownp.ImportPath(profileFile(t, "ok.saprint", encoded(t, ok))); err != nil || ownCount(a) != 2 {
 		t.Errorf("«(своя 2)»: %v, своих %d", err, ownCount(a))
 	}
 }
@@ -115,24 +113,24 @@ func TestImportOwnLabelClash(t *testing.T) {
 func TestImportReplaceLabelClash(t *testing.T) {
 	a, _ := printApp(t)
 	v1 := ownFile(t, a, "own-aaaa0001", "Общая", 1)
-	if _, err := a.importPrintPath(profileFile(t, "1.saprint", encoded(t, v1))); err != nil {
+	if _, err := a.ownp.ImportPath(profileFile(t, "1.saprint", encoded(t, v1))); err != nil {
 		t.Fatal(err)
 	}
 	saved(t, a, editOf(t, a, "fabrika", "Игрек"))
 	v2 := v1
 	v2.Version, v2.Name, v2.Gen = 2, "Игрек (своя)", "Игрек (своя)"
-	if _, err := a.importPrintPath(profileFile(t, "2.saprint", encoded(t, v2))); err != errPrintDupLabel {
+	if _, err := a.ownp.ImportPath(profileFile(t, "2.saprint", encoded(t, v2))); err != ownprint.ErrDupLabel {
 		t.Errorf("вопрос о замене: %v", err)
 	}
 	// Название свободно при вопросе, затем занято сохранением другой своей.
 	v3 := v1
 	v3.Version, v3.Name, v3.Gen = 3, "Зет", "Зет"
-	res, err := a.importPrintPath(profileFile(t, "3.saprint", encoded(t, v3)))
+	res, err := a.ownp.ImportPath(profileFile(t, "3.saprint", encoded(t, v3)))
 	if err != nil || res.Ask != "replace" {
 		t.Fatalf("вопрос: %+v %v", res, err)
 	}
 	saved(t, a, editOf(t, a, "fabrika", "Зет (своя)"))
-	if _, err := a.ConfirmImportPrintProfile(res.Token); err != errPrintDupLabel {
+	if _, err := a.ConfirmImportPrintProfile(res.Token); err != ownprint.ErrDupLabel {
 		t.Errorf("ответ: %v", err)
 	}
 	if cur, _ := printprof.Current().ByID("own-aaaa0001"); cur.Name != "Общая" || cur.Version != 1 {

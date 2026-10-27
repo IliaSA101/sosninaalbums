@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
 import { can, minLevel, rowOf, type Level } from '../../base/prefs/levels'
 import { features, fromBase } from '../../base/prefs/levelcustom'
-import { articleById, placesOf } from './articles'
+import { articleById, placesOf } from '../guidetext/articles'
 import {
   closedLine,
   closedPlaces,

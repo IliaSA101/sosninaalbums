@@ -63,15 +63,22 @@ func (s *Store) RemovePack(id string, keep func(key string) bool) (PackRemove, e
 }
 
 // collect — сборка мусора по ключам (под ioMu): файл удаляется, если ключ не держат свои,
-// наборы кроме except, шаблоны (свои и наборов кроме except) и keep; dry — только посчитать.
+// наборы кроме except, шаблоны (свои и наборов кроме except), записи незнакомого вида и keep;
+// dry — только посчитать. Незнакомое не прочиталось до конца — не удаляется ничего.
 // Удаление — только внутри папки вида.
 func (s *Store) collect(items []packEntry, keep func(key string) bool, except *packReg, dry bool) PackRemove {
 	var res PackRemove
-	refs := s.tplRefs(except)
+	if len(items) == 0 {
+		return res // нечего собирать — полный проход по диску не нужен
+	}
+	refs, complete := s.tplRefs(except)
+	if !complete {
+		log.Print("библиотека: незнакомое прочитано не до конца — сборка мусора ничего не удаляет")
+	}
 	for _, e := range items {
 		s.mu.RLock()
 		path, ok := s.files[e.Kind][e.Key]
-		held := refs[e.Key] || s.heldBy(e.Key, except)
+		held := !complete || refs[e.Key] || s.heldBy(e.Key, except)
 		s.mu.RUnlock()
 		if !ok {
 			continue // файла нет — удалять нечего
@@ -102,7 +109,9 @@ func (s *Store) collect(items []packEntry, keep func(key string) bool, except *p
 // tplRefs — ключи картинок, на которые ссылаются шаблоны разворотов: свои (и скрытые — как
 // heldBy) и наборов, кроме except. Иначе удаление набора стёрло бы фон своего шаблона, ради
 // которого фотограф его и сохранял. Разбор — через кэш плиток (ключ — хэш содержимого).
-func (s *Store) tplRefs(except *packReg) map[string]bool {
+// К ссылкам известного разбора добавлены ключи из сырых байт шаблонов и из записей незнакомого вида
+// (unknownRefs — задел под 0.28); complete = false — незнакомое прочитано не до конца.
+func (s *Store) tplRefs(except *packReg) (refs map[string]bool, complete bool) {
 	var keys []string
 	s.mu.RLock()
 	for _, e := range s.entries {
@@ -121,11 +130,19 @@ func (s *Store) tplRefs(except *packReg) map[string]bool {
 		}
 	}
 	s.mu.RUnlock()
-	refs := map[string]bool{}
+	unknown := s.unknownRefs(except)
+	refs = unknown.keys
 	for _, key := range keys {
-		for _, ref := range s.tplLookup(key).libs {
+		info := s.tplLookup(key)
+		if info.unread {
+			unknown.complete = false // шаблон есть, но не прочитан — его ссылок не знаем
+		}
+		for _, ref := range info.libs {
 			refs[ref.key] = true
 		}
+		for _, k := range info.raw {
+			refs[k] = true
+		}
 	}
-	return refs
+	return refs, unknown.complete
 }

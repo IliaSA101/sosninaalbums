@@ -385,11 +385,21 @@ describe('имена из названий файлов (060)', () => {
     })
   })
 
-  it('«Заполнить»: named — тост, «не хватило мест» идёт в тот же текст', async () => {
-    store.plug({ ...noHooks, select, pick: () => ({ ids: ['a', 'b'], skipped: 0, from: 'free', inAlbum: 0, filtered: false }) })
+  it('«Заполнить» с выделением: named — тост, «не хватило мест» идёт в тот же текст', async () => {
+    store.photos = [{ id: 'a', path: 'a', name: 'a', w: 100, h: 100 }] as never
+    store.selected.add('a')
+    store.plug({ ...noHooks, select, pick: () => ({ ids: ['a', 'b'], skipped: 0, from: 'selected', inAlbum: 0, filtered: false }) })
     vi.mocked(Api.FillPlaces).mockResolvedValueOnce({ view: view(2), left: 1, named: ['a'] } as never)
     await store.fillPlaces()
     expect(store.toast?.text).toBe('Не хватило мест: 1 фото остались в ленте. Имена взяты из названий файлов: 1')
+    expect(store.toast?.action?.label).toBe('Убрать имена')
+  })
+
+  it('«Заполнить» без выделения: остаток ленты не называется (132-22), имена — в тосте', async () => {
+    store.plug({ ...noHooks, select, pick: () => ({ ids: ['a', 'b'], skipped: 0, from: 'free', inAlbum: 0, filtered: false }) })
+    vi.mocked(Api.FillPlaces).mockResolvedValueOnce({ view: view(2), left: 1, named: ['a'] } as never)
+    await store.fillPlaces()
+    expect(store.toast?.text).toBe('Имена взяты из названий файлов: 1')
     expect(store.toast?.action?.label).toBe('Убрать имена')
   })
 

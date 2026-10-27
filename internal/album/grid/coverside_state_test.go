@@ -271,6 +271,14 @@ func TestCoverGridChoicesMine(t *testing.T) {
 			t.Errorf("Мои %s: Drop %d, scope %s", m.ID, m.Drop, m.Scope)
 		}
 	}
+	// Починка двойного поля, 0.27-132-2: доли шаблона страницы — доли рамки «зона + поле» (не зоны),
+	// в «Мои» уходят доли зоны, обрезанные по ней: крайние места упираются в пунктир.
+	fr, z := frameOf(ch.Box, c.p().Settings.Margin), ch.Box
+	b0, b2 := ch.Mine[0].Boxes[0], ch.Mine[0].Boxes[2]
+	wantY := (fr.Y + 0.1*fr.H - z.Y) / z.H
+	if b0.X != 0 || math.Abs(b2.X+b2.W-1) > 1e-9 || math.Abs(b0.Y-wantY) > 1e-9 {
+		t.Errorf("Мои page3: первое %+v (ждали X = 0, Y = %.4f), последнее %+v (правый край 1)", b0, wantY, b2)
+	}
 	if len(ch.ByPhoto) != 0 || ch.Photos != 5 || ch.Places != 5 {
 		t.Errorf("вкладка 3 при 5 местах: byPhoto=%d photos=%d places=%d", len(ch.ByPhoto), ch.Photos, ch.Places)
 	}

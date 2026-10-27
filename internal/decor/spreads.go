@@ -119,7 +119,9 @@ type tplInfo struct {
 	ok            bool
 	pages, places int
 	ratio         float64
+	unread        bool     // файл в индексе не прочитался (занят, велик, не обычный): ссылок не знаем — сборка мусора не удаляет
 	libs          []libRef // картинки библиотеки шаблона: их держит сборка мусора (tplRefs)
+	raw           []string // ключи my:… из сырых байт файла, в том числе в полях новее программы (rawLibKeys)
 }
 
 // tplMeta дописывает к плитке своего шаблона (или из набора) страницы, места и пропорцию; false — файл не
@@ -138,9 +140,9 @@ func (s *Store) tplLookup(key string) tplInfo {
 	if hit {
 		return info
 	}
-	t, err := s.SpreadTpl(key)
-	info = tplInfo{ok: err == nil, pages: t.Pages, places: len(t.Places), ratio: t.Ratio, libs: tplLibs(t)}
-	if !errors.Is(err, ErrNotFound) { // не прочитался (стёрт, занят) — не запоминать
+	t, data, err := s.spreadTplRaw(key)
+	info = tplInfo{ok: err == nil, pages: t.Pages, places: len(t.Places), ratio: t.Ratio, libs: tplLibs(t), raw: rawLibKeys(data), unread: errors.Is(err, errTplUnread)}
+	if !errors.Is(err, ErrNotFound) && !info.unread { // не прочитался (стёрт, занят) — не запоминать
 		s.tpl.put(key, info)
 	}
 	return info
@@ -148,6 +150,10 @@ func (s *Store) tplLookup(key string) tplInfo {
 
 // errTplBroken — файл шаблона прочитан, но не разбирается.
 var errTplBroken = errors.New("файл готового разворота испорчен")
+
+// errTplUnread — файл из индекса не прочитался (занят, больше MaxTplFile, не обычный файл), но он
+// есть: для сборки мусора это «ссылки неизвестны», а не «шаблона нет». Наружу (SpreadTpl) — ErrNotFound.
+var errTplUnread = errors.New("файл готового разворота не прочитан")
 
 // warmTpl — разбор шаблонов (своих и наборов), которых нет в кэше, в несколько потоков: первое
 // открытие окна с тысячами своих упирается в чтение файлов (антивирус, облако), а не в разбор.
@@ -183,33 +189,46 @@ func (s *Store) warmTpl(keys []string) {
 // SpreadTpl — шаблон по ID плитки: встроенный или файл из индекса папки Развороты/ (свой и
 // из набора; путь — от ключа, не от интерфейса). Файл новее программы — model.ErrTplNewer.
 func (s *Store) SpreadTpl(id string) (model.SpreadTpl, error) {
+	t, _, err := s.spreadTplRaw(id)
+	if errors.Is(err, errTplUnread) {
+		err = ErrNotFound
+	}
+	return t, err
+}
+
+// spreadTplRaw — SpreadTpl и сырые байты файла (для сборки мусора: ссылки читаются и там, где разбор
+// не знает поля — borders[].lib 0.28 — или отказал, ErrTplNewer, битый). У встроенного байт нет.
+func (s *Store) spreadTplRaw(id string) (model.SpreadTpl, []byte, error) {
 	if strings.HasPrefix(id, presetPrefix) {
 		if t, ok := builtinTpl(id); ok {
-			return t, nil
+			return t, nil, nil
 		}
-		return model.SpreadTpl{}, ErrNotFound
+		return model.SpreadTpl{}, nil, ErrNotFound
 	}
 	if !model.ValidLibKey(id) {
-		return model.SpreadTpl{}, ErrNotFound
+		return model.SpreadTpl{}, nil, ErrNotFound
 	}
 	s.mu.RLock()
 	path, ok := s.files[KindSpread][id]
 	s.mu.RUnlock()
 	if !ok {
-		return model.SpreadTpl{}, ErrNotFound
+		return model.SpreadTpl{}, nil, ErrNotFound
 	}
 	data, err := readCapped(path, model.MaxTplFile)
+	if errors.Is(err, os.ErrNotExist) { // стёрт между индексом и чтением — шаблона нет
+		return model.SpreadTpl{}, nil, ErrNotFound
+	}
 	if err != nil {
-		return model.SpreadTpl{}, ErrNotFound
+		return model.SpreadTpl{}, nil, errTplUnread
 	}
 	t, err := model.ParseSpreadTpl(data)
 	if errors.Is(err, model.ErrTplNewer) {
-		return model.SpreadTpl{}, err
+		return model.SpreadTpl{}, data, err
 	}
 	if err != nil {
-		return model.SpreadTpl{}, errTplBroken
+		return model.SpreadTpl{}, data, errTplBroken
 	}
-	return t, nil
+	return t, data, nil
 }
 
 // SaveSpreadTpl — «Сохранить разворот…»: шаблон в Развороты/<ключ>.json и запись реестра в

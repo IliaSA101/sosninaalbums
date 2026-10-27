@@ -115,7 +115,8 @@ jobs:
       - name: go test
         env:
           SA_TEST_SLOW: "2.5"
-        run: go test -cover -json . ./internal/... > "$RUNNER_TEMP/go-test.json"
+        # PACKPREP_CHROME: настоящий тест вырезов SVG (devtools/svgcut) в Chrome раннера, без него — пропуск (ревью 129, «да» владельца 25.10)
+        run: PACKPREP_CHROME="$(command -v google-chrome)" go test -cover -json . ./internal/... > "$RUNNER_TEMP/go-test.json"
 
       # и после провала go test: test-baseline печатает упавшие тесты с хвостом вывода (24.10 - провал без единой строки)
       - name: сверка с эталоном go-linux

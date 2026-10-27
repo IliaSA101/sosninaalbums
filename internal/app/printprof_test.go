@@ -12,6 +12,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
+	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 )
 
@@ -23,7 +24,7 @@ func printApp(t *testing.T) (*App, *events) {
 	t.Helper()
 	a := decorApp(t)
 	printprof.UseForTest(t, nil)
-	a.reloadPrints()
+	a.ownp.Reload()
 	return a, catchEvents(a)
 }
 
@@ -46,6 +47,17 @@ func saved(t *testing.T, a *App, e PrintEdit) PrintSaved {
 		t.Fatalf("сохранение %q: %v", e.Name, err)
 	}
 	return res
+}
+
+// built — итог ownprint.Build: профиль и ошибки полей.
+type built struct {
+	p    printprof.Profile
+	errs map[string]string
+}
+
+func buildOwn(e PrintEdit, id string, snap *printprof.Snapshot, spreads int) built {
+	p, errs := ownprint.Build(editIn(e), id, snap, spreads)
+	return built{p, errs}
 }
 
 func ownCount(a *App) int {
@@ -237,7 +249,7 @@ func TestSavePrintProfileRoundTrip(t *testing.T) {
 	b.cfgDir, b.emit = a.cfgDir, func(string, ...any) {}
 	b.openDecor()
 	t.Cleanup(func() { printprof.Install(nil) })
-	b.reloadPrints()
+	b.ownp.Reload()
 	for _, id := range []string{res1.ID, res2.ID, res3.ID} {
 		want, _ := printprof.Current().ByID(id)
 		if want.ID != id {
@@ -318,7 +330,7 @@ func TestDeletePrintProfile(t *testing.T) {
 	}
 	// Повтор, встроенная, чужой id, пустой: отказ, события нет.
 	for _, id := range []string{gone.ID, "fabrika", "fsfera", "нет", ""} {
-		if _, err := a.DeletePrintProfile(id); !errors.Is(err, errPrintNotOwn) {
+		if _, err := a.DeletePrintProfile(id); !errors.Is(err, ownprint.ErrNotOwn) {
 			t.Errorf("удаление %q: %v", id, err)
 		}
 	}
@@ -363,7 +375,7 @@ func TestReloadPrints(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	a.reloadPrints()
+	a.ownp.Reload()
 	var got []string
 	for _, in := range a.PrintProfiles() {
 		if in.Source == printprof.SourceOwn {
@@ -381,7 +393,7 @@ func TestReloadPrints(t *testing.T) {
 	}
 	// Без библиотеки (startup не дошёл): остаются встроенные, паники нет.
 	b := newApp(t)
-	b.reloadPrints()
+	b.ownp.Reload()
 	if len(printprof.Current().Profiles()) != 3 {
 		t.Errorf("без библиотеки: %d типографий", len(printprof.Current().Profiles()))
 	}

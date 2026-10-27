@@ -360,6 +360,7 @@ test('rebuildChecks: настоящий rebuildSetup с ref и verify (git на�
     fs.writeFileSync(path.join(repo, f), f)
   }
   execFileSync('git', ['init', '-q', repo])
+  g('config', 'core.autocrlf', 'false') // не зависеть от CRLF-настроек машины
   g('add', '.')
   g('commit', '-q', '-m', 'x')
   const work = path.join(dir, 'work')

@@ -21,6 +21,7 @@ function repo() {
   fs.writeFileSync(path.join(r, 'frontend', 'package.json'), '{}\n')
   fs.writeFileSync(path.join(r, 'marker.txt'), 'метка\n')
   git(dir, 'init', '-q', r)
+  git(r, 'config', 'core.autocrlf', 'false') // тест проверяет логику, а не настройки машины (CRLF на Windows)
   git(r, 'add', '.')
   git(r, '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'x')
   git(r, 'tag', TAG)

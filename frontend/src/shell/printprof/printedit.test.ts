@@ -104,6 +104,86 @@ describe('открытие', () => {
     expect(printEdit.e.base).toBe('fsfera')
   })
 
+  describe('смена основы после правок (0.27-m-11)', () => {
+    beforeEach(async () => {
+      api.PrintProfileEdit.mockImplementation(async (b: string) => edit(b, b === 'fsfera' ? { dpi: 600, name: 'Из Фотосферы' } : {}))
+      await printEdit.show('fabrika')
+      api.PrintProfileEdit.mockClear()
+    })
+
+    it('поля не правили — основа меняется без вопроса', async () => {
+      expect(printEdit.dirty).toBe(false)
+      await printEdit.setBase('fsfera')
+      expect(printEdit.ask).toBeNull()
+      expect(printEdit.e).toMatchObject({ base: 'fsfera', dpi: 600 })
+    })
+
+    it('правили строку формата — вопрос, Go не зовётся, основа и поля прежние', async () => {
+      printEdit.e.formats[0].pxW = 7000
+      expect(printEdit.dirty).toBe(true)
+      await printEdit.setBase('fsfera')
+      expect(printEdit.ask).toMatchObject({ kind: 'base', id: 'fsfera', title: 'Фотосфера' })
+      expect(printEdit.ask?.text).toBe('Сменить основу на «Фотосфера»? Поля окна заполнятся заново из этой типографии.')
+      expect(printEdit.ask?.note).toBe('Введённые вами правки пропадут')
+      expect(api.PrintProfileEdit).not.toHaveBeenCalled()
+      expect(printEdit.e.base).toBe('fabrika')
+      expect(printEdit.e.formats[0].pxW).toBe(7000)
+    })
+
+    it('правили название — тоже вопрос; «Без основы» называется словами списка', async () => {
+      printEdit.e.name = 'Моя'
+      await printEdit.setBase('')
+      expect(printEdit.ask?.text).toContain('«Без основы (без обложки)»')
+    })
+
+    it('правка и возврат к прежнему значению — не правка', async () => {
+      printEdit.e.dpi = 450
+      printEdit.e.dpi = 300
+      expect(printEdit.dirty).toBe(false)
+      await printEdit.setBase('fsfera')
+      expect(printEdit.ask).toBeNull()
+    })
+
+    it('отказ (dismiss) оставляет основу и правки; «Сменить» перезаполняет и снимает вопрос', async () => {
+      printEdit.e.dpi = 450
+      await printEdit.setBase('fsfera')
+      printEdit.dismiss()
+      expect(printEdit.ask).toBeNull()
+      expect(printEdit.e).toMatchObject({ base: 'fabrika', dpi: 450 })
+      await printEdit.setBase('fsfera')
+      await printEdit.confirmBase()
+      expect(api.PrintProfileEdit).toHaveBeenCalledWith('fsfera')
+      expect(printEdit.ask).toBeNull()
+      expect(printEdit.e).toMatchObject({ base: 'fsfera', dpi: 600, name: 'Из Фотосферы' })
+      expect(printEdit.dirty).toBe(false)
+    })
+
+    it('«Сменить» без вопроса или чужой вопрос — ничего не делает', async () => {
+      await printEdit.confirmBase()
+      printEdit.ask = { kind: 'remove', id: 'x', title: 'x', text: '', note: '' }
+      await printEdit.confirmBase()
+      expect(api.PrintProfileEdit).not.toHaveBeenCalled()
+      expect(printEdit.ask).not.toBeNull()
+    })
+
+    it('Go отказал после «Сменить» — вопрос закрыт, ошибка тостом, основа и правки прежние', async () => {
+      printEdit.e.dpi = 450
+      await printEdit.setBase('fsfera')
+      api.PrintProfileEdit.mockRejectedValue('типографии "fsfera" нет')
+      await printEdit.confirmBase()
+      expect(printEdit.ask).toBeNull()
+      expect(toast()).toMatchObject({ kind: 'error' })
+      expect(printEdit.e).toMatchObject({ base: 'fabrika', dpi: 450 })
+    })
+
+    it('Esc окна сбрасывает вопрос', () => {
+      printEdit.e.dpi = 450
+      void printEdit.setBase('fsfera')
+      printEdit.close()
+      expect(printEdit.ask).toBeNull()
+    })
+  })
+
   it('Esc/«Отмена» (close): окно закрыто, вопрос и блок «добавлено» сброшены', async () => {
     await printEdit.show('fabrika')
     printEdit.ask = { kind: 'remove', id: 'x', title: 'x', text: '', note: '' }

@@ -120,7 +120,7 @@ func libApp(t *testing.T) (*App, *netLib, *capture) {
 	t.Helper()
 	a, l := netApp(t, true)
 	printprof.UseForTest(t, nil)
-	a.reloadPrints()
+	a.ownp.Reload()
 	return a, l, captureEvents(a)
 }
 
@@ -178,7 +178,7 @@ func TestPackPrintOverrideAndRollback(t *testing.T) {
 	// Перезапуск: новое хранилище читает реестр наборов и файл профиля.
 	printprof.Install(nil)
 	a.openDecor()
-	a.reloadPrints()
+	a.ownp.Reload()
 	if got, _ := printprof.Current().ByID("fabrika"); got.Version != 3 {
 		t.Fatalf("после перезапуска версия %d", got.Version)
 	}
@@ -240,13 +240,13 @@ func TestPackPrintBuiltinNewer(t *testing.T) {
 	// Программу понизили: набор требует 0.26.0 — не действует, остальное работает.
 	printprof.UseBuiltinForTest(t, nil)
 	printprof.Install(nil)
-	a.reloadPrints()
+	a.ownp.Reload()
 	if got, _ := printprof.Current().ByID("fabrika"); got.Version != 3 {
 		t.Fatalf("набор не действует при dev: %d", got.Version)
 	}
 	defer func(old []byte) { wailsJSON = old }(wailsJSON)
 	wailsJSON = []byte(`{"info":{"productVersion":"0.25.1"}}`)
-	a.reloadPrints()
+	a.ownp.Reload()
 	if got, _ := printprof.Current().ByID("fabrika"); got.Version != 2 {
 		t.Errorf("набор новее программы действует: %d", got.Version)
 	}
@@ -420,7 +420,7 @@ func TestPackPrintBrokenFileOnDisk(t *testing.T) {
 			if err := os.WriteFile(path, content, 0o644); err != nil {
 				t.Fatal(err)
 			}
-			a.reloadPrints()
+			a.ownp.Reload()
 			if got, _ := printprof.Current().ByID("fabrika"); got.Version != 2 || len(a.PrintProfiles()) != 3 {
 				t.Errorf("версия %d, типографий %d", got.Version, len(a.PrintProfiles()))
 			}

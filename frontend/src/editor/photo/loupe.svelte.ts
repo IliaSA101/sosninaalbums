@@ -7,11 +7,13 @@ import { carry, fitScale, FIT, isClick, MAX_SCALE, pan, place, toggle, zoomAt, z
 const NONE: Size = { w: 0, h: 0 }
 
 // Что известно окну о показанном кадре: size — размер загруженной картинки с учётом четверти поворота (0 — не загружена),
-// guess — размер по данным фото (до загрузки, только для рамки), off — картинки нет (заглушка «нет файла»).
+// guess — размер по данным фото (до загрузки, только для рамки), off — картинки нет (заглушка «нет файла»),
+// max — предел зума (1 — 1:1 по превью, выше — оригинал, ступень 2).
 export interface Src {
   size: Size
   guess: Size
   off: boolean
+  max: number
 }
 
 export class PreviewLoupe {
@@ -73,7 +75,11 @@ export class PreviewLoupe {
     if (this.ready()) this.l = toggle(this.l, this.dim(), this.box, at ?? this.mouse, MAX_SCALE)
   }
   zoomBy(k: number, at?: Pt | null) {
-    if (this.ready()) this.l = zoomAt(this.l, k, this.dim(), this.box, at ?? this.mouse, MAX_SCALE)
+    if (this.ready()) this.l = zoomAt(this.l, k, this.dim(), this.box, at ?? this.mouse, this.src().max)
+  }
+  // Предел снизился (оригинал не пришёл, другое фото): растянутое превью возвращается к пределу, центр остаётся.
+  clampTo(max: number) {
+    if (this.l.s > max + 1e-6 && this.ready()) this.l = zoomAt(this.l, max / this.l.s, this.dim(), this.box, null, max)
   }
 
   private pt(e: { clientX: number; clientY: number }): Pt {

@@ -171,6 +171,12 @@ if (part !== 'fe' && goFiles.length) {
     if (fresh.length) parts.push(exec(['test', '-short', '-count=1', ...fresh], fresh.length))
     return res({ code: parts.find((r) => r.code !== 0)?.code ?? 0, out: parts.map((r) => r.out).join('\n') })
   })
+  // Стражи Go: тесты internal/testkit, читающие всё дерево (t.TempDir, своя ссылка на бинарь), — go test -short
+  // изменённых пакетов их не берёт, а ломаются они от любого *_test.go (25.10: три t.TempDir прошли precheck
+  // трёх агентов и упали только в check --go; «да» владельца 25.10)
+  if (built.some((f) => f.endsWith('_test.go'))) {
+    step('стражи Go', () => res(run('go', ['test', '-count=1', '-run', '^TestNo', './internal/testkit'])))
+  }
   if (goFiles.some((f) => isTree(path.posix.dirname(f)))) {
     step('покрытие дерева album', () => {
       const baseJson = path.join(root, 'testdata', GO_BASELINE)

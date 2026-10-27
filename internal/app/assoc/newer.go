@@ -141,8 +141,8 @@ func (s *Service) exeOK(exe string) bool {
 // (без файла у черновика) и закрывает эту программу: альбом сохраняется, новая ждёт выхода этого
 // процесса (AfterPIDFlag). Ошибка запуска — вернуть, программа работает. Путь от интерфейса не
 // принимается: берётся запомненный SetNewer.
-func (s *Service) OpenInNewer() error {
-	defer appkit.Guard("OpenInNewer")
+func (s *Service) OpenInNewer() (err error) {
+	defer appkit.GuardErr("OpenInNewer", &err)
 	s.nmu.Lock()
 	path, exe := s.path, s.exe
 	s.nmu.Unlock()

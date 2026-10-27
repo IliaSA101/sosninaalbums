@@ -215,13 +215,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ARCH: ${{ runner.arch }}
         run: |
-          $tag = 'autobuild-2026-10-13-13-05'
+          $tag = 'autobuild-2026-10-27-18-38'
           if ($env:ARCH -eq 'ARM64') {
-            $name = 'ffmpeg-N-127507-g24e860f6d3-winarm64-gpl.zip'
-            $sha = '67485ca1bf1da02303178adc9f5545add3c22e1b74f1f43e37854c35e9d40c67'
+            $name = 'ffmpeg-N-128121-g86444dd368-winarm64-gpl.zip'
+            $sha = '15e6c469c4c4790e58a43354e22d9de632f8918bcd9e88269fc8ebcb49b35818'
           } else {
-            $name = 'ffmpeg-N-127507-g24e860f6d3-win64-gpl.zip'
-            $sha = 'fbb5a21695435f9fb93ad0209ad09c90ffdd54d5bd0659720b14dedda997e2ea'
+            $name = 'ffmpeg-N-128121-g86444dd368-win64-gpl.zip'
+            $sha = '1eb70a550388567bc2abbb2d164814f722f36a034fd927dcdfb217bc7e94930c'
           }
           $dir = Join-Path $env:RUNNER_TEMP 'ffmpeg'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null

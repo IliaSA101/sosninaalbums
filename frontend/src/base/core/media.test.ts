@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coverGuideUrl, spreadGuideUrl, previewUrl, thumbUrl, warmable, wantPreview } from './media'
+import { originalUrl, coverGuideUrl, spreadGuideUrl, previewUrl, thumbUrl, warmable, wantPreview } from './media'
 
 describe('media', () => {
   it('обычный id', () => {
@@ -13,6 +13,10 @@ describe('media', () => {
   it('id экранируется: ни путь, ни запрос не подменяются', () => {
     expect(thumbUrl('a/../b?x')).toBe('/media/t/a%2F..%2Fb%3Fx?v=5')
     expect(previewUrl('a b#c')).toBe('/media/p/a%20b%23c?v=5')
+    expect(originalUrl('a/../b?x')).toBe('/media/o/a%2F..%2Fb%3Fx?v=5')
+  })
+  it('оригинал (128): адрес /media/o/<id>', () => {
+    expect(originalUrl('ab12')).toBe('/media/o/ab12?v=5')
   })
 })
 

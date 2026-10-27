@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/svelte'
+import { tick } from 'svelte'
 import type { CoverSide } from '../../base/types/print'
 
 // Полоса «‹ ▦ ›» над сторонками обложки (127): группы в LayoutBar, метка «· Ручная ·», что делают ‹ › и ▦. Go подменён.
@@ -76,6 +77,16 @@ describe('полоса над сторонками обложки', () => {
     cleanup()
     setup([side({ known: false, places: 0 })])
     expect(document.body.textContent).not.toContain('Ручная')
+  })
+  it('вид с тем же rev, но known = true (холостая постановка своего шаблона, 132-9) снимает «· Ручная ·» и возвращает листание', async () => {
+    setup([side({ known: false })])
+    expect(document.body.textContent).toContain('· Ручная ·')
+    store.apply({ ...store.view, cover: { sheet, sides: [side({ known: true })] } } as never)
+    await tick()
+    expect(store.view.rev).toBe(1)
+    expect(document.body.textContent).not.toContain('Ручная')
+    await fireEvent.click(by(/^Следующая/)[0])
+    expect(api.step).toHaveBeenCalledWith('right', 1)
   })
   it('› при узнанной форме — StepCoverGrid(scope, ±1), галерея не открывается', async () => {
     setup([side()])

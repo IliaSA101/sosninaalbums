@@ -11,7 +11,7 @@ vi.mock('../../../wailsjs/go/app/App', async (orig) => {
 const { store } = await import('../../base/core/store.svelte')
 const { noHooks } = await import('../../base/core/hooks')
 const { guide } = await import('./guidestate.svelte')
-const { articleById } = await import('./articles')
+const { articleById } = await import('../guidetext/articles')
 const { planShow } = await import('./show')
 
 afterEach(() => {

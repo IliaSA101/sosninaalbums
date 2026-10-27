@@ -94,6 +94,7 @@ func BuildView(p *model.Project, st State) model.View {
 		MinDPI:          min(lowDPILimit, p.Settings.DPI),
 		TextMaxW:        p.TextMaxW(nil),
 		BackdropUsed:    []string{},
+		FillFrom:        []int{},
 		LibPhotos:       libPhotos(p),
 		AlbumBg:         albumBgView(p),
 		AlbumFonts:      albumFonts(p),
@@ -114,6 +115,9 @@ func BuildView(p *model.Project, st State) model.View {
 			}
 		}
 		v.LowDPI += v.Spreads[i].LowDPI
+	}
+	if !st.Print { // вид печати числа не несёт (030): пустые поля — пусто
+		v.FillFrom, v.CoverFill = p.FillCounts()
 	}
 	// Обложка — тем же f до result: её поля и имена попадают в Unfilled/Unnamed.
 	v.Cover = coverView(f, st, &v)

@@ -121,6 +121,7 @@ var catalog = []Command{
 	c("view", "toggleMarkup", "Разметка типографии", "Разметка", ""),
 	c("view", "toggleRulers", "Линейки", "Линейки", "rulers", "Mod+KeyR"),
 	c("view", "toggleSnap", "Привязка", "Привязка", "manual"),
+	c("view", "toggleFaceGuide", "Силуэт под лицо", "Силуэт", "vignette"),
 	c("view", "allSpreads", "Все развороты", "Все разв.", "allSpreads"),
 	c("view", "compareLevels", "Уровни и функции…", "Уровни", ""),
 	c("view", "levelSimple", "Уровень: Простой", "Простой", ""),

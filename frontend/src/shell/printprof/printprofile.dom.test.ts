@@ -118,6 +118,67 @@ describe('PrintProfileDialog', () => {
     expect(btn('Удалить').disabled).toBe(false)
   })
 
+  describe('смена «Основы» после правок (0.27-m-11)', () => {
+    const pick = async (id: string) => {
+      const base = screen.getByLabelText('Основа') as HTMLSelectElement
+      base.value = id
+      await fireEvent.change(base)
+      await flush()
+      return base
+    }
+    const asks = () => screen.queryByRole('dialog', { name: 'Сменить основу?' })
+    const askBtn = (name: string) =>
+      Array.from(asks()!.querySelectorAll('button')).find((b) => b.textContent?.trim() === name) as HTMLButtonElement
+
+    it('поля не правили — без вопроса, основа сразу новая', async () => {
+      await open('fabrika')
+      await pick('own-1')
+      expect(asks()).toBeNull()
+      expect(api.PrintProfileEdit).toHaveBeenLastCalledWith('own-1')
+    })
+
+    it('после правки — вопрос со словами; список возвращён на прежнюю основу, Go не зовётся', async () => {
+      await open('fabrika')
+      api.PrintProfileEdit.mockClear()
+      await fireEvent.input(screen.getByLabelText('Плотность, dpi'), { target: { value: '600' } })
+      const base = await pick('own-1')
+      expect(asks()!.textContent).toContain('Сменить основу на «Типография Альфа»? Поля окна заполнятся заново из этой типографии.')
+      expect(asks()!.textContent).toContain('Введённые вами правки пропадут')
+      expect(Array.from(asks()!.querySelectorAll('button')).map((b) => b.textContent?.trim() || b.getAttribute('aria-label'))).toEqual([
+        'Закрыть',
+        'Отмена',
+        'Сменить',
+      ])
+      expect(base.value).toBe('fabrika')
+      expect(api.PrintProfileEdit).not.toHaveBeenCalled()
+    })
+
+    it('«Отмена» — окно, основа и введённое прежние', async () => {
+      await open('fabrika')
+      await fireEvent.input(screen.getByLabelText('Плотность, dpi'), { target: { value: '600' } })
+      await pick('own-1')
+      await fireEvent.click(askBtn('Отмена'))
+      await flush()
+      expect(asks()).toBeNull()
+      expect(screen.getByRole('dialog', { name: 'Своя типография' })).toBeTruthy()
+      expect((screen.getByLabelText('Основа') as HTMLSelectElement).value).toBe('fabrika')
+      expect((screen.getByLabelText('Плотность, dpi') as HTMLInputElement).value).toBe('600')
+    })
+
+    it('«Сменить» — основа новая, поля из Go, вопроса нет', async () => {
+      await open('fabrika')
+      await fireEvent.input(screen.getByLabelText('Плотность, dpi'), { target: { value: '600' } })
+      await pick('own-1')
+      api.PrintProfileEdit.mockImplementation(async (b: string) => ({ ...edit(b), dpi: 250 }))
+      await fireEvent.click(askBtn('Сменить'))
+      await flush()
+      expect(api.PrintProfileEdit).toHaveBeenLastCalledWith('own-1')
+      expect(asks()).toBeNull()
+      expect((screen.getByLabelText('Основа') as HTMLSelectElement).value).toBe('own-1')
+      expect((screen.getByLabelText('Плотность, dpi') as HTMLInputElement).value).toBe('250')
+    })
+  })
+
   it('«Сохранить» серая, пока Go не одобрил; ошибка названия — под полем «Название»', async () => {
     api.CheckPrintProfile.mockResolvedValue({ ...ok, ok: false, errs: { name: 'Такое название уже есть' } })
     await open('fabrika')

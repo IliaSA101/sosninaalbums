@@ -24,6 +24,8 @@ export const FIT: Loupe = { s: 0, cx: 0.5, cy: 0.5 }
 export const CLICK_PX = 5
 // Пропорции «те же» при расхождении до 1 %: серия кадров одной камеры.
 const SAME_RATIO = 0.01
+// Кадр больше этого числа пикселей оригиналом не открывается: WebView держит декод в RGBA (design §2.2).
+export const ORIG_MAX_PX = 100e6
 const EPS = 1e-6
 
 export const isClick = (dx: number, dy: number): boolean => Math.hypot(dx, dy) < CLICK_PX
@@ -99,11 +101,15 @@ export function pan(start: Loupe, dx: number, dy: number, nat: Size, box: Size):
   return settle({ s: start.s, cx: start.cx - dx / (nat.w * start.s), cy: start.cy - dy / (nat.h * start.s) }, nat, box)
 }
 
+// Пропорции двух картинок совпали (±1 %): оригинал ложится на превью, если WebView не повернул его иначе.
+export function sameShape(a: Size, b: Size): boolean {
+  return known(a) && known(b) && Math.abs(a.w / a.h / (b.w / b.h) - 1) <= SAME_RATIO
+}
+
 // Листание: пропорции те же (±1 %) — тот же масштаб и точка («мигание» серии); другие или неизвестные — вписано.
 export function carry(l: Loupe, prev: Size, next: Size): Loupe {
   if (l.s <= 0) return l
-  if (!known(prev) || !known(next)) return FIT
-  return Math.abs(prev.w / prev.h / (next.w / next.h) - 1) <= SAME_RATIO ? l : FIT
+  return sameShape(prev, next) ? l : FIT
 }
 
 // Значок в подписи окна: «Вписано · 48 %», «1:1», «130 %». Размеры неизвестны (картинка не загружена) — пусто.
@@ -113,6 +119,29 @@ export function zoomLabel(l: Loupe, nat: Size, box: Size): string {
   const s = place(l, nat, box).w / nat.w
   if (s <= fit + EPS) return fit >= MAX_SCALE - EPS ? '1:1' : `Вписано · ${Math.round(fit * 100)} %`
   return Math.abs(s - 1) < EPS ? '1:1' : `${Math.round(s * 100)} %`
+}
+
+// Кадр показывается оригиналом только для sRGB без профиля и не больше 100 Мп (Go отдаёт /media/o/<id> по тем же правилам).
+// Причина отказа для подсказки в значке; пусто — оригинал можно.
+export type OrigWhy = '' | 'adobe' | 'p3' | 'icc' | 'other' | 'big'
+export function origWhy(p: { w: number; h: number; color?: string } | undefined): OrigWhy {
+  if (!p) return ''
+  if (p.color === 'adobe' || p.color === 'p3' || p.color === 'icc' || p.color === 'other') return p.color
+  return p.w * p.h > ORIG_MAX_PX ? 'big' : ''
+}
+export const ORIG_WHY_TEXT: Record<Exclude<OrigWhy, ''>, string> = {
+  adobe: 'Крупнее превью не показывается: профиль Adobe RGB',
+  p3: 'Крупнее превью не показывается: профиль Display P3',
+  icc: 'Крупнее превью не показывается: другой цветовой профиль',
+  other: 'Крупнее превью не показывается: другой цветовой профиль',
+  big: 'Крупнее превью не показывается: больше 100 Мп',
+}
+export const ORIG_LOADING = 'Оригинал загружается…'
+
+// Предел зума: 1:1 по оригиналу (px экрана на px превью), не меньше 1:1 по превью. Отказ, размеры фото или превью неизвестны — 1.
+export function origMax(p: { w: number; h: number; color?: string } | undefined, nat: Size): number {
+  if (!p || origWhy(p) !== '' || !(p.w > 0) || !(nat.w > 0)) return MAX_SCALE
+  return Math.max(MAX_SCALE, p.w / nat.w)
 }
 
 // Строка клавиш под подписью окна (Т5): метки клавиш заполняет keymap.text, чтобы показывать назначенные клавиши.

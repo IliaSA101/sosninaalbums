@@ -54,6 +54,7 @@
   // Масштаб: TiltRow ведёт предпросмотр через framelive, SetFrame — на отпускании (onend гасит просмотр)
   async function zoom(pct: number) {
     const f = zoomFrame(frame, pct / 100)
+    framelive.set(id, f) // кадр остаётся до ответа Go, силуэт гаснет сразу на отпускании
     await store.run(Api.SetFrame(id, f.s, f.x, f.y))
   }
   // Наклон (010 U5 → 045 → 057): строка TiltRow ведёт предпросмотр на ячейке, SetFrameAngle уходит на отпускании.
@@ -131,7 +132,7 @@
       resetLabel="Сбросить кадр"
       resetTitle="Сбросить кадр: фото целиком в месте"
       resetOff={isDefaultFrame(cur) && !own}
-      onlive={(v) => framelive.set(id, zoomFrame(frame, v / 100))}
+      onlive={(v) => framelive.setZoom(id, zoomFrame(frame, v / 100))}
       oncommit={zoom}
       onreset={reset}
       onend={() => framelive.clear()}

@@ -3,11 +3,11 @@
   import { gallery } from './gallery.svelte'
   import { errText } from '../../base/words/errtext'
   import { tplio } from '../../shell/menu/tplio.svelte'
-  import { applyChoice, tplCall } from '../layouts/gridactions'
+  import { applyChoice } from '../layouts/gridactions'
   import { builtinOf, cardBoxes, defaultN, dropTitle, gridSourceTexts, mineOf, N_ITEMS, previewRects } from './gridgallery'
   import type { GridChoice, GridChoices, LayoutScope } from '../../base/core/types'
-  import { BORDER_NOTE, hasBorders, isSheet, newSheetSize, sheetIn, sheetSize, unitOf } from '../../base/geom/sheet'
-  import Modal from '../../base/modal/Modal.svelte'
+  import { hasBorders, isSheet, newSheetSize, sheetIn, sheetSize, unitOf } from '../../base/geom/sheet'
+  import GridTplModals from './GridTplModals.svelte'
   import TplRow from '../../base/tpl/TplRow.svelte'
   import TplItem from '../../base/tpl/TplItem.svelte'
   import TplSep from '../../base/tpl/TplSep.svelte'
@@ -104,44 +104,9 @@
     void applyChoice(spread, sc, ch)
   }
 
-  // ---------- шаблоны: переименовать, удалить, сохранить ----------
-  // Имена в полях — отдельное состояние: окно закрывается (rename/save = null) раньше, чем bind:value
-  // отпустит поле, и привязка к свойству null падала.
-  let rename = $state<GridChoice | null>(null)
-  let renameName = $state('')
-  let del = $state<GridChoice | null>(null)
-  let save = $state<{ scope: LayoutScope } | null>(null)
-  let saveName = $state('')
-
-  async function doRename() {
-    const r = rename
-    if (!r) return
-    rename = null
-    if (await tplCall(Api.RenameGridTemplate(r.id, renameName))) again++
-  }
-  async function doDelete() {
-    const d = del
-    if (!d) return
-    del = null
-    if (await tplCall(Api.DeleteGridTemplate(d.id))) again++
-  }
-  async function doSave() {
-    const v = save
-    if (!v) return
-    save = null
-    gallery.preview = null
-    if (await tplCall(Api.SaveGridTemplate(g.spread, v.scope, saveName.trim()))) {
-      store.notify('Шаблон сохранён')
-      again++
-    }
-  }
-  // Enter в поле имени — как кнопка окна.
-  const enter = (fn: () => void) => (e: KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      fn()
-    }
-  }
+  // ---------- шаблоны: переименовать, удалить, сохранить — окна общие с обложкой (GridTplModals) ----------
+  let modals: ReturnType<typeof GridTplModals>
+  const saveHint = $derived(`Запоминаются только места, без фото.${pages.length > 1 ? ' «Левая» и «Правая» дают шаблон страницы.' : ''}`)
 </script>
 
 <GalleryHead
@@ -149,7 +114,7 @@
   title={loading ? 'Считаю…' : ''}
   save={{
     title: isSheet(s) ? 'Запомнить места этого листа как шаблон' : 'Запомнить места этого разворота или страницы как шаблон',
-    onclick: () => ((saveName = ''), (save = { scope })),
+    onclick: () => modals.openSave(scope),
   }}
 >
   {#snippet filters()}
@@ -168,8 +133,8 @@
       {@const own = p.list === mine}
       <TplItem
         name={own ? ch.name : undefined}
-        onrename={own ? () => ((rename = ch), (renameName = ch.name), hover(null)) : undefined}
-        ondelete={own ? () => ((del = ch), hover(null)) : undefined}
+        onrename={own ? () => (modals.openRename(ch), hover(null)) : undefined}
+        ondelete={own ? () => (modals.openDelete(ch), hover(null)) : undefined}
       >
         <button
           class="card"
@@ -200,50 +165,15 @@
   {/each}
 </TplRow>
 
-{#if rename}
-  <Modal title="Переименовать шаблон" onclose={() => (rename = null)}>
-    <input type="text" maxlength="60" data-autofocus bind:value={renameName} onkeydown={enter(doRename)} aria-label="Имя шаблона" />
-    <div class="actions">
-      <button class="ghost" onclick={() => (rename = null)}>Отмена</button>
-      <button class="primary" onclick={doRename}>Сохранить</button>
-    </div>
-  </Modal>
-{/if}
-
-{#if del}
-  <Modal title="Удалить шаблон?" onclose={() => (del = null)}>
-    <p>Шаблон «{del.name}» будет удалён из списка. {unit.cap === 'Лист' ? 'Листы' : 'Развороты'}, где он уже применён, не изменятся.</p>
-    <div class="actions">
-      <button class="ghost" onclick={() => (del = null)}>Отмена</button>
-      <button class="primary" onclick={doDelete}>Удалить</button>
-    </div>
-  </Modal>
-{/if}
-
-{#if save}
-  <Modal title="Сохранить как шаблон" onclose={() => (save = null)}>
-    <label class="field"
-      >Название
-      <input type="text" maxlength="60" data-autofocus placeholder="Шаблон N" bind:value={saveName} onkeydown={enter(doSave)} /></label
-    >
-    {#if pages.length > 1}
-      <div class="field">
-        Область
-        <div class="segwrap">
-          <Seg items={pages} value={save.scope} onpick={(v) => save && (save.scope = v)} label="Область шаблона" />
-        </div>
-      </div>
-    {/if}
-    <p class="hint">
-      Запоминаются только места, без фото.{pages.length > 1 ? ' «Левая» и «Правая» дают шаблон страницы.' : ''}
-    </p>
-    {#if hasBorders(sheetIn(store.view, g.spread), save.scope)}<p class="hint">{BORDER_NOTE}</p>{/if}
-    <div class="actions">
-      <button class="ghost" onclick={() => (save = null)}>Отмена</button>
-      <button class="primary" onclick={doSave}>Сохранить</button>
-    </div>
-  </Modal>
-{/if}
+<GridTplModals
+  bind:this={modals}
+  spread={g.spread}
+  areas={pages}
+  hint={saveHint}
+  borders={(sc) => hasBorders(sheetIn(store.view, g.spread), sc)}
+  applied={unit.cap === 'Лист' ? 'Листы' : 'Развороты'}
+  ondone={() => again++}
+/>
 
 <style>
   .card {
@@ -290,42 +220,5 @@
     font-size: 11px;
     font-weight: 700;
     line-height: 16px;
-  }
-  /* Окна */
-  input[type='text'] {
-    width: 100%;
-    height: 30px;
-    padding: 0 8px;
-    font: inherit;
-    background: #3a3a3e;
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    user-select: text;
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-bottom: 10px;
-    color: var(--muted);
-    font-size: 12px;
-  }
-  .segwrap {
-    align-self: flex-start;
-  }
-  p {
-    margin: 0 0 10px;
-    line-height: 1.4;
-  }
-  .hint {
-    color: var(--muted);
-    font-size: 12px;
-  }
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 12px;
   }
 </style>

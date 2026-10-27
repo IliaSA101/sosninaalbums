@@ -568,6 +568,16 @@ func TestExporterHostComplete(t *testing.T) {
 	testkit.HostComplete(t, newApp(t).expHost())
 }
 
+// Фасад наборов задаёт все поля Host службы libpacks (126 Ш4).
+func TestLibpacksHostComplete(t *testing.T) {
+	testkit.HostComplete(t, newApp(t).packsHost())
+}
+
+// Фасад типографий задаёт все поля Host службы ownprint (126 Ш5).
+func TestOwnprintHostComplete(t *testing.T) {
+	testkit.HostComplete(t, newApp(t).printsHost())
+}
+
 // AutoOpts 051 из UI по именам JSON; время съёмки из ленты доходит до плана: одна папка, две
 // серии с паузой в час — одна граница (без Taken в infos её бы не было), «Авто» даёт From/To.
 func TestAutoPlanSeriesFromLibrary(t *testing.T) {

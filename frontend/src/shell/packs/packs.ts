@@ -60,6 +60,11 @@ export type PackAsk =
 export const BUSY_HINT = 'Библиотека обновляется'
 export const EMPTY_TEXT = 'Других наборов пока нет. Добавьте набор файлом — кнопка «Добавить из файла…».'
 export const ADD_HINT = 'Набор — файл .zip с фонами, стикерами и разворотами'
+// Подпись каталога под списком окна «Наборы» (129 §6): видна, пока стоит хоть один набор из сети.
+export const AUTHORS_TEXT = 'Наборы каталога: Илья и Марина Соснины'
+export const AUTHORS_LINK = 'Об авторах'
+export const hasNet = (list: readonly PackInfo[]): boolean => list.some((p) => p.origin === 'net')
+
 export const BUILTIN_NOTE = 'не удаляется'
 export const WHY_MAX = 3 // сколько пропущенных предметов называем в тосте
 

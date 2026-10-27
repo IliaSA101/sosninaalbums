@@ -4,6 +4,7 @@
 import { plural } from '../../base/words/plural'
 import type { SheetSize } from '../../base/geom/sheet'
 import type { TplTexts } from '../../base/tpl/tplsource'
+import type { CoverSide } from '../../base/types/print'
 import type { Box, GridChoice, GridChoices, GridPlan, GridTarget, LayoutScope, PlaceView, Rect, RotRect } from '../../base/core/types'
 
 export const MAX_N = 7 // фильтр «7+»
@@ -113,6 +114,29 @@ export function coverPreview(
       return rot ? { ...r, rot } : r
     }
     return fresh[k++] ?? GONE
+  })
+}
+
+// Пункты «Область» окна «Сохранить как шаблон» на обложке: «Задняя · Лицевая» по сторонкам вида (подписи — от Go).
+// Сторонка с пустой зоной в вид не попадает; одна сторонка — выбора в окне нет.
+export function coverAreas(sides: readonly Pick<CoverSide, 'scope' | 'label'>[] | undefined): { id: LayoutScope; label: string }[] {
+  const pick = (scope: 'left' | 'right') =>
+    (sides ?? []).filter((s) => s.scope === scope).map((s) => ({ id: scope as LayoutScope, label: s.label }))
+  return [...pick('left'), ...pick('right')]
+}
+
+// Есть ли рамочка у мест сторонки. Принадлежность — как Go (InArea): по центру места по X, без проверки
+// высоты и поля; задняя — всё левее правого края её рамки, лицевая — всё правее левого. Так место с рамочкой,
+// стоящее за пунктиром, но на своей половине листа, тоже считается (132-22). Центр на корешке — ничьё.
+export function coverHasBorders(
+  places: readonly Pick<PlaceView, 'x' | 'y' | 'w' | 'h' | 'border'>[] | null | undefined,
+  box: Rect | undefined,
+  scope: LayoutScope,
+): boolean {
+  if (!box) return false
+  return (places ?? []).some((p) => {
+    const c = p.x + p.w / 2
+    return !!p.border && (scope === 'left' ? c < box.x + box.w : c >= box.x)
   })
 }
 

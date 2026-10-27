@@ -5,7 +5,7 @@
   import { shortOf } from '../../base/prefs/levelcustom'
   import { rowOf } from '../../base/prefs/levels'
   import { keysUi } from '../hotkeys/keysui.svelte'
-  import { ARTICLES, GUIDE_GROUPS, placesOf, type Article } from './articles'
+  import { ARTICLES, GUIDE_GROUPS, placesOf, type Article } from '../guidetext/articles'
   import GuideCard from './GuideCard.svelte'
   import { selectQuery } from './queryfocus'
   import { guide } from './guidestate.svelte'

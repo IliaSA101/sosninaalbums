@@ -46,10 +46,14 @@ func TplCells(p *model.Project, s *model.Spread) (rs []model.Box, filled []bool)
 
 // PlaceBoxes — места области scope разворота в долях области: для «Сохранить как
 // шаблон». Второе значение — область шаблона (page для left/right, spread для
-// spread). Нет мест — ErrNoPlaces. Только чтение.
+// spread). Нет мест — ErrNoPlaces. Только чтение. Для обложки (spreadID = CoverID) — места
+// сторонки left/right в долях рамки «зона + поле», область всегда page (coverPlaceBoxes).
 func PlaceBoxes(p *model.Project, spreadID, scope string) ([]model.Box, string, error) {
 	if scope != model.ScopeLeft && scope != model.ScopeRight && scope != model.ScopeSpread {
 		return nil, "", errors.New("неизвестная область")
+	}
+	if spreadID == model.CoverID {
+		return coverPlaceBoxes(p, scope) // сторонка обложки: рамка «зона + поле» (0.27-132)
 	}
 	_, s := p.Find(spreadID)
 	if s == nil {

@@ -1,7 +1,7 @@
 // Первые шаги (спека 113, design §4.3 и §5): шаги тура и их тексты. Новый шаг = строка в TOUR и якорь data-guide
 // литералом в разметке (страж steps.test.ts). Тексты идут через articleText: метки клавиш и куски по уровню (как в статьях справочника).
 import type { FeatureId } from '../../base/prefs/levels'
-import type { SpotKey } from '../guide/articles'
+import type { SpotKey } from '../guidetext/articles'
 
 export type TourId = 'folders' | 'library' | 'autobuild' | 'timeline' | 'layouts' | 'photo' | 'export'
 

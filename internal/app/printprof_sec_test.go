@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
+	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 )
 
 // Находки аудита безопасности 123 в слое App: ключ файла у принятой своей (№6), двойники
@@ -27,9 +28,9 @@ func TestReloadKeyOfAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.reloadPrints()
-	if cur, ok := printprof.Current().ByID(id); !ok || cur.Name != "Видимая" || a.prints.own[id].key != k2 {
-		t.Fatalf("принята %+v, ключ %q (ждали %q)", cur.Name, a.prints.own[id].key, k2)
+	a.ownp.Reload()
+	if cur, ok := printprof.Current().ByID(id); !ok || cur.Name != "Видимая" || a.ownp.OwnKey(id) != k2 {
+		t.Fatalf("принята %+v, ключ %q (ждали %q)", cur.Name, a.ownp.OwnKey(id), k2)
 	}
 	if _, err := a.DeletePrintProfile(id); err != nil {
 		t.Fatal(err)
@@ -42,11 +43,11 @@ func TestReloadKeyOfAccepted(t *testing.T) {
 		t.Errorf("после удаления в хранилище %v, ждали только невидимый %q", keys, k1)
 	}
 	// id лежит в хранилище (отвергнутым) — файл с ним добавляется копией под новым own-….
-	res, err := a.importPrintPath(profileFile(t, "t.saprint", encoded(t, ownFile(t, a, id, "Третья", 1))))
+	res, err := a.ownp.ImportPath(profileFile(t, "t.saprint", encoded(t, ownFile(t, a, id, "Третья", 1))))
 	if err != nil || !res.Copied || res.Info.ID == id || !printprof.ValidOwnID(res.Info.ID) {
 		t.Fatalf("импорт занятого хранилищем id: %+v %v", res, err)
 	}
-	if !a.printTaken(id) {
+	if !a.ownp.Taken(id) {
 		t.Error("id из хранилища не считается занятым")
 	}
 }
@@ -65,10 +66,10 @@ func TestImportTwinNames(t *testing.T) {
 		if p.Validate() != nil { // невидимые знаки разбор не пускает вовсе — тоже отказ
 			continue
 		}
-		if _, err := a.importPrintPath(profileFile(t, "x.saprint", encoded(t, p))); err != errPrintDup {
+		if _, err := a.ownp.ImportPath(profileFile(t, "x.saprint", encoded(t, p))); err != ownprint.ErrDup {
 			t.Errorf("%q: %v", name, err)
 		}
-		if c := a.CheckPrintProfile(editOf(t, a, "fabrika", name)); c.OK || c.Errs["name"] != errPrintDup.Error() {
+		if c := a.CheckPrintProfile(editOf(t, a, "fabrika", name)); c.OK || c.Errs["name"] != ownprint.ErrDup.Error() {
 			t.Errorf("окно, %q: %+v", name, c.Errs)
 		}
 	}
@@ -86,15 +87,15 @@ func TestImportTwinNames(t *testing.T) {
 // №1: сводка импорта показывает хост сайта и тогда, когда адрес есть только у изделий.
 func TestPrintSummaryHost(t *testing.T) {
 	p, _ := printprof.Builtin().ByID("fabrika")
-	if !slices.Contains(printSummary(p), "Сайт: fabrika-fotoknigi.com") {
-		t.Errorf("сводка: %v", printSummary(p))
+	if !slices.Contains(ownprint.Summary(p), "Сайт: fabrika-fotoknigi.com") {
+		t.Errorf("сводка: %v", ownprint.Summary(p))
 	}
 	p.Export = nil
-	if got := printSummary(p); !slices.Contains(got, "Сайт: fabrika-fotoknigi.com") {
+	if got := ownprint.Summary(p); !slices.Contains(got, "Сайт: fabrika-fotoknigi.com") {
 		t.Errorf("без export: %v", got)
 	}
 	n, _ := printprof.Builtin().ByID("netprint")
-	for _, l := range printSummary(n) {
+	for _, l := range ownprint.Summary(n) {
 		if strings.HasPrefix(l, "Сайт:") {
 			t.Errorf("у Нетпринта адресов нет: %v", l)
 		}

@@ -18,11 +18,18 @@
   import { drag } from '../../base/drag/drag.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import MoreMenu from './MoreMenu.svelte'
+  import { fillCount, fillDigits, fillTitle } from './freephotos'
 
   // Верхняя полоса ленты фото (спека 024): всегда одна строка. Что не поместилось — уходит в «⋯» по приоритету
   // (prio: меньше — раньше; «Автосборка» не уходит никогда). «Не в альбоме» = не в местах и не на фоне.
   const frac = $derived(scanFraction(store.scan))
   const unit = $derived(unitOf(store.view.settings))
+  // 132: число на кнопке — места «отсюда» (с обложки — обложка и развороты); видна она по пустым местам всего альбома,
+  // иначе мигала бы при листании, а узкая полоса перекидывала бы группы в «⋯» (0.27-132-16).
+  const fillN = $derived(fillCount(store.view, store.onCover, store.current))
+  // Ширина числа резервируется по разрядам пустых мест альбома (0.27-132-22): при листании «12» → «0» кнопка не
+  // меняет ширину, и у границы полосы группы не прыгают в «⋯» и обратно.
+  const fillW = $derived(fillDigits(store.view.emptyPlaces, fillN))
   const loading = $derived(store.thumbs.total > 0 && store.thumbs.done < store.thumbs.total)
 
   // GAP и PAD уходят в CSS полосы через style: (одна правда с расчётом fitGroups)
@@ -143,14 +150,12 @@
     <button
       data-guide="fill-empty"
       disabled={store.photos.length === 0}
-      aria-label="Заполнить пустые места: {store.view.emptyPlaces}"
-      title="Заполнить пустые места ({store.view
-        .emptyPlaces}): положить выделенные фото (или все, что ещё не в альбоме) в пустые места {unit
-        .plural[2]}-сеток, начиная с этого {unit.of}. Без выделения отклонённые пропускаются"
+      aria-label="Заполнить пустые места: {fillN}"
+      title={fillTitle(store.onCover, fillN, unit)}
       onmousedown={keep}
       onclick={() => store.fillPlaces()}
     >
-      Заполнить места: {store.view.emptyPlaces}
+      Заполнить места: <span class="num" style:min-width="{fillW}ch">{fillN}</span>
     </button>
   {:else if id === 'status'}
     {#if store.scan.active}
@@ -225,6 +230,12 @@
   }
   .size {
     width: 72px;
+  }
+  /* Число кнопки «Заполнить места»: моноширинные цифры и запас по разрядам — ширина не зависит от значения */
+  .num {
+    display: inline-block;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
   }
   /* Тонкая полоса чтения папки по нижнему краю панели; при обходе итог неизвестен */
   .progress {

@@ -8,6 +8,9 @@ const V = 5
 // retry — повторная загрузка после сверки папок (088): новая метка сбивает кэш неудачного запроса; путь для Go прежний.
 export const thumbUrl = (id: string, retry = 0) => `/media/t/${encodeURIComponent(id)}?v=${V}${retry > 0 ? `&r=${retry}` : ''}`
 export const previewUrl = (id: string) => `/media/p/${encodeURIComponent(id)}?v=${V}`
+// Оригинал файла как есть (128, ступень 2): окно крупного просмотра при зуме выше 1:1 по превью. Go отдаёт без кэша
+// и игнорирует ?v=; 404 и 415 (профиль не sRGB, больше 100 Мп или 200 МБ, битый) UI видит как error у <img>.
+export const originalUrl = (id: string) => `/media/o/${encodeURIComponent(id)}?v=${V}`
 
 // Разметка типографии обложки (032) и разворотов (066): путь Go берёт из проекта, rev только сбивает кэш
 // при смене файла. PSD Go отдаёт PNG ≤ 4096 px.

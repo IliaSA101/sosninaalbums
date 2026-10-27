@@ -12,6 +12,12 @@
   const lines = $derived(ui.check?.lines ?? [])
   const general = $derived(formErr(ui.check))
 
+  // Выбор основы: при вопросе (были правки) список сразу возвращается на прежнюю основу — отказ её не меняет.
+  function pickBase(sel: HTMLSelectElement) {
+    void ui.setBase(sel.value)
+    if (ui.ask) sel.value = ui.e.base
+  }
+
   // Следим за всеми полями: JSON читает каждое. Запрос — вне отслеживания, номер запроса отсекает устаревший ответ.
   $effect(() => {
     void JSON.stringify(ui.e)
@@ -33,7 +39,7 @@
   </div>
   <div class="col">
     <label class="lbl2" for="pe-base">Основа</label>
-    <select id="pe-base" class:bad={bad('base')} value={ui.e.base} onchange={(e) => ui.setBase(e.currentTarget.value)}>
+    <select id="pe-base" class:bad={bad('base')} value={ui.e.base} onchange={(e) => pickBase(e.currentTarget)}>
       {#each groups as g (g.label)}
         <optgroup label={g.label}>
           {#each g.items as i (i.id)}<option value={i.id}>{i.name}</option>{/each}

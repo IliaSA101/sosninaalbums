@@ -7,17 +7,18 @@
   import { keymap } from '../../base/keys/keymap.svelte'
   import { modalStack } from '../../base/modal/modalstack.svelte'
   import { markOf } from '../../panels/marks/marks'
-  import { stars } from '../../panels/marks/thumbmark'
-  import { previewUrl } from '../../base/core/media'
+  import { originalUrl, previewUrl } from '../../base/core/media'
   import { cancelOnUnmount } from '../../base/ui/imgcancel'
   import { fitTilt } from '../../base/geom/frame'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { isMac } from '../../base/core/platform'
   import { ZOOM_STEP } from '../zoom/zoom'
-  import { hintLine } from './loupe'
+  import { hintLine, origMax, origWhy, ORIG_LOADING, ORIG_WHY_TEXT } from './loupe'
   import { PreviewLoupe } from './loupe.svelte'
+  import { PreviewOriginal } from './original.svelte'
   import { adjlive } from './adjlive.svelte'
   import Icon from '../../base/ui/Icon.svelte'
+  import PreviewMarks from './PreviewMarks.svelte'
   import MissPhoto from '../../base/ui/MissPhoto.svelte'
   import { missTip } from '../../panels/library/missing'
   import { autocheck } from '../../panels/folders/autocheck'
@@ -61,12 +62,36 @@
   // Лупа: размер кадра в px превью с учётом четверти поворота (рамка лупы — пропорции повёрнутого фото).
   const eff = $derived(turned ? { w: nat.h, h: nat.w } : nat)
   const guess = $derived({ w: ratio * 1000, h: 1000 }) // до загрузки — по данным фото, только для рамки
-  const loupe = new PreviewLoupe(() => ({ size: eff, guess, off: gone }))
+  // Оригинал при зуме выше 1:1 по превью (ступень 2): предел — 1:1 по оригиналу; профиль не sRGB, > 100 Мп, ошибка, другие пропорции — 1:1 по превью.
+  const orig = new PreviewOriginal()
+  const why = $derived(origWhy(photo))
+  const max = $derived(!id || gone || orig.failed(id) ? 1 : origMax(photo, nat))
+  const loupe = new PreviewLoupe(() => ({ size: eff, guess, off: gone, max }))
   const at = $derived(loupe.at)
+  const zs = $derived(loupe.l.s) // масштаб лупы: сдвиг кадра запрос оригинала не откладывает, шаг колеса — откладывает
   // Загрузился кадр: зум и точка переносятся при тех же пропорциях, иначе вписано.
   $effect(() => {
     if (eff.w > 0 && eff.h > 0) untrack(() => loupe.loaded(eff))
   })
+  // Предел снизился (оригинал не пришёл, другое фото): растянутое превью возвращается к пределу.
+  $effect(() => {
+    const m = max
+    if (eff.w > 0 && zs > m) untrack(() => loupe.clampTo(m)) // eff.w: после загрузки превью листаемого фото
+  })
+  // Зум выше 1:1 устоялся — запрашиваем оригинал; следующий шаг колеса или другое фото отменяют ожидание.
+  $effect(() => {
+    const want = !gone && max > 1 && zs > 1 + 1e-6
+    const i = id
+    return untrack(() => orig.sync(i, want))
+  })
+  const natNow = (e: Event) => ({
+    w: (e.currentTarget as HTMLImageElement).naturalWidth,
+    h: (e.currentTarget as HTMLImageElement).naturalHeight,
+  })
+  const origLive = $derived(orig.live(id))
+  // Значок: пока оригинал не пришёл — «Оригинал загружается…»; на пределе без оригинала — причина рядом (Т6).
+  const label = $derived(zs > 1 + 1e-6 && orig.waiting(id) ? ORIG_LOADING : loupe.label)
+  const note = $derived(why && loupe.zoomed && loupe.label && zs >= 1 - 1e-6 ? ORIG_WHY_TEXT[why] : '')
   // Окно закрыто — лупа сбрасывается: следующее открытие начинается с «вписано».
   $effect(() => {
     if (!st) untrack(() => loupe.reset())
@@ -197,19 +222,32 @@
                 {@attach cancelOnUnmount}
               />
             {/if}
+            {#if origLive && id}
+              <!-- Оригинал поверх превью в той же рамке; виден по load, если пропорции те же. Снятый узел убирает src (листание) -->
+              <img
+                class="ph orig"
+                class:raw={rotated}
+                class:ready={orig.ready(id)}
+                src={originalUrl(id)}
+                alt=""
+                draggable="false"
+                style:width={rotated ? (turned ? '100cqh' : '100cqw') : undefined}
+                style:height={rotated ? (turned ? '100cqw' : '100cqh') : undefined}
+                style:transform={rotated ? `translate(-50%, -50%) rotate(${fv?.r}deg) scale(${k})` : undefined}
+                style:filter={tone}
+                onload={(e) => orig.loaded(id, natNow(e), nat)}
+                onerror={() => orig.error(id)}
+                {@attach cancelOnUnmount}
+              />
+            {/if}
           </div>
         {/if}
       </div>
       <div class="cap">
         <span class="name">{st ? caption(photo?.name ?? '', st) : ''}</span>
-        {#if lib && mark}
-          <span class="mk">
-            {#if mark.rating > 0}<span class="stars">{stars(mark.rating)}</span>{/if}
-            {#if mark.flag === 1}<Icon name="flag" size={14} />{:else if mark.flag === -1}<Icon name="flag-off" size={14} />{/if}
-            {#if mark.label !== ''}<i class="dot {mark.label}"></i>{/if}
-          </span>
-        {/if}
-        {#if loupe.label}<span class="zoom">{loupe.label}</span>{/if}
+        {#if lib && mark}<PreviewMarks {mark} />{/if}
+        {#if note}<span class="note">{note}</span>{/if}
+        {#if label}<span class="zoom" class:after={!!note} title={note || undefined}>{label}</span>{/if}
         <button class="x" onclick={close} title="Закрыть (Esc)" aria-label="Закрыть"><Icon name="x" size={14} /></button>
       </div>
       <div class="hint">{hint}</div>
@@ -306,42 +344,30 @@
     color: var(--text);
     white-space: nowrap;
   }
+  /* Оригинал: поверх превью, скрыт до load и пока пропорции не сверены */
+  .ph.orig {
+    visibility: hidden;
+  }
+  .ph.orig:not(.raw) {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  .ph.orig.ready {
+    visibility: visible;
+  }
+  .note {
+    margin-left: auto;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .zoom.after {
+    margin-left: 0;
+  }
   .hint {
     color: var(--muted);
     font-size: 12px;
     padding-bottom: 2px;
-  }
-  /* Отметки показанного фото (128): звёзды, флажок, цвет метки */
-  .mk {
-    flex: 1;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: #fff;
-  }
-  .stars {
-    letter-spacing: 1px;
-  }
-  .dot {
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-    background: var(--lbl-other);
-  }
-  .dot.red {
-    background: var(--lbl-red);
-  }
-  .dot.yellow {
-    background: var(--lbl-yellow);
-  }
-  .dot.green {
-    background: var(--lbl-green);
-  }
-  .dot.blue {
-    background: var(--lbl-blue);
-  }
-  .dot.purple {
-    background: var(--lbl-purple);
   }
   .x {
     flex: none;

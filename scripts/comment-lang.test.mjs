@@ -110,6 +110,7 @@ test('collect: режим по диффу не трогает старое, ло
   }
   try {
     git('init', '-q', '-b', 'dev')
+    git('config', 'core.autocrlf', 'false') // не зависеть от CRLF-настроек машины
     fs.writeFileSync(path.join(repo, 'old.go'), `package a\n${SL}${EN}\n`)
     git('add', '.')
     git('commit', '-q', '-m', 'base')
