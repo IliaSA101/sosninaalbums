@@ -1,0 +1,292 @@
+# Снимки и видео для инструкции Windows (спеки 036 и 039): [страница релиза в Edge] -> распаковка архива в Проводнике
+# -> окно SmartScreen -> программа -> запуск прямо из архива -> «Разблокировать»; запись экрана и журнал шагов для
+# монтажа scripts/guide/overlay.py. Берёт архив (или exe выпуска 0.10, его пакует scripts/win/pack.py) опубликованного
+# релиза (tag) или артефакт «packages»/«windows» прогона Release (run_id, для черновика).
+# Раннеры: windows-11-arm (Windows 11, как у фотографа) и windows-2025 (для сравнения).
+# Скрипты - из того же коммита, что этот файл: итерация = правка scripts/win -> коммит в main -> новый прогон.
+name: "Windows: снимки и видео"
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Метка опубликованного релиза, например v0.9.1 (пусто - последний релиз, иначе последний прогон Release)"
+        required: false
+        type: string
+        default: ""
+      run_id:
+        description: "Номер прогона Release с артефактом packages или windows (пусто - см. tag; без Edge: артефакт скачивается только через токен)"
+        required: false
+        type: string
+        default: ""
+      runners:
+        description: "Раннеры"
+        required: true
+        type: choice
+        default: "windows-11-arm,windows-2025"
+        options:
+          - "windows-11-arm,windows-2025"
+          - "windows-11-arm"
+          - "windows-2025"
+      video:
+        description: "Записывать видео (raw.mp4 и steps.jsonl)"
+        required: true
+        type: boolean
+        default: true
+      edge:
+        description: "Скачивать в Edge со страницы релиза (иначе файл берётся напрямую и ставится метка Zone.Identifier)"
+        required: true
+        type: boolean
+        default: true
+      try_ru:
+        description: "Проба: поставить русский язык Windows (долго, ~15 мин; нужна только если агент раннера в сеансе пользователя)"
+        required: true
+        type: boolean
+        default: false
+
+# Только чтение: релиз и артефакты; секретов нет
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  pick:
+    name: Входы
+    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      run_id: ${{ steps.pick.outputs.run_id }}
+      runners: ${{ steps.pick.outputs.runners }}
+    steps:
+      - name: Ровно один источник exe, список раннеров
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUNNERS: ${{ inputs.runners }}
+        run: |
+          if [ -n "$TAG" ] && [ -n "$RUN_ID" ]; then
+            echo "::error::Задайте tag или run_id, не оба"
+            exit 1
+          fi
+          # Входы по умолчанию (пустые): последний опубликованный релиз, иначе последний успешный прогон Release
+          if [ -z "$TAG" ] && [ -z "$RUN_ID" ]; then
+            TAG="$(gh release list -R "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty' || true)"
+            if [ -z "$TAG" ]; then
+              RUN_ID="$(gh run list -R "$GITHUB_REPOSITORY" --workflow release.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)"
+            fi
+            echo "Вход по умолчанию: tag='$TAG' run_id='$RUN_ID'"
+          fi
+          if [ -n "$TAG" ]; then
+            [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag должен быть vX.Y.Z, получено '$TAG'"; exit 1; }
+          elif [ -n "$RUN_ID" ]; then
+            [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::run_id - число, получено '$RUN_ID'"; exit 1; }
+            # Артефакт «macos»/«windows» берём только из прогона Release по метке или ручному запуску:
+            # чужой workflow мог бы выложить под этим именем что угодно
+            info="$(gh run view "$RUN_ID" -R "$GITHUB_REPOSITORY" --json workflowName,event,headBranch --jq '.workflowName + "|" + .event + "|" + .headBranch')" ||
+              { echo "::error::Прогон $RUN_ID не найден"; exit 1; }
+            case "$info" in
+              "Release|workflow_dispatch|main") ;;
+              "Release|push|"*)
+                [[ "${info#Release|push|}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+                  { echo "::error::Прогон $RUN_ID — ветка не метка версии: '$info'"; exit 1; } ;;
+              *) echo "::error::Прогон $RUN_ID — '$info', нужен Release (push по метке или workflow_dispatch с main)"; exit 1 ;;
+            esac
+          else
+            echo "::error::Нужен tag (опубликованный релиз) или run_id (прогон Release)"
+            exit 1
+          fi
+          IFS=, read -ra list <<< "$RUNNERS"
+          for r in "${list[@]}"; do
+            [[ "$r" =~ ^windows-(11-arm|2025)$ ]] || { echo "::error::Неизвестный раннер '$r'"; exit 1; }
+          done
+          {
+            echo "tag=$TAG"
+            echo "run_id=$RUN_ID"
+            echo "runners=$(printf '%s\n' "${list[@]}" | jq -R . | jq -sc .)"
+          } >> "$GITHUB_OUTPUT"
+
+  shots:
+    name: Windows ${{ matrix.runner }}
+    needs: pick
+    strategy:
+      # раннеры независимы: сбой одного не отменяет второй
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(needs.pick.outputs.runners) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        # Windows PowerShell 5.1: в нём есть UIAutomationClient и WinRT OCR (в pwsh 7 их нет)
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Тесты помощников (test_winlib.ps1)
+        continue-on-error: true
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          & "$env:GITHUB_WORKSPACE\scripts\win\test_winlib.ps1"
+          $code = $LASTEXITCODE
+          & "$env:GITHUB_WORKSPACE\scripts\win\test_winzip.ps1"
+          if ($code -ne 0) { exit $code }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      # Готовый архив выпуска (0.11+) берётся как есть; «голый» exe (0.10) пакует pack.py, как release.yml.
+      # Run-блоки этого задания только ASCII: Windows PowerShell 5.1 читает файл без BOM как ANSI
+      - name: Архив программы
+        id: zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.pick.outputs.tag }}
+          RUN_ID: ${{ needs.pick.outputs.run_id }}
+          PYTHONUTF8: "1"
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          $ErrorActionPreference = 'Continue'
+          $ws = $env:GITHUB_WORKSPACE
+          $repo = $env:GITHUB_REPOSITORY
+          Import-Module "$ws\scripts\win\winzip.psm1" -DisableNameChecking
+          $d = Join-Path $env:RUNNER_TEMP 'zip'
+          $g = Join-Path $env:RUNNER_TEMP 'guide'
+          New-Item -ItemType Directory -Force -Path $d, $g | Out-Null
+          $names = @()
+          if ($env:TAG) {
+            $names = @(gh release view $env:TAG -R $repo --json assets --jq '.assets[].name')
+            if ($LASTEXITCODE -ne 0) { throw 'gh release view failed' }
+            $pick = Select-ReleaseAsset $names
+            if (-not $pick.Name) { throw 'no windows-x64 zip or exe in the release' }
+            gh release download $env:TAG -R $repo -p $pick.Name -D $d --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'failed to download the release asset' }
+            $guide = Select-GuideAsset $names
+            if ($pick.Kind -eq 'exe' -and $guide) { gh release download $env:TAG -R $repo -p $guide -D $g --clobber }
+          } else {
+            gh run download $env:RUN_ID -R $repo -n packages -D $d
+            if ($LASTEXITCODE -ne 0) { gh run download $env:RUN_ID -R $repo -n windows -D $d }
+            if ($LASTEXITCODE -ne 0) { throw 'failed to download the artifact' }
+            gh run download $env:RUN_ID -R $repo -n guide -D $g
+          }
+          $all = @(Get-ChildItem -LiteralPath $d -Recurse -File)
+          $z = @($all | Where-Object { $_.Name -cmatch '^SosninaAlbums-\d+\.\d+\.\d+-windows-x64\.zip$' })
+          $e = @($all | Where-Object { $_.Name -cmatch '^SosninaAlbums-\d+\.\d+\.\d+-windows-x64\.exe$' })
+          if ($z.Count -eq 1) {
+            python -I "$ws\scripts\win\pack.py" check $z[0].FullName --os windows
+            if ($LASTEXITCODE -ne 0) { throw "pack.py check exit $LASTEXITCODE" }
+            $zip = $z[0].FullName
+          } elseif ($z.Count -eq 0 -and $e.Count -eq 1) {
+            $ver = [regex]::Match($e[0].Name, '^SosninaAlbums-(\d+\.\d+\.\d+)-').Groups[1].Value
+            $gn = Select-GuideAsset @(Get-ChildItem -LiteralPath $g -File | ForEach-Object { $_.Name })
+            if ($ver -and -not $gn) {
+              # Выпуски до 0.10 без инструкции: в архиве снимков важна раскладка, не текст (как в mac-shots)
+              Write-Host '::warning::No release guide - a stub goes into the archive for shots'
+              $gn = "SosninaAlbums-$ver-install-guide-ru.docx"
+              Set-Content -LiteralPath (Join-Path $g $gn) -Value 'stub' -Encoding ascii
+            }
+            if (-not $ver -or -not $gn) { throw "no version or guide for packing (ver='$ver' guide='$gn')" }
+            $out = Join-Path $env:RUNNER_TEMP 'packed'
+            $lines = @(python -I "$ws\scripts\win\pack.py" windows --exe $e[0].FullName --version $ver --guide (Join-Path $g $gn) --changelog "$ws\CHANGELOG.md" --notices "$ws\THIRD_PARTY_NOTICES.txt" --license "$ws\LICENSE" --notice "$ws\NOTICE.md" --out $out)
+            $lines | ForEach-Object { Write-Host $_ }
+            if ($LASTEXITCODE -ne 0) { throw "pack.py windows exit $LASTEXITCODE" }
+            $zip = [string]$lines[-1]
+          } else {
+            throw "Expected one windows-x64 zip or one exe, found zip=$($z.Count) exe=$($e.Count)"
+          }
+          if (-not (Test-Path -LiteralPath $zip)) { throw "archive not found: $zip" }
+          Get-FileHash -Algorithm SHA256 -LiteralPath $zip | Format-List
+          "zip=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding ascii -Append
+
+      # ffmpeg BtbN: закреплённый выпуск и sha256 (сверяется до распаковки). Старые выпуски BtbN удаляет - тогда choco
+      - name: ffmpeg
+        if: ${{ inputs.video }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCH: ${{ runner.arch }}
+        run: |
+          $tag = 'autobuild-2026-10-27-18-38'
+          if ($env:ARCH -eq 'ARM64') {
+            $name = 'ffmpeg-N-128121-g86444dd368-winarm64-gpl.zip'
+            $sha = '15e6c469c4c4790e58a43354e22d9de632f8918bcd9e88269fc8ebcb49b35818'
+          } else {
+            $name = 'ffmpeg-N-128121-g86444dd368-win64-gpl.zip'
+            $sha = '1eb70a550388567bc2abbb2d164814f722f36a034fd927dcdfb217bc7e94930c'
+          }
+          $dir = Join-Path $env:RUNNER_TEMP 'ffmpeg'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $ff = $null
+          $ErrorActionPreference = 'Continue'
+          gh release download $tag -R BtbN/FFmpeg-Builds -p $name -D $dir --clobber
+          $zip = Join-Path $dir $name
+          if ((Test-Path -LiteralPath $zip) -and ((Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant() -eq $sha)) {
+            tar -xf $zip -C $dir
+            $ff = Join-Path $dir ([IO.Path]::GetFileNameWithoutExtension($name) + '\bin\ffmpeg.exe')
+          } else {
+            Write-Host "::warning::ffmpeg BtbN download or sha256 failed - installing via choco"
+          }
+          if (-not $ff -or -not (Test-Path -LiteralPath $ff)) {
+            choco install ffmpeg -y --no-progress
+            $ff = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
+          }
+          if (-not $ff) { throw 'ffmpeg not installed' }
+          $ver = & $ff -version
+          if ($LASTEXITCODE -ne 0) { throw "ffmpeg -version exit $LASTEXITCODE" }
+          $ver[0]
+          "WIN_FFMPEG=$ff" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
+
+      - name: Пробы среды (probe.ps1)
+        if: always()
+        env:
+          VIDEO: ${{ inputs.video }}
+          TRY_RU: ${{ inputs.try_ru }}
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          $a = @{ OutDir = (Join-Path $env:RUNNER_TEMP 'win-out'); Video = ($env:VIDEO -eq 'true'); TryRu = ($env:TRY_RU -eq 'true') }
+          & "$env:GITHUB_WORKSPACE\scripts\win\probe.ps1" @a
+
+      # Сценарий всегда выходит с кодом 0: провал одного шага - строка в summary.md, а не падение задания
+      - name: Снимки и видео (shots.ps1)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.pick.outputs.tag }}
+          ZIP: ${{ steps.zip.outputs.zip }}
+          VIDEO: ${{ inputs.video }}
+          EDGE: ${{ inputs.edge }}
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          $a = @{
+            OutDir = (Join-Path $env:RUNNER_TEMP 'win-out')
+            Tag = $env:TAG
+            Repo = $env:GITHUB_REPOSITORY
+            ZipPath = $env:ZIP
+            Edge = ($env:EDGE -eq 'true')
+            Video = ($env:VIDEO -eq 'true')
+          }
+          & "$env:GITHUB_WORKSPACE\scripts\win\shots.ps1" @a
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'win-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'summary.md missing' }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: win-shots-${{ matrix.runner }}
+          path: ${{ runner.temp }}\win-out\
+          if-no-files-found: warn
+          retention-days: 14
