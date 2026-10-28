@@ -1,0 +1,28 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g filter="url(#filter0_d_12_34)">
+<circle cx="60" cy="56" r="40" fill="url(#paint0_linear_12_34)"/>
+</g>
+<rect x="20" y="20" width="80" height="80" fill="url(#pattern0_12_34)"/>
+<g clip-path="url(#clip0_12_34)"><path d="M0 0h10v10H0z" fill="#C9A96E"/></g>
+<defs>
+<filter id="filter0_d_12_34" x="16" y="16" width="88" height="88" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="4"/>
+<feGaussianBlur stdDeviation="2"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_12_34"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_12_34" result="shape"/>
+</filter>
+<pattern id="pattern0_12_34" patternContentUnits="objectBoundingBox" width="1" height="1">
+<use xlink:href="#image0_12_34" transform="scale(0.01)"/>
+</pattern>
+<linearGradient id="paint0_linear_12_34" x1="60" y1="16" x2="60" y2="96" gradientUnits="userSpaceOnUse">
+<stop stop-color="#F5E6CC"/>
+<stop offset="1" stop-color="#C9A96E"/>
+</linearGradient>
+<clipPath id="clip0_12_34"><rect width="120" height="120" fill="white"/></clipPath>
+<image id="image0_12_34" width="1" height="1" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="/>
+</defs>
+</svg>

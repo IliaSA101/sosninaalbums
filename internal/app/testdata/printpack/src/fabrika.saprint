@@ -1,0 +1,58 @@
+{
+  "format": 1,
+  "id": "fabrika",
+  "version": 3,
+  "name": "Фабрика Фотокниги",
+  "gen": "Фабрики Фотокниги",
+  "page": {
+    "dpi": 300, "layflat": true, "safe": 10, "bleed": 3,
+    "hint": "Фабрика Фотокниги: JPEG sRGB 300 dpi, наибольшее качество; 1-00.jpg — обложка, 1-01.jpg… — развороты; важное — не ближе {safe} мм к краю (поправка набора)"
+  },
+  "formats": [
+    {"name": "20×20", "page": [200, 203], "side": [206, 206], "wrap": 17,
+     "guide": {"bleed": [3, 3], "fold": [20, 19]}},
+    {"name": "21×30", "page": [208, 296], "side": [211, 296], "wrap": 17,
+     "guide": {"bleed": [3, 3], "fold": [18, 17]}},
+    {"name": "25×25", "page": [250, 254], "side": [255, 256], "wrap": 17,
+     "guide": {"bleed": [3, 3.5], "fold": [19, 18.5]}},
+    {"name": "30×20", "page": [304, 203], "side": [310, 206], "wrap": 17,
+     "guide": {"bleed": [3, 3], "fold": [20.5, 18.5]}},
+    {"name": "30×30", "page": [300, 305], "side": [312, 306], "wrap": 12,
+     "guide": {"bleed": [3, 4], "fold": [21.5, 13.5]}}
+  ],
+  "cover": {"wrap": 17, "foldSafe": 3, "guideSpineSafe": 12},
+  "products": [
+    {"id": "fabrika-photo", "name": "Фотобумага", "pages": "Фотобумага", "item": "Фотокнига на фотобумаге",
+     "url": "https://fabrika-fotoknigi.com/photobook-photopaper",
+     "spine": [8,8, 12,10, 16,12, 20,14, 24,16, 27,18, 31,20, 35,22, 39,24, 40,26],
+     "limits": [{}, {"format": "30×30", "min": 10}]},
+    {"id": "fabrika-photo-1", "name": "Фотобумага, прослойка 1 мм", "pages": "Фотобумага, прослойка 1 мм", "item": "Фотокнига на фотобумаге",
+     "url": "https://fabrika-fotoknigi.com/photobook-photopaper",
+     "spine": [4,8, 6,10, 8,12, 10,14, 12,16, 14,18, 16,20, 18,22, 20,24, 22,26, 24,28, 26,30, 28,32, 30,34],
+     "limits": [{}, {"format": "30×30", "min": 10}, {"format": "20×20", "min": 2}, {"format": "21×30", "min": 2}, {"format": "25×25", "min": 2}]},
+    {"id": "fabrika-photo-2", "name": "Фотобумага, прослойка 2 мм", "pages": "Фотобумага, прослойка 2 мм", "item": "Фотокнига на фотобумаге",
+     "url": "https://fabrika-fotoknigi.com/photobook-photopaper",
+     "spine": [2,8, 3,10, 4,12, 5,14, 6,16, 7,18, 8,20, 9,22],
+     "spineBy": {"30×20": [2,8, 3,10, 4,12, 5,14, 6,16, 7,18, 8,20, 9,22, 10,24]},
+     "limits": [{"format": "20×20", "min": 2}, {"format": "21×30", "min": 2}, {"format": "25×25", "min": 2}, {"format": "30×20"}]},
+    {"id": "fabrika-layflat-paper", "name": "Лайфлат, бумага", "pages": "Бумага", "item": "Лайфлат",
+     "url": "https://fabrika-fotoknigi.com/layflat",
+     "spine": [13,10, 17,12, 21,14, 26,16, 30,18],
+     "limits": [{"format": "20×20", "min": 10}, {"format": "21×30", "min": 10}]},
+    {"id": "fabrika-layflat-card", "name": "Лайфлат, картон", "pages": "Картон", "item": "Лайфлат",
+     "url": "https://fabrika-fotoknigi.com/layflat",
+     "spine": [7,8, 10,10, 13,12, 16,14, 20,16],
+     "limits": [{"format": "20×20", "min": 2}, {"format": "21×30", "min": 2}]},
+    {"id": "fabrika-layflat-card-1", "name": "Лайфлат, картон + прослойка 1 мм", "pages": "Картон, прослойка 1 мм", "item": "Лайфлат",
+     "url": "https://fabrika-fotoknigi.com/layflat",
+     "spine": [4,8, 5,10, 7,12, 9,14, 11,16, 12,18],
+     "limits": [{"format": "20×20", "min": 2}, {"format": "21×30", "min": 2}]}
+  ],
+  "default": "fabrika-photo",
+  "export": {
+    "acc": "Фабрику Фотокниги", "title": "Для Фабрики Фотокниги", "prefix": "1-", "quality": 100,
+    "coverWord": "обложки", "pagesCap": "Разворот: ", "plain": "Фотокнига", "withCover": "",
+    "done": "Готово для Фабрики Фотокниги", "site": "Фотокниги → {item} → эти параметры → «Создать заказ»",
+    "siteNoItem": "изделие", "siteButton": "Открыть Фабрику Фотокниги", "url": "https://fabrika-fotoknigi.com/photo-books"
+  }
+}

@@ -1,0 +1,863 @@
+version: "2"
+
+run:
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gosec
+    - revive
+    - funlen
+    - gocognit
+    - depguard
+    - forbidigo
+  settings:
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: var-declaration
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    gosec:
+      excludes:
+        - G301 # 0o755 для папок кэша/настроек пользователя — обычное дело для десктопа
+        - G302 # то же для лога и проекта
+        - G306 # то же для файлов проекта и конфига: должны открываться другими программами
+        - G304 # программа по замыслу открывает фото и проекты по путям, выбранным пользователем
+    # Пределы функций (решение владельца 2026-10-09: не давать коду разрастаться).
+    # Замер на dev: при lines 80 / statements 50 / gocognit 30 — 8 функций у funlen и 10 у gocognit.
+    funlen:
+      lines: 80
+      statements: 50
+      ignore-comments: true
+    gocognit:
+      min-complexity: 30
+    # 023 Ш4з (ревью Ш3): правки модели мимо Editor.change и крючки тестов. analyze-types: вызов
+    # раскрывается в «пакет.Тип.метод» и для неквалифицированного вызова внутри model.
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^model\.(Unmarshal|Remember|Project\.(SetFrom|SetLoaded|Normalize|KeepLayouts|Detach)|Spread\.Insert|Mark\.WithAlt)$
+          pkg: ^github\.com/IliaSA101/sosninaalbums/internal/album/model$
+          msg: "023: правка модели мимо Editor — только в дереве альбома"
+        - pattern: ^model\.(SetMarksLimit|SetParallelLayouts)$
+          pkg: ^github\.com/IliaSA101/sosninaalbums/internal/album/model$
+          msg: "023: крючок теста — только в _test.go"
+        # 067: в сеть ходит только decor/fetch (белый список хостов, пределы, подпись); сервер /media — не клиент
+        - pattern: ^http\.(Get|Head|Post|PostForm|NewRequest|NewRequestWithContext|DefaultClient|DefaultTransport|Client|Transport)$
+          pkg: ^net/http$
+          msg: "067: сетевой клиент — только в internal/decor/fetch"
+        # 110: os.Stat идёт по ссылке, в том числе на сетевой путь (зависание на недоступном томе); пока — только internal/app
+        - pattern: ^os\.Stat$
+          pkg: ^os$
+          msg: "110: os.Stat идёт по ссылке, в том числе на сетевой путь — library.StatLocal"
+    # Границы пакетов (docs/ARCHITECTURE.md «Слои»): у каждого пакета internal/* белый список
+    # того, что он вправе импортировать; всё остальное из internal — нарушение. Новый пакет
+    # сначала вносится сюда. Имя правила — то, что увидит автор в сообщении линтера.
+    depguard:
+      rules:
+        # testkit — генератор тестовых файлов: в рабочий код не попадает.
+        "testkit — только из тестов":
+          files:
+            - "!$test"
+            # 023: edtest — помощники тестов дерева альбома (design §5), сам импортируется только из тестов
+            - "!**/internal/album/internal/edtest/**"
+          deny:
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/testkit
+              desc: testkit подключают только _test.go
+        # Корневой main.go знает только internal/app.
+        "корневой main: только internal/app":
+          files:
+            - "**/main.go"
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app
+        # internal/app (слой окна Wails) импортирует любые пакеты internal, кроме testkit
+        # (его закрывает правило выше); app не импортирует никто, кроме main.go — это
+        # следует из белых списков ниже: app там нигде не назван.
+        # Разрез app (№202): edit — тонкие правки только через Editor и Host.Changed, иначе обход
+        # автосохранения и syncMissing; namesfile — чтение таблицы имён. Да владельца 2026-10-16 (№206).
+        "app/edit: только album и model":
+          files:
+            - "**/internal/app/edit/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/edit
+        # Пипетка и «С фото» (0.25, долг ревью Go 0.24): за малым Host — только чтение альбома и картинок.
+        # Да владельца 2026-10-23.
+        "app/colorpick: чтение альбома и картинок":
+          files:
+            - "**/internal/app/colorpick/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/colorspace
+            - github.com/IliaSA101/sosninaalbums/internal/export
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/render
+            - github.com/IliaSA101/sosninaalbums/internal/app/colorpick
+        # Обновление (111): сеть только через decor/fetch (подписанный конверт, белый список хостов), место на диске —
+        # osx; ни альбома, ни App. Да владельца 2026-10-23.
+        "update: fetch и osx":
+          files:
+            - "**/internal/update/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch
+            - github.com/IliaSA101/sosninaalbums/internal/osx
+            - github.com/IliaSA101/sosninaalbums/internal/update
+        "app/namesfile: model, paths, table":
+          files:
+            - "**/internal/app/namesfile/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/table
+            - github.com/IliaSA101/sosninaalbums/internal/app/namesfile
+        # 126: общие помощники служб App (защита от паники, адрес репозитория) — только stdlib. Да владельца 2026-10-24.
+        "app/appkit: только stdlib":
+          files:
+            - "**/internal/app/appkit/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+        # 126: службы App за узким Host (образец colorpick): без Wails, без App и без других служб.
+        "app/updater: update, prefs, paths":
+          files:
+            - "**/internal/app/updater/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/updater$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/prefs$
+            - github.com/IliaSA101/sosninaalbums/internal/update$
+        "app/assoc: osx, update, salbum":
+          files:
+            - "**/internal/app/assoc/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/salbum$
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/assoc$
+            - github.com/IliaSA101/sosninaalbums/internal/osx$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/prefs$
+            - github.com/IliaSA101/sosninaalbums/internal/update$
+        "app/exporter: export, printshop, render":
+          files:
+            - "**/internal/app/exporter/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model/printprof$
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/exporter$
+            - github.com/IliaSA101/sosninaalbums/internal/export$
+            - github.com/IliaSA101/sosninaalbums/internal/export/printshop$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/render$
+            - github.com/IliaSA101/sosninaalbums/internal/text$
+        # 126 Ш4: наборы библиотеки за узким Host (образец updater/assoc/exporter): без Wails, без App и без других служб.
+        # Да владельца 2026-10-25 (0.27-owner-25).
+        "app/libpacks: decor, library, paths, prefs":
+          files:
+            - "**/internal/app/libpacks/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/libpacks$
+            - github.com/IliaSA101/sosninaalbums/internal/decor$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/pack$
+            - github.com/IliaSA101/sosninaalbums/internal/library$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/prefs$
+        # 126 Ш5: свои типографии за узким Host (образец libpacks): без Wails, без App и без других служб.
+        # Да владельца 2026-10-25 (0.27-owner-25): правило и golang.org/x/net/idna.
+        "app/ownprint: model, printprof, decor, library, paths, export, idna":
+          files:
+            - "**/internal/app/ownprint/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/model$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model/printprof$
+            - github.com/IliaSA101/sosninaalbums/internal/app/ownprint$
+            - github.com/IliaSA101/sosninaalbums/internal/decor$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch$
+            - github.com/IliaSA101/sosninaalbums/internal/export$
+            - github.com/IliaSA101/sosninaalbums/internal/library$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - golang.org/x/net/idna$
+        # 140 Т4: ролики справочника F1 за узким Host (образец libpacks): без Wails, без App и без других служб.
+        # Да владельца 2026-10-28.
+        "app/guidevideo: decor/fetch":
+          files:
+            - "**/internal/app/guidevideo/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/guidevideo$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch$
+        # devtools — инструменты разработчика (нарезка листа стикеров и т. п.): в exe не входят, запускают
+        # внешние команды (rembg). Импортирует их только CLI в scripts/ (//go:build ignore); да владельца 19.10.
+        "devtools — не в программу":
+          files:
+            - "!**/internal/devtools/**"
+          deny:
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/devtools
+              desc: инструменты разработчика подключают только скрипты scripts/*.go
+        "devtools: ничего из internal":
+          files:
+            - "**/internal/devtools/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/devtools
+        "paths: ничего из internal":
+          files:
+            - "**/internal/paths/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Чтение таблиц Excel/CSV (043) — чистый разбор файла; да владельца 15.10.
+        "table: ничего из internal":
+          files:
+            - "**/internal/table/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/table
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/text/encoding # CSV из Excel в cp1251
+        # Рисовалка фонов и стикеров (048) — только stdlib и x/image; да владельца 15.10 (№143).
+        "decor/gen: только x/image":
+          files:
+            - "**/internal/decor/gen/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/image
+        # Проверка чужого SVG (048, design §5.4) — чистый разбор, без хранилища (052; да владельца 16.10).
+        "decor/svgcheck: только imgfile":
+          files:
+            - "**/internal/decor/svgcheck/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/svgcheck
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Разбор недоверенного набора и сеть (067) — только stdlib; да владельца 18.10.
+        "decor/pack: только stdlib":
+          files:
+            - "**/internal/decor/pack/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/pack
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "decor/fetch: только stdlib":
+          files:
+            - "**/internal/decor/fetch/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "decor: gen, model, library, imgfile, paths":
+          files:
+            - "**/internal/decor/*.go"
+          list-mode: strict
+          allow:
+            - $gostd
+            # QR-код по ссылке (спека 0.23/100 п. 3, «да» владельца 22.10).
+            - github.com/skip2/go-qrcode
+            - github.com/IliaSA101/sosninaalbums/internal/decor$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
+            - github.com/IliaSA101/sosninaalbums/internal/decor/svgcheck
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/disintegration/imaging
+        "colorspace: ничего из internal":
+          files:
+            - "**/internal/colorspace/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/colorspace
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "text: ничего из internal":
+          files:
+            - "**/internal/text/**"
+            # Хранилище шрифтов пользователя живёт под text (предел подпапок internal/, 0.21-S1),
+            # но ему нужны граница путей и безопасное открытие файла — своё правило ниже.
+            - "!**/internal/text/fontlib/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/image
+            # NFC для FamilyID (082-2): в stdlib нет; x/text уже в модуле (его тянет sfnt).
+            - golang.org/x/text/unicode/norm
+        "text/fontlib: только text, paths, imgfile":
+          files:
+            - "**/internal/text/fontlib/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/image
+        "osx: ничего из internal":
+          files:
+            - "**/internal/osx/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/osx
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "layout: ничего из internal":
+          files:
+            - "**/internal/layout/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "testkit: ничего из internal":
+          files:
+            - "**/internal/testkit/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "geom: только layout, text":
+          files:
+            - "**/internal/geom/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+        "imgfile: только colorspace":
+          files:
+            - "**/internal/imgfile/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/image
+            - github.com/disintegration/imaging
+            - github.com/IliaSA101/sosninaalbums/internal/colorspace
+        "render: только colorspace, geom, imgfile, layout, text":
+          files:
+            - "**/internal/render/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/render
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/image
+            - github.com/disintegration/imaging
+            - github.com/IliaSA101/sosninaalbums/internal/colorspace
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
+        "library: только colorspace, imgfile, paths":
+          files:
+            - "**/internal/library/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/disintegration/imaging
+            - github.com/IliaSA101/sosninaalbums/internal/colorspace
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            # разметка типографии (066) — подпакет library/psd под тем же префиксом; да владельца 17.10
+        # Разбор недоверенного PSD (066) — только stdlib; да владельца 17.10.
+        "library/psd: ничего из internal":
+          files:
+            - "**/internal/library/psd/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/library/psd
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "backup: только library, paths":
+          files:
+            - "**/internal/backup/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/backup
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+        # 023 Ш4з: ядро — только свои подпакеты (префикс) и нижние пакеты; ввод-вывод — в salbum.
+        "album (ядро): подпакеты и нижние пакеты":
+          files:
+            - "**/internal/album/*.go"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/text
+        # 023 (решение владельца 2026-10-10, design §5): правила пакетов дерева album. depguard пересекает правила: album/edtest/testkit для тестов — в allow
+        # каждой области, запреты рабочему коду — отдельными правилами с !$test. Пустая папка правилу не мешает.
+        "album/model: только нижние пакеты":
+          files:
+            - "**/internal/album/model/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
+        "album/design: только model":
+          files:
+            - "**/internal/album/design/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/design
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "album/layers: только model":
+          files:
+            - "**/internal/album/layers/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/layers
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "album/backdrop: только model":
+          files:
+            - "**/internal/album/backdrop/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/backdrop
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "album/grid: только model":
+          files:
+            - "**/internal/album/grid/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/grid
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Виньетка листа (разрез 0.12) — область дерева album, как grid; да владельца 15.10.
+        "album/vigsheet: только model":
+          files:
+            - "**/internal/album/vigsheet/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/vigsheet
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Серии съёмки (051, разрез spreads) — область дерева album; да владельца 17.10.
+        "album/series: только model":
+          files:
+            - "**/internal/album/series/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/series
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "album/spreads: только model":
+          files:
+            - "**/internal/album/spreads/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/spreads
+            - github.com/IliaSA101/sosninaalbums/internal/album/series
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "album/view: только model":
+          files:
+            - "**/internal/album/view/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/view
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/IliaSA101/sosninaalbums/internal/decor/gen
+        # 0.10 (разрешение владельца 2026-10-14): генератор виньетки — чистая геометрия без проекта (031 design §4).
+        "album/vignette: только стандартная библиотека":
+          files:
+            - "**/internal/album/vignette/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/vignette
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Разбор и вставка имён (030) — над моделью, без раскладки и ввода-вывода.
+        "album/names: только model":
+          files:
+            - "**/internal/album/names/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/names
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        # Правки обложки (032) — область дерева album, как grid и view.
+        "album/cover: только model":
+          files:
+            - "**/internal/album/cover/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/cover
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/text
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "album/salbum: model и ввод-вывод":
+          files:
+            - "**/internal/album/salbum/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/salbum
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/osx
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+        "album/internal/inside: только model":
+          files:
+            - "**/internal/album/internal/inside/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/inside
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+        "album/internal/edtest: ядро, model, salbum, inside":
+          files:
+            - "**/internal/album/internal/edtest/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/album/salbum
+            - github.com/IliaSA101/sosninaalbums/internal/album/internal/inside
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/text
+        "edtest — только из тестов":
+          files:
+            - "$all"
+            - "!$test"
+          deny:
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest
+              desc: помощники тестов не попадают в рабочий код
+        # Аудит 2026-10-10: inside открывает живое состояние Editor — рабочий код дерева его не импортирует
+        # (кроме связки ядра inside.go); иначе правка в обход Editor.change.
+        "inside — только связка ядра, edtest и тесты":
+          files:
+            - "**/internal/album/**"
+            - "!**/internal/album/inside.go"
+            - "!**/internal/album/internal/edtest/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/internal/inside
+              desc: живое состояние Editor — только для тестов
+        "пакеты дерева альбома не импортируют ядро":
+          files:
+            - "**/internal/album/*/**"
+            - "!**/internal/album/internal/edtest/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album$
+              desc: ядро зовёт области, а не наоборот (023)
+        # 023 Ш4з (аудит, находка 2): тела правок принимают уже проверенные аргументы — вне дерева
+        # альбома зовут только ядро, model и salbum.
+        "области альбома — только из дерева альбома":
+          files:
+            - "$all"
+            - "!**/internal/album/**"
+          deny:
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/grid
+              desc: тело правки без проверок обёртки Editor (023)
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/design
+              desc: тело правки без проверок обёртки Editor (023)
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/layers
+              desc: тело правки без проверок обёртки Editor (023)
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/backdrop
+              desc: тело правки без проверок обёртки Editor (023)
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/spreads
+              desc: тело правки без проверок обёртки Editor (023)
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/view
+              desc: сборка вида — через Editor.View (023)
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/vigsheet
+              desc: тело правки без проверок обёртки Editor (разрез 0.12)
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album/series
+              desc: серии съёмки — только для автосборки в дереве альбома (разрез spreads)
+        "prefs: только library, osx, paths, album":
+          files:
+            - "**/internal/prefs/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/prefs
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/osx
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/album/salbum
+        "export: только colorspace, geom, imgfile, layout, library, paths, album, render, text":
+          files:
+            - "**/internal/export/**"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/export
+            - github.com/IliaSA101/sosninaalbums/internal/testkit
+            - golang.org/x/image
+            - github.com/disintegration/imaging
+            - github.com/IliaSA101/sosninaalbums/internal/colorspace
+            - github.com/IliaSA101/sosninaalbums/internal/geom
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile
+            - github.com/IliaSA101/sosninaalbums/internal/layout
+            - github.com/IliaSA101/sosninaalbums/internal/library
+            - github.com/IliaSA101/sosninaalbums/internal/paths
+            - github.com/IliaSA101/sosninaalbums/internal/album/model
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/render
+            - github.com/IliaSA101/sosninaalbums/internal/text
+        "export: ядро альбома — только в тестах":
+          files:
+            - "**/internal/export/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/IliaSA101/sosninaalbums/internal/album$
+              desc: экспорт получает Snapshot и View, а не Editor (023)
+  exclusions:
+    generated: lax
+    paths:
+      - frontend
+      - build
+      - .gotmp
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          # табличные и свойственные тестам длинные функции; сложность (gocognit) в тестах проверяется
+          - funlen
+      - path: internal/testkit/
+        linters:
+          - gosec # генератор тестовых файлов, в продукт не попадает
+      # Пределы funlen/gocognit: существующие нарушения на 2026-10-09 (замер при lines 80 /
+      # statements 50 / cognitive 30). Список только сокращается; новые функции в него не вносить.
+      # Разрез перенесён на 0.9 (спека 023 «Не входит», BACKLOG «Сводное ревью 0.8.0»); строки удалять по мере разреза.
+      # funlen пишет «Function 'имя' …», gocognit — «of func `(*Тип).имя`».
+      - path: internal/app/exporter/export\.go
+        linters: [funlen, gocognit]
+        text: "Function 'Export' |func `\\(\\*Service\\)\\.Export`"
+      # 023: шаблоны верны и до переноса, и после (R3, экспорт ClampGrid, новые файлы, album) — design §5
+      - path: internal/album/editor\.go
+        linters: [funlen]
+        text: "Function 'edit' "
+      - path: internal/album/
+        linters: [funlen, gocognit]
+        text: "Function 'copyGrid' |func `(\\(\\*Project\\)\\.)?copyGrid`"
+      - path: internal/album/
+        linters: [gocognit]
+        text: "func `\\(\\*Project\\)\\.(clampGrid|ClampGrid)`"
+      # Тесты: циклы-свойства, фаззинг и таблицы с вложенными проверками сложны по природе;
+      # те же условия — до 023 (0.8.0).
+      - path: internal/app/api_test\.go
+        linters: [gocognit]
+        text: "func `TestRescanGeneration`"
+      - path: internal/render/render_rotplace_test\.go
+        linters: [gocognit]
+        text: "func `(TestRenderContainTiltMask|TestRenderPlaceRot)`"
+      - path: internal/album/.*_test\.go
+        linters: [gocognit]
+        text: "func `(TestGridInvariants|TestLoadV4Dev|FuzzLoad|TestPlaceBoxes)`"
+      # 023 Ш2: помощники тестов переехали из _test.go в edtest без правки тел (rw verify); сообщения
+      # инвариантов начинаются с имени поля («Order …») — для тестов ST1005 и раньше не действовал.
+      - path: internal/album/internal/edtest/
+        linters: [staticcheck]
+        text: "ST1005"
+      # 023 Ш4з: правки модели мимо Editor — только в дереве альбома (forbidigo, msg правила)
+      - path: internal/album/
+        linters: [forbidigo]
+        text: "правка модели мимо Editor"
+      - path: _test\.go
+        linters: [forbidigo]
+        text: "крючок теста"
+      # 067: сам клиент; тесты ходят в свой httptest-сервер
+      - path: (internal/decor/fetch/|_test\.go)
+        linters: [forbidigo]
+        text: "сетевой клиент"
+      # quietTransport глушит keep-alive общего транспорта для прокси wails dev — настройка, не запрос в сеть
+      - path: internal/app/app\.go
+        linters: [forbidigo]
+        text: "сетевой клиент"
+      # 110: правило os.Stat — только для internal/app (остальные 19 файлов — позже); тесты пакета свободны
+      - path-except: ^internal/app/
+        linters: [forbidigo]
+        text: "110: os.Stat"
+      - path: internal/app/.*_test\.go
+        linters: [forbidigo]
+        text: "110: os.Stat"
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    paths:
+      - frontend
+      - build
+      - .gotmp
+
+issues:
+  # funlen и gocognit стоят на одной строке (объявлении функции): без этого один скрывает другого
+  uniq-by-line: false

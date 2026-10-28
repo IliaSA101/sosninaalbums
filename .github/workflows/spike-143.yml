@@ -1,0 +1,110 @@
+# Спайк 143/Т0 (docs/specs/0.31/143-mcp-read/design.md §4.3): канал MCP — stdio у GUI-exe Windows (С1),
+# AF_UNIX в Windows (С2), ревизии протокола и клиенты через посредника (С4). Прототип — spike/mcp143.
+# Запуск только по ветке winqa/143-* (её строит scripts/winqa-push.mjs) или руками. Секретов и прав записи нет.
+# Один прогон собирает все провалы: каждый шаг-проверка с continue-on-error, сводка и артефакт — всегда.
+# В run-блоках только ASCII: Windows PowerShell 5.1 читает файл без BOM как ANSI.
+name: "Спайк 143/Т0: канал MCP"
+
+on:
+  push:
+    branches: ["winqa/143-*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-143-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  spike:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: Папки и сведения о среде
+        run: |
+          mkdir -p "$RUNNER_TEMP/spike143-out" "$RUNNER_TEMP/spike-bin"
+          {
+            echo "SPIKE_OUT=$RUNNER_TEMP/spike143-out"
+            echo "BIN=$RUNNER_TEMP/spike-bin"
+            echo "EXT=$([ "$RUNNER_OS" = Windows ] && echo .exe)"
+          } >> "$GITHUB_ENV"
+          node --version && go version
+
+      - name: Сборка (консольный spikec и spike143 с подсистемой GUI)
+        run: |
+          go build -o "$BIN/spikec$EXT" ./spike/mcp143
+          if [ "$RUNNER_OS" = Windows ]; then
+            go build -ldflags "-H=windowsgui" -o "$BIN/spike143$EXT" ./spike/mcp143
+          else
+            cp "$BIN/spikec" "$BIN/spike143"
+          fi
+          ls -l "$BIN"
+          node spike/mcp143/lib.mjs record build/env INFO "$RUNNER_OS $(uname -sr 2>/dev/null) $(go version)"
+
+      - name: "С1: stdio у exe с подсистемой GUI"
+        id: c1
+        continue-on-error: true
+        run: node spike/mcp143/c1.mjs "$BIN/spike143$EXT"
+
+      - name: "С2 (в), (д): замена файла после убийства, Close удаляет файл"
+        id: c2
+        continue-on-error: true
+        run: node spike/mcp143/c2.mjs "$BIN/spikec$EXT"
+
+      - name: "С2 (а), (б): кириллический пользователь и чужой пользователь"
+        if: runner.os == 'Windows'
+        id: c2win
+        continue-on-error: true
+        shell: powershell
+        run: |
+          & "$env:GITHUB_WORKSPACE\spike\mcp143\c2-win.ps1" -Console "$env:RUNNER_TEMP\spike-bin\spikec.exe" -Out "$env:RUNNER_TEMP\spike143-out"
+
+      - name: "С4: клиент Go SDK, две ревизии протокола"
+        id: c4go
+        continue-on-error: true
+        run: node spike/mcp143/c4.mjs go "$BIN/spikec$EXT"
+
+      - name: "С4: сырой JSON-RPC (заглушка, повтор initialize, пределы строк)"
+        id: c4raw
+        continue-on-error: true
+        run: node spike/mcp143/c4.mjs raw "$BIN/spikec$EXT"
+
+      - name: "С4: MCP Inspector --cli"
+        id: c4insp
+        continue-on-error: true
+        run: node spike/mcp143/c4.mjs insp "$BIN/spikec$EXT"
+
+      - name: Сводка
+        if: always()
+        run: node spike/mcp143/summary.mjs
+
+      - name: Журналы и снимки
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spike143-${{ runner.os }}
+          path: ${{ runner.temp }}/spike143-out
+          retention-days: 7
+          if-no-files-found: warn
