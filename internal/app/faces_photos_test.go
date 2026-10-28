@@ -52,7 +52,7 @@ func TestAppFitFacesPortraits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.BeforeRemove(t, cache.Close)
+	// Кэш закрывает closeBackground из newApp (a.cache): отдельный хук закрыл бы его при идущем фоне.
 	a.cache = cache
 	files, err := filepath.Glob(filepath.Join(src, "portrait-*.jpg"))
 	if err != nil || len(files) == 0 {

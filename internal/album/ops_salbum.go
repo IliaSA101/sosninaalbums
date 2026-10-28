@@ -74,6 +74,9 @@ func (e *Editor) view() model.View {
 	v := view.BuildView(e.p, e.state(false))
 	markVigs(e.p, &v) // имя шаблона и «Ручная» виньеток: план мест знает Editor (038)
 	v.Again = e.againAlive()
+	if v.Look != nil {
+		v.Look.Found = e.lookFound(e.p.Look) // индекс библиотеки, не файл: View зовётся после каждой правки
+	}
 	// Подборки — всегда список, а не nil: шапка дельты (sameHead) сравнивает их DeepEqual.
 	v.Bins = append([]model.Bin{}, e.bins...)
 	v.SetSrc(e.id)

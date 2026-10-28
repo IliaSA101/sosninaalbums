@@ -45,6 +45,7 @@ const spreadView = (backdrop = false) => ({
     {
       id: 's1',
       photos: [],
+      stickers: [{ id: 'k1' }], // заменяемый в тестах «Заменить…»
       w: 600,
       h: 300,
       mid: 300,
@@ -140,7 +141,7 @@ describe('окно после установки набора (073-1)', () => {
     await decor.refresh()
     expect(decor.theme).toBe('basic')
     // Следующее открытие каждого окна — на теме набора, один раз; потом забыто.
-    for (const kind of ['sticker', 'spread', 'bg'] as const) {
+    for (const kind of ['sticker', 'spread', 'frame', 'bg'] as const) {
       decor.close()
       decor.setTheme('basic')
       decor.show(kind, 's1', 'spread')
@@ -151,7 +152,7 @@ describe('окно после установки набора (073-1)', () => {
     decor.setTheme('basic')
     decor.show('bg', 's1', 'spread')
     await vi.waitFor(() => expect(decor.loading).toBe(false))
-    expect(decor.theme).toBe('basic') // свежее показано всем трём видам и забыто
+    expect(decor.theme).toBe('basic') // свежее показано всем четырём видам и забыто
   })
 
   it('повторное открытие того же вида не прыгает; удаление набора (пусто) и набор без плиток вида — тоже', async () => {
@@ -276,6 +277,31 @@ describe('окно «Стикеры» (048 Ф2)', () => {
     expect(api.ReplaceSticker).toHaveBeenCalledWith('s1', 'k1', STK)
     expect(api.AddSticker).not.toHaveBeenCalled()
     expect(store.view.rev).toBe(3)
+  })
+
+  // 0.28-133-78: Ctrl+Z под окном убрал заменяемый стикер — окно остаётся и ведёт себя как «Добавить…»; возврат (Redo) — снова «Заменить…»
+  it('«Заменить…»: стикер убрали отменой — окно открыто, постановка добавляет; вернули — снова заменяет', async () => {
+    const { placesel } = await import('../../editor/places/placesel.svelte')
+    placesel.clear()
+    placesel.page = 1
+    api.AddSticker.mockResolvedValue({ view: { ...spreadView(), rev: 4 }, id: 'k9' })
+    api.ReplaceSticker.mockResolvedValue({ ...spreadView(), rev: 6 })
+    await open('k1')
+    expect(decor.replacing()).toBe('k1')
+    const withK1 = store.view
+    store.view = { ...withK1, rev: 2, spreads: [{ ...withK1.spreads[0], stickers: [] }] } as never // Ctrl+Z
+    expect(decor.cur?.replace).toBe('k1') // окно не закрылось, запись режима цела
+    expect(decor.replacing()).toBeUndefined()
+    expect(decor.standing('spread')).toBe('')
+    store.view = { ...withK1, rev: 3 } as never // Ctrl+Shift+Z вернул стикер
+    expect(decor.replacing()).toBe('k1')
+    store.view = { ...withK1, rev: 2, spreads: [{ ...withK1.spreads[0], stickers: [] }] } as never
+    await decor.pick(decor.cat!.items[0])
+    expect(api.AddSticker).toHaveBeenCalledWith('s1', 1, 'sa:heart')
+    expect(api.ReplaceSticker).not.toHaveBeenCalled()
+    expect(decor.cur).toBeNull()
+    placesel.page = 0
+    placesel.clear()
   })
 
   it('отказ Go — тост, окно закрыто, выделение прежнее', async () => {

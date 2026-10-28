@@ -28,6 +28,7 @@ const (
 	v15Shape = "testdata/compat/v15-shape.json" // 0.21 (тег v0.21.0)
 	v16Shape = "testdata/compat/v16-shape.json" // 0.22 (тег v0.22.0)
 	v17Shape = "testdata/compat/v17-shape.json" // 0.23 (тег v0.23.0)
+	v18Shape = "testdata/compat/v18-shape.json" // 0.24–0.27 (тег v0.24.0; форма у 0.27 та же)
 )
 
 func readShape(t *testing.T, path string) map[string]string {

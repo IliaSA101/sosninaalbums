@@ -28,8 +28,14 @@ import (
 // lvTool — собранный скрипт.
 type lvTool struct{ exe string }
 
-// buildLibVerify собирает скрипт (два файла одного package main); без go или на лёгком уровне — пропуск.
+// buildLibVerify собирает скрипт (три файла одного package main); без go или на лёгком уровне — пропуск.
 func buildLibVerify(t *testing.T) lvTool {
+	t.Helper()
+	return buildLibVerifyOf(t, "library-verify.go", "library-verify-sheets.go", "library-verify-looks.go")
+}
+
+// buildLibVerifyOf — сборка из файлов scripts/files (сборка для меток 0.26/0.27 — без третьего).
+func buildLibVerifyOf(t *testing.T, files ...string) lvTool {
 	t.Helper()
 	if testkit.Lite() {
 		t.Skip("сборка скрипта — полный уровень")
@@ -46,7 +52,10 @@ func buildLibVerify(t *testing.T) lvTool {
 	if runtime.GOOS == "windows" {
 		g.exe += ".exe"
 	}
-	args := []string{"build", "-o", g.exe, filepath.Join(dir, "library-verify.go"), filepath.Join(dir, "library-verify-sheets.go")}
+	args := []string{"build", "-o", g.exe}
+	for _, f := range files {
+		args = append(args, filepath.Join(dir, f))
+	}
 	if b, err := exec.Command(goBin, args...).CombinedOutput(); err != nil {
 		t.Fatalf("сборка: %v\n%s", err, b)
 	}
@@ -386,19 +395,27 @@ func (e lvEnv) pull(t *testing.T) {
 	mine("Маринин из набора", lvTpl(t, 2, e.bg, e.st, 0.15))
 	mine("Чужой фон", lvTpl(t, 1, "my:0123456789abcdef", e.st, 0.15))
 	mine("Только цвет", pfile{data: []byte(`{"v":1,"pages":1,"ratio":0.67,"page":[{"color":"#ffffff"}],"places":[{"x":0.1,"y":0.1,"w":0.8,"h":0.8}]}`)})
+	// Рамочки мест (131): своя рамка набора — забирается, чужая — нет (ключ borders[].lib учтён).
+	framed := func(lib string) pfile {
+		return pfile{data: []byte(`{"v":1,"pages":1,"ratio":0.67,"page":[{"lib":"` + e.bg + `"}],"places":[{"x":0.1,"y":0.1,"w":0.8,"h":0.8}],"borders":[{"i":0,"lib":"` + lib + `"}]}`)}
+	}
+	mine("Рамочка из набора", framed(lvKey(e.files[2].data)))
+	mine("Чужая рамочка", framed("my:0123456789abcdef"))
 	out := filepath.Join(testkit.TempDir(t), "pulled")
 	lib := filepath.Join(a.cfgDir, "Библиотека")
 	text, code := e.g.run(t, "-pull", lib, "-pack", "pullset", "-out", out)
-	if code != 0 || !strings.Contains(text, "забрано шаблонов: 1") {
+	if code != 0 || !strings.Contains(text, "забрано шаблонов: 2") || strings.Contains(text, "Чужая рамочка") {
 		t.Fatalf("код %d\n%s", code, text)
 	}
 	m, _ := filepath.Glob(filepath.Join(out, "*.json"))
-	if len(m) != 1 {
+	if len(m) != 2 {
 		t.Fatalf("файлов %v", m)
 	}
-	data, _ := os.ReadFile(m[0])
-	if _, err := model.ParseSpreadTpl(data); err != nil {
-		t.Errorf("забранный шаблон не читается: %v", err)
+	for _, f := range m {
+		data, _ := os.ReadFile(f)
+		if _, err := model.ParseSpreadTpl(data); err != nil {
+			t.Errorf("забранный шаблон %s не читается: %v", filepath.Base(f), err)
+		}
 	}
 	if text, code := e.g.run(t, "-pull", lib, "-pack", "net-takogo", "-out", out); code != 1 {
 		t.Errorf("чужой id: код %d\n%s", code, text)

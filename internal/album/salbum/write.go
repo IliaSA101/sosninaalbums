@@ -58,6 +58,7 @@ func encodeWith(p *model.Project, side model.Side, enc pathEnc) ([]byte, error) 
 		Cover:    encodeCover(p.Cover, enc),
 		Fonts:    p.Fonts, // только названия: файлы шрифтов альбом не несёт (082-8)
 		AlbumBg:  p.AlbumBg,
+		Look:     p.Look,
 	}
 	if f.Spreads == nil {
 		f.Spreads = []*model.Spread{}

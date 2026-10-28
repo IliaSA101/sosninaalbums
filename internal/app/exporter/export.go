@@ -103,9 +103,10 @@ func (s *Service) Export(o Options) (bool, error) {
 	// Пустые развороты — тоже до папки, по тому же доводу (спека 013).
 	// Лист только с фоном альбома считается пустым, но белым он не выйдет (0.23-g3g4 G4-4);
 	// обложку фон альбома не красит (098-10) — одна пустая обложка остаётся «белой».
-	blank := export.BlankSpreads(v, &pl)
+	// Лист и обложка только с заготовками — не здесь, а в вопросе о заготовках после папки (0.28-131-19).
+	drafts := export.DraftSummaryFor(v, &pl, opt.PageW)
+	blank, blankCover := drafts.TakeBlank(export.BlankSpreads(v, &pl), cover != nil && export.BlankCover(v))
 	white := (p.Settings.Bg == "" || p.Settings.Bg == "#ffffff") && (p.AlbumBg == nil || len(blank) == 0)
-	blankCover := cover != nil && export.BlankCover(v)
 	if text := export.BlankWarningCover(blank, blankCover, white); text != "" {
 		if ok, err := s.h.Ask(text); !ok {
 			return false, err
@@ -145,8 +146,8 @@ func (s *Service) Export(o Options) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// Пустые места после выбора папки, до вопроса о перезаписи: «нет» ничего не удаляет.
-	if text := export.EmptyWarning(export.EmptySummaryFor(v, &pl, opt.PageW)); text != "" {
+	// Пустые места и заготовки (131) после выбора папки, до вопроса о перезаписи: «нет» ничего не удаляет.
+	if text := export.EmptyDraftWarning(drafts); text != "" {
 		if ok, err := s.h.Ask(text); !ok {
 			return false, err
 		}

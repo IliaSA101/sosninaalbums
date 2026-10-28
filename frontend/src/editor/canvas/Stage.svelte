@@ -23,7 +23,8 @@
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { emptyField } from './field'
   import { fieldClick } from '../places/placegesture'
-  import { FIT_BOTTOM, FIT_TOP, fitH, isZoomWheel, placement, rowWheelAllowed, wheelFactor, wheelPan } from '../zoom/zoom'
+  import { FIT_BOTTOM, FIT_TOP, fitH, isZoomWheel, placement, rowWheelAllowed, wheelFactor, wheelPan, zoomGate } from '../zoom/zoom'
+  import { pinchOn, pinching } from '../zoom/pinch'
   import { BAR, railCols, sideReserve } from '../inspector/panels'
 
   let w = $state(0)
@@ -102,6 +103,8 @@
 
   // Посреди жеста (перенос, кадр, текст, места) масштаб не меняется: иначе px на мм поплыли бы.
   const busy = () => canvas.busy || canvas.pressed || drag.active
+  // Зум колесом и щипком: одни запреты (zoomGate). На слоте «новый» разворота под курсором нет — вид прыгнул бы.
+  const canZoom = () => zoomGate({ spread: !!store.spread, busy: busy(), atNew: row.atNew, can: prefs.can('zoom') })
 
   function wheel(e: WheelEvent) {
     // Над полосой и панелями — их прокрутка; Ctrl+колесо гасим всегда, иначе масштабируется страница.
@@ -113,8 +116,8 @@
     // Ctrl+колесо и щипок — зум к курсору. Без них: в зуме — сдвиг листа (колесо вниз-вверх, Shift — вбок, тачпад — оба),
     // при 100 % — ряд разворотов; во время переноса фото ряд едет (цель пересчитывается), посреди жеста правки ждёт.
     if (isZoomWheel(e)) {
-      // На слоте «новый» разворота под курсором нет: зум не начинаем (вид прыгнул бы)
-      if (!store.spread || busy() || row.atNew || !prefs.can('zoom')) return
+      // Посреди щипка Ctrl-колесо (старый WebKit дублирует жест) не зумит: двойного зума не будет
+      if (pinching() || !canZoom()) return
       const r = el!.getBoundingClientRect()
       zoomTo(wheelFactor(e.deltaY, e.deltaMode), e.clientX - r.left, e.clientY - r.top - BAR)
     } else if (zoomed) {
@@ -123,12 +126,23 @@
       canvas.panBy(d.dx, d.dy)
     } else if (rowWheelAllowed({ dragging: drag.active, busy: canvas.busy, pressed: canvas.pressed, eyedrop: eyedrop.on })) row.wheel(e)
   }
-  // Свой слушатель с passive: false — иначе preventDefault у колеса не сработает.
+  // Свой слушатель с passive: false — иначе preventDefault у колеса не сработает. Щипок Mac (134) — тот же зум,
+  // множитель жеста как есть; над полосой и панелями жест только гасится.
   $effect(() => {
     const node = el
     if (!node) return
     node.addEventListener('wheel', wheel, { passive: false })
+    const unpinch = pinchOn(
+      node,
+      (f, x, y) => {
+        if (!canZoom()) return
+        const r = node.getBoundingClientRect()
+        zoomTo(f, x - r.left, y - r.top - BAR)
+      },
+      { skip: (t) => !!(t as HTMLElement | null)?.closest?.('[data-chrome]') },
+    )
     return () => {
+      unpinch()
       node.removeEventListener('wheel', wheel)
       if (raf) cancelAnimationFrame(raf)
       raf = 0

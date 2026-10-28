@@ -5,10 +5,11 @@
 // строит album.PreviewTpl на страницах 20×30, 30×30 и 40×30 см, рамки рисует ServeFramePic.
 // Инструмент разработчика, не функция программы.
 //
-//	go run scripts/library-verify.go scripts/library-verify-sheets.go [-app x.y.z] [-with донор.zip]... [-out папка] [-preview лист.png] набор.zip...
-//	go run scripts/library-verify.go scripts/library-verify-sheets.go -pull <Библиотека> -pack <id> -out папка
+//	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go [-app x.y.z] [-with донор.zip]... [-out папка] [-preview лист.png] набор.zip...
+//	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go -pull <Библиотека> -pack <id> -out папка
 //
-// Два файла: лимит 600 строк на файл (рамки, листы и -pull — во втором, тот же package main).
+// Три файла: лимит 600 строк на файл (рамки, листы и -pull — во втором, макеты альбома 0.28 — в третьем,
+// тот же package main; без третьего скрипт собирается и для 0.26/0.27, макеты тогда не проверяются).
 //
 // Версия программы для minApp: -app x.y.z, иначе info.productVersion из wails.json (в текущей папке
 // или выше — дерево сборки); minApp набора новее — провал. Набор для 0.27.0 в дереве, где wails.json
@@ -22,13 +23,15 @@
 //     области листа (-tol мм на округление);
 //   - пропорция мест на 30×30: меньше 80 % мест, где кадр 3:2 / 2:3 режется ≤ 15 %, — WARN в итоге
 //     (имя шаблона и доля), не провал, код выхода прежний; места-фигуры не считаются;
+//   - макет альбома (вид album, library-verify-looks.go): missing 0, LowDPI 0, места внутри области на
+//     20×30, 30×30 и 40×30; WARN, если в шаге меньше 80 % мест 3:2 / 2:3 на эталоне Ratio шага;
 //   - рамка: окно прозрачно, рамка вровень с краем места 20×20, 20×30, 30×20 см; «тянется» % (design
 //     §2.1) выше 20 — флаг-подсказка для отбора, не провал.
 //
 // Провалы копятся и печатаются в конце (код 1), независимые блоки друг друга не прерывают. С -out:
 // frames.png (рамки на шахматке — по нему идёт отбор) и fail-*.png (шаблон на размере, где провал);
-// -preview — общий лист «фоны / стикеры / рамки / развороты». -pull забирает из Развороты/ библиотеки
-// шаблоны, все ключи которых из набора -pack (правки Марины), в -out/*.json.
+// -preview — общий лист «фоны / стикеры / рамки / развороты» и строка на макет альбома «Обложка, 1…N».
+// -pull забирает из Развороты/ библиотеки шаблоны, все ключи которых из набора -pack (правки Марины), в -out/*.json.
 //
 // Скрипт опирается только на API, общее для 0.26.0 и dev: для проверки 0.26 он копируется в
 // git worktree метки v0.26.0 и собирается там (флага версии нет). Под ignore precheck его не
@@ -97,7 +100,18 @@ type verifier struct {
 	ctx   string
 	done  []decor.PackInfo
 	app   string // версия программы для minApp (x.y.z)
+	// Последний поставленный набор: макетов альбома в манифесте и его minApp (проверяет lookCheck).
+	albums int
+	minApp string
 }
+
+// lookCheck — проверка макетов альбома набора (library-verify-looks.go, вид album с 0.28); без этого
+// файла (сборка для 0.26/0.27) макеты не проверяются.
+var lookCheck func(v *verifier, path string, info decor.PackInfo)
+
+// lookRows — строки листа превью для макетов набора: по строке на макет «Обложка, 1…N» (то же —
+// library-verify-looks.go).
+var lookRows func(v *verifier, info decor.PackInfo) []image.Image
 
 func (v *verifier) failf(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
@@ -279,6 +293,12 @@ func (v *verifier) install(path string) (decor.PackInfo, bool) {
 	}
 	defer arc.Close()
 	m := arc.Manifest
+	v.albums, v.minApp = 0, m.MinApp
+	for _, it := range m.Items {
+		if it.Kind == "album" {
+			v.albums++
+		}
+	}
 	for _, sk := range m.Skipped {
 		v.failf("манифест пропустил «%s»: %s", sk.File, sk.Why)
 	}
@@ -355,6 +375,12 @@ func (v *verifier) verifyPack(path string) {
 	}
 	v.ctx = filepath.Base(path)
 	v.guard("рамки", func() { v.checkFrames(info) })
+	if lookCheck != nil {
+		v.guard("макеты", func() { lookCheck(v, path, info) })
+		v.ctx = filepath.Base(path)
+	} else if v.albums > 0 {
+		v.failf("макеты альбома не проверены: соберите с library-verify-looks.go")
+	}
 }
 
 // libsOf — картинки библиотеки шаблона и число ключей, которых на этом ПК нет.
@@ -374,7 +400,8 @@ func (v *verifier) libsOf(t model.SpreadTpl) (libs map[string]model.PhotoInfo, m
 	return libs, missing
 }
 
-// tplKeys — ключи библиотеки в шаблоне: фоны страниц, фон разворота и стикеры.
+// tplKeys — ключи библиотеки в шаблоне: фоны страниц, фон разворота, стикеры и рамочки мест
+// (borders, 131) — как app.tplKeys и decor.tplLibs.
 func tplKeys(t model.SpreadTpl) []string {
 	var keys []string
 	bgs := slices.Clone(t.Page)
@@ -389,6 +416,11 @@ func tplKeys(t model.SpreadTpl) []string {
 	for _, it := range t.Stickers {
 		if it.Lib != "" {
 			keys = append(keys, it.Lib)
+		}
+	}
+	for _, b := range t.Borders {
+		if b.Lib != "" {
+			keys = append(keys, b.Lib)
 		}
 	}
 	return keys

@@ -185,6 +185,9 @@ func FuzzParseSpreadTpl(f *testing.F) {
 	seed, _ := json.Marshal(fullTpl())
 	f.Add(seed)
 	f.Add([]byte(`{"v":1,"pages":1,"page":[{"color":"#ffffff"}],"places":[{"x":0.9,"y":0.9,"w":0.5,"h":0.5,"rot":30}]}`))
+	f.Add([]byte(`{"v":1,"pages":1,"page":[{}],"places":[{"x":0.1,"y":0.1,"w":0.3,"h":0.3},{"x":0.5,"y":0.1,"w":0.3,"h":0.3}],` +
+		`"borders":[{"i":0,"kind":"line","inks":["#ABCDEF"],"w":2},{"i":1,"lib":"my:0123456789abcdef","scale":1.5,"cut":[0.1,0.1,0.9,0.1],"open":true},{"i":1,"kind":"gold"}],` +
+		`"drafts":[{"ax":0,"ay":1,"w":0.5,"text":"[Имена]","style":{}}]}`))
 	f.Add([]byte(`{"v":1,"pages":2,"page":[{},{}],"stickers":[{"ax":1,"ay":1,"dx":0.3333333,"w":0.1,"h":0.1,"lib":"my:0123456789abcdef"}]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		tp, err := ParseSpreadTpl(data)

@@ -4,7 +4,7 @@
 import type { FeatureId } from '../../base/prefs/levels'
 import type { MenuNode } from '../../base/ui/menulist'
 import type { UseSrc } from '../../base/words/whereuse'
-import { fileGroup, previewItem, type HintFn } from '../../editor/photo/photomenu'
+import { fileGroup, previewItem, type HintFn } from '../../editor/photomenu/photomenu'
 import { useRows } from '../../editor/photoprops/usemenu'
 
 export interface ThumbCtx {

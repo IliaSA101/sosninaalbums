@@ -38,7 +38,7 @@ func TestLoadV9CoverBoth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != model.FormatVersion || model.FormatVersion != 18 || edtest.From(p) != 9 {
+	if p.Version != model.FormatVersion || model.FormatVersion != 19 || edtest.From(p) != 9 {
 		t.Fatalf("версия %d, from %d", p.Version, edtest.From(p))
 	}
 	c := p.Cover

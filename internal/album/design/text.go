@@ -14,7 +14,8 @@ import (
 // Блоки текста: набор, оформление, добавление, рамка, поворот, ширина «по тексту»,
 // названия разворотов (спеки 006, 008).
 
-// SetText меняет текст блока; пустой (одни пробелы) — блок удаляется.
+// SetText меняет текст блока; пустой (одни пробелы) — блок удаляется. Новая строка делает
+// заготовку (131) обычной надписью; та же строка — холостая, признак стоит.
 // txt — уже очищенный (CleanText).
 func SetText(p *model.Project, textID, txt string) {
 	s, i := p.FindText(textID)
@@ -25,7 +26,39 @@ func SetText(p *model.Project, textID, txt string) {
 		s.Texts = slices.Delete(s.Texts, i, i+1)
 		return
 	}
-	s.Texts[i].Text = txt
+	if t := s.Texts[i]; t.Text != txt {
+		t.Text, t.Draft = txt, false
+	}
+}
+
+// SetTextDraft ставит или снимает признак заготовки (131 design §6) у надписи textID листа
+// spreadID. Снятие («Сделать обычной надписью») убирает скобки, если весь текст — одна пара
+// «[…]» с непустым содержимым: «[Имя] и [Имя]» и «[ ]» не трогаются. Тот же признак — холостая.
+func SetTextDraft(p *model.Project, spreadID, textID string, draft bool) {
+	s := p.Sheet(spreadID)
+	if s == nil {
+		return
+	}
+	i := slices.IndexFunc(s.Texts, func(t *model.TextBlock) bool { return t.ID == textID })
+	if i < 0 || s.Texts[i].Draft == draft {
+		return
+	}
+	t := s.Texts[i]
+	t.Draft = draft
+	if inner, ok := bracketPair(t.Text); !draft && ok {
+		t.Text = inner
+	}
+}
+
+// bracketPair — содержимое без пробелов по краям, если весь s — одна пара скобок без вложенных
+// (^\[[^\[\]]*\]$, 131 К1-r2-7) и внутри не пусто.
+func bracketPair(s string) (string, bool) {
+	n := len(s)
+	if n < 2 || s[0] != '[' || s[n-1] != ']' || strings.ContainsAny(s[1:n-1], "[]") {
+		return "", false
+	}
+	inner := strings.TrimSpace(s[1 : n-1])
+	return inner, inner != ""
 }
 
 // SetTextStyle меняет оформление блока: st — уже зажатый (ClampStyle: гарнитура из

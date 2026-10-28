@@ -25,7 +25,7 @@ func TestColorPickWrappers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.BeforeRemove(t, cache.Close)
+	// Кэш закрывает closeBackground из newApp (a.cache): отдельный хук закрыл бы его при идущем фоне.
 	a.cache = cache
 	im := image.NewRGBA(image.Rect(0, 0, 600, 400))
 	draw.Draw(im, im.Bounds(), image.NewUniform(color.RGBA{R: 220, G: 30, B: 30, A: 255}), image.Point{}, draw.Src)

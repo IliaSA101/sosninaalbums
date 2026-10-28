@@ -240,6 +240,39 @@ describe('колесо', () => {
     wheel({ deltaY: 100, ctrlKey: true })
     expect(badge()).toBe('Вписано · 51 %')
   })
+  // 134-5: щипок Mac — GestureEvent (happy-dom его не знает: событие собираем руками)
+  const gesture = (type: string, init: { scale?: number; clientX?: number; clientY?: number }) => {
+    const e = new Event(type, { bubbles: true, cancelable: true })
+    for (const [k, v] of Object.entries(init)) Object.defineProperty(e, k, { value: v })
+    document.querySelector('.view')!.dispatchEvent(e)
+    flushSync()
+    return e
+  }
+  it('щипок: gesturechange scale 1,5 — масштаб ×1,5 у точки жеста (вписано 51 %, дальше 1:1 — предел), событие погашено', () => {
+    open()
+    const s0 = w() / 2048
+    const left0 = parseFloat(move().match(/translate\(([-\d.]+)px/)![1])
+    expect(gesture('gesturestart', { scale: 1, clientX: 900, clientY: 350 }).defaultPrevented).toBe(true)
+    const e = gesture('gesturechange', { scale: 1.5, clientX: 900, clientY: 350 })
+    expect(e.defaultPrevented).toBe(true)
+    expect(w() / 2048).toBeCloseTo(s0 * 1.5, 6)
+    // точка под пальцами осталась на месте: доля кадра по x та же
+    const left1 = parseFloat(move().match(/translate\(([-\d.]+)px/)![1])
+    expect((900 - left1) / w()).toBeCloseTo((900 - left0) / (s0 * 2048), 4)
+    gesture('gesturechange', { scale: 1, clientX: 900, clientY: 350 }) // свёл обратно
+    expect(badge()).toBe('Вписано · 51 %')
+    gesture('gestureend', { scale: 1, clientX: 900, clientY: 350 })
+  })
+  it('Ctrl-колесо посреди щипка не зумит (старый WebKit дублирует жест)', () => {
+    open()
+    gesture('gesturestart', { scale: 1, clientX: 900, clientY: 350 })
+    const e = wheel({ deltaY: -100, ctrlKey: true })
+    expect(e.defaultPrevented).toBe(true)
+    expect(badge()).toBe('Вписано · 51 %')
+    gesture('gestureend', { scale: 1 })
+    wheel({ deltaY: -100, ctrlKey: true })
+    expect(parseFloat(badge()!)).toBeGreaterThan(51)
+  })
   it('предел — 1:1', () => {
     open()
     for (let i = 0; i < 10; i++) wheel({ deltaY: -100, ctrlKey: true })
@@ -321,11 +354,13 @@ describe('фон и подпись', () => {
   it('строка клавиш из ленты: клавиши из реестра; Mac — ⌘', () => {
     open()
     const hint = () => document.querySelector('.hint')?.textContent
-    expect(hint()).toBe('← → — листать · щелчок или Z — 1:1 · Ctrl+колесо — зум · 0 — вписать · отметки — клавишами ленты · Esc — закрыть')
+    expect(hint()).toBe(
+      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · отметки — клавишами ленты · Esc — закрыть',
+    )
     cleanup()
     setOsForTest('mac')
     open()
-    expect(hint()).toContain('⌘+колесо — зум')
+    expect(hint()).toContain('⌘+колесо или щипок — зум')
     expect(keymap.hint('fitZoom')).toBe('0')
   })
 
@@ -333,7 +368,9 @@ describe('фон и подпись', () => {
     render(PhotoPreview)
     photoui.openCanvas('a')
     loaded()
-    expect(document.querySelector('.hint')?.textContent).toBe('щелчок или Z — 1:1 · Ctrl+колесо — зум · 0 — вписать · Esc — закрыть')
+    expect(document.querySelector('.hint')?.textContent).toBe(
+      'щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · Esc — закрыть',
+    )
   })
 
   it('клавиша снята — в строке её нет', () => {
@@ -341,7 +378,7 @@ describe('фон и подпись', () => {
     render(PhotoPreview)
     photoui.openCanvas('a')
     loaded()
-    expect(document.querySelector('.hint')?.textContent).toBe('щелчок — 1:1 · Ctrl+колесо — зум · Esc — закрыть')
+    expect(document.querySelector('.hint')?.textContent).toBe('щелчок — 1:1 · Ctrl+колесо или щипок — зум · Esc — закрыть')
   })
 })
 
@@ -383,7 +420,7 @@ describe('мелкое фото и зона', () => {
     expect(prefs.can('marks')).toBe(false)
     open()
     expect(document.querySelector('.hint')?.textContent).toBe(
-      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо — зум · 0 — вписать · Esc — закрыть',
+      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · Esc — закрыть',
     )
   })
 })

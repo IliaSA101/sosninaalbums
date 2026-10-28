@@ -1,6 +1,7 @@
 import { Api, store } from '../../base/core/store.svelte'
 import { errText, capFirst } from '../../base/words/errtext'
 import { decor } from '../../panels/decor/decor.svelte'
+import { looks } from '../looks/looks.svelte'
 import {
   addedText,
   cancelled,
@@ -79,6 +80,8 @@ class PacksUi {
   // installed — названия поставленных наборов (при удалении пусто): следующее открытие окон встанет на их тему (073-1).
   changed(installed?: readonly string[] | null) {
     decor.note(installed)
+    if (store.view.look) void store.resync() // View.look.found зависит от библиотеки: вид сам не придёт (131-116)
+    looks.changed(installed) // окно «Макеты альбома»: открытое перечитывает каталог, закрытое встанет на тему свежего набора
     if (this.open) void this.load()
     if (decor.cur) void decor.refresh()
   }

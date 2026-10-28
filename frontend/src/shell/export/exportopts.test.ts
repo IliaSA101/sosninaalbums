@@ -194,6 +194,17 @@ describe('сводка перед выгрузкой', () => {
   })
 })
 
+describe('сводка перед выгрузкой: заготовки (131)', () => {
+  it('«пустые места: 3, заготовки: 2» — та же строка, что у вопроса Go', () => {
+    expect(exportWarnings({ emptyPlaces: 3, lowDPI: 0, drafts: 2 }, 0)).toBe('Перед выгрузкой: пустые места: 3, заготовки: 2')
+  })
+  it('только заготовки, а поле не пришло — как ноль', () => {
+    expect(exportWarnings({ emptyPlaces: 0, lowDPI: 0, drafts: 1 }, 0)).toBe('Перед выгрузкой: заготовки: 1')
+    expect(exportWarnings({ emptyPlaces: 0, lowDPI: 0 }, 0)).toBe('')
+    expect(exportWarnings({ emptyPlaces: 0, lowDPI: 0, drafts: 0 }, 0)).toBe('')
+  })
+})
+
 describe('предел разворотов в окне (085)', () => {
   const over = {
     pageLimit: {

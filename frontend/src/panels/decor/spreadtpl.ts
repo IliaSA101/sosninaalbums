@@ -6,7 +6,8 @@ import { plural } from '../../base/words/plural'
 import { isVignette } from '../vignette/vignette'
 import type { SegItem } from '../../base/tpl/Seg.svelte'
 import type { SideItem } from '../../base/tpl/SideList.svelte'
-import { ALL, RECENT, sideItems, themeItems, tilePx, type DecorCatalog, type DecorItem } from './decor'
+import { sideCounts, type BrowseSel, NO_SEL } from '../decorbrowse/browse'
+import { noOwn, tilePx, type DecorCatalog, type DecorItem } from './decor'
 
 type SheetFor = Pick<SpreadView, 'w' | 'h' | 'mid'>
 
@@ -18,9 +19,15 @@ export const tplFits = (it: Pick<DecorItem, 'pages'>, scope: BackdropScope, sp: 
 export const tplVisible = (items: readonly DecorItem[], scope: BackdropScope, sp: Pick<SpreadView, 'mid'>): DecorItem[] =>
   items.filter((it) => tplFits(it, scope, sp))
 
-// Счётчики тем считаются по тому же отбору «Куда», что и плитки (Go считает по всем): иначе «Недавние 3» при двух плитках.
-export function tplSideItems(cat: DecorCatalog | null, scope: BackdropScope, sp: Pick<SpreadView, 'mid'>): SideItem<string>[] {
-  return sideItems(cat).map((t) => ({ ...t, count: tplVisible(themeItems(cat, t.id), scope, sp).length }))
+// Счётчики тем считаются по тому же отбору «Куда» (и «Набор», 133), что и плитки (Go считает по всем): иначе «Недавние 3» при двух плитках.
+export function tplSideItems(
+  cat: DecorCatalog | null,
+  scope: BackdropScope,
+  sp: Pick<SpreadView, 'mid'>,
+  sel: BrowseSel = NO_SEL,
+  keep = '',
+): SideItem<string>[] {
+  return sideCounts(cat, sel, { extra: (list) => tplVisible(list, scope, sp), keep })
 }
 
 // Пустая тема после отбора по «Куда», хотя в ней что-то есть: подсказка вместо немой пустоты (owner-ux §2.7).
@@ -85,12 +92,13 @@ export interface PutToast {
   undo: boolean // правка была: тост с «Вернуть»
 }
 
-// Итог постановки. Версия не выросла — Go ничего не менял (повтор), шага отмены нет.
-export function putToast(changed: boolean, left: number, missing: number): PutToast {
+// Итог постановки. Версия не выросла — Go ничего не менял (повтор), шага отмены нет. cover — «Поставить на обложку» (131).
+export function putToast(changed: boolean, left: number, missing: number, cover = false): PutToast {
   const lack = missing > 0 ? `Нет в библиотеке: ${missing}` : ''
-  if (!changed) return { text: ['Здесь уже такой разворот', lack].filter(Boolean).join(' · '), undo: false }
+  if (!changed)
+    return { text: [cover ? 'Здесь уже такая обложка' : 'Здесь уже такой разворот', lack].filter(Boolean).join(' · '), undo: false }
   const back = left > 0 ? `${left} ${plural(left, ['фото вернулось', 'фото вернулись', 'фото вернулись'])} в ленту` : ''
-  return { text: ['Разворот поставлен', back, lack].filter(Boolean).join(' · '), undo: true }
+  return { text: [cover ? 'Обложка поставлена' : 'Разворот поставлен', back, lack].filter(Boolean).join(' · '), undo: true }
 }
 
 // ---------- «Сохранить разворот…» ----------
@@ -100,12 +108,12 @@ export const SAVE_HINT =
   'Фото не сохраняются — только места. Фото фона из съёмки не входит: сохраняются цвет, узор, фоны и стикеры библиотеки.'
 export const SAVED = 'Разворот сохранён в библиотеку'
 
-// Темы для сохранения: настоящие (не выборки «Недавние» и «Все»).
+// Темы для сохранения: настоящие (не выборки «Все», «Недавние», «Новые» и не «Фирменные» — noOwn).
 export const saveThemes = (cat: Pick<DecorCatalog, 'themes'> | null): { id: string; name: string }[] =>
-  (cat?.themes ?? []).filter((t) => t.id !== RECENT && t.id !== ALL).map((t) => ({ id: t.id, name: t.name }))
+  (cat?.themes ?? []).filter((t) => !noOwn(t.id)).map((t) => ({ id: t.id, name: t.name }))
 
-// Тема по умолчанию: открытая в окне, если она настоящая; из «Недавних» и «Все» — «Мои».
-export const saveTheme = (theme: string): string => (theme === RECENT || theme === ALL || theme === '' ? 'mine' : theme)
+// Тема по умолчанию: открытая в окне, если она настоящая; из выборок и «Фирменных» — «Мои».
+export const saveTheme = (theme: string): string => (noOwn(theme) || theme === '' ? 'mine' : theme)
 
 // Области «Что» для сохранения: те же, что «Куда», но без обложки (её сторонки сюда не попадают).
 export const saveScopes = (items: readonly SegItem<BackdropScope>[]): SegItem<BackdropScope>[] =>

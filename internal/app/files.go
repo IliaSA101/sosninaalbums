@@ -258,7 +258,7 @@ func (a *App) flushSave() {
 func (a *App) retire(next *album.Editor, between func()) {
 	a.saveMu.Lock()
 	defer a.saveMu.Unlock()
-	defer a.ed.Store(next) // до Unlock: автосохранение после смены пишет уже next
+	defer a.setEditor(next) // до Unlock: автосохранение после смены пишет уже next
 	if ed := a.editor(); ed != nil {
 		ed.Close()
 	}
@@ -554,4 +554,11 @@ func (a *App) checkSaveTarget(path string) error {
 func (a *App) rememberProject(path string) {
 	a.updateConfig(func(c *prefs.Config) { c.LastProject = path; c.Recent = prefs.PushRecent(c.Recent, path) })
 	a.rememberDir(prefs.DirProject, filepath.Dir(path))
+}
+
+// setEditor делает ed текущим и подключает к нему библиотеку макетов (131): смена формата сама
+// вписывает макет альбома, View.look.found знает, есть ли он на этом ПК.
+func (a *App) setEditor(ed *album.Editor) {
+	ed.SetLookHost(a.lookHost())
+	a.ed.Store(ed)
 }

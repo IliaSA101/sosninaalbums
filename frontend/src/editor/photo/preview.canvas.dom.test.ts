@@ -8,7 +8,7 @@ vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} })
 vi.mock('../../../wailsjs/go/app/App', () => ({ WhereUsed: vi.fn().mockResolvedValue([]), ShowPhotoInExplorer: vi.fn() }))
 
 const { default: PhotoPreview } = await import('./PhotoPreview.svelte')
-const { default: PhotoMenu } = await import('./PhotoMenu.svelte')
+const { default: PhotoMenu } = await import('../photomenu/PhotoMenu.svelte')
 const { photoui } = await import('./photoui.svelte')
 const { placesel } = await import('../places/placesel.svelte')
 const { store } = await import('../../base/core/store.svelte')

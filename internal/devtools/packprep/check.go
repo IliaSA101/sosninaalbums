@@ -15,7 +15,7 @@ import (
 // Листы проверки _check/ (design §2.4): плитки по семействам размером с плитку программы (168 px),
 // те же предметы по 512 px и углы исходных листов в 100 %.
 const (
-	TileSide    = 168 // плитка окон «Фоны» и «Стикеры» (DecorDialog.svelte)
+	TileSide    = 168 // наибольшая плитка окон по умолчанию (DecorDialog.svelte: фоны 168, стикеры 120)
 	BigSide     = 512
 	tilesPerRow = 8
 	bigPerRow   = 4

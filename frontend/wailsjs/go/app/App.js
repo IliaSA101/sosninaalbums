@@ -78,6 +78,14 @@ export function ApplyGrid(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['ApplyGrid'](arg1, arg2, arg3, arg4);
 }
 
+export function ApplyLook(arg1, arg2) {
+  return window['go']['app']['App']['ApplyLook'](arg1, arg2);
+}
+
+export function ApplyLookStep(arg1, arg2, arg3) {
+  return window['go']['app']['App']['ApplyLookStep'](arg1, arg2, arg3);
+}
+
 export function ApplyPrint(arg1, arg2) {
   return window['go']['app']['App']['ApplyPrint'](arg1, arg2);
 }
@@ -232,6 +240,10 @@ export function CoverSpineText() {
 
 export function CreateCover(arg1, arg2) {
   return window['go']['app']['App']['CreateCover'](arg1, arg2);
+}
+
+export function CreateCoverLook(arg1, arg2) {
+  return window['go']['app']['App']['CreateCoverLook'](arg1, arg2);
 }
 
 export function CropsToKeep(arg1) {
@@ -418,6 +430,14 @@ export function LogUI(arg1) {
   return window['go']['app']['App']['LogUI'](arg1);
 }
 
+export function LookCount(arg1, arg2, arg3) {
+  return window['go']['app']['App']['LookCount'](arg1, arg2, arg3);
+}
+
+export function LookInfo(arg1) {
+  return window['go']['app']['App']['LookInfo'](arg1);
+}
+
 export function MarginNote(arg1, arg2) {
   return window['go']['app']['App']['MarginNote'](arg1, arg2);
 }
@@ -460,6 +480,10 @@ export function MyColors() {
 
 export function NewBin(arg1, arg2) {
   return window['go']['app']['App']['NewBin'](arg1, arg2);
+}
+
+export function NewLookSpread() {
+  return window['go']['app']['App']['NewLookSpread']();
 }
 
 export function NewProject(arg1) {
@@ -566,8 +590,20 @@ export function PlanCopyGrid(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['App']['PlanCopyGrid'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function PlanLook(arg1, arg2) {
+  return window['go']['app']['App']['PlanLook'](arg1, arg2);
+}
+
+export function PlanLookStep(arg1, arg2, arg3) {
+  return window['go']['app']['App']['PlanLookStep'](arg1, arg2, arg3);
+}
+
 export function PlanRemovePack(arg1) {
   return window['go']['app']['App']['PlanRemovePack'](arg1);
+}
+
+export function PlanSaveLook(arg1) {
+  return window['go']['app']['App']['PlanSaveLook'](arg1);
 }
 
 export function PlanSpreadTpl(arg1, arg2, arg3) {
@@ -708,6 +744,10 @@ export function RotateGroup(arg1, arg2, arg3, arg4, arg5) {
 
 export function SaveGridTemplate(arg1, arg2, arg3) {
   return window['go']['app']['App']['SaveGridTemplate'](arg1, arg2, arg3);
+}
+
+export function SaveLook(arg1) {
+  return window['go']['app']['App']['SaveLook'](arg1);
 }
 
 export function SavePrintProfile(arg1, arg2) {
@@ -936,6 +976,10 @@ export function SetTextAuto(arg1) {
 
 export function SetTextBox(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['SetTextBox'](arg1, arg2, arg3, arg4);
+}
+
+export function SetTextDraft(arg1, arg2, arg3) {
+  return window['go']['app']['App']['SetTextDraft'](arg1, arg2, arg3);
 }
 
 export function SetTextScale(arg1, arg2, arg3, arg4) {

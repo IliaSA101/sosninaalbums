@@ -100,6 +100,26 @@
         "custom": false
       },
       {
+        "id": "looks",
+        "label": "Макеты альбома…",
+        "short": "Макеты",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "saveLook",
+        "label": "Сохранить альбом как макет…",
+        "short": "Как макет",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
         "id": "tplExport",
         "label": "Сохранить мои шаблоны в файл…",
         "short": "Сохр. шабл",

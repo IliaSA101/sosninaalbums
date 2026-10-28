@@ -326,7 +326,7 @@ func siteHostRaw(s string) string {
 	return u.Hostname()
 }
 
-// wailsValidate — копия github.com/wailsapp/wails/v2@v2.16.0/internal/frontend/utils/urlValidator.go
+// wailsValidate — копия github.com/wailsapp/wails/v2@v2.17.0/internal/frontend/utils/urlValidator.go
 // (ValidateAndSanitizeURL, MIT): пакет internal, импортировать нельзя.
 func wailsValidate(rawURL string) (string, error) {
 	if strings.Contains(rawURL, "\x00") {
@@ -360,14 +360,14 @@ func wailsValidate(rawURL string) (string, error) {
 	return sanitizedURL, nil
 }
 
-// TestWailsVersionPinned — копия wailsValidate и wailsSafe сверены с Wails v2.16.0: новая версия
+// TestWailsVersionPinned — копия wailsValidate и wailsSafe сверены с Wails v2.17.0 (urlValidator.go не менялся с 2.16.0): новая версия
 // в go.mod — сначала сверить их с urlValidator.go новой версии, потом поднять здесь.
 func TestWailsVersionPinned(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "go.mod"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`(?m)^\s*github\.com/wailsapp/wails/v2 v2\.16\.0\s*$`).Match(b) {
+	if !regexp.MustCompile(`(?m)^\s*github\.com/wailsapp/wails/v2 v2\.17\.0\s*$`).Match(b) {
 		t.Fatal("версия Wails в go.mod сменилась: сверить wailsValidate и wailsSafe с internal/frontend/utils/urlValidator.go")
 	}
 }

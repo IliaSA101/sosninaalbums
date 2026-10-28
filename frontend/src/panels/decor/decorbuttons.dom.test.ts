@@ -36,6 +36,7 @@ const cat = (kind: string, o: Record<string, unknown> = {}) => ({
 const sheet = (id: string) => ({
   id,
   photos: [],
+  stickers: [{ id: 'k1' }], // заменяемый в тесте «Заменить…»
   w: 600,
   h: 300,
   mid: 300,
@@ -95,6 +96,18 @@ describe('кнопка своего (100-1)', () => {
     expect(bar()).not.toContain('QR-код по ссылке…')
     cleanup()
     await open('sticker', {}, 'k1')
+    expect(bar()).not.toContain('QR-код по ссылке…')
+  })
+
+  it('«Заменить…»: Ctrl+Z убрал стикер — QR-кнопка возвращается, Ctrl+Shift+Z — исчезает (0.28-133-78)', async () => {
+    await open('sticker', {}, 'k1')
+    expect(bar()).not.toContain('QR-код по ссылке…')
+    const withK1 = store.view
+    store.view = { ...withK1, rev: 2, spreads: [{ ...withK1.spreads[0], stickers: [] }, ...withK1.spreads.slice(1)] } as never
+    flushSync()
+    expect(bar()).toContain('QR-код по ссылке…')
+    store.view = withK1
+    flushSync()
     expect(bar()).not.toContain('QR-код по ссылке…')
   })
 

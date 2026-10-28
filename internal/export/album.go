@@ -106,13 +106,13 @@ func ColorNote(conv map[string]int) string {
 }
 
 // FromView собирает задание экспорта из View: фото с кадром, фон страниц и текст
-// (слои — по Z фото и текстов, его сортирует Render). Выгружается каждый разворот, даже пустой (один фон):
+// (слои — по Z фото и текстов, его сортирует Render; заготовки макета (131) не рисуются). Выгружается каждый разворот, даже пустой (один фон):
 // номер файла — номер разворота в альбоме, пропуск сдвинул бы все следующие («05.jpg» стал бы
 // шестым разворотом), а типография сверяет файлы с макетом по номерам.
 func FromView(p *model.Project, v model.View) []render.Spread {
 	out := make([]render.Spread, 0, len(v.Spreads))
 	for _, s := range v.Spreads {
-		out = append(out, fromSheet(p, s))
+		out = append(out, fromSheet(p, printable(s))) // заготовки (131) не печатаются
 	}
 	return out
 }

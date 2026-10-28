@@ -18,6 +18,7 @@
   import { hasSources } from '../folders/folders'
   import { foldersUi } from '../folders/foldersui.svelte'
   import { isThumbWheel, thumbWheelAcc } from './thumbzoom'
+  import { pinchOn, pinching } from '../../editor/zoom/pinch'
   import { LIB_DEF, PAD_X, SPLITTER, anchorTop, colsOf, keepScroll, libFloor, libWindow, photoAt, revealTop } from './libwindow'
   import { photoui } from '../../editor/photo/photoui.svelte'
   import { watchSize } from '../../base/ui/size'
@@ -80,20 +81,26 @@
     el.addEventListener('pointercancel', up)
   }
 
-  // Ctrl/Alt/Cmd+колесо над лентой — размер миниатюр (053). Дельты копятся до кадра, как зум холста.
+  // Ctrl/Alt/Cmd+колесо и щипок Mac (134) над лентой — размер миниатюр (053). Дельты копятся до кадра, как зум холста;
+  // колесо и щипок кладутся в один накопитель. Во время переноса фото размер не меняется.
   let grid = $state<HTMLElement>()
   const acc = thumbWheelAcc()
   let wx = 0
   let wy = 0
   let raf = 0
+  function order(first: boolean, x: number, y: number) {
+    wx = x
+    wy = y
+    if (first && !raf) raf = requestAnimationFrame(() => void applyZoom())
+  }
   function wheel(e: WheelEvent) {
     if (!isThumbWheel(e)) return
     e.preventDefault() // иначе масштабируется страница
-    if (drag.active) return
-    const first = acc.push(modes.thumbSize, e)
-    wx = e.clientX
-    wy = e.clientY
-    if (first && !raf) raf = requestAnimationFrame(() => void applyZoom())
+    if (drag.active || pinching()) return // посреди щипка Ctrl-колесо (старый WebKit) не меняет размер второй раз
+    order(acc.push(modes.thumbSize, e), e.clientX, e.clientY)
+  }
+  function pinch(f: number, x: number, y: number) {
+    if (!drag.active) order(acc.pushScale(modes.thumbSize, f), x, y)
   }
   // Окно рядов (073): в DOM только видимые ряды ± запас, остальное — распорки. Размер сетки — watchSize.
   let gw = $state(0)
@@ -159,9 +166,11 @@
   // Свой слушатель с passive: false — иначе preventDefault у колеса не сработает.
   function wheelOn(node: HTMLElement) {
     node.addEventListener('wheel', wheel, { passive: false })
+    const unpinch = pinchOn(node, pinch)
     return {
       destroy() {
         node.removeEventListener('wheel', wheel)
+        unpinch()
         if (raf) cancelAnimationFrame(raf)
         raf = 0
         acc.reset()

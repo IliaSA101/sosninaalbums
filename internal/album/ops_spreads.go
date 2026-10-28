@@ -130,7 +130,13 @@ func (e *Editor) MoveSpread(id string, to int) model.View {
 func (e *Editor) SetSettings(s model.Settings) (v model.View) {
 	t0 := time.Now()
 	defer func() { slow(t0, "настройки: %d разворотов", len(v.Spreads)) }()
-	return e.change(func(p *model.Project) { old := p.Settings; spreads.SetSettings(p, s); cover.FollowFormat(p, old) })
+	v, _ = e.formatLook(nil, true, func(p *model.Project) error {
+		old := p.Settings
+		spreads.SetSettings(p, s)
+		cover.FollowFormat(p, old)
+		return nil
+	})
+	return v
 }
 
 // SetSettingsToAll — SetSettings и снятие своего цвета страниц у всех разворотов (115): тот же
@@ -139,12 +145,14 @@ func (e *Editor) SetSettings(s model.Settings) (v model.View) {
 func (e *Editor) SetSettingsToAll(s model.Settings) (v model.View) {
 	t0 := time.Now()
 	defer func() { slow(t0, "настройки для всех: %d разворотов", len(v.Spreads)) }()
-	return e.change(func(p *model.Project) {
+	v, _ = e.formatLook(nil, true, func(p *model.Project) error {
 		old := p.Settings
 		spreads.SetSettings(p, s)
 		cover.FollowFormat(p, old)
 		design.ColorsToAlbum(p)
+		return nil
 	})
+	return v
 }
 
 // SheetSize — мм разворота (у проекта из листов 031 — листа): по ним каталог фонов рисует

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { SHEET_PRESETS } from '../../base/geom/sheet'
   import { prefs } from '../../base/prefs/prefs.svelte'
+  import { looks } from '../looks/looks.svelte'
   import { newDoc } from './newdoc.svelte'
   import { sizeHint } from './newproduct'
 
@@ -23,12 +24,25 @@
     newDoc.kind = 'album'
     await create()
   }
+
+  // 131 (вопрос 19): «Альбом по макету…» создаёт новый альбом, как «Новый альбом», и открывает «Макеты альбома» уже в нём —
+  // макет оформляет пустой альбом, а не тот, что был открыт до окна.
+  async function newByLook() {
+    newDoc.kind = 'album'
+    if (newDoc.ok && (await newDoc.create())) {
+      oncreated()
+      void looks.show()
+    }
+  }
 </script>
 
 <!-- Виньетка — с «Стандартного» (решение 80): на «Простом» кнопки нет -->
 <!-- Ряд изделий как в 0.9.1: обычные кнопки; жёлтая в окне одна — «Продолжить». Выбранная виньетка — рамкой. -->
 <div class="products">
   <button disabled={newDoc.busy} onclick={newAlbum}>Новый альбом</button>
+  <button disabled={newDoc.busy} title="Новый альбом и сразу готовые макеты из наборов библиотеки" onclick={newByLook}
+    >Альбом по макету…</button
+  >
   {#if prefs.can('vignette')}
     <button
       class:on={newDoc.kind === 'sheet'}

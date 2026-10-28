@@ -38,6 +38,7 @@ export interface DecorPutHost {
   readonly albumPages: boolean
   readonly bgItems: DecorItem[]
   close(): void
+  replacing(): string | undefined
   show(kind: DecorCur['kind'], spread: string, scope: BackdropScope, replace?: string): void
   bgPlan(): { pick: BgPick; targets: GridTarget[]; error: string | null }
   albumNow(): boolean
@@ -61,8 +62,9 @@ export class DecorPut {
     if (c.kind === 'spread') return this.pickSpread(item)
     if (c.kind === 'bg') return this.pickBg(c, item)
     if (c.kind === 'frame') return this.pickFrame(c.spread, item)
+    const rid = this.h.replacing() // до close: после него cur пуст
     this.h.close()
-    if (c.replace) await sticker.replace(c.spread, c.replace, item.id)
+    if (rid) await sticker.replace(c.spread, rid, item.id)
     else await sticker.add(c.spread, currentPage(), item.id)
   }
 

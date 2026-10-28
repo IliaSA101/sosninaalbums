@@ -457,7 +457,7 @@ func TestDuplicateBorderOwn(t *testing.T) {
 
 // «Копировать раскладку» на несколько целей (страница → разворот: одни доли на обе страницы;
 // и на страницу другого листа) — рамочки едут, у каждой цели свои; правка одной цели не
-// задевает другие и источник. Готовый разворот (067) рамочек не несёт.
+// задевает другие и источник. Готовый разворот (067) несёт рамочки мест — свои указатели (131 G1).
 func TestCopyLayoutBorderOwn(t *testing.T) {
 	e := edtest.GridEd(t, []*model.Place{edtest.Gp(10, 10, 100, 100, "a")}, []string{"c", "d"}, []string{"x"})
 	if _, err := e.ApplyBorder("s1", []string{"a"}, line); err != nil {
@@ -500,9 +500,15 @@ func TestCopyLayoutBorderOwn(t *testing.T) {
 	if _, _, _, err := e.ApplySpreadTpl("s3", model.ScopeLeft, tp, nil); err != nil {
 		t.Fatal(err)
 	}
+	// 131 G1: готовый разворот несёт рамочки мест (borders; 0.27 их не снимала, 079-10) — на левой
+	// странице встаёт рамочка источника, и она своя у места, а не общий указатель с s1.
+	if len(tp.Borders) != 1 || tp.Borders[0].Kind != "line" {
+		t.Fatalf("снимок без рамочки: %+v", tp.Borders)
+	}
+	src := edtest.P(e).Spreads[0].Grid[0]
 	for _, pl := range edtest.P(e).Spreads[2].Grid {
-		if pl.X < 281 && pl.Border != nil { // левая страница — из готового разворота
-			t.Fatalf("готовый разворот принёс рамочку: %+v", pl.Border)
+		if pl.X < 281 && (pl.Border == nil || pl.Border.Kind != "line" || pl.Border.Width != 2 || pl.Border == src.Border) {
+			t.Fatalf("готовый разворот не принёс свою рамочку: %+v", pl.Border)
 		}
 	}
 	edtest.MustGrid(t, e)

@@ -29,6 +29,8 @@
 // Порядок строк каталога не сортируется: прежние на месте, новая в конец (порядок установки = порядок выпуска).
 // zip больше 70 МБ — отказ. manifest.src.json `needs: "<id донора>"` -> поле `needs` строки каталога (minApp от 0.27.0);
 // донор обязан быть в каталоге и стоять в нём раньше (порядок строк = порядок установки).
+// Макет альбома (kind album, .json ≤ 512 КБ): id набора на `-layouts`, minApp не ниже 0.28.0; путь записи прежней
+// версии обязан остаться в новой (иначе альбомы не найдут макет), кроме явного --drop.
 // Стикер — сторона до 4096 px, фон — до 100 Мп (по заголовку PNG/JPEG, без декодирования).
 //
 // Закрытый ключ (по умолчанию docs/private/library-key.pem, вне git) в вывод не печатается.
@@ -42,11 +44,17 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const URL_PREFIX = 'https://github.com/IliaSA101/sosninaalbums-library/releases/download/'
 const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}(\/[a-z0-9][a-z0-9._-]{0,63}){0,2}$/
 const ID_RE = /^[a-z0-9][a-z0-9-]{2,39}$/
-const LIMITS = { bg: 60 << 20, sticker: 30 << 20, spread: 256 << 10, frame: 30 << 20, print: 64 << 10 }
+const LIMITS = { bg: 60 << 20, sticker: 30 << 20, spread: 256 << 10, frame: 30 << 20, print: 64 << 10, album: 512 << 10 }
 const KINDS = Object.keys(LIMITS)
 const FRAME_MIN_APP = [0, 20, 0] // рамочки-картинки умеют только версии с 0.20.0 (079)
 const FRAME_MAX_SIDE = 4096 // как decor.MaxFrameSide: больше приложение не рисует
 const PRINT_MIN_APP = [0, 26, 0] // профили типографий (.saprint) умеют только версии с 0.26.0 (123)
+const LAYOUT_MIN_APP = [0, 28, 0] // шаблон с borders/drafts: 0.27 их не видит и ставит без рамочек и заготовок (131, 0.27-131-2)
+const ALBUM_MIN_APP = [0, 28, 0] // макеты альбома (.json, вид album) умеют только версии с 0.28.0 (131)
+const ALBUM_ID_SUFFIX = '-layouts' // макеты приносят только дополнения <id>-layouts (0.28-131-24)
+const ALBUM_MAX_STEPS = 24 // как model.MaxLookSteps: больше программа макет не берёт
+const ALBUM_MIN_RATIO = 0.2 // как minTplRatio, maxTplRatio в model/spreadtpl.go
+const ALBUM_MAX_RATIO = 5
 const NEEDS_MIN_APP = [0, 27, 0] // 0.26 поле needs не знает и дополнение без донора поставит (0.27-129-12)
 export const MAX_ZIP = 70 << 20 // бюджет набора (0.27-129-13): 70 МБ за 15 мин — от 0,62 Мбит/с
 const STICKER_MAX_SIDE = 4096 // как packMaxSide в decor: больше стикер не ставится
@@ -209,6 +217,22 @@ export function checkPrintFile(name, data) {
   if (typeof v.name !== 'string' || v.name.trim() === '') throw new Error(`${name}: у профиля нет name`)
 }
 
+/** Шаблон разворота (kind spread): с непустыми borders/drafts — только minApp не ниже 0.28.0. Не JSON и не объект здесь не ловим: программа пропустит такой шаблон сама. */
+export function checkSpreadFile(name, data, minApp) {
+  let v
+  try {
+    v = JSON.parse(data.toString('utf8'))
+  } catch {
+    return
+  }
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return
+  // Go разбирает ключи без учёта регистра ("Borders" тоже рамочки).
+  const used = ['borders', 'drafts'].filter((k) => Object.keys(v).some((key) => key.toLowerCase() === k && Array.isArray(v[key]) && v[key].length > 0))
+  if (used.length > 0 && verNum(minApp) < verNum(LAYOUT_MIN_APP.join('.'))) {
+    throw new Error(`${name}: шаблон с ${used.join('/')} требует minApp не ниже ${LAYOUT_MIN_APP.join('.')}`)
+  }
+}
+
 /** Фон и стикер: PNG/JPEG по заголовку, расширение сходится с содержимым, предел фона (Мп) и стикера (сторона). */
 function checkRaster(it, data) {
   let info
@@ -222,6 +246,39 @@ function checkRaster(it, data) {
   if (info.w < 1 || info.h < 1) throw new Error(`${it.file}: размер картинки ${info.w}×${info.h}`)
   if (it.kind === 'bg' && info.w * info.h > BG_MAX_PIXELS) throw new Error(`${it.file}: фон ${info.w}×${info.h} больше ${BG_MAX_PIXELS / 1e6} Мп`)
   if (it.kind === 'sticker' && Math.max(info.w, info.h) > STICKER_MAX_SIDE) throw new Error(`${it.file}: сторона стикера ${info.w}×${info.h} больше ${STICKER_MAX_SIDE}`)
+}
+
+/** Файл макета альбома: JSON-объект v 1 и steps 1…24 (полный разбор строго — в программе, model.ParseLook). */
+export function checkAlbumFile(name, data) {
+  let v
+  try {
+    v = JSON.parse(data.toString('utf8'))
+  } catch {
+    throw new Error(`${name}: макет альбома — не JSON`)
+  }
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) throw new Error(`${name}: макет альбома — не JSON-объект`)
+  if (v.v !== 1) throw new Error(`${name}: v макета альбома — 1`)
+  if (!Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > ALBUM_MAX_STEPS) throw new Error(`${name}: в макете альбома steps 1…${ALBUM_MAX_STEPS}`)
+  // ratio — эталон, при котором нарисованы места: без него программа зажмёт в 1 и LookBoxes сожмёт разворот в квадрат
+  const tpls = v.steps.map((st, i) => [`steps[${i}].tpl`, st?.tpl])
+  for (const side of ['back', 'front']) if (v.cover?.[side] != null) tpls.push([`cover.${side}`, v.cover[side]])
+  for (const [where, t] of tpls) {
+    if (t === null || typeof t !== 'object' || Array.isArray(t)) throw new Error(`${name}: ${where} — не объект`)
+    if (typeof t.ratio !== 'number' || !(t.ratio >= ALBUM_MIN_RATIO && t.ratio <= ALBUM_MAX_RATIO)) throw new Error(`${name}: ${where}.ratio — число ${ALBUM_MIN_RATIO}…${ALBUM_MAX_RATIO}`)
+  }
+  // Сборка мусора 0.27 держит картинки только по сырым байтам "my:<16 hex>": ключ, записанный экранированием, она не увидит
+  const text = data.toString('utf8')
+  for (const key of libKeys(v)) if (!text.includes(key)) throw new Error(`${name}: ключ ${key} записан не как есть (экранирование)`)
+}
+
+/** Строки-ключи библиотеки my:<16 hex> в разобранном JSON (значения на любой глубине). */
+function libKeys(v, out = new Set()) {
+  if (typeof v === 'string') {
+    for (const m of v.matchAll(/my:[0-9a-f]{16}/g)) out.add(m[0])
+  } else if (v !== null && typeof v === 'object') {
+    for (const x of Object.values(v)) libKeys(x, out)
+  }
+  return out
 }
 
 /** Читает папку набора -> {manifest, files:[{name,data}]}; нарушение предела — исключение. */
@@ -241,6 +298,7 @@ export function buildPack(dir) {
     if (!KINDS.includes(it.kind)) throw new Error(`kind ${it.kind}`)
     if (it.kind === 'frame' && !it.file.endsWith('.png')) throw new Error(`${it.file}: рамочка в наборе — только PNG`)
     if (it.kind === 'print' && !it.file.endsWith('.saprint')) throw new Error(`${it.file}: типография в наборе — только .saprint`)
+    if (it.kind === 'album' && !it.file.endsWith('.json')) throw new Error(`${it.file}: макет альбома в наборе — только .json`)
     const file = path.join(dir, ...it.file.split('/'))
     const size = fs.statSync(file).size
     if (size < 1 || size > LIMITS[it.kind]) throw new Error(`${it.file}: размер вне предела вида`)
@@ -251,9 +309,15 @@ export function buildPack(dir) {
       const { w, h } = pngSize(data)
       if (w < 1 || h < 1 || Math.max(w, h) > FRAME_MAX_SIDE) throw new Error(`${it.file}: сторона PNG ${w}×${h} вне 1…${FRAME_MAX_SIDE}`)
     }
+    if (it.kind === 'spread') checkSpreadFile(it.file, data, src.minApp)
     if (it.kind === 'print') {
       if (verNum(src.minApp) < verNum(PRINT_MIN_APP.join('.'))) throw new Error(`${it.file}: набор с типографиями требует minApp не ниже ${PRINT_MIN_APP.join('.')}`)
       checkPrintFile(it.file, data)
+    }
+    if (it.kind === 'album') {
+      if (!src.id.endsWith(ALBUM_ID_SUFFIX)) throw new Error(`${it.file}: макеты альбома — только в наборе с id <имя>${ALBUM_ID_SUFFIX}`)
+      if (verNum(src.minApp) < verNum(ALBUM_MIN_APP.join('.'))) throw new Error(`${it.file}: набор с макетами альбома требует minApp не ниже ${ALBUM_MIN_APP.join('.')}`)
+      checkAlbumFile(it.file, data)
     }
     files.push({ name: it.file, data })
     return { file: it.file, kind: it.kind, theme: it.theme ?? 'basic', name: it.name, sha256: sha256(data), size: data.length }
@@ -296,6 +360,10 @@ export function checkPrev(prevManifest, manifest, drops = []) {
   const prevFiles = new Set(prevManifest.items.map((it) => it.file))
   for (const d of drops) if (!prevFiles.has(d)) throw new Error(`--drop ${d}: такого файла нет в прежней версии`)
   const lost = prevManifest.items.filter((it) => KEYED_KINDS.includes(it.kind) && !have.has(it.sha256) && !drops.includes(it.file))
+  // Макет альбома находят по пути записи (не по ключу: правка файла меняет ключ, путь держит альбомы).
+  const files = new Set(manifest.items.map((it) => it.file))
+  const lostLooks = prevManifest.items.filter((it) => it.kind === 'album' && !files.has(it.file) && !drops.includes(it.file))
+  if (lostLooks.length > 0) throw new Error(`из новой версии пропали пути макетов альбома прежней (${lostLooks.length}): ${lostLooks.slice(0, 5).map((it) => it.file).join(', ')}${lostLooks.length > 5 ? ', …' : ''}; альбомы с прежней версией не найдут макет; нужное — вернуть, намеренное — явный --drop <файл>`)
   if (lost.length > 0) throw new Error(`из новой версии пропали ключи прежней (${lost.length}): ${lost.slice(0, 5).map((it) => it.file).join(', ')}${lost.length > 5 ? ', …' : ''}; нужное — вернуть, намеренное — явный --drop <файл>`)
 }
 
@@ -346,7 +414,7 @@ export function orderWarnings(cat) {
 
 /** Строка каталога по собранному архиву. */
 export function catalogRow(manifest, zip, tag, needs) {
-  const counts = { bg: 0, sticker: 0, spread: 0, frame: 0, print: 0 }
+  const counts = { bg: 0, sticker: 0, spread: 0, frame: 0, print: 0, album: 0 }
   for (const it of manifest.items) counts[it.kind]++
   const url = `${URL_PREFIX}${manifest.id}-v${manifest.version}/${tag}`
   return {

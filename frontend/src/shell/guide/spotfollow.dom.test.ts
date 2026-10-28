@@ -77,6 +77,27 @@ describe('F1 «Показать»: подводка после роста раз
     expect(m.aside.scrollTop).toBe(0)
   })
 
+  it('щипок Mac (134) тоже обрывает подводку: gesturestart', async () => {
+    const m = mountPanel()
+    await seek('ui:page-px')
+    window.dispatchEvent(new Event('gesturestart'))
+    m.aside.scrollTop = 0
+    await later(GROW + 100)
+    expect(m.aside.scrollTop).toBe(0)
+  })
+
+  it('остановка подводки снимает слушатель gesturestart (тот же, что повесили)', async () => {
+    const add = vi.spyOn(window, 'addEventListener')
+    const del = vi.spyOn(window, 'removeEventListener')
+    mountPanel()
+    await seek('ui:page-px')
+    const fn = add.mock.calls.find((c) => c[0] === 'gesturestart')?.[1]
+    expect(fn).toBeTypeOf('function')
+    window.dispatchEvent(new Event('wheel'))
+    expect(del.mock.calls.some((c) => c[0] === 'gesturestart' && c[1] === fn)).toBe(true)
+    vi.restoreAllMocks()
+  })
+
   it('уже видимое поле не двигает панель', async () => {
     const m = mountPanel()
     m.target.getBoundingClientRect = () =>

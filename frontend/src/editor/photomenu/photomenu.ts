@@ -44,6 +44,7 @@ export interface MenuCtx {
   scopes: { scope: BackdropScope; label: string }[] // области «На фон ▸» (лист или обложка): считает PhotoMenu
   uses: boolean // «Где ещё стоит ▸» в «Файл ▸» (одно фото; 108 U3: в menuContext включено)
   usesSub?: MenuNode[] // строки подменю вхождений (editor/photoprops/usemenu); нет — пункт без подменю
+  draft?: boolean // 131: выделена одна надпись и она заготовка макета — «Сделать обычной надписью»; нужен на любом уровне (вопрос 20)
 }
 
 // Состояние буфера для серых пунктов (clip.canCopy, clip.canPaste).
@@ -312,10 +313,14 @@ function stickerMenu(c: MenuCtx, can: (f: FeatureId) => boolean, hint: HintFn): 
 }
 
 // Меню надписи (099): «Копировать», «Вставить», «Слой ▸» (только «Ручная»: у «Авто» места не перекрываются), «Удалить».
-// Без функции буфера надпись меню не получает (раньше его не было).
+// Без функции буфера надпись меню не получает (раньше его не было); заготовка (131) — исключение: её правят на любом уровне,
+// поэтому «Сделать обычной надписью» стоит первым и остаётся единственным пунктом там, где буфера нет.
 function textMenu(c: MenuCtx, can: (f: FeatureId) => boolean, hint: HintFn): MenuItem[] {
-  if (!can('clipboard')) return []
+  const undraft = !!c.draft && node('undraft', hint)
+  if (!can('clipboard')) return undraft ? [undraft] : []
   return tidy([
+    undraft,
+    SEP,
     ...clipRows(c, hint),
     SEP,
     c.grid && actOk('layer', can) && node('layer', hint, { sub: layerSub() }),

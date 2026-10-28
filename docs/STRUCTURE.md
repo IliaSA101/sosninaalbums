@@ -8,12 +8,12 @@
 
 Компонент, его логика и тест — в одной папке области. С 022 области сгруппированы во второй уровень (на уровне ≤ 20 папок — решение владельца 2026-10-09; план — `docs/specs/archive/0.8/022-structure/groups.md`, пофайловая карта — `structure-map.json` → `move-groups`). Таблица областей ниже — по именам областей, группа — в таблице групп.
 
-| Группа    | Области                                                                                                                                                                        | Что                                                                      |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `base/`   | `core`, `prefs`, `ui`, `modal`, `tpl`, `drag`, `geom`, `groupgeom`, `types`, `words`, `keys`, `color`, `auto`                                                                  | низ: состояние и уровни, общие виджеты, перенос, зеркала Go-геометрии    |
-| `editor/` | `canvas`, `spread`, `zoom`, `places`, `photo`, `text`, `captions`, `backdrop`, `pattern`, `sticker`, `inspector`, `photoprops`, `cover`, `markup`, `clip`, `border`, `eyedrop` | холст, объекты на нём и карточка выделенного                             |
-| `panels/` | `library`, `folders`, `marks`, `timeline`, `spreadmenu`, `layouts`, `gallery`, `details`, `names`, `cover`, `markup`, `vignette`, `decor`, `albumbg`, `bins`                   | панели вокруг холста: фото, отметки, лента, раскладки, детали альбома    |
-| `shell/`  | `menu`, `dialogs`, `packs`, `printprof`, `ask`, `export`, `collect`, `boot`, `newdoc`, `guide`, `guidetext`, `hotkeys`, `autobuild`, `autoalbum`, `tour`                       | оболочка: меню и клавиши, окна, экспорт, новое изделие (альбом или лист) |
+| Группа    | Области                                                                                                                                                                                     | Что                                                                      |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `base/`   | `core`, `prefs`, `ui`, `modal`, `tpl`, `drag`, `geom`, `groupgeom`, `types`, `words`, `keys`, `color`, `auto`                                                                               | низ: состояние и уровни, общие виджеты, перенос, зеркала Go-геометрии    |
+| `editor/` | `canvas`, `spread`, `zoom`, `places`, `photo`, `photomenu`, `text`, `captions`, `backdrop`, `pattern`, `sticker`, `inspector`, `photoprops`, `cover`, `markup`, `clip`, `border`, `eyedrop` | холст, объекты на нём и карточка выделенного                             |
+| `panels/` | `library`, `folders`, `marks`, `timeline`, `spreadmenu`, `layouts`, `gallery`, `details`, `names`, `cover`, `markup`, `vignette`, `decor`, `decorbrowse`, `albumbg`, `bins`                 | панели вокруг холста: фото, отметки, лента, раскладки, детали альбома    |
+| `shell/`  | `menu`, `dialogs`, `packs`, `looks`, `printprof`, `ask`, `export`, `collect`, `boot`, `newdoc`, `guide`, `guidetext`, `hotkeys`, `autobuild`, `autoalbum`, `tour`                           | оболочка: меню и клавиши, окна, экспорт, новое изделие (альбом или лист) |
 
 ## Карты областей (подробно: что в каждой папке)
 

@@ -10,6 +10,11 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
     calls.push(`CreateCover:${preset}:${photo}`)
     return reply
   },
+  // Макета у альбома нет: Go отвечает обычной обложкой (styled=false).
+  CreateCoverLook: async (preset: string, photo: string) => {
+    calls.push(`CreateCoverLook:${preset}:${photo}`)
+    return { view: reply, styled: false, look: '' }
+  },
   DeleteCover: async () => {
     calls.push('DeleteCover')
     return reply
@@ -176,7 +181,7 @@ describe('store: создание и удаление обложки', () => {
     load()
     reply = view({ cover: ['p1'], rev: 2 })
     expect(await store.createCover('p1')).toBe(true)
-    expect(calls).toEqual(['CreateCover::p1'])
+    expect(calls).toEqual(['CreateCoverLook::p1'])
     expect(store.onCover).toBe(true)
     expect(store.spread?.id).toBe('cover')
   })
@@ -298,6 +303,6 @@ describe('createCover: двойной щелчок', () => {
     reply = view({ cover: [] })
     const [a, b] = await Promise.all([store.createCover(''), store.createCover('')])
     expect([a, b]).toEqual([true, false])
-    expect(calls.filter((c) => c.startsWith('CreateCover'))).toHaveLength(1)
+    expect(calls.filter((c) => c.startsWith('CreateCoverLook'))).toHaveLength(1)
   })
 })

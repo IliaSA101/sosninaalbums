@@ -8,7 +8,7 @@ import {
   defaultScope,
   deleteText,
   emptyText,
-  firstTheme,
+  firstSource,
   importSummary,
   importTheme,
   ownKind,
@@ -50,6 +50,7 @@ const cat = (over: Partial<DecorCatalog> = {}): DecorCatalog => ({
   ],
   items: [item('sa:a', 'basic'), item('sa:b', 'basic'), item('sa:c', 'wedding'), item('my:0123456789abcdef', MINE, { name: 'Моё' })],
   recent: ['sa:c', 'my:0123456789abcdef', 'sa:gone'],
+  new: [],
   readOnly: false,
   ...over,
 })
@@ -57,7 +58,7 @@ const cat = (over: Partial<DecorCatalog> = {}): DecorCatalog => ({
 describe('темы окна', () => {
   it('в списке слева числа тем из Go, порядок Go', () => {
     expect(sideItems(cat())).toEqual([
-      { id: 'recent', label: 'Недавние', count: 2 },
+      { id: 'recent', label: 'Недавние', count: 2, title: 'Что вы недавно ставили' },
       { id: 'all', label: 'Все', count: 4 },
       { id: 'basic', label: 'Универсальные', count: 2 },
       { id: 'wedding', label: 'Свадьба', count: 1 },
@@ -67,33 +68,33 @@ describe('темы окна', () => {
   })
 
   it('первая тема: «Недавние», если не пусты, иначе «Все»; прежняя остаётся', () => {
-    expect(firstTheme(cat())).toBe(RECENT)
+    expect(firstSource(cat())).toBe(RECENT)
     const empty = cat({
       themes: [
         { id: RECENT, name: 'Недавние', count: 0 },
         { id: ALL, name: 'Все', count: 4 },
       ],
     })
-    expect(firstTheme(empty)).toBe(ALL)
-    expect(firstTheme(cat(), 'wedding')).toBe('wedding')
-    expect(firstTheme(cat(), 'исчезла')).toBe(RECENT)
-    expect(firstTheme(null)).toBe(ALL)
+    expect(firstSource(empty)).toBe(ALL)
+    expect(firstSource(cat(), 'wedding')).toBe('wedding')
+    expect(firstSource(cat(), 'исчезла')).toBe(RECENT)
+    expect(firstSource(null)).toBe(ALL)
   })
 
-  it('firstTheme: тема нового набора', () => {
+  it('firstSource: тема нового набора', () => {
     const packed = cat({
       themes: [...cat().themes, { id: 'ivory', name: 'Айвори', count: 2 }],
       items: [...cat().items, item('pk:1', 'ivory', { pack: 'Айвори' }), item('pk:2', 'wedding', { pack: 'Айвори' })],
     })
-    expect(firstTheme(packed, '', new Set(['Айвори']))).toBe('ivory') // первая плитка набора
-    expect(firstTheme(packed, 'wedding', new Set(['Айвори']))).toBe('ivory') // свежее главнее прежнего выбора
-    expect(firstTheme(packed, 'wedding', new Set(['Другой']))).toBe('wedding') // таких плиток нет
-    expect(firstTheme(packed, '', new Set())).toBe(RECENT)
-    expect(firstTheme(packed, 'wedding')).toBe('wedding')
+    expect(firstSource(packed, '', new Set(['Айвори']))).toBe('ivory') // первая плитка набора
+    expect(firstSource(packed, 'wedding', new Set(['Айвори']))).toBe('ivory') // свежее главнее прежнего выбора
+    expect(firstSource(packed, 'wedding', new Set(['Другой']))).toBe('wedding') // таких плиток нет
+    expect(firstSource(packed, '', new Set())).toBe(RECENT)
+    expect(firstSource(packed, 'wedding')).toBe('wedding')
     // тема плитки пропала из списка тем — не возвращаем несуществующую
     const gone = cat({ items: [item('pk:1', 'нет-темы', { pack: 'Айвори' })] })
-    expect(firstTheme(gone, '', new Set(['Айвори']))).toBe(RECENT)
-    expect(firstTheme(null, '', new Set(['Айвори']))).toBe(ALL)
+    expect(firstSource(gone, '', new Set(['Айвори']))).toBe(RECENT)
+    expect(firstSource(null, '', new Set(['Айвори']))).toBe(ALL)
   })
 
   it('плитки темы: «Все» — каталог, «Недавние» — в порядке поставленных без пропавших, остальные — по теме', () => {

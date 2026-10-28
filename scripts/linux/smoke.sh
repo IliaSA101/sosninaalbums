@@ -195,7 +195,7 @@ fi
 pass "5 log.txt" "есть «$want», ошибок нет"
 
 # ---------- 6. Папки данных WebKit ----------
-# Решение 0.23-r2: Wails 2.16 вызывает g_set_prgname из linux.Options.ProgramName уже ПОСЛЕ создания окна, поэтому
+# Решение 0.23-r2: Wails 2.16–2.17 вызывает g_set_prgname из linux.Options.ProgramName уже ПОСЛЕ создания окна, поэтому
 # WebKit называет свои папки по имени файла программы, а не по ProgramName. В поставке имя файла постоянное
 # (sosninaalbums, версия — только в имени архива), настройки интерфейса при обновлении не теряются.
 if [ -d "$XDG_DATA_HOME/sosninaalbums" ]; then

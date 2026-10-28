@@ -24,7 +24,8 @@ import (
 //
 // Снятые: v12-shape.json (git-тег v0.17.0, FormatVersion 12), v13-shape.json (v0.18.0, 13; 0.19 —
 // тоже 13), v14-shape.json (v0.20.0, 14), v15-shape.json (v0.21.0, 15), v16-shape.json (v0.22.0,
-// 16), v17-shape.json (v0.23.0, 17). Следующий — v18-shape.json из выпуска 0.24.
+// 16), v17-shape.json (v0.23.0, 17), v18-shape.json (v0.24.0, 18; дерево 0.27 до 131 даёт те же
+// байты). Следующий — v19-shape.json из выпуска 0.28.
 
 var shapeOut = flag.String("shapeout", "", "записать форму JSON FileProject в файл (снимок прошлого выпуска)")
 

@@ -132,6 +132,11 @@ describe('тост итога (сц. 2)', () => {
     expect(putToast(false, 0, 0)).toEqual({ text: 'Здесь уже такой разворот', undo: false })
     expect(putToast(false, 0, 2).text).toBe('Здесь уже такой разворот · Нет в библиотеке: 2')
   })
+  it('обложка (131 «Поставить на обложку»): те же правила, слово — обложка', () => {
+    expect(putToast(true, 0, 0, true)).toEqual({ text: 'Обложка поставлена', undo: true })
+    expect(putToast(true, 1, 1, true).text).toBe('Обложка поставлена · 1 фото вернулось в ленту · Нет в библиотеке: 1')
+    expect(putToast(false, 0, 0, true)).toEqual({ text: 'Здесь уже такая обложка', undo: false })
+  })
 })
 
 describe('«Сохранить разворот…» и пустые состояния', () => {
@@ -182,6 +187,7 @@ describe('счётчики тем идут по тому же отбору, чт
     ],
     items: [item('a', 2), item('b', 1), item('c', 2, { theme: 'mine' })],
     recent: ['a', 'b', 'c'],
+    new: [],
     readOnly: false,
   }
   const counts = (scope: 'spread' | 'left', sp: { mid: number }) => tplSideItems(cat, scope, sp).map((t) => t.count)

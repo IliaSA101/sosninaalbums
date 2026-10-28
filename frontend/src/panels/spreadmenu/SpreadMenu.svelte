@@ -21,6 +21,8 @@
     kind,
     onVignette,
     onNewVignette,
+    onNewLook,
+    newLook,
     onVary,
     varies = true,
     onRename,
@@ -40,6 +42,8 @@
     kind?: string // вид листа под курсором (SpreadView.kind)
     onVignette?: (act: 'make' | 'clear' | 'setup') => void
     onNewVignette?: () => void // плитка «+»: новая виньетка вместо пунктов группы
+    onNewLook?: () => void // плитка «+»: разворот макета альбома (131)
+    newLook?: string // имя макета для пункта; нет макета (или не найден на этом ПК) — пункта нет
     onVary?: () => void // «Разнообразить раскладки» (041); нет — пункта нет (плитка обложки)
     varies?: boolean // среди целей есть разворот «Авто» с фото (anyVaries); нет — пункт серый
     onRename?: () => void // «Название…»; нет — пункта нет
@@ -66,6 +70,7 @@
       insert: !!onInsert,
       vignette: !!onVignette,
       newVignette: !!onNewVignette,
+      newLook: onNewLook ? newLook : undefined,
       vary: !!onVary,
       varies,
       del: !!onDelete,
@@ -83,6 +88,7 @@
     insert: (arg) => onInsert?.(arg as 'before' | 'after'),
     vignette: (arg) => onVignette?.(arg as 'make' | 'clear' | 'setup'),
     newVignette: () => onNewVignette?.(),
+    newLook: () => onNewLook?.(),
     vary: () => onVary?.(),
     delete: () => onDelete?.(),
   }

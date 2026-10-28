@@ -21,71 +21,6 @@ import (
 // (рамочки мест, 079).
 // Пути к файлам библиотеки от интерфейса не принимаются: ID плитки → индекс decor.Store.
 
-// Типы биндингов — копии decor.* (решение №178): namespace Wails = имя пакета.
-
-// DecorItem — плитка каталога (decor.Item).
-type DecorItem struct {
-	ID     string  `json:"id"` // sa:<пресет> | my:<16 hex>
-	Theme  string  `json:"theme"`
-	Name   string  `json:"name"`
-	URL    string  `json:"url"` // без px: UI дописывает &px=
-	Own    bool    `json:"own"`
-	Aspect float64 `json:"aspect"` // ширина/высота картинки; узор — 0
-	W      int     `json:"w"`
-	H      int     `json:"h"`
-	Color  string  `json:"color,omitempty"` // цвет страниц пресета: подложка плитки
-	Dark   bool    `json:"dark,omitempty"`  // светлый стикер (116): плитке — тёмная шашечка
-	// Pages, Places — у разворота (067): 1 — страница, 2 — разворот; мест в шаблоне.
-	Pages  int    `json:"pages,omitempty"`
-	Places int    `json:"places,omitempty"`
-	Pack   string `json:"pack,omitempty"` // название набора: подсказка «Набор «…»»
-}
-
-// DecorTheme — строка списка тем слева.
-type DecorTheme struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Count int    `json:"count"`
-}
-
-// DecorCatalog — содержимое окна одного вида.
-type DecorCatalog struct {
-	Kind     string       `json:"kind"`
-	Themes   []DecorTheme `json:"themes"`
-	Items    []DecorItem  `json:"items"`
-	Recent   []string     `json:"recent"` // ID плиток, новые первыми
-	ReadOnly bool         `json:"readOnly"`
-}
-
-// DecorSkip — пропущенный при загрузке файл и причина.
-type DecorSkip struct {
-	Name string `json:"name"`
-	Why  string `json:"why"`
-}
-
-// DecorSvg — проверенный SVG стикера: окно рисует Data (base64) холстом W×H и присылает PNG
-// в AddDecorPNG с Token (design §5.4).
-type DecorSvg struct {
-	Token string `json:"token"`
-	Name  string `json:"name"`
-	Data  string `json:"data"`
-	W     int    `json:"w"`
-	H     int    `json:"h"`
-}
-
-// DecorImport — итог «Загрузить своё…»: добавленные (и возвращённые из скрытых), пропущенные
-// и задания окну на SVG (только стикеры).
-type DecorImport struct {
-	Added   []DecorItem `json:"added"`
-	Skipped []DecorSkip `json:"skipped"`
-	Svg     []DecorSvg  `json:"svg"`
-}
-
-// newDecorImport — пустой итог: срезы не nil, интерфейс не проверяет null.
-func newDecorImport() DecorImport {
-	return DecorImport{Added: []DecorItem{}, Skipped: []DecorSkip{}, Svg: []DecorSvg{}}
-}
-
 // errNoLibrary — библиотека не открылась (startup не дошёл до неё).
 var errNoLibrary = errors.New("библиотека фонов недоступна")
 
@@ -136,15 +71,15 @@ func (a *App) DecorCatalog(kind string) (c DecorCatalog, err error) {
 	defer guardErr("DecorCatalog", &err)
 	s, err := a.decorStore()
 	if err != nil {
-		return DecorCatalog{Kind: kind, Themes: []DecorTheme{}, Items: []DecorItem{}, Recent: []string{}}, err
+		return DecorCatalog{Kind: kind, Themes: []DecorTheme{}, Items: []DecorItem{}, Recent: []string{}, New: []string{}}, err
 	}
 	w, h := a.editor().SheetSize()
 	cat, err := s.Catalog(kind, prefs.RecentDecor(a.cfgDir, kind), w, h)
 	if err != nil {
-		return DecorCatalog{Kind: kind, Themes: []DecorTheme{}, Items: []DecorItem{}, Recent: []string{}}, err
+		return DecorCatalog{Kind: kind, Themes: []DecorTheme{}, Items: []DecorItem{}, Recent: []string{}, New: []string{}}, err
 	}
 	c = DecorCatalog{Kind: cat.Kind, Themes: make([]DecorTheme, len(cat.Themes)), Items: decorItems(cat.Items),
-		Recent: cat.Recent, ReadOnly: cat.ReadOnly}
+		Recent: cat.Recent, New: cat.New, ReadOnly: cat.ReadOnly}
 	for i, t := range cat.Themes {
 		c.Themes[i] = DecorTheme(t)
 	}

@@ -80,7 +80,7 @@ func checkLabel(what, s string) error {
 	return nil
 }
 
-// wailsBad — знаки, с которыми Wails 2.16 BrowserOpenURL (internal/frontend/utils/urlValidator.go,
+// wailsBad — знаки, с которыми Wails 2.17 BrowserOpenURL (internal/frontend/utils/urlValidator.go,
 // ValidateAndSanitizeURL) адрес молча не откроет: метазнаки оболочки и пробелы.
 const wailsBad = ";|`$\\<>*{}[]()~! \t\n\r"
 

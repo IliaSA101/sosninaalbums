@@ -304,6 +304,8 @@ func replayScenario(t *testing.T) *replay {
 	replayCoverGrid(r)
 	// 130: подгон по лицам — последним.
 	replayFitFaces(r)
+	// 131: макет альбома — последним.
+	replayLook(r)
 	return r
 }
 
@@ -362,6 +364,8 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	tv := r.lastText(s0)
 	r.do("SetTextScale", e.SetTextScale(tid, tv.Style.Size*1.5, tv.X-5, tv.Y-5))
 	r.do("SetTextAuto", e.SetTextAuto(tid))
+	r.do("SetTextDraft", e.SetTextDraft(s0, tid, true))
+	r.do("SetTextDraft:снять", e.SetTextDraft(s0, tid, false))
 	r.do("SetSpreadName", e.SetSpreadName(s0, "Сборы"))
 	r.do("SetCaption", e.SetCaption(id(3), "Кольца", "c1"))
 	cs := model.NewCaptionStyle(r.v.Settings.PageH)

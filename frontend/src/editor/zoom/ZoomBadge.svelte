@@ -5,7 +5,8 @@
   import { drag } from '../../base/drag/drag.svelte'
   import { canvas } from '../canvas/canvas.svelte'
   import { row } from '../spread/spreadrow.svelte'
-  import { percent } from './zoom'
+  import { percent, zoomTip } from './zoom'
+  import { isMac } from '../../base/core/platform'
   import { keymap } from '../../base/keys/keymap.svelte'
   import { zoomui } from './zoomui.svelte'
   import ZoomSlider from './ZoomSlider.svelte'
@@ -13,7 +14,7 @@
   const p = $derived(percent(canvas.cur.z))
   const can = $derived(prefs.can('zoom'))
   // Клавиша «вписать» — из реестра: после переназначения подсказка не врёт
-  const fitTip = $derived('Ctrl+колесо — масштаб' + (keymap.hint('fitZoom') ? `, ${keymap.hint('fitZoom')} — вписать` : ''))
+  const fitTip = $derived(zoomTip(isMac(), keymap.hint('fitZoom')))
 
   let badge: HTMLButtonElement | undefined = $state()
   let slider: ZoomSlider | undefined = $state()

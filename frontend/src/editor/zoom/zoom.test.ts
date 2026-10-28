@@ -19,7 +19,9 @@ import {
   rowWheelAllowed,
   wheelPan,
   zoomAt,
+  zoomGate,
   zoomPos,
+  zoomTip,
   type Viewport,
 } from './zoom'
 
@@ -319,5 +321,27 @@ describe('rowWheelAllowed', () => {
   it('режим пипетки — ряд не листается (даже при переносе)', () => {
     expect(rowWheelAllowed({ ...base, eyedrop: true })).toBe(false)
     expect(rowWheelAllowed({ ...base, eyedrop: true, dragging: true })).toBe(false)
+  })
+})
+
+describe('zoomGate (134-3)', () => {
+  const ok = { spread: true, busy: false, atNew: false, can: true }
+  it('всё в порядке — зум можно', () => expect(zoomGate(ok)).toBe(true))
+  it('нет разворота, жест правки, слот «новый», уровень без «Масштаба» — нет', () => {
+    expect(zoomGate({ ...ok, spread: false })).toBe(false)
+    expect(zoomGate({ ...ok, busy: true })).toBe(false)
+    expect(zoomGate({ ...ok, atNew: true })).toBe(false)
+    expect(zoomGate({ ...ok, can: false })).toBe(false)
+  })
+})
+
+describe('zoomTip (134-3)', () => {
+  it('Mac — «⌘+колесо или щипок», иначе «Ctrl+…»; клавиша «вписать» из реестра', () => {
+    expect(zoomTip(true, 'F')).toBe('⌘+колесо или щипок — масштаб, F — вписать')
+    expect(zoomTip(false, '0')).toBe('Ctrl+колесо или щипок — масштаб, 0 — вписать')
+  })
+  it('клавиша снята — без хвоста', () => {
+    expect(zoomTip(true, '')).toBe('⌘+колесо или щипок — масштаб')
+    expect(zoomTip(false, '')).toBe('Ctrl+колесо или щипок — масштаб')
   })
 })

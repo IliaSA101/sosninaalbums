@@ -329,6 +329,8 @@ type SpreadView struct {
 	// FoldHidden — сколько раскладок «Разброса» скрыто из-за фото на сгибе при «Только широкие»
 	// (105 В1): «Ещё N раскладок с фото на сгибе» в галерее; 0 — нечего показывать.
 	FoldHidden int `json:"foldHidden,omitempty"`
+	// LookStep — номер шага макета, которым поставлен лист (131, Spread.LookStep); 0 — не макетом.
+	LookStep int `json:"lookStep,omitempty"`
 }
 
 // VignetteView — виньетка для панели: параметры, сколько мест они дают (с групповым)
@@ -458,6 +460,10 @@ type View struct {
 	// вопрос перед экспортом (export.FieldsWarning).
 	Unfilled []string `json:"unfilled"`
 	Unnamed  int      `json:"unnamed"`
+	// Drafts — заготовок (131) на разворотах и обложке: вопрос перед экспортом и окно сохранения макета.
+	Drafts int `json:"drafts"`
+	// Look — макет альбома (131, Project.Look); nil — альбом не по макету.
+	Look *LookView `json:"look,omitempty"`
 	// Cover — обложка (032); nil — её нет. В Spreads её нет: в счёт и нумерацию не входит.
 	Cover *CoverView `json:"cover"`
 	// AlbumBg — фон альбома для строки настроек (098); nil — его нет.

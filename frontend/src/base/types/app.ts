@@ -50,6 +50,13 @@ export interface UsedAt {
   move: string // запись единственного места; '' — мест 0 или больше одного
 }
 
+// Макет альбома в проекте (131, design §9): found — он есть в библиотеке этого компьютера (нет — «Разворот макета» не предлагается).
+export interface LookView {
+  key: string
+  name: string
+  found: boolean
+}
+
 export interface View {
   spreads: SpreadView[]
   albumBg?: AlbumBg // фон альбома (098); нет — его нет
@@ -73,6 +80,7 @@ export interface View {
   minDPI: number // порог «!»: min(200, dpi настроек)
   lowDPI: number // фото на разворотах с 0 < dpi < minDPI
   emptyPlaces: number // пустых мест во всём альбоме (спека 007)
+  drafts?: number // 131: заготовок на разворотах и обложке (в печать не идут); нет поля — 0
   // 132: сколько мест займёт «Заполнить места» с разворота i до конца (длина = spreads.length, в печати []) и с обложки
   // (обложка + все развороты; без обложки и в печати 0). Места самой обложки — coverFill − fillFrom[0]. Нет поля — 0.
   fillFrom?: number[]
@@ -84,6 +92,7 @@ export interface View {
   unfilled?: string[] // пустые переменные из текстов, по алфавиту
   unnamed?: number // фото с полями имени в подписи и без имени
   cover?: CoverView | null // обложка (032); нет — её нет в альбоме
+  look?: LookView | null // 131: макет, по которому оформлен альбом; нет — альбом без макета
   pageLimit?: PageLimitView // предел разворотов типографии (085); нет поля — типография неизвестна
   albumFonts?: FontUse[] // 082: свои шрифты, стоящие в альбоме; Go начнёт слать с G4 — до этого undefined
   bins: Bin[] // 083: подборки фото в порядке создания

@@ -57,6 +57,13 @@ func isLowerHex(b []byte) bool {
 	return true
 }
 
+// linkLike — ссылка или junction: на Windows Go ≥ 1.23 отдаёт junction как ModeIrregular, а не
+// ModeSymlink — проверка одного ModeSymlink его молча пропускала.
+func linkLike(m os.FileMode) bool { return m&(os.ModeSymlink|os.ModeIrregular) != 0 }
+
+// rawKind — вид, ссылки которого держит сырой разбор (папка и записи), а не разбор файла: макет альбома.
+func rawKind(kind string) bool { return kind == KindAlbum }
+
 // rawRefs — накопитель ссылок из незнакомого; complete = false — что-то не удалось прочитать или
 // превышен предел.
 type rawRefs struct {
@@ -90,10 +97,17 @@ func (r *rawRefs) read(path string, limit int64) ([]byte, bool) {
 	return data, true
 }
 
-// unknownRefs — ссылки записей незнакомого вида: файлы в незнакомых папках корня библиотеки (Макеты/),
+// unknownRefs — ссылки записей незнакомого вида: файлы в незнакомых папках корня библиотеки,
 // записи незнакомого вида в library.json и в реестрах наборов, кроме except. Свои папки видов и
 // Наборы/ пропускаются: в реестрах набора лежат ключи самих картинок, они ничего не держат.
-func (s *Store) unknownRefs(except *packReg) *rawRefs {
+//
+// Макеты альбома (вид album, 0.28) читаются тем же сырым разбором, что и в 0.27: и файлы Макеты/*.json
+// (в том числе без записи — ложное удержание безопаснее потери), и записи album в реестрах. Ключи
+// файла — надмножество разобранных ссылок (страж TestLookFileKeysRaw).
+func (s *Store) unknownRefs(except *packReg) *rawRefs { return s.unknownRefsDrop(except, nil) }
+
+// unknownRefsDrop — unknownRefs без файлов макетов drop (пути): их удаляет та же сборка мусора.
+func (s *Store) unknownRefsDrop(except *packReg, drop map[string]bool) *rawRefs {
 	r := &rawRefs{keys: map[string]bool{}, complete: true}
 	list, err := os.ReadDir(s.root)
 	if err != nil {
@@ -101,14 +115,14 @@ func (s *Store) unknownRefs(except *packReg) *rawRefs {
 		return r
 	}
 	known := map[string]bool{packsDir: true}
-	for _, d := range kindDirs {
-		known[d] = true
+	for k, d := range kindDirs {
+		known[d] = !rawKind(k)
 	}
 	for _, de := range list {
 		if known[de.Name()] {
 			continue
 		}
-		if de.Type()&os.ModeSymlink != 0 { // ссылка (junction) на незнакомое: не читаем, держим всё
+		if linkLike(de.Type()) { // ссылка или junction на незнакомое: не читаем, держим всё
 			r.complete = false
 			continue
 		}
@@ -125,12 +139,12 @@ func (s *Store) unknownRefs(except *packReg) *rawRefs {
 			if !strings.HasSuffix(f.Name(), ".json") {
 				continue
 			}
-			if f.Type()&os.ModeSymlink != 0 { // .json-ссылка: цель не читаем — держим всё
+			if linkLike(f.Type()) { // .json-ссылка или junction: цель не читаем — держим всё
 				r.complete = false
 				continue
 			}
-			if !f.Type().IsRegular() {
-				continue
+			if !f.Type().IsRegular() || drop[filepath.Clean(filepath.Join(dir, f.Name()))] {
+				continue // папка с именем .json — мусор, ссылок в ней нет
 			}
 			if data, ok := r.read(filepath.Join(dir, f.Name()), rawFileMax); ok {
 				r.add(data)
@@ -145,7 +159,7 @@ func (s *Store) unknownRefs(except *packReg) *rawRefs {
 }
 
 // packRegsUnknown — записи незнакомого вида в реестрах наборов, кроме except. Папку Наборы/ не
-// перечислить (не «нет папки») или .json-ссылка в ней — не прочитано, complete = false.
+// перечислить (не «нет папки») или .json-ссылка (и junction) в ней — не прочитано, complete = false.
 func (s *Store) packRegsUnknown(r *rawRefs, except *packReg) {
 	packs, err := os.ReadDir(filepath.Join(s.root, packsDir))
 	if err != nil {
@@ -159,7 +173,7 @@ func (s *Store) packRegsUnknown(r *rawRefs, except *packReg) {
 		if !ok || except != nil && id == except.ID {
 			continue
 		}
-		if f.Type()&os.ModeSymlink != 0 {
+		if linkLike(f.Type()) { // ссылка или junction: реестр не загружен, его ссылок не знаем
 			r.complete = false
 			continue
 		}
@@ -186,7 +200,7 @@ func (r *rawRefs) addUnknownItems(data []byte) {
 		var head struct {
 			Kind string `json:"kind"`
 		}
-		if json.Unmarshal(raw, &head) == nil && kindDirs[head.Kind] != "" {
+		if json.Unmarshal(raw, &head) == nil && kindDirs[head.Kind] != "" && !rawKind(head.Kind) {
 			continue // известный вид: его ссылки уже знает tplRefs
 		}
 		r.add(raw)

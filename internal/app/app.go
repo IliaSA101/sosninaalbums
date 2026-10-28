@@ -255,7 +255,7 @@ func NewApp() *App {
 			wr.EventsEmit(a.ctx, name, data...)
 		}
 	}
-	a.ed.Store(blankEditor(""))
+	a.setEditor(blankEditor(""))
 	a.Methods = edit.New(a.editHost())
 	a.colorPick = colorpick.New(a.colorHost())
 	a.upd = updater.New(a.updHost())

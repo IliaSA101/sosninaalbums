@@ -423,7 +423,7 @@ func (p *Project) IsCover(s *Spread) bool {
 // без места с обложки уходит (и не отнимает себя у разворота в dedupe).
 func FixCoverSheet(s *Spread) {
 	s.ID, s.Layout, s.Variant, s.Name = CoverID, "", 0, ""
-	s.Kind, s.Vig, s.NoAlbumBg = "", nil, false
+	s.Kind, s.Vig, s.NoAlbumBg, s.LookStep = "", nil, false, 0 // шаг обложки — 0 макета (131)
 	s.Grid = slices.DeleteFunc(s.Grid, func(pl *Place) bool { return pl == nil })
 	seen := make(map[string]bool, len(s.Grid))
 	s.Photos = nil

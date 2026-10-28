@@ -201,7 +201,7 @@ func libQueryOK(raw string) bool {
 }
 
 // registered — файл своего, если ключ есть в реестре (любого вида, в том числе скрытый: он
-// может стоять в альбоме) или в наборе (картинка, не шаблон) и файл найден сканом или импортом.
+// может стоять в альбоме) или в наборе (картинка, не шаблон и не макет) и файл найден сканом или импортом.
 func (s *Store) registered(key string) (string, bool) {
 	if !model.ValidLibKey(key) {
 		return "", false
@@ -209,7 +209,7 @@ func (s *Store) registered(key string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, e := range s.entries {
-		if e.Key != key || e.Kind == KindSpread { // шаблон — не картинка: его плитка в /media/tpl
+		if e.Key != key || e.Kind == KindSpread || e.Kind == KindAlbum { // шаблон и макет — JSON, не картинка: плитки в /media/tpl, /media/look
 			continue
 		}
 		if p, ok := s.files[e.Kind][key]; ok {

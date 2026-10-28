@@ -297,6 +297,11 @@ func (s *Store) SaveSpreadTpl(theme, name string, t model.SpreadTpl) (Item, erro
 
 // writeTpl пишет файл шаблона атомарно (tmp + rename) только внутри корня библиотеки.
 func writeTpl(root, final string, data []byte) error {
+	return writeJSON(root, final, "разворот", data)
+}
+
+// writeJSON — общая запись шаблона и макета (what — что не записалось): tmp + rename только внутри корня.
+func writeJSON(root, final, what string, data []byte) error {
 	if !library.Under(final, root) { // имя от ключа, но проверка дешевле ошибки
 		return errors.New("недопустимый путь в библиотеке")
 	}
@@ -304,7 +309,7 @@ func writeTpl(root, final string, data []byte) error {
 		return paths.NoPath(err)
 	}
 	if err := library.WriteFileAtomic(final, data); err != nil {
-		return errors.New("разворот не записался: " + paths.NoPath(err).Error())
+		return errors.New(what + " не записался: " + paths.NoPath(err).Error())
 	}
 	return nil
 }

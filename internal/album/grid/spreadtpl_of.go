@@ -9,12 +9,34 @@ import (
 
 // Снимок области в шаблон разворота (спека 067, design §2): обратное ApplySpreadTpl.
 
-// SpreadTplOf — шаблон из области scope разворота spreadID: места (places; «Авто» — как их
+// SpreadTplOfSkip — шаблон из области scope разворота spreadID: места (places; «Авто» — как их
 // закрепила бы правка, проект не трогается) в долях области, цвет, узоры, фото фона и свои
 // стикеры — только из библиотеки (с ключом Lib: кадр съёмки в шаблон не идёт, решение 6),
 // рисунки, надписи (texts; шапка виньетки — часть виньетки, не входит). Геометрия — якорями от
 // краёв области (design §1). Обложка и неизвестная область — ErrScope; нечего снять — ErrNothing.
-func SpreadTplOf(p *model.Project, spreadID, scope string, places, texts bool) (model.SpreadTpl, error) {
+// Рамочки мест (встроенные и свои из библиотеки) идут в borders вместе с местами; заготовки
+// (надписи с Draft) — в drafts, а не в texts. Свои стикеры, для которых skip(ключ) верно (код
+// ссылки клиента не должен уйти в шаблон, решение 0.28-131-157), пропускаются; skip nil — берутся все.
+func SpreadTplOfSkip(p *model.Project, spreadID, scope string, places, texts bool, skip func(lib string) bool) (model.SpreadTpl, error) {
+	return spreadTplOf(p, spreadID, scope, tplSnap{places: places, texts: texts, skip: skip})
+}
+
+// SpreadTplOfAs — снимок без skip, с флажком «Надписи — заготовками» (131, «Сохранить альбом как
+// макет»): asDrafts кладёт в drafts все надписи, а не только помеченные Draft.
+func SpreadTplOfAs(p *model.Project, spreadID, scope string, places, texts, asDrafts bool) (model.SpreadTpl, error) {
+	return spreadTplOf(p, spreadID, scope, tplSnap{places: places, texts: texts, asDrafts: asDrafts})
+}
+
+// tplSnap — что снимает spreadTplOf: места, надписи (все заготовками — asDrafts), какие свои стикеры
+// пропустить (skip), и frozen — «Авто» уже закреплена в p (копия вызывающего): места берутся как
+// есть, без копии проекта на каждый разворот.
+type tplSnap struct {
+	places, texts, asDrafts bool
+	skip                    func(lib string) bool
+	frozen                  bool
+}
+
+func spreadTplOf(p *model.Project, spreadID, scope string, o tplSnap) (model.SpreadTpl, error) {
 	if spreadID == model.CoverID {
 		return model.SpreadTpl{}, model.ErrScope
 	}
@@ -42,21 +64,14 @@ func SpreadTplOf(p *model.Project, spreadID, scope string, places, texts bool) (
 	default:
 		t.Page = []model.TplBg{bgOf(p, s.BgR, pageOrSheet(s.PatR, s.Pat), s.BgPhotoR)}
 	}
-	if places {
-		t.Places = placesOf(p, s, scope)
-	}
-	sd := designOf(p, s, scope, a.X)
-	under := underPlaces(p, s, scope)
-	for _, st := range sd.stickers {
-		if it, ok := itemOf(p, st, a, under[st.ID]); ok {
-			t.Stickers = append(t.Stickers, it)
+	if o.places {
+		t.Places = placesOf(p, s, scope, o.frozen)
+		t.Borders = bordersOf(p, t.Places)
+		for i := range t.Places {
+			t.Places[i].Border = nil // в памяти шаблона рамочек у коробок нет: они в Borders
 		}
 	}
-	if texts {
-		for _, tx := range withoutHead(s, sd.texts) {
-			t.Texts = append(t.Texts, textOf(&tx, a))
-		}
-	}
+	tplLayers(p, s, scope, a, &t, o)
 	c, ok := model.ClampSpreadTpl(t)
 	if !ok {
 		return model.SpreadTpl{}, ErrNothing
@@ -64,15 +79,33 @@ func SpreadTplOf(p *model.Project, spreadID, scope string, places, texts bool) (
 	return c, nil
 }
 
-// placesOf — места области в долях; у «Авто» — закреплённые на копии проекта. Без рамочек
-// (079-10): готовый разворот их не хранит, а поле в памяти несло бы их до первого сохранения.
-func placesOf(p *model.Project, s *model.Spread, scope string) []model.Box {
-	if len(s.Grid) > 0 {
-		out := AreaFrac(p, s, scope)
-		for i := range out {
-			out[i].Border = nil
+// tplLayers дописывает в t стикеры (свои — только из библиотеки) и надписи области scope листа s,
+// якорями от краёв области a; общая часть снимка разворота и сторонки обложки макета.
+func tplLayers(p *model.Project, s *model.Spread, scope string, a layout.Rect, t *model.SpreadTpl, o tplSnap) {
+	sd := designOf(p, s, scope, a.X)
+	under := underPlaces(p, s, scope)
+	for _, st := range sd.stickers {
+		if it, ok := itemOf(p, st, a, under[st.ID]); ok && (it.Lib == "" || o.skip == nil || !o.skip(it.Lib)) {
+			t.Stickers = append(t.Stickers, it)
 		}
-		return out
+	}
+	if !o.texts {
+		return
+	}
+	for _, tx := range withoutHead(s, sd.texts) {
+		if tx.Draft || o.asDrafts {
+			t.Drafts = append(t.Drafts, textOf(&tx, a))
+		} else {
+			t.Texts = append(t.Texts, textOf(&tx, a))
+		}
+	}
+}
+
+// placesOf — места области в долях, с рамочками (SpreadTplOfAs переносит их в Borders и
+// обнуляет Box.Border: в памяти шаблона они не живут); у «Авто» — закреплённые на копии проекта.
+func placesOf(p *model.Project, s *model.Spread, scope string, frozen bool) []model.Box {
+	if len(s.Grid) > 0 || frozen {
+		return AreaFrac(p, s, scope)
 	}
 	c := p.Clone()
 	_, cs := c.Find(s.ID)

@@ -291,9 +291,12 @@ func (e *Editor) PlanSpreadTpl(spreadID, scope string, t model.SpreadTpl, libs m
 	return grid.PlanSpreadTpl(c, spreadID, scope, t, libs)
 }
 
-// SpreadTplOf. Договор: только чтение под замком («Авто» закрепляется на копии).
+// SpreadTplOf. Договор: только чтение под замком («Авто» закрепляется на копии); код ссылки
+// клиента (LookHost.Private) в шаблон не идёт.
 func (e *Editor) SpreadTplOf(spreadID, scope string, places, texts bool) (t model.SpreadTpl, err error) {
-	e.read(func(p *model.Project) { t, err = grid.SpreadTplOf(p, spreadID, scope, places, texts) })
+	e.read(func(p *model.Project) {
+		t, err = grid.SpreadTplOfSkip(p, spreadID, scope, places, texts, e.privateLib())
+	})
 	return t, err
 }
 

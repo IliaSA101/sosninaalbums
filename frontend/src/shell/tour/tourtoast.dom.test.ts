@@ -20,7 +20,6 @@ const { UpdateUi } = await import('../update/update.svelte')
 const { NO_UPDATE } = await import('../update/updateapi')
 const { justText } = await import('../update/updatetext')
 
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const shown = () => store.toast?.text // функцией: TS не сужает store.toast по присваиванию null
 const spreadWithPhoto = { id: 's1', photos: ['p1'], texts: [], grid: false } as never
 
@@ -57,8 +56,7 @@ describe('предложение тура и тост итога обновле�
     store.view = { ...store.view, spreads: [spreadWithPhoto] }
     render(Tour)
     flushSync()
-    await wait(0)
-    expect(shown()).toBe(MORE_TOAST)
+    await vi.waitFor(() => expect(shown()).toBe(MORE_TOAST), { timeout: 5000 })
     expect(setTour).toHaveBeenCalledWith('spread', 'done')
   })
 

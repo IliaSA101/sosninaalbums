@@ -58,10 +58,12 @@ import (
 // откроет и не сольёт копии автосохранением;
 // 18 (общий на 0.24, новые поля 0.24 до выпуска ложатся сюда же, без нового номера): подрезка
 // `settings.crop` (спека 104, omitempty), новые буквы ключа раскладки «Разброс» (спека 105) — 0.23
-// файл не откроет и не выбросит подрезку автосохранением.
+// файл не откроет и не выбросит подрезку автосохранением;
+// 19 (общий на 0.28): заготовки `texts[].draft`, макет альбома `look` и `spreads[].lookStep` (спека 131,
+// omitempty) — 0.27 файл не откроет и не напечатает заготовки, не сотрёт макет автосохранением.
 // Старые читаются с миграцией.
 // Поля 008 (`name`, `rot`, `auto`) вошли в v3 до выпуска v3 — без смены версии (design 008 §1).
-const FormatVersion = 18
+const FormatVersion = 19
 
 type Settings struct {
 	PageW   float64 `json:"pageW"`   // мм, одна страница; у листа (Sheet) — ширина листа
@@ -138,6 +140,9 @@ type Spread struct {
 	Vars *Vars `json:"vars,omitempty"`
 	// NoAlbumBg — фон альбома (098, albumbg.go) на этом листе не рисуется.
 	NoAlbumBg bool `json:"noAlbumBg,omitempty"`
+	// LookStep — шаг макета Project.Look (1…MaxLookSteps), которым поставлен лист (131, lookref.go);
+	// 0 — не макетом. Подсказка «какой шаг сверять», а не учёт правок (FixLook).
+	LookStep int `json:"lookStep,omitempty"`
 }
 
 // TextStyle — оформление текста; тип живёт в internal/text, проект его хранит.
@@ -174,6 +179,8 @@ type TextBlock struct {
 	Auto  bool      `json:"auto,omitempty"`
 	Text  string    `json:"text"`
 	Style TextStyle `json:"style"`
+	// Draft — заготовка макета (131): видна, не печатается; снимает смена строки (design.SetText).
+	Draft bool `json:"draft,omitempty"`
 }
 
 // PhotoRef — что проект помнит о фото, даже если папку не открыли.
@@ -238,6 +245,8 @@ type Project struct {
 	Fonts map[string]FontRef `json:"fonts,omitempty"`
 	// AlbumBg — фон альбома (098, albumbg.go): рисуется на листах без своего фона; nil — нет.
 	AlbumBg *AlbumBg `json:"albumBg,omitempty"`
+	// Look — макет альбома (131, lookref.go): ключ и где его искать; nil — альбом не по макету.
+	Look *LookRef `json:"look,omitempty"`
 	// from — версия файла, из которого прочитан проект (0 — новый): по ней
 	// Editor решает, нужен ли бэкап перед первой записью.
 	from int
@@ -489,7 +498,7 @@ func (s *Spread) Empty() bool {
 		s.BgL == "" && s.BgR == "" && s.Name == "" &&
 		s.BgPhoto == nil && s.BgPhotoL == nil && s.BgPhotoR == nil && s.BgPhotoS == nil && s.Caps == nil &&
 		s.Pat == nil && s.PatL == nil && s.PatR == nil && len(s.Stickers) == 0 &&
-		s.Kind == "" && s.Vig == nil && s.Vars == nil && !s.NoAlbumBg
+		s.Kind == "" && s.Vig == nil && s.Vars == nil && !s.NoAlbumBg && s.LookStep == 0
 }
 
 // Placed — фото стоит в каком-нибудь листе (месте обложки тоже).

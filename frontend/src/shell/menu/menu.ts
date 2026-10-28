@@ -9,7 +9,7 @@ import { ALL_LEVELS, LEVEL_TITLE, type FeatureId, type Level } from '../../base/
 import { recentName } from '../dialogs/recent'
 import type { RecentProject } from '../../base/core/types'
 import type { IconName } from '../../base/ui/Icon.svelte'
-import { ACTS, GROUP_ICON } from '../../editor/photo/photoacts'
+import { ACTS, GROUP_ICON } from '../../editor/photomenu/photoacts'
 import { LAYER_OPS, type LayerOp } from '../../editor/places/minipanel'
 
 // Функция уровня (levels.ts): `can(id)` прячет пункт, чужой уровню.
@@ -67,6 +67,7 @@ export interface MenuCtx {
   layerable?: boolean // «Ручная» и выделено место, фото, текст или стикер; «Авто» — стикер (с текстом или без) без мест: слои двигать есть что; нет — серое
   missing: number // пропавших фото
   collecting?: boolean // сбор проекта в папку уже идёт (069)
+  sheetDoc?: boolean // проект — отдельный лист-виньетка 031 (settings.sheet): макеты альбома недоступны (131, design §8)
   big: boolean
   details: boolean
   safe: boolean
@@ -222,6 +223,10 @@ function fileSpecs(c: MenuCtx): Spec[][] {
       { id: 'backups', label: 'Резервные копии…', cmd: 'backups' },
       // 067 Ф2: наборы фонов, стикеров и разворотов — добавить из файла, удалить
       { id: 'packs', label: 'Наборы библиотеки…', cmd: 'packs', feature: 'decor' },
+      // 131: готовые макеты альбома и свой альбом как макет; без feature — с «Простого». У проекта-листа 031 серые (методы Go
+      // отвечают ошибкой); saveLook серый ещё и без разворотов
+      { id: 'looks', label: 'Макеты альбома…', cmd: 'looks', disabled: !!c.sheetDoc },
+      { id: 'saveLook', label: 'Сохранить альбом как макет…', cmd: 'saveLook', disabled: !c.spreads || !!c.sheetDoc },
       // 086: свои шаблоны сеток и виньеток — в файл и из файла; без шаблонов и виньетки на уровне подменю нечего показывать
       ...(!c.can || c.can('templates') || c.can('vignette')
         ? [

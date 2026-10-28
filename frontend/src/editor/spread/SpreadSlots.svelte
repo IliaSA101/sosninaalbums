@@ -7,12 +7,13 @@
   import { modes } from '../../base/prefs/view.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { addVignette } from '../../panels/vignette/vigact'
+  import { looks } from '../../shell/looks/looks.svelte'
   import { row } from './spreadrow.svelte'
   import { AUTO_LABEL, emptyCanvas } from './emptycanvas'
   import { centerAt, gapBox, pitch, renderRange, slotBox, type SlotBox } from './spreadrow'
   import { gapKey } from '../../panels/timeline/cutkey.svelte'
   import { labelTitle } from '../../panels/timeline/spreadname'
-  import { COVER_ID, unitOf, type SheetSize } from '../../base/geom/sheet'
+  import { COVER_ID, isSheet, unitOf, type SheetSize } from '../../base/geom/sheet'
   import type { Settings } from '../../base/core/types'
 
   type Box = SlotBox
@@ -114,6 +115,12 @@
           {#if prefs.can('vignette')}
             <button type="button" class="first-vig" title="Лист с учителями и учениками" onclick={() => addVignette(0)}
               >или новая виньетка</button
+            >
+          {/if}
+          <!-- 131: макет оформляет весь альбом; с «Простого», как «Файл ▸ Макеты альбома…»; у проекта-листа 031 макетов нет -->
+          {#if !isSheet(settings)}
+            <button type="button" class="first-vig" title="Готовые макеты альбома из наборов библиотеки" onclick={() => void looks.show()}
+              >или начните с макета альбома</button
             >
           {/if}
         </div>

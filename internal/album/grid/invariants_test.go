@@ -39,7 +39,7 @@ func TestGridInvariants(t *testing.T) {
 	edtest.NewSpread(e, -1, pool[:3])
 	scopes := []string{model.ScopeLeft, model.ScopeRight, model.ScopeSpread}
 	ops := []string{"set", "add", "move", "swap", "remove", "new", "place", "fill", "addPlace", "setPlaces", "delete",
-		"arrange", "layers", "group", "fit", "shape", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop", "border", "border", "clip", "clip", "copies", "coverGrid", "coverGrid", "coverGrid"}
+		"arrange", "layers", "group", "fit", "shape", "mirror", "copy", "apply", "dup", "settings", "layout", "split", "merge", "auto", "undo", "redo", "angle", "angle", "align", "align", "grot", "gaxes", "cover", "vignette", "fields", "drop", "drop", "border", "border", "clip", "clip", "copies", "coverGrid", "coverGrid", "coverGrid", "look"}
 	arr := []string{"same", "sameW", "fitPhoto", "splitH", "splitV", "front", "back"}
 	vigTpls := []string{"grid", "head-t-left", "g-top", "t-top-g", "split-tg", "нет такого"}
 	withGrid, seated, turned, ordered := 0, 0, 0, 0 // тест не должен выродиться в прогон одного «Авто»
@@ -47,6 +47,7 @@ func TestGridInvariants(t *testing.T) {
 	bordered := 0                                   // мест с рамочкой по шагам (079)
 	clips := 0                                      // удачных вставок и дублей (099)
 	coverGrids := 0                                 // удачных плиток и шагов раскладки сторонки обложки (127)
+	looks := 0                                      // удачных постановок макета альбома (131)
 	shifts := 0                                     // сдвигов своего фото по местам ручного листа (114)
 	frSrcs := []model.BorderSrc{{}, {Kind: "line", Width: 2}, {Kind: "polaroid", Inks: []string{"#EEEEEE"}}, {Kind: "future-kind"},
 		{Photo: model.PhotoInfo{ID: model.LibPhotoID(frKey), Path: filepath.Join(dir, "frame.png"), Lib: frKey, W: 3000, H: 4000}, Cut: [4]float64{0.1, 0.2, 0.1, 0.3}},
@@ -279,6 +280,8 @@ func TestGridInvariants(t *testing.T) {
 			default:
 				_, _, _ = e.DropPhotos(id, []string{"", place}[r.IntN(2)], cp, -1, []string{"", "add", "skip"}[r.IntN(3)])
 			}
+		case "look": // 131: макет альбома — на собранном отказ без следа, на пустом серия
+			looks += lookOp(t, e, r)
 		case "undo":
 			e.Undo()
 		case "redo":
@@ -343,8 +346,8 @@ func TestGridInvariants(t *testing.T) {
 		t.Fatalf("сеток мало: %d разворотов-сеток по шагам, %d фото в местах, %d повёрнутых мест, %d с общим порядком",
 			withGrid, seated, turned, ordered)
 	}
-	t.Logf("раскладок сторонки %d, сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, вставок %d, сдвигов %d, разворотов %d",
-		coverGrids, withGrid, seated, turned, ordered, vigs, bordered, clips, shifts, len(edtest.P(e).Spreads))
+	t.Logf("макетов %d, раскладок сторонки %d, сеток %d, фото в местах %d, повёрнутых мест %d, с общим порядком %d, виньеток %d, с рамочкой %d, вставок %d, сдвигов %d, разворотов %d",
+		looks, coverGrids, withGrid, seated, turned, ordered, vigs, bordered, clips, shifts, len(edtest.P(e).Spreads))
 }
 
 // coverGridOp — шаг раскладки сторонки обложки (127): плитка случайного ряда на вкладке 1…7 (со
@@ -681,4 +684,38 @@ func TestSeatNamesInvariant(t *testing.T) {
 		t.Fatalf("табличек мало: шагов с ними %d из %d, пересборок %d", withSeats, steps, x.rebuilt)
 	}
 	t.Logf("шагов с табличками %d из %d, повторов пересборки %d", withSeats, steps, x.rebuilt)
+}
+
+// lookOp — шаг макета альбома (131): серия из 2…6 разворотов с пустыми местами. Собранный альбом
+// (фото в местах) отвечает отказом, любой отказ не оставляет следа (rev и JSON прежние); серия
+// отдельно ставится на чистый альбом. Итог — 1, если серия встала.
+func lookOp(t *testing.T, e *album.Editor, r *rand.Rand) int {
+	t.Helper()
+	box := func(x float64) model.Box { return model.Box{X: x, Y: 0.1, W: 0.4, H: 0.8} }
+	step := func(role, name string, places ...model.Box) model.LookStep {
+		return model.LookStep{Role: role, Name: name, Tpl: model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Places: places,
+			Page: []model.TplBg{{Color: "#fff0f0"}, {Color: "#f0f0ff"}}}}
+	}
+	tpl := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{step("", "Начало", box(0.05)),
+		step(model.RoleRepeat, "", box(0.05), box(0.55)), step("", "Конец", box(0.3))}}
+	ref := model.LookRef{Key: "my:0123456789abcdef", Name: "Тест"}
+	rev, data := edtest.Rev(e), model.Marshal(edtest.P(e))
+	o := model.LookOpts{Spreads: 2 + r.IntN(5)}
+	_, plan, err := e.ApplyLook(ref, tpl, nil, o, nil)
+	if err != nil {
+		if edtest.Rev(e) != rev || !slices.Equal(data, model.Marshal(edtest.P(e))) {
+			t.Fatalf("отказ макета (%v) оставил след", err)
+		}
+	} else if plan.Full {
+		t.Fatal("макет встал на собранный альбом")
+	}
+	// Идущий альбом почти всегда собран — серию проверяем на чистом: места пустые, инварианты целы.
+	fresh := edtest.Open(t, model.New(), "")
+	if _, _, err := fresh.ApplyLook(ref, tpl, nil, o, nil); err != nil {
+		t.Fatalf("серия на чистом альбоме: %v", err)
+	}
+	if err := edtest.GridInvariants(edtest.P(fresh)); err != nil {
+		t.Fatalf("серия на чистом альбоме: %v", err)
+	}
+	return 1
 }

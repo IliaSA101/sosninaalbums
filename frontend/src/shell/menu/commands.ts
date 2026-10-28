@@ -17,6 +17,8 @@ import { keysUi } from '../hotkeys/keysui.svelte'
 import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
 import { packsUi } from '../packs/packs.svelte'
+import { looks } from '../looks/looks.svelte'
+import { saveLookUi } from '../looks/savelook.svelte'
 import { tplio } from './tplio.svelte'
 import { namesUi } from '../../panels/names/names.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
@@ -135,6 +137,9 @@ const HANDLERS = {
   packs: () => {
     if (prefs.can('decor')) void packsUi.show() // без «Фонов и стикеров» на уровне наборам нечего показывать
   },
+  // 131: макеты альбома и сохранение своего альбома как макета — окна и на «Простом» (без prefs.can)
+  looks: () => void looks.show(),
+  saveLook: () => void saveLookUi.show(),
   collect: () => edit.idle().then(() => jobs.collectShow()),
   addFolder: () => store.run(Api.ChooseFolder()),
   relink: () => relinkFolder(),

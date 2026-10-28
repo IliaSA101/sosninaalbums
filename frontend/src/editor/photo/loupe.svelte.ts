@@ -2,6 +2,7 @@
 // Живёт столько же, сколько окно: экземпляр создаёт PhotoPreview.svelte, на закрытии reset().
 import { primaryPress } from '../../base/core/platform'
 import { isZoomWheel, wheelFactor } from '../zoom/zoom'
+import { pinchOn, pinching } from '../zoom/pinch'
 import { carry, fitScale, FIT, isClick, MAX_SCALE, pan, place, toggle, zoomAt, zoomLabel, type Loupe, type Pt, type Size } from './loupe'
 
 const NONE: Size = { w: 0, h: 0 }
@@ -119,10 +120,25 @@ export class PreviewLoupe {
     this.panning = false
   }
 
-  // Ctrl+колесо и щипок — зум у курсора; без Ctrl ничего (тачпад иначе проскакивал бы кадры).
+  // Ctrl+колесо — зум у курсора; без Ctrl ничего (тачпад иначе проскакивал бы кадры). Посреди щипка Mac колесо не зумит (двойной зум).
   wheel(e: WheelEvent) {
     e.preventDefault()
-    if (!isZoomWheel(e)) return
+    if (!isZoomWheel(e) || pinching()) return
     this.zoomBy(wheelFactor(e.deltaY, e.deltaMode), this.pt(e))
+  }
+  // Щипок Mac (134): множитель жеста как есть, у точки жеста.
+  pinch(f: number, x: number, y: number) {
+    this.zoomBy(f, this.pt({ clientX: x, clientY: y }))
+  }
+  // Колесо и щипок на узле окна; passive: false — иначе preventDefault не сработает и Ctrl+колесо масштабирует страницу.
+  // Возвращает снятие. Тот же вызов — в просмотре окон оформления (133).
+  bind(node: HTMLElement): () => void {
+    const wheel = (e: WheelEvent) => this.wheel(e)
+    node.addEventListener('wheel', wheel, { passive: false })
+    const off = pinchOn(node, (f, x, y) => this.pinch(f, x, y))
+    return () => {
+      node.removeEventListener('wheel', wheel)
+      off()
+    }
   }
 }

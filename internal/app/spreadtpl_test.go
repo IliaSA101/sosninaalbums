@@ -308,8 +308,8 @@ func FuzzMediaTplQuery(f *testing.F) {
 	})
 }
 
-// Стык 067 G2 и G3: шаблон разворота из набора — в каталоге между встроенными и своими, с
-// плиткой /media/tpl, страницами и местами; ставится одним шагом отмены; встроенных в окне
+// Стык 067 G2 и G3 (порядок 133): шаблон разворота из набора — в каталоге выше встроенных и
+// своих, с плиткой /media/tpl, страницами и местами; ставится одним шагом отмены; встроенных в окне
 // «Наборы» — 12; удаление набора убирает плитку и возможность поставить.
 func TestPackSpreadTpl(t *testing.T) {
 	a := spreadApp(t)
@@ -325,17 +325,17 @@ func TestPackSpreadTpl(t *testing.T) {
 	if err != nil || len(cat.Items) != 14 {
 		t.Fatalf("каталог: %v %d", err, len(cat.Items))
 	}
-	for i, it := range cat.Items[:12] {
-		if !strings.HasPrefix(it.ID, "sa:tpl-") || it.Pack != "" {
+	for i, it := range cat.Items[1:13] {
+		if !strings.HasPrefix(it.ID, "sa:tpl-") || it.Pack != "" || it.PackID != decor.BuiltinPack || it.Peek != "" {
 			t.Errorf("встроенный %d: %+v", i, it)
 		}
 	}
-	pk := cat.Items[12]
+	pk := cat.Items[0]
 	if pk.Pack != "Свадьба — айвори" || pk.Own || pk.Name != "Главное и два" || pk.Theme != "wedding" ||
-		pk.URL != decor.TplURL(pk.ID) || pk.Pages != 2 || pk.Places != 3 || pk.Aspect != 1.5 {
+		pk.URL != decor.TplURL(pk.ID) || pk.PackID != "ivory" || pk.Peek != "" || pk.Pages != 2 || pk.Places != 3 || pk.Aspect != 1.5 {
 		t.Fatalf("плитка набора: %+v", pk)
 	}
-	if cat.Items[13].ID != own.ID || !cat.Items[13].Own {
+	if cat.Items[13].ID != own.ID || !cat.Items[13].Own || cat.Items[13].PackID != "" || cat.Items[13].Peek != "" {
 		t.Errorf("свой не последним: %+v", cat.Items[13])
 	}
 	if rec := getTpl(a, "GET", pk.URL+"&px=128&r=1.5"); rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "image/png" {
@@ -371,5 +371,20 @@ func TestPackSpreadTpl(t *testing.T) {
 	rev = a.editor().View().Rev
 	if r, err := a.ApplySpreadTpl("s1", "spread", pk.ID); err == nil || r.View.Rev != rev {
 		t.Errorf("шаблон удалённого набора встал: %v", err)
+	}
+}
+
+// TestTplKeysBorders — ключи шаблона для App.tplLibs: фоны, стикеры и рамочки-картинки
+// (131 G1); встроенная рамочка ключа не даёт.
+func TestTplKeysBorders(t *testing.T) {
+	tp := model.SpreadTpl{Page: []model.TplBg{{Lib: "my:00000000000000b1"}}, Whole: &model.TplBg{Lib: "my:00000000000000b2"},
+		Stickers: []model.TplItem{{Lib: "my:00000000000000c1"}, {}},
+		Borders:  []model.TplBorder{{I: 0, Kind: "line"}, {I: 1, Lib: "my:00000000000000d1"}}}
+	want := []string{"my:00000000000000b2", "my:00000000000000b1", "my:00000000000000c1", "my:00000000000000d1"}
+	if got := tplKeys(tp); !slices.Equal(got, want) {
+		t.Errorf("ключи %v, ждали %v", got, want)
+	}
+	if got := tplKeys(model.SpreadTpl{}); len(got) != 0 {
+		t.Errorf("пустой шаблон: %v", got)
 	}
 }

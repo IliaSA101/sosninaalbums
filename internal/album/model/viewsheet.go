@@ -169,6 +169,8 @@ type TextView struct {
 	Src string `json:"src,omitempty"`
 	// Z — слой в общем стеке разворота (zView); у подписи — сразу над её фото.
 	Z int `json:"z"`
+	// Draft — заготовка (131): холст рисует пунктиром, выгрузка пропускает; у подписи всегда false.
+	Draft bool `json:"draft,omitempty"`
 }
 
 // CaptionView — подпись к фото: рамка — место подписи, ID пуст.
@@ -197,4 +199,21 @@ func (b BackdropView) Shown() (r layout.Rect, ok bool) {
 		return layout.Rect{}, false
 	}
 	return layout.Rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}, true
+}
+
+// LookView — макет альбома для интерфейса (131 design §9): ключ и имя из Project.Look. Found —
+// макет есть в библиотеке этого компьютера (по ключу или по набору и записи); ставит App (G6),
+// вид ядра — false.
+type LookView struct {
+	Key   string `json:"key"`
+	Name  string `json:"name"`
+	Found bool   `json:"found"`
+}
+
+// NewLookView — вид ссылки r; nil — макета нет.
+func NewLookView(r *LookRef) *LookView {
+	if r == nil {
+		return nil
+	}
+	return &LookView{Key: r.Key, Name: r.Name}
 }

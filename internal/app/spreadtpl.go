@@ -50,8 +50,13 @@ func (a *App) spreadTpl(itemID string) (*decor.Store, model.SpreadTpl, error) {
 // thumbs — для плитки: путь — миниатюра кэша, а не исходник (рисовать 200 МБ фона ради плитки
 // незачем); без кэша миниатюр своих на плитке нет.
 func (a *App) tplLibs(s *decor.Store, t model.SpreadTpl, thumbs bool) map[string]model.PhotoInfo {
+	return a.libsFor(s, tplKeys(t), thumbs)
+}
+
+// libsFor — сведения о файлах библиотеки по ключам keys; ключа или файла нет — пропуск.
+func (a *App) libsFor(s *decor.Store, keys []string, thumbs bool) map[string]model.PhotoInfo {
 	libs := map[string]model.PhotoInfo{}
-	for _, key := range tplKeys(t) {
+	for _, key := range keys {
 		if _, have := libs[key]; have {
 			continue
 		}
@@ -75,7 +80,7 @@ func (a *App) tplLibs(s *decor.Store, t model.SpreadTpl, thumbs bool) map[string
 	return libs
 }
 
-// tplKeys — ключи библиотеки, на которые ссылается шаблон (фоны и свои стикеры).
+// tplKeys — ключи библиотеки, на которые ссылается шаблон (фоны, свои стикеры и рамочки).
 func tplKeys(t model.SpreadTpl) []string {
 	var keys []string
 	if t.Whole != nil && t.Whole.Lib != "" {
@@ -89,6 +94,11 @@ func tplKeys(t model.SpreadTpl) []string {
 	for _, st := range t.Stickers {
 		if st.Lib != "" {
 			keys = append(keys, st.Lib)
+		}
+	}
+	for _, b := range t.Borders {
+		if b.Lib != "" {
+			keys = append(keys, b.Lib)
 		}
 	}
 	return keys
@@ -245,6 +255,24 @@ var errTplDraw = errors.New("плитка шаблона не рисуется")
 // drawTpl — PNG плитки: шаблон ставится на временный лист тем же путём, что в альбом
 // (album.PreviewTpl), и рисуется как экспорт (export.TplScene); у страницы — левая половина.
 func drawTpl(t model.SpreadTpl, q tplQuery, libs map[string]model.PhotoInfo) ([]byte, error) {
+	img, err := tplImage(t, q, libs)
+	if err != nil {
+		return nil, err
+	}
+	return encodeTile(img)
+}
+
+// encodeTile — PNG плитки (быстрое сжатие: плитка живёт в кэше недолго).
+func encodeTile(img image.Image) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, img); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// tplImage — картинка плитки шириной q.px (drawTpl без кодирования: плитка обложки склеивает две).
+func tplImage(t model.SpreadTpl, q tplQuery, libs map[string]model.PhotoInfo) (image.Image, error) {
 	wmm, hmm := tplSideMM*q.r, float64(tplSideMM)
 	if q.r < 1 {
 		wmm, hmm = tplSideMM, tplSideMM/q.r
@@ -275,9 +303,5 @@ func drawTpl(t model.SpreadTpl, q tplQuery, libs map[string]model.PhotoInfo) ([]
 	if out.Bounds().Dx() != q.px {
 		out = imaging.Resize(out, q.px, 0, imaging.Linear)
 	}
-	var buf bytes.Buffer
-	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, out); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return out, nil
 }

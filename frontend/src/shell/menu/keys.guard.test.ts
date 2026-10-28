@@ -58,6 +58,7 @@ describe('обработчики клавиш мимо реестра', () => {
     '/src/editor/tilt/StraightenLayer.svelte': 'Esc режима «Выпрямить»',
     '/src/editor/tilt/TiltDial.svelte': '←/→ и Shift у дуги наклона (owner-ux §2.4)',
     '/src/editor/zoom/ZoomBadge.svelte': 'Esc закрывает бегунок масштаба',
+    '/src/panels/decorbrowse/DecorPeek.svelte': 'Esc, ← →, Enter и команды лупы окна просмотра плитки (133); остальное идёт диспетчеру',
     '/src/panels/layouts/MirrorMenu.svelte': 'навигация и Esc меню',
     '/src/panels/names/NamesDialog.svelte': 'Ctrl+Enter «Вставить» в окне имён',
     '/src/shell/guide/spotstate.svelte.ts': 'Esc гасит подсветку места',

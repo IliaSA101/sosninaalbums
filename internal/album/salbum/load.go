@@ -44,6 +44,8 @@ type FileProject struct {
 	Loose []FileLoose `json:"loose,omitempty"`
 	// AlbumBg — фон альбома (v17, 098 §4; фото — ID записи photos).
 	AlbumBg *model.AlbumBg `json:"albumBg,omitempty"`
+	// Look — макет альбома (v19, 131 design §3): ключ, имя, набор и запись; зажим — FixLook.
+	Look *model.LookRef `json:"look,omitempty"`
 }
 
 // FileFolder — папка: path (относительный или абсолютный) и запасной abs.
@@ -175,11 +177,8 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	if err := loadPhotos(p, f.Photos, base, v1); err != nil {
 		return nil, err
 	}
-	// Фон альбома — до dedupe и первого PruneRefs (098-21): иначе запись его фото, не стоящего на
-	// листах, удалилась бы при чтении.
-	p.AlbumBg = f.AlbumBg
-	p.ClampAlbumBg()
-	dropNilPlaces(p)
+	dropNilPlaces(p) // до FixLook в loadAlbumWide: место null не держит шаг у листа, который иначе пуст
+	loadAlbumWide(p, &f)
 	unionGrid(p)
 	dedupe(p)
 	p.PruneRefs()
@@ -198,6 +197,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	p.PruneRefs() // фон, выброшенный зажимом (взаимоисключение), не оставляет фото без дела
 	p.ClampGrid()
 	p.PruneRefs() // запись рамочки, снятой зажимом (079: вид и картинка сразу), не остаётся без дела
+	p.FixLook()   // ещё раз: зажимы выше могли снять места и фон листа с шагом
 	migrate(p)
 	if err := p.SyncGrid(true); err != nil {
 		return nil, err
@@ -211,6 +211,16 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	bins := decodeBins(f.Bins)
 	p.SetLoaded(model.Side{Marks: decodeMarks(f.Marks, base, p.Folders, p.LooseFiles(), model.BinSet(bins)), Bins: bins})
 	return p, nil
+}
+
+// loadAlbumWide — поля всего альбома, которые нужны до dedupe. Фон альбома — до первого PruneRefs
+// (098-21): иначе запись его фото, не стоящего на листах, удалилась бы при чтении. Макет (131):
+// лист с одним номером шага чужого или битого макета пуст (Empty) — dedupe его уберёт.
+func loadAlbumWide(p *model.Project, f *FileProject) {
+	p.AlbumBg = f.AlbumBg
+	p.ClampAlbumBg()
+	p.Look = f.Look
+	p.FixLook()
 }
 
 // checkHead — версия до полного разбора (075-12): файл новее программы мог сменить вид поля, и

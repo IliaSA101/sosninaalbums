@@ -17,6 +17,8 @@ method ApplyBorder(arg1:string,arg2:Array<string>,arg3:string):Promise<model.Vie
 method ApplyCoverGrid(arg1:string,arg2:Array<model.Box>):Promise<APP.GridResult>
 method ApplyCoverPreset(arg1:string):Promise<model.View>
 method ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<APP.GridResult>
+method ApplyLook(arg1:string,arg2:model.LookOpts):Promise<APP.LookResult>
+method ApplyLookStep(arg1:string,arg2:string,arg3:number):Promise<APP.TplResult>
 method ApplyPrint(arg1:model.Settings,arg2:string):Promise<model.View>
 method ApplySpreadTpl(arg1:string,arg2:string,arg3:string):Promise<APP.TplResult>
 method ArrangeLayers(arg1:string,arg2:string,arg3:Array<string>):Promise<model.View>
@@ -56,6 +58,7 @@ method CoverGridChoices(arg1:string,arg2:number):Promise<model.CoverGridChoices>
 method CoverPresets():Promise<Array<model.CoverPreset>>
 method CoverSpineText():Promise<model.View>
 method CreateCover(arg1:string,arg2:string):Promise<model.View>
+method CreateCoverLook(arg1:string,arg2:string):Promise<APP.CoverResult>
 method CropsToKeep(arg1:string):Promise<number>
 method CutItems(arg1:string,arg2:model.ClipSel):Promise<APP.ClipResult>
 method DecorCatalog(arg1:string):Promise<APP.DecorCatalog>
@@ -102,6 +105,8 @@ method Keymap():Promise<keymap.View>
 method LayoutChoices(arg1:string):Promise<model.Choices>
 method LibraryPacks():Promise<APP.PackList>
 method LogUI(arg1:string):Promise<void>
+method LookCount(arg1:string,arg2:number,arg3:number):Promise<APP.LookCount>
+method LookInfo(arg1:string):Promise<APP.LookInfo>
 method MarginNote(arg1:number,arg2:number):Promise<string>
 method Marks():Promise<Record<string, model.MarkView>>
 method MergeSpreads(arg1:string):Promise<model.View>
@@ -113,6 +118,7 @@ method MovePhoto(arg1:string,arg2:string,arg3:number):Promise<model.View>
 method MoveSpread(arg1:string,arg2:number):Promise<model.View>
 method MyColors():Promise<Array<string>>
 method NewBin(arg1:string,arg2:Array<string>):Promise<model.View>
+method NewLookSpread():Promise<model.View>
 method NewProject(arg1:string):Promise<APP.State>
 method NewSpread(arg1:number,arg2:Array<string>):Promise<model.View>
 method NewVignetteSheet(arg1:number,arg2:number):Promise<APP.State>
@@ -139,7 +145,10 @@ method PlacePhotos(arg1:string,arg2:string,arg3:Array<string>):Promise<APP.GridR
 method PlanBackgroundTo(arg1:Array<model.GridTarget>,arg2:string):Promise<model.BgPlan>
 method PlanCopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
 method PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>
+method PlanLook(arg1:string,arg2:model.LookOpts):Promise<model.LookPlan>
+method PlanLookStep(arg1:string,arg2:string,arg3:number):Promise<model.GridPlan>
 method PlanRemovePack(arg1:string):Promise<APP.PackRemove>
+method PlanSaveLook(arg1:model.SaveLookOpts):Promise<APP.LookPlanSave>
 method PlanSpreadTpl(arg1:string,arg2:string,arg3:string):Promise<model.GridPlan>
 method PrepareSigs(arg1:Array<string>):Promise<APP.SigState>
 method PreviewNames(arg1:string,arg2:model.NamesOpts):Promise<model.NamesPlan>
@@ -175,6 +184,7 @@ method RestoreBackup(arg1:string):Promise<model.View>
 method RestoreHotkeys(arg1:Record<string, Array<string>>):Promise<keymap.View>
 method RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>
 method SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<void>
+method SaveLook(arg1:model.SaveLookOpts):Promise<APP.DecorItem>
 method SavePrintProfile(arg1:APP.PrintEdit,arg2:boolean):Promise<APP.PrintSaved>
 method SaveProject():Promise<model.View>
 method SaveProjectAs():Promise<model.View>
@@ -232,6 +242,7 @@ method SetText(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method SetTextAngle(arg1:string,arg2:number):Promise<model.View>
 method SetTextAuto(arg1:string):Promise<model.View>
 method SetTextBox(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>
+method SetTextDraft(arg1:string,arg2:string,arg3:boolean):Promise<model.View>
 method SetTextScale(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>
 method SetTextStyle(arg1:string,arg2:text.Style):Promise<model.View>
 method SetTone(arg1:string,arg2:number,arg3:number):Promise<model.View>
@@ -284,11 +295,16 @@ type APP.ClipResult
   clip: model.ClipInfo
 type APP.CollectOptions
   all: boolean
+type APP.CoverResult
+  view: model.View
+  styled: boolean
+  look: string
 type APP.DecorCatalog
   kind: string
   themes: DecorTheme[]
   items: DecorItem[]
   recent: string[]
+  new: string[]
   readOnly: boolean
 type APP.DecorImport
   added: DecorItem[]
@@ -308,6 +324,14 @@ type APP.DecorItem
   pages?: number
   places?: number
   pack?: string
+  steps?: number
+  from?: number
+  vig?: boolean
+  cover?: boolean
+  packId?: string
+  peek?: string
+  form?: string
+  style?: string
 type APP.DecorSkip
   name: string
   why: string
@@ -372,6 +396,28 @@ type APP.LibraryUpdate
   updated: number
   skipped: DecorSkip[]
   bytes: number
+type APP.LookCount
+  n: number
+  places: number
+  fit: number
+type APP.LookInfo
+  steps: LookStepInfo[]
+  cover: boolean
+  min: number
+  max: number
+type APP.LookPlanSave
+  ok: boolean
+  steps: number
+  max: number
+  reason: string
+type APP.LookResult
+  view: model.View
+  plan: model.LookPlan
+type APP.LookStepInfo
+  name: string
+  role: string
+  places: number
+  pages: number
 type APP.LooseResult
   view: model.View
   batch: string
@@ -772,6 +818,7 @@ type model.CaptionView
   auto: boolean
   src?: string
   z: number
+  draft?: boolean
   over: boolean
   overflow: number
   sheet: boolean
@@ -948,6 +995,29 @@ type model.GuideView
   warn?: string
   note?: string
   lines?: GuideLine[]
+type model.LookOpts
+  mode: string
+  spreads: number
+type model.LookPlan
+  mode: string
+  trial: boolean
+  touched: number
+  full: boolean
+  spreads: number
+  places: number
+  drafts: number
+  replaced: number
+  coverTouched: boolean
+  coverReplaced: boolean
+  anchors: number
+  cover: boolean
+  left: number
+  prev: string
+  missing: number
+type model.LookView
+  key: string
+  name: string
+  found: boolean
 type model.LooseFileView
   path: string
   photo: string
@@ -1102,6 +1172,15 @@ type model.SampleRow
   group: number
   inOrder: Choice[]
   extra: Choice[]
+type model.SaveLookOpts
+  theme: string
+  name: string
+  ids: string[]
+  repFrom: number
+  repTo: number
+  places: boolean
+  drafts: boolean
+  cover: boolean
 type model.Settings
   pageW: number
   pageH: number
@@ -1161,6 +1240,7 @@ type model.SpreadView
   fields: string[]
   noAlbumBg?: boolean
   foldHidden?: number
+  lookStep?: number
 type model.StickerView
   id: string
   x: number
@@ -1198,6 +1278,7 @@ type model.StubView
   auto: boolean
   src?: string
   z: number
+  draft?: boolean
   who?: string[]
 type model.TextView
   id: string
@@ -1212,6 +1293,7 @@ type model.TextView
   auto: boolean
   src?: string
   z: number
+  draft?: boolean
 type model.UsedAt
   id: string
   uses: PhotoUse[]
@@ -1250,6 +1332,8 @@ type model.View
   bins: Bin[]
   unfilled: string[]
   unnamed: number
+  drafts: number
+  look?: LookView
   cover?: CoverView
   albumBg?: AlbumBgView
   pageLimit?: PageLimitView

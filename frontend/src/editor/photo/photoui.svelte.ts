@@ -125,9 +125,11 @@ class PhotoUi {
     e.preventDefault()
     e.stopPropagation()
     const sid = store.spread?.id
-    if (drag.active || !sid || !prefs.can('clipboard')) return
+    // Заготовка макета (131) правится на любом уровне: меню с «Сделать обычной надписью» есть и без буфера и без функции «Текст».
+    const draft = store.spread?.texts.find((t) => t.id === id)?.draft === true
+    if (drag.active || !sid || !(draft || prefs.can('clipboard'))) return
     // Текст отключён в «Своём» уровне: как левый щелчок — только тост.
-    if (prefs.blocked('text', () => edit.select({ kind: 'text', spread: sid, id }))) return
+    if (!draft && prefs.blocked('text', () => edit.select({ kind: 'text', spread: sid, id }))) return
     const picked = placesel.texts.includes(id) || (edit.sel?.kind === 'text' && edit.sel.id === id)
     if (!picked) edit.select({ kind: 'text', spread: sid, id })
     this.menu = { x: e.clientX, y: e.clientY, kind: 'text', at: pointOnSheet(e) }

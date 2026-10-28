@@ -1,10 +1,17 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { screenDpr } from '../../base/ui/dpr.svelte'
   import { store } from '../../base/core/store.svelte'
   import { sheetIn, unitOf } from '../../base/geom/sheet'
   import Modal from '../../base/modal/Modal.svelte'
   import SideList from '../../base/tpl/SideList.svelte'
-  import TplItem from '../../base/tpl/TplItem.svelte'
+  import DecorTile from '../decorbrowse/DecorTile.svelte'
+  import DecorPeek from '../decorbrowse/DecorPeek.svelte'
+  import BrowseFilters from '../decorbrowse/BrowseFilters.svelte'
+  import { browse, sideCounts, tileLabel } from '../decorbrowse/browse'
+  import { peek } from '../decorbrowse/peek.svelte'
+  import { holdSize, tileOf } from '../decorbrowse/tilesize'
+  import { tileWheel } from '../decorbrowse/tilewheel'
   import { decor } from './decor.svelte'
   import BgTargets from './BgTargets.svelte'
   import { bgPickShown } from './bgtargets'
@@ -13,7 +20,7 @@
   import DecorHead from './DecorHead.svelte'
   import QrDialog from './QrDialog.svelte'
   import SpreadSave from './SpreadSave.svelte'
-  import { FILTERED_EMPTY, saveScopes, tileLook, tplNote, tplSideItems, tplSrc, tplTitle, tplVisible } from './spreadtpl'
+  import { FILTERED_EMPTY, saveScopes, tplSideItems, tplVisible } from './spreadtpl'
   import {
     ADD_OWN,
     DECOR_TITLE,
@@ -25,17 +32,13 @@
     emptyText,
     ownKind,
     scopeIn,
-    sideItems,
     themeItems,
-    tilePx,
-    tileSrc,
     uploadHint,
     whereItems,
   } from './decor'
 
   // Окно «Фоны» (048; те же плитки для «Стикеры» и «Развороты» 067): темы слева («источник слева», как в галерее шаблонов ⊞), справа плитки в пропорции листа,
   // сверху «Куда» и «Добавить свой…» (100-1). Щелчок по плитке ставит фон и закрывает окно; ✎ и × — у своих, как у «Мои шаблоны».
-  const TILE_W = 168 // CSS px: плитка с запасом в dpr берёт PNG шириной px
 
   const c = $derived(decor.cur)
   const sp = $derived(c ? sheetIn(store.view, c.spread) : undefined)
@@ -48,11 +51,48 @@
   const frame = $derived(c?.kind === 'frame') // 079: «Куда» — выделенные места или весь лист, а не область листа
   const spreads = $derived(c?.kind === 'spread') // 067: плитки готовых разворотов, «Куда» отбирает их
   const themed = $derived(themeItems(decor.cat, decor.theme))
-  const items = $derived(spreads && sp ? tplVisible(themed, scope, sp) : themed)
+  const listed = $derived(spreads && sp ? tplVisible(themed, scope, sp) : themed)
   const readOnly = $derived(!!decor.cat?.readOnly)
-  const px = $derived(tilePx(TILE_W, screenDpr.value))
+  // 133: размер плиток — по виду окна (ползунок в шапке, Ctrl+колесо); px картинки от него не уменьшается, пока окно открыто
+  const size = $derived(c ? tileOf(c.kind) : 0)
+  let hold = $state(0)
+  let holdKind = ''
+  $effect.pre(() => {
+    const k = c?.kind ?? ''
+    const sz = size
+    untrack(() => {
+      if (k !== holdKind) {
+        holdKind = k
+        hold = 0
+      }
+      if (sz > hold) hold = sz
+    })
+  })
+  const pxSize = $derived(holdSize(hold, size))
   // Плитка, что стоит в этой области сейчас: отмечена, как текущая раскладка в галерее ⊞
   const standing = $derived(decor.standing(scope))
+  // 133: отбор «Набор · Вид · Стиль» после темы и «Куда»; стоящая плитка видна при любом отборе
+  const br = $derived(browse(listed, decor.cat?.items ?? [], decor.filters, standing))
+  const items = $derived(br.items)
+  let tilesEl = $state<HTMLElement>()
+  // Смена источника или отбора — к стоящей плитке, иначе в начало (образец — TplRow). Ключ — строка: пересчёт br, перечитывание
+  // каталога, смена standing и открытие окна тех же значений прокрутку не трогают (стоящую при открытии показывает seenIf плитки).
+  const scrollKey = $derived(`${decor.theme}|${br.sel.pack}|${br.sel.form}|${br.sel.style}`)
+  let seenKey: string | null = null
+  $effect(() => {
+    const k = scrollKey
+    if (seenKey === null || k === seenKey) {
+      seenKey = k
+      return
+    }
+    seenKey = k
+    queueMicrotask(() => {
+      if (!tilesEl) return
+      const cur = tilesEl.querySelector<HTMLElement>('.current')
+      if (cur) cur.scrollIntoView?.({ block: 'nearest' })
+      else tilesEl.scrollTop = 0
+    })
+  })
   // 077: строка «на какие листы» под «Куда» — у «Фонов», не на обложке и не в альбоме из одного разворота
   const manyRow = $derived(c?.kind === 'bg' && !albumOnly && bgPickShown(sp, store.view.spreads.length))
   const bgPlan = $derived(decor.bgPlan())
@@ -66,12 +106,6 @@
     if (!sp) decor.close()
     else if (!frame && !album && scope !== c.scope) decor.setScope(scope)
   })
-
-  // Отмеченная плитка при открытии окна не должна прятаться за краем прокрутки.
-  function seenIf(el: HTMLElement, on: boolean) {
-    if (on) el.scrollIntoView?.({ block: 'nearest' })
-    return { update: (v: boolean) => v && el.scrollIntoView?.({ block: 'nearest' }) }
-  }
 
   // Enter в поле имени — как кнопка окна.
   function enter(e: KeyboardEvent) {
@@ -88,7 +122,9 @@
     <div class="body">
       <div class="side">
         <SideList
-          items={spreads && sp ? tplSideItems(decor.cat, scope, sp) : sideItems(decor.cat)}
+          items={spreads && sp
+            ? tplSideItems(decor.cat, scope, sp, decor.filters, standing)
+            : sideCounts(decor.cat, decor.filters, { keep: standing })}
           value={decor.theme}
           onpick={(id) => decor.setTheme(id)}
           label="Темы"
@@ -97,6 +133,7 @@
       </div>
       <div class="main">
         <DecorHead {c} {where} {scope} {album} />
+        <BrowseFilters {br} onpick={(k, v) => decor.setFilter(k, v)} />
         {#if manyRow}
           <BgTargets
             bind:pick={decor.bgPick}
@@ -111,48 +148,25 @@
           />
         {/if}
         {#if sticker && decor.theme === MINE}<p class="tip">{OWN_TIP_STICKER}</p>{/if}
-        <div class="tiles" aria-busy={decor.loading}>
+        <div class="tiles" aria-busy={decor.loading} style:--tile="{size}px" use:tileWheel={c.kind} bind:this={tilesEl}>
           {#each items as it (it.id)}
-            {@const look = spreads ? tileLook(it, sp, scope, TILE_W, dpr) : null}
-            <TplItem
-              name={it.name}
-              note={spreads ? tplNote(it) : undefined}
-              onrename={it.own && !readOnly ? () => decor.askRename(it) : undefined}
-              ondelete={it.own && !readOnly ? () => decor.askHide(it) : undefined}
-              renameLabel="Переименовать {noun}"
-              deleteTitle="Убрать из библиотеки"
-              deleteLabel="Убрать {noun} из библиотеки"
-            >
-              {#if look}
-                <!-- 067: лист одной пропорции на всё окно; страница в «Весь разворот» стоит по центру на своей -->
-                <button
-                  class="tile tpl"
-                  style:aspect-ratio={look.box}
-                  title={tplTitle(it)}
-                  disabled={decor.busy}
-                  onclick={() => decor.pick(it)}
-                >
-                  <img src={tplSrc(it.url, look.px, look.r)} alt="" loading="lazy" draggable="false" />
-                </button>
-              {:else}
-                <button
-                  class="tile"
-                  class:current={it.id === standing}
-                  class:stk={sticker}
-                  class:stkdark={sticker && it.dark}
-                  class:frm={frame}
-                  class:chk={frame && it.own}
-                  aria-current={it.id === standing ? 'true' : undefined}
-                  use:seenIf={it.id === standing}
-                  style:aspect-ratio={sticker || frame ? '1 / 1' : `${sp.w} / ${sp.h}`}
-                  style:background={it.color || undefined}
-                  title={tplTitle(it)}
-                  onclick={() => decor.pick(it)}
-                >
-                  <img src={tileSrc(it.url, px)} alt="" loading="lazy" draggable="false" />
-                </button>
-              {/if}
-            </TplItem>
+            <DecorTile
+              {it}
+              label={tileLabel(it, br.sel.style)}
+              kind={c.kind}
+              {sp}
+              {scope}
+              current={it.id === standing}
+              {readOnly}
+              {noun}
+              hold={pxSize}
+              {dpr}
+              onpeek={(t) =>
+                peek.open(
+                  items.map((i) => i.id),
+                  t.id,
+                )}
+            />
           {/each}
           {#if decor.cat && items.length === 0}
             <div class="empty">
@@ -171,6 +185,7 @@
       </div>
     </div>
   </Modal>
+  <DecorPeek {sp} {scope} hold={pxSize} {dpr} />
 {/if}
 
 {#if c && decor.ask?.kind === 'rename'}
@@ -243,60 +258,11 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fill, 168px);
+    grid-template-columns: repeat(auto-fill, var(--tile));
     align-content: start;
     gap: 12px 10px;
     padding: 5px 6px 6px 5px; /* место под рамку отмеченной плитки */
     overflow-y: auto;
-  }
-  .tile {
-    display: block;
-    position: relative;
-    width: 168px;
-    height: auto;
-    padding: 0;
-    overflow: hidden;
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    background: var(--panel2);
-  }
-  .tile:hover:not(:disabled) {
-    border-color: var(--accent);
-  }
-  /* Стоящий сейчас — рамка, как у текущей раскладки в галерее ⊞ */
-  .tile.current {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-  .tile img {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    pointer-events: none;
-  }
-  /* Готовый разворот: картинка вписана в кнопку (страница уже листа — по краям подложка).
-     Рамочка: квадратная плитка, рамка вокруг силуэта вписана целиком */
-  .tile.tpl img,
-  .tile.frm img {
-    object-fit: contain;
-  }
-  /* Стикер: квадратная плитка, рисунок вписан целиком, под ним шашечка (видно прозрачность);
-     у рамочки шашечка — только у своих */
-  .tile.stk,
-  .tile.chk {
-    background: repeating-conic-gradient(#d4d4d8 0 25%, #f4f4f5 0 50%) 0 0 / 14px 14px;
-  }
-  /* Светлый стикер (116, Go: dark): тот же рисунок, тёмные тона темы */
-  .tile.stk.stkdark {
-    background: repeating-conic-gradient(var(--line) 0 25%, var(--panel2) 0 50%) 0 0 / 14px 14px;
-  }
-  .tile.stk img {
-    object-fit: contain;
-    inset: 6px;
-    width: calc(100% - 12px);
-    height: calc(100% - 12px);
   }
   .tip {
     flex: none;

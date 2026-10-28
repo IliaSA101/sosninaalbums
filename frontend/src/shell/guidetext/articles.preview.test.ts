@@ -69,3 +69,49 @@ describe('статья «Обложка» (132-22)', () => {
     expect(a.keys).toBeUndefined() // общая строка Пробела говорит «раскладка разворота»
   })
 })
+
+describe('статьи про макеты альбома (131 U2)', () => {
+  it('четыре статьи в «Развороты и раскладки», на любом уровне, все ведут к «Файл ▸ Макеты альбома…»', () => {
+    const ids = ['looks', 'looks-built', 'looks-step', 'looks-format']
+    for (const id of ids) {
+      const a = art(id)
+      expect(a, id).toMatchObject({ group: 'spreads', feature: 'base', menu: ['looks'], spot: 'menu:looks' })
+    }
+    expect(art('looks').title).toBe('Макеты альбома')
+    expect(menuPath('looks')).toContain('Макеты альбома…')
+  })
+  it('слова спеки: входы, «Что сделать», «Поставить на разворот N», «Разворот макета», формат', () => {
+    expect(art('looks').where).toContain('или начните с макета альбома')
+    expect(art('looks').where).toContain('Альбом по макету…')
+    expect(art('looks-built').what).toContain('«Фоны по серии»')
+    expect(art('looks-built').where).toContain('«Весь альбом заново» их не пересоберёт')
+    expect(art('looks-step').what).toContain('«Поставить на разворот N»')
+    expect(art('looks-step').where).toContain('«Разворот макета «…»»')
+    expect(art('looks-format').what).toContain('20×30 и 40×30')
+  })
+  it('Отмена в статье — клавиша из реестра, снята — без скобок', () => {
+    useCatalog()
+    expect(articleText(art('looks').where ?? '')).toContain('Отмена (Ctrl+Z) возвращает его')
+    useCatalog({ undo: [] })
+    expect(articleText(art('looks').where ?? '')).toContain('Отмена возвращает его')
+  })
+})
+
+describe('статьи про заготовки и сохранение макета (131 U3)', () => {
+  it('«Заготовки макета» и «Сохранить альбом как макет» — в «Развороты и раскладки», на любом уровне', () => {
+    expect(art('looks-draft')).toMatchObject({ group: 'spreads', feature: 'base', menu: ['looks'], spot: 'menu:looks' })
+    expect(art('looks-save')).toMatchObject({ group: 'spreads', feature: 'base', menu: ['saveLook'], spot: 'menu:saveLook' })
+    expect(menuPath('saveLook')).toContain('Сохранить альбом как макет…')
+  })
+  it('слова спеки: пунктир, «Сделать обычной надписью», вопрос выгрузки, флажки, предел 24', () => {
+    const d = art('looks-draft')
+    expect(d.what).toContain('рамке-пунктире')
+    expect(d.where).toContain('«Сделать обычной надписью»')
+    expect(d.where).toContain('«… пустые места: 3, заготовки: 2»')
+    expect(d.where).toContain('на любом уровне')
+    const s = art('looks-save')
+    for (const w of ['«Места для фото»', '«Надписи — заготовками»', '«Обложка»', 'не больше 24', '«Повторяемые»'])
+      expect(s.where, w).toContain(w)
+    expect(s.what).toContain('«Мои»')
+  })
+})

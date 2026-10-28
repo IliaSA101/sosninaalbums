@@ -36,7 +36,24 @@ func NewCoverJob(p *model.Project, v model.View, dpi, quality int) *CoverJob {
 	if c == nil {
 		return nil
 	}
-	s := fromSheet(p, c.Sheet)
+	s := coverSpread(p, c, printable(c.Sheet)) // заготовки (131) не печатаются
+	// Холст рендера — две половины PageW; у обложки PageW = W/2, а шов закрывает плашка.
+	return &CoverJob{Spread: s, Opt: render.Options{PageW: c.Sheet.W / 2, PageH: c.Sheet.H, DPI: dpi, Quality: quality}, Name: CoverName}
+}
+
+// CoverScene — сцена обложки для кадра пипетки: как NewCoverJob (с плашкой корешка), но
+// заготовки (131) на месте — холст их показывает. Обложки нет — false.
+func CoverScene(p *model.Project, v model.View) (render.Spread, bool) {
+	c := v.Cover
+	if c == nil {
+		return render.Spread{}, false
+	}
+	return coverSpread(p, c, c.Sheet), true
+}
+
+// coverSpread — лист обложки sheet (вид c.Sheet, возможно без заготовок) и плашка корешка.
+func coverSpread(p *model.Project, c *model.CoverView, sheet model.SpreadView) render.Spread {
+	s := fromSheet(p, sheet)
 	if c.SpineBg != "" { // плашка во весь корешок: поверх фонов сторонок, под фото корешка, местами и текстами
 		for _, z := range c.Zones {
 			if z.Kind == "spine" && z.Rect.W > 0 && z.Rect.H > 0 {
@@ -44,8 +61,7 @@ func NewCoverJob(p *model.Project, v model.View, dpi, quality int) *CoverJob {
 			}
 		}
 	}
-	// Холст рендера — две половины PageW; у обложки PageW = W/2, а шов закрывает плашка.
-	return &CoverJob{Spread: s, Opt: render.Options{PageW: c.Sheet.W / 2, PageH: c.Sheet.H, DPI: dpi, Quality: quality}, Name: CoverName}
+	return s
 }
 
 // WithCover добавляет обложку в план: её имя (по префиксу плана), вопрос о замене и прогресс.
@@ -118,14 +134,14 @@ func AddCoverFile(pl Plan, dir string, ours, foreign []DirFile) ([]DirFile, []Di
 	return ours, append(foreign, DirFile{Name: name})
 }
 
-// BlankCover — обложка в виде печати пуста: ни фото, ни мест, ни текстов, ни фото фона, ни
+// BlankCover — обложка в виде печати пуста: ни фото, ни мест, ни текстов (заготовки не в счёт), ни фото фона, ни
 // узора, ни стикера, ни своего цвета страниц и плашки корешка.
 func BlankCover(v model.View) bool {
 	c := v.Cover
 	if c == nil {
 		return false
 	}
-	s := c.Sheet
+	s := printable(c.Sheet)
 	return len(s.Photos) == 0 && len(s.Texts) == 0 && len(s.Captions) == 0 && !shownBackdrop(s) && !shownPattern(s) &&
 		!shownSticker(s) && len(s.Places) == 0 && s.BgSet == [2]string{} && c.SpineBg == ""
 }

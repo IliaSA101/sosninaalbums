@@ -156,12 +156,14 @@ func (f *fields) mode() model.FieldMode {
 	return model.FieldCanvas
 }
 
-// text — надпись для показа и исходник (если отличается); пустые поля — в Unfilled
+// text — надпись для показа и исходник (если отличается); при count пустые поля — в Unfilled
 // (имени у надписи нет, поэтому и {Фамилия} в ней — пустое поле).
-func (f *fields) text(s string) (out, src string) {
+func (f *fields) text(s string, count bool) (out, src string) {
 	out, miss := model.Shown(f.vars, s, nil, f.mode())
-	for _, m := range miss {
-		f.miss(m)
+	if count {
+		for _, m := range miss {
+			f.miss(m)
+		}
 	}
 	if out != s {
 		src = s

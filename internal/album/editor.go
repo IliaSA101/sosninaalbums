@@ -70,6 +70,8 @@ type Editor struct {
 	// id — номер Editor в процессе (087-3), не меняется (и при Restore): по нему App узнаёт
 	// поздний вид прежнего альбома.
 	id uint64
+	// lookHost — библиотека макетов альбома (SetLookHost); не данные проекта, нет — макетов нет.
+	lookHost atomic.Pointer[LookHost]
 	// closed — альбом сменился (Close, 087-5): правки отклоняются, запись и чтения работают.
 	closed bool
 }
@@ -157,6 +159,9 @@ type editOpts struct {
 	rel  *model.Project
 	done func(pushed *model.Project)
 	bins func() *BinsSwap
+	// after — правка проекта после settle, той же правкой (смена формата с макетом: нетронутые
+	// места вписываются заново после grid.Rescale). Только геометрия существующего, не состав.
+	after func(p *model.Project)
 }
 
 // editWith — тело edit с необязательным o.
@@ -173,7 +178,7 @@ func (e *Editor) editWith(merge string, whole bool, fn func(p *model.Project) er
 	before := model.Unmarshal(data)
 	err := fn(e.p)
 	if err == nil {
-		err = settle(e.p, o.relOr(before), whole)
+		err = settleAfter(e.p, o.relOr(before), whole, o.after)
 	}
 	if err != nil {
 		e.p = before
@@ -245,6 +250,15 @@ func (e *Editor) stepped(same bool, pushed *model.Project, o editOpts) {
 	}
 }
 
+// settleAfter — settle и правка after (nil — нет) того же шага.
+func settleAfter(p, before *model.Project, whole bool, after func(*model.Project)) error {
+	err := settle(p, before, whole)
+	if err == nil && after != nil {
+		after(p)
+	}
+	return err
+}
+
 // settle — хвост конвейера правки после fn: p приводится к инвариантам относительно before.
 // Общий для edit и сухого прогона (PreviewVignette): предпросмотр по построению равен итогу
 // правки. Ошибка — правку не применять (SyncGrid без пустого места, сверх запаса знаков).
@@ -254,6 +268,7 @@ func settle(p, before *model.Project, whole bool) error {
 	}
 	p.PruneRefs()
 	if !whole {
+		p.FixLook() // до Normalize: лист, у которого правка сняла всё, кроме номера шага, — пустой
 		p.Normalize(before)
 		p.KeepLayouts(before)
 		// Смена формата страницы: тексты, места и фоны остаются на своих местах страницы.

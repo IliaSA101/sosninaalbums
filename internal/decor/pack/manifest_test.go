@@ -275,3 +275,24 @@ func TestParseManifestPrint(t *testing.T) {
 		t.Errorf("предел типографии %d", KindLimit(KindPrint))
 	}
 }
+
+// Макет альбома (131): .json не больше MaxLook; иное расширение и больше предела — пропуск с причиной.
+func TestParseManifestAlbum(t *testing.T) {
+	m, err := ParseManifest(manifestJSON(t, func(m map[string]any) {
+		m["items"] = append(m["items"].([]any),
+			map[string]any{"file": "looks/wedding.json", "kind": "album", "sha256": sumA, "size": MaxLook},
+			map[string]any{"file": "looks/big.json", "kind": "album", "sha256": sumA, "size": MaxLook + 1},
+			map[string]any{"file": "looks/a.txt", "kind": "album", "sha256": sumA, "size": 10},
+		)
+	}), "0.28.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Items) != 3 || m.Items[2].Kind != KindAlbum || len(m.Skipped) != 2 ||
+		!strings.Contains(m.Skipped[0].Why, "512 КБ") || !strings.Contains(m.Skipped[1].Why, ".json") {
+		t.Fatalf("предметы %+v, пропуски %+v", m.Items, m.Skipped)
+	}
+	if KindLimit(KindAlbum) != 512<<10 {
+		t.Error("предел макета не равен model.MaxLookFile")
+	}
+}

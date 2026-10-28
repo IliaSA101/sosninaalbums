@@ -259,6 +259,25 @@ describe('справочник функций: стражи', () => {
     expect(rowOf('photoFade')).toBe('adjust')
   })
 
+  it('133: «Фоны и стикеры» — размер миниатюр, правый щелчок, порядок каталога (слова окна), поиск находит', () => {
+    const a = ARTICLES.find((x) => x.id === 'decor')
+    for (const w of [
+      '«Размер миниатюр»',
+      'Ctrl+колесо',
+      'щипок тачпада',
+      'Правый щелчок по плитке',
+      '— крупно',
+      '«Поставить»',
+      'Новые наборы стоят наверху каталога',
+    ])
+      expect(a?.how, w).toContain(w)
+    for (const w of ['размер', 'миниатюр', 'щипок', 'крупно', 'просмотр']) expect(a?.words, w).toContain(w)
+    expect(MOUSE_HELP.filter((r) => r.feature === 'decor').map((r) => r.show)).toEqual([
+      'Ctrl+колесо, Alt+колесо, щипок над плитками окон оформления',
+      'Правый щелчок по плитке в окне оформления',
+    ])
+  })
+
   it('067 Ф2: «Наборы библиотеки» — на функции «Фоны и стикеры», вход в «Файл» и в окна', () => {
     const a = ARTICLES.find((x) => x.id === 'library-packs')
     expect(a).toMatchObject({ title: 'Наборы библиотеки', feature: 'decor', menu: ['packs'] })

@@ -382,6 +382,19 @@ func FuzzLoad(f *testing.F) {
 	f.Add([]byte(`{"version":17,"albumBg":null,"spreads":[{"id":"s","noAlbumBg":"да"}]}`))
 	f.Add([]byte(`{"version":17,"albumBg":{"pat":{"kind":"stripes","inks":["#AAAAAA"],"scale":1e308,"fade":2},"photo":"","pages":true},"settings":{"sheet":true}}`))
 	f.Add([]byte(`{"version":18,"app":"0.24.0"}`))
+	// 131 (v19): макет, шаги и заготовки — шаг вне 0…24, без макета, у обложки, у пустого листа;
+	// ключ не hex, набор-устройство, путь записи с «..» и обратной косой, заготовка у пустого текста, не тех типов.
+	f.Add([]byte(`{"version":19,"look":{"key":"my:00112233445566ff","name":"` + strings.Repeat("Классика\n", 20) + `","pack":"wedding-layouts","item":"layouts/classic.json"},
+"spreads":[{"id":"s","photos":[],"lookStep":3,"bgL":"#ffeeee","texts":[{"id":"0a0b0c0d0e01","w":50,"auto":true,"text":"[Имена]","draft":true,"style":{}},
+{"id":"0a0b0c0d0e02","w":50,"text":"","draft":true,"style":{}}]},{"id":"t","lookStep":25,"grid":[{"id":"c0ffee000001","x":1,"y":1,"w":50,"h":50}]},
+{"id":"u","lookStep":-1,"bgR":"#eeeeff"},{"id":"v","lookStep":7}],
+"cover":{"sheet":{"id":"cover","lookStep":2,"bgL":"#ffffff","texts":[{"id":"0a0b0c0d0e03","w":50,"text":"{Имя}","draft":true,"style":{}}]},"layout":"front"}}`))
+	f.Add([]byte(`{"version":19,"look":{"key":"my:00112233445566FF","pack":"nul","item":"../x"},"spreads":[{"id":"s","lookStep":1e308,"bgL":"#ffeeee"}]}`))
+	f.Add([]byte(`{"version":19,"look":{"key":"my:0011223344556677","pack":"com1","item":"a\\b:c"},"spreads":[{"id":"s","lookStep":"3","texts":[{"text":"x","draft":"да"}]}]}`))
+	f.Add([]byte(`{"version":19,"look":null,"spreads":[{"id":"s","lookStep":4,"bgL":"#ffeeee","texts":[{"text":"x","draft":true}]}]}`))
+	f.Add([]byte(`{"version":19,"look":{"key":"my:0011223344556677","item":"` + strings.Repeat("a/", 120) + `"},"spreads":[{"id":"s","lookStep":24,"bgL":"#ffeeee"}]}`))
+	// Аудит G2: место null при годном макете не держит шаг у листа с одним чужим фото.
+	f.Add([]byte(`{"version":19,"look":{"key":"my:0011223344556677"},"spreads":[{"id":"s","photos":["нет"],"grid":[null],"lookStep":3},{"id":"t","bgL":"#ffeeee","lookStep":1}]}`))
 	// Находка fuzz 0.23: блок без ширины со своим шрифтом, которого нет здесь, — FitTexts его не трогает (082-5).
 	f.Add([]byte(`{"spreads":[{"texts":[{"text":"0","style":{"font":"my:0000000000000000"}}]}]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -496,6 +509,7 @@ func FuzzLoad(f *testing.F) {
 			t.Fatalf("источники после записи и чтения:\n%q %+v\nждали\n%q %+v", q.Folders, q.Loose, p.Folders, p.Loose)
 		}
 		fuzzBackdrops(t, p, q)
+		fuzzLook(t, p, q)
 	})
 }
 

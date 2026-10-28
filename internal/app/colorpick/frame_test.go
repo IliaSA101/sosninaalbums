@@ -270,6 +270,47 @@ func TestPickColorAtCoverSpine(t *testing.T) {
 	}
 }
 
+// Обложка: заготовка (131) в кадре пипетки на месте — как на холсте, в выгрузку она не идёт.
+func TestPickColorAtCoverDraft(t *testing.T) {
+	a := colorApp(t, nil, nil)
+	ed := a.editor()
+	if _, err := ed.CreateCover("", nil); err != nil {
+		t.Fatal(err)
+	}
+	v, err := ed.AddText(model.CoverID, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := v.Cover.Sheet.Texts[0].ID
+	st := v.Cover.Sheet.Texts[0].Style
+	st.Size, st.Color = 80, "#000000"
+	ed.SetTextStyle(id, st)
+	ed.SetText(id, "[MMM]", "")
+	ed.SetTextDraft(model.CoverID, id, true)
+	cv := ed.View().Cover
+	if cv == nil || !cv.Sheet.Texts[0].Draft {
+		t.Fatalf("заготовки на обложке нет: %+v", cv)
+	}
+	bg, err := a.PickAt(cv.Sheet.ID, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tb, dark := cv.Sheet.Texts[0], false
+	for i := range 24 {
+		for j := range 24 {
+			x, y := tb.X+tb.W*(float64(i)+0.5)/24, tb.Y+tb.H*(float64(j)+0.5)/24
+			if got, err := a.PickAt(cv.Sheet.ID, x, y); err != nil {
+				t.Fatal(err)
+			} else if got != bg {
+				dark = true
+			}
+		}
+	}
+	if !dark {
+		t.Fatal("заготовка обложки не попала в кадр пипетки")
+	}
+}
+
 // Цена кадра: 16 фото на листе, превью готовы, — не дольше 400 мс (замер 251 мс, спека 109 §4).
 func TestPickColorAtCost(t *testing.T) {
 	photos := map[string]color.RGBA{}

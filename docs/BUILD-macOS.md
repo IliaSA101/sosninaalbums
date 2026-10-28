@@ -19,7 +19,7 @@
 4. Wails той же версии, что в проекте (`go.mod`):
 
    ```bash
-   go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+   go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
    echo 'export PATH="$PATH:$HOME/go/bin"' >> ~/.zshrc && source ~/.zshrc
    wails doctor
    ```

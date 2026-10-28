@@ -409,7 +409,9 @@ func TestCoverSheetFields(t *testing.T) {
 		// Pat* — узоры фона, как фото фона (048 design §1); стикеры — как тексты (048 сц. 15).
 		"Vars": true, "Pat": true, "PatL": true, "PatR": true, "Stickers": true}
 	// NoAlbumBg — фона альбома на обложке нет (098-10).
-	zeroed := map[string]bool{"ID": true, "Layout": true, "Variant": true, "Name": true, "Kind": true, "Vig": true, "NoAlbumBg": true}
+	zeroed := map[string]bool{"ID": true, "Layout": true, "Variant": true, "Name": true, "Kind": true, "Vig": true, "NoAlbumBg": true,
+		// LookStep — шаг макета (131): оформление обложки — шаг 0, номер у неё не хранится.
+		"LookStep": true}
 	set := func(t *testing.T, v reflect.Value, typ reflect.Type) {
 		switch v.Kind() {
 		case reflect.String:

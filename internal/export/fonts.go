@@ -11,7 +11,7 @@ import (
 // unnamedFont — гарнитура без названия (id из шаблона): так же её зовёт карточка текста.
 const unnamedFont = "Свой шрифт"
 
-// PlanFonts — названия своих гарнитур, которых нет на этом компьютере, в непустых текстах и
+// PlanFonts — названия своих гарнитур, которых нет на этом компьютере, в непустых текстах (не заготовках) и
 // подписях листов плана (082): в выгрузке они будут шрифтом Montserrat. По алфавиту, без повторов.
 func PlanFonts(v model.View, pl *Plan) []string {
 	names := map[string]string{}
@@ -21,7 +21,8 @@ func PlanFonts(v model.View, pl *Plan) []string {
 	var out []string
 	use := func(t model.TextView) {
 		id := t.Style.Font
-		if strings.TrimSpace(t.Text) == "" || !text.IsCustomID(id) || text.Available(id) {
+		// заготовка (131) не печатается — шрифт её текста не нужен
+		if t.Draft || strings.TrimSpace(t.Text) == "" || !text.IsCustomID(id) || text.Available(id) {
 			return
 		}
 		name := names[id]

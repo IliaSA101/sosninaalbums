@@ -89,12 +89,16 @@ export interface SpreadMenuSpec {
   insert: boolean // задан onInsert
   vignette: boolean // задан onVignette
   newVignette: boolean // задан onNewVignette (плитка «+»)
+  newLook?: string // имя макета альбома, если стоит и найден (131): «Разворот макета «…»» в меню плитки «+»
   vary: boolean // задан onVary
   varies: boolean
   del: boolean // задан onDelete
   label?: string // свой текст удаления (плитка обложки)
   how: string // способ мышью для разреза и склейки («Alt+щелчок»…)
 }
+
+// 131: «Разворот макета «Светлая свадьба»» — следующий повторяемый шаг перед концом серии.
+export const newLookLabel = (name: string): string => `Разворот макета «${name}»`
 
 // Пункты разреза, склейки и названия (серый несёт причину в title, способ мышью — в hint).
 function stripNodes(o: SpreadMenuSpec): MenuNode[] {
@@ -141,6 +145,7 @@ export function spreadMenu(o: SpreadMenuSpec): MenuNode[] {
     for (const it of insertItems(o.count, o.unit)) out.push({ id: 'insert', arg: it.where, icon: insertIcon(it.where), label: it.label })
   if (o.vignette) out.push(...vignetteNodes(o))
   if (o.newVignette) out.push({ id: 'newVignette', icon: 'vignette', label: 'Новая виньетка' })
+  if (o.newLook) out.push({ id: 'newLook', icon: 'spread-add', label: newLookLabel(o.newLook) })
   if (o.vary && !o.sheet && o.can('variants')) {
     out.push({ id: 'vary', icon: 'shuffle', label: varyLabel(o.count), disabled: !canVary(o.varies, o.sheet, o.can('variants')) })
   }

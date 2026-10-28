@@ -110,3 +110,5 @@ toggleAssoc
 findPhotos
 photoPreview
 toggleFaceGuide
+looks
+saveLook

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { originalUrl, coverGuideUrl, spreadGuideUrl, previewUrl, thumbUrl, warmable, wantPreview } from './media'
+import { lookUrl, originalUrl, coverGuideUrl, spreadGuideUrl, previewUrl, thumbUrl, warmable, wantPreview } from './media'
 
 describe('media', () => {
   it('обычный id', () => {
@@ -44,5 +44,22 @@ describe('превью при многих фото', () => {
   it('соседей с 17+ фото не прогреваем', () => {
     expect(warmable(17)).toBe(false)
     expect(warmable(64)).toBe(false)
+  })
+})
+
+describe('макеты альбома (131)', () => {
+  it('lookUrl: ключ, шаг, ширина, пропорция и фон', () => {
+    expect(lookUrl('0123456789abcdef', { i: 0, px: 256, r: 1 })).toBe('/media/look/0123456789abcdef?v=1&i=0&px=256&r=1&bg=0')
+    expect(lookUrl('0123456789abcdef', { i: 3, px: 512, r: 1.3333333, bg: true })).toBe(
+      '/media/look/0123456789abcdef?v=1&i=3&px=512&r=1.3333&bg=1',
+    )
+    expect(lookUrl('0123456789abcdef', { i: 0, px: 256, r: 1, front: true })).toBe(
+      '/media/look/0123456789abcdef?v=1&i=0&px=256&r=1&bg=0&f=1',
+    )
+  })
+  it('lookUrl: не ключ (не 16 строчных hex) — адреса нет; мусор в числах не попадает в адрес', () => {
+    for (const bad of ['', 'a/../b?x', '0123456789ABCDEF', '0123456789abcde', '0123456789abcdef0', 'my:0123456789abcdef'])
+      expect(lookUrl(bad, { i: 1, px: 256, r: 1 }), bad).toBe('')
+    expect(lookUrl('0123456789abcdef', { i: NaN, px: NaN, r: NaN })).toBe('/media/look/0123456789abcdef?v=1&i=0&px=0&r=1&bg=0')
   })
 })

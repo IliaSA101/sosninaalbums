@@ -9,6 +9,7 @@ import { prefs } from '../../base/prefs/prefs.svelte'
 import { hasSources } from '../../panels/folders/folders'
 import { aboutUi } from '../dialogs/about.svelte'
 import { guide, runStep } from '../guide/guidestate.svelte'
+import type { SpotKey } from '../guidetext/articles'
 import { seek, spot } from '../guide/spotstate.svelte'
 import { activeSteps, enterSteps, hasPhotoOnSpread, resolve, visibleBox, type Box, type TourCtx, type TourFrom } from './tour'
 import { MORE_TOAST, SKIP_TOAST } from './steps'
@@ -42,6 +43,8 @@ class Tour {
   private ownSel: string | null = null
   private sawPhoto = false
   private offered = false
+  // Отмена висящего поиска места: новый place, закрытие и сброс обрывают его (иначе таймеры живут после тура).
+  private ctl: AbortController | null = null
 
   steps = $derived(activeSteps(prefs.can, this.from))
   step = $derived(typeof this.at === 'number' ? this.steps[this.at] : undefined)
@@ -87,9 +90,15 @@ class Tour {
     return out
   }
 
+  private abortSeek() {
+    this.ctl?.abort()
+    this.ctl = null
+  }
+
   // from: 'auto' — первый запуск (пишет pending), 'menu' — «Справка ▸ Первые шаги» и стартовое окно, 'more' — продолжение.
   start(from: TourFrom) {
     if (prefs.startOpen) prefs.closeStart()
+    this.abortSeek()
     this.seq++
     this.from = from
     this.open = true
@@ -154,6 +163,7 @@ class Tour {
     logUi(`тур закрыт: ${reason}, ${via}, шаг ${String(this.at)}, запуск ${this.from}`)
     this.open = false
     this.popup = false
+    this.abortSeek()
     this.seq++
     this.release()
     if (this.ownSel && store.selectedCell === this.ownSel) store.selectedCell = null
@@ -180,9 +190,20 @@ class Tour {
     if (spot.cur?.hold) spot.cancel()
   }
 
+  // Поиск места с отменой: finish, start и следующий place обрывают его через abortSeek.
+  private async find(key: SpotKey) {
+    const ctl = (this.ctl = new AbortController())
+    try {
+      return await seek(key, '', ctl.signal)
+    } finally {
+      if (this.ctl === ctl) this.ctl = null
+    }
+  }
+
   // Найти место шага и взять кольцо в режим hold. Вызывает эффект Tour.svelte при смене key и снятии «скрыто».
   async place() {
     const my = ++this.seq
+    this.abortSeek()
     if (!this.open) return
     if (spot.cur && !spot.cur.hold) {
       this.foreign = true // кольцо «Показать»: ждём его конца (onSpot)
@@ -193,7 +214,7 @@ class Tour {
     if (!res) return this.release()
     await tick()
     if (my !== this.seq || !this.open) return
-    const found = await seek(res.spot)
+    const found = await this.find(res.spot)
     if (my !== this.seq || !this.open) return
     if (spot.cur && !spot.cur.hold) {
       this.foreign = true

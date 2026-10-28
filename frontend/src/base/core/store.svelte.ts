@@ -7,7 +7,7 @@ import { Nav } from './nav.svelte'
 import { jobs } from './jobs.svelte'
 import { AutoRun } from '../auto/autorun.svelte'
 import { SpreadOps } from './spreadops.svelte'
-import { Toasts, stepToast, undoToast, type Toast } from './toasts.svelte'
+import { Toasts, coverLookToast, stepToast, undoToast, type Toast } from './toasts.svelte'
 import type { MarkMap, PickResult } from './hooks'
 import { pickCurrent } from './undo'
 import { deepFreeze } from './viewdelta'
@@ -248,6 +248,10 @@ class Store extends Nav {
     return w ? await w : true
   }
 
+  // Вид заново у Go (GetView), когда его меняет не правка, а внешнее событие: library:changed меняет View.look.found
+  // (набор поставлен или удалён). Тот же вид Go отдаёт с прежним номером — цепочка его пропускает. false — GetView упал.
+  resync = (): Promise<boolean> => this.run(Api.GetView())
+
   // Цепочка видов App (075, viewchain.ts): дубли, дельты, пересинхрон через GetView.
   private readonly chain = new ViewChain({
     current: () => this.view,
@@ -388,6 +392,10 @@ class Store extends Nav {
   // Тосты «Вернуть» / «Убрать имена» — toasts.svelte.ts.
   undoToast(text: string, back?: string) {
     undoToast(this, text, back)
+  }
+  // «Обложка в стиле «…»» с кнопкой «Без оформления».
+  coverLookToast(look: string, photoID: string) {
+    coverLookToast(this, look, photoID)
   }
 
   stepToast(lead: string, notes: string[], named: string[]) {

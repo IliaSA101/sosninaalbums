@@ -147,13 +147,16 @@ func (q QR) PNG() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// qrNamePrefix — начало имени записи кода (isQR узнаёт по нему записи без признака).
+const qrNamePrefix = "QR · "
+
 // qrName — имя плитки: «QR · » и адрес без схемы, всё не длиннее qrNameMax знаков, обрезанное — с «…».
 func qrName(text string) string {
 	addr := text
 	if _, rest, ok := strings.Cut(text, "://"); ok {
 		addr = rest
 	}
-	r := []rune("QR · " + addr)
+	r := []rune(qrNamePrefix + addr)
 	if len(r) > qrNameMax {
 		r = append(r[:qrNameMax-1], '…')
 	}

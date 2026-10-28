@@ -98,15 +98,9 @@
   })
   const mod = isMac() ? '⌘' : 'Ctrl'
   const hint = $derived(keymap.text(hintLine(lib, mod, prefs.can('marks'))))
-  // Колесо: слушатель с passive: false, иначе preventDefault не сработает и Ctrl+колесо масштабирует страницу.
+  // Колесо и щипок Mac (134) вешает лупа: passive: false, иначе Ctrl+колесо масштабирует страницу.
   let back = $state<HTMLElement>()
-  $effect(() => {
-    const node = back
-    if (!node) return
-    const wheel = (e: WheelEvent) => loupe.wheel(e)
-    node.addEventListener('wheel', wheel, { passive: false })
-    return () => node.removeEventListener('wheel', wheel)
-  })
+  $effect(() => (back ? loupe.bind(back) : undefined))
 
   // Снимок пропал из альбома (правка за окном) — закрываем.
   $effect(() => {

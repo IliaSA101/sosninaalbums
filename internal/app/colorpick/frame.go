@@ -153,8 +153,8 @@ func (pk *Picker) PickAt(spreadID string, x, y float64) (string, error) {
 	img, err := pk.pick.get(ctx, k, func() (*image.RGBA, error) {
 		scene := export.SheetScene(p, sv)
 		if v.Cover != nil && v.Cover.Sheet.ID == spreadID {
-			if job := export.NewCoverJob(p, v, 0, 0); job != nil {
-				scene = job.Spread // с плашкой корешка
+			if cs, ok := export.CoverScene(p, v); ok {
+				scene = cs // с плашкой корешка и заготовками (131)
 			}
 		}
 		pk.pickPreviews(ctx, p.Photos, &scene)

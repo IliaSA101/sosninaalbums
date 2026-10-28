@@ -36,6 +36,7 @@ export type ActId =
   | 'uses'
   | 'relink'
   | 'replace'
+  | 'undraft'
   | 'delete'
 
 export interface Act {
@@ -78,6 +79,7 @@ export const ACTS: Record<ActId, Act> = {
   uses: { label: 'Где ещё стоит', icon: 'locate' },
   relink: { label: 'Перепривязать…', icon: 'link' },
   replace: { label: 'Заменить…', icon: 'replace' },
+  undraft: { label: 'Сделать обычной надписью' }, // 131: заготовка макета → обычный текст (Go снимает признак и [ ])
   delete: { label: 'Удалить', icon: 'trash' },
 }
 

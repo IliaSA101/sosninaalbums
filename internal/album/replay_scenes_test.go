@@ -306,6 +306,20 @@ func replayTail(r *replay, ph []model.PhotoInfo, q *model.Project) {
 	// холостой — только rev и ошибка.
 	tp, err := e.SpreadTplOf(sid, model.ScopeRight, true, true)
 	r.read("SpreadTplOf", []any{tp, fmt.Sprint(err)})
+	// Макет из альбома (131 G6b): чтение — rev не меняется; все развороты, повторяемые со второго, с обложкой.
+	var all []string
+	for _, sp := range r.v.Spreads {
+		all = append(all, sp.ID)
+	}
+	rev := e.View().Rev
+	lk, err := e.AlbumTplOf(model.SaveLookOpts{Ids: all, RepFrom: 2, RepTo: len(all) - 1, Places: true, Drafts: true, Cover: true})
+	if e.View().Rev != rev {
+		r.t.Fatalf("AlbumTplOf сменил rev: %d → %d", rev, e.View().Rev)
+	}
+	if err != nil || len(lk.Steps) == 0 {
+		r.t.Fatalf("AlbumTplOf: %v, шагов %d", err, len(lk.Steps))
+	}
+	r.read("AlbumTplOf", []any{lk, fmt.Sprint(err)})
 	libs := map[string]model.PhotoInfo{key: own}
 	tplan, err := e.PlanSpreadTpl(sid, model.ScopeSpread, tp, libs)
 	r.read("PlanSpreadTpl", []any{tplan, fmt.Sprint(err)})

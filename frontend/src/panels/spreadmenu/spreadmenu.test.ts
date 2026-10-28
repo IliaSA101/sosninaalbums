@@ -167,6 +167,13 @@ describe('spreadMenu: дерево для MenuList (108)', () => {
     expect(spreadMenu(base).at(-1)).toMatchObject({ id: 'delete', danger: true })
     expect(labels({ ...none, newVignette: true })).toEqual(['Новая виньетка'])
   })
+  it('«Разворот макета «…»» (131): после «Новой виньетки», только с именем макета', () => {
+    expect(labels({ ...none, newVignette: true, newLook: 'Светлая' })).toEqual(['Новая виньетка', 'Разворот макета «Светлая»'])
+    expect(labels({ ...none, newLook: 'Светлая' })).toEqual(['Разворот макета «Светлая»']) // меню есть и без виньетки
+    expect(labels({ ...none, newVignette: true })).toEqual(['Новая виньетка'])
+    expect(labels({ ...none, newLook: '' })).toEqual([])
+    expect(spreadMenu({ ...base, ...none, newLook: 'С' })[0]).toMatchObject({ id: 'newLook', icon: 'spread-add' })
+  })
   it('виньетка: «Настроить…» перед «Обычный разворот»; arg несёт act', () => {
     const nodes = spreadMenu({ ...base, kind: 'vignette', cut: undefined, join: undefined, insert: false })
     expect(nodes.filter((n) => n.id === 'vignette').map((n) => [n.arg, n.label])).toEqual([

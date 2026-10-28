@@ -53,6 +53,9 @@ func CopyDecor(p *model.Project, srcID, from string, targets []model.GridTarget,
 		}
 		o.flip = mirror && from != model.ScopeSpread && t.Scope != from
 		o.own = s == src
+		if from == model.ScopeSpread && t.Scope == model.ScopeSpread {
+			s.LookStep = src.LookStep // весь лист → весь лист: шаг макета (131), даже если оформление уже то же
+		}
 		if sameDecor(p, s, t.Scope, sd, o) {
 			continue
 		}

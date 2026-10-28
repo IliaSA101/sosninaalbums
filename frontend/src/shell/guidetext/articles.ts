@@ -1,4 +1,4 @@
-// Справочник функций (спека 033): модель статьи и общий список. Тексты — articles-a.ts, articles-e.ts, articles-d.ts (раздел 4), articles-b.ts, articles-b2.ts и articles-c.ts;
+// Справочник функций (спека 033): модель статьи и общий список. Тексты — articles-a.ts, articles-e.ts, articles-d.ts (раздел 4), articles-b.ts, articles-b2.ts, articles-c.ts и articles-f.ts;
 // уровни берутся из FEATURES (levels.ts), здесь они не дублируются. Правка проекта из справочника запрещена.
 import type { Base, FeatureId } from '../../base/prefs/levels'
 import type { SectionName } from '../../base/prefs/view.svelte'
@@ -8,6 +8,7 @@ import { PART_D } from './articles-d'
 import { PART_B } from './articles-b'
 import { PART_B2 } from './articles-b2'
 import { PART_C } from './articles-c'
+import { PART_F } from './articles-f'
 
 export type GroupId = 'start' | 'photos' | 'spreads' | 'onspread' | 'text' | 'cover' | 'view' | 'manual'
 
@@ -74,7 +75,7 @@ export interface Article {
   miss?: { spot?: `ui:${string}`; hint: string }
 }
 
-export const ARTICLES: Article[] = [...PART_A, ...PART_E, ...PART_D, ...PART_B, ...PART_B2, ...PART_C]
+export const ARTICLES: Article[] = [...PART_A, ...PART_E, ...PART_D, ...PART_B, ...PART_B2, ...PART_C, ...PART_F]
 
 // Места статьи в порядке показа: spots, иначе единственное spot с кнопкой «Показать»; без обоих (жест, клавиша) — пусто.
 export const placesOf = (a: Article): Place[] => a.spots ?? (a.spot ? [{ label: 'Показать', spot: a.spot }] : [])

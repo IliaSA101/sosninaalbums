@@ -124,7 +124,9 @@ func TestSeatSitesGuard(t *testing.T) {
 		// Копии мест — без табличек.
 		"model/places.go ClonePlace": "TestClonePlaceDropsPerson",
 		"grid/copy.go DuplicateGrid": "TestClonePlaceDropsPerson",
-		"grid/ops.go splitPlaces":    "TestClonePlaceDropsPerson",
+		// Шаг макета без мест снимает места вместе с табличками имён (разворот заменяется целиком).
+		"grid/look.go PutLookStep": "TestSwitchLookAsksTouched/шаг_без_мест_снимает_места (табличка имени -> Touched > 0, места уходят)",
+		"grid/ops.go splitPlaces":  "TestClonePlaceDropsPerson",
 		// Вставка из буфера (099): табличка только у вырезанного и вставленного места.
 		"grid/paste.go pastePlaces": "TestPasteMovedPhotoRestoresRef",
 		// Новые пустые места и «Авто»: табличек ещё нет.

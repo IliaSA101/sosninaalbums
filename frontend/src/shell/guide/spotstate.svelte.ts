@@ -10,13 +10,20 @@ import { modes } from '../../base/prefs/view.svelte'
 export const reducedMotion = (): boolean => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // Кадр или 50 мс: в фоновой вкладке и в окне без кадров rAF стоит, а ждать результата поиска надо по времени.
-const frame = () =>
+// signal — отмена: ожидание кончается сразу, таймер и кадр снимаются (тур закрыт — поиск не живёт дальше).
+const frame = (signal?: AbortSignal) =>
   new Promise<void>((res) => {
-    const t = setTimeout(res, 50)
-    requestAnimationFrame(() => {
+    if (signal?.aborted) return res()
+    let raf = 0
+    const done = () => {
       clearTimeout(t)
+      cancelAnimationFrame(raf)
+      signal?.removeEventListener('abort', done)
       res()
-    })
+    }
+    const t = setTimeout(done, 50)
+    raf = requestAnimationFrame(done)
+    signal?.addEventListener('abort', done)
   })
 
 // Подходит ли элемент: виден, не нулевой, не под inert.
@@ -47,13 +54,15 @@ export function unfoldFor(selector: string): boolean {
 // Ищем элементы по селектору до ms миллисекунд: панель деталей выезжает, ряд доезжает, меню рисуется после tick.
 // unfold — раскрывать свёрнутые группы карточек: зовём в каждом круге, не один раз до поиска, чтобы не зависеть от того,
 // успел ли элемент смонтироваться. unfolded (если дан) получает true, когда что-то раскрыто.
-export async function locate(selector: string, ms = 600, unfold?: { done: boolean }): Promise<HTMLElement[]> {
+// signal — отмена: поиск возвращает [] и больше не трогает документ.
+export async function locate(selector: string, ms = 600, unfold?: { done: boolean }, signal?: AbortSignal): Promise<HTMLElement[]> {
   const end = performance.now() + ms
   for (;;) {
+    if (signal?.aborted) return []
     if (unfold && unfoldFor(selector)) unfold.done = true
     const found = [...document.querySelectorAll<HTMLElement>(selector)].filter(usable)
     if (found.length > 0 || performance.now() >= end) return found
-    await frame()
+    await frame(signal)
   }
 }
 
@@ -93,6 +102,7 @@ function follow(el: HTMLElement): void {
   const stop = () => {
     cancelAnimationFrame(raf)
     window.removeEventListener('wheel', stop, true)
+    window.removeEventListener('gesturestart', stop, true)
     window.removeEventListener('pointerdown', stop, true)
   }
   const step = () => {
@@ -103,25 +113,29 @@ function follow(el: HTMLElement): void {
   }
   modes.reveal = null
   window.addEventListener('wheel', stop, { capture: true, passive: true })
+  window.addEventListener('gesturestart', stop, { capture: true, passive: true }) // щипок Mac (134) — тоже ручное движение
   window.addEventListener('pointerdown', stop, true)
   raf = requestAnimationFrame(step)
 }
 
 // Основное место, иначе «⋯» полосы фото (кнопка ушла в меню). Общий поиск «Показать» справочника и тура (113):
 // hint — подпись, когда мигает не сама функция (planHint — подсказка плана для найденного основного места).
-export async function seek(key: SpotKey, planHint = ''): Promise<{ el: HTMLElement; hint: string } | null> {
+// signal — отмена (тур закрыт или ищет заново): результат null, документ после отмены не читается.
+export async function seek(key: SpotKey, planHint = '', signal?: AbortSignal): Promise<{ el: HTMLElement; hint: string } | null> {
   const id = spotId(key)
   const isMenu = key.startsWith('menu:')
   const sel = isMenu ? `[role="menu"] [data-item="${id}"]` : `[data-guide~="${id}"]`
+  if (signal?.aborted) return null
   if (!isMenu) spot.reveal(sel) // кнопки, видимые только при наведении, раскрываются до поиска
   const unfold = { done: false }
-  let els = await locate(sel, 600, isMenu ? undefined : unfold)
+  let els = await locate(sel, 600, isMenu ? undefined : unfold, signal)
   let hint = planHint
   if (els.length === 0 && !isMenu) {
     // Кнопка ушла в «⋯» полосы фото: мигает «⋯».
-    els = await locate(`[data-guide-hold~="${id}"]`, 100)
+    els = await locate(`[data-guide-hold~="${id}"]`, 100, undefined, signal)
     hint = els.length > 0 ? 'В меню «⋯»' : ''
   }
+  if (signal?.aborted) return null
   const el = choose(els)
   // Подводим и без раскрытия группы: панель деталей и раздел «Настроек» могли открыться этим же «Показать».
   if (el && !isMenu) follow(el)

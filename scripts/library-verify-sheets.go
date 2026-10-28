@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/gen"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
@@ -302,8 +303,11 @@ func unevenAlong(src *image.NRGBA, rc image.Rectangle, rows bool) int {
 // previewSheet — общий лист проверенных наборов: фоны, стикеры, рамки (место 20×30), развороты
 // (страница 30×30), строками по виду; плиток каждого вида не больше maxTiles.
 func (v *verifier) previewSheet(path string) {
-	var bgs, sts, frs, tps []image.Image
+	var bgs, sts, frs, tps, lks []image.Image
 	for _, info := range v.done {
+		if lookRows != nil {
+			lks = append(lks, lookRows(v, info)...)
+		}
 		for _, it := range v.tiles(decor.KindBg, info) {
 			bgs = appendTile(bgs, v.fileTile(it.ID, false))
 		}
@@ -321,7 +325,7 @@ func (v *verifier) previewSheet(path string) {
 			tps = appendTile(tps, v.tplTile(it))
 		}
 	}
-	if len(bgs)+len(sts)+len(frs)+len(tps) == 0 {
+	if len(bgs)+len(sts)+len(frs)+len(tps)+len(lks) == 0 {
 		v.failf("лист %s: нет ни одной плитки", filepath.Base(path))
 		return
 	}
@@ -331,6 +335,7 @@ func (v *verifier) previewSheet(path string) {
 			rows = append(rows, flow(sec, flowW, 8))
 		}
 	}
+	rows = append(rows, lks...)
 	if err := imaging.Save(stack(rows, 16), path); err != nil {
 		v.failf("лист %s: %v", filepath.Base(path), err)
 	}
@@ -370,6 +375,11 @@ func (v *verifier) tplTile(it decor.Item) image.Image {
 	if err != nil {
 		return nil
 	}
+	return v.tileOf(it.Name, t)
+}
+
+// tileOf — плитка готового шаблона t (страница 30×30); name — для сообщения об ошибке.
+func (v *verifier) tileOf(name string, t model.SpreadTpl) image.Image {
 	libs, _ := v.libsOf(t)
 	sz := pageSizes[1]
 	p, view, err := album.PreviewTpl(t, sz.w*float64(max(t.Pages, 1)), sz.h, libs)
@@ -383,7 +393,7 @@ func (v *verifier) tplTile(it decor.Item) image.Image {
 	}
 	img, err := tplImage(t, p, view, int(float64(rowH)*area/sv.H))
 	if err != nil {
-		v.failf("лист: плитка «%s»: %v", it.Name, err)
+		v.failf("лист: плитка «%s»: %v", name, err)
 		return nil
 	}
 	return imaging.Resize(img, 0, rowH, imaging.Lanczos)
@@ -436,7 +446,8 @@ func pullTpls(w io.Writer, lib, packID, out string) error {
 		return fmt.Errorf("набора %q нет в библиотеке", packID)
 	}
 	keys := map[string]bool{}
-	for _, kind := range []string{decor.KindBg, decor.KindSticker} {
+	// Рамки — тоже: шаблон 0.28 ссылается на них из borders (131).
+	for _, kind := range []string{decor.KindBg, decor.KindSticker, decor.KindFrame} {
 		cat, err := s.Catalog(kind, nil, 300, 300)
 		if err != nil {
 			return err

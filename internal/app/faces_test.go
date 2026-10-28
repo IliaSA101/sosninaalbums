@@ -63,7 +63,7 @@ func newFacesEnv(t *testing.T, n int) *facesEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.BeforeRemove(t, cache.Close)
+	// Кэш закрывает closeBackground из newApp (a.cache): отдельный хук закрыл бы его при идущем фоне.
 	e.a.cache = cache
 	e.a.emit = func(name string, data ...any) {
 		if name == "faces:progress" {

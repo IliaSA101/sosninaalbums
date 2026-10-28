@@ -124,6 +124,9 @@ func copyGrid(p *model.Project, srcID, from string, targets []model.GridTarget, 
 			plan.Texts += n
 			plan.Stickers += k
 			putOrder(s, old, seq)
+			if from == model.ScopeSpread && t.Scope == model.ScopeSpread {
+				s.LookStep = src.LookStep // весь лист → весь лист: шаг макета (131) вместе с оформлением
+			}
 		}
 	}
 	for _, s := range p.Spreads {
@@ -259,6 +262,16 @@ func putDesign(p *model.Project, s *model.Spread, scope string, sd srcDesign, o 
 	if len(s.Stickers) == 0 {
 		s.Stickers = nil
 	}
+	putBg(s, scope, m, o)
+	if len(s.Texts) == 0 {
+		s.Texts = nil
+	}
+	return n, k, nil
+}
+
+// putBg пишет фон области scope листа s из m: цвет, узор, фото фона (взаимоисключающие слоты
+// сбрасываются). Общее тело putDesign и ApplyLookBg (макет, «Фоны по серии»).
+func putBg(s *model.Spread, scope string, m srcDesign, o putOpt) {
 	switch scope {
 	case model.ScopeLeft:
 		s.BgL, s.BgPhotoL = m.bgL, m.photoL
@@ -277,10 +290,9 @@ func putDesign(p *model.Project, s *model.Spread, scope string, sd srcDesign, o 
 		// листа взаимоисключающие.
 		s.BgPhoto = nil
 	}
-	if len(s.Texts) == 0 {
-		s.Texts = nil
+	if s.BgPhoto != nil {
+		s.BgPhotoS = nil // фото корешка исключено фоном всего листа (backdrop.go)
 	}
-	return n, k, nil
 }
 
 // placed — оформление sd в координатах области scope листа s (ID — источника): сдвиг на
@@ -351,6 +363,7 @@ func DuplicateGrid(p *model.Project, src string, count int, design bool) error {
 			newID[pl.ID] = ns.Grid[j].ID
 		}
 		if design {
+			ns.LookStep = s.LookStep // шаг макета (131) едет с оформлением листа
 			ns.BgL, ns.BgR = s.BgL, s.BgR
 			ns.BgPhoto, ns.BgPhotoL, ns.BgPhotoR = s.BgPhoto.Clone(), s.BgPhotoL.Clone(), s.BgPhotoR.Clone()
 			ns.Pat, ns.PatL, ns.PatR = s.Pat.Clone(), s.PatL.Clone(), s.PatR.Clone()

@@ -33,7 +33,7 @@ var themeList = []struct{ id, name string }{
 
 // isTheme — тема, в которой может лежать элемент (не выборка).
 func isTheme(id string) bool {
-	if id == ThemeRecent || id == ThemeAll || id == ThemeBrand {
+	if id == ThemeRecent || id == ThemeAll || id == ThemeBrand || id == ThemeNew {
 		return false
 	}
 	return slices.ContainsFunc(themeList, func(t struct{ id, name string }) bool { return t.id == id })
@@ -58,6 +58,20 @@ type Item struct {
 	Pages  int    `json:"pages,omitempty"`
 	Places int    `json:"places,omitempty"`
 	Pack   string `json:"pack,omitempty"` // название набора (067): подсказка «Набор «…»»
+	// Steps, From, Vig, Cover — у макета альбома (131): разворотов и мест при n по умолчанию (с
+	// обложкой), есть ли шаг-виньетка и оформление обложки.
+	Steps int  `json:"steps,omitempty"`
+	From  int  `json:"from,omitempty"`
+	Vig   bool `json:"vig,omitempty"`
+	Cover bool `json:"cover,omitempty"`
+	// PackID — чей предмет (133): BuiltinPack | id набора; своё — "". Peek — крупная картинка без px
+	// (/media/lib/p/…) у своего и набора; у встроенного и шаблона разворота — "": UI берёт URL с px.
+	PackID string `json:"packId,omitempty"`
+	Peek   string `json:"peek,omitempty"`
+	// Form, Style — у стикера набора и встроенного (133, browse.go): "corner" | "divider" | "" (стикер);
+	// стиль — у обычного стикера, например «Значки». Свои, фоны и рамочки — без них.
+	Form  string `json:"form,omitempty"`
+	Style string `json:"style,omitempty"`
 }
 
 // Theme — строка списка тем слева.
@@ -73,6 +87,7 @@ type Catalog struct {
 	Themes   []Theme  `json:"themes"`
 	Items    []Item   `json:"items"`
 	Recent   []string `json:"recent"` // ID плиток, новые первыми
+	New      []string `json:"new"`    // ID плиток «Новые» в порядке каталога (133); пусто — []
 	ReadOnly bool     `json:"readOnly"`
 }
 
@@ -83,7 +98,7 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 		return Catalog{}, ErrKind
 	}
 	w, h = tileSize(w, h)
-	cat := Catalog{Kind: kind, Items: []Item{}, Recent: []string{}}
+	cat := Catalog{Kind: kind, Items: []Item{}, Recent: []string{}, New: []string{}}
 	for _, p := range presetsOf(kind) {
 		if gen.Known(p.spec.Kind) { // текстура без файла в сборке — нет плитки (решение №148)
 			cat.Items = append(cat.Items, p.item(w, h))
@@ -91,6 +106,10 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 	}
 	cat.Items = append(cat.Items, spreadBuiltins(kind)...)
 	cat.Items = append(cat.Items, frameBuiltins(kind)...)
+	for i := range cat.Items {
+		cat.Items[i].PackID = BuiltinPack
+		markForm(&cat.Items[i], kind)
+	}
 	s.mu.RLock()
 	cat.ReadOnly = s.readOnly
 	// Копии записей: ✎ и × меняют их под mu, пока каталог собирается.
@@ -101,8 +120,16 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 		}
 	}
 	packs := s.packItems(kind)
+	var fresh map[string]bool
+	// «Новые» — не у окна макетов (131, 0.28-133-67); часы — один вызов на каталог и только при наборах.
+	if len(s.packs) > 0 && kind != KindAlbum {
+		fresh = s.freshPacks(nowMs())
+	}
 	s.mu.RUnlock()
-	cat.Items = append(cat.Items, s.libItems(kind, packs, own)...)
+	fromPacks, mine := s.libItems(kind, packs, own)
+	// Порядок 133 §3: наборы (новый выше), встроенные, свои.
+	cat.Items = slices.Concat(fromPacks, cat.Items, mine)
+	cat.New = newIDs(cat.Items, fresh)
 	has := make(map[string]bool, len(cat.Items))
 	count := map[string]int{ThemeAll: len(cat.Items)}
 	for _, it := range cat.Items {
@@ -115,6 +142,9 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 		}
 	}
 	count[ThemeRecent] = len(cat.Recent)
+	if len(cat.New) > 0 { // «Новые» — первой строкой и только при предметах
+		cat.Themes = append(cat.Themes, Theme{ID: ThemeNew, Name: "Новые", Count: len(cat.New)})
+	}
 	for _, t := range themeList {
 		// Пустые темы скрыты; «Все» и «Мои» (подсказка «Загрузите свои…») есть всегда.
 		if count[t.id] > 0 || t.id == ThemeAll || t.id == ThemeMine {
@@ -124,10 +154,10 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 	return cat, nil
 }
 
-// libItems — плитки после встроенных: наборы (design §4.4; тот же ключ у своего — плитка
-// своего: у неё ✎ и ×), затем свои новыми первыми, как «Мои шаблоны». Шаблон разворота, файл
-// которого не разбирается, — без плитки.
-func (s *Store) libItems(kind string, packs []Item, own []entry) []Item {
+// libItems — плитки наборов (design §4.4; тот же ключ у своего — плитка своего: у неё ✎ и ×)
+// и отдельно свои новыми первыми, как «Мои шаблоны». Шаблон разворота, файл которого не
+// разбирается, — без плитки.
+func (s *Store) libItems(kind string, packs []Item, own []entry) (fromPacks, mine []Item) {
 	if kind == KindSpread {
 		keys := make([]string, 0, len(packs)+len(own))
 		for _, it := range packs {
@@ -138,15 +168,16 @@ func (s *Store) libItems(kind string, packs []Item, own []entry) []Item {
 		}
 		s.warmTpl(keys)
 	}
-	out := make([]Item, 0, len(packs)+len(own))
+	fromPacks = make([]Item, 0, len(packs))
+	mine = make([]Item, 0, len(own))
 	for _, it := range packs {
 		if slices.ContainsFunc(own, func(e entry) bool { return e.Key == it.ID }) {
 			continue
 		}
-		if kind == KindSpread && !s.tplMeta(&it) {
+		if !s.meta(kind, &it) {
 			continue
 		}
-		out = append(out, it)
+		fromPacks = append(fromPacks, it)
 	}
 	// Ничья по Added (два шаблона в одну мс): новее тот, что сохранён позже. own идёт в порядке
 	// хранения, поэтому разворот перед устойчивой сортировкой — порядок не случаен.
@@ -154,12 +185,24 @@ func (s *Store) libItems(kind string, packs []Item, own []entry) []Item {
 	slices.SortStableFunc(own, func(a, b entry) int { return cmp.Compare(b.Added, a.Added) })
 	for i := range own {
 		it := own[i].item()
-		if kind == KindSpread && !s.tplMeta(&it) {
+		if !s.meta(kind, &it) {
 			continue
 		}
-		out = append(out, it)
+		mine = append(mine, it)
 	}
-	return out
+	return fromPacks, mine
+}
+
+// meta — сведения плитки шаблона или макета из файла; false — файл не разбирается, плитки нет.
+// Картинкам сведения не нужны.
+func (s *Store) meta(kind string, it *Item) bool {
+	switch kind {
+	case KindSpread:
+		return s.tplMeta(it)
+	case KindAlbum:
+		return s.lookMeta(it)
+	}
+	return true
 }
 
 // tileSize — мм плитки узора: лист, а без него (или с мусором) — квадрат 300 мм.
@@ -174,8 +217,13 @@ func tileSize(w, h float64) (float64, float64) {
 // item — плитка своего: превью через кэш миниатюр по ключу (/media/lib/t).
 func (e *entry) item() Item {
 	it := Item{ID: e.Key, Theme: e.Theme, Name: e.Name, URL: LibURL(e.Key, false), Own: true, W: e.W, H: e.H}
-	if e.Kind == KindSpread { // плитку рисует Go по шаблону (/media/tpl), не кэш миниатюр
+	switch e.Kind { // плитку шаблона и макета рисует Go (/media/tpl, /media/look), не кэш миниатюр
+	case KindSpread:
 		it.URL = TplURL(e.Key)
+	case KindAlbum:
+		it.URL = LookURL(e.Key)
+	case KindBg, KindSticker, KindFrame: // peek — только у картинок: у JSON макета /media/lib/p дал бы 404
+		it.Peek = LibURL(e.Key, true)
 	}
 	if e.W > 0 && e.H > 0 {
 		it.Aspect = float64(e.W) / float64(e.H)

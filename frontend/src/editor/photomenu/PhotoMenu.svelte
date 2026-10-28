@@ -2,7 +2,7 @@
   import { store, Api } from '../../base/core/store.svelte'
   import { placesel } from '../places/placesel.svelte'
   import { edit } from '../text/edit.svelte'
-  import { photoui } from './photoui.svelte'
+  import { photoui } from '../photo/photoui.svelte'
   import { straighten } from '../tilt/straighten.svelte'
   import { tiltmode } from '../tilt/tiltmode.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
@@ -14,7 +14,7 @@
   import { relinkFolder } from '../../panels/library/relink'
   import { decor } from '../../panels/decor/decor.svelte'
   import { sticker } from '../sticker/sticker.svelte'
-  import { copyNames, reveal } from './fileact'
+  import { copyNames, reveal } from '../photo/fileact'
   import { scopeLabel, scopesFor } from '../backdrop/backdrop'
   import { setBackdrop } from '../backdrop/backdropact'
   import { coverLabel, coverScopes } from '../cover/cover'
@@ -35,7 +35,7 @@
   const scopes = $derived(cover ? coverScopes(store.cover) : scopesFor(sheet))
   const label = (sc: BackdropScope) => (cover ? coverLabel(store.cover, sc) : scopeLabel(sc, sheet))
 
-  // Меню правого щелчка по фото (спека 008, 108): своё, работает и в браузере. Дерево пунктов — photo/photomenu.ts,
+  // Меню правого щелчка по фото (спека 008, 108): своё, работает и в браузере. Дерево пунктов — photomenu/photomenu.ts,
   // список с подменю сбоку и клавишами — base/ui/MenuList. Esc и щелчок мимо закрывают.
   // Выделены одни стикеры (048) — меню стикера: «Копировать», «Вставить», «Заменить…», «Зеркало», «Слой», «Удалить».
   // Одни надписи (099) — своё меню по его образцу; пустой лист (099) — только «Вставить».
@@ -46,6 +46,13 @@
         ? 1
         : 0),
   )
+  // Одна выделенная надпись-заготовка (131): ей нужен пункт «Сделать обычной надписью».
+  const draftText = $derived.by(() => {
+    if (texts !== 1 || placesel.selected.length > 0) return undefined
+    const id = placesel.texts[0] ?? (edit.sel?.kind === 'text' ? edit.sel.id : '')
+    const t = store.spread?.texts.find((x) => x.id === id)
+    return t?.draft && store.spread ? { spread: store.spread.id, id } : undefined
+  })
   // «Где ещё стоит ▸» (спека 106, 108): одно фото на месте; вхождения от Go грузятся при открытии меню, текущее место
   // в списке не показываем («ещё» — кроме этого).
   const useList = new UseList()
@@ -72,6 +79,7 @@
             }),
             scopes: scopes.map((scope) => ({ scope, label: label(scope) })),
             usesSub: useRows(useLines, 'Больше нигде не стоит'),
+            draft: !!draftText,
           },
           prefs.can,
           keymap.hint.bind(keymap),
@@ -151,6 +159,7 @@
     layer: (_first, _at, arg) => placesel.layer(arg as LayerOp),
     backdrop: (first, _at, arg) => toBackdrop(first, arg),
     replace: replaceSticker,
+    undraft: () => draftText && void edit.undraft(draftText.spread, draftText.id),
     // Одиночная надпись (099) живёт в edit.sel, не в placesel: удаляется своим путём (как Del).
     delete: () => (texts === 1 && placesel.texts.length === 0 ? edit.removeSelected() : placesel.deleteSelected()),
   }

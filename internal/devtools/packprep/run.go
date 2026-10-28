@@ -140,6 +140,7 @@ func (r *runner) finish() error {
 	arrange(r.outs)
 	r.rep.Items = r.outs
 	markSimilar(r.outs)
+	markForm(r.outs)
 	r.rep.budget()
 	r.rep.collect()
 	if len(r.outs) == 0 {

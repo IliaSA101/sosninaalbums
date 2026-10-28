@@ -233,13 +233,14 @@ func newFrameView(img layout.Rect, f model.Frame) model.FrameView {
 }
 
 // textViews — блоки разворота с рамкой и строками (переносы — из кэша text); поля
-// подставлены (030), исходник — в Src.
+// подставлены (030), исходник — в Src. Пустые поля заготовки (131) не в Unfilled: она не
+// печатается, о ней свой вопрос (View.Drafts).
 func textViews(f *fields, s *model.Spread) []model.TextView {
 	out := make([]model.TextView, len(s.Texts))
 	for i, t := range s.Texts {
-		shown, src := f.text(t.Text)
+		shown, src := f.text(t.Text, !t.Draft)
 		out[i] = placeText(t.ID, shown, t.Style, t.X, t.Y, t.W)
-		out[i].Rot, out[i].Auto, out[i].Src = t.Rot, t.Auto, src
+		out[i].Rot, out[i].Auto, out[i].Src, out[i].Draft = t.Rot, t.Auto, src, t.Draft
 	}
 	return out
 }

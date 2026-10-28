@@ -47,6 +47,10 @@ export function ApplyCoverPreset(arg1:string):Promise<model.View>;
 
 export function ApplyGrid(arg1:string,arg2:string,arg3:string,arg4:Array<model.Box>):Promise<app.GridResult>;
 
+export function ApplyLook(arg1:string,arg2:model.LookOpts):Promise<app.LookResult>;
+
+export function ApplyLookStep(arg1:string,arg2:string,arg3:number):Promise<app.TplResult>;
+
 export function ApplyPrint(arg1:model.Settings,arg2:string):Promise<model.View>;
 
 export function ApplySpreadTpl(arg1:string,arg2:string,arg3:string):Promise<app.TplResult>;
@@ -124,6 +128,8 @@ export function CoverPresets():Promise<Array<model.CoverPreset>>;
 export function CoverSpineText():Promise<model.View>;
 
 export function CreateCover(arg1:string,arg2:string):Promise<model.View>;
+
+export function CreateCoverLook(arg1:string,arg2:string):Promise<app.CoverResult>;
 
 export function CropsToKeep(arg1:string):Promise<number>;
 
@@ -217,6 +223,10 @@ export function LibraryPacks():Promise<app.PackList>;
 
 export function LogUI(arg1:string):Promise<void>;
 
+export function LookCount(arg1:string,arg2:number,arg3:number):Promise<app.LookCount>;
+
+export function LookInfo(arg1:string):Promise<app.LookInfo>;
+
 export function MarginNote(arg1:number,arg2:number):Promise<string>;
 
 export function Marks():Promise<Record<string, model.MarkView>>;
@@ -238,6 +248,8 @@ export function MoveSpread(arg1:string,arg2:number):Promise<model.View>;
 export function MyColors():Promise<Array<string>>;
 
 export function NewBin(arg1:string,arg2:Array<string>):Promise<model.View>;
+
+export function NewLookSpread():Promise<model.View>;
 
 export function NewProject(arg1:string):Promise<app.State>;
 
@@ -291,7 +303,13 @@ export function PlanCopyDecor(arg1:string,arg2:string,arg3:Array<model.GridTarge
 
 export function PlanCopyGrid(arg1:string,arg2:string,arg3:Array<model.GridTarget>,arg4:boolean,arg5:boolean):Promise<model.GridPlan>;
 
+export function PlanLook(arg1:string,arg2:model.LookOpts):Promise<model.LookPlan>;
+
+export function PlanLookStep(arg1:string,arg2:string,arg3:number):Promise<model.GridPlan>;
+
 export function PlanRemovePack(arg1:string):Promise<app.PackRemove>;
+
+export function PlanSaveLook(arg1:model.SaveLookOpts):Promise<app.LookPlanSave>;
 
 export function PlanSpreadTpl(arg1:string,arg2:string,arg3:string):Promise<model.GridPlan>;
 
@@ -362,6 +380,8 @@ export function RestoreHotkeys(arg1:Record<string, Array<string>>):Promise<keyma
 export function RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>;
 
 export function SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function SaveLook(arg1:model.SaveLookOpts):Promise<app.DecorItem>;
 
 export function SavePrintProfile(arg1:app.PrintEdit,arg2:boolean):Promise<app.PrintSaved>;
 
@@ -476,6 +496,8 @@ export function SetTextAngle(arg1:string,arg2:number):Promise<model.View>;
 export function SetTextAuto(arg1:string):Promise<model.View>;
 
 export function SetTextBox(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>;
+
+export function SetTextDraft(arg1:string,arg2:string,arg3:boolean):Promise<model.View>;
 
 export function SetTextScale(arg1:string,arg2:number,arg3:number,arg4:number):Promise<model.View>;
 

@@ -27,6 +27,10 @@ export interface DecorItem {
   pages?: number // 067, только вид spread: 1 — страница, 2 — весь разворот
   places?: number // 067: сколько мест для фото в шаблоне
   pack?: string // 067: название набора, из которого плитка
+  packId?: string // 133: 'sa:builtin' | id набора; нет — своё
+  peek?: string // 133: крупная картинка без px (/media/lib/p/…) у своих и наборов; нет — url + px
+  form?: string // 133, только стикеры: 'corner' | 'divider'; нет — обычный стикер (в биндинге просто string)
+  style?: string // 133, только стикер без form: стиль из имени «Значки: Колокольчик» → «Значки»
 }
 export interface DecorTheme {
   id: string
@@ -38,6 +42,7 @@ export interface DecorCatalog {
   themes: DecorTheme[]
   items: DecorItem[]
   recent: string[]
+  new: string[] // 133: ID плиток строки «Новые» в порядке каталога; пусто — []
   readOnly: boolean
 }
 export interface DecorSkip {
@@ -63,38 +68,67 @@ export const DECOR_TITLE: Record<DecorKind, string> = { bg: 'Фоны', sticker:
 export const NOUN: Record<DecorKind, string> = { bg: 'фон', sticker: 'стикер', spread: 'разворот', frame: 'рамочку' }
 export const NAME_MAX = 60
 export const RECENT = 'recent'
+export const NEW = 'new' // 133: «Новые» — выборка, как «Недавние»
 export const ALL = 'all'
 export const MINE = 'mine'
 
-// Тема при открытии: тема только что поставленного набора (073-1, fresh — названия наборов; первая плитка каталога из них),
-// иначе прежний выбор, если он ещё есть; иначе «Недавние» (если не пусты), иначе «Все».
-export function firstTheme(cat: Pick<DecorCatalog, 'themes' | 'items'> | null, prev = '', fresh?: ReadonlySet<string>): string {
+// Выборка — не тема предметов, а отбор: «Все», «Недавние», «Новые» (themeItems ведёт их особо).
+export const isSelection = (id: string): boolean => id === ALL || id === RECENT || id === NEW
+// Куда своё не кладётся: выборки и «Фирменные» (зеркало Go isTheme); импорт и сохранение уходят в «Мои».
+export const noOwn = (id: string): boolean => isSelection(id) || id === 'brand'
+
+type SourceCat = Pick<DecorCatalog, 'themes' | 'items'> & { new?: string[] }
+
+// Куда прыгнуть из-за свежего набора (fresh — названия наборов сеанса): «Новые», если там плитка такого набора (133),
+// иначе тема первой его плитки (073-1); '' — свежего в этом каталоге нет. Так обновление набора при чужих свежих
+// не уводит на «Новые» с чужим содержимым.
+export function freshSource(cat: SourceCat | null, fresh?: ReadonlySet<string>): string {
+  if (!cat || !fresh?.size) return ''
+  const has = (id: string) => cat.themes.some((t) => t.id === id)
+  const items = cat.items ?? []
+  if (has(NEW)) {
+    const news = new Set(cat.new ?? [])
+    if (items.some((i) => news.has(i.id) && i.pack && fresh.has(i.pack))) return NEW
+  }
+  return items.find((i) => i.pack && fresh.has(i.pack) && has(i.theme))?.theme ?? ''
+}
+
+// Источник при открытии: свежий набор (freshSource), иначе прежний выбор, если он ещё есть; иначе «Недавние» (если не пусты), иначе «Все».
+export function firstSource(cat: SourceCat | null, prev = '', fresh?: ReadonlySet<string>): string {
   if (!cat) return ALL
   const has = (id: string) => cat.themes.some((t) => t.id === id)
-  if (fresh?.size) {
-    const it = (cat.items ?? []).find((i) => i.pack && fresh.has(i.pack) && has(i.theme))
-    if (it) return it.theme
-  }
+  const hot = freshSource(cat, fresh)
+  if (hot) return hot
   if (prev && has(prev)) return prev
   return cat.themes.find((t) => t.id === RECENT && t.count > 0) ? RECENT : ALL
 }
 
-export const sideItems = (cat: Pick<DecorCatalog, 'themes'> | null): SideItem<string>[] =>
-  (cat?.themes ?? []).map((t) => ({ id: t.id, label: t.name, count: t.count }))
+// Прежнее имя: окно макетов (shell/looks, 131) зовёт его, «Новых» у макетов нет — Go их не отдаёт.
+export const firstTheme = firstSource
 
-// Плитки темы. «Недавние» — в порядке поставленных (новые первыми), «Все» — каталог целиком.
-export function themeItems(cat: DecorCatalog | null, theme: string): DecorItem[] {
+// Подсказки строк-выборок слева (Т5)
+export const SIDE_TIPS: Readonly<Record<string, string>> = {
+  [NEW]: 'Из наборов, поставленных за последние 30 дней (кроме первой установки библиотеки)',
+  [RECENT]: 'Что вы недавно ставили',
+}
+
+export const sideItems = (cat: Pick<DecorCatalog, 'themes'> | null): SideItem<string>[] =>
+  (cat?.themes ?? []).map((t) => ({ id: t.id, label: t.name, count: t.count, title: SIDE_TIPS[t.id] }))
+
+// Плитки темы. «Недавние» — в порядке поставленных (новые первыми), «Новые» — в порядке каталога (новый набор выше),
+// «Все» — каталог целиком.
+export function themeItems<T extends DecorItem>(cat: { items: T[]; recent: string[]; new?: string[] } | null, theme: string): T[] {
   if (!cat) return []
   if (theme === ALL) return cat.items
-  if (theme === RECENT) {
+  if (theme === RECENT || theme === NEW) {
     const by = new Map(cat.items.map((it) => [it.id, it]))
-    return cat.recent.flatMap((id) => by.get(id) ?? [])
+    return (theme === RECENT ? cat.recent : (cat.new ?? [])).flatMap((id) => by.get(id) ?? [])
   }
   return cat.items.filter((it) => it.theme === theme)
 }
 
-// Своё из «Все» и «Недавних» кладётся в «Мои» (в выборках лежит не тема, а отбор).
-export const importTheme = (theme: string): string => (theme === ALL || theme === RECENT ? MINE : theme)
+// Своё из выборок и «Фирменных» кладётся в «Мои» (в выборках лежит не тема, а отбор; Go кладёт туда же).
+export const importTheme = (theme: string): string => (noOwn(theme) ? MINE : theme)
 
 // Кнопка своего в окнах плиток (100-1): одна на три окна, крайняя справа, вид primary.
 export const ADD_OWN: Record<'bg' | 'sticker' | 'frame', string> = {

@@ -45,6 +45,22 @@ export function undoToast(h: ToastHost, text: string, back?: string) {
   if (h.toast) h.toast.rev = rev
 }
 
+// Тост «Обложка в стиле «…»» (131 G5): кнопка «Без оформления» — Undo и тот же бросок обычным CreateCover, одним нажатием.
+// Не прошёл Undo (или после обложки были другие правки) — ничего не делаем, как «Вернуть».
+export function coverLookToast(h: ToastHost & { goCover(): void }, look: string, photoID: string) {
+  const rev = h.view.rev
+  h.notify(`Обложка в стиле «${look}»`, 'info', {
+    label: 'Без оформления',
+    run: async () => {
+      await h.delQueue
+      if (h.view.rev !== rev) return h.notify(keymap.tip('Уже были другие изменения — используйте «Отменить»', 'undo'))
+      if (!(await h.run(Api.Undo()))) return
+      if (await h.run(Api.CreateCover('', photoID))) h.goCover()
+    },
+  })
+  if (h.toast) h.toast.rev = rev
+}
+
 // Итоговый тост правки, добавившей фото (042, 060). notes — заметки с «Вернуть» (отменяют весь шаг);
 // named — фото, получившие имя из названия файла: с заметками имена идут в тот же тост, без них у тоста
 // своя кнопка «Убрать имена» (снимает только имена, бросок остаётся). lead — прежний простой тост.

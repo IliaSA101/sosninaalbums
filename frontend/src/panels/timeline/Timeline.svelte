@@ -3,6 +3,7 @@
   import { toggleKey } from '../../base/core/platform'
   import { store } from '../../base/core/store.svelte'
   import { drag } from '../../base/drag/drag.svelte'
+  import { pinchOn } from '../../editor/zoom/pinch'
   import { edgeScroll } from '../../base/drag/edgescroll'
   import { Reorder, lineSource } from '../../base/drag/reorder.svelte'
   import { canvas } from '../../editor/canvas/canvas.svelte'
@@ -89,6 +90,10 @@
       e.preventDefault()
     }
   }
+
+  // Щипок Mac (134) ленту не листает и страницу не масштабирует: жест только гасится. Ctrl+колесо листает, как прежде:
+  // зажатый Ctrl — режим разреза (094 §1), и крутить колесо до места разреза нужно уметь.
+  $effect(() => pinchOn(box, () => {}))
 
   // Разрез и склейка — функция «Разрез и склейка» (спека 011); без неё черта остаётся только целью переноса.
   const cuts = $derived(prefs.can('timeline'))

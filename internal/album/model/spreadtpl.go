@@ -54,6 +54,10 @@ type SpreadTpl struct {
 	// Stickers — в порядке слоёв: сначала лежавшие под местами (Under), затем остальные.
 	Stickers []TplItem `json:"stickers,omitempty"`
 	Texts    []TplText `json:"texts,omitempty"`
+	// Borders — рамочки мест (131, V = 1): 0.27 их не видит — места без рамочек. Drafts — заготовки
+	// (надписи с Draft): 0.27 их не видит и не печатает. Texts + Drafts ≤ MaxTexts.
+	Borders []TplBorder `json:"borders,omitempty"`
+	Drafts  []TplText   `json:"drafts,omitempty"`
 }
 
 // TplBg — фон страницы (или всего разворота): цвет, узор, фото фона — только своё из
@@ -147,8 +151,9 @@ func TplKey(t SpreadTpl) string {
 // 1|2, len(Page) ≠ Pages, после зажима пусто. Остальное зажимается: Ratio 0,2…5 (иначе 1), W
 // и H 10…2500 мм (иначе оба 0), места — ClampBoxes, цвета, узоры, ключи; у предмета якорь
 // −1…1, сдвиг ±2, размер 0,01…4, NaN — предмет отброшен; стикер с обоими или без Art/Lib —
-// отброшен; стикеров ≤ MaxStickers, надписей ≤ MaxTexts. Фото и узор всего разворота
-// исключают постраничные (как слоты Spread). Доли округляются до 1e-6 (короткий ключ).
+// отброшен; стикеров ≤ MaxStickers, надписей и заготовок вместе ≤ MaxTexts; рамочки — по
+// clampTplBorders. Фото и узор всего разворота исключают постраничные (как слоты Spread).
+// Доли округляются до 1e-6 (короткий ключ).
 func ClampSpreadTpl(t SpreadTpl) (SpreadTpl, bool) {
 	if t.V != TplV || t.Pages != 1 && t.Pages != 2 || len(t.Page) != t.Pages {
 		return SpreadTpl{}, false
@@ -160,7 +165,8 @@ func ClampSpreadTpl(t SpreadTpl) (SpreadTpl, bool) {
 	if w, h := Finite(t.W, 0), Finite(t.H, 0); w >= minTplMM && w <= maxTplMM && h >= minTplMM && h <= maxTplMM {
 		c.W, c.H = geom.Round2(w), geom.Round2(h)
 	}
-	for _, b := range ClampBoxes(t.Places) {
+	places, at := tplPlaces(t.Places)
+	for _, b := range ClampBoxes(places) {
 		b.X, b.Y, b.W, b.H, b.Round = round6(b.X), round6(b.Y), round6(b.W), round6(b.H), round6(b.Round)
 		c.Places = append(c.Places, b)
 	}
@@ -175,14 +181,9 @@ func ClampSpreadTpl(t SpreadTpl) (SpreadTpl, bool) {
 	}
 	// Под местами — первыми: порядок в срезе и есть порядок слоёв (design §2, decorOrder).
 	slices.SortStableFunc(c.Stickers, func(a, b TplItem) int { return boolRank(b.Under) - boolRank(a.Under) })
-	for _, tx := range t.Texts {
-		if len(c.Texts) == MaxTexts {
-			break
-		}
-		if ct, ok := clampTplText(tx); ok {
-			c.Texts = append(c.Texts, ct)
-		}
-	}
+	c.Texts = clampTplTexts(t.Texts, MaxTexts)
+	c.Drafts = clampTplTexts(t.Drafts, MaxTexts-len(c.Texts))
+	c.Borders = clampTplBorders(t.Borders, at, len(c.Places))
 	return c, !c.empty()
 }
 
@@ -209,9 +210,9 @@ func clampTplBgs(t SpreadTpl) (*TplBg, []TplBg) {
 	return whole, pages
 }
 
-// empty — ни мест, ни цвета, узора и фона, ни стикеров, ни надписей.
+// empty — ни мест, ни цвета, узора и фона, ни стикеров, ни надписей и заготовок.
 func (t SpreadTpl) empty() bool {
-	if len(t.Places)+len(t.Stickers)+len(t.Texts) > 0 || t.Whole != nil {
+	if len(t.Places)+len(t.Stickers)+len(t.Texts)+len(t.Drafts) > 0 || t.Whole != nil {
 		return false
 	}
 	for _, pg := range t.Page {

@@ -160,6 +160,12 @@ func (e *Editor) SetText(textID, txt, session string) model.View {
 	return e.apply(textMerge(session), func(p *model.Project) { design.SetText(p, textID, txt) })
 }
 
+// Договор: проверок нет (лист и надпись ищет тело; чужая надпись — холостая). Без слияния:
+// «Сделать обычной надписью» — свой шаг отмены.
+func (e *Editor) SetTextDraft(spreadID, textID string, draft bool) model.View {
+	return e.change(func(p *model.Project) { design.SetTextDraft(p, spreadID, textID, draft) })
+}
+
 // Договор: стиль зажат ClampStyle (гарнитура из таблицы, кегль 6..200 pt).
 func (e *Editor) SetTextStyle(textID string, st model.TextStyle) model.View {
 	st = model.ClampStyle(st)

@@ -31,7 +31,8 @@ func cancelApp(t *testing.T, n int) (a *App, photos []library.Photo, cacheDir st
 	if err != nil {
 		t.Fatal(err)
 	}
-	testkit.BeforeRemove(t, c.Close) // превью в фоне не пишет в удалённую папку
+	// Кэш закрывает closeBackground из newApp (a.cache): отдельный хук шёл бы раньше него и закрывал
+	// кэш при ещё идущем прогреве фона (гонка под -race).
 	a.cache = c
 	dir := testkit.TempDir(t)
 	a.mu.Lock()

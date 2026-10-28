@@ -82,13 +82,16 @@ type stagedItem struct {
 	kind, key, theme, name, ext string
 	tmp                         string  // картинка: временный файл в папке вида
 	win                         winInfo // рамочка: окно, найденное при проверке
-	tpl                         []byte  // шаблон: канонический JSON (ключ — TplKey)
+	tpl                         []byte  // шаблон: канонический JSON (ключ — TplKey); макет и типография — байты как пришли
+	item                        string  // макет: путь записи в манифесте (поиск после обновления набора)
 	libs                        []libRef
 	w, h                        int
 	bytes                       int64
 }
 
-// libRef — ссылка шаблона на картинку библиотеки: фон (TplBg.Lib) или стикер (TplItem.Lib).
+// libRef — ссылка шаблона на картинку библиотеки: фон (TplBg.Lib), стикер (TplItem.Lib) или
+// рамочка места (TplBorder.Lib, вид frame); kind "" — ключ из сырых байт макета (поле новее
+// программы), вид неизвестен.
 type libRef struct{ kind, key string }
 
 // Close удаляет временные файлы, не ушедшие в библиотеку.
@@ -126,7 +129,7 @@ func (st *Staged) reg(installed int64) *packReg {
 		r.Title = st.m.ID
 	}
 	for _, it := range st.items {
-		r.Items = append(r.Items, packEntry{Key: it.key, Kind: it.kind, Theme: it.theme, Name: it.name, W: it.w, H: it.h, Bytes: it.bytes})
+		r.Items = append(r.Items, packEntry{Key: it.key, Kind: it.kind, Theme: it.theme, Name: it.name, W: it.w, H: it.h, Bytes: it.bytes, Item: it.item})
 	}
 	return r
 }
@@ -200,6 +203,8 @@ func (s *Store) stageItems(st *Staged, src PackSource) error {
 			si, why, err = stageTpl(i, src)
 		case KindPrint:
 			si, why, err = s.stagePrint(i, src, st)
+		case KindAlbum:
+			si, why, err = stageLook(i, it, src)
 		default:
 			why = "незнакомый вид — нужна новая версия программы"
 		}
@@ -320,7 +325,8 @@ func (b *capBuffer) Write(p []byte) (int, error) {
 	return b.Buffer.Write(p)
 }
 
-// tplKnown — все узоры и рисунки шаблона знакомы этой версии (зажим незнакомый ключ оставляет).
+// tplKnown — все узоры, рисунки и встроенные рамочки шаблона знакомы этой версии (зажим
+// незнакомый ключ оставляет).
 func tplKnown(t model.SpreadTpl) bool {
 	bgs := slices.Clone(t.Page)
 	if t.Whole != nil {
@@ -333,6 +339,11 @@ func tplKnown(t model.SpreadTpl) bool {
 	}
 	for _, it := range t.Stickers {
 		if it.Art != nil && !gen.Known(it.Art.Kind) {
+			return false
+		}
+	}
+	for _, b := range t.Borders {
+		if b.Kind != "" && !gen.FrameKnown(b.Kind) {
 			return false
 		}
 	}
@@ -356,29 +367,54 @@ func tplLibs(t model.SpreadTpl) []libRef {
 			out = append(out, libRef{KindSticker, it.Lib})
 		}
 	}
+	for _, b := range t.Borders {
+		if b.Lib != "" {
+			out = append(out, libRef{KindFrame, b.Lib})
+		}
+	}
 	return out
 }
 
-// checkTplLibs — ссылка шаблона только на картинку этого набора нужного вида или уже стоящую
-// в библиотеке (design §4.2): ссылка на чужое — шаблон пропускается.
+// checkTplLibs — ссылка шаблона (и макета альбома — checkLookLibs 131 тем же правилом) только на
+// картинку этого набора нужного вида или уже стоящую в библиотеке (design §4.2): ссылка на чужое —
+// шаблон или макет пропускается.
 func (s *Store) checkTplLibs(st *Staged) {
 	have := map[libRef]bool{}
 	for _, it := range st.items {
 		if it.tpl == nil {
 			have[libRef{it.kind, it.key}] = true
+			have[libRef{"", it.key}] = true // ключ сырых байт макета: вид неизвестен — любой
 		}
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	st.items = slices.DeleteFunc(st.items, func(it stagedItem) bool {
 		for _, ref := range it.libs {
-			if _, ok := s.files[ref.kind][ref.key]; !ok && !have[ref] {
-				st.Skipped = append(st.Skipped, Skip{Name: it.name, Why: "шаблон ссылается на фон или стикер не из набора"})
+			if !have[ref] && !s.haveFile(ref) {
+				why := "шаблон ссылается на фон, стикер или рамочку не из набора"
+				if it.kind == KindAlbum {
+					why = "макет ссылается на картинку не из набора"
+				}
+				st.Skipped = append(st.Skipped, Skip{Name: it.name, Why: why})
 				return true
 			}
 		}
 		return false
 	})
+}
+
+// haveFile — файл ключа ref есть в библиотеке; вид "" — любого вида. Под mu.
+func (s *Store) haveFile(ref libRef) bool {
+	if ref.kind != "" {
+		_, ok := s.files[ref.kind][ref.key]
+		return ok
+	}
+	for _, m := range s.files {
+		if _, ok := m[ref.key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // libBytes — байты библиотеки (свои + наборы, ключ считается один раз); под mu. Насыщается
@@ -443,7 +479,7 @@ func (s *Store) InstallPack(st *Staged, keep func(key string) bool) (PackInfo, e
 	}
 	reg := st.reg(nowMs())
 	if old != nil {
-		reg.Installed = old.Installed // обновление остаётся на своём месте в каталоге
+		reg.Installed, reg.Base = old.Installed, old.Base // обновление остаётся на своём месте и хранит границу
 	}
 	placed, created, err := s.placeItems(st)
 	if err == nil {

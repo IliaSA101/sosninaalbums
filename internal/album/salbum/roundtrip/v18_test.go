@@ -87,7 +87,8 @@ func TestCropGoldenV18(t *testing.T) {
 	}
 	enc = norm17(enc, base)
 	if *writeGolden18Crop {
-		if err := os.WriteFile(path, append(enc, '\n'), 0o644); err != nil {
+		old := bytes.Replace(enc, verTag(model.FormatVersion), verTag(18), 1) // голден остаётся на своей версии
+		if err := os.WriteFile(path, append(old, '\n'), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -96,7 +97,11 @@ func TestCropGoldenV18(t *testing.T) {
 		t.Fatal(err)
 	}
 	golden = bytes.TrimSuffix(bytes.ReplaceAll(golden, []byte("\r\n"), []byte("\n")), []byte("\n"))
-	if !bytes.Equal(enc, golden) {
+	if bytes.Equal(asCurrent(golden, 18), golden) {
+		t.Fatal("в голдене нет номера версии 18")
+	}
+	// Файл v18 без заготовок и макета (131): голден = Encode, кроме номера версии.
+	if !bytes.Equal(enc, asCurrent(golden, 18)) {
 		t.Fatalf("Encode отличается от голдена:\n%s", enc)
 	}
 	for _, key := range []string{`"version": 18,`, `"crop": 10`, `"asp": 0.8`, `"app": "0.24.0"`} {
@@ -122,11 +127,13 @@ func TestCropGoldenV18(t *testing.T) {
 	for _, n := range []string{"a.jpg", "b.jpg"} {
 		back = bytes.ReplaceAll(back, []byte(library.IDFor(filepath.Join(base, "Март", n))), []byte(fixedIDs(n)))
 	}
-	if canonJSON(t, back) != canonJSON(t, golden) {
+	if canonJSON(t, back) != canonJSON(t, asCurrent(golden, 18)) {
 		t.Fatalf("Decode → Encode отличается от голдена:\n%s", back)
 	}
 
-	// Save → Load → Save: проект и байты те же.
+	// Save → Load → Save: проект и байты те же. Свой формат записи — текущий (копия для 0.27 и
+	// переход v18 → v19 — TestMigrateV18).
+	p.SetFrom(model.FormatVersion)
 	album := filepath.Join(base, "Свадьба.salbum")
 	e := edtest.Open(t, p, album)
 	if err := e.Save(album); err != nil {
@@ -143,7 +150,7 @@ func TestCropGoldenV18(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(model.Marshal(p), model.Marshal(q)) || edtest.From(q) != 18 {
+	if !bytes.Equal(model.Marshal(p), model.Marshal(q)) || edtest.From(q) != model.FormatVersion {
 		t.Fatalf("потери при Save → Load:\n%s\n%s", model.Marshal(p), model.Marshal(q))
 	}
 	checkCrop(t, q)
@@ -209,7 +216,7 @@ func TestMigrateV17ToV18(t *testing.T) {
 	if got := e.TakeBackup(); got != bak {
 		t.Fatalf("TakeBackup %q, ждали %q", got, bak)
 	}
-	if f := fileJSON(t, path); f.Version != 18 || string(f.App) != "0.24.0" {
+	if f := fileJSON(t, path); f.Version != model.FormatVersion || string(f.App) != "0.24.0" {
 		t.Fatalf("в файле версия %d, app %q", f.Version, f.App)
 	}
 	if now, _ := os.ReadFile(path); bytes.Contains(now, []byte(`"crop"`)) {
@@ -219,7 +226,7 @@ func TestMigrateV17ToV18(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(before, model.Marshal(q)) || edtest.From(q) != 18 {
+	if !bytes.Equal(before, model.Marshal(q)) || edtest.From(q) != model.FormatVersion {
 		t.Fatalf("потери при v17 → v18:\n%s\n%s", before, model.Marshal(q))
 	}
 

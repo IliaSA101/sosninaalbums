@@ -90,4 +90,17 @@ describe('seek: общий поиск места', () => {
   it('места нет — null', async () => {
     expect(await seek('ui:no-such-place')).toBeNull()
   })
+
+  it('отмена: поиск без места кончается сразу, а не через 600 мс; с отменённым сигналом документ не читается', async () => {
+    const ctl = new AbortController()
+    const t0 = performance.now()
+    const p = seek('ui:no-such-place', '', ctl.signal)
+    ctl.abort()
+    expect(await p).toBeNull()
+    expect(performance.now() - t0).toBeLessThan(500)
+    const q = vi.spyOn(document, 'querySelectorAll')
+    expect(await seek('ui:topbar-export', '', ctl.signal)).toBeNull()
+    expect(q).not.toHaveBeenCalled()
+    q.mockRestore()
+  })
 })

@@ -31,6 +31,8 @@
   import BackupsDialog from './shell/dialogs/BackupsDialog.svelte'
   import { backupsUi } from './shell/dialogs/backups.svelte'
   import PacksDialog from './shell/packs/PacksDialog.svelte'
+  import LooksDialog from './shell/looks/LooksDialog.svelte'
+  import SaveLookDialog from './shell/looks/SaveLookDialog.svelte'
   import { packsUi } from './shell/packs/packs.svelte'
   import PrintProfileDialog from './shell/printprof/PrintProfileDialog.svelte'
   import { printEdit } from './shell/printprof/printedit.svelte'
@@ -43,7 +45,7 @@
   import DecorDialog from './panels/decor/DecorDialog.svelte'
   import { vigDialog } from './panels/vignette/vigsession.svelte'
   import { namesUi } from './panels/names/names.svelte'
-  import PhotoMenu from './editor/photo/PhotoMenu.svelte'
+  import PhotoMenu from './editor/photomenu/PhotoMenu.svelte'
   import PhotoPreview from './editor/photo/PhotoPreview.svelte'
   import { store } from './base/core/store.svelte'
   import { autocheck } from './panels/folders/autocheck'
@@ -231,6 +233,8 @@
 <LevelsDialog />
 <BackupsDialog />
 <PacksDialog />
+<LooksDialog />
+<SaveLookDialog />
 <PrintProfileDialog />
 <AboutDialog />
 <UpdateWatch />

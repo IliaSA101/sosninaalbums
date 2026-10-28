@@ -7,7 +7,7 @@ import path from 'node:path'
 import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { assertZipSize, buildPack, catalogRow, checkPrev, checkPublish, imageInfo, jpegSize, makeZip, orderWarnings, publicRaw, readCatalogFile, readPrev, readZip, requireBase, sealCatalog, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
+import { assertZipSize, buildPack, checkAlbumFile, catalogRow, checkSpreadFile, checkPrev, checkPublish, imageInfo, jpegSize, makeZip, orderWarnings, publicRaw, readCatalogFile, readPrev, readZip, requireBase, sealCatalog, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
 
 function setDir() {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'libpack-'))
@@ -148,7 +148,7 @@ test('рамочка (079): kind frame — PNG в пределах, counts.frame
   fs.writeFileSync(p, JSON.stringify(src))
   const { manifest } = buildPack(d)
   assert.equal(manifest.items[2].kind, 'frame')
-  assert.deepEqual(catalogRow(manifest, Buffer.from('zip'), 'v1').counts, { bg: 1, sticker: 0, spread: 1, frame: 1, print: 0 })
+  assert.deepEqual(catalogRow(manifest, Buffer.from('zip'), 'v1').counts, { bg: 1, sticker: 0, spread: 1, frame: 1, print: 0, album: 0 })
   fs.writeFileSync(path.join(d, 'frames', 'ring.jpg'), crypto.randomBytes(700))
   src.items[2].file = 'frames/ring.jpg'
   fs.writeFileSync(p, JSON.stringify(src))
@@ -191,6 +191,49 @@ test('рамочка (079-35): minApp ниже 0.20.0 и сторона PNG бо
   assert.equal(buildPack(d2).manifest.minApp, '0.16.0')
 })
 
+test('шаблон с рамочками и заготовками (131): borders/drafts — только minApp не ниже 0.28.0', () => {
+  const d = setDir()
+  const p = path.join(d, 'manifest.src.json')
+  const src = JSON.parse(fs.readFileSync(p, 'utf8'))
+  const put = (minApp, spread) => {
+    src.minApp = minApp
+    fs.writeFileSync(p, JSON.stringify(src))
+    fs.writeFileSync(path.join(d, 'spreads', 'hero.json'), typeof spread === 'string' ? spread : JSON.stringify(spread))
+  }
+  const tpl = (extra) => ({ v: 1, pages: 1, page: [{}], places: [{ x: 0.1, y: 0.1, w: 0.5, h: 0.5 }], ...extra })
+  const borders = { borders: [{ i: 0, kind: 'line' }] }
+  const drafts = { drafts: [{ w: 0.4, text: '[Имена]' }] }
+
+  put('0.27.0', tpl({}))
+  assert.equal(buildPack(d).manifest.items[1].kind, 'spread') // без новых списков 0.27 достаточно
+  put('0.27.0', tpl({ borders: [], drafts: [] })) // пустые списки — не использование
+  assert.equal(buildPack(d).manifest.items[1].kind, 'spread')
+  put('0.27.0', tpl(borders))
+  assert.throws(() => buildPack(d), /borders требует minApp не ниже 0\.28\.0/)
+  put('0.27.0', tpl(drafts))
+  assert.throws(() => buildPack(d), /drafts требует minApp не ниже 0\.28\.0/)
+  put('0.20.1', tpl({ ...borders, ...drafts })) // числовое сравнение, оба списка названы
+  assert.throws(() => buildPack(d), /borders\/drafts требует/)
+  put('0.9.0', tpl(drafts))
+  assert.throws(() => buildPack(d), /minApp не ниже/)
+  for (const ok of ['0.28.0', '0.28.1', '1.0.0']) {
+    put(ok, tpl({ ...borders, ...drafts }))
+    assert.equal(buildPack(d).manifest.items[1].kind, 'spread', ok)
+  }
+  // Go разбирает ключи без учёта регистра: "Borders"/"DRAFTS" — те же списки.
+  put('0.27.0', tpl({ Borders: borders.borders }))
+  assert.throws(() => buildPack(d), /borders требует minApp не ниже 0\.28\.0/)
+  put('0.27.0', tpl({ DRAFTS: drafts.drafts }))
+  assert.throws(() => buildPack(d), /drafts требует/)
+  put('0.28.0', tpl({ Borders: borders.borders }))
+  assert.equal(buildPack(d).manifest.items[1].kind, 'spread')
+  // Не JSON и не объект здесь не ловим (программа пропустит сама); borders в массиве верхнего уровня — не шаблон.
+  for (const odd of ['{не json', '[]', 'null', '42', '"borders"']) {
+    put('0.27.0', odd)
+    assert.doesNotThrow(() => checkSpreadFile('x.json', Buffer.from(odd), '0.27.0'), odd)
+  }
+})
+
 test('типография (123): kind print — .saprint, JSON-объект ≤ 64 КБ, minApp не ниже 0.26.0, counts.print', () => {
   const d = setDir()
   fs.mkdirSync(path.join(d, 'prints'))
@@ -208,7 +251,7 @@ test('типография (123): kind print — .saprint, JSON-объект ≤
   put('0.26.0', profile())
   const { manifest, files } = buildPack(d)
   assert.equal(manifest.items[2].kind, 'print')
-  assert.deepEqual(catalogRow(manifest, Buffer.from('zip'), 'v1').counts, { bg: 1, sticker: 0, spread: 1, frame: 0, print: 1 })
+  assert.deepEqual(catalogRow(manifest, Buffer.from('zip'), 'v1').counts, { bg: 1, sticker: 0, spread: 1, frame: 0, print: 1, album: 0 })
   assert.equal(readZip(makeZip(files)).get('prints/fabrika.saprint').toString(), profile()) // круг через zip
 
   put('0.25.1', profile()) // минимум по версии, числовое сравнение
@@ -305,6 +348,109 @@ test('writes needs: поле в строке каталога, не в мани�
   assert.throws(() => build({ minApp: '0.26.0', needs: 'wedding-navy-watercolor' }), /minApp не ниже 0\.27\.0/)
   assert.throws(() => build({ minApp: '0.27.0', needs: 'Плохой id' }), /needs/)
   assert.throws(() => build({ minApp: '0.27.0', needs: 'test-set' }), /сам набор/)
+})
+
+/** Папка набора макетов: id, minApp и файлы макетов layouts/*.json; sample — шаги по умолчанию. */
+function layoutsDir(files = { 'layouts/wedding.json': null }, patch = {}) {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'libpack-look-'))
+  fs.mkdirSync(path.join(d, 'layouts'))
+  const items = []
+  for (const [file, data] of Object.entries(files)) {
+    fs.writeFileSync(path.join(d, ...file.split('/')), data ?? lookJSON())
+    items.push({ file, kind: 'album', name: file })
+  }
+  fs.writeFileSync(path.join(d, 'manifest.src.json'), JSON.stringify({ id: 'wedding-layouts', version: 1, minApp: '0.28.0', title: 'Макеты', needs: 'wedding-set', items, ...patch }))
+  return d
+}
+
+const ST = { tpl: { pages: 2, ratio: 2 } } // шаг: ratio обязателен (эталон мест)
+const lookJSON = (extra = {}) => JSON.stringify({ v: 1, steps: [ST], ...extra })
+
+test('макеты альбома (131): kind album — .json, id на -layouts, minApp не ниже 0.28.0, counts.album, круг через zip', () => {
+  const d = layoutsDir()
+  const { manifest, files } = buildPack(d)
+  assert.equal(manifest.items[0].kind, 'album')
+  const zip = makeZip(files)
+  assert.equal(catalogRow(manifest, zip, 'v1').counts.album, 1)
+  assert.equal(readZip(zip).get('layouts/wedding.json').toString(), lookJSON())
+
+  const put = (patch, files) => buildPack(layoutsDir(files, patch))
+  assert.throws(() => put({ minApp: '0.27.0' }), /minApp не ниже 0\.28\.0/)
+  assert.throws(() => put({ minApp: '0.9.0' }), /minApp не ниже 0\.28\.0/) // числовое сравнение, не строковое
+  assert.equal(put({ minApp: '0.100.0' }).manifest.minApp, '0.100.0')
+  assert.equal(put({ minApp: '1.0.0' }).manifest.items[0].kind, 'album')
+  assert.throws(() => put({ id: 'wedding-set' }), /только в наборе с id <имя>-layouts/)
+  assert.throws(() => put({ id: 'layouts-wedding' }), /-layouts/)
+  assert.throws(() => put({}, { 'layouts/wedding.txt': null }), /только \.json/)
+  assert.throws(() => put({}, { 'layouts/a.json': '' }), /размер вне предела/)
+  assert.throws(() => put({}, { 'layouts/a.json': ' '.repeat((512 << 10) + 1) }), /размер вне предела/)
+  const head = Buffer.from(lookJSON({ pad: '' })).length
+  const ok = put({}, { 'layouts/a.json': lookJSON({ pad: 'x'.repeat((512 << 10) - head) }) }) // ровно 512 КБ — предел включительно
+  assert.equal(ok.manifest.items[0].size, 512 << 10)
+  // несколько макетов сразу, один набор
+  const many = put({}, { 'layouts/a.json': null, 'layouts/b.json': lookJSON({ steps: [ST, ST] }), 'layouts/c.json': null })
+  assert.equal(catalogRow(many.manifest, makeZip(many.files), 'v1').counts.album, 3)
+  // старый набор без макетов собирается как раньше
+  assert.equal(buildPack(setDir()).manifest.minApp, '0.16.0')
+})
+
+test('макеты альбома (131): содержимое — JSON-объект v 1 с шагами 1…24; пустое и битое — ошибка, не паника', () => {
+  const bad = (data, re) => assert.throws(() => checkAlbumFile('a.json', Buffer.from(data)), re, String(data))
+  assert.doesNotThrow(() => checkAlbumFile('a.json', Buffer.from(lookJSON())))
+  assert.doesNotThrow(() => checkAlbumFile('a.json', Buffer.from(lookJSON({ steps: Array.from({ length: 24 }, () => ST) }))))
+  bad(lookJSON({ steps: Array.from({ length: 25 }, () => ST) }), /steps 1…24/)
+  bad(lookJSON({ steps: [] }), /steps 1…24/)
+  bad(lookJSON({ steps: 'x' }), /steps 1…24/)
+  bad(JSON.stringify({ v: 1 }), /steps 1…24/)
+  bad(lookJSON({ v: 2 }), /v макета/)
+  bad(lookJSON({ v: '1' }), /v макета/)
+  for (const x of ['[]', 'null', '"x"', '42']) bad(x, /не JSON-объект/)
+  bad('{не json', /не JSON/)
+  bad('', /не JSON/)
+  bad('{"v":1,"steps":[{"tpl"', /не JSON/) // усечённый
+  // ratio шага и сторон обложки — число 0,2…5 (Р2): без него LookBoxes сожмёт разворот в квадрат
+  for (const t of [{ pages: 2 }, { ratio: 0 }, { ratio: 5.5 }, { ratio: '2' }, { ratio: null }]) bad(lookJSON({ steps: [ST, { tpl: t }] }), /steps\[1\]\.tpl\.ratio — число 0.2…5/)
+  for (const st of [{}, { tpl: null }, { tpl: [] }]) bad(lookJSON({ steps: [st] }), /steps\[0\]\.tpl — не объект/)
+  bad(lookJSON({ cover: { front: { pages: 1 } } }), /cover\.front\.ratio/)
+  bad(lookJSON({ cover: { back: 'x' } }), /cover\.back — не объект/)
+  assert.doesNotThrow(() => checkAlbumFile('a.json', Buffer.from(lookJSON({ cover: { bg: { color: '#fff' }, back: { ratio: 0.2 }, front: { ratio: 5 } } }))))
+  // ключ библиотеки — как есть: экранированный сборка мусора 0.27 не увидит (А5); вложенный и в незнакомом поле — можно
+  const key = 'my:0123456789abcdef'
+  assert.doesNotThrow(() => checkAlbumFile('a.json', Buffer.from(lookJSON({ steps: [{ tpl: { ratio: 2, page: [{ lib: key }] } }], auto: { x: [key] } }))))
+  const esc = lookJSON({ steps: [{ tpl: { ratio: 2, page: [{ lib: key }] } }] }).replace(key, 'my\\u003a' + key.slice(3))
+  assert.ok(esc.includes('\\u003a'))
+  bad(esc, /ключ my:0123456789abcdef записан не как есть/)
+  // через buildPack: ошибка называет файл
+  assert.throws(() => buildPack(layoutsDir({ 'layouts/x.json': '{"v":1' })), /layouts\/x\.json: макет альбома — не JSON/)
+})
+
+test('TestPackPrevKeepsAlbumPath: путь записи album прежней версии остаётся в новой, иначе отказ; --drop разрешает', () => {
+  const v1 = buildPack(layoutsDir({ 'layouts/a.json': null, 'layouts/b.json': lookJSON({ steps: [ST, ST] }) })).manifest
+  // тот же путь, другое содержимое (правка макета): ключ меняется, путь держит — можно
+  const edited = buildPack(layoutsDir({ 'layouts/a.json': lookJSON({ name: 'новый' }), 'layouts/b.json': lookJSON({ steps: [ST, ST] }) })).manifest
+  assert.notEqual(edited.items[0].sha256, v1.items[0].sha256)
+  assert.doesNotThrow(() => checkPrev(v1, edited))
+  // новый макет в добавок — можно
+  const more = buildPack(layoutsDir({ 'layouts/a.json': null, 'layouts/b.json': lookJSON({ steps: [ST, ST] }), 'layouts/c.json': null })).manifest
+  assert.doesNotThrow(() => checkPrev(v1, more))
+  // путь переименован — отказ, с именем пропавшего
+  const renamed = buildPack(layoutsDir({ 'layouts/a2.json': null, 'layouts/b.json': lookJSON({ steps: [ST, ST] }) })).manifest
+  assert.throws(() => checkPrev(v1, renamed), /пропали пути макетов альбома прежней \(1\): layouts\/a\.json/)
+  assert.doesNotThrow(() => checkPrev(v1, renamed, ['layouts/a.json']))
+  assert.throws(() => checkPrev(v1, renamed, ['layouts/zzz.json']), /нет в прежней версии/)
+  // все макеты убраны — отказ по каждому; --drop одного не снимает отказ по другому
+  const none = { ...v1, items: [] }
+  assert.throws(() => checkPrev(v1, none), /\(2\)/)
+  assert.throws(() => checkPrev(v1, none, ['layouts/a.json']), /\(1\): layouts\/b\.json/)
+  assert.doesNotThrow(() => checkPrev(v1, none, ['layouts/a.json', 'layouts/b.json']))
+  // предметы других видов этим правилом не затронуты: пропавший spread по-прежнему можно
+  const withSpread = { ...v1, items: [...v1.items, { file: 'spreads/s.json', kind: 'spread', sha256: 'f'.repeat(64) }] }
+  assert.doesNotThrow(() => checkPrev(withSpread, v1))
+  // через checkPublish: каталог + --prev
+  const zip1 = makeZip(buildPack(layoutsDir({ 'layouts/a.json': null })).files)
+  const cat = upsertCatalog(null, catalogRow(v1, zip1, 'a.zip'))
+  const next = { ...renamed, version: 2 }
+  assert.throws(() => checkPublish(cat, next, undefined, readPrev(zip1)), /пропали пути макетов/)
 })
 
 /** JPEG-заглушка: SOI, APP0, SOF0 нужного размера, SOS и конец (декодировать её нельзя — заголовок читается). */

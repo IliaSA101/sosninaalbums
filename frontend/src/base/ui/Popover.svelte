@@ -121,6 +121,12 @@
   // Колесо вне окна — пользователь крутит ленту; scroll не годится: браузер шлёт его сам при смене содержимого.
   const onWheel = (e: WheelEvent) => open && outside(e.target) && close()
   const onPointer = (e: PointerEvent) => open && outside(e.target) && close()
+  // Щипок Mac (134) вне окна закрывает его, как колесо: жест гасят места масштаба, колеса после него нет.
+  $effect(() => {
+    const onGesture = (e: Event) => open && outside(e.target) && close()
+    window.addEventListener('gesturestart', onGesture, true)
+    return () => window.removeEventListener('gesturestart', onGesture, true)
+  })
 </script>
 
 <svelte:window onkeydowncapture={onKey} onpointerdowncapture={onPointer} onwheelcapture={onWheel} onresize={() => close()} />

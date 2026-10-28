@@ -43,6 +43,8 @@ func kindOfFile(file string) string {
 		return KindSticker
 	case "frames":
 		return KindFrame
+	case "looks":
+		return KindAlbum
 	}
 	return KindSpread
 }
@@ -272,8 +274,8 @@ func TestPackStageSkips(t *testing.T) {
 		"spreads/new-art.json: шаблон из новой версии программы", "spreads/new-pat.json: шаблон из новой версии программы",
 		"spreads/v2.json: шаблон из новой версии программы", "spreads/junk.json: шаблон разворота не читается",
 		"x/frame.bin: незнакомый вид — нужна новая версия программы",
-		"spreads/foreign.json: шаблон ссылается на фон или стикер не из набора",
-		"spreads/wrongkind.json: шаблон ссылается на фон или стикер не из набора"}
+		"spreads/foreign.json: шаблон ссылается на фон, стикер или рамочку не из набора",
+		"spreads/wrongkind.json: шаблон ссылается на фон, стикер или рамочку не из набора"}
 	if !slices.Equal(why, want) {
 		t.Errorf("пропуски:\n%s", strings.Join(why, "\n"))
 	}
@@ -428,8 +430,8 @@ func TestRemovePackGC(t *testing.T) {
 	}
 }
 
-// Каталог: встроенные → наборы по времени установки (внутри — порядок манифеста) → свои
-// новыми первыми; ключ в двух наборах — одна плитка, свой с тем же ключом — плитка своего.
+// Каталог (133): ключ в двух наборах — одна плитка, у старшего набора; свой с тем же ключом
+// перекрывает плитку набора. Порядок блоков наборов, встроенных и своих — TestCatalogOrderPacksFirst.
 func TestCatalogPacksOrder(t *testing.T) {
 	s, _ := openTemp(t)
 	clock := int64(1000)

@@ -58,9 +58,11 @@ export function formatSize(bytes: number): string {
 }
 
 // Строка «Перед выгрузкой: …» (035 U8): только то, что есть; нечего сказать — пусто (строки в окне нет).
-export function exportWarnings(v: Pick<View, 'emptyPlaces' | 'lowDPI'>, missing: number): string {
+// Заготовки макета (131) — в печать не идут, как и пустые места; вопрос перед выгрузкой задаёт Go той же строкой.
+export function exportWarnings(v: Pick<View, 'emptyPlaces' | 'lowDPI'> & Partial<Pick<View, 'drafts'>>, missing: number): string {
   const parts = [
     v.emptyPlaces > 0 ? `пустые места: ${v.emptyPlaces}` : '',
+    (v.drafts ?? 0) > 0 ? `заготовки: ${v.drafts}` : '',
     v.lowDPI > 0 ? `мало разрешения: ${v.lowDPI} фото` : '',
     missing > 0 ? `не найдено фото: ${missing}` : '',
   ].filter(Boolean)

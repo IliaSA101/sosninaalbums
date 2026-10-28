@@ -24,7 +24,7 @@ const sheet = (id: string) => ({
   photos: [],
   rects: [],
   frames: [],
-  texts: [{ id: 't1' }, { id: 't2' }],
+  texts: [{ id: 't1' }, { id: 't2' }, { id: 'd1', draft: true }],
   captions: [],
   backdrops: [],
   stickers: [],
@@ -135,6 +135,13 @@ describe('openText', () => {
     photoui.openText(click(), 't1')
     expect(photoui.menu).toBeNull()
     expect(edit.sel).toBeNull()
+  })
+  // 131: заготовка макета правится на любом уровне (вопрос 20 а) — меню с «Сделать обычной надписью» есть и на «Простом»
+  it('заготовка на «Простом» — выделяется и открывает меню', () => {
+    prefs.level = 'simple'
+    photoui.openText(click(), 'd1')
+    expect(edit.sel).toMatchObject({ kind: 'text', id: 'd1' })
+    expect(photoui.menu).toMatchObject({ kind: 'text' })
   })
 })
 

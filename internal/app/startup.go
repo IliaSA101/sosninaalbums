@@ -118,12 +118,12 @@ func (a *App) startFailure(cand, arg, last string, err error) string {
 func (a *App) startEditor(p *model.Project, path, notice string) (string, string) {
 	ed, err := album.NewEditor(p, path)
 	if err == nil {
-		a.ed.Store(ed)
+		a.setEditor(ed)
 		return path, notice
 	}
 	log.Printf("проект при запуске не прошёл проверку путей")
 	a.draftLocked.Store(true)
-	a.ed.Store(blankEditor(""))
+	a.setEditor(blankEditor(""))
 	return "", strings.TrimSpace(notice + " Не открылся проект: " + err.Error() + ". Автосохранение отключено до перезапуска.")
 }
 

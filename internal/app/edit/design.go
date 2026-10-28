@@ -79,6 +79,13 @@ func (m *Methods) SetText(textID, text, session string) (v model.View) {
 	return m.changed(m.editor().SetText(textID, text, session))
 }
 
+// SetTextDraft: признак заготовки надписи (131); false — «Сделать обычной надписью»:
+// текст из одной пары «[…]» теряет скобки.
+func (m *Methods) SetTextDraft(spreadID, textID string, draft bool) (v model.View) {
+	defer m.guardEdit("SetTextDraft", &v, nil)
+	return m.changed(m.editor().SetTextDraft(spreadID, textID, draft))
+}
+
 // SetTextBox: x, y — угол рамки до поворота, мм разворота. Другая w закрепляет
 // ширину (auto = false), та же — режим не меняется.
 func (m *Methods) SetTextBox(textID string, x, y, w float64) (v model.View) {

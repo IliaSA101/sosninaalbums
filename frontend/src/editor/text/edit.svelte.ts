@@ -114,9 +114,10 @@ class Edit {
     return sessionId(Date.now(), ++this.seq)
   }
 
-  // Двойной щелчок по блоку или подписи.
+  // Двойной щелчок по блоку или подписи. Заготовка макета (131) входит в правку с выделенным текстом:
+  // набор сразу заменяет «[Имена молодожёнов]», а признак заготовки снимает сам Go (смена строки).
   startEdit() {
-    if (!this.target) this.begin(false)
+    if (!this.target) this.begin(this.text?.draft === true)
   }
 
   // Набранное: уходит через SEND_DELAY после последней клавиши и на выходе.
@@ -291,6 +292,12 @@ class Edit {
     const text = (cur.src ?? cur.text) + t
     const session = this.newSession()
     await store.run(s.kind === 'text' ? Api.SetText(s.id, text, session) : Api.SetCaption(s.id, text, session))
+  }
+
+  // «Сделать обычной надписью» (131): признак и [ ] снимает Go (SetTextDraft), UI только зовёт. Недосланный набор уходит первым.
+  async undraft(spreadId: string, textId: string) {
+    await this.finish()
+    await store.run(Api.SetTextDraft(spreadId, textId, false))
   }
 
   // Delete на выделенном: набранное не отправляем, блок или подпись уходят.

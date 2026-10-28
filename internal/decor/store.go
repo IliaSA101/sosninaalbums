@@ -32,6 +32,7 @@ const (
 	KindSpread  = "spread" // готовые развороты (067): файл — шаблон JSON, не картинка
 	KindFrame   = "frame"  // рамочки-картинки (079): только PNG с прозрачным окном
 	KindPrint   = "print"  // свои типографии (123 Б1): файл — профиль .saprint, не картинка (prints.go)
+	KindAlbum   = "album"  // макеты альбома (131): файл — JSON как пришёл, ключ — sha256 байтов (looks.go)
 )
 
 // RootName — папка библиотеки в папке данных (решение №79); regFile — реестр.
@@ -63,10 +64,13 @@ type entry struct {
 	Bytes  int64  `json:"bytes"`
 	Added  int64  `json:"added"` // unix мс
 	Hidden bool   `json:"hidden,omitempty"`
+	// QR — код ссылки (AddQR): ссылка клиента, в шаблон и макет не уходит (isQR).
+	QR bool `json:"qr,omitempty"`
 }
 
 type registry struct {
 	Version int      `json:"version"`
+	QRScan  int      `json:"qrScan,omitempty"` // версия миграции признака QR (qr_migrate.go)
 	Items   []*entry `json:"items"`
 }
 
@@ -82,11 +86,14 @@ type Store struct {
 	files    map[string]map[string]string // вид → ключ → путь файла на диске (скан + импорт)
 	packs    []*packReg                   // наборы (packs.go) по installed
 	readOnly bool
+	qrScan   int // версия миграции признака QR (qr_migrate.go); qrScanV — стикеры просмотрены
 
-	media *mediaCache
-	svg   svgTokens // проверенные SVG, ждущие PNG от окна (AddPNG)
-	tpl   tplCache  // разбор своих шаблонов разворотов для плиток (spreads.go)
-	frame frameMeta // окна рамочек-картинок: нужны импорту и Frame (frame.go)
+	media   *mediaCache
+	svg     svgTokens   // проверенные SVG, ждущие PNG от окна (AddPNG)
+	tpl     tplCache    // разбор своих шаблонов разворотов для плиток (spreads.go)
+	frame   frameMeta   // окна рамочек-картинок: нужны импорту и Frame (frame.go)
+	look    lookCache   // разбор макетов альбома для плиток и сборки мусора (looks.go)
+	lookTpl parsedLooks // разобранные макеты для Look: Find и /media/look (looks_cache.go)
 
 	cancelled atomic.Int64 // запросы /media/lib, снятые клиентом (Cancelled)
 
@@ -94,15 +101,17 @@ type Store struct {
 }
 
 // kindDirs — папка вида; имя файла внутри — только <16 hex>.<ext> от ключа.
-var kindDirs = map[string]string{KindBg: "Фоны", KindSticker: "Стикеры", KindSpread: "Развороты", KindFrame: "Рамочки", KindPrint: "Типографии"}
+var kindDirs = map[string]string{KindBg: "Фоны", KindSticker: "Стикеры", KindSpread: "Развороты", KindFrame: "Рамочки", KindPrint: "Типографии",
+	KindAlbum: "Макеты"}
 
 // Open открывает библиотеку в <cfgDir>/Библиотека: читает реестр и ищет файлы. Ошибки чтения
 // не мешают работе: битый реестр уходит в .bad, библиотека пуста (строка в log.txt).
 func Open(cfgDir string) *Store {
-	s := &Store{root: filepath.Join(cfgDir, RootName), files: map[string]map[string]string{}, media: newMediaCache(mediaCacheMax)}
+	s := &Store{root: filepath.Join(cfgDir, RootName), files: map[string]map[string]string{}, media: newMediaCache(mediaCacheMax), qrScan: qrScanV}
 	s.scan()
 	s.load()
 	s.loadPacks()
+	s.migrateQR()
 	return s
 }
 
@@ -151,8 +160,8 @@ func (s *Store) scan() {
 	}
 }
 
-// keyOfFile — ключ по имени файла <16 hex>.<jpg|png>, в папке разворотов — <16 hex>.json, в
-// папке рамочек — только <16 hex>.png; иначе ok = false.
+// keyOfFile — ключ по имени файла <16 hex>.<jpg|png>, в папке разворотов и макетов — <16 hex>.json,
+// в папке рамочек — только <16 hex>.png; иначе ok = false.
 func keyOfFile(kind, name string) (string, bool) {
 	base, ext, ok := strings.Cut(name, ".")
 	if !ok || !extOK(kind, ext) {
@@ -162,11 +171,11 @@ func keyOfFile(kind, name string) (string, bool) {
 	return key, model.ValidLibKey(key)
 }
 
-// extOK — расширение файла вида kind: шаблон — json, типография — saprint, рамочка — png, фон и
-// стикер — jpg или png.
+// extOK — расширение файла вида kind: шаблон и макет — json, типография — saprint, рамочка — png,
+// фон и стикер — jpg или png.
 func extOK(kind, ext string) bool {
 	switch kind {
-	case KindSpread:
+	case KindSpread, KindAlbum:
 		return ext == "json"
 	case KindPrint:
 		return ext == printExt
@@ -214,6 +223,7 @@ func (s *Store) load() {
 		}
 		return
 	}
+	s.qrScan = reg.QRScan // нет поля — миграция 0.28 ещё не проходила (migrateQR)
 	if reg.Version > regVersion {
 		log.Printf("библиотека: реестр версии %d — только чтение", reg.Version)
 		s.readOnly = true
@@ -271,7 +281,7 @@ func validKind(k string) bool {
 // save пишет реестр атомарно (tmp + rename). Зовётся под ioMu.
 func (s *Store) save() error {
 	s.mu.RLock()
-	data, err := json.MarshalIndent(registry{Version: regVersion, Items: s.entries}, "", "  ")
+	data, err := json.MarshalIndent(registry{Version: regVersion, QRScan: s.qrScan, Items: s.entries}, "", "  ")
 	s.mu.RUnlock()
 	if err != nil {
 		return err
@@ -370,6 +380,7 @@ func (s *Store) Rename(kind, id, name string) error {
 		if e.Name == name {
 			return false
 		}
+		e.QR = e.isQR() // имя «QR · …» было единственным следом старого кода: фиксируем до смены
 		e.Name = name
 		return true
 	})

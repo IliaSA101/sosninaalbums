@@ -313,3 +313,32 @@ describe('modes.keysMode и keysSplit (074: окно «Горячие клави
     expect(m.keysSplit).toEqual({ ra: null, rw: 0.4, rh: 0.62 })
   })
 })
+
+describe('modes.decorTile (133)', () => {
+  beforeEach(useStorage)
+
+  it('по умолчанию пусто; размер запоминается по виду', async () => {
+    const m = await fresh()
+    expect(m.decorTile).toEqual({})
+    m.setDecorTile('sticker', 150.4)
+    m.setDecorTile('bg', 200)
+    expect(m.decorTile).toEqual({ sticker: 150, bg: 200 })
+    expect((await fresh()).decorTile).toEqual({ sticker: 150, bg: 200 })
+  })
+
+  it('мусор в хранилище отбрасывается; нечисло не запоминается', async () => {
+    localStorage.setItem('viewMode', JSON.stringify({ decorTile: { sticker: 'x', frame: 99.5, spread: 140 } }))
+    const m = await fresh()
+    expect(m.decorTile).toEqual({ spread: 140 })
+    m.setDecorTile('bg', NaN)
+    expect(m.decorTile).toEqual({ spread: 140 })
+  })
+
+  it('то же значение — без записи', async () => {
+    const m = await fresh()
+    m.setDecorTile('frame', 130)
+    const before = m.decorTile
+    m.setDecorTile('frame', 130)
+    expect(m.decorTile).toBe(before)
+  })
+})

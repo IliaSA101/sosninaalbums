@@ -112,6 +112,40 @@ export namespace app {
 	        this.all = source["all"];
 	    }
 	}
+	export class CoverResult {
+	    view: model.View;
+	    styled: boolean;
+	    look: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CoverResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.view = this.convertValues(source["view"], model.View);
+	        this.styled = source["styled"];
+	        this.look = source["look"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DecorItem {
 	    id: string;
 	    theme: string;
@@ -126,6 +160,14 @@ export namespace app {
 	    pages?: number;
 	    places?: number;
 	    pack?: string;
+	    steps?: number;
+	    from?: number;
+	    vig?: boolean;
+	    cover?: boolean;
+	    packId?: string;
+	    peek?: string;
+	    form?: string;
+	    style?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new DecorItem(source);
@@ -146,6 +188,14 @@ export namespace app {
 	        this.pages = source["pages"];
 	        this.places = source["places"];
 	        this.pack = source["pack"];
+	        this.steps = source["steps"];
+	        this.from = source["from"];
+	        this.vig = source["vig"];
+	        this.cover = source["cover"];
+	        this.packId = source["packId"];
+	        this.peek = source["peek"];
+	        this.form = source["form"];
+	        this.style = source["style"];
 	    }
 	}
 	export class DecorTheme {
@@ -169,6 +219,7 @@ export namespace app {
 	    themes: DecorTheme[];
 	    items: DecorItem[];
 	    recent: string[];
+	    new: string[];
 	    readOnly: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -181,6 +232,7 @@ export namespace app {
 	        this.themes = this.convertValues(source["themes"], DecorTheme);
 	        this.items = this.convertValues(source["items"], DecorItem);
 	        this.recent = source["recent"];
+	        this.new = source["new"];
 	        this.readOnly = source["readOnly"];
 	    }
 	
@@ -538,6 +590,127 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class LookCount {
+	    n: number;
+	    places: number;
+	    fit: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LookCount(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.n = source["n"];
+	        this.places = source["places"];
+	        this.fit = source["fit"];
+	    }
+	}
+	export class LookStepInfo {
+	    name: string;
+	    role: string;
+	    places: number;
+	    pages: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LookStepInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.role = source["role"];
+	        this.places = source["places"];
+	        this.pages = source["pages"];
+	    }
+	}
+	export class LookInfo {
+	    steps: LookStepInfo[];
+	    cover: boolean;
+	    min: number;
+	    max: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LookInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.steps = this.convertValues(source["steps"], LookStepInfo);
+	        this.cover = source["cover"];
+	        this.min = source["min"];
+	        this.max = source["max"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class LookPlanSave {
+	    ok: boolean;
+	    steps: number;
+	    max: number;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LookPlanSave(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ok = source["ok"];
+	        this.steps = source["steps"];
+	        this.max = source["max"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class LookResult {
+	    view: model.View;
+	    plan: model.LookPlan;
+	
+	    static createFrom(source: any = {}) {
+	        return new LookResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.view = this.convertValues(source["view"], model.View);
+	        this.plan = this.convertValues(source["plan"], model.LookPlan);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class LooseResult {
 	    view: model.View;
 	    batch: string;
@@ -2275,6 +2448,7 @@ export namespace model {
 	    auto: boolean;
 	    src?: string;
 	    z: number;
+	    draft?: boolean;
 	    over: boolean;
 	    overflow: number;
 	    sheet: boolean;
@@ -2300,6 +2474,7 @@ export namespace model {
 	        this.auto = source["auto"];
 	        this.src = source["src"];
 	        this.z = source["z"];
+	        this.draft = source["draft"];
 	        this.over = source["over"];
 	        this.overflow = source["overflow"];
 	        this.sheet = source["sheet"];
@@ -2938,6 +3113,7 @@ export namespace model {
 	    auto: boolean;
 	    src?: string;
 	    z: number;
+	    draft?: boolean;
 	    who?: string[];
 	
 	    static createFrom(source: any = {}) {
@@ -2960,6 +3136,7 @@ export namespace model {
 	        this.auto = source["auto"];
 	        this.src = source["src"];
 	        this.z = source["z"];
+	        this.draft = source["draft"];
 	        this.who = source["who"];
 	    }
 	
@@ -3192,6 +3369,7 @@ export namespace model {
 	    auto: boolean;
 	    src?: string;
 	    z: number;
+	    draft?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new TextView(source);
@@ -3211,6 +3389,7 @@ export namespace model {
 	        this.auto = source["auto"];
 	        this.src = source["src"];
 	        this.z = source["z"];
+	        this.draft = source["draft"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3356,6 +3535,7 @@ export namespace model {
 	    fields: string[];
 	    noAlbumBg?: boolean;
 	    foldHidden?: number;
+	    lookStep?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SpreadView(source);
@@ -3395,6 +3575,7 @@ export namespace model {
 	        this.fields = source["fields"];
 	        this.noAlbumBg = source["noAlbumBg"];
 	        this.foldHidden = source["foldHidden"];
+	        this.lookStep = source["lookStep"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -3627,6 +3808,76 @@ export namespace model {
 	}
 	
 	
+	export class LookOpts {
+	    mode: string;
+	    spreads: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LookOpts(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.spreads = source["spreads"];
+	    }
+	}
+	export class LookPlan {
+	    mode: string;
+	    trial: boolean;
+	    touched: number;
+	    full: boolean;
+	    spreads: number;
+	    places: number;
+	    drafts: number;
+	    replaced: number;
+	    coverTouched: boolean;
+	    coverReplaced: boolean;
+	    anchors: number;
+	    cover: boolean;
+	    left: number;
+	    prev: string;
+	    missing: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LookPlan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.trial = source["trial"];
+	        this.touched = source["touched"];
+	        this.full = source["full"];
+	        this.spreads = source["spreads"];
+	        this.places = source["places"];
+	        this.drafts = source["drafts"];
+	        this.replaced = source["replaced"];
+	        this.coverTouched = source["coverTouched"];
+	        this.coverReplaced = source["coverReplaced"];
+	        this.anchors = source["anchors"];
+	        this.cover = source["cover"];
+	        this.left = source["left"];
+	        this.prev = source["prev"];
+	        this.missing = source["missing"];
+	    }
+	}
+	export class LookView {
+	    key: string;
+	    name: string;
+	    found: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new LookView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.name = source["name"];
+	        this.found = source["found"];
+	    }
+	}
 	export class LooseFileView {
 	    path: string;
 	    photo: string;
@@ -4046,6 +4297,32 @@ export namespace model {
 	
 	
 	
+	export class SaveLookOpts {
+	    theme: string;
+	    name: string;
+	    ids: string[];
+	    repFrom: number;
+	    repTo: number;
+	    places: boolean;
+	    drafts: boolean;
+	    cover: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SaveLookOpts(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.theme = source["theme"];
+	        this.name = source["name"];
+	        this.ids = source["ids"];
+	        this.repFrom = source["repFrom"];
+	        this.repTo = source["repTo"];
+	        this.places = source["places"];
+	        this.drafts = source["drafts"];
+	        this.cover = source["cover"];
+	    }
+	}
 	export class Settings {
 	    pageW: number;
 	    pageH: number;
@@ -4167,6 +4444,8 @@ export namespace model {
 	    bins: Bin[];
 	    unfilled: string[];
 	    unnamed: number;
+	    drafts: number;
+	    look?: LookView;
 	    cover?: CoverView;
 	    albumBg?: AlbumBgView;
 	    pageLimit?: PageLimitView;
@@ -4208,6 +4487,8 @@ export namespace model {
 	        this.bins = this.convertValues(source["bins"], Bin);
 	        this.unfilled = source["unfilled"];
 	        this.unnamed = source["unnamed"];
+	        this.drafts = source["drafts"];
+	        this.look = this.convertValues(source["look"], LookView);
 	        this.cover = this.convertValues(source["cover"], CoverView);
 	        this.albumBg = this.convertValues(source["albumBg"], AlbumBgView);
 	        this.pageLimit = this.convertValues(source["pageLimit"], PageLimitView);

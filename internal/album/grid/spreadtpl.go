@@ -31,6 +31,9 @@ func tplParts(p *model.Project, s *model.Spread, scope string, t model.SpreadTpl
 	if !ok || !model.ValidScope(scope) {
 		return nil, model.ErrScope
 	}
+	if side, ok := coverSideTplZone(p, s, scope, t); ok {
+		return []tplPart{{scope: scope, a: side}}, nil // сторонка обложки: область — безопасная зона (131 §5)
+	}
 	l, two := p.AreaOf(s, model.ScopeLeft)
 	switch {
 	case t.Pages == 2 && (scope != model.ScopeSpread || !two):
@@ -44,26 +47,33 @@ func tplParts(p *model.Project, s *model.Spread, scope string, t model.SpreadTpl
 
 // ApplySpreadTpl ставит шаблон t на область scope разворота spreadID: места заменяются (фото
 // по порядку, лишние — в ленту, «Авто» закрепляется; на виньетке и листе 031 места не
-// ставятся), оформление области — как у «Копировать оформление» (надписи — если они есть в
-// шаблоне; шапка виньетки стоит). Свои из библиотеки берутся из libs (ключ → сведения о файле
-// на этом ПК); ключа нет — слой пропускается, missing — сколько таких ключей. Область уже такая
+// ставятся; рамочки шаблона встают на места), оформление области — как у «Копировать
+// оформление» (надписи и заготовки — если они есть в шаблоне; шапка виньетки стоит). Свои
+// из библиотеки берутся из libs (ключ → сведения о файле на этом ПК); ключа нет — слой пропускается, missing — сколько таких ключей. Область уже такая
 // же — холостая правка (повтор не даёт шага). Обложка — ErrScope; неизвестный разворот —
 // холостая; пустой шаблон — ErrTplEmpty.
 func ApplySpreadTpl(p *model.Project, spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, missing int, err error) {
+	plan, gone, err := applySpreadTpl(p, spreadID, scope, t, libs)
+	return plan, len(gone), err
+}
+
+// applySpreadTpl — тело ApplySpreadTpl; gone — ключи библиотеки без файла на этом ПК (макет
+// альбома 131 считает их по всей серии без повторов).
+func applySpreadTpl(p *model.Project, spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, gone map[string]bool, err error) {
 	if spreadID == model.CoverID {
-		return plan, 0, model.ErrScope
+		return plan, nil, model.ErrScope
 	}
 	_, s := p.Find(spreadID)
 	if s == nil {
-		return plan, 0, nil
+		return plan, nil, nil
 	}
 	t, ok := model.ClampSpreadTpl(t)
 	if !ok {
-		return plan, 0, model.ErrTplEmpty
+		return plan, nil, model.ErrTplEmpty
 	}
 	parts, err := tplParts(p, s, scope, t)
 	if err != nil {
-		return plan, 0, err
+		return plan, nil, err
 	}
 	r := &tplRes{p: p, s: s, libs: libs, gone: map[string]bool{}}
 	sd, seq := r.design(t, scope, parts)
@@ -71,16 +81,17 @@ func ApplySpreadTpl(p *model.Project, spreadID, scope string, t model.SpreadTpl,
 	var boxes []model.Box
 	places := len(t.Places) > 0 && two && !s.IsVignette()
 	if places {
+		r.borders(&t)
 		boxes = tplBoxes(p, s, parts, t)
 	}
-	o := putOpt{decor: true, texts: len(t.Texts) > 0}
+	o := putOpt{decor: true, texts: len(t.Texts)+len(t.Drafts) > 0}
 	if (!places || samePlaces(p, s, scope, boxes)) && sameDecor(p, s, scope, sd, o) {
-		return plan, len(r.gone), nil
+		return plan, r.gone, nil
 	}
 	if places {
 		auto := len(s.Grid) == 0
 		if plan.Left, err = applyGrid(p, s, scope, boxes); err != nil {
-			return model.GridPlan{}, 0, err
+			return model.GridPlan{}, nil, err
 		}
 		if auto && len(s.Grid) > 0 {
 			plan.Frozen = 1
@@ -88,10 +99,10 @@ func ApplySpreadTpl(p *model.Project, spreadID, scope string, t model.SpreadTpl,
 	}
 	old := s.Kinds()
 	if plan.Texts, plan.Stickers, err = putDesign(p, s, scope, sd, o); err != nil {
-		return model.GridPlan{}, 0, err
+		return model.GridPlan{}, nil, err
 	}
 	decorOrder(s, old, seq)
-	return plan, len(r.gone), nil
+	return plan, r.gone, nil
 }
 
 // PlanSpreadTpl — сухой прогон ApplySpreadTpl на копии проекта c (её делает обёртка под
@@ -156,6 +167,7 @@ type tplRes struct {
 	s    *model.Spread
 	libs map[string]model.PhotoInfo
 	gone map[string]bool // ключи без файла на этом ПК
+	dry  bool            // сверка без записи: запись Photos не добавляется
 }
 
 // photo — ID записи Photos своего из библиотеки key; файла на этом ПК нет — "". Запись, уже
@@ -167,7 +179,7 @@ func (r *tplRes) photo(key string) string {
 		return ""
 	}
 	id := model.LibPhotoID(key)
-	if _, have := r.p.Photos[id]; !have {
+	if _, have := r.p.Photos[id]; !have && !r.dry {
 		ph.ID, ph.Lib = id, key
 		model.Remember(r.p, []model.PhotoInfo{ph})
 	}
@@ -188,10 +200,9 @@ func (r *tplRes) bg(b model.TplBg, a layout.Rect) *model.Backdrop {
 	return bd
 }
 
-// design — оформление шаблона в мм области scope (srcDesign с x0 области: putDesign его не
-// сдвигает) и виды слоёв seq для decorOrder: стикеры «под местами» — до места, остальные и
-// надписи — после.
-func (r *tplRes) design(t model.SpreadTpl, scope string, parts []tplPart) (srcDesign, []string) {
+// bgDesign — фон шаблона в мм области scope: цвет, узор, фото фона (srcDesign с x0 области:
+// putDesign его не сдвигает). Стикеров и надписей нет.
+func (r *tplRes) bgDesign(t model.SpreadTpl, scope string, parts []tplPart) srcDesign {
 	p, s := r.p, r.s
 	a := p.BdArea(s, scope)
 	sd := srcDesign{x0: a.X}
@@ -214,6 +225,13 @@ func (r *tplRes) design(t model.SpreadTpl, scope string, parts []tplPart) (srcDe
 	default:
 		sd.bgL, sd.patL, sd.photoL = pg.Color, pg.Pat.Clone(), r.bg(pg, a)
 	}
+	return sd
+}
+
+// design — оформление шаблона в мм области scope (bgDesign плюс стикеры и надписи) и виды
+// слоёв seq для decorOrder: стикеры «под местами» — до места, остальные и надписи — после.
+func (r *tplRes) design(t model.SpreadTpl, scope string, parts []tplPart) (srcDesign, []string) {
+	sd := r.bgDesign(t, scope, parts)
 	var under, above []*model.Sticker
 	for _, pt := range parts {
 		for _, it := range t.Stickers {
@@ -233,6 +251,11 @@ func (r *tplRes) design(t model.SpreadTpl, scope string, parts []tplPart) (srcDe
 	for _, pt := range parts {
 		for _, tx := range t.Texts {
 			sd.texts = append(sd.texts, r.text(tx, pt, k))
+		}
+		for _, tx := range t.Drafts {
+			d := r.text(tx, pt, k)
+			d.Draft = true
+			sd.texts = append(sd.texts, d)
 		}
 	}
 	seq := slices.Repeat([]string{model.LayerSticker}, len(under))

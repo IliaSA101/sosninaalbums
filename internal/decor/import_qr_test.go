@@ -188,3 +188,45 @@ func TestAddQRName(t *testing.T) {
 		t.Fatalf("предельная ссылка: %+v %v", big, err)
 	}
 }
+
+// TestIsQR: код ссылки узнаётся по признаку (он переживает перезапуск), старая запись без признака — по
+// имени «QR · », переименованная старая и чужие ключи — нет; повтор AddQR ставит признак старой записи.
+func TestIsQR(t *testing.T) {
+	s, cfg := openTemp(t)
+	it, err := s.AddQR("t.me/client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.IsQR(it.ID) {
+		t.Fatal("новый код не помечен")
+	}
+	if !Open(cfg).IsQR(it.ID) {
+		t.Error("признак не пережил перезапуск")
+	}
+	for _, key := range []string{"", "sa:x", "my:0000000000000000", "../x"} {
+		if s.IsQR(key) {
+			t.Errorf("IsQR(%q)", key)
+		}
+	}
+	set := func(qr bool, name string) {
+		s.mu.Lock()
+		e := s.entryOf(KindSticker, it.ID)
+		e.QR, e.Name = qr, name
+		s.mu.Unlock()
+	}
+	set(false, qrNamePrefix+"t.me/client") // запись 0.23–0.27: признака нет, имя от qrName
+	if !s.IsQR(it.ID) {
+		t.Error("старая запись не узнана по имени")
+	}
+	set(false, "Мой стикер") // старая запись, переименованная: узнать нечем
+	if s.IsQR(it.ID) {
+		t.Error("переименованная старая запись узнана")
+	}
+	if _, err := s.AddQR("t.me/client"); err != nil || !s.IsQR(it.ID) {
+		t.Errorf("повтор AddQR не пометил запись: %v", err)
+	}
+	set(true, "Мой стикер") // переименование помеченной признак сохраняет
+	if !s.IsQR(it.ID) {
+		t.Error("признак пропал")
+	}
+}

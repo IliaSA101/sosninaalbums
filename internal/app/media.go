@@ -27,7 +27,7 @@ var readColor = imgfile.ReadColor
 // media отдаёт миниатюры: /media/t/<id> и /media/p/<id>; рамочки-картинки — /media/f/<id>
 // (serveFramePic); оригинал фото как есть — /media/o/<id> (serveOriginal); шрифты — /media/font/<файл>;
 // библиотека фонов — /media/gen/*, /media/lib/* (serveDecor), плитки разворотов — /media/tpl/*
-// (serveTpl); разметки — /media/cover-guide и
+// (serveTpl), макетов — /media/look/* (serveLook); разметки — /media/cover-guide и
 // /media/spread-guide (serveMarkup).
 func (a *App) media(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +43,7 @@ func (a *App) media(next http.Handler) http.Handler {
 		if a.serveMarkup(w, r) {
 			return
 		}
-		if a.serveDecor(w, r) || a.serveTpl(w, r) {
+		if a.serveDecor(w, r) || a.serveTpl(w, r) || a.serveLook(w, r) {
 			return
 		}
 		// До общего разбора /media/<t|p>/<id>: иначе «f» ушло бы в миниатюру.

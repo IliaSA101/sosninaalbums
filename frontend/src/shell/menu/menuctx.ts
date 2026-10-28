@@ -12,7 +12,7 @@ import { binsel } from '../../panels/bins/binsel.svelte'
 import { align } from '../../panels/layouts/align.svelte'
 import { anyVaries, varyTargets } from '../../panels/gallery/variants'
 import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
-import { isCover } from '../../base/geom/sheet'
+import { isCover, isSheet } from '../../base/geom/sheet'
 import { splitMissing } from '../../panels/library/missing'
 import { buildMenu, enabledCmds, type MenuCtx } from './menu'
 
@@ -47,6 +47,7 @@ export function menuCtx(): MenuCtx {
     pasteable: clip.canPaste,
     missing: splitMissing(store.missing, store.view.libPhotos).photos.length, // свои из библиотеки папкой не ищутся (048)
     collecting: !!jobs.collecting,
+    sheetDoc: isSheet(store.view.settings),
     exporting: !!jobs.exporting,
     big: modes.big,
     details: modes.details,

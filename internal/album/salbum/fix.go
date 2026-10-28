@@ -186,8 +186,19 @@ func migrate(p *model.Project) {
 	if p.From() < v18From {
 		migrateV18(p)
 	}
+	if p.From() < v19From {
+		migrateV19(p)
+	}
 	p.Version = model.FormatVersion
 }
+
+// migrateV19 — шаги v18 → v19 (общий формат 0.28). Каждая спека 0.28 с полями, которым нужна
+// починка старого файла, добавляет сюда свой шаг. 131 (заготовки texts[].draft, макет look,
+// spreads[].lookStep) — только номер: у старых файлов макета нет, нули верны.
+func migrateV19(*model.Project) {}
+
+// v19From — общий формат 0.28: файлы раньше проходят migrateV19.
+const v19From = 19
 
 // migrateV18 — шаги v17 → v18 (общий формат 0.24). Каждая спека 0.24 с полями, которым нужна
 // починка старого файла, добавляет сюда свой шаг. 104 (подрезка settings.crop) — только номер: у

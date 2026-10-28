@@ -45,6 +45,12 @@
     scroll?.scrollBy({ left: dir * scroll.clientWidth * 0.8, behavior: 'smooth' })
   }
   function wheel(e: WheelEvent) {
+    // Ctrl/⌘+колесо и щипок Mac (134) ряд не листают (синтетическое колесо жеста слегка двигало бы его).
+    // isZoomWheel живёт в editor/zoom, а base его не импортирует — условие то же.
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      return
+    }
     if (scroll && Math.abs(e.deltaY) > Math.abs(e.deltaX)) scroll.scrollLeft += e.deltaY
   }
 </script>

@@ -56,6 +56,8 @@ describe('buildMenu', () => {
       'collect',
       'backups',
       'packs',
+      'looks',
+      'saveLook',
       'tpl',
       'tplExport',
       'tplImport',
@@ -280,7 +282,7 @@ describe('уровень в меню (спека 010 U1)', () => {
         ['Загрузить из файла…', 'tplImport'],
       ])
       const file = ids(m, 'file')
-      expect(file.indexOf('tpl')).toBe(file.indexOf('packs') + 1)
+      expect(file.indexOf('tpl')).toBe(file.indexOf('saveLook') + 1)
     }
     // «Свой»: шаблоны сеток без виньетки тоже дают подменю; ни того ни другого — нет
     const only = (on: FeatureId[]): Custom => ({ base: 'simple', on, off: [] })
@@ -288,6 +290,34 @@ describe('уровень в меню (спека 010 U1)', () => {
     expect(own(only(['templates', 'manual']))).toContain('tpl') // templates требует manual
     expect(own(only(['vignette']))).toContain('tpl')
     expect(own(only([]))).not.toContain('tpl')
+  })
+  it('«Файл ▸ Макеты альбома…» и «Сохранить альбом как макет…» (131) — на всех уровнях, сразу после «Наборов библиотеки»', () => {
+    for (const l of ['simple', 'standard', 'full'] as const) {
+      const m = buildMenu(at(l))
+      expect(find(m, 'looks'), l).toMatchObject({ label: 'Макеты альбома…', cmd: 'looks' })
+      expect(find(m, 'saveLook'), l).toMatchObject({ label: 'Сохранить альбом как макет…', cmd: 'saveLook' })
+      const file = ids(m, 'file')
+      // «Наборы библиотеки» требуют «Фоны и стикеры» (на «Простом» их нет) — тогда макеты идут после «Резервных копий»
+      expect(file.indexOf('looks'), l).toBe(file.indexOf(file.includes('packs') ? 'packs' : 'backups') + 1)
+      expect(file.indexOf('saveLook'), l).toBe(file.indexOf('looks') + 1)
+    }
+  })
+  it('проект-лист 031 (design §8): «Макеты альбома…» серый, «Сохранить альбом как макет…» серый всегда; у альбома «Макеты» живые', () => {
+    for (const l of ['simple', 'standard', 'full'] as const) {
+      const sheet = buildMenu({ ...at(l), sheetDoc: true })
+      expect(find(sheet, 'looks')?.disabled, l).toBe(true)
+      expect(find(sheet, 'saveLook')?.disabled, l).toBe(true)
+      const album = buildMenu(at(l))
+      expect(find(album, 'looks')?.disabled, l).toBeFalsy()
+      expect(enabledCmds(sheet).has('looks'), l).toBe(false) // и клавиша молчит
+    }
+  })
+  it('«Сохранить альбом как макет…» (131 U3): живой с разворотами; серый без разворотов и в проекте-листе', () => {
+    const on = (o: object) => find(buildMenu({ ...at('simple'), ...o }), 'saveLook')?.disabled
+    expect(on({ spreads: 3 })).toBeFalsy()
+    expect(on({ spreads: 0 })).toBe(true)
+    expect(on({ spreads: 3, sheetDoc: true })).toBe(true)
+    expect(find(buildMenu({ ...at('simple'), spreads: 0 }), 'looks')?.disabled).toBeFalsy() // «Макеты альбома…» не зависит
   })
   it('«Файл ▸ Открыть папку данных» (086) — после «Мои шаблоны», на всех уровнях', () => {
     for (const l of ['simple', 'standard', 'full'] as const) {
@@ -298,7 +328,7 @@ describe('уровень в меню (спека 010 U1)', () => {
     const full = ids(buildMenu(at('full')), 'file')
     expect(full.indexOf('showData')).toBe(full.indexOf('tplImport') + 1)
     const simple = ids(buildMenu(at('simple')), 'file')
-    expect(simple.indexOf('showData')).toBe(simple.indexOf('backups') + 1) // нет ни наборов, ни шаблонов
+    expect(simple.indexOf('showData')).toBe(simple.indexOf('saveLook') + 1) // нет ни наборов, ни шаблонов
   })
   it('«Правка ▸ Зеркало» (048): включено при выделенном стикере и без фото', () => {
     const base = { ...at('full'), flippable: false }

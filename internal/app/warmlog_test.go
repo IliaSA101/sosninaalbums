@@ -45,10 +45,13 @@ func TestWarmLogsDone(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.rescan()
-	deadline := time.Now().Add(10 * time.Second)
-	for !thumbs.MatchString(buf.String()) { // прогрев идёт в фоне
+	// Прогрев идёт в фоне и пишет строку «память: прогрев миниатюр» уже после «миниатюры: 3 за …»:
+	// ждём последнюю, а не первую, иначе чтение журнала попадает между ними.
+	memWarm := mem("прогрев миниатюр")
+	deadline := time.Now().Add(testkit.Limit(10 * time.Second))
+	for log := buf.String(); !thumbs.MatchString(log) || !memWarm.MatchString(log); log = buf.String() {
 		if time.Now().After(deadline) {
-			t.Fatalf("нет строки «миниатюры: 3 за …» в журнале: %q", buf.String())
+			t.Fatalf("нет строк «миниатюры: 3 за …» и «память: прогрев миниатюр» в журнале: %q", buf.String())
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -88,7 +91,7 @@ func TestWarmLogsDone(t *testing.T) {
 	b.layouts.leave()
 	select {
 	case <-done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(testkit.Limit(10 * time.Second)):
 		t.Fatal("отменённый прогрев не кончился")
 	}
 	if out := buf.String(); strings.Contains(out, "миниатюры:") || strings.Contains(out, "прогрев миниатюр") {

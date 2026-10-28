@@ -9,7 +9,7 @@ vi.mock('../../../wailsjs/go/app/App', () => ({
   NewSpread: vi.fn(),
   PlacePhotos: vi.fn(),
   DropPhotos: vi.fn(),
-  CreateCover: vi.fn(),
+  CreateCoverLook: vi.fn(),
   ForgetFileNames: vi.fn(),
 }))
 vi.stubGlobal('window', globalThis)
@@ -143,10 +143,10 @@ describe('dropOn: ворота копии (098)', () => {
   })
 
   it('на фон и на плитку «+ Обложка» — без вопроса (фото с места не уходит)', async () => {
-    vi.mocked(Api.CreateCover).mockResolvedValueOnce(view(2, ['a', 'b', 'c', 'd']))
+    vi.mocked(Api.CreateCoverLook).mockResolvedValueOnce({ view: view(2, ['a', 'b', 'c', 'd']), styled: false, look: '' } as never)
     await dropOn(strip('f1'), { kind: 'cover' })
     await dropOn(strip('f1'), { kind: 'backdrop', spread: 'a', scope: 'spread' })
-    expect(Api.CreateCover).toHaveBeenCalledExactlyOnceWith('', 'f1')
+    expect(Api.CreateCoverLook).toHaveBeenCalledExactlyOnceWith('', 'f1')
     expect(gate).not.toHaveBeenCalled()
   })
 })

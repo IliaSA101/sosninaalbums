@@ -440,7 +440,7 @@ func TestSaveLoadV3Names(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Version != model.FormatVersion || model.FormatVersion != 18 {
+	if p.Version != model.FormatVersion || model.FormatVersion != 19 {
 		t.Fatalf("версия %d", p.Version)
 	}
 	ta, tb := *edtest.P(e).Spreads[0].Texts[0], *edtest.P(e).Spreads[0].Texts[1]
@@ -496,8 +496,8 @@ func TestLoadOrderRepair(t *testing.T) {
 // открывается с 8 благодаря заполнению DefaultSettings() до разбора; 12 и 0 («без зоны»)
 // переживают запись и чтение.
 func TestLoadSafeDefault(t *testing.T) {
-	if model.FormatVersion != 18 {
-		t.Fatalf("FormatVersion %d: безопасная зона — с v6 (decisions 0.10, запись 2), v7 — vig.own (038), v8 — наклон фона (045), v9 — ключи форм (051), v10 — фото корешка (061), v11 — правило сгиба (064), обрез и разметка разворотов (066), v12 — тон фото (068), v13 — табличка места (071), v14 — рамочки и прозрачность фото (079), v15 — подборки фото (083), v16 — отдельные фото (097), v17 — копии фото, свой кадр, фон альбома (098)", model.FormatVersion)
+	if model.FormatVersion != 19 {
+		t.Fatalf("FormatVersion %d: безопасная зона — с v6 (decisions 0.10, запись 2), v7 — vig.own (038), v8 — наклон фона (045), v9 — ключи форм (051), v10 — фото корешка (061), v11 — правило сгиба (064), обрез и разметка разворотов (066), v12 — тон фото (068), v13 — табличка места (071), v14 — рамочки и прозрачность фото (079), v15 — подборки фото (083), v16 — отдельные фото (097), v17 — копии фото, свой кадр, фон альбома (098), v18 — подрезка (104), v19 — заготовки и макет (131)", model.FormatVersion)
 	}
 	data, err := os.ReadFile(filepath.Join("..", "testdata", "v5.salbum.json"))
 	if err != nil {

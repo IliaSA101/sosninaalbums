@@ -144,6 +144,7 @@ func probes() []probe {
 		{"AddText", kErr, func(m *Methods) (model.View, error) { return m.AddText("s1", 0, "") }},
 		{"SetText", kView, func(m *Methods) (model.View, error) { return ok(m.SetText("t", "x", "")) }},
 		{"SetTextBox", kView, func(m *Methods) (model.View, error) { return ok(m.SetTextBox("t", 1, 1, 10)) }},
+		{"SetTextDraft", kView, func(m *Methods) (model.View, error) { return ok(m.SetTextDraft("s", "t", false)) }},
 		{"SetTextAngle", kView, func(m *Methods) (model.View, error) { return ok(m.SetTextAngle("t", 5)) }},
 		{"SetTextScale", kErr, func(m *Methods) (model.View, error) { return m.SetTextScale("t", 12, 0, 0) }},
 		{"SetTextAuto", kView, func(m *Methods) (model.View, error) { return ok(m.SetTextAuto("t")) }},

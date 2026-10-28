@@ -15,6 +15,8 @@
   import type { TextGestures } from './textgesture.svelte'
   import { pickOwns } from '../canvas/pickunder.svelte'
   import { photoui } from '../photo/photoui.svelte'
+  import { tipped } from '../../base/ui/tip.svelte'
+  import { DRAFT_TIP } from './draft'
 
   // Блоки текста и подписи — в общем стеке `.content` разворота (спека 010 U6): у каждого своя обёртка
   // с z-index = 10 + z из Go, поэтому текст может лежать под фото. Внутри — SVG строк (уже перенесены
@@ -34,7 +36,8 @@
     if (!primaryPress(e)) return
     e.stopPropagation()
     // Текст «Стандартного» уровня на «Простом»: виден, но не выделяется (вопрос 5), только тост.
-    if (prefs.blocked('text', () => edit.select({ kind: 'text', spread: spread.id, id: t.id }))) return
+    // Заготовка макета (131) правится на любом уровне (вопрос 20): после правки это обычная надпись.
+    if (!t.draft && prefs.blocked('text', () => edit.select({ kind: 'text', spread: spread.id, id: t.id }))) return
     // Shift/Ctrl+щелчок — в группу или из неё; перенос не начинается.
     if (additive(e)) return placesel.pickText(t.id)
     if (tg.inGroup(t.id)) return downMember(e, t)
@@ -168,7 +171,7 @@
   {#if !tg.editing('text', t.id)}
     {@const e = tg.eff(t)}
     {@const shift = e.mode === 'move' || e.mode === 'rotate' || e.mode === 'scale'}
-    <div class="blk" style:z-index={layerIndex(t.z)}>
+    <div class="blk" class:draft={t.draft} style:z-index={layerIndex(t.z)}>
       <svg viewBox="0 0 {sw} {ph}" preserveAspectRatio="none" aria-hidden="true">
         <g
           transform="translate({shift ? e.x - t.x : 0} {shift
@@ -182,10 +185,22 @@
           {/each}
         </g>
       </svg>
+      {#if t.draft}
+        <!-- Заготовка макета (131): бледная, в рамке-пунктире; в печать не идёт, пока текст не изменён -->
+        <div
+          class="dash"
+          style:left={pctX(e.x)}
+          style:top={pctY(e.y)}
+          style:width={pctX(e.w)}
+          style:height={pctY(e.h)}
+          style:transform={e.rot ? `rotate(${e.rot}deg)` : undefined}
+        ></div>
+      {/if}
       {#if !mini}
         <!-- Обводку выделенного одиночного блока рисует TextOverlay (выше стека); здесь — только член группы -->
         <div
           class="hit block"
+          use:tipped={{ text: t.draft ? DRAFT_TIP : '', side: 'top' }}
           class:selected={tg.inGroup(t.id) && !tg.selected('text', t.id)}
           class:moving={e.mode === 'move'}
           style:left={pctX(e.x)}
@@ -217,6 +232,17 @@
   .stub {
     opacity: 0.45;
     filter: grayscale(1);
+  }
+  /* Заготовка макета (131): бледный текст, рамка пунктиром */
+  .draft svg {
+    opacity: 0.45;
+  }
+  .dash {
+    position: absolute;
+    transform-origin: 0 0;
+    border: 1px dashed rgba(90, 90, 100, 0.7);
+    box-sizing: border-box;
+    pointer-events: none;
   }
   svg {
     position: absolute;

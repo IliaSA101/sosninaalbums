@@ -34,7 +34,14 @@
 //   - ops_auto.go — автосборка: план окна, предпросмотр, сборка и «Пересобрать» (цепочка auto,
 //     живость по projRev, 078 §8), отбор похожих кадров (similar) до передачи в spreads (078-15);
 //   - ops_salbum.go — перепривязка и Refs (salbum), сборка View (view);
-//   - ops_sheets.go — листы особого вида: обложка (cover, 032) и виньетка (031 G5).
+//   - ops_sheets.go — листы особого вида: обложка (cover, 032), createCover и виньетка (031 G5).
+//   - ops_look*.go — макет альбома (131): ops_look.go — ApplyLook и PlanLook одной функцией applyLook
+//     (режим series: пустые, Series, сопоставление разворотов позициям, вставка недостающих, шаг за
+//     шагом, «тронутые» пробного альбома; тот же макет после обновления набора — model.SameLook);
+//     ops_look_full — собранный альбом (add, bg); ops_look_step — шаг на лист и разворот по серии;
+//     ops_look_fmt — смена формата с макетом и LookHost (поиск макета, Has, Private; SetLookHost);
+//     ops_look_cover — обложка по макету (серия, шаг 0, CreateCoverLook; тело — grid/covertpl.go);
+//     ops_looksave.go — «Сохранить альбом как макет» (AlbumTplOf; тело — grid/looksave.go).
 //   - ops_clip.go — «Копировать и вставить» (099): снимок TakeClip, вырезание CutClip (тела —
 //     grid/clip.go); буфер держит App, Editor его не хранит.
 //   - ops_copies.go — копии фото (098): «где стоит» WhereUsed и сведения файла FileRef; копии

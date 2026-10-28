@@ -144,3 +144,12 @@ export function wheelPan(e: WheelLike): { dx: number; dy: number } {
   const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 800 : 1
   return { dx: (0 - fin(e.deltaX, 0)) * unit, dy: (0 - fin(e.deltaY, 0)) * unit } // 0 - x: без «−0»
 }
+
+// Зум колесом и щипком (134): один предикат запретов. Нет разворота, жест правки, слот «новый» (под курсором листа нет)
+// и уровень без функции «Масштаб» — зум не начинаем.
+export const zoomGate = (s: { spread: boolean; busy: boolean; atNew: boolean; can: boolean }): boolean =>
+  s.spread && !s.busy && !s.atNew && s.can
+
+// Подсказка масштаба в бейдже; fit — подпись клавиши «вписать» из реестра (пусто — клавиша снята).
+export const zoomTip = (mac: boolean, fit: string): string =>
+  `${mac ? '⌘' : 'Ctrl'}+колесо или щипок — масштаб${fit ? `, ${fit} — вписать` : ''}`

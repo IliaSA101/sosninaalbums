@@ -20,6 +20,15 @@ const { prefs } = await import('../../base/prefs/prefs.svelte')
 const { spot } = await import('../guide/spotstate.svelte')
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+// Дождаться результата асинхронной цепочки (place → seek → locate): на занятой машине она идёт дольше любой фиксированной паузы.
+const until = (check: () => void) =>
+  vi.waitFor(
+    () => {
+      flushSync()
+      check()
+    },
+    { timeout: 5000 },
+  )
 const rect = { left: 10, top: 20, width: 50, height: 30, right: 60, bottom: 50, x: 10, y: 20, toJSON: () => ({}) }
 
 function anchor(id = 'folders') {
@@ -50,8 +59,7 @@ describe('тур: повторное открытие после закрыти�
     expect(tour.open).toBe(true)
     tour.finish('skip')
     flushSync()
-    await wait(100)
-    flushSync()
+    await until(() => expect(prefs.tourDue).toBe(false)) // ответ Go применён: tourDue мог бы вернуть приветствие
     expect(tour.open).toBe(false)
     expect(setTour.mock.calls.at(-1)).toEqual(['first', 'done'])
     expect(setTour.mock.calls.some((c) => c[1] === 'pending')).toBe(false)
@@ -79,15 +87,11 @@ describe('тур: кольцо при замене элемента-цели', (
     tour.go(0)
     flushSync()
     const a = anchor()
-    await wait(100)
-    flushSync()
-    expect(tour.ring).not.toBeNull()
+    await until(() => expect(tour.ring).not.toBeNull())
     a.remove()
     const b = anchor()
-    await wait(300)
-    flushSync()
+    await until(() => expect(spot.cur?.el).toBe(b))
     expect(tour.ring).not.toBeNull()
-    expect(spot.cur?.el).toBe(b)
     expect(tour.missing).toBe(false)
   })
 
@@ -100,12 +104,35 @@ describe('тур: кольцо при замене элемента-цели', (
     tour.go(0)
     flushSync()
     const a = anchor()
-    await wait(100)
+    await until(() => expect(tour.ring).not.toBeNull())
     a.remove()
-    await wait(1200)
+    await until(() => expect(tour.missing).toBe(true))
+    // Без зацикливания: поиск не возобновляется, состояние стабильно.
+    await wait(150)
     flushSync()
     expect(tour.ring).toBeNull()
     expect(tour.missing).toBe(true)
+  })
+})
+
+describe('тур: поиск места обрывается вместе с туром', () => {
+  it('закрыли посреди поиска — документ больше не читается, кольца нет', async () => {
+    prefs.load({ level: 'full', showStart: false, first: false, custom: null, tourDue: false })
+    store.loaded = true
+    render(Tour)
+    tour.start('menu')
+    flushSync()
+    tour.go(0)
+    flushSync()
+    await tick()
+    await wait(60) // поиск идёт: места нет, locate крутит кадры
+    const q = vi.spyOn(document, 'querySelectorAll')
+    tour.finish('done')
+    q.mockClear()
+    await wait(200)
+    expect(q).not.toHaveBeenCalled()
+    expect(spot.cur).toBeNull()
+    q.mockRestore()
   })
 })
 
@@ -127,15 +154,11 @@ describe('тур: ловушка и открытые окна', () => {
     const menu = document.createElement('div')
     menu.setAttribute('role', 'menu')
     document.body.append(menu)
-    await wait(10)
-    flushSync()
-    expect(tour.popup).toBe(true)
+    await until(() => expect(tour.popup).toBe(true))
     expect(trapsOn()).toBe(false)
     expect(document.querySelector('[data-tour-layer]')?.classList.contains('lit')).toBe(true)
     menu.remove()
-    await wait(10)
-    flushSync()
-    expect(tour.popup).toBe(false)
+    await until(() => expect(tour.popup).toBe(false))
     expect(trapsOn()).toBe(true)
   })
 
@@ -144,9 +167,7 @@ describe('тур: ловушка и открытые окна', () => {
     const pop = document.createElement('div')
     pop.setAttribute('data-barpop', 'x')
     document.body.append(pop)
-    await wait(10)
-    flushSync()
-    expect(trapsOn()).toBe(false)
+    await until(() => expect(trapsOn()).toBe(false))
   })
 
   it('финиш при открытом меню: флаг сброшен, следующий тур начинается с ловушки', async () => {
@@ -154,15 +175,14 @@ describe('тур: ловушка и открытые окна', () => {
     const menu = document.createElement('div')
     menu.setAttribute('role', 'menu')
     document.body.append(menu)
-    await wait(10)
-    expect(tour.popup).toBe(true)
+    await until(() => expect(tour.popup).toBe(true))
     tour.finish('done')
     flushSync()
     expect(tour.popup).toBe(false)
     menu.remove()
     tour.start('menu')
     flushSync()
-    await wait(10)
+    await tick()
     expect(trapsOn()).toBe(true)
   })
 })
@@ -191,9 +211,7 @@ describe('тур: области, которых карточка не закр�
     lib.setAttribute('data-guide', 'library')
     at(lib, { left: 0, top: window.innerHeight - 200, width: window.innerWidth + 300, height: 400 })
     document.body.append(lib)
-    await wait(100)
-    flushSync()
-    expect(tour.ring).not.toBeNull()
+    await until(() => expect(tour.ring).not.toBeNull())
     expect(tour.avoid).toEqual([{ left: 0, top: window.innerHeight - 200, width: window.innerWidth, height: 200 }])
     lib.remove() // области нет на экране — пропуск
     expect(tour.avoid).toEqual([])

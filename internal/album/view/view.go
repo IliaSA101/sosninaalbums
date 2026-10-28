@@ -100,6 +100,7 @@ func BuildView(p *model.Project, st State) model.View {
 		AlbumFonts:      albumFonts(p),
 		MarksRev:        st.MarksRev,
 	}
+	v.Look = model.NewLookView(p.Look)
 	g := p.Geo(nil)
 	v.SpreadMarkup = markupOf(p.SpreadGuide, st.SpreadGuide, g.W, g.H, sheetWord(p))
 	f := newFields(p, st.Print)
@@ -115,12 +116,16 @@ func BuildView(p *model.Project, st State) model.View {
 			}
 		}
 		v.LowDPI += v.Spreads[i].LowDPI
+		v.Drafts += drafts(v.Spreads[i])
 	}
 	if !st.Print { // вид печати числа не несёт (030): пустые поля — пусто
 		v.FillFrom, v.CoverFill = p.FillCounts()
 	}
 	// Обложка — тем же f до result: её поля и имена попадают в Unfilled/Unnamed.
 	v.Cover = coverView(f, st, &v)
+	if v.Cover != nil {
+		v.Drafts += drafts(v.Cover.Sheet)
+	}
 	if l, ok := model.LimitOf(p); ok {
 		v.PageLimit = &l
 	}
@@ -139,6 +144,17 @@ func BuildView(p *model.Project, st State) model.View {
 	slices.Sort(v.BackdropUsed)
 	v.BackdropUsed = slices.Compact(v.BackdropUsed)
 	return v
+}
+
+// drafts — заготовок (131) на листе.
+func drafts(sv model.SpreadView) int {
+	n := 0
+	for _, t := range sv.Texts {
+		if t.Draft {
+			n++
+		}
+	}
+	return n
 }
 
 // libPhotos — ID записей со своим из библиотеки по возрастанию; пусто — [] (UI не проверяет null).
@@ -221,7 +237,7 @@ func spreadView(f *fields, s *model.Spread, l Laid) (sv model.SpreadView) {
 	sv = model.SpreadView{ID: s.ID, W: g.W, H: g.H, Mid: g.Mid, Photos: append([]string{}, s.Photos...), Rects: []layout.Rect{},
 		Frames: []model.FrameView{}, Captions: []model.CaptionView{}, Texts: textViews(f, s),
 		Bg: pageBg(p, s), BgSet: [2]string{s.BgL, s.BgR}, Name: s.Name, Backdrops: backdropViews(p, s), Patterns: patternViews(p, s),
-		Stickers: stickerViews(p, s), Stubs: []model.StubView{}, Kind: s.Kind, Fields: model.FieldsOf(s, f.vars)}
+		Stickers: stickerViews(p, s), Stubs: []model.StubView{}, Kind: s.Kind, Fields: model.FieldsOf(s, f.vars), LookStep: s.LookStep}
 	albumBgSheet(p, s, &sv) // после своих фонов: фон альбома лежит только там, где их нет
 	if s.Vars != nil {
 		sv.Vars = *s.Vars

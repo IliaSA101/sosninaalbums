@@ -5,6 +5,7 @@
   import { row } from '../../editor/spread/spreadrow.svelte'
   import { newSheetSize, unitOf } from '../../base/geom/sheet'
   import { addVignette } from '../vignette/vigact'
+  import { looks } from '../../shell/looks/looks.svelte'
   import SpreadMenu from '../spreadmenu/SpreadMenu.svelte'
 
   // Колонка «+ Новый разворот» в конце ленты. Как группа: рамка, под ней подпись в строке номера —
@@ -15,10 +16,21 @@
   const newSheet = $derived(newSheetSize(store.view.settings))
   const unit = $derived(unitOf(store.view.settings))
   const canVig = $derived(prefs.can('vignette'))
+  // 131: в альбоме стоит макет и он найден на этом компьютере — в меню есть «Разворот макета «…»» (с любого уровня)
+  const look = $derived(store.view.look?.found ? store.view.look.name : '')
+  const rightHint = $derived(
+    canVig && look
+      ? '. Правая кнопка — новая виньетка или разворот макета'
+      : canVig
+        ? '. Правая кнопка — новая виньетка'
+        : look
+          ? '. Правая кнопка — разворот макета'
+          : '',
+  )
 
   let menu = $state<{ x: number; y: number } | null>(null)
   function openMenu(e: MouseEvent) {
-    if (!canVig) return
+    if (!canVig && !look) return
     e.preventDefault()
     e.stopPropagation()
     if (!drag.active) menu = { x: e.clientX, y: e.clientY }
@@ -26,6 +38,10 @@
   function newVignette() {
     menu = null
     void addVignette(n)
+  }
+  function newLook() {
+    menu = null
+    void looks.newSpread()
   }
 </script>
 
@@ -40,7 +56,7 @@
       data-at={n}
       style:aspect-ratio={newSheet.w / newSheet.h}
       aria-label={unit.new}
-      title="Щёлкните — новый пустой {unit.one}; или перетащите сюда фото{canVig ? '. Правая кнопка — новая виньетка' : ''}"
+      title="Щёлкните — новый пустой {unit.one}; или перетащите сюда фото{rightHint}"
       oncontextmenu={openMenu}
       onclick={(e) => e.detail < 2 && drag.clickAllowed() && store.addEmptySpread(n)}
     >
@@ -51,7 +67,14 @@
 </div>
 
 {#if menu}
-  <SpreadMenu x={menu.x} y={menu.y} onNewVignette={newVignette} onclose={() => (menu = null)} />
+  <SpreadMenu
+    x={menu.x}
+    y={menu.y}
+    onNewVignette={canVig ? newVignette : undefined}
+    onNewLook={look ? newLook : undefined}
+    newLook={look}
+    onclose={() => (menu = null)}
+  />
 {/if}
 
 <style>

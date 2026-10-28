@@ -16,6 +16,7 @@ export interface SpreadHost {
   run(p: Promise<unknown>): Promise<boolean>
   notify(text: string): void
   undoToast(text: string, back?: string): void
+  coverLookToast(look: string, photoID: string): void
   goId(id: string): void
   goCover(): void
 }
@@ -99,12 +100,21 @@ export class SpreadOps {
     const h = this.h
     if (h.cover || h.view.settings?.sheet || h.busy || this.coverMaking) return false
     this.coverMaking = true
+    let styled: { look: string } | null = null
     try {
-      if (!(await h.run(Api.CreateCover('', photoID)))) return false
+      // Обложка в стиле макета альбома (131 G5): Go отвечает видом, styled и именем макета.
+      const ok = await h.run(
+        Api.CreateCoverLook('', photoID).then((r) => {
+          if (r.styled && r.look) styled = { look: r.look }
+          return r.view
+        }),
+      )
+      if (!ok) return false
     } finally {
       this.coverMaking = false
     }
     h.goCover()
+    if (styled) h.coverLookToast((styled as { look: string }).look, photoID)
     return true
   }
 

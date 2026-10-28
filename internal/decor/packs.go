@@ -37,19 +37,22 @@ const (
 
 // packReg — реестр одного набора; Items — в порядке манифеста.
 type packReg struct {
-	V         int         `json:"v"`
-	ID        string      `json:"id"`
-	Version   int         `json:"version"`
-	Title     string      `json:"title"`
-	About     string      `json:"about"`
-	Author    string      `json:"author"`
-	License   string      `json:"license"`
-	Source    string      `json:"source"`
-	Origin    string      `json:"origin"`
-	MinApp    string      `json:"minApp,omitempty"` // x.y.z; нужен слою типографий (понизили программу — набор не действует)
-	Installed int64       `json:"installed"`        // unix мс; порядок наборов в каталоге
-	Zip       string      `json:"zip"`              // sha256 архива
-	Items     []packEntry `json:"items"`
+	V         int    `json:"v"`
+	ID        string `json:"id"`
+	Version   int    `json:"version"`
+	Title     string `json:"title"`
+	About     string `json:"about"`
+	Author    string `json:"author"`
+	License   string `json:"license"`
+	Source    string `json:"source"`
+	Origin    string `json:"origin"`
+	MinApp    string `json:"minApp,omitempty"` // x.y.z; нужен слою типографий (понизили программу — набор не действует)
+	Installed int64  `json:"installed"`        // unix мс; порядок наборов в каталоге
+	// Base — граница первой партии (133 §4): пишет RemovePack оставшимся наборам, чтобы удаление самого
+	// раннего не сдвинуло её. 0.27 поле не читает и при обновлении набора теряет — граница тогда по Installed.
+	Base  int64       `json:"base,omitempty"`
+	Zip   string      `json:"zip"` // sha256 архива
+	Items []packEntry `json:"items"`
 }
 
 type packEntry struct {
@@ -60,6 +63,7 @@ type packEntry struct {
 	W     int    `json:"w"`
 	H     int    `json:"h"`
 	Bytes int64  `json:"bytes"`
+	Item  string `json:"item,omitempty"` // макет (131): путь записи в манифесте — поиск после обновления набора
 }
 
 // PackInfo — строка окна «Наборы библиотеки».
@@ -147,6 +151,9 @@ func readPackReg(path, id string) (*packReg, error) {
 	}
 	reg.About, reg.Author = cleanText(reg.About, 300), cleanName(reg.Author)
 	reg.License, reg.Source = cleanText(reg.License, 40), cleanText(reg.Source, 200)
+	if !dateOK(reg.Base) {
+		reg.Base = 0 // мусор и сброшенные часы — не граница
+	}
 	if reg.Origin != OriginNet {
 		reg.Origin = OriginFile
 	}
@@ -163,6 +170,9 @@ func readPackReg(path, id string) (*packReg, error) {
 		}
 		e.W, e.H = min(max(e.W, 0), imgfile.MaxPixels), min(max(e.H, 0), imgfile.MaxPixels)
 		e.Bytes = min(max(e.Bytes, 0), MaxBgBytes)
+		if e.Kind != KindAlbum || !ValidItemPath(e.Item) {
+			e.Item = "" // путь только у макета и по грамматике манифеста: в ФС он не идёт
+		}
 		reg.Items = append(reg.Items, e)
 	}
 	return &reg, nil
@@ -219,12 +229,18 @@ func (s *Store) heldBy(key string, except *packReg) bool {
 	return false
 }
 
-// packItems — плитки наборов вида kind (под mu): наборы по installed, внутри — порядок
-// манифеста; ключ в двух наборах — одна плитка (первый набор); файла нет — нет плитки.
+// packItems — плитки наборов вида kind (под mu): наборы от нового к старому (ничья по installed —
+// по id), внутри — порядок манифеста (133 §3). Ключ в двух наборах — одна плитка у старшего
+// (по installed), порядок вывода на владение не влияет; файла нет — нет плитки.
 func (s *Store) packItems(kind string) []Item {
-	var out []Item
+	type block struct {
+		reg   *packReg
+		items []Item
+	}
+	var blocks []block
 	seen := map[string]bool{}
-	for _, r := range s.packs {
+	for _, r := range s.packs { // s.packs — по installed возр.: первый набор берёт ключ
+		b := block{reg: r}
 		for _, e := range r.Items {
 			if e.Kind != kind || seen[e.Key] {
 				continue
@@ -233,22 +249,36 @@ func (s *Store) packItems(kind string) []Item {
 				continue
 			}
 			seen[e.Key] = true
-			out = append(out, e.item(r.Title))
+			b.items = append(b.items, e.item(r))
 		}
+		blocks = append(blocks, b)
+	}
+	slices.SortStableFunc(blocks, func(a, b block) int {
+		return cmp.Or(cmp.Compare(b.reg.Installed, a.reg.Installed), cmp.Compare(a.reg.ID, b.reg.ID))
+	})
+	var out []Item
+	for _, b := range blocks {
+		out = append(out, b.items...)
 	}
 	return out
 }
 
-// item — плитка предмета набора: превью — как у своего, по ключу (/media/lib); шаблон рисует
-// Go (/media/tpl), страницы и места — Catalog по файлу.
-func (e packEntry) item(pack string) Item {
-	it := Item{ID: e.Key, Theme: e.Theme, Name: e.Name, URL: LibURL(e.Key, false), W: e.W, H: e.H, Pack: pack}
-	if e.Kind == KindSpread {
+// item — плитка предмета набора: превью — как у своего, по ключу (/media/lib); шаблон и макет рисует
+// Go (/media/tpl, /media/look), страницы, места и карточку — Catalog по файлу.
+func (e packEntry) item(r *packReg) Item {
+	it := Item{ID: e.Key, Theme: e.Theme, Name: e.Name, URL: LibURL(e.Key, false), W: e.W, H: e.H, Pack: r.Title, PackID: r.ID}
+	switch e.Kind {
+	case KindSpread:
 		it.URL = TplURL(e.Key)
+	case KindAlbum:
+		it.URL = LookURL(e.Key)
+	case KindBg, KindSticker, KindFrame: // peek — только у картинок (JSON макета не картинка)
+		it.Peek = LibURL(e.Key, true)
 	}
 	if e.W > 0 && e.H > 0 {
 		it.Aspect = float64(e.W) / float64(e.H)
 	}
+	markForm(&it, e.Kind)
 	return it
 }
 

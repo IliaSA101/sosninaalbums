@@ -5,11 +5,14 @@ import { Api, store } from '../../base/core/store.svelte'
 import { errText } from '../../base/words/errtext'
 import type { BackdropScope, GridTarget } from '../../base/core/types'
 import { isCover, isSheet, sheetIn } from '../../base/geom/sheet'
+import { stickerById } from '../../editor/sticker/sticker'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { placesel } from '../../editor/places/placesel.svelte'
 import {
+  ALL,
   cleanName,
-  firstTheme,
+  firstSource,
+  freshSource,
   importSummary,
   importTheme,
   standingId,
@@ -19,6 +22,7 @@ import {
   type DecorItem,
   type DecorKind,
 } from './decor'
+import { NO_SEL, type BrowseSel } from '../decorbrowse/browse'
 import { albumStanding } from '../albumbg/albumbg'
 import { bgNums, bgPickDefault, bgPickShown, bgSelShown, bgTargets, type BgPick } from './bgtargets'
 import { spreadsel } from '../timeline/spreadsel.svelte'
@@ -39,14 +43,18 @@ export type DecorAsk =
   | { kind: 'albumOwn'; id: string; pages: boolean; own: OwnAsk; count: number }
 
 // Открытое окно: что ставим (вид), на каком листе и в какую область. replace — ID стикера, которому ищут замену
-// («Заменить…» в карточке «Стикер»); нет — стикер добавляется.
+// («Заменить…» в карточке «Стикер»); нет — стикер добавляется. Режим — replacing(): стикера на листе нет — добавление (0.28-133-78).
 // album — окно «Фон альбома» (098, из настроек и карточки листа): без строки «На», «Куда» — разворот или страницы.
 export type DecorCur = { kind: DecorKind; spread: string; scope: BackdropScope; replace?: string; album?: boolean }
+
+const PACK_KINDS = 4 // видов окна с плитками наборов: фоны, стикеры, развороты, рамочки
 
 class DecorUi {
   cur = $state<DecorCur | null>(null)
   cat = $state<DecorCatalog | null>(null)
   theme = $state('')
+  // 133: отбор «Набор · Вид · Стиль» помнится до конца сеанса; смена вида окна — всё «Все» (0.28-133-14)
+  filters = $state<BrowseSel>({ ...NO_SEL })
   loading = $state(false)
   ask = $state<DecorAsk | null>(null)
   // Имя в поле — отдельно от ask: окно закрывается раньше, чем bind:value отпустит поле.
@@ -80,8 +88,11 @@ class DecorUi {
   private frLoaded = false
 
   show(kind: DecorKind, spread: string, scope: BackdropScope, replace?: string) {
-    // Темы фонов и стикеров разные: с другим видом начинаем с первой темы, а не с запомненной.
-    if (this.cat && this.cat.kind !== kind) this.theme = ''
+    // Темы фонов и стикеров разные: с другим видом начинаем с первой темы, а не с запомненной; отбор тоже «Все».
+    if (this.cat && this.cat.kind !== kind) {
+      this.theme = ''
+      this.filters = { ...NO_SEL }
+    }
     this.cur = replace ? { kind, spread, scope, replace } : { kind, spread, scope }
     this.ask = null
     this.bgText = ''
@@ -125,6 +136,13 @@ class DecorUi {
     return c ? frameTargets(sheetIn(store.view, c.spread), this.frameWhereNow(), this.frameSel()) : []
   }
 
+  // ID заменяемого стикера, пока он стоит на листе. Ctrl+Z под окном мог его убрать (Ctrl+Shift+Z вернёт): без стикера
+  // окно ведёт себя как «Добавить…» — постановка добавляет, шапка и подсказки без «Заменить» (0.28-133-78).
+  replacing = (): string | undefined => {
+    const c = this.cur
+    return c?.replace && stickerById(sheetIn(store.view, c.spread), c.replace) ? c.replace : undefined
+  }
+
   // Плитка, что стоит в окне сейчас (scope — действующая область листа): фон альбома, рамочка, стикер или фон листа.
   standing(scope: BackdropScope): string {
     const c = this.cur
@@ -159,12 +177,13 @@ class DecorUi {
     this.shown.clear()
   }
 
-  // Свежие наборы для открывающегося окна; каждому виду — один раз, показаны всем трём — забываются.
+  // Свежие наборы для открывающегося окна; каждому виду — один раз, показаны всем видам с плитками наборов — забываются.
+  // Плитки наборов бывают во всех четырёх видах (фоны, стикеры, развороты, рамочки): до 133 здесь стояло «трём из четырёх».
   private takeFresh(kind: DecorKind): ReadonlySet<string> | undefined {
     if (!this.fresh.size || this.shown.has(kind)) return undefined
     const out = new Set(this.fresh)
     this.shown.add(kind)
-    if (this.shown.size >= 3) {
+    if (this.shown.size >= PACK_KINDS) {
       this.fresh.clear()
       this.shown.clear()
     }
@@ -190,6 +209,17 @@ class DecorUi {
     this.theme = id
   }
 
+  // Ряд отбора: один из трёх выборов; выбор помнится, даже если в теме такого варианта нет.
+  setFilter<K extends keyof BrowseSel>(key: K, value: BrowseSel[K]) {
+    this.filters = { ...this.filters, [key]: value }
+  }
+
+  // «Показать весь набор» в просмотре: «Все» источники, только этот набор, вид и стиль — «Все».
+  showPack(packId: string) {
+    this.theme = ALL
+    this.filters = { ...NO_SEL, pack: packId }
+  }
+
   // Каталог заново (после ✎, ×, загрузки). Тема остаётся, если ещё есть. Номер запроса отсекает запоздавший ответ.
   // fresh — только при открытии окна (show): открытое окно тему не меняет.
   async refresh(fresh?: ReadonlySet<string>) {
@@ -201,7 +231,9 @@ class DecorUi {
       const cat = c.kind === 'frame' ? await frameApi.catalog() : ((await Api.DecorCatalog(c.kind)) as unknown as DecorCatalog)
       if (my !== this.req) return
       this.cat = cat
-      this.theme = firstTheme(cat, this.theme, fresh)
+      this.theme = firstSource(cat, this.theme, fresh)
+      // Прыжок к свежему набору: старый отбор не должен его спрятать
+      if (freshSource(cat, fresh)) this.filters = { ...NO_SEL }
       this.remember(cat)
     } catch (e) {
       if (my === this.req) store.notify(errText(e), 'error')
@@ -309,7 +341,11 @@ class DecorUi {
       // SVG от Go рисуем здесь по очереди; итог идёт в тот же тост, что и остальные файлы.
       const res = go.svg?.length ? mergeImport(go, await rasterSvgs(go.svg, Api.AddDecorPNG)) : go
       // 100-1: окно переходит в тему, куда легло своё («Мои», если грузили из «Все» или «Недавних»)
-      if (res.added.length && this.cur) this.setTheme(importTheme(this.theme))
+      if (res.added.length && this.cur) {
+        this.setTheme(importTheme(this.theme))
+        // 133: набор, стиль, «Уголки», «Разделители» прячут свои — загруженное выглядело бы потерянным; отбор «Все» (0.28-133-77)
+        this.filters = { ...NO_SEL }
+      }
       const sum = importSummary(res)
       if (sum) store.notify(sum.text, sum.error ? 'error' : 'info')
       if (this.cur) await this.refresh()

@@ -21,6 +21,8 @@ const { tour } = await import('./tourstate.svelte')
 const { store } = await import('../../base/core/store.svelte')
 const { prefs } = await import('../../base/prefs/prefs.svelte')
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+// Дождаться записи в config (мок Go отвечает асинхронно): на занятой машине фиксированная пауза не годится.
+const settled = (check: () => void) => vi.waitFor(check, { timeout: 5000 })
 
 beforeEach(() => {
   cfg.first = ''
@@ -41,7 +43,8 @@ afterEach(() => {
 // Закрытие окна программы: Svelte-дерево уходит, ни одной команды тура не приходит.
 const closeWindow = async () => {
   cleanup()
-  await wait(50)
+  await settled(() => expect(cfg.first).toBe('pending'))
+  await wait(50) // и ни одной лишней команды после сноса дерева (отрицательная проверка — пауза неизбежна)
 }
 
 async function startTour() {
@@ -64,11 +67,9 @@ describe('тур: закрытие окна программы посреди т
     await startTour()
     tour.next()
     flushSync()
-    await wait(50)
     store.view = { ...store.view, folders: [{ path: '/a' } as never] }
     flushSync()
-    await wait(300)
-    expect(tour.res?.live).toBe(true)
+    await settled(() => expect(tour.res?.live).toBe(true))
     await closeWindow()
     expect(cfg.calls).toEqual([['first', 'pending']])
     expect(cfg.first).toBe('pending')
@@ -78,7 +79,7 @@ describe('тур: закрытие окна программы посреди т
     await startTour()
     tour.go(2)
     flushSync()
-    await wait(50)
+    await tick()
     await closeWindow()
     expect(cfg.first).toBe('pending')
   })
@@ -88,16 +89,14 @@ describe('тур: закрытие окна программы посреди т
     tour.next()
     flushSync()
     await fireEvent.click(screen.getByRole('button', { name: 'Пропустить' }))
-    await wait(50)
-    expect(cfg.first).toBe('done')
+    await settled(() => expect(cfg.first).toBe('done'))
     expect(cfg.log).toEqual(['тур закрыт: skip, click, шаг 0, запуск auto'])
   })
 
   it('Esc в карточке — тоже skip, в журнале «key»', async () => {
     await startTour()
     await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
-    await wait(50)
-    expect(cfg.first).toBe('done')
+    await settled(() => expect(cfg.first).toBe('done'))
     expect(cfg.log).toEqual(['тур закрыт: skip, key, шаг intro, запуск auto'])
   })
 })

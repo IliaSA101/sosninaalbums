@@ -19,10 +19,27 @@ export const THUMB_MIN = 70
 export const THUMB_MAX = 220
 export const THUMB_DEF = 110
 
+// Размер плиток окон оформления (133): по одному числу на вид окна. Пределы и умолчания знает
+// panels/decorbrowse/tilesize.ts; здесь только память — целые px, мусор не загружается.
+export const DECOR_TILE_KEYS = ['bg', 'sticker', 'frame', 'spread'] as const
+export type DecorTileKey = (typeof DECOR_TILE_KEYS)[number]
+export type DecorTiles = Partial<Record<DecorTileKey, number>>
+
 // Порядок ленты фото (075): по имени (как от Go) или по времени съёмки.
 export type LibSort = 'name' | 'shot'
 
 const isPer = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 64
+
+// Хранилище → память плиток окон оформления: только известные виды и целые числа.
+export function loadDecorTile(x: unknown): DecorTiles {
+  const out: DecorTiles = {}
+  if (!x || typeof x !== 'object') return out
+  for (const k of DECOR_TILE_KEYS) {
+    const n = (x as Record<string, unknown>)[k]
+    if (Number.isInteger(n) && (n as number) > 0) out[k] = n as number
+  }
+  return out
+}
 
 // Хранилище → память: autoRange главнее; прежнее «не больше m» (autoMaxPer): 64 или нет → «Авто», меньшее m — «от min(3, m) до m».
 // Мусор — «Авто».
@@ -69,6 +86,8 @@ class ViewMode {
   }
   // 053: размер миниатюр ленты, целые px; настройка окна, как высота ленты.
   thumbSize = $state(THUMB_DEF)
+  // 133: размер плиток окон «Фоны», «Стикеры», «Рамочки», «Развороты»; нет ключа — умолчание вида.
+  decorTile = $state<DecorTiles>({})
   // 075: порядок ленты («Фильтр ▸ Порядок»); настройка окна, фильтр «Сбросить» её не трогает.
   libSort = $state<LibSort>('name')
   // 058: последняя типография в списке форматов «Настроек альбома» ("" — «Общие»).
@@ -95,6 +114,7 @@ class ViewMode {
       this.rulers = v.rulers !== false
       const t = v.thumbSize
       if (Number.isInteger(t) && t >= THUMB_MIN && t <= THUMB_MAX) this.thumbSize = t
+      this.decorTile = loadDecorTile(v.decorTile)
       if (v.libSort === 'name' || v.libSort === 'shot') this.libSort = v.libSort
       if (typeof v.presetGroup === 'string') this.presetGroup = v.presetGroup
       this.keysMode = loadKeysMode(v.keysMode)
@@ -137,6 +157,7 @@ class ViewMode {
           faceGuide: this.faceGuide,
           rulers: this.rulers,
           thumbSize: this.thumbSize,
+          decorTile: this.decorTile,
           libSort: this.libSort,
           presetGroup: this.presetGroup,
           keysMode: this.keysMode,
@@ -214,6 +235,15 @@ class ViewMode {
   setThumb(n: number) {
     if (!Number.isFinite(n)) return
     this.thumbSize = Math.max(THUMB_MIN, Math.min(THUMB_MAX, Math.round(n)))
+    this.save()
+  }
+
+  // Размер плиток окна оформления: целое число запоминаем (пределы зажимает вызывающий), мусор — нет.
+  setDecorTile(kind: DecorTileKey, n: number) {
+    if (!Number.isFinite(n)) return
+    const v = Math.round(n)
+    if (this.decorTile[kind] === v) return
+    this.decorTile = { ...this.decorTile, [kind]: v }
     this.save()
   }
 
