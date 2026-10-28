@@ -85,6 +85,7 @@ type Store struct {
 	entries  []*entry                     // порядок файла; запись сохраняет и чужие виды
 	files    map[string]map[string]string // вид → ключ → путь файла на диске (скан + импорт)
 	packs    []*packReg                   // наборы (packs.go) по installed
+	demo     demoRef                      // пример темы (SetDemo): поведение по id, не по origin
 	readOnly bool
 	qrScan   int // версия миграции признака QR (qr_migrate.go); qrScanV — стикеры просмотрены
 

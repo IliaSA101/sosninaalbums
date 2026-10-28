@@ -34,6 +34,7 @@ export interface KeyContext {
   big?: boolean // «Во весь экран» (F): ленты не видно, отметки клавишами молчат
   dialog?: DialogState // открыто окно (074-18, 074-28)
   preview?: 'library' | 'canvas' // открыт крупный просмотр (128): откуда; из ленты под окном проходят отметки
+  compare?: boolean // открыто окно сравнения (138): отметки идут активному кадру
   can?: (feature: FeatureId) => boolean // уровень интерфейса: команда с чужой функцией молчит; не задано — всё доступно
   menuOn?: (id: string) => boolean // пункт меню команды виден на уровне и не серый; не задано — да
 }
@@ -77,8 +78,13 @@ const pasteOn = (c: KeyContext) => clipOn(c) && !!c.pasteable
 // Крупный просмотр (128): в зоне ленты — как отметки (не в «Во весь экран» и не при галерее), на холсте — без галереи и
 // режима фона. Нечего открыть — команда сама скажет тостом.
 const previewOn = (c: KeyContext) => (c.zone === 'canvas' ? !c.galleryOpen && !c.bgMode : marksOn(c))
-// Под окном просмотра из ленты проходят отметки показанному фото (0.26-128-6); 0 остаётся окну («вписать»).
-const previewMark = (cmd: KeymapEntry, c: KeyContext) => c.preview === 'library' && cmd.group === 'marks' && cmd.id !== 'markRating0'
+// Под окном просмотра из ленты и под сравнением проходят отметки показанному (активному) фото (0.26-128-6); 0 остаётся окну («вписать»).
+const previewMark = (cmd: KeymapEntry, c: KeyContext) =>
+  (c.preview === 'library' || !!c.compare) && cmd.group === 'marks' && cmd.id !== 'markRating0'
+// Сравнение (138) открывается только из ленты — и из окна 128, открытого из ленты (оно передаёт ему кадры);
+// на холсте и в «Во весь экран» команды молчат, как отметки.
+const compareOn = (c: KeyContext) => (c.preview === 'library' || c.zone !== 'canvas') && marksOn(c) && !c.compare
+const handOff = (cmd: KeymapEntry, c: KeyContext) => c.preview === 'library' && (cmd.id === 'photoCompare' || cmd.id === 'photoSimilar')
 
 // Условия команд (прежние when таблицы). Команда без записи — без условий; без клавиши по умолчанию — «пункт меню».
 const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
@@ -102,6 +108,8 @@ const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
     ].map((id) => [id, marksOn]),
   ),
   photoPreview: previewOn,
+  photoCompare: compareOn,
+  photoSimilar: compareOn,
   findPhotos: marksOn, // поле поиска в ленте: в «Во весь экран» и при галерее ленты нет (0.26-124-10)
   // Подборки (083): как отметки, плюс уровень; Del — только с выделением (без него в ленте Del молчит, как раньше).
   binToggle: (c) => binsOn(c),
@@ -128,7 +136,8 @@ const WHEN: Readonly<Record<string, (c: KeyContext) => boolean>> = {
 const scopeOk = (cmd: KeymapEntry, c: KeyContext) => active(cmd.scope, c) || previewMark(cmd, c)
 
 // Под окном: «Отменить»/«Повторить» только под окнами правки (074-28), плюс отметки под просмотром из ленты (128).
-const dialogOk = (cmd: KeymapEntry, c: KeyContext) => !c.dialog || (c.dialog === 'undo' && !!(cmd.dialogs || previewMark(cmd, c)))
+const dialogOk = (cmd: KeymapEntry, c: KeyContext) =>
+  !c.dialog || (c.dialog === 'undo' && !!(cmd.dialogs || previewMark(cmd, c) || handOff(cmd, c)))
 
 function allowed(cmd: KeymapEntry, e: KeyEvent, c: KeyContext): boolean {
   if (!scopeOk(cmd, c) || !dialogOk(cmd, c)) return false

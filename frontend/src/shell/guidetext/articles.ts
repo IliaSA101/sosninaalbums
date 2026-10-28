@@ -1,14 +1,17 @@
-// Справочник функций (спека 033): модель статьи и общий список. Тексты — articles-a.ts, articles-e.ts, articles-d.ts (раздел 4), articles-b.ts, articles-b2.ts, articles-c.ts и articles-f.ts;
+// Справочник функций (спека 033): модель статьи и общий список. Тексты — articles-a.ts, articles-e.ts, articles-d.ts (раздел 4), articles-b.ts, articles-b2.ts, articles-c.ts, articles-c2.ts, articles-f.ts и articles-g.ts;
 // уровни берутся из FEATURES (levels.ts), здесь они не дублируются. Правка проекта из справочника запрещена.
 import type { Base, FeatureId } from '../../base/prefs/levels'
 import type { SectionName } from '../../base/prefs/view.svelte'
+import type { ActId } from '../../editor/photomenu/photoacts'
 import { PART_A } from './articles-a'
 import { PART_E } from './articles-e'
 import { PART_D } from './articles-d'
 import { PART_B } from './articles-b'
 import { PART_B2 } from './articles-b2'
 import { PART_C } from './articles-c'
+import { PART_C2 } from './articles-c2'
 import { PART_F } from './articles-f'
+import { PART_G } from './articles-g'
 
 export type GroupId = 'start' | 'photos' | 'spreads' | 'onspread' | 'text' | 'cover' | 'view' | 'manual'
 
@@ -67,6 +70,8 @@ export interface Article {
   keys?: string[] // action строки HOTKEYS или её show у справочной строки
   menu?: string[] // id верхних пунктов меню: строка «Меню: Файл ▸ Экспорт…» строится из buildMenu
   how?: string // для жестов и клавиш: как сделать
+  see?: string[] // «См. также»: id других статей, не своя, ≤ 4 (щелчок в карточке выбирает статью)
+  acts?: ActId[] // действия фото и стикера (ACTS), о которых статья: страж полноты и индекс поиска
   spot?: SpotKey // что мигает: одно место (кнопка «Показать»)
   spots?: Place[] // несколько мест (шапка и меню, лента и меню): вместо spot, от двух штук
   needs?: Need[]
@@ -75,7 +80,7 @@ export interface Article {
   miss?: { spot?: `ui:${string}`; hint: string }
 }
 
-export const ARTICLES: Article[] = [...PART_A, ...PART_E, ...PART_D, ...PART_B, ...PART_B2, ...PART_C, ...PART_F]
+export const ARTICLES: Article[] = [...PART_A, ...PART_E, ...PART_D, ...PART_B, ...PART_B2, ...PART_C, ...PART_C2, ...PART_F, ...PART_G]
 
 // Места статьи в порядке показа: spots, иначе единственное spot с кнопкой «Показать»; без обоих (жест, клавиша) — пусто.
 export const placesOf = (a: Article): Place[] => a.spots ?? (a.spot ? [{ label: 'Показать', spot: a.spot }] : [])

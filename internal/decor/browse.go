@@ -78,13 +78,14 @@ func markForm(it *Item, kind string) {
 // dateOK — t похоже на дату установки (0 и сброшенные часы — нет).
 func dateOK(t int64) bool { return t >= minInstalled }
 
-// packBase — граница первой партии: самое раннее из Base и Installed стоящих наборов, кроме skip;
+// packBase — граница первой партии: самое раннее из Base и Installed стоящих наборов, кроме skip и
+// примера темы (первая партия нового пользователя — каталог, а не пример, 0.30-142-20);
 // false — дат нет. Под mu.
 func (s *Store) packBase(skip *packReg) (int64, bool) {
 	var base int64
 	found := false
 	for _, r := range s.packs {
-		if r == skip {
+		if r == skip || s.isDemo(r) {
 			continue
 		}
 		for _, t := range [2]int64{r.Base, r.Installed} {

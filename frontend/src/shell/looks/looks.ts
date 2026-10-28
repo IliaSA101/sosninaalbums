@@ -8,6 +8,9 @@ import type { LookInfo, LookItem, LookMode, LookPlan, LookRole } from './looktyp
 
 export const LOOKS_TITLE = 'Макеты альбома'
 export const EMPTY_LOOKS = 'Макетов пока нет — их приносят наборы библиотеки'
+// Пример темы (142): в компактной редакции его ещё нет — пустое окно ведёт в «Наборы»; с примером указатель стоит под плитками.
+export const EMPTY_DEMO = 'Макетов пока нет — пример свадебного макета есть в «Наборах»'
+export const MORE_LOOKS = 'Ещё макеты — в наборах библиотеки'
 export const EMPTY_THEME = 'В этой теме пока пусто'
 export const EMPTY_MINE = 'Здесь появятся ваши макеты'
 export const PICK_HINT = 'Выберите макет слева'

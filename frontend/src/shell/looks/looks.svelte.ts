@@ -5,7 +5,9 @@
 import { store } from '../../base/core/store.svelte'
 import { errText } from '../../base/words/errtext'
 import { modes } from '../../base/prefs/view.svelte'
-import { cleanName, firstTheme } from '../../panels/decor/decor'
+import { ALL, cleanName, firstTheme } from '../../panels/decor/decor'
+import type { GetItem } from '../../panels/decorbrowse/decorget'
+import { getApi } from '../../panels/decorbrowse/getapi'
 import { lookApi } from './lookapi'
 import { COVER_ID } from '../../base/geom/sheet'
 import { putQuestion, putToast } from '../../panels/decor/spreadtpl'
@@ -19,12 +21,14 @@ export type LooksAsk =
   | { kind: 'hide'; id: string; name: string }
   | { kind: 'apply'; plan: LookPlan; o: LookOpts } // o — запрос, о котором спросили: ставится именно он (plan.spreads — число Go после постановки, не «сколько добавить»)
   | { kind: 'step'; id: string; spread: string; step: number; text: string }
+  | { kind: 'get'; tile: GetItem } // 144: «Скачать набор?» перед скачиванием образца макета
 
 class LooksUi {
   open = $state(false)
   cat = $state<LookCatalog | null>(null)
   theme = $state('')
   loading = $state(false)
+  demoOffer = $state(false) // каталог пуст, а в «Можно скачать» есть пример (142): пустое окно ведёт к нему
   sel = $state('') // id выбранной плитки; '' — не выбрана
   spreads = $state(0) // «Разворотов» в режиме «весь альбом»
   addN = $state(1) // «Разворотов» в режиме «Добавить»: сколько повторяемых добавить (0.28-131-67)
@@ -41,6 +45,7 @@ class LooksUi {
   private reqInfo = 0
   private reqCnt = 0
   private rev = -1
+  opened = 0 // номер открытия окна: скачанный макет узнаёт по нему, что окно закрывали (144)
   // 073-1: названия поставленных за сеанс наборов; окно встаёт на тему первого из них один раз при открытии.
   private fresh = new Set<string>()
 
@@ -78,8 +83,10 @@ class LooksUi {
 
   async show() {
     this.open = true
+    this.opened++
     this.ask = null
     this.rev = store.view.rev
+    getApi.previews() // 144: образцы нескачанных наборов докачиваются, пока окно открыто
     const fresh = this.fresh.size ? new Set(this.fresh) : undefined
     this.fresh.clear()
     await this.refresh(fresh)
@@ -116,6 +123,8 @@ class LooksUi {
       if (my !== this.reqCat) return
       this.cat = cat
       this.theme = firstTheme(cat, this.theme, fresh)
+      this.demoOffer = cat.items.length === 0 ? await this.offered() : false
+      if (my !== this.reqCat) return
     } catch (e) {
       if (my === this.reqCat) store.notify(errText(e), 'error')
       return
@@ -124,6 +133,15 @@ class LooksUi {
     }
     if (this.sel && !this.item) this.drop()
     if (this.sel) await this.load(false)
+  }
+
+  // Ошибка чтения списка наборов окну макетов не помеха: остаётся прежний текст пустого окна.
+  private async offered(): Promise<boolean> {
+    try {
+      return await lookApi.demoOffer()
+    } catch {
+      return false
+    }
   }
 
   setTheme(id: string) {
@@ -391,6 +409,20 @@ class LooksUi {
   }
   dismiss() {
     this.ask = null
+  }
+
+  // 144: щелчок по плитке скачивания — вопрос «Скачать набор?» (ход и показ — lookget.svelte).
+  askGet(tile: GetItem) {
+    this.ask = { kind: 'get', tile }
+  }
+
+  // 144: макет скачанного набора — каталог перечитан, тема карточки, карточка выбрана и показана справа. Ничего не применяет:
+  // «Применить» — кнопкой формы (0.27-131-12). Каталога с этим макетом нет (скрыт, набор без него) — молча.
+  async showGot(item: Pick<LookItem, 'id' | 'theme'>) {
+    await this.refresh()
+    if (!this.open || !this.cat?.items.some((i) => i.id === item.id)) return
+    this.theme = this.cat.themes.some((t) => t.id === item.theme) ? item.theme : ALL
+    await this.choose(item.id)
   }
 
   // «Сохранить» / «Убрать»: вопрос закрывается сразу, каталог перечитывается после успеха. Отмены нет (библиотека, не альбом).

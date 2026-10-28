@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
 vi.mock('../../../wailsjs/go/app/App', () => ({
   DecorCatalog: vi.fn(),
+  LibraryPacks: vi.fn(),
   LookInfo: vi.fn(),
   LookCount: vi.fn(),
   PlanLook: vi.fn(),
@@ -31,6 +32,15 @@ describe('lookApi: вызовы биндингов', () => {
     vi.mocked(Api.DecorCatalog).mockResolvedValue({ kind: 'album' } as never)
     expect(await lookApi.catalog()).toEqual({ kind: 'album' })
     expect(Api.DecorCatalog).toHaveBeenCalledExactlyOnceWith('album')
+  })
+
+  it('demoOffer: net.demoOffer из LibraryPacks; поля нет (старый Go) или ответа нет — ложь', async () => {
+    vi.mocked(Api.LibraryPacks).mockResolvedValue({ net: { demoOffer: true } } as never)
+    expect(await lookApi.demoOffer()).toBe(true)
+    vi.mocked(Api.LibraryPacks).mockResolvedValue({ net: {} } as never)
+    expect(await lookApi.demoOffer()).toBe(false)
+    vi.mocked(Api.LibraryPacks).mockResolvedValue(undefined as never)
+    expect(await lookApi.demoOffer()).toBe(false)
   })
 
   it('карточка, числа и план: id и параметры без изменений', async () => {

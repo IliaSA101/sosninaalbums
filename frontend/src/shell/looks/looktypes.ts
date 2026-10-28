@@ -3,6 +3,7 @@
 // Поля View.look / drafts, SpreadView.lookStep и TextView.draft — у U2/U3, окну они не нужны.
 import type { View } from '../../base/core/types'
 import type { DecorItem, DecorTheme } from '../../panels/decor/decor'
+import type { DecorGet } from '../../panels/decorbrowse/decorget'
 
 // Плитка каталога вида «album» (DecorItem + карточка макета).
 export interface LookItem extends DecorItem {
@@ -17,7 +18,10 @@ export interface LookCatalog {
   themes: DecorTheme[]
   items: LookItem[]
   recent: string[]
+  get?: DecorGet[] // 144: плитки «Можно скачать» (образцы макетов нескачанных наборов); у старого Go поля нет
+  invite?: boolean // 144: списка наборов ещё не было — в конце «Все» приглашение «⤓ Ещё из интернета»
   readOnly: boolean
+  demoOnly?: boolean // все макеты — из примера темы (142); у старого Go поля нет
 }
 
 export type LookRole = '' | 'repeat' | 'vignette'

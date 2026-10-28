@@ -2,7 +2,7 @@
   import { keymap } from '../../base/keys/keymap.svelte'
   import { bgmode } from './bgmode.svelte'
   import { store } from '../../base/core/store.svelte'
-  import { SCOPE_BAR } from './bgmode'
+  import { scopeWord } from './bgmode'
   import { fitBackdrop, flipBackdrop } from './backdropact'
   import Icon from '../../base/ui/Icon.svelte'
 
@@ -16,7 +16,7 @@
 {#if b && c}
   <div class="bar" role="toolbar" aria-label="Режим фона">
     <div class="group">
-      <span class="tag">Фон: {SCOPE_BAR[c.scope]}</span>
+      <span class="tag">Фон: {scopeWord(c.scope, store.cover, store.onCover)}</span>
       {#if b.dpi > 0}<span class="dpi" class:low={b.dpi < store.view.minDPI} title="Разрешение фото фона в печати"
           >{Math.round(b.dpi)} dpi</span
         >{/if}

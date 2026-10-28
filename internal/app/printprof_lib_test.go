@@ -131,7 +131,7 @@ func publishPrints(t *testing.T, l *netLib, zips ...string) {
 
 func updateOK(t *testing.T, a *App) LibraryUpdate {
 	t.Helper()
-	res, err := a.UpdateLibrary()
+	res, err := getAll(t, a)
 	if err != nil {
 		t.Fatalf("обновление: %v", err)
 	}
@@ -381,8 +381,9 @@ func TestPackPrintBrokenProfile(t *testing.T) {
 			a, l, ev := libApp(t)
 			z := packZip(t, "print-bad", 1, pfile{"bad.saprint", "print", bad})
 			publishPrints(t, l, z)
-			res, err := a.UpdateLibrary()
-			if err != nil || res.Added != 0 || len(res.Skipped) == 0 {
+			res, err := getAll(t, a)
+			// Набор без единой годной типографии не встал: причина — в «не скачались».
+			if err != nil || res.Added != 0 || len(res.Failed) != 1 {
 				t.Fatalf("плохой профиль: %v %+v", err, res)
 			}
 			if len(a.PrintProfiles()) != 3 || len(ev.of("print:changed")) != 0 || len(printFiles(t, a)) != 0 {

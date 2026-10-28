@@ -80,7 +80,7 @@ describe('facesLabel: ход на кнопке', () => {
 describe('faceText: три группы', () => {
   it('все группы по спеке: 20 из 25, нулевые не пишутся', () => {
     const r = rep({ fitted: 20, noFace: 2, many: 1, small: 1, contain: 1 })
-    expect(faceText(r)).toBe('Подогнано 20 из 25 · Проверьте 3 · Не по норме 1 (мелкое) · Не тронуто 1 («Целиком»)')
+    expect(faceText(r)).toBe('Подогнано 20 из 25 · Проверьте 3 · Не по норме 1 (мельче нормы листа) · Не тронуто 1 («Целиком»)')
     expect(facesTotal(r)).toBe(25)
   })
 

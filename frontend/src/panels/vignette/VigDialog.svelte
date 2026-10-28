@@ -93,7 +93,7 @@
       if ((final || el.value !== '') && el.value !== String(n)) el.value = String(n)
     }
 
-  // Enter — «Применить» отовсюду, кроме подписи и кнопок: карточки шаблонов ловят его сами.
+  // Enter — «Применить» отовсюду в окне (Modal.onkey: и при фокусе на самом окне), кроме подписи и кнопок: карточки шаблонов ловят его сами.
   function key(e: KeyboardEvent) {
     const t = e.target as HTMLElement
     if (e.key === 'Enter' && !t.closest('textarea, button, summary')) {
@@ -112,8 +112,8 @@
 
 {#if ses}
   {@const s = ses}
-  <Modal title="Настроить виньетку" size="large" onclose={close} undo>
-    <div class="body" role="presentation" onkeydown={key}>
+  <Modal title="Настроить виньетку" size="large" onclose={close} onkey={key} undo>
+    <div class="body">
       <div class="grid">
         <div class="left" bind:clientWidth={colW}>
           <div class="pv" style:height="{box.h}px" aria-busy={s.preview.pending} aria-label="Предпросмотр листа" role="img">

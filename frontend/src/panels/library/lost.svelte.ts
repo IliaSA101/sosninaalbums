@@ -1,3 +1,4 @@
+import { untrack } from 'svelte'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { store } from '../../base/core/store.svelte'
 import { autocheck } from '../folders/autocheck'
@@ -11,6 +12,8 @@ class Lost {
   private tries = new SvelteMap<string, number>()
   // Плитки, которым повтор уже дали с последнего нового списка ленты: вторая ошибка — заглушка без нового круга.
   private spent = new SvelteSet<string>()
+  // ID, у которых в прошлый раз была причина «не читается» (store.unread) — чтобы заметить её исчезновение.
+  private unreadPrev = new Set<string>()
 
   constructor() {
     // Новый список ленты — новая попытка загрузки: заглушки сбрасываются (вернувшийся файл снова виден).
@@ -19,6 +22,18 @@ class Lost {
         void store.photos
         this.ids.clear()
         this.spent.clear()
+      })
+      // 117: причина «не читается» у фото исчезла (файл перезаписан) — миниатюру просим заново, как после новой сверки.
+      $effect(() => {
+        const now = new Set(Object.keys(store.unread))
+        untrack(() => {
+          for (const id of this.unreadPrev) {
+            if (now.has(id)) continue
+            this.spent.delete(id) // причина снята — новая ошибка снова вправе просить сверку
+            this.again(id)
+          }
+        })
+        this.unreadPrev = now
       })
     })
     autocheck.onDone(this.retry)
@@ -44,9 +59,14 @@ class Lost {
     for (const id of [...this.ids]) {
       if (this.spent.has(id) || store.missing.includes(id)) continue
       this.spent.add(id)
-      this.tries.set(id, this.retryOf(id) + 1)
-      this.ids.delete(id)
+      this.again(id)
     }
+  }
+
+  // Новый адрес миниатюры (сбивает кэш прошлого сбоя) и снятая заглушка.
+  private again(id: string) {
+    this.tries.set(id, this.retryOf(id) + 1)
+    this.ids.delete(id)
   }
 
   clear = () => {

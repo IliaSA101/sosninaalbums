@@ -112,10 +112,23 @@ export function spotLabel(s: Spot, unit: Pick<Unit, 'cap'>, names: Names): strin
   return name ? `${at} · ${name}` : at
 }
 
-// Подсказка на заглушке пропавшего фото; имени нет в карте — без него.
-export function missTip(id: string, names: Names): string {
+// Подсказка на заглушке фото; имени нет в карте — без него. Файл найден, но не читается (117, store.unread) —
+// «Не читается: <причина>»: фраза от Go готовая, без добавок.
+export function missTip(id: string, names: Names, unread: Readonly<Record<string, string>> = {}): string {
+  const why = unread[id]
+  if (why) return `Не читается: ${why}`
   const name = names[id]
   return name ? `Файл не найден: ${name}` : 'Файл фото не найден'
+}
+
+// Подпись заглушки плитки: файла нет или он есть, но не читается (117).
+export function goneLabel(id: string, unread: Readonly<Record<string, string>>): string {
+  return unread[id] ? 'не читается' : 'нет файла'
+}
+
+// Вместо картинки — заглушка: файла нет на диске (store.missing) или он не читается (store.unread, 117).
+export function isGone(id: string, missing: readonly string[], unread: Readonly<Record<string, string>>): boolean {
+  return !!unread[id] || missing.includes(id)
 }
 
 // Ключ набора пропавших для «Скрыть»: другой набор или другое открытие альбома — полоса снова видна.

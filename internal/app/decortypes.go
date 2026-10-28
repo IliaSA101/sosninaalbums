@@ -49,6 +49,17 @@ type DecorCatalog struct {
 	Recent   []string     `json:"recent"` // ID плиток, новые первыми
 	New      []string     `json:"new"`    // ID плиток «Новые» (133) в порядке каталога; пусто — []
 	ReadOnly bool         `json:"readOnly"`
+	// DemoOnly — плитки вида есть и все из примера (142): окно даёт указатель на наборы библиотеки.
+	DemoOnly bool `json:"demoOnly"`
+	// Get — плитки «Можно скачать» (144, не nil); Invite — списка наборов ещё не было: в конце «Все»
+	// плитка «⤓ Ещё из интернета».
+	Get    []DecorGet `json:"get"`
+	Invite bool       `json:"invite"`
+}
+
+// emptyDecorCatalog — пустой каталог вида: срезы не nil, интерфейс не проверяет null.
+func emptyDecorCatalog(kind string) DecorCatalog {
+	return DecorCatalog{Kind: kind, Themes: []DecorTheme{}, Items: []DecorItem{}, Recent: []string{}, New: []string{}, Get: []DecorGet{}}
 }
 
 // DecorSkip — пропущенный при загрузке файл и причина.

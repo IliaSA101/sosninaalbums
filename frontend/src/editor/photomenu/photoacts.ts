@@ -5,6 +5,8 @@ import type { FeatureId } from '../../base/prefs/levels'
 
 export type ActId =
   | 'preview'
+  | 'compare'
+  | 'similar'
   | 'clipCopy'
   | 'clipPaste'
   | 'turnCw'
@@ -48,6 +50,8 @@ export interface Act {
 
 export const ACTS: Record<ActId, Act> = {
   preview: { label: 'Крупный просмотр', icon: 'preview', cmd: 'photoPreview' },
+  compare: { label: 'Сравнить', icon: 'compare', cmd: 'photoCompare' }, // 138: меню ленты, 2–4 фото
+  similar: { label: 'Похожие к этому', icon: 'similar', cmd: 'photoSimilar' }, // 138: меню ленты, одно фото
   clipCopy: { label: 'Копировать', icon: 'copy', cmd: 'copyItems' },
   clipPaste: { label: 'Вставить', icon: 'paste', cmd: 'pasteItems' },
   turnCw: { label: 'Повернуть ↻ 90°', icon: 'turn-cw', feature: 'turn', cmd: 'turnCw' },
@@ -77,10 +81,10 @@ export const ACTS: Record<ActId, Act> = {
   explorer: { label: 'Показать в папке', icon: 'folder' }, // слово по ОС подставляет дерево меню (revealLabel)
   copy: { label: 'Копировать имя файла', icon: 'copy-name' },
   uses: { label: 'Где ещё стоит', icon: 'locate' },
-  relink: { label: 'Перепривязать…', icon: 'link' },
+  relink: { label: 'Перепривязать…', icon: 'link', cmd: 'relink' }, // тот же relinkFolder, что у пункта «Найти пропавшие фото…»
   replace: { label: 'Заменить…', icon: 'replace' },
   undraft: { label: 'Сделать обычной надписью' }, // 131: заготовка макета → обычный текст (Go снимает признак и [ ])
-  delete: { label: 'Удалить', icon: 'trash' },
+  delete: { label: 'Удалить', icon: 'trash', cmd: 'removeCell' }, // клавиша в меню своя (hint: 'Del')
 }
 
 export const actOk = (id: ActId, can: (f: FeatureId) => boolean): boolean => {

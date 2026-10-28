@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -284,5 +285,63 @@ func TestCleanOld(t *testing.T) {
 	Clean(filepath.Join(dir, "нет-такой"), "0.25.0") // нет папки — тихо
 	if Dir("X") == "" || filepath.Base(Dir("X")) != "Updates" {
 		t.Errorf("Dir: %q", Dir("X"))
+	}
+}
+
+// Dir без кэша пользователя или с относительным путём — "" (не путь от текущей папки процесса);
+// с абсолютным кэшем — внутри него, у стенда своя папка.
+func TestDirNoCache(t *testing.T) {
+	base := testkit.TempDir(t)
+	var env, root string // переменная кэша и каталог, куда она ведёт кэш
+	switch runtime.GOOS {
+	case "linux":
+		env, root = "XDG_CACHE_HOME", base
+	case "windows":
+		env, root = "LOCALAPPDATA", base
+	case "darwin":
+		env, root = "HOME", filepath.Join(base, "Library", "Caches")
+	default:
+		t.Skip("кэш пользователя на " + runtime.GOOS + " не проверяется")
+	}
+	t.Setenv(env, base)
+	if got, want := Dir("X"), filepath.Join(root, "X", "Updates"); got != want {
+		t.Errorf("с кэшем: %q, ждали %q", got, want)
+	}
+	if Dir("X") == Dir("X-b") {
+		t.Error("у стенда та же папка")
+	}
+	t.Setenv(env, "")
+	t.Setenv("HOME", "")
+	t.Setenv("LOCALAPPDATA", "")
+	if got := Dir("X"); got != "" {
+		t.Errorf("без кэша пользователя: %q", got)
+	}
+	if runtime.GOOS == "linux" {
+		t.Setenv("XDG_CACHE_HOME", "rel/cache")
+		if got := Dir("X"); got != "" {
+			t.Errorf("относительный кэш: %q", got)
+		}
+	}
+}
+
+// Старый «.part» с мусором (длиннее установщика) не мешает: файл создаётся заново, итог проходит Verify.
+func TestDownloadStalePart(t *testing.T) {
+	f := newFeed(t)
+	data, file := setup("0.25.1", MinSetup)
+	f.serveSetup("0.25.1", data)
+	dir := testkit.TempDir(t)
+	part := filepath.Join(dir, SetupName("0.25.1")+".part")
+	if err := os.WriteFile(part, bytes.Repeat([]byte("МУСОР"), len(data)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path, err := Fetch(context.Background(), f.client(), offerFor("0.25.1", file), dir, freeOf(1<<40), nil)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if err := Verify(path, file); err != nil {
+		t.Errorf("Verify: %v", err)
+	}
+	if n := names(t, dir); len(n) != 1 {
+		t.Errorf("в папке %v", n)
 	}
 }

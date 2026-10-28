@@ -5,6 +5,10 @@ import type { MenuNode } from '../../base/ui/menulist'
 export const VIG_SAVE = 'vig-save'
 export const VIG_CLEAR = 'vig-clear'
 
+// Подсказки действий виньетки: одни слова у кнопки карточки, пункта «⋯» и пункта меню «Разворот» (141).
+export const VIG_SORT_TITLE = 'Ученики по алфавиту: фамилия, имя; без имени — в конце'
+export const VIG_CLEAR_TITLE = 'Места, фото и подписи остаются, раскладка становится «Ручной»; пропадают только параметры виньетки'
+
 // templates — функция «Свои шаблоны» на уровне; без неё остаётся один пункт. one — «разворот» / «лист».
 export function vigMore(one: string, templates: boolean): MenuNode[] {
   const save: MenuNode = {
@@ -15,7 +19,7 @@ export function vigMore(one: string, templates: boolean): MenuNode[] {
   const clear: MenuNode = {
     id: VIG_CLEAR,
     label: `Обычный ${one}`,
-    title: 'Места, фото и подписи остаются, раскладка становится «Ручной»; пропадают только параметры виньетки',
+    title: VIG_CLEAR_TITLE,
   }
   return templates ? [save, clear] : [clear]
 }

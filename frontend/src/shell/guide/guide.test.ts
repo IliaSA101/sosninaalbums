@@ -28,13 +28,7 @@ const anchors = (): Set<string> => {
         .forEach((id) => out.add(id))
   return out
 }
-// Пункты меню без своей статьи: причина обязательна. Новый пункт с командой роняет страж 6, пока ему не
-// напишут статью (menu: или spot: menu:) или не добавят сюда с причиной.
-const NO_ARTICLE: Record<string, string> = {
-  guide: 'сам справочник: открывает это окно, мигать нечем',
-  whatsNew: 'окно «Что нового» — список изменений версии, а не функция редактора',
-  about: 'окно «О программе»: версия, автор, лицензия и ссылки, а не функция редактора',
-}
+// Покрытие меню, клавиш, жестов, действий и окон статьями — coverage.guard.test.ts (136 Т4).
 const uiOf = (spot?: string): string | null => (spot?.startsWith('ui:') ? spot.slice(3) : null)
 
 describe('справочник функций: стражи', () => {
@@ -91,7 +85,9 @@ describe('справочник функций: стражи', () => {
   })
 
   it('пункты меню и клавиши существуют', () => {
-    const top = new Set(menus().flatMap((m) => m.items.map((i) => i.id)))
+    // «Открывать .salbum этой программой» есть только в Windows-выпуске (assocCan): в меню справочника (FULL) его нет,
+    // но статья `open` его называет — сам пункт проверяет страж S1 (coverage.guard.test.ts) с assocCan: true.
+    const top = new Set([...menus().flatMap((m) => m.items.map((i) => i.id)), 'assoc'])
     const badMenu: string[] = []
     for (const a of ARTICLES) {
       for (const p of placesOf(a)) if (p.spot.startsWith('menu:') && !top.has(p.spot.slice(5))) badMenu.push(`${a.id}: ${p.spot}`)
@@ -103,21 +99,6 @@ describe('справочник функций: стражи', () => {
     const known = new Set([...catalogView.commands.map((e) => e.id), ...MOUSE_HELP.map((r) => r.show)])
     for (const a of ARTICLES) for (const k of a.keys ?? []) if (!known.has(k)) badKeys.push(`${a.id}: ${k}`)
     expect(badKeys).toEqual([])
-  })
-
-  it('у пункта меню есть статья', () => {
-    const covered = new Set<string>()
-    for (const a of ARTICLES) {
-      for (const p of placesOf(a)) if (p.spot.startsWith('menu:')) covered.add(p.spot.slice(5))
-      for (const m of a.menu ?? []) covered.add(m)
-    }
-    const items = menus().flatMap((m) => m.items.filter((i) => i.cmd).map((i) => i.id))
-    expect(items.filter((id) => !covered.has(id) && !NO_ARTICLE[id])).toEqual([])
-    // Запись в NO_ARTICLE без причины или про несуществующий / уже описанный пункт — мусор.
-    for (const [id, why] of Object.entries(NO_ARTICLE)) {
-      expect(why.trim().length, `NO_ARTICLE.${id}: нужна причина`).toBeGreaterThan(0)
-      expect(items.includes(id) && !covered.has(id), `NO_ARTICLE.${id}: пункт описан или не существует`).toBe(true)
-    }
   })
 
   it('статьи целы', () => {
@@ -185,16 +166,19 @@ describe('справочник функций: стражи', () => {
     expect(ARTICLES.find((x) => x.id === 'autobuild')?.words).toContain('вариант')
   })
 
-  it('078: «Автосборка» рассказывает про «Пересобрать…»: тост, вариант, отмена одним шагом, что её закрывает', () => {
-    const a = ARTICLES.find((x) => x.id === 'autobuild')
+  it('078: «Пересобрать и собрать заново» рассказывает про «Пересобрать…»: тост, вариант, отмена одним шагом, что её закрывает; «Автосборка» их называет', () => {
+    const a = ARTICLES.find((x) => x.id === 'autobuild-redo')
+    expect(ARTICLES.find((x) => x.id === 'autobuild')?.how).toContain('«Пересобрать прошлую»')
+    expect(ARTICLES.find((x) => x.id === 'autobuild')?.see).toContain('autobuild-redo')
     for (const w of ['«Пересобрать…»', '«Вариант»', 'одним шагом', 'Звёзды и метки пересборку не закрывают', 'свободных фото нет'])
       expect(a?.how, w).toContain(w)
     expect(a?.how).toContain('{key:undo|')
     for (const w of ['пересобрать', 'пересборка']) expect(a?.words, w).toContain(w)
   })
 
-  it('107: «Автосборка» рассказывает про «Весь альбом заново»: что остаётся на месте, вопрос, один шаг отмены, похожие в ленту', () => {
-    const a = ARTICLES.find((x) => x.id === 'autobuild')
+  it('107: «Пересобрать и собрать заново» рассказывает про «Весь альбом заново»: что остаётся на месте, вопрос, один шаг отмены, похожие в ленту; «Автосборка» его называет', () => {
+    const a = ARTICLES.find((x) => x.id === 'autobuild-redo')
+    expect(ARTICLES.find((x) => x.id === 'autobuild')?.how).toContain('«Весь альбом заново»')
     for (const w of ['Весь альбом заново', 'остаются на своих местах', 'Пересобрать альбом?', 'одним шагом', 'уйдут в ленту', 'обложка'])
       expect(a?.how, w).toContain(w)
     expect(a?.words).toContain('весь альбом')
@@ -224,7 +208,8 @@ describe('справочник функций: стражи', () => {
   it('067: «Готовые развороты» — на функции «Фоны и стикеры», вход в «Фон» карточки и в «Разворот»', () => {
     const a = ARTICLES.find((x) => x.id === 'spread-tpl')
     expect(a).toMatchObject({ title: 'Готовые развороты', feature: 'decor', menu: ['spreadTpl'] })
-    for (const w of ['«Фон»', 'Разворот ▸ Готовые развороты…', '«Левую» и «Правую»']) expect(a?.where, w).toContain(w)
+    for (const w of ['«Фон»', '«Левую» и «Правую»']) expect(a?.where, w).toContain(w)
+    expect(a?.menu?.map(menuPath)).toContain('Разворот ▸ Готовые развороты…')
     expect(placesOf(a!).map((p) => p.spot)).toEqual(['ui:spread-tpl', 'menu:spreadTpl'])
   })
 
@@ -246,8 +231,9 @@ describe('справочник функций: стражи', () => {
   it('079: «Рамочки» и «Прозрачность фото» — свои функции уровня, якоря карточки, вход в «Разворот», слова поиска', () => {
     const b = ARTICLES.find((x) => x.id === 'border')
     expect(b).toMatchObject({ title: 'Рамочки', feature: 'border', menu: ['borderGallery'] })
-    for (const w of ['«Рамочка» ▸ «Выбрать…»', 'Разворот ▸ Рамочки…', 'правая кнопка', 'все места разворота', '«Добавить свою рамочку…»'])
+    for (const w of ['«Рамочка» ▸ «Выбрать…»', 'правая кнопка', 'все места разворота', '«Добавить свою рамочку…»'])
       expect(b?.where, w).toContain(w)
+    expect(b?.menu?.map(menuPath)).toContain('Разворот ▸ Рамочки…')
     expect(placesOf(b!).map((p) => p.spot)).toEqual(['ui:border', 'menu:borderGallery'])
     for (const w of ['рамочка', 'рамка', 'паспарту', 'полароид', 'обводка']) expect(b?.words, w).toContain(w)
     const f = ARTICLES.find((x) => x.id === 'photo-fade')
@@ -281,7 +267,8 @@ describe('справочник функций: стражи', () => {
   it('067 Ф2: «Наборы библиотеки» — на функции «Фоны и стикеры», вход в «Файл» и в окна', () => {
     const a = ARTICLES.find((x) => x.id === 'library-packs')
     expect(a).toMatchObject({ title: 'Наборы библиотеки', feature: 'decor', menu: ['packs'] })
-    for (const w of ['Файл ▸ Наборы библиотеки…', '«Наборы…»', '«Добавить из файла…»', '«Заменить?»']) expect(a?.where, w).toContain(w)
+    for (const w of ['«Наборы…»', '«Добавить из файла…»', '«Заменить?»']) expect(a?.where, w).toContain(w)
+    expect(a?.menu?.map(menuPath)).toContain('Файл ▸ Наборы библиотеки…')
     // Ф3: сеть — согласие, ход, флажок и отзыв названы теми же словами, что в окне
     for (const w of ['«Обновить библиотеку»', '«Обратиться к GitHub?»', '«Отменить»', '«Проверять при запуске»', '«Не обращаться к сети»'])
       expect(a?.where, w).toContain(w)
@@ -320,7 +307,7 @@ describe('справочник функций: стражи', () => {
     for (const id of ['similar', 'autobuild']) expect(texts(id), id).not.toMatch(/ч\/б/i)
     expect(texts('autobuild')).not.toContain('{can:')
     prefs.load({ level: 'standard', showStart: false, first: false, custom: null })
-    expect(texts('autobuild')).toContain('«Ч/б развороты» (статья «Ч/б развороты»)')
+    expect(texts('autobuild')).toContain('и «Ч/б развороты»;')
     expect(texts('similar')).not.toMatch(/ч\/б/i) // ч/б теперь только в своей статье
   })
 

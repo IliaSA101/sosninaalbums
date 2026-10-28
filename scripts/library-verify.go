@@ -7,9 +7,11 @@
 //
 //	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go [-app x.y.z] [-with донор.zip]... [-out папка] [-preview лист.png] набор.zip...
 //	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go -pull <Библиотека> -pack <id> -out папка
+//	go run scripts/library-verify.go scripts/library-verify-sheets.go scripts/library-verify-looks.go scripts/library-verify-sprite.go -sprite набор.zip -out папка [-pick pick.json] [-with донор.zip]...
 //
-// Три файла: лимит 600 строк на файл (рамки, листы и -pull — во втором, макеты альбома 0.28 — в третьем,
-// тот же package main; без третьего скрипт собирается и для 0.26/0.27, макеты тогда не проверяются).
+// Четыре файла: лимит 600 строк на файл (рамки, листы и -pull — во втором, макеты альбома 0.28 — в третьем,
+// лист образцов набора для каталога (спека 144) — в четвёртом, тот же package main; без третьего и четвёртого
+// скрипт собирается и для 0.26/0.27, макеты тогда не проверяются, а -sprite отказывает).
 //
 // Версия программы для minApp: -app x.y.z, иначе info.productVersion из wails.json (в текущей папке
 // или выше — дерево сборки); minApp набора новее — провал. Набор для 0.27.0 в дереве, где wails.json
@@ -109,6 +111,17 @@ type verifier struct {
 // файла (сборка для 0.26/0.27) макеты не проверяются.
 var lookCheck func(v *verifier, path string, info decor.PackInfo)
 
+// spriteRun — лист образцов набора (-sprite, library-verify-sprite.go, спека 144); без этого файла пуст.
+var spriteRun func(v *verifier, zipPath, pickPath string)
+
+// spriteUsage — проверка ключей -sprite/-pick (текст ошибки или ""); library-verify-sprite.go подменяет её своей.
+var spriteUsage = func(sprite, pick, _ string, _ int) string {
+	if sprite != "" || pick != "" {
+		return "-sprite и -pick: собирайте с library-verify-sprite.go"
+	}
+	return ""
+}
+
 // lookRows — строки листа превью для макетов набора: по строке на макет «Обложка, 1…N» (то же —
 // library-verify-looks.go).
 var lookRows func(v *verifier, info decor.PackInfo) []image.Image
@@ -156,11 +169,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 	pull := fs.String("pull", "", "библиотека, откуда забрать шаблоны")
 	packID := fs.String("pack", "", "id набора для -pull")
 	app := fs.String("app", "", "версия программы x.y.z для minApp (по умолчанию wails.json дерева сборки)")
+	sprite := fs.String("sprite", "", "набор (zip), для которого собрать лист образцов в -out")
+	pick := fs.String("pick", "", "свой отбор клеток листа (json) для -sprite")
 	if fs.Parse(args) != nil {
 		return 2
 	}
 	usage := func(msg string) int { fmt.Fprintln(stderr, "library-verify:", msg); return 2 }
-	for _, p := range append(slices.Clone(with), append(fs.Args(), *out, *prev, *pull)...) {
+	for _, p := range append(slices.Clone(with), append(fs.Args(), *out, *prev, *pull, *sprite, *pick)...) {
 		if p == "" {
 			continue
 		}
@@ -178,7 +193,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	if fs.NArg() == 0 {
+	if msg := spriteUsage(*sprite, *pick, *out, fs.NArg()); msg != "" {
+		return usage(msg)
+	}
+	if fs.NArg() == 0 && *sprite == "" {
 		return usage("нужен хотя бы один набор (zip)")
 	}
 	appV, err := appVersion(*app)
@@ -205,6 +223,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "донор:", filepath.Base(z))
 		v.ctx = filepath.Base(z) + " (донор)"
 		v.guard("донор", func() { v.install(z) })
+	}
+	if *sprite != "" {
+		v.ctx = filepath.Base(*sprite)
+		v.guard("лист образцов", func() { spriteRun(v, *sprite, *pick) })
 	}
 	for _, z := range fs.Args() {
 		v.ctx = filepath.Base(z)

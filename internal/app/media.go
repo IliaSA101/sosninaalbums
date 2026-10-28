@@ -28,7 +28,8 @@ var readColor = imgfile.ReadColor
 // (serveFramePic); оригинал фото как есть — /media/o/<id> (serveOriginal); шрифты — /media/font/<файл>;
 // библиотека фонов — /media/gen/*, /media/lib/* (serveDecor), плитки разворотов — /media/tpl/*
 // (serveTpl), макетов — /media/look/* (serveLook); разметки — /media/cover-guide и
-// /media/spread-guide (serveMarkup).
+// /media/spread-guide (serveMarkup); ролики справочника F1 — /media/guide-video/<id> (serveGuideVideo, 140); клетки образцов наборов —
+// /media/lp/<набор>/<вид>/<i> (serveLibPreview, 144).
 func (a *App) media(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/media/") {
@@ -40,7 +41,12 @@ func (a *App) media(next http.Handler) http.Handler {
 			serveFont(w, r, name)
 			return
 		}
-		if a.serveMarkup(w, r) {
+		// /media/lp/ (образцы наборов, 144) — до всех разборов ниже: любой хвост отвечает своя ветка,
+		// в миниатюры /media/<t|p>/<id> он не уходит. Своя recover внутри (404, не пустой 200).
+		if a.serveLibPreview(w, r) {
+			return
+		}
+		if a.serveGuideVideo(w, r) || a.serveMarkup(w, r) {
 			return
 		}
 		if a.serveDecor(w, r) || a.serveTpl(w, r) || a.serveLook(w, r) {
@@ -150,17 +156,24 @@ func (a *App) mediaCancelled() int64 {
 func (a *App) serveThumb(w http.ResponseWriter, r *http.Request, p library.Photo, preview bool) {
 	ctx := r.Context()
 	file, err := a.cache.FileCtx(ctx, p, preview)
+	var de *library.DecodeError
+	if errors.As(err, &de) { // оригинал не декодируется: причину запоминаем даже у снятого запроса
+		a.noteBadThumb(p.ID, de.Why)
+	}
 	if ctx.Err() != nil { // и когда генерация успела доделаться: отвечать некому
 		a.mediaSt.cancelled.Add(1)
 		return
 	}
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) { // файл пропал — не сбой, хватит 404
+		if de != nil { // причина уйдёт в окно событием unread; в журнал — раз в сотню, без пути
+			logRare(a.mediaMiss.Add(1), "превью: файл не декодируется: %s", library.ShortWhy(de.Why))
+		} else if !errors.Is(err, fs.ErrNotExist) { // файл пропал — не сбой, хватит 404
 			logRare(a.mediaMiss.Add(1), "превью: %v", paths.NoPath(err))
 		}
 		http.NotFound(w, r)
 		return
 	}
+	a.clearBadThumb(p.ID) // файл перезаписан и читается: «повреждён» снимается
 	// Тип задаём сами: копия бывает PNG (прозрачные картинки), а реестровый тип Windows ненадёжен.
 	ct := "image/jpeg"
 	if strings.EqualFold(filepath.Ext(file), ".png") {

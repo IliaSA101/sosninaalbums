@@ -30,6 +30,8 @@ import { mergeImport, rasterSvgs } from './svgraster'
 import { frameStanding, frameTargets, frameWhereDefault, frameWhereIn, type FrameWhere } from './frames'
 import { frameApi } from './frameapi'
 import { DecorPut } from './decorput.svelte'
+import { getApi } from '../decorbrowse/getapi'
+import type { GetItem } from '../decorbrowse/decorget'
 import type { OwnAsk } from '../albumbg/albumown'
 
 // put (067) — вопрос перед постановкой разворота: уходят фото в ленту или заменяются стикеры и надписи.
@@ -41,6 +43,7 @@ export type DecorAsk =
   | { kind: 'put'; id: string; text: string }
   | { kind: 'bgMany'; id: string; text: string; targets: GridTarget[] }
   | { kind: 'albumOwn'; id: string; pages: boolean; own: OwnAsk; count: number }
+  | { kind: 'get'; tile: GetItem } // 144: «Скачать набор?» перед скачиванием образца
 
 // Открытое окно: что ставим (вид), на каком листе и в какую область. replace — ID стикера, которому ищут замену
 // («Заменить…» в карточке «Стикер»); нет — стикер добавляется. Режим — replacing(): стикера на листе нет — добавление (0.28-133-78).
@@ -78,6 +81,7 @@ class DecorUi {
   // 079: «Куда» окна «Рамочки» — выделенные места или весь лист; сброс при открытии (show)
   frameWhere = $state<FrameWhere>('all')
   private req = 0
+  private opened = 0 // номер открытия окна: скачанное узнаёт по нему, что окно закрывали (target)
   // Постановка по щелчку (decorput): состояние окна читает и пишет через this
   private readonly put = new DecorPut(this)
   // 073-1: названия поставленных за сеанс наборов; окно встаёт на тему первого из них один раз для каждого вида.
@@ -94,6 +98,7 @@ class DecorUi {
       this.filters = { ...NO_SEL }
     }
     this.cur = replace ? { kind, spread, scope, replace } : { kind, spread, scope }
+    this.opened++
     this.ask = null
     this.bgText = ''
     this.numsFocus = 0
@@ -102,6 +107,30 @@ class DecorUi {
     this.bgPick =
       kind === 'bg' && bgPickShown(sheetIn(store.view, spread), store.view.spreads.length) ? bgPickDefault(this.selIds().length) : 'this'
     void this.refresh(this.takeFresh(kind))
+    getApi.previews() // 144: образцы нескачанных наборов докачиваются, пока окно открыто (Go: без согласия — ничего)
+  }
+
+  // 144: метка цели окна — открытие, вид, лист, область, «Куда», «На», рамочное «Куда» и «Куда» Фона альбома. Пока скачивался
+  // набор, метка сменилась (окно закрыли, перешли на другой разворот или «Куда») — скачанное само не ставится, только тост.
+  target(): string {
+    const c = this.cur
+    if (!c) return ''
+    return [
+      this.opened,
+      c.kind,
+      c.spread,
+      c.scope,
+      c.album ? 'album' : '',
+      c.replace ?? '',
+      this.bgPick,
+      this.frameWhere,
+      this.albumPages,
+    ].join('|')
+  }
+
+  // Щелчок по плитке скачивания: вопрос «Скачать набор?» (ход и постановка — decorget.svelte).
+  askGet(tile: GetItem) {
+    if (this.cur) this.ask = { kind: 'get', tile }
   }
 
   // 098: окно «Фон альбома» — лист для плиток берём обычный (не обложку: у неё свои размеры), область не нужна.

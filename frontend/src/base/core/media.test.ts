@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lookUrl, originalUrl, coverGuideUrl, spreadGuideUrl, previewUrl, thumbUrl, warmable, wantPreview } from './media'
+import { guideVideoUrl, lookUrl, originalUrl, coverGuideUrl, spreadGuideUrl, previewUrl, thumbUrl, warmable, wantPreview } from './media'
 
 describe('media', () => {
   it('обычный id', () => {
@@ -61,5 +61,12 @@ describe('макеты альбома (131)', () => {
     for (const bad of ['', 'a/../b?x', '0123456789ABCDEF', '0123456789abcde', '0123456789abcdef0', 'my:0123456789abcdef'])
       expect(lookUrl(bad, { i: 1, px: 256, r: 1 }), bad).toBe('')
     expect(lookUrl('0123456789abcdef', { i: NaN, px: NaN, r: NaN })).toBe('/media/look/0123456789abcdef?v=1&i=0&px=0&r=1&bg=0')
+  })
+})
+
+describe('ролик справочника (140)', () => {
+  it('адрес — /media/guide-video/<id> без ?v=, id кодируется', () => {
+    expect(guideVideoUrl('autobuild')).toBe('/media/guide-video/autobuild')
+    expect(guideVideoUrl('a/b?c')).toBe('/media/guide-video/a%2Fb%3Fc')
   })
 })

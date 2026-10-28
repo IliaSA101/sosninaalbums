@@ -41,6 +41,9 @@ var (
 	ErrPackEmpty = errors.New("в наборе нечего ставить")
 	errPackOlder = errors.New("уже стоит версия набора новее")
 	errPackSame  = errors.New("этот набор уже стоит")
+	// ErrBadPackID — id набора не по грамматике или имя устройства Windows (con, nul…): ошибка
+	// строки каталога или манифеста, а не диска.
+	ErrBadPackID = errors.New("недопустимый id набора")
 	// ErrLibFull — своё и наборы вместе дошли до MaxLibraryLen.
 	ErrLibFull = fmt.Errorf("библиотека заполнена (%d ГБ)", MaxLibraryLen>>30)
 )
@@ -75,6 +78,7 @@ type Staged struct {
 	m      PackManifest
 	origin string
 	zip    string
+	zipSz  int64 // размер zip из каталога (только из сети), 0 — не известен
 	items  []stagedItem
 }
 
@@ -84,6 +88,7 @@ type stagedItem struct {
 	win                         winInfo // рамочка: окно, найденное при проверке
 	tpl                         []byte  // шаблон: канонический JSON (ключ — TplKey); макет и типография — байты как пришли
 	item                        string  // макет: путь записи в манифесте (поиск после обновления набора)
+	src                         string  // sha256[:16] записи манифеста (packEntry.Src)
 	libs                        []libRef
 	w, h                        int
 	bytes                       int64
@@ -93,6 +98,9 @@ type stagedItem struct {
 // рамочка места (TplBorder.Lib, вид frame); kind "" — ключ из сырых байт макета (поле новее
 // программы), вид неизвестен.
 type libRef struct{ kind, key string }
+
+// SetZipSize запоминает размер zip из каталога: набор из сети показывает его как PackInfo.Bytes (137-31).
+func (st *Staged) SetZipSize(n int64) { st.zipSz = max(n, 0) }
 
 // Close удаляет временные файлы, не ушедшие в библиотеку.
 func (st *Staged) Close() {
@@ -124,26 +132,26 @@ func (st *Staged) Info() PackInfo {
 func (st *Staged) reg(installed int64) *packReg {
 	r := &packReg{V: packRegV, ID: st.m.ID, Version: st.m.Version, Title: cleanName(st.m.Title), About: cleanText(st.m.About, 300),
 		Author: cleanName(st.m.Author), License: cleanText(st.m.License, 40), Source: cleanText(st.m.Source, 200),
-		Origin: st.origin, MinApp: st.m.MinApp, Installed: installed, Zip: st.zip, Items: make([]packEntry, 0, len(st.items))}
+		Origin: st.origin, MinApp: st.m.MinApp, Installed: installed, Zip: st.zip, ZipSize: st.zipSz, Items: make([]packEntry, 0, len(st.items))}
 	if r.Title == "" {
 		r.Title = st.m.ID
 	}
 	for _, it := range st.items {
-		r.Items = append(r.Items, packEntry{Key: it.key, Kind: it.kind, Theme: it.theme, Name: it.name, W: it.w, H: it.h, Bytes: it.bytes, Item: it.item})
+		r.Items = append(r.Items, packEntry{Key: it.key, Kind: it.kind, Theme: it.theme, Name: it.name, W: it.w, H: it.h, Bytes: it.bytes, Item: it.item, Src: it.src})
 	}
 	return r
 }
 
 // StagePack — проверка содержимого набора во временные файлы (без записи в библиотеку).
-// origin — OriginFile | OriginNet, zipSum — sha256 архива. Набор с тем же id уже стоит — Ask
+// origin — OriginFile | OriginNet | OriginDemo, zipSum — sha256 архива. Набор с тем же id уже стоит — Ask
 // без распаковки (AskUpdate распаковывается: его ставит ConfirmPack). Битый архив — ошибка,
 // временные удалены; плохой предмет — Skipped; не осталось ни одного — ErrPackEmpty (Staged
 // с причинами всё равно возвращается).
 func (s *Store) StagePack(m PackManifest, src PackSource, origin, zipSum string) (*Staged, error) {
 	if !validPackID(m.ID) {
-		return nil, errors.New("недопустимый id набора")
+		return nil, ErrBadPackID
 	}
-	if origin != OriginNet {
+	if origin != OriginNet && origin != OriginDemo {
 		origin = OriginFile
 	}
 	st := &Staged{m: m, origin: origin, zip: zipSum, Skipped: []Skip{}}
@@ -223,6 +231,9 @@ func (s *Store) stageItems(st *Staged, src PackSource) error {
 		}
 		seen[it.Kind+si.key] = true
 		si.kind, si.theme, si.name = it.Kind, packTheme(it.Theme), name
+		if si.src == "" && it.Kind != KindSpread && it.Kind != KindPrint { // ключ картинки и макета — sha байт
+			si.src = strings.TrimPrefix(si.key, libPrefix)
+		}
 		st.items = append(st.items, si)
 	}
 	return nil
@@ -312,6 +323,8 @@ func stageTpl(i int, src PackSource) (si stagedItem, why string, err error) {
 		return si, "шаблон разворота не читается", nil
 	}
 	si.key, si.ext, si.tpl, si.libs, si.bytes = model.TplKey(t), "json", data, tplLibs(t), int64(len(data))
+	sum := sha256.Sum256(buf.Bytes()) // байты записи: Extract уже сверил их с sha256 манифеста
+	si.src = hex.EncodeToString(sum[:8])
 	return si, "", nil
 }
 

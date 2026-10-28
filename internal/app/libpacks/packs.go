@@ -117,7 +117,8 @@ func newAdd() Add { return Add{Skipped: []Skip{}} }
 // List — список наборов: встроенные и поставленные.
 func (s *Service) List() (list List, err error) {
 	defer appkit.GuardErr("LibraryPacks", &err)
-	list = List{Packs: []Info{}, Busy: s.Busy(), Net: netView(prefs.LibraryNetOf(s.h.CfgDir()))}
+	net := prefs.LibraryNetOf(s.h.CfgDir())
+	list = List{Packs: []Info{}, Busy: s.Busy(), Net: netView(net), Available: []Avail{}}
 	st, err := s.h.Store()
 	if err != nil {
 		return list, err
@@ -126,6 +127,19 @@ func (s *Service) List() (list List, err error) {
 		list.Packs = append(list.Packs, Info(p))
 	}
 	list.ReadOnly = st.ReadOnly()
+	list.Net = s.netWith(net, st)
+	// Строка примера — первой и до проверки сохранённого списка: она есть и до первого обращения к
+	// сети; availRows, «Скачать все» и «новые наборы» её не знают (142, 0.30-142-39).
+	if row, ok := s.demoRow(s.h.Demo(), haveOf(st), net.Skip); ok {
+		list.Available = append(list.Available, row)
+	}
+	// Раздел «Можно скачать» — из сохранённого списка, сеть не трогается (137-4).
+	if cat, at, _ := s.cached(); cat != nil {
+		have := haveOf(st)
+		list.Available = append(list.Available, availRows(*cat, have, net.Skip, s.h.Version())...)
+		_, list.All = shownPlan(*cat, have, net.Skip, s.h.Version())
+		list.AvailAt = at.UnixMilli()
+	}
 	return list, nil
 }
 
@@ -231,20 +245,40 @@ func (s *Service) install(st *decor.Store, sg *decor.Staged, res Add) (Add, erro
 	if slices.Contains(prefs.LibraryNetOf(s.h.CfgDir()).Skip, info.ID) {
 		prefs.UpdateLibraryNet(s.h.CfgDir(), func(n *prefs.LibraryNet) { n.SetSkip(info.ID, false) })
 	}
+	s.retireDemo(st) // донор из файла мог закрыть пример
 	s.h.Relink(st)
 	s.emitChanged(info.Title)
 	return res, nil
 }
 
-// PlanRemove — числа для вопроса «Удалить набор?».
+// PlanRemove — числа для вопроса «Удалить набор?»; Addons — стоящие дополнения этого донора по
+// сохранённому списку (нет списка — пусто, вопрос прежний).
 func (s *Service) PlanRemove(id string) (r Remove, err error) {
 	defer appkit.GuardErr("PlanRemovePack", &err)
+	r.Addons = []string{}
 	st, err := s.h.Store()
 	if err != nil {
 		return r, err
 	}
 	plan, err := st.PlanRemovePack(id, s.h.AlbumLibs())
-	return Remove(plan), err
+	r = Remove{Files: plan.Files, Kept: plan.Kept, Bytes: plan.Bytes, Addons: s.addonsOf(st, id)}
+	return r, err
+}
+
+// addonsOf — названия стоящих наборов, что в сохранённом списке числятся дополнениями id.
+func (s *Service) addonsOf(st *decor.Store, id string) []string {
+	out := []string{}
+	cat, _, _ := s.cached()
+	if cat == nil {
+		return out
+	}
+	have := haveOf(st)
+	for _, e := range cat.Packs {
+		if p, ok := have[e.ID]; ok && e.Needs == id {
+			out = append(out, p.Title)
+		}
+	}
+	return out
 }
 
 // Remove — удаление набора (решение 10): файлы, нужные открытому альбому, своим и другим
@@ -263,7 +297,10 @@ func (s *Service) Remove(id string) (list List, err error) {
 	// origin — до удаления: после него набора нет. Пропуск отвечает только на «почему сеть не
 	// вернула набор» (0.17 решение №4) и пишется под замком: иначе «Обновить» между снятием
 	// замка и записью вернул бы удалённый.
-	fromNet := slices.ContainsFunc(st.Packs(), func(p decor.PackInfo) bool { return p.ID == id && p.Origin == decor.OriginNet })
+	demoID := s.h.Demo().ID // пример — тоже в пропуск: сам не вернётся (142)
+	fromNet := slices.ContainsFunc(st.Packs(), func(p decor.PackInfo) bool {
+		return p.ID == id && (p.Origin == decor.OriginNet || demoID != "" && id == demoID)
+	})
 	_, err = st.RemovePack(id, s.h.AlbumLibs())
 	if err == nil && fromNet {
 		prefs.UpdateLibraryNet(s.h.CfgDir(), func(n *prefs.LibraryNet) { n.SetSkip(id, true) })

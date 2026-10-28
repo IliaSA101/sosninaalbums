@@ -6,6 +6,8 @@
   import Modal from '../../base/modal/Modal.svelte'
   import SideList from '../../base/tpl/SideList.svelte'
   import DecorTile from '../decorbrowse/DecorTile.svelte'
+  import GetAsk from '../decorbrowse/GetAsk.svelte'
+  import GetTile from '../decorbrowse/GetTile.svelte'
   import DecorPeek from '../decorbrowse/DecorPeek.svelte'
   import BrowseFilters from '../decorbrowse/BrowseFilters.svelte'
   import { browse, sideCounts, tileLabel } from '../decorbrowse/browse'
@@ -13,6 +15,11 @@
   import { holdSize, tileOf } from '../decorbrowse/tilesize'
   import { tileWheel } from '../decorbrowse/tilewheel'
   import { decor } from './decor.svelte'
+  import { packsUi } from '../../shell/packs/packs.svelte'
+  import PackRun from '../../shell/packs/PackRun.svelte'
+  import { isGetItem } from '../decorbrowse/decorget'
+  import { getOffHint } from '../decorbrowse/getoff'
+  import { confirmDecorGet } from '../decorbrowse/decorget.svelte'
   import BgTargets from './BgTargets.svelte'
   import { bgPickShown } from './bgtargets'
   import { ALBUM_BG } from '../albumbg/albumbg'
@@ -20,10 +27,11 @@
   import DecorHead from './DecorHead.svelte'
   import QrDialog from './QrDialog.svelte'
   import SpreadSave from './SpreadSave.svelte'
-  import { FILTERED_EMPTY, saveScopes, tplSideItems, tplVisible } from './spreadtpl'
+  import { FILTERED_EMPTY, getBoxFor, saveScopes, tplSideItems, tplVisible } from './spreadtpl'
   import {
     ADD_OWN,
     DECOR_TITLE,
+    ALL,
     MINE,
     NAME_MAX,
     NOUN,
@@ -97,6 +105,9 @@
   const manyRow = $derived(c?.kind === 'bg' && !albumOnly && bgPickShown(sp, store.view.spreads.length))
   const bgPlan = $derived(decor.bgPlan())
   const noun = $derived(c ? NOUN[c.kind] : 'фон')
+  // 144: плитки «Можно скачать» серые, пока идёт скачивание (своё или из окна «Наборы») и в библиотеке «только чтение»
+  const getOff = $derived(getOffHint(packsUi.net, readOnly))
+  const getBox = $derived(c && sp ? getBoxFor(c.kind, sp, scope) : undefined) // пропорция плитки скачивания — как у стоящей
   const dpr = $derived(screenDpr.value)
   const emptyMsg = $derived(spreads && themed.length > 0 && !decor.loading ? FILTERED_EMPTY : emptyText(decor.theme, readOnly, c?.kind))
 
@@ -148,26 +159,35 @@
           />
         {/if}
         {#if sticker && decor.theme === MINE}<p class="tip">{OWN_TIP_STICKER}</p>{/if}
+        <PackRun net={packsUi.net} />
         <div class="tiles" aria-busy={decor.loading} style:--tile="{size}px" use:tileWheel={c.kind} bind:this={tilesEl}>
           {#each items as it (it.id)}
-            <DecorTile
-              {it}
-              label={tileLabel(it, br.sel.style)}
-              kind={c.kind}
-              {sp}
-              {scope}
-              current={it.id === standing}
-              {readOnly}
-              {noun}
-              hold={pxSize}
-              {dpr}
-              onpeek={(t) =>
-                peek.open(
-                  items.map((i) => i.id),
-                  t.id,
-                )}
-            />
+            {#if isGetItem(it)}
+              <GetTile {it} kind={c.kind} box={getBox} off={getOff} onget={(t) => decor.askGet(t)} />
+            {:else}
+              <DecorTile
+                {it}
+                label={tileLabel(it, br.sel.style)}
+                kind={c.kind}
+                {sp}
+                {scope}
+                current={it.id === standing}
+                {readOnly}
+                {noun}
+                hold={pxSize}
+                {dpr}
+                onpeek={(t) =>
+                  peek.open(
+                    items.map((i) => i.id),
+                    t.id,
+                  )}
+              />
+            {/if}
           {/each}
+          {#if decor.theme === ALL && decor.cat?.invite}
+            <!-- 144: списка наборов ещё не было — приглашение в конце «Все» (так же, как «Наборы…» пустых «Макетов») -->
+            <GetTile kind={c.kind} oninvite={() => packsUi.show()} />
+          {/if}
           {#if decor.cat && items.length === 0}
             <div class="empty">
               {emptyMsg}
@@ -222,6 +242,9 @@
       <button class="primary" data-autofocus onclick={() => decor.confirmBgMany()}>Поставить</button>
     </div>
   </Modal>
+{:else if c && decor.ask?.kind === 'get'}
+  <!-- 144: образец из нескачанного набора; «Отмена» возвращает к плиткам, ничего не скачивается -->
+  <GetAsk tile={decor.ask.tile} kind={c.kind} onconfirm={() => confirmDecorGet()} oncancel={() => decor.dismiss()} />
 {:else if c && decor.ask?.kind === 'albumOwn'}
   <!-- 115: у разворотов свой фон; × возвращает к плиткам, правки нет (как вопрос 077) -->
   <AlbumOwnAsk

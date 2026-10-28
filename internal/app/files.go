@@ -24,6 +24,9 @@ func (a *App) removeDraft() {
 	if a.draftNewer.Load() {
 		return // чужой версии: это данные пользователя, не наш мусор
 	}
+	if a.draftPath() == "" {
+		return
+	}
 	a.backupDraft() // «Новый» и «Сохранить как» иначе удаляли бы несохранённый черновик без следа
 	if err := os.Remove(a.draftPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		log.Printf("черновик не удалён: %v", paths.NoPath(err))
@@ -165,7 +168,13 @@ func (a *App) saveAs(ed *album.Editor, path string) (model.View, error) {
 	return a.out(ed.View()), nil
 }
 
-func (a *App) draftPath() string { return filepath.Join(a.cfgDir, "черновик"+projectExt) }
+// draftPath — черновик в папке настроек; "" — папки нет (настройки не пишутся), черновика нет.
+func (a *App) draftPath() string {
+	if a.cfgDir == "" {
+		return ""
+	}
+	return filepath.Join(a.cfgDir, "черновик"+projectExt)
+}
 
 // blankEditor — редактор нового пустого альбома изделия product.
 func blankEditor(product string) *album.Editor {
@@ -186,6 +195,9 @@ func freshEditor(p *model.Project) *album.Editor {
 
 // badDraftPath — куда уходит сломанный черновик.
 func (a *App) badDraftPath(t time.Time) string {
+	if a.cfgDir == "" {
+		return ""
+	}
 	return filepath.Join(a.cfgDir, "черновик.bad-"+t.Format("20060102-150405")+projectExt)
 }
 
@@ -284,7 +296,7 @@ func (a *App) save() {
 	} else {
 		// Без файла проекта пишем черновик, чтобы ничего не потерялось.
 		// Если старый черновик не открылся и не ушёл в .bad, поверх него не пишем.
-		if a.draftLocked.Load() || a.draftNewer.Load() {
+		if a.draftLocked.Load() || a.draftNewer.Load() || a.draftPath() == "" {
 			return
 		}
 		if backup.HasContent(a.draftPath()) { // пустой черновик копировать незачем
@@ -441,7 +453,7 @@ func (a *App) backupDraft() { a.backupDraftKeep("") }
 
 // backupDraftKeep — backupDraft, чистка не удаляет копию keep.
 func (a *App) backupDraftKeep(keep string) {
-	if a.backups == nil || a.draftNewer.Load() || !backup.HasContent(a.draftPath()) {
+	if a.backups == nil || a.draftNewer.Load() || a.draftPath() == "" || !backup.HasContent(a.draftPath()) {
 		return
 	}
 	a.backupKeep(a.draftPath(), backup.DraftKey, true, keep)

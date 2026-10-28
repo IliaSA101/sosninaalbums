@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Stop, accept, mergeBothSides } from './accept.mjs'
+import { Stop, accept, ensureNodeModules, mergeBothSides } from './accept.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const gotmp = path.join(here, '..', '.gotmp')
@@ -64,13 +64,16 @@ if (process.env.ACCEPT_TEST_FAIL) { console.log('FAIL: заглушка'); proce
   fs.writeFileSync(path.join(nm, 'keep.txt'), 'x')
   const env = { ...process.env, ACCEPT_PRECHECK: stub }
   delete env.ACCEPT_TEST_FAIL
-  const wt = (name) => {
+  const wt = (name, link = true) => {
     const p = path.join(root, '.claude', 'worktrees', name)
     git(root, 'worktree', 'add', '-q', '-b', name, p, 'dev')
     fs.mkdirSync(path.join(p, 'frontend'), { recursive: true })
-    fs.symlinkSync(nm, path.join(p, 'frontend', 'node_modules'), 'junction')
+    if (link) fs.symlinkSync(nm, path.join(p, 'frontend', 'node_modules'), 'junction')
     return p
   }
+  // основная копия: frontend/node_modules — цель ссылки, которую accept ставит сам
+  fs.mkdirSync(path.join(root, 'frontend'), { recursive: true })
+  fs.symlinkSync(nm, path.join(root, 'frontend', 'node_modules'), 'junction')
   return { root, dir, nm, env, wt, log: () => JSON.parse(fs.readFileSync(path.join(dir, 'precheck.log'), 'utf8')) }
 }
 
@@ -112,6 +115,40 @@ test('чистый ff: rebase на ушедший вперёд dev, precheck п�
   const log = s.log()
   assert.deepEqual(log.args, ['--base', devBefore])
   assert.equal(log.cwd, wReal)
+})
+
+test('нет frontend/node_modules в копии → ссылка на основную копию создана до precheck и снята при приёме', () => {
+  const s = setup()
+  const w = s.wt('b10', false)
+  commit(w, 'b.txt', 'b\n', 'b10')
+  // precheck-заглушка фиксирует, видна ли ссылка на момент запуска
+  const seen = path.join(s.dir, 'seen.txt')
+  const stub = path.join(s.dir, 'precheck-seen.mjs')
+  fs.writeFileSync(
+    stub,
+    `import fs from 'node:fs'
+const l = fs.lstatSync('frontend/node_modules', { throwIfNoEntry: false })
+fs.writeFileSync(${JSON.stringify(seen)}, String(!!l?.isSymbolicLink()) + ' ' + fs.realpathSync('frontend/node_modules'))
+`,
+  )
+  const line = accept('b10', 'b10', { cwd: s.root, env: { ...s.env, ACCEPT_PRECHECK: stub } })
+  assert.match(line, /^принято b10:/)
+  assert.equal(fs.readFileSync(seen, 'utf8'), `true ${fs.realpathSync(s.nm)}`)
+  assert.ok(!fs.existsSync(w), 'worktree удалён вместе со ссылкой')
+  assert.ok(fs.existsSync(path.join(s.nm, 'keep.txt')), 'цель ссылки цела')
+})
+
+test('ensureNodeModules: ссылка есть — не трогает; нет в основной копии или нет frontend/ — пропуск', () => {
+  const s = setup()
+  const w = s.wt('b11')
+  assert.equal(ensureNodeModules(s.root, w), false, 'ссылка уже есть')
+  const w2 = s.wt('b12', false)
+  fs.rmSync(path.join(w2, 'frontend'), { recursive: true })
+  assert.equal(ensureNodeModules(s.root, w2), false, 'нет frontend/')
+  fs.mkdirSync(path.join(w2, 'frontend'))
+  fs.rmSync(path.join(s.root, 'frontend', 'node_modules'), { recursive: true, force: true }) // ссылка: цель s.nm не трогаем
+  assert.equal(ensureNodeModules(s.root, w2), false, 'нет цели в основной копии')
+  assert.ok(!fs.existsSync(path.join(w2, 'frontend', 'node_modules')))
 })
 
 test('worktree можно задать полным путём; 1 коммит — единственное число', () => {

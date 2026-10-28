@@ -184,6 +184,18 @@ func (m *Methods) SetMarks(ids []string, patch model.MarkPatch) (v model.View, e
 	return m.changedOrErr(m.editor().SetMarks(m.infos(ids), patch))
 }
 
+// PickBest — «Лучший» в сравнении кадров (138): best — «отобрано», rest — «отклонено», один шаг
+// отмены. ID вне ленты пропускаются (best неизвестен — холостая без ошибки); ошибка — больше
+// трёх остальных или сверх MaxMarks, отметки тогда прежние.
+func (m *Methods) PickBest(best string, rest []string) (v model.View, err error) {
+	defer m.guardEdit("PickBest", &v, &err)
+	b := m.infos([]string{best})
+	if len(b) == 0 {
+		return m.editor().View(), nil
+	}
+	return m.changedOrErr(m.editor().PickBest(b[0], m.infos(rest)))
+}
+
 // ResetMarks — «Как в Lightroom»: у этих фото снова действуют отметки из файлов.
 func (m *Methods) ResetMarks(ids []string) (v model.View) {
 	defer m.guardEdit("ResetMarks", &v, nil)

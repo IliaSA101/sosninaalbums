@@ -135,6 +135,34 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  # Детектор гонок (-race, cgo/gcc есть на раннере): только push в winqa/** (тот же коммит, что уйдёт в main), не main и не PR.
+  # Пока не блокирует: continue-on-error на уровне задания - красный прогон виден, но общий итог не краснит.
+  # Снять continue-on-error после 3 зелёных прогонов подряд (решение владельца 28.10, В5).
+  go-race:
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/winqa/') }}
+    continue-on-error: true
+    timeout-minutes: 40
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      # node нужен части Go-тестов, как в go-linux
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      # SA_TEST_SLOW: пороги времени (testkit.Limit) с запасом: -race замедляет код в разы; пакеты — как в go test выше
+      - name: go test -race
+        env:
+          SA_TEST_SLOW: "2.5"
+        run: go test -race -timeout 30m . ./internal/...
+
   # Уязвимости в достижимом коде; три GOOS — анализ учитывает теги сборки, Windows-путь иначе не проверяется
   govulncheck:
     timeout-minutes: 15
@@ -221,6 +249,18 @@ jobs:
         run: |
           : > "$RUNNER_TEMP/empty.exe"
           bash scripts/win/installer.sh --exe "$RUNNER_TEMP/empty.exe" --version 0.0.1 --out "$RUNNER_TEMP/installer"
+
+      # Стандартный установщик (спека 142): блок !ifdef DEMO_SRC в .nsi под -WX с настоящим zip примера; пустышка exe, как выше
+      - name: пробная сборка стандартного установщика
+        run: |
+          : > "$RUNNER_TEMP/empty.exe"
+          bash scripts/win/installer.sh --exe "$RUNNER_TEMP/empty.exe" --version 0.0.1 --out "$RUNNER_TEMP/installer-standard" --demo "$(ls internal/demopack/*.zip)" --standard
+
+      # Пакет данных с примером (0.30-142-47): сборка настоящего zip; дата передана, т. к. история в CI неполная
+      - name: пробная сборка пакета данных (deb-demo)
+        run: |
+          bash scripts/linux/deb-demo.sh --out "$RUNNER_TEMP/deb-demo" --date 2026-10-28T00:00:00Z
+          dpkg-deb -I "$RUNNER_TEMP"/deb-demo/SosninaAlbums-demo-*-linux-all.deb
 
       # deb.sh и glibc.sh из пустышки (спека 101): раньше шли только в release.yml, то есть только при выпуске (0.25.0 - xdg-mime)
       - name: тест сборки .deb

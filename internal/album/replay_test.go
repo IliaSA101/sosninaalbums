@@ -390,6 +390,7 @@ func replayAlbum(r *replay, ph []model.PhotoInfo) *model.Project {
 	r.do("Undo", e.Undo())
 	r.do("Undo:правка", e.Undo())
 	r.do("Redo", e.Redo())
+	r.ve("PickBest")(e.PickBest(ph[0], ph[2:4])) // «Лучший» сравнения кадров (138)
 	// Подборки (083): шаги «рядом с проектом», как отметки; одна остаётся — её пишет Save.
 	r.ve("NewBin")(e.NewBin("Обязательно", ph[1:4]))
 	bin := r.v.Bins[0].ID

@@ -25,6 +25,8 @@ export interface JobsHost {
 // Экспорт закрыт: листов нет и выгрузка не идёт. Идущую выгрузку окно хода обязано показывать
 // и при пустом альбоме (удалили все развороты) — иначе «Остановить» не достать.
 export const exportShut = (sheets: number, exporting: boolean) => sheets === 0 && !exporting
+// Почему «Экспорт» молчит: кнопка шапки, подсказка у неё и тост от клавиши/кнопки говорят одно.
+export const EXPORT_EMPTY = 'Выгружать нечего: в альбоме нет разворотов'
 
 // Фоновые работы Go: экспорт и его окна (события export:*) и сбор проекта в папку (collect:*, 069).
 class Jobs {
@@ -103,7 +105,11 @@ class Jobs {
 
   // «Экспорт» открывает окно (ExportDialog): настройки, а пока выгрузка идёт — её ход (073); сам запуск — runExport.
   exportAll() {
-    if (!this.host || exportShut(this.host.sheets.length, !!this.exporting)) return
+    if (!this.host) return
+    if (exportShut(this.host.sheets.length, !!this.exporting)) {
+      this.host.notify(EXPORT_EMPTY)
+      return
+    }
     this.exportOpen = true
   }
 

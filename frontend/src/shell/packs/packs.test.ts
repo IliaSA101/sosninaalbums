@@ -4,6 +4,7 @@ import {
   cancelled,
   contentsLabel,
   creditLine,
+  hasNet,
   metaLine,
   notAddedText,
   onlyBuiltin,
@@ -152,6 +153,17 @@ describe('вопрос «Удалить набор?»', () => {
     expect(removeQuestion(pack({ print: 2 }))).toContain('Его фоны, стикеры, развороты и типографии пропадут')
   })
 
+  it('донор с дополнениями (137-10): названия и что с ними будет; нет каталога или дополнений — прежний текст', () => {
+    const base = removeQuestion(pack())
+    expect(removeQuestion(pack(), ['Свадьба: макеты'])).toBe(
+      base + ' Дополнения к нему — «Свадьба: макеты» — останутся, но их новые версии приходить перестанут, пока набор не скачаете снова.',
+    )
+    expect(removeQuestion(pack(), ['A', 'B'])).toContain('Дополнения к нему — «A», «B» — останутся')
+    expect(removeQuestion(pack(), [])).toBe(base)
+    expect(removeQuestion(pack(), null)).toBe(base)
+    expect(removeQuestion(pack(), undefined)).toBe(base)
+  })
+
   it('числа Go: сколько освободится и сколько файлов остаётся', () => {
     expect(removeNote({ files: 40, kept: 0, bytes: 58 * 1048576 })).toBe('Освободится 58,0 МБ (40 файлов).')
     expect(removeNote({ files: 21, kept: 3, bytes: 2048 })).toBe(
@@ -161,5 +173,25 @@ describe('вопрос «Удалить набор?»', () => {
     expect(removeNote({ files: 0, kept: 5, bytes: 0 })).toBe(
       'Место не освободится: все файлы набора нужны ещё где-то. 5 файлов останутся: нужны открытому альбому, вашим фонам или другим наборам.',
     )
+  })
+})
+
+describe('пример темы (142)', () => {
+  it('происхождение «demo»: «Пример в программе» последним в подписи, версия и состав как у набора', () => {
+    const demo = pack({ origin: 'demo', author: '', license: 'CC0-1.0', source: '', version: 1, bg: 4, sticker: 7, spread: 4, frame: 2 })
+    expect(creditLine(demo)).toBe('Лицензия: CC0-1.0 · Пример в программе')
+    expect(metaLine(demo)).toBe('версия 1 · 4 фона · 7 стикеров · 4 разворота · 2 рамочки · 41,0 МБ')
+  })
+
+  it('пример — не «набор из сети»: подпись каталога под списком не просится', () => {
+    expect(hasNet([pack({ origin: 'demo' })])).toBe(false)
+    expect(hasNet([pack({ origin: 'demo' }), pack({ origin: 'net' })])).toBe(true)
+  })
+
+  it('вопрос «Удалить набор?» — прежний, с числами; пример не builtin (не «только встроенные»)', () => {
+    expect(removeQuestion(pack({ origin: 'demo', bg: 4, sticker: 7, spread: 4, frame: 2 }))).toContain(
+      'Его фоны, стикеры, развороты и рамочки пропадут из окон.',
+    )
+    expect(onlyBuiltin([pack({ origin: 'builtin' }), pack({ origin: 'demo' })])).toBe(false)
   })
 })

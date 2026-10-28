@@ -3,7 +3,7 @@ import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
 import { can, type Level } from '../../base/prefs/levels'
 import { buildMenu, type Menu, type MenuCtx, type MenuItem } from './menu'
 
-// Меню «Разворот» (владелец 2026-10-24, 0.26-124-1): 11 пунктов, четыре группы; «Правка» — 14. Тесты порядка
+// Меню «Разворот» (владелец 2026-10-24, 0.26-124-1; 141): 16 пунктов, пять групп; «Правка» — 14. Тесты порядка
 // пунктов 041, 048, 049, 067, 079, 094 переехали сюда из menu.test.ts вместе с пунктами.
 beforeEach(() => useCatalog())
 afterEach(() => dropCatalog())
@@ -56,8 +56,13 @@ const SPREAD = [
   'renameSpread',
   'pasteNames',
   'varyLayouts',
+  'insertSpread',
+  'splitSpread',
+  'joinSpread',
   'makeVignette',
   'vigSetup',
+  'sortVignette',
+  'clearVignette',
 ]
 const EDIT = [
   'undo',
@@ -76,7 +81,7 @@ const EDIT = [
   'align',
 ]
 
-describe('«Правка» 14 и «Разворот» 11 (владелец 2026-10-24)', () => {
+describe('«Правка» 14 и «Разворот» 16 (владелец 2026-10-24, 141)', () => {
   const m = buildMenu(ctx({ level: 'full', can: () => true }))
 
   it('«Правка» — 14 пунктов верхнего уровня, группы с чертами по макету', () => {
@@ -89,17 +94,18 @@ describe('«Правка» 14 и «Разворот» 11 (владелец 2026-
     ])
   })
 
-  it('«Разворот» — 11 пунктов, группы с чертами по макету', () => {
+  it('«Разворот» — 16 пунктов, группы с чертами по макету', () => {
     expect(top(m, 'spread').map((i) => i.id)).toEqual(SPREAD)
     expect(groups(top(m, 'spread'))).toEqual([
       ['addText', 'addSticker'],
       ['bgGallery', 'borderGallery', 'copyDecor', 'spreadTpl'],
       ['renameSpread', 'pasteNames', 'varyLayouts'],
-      ['makeVignette', 'vigSetup'],
+      ['insertSpread', 'splitSpread', 'joinSpread'],
+      ['makeVignette', 'vigSetup', 'sortVignette', 'clearVignette'],
     ])
   })
 
-  it('каждый пункт ровно в одном меню: 11 — в «Разворот», 14 — в «Правка»', () => {
+  it('каждый пункт ровно в одном меню: 16 — в «Разворот», 14 — в «Правка»', () => {
     const where = (id: string) => m.filter((x) => top([x], x.id).some((i) => i.id === id)).map((x) => x.id)
     for (const id of SPREAD) expect(where(id), id).toEqual(['spread'])
     for (const id of EDIT) expect(where(id), id).toEqual(['edit'])
@@ -118,10 +124,11 @@ describe('«Правка» 14 и «Разворот» 11 (владелец 2026-
     }
   })
 
-  it('пустое меню скрыто: нет видимых на уровне пунктов — «Разворота» в строке нет', () => {
+  // С 141 «Вставить разворот после» без функции уровня (как в правом щелчке, 103-9): «Разворот» не пустеет ни на каком уровне.
+  it('без функций уровня в «Разворот» остаётся один пункт — «Вставить разворот после»', () => {
     const none = buildMenu(ctx({ can: () => false }))
-    expect(none.map((x) => x.id)).toEqual(['file', 'edit', 'view', 'help'])
-    expect(() => ids(none, 'spread')).toThrow('нет в строке')
+    expect(none.map((x) => x.id)).toEqual(['file', 'edit', 'spread', 'view', 'help'])
+    expect(ids(none, 'spread')).toEqual(['insertSpread'])
   })
 
   it('«Простой»: «Разворот» в строке, пунктов уровня меньше; id как у «Полного»', () => {
@@ -129,6 +136,9 @@ describe('«Правка» 14 и «Разворот» 11 (владелец 2026-
     expect(simple.map((x) => x.label)).toEqual(['Файл', 'Правка', 'Разворот', 'Вид', 'Справка'])
     expect(ids(simple, 'spread').length).toBeLessThan(SPREAD.length)
     for (const id of ids(simple, 'spread')) expect(SPREAD, id).toContain(id)
+    // 141: разрез и склейка («Разрез и склейка» — с «Простого») и вставка есть, виньеточные — со «Стандартного»
+    for (const id of ['insertSpread', 'splitSpread', 'joinSpread']) expect(ids(simple, 'spread'), id).toContain(id)
+    for (const id of ['sortVignette', 'clearVignette']) expect(ids(simple, 'spread'), id).not.toContain(id)
   })
 
   it('первый пункт «Разворота» не начинается с черты', () => {
@@ -227,5 +237,57 @@ describe('пункты «Разворота»: уровень, серое, по�
     const edit = ids(std, 'spread')
     expect(edit.indexOf('addSticker')).toBe(edit.indexOf('addText') + 1)
     expect(find(buildMenu({ ...at('full'), hasSpread: false }), 'addSticker')?.disabled).toBe(true)
+  })
+})
+
+describe('пять команд разворота (141): серое, подсказки, порядок', () => {
+  const ok = { ok: true, why: '' }
+
+  it('«Вставить разворот после» — без функции уровня, серое без текущего листа', () => {
+    expect(find(buildMenu({ ...at('simple'), insertable: true }), 'insertSpread')).toMatchObject({
+      label: 'Вставить разворот после',
+      cmd: 'insertSpread',
+    })
+    expect(find(buildMenu({ ...at('simple'), insertable: true }), 'insertSpread')?.disabled).toBeUndefined()
+    expect(find(buildMenu(at('full')), 'insertSpread')?.disabled).toBe(true)
+    expect(find(buildMenu({ ...at('full'), insertable: false }), 'insertSpread')?.disabled).toBe(true)
+  })
+
+  it('«Разрезать» и «Склеить»: серое по cutGate/joinGate, причина — подсказкой, ручной в паре — что будет', () => {
+    const gray = { ok: false, why: 'Обложку не разрезать' }
+    expect(find(buildMenu(ctx({ cutGate: gray, can: () => true })), 'splitSpread')).toMatchObject({
+      label: 'Разрезать перед выделенным фото',
+      disabled: true,
+      hint: 'Обложку не разрезать',
+    })
+    expect(find(buildMenu(ctx({ can: () => true })), 'splitSpread')?.disabled).toBe(true) // шлюз не задан
+    expect(find(buildMenu(ctx({ can: () => true })), 'joinSpread')?.disabled).toBe(true)
+    const on = buildMenu(ctx({ cutGate: ok, joinGate: { ...ok, ask: 'У разворота 2 ручная раскладка' }, can: () => true }))
+    expect(find(on, 'splitSpread')?.disabled).toBeUndefined()
+    expect(find(on, 'splitSpread')?.hint).toBeUndefined()
+    expect(find(on, 'joinSpread')).toMatchObject({
+      label: 'Склеить со следующим',
+      hint: 'У разворота 2 ручная раскладка: места вернутся к «Авто», сначала спросим',
+    })
+    expect(find(on, 'joinSpread')?.disabled).toBeUndefined()
+  })
+
+  it('«Сортировать по фамилии» и «Обычный разворот»: со «Стандартного», серое без виньетки, подсказки как у кнопки и «⋯»', () => {
+    const on = buildMenu({ ...at('standard'), vigSetup: true })
+    expect(find(on, 'sortVignette')).toMatchObject({
+      label: 'Сортировать по фамилии',
+      cmd: 'sortVignette',
+      hint: 'Ученики по алфавиту: фамилия, имя; без имени — в конце',
+    })
+    expect(find(on, 'clearVignette')).toMatchObject({ label: 'Обычный разворот', cmd: 'clearVignette' })
+    expect(find(on, 'clearVignette')?.hint).toMatch(/^Места, фото и подписи остаются/)
+    expect(find(on, 'sortVignette')?.disabled).toBeUndefined()
+    for (const id of ['sortVignette', 'clearVignette']) expect(find(buildMenu(at('standard')), id)?.disabled, id).toBe(true)
+  })
+
+  it('клавиш по умолчанию у пяти пунктов нет', () => {
+    const m = buildMenu({ ...at('full'), insertable: true, cutGate: ok, joinGate: ok, vigSetup: true })
+    for (const id of ['insertSpread', 'splitSpread', 'joinSpread', 'sortVignette', 'clearVignette'])
+      expect(find(m, id)?.keys, id).toBeFalsy()
   })
 })

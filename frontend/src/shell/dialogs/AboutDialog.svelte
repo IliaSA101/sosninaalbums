@@ -2,6 +2,8 @@
   import { store } from '../../base/core/store.svelte'
   import Modal from '../../base/modal/Modal.svelte'
   import logo from '../../assets/logo.png'
+  import { guide } from '../guide/guidestate.svelte'
+  import { ABOUT_FUNCTIONS_LINK, ABOUT_FUNCTIONS_TAIL, functionsText, guideCount } from '../guide/inventory'
   import UpdateBlock from '../update/UpdateBlock.svelte'
   import { aboutUi, BASED_ON, REPO_TEXT } from './about.svelte'
 </script>
@@ -20,6 +22,16 @@
     <p class="line">
       Вместе с фотографом Мариной Сосниной —
       <button class="link" onclick={() => void aboutUi.link('marina')}>Sosnina films</button>
+    </p>
+    <!-- 140: число функций из описи справочника; ссылка закрывает «О программе» и открывает F1. -->
+    <p class="line">
+      {functionsText(guideCount())}{ABOUT_FUNCTIONS_TAIL}<button
+        class="link"
+        onclick={() => {
+          aboutUi.close()
+          guide.openFresh()
+        }}>{ABOUT_FUNCTIONS_LINK}</button
+      >
     </p>
     <p class="line">{BASED_ON} · {REPO_TEXT}</p>
     <p class="line muted">

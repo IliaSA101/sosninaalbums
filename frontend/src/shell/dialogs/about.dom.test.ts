@@ -12,6 +12,8 @@ const { default: AboutDialog } = await import('./AboutDialog.svelte')
 const { aboutUi } = await import('./about.svelte')
 const { store } = await import('../../base/core/store.svelte')
 const { modalStack } = await import('../../base/modal/modalstack.svelte')
+const { guide } = await import('../guide/guidestate.svelte')
+const { guideCount, functionsText } = await import('../guide/inventory')
 
 beforeEach(() => {
   store.version = '0.23.0'
@@ -19,6 +21,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  guide.open = false
   aboutUi.close()
   openLink.mockReset()
   openLink.mockResolvedValue(undefined)
@@ -87,6 +90,19 @@ describe('AboutDialog: «О программе»', () => {
     expect(openLink.mock.calls.map((c) => c[0])).toEqual(['source', 'license', 'marina', 'telegram', 'bug', 'telegram', 'idea'])
     // Окно после ссылок остаётся: фотограф возвращается к программе.
     expect(screen.queryByRole('dialog')).not.toBeNull()
+  })
+
+  it('строка «N функций — описаны в справочнике F1»: число из описи, ссылка открывает F1 и закрывает окно', async () => {
+    render(AboutDialog)
+    open()
+    const line = screen.getByText('справочнике F1', { selector: 'button' }).closest('p')
+    expect(line?.textContent?.replace(/\s+/g, ' ').trim()).toBe(`${functionsText(guideCount())} — описаны в справочнике F1`)
+    guide.open = false
+    await fireEvent.click(screen.getByText('справочнике F1', { selector: 'button' }))
+    expect(guide.open).toBe(true)
+    expect(guide.rowFilter).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(openLink).not.toHaveBeenCalled()
   })
 
   it('обратная связь — две строки с подписями и по две кнопки', () => {

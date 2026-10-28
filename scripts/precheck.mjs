@@ -107,6 +107,9 @@ const fe = changed
   .filter((f) => /^frontend\//.test(f) && !/^frontend\/(wailsjs|dist)\//.test(f) && !/package(-lock)?\.json$/.test(f))
   .filter((f) => /\.(ts|js|svelte|css|html|json)$/.test(f))
   .map((f) => f.slice('frontend/'.length))
+// Эталоны Go, которые импортируют тесты фронта (каталог клавиш и пр.): правка только Go-стороны ломала стражи фронта
+// незаметно (138 Г1: команда каталога без обработчика), поэтому такие файлы гонят vitest related и стражи. Пути от frontend/.
+const feShared = changed.filter((f) => /^testdata\/parity\/.+\.json$/.test(f)).map((f) => `../${f}`)
 
 const failed = []
 const total = Date.now()
@@ -138,7 +141,7 @@ const res = (r, emptyOut = false) => ({ ok: r.code === 0 && !(emptyOut && r.out.
 const goFiles = changed.filter((f) => f.endsWith('.go'))
 // Go и фронт не зависят друг от друга: фронт идёт дочерним процессом, пока Go занят (вывод — в файл, а не в pipe)
 let feJob = null
-if (part === '' && goFiles.length && fe.length) {
+if (part === '' && goFiles.length && (fe.length || feShared.length)) {
   const log = path.join(gotmp, `precheck-fe-${process.pid}.log`)
   const fd = fs.openSync(log, 'w')
   const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--part', 'fe', '--base', base], {
@@ -236,7 +239,7 @@ function scanGuards(dir) {
   walk(dir)
   return res.sort()
 }
-if (fe.length && (part === 'fe' || !feJob)) {
+if ((fe.length || feShared.length) && (part === 'fe' || !feJob)) {
   const npx = (parts) => {
     let out = ''
     let code = 0
@@ -248,13 +251,13 @@ if (fe.length && (part === 'fe' || !feJob)) {
     return { code, out }
   }
   const fePart = (pre, files) => chunks(files).map((c) => [...pre, ...c])
-  step('prettier', () => res(npx(fePart(['prettier', '--check', '--log-level', 'warn'], fe))))
+  if (fe.length) step('prettier', () => res(npx(fePart(['prettier', '--check', '--log-level', 'warn'], fe))))
   const lint = fe.filter((f) => /\.(ts|js|svelte)$/.test(f))
   if (lint.length) step('eslint', () => res(npx(fePart(['eslint', '--max-warnings', '0'], lint))))
   if (fe.some((f) => /\.(ts|svelte)$/.test(f))) {
     step('svelte-check', () => res(npx([['svelte-check', '--output', 'human', '--fail-on-warnings']])))
   }
-  const src = fe.filter((f) => /^src\/.*\.(ts|js|svelte)$/.test(f))
+  const src = [...fe.filter((f) => /^src\/.*\.(ts|js|svelte)$/.test(f)), ...feShared]
   if (src.length) step('vitest related', () => res(npx(fePart(['vitest', 'related', '--run', '--passWithNoTests'], src))))
   // Стражи: тесты-сканеры всего дерева фронта (import.meta.glob) — vitest related их не выбирает, а ломаются они от
   // любой правки src. Список вычисляем по содержимому, не храним.

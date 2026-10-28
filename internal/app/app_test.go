@@ -22,6 +22,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
+	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
@@ -310,6 +311,8 @@ func TestRotateLog(t *testing.T) {
 func newApp(t testing.TB) *App {
 	a := NewApp()
 	close(a.ready) // startup в тестах не вызывается
+	// Примера нет: иначе каждому тесту добавилась бы строка «Скачать». Тесты 142 ставят свой.
+	a.demoFn = func() libpacks.Demo { return libpacks.Demo{} }
 	// Без папки данных prefs пишут config.json в рабочую папку пакета (так в git попал internal/app/config.json).
 	a.cfgDir = testkit.TempDir(t)
 	testkit.BeforeRemove(t, a.closeBackground)

@@ -76,6 +76,7 @@ func (a *App) rescanWith(mode scanMode) {
 	a.mediaSt.forget(a.byID, next) // плитки прежнего альбома из очереди браузера — не промах
 	a.photos, a.byID = kept, next
 	a.unread = prunedUnread(a.unread, src)
+	a.badThumb = prunedBadThumb(a.badThumb, next, src)
 	if !quiet {
 		a.scan = library.ScanProgress{Active: true, Walking: true}
 	}

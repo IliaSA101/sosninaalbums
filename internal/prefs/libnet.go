@@ -7,19 +7,28 @@ import (
 
 // LibraryNet — согласие на сеть библиотеки (067 Ф3, решения 16–18): Allowed — «Разрешить»
 // (без него программа в сеть не ходит), AtStart — «Проверять при запуске», Checked — unix мс
-// последней удачной проверки, Skip — ID наборов, удалённых пользователем: «Обновить» их не
-// возвращает, «Добавить из файла» снимает отсюда. CatalogSeq — seq последнего принятого
+// последней удачной проверки, Skip — ID наборов, удалённых пользователем: «Скачать все» и
+// «Обновить» их не ставят; «Скачать» в строке и «Добавить из файла» снимают пометку.
+// CatalogSeq — seq последнего принятого
 // каталога: меньший — откат к старому подписанному каталогу, отказ (0.17 решение №2).
+// Announced — id наборов, о которых пользователю уже сообщили (событие «новых наборов» и счёт
+// «Обновить»); пишет только проверка наборов, а не каталог для роликов (140, 0.30-140-24).
+// nil — поля нет (старый файл): тогда «объявлено» — состав сохранённого каталога; [] — объявлено
+// пусто.
 type LibraryNet struct {
 	Allowed    bool     `json:"allowed,omitempty"`
 	AtStart    bool     `json:"atStart,omitempty"`
 	Checked    int64    `json:"checked,omitempty"`
 	CatalogSeq int64    `json:"catalogSeq,omitempty"`
 	Skip       []string `json:"skip,omitempty"`
+	Announced  []string `json:"announced,omitzero"` // omitzero: nil нет в файле, [] есть
 }
 
 // maxSkip — удалённых наборов в памяти (= наборов в каталоге).
 const maxSkip = 500
+
+// maxAnnounced — объявленных наборов в памяти (каталог — fetch.MaxPacks).
+const maxAnnounced = 500
 
 // clean — после правки руками: флажок без согласия не действует, ID по грамматике без
 // повторов, время и seq не отрицательные.
@@ -33,6 +42,15 @@ func (n LibraryNet) clean() LibraryNet {
 		}
 	}
 	n.Skip = out
+	if n.Announced != nil {
+		ann := make([]string, 0, min(len(n.Announced), maxAnnounced))
+		for _, id := range n.Announced {
+			if len(ann) < maxAnnounced && validPackID(id) && !slices.Contains(ann, id) {
+				ann = append(ann, id)
+			}
+		}
+		n.Announced = ann
+	}
 	return n
 }
 
@@ -55,7 +73,7 @@ func UpdateLibraryNet(dir string, fn func(n *LibraryNet)) LibraryNet {
 		}
 		fn(&n)
 		out = n.clean()
-		if out.Allowed || out.Checked != 0 || out.CatalogSeq != 0 || len(out.Skip) != 0 {
+		if out.Allowed || out.Checked != 0 || out.CatalogSeq != 0 || len(out.Skip) != 0 || out.Announced != nil {
 			c.LibraryNet = &out
 		} else {
 			c.LibraryNet = nil // всё выключено — ключа в файле нет

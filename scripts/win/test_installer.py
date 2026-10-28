@@ -4,6 +4,7 @@
 в CI (переменная CI) его отсутствие — провал: иначе проверка молча ничего бы не проверяла.
 """
 
+import fnmatch
 import os
 import re
 import shutil
@@ -191,6 +192,29 @@ class TestScript(unittest.TestCase):
         # безусловного удаления этих ключей нет
         self.assertNotRegex(un, r'DeleteRegKey HKCU "Software\\Classes\\\.salbum')
 
+    def test_demo_block_order(self):
+        # стандартная редакция (0.30-142-44): пример — после замены exe, затем рабочая папка возвращается в $INSTDIR
+        # (её наследуют CreateShortcut и Exec); без DEMO_SRC блока нет вовсе
+        i0 = self.nsi.index("!ifdef DEMO_SRC")
+        blk = self.nsi[i0:self.nsi.index("!endif", i0)]
+        self.assertLess(self.nsi.index("Call ReplaceExe"), i0)
+        self.assertLess(i0, self.nsi.index("WriteUninstaller"))
+        self.assertLess(i0, self.nsi.index("CreateShortcut"))
+        self.assertLess(blk.index('SetOutPath "$INSTDIR\\data"'), blk.index('File "${DEMO_SRC}"'))
+        self.assertLess(blk.index('File "${DEMO_SRC}"'), blk.index('SetOutPath "$INSTDIR"'))
+        self.assertNotRegex(self.nsi, r"!ifndef DEMO_SRC\s*\n\s*!error")  # DEMO_SRC необязателен
+
+    def test_uninstall_demo_mask_and_order(self):
+        # маска по префиксу (v2 не оставит сиротой v1; имя через -D при пропуске уронило бы makensis -WX);
+        # RMDir data без /r — до RMDir $INSTDIR, иначе папка программы останется непустой
+        un = self.nsi[self.nsi.index('Section "Uninstall"'):]
+        mask = un.index('Delete "$INSTDIR\\data\\wedding-navy-watercolor-demo-*.zip"')
+        rd = un.index('RMDir "$INSTDIR\\data"\n')
+        inst = un.index('\n  RMDir "$INSTDIR"\n')
+        self.assertLess(mask, rd)
+        self.assertLess(rd, inst)
+        self.assertNotIn("!ifdef", un)  # удаление безусловное, не зависит от DEMO_SRC
+
     @unittest.skipUnless(HAVE_PIL, "нет Pillow")
     def test_wizard_bmp_reproducible(self):
         # скрипт картинок детерминирован: два прогона в разные папки — те же байты всех шести файлов,
@@ -338,6 +362,48 @@ class TestInstallerSh(unittest.TestCase):
             self.assertNotEqual(f1.read(), f2.read())
         # пустой exe (ci.yml проверяет сам скрипт без сборки программы) собирается так же, без предупреждений
         self.build("empty", "0.0.1", exe=self.empty)
+
+    def test_demo_and_standard_only_together(self):
+        # редакция — пара ключей; одиночный не собирает ничего (до makensis)
+        out = os.path.join(self.dir, "o")
+        zp = os.path.join(self.dir, "demo.zip")
+        with open(zp, "wb") as f:
+            f.write(b"PK")
+        base = ("--exe", self.exe, "--version", "1.2.3", "--out", out)
+        self.assertEqual(self.run_sh(*base, "--demo", zp)[0], 2)
+        self.assertEqual(self.run_sh(*base, "--standard")[0], 2)
+        code, _, err = self.run_sh(*base, "--demo", os.path.join(self.dir, "none.zip"), "--standard")
+        self.assertEqual(code, 1, err)
+        self.assertFalse(os.path.exists(out))
+
+    def test_standard_name_outside_sign_mask(self):
+        # release-sign.mjs ищет «*-windows-x64-setup.exe» и SETUP_RE: стандартный установщик под них попасть не должен
+        name = "SosninaAlbums-1.2.3-windows-x64-standard-setup.exe"
+        self.assertFalse(fnmatch.fnmatch(name, "*-windows-x64-setup.exe"))
+        self.assertTrue(fnmatch.fnmatch("SosninaAlbums-1.2.3-windows-x64-setup.exe", "*-windows-x64-setup.exe"))
+        with open(SH, encoding="utf-8") as f:
+            self.assertIn("-windows-x64-$suffix.exe", f.read())
+
+    @unittest.skipUnless(HAVE_MAKENSIS or os.environ.get("CI"), "нет makensis")
+    def test_standard_build_wx_and_demo_inside(self):
+        self.assertTrue(HAVE_MAKENSIS, "в CI makensis обязателен (apt install nsis)")
+        zp = os.path.join(self.dir, "wedding-navy-watercolor-demo-1.zip")
+        with open(zp, "wb") as f:
+            f.write(b"PK\x03\x04" + os.urandom(200_000))  # несжимаемый: размер установщика растёт на размер zip
+        compact = self.build("c")
+        out = os.path.join(self.dir, "s")
+        args = ("--exe", self.exe, "--version", "1.2.3", "--out", out, "--demo", zp, "--standard")
+        code, stdout, err = self.run_sh(*args)
+        self.assertEqual(code, 0, err)
+        std = stdout.strip().splitlines()[-1]
+        self.assertEqual(os.path.basename(std), "SosninaAlbums-1.2.3-windows-x64-standard-setup.exe")
+        self.assertGreater(os.path.getsize(std), os.path.getsize(compact) + 190_000)
+        code2, stdout2, _ = self.run_sh(*args)
+        self.assertEqual(code2, 0)
+        with open(std, "rb") as f1, open(stdout2.strip().splitlines()[-1], "rb") as f2:
+            self.assertEqual(f1.read(), f2.read(), "стандартная сборка воспроизводима побайтно")
+        with open(compact, "rb") as f:
+            self.assertEqual(f.read()[:2], b"MZ")
 
 
 if __name__ == "__main__":

@@ -149,7 +149,8 @@ func (s *Store) lookMeta(it *Item) bool {
 }
 
 // LookByItem — текущий ключ макета набора pack по пути записи item в манифесте (design §3 «Поиск
-// макета»): набор обновился — ключ новый, запись та же. Нет набора, записи или файла — false.
+// макета»): набор обновился — ключ новый, запись та же. Нет набора, записи или файла — false. Набор-пример,
+// которого нет, ищется в донорах (SetDemo, 0.30-142-19).
 func (s *Store) LookByItem(pack, item string) (string, bool) {
 	if !validPackID(pack) || !ValidItemPath(item) {
 		return "", false
@@ -158,8 +159,23 @@ func (s *Store) LookByItem(pack, item string) (string, bool) {
 	defer s.mu.RUnlock()
 	r := s.packOf(pack)
 	if r == nil {
+		if pack != s.demo.id { // пример ушёл — ищем ту же запись в его донорах (0.30-142-19)
+			return "", false
+		}
+		for _, id := range s.demo.related {
+			if r := s.packOf(id); r != nil {
+				if key, ok := s.lookIn(r, item); ok {
+					return key, true
+				}
+			}
+		}
 		return "", false
 	}
+	return s.lookIn(r, item)
+}
+
+// lookIn — ключ макета набора r по пути записи item и наличие его файла; под mu.
+func (s *Store) lookIn(r *packReg, item string) (string, bool) {
 	for _, e := range r.Items {
 		if e.Kind == KindAlbum && e.Item == item {
 			_, ok := s.files[KindAlbum][e.Key]

@@ -105,8 +105,9 @@ func (e *Editor) CreateCoverLook(preset string, ph *model.PhotoInfo, libs map[st
 }
 
 // createCover — тело CreateCover и CreateCoverLook: обложка, затем (если задано) оформление
-// макетом, затем фото фона лицевой. Копия фону не нужна (098-3): фон фото с места не снимает —
-// запрос копии ставит само фото, а не запись «-new».
+// макетом, затем фото броска: после макета — в первое пустое место лицевой (145 Ч2), иначе фоном
+// лицевой. Копия фону не нужна (098-3): фон фото с места не снимает — запрос копии ставит само
+// фото, а не запись «-new».
 func createCover(p *model.Project, preset string, ph *model.PhotoInfo, style func() error) error {
 	err := cover.Create(p, preset)
 	if err == nil && style != nil {
@@ -115,7 +116,42 @@ func createCover(p *model.Project, preset string, ph *model.PhotoInfo, style fun
 	if err != nil || ph == nil {
 		return err
 	}
+	// Своё из библиотеки, уже стоящее в месте разворота, в место не идёт: PlacePhotos снял бы его
+	// с разворота (копией оно не ставится — ID записи и есть ключ библиотеки); встаёт фоном, как в 0.28.
+	if style != nil && (ph.Lib == "" || !p.Placed(model.ReqBase(ph.ID))) {
+		if seat := frontSeat(p); seat != nil {
+			return seatCopy(p, seat, *ph)
+		}
+	}
 	in := *ph
 	in.ID = model.ReqBase(in.ID)
 	return backdrop.SetBackdrop(p, model.CoverID, model.ScopeRight, in)
+}
+
+// frontSeat — первое пустое место лицевой по model.CoverSeats (задняя и корешок не годятся:
+// бросок на плитку — «этот кадр на лицевую»); мест нет — nil, фото встанет фоном.
+func frontSeat(p *model.Project) *model.Place {
+	s := p.Cover.Sheet
+	for _, pl := range p.CoverSeats() {
+		if pl.Photo == "" && grid.InArea(p, s, pl.X, pl.W, model.ScopeRight) {
+			return pl
+		}
+	}
+	return nil
+}
+
+// seatCopy — фото ph в место pl обложки. Фото, уже стоящее в альбоме, встаёт копией (098-2,
+// запрос «-new» разбирает ResolveCopies внутри PlacePhotos), без вопроса: кадр остаётся в
+// развороте. Фото вне альбома и своё из библиотеки, которого нет в местах (createCover отсёк
+// остальные), — как есть.
+func seatCopy(p *model.Project, pl *model.Place, ph model.PhotoInfo) error {
+	ph.ID = model.ReqBase(ph.ID)
+	if ph.Lib != "" && (!model.ValidLibKey(ph.Lib) || ph.ID != model.LibPhotoID(ph.Lib)) {
+		return model.ErrLibKey // как у фона: иначе Rekey при открытии разведёт запись и ключ
+	}
+	if ph.Lib == "" && p.Placed(ph.ID) {
+		ph.ID = model.CopyReq(model.FileOf(ph.ID))
+	}
+	_, err := grid.PlacePhotos(p, model.CoverID, pl.ID, []model.PhotoInfo{ph})
+	return err
 }

@@ -355,7 +355,7 @@ describe('фон и подпись', () => {
     open()
     const hint = () => document.querySelector('.hint')?.textContent
     expect(hint()).toBe(
-      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · отметки — клавишами ленты · Esc — закрыть',
+      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · отметки — клавишами ленты · C — сравнить · Esc — закрыть',
     )
     cleanup()
     setOsForTest('mac')
@@ -420,7 +420,7 @@ describe('мелкое фото и зона', () => {
     expect(prefs.can('marks')).toBe(false)
     open()
     expect(document.querySelector('.hint')?.textContent).toBe(
-      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · Esc — закрыть',
+      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · C — сравнить · Esc — закрыть',
     )
   })
 })

@@ -3,6 +3,7 @@
 package backup
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -50,5 +51,41 @@ func TestDefaultRootRelativeLocalAppData(t *testing.T) {
 		if got := DefaultRoot("SA"); got != want {
 			t.Errorf("LOCALAPPDATA=%q: %q, ждали %q", v, got, want)
 		}
+	}
+}
+
+// Относительные HOME и XDG_*: ни одной абсолютной базы — папки копий нет, а запись через такое
+// хранилище не создаёт ничего в текущей папке процесса.
+func TestDefaultRootRelativeHomeNoCwdWrites(t *testing.T) {
+	cwd := testkit.TempDir(t)
+	t.Chdir(cwd)
+	src := filepath.Join(cwd, "a.salbum")
+	if err := os.WriteFile(src, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LOCALAPPDATA", "")
+	t.Setenv("XDG_DATA_HOME", "rel/data")
+	for _, home := range []string{"foo", "."} {
+		t.Setenv("HOME", home)
+		// Go сам отвергает относительный XDG_CACHE_HOME, а вот HOME/.cache — нет.
+		t.Setenv("XDG_CACHE_HOME", "")
+		root := DefaultRoot("SA")
+		if root != "" {
+			t.Fatalf("HOME=%q: DefaultRoot = %q, ждали пусто", home, root)
+		}
+		s := New(root)
+		if err := s.Force(src, Key(src)); err != nil {
+			t.Errorf("HOME=%q: Force: %v", home, err)
+		}
+		if err := s.Prune(); err != nil {
+			t.Errorf("HOME=%q: Prune: %v", home, err)
+		}
+	}
+	ents, err := os.ReadDir(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ents) != 1 || ents[0].Name() != "a.salbum" {
+		t.Errorf("в текущей папке появилось лишнее: %v", ents)
 	}
 }

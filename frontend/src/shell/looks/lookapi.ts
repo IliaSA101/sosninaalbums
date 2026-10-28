@@ -4,6 +4,7 @@
 // save — SaveLook: снимок альбома в свои макеты темы; альбом не меняется, отмены нет.
 import { Api } from '../../base/core/store.svelte'
 import type { GridPlan, View } from '../../base/core/types'
+import type { PackList } from '../packs/packs'
 import type { TplResult } from '../../panels/decor/decor'
 import type { LookCatalog, LookCount, LookInfo, LookItem, LookOpts, LookPlan, LookPlanSave, LookResult, SaveLookOpts } from './looktypes'
 
@@ -11,6 +12,8 @@ const as = <T>(p: Promise<unknown>) => p as Promise<T>
 
 export const lookApi = {
   catalog: () => as<LookCatalog>(Api.DecorCatalog('album')),
+  // Есть ли у «Можно скачать» строка примера (142): только местный список, сеть не трогается.
+  demoOffer: async (): Promise<boolean> => !!((await Api.LibraryPacks()) as unknown as PackList)?.net?.demoOffer,
   info: (id: string) => as<LookInfo>(Api.LookInfo(id)),
   // Серия из n разворотов: сколько их на деле, мест и сколько разворотов нужно под k фото.
   count: (id: string, n: number, k: number) => as<LookCount>(Api.LookCount(id, n, k)),

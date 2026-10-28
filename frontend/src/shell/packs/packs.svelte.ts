@@ -2,17 +2,21 @@ import { Api, store } from '../../base/core/store.svelte'
 import { errText, capFirst } from '../../base/words/errtext'
 import { decor } from '../../panels/decor/decor.svelte'
 import { looks } from '../looks/looks.svelte'
+import { getApi } from '../../panels/decorbrowse/getapi'
 import {
   addedText,
   cancelled,
+  hasNet,
   notAddedText,
   removeNote,
   removeQuestion,
   removedText,
   replaceQuestion,
   sortPacks,
+  type LibraryOffer,
   type PackAdd,
   type PackAsk,
+  type PackAvail,
   type PackInfo,
   type PackList,
   type PackRemove,
@@ -25,6 +29,11 @@ import { LibNet } from './packnet.svelte'
 class PacksUi {
   open = $state(false)
   packs = $state<PackInfo[]>([])
+  available = $state<PackAvail[]>([]) // «Можно скачать» (137): строки от Go
+  all = $state<LibraryOffer>({ count: 0, bytes: 0 }) // «Скачать все (N, M МБ)»
+  availAt = $state(0) // unix мс списка; 0 — первой проверки ещё не было
+  listed = $state(false) // список наборов хоть раз читался (packs не пуст по умолчанию, а не «ещё не знаем»)
+  reveal = $state(false) // прокрутить окно к «Можно скачать» (после «Обновить», тост «Показать»)
   loading = $state(false)
   busy = $state(false) // наша операция идёт
   goBusy = $state(false) // Go занят (обновление библиотеки): кнопки серые с подсказкой
@@ -43,11 +52,26 @@ class PacksUi {
     this.error = ''
     this.ask = null
     this.packs = []
+    this.available = []
+    this.all = { count: 0, bytes: 0 }
+    this.availAt = 0
     await this.load(true)
+  }
+
+  // «Показать» в тосте запуска: окно «Наборы» (откроем, если закрыто) прокручено к «Можно скачать».
+  async showAvail() {
+    if (!this.open) await this.show()
+    this.reveal = true
+  }
+
+  // Ни одного набора из сети не стоит (список уже читался): итог «Обновить» тогда «Список наборов получен» (137-22).
+  get noNet(): boolean {
+    return this.listed && !hasNet(this.packs)
   }
 
   close() {
     this.open = false
+    this.reveal = false
     this.ask = null
     this.net.stop()
     this.req++ // запоздавший ответ списка окну не нужен
@@ -70,6 +94,10 @@ class PacksUi {
   private take(list: PackList, my = this.req) {
     if (my !== this.req) return
     this.packs = sortPacks(list.packs ?? [])
+    this.available = list.available ?? []
+    this.all = list.all ?? { count: 0, bytes: 0 }
+    this.availAt = list.availAt ?? 0
+    this.listed = true
     this.goBusy = !!list.busy
     this.readOnly = !!list.readOnly
     this.net.take(list.net)
@@ -84,6 +112,21 @@ class PacksUi {
     looks.changed(installed) // окно «Макеты альбома»: открытое перечитывает каталог, закрытое встанет на тему свежего набора
     if (this.open) void this.load()
     if (decor.cur) void decor.refresh()
+  }
+
+  // library:previews от Go (144): докачаны листы образцов — открытые «Фоны…»/«Макеты альбома» перечитывают каталог (темы не меняют).
+  // FetchPackPreviews отсюда не звать: докачка шлёт это же событие — выйдет петля.
+  previews() {
+    if (decor.cur) void decor.refresh()
+    looks.changed()
+  }
+
+  // «Обновить» дал список без установок (library:changed не шлётся): строка «Можно скачать» и приглашение открытых окон
+  // меняются сразу, образцы докачиваются. Это действие человека, а не library:previews — петли нет.
+  listUpdated() {
+    if (!decor.cur && !looks.open) return
+    getApi.previews()
+    this.previews()
   }
 
   // «Добавить из файла…»: диалог — в Go; закрыли без выбора — молча.
@@ -159,7 +202,7 @@ class PacksUi {
     try {
       const plan = (await Api.PlanRemovePack(p.id)) as unknown as PackRemove
       if (!this.open) return // окно закрыли, пока считалось
-      this.ask = { kind: 'remove', id: p.id, title: p.title, text: removeQuestion(p), note: removeNote(plan) }
+      this.ask = { kind: 'remove', id: p.id, title: p.title, text: removeQuestion(p, plan.addons), note: removeNote(plan) }
     } catch (e) {
       store.notify(capFirst(errText(e)), 'error')
     } finally {

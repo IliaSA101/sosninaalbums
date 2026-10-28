@@ -117,10 +117,12 @@ function goodDeps(ov = {}) {
     'git status': { code: 0, out: '' },
     'git tag': { code: 0, out: '' },
     'node scripts/release-check.mjs': { code: 0, out: '' },
+    curl: { code: 0, out: 'HTTP/2 302\r\nlocation: https://cdn/x\r\n\r\nHTTP/2 200\r\ncontent-length: 1234\r\n\r\n' },
     ...ov.answers,
   }
   return {
-    exec: (cmd, args) => answers[`${cmd} ${args[0]}`] ?? answers[`${cmd} ${args.join(' ')}`] ?? { code: 1, out: 'не подменено' },
+    demoZip: () => ('demoZip' in ov ? ov.demoZip : { name: 'wedding-navy-watercolor-demo-1.zip', size: 1234 }),
+    exec: (cmd, args) => (cmd === 'curl' ? answers.curl : null) ?? answers[`${cmd} ${args[0]}`] ?? answers[`${cmd} ${args.join(' ')}`] ?? { code: 1, out: 'не подменено' },
     read: (rel) => files[rel] ?? null,
     stat: ov.stat ?? (() => ({ isFile: () => true, size: 10, mode: 0o100600 })),
     platform: 'linux',
@@ -129,9 +131,9 @@ function goodDeps(ov = {}) {
 }
 const failsOf = (res) => res.filter((r) => !r.ok)
 
-test('quickChecks: всё хорошо — десять OK и нет FAIL', () => {
+test('quickChecks: всё хорошо — одиннадцать OK и нет FAIL', () => {
   const res = quickChecks(VER, goodDeps(), '/k.pem')
-  assert.equal(res.length, 10)
+  assert.equal(res.length, 11)
   assert.deepEqual(failsOf(res), [])
 })
 
@@ -150,6 +152,10 @@ test('quickChecks: каждая поломка даёт ровно один FAIL
     ['грязная копия', { answers: { 'git status': { code: 0, out: ' M a.go\n' } } }, /закоммитьте/],
     ['метка есть', { answers: { 'git tag': { code: 0, out: 'v0.25.1\n' } } }, /не перевешиваем/],
     ['release-check красный', { answers: { 'node scripts/release-check.mjs': { code: 1, out: 'a\nb\n' } } }, /a \| b/],
+    ['ассет примера не опубликован', { answers: { curl: { code: 0, out: 'HTTP/2 404\n\n' } } }, /опубликуйте релиз wedding-navy-watercolor-demo-v1/],
+    ['ассет примера другой длины', { answers: { curl: { code: 0, out: 'HTTP/2 200\ncontent-length: 99\n' } } }, /длина в сети 99/],
+    ['нет сети для ассета', { answers: { curl: { code: 6, out: '' } } }, /нет сети/],
+    ['нет zip примера', { demoZip: null }, /нет ровно одного zip/],
   ]
   for (const [name, ov, hint] of cases) {
     const bad = failsOf(quickChecks(VER, goodDeps(ov), '/k.pem'))

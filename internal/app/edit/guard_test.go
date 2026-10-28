@@ -96,6 +96,7 @@ func probes() []probe {
 		}},
 		{"VaryLayouts", kErr, func(m *Methods) (model.View, error) { return m.VaryLayouts([]string{"s1"}, 1, nil) }},
 		{"SetMarks", kErr, func(m *Methods) (model.View, error) { return m.SetMarks(ids, model.MarkPatch{}) }},
+		{"PickBest", kErr, func(m *Methods) (model.View, error) { return m.PickBest("a", ids) }},
 		{"ResetMarks", kView, func(m *Methods) (model.View, error) { return ok(m.ResetMarks(ids)) }},
 		{"Marks", kRead, func(m *Methods) (model.View, error) { m.Marks(); return none(m) }},
 		// bins.go

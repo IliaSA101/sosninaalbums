@@ -7,7 +7,10 @@
   import { isTextField } from '../menu/keys'
   import { NAME_MAX, sideItems } from '../../panels/decor/decor'
   import { packsUi } from '../packs/packs.svelte'
-  import { ASK_TITLE, EMPTY_LOOKS, LOOKS_TITLE, applyQuestion, hideText, stepAskTitle } from './looks'
+  import PackRun from '../packs/PackRun.svelte'
+  import GetAsk from '../../panels/decorbrowse/GetAsk.svelte'
+  import { confirmLookGet } from './lookget.svelte'
+  import { ASK_TITLE, EMPTY_DEMO, EMPTY_LOOKS, LOOKS_TITLE, MORE_LOOKS, applyQuestion, hideText, stepAskTitle } from './looks'
   import { looks } from './looks.svelte'
   import LookCards from './LookCards.svelte'
   import LookForm from './LookForm.svelte'
@@ -16,7 +19,7 @@
   // Окно «Макеты альбома» (131, U1): темы слева, плитки, справа предпросмотр выбранного макета и форма «Применить».
   // Образец — «Развороты» (DecorDialog); отличие — щелчок по плитке ничего не ставит (0.27-131-12).
   const side = $derived(sideItems(looks.cat))
-  const none = $derived(!!looks.cat && looks.cat.items.length === 0 && !looks.loading)
+  const none = $derived(!!looks.cat && looks.cat.items.length === 0 && !looks.cat.get?.length && !looks.loading)
 
   // Правка альбома под открытым окном (формат в панели деталей, событие Go): числа и план пересчитать.
   $effect(() => {
@@ -47,7 +50,7 @@
   <Modal title={LOOKS_TITLE} size="large" onclose={() => looks.close()}>
     {#if none}
       <div class="none">
-        {EMPTY_LOOKS} ·
+        {looks.demoOffer ? EMPTY_DEMO : EMPTY_LOOKS} ·
         <button type="button" class="link" onclick={() => packsUi.show()}>Наборы…</button>
       </div>
     {:else}
@@ -64,7 +67,15 @@
             <!-- 067 Ф2: те же наборы, что в окнах «Фоны» и «Развороты»; окно открывается поверх -->
             <button class="ghost" title="Наборы библиотеки: добавить из файла, удалить" onclick={() => packsUi.show()}>Наборы…</button>
           </div>
+          <PackRun net={packsUi.net} />
           <LookCards />
+          {#if looks.cat?.demoOnly}
+            <!-- Все макеты окна — из примера (142): дальше их приносят наборы; образец — пустое состояние -->
+            <div class="more">
+              {MORE_LOOKS} ·
+              <button type="button" class="link" onclick={() => packsUi.show()}>Наборы…</button>
+            </div>
+          {/if}
         </div>
         <div class="right">
           <LookPreview />
@@ -100,6 +111,9 @@
       <button class="primary" data-autofocus onclick={() => looks.confirm()}>Применить</button>
     </div>
   </Modal>
+{:else if looks.open && looks.ask?.kind === 'get'}
+  <!-- 144: образец макета из нескачанного набора; «Отмена» возвращает к плиткам -->
+  <GetAsk tile={looks.ask.tile} kind="album" onconfirm={() => confirmLookGet()} oncancel={() => looks.dismiss()} />
 {:else if looks.open && looks.ask?.kind === 'step'}
   <!-- «Поставить на разворот N»: тот же вопрос, что у «Развороты» (067) -->
   <Modal title={stepAskTitle(looks.ask.spread === COVER_ID)} onclose={() => looks.dismiss()}>
@@ -154,6 +168,12 @@
     text-align: center;
     color: var(--muted);
     font-size: 13px;
+  }
+  .more {
+    flex: none;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
   }
   .link {
     all: unset;

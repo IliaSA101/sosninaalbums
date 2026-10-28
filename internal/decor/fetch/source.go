@@ -8,11 +8,12 @@ import (
 
 // Стенд QA (design §5): SA_LIBRARY_URL — каталог и архивы с http://127.0.0.1:<порт>/,
 // SA_LIBRARY_KEY — открытый тестовый ключ (base64). Читаются только в сборке с тегом dev
-// (standLibrary); в выпуске забытая в системе переменная ничего не меняет.
+// (standLibrary) и при включённом стенде (признак передаёт вызывающий: osx.StandOn(), fetch
+// только на stdlib); в выпуске и без SA_STAND забытая в системе переменная ничего не меняет.
 
-// Default — источник программы: GitHub, у стенда dev — свой, если задан.
-func Default() Source {
-	if !standLibrary {
+// Default — источник программы: GitHub, у стенда (stand) в сборке dev — свой, если задан.
+func Default(stand bool) Source {
+	if !standLibrary || !stand {
 		return GitHub()
 	}
 	if s, ok := Stand(os.Getenv("SA_LIBRARY_URL"), os.Getenv("SA_LIBRARY_KEY")); ok {

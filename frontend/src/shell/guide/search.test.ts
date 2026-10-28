@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { dropCatalog, useCatalog } from '../../base/keys/keymap.fixture'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { ARTICLES } from '../guidetext/articles'
+import { orderRank } from '../guidetext/order'
 import { fromLatin, grouped, norm, search, stem, tokens } from './search'
 
 const titles = (q: string) => search(q).hits.map((h) => h.a.title)
@@ -27,10 +28,17 @@ describe('нормализация', () => {
     expect(tokens('Ctrl+Z, отмена')).toEqual(['ctrl+z', 'отмена'])
   })
   it('основа: окончания отбрасываются по длине слова', () => {
-    expect(stem('виньетку')).toBe('виньет')
-    expect(stem('имена')).toBe('имен')
+    expect(stem('виньетку')).toBe('винье')
+    expect(stem('имена')).toBe('име')
     expect(stem('фото')).toBe('фот')
     expect(stem('са')).toBe('са')
+  })
+  it('основа сводит «белое/белые» и «обрезать/обрезка»', () => {
+    expect(stem('белое')).toBe(stem('белые'))
+    expect(stem('обрезать')).toBe(stem('обрезка'))
+  })
+  it('слова с цифрой или «+» — целиком', () => {
+    for (const w of ['ctrl+z', 'f1', 'p3', 'ctrl+shift+z']) expect(stem(w), w).toBe(w)
   })
   it('английская раскладка → русская', () => {
     expect(fromLatin('j,kj;rf')).toBe('обложка')
@@ -122,9 +130,32 @@ describe('поиск (спека 033)', () => {
     expect(has()).toBe(false)
     prefs.load({ level: 'simple', showStart: false, first: false, custom: null })
   })
-  it('все слова запроса обязательны', () => {
-    expect(titles('виньетка шрифт зеркало')).toEqual([])
-    expect(titles('виньетка шаблон')).toContain('Шаблоны виньетки')
+  it('сначала все слова: точный проход, без пометки «похожие»', () => {
+    const r = search('виньетка шаблон')
+    expect(r.loose).toBe(false)
+    expect(r.hits.map((h) => h.a.title)).toContain('Шаблоны виньетки')
+  })
+  it('нет статьи со всеми словами — «похожие» по части слов, у кого совпало больше — выше', () => {
+    const r = search('виньетка шаблон ъъъъъ')
+    expect(r.loose).toBe(true)
+    const has = (id: string, w: string) => search(w).hits.some((h) => h.a.id === id)
+    const n = (id: string) => ['виньетка', 'шаблон'].filter((w) => has(id, w)).length
+    const counts = r.hits.map((h) => n(h.a.id))
+    expect(counts[0]).toBe(2)
+    expect(counts).toEqual([...counts].sort((x, y) => y - x))
+  })
+  it('служебные слова не мешают; если кроме них ничего нет — ищутся как есть', () => {
+    expect(search('как сделать виньетку').hits.map((h) => h.a.id)).toContain('vignette')
+    expect(search('как').hits.length).toBeGreaterThan(0)
+  })
+  it('«ctrl+z» и «f1» ищутся целиком: «ctrl+zz» ничего не находит', () => {
+    expect(search('ctrl+z').hits[0].a.id).toBe('undo')
+    expect(search('ctrl+zz').hits).toEqual([])
+  })
+  it('запрос режется до 200 знаков и не бросает на знаках RegExp', () => {
+    const head = 'я'.repeat(200)
+    expect(search(`${head} виньетка`).hits).toEqual(search(head).hits)
+    for (const q of ['(', '[a-', '.*', '\\', 'a{2,1}', '+', '$^']) expect(() => search(q), q).not.toThrow()
   })
   it('«свой шаблон виньетки» → статья «Свои шаблоны виньетки»', () => {
     expect(search('свой шаблон виньетки').hits.map((h) => h.a.id)).toContain('vig-own')
@@ -133,12 +164,55 @@ describe('поиск (спека 033)', () => {
     const r = search('ъъъъъ')
     expect(r.hits).toEqual([])
     expect(r.from).toBeNull()
+    expect(r.loose).toBe(false)
   })
   it('название весомее текста: статья с названием идёт раньше', () => {
     expect(titles('обложка')[0]).toBe('Обложка')
   })
+  it('ничья при равном весе — в порядке окна (GUIDE_ORDER: раздел, затем место в разделе)', () => {
+    let ties = 0
+    for (const q of ['фото', 'разворот', 'макет', 'текст', 'цвет', 'виньетка', 'шаблон', 'размер']) {
+      const hits = search(q).hits
+      for (let i = 1; i < hits.length; i++) {
+        if (hits[i - 1].score !== hits[i].score) continue
+        ties++
+        expect(orderRank(hits[i - 1].a.id), `${q}: ${hits[i - 1].a.id} перед ${hits[i].a.id}`).toBeLessThanOrEqual(orderRank(hits[i].a.id))
+      }
+    }
+    expect(ties).toBeGreaterThan(20) // проверка не пустая: ничьих много
+  })
+  it('ничья в запасном проходе — тот же порядок окна: сначала число слов, потом вес, потом место в окне', () => {
+    const hits = search('виньетка шаблон ъъъъъ').hits
+    expect(search('виньетка шаблон ъъъъъ').loose).toBe(true)
+    const found = (id: string) => ['виньетка', 'шаблон'].filter((w) => search(w).hits.some((h) => h.a.id === id)).length
+    let ties = 0
+    for (let i = 1; i < hits.length; i++) {
+      const [x, y] = [hits[i - 1], hits[i]]
+      if (x.score !== y.score || found(x.a.id) !== found(y.a.id)) continue
+      ties++
+      expect(orderRank(x.a.id), `${x.a.id} перед ${y.a.id}`).toBeLessThanOrEqual(orderRank(y.a.id))
+    }
+    expect(ties).toBeGreaterThan(0)
+  })
+  it('orderRank: разделы по GUIDE_GROUPS, внутри — по GUIDE_ORDER; неизвестная статья — в конец', () => {
+    expect(orderRank('new-album')).toBe(0)
+    expect(orderRank('open')).toBe(1)
+    expect(orderRank('folders')).toBeGreaterThan(orderRank('updates'))
+    expect(orderRank('нет-такой')).toBeGreaterThan(orderRank('mirror'))
+  })
   it('пустой запрос — все статьи', () => {
     expect(search('  ').hits).toHaveLength(ARTICLES.length)
+  })
+})
+
+describe('индекс: действия фото и подменю', () => {
+  it('подпись действия из acts находит статью', () => {
+    expect(search('Копировать имя файла').hits[0].a.id).toBe('photo-about')
+    expect(search('Сделать обычной надписью').hits.map((h) => h.a.id)).toContain('looks-draft')
+  })
+  it('подпись подменю связанного пункта находит статью', () => {
+    // «Правка ▸ Зеркало ▸ ↔ По горизонтали»: подпись пункта подменю статьи flip (menu: flip).
+    expect(search('↔ По горизонтали').hits.map((h) => h.a.id)).toContain('flip')
   })
 })
 

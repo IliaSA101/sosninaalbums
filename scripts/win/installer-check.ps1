@@ -1,5 +1,5 @@
 ﻿# installer-check.ps1 - проверка установщика на раннере windows-latest (спека 111, design §8.1; задание win-check в release.yml).
-# Запуск: pwsh scripts/win/installer-check.ps1 -Setup <setup X.Y.Z> -Next <setup X.Y.(Z+1), тот же exe> -Version X.Y.Z [-Summary <файл>] [-Force]
+# Запуск: pwsh scripts/win/installer-check.ps1 -Setup <setup X.Y.Z> -Next <setup X.Y.(Z+1), тот же exe> -Version X.Y.Z [-Standard <стандартный setup X.Y.Z с примером>] [-Summary <файл>] [-Force]
 # Ставит и удаляет программу по-настоящему: на машине с уже стоящей программой или config.json отказывает без -Force.
 # Код выхода: 0 - всё прошло, 1 - есть провалы (список в сводке и в конце вывода). Коды установщика - installer.nsi.
 # Windows PowerShell 5.1 и pwsh 7: файл в UTF-8 с BOM; без Invoke-Expression и сети.
@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Setup,
     [Parameter(Mandatory = $true)][string]$Next,
     [Parameter(Mandatory = $true)][ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version,
+    [string]$Standard = '',
     [string]$Summary = 'installer-check-summary.md',
     [switch]$Force
 )
@@ -262,6 +263,55 @@ try {
     Check 'отметка AssocOff убрана вместе с ключом' (-not (Test-RegKey $KApp))
     Remove-Item -LiteralPath $UninstExe -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $Inst -Force -ErrorAction SilentlyContinue
+
+    if ($Standard) {
+        Section 'Стандартная редакция: пример в data\ (0.30-142-43)'
+        if (-not (Test-Path -LiteralPath $Standard -PathType Leaf)) { throw "нет файла стандартного установщика: $Standard" }
+        Same 'версия стандартного установщика в свойствах файла' ((Get-Item -LiteralPath $Standard).VersionInfo.ProductVersion) $Version
+        Same 'манифест стандартного установщика: asInvoker' (Get-ManifestLevel $Standard) 'asInvoker'
+        $DataDir = Join-Path $Inst 'data'
+        # Имя примера не зашито: маска по префиксу, как у деинсталлятора (v2 примера подойдёт)
+        function Get-Demo { return @(Get-ChildItem -LiteralPath $DataDir -Filter 'wedding-navy-watercolor-demo-*.zip' -File -ErrorAction SilentlyContinue) }
+
+        # (2) стандартный X и его собственное удаление
+        Same 'standard /S - код 0' (Invoke-Setup $Standard '/S') 0
+        Check 'программа и uninstall.exe на месте (стандартная)' ((Test-Path -LiteralPath $ExePath -PathType Leaf) -and (Test-Path -LiteralPath $UninstExe -PathType Leaf))
+        Same 'пример в data\ - один файл' (Get-Demo).Count 1
+        $demoSize = 0
+        $demoHash = ''
+        if ((Get-Demo).Count -eq 1) {
+            $demoSize = (Get-Demo)[0].Length
+            $demoHash = (Get-FileHash -LiteralPath (Get-Demo)[0].FullName -Algorithm SHA256).Hash
+        }
+        Check 'пример не пустой' ($demoSize -gt 0)
+        Same 'Приложения: DisplayVersion (стандартная)' (Get-Reg $KUninst 'DisplayVersion') $Version
+        Check 'EstimatedSize считает data\' ([int](Get-Reg $KUninst 'EstimatedSize') -ge [int][math]::Floor($demoSize / 1024)) "EstimatedSize=$(Get-Reg $KUninst 'EstimatedSize') КБ, пример $demoSize байт"
+        # ярлык открывает программу из папки установки, не из data\ (SetOutPath возвращён)
+        $wsh = New-Object -ComObject WScript.Shell
+        Same 'ярлык Пуска: рабочая папка - папка программы' ($wsh.CreateShortcut($Lnk).WorkingDirectory) $Inst
+        Same 'standard uninstall.exe /S - код 0' (Invoke-Setup $UninstExe "/S _?=$Inst") 0
+        Check 'пример и data\ удалены' (-not (Test-Path -LiteralPath $DataDir))
+        Check 'в папке остался только сам uninstall.exe (стандартная)' (@(Get-ChildItem -LiteralPath $Inst -Force).Count -eq 1)
+        Check 'ключ Приложений удалён (стандартная)' (-not (Test-RegKey $KUninst))
+        Remove-Item -LiteralPath $UninstExe -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $Inst -Force -ErrorAction SilentlyContinue
+
+        # (1) стандартный X -> компактный X+1: data\ цел, uninstall.exe от X+1 чистит data\ и папку.
+        # Той же версии /S вышел бы с кодом 4 и ничего не поставил (installer.nsi) - поэтому именно Next
+        Same 'standard /S (до обновления) - код 0' (Invoke-Setup $Standard '/S') 0
+        Same 'next (компактный X+1) /S поверх стандартной - код 0' (Invoke-Setup $Next '/S') 0
+        Same 'Приложения: DisplayVersion обновлён (X+1)' (Get-Reg $KUninst 'DisplayVersion') $NextVersion
+        Same 'пример цел после компактного X+1 - один файл' (Get-Demo).Count 1
+        if ((Get-Demo).Count -eq 1) {
+            Same 'пример цел после компактного X+1 - хеш' ((Get-FileHash -LiteralPath (Get-Demo)[0].FullName -Algorithm SHA256).Hash) $demoHash
+        }
+        Check 'EstimatedSize с data\ после компактного X+1' ([int](Get-Reg $KUninst 'EstimatedSize') -ge [int][math]::Floor($demoSize / 1024)) "EstimatedSize=$(Get-Reg $KUninst 'EstimatedSize') КБ"
+        Same 'next uninstall.exe /S - код 0' (Invoke-Setup $UninstExe "/S _?=$Inst") 0
+        Check 'uninstall.exe от X+1 удалил пример и data\' (-not (Test-Path -LiteralPath $DataDir))
+        Check 'в папке остался только сам uninstall.exe (после X+1)' (@(Get-ChildItem -LiteralPath $Inst -Force).Count -eq 1)
+        Remove-Item -LiteralPath $UninstExe -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $Inst -Force -ErrorAction SilentlyContinue
+    }
 } catch {
     $script:Fail++
     Write-Host "FAIL  проверка прервана: $($_.Exception.Message)"

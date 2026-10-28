@@ -16,6 +16,7 @@ frontend/.vite/
 *.out
 coverage/
 coverage.*
+!frontend/src/shell/guide/coverage.guard.test.ts
 __debug_bin*
 
 # Инструкции и настройки агентов (Claude Code) — локальные, в репозиторий не идут

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Тест deb.sh и glibc.sh (спека 101, 101-12): .deb из пустышки — поля control, права, .desktop, воспроизводимость.
+# Тест deb.sh, deb-demo.sh и glibc.sh (спека 101, 101-12; 142): .deb из пустышки — поля control, права, .desktop, воспроизводимость.
 #   scripts/linux/test_deb.sh        код ≠ 0 при первом провале
 # Нужны dpkg-deb и objdump; desktop-file-validate — если есть (иначе пропуск с предупреждением).
 set -uo pipefail
@@ -91,6 +91,36 @@ check 'другая дата — другие байты' bash -c '[ "$(sha256su
 # края: плохая версия и нет бинарника — код 2 и 1
 check 'неверная версия — код 2' bash -c '"$1" --bin "$2" --version 1.2 --out "$3" >/dev/null 2>&1; [ $? = 2 ]' _ "$HERE/deb.sh" "$WORK/bin" "$WORK/d"
 check 'нет бинарника — код 1' bash -c '"$1" --bin "$2/нет" --version 1.2.3 --out "$3" >/dev/null 2>&1; [ $? = 1 ]' _ "$HERE/deb.sh" "$WORK" "$WORK/d"
+
+# deb-demo.sh (спека 142, 0.30-142-47): пакет данных из пустышки-zip — поля control, состав, права, воспроизводимость
+printf 'PK-пустышка' >"$WORK/wedding-navy-watercolor-demo-7.zip"
+ddate=2026-10-28T12:00:00+03:00
+"$HERE/deb-demo.sh" --zip "$WORK/wedding-navy-watercolor-demo-7.zip" --out "$WORK/e" --date "$ddate" >/dev/null 2>&1
+demo="$WORK/e/SosninaAlbums-demo-7-linux-all.deb"
+check 'deb-demo.sh: файл создан, версия — число из имени zip' bash -c '
+  [ -s "$1" ] && [ "$(dpkg-deb -f "$1" Package)" = sosninaalbums-demo ] && [ "$(dpkg-deb -f "$1" Version)" = 7 ]' _ "$demo"
+check 'deb-demo control: all, Multi-Arch foreign, Enhances, без Depends' bash -c '
+  [ "$(dpkg-deb -f "$1" Architecture)" = all ] && [ "$(dpkg-deb -f "$1" Multi-Arch)" = foreign ] &&
+  [ "$(dpkg-deb -f "$1" Enhances)" = sosninaalbums ] && [ -z "$(dpkg-deb -f "$1" Depends)" ]' _ "$demo"
+check 'deb-demo: состав — zip и copyright, права 0644/0755 root' bash -c '
+  l=$(dpkg-deb -c "$1")
+  grep -qE "^-rw-r--r-- root/root .* \./usr/share/sosninaalbums/wedding-navy-watercolor-demo-7\.zip$" <<<"$l" &&
+  grep -qE "^-rw-r--r-- root/root .* \./usr/share/doc/sosninaalbums-demo/copyright$" <<<"$l" &&
+  ! grep "^d" <<<"$l" | grep -qv "^drwxr-xr-x root/root"' _ "$demo"
+check 'deb-demo copyright: CC0' bash -c '
+  dpkg-deb --fsys-tarfile "$1" | tar -xO ./usr/share/doc/sosninaalbums-demo/copyright | grep -q "^License: CC0-1.0"' _ "$demo"
+check 'deb-demo: сжатие gzip' bash -c 'ar t "$1" | grep -qx "data.tar.gz"' _ "$demo"
+sleep 2
+"$HERE/deb-demo.sh" --zip "$WORK/wedding-navy-watercolor-demo-7.zip" --out "$WORK/f" --date "$ddate" >/dev/null 2>&1
+check 'deb-demo: два прогона дают одинаковый sha256' bash -c '[ "$(sha256sum <"$1")" = "$(sha256sum <"$2")" ]' _ "$demo" "$WORK/f/SosninaAlbums-demo-7-linux-all.deb"
+check 'deb-demo: неверное имя zip — код 2' bash -c '"$1" --zip "$2" --out "$3" --date "$4" >/dev/null 2>&1; [ $? = 2 ]' _ "$HERE/deb-demo.sh" "$WORK/bin" "$WORK/g" "$ddate"
+check 'deb-demo: нет zip — код 1' bash -c '"$1" --zip "$2/нет-demo-1.zip" --out "$3" --date "$4" >/dev/null 2>&1; [ $? = 1 ]' _ "$HERE/deb-demo.sh" "$WORK" "$WORK/g" "$ddate"
+# zip репозитория: дата берётся из истории (нужна полная копия), номер пакета — по имени zip
+if [ "$(git -C "$HERE" rev-parse --is-shallow-repository 2>/dev/null)" = false ]; then
+  check 'deb-demo: zip репозитория и дата коммита zip' bash -c '"$1" --out "$2" >/dev/null' _ "$HERE/deb-demo.sh" "$WORK/h"
+else
+  echo 'skip deb-demo с датой из истории: неполная копия'
+fi
 
 # glibc.sh: на самом себе (скрипт без символов) — код 1; на системном ls порог 99 проходит, порог 2.0 — нет
 check 'glibc.sh: бинарник без символов GLIBC_ — код 1' bash -c '"$1" "$2" >/dev/null 2>&1; [ $? = 1 ]' _ "$HERE/glibc.sh" "$WORK/bin"

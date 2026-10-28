@@ -82,6 +82,34 @@ func TestLibraryNetSkip(t *testing.T) {
 	}
 }
 
+// Announced: nil (поля нет) и [] (объявлено пусто) различаются в круге Save→Load, плохие и
+// повторные id и предел чистятся, nil ключа в файле не оставляет.
+func TestLibraryNetAnnounced(t *testing.T) {
+	dir := testkit.TempDir(t)
+	if n := LibraryNetOf(dir); n.Announced != nil {
+		t.Fatalf("без файла: %#v", n.Announced)
+	}
+	UpdateLibraryNet(dir, func(n *LibraryNet) { n.Announced = []string{} })
+	if n := LibraryNetOf(dir); n.Announced == nil || len(n.Announced) != 0 {
+		t.Fatalf("пустой список не пережил круг: %#v", n.Announced)
+	}
+	UpdateLibraryNet(dir, func(n *LibraryNet) { n.Announced = []string{"ivory", "sage", "ivory", "Bad!", "", "ab"} })
+	if n := LibraryNetOf(dir); !slices.Equal(n.Announced, []string{"ivory", "sage"}) {
+		t.Fatalf("чистка: %#v", n.Announced)
+	}
+	many := make([]string, 0, 3*maxAnnounced)
+	for i := range 3 * maxAnnounced {
+		many = append(many, "set-"+strconv.Itoa(i))
+	}
+	if n := UpdateLibraryNet(dir, func(n *LibraryNet) { n.Announced = many }); len(n.Announced) != maxAnnounced {
+		t.Fatalf("предел: %d", len(n.Announced))
+	}
+	UpdateLibraryNet(dir, func(n *LibraryNet) { n.Announced = nil })
+	if data, _ := os.ReadFile(ConfigPath(dir)); strings.Contains(string(data), "announced") || strings.Contains(string(data), "libraryNet") {
+		t.Fatalf("nil записан: %s", data)
+	}
+}
+
 func equalNet(a, b LibraryNet) bool {
 	return a.Allowed == b.Allowed && a.AtStart == b.AtStart && a.Checked == b.Checked && a.CatalogSeq == b.CatalogSeq && slices.Equal(a.Skip, b.Skip)
 }

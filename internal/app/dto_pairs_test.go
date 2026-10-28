@@ -26,6 +26,8 @@ var dtoPairs = []dtoPair{
 	pairOf[PackInfo, libpacks.Info](),
 	pairOf[LibraryNet, libpacks.Net](),
 	pairOf[PackList, libpacks.List](),
+	pairOf[PackAvail, libpacks.Avail](),
+	pairOf[LibraryOffer, libpacks.Offer](),
 	pairOf[PackAdd, libpacks.Add](),
 	pairOf[PackRemove, libpacks.Remove](),
 	pairOf[LibraryUpdate, libpacks.Update](),
@@ -120,14 +122,16 @@ func TestDTOPairsRoundTrip(t *testing.T) {
 	info := filled(t, libpacks.Info{ID: "ivory", Title: "Т", About: "О", Author: "А", License: "CC0", Source: "И", Origin: "file", Version: 2,
 		Bg: 1, Sticker: 2, Spread: 3, Frame: 4, Print: 5, Bytes: 6, Removable: true})
 	skips := filled(t, []libpacks.Skip{{Name: "a", Why: "b"}})
-	net := filled(t, libpacks.Net{Allowed: true, AtStart: true, Checked: 7, Skipped: 8})
-	list := filled(t, libpacks.List{Packs: []libpacks.Info{info}, Net: net, Busy: true, ReadOnly: true})
+	net := filled(t, libpacks.Net{Allowed: true, AtStart: true, Checked: 7, Skipped: 8, DemoSkipped: true, DemoBack: true, DemoOffer: true})
+	avail := filled(t, libpacks.Avail{ID: "sage", Title: "Т", About: "О", License: "CC0", Version: 2, Bg: 1, Sticker: 2, Spread: 3, Frame: 4, Print: 5,
+		Bytes: 6, AddonTitles: []string{"Д"}, Donor: "Свадьба", Why: "нужна версия", Removed: true})
+	list := filled(t, libpacks.List{Packs: []libpacks.Info{info}, Net: net, Busy: true, ReadOnly: true, Available: []libpacks.Avail{avail}, All: libpacks.Offer{Count: 1, Bytes: 2}, AvailAt: 9})
 	add := filled(t, libpacks.Add{Pack: info, Ask: "update", FromVersion: 1, Token: "т", Skipped: skips})
-	upd := filled(t, libpacks.Update{Added: 1, Updated: 2, Skipped: skips, Bytes: 3})
-	rem := filled(t, libpacks.Remove{Files: 1, Kept: 2, Bytes: 3})
+	upd := filled(t, libpacks.Update{Added: 1, Updated: 2, Skipped: skips, Bytes: 3, Failed: skips, Available: 4, Fresh: 5, Picked: true, Why: "п"})
+	rem := filled(t, libpacks.Remove{Files: 1, Kept: 2, Bytes: 3, Addons: []string{"А"}})
 	for name, c := range map[string]struct{ svc, app any }{
 		"список":                   {list, packList(list)},
-		"список пустой":            {libpacks.List{Packs: []libpacks.Info{}}, packList(libpacks.List{Packs: []libpacks.Info{}})},
+		"список пустой":            {libpacks.List{Packs: []libpacks.Info{}, Available: []libpacks.Avail{}}, packList(libpacks.List{Packs: []libpacks.Info{}, Available: []libpacks.Avail{}})},
 		"добавление":               {add, packAdd(add)},
 		"добавление без пропусков": {libpacks.Add{Skipped: []libpacks.Skip{}}, packAdd(libpacks.Add{Skipped: []libpacks.Skip{}})},
 		"обновление":               {upd, libraryUpdate(upd)},

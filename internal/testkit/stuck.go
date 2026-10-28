@@ -51,3 +51,34 @@ func WaitCh[T any](t testing.TB, ch <-chan T, d time.Duration, what string, stat
 		return zero, false
 	}
 }
+
+// WaitProgress ждёт значение из ch, пока работа идёт: зависанием считается не общее время, а
+// отсутствие прогресса — progress (счётчик сделанного) не вырос за stall (уже с testkit.Limit).
+// Нужен длинным конвейерам (рендер десятков больших файлов): под -race на раннере они идут минуты,
+// но каждый шаг укладывается в окно, а настоящая остановка ловится за одно окно. Отчёт и
+// возвращаемое значение — как у WaitCh.
+func WaitProgress[T any](t testing.TB, ch <-chan T, stall time.Duration, what string, progress func() int64, state func() string) (T, bool) {
+	t.Helper()
+	last := progress()
+	timer := time.NewTimer(stall)
+	defer timer.Stop()
+	for {
+		select {
+		case v := <-ch:
+			return v, true
+		case <-timer.C:
+			if cur := progress(); cur != last {
+				last = cur
+				timer.Reset(stall)
+				continue
+			}
+			s := ""
+			if state != nil {
+				s = state()
+			}
+			t.Log(StuckReport(what, s))
+			var zero T
+			return zero, false
+		}
+	}
+}

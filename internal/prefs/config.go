@@ -49,6 +49,9 @@ type Config struct {
 	// Tours — состояние туров обучения (113): id → "pending" | "done" (tours.go). Чужие id
 	// (новая версия) при записи сохраняются; чистка — только при чтении в Of.
 	Tours map[string]string `json:"tours,omitempty"`
+	// GuideLearned — отметки «Изучил» справочника F1 (140): id статей в порядке отметки;
+	// правила списка — guide.go. Чужие id (новая версия) хранятся.
+	GuideLearned []string `json:"guideLearned,omitempty"`
 	// Update — проверка и установка обновления программы (111, update.go).
 	Update *Update `json:"update,omitempty"`
 	// Assoc — открытие .salbum двойным щелчком (112): "" — не решено (стартовое окно спросит),
@@ -73,8 +76,18 @@ var configKeys = func() []string {
 // Файл один на процесс, поэтому и замок общий.
 var cfgMu sync.Mutex
 
-// ConfigPath — config.json в папке данных dir.
-func ConfigPath(dir string) string { return filepath.Join(dir, "config.json") }
+// ConfigPath — config.json в папке данных dir. Пустая dir — папки данных нет (нет абсолютной
+// папки настроек, 140 Н4): путь пуст, а не «config.json» от текущей папки.
+func ConfigPath(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "config.json")
+}
+
+// memCfg — config.json без папки данных (dir == ""): настройки живут до выхода, на диск не
+// пишутся. Под cfgMu. Тот же JSON, что в файле: копии не делят карты и срезы.
+var memCfg []byte
 
 // LoadConfig читает config.json под замком.
 func LoadConfig(dir string) Config {
@@ -88,7 +101,14 @@ func LoadConfig(dir string) Config {
 const maxConfigSize = 1 << 20
 
 // readConfigFile читает config.json не больше maxConfigSize; больше — как отсутствующий.
+// Пустой путь — настройки в памяти (memCfg).
 func readConfigFile(path string) ([]byte, error) {
+	if path == "" {
+		if memCfg == nil {
+			return nil, os.ErrNotExist
+		}
+		return memCfg, nil
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -141,6 +161,10 @@ func UpdateConfig(dir string, fn func(c *Config)) {
 	_ = json.Unmarshal(own, &mine)
 	maps.Copy(raw, mine)
 	data, _ := json.MarshalIndent(raw, "", "  ")
+	if path == "" {
+		memCfg = data
+		return
+	}
 	if err := library.WriteFileAtomicMode(path, data, privateMode); err != nil {
 		log.Printf("config.json: %v", paths.NoPath(err))
 	}
@@ -162,8 +186,12 @@ func RememberDir(dir, kind, d string) {
 // DialogDir — DefaultDirectory для диалога вида kind ("" — пусть решает система).
 func DialogDir(dir, kind string) string {
 	last := LoadConfig(dir).LastDirs[kind]
-	home, _ := os.UserHomeDir()
-	return PickDir(last, filepath.Join(home, "Documents"))
+	fallback := ""
+	// Без домашней папки Join дал бы относительное «Documents» — папку от текущей.
+	if home, err := os.UserHomeDir(); err == nil && filepath.IsAbs(home) {
+		fallback = filepath.Join(home, "Documents")
+	}
+	return PickDir(last, fallback)
 }
 
 // PickDir выбирает папку для диалога: последняя, если это локальный путь и папка есть;

@@ -1,9 +1,10 @@
 // Режим фона (спека 009, design-backdrop §6): чистые решения — что под курсором, что делает щелчок,
 // жив ли режим. Всё в мм разворота; рамка повёрнута по часовой вокруг своего левого верхнего угла.
+import { coverLabel } from '../cover/cover'
 import { placeImage } from '../../base/geom/frame'
 import { ownBg } from '../../base/geom/sheet'
 import { rotate, type Pt, type TextBox } from '../../base/geom/textbox'
-import type { BackdropScope, BackdropView, Frame, Rect, SpreadView } from '../../base/core/types'
+import type { BackdropScope, BackdropView, CoverView, Frame, Rect, SpreadView } from '../../base/core/types'
 
 export interface BgCur {
   spread: string
@@ -71,3 +72,7 @@ export const SCOPE_BAR: Record<BackdropScope, string> = {
   right: 'правая страница',
   spine: 'корешок',
 }
+
+// Слово области на полосе: на обложке — те же слова, что в карточках («Задняя», «Корешок», «Лицевая»), строчными.
+export const scopeWord = (scope: BackdropScope, cover: Pick<CoverView, 'scopes'> | null | undefined, onCover: boolean): string =>
+  onCover ? coverLabel(cover, scope).toLowerCase() : SCOPE_BAR[scope]

@@ -54,10 +54,24 @@ describe('пути «Правка ▸ …» и «Разворот ▸ …» в �
     expect(bad).toEqual([])
   })
 
-  it('страж видит пути: 10 «Разворот ▸ …» и не меньше 9 «Правка ▸ …»', () => {
+  it('страж видит пути: не меньше 3 «Разворот ▸ …» и 2 «Правка ▸ …» (остальные ушли в строку «Меню», 136 Т3)', () => {
     const all = found()
-    expect(all.filter((f) => f.menu === 'Разворот').length).toBe(10)
-    expect(all.filter((f) => f.menu === 'Правка').length).toBeGreaterThanOrEqual(9)
+    expect(all.filter((f) => f.menu === 'Разворот').length).toBeGreaterThanOrEqual(3)
+    expect(all.filter((f) => f.menu === 'Правка').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('141: пять новых пунктов — в меню «Разворот», а статьи называют их id в menu', () => {
+    const ids = ['insertSpread', 'splitSpread', 'joinSpread', 'sortVignette', 'clearVignette']
+    const spread = menus()
+      .find((m) => m.label === 'Разворот')!
+      .items.map((i) => i.id)
+    for (const id of ids) {
+      expect(spread, id).toContain(id)
+      expect(
+        ARTICLES.some((a) => a.menu?.includes(id)),
+        id,
+      ).toBe(true)
+    }
   })
 
   it('страж ловит перенесённый пункт по старому пути и несуществующее подменю', () => {

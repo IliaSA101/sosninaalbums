@@ -72,8 +72,8 @@ export function cutState(sp: SpreadView, j: number, u: Unit = SPREAD_UNIT): CanD
 export const modClick = (mac: boolean) => (mac ? '⌘+щелчок' : 'Ctrl+щелчок')
 
 // Подсказка: можно — как сделать (у ручного — что будет с местами), нельзя — причина.
-const askTip = (mac: boolean, verb: string, ask?: string) =>
-  `${modClick(mac)} — ${verb}${ask ? `. ${ask}: места вернутся к «Авто», сначала спросим` : ''}`
+export const ASK_TAIL = 'места вернутся к «Авто», сначала спросим'
+const askTip = (mac: boolean, verb: string, ask?: string) => `${modClick(mac)} — ${verb}${ask ? `. ${ask}: ${ASK_TAIL}` : ''}`
 export const joinTip = (st: CanDo, mac: boolean) => (st.ok ? askTip(mac, 'склеить', st.ask) : st.why)
 export const cutTip = (mac: boolean, ask?: string) => askTip(mac, 'разрезать', ask)
 

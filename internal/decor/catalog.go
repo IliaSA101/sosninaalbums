@@ -89,6 +89,8 @@ type Catalog struct {
 	Recent   []string `json:"recent"` // ID плиток, новые первыми
 	New      []string `json:"new"`    // ID плиток «Новые» в порядке каталога (133); пусто — []
 	ReadOnly bool     `json:"readOnly"`
+	// DemoOnly — плитки вида есть и все из примера темы (142): UI даёт указатель на наборы библиотеки.
+	DemoOnly bool `json:"demoOnly"`
 }
 
 // Catalog — плитки вида kind. recent — недавние из prefs (новые первыми); w×h — мм листа:
@@ -112,6 +114,7 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 	}
 	s.mu.RLock()
 	cat.ReadOnly = s.readOnly
+	demoID := s.demo.id
 	// Копии записей: ✎ и × меняют их под mu, пока каталог собирается.
 	own := make([]entry, 0, len(s.entries))
 	for _, e := range s.entries {
@@ -130,6 +133,7 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 	// Порядок 133 §3: наборы (новый выше), встроенные, свои.
 	cat.Items = slices.Concat(fromPacks, cat.Items, mine)
 	cat.New = newIDs(cat.Items, fresh)
+	cat.DemoOnly = demoID != "" && len(cat.Items) > 0 && !slices.ContainsFunc(cat.Items, func(it Item) bool { return it.PackID != demoID })
 	has := make(map[string]bool, len(cat.Items))
 	count := map[string]int{ThemeAll: len(cat.Items)}
 	for _, it := range cat.Items {

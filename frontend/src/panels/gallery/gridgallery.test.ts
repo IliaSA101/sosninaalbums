@@ -237,8 +237,14 @@ describe('gridSourceTexts', () => {
   })
   it('страница: встроенных нет совсем, «Все» = свои', () => {
     const t = gridSourceTexts('left', 1, 'разворот')
-    expect(t.empty.all).toBe('Нет своих шаблонов на 1 место')
+    expect(t.empty.all).toBe('Нет шаблонов на 1 место')
+    expect(t.empty.mine).toBe('Нет своих шаблонов на 1 место')
     expect(t.empty.builtin).toBe('Встроенные шаблоны ставятся только на весь разворот')
+  })
+  it('«Все» при нуле шаблонов не говорит «своих»: правая страница, вкладка 7+', () => {
+    const t = gridSourceTexts('right', 7, 'лист')
+    expect(t.empty.all).toBe('Нет шаблонов на 7 мест и больше')
+    expect(t.empty.mine).toBe('Нет своих шаблонов на 7 мест и больше')
   })
   it('7+ — «7 мест и больше», лист — «на весь лист»', () => {
     expect(gridSourceTexts('spread', 7, 'лист').empty.mine).toBe('Нет своих шаблонов на 7 мест и больше')

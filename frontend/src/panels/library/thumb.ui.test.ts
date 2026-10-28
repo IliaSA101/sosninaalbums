@@ -9,8 +9,8 @@ const src = files['/src/panels/library/Thumb.svelte'] ?? ''
 const body = src.replace(/<script[\s\S]*?<\/script>/, '').replace(/<style[\s\S]*$/, '')
 
 describe('Thumb: файл пропал', () => {
-  it('lost → MissPhoto вместо img; иначе img с onerror → lost.mark', () => {
-    const branch = body.match(/\{#if lost\.has\(p\.id\)\}([\s\S]*?)\{:else\}([\s\S]*?)\{\/if\}/)
+  it('lost или unread → MissPhoto вместо img; иначе img с onerror → lost.mark', () => {
+    const branch = body.match(/\{#if lost\.has\(p\.id\) \|\| store\.unread\[p\.id\]\}([\s\S]*?)\{:else\}([\s\S]*?)\{\/if\}/)
     expect(branch).not.toBeNull()
     expect(branch?.[1]).toContain('<MissPhoto')
     expect(branch?.[1]).not.toContain('<img')
@@ -42,7 +42,9 @@ describe('Thumb: файл пропал', () => {
     expect(shown(0)).toBeNull()
   })
   it('подпись «нет файла» под значком; адрес миниатюры несёт метку повтора lost.retryOf', () => {
-    expect(body).toMatch(/<MissPhoto[^>]*label="нет файла"/)
+    expect(body).toMatch(/<MissPhoto[\s\S]*?label=\{goneLabel\(p\.id, store\.unread\)\}/) // «нет файла» / «не читается» (117)
+    expect(body).toContain('{#if lost.has(p.id) || store.unread[p.id]}') // причина проверяется в отрисовке, не при ошибке
+    expect(body).toContain('missTip(p.id, { [p.id]: p.name }, store.unread)')
     expect(body).toContain('thumbUrl(p.id, lost.retryOf(p.id))')
   })
   it('рамка заглушки: выбранная — акцентная, как у img', () => {

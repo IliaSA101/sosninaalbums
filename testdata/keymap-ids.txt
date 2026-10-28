@@ -112,3 +112,10 @@ photoPreview
 toggleFaceGuide
 looks
 saveLook
+photoCompare
+photoSimilar
+sortVignette
+clearVignette
+insertSpread
+splitSpread
+joinSpread

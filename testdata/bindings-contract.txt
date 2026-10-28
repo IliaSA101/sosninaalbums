@@ -32,6 +32,7 @@ method BackToAuto(arg1:string,arg2:string,arg3:boolean):Promise<model.View>
 method Backups():Promise<Array<APP.BackupInfo>>
 method CancelCollect():Promise<void>
 method CancelExport():Promise<void>
+method CancelGuideVideos():Promise<void>
 method CancelLibrary():Promise<void>
 method CancelUpdate():Promise<void>
 method CheckFolders(arg1:boolean):Promise<void>
@@ -71,6 +72,9 @@ method DeleteSelection(arg1:string,arg2:Array<string>,arg3:Array<string>,arg4:Ar
 method DeleteSpread(arg1:string):Promise<model.View>
 method DeleteSpreads(arg1:Array<string>):Promise<model.View>
 method DeleteText(arg1:string):Promise<model.View>
+method DownloadAllLibrary():Promise<APP.LibraryUpdate>
+method DownloadGuideVideos(arg1:Array<string>):Promise<Array<APP.GuideVideo>>
+method DownloadLibraryPack(arg1:string):Promise<APP.LibraryUpdate>
 method DownloadUpdate():Promise<APP.UpdateInfo>
 method DropFonts(arg1:Array<string>):Promise<Array<string>>
 method DropPhotos(arg1:string,arg2:string,arg3:Array<string>,arg4:number,arg5:string):Promise<APP.DropResult>
@@ -79,6 +83,7 @@ method DuplicateItems(arg1:string,arg2:model.ClipSel):Promise<APP.PasteResult>
 method Export(arg1:APP.ExportOptions):Promise<boolean>
 method ExportTemplates():Promise<APP.TplSave>
 method FaceGuide(arg1:string,arg2:string):Promise<model.FaceGuide>
+method FetchPackPreviews():Promise<void>
 method FillPlaces(arg1:Array<string>,arg2:string):Promise<APP.GridResult>
 method FitBackdrop(arg1:string,arg2:string):Promise<model.View>
 method FitFaces(arg1:string,arg2:string,arg3:string):Promise<APP.FacesResult>
@@ -90,6 +95,8 @@ method ForgetRecent(arg1:string):Promise<Array<prefs.RecentProject>>
 method GetState():Promise<APP.State>
 method GetView():Promise<model.View>
 method GridChoices(arg1:string,arg2:number,arg3:string):Promise<model.GridChoices>
+method GuideLearned():Promise<Array<string>>
+method GuideVideos():Promise<Array<APP.GuideVideo>>
 method HideDecor(arg1:string,arg2:string):Promise<void>
 method HideFont(arg1:string):Promise<void>
 method ImportColors(arg1:Array<string>):Promise<Array<string>>
@@ -108,6 +115,7 @@ method LogUI(arg1:string):Promise<void>
 method LookCount(arg1:string,arg2:number,arg3:number):Promise<APP.LookCount>
 method LookInfo(arg1:string):Promise<APP.LookInfo>
 method MarginNote(arg1:number,arg2:number):Promise<string>
+method MarkGuide(arg1:Array<string>,arg2:boolean):Promise<Array<string>>
 method Marks():Promise<Record<string, model.MarkView>>
 method MergeSpreads(arg1:string):Promise<model.View>
 method MergeSpreadsAuto(arg1:string,arg2:boolean):Promise<model.View>
@@ -129,6 +137,7 @@ method OpenPrintSite(arg1:string):Promise<void>
 method OpenProject():Promise<APP.State>
 method OpenRecent(arg1:string):Promise<APP.State>
 method OpenUpdatePage():Promise<void>
+method PackItem(arg1:string,arg2:string,arg3:string):Promise<APP.DecorItem>
 method PagePresets():Promise<Array<model.PagePreset>>
 method PagePx(arg1:number,arg2:number):Promise<APP.PagePxView>
 method PasteItems(arg1:model.PasteReq):Promise<APP.PasteResult>
@@ -136,6 +145,7 @@ method PasteNames(arg1:string,arg2:model.NamesOpts):Promise<APP.NamesResult>
 method Person(arg1:string):Promise<model.PersonView>
 method PhotoAbout(arg1:string):Promise<APP.PhotoAbout>
 method PickBackdropFile(arg1:string,arg2:string):Promise<model.View>
+method PickBest(arg1:string,arg2:Array<string>):Promise<model.View>
 method PickColorAt(arg1:string,arg2:number,arg3:number):Promise<string>
 method PickCoverGuide():Promise<model.View>
 method PickNamesFile():Promise<APP.NamesFile>
@@ -182,6 +192,7 @@ method ResetMarks(arg1:Array<string>):Promise<model.View>
 method ResetVignette(arg1:string):Promise<APP.GridResult>
 method RestoreBackup(arg1:string):Promise<model.View>
 method RestoreHotkeys(arg1:Record<string, Array<string>>):Promise<keymap.View>
+method RevealGuideVideo(arg1:string):Promise<void>
 method RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>
 method SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<void>
 method SaveLook(arg1:model.SaveLookOpts):Promise<APP.DecorItem>
@@ -257,6 +268,7 @@ method ShowDataFolder():Promise<void>
 method ShowInExplorer():Promise<void>
 method ShowLibraryFolder():Promise<void>
 method ShowPhotoInExplorer(arg1:string):Promise<void>
+method SimilarTo(arg1:string,arg2:Array<string>):Promise<APP.SimilarResult>
 method SortVignette(arg1:string):Promise<model.View>
 method SplitSpread(arg1:string,arg2:number):Promise<model.View>
 method SplitSpreadAuto(arg1:string,arg2:number,arg3:boolean):Promise<model.View>
@@ -306,6 +318,23 @@ type APP.DecorCatalog
   recent: string[]
   new: string[]
   readOnly: boolean
+  demoOnly: boolean
+  get: DecorGet[]
+  invite: boolean
+type APP.DecorGet
+  id: string
+  pack: string
+  src: string
+  title: string
+  url: string
+  w: number
+  h: number
+  bytes: number
+  with: string[]
+  bg: number
+  sticker: number
+  spread: number
+  frame: number
 type APP.DecorImport
   added: DecorItem[]
   skipped: DecorSkip[]
@@ -386,16 +415,33 @@ type APP.GridResult
   view: model.View
   left: number
   named: string[]
+type APP.GuideVideo
+  id: string
+  version: number
+  seconds: number
+  size: number
+  ready: boolean
 type APP.LibraryNet
   allowed: boolean
   atStart: boolean
   checked: number
   skipped: number
+  demoSkipped: boolean
+  demoBack: boolean
+  demoOffer: boolean
+type APP.LibraryOffer
+  count: number
+  bytes: number
 type APP.LibraryUpdate
   added: number
   updated: number
   skipped: DecorSkip[]
   bytes: number
+  failed: DecorSkip[]
+  available: number
+  fresh: number
+  picked: boolean
+  why: string
 type APP.LookCount
   n: number
   places: number
@@ -453,6 +499,22 @@ type APP.PackAdd
   fromVersion: number
   token: string
   skipped: DecorSkip[]
+type APP.PackAvail
+  id: string
+  title: string
+  about: string
+  license: string
+  version: number
+  bg: number
+  sticker: number
+  spread: number
+  frame: number
+  print: number
+  bytes: number
+  addonTitles: string[]
+  donor: string
+  why: string
+  removed: boolean
 type APP.PackInfo
   id: string
   title: string
@@ -474,10 +536,14 @@ type APP.PackList
   net: LibraryNet
   busy: boolean
   readOnly: boolean
+  available: PackAvail[]
+  all: LibraryOffer
+  availAt: number
 type APP.PackRemove
   files: number
   kept: number
   bytes: number
+  addons: string[]
 type APP.PagePxView
   pageW: number
   pageH: number
@@ -557,6 +623,10 @@ type APP.RelinkResult
 type APP.SigState
   done: number
   total: number
+type APP.SimilarResult
+  ids: string[]
+  more: number
+  why: string
 type APP.State
   view: model.View
   photos: library.Photo[]

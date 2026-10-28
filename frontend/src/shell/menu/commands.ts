@@ -10,6 +10,8 @@ import { edit } from '../../editor/text/edit.svelte'
 import { nameSearch } from '../../panels/marks/namefind.svelte'
 import { ownMarks, type MarkHost } from '../../panels/marks/ownmarks.svelte'
 import { photoui } from '../../editor/photo/photoui.svelte'
+import { compare } from '../../panels/compare/compare.svelte'
+import { shownId } from '../../editor/photo/previewlist'
 import { openNew, removeSelected, toggleSelected } from '../../panels/bins/binact'
 import { binsel } from '../../panels/bins/binsel.svelte'
 import { gallery } from '../../panels/gallery/gallery.svelte'
@@ -29,7 +31,9 @@ import { naming } from '../../panels/timeline/naming.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { modes } from '../../base/prefs/view.svelte'
 import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
-import { makeVignette } from '../../panels/vignette/vigact'
+import { clearVignette, makeVignette, sortVignette } from '../../panels/vignette/vigact'
+import { glueAsk } from '../../panels/spreadmenu/menuact.svelte'
+import { liveSpreadCmds } from './menuctx'
 import { vigDialog } from '../../panels/vignette/vigsession.svelte'
 import { decor } from '../../panels/decor/decor.svelte'
 import { defaultScope } from '../../panels/decor/decor'
@@ -114,8 +118,9 @@ async function clearRecent() {
 // Отметка выделенным фото ленты: свой id у каждой клавиши (074-7), событие не нужно. Тост без выделения — в ownMarks.setMarks.
 // Под окном крупного просмотра из ленты отметка идёт показанному фото, выделение ленты не меняется (0.26-128-5).
 // Разворот { ...store } не годится: методы класса лежат в прототипе и при развороте теряются.
+// Под сравнением (138) — активному кадру окна.
 const markHost = (): MarkHost => {
-  const id = photoui.preview?.from === 'library' ? photoui.previewId : null
+  const id = compare.activeId ?? (photoui.preview?.from === 'library' ? photoui.previewId : null)
   if (!id) return store
   return { selectedIds: [id], run: (p) => store.run(p), notify: (t) => store.notify(t) }
 }
@@ -193,6 +198,30 @@ const HANDLERS = {
     const s = store.spread
     if (isVignette(s) && prefs.can('vignette')) vigDialog.open(s.id)
   },
+  // 141: пять команд разворота из правого щелчка. Условие проверяется заново: клавиша могла прийти, пока меню не строилось;
+  // серое состояние молчит, как пункт. Цель — текущий лист (0.30-141-5).
+  insertSpread: () => {
+    const at = liveSpreadCmds().insertAt
+    if (at !== null) return store.addEmptySpread(at)
+  },
+  splitSpread: () => {
+    const c = liveSpreadCmds().cut
+    if (!c.ok || !prefs.can('timeline')) return
+    return c.ask ? glueAsk.cut(c.id, c.at) : store.split(c.id, c.at)
+  },
+  joinSpread: () => {
+    const c = liveSpreadCmds().join
+    if (!c.ok || !prefs.can('timeline')) return
+    return c.ask ? glueAsk.join(c.id) : store.merge(c.id)
+  },
+  sortVignette: () => {
+    const s = store.spread
+    if (isVignette(s) && prefs.can('vignette')) return sortVignette(s.id)
+  },
+  clearVignette: () => {
+    const s = store.spread
+    if (isVignette(s) && prefs.can('vignette')) return clearVignette(s.id)
+  },
   // 041: выделенные в ленте развороты, иначе текущий; уровень и семейства (065) — запомненные в окне автосборки.
   varyLayouts: () => {
     if (!prefs.can('variants')) return
@@ -260,6 +289,17 @@ const HANDLERS = {
   fitZoom: () => canvas.fit(),
   // Крупный просмотр фото (128): лента — выделенное, холст — одно выделенное фото разворота; нечего открыть — тост.
   photoPreview: () => photoui.openByKey(),
+  // Сравнение 2–4 кадров (138): C — по выделению, Shift+C — похожие к этому; из окна 128 — с его списком.
+  photoCompare: () => {
+    const p = photoui.preview?.from === 'library' ? photoui.preview : null
+    if (p) compare.openFrom(p.ids, shownId(p), () => photoui.handOff())
+    else compare.openByKey()
+  },
+  photoSimilar: () => {
+    const p = photoui.preview?.from === 'library' ? photoui.preview : null
+    if (p) void compare.similar(shownId(p), p.ids, () => photoui.handOff())
+    else void compare.similarByKey()
+  },
   // Отметки фото ленты (004)
   markRating0: rate(0),
   markRating1: rate(1),

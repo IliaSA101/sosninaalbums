@@ -92,7 +92,9 @@ func DefaultRoot(name string) string {
 		base = xdgDataHome()
 	}
 	if base == "" {
-		base, _ = os.UserCacheDir()
+		if c, err := os.UserCacheDir(); err == nil && filepath.IsAbs(c) { // относительный — от текущей папки
+			base = c
+		}
 	}
 	if base == "" {
 		return ""

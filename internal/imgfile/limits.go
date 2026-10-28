@@ -16,6 +16,9 @@ import (
 // файл с «раздутым» заголовком иначе может уронить программу по памяти.
 const MaxPixels = 250_000_000
 
+// ErrChanged — файл подменили между проверкой заголовка и декодом: не порча содержимого, повтор может пройти.
+var ErrChanged = errors.New("файл изменился во время чтения")
+
 // CheckSize читает только заголовок и отказывает, если размер нулевой или больше MaxPixels.
 func CheckSize(path string) error {
 	_, _, err := checkFile(path)
@@ -146,7 +149,7 @@ func OpenOrientedCtx(ctx context.Context, path string) (img image.Image, release
 		return nil, nil, err
 	}
 	if n2 != n || h2.Color != col {
-		return nil, nil, errors.New("файл изменился во время чтения")
+		return nil, nil, ErrChanged
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return nil, nil, err

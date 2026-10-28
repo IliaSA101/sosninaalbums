@@ -1,7 +1,8 @@
 // Приём ветки агента одной командой: `node scripts/accept.mjs <worktree> <ветка>` (П4, владелец 24.10).
 // worktree — путь или имя под .claude/worktrees/. Порядок: копия чистая → rebase на dev (конфликт только в
 // docs/specs/*/decisions.md сводится «сначала dev, затем ветка») → precheck по диффу ветки → ff-merge в основной dev →
-// снять ссылку frontend/node_modules → удалить worktree и ветку. Итог — одна строка («принято …» или «СТОП: …»).
+// снять ссылку frontend/node_modules → удалить worktree и ветку. Перед precheck ссылку node_modules ставим сами (агенты
+// снимают её перед отчётом, без неё precheck фронта падает). Итог — одна строка («принято …» или «СТОП: …»).
 // Ничего не пушит. Без оболочки: только execFileSync с массивом аргументов (Windows-пути тоже).
 // ACCEPT_PRECHECK — путь к .mjs вместо scripts/precheck.mjs копии (подмена в тестах).
 import { execFileSync } from 'node:child_process'
@@ -115,6 +116,21 @@ function rebaseOnDev(wt, env) {
   }
 }
 
+/**
+ * Ссылка <копия>/frontend/node_modules на node_modules основной копии, если в копии её нет (агент снял перед отчётом).
+ * Тип 'junction' — на Windows не требует прав на симлинки (на Linux/macOS игнорируется, как в CLAUDE.md, «Worktree»).
+ * Возвращает true, если ссылку поставили. Нет frontend/ в копии или node_modules в основной — пропуск (precheck скажет сам).
+ */
+export function ensureNodeModules(root, wt) {
+  const link = path.join(wt, 'frontend', 'node_modules')
+  const target = path.join(root, 'frontend', 'node_modules')
+  if (fs.lstatSync(link, { throwIfNoEntry: false })) return false
+  if (!fs.statSync(path.join(wt, 'frontend'), { throwIfNoEntry: false })?.isDirectory()) return false
+  if (!fs.statSync(target, { throwIfNoEntry: false })?.isDirectory()) return false
+  fs.symlinkSync(target, link, 'junction')
+  return true
+}
+
 const plural = (n) => {
   const m = n % 100
   const d = n % 10
@@ -140,6 +156,7 @@ export function accept(wtArg, branch, { cwd = process.cwd(), env = process.env, 
 
   const devHash = gitIn(root, ['rev-parse', 'dev']).out.trim()
   const pre = env.ACCEPT_PRECHECK || path.join(wt, 'scripts', 'precheck.mjs')
+  if (ensureNodeModules(root, wt)) log('frontend/node_modules: поставлена ссылка на основную копию')
   log('precheck…')
   const p = sh(process.execPath, [pre, '--base', devHash], wt, env)
   if (p.code !== 0) {

@@ -200,6 +200,26 @@ class TestPack(Base):
         self.assertEqual(self.check_code(path, "--os", "windows"), 1)
         self.assertEqual(self.check_code(path, "--version", "9.9.9"), 1)
 
+    def test_macos_archive_name(self):
+        # стандартная редакция (0.30-142-45): тот же pack, другое имя архива; {v} — версия; check проходит как обычно
+        name = "SosninaAlbums-{v}-macos-universal-standard.zip"
+        path, _ = self.pack_macos("--archive", name)
+        self.assertEqual(os.path.basename(path), "SosninaAlbums-1.2.3-macos-universal-standard.zip")
+        self.assertFalse(os.path.exists(os.path.join(self.out, "SosninaAlbums-1.2.3-macos-universal.zip")))
+        self.assertEqual(self.check_code(path, "--os", "macos", "--version", V), 0)
+        plain, _ = self.pack_macos("--archive", "plain-name.zip")
+        self.assertEqual(os.path.basename(plain), "plain-name.zip")
+
+    def test_archive_name_rejects_paths(self):
+        # имя — только файл в --out: пути, не-zip и пустое отвергаются до работы (код 2)
+        for bad in ("../x.zip", "a/b.zip", "/abs.zip", "x.tar.gz", "x", "", ".zip", "-x.zip", "a b.zip"):
+            code, _, _ = self.run_pack("macos", "--app-zip", self.appzip, *self.common(), "--archive", bad)
+            self.assertEqual(code, 2, repr(bad))
+
+    def test_archive_only_for_macos(self):
+        code, _, _ = self.run_pack("windows", "--exe", self.exe, *self.common(), "--archive", "x.zip")
+        self.assertEqual(code, 2)
+
     def test_macos_keeps_modes(self):
         path, _ = self.pack_macos()
         base = FOLDER + "/sosninaalbums.app/Contents/"

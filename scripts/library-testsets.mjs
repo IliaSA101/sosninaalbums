@@ -4,13 +4,19 @@
 //   site/                  — каталог и подпись тестовым ключом + хорошие архивы (раздаёт SA_LIBRARY_URL);
 //   bad/                   — плохие архивы для AddPackPath: bad-hash, bomb, traversal, newer-app.
 // Ключ: node scripts/library-pack.mjs --test-key (кладёт в .gotmp/, печатает открытый).
+// Каталог здесь собирается с нуля (намеренно): поле videos стирается — ролики после этого скрипта:
+//   node scripts/library-testvideos.mjs (спека 140).
+// Лист образцов (спека 144): для каждого набора library-verify -sprite (go build в .gotmp) делает <id>-1-preview.jpg
+// и .json, их проверяет previewField, строка каталога получает поле preview, лист лежит в site/ рядом с архивом.
 // --min-app X.Y.Z — minApp в манифестах наборов (по умолчанию 0.16.0): чтобы собрать наборы для стенда старой версии.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { buildPack, catalogRow, makeZip, sealCatalog, upsertCatalog } from './library-pack.mjs'
+import { URL_PREFIX, buildPack, catalogRow, makeZip, readLimited, sealCatalog, upsertCatalog } from './library-pack.mjs'
+import { previewField, readSheet } from './library-pack-preview.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const base = path.join(root, '.testphotos', 'library')
@@ -85,6 +91,27 @@ function writeSet(id, title, color, bgNames) {
   return dir
 }
 
+let built = false // сборка раз за запуск скрипта
+
+/** Лист образцов набора из его архива: собирает library-verify (Go) и запускает -sprite; результат — в sprites/. */
+function sprite(zipFile) {
+  const exe = path.join(root, '.gotmp', process.platform === 'win32' ? 'library-verify.exe' : 'library-verify')
+  const files = ['library-verify.go', 'library-verify-sheets.go', 'library-verify-looks.go', 'library-verify-sprite.go'].map((f) => path.join(root, 'scripts', f))
+  const out = path.join(base, 'sprites')
+  const run = (cmd, args) => {
+    const r = spawnSync(cmd, args, { cwd: root, encoding: 'utf8' })
+    if (r.status !== 0) {
+      console.error(`${cmd} ${args[0]}: код ${r.status ?? r.error?.message}\n${r.stdout}${r.stderr}`)
+      process.exit(1)
+    }
+  }
+  if (!built) run('go', ['build', '-o', exe, ...files]) // всегда: кэш Go сам пропускает неизменное, по mtime устаревший exe не отличить
+  built = true
+  fs.mkdirSync(out, { recursive: true })
+  run(exe, ['-sprite', zipFile, '-out', out])
+  return out
+}
+
 fs.mkdirSync(path.join(base, 'site'), { recursive: true })
 fs.mkdirSync(path.join(base, 'bad'), { recursive: true })
 
@@ -100,10 +127,18 @@ for (const [id, title, color] of [
   const zip = makeZip(files)
   const tag = `${id}-${manifest.version}.zip`
   fs.writeFileSync(path.join(base, 'site', tag), zip)
-  cat = upsertCatalog(cat, catalogRow(manifest, zip, tag))
+  const row = catalogRow(manifest, zip, tag)
+  const sheets = sprite(path.join(base, 'site', tag))
+  const { jpeg, metaText } = readSheet(sheets, manifest, { readLimited })
+  row.preview = previewField(jpeg, metaText, manifest, URL_PREFIX)
+  fs.writeFileSync(path.join(base, 'site', `${id}-${manifest.version}-preview.jpg`), jpeg)
+  cat = upsertCatalog(cat, row)
 }
 // Для стенда адреса архивов — локальные (SA_LIBRARY_URL); путь после хоста — как в файле site/.
-for (const p of cat.packs) p.url = `http://127.0.0.1:34190/${path.basename(p.url)}`
+for (const p of cat.packs) {
+  p.url = `http://127.0.0.1:34190/${path.basename(p.url)}`
+  p.preview.url = `http://127.0.0.1:34190/${path.basename(p.preview.url)}`
+}
 fs.rmSync(path.join(base, 'site', 'catalog.json.sig'), { force: true })
 if (key) fs.writeFileSync(path.join(base, 'site', 'catalog.json'), JSON.stringify(sealCatalog(cat, key)) + '\n')
 else console.log('нет тестового ключа: node scripts/library-pack.mjs --test-key, затем запустить снова — каталог не записан')

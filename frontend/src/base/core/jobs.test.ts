@@ -52,6 +52,7 @@ describe('jobs.exportAll', () => {
     load({ spreads: [] })
     jobs.exportAll()
     expect(jobs.exportOpen).toBe(false)
+    expect(store.toast?.text).toBe('Выгружать нечего: в альбоме нет разворотов')
   })
   it('экспорт идёт, а листов не осталось — окно хода всё равно открывается («Остановить» достать можно)', () => {
     load({ spreads: [] })

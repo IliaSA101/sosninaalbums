@@ -120,6 +120,9 @@ var catalog = []Command{
 	// «Во весь экран» (режим F) и «Крупный просмотр фото» (окно, Z) — разные вещи (0.26-128-15).
 	c("view", "toggleBig", "Во весь экран", "Весь экран", "timeline", "KeyF"),
 	c("view", "photoPreview", "Крупный просмотр фото", "Крупно", "", "KeyZ"),
+	// Сравнение 2–4 кадров (138): только из ленты; без функции уровня, как Z. Compare в Lightroom — C.
+	c("view", "photoCompare", "Сравнить фото", "Сравнить", "", "KeyC"),
+	c("view", "photoSimilar", "Похожие к этому", "Похожие", "", "Shift+KeyC"),
 	c("view", "toggleDetails", "Панель деталей", "Детали", "", "KeyI"),
 	c("view", "toggleSafe", "Безопасная зона", "Зона", "", "KeyG"),
 	c("view", "toggleMarkup", "Разметка типографии", "Разметка", ""),
@@ -152,7 +155,13 @@ var catalog = []Command{
 	c("spreads", "varyLayouts", "Разнообразить раскладки", "Разнообр.", "variants"),
 	c("spreads", "makeVignette", "Сделать разворот виньеткой", "Виньетка", "vignette"),
 	c("spreads", "vigSetup", "Настроить виньетку…", "Виньетка…", "vignette"),
+	c("spreads", "sortVignette", "Сортировать учеников по фамилии", "По фамилии", "vignette"),
+	c("spreads", "clearVignette", "Обычный разворот (снять виньетку)", "Обычный", "vignette"),
 	c("spreads", "renameSpread", "Название разворота…", "Название", "names", "F2"),
+	// 0.30-141: команды правого щелчка по группе ленты — в меню «Разворот»; клавиш нет, «можно ли» решает пункт меню (074-8).
+	c("spreads", "insertSpread", "Вставить разворот после текущего", "Вставить", ""),
+	c("spreads", "splitSpread", "Разрезать разворот перед выделенным фото", "Разрезать", "timeline"),
+	c("spreads", "joinSpread", "Склеить разворот со следующим", "Склеить", "timeline"),
 
 	c("photos", "selectSpread", "Выделить всё на развороте", "Выделить", "groupSelect", "Mod+KeyA").
 		hint("Все фото, места и тексты разворота").in(ScopeCanvas),

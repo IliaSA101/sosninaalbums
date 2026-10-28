@@ -30,6 +30,9 @@ const on: MenuCtx = {
   vigable: true,
   decorable: true,
   vigSetup: true,
+  insertable: true,
+  cutGate: { ok: true, why: '' },
+  joinGate: { ok: true, why: '' },
   copyable: true,
   pasteable: true,
   layerable: true,
@@ -52,6 +55,7 @@ const atLevel = (level: Level, o: Partial<MenuCtx> = {}): MenuCtx => ({
   ...o,
 })
 const full = (o: Partial<MenuCtx>): MenuCtx => atLevel('full', o)
+const GRAY = { ok: false, why: '' }
 
 // Явные контексты (имя → контекст): 4 уровня × всё включено, затем «Полный» с одним выключенным флагом.
 const CONTEXTS: Record<string, MenuCtx> = {
@@ -61,7 +65,17 @@ const CONTEXTS: Record<string, MenuCtx> = {
   'свой без функций, всё включено': atLevel('custom'),
   'простой в ленте': atLevel('simple', { zone: 'library' }),
   'стандартный, ничего не выделено': atLevel('standard', { anySelection: false, deletable: false, flippable: false, copyable: false }),
-  'полный, нет разворота': full({ hasSpread: false, decorable: false, vigable: false, varyable: false, vigSetup: false, copyable: false }),
+  'полный, нет разворота': full({
+    hasSpread: false,
+    decorable: false,
+    vigable: false,
+    varyable: false,
+    vigSetup: false,
+    insertable: false,
+    cutGate: GRAY,
+    joinGate: GRAY,
+    copyable: false,
+  }),
   'полный, нет отмены': full({ canUndo: false }),
   'полный, нет повтора': full({ canRedo: false }),
   'полный, нечего удалять': full({ deletable: false }),
@@ -73,6 +87,9 @@ const CONTEXTS: Record<string, MenuCtx> = {
   'полный, нельзя виньетку': full({ vigable: false }),
   'полный, нет оформления (обложка)': full({ decorable: false }),
   'полный, не виньетка': full({ vigSetup: false }),
+  'полный, нельзя вставить': full({ insertable: false }),
+  'полный, нельзя разрезать': full({ cutGate: GRAY }),
+  'полный, нельзя склеить': full({ joinGate: GRAY }),
   'полный, нечего копировать': full({ copyable: false }),
   'полный, буфер пуст': full({ pasteable: false }),
   'полный, слои недоступны': full({ layerable: false }),
@@ -92,6 +109,9 @@ const CONTEXTS: Record<string, MenuCtx> = {
     vigable: false,
     decorable: false,
     vigSetup: false,
+    insertable: false,
+    cutGate: GRAY,
+    joinGate: GRAY,
     copyable: false,
     pasteable: false,
     layerable: false,

@@ -306,7 +306,8 @@ func lkTextJSON(e *album.Editor, id string) string {
 }
 
 // CreateCoverLook: у альбома найден макет — обложка получает его оформление, затем фото броска (оно
-// главнее макета: фон лицевой — фото); один шаг отмены; повтор Undo+CreateCover без макета — чистая.
+// главнее макета: встаёт в первое место лицевой, 145; фоном его нет); один шаг отмены; повтор
+// Undo+CreateCover без макета — чистая, фото фоном лицевой.
 func TestCreateCoverWithLook(t *testing.T) {
 	tpl := lkCoverFull()
 	e := lkEditor(t)
@@ -323,8 +324,11 @@ func TestCreateCoverWithLook(t *testing.T) {
 		t.Fatalf("styled %v, шагов %d, %v", styled != nil, edtest.UndoLen(e)-undo, err)
 	}
 	c := edtest.P(e).Cover.Sheet
-	if len(c.Grid) != 5 || c.BgL != "#334455" || c.BgR != "#998877" || len(c.Stickers) != 1 || c.BgPhotoR == nil {
-		t.Fatalf("оформление: мест %d, фон %q %q, стикеров %d, фото лицевой %v", len(c.Grid), c.BgL, c.BgR, len(c.Stickers), c.BgPhotoR)
+	if len(c.Grid) != 5 || c.BgL != "#334455" || c.BgR != "#998877" || len(c.Stickers) != 1 || c.BgPhotoR != nil {
+		t.Fatalf("оформление: мест %d, фон %q %q, стикеров %d, фото фоном лицевой %v", len(c.Grid), c.BgL, c.BgR, len(c.Stickers), c.BgPhotoR)
+	}
+	if seats := edtest.P(e).CoverSeats(); seats[0].Photo != "bg1" {
+		t.Fatalf("фото не в первом месте лицевой: %q", seats[0].Photo)
 	}
 	// «Без оформления»: Undo + обычная CreateCover.
 	e.Undo()

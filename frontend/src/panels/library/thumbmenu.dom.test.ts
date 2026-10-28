@@ -19,6 +19,7 @@ const { default: ThumbMenu } = await import('./ThumbMenu.svelte')
 const { thumbmenu } = await import('./thumbmenustate.svelte')
 const { store } = await import('../../base/core/store.svelte')
 const { photoui } = await import('../../editor/photo/photoui.svelte')
+const { compare } = await import('../compare/compare.svelte')
 const { prefs } = await import('../../base/prefs/prefs.svelte')
 const { lost } = await import('./lost.svelte')
 const { autocheck } = await import('../folders/autocheck')
@@ -75,17 +76,34 @@ describe('ThumbMenu', () => {
     await open('a', e)
     expect(e.defaultPrevented).toBe(true)
     expect([...store.selected]).toEqual(['a'])
-    expect(items()).toEqual(['preview', 'explorer', 'copy', 'uses'])
+    expect(items()).toEqual(['preview', 'similar', 'explorer', 'copy', 'uses'])
     expect(screen.getByText(reveal)).toBeTruthy()
   })
 
-  it('щелчок по выделенному оставляет выделение; несколько фото — только «Копировать имена файлов»', async () => {
+  it('щелчок по выделенному оставляет выделение; несколько фото — «Сравнить» и «Копировать имена файлов»', async () => {
     store.selected.add('a')
     store.selected.add('b')
     await open('a')
     expect([...store.selected].sort()).toEqual(['a', 'b'])
-    expect(items()).toEqual(['copy'])
+    expect(items()).toEqual(['compare', 'copy'])
     expect(screen.getByText('Копировать имена файлов')).toBeTruthy()
+  })
+
+  it('«Сравнить» открывает сравнение выделенных и закрывает меню; «Похожие к этому» зовёт поиск по якорю (138)', async () => {
+    const cmp = vi.spyOn(compare, 'openByKey').mockReturnValue(true)
+    const sim = vi.spyOn(compare, 'similarByKey').mockResolvedValue(true)
+    store.selected.add('a')
+    store.selected.add('b')
+    await open('a')
+    await fireEvent.click(screen.getByText('Сравнить'))
+    expect(cmp).toHaveBeenCalledOnce()
+    expect(thumbmenu.menu).toBeNull()
+    cleanup()
+    store.selected.clear()
+    await open('c')
+    await fireEvent.click(screen.getByText('Похожие к этому'))
+    expect(sim).toHaveBeenCalledOnce()
+    expect(thumbmenu.menu).toBeNull()
   })
 
   it('«Где стоит ▸» — строки от WhereUsed; щелчок закрывает меню и ведёт к вхождению', async () => {
@@ -102,7 +120,7 @@ describe('ThumbMenu', () => {
 
   it('фото нигде не стоит — «Где стоит» нет, Go за вхождениями не зовём', async () => {
     await open('c')
-    expect(items()).toEqual(['preview', 'explorer', 'copy'])
+    expect(items()).toEqual(['preview', 'similar', 'explorer', 'copy'])
     expect(m.whereUsed).not.toHaveBeenCalled()
   })
 
@@ -130,7 +148,7 @@ describe('ThumbMenu', () => {
     lost.mark('a')
     expect(soon).toHaveBeenCalledOnce()
     await open('a')
-    expect(items()).toEqual(['uses'])
+    expect(items()).toEqual(['similar', 'uses'])
     lost.clear()
   })
 
@@ -173,7 +191,7 @@ describe('ThumbMenu', () => {
     const first = document.activeElement as HTMLElement
     await vi.waitFor(() => expect(first?.dataset.item).toBe('preview'))
     await fireEvent.keyDown(first, { key: 'ArrowDown' })
-    expect((document.activeElement as HTMLElement).dataset.item).toBe('explorer')
+    expect((document.activeElement as HTMLElement).dataset.item).toBe('similar')
     await fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowUp' })
     expect((document.activeElement as HTMLElement).dataset.item).toBe('preview')
   })

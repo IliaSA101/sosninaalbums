@@ -144,6 +144,9 @@ function node(id: ActId, hint: HintFn, extra: Partial<MenuNode> = {}): MenuNode 
 
 // «Крупный просмотр» для меню ленты (128): тот же пункт и клавиша справа, что у меню фото на холсте.
 export const previewItem = (hint: HintFn): MenuNode => node('preview', hint)
+// Сравнение (138): «Сравнить» (2–4 фото) и «Похожие к этому» (одно) — в меню ленты, с клавишей из реестра.
+export const compareItem = (hint: HintFn): MenuNode => node('compare', hint)
+export const similarItem = (hint: HintFn): MenuNode => node('similar', hint)
 
 // Пункт отмечен как состояние (✓ или •).
 const check = (on: boolean): Partial<MenuNode> => ({ mark: 'check', checked: on })
@@ -197,6 +200,8 @@ function usesRows(c: FileCtx, ok: boolean, none: HintFn): Row[] {
 const canStraighten = (c: MenuCtx) => c.places === 1 && c.photos === 1 && c.texts === 0 && c.stickers === 0
 
 // Подсказка пункта «Остальные — как это лицо» (макет 130-m1-menu).
+// Пункт-сосед «Подогнать место под фото» звучит похоже, но меряет рамку по пропорциям снимка, а не по лицу.
+export const FIT_PHOTO_TIP = 'Размер места — по пропорциям фото, лица не учитываются'
 export const FACE_REF_TIP = 'Как у этого фото — размер лица и линия глаз у всех на листе'
 
 type MkAct = (id: ActId, extra?: Partial<MenuNode>) => MenuNode | false
@@ -219,7 +224,7 @@ function editRows(c: MenuCtx, A: MkAct): Row[] {
         A('contain', radio(c.allContain)),
         A('cover', radio(c.allCover)),
         SEP,
-        c.differ && A('fitPhoto'),
+        c.differ && A('fitPhoto', { title: FIT_PHOTO_TIP }),
         c.framed && A('resetFrame'),
         // Команда над листом, а не свойство фото: отдельной группой под чертой (130 U2).
         SEP,

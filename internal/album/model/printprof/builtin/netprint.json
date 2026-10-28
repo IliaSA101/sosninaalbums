@@ -1,7 +1,7 @@
 {
   "format": 1,
   "id": "netprint",
-  "version": 1,
+  "version": 2,
   "name": "Нетпринт",
   "gen": "Нетпринта",
   "page": {
@@ -19,7 +19,8 @@
      "limits": [{"min": 10, "max": 60}]},
     {"id": "netprint-royal", "name": "Royal", "wrap": 15, "hinge": 9, "a": 5.4, "b": 0.8,
      "limits": [{"min": 8, "max": 30}, {"format": "20×20", "min": 10, "max": 30}]},
-    {"id": "netprint-soft", "name": "Мягкая", "wrap": 10, "a": 0.39, "b": 0.39}
+    {"id": "netprint-soft", "name": "Мягкая", "wrap": 10, "a": 0.39, "b": 0.39,
+     "limits": [{"min": 10, "max": 25}]}
   ],
   "default": "netprint-premium",
   "nameDefault": true

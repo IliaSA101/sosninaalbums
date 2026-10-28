@@ -39,6 +39,8 @@ var openFilesDialog = wr.OpenMultipleFilesDialog
 func (a *App) openDecor() {
 	s := decor.Open(a.cfgDir)
 	s.SetPrintCheck(ownprint.CheckData)
+	d := a.demo() // пример темы (142): ссылки на макеты, «Новые», DemoOnly узнают его по id
+	s.SetDemo(d.ID, d.Related)
 	a.decorLib.Store(s)
 	salbum.SetLibFinder(s.Find)
 	salbum.SetFrameFinder(s.FindFrame)
@@ -71,18 +73,21 @@ func (a *App) DecorCatalog(kind string) (c DecorCatalog, err error) {
 	defer guardErr("DecorCatalog", &err)
 	s, err := a.decorStore()
 	if err != nil {
-		return DecorCatalog{Kind: kind, Themes: []DecorTheme{}, Items: []DecorItem{}, Recent: []string{}, New: []string{}}, err
+		return emptyDecorCatalog(kind), err
 	}
 	w, h := a.editor().SheetSize()
 	cat, err := s.Catalog(kind, prefs.RecentDecor(a.cfgDir, kind), w, h)
 	if err != nil {
-		return DecorCatalog{Kind: kind, Themes: []DecorTheme{}, Items: []DecorItem{}, Recent: []string{}, New: []string{}}, err
+		return emptyDecorCatalog(kind), err
 	}
 	c = DecorCatalog{Kind: cat.Kind, Themes: make([]DecorTheme, len(cat.Themes)), Items: decorItems(cat.Items),
-		Recent: cat.Recent, New: cat.New, ReadOnly: cat.ReadOnly}
+		Recent: cat.Recent, New: cat.New, ReadOnly: cat.ReadOnly, DemoOnly: cat.DemoOnly}
 	for i, t := range cat.Themes {
 		c.Themes[i] = DecorTheme(t)
 	}
+	// «Можно скачать» (144): плитки образцов нескачанных наборов и приглашение; сети нет.
+	c.Get, c.Invite = a.decorGet(kind)
+	c.Themes = withGetTheme(c.Themes, len(c.Get))
 	return c, nil
 }
 

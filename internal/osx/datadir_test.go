@@ -160,3 +160,17 @@ func TestStandFrom(t *testing.T) {
 		}
 	}
 }
+
+// Относительный LOCALAPPDATA и пустой кэш пользователя — папки данных WebView2 нет (""), а не путь
+// от текущей папки процесса (140 Н4).
+func TestWebviewDirNeverRelative(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("APPDATA", "")
+	for _, v := range []string{"", "rel/dir", "."} {
+		t.Setenv("LOCALAPPDATA", v)
+		if got := WebViewDir(DataName("")); got != "" {
+			t.Errorf("LOCALAPPDATA=%q: WebViewDir() = %q, ждали пусто", v, got)
+		}
+	}
+}

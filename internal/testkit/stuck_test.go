@@ -3,6 +3,7 @@ package testkit
 import (
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -48,5 +49,41 @@ func TestWaitCh(t *testing.T) {
 	v, ok := WaitCh(t, ch, 30*time.Millisecond, "x", func() string { asked = true; return "s" })
 	if ok || v != "" || !asked {
 		t.Fatalf("таймаут: %q, %v, состояние запрошено %v", v, ok, asked)
+	}
+}
+
+// WaitProgress: прогресс растёт — ждёт дольше одного окна и берёт значение; прогресса нет —
+// падает за одно окно, функция состояния вызвана; готовое значение приходит без отчёта.
+func TestWaitProgress(t *testing.T) {
+	const stall = 80 * time.Millisecond
+	// медленная работа: 6 шагов по 80 мс (480 мс > окна 400 мс), шаг — 1/5 окна. Запас большой:
+	// таймер Windows грубый (≈15,6 мс), и под нагрузкой CI шаг при запасе 1,6× выходил за окно.
+	const slowStall = 400 * time.Millisecond
+	ch := make(chan string, 1)
+	var n atomic.Int64
+	go func() {
+		for range 6 {
+			time.Sleep(80 * time.Millisecond)
+			n.Add(1)
+		}
+		ch <- "ok"
+	}()
+	if v, ok := WaitProgress(t, ch, slowStall, "x", n.Load, func() string { t.Error("состояние без зависания"); return "" }); !ok || v != "ok" {
+		t.Fatalf("медленная работа: %q, %v", v, ok)
+	}
+	// стоит: счётчик не растёт — false не позже чем за пару окон
+	asked := false
+	start := time.Now()
+	v, ok := WaitProgress(t, ch, stall, "x", func() int64 { return 7 }, func() string { asked = true; return "s" })
+	if ok || v != "" || !asked {
+		t.Fatalf("остановка: %q, %v, состояние запрошено %v", v, ok, asked)
+	}
+	if d := time.Since(start); d > 10*stall {
+		t.Errorf("остановка ловилась %v, ждали около одного окна", d)
+	}
+	// уже готовое значение — без ожидания
+	ch <- "late"
+	if v, ok := WaitProgress(t, ch, stall, "x", func() int64 { return 0 }, nil); !ok || v != "late" {
+		t.Fatalf("готовое: %q, %v", v, ok)
 	}
 }

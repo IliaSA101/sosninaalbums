@@ -8,6 +8,7 @@
   import { DEFAULT_FRAME, hasSlack } from '../../base/geom/frame'
   import { aabbOf, uprightAt } from '../../base/geom/rotbox'
   import { markAt, outlineOf } from '../../base/geom/shape'
+  import { isGone } from '../../panels/library/missing'
   import DpiMark from './DpiMark.svelte'
   import FrameControls from './FrameControls.svelte'
   import { tiltmode } from '../tilt/tiltmode.svelte'
@@ -57,7 +58,7 @@
   {@const frame = fv ? { s: fv.s, x: fv.x, y: fv.y, r: fv.r } : DEFAULT_FRAME}
   {@const cur = framelive.of(it.id) ?? frame}
   {@const contain = !!spread.grid && spread.places?.find((p) => p.photo === it.id)?.fit === 'contain'}
-  {@const missing = store.missing.includes(it.id)}
+  {@const missing = isGone(it.id, store.missing, store.unread)}
   <!-- Мелкая ячейка (< 48 px на экране): ✥ и ползунок не помещаются, они есть в карточке справа -->
   {@const big = it.selected && !missing && Math.min(r.w, r.h) * ppm >= 48}
   {@const ok = big && prefs.can('frame')}

@@ -45,6 +45,9 @@ type netLib struct {
 	zips  map[string][]byte
 	block chan struct{} // не nil — архив отдаёт половину и ждёт
 	half  func()        // зовётся, когда половина архива отдана
+	// mode — сбой архива по id набора: hang (половина и тишина), 500, drop (рвёт соединение),
+	// redirect (переход мимо белого списка); нет записи — архив отдаётся.
+	mode map[string]string
 }
 
 func newNetLib(t *testing.T) *netLib {
@@ -74,6 +77,9 @@ func (l *netLib) serve(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(env)
 	case ok:
 		l.archives.Add(1)
+		if l.fail(w, r) {
+			return
+		}
 		if block != nil {
 			w.Header().Set("Content-Length", itoa(len(zip)))
 			_, _ = w.Write(zip[:len(zip)/2])
@@ -234,23 +240,32 @@ func TestNoNetWithoutConsent(t *testing.T) {
 	}
 }
 
-// Обновление: новый набор ставится из сети (origin net), ход и library:changed; повтор — «всё
-// свежее» без скачивания; временного файла нет; checked записан.
+// «Обновить» новый набор не ставит, а показывает в разделе «Можно скачать» (available, fresh);
+// «Скачать все» ставит его из сети (origin net), ход и library:changed; повтор — «всё свежее» без
+// скачивания; временного файла нет; checked записан.
 func TestUpdateLibrary(t *testing.T) {
 	a, l := netApp(t, true)
 	ev := captureEvents(a)
 	zip := d1Zip(t)
 	l.publish(t, nil, zip)
 	before := time.Now().UnixMilli()
-	res, err := a.UpdateLibrary()
+	if first, err := a.UpdateLibrary(); err != nil || first.Added+first.Updated != 0 || first.Available != 1 || first.Fresh != 1 ||
+		l.archives.Load() != 0 || len(ev.of("library:changed")) != 0 {
+		t.Fatalf("обновить: %v %+v, архивов %d", err, first, l.archives.Load())
+	}
+	res, err := a.DownloadAllLibrary()
 	fi, _ := os.Stat(zip)
-	if err != nil || res.Added != 1 || res.Updated != 0 || res.Bytes != fi.Size() || res.Skipped == nil || len(res.Skipped) != 0 {
+	if err != nil || res.Added != 1 || res.Updated != 0 || res.Bytes != fi.Size() || res.Skipped == nil || len(res.Skipped) != 0 ||
+		res.Available != 0 || res.Fresh != 0 {
 		t.Fatalf("обновление: %v %+v", err, res)
 	}
 	list, _ := a.LibraryPacks()
 	if len(list.Packs) != 2 || list.Packs[1].ID != "ivory" || list.Packs[1].Origin != decor.OriginNet || !list.Packs[1].Removable ||
 		list.Net.Checked < before || !list.Net.Allowed || list.Busy {
 		t.Fatalf("список: %+v", list)
+	}
+	if list.Packs[1].Bytes != fi.Size() { // 137-31: размер набора из сети — размер zip, как в «Можно скачать»
+		t.Errorf("размер стоящего %d, zip %d", list.Packs[1].Bytes, fi.Size())
 	}
 	if len(ev.of("library:changed")) != 1 || len(packBgIDs(t, a)) != 2 {
 		t.Fatalf("событий %d, плиток %d", len(ev.of("library:changed")), len(packBgIDs(t, a)))
@@ -279,7 +294,7 @@ func TestUpdateLibraryNewVersion(t *testing.T) {
 	a, l := netApp(t, true)
 	src := d1Zip(t)
 	l.publish(t, nil, src)
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := getAll(t, a); err != nil || res.Added != 1 {
 		t.Fatalf("первая версия: %v %+v", err, res)
 	}
 	before := packBgIDs(t, a)
@@ -292,6 +307,9 @@ func TestUpdateLibraryNewVersion(t *testing.T) {
 	list, _ := a.LibraryPacks()
 	if p := list.Packs[1]; p.Version != 2 || p.Origin != decor.OriginNet || p.Bg != 1 {
 		t.Fatalf("набор: %+v", p)
+	}
+	if fi, err := os.Stat(v2); err != nil || list.Packs[1].Bytes != fi.Size() { // размер zip новой версии, не старой
+		t.Errorf("размер после обновления %d: %v", list.Packs[1].Bytes, err)
 	}
 	if after := packBgIDs(t, a); len(after) != 1 || len(before) != 2 {
 		t.Fatalf("фоны: %v → %v", before, after)
@@ -322,7 +340,7 @@ func TestUpdateLibrarySkipRemoved(t *testing.T) {
 	a, l := netApp(t, true)
 	zip := d1Zip(t)
 	l.publish(t, nil, zip)
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := getAll(t, a); err != nil || res.Added != 1 {
 		t.Fatalf("первое: %v %+v", err, res)
 	}
 	if _, err := a.RemovePack("ivory"); err != nil {
@@ -348,7 +366,7 @@ func TestUpdateLibrarySkipRemoved(t *testing.T) {
 func TestResetLibrarySkip(t *testing.T) {
 	a, l := netApp(t, true)
 	l.publish(t, nil, d1Zip(t))
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := getAll(t, a); err != nil || res.Added != 1 {
 		t.Fatalf("первое: %v %+v", err, res)
 	}
 	list, err := a.RemovePack("ivory")
@@ -372,7 +390,7 @@ func TestResetLibrarySkip(t *testing.T) {
 	if _, err := a.SetLibraryNet(true, false); err != nil {
 		t.Fatal(err)
 	}
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := getAll(t, a); err != nil || res.Added != 1 {
 		t.Fatalf("после сброса не вернулся: %v %+v", err, res)
 	}
 
@@ -404,7 +422,8 @@ func TestResetLibrarySkip(t *testing.T) {
 }
 
 // Ошибки: подпись, хэш архива, отмена посреди скачивания, занятая библиотека, набор новее
-// программы — библиотека прежняя, временного файла нет, checked не записан (кроме пропуска).
+// программы — библиотека прежняя, временного файла нет, checked не пишется при отмене (при
+// неудаче одного набора — пишется: поштучная неудача проверку закрывает).
 func TestUpdateLibraryErrors(t *testing.T) {
 	a, l := netApp(t, true)
 	ev := captureEvents(a)
@@ -417,8 +436,12 @@ func TestUpdateLibraryErrors(t *testing.T) {
 		t.Fatalf("подпись: %v", err)
 	}
 	l.publish(t, func(r map[string]any) { r["sha256"] = strings.Repeat("0", 64) }, zip)
-	if _, err := a.UpdateLibrary(); !errors.Is(err, fetch.ErrBroken) || !strings.Contains(err.Error(), "айвори") {
-		t.Fatalf("хэш: %v", err)
+	if res, err := getAll(t, a); err != nil || len(res.Failed) != 1 || res.Failed[0].Name != "Свадьба — айвори" {
+		t.Fatalf("хэш: %v %+v", err, res)
+	}
+	checked := prefs.LibraryNetOf(a.cfgDir).Checked
+	if checked == 0 {
+		t.Fatal("checked не записан при неудаче набора")
 	}
 	noDownloadLeft(t, a)
 	// Отмена: архив отдаёт половину и ждёт; «Отменить» посреди скачивания.
@@ -428,11 +451,11 @@ func TestUpdateLibraryErrors(t *testing.T) {
 	l.half = a.CancelLibrary
 	l.mu.Unlock()
 	defer close(l.block)
-	if _, err := a.UpdateLibrary(); !errors.Is(err, fetch.ErrCancelled) {
+	if _, err := a.DownloadAllLibrary(); !errors.Is(err, fetch.ErrCancelled) {
 		t.Fatalf("отмена: %v", err)
 	}
 	noDownloadLeft(t, a)
-	if list, _ := a.LibraryPacks(); len(list.Packs) != 1 || list.Net.Checked != 0 || len(ev.of("library:changed")) != 0 {
+	if list, _ := a.LibraryPacks(); len(list.Packs) != 1 || list.Net.Checked != checked || len(ev.of("library:changed")) != 0 {
 		t.Fatalf("библиотека изменилась: %+v", list)
 	}
 	// Занято другой операцией наборов.
@@ -444,14 +467,16 @@ func TestUpdateLibraryErrors(t *testing.T) {
 		t.Fatalf("занято: %v", err)
 	}
 	release()
-	// Набор новее программы — пропуск с причиной, без скачивания.
+	// Набор новее программы — серая строка раздела с причиной, без скачивания и без пропуска.
 	defer func(old []byte) { wailsJSON = old }(wailsJSON)
 	wailsJSON = []byte(`{"info":{"productVersion":"0.17.0"}}`)
 	hits := l.archives.Load()
 	l.publish(t, func(r map[string]any) { r["minApp"] = "0.99.0" }, zip)
 	res, err := a.UpdateLibrary()
-	if err != nil || res.Added != 0 || len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0].Why, "0.99.0") || l.archives.Load() != hits {
-		t.Fatalf("minApp: %v %+v", err, res)
+	list, _ := a.LibraryPacks()
+	if err != nil || res.Added != 0 || len(res.Skipped) != 0 || res.Available != 0 || l.archives.Load() != hits ||
+		len(list.Available) != 1 || !strings.Contains(list.Available[0].Why, "0.99.0") || list.All.Count != 0 {
+		t.Fatalf("minApp: %v %+v %+v", err, res, list.Available)
 	}
 }
 
@@ -463,7 +488,8 @@ func setStart(delay, every time.Duration) func() {
 }
 
 // Проверка при запуске: с согласием и флажком — раз за сеанс (повтор domReady не повторяет),
-// ставит молча и шлёт тост; свежий checked — без запроса; checked из будущего — пора.
+// новое только объявляет одним событием library:start (не ставит) и повторно не тревожит; свежий
+// checked — без запроса; checked из будущего — пора.
 func TestStartCheckOnce(t *testing.T) {
 	defer setStart(0, 20*time.Hour)()
 	a, l := netApp(t, true)
@@ -493,12 +519,16 @@ func TestStartCheckOnce(t *testing.T) {
 	a.libp.ScheduleCheck()
 	a.libp.ScheduleCheck()
 	a.bg.Wait()
-	if l.hits.Load() != 2 || l.archives.Load() != 1 || len(ev.of("library:updated")) != 1 || len(ev.of("notice")) != 0 || len(ev.of("library:changed")) != 1 {
-		t.Fatalf("запросов %d, архивов %d, итогов %d", l.hits.Load(), l.archives.Load(), len(ev.of("library:updated")))
+	size := fileSize(t, d1Zip(t))
+	if l.hits.Load() != 1 || l.archives.Load() != 0 || len(ev.of("library:start")) != 1 || len(ev.of("notice")) != 0 || len(ev.of("library:changed")) != 0 {
+		t.Fatalf("запросов %d, архивов %d, событий %d", l.hits.Load(), l.archives.Load(), len(ev.of("library:start")))
 	}
-	// Фразу собирает фронт; Go отдаёт числа и тот же LibraryUpdate, что кнопка (073-2).
-	if u := ev.of("library:updated")[0].(libpacks.Update); u.Added != 1 || u.Updated != 0 {
-		t.Errorf("итог: %+v", u)
+	// Фразу собирает фронт; Go отдаёт числа: новый набор списка — Fresh (073-2, 137).
+	if st := ev.of("library:start")[0].(libpacks.Start); st != (libpacks.Start{Fresh: libpacks.Offer{Count: 1, Bytes: size}}) {
+		t.Errorf("событие: %+v", st)
+	}
+	if len(ev.of("library:updated"))+len(ev.of("library:offer")) != 0 {
+		t.Error("прежние события library:updated/offer ещё шлются")
 	}
 	for name, tc := range map[string]struct {
 		checked time.Duration // назад от сейчас; < 0 — в будущем
@@ -532,35 +562,45 @@ func TestStartCheckOnce(t *testing.T) {
 	if l.hits.Load() != hits {
 		t.Error("проверка после выхода")
 	}
+	if len(ev.of("library:start")) != 1 {
+		t.Errorf("повторные проверки без новостей дали событие: %d", len(ev.of("library:start")))
+	}
 }
 
-// При запуске новое больше предела — только library:offer (число и байты), без скачивания;
-// checked записан; кнопка потом ставит.
+// При запуске обновления больше предела — только library:start с offer (число и байты), без
+// скачивания; checked записан; кнопка потом ставит. Ошибка при запуске — только log.txt.
 func TestUpdateLibraryOffer(t *testing.T) {
 	defer setStart(0, 20*time.Hour)()
 	a, l := netApp(t, true)
 	ev := captureEvents(a)
-	zip := d1Zip(t)
-	l.publish(t, nil, zip)
-	fi, _ := os.Stat(zip)
-	startOffer = fi.Size() - 1
-	a.libp.StartCheck()
-	offers := ev.of("library:offer")
-	if len(offers) != 1 || offers[0].(libpacks.Offer) != (libpacks.Offer{Count: 1, Bytes: fi.Size()}) || l.archives.Load() != 0 {
-		t.Fatalf("предложение: %+v, архивов %d", offers, l.archives.Load())
+	src := d1Zip(t)
+	l.publish(t, nil, src)
+	if _, err := getAll(t, a); err != nil { // версия 1 стоит
+		t.Fatal(err)
 	}
-	if list, _ := a.LibraryPacks(); len(list.Packs) != 1 || list.Net.Checked == 0 || len(ev.of("notice")) != 0 {
+	v2 := rezip(t, src, func(m map[string]any) { m["version"] = 2 }, before2File(t, src))
+	l.publish(t, nil, v2)
+	size := fileSize(t, v2)
+	startOffer = size - 1
+	prefs.UpdateLibraryNet(a.cfgDir, func(n *prefs.LibraryNet) { n.Checked = 0 })
+	arc := l.archives.Load()
+	a.libp.StartCheck()
+	starts := ev.of("library:start")
+	if len(starts) != 1 || starts[0].(libpacks.Start) != (libpacks.Start{Offer: libpacks.Offer{Count: 1, Bytes: size}}) || l.archives.Load() != arc {
+		t.Fatalf("предложение: %+v, архивов %d", starts, l.archives.Load()-arc)
+	}
+	if list, _ := a.LibraryPacks(); list.Packs[1].Version != 1 || list.Net.Checked == 0 || len(ev.of("notice")) != 0 {
 		t.Fatalf("после предложения: %+v", list)
 	}
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := a.UpdateLibrary(); err != nil || res.Updated != 1 {
 		t.Fatalf("кнопка: %v %+v", err, res)
 	}
-	// Ошибка при запуске — только log.txt, без тоста.
+	// Ошибка при запуске — только log.txt, без тоста и события.
 	l.mu.Lock()
 	l.sig = nil
 	l.mu.Unlock()
 	a.libp.StartCheck()
-	if len(ev.of("notice")) != 0 || len(ev.of("library:offer")) != 1 {
+	if len(ev.of("notice")) != 0 || len(ev.of("library:start")) != 1 {
 		t.Fatalf("ошибка при запуске дала тост")
 	}
 }
@@ -588,7 +628,8 @@ func readManifest(t *testing.T, zipPath string) []byte {
 func itoa(n int) string { return strconv.Itoa(n) }
 
 // Набор из файла сеть не заменяет: новая версия в каталоге — пропуск с причиной без скачивания,
-// стоит прежний; новый набор того же каталога ставится; та же версия — без пропуска.
+// стоит прежний; новый набор того же каталога «Обновить» не ставит (он в разделе), «Скачать все»
+// ставит; та же версия — без пропуска.
 func TestUpdateLibraryFromFile(t *testing.T) {
 	a, l := netApp(t, true)
 	src := d1Zip(t)
@@ -599,8 +640,11 @@ func TestUpdateLibraryFromFile(t *testing.T) {
 	sage := rezip(t, src, func(m map[string]any) { m["id"], m["title"] = "sage", "Шалфей" })
 	l.publish(t, nil, v2, sage)
 	res, err := a.UpdateLibrary()
-	if err != nil || res.Added != 1 || res.Updated != 0 || len(res.Skipped) != 1 || l.archives.Load() != 1 {
+	if err != nil || res.Added != 0 || res.Updated != 0 || len(res.Skipped) != 1 || l.archives.Load() != 0 || res.Available != 1 {
 		t.Fatalf("обновление: %v %+v, архивов %d", err, res, l.archives.Load())
+	}
+	if all, err := a.DownloadAllLibrary(); err != nil || all.Added != 1 || len(all.Skipped) != 0 || l.archives.Load() != 1 {
+		t.Fatalf("скачать все: %v %+v, архивов %d", err, all, l.archives.Load())
 	}
 	if k := res.Skipped[0]; k.Name != "Свадьба — айвори" || k.Why != "стоит из файла — обновите из файла или удалите" {
 		t.Errorf("пропуск: %+v", k)
@@ -638,7 +682,7 @@ func TestUpdateLibrarySeq(t *testing.T) {
 	}
 	l.seq = 5
 	l.publish(t, nil, zip)
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 || seq() != 5 {
+	if res, err := getAll(t, a); err != nil || res.Added != 1 || seq() != 5 {
 		t.Fatalf("повтор seq 5: %v %+v", err, res)
 	}
 	l.seq = 9
@@ -669,7 +713,7 @@ func TestUpdateLibraryDiskError(t *testing.T) {
 	if err := os.WriteFile(dir, []byte("не папка"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := a.UpdateLibrary()
+	_, err := getAll(t, a)
 	if !errors.Is(err, fetch.ErrDisk) || strings.Contains(err.Error(), a.cfgDir) {
 		t.Fatalf("ошибка: %v", err)
 	}
@@ -714,7 +758,7 @@ func TestRevokeBeforeBegin(t *testing.T) {
 	if _, err := a.SetLibraryNet(true, false); err != nil {
 		t.Fatal(err)
 	}
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := getAll(t, a); err != nil || res.Added != 1 {
 		t.Fatalf("после отзыва и согласия: %v %+v", err, res)
 	}
 	if a.libp.Cancelable() {

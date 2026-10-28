@@ -9,6 +9,7 @@ import { stickerById } from '../../editor/sticker/sticker'
 import { coverLabel, coverScopes } from '../../editor/cover/cover'
 import type { SegItem } from '../../base/tpl/Seg.svelte'
 import type { SideItem } from '../../base/tpl/SideList.svelte'
+import { GET, GET_SIDE_TIP, getItems, type DecorGet } from '../decorbrowse/decorget'
 
 export type DecorKind = 'bg' | 'sticker' | 'spread' | 'frame'
 
@@ -43,6 +44,8 @@ export interface DecorCatalog {
   items: DecorItem[]
   recent: string[]
   new: string[] // 133: ID плиток строки «Новые» в порядке каталога; пусто — []
+  get?: DecorGet[] // 144: плитки «Можно скачать» (образцы нескачанных наборов); у старого Go поля нет
+  invite?: boolean // 144: списка наборов ещё не было — в конце «Все» приглашение «⤓ Ещё из интернета»
   readOnly: boolean
 }
 export interface DecorSkip {
@@ -73,7 +76,7 @@ export const ALL = 'all'
 export const MINE = 'mine'
 
 // Выборка — не тема предметов, а отбор: «Все», «Недавние», «Новые» (themeItems ведёт их особо).
-export const isSelection = (id: string): boolean => id === ALL || id === RECENT || id === NEW
+export const isSelection = (id: string): boolean => id === ALL || id === RECENT || id === NEW || id === GET
 // Куда своё не кладётся: выборки и «Фирменные» (зеркало Go isTheme); импорт и сохранение уходят в «Мои».
 export const noOwn = (id: string): boolean => isSelection(id) || id === 'brand'
 
@@ -110,6 +113,7 @@ export const firstTheme = firstSource
 export const SIDE_TIPS: Readonly<Record<string, string>> = {
   [NEW]: 'Из наборов, поставленных за последние 30 дней (кроме первой установки библиотеки)',
   [RECENT]: 'Что вы недавно ставили',
+  [GET]: GET_SIDE_TIP,
 }
 
 export const sideItems = (cat: Pick<DecorCatalog, 'themes'> | null): SideItem<string>[] =>
@@ -117,9 +121,14 @@ export const sideItems = (cat: Pick<DecorCatalog, 'themes'> | null): SideItem<st
 
 // Плитки темы. «Недавние» — в порядке поставленных (новые первыми), «Новые» — в порядке каталога (новый набор выше),
 // «Все» — каталог целиком.
-export function themeItems<T extends DecorItem>(cat: { items: T[]; recent: string[]; new?: string[] } | null, theme: string): T[] {
+export function themeItems<T extends DecorItem>(
+  cat: { items: T[]; recent: string[]; new?: string[]; get?: DecorGet[] } | null,
+  theme: string,
+): T[] {
   if (!cat) return []
   if (theme === ALL) return cat.items
+  // 144: «Можно скачать» — плитки образцов (GetItem — тот же DecorItem по форме), а не предметы каталога
+  if (theme === GET) return getItems(cat) as unknown as T[]
   if (theme === RECENT || theme === NEW) {
     const by = new Map(cat.items.map((it) => [it.id, it]))
     return (theme === RECENT ? cat.recent : (cat.new ?? [])).flatMap((id) => by.get(id) ?? [])

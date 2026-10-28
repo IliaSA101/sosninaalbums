@@ -7,7 +7,7 @@ import path from 'node:path'
 import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { assertZipSize, buildPack, checkAlbumFile, catalogRow, checkSpreadFile, checkPrev, checkPublish, imageInfo, jpegSize, makeZip, orderWarnings, publicRaw, readCatalogFile, readPrev, readZip, requireBase, sealCatalog, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
+import { MAX_ZIP, MAX_ZIP_WAVE2, zipLimit, assertZipSize, buildPack, checkAlbumFile, catalogRow, checkSpreadFile, checkPrev, checkPublish, imageInfo, jpegSize, makeZip, orderWarnings, publicRaw, readCatalogFile, readPrev, readZip, requireBase, sealCatalog, signBytes, upsertCatalog, verifyBytes } from './library-pack.mjs'
 
 function setDir() {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'libpack-'))
@@ -103,6 +103,40 @@ test('каталог: замена по id, старее — отказ', () => 
   const c1 = upsertCatalog(null, row)
   assert.equal(upsertCatalog(c1, { ...row, version: 3 }).packs.length, 1)
   assert.throws(() => upsertCatalog(c1, { ...row, version: 1 }))
+})
+
+test('каталог: публикация набора сохраняет videos (ролики F1) и подпись сходится, круг файл → upsert → файл', () => {
+  const { manifest, files } = buildPack(setDir())
+  const row = catalogRow(manifest, makeZip(files), 'a.zip')
+  const videos = [
+    { id: 'filter', version: 1, files: { webm: { url: 'https://x/a.webm', size: 5, sha256: 'a'.repeat(64) } } },
+    { id: 'export', version: 2, files: { mp4: { url: 'https://x/b.mp4', size: 6, sha256: 'b'.repeat(64) } } },
+  ]
+  const { privateKey } = crypto.generateKeyPairSync('ed25519')
+  const f = path.join(os.tmpdir(), `lib-cat-videos-${process.pid}.json`)
+  try {
+    // Замена своей строки и добавление новой: videos остаются на месте и в том же порядке.
+    for (const second of [row, { ...row, id: 'other' }]) {
+      fs.writeFileSync(f, JSON.stringify(sealCatalog({ format: 1, seq: 3, packs: [row], videos }, privateKey)))
+      const next = upsertCatalog(readCatalogFile(f), second)
+      assert.deepEqual(next.videos, videos)
+      assert.equal(next.seq, 4)
+      assert.equal(next.format, 1)
+      const env = sealCatalog(next, privateKey)
+      assert.equal(verifyBytes(Buffer.from(env.body, 'base64'), env.sig, publicRaw(privateKey)), true)
+      fs.writeFileSync(f, JSON.stringify(env))
+      assert.deepEqual(readCatalogFile(f).videos, videos)
+    }
+    // Пустой список сохраняется как есть, а у каталога без роликов поле не появляется.
+    assert.deepEqual(upsertCatalog({ format: 1, seq: 1, packs: [], videos: [] }, row).videos, [])
+    assert.equal('videos' in upsertCatalog({ format: 1, seq: 1, packs: [] }, row), false)
+    assert.equal('videos' in upsertCatalog(null, row), false)
+    // Поля формата и seq из прежнего каталога не перетирают новые.
+    assert.equal(upsertCatalog({ format: 7, seq: 2, packs: [], videos }, row, 9).format, 1)
+    assert.equal(upsertCatalog({ format: 7, seq: 2, packs: [], videos }, row, 9).seq, 9)
+  } finally {
+    fs.rmSync(f, { force: true })
+  }
 })
 
 test('--seq: не больше seq прежнего каталога — отказ; больше — принят', () => {
@@ -289,6 +323,27 @@ test('типография (123): kind print — .saprint, JSON-объект ≤
 test('rejects zip over 70 MB', () => {
   assert.doesNotThrow(() => assertZipSize(Buffer.alloc(70 << 20)))
   assert.throws(() => assertZipSize(Buffer.alloc((70 << 20) + 1)), /больше предела 70 МБ/)
+})
+
+test('предел zip по minApp (0.30-wave2-1): ниже 0.29.0 — 70 МБ, от 0.29.0 — 240 МБ; граница включительно', () => {
+  const over70 = Buffer.alloc((70 << 20) + 1)
+  assert.equal(zipLimit('0.28.9'), MAX_ZIP)
+  assert.equal(zipLimit('0.29.0'), MAX_ZIP_WAVE2)
+  assert.equal(zipLimit('0.30.1'), MAX_ZIP_WAVE2)
+  assert.equal(zipLimit(undefined), MAX_ZIP) // без minApp (самопроверки, пример) — прежнее
+  assert.ok(MAX_ZIP_WAVE2 < 300 << 20) // ниже жёсткого fetch.MaxZip
+  assert.throws(() => assertZipSize(over70, '0.28.0'), /больше предела 70 МБ/)
+  assert.doesNotThrow(() => assertZipSize(over70, '0.29.0'))
+  assert.doesNotThrow(() => assertZipSize(Buffer.alloc(MAX_ZIP_WAVE2), '0.29.0'))
+  assert.throws(() => assertZipSize(Buffer.alloc(MAX_ZIP_WAVE2 + 1), '0.29.0'), /больше предела 240 МБ \(minApp 0\.29\.0\)/)
+  assert.doesNotThrow(() => assertZipSize(Buffer.alloc(0), '0.29.0')) // пустой — не наше дело (манифест не даст)
+})
+
+test('readZip: распакованное целиком больше 1 ГБ — ошибка, не раздувание памяти', () => {
+  // 17 записей по 64 МБ нулей: в сжатом виде крошечные, суммарно > 1 ГБ
+  const chunk = Buffer.alloc(64 << 20)
+  const files = Array.from({ length: 17 }, (_, i) => ({ name: `z${i}.bin`, data: chunk }))
+  assert.throws(() => readZip(makeZip(files)), /распакованное больше 1024 МБ/)
 })
 
 test('keeps keys of previous version: пропавший sha256 — отказ, --drop разрешает, перепаковка даёт те же ключи', () => {
@@ -559,13 +614,35 @@ test('checkPublish: набор уже в каталоге — нужен --prev 
   assert.throws(() => checkPublish(cat, { ...next, items: [] }, undefined, prev), /пропали ключи/)
 })
 
+test('checkPublish (0.30-wave2-1): новый id в готовом каталоге — minApp не ниже 0.29.0; старый id и пустой каталог — прежнее правило', () => {
+  const { manifest, files } = buildPack(setDir()) // minApp 0.16.0
+  const zip = makeZip(files)
+  const oldZip = makeZip(buildPack(setDir()).files.map((f) => (f.name === 'manifest.json' ? { ...f, data: Buffer.from(JSON.stringify({ ...manifest, id: 'old-set' })) } : f)))
+  const cat = upsertCatalog(null, catalogRow({ ...manifest, id: 'old-set' }, oldZip, 'a.zip'))
+  const fresh = (minApp) => ({ ...manifest, id: 'wave2-set', minApp })
+  for (const low of ['0.16.0', '0.28.0', '0.28.9']) assert.throws(() => checkPublish(cat, fresh(low), undefined, undefined), /новый набор wave2-set.*не ниже 0\.29\.0/)
+  assert.doesNotThrow(() => checkPublish(cat, fresh('0.29.0'), undefined, undefined))
+  assert.doesNotThrow(() => checkPublish(cat, fresh('0.30.0'), undefined, undefined))
+  assert.doesNotThrow(() => checkPublish(null, fresh('0.16.0'), undefined, undefined)) // первый набор нового каталога (--new)
+  // пустой, но подписанный каталог — тоже каталог: старые клиенты его читают
+  assert.throws(() => checkPublish({ format: 1, seq: 3, packs: [] }, fresh('0.28.0'), undefined, undefined), /новый набор/)
+  // повторный выпуск старого набора с низким minApp — прежнее правило (нужен --prev, дальше без отказа по minApp)
+  const old = { ...manifest, id: 'old-set', version: 3 }
+  assert.throws(() => checkPublish(cat, old, undefined, undefined), /нужен --prev/)
+  assert.doesNotThrow(() => checkPublish(cat, old, undefined, readPrev(oldZip)))
+  // несколько новых подряд: каждый проверяется сам, прошедший не открывает путь следующему
+  const cat2 = upsertCatalog(cat, catalogRow(fresh('0.29.0'), zip, 'b.zip'))
+  assert.throws(() => checkPublish(cat2, { ...manifest, id: 'wave2-b', minApp: '0.27.0' }, undefined, undefined), /новый набор wave2-b/)
+  assert.doesNotThrow(() => checkPublish(cat2, { ...manifest, id: 'wave2-c', minApp: '0.29.0' }, undefined, undefined))
+})
+
 test('checkPublish: needs — донор в каталоге и раньше по порядку', () => {
   const { manifest, files } = buildPack(setDir())
   const zip = makeZip(files)
   const row = (id) => catalogRow({ ...manifest, id }, zip, `${id}.zip`)
   let cat = upsertCatalog(null, row('donor-set'))
   cat = upsertCatalog(cat, row('other-set'))
-  const addon = { ...manifest, id: 'addon-set' }
+  const addon = { ...manifest, id: 'addon-set', minApp: '0.29.0' } // новый id — не ниже 0.29.0 (0.30-wave2-1)
   assert.doesNotThrow(() => checkPublish(cat, addon, 'donor-set', undefined))
   assert.throws(() => checkPublish(cat, addon, 'ghost-set', undefined), /донора ghost-set нет в каталоге/)
   assert.throws(() => checkPublish(null, addon, 'donor-set', undefined), /донора donor-set нет/)
@@ -658,7 +735,7 @@ test('CLI: набор уже в каталоге — без --prev отказ д
 
 test('CLI: needs без донора в каталоге — отказ, папка вывода пуста; с донором — выпуск; донор не раньше — отказ', () => {
   const e = cliEnv()
-  const addon = (id) => cliSet(id, 1, { minApp: '0.27.0', needs: 'donor-set' })
+  const addon = (id) => cliSet(id, 1, { minApp: '0.29.0', needs: 'donor-set' })
   const noCatalog = e.run(addon('addon-set'), '--new') // донор не выпущен: каталога ещё нет
   assert.equal(noCatalog.code, 1)
   assert.match(noCatalog.text, /донора donor-set нет в каталоге/)
@@ -666,7 +743,7 @@ test('CLI: needs без донора в каталоге — отказ, пап�
 
   assert.equal(e.run(cliSet('donor-set', 1), '--new').code, 0)
   const before = e.listing()
-  const ghost = e.run(cliSet('addon-set', 1, { minApp: '0.27.0', needs: 'ghost-set' }))
+  const ghost = e.run(cliSet('addon-set', 1, { minApp: '0.29.0', needs: 'ghost-set' }))
   assert.equal(ghost.code, 1)
   assert.match(ghost.text, /донора ghost-set нет/)
   assert.deepEqual(e.listing(), before)
@@ -692,4 +769,21 @@ test('CLI: отказ по содержимому набора и по ключ�
   const help = spawnSync(process.execPath, [SCRIPT, '--help'], { encoding: 'utf8' })
   assert.equal(help.status, 0)
   assert.match(help.stdout, /--test-key/)
+})
+
+test('CLI (0.30-wave2-1): новый id с низким minApp в готовом каталоге — отказ до записи; 0.29.0 — выпуск; старый id — как прежде', () => {
+  const e = cliEnv()
+  assert.equal(e.run(cliSet('my-set', 1), '--new').code, 0) // первый набор нового каталога: minApp 0.16.0 можно
+  const before = { files: e.listing(), cat: fs.readFileSync(path.join(e.out, 'catalog.json'), 'utf8') }
+  for (const low of ['0.16.0', '0.28.0']) {
+    const r = e.run(cliSet('wave2-set', 1, { minApp: low }))
+    assert.equal(r.code, 1, r.text)
+    assert.match(r.text, /новый набор wave2-set.*minApp не ниже 0\.29\.0/)
+  }
+  assert.deepEqual({ files: e.listing(), cat: fs.readFileSync(path.join(e.out, 'catalog.json'), 'utf8') }, before) // ничего не записано
+  const ok = e.run(cliSet('wave2-set', 1, { minApp: '0.29.0' }))
+  assert.equal(ok.code, 0, ok.text)
+  const rep = e.run(cliSet('my-set', 2), '--prev', path.join(e.out, 'my-set-1.zip')) // повторный выпуск старого — с minApp 0.16.0
+  assert.equal(rep.code, 0, rep.text)
+  assert.deepEqual(e.catalog().packs.map((p) => `${p.id}:${p.version}:${p.minApp}`), ['my-set:2:0.16.0', 'wave2-set:1:0.29.0'])
 })

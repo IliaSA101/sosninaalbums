@@ -77,6 +77,8 @@ export function CancelCollect():Promise<void>;
 
 export function CancelExport():Promise<void>;
 
+export function CancelGuideVideos():Promise<void>;
+
 export function CancelLibrary():Promise<void>;
 
 export function CancelUpdate():Promise<void>;
@@ -155,6 +157,12 @@ export function DeleteSpreads(arg1:Array<string>):Promise<model.View>;
 
 export function DeleteText(arg1:string):Promise<model.View>;
 
+export function DownloadAllLibrary():Promise<app.LibraryUpdate>;
+
+export function DownloadGuideVideos(arg1:Array<string>):Promise<Array<app.GuideVideo>>;
+
+export function DownloadLibraryPack(arg1:string):Promise<app.LibraryUpdate>;
+
 export function DownloadUpdate():Promise<app.UpdateInfo>;
 
 export function DropFonts(arg1:Array<string>):Promise<Array<string>>;
@@ -170,6 +178,8 @@ export function Export(arg1:app.ExportOptions):Promise<boolean>;
 export function ExportTemplates():Promise<app.TplSave>;
 
 export function FaceGuide(arg1:string,arg2:string):Promise<model.FaceGuide>;
+
+export function FetchPackPreviews():Promise<void>;
 
 export function FillPlaces(arg1:Array<string>,arg2:string):Promise<app.GridResult>;
 
@@ -192,6 +202,10 @@ export function GetState():Promise<app.State>;
 export function GetView():Promise<model.View>;
 
 export function GridChoices(arg1:string,arg2:number,arg3:string):Promise<model.GridChoices>;
+
+export function GuideLearned():Promise<Array<string>>;
+
+export function GuideVideos():Promise<Array<app.GuideVideo>>;
 
 export function HideDecor(arg1:string,arg2:string):Promise<void>;
 
@@ -228,6 +242,8 @@ export function LookCount(arg1:string,arg2:number,arg3:number):Promise<app.LookC
 export function LookInfo(arg1:string):Promise<app.LookInfo>;
 
 export function MarginNote(arg1:number,arg2:number):Promise<string>;
+
+export function MarkGuide(arg1:Array<string>,arg2:boolean):Promise<Array<string>>;
 
 export function Marks():Promise<Record<string, model.MarkView>>;
 
@@ -271,6 +287,8 @@ export function OpenRecent(arg1:string):Promise<app.State>;
 
 export function OpenUpdatePage():Promise<void>;
 
+export function PackItem(arg1:string,arg2:string,arg3:string):Promise<app.DecorItem>;
+
 export function PagePresets():Promise<Array<model.PagePreset>>;
 
 export function PagePx(arg1:number,arg2:number):Promise<app.PagePxView>;
@@ -284,6 +302,8 @@ export function Person(arg1:string):Promise<model.PersonView>;
 export function PhotoAbout(arg1:string):Promise<app.PhotoAbout>;
 
 export function PickBackdropFile(arg1:string,arg2:string):Promise<model.View>;
+
+export function PickBest(arg1:string,arg2:Array<string>):Promise<model.View>;
 
 export function PickColorAt(arg1:string,arg2:number,arg3:number):Promise<string>;
 
@@ -376,6 +396,8 @@ export function ResetVignette(arg1:string):Promise<app.GridResult>;
 export function RestoreBackup(arg1:string):Promise<model.View>;
 
 export function RestoreHotkeys(arg1:Record<string, Array<string>>):Promise<keymap.View>;
+
+export function RevealGuideVideo(arg1:string):Promise<void>;
 
 export function RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>;
 
@@ -526,6 +548,8 @@ export function ShowInExplorer():Promise<void>;
 export function ShowLibraryFolder():Promise<void>;
 
 export function ShowPhotoInExplorer(arg1:string):Promise<void>;
+
+export function SimilarTo(arg1:string,arg2:Array<string>):Promise<app.SimilarResult>;
 
 export function SortVignette(arg1:string):Promise<model.View>;
 

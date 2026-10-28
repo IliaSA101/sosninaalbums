@@ -4,10 +4,19 @@
 # чтобы у Марины и в GitHub Release было видно, какая это сборка. Работает в Windows PowerShell 5.1 и pwsh 7.
 # -Installer: ещё и установщик build/bin/SosninaAlbums-<версия>-windows-x64-setup.exe (нужны makensis и bash из Git for Windows;
 # scripts/win/installer.sh, спека 111). Выпускной установщик собирает CI.
-param([switch]$Installer)
+# -Standard (вместе с -Installer): ещё и стандартный установщик с примером набора (спека 142, installer.sh --demo ... --standard).
+param([switch]$Installer, [switch]$Standard)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+if ($Standard -and -not $Installer) { throw '-Standard — вместе с -Installer' }
+# Zip примера набора: один на репозиторий (internal/demopack); ищем до сборки, чтобы не падать на последнем шаге
+$demo = $null
+if ($Standard) {
+    $zips = @(Get-ChildItem -Path (Join-Path $root 'internal/demopack') -Filter '*.zip' -File)
+    if ($zips.Count -ne 1) { throw "в internal/demopack ждали ровно один zip примера, найдено: $($zips.Count)" }
+    $demo = $zips[0].FullName -replace '\\', '/'
+}
 
 # GOTMPDIR нужен из-за антивируса, см. README
 $env:GOTMPDIR = Join-Path $root '.gotmp'
@@ -49,4 +58,8 @@ if ($Installer) {
     # bash из Git for Windows путей с обратными косыми не разбирает
     & $bash.Source ((Join-Path $root 'scripts/win/installer.sh') -replace '\\', '/') --exe ($out -replace '\\', '/') --version $ver --out ($bin -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "installer.sh: код $LASTEXITCODE" }
+    if ($Standard) {
+        & $bash.Source ((Join-Path $root 'scripts/win/installer.sh') -replace '\\', '/') --exe ($out -replace '\\', '/') --version $ver --out ($bin -replace '\\', '/') --demo $demo --standard
+        if ($LASTEXITCODE -ne 0) { throw "installer.sh --standard: код $LASTEXITCODE" }
+    }
 }

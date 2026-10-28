@@ -2,6 +2,7 @@
 // spot.ts (под тестами); здесь только вызовы store/prefs/modes. Проект не меняется ни одним шагом:
 // правятся уровень, лист, выделение и панели.
 import { tick } from 'svelte'
+import { SvelteSet } from 'svelte/reactivity'
 import { store } from '../../base/core/store.svelte'
 import { prefs } from '../../base/prefs/prefs.svelte'
 import { modes } from '../../base/prefs/view.svelte'
@@ -16,7 +17,7 @@ import { edit } from '../../editor/text/edit.svelte'
 import { gallery } from '../../panels/gallery/gallery.svelte'
 import { isVignette } from '../../panels/vignette/vignette'
 import { menuUi } from '../menu/menuui.svelte'
-import { articleById, placesOf, type Article, type SpotKey } from '../guidetext/articles'
+import { articleById, placesOf, type Article, type GroupId, type SpotKey } from '../guidetext/articles'
 import { planShow, type Plan, type SheetInfo, type ShowCtx, type Step } from './show'
 import { seek, spot } from './spotstate.svelte'
 import { articleText } from '../guidetext/articletext'
@@ -81,6 +82,9 @@ class Guide {
   sel = $state('')
   // Список ограничен функциями одной строки таблицы уровней (из окна «Уровни и функции»).
   rowFilter = $state<RowId | null>(null)
+  // Разделы списка, открытые руками (136): живут до закрытия программы, в config.json не пишутся.
+  // Раздел выбранной статьи открыт всегда, независимо от этого набора.
+  readonly opened = new SvelteSet<GroupId>()
   private seq = 0
 
   // F1, меню, ссылка в стартовом окне: прежние запрос и выбор.

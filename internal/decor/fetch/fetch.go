@@ -53,8 +53,9 @@ const (
 	tlsTimeout    = 10 * time.Second
 	headerTimeout = 20 * time.Second
 	stallTimeout  = 30 * time.Second
-	packTimeout   = 15 * time.Minute
-	smallTimeout  = time.Minute // каталог и подпись — килобайты
+	packTimeout   = 15 * time.Minute // пол предела набора; больше — по размеру (PackLimit)
+	minRate       = 64 << 10         // байт/с, ниже которых набор не успевает (≈ 0,5 Мбит/с; решение 0.29-137-6)
+	smallTimeout  = time.Minute      // каталог и подпись — килобайты
 	maxRedirects  = 5
 )
 
@@ -71,6 +72,9 @@ var (
 	ErrCancelled = errors.New("обновление библиотеки отменено")
 	ErrBroken    = errors.New("набор скачался с ошибкой — повторите")
 	ErrDisk      = errors.New("набор не записывается на диск")
+	// ErrSlow — набор не уложился в предел времени (PackLimit): связь медленная, и следующий набор
+	// упрётся в него так же. В отличие от застоя (ErrTimeout) ход обрывается сразу.
+	ErrSlow      = errors.New("связь слишком медленная — набор не скачался за отведённое время")
 	errStall     = errors.New("застой скачивания")
 	errPackLimit = errors.New("набор скачивается дольше предела")
 )
@@ -153,7 +157,23 @@ type Client struct {
 	src   Source
 	hc    *http.Client
 	stall time.Duration
-	limit time.Duration
+	limit time.Duration // пол предела набора; больше — по размеру при rate
+	rate  int64         // байт/с для предела по размеру; тесты обнуляют, чтобы сузить предел
+}
+
+// PackLimit — сколько можно качать набор размера size: не меньше packTimeout, а большой — по
+// скорости minRate (70 МиБ — 1120 с, MaxZip — 4800 с). Застой (stallTimeout) отдельно ловит
+// оборванную связь. Размер вне 0…MaxZip не растит предел: Download такие отвергает до сети.
+func PackLimit(size int64) time.Duration { return limitFor(packTimeout, minRate, size) }
+
+// limitFor — floor или время на size байт при скорости rate (байт/с), что больше; rate ≤ 0 —
+// только floor (тесты). Переполнения нет: size ≤ MaxZip, size·1e9 < 9,2·1e18.
+func limitFor(floor time.Duration, rate, size int64) time.Duration {
+	if rate <= 0 {
+		return floor
+	}
+	size = min(max(size, 0), MaxZip)
+	return max(floor, time.Duration(size)*time.Second/time.Duration(rate))
 }
 
 // New — клиент для src.
@@ -169,9 +189,20 @@ func New(src Source) *Client {
 		IdleConnTimeout:       30 * time.Second,
 		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: src.Roots},
 	}
-	c := &Client{src: src, stall: stallTimeout, limit: packTimeout}
+	c := &Client{src: src, stall: stallTimeout, limit: packTimeout, rate: minRate}
 	c.hc = &http.Client{Transport: tr, CheckRedirect: c.redirect}
 	return c
+}
+
+// SetTimeouts — сузить застой и пол предела набора: для тестов, где настоящие 30 с и 15 мин
+// не дождаться. Вызывать до первого запроса. Нулевое значение не меняет своё.
+func (c *Client) SetTimeouts(stall, limit time.Duration) {
+	if stall > 0 {
+		c.stall = stall
+	}
+	if limit > 0 {
+		c.limit = limit
+	}
 }
 
 // redirect — каждый переход: не больше maxRedirects, адрес из белого списка (параметры — только

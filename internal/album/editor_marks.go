@@ -102,10 +102,7 @@ func (e *Editor) SetMarks(photos []model.PhotoInfo, patch model.MarkPatch) (mode
 	}
 	next := make(map[string]*model.Mark, len(photos))
 	for _, ph := range photos {
-		m, ok := e.marks[ph.ID]
-		if !ok {
-			m = model.Mark{Path: ph.Path}
-		}
+		m := e.markOf(ph)
 		eff := model.Effective(m, ph.Xmp)
 		switch {
 		case patch.Rating != nil:
@@ -126,6 +123,53 @@ func (e *Editor) SetMarks(photos []model.PhotoInfo, patch model.MarkPatch) (mode
 		return e.view(), err
 	}
 	return e.commitSide(delta, nil), nil
+}
+
+// MaxCompareRest — сколько «остальных» кадров бывает у «Лучшего» (окно сравнения 138: 2–4 кадра).
+const MaxCompareRest = 3
+
+// PickBest — «Лучший» в сравнении кадров (138): best — флажок «отобрано», каждому из rest —
+// «отклонено», одним шагом отмены. best среди rest и повторы вычёркиваются; без best (пустой ID
+// или путь) — холостая; rest больше MaxCompareRest — ошибка, отметки прежние. Поле, равное
+// отметке из файла, не пишется (как в SetMarks); совпало всё — холостая.
+func (e *Editor) PickBest(best model.PhotoInfo, rest []model.PhotoInfo) (model.View, error) {
+	if len(feedPhotos([]model.PhotoInfo{best})) == 0 {
+		return e.View(), nil
+	}
+	rest = slices.DeleteFunc(feedPhotos(rest), func(ph model.PhotoInfo) bool { return ph.ID == best.ID })
+	if len(rest) > MaxCompareRest {
+		return e.View(), fmt.Errorf("Сравнить можно до %d фото", MaxCompareRest+1) //nolint:staticcheck // текст уходит пользователю как есть
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.shut("отметки") {
+		return e.view(), nil
+	}
+	next := make(map[string]*model.Mark, len(rest)+1)
+	next[best.ID] = e.flagTo(best, 1)
+	for _, ph := range rest {
+		next[ph.ID] = e.flagTo(ph, -1)
+	}
+	delta := e.diffMarks(next)
+	if err := e.marksFit(delta); err != nil {
+		return e.view(), err
+	}
+	return e.commitSide(delta, nil), nil
+}
+
+// markOf — своя отметка фото (копия) или новая с путём фото. Под e.mu.
+func (e *Editor) markOf(ph model.PhotoInfo) model.Mark {
+	if m, ok := e.marks[ph.ID]; ok {
+		return m
+	}
+	return model.Mark{Path: ph.Path}
+}
+
+// flagTo — отметка фото с флажком v (поле, равное отметке из файла, не пишется). Под e.mu.
+func (e *Editor) flagTo(ph model.PhotoInfo, v int) *model.Mark {
+	m := e.markOf(ph)
+	model.SetField(&m.Flag, v, ph.Xmp.Flag)
+	return &m
 }
 
 // feedPhotos — фото ленты для правки отметок: без повторов, пустых ID и путей.

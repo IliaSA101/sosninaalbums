@@ -73,12 +73,15 @@ export function previewRects(ch: GridChoice, scope: LayoutScope, sheet: SheetSiz
 // n — число мест в фильтре (7 = «7 мест и больше»), unitOne — «разворот» / «лист».
 export function gridSourceTexts(scope: LayoutScope, n: number, unitOne: string): TplTexts {
   const mineN = noMine(n)
+  const noneN = noMine(n, false)
   const builtin = scope === 'spread' ? 'Нет шаблонов на такое число мест' : `Встроенные шаблоны ставятся только на весь ${unitOne}`
-  const empty = { all: scope === 'spread' ? builtin : mineN, builtin, mine: mineN }
+  const empty = { all: scope === 'spread' ? builtin : noneN, builtin, mine: mineN }
   return { empty, off: { builtin, mine: mineN } }
 }
 
-const noMine = (n: number) => `Нет своих шаблонов на ${n === MAX_N ? '7 мест и больше' : `${n} ${plural(n, ['место', 'места', 'мест'])}`}`
+// own: «своих» — только для фильтра «Мои»; у «Все» шаблонов нет вообще.
+const noMine = (n: number, own = true) =>
+  `Нет ${own ? 'своих ' : ''}шаблонов на ${n === MAX_N ? '7 мест и больше' : `${n} ${plural(n, ['место', 'места', 'мест'])}`}`
 
 // ---------- сторонка обложки (127) ----------
 
@@ -143,9 +146,10 @@ export function coverHasBorders(
 // Тексты галереи сторонки: серый «По фото» с причиной (design §7), пустые ряды — как у сеток.
 export function coverSourceTexts(places: number, n: number): TplTexts {
   const mineN = noMine(n)
+  const noneN = noMine(n, false)
   const builtin = 'Нет шаблонов на такое число мест'
   const byPhoto = byPhotoReason(places, n)
-  return { empty: { all: mineN, byPhoto, builtin, mine: mineN }, off: { byPhoto, builtin, mine: mineN } }
+  return { empty: { all: noneN, byPhoto, builtin, mine: mineN }, off: { byPhoto, builtin, mine: mineN } }
 }
 
 function byPhotoReason(places: number, n: number): string {

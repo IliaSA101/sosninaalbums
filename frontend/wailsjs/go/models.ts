@@ -146,6 +146,42 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class DecorGet {
+	    id: string;
+	    pack: string;
+	    src: string;
+	    title: string;
+	    url: string;
+	    w: number;
+	    h: number;
+	    bytes: number;
+	    with: string[];
+	    bg: number;
+	    sticker: number;
+	    spread: number;
+	    frame: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DecorGet(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.pack = source["pack"];
+	        this.src = source["src"];
+	        this.title = source["title"];
+	        this.url = source["url"];
+	        this.w = source["w"];
+	        this.h = source["h"];
+	        this.bytes = source["bytes"];
+	        this.with = source["with"];
+	        this.bg = source["bg"];
+	        this.sticker = source["sticker"];
+	        this.spread = source["spread"];
+	        this.frame = source["frame"];
+	    }
+	}
 	export class DecorItem {
 	    id: string;
 	    theme: string;
@@ -221,6 +257,9 @@ export namespace app {
 	    recent: string[];
 	    new: string[];
 	    readOnly: boolean;
+	    demoOnly: boolean;
+	    get: DecorGet[];
+	    invite: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new DecorCatalog(source);
@@ -234,6 +273,9 @@ export namespace app {
 	        this.recent = source["recent"];
 	        this.new = source["new"];
 	        this.readOnly = source["readOnly"];
+	        this.demoOnly = source["demoOnly"];
+	        this.get = this.convertValues(source["get"], DecorGet);
+	        this.invite = source["invite"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -254,6 +296,7 @@ export namespace app {
 		    return a;
 		}
 	}
+	
 	export class DecorSvg {
 	    token: string;
 	    name: string;
@@ -536,11 +579,34 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class GuideVideo {
+	    id: string;
+	    version: number;
+	    seconds: number;
+	    size: number;
+	    ready: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new GuideVideo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.version = source["version"];
+	        this.seconds = source["seconds"];
+	        this.size = source["size"];
+	        this.ready = source["ready"];
+	    }
+	}
 	export class LibraryNet {
 	    allowed: boolean;
 	    atStart: boolean;
 	    checked: number;
 	    skipped: number;
+	    demoSkipped: boolean;
+	    demoBack: boolean;
+	    demoOffer: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new LibraryNet(source);
@@ -552,6 +618,23 @@ export namespace app {
 	        this.atStart = source["atStart"];
 	        this.checked = source["checked"];
 	        this.skipped = source["skipped"];
+	        this.demoSkipped = source["demoSkipped"];
+	        this.demoBack = source["demoBack"];
+	        this.demoOffer = source["demoOffer"];
+	    }
+	}
+	export class LibraryOffer {
+	    count: number;
+	    bytes: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LibraryOffer(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.count = source["count"];
+	        this.bytes = source["bytes"];
 	    }
 	}
 	export class LibraryUpdate {
@@ -559,6 +642,11 @@ export namespace app {
 	    updated: number;
 	    skipped: DecorSkip[];
 	    bytes: number;
+	    failed: DecorSkip[];
+	    available: number;
+	    fresh: number;
+	    picked: boolean;
+	    why: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new LibraryUpdate(source);
@@ -570,6 +658,11 @@ export namespace app {
 	        this.updated = source["updated"];
 	        this.skipped = this.convertValues(source["skipped"], DecorSkip);
 	        this.bytes = source["bytes"];
+	        this.failed = this.convertValues(source["failed"], DecorSkip);
+	        this.available = source["available"];
+	        this.fresh = source["fresh"];
+	        this.picked = source["picked"];
+	        this.why = source["why"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -915,12 +1008,55 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class PackAvail {
+	    id: string;
+	    title: string;
+	    about: string;
+	    license: string;
+	    version: number;
+	    bg: number;
+	    sticker: number;
+	    spread: number;
+	    frame: number;
+	    print: number;
+	    bytes: number;
+	    addonTitles: string[];
+	    donor: string;
+	    why: string;
+	    removed: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PackAvail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.about = source["about"];
+	        this.license = source["license"];
+	        this.version = source["version"];
+	        this.bg = source["bg"];
+	        this.sticker = source["sticker"];
+	        this.spread = source["spread"];
+	        this.frame = source["frame"];
+	        this.print = source["print"];
+	        this.bytes = source["bytes"];
+	        this.addonTitles = source["addonTitles"];
+	        this.donor = source["donor"];
+	        this.why = source["why"];
+	        this.removed = source["removed"];
+	    }
+	}
 	
 	export class PackList {
 	    packs: PackInfo[];
 	    net: LibraryNet;
 	    busy: boolean;
 	    readOnly: boolean;
+	    available: PackAvail[];
+	    all: LibraryOffer;
+	    availAt: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new PackList(source);
@@ -932,6 +1068,9 @@ export namespace app {
 	        this.net = this.convertValues(source["net"], LibraryNet);
 	        this.busy = source["busy"];
 	        this.readOnly = source["readOnly"];
+	        this.available = this.convertValues(source["available"], PackAvail);
+	        this.all = this.convertValues(source["all"], LibraryOffer);
+	        this.availAt = source["availAt"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -956,6 +1095,7 @@ export namespace app {
 	    files: number;
 	    kept: number;
 	    bytes: number;
+	    addons: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new PackRemove(source);
@@ -966,6 +1106,7 @@ export namespace app {
 	        this.files = source["files"];
 	        this.kept = source["kept"];
 	        this.bytes = source["bytes"];
+	        this.addons = source["addons"];
 	    }
 	}
 	export class PagePxView {
@@ -1355,6 +1496,22 @@ export namespace app {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.done = source["done"];
 	        this.total = source["total"];
+	    }
+	}
+	export class SimilarResult {
+	    ids: string[];
+	    more: number;
+	    why: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SimilarResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ids = source["ids"];
+	        this.more = source["more"];
+	        this.why = source["why"];
 	    }
 	}
 	export class State {

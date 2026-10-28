@@ -50,6 +50,8 @@ describe('обработчики клавиш мимо реестра', () => {
     '/src/editor/eyedrop/EyedropLayer.svelte': 'Esc выходит из пипетки',
     '/src/editor/photo/FrameControls.svelte': 'Esc жеста кадра',
     '/src/editor/photo/PhotoPreview.svelte': 'Esc и ← → окна просмотра; свои клавиши окна гасятся, остальные идут диспетчеру (128)',
+    '/src/panels/compare/PhotoCompare.svelte':
+      'Esc, ← →, Tab, Enter окна сравнения (138); команды лупы и Delete берутся из реестра, остальное идёт диспетчеру',
     '/src/editor/places/MiniPanel.svelte': 'Esc наклона и модификатор Alt/Shift панели (owner-ux §2)',
     '/src/editor/places/PlaceAddMenu.svelte': 'навигация и Esc меню',
     '/src/editor/places/placegesture.ts': 'Esc отменяет жест места',

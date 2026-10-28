@@ -4,7 +4,11 @@
   import { store } from '../../base/core/store.svelte'
   import TplItem from '../../base/tpl/TplItem.svelte'
   import { lookUrl } from '../../base/core/media'
-  import { themeItems, tilePx } from '../../panels/decor/decor'
+  import { ALL, themeItems, tilePx } from '../../panels/decor/decor'
+  import { isGetItem } from '../../panels/decorbrowse/decorget'
+  import { getOffHint } from '../../panels/decorbrowse/getoff'
+  import GetTile from '../../panels/decorbrowse/GetTile.svelte'
+  import { packsUi } from '../packs/packs.svelte'
   import { cardNote, lookKey, tileRatio, tileStep, EMPTY_MINE, EMPTY_THEME } from './looks'
   import { looks } from './looks.svelte'
 
@@ -15,34 +19,45 @@
   const px = $derived(Math.min(1024, tilePx(TILE_W, screenDpr.value)))
   const readOnly = $derived(!!looks.cat?.readOnly)
   const cover = $derived(store.cover?.sheet)
+  // 144: плитки «Можно скачать» серые, пока идёт скачивание и в библиотеке «только чтение»
+  const getOff = $derived(getOffHint(packsUi.net, readOnly))
+  const getBox = $derived(tileRatio(store.view.settings, { cover: false })) // как у стоящей плитки разворота
 </script>
 
 <div class="tiles" aria-busy={looks.loading}>
   {#each items as it (it.id)}
-    {@const i = tileStep(it)}
-    {@const r = tileRatio(store.view.settings, it, cover)}
-    <TplItem
-      name={it.name}
-      note={cardNote(it)}
-      onrename={it.own && !readOnly ? () => looks.askRename(it) : undefined}
-      ondelete={it.own && !readOnly ? () => looks.askHide(it) : undefined}
-      renameLabel="Переименовать макет"
-      deleteTitle="Убрать из библиотеки"
-      deleteLabel="Убрать макет из библиотеки"
-    >
-      <button
-        class="tile"
-        class:current={it.id === looks.sel}
-        aria-pressed={it.id === looks.sel}
-        use:seenIf={it.id === looks.sel}
-        style:aspect-ratio={r}
-        title={[it.name, cardNote(it)].filter(Boolean).join(' · ')}
-        onclick={() => looks.choose(it.id)}
+    {#if isGetItem(it)}
+      <GetTile {it} kind="album" box={getBox} off={getOff} onget={(t) => looks.askGet(t)} />
+    {:else}
+      {@const i = tileStep(it)}
+      {@const r = tileRatio(store.view.settings, it, cover)}
+      <TplItem
+        name={it.name}
+        note={cardNote(it)}
+        onrename={it.own && !readOnly ? () => looks.askRename(it) : undefined}
+        ondelete={it.own && !readOnly ? () => looks.askHide(it) : undefined}
+        renameLabel="Переименовать макет"
+        deleteTitle="Убрать из библиотеки"
+        deleteLabel="Убрать макет из библиотеки"
       >
-        <img src={lookUrl(lookKey(it.id), { i, px, r, front: i === 0 }) || undefined} alt="" loading="lazy" draggable="false" />
-      </button>
-    </TplItem>
+        <button
+          class="tile"
+          class:current={it.id === looks.sel}
+          aria-pressed={it.id === looks.sel}
+          use:seenIf={it.id === looks.sel}
+          style:aspect-ratio={r}
+          title={[it.name, cardNote(it)].filter(Boolean).join(' · ')}
+          onclick={() => looks.choose(it.id)}
+        >
+          <img src={lookUrl(lookKey(it.id), { i, px, r, front: i === 0 }) || undefined} alt="" loading="lazy" draggable="false" />
+        </button>
+      </TplItem>
+    {/if}
   {/each}
+  {#if looks.theme === ALL && looks.cat?.invite}
+    <!-- 144: списка наборов ещё не было — приглашение в конце «Все» -->
+    <GetTile kind="album" oninvite={() => packsUi.show()} />
+  {/if}
   {#if looks.cat && items.length === 0}
     <div class="empty">{looks.theme === 'mine' ? EMPTY_MINE : EMPTY_THEME}</div>
   {/if}

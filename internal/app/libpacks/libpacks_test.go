@@ -49,7 +49,7 @@ func (e *evs) of(name string) []any {
 }
 
 // testHost — Host со своей папкой настроек и библиотекой; mut правит поля до New.
-func testHost(t *testing.T, ev *evs, mut func(h *Host)) Host {
+func testHost(t testing.TB, ev *evs, mut func(h *Host)) Host {
 	t.Helper()
 	dir := testkit.TempDir(t)
 	store := decor.Open(dir)
@@ -67,7 +67,9 @@ func testHost(t *testing.T, ev *evs, mut func(h *Host)) Host {
 		RememberDir:   func(string) {},
 		OpenDir:       func(string) error { return nil },
 		Fetcher:       func() *fetch.Client { return nil },
+		Demo:          func() Demo { return Demo{} }, // примера нет; тесты 142 задают свой
 		Now:           time.Now,
+		Rename:        os.Rename,
 		Start:         func() (time.Duration, time.Duration, int64) { return 0, time.Hour, 1 << 30 },
 		BeforeBegin:   func() {},
 		AfterNetWrite: func() {},
@@ -141,6 +143,11 @@ func TestLibraryProgress(t *testing.T) {
 	}
 }
 
+// wantAll — план «все строки каталога»: так netPlan вёл себя до выборочной установки.
+func wantAll(cat fetch.Catalog) plan {
+	return plan{want: catIDs(cat), force: map[string]bool{}}
+}
+
 // Совпадение id со встроенным — своя причина, и для версии 1 (встроенный — версия 1); набор
 // из файла — прежняя причина; без скачивания. Через сеть строки с таким id не бывает (fetch
 // отбрасывает id не по грамматике) — план проверяется напрямую.
@@ -156,7 +163,7 @@ func TestNetPlanBuiltin(t *testing.T) {
 		{ID: "ivory", Version: 2, MinApp: "0.1.0", Title: "Айвори", Size: 10},
 	}}
 	var res Update
-	todo, need := s.netPlan(st, cat, &res)
+	todo, need := s.netPlan(st, cat, wantAll(cat), &res)
 	if len(todo) != 0 || need != 0 || len(res.Skipped) != 3 {
 		t.Fatalf("план: %v %d %+v", todo, need, res.Skipped)
 	}
@@ -203,7 +210,7 @@ func TestNetPlanSkipsOrphanAddon(t *testing.T) {
 	for _, tc := range cases {
 		prefs.UpdateLibraryNet(s.h.CfgDir(), func(n *prefs.LibraryNet) { n.Skip = tc.skip })
 		var res Update
-		todo, need := s.netPlan(st, fetch.Catalog{Packs: tc.cat}, &res)
+		todo, need := s.netPlan(st, fetch.Catalog{Packs: tc.cat}, wantAll(fetch.Catalog{Packs: tc.cat}), &res)
 		var ids []string
 		for _, e := range todo {
 			ids = append(ids, e.ID)
@@ -211,12 +218,9 @@ func TestNetPlanSkipsOrphanAddon(t *testing.T) {
 		if got := strings.Join(ids, ","); got != tc.want || need != int64(10*len(ids)) {
 			t.Errorf("%s: в плане %q (%d байт), нужно %q", tc.name, got, need, tc.want)
 		}
-		// Пропуск дополнения — без записи в Skipped (тоста нет); причина есть только у донора с minApp.
-		wantSkips := 0
-		if tc.name == "донор пропущен по minApp" {
-			wantSkips = 1
-		}
-		if len(res.Skipped) != wantSkips {
+		// Пропуск дополнения — без записи в Skipped (тоста нет); нестоящему донору с minApp причину
+		// показывает серая кнопка строки, а не Skipped (137), поэтому пропусков нет нигде.
+		if len(res.Skipped) != 0 {
 			t.Errorf("%s: пропуски с причиной: %+v", tc.name, res.Skipped)
 		}
 	}

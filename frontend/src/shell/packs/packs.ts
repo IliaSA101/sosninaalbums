@@ -11,7 +11,7 @@ export interface PackInfo {
   author: string
   license: string
   source: string
-  origin: string // builtin | file | net
+  origin: string // builtin | file | net | demo
   version: number
   bg: number
   sticker: number
@@ -38,18 +38,50 @@ export interface LibraryNet {
   allowed: boolean
   atStart: boolean
   checked: number
-  skipped: number // сетевых наборов в пропуске (удалены пользователем)
+  skipped: number // наборов в пропуске (удалены пользователем); пример входит, пока не покрыт стоящим полным набором
+  // Пример темы (142): у старого Go полей нет — «ложь».
+  demoSkipped?: boolean // пример удалён вами и входит в skipped
+  demoBack?: boolean // только в ответе ResetLibrarySkip: пример встал этим вызовом
+  demoOffer?: boolean // в «Можно скачать» есть строка примера (указатель в пустом окне макетов)
 }
+// Строка «Можно скачать» (app.PackAvail): что и как считать — решает Go, интерфейс только рисует.
+export interface PackAvail {
+  id: string
+  title: string
+  about: string
+  license: string
+  version: number
+  bg: number
+  sticker: number
+  spread: number
+  frame: number
+  print: number
+  bytes: number // всё, что поставит «Скачать» строки, с дополнениями
+  addonTitles: string[] | null // что придёт вместе
+  donor: string // стоящий донор строки-дополнения, иначе ''
+  why: string // непусто — «Скачать» серая, текст — подсказка
+  removed: boolean // «удалён вами»
+}
+// «Скачать все (N, M МБ)» (app.LibraryOffer): число строк раздела и их размер.
+export interface LibraryOffer {
+  count: number
+  bytes: number
+}
+// У старого Go available, all и availAt нет.
 export interface PackList {
   packs: PackInfo[] | null
-  net?: LibraryNet // у старого Go поля нет
+  net?: LibraryNet
   busy: boolean
   readOnly: boolean
+  available?: PackAvail[] | null
+  all?: LibraryOffer | null
+  availAt?: number // unix мс списка; 0 — списка ещё нет
 }
 export interface PackRemove {
   files: number
   kept: number
   bytes: number
+  addons?: string[] | null // названия стоящих дополнений донора (по сохранённому каталогу)
 }
 
 // Вопросы окна, пока они открыты.
@@ -68,7 +100,7 @@ export const hasNet = (list: readonly PackInfo[]): boolean => list.some((p) => p
 export const BUILTIN_NOTE = 'не удаляется'
 export const WHY_MAX = 3 // сколько пропущенных предметов называем в тосте
 
-const ORIGIN: Record<string, string> = { file: 'Из файла', net: 'Из сети', builtin: 'Рисует программа' }
+const ORIGIN: Record<string, string> = { file: 'Из файла', net: 'Из сети', builtin: 'Рисует программа', demo: 'Пример в программе' }
 
 const PART: [keyof Pick<PackInfo, 'bg' | 'sticker' | 'spread' | 'frame' | 'print'>, [string, string, string]][] = [
   ['bg', ['фон', 'фона', 'фонов']],
@@ -86,7 +118,7 @@ export function contentsLabel(p: Pick<PackInfo, 'bg' | 'sticker' | 'spread' | 'f
 }
 
 // Первая строка под названием: «версия 3 · 12 фонов · 30 стикеров · 8 разворотов · 41 МБ». Размер встроенного неизвестен — не пишем.
-export function metaLine(p: PackInfo): string {
+export function metaLine(p: Pick<PackInfo, 'origin' | 'version' | 'bytes' | 'bg' | 'sticker' | 'spread' | 'frame' | 'print'>): string {
   const parts: string[] = []
   if (p.origin !== 'builtin' && p.version > 0) parts.push(`версия ${p.version}`)
   const c = contentsLabel(p, ' · ')
@@ -146,11 +178,17 @@ export const cancelled = (r: PackAdd | null | undefined): boolean => !r || (!r.p
 export const replaceQuestion = (r: PackAdd): string => `Заменить набор «${r.pack.title}» версии ${r.fromVersion} версией ${r.pack.version}?`
 
 // «Удалить набор «Айвори»?»: что пропадёт, что останется и почему (числа — PlanRemovePack).
-export function removeQuestion(p: Pick<PackInfo, 'title' | 'bg' | 'sticker' | 'spread' | 'frame' | 'print'>): string {
-  return (
+// addons — стоящие дополнения донора: они остаются, но новые версии к ним приходить перестанут (137-10).
+export function removeQuestion(
+  p: Pick<PackInfo, 'title' | 'bg' | 'sticker' | 'spread' | 'frame' | 'print'>,
+  addons: readonly string[] | null = null,
+): string {
+  const base =
     `Удалить набор «${p.title}»? ${goneText(p)} ` +
     'В открытом альбоме всё останется; в других альбомах — станет пропавшим и вернётся при повторной загрузке набора.'
-  )
+  if (!addons || addons.length === 0) return base
+  const names = addons.map((t) => `«${t}»`).join(', ')
+  return `${base} Дополнения к нему — ${names} — останутся, но их новые версии приходить перестанут, пока набор не скачаете снова.`
 }
 
 // «Его фоны, стикеры и развороты пропадут из окон.» — по составу набора. Состав пуст — «Его содержимое пропадёт…».

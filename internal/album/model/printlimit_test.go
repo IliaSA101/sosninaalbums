@@ -50,7 +50,14 @@ func TestPrintLimitResolve(t *testing.T) {
 		{"общий 30×30", limitProject(300, 300, 20, ""), nil},
 		{"общий 20×20 у Нетпринта 200×203", limitProject(200, 200, 20, ""), nil},
 		{"лист 031", sheet, nil},
-		{"мягкая Нетпринта", limitProject(200, 203, 20, "netprint-soft"), nil},
+		{"мягкая Нетпринта", limitProject(200, 203, 20, "netprint-soft"),
+			&PageLimitView{Who: "Нетпринт «Мягкая»", Range: "от 10 до 25 разворотов", Count: 20, Min: 10, Max: 25}},
+		{"мягкая Нетпринта, 26", limitProject(200, 203, 26, "netprint-soft"),
+			&PageLimitView{Who: "Нетпринт «Мягкая»", Range: "от 10 до 25 разворотов", Count: 26, Min: 10, Max: 25,
+				Warn: "Разворотов 26 — у Нетпринта («Мягкая») не больше 25"}},
+		{"мягкая Нетпринта, 9", limitProject(200, 203, 9, "netprint-soft"),
+			&PageLimitView{Who: "Нетпринт «Мягкая»", Range: "от 10 до 25 разворотов", Count: 9, Min: 10, Max: 25,
+				Warn: "Разворотов 9 — у Нетпринта («Мягкая») не меньше 10"}},
 		{"Свои размеры, общий формат", limitProject(300, 300, 20, CoverCustom), nil},
 	} {
 		got, ok := LimitOf(c.p)

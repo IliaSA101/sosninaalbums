@@ -12,11 +12,26 @@ import { binsel } from '../../panels/bins/binsel.svelte'
 import { align } from '../../panels/layouts/align.svelte'
 import { anyVaries, varyTargets } from '../../panels/gallery/variants'
 import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
-import { isCover, isSheet } from '../../base/geom/sheet'
+import { isCover, isSheet, unitOf } from '../../base/geom/sheet'
 import { splitMissing } from '../../panels/library/missing'
 import { buildMenu, enabledCmds, type MenuCtx } from './menu'
+import { spreadCmds, type SpreadCmds } from './spreadcmds'
+
+// 141: «вставить/разрезать/склеить» для текущего листа: выделенные на нём фото — цель разреза. Зовёт и меню, и обработчики команд.
+export function liveSpreadCmds(): SpreadCmds {
+  const sel = placesel.selected.flatMap((b) => (b.photo ? [b.photo] : []))
+  return spreadCmds(
+    store.view.spreads,
+    store.spread?.id ?? null,
+    store.onCover,
+    sel,
+    store.view.maxSpreadPhotos || 64,
+    unitOf(store.view.settings),
+  )
+}
 
 export function menuCtx(): MenuCtx {
+  const sc = liveSpreadCmds()
   return {
     can: prefs.can,
     level: prefs.level,
@@ -42,6 +57,9 @@ export function menuCtx(): MenuCtx {
     vigable: canMakeVignette(store.spread, prefs.can),
     decorable: !!store.spread && !isCover(store.spread),
     vigSetup: isVignette(store.spread),
+    insertable: sc.insertAt !== null,
+    cutGate: sc.cut,
+    joinGate: sc.join,
     layerable: placesel.canLayer,
     copyable: clip.canCopy,
     pasteable: clip.canPaste,

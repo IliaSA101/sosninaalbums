@@ -1,5 +1,6 @@
 ; Установщик Sosnina Albums (спека 111): на пользователя, без прав администратора и без выбора папки.
-; Сборка — scripts/win/installer.sh (makensis 3.08+, -WX): -DVERSION=X.Y.Z -DEXE_SRC=<exe> -DICON=<ico> -DWIZARD=<bmp> -DWIZARD_DPI=<папка с wizard-100/125/150/175.bmp> -DHEADER=<bmp> -DOUT=<файл>.
+; Сборка — scripts/win/installer.sh (makensis 3.08+, -WX): -DVERSION=X.Y.Z -DEXE_SRC=<exe> -DICON=<ico> -DWIZARD=<bmp> -DWIZARD_DPI=<папка с wizard-100/125/150/175.bmp> -DHEADER=<bmp> -DOUT=<файл> [-DDEMO_SRC=<zip примера>].
+; -DDEMO_SRC — стандартная редакция (0.30-142-44): zip примера кладётся в $INSTDIR\data\; без него — компактная.
 ; Коды выхода (контракт с installer-check.ps1 и программой): 0 готово; 1 отмена; 2 ошибка NSIS;
 ; 3 откат отклонён (установлена новее); 4 та же версия (тихо); 5 программа не закрылась;
 ; 6 не удалось заменить exe (занят антивирусом; прежняя программа и версия в реестре целы); 64 система не та.
@@ -291,6 +292,14 @@ Section "main"
   Delete "$INSTDIR\${EXE}.new"
   File "/oname=${EXE}.new" "${EXE_SRC}"
   Call ReplaceExe
+!ifdef DEMO_SRC
+  ; Стандартная редакция: пример свадебного макета рядом с программой (0.30-142-44). Блок после ReplaceExe:
+  ; сбой замены exe не оставит пример без программы. Имя файла — как у demopack.File (оно же в маске удаления)
+  SetOutPath "$INSTDIR\data"
+  File "${DEMO_SRC}"
+  ; Рабочую папку наследуют CreateShortcut и Exec ниже — возвращаем её
+  SetOutPath "$INSTDIR"
+!endif
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   WriteRegStr HKCU "${REGKEY}" "InstallDir" "$INSTDIR"
@@ -358,6 +367,10 @@ Section "Uninstall"
   Delete "$INSTDIR\${EXE}.new"
   Delete "$INSTDIR\${EXE}.old"
   Delete "$INSTDIR\uninstall.exe"
+  ; Пример (только стандартная редакция): маской по префиксу — деинсталлятор компактной собирается без DEMO_SRC,
+  ; а v2 примера не оставит сиротой v1. RMDir без /r: чужое в data\ не трогаем; оба до RMDir "$INSTDIR"
+  Delete "$INSTDIR\data\wedding-navy-watercolor-demo-*.zip"
+  RMDir "$INSTDIR\data"
   RMDir "$INSTDIR"
   Delete "$SMPROGRAMS\${PRODUCT}.lnk"
   Delete "$DESKTOP\${PRODUCT}.lnk"

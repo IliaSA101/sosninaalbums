@@ -35,6 +35,10 @@ Sosnina Albums — © 2026 Илья Соснин ([github.com/IliaSA101](https:/
 Go-модули, npm-пакеты и шрифты со своими лицензиями перечислены в
 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
 
+## Пример набора
+
+Пример набора «Свадьба — синяя акварель (пример)» (файл `wedding-navy-watercolor-demo-1.zip` в стандартной редакции и в пакете `sosninaalbums-demo`, ассет `wedding-navy-watercolor-demo-v1` в релизах библиотеки) распространяется по CC0 1.0 (общественное достояние), а не по GPL. Фоны, рамочки, уголки, разделители и стикеры сгенерированы нейросетью (Magnific) по запросам авторов, отобраны и обработаны вручную: Илья Соснин, Марина Соснина. Текст — `LICENSE.txt` внутри набора.
+
 ---
 
 ## English
@@ -69,6 +73,10 @@ and are not covered by the license; modified versions must replace them with the
 
 Versions up to and including 0.22.x were released under the MIT license; copies received then stay under
 MIT. Starting with version 0.23.0 the program is GPL-3.0-only with the term above.
+
+### Sample pack
+
+The sample pack "Свадьба — синяя акварель (пример)" (`wedding-navy-watercolor-demo-1.zip`, shipped with the standard edition and the `sosninaalbums-demo` package, or downloaded from the library releases) is dedicated to the public domain under CC0 1.0, not GPL. Its backgrounds, frames, corners, dividers and stickers were generated with an AI service (Magnific) from the authors' prompts, then selected and processed by hand by Ilya Sosnin and Marina Sosnina. See `LICENSE.txt` inside the pack.
 
 <details>
 <summary>MIT license of versions up to 0.22.x</summary>

@@ -24,8 +24,9 @@ func coverLookApp(t *testing.T) (a *App, id string) {
 	return a, id
 }
 
-// Макет есть: оформление встало, Styled и имя; фото броска — фоном лицевой; один шаг отмены;
-// «Без оформления» — Undo и CreateCover; круг Save→Load держит обложку.
+// Макет есть: оформление встало, Styled и имя; фото броска — копией в месте лицевой (145: фото
+// уже в альбоме), фона нет; один шаг отмены; «Без оформления» — Undo и CreateCover, фото фоном
+// лицевой; круг Save→Load держит обложку.
 func TestCreateCoverLookApp(t *testing.T) {
 	a, _ := coverLookApp(t)
 	r, err := a.CreateCoverLook("", "a")
@@ -36,12 +37,19 @@ func TestCreateCoverLookApp(t *testing.T) {
 		t.Fatalf("вид мимо цепочки: Seq=%d", r.View.Seq)
 	}
 	c := r.View.Cover.Sheet
-	if c.BgSet[0] != "#336699" || len(c.Backdrops) != 1 || c.Backdrops[0].Photo != "a" {
+	if c.BgSet[0] != "#336699" || len(c.Backdrops) != 0 {
 		t.Fatalf("оформление: фон %q, фоны фото %+v", c.BgSet[0], c.Backdrops)
 	}
 	styled := projectJSON(t, a)
 	p, _ := a.editor().Snapshot()
-	if q := reloaded(t, p); q.Cover == nil || q.Cover.Sheet.BgL != "#336699" || q.Look == nil {
+	seat := p.CoverSeats()
+	if len(seat) != 1 {
+		t.Fatalf("мест лицевой: %d, ждали 1", len(seat))
+	}
+	if model.CopyNo(seat[0].Photo) < 2 || p.Photos[seat[0].Photo].Path != p.Photos["a"].Path || p.Spreads[0].Photos[0] != "a" {
+		t.Fatalf("фото не копией в месте лицевой: место %q, разворот %v", seat[0].Photo, p.Spreads[0].Photos)
+	}
+	if q := reloaded(t, p); q.Cover == nil || q.Cover.Sheet.BgL != "#336699" || q.Look == nil || len(q.CoverSeats()) != 1 || q.CoverSeats()[0].Photo != seat[0].Photo {
 		t.Fatalf("после круга: %+v", q.Cover)
 	}
 	// Один шаг отмены: Undo снимает обложку целиком, макет альбома остаётся.
@@ -60,6 +68,28 @@ func TestCreateCoverLookApp(t *testing.T) {
 	before := projectJSON(t, a)
 	if _, err = a.CreateCoverLook("", ""); err == nil || projectJSON(t, a) != before {
 		t.Fatalf("вторая обложка: %v", err)
+	}
+}
+
+// «Без оформления» после броска (145): Undo снимает обложку с фото в месте, CreateCover с тем же
+// фото — обложка без макета, мест нет, фото фоном лицевой; макет альбома остаётся.
+func TestCreateCoverLookPlainAfterUndo(t *testing.T) {
+	a, _ := coverLookApp(t)
+	r, err := a.CreateCoverLook("", "a")
+	if err != nil || !r.Styled || len(r.View.Cover.Sheet.Backdrops) != 0 {
+		t.Fatalf("бросок: %+v %v", r, err)
+	}
+	if v := a.Undo(); v.Cover != nil {
+		t.Fatalf("Undo оставил обложку: %+v", v.Cover)
+	}
+	v, err := a.CreateCover("", "a")
+	if err != nil || v.Cover == nil || v.Look == nil {
+		t.Fatalf("без оформления: %v %+v", err, v.Cover)
+	}
+	c := v.Cover.Sheet
+	p, _ := a.editor().Snapshot()
+	if len(p.Cover.Sheet.Grid) != 0 || len(c.Backdrops) != 1 || c.Backdrops[0].Photo != "a" || c.BgSet[0] == "#336699" {
+		t.Fatalf("без оформления: мест %d, фоны %+v, цвет %q", len(p.Cover.Sheet.Grid), c.Backdrops, c.BgSet[0])
 	}
 }
 

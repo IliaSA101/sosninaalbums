@@ -38,6 +38,8 @@ type Cache struct {
 	mu    sync.Mutex
 	// inflight — генерация копий фото идёт (ключ кэша); ждущие ждут канал, а не декодируют второй раз.
 	inflight map[string]chan struct{}
+	// bad — файлы, оригинал которых не декодируется (ключ кэша → причина): повторного декода нет.
+	bad map[string]*DecodeError
 	// tails — превью, которые кодируются в фоне после ответа миниатюрой (090 design §3, «inflight key_p»);
 	// queue — не начатые из них по порядку, tailMax — предел очереди (память: ≈ 11 МБ на хвост).
 	tails   map[string]*tail
@@ -120,6 +122,9 @@ func (c *Cache) get(ctx context.Context, p Photo, preview bool, cl prio) (string
 		if f, ok := c.find(key, preview, isPNG); ok {
 			return f, nil
 		}
+		if de := c.failed(key); de != nil {
+			return "", de // уже не декодировался: второй раз тот же файл не читаем
+		}
 		c.mu.Lock()
 		ch, gen := c.inflight[key]
 		t := c.tails[key]
@@ -169,6 +174,9 @@ func (c *Cache) awaitGen(ctx context.Context, ch <-chan struct{}, key string, p 
 	if f, ok := c.find(key, preview, isPNGPath(p.Path)); ok {
 		return f, true, nil
 	}
+	if de := c.failed(key); de != nil {
+		return "", true, de
+	}
 	if !preview || !c.hasTail(key) {
 		return "", true, noCopyErr(p) // генерация не удалась: второй раз тот же файл не читаем
 	}
@@ -204,7 +212,7 @@ func (c *Cache) generateOwn(ctx context.Context, key, src string, preview bool, 
 	}
 	t, err := c.generate(src, key, split)
 	if err != nil {
-		return false, err
+		return false, c.noteFail(key, err)
 	}
 	if t != nil && !c.queueTail(t) {
 		c.runTail(t) // очередь полна или кэш закрыт: превью — здесь же, до ответа, как раньше
@@ -324,7 +332,7 @@ func cacheKey(path string, col imgfile.Color) (string, error) {
 func (c *Cache) generate(src, key string, split bool) (*tail, error) {
 	img, release, err := c.open(src)
 	if err != nil {
-		return nil, err
+		return nil, decodeFail(src, err)
 	}
 	release = sync.OnceFunc(release)
 	defer release()

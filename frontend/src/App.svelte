@@ -47,6 +47,7 @@
   import { namesUi } from './panels/names/names.svelte'
   import PhotoMenu from './editor/photomenu/PhotoMenu.svelte'
   import PhotoPreview from './editor/photo/PhotoPreview.svelte'
+  import PhotoCompare from './panels/compare/PhotoCompare.svelte'
   import { store } from './base/core/store.svelte'
   import { autocheck } from './panels/folders/autocheck'
   import { foldersUi } from './panels/folders/foldersui.svelte'
@@ -70,6 +71,7 @@
   import { extOpen } from './shell/boot/extopen.svelte'
   import { zoneOf } from './editor/places/groupsel'
   import { photoui } from './editor/photo/photoui.svelte'
+  import { compare } from './panels/compare/compare.svelte'
   import { bgmode } from './editor/backdrop/bgmode.svelte'
   import { prefs } from './base/prefs/prefs.svelte'
   import { modes } from './base/prefs/view.svelte'
@@ -138,6 +140,7 @@
       aboutUi.open ||
       namesUi.open ||
       !!photoui.preview || // окно z 85 перекрыло бы справочник (z 80+)
+      compare.open ||
       !!vigDialog.id ||
       !!store.autoDraft ||
       jobsOpen() ||
@@ -175,6 +178,7 @@
       big: modes.big,
       dialog: dialogState(),
       preview: photoui.preview?.from,
+      compare: compare.open,
       can: prefs.can,
       menuOn,
     })
@@ -245,6 +249,7 @@
 <RemoveAsk />
 <PhotoMenu />
 <PhotoPreview />
+<PhotoCompare />
 <Spot />
 <Tour />
 <!-- Последним: окно хода открытия (073) лежит над стартовым окном -->

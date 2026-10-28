@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render } from '@testing-library/svelte'
+import { cleanup, fireEvent, render } from '@testing-library/svelte'
 
 // Подпись формата в шапке (123 QA): страница из px — 303,95 × 202,95 мм — без float-хвостов, с запятой.
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
@@ -8,6 +8,7 @@ vi.mock('../../../wailsjs/go/app/App', () => ({ RecentProjects: vi.fn(async () =
 
 const { default: TopBar } = await import('./TopBar.svelte')
 const { store } = await import('../../base/core/store.svelte')
+const { jobs, EXPORT_EMPTY } = await import('../../base/core/jobs.svelte')
 const { dropCatalog, useCatalog } = await import('../../base/keys/keymap.fixture')
 
 const settings = { pageW: 300, pageH: 300, dpi: 300, margin: 10, gap: 3, safe: 5, bleed: 3, bg: '' }
@@ -63,5 +64,35 @@ describe('шапка: строка сводки', () => {
     expect(text).toMatch(/^2 разворота \(\d+ стр\.\) · 0 \/ 2 фото в альбоме$/)
     expect(info.getAttribute('title')).toBe(text)
     store.photos = []
+  })
+})
+
+describe('шапка: «Экспорт» без разворотов (QA 120)', () => {
+  const exportBtn = () => document.querySelector<HTMLElement>('[data-guide="topbar-export"]')!
+  afterEach(() => {
+    jobs.exportOpen = false
+    store.toast = null
+  })
+  it('пустой альбом: кнопка серая с подсказкой, щелчок — тост, окно не открывается', async () => {
+    show({})
+    render(TopBar)
+    const b = exportBtn()
+    expect(b.getAttribute('aria-disabled')).toBe('true')
+    expect(b.classList.contains('off')).toBe(true)
+    expect(b.getAttribute('title')).toBe('Выгружать нечего: в альбоме нет разворотов')
+    await fireEvent.click(b)
+    await vi.waitFor(() => expect(store.toast?.text).toBe(EXPORT_EMPTY))
+    expect(jobs.exportOpen).toBe(false)
+  })
+  it('есть разворот: кнопка обычная, щелчок открывает окно выгрузки без тоста', async () => {
+    const sp = { id: 's1', grid: false, photos: [], rects: [], places: [], frames: [], texts: [], captions: [] }
+    store.view = { rev: 1, folders: [], spreads: [sp], settings } as never
+    render(TopBar)
+    const b = exportBtn()
+    expect(b.getAttribute('aria-disabled')).toBeNull()
+    expect(b.getAttribute('title')).toBeNull()
+    await fireEvent.click(b)
+    await vi.waitFor(() => expect(jobs.exportOpen).toBe(true))
+    expect(store.toast).toBeNull()
   })
 })

@@ -29,7 +29,8 @@
   import DpiMark from './DpiMark.svelte'
   import FaceGuide from './FaceGuide.svelte'
   import { modes } from '../../base/prefs/view.svelte'
-  import { missTip } from '../../panels/library/missing'
+  import { isGone, missTip } from '../../panels/library/missing'
+  import { lost } from '../../panels/library/lost.svelte'
   import { autocheck } from '../../panels/folders/autocheck'
 
   // Ячейка фото: рамка из раскладки Go, внутри кадр (спека 006). Геометрию картинки
@@ -102,7 +103,7 @@
   // (групповое фото и «Целиком» без него); тогда он заменяет сетку третей при сдвиге.
   const guided = $derived(!mini && !preview && selected && spread.kind === 'vignette' && modes.faceGuide)
   let guideOn = $state(false)
-  const missing = $derived(store.missing.includes(id))
+  const missing = $derived(isGone(id, store.missing, store.unread)) // нет файла или не читается (117)
 
   let el = $state<HTMLDivElement>()
   // Размер ячейки на экране (CSS px, с учётом зума холста): на 17+ фото крупное превью — только крупным ячейкам.
@@ -175,7 +176,7 @@
     style:--m={maskUrlCss(maskReady)}
   >
     {#if missing}
-      <MissPhoto size={mini ? 12 : 28} tip={missTip(id, store.missingNames)} />
+      <MissPhoto size={mini ? 12 : 28} tip={missTip(id, store.missingNames, store.unread)} />
     {:else}
       {@const pos = `left:${pct(img.x - w.win.x, w.win.w)};top:${pct(img.y - w.win.y, w.win.h)};width:${pct(img.w, w.win.w)};height:${pct(img.h, w.win.h)}`}
       <img
@@ -184,7 +185,7 @@
         style={pos}
         style:transform={liveTransform(cur, fv)}
         style:filter={tone}
-        src={thumbUrl(id)}
+        src={thumbUrl(id, lost.retryOf(id))}
         {@attach cancelOnUnmount}
         alt=""
         draggable="false"

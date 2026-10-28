@@ -15,7 +15,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const KB = 1024
-const SIZE_SKIP = /(^|\/)(wailsjs|build|docs\/private|docs\/refs|node_modules|dist)\/|\.d\.ts$/
+// internal/export/flipbook/vendor — чужая минифицированная библиотека (StPageFlip, MIT), правится только заменой версии (владелец 28.10, 0.30-139-4)
+const SIZE_SKIP = /(^|\/)(wailsjs|build|docs\/private|docs\/refs|node_modules|dist|internal\/export\/flipbook\/vendor)\/|\.d\.ts$/
 const FOLDER_SKIP = /(^|\/)(wailsjs|testdata|node_modules)\/|\.d\.ts$/
 const TEST = /(_test\.go|\.test\.(ts|js|mjs))$/
 

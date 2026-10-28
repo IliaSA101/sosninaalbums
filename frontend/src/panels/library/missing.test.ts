@@ -5,6 +5,8 @@ import {
   fileCount,
   fontsKey,
   fontsMissingText,
+  goneLabel,
+  isGone,
   LIB_MISSING_TEXT,
   isHidden,
   libMissingText,
@@ -112,6 +114,22 @@ describe('missing: где фото', () => {
     expect(missTip('f', names)).toBe('Файл не найден: IMG_1.jpg')
     expect(missTip('zz', names)).toBe('Файл фото не найден')
     expect(missTip('f', {})).toBe('Файл фото не найден')
+  })
+
+  it('не читается (117): подсказка — «Не читается: причина Go» без добавок, имени файла нет; без причины — как раньше', () => {
+    const names = { f: 'IMG_1.jpg' }
+    expect(missTip('f', names, { f: 'файл оборван на середине' })).toBe('Не читается: файл оборван на середине')
+    expect(missTip('f', names, { other: 'пустой файл' })).toBe('Файл не найден: IMG_1.jpg')
+    expect(goneLabel('f', { f: 'файл оборван' })).toBe('не читается')
+    expect(goneLabel('f', {})).toBe('нет файла')
+    expect(goneLabel('f', { other: 'x' })).toBe('нет файла')
+  })
+
+  it('заглушка вместо картинки: пропавшее или не читается; ничего из двух — картинка', () => {
+    expect(isGone('a', ['a'], {})).toBe(true)
+    expect(isGone('a', [], { a: 'пустой файл' })).toBe(true)
+    expect(isGone('a', ['b'], { b: 'x' })).toBe(false)
+    expect(isGone('a', [], {})).toBe(false)
   })
 
   it('скрытие держится, пока набор и открытие те же', () => {

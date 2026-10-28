@@ -10,6 +10,12 @@ import { exportPublic } from './public-tree.mjs'
 
 export const NO_DESKTOP = ['DISPLAY', 'WAYLAND_DISPLAY', 'XDG_CURRENT_DESKTOP', 'DESKTOP_SESSION']
 
+// Правки, которые затрагивают тесты не по имени файла: pack-check читает Go-паритет (internal/decor/pack, testdata/pack-*-cases.json)
+// и свои модули в папке pack-check/. Причина: правка pack/*.go или файла случаев проходила Go-тест, а JS-сторона паритета не бежала (ревью С1).
+const LINKED = [
+  [/^(scripts\/pack-check(\/[\w-]+)?\.mjs|internal\/decor\/pack\/.*|testdata\/pack-(manifest|archive)-cases\.json)$/, ['scripts/pack-check.test.mjs', 'scripts/pack-check-zip.test.mjs']],
+]
+
 /**
  * Какие тесты скриптов затронуты правкой (для precheck): changed — пути от корня через «/», exists(путь) — есть ли файл.
  * node — файлы scripts/*.test.mjs (правка scripts/x.mjs берёт scripts/x.test.mjs, если он есть; правка workflow — все тесты),
@@ -28,6 +34,7 @@ export function affectedScriptTests(changed, exists) {
     }
     if (f.startsWith('scripts/win/')) win = true
     if (f.startsWith('scripts/linux/')) deb = true
+    for (const [re, tests] of LINKED) if (re.test(f)) for (const t of tests) if (exists(t)) node.add(t)
     const m = f.match(/^scripts\/([\w-]+)(\.test)?\.mjs$/)
     if (!m) continue
     const test = `scripts/${m[1]}.test.mjs`

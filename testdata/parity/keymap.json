@@ -277,6 +277,34 @@
         "custom": false
       },
       {
+        "id": "photoCompare",
+        "label": "Сравнить фото",
+        "short": "Сравнить",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "KeyC"
+        ],
+        "keys": [
+          "KeyC"
+        ],
+        "custom": false
+      },
+      {
+        "id": "photoSimilar",
+        "label": "Похожие к этому",
+        "short": "Похожие",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "Shift+KeyC"
+        ],
+        "keys": [
+          "Shift+KeyC"
+        ],
+        "custom": false
+      },
+      {
         "id": "toggleDetails",
         "label": "Панель деталей",
         "short": "Детали",
@@ -642,6 +670,28 @@
         "custom": false
       },
       {
+        "id": "sortVignette",
+        "label": "Сортировать учеников по фамилии",
+        "short": "По фамилии",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "vignette",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "clearVignette",
+        "label": "Обычный разворот (снять виньетку)",
+        "short": "Обычный",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "vignette",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
         "id": "renameSpread",
         "label": "Название разворота…",
         "short": "Название",
@@ -654,6 +704,38 @@
         "keys": [
           "F2"
         ],
+        "custom": false
+      },
+      {
+        "id": "insertSpread",
+        "label": "Вставить разворот после текущего",
+        "short": "Вставить",
+        "group": "spreads",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "splitSpread",
+        "label": "Разрезать разворот перед выделенным фото",
+        "short": "Разрезать",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "timeline",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "joinSpread",
+        "label": "Склеить разворот со следующим",
+        "short": "Склеить",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "timeline",
+        "defaults": [],
+        "keys": [],
         "custom": false
       },
       {

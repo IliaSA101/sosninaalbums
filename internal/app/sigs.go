@@ -40,6 +40,8 @@ type sigState struct {
 	gen    int // поколение работы: отменённая молчит
 	// shot — подпись фото; в тестах подменяется (по умолчанию — Cache.ShotSig).
 	shot func(p library.Photo) (imgsig.Sig, error)
+	// wait — предел досчёта в SimilarTo; 0 — similarWait (в тестах короче).
+	wait time.Duration
 }
 
 // errNoCache — кэша миниатюр нет (не создался при запуске): подписей нет.

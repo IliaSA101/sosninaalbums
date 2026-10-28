@@ -6,6 +6,9 @@
 #                                 только Linux, .ps1-двойника нет). Выпускной .deb и tar.gz собирает CI (release.yml, задания linux и pack).
 #   scripts/build.sh --installer — и установщик для Windows рядом с exe (нужен makensis; scripts/win/installer.sh, спека 111):
 #                                 build/bin/SosninaAlbums-<версия>-windows-x64-setup.exe. Выпускной установщик собирает CI (задание pack).
+#   --standard (вместе с --installer и/или --deb) — ещё и «стандартная» редакция с примером набора (спека 142): установщик
+#                                 ...-windows-x64-standard-setup.exe (installer.sh --demo ... --standard) и пакет данных
+#                                 build/bin/SosninaAlbums-demo-<N>-linux-all.deb (scripts/linux/deb-demo.sh); zip примера — internal/demopack.
 #   scripts/build.sh --tags qa  — свои теги сборки (только здесь, у .ps1 двойника нет): exe набора QA (scripts/win/qa-kit.sh) читает
 #                                 SA_STAND и SA_UPDATE_URL, как wails dev. Тег dev для wails build не годится: Wails сам ставит
 #                                 production, и его app_dev.go с app_production.go вместе не собираются. Выпуск (CI) тегов не передаёт.
@@ -17,6 +20,7 @@ set -eu
 native=0
 deb=0
 installer=0
+standard=0
 tags=''
 while [ $# -gt 0 ]; do
   a=$1
@@ -25,10 +29,12 @@ while [ $# -gt 0 ]; do
     --native | -native | -Native) native=1 ;;
     --deb) deb=1 ;;
     --installer | -installer | -Installer) installer=1 ;;
+    --standard | -standard | -Standard) standard=1 ;;
     --tags) [ $# -gt 0 ] || { echo '--tags: нужны теги (например qa)' >&2; exit 2; }; tags=$1; shift ;;
-    *) echo "неизвестный флаг: $a (есть --native, --deb, --installer, --tags)" >&2; exit 2 ;;
+    *) echo "неизвестный флаг: $a (есть --native, --deb, --installer, --standard, --tags)" >&2; exit 2 ;;
   esac
 done
+[ $standard = 0 ] || [ $deb = 1 ] || [ $installer = 1 ] || { echo '--standard — вместе с --installer или --deb' >&2; exit 2; }
 [ $deb = 0 ] || [ $native = 1 ] || { echo '--deb только вместе с --native' >&2; exit 2; }
 [ $installer = 0 ] || [ $native = 0 ] || { echo '--installer — установщик Windows, без --native' >&2; exit 2; }
 [ $deb = 0 ] || [ "$(uname -s)" = Linux ] || { echo '--deb собирается только на Linux' >&2; exit 2; }
@@ -38,6 +44,15 @@ done
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
 . "$root/scripts/env.sh"
+
+# Zip примера набора: один на репозиторий (internal/demopack); нужен только стандартной редакции. Ищем до сборки,
+# чтобы не тратить минуты wails на последний шаг
+demo=''
+if [ $standard = 1 ]; then
+  set -- "$root"/internal/demopack/*.zip
+  [ $# -eq 1 ] && [ -s "$1" ] || { echo 'в internal/demopack ждали ровно один zip примера' >&2; exit 1; }
+  demo=$1
+fi
 
 ver=$(node -p "require('./wails.json').info.productVersion || ''")
 [ -n "$ver" ] || { echo 'нет info.productVersion в wails.json' >&2; exit 1; }
@@ -83,10 +98,14 @@ if [ $deb = 1 ]; then
   # Страж glibc здесь только сообщает: локальная машина новее Ubuntu 22.04, блокирует его CI (ubuntu-24.04, release.yml)
   "$root/scripts/linux/glibc.sh" "$out" || echo 'внимание: порог glibc выше 2.35 — пакет не проверен на Ubuntu 22.04 (в выпуске страж блокирующий)' >&2
   "$root/scripts/linux/deb.sh" --bin "$out" --version "$ver" --out "$bin" --date "$(git log -1 --format=%cI)"
+  # Пакет данных: дата — коммита zip примера (внутри скрипта), байты не зависят от выпуска
+  [ $standard = 0 ] || "$root/scripts/linux/deb-demo.sh" --zip "$demo" --out "$bin"
 fi
 
 if [ $installer = 1 ]; then
   # bash явно: в метке режим файла 100644 (как в CI, где pack зовёт installer.sh через bash)
   # exe в установщике — тот же файл, что проверен выше на личные пути; имя внутри установки постоянное (SosninaAlbums.exe)
   bash "$root/scripts/win/installer.sh" --exe "$out" --version "$ver" --out "$bin"
+  # Стандартная редакция — ещё один установщик с примером (ключи installer.sh — спека 142 §9)
+  [ $standard = 0 ] || bash "$root/scripts/win/installer.sh" --exe "$out" --version "$ver" --out "$bin" --demo "$demo" --standard
 fi

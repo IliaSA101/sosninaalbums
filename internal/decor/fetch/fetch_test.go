@@ -88,14 +88,17 @@ func TestKeysValid(t *testing.T) {
 		g.LocalHTTP || g.Roots != nil || len(g.Keys) != 2 {
 		t.Fatalf("GitHub: %+v", g)
 	}
-	// Без тега dev Default — всегда GitHub, даже с переменной стенда; с тегом — стенд.
+	// Без тега dev или без стенда Default — всегда GitHub, даже с переменной; с тегом и стендом — стенд.
 	t.Setenv("SA_LIBRARY_URL", "http://127.0.0.1:34190/")
-	if d := Default(); standLibrary != (d.CatalogURL == "http://127.0.0.1:34190/catalog.json" && d.LocalHTTP) ||
+	if d := Default(false); d.CatalogURL != CatalogURL || d.LocalHTTP {
+		t.Fatalf("Default без стенда игнорирует переменную: %+v", d)
+	}
+	if d := Default(true); standLibrary != (d.CatalogURL == "http://127.0.0.1:34190/catalog.json" && d.LocalHTTP) ||
 		!standLibrary && d.CatalogURL != CatalogURL {
 		t.Fatalf("Default (dev %v): %+v", standLibrary, d)
 	}
 	t.Setenv("SA_LIBRARY_URL", "http://10.0.0.1/") // не loopback — и в dev GitHub
-	if d := Default(); d.CatalogURL != CatalogURL || d.LocalHTTP {
+	if d := Default(true); d.CatalogURL != CatalogURL || d.LocalHTTP {
 		t.Fatalf("Default с чужим адресом: %+v", d)
 	}
 }

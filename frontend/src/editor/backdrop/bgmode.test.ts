@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { backdropAt, bdSession, inBox, keepMode, liveImg, modeClick, roomForSlider } from './bgmode'
+import { backdropAt, bdSession, inBox, keepMode, liveImg, modeClick, roomForSlider, scopeWord } from './bgmode'
 import type { BackdropView, SpreadView } from '../../base/core/types'
 
 const bd = (o: Partial<BackdropView>): BackdropView => ({
@@ -109,5 +109,19 @@ describe('roomForSlider', () => {
   })
   it('нулевой масштаб — нет', () => {
     expect(roomForSlider({ w: 100, h: 100 }, 0)).toBe(false)
+  })
+})
+
+describe('scopeWord: слова области на полосе фона', () => {
+  const cv = { scopes: [{ scope: 'left', label: 'Задняя' }] } as never
+  it('обычный разворот — страницы', () => {
+    expect(scopeWord('left', null, false)).toBe('левая страница')
+    expect(scopeWord('spine', null, false)).toBe('корешок')
+  })
+  it('обложка — слова карточек (из Go, запасные при отсутствии), строчными', () => {
+    expect(scopeWord('left', cv, true)).toBe('задняя')
+    expect(scopeWord('right', cv, true)).toBe('лицевая')
+    expect(scopeWord('spine', null, true)).toBe('корешок')
+    expect(scopeWord('spread', null, true)).toBe('вся обложка')
   })
 })

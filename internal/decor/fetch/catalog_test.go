@@ -271,7 +271,7 @@ func FuzzParseCatalog(f *testing.F) {
 			t.Fatalf("seq %d", cat.Seq)
 		}
 		for _, e := range cat.Packs {
-			if !validID(e.ID) || !validSum(e.SHA256) || e.Size < 1 || e.Size > MaxZip || !src.assetURL(e.URL) || e.Title == "" ||
+			if !ValidID(e.ID) || !validSum(e.SHA256) || e.Size < 1 || e.Size > MaxZip || !src.assetURL(e.URL) || e.Title == "" ||
 				len([]rune(e.Title)) > 60 || e.Counts.Bg < 0 || e.Counts.Bg > maxCount {
 				t.Fatalf("строка: %+v", e)
 			}

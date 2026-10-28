@@ -3,6 +3,7 @@
   import type { SpreadView } from '../../base/core/types'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import ColorReset from '../../base/color/ColorReset.svelte'
   import { colorLive } from '../../base/color/colorlive.svelte'
   import InspectorBackdrop from '../backdrop/InspectorBackdrop.svelte'
   import InspectorPattern from '../pattern/InspectorPattern.svelte'
@@ -101,13 +102,7 @@
               onpick={(c) => pick('spread', c)}
               onpreview={(c) => preview('spread', c)}
             />
-            <button
-              class="reset"
-              disabled={!own}
-              aria-label="{allLabel}: как в альбоме"
-              title="Как в альбоме"
-              onclick={() => pick('spread', '')}>×</button
-            >
+            <ColorReset label="{allLabel}: как в альбоме" title="Как в альбоме" disabled={!own} onclick={() => pick('spread', '')} />
           </div>
         {/if}
         {#if !sheet}
@@ -129,13 +124,12 @@
                 onpick={(c) => pick(s.scope, c)}
                 onpreview={(c) => preview(s.scope, c)}
               />
-              <button
-                class="reset"
-                disabled={sp.bgSet[s.i] === ''}
-                aria-label="{s.label} страница: как в альбоме"
+              <ColorReset
+                label="{s.label} страница: как в альбоме"
                 title="Как в альбоме"
-                onclick={() => pick(s.scope, '')}>×</button
-              >
+                disabled={sp.bgSet[s.i] === ''}
+                onclick={() => pick(s.scope, '')}
+              />
             </div>
           {/each}
         {/if}
@@ -231,14 +225,5 @@
     height: 24px;
     padding: 0 8px;
     font-size: 12px;
-  }
-  .reset {
-    width: 22px;
-    height: 24px;
-    padding: 0;
-    font-size: 14px;
-    background: transparent;
-    color: #cfcfd4;
-    border-radius: 4px;
   }
 </style>

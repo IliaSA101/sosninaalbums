@@ -159,6 +159,32 @@ func TestRenameSpreadF2(t *testing.T) {
 	}
 }
 
+// 0.30-141: пять команд разворота из правого щелчка — группа разворотов, везде, без клавиш по умолчанию;
+// функции уровня — как у пунктов правого щелчка (разрез и склейка — «timeline», виньетка — «vignette»).
+func TestSpreadCommandsNoKeys(t *testing.T) {
+	want := []struct{ id, feature string }{
+		{"insertSpread", ""},
+		{"splitSpread", "timeline"},
+		{"joinSpread", "timeline"},
+		{"sortVignette", "vignette"},
+		{"clearVignette", "vignette"},
+	}
+	for _, w := range want {
+		i, ok := byID[w.id]
+		if !ok {
+			t.Errorf("в каталоге нет %s", w.id)
+			continue
+		}
+		x := catalog[i]
+		if x.Group != "spreads" || x.Scope != ScopeApp || x.Feature != w.feature || x.Fixed || x.Dialogs {
+			t.Errorf("%s: %+v", w.id, x)
+		}
+		if len(x.Defaults) != 0 {
+			t.Errorf("%s: клавиши по умолчанию %v, ждали пусто", w.id, x.Defaults)
+		}
+	}
+}
+
 // 0.26-124-10: «Найти фото по имени» — Ctrl/⌘+F, группа фото, везде, без функции, переназначаемая;
 // одинокий KeyF («Во весь экран») — другое сочетание.
 func TestFindPhotosModF(t *testing.T) {
@@ -207,6 +233,39 @@ func TestPhotoPreviewKeyZ(t *testing.T) {
 		if o.ID != x.ID && slices.Contains(o.Defaults, "KeyZ") {
 			t.Errorf("KeyZ занята и командой %s", o.ID)
 		}
+	}
+}
+
+// 0.29-138: «Сравнить фото» — C, «Похожие к этому» — Shift+C; группа «Вид», везде, без функции уровня,
+// переназначаемые, короткая подпись до 10 знаков; обе клавиши свободны (кроме друг друга по модификатору).
+func TestCompareKeysCatalog(t *testing.T) {
+	for _, w := range []struct{ id, label, short, key string }{
+		{"photoCompare", "Сравнить фото", "Сравнить", "KeyC"},
+		{"photoSimilar", "Похожие к этому", "Похожие", "Shift+KeyC"},
+	} {
+		i, ok := byID[w.id]
+		if !ok {
+			t.Fatalf("в каталоге нет %s", w.id)
+		}
+		x := catalog[i]
+		if x.Group != "view" || x.Feature != "" || x.Scope != ScopeApp || x.Fixed || x.Dialogs || x.Repeat {
+			t.Errorf("%s: %+v", w.id, x)
+		}
+		if x.Label != w.label || x.Short != w.short || utf8.RuneCountInString(x.Short) > 10 {
+			t.Errorf("подписи %s: %q / %q", w.id, x.Label, x.Short)
+		}
+		if !slices.Equal(x.Defaults, []string{w.key}) {
+			t.Errorf("%s: клавиши по умолчанию %v, ждали [%s]", w.id, x.Defaults, w.key)
+		}
+		for _, o := range catalog {
+			if o.ID != x.ID && slices.Contains(o.Defaults, w.key) {
+				t.Errorf("%s занята и командой %s", w.key, o.ID)
+			}
+		}
+	}
+	// compareLevels («Уровни и функции…») — другая команда, имена не пересекаются.
+	if _, ok := byID["compareLevels"]; !ok {
+		t.Error("compareLevels пропал из каталога")
 	}
 }
 

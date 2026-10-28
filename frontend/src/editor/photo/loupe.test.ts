@@ -189,17 +189,20 @@ describe('щелчок и значок', () => {
 })
 
 describe('строка клавиш', () => {
-  const hints: Record<string, string> = { photoPreview: 'Z', fitZoom: '0' }
+  const hints: Record<string, string> = { photoPreview: 'Z', fitZoom: '0', photoCompare: 'C' }
   const fill = (lib: boolean, mod = 'Ctrl', h = hints, marks = true) => fillKeys(hintLine(lib, mod, marks), (id) => h[id] ?? '')
   it('из ленты: листание и отметки есть, клавиши из реестра', () => {
     expect(fill(true)).toBe(
-      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · отметки — клавишами ленты · Esc — закрыть',
+      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · отметки — клавишами ленты · C — сравнить · Esc — закрыть',
     )
   })
   it('отметки выключены уровнем — куска про них нет', () => {
     expect(fill(true, 'Ctrl', hints, false)).toBe(
-      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · Esc — закрыть',
+      '← → — листать · щелчок или Z — 1:1 · Ctrl+колесо или щипок — зум · 0 — вписать · C — сравнить · Esc — закрыть',
     )
+  })
+  it('клавиша сравнения снята — куска нет', () => {
+    expect(fill(true, 'Ctrl', { ...hints, photoCompare: '' }, false)).not.toContain('сравнить')
   })
   it('с холста: без «листать» и «отметки»; на Mac ⌘', () => {
     expect(fill(false, '⌘')).toBe('щелчок или Z — 1:1 · ⌘+колесо или щипок — зум · 0 — вписать · Esc — закрыть')

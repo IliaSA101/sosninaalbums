@@ -63,8 +63,11 @@ func DataName(stand string) string {
 // версия теряла бы localStorage. Local, а не Roaming: кэш большой. "" — пусть решает Wails.
 func WebViewDir(name string) string {
 	base := os.Getenv("LOCALAPPDATA")
+	if !filepath.IsAbs(base) { // относительный путь положил бы данные WebView2 в текущую папку
+		base = ""
+	}
 	if base == "" {
-		base, _ = os.UserCacheDir()
+		base = CacheDir()
 	}
 	if base == "" {
 		return ""

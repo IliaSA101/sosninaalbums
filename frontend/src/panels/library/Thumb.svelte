@@ -13,7 +13,7 @@
   import { peekTip, stars, thumbTitle } from '../marks/thumbmark'
   import { binsel } from '../bins/binsel.svelte'
   import { lost } from './lost.svelte'
-  import { missTip } from './missing'
+  import { goneLabel, missTip } from './missing'
   import { thumbmenu } from './thumbmenustate.svelte'
 
   // Миниатюра фото в библиотеке. Размер задаёт --size родителя (.grid в Library).
@@ -48,9 +48,12 @@
 >
   <!-- .im повторяет форму фото и вписан в квадратную ячейку: рамка идёт по самому фото -->
   <div class="im" class:tall={p.h > p.w} style:aspect-ratio="{p.w} / {p.h}">
-    {#if lost.has(p.id)}
-      <!-- Файл пропал до проверки папок (088): заглушка вместо битой картинки, рамка — как у img -->
-      <div class="gone"><MissPhoto size={24} tip={missTip(p.id, { [p.id]: p.name })} label="нет файла" /></div>
+    {#if lost.has(p.id) || store.unread[p.id]}
+      <!-- Файл пропал до проверки папок (088) или не читается (117): заглушка вместо битой картинки, рамка — как у img.
+           unread проверяем здесь, не при ошибке загрузки: событие приходит позже lost.mark -->
+      <div class="gone">
+        <MissPhoto size={24} tip={missTip(p.id, { [p.id]: p.name }, store.unread)} label={goneLabel(p.id, store.unread)} />
+      </div>
     {:else}
       <!-- retryOf: разовая перезагрузка после сверки папок, если файл на месте (lost.retry) -->
       <img

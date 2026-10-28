@@ -98,6 +98,16 @@ test('affectedScriptTests: правка скрипта берёт его тес�
   assert.deepEqual(affectedScriptTests([], ex), { node: [], win: false, deb: false })
 })
 
+test('affectedScriptTests: pack-check — паритет с Go (pack/*.go, файлы случаев) и модули папки запускают оба его теста', () => {
+  const both = ['scripts/pack-check-zip.test.mjs', 'scripts/pack-check.test.mjs']
+  const ex = (f) => both.includes(f)
+  for (const f of ['internal/decor/pack/manifest.go', 'internal/decor/pack/eocd.go', 'testdata/pack-manifest-cases.json', 'testdata/pack-archive-cases.json', 'scripts/pack-check/zip.mjs', 'scripts/pack-check.mjs']) {
+    assert.deepEqual(affectedScriptTests([f], ex).node, both, f)
+  }
+  assert.deepEqual(affectedScriptTests(['internal/decor/packs_install.go', 'internal/decor/pack_other/x.go', 'testdata/other.json'], ex).node, [])
+  assert.deepEqual(affectedScriptTests(['internal/decor/pack/manifest.go'], () => false).node, []) // нет файла теста — нечего запускать
+})
+
 test('affectedScriptTests: workflow — все node-тесты и scripts/win; scripts/win/** — упаковка; scripts/linux/** — test_deb', () => {
   const none = () => false
   assert.deepEqual(affectedScriptTests(['.github/workflows/win-qa.yml'], none), { node: ['scripts/*.test.mjs'], win: true, deb: false })

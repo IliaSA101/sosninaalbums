@@ -1,9 +1,12 @@
 """Упаковка выпуска архивом с папкой (спека 039, design §2). Только stdlib, Python >= 3.9.
 
   pack.py windows --exe E --version X.Y.Z --guide G --changelog C --notices N --license L --notice M --out D [--date ISO]
-  pack.py macos   --app-zip Z --version X.Y.Z --guide G --changelog C --notices N --license L --notice M --out D [--date ISO]
+  pack.py macos   --app-zip Z --version X.Y.Z --guide G --changelog C --notices N --license L --notice M --out D [--date ISO] [--archive ИМЯ.zip]
   pack.py linux   --bin B [--icon P] --version X.Y.Z --guide G --changelog C --notices N --license L --notice M --out D [--date ISO]
   pack.py check   ARCHIVE [--os windows|macos|linux] [--version X.Y.Z]
+
+--archive (только macos, 0.30-142-45): имя архива вместо стандартного — так же упаковывается стандартная редакция
+(«SosninaAlbums-X.Y.Z-macos-universal-standard.zip»); «{v}» в имени заменяется версией, пути в имени нельзя.
 
 Упаковка: последняя строка stdout — путь к архиву; коды 0 — готово, 1 — ошибка входа или
 проверки (текст в stderr), 2 — неверные аргументы.
@@ -246,7 +249,7 @@ def pack(args):
     elif not args.app_zip or not os.path.isfile(args.app_zip):
         raise PackError("нет входного файла (zip программы): %s" % args.app_zip)
     os.makedirs(args.out, exist_ok=True)
-    out = os.path.join(args.out, ARCHIVE[osname].format(v=v))
+    out = os.path.join(args.out, (getattr(args, "archive", None) or ARCHIVE[osname]).format(v=v))
     if osname == "linux":
         # порядок записей фиксирован — архив воспроизводим
         entries = [(BIN, src, pack_linux.EXEC_MODE), (ICON, icon, pack_linux.FILE_MODE),
@@ -398,6 +401,8 @@ def build_parser():
         s.add_argument({"windows": "--exe", "macos": "--app-zip", "linux": "--bin"}[name], required=True)
         if name == "linux":
             s.add_argument("--icon")
+        if name == "macos":
+            s.add_argument("--archive", type=archive_arg)
         s.add_argument("--license", required=True)
         s.add_argument("--notice", required=True)
         s.add_argument("--version", required=True, type=version_arg)
@@ -416,6 +421,13 @@ def build_parser():
 def version_arg(text):
     if not re.match(r"^[0-9A-Za-z][0-9A-Za-z.+-]*$", text):
         raise argparse.ArgumentTypeError("неверная версия: %r" % text)
+    return text
+
+
+def archive_arg(text):
+    # только имя файла .zip: --out остаётся единственной папкой результата
+    if not re.match(r"^[0-9A-Za-z][0-9A-Za-z.+_{}-]*\.zip$", text):
+        raise argparse.ArgumentTypeError("имя архива — только буквы, цифры, «.+_-{}» и расширение .zip: %r" % text)
     return text
 
 

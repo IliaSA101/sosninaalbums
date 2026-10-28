@@ -265,6 +265,24 @@ jobs:
           mkdir out
           # «Голый» zip: итоговый архив с папкой и инструкцией соберёт задание pack (спека 039)
           ditto -c -k --keepParent "$app" "out/SosninaAlbums-$VERSION-macos-app.zip"
+
+          # Стандартная редакция (спека 142, 0.30-142-46): копия подписанного .app плюс zip примера в Contents/Resources и
+          # повторная подпись — ресурс меняет печать пакета, иначе проверка и Gatekeeper видят «повреждено».
+          # Один universal-файл на обе архитектуры: +17 МБ, не +34
+          demos=(internal/demopack/*.zip)
+          if [ "${#demos[@]}" -ne 1 ]; then
+            echo "::error::Ожидался один zip примера в internal/demopack, найдено: ${#demos[@]}"
+            exit 1
+          fi
+          std="$RUNNER_TEMP/standard"
+          mkdir -p "$std"
+          ditto "$app" "$std/$(basename "$app")"
+          sapp="$std/$(basename "$app")"
+          mkdir -p "$sapp/Contents/Resources"
+          cp "${demos[0]}" "$sapp/Contents/Resources/"
+          codesign --force --deep --sign - "$sapp"
+          codesign --verify --deep --strict "$sapp"
+          ditto -c -k --keepParent "$sapp" "out/SosninaAlbums-$VERSION-macos-app-standard.zip"
           ls -l out
           # Хеш — в output задания: pack сверит с ним скачанный артефакт
           {
@@ -391,7 +409,12 @@ jobs:
           # Проверяем ровно те архивы, что собрал pack (хеши — из output задания, не из артефакта)
           [ -n "$SUMS" ] || { echo "::error::Задание pack не передало sha256"; exit 1; }
           (cd "$ZIP_DIR" && printf '%s\n' "$SUMS" | shasum -a 256 -c) || { echo "::error::sha256 zip не совпал с хешем сборки"; exit 1; }
+          # Стандартная редакция (спека 142): тот же universal, но с zip примера в Contents/Resources
+          std="$ZIP_DIR/SosninaAlbums-$VERSION-macos-universal-standard.zip"
+          test -s "$std" || { echo "::error::Нет $std"; ls -l "$ZIP_DIR"; exit 1; }
+          unzip -l "$std" | grep -q 'Contents/Resources/.*-demo-[0-9]*\.zip$' || { echo "::error::В стандартном zip нет файла примера в Contents/Resources"; exit 1; }
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          echo "std=$std" >> "$GITHUB_OUTPUT"
 
       # Эталон раскладок (решения 64 и 95: first.sha и first16.sha проверяются на любой архитектуре); блокирующий
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -419,6 +442,12 @@ jobs:
           ZIP: ${{ steps.zip.outputs.zip }}
         run: /bin/bash scripts/mac/smoke.sh "$ZIP" "$RUNNER_TEMP/mac-out"
 
+      # Стандартный zip: подпись после добавления примера держится, программа запускается (отдельная папка вывода)
+      - name: Проверка запуска стандартной (smoke.sh)
+        env:
+          STD: ${{ steps.zip.outputs.std }}
+        run: /bin/bash scripts/mac/smoke.sh "$STD" "$RUNNER_TEMP/mac-out-standard"
+
       # Снимки для инструкции выпуск не блокируют; после провала smoke.sh идут тоже — для разбора
       - name: Снимки (shots.sh)
         if: always() && steps.zip.outcome == 'success'
@@ -433,12 +462,16 @@ jobs:
         run: |
           f="$RUNNER_TEMP/mac-out/summary.md"
           if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; else echo "summary.md нет" >> "$GITHUB_STEP_SUMMARY"; fi
+          f="$RUNNER_TEMP/mac-out-standard/summary.md"
+          if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: mac-shots-release
-          path: ${{ runner.temp }}/mac-out/
+          path: |
+            ${{ runner.temp }}/mac-out/
+            ${{ runner.temp }}/mac-out-standard/
           if-no-files-found: warn
           retention-days: 30
 
@@ -484,20 +517,27 @@ jobs:
         run: |
           deb="$PKG_DIR/SosninaAlbums-$VERSION-linux-amd64.deb"
           tgz="$PKG_DIR/SosninaAlbums-$VERSION-linux-amd64.tar.gz"
+          # Пакет данных с примером (спека 142, 0.30-142-47): версия — номер примера, а не программы
+          demo="$(ls "$PKG_DIR"/SosninaAlbums-demo-*-linux-all.deb 2>/dev/null || true)"
           test -s "$deb" || { echo "::error::Нет $deb"; ls -l "$PKG_DIR"; exit 1; }
           test -s "$tgz" || { echo "::error::Нет $tgz"; ls -l "$PKG_DIR"; exit 1; }
+          [ "$(printf '%s\n' "$demo" | grep -c .)" -eq 1 ] || { echo "::error::Ждали один пакет данных SosninaAlbums-demo-*-linux-all.deb"; ls -l "$PKG_DIR"; exit 1; }
           # Проверяем ровно то, что собрал pack (хеши — из output задания, не из артефакта)
           [ -n "$SUMS" ] || { echo "::error::Задание pack не передало sha256"; exit 1; }
-          (cd "$PKG_DIR" && printf '%s\n' "$SUMS" | grep -F -e "linux-amd64.deb" -e "linux-amd64.tar.gz" | sha256sum --strict --check) ||
+          (cd "$PKG_DIR" && printf '%s\n' "$SUMS" | grep -F -e "linux-amd64.deb" -e "linux-amd64.tar.gz" -e "linux-all.deb" | sha256sum --strict --check) ||
             { echo "::error::sha256 пакетов Linux не совпал с хешем сборки"; exit 1; }
-          echo "deb=$deb" >> "$GITHUB_OUTPUT"
-          echo "tgz=$tgz" >> "$GITHUB_OUTPUT"
+          {
+            echo "deb=$deb"
+            echo "tgz=$tgz"
+            echo "demo=$demo"
+          } >> "$GITHUB_OUTPUT"
 
       # В контейнере нет sudo (работаем root), на раннере есть. Пакет копируем в /tmp: apt (пользователь _apt) не читает
       # папки раннера и жаловался бы предупреждением. Зависимости (GTK 3, WebKitGTK 4.1) должен поставить сам .deb.
       - name: Установка .deb
         env:
           DEB: ${{ steps.pkg.outputs.deb }}
+          DEMO: ${{ steps.pkg.outputs.demo }}
         run: |
           sudo=()
           [ "$(id -u)" -eq 0 ] || sudo=(sudo)
@@ -505,10 +545,20 @@ jobs:
           "${sudo[@]}" apt-get -o Acquire::Retries=3 update
           "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y --no-install-recommends ca-certificates binutils desktop-file-utils xvfb xauth dbus libgl1-mesa-dri fonts-dejavu-core shared-mime-info xdg-utils libglib2.0-bin
           cp "$DEB" /tmp/sosninaalbums.deb
-          "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y /tmp/sosninaalbums.deb
+          cp "$DEMO" /tmp/sosninaalbums-demo.deb
+          # Оба пакета одной командой: пакет данных не зависит от программы, порядок не важен
+          "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y /tmp/sosninaalbums.deb /tmp/sosninaalbums-demo.deb
           dpkg -s sosninaalbums | sed -n '1,/^Description/p'
+          dpkg -s sosninaalbums-demo | sed -n '1,/^Description/p'
           test -x /usr/bin/sosninaalbums
           desktop-file-validate /usr/share/applications/sosninaalbums.desktop
+          # Файл примера лежит там, где его ищет программа (internal/demopack, /usr/share/sosninaalbums)
+          ls /usr/share/sosninaalbums/*-demo-*.zip
+          test "$(find /usr/share/sosninaalbums -maxdepth 1 -name '*-demo-*.zip' | wc -l)" -eq 1
+          # Чистое удаление обоих: от пакета данных ничего не остаётся
+          "${sudo[@]}" apt-get -o Acquire::Retries=3 remove -y sosninaalbums sosninaalbums-demo
+          test ! -e /usr/share/sosninaalbums
+          "${sudo[@]}" apt-get -o Acquire::Retries=3 install -y /tmp/sosninaalbums.deb
 
       - name: Тест сборки .deb (deb.sh, glibc.sh)
         run: bash scripts/linux/test_deb.sh
@@ -581,24 +631,31 @@ jobs:
           next="$tmp/pkg-test/SosninaAlbums-$vmaj.$vmin.$((10#$vpat + 1))-windows-x64-setup.exe"
           test -s "$setup" || { echo "::error::Нет $setup"; ls -l "$tmp/pkg"; exit 1; }
           test -s "$next" || { echo "::error::Нет $next"; ls -l "$tmp/pkg-test"; exit 1; }
-          (cd "$tmp/pkg" && printf '%s\n' "$SUMS" | grep -F -e "-windows-x64-setup.exe" | sha256sum --strict --check) ||
+          # Стандартный установщик (спека 142): с примером в data\, ставится первым в сценариях installer-check.ps1
+          standard="$tmp/pkg/SosninaAlbums-$VERSION-windows-x64-standard-setup.exe"
+          test -s "$standard" || { echo "::error::Нет $standard"; ls -l "$tmp/pkg"; exit 1; }
+          (cd "$tmp/pkg" && printf '%s\n' "$SUMS" | grep -F -e "-windows-x64-setup.exe" -e "-windows-x64-standard-setup.exe" | sha256sum --strict --check) ||
             { echo "::error::sha256 установщика не совпал с хешем сборки"; exit 1; }
           (cd "$tmp/pkg-test" && printf '%s\n' "$TEST_SUMS" | sha256sum --strict --check) ||
             { echo "::error::sha256 пробного установщика не совпал с хешем сборки"; exit 1; }
-          echo "setup=$setup" >> "$GITHUB_OUTPUT"
-          echo "next=$next" >> "$GITHUB_OUTPUT"
+          {
+            echo "setup=$setup"
+            echo "next=$next"
+            echo "standard=$standard"
+          } >> "$GITHUB_OUTPUT"
 
       # Провал валит задание, а с ним и «Черновик релиза»
       - name: Проверка установщика (installer-check.ps1)
         env:
           SETUP: ${{ steps.setup.outputs.setup }}
           NEXT: ${{ steps.setup.outputs.next }}
+          STANDARD: ${{ steps.setup.outputs.standard }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           # Папку сводки создаём заранее: скрипт её не создаёт; путь — с «/», его понимают и bash, и pwsh
           out="$(cygpath -m "$RUNNER_TEMP")/win-check"
           mkdir -p "$out"
-          pwsh scripts/win/installer-check.ps1 -Setup "$SETUP" -Next "$NEXT" -Version "$VERSION" -Summary "$out/summary.md"
+          pwsh scripts/win/installer-check.ps1 -Setup "$SETUP" -Standard "$STANDARD" -Next "$NEXT" -Version "$VERSION" -Summary "$out/summary.md"
 
       - name: Сводка
         if: always()
@@ -721,6 +778,8 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
+          # Полная история: deb-demo.sh берёт дату коммита zip примера, в неполной копии это дата метки (0.30-142-47)
+          fetch-depth: 0
 
       # Код из метки со старым режимом 100644: скрипты зовут друг друга напрямую, поэтому +x в рабочей копии раннера
       - name: права на скрипты scripts/linux
@@ -790,9 +849,15 @@ jobs:
           date="$(git log -1 --format=%cI)"
           exe="in/windows/SosninaAlbums-$VERSION-windows-x64.exe"
           app="in/macos/SosninaAlbums-$VERSION-macos-app.zip"
+          sapp="in/macos/SosninaAlbums-$VERSION-macos-app-standard.zip"
           lin="in/linux/SosninaAlbums-$VERSION-linux-amd64"
+          # Пример набора (спека 142): один zip на репозиторий, из коммита метки
+          demos=(internal/demopack/*.zip)
+          [ "${#demos[@]}" -eq 1 ] || { echo "::error::Ожидался один zip примера в internal/demopack"; ls internal/demopack; exit 1; }
+          demo="${demos[0]}"
           test -s "$exe" || { echo "::error::Нет $exe"; ls -lR in; exit 1; }
           test -s "$app" || { echo "::error::Нет $app"; ls -lR in; exit 1; }
+          test -s "$sapp" || { echo "::error::Нет $sapp"; ls -lR in; exit 1; }
           test -s "$lin" || { echo "::error::Нет $lin"; ls -lR in; exit 1; }
 
           # Инструкция: pdf своего варианта, нет pdf (сбой LibreOffice) — docx; pack.py сам предупредит
@@ -813,33 +878,46 @@ jobs:
           python -I scripts/win/pack.py macos --app-zip "$app" --version "$VERSION" --guide "$gmac" \
             --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --license LICENSE --notice NOTICE.md \
             --out out --date "$date" | tee "$RUNNER_TEMP/pack-macos.log"
+          # Стандартная Mac: тот же pack.py, другой ключ имени архива (...-macos-universal-standard.zip), приложение с примером
+          python -I scripts/win/pack.py macos --archive "SosninaAlbums-{v}-macos-universal-standard.zip" --app-zip "$sapp" --version "$VERSION" --guide "$gmac" \
+            --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --license LICENSE --notice NOTICE.md \
+            --out out --date "$date" | tee "$RUNNER_TEMP/pack-macos-standard.log"
           python -I scripts/win/pack.py linux --bin "$lin" --version "$VERSION" --guide "$glin" \
             --changelog CHANGELOG.md --notices THIRD_PARTY_NOTICES.txt --license LICENSE --notice NOTICE.md \
             --out out --date "$date" | tee "$RUNNER_TEMP/pack-linux.log"
           # .deb: dpkg-deb, лицензии внутри (/usr/share/doc/sosninaalbums); время файлов — коммита метки, как у архивов
           bash scripts/linux/deb.sh --bin "$lin" --version "$VERSION" --out out --date "$date"
+          # Пакет данных с примером (0.30-142-47): дата — коммита zip (внутри скрипта, нужна полная история), не метки
+          bash scripts/linux/deb-demo.sh --zip "$demo" --out out
           # Установщик Windows (спека 111): тот же exe, что в zip. Пробный — следующей версии (патч + 1): им win-check
           # проверяет обновление поверх; в черновик он не идёт (артефакт installer-test)
           setup="out/SosninaAlbums-$VERSION-windows-x64-setup.exe"
           last="$(bash scripts/win/installer.sh --exe "$exe" --version "$VERSION" --out out)"
           [ "$(basename "$last")" = "$(basename "$setup")" ] || { echo "::error::installer.sh назвал установщик иначе: $last"; exit 1; }
+          # Стандартный установщик: тот же exe плюс пример в data\ (спека 142, 0.30-142-43/44)
+          standard="out/SosninaAlbums-$VERSION-windows-x64-standard-setup.exe"
+          last="$(bash scripts/win/installer.sh --exe "$exe" --version "$VERSION" --out out --demo "$demo" --standard)"
+          [ "$(basename "$last")" = "$(basename "$standard")" ] || { echo "::error::installer.sh назвал стандартный установщик иначе: $last"; exit 1; }
+          test -s "$standard" || { echo "::error::Нет $standard"; ls -l out; exit 1; }
           IFS=. read -r vmaj vmin vpat <<< "$VERSION"
           next="$vmaj.$vmin.$((10#$vpat + 1))"
           bash scripts/win/installer.sh --exe "$exe" --version "$next" --out out-test
           test -s "$setup" || { echo "::error::Нет $setup"; ls -l out; exit 1; }
           test -s "out-test/SosninaAlbums-$next-windows-x64-setup.exe" || { echo "::error::Нет пробного установщика"; ls -l out-test; exit 1; }
 
-          # Ровно три архива и .deb с ожидаемыми именами; последняя строка вывода pack.py — путь к архиву
-          for kv in "windows:windows-x64.zip" "macos:macos-universal.zip" "linux:linux-amd64.tar.gz"; do
+          # Ровно четыре архива (Mac — в двух редакциях), два .deb и два установщика с ожидаемыми именами;
+          # последняя строка вывода pack.py — путь к архиву
+          for kv in "windows:windows-x64.zip" "macos:macos-universal.zip" "macos-standard:macos-universal-standard.zip" "linux:linux-amd64.tar.gz"; do
             os="${kv%%:*}"
             z="out/SosninaAlbums-$VERSION-${kv#*:}"
             test -s "$z" || { echo "::error::Нет $z"; ls -l out; exit 1; }
             last="$(tail -n 1 "$RUNNER_TEMP/pack-$os.log")"
             [ "$(basename "$last")" = "$(basename "$z")" ] || { echo "::error::pack.py назвал архив иначе: $last"; exit 1; }
-            python -I scripts/win/pack.py check "$z" --os "$os" --version "$VERSION"
+            python -I scripts/win/pack.py check "$z" --os "${os%-standard}" --version "$VERSION"
           done
           test -s "out/SosninaAlbums-$VERSION-linux-amd64.deb" || { echo "::error::Нет .deb"; ls -l out; exit 1; }
-          [ "$(find out -mindepth 1 -maxdepth 1 | wc -l)" -eq 5 ] || { echo "::error::В out должно быть три архива, .deb и установщик"; ls -l out; exit 1; }
+          [ "$(find out -name 'SosninaAlbums-demo-*-linux-all.deb' | wc -l)" -eq 1 ] || { echo "::error::Нет пакета данных"; ls -l out; exit 1; }
+          [ "$(find out -mindepth 1 -maxdepth 1 | wc -l)" -eq 8 ] || { echo "::error::В out должно быть четыре архива, два .deb и два установщика"; ls -l out; exit 1; }
           [ "$(find out-test -mindepth 1 -maxdepth 1 | wc -l)" -eq 1 ] || { echo "::error::В out-test должен быть один пробный установщик"; ls -l out-test; exit 1; }
           ls -l out out-test
 
@@ -932,8 +1010,16 @@ jobs:
             "dist/SosninaAlbums-$VERSION-linux-amd64.tar.gz"
             "dist/SosninaAlbums-$VERSION-linux-amd64.deb"
             "dist/SosninaAlbums-$VERSION-windows-x64-setup.exe"
+            "dist/SosninaAlbums-$VERSION-windows-x64-standard-setup.exe"
+            "dist/SosninaAlbums-$VERSION-macos-universal-standard.zip"
             "dist/THIRD_PARTY_NOTICES.txt"
           )
+          # Пакет данных Linux: номер в имени — номер примера, не версия программы (0.30-142-47)
+          demo_debs=(dist/SosninaAlbums-demo-*-linux-all.deb)
+          if [ "${#demo_debs[@]}" -ne 1 ] || [ ! -s "${demo_debs[0]}" ]; then
+            echo "::error::Ждали один пакет данных в dist"; ls -l dist; exit 1
+          fi
+          files+=("${demo_debs[0]}")
           # Шесть вариантов инструкции; вариант macos уходит только внутрь архива Mac (спека 039, запись 4)
           for mid in "" -windows -linux -macos-26 -macos-15 -macos-12-14; do
             base="dist/SosninaAlbums-$VERSION-install-guide$mid-ru"

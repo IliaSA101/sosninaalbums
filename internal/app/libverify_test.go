@@ -28,13 +28,13 @@ import (
 // lvTool — собранный скрипт.
 type lvTool struct{ exe string }
 
-// buildLibVerify собирает скрипт (три файла одного package main); без go или на лёгком уровне — пропуск.
+// buildLibVerify собирает скрипт (четыре файла одного package main); без go или на лёгком уровне — пропуск.
 func buildLibVerify(t *testing.T) lvTool {
 	t.Helper()
-	return buildLibVerifyOf(t, "library-verify.go", "library-verify-sheets.go", "library-verify-looks.go")
+	return buildLibVerifyOf(t, "library-verify.go", "library-verify-sheets.go", "library-verify-looks.go", "library-verify-sprite.go")
 }
 
-// buildLibVerifyOf — сборка из файлов scripts/files (сборка для меток 0.26/0.27 — без третьего).
+// buildLibVerifyOf — сборка из файлов scripts/files (сборка для меток 0.26/0.27 — без третьего и четвёртого).
 func buildLibVerifyOf(t *testing.T, files ...string) lvTool {
 	t.Helper()
 	if testkit.Lite() {

@@ -96,9 +96,23 @@ class PhotoUi {
         store.anchor = pick[0]
       }
       const to = nearestVisible(p, vis)
-      if (to) this.reveal = { id: to, n: ++this.revealN }
+      if (to) this.revealTo(to)
     }
     this.preview = null
+  }
+
+  // Окно 128 из ленты передаёт кадры сравнению (138): закрывается без смены выделения и прокрутки, их сделает закрытие
+  // сравнения. Возвращает прежнее состояние (список и показанный кадр); с холста или без окна — null, окно не тронуто.
+  handOff(): PreviewState | null {
+    const p = this.preview
+    if (!p || p.from !== 'library') return null
+    this.preview = null
+    return p
+  }
+
+  // Прокрутить ленту к фото (окно сравнения 138 закрывается тем же механизмом, что и 128).
+  revealTo(id: string) {
+    this.reveal = { id, n: ++this.revealN }
   }
 
   // Правый щелчок: выделенное остаётся, если щёлкнули по нему; иначе выделяется только щёлкнутое.

@@ -36,6 +36,7 @@ type exportEnv struct {
 	onStep func(done int)
 	last   []any
 	steps  atomic.Int32 // последний готовый номер из export:progress — для отчёта о зависании
+	ticks  atomic.Int64 // число событий export:progress — признак «работа идёт» для ожидания
 }
 
 func newExportEnv(t *testing.T, n int) *exportEnv {
@@ -57,6 +58,7 @@ func newExportEnv(t *testing.T, n int) *exportEnv {
 		switch name {
 		case "export:progress":
 			e.steps.Store(int32(data[0].(int)))
+			e.ticks.Add(1)
 			if e.onStep != nil {
 				e.onStep(data[0].(int))
 			}
@@ -74,6 +76,10 @@ func newExportEnv(t *testing.T, n int) *exportEnv {
 	return e
 }
 
+// exportStall — окно без export:progress, после которого экспорт считается зависшим (до Limit).
+// Запас над самым долгим шагом: под -race и в параллельных тестах первый файл ждёт бюджет декодов.
+const exportStall = 60 * time.Second
+
 // export запускает Export и ждёт конца записи; возвращает сообщение об ошибке из export:done.
 func (e *exportEnv) export(t *testing.T, o ExportOptions) string {
 	t.Helper()
@@ -82,7 +88,9 @@ func (e *exportEnv) export(t *testing.T, o ExportOptions) string {
 	if err != nil || !ok {
 		t.Fatalf("Export(%+v) = %v, %v", o, ok, err)
 	}
-	msg, ok := testkit.WaitCh(t, e.done, testkit.Limit(30*time.Second), "экспорт не закончился", e.stuckState)
+	// Зависание — нет прогресса целое окно, а не общее время: 41 файл 7180×2397 под -race на
+	// раннере идёт минуты, но каждый файл укладывается в окно.
+	msg, ok := testkit.WaitProgress(t, e.done, testkit.Limit(exportStall), "экспорт не закончился", e.ticks.Load, e.stuckState)
 	if !ok {
 		t.Fatal("экспорт не закончился (стеки горутин — в логе выше)")
 	}

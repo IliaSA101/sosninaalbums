@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { isCancelled, offerText, progressPercent, progressText, skipLine, updateText } from './packnet'
+import { CONSENT_TEXT, isCancelled, progressPercent, progressText, skipLine, startText, updateText } from './packnet'
 
 const MB = 1048576
 
@@ -43,8 +43,16 @@ describe('packnet: тексты', () => {
     )
   })
 
-  it('предложение при запуске: число и размер', () => {
-    expect(offerText({ count: 2, bytes: 120 * MB })).toBe('Есть новые наборы: 2 (120,0 МБ)')
+  it('тост запуска: части через «; », первая с заглавной, нулевых нет', () => {
+    const z = { count: 0, bytes: 0 }
+    expect(startText({ updated: 1, offer: z, fresh: { count: 2, bytes: 160 * MB } })).toBe(
+      'Обновлено наборов: 1; есть новые наборы: 2 (160,0 МБ)',
+    )
+    expect(startText({ updated: 0, offer: { count: 2, bytes: 120 * MB }, fresh: z })).toBe('Есть обновления наборов: 2 (120,0 МБ)')
+    expect(startText({ updated: 0, offer: { count: 1, bytes: 120 * MB }, fresh: { count: 3, bytes: 5 * MB } })).toBe(
+      'Есть обновления наборов: 1 (120,0 МБ); есть новые наборы: 3 (5,0 МБ)',
+    )
+    expect(startText({ updated: 0, offer: z, fresh: z })).toBe('')
   })
 
   it('отмена узнаётся по ответу Go (строка и Error), прочее — нет', () => {
@@ -60,6 +68,7 @@ const api = vi.hoisted(() => ({
   LibraryPacks: vi.fn(),
   SetLibraryNet: vi.fn(),
   UpdateLibrary: vi.fn(),
+  DownloadLibraryPack: vi.fn(),
   CancelLibrary: vi.fn(),
   ResetLibrarySkip: vi.fn(),
   DecorCatalog: vi.fn(),
@@ -376,20 +385,52 @@ describe('сеть: ход, «Отменить», итоги', () => {
   })
 })
 
-describe('сеть: library:updated', () => {
-  it('library:updated — обычный тост (не красный), текст как у кнопки', () => {
-    net.updated(upd({ added: 2, updated: 1 }))
-    expect(toast()).toMatchObject({ text: 'Библиотека обновлена: новых наборов 2, обновлено 1' })
-    expect(toast()?.kind).not.toBe('error')
-    net.updated(upd({ updated: 2 }))
-    expect(toast()?.text).toBe('Библиотека обновлена: обновлено наборов 2')
+const none = { count: 0, bytes: 0 }
+
+describe('сеть: library:start', () => {
+  it('только обновлено — обычный тост без кнопки', () => {
+    net.started({ updated: 2, offer: none, fresh: none })
+    expect(toast()).toMatchObject({ text: 'Обновлено наборов: 2', kind: 'info' })
+    expect(toast()?.action).toBeUndefined()
+  })
+
+  it('нечего сказать — тоста нет', () => {
+    net.started({ updated: 0, offer: none, fresh: none })
+    expect(toast()).toBeNull()
+  })
+
+  it('обновления и новые вместе — один тост, кнопка «Скачать» (приоритет предложения)', () => {
+    net.started({ updated: 1, offer: { count: 1, bytes: 120 * MB }, fresh: { count: 2, bytes: 160 * MB } })
+    expect(toast()?.text).toBe('Обновлено наборов: 1; есть обновления наборов: 1 (120,0 МБ); есть новые наборы: 2 (160,0 МБ)')
+    expect(toast()?.action?.label).toBe('Скачать')
+  })
+
+  it('только новые — кнопка «Показать» открывает окно «Наборы» с прокруткой к разделу', async () => {
+    packsUi.close()
+    net.started({ updated: 0, offer: none, fresh: { count: 2, bytes: 160 * MB } })
+    expect(toast()).toMatchObject({ text: 'Есть новые наборы: 2 (160,0 МБ)', kind: 'info' })
+    expect(toast()?.action?.label).toBe('Показать')
+    toast()?.action?.run()
+    await vi.waitFor(() => expect(packsUi.reveal).toBe(true))
+    expect(packsUi.open).toBe(true)
+    expect(api.UpdateLibrary).not.toHaveBeenCalled()
+  })
+
+  it('«Показать» при открытом окне не перечитывает его заново', async () => {
+    api.LibraryPacks.mockClear()
+    net.started({ updated: 0, offer: none, fresh: { count: 1, bytes: MB } })
+    toast()?.action?.run()
+    await vi.waitFor(() => expect(packsUi.reveal).toBe(true))
+    expect(api.LibraryPacks).not.toHaveBeenCalled()
   })
 })
 
-describe('сеть: library:offer и чужая операция', () => {
+describe('сеть: предложение при запуске и чужая операция', () => {
+  const offer = (count: number) => net.started({ updated: 0, offer: { count, bytes: 120 * MB }, fresh: none })
+
   it('предложение: тост с «Скачать», кнопка зовёт UpdateLibrary без вопроса', async () => {
-    net.offered({ count: 2, bytes: 120 * MB })
-    expect(toast()).toMatchObject({ text: 'Есть новые наборы: 2 (120,0 МБ)', kind: 'info' })
+    offer(2)
+    expect(toast()).toMatchObject({ text: 'Есть обновления наборов: 2 (120,0 МБ)', kind: 'info' })
     expect(toast()?.action?.label).toBe('Скачать')
     api.UpdateLibrary.mockResolvedValue(upd({ added: 2 }))
     toast()?.action?.run()
@@ -399,7 +440,7 @@ describe('сеть: library:offer и чужая операция', () => {
   })
 
   it('«Скачать» из тоста при только чтении: подсказка про новую версию, Go не зовётся', async () => {
-    net.offered({ count: 1, bytes: 120 * MB })
+    offer(1)
     const act = toast()?.action
     packsUi.readOnly = true
     act?.run()
@@ -409,13 +450,13 @@ describe('сеть: library:offer и чужая операция', () => {
   })
 
   it('«Скачать» из тоста, пока Go занят: молча, без красного тоста и без вызова Go', () => {
-    net.offered({ count: 1, bytes: 120 * MB })
+    offer(1)
     const act = toast()?.action
     packsUi.goBusy = true
     act?.run()
     packsUi.goBusy = false
     expect(toast()?.kind).toBe('info')
-    expect(toast()?.text).toBe('Есть новые наборы: 1 (120,0 МБ)')
+    expect(toast()?.text).toBe('Есть обновления наборов: 1 (120,0 МБ)')
     expect(api.UpdateLibrary).not.toHaveBeenCalled()
   })
 
@@ -444,7 +485,7 @@ describe('сеть: пропуск удалённых наборов («Верн
   const withSkip = (n: number, o: Record<string, unknown> = {}) => list({ net: netOf({ allowed: true, skipped: n }), ...o })
 
   it('skipLine: число в скобках', () => {
-    expect(skipLine(2)).toBe('Удалённые вами наборы не возвращаются при обновлении (2)')
+    expect(skipLine(2)).toBe('Удалённые вами наборы «Скачать все» пропускает (2)')
   })
 
   it('строка нужна только при skipped > 0: число из LibraryPacks().net, у старого Go — 0', async () => {
@@ -464,7 +505,7 @@ describe('сеть: пропуск удалённых наборов («Верн
     await net.resetSkip()
     expect(api.ResetLibrarySkip).toHaveBeenCalledTimes(1)
     expect(net.net).toMatchObject({ allowed: true, skipped: 0 })
-    expect(toast()).toMatchObject({ text: 'Удалённые наборы вернутся при следующем обновлении', kind: 'info' })
+    expect(toast()).toMatchObject({ text: 'Пометка снята: «Скачать все» снова ставит эти наборы', kind: 'info' })
   })
 
   it('ошибка «Вернуть» — красный тост, число прежнее', async () => {
@@ -487,5 +528,68 @@ describe('сеть: пропуск удалённых наборов («Верн
     await packsUi.load()
     await net.resetSkip()
     expect(api.ResetLibrarySkip).not.toHaveBeenCalled()
+  })
+})
+
+describe('сеть: «Скачать и поставить» из галереи (144)', () => {
+  const pick = (o: Record<string, unknown> = {}) => upd({ added: 1, picked: true, ...o })
+  beforeEach(async () => {
+    api.LibraryPacks.mockResolvedValue(list({ net: netOf({ allowed: true }) }))
+    await packsUi.load()
+  })
+
+  it('fetchOne возвращает итог Go и показывает тост «Скачать» из окна «Наборы»', async () => {
+    const r = pick()
+    api.DownloadLibraryPack.mockResolvedValue(r)
+    expect(await net.fetchOne({ id: 'school', title: 'Школа — осень' })).toBe(r)
+    expect(api.DownloadLibraryPack).toHaveBeenCalledWith('school')
+    expect(toast()).toMatchObject({ text: 'Набор «Школа — осень» скачан', kind: 'info' })
+    expect(net.updating).toBe(false)
+    expect(net.progress).toBeNull()
+  })
+
+  it('ход виден в галерее: окно «Наборы» закрыто, тост «Скачиваем наборы…» не нужен', async () => {
+    packsUi.close()
+    let done: (v: unknown) => void = () => {}
+    api.DownloadLibraryPack.mockReturnValue(new Promise((r) => (done = r)))
+    const p = net.fetchOne({ id: 'school', title: 'Школа' })
+    expect(net.updating).toBe(true)
+    expect(toast()).toBeNull()
+    done(pick())
+    await p
+    expect(toast()?.text).toBe('Набор «Школа» скачан')
+  })
+
+  it('не встал: итог возвращается с picked=false, тост с причиной Go', async () => {
+    api.DownloadLibraryPack.mockResolvedValue(upd({ picked: false, why: 'нужна новая версия программы' }))
+    const r = await net.fetchOne({ id: 'school', title: 'Школа' })
+    expect(r?.picked).toBe(false)
+    expect(toast()?.text).toBe('Набор «Школа» не поставлен: нужна новая версия программы')
+  })
+
+  it('отмена и сбой — null; отмена обычным тостом, сбой красным', async () => {
+    api.DownloadLibraryPack.mockRejectedValueOnce('обновление библиотеки отменено')
+    expect(await net.fetchOne({ id: 'a', title: 'А' })).toBeNull()
+    expect(toast()).toMatchObject({ text: 'Обновление отменено' })
+    api.DownloadLibraryPack.mockRejectedValueOnce('нет связи с github.com')
+    expect(await net.fetchOne({ id: 'a', title: 'А' })).toBeNull()
+    expect(toast()).toMatchObject({ text: 'Нет связи с github.com', kind: 'error' })
+  })
+
+  it('идёт другой ход: второго запроса к Go нет, тост «Библиотека обновляется»', async () => {
+    let done: (v: unknown) => void = () => {}
+    api.DownloadLibraryPack.mockReturnValue(new Promise((r) => (done = r)))
+    const first = net.fetchOne({ id: 'a', title: 'А' })
+    expect(await net.fetchOne({ id: 'b', title: 'Б' })).toBeNull()
+    expect(api.DownloadLibraryPack).toHaveBeenCalledTimes(1)
+    expect(toast()?.text).toBe('Библиотека обновляется')
+    done(pick())
+    await first
+  })
+
+  it('текст согласия называет ролики и образцы (0.31-144-21)', () => {
+    expect(CONSENT_TEXT).toBe(
+      'Программа скачает список наборов и роликов, картинки-образцы наборов, новые наборы и выбранное вами с github.com. Отправляется только обычный запрос: альбомы, фото и сведения о вас не передаются.',
+    )
   })
 })

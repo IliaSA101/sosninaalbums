@@ -22,6 +22,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/app/colorpick"
 	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/app/exporter"
+	"github.com/IliaSA101/sosninaalbums/internal/app/guidevideo"
 	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
 	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 	"github.com/IliaSA101/sosninaalbums/internal/app/updater"
@@ -95,6 +96,9 @@ type App struct {
 
 	// unread — отдельные файлы, найденные, но не прочитанные: ID фото → причина (117, unread.go); под mu.
 	unread map[string]string
+	// badThumb — фото, чей оригинал не декодируется: ID → причина (миниатюра не вышла); входит в
+	// State.Unread и событие `unread`; под mu.
+	badThumb map[string]string
 	// oursSeen — ключи файлов выгрузки программы прошлого законченного чтения папок (121, ours.go); под mu.
 	oursSeen map[string]bool
 
@@ -179,6 +183,14 @@ type App struct {
 	ownp *ownprint.Service
 	// libp — служба наборов библиотеки (internal/app/libpacks; фасад — packs.go).
 	libp *libpacks.Service
+	// guidev — служба роликов справочника F1 (internal/app/guidevideo; фасад — guide.go, спека 140).
+	guidev *guidevideo.Service
+	// demoF — файл примера рядом с программой (demofile.go), ищется лениво один раз за сеанс.
+	demoF    *demoFile
+	demoOnce sync.Once
+	// demoFn — подмена примера в тестах (nil — настоящий, demofile.go): без неё каждый тест App
+	// получал бы строку «Скачать» примера и ждал бы его файл.
+	demoFn func() libpacks.Demo
 	// exp — служба выгрузки (internal/app/exporter; фасад — export.go, спеки 013 и 123).
 	exp *exporter.Service
 	// faceSt — подгон по лицам (faces.go, спека 130): занятость, кэш точек, память сессии.
@@ -209,8 +221,9 @@ type State struct {
 	FreshFonts []string `json:"freshFonts,omitempty"`
 	// Missing — ID недостающих фото (файла нет на диске); обновляется событием `missing`.
 	Missing []string `json:"missing"`
-	// Unread — отдельные файлы, которые найдены, но не читаются: ID фото → готовая причина (117);
-	// обновляется событием `unread` с тем же видом. Нет ключа — файл читается или чтение ещё идёт.
+	// Unread — файлы, которые найдены, но не читаются: ID фото → готовая причина (117); сюда же
+	// входят фото, чья миниатюра не вышла из-за повреждённого оригинала (усечён). Обновляется событием
+	// `unread` с тем же видом. Нет ключа — файл читается или чтение ещё идёт.
 	Unread map[string]string `json:"unread,omitempty"`
 	// Version — версия программы из wails.json.
 	Version string `json:"version"`
@@ -262,6 +275,7 @@ func NewApp() *App {
 	a.assoc = assoc.New(a.assocHost())
 	a.exp = exporter.New(a.expHost())
 	a.libp = libpacks.New(a.packsHost())
+	a.guidev = guidevideo.New(a.guideHost())
 	a.ownp = ownprint.New(a.printsHost())
 	return a
 }
@@ -277,25 +291,30 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	cfgDir, thumbsDir := dataDirs(a.data)
 	a.cfgDir = cfgDir
-	if err := makeDataDir(a.cfgDir); err != nil {
-		log.Printf("папка настроек: %v", paths.NoPath(err)) // без неё лог и конфиг не пишутся, но программа работает
+	if a.cfgDir == "" {
+		// Нет абсолютной папки: относительный путь положил бы config.json и log.txt в текущую папку (140 Н4).
+		log.Printf("папка настроек не определена: настройки, черновик и библиотека на диск не пишутся")
+	} else {
+		if err := makeDataDir(a.cfgDir); err != nil {
+			log.Printf("папка настроек: %v", paths.NoPath(err)) // без неё лог и конфиг не пишутся, но программа работает
+		}
+		setupLog(filepath.Join(a.cfgDir, "log.txt"))
 	}
-	setupLog(filepath.Join(a.cfgDir, "log.txt"))
 	log.Printf("запуск, версия %s", appVersion(wailsJSON))
 	a.flushLaunchLog()                          // строки разбора аргументов, накопленные до открытия log.txt
 	salbum.SetAppVersion(appVersion(wailsJSON)) // до первого Load и записи: поле app в файле (098)
 	a.upd.Startup()                             // итог прошлого запуска установщика — до первого UpdateInfo
 	a.loadTemplates()
 	a.startBackups()
-	a.openDecor()   // до первого Load: свои фоны альбома находят путь по ключу
-	a.ownp.Reload() // и свои типографии: обложка со своим изделием читается при открытии
-	a.openFonts()   // до первого Load: ширины «по тексту» — своими шрифтами
-
-	c, err := library.NewCache(thumbsDir)
-	if err != nil {
-		log.Printf("кэш миниатюр: %v", paths.NoPath(err))
+	if a.cfgDir != "" { // библиотека и шрифты лежат в папке настроек; без неё методы отвечают ошибкой (nil)
+		a.openDecor() // до первого Load: свои фоны альбома находят путь по ключу
 	}
-	a.cache = c
+	a.ownp.Reload() // и свои типографии: обложка со своим изделием читается при открытии
+	if a.cfgDir != "" {
+		a.openFonts() // до первого Load: ширины «по тексту» — своими шрифтами
+	}
+
+	a.cache = a.openCache(thumbsDir)
 
 	// Открываем последний проект, а если его нет — черновик.
 	a.mu.Lock()
@@ -399,6 +418,7 @@ func (a *App) editHost() edit.Host {
 func (a *App) domReady(ctx context.Context) {
 	defer guard("domReady")
 	a.fitScreen(ctx)
+	a.goBG(a.placeDemo) // файл примера — раньше проверки при запуске, замок она не теряет
 	a.libp.ScheduleCheck()
 	a.upd.Schedule()
 }
@@ -467,10 +487,33 @@ func instanceKey(stand string) string {
 
 // dataDirs — папка настроек (config.json, templates.json, Библиотека, черновик, log.txt) и кэша
 // миниатюр; name — osx.DataName.
+//
+// Только абсолютные (osx.ConfigDir/CacheDir): без HOME, XDG_* или APPDATA/LOCALAPPDATA Join с
+// пустой базой дал бы путь от текущей папки процесса. "" — папки нет
+// (настройки не пишутся, миниатюры отключены), как у guideCacheDir и update.Dir.
 func dataDirs(name string) (cfg, thumbs string) {
-	c, _ := os.UserConfigDir()
-	k, _ := os.UserCacheDir()
-	return filepath.Join(c, name), filepath.Join(k, name, "thumbs")
+	if c := osx.ConfigDir(); c != "" {
+		cfg = filepath.Join(c, name)
+	}
+	if k := osx.CacheDir(); k != "" {
+		thumbs = filepath.Join(k, name, "thumbs")
+	}
+	return cfg, thumbs
+}
+
+// openCache — кэш миниатюр в папке dir; nil — кэша нет (dir пуст или не открылся): медиа-запросы
+// миниатюр тогда отвечают 404, остальное работает.
+func (a *App) openCache(dir string) *library.Cache {
+	if dir == "" {
+		log.Printf("папка кэша не определена: миниатюры отключены")
+		return nil
+	}
+	c, err := library.NewCache(dir)
+	if err != nil {
+		log.Printf("кэш миниатюр: %v", paths.NoPath(err))
+		return nil
+	}
+	return c
 }
 
 // quietTransport выключает keep-alive у транспорта. В wails dev обратный прокси к Vite идёт через

@@ -27,8 +27,13 @@ type Templates struct {
 	newer  bool // файл новее программы: читаем, но не пишем
 }
 
-// TemplatesPath — templates.json в папке данных dir.
-func TemplatesPath(dir string) string { return filepath.Join(dir, "templates.json") }
+// TemplatesPath — templates.json в папке данных dir; пустая dir — папки нет, путь пуст.
+func TemplatesPath(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "templates.json")
+}
 
 // openTplFile — os.Open; подменяется в тестах (замок на файле иначе не изобразить).
 var openTplFile = os.Open
@@ -49,6 +54,9 @@ func LoadTemplates(dir string) Templates {
 // read читает файл в t. Ошибка — только если файл есть, но не открылся или не
 // прочитался: такой файл может быть исправным, в .bad его не уводим.
 func (t *Templates) read(dir string) error {
+	if dir == "" {
+		return nil // папки данных нет: файла не бывает
+	}
 	f, err := openTplFile(TemplatesPath(dir))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -110,6 +118,10 @@ func (t *Templates) Store(dir string, list []model.Template, rename func(from, t
 		// Такой файл при следующем чтении ушёл бы в .bad: не пишем, память прежняя.
 		log.Printf("templates.json: %d байт больше предела, запись отменена", len(data))
 		return model.ErrTemplatesFull
+	}
+	if dir == "" { // папки данных нет: шаблоны живут в памяти до выхода
+		t.list = list
+		return nil
 	}
 	if t.bad || t.cut {
 		if err := moveBad(dir, rename); err != nil {

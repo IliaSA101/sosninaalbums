@@ -12,6 +12,7 @@
   import type { PagePreset, PagePxView, Settings } from '../../base/core/types'
   import Seg from '../../base/tpl/Seg.svelte'
   import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import ColorReset from '../../base/color/ColorReset.svelte'
   import { colorLive } from '../../base/color/colorlive.svelte'
   import { SHEET_PRESETS, cmText, isSheet, newSheetSize, unitOf } from '../../base/geom/sheet'
   import { modes } from '../../base/prefs/view.svelte'
@@ -27,6 +28,7 @@
   import { groupLabel, presetActive, presetFields, presetGroupOf, presetHint, presetRows, exportPx, FILE_DPI, type Preset } from './presets'
   import { NUMS, norm, same } from './settingsnorm'
   import { marginNoteAsker } from './marginnote'
+  import { BG_RESET_TIP } from '../albumbg/albumbg'
   import AlbumOwnAsk from '../albumbg/AlbumOwnAsk.svelte'
   import { ownAskText, ownColorNums, ownDoneText, type OwnAsk } from '../albumbg/albumown'
 
@@ -198,13 +200,23 @@
     {sheet ? 'Цвет листов' : 'Цвет страниц альбома'}
     <!-- цвет попадает в форму при выборе; применяет «Применить» -->
     <!-- наведение показывает цвет на страницах без своего цвета (109); выбор остаётся в черновике до «Применить» -->
-    <ColorPicker
-      value={s.bg || '#ffffff'}
-      sheet={store.spread?.id}
-      label={sheet ? 'Цвет листов' : 'Цвет страниц альбома'}
-      onpick={(c) => (s.bg = c)}
-      onpreview={(c) => (c ? colorLive.set(['album'], c) : colorLive.clear())}
-    />
+    <!-- 135: крестик — исходный цвет (пустой bg) в тот же черновик; гаснет, когда цвет уже исходный -->
+    <span class="color">
+      <ColorPicker
+        value={s.bg || '#ffffff'}
+        sheet={store.spread?.id}
+        label={sheet ? 'Цвет листов' : 'Цвет страниц альбома'}
+        onpick={(c) => (s.bg = c)}
+        onpreview={(c) => (c ? colorLive.set(['album'], c) : colorLive.clear())}
+      />
+      <ColorReset
+        label={sheet ? 'Цвет листов: исходный' : 'Цвет страниц альбома: исходный'}
+        title={BG_RESET_TIP}
+        disabled={!s.bg}
+        onclick={() => (s.bg = '')}
+        onhover={(on) => (on ? colorLive.set(['album'], '#ffffff') : colorLive.clear())}
+      />
+    </span>
   </label>
   <!-- 098: фон альбома — не поле формы, ставится сразу (свой шаг отмены); цвет страниц лежит под ним -->
   <AlbumBgRow />
@@ -308,6 +320,11 @@
   }
   label input[type='number'] {
     width: 90px;
+  }
+  .color {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
   .pair {
     display: flex;

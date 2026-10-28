@@ -55,6 +55,16 @@ class InstallerCheck(unittest.TestCase):
         self.assertGreater(reread, text.index("Section 'Удаление'"))
 
 
+    def test_standard_section_optional_and_uses_next(self):
+        # 0.30-142-43: стандартная X -> компактная X+1 (той же версии /S вышел бы с кодом 4); без -Standard раздела нет
+        text = read("installer-check.ps1")
+        self.assertIn("[string]$Standard = ''", text)
+        sec = text[text.index("if ($Standard) {"):text.rindex("} catch {")]
+        self.assertLess(sec.index("Invoke-Setup $Standard"), sec.index("Invoke-Setup $Next '/S'"))
+        self.assertIn("wedding-navy-watercolor-demo-*.zip", sec)
+        self.assertIn("EstimatedSize", sec)
+
+
 class Shots(unittest.TestCase):
     def test_save_shot_sets_dpi_awareness(self):
         text = read("qa", "winqa.psm1")

@@ -11,6 +11,8 @@ import type { RecentProject } from '../../base/core/types'
 import type { IconName } from '../../base/ui/Icon.svelte'
 import { ACTS, GROUP_ICON } from '../../editor/photomenu/photoacts'
 import { LAYER_OPS, type LayerOp } from '../../editor/places/minipanel'
+import { VIG_CLEAR_TITLE, VIG_SORT_TITLE } from '../../panels/vignette/vigmenu'
+import { gateHint, type Gate } from './spreadcmds'
 
 // Функция уровня (levels.ts): `can(id)` прячет пункт, чужой уровню.
 export type Feature = FeatureId
@@ -61,7 +63,10 @@ export interface MenuCtx {
   varyable?: boolean // у «Разнообразить раскладки» есть цель: развороты «Авто» с фото среди выделенных, без выделения — текущий; нет — серое
   vigable?: boolean // текущий лист можно сделать виньеткой (обычный разворот, не обложка); нет — серое
   decorable?: boolean // у текущего листа можно копировать оформление (049 Ф2): есть лист и это не обложка; нет — серое
-  vigSetup?: boolean // текущий лист — виньетка: «Настроить виньетку…» доступна; нет — серое
+  vigSetup?: boolean // текущий лист — виньетка: «Настроить виньетку…», «Сортировать по фамилии», «Обычный разворот» доступны; нет — серое
+  insertable?: boolean // 141: есть текущий лист — «Вставить разворот после»; нет — серое
+  cutGate?: Gate // 141: «Разрезать перед выделенным фото»: ok, why (серое), ask (подсказка доступного); не задан — серое
+  joinGate?: Gate // 141: «Склеить со следующим», как cutGate
   copyable?: boolean // на листе выделено то, что копируется (099): «Вырезать», «Копировать», «Дублировать» без этого серые
   pasteable?: boolean // буфер не пуст и есть лист (099): «Вставить» без этого серое
   layerable?: boolean // «Ручная» и выделено место, фото, текст или стикер; «Авто» — стикер (с текстом или без) без мест: слои двигать есть что; нет — серое
@@ -388,6 +393,27 @@ function spreadSpecs(c: MenuCtx): Spec[][] {
       { id: 'varyLayouts', label: 'Разнообразить раскладки', cmd: 'varyLayouts', feature: 'variants', disabled: !c.varyable },
     ],
     [
+      // 141: те же действия, что в правом щелчке по группе ленты; «вставить перед» остаётся там (0.30-141-3).
+      // Разрез идёт перед выделенным фото (0.30-141-2), цель — текущий лист (0.30-141-5), слова постоянные (0.30-141-6)
+      { id: 'insertSpread', label: 'Вставить разворот после', cmd: 'insertSpread', disabled: !c.insertable },
+      {
+        id: 'splitSpread',
+        label: 'Разрезать перед выделенным фото',
+        cmd: 'splitSpread',
+        feature: 'timeline',
+        disabled: !c.cutGate?.ok,
+        hint: gateHint(c.cutGate),
+      },
+      {
+        id: 'joinSpread',
+        label: 'Склеить со следующим',
+        cmd: 'joinSpread',
+        feature: 'timeline',
+        disabled: !c.joinGate?.ok,
+        hint: gateHint(c.joinGate),
+      },
+    ],
+    [
       {
         id: 'makeVignette',
         label: 'Сделать разворот виньеткой',
@@ -397,6 +423,23 @@ function spreadSpecs(c: MenuCtx): Spec[][] {
         disabled: !c.vigable,
       },
       { id: 'vigSetup', label: 'Настроить виньетку…', cmd: 'vigSetup', feature: 'vignette', disabled: !c.vigSetup },
+      // 141: как кнопка карточки и пункт «⋯»; в правом щелчке «Обычный разворот» остаётся на любом уровне (0.30-141-4)
+      {
+        id: 'sortVignette',
+        label: 'Сортировать по фамилии',
+        cmd: 'sortVignette',
+        feature: 'vignette',
+        disabled: !c.vigSetup,
+        hint: VIG_SORT_TITLE,
+      },
+      {
+        id: 'clearVignette',
+        label: 'Обычный разворот',
+        cmd: 'clearVignette',
+        feature: 'vignette',
+        disabled: !c.vigSetup,
+        hint: VIG_CLEAR_TITLE,
+      },
     ],
   ]
 }
@@ -447,10 +490,10 @@ function helpSpecs(): Spec[][] {
   ]
 }
 
-// Меню без видимых на уровне пунктов в строку не попадает (как группа и подменю в build).
+// У каждого меню есть пункт без feature (новый, правка, вставка разворота, уровень, «О программе»): строка не пустеет на любом уровне.
 export function buildMenu(c: MenuCtx): Menu[] {
   const can = c.can ?? (() => true)
-  const all: Menu[] = [
+  return [
     { id: 'file', label: 'Файл', items: build(fileSpecs(c), can) },
     { id: 'edit', label: 'Правка', items: build(editSpecs(c), can) },
     // Название постоянное, и в проекте «виньетка-лист» (0.26-124-1)
@@ -458,5 +501,4 @@ export function buildMenu(c: MenuCtx): Menu[] {
     { id: 'view', label: 'Вид', items: build(viewSpecs(c), can) },
     { id: 'help', label: 'Справка', items: build(helpSpecs(), can) },
   ]
-  return all.filter((m) => m.items.length > 0)
 }

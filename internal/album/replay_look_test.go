@@ -4,6 +4,7 @@ import (
 	"reflect"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
+	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 )
 
@@ -109,6 +110,27 @@ func replayLookCover(r *replay) {
 	lkHost(e, c)
 	v, styled, err := e.CreateCoverLook("", nil, nil, e.Look())
 	r.edit("CreateCoverLook", v, styled != nil, err)
+
+	// 145: бросок с фото — в первое место лицевой макета: фото вне альбома (номер 90 — вне ленты и
+	// сцен реплея) прямо в место, затем фото, уже стоящее в альбоме (встаёт копией).
+	r.do("DeleteCover:перед броском", e.DeleteCover())
+	ph := replayPhoto(90, 'h', model.XmpMarks{})
+	v, styled, err = e.CreateCoverLook("", &ph, nil, e.Look())
+	r.edit("CreateCoverLook:фото в место", v, styled != nil, err)
+	r.do("DeleteCover:перед копией", e.DeleteCover())
+	var in model.PhotoInfo
+	for _, s := range edtest.P(e).Spreads {
+		if len(s.Photos) > 0 {
+			ref := edtest.P(e).Photos[s.Photos[0]]
+			in = model.PhotoInfo{ID: s.Photos[0], Path: ref.Path, W: ref.W, H: ref.H, Size: ref.Size}
+			break
+		}
+	}
+	if in.ID == "" {
+		r.t.Fatal("в альбоме реплея нет фото для броска копией")
+	}
+	v, styled, err = e.CreateCoverLook("", &in, nil, e.Look())
+	r.edit("CreateCoverLook:копия в место", v, styled != nil, err)
 }
 
 func errText(err error) string {

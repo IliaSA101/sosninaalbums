@@ -27,11 +27,18 @@
 // Если набор с этим id уже есть в каталоге, --prev обязателен, его id совпадает с набором, а sha256 — со
 // строкой каталога (истина — опубликованный zip, а не папка на одной машине).
 // Порядок строк каталога не сортируется: прежние на месте, новая в конец (порядок установки = порядок выпуска).
-// zip больше 70 МБ — отказ. manifest.src.json `needs: "<id донора>"` -> поле `needs` строки каталога (minApp от 0.27.0);
+// zip больше 70 МБ — отказ; для minApp не ниже 0.29.0 — больше 240 МБ (0.30-wave2-1: клиент 0.29+ ждёт по размеру,
+// PackLimit; жёсткий предел MaxZip 300 МБ). Новый id (его нет в --catalog) — только с minApp не ниже 0.29.0: клиенты
+// 0.17–0.28 такие строки пропускают, а не заполняют ими библиотеку (0.29-137-27). Первый набор нового каталога
+// (--new) и повторный выпуск старого набора — без этого правила. manifest.src.json `needs: "<id донора>"` -> поле `needs` строки каталога (minApp от 0.27.0);
 // донор обязан быть в каталоге и стоять в нём раньше (порядок строк = порядок установки).
 // Макет альбома (kind album, .json ≤ 512 КБ): id набора на `-layouts`, minApp не ниже 0.28.0; путь записи прежней
 // версии обязан остаться в новой (иначе альбомы не найдут макет), кроме явного --drop.
 // Стикер — сторона до 4096 px, фон — до 100 Мп (по заголовку PNG/JPEG, без декодирования).
+// --sheets <папка>: лист образцов набора (спека 144) — `<id>-<версия>-preview.jpg` и `.json` из `library-verify -sprite -out`;
+// в строку каталога идёт поле `preview` (sha256 и размер считает скрипт), проверки и режим `--preview-only <id>=<zip>`
+// для вышедших наборов (архив не меняется) — library-pack-preview.mjs. Без --sheets строка без `preview`.
+// Пример темы в программе (спека 142): --zip-only, --snapshot, --demo-keys без каталога и ключа, резерв id и страж ключей — library-pack-demo.mjs.
 //
 // Закрытый ключ (по умолчанию docs/private/library-key.pem, вне git) в вывод не печатается.
 import crypto from 'node:crypto'
@@ -39,6 +46,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { checkDemoPack, demoMain, isDemoCmd, readDemoKeys } from './library-pack-demo.mjs'
+import { checkBody, isPreviewCmd, previewField, previewMain, readSheet } from './library-pack-preview.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const URL_PREFIX = 'https://github.com/IliaSA101/sosninaalbums-library/releases/download/'
@@ -57,11 +66,16 @@ const ALBUM_MIN_RATIO = 0.2 // как minTplRatio, maxTplRatio в model/spreadtp
 const ALBUM_MAX_RATIO = 5
 const NEEDS_MIN_APP = [0, 27, 0] // 0.26 поле needs не знает и дополнение без донора поставит (0.27-129-12)
 export const MAX_ZIP = 70 << 20 // бюджет набора (0.27-129-13): 70 МБ за 15 мин — от 0,62 Мбит/с
+// Клиент 0.29+ качает набор столько, сколько нужно на 64 КиБ/с (fetch.PackLimit: 240 МБ — 3840 с), а жёстко
+// режет только fetch.MaxZip = pack.MaxZip = 300 МБ; берём 240 МБ — запас 60 МБ под оверхед zip и рост (0.30-wave2-1).
+export const MAX_ZIP_WAVE2 = 240 << 20
+const WAVE2_MIN_APP = [0, 29, 0] // с этой версии клиент пропускает строки с большим minApp и ждёт большие наборы (137)
 const STICKER_MAX_SIDE = 4096 // как packMaxSide в decor: больше стикер не ставится
 const BG_MAX_PIXELS = 100_000_000 // как packMaxBgPixels
 const MAX_SRC = 1 << 20 // manifest.src.json: 1000 предметов — десятки КБ
 const MAX_CATALOG = 8 << 20 // файл каталога: 500 строк — сотни КБ
 const KEYED_KINDS = ['bg', 'sticker', 'frame'] // ключи, которые нельзя терять между версиями
+const MAX_TOTAL = 1 << 30 // набор распакованным целиком, как pack.MaxTotal
 const MAX_ENTRY = 64 << 20 // запись zip при чтении --prev: предел вида (60 МБ) с запасом
 
 /** x.y.z -> число для сравнения версий. */
@@ -171,6 +185,7 @@ export function readZip(buf) {
   const n = buf.readUInt16LE(eocd + 10)
   let p = buf.readUInt32LE(eocd + 16)
   const out = new Map()
+  let total = 0 // распакованное целиком: предел pack.MaxTotal, иначе много записей по 64 МБ раздуют память
   for (let i = 0; i < n; i++) {
     if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('zip: битый каталог')
     const method = buf.readUInt16LE(p + 10)
@@ -182,6 +197,8 @@ export function readZip(buf) {
     const name = buf.toString('utf8', p + 46, p + 46 + nl)
     const start = lho + 30 + buf.readUInt16LE(lho + 26) + buf.readUInt16LE(lho + 28)
     if (usize > MAX_ENTRY) throw new Error(`zip: ${name} больше ${MAX_ENTRY >> 20} МБ`)
+    total += usize
+    if (total > MAX_TOTAL) throw new Error(`zip: распакованное больше ${MAX_TOTAL >> 20} МБ`)
     const raw = buf.subarray(start, start + csize)
     const data = method === 8 ? zlib.inflateRawSync(raw, { maxOutputLength: usize }) : raw
     if (data.length !== usize || zlib.crc32(data) !== crc) throw new Error(`zip: ${name} не сошёлся`)
@@ -196,7 +213,7 @@ export function readZip(buf) {
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
 /** Читает файл, сперва сверив размер с пределом (огромный файл в память не читается). */
-function readLimited(file, max, what) {
+export function readLimited(file, max, what) {
   const st = fs.statSync(file)
   if (!st.isFile()) throw new Error(`${what}: не обычный файл`)
   if (st.size > max) throw new Error(`${what}: ${st.size} байт больше предела ${max}`)
@@ -282,7 +299,7 @@ function libKeys(v, out = new Set()) {
 }
 
 /** Читает папку набора -> {manifest, files:[{name,data}]}; нарушение предела — исключение. */
-export function buildPack(dir) {
+export function buildPack(dir, { zipOnly = false } = {}) {
   const src = JSON.parse(readLimited(path.join(dir, 'manifest.src.json'), MAX_SRC, 'manifest.src.json').toString('utf8'))
   if (!ID_RE.test(src.id ?? '')) throw new Error('id набора не по грамматике')
   if (!Number.isInteger(src.version) || src.version < 1 || src.version > 999999) throw new Error('version 1…999999')
@@ -315,7 +332,7 @@ export function buildPack(dir) {
       checkPrintFile(it.file, data)
     }
     if (it.kind === 'album') {
-      if (!src.id.endsWith(ALBUM_ID_SUFFIX)) throw new Error(`${it.file}: макеты альбома — только в наборе с id <имя>${ALBUM_ID_SUFFIX}`)
+      if (!zipOnly && !src.id.endsWith(ALBUM_ID_SUFFIX)) throw new Error(`${it.file}: макеты альбома — только в наборе с id <имя>${ALBUM_ID_SUFFIX}`)
       if (verNum(src.minApp) < verNum(ALBUM_MIN_APP.join('.'))) throw new Error(`${it.file}: набор с макетами альбома требует minApp не ниже ${ALBUM_MIN_APP.join('.')}`)
       checkAlbumFile(it.file, data)
     }
@@ -349,9 +366,18 @@ export function buildPack(dir) {
   return { manifest, needs, files: [{ name: 'manifest.json', data: mdata }, ...files, ...extra] }
 }
 
-/** Отказ, если zip больше бюджета набора. */
-export function assertZipSize(zip) {
-  if (zip.length > MAX_ZIP) throw new Error(`zip ${(zip.length / (1 << 20)).toFixed(1)} МБ больше предела ${MAX_ZIP >> 20} МБ: уберите предметы из набора`)
+/** Предел zip по minApp набора: от 0.29.0 — MAX_ZIP_WAVE2, иначе (и без minApp) — MAX_ZIP. */
+export function zipLimit(minApp) {
+  return minApp && verNum(minApp) >= verNum(WAVE2_MIN_APP.join('.')) ? MAX_ZIP_WAVE2 : MAX_ZIP
+}
+
+/** Отказ, если zip больше бюджета набора (minApp не задан — прежний предел 70 МБ). */
+export function assertZipSize(zip, minApp) {
+  const max = zipLimit(minApp)
+  if (zip.length > max) {
+    const why = max === MAX_ZIP ? '' : ` (minApp ${minApp})`
+    throw new Error(`zip ${(zip.length / (1 << 20)).toFixed(1)} МБ больше предела ${max >> 20} МБ${why}: уберите предметы из набора`)
+  }
 }
 
 /** Ключи прежней версии (sha256 bg/sticker/frame) должны остаться в новой; drops — имена файлов прежнего манифеста. */
@@ -383,6 +409,9 @@ export function checkPublish(base, manifest, needs, prev, drops = []) {
   const packs = base?.packs ?? []
   const at = packs.findIndex((p) => p.id === manifest.id)
   const row = at >= 0 ? packs[at] : null
+  if (base && !row && verNum(manifest.minApp) < verNum(WAVE2_MIN_APP.join('.'))) {
+    throw new Error(`новый набор ${manifest.id} (его нет в каталоге) требует minApp не ниже ${WAVE2_MIN_APP.join('.')}, а в манифесте ${manifest.minApp}: клиенты 0.17–0.28 иначе скачают его целиком и заполнят библиотеку`)
+  }
   if (row && !prev) throw new Error(`в каталоге уже есть ${manifest.id} v${row.version}: нужен --prev <опубликованный zip> (заморозка ключей)`)
   if (prev) {
     if (prev.manifest.id !== manifest.id) throw new Error(`--prev: архив набора ${prev.manifest.id}, а собирается ${manifest.id}`)
@@ -432,7 +461,7 @@ export function catalogRow(manifest, zip, tag, needs) {
   }
 }
 
-/** Добавляет/заменяет строку по id; возвращает новый каталог. Старее стоящей версии — отказ. Порядок не сортируется: прежняя строка остаётся на месте, новая — в конец. */
+/** Добавляет/заменяет строку по id; возвращает новый каталог. Старее стоящей версии — отказ. Порядок не сортируется: прежняя строка остаётся на месте, новая — в конец. Прочие поля прежнего каталога (videos — ролики F1, 140) переносятся как есть: публикация набора их не трогает. */
 export function upsertCatalog(cat, row, seq) {
   const packs = [...(cat?.packs ?? [])]
   const i = packs.findIndex((p) => p.id === row.id)
@@ -444,7 +473,7 @@ export function upsertCatalog(cat, row, seq) {
   seq ??= prev + 1
   if (!Number.isInteger(seq) || seq <= 0) throw new Error('seq должен быть целым > 0')
   if (cat && seq <= prev) throw new Error(`seq ${seq} должен быть больше seq прежнего каталога (${prev})`)
-  return { format: 1, seq, packs }
+  return { ...cat, format: 1, seq, packs }
 }
 
 /** Прежний каталог обязателен: без файла — отказ, если не задан явный --new (тогда каталог начинается с seq 1). */
@@ -486,12 +515,16 @@ export function verifyBytes(data, sigB64, pubRaw) {
 
 // ---- CLI ----
 
-const VALUE_FLAGS = ['--out', '--catalog', '--key', '--seq', '--prev', '--drop']
+const VALUE_FLAGS = ['--out', '--catalog', '--key', '--seq', '--prev', '--drop', '--sheets']
 const BOOL_FLAGS = ['--new', '--test-key', '--help']
 const USAGE = `использование: node scripts/library-pack.mjs <папка набора> [--out dist] [--catalog catalog.json] [--key pem] [--seq N] [--new] [--prev zip [--drop файл]...]
               node scripts/library-pack.mjs --test-key   (одноразовый ключ .gotmp/library-test-key.pem и открытый ключ)
 Скрипт всегда подписывает. Локально: --test-key, затем <папка> --new --key .gotmp/library-test-key.pem --out .gotmp/lib
-(следующие наборы — без --new). Набор уже в каталоге — нужен --prev <опубликованный zip>. Подробности — шапка файла.`
+(следующие наборы — без --new). Набор уже в каталоге — нужен --prev <опубликованный zip>. Подробности — шапка файла.
+              node scripts/library-pack.mjs --zip-only <папка> --out <папка>   (пример в программе: без каталога и ключа)
+              node scripts/library-pack.mjs <папка> ... --sheets <папка листа>   (поле preview строки каталога, спека 144)
+              node scripts/library-pack.mjs --preview-only <id>=<zip> [...] --sheets <папка> --catalog <каталог> [--key pem] [--seq N]
+                                                  (лист образцов вышедших наборов: архивы и их sha256 не меняются)`
 
 /** Значение ключа: следующий аргумент; нет значения — исключение. */
 function arg(argv, name, def) {
@@ -513,6 +546,22 @@ function main(argv) {
     console.log(USAGE)
     return
   }
+  if (isDemoCmd(argv)) {
+    try {
+      demoMain(argv, { buildPack, makeZip, assertZipSize, readZip, readLimited, MAX_ZIP })
+    } catch (e) {
+      die(e.message, e.code === 2 ? 2 : 1) // у ошибок fs code — строка
+    }
+    return
+  }
+  if (isPreviewCmd(argv)) {
+    try {
+      previewMain(argv, { buildPack, readLimited, readPrev, readCatalogFile, sealCatalog, URL_PREFIX, MAX_ZIP_WAVE2 }, root)
+    } catch (e) {
+      die(e.message, e.code === 2 ? 2 : 1)
+    }
+    return
+  }
   if (argv.includes('--test-key')) {
     const { privateKey } = crypto.generateKeyPairSync('ed25519')
     const file = path.join(root, '.gotmp', 'library-test-key.pem')
@@ -526,13 +575,14 @@ function main(argv) {
   if (unknown) die(`неизвестный ключ ${unknown}\n${USAGE}`, 2)
   const dir = argv.find((a, i) => !a.startsWith('--') && (i === 0 || !VALUE_FLAGS.includes(argv[i - 1])))
   if (!dir) die(USAGE, 2)
-  let keyPath, outDir, catPath, prevPath, seqArg
+  let keyPath, outDir, catPath, prevPath, seqArg, sheets
   try {
     keyPath = path.resolve(arg(argv, '--key', path.join(root, 'docs', 'private', 'library-key.pem')))
     outDir = path.resolve(arg(argv, '--out', 'dist'))
     catPath = path.resolve(arg(argv, '--catalog', path.join(outDir, 'catalog.json')))
     prevPath = arg(argv, '--prev', undefined)
     seqArg = arg(argv, '--seq', undefined)
+    sheets = arg(argv, '--sheets', undefined)
   } catch (e) {
     die(e.message, 2)
   }
@@ -545,21 +595,28 @@ function main(argv) {
     die(e.message, 2)
   }
   // Всё, что может отказать, — до первой записи: при отказе папка вывода и каталог не тронуты.
-  let manifest, needs, zip, cat
+  let manifest, needs, zip, cat, bodyWarn
   try {
     ;({ manifest, needs, files: zip } = buildPack(path.resolve(dir)))
+    checkDemoPack(manifest, readDemoKeys(root))
     zip = makeZip(zip)
-    assertZipSize(zip)
+    assertZipSize(zip, manifest.minApp)
     let prev
-    if (prevPath) prev = readPrev(readLimited(path.resolve(prevPath), MAX_ZIP, '--prev'))
+    if (prevPath) prev = readPrev(readLimited(path.resolve(prevPath), MAX_ZIP_WAVE2, '--prev'))
     const drops = argv.flatMap((a, i) => (a === '--drop' ? [argv[i + 1]] : []))
     checkPublish(base, manifest, needs, prev, drops)
     const tag = `${manifest.id}-${manifest.version}.zip`
-    cat = upsertCatalog(base, catalogRow(manifest, zip, tag, needs), seqArg === undefined ? undefined : Number(seqArg))
+    const row = catalogRow(manifest, zip, tag, needs)
+    if (sheets) {
+      const { jpeg, metaText } = readSheet(path.resolve(sheets), manifest, { readLimited })
+      row.preview = previewField(jpeg, metaText, manifest, URL_PREFIX)
+    }
+    cat = upsertCatalog(base, row, seqArg === undefined ? undefined : Number(seqArg))
+    bodyWarn = checkBody(cat)
   } catch (e) {
     die(e.message)
   }
-  for (const w of orderWarnings(cat)) console.warn(`предупреждение: ${w}`)
+  for (const w of [...orderWarnings(cat), ...(bodyWarn ? [bodyWarn] : [])]) console.warn(`предупреждение: ${w}`)
   const tag = `${manifest.id}-${manifest.version}.zip`
   fs.mkdirSync(outDir, { recursive: true })
   fs.writeFileSync(path.join(outDir, tag), zip)

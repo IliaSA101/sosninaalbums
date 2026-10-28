@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // TestAutoBuildLogsMem (089 G3): удачная сборка пишет одну строку «память: автосборка», отказ
@@ -326,5 +327,42 @@ func TestMarksWiring(t *testing.T) {
 	rev = v.Rev
 	if v = k.ResetMarks([]string{"a", "нет"}); v.Rev != rev {
 		t.Errorf("повторный ResetMarks: rev %d → %d", rev, v.Rev)
+	}
+}
+
+// PickBest (138): ID вне ленты пропускаются, путь от интерфейса в файл не идёт; неизвестный
+// «лучший» — холостая без ошибки и без рассылки; больше трёх остальных — ошибка без рассылки;
+// удачная — одна рассылка и один шаг отмены.
+func TestPickBestUnknownSkipped(t *testing.T) {
+	k := twoSpreads(t)
+	for _, id := range []string{"a", "b", "c", "d", "e"} {
+		k.lentPhoto(id)
+	}
+	v, err := k.PickBest("a", []string{"b", "призрак", "b", "a", testkit.AbsPath("чужой.jpg")})
+	if err != nil || k.calls != 1 {
+		t.Fatalf("PickBest: err %v, Changed %d", err, k.calls)
+	}
+	marks := k.Marks()
+	if len(marks) != 2 || marks["a"].Flag == nil || *marks["a"].Flag != 1 || marks["b"].Flag == nil || *marks["b"].Flag != -1 {
+		t.Fatalf("отметки: %+v", marks)
+	}
+	// Повтор — холостая: rev прежний.
+	rev := v.Rev
+	if v, err = k.PickBest("a", []string{"b"}); err != nil || v.Rev != rev {
+		t.Fatalf("повтор: err %v, rev %d → %d", err, rev, v.Rev)
+	}
+	// Неизвестный лучший: без ошибки, отметки целы, рассылки нет.
+	calls := k.calls
+	if v, err = k.PickBest("призрак", []string{"c"}); err != nil || v.Rev != rev || k.calls != calls || len(k.Marks()) != 2 {
+		t.Fatalf("неизвестный лучший: err %v, rev %d → %d, Changed %d → %d, отметок %d", err, rev, v.Rev, calls, k.calls, len(k.Marks()))
+	}
+	// Больше трёх остальных: ошибка, без рассылки.
+	if _, err = k.PickBest("a", []string{"b", "c", "d", "e"}); err == nil || k.calls != calls || len(k.Marks()) != 2 {
+		t.Fatalf("четыре остальных: err %v, Changed %d → %d, отметок %d", err, calls, k.calls, len(k.Marks()))
+	}
+	// Один шаг отмены на всё.
+	k.ed.Undo()
+	if len(k.Marks()) != 0 {
+		t.Errorf("Ctrl+Z оставил отметки: %+v", k.Marks())
 	}
 }

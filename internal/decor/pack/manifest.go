@@ -51,6 +51,8 @@ var (
 	ErrManifest = errors.New("манифест набора не читается")
 	ErrDamaged  = errors.New("архив набора повреждён")
 	ErrEmpty    = errors.New("в наборе нечего ставить")
+	// ErrAppOld — программа старше minApp набора; текст ошибки целиком: «нужна версия Sosnina Albums X или новее».
+	ErrAppOld = errors.New("нужна версия Sosnina Albums")
 )
 
 // Manifest — manifest.json набора после проверки. Items — только предметы, которые эта версия
@@ -168,7 +170,7 @@ func (m *Manifest) checkHead(app string) error {
 		return fmt.Errorf("%w: minApp — x.y.z", ErrManifest)
 	}
 	if have, ok := parseVer(app); ok && cmpVer(need, have) > 0 {
-		return fmt.Errorf("нужна версия Sosnina Albums %s или новее", m.MinApp)
+		return fmt.Errorf("%w %s или новее", ErrAppOld, m.MinApp)
 	}
 	if m.Title = Clean(m.Title, 60); m.Title == "" {
 		return fmt.Errorf("%w: у набора нет названия", ErrManifest)

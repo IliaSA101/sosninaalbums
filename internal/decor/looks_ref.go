@@ -21,16 +21,23 @@ func (s *Store) LookRefOf(id string) (model.LookRef, bool) {
 	if e := s.entryOf(KindAlbum, id); e != nil {
 		ref.Name = e.Name
 	}
-	for _, r := range s.packs {
-		for _, e := range r.Items {
-			if e.Kind != KindAlbum || e.Key != id {
+	// Пример темы — только если макета нет в других наборах: альбом, начатый на примере, должен
+	// ссылаться на донора, чтобы пережить уход примера (0.30-142-19).
+	for pass := range 2 {
+		for _, r := range s.packs {
+			if s.isDemo(r) != (pass == 1) || (pass == 1 && ref.Pack != "") {
 				continue
 			}
-			if ref.Name == "" {
-				ref.Name = e.Name
-			}
-			if ref.Pack == "" && ValidItemPath(e.Item) {
-				ref.Pack, ref.Item = r.ID, e.Item
+			for _, e := range r.Items {
+				if e.Kind != KindAlbum || e.Key != id {
+					continue
+				}
+				if ref.Name == "" {
+					ref.Name = e.Name
+				}
+				if ref.Pack == "" && ValidItemPath(e.Item) {
+					ref.Pack, ref.Item = r.ID, e.Item
+				}
 			}
 		}
 	}

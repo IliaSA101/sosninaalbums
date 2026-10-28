@@ -45,12 +45,13 @@ describe('строка меню', () => {
     expect(bar().map((b) => b.textContent)).toEqual(NAMES)
   })
 
-  it('щелчок по «Разворот» открывает 11 пунктов; повторный щелчок закрывает', async () => {
+  it('щелчок по «Разворот» открывает 16 пунктов; повторный щелчок закрывает', async () => {
     render(MenuBar)
     await fireEvent.click(screen.getByRole('menuitem', { name: 'Разворот' }))
     expect(items()).toEqual([
       ...['addText', 'addSticker', 'bgGallery', 'borderGallery', 'copyDecor', 'spreadTpl'],
-      ...['renameSpread', 'pasteNames', 'varyLayouts', 'makeVignette', 'vigSetup'],
+      ...['renameSpread', 'pasteNames', 'varyLayouts', 'insertSpread', 'splitSpread', 'joinSpread'],
+      ...['makeVignette', 'vigSetup', 'sortVignette', 'clearVignette'],
     ])
     await fireEvent.click(screen.getByRole('menuitem', { name: 'Разворот' }))
     expect(items()).toEqual([])

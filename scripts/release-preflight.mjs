@@ -5,7 +5,8 @@
 //
 // Быстрые проверки: makensis = NSIS_CI и раннер pack в release.yml закреплён (иначе версия NSIS в CI уплывёт), вход в gh,
 // файл ключа подписи (только существование, размер и права — содержимое не читается и не печатается), Node и Go как в CI,
-// wails как в go.mod, рабочая копия чистая, метки vX.Y.Z ещё нет, release-check --version зелёный.
+// wails как в go.mod, рабочая копия чистая, метки vX.Y.Z ещё нет, release-check --version зелёный, ассет примера набора
+// (спека 142) опубликован в библиотеке и совпадает длиной с zip в репозитории.
 // --rebuild (2–6 мин): установщик собирается в чистой копии коммита HEAD (release-rebuild с ref) и должен воспроизводиться:
 // после сдвига mtime всех входов на год назад установщик из тех же входов обязан совпасть байт в байт.
 // --against <id>: установщик из артефакта packages прогона CI сверяется с локальной пересборкой на коммите прогона (headSha)
@@ -53,6 +54,36 @@ export const installerInputs = (version) => [
 
 const ok = (what, hint = '') => ({ ok: true, what, hint })
 const fail = (what, hint) => ({ ok: false, what, hint })
+
+/** Префикс ассетов библиотеки: то же, что fetch.AssetPrefix в Go (спека 142, 0.30-142-42). */
+export const LIBRARY_ASSETS = 'https://github.com/IliaSA101/sosninaalbums-library/releases/download/'
+
+/** Адрес ассета примера по имени zip: wedding-navy-watercolor-demo-1.zip → <префикс>wedding-navy-watercolor-demo-v1/<файл>; null — имя не того вида. */
+export function demoAssetUrl(zipName) {
+  const m = zipName.match(/^(.+-demo)-([1-9]\d*)\.zip$/)
+  return m ? `${LIBRARY_ASSETS}${m[1]}-v${m[2]}/${zipName}` : null
+}
+
+/**
+ * Ассет примера (спека 142, design §9) опубликован до метки: 200 и длина как у zip в репозитории. Компактная редакция
+ * докачивает пример из библиотеки — без ассета «Скачать» в готовом выпуске ведёт в пустоту. demoZip() -> {name, size}|null.
+ */
+export function checkDemoAsset(deps) {
+  const zip = deps.demoZip()
+  if (!zip) return fail('ассет примера', 'в internal/demopack нет ровно одного zip примера')
+  const url = demoAssetUrl(zip.name)
+  if (!url) return fail(`ассет примера ${zip.name}`, 'имя zip не вида <набор>-demo-<N>.zip')
+  const r = deps.exec('curl', ['-sIL', '--max-time', '30', url])
+  if (r.code !== 0) return fail(`ассет примера ${url}`, `curl не отработал (код ${r.code}): нет сети или ассет не опубликован`)
+  // После перенаправлений (GitHub → CDN) значим последний ответ
+  const blocks = r.out.replace(/\r\n/g, '\n').split(/\n(?=HTTP\/)/)
+  const last = blocks[blocks.length - 1]
+  const status = last.match(/^HTTP\/\S+ (\d+)/)?.[1]
+  const len = Number(last.match(/^content-length:\s*(\d+)/im)?.[1] ?? NaN)
+  if (status !== '200') return fail(`ассет примера ${url}`, `ответ ${status ?? 'не разобран'}: опубликуйте релиз ${url.split('/').slice(-2)[0]} в sosninaalbums-library до метки`)
+  if (len !== zip.size) return fail(`ассет примера ${url}`, `длина в сети ${len}, у zip в репозитории ${zip.size}: ассет другой версии`)
+  return ok(`ассет примера опубликован (${zip.name}, ${len} байт)`)
+}
 
 /** Первый разошедшийся байт двух буферов; -1 — равны. */
 export function firstDiff(a, b) {
@@ -123,6 +154,7 @@ export function quickChecks(version, deps, keyFile) {
   res.push(tag.out.trim() ? fail(`метка v${version} уже есть`, 'метку не перевешиваем: следующая версия или git tag -d до публикации') : ok(`метки v${version} ещё нет`))
   const rc = deps.exec('node', ['scripts/release-check.mjs', '--version', version])
   res.push(rc.code === 0 ? ok(`release-check ${version}`) : fail(`release-check ${version}`, rc.out.trim().split('\n').slice(0, 6).join(' | ')))
+  res.push(checkDemoAsset(deps))
   return res
 }
 
@@ -244,6 +276,11 @@ function realDeps(work) {
     exec: realExec,
     read: (rel) => (fs.existsSync(path.join(root, rel)) ? fs.readFileSync(path.join(root, rel), 'utf8') : null),
     stat: fs.statSync,
+    demoZip: () => {
+      const dir = path.join(root, 'internal', 'demopack')
+      const zips = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith('.zip')) : []
+      return zips.length === 1 ? { name: zips[0], size: fs.statSync(path.join(dir, zips[0])).size } : null
+    },
     platform: process.platform,
     nodeVersion: process.version,
     env,

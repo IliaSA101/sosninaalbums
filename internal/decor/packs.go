@@ -24,6 +24,7 @@ const (
 	packsDir   = "Наборы"
 	packRegMax = 1 << 20 // 1000 предметов — сотни КБ
 	packRegV   = 1
+	packZipMax = 1 << 30 // зажим zipSize при чтении: правят руками, а число идёт на экран
 	// BuiltinPack — строка встроенного в окне «Наборы»: не по грамматике id, с набором не совпадёт.
 	BuiltinPack = "sa:builtin"
 )
@@ -33,7 +34,34 @@ const (
 	OriginBuiltin = "builtin"
 	OriginFile    = "file"
 	OriginNet     = "net"
+	OriginDemo    = "demo" // пример темы в программе (142): ставит только служба библиотеки
 )
+
+// demoRef — какой набор считается примером и чьи предметы он дублирует (142 design §3, 0.30-142-17).
+type demoRef struct {
+	id      string
+	related []string // наборы-доноры: макет примера ищется в них, когда примера нет
+}
+
+// SetDemo — id набора-примера и его доноры. Пусто — примера нет. Узнаётся по id, а не по
+// origin: после отката на 0.29 и «Добавить из файла» пример стоит с origin file (0.30-142-17).
+func (s *Store) SetDemo(id string, related []string) {
+	d := demoRef{}
+	if validPackID(id) {
+		d.id = id
+		for _, r := range related {
+			if validPackID(r) && r != id {
+				d.related = append(d.related, r)
+			}
+		}
+	}
+	s.mu.Lock()
+	s.demo = d
+	s.mu.Unlock()
+}
+
+// isDemo — r пример темы; под mu.
+func (s *Store) isDemo(r *packReg) bool { return s.demo.id != "" && r.ID == s.demo.id }
 
 // packReg — реестр одного набора; Items — в порядке манифеста.
 type packReg struct {
@@ -50,9 +78,12 @@ type packReg struct {
 	Installed int64  `json:"installed"`        // unix мс; порядок наборов в каталоге
 	// Base — граница первой партии (133 §4): пишет RemovePack оставшимся наборам, чтобы удаление самого
 	// раннего не сдвинуло её. 0.27 поле не читает и при обновлении набора теряет — граница тогда по Installed.
-	Base  int64       `json:"base,omitempty"`
-	Zip   string      `json:"zip"` // sha256 архива
-	Items []packEntry `json:"items"`
+	Base int64  `json:"base,omitempty"`
+	Zip  string `json:"zip"` // sha256 архива
+	// ZipSize — размер zip из каталога (137-31): наборы из сети показывают его же, что и «Можно скачать».
+	// Старые программы поле пропускают (неизвестные поля json игнорирует), у старых реестров его нет — 0.
+	ZipSize int64       `json:"zipSize,omitempty"`
+	Items   []packEntry `json:"items"`
 }
 
 type packEntry struct {
@@ -64,6 +95,10 @@ type packEntry struct {
 	H     int    `json:"h"`
 	Bytes int64  `json:"bytes"`
 	Item  string `json:"item,omitempty"` // макет (131): путь записи в манифесте — поиск после обновления набора
+	// Src — sha256[:16] записи манифеста (144): по нему плитка «Можно скачать» находит предмет после
+	// установки. Ключ разворота — TplKey канонического JSON, с sha файла не совпадает; у старых
+	// реестров поля нет (картинки находятся по ключу, он и есть sha).
+	Src string `json:"src,omitempty"`
 }
 
 // PackInfo — строка окна «Наборы библиотеки».
@@ -74,7 +109,7 @@ type PackInfo struct {
 	Author    string `json:"author"`
 	License   string `json:"license"`
 	Source    string `json:"source"` // текст, не ссылка (решение 14)
-	Origin    string `json:"origin"` // builtin | file | net
+	Origin    string `json:"origin"` // builtin | file | net | demo
 	Version   int    `json:"version"`
 	Bg        int    `json:"bg"`
 	Sticker   int    `json:"sticker"`
@@ -151,10 +186,11 @@ func readPackReg(path, id string) (*packReg, error) {
 	}
 	reg.About, reg.Author = cleanText(reg.About, 300), cleanName(reg.Author)
 	reg.License, reg.Source = cleanText(reg.License, 40), cleanText(reg.Source, 200)
+	reg.ZipSize = min(max(reg.ZipSize, 0), packZipMax)
 	if !dateOK(reg.Base) {
 		reg.Base = 0 // мусор и сброшенные часы — не граница
 	}
-	if reg.Origin != OriginNet {
+	if reg.Origin != OriginNet && reg.Origin != OriginDemo {
 		reg.Origin = OriginFile
 	}
 	items, seen := reg.Items, map[string]bool{}
@@ -322,6 +358,9 @@ func (r *packReg) info() PackInfo {
 		}
 		p.Bytes += e.Bytes
 	}
+	if r.ZipSize > 0 {
+		p.Bytes = r.ZipSize // из сети — размер zip, как в «Можно скачать»; «Освободится» считает диск (PlanRemovePack)
+	}
 	return p
 }
 
@@ -351,11 +390,25 @@ func (s *Store) Used() int64 {
 	return s.libBytes()
 }
 
+// PackDiskBytes — сумма файлов набора id на диске (0 — набора нет). PackInfo.Bytes у наборов из сети —
+// размер zip (137-31), а квота при обновлении вычитает именно диск.
+func (s *Store) PackDiskBytes(id string) int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var n int64
+	if r := s.packOf(id); r != nil {
+		for _, e := range r.Items {
+			n += e.Bytes
+		}
+	}
+	return n
+}
+
 // DownloadPath — временный файл скачивания набора id: Наборы/.dl-<id>.tmp (остаток оборванного
 // убирает loadPacks при запуске). Имя только из id по грамматике.
 func (s *Store) DownloadPath(id string) (string, error) {
 	if !validPackID(id) {
-		return "", errors.New("недопустимый id набора")
+		return "", ErrBadPackID
 	}
 	dir := filepath.Join(s.root, packsDir)
 	if err := os.MkdirAll(dir, 0o700); err != nil {

@@ -91,6 +91,8 @@ describe('значки главного меню', () => {
     const bare = [
       ...['cutItems', 'duplicateItems', 'selectAll', 'clearSelection'],
       ...['bgGallery', 'borderGallery', 'copyDecor', 'spreadTpl', 'renameSpread', 'pasteNames', 'varyLayouts', 'vigSetup'],
+      // 141: у пяти команд разворота кнопки со значком нет (0.30-141-7)
+      ...['insertSpread', 'splitSpread', 'joinSpread', 'sortVignette', 'clearVignette'],
     ]
     for (const id of [...bare, 'align', 'alignTo-sel']) expect(edit.find((i) => i.id === id)?.icon, id).toBeUndefined()
   })

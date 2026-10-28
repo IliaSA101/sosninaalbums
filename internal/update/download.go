@@ -26,8 +26,8 @@ func (e *NoSpaceError) Error() string {
 // Dir — папка скачанных обновлений: <кэш пользователя>\<имя данных>\Updates (Windows:
 // %LOCALAPPDATA%\SosninaAlbums\Updates; у стенда своя). name — osx.DataName. "" — кэша нет.
 func Dir(name string) string {
-	base, err := os.UserCacheDir()
-	if err != nil || base == "" {
+	base := osx.CacheDir()
+	if base == "" {
 		return ""
 	}
 	return filepath.Join(base, name, "Updates")

@@ -31,7 +31,7 @@ describe('MissPhoto: подпись', () => {
 describe('PhotoPreview: файла нет', () => {
   it('заглушка при сбое загрузки или store.missing', () => {
     expect(preview).toContain('let failed = $state(false)')
-    expect(preview).toMatch(/const gone = \$derived\(failed \|\| \(!!id && store\.missing\.includes\(id\)\)\)/)
+    expect(preview).toMatch(/const gone = \$derived\(failed \|\| \(!!id && isGone\(id, store\.missing, store\.unread\)\)\)/)
     expect(markup(preview)).toMatch(/\{#if gone\}\s*<div class="gone"[^>]*><MissPhoto/)
   })
   it('ошибка загрузки обеих картинок (прямой и повёрнутой) → onFail: failed и autocheck.soon(true)', () => {
@@ -47,9 +47,22 @@ describe('PhotoPreview: файла нет', () => {
   })
 })
 
+describe('не читается (117): причина из store.unread доходит до подсказки', () => {
+  it('Cell и PhotoPreview передают store.unread в missTip', () => {
+    expect(cell).toContain('missTip(id, store.missingNames, store.unread)')
+    expect(preview).toContain("missTip(id, { [id]: photo?.name ?? '' }, store.unread)")
+  })
+})
+
+describe('Cell: повтор миниатюры', () => {
+  it('адрес несёт метку lost.retryOf: после снятия причины «не читается» запрос идёт заново мимо кэша', () => {
+    expect(markup(cell)).toContain('src={thumbUrl(id, lost.retryOf(id))}')
+  })
+})
+
 describe('Cell: файла нет', () => {
   it('missing → MissPhoto вместо img', () => {
-    expect(cell).toContain('const missing = $derived(store.missing.includes(id))')
+    expect(cell).toContain('const missing = $derived(isGone(id, store.missing, store.unread))')
     expect(markup(cell)).toMatch(/\{#if missing\}\s*<MissPhoto[\s\S]*?\{:else\}/)
   })
   it('onerror миниатюры → autocheck.soon(true)', () => {

@@ -71,7 +71,7 @@
     return true
   }
 
-  // Enter собирает отовсюду, кроме кнопок и «Дополнительно» (там он делает своё).
+  // Enter собирает отовсюду в окне (Modal.onkey), кроме кнопок и «Дополнительно» (там он делает своё).
   function key(e: KeyboardEvent) {
     if (!ui) return
     if (!(e.target instanceof HTMLElement)) return
@@ -109,8 +109,8 @@
 
 {#if store.autoDraft && ui}
   {@const d = store.autoDraft}
-  <Modal title="Автосборка" onclose={close} width={860}>
-    <div class="body" role="presentation" onkeydown={key}>
+  <Modal title="Автосборка" onclose={close} onkey={key} width={860}>
+    <div class="body">
       <AutoMode {d} plan={ui.plan} />
 
       <AutoTiles {ui} {unit} {empty} {low} {top} bind:typing />

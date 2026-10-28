@@ -4,6 +4,8 @@ import { MOUSE_HELP } from '../menu/mousehelp'
 import { ARTICLES } from './articles'
 import { articleText } from './articletext'
 import { menuPath } from '../guide/show'
+import { ACTS } from '../../editor/photomenu/photoacts'
+import { NEW_ITEM, WINDOW_TITLE } from '../printprof/printwords'
 
 // Статьи F1 про «Во весь экран» (режим F) и «Крупный просмотр фото» (окно, 128-11, Т9).
 afterEach(() => dropCatalog())
@@ -14,7 +16,8 @@ describe('статья про режим F', () => {
   it('называется «Во весь экран»; старое имя находится по словам', () => {
     const a = art('big')
     expect(a.title).toBe('Во весь экран')
-    expect(a.where).toBe('Кнопка в шапке; «Вид ▸ Во весь экран»; F.')
+    expect(a.where).toBe('Кнопка в шапке.') // путь меню — в строке «Меню», клавиша F — в «Клавишах» (136 Т3)
+    expect(a.menu?.map(menuPath)).toEqual(['Вид ▸ Во весь экран'])
     expect(a.words).toContain('крупный просмотр')
     expect(a.keys).toEqual(['toggleBig'])
   })
@@ -113,5 +116,51 @@ describe('статьи про заготовки и сохранение мак�
     for (const w of ['«Места для фото»', '«Надписи — заготовками»', '«Обложка»', 'не больше 24', '«Повторяемые»'])
       expect(s.where, w).toContain(w)
     expect(s.what).toContain('«Мои»')
+  })
+})
+
+describe('статьи, дописанные по стражам полноты (136 Т5)', () => {
+  it('«Справочник функций»: раздел «Начало», клавиша F1 и пункт «Справка», путь меню не повторён в «Где»', () => {
+    const a = art('guide')
+    expect(a).toMatchObject({ group: 'start', feature: 'base', keys: ['guide'], menu: ['guide'], spot: 'menu:guide' })
+    expect(menuPath('guide')).toBe('Справка ▸ Справочник функций…')
+    useCatalog()
+    expect(articleText(a.where ?? '')).toContain('клавишей F1')
+  })
+  it('«Своя типография»: название окна и пункт списка — из интерфейса, место — список «Типография»', () => {
+    const a = art('print-profile')
+    expect(a.title).toBe(WINDOW_TITLE)
+    expect(a.where).toContain(`«${NEW_ITEM}»`)
+    expect(a).toMatchObject({ group: 'start', spot: 'ui:fsfera-presets', needs: ['details:settings'] })
+    for (const w of ['«Основа»', '«Форматы»', '«Сайт типографии»', '.saprint', '«Добавить из файла…»', '«Поделиться файлом…»', '«Удалить»'])
+      expect(`${a.where} ${a.how}`, w).toContain(w)
+  })
+  it('действия фото названы словами меню: «Одинаковый размер», «Где ещё стоит», «Заменить…», «Перепривязать…»', () => {
+    expect(art('same-size')).toMatchObject({ group: 'manual', feature: 'manual', acts: ['same'] })
+    expect(art('same-size').where).toContain(`«${ACTS.same.label}»`)
+    expect(art('photo-uses')).toMatchObject({ group: 'photos', acts: ['uses'] })
+    expect(art('photo-uses').where).toContain(`«${ACTS.uses.label}»`)
+    const r = art('replace-photo')
+    expect(r).toMatchObject({ group: 'onspread', acts: ['replace', 'relink'] })
+    expect(r.where).toContain(ACTS.replace.label)
+    expect(r.where).toContain(ACTS.relink.label)
+  })
+  it('«Свои цвета»: блок окна цвета, список общий, отмены нет', () => {
+    const a = art('my-colors')
+    expect(a).toMatchObject({ group: 'onspread', feature: 'bgColor' })
+    expect(a.where).toContain('«Свои цвета»')
+    expect(a.what).toContain('общий для всех альбомов')
+    expect(a.how).toContain('Отменить нельзя')
+  })
+  it('«Открыть альбом»: «Открывать .salbum…» и «Очистить список»; «Папка данных» — «Мои шаблоны»', () => {
+    expect(art('open').menu).toEqual(['recent', 'assoc'])
+    expect(art('open').where).toContain('«Очистить список»')
+    expect(art('data-folder').menu).toEqual(['tpl'])
+    expect(menuPath('tpl')).toBe('Файл ▸ Мои шаблоны')
+  })
+  it('жесты, о которых говорят привязанные строки, названы в тексте: фон, ручная, лента', () => {
+    expect(art('bg-photo').how).toMatch(/Shift.*15°.*Alt.*мимо рамки/s)
+    expect(art('manual').how).toMatch(/Перетащите место.*Ctrl.*⇄.*Shift/s)
+    expect(art('timeline').how).toContain('Фото внутри разворота переставляют перетаскиванием')
   })
 })

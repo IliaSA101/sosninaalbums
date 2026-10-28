@@ -12,6 +12,10 @@ export const previewUrl = (id: string) => `/media/p/${encodeURIComponent(id)}?v=
 // и игнорирует ?v=; 404 и 415 (профиль не sRGB, больше 100 Мп или 200 МБ, битый) UI видит как error у <img>.
 export const originalUrl = (id: string) => `/media/o/${encodeURIComponent(id)}?v=${V}`
 
+// Ролик справочника F1 (140): Go отдаёт файл целиком, 200 (design §5, 0.30-140-19). В <video src> адрес не годится
+// (WebKitGTK не играет через схему Wails) — окно берёт его fetch и играет Blob.
+export const guideVideoUrl = (id: string) => `/media/guide-video/${encodeURIComponent(id)}`
+
 // Разметка типографии обложки (032) и разворотов (066): путь Go берёт из проекта, rev только сбивает кэш
 // при смене файла. PSD Go отдаёт PNG ≤ 4096 px.
 export const coverGuideUrl = (rev: number) => `/media/cover-guide?r=${Math.trunc(rev) || 0}`

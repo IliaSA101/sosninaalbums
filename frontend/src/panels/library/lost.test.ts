@@ -104,6 +104,35 @@ describe('lost', () => {
     expect(lost.retryOf('r5')).toBeGreaterThan(0)
   })
 
+  it('причина «не читается» исчезла (117): заглушка снята, адрес миниатюры новый, сверку снова можно просить', () => {
+    store.unread = { r1: 'файл оборван' }
+    flushSync()
+    lost.mark('r1')
+    lost.retry() // повтор уже потрачен
+    lost.mark('r1')
+    expect(lost.has('r1')).toBe(true)
+    const before = lost.retryOf('r1')
+    store.unread = {}
+    flushSync()
+    expect(lost.has('r1')).toBe(false)
+    expect(lost.retryOf('r1')).toBe(before + 1)
+    soon.mockClear()
+    lost.mark('r1')
+    expect(soon).toHaveBeenCalledTimes(1)
+  })
+
+  it('причина осталась или появилась — адрес не меняется', () => {
+    const [t2, t3] = [lost.retryOf('r2'), lost.retryOf('r3')]
+    store.unread = { r2: 'пустой файл' }
+    flushSync()
+    store.unread = { r2: 'пустой файл', r3: 'оборван' }
+    flushSync()
+    expect(lost.retryOf('r2')).toBe(t2)
+    expect(lost.retryOf('r3')).toBe(t3)
+    store.unread = {}
+    flushSync()
+  })
+
   it('повторная ошибка той же плитки не плодит записей', () => {
     lost.mark('a')
     lost.mark('a')

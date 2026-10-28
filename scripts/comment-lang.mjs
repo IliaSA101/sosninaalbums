@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url'
 const MIN_WORDS = 4 // комментарий из стольких латинских слов без кириллицы — английская фраза
 export const MARKER = 'lang-ok'
 const CODE_EXT = /\.(go|svelte|m?js|cjs|ts|css|ps1|py|sh)$/i
-const SKIP_PATH = /(^|[\\/])(wailsjs|node_modules|dist|bin|\.git|\.gotmp|testdata)[\\/]/i
+// flipbook[\\/]vendor — чужой код с английскими комментариями (StPageFlip, владелец 28.10, 0.30-139-4)
+const SKIP_PATH = /(^|[\\/])(wailsjs|node_modules|dist|bin|\.git|\.gotmp|testdata|flipbook[\\/]vendor)[\\/]/i
 
 export const isCodeFile = (f) => CODE_EXT.test(f) && !SKIP_PATH.test(f)
 

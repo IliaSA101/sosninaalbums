@@ -149,5 +149,6 @@ export function origMax(p: { w: number; h: number; color?: string } | undefined,
 export function hintLine(fromLibrary: boolean, mod: string, marks: boolean): string {
   const lead = fromLibrary ? '← → — листать · ' : ''
   const tail = fromLibrary && marks ? ' · отметки — клавишами ленты' : ''
-  return `${lead}щелчок{key:photoPreview| или %} — 1:1 · ${mod}+колесо или щипок — зум{key:fitZoom| · % — вписать}${tail} · Esc — закрыть`
+  const compare = fromLibrary ? '{key:photoCompare| · % — сравнить}' : '' // 138: сравнение только из ленты
+  return `${lead}щелчок{key:photoPreview| или %} — 1:1 · ${mod}+колесо или щипок — зум{key:fitZoom| · % — вписать}${tail}${compare} · Esc — закрыть`
 }

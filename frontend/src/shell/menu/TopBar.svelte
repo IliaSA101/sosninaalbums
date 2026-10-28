@@ -1,7 +1,7 @@
 <script lang="ts">
   import { keymap } from '../../base/keys/keymap.svelte'
   import { store } from '../../base/core/store.svelte'
-  import { exportShut, jobs } from '../../base/core/jobs.svelte'
+  import { EXPORT_EMPTY, exportShut, jobs } from '../../base/core/jobs.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import { run } from './commands'
@@ -20,6 +20,8 @@
   const count = $derived(countLabel(store.view.spreads.length, pages, store.view.settings))
   // Вне предела типографии (085) счётчик цвета предупреждения; щелчок — «Сведения об альбоме» (спека 100 п. 7).
   const lim = $derived(topLimit(store.view))
+  // Альбом без разворотов: кнопка серая, но живая — щелчок отвечает тостом (на disabled нет ни подсказки, ни щелчка).
+  const shut = $derived(exportShut(store.sheets.length, !!jobs.exporting))
   const usedCount = $derived(store.photos.filter((p) => store.used.has(p.id)).length)
 </script>
 
@@ -89,8 +91,10 @@
     </button>
     <button
       class="accent"
+      class:off={shut}
       data-guide="topbar-export"
-      disabled={exportShut(store.sheets.length, !!jobs.exporting)}
+      aria-disabled={shut ? 'true' : undefined}
+      title={shut ? EXPORT_EMPTY : undefined}
       onclick={() => run('export')}
     >
       {#if jobs.exporting && jobs.exporting.total > 0}
@@ -220,5 +224,12 @@
   .mode.on:hover:not(:disabled) {
     background: var(--accent);
     color: #1e1e1e;
+  }
+  /* Экспорт без разворотов: как disabled, но с подсказкой и щелчком (тост «почему») */
+  button.off,
+  button.off:hover {
+    opacity: 0.4;
+    cursor: default;
+    background: var(--accent);
   }
 </style>

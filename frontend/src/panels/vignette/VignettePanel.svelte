@@ -13,6 +13,7 @@
   import { vigFaces } from './vigfaces.svelte'
   import { facesLabel, facesTip } from './vigfaces'
   import { choiceOf, formOf } from './vignette'
+  import { VIG_SORT_TITLE } from './vigmenu'
 
   // Раздел «Виньетка» карточки справа — только сводка и кнопки (031 dialog §2, отзыв 14.10): схема шаблона,
   // имя, числа и размер портрета. Все параметры — в окне «Настроить виньетку» (VigDialog).
@@ -75,12 +76,7 @@
       title="Шаблоны рядом над листом, как раскладки (⊞ в полосе над листом, пробел — следующий). Шаблон встаёт с числами, что уже на листе"
       onclick={() => gallery.open('spread')}>Шаблоны…</button
     >
-    <button
-      type="button"
-      data-guide="vig-sort"
-      onclick={() => sortVignette(sp.id)}
-      title="Ученики по алфавиту: фамилия, имя; без имени — в конце">Сортировать по фамилии</button
-    >
+    <button type="button" data-guide="vig-sort" onclick={() => sortVignette(sp.id)} title={VIG_SORT_TITLE}>Сортировать по фамилии</button>
     <button
       type="button"
       class="faces"

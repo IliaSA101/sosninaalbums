@@ -17,20 +17,22 @@ const use = (i: number, what = 'место'): UseSrc => ({
 })
 
 describe('thumbMenu: состав', () => {
-  it('одно стоящее фото: «Крупный просмотр», «Показать в …» (слово по ОС), «Копировать имя файла», «Где стоит ▸»', () => {
+  it('одно стоящее фото: «Крупный просмотр», «Похожие к этому», «Показать в …» (слово по ОС), «Копировать имя файла», «Где стоит ▸»', () => {
     const m = thumbMenu(ctx())
-    expect(m.map((n) => n.id)).toEqual(['preview', 'explorer', 'copy', 'uses'])
-    expect(m[1].label).toBe(revealLabel())
-    expect(m[2].label).toBe('Копировать имя файла')
-    expect(m[3].label).toBe('Где стоит')
-    expect(m[3].sub).toBeTruthy()
+    expect(m.map((n) => n.id)).toEqual(['preview', 'similar', 'explorer', 'copy', 'uses'])
+    expect(m[2].label).toBe(revealLabel())
+    expect(m[3].label).toBe('Копировать имя файла')
+    expect(m[4].label).toBe('Где стоит')
+    expect(m[4].sub).toBeTruthy()
   })
 
   it('«Крупный просмотр» первым, с клавишей справа из реестра, и черта под ним (128-8)', () => {
     const m = thumbMenu(ctx(), undefined, (cmd) => (cmd === 'photoPreview' ? 'Z' : ''))
     expect(m[0]).toMatchObject({ id: 'preview', label: 'Крупный просмотр', hint: 'Z' })
     expect(m[0].sep).toBeUndefined()
-    expect(m[1]).toMatchObject({ id: 'explorer', sep: true })
+    expect(m[1]).toMatchObject({ id: 'similar', label: 'Похожие к этому' })
+    expect(m[1].sep).toBeUndefined()
+    expect(m[2]).toMatchObject({ id: 'explorer', sep: true })
   })
 
   it('клавишу сняли — пункт без подписи справа', () => {
@@ -44,23 +46,41 @@ describe('thumbMenu: состав', () => {
   })
 
   it('одно фото, которое нигде не стоит (числа нет) — без «Где стоит»; не серый, а скрыт', () => {
-    expect(ids(ctx({ used: 0 }))).toEqual(['preview', 'explorer', 'copy'])
+    expect(ids(ctx({ used: 0 }))).toEqual(['preview', 'similar', 'explorer', 'copy'])
   })
 
-  it('несколько фото: только «Копировать имена файлов»', () => {
-    const m = thumbMenu(ctx({ photos: 3, used: 0 }))
+  it('больше четырёх фото: только «Копировать имена файлов»', () => {
+    const m = thumbMenu(ctx({ photos: 5, used: 0 }))
     expect(m.map((n) => n.id)).toEqual(['copy'])
     expect(m[0].label).toBe('Копировать имена файлов')
   })
 
-  it('пропавший файл: «Показать в …» и «Копировать» нет, «Где стоит» остаётся', () => {
-    expect(ids(ctx({ missing: 1 }))).toEqual(['uses'])
-    expect(ids(ctx({ missing: 1, used: 0 }))).toEqual([])
+  it('пропавший файл: «Показать в …», «Копировать» и «Крупного просмотра» нет, «Похожие» и «Где стоит» остаются', () => {
+    expect(ids(ctx({ missing: 1 }))).toEqual(['similar', 'uses'])
+    expect(ids(ctx({ missing: 1, used: 0 }))).toEqual(['similar'])
   })
 
-  it('несколько фото, часть пропала: копируются найденные', () => {
-    expect(ids(ctx({ photos: 3, missing: 1, used: 0 }))).toEqual(['copy'])
-    expect(ids(ctx({ photos: 2, missing: 2, used: 0 }))).toEqual([])
+  it('несколько фото, часть пропала: «Сравнить» остаётся, копируются найденные', () => {
+    expect(ids(ctx({ photos: 3, missing: 1, used: 0 }))).toEqual(['compare', 'copy'])
+    expect(ids(ctx({ photos: 2, missing: 2, used: 0 }))).toEqual(['compare'])
+  })
+
+  it('2–4 фото: «Сравнить» первым, с клавишей справа и чертой под ним (138)', () => {
+    for (const n of [2, 3, 4]) {
+      const m = thumbMenu(ctx({ photos: n, used: 0 }), undefined, (cmd) => (cmd === 'photoCompare' ? 'C' : ''))
+      expect(m.map((x) => x.id)).toEqual(['compare', 'copy'])
+      expect(m[0]).toMatchObject({ label: 'Сравнить', hint: 'C' })
+      expect(m[0].sep).toBeUndefined()
+      expect(m[1].sep).toBe(true)
+    }
+    expect(ids(ctx({ photos: 5, used: 0 }))).not.toContain('compare')
+  })
+
+  it('«Похожие к этому» — с клавишей из реестра; снятая клавиша — без подписи справа', () => {
+    const m = thumbMenu(ctx(), undefined, (cmd) => (cmd === 'photoSimilar' ? 'Shift+C' : ''))
+    expect(m.find((n) => n.id === 'similar')).toMatchObject({ label: 'Похожие к этому', hint: 'Shift+C' })
+    expect(thumbMenu(ctx()).find((n) => n.id === 'similar')?.hint).toBeUndefined()
+    expect(ids(ctx({ photos: 2 }))).not.toContain('similar')
   })
 
   it('«Простой» (нет photoMenu) и пустое выделение — меню нет', () => {

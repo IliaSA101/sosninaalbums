@@ -149,7 +149,7 @@ func TestUpdateLibraryReadOnly(t *testing.T) {
 	if l.hits.Load() != 0 {
 		t.Fatalf("повтор в том же сеансе: запросов %d", l.hits.Load())
 	}
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := getAll(t, a); err != nil || res.Added != 1 {
 		t.Fatalf("записываемая: %v %+v", err, res)
 	}
 }
@@ -164,7 +164,7 @@ func TestRemovePackSkipOnlyNet(t *testing.T) {
 	}
 	sage := rezip(t, src, func(m map[string]any) { m["id"], m["title"] = "sage", "Шалфей" })
 	l.publish(t, nil, sage)
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := getAll(t, a); err != nil || res.Added != 1 {
 		t.Fatalf("из сети: %v %+v", err, res)
 	}
 	list, err := a.RemovePack("ivory")
@@ -188,20 +188,21 @@ func TestNetQuotaAtLimit(t *testing.T) {
 	a, l := netApp(t, true)
 	zip := d1Zip(t)
 	l.publish(t, nil, zip)
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := getAll(t, a); err != nil || res.Added != 1 {
 		t.Fatalf("первая версия: %v %+v", err, res)
 	}
 	v2 := rezip(t, zip, func(m map[string]any) { m["version"] = 2 })
 	size := fileSize(t, v2)
-	list, _ := a.LibraryPacks()
-	if b := list.Packs[1].Bytes; b <= 0 || b > size {
+	plan, _ := a.PlanRemovePack("ivory") // байты на диске: PackInfo.Bytes у набора из сети — размер zip (137-31)
+	if b := plan.Bytes; b <= 0 || b > size {
 		t.Fatalf("байты набора %d, архива %d: предел ниже не проверить", b, size)
 	}
 	l.publish(t, nil, v2)
 	fillLib(t, a, "full", decor.MaxLibraryLen-size+1)
 	arc := l.archives.Load()
-	if _, err := a.UpdateLibrary(); !errors.Is(err, decor.ErrLibFull) || l.archives.Load() != arc {
-		t.Fatalf("байт сверх: %v, архивов %d", err, l.archives.Load()-arc)
+	// Квота — по набору: ход не рвётся, набор в итоге «не скачались», архив не запрошен.
+	if res, err := a.UpdateLibrary(); err != nil || len(res.Failed) != 1 || res.Failed[0].Why != decor.ErrLibFull.Error() || l.archives.Load() != arc {
+		t.Fatalf("байт сверх: %v %+v, архивов %d", err, res, l.archives.Load()-arc)
 	}
 	fillLib(t, a, "full", decor.MaxLibraryLen-size)
 	if res, err := a.UpdateLibrary(); err != nil || res.Updated != 1 || l.archives.Load() != arc+1 {
@@ -215,14 +216,14 @@ func TestNetQuotaAtLimit(t *testing.T) {
 	size = fileSize(t, sage)
 	fillLib(t, b, "full", decor.MaxLibraryLen-size+1)
 	arc = l.archives.Load()
-	if _, err := b.UpdateLibrary(); !errors.Is(err, decor.ErrLibFull) || l.archives.Load() != arc {
-		t.Fatalf("новый сверх: %v, архивов %d", err, l.archives.Load()-arc)
+	if res, err := getAll(t, b); err != nil || len(res.Failed) != 1 || res.Failed[0].Why != decor.ErrLibFull.Error() || l.archives.Load() != arc {
+		t.Fatalf("новый сверх: %v %+v, архивов %d", err, res, l.archives.Load()-arc)
 	}
-	if prefs.LibraryNetOf(b.cfgDir).Checked != 0 {
-		t.Fatal("checked записан при квоте")
+	if prefs.LibraryNetOf(b.cfgDir).Checked == 0 { // поштучная неудача проверку закрывает
+		t.Fatal("checked не записан при квоте")
 	}
 	fillLib(t, b, "full", decor.MaxLibraryLen-size)
-	if res, err := b.UpdateLibrary(); err != nil || res.Added != 1 {
+	if res, err := b.DownloadAllLibrary(); err != nil || res.Added != 1 {
 		t.Fatalf("новый ровно предел: %v %+v", err, res)
 	}
 }
@@ -238,9 +239,11 @@ func fresh(t *testing.T, l *netLib) *App {
 	return b
 }
 
-// Ветки netInstall: архив подлинный, но о другом наборе (id или версия) — пропуск; архив не
-// открывается (minApp в манифесте новее программы) — пропуск с причиной pack; ни один предмет не
-// прошёл — пропуск «нечего ставить». Библиотека прежняя, временного файла нет.
+// Ветки netInstall: архив подлинный, но о другом наборе (id или версия) — «не скачались» с
+// причиной; архив не открывается (minApp в манифесте новее программы) — причина pack; ни один
+// предмет не прошёл — «нечего ставить» (причина первого предмета в тексте). Раньше это были
+// пропуски: «Скачать» одного набора показывает причину нажатому, пропуск ему не виден (137-29).
+// Библиотека прежняя, временного файла нет.
 func TestNetInstallSkips(t *testing.T) {
 	defer func(old []byte) { wailsJSON = old }(wailsJSON)
 	wailsJSON = []byte(`{"info":{"productVersion":"0.17.0"}}`)
@@ -248,23 +251,32 @@ func TestNetInstallSkips(t *testing.T) {
 	zip := d1Zip(t)
 	newer := rezip(t, zip, func(m map[string]any) { m["minApp"] = "0.99.0" })
 	for name, tc := range map[string]struct {
-		zip string
-		mut func(r map[string]any)
-		why string
+		zip  string
+		mut  func(r map[string]any)
+		why  string
+		item string // непусто — why только начало, дальше имя предмета
 	}{
-		"другой id":      {zip, func(r map[string]any) { r["id"] = "sage" }, "архив не совпадает со списком наборов"},
-		"другая версия":  {zip, func(r map[string]any) { r["version"] = 2 }, "архив не совпадает со списком наборов"},
-		"pack.Open":      {newer, func(r map[string]any) { r["minApp"] = "0.1.0" }, "нужна версия Sosnina Albums 0.99.0 или новее"},
-		"нечего ставить": {garbleZip(t, zip), nil, decor.ErrPackEmpty.Error()},
+		"другой id":      {zip, func(r map[string]any) { r["id"] = "sage" }, "архив не совпадает со списком наборов", ""},
+		"другая версия":  {zip, func(r map[string]any) { r["version"] = 2 }, "архив не совпадает со списком наборов", ""},
+		"pack.Open":      {newer, func(r map[string]any) { r["minApp"] = "0.1.0" }, "нужна версия Sosnina Albums 0.99.0 или новее", ""},
+		"нечего ставить": {garbleZip(t, zip), nil, decor.ErrPackEmpty.Error(), "Фон 1"},
 	} {
 		arc := l.archives.Load()
 		l.publish(t, tc.mut, tc.zip)
-		res, err := a.UpdateLibrary()
-		if err != nil || res.Added+res.Updated != 0 || len(res.Skipped) == 0 || l.archives.Load() != arc+1 {
+		res, err := getAll(t, a)
+		if err != nil || res.Added+res.Updated != 0 || len(res.Failed) != 1 || l.archives.Load() != arc+1 {
 			t.Fatalf("%s: %v %+v", name, err, res)
 		}
-		if k := res.Skipped[len(res.Skipped)-1]; k.Name != "Свадьба — айвори" || k.Why != tc.why {
-			t.Errorf("%s: пропуск %+v", name, k)
+		k := res.Failed[0]
+		if k.Name != "Свадьба — айвори" {
+			t.Errorf("%s: набор %+v", name, k)
+		}
+		if tc.item == "" && k.Why != tc.why {
+			t.Errorf("%s: причина %q, ждали %q", name, k.Why, tc.why)
+		}
+		// «Нечего ставить»: после общей фразы идёт причина первого предмета — с его именем.
+		if tc.item != "" && (!strings.HasPrefix(k.Why, tc.why) || !strings.Contains(k.Why[len(tc.why):], tc.item)) {
+			t.Errorf("%s: причина %q, ждали «%s…%s»", name, k.Why, tc.why, tc.item)
 		}
 		if list, _ := a.LibraryPacks(); len(list.Packs) != 1 {
 			t.Fatalf("%s: библиотека изменилась: %+v", name, list.Packs)
@@ -273,8 +285,8 @@ func TestNetInstallSkips(t *testing.T) {
 	}
 }
 
-// Два набора, второй падает (хэш архива): первый остаётся, library:changed есть, checked не
-// записан, ошибка — о втором.
+// Два набора, второй падает (хэш архива): первый остаётся, library:changed есть, checked записан
+// (поштучная неудача проверку закрывает), второй — в res.Failed, а не ошибкой вызова (ход не рвётся).
 func TestNetInstallSecondFails(t *testing.T) {
 	a, l := netApp(t, true)
 	ev := captureEvents(a)
@@ -285,12 +297,12 @@ func TestNetInstallSecondFails(t *testing.T) {
 			r["sha256"] = strings.Repeat("0", 64)
 		}
 	}, zip, sage)
-	res, err := a.UpdateLibrary()
-	if !errors.Is(err, fetch.ErrBroken) || !strings.Contains(err.Error(), "Шалфей") || res.Added != 1 {
+	res, err := getAll(t, a)
+	if err != nil || res.Added != 1 || len(res.Failed) != 1 || res.Failed[0].Name != "Шалфей" || res.Failed[0].Why != "скачался с ошибкой, повторите" {
 		t.Fatalf("второй: %v %+v", err, res)
 	}
 	list, _ := a.LibraryPacks()
-	if len(list.Packs) != 2 || list.Packs[1].ID != "ivory" || list.Net.Checked != 0 || len(ev.of("library:changed")) != 1 {
+	if len(list.Packs) != 2 || list.Packs[1].ID != "ivory" || list.Net.Checked == 0 || len(ev.of("library:changed")) != 1 {
 		t.Fatalf("после ошибки: %+v, событий %d", list, len(ev.of("library:changed")))
 	}
 	if _, err := os.Stat(filepath.Join(libDir(a), "Наборы", ".dl-sage.tmp")); !errors.Is(err, os.ErrNotExist) {
@@ -311,10 +323,10 @@ func TestNetInstallItemMismatch(t *testing.T) {
 		items[len(items)-1].(map[string]any)["sha256"] = strings.Repeat("0", 64)
 	})
 	l.publish(t, nil, bad)
-	res, err := a.UpdateLibrary()
-	if !errors.Is(err, fetch.ErrBroken) || errors.Is(err, fetch.ErrDisk) || !strings.Contains(err.Error(), "скачался с ошибкой") ||
-		strings.Contains(err.Error(), "на диск") || strings.Contains(err.Error(), a.cfgDir) || res.Added != 0 {
-		t.Fatalf("ошибка: %v %+v", err, res)
+	res, err := getAll(t, a)
+	if err != nil || res.Added != 0 || len(res.Failed) != 1 || res.Failed[0].Name != "Свадьба — айвори" || !strings.Contains(res.Failed[0].Why, "скачался с ошибкой") ||
+		strings.Contains(res.Failed[0].Why, "на диск") || strings.Contains(res.Failed[0].Why, a.cfgDir) {
+		t.Fatalf("итог: %v %+v", err, res)
 	}
 	out := buf.String()
 	if strings.Contains(out, a.cfgDir) || strings.Contains(out, filepath.ToSlash(a.cfgDir)) || !strings.Contains(out, "не сходится с манифестом (") {
@@ -351,7 +363,7 @@ func TestLibraryChangedInstalled(t *testing.T) {
 	zip := d1Zip(t)
 	sage := rezip(t, zip, func(m map[string]any) { m["id"], m["title"] = "sage", "Шалфей" })
 	l.publish(t, nil, zip, sage)
-	if res, err := a.UpdateLibrary(); err != nil || res.Added != 2 {
+	if res, err := getAll(t, a); err != nil || res.Added != 2 {
 		t.Fatalf("сеть: %v %+v", err, res)
 	}
 	if got := installedOf(t, ev, 1); len(got) != 2 || got[0] != "Свадьба — айвори" || got[1] != "Шалфей" {
@@ -430,8 +442,8 @@ func TestLibraryChangedPartial(t *testing.T) {
 			r["sha256"] = strings.Repeat("0", 64)
 		}
 	}, zip, sage)
-	if _, err := a.UpdateLibrary(); err == nil {
-		t.Fatal("ждали ошибку второго набора")
+	if res, err := getAll(t, a); err != nil || len(res.Failed) != 1 {
+		t.Fatalf("ждали второй набор в Failed: %v %+v", err, res)
 	}
 	if got := installedOf(t, ev, 1); len(got) != 1 || got[0] != "Свадьба — айвори" {
 		t.Fatalf("названия: %v", got)
@@ -447,7 +459,7 @@ func TestLibraryLogSummary(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	zip := d1Zip(t)
 	l.publish(t, nil, zip)
-	if _, err := a.UpdateLibrary(); err != nil {
+	if _, err := getAll(t, a); err != nil {
 		t.Fatal(err)
 	}
 	if out := buf.String(); !strings.Contains(out, "библиотека: итог — новых 1, обновлено 0, пропущено 0") {
@@ -459,7 +471,8 @@ func TestLibraryLogSummary(t *testing.T) {
 	if out := buf.String(); !strings.Contains(out, "библиотека: итог — новых 0, обновлено 0, пропущено 0") {
 		t.Fatalf("при нуле: %q", out)
 	}
-	// Обновление и пропуск: версия 2 ивори и набор, которому нужна новая программа.
+	// Обновление: версия 2 ивори; новый набор, которому нужна новая программа, не пропуск, а серая
+	// строка раздела («пропущено» считает причины стоящих наборов).
 	buf.Reset()
 	v2 := rezip(t, zip, func(m map[string]any) { m["version"] = 2 }, before2File(t, zip))
 	defer func(old []byte) { wailsJSON = old }(wailsJSON)
@@ -473,8 +486,11 @@ func TestLibraryLogSummary(t *testing.T) {
 	if _, err := a.UpdateLibrary(); err != nil {
 		t.Fatal(err)
 	}
-	if out := buf.String(); !strings.Contains(out, "библиотека: итог — новых 0, обновлено 1, пропущено 1") {
+	if out := buf.String(); !strings.Contains(out, "библиотека: итог — новых 0, обновлено 1, пропущено 0") {
 		t.Fatalf("обновление с пропуском: %q", out)
+	}
+	if list, _ := a.LibraryPacks(); len(list.Available) != 1 || !strings.Contains(list.Available[0].Why, "0.99.0") {
+		t.Fatalf("серая строка: %+v", list.Available)
 	}
 	// Неудачная проверка итога не пишет.
 	buf.Reset()
@@ -503,12 +519,12 @@ func TestNetAddonDonorNotInstalled(t *testing.T) {
 			r["needs"] = "ivory"
 		}
 	}, zip, add)
-	res, err := a.UpdateLibrary()
+	res, err := getAll(t, a)
 	if err != nil || res.Added+res.Updated != 0 || l.archives.Load() != 1 {
 		t.Fatalf("итог: %v %+v, архивов %d", err, res, l.archives.Load())
 	}
-	if len(res.Skipped) != 1 || res.Skipped[0].Why != "архив не совпадает со списком наборов" {
-		t.Errorf("пропуски (причина у донора, у дополнения молчок): %+v", res.Skipped)
+	if len(res.Failed) != 1 || res.Failed[0].Why != "архив не совпадает со списком наборов" || len(res.Skipped) != 0 {
+		t.Errorf("причина у донора, у дополнения молчок: %+v %+v", res.Failed, res.Skipped)
 	}
 	if list, _ := a.LibraryPacks(); len(list.Packs) != 1 {
 		t.Fatalf("библиотека изменилась: %+v", list.Packs)
@@ -526,7 +542,7 @@ func TestNetAddonBeforeDonor(t *testing.T) {
 			r["needs"] = "ivory"
 		}
 	}, add, zip)
-	res, err := a.UpdateLibrary()
+	res, err := getAll(t, a)
 	if err != nil || res.Added != 2 || len(res.Skipped) != 0 {
 		t.Fatalf("итог: %v %+v", err, res)
 	}

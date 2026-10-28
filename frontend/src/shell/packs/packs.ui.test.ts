@@ -113,6 +113,70 @@ describe('packsUi: открытие и список', () => {
   })
 })
 
+describe('packsUi: «Можно скачать» (137)', () => {
+  const row = (o: Record<string, unknown> = {}) => ({
+    id: 'school',
+    title: 'Школа',
+    about: '',
+    license: '',
+    version: 1,
+    bg: 1,
+    sticker: 0,
+    spread: 0,
+    frame: 0,
+    print: 0,
+    bytes: 1048576,
+    addonTitles: [],
+    donor: '',
+    why: '',
+    removed: false,
+    ...o,
+  })
+
+  it('строки, «Скачать все» и дата списка берутся из LibraryPacks', async () => {
+    api.LibraryPacks.mockResolvedValue(list([builtin], { available: [row()], all: { count: 1, bytes: 1048576 }, availAt: 1761561600000 }))
+    await packsUi.show()
+    expect(packsUi.available.map((a) => a.id)).toEqual(['school'])
+    expect(packsUi.all).toEqual({ count: 1, bytes: 1048576 })
+    expect(packsUi.availAt).toBe(1761561600000)
+  })
+
+  it('старый Go без полей: пусто, списка нет (availAt = 0)', async () => {
+    await packsUi.show()
+    expect(packsUi.available).toEqual([])
+    expect(packsUi.all).toEqual({ count: 0, bytes: 0 })
+    expect(packsUi.availAt).toBe(0)
+  })
+
+  it('повторное открытие не показывает строки прошлого раза, пока список читается', async () => {
+    api.LibraryPacks.mockResolvedValue(list([builtin], { available: [row()], availAt: 5 }))
+    await packsUi.show()
+    packsUi.close()
+    api.LibraryPacks.mockReturnValue(new Promise(() => {}))
+    void packsUi.show()
+    expect(packsUi.available).toEqual([])
+    expect(packsUi.availAt).toBe(0)
+  })
+
+  it('noNet: пока список не читался — нет; прочитан без сетевых — да; с сетевым — нет', async () => {
+    packsUi.listed = false
+    expect(packsUi.noNet).toBe(false)
+    await packsUi.show()
+    expect(packsUi.noNet).toBe(true)
+    api.LibraryPacks.mockResolvedValue(list([builtin, info({ origin: 'net' })]))
+    await packsUi.load()
+    expect(packsUi.noNet).toBe(false)
+  })
+
+  it('showAvail: закрытое окно открывается и просит прокрутку; закрытие её гасит', async () => {
+    await packsUi.showAvail()
+    expect(packsUi.open).toBe(true)
+    expect(packsUi.reveal).toBe(true)
+    packsUi.close()
+    expect(packsUi.reveal).toBe(false)
+  })
+})
+
 describe('packsUi: добавить из файла', () => {
   beforeEach(async () => {
     await packsUi.show()
@@ -211,6 +275,16 @@ describe('packsUi: удалить набор', () => {
     expect(a && 'note' in a && a.note).toContain('3 файла останутся')
     expect(a?.text).toContain('Удалить набор «Айвори»?')
     expect(api.RemovePack).not.toHaveBeenCalled()
+  })
+
+  it('донор со стоящими дополнениями: вопрос называет их (137-10); без addons — прежний текст', async () => {
+    api.PlanRemovePack.mockResolvedValue({ files: 20, kept: 0, bytes: 1048576, addons: ['Свадьба: макеты'] })
+    await packsUi.askRemove(packsUi.packs[1])
+    expect(packsUi.ask?.text).toContain('Дополнения к нему — «Свадьба: макеты» — останутся')
+    packsUi.dismiss()
+    api.PlanRemovePack.mockResolvedValue({ files: 20, kept: 0, bytes: 1048576 })
+    await packsUi.askRemove(packsUi.packs[1])
+    expect(packsUi.ask?.text).not.toContain('Дополнения к нему')
   })
 
   it('встроенный не удаляется', async () => {

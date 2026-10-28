@@ -32,7 +32,11 @@ const (
 type Catalog struct {
 	Seq     int64
 	Packs   []Entry
+	Videos  []Video // ролики справочника F1 (videos.go); не nil
 	Skipped []Skip
+	// Env — конверт как пришёл (подписанные байты): из него служба сохраняет список на диск.
+	// Только у Client.Catalog; после записи вызывающий обнуляет, чтобы не держать лишний мегабайт.
+	Env []byte `json:"-"`
 }
 
 // Entry — строка каталога: что за набор, какой версии, сколько весит, где лежит и его sha256.
@@ -49,6 +53,11 @@ type Entry struct {
 	Counts  Counts `json:"counts"`
 	// Needs — id набора-донора у дополнения (0.27): без донора netPlan его не ставит. Пусто — обычный набор.
 	Needs string `json:"needs,omitempty"`
+	// PreviewRaw — поле preview как пришло: ParseCatalog разбирает его отдельно от строки (preview.go),
+	// чтобы ошибка типа в нём не роняла каталог, и после разбора обнуляет.
+	PreviewRaw json.RawMessage `json:"preview,omitempty"`
+	// Preview — лист образцов набора (144); nil — нет поля или оно негодно (Skipped).
+	Preview *Preview `json:"-"`
 }
 
 // Counts — сколько предметов каждого вида (для строки окна до скачивания).
@@ -112,7 +121,9 @@ func Verify(data, sig []byte, keys []ed25519.PublicKey) error {
 // ParseCatalog — разбор подписанного body: {format, seq, packs}. Шапка не по правилам (формат,
 // seq < 1, больше MaxPacks наборов) — отказ целиком; строка
 // с плохим id, версией, размером, хэшем или адресом (не с префиксом src.Prefix и не из белого
-// списка) — пропуск; повтор id — берётся первая. Неизвестные поля пропускаются.
+// списка) — пропуск; повтор id — берётся первая. Ролики (videos) — построчно, без отказа целиком
+// (videos.go); так же поле preview строки (preview.go): негодное — Preview == nil и запись в
+// Skipped, сам набор остаётся. Неизвестные поля пропускаются.
 func ParseCatalog(data []byte, src Source) (Catalog, error) {
 	if len(data) > MaxCatalog {
 		return Catalog{}, ErrCatalog
@@ -121,6 +132,8 @@ func ParseCatalog(data []byte, src Source) (Catalog, error) {
 		Format int     `json:"format"`
 		Seq    int64   `json:"seq"`
 		Packs  []Entry `json:"packs"`
+		// Ролики разбираются отдельно и построчно (videos.go): их ошибки наборы не роняют.
+		Videos json.RawMessage `json:"videos"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return Catalog{}, ErrCatalog
@@ -132,6 +145,8 @@ func ParseCatalog(data []byte, src Source) (Catalog, error) {
 		return Catalog{}, ErrCatalog
 	}
 	cat := Catalog{Seq: raw.Seq, Packs: make([]Entry, 0, len(raw.Packs)), Skipped: []Skip{}}
+	var vskip []Skip
+	cat.Videos, vskip = parseVideos(raw.Videos, src)
 	seen := map[string]bool{}
 	for i, e := range raw.Packs {
 		why := entrySkip(&e, src)
@@ -140,22 +155,28 @@ func ParseCatalog(data []byte, src Source) (Catalog, error) {
 		}
 		if why != "" {
 			id := cleanText(e.ID, 40)
-			if !validID(e.ID) {
+			if !ValidID(e.ID) {
 				id = "#" + strconv.Itoa(i+1)
 			}
 			cat.Skipped = append(cat.Skipped, Skip{ID: id, Why: why})
 			continue
 		}
 		seen[e.ID] = true
+		var pwhy string
+		if e.Preview, pwhy = parsePreview(e.PreviewRaw, src); pwhy != "" {
+			cat.Skipped = append(cat.Skipped, Skip{ID: e.ID, Why: pwhy})
+		}
+		e.PreviewRaw = nil
 		cat.Packs = append(cat.Packs, e)
 	}
+	cat.Skipped = append(cat.Skipped, vskip...)
 	return cat, nil
 }
 
 // entrySkip — причина пропуска строки; "" — строка годна (тексты почищены, счётчики зажаты).
 func entrySkip(e *Entry, src Source) string {
 	switch {
-	case !validID(e.ID):
+	case !ValidID(e.ID):
 		return "недопустимый id"
 	case e.Version < 1 || e.Version > 999999:
 		return "версия вне 1…999999"
@@ -167,7 +188,7 @@ func entrySkip(e *Entry, src Source) string {
 		return "нет sha256"
 	case !src.assetURL(e.URL):
 		return "адрес не из библиотеки"
-	case e.Needs != "" && (!validID(e.Needs) || e.Needs == e.ID):
+	case e.Needs != "" && (!ValidID(e.Needs) || e.Needs == e.ID):
 		return "недопустимый needs"
 	}
 	if e.Title = cleanText(e.Title, 60); e.Title == "" {
@@ -199,9 +220,22 @@ func (s Source) assetURL(raw string) bool {
 	return err == nil && s.allowed(u)
 }
 
+// AssetURL — адрес ассета rel (путь от префикса источника) для скачивания без строки каталога
+// (пример в программе, спека 142): префикс плюс rel и та же проверка, что у строк каталога
+// (метка и файл без «..», хост из белого списка). Не прошёл — ok == false, адрес не отдаётся.
+func (c *Client) AssetURL(rel string) (string, bool) {
+	raw := c.src.Prefix + rel
+	if rel == "" || !c.src.assetURL(raw) {
+		return "", false
+	}
+	return raw, true
+}
+
 // NeedsApp — набор требует программу новее app (x.y.z); другая строка (сборка dev) — нет.
-func (e Entry) NeedsApp(app string) bool {
-	need, ok1 := parseVer(e.MinApp)
+func (e Entry) NeedsApp(app string) bool { return needsApp(e.MinApp, app) }
+
+func needsApp(minApp, app string) bool {
+	need, ok1 := parseVer(minApp)
 	have, ok2 := parseVer(app)
 	if !ok1 || !ok2 {
 		return false
@@ -224,6 +258,18 @@ func (c *Client) Catalog(ctx context.Context, minSeq int64) (Catalog, error) {
 	if err != nil {
 		return Catalog{}, err
 	}
+	cat, err := c.Parse(env, minSeq)
+	if err != nil {
+		return Catalog{}, err
+	}
+	cat.Env = env
+	return cat, nil
+}
+
+// Parse — проверка конверта каталога без сети: подпись до разбора, затем body, затем seq. Тот же
+// путь, что у Catalog, поэтому и сохранённый на диске список (недоверенный файл) проходит те же
+// проверки: подмена, чужой ключ и откат к старому выпуску — отказ.
+func (c *Client) Parse(env []byte, minSeq int64) (Catalog, error) {
 	body, err := Open(env, c.src.Keys)
 	if err != nil {
 		return Catalog{}, err
@@ -271,8 +317,9 @@ func (c *Client) small(ctx context.Context, raw string, limit int64) ([]byte, er
 	return data, nil
 }
 
-// validID — ^[a-z0-9][a-z0-9-]{2,39}$ (как pack.ValidID; устройства Windows проверяет decor).
-func validID(id string) bool {
+// ValidID — ^[a-z0-9][a-z0-9-]{2,39}$ (как pack.ValidID; устройства Windows проверяет decor). Одна грамматика
+// на наборы и на ролики справочника (id статей F1, имена файлов, адрес раздачи).
+func ValidID(id string) bool {
 	if len(id) < 3 || len(id) > 40 || id[0] == '-' {
 		return false
 	}

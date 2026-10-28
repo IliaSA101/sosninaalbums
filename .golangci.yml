@@ -81,6 +81,15 @@ linters:
           deny:
             - pkg: github.com/IliaSA101/sosninaalbums/internal/testkit
               desc: testkit подключают только _test.go
+        # 143: библиотека MCP — только в службе агентов (чтение альбома для ИИ-агентов), чтобы протокол
+        # и его зависимости не расползлись по программе. Да владельца 2026-10-28 (0.31-143-28).
+        "go-sdk MCP — только internal/app/agents":
+          files:
+            - "!$test"
+            - "!**/internal/app/agents/**"
+          deny:
+            - pkg: github.com/modelcontextprotocol/go-sdk
+              desc: MCP подключает только internal/app/agents (решение 0.31-143-28)
         # Корневой main.go знает только internal/app.
         "корневой main: только internal/app":
           files:
@@ -233,6 +242,17 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/library$
             - github.com/IliaSA101/sosninaalbums/internal/paths$
             - golang.org/x/net/idna$
+        # 140 Т4: ролики справочника F1 за узким Host (образец libpacks): без Wails, без App и без других служб.
+        # Да владельца 2026-10-28.
+        "app/guidevideo: decor/fetch":
+          files:
+            - "**/internal/app/guidevideo/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/guidevideo$
+            - github.com/IliaSA101/sosninaalbums/internal/decor/fetch$
         # devtools — инструменты разработчика (нарезка листа стикеров и т. п.): в exe не входят, запускают
         # внешние команды (rembg). Импортирует их только CLI в scripts/ (//go:build ignore); да владельца 19.10.
         "devtools — не в программу":

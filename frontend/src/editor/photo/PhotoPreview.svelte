@@ -5,7 +5,7 @@
   import { caption } from './previewlist'
   import { eventChord } from '../../base/keys/chord'
   import { keymap } from '../../base/keys/keymap.svelte'
-  import { modalStack } from '../../base/modal/modalstack.svelte'
+  import { modalStack, Z_MODAL } from '../../base/modal/modalstack.svelte'
   import { markOf } from '../../panels/marks/marks'
   import { originalUrl, previewUrl } from '../../base/core/media'
   import { cancelOnUnmount } from '../../base/ui/imgcancel'
@@ -20,7 +20,7 @@
   import Icon from '../../base/ui/Icon.svelte'
   import PreviewMarks from './PreviewMarks.svelte'
   import MissPhoto from '../../base/ui/MissPhoto.svelte'
-  import { missTip } from '../../panels/library/missing'
+  import { isGone, missTip } from '../../panels/library/missing'
   import { autocheck } from '../../panels/folders/autocheck'
 
   // Крупный просмотр фото (Quick Preview из SmartAlbums). Открывают: Ctrl+правый щелчок по плитке, пункт меню, клавиша (128).
@@ -40,9 +40,9 @@
   let nat = $state({ w: 0, h: 0 }) // размер картинки просмотра, px
   // Файла нет (088): Go уже сообщил (store.missing) или картинка не загрузилась — заглушка вместо битой картинки.
   let failed = $state(false)
-  const gone = $derived(failed || (!!id && store.missing.includes(id)))
+  const gone = $derived(failed || (!!id && isGone(id, store.missing, store.unread)))
   const ratio = $derived(photo && photo.w > 0 && photo.h > 0 ? photo.w / photo.h : 1.5)
-  const failTip = $derived(id ? missTip(id, { [id]: photo?.name ?? '' }) : '')
+  const failTip = $derived(id ? missTip(id, { [id]: photo?.name ?? '' }, store.unread) : '')
   function onFail() {
     failed = true
     autocheck.soon(true)
@@ -106,15 +106,23 @@
   $effect(() => {
     if (id && !store.byId.has(id)) photoui.closePreview()
   })
-  $effect(() => {
-    if (box) box.focus()
-  })
   // Окно — в стек, пока оно открыто (любой путь закрытия освобождает его): буфер и клавиши программы под ним молчат.
+  // Вопрос поверх просмотра (двойной щелчок по .salbum, «Файл новее») ложится выше по глубине и забирает Esc и стрелки.
   const open = $derived(!!st)
+  let me = $state(0)
+  const top = $derived(me > 0 && modalStack.isTop(me))
   $effect(() => {
     if (!open) return
     const mid = untrack(() => modalStack.push(true))
-    return () => modalStack.remove(mid)
+    me = mid
+    return () => {
+      modalStack.remove(mid)
+      me = 0
+    }
+  })
+  // Фокус в окне просмотра; когда вопрос сверху закрылся — возвращается сюда.
+  $effect(() => {
+    if (box && top) box.focus()
   })
 
   const close = () => photoui.closePreview()
@@ -123,7 +131,7 @@
   // Остальное идёт диспетчеру: отмена и отметки (shell/menu/keys.ts).
   const OWN = ['photoPreview', 'fitZoom', 'zoomIn', 'zoomOut']
   function onKey(e: KeyboardEvent) {
-    if (!id) return
+    if (!id || !top) return
     const own = () => {
       e.preventDefault()
       e.stopPropagation()
@@ -162,7 +170,14 @@
 <svelte:window onkeydowncapture={onKey} />
 
 {#if id}
-  <div class="back" role="presentation" bind:this={back} onpointerdown={(e) => e.target === e.currentTarget && close()} data-chrome>
+  <div
+    class="back"
+    role="presentation"
+    style:z-index={Z_MODAL + Math.max(modalStack.depth(me), 0)}
+    bind:this={back}
+    onpointerdown={(e) => e.target === e.currentTarget && close()}
+    data-chrome
+  >
     <div class="box" role="dialog" aria-modal="true" aria-label="Крупный просмотр" tabindex="-1" bind:this={box}>
       <div
         class="view"
@@ -253,7 +268,7 @@
   .back {
     position: fixed;
     inset: 0;
-    z-index: 85;
+    z-index: 85; /* запас: реальный z — из modalStack.depth (style:z-index) */
     display: grid;
     place-items: center;
     background: rgba(0, 0, 0, 0.82);

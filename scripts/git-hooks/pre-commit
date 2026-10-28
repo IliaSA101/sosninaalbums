@@ -11,12 +11,16 @@ if [ -n "$bad" ]; then
   exit 1
 fi
 
-# Крупные бинарники (> 2 МБ) — почти наверняка случайность
+# Крупные бинарники (> 2 МБ) — почти наверняка случайность. Исключение — файл примера темы (стандартная редакция)
+# (internal/demopack/*.zip, до 20 МиБ; владелец 28.10, решения 0.30-142-31, -33).
 big=$(git diff --cached --name-only --diff-filter=ACMR | while read -r f; do
-  [ -f "$f" ] && [ "$(wc -c < "$f")" -gt 2097152 ] && echo "$f"
+  [ -f "$f" ] || continue
+  lim=2097152
+  case "$f" in internal/demopack/*.zip) lim=20971520 ;; esac
+  [ "$(wc -c < "$f")" -gt "$lim" ] && echo "$f"
 done)
 if [ -n "$big" ]; then
-  echo "pre-commit: файлы больше 2 МБ:" >&2
+  echo "pre-commit: файлы больше 2 МБ (internal/demopack/*.zip — больше 20 МиБ):" >&2
   echo "$big" | sed 's/^/  /' >&2
   exit 1
 fi

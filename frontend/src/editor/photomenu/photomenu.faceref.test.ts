@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FACE_REF_TIP, menuContext, photoMenu, type MenuCtx, type MenuItem } from './photomenu'
+import { FACE_REF_TIP, FIT_PHOTO_TIP, menuContext, photoMenu, type MenuCtx, type MenuItem } from './photomenu'
 import type { SelBox } from '../../base/geom/gridedit'
 import type { FeatureId } from '../../base/prefs/levels'
 import type { SpreadView } from '../../base/core/types'
@@ -35,6 +35,11 @@ describe('photoMenu: «Кадр ▸ Остальные — как это лиц�
     })
     expect(ref.title).toBe(FACE_REF_TIP)
     expect(ref.icon).toBeTruthy()
+  })
+  it('сосед «Подогнать место под фото» объясняет, что меряет по фото, а не по лицу', () => {
+    const fit = frameSub({ ...ctx(vig, [box('p1')]), differ: true }).find((i) => i.id === 'fitPhoto')
+    expect(fit?.title).toBe('Размер места — по пропорциям фото, лица не учитываются')
+    expect(fit?.title).toBe(FIT_PHOTO_TIP)
   })
   it('кадр не тронут — пункт всё равно есть (норма берётся с места, а не с правки)', () => {
     expect(frameSub(ctx(vig, [box('p1')])).map((i) => i.id)).toEqual(['contain', 'cover', 'faceRef'])

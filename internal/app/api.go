@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,7 +38,7 @@ func (a *App) GetState() State {
 	fromFile := a.startFromFile
 	a.startFromFile = false
 	missing := append([]string{}, a.missing...)
-	unread := maps.Clone(a.unread)
+	unread := a.unreadAllLocked()
 	pending := a.pendingName()
 	a.mu.Unlock()
 	if photos == nil {

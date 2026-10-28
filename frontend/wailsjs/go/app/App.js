@@ -138,6 +138,10 @@ export function CancelExport() {
   return window['go']['app']['App']['CancelExport']();
 }
 
+export function CancelGuideVideos() {
+  return window['go']['app']['App']['CancelGuideVideos']();
+}
+
 export function CancelLibrary() {
   return window['go']['app']['App']['CancelLibrary']();
 }
@@ -294,6 +298,18 @@ export function DeleteText(arg1) {
   return window['go']['app']['App']['DeleteText'](arg1);
 }
 
+export function DownloadAllLibrary() {
+  return window['go']['app']['App']['DownloadAllLibrary']();
+}
+
+export function DownloadGuideVideos(arg1) {
+  return window['go']['app']['App']['DownloadGuideVideos'](arg1);
+}
+
+export function DownloadLibraryPack(arg1) {
+  return window['go']['app']['App']['DownloadLibraryPack'](arg1);
+}
+
 export function DownloadUpdate() {
   return window['go']['app']['App']['DownloadUpdate']();
 }
@@ -324,6 +340,10 @@ export function ExportTemplates() {
 
 export function FaceGuide(arg1, arg2) {
   return window['go']['app']['App']['FaceGuide'](arg1, arg2);
+}
+
+export function FetchPackPreviews() {
+  return window['go']['app']['App']['FetchPackPreviews']();
 }
 
 export function FillPlaces(arg1, arg2) {
@@ -368,6 +388,14 @@ export function GetView() {
 
 export function GridChoices(arg1, arg2, arg3) {
   return window['go']['app']['App']['GridChoices'](arg1, arg2, arg3);
+}
+
+export function GuideLearned() {
+  return window['go']['app']['App']['GuideLearned']();
+}
+
+export function GuideVideos() {
+  return window['go']['app']['App']['GuideVideos']();
 }
 
 export function HideDecor(arg1, arg2) {
@@ -440,6 +468,10 @@ export function LookInfo(arg1) {
 
 export function MarginNote(arg1, arg2) {
   return window['go']['app']['App']['MarginNote'](arg1, arg2);
+}
+
+export function MarkGuide(arg1, arg2) {
+  return window['go']['app']['App']['MarkGuide'](arg1, arg2);
 }
 
 export function Marks() {
@@ -526,6 +558,10 @@ export function OpenUpdatePage() {
   return window['go']['app']['App']['OpenUpdatePage']();
 }
 
+export function PackItem(arg1, arg2, arg3) {
+  return window['go']['app']['App']['PackItem'](arg1, arg2, arg3);
+}
+
 export function PagePresets() {
   return window['go']['app']['App']['PagePresets']();
 }
@@ -552,6 +588,10 @@ export function PhotoAbout(arg1) {
 
 export function PickBackdropFile(arg1, arg2) {
   return window['go']['app']['App']['PickBackdropFile'](arg1, arg2);
+}
+
+export function PickBest(arg1, arg2) {
+  return window['go']['app']['App']['PickBest'](arg1, arg2);
 }
 
 export function PickColorAt(arg1, arg2, arg3) {
@@ -736,6 +776,10 @@ export function RestoreBackup(arg1) {
 
 export function RestoreHotkeys(arg1) {
   return window['go']['app']['App']['RestoreHotkeys'](arg1);
+}
+
+export function RevealGuideVideo(arg1) {
+  return window['go']['app']['App']['RevealGuideVideo'](arg1);
 }
 
 export function RotateGroup(arg1, arg2, arg3, arg4, arg5) {
@@ -1036,6 +1080,10 @@ export function ShowLibraryFolder() {
 
 export function ShowPhotoInExplorer(arg1) {
   return window['go']['app']['App']['ShowPhotoInExplorer'](arg1);
+}
+
+export function SimilarTo(arg1, arg2) {
+  return window['go']['app']['App']['SimilarTo'](arg1, arg2);
 }
 
 export function SortVignette(arg1) {

@@ -8,6 +8,7 @@ import type { SegItem } from '../../base/tpl/Seg.svelte'
 import type { SideItem } from '../../base/tpl/SideList.svelte'
 import { sideCounts, type BrowseSel, NO_SEL } from '../decorbrowse/browse'
 import { noOwn, tilePx, type DecorCatalog, type DecorItem } from './decor'
+import { isGetItem, type GetKind } from '../decorbrowse/decorget'
 
 type SheetFor = Pick<SpreadView, 'w' | 'h' | 'mid'>
 
@@ -16,8 +17,9 @@ type SheetFor = Pick<SpreadView, 'w' | 'h' | 'mid'>
 export const tplFits = (it: Pick<DecorItem, 'pages'>, scope: BackdropScope, sp: Pick<SpreadView, 'mid'>): boolean =>
   it.pages === 1 || (scope === 'spread' && hasSeam(sp))
 
+// Плитки скачивания (144) «Куда» не отбирает: страница это или разворот, видно по скачанному предмету.
 export const tplVisible = (items: readonly DecorItem[], scope: BackdropScope, sp: Pick<SpreadView, 'mid'>): DecorItem[] =>
-  items.filter((it) => tplFits(it, scope, sp))
+  items.filter((it) => isGetItem(it) || tplFits(it, scope, sp))
 
 // Счётчики тем считаются по тому же отбору «Куда» (и «Набор», 133), что и плитки (Go считает по всем): иначе «Недавние 3» при двух плитках.
 export function tplSideItems(
@@ -36,6 +38,11 @@ export const FILTERED_EMPTY = 'Здесь только развороты на �
 // Ширина/высота страницы и листа целиком. Лист без шва (031, виньетка) — одна «страница» во весь лист.
 export const pageRatio = (sp: SheetFor): number => (hasSeam(sp) ? sp.mid / sp.h : sp.w / sp.h)
 export const sheetRatio = (sp: SheetFor): number => sp.w / sp.h
+
+// Пропорция плитки «Можно скачать» (144) — как у стоящей плитки вида: фон — лист, развороты — лист или страница по «Куда»
+// (tileLook.box); стикеры и рамочки — квадрат, его знает getRatio.
+export const getBoxFor = (kind: GetKind, sp: SheetFor, scope: BackdropScope): number | undefined =>
+  kind === 'bg' ? sheetRatio(sp) : kind === 'spread' ? (scope === 'spread' ? sheetRatio(sp) : pageRatio(sp)) : undefined
 
 // Пределы Go для запроса плитки: px 64…1024, r 0,2…5 (иначе 404).
 const PX_MAX = 1024

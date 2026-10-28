@@ -32,7 +32,7 @@ type Info struct {
 	Author    string `json:"author"`
 	License   string `json:"license"`
 	Source    string `json:"source"` // текст, не ссылка (решение 14)
-	Origin    string `json:"origin"` // builtin | file | net
+	Origin    string `json:"origin"` // builtin | file | net | demo
 	Version   int    `json:"version"`
 	Bg        int    `json:"bg"`
 	Sticker   int    `json:"sticker"`
@@ -48,15 +48,44 @@ type Info struct {
 type Net struct {
 	Allowed bool  `json:"allowed"`
 	AtStart bool  `json:"atStart"`
-	Checked int64 `json:"checked"` // unix мс последней удачной проверки
-	Skipped int   `json:"skipped"` // удалённых пользователем: «Обновить» их не ставит
+	Checked int64 `json:"checked"` // unix мс последней проверки обновлений (не даты списка «Можно скачать»: она — List.AvailAt)
+	Skipped int   `json:"skipped"` // удалённых пользователем: «Обновить» и «Скачать все» их не ставят
+	// Пример набора в программе (спека 142). DemoSkipped — пример удалён вами и не покрыт стоящим
+	// полным набором (входит в Skipped); DemoBack — только в ответе «Вернуть»: пример встал этим
+	// вызовом; DemoOffer — есть строка «Скачать» примера (указатель в пустом окне макетов).
+	DemoSkipped bool `json:"demoSkipped"`
+	DemoBack    bool `json:"demoBack"`
+	DemoOffer   bool `json:"demoOffer"`
 }
 
-// Remove — числа вопроса «Удалить набор?» (decor.PackRemove).
+// Remove — числа вопроса «Удалить набор?» (decor.PackRemove). Addons — названия стоящих
+// дополнений донора по сохранённому списку: останутся без обновлений (137-10); пусто — не
+// знаем или нет, не nil.
 type Remove struct {
-	Files int   `json:"files"`
-	Kept  int   `json:"kept"`
-	Bytes int64 `json:"bytes"`
+	Files  int      `json:"files"`
+	Kept   int      `json:"kept"`
+	Bytes  int64    `json:"bytes"`
+	Addons []string `json:"addons"`
+}
+
+// Avail — строка раздела «Можно скачать»: набор сохранённого списка, которого нет в библиотеке
+// (137). Тексты — из подписанного каталога, прошли cleanText; адреса в строке нет.
+type Avail struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	About       string   `json:"about"`
+	License     string   `json:"license"`
+	Version     int      `json:"version"`
+	Bg          int      `json:"bg"`
+	Sticker     int      `json:"sticker"`
+	Spread      int      `json:"spread"`
+	Frame       int      `json:"frame"`
+	Print       int      `json:"print"`
+	Bytes       int64    `json:"bytes"`       // вместе с дополнениями, которые придут с набором
+	AddonTitles []string `json:"addonTitles"` // что придёт вместе (дополнения); не nil
+	Donor       string   `json:"donor"`       // название стоящего донора у строки-дополнения, иначе ""
+	Why         string   `json:"why"`         // непусто — «Скачать» серая, текст — подсказка
+	Removed     bool     `json:"removed"`     // в пропуске: «удалён вами»
 }
 
 // Skip — пропущенный предмет или набор и причина (в App — DecorSkip).
@@ -65,13 +94,19 @@ type Skip struct {
 	Why  string `json:"why"`
 }
 
-// List — содержимое окна «Наборы»: Busy — идёт операция (кнопки неактивны). Вложенный DTO: в App
-// он написан заново (PackList), пару стережёт TestDTOPairs.
+// List — содержимое окна «Наборы»: Busy — идёт операция (кнопки неактивны). Available — раздел
+// «Можно скачать» из сохранённого списка (сеть не трогается), AvailAt — когда список записан
+// (unix мс, время файла; 0 — списка нет), All — «Скачать все» (число строк и байты): подпись и
+// план DownloadAll считает одна функция. Вложенный DTO: в App он написан заново (PackList),
+// пару стережёт TestDTOPairs.
 type List struct {
-	Packs    []Info `json:"packs"`
-	Net      Net    `json:"net"`
-	Busy     bool   `json:"busy"`
-	ReadOnly bool   `json:"readOnly"`
+	Packs     []Info  `json:"packs"`
+	Net       Net     `json:"net"`
+	Busy      bool    `json:"busy"`
+	ReadOnly  bool    `json:"readOnly"`
+	Available []Avail `json:"available"`
+	All       Offer   `json:"all"`
+	AvailAt   int64   `json:"availAt"`
 }
 
 // Add — итог «Добавить из файла». Ask: "" — поставлен; same — эта версия уже стоит; update —
@@ -84,15 +119,24 @@ type Add struct {
 	Skipped     []Skip `json:"skipped"`
 }
 
-// Update — итог «Обновить библиотеку»: новых и обновлённых наборов, пропущенное с причиной (нужна
-// новая программа, предметы набора), байты скачанного. В App — LibraryUpdate (без titles); в
-// событие library:updated уходит как есть.
+// Update — итог «Обновить библиотеку», «Скачать» и «Скачать все»: новых и обновлённых наборов,
+// пропущенное с причиной (нужна новая программа, предметы набора), не поставленные наборы
+// (Failed — «повторите» или причина; в «Скачать» сюда же попадает нажатый набор, если он не
+// встал), байты скачанного, Available — сколько строк «Скачать все» в разделе после операции
+// (без серых и «удалён вами»). В App — LibraryUpdate (без titles).
 type Update struct {
-	Added   int      `json:"added"`
-	Updated int      `json:"updated"`
-	Skipped []Skip   `json:"skipped"`
-	Bytes   int64    `json:"bytes"`
-	titles  []string // названия поставленных и обновлённых — в library:changed; в JSON не идут
+	Added     int               `json:"added"`
+	Updated   int               `json:"updated"`
+	Skipped   []Skip            `json:"skipped"`
+	Bytes     int64             `json:"bytes"`
+	Failed    []Skip            `json:"failed"`
+	Available int               `json:"available"`
+	Fresh     int               `json:"fresh"`  // новых строк раздела сверх прошлого списка
+	Picked    bool              `json:"picked"` // «Скачать»: нажатый набор стоит после хода
+	Why       string            `json:"why"`    // «Скачать»: почему не встал
+	titles    []string          // названия поставленных и обновлённых — в library:changed; в JSON не идут
+	done      []string          // id поставленных и обновлённых: «удалён вами» снимается с них
+	why       map[string]string // id → почему набор не встал (итог «Скачать»)
 }
 
 // Progress — событие library:progress: этап catalog | download | install, набор и байты.
@@ -103,10 +147,20 @@ type Progress struct {
 	Total int64  `json:"total"`
 }
 
-// Offer — событие library:offer: при запуске новое больше порога — тост «Скачать».
+// Offer — число наборов и их байты: «Скачать все» в списке, обновления больше порога и новые
+// наборы в событии library:start.
 type Offer struct {
 	Count int   `json:"count"`
 	Bytes int64 `json:"bytes"`
+}
+
+// Start — событие library:start: итог проверки при запуске одним событием (тост один, следующий
+// стирает прежний): Updated — встало тихо, Offer — обновления больше порога (не скачаны), Fresh —
+// новые наборы списка. Шлётся, если хоть одна часть не нулевая; неудачи — только в log.txt.
+type Start struct {
+	Updated int   `json:"updated"`
+	Offer   Offer `json:"offer"`
+	Fresh   Offer `json:"fresh"`
 }
 
 // Changed — данные library:changed: названия (Info.Title) поставленных и обновлённых наборов,
@@ -128,6 +182,8 @@ var (
 	ErrStale     = errors.New("вопрос устарел — добавьте набор ещё раз")
 	ErrFile      = errors.New("это не набор библиотеки (.zip)")
 	ErrNoConsent = errors.New("обращение к сети не разрешено — нажмите «Обновить библиотеку» и разрешите")
+	// ErrGone — «Скачать» набору, которого нет в свежем списке; список при этом уже обновлён.
+	ErrGone = errors.New("набора больше нет в списке — список обновлён")
 	// ErrRemote — без пути: ошибка CheckLocalPath несёт его целиком, а тост его не показывает.
 	ErrRemote = errors.New("файл набора не на локальном диске")
 )
@@ -153,7 +209,11 @@ type Host struct {
 	RememberDir   func(dir string)       // последняя папка диалога «Добавить из файла»
 	OpenDir       func(dir string) error // папка в проводнике
 	Fetcher       func() *fetch.Client   // сетевой клиент; тесты подменяют своим сервером
-	Now           func() time.Time       // часы вопроса «Заменить?»; тесты уводят их вперёд
+	Demo          func() Demo            // пример набора в программе (спека 142); пустой ID — выключен
+	Now           func() time.Time       // часы вопроса «Заменить?» и пауз образцов; тесты уводят их вперёд
+	// Rename — переименование скачанного листа образцов (os.Rename; тест подменяет, чтобы проверить
+	// уборку временного файла при отказе).
+	Rename func(oldPath, newPath string) error
 	// Start — проверка при запуске (решение 17): задержка после открытия окна, период и порог
 	// размера, после которого вместо скачивания только предложение. Читается при каждом вызове.
 	Start func() (delay, every time.Duration, offerOver int64)
@@ -177,6 +237,32 @@ type Service struct {
 	netMu   sync.Mutex
 	cancel  context.CancelFunc
 	started atomic.Bool
+
+	// Сохранённый список «Можно скачать» (cache.go). Чтение файла и запись с подменой cat идут под
+	// одним catMu, loaded — отдельно от cat == nil (безопасность Д1): ленивое чтение не затирает
+	// свежий список и не повторяется после неудачи.
+	catMu  sync.Mutex
+	cat    *fetch.Catalog // nil — списка нет; после записи Env обнулён
+	catAt  time.Time      // время файла списка
+	catBad bool           // файл есть, но не читается: проверка при запуске не объявляет «новые»
+	loaded bool
+
+	consMu sync.Mutex // согласие на сеть в памяти (consent.go)
+	cons   consent
+
+	demoAsset demoAsset // адрес ассета примера: проверяется один раз (demo.go)
+
+	// Образцы наборов (спека 144): задание, пауза, плохие листы — prevjob.go; кэш клеток — cells.go.
+	// prevMu держит задание и уборку (TryLock); отмена задания — prevCancel под netMu.
+	prevMu     sync.Mutex
+	prevCancel context.CancelFunc
+	prev       prevState
+	cells      *cellCache
+
+	// Крючки внутренних тестов (в программе nil): между Lstat листа и его открытием; разборов JPEG.
+	afterLstat func()
+	decodes    atomic.Int64
+	lpMiss     atomic.Int64 // промахи /media/lp/: журнал — первый и каждый сотый
 }
 
 // New собирает службу; пустое поле Host — паника с его именем (как edit.New и colorpick.New).
@@ -187,7 +273,7 @@ func New(h Host) *Service {
 			panic("libpacks.New: не задано поле Host." + v.Type().Field(i).Name)
 		}
 	}
-	return &Service{h: h}
+	return &Service{h: h, cells: newCellCache()}
 }
 
 // ResetSession — новый сеанс: проверка при запуске снова разрешена (тесты зовут вместо перезапуска

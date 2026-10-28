@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,11 +146,13 @@ func TestDownloadStall(t *testing.T) {
 		t.Errorf("застой ждал %v", d)
 	}
 	assertGone(t, dst)
-	// Предел на набор целиком — тот же отказ.
-	c.stall, c.limit = time.Minute, 150*time.Millisecond
-	if err := c.Download(context.Background(), entryFor(l, "/stall.zip", body), dst, nil); !errors.Is(err, ErrTimeout) {
+	// Предел на набор целиком — не застой, а своя ошибка: ход «Скачать все» рвётся сразу (137 Д3).
+	c.stall, c.limit, c.rate = time.Minute, 150*time.Millisecond, 0 // rate 0: предел только полом
+	err = c.Download(context.Background(), entryFor(l, "/stall.zip", body), dst, nil)
+	if !errors.Is(err, ErrSlow) || errors.Is(err, ErrTimeout) || !strings.Contains(err.Error(), "«") {
 		t.Fatalf("предел набора: %v", err)
 	}
+	assertGone(t, dst)
 }
 
 // Отмена посреди скачивания — ErrCancelled, файла нет.
@@ -179,5 +183,82 @@ func TestDownloadCancel(t *testing.T) {
 	err = l.client().Download(context.Background(), entryFor(l, "/x.zip", []byte("xyz")), filepath.Join(dst, "нет", "x.tmp"), nil)
 	if !errors.Is(err, ErrDisk) || err.Error() != ErrDisk.Error() {
 		t.Fatalf("диск: %v", err)
+	}
+}
+
+// DownloadTemp без подмены: файл целый, права 0600; ошибка загрузки или папки — файла нет.
+func TestDownloadTempOK(t *testing.T) {
+	l := newTestLib(t)
+	body := bytes.Repeat([]byte("z"), 70_000)
+	l.serve("/ok.zip", body)
+	dir := testkit.TempDir(t)
+	p, err := l.client().DownloadTemp(context.Background(), entryFor(l, "/ok.zip", body), dir, "ok-*.tmp", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(p); !bytes.Equal(got, body) {
+		t.Fatalf("файл %d байт", len(got))
+	}
+	// На Windows Go всегда отдаёт 0666 для файла без атрибута «только чтение»: биты прав там ничего не значат.
+	if st, _ := os.Stat(p); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
+		t.Errorf("права %v", st.Mode())
+	}
+	bad := entryFor(l, "/ok.zip", body)
+	bad.SHA256 = "00" + bad.SHA256[2:]
+	if p2, err := l.client().DownloadTemp(context.Background(), bad, dir, "ok-*.tmp", nil); !errors.Is(err, ErrBroken) || p2 != "" {
+		t.Fatalf("хэш: %q %v", p2, err)
+	}
+	if list, _ := filepath.Glob(filepath.Join(dir, "ok-*.tmp")); len(list) != 1 || list[0] != p {
+		t.Errorf("в папке %v", list)
+	}
+	if _, err := l.client().DownloadTemp(context.Background(), entryFor(l, "/ok.zip", body), filepath.Join(dir, "нет"), "ok-*.tmp", nil); !errors.Is(err, ErrDisk) {
+		t.Errorf("нет папки: %v", err)
+	}
+}
+
+// DownloadTo пишет в открытый файл и оставляет его открытым и на месте — и при успехе, и при ошибке.
+func TestDownloadToKeepsFile(t *testing.T) {
+	l := newTestLib(t)
+	body := []byte("0123456789")
+	l.serve("/t.zip", body)
+	f, err := os.CreateTemp(testkit.TempDir(t), "to-*.tmp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close() //nolint:errcheck // тест
+	if err := l.client().DownloadTo(context.Background(), entryFor(l, "/t.zip", body), f, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(nil); err != nil { // дескриптор жив
+		t.Errorf("файл закрыт: %v", err)
+	}
+	if got, _ := os.ReadFile(f.Name()); !bytes.Equal(got, body) {
+		t.Errorf("записано %q", got)
+	}
+	bad := entryFor(l, "/t.zip", body)
+	bad.SHA256 = "00" + bad.SHA256[2:]
+	if err := l.client().DownloadTo(context.Background(), bad, f, nil); !errors.Is(err, ErrBroken) {
+		t.Fatalf("хэш: %v", err)
+	}
+	if _, err := os.Stat(f.Name()); err != nil {
+		t.Errorf("файл удалён: %v", err)
+	}
+}
+
+// На месте dst лежит обычный файл с мусором: Download его заменяет, внутри только новое тело
+// (портативный случай остатка прежней загрузки; ссылка и FIFO — в download_swap_linux_test.go).
+func TestDownloadReplacesJunk(t *testing.T) {
+	l := newTestLib(t)
+	body := bytes.Repeat([]byte("n"), 3000)
+	l.serve("/j.zip", body)
+	dst := dlPath(t)
+	if err := os.WriteFile(dst, bytes.Repeat([]byte("МУСОР"), 5000), 0o600); err != nil { // мусор длиннее тела
+		t.Fatal(err)
+	}
+	if err := l.client().Download(context.Background(), entryFor(l, "/j.zip", body), dst, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dst); !bytes.Equal(got, body) {
+		t.Fatalf("в файле %d байт, хвост мусора не убран", len(got))
 	}
 }

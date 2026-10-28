@@ -21,8 +21,8 @@ const hasTargets = (text: string): string[] => {
 
 describe('глобальные :has(.класс) не задевают чужие окна', () => {
   // Правила `:global(.box.wide):has(.x)` меняют только ширину окна с `wide`; совпадения ниже проверены глазами:
-  // .opts в CollectDialog и главном окне PacksDialog — не wide; .guide в редакторе — направляющие вне окон.
-  const ok = new Set(['.opts|ExportGroup.svelte', '.guide|Guide.svelte'])
+  // .opts в CollectDialog и главном окне PacksDialog — не wide.
+  const ok = new Set(['.opts|ExportGroup.svelte'])
   it('класс из правила встречается в разметке только у владельца правила', () => {
     const bad: string[] = []
     for (const [path, text] of Object.entries(files)) {
