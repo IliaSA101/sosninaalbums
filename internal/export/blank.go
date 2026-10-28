@@ -1,0 +1,140 @@
+package export
+
+import (
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+)
+
+// BlankSpreads — номера (с 1) разворотов из плана, где печатать нечего: ни фото, ни текстов (заготовки
+// не в счёт), ни подписей, ни фото на фоне, ни узора, ни стикера, ни мест, ни своего цвета страниц. Название
+// не печатается, поэтому разворот с одним названием тоже пустой (Spread.empty тут не подходит).
+// Фон, узор и стикер с Fade ≥ 1, узор и стикер неизвестного генератора не печатаются — не считаются.
+// Фон альбома (098, Album) — не содержимое листа: лист только с ним пустой, как лист только с цветом альбома.
+func BlankSpreads(v model.View, pl *Plan) []int {
+	var out []int
+	for i, s := range v.Spreads {
+		if pl.mask[i+1] == 0 {
+			continue
+		}
+		s = printable(s) // заготовка (131) не печатается — на листе только с ней печатать нечего
+		if len(s.Photos) == 0 && len(s.Texts) == 0 && len(s.Captions) == 0 && !shownBackdrop(s) && !shownPattern(s) &&
+			!shownSticker(s) && len(s.Places) == 0 && s.BgSet == [2]string{} {
+			out = append(out, i+1)
+		}
+	}
+	return out
+}
+
+// shownBackdrop — на развороте есть свой фон, который попадёт в печать (Fade < 1).
+func shownBackdrop(s model.SpreadView) bool {
+	for _, b := range s.Backdrops {
+		if !b.Album && b.Fade < 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// shownPattern — на листе есть свой узор, который попадёт в печать (048): видимый и известный.
+func shownPattern(s model.SpreadView) bool {
+	for _, pv := range s.Patterns {
+		if !pv.Album && pv.Known && pv.Pat.Fade < 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// shownSticker — на листе есть стикер, который попадёт в печать (048): видимый, свой или
+// известного генератора.
+func shownSticker(s model.SpreadView) bool {
+	for _, st := range s.Stickers {
+		if st.Known && st.Fade < 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// BlankWarning — текст вопроса перед экспортом о пустых разворотах; "" — пустых нет.
+// white — фон альбома белый. Номеров не больше 10, остальные — «…и ещё K».
+func BlankWarning(nums []int, white bool) string {
+	if len(nums) == 0 {
+		return ""
+	}
+	list := numList(nums)
+	head, tail := "Развороты %s пустые — выгрузить %s?", "белыми"
+	if len(nums) == 1 {
+		head, tail = "Разворот %s пустой — выгрузить %s?", "белым"
+	}
+	if !white {
+		tail = "с фоном альбома"
+	}
+	return fmt.Sprintf(head, list, tail)
+}
+
+// numList — номера через запятую, не больше 10, остальные — «…и ещё K».
+func numList(nums []int) string {
+	const maxShown = 10
+	parts := make([]string, 0, maxShown)
+	for _, n := range nums[:min(len(nums), maxShown)] {
+		parts = append(parts, strconv.Itoa(n))
+	}
+	list := strings.Join(parts, ", ")
+	if len(nums) > maxShown {
+		list += fmt.Sprintf(" …и ещё %d", len(nums)-maxShown)
+	}
+	return list
+}
+
+// PlanFields — пустые поля (по алфавиту), фото без имени и имена без фото (таблички пустых
+// мест, 071) на листах, которые пишет план: развороты из pl.mask и обложка, если она в плане.
+// По всему альбому (View.Unfilled) нельзя — «Только обложка» или диапазон спросили бы о листах,
+// которые не выгружаются. При выгрузке одной страницы разворота вопрос учитывает поля всего
+// разворота: лишний вопрос, данные целы.
+func PlanFields(v model.View, pl *Plan) (unfilled []string, unnamed, waiting int) {
+	add := func(s model.SpreadView) {
+		unfilled = append(unfilled, s.Unfilled...)
+		unnamed += s.Unnamed
+		waiting += s.Waiting
+	}
+	if pl.Cover != nil && v.Cover != nil {
+		add(v.Cover.Sheet)
+	}
+	for i, s := range v.Spreads {
+		if pl.mask[i+1] != 0 {
+			add(s)
+		}
+	}
+	slices.Sort(unfilled)
+	return slices.Compact(unfilled), unnamed, waiting
+}
+
+// FieldsWarning — вопрос перед экспортом о пустых полях подписей (030): unfilled —
+// имена полей, unnamed — фото без имени, waiting — имена без фото (071; все — из PlanFields);
+// "" — всё заполнено.
+func FieldsWarning(unfilled []string, unnamed, waiting int) string {
+	var parts []string
+	if len(unfilled) > 0 {
+		parts = append(parts, "Не заполнены поля: "+strings.Join(unfilled, ", "))
+	}
+	count := func(first, head string, n int) { // first — первой частью, с большой буквы
+		if n == 0 {
+			return
+		}
+		if len(parts) == 0 {
+			head = first
+		}
+		parts = append(parts, fmt.Sprintf("%s: %d", head, n))
+	}
+	count("Фото без имени", "фото без имени", unnamed)
+	count("Имён без фото", "имён без фото", waiting)
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "; ") + ". В выгрузке они будут пустыми. Продолжить?"
+}
