@@ -1,0 +1,295 @@
+name: CI
+
+on:
+  push:
+    # winqa/** - то же дерево, что уйдёт в main (winqa-push.mjs: коммит-сирота без publish-exclude):
+    # находки CI main (0.25.0: тесты под Windows, дерево без docs/qa, shellcheck) видны до publish-main
+    branches: [main, "winqa/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Повторная отправка ветки winqa отменяет прежний прогон; прогоны main не отменяются
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/winqa/') }}
+
+jobs:
+  check:
+    timeout-minutes: 30
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # Как локально: эталон экспорта сверяет пиксели image/jpeg этой версии Go
+          go-version: "1.26.10"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci
+
+      - name: gofmt
+        shell: bash
+        run: |
+          out="$(gofmt -l main.go internal)"
+          if [ -n "$out" ]; then echo "$out"; exit 1; fi
+
+      - name: go vet
+        # Пакеты — без ./...: тот заходит в frontend/node_modules (npm ci уже выполнен); один шаблон для всех скриптов
+        run: go vet . ./internal/...
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          args: . ./internal/...
+
+      # SA_TEST_SLOW: пороги времени (testkit.Limit) с запасом на общий раннер
+      - name: go test
+        env:
+          SA_TEST_SLOW: "2.5"
+        run: go test . ./internal/...
+
+      - name: prettier
+        working-directory: frontend
+        run: npx prettier --check .
+
+      - name: eslint
+        working-directory: frontend
+        run: npx eslint . --max-warnings 0
+
+      - name: svelte-check
+        working-directory: frontend
+        run: npx svelte-check --fail-on-warnings
+
+      # SA_TEST_SLOW: пороги времени (namequery.test.ts) с запасом на общий раннер; на Windows-раннере 0.27.0 дал 62 мс при пороге 60
+      - name: vitest
+        working-directory: frontend
+        env:
+          SA_TEST_SLOW: "2.5"
+        run: npx vitest run
+
+      - name: build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: bindings contract
+        run: node scripts/bindings-contract.mjs --check
+
+      # Тесты разбора покрытия и release-check; сам release-check без --version сверяет согласованность версий
+      - name: тесты скриптов
+        run: node --test "scripts/*.test.mjs"
+
+      - name: release-check
+        run: node scripts/release-check.mjs
+
+  # Go-тесты на Linux (ведущая ОС разработки): раздел go-linux эталона. Пакеты без тега desktop cgo не требуют — GTK не ставим
+  go-linux:
+    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: go vet
+        run: go vet . ./internal/...
+
+      # -cover -json: эталон сверяет и покрытие; раздел go-linux выбирается по ОС (scripts/tree-cover.mjs)
+      - name: go test
+        env:
+          SA_TEST_SLOW: "2.5"
+        # PACKPREP_CHROME: настоящий тест вырезов SVG (devtools/svgcut) в Chrome раннера, без него — пропуск (ревью 129, «да» владельца 25.10)
+        run: PACKPREP_CHROME="$(command -v google-chrome)" go test -cover -json . ./internal/... > "$RUNNER_TEMP/go-test.json"
+
+      # и после провала go test: test-baseline печатает упавшие тесты с хвостом вывода (24.10 - провал без единой строки)
+      - name: сверка с эталоном go-linux
+        if: ${{ !cancelled() }}
+        run: node scripts/test-baseline.mjs --check --go --go-json "$RUNNER_TEMP/go-test.json"
+
+      # Плавающий тест: json остаётся для разбора (gh run download <id> -n go-test-linux)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: go-test-linux
+          path: ${{ runner.temp }}/go-test.json
+          retention-days: 7
+          if-no-files-found: warn
+
+  # Детектор гонок (-race, cgo/gcc есть на раннере): только push в winqa/** (тот же коммит, что уйдёт в main), не main и не PR.
+  # Пока не блокирует: continue-on-error на уровне задания - красный прогон виден, но общий итог не краснит.
+  # Снять continue-on-error после 3 зелёных прогонов подряд (решение владельца 28.10, В5).
+  go-race:
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/winqa/') }}
+    continue-on-error: true
+    timeout-minutes: 40
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      # node нужен части Go-тестов, как в go-linux
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      # SA_TEST_SLOW: пороги времени (testkit.Limit) с запасом: -race замедляет код в разы; пакеты — как в go test выше
+      - name: go test -race
+        env:
+          SA_TEST_SLOW: "2.5"
+        run: go test -race -timeout 30m . ./internal/...
+
+  # Уязвимости в достижимом коде; три GOOS — анализ учитывает теги сборки, Windows-путь иначе не проверяется
+  govulncheck:
+    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [windows, darwin, linux]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      # Ставим без GOOS (иначе go run соберёт чужой exe), GOOS — только на запуске анализа
+      - name: установка govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+
+      - name: govulncheck
+        env:
+          GOOS: ${{ matrix.goos }}
+        run: govulncheck . ./internal/...
+
+  # Проверка самих workflow: синтаксис, выражения, типы входов; на ubuntu есть shellcheck — им же и run:
+  workflows:
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+          cache: false
+
+      - name: actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+
+  # Движок инструкции по установке (029): тесты и пробная сборка docx без pdf
+  guide:
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: зависимости (по хешам)
+        run: python -m pip install --require-hashes -r scripts/guide/requirements.txt
+
+      # PyYAML нужен test_winqa_workflow: без него страж win-qa.yml в CI молча пропускался
+      - name: зависимости scripts/win (по хешам)
+        run: python -m pip install --require-hashes -r scripts/win/requirements.txt
+
+      # ffmpeg нужен TestRender, иначе тест пропускается
+      - name: ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: тесты
+        run: python -I -m unittest discover -s scripts/guide -v
+
+      # makensis ≥ 3.08 (в образе ubuntu есть в пакете nsis): тесты scripts/win при CI=true без него падают,
+      # поэтому ставим раньше них
+      - name: NSIS
+        run: |
+          sudo apt-get update && sudo apt-get install -y nsis
+          echo "NSIS: $(makensis -VERSION)" >> "$GITHUB_STEP_SUMMARY"
+
+      # Упаковка архивов выпуска (039) и установщика Windows (111): stdlib, синтетические exe и .app-zip
+      - name: тесты упаковки выпуска
+        run: python -I -m unittest discover -s scripts/win -v
+
+      # Сам скрипт .nsi под -WX без сборки программы: пустой exe вместо настоящего
+      - name: пробная сборка установщика
+        run: |
+          : > "$RUNNER_TEMP/empty.exe"
+          bash scripts/win/installer.sh --exe "$RUNNER_TEMP/empty.exe" --version 0.0.1 --out "$RUNNER_TEMP/installer"
+
+      # Стандартный установщик (спека 142): блок !ifdef DEMO_SRC в .nsi под -WX с настоящим zip примера; пустышка exe, как выше
+      - name: пробная сборка стандартного установщика
+        run: |
+          : > "$RUNNER_TEMP/empty.exe"
+          bash scripts/win/installer.sh --exe "$RUNNER_TEMP/empty.exe" --version 0.0.1 --out "$RUNNER_TEMP/installer-standard" --demo "$(ls internal/demopack/*.zip)" --standard
+
+      # Пакет данных с примером (0.30-142-47): сборка настоящего zip; дата передана, т. к. история в CI неполная
+      - name: пробная сборка пакета данных (deb-demo)
+        run: |
+          bash scripts/linux/deb-demo.sh --out "$RUNNER_TEMP/deb-demo" --date 2026-10-28T00:00:00Z
+          dpkg-deb -I "$RUNNER_TEMP"/deb-demo/SosninaAlbums-demo-*-linux-all.deb
+
+      # deb.sh и glibc.sh из пустышки (спека 101): раньше шли только в release.yml, то есть только при выпуске (0.25.0 - xdg-mime)
+      - name: тест сборки .deb
+        run: |
+          sudo apt-get install -y --no-install-recommends shared-mime-info libglib2.0-bin desktop-file-utils
+          bash scripts/linux/test_deb.sh
+
+      - name: пробная сборка docx
+        run: |
+          for v in "" win macos; do
+            python -I scripts/guide/build_docx.py docs/install/guide.md ${v:+--variant "$v"} --out "$RUNNER_TEMP/guide"
+          done
+
+  # Помощники снимков для Mac (029/036): чистые функции без macOS; bash — тот же язык, что на раннере Mac
+  mac-scripts:
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      # Pillow не ставим: тесты, которым он нужен, пропускаются сами
+      - name: тесты macshots.py
+        run: python -I -m unittest discover -s scripts/mac -v
+
+      - name: тесты lib.sh
+        run: bash scripts/mac/test_lib.sh
