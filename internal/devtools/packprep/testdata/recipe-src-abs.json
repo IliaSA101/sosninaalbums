@@ -1,0 +1,56 @@
+{
+  "id": "school-autumn",
+  "version": 1,
+  "minApp": "0.26.0",
+  "title": "Школа — осень",
+  "theme": "school",
+  "author": "Илья Соснин · Марина Соснина",
+  "license": "CC0-1.0",
+  "source": "github.com/IliaSA101/sosninaalbums-library",
+  "about": "Нарисовано ИИ (Magnific), отобрано и обработано вручную. Фоны, рамочки, уголки и стикеры двух стилей.",
+  "items": [
+    {
+      "src": "school-1/school-1-recraft-36.svg",
+      "mode": "svg",
+      "style": "Значки",
+      "grid": "6x6",
+      "side": 1600,
+      "out": "stickers/z-",
+      "names": [
+        "Колокольчик",
+        "Книги"
+      ],
+      "knock": [
+        [
+          812,
+          640
+        ]
+      ]
+    },
+    {
+      "src": "/etc/passwd.jpg",
+      "mode": "bg",
+      "out": "bg/chalk.jpg",
+      "name": "Доска",
+      "trim": 2
+    },
+    {
+      "src": "school-frames/sf-supplies-rich-flux.jpg",
+      "mode": "frame",
+      "holes": "clean",
+      "out": "frames/supplies-rich.png",
+      "name": "Принадлежности в углах"
+    },
+    {
+      "src": "school-corners-dividers/sd-dividers-four-flux.jpg",
+      "mode": "rows",
+      "n": 4,
+      "out": "stickers/div-four-",
+      "name": "Разделитель",
+      "kind": "divider"
+    }
+  ],
+  "skip": {
+    "school-1/school-1-recraft-36.svg#3": "кубик B — брак"
+  }
+}
