@@ -1,0 +1,32 @@
+{
+"comment": "Паритет проверки архива набора: scripts/pack-check.mjs и pack.OpenReader+Extract читают эти случаи (scripts/pack-check-zip.test.mjs, TestArchiveCases). Архив собирает каждая сторона сама: manifest.json со всеми files (вид spread, Store), затем extra (вне манифеста); prefix — столько нулевых байт перед zip; eocdRecords — число записей в конце каталога вместо настоящего; dirSizeMinus — на сколько байт размер каталога в конце меньше настоящего; madeBy и attrs — создатель и внешние атрибуты записи; dd — флаг 8 и дескриптор данных после записи. name — текст, nameHex — байты имени как есть. want: ok и подстрока error отказа.",
+"cases": [
+{"name":"хороший набор","files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":true}},
+{"name":"данные перед zip 100 КБ — сдвиг смещений","prefix":100000,"files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":true}},
+{"name":"данные перед zip 1,1 МБ — ещё в пределе","prefix":1100000,"files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":true}},
+{"name":"данные перед zip 1,12 МБ — каталог дальше предела","prefix":1120000,"files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":false,"error":"каталог архива больше 1 МБ"}},
+{"name":"данные перед zip 2 МБ","prefix":2097152,"files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":false,"error":"каталог архива больше 1 МБ"}},
+{"name":"число записей в конце каталога больше настоящего","eocdRecords":4,"files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":false,"error":"не читается как zip"}},
+{"name":"число записей в конце каталога меньше настоящего","eocdRecords":1,"files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":false,"error":"не читается как zip"}},
+{"name":"размер каталога в конце на 10 меньше настоящего: годный заголовок по dirOff — сдвига нет","dirSizeMinus":10,"files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":true}},
+{"name":"размер каталога в конце на 10 больше настоящего — смещение уходит назад","dirSizeMinus":-10,"files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":false,"error":"не читается как zip"}},
+{"name":"записей больше 2000","eocdRecords":2001,"files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"want":{"ok":false,"error":"в архиве больше 2000 записей"}},
+{"name":"имя cp866 «Про» и «Лес» — для Go каждый негодный байт U+FFFD, имена равны","files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"extra":[{"nameHex":"8fe0ae2e747874","text":"1"},{"nameHex":"8ba5e12e747874","text":"2"}],"want":{"ok":false,"error":"повторяется"}},
+{"name":"имена E0 AE 41 и 8F 41 — разные байты, разные имена","files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"extra":[{"nameHex":"e0ae412e747874","text":"1"},{"nameHex":"8f412e747874","text":"2"}],"want":{"ok":true}},
+{"name":"имя с негодным байтом не мешает набору","files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"extra":[{"nameHex":"8fe0ae2e747874","text":"1"}],"want":{"ok":true}},
+{"name":"İ и i — в Go (unicode.ToLower) один знак","files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"extra":[{"nameHex":"c4b02e747874","text":"1"},{"nameHex":"692e747874","text":"2"}],"want":{"ok":false,"error":"повторяется"}},
+{"name":"ΑΣ и ας — в Go без контекста сигмы разные имена","files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"extra":[{"nameHex":"ce91cea32e747874","text":"1"},{"nameHex":"ceb1cf822e747874","text":"2"}],"want":{"ok":true}},
+{"name":"знак Кельвина и k — один знак","files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"extra":[{"nameHex":"e284aa2e747874","text":"1"},{"nameHex":"6b2e747874","text":"2"}],"want":{"ok":false,"error":"повторяется"}},
+{"name":"повтор имени без учёта регистра","files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"extra":[{"name":"LICENSE.txt","text":"1"},{"name":"license.TXT","text":"2"}],"want":{"ok":false,"error":"повторяется"}},
+{"name":"запись с дескриптором данных (флаг 8)","files":[{"name":"sp/a.json","text":"{\"v\":1}","dd":true}],"want":{"ok":true}},
+{"name":"имя с «..»","files":[{"name":"sp/a.json","text":"{\"v\":1}"}],"extra":[{"name":"../x.png","text":"1"}],"want":{"ok":false,"error":"недопустимое имя в архиве"}},
+{"name":"Unix-запись предмета — обычный файл","files":[{"name":"sp/a.json","text":"{\"v\":1}","madeBy":788,"attrs":2175008768}],"want":{"ok":true}},
+{"name":"Unix-запись предмета — символьная ссылка","files":[{"name":"sp/a.json","text":"{\"v\":1}","madeBy":788,"attrs":2717843456}],"want":{"ok":false,"error":"нет «sp/a.json»"}},
+{"name":"macOS-запись предмета — ссылка (создатель 19)","files":[{"name":"sp/a.json","text":"{\"v\":1}","madeBy":4884,"attrs":2717843456}],"want":{"ok":false,"error":"нет «sp/a.json»"}},
+{"name":"macOS-запись предмета — обычный файл","files":[{"name":"sp/a.json","text":"{\"v\":1}","madeBy":4884,"attrs":2175008768}],"want":{"ok":true}},
+{"name":"Unix-запись с неизвестным типом 030000 — Go считает файлом","files":[{"name":"sp/a.json","text":"{\"v\":1}","madeBy":788,"attrs":805306368}],"want":{"ok":true}},
+{"name":"создатель 5 (Atari) с атрибутом папки — Go режима не знает, файл","files":[{"name":"sp/a.json","text":"{\"v\":1}","madeBy":1300,"attrs":16}],"want":{"ok":true}},
+{"name":"DOS-запись с атрибутом папки","files":[{"name":"sp/a.json","text":"{\"v\":1}","madeBy":20,"attrs":16}],"want":{"ok":false,"error":"нет «sp/a.json»"}},
+{"name":"NTFS-запись с атрибутом папки","files":[{"name":"sp/a.json","text":"{\"v\":1}","madeBy":2836,"attrs":16}],"want":{"ok":false,"error":"нет «sp/a.json»"}}
+]
+}
