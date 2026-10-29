@@ -74,13 +74,35 @@ linters:
           pkg: ^os$
           msg: "п5: папка данных — osx.ConfigDir/CacheDir (только абсолютный путь)"
         # 143 (да владельца 2026-10-29, очередь п. 7; design §12): служба агентов только читает — не пишет файлы
-        # и настройки; исключения ниже снимают правило вне internal/app/agents и для сокета (channel.go, perm_*.go).
+        # и настройки; исключения ниже снимают правило вне internal/app/agents и internal/mcpbridge и для сокета
+        # (channel.go, perm_*.go). 149 В13 (да владельца 2026-10-29): и посредник, и обходы — WriteFileAtomicMode,
+        # запись ассоциаций и переименование через osx.
         - pattern: ^os\.(WriteFile|Create|CreateTemp|OpenFile|Remove|RemoveAll|Rename|Mkdir|MkdirAll|MkdirTemp|Chmod|Chown|Symlink|Link|Truncate)$
           pkg: ^os$
-          msg: "143: служба агентов не пишет файлы"
-        - pattern: ^library\.WriteFileAtomic$
+          msg: "143: служба агентов и посредник не пишут файлы"
+        - pattern: ^library\.WriteFileAtomic(Mode)?$
           pkg: ^github\.com/IliaSA101/sosninaalbums/internal/library$
-          msg: "143: служба агентов не пишет файлы"
+          msg: "143: служба агентов и посредник не пишут файлы"
+        - pattern: ^osx\.(WriteAssoc|RemoveAssoc|DropUserChoice|RenameNoReplace)$
+          pkg: ^github\.com/IliaSA101/sosninaalbums/internal/osx$
+          msg: "143: служба агентов и посредник не пишут файлы"
+        # 149 В13 (да владельца 2026-10-29): агент не запускает программ и не открывает окна ОС мимо вопроса;
+        # запуск самой программы (start_program) — только internal/mcpbridge/launch_*.go.
+        - pattern: ^osx\.(Start|Reveal|OpenDir|OpenURL)$
+          pkg: ^github\.com/IliaSA101/sosninaalbums/internal/osx$
+          msg: "149: служба агентов и посредник не запускают программы"
+        - pattern: ^exec\..*$
+          pkg: ^os/exec$
+          msg: "149: служба агентов и посредник не запускают программы"
+        - pattern: ^os\.StartProcess$
+          pkg: ^os$
+          msg: "149: служба агентов и посредник не запускают программы"
+        - pattern: ^syscall\.(StartProcess|ForkExec)$
+          pkg: ^syscall$
+          msg: "149: служба агентов и посредник не запускают программы"
+        - pattern: ^windows\.CreateProcess.*$
+          pkg: ^golang\.org/x/sys/windows$
+          msg: "149: служба агентов и посредник не запускают программы"
         - pattern: ^prefs\.(Update|Remember|Push|Drop|Forget|Mark|Set|Import|Merge|Clean|PickDir).*$
           pkg: ^github\.com/IliaSA101/sosninaalbums/internal/prefs$
           msg: "143: служба агентов не меняет настройки"
@@ -981,16 +1003,26 @@ linters:
       - path: (^internal/osx/userdirs\.go$|_test\.go$)
         linters: [forbidigo]
         text: "п5: папка данных"
-      # 143: запрет записи — только для службы агентов; сокет и права папки пишут channel.go и perm_*.go
-      - path-except: ^internal/app/agents/
+      # 143: запрет записи — только для службы агентов и посредника; сокет и права папки пишут channel.go и perm_*.go
+      - path-except: ^internal/(app/agents|mcpbridge)/
         linters: [forbidigo]
         text: "143: служба агентов"
       - path: ^internal/app/agents/(channel|perm_[a-z]+)\.go$
         linters: [forbidigo]
-        text: "143: служба агентов не пишет файлы"
-      - path: ^internal/app/agents/.*_test\.go$
+        text: "143: служба агентов и посредник не пишут файлы"
+      - path: ^internal/(app/agents|mcpbridge)/.*_test\.go$
         linters: [forbidigo]
         text: "143: служба агентов"
+      # 149 В13: запрет запуска программ — для службы агентов и посредника; запуск программы — launch_*.go посредника
+      - path-except: ^internal/(app/agents|mcpbridge)/
+        linters: [forbidigo]
+        text: "149: служба агентов"
+      - path: ^internal/mcpbridge/launch_[a-z_]+\.go$
+        linters: [forbidigo]
+        text: "149: служба агентов"
+      - path: ^internal/(app/agents|mcpbridge)/.*_test\.go$
+        linters: [forbidigo]
+        text: "149: служба агентов"
 formatters:
   enable:
     - gofmt

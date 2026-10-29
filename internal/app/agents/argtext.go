@@ -86,6 +86,8 @@ func explainValue(s *jsonschema.Schema, v any) string {
 		return "допустимые значения: " + strings.Join(vals, ", ")
 	}
 	switch x := v.(type) {
+	case []any:
+		return explainEnumItems(s, x)
 	case float64:
 		return explainNumber(s, x)
 	case string:
@@ -95,6 +97,21 @@ func explainValue(s *jsonschema.Schema, v any) string {
 		}
 		if s.MinLength != nil && n < *s.MinLength {
 			return "длина " + strconv.Itoa(n) + " знаков меньше предела " + strconv.Itoa(*s.MinLength)
+		}
+	}
+	return ""
+}
+
+// explainEnumItems — список из перечисления (families): неизвестный элемент называется по номеру, а
+// допустимые значения перечисляются; иначе агент видел бы общую фразу «не подходят под схему».
+// Прочие нарушения элементов (тип, предел) остаются общей фразе: разбор здесь только про перечисление.
+func explainEnumItems(s *jsonschema.Schema, items []any) string {
+	if s.Items == nil || len(s.Items.Enum) == 0 {
+		return ""
+	}
+	for i, it := range items {
+		if why := explainValue(&jsonschema.Schema{Enum: s.Items.Enum}, it); why != "" {
+			return "элемент " + strconv.Itoa(i+1) + ": " + why
 		}
 	}
 	return ""

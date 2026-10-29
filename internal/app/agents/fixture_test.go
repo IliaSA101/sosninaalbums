@@ -37,6 +37,9 @@ type fixture struct {
 	// preview, render — ответы Host.Preview/Render; nil — настоящий JPEG нужного размера (см. preview_test.go).
 	preview func(ctx context.Context, id string, px int) ([]byte, error)
 	render  func(ctx context.Context, id string, px int) ([]byte, error)
+	// edit — замыкания правок (edit_fixture_test.go); noEdit — Host без них (инструментов правки нет).
+	edit   *editFake
+	noEdit bool
 	// reads — сколько раз служба читала данные: проверка, что инструмент вообще ходил в Host.
 	reads atomic.Int32
 }
@@ -101,6 +104,7 @@ func newFixture() *fixture {
 		AlbumFonts: []model.FontUse{{ID: "f1", Name: "ZQ11 шрифт"}}, Unfilled: []string{"Школа"}, Unnamed: 2,
 		PageLimit: &model.PageLimitView{Who: "ZQ17 типография", Count: 2, Min: 10, Max: 60, Warn: "мало"},
 	}
+	f.edit = newEditFake(f)
 	f.fonts = []string{"ZQ11 шрифт"}
 	f.decor = map[string]DecorCatalogLite{
 		"sticker": {
@@ -145,6 +149,14 @@ func newFixture() *fixture {
 
 // host собирает Host над fixture; sock и cfg — как у rig.
 func (f *fixture) host(cfg, sock string, changed func()) Host {
+	h := f.readHost(cfg, sock, changed)
+	if !f.noEdit {
+		f.edit.install(&h)
+	}
+	return h
+}
+
+func (f *fixture) readHost(cfg, sock string, changed func()) Host {
 	read := func() { f.reads.Add(1) }
 	return Host{
 		CfgDir: func() string { return cfg }, Version: func() string { return "test" }, Sock: func() string { return sock }, Changed: changed,

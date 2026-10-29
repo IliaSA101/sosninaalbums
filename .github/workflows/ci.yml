@@ -55,11 +55,41 @@ jobs:
           version: v2.14.0
           args: . ./internal/...
 
-      # SA_TEST_SLOW: пороги времени (testkit.Limit) с запасом на общий раннер
+      # SA_TEST_SLOW: пороги времени (testkit.Limit) с запасом на общий раннер.
+      # -cover -json кладёт прогон в go-test.json: по нему сверка с эталоном Windows (раздел go в
+      # testdata/test-baseline.json) ниже, артефакт - материал для --write. shell: bash - pwsh не умеет такой redirect
+      # с кодом возврата go. go-test.json в консоль не идёт, поэтому имена упавших пакетов и тестов печатаем здесь же.
       - name: go test
+        shell: bash
         env:
           SA_TEST_SLOW: "2.5"
-        run: go test . ./internal/...
+        run: |
+          status=0
+          go test -cover -json . ./internal/... > "$RUNNER_TEMP/go-test.json" || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "go test завершился с кодом $status; упавшие:"
+            grep -E '"Action":"fail"' "$RUNNER_TEMP/go-test.json" || true
+          fi
+          exit "$status"
+
+      # json остаётся всегда (в том числе при провале): из него пополняется эталон Windows
+      # (gh run download <id> -n go-test-windows)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: go-test-windows
+          path: ${{ runner.temp }}/go-test.json
+          retention-days: 7
+          if-no-files-found: warn
+
+      # Да владельца 29.10 (0.33-baseline-2): раздел go переписан по прогону CI, сверка включена. Дерево album
+      # сверка меряет сама (go test -coverpkg), отсюда и SA_TEST_SLOW
+      - name: сверка с эталоном go (Windows)
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          SA_TEST_SLOW: "2.5"
+        run: node scripts/test-baseline.mjs --check --go --go-json "$RUNNER_TEMP/go-test.json"
 
       # 146 (да владельца 2026-10-29): модуль контракта api/albums — свой go.mod, корневые шаги его не видят
       - name: api/albums (gofmt, vet, test)

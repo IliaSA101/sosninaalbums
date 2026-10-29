@@ -18,6 +18,8 @@ type Call struct {
 	Tool   string // название инструмента для человека («Сводка альбома»)
 	OK     bool
 	Ms     int
+	Edit   bool   // правящий инструмент (149): в окне помечен ✎
+	Note   string // итог словами: отказано, без ответа, занят, копия, поздно; "" — обычный вызов
 }
 
 // journal — последние вызовы (новые первыми) и число вызовов за сегодня. Живёт в памяти: на диск
@@ -76,8 +78,14 @@ func (s *Service) ClearCalls() {
 
 // record — запись вызова после ответа; обратный вызов приложения — после отпускания замка.
 func (s *Service) record(spec toolSpec, req *mcp.CallToolRequest, res *mcp.CallToolResult, d time.Duration) {
+	s.recordNote(spec, req, res, d, "")
+}
+
+// recordNote — то же с итогом словами (Call.Note) для правящих инструментов.
+func (s *Service) recordNote(spec toolSpec, req *mcp.CallToolRequest, res *mcp.CallToolResult, d time.Duration, note string) {
 	defer guardPanic("journal")
-	c := Call{At: s.jr.clock(), Client: clientOf(req), Tool: spec.title, OK: res != nil && !res.IsError, Ms: int(d.Milliseconds())}
+	c := Call{At: s.jr.clock(), Client: clientOf(req), Tool: spec.title, OK: res != nil && !res.IsError, Ms: int(d.Milliseconds()),
+		Edit: spec.edit, Note: note}
 	today := s.jr.add(c)
 	if s.o.OnCall != nil {
 		s.o.OnCall(c, today)
@@ -90,6 +98,17 @@ func clientOf(req *mcp.CallToolRequest) string {
 		return ""
 	}
 	if ip := req.Session.InitializeParams(); ip != nil && ip.ClientInfo != nil {
+		return cleanName(ip.ClientInfo.Name)
+	}
+	return ""
+}
+
+// client — имя клиента вызова (очищено): из подключения; нет — пусто.
+func (c *call) client() string {
+	if c.sess == nil {
+		return ""
+	}
+	if ip := c.sess.InitializeParams(); ip != nil && ip.ClientInfo != nil {
 		return cleanName(ip.ClientInfo.Name)
 	}
 	return ""

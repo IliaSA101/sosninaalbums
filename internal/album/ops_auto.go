@@ -127,20 +127,31 @@ func (e *Editor) AutoSimilar(photos []model.PhotoInfo, o model.AutoOpts) ([]mode
 // План и пулы раскладок считаются вне замка (autoPrep): под замком — только выбор и запись.
 // Договор: photos без повторов (DedupePhotos).
 func (e *Editor) AutoBuild(photos []model.PhotoInfo, at int, o model.AutoOpts) (model.View, error) {
+	return e.autoBuild(photos, at, o, nil)
+}
+
+// buildGap — крючок теста: зовётся между планом сборки (вне замка) и её правкой (nil — нет).
+var buildGap func()
+
+// autoBuild — тело AutoBuild и AutoBuildIf: x (nil — без сверки) проверяется под замком правки.
+func (e *Editor) autoBuild(photos []model.PhotoInfo, at int, o model.AutoOpts, x *Expect) (model.View, error) {
 	photos, o = model.DedupePhotos(photos), o.Clamp()
 	t0, made := time.Now(), 0
 	in, err := e.autoPrep(photos, o)
 	if err != nil {
 		return e.View(), err
 	}
+	if buildGap != nil {
+		buildGap()
+	}
 	defer func() {
 		slow(t0, "автосборка: %d фото → %d разворотов", in.pre.Photos(), made)
 	}()
 	if o.Again {
-		return e.autoAgain(in, photos, at, &made)
+		return e.autoAgain(in, photos, at, &made, x)
 	}
 	if o.Album {
-		return e.autoAlbum(in, photos, &made)
+		return e.autoAlbum(in, photos, &made, x)
 	}
 	key := "auto:" + model.NewID() // уникален: с прошлыми правками не сливается
 	var ids []string
@@ -148,7 +159,7 @@ func (e *Editor) AutoBuild(photos []model.PhotoInfo, at int, o model.AutoOpts) (
 		ids, err = spreads.Rebuild(p, in.pre, at, e.rating(photos), nil)
 		made = len(ids)
 		return err
-	}, nil, editOpts{done: func(pushed *model.Project) {
+	}, nil, editOpts{expect: x, done: func(pushed *model.Project) {
 		if pushed != nil {
 			e.auto = autoChain{key: key, base: pushed, rev: e.projRev, ids: ids}
 		}
@@ -159,7 +170,7 @@ func (e *Editor) AutoBuild(photos []model.PhotoInfo, at int, o model.AutoOpts) (
 // и обложка не меняются; цепочка и шаг отмены — как у сборки. Пул пуст — холостая правка.
 // «До правки» для settle — копия без ID голых (spreads.WithoutBare), иначе KeepLayouts сбросил бы
 // раскладки новых разворотов с прежними ID.
-func (e *Editor) autoAlbum(in autoIn, photos []model.PhotoInfo, made *int) (model.View, error) {
+func (e *Editor) autoAlbum(in autoIn, photos []model.PhotoInfo, made *int, x *Expect) (model.View, error) {
 	key := "auto:" + model.NewID()
 	var ids []string
 	rel := new(model.Project)
@@ -168,7 +179,7 @@ func (e *Editor) autoAlbum(in autoIn, photos []model.PhotoInfo, made *int) (mode
 		ids, err = spreads.RebuildAlbum(p, in.pre, e.rating(photos), spreads.BareIDs(p))
 		*made = len(ids)
 		return err
-	}, nil, editOpts{rel: rel, done: func(pushed *model.Project) {
+	}, nil, editOpts{rel: rel, expect: x, done: func(pushed *model.Project) {
 		if pushed != nil {
 			e.auto = autoChain{key: key, base: pushed, rev: e.projRev, ids: ids, album: true}
 		}
@@ -179,7 +190,7 @@ func (e *Editor) autoAlbum(in autoIn, photos []model.PhotoInfo, made *int) (mode
 // развороты — с ID прошлого варианта; нормализация — от альбома до сборки. После сборки
 // шагов не было — тот же шаг отмены (слияние), были отметки — новый шаг. Тот же вариант —
 // холостая правка. Живость проверяется и под замком правки: за время счёта могли править.
-func (e *Editor) autoAgain(in autoIn, photos []model.PhotoInfo, at int, made *int) (model.View, error) {
+func (e *Editor) autoAgain(in autoIn, photos []model.PhotoInfo, at int, made *int, x *Expect) (model.View, error) {
 	if againGap != nil {
 		againGap()
 	}
@@ -198,7 +209,7 @@ func (e *Editor) autoAgain(in autoIn, photos []model.PhotoInfo, at int, made *in
 		}
 		*made = len(ids)
 		return err
-	}, nil, editOpts{rel: cmp.Or(in.rel, in.base), done: func(*model.Project) { e.auto.rev, e.auto.ids = e.projRev, ids }})
+	}, nil, editOpts{rel: cmp.Or(in.rel, in.base), expect: x, done: func(*model.Project) { e.auto.rev, e.auto.ids = e.projRev, ids }})
 }
 
 // autoIn — вход сборки, снятый под замком: job — без похожих, drops — они сами; base и key —

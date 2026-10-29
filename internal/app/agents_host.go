@@ -4,6 +4,7 @@ package app
 // альбома и библиотеки. Контракт (design §5): ничего не пишут (ни файлов, ни настроек, ни
 // событий), не ждут долгих операций под a.mu (загрузка, автосборка, выгрузка), с медленным диском —
 // только через проверку тома; ошибки — без путей и имён файлов, с длинными операциями — ctx.
+// Замыкания правок (149, ступень 3) — отдельно: agents_host_edit.go; события agents:edited шлют они.
 
 import (
 	"context"
@@ -34,7 +35,7 @@ var (
 // agentsHost — что службе агентов нужно от App. Позднее связывание: cfgDir, cache и editor читаются
 // при каждом вызове (cfgDir ставит startup, редактор подменяется при открытии альбома).
 func (a *App) agentsHost() agents.Host {
-	return agents.Host{
+	h := agents.Host{
 		CfgDir:       func() string { return a.cfgDir },
 		Version:      func() string { return appVersion(wailsJSON) },
 		Sock:         func() string { return osx.MCPSock(a.data) },
@@ -51,6 +52,8 @@ func (a *App) agentsHost() agents.Host {
 		Preview:      a.agentsPreview,
 		Render:       a.agentsRender,
 	}
+	a.agentsEditHost(&h)
+	return h
 }
 
 // agentsView — вид, который видит окно: последний отданный ему (несохранённое тоже), иначе вид

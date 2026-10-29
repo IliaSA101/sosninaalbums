@@ -1,6 +1,544 @@
 [
   {
     "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Добавить в открытый альбом папку с фотографиями. Программа спросит человека и откроет выбор папки; путь агент не передаёт и не получает. folder_hint — подсказка, где открыть выбор. Человек отвечает в окне программы; если он не ответил за несколько секунд, придёт pending с жетоном: попросите человека ответить в окне и вызовите await_answer. Отказ — не повторять без его просьбы в чате. Правка видна в программе, Ctrl+Z её отменяет.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": "object"
+        },
+        "folder_hint": {
+          "description": "подсказка, где открыть выбор папки (путь не используется как есть)",
+          "maxLength": 4096,
+          "type": "string"
+        }
+      },
+      "required": [
+        "album"
+      ],
+      "type": "object"
+    },
+    "name": "add_folder",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "folder": {
+          "additionalProperties": false,
+          "properties": {
+            "merged": {
+              "description": "папка уже была в альбоме: правки нет",
+              "type": "boolean"
+            },
+            "n": {
+              "description": "номер папки в альбоме с 1",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "n",
+            "merged"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "pending": {
+          "additionalProperties": false,
+          "properties": {
+            "ask": {
+              "description": "жетон вопроса: передайте в await_answer",
+              "type": "string"
+            },
+            "text": {
+              "description": "что сказать человеку",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ask",
+            "text"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "scan": {
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "description": "программа ещё читает фото папки",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "active"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "title": "Добавить папку"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Собрать развороты в конец альбома из свободных фото (не в альбоме, не на фоне, не отклонённые; фильтр и выделение ленты не учитываются) с умолчаниями окна «Автосборка»: «Авто», серии, «Обычное», все семейства. Входы необязательны: spreads, perSpread, series, similar, variant, variety (0…2), families, photos (только эти фото из свободных). Ждёт, пока программа дочитает папки. Правка видна в программе, Ctrl+Z её отменяет.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": "object"
+        },
+        "families": {
+          "description": "разрешённые семейства раскладок (по умолчанию все): dense — плотнее, air — больше воздуха, hero, bleed, strip, figure",
+          "items": {
+            "enum": [
+              "dense",
+              "hero",
+              "air",
+              "bleed",
+              "strip",
+              "figure"
+            ],
+            "type": "string"
+          },
+          "maxItems": 6,
+          "type": "array"
+        },
+        "perSpread": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto"
+              ],
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "max": {
+                  "maximum": 64,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "min": {
+                  "maximum": 64,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "фото на разворот: \"auto\" или {min, max}"
+        },
+        "photos": {
+          "description": "id фото из list_photos: собрать только их, если они свободны",
+          "items": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "maxItems": 5000,
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "series": {
+          "description": "не разрывать серии съёмки (по умолчанию да)",
+          "type": "boolean"
+        },
+        "similar": {
+          "description": "убирать похожие кадры: 0 нет, 1 дубли, 2 очень похожие, 3 похожие",
+          "maximum": 3,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "spreads": {
+          "description": "сколько разворотов собрать (по умолчанию как в окне: фото / 4)",
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "variant": {
+          "description": "номер варианта: другие границы и раскладки (по умолчанию 1)",
+          "maximum": 9999,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "variety": {
+          "description": "разнообразие раскладок 0…2 (по умолчанию 1 — «Обычное»)",
+          "maximum": 2,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "album"
+      ],
+      "type": "object"
+    },
+    "name": "autobuild",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "added": {
+          "description": "собрано разворотов",
+          "type": "integer"
+        },
+        "album": {
+          "additionalProperties": false,
+          "description": "новая ревизия",
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": "object"
+        },
+        "first": {
+          "description": "номер первого нового разворота с 1; 0 — нет",
+          "type": "integer"
+        },
+        "photos": {
+          "description": "фото в сборке",
+          "type": "integer"
+        },
+        "plan": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "description": "фото на разворот: от",
+              "type": "integer"
+            },
+            "similar": {
+              "description": "похожих кадров не взято",
+              "type": "integer"
+            },
+            "to": {
+              "description": "фото на разворот: до",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to",
+            "similar"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "album",
+        "added",
+        "photos",
+        "plan",
+        "first"
+      ],
+      "type": "object"
+    },
+    "title": "Автосборка"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Дождаться ответа человека на вопрос, о котором сообщил pending: возвращает то же, что вернул бы вызов, задавший вопрос, либо снова pending (подождите и повторите). Жетон ask работает только в этом подключении.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "ask": {
+          "description": "жетон из pending",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "ask"
+      ],
+      "type": "object"
+    },
+    "name": "await_answer",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "folder": {
+          "additionalProperties": false,
+          "properties": {
+            "merged": {
+              "description": "папка уже была в альбоме: правки нет",
+              "type": "boolean"
+            },
+            "n": {
+              "description": "номер папки в альбоме с 1",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "n",
+            "merged"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "pending": {
+          "additionalProperties": false,
+          "properties": {
+            "ask": {
+              "description": "жетон вопроса: передайте в await_answer",
+              "type": "string"
+            },
+            "text": {
+              "description": "что сказать человеку",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ask",
+            "text"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "scan": {
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "description": "программа ещё читает фото папки",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "active"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "title": "Ответ человека"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Создать новый альбом из папки с фотографиями. Программа спросит человека в своём окне и откроет выбор папки; путь агент не передаёт и не получает. folder_hint (необязательно) — лишь подсказка, где открыть выбор. Открытый альбом сохранится в свой файл. Создание нельзя отменить через undo_last_edit. Человек отвечает в окне программы; если он не ответил за несколько секунд, придёт pending с жетоном: попросите человека ответить в окне и вызовите await_answer. Отказ — не повторять без его просьбы в чате. Правка видна в программе, Ctrl+Z её отменяет.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "folder_hint": {
+          "description": "подсказка, где открыть выбор папки (путь не используется как есть)",
+          "maxLength": 4096,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "create_album",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "folder": {
+          "additionalProperties": false,
+          "properties": {
+            "merged": {
+              "description": "папка уже была в альбоме: правки нет",
+              "type": "boolean"
+            },
+            "n": {
+              "description": "номер папки в альбоме с 1",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "n",
+            "merged"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "pending": {
+          "additionalProperties": false,
+          "properties": {
+            "ask": {
+              "description": "жетон вопроса: передайте в await_answer",
+              "type": "string"
+            },
+            "text": {
+              "description": "что сказать человеку",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ask",
+            "text"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "scan": {
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "description": "программа ещё читает фото папки",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "active"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "title": "Создать альбом"
+  },
+  {
+    "annotations": {
       "idempotentHint": true,
       "openWorldHint": false,
       "readOnlyHint": true
@@ -18,11 +556,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -121,6 +659,25 @@
         "dirty": {
           "description": "есть несохранённые правки",
           "type": "boolean"
+        },
+        "edits": {
+          "additionalProperties": false,
+          "properties": {
+            "allowed": {
+              "type": "boolean"
+            },
+            "blocked": {
+              "description": "off — флажок выключен (Файл ▸ ИИ-агенты), elevated — программа запущена от администратора",
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowed"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
         },
         "folders": {
           "items": {
@@ -289,6 +846,27 @@
           "description": "у альбома есть файл",
           "type": "boolean"
         },
+        "scan": {
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "description": "программа ещё читает фото папок",
+              "type": "boolean"
+            },
+            "found": {
+              "description": "фото в ленте сейчас",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "active",
+            "found"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
         "unfilled": {
           "description": "пустые поля шаблонов в печатаемом тексте",
           "items": {
@@ -354,11 +932,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -521,11 +1099,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -598,11 +1176,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -960,11 +1538,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -1032,11 +1610,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -1157,11 +1735,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -1304,11 +1882,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -1522,11 +2100,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -1647,11 +2225,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -1767,11 +2345,11 @@
           "additionalProperties": false,
           "properties": {
             "key": {
-              "description": "меняется при открытии другого альбома",
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
               "type": "string"
             },
             "rev": {
-              "description": "растёт с каждой правкой альбома",
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
               "type": "integer"
             }
           },
@@ -1879,5 +2457,236 @@
       "type": "object"
     },
     "title": "Список разворотов"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Перевести программу к развороту (номер с 1, \"cover\" или id): человек увидит его. Альбом не меняется, шага отмены нет.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album",
+              "type": "string"
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "type": "object"
+        },
+        "spread": {
+          "description": "номер разворота с 1, \"cover\" (обложка) или id из list_spreads",
+          "maxLength": 64,
+          "type": [
+            "string",
+            "integer"
+          ]
+        }
+      },
+      "required": [
+        "album",
+        "spread"
+      ],
+      "type": "object"
+    },
+    "name": "show_spread",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "spread": {
+          "description": "номер разворота с 1; 0 — обложка",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "spread"
+      ],
+      "type": "object"
+    },
+    "title": "Показать разворот"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Отменить последнюю правку, которую сделал этот агент (autobuild, vary_layouts, add_folder), если после неё альбом не менялся. Только одна правка: второй вызов подряд — отказ. Создание альбома не отменяется. Правка видна в программе, Ctrl+Z её отменяет.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "album"
+      ],
+      "type": "object"
+    },
+    "name": "undo_last_edit",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "description": "новая ревизия",
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "album"
+      ],
+      "type": "object"
+    },
+    "title": "Отменить свою правку"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Подобрать другие раскладки выбранным разворотам (номер с 1 или id из list_spreads). families: dense — плотнее, air — больше воздуха, ещё hero, bleed, strip, figure; без families — любые. variety 1 или 2 (по умолчанию 1). Правка видна в программе, Ctrl+Z её отменяет.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": "object"
+        },
+        "families": {
+          "description": "разрешённые семейства раскладок (по умолчанию все): dense — плотнее, air — больше воздуха, hero, bleed, strip, figure",
+          "items": {
+            "enum": [
+              "dense",
+              "hero",
+              "air",
+              "bleed",
+              "strip",
+              "figure"
+            ],
+            "type": "string"
+          },
+          "maxItems": 6,
+          "type": "array"
+        },
+        "spreads": {
+          "description": "развороты: номер с 1 или id",
+          "items": {
+            "maxLength": 64,
+            "type": [
+              "string",
+              "integer"
+            ]
+          },
+          "maxItems": 200,
+          "minItems": 1,
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "variety": {
+          "description": "1 или 2 (по умолчанию 1)",
+          "maximum": 2,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "album",
+        "spreads"
+      ],
+      "type": "object"
+    },
+    "name": "vary_layouts",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "description": "новая ревизия",
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": "object"
+        },
+        "changed": {
+          "description": "разворотов изменено; 0 — менять нечего, правки нет",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "album",
+        "changed"
+      ],
+      "type": "object"
+    },
+    "title": "Другие раскладки"
   }
 ]

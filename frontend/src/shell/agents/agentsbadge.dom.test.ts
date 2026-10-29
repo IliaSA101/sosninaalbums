@@ -111,14 +111,14 @@ describe('значок «ИИ»', () => {
     expect(ev.subs).toHaveLength(0)
   })
 
-  it('окно и значок вместе: одна пара подписок; убрали одного — события идут; убрали обоих — подписок 0', async () => {
+  it('окно и значок вместе: один набор подписок; убрали одного — события идут; убрали обоих — подписок 0', async () => {
     info.mockResolvedValue(on())
     const badgeView = render(AgentsBadge)
     await waitFor(() => expect(badge()).not.toBeNull())
     const dialogView = render(AgentsDialog)
-    expect(ev.subs.map((s) => s.name).sort()).toEqual(['agents:call', 'agents:state']) // не по две
+    expect(ev.subs.map((s) => s.name).sort()).toEqual(['agents:call', 'agents:edited', 'agents:show', 'agents:state']) // не по две
     badgeView.unmount()
-    expect(ev.subs).toHaveLength(2)
+    expect(ev.subs).toHaveLength(4) // call, edited, show, state (149: тосты правок живут вместе со значком)
     ev.emit('agents:call', { at: 1, client: 'Claude Code', tool: 'Сводка', ok: true, ms: 3, today: 7 })
     expect(agents.info.today).toBe(7)
     expect(agents.info.calls).toHaveLength(1)
@@ -130,15 +130,15 @@ describe('значок «ИИ»', () => {
     info.mockResolvedValue(on())
     const off1 = agents.watch()
     const off2 = agents.watch()
-    expect(ev.subs).toHaveLength(2)
+    expect(ev.subs).toHaveLength(4) // call, edited, show, state (149: тосты правок живут вместе со значком)
     off1()
     off1() // второй вызов того же снятия не должен убрать чужую подписку
-    expect(ev.subs).toHaveLength(2)
+    expect(ev.subs).toHaveLength(4) // call, edited, show, state (149: тосты правок живут вместе со значком)
     off2()
     expect(ev.subs).toHaveLength(0)
     off2()
     const off3 = agents.watch() // счётчик цел: новая подписка снова подписывает
-    expect(ev.subs).toHaveLength(2)
+    expect(ev.subs).toHaveLength(4) // call, edited, show, state (149: тосты правок живут вместе со значком)
     off3()
     expect(ev.subs).toHaveLength(0)
   })

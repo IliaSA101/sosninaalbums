@@ -28,7 +28,7 @@ FAKE = textwrap.dedent(
         if m["method"] == "initialize":
             res = {{"protocolVersion": "2025-06-18", "serverInfo": {{"name": "sosnina-albums", "version": "bridge"}}}}
         elif m["method"] == "tools/list":
-            res = {{"tools": [{{"name": "program_status"}}]}}
+            res = {{"tools": [{{"name": "program_status"}}, {{"name": "start_program"}}]}}
         elif m["method"] == "hang":
             continue
         else:
@@ -55,7 +55,7 @@ class MediatorClient(unittest.TestCase):
     def test_initialize_tools_and_notification_skipped(self):
         r = self.med.initialize()
         self.assertEqual(r["result"]["serverInfo"]["name"], "sosnina-albums")
-        self.assertEqual(self.med.tools(), ["program_status"])
+        self.assertEqual(self.med.tools(), ax.STUB_TOOLS)
         # уведомление, пришедшее раньше ответа, не принимается за ответ и остаётся в seen
         self.assertTrue(any("list_changed" in s for s in self.med.seen))
 
@@ -70,6 +70,16 @@ class MediatorClient(unittest.TestCase):
 
 
 class Pieces(unittest.TestCase):
+    def test_connected_needs_tool_outside_stub(self):
+        # заглушка (два инструмента) не считается подключением; иначе Т1-2 проходит и без новой программы
+        self.assertFalse(ax.connected(None))
+        self.assertFalse(ax.connected([]))
+        self.assertFalse(ax.connected(["program_status"]))
+        self.assertFalse(ax.connected(ax.STUB_TOOLS))
+        self.assertFalse(ax.connected(list(reversed(ax.STUB_TOOLS))))
+        self.assertTrue(ax.connected(["list_albums", "get_album"]))
+        self.assertTrue(ax.connected(ax.STUB_TOOLS + ["list_albums"]))
+
     def test_stand_config_valid_and_agents_on(self):
         c = json.loads(ax.stand_config())
         self.assertEqual(c["agents"], {"on": True, "level": 1})

@@ -27,20 +27,31 @@ type toolSpec struct {
 	minLevel int  // уровень доступа, с которого инструмент отвечает (3 — картинки)
 	paged    bool // у инструмента есть limit: слишком большой ответ лечится им
 	slow     bool // рендер: срок вдвое длиннее (design §6: 20 с вместо 10)
+
+	// Ступень 3 (149, edit.go).
+	edit   bool // правит альбом: путь serveEdit, аннотации «не только чтение», ✎ в журнале
+	view   bool // меняет вид окна, а не альбом (show_spread): место, темп и «человек занят» — без флажка и копии
+	await  bool // продолжение вопроса (await_answer): ни семафора чтения, ни места правки
+	ask    bool // вопрос человеку: срок вызова AskWait + CallTimeout
+	auto   bool // автосборка: срок вызова AutoTimeout
+	backup bool // до тела — резервная копия (Host.Backup)
+	danger bool // DestructiveHint: заменяет открытый альбом
 }
 
 // toolEnv — общее для инструментов одного запуска службы: сервер, место под вызовы, сроки.
 type toolEnv struct {
 	s   *Service
+	r   *run
 	srv *mcp.Server
-	sem chan struct{} // занятые места вызовов
+	ctx context.Context // жизнь запуска службы: вопросы агента живут дольше вызова
+	sem chan struct{}   // занятые места вызовов
 	// render — место под один рендер разворота: они тяжёлые и идут по одному (design §6).
 	render chan struct{}
 }
 
-func newToolEnv(s *Service, srv *mcp.Server) *toolEnv {
+func newToolEnv(s *Service, r *run) *toolEnv {
 	n := s.o.MaxCalls
-	return &toolEnv{s: s, srv: srv, sem: make(chan struct{}, n), render: make(chan struct{}, 1)}
+	return &toolEnv{s: s, r: r, srv: r.srv, ctx: r.ctx, sem: make(chan struct{}, n), render: make(chan struct{}, 1)}
 }
 
 // call — что видит тело инструмента: контекст с сроком, уровень доступа на этот вызов и служба.
@@ -49,6 +60,10 @@ type call struct {
 	s     *Service
 	env   *toolEnv
 	level int
+	spec  toolSpec
+	sess  *mcp.ServerSession   // подключение вызова; запись отмены и жетон вопроса привязаны к нему
+	rel   func()               // место правки (edit.go); берёт тот, кто его занял
+	keep  bool                 // место правки передано вопросу: отпустит он
 	cats  map[string]*decorCat // каталоги оформления, прочитанные в этом вызове
 }
 
@@ -70,15 +85,14 @@ func reg[In, Out any](e *toolEnv, spec toolSpec, tweak func(props map[string]*js
 	if err != nil {
 		panic("agents: схема входа " + spec.name + ": " + err.Error())
 	}
-	f := false
 	e.srv.AddTool(&mcp.Tool{
 		Name: spec.name, Title: spec.title, Description: spec.desc,
-		InputSchema: in, OutputSchema: out,
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &f},
+		InputSchema: in, OutputSchema: out, Annotations: spec.annotations(),
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (res *mcp.CallToolResult, _ error) {
 		start := time.Now()
-		defer func() { e.s.record(spec, req, res, time.Since(start)) }() // после recover ниже: паника тоже вызов
-		defer func() {                                                   // SDK паник не ловит, а горутина обработчика без recover роняет программу
+		var note string
+		defer func() { e.s.recordNote(spec, req, res, time.Since(start), note) }() // после recover ниже: паника тоже вызов
+		defer func() {                                                             // SDK паник не ловит, а горутина обработчика без recover роняет программу
 			if p := recover(); p != nil {
 				logPanic("tool "+spec.name, p)
 				res = errResult(errInternal)
@@ -88,7 +102,11 @@ func reg[In, Out any](e *toolEnv, spec toolSpec, tweak func(props map[string]*js
 		if req != nil && req.Params != nil {
 			raw = req.Params.Arguments
 		}
-		return e.serve(ctx, spec, in, resolved, raw, func(c *call, raw json.RawMessage) (any, error) {
+		var sess *mcp.ServerSession
+		if req != nil {
+			sess = req.Session
+		}
+		return e.serve(ctx, spec, in, resolved, raw, serveOpts{sess: sess, note: &note}, func(c *call, raw json.RawMessage) (any, error) {
 			var a In
 			if len(raw) > 0 {
 				d := json.NewDecoder(bytes.NewReader(raw))
@@ -102,8 +120,29 @@ func reg[In, Out any](e *toolEnv, spec toolSpec, tweak func(props map[string]*js
 	})
 }
 
+// serveOpts — что вызов приносит с собой: подключение и место для итога журнала (Call.Note).
+type serveOpts struct {
+	sess *mcp.ServerSession
+	note *string
+}
+
+// annotations — подсказки клиенту (не защита: MCP 2025-11-25 считает их недоверенными). Чтение —
+// «только чтение»; правка — явно «не только чтение, не идемпотентна, закрытый мир», разрушающей
+// помечена лишь замена открытого альбома (0.33-149-5).
+func (spec toolSpec) annotations() *mcp.ToolAnnotations {
+	f, t := false, true
+	if !spec.edit && !spec.view && !spec.await {
+		return &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &f}
+	}
+	d := f
+	if spec.danger {
+		d = t
+	}
+	return &mcp.ToolAnnotations{ReadOnlyHint: false, IdempotentHint: spec.view, DestructiveHint: &d, OpenWorldHint: &f}
+}
+
 // serve — общий путь вызова: вход по схеме, уровень, место, срок, ответ и его предел.
-func (e *toolEnv) serve(ctx context.Context, spec toolSpec, schema *jsonschema.Schema, rs *jsonschema.Resolved, raw json.RawMessage,
+func (e *toolEnv) serve(ctx context.Context, spec toolSpec, schema *jsonschema.Schema, rs *jsonschema.Resolved, raw json.RawMessage, so serveOpts,
 	exec func(*call, json.RawMessage) (any, error)) (*mcp.CallToolResult, error) {
 	var v any = map[string]any{}
 	if len(bytes.TrimSpace(raw)) > 0 {
@@ -122,19 +161,27 @@ func (e *toolEnv) serve(ctx context.Context, spec toolSpec, schema *jsonschema.S
 		return errResult(badArgs(why)), nil
 	}
 	// Место — до чтения уровня: поток вызовов при занятых местах не дёргает config.json.
-	select {
-	case e.sem <- struct{}{}:
-	default:
-		return errResult(errCallBusy), nil
+	// await_answer мест чтения не занимает: ждёт чужого ответа, а читать не мешает (В12).
+	if !spec.await {
+		select {
+		case e.sem <- struct{}{}:
+		default:
+			return errResult(errCallBusy), nil
+		}
 	}
 	lv := e.s.level()
 	if lv < spec.minLevel {
-		<-e.sem
+		if !spec.await {
+			<-e.sem
+		}
 		return errResult(errNoImages), nil
 	}
-	val, err := e.invoke(ctx, &call{s: e.s, env: e, level: lv}, spec.slow, raw, exec)
+	val, err := e.invoke(ctx, &call{s: e.s, env: e, level: lv, spec: spec, sess: so.sess}, spec, raw, exec)
 	if err != nil {
 		ae, orig := toAgent(err)
+		if so.note != nil {
+			*so.note = noteOf(spec, ae)
+		}
 		switch {
 		case orig != nil:
 			log.Printf("agents: %s: %v", spec.name, bare(orig))
@@ -148,12 +195,8 @@ func (e *toolEnv) serve(ctx context.Context, spec toolSpec, schema *jsonschema.S
 
 // invoke (место уже занято в serve) исполняет тело в своей горутине: место освобождается по её концу, а не по сроку — агент
 // получает «время вышло», но пятый вызов не стартует, пока висит четвёртый (design §2).
-func (e *toolEnv) invoke(ctx context.Context, c *call, slow bool, raw json.RawMessage, exec func(*call, json.RawMessage) (any, error)) (any, error) {
-	d := e.s.o.CallTimeout
-	if slow {
-		d *= 2
-	}
-	cctx, cancel := context.WithTimeout(ctx, d)
+func (e *toolEnv) invoke(ctx context.Context, c *call, spec toolSpec, raw json.RawMessage, exec func(*call, json.RawMessage) (any, error)) (any, error) {
+	cctx, cancel := context.WithTimeout(ctx, e.s.budget(spec))
 	c.ctx = cctx
 	type result struct {
 		v   any
@@ -161,7 +204,11 @@ func (e *toolEnv) invoke(ctx context.Context, c *call, slow bool, raw json.RawMe
 	}
 	ch := make(chan result, 1)
 	go func() {
-		defer func() { <-e.sem }()
+		defer func() {
+			if !spec.await {
+				<-e.sem
+			}
+		}()
 		defer cancel()
 		defer func() {
 			if p := recover(); p != nil {
@@ -214,6 +261,19 @@ func okResult(v any, paged bool) *mcp.CallToolResult {
 		return errResult(errTooBigOne)
 	}
 	return res
+}
+
+// budget — срок одного вызова: рендер вдвое длиннее, вопрос — плюс ожидание ответа, автосборка — своя.
+func (s *Service) budget(spec toolSpec) time.Duration {
+	switch {
+	case spec.slow:
+		return s.o.CallTimeout * 2
+	case spec.ask:
+		return s.o.AskWait + s.o.CallTimeout
+	case spec.auto:
+		return s.o.AutoTimeout
+	}
+	return s.o.CallTimeout
 }
 
 // level — уровень доступа на этот вызов (смена в окне действует сразу).

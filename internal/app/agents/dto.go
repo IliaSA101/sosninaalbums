@@ -123,16 +123,9 @@ func cleanID(s string) string {
 	return string(b)
 }
 
-// albumRef — какой это альбом и в каком состоянии: сменился key — открыли другой, агент
-// перечитывает; сменился rev — альбом правили.
-type albumRef struct {
-	Key string `json:"key" jsonschema:"меняется при открытии другого альбома"`
-	Rev int    `json:"rev" jsonschema:"растёт с каждой правкой альбома"`
-}
-
 // meta — шапка каждого ответа.
 type meta struct {
-	Album albumRef `json:"album"`
+	Album AlbumRef `json:"album"`
 	Level int      `json:"level" jsonschema:"1 — устройство альбома, 2 — ещё имена и тексты, 3 — ещё картинки"`
 }
 
@@ -167,12 +160,12 @@ func (c *call) view() (model.View, uint64, error) {
 // meta — шапка ответа; альбома нет — пустой key.
 func (c *call) meta() meta {
 	v, ed := c.s.h.View()
-	return meta{Album: albumRef{Key: albumKey(ed), Rev: v.Rev}, Level: c.level}
+	return meta{Album: AlbumRef{Key: albumKey(ed), Rev: v.Rev}, Level: c.level}
 }
 
 // metaOf — шапка по уже снятому виду (ответ целиком об одном состоянии).
 func (c *call) metaOf(v model.View, ed uint64) meta {
-	return meta{Album: albumRef{Key: albumKey(ed), Rev: v.Rev}, Level: c.level}
+	return meta{Album: AlbumRef{Key: albumKey(ed), Rev: v.Rev}, Level: c.level}
 }
 
 // usedIDs — ID файлов фото, стоящих на разворотах и обложке (без фонов и стикеров).
@@ -289,6 +282,20 @@ type albumOut struct {
 	Unfilled     []string      `json:"unfilled" jsonschema:"пустые поля шаблонов в печатаемом тексте"`
 	Unnamed      int           `json:"unnamed" jsonschema:"фото с подписью-шаблоном без имени"`
 	FontsMissing []string      `json:"fontsMissing,omitempty"`
+	Scan         *scanOut      `json:"scan,omitempty"`
+	Edits        *editsOut     `json:"edits,omitempty"`
+}
+
+// scanOut — чтение папок: пока active, фото в ленте ещё прибавляются (149).
+type scanOut struct {
+	Active bool `json:"active" jsonschema:"программа ещё читает фото папок"`
+	Found  int  `json:"found" jsonschema:"фото в ленте сейчас"`
+}
+
+// editsOut — можно ли агенту править альбом: blocked off — флажок выключен, elevated — программа от администратора.
+type editsOut struct {
+	Allowed bool   `json:"allowed"`
+	Blocked string `json:"blocked,omitempty" jsonschema:"off — флажок выключен (Файл ▸ ИИ-агенты), elevated — программа запущена от администратора"`
 }
 
 // coverPreset — изделие обложки; id чужого профиля типографии на уровне 1 скрыт так же, как в
@@ -386,6 +393,7 @@ func (c *call) getAlbum() (albumOut, error) {
 			out.Look.Name = cleanLine(lk.Name, maxFile)
 		}
 	}
+	c.editInfo(&out, len(photos))
 	if len(v.AlbumFonts) > 0 {
 		miss := c.s.h.FontsMissing(v.AlbumFonts)
 		out.Counts.FontsMissing = len(miss)
@@ -396,6 +404,23 @@ func (c *call) getAlbum() (albumOut, error) {
 		}
 	}
 	return out, nil
+}
+
+// editInfo — scan и edits сводки (149): только когда Host умеет правки.
+func (c *call) editInfo(out *albumOut, found int) {
+	if !c.s.h.canEdit() {
+		return
+	}
+	out.Scan = &scanOut{Active: c.s.h.Scanning(), Found: found}
+	out.Edits = &editsOut{}
+	switch allowed, blocked := c.s.h.EditState(); {
+	case blocked == "elevated":
+		out.Edits.Blocked = "elevated"
+	case !allowed:
+		out.Edits.Blocked = "off"
+	default:
+		out.Edits.Allowed = true
+	}
 }
 
 // photoName — имя файла фото по ID для уровня ≥ 2; нет фото — "".

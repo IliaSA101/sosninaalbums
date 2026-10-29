@@ -33,6 +33,11 @@ func TestHostFields(t *testing.T) {
 		"Packs func() (agents.PacksLite, error)", "Prints func() []printprof.Info", "Recent func() []prefs.RecentProject",
 		"FontsMissing func([]model.FontUse) []string",
 		"Preview func(context.Context, string, int) ([]uint8, error)", "Render func(context.Context, string, int) ([]uint8, error)",
+		// Ступень 3 (149): правки; всё — числа, строки и срезы строк (TestHostTypesScalar).
+		"EditState func() (bool, string)", "Scanning func() bool", "Busy func(context.Context) bool", "Backup func(string) error",
+		"Ask func(context.Context, agents.AskReq) (agents.AskRes, error)", "Auto func(context.Context, agents.AutoReq) (agents.AutoRes, error)",
+		"Vary func(context.Context, agents.VaryReq) (agents.AlbumRef, int, error)", "Show func(string, string) (int, error)",
+		"Undo func(context.Context, agents.AlbumRef) (agents.AlbumRef, error)",
 	}
 	rt := reflect.TypeOf(Host{})
 	var got []string
@@ -41,6 +46,42 @@ func TestHostFields(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("поля Host изменились — нужна правка списка и ревью безопасности:\n got %q\nwant %q", got, want)
+	}
+}
+
+// TestHostTypesScalar: через Host правок идут только числа, bool, строки и срезы строк — ни
+// указателя, ни замыкания, ни карты, ни интерфейса; полей с Dir и Path в имени нет (путь агента — не
+// путь программы). Вложенные структуры — только такие же.
+func TestHostTypesScalar(t *testing.T) {
+	var check func(path string, rt reflect.Type)
+	check = func(path string, rt reflect.Type) {
+		switch rt.Kind() {
+		case reflect.Bool, reflect.Int, reflect.Int64, reflect.Uint64, reflect.Float64, reflect.String:
+		case reflect.Slice:
+			if rt.Elem().Kind() != reflect.String {
+				t.Errorf("%s: срез не из строк: %v", path, rt)
+			}
+		case reflect.Struct:
+			for i := range rt.NumField() {
+				f := rt.Field(i)
+				if n := strings.ToLower(f.Name); strings.Contains(n, "dir") || strings.Contains(n, "path") {
+					t.Errorf("%s.%s: путь в имени поля", path, f.Name)
+				}
+				check(path+"."+f.Name, f.Type)
+			}
+		default:
+			t.Errorf("%s: недопустимый вид %v", path, rt)
+		}
+	}
+	for _, v := range []any{AskReq{}, AskRes{}, AutoReq{}, AutoRes{}, VaryReq{}, AlbumRef{}} {
+		rt := reflect.TypeOf(v)
+		check(rt.Name(), rt)
+	}
+	// Вызов агента не может нести «Album» и «Again» окна: фасад ставит их сам (М10).
+	for _, bad := range []string{"Album", "Again"} {
+		if _, ok := reflect.TypeOf(AutoReq{}).FieldByName(bad); ok {
+			t.Errorf("у AutoReq есть поле %s", bad)
+		}
 	}
 }
 
@@ -76,6 +117,9 @@ func TestToolsReadOnly(t *testing.T) {
 		before, events := snapshot(t, r), r.changed.Load()
 		for _, c := range allCalls() {
 			tcall(t, cs, c.name, c.args)
+		}
+		if n := r.fx.edit.writes(); n != 0 {
+			t.Fatalf("уровень %d: чтение дошло до замыканий правок (%d)", lv, n)
 		}
 		for _, c := range []struct {
 			n string

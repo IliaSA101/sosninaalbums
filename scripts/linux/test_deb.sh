@@ -116,10 +116,13 @@ check 'deb-demo: два прогона дают одинаковый sha256' bas
 check 'deb-demo: неверное имя zip — код 2' bash -c '"$1" --zip "$2" --out "$3" --date "$4" >/dev/null 2>&1; [ $? = 2 ]' _ "$HERE/deb-demo.sh" "$WORK/bin" "$WORK/g" "$ddate"
 check 'deb-demo: нет zip — код 1' bash -c '"$1" --zip "$2/нет-demo-1.zip" --out "$3" --date "$4" >/dev/null 2>&1; [ $? = 1 ]' _ "$HERE/deb-demo.sh" "$WORK" "$WORK/g" "$ddate"
 # zip репозитория: дата берётся из истории (нужна полная копия), номер пакета — по имени zip
-if [ "$(git -C "$HERE" rev-parse --is-shallow-repository 2>/dev/null)" = false ]; then
-  check 'deb-demo: zip репозитория и дата коммита zip' bash -c '"$1" --out "$2" >/dev/null' _ "$HERE/deb-demo.sh" "$WORK/h"
-else
+# и коммит у zip (публичное дерево check.sh — git init без коммитов, git log там падает)
+if [ "$(git -C "$HERE" rev-parse --is-shallow-repository 2>/dev/null)" != false ]; then
   echo 'skip deb-demo с датой из истории: неполная копия'
+elif [ -z "$(git -C "$HERE" log -1 --format=%cI -- ':(top)internal/demopack/' 2>/dev/null)" ]; then
+  echo 'skip deb-demo с датой из истории: в копии нет коммитов с zip'
+else
+  check 'deb-demo: zip репозитория и дата коммита zip' bash -c '"$1" --out "$2" >/dev/null' _ "$HERE/deb-demo.sh" "$WORK/h"
 fi
 
 # glibc.sh: на самом себе (скрипт без символов) — код 1; на системном ls порог 99 проходит, порог 2.0 — нет

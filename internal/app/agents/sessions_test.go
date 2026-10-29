@@ -216,6 +216,8 @@ func TestCleanName(t *testing.T) {
 		"\xff\xfeок":                 "ок",
 		strings.Repeat("ё", 100):     strings.Repeat("ё", 40),
 		strings.Repeat("\u202e", 50): "",
+		"a\u3164b\u115fc\u2028d\u00a0e\ue000f\u0378g": "abcdefg",        // пустышки, разделитель строки, неразрывный пробел, личное, неназначенное
+		"x\u0301\u0302\u0303\u0304y":                  "x\u0301\u0302y", // не больше двух сочетаемых подряд
 	}
 	for in, want := range cases {
 		if got := cleanName(in); got != want {

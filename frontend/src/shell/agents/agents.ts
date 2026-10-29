@@ -2,6 +2,7 @@
 // Что и кому видно, пределы и уровни решает Go; здесь только форма данных и строки журнала.
 
 import * as Api from '../../../wailsjs/go/app/App'
+import { EDIT_MARK } from './agentstext'
 
 export type AgentsStatus = 'off' | 'on' | 'error'
 
@@ -22,6 +23,8 @@ export interface AgentCall {
   tool: string
   ok: boolean
   ms: number
+  edit?: boolean // правящий инструмент (149): в журнале ✎
+  note?: string // итог словами Go: отказано | без ответа | занят | копия | поздно | ""
 }
 export interface AgentsInfo {
   status: AgentsStatus
@@ -33,6 +36,9 @@ export interface AgentsInfo {
   clients: AgentClient[]
   calls: AgentCall[] // новые первыми, ≤ 50
   today: number
+  edit: boolean // агентам разрешено менять альбом (149)
+  editBlocked: '' | 'elevated' // правки нельзя включить: программа от администратора
+  asksMuted: boolean // вопросы агентов отключены после трёх отказов подряд
 }
 export interface AgentsSaved {
   canceled: boolean
@@ -40,6 +46,31 @@ export interface AgentsSaved {
 }
 // Событие agents:call: вызов и счётчик «за сегодня».
 export type AgentCallEvent = AgentCall & { today: number }
+
+// События правок (149; Go — AgentAsk, AgentAskDone, AgentEdited, AgentShow, docs/architecture/events.md).
+// Тексты вопроса и тостов целиком из Go: агент своих слов не вносит.
+export interface AgentAsk {
+  id: string
+  kind: 'create' | 'add'
+  title: string
+  lines: string[]
+  hint: string // имя папки-подсказки агента; "" — нет
+  ok: string // подпись действия: «Выбрать папку…»
+}
+export type AgentAskWhy = 'answered' | 'declined' | 'timeout' | 'gone' | 'closed' | 'off' | 'too_wide' | 'ours'
+export interface AgentAskDone {
+  id: string
+  why: AgentAskWhy
+}
+export interface AgentEdited {
+  client: string
+  text: string
+  rev: number
+  go: string // ID разворота для перехода; "" — без перехода
+}
+export interface AgentShow {
+  spread: string
+}
 
 export const CALLS_MAX = 50
 
@@ -53,11 +84,14 @@ export const emptyInfo = (): AgentsInfo => ({
   clients: [],
   calls: [],
   today: 0,
+  edit: false,
+  editBlocked: '',
+  asksMuted: false,
 })
 
 // Ответ Go с пропусками (null вместо списка) приводим к форме: шаблон не должен проверять каждое поле.
 // Тип Wails даёт `status: string` — здесь он сужается сам, без приведения типов в вызывающем коде.
-export type AgentsInfoRaw = Omit<Partial<AgentsInfo>, 'status'> & { status?: string }
+export type AgentsInfoRaw = Omit<Partial<AgentsInfo>, 'status' | 'editBlocked'> & { status?: string; editBlocked?: string }
 export function normInfo(i: AgentsInfoRaw | null | undefined): AgentsInfo {
   const e = emptyInfo()
   if (!i) return e
@@ -65,6 +99,7 @@ export function normInfo(i: AgentsInfoRaw | null | undefined): AgentsInfo {
     ...e,
     ...i,
     status: i.status === 'on' || i.status === 'error' ? i.status : 'off',
+    editBlocked: i.editBlocked === 'elevated' ? 'elevated' : '',
     level: Math.min(3, Math.max(1, Math.round(i.level ?? 1))),
     setups: i.setups ?? [],
     clients: i.clients ?? [],
@@ -77,12 +112,15 @@ export const pushCall = (calls: AgentCall[], c: AgentCall): AgentCall[] => [c, .
 
 const two = (n: number): string => String(n).padStart(2, '0')
 
-// «12:03 · Claude Desktop · Сводка альбома · 4 мс»; неудача — «· ошибка». Имя клиента и инструмента —
+// «12:03 · Claude Desktop · Сводка альбома · 4 мс»; неудача — «· ошибка». Правка — «✎ » перед инструментом,
+// итог правки словами Go (note: «отказано», «без ответа»…) вместо «ошибка». Имя клиента и инструмента —
 // чужой текст (Go чистит и обрезает), показываем только текстом.
 export function callLine(c: AgentCall): string {
   const d = new Date(c.at)
   const t = `${two(d.getHours())}:${two(d.getMinutes())}`
-  return [t, c.client, c.tool, `${c.ms} мс`, ...(c.ok ? [] : ['ошибка'])].join(' · ')
+  const tool = c.edit ? `${EDIT_MARK} ${c.tool}` : c.tool
+  const tail = c.note ? [c.note] : c.ok ? [] : ['ошибка']
+  return [t, c.client, tool, `${c.ms} мс`, ...tail].join(' · ')
 }
 
 // Имена подключённых без повторов (два окна Claude Code — одна строка).
@@ -106,6 +144,11 @@ export interface AgentsBridge {
   setLevel(level: number): Promise<AgentsInfo>
   clearLog(): Promise<AgentsInfo>
   saveExtension(): Promise<AgentsSaved>
+  setEdit(on: boolean): Promise<AgentsInfo>
+  allowAsks(): Promise<void>
+  answer(id: string, yes: boolean): Promise<unknown> // View: «Выбрать папку…» у add, отказ любого вида
+  answerCreate(id: string): Promise<unknown> // State: «Выбрать папку…» у create
+  busy(on: boolean): Promise<void> // человек занят: правка агента подождёт (agentbusy.ts)
 }
 
 export const bridge: AgentsBridge = {
@@ -114,4 +157,9 @@ export const bridge: AgentsBridge = {
   setLevel: (n) => Api.SetAgentsLevel(n).then(normInfo),
   clearLog: () => Api.ClearAgentsLog().then(normInfo),
   saveExtension: () => Api.SaveClaudeExtension(),
+  setEdit: (on) => Api.SetAgentsEdit(on).then(normInfo),
+  allowAsks: () => Api.AllowAgentAsks(),
+  answer: (id, yes) => Api.AnswerAgent(id, yes),
+  answerCreate: (id) => Api.AgentAnswerCreate(id),
+  busy: (on) => Api.AgentsBusy(on),
 }

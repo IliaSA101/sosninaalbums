@@ -16,23 +16,36 @@ import (
 )
 
 // closedSilently — сервер закрыл подключение, не отправив ни байта (Read: 0 байт и EOF/сброс).
+// Чтение идёт короткими срезами, а не одним долгим: на Windows (AF_UNIX) закрытие сервером иногда
+// не будило уже висящий WSARecv клиента (148, 149: «i/o timeout» при том, что сервер сверил,
+// закрыл и место свободно). Срок среза снимает висящую операцию, следующий Read видит уже
+// закрытый сокет сразу. Общий срок прежний, а байт или живое подключение по его истечении — провал.
 func closedSilently(t *testing.T, c net.Conn, info ...func() string) {
 	t.Helper()
-	_ = c.SetReadDeadline(time.Now().Add(testkit.Limit(5 * time.Second)))
+	end := time.Now().Add(testkit.Limit(5 * time.Second))
 	buf := make([]byte, 64)
-	n, err := c.Read(buf)
-	if n != 0 || err == nil {
-		t.Fatalf("чужому отправлено %d байт (%q), ошибка %v", n, buf[:n], err)
-	}
-	var ne net.Error
-	if errors.As(err, &ne) && ne.Timeout() {
-		extra := ""
-		for _, f := range info { // что видел сервер: отличает «не закрыл» от «закрыл, но клиент не увидел»
-			extra += "; " + f()
+	for polls := 1; ; polls++ {
+		_ = c.SetReadDeadline(time.Now().Add(readSlice))
+		n, err := c.Read(buf)
+		if n != 0 || err == nil {
+			t.Fatalf("чужому отправлено %d байт (%q), ошибка %v", n, buf[:n], err)
 		}
-		t.Fatalf("подключение не закрыто: %v%s", err, extra)
+		var ne net.Error
+		if !errors.As(err, &ne) || !ne.Timeout() {
+			return // EOF или сброс: конец потока дошёл
+		}
+		if time.Now().After(end) {
+			extra := ""
+			for _, f := range info { // что видел сервер: отличает «не закрыл» от «закрыл, но клиент не увидел»
+				extra += "; " + f()
+			}
+			t.Fatalf("подключение не закрыто: %v%s; чтений %d", err, extra, polls)
+		}
 	}
 }
+
+// readSlice — срез одного Read в closedSilently.
+const readSlice = 250 * time.Millisecond
 
 func count(s, sub string) int { return strings.Count(s, sub) }
 
@@ -198,5 +211,33 @@ func TestSocketStaleForeignPeer(t *testing.T) {
 			t.Fatalf("%s: чужой сокет тронут: %v", c.name, err)
 		}
 		client(t, a.sock, "жив-"+c.name)
+	}
+}
+
+// orderConn запоминает порядок закрытия: shutdown записи должен идти до Close.
+type orderConn struct {
+	net.Conn
+	steps []string
+}
+
+func (c *orderConn) CloseWrite() error { c.steps = append(c.steps, "shutdown"); return nil }
+func (c *orderConn) Close() error      { c.steps = append(c.steps, "close"); return nil }
+
+// TestCloseOrder: закрытие службой по своей воле идёт как у отказа — shutdown, потом Close
+// (на Windows голый Close конец потока клиенту не доставлял, 148): паника сверки, служба закрыта, чужой.
+func TestCloseOrder(t *testing.T) {
+	captureLog(t)
+	want := fmt.Sprint([]string{"shutdown", "close"})
+	cases := map[string]*run{
+		"паника сверки":  {o: Options{Peer: func(net.Conn) (bool, error) { panic("сбой") }}},
+		"служба закрыта": {closed: true, o: Options{Peer: func(net.Conn) (bool, error) { return true, nil }}},
+		"чужой":          {o: Options{Peer: func(net.Conn) (bool, error) { return false, nil }}},
+	}
+	for name, r := range cases {
+		c := &orderConn{}
+		r.admit(c)
+		if got := fmt.Sprint(c.steps); got != want {
+			t.Errorf("%s: порядок %v, ждали %v", name, got, want)
+		}
 	}
 }

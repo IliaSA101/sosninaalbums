@@ -6,6 +6,8 @@ export namespace app {
 	    tool: string;
 	    ok: boolean;
 	    ms: number;
+	    edit: boolean;
+	    note: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AgentCall(source);
@@ -18,6 +20,8 @@ export namespace app {
 	        this.tool = source["tool"];
 	        this.ok = source["ok"];
 	        this.ms = source["ms"];
+	        this.edit = source["edit"];
+	        this.note = source["note"];
 	    }
 	}
 	export class AgentClient {
@@ -64,6 +68,9 @@ export namespace app {
 	    clients: AgentClient[];
 	    calls: AgentCall[];
 	    today: number;
+	    edit: boolean;
+	    editBlocked: string;
+	    asksMuted: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new AgentsInfo(source);
@@ -80,6 +87,9 @@ export namespace app {
 	        this.clients = this.convertValues(source["clients"], AgentClient);
 	        this.calls = this.convertValues(source["calls"], AgentCall);
 	        this.today = source["today"];
+	        this.edit = source["edit"];
+	        this.editBlocked = source["editBlocked"];
+	        this.asksMuted = source["asksMuted"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

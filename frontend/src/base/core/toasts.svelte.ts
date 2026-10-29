@@ -30,9 +30,10 @@ export class Toasts {
 }
 
 // Тост с кнопкой «Вернуть» = Undo, как у разреза: безопасно, только если после правки ничего не менялось.
-// back — разворот, на который перейти после возврата.
-export function undoToast(h: ToastHost, text: string, back?: string) {
-  const rev = h.view.rev
+// back — разворот, на который перейти после возврата. at — ревизия, на которую рассчитан тост, если она не нынешняя
+// (тост правки агента: view с новой ревизией пришёл раньше события, нынешняя уже может быть дальше — тогда «Вернуть» откажет).
+export function undoToast(h: ToastHost, text: string, back?: string, at?: number) {
+  const rev = at ?? h.view.rev
   h.notify(text, 'info', {
     label: 'Вернуть',
     run: async () => {

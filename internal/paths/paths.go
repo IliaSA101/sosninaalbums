@@ -41,17 +41,23 @@ func notLocal(format string, a ...any) error {
 // без расширения — всегда, «CON.jpg» — как судит ОС) — отказ, узнаётся и как ErrDevice:
 // открыть такой путь — значит обратиться к устройству (073-10). На остальных ОС — абсолютный
 // без `//`.
-func CheckLocalPath(path string) error {
+func CheckLocalPath(path string) error { return CheckLocalFor(runtime.GOOS == "windows", path) }
+
+// CheckLocalFor — CheckLocalPath по правилам Windows (windows) или остальных ОС: ОС выбирает
+// вызывающий, чтобы правила папки агента (149) проверялись таблицей и Windows-случаи шли на Linux.
+func CheckLocalFor(windows bool, path string) error {
 	if len(path) > MaxPathLen {
 		return fmt.Errorf("слишком длинный путь")
 	}
 	if path == "" || strings.ContainsRune(path, 0) {
 		return fmt.Errorf("пустой или недопустимый путь")
 	}
-	if runtime.GOOS == "windows" {
+	if windows {
 		return windowsLocalRule(path, osDeviceExt)
 	}
-	if !filepath.IsAbs(path) || strings.HasPrefix(path, "//") {
+	// Правило Unix задано строкой, а не filepath.IsAbs: вызывающий выбрал ОС правил, она не
+	// обязана быть ОС процесса (на Windows IsAbs("/x") ложь, а IsAbs(`D:\x`) истина).
+	if path[0] != '/' || strings.HasPrefix(path, "//") {
 		return notLocal("путь должен быть абсолютным и локальным: %s", path)
 	}
 	return nil

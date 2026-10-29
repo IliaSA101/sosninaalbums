@@ -17,6 +17,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -47,7 +48,7 @@ func (a *App) SaveClaudeExtension() (res AgentsSaved, err error) {
 		return res, agents.ErrMcpbPlatform
 	}
 	exe, _ := a.agentsExe()
-	if agents.ExeHint(exe, mcpbGOOS, os.TempDir(), isRegular) != "" {
+	if osx.ExeHint(exe, mcpbGOOS, os.TempDir(), isRegular) != "" {
 		return res, errMcpbExe
 	}
 	data, err := agents.Mcpb(agents.McpbInfo{Exe: exe, GOOS: mcpbGOOS, Version: appVersion(wailsJSON), Author: wailsCopyright(wailsJSON)})

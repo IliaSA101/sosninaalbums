@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
+	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/update"
 )
@@ -39,6 +40,8 @@ type AgentCall struct {
 	Tool   string `json:"tool"`   // «Сводка альбома»
 	OK     bool   `json:"ok"`
 	Ms     int    `json:"ms"`
+	Edit   bool   `json:"edit"` // правящий инструмент (149): в журнале ✎
+	Note   string `json:"note"` // отказано | без ответа | занят | копия | поздно | ""
 }
 
 // AgentCallEvent — событие agents:call: вызов и счётчик «за сегодня».
@@ -58,6 +61,11 @@ type AgentsInfo struct {
 	Clients  []AgentClient `json:"clients"` // не nil
 	Calls    []AgentCall   `json:"calls"`   // не nil; новые первыми, ≤ 50
 	Today    int           `json:"today"`
+	// Правки (149): флажок «Разрешить агентам менять альбом», причина, по которой его нельзя
+	// включить, и «вопросы отключены после трёх отказов».
+	Edit        bool   `json:"edit"`
+	EditBlocked string `json:"editBlocked"` // "" | elevated (программа запущена от администратора)
+	AsksMuted   bool   `json:"asksMuted"`
 }
 
 // AgentsSaved — итог SaveClaudeExtension (как TplSave, 086).
@@ -118,6 +126,15 @@ func (a *App) SetAgentsLevel(level int) AgentsInfo {
 	return a.agentsInfo()
 }
 
+// SetAgentsEdit разрешает или запрещает агентам менять альбом (149). Флажок читается на каждый
+// вызов агента, от уровня доступа не зависит; по умолчанию выключен.
+func (a *App) SetAgentsEdit(on bool) AgentsInfo {
+	defer guard("SetAgentsEdit")
+	prefs.UpdateAgents(a.cfgDir, func(c *prefs.Agents) { c.Edit = on })
+	a.agentsChanged()
+	return a.agentsInfo()
+}
+
 // ClearAgentsLog очищает журнал вызовов; счётчик «за сегодня» остаётся.
 func (a *App) ClearAgentsLog() AgentsInfo {
 	defer guard("ClearAgentsLog")
@@ -130,7 +147,7 @@ func (a *App) ClearAgentsLog() AgentsInfo {
 func (a *App) agentsInfo() AgentsInfo {
 	st, errText := a.agents.State()
 	exe, _ := a.agentsExe()
-	hint := agents.ExeHint(exe, runtime.GOOS, os.TempDir(), isRegular)
+	hint := osx.ExeHint(exe, runtime.GOOS, os.TempDir(), isRegular)
 	setups := []AgentSetup{}
 	if hint == "" {
 		for _, s := range agents.Setups(exe, runtime.GOOS) {
@@ -138,7 +155,8 @@ func (a *App) agentsInfo() AgentsInfo {
 		}
 		hint = agents.XDGHint(runtime.GOOS, os.Getenv("XDG_CONFIG_HOME"), userHome())
 	}
-	info := AgentsInfo{Status: st, Hint: hint, Error: errText, Level: prefs.AgentsOf(a.cfgDir).Level,
+	cfg := prefs.AgentsOf(a.cfgDir)
+	info := AgentsInfo{Status: st, Hint: hint, Error: errText, Level: cfg.Level, Edit: cfg.Edit, EditBlocked: a.editBlocked(), AsksMuted: a.agents != nil && a.agents.AsksMuted(),
 		Portable: runtime.GOOS == "windows" && update.ModeOf(runtime.GOOS, exe) == update.ModeSetup,
 		Setups:   setups, Clients: []AgentClient{}, Calls: []AgentCall{}}
 	for _, c := range a.agents.Clients() {
@@ -152,8 +170,16 @@ func (a *App) agentsInfo() AgentsInfo {
 	return info
 }
 
+// editBlocked — почему флажок правок нельзя включить ("" — можно): процесс от администратора.
+func (a *App) editBlocked() string {
+	if a.askM().elevated() {
+		return agentBlockedElevated
+	}
+	return ""
+}
+
 func agentCall(c agents.Call) AgentCall {
-	return AgentCall{At: c.At.UnixMilli(), Client: c.Client, Tool: c.Tool, OK: c.OK, Ms: c.Ms}
+	return AgentCall{At: c.At.UnixMilli(), Client: c.Client, Tool: c.Tool, OK: c.OK, Ms: c.Ms, Edit: c.Edit, Note: c.Note}
 }
 
 // isRegular — на месте обычный файл (не ссылка, не каталог).
@@ -221,6 +247,7 @@ func (a *App) startAgents() {
 // stopAgents — выход: сокет закрыт, подключения оборваны, таймер журнала снят. Идёт до flushSave:
 // рендер агента не должен держать выход (Close ждёт горутины не дольше секунды).
 func (a *App) stopAgents() {
+	a.closeAgentAsk() // открытый вопрос снимается первым: done{closed}, окно закрывается
 	a.agentsPub.mu.Lock()
 	if a.agentsPub.timer != nil {
 		a.agentsPub.timer.Stop()

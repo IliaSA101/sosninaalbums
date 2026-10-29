@@ -165,6 +165,8 @@ class Spot {
   private timer: ReturnType<typeof setTimeout> | undefined
   private slow: ReturnType<typeof setTimeout> | undefined
   private off: (() => void) | undefined
+  // Ожидание кадра перед подпиской на щелчок/клавишу: cancel() снимает его, иначе таймер переживёт показ.
+  private wait: AbortController | undefined
   private onEnd: (() => void) | undefined
   // Контейнеры с data-guide-reveal, что прячут кнопки до наведения (LayoutBar): на время поиска и показа
   // получают data-spot, и кнопки видны. Иначе круг: скрытую кнопку locate отбросит, а атрибут ставится на найденную.
@@ -225,8 +227,9 @@ class Spot {
       return
     }
     // Щелчок или клавиша гасят подсветку раньше; слушаем со следующего кадра, чтобы не поймать запустивший щелчок.
-    void frame().then(() => {
-      if (this.cur?.el !== el) return
+    const wait = (this.wait = new AbortController())
+    void frame(wait.signal).then(() => {
+      if (wait.signal.aborted || this.cur?.el !== el) return
       const stop = () => this.cancel()
       window.addEventListener('pointerdown', stop, true)
       window.addEventListener('keydown', stop, true)
@@ -241,6 +244,8 @@ class Spot {
     cancelAnimationFrame(this.raf)
     clearTimeout(this.timer)
     clearTimeout(this.slow)
+    this.wait?.abort()
+    this.wait = undefined
     this.off?.()
     this.off = undefined
     this.cur?.el.removeAttribute('data-spot')

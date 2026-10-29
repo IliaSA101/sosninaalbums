@@ -64,6 +64,19 @@ type Host struct {
 	// чтение файлов (design §5); рендеры службы идут по одному. Ошибки render пишут имя файла фото
 	// (render.go, rotated.go) — Host заменяет их на безымянные (имена фото в log.txt не нужны).
 	Render func(ctx context.Context, spreadID string, px int) ([]byte, error)
+
+	// Ступень 3 (149, hostedit.go): правки альбома. Поля необязательны — пока их нет (все nil), инструментов
+	// правки в списке нет; частично заполненный набор считается пустым (canEdit). Фасад сверяет ключ и rev
+	// под замком Editor; ctx вызова проверяется там же — после срока правка не записывается.
+	EditState func() (allowed bool, blocked string)                        // флажок edit; blocked: "" | "elevated"
+	Scanning  func() (active bool)                                         // лента ещё читает папки (get_album.scan)
+	Busy      func(ctx context.Context) bool                               // ждёт, пока человек занят, до конца ctx; true — всё ещё занят
+	Backup    func(key string) error                                       // резервная копия до первой правки в альбоме; nil — есть или копировать нечего
+	Ask       func(ctx context.Context, q AskReq) (AskRes, error)          // вопрос в окне; ждёт итога, ctx — жизнь подключения
+	Auto      func(ctx context.Context, in AutoReq) (AutoRes, error)       // сборка в конец альбома, один шаг отмены
+	Vary      func(ctx context.Context, in VaryReq) (AlbumRef, int, error) // раскладки; int — сколько разворотов изменилось
+	Show      func(key, spreadID string) (n int, err error)                // перевести окно к развороту; n — номер с 1, 0 — обложка
+	Undo      func(ctx context.Context, ref AlbumRef) (AlbumRef, error)    // отмена своей последней правки при совпавшей ревизии
 }
 
 // Options — пределы канала; нулевое значение — рабочее.
@@ -81,6 +94,16 @@ type Options struct {
 	// Peer — сверка собеседника подключения (148): true — учётная запись ОС та же, что у программы.
 	// По умолчанию peercred.Same; тесты подменяют (глобальной переменной нет — гонок в -race тоже).
 	Peer func(net.Conn) (bool, error)
+	// Сроки правок (149 design §2.6); нулевые — рабочие. Тесты ставят миллисекунды и свои часы.
+	AskWait     time.Duration    // сколько вызов ждёт ответ человека, затем pending (10 с)
+	AskLife     time.Duration    // сколько итог вопроса ждёт await_answer (120 с)
+	Cooldown    time.Duration    // пауза после отказа (30 с)
+	Mute        time.Duration    // тишина после второго отказа подряд (5 мин)
+	BusyWait    time.Duration    // сколько правка ждёт, пока человек занят (2 с)
+	AutoTimeout time.Duration    // срок вызова autobuild (30 с)
+	ScanSlack   time.Duration    // запас срока autobuild после ожидания ленты (5 с)
+	Rate        int              // правок в минуту (20)
+	Now         func() time.Time // часы счёта отказов и темпа; по умолчанию time.Now
 	// Setup — доработка сервера до первого подключения: тесты и таблица инструментов (Г2).
 	Setup func(*mcp.Server)
 }
@@ -96,6 +119,19 @@ func (o Options) withDefaults() Options {
 	def(&o.InitTimeout, initTimeout)
 	def(&o.CloseWait, closeWait)
 	def(&o.CallTimeout, callTimeout)
+	def(&o.AskWait, askWait)
+	def(&o.AskLife, askLife)
+	def(&o.Cooldown, askCooldown)
+	def(&o.Mute, askMute)
+	def(&o.BusyWait, busyWait)
+	def(&o.AutoTimeout, autoTimeout)
+	def(&o.ScanSlack, scanSlack)
+	if o.Rate <= 0 {
+		o.Rate = editRate
+	}
+	if o.Now == nil {
+		o.Now = time.Now
+	}
 	if o.Peer == nil {
 		o.Peer = peercred.Same
 	}
@@ -118,18 +154,27 @@ type Service struct {
 	run  *run       // нет — выключено
 	st   string
 	err  string
-	jr   journal // журнал вызовов (journal.go)
+	jr   journal    // журнал вызовов (journal.go)
+	ed   *editState // правки: место, темп, вопросы, записи отмены (edit.go)
 }
+
+// optionalHost — поля Host ступени 3: пустые допустимы (правок тогда нет).
+var optionalHost = map[string]bool{"EditState": true, "Scanning": true, "Busy": true, "Backup": true, "Ask": true,
+	"Auto": true, "Vary": true, "Show": true, "Undo": true}
 
 // New собирает службу; пустое поле Host — паника с его именем.
 func New(h Host, o Options) *Service {
 	v := reflect.ValueOf(h)
 	for i := range v.NumField() {
+		if optionalHost[v.Type().Field(i).Name] {
+			continue
+		}
 		if v.Field(i).IsNil() {
 			panic("agents.New: не задано поле Host." + v.Type().Field(i).Name)
 		}
 	}
-	return &Service{h: h, o: o.withDefaults(), st: StateOff}
+	o = o.withDefaults()
+	return &Service{h: h, o: o, st: StateOff, ed: newEditState(o)}
 }
 
 // StartIfOn — запуск программы: открывает доступ, если он включён в config.json. Выключен или
@@ -239,7 +284,7 @@ func (s *Service) newRun(ln net.Listener) *run {
 		conns: map[net.Conn]struct{}{}, seen: map[*mcp.ServerSession]Client{}, gone: map[*mcp.ServerSession]struct{}{}}
 	r.srv = mcp.NewServer(&mcp.Implementation{Name: "sosnina-albums", Version: s.h.Version()},
 		&mcp.ServerOptions{KeepAlive: s.o.KeepAlive})
-	registerTools(newToolEnv(s, r.srv))
+	registerTools(newToolEnv(s, r))
 	if s.o.Setup != nil {
 		s.o.Setup(r.srv)
 	}

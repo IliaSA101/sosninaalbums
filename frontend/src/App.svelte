@@ -32,6 +32,8 @@
   import { backupsUi } from './shell/dialogs/backups.svelte'
   import PacksDialog from './shell/packs/PacksDialog.svelte'
   import AgentsDialog from './shell/agents/AgentsDialog.svelte'
+  import AgentAskDialog from './shell/agents/AgentAskDialog.svelte'
+  import { agentAsk } from './shell/agents/agentask.svelte'
   import ShareDialog from './shell/share/ShareDialog.svelte'
   import { share } from './shell/share/share.svelte'
   import { agents } from './shell/agents/agents.svelte'
@@ -126,7 +128,7 @@
   const noAutoLayouts = () => !!store.spread?.grid || store.onCover
 
   // Открыт вопрос ручного листа (автораскладка, броски, копия сетки, «Фото уже в альбоме»): под ним F1 молчит.
-  const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!copyAsk.cur || !!newerAsk.cur || !!gridAct.copyGrid
+  const askOpen = () => !!gridAct.autoAsk || !!dropAsk.cur || !!copyAsk.cur || !!newerAsk.cur || !!agentAsk.cur || !!gridAct.copyGrid
 
   // Открыто окно фоновой работы Go: экспорт, его памятка, сбор в папку (069) или «Открываем альбом» (073: F1 не открывает справочник под ним).
   const jobsOpen = () => jobs.exportOpen || jobs.collectOpen || !!jobs.exportMemo || jobs.openShown
@@ -244,6 +246,7 @@
 <BackupsDialog />
 <PacksDialog />
 <AgentsDialog />
+<AgentAskDialog />
 <ShareDialog />
 <LooksDialog />
 <SaveLookDialog />

@@ -35,6 +35,34 @@ func TestAgentsPrefs(t *testing.T) {
 	if a := AgentsOf(dir); !a.On || a.Level != 2 {
 		t.Fatalf("уровень 2: %+v", a)
 	}
+	// Edit (149): круг Save→Load, не зависит от On и уровня, чужие ключи целы, мусор — умолчание.
+	if got := UpdateAgents(dir, func(a *Agents) { *a = Agents{Edit: true, Level: 1} }); !got.Edit || !AgentsOf(dir).Edit {
+		t.Fatalf("edit не записан: %+v", got)
+	}
+	if data, _ := os.ReadFile(ConfigPath(dir)); !strings.Contains(string(data), `"edit": true`) || !strings.Contains(string(data), `"future"`) {
+		t.Fatalf("edit или чужие ключи в файле: %s", data)
+	}
+	UpdateAgents(dir, func(a *Agents) { a.On, a.Level = true, 3 })
+	if a := AgentsOf(dir); a != (Agents{On: true, Edit: true, Level: 3}) {
+		t.Fatalf("правка On и уровня задела edit: %+v", a)
+	}
+	UpdateAgents(dir, func(a *Agents) { a.Edit = false })
+	if a := AgentsOf(dir); a.Edit || !a.On || a.Level != 3 {
+		t.Fatalf("edit выключен: %+v", a)
+	}
+	for _, raw := range []string{`{"agents":{"edit":"да"}}`, `{"agents":{"edit":1}}`, `{"agents":{"edit":null}}`, `{"agents":{}}`} {
+		if err := os.WriteFile(ConfigPath(dir), []byte(raw), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if a := AgentsOf(dir); a.Edit {
+			t.Fatalf("%s: edit включён мусором", raw)
+		}
+	}
+	UpdateAgents(dir, func(a *Agents) { a.Edit = true })
+	UpdateAgents(dir, func(a *Agents) { a.Edit = false }) // edit без остального — ключа agents нет
+	if data, _ := os.ReadFile(ConfigPath(dir)); strings.Contains(string(data), `"agents"`) {
+		t.Fatalf("умолчание осталось в файле: %s", data)
+	}
 	// Края: вне 1…3 — уровень 1 (и при записи, и при чтении правки руками).
 	for _, lv := range []int{0, -1, 4, 1 << 30} {
 		if got := UpdateAgents(dir, func(a *Agents) { a.Level = lv }); got.Level != 1 {

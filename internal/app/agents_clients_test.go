@@ -140,14 +140,14 @@ func TestAgentsInfoLists(t *testing.T) {
 // службы без пары в app — провал, а не молчаливая потеря.
 func TestAgentTypesConvert(t *testing.T) {
 	at := time.Date(2026, 10, 29, 12, 30, 15, 123_456_789, time.UTC)
-	got := agentCall(agents.Call{At: at, Client: "К", Tool: "Сводка альбома", OK: true, Ms: 42})
-	if want := (AgentCall{At: at.UnixMilli(), Client: "К", Tool: "Сводка альбома", OK: true, Ms: 42}); got != want {
+	got := agentCall(agents.Call{At: at, Client: "К", Tool: "Сводка альбома", OK: true, Ms: 42, Edit: true, Note: "копия"})
+	if want := (AgentCall{At: at.UnixMilli(), Client: "К", Tool: "Сводка альбома", OK: true, Ms: 42, Edit: true, Note: "копия"}); got != want {
 		t.Errorf("agentCall = %+v, ждали %+v", got, want)
 	}
 	if got.At != 1_793_277_015_123 {
 		t.Errorf("At = %d: не unix мс", got.At)
 	}
-	if z := agentCall(agents.Call{}); z.At != (time.Time{}).UnixMilli() || z.Client != "" || z.OK || z.Ms != 0 {
+	if z := agentCall(agents.Call{}); z.At != (time.Time{}).UnixMilli() || z.Client != "" || z.OK || z.Ms != 0 || z.Edit || z.Note != "" {
 		t.Errorf("нулевой вызов: %+v", z)
 	}
 	names := func(t reflect.Type) []string {
@@ -165,7 +165,7 @@ func TestAgentTypesConvert(t *testing.T) {
 	}
 	// JSON-теги окна: контракт с frontend/wailsjs.
 	for typ, want := range map[reflect.Type][]string{
-		reflect.TypeFor[AgentCall]():   {"at", "client", "tool", "ok", "ms"},
+		reflect.TypeFor[AgentCall]():   {"at", "client", "tool", "ok", "ms", "edit", "note"},
 		reflect.TypeFor[AgentClient](): {"name", "since"},
 	} {
 		var tags []string

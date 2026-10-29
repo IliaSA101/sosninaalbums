@@ -116,6 +116,11 @@ func (e *Editor) sessionStart(merge string) *model.Project {
 func (e *Editor) Undo() model.View {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.undoLocked()
+}
+
+// undoLocked — тело Undo под e.mu (UndoIfRev сверяет rev под тем же замком).
+func (e *Editor) undoLocked() model.View {
 	if e.shut("отмена") {
 		return e.view()
 	}

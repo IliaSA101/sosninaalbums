@@ -15,6 +15,11 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
+// editTools — инструменты правок 0.33 (без start_program — он у посредника); значение — в описании
+// должна быть пометка «Ctrl+Z» (у вопроса-продолжения и «показать» её нет).
+var editTools = map[string]bool{"create_album": true, "add_folder": true, "await_answer": false, "autobuild": true,
+	"vary_layouts": true, "show_spread": false, "undo_last_edit": true}
+
 var updateTools = flag.Bool("update-tools", false, "перезаписать testdata/mcp-tools.json")
 
 // TestToolsContract: tools/list = testdata/mcp-tools.json (имена, описания, схемы входа и выхода,
@@ -27,11 +32,22 @@ func TestToolsContract(t *testing.T) {
 	}
 	tools := res.Tools
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
-	if len(tools) != 11 {
-		t.Fatalf("инструментов %d, ждали 11", len(tools))
+	if len(tools) != 11+len(editTools) {
+		t.Fatalf("инструментов %d, ждали %d", len(tools), 11+len(editTools))
 	}
 	for _, tl := range tools {
 		a := tl.Annotations
+		if _, edit := editTools[tl.Name]; edit {
+			// Правящие: подсказки явно (0.33-149-5), разрушающий — только create_album; описание — про Ctrl+Z.
+			if a == nil || a.ReadOnlyHint || a.OpenWorldHint == nil || *a.OpenWorldHint || a.DestructiveHint == nil ||
+				*a.DestructiveHint != (tl.Name == "create_album") {
+				t.Errorf("%s: подсказки правящего инструмента: %+v", tl.Name, a)
+			}
+			if tl.Title == "" || tl.OutputSchema == nil || editTools[tl.Name] && !strings.Contains(tl.Description, "Ctrl+Z") {
+				t.Errorf("%s: нет названия, схемы выхода или пометки про Ctrl+Z", tl.Name)
+			}
+			continue
+		}
 		if a == nil || !a.ReadOnlyHint || !a.IdempotentHint || a.OpenWorldHint == nil || *a.OpenWorldHint {
 			t.Errorf("%s: подсказки не «только чтение»: %+v", tl.Name, a)
 		}

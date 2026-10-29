@@ -86,6 +86,17 @@ class Guide {
   // Раздел выбранной статьи открыт всегда, независимо от этого набора.
   readonly opened = new SvelteSet<GroupId>()
   private seq = 0
+  // Отмена поиска места текущего «Показать»: новый показ или stop() снимают его ожидания (таймеры кадров).
+  private ctl: AbortController | null = null
+
+  // Оборвать идущий «Показать» (поиск места и подсветка): ничего не ждёт и не мигает после. Зовёт тест при разборке.
+  stop() {
+    this.seq++
+    this.ctl?.abort()
+    this.ctl = null
+    this.busy = false
+    spot.cancel()
+  }
 
   // F1, меню, ссылка в стартовом окне: прежние запрос и выбор.
   openFresh() {
@@ -141,16 +152,21 @@ class Guide {
   async show(id: string, spotKey?: string) {
     const a = articleById(id)
     if (!a) return
+    this.ctl?.abort() // прежний поиск места кончается сразу
+    const ctl = (this.ctl = new AbortController())
     const my = ++this.seq
     this.busy = true
     try {
-      await this.run(a, spotKey, my)
+      await this.run(a, spotKey, my, ctl.signal)
     } finally {
-      if (my === this.seq) this.busy = false
+      if (my === this.seq) {
+        this.busy = false
+        this.ctl = null
+      }
     }
   }
 
-  private async run(a: Article, spotKey: string | undefined, my: number) {
+  private async run(a: Article, spotKey: string | undefined, my: number, signal: AbortSignal) {
     spot.cancel() // прежняя подсветка (и её закрытие меню) — до новых шагов, иначе закроет только что открытое меню
     this.open = false
     if (prefs.startOpen) prefs.closeStart()
@@ -162,7 +178,7 @@ class Guide {
     this.announce(plan, prev)
     await tick()
     if (my !== this.seq) return
-    await this.flash(a, plan, prev)
+    await this.flash(a, plan, prev, signal)
   }
 
   // Тост об изменении уровня с «Вернуть»; без него — тост плана (мигать нечем).
@@ -174,23 +190,29 @@ class Guide {
   }
 
   // Ищет место (seek), затем запасное статьи (miss.spot).
-  private async find(a: Article, spotKey: string, planHint: string): Promise<{ el: HTMLElement; hint: string } | null> {
-    const found = await seek(spotKey as SpotKey, planHint)
+  private async find(
+    a: Article,
+    spotKey: string,
+    planHint: string,
+    signal: AbortSignal,
+  ): Promise<{ el: HTMLElement; hint: string } | null> {
+    const found = await seek(spotKey as SpotKey, planHint, signal)
     if (found) return found
     const alt = a.miss?.spot
     if (alt && !spotKey.startsWith('menu:')) {
-      const f2 = await seek(alt, articleText(a.miss?.hint ?? ''))
+      const f2 = await seek(alt, articleText(a.miss?.hint ?? ''), signal)
       if (f2) return f2
     }
     return null
   }
 
-  private async flash(a: Article, plan: Plan, prev: ReturnType<typeof prefs.snapshot>) {
+  private async flash(a: Article, plan: Plan, prev: ReturnType<typeof prefs.snapshot>, signal: AbortSignal) {
     if (!plan.spot) {
       if (!plan.toast) store.notify(missToast(a)) // мигать нечем и тоста нет: всё равно говорим, где это
       return
     }
-    const found = await this.find(a, plan.spot, plan.hint ?? '')
+    const found = await this.find(a, plan.spot, plan.hint ?? '', signal)
+    if (signal.aborted) return // новый показ или stop(): ни мигать, ни тост «не нашли»
     if (found) {
       spot.flash(found.el, a.title, found.hint, plan.spot.startsWith('menu:') ? () => menuUi.close() : undefined)
       return

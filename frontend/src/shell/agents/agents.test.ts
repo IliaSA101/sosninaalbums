@@ -43,6 +43,13 @@ describe('строка журнала', () => {
   it('чужой текст остаётся текстом', () => {
     expect(callLine(call({ client: '<b>x</b>' }))).toContain('<b>x</b>')
   })
+  it('правка — ✎ перед инструментом; итог Go (note) вместо «ошибка»', () => {
+    expect(callLine(call({ edit: true, tool: 'Собрать' }))).toBe('09:05 · Claude Desktop · ✎ Собрать · 4 мс')
+    expect(callLine(call({ edit: true, ok: false, tool: 'Создать альбом', note: 'отказано' }))).toBe(
+      '09:05 · Claude Desktop · ✎ Создать альбом · 4 мс · отказано',
+    )
+    expect(callLine(call({ note: 'копия' }))).toBe('09:05 · Claude Desktop · Сводка альбома · 4 мс · копия')
+  })
 })
 
 describe('журнал и подключённые', () => {
@@ -65,6 +72,9 @@ describe('ответ Go', () => {
     expect(i).toMatchObject({ status: 'on', level: 3, setups: [], clients: [], calls: [], hint: '' })
     expect(normInfo({ level: 0 }).level).toBe(1)
     expect(normInfo(null).status).toBe('off')
+    expect(normInfo({}).edit).toBe(false)
+    expect(normInfo({ editBlocked: 'elevated' }).editBlocked).toBe('elevated')
+    expect(normInfo({ editBlocked: 'что-то' }).editBlocked).toBe('')
   })
 })
 

@@ -54,6 +54,10 @@ func NameKey(s string) string {
 	return b.String()
 }
 
+// Decompose — NFKD имени: буква с ударением раскладывается на букву и знак, который скелет
+// отбрасывает. Для сверки имён клиентов агентов (app/agents не импортирует text напрямую).
+func Decompose(s string) string { return text.NFKD(s) }
+
 // SameName — названия — двойники (один скелет).
 func SameName(a, b string) bool { return NameKey(a) == NameKey(b) }
 

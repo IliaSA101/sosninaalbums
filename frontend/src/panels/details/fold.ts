@@ -1,7 +1,7 @@
 import type { SegItem } from '../../base/tpl/Seg.svelte'
 
 // Фото через корешок (064): три положения из пары полей настроек. Правило подбора считает Go;
-// здесь только перевод пары в положение и тексты (макет docs/specs/0.15/064-mock-fold.html).
+// здесь только перевод пары в положение и тексты (макет docs/specs/archive/0.15/064-mock-fold.html).
 export type FoldMode = 'none' | 'wide' | 'any'
 export type FoldFields = { layflat: boolean; foldAny: boolean }
 

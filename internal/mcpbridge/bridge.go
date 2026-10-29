@@ -2,8 +2,9 @@
 // между stdio агента и сокетом программы, байт в байт. Пока программа закрыта, отвечает сам
 // (заглушка stub.go), потом подключается и повторяет клиенту рукопожатие (replay.go).
 //
-// SDK не нужен: посредник MCP не разбирает, читает только id и method. Ничего не пишет на диск,
-// программу не запускает. В stdout — только строки JSON-RPC, тексты — фиксированные (texts.go),
+// SDK не нужен: посредник MCP не разбирает, читает только id и method. На диск пишет одну отметку
+// времени запуска (osx.ClaimStart); программу запускает только по start_program и только при
+// включённом доступе агентам (start.go, launch_*.go). В stdout — только строки JSON-RPC, тексты — фиксированные (texts.go),
 // без путей: stderr клиент пишет в свой журнал.
 package mcpbridge
 
@@ -36,15 +37,26 @@ type config struct {
 	replayWait time.Duration
 	// peer — чья учётная запись на другом конце сокета (148, design §4); тесты подменяют.
 	peer func(net.Conn) (bool, error)
+	// start — запуск программы по start_program (149); нулевое значение — выключен.
+	start startDeps
 }
 
 func defaultConfig(socks []string) config {
 	return config{socks: socks, maxIn: maxFromClient, maxOut: maxFromProgram, probeEvery: probeEvery, replayWait: replayWait, peer: peercred.Same}
 }
 
+// Program — какую программу посредник умеет запускать (start_program): DataName стенда
+// (папка настроек и кэша) и UniqueId замка экземпляра (internal/app).
+type Program struct {
+	DataName    string
+	InstanceKey string
+}
+
 // Run — тело `--mcp`: код выхода процесса. EOF stdin — закрыть сокет и выйти с 0.
-func Run(in io.Reader, out, errw io.Writer, socks []string) int {
-	return run(defaultConfig(socks), in, out, errw)
+func Run(in io.Reader, out, errw io.Writer, socks []string, prog Program) int {
+	cfg := defaultConfig(socks)
+	cfg.start = defaultStart(prog.DataName, prog.InstanceKey)
+	return run(cfg, in, out, errw)
 }
 
 type cliEv struct {

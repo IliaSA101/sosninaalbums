@@ -31,11 +31,19 @@ export function AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
 
 export function AddVignette(arg1:number):Promise<model.View>;
 
+export function AgentAnswerCreate(arg1:string):Promise<app.State>;
+
+export function AgentsBusy(arg1:boolean):Promise<void>;
+
 export function AgentsInfo():Promise<app.AgentsInfo>;
 
 export function AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>;
 
 export function AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<boolean>;
+
+export function AllowAgentAsks():Promise<void>;
+
+export function AnswerAgent(arg1:string,arg2:boolean):Promise<model.View>;
 
 export function ApplyBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
@@ -428,6 +436,8 @@ export function SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>;
 export function ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>;
 
 export function SetAgents(arg1:boolean):Promise<app.AgentsInfo>;
+
+export function SetAgentsEdit(arg1:boolean):Promise<app.AgentsInfo>;
 
 export function SetAgentsLevel(arg1:number):Promise<app.AgentsInfo>;
 

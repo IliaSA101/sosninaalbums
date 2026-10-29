@@ -207,6 +207,16 @@ def gui_pids(instexe):
     return [pid for pid, cmd in processes(instexe) if "--mcp" not in cmd]
 
 
+# Заглушка посредника при закрытой программе и включённом доступе (спека 149, design §5): статус и запуск.
+STUB_TOOLS = ["program_status", "start_program"]
+
+
+def connected(names):
+    """Посредник подключился к программе: в списке есть инструмент, которого нет у заглушки.
+    Счёт длины не годится: заглушка сама уже из двух инструментов."""
+    return bool(names) and any(n not in STUB_TOOLS for n in names)
+
+
 def wait_for(cond, timeout, step=0.5):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -414,7 +424,7 @@ def main():
         names = meds["A"].tools() if r and "result" in r else None
         info = (r or {}).get("result", {}).get("serverInfo", {})
         rep.add("Т1-1 посредник A: initialize и заглушка при закрытой программе",
-                bool(r) and "result" in r and info.get("name") == "sosnina-albums" and names == ["program_status"],
+                bool(r) and "result" in r and info.get("name") == "sosnina-albums" and names == STUB_TOOLS,
                 "serverInfo %s; инструменты %s; stdout: %s" % (info, names, meds["A"].seen[-2:]))
 
         # ---- 2. обновление 0.25.1 при живом A ----
@@ -429,10 +439,10 @@ def main():
         rep.add("Т1-2 /relaunch открыл программу", bool(gui), "PID программы: %s" % gui)
         sock_ok = wait_for(lambda: os.path.isdir(os.path.dirname(sock)) and "sock" in os.listdir(os.path.dirname(sock)), 30)
         rep.add("Т1-2 программа подняла сокет агентов", bool(sock_ok), "папка mcp: %s" % listing(os.path.dirname(sock)))
-        # A подхватывает новую программу сам (повтор initialize, §4.2): инструментов больше одного
+        # A подхватывает новую программу сам (повтор initialize, §4.2): в списке есть инструмент вне заглушки
         def a_full():
             n = meds["A"].tools(8)
-            return n if n and len(n) > 1 else None
+            return n if connected(n) else None
         full = wait_for(a_full, 45, 1) if meds["A"].alive() and sock_ok else None
         rep.add("Т1-2 старый A после обновления подключился к новой программе", bool(full), "инструменты: %s" % (full,))
 

@@ -67,3 +67,6 @@ func SetSlowEdit(d time.Duration) { inside.SetSlowEdit(d) }
 
 // SetAgainGap — fn между снимком входа пересборки и её правкой (nil — снять).
 func SetAgainGap(fn func()) { inside.SetAgainGap(fn) }
+
+// SetBuildGap — fn между планом сборки и её правкой (nil — снять).
+func SetBuildGap(fn func()) { inside.SetBuildGap(fn) }

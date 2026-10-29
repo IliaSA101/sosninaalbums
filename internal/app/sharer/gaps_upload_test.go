@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/api/albums"
 	"github.com/IliaSA101/sosninaalbums/api/albums/albumstest"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Тесты Т6 (0.32-146-T6): ветки загрузки и публикации, которые ревью Т4 нашло непокрытыми.
@@ -18,6 +20,15 @@ import (
 const page2 = "/pages/2"
 
 func isPage2(q *http.Request) bool { return isPut(q) && strings.HasSuffix(q.URL.Path, page2) }
+
+// pageNo — номер страницы из адреса PUT .../pages/N (0, если не разобрался).
+func pageNo(q *http.Request) int {
+	n, err := strconv.Atoi(q.URL.Path[strings.LastIndex(q.URL.Path, "/")+1:])
+	if err != nil {
+		return 0
+	}
+	return n
+}
 
 func isPublish(q *http.Request) bool {
 	return q.Method == http.MethodPost && strings.HasSuffix(q.URL.Path, "/publish")
@@ -132,12 +143,19 @@ func TestShareHashMismatch(t *testing.T) {
 func TestShareDropMidUpload(t *testing.T) {
 	r := newRig(t)
 	r.connect()
-	var puts atomic.Int32
+	// Обрыв по номеру страницы, а не по порядку прихода: страницы идут тремя потоками, и при счёте
+	// «третий PUT и далее» оборванной могла оказаться любая, а её соседа отмена выгрузки отрезала на
+	// лету, до сохранения (CI go-race: на сервере 1 страница вместо 2). Страницы 3+ обрываются, но
+	// только когда 1 и 2 уже сохранены; их самих не трогаем.
 	r.setFault(func(q *http.Request) *albumstest.Fault {
-		if isPut(q) && puts.Add(1) > 2 {
-			return &albumstest.Fault{Drop: true}
+		if !isPut(q) || pageNo(q) < 3 {
+			return nil
 		}
-		return nil
+		end := time.Now().Add(testkit.Limit(5 * time.Second))
+		for r.srv.Fake.Puts() < 2 && time.Now().Before(end) {
+			time.Sleep(time.Millisecond)
+		}
+		return &albumstest.Fault{Drop: true}
 	})
 	msg, stopped := r.run(Options{Days: 30})
 	if stopped || !strings.Contains(msg, "Нет связи") {

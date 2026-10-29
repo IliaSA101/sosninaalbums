@@ -57,6 +57,10 @@ func registerTools(e *toolEnv) {
 
 	reg(e, toolSpec{name: "list_albums", title: "Последние альбомы", desc: "Последние альбомы программы: ключ, имя (с уровня 2), когда менялся, на месте ли файл, открыт ли. Путей нет." + dataNote},
 		nil, func(c *call, _ none) (recentsOut, error) { return c.listAlbums() })
+
+	if e.s.h.canEdit() { // ступень 3 (149): без замыканий правок инструментов правки нет
+		registerEditTools(e)
+	}
 }
 
 type spreadIn struct {

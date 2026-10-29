@@ -46,6 +46,14 @@ export function AddVignette(arg1) {
   return window['go']['app']['App']['AddVignette'](arg1);
 }
 
+export function AgentAnswerCreate(arg1) {
+  return window['go']['app']['App']['AgentAnswerCreate'](arg1);
+}
+
+export function AgentsBusy(arg1) {
+  return window['go']['app']['App']['AgentsBusy'](arg1);
+}
+
 export function AgentsInfo() {
   return window['go']['app']['App']['AgentsInfo']();
 }
@@ -56,6 +64,14 @@ export function AlignItems(arg1, arg2, arg3, arg4) {
 
 export function AlignOverlap(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['AlignOverlap'](arg1, arg2, arg3, arg4);
+}
+
+export function AllowAgentAsks() {
+  return window['go']['app']['App']['AllowAgentAsks']();
+}
+
+export function AnswerAgent(arg1, arg2) {
+  return window['go']['app']['App']['AnswerAgent'](arg1, arg2);
 }
 
 export function ApplyBackground(arg1, arg2, arg3) {
@@ -840,6 +856,10 @@ export function ScaleGroupAxes(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
 
 export function SetAgents(arg1) {
   return window['go']['app']['App']['SetAgents'](arg1);
+}
+
+export function SetAgentsEdit(arg1) {
+  return window['go']['app']['App']['SetAgentsEdit'](arg1);
 }
 
 export function SetAgentsLevel(arg1) {

@@ -31,6 +31,11 @@ func FamilyID(name string) string {
 // x/text напрямую не положен (depguard), а text его уже тянет.
 func NFKC(s string) string { return norm.NFKC.String(s) }
 
+// NFKD — совместимая декомпозиция: «í» раскладывается в «i» и ударение, буквы во всю ширину
+// становятся обычными. Для сверки имён клиентов агентов (подделка под программу): комбинирующие
+// знаки после неё отбрасываются, и подмена с ударением не прячет слово.
+func NFKD(s string) string { return norm.NFKD.String(s) }
+
 // IsCustomID — id своей гарнитуры: «my:» и 16 знаков hex в нижнем регистре.
 func IsCustomID(id string) bool {
 	return len(id) == 19 && strings.HasPrefix(id, "my:") && isHex16(id[3:])

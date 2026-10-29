@@ -1,9 +1,11 @@
 <script lang="ts">
   import Modal from '../../base/modal/Modal.svelte'
   import { agents } from './agents.svelte'
+  import AgentsEdits from './AgentsEdits.svelte'
   import { callLine, hasNames, hasPics } from './agents'
   import {
     AGENTS_TITLE,
+    ASK_EDIT,
     ASK_NAMES,
     ASK_ON,
     ASK_PICS,
@@ -39,7 +41,7 @@
   // Тексты клиентов, имена агентов и журнал — чужой/недоверенный текст: только как текст (не {@html}).
   $effect(() => agents.watch())
 
-  const ASKS = { on: ASK_ON, names: ASK_NAMES, pics: ASK_PICS }
+  const ASKS = { on: ASK_ON, names: ASK_NAMES, pics: ASK_PICS, edit: ASK_EDIT }
   const ask = $derived(agents.ask ? ASKS[agents.ask] : null)
   const info = $derived(agents.info)
   const names = $derived(agents.names)
@@ -105,6 +107,8 @@
             />
             {SEE_PICS}
           </label>
+
+          <AgentsEdits />
 
           <!-- Настройка клиентов нужна один раз: свёрнута, чтобы журнал был виден без прокрутки (образец — «Дополнительно» в автосборке).
                Предупреждение (путь к программе устарел) разворачивает её сразу: оно про подключение -->

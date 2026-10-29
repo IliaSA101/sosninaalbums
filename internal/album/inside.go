@@ -48,4 +48,5 @@ func init() {
 	inside.SlowEdit = func() time.Duration { return slowEdit }
 	inside.SetSlowEdit = func(d time.Duration) { slowEdit = d }
 	inside.SetAgainGap = func(fn func()) { againGap = fn }
+	inside.SetBuildGap = func(fn func()) { buildGap = fn }
 }

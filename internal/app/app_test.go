@@ -315,6 +315,8 @@ func newApp(t testing.TB) *App {
 	a.demoFn = func() libpacks.Demo { return libpacks.Demo{} }
 	// Без папки данных prefs пишут config.json в рабочую папку пакета (так в git попал internal/app/config.json).
 	a.cfgDir = testkit.TempDir(t)
+	// Раннер Windows в CI работает от администратора: настоящий osx.Elevated закрыл бы правки и вопросы.
+	a.askM().elevated = func() bool { return false }
 	testkit.BeforeRemove(t, a.closeBackground)
 	return a
 }

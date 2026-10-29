@@ -70,14 +70,15 @@ type Store struct {
 	now  func() time.Time
 
 	mu       sync.Mutex
-	last     map[string]time.Time // ключ → время последней копии в этом сеансе
-	writes   int                  // записей с прошлой PruneDue
-	albumMax int64                // предел папки альбома (тесты уменьшают)
+	last     map[string]time.Time       // ключ → время последней копии в этом сеансе
+	pins     map[string]map[string]bool // ключ → имена закреплённых копий (pin.go)
+	writes   int                        // записей с прошлой PruneDue
+	albumMax int64                      // предел папки альбома (тесты уменьшают)
 }
 
 // New — хранилище копий в root.
 func New(root string) *Store {
-	return &Store{Root: root, now: time.Now, last: map[string]time.Time{}, albumMax: albumMax}
+	return &Store{Root: root, now: time.Now, last: map[string]time.Time{}, pins: map[string]map[string]bool{}, albumMax: albumMax}
 }
 
 // DefaultRoot — %LOCALAPPDATA%\<name>\backups (как osx.WebViewDir; name — osx.DataName, у
@@ -154,14 +155,17 @@ func validKey(key string) bool {
 // было или с прошлой прошло не меньше Every; затем в папке альбома остаётся Keep последних.
 // Время ставится и при сбое: иначе ошибка повторялась бы на каждом автосохранении.
 // Файл совпал с самой новой копией — не пишется и время не ставится (дубль ничего не сохраняет).
-func (s *Store) Before(path, key string) error { return s.copy(path, key, false, "") }
+func (s *Store) Before(path, key string) error { _, err := s.copy(path, key, false, ""); return err }
 
 // Force — копия без учёта Every (черновик перед удалением, файл перед «Сохранить как» поверх него).
-func (s *Store) Force(path, key string) error { return s.copy(path, key, true, "") }
+func (s *Store) Force(path, key string) error { _, err := s.copy(path, key, true, ""); return err }
 
 // ForceKeep — Force, только чистка не удаляет копию keep: её восстанавливают, и после Ctrl+Z
 // она должна остаться в списке, даже если была самой давней из Keep.
-func (s *Store) ForceKeep(path, key, keep string) error { return s.copy(path, key, true, keep) }
+func (s *Store) ForceKeep(path, key, keep string) error {
+	_, err := s.copy(path, key, true, keep)
+	return err
+}
 
 // PruneDue — с прошлого вызова записано pruneEvery копий: пора Prune (в фоне у вызывающего),
 // иначе за долгий сеанс общий предел держала бы только чистка при старте.
@@ -178,54 +182,66 @@ func (s *Store) PruneDue() bool {
 	return true
 }
 
-func (s *Store) copy(path, key string, force bool, keep string) error {
+// copy — тело копии; name — файл, в котором теперь лежит содержимое path (новая копия или самая
+// новая, совпавшая байт в байт); "" — копировать не пришлось (нет файла, рано по Every, Root пуст).
+func (s *Store) copy(path, key string, force bool, keep string) (string, error) {
 	if s == nil || s.Root == "" {
-		return nil
+		return "", nil
 	}
 	if !validKey(key) {
-		return fmt.Errorf("недопустимый ключ копии %q", key)
+		return "", fmt.Errorf("недопустимый ключ копии %q", key)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.copyLocked(path, key, force, keep)
+}
+
+// copyLocked — copy под s.mu.
+func (s *Store) copyLocked(path, key string, force bool, keep string) (string, error) {
 	now := s.now()
 	// Часы ушли назад (now раньше прошлой копии) — пора: иначе копий не было бы до тех пор.
 	if t, ok := s.last[key]; ok && !force && !now.Before(t) && now.Sub(t) < Every {
-		return nil
+		return "", nil
 	}
 	data, err := readLimited(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil // перезаписывать нечего
+		return "", nil // перезаписывать нечего
 	}
 	dir := filepath.Join(s.Root, key)
 	if err == nil {
 		err = s.ensureDir(dir)
 	}
-	if err == nil && sameAsNewest(dir, data, now) {
-		return nil
+	if err == nil {
+		if same := sameAsNewest(dir, data, now); same != "" {
+			return same, nil
+		}
 	}
 	s.last[key] = now
 	if err != nil {
-		return err
+		return "", err
 	}
 	name, err := freeName(dir, now)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := library.WriteFileAtomicMode(filepath.Join(dir, name), data, fileMode); err != nil {
-		return err
+		return "", err
 	}
 	s.writes++
-	return s.trim(dir, now, name, keep)
+	return name, s.trim(dir, now, append([]string{name, keep}, s.pinned(key)...)...)
 }
 
-// sameAsNewest — data байт в байт совпадает с самой новой копией альбома.
-func sameAsNewest(dir string, data []byte, now time.Time) bool {
+// sameAsNewest — имя самой новой копии альбома, если data байт в байт совпадает с ней; иначе "".
+func sameAsNewest(dir string, data []byte, now time.Time) string {
 	cs, err := copies(dir, now)
 	if err != nil || len(cs) == 0 || cs[0].size != int64(len(data)) {
-		return false
+		return ""
 	}
 	old, err := readLimited(filepath.Join(dir, cs[0].name))
-	return err == nil && bytes.Equal(old, data)
+	if err != nil || !bytes.Equal(old, data) {
+		return ""
+	}
+	return cs[0].name
 }
 
 // ensureDir создаёт Root и папку альбома; существующая папка — только обычная (не ссылка и

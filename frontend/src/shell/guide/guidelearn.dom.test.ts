@@ -55,6 +55,7 @@ beforeEach(() => {
   guide.open = false
 })
 afterEach(() => {
+  guide.stop() // «Показать» из теста не оставляет поиск места: его таймеры пережили бы разборку окружения
   cleanup()
   guide.open = false
   document.body.innerHTML = ''
@@ -135,6 +136,24 @@ describe('отметку ставит только флажок', () => {
     await settle()
     expect(api.MarkGuide).not.toHaveBeenCalled()
     expect(learned.ids.size).toBe(0)
+  })
+})
+
+describe('«Показать» и конец теста', () => {
+  it('stop() снимает ожидание поиска места: таймеров не остаётся, документ после него не читается', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await open('open')
+      await fireEvent.click(qa('.act button')[0])
+      await settle()
+      expect(vi.getTimerCount()).toBeGreaterThan(0) // в happy-dom кнопки нет на экране — поиск ждёт кадры
+      guide.stop()
+      await settle()
+      expect(vi.getTimerCount()).toBe(0)
+      expect(guide.busy).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

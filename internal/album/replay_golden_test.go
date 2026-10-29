@@ -61,9 +61,13 @@ func TestEditorReplay(t *testing.T) {
 // каждом шаге-правке) и ID (номер Editor в процессе, 087-3: зависит от порядка тестов, в эталон
 // не годится; проверка — TestEditorViewSrc), Close (после него реплей правок не идёт; проверка —
 // TestEditorClose): новый метод без шага — провал. Не зависит от эталона и ОС.
+// Исключение 149: AutoBuildIf, VaryLayoutsIf, UndoIfRev — те же AutoBuild, VaryLayouts и Undo с
+// условием (rev, срок); тело и шаг отмены те же, что у шагов реплея, условие проверяет
+// expect_test.go. Шаги в эталон — вместе с обновлением эталона Windows (его пишет CI).
 func TestEditorReplayMethods(t *testing.T) {
 	r, _ := replayRun(t)
-	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true}
+	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true,
+		"AutoBuildIf": true, "VaryLayoutsIf": true, "UndoIfRev": true}
 	for _, s := range r.steps {
 		seen[strings.SplitN(s.Step, ":", 2)[0]] = true
 	}

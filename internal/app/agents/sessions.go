@@ -46,7 +46,7 @@ type run struct {
 func (r *run) admit(c net.Conn) {
 	defer func() {
 		if recover() != nil { // паника приёма не должна оставить открытое подключение
-			_ = c.Close()
+			closeRefused(c) // как у отказа: на Windows голый Close конец потока не доставлял (148)
 			log.Printf("ПАНИКА в agents admit")
 		}
 	}()
@@ -62,7 +62,7 @@ func (r *run) admit(c net.Conn) {
 	switch {
 	case r.closed:
 		r.mu.Unlock()
-		_ = c.Close()
+		closeRefused(c)
 	case len(r.conns) >= r.o.MaxConns:
 		r.wg.Add(1)
 		r.mu.Unlock()
@@ -75,8 +75,8 @@ func (r *run) admit(c net.Conn) {
 	}
 }
 
-// closeRefused закрывает отказанное подключение: сначала shutdown записи (клиент получает конец потока
-// явно), потом Close. На Windows (AF_UNIX) голый Close без shutdown раз на прогон не доходил до
+// closeRefused закрывает подключение, которое служба закрывает по своей воле (отказ, паника сверки,
+// молчун, выход): сначала shutdown записи (клиент получает конец потока явно), потом Close. На Windows (AF_UNIX) голый Close без shutdown раз на прогон не доходил до
 // клиента за 5 с (148, TestAdmitRejectsForeign); на Unix shutdown безвреден.
 func closeRefused(c net.Conn) {
 	if cw, ok := c.(interface{ CloseWrite() error }); ok {
@@ -139,7 +139,7 @@ func (r *run) session(c net.Conn) {
 	defer guardPanic("session")
 	w := &watch{Conn: c, r: r}
 	defer w.drop() // и при панике: место не должно остаться занятым
-	defer func() { _ = c.Close() }()
+	defer closeRefused(c)
 	ss, err := r.srv.Connect(r.ctx, &mcp.IOTransport{
 		Reader: w, Writer: deadlineConn{c, r.o.WriteTimeout}, MaxLineLength: maxLine,
 	}, nil)
@@ -155,12 +155,12 @@ func (r *run) session(c net.Conn) {
 	// Без initialize подключение молчуна не живёт вечно.
 	t := time.AfterFunc(r.o.InitTimeout, func() {
 		if ss.InitializeParams() == nil {
-			_ = c.Close()
+			closeRefused(c)
 		}
 	})
 	defer t.Stop()
 	_ = ss.Wait()
-	_ = c.Close()
+	closeRefused(c)
 	w.drop()
 	_ = ss.Close() // ждёт обработчики; место уже свободно
 }
@@ -189,6 +189,7 @@ func (r *run) forget(ss *mcp.ServerSession) {
 	delete(r.gone, ss)
 	delete(r.seen, ss)
 	r.mu.Unlock()
+	r.s.ed.forgetSession(ss)
 }
 
 // errInternal — ответ клиенту при панике в приёмном слое или обработчике.
@@ -269,7 +270,7 @@ func (r *run) close() {
 	r.cancel()
 	_ = r.ln.Close()
 	for _, c := range conns {
-		_ = c.Close()
+		closeRefused(c)
 	}
 	done := make(chan struct{})
 	go func() { r.wg.Wait(); close(done) }()
@@ -296,13 +297,23 @@ func (w deadlineConn) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// cleanName — имя клиента для списка: без управляющих и форматных знаков (разворот строки,
-// невидимые), не длиннее maxClientName знаков, битый UTF-8 пропускается.
+// cleanName — имя клиента для списка и вопроса: только печатные знаки (без управляющих, форматных,
+// личного использования, неназначенных, разделителей строк и абзацев, пробелов кроме обычного),
+// без заполнителей-«пустышек», не больше двух сочетаемых знаков подряд, не длиннее maxClientName
+// знаков; битый UTF-8 пропускается (0.33-149-21: имя клиента попадает в текст вопроса человеку).
 func cleanName(s string) string {
 	out := make([]rune, 0, maxClientName)
+	marks := 0
 	for _, r := range s {
-		if r == utf8.RuneError || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+		if r == utf8.RuneError || !unicode.IsPrint(r) || r == '\u115F' || r == '\u1160' || r == '\u3164' || r == '\uFFA0' {
 			continue
+		}
+		if unicode.Is(unicode.Mn, r) {
+			if marks++; marks > 2 {
+				continue
+			}
+		} else {
+			marks = 0
 		}
 		if len(out) == maxClientName {
 			break

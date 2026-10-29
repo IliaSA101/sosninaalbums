@@ -31,12 +31,21 @@
   import { BG_RESET_TIP } from '../albumbg/albumbg'
   import AlbumOwnAsk from '../albumbg/AlbumOwnAsk.svelte'
   import { ownAskText, ownColorNums, ownDoneText, type OwnAsk } from '../albumbg/albumown'
+  import { inSettings, settingsDraft } from './settingsbusy.svelte'
 
   // base — настройки, с которыми форма сверялась последний раз.
   let base = $state<Settings>({ ...store.view.settings })
   let s = $state<Settings>({ ...store.view.settings })
 
   const edited = $derived(!same(s, base))
+  // Агентам правка в разделе — «человек занят» (149-16); форма уходит — флаги снимаются.
+  $effect(() => {
+    settingsDraft.dirty = edited
+  })
+  $effect(() => () => {
+    settingsDraft.dirty = false
+    settingsDraft.focus = false
+  })
   const differs = $derived(!same(s, store.view.settings))
   const valid = $derived.by(() => {
     const n = norm(s)
@@ -155,6 +164,10 @@
   }
 </script>
 
+<svelte:document
+  onfocusin={(e) => (settingsDraft.focus = inSettings(e.target))}
+  onfocusout={(e) => (settingsDraft.focus = inSettings(e.relatedTarget))}
+/>
 {#if !sheet && allRows.length > 0}
   <div class="group" data-guide="fsfera-presets">
     <label class="cap" for="preset-group">Типография</label>

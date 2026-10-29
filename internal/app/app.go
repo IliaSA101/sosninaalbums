@@ -477,7 +477,8 @@ func Run(assets fs.FS, wailsCfg, icon []byte) error {
 	// Посредник агентов (143): до памяти, App, замка экземпляра и log.txt — stdout занят
 	// протоколом, окно не нужно.
 	if mcpbridge.Want(os.Args) {
-		os.Exit(mcpbridge.Run(os.Stdin, os.Stdout, os.Stderr, mcpbridge.SockPaths(osx.DataName(stand))))
+		os.Exit(mcpbridge.Run(os.Stdin, os.Stdout, os.Stderr, mcpbridge.SockPaths(osx.DataName(stand)),
+			mcpbridge.Program{DataName: osx.DataName(stand), InstanceKey: instanceKey(stand)}))
 	}
 	applyMemoryLimit()
 	app := NewApp()

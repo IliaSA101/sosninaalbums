@@ -179,14 +179,16 @@ type editOpts struct {
 	// after — правка проекта после settle, той же правкой (смена формата с макетом: нетронутые
 	// места вписываются заново после grid.Rescale). Только геометрия существующего, не состав.
 	after func(p *model.Project)
+	// expect — сверка rev и срока под замком до fn (editor_expect.go); nil — без сверки.
+	expect *Expect
 }
 
 // editWith — тело edit с необязательным o.
 func (e *Editor) editWith(merge string, whole bool, fn func(p *model.Project) error, marks func() []MarkChange, o editOpts) (model.View, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.shut("правка") {
-		return e.view(), nil
+	if stop, err := e.refuse(o); stop {
+		return e.view(), err
 	}
 	t0 := time.Now()
 	defer func() { slowAt(t0, slowEdit, "правка: %d разворотов", len(e.p.Spreads)) }()
@@ -244,6 +246,15 @@ func (e *Editor) editWith(merge string, whole bool, fn func(p *model.Project) er
 	e.dirty = true
 	e.stepped(same, pushed, o)
 	return e.view(), nil
+}
+
+// refuse — правку не начинать: сверка o.expect не прошла (ошибка) или Editor закрыт (shut, без ошибки).
+// Под e.mu.
+func (e *Editor) refuse(o editOpts) (bool, error) {
+	if err := o.expect.check(e); err != nil {
+		return true, err
+	}
+	return e.shut("правка"), nil
 }
 
 // relOr — от чего считать поправки settle: o.rel, а без него — проект до fn.

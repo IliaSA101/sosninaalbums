@@ -182,6 +182,7 @@ type album struct {
 	dir    string
 	newest time.Time
 	size   int64
+	pinned bool // есть закреплённая копия: альбом целиком не удаляется
 }
 
 // Prune — общий предел: копии старше MaxAge удаляются, затем самые давние альбомы — пока
@@ -206,6 +207,7 @@ func (s *Store) Prune() error {
 	now := s.now()
 	type found struct {
 		dir string
+		key string
 		cs  []copyFile
 	}
 	var dirs []found
@@ -222,7 +224,7 @@ func (s *Store) Prune() error {
 		if len(cs) > 0 {
 			newest = maxTime(newest, cs[0].raw)
 		}
-		dirs = append(dirs, found{dir, cs})
+		dirs = append(dirs, found{dir, e.Name(), cs})
 	}
 	byAge := !now.Before(newest)
 	old := now.Add(-MaxAge)
@@ -231,8 +233,11 @@ func (s *Store) Prune() error {
 	for _, f := range dirs {
 		dir, cs := f.dir, f.cs
 		a := album{dir: dir}
+		pins := s.pins[f.key]
 		for _, c := range cs {
-			if byAge && c.t.Before(old) {
+			if pins[c.name] {
+				a.pinned = true // закреплена (pin.go): ни по возрасту, ни вместе с альбомом
+			} else if byAge && c.t.Before(old) {
 				_ = os.Remove(filepath.Join(dir, c.name)) // не вышло — попробуем при следующем запуске
 				continue
 			}
@@ -247,10 +252,14 @@ func (s *Store) Prune() error {
 		total += a.size
 	}
 	slices.SortFunc(albums, func(a, b album) int { return a.newest.Compare(b.newest) })
-	for len(albums) > 1 && (len(albums) > MaxDirs || total > MaxBytes) {
-		removeAlbum(albums[0].dir)
-		total -= albums[0].size
-		albums = albums[1:]
+	for i := 0; i < len(albums) && len(albums) > 1 && (len(albums) > MaxDirs || total > MaxBytes); {
+		if albums[i].pinned {
+			i++
+			continue
+		}
+		removeAlbum(albums[i].dir)
+		total -= albums[i].size
+		albums = slices.Delete(albums, i, i+1)
 	}
 	return nil
 }

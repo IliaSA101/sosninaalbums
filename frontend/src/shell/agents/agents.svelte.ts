@@ -10,13 +10,18 @@ import {
   normInfo,
   pushCall,
   type AgentCallEvent,
+  type AgentEdited,
   type AgentSetup,
+  type AgentShow,
   type AgentsInfo,
 } from './agents'
+import { agentEdited, agentShow } from './agentedited'
+import { BusyPing, userBusy } from './agentbusy'
 import { COPIED, COPY_FAIL } from './agentstext'
 
-// Вопрос перед включением доступа или уровня: 'on' — «Разрешить агентам ИИ читать альбом?», 'names' и 'pics' — уровни 2 и 3.
-export type AgentsAsk = 'on' | 'names' | 'pics'
+// Вопрос перед включением доступа, уровня или правок: 'on' — «Разрешить агентам ИИ читать альбом?», 'names' и 'pics' — уровни 2 и 3,
+// 'edit' — «Разрешить агентам ИИ менять альбом?» (149).
+export type AgentsAsk = 'on' | 'names' | 'pics' | 'edit'
 
 // Окно «Файл ▸ ИИ-агенты (MCP)…» (143): состояние от Go (`agents:state`, `agents:call`), решения — в Go.
 // Доступ — данные программы, не альбома: правок проекта и шагов отмены нет. Образец — packs.svelte.ts (067).
@@ -27,6 +32,7 @@ class AgentsUi {
   busy = $state(false)
   private watchers = 0
   private offEvents: (() => void) | null = null
+  private ping = new BusyPing()
 
   get on(): boolean {
     return this.info.status === 'on'
@@ -58,13 +64,26 @@ class AgentsUi {
   }
 
   private subscribe(): () => void {
+    // Значок «ИИ» живёт в шапке всегда, поэтому сигнал «человек занят» (перенос, набор, «Автосборка»…) идёт отсюда, а не из окна вопроса.
+    const stopBusy = $effect.root(() => {
+      $effect(() => {
+        this.ping.set(userBusy())
+      })
+    })
     const off = [
       EventsOn('agents:state', (i: AgentsInfo) => this.take(i)),
       EventsOn('agents:call', (c: AgentCallEvent) => {
         this.info = { ...this.info, calls: pushCall(this.info.calls, c), today: c.today }
       }),
+      // Правки агента (149): тосты и переходы живут, пока жив значок «ИИ» (он в шапке всегда), окно открывать не нужно.
+      EventsOn('agents:edited', (e: AgentEdited) => agentEdited(e)),
+      EventsOn('agents:show', (s: AgentShow) => agentShow(s)),
     ]
-    return () => off.forEach((f) => f?.())
+    return () => {
+      off.forEach((f) => f?.())
+      stopBusy()
+      this.ping.stop() // подписка снята посреди занятости — Go получает «не занят»
+    }
   }
 
   private take(i: AgentsInfo) {
@@ -105,6 +124,7 @@ class AgentsUi {
     if (a === 'on') await this.call(() => bridge.set(true))
     else if (a === 'names') await this.call(() => bridge.setLevel(levelAfterNames(true)))
     else if (a === 'pics') await this.call(() => bridge.setLevel(levelAfterPics(true)))
+    else if (a === 'edit') await this.call(() => bridge.setEdit(true))
   }
 
   // Флажки: включение спрашивает, снятие — сразу (снятие «имён» снимает и «картинки»).
@@ -115,6 +135,26 @@ class AgentsUi {
   togglePics(on: boolean) {
     if (on) this.want('pics')
     else void this.call(() => bridge.setLevel(levelAfterPics(false)))
+  }
+
+  // Правки агентов: включение спрашивает, снятие — сразу.
+  toggleEdit(on: boolean) {
+    if (on) this.want('edit')
+    else void this.call(() => bridge.setEdit(false))
+  }
+
+  // «Разрешить вопросы» после третьего отказа подряд: Go снимает тишину и шлёт новое состояние.
+  async allowAsks() {
+    if (this.busy) return
+    this.busy = true
+    try {
+      await bridge.allowAsks()
+    } catch (e) {
+      store.notify(capFirst(errText(e)), 'error')
+    } finally {
+      this.busy = false
+    }
+    await this.load()
   }
 
   disable(): Promise<void> {

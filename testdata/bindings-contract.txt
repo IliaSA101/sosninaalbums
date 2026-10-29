@@ -9,9 +9,13 @@ method AddQRSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResu
 method AddSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResult>
 method AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
 method AddVignette(arg1:number):Promise<model.View>
+method AgentAnswerCreate(arg1:string):Promise<APP.State>
+method AgentsBusy(arg1:boolean):Promise<void>
 method AgentsInfo():Promise<APP.AgentsInfo>
 method AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>
 method AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<boolean>
+method AllowAgentAsks():Promise<void>
+method AnswerAgent(arg1:string,arg2:boolean):Promise<model.View>
 method ApplyBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method ApplyBackgroundTo(arg1:Array<model.GridTarget>,arg2:string):Promise<APP.BgResult>
 method ApplyBorder(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
@@ -208,6 +212,7 @@ method SaveSpreadTpl(arg1:string,arg2:string,arg3:string,arg4:string,arg5:boolea
 method SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>
 method ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>
 method SetAgents(arg1:boolean):Promise<APP.AgentsInfo>
+method SetAgentsEdit(arg1:boolean):Promise<APP.AgentsInfo>
 method SetAgentsLevel(arg1:number):Promise<APP.AgentsInfo>
 method SetAlbumBg(arg1:string,arg2:boolean):Promise<model.View>
 method SetAlbumBgFade(arg1:number,arg2:string):Promise<model.View>
@@ -310,6 +315,8 @@ type APP.AgentCall
   tool: string
   ok: boolean
   ms: number
+  edit: boolean
+  note: string
 type APP.AgentClient
   name: string
   since: number
@@ -329,6 +336,9 @@ type APP.AgentsInfo
   clients: AgentClient[]
   calls: AgentCall[]
   today: number
+  edit: boolean
+  editBlocked: string
+  asksMuted: boolean
 type APP.AgentsSaved
   canceled: boolean
   text: string

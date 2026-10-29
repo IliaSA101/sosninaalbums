@@ -21,6 +21,8 @@
 //     (seals) только при выдаче, сверка печати при выгрузке и показе ссылки (ShareIdent,
 //     SnapshotAt), новый при «Сохранить как» другим проектом (SaveNew), запись перед выгрузкой
 //     (NeedUID, SaveUID); мимо change, без шага отмены и dirty;
+//   - editor_expect.go — правка «если всё ещё то же» для агентов (149): Expect (rev и срок вызова)
+//     сверяется под e.mu в editWith; AutoBuildIf, VaryLayoutsIf, UndoIfRev; ErrLate, ErrRevChanged;
 //   - editor_bins.go — подборки фото (083): список в Editor, членство в отметках; шаг «рядом с
 //     проектом», как у отметок (commitSide), projRev не трогает;
 //   - LoadBase и Restore (резервные копии, спека 019; проект проходит own), черновик
