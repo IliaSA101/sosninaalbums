@@ -16,6 +16,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
 	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
+	"github.com/IliaSA101/sosninaalbums/internal/app/sharer"
 )
 
 type dtoPair struct{ app, svc reflect.Type }
@@ -40,6 +41,10 @@ var dtoPairs = []dtoPair{
 	pairOf[PrintSaved, ownprint.Saved](),
 	pairOf[PrintImport, ownprint.Import](),
 	pairOf[PrintShare, ownprint.Share](),
+	pairOf[ShareView, sharer.View](),
+	pairOf[ShareService, sharer.ServiceInfo](),
+	pairOf[ShareAlbum, sharer.Album](),
+	pairOf[ShareLink, sharer.Link](),
 	pairOf[AgentSetup, agents.Setup](), // AgentCall и AgentClient — время в unix мс: пары нет, конвертеры в TestAgentTypesConvert
 }
 
@@ -48,7 +53,7 @@ func sameShape(a, s reflect.Type) bool {
 	if a == s {
 		return true
 	}
-	if a.Kind() == reflect.Slice && s.Kind() == reflect.Slice {
+	if a.Kind() == reflect.Slice && s.Kind() == reflect.Slice || a.Kind() == reflect.Pointer && s.Kind() == reflect.Pointer {
 		return sameShape(a.Elem(), s.Elem())
 	}
 	for _, p := range dtoPairs {

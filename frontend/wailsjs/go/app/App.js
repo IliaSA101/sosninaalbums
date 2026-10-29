@@ -150,6 +150,10 @@ export function CancelLibrary() {
   return window['go']['app']['App']['CancelLibrary']();
 }
 
+export function CancelShare() {
+  return window['go']['app']['App']['CancelShare']();
+}
+
 export function CancelUpdate() {
   return window['go']['app']['App']['CancelUpdate']();
 }
@@ -560,6 +564,10 @@ export function OpenProject() {
 
 export function OpenRecent(arg1) {
   return window['go']['app']['App']['OpenRecent'](arg1);
+}
+
+export function OpenShare() {
+  return window['go']['app']['App']['OpenShare']();
 }
 
 export function OpenUpdatePage() {
@@ -1074,8 +1082,40 @@ export function SetupVignette(arg1, arg2) {
   return window['go']['app']['App']['SetupVignette'](arg1, arg2);
 }
 
+export function Share(arg1) {
+  return window['go']['app']['App']['Share'](arg1);
+}
+
+export function ShareChange(arg1) {
+  return window['go']['app']['App']['ShareChange'](arg1);
+}
+
+export function ShareConnect(arg1, arg2) {
+  return window['go']['app']['App']['ShareConnect'](arg1, arg2);
+}
+
+export function ShareForget() {
+  return window['go']['app']['App']['ShareForget']();
+}
+
+export function SharePassword() {
+  return window['go']['app']['App']['SharePassword']();
+}
+
 export function SharePrintProfile(arg1) {
   return window['go']['app']['App']['SharePrintProfile'](arg1);
+}
+
+export function ShareRevoke() {
+  return window['go']['app']['App']['ShareRevoke']();
+}
+
+export function ShareState() {
+  return window['go']['app']['App']['ShareState']();
+}
+
+export function ShareText() {
+  return window['go']['app']['App']['ShareText']();
 }
 
 export function ShowBackups() {

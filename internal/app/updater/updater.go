@@ -54,6 +54,7 @@ type Info struct {
 	Done    int64    `json:"done"`
 	Total   int64    `json:"total"`
 	Error   string   `json:"error"`   // словами, без адресов и путей
+	ErrorOf string   `json:"errorOf"` // что не удалось при Phase == error: check | download | install; иначе ""
 	AtStart bool     `json:"atStart"` // флажок «Проверять при запуске»
 	Checked int64    `json:"checked"` // мс, последняя удачная проверка; 0 — не было
 	Just    string   `json:"just"`    // версия, до которой только что обновились (один раз)
@@ -65,6 +66,14 @@ type Progress struct {
 	Done  int64 `json:"done"`
 	Total int64 `json:"total"`
 }
+
+// Значения Info.ErrorOf: какая операция закончилась ошибкой. Интерфейс по ним выбирает «Повторить»,
+// а не гадает по наличию предложенной версии.
+const (
+	ErrOfCheck    = "check"
+	ErrOfDownload = "download"
+	ErrOfInstall  = "install"
+)
 
 // Ошибки для интерфейса (тексты — как были).
 var (
@@ -103,6 +112,7 @@ type Service struct {
 	done    int64
 	total   int64
 	err     string
+	errOf   string // операция, давшая err (ErrOf*)
 	just    string
 	failed  string
 	cancel  context.CancelFunc // идущая проверка или скачивание
@@ -143,7 +153,7 @@ func (s *Service) snap() Info {
 }
 
 func (s *Service) snapLocked(u prefs.Update) Info {
-	info := Info{Phase: s.phase, Notes: []string{}, Done: s.done, Total: s.total, Error: s.err,
+	info := Info{Phase: s.phase, Notes: []string{}, Done: s.done, Total: s.total, Error: s.err, ErrorOf: s.errOf,
 		AtStart: !u.Off, Checked: u.Checked}
 	if info.Phase == "" {
 		info.Phase = phaseIdle
@@ -209,7 +219,7 @@ func (s *Service) begin(phase string) (context.Context, bool) {
 	ctx, cancel := context.WithCancel(s.h.StopCtx())
 	s.busy, s.cancel = true, cancel
 	if phase != "" {
-		s.phase, s.err = phase, ""
+		s.phase, s.err, s.errOf = phase, "", ""
 	}
 	return ctx, true
 }
@@ -261,7 +271,7 @@ func (s *Service) check(silent bool) {
 	if err != nil {
 		log.Printf("обновление: проверка не удалась: %s", update.Detail(err))
 		if !silent {
-			s.fail(err)
+			s.fail(ErrOfCheck, err)
 		}
 		return
 	}
@@ -275,7 +285,7 @@ func (s *Service) check(silent bool) {
 		log.Printf("обновление: подписанный файл старее виденной версии — отклонён")
 	}
 	s.mu.Lock()
-	s.offer, s.phase, s.err = res.Offer, phaseLatest, ""
+	s.offer, s.phase, s.err, s.errOf = res.Offer, phaseLatest, "", ""
 	if res.Offer != nil {
 		s.phase = phaseAvailable
 	}
@@ -289,8 +299,8 @@ func (s *Service) check(silent bool) {
 	}
 }
 
-// fail — фаза error с текстом ошибки; отмена — не ошибка (фаза возвращается к предложению).
-func (s *Service) fail(err error) {
+// fail — фаза error с текстом ошибки операции of (ErrOf*); отмена — не ошибка (фаза возвращается к предложению).
+func (s *Service) fail(of string, err error) {
 	s.mu.Lock()
 	if errors.Is(err, update.ErrCancelled) {
 		s.phase = phaseAvailable
@@ -298,7 +308,7 @@ func (s *Service) fail(err error) {
 			s.phase = phaseIdle
 		}
 	} else {
-		s.phase, s.err = phaseError, err.Error()
+		s.phase, s.err, s.errOf = phaseError, err.Error(), of
 	}
 	s.mu.Unlock()
 	s.emitState()
@@ -331,7 +341,7 @@ func (s *Service) Download() (info Info, err error) {
 	path, err := update.Fetch(ctx, c, *o, s.h.Dir(), s.h.Free, s.progress(o.Setup.Size))
 	if err != nil {
 		log.Printf("обновление: скачивание не удалось: %s", update.Detail(err))
-		s.fail(err)
+		s.fail(ErrOfDownload, err)
 		return s.snap(), nil
 	}
 	s.mu.Lock()
@@ -382,7 +392,7 @@ func (s *Service) Install() (err error) {
 	if err := update.Verify(path, *o.Setup); err != nil {
 		log.Printf("обновление: файл не прошёл повторную проверку: %s", update.Detail(err))
 		s.mu.Lock()
-		s.phase, s.err, s.path = phaseError, err.Error(), ""
+		s.phase, s.err, s.errOf, s.path = phaseError, err.Error(), ErrOfInstall, ""
 		s.mu.Unlock()
 		s.emitState()
 		return err

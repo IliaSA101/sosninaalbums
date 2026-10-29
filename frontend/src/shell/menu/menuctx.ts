@@ -14,6 +14,7 @@ import { anyVaries, varyTargets } from '../../panels/gallery/variants'
 import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
 import { isCover, isSheet, unitOf } from '../../base/geom/sheet'
 import { splitMissing } from '../../panels/library/missing'
+import { share } from '../share/share.svelte'
 import { buildMenu, enabledCmds, type MenuCtx } from './menu'
 import { spreadCmds, type SpreadCmds } from './spreadcmds'
 
@@ -67,6 +68,7 @@ export function menuCtx(): MenuCtx {
     collecting: !!jobs.collecting,
     sheetDoc: isSheet(store.view.settings),
     exporting: !!jobs.exporting,
+    sharing: share.sharing,
     big: modes.big,
     details: modes.details,
     safe: modes.safe,

@@ -172,6 +172,14 @@ if [ $run_go = 1 ]; then
   else
     step 'go test' node scripts/heavy.mjs node scripts/test-baseline.mjs --run-go --out "$go_json"
   fi
+  # 146 (да владельца 2026-10-29): модуль контракта api/albums — свой go.mod; корневые vet, test и lint его не видят.
+  if [ -f "$root/api/albums/go.mod" ]; then
+    api="$root/api/albums"
+    step 'api/albums: go vet' --dir "$api" go vet ./...
+    step 'api/albums: golangci-lint' --dir "$api" node "$root/scripts/heavy.mjs" "$(command -v golangci-lint)" run --allow-parallel-runners ./...
+    if [ $race = 1 ]; then step 'api/albums: go test -race' --dir "$api" env CGO_ENABLED=1 go test -race ./...
+    else step 'api/albums: go test' --dir "$api" go test ./...; fi
+  fi
 fi
 if [ $run_ui = 1 ]; then
   fe="$root/frontend"

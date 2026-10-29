@@ -83,6 +83,8 @@ export function CancelGuideVideos():Promise<void>;
 
 export function CancelLibrary():Promise<void>;
 
+export function CancelShare():Promise<void>;
+
 export function CancelUpdate():Promise<void>;
 
 export function CheckFolders(arg1:boolean):Promise<void>;
@@ -288,6 +290,8 @@ export function OpenPrintSite(arg1:string):Promise<void>;
 export function OpenProject():Promise<app.State>;
 
 export function OpenRecent(arg1:string):Promise<app.State>;
+
+export function OpenShare():Promise<void>;
 
 export function OpenUpdatePage():Promise<void>;
 
@@ -545,7 +549,23 @@ export function SetVignette(arg1:string,arg2:model.Vignette):Promise<app.GridRes
 
 export function SetupVignette(arg1:string,arg2:model.VigSetup):Promise<app.GridResult>;
 
+export function Share(arg1:app.ShareOptions):Promise<boolean>;
+
+export function ShareChange(arg1:app.ShareChange):Promise<app.ShareView>;
+
+export function ShareConnect(arg1:string,arg2:string):Promise<app.ShareView>;
+
+export function ShareForget():Promise<app.ShareView>;
+
+export function SharePassword():Promise<string>;
+
 export function SharePrintProfile(arg1:string):Promise<app.PrintShare>;
+
+export function ShareRevoke():Promise<app.ShareView>;
+
+export function ShareState():Promise<app.ShareView>;
+
+export function ShareText():Promise<string>;
 
 export function ShowBackups():Promise<void>;
 

@@ -94,6 +94,7 @@ same-size
 save
 settings
 shape
+share-link
 similar
 snap
 split

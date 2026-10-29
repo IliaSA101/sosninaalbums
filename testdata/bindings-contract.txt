@@ -35,6 +35,7 @@ method CancelCollect():Promise<void>
 method CancelExport():Promise<void>
 method CancelGuideVideos():Promise<void>
 method CancelLibrary():Promise<void>
+method CancelShare():Promise<void>
 method CancelUpdate():Promise<void>
 method CheckFolders(arg1:boolean):Promise<void>
 method CheckPrintProfile(arg1:APP.PrintEdit):Promise<APP.PrintEditCheck>
@@ -138,6 +139,7 @@ method OpenLink(arg1:string):Promise<void>
 method OpenPrintSite(arg1:string):Promise<void>
 method OpenProject():Promise<APP.State>
 method OpenRecent(arg1:string):Promise<APP.State>
+method OpenShare():Promise<void>
 method OpenUpdatePage():Promise<void>
 method PackItem(arg1:string,arg2:string,arg3:string):Promise<APP.DecorItem>
 method PagePresets():Promise<Array<model.PagePreset>>
@@ -266,7 +268,15 @@ method SetTour(arg1:string,arg2:string):Promise<prefs.Prefs>
 method SetUpdateCheck(arg1:boolean):Promise<APP.UpdateInfo>
 method SetVignette(arg1:string,arg2:model.Vignette):Promise<APP.GridResult>
 method SetupVignette(arg1:string,arg2:model.VigSetup):Promise<APP.GridResult>
+method Share(arg1:APP.ShareOptions):Promise<boolean>
+method ShareChange(arg1:APP.ShareChange):Promise<APP.ShareView>
+method ShareConnect(arg1:string,arg2:string):Promise<APP.ShareView>
+method ShareForget():Promise<APP.ShareView>
+method SharePassword():Promise<string>
 method SharePrintProfile(arg1:string):Promise<APP.PrintShare>
+method ShareRevoke():Promise<APP.ShareView>
+method ShareState():Promise<APP.ShareView>
+method ShareText():Promise<string>
 method ShowBackups():Promise<void>
 method ShowCollected():Promise<void>
 method ShowDataFolder():Promise<void>
@@ -653,6 +663,41 @@ type APP.RelinkResult
   found: number
   missing: number
   ambiguous: number
+type APP.ShareAlbum
+  block: string
+  save: boolean
+  title: string
+  pages: number
+  bytes: number
+type APP.ShareChange
+  days: number
+  setPassword: boolean
+  password: string
+type APP.ShareLink
+  state: string
+  url: string
+  title: string
+  password: string
+  expiresAt: string
+  until: string
+  host: string
+  published: string
+type APP.ShareOptions
+  title: string
+  password: string
+  days: number
+type APP.ShareService
+  host: string
+  url: string
+  token: boolean
+  store: string
+  days: number
+type APP.ShareView
+  service: ShareService
+  album: ShareAlbum
+  link?: ShareLink
+  busy: boolean
+  busyOther: boolean
 type APP.SigState
   done: number
   total: number
@@ -705,6 +750,7 @@ type APP.UpdateInfo
   done: number
   total: number
   error: string
+  errorOf: string
   atStart: boolean
   checked: number
   just: string

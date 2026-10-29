@@ -71,6 +71,7 @@ export const PART_A: Article[] = [
     words: 'выгрузка сохранить jpeg джипег печать типография файлы папка диапазон остановить отменить прервать ход',
     keys: ['export'],
     menu: ['showExport'],
+    see: ['share-link'],
     spots: [
       { label: 'Показать «Экспорт…»', spot: 'menu:export' },
       { label: 'Показать в шапке', spot: 'ui:topbar-export' },

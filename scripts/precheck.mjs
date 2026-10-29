@@ -138,7 +138,19 @@ const step = (name, fn) => {
 const res = (r, emptyOut = false) => ({ ok: r.code === 0 && !(emptyOut && r.out.trim()), out: r.out })
 
 // ---- Go ----
-const goFiles = changed.filter((f) => f.endsWith('.go'))
+// 146 (да владельца 2026-10-29): модуль контракта api/albums — свой go.mod. Его пакеты корневой go test
+// не находит («main module does not contain package»), поэтому они идут отдельными шагами из папки модуля.
+const API_MOD = 'api/albums'
+const allGo = changed.filter((f) => f.endsWith('.go'))
+const apiGoFiles = allGo.filter((f) => f.startsWith(`${API_MOD}/`))
+const goFiles = allGo.filter((f) => !f.startsWith(`${API_MOD}/`))
+// golangci-lint ставится через go install — может не быть в PATH
+const gclExe = () => {
+  const gcl = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['golangci-lint'], { encoding: 'utf8' })
+  if (gcl.status === 0) return gcl.stdout.split('\n')[0].trim()
+  const gp = run('go', ['env', 'GOPATH']).out.trim()
+  return path.join(gp, 'bin', process.platform === 'win32' ? 'golangci-lint.exe' : 'golangci-lint')
+}
 // Go и фронт не зависят друг от друга: фронт идёт дочерним процессом, пока Go занят (вывод — в файл, а не в pipe)
 let feJob = null
 if (part === '' && goFiles.length && (fe.length || feShared.length)) {
@@ -215,12 +227,7 @@ if (part !== 'fe' && goFiles.length) {
   }
   step('golangci-lint', () => {
     if (!pkgs.length) return res({ code: 0, out: '' })
-    const gcl = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['golangci-lint'], { encoding: 'utf8' })
-    let exe = gcl.status === 0 ? gcl.stdout.split('\n')[0].trim() : ''
-    if (!exe) {
-      const gp = run('go', ['env', 'GOPATH']).out.trim()
-      exe = path.join(gp, 'bin', process.platform === 'win32' ? 'golangci-lint.exe' : 'golangci-lint')
-    }
+    const exe = gclExe()
     const heavy = (...args) => run('node', ['scripts/heavy.mjs', exe, 'run', '--allow-parallel-runners', ...args, ...pkgs])
     const fresh = heavy(`--new-from-rev=${base}`)
     // Линтеры «на функцию» (funlen, gocognit) ставят замечание на заголовок: выросло тело старой функции —
@@ -237,6 +244,17 @@ if (part !== 'fe' && goFiles.length) {
     const outs = [fresh.out, perFunc.out, win.code ? `GOOS=windows:\n${win.out}` : '']
     return res({ code: fresh.code || perFunc.code || win.code, out: outs.filter((o) => o.trim()).join('\n') })
   })
+}
+// Модуль api/albums целиком (он мал): конфиг линтера — корневой, golangci-lint ищет его вверх от папки
+if (part !== 'fe' && apiGoFiles.length && fs.existsSync(path.join(root, API_MOD, 'go.mod'))) {
+  const cwd = path.join(root, API_MOD)
+  const heavy = path.join(root, 'scripts', 'heavy.mjs')
+  step('gofmt api/albums', () => res(run('gofmt', ['-l', ...apiGoFiles]), true))
+  step('go vet api/albums', () => res(run('go', ['vet', './...'], { cwd })))
+  step('go test -short api/albums', () => res(run('go', ['test', '-short', './...'], { cwd })))
+  step('golangci-lint api/albums', () =>
+    res(run('node', [heavy, gclExe(), 'run', '--allow-parallel-runners', './...'], { cwd })),
+  )
 }
 
 // ---- Фронт ----

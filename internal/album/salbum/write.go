@@ -45,11 +45,15 @@ func Encode(p *model.Project, base string) ([]byte, error) {
 	return encodeWith(p, p.Loaded(), encFor(base, false))
 }
 
-// encodeWith — файл проекта, свои отметки и подборки side; пути — по enc.
+// encodeWith — файл проекта, свои отметки и подборки side; пути — по enc. Печать отпечатка —
+// p.UIDAt() как есть: ставит её только выдача отпечатка (album/editor_uid.go, collect.Save), запись
+// по другому пути её не меняет (146 T4-9).
 func encodeWith(p *model.Project, side model.Side, enc pathEnc) ([]byte, error) {
 	f := FileProject{
 		Version:  model.FormatVersion,
 		App:      appField(curApp()),
+		UID:      p.UID,
+		UIDAt:    sealOf(p),
 		Product:  model.NormProduct(p.Product),
 		Folders:  make([]FileFolder, 0, len(p.Folders)),
 		Settings: p.Settings,
@@ -117,6 +121,14 @@ func WriteRel(p *model.Project, path, base string, side model.Side) error {
 		return fmt.Errorf("запись с относительными путями без папки альбома")
 	}
 	return writeEnc(p, path, side, encFor(base, true))
+}
+
+// sealOf — печать для записи: только при годных отпечатке и печати (без отпечатка она ничья).
+func sealOf(p *model.Project) string {
+	if !model.GoodUID(p.UID) || !model.GoodUIDTag(p.UIDAt()) {
+		return ""
+	}
+	return p.UIDAt()
 }
 
 func writeEnc(p *model.Project, path string, side model.Side, enc pathEnc) error {

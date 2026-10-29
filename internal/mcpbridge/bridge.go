@@ -12,6 +12,8 @@ import (
 	"io"
 	"net"
 	"time"
+
+	"github.com/IliaSA101/sosninaalbums/internal/peercred"
 )
 
 // Пределы и сроки по умолчанию; тесты подменяют через config.
@@ -32,10 +34,12 @@ type config struct {
 	maxOut     int
 	probeEvery time.Duration
 	replayWait time.Duration
+	// peer — чья учётная запись на другом конце сокета (148, design §4); тесты подменяют.
+	peer func(net.Conn) (bool, error)
 }
 
 func defaultConfig(socks []string) config {
-	return config{socks: socks, maxIn: maxFromClient, maxOut: maxFromProgram, probeEvery: probeEvery, replayWait: replayWait}
+	return config{socks: socks, maxIn: maxFromClient, maxOut: maxFromProgram, probeEvery: probeEvery, replayWait: replayWait, peer: peercred.Same}
 }
 
 // Run — тело `--mcp`: код выхода процесса. EOF stdin — закрыть сокет и выйти с 0.

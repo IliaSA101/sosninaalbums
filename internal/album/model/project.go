@@ -247,11 +247,16 @@ type Project struct {
 	AlbumBg *AlbumBg `json:"albumBg,omitempty"`
 	// Look — макет альбома (131, lookref.go): ключ и где его искать; nil — альбом не по макету.
 	Look *LookRef `json:"look,omitempty"`
+	// UID — отпечаток проекта (146, uid.go): живёт в снимках отмены, чтобы Ctrl+Z после
+	// восстановления чужой копии вернул и прежний отпечаток. Выдаёт и меняет только Editor.
+	UID string `json:"uid,omitempty"`
 	// from — версия файла, из которого прочитан проект (0 — новый): по ней
 	// Editor решает, нужен ли бэкап перед первой записью.
 	from int
 	// loaded — свои отметки и подборки из файла: NewEditor копирует их себе (JSON их не несёт).
 	loaded Side
+	// uidAt — печать отпечатка из файла (uid.go, UIDAt): JSON её не несёт.
+	uidAt string
 }
 
 // Доступы к from и loaded: полем их не экспортировать — попали бы в JSON снимков отмены

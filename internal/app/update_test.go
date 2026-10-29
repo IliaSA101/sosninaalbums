@@ -313,7 +313,7 @@ func TestInstallRehash(t *testing.T) {
 	if len(r.starts) != 0 || r.quits.Load() != 0 || prefs.UpdateOf(a.cfgDir).Pending != "" {
 		t.Errorf("после отказа: запусков %d, выходов %d, pending %q", len(r.starts), r.quits.Load(), prefs.UpdateOf(a.cfgDir).Pending)
 	}
-	if info := a.UpdateInfo(); info.Phase != "error" || info.Error == "" {
+	if info := a.UpdateInfo(); info.Phase != "error" || info.Error == "" || info.ErrorOf != updater.ErrOfInstall {
 		t.Errorf("фаза: %+v", info)
 	}
 }
@@ -342,7 +342,7 @@ func TestInstallStartFails(t *testing.T) {
 func TestUpdateCheckErrors(t *testing.T) {
 	r := newUpdApp(t) // манифеста нет — 404
 	info, err := r.a.CheckUpdate()
-	if err != nil || info.Phase != "error" || info.Error == "" || strings.Contains(info.Error, "127.0.0.1") || info.Checked != 0 {
+	if err != nil || info.Phase != "error" || info.Error == "" || info.ErrorOf != updater.ErrOfCheck || strings.Contains(info.Error, "127.0.0.1") || info.Checked != 0 {
 		t.Fatalf("кнопка: %v %+v", err, info)
 	}
 	if prefs.UpdateOf(r.a.cfgDir).Checked != 0 {
@@ -358,7 +358,7 @@ func TestUpdateCheckErrors(t *testing.T) {
 	}
 	// Повтор после ошибки работает: фаза выходит из error.
 	r.f.publish(t, "0.25.1", update.MinSetup, nil)
-	if info, _ := r.a.CheckUpdate(); info.Phase != "available" || info.Error != "" {
+	if info, _ := r.a.CheckUpdate(); info.Phase != "available" || info.Error != "" || info.ErrorOf != "" {
 		t.Errorf("повтор: %+v", info)
 	}
 	// Манифест с чужой подписью — «не прошло проверку».
@@ -447,7 +447,7 @@ func TestUpdateReuse(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, _ := q.a.DownloadUpdate()
-	if info.Phase != "error" || !strings.Contains(info.Error, "нужно 2 МБ") || q.f.setup.Load() != 0 {
+	if info.Phase != "error" || info.ErrorOf != updater.ErrOfDownload || !strings.Contains(info.Error, "нужно 2 МБ") || q.f.setup.Load() != 0 {
 		t.Errorf("мало места: %+v", info)
 	}
 }

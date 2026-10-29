@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { tick } from 'svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 
@@ -117,6 +118,15 @@ describe('включение доступа', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('«Выключить» — обычная кнопка окна, не ссылка (контраст на тёмной теме)', async () => {
+    await open(infoOn())
+    expect(btn('Выключить').classList.contains('link')).toBe(false)
+    cleanup()
+    agents.close()
+    await open(normInfo({ status: 'error', error: 'Не найдена папка данных' }))
+    expect(btn('Выключить').classList.contains('link')).toBe(false)
+  })
+
   it('выключено без ошибки — «Выключить» нет', async () => {
     await open()
     expect(noBtn('Выключить')).toBeNull()
@@ -204,6 +214,24 @@ describe('флажки уровней', () => {
 })
 
 describe('как подключить', () => {
+  it('настройка клиентов свёрнута (журнал виден без прокрутки); hint разворачивает её', async () => {
+    await open(infoOn())
+    const det = document.querySelector<HTMLDetailsElement>('details.setup')!
+    expect(det.open).toBe(false)
+    expect(det.querySelector('summary')!.textContent).toBe('Как подключить')
+    await fireEvent.click(det.querySelector('summary')!)
+    await waitFor(() => expect(det.open).toBe(true))
+    // События Go (подключение, вызов) не захлопывают раскрытый пользователем раздел
+    ev.on.get('agents:state')!(infoOn({ clients: [{ name: 'Claude Desktop', since: '2026-10-29T10:00:00Z' }] }))
+    ev.on.get('agents:call')!({ client: 'Claude Desktop', tool: 'get_album', ok: true, at: '2026-10-29T10:00:01Z', ms: 3, today: 1 })
+    await tick()
+    expect(det.open).toBe(true)
+    cleanup()
+    agents.close()
+    await open(infoOn({ hint: 'Путь к программе устарел' }))
+    expect(document.querySelector<HTMLDetailsElement>('details.setup')!.open).toBe(true)
+  })
+
   it('строка hint — над настройками; пустая — строки нет', async () => {
     await open(infoOn({ hint: 'Программа запущена из временной папки — путь в настройке устареет' }))
     const hint = screen.getByRole('note')

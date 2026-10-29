@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"runtime"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -24,7 +25,12 @@ type ExportOptions exporter.Options
 
 // Export собирает развороты по настройкам окна экспорта: спрашивает папку и пишет в фоне.
 // Ход работы приходит событиями export:progress и export:done; остановка — CancelExport.
-func (a *App) Export(o ExportOptions) (bool, error) { return a.exp.Export(exporter.Options(o)) }
+func (a *App) Export(o ExportOptions) (bool, error) {
+	if a.shr.Busy() { // экспорт и выгрузка по ссылке вместе не идут (146)
+		return false, errors.New("Сейчас идёт выгрузка по ссылке — дождитесь её конца") //nolint:revive,staticcheck // текст уходит пользователю тостом как есть
+	}
+	return a.exp.Export(exporter.Options(o))
+}
 
 // CancelExport — «Остановить»: текущий разворот прерывается (не дописывается), следующие не пишутся, прежние
 // файлы папки не удаляются. Экспорта нет — ничего.

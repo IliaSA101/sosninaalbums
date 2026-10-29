@@ -55,3 +55,10 @@ func trySetDACL(dir string, owner *windows.SID, ownMe bool, sddl string) error {
 	}
 	return windows.SetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT, info, owner, nil, dacl, nil)
 }
+
+// checkOnly — checkSock без удержания папки: для тестов, которым нужен только вердикт.
+func checkOnly(sock string) (bool, error) {
+	present, release, err := checkSock(sock)
+	release()
+	return present, err
+}

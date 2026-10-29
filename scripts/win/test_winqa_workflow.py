@@ -151,6 +151,54 @@ class WinQaWorkflow(unittest.TestCase):
         site = self.doc["jobs"]["videos-site"]
         self.assertIn("library-testvideos.mjs", " ".join(s.get("run", "") for s in steps(site)))
 
+    def test_replay_peercred_steps(self):
+        # 148: чужая учётная запись на Windows - создание пользователя, два разбора, удаление последним и всегда; run-блоки ASCII;
+        # пакет peercred входит в шаг -v; пароль скрыт add-mask и не печатается
+        rp = steps(self.doc["jobs"]["replay"])
+        names = [s.get("name", "") for s in rp]
+        idx = [i for i, n in enumerate(names) if n.startswith("peercred")]
+        self.assertEqual(len(idx), 4, names)
+        self.assertEqual(idx, list(range(idx[0], idx[0] + 4)))
+        create, foreign, elevated, cleanup = (rp[i] for i in idx)
+        self.assertEqual(idx[-1], len(rp) - 1)  # удаление - последним
+        for s in (create, foreign, elevated, cleanup):
+            self.assertEqual(s["if"], "always()", s["name"])
+            self.assertTrue(s["run"].isascii(), s["name"])
+        self.assertIn("::add-mask::$pw", create["run"])
+        self.assertIn("SA_PEER_FOREIGN=cred", create["run"])
+        self.assertLessEqual(len("Aa1!") + 10, 14)  # пароль до 14 знаков: длиннее net user спрашивает Y/N
+        self.assertRegex(create["run"], r"GetBytes\(\$b\)")
+        self.assertRegex(foreign["run"], r"peer-foreign\.mjs TestForeign TestForeignClient TestForeignServer$")
+        self.assertNotIn("--allow-skip", foreign["run"])  # пропуск - провал
+        # Г-в подтверждена (29.10, 148-11): пропуск TestElevatedServerWindows - тоже провал, PASS обязателен
+        self.assertNotIn("--allow-skip", elevated["run"])
+        for name in ("TestPeerPIDQuery", "TestElevatedServerWindows", "TestListenerHandoffWindows", "TestSelfProbeReal"):
+            self.assertRegex(elevated["run"], rf"'[^']*\b{name}\b[^']*' .*\b{name}\b", name)  # в шаблоне -run и в обязательных
+        self.assertIn("Remove-LocalUser", cleanup["run"])
+        self.assertIn("Win32_UserProfile", cleanup["run"])
+        verbose = [s for s in rp if "-v" in s.get("run", "") and "./internal/peercred" in s["run"]]
+        self.assertEqual(len(verbose), 1)
+        self.assertTrue(any(s.get("uses", "").startswith("actions/setup-node@") for s in rp))  # node для peer-foreign.mjs
+
+    def test_replay_mcp_dir_steps(self):
+        # 148-11: подтесты с точкой соединения (mklink /J) в CI не пропускаются; разбор - peer-foreign.mjs по своему пакету
+        rp = steps(self.doc["jobs"]["replay"])
+        found = {s["name"]: s for s in rp if s.get("name", "").startswith("mcp - ")}
+        self.assertEqual(len(found), 2, list(found))
+        for s in found.values():
+            self.assertEqual(s["if"], "always()", s["name"])
+            self.assertTrue(s["run"].isascii(), s["name"])
+            self.assertNotIn("--allow-skip", s["run"], s["name"])
+            self.assertIn("peer-foreign.mjs", s["run"], s["name"])
+        runs = " ".join(s["run"] for s in found.values())
+        self.assertIn("--pkg=./internal/app/agents", runs)
+        self.assertIn("--pkg=./internal/mcpbridge", runs)
+        for name in ("TestSocketDACL", "TestSocketDACLHandle", "TestSockDirHandleWindows", "TestSockDirHeldWindows", "TestBridgeHoldsDirDuringPeerWindows", "TestSockDirWindows"):
+            self.assertIn(name, runs)
+        names = [s.get("name", "") for s in rp]
+        self.assertLess(max(names.index(n) for n in found), names.index("peercred - создать пользователя qapeer"))
+        self.assertTrue(any(s.get("uses", "").startswith("actions/setup-node@") for s in rp[: names.index(list(found)[0])]))  # node до разбора
+
     def test_scenario_step_timeout_below_job(self):
         # шаг сценария должен кончиться раньше задания, чтобы сводка и выгрузка артефактов успели (сторож 118)
         sc = self.doc["jobs"]["scenario"]
@@ -162,6 +210,36 @@ class WinQaWorkflow(unittest.TestCase):
     def test_scripts_exist(self):
         for rel in re.findall(r"scripts[/\\]win[/\\][\w./\\-]+\.(?:ps1|sh|py)", self.text):
             self.assertTrue(os.path.isfile(os.path.join(ROOT, rel.replace("\\", "/"))), rel)
+
+
+CI = os.path.join(ROOT, ".github", "workflows", "ci.yml")
+
+
+@unittest.skipUnless(yaml is not None or os.environ.get("CI"), "нужен PyYAML (pip install -r scripts/win/requirements.txt)")
+@unittest.skipUnless(os.path.isfile(CI), "нет .github/workflows/ci.yml")
+class CiPeercred(unittest.TestCase):
+    """148: чужая учётная запись на Linux и macOS - отдельный шаг с SA_PEER_FOREIGN=sudo и разбором peer-foreign.mjs."""
+
+    def setUp(self):
+        self.assertIsNotNone(yaml, "в CI PyYAML обязателен")
+        with open(CI, encoding="utf-8") as f:
+            self.jobs = yaml.safe_load(f)["jobs"]
+
+    def test_linux_and_mac_foreign_steps(self):
+        for job in ("go-linux", "go-mac"):
+            found = [s for s in steps(self.jobs[job]) if "peer-foreign.mjs" in s.get("run", "")]
+            self.assertEqual(len(found), 1, job)
+            self.assertEqual(found[0]["env"]["SA_PEER_FOREIGN"], "sudo", job)
+            self.assertIn("TestForeignClient TestForeignServer", found[0]["run"], job)
+            self.assertNotIn("--allow-skip", found[0]["run"], job)
+            self.assertNotIn("continue-on-error", found[0], job)
+        mac_v = [s for s in steps(self.jobs["go-mac"]) if "-v" in s.get("run", "") and "./internal/peercred" in s["run"]]
+        self.assertEqual(len(mac_v), 1)  # peercred в блокирующем шаге macOS
+        self.assertNotIn("continue-on-error", mac_v[0])
+
+    def test_linux_step_after_go_test(self):
+        names = [s.get("name", "") for s in steps(self.jobs["go-linux"])]
+        self.assertLess(names.index("go test"), [i for i, n in enumerate(names) if n.startswith("peercred")][0])
 
 
 class ClickModes(unittest.TestCase):

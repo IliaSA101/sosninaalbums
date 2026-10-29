@@ -128,9 +128,10 @@ func albumSetup(t *testing.T) (base string) {
 
 // wantTail — копии, кадры и фон альбома после чтения проекта из папки base: то же, что записано
 // в голдене, с ID по путям.
-func wantTail(t *testing.T, p *model.Project, base string) {
+func wantTail(t *testing.T, p *model.Project, base, uid string) {
 	t.Helper()
 	want := copiesGolden(base, library.IDFor)
+	want.UID = uid                   // отпечаток (146 T4-9): в голдене v17 его нет, после Save → Load — записанный
 	for id, r := range want.Photos { // путь своего — от искателя
 		if r.Lib != "" {
 			r.Path = p.Photos[id].Path
@@ -190,7 +191,7 @@ func TestCopiesGoldenV17(t *testing.T) {
 	if p.Version != model.FormatVersion || edtest.From(p) != 17 {
 		t.Fatalf("версия %d, from %d", p.Version, edtest.From(p))
 	}
-	wantTail(t, p, base)
+	wantTail(t, p, base, "")
 	out, err := salbum.Encode(p, base)
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +238,7 @@ func TestCopiesGoldenV17(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantTail(t, m, moved)
+	wantTail(t, m, moved, p.UID)
 	if err := edtest.SourcesInvariant(m); err != nil {
 		t.Fatal(err)
 	}

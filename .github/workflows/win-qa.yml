@@ -134,7 +134,67 @@ jobs:
       # always - независимо от реплея.
       - name: go test agents и mcpbridge (канал и посредник)
         if: always()
-        run: go test ./internal/app/agents ./internal/mcpbridge ./internal/osx -count=1 -v
+        run: go test ./internal/app/agents ./internal/mcpbridge ./internal/osx ./internal/peercred -count=1 -v
+
+      # 148: проверка чужой учётной записи (internal/peercred) по-настоящему. Node - версия как в ci.yml: разбор вывода
+      # go test делает scripts/peer-foreign.mjs (пропуск и отсутствие PASS - провал). Шаги ниже - always: независимо от прежних.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: always()
+        with:
+          node-version: "24.11.1"
+
+      # Папка mcp по дескриптору (148-6, 148-11): подтесты с точкой соединения пропускаются, если mklink /J не удалась, -
+      # в CI это провал (иначе подмена предка осталась бы непроверенной). Шаблон подтеста ASCII (\x{...} = "вместо"), run-блоки ASCII.
+      - name: mcp - дескриптор папки agents (TestSocketDACL, TestSocketDACLHandle)
+        if: always()
+        run: node scripts/peer-foreign.mjs '^(TestSocketDACL|TestSocketDACLHandle)$' TestSocketDACL TestSocketDACLHandle --pkg=./internal/app/agents
+
+      - name: mcp - дескриптор папки mcpbridge (TestSockDirHeldWindows, TestBridgeHoldsDirDuringPeerWindows)
+        if: always()
+        run: node scripts/peer-foreign.mjs 'TestSockDirHandleWindows|TestSockDirHeldWindows|TestBridgeHoldsDirDuringPeerWindows|TestSockDirWindows/\x{0432}\x{043c}\x{0435}\x{0441}\x{0442}\x{043e}' TestSockDirHandleWindows TestSockDirHeldWindows TestBridgeHoldsDirDuringPeerWindows TestSockDirWindows --pkg=./internal/mcpbridge
+
+      # Локальный qapeer: пароль случайный до 14 знаков (длиннее - вопрос Y/N у net user; образец agents_exe.py), в журнале скрыт.
+      - name: peercred - создать пользователя qapeer
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $b = New-Object byte[] 5
+          [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+          $pw = 'Aa1!' + (($b | ForEach-Object { $_.ToString('x2') }) -join '')
+          Write-Output "::add-mask::$pw"
+          New-LocalUser -Name qapeer -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -AccountNeverExpires -PasswordNeverExpires | Out-Null
+          # group Users by SID (the name depends on the OS language): without it the account cannot log on
+          if (-not (Get-LocalGroupMember -SID S-1-5-32-545 | Where-Object { $_.Name -like '*\qapeer' })) { Add-LocalGroupMember -SID S-1-5-32-545 -Member qapeer }
+          Add-Content -Path $env:GITHUB_ENV -Value 'SA_PEER_FOREIGN=cred', 'SA_PEER_USER=qapeer', "SA_PEER_PASS=$pw"
+
+      - name: peercred - чужая учётная запись (TestForeignClient, TestForeignServer)
+        if: always()
+        run: node scripts/peer-foreign.mjs TestForeign TestForeignClient TestForeignServer
+
+      # Г-в и Г-б (design §5): процесс от администратора (раннер) и помощник с урезанным токеном (runas /trustlevel:0x20000);
+      # в журнале - итог по шагам (getpeerpid, openprocess, token) и errno запроса PID. Г-в подтверждена (29.10): пропуск и
+      # отсутствие PASS - провал, без --allow-skip. TestListenerHandoffWindows - гипотеза аудита 148-11 (PID фиксируется при listen).
+      - name: peercred - администратор, передача сокета, проба (TestElevatedServerWindows)
+        if: always()
+        run: node scripts/peer-foreign.mjs 'TestPeerPIDQuery|TestElevatedServerWindows|TestListenerHandoffWindows|TestSelfProbeReal' TestPeerPIDQuery TestElevatedServerWindows TestListenerHandoffWindows TestSelfProbeReal
+
+      - name: peercred - удалить qapeer и профиль
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bad = $false
+          # profile first (while the account exists); it unloads not at once after the helper exits: up to 5 tries
+          for ($i = 1; $i -le 5; $i++) {
+            Get-CimInstance Win32_UserProfile | Where-Object { $_.LocalPath -like 'C:\Users\qapeer*' } | Remove-CimInstance -ErrorAction SilentlyContinue
+            if (-not (Test-Path 'C:\Users\qapeer*')) { break }
+            Start-Sleep -Seconds 2
+          }
+          if (Test-Path 'C:\Users\qapeer*') { Write-Output 'profile qapeer was not removed'; $bad = $true }
+          if (Get-LocalUser -Name qapeer -ErrorAction SilentlyContinue) { Remove-LocalUser -Name qapeer }
+          if (Get-LocalUser -Name qapeer -ErrorAction SilentlyContinue) { Write-Output 'user qapeer was not removed'; $bad = $true }
+          if ($bad) { exit 1 }
 
   kit:
     name: Набор qa-kit

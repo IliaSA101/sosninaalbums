@@ -8,6 +8,8 @@ import type { Zone } from '../../editor/places/groupsel'
 import { ALL_LEVELS, LEVEL_TITLE, type FeatureId, type Level } from '../../base/prefs/levels'
 import { recentName } from '../dialogs/recent'
 import { AGENTS_MENU } from '../agents/agentstext'
+import { SHARE_MENU } from '../share/sharetext'
+import { shareShut } from '../share/share'
 import type { RecentProject } from '../../base/core/types'
 import type { IconName } from '../../base/ui/Icon.svelte'
 import { ACTS, GROUP_ICON } from '../../editor/photomenu/photoacts'
@@ -50,6 +52,7 @@ export interface MenuCtx {
   recent?: readonly RecentProject[] // последние альбомы; не заданы — список пуст
   level?: Level // текущий уровень: галочка в «Вид ▸ Уровень»; не задан — «Полный»
   spreads: number // разворотов в альбоме
+  sharing?: boolean // идёт своя выгрузка по ссылке (146): «Отправить по ссылке…» открывает окно хода
   exporting?: boolean // выгрузка идёт: «Экспорт…» открывает окно хода, даже если листов не осталось (073)
   hasSpread: boolean // есть текущий разворот
   canUndo: boolean
@@ -89,10 +92,10 @@ export interface MenuCtx {
 }
 
 // Id команды каталога для пункта: align с параметром — отдельные alignLeft…alignDistV (074-7);
-// команды с путём или опорой (openRecent, clearRecent, alignTo) клавиши не имеют.
+// команды с путём или опорой (openRecent, clearRecent, alignTo) клавиши не имеют; share (146) — вне каталога Go, пока владелец не просил клавишу.
 export function keyId(cmd: Command, arg?: string): string | undefined {
   if (cmd === 'align') return arg ? 'align' + arg[0].toUpperCase() + arg.slice(1) : undefined
-  return cmd === 'alignTo' || cmd === 'openRecent' || cmd === 'clearRecent' ? undefined : cmd
+  return cmd === 'alignTo' || cmd === 'openRecent' || cmd === 'clearRecent' || cmd === 'share' ? undefined : cmd
 }
 
 // Клавиша команды для подписи пункта: первая из действующих (в том числе своя).
@@ -260,6 +263,8 @@ function fileSpecs(c: MenuCtx): Spec[][] {
     ],
     [
       { id: 'export', label: 'Экспорт…', cmd: 'export', disabled: c.spreads === 0 && !c.exporting },
+      // 146: ссылка на альбом для клиента; без разворотов и у листа-виньетки (031) серая, как «Экспорт…» без листов
+      { id: 'share', label: SHARE_MENU, cmd: 'share', disabled: shareShut(c.spreads, !!c.sheetDoc, !!c.sharing) },
       { id: 'showExport', label: 'Открыть папку экспорта', cmd: 'showExport' },
     ],
     [{ id: 'settings', label: 'Настройки альбома…', cmd: 'settings' }],

@@ -314,10 +314,14 @@ func foldMode(s model.Settings) string {
 	return "wide"
 }
 
-// albumName — имя альбома по файлу: без папки и расширения; файла нет — «Без названия».
+// unnamedAlbum — имя альбома без файла: так же его зовёт интерфейс (collect.ts, folderStub) и
+// так отвечает уровень 1; на уровнях 2–3 больше нет второго слова для безымянного (0.31-tails-3).
+const unnamedAlbum = "Альбом"
+
+// albumName — имя альбома по файлу: без папки и расширения; файла нет — «Альбом».
 func albumName(path string) string {
 	if path == "" {
-		return "Без названия"
+		return unnamedAlbum
 	}
 	b := filepath.Base(path)
 	return strings.TrimSuffix(b, filepath.Ext(b))
@@ -350,7 +354,7 @@ func (c *call) getAlbum() (albumOut, error) {
 	pg := s.Page() // ширина страницы — через Geo (TestPageWReaders), не PageW разворота
 	out := albumOut{
 		meta: c.metaOf(v, ed), Program: programOut{Version: c.s.h.Version(), Level: c.level},
-		Name: "Альбом", Saved: v.Path != "", Dirty: v.Dirty, Product: "album",
+		Name: unnamedAlbum, Saved: v.Path != "", Dirty: v.Dirty, Product: "album",
 		Page: pageOut{W: pg.W, H: pg.H, DPI: s.DPI, Margin: s.Margin, Gap: s.Gap, Safe: s.Safe, Bleed: s.Bleed, Crop: s.Crop, Fold: foldMode(s)},
 		Counts: countsOut{Spreads: len(v.Spreads), PhotosUsed: len(used), PhotosTotal: len(photos), Unused: unused,
 			Missing: len(missing), Unreadable: len(unread), EmptyPlaces: v.EmptyPlaces, LowDPI: v.LowDPI, Drafts: v.Drafts, Bins: len(v.Bins)},

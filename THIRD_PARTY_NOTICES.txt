@@ -19,17 +19,19 @@ GPL-3.0-only) с дополнительным условием по п. 7(b) —
   5. Прочее (системные библиотеки)
   6. Тексты лицензий
 
-1. Go-модули в исполняемом файле (33)
+1. Go-модули в исполняемом файле (36)
 -------------------------------------------
 Модуль без пометки входит во все три сборки (Windows, macOS, Linux).
 git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 (MIT) — только Windows
 github.com/bep/debounce v1.2.1 (MIT) — только Windows
+github.com/danieljoos/wincred v1.2.3 (MIT) — только Windows
 github.com/disintegration/imaging v1.6.2 (MIT)
 github.com/gabriel-vasile/mimetype v1.4.16 (MIT)
 github.com/go-ole/go-ole v1.3.0 (MIT) — только Windows
-github.com/godbus/dbus/v5 v5.1.0 (BSD-2-Clause) — только Linux
+github.com/godbus/dbus/v5 v5.2.2 (BSD-2-Clause) — только Linux
 github.com/google/jsonschema-go v0.4.3 (MIT)
 github.com/google/uuid v1.6.0 (BSD-3-Clause) — только Windows
+github.com/IliaSA101/sosninaalbums/api/albums v0.0.0 (Apache-2.0)
 github.com/leaanthony/go-ansi-parser v1.6.1 (MIT)
 github.com/leaanthony/slicer v1.6.0 (MIT)
 github.com/leaanthony/u v1.1.1 (MIT)
@@ -47,6 +49,7 @@ github.com/wailsapp/go-webview2 v1.0.22 (MIT) — только Windows
 github.com/wailsapp/wails/v2 v2.17.0 (Apache-2.0)
 github.com/wailsapp/wails/v2 v2.17.0 (MIT)
 github.com/yosida95/uritemplate/v3 v3.0.2 (BSD-3-Clause)
+github.com/zalando/go-keyring v0.2.8 (MIT)
 golang.org/x/image v0.47.0 (BSD-3-Clause)
 golang.org/x/net v0.62.0 (BSD-3-Clause)
 golang.org/x/oauth2 v0.35.0 (BSD-3-Clause)
@@ -381,6 +384,33 @@ SOFTWARE.
 
 === Лицензия 3: MIT ===
 Применяется к:
+  - github.com/danieljoos/wincred v1.2.3
+
+The MIT License (MIT)
+
+Copyright (c) 2014 Daniel Joos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+=== Лицензия 4: MIT ===
+Применяется к:
   - github.com/disintegration/imaging v1.6.2
 
 The MIT License (MIT)
@@ -406,7 +436,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 4: MIT ===
+=== Лицензия 5: MIT ===
 Применяется к:
   - github.com/gabriel-vasile/mimetype v1.4.16
 
@@ -433,7 +463,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 5: MIT ===
+=== Лицензия 6: MIT ===
 Применяется к:
   - github.com/go-ole/go-ole v1.3.0
 
@@ -460,9 +490,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 6: BSD-2-Clause ===
+=== Лицензия 7: BSD-2-Clause ===
 Применяется к:
-  - github.com/godbus/dbus/v5 v5.1.0
+  - github.com/godbus/dbus/v5 v5.2.2
 
 Copyright (c) 2013, Georg Reinke (<guelfey at gmail dot com>), Google
 All rights reserved.
@@ -491,7 +521,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 7: MIT ===
+=== Лицензия 8: MIT ===
 Применяется к:
   - github.com/google/jsonschema-go v0.4.3
 
@@ -518,7 +548,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 8: BSD-3-Clause ===
+=== Лицензия 9: BSD-3-Clause ===
 Применяется к:
   - github.com/google/uuid v1.6.0
 
@@ -551,7 +581,203 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 9: MIT ===
+=== Лицензия 10: Apache-2.0 ===
+Применяется к:
+  - github.com/IliaSA101/sosninaalbums/api/albums v0.0.0
+
+Apache License
+                           Version 2.0, January 2004
+                        https://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   Copyright 2026 Ilya Sosnin
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       https://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+
+=== Лицензия 11: MIT ===
 Применяется к:
   - github.com/leaanthony/go-ansi-parser v1.6.1
 
@@ -578,7 +804,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 10: MIT ===
+=== Лицензия 12: MIT ===
 Применяется к:
   - github.com/leaanthony/slicer v1.6.0
 
@@ -605,7 +831,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 11: MIT ===
+=== Лицензия 13: MIT ===
 Применяется к:
   - github.com/leaanthony/u v1.1.1
 
@@ -632,7 +858,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 12: Apache-2.0 + MIT ===
+=== Лицензия 14: Apache-2.0 + MIT ===
 Применяется к:
   - github.com/modelcontextprotocol/go-sdk v1.8.0
 
@@ -854,7 +1080,7 @@ CC-BY-4.0. See https://creativecommons.org/licenses/by/4.0/legalcode for
 the full license text.
 
 
-=== Лицензия 13: BSD-2-Clause ===
+=== Лицензия 15: BSD-2-Clause ===
 Применяется к:
   - github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 
@@ -883,7 +1109,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 14: BSD-2-Clause ===
+=== Лицензия 16: BSD-2-Clause ===
 Применяется к:
   - github.com/pkg/errors v0.9.1
 
@@ -912,7 +1138,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 15: MIT ===
+=== Лицензия 17: MIT ===
 Применяется к:
   - github.com/rivo/uniseg v0.4.7
 
@@ -939,7 +1165,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 16: MIT ===
+=== Лицензия 18: MIT ===
 Применяется к:
   - github.com/samber/lo v1.49.1
 
@@ -966,7 +1192,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 17: MIT ===
+=== Лицензия 19: MIT ===
 Применяется к:
   - github.com/segmentio/asm v1.1.3
 
@@ -993,7 +1219,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 18: MIT ===
+=== Лицензия 20: MIT ===
 Применяется к:
   - github.com/segmentio/encoding v0.5.4
 
@@ -1020,7 +1246,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 19: MIT ===
+=== Лицензия 21: MIT ===
 Применяется к:
   - github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 
@@ -1045,7 +1271,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-=== Лицензия 20: Apache-2.0 ===
+=== Лицензия 22: Apache-2.0 ===
 Применяется к:
   - github.com/tkrajina/go-reflector v0.5.8
 
@@ -1252,7 +1478,7 @@ Apache License
    limitations under the License.
 
 
-=== Лицензия 21: ISC ===
+=== Лицензия 23: ISC ===
 Применяется к:
   - github.com/wailsapp/go-webview2 v1.0.22
 
@@ -1274,7 +1500,7 @@ OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 
 
-=== Лицензия 22: MIT ===
+=== Лицензия 24: MIT ===
 Применяется к:
   - github.com/wailsapp/go-webview2 v1.0.22
 
@@ -1302,7 +1528,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 23: Apache-2.0 ===
+=== Лицензия 25: Apache-2.0 ===
 Применяется к:
   - github.com/wailsapp/wails/v2 v2.17.0
 
@@ -1509,7 +1735,7 @@ Apache License
    limitations under the License.
 
 
-=== Лицензия 24: MIT ===
+=== Лицензия 26: MIT ===
 Применяется к:
   - github.com/wailsapp/wails/v2 v2.17.0
 
@@ -1536,7 +1762,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 25: MIT ===
+=== Лицензия 27: MIT ===
 Применяется к:
   - github.com/wailsapp/wails/v2 v2.17.0
 
@@ -1563,7 +1789,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 26: MIT ===
+=== Лицензия 28: MIT ===
 Применяется к:
   - github.com/wailsapp/wails/v2 v2.17.0
 
@@ -1590,7 +1816,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 27: BSD-3-Clause ===
+=== Лицензия 29: BSD-3-Clause ===
 Применяется к:
   - github.com/yosida95/uritemplate/v3 v3.0.2
 
@@ -1621,7 +1847,61 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 28: BSD-3-Clause ===
+=== Лицензия 30: MIT ===
+Применяется к:
+  - github.com/zalando/go-keyring v0.2.8
+
+The MIT License (MIT)
+
+Copyright (c) 2016 Zalando SE
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+=== Лицензия 31: MIT ===
+Применяется к:
+  - github.com/zalando/go-keyring v0.2.8
+
+The MIT License (MIT)
+
+Copyright (c) 2016 Alessio Treglia
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+=== Лицензия 32: BSD-3-Clause ===
 Применяется к:
   - golang.org/x/image v0.47.0
   - golang.org/x/net v0.62.0
@@ -1661,7 +1941,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-=== Лицензия 29: MIT ===
+=== Лицензия 33: MIT ===
 Применяется к:
   - @jridgewell/gen-mapping 0.3.13
   - @jridgewell/remapping 2.3.5
@@ -1689,7 +1969,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 30: MIT ===
+=== Лицензия 34: MIT ===
 Применяется к:
   - @jridgewell/resolve-uri 3.1.2
 
@@ -1714,7 +1994,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 31: MIT ===
+=== Лицензия 35: MIT ===
 Применяется к:
   - @sveltejs/acorn-typescript 1.0.13
 
@@ -1742,7 +2022,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 32: MIT ===
+=== Лицензия 36: MIT ===
 Применяется к:
   - @types/estree 1.0.9
 
@@ -1769,7 +2049,7 @@ MIT License
     SOFTWARE
 
 
-=== Лицензия 33: MIT ===
+=== Лицензия 37: MIT ===
 Применяется к:
   - acorn 8.19.0
 
@@ -1796,7 +2076,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-=== Лицензия 34: Apache-2.0 ===
+=== Лицензия 38: Apache-2.0 ===
 Применяется к:
   - aria-query 5.3.1
   - axobject-query 4.1.0
@@ -2004,7 +2284,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-=== Лицензия 35: MIT ===
+=== Лицензия 39: MIT ===
 Применяется к:
   - clsx 2.1.1
 
@@ -2019,7 +2299,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 36: MIT ===
+=== Лицензия 40: MIT ===
 Применяется к:
   - devalue 5.9.4
 
@@ -2032,7 +2312,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 37: MIT ===
+=== Лицензия 41: MIT ===
 Применяется к:
   - esm-env 1.2.2
 
@@ -2045,7 +2325,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 38: MIT ===
+=== Лицензия 42: MIT ===
 Применяется к:
   - esrap 2.4.0
 
@@ -2058,7 +2338,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 39: MIT ===
+=== Лицензия 43: MIT ===
 Применяется к:
   - is-reference 3.0.3
   - locate-character 3.0.0
@@ -2074,7 +2354,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 40: MIT ===
+=== Лицензия 44: MIT ===
 Применяется к:
   - magic-string 0.30.21
 
@@ -2087,7 +2367,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 41: MIT ===
+=== Лицензия 45: MIT ===
 Применяется к:
   - svelte 5.57.2
 
@@ -2100,7 +2380,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-=== Лицензия 42: MIT ===
+=== Лицензия 46: MIT ===
 Применяется к:
   - zimmerframe 1.1.5
 
@@ -2127,7 +2407,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 43: MIT ===
+=== Лицензия 47: MIT ===
 Применяется к:
   - YuNet (face_detection_yunet_2023mar.onnx) 2023mar
 
@@ -2154,7 +2434,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-=== Лицензия 44: OFL-1.1 ===
+=== Лицензия 48: OFL-1.1 ===
 Применяется к:
   - Bad Script (шрифт)
   - Caveat (шрифт)

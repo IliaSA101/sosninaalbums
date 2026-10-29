@@ -87,8 +87,9 @@ type Service struct {
 
 	mu sync.Mutex // TryLock: вторая загрузка — ErrBusy, а не ожидание
 
-	netMu  sync.Mutex
-	cancel context.CancelFunc
+	netMu    sync.Mutex
+	cancel   context.CancelFunc
+	starting map[*start]struct{} // вошли в Download, begin ещё не прошёл
 
 	miss  atomic.Int64
 	slots chan struct{}
@@ -115,27 +116,57 @@ func (s *Service) dir() string {
 	return filepath.Clean(d)
 }
 
-// Cancel — «Отменить» и отзыв согласия: идущая загрузка обрывается.
+// start — загрузка, которая вошла в Download, но ещё не дошла до регистрации отмены в begin.
+type start struct{ cancelled bool }
+
+// Cancel — «Отменить» и отзыв согласия: идущая загрузка обрывается; ещё не начавшаяся (вошла в
+// Download, но не дошла до begin) тоже — иначе отмена в этом окне терялась и ролики качались.
 func (s *Service) Cancel() {
 	s.netMu.Lock()
 	defer s.netMu.Unlock()
+	for st := range s.starting {
+		st.cancelled = true
+	}
 	if s.cancel != nil {
 		s.cancel()
 	}
 }
 
+// arm ставит метку «загрузка начинается» в самом начале Download; снимает её возвращённая функция.
+// Метка только у вошедших вызовов: Cancel без загрузки ничего не помнит и следующую не заденет.
+func (s *Service) arm() (*start, func()) {
+	st := &start{}
+	s.netMu.Lock()
+	if s.starting == nil {
+		s.starting = map[*start]struct{}{}
+	}
+	s.starting[st] = struct{}{}
+	s.netMu.Unlock()
+	return st, func() {
+		s.netMu.Lock()
+		delete(s.starting, st)
+		s.netMu.Unlock()
+	}
+}
+
 // begin — контекст загрузки от StopCtx и повторная сверка согласия уже после регистрации отмены:
-// отзыв между первой проверкой и begin иначе не отменил бы ничего (security Н2).
-func (s *Service) begin() (context.Context, func(), error) {
+// отзыв между первой проверкой и begin иначе не отменил бы ничего (security Н2). Отмена, пришедшая
+// после arm, но до begin, видна в st.cancelled: загрузка не начинается (ErrCancelled).
+func (s *Service) begin(st *start) (context.Context, func(), error) {
 	ctx, cancel := context.WithCancel(s.h.StopCtx())
 	s.netMu.Lock()
 	s.cancel = cancel
+	was := st.cancelled
 	s.netMu.Unlock()
 	done := func() {
 		s.netMu.Lock()
 		s.cancel = nil
 		s.netMu.Unlock()
 		cancel()
+	}
+	if was {
+		done()
+		return nil, nil, ErrCancelled
 	}
 	if !s.h.Allowed() {
 		done()

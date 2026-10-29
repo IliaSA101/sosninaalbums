@@ -249,6 +249,9 @@ func (a *App) runCollect(ctx context.Context, cancel context.CancelFunc, j colle
 		if err == nil {
 			err = collect.Save(q, qm, j.album, j.pl)
 		}
+		if err == nil { // на путь легла собранная копия — другой проект: запись о ссылке прежнего не переходит (146, С1)
+			a.shr.OnSaved(j.album, true)
+		}
 	}
 	msg, note, stopped := collectOutcome(j.pl, copied, err, copyFailed)
 	if err != nil {

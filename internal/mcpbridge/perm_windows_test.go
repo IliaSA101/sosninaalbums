@@ -38,7 +38,7 @@ func TestSockDirWindows(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sock := newSock(t)
 			tc.mutate(t, filepath.Dir(sock))
-			if _, err := checkSock(sock); !errors.Is(err, errUnsafe) {
+			if _, err := checkOnly(sock); !errors.Is(err, errUnsafe) {
 				t.Fatalf("checkSock: %v, ждали errUnsafe", err)
 			}
 			h := startBridge(t, testCfg(sock))
@@ -57,14 +57,14 @@ func TestSockDirWindows(t *testing.T) {
 			t.Skipf("mklink /J не удалась: %v %s", err, out)
 		}
 		t.Cleanup(func() { _ = os.Remove(link) })
-		if _, err := checkSock(filepath.Join(link, "sock")); !errors.Is(err, errUnsafe) {
+		if _, err := checkOnly(filepath.Join(link, "sock")); !errors.Is(err, errUnsafe) {
 			t.Fatalf("checkSock через точку соединения: %v, ждали errUnsafe", err)
 		}
 	})
 
 	t.Run("годная папка: сокет найден", func(t *testing.T) {
 		sock := newSock(t)
-		if present, err := checkSock(sock); present || err != nil {
+		if present, err := checkOnly(sock); present || err != nil {
 			t.Fatalf("без сокета: present=%v err=%v", present, err)
 		}
 		ln, err := net.Listen("unix", sock)
@@ -72,7 +72,7 @@ func TestSockDirWindows(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = ln.Close() })
-		if present, err := checkSock(sock); !present || err != nil {
+		if present, err := checkOnly(sock); !present || err != nil {
 			t.Fatalf("с сокетом: present=%v err=%v", present, err)
 		}
 	})
@@ -82,7 +82,7 @@ func TestSockDirWindows(t *testing.T) {
 		if err := os.WriteFile(sock, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := checkSock(sock); !errors.Is(err, errUnsafe) {
+		if _, err := checkOnly(sock); !errors.Is(err, errUnsafe) {
 			t.Fatalf("файл вместо сокета: %v", err)
 		}
 	})

@@ -70,7 +70,7 @@ func run(out, dir, links string, n, per int) error {
 	if err != nil {
 		return err
 	}
-	if _, err := e.AddFolder(links); err != nil {
+	if _, _, err := e.AddFolder(links); err != nil {
 		return err
 	}
 	x := uint64(n*1000 + per)

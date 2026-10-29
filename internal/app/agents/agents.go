@@ -13,6 +13,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/peercred"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 )
 
@@ -77,6 +78,9 @@ type Options struct {
 	// OnCall — вызов агента записан в журнал (today — вызовов за сегодня); App шлёт agents:call.
 	// Зовётся из горутины обработчика, не под замками службы.
 	OnCall func(c Call, today int)
+	// Peer — сверка собеседника подключения (148): true — учётная запись ОС та же, что у программы.
+	// По умолчанию peercred.Same; тесты подменяют (глобальной переменной нет — гонок в -race тоже).
+	Peer func(net.Conn) (bool, error)
 	// Setup — доработка сервера до первого подключения: тесты и таблица инструментов (Г2).
 	Setup func(*mcp.Server)
 }
@@ -92,6 +96,9 @@ func (o Options) withDefaults() Options {
 	def(&o.InitTimeout, initTimeout)
 	def(&o.CloseWait, closeWait)
 	def(&o.CallTimeout, callTimeout)
+	if o.Peer == nil {
+		o.Peer = peercred.Same
+	}
 	if o.MaxCalls <= 0 {
 		o.MaxCalls = maxCalls
 	}
@@ -152,6 +159,9 @@ func (s *Service) start() error {
 	if running {
 		return nil
 	}
+	// Решение «ОС не умеет называть собеседника» — здесь, пробой на своей паре, а не по ответу
+	// на чужом подключении (0.32-148-11); результат у peercred.Same, строка в журнал — в admitted.
+	_ = peercred.Probe()
 	ln, err := s.open()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -233,6 +243,7 @@ func (s *Service) newRun(ln net.Listener) *run {
 	if s.o.Setup != nil {
 		s.o.Setup(r.srv)
 	}
+	r.srv.AddReceivingMiddleware(unknownTool)
 	r.srv.AddReceivingMiddleware(r.noteClient) // последним: внешний слой ловит и панику чужих слоёв
 	r.wg.Add(1)
 	go r.serve()

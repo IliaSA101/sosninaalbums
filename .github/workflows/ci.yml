@@ -61,6 +61,24 @@ jobs:
           SA_TEST_SLOW: "2.5"
         run: go test . ./internal/...
 
+      # 146 (да владельца 2026-10-29): модуль контракта api/albums — свой go.mod, корневые шаги его не видят
+      - name: api/albums (gofmt, vet, test)
+        if: hashFiles('api/albums/go.mod') != ''
+        working-directory: api/albums
+        shell: bash
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then echo "$out"; exit 1; fi
+          go vet ./...
+          go test ./...
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        if: hashFiles('api/albums/go.mod') != ''
+        with:
+          version: v2.14.0
+          working-directory: api/albums
+          args: ./...
+
       - name: prettier
         working-directory: frontend
         run: npx prettier --check .
@@ -121,6 +139,13 @@ jobs:
         # PACKPREP_CHROME: настоящий тест вырезов SVG (devtools/svgcut) в Chrome раннера, без него — пропуск (ревью 129, «да» владельца 25.10)
         run: PACKPREP_CHROME="$(command -v google-chrome)" go test -cover -json . ./internal/... > "$RUNNER_TEMP/go-test.json"
 
+      # 148: настоящая чужая учётная запись (sudo -n -u nobody без пароля на раннере). Пропуск в CI - провал, и без
+      # `--- PASS` обоих тестов тоже (при "no tests to run" go test выходит с 0): разбор - scripts/peer-foreign.mjs
+      - name: peercred, чужая учётная запись (nobody)
+        env:
+          SA_PEER_FOREIGN: sudo
+        run: node scripts/peer-foreign.mjs TestForeign TestForeignClient TestForeignServer
+
       # и после провала go test: test-baseline печатает упавшие тесты с хвостом вывода (24.10 - провал без единой строки)
       - name: сверка с эталоном go-linux
         if: ${{ !cancelled() }}
@@ -159,8 +184,14 @@ jobs:
         run: go vet . ./internal/...
 
       # С -v, чтобы в логе были видны PASS и SKIP каждого теста (как в win-qa.yml); отдельным шагом - до общего прогона
-      - name: go test agents, mcpbridge и osx (канал и посредник)
-        run: go test -count=1 -v ./internal/app/agents ./internal/mcpbridge ./internal/osx
+      - name: go test agents, mcpbridge, osx и peercred (канал, посредник, собеседник)
+        run: go test -count=1 -v ./internal/app/agents ./internal/mcpbridge ./internal/osx ./internal/peercred
+
+      # 148: чужая учётная запись на macOS (LOCAL_PEERCRED, nobody - uid -2); пропуск и "no tests to run" - провал
+      - name: peercred, чужая учётная запись (nobody)
+        env:
+          SA_PEER_FOREIGN: sudo
+        run: node scripts/peer-foreign.mjs TestForeign TestForeignClient TestForeignServer
 
       # -short: быстрый уровень (testkit.Lite); SA_TEST_SLOW - пороги времени с запасом на общий раннер.
       # Пока не блокирует (continue-on-error): на arm64 macOS расходятся эталоны пикселей и float (replay, golden export,
@@ -277,6 +308,11 @@ jobs:
       # Помощники e2e (отчёт, масштаб, крупные папки): stdlib, Playwright не нужен — драйвер импортирует его лениво
       - name: тесты помощников e2e
         run: python -I -m unittest discover -s scripts/e2e -v
+
+      # Сборка роликов README (102): Pillow из зависимостей guide, ffmpeg выше; тесты, которым нужны фото .testphotos
+      # или docs/qa (их нет в публичном дереве), пропускаются сами
+      - name: тесты сборки роликов README
+        run: python -I -m unittest discover -s scripts/demo -v
 
       # makensis ≥ 3.08 (в образе ubuntu есть в пакете nsis): тесты scripts/win при CI=true без него падают,
       # поэтому ставим раньше них

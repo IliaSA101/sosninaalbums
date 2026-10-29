@@ -44,6 +44,14 @@
   const info = $derived(agents.info)
   const names = $derived(agents.names)
 
+  // Раздел «Как подключить»: свёрнут; предупреждение (hint) раскрывает его. Состояние своё, не `open={…}`: Svelte переписал бы
+  // атрибут при каждом событии Go и захлопнул раскрытое пользователем.
+  let setupOpen = $state(false)
+  const hinted = $derived(!!info.hint)
+  $effect(() => {
+    if (hinted) setupOpen = true
+  })
+
   // Состояние флажка — у Go: до ответа (или вопроса) вид прежний.
   function flag(e: Event & { currentTarget: HTMLInputElement }, now: boolean, act: (on: boolean) => void) {
     const on = e.currentTarget.checked
@@ -61,7 +69,7 @@
           <div class="state" role="status">
             <b>{ON_TEXT}</b>
             <span class="grow"></span>
-            <button class="link" disabled={agents.busy} title={DISABLE_HINT} onclick={() => agents.disable()}>{DISABLE_LABEL}</button>
+            <button disabled={agents.busy} title={DISABLE_HINT} onclick={() => agents.disable()}>{DISABLE_LABEL}</button>
           </div>
         {:else}
           <p class="note">{OFF_TEXT}</p>
@@ -71,7 +79,7 @@
             <button disabled={agents.busy} onclick={() => agents.want('on')}>{ENABLE_LABEL}</button>
             {#if info.status === 'error'}
               <span class="grow"></span>
-              <button class="link" disabled={agents.busy} title={DISABLE_HINT} onclick={() => agents.disable()}>{DISABLE_LABEL}</button>
+              <button disabled={agents.busy} title={DISABLE_HINT} onclick={() => agents.disable()}>{DISABLE_LABEL}</button>
             {/if}
           </div>
         {/if}
@@ -98,28 +106,32 @@
             {SEE_PICS}
           </label>
 
-          <h3>{SETUP_TITLE}</h3>
-          {#if info.hint}<p class="hint" role="note">{info.hint}</p>{/if}
-          {#if info.setups.length > 0}
-            <p class="note">{SETUP_NOTE}</p>
-            <ul class="setups" aria-label={SETUP_TITLE}>
-              {#each info.setups as s (s.id)}
-                <li>
-                  <div class="head">
-                    <b>{s.title}</b>{#if s.note}<span class="meta">{s.note}</span>{/if}
-                  </div>
-                  <pre class="code">{s.text}</pre>
-                  <div class="row">
-                    <button class="ghost" onclick={() => agents.copy(s)}>{COPY_LABEL}</button>
-                    {#if s.file}
-                      <button class="ghost" title={SAVE_FILE_HINT} onclick={() => agents.saveFile()}>{SAVE_FILE_LABEL}</button>
-                    {/if}
-                  </div>
-                </li>
-              {/each}
-            </ul>
-            {#if info.portable}<p class="note">{PORTABLE_NOTE}</p>{/if}
-          {/if}
+          <!-- Настройка клиентов нужна один раз: свёрнута, чтобы журнал был виден без прокрутки (образец — «Дополнительно» в автосборке).
+               Предупреждение (путь к программе устарел) разворачивает её сразу: оно про подключение -->
+          <details class="setup" bind:open={setupOpen}>
+            <summary>{SETUP_TITLE}</summary>
+            {#if info.hint}<p class="hint" role="note">{info.hint}</p>{/if}
+            {#if info.setups.length > 0}
+              <p class="note">{SETUP_NOTE}</p>
+              <ul class="setups" aria-label={SETUP_TITLE}>
+                {#each info.setups as s (s.id)}
+                  <li>
+                    <div class="head">
+                      <b>{s.title}</b>{#if s.note}<span class="meta">{s.note}</span>{/if}
+                    </div>
+                    <pre class="code">{s.text}</pre>
+                    <div class="row">
+                      <button class="ghost" onclick={() => agents.copy(s)}>{COPY_LABEL}</button>
+                      {#if s.file}
+                        <button class="ghost" title={SAVE_FILE_HINT} onclick={() => agents.saveFile()}>{SAVE_FILE_LABEL}</button>
+                      {/if}
+                    </div>
+                  </li>
+                {/each}
+              </ul>
+              {#if info.portable}<p class="note">{PORTABLE_NOTE}</p>{/if}
+            {/if}
+          </details>
 
           <p class="clients">{names.length > 0 ? clientsLine(names) : CLIENTS_NONE}</p>
 
@@ -179,7 +191,7 @@
     justify-content: flex-end;
   }
   h3 {
-    margin: 16px 0 6px;
+    margin: 12px 0 6px;
     font-size: 13px;
     font-weight: 600;
   }
@@ -196,6 +208,17 @@
   }
   .err {
     color: #ff8a8a;
+  }
+  .setup {
+    margin: 12px 0 8px;
+  }
+  .setup summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .setup[open] summary {
+    margin-bottom: 6px;
   }
   .hint {
     padding: 6px 8px;

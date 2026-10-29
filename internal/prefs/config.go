@@ -54,6 +54,8 @@ type Config struct {
 	// GuideLearned — отметки «Изучил» справочника F1 (140): id статей в порядке отметки;
 	// правила списка — guide.go. Чужие id (новая версия) хранятся.
 	GuideLearned []string `json:"guideLearned,omitempty"`
+	// Share — подключение к сервису листалок (146, shareconf.go): только адрес; токен — в internal/secret.
+	Share *ShareConfig `json:"share,omitempty"`
 	// Update — проверка и установка обновления программы (111, update.go).
 	Update *Update `json:"update,omitempty"`
 	// Assoc — открытие .salbum двойным щелчком (112): "" — не решено (стартовое окно спросит),
@@ -143,6 +145,14 @@ const privateMode os.FileMode = 0o600
 // затирать друг друга (проект и последние папки меняются из разных методов).
 // Чужие ключи (из более новой версии) переписываются как были.
 func UpdateConfig(dir string, fn func(c *Config)) {
+	if err := UpdateConfigErr(dir, fn); err != nil {
+		log.Printf("config.json: %v", paths.NoPath(err))
+	}
+}
+
+// UpdateConfigErr — UpdateConfig, возвращающий ошибку записи файла: для правок, о неудаче
+// которых надо сказать пользователю (адрес сервиса листалок, 146). Память (dir == "") не отказывает.
+func UpdateConfigErr(dir string, fn func(c *Config)) error {
 	cfgMu.Lock()
 	defer cfgMu.Unlock()
 	c := loadConfig(dir)
@@ -165,11 +175,9 @@ func UpdateConfig(dir string, fn func(c *Config)) {
 	data, _ := json.MarshalIndent(raw, "", "  ")
 	if path == "" {
 		memCfg = data
-		return
+		return nil
 	}
-	if err := library.WriteFileAtomicMode(path, data, privateMode); err != nil {
-		log.Printf("config.json: %v", paths.NoPath(err))
-	}
+	return library.WriteFileAtomicMode(path, data, privateMode)
 }
 
 // RememberDir запоминает папку d для диалога вида kind. Нелокальные пути не пишем.

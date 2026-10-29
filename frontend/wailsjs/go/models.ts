@@ -1598,6 +1598,142 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class ShareAlbum {
+	    block: string;
+	    save: boolean;
+	    title: string;
+	    pages: number;
+	    bytes: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShareAlbum(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.block = source["block"];
+	        this.save = source["save"];
+	        this.title = source["title"];
+	        this.pages = source["pages"];
+	        this.bytes = source["bytes"];
+	    }
+	}
+	export class ShareChange {
+	    days: number;
+	    setPassword: boolean;
+	    password: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShareChange(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.days = source["days"];
+	        this.setPassword = source["setPassword"];
+	        this.password = source["password"];
+	    }
+	}
+	export class ShareLink {
+	    state: string;
+	    url: string;
+	    title: string;
+	    password: string;
+	    expiresAt: string;
+	    until: string;
+	    host: string;
+	    published: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShareLink(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.url = source["url"];
+	        this.title = source["title"];
+	        this.password = source["password"];
+	        this.expiresAt = source["expiresAt"];
+	        this.until = source["until"];
+	        this.host = source["host"];
+	        this.published = source["published"];
+	    }
+	}
+	export class ShareOptions {
+	    title: string;
+	    password: string;
+	    days: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShareOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.password = source["password"];
+	        this.days = source["days"];
+	    }
+	}
+	export class ShareService {
+	    host: string;
+	    url: string;
+	    token: boolean;
+	    store: string;
+	    days: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShareService(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.host = source["host"];
+	        this.url = source["url"];
+	        this.token = source["token"];
+	        this.store = source["store"];
+	        this.days = source["days"];
+	    }
+	}
+	export class ShareView {
+	    service: ShareService;
+	    album: ShareAlbum;
+	    link?: ShareLink;
+	    busy: boolean;
+	    busyOther: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShareView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.service = this.convertValues(source["service"], ShareService);
+	        this.album = this.convertValues(source["album"], ShareAlbum);
+	        this.link = this.convertValues(source["link"], ShareLink);
+	        this.busy = source["busy"];
+	        this.busyOther = source["busyOther"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SigState {
 	    done: number;
 	    total: number;
@@ -1804,6 +1940,7 @@ export namespace app {
 	    done: number;
 	    total: number;
 	    error: string;
+	    errorOf: string;
 	    atStart: boolean;
 	    checked: number;
 	    just: string;
@@ -1822,6 +1959,7 @@ export namespace app {
 	        this.done = source["done"];
 	        this.total = source["total"];
 	        this.error = source["error"];
+	        this.errorOf = source["errorOf"];
 	        this.atStart = source["atStart"];
 	        this.checked = source["checked"];
 	        this.just = source["just"];

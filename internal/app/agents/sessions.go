@@ -37,6 +37,9 @@ type run struct {
 	conns  map[net.Conn]struct{}           // занятые места
 	seen   map[*mcp.ServerSession]Client   // прошедшие initialize
 	gone   map[*mcp.ServerSession]struct{} // ушли, обработчики ещё идут
+
+	foreign     throttle  // строка об отклонённых чужих подключениях (под mu)
+	unsupported sync.Once // строка «сверка недоступна» — раз за запуск
 }
 
 // admit принимает подключение: место есть — сессия в своей горутине, нет — текст и закрытие.
@@ -47,6 +50,14 @@ func (r *run) admit(c net.Conn) {
 			log.Printf("ПАНИКА в agents admit")
 		}
 	}()
+	r.mu.Lock()
+	closed := r.closed
+	r.mu.Unlock()
+	// Сверка собеседника: до места в conns и до первого байта; чужой закрывается молча.
+	if closed || !r.admitted(c) {
+		closeRefused(c)
+		return
+	}
 	r.mu.Lock()
 	switch {
 	case r.closed:
@@ -62,6 +73,16 @@ func (r *run) admit(c net.Conn) {
 		r.mu.Unlock()
 		go r.session(c)
 	}
+}
+
+// closeRefused закрывает отказанное подключение: сначала shutdown записи (клиент получает конец потока
+// явно), потом Close. На Windows (AF_UNIX) голый Close без shutdown раз на прогон не доходил до
+// клиента за 5 с (148, TestAdmitRejectsForeign); на Unix shutdown безвреден.
+func closeRefused(c net.Conn) {
+	if cw, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = cw.CloseWrite()
+	}
+	_ = c.Close()
 }
 
 // reject пишет лишнему подключению текст и закрывает. Сначала закрывается запись и дочитывается

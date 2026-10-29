@@ -1,5 +1,5 @@
 // Тесты скриптов одним списком — тем же, что гоняет CI: `node scripts/script-tests.mjs [--public]`.
-// node --test скриптов, release-check, python unittest (win, mac, guide, guide-videos, e2e), test_lib.sh, test_deb.sh.
+// node --test скриптов, release-check, python unittest (win, mac, guide, guide-videos, e2e, demo), test_lib.sh, test_deb.sh.
 // --public: сначала публичное дерево (без scripts/publish-exclude.txt, public-tree.mjs) в .gotmp/public-tree и тесты на нём,
 // как их видит CI main: 0.25.0 — test_qakit ждал docs/qa, которого в публичном дереве нет.
 // Выход: код первого упавшего шага (0 — все зелёные; пропуск без инструмента — WARN, не провал, кроме NSIS: CI его требует).
@@ -44,7 +44,7 @@ export function affectedScriptTests(changed, exists) {
 }
 
 /**
- * Список шагов. ctx: {platform, python (команда или ''), hasDocx, hasMakensis, hasDpkg}.
+ * Список шагов. ctx: {platform, python (команда или ''), hasDocx, hasPillow, hasMakensis, hasDpkg}.
  * Шаг: {name, cmd, args, env?, skip?: текст WARN, fail?: текст провала без запуска, ci: [файл workflow, строка из его run:]}.
  * ci — страж расхождения: тест сверяет, что строка есть в workflow (скрипт-tests.test.mjs).
  */
@@ -76,6 +76,11 @@ export function buildSteps(ctx) {
   // guide-videos: stdlib, чистые части съёмки роликов F1 (docx не нужен)
   steps.push(pyStep('python scripts/guide-videos', 'scripts/guide-videos', 'python -I -m unittest discover -s scripts/guide-videos'))
   steps.push(pyStep('python scripts/e2e', 'scripts/e2e', 'python -I -m unittest discover -s scripts/e2e'))
+  // demo: сборка роликов README (102); нужен Pillow (в CI он из scripts/guide/requirements.txt), ffmpeg/GStreamer и фото .testphotos
+  // тесты берут сами — без них пропускают свои тесты с причиной
+  const demo = pyStep('python scripts/demo', 'scripts/demo', 'python -I -m unittest discover -s scripts/demo')
+  if (py && !ctx.hasPillow) demo.skip = 'нет Pillow (pip install -r scripts/guide/requirements.txt): scripts/demo не запущен'
+  steps.push(demo)
   // test_deb.sh в CI идёт на раннере без рабочего стола: xdg-mime при DISPLAY смотрит не туда (0.25.0)
   const deb = { name: 'scripts/linux/test_deb.sh', cmd: 'bash', args: ['scripts/linux/test_deb.sh'], unset: NO_DESKTOP, ci: ['release.yml', 'bash scripts/linux/test_deb.sh'] }
   if (ctx.platform === 'win32') deb.skip = 'test_deb.sh: на Windows нет dpkg-deb, пропуск'
@@ -93,6 +98,7 @@ export function detect(platform = process.platform) {
     platform,
     python,
     hasDocx: python ? ok(python, ['-I', '-c', 'import docx']) : false,
+    hasPillow: python ? ok(python, ['-I', '-c', 'import PIL']) : false,
     hasMakensis: ok('makensis', ['-VERSION']),
     hasDpkg: platform !== 'win32' && ok('dpkg-deb', ['--version']),
   }

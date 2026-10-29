@@ -81,6 +81,13 @@ $goJson = Join-Path $env:GOTMPDIR 'go-test.json'
 $uiJson = Join-Path $env:GOTMPDIR 'vitest.json'
 # Только свои файлы: дочерние прогоны частей идут одновременно и чужой json не трогают.
 if ($runGo) { Remove-Item -LiteralPath $goJson -ErrorAction SilentlyContinue }
+if ($runGo -and (Test-Path (Join-Path $root 'api/albums/go.mod'))) {
+    # 146 (да владельца 2026-10-29): модуль контракта api/albums — свой go.mod; корневые vet, test и lint его не видят.
+    $api = Join-Path $root 'api/albums'
+    Step 'api/albums: go vet' { go vet ./... } -Dir $api
+    Step 'api/albums: golangci-lint' { node (Join-Path $root 'scripts/heavy.mjs') $gclPath run --allow-parallel-runners ./... } -Dir $api
+    if ($Race) { Step 'api/albums: go test -race' { go test -race ./... } -Dir $api } else { Step 'api/albums: go test' { go test ./... } -Dir $api }
+}
 if ($runUi) { Remove-Item -LiteralPath $uiJson -ErrorAction SilentlyContinue }
 
 # Версия actionlint — из задания workflows в ci.yml (go run ...@версия, ставить не нужно).

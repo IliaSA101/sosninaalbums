@@ -20,6 +20,9 @@ import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
 import { packsUi } from '../packs/packs.svelte'
 import { agents } from '../agents/agents.svelte'
+import { share } from '../share/share.svelte'
+import { shareShut } from '../share/share'
+import { SHARE_EMPTY, SHARE_SHEET } from '../share/sharetext'
 import { looks } from '../looks/looks.svelte'
 import { saveLookUi } from '../looks/savelook.svelte'
 import { tplio } from './tplio.svelte'
@@ -38,7 +41,7 @@ import { liveSpreadCmds } from './menuctx'
 import { vigDialog } from '../../panels/vignette/vigsession.svelte'
 import { decor } from '../../panels/decor/decor.svelte'
 import { defaultScope } from '../../panels/decor/decor'
-import { COVER_ID } from '../../base/geom/sheet'
+import { COVER_ID, isSheet } from '../../base/geom/sheet'
 import { relinkFolder } from '../../panels/library/relink'
 import { anyVaries, varyTargets } from '../../panels/gallery/variants'
 import { gridAct } from '../../panels/layouts/gridact.svelte'
@@ -150,6 +153,12 @@ const HANDLERS = {
   addFolder: () => store.run(Api.ChooseFolder()),
   relink: () => relinkFolder(),
   export: () => edit.idle().then(() => jobs.exportAll()),
+  // 146: окно «Отправить по ссылке»; без листов и у виньетки — тост, как у «Экспорта» (окно не открывается над стартовым)
+  share: () =>
+    edit.idle().then(() => {
+      if (!shareShut(store.sheets.length, isSheet(store.view.settings), share.sharing)) return share.show()
+      store.notify(store.sheets.length === 0 ? SHARE_EMPTY : SHARE_SHEET)
+    }),
   showExport: () => showExportFolder(),
   showData: () => showDataFolder(),
   agents: () => agents.show(), // 143: окно доступа ИИ-агентов, на всех уровнях

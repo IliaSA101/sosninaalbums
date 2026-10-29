@@ -59,10 +59,11 @@ linters:
         - pattern: ^model\.(SetMarksLimit|SetParallelLayouts)$
           pkg: ^github\.com/IliaSA101/sosninaalbums/internal/album/model$
           msg: "023: крючок теста — только в _test.go"
-        # 067: в сеть ходит только decor/fetch (белый список хостов, пределы, подпись); сервер /media — не клиент
+        # 067: в сеть ходят только разрешённые клиенты — decor/fetch (наборы: белый список хостов, пределы, подпись)
+        # и клиент сервиса листалок api/albums (146, да владельца 2026-10-29); сервер /media — не клиент
         - pattern: ^http\.(Get|Head|Post|PostForm|NewRequest|NewRequestWithContext|DefaultClient|DefaultTransport|Client|Transport)$
           pkg: ^net/http$
-          msg: "067: сетевой клиент — только в internal/decor/fetch"
+          msg: "067: сетевой клиент — только internal/decor/fetch и клиент сервиса листалок api/albums"
         # 110: os.Stat идёт по ссылке, в том числе на сетевой путь (зависание на недоступном томе); пока — только internal/app
         - pattern: ^os\.Stat$
           pkg: ^os$
@@ -274,6 +275,7 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/library$
             - github.com/IliaSA101/sosninaalbums/internal/osx$
             - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/peercred$
             - github.com/IliaSA101/sosninaalbums/internal/prefs$
             - github.com/modelcontextprotocol/go-sdk/mcp$
             - github.com/google/jsonschema-go/jsonschema$
@@ -290,7 +292,73 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/mcpbridge$
             - github.com/IliaSA101/sosninaalbums/internal/osx$
             - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/peercred$
             - golang.org/x/sys/windows$
+        # 148 (да владельца 2026-10-29, design §2): учётная запись собеседника сокета — только stdlib и x/sys,
+        # чтобы граница безопасности не тянула за собой остальную программу.
+        "peercred: только stdlib и x/sys":
+          files:
+            - "**/internal/peercred/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/peercred$
+            - golang.org/x/sys/unix$
+            - golang.org/x/sys/windows$
+        # 146 (да владельца 2026-10-29, design §3.1): «Отправить по ссылке». Клиент сервиса живёт в модуле контракта
+        # api/albums — его импортируют только share и sharer (одна дверь в сеть на назначение, как decor/fetch).
+        "api/albums — только share и app/sharer":
+          files:
+            - "!$test"
+            - "!**/internal/share/**"
+            - "!**/internal/app/sharer/**"
+            - "!**/api/albums/**"
+          deny:
+            - pkg: github.com/IliaSA101/sosninaalbums/api/albums
+              desc: клиент сервиса листалок — только internal/share и internal/app/sharer (0.32-146-13)
+        "share: api/albums, export, render":
+          files:
+            - "**/internal/share/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/api/albums$
+            - github.com/IliaSA101/sosninaalbums/internal/export$
+            - github.com/IliaSA101/sosninaalbums/internal/render$
+            - github.com/IliaSA101/sosninaalbums/internal/share$
+        # Токен сервиса — в хранилище ключей ОС; go-keyring больше никому не нужен.
+        "secret: только go-keyring":
+          files:
+            - "**/internal/secret/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/secret$
+            - github.com/zalando/go-keyring$
+        "go-keyring — только internal/secret":
+          files:
+            - "!$test"
+            - "!**/internal/secret/**"
+          deny:
+            - pkg: github.com/zalando/go-keyring
+              desc: хранилище ключей ОС — только через internal/secret (0.32-146-8)
+        # Служба выгрузки за узким Host (образец exporter): без Wails, без App и без других служб.
+        "app/sharer: api/albums, share, export, secret, prefs":
+          files:
+            - "**/internal/app/sharer/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/api/albums$
+            - github.com/IliaSA101/sosninaalbums/internal/app/sharer$
+            - github.com/IliaSA101/sosninaalbums/internal/export$
+            - github.com/IliaSA101/sosninaalbums/internal/prefs$
+            - github.com/IliaSA101/sosninaalbums/internal/secret$
+            - github.com/IliaSA101/sosninaalbums/internal/share$
         # 140 Т4: ролики справочника F1 за узким Host (образец libpacks): без Wails, без App и без других служб.
         # Да владельца 2026-10-28.
         "app/guidevideo: decor/fetch":
@@ -893,8 +961,9 @@ linters:
       - path: _test\.go
         linters: [forbidigo]
         text: "крючок теста"
-      # 067: сам клиент; тесты ходят в свой httptest-сервер
-      - path: (internal/decor/fetch/|_test\.go)
+      # 067: разрешённые клиенты; тесты ходят в свой httptest-сервер. Клиент сервиса листалок (146, С10) — только запросы /v1
+      # (client.go), соединение (transport.go) и проверка сервера на контракт (albumstest/); остальной модуль api/albums — под правилом.
+      - path: (internal/decor/fetch/|api/albums/(client|transport)\.go$|api/albums/albumstest/|_test\.go)
         linters: [forbidigo]
         text: "сетевой клиент"
       # quietTransport глушит keep-alive общего транспорта для прокси wails dev — настройка, не запрос в сеть

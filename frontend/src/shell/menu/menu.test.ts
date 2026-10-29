@@ -66,6 +66,7 @@ describe('buildMenu', () => {
       'addFolder',
       'relink',
       'export',
+      'share',
       'showExport',
       'settings',
     ])

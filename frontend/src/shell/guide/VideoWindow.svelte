@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '../../base/modal/Modal.svelte'
+  import ProgressRun from '../../base/ui/ProgressRun.svelte'
   import { guideVideoUrl } from '../../base/core/media'
   import { blobType, busyLine, percent } from './videorow'
   import { videos } from './videos.svelte'
@@ -43,15 +44,15 @@
 <Modal title="Ролик: {title}" width={960} {onclose}>
   <div class="box" class:wait={loading} aria-busy={!src}>
     {#if loading}
-      <!-- Ход и «Отменить» — как у загрузки набора (PackRun) -->
-      <div class="run">
-        <div class="line">
-          <span role="status">{videos.cancelling ? 'Отменяем…' : busyLine(videos.progress, id)}</span>
-          <span class="grow"></span>
-          <button class="ghost" data-autofocus disabled={videos.cancelling} onclick={onclose}>Отменить</button>
-        </div>
-        <progress max="100" value={percent(videos.progress, id) ?? undefined} aria-label="Ход скачивания ролика"></progress>
-      </div>
+      <!-- Ход и «Отменить» — та же полоса, что у загрузки набора (PackRun) -->
+      <ProgressRun
+        text={busyLine(videos.progress, id)}
+        percent={percent(videos.progress, id)}
+        label="Ход скачивания ролика"
+        cancelling={videos.cancelling}
+        autofocus
+        oncancel={onclose}
+      />
     {:else if src}
       <video
         {src}
@@ -83,27 +84,6 @@
   .box.wait {
     background: transparent;
     min-height: 0;
-  }
-  .run {
-    padding: 8px 10px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    background: var(--panel2);
-  }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 6px;
-    font-variant-numeric: tabular-nums;
-  }
-  .grow {
-    flex: 1;
-  }
-  progress {
-    width: 100%;
-    height: 6px;
-    accent-color: var(--accent);
   }
   video {
     display: block;

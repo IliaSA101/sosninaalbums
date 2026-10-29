@@ -10,6 +10,7 @@ export const GUIDE_ORDER: Record<GroupId, readonly string[]> = {
     'open',
     'save',
     'export',
+    'share-link',
     'fsfera',
     'print-px',
     'print-profile',

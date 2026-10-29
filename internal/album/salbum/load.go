@@ -22,7 +22,12 @@ const maxUp = 2
 type FileProject struct {
 	Version int `json:"version"`
 	// App — версия программы, записавшей файл (v17, 098 design §6): справочно, в Project не идёт.
-	App      appField             `json:"app,omitempty"`
+	App appField `json:"app,omitempty"`
+	// UID — отпечаток проекта (146, model/uid.go): без смены номера формата; негодный — нет.
+	UID string `json:"uid,omitempty"`
+	// UIDAt — печать отпечатка к пути, где он выдан (model.UIDTag): у копии файла в другом пути
+	// запись о ссылке пути чужая. Без смены номера формата; негодная — нет.
+	UIDAt    string               `json:"uidAt,omitempty"`
 	Product  string               `json:"product"`
 	Folders  []FileFolder         `json:"folders"`
 	Settings model.Settings       `json:"settings"`
@@ -144,6 +149,20 @@ func spreadsWord(n int) string {
 	return "разворотов"
 }
 
+// fileHead кладёт в p шапку файла: версию, изделие, отпечаток и его печать (146 T4-9: чужие
+// данные, негодные — нет). Печать с путём альбома сверяет Editor при выгрузке и показе ссылки.
+func fileHead(p *model.Project, f *FileProject) {
+	p.SetFrom(max(f.Version, 1))
+	p.Product = model.NormProduct(f.Product)
+	if !model.GoodUID(f.UID) {
+		return
+	}
+	p.UID = f.UID
+	if model.GoodUIDTag(f.UIDAt) {
+		p.SetUIDAt(f.UIDAt)
+	}
+}
+
 // decodeFile разбирает файл: пути (с проверкой и выбором из двух), повторы,
 // ID по путям, лимиты, миграция старой версии. base — папка файла.
 // Порядок шагов сетки (design 007 §2): nil и объединение мест с Photos — до
@@ -160,8 +179,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 		return nil, err
 	}
 	p := model.New()
-	p.SetFrom(max(f.Version, 1))
-	p.Product = model.NormProduct(f.Product)
+	fileHead(p, &f)
 	// foldLegacy — до всех шагов, что считают «Авто»: они — по прежнему поведению (064).
 	p.Settings, p.Spreads = foldLegacy(p.From(), f.Settings), f.Spreads
 	for _, s := range p.Spreads {

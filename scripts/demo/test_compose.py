@@ -482,7 +482,10 @@ class TestDemoArgs(unittest.TestCase):
 class TestCredits(unittest.TestCase):
     def rows(self, p: Path) -> dict[int, str]:
         out = {}
-        for ln in p.read_text(encoding="utf-8").splitlines():
+        # только таблица до первого «##»: ниже в stock-photos.md свой набор «Детские портреты» с номерами 01… (130),
+        # и его строки затирали бы автора фото stock-01
+        text = p.read_text(encoding="utf-8").split("\n## ")[0]
+        for ln in text.splitlines():
             c = [x.strip() for x in ln.strip().strip("|").split("|")]
             if c and re.fullmatch(r"\d{2,3}", c[0]):
                 out[int(c[0])] = c

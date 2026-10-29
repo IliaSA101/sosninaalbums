@@ -32,6 +32,8 @@
   import { backupsUi } from './shell/dialogs/backups.svelte'
   import PacksDialog from './shell/packs/PacksDialog.svelte'
   import AgentsDialog from './shell/agents/AgentsDialog.svelte'
+  import ShareDialog from './shell/share/ShareDialog.svelte'
+  import { share } from './shell/share/share.svelte'
   import { agents } from './shell/agents/agents.svelte'
   import LooksDialog from './shell/looks/LooksDialog.svelte'
   import SaveLookDialog from './shell/looks/SaveLookDialog.svelte'
@@ -129,8 +131,8 @@
   // Открыто окно фоновой работы Go: экспорт, его памятка, сбор в папку (069) или «Открываем альбом» (073: F1 не открывает справочник под ним).
   const jobsOpen = () => jobs.exportOpen || jobs.collectOpen || !!jobs.exportMemo || jobs.openShown
 
-  // Окна «Резервные копии», «Наборы библиотеки», «ИИ-агенты»: под ними F1 молчит.
-  const serviceOpen = () => backupsUi.open || packsUi.open || agents.open
+  // Окна «Резервные копии», «Наборы библиотеки», «ИИ-агенты», «Отправить по ссылке»: под ними F1 молчит.
+  const serviceOpen = () => backupsUi.open || packsUi.open || agents.open || share.open
 
   // F1 — справочник функций (033). В WebView2 он открыл бы справку браузера, поэтому гасится всегда.
   // Поверх стартового окна и окна уровней справочник открывается; под другими окнами и сам справочник — нет.
@@ -242,6 +244,7 @@
 <BackupsDialog />
 <PacksDialog />
 <AgentsDialog />
+<ShareDialog />
 <LooksDialog />
 <SaveLookDialog />
 <PrintProfileDialog />

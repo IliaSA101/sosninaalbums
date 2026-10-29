@@ -151,15 +151,22 @@ func (a *App) saveAs(ed *album.Editor, path string) (model.View, error) {
 		return ed.View(), err
 	}
 	// Файл, поверх которого пишут, — в копию: «Сохранить как» мог промахнуться мимо имени.
-	if cur := ed.Path(); cur == "" || !paths.SamePath(cur, path) {
+	cur := ed.Path()
+	newProject := cur == "" || !paths.SamePath(cur, path) // по этому пути записывается другой проект
+	if newProject {
 		a.backupBefore(path, backupKey(path), true)
 	} else {
 		a.backupBefore(path, backupKey(path), false)
 	}
-	if err := ed.Save(path); err != nil {
+	save := ed.Save
+	if newProject {
+		save = ed.SaveNew // другой проект — новый отпечаток: чужая запись пути к нему не подойдёт (146 T4-9)
+	}
+	if err := save(path); err != nil {
 		return ed.View(), err
 	}
 	a.noticeBackup(ed)
+	a.shr.OnSaved(path, newProject) // запись о ссылке пути не переходит к другому проекту (146, С1)
 	a.rememberProject(path)
 	// Застрявший черновик (draftLocked) не трогаем: он нечитаем, но это данные пользователя.
 	if !a.draftLocked.Load() {

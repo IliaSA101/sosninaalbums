@@ -121,6 +121,7 @@ func TestEditorClose(t *testing.T) {
 	}
 	before, err1 := os.ReadFile(filepath.Join(dir, "a.salbum"))
 	after, err2 := os.ReadFile(again)
+	// Печать отпечатка переносится как есть (146 T4-9): файл байт в байт.
 	if err1 != nil || err2 != nil || !bytes.Equal(before, after) {
 		t.Fatalf("Save после Close пишет другое (%v, %v):\n%s\n---\n%s", err1, err2, before, after)
 	}

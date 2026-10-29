@@ -79,7 +79,13 @@ func newReplay(t *testing.T) *replay {
 		ids: map[string]string{}, revs: map[int]int{}}
 }
 
+// replayUID — поля отпечатка проекта и его печати (146 T4-9) в JSON файла и снимков, с запятой рядом.
+// Отпечаток случайный и в хэши не входит: строки эталона до 146 остались прежними, а его
+// выдачу и смену показывают шаги Ident (метки u1, u2… — uidMark).
+var replayUID = regexp.MustCompile(`,\s*"uid(?:At)?":\s*"[0-9a-f]{16,32}"|"uid(?:At)?":\s*"[0-9a-f]{16,32}",\s*`)
+
 func (r *replay) norm(data []byte) []byte {
+	data = replayUID.ReplaceAll(data, nil)
 	return replayID.ReplaceAllFunc(data, func(m []byte) []byte {
 		k := string(m)
 		if _, ok := r.ids[k]; !ok {
@@ -306,6 +312,8 @@ func replayScenario(t *testing.T) *replay {
 	replayFitFaces(r)
 	// 131: макет альбома — последним.
 	replayLook(r)
+	// 146: отпечаток проекта — последним.
+	replayIdent(r)
 	return r
 }
 

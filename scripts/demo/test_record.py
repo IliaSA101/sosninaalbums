@@ -214,7 +214,10 @@ class TestPhotos(unittest.TestCase):
                 record.stage_photos({"A": [99]}, src, dst)
 
     def test_list_in_credits(self):
-        qa = (ROOT / "docs" / "qa" / "stock-photos.md").read_text(encoding="utf-8")
+        qa_file = ROOT / "docs" / "qa" / "stock-photos.md"
+        if not qa_file.is_file():
+            self.skipTest("docs/qa/stock-photos.md нет в этой копии (не публикуется)")
+        qa = qa_file.read_text(encoding="utf-8").split("\n## ")[0]  # без набора «Детские портреты» (свои номера 01…)
         in_qa = {int(m) for m in re.findall(r"^\|\s*(\d+)\s*\|", qa, re.M)}
         allnums = {n for v in record.load_photos().values() for n in v}
         self.assertFalse(allnums - in_qa, "номера photos.txt без записи в docs/qa/stock-photos.md")

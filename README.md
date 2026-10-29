@@ -6,7 +6,7 @@
 **Sosnina Albums** is a desktop application for laying out wedding photo albums, built for a working photographer. Pick folders with photos, drag frames onto spreads (or let auto-assembly do it), flip through layout variants, and export spreads as 300 dpi JPEGs for the print shop. Layouts are computed exactly and **photos are not cropped without your say**: a frame keeps the photo's aspect ratio unless you choose full bleed (crops up to 30 %), crop to fill the sheet (up to 15 %) or set your own crop; margins and gaps are set in millimetres.
 
 - Platform: Windows, macOS, Linux (WebView2, WKWebView, WebKitGTK). Stack: Go 1.26 + [Wails](https://wails.io) v2 + Svelte 5 + TypeScript.
-- Status: version 0.31.0, actively developed; the UI is in Russian.
+- Status: version 0.32.0, actively developed; the UI is in Russian.
 - Built together with photographer Marina Sosnina ([Sosnina films](https://sosnina-films.ru)) and used in her work.
 
 ![Sosnina Albums: auto-build an album, flip through spreads, try layouts](docs/media/demo.webp)
@@ -81,6 +81,7 @@ https://github.com/user-attachments/assets/21096f35-4c1b-4954-b130-9b8cecf1a5b1
 - Макеты альбома и окна оформления (0.28): «Макеты альбома…» оформляют весь альбом в одном стиле (фон, стикеры, рамочки, пустые места для фото, надписи-заготовки, обложка), в готовом альбоме — «Фоны по серии» и «Добавить развороты макета», «Сохранить альбом как макет»; в окнах «Фоны», «Стикеры», «Рамочки» и «Развороты» — размер миниатюр, крупный просмотр с лупой, строка «Новые», отбор по набору; щипок трекпада на Mac во всех местах масштаба.
 - Сравнение, наборы и справочник (0.29): сравнение 2–4 кадров рядом (клавиша C) с общим зумом и кнопкой «Лучший», «Похожие к этому» (Shift+C), выборочная установка наборов библиотеки («Можно скачать», «Скачать все»), справочник F1 с разделами, умным поиском и отметками «Изучил», число функций программы в «О программе», пять новых команд в меню «Разворот», пример набора «Свадьба — синяя акварель» и две редакции программы (стандартная с примером и компактная), крестик сброса цвета страниц в «Настройках альбома».
 - ИИ-агенты и плитки наборов (0.31): окно «Файл ▸ ИИ-агенты (MCP)…» — Claude Desktop, Claude Code, OpenCode и другие агенты могут читать открытый альбом (только чтение, имена файлов, тексты и картинки — по отдельным флажкам), и плитки «⤓ набор, размер» нескачанных наборов прямо в «Фонах», «Стикерах», «Рамочках», «Разворотах» и «Макетах альбома».
+- Отправка по ссылке (0.32): «Файл ▸ Отправить по ссылке…» выгружает альбом в сервис листалок — клиент получает ссылку (и пароль, если задан) и листает макет в браузере; после правок «Обновить по ссылке» сохраняет ту же ссылку и догружает только изменённые страницы.
 
 ### Уровни интерфейса
 

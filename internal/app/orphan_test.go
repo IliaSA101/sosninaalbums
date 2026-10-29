@@ -81,6 +81,9 @@ func newOrphanRig(t *testing.T) *orphanRig {
 		t.Fatal(err)
 	}
 	waitScan(t, r.a)
+	// Scan.Active гаснет раньше, чем фон дописал журнал; устаревшее поколение (от RemoveFolder)
+	// тоже может ещё писать. Тесты подменяют log.SetOutput позже, поэтому ждём весь фон здесь.
+	r.a.bg.Wait()
 	if n := len(r.a.GetState().Photos); n != 3 {
 		t.Fatalf("в ленте %d фото, ждали 3 из подпапки", n)
 	}

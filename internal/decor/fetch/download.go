@@ -150,7 +150,7 @@ func (c *Client) download(ctx context.Context, e Entry, progress func(done int64
 	}
 	defer resp.Body.Close() //nolint:errcheck // чтение: ошибка закрытия ничего не теряет
 	if resp.ContentLength >= 0 && resp.ContentLength != e.Size {
-		return brokenError{e.Title}
+		return brokenOrCut(ctx, e.Title)
 	}
 	f, err := open()
 	if err != nil {
@@ -161,13 +161,27 @@ func (c *Client) download(ctx context.Context, e Entry, progress func(done int64
 	if err != nil {
 		return err
 	}
-	if done != e.Size || hex.EncodeToString(h.Sum(nil)) != e.SHA256 {
+	if done != e.Size {
+		return brokenOrCut(ctx, e.Title)
+	}
+	if hex.EncodeToString(h.Sum(nil)) != e.SHA256 {
 		return brokenError{e.Title}
 	}
 	if f.Sync() != nil {
 		return ErrDisk
 	}
 	return nil
+}
+
+// brokenOrCut — ответ короче или другой длины, чем в каталоге. Если ctx уже отменён (предел набора,
+// застой, отмена), это обрыв по времени или отмена, а не порча архива: сервер мог успеть ответить
+// пустым телом, пока таймер закрывал соединение (медленный раннер под -race). Порчу по sha256
+// при полной длине это не касается.
+func brokenOrCut(ctx context.Context, title string) error {
+	if context.Cause(ctx) != nil {
+		return netErr(ctx, ctx.Err())
+	}
+	return brokenError{title}
 }
 
 // copyBody — тело в файл кусками; каждый кусок сбрасывает таймер застоя.

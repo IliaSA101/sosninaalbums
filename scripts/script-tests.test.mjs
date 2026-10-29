@@ -7,7 +7,7 @@ import { NO_DESKTOP, affectedScriptTests, buildSteps, runAll, runStep } from './
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, '$1')), '..')
 const workflow = (f) => fs.readFileSync(path.join(root, '.github', 'workflows', f), 'utf8')
-const FULL = { platform: 'linux', python: 'python3', hasDocx: true, hasMakensis: true, hasDpkg: true }
+const FULL = { platform: 'linux', python: 'python3', hasDocx: true, hasPillow: true, hasMakensis: true, hasDpkg: true }
 const byName = (steps, part) => steps.find((s) => s.name.includes(part))
 
 test('каждый шаг есть в workflow (ci.yml / release.yml) дословно', () => {
@@ -20,7 +20,7 @@ test('обратный страж: каждый python unittest и test_*.sh и�
   const have = buildSteps(FULL)
   const text = workflow('ci.yml') + workflow('release.yml')
   const dirs = new Set([...text.matchAll(/unittest discover -s (scripts\/[\w-]+)/g)].map((m) => m[1]))
-  assert.ok(dirs.size >= 5, 'ожидали win, mac, guide, guide-videos, e2e')
+  assert.ok(dirs.size >= 6, 'ожидали win, mac, guide, guide-videos, e2e, demo')
   for (const d of dirs) assert.ok(have.some((s) => s.args.at(-1) === d), `в script-tests нет ${d}`)
   const shells = new Set([...text.matchAll(/bash (scripts\/\w+\/test_\w+\.sh)/g)].map((m) => m[1]))
   for (const sh of shells) assert.ok(have.some((s) => s.args.includes(sh)), `в script-tests нет ${sh}`)
@@ -29,22 +29,23 @@ test('обратный страж: каждый python unittest и test_*.sh и�
 
 test('полный набор: нет пропусков и провалов без запуска, у win — CI=true, у test_deb — без рабочего стола', () => {
   const steps = buildSteps(FULL)
-  assert.equal(steps.length, 9)
+  assert.equal(steps.length, 10)
   for (const s of steps) assert.ok(!s.skip && !s.fail, s.name)
   assert.equal(byName(steps, 'scripts/win').env.CI, 'true')
   assert.deepEqual(byName(steps, 'test_deb').unset, ['DISPLAY', 'WAYLAND_DISPLAY', 'XDG_CURRENT_DESKTOP', 'DESKTOP_SESSION'])
 })
 
-test('нет python: пять python-шагов пропущены с предупреждением, остальные идут', () => {
-  const steps = buildSteps({ ...FULL, python: '', hasDocx: false })
+test('нет python: шесть python-шагов пропущены с предупреждением, остальные идут', () => {
+  const steps = buildSteps({ ...FULL, python: '', hasDocx: false, hasPillow: false })
   const skipped = steps.filter((s) => s.skip).map((s) => s.name)
-  assert.deepEqual(skipped, ['python scripts/win', 'python scripts/mac', 'python scripts/guide', 'python scripts/guide-videos', 'python scripts/e2e'])
+  assert.deepEqual(skipped, ['python scripts/win', 'python scripts/mac', 'python scripts/guide', 'python scripts/guide-videos', 'python scripts/e2e', 'python scripts/demo'])
   assert.ok(!byName(steps, 'scripts/win').fail, 'без python нечего проверять на makensis')
   assert.ok(!byName(steps, 'node --test').skip && !byName(steps, 'test_lib').skip)
 })
 
-test('нет python-docx — пропуск только guide; нет makensis — провал win (CI его требует); нет dpkg и Windows — пропуск test_deb', () => {
+test('нет python-docx — пропуск только guide, нет Pillow — только demo; нет makensis — провал win (CI его требует); нет dpkg и Windows — пропуск test_deb', () => {
   assert.deepEqual(buildSteps({ ...FULL, hasDocx: false }).filter((s) => s.skip).map((s) => s.name), ['python scripts/guide'])
+  assert.deepEqual(buildSteps({ ...FULL, hasPillow: false }).filter((s) => s.skip).map((s) => s.name), ['python scripts/demo'])
   const noNsis = buildSteps({ ...FULL, hasMakensis: false })
   assert.match(byName(noNsis, 'scripts/win').fail, /apt install nsis/)
   assert.equal(noNsis.filter((s) => s.fail).length, 1)

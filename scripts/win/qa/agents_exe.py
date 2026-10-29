@@ -158,10 +158,18 @@ class Report:
         return "\n".join(out) + "\n"
 
 
+def ps_env(**extra):
+    """Окружение для powershell.exe (5.1) без PSModulePath: от pwsh 7 он ведёт в модули, которые 5.1 не грузит
+    (Microsoft.PowerShell.Security - ConvertTo-SecureString не найдена, прогон 148 40832895417)."""
+    env = {k: v for k, v in os.environ.items() if k.upper() != "PSMODULEPATH"}
+    env.update(extra)
+    return env
+
+
 def ps(script, timeout=90):
     """PowerShell-однострочник; (код, stdout+stderr)."""
     r = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
-                       capture_output=True, timeout=timeout)
+                       capture_output=True, timeout=timeout, env=ps_env())
     return r.returncode, (r.stdout + r.stderr).decode("utf-8", "replace")
 
 
@@ -276,7 +284,7 @@ def create_user(user, pw):
     script = ("New-LocalUser -Name $env:QA_USER -Password (ConvertTo-SecureString $env:QA_PW -AsPlainText -Force) "
               "-AccountNeverExpires -PasswordNeverExpires | Out-Null")
     r = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
-                       capture_output=True, stdin=subprocess.DEVNULL, timeout=60, env=dict(os.environ, QA_USER=user, QA_PW=pw))
+                       capture_output=True, stdin=subprocess.DEVNULL, timeout=60, env=ps_env(QA_USER=user, QA_PW=pw))
     if r.returncode == 0:
         return True, ""
     return False, first + "; New-LocalUser код %d: %s" % (r.returncode, " ".join((r.stdout + r.stderr).decode("utf-8", "replace").split()))
@@ -337,7 +345,7 @@ def foreign_probe(sock, work, rep):
                   "$p = Start-Process -FilePath $env:QA_PY -ArgumentList @('-I', $env:QA_PROBE, $env:QA_SOCK, $env:QA_OUT) "
                   "-Credential $c -LoadUserProfile -WorkingDirectory $env:SystemRoot -WindowStyle Hidden -Wait -PassThru; "
                   "exit $p.ExitCode" % user)
-        env = dict(os.environ, QA_PW=pw, QA_PY=sys.executable, QA_PROBE=probe, QA_SOCK=sock, QA_OUT=out_file)
+        env = ps_env(QA_PW=pw, QA_PY=sys.executable, QA_PROBE=probe, QA_SOCK=sock, QA_OUT=out_file)
         r = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
                            capture_output=True, env=env, timeout=120)
         text = (r.stdout + r.stderr).decode("utf-8", "replace").strip()

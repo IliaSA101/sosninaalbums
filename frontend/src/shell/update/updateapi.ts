@@ -22,6 +22,7 @@ export const NO_UPDATE: UpdateInfo = {
   done: 0,
   total: 0,
   error: '',
+  errorOf: '',
   atStart: true,
   checked: 0,
   just: '',

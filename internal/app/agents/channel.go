@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
+	"github.com/IliaSA101/sosninaalbums/internal/peercred"
 )
 
 // Права: папка сокета — только владелец, сам сокет — тоже (Unix); на Windows права ставит
@@ -31,17 +32,18 @@ const probeTimeout = 300 * time.Millisecond
 
 // Причины отказа открыть доступ. Тексты идут в окно как есть: словами, без путей.
 var (
-	errNoDataDir = errors.New("не найдена папка данных")
-	errBadPath   = errors.New("папка данных недопустима для доступа агентов")
-	errPathLong  = errors.New("путь к папке данных слишком длинный")
-	errNoPerm    = errors.New("папка данных на диске без прав доступа")
-	errForeign   = errors.New("на месте доступа агентов чужой файл")
-	errBusy      = errors.New("доступ занят другой копией программы")
-	errOpen      = errors.New("не удалось открыть доступ для агентов")
+	errNoDataDir  = errors.New("не найдена папка данных")
+	errBadPath    = errors.New("папка данных недопустима для доступа агентов")
+	errPathLong   = errors.New("путь к папке данных слишком длинный")
+	errNoPerm     = errors.New("папка данных на диске без прав доступа")
+	errForeign    = errors.New("на месте доступа агентов чужой файл")
+	errBusy       = errors.New("доступ занят другой копией программы")
+	errParentOpen = errors.New("папка данных открыта на запись другим пользователям компьютера")
+	errOpen       = errors.New("не удалось открыть доступ для агентов")
 )
 
 // known — отказы со своим текстом; прочие ошибки (диск, ОС) наружу уходят как errOpen.
-var known = []error{errNoDataDir, errBadPath, errPathLong, errNoPerm, errForeign, errBusy}
+var known = []error{errNoDataDir, errBadPath, errPathLong, errNoPerm, errForeign, errBusy, errParentOpen}
 
 // checkSock проверяет путь сокета до любых действий на диске. "" — папки данных нет: пути от
 // текущей папки не бывает. Только путь в ФС: абстрактное пространство Linux («@…», «\0…») не
@@ -96,10 +98,12 @@ func (s *Service) open() (l net.Listener, err error) {
 	if err = checkSock(sock); err != nil {
 		return nil, err
 	}
-	if err = secureDir(filepath.Dir(sock)); err != nil {
+	release, err := secureDir(filepath.Dir(sock))
+	if err != nil {
 		return nil, err
 	}
-	if err = clearStale(sock); err != nil {
+	defer release() // Windows: дескриптор папки держится до конца Listen (0.32-148-6)
+	if err = clearStale(sock, s.o.Peer); err != nil {
 		return nil, err
 	}
 	if l, err = net.Listen("unix", sock); err != nil {
@@ -123,8 +127,9 @@ func isKnown(err error) bool {
 
 // clearStale убирает файл от упавшего запуска. Удаляется только сокет, на который никто не
 // отвечает: обычный файл, ссылка и каталог на этом месте — чужое, не трогаем; живой ответ —
-// другая копия программы (замок экземпляра этого не допускает, но Remove сокета бы её отрезал).
-func clearStale(sock string) error {
+// другая копия программы (замок экземпляра этого не допускает, но Remove сокета бы её отрезал)
+// или чужая учётная запись (0.32-148-8) — та же мера, но другой текст; файл цел в обоих случаях.
+func clearStale(sock string, peer func(net.Conn) (bool, error)) error {
 	fi, err := os.Lstat(sock)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -136,8 +141,15 @@ func clearStale(sock string) error {
 		return errForeign
 	}
 	if c, derr := net.DialTimeout("unix", sock, probeTimeout); derr == nil {
-		_ = c.Close()
-		return errBusy
+		defer func() { _ = c.Close() }()
+		ok, perr := peer(c)
+		switch {
+		case perr == nil && ok, errors.Is(perr, peercred.ErrUnsupported):
+			return errBusy
+		case perr != nil:
+			return perr // не определили: тронуть нельзя, наружу — errOpen
+		}
+		return errForeign
 	}
 	if err := os.Remove(sock); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err

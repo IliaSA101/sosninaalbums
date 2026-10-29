@@ -26,6 +26,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/app/guidevideo"
 	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
 	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
+	"github.com/IliaSA101/sosninaalbums/internal/app/sharer"
 	"github.com/IliaSA101/sosninaalbums/internal/app/updater"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
@@ -35,6 +36,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
+	"github.com/IliaSA101/sosninaalbums/internal/secret"
 	"github.com/IliaSA101/sosninaalbums/internal/text"
 	"github.com/IliaSA101/sosninaalbums/internal/text/fontlib"
 	"github.com/wailsapp/wails/v2"
@@ -202,6 +204,10 @@ type App struct {
 	demoFn func() libpacks.Demo
 	// exp — служба выгрузки (internal/app/exporter; фасад — export.go, спеки 013 и 123).
 	exp *exporter.Service
+	// shr — служба «Отправить по ссылке» (internal/app/sharer; фасад — share.go, спека 146); secrets —
+	// токен сервиса: один Store на процесс (контракт secret.System).
+	shr     *sharer.Service
+	secrets secret.Store
 	// faceSt — подгон по лицам (faces.go, спека 130): занятость, кэш точек, память сессии.
 	faceSt faceState
 	// upd — служба обновления программы (internal/app/updater; фасад — update.go, спека 111).
@@ -283,6 +289,8 @@ func NewApp() *App {
 	a.upd = updater.New(a.updHost())
 	a.assoc = assoc.New(a.assocHost())
 	a.exp = exporter.New(a.expHost())
+	a.secrets = secret.System(osx.StandOn())
+	a.shr = sharer.New(a.shareHost())
 	a.libp = libpacks.New(a.packsHost())
 	a.guidev = guidevideo.New(a.guideHost())
 	a.ownp = ownprint.New(a.printsHost())
@@ -312,9 +320,10 @@ func (a *App) startup(ctx context.Context) {
 		setupLog(filepath.Join(a.cfgDir, "log.txt"))
 	}
 	log.Printf("запуск, версия %s", appVersion(wailsJSON))
-	a.flushLaunchLog()                          // строки разбора аргументов, накопленные до открытия log.txt
-	salbum.SetAppVersion(appVersion(wailsJSON)) // до первого Load и записи: поле app в файле (098)
-	a.upd.Startup()                             // итог прошлого запуска установщика — до первого UpdateInfo
+	a.flushLaunchLog()                              // строки разбора аргументов, накопленные до открытия log.txt
+	salbum.SetAppVersion(appVersion(wailsJSON))     // до первого Load и записи: поле app в файле (098)
+	sharer.CleanTemp(a.shareCacheDir(), time.Now()) // остатки прошлых выгрузок по ссылке старше суток
+	a.upd.Startup()                                 // итог прошлого запуска установщика — до первого UpdateInfo
 	a.loadTemplates()
 	a.startBackups()
 	if a.cfgDir != "" { // библиотека и шрифты лежат в папке настроек; без неё методы отвечают ошибкой (nil)

@@ -42,6 +42,8 @@ func (s *Service) List() []Item {
 // свежий каталог → по одному ролику. Первая ошибка обрывает ход: ролики маленькие, второй запрос после
 // отказа лишний (урок 137). Итог — весь список; при ошибке он тоже отдаётся (окно обновит строки).
 func (s *Service) Download(want []string) ([]Item, error) {
+	st, disarm := s.arm() // с этого места отмена не теряется, даже если придёт до begin
+	defer disarm()
 	dir := s.dir()
 	if dir == "" {
 		return s.List(), ErrUnavailable
@@ -60,7 +62,7 @@ func (s *Service) Download(want []string) ([]Item, error) {
 		return s.List(), ErrBusy
 	}
 	defer s.mu.Unlock()
-	ctx, done, err := s.begin()
+	ctx, done, err := s.begin(st)
 	if err != nil {
 		return s.List(), err
 	}

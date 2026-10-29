@@ -14,9 +14,23 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 )
 
-// Open — album.NewEditor для тестов: отказ проверки проекта — Fatal.
+// UID — отпечаток проекта (146 T4-9), который Open даёт проекту без него: у двух Editor из
+// одинаковых проектов одинаковые снимки, сверки «p → Save → Load» проверяют и отпечаток.
+// Выдачу нового отпечатка NewEditor проверяют тесты editor_uid_test.go (без Open).
+const UID = "7e570000000000000000000000000001"
+
+// Open — album.NewEditor для тестов: отказ проверки проекта — Fatal. Проекту без отпечатка
+// сначала ставится UID (в самом p), проекту без печати — печать пути path: так отпечаток
+// переживает открытие, как у файла, записанного по этому пути. Отпечаток без печати и чужую
+// печать проверяют тесты editor_uid_test.go (album.NewEditor без Open).
 func Open(t testing.TB, p *model.Project, path string) *album.Editor {
 	t.Helper()
+	if p != nil && p.UID == "" {
+		p.UID = UID
+	}
+	if p != nil && path != "" && p.UIDAt() == "" {
+		p.SetUIDAt(model.UIDTag(p.UID, path))
+	}
 	e, err := album.NewEditor(p, path)
 	if err != nil {
 		t.Fatal(err)

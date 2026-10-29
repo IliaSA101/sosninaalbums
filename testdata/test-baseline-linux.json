@@ -2165,6 +2165,16 @@
     "TestUnderAny": 1
    }
   },
+  "internal/peercred": {
+   "cover": 88.2,
+   "tests": 4,
+   "names": {
+    "TestForeignClient": 1,
+    "TestForeignServer": 1,
+    "TestNotUnix": 1,
+    "TestSamePair": 1
+   }
+  },
   "internal/prefs": {
    "cover": 92.3,
    "tests": 34,

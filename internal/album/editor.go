@@ -74,6 +74,13 @@ type Editor struct {
 	lookHost atomic.Pointer[LookHost]
 	// closed — альбом сменился (Close, 087-5): правки отклоняются, запись и чтения работают.
 	closed bool
+	// diskUID — отпечаток проекта (146, editor_uid.go), который лежит в файле path; "" — не лежит
+	// или неизвестен. Отпечаток не делает альбом «изменённым»: в файл он попадает с ближайшей
+	// записью или перед выгрузкой (SaveUID).
+	diskUID string
+	// seals — печати отпечатков (editor_uid.go): отпечаток → печать из файла или выданная. По
+	// отпечатку, а не одна: Ctrl+Z после Restore копии с другим отпечатком возвращает и его печать.
+	seals map[string]string
 }
 
 // editorSeq — счётчик номеров Editor на процесс: у двух Editor номера разные, 0 не бывает.
@@ -87,14 +94,24 @@ func (e *Editor) ID() uint64 { return e.id }
 // Проект проверяется заново (own): собранный не через Load не протащит в альбом чужой путь.
 // Проверяются только пути (salbum.Check) и NaN (Marshal); остальные инварианты (лимиты,
 // зажимы, цвета) — только Load/Decode, единственный источник внешних проектов.
+// Отпечаток и его печать берутся из файла как есть, и при печати другого пути: открытие ничего
+// не меняет; печать с путём сверяет выгрузка и показ ссылки (Sealed, T4-9).
 func NewEditor(p *model.Project, path string) (*Editor, error) {
 	q, side, err := own(p)
 	if err != nil {
 		return nil, err
 	}
-	return &Editor{p: q, path: path, origin: path, from: q.From(),
+	disk := "" // отпечаток в файле path: прочитан из него; выданный здесь в файле ещё не лежит
+	if path != "" && model.GoodUID(q.UID) {
+		disk = q.UID
+	}
+	ensureUID(q)
+	e := &Editor{p: q, path: path, origin: path, from: q.From(),
 		backup: path != "" && q.From() != 0 && q.From() < model.FormatVersion,
-		marks:  side.Marks, bins: side.Bins, marksRev: nextMarksRev(), id: editorSeq.Add(1)}, nil
+		marks:  side.Marks, bins: side.Bins, marksRev: nextMarksRev(), id: editorSeq.Add(1), diskUID: disk,
+		seals: map[string]string{}}
+	e.keepSeal(p) // p, а не q: печать в JSON копии не идёт
+	return e, nil
 }
 
 // own — своя копия внешнего проекта (NewEditor, Restore) и его отметки и подборки из файла.
@@ -294,6 +311,11 @@ func settle(p, before *model.Project, whole bool) error {
 func (e *Editor) Save(path string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.save(path)
+}
+
+// save — тело Save под e.mu.
+func (e *Editor) save(path string) error {
 	if path == "" {
 		path = e.path
 	}
@@ -307,6 +329,7 @@ func (e *Editor) Save(path string) error {
 		}
 		e.keepBackup(bak)
 	}
+	e.stamp()
 	if err := salbum.SaveWith(e.p, path, e.side()); err != nil {
 		return err
 	}
@@ -315,6 +338,7 @@ func (e *Editor) Save(path string) error {
 	}
 	e.path = path
 	e.dirty = false
+	e.diskUID = e.p.UID
 	return nil
 }
 
@@ -368,6 +392,7 @@ func (e *Editor) Snapshot() (*model.Project, model.View) {
 func (e *Editor) WriteCopy(path string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.stamp()
 	return salbum.Write(e.p, path, "", e.side())
 }
 
@@ -466,7 +491,9 @@ func LoadBase(file, base string) (*model.Project, error) {
 // не прошли пределы правки — ошибка, альбом прежний.
 // Заменяется всё, что пишет encode (Product, Folders, FolderAlt, Settings, Spreads, Photos):
 // это поля Project с JSON-тегами, и свои отметки с подборками (q.loaded; у копии до 004 или 083
-// их нет — после замены их нет и в альбоме, Ctrl+Z вернёт). from остаётся текущим — копия старой версии файла
+// их нет — после замены их нет и в альбоме, Ctrl+Z вернёт). Отпечаток и печать — копии как есть
+// (146 T4-9: копия из папки копий несёт печать альбома, чужую сверка отбросит при выгрузке); у
+// копии без отпечатка — новый. from остаётся текущим — копия старой версии файла
 // (Editor.backup) нужна для файла альбома, а не для копии. q проверяется заново, как в
 // NewEditor (own): не прошёл — ошибка, альбом прежний.
 func (e *Editor) Restore(q *model.Project) (model.View, error) {
@@ -478,6 +505,8 @@ func (e *Editor) Restore(q *model.Project) (model.View, error) {
 		from := p.From()
 		*p = *src
 		p.SetFrom(from)
+		e.keepSeal(q)
+		ensureUID(p) // копия до 0.32 без отпечатка — новый: чьей она была, неизвестно (T4-9)
 		return nil
 	}, func() []MarkChange { return e.replaceMarks(side.Marks) },
 		editOpts{bins: func() *BinsSwap { return e.replaceBins(side.Bins) }})
@@ -499,6 +528,7 @@ func (e *Editor) WriteDraft(path string) error {
 		}
 		e.keepBackup(bak)
 	}
+	e.stamp()
 	return salbum.Write(e.p, path, "", e.side())
 }
 
