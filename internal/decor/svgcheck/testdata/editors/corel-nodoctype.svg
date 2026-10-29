@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Creator: CorelDRAW 2020 (64-Bit) -->
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="210mm" height="297mm" version="1.1" style="shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd"
+viewBox="0 0 21000 29700"
+ xmlns:xlink="http://www.w3.org/1999/xlink"
+ xmlns:xodm="http://www.corel.com/coreldraw/odm/2003">
+ <defs>
+  <font id="FontID0" horiz-adv-x="600" font-variant="normal" style="fill-rule:nonzero" font-style="normal" font-weight="400">
+	<font-face font-family="Great Vibes">
+		<font-face-src><font-face-name name="Great Vibes"/></font-face-src>
+	</font-face>
+   <missing-glyph><path d="M0 0z"/></missing-glyph>
+   <glyph unicode="A" horiz-adv-x="600" d="M0 0l300 700 300 -700z"/>
+  </font>
+  <style type="text/css">
+   <![CDATA[
+    @font-face { font-family:"Great Vibes";font-variant:normal;font-style:normal;font-weight:normal;src:url("#FontID0") format(svg)}
+    .str0 {stroke:#C9A96E;stroke-width:20;stroke-miterlimit:22.9256}
+    .fil1 {fill:none}
+    .fil0 {fill:url(#id0)}
+    .fnt0 {font-weight:normal;font-size:846.67px;font-family:'Great Vibes'}
+   ]]>
+  </style>
+  <linearGradient id="id0" gradientUnits="userSpaceOnUse" x1="1000" y1="1000" x2="5000" y2="5000">
+   <stop offset="0" style="stop-opacity:1; stop-color:#F5E6CC"/>
+   <stop offset="1" style="stop-opacity:1; stop-color:#C9A96E"/>
+  </linearGradient>
+ </defs>
+ <g id="Слой_x0020_1">
+  <metadata id="CorelCorpID_0Corel-Layer"/>
+  <rect class="fil0 str0" x="1000" y="1000" width="4000" height="4000"/>
+  <text x="2000" y="8000"  class="fil0 fnt0">Анна</text>
+ </g>
+</svg>
