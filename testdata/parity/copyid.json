@@ -1,0 +1,98 @@
+[
+  {
+    "id": "0123456789abcdef",
+    "base": "0123456789abcdef",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-2",
+    "base": "0123456789abcdef",
+    "no": 2,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-10",
+    "base": "0123456789abcdef",
+    "no": 10,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-99",
+    "base": "0123456789abcdef",
+    "no": 99,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-100",
+    "base": "0123456789abcdef-100",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-1",
+    "base": "0123456789abcdef-1",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-0",
+    "base": "0123456789abcdef-0",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-02",
+    "base": "0123456789abcdef-02",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-x",
+    "base": "0123456789abcdef-x",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-",
+    "base": "0123456789abcdef-",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-+3",
+    "base": "0123456789abcdef-+3",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "0123456789abcdef-new",
+    "base": "0123456789abcdef-new",
+    "no": 0,
+    "req": true
+  },
+  {
+    "id": "-new",
+    "base": "-new",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "-3",
+    "base": "-3",
+    "no": 0,
+    "req": false
+  },
+  {
+    "id": "a-b-3",
+    "base": "a-b",
+    "no": 3,
+    "req": false
+  },
+  {
+    "id": "",
+    "base": "",
+    "no": 0,
+    "req": false
+  }
+]
