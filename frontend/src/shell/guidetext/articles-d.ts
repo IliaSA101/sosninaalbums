@@ -217,7 +217,7 @@ export const PART_D: Article[] = [
     group: 'onspread',
     feature: 'groupSelect',
     what: 'Несколько фото, мест и текстов разом — двигать, удалять, выравнивать вместе.',
-    how: 'Рамка мышью по пустому полю, Shift- или Ctrl-щелчок{key:selectSpread|, %}; «Правка ▸ Выделить всё».',
+    how: 'Рамка мышью по пустому полю, Shift- или Ctrl-щелчок{key:selectSpread|, %}.',
     words: 'выделить несколько группа рамка все сразу',
     keys: ['selectSpread', 'Shift+клик по фото', 'clearSelection'],
     menu: ['selectAll', 'clearSelection'],

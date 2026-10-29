@@ -160,6 +160,16 @@
         "custom": false
       },
       {
+        "id": "agents",
+        "label": "ИИ-агенты (MCP)…",
+        "short": "Агенты",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
         "id": "addFolder",
         "label": "Добавить папку с фото…",
         "short": "Папка фото",

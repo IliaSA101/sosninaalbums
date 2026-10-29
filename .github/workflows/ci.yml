@@ -135,6 +135,43 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  # Go-тесты на macOS (143 Т2): сторона программы службы агентов и посредник --mcp на настоящем Unix-сокете macOS
+  # (права папки и сокета, LOCAL_PEERCRED, путь Application Support). Без Wails и фронта: embed frontend/dist закрывает
+  # dist/gitkeep из репозитория, cgo на macOS включён по умолчанию. Эталона покрытия для macOS нет - только провал/успех.
+  go-mac:
+    timeout-minutes: 30
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      # node нужен части Go-тестов, как в go-linux
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: go vet
+        run: go vet . ./internal/...
+
+      # С -v, чтобы в логе были видны PASS и SKIP каждого теста (как в win-qa.yml); отдельным шагом - до общего прогона
+      - name: go test agents, mcpbridge и osx (канал и посредник)
+        run: go test -count=1 -v ./internal/app/agents ./internal/mcpbridge ./internal/osx
+
+      # -short: быстрый уровень (testkit.Lite); SA_TEST_SLOW - пороги времени с запасом на общий раннер.
+      # Пока не блокирует (continue-on-error): на arm64 macOS расходятся эталоны пикселей и float (replay, golden export,
+      # paint, plan, grid) - список и план в decisions.md 0.31-143-79; убрать флаг, когда появится эталон macOS.
+      - name: go test -short
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          SA_TEST_SLOW: "2.5"
+        run: go test -short . ./internal/...
+
   # Детектор гонок (-race, cgo/gcc есть на раннере): только push в winqa/** (тот же коммит, что уйдёт в main), не main и не PR.
   # Пока не блокирует: continue-on-error на уровне задания - красный прогон виден, но общий итог не краснит.
   # Снять continue-on-error после 3 зелёных прогонов подряд (решение владельца 28.10, В5).
@@ -232,6 +269,14 @@ jobs:
 
       - name: тесты
         run: python -I -m unittest discover -s scripts/guide -v
+
+      # Чистые части съёмки роликов F1 (140, Т6): охрана путей, подмена фото, окно обрезки, хеш статьи; без браузера
+      - name: тесты роликов справочника
+        run: python -I -m unittest discover -s scripts/guide-videos -v
+
+      # Помощники e2e (отчёт, масштаб, крупные папки): stdlib, Playwright не нужен — драйвер импортирует его лениво
+      - name: тесты помощников e2e
+        run: python -I -m unittest discover -s scripts/e2e -v
 
       # makensis ≥ 3.08 (в образе ubuntu есть в пакете nsis): тесты scripts/win при CI=true без него падают,
       # поэтому ставим раньше них

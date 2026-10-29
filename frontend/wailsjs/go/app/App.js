@@ -46,6 +46,10 @@ export function AddVignette(arg1) {
   return window['go']['app']['App']['AddVignette'](arg1);
 }
 
+export function AgentsInfo() {
+  return window['go']['app']['App']['AgentsInfo']();
+}
+
 export function AlignItems(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['AlignItems'](arg1, arg2, arg3, arg4);
 }
@@ -168,6 +172,10 @@ export function ChooseFiles() {
 
 export function ChooseFolder() {
   return window['go']['app']['App']['ChooseFolder']();
+}
+
+export function ClearAgentsLog() {
+  return window['go']['app']['App']['ClearAgentsLog']();
 }
 
 export function ClearAlbumBg() {
@@ -786,6 +794,10 @@ export function RotateGroup(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['App']['RotateGroup'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function SaveClaudeExtension() {
+  return window['go']['app']['App']['SaveClaudeExtension']();
+}
+
 export function SaveGridTemplate(arg1, arg2, arg3) {
   return window['go']['app']['App']['SaveGridTemplate'](arg1, arg2, arg3);
 }
@@ -816,6 +828,14 @@ export function SaveVignetteTemplate(arg1, arg2) {
 
 export function ScaleGroupAxes(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['app']['App']['ScaleGroupAxes'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
+export function SetAgents(arg1) {
+  return window['go']['app']['App']['SetAgents'](arg1);
+}
+
+export function SetAgentsLevel(arg1) {
+  return window['go']['app']['App']['SetAgentsLevel'](arg1);
 }
 
 export function SetAlbumBg(arg1, arg2) {

@@ -119,32 +119,35 @@ afterEach(() => {
   dropCatalog()
 })
 
+const titleOf = () => 'Ролик: ' + q('.card h2')!.textContent
+const winDialog = () => dialog(titleOf())
+
 describe('строка «Ролик»', () => {
   it('статья без ролика — строки нет', async () => {
     await open('crop')
     expect(vrow()).toBeNull()
   })
-  it('ролик из встроенного списка виден до сети: «Скачать · 48 с», каталог читается из кэша Go, скачивания нет', async () => {
+  it('ролик из встроенного списка виден до сети: «▶ Смотреть · 48 с», каталог читается из кэша Go, загрузки нет', async () => {
     await open()
-    expect(text(vrow())).toBe('Ролик Скачать · 48 с')
+    expect(text(vrow())).toBe('Ролик ▶ Смотреть · 48 с')
     expect(api.GuideVideos).toHaveBeenCalledTimes(1)
     expect(api.DownloadGuideVideos).not.toHaveBeenCalled()
   })
-  it('каталог дал размер: «Скачать · 48 с, 512 КБ»; ссылка «все ролики (2, 1,0 МБ)» — когда не скачано больше одного', async () => {
+  it('размера в строке нет, даже если каталог его дал; ссылка «все ролики (2, 1,0 МБ)» — когда не скачано больше одного', async () => {
     api.GuideVideos.mockResolvedValue([item(), item({ id: 'open' }), item({ id: 'save', ready: true })])
     await open()
-    expect(text(vrow())).toBe('Ролик Скачать · 48 с, 512 КБ все ролики (2, 1,0 МБ)')
+    expect(text(vrow())).toBe('Ролик ▶ Смотреть · 48 с все ролики (2, 1,0 МБ)')
   })
   it('скачан: «▶ Смотреть · 48 с», ссылок нет', async () => {
     api.GuideVideos.mockResolvedValue([item({ ready: true }), item({ id: 'open' })])
     await open()
     expect(text(vrow())).toBe('Ролик ▶ Смотреть · 48 с')
   })
-  it('ролик пересняли (в каталоге ready=false) — снова «Скачать»', async () => {
+  it('ролик пересняли (в каталоге ready=false) — та же кнопка, окно загрузит новый', async () => {
     api.GuideVideos.mockResolvedValue([item({ version: 2, ready: false })])
     await open()
-    expect(btn('Скачать', vrow()!)).toBeTruthy()
-    expect(btn('▶ Смотреть', vrow()!)).toBeUndefined()
+    expect(btn('▶ Смотреть', vrow()!)).toBeTruthy()
+    expect(btn('Скачать', vrow()!)).toBeUndefined()
   })
   it('выбор статьи с роликом и без: строка появляется и уходит', async () => {
     await open()
@@ -155,43 +158,53 @@ describe('строка «Ролик»', () => {
   })
 })
 
-describe('«Скачать»', () => {
-  it('с согласием: DownloadGuideVideos([id]), ход событием guide:video, затем «Смотреть»', async () => {
+describe('«▶ Смотреть» без файла: загрузка в окне ролика', () => {
+  it('с согласием: окно открывается сразу, в нём ход и «Отменить»; готово — ролик играет тут же', async () => {
     let done: (v: unknown) => void = () => {}
     api.DownloadGuideVideos.mockReturnValue(new Promise((r) => (done = r)))
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     expect(api.DownloadGuideVideos).toHaveBeenCalledWith(['start-window'])
-    expect(text(vrow())).toContain('Скачиваем…')
-    expect(btn('Отменить', vrow()!)).toBeTruthy()
+    const dlg = winDialog()!
+    expect(dlg).toBeTruthy()
+    expect(text(dlg.querySelector('[role="status"]'))).toBe('Скачиваем…')
+    expect(btn('Отменить', dlg)).toBeTruthy()
+    expect(dlg.querySelector('video')).toBeNull()
+    expect(globalThis.fetch).not.toHaveBeenCalled() // файла ещё нет
+    expect(text(vrow())).toBe('Ролик ▶ Смотреть · 48 с') // строка под окном прежняя, второго хода в ней нет
 
     events.get('guide:video')?.({ id: 'start-window', done: Math.round(0.3 * MB), total: MB / 2 })
     await settle()
-    expect(text(vrow())).toContain('Скачиваем… 0,3 из 0,5 МБ')
-    expect(q('.card progress')?.getAttribute('value')).toBe('60')
+    expect(text(dlg.querySelector('[role="status"]'))).toBe('Скачиваем… 0,3 из 0,5 МБ')
+    expect(dlg.querySelector('progress')?.getAttribute('value')).toBe('60')
 
     done([item({ ready: true })])
     await settle()
-    expect(text(vrow())).toBe('Ролик ▶ Смотреть · 48 с')
+    expect(globalThis.fetch).toHaveBeenCalledWith('/media/guide-video/start-window', expect.anything())
+    const v = winDialog()!.querySelector('video')!
+    expect(v.getAttribute('src')).toBe('blob:ролик')
+    expect(v.muted && v.hasAttribute('autoplay')).toBe(true)
+    expect(btn('Отменить', winDialog()!)).toBeUndefined()
     expect(notify).not.toHaveBeenCalled()
   })
-  it('ход чужого ролика строку не трогает', async () => {
+  it('ход чужого ролика окно не трогает', async () => {
     api.DownloadGuideVideos.mockReturnValue(new Promise(() => {}))
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     events.get('guide:video')?.({ id: 'open', done: 1, total: 2 })
     await settle()
-    expect(text(vrow())).toBe('Ролик Скачиваем… Отменить')
+    expect(text(winDialog()!.querySelector('[role="status"]'))).toBe('Скачиваем…')
   })
-  it('без согласия: вопрос «Обратиться к GitHub?» тем же текстом; «Отмена» — Go не звали, строка прежняя', async () => {
+  it('без согласия: вопрос «Обратиться к GitHub?» тем же текстом; «Отмена» — Go не звали, окна нет, кнопка прежняя', async () => {
     allowed = false
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     const dlg = dialog('Обратиться к GitHub?')!
     expect(dlg).toBeTruthy()
+    expect(winDialog()).toBeUndefined() // окно ролика откроется после согласия
     expect(text(dlg.querySelector('p'))).toContain(
       'Программа скачает список наборов и роликов, картинки-образцы наборов, новые наборы и выбранное вами с github.com',
     )
@@ -202,30 +215,34 @@ describe('«Скачать»', () => {
     expect(dialog('Обратиться к GitHub?')).toBeUndefined()
     expect(api.SetLibraryNet).not.toHaveBeenCalled()
     expect(api.DownloadGuideVideos).not.toHaveBeenCalled()
-    expect(btn('Скачать', vrow()!)).toBeTruthy()
+    expect(winDialog()).toBeUndefined()
+    expect(btn('▶ Смотреть', vrow()!)).toBeTruthy()
   })
-  it('«Разрешить и скачать»: SetLibraryNet(true, false), затем скачивание; флажок — SetLibraryNet(true, true)', async () => {
+  it('«Разрешить и скачать»: SetLibraryNet(true, false), затем окно с загрузкой; второй раз вопроса нет', async () => {
     allowed = false
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     await fireEvent.click(btn('Разрешить и скачать', dialog('Обратиться к GitHub?')!)!)
     await settle()
     expect(api.SetLibraryNet).toHaveBeenLastCalledWith(true, false)
     expect(api.DownloadGuideVideos).toHaveBeenCalledWith(['start-window'])
     expect(packsUi.net.net.allowed).toBe(true) // согласие общее с «Наборами»
+    expect(qa('video')).toHaveLength(1) // загрузка сразу кончилась (заглушка) — ролик играет в окне
 
-    // второй раз согласие уже есть — вопроса нет
+    // ролик пересняли — снова нужна загрузка, а согласие уже есть: вопроса нет
+    await fireEvent.click(winDialog()!.querySelector('.x')!)
     videos.items.set('start-window', item())
     await settle()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     expect(dialog('Обратиться к GitHub?')).toBeUndefined()
+    expect(api.DownloadGuideVideos).toHaveBeenCalledTimes(2)
   })
   it('флажок «Проверять при запуске» в вопросе уходит в SetLibraryNet', async () => {
     allowed = false
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     const dlg = dialog('Обратиться к GitHub?')!
     await fireEvent.click(dlg.querySelector('input[type="checkbox"]')!)
@@ -233,41 +250,105 @@ describe('«Скачать»', () => {
     await settle()
     expect(api.SetLibraryNet).toHaveBeenLastCalledWith(true, true)
   })
-  it('Esc в вопросе закрывает только его, справочник остаётся', async () => {
+  it('Esc в вопросе закрывает только его, справочник остаётся, окна ролика нет', async () => {
     allowed = false
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     await fireEvent.keyDown(document.body, { key: 'Escape' })
     await settle()
     expect(dialog('Обратиться к GitHub?')).toBeUndefined()
     expect(dialog('Справочник функций')).toBeTruthy()
+    expect(winDialog()).toBeUndefined()
     expect(api.DownloadGuideVideos).not.toHaveBeenCalled()
   })
-  it('«все ролики»: DownloadGuideVideos со всеми не скачанными', async () => {
+  it('скачан: окно и показ сразу, без сети и без хода', async () => {
+    api.GuideVideos.mockResolvedValue([item({ ready: true })])
+    allowed = false // даже без согласия: сети нет — вопроса нет
+    await open()
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
+    await settle()
+    expect(api.DownloadGuideVideos).not.toHaveBeenCalled()
+    expect(dialog('Обратиться к GitHub?')).toBeUndefined()
+    expect(winDialog()!.querySelector('video')).toBeTruthy()
+    expect(winDialog()!.querySelector('progress')).toBeNull()
+  })
+  it('«все ролики»: DownloadGuideVideos со всеми не скачанными, ход — в строке, окна нет', async () => {
+    api.DownloadGuideVideos.mockReturnValue(new Promise(() => {}))
     api.GuideVideos.mockResolvedValue([item(), item({ id: 'open' }), item({ id: 'save', ready: true })])
     await open()
     await fireEvent.click(btn('все ролики (2, 1,0 МБ)', vrow()!)!)
     await settle()
     expect(api.DownloadGuideVideos).toHaveBeenCalledWith(['start-window', 'open'])
+    expect(text(vrow())).toBe('Ролик Скачиваем… Отменить')
+    expect(winDialog()).toBeUndefined()
   })
-  it('повторный щелчок во время хода второй загрузки не запускает', async () => {
+  it('второй ролик, пока первый грузится, не запускается (ErrBusy как раньше)', async () => {
     api.DownloadGuideVideos.mockReturnValue(new Promise(() => {}))
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
-    void videos.get(['start-window'])
+    void videos.watch('start-window')
+    void videos.watch('open')
     await settle()
     expect(api.DownloadGuideVideos).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('«Отменить» и ошибки', () => {
-  it('«Отменить» зовёт CancelGuideVideos; отмена без тоста, строка снова «Скачать»', async () => {
+  const loadingWindow = async () => {
     let fail: (e: unknown) => void = () => {}
     api.DownloadGuideVideos.mockReturnValue(new Promise((_, r) => (fail = r)))
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
+    await settle()
+    return (e: unknown) => fail(e)
+  }
+  it('«Отменить» в окне: CancelGuideVideos, окно закрыто, фокус на «Смотреть», без тоста; Go ответил — кнопка прежняя', async () => {
+    const fail = await loadingWindow()
+    await fireEvent.click(btn('Отменить', winDialog()!)!)
+    await settle()
+    expect(api.CancelGuideVideos).toHaveBeenCalledTimes(1)
+    expect(winDialog()).toBeUndefined()
+    expect(document.activeElement).toBe(btn('▶ Смотреть', vrow()!))
+    fail('скачивание ролика отменено')
+    await settle()
+    expect(notify).not.toHaveBeenCalled()
+    expect(winDialog()).toBeUndefined()
+    expect(text(vrow())).toBe('Ролик ▶ Смотреть · 48 с')
+    expect(videos.busy).toEqual([])
+  })
+  it('Esc во время загрузки — то же: загрузка отменена, окно закрыто, справочник на месте, фокус на «Смотреть»', async () => {
+    const fail = await loadingWindow()
+    await fireEvent.keyDown(document.body, { key: 'Escape' })
+    await settle()
+    expect(api.CancelGuideVideos).toHaveBeenCalledTimes(1)
+    expect(winDialog()).toBeUndefined()
+    expect(dialog('Справочник функций')).toBeTruthy()
+    expect(document.activeElement).toBe(btn('▶ Смотреть', vrow()!))
+    fail('скачивание ролика отменено')
+    await settle()
+    expect(notify).not.toHaveBeenCalled()
+  })
+  it('крестик окна во время загрузки тоже отменяет её; повторный щелчок, пока Go отвечает, не запускает вторую', async () => {
+    const fail = await loadingWindow()
+    await fireEvent.click(winDialog()!.querySelector('.x')!)
+    await settle()
+    expect(api.CancelGuideVideos).toHaveBeenCalledTimes(1)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
+    await settle()
+    expect(api.DownloadGuideVideos).toHaveBeenCalledTimes(1)
+    expect(winDialog()).toBeUndefined()
+    fail('скачивание ролика отменено')
+    await settle()
+    expect(videos.busy).toEqual([])
+  })
+  it('«Отменить» в строке («все ролики») зовёт CancelGuideVideos; отмена без тоста', async () => {
+    let fail: (e: unknown) => void = () => {}
+    api.DownloadGuideVideos.mockReturnValue(new Promise((_, r) => (fail = r)))
+    api.GuideVideos.mockResolvedValue([item(), item({ id: 'open' })])
+    await open()
+    await fireEvent.click(btn('все ролики (2, 1,0 МБ)', vrow()!)!)
     await settle()
     await fireEvent.click(btn('Отменить', vrow()!)!)
     await settle()
@@ -276,30 +357,28 @@ describe('«Отменить» и ошибки', () => {
     fail('скачивание ролика отменено')
     await settle()
     expect(notify).not.toHaveBeenCalled()
-    expect(btn('Скачать', vrow()!)).toBeTruthy()
+    expect(btn('▶ Смотреть', vrow()!)).toBeTruthy()
   })
-  it('ошибка Go — тостом с заглавной, строка снова «Скачать», список перечитан', async () => {
+  it('ошибка сети — тостом словами с заглавной, окно закрывается, кнопка прежняя, список перечитан', async () => {
     api.DownloadGuideVideos.mockRejectedValue('нет связи с github.com — проверьте сеть')
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     expect(notify).toHaveBeenCalledWith('Нет связи с github.com — проверьте сеть', 'error')
-    expect(btn('Скачать', vrow()!)).toBeTruthy()
+    expect(winDialog()).toBeUndefined()
+    expect(btn('▶ Смотреть', vrow()!)).toBeTruthy()
     expect(api.GuideVideos).toHaveBeenCalledTimes(2)
   })
-  it('отзыв согласия в «Наборах» во время загрузки ролика — без красного тоста «отменено»', async () => {
-    let fail: (e: unknown) => void = () => {}
-    api.DownloadGuideVideos.mockReturnValue(new Promise((_, r) => (fail = r)))
-    await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
-    await settle()
+  it('отзыв согласия в «Наборах» во время загрузки ролика — без красного тоста «отменено», окно закрыто', async () => {
+    const fail = await loadingWindow()
     await packsUi.net.revoke() // Go обрывает загрузку и отвечает ошибкой «отменено»
     fail('скачивание ролика отменено')
     await settle()
     expect(api.SetLibraryNet).toHaveBeenCalledWith(false, false)
     expect(notify).not.toHaveBeenCalledWith(expect.anything(), 'error')
     expect(notify.mock.calls.map((c: unknown[]) => c[0]).join('|')).not.toContain('отменено')
-    expect(btn('Скачать', vrow()!)).toBeTruthy()
+    expect(winDialog()).toBeUndefined()
+    expect(btn('▶ Смотреть', vrow()!)).toBeTruthy()
   })
   it('ошибка после отзыва согласия в прошлом ходе тост даёт как обычно', async () => {
     await packsUi.net.revoke()
@@ -307,7 +386,7 @@ describe('«Отменить» и ошибки', () => {
     notify.mockClear()
     api.DownloadGuideVideos.mockRejectedValue('нет связи с github.com — проверьте сеть')
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     await fireEvent.click(btn('Разрешить и скачать', dialog('Обратиться к GitHub?')!)!)
     await settle()
@@ -316,20 +395,37 @@ describe('«Отменить» и ошибки', () => {
   it('«Ролика пока нет в библиотеке» — обычный тост, не красный', async () => {
     api.DownloadGuideVideos.mockRejectedValue('ролика пока нет в библиотеке — повторите позже')
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     expect(notify).toHaveBeenCalledWith('Ролика пока нет в библиотеке — повторите позже', 'info')
   })
-  it('отказ в согласии на записи (SetLibraryNet) — тост, скачивания нет', async () => {
+  it('отказ в согласии на записи (SetLibraryNet) — тост, загрузки и окна нет', async () => {
     allowed = false
     api.SetLibraryNet.mockRejectedValue('диск недоступен')
     await open()
-    await fireEvent.click(btn('Скачать', vrow()!)!)
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
     await settle()
     await fireEvent.click(btn('Разрешить и скачать', dialog('Обратиться к GitHub?')!)!)
     await settle()
     expect(notify).toHaveBeenCalledWith('Диск недоступен', 'error')
     expect(api.DownloadGuideVideos).not.toHaveBeenCalled()
+    expect(winDialog()).toBeUndefined()
+  })
+  it('закрыли справочник, пока ролик грузится: окно ролика уходит, загрузка идёт дальше, итог — в строке', async () => {
+    let done: (v: unknown) => void = () => {}
+    api.DownloadGuideVideos.mockReturnValue(new Promise((r) => (done = r)))
+    await open()
+    await fireEvent.click(btn('▶ Смотреть', vrow()!)!)
+    await settle()
+    guide.open = false
+    await settle()
+    expect(videos.playing).toBeNull()
+    expect(videos.loading).toBeNull()
+    expect(api.CancelGuideVideos).not.toHaveBeenCalled()
+    done([item({ ready: true })])
+    await settle()
+    expect(qa('video')).toHaveLength(0) // окно само не всплывает
+    expect(videos.items.get('start-window')?.ready).toBe(true)
   })
 })
 

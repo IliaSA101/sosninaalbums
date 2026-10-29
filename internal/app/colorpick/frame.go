@@ -83,7 +83,6 @@ func (c *pickCache) get(ctx context.Context, k pickKey, build func() (*image.RGB
 	c.inflight[k] = call
 	c.mu.Unlock()
 
-	c.semOnce.Do(func() { c.sem = make(chan struct{}, pickParallel) })
 	defer func() { // и при панике: ждущие не зависают
 		c.mu.Lock()
 		delete(c.inflight, k)
@@ -93,17 +92,26 @@ func (c *pickCache) get(ctx context.Context, k pickKey, build func() (*image.RGB
 		c.mu.Unlock()
 		close(call.done)
 	}()
-	// Щелчки по разным листам или правки подряд не должны запускать рендеры лавиной: ждём слот,
-	// отмена ctx (закрытие программы) снимает ожидание.
-	select {
-	case c.sem <- struct{}{}:
-		defer func() { <-c.sem }()
-	case <-ctx.Done():
-		call.err = ctx.Err()
-		return nil, call.err
+	release, err := c.acquire(ctx)
+	if err != nil {
+		call.err = err
+		return nil, err
 	}
+	defer release()
 	call.img, call.err = build()
 	return call.img, call.err
+}
+
+// acquire занимает слот рендера: щелчки по разным листам или правки подряд не должны запускать
+// рендеры лавиной. Отмена ctx (закрытие программы) снимает ожидание.
+func (c *pickCache) acquire(ctx context.Context) (release func(), err error) {
+	c.semOnce.Do(func() { c.sem = make(chan struct{}, pickParallel) })
+	select {
+	case c.sem <- struct{}{}:
+		return func() { <-c.sem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // pickDPI — разрешение кадра: большая сторона листа укладывается в pickSidePx (а не ширина: у

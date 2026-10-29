@@ -9,6 +9,7 @@
   import MenuBar from './MenuBar.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import LevelBadge from './LevelBadge.svelte'
+  import AgentsBadge from '../agents/AgentsBadge.svelte'
   import logo from '../../assets/logo.png'
   import { cmText, hasSeam, isSheet, pageSize } from '../../base/geom/sheet'
   import { topLimit } from '../../panels/details/stats'
@@ -55,6 +56,7 @@
   </div>
 
   <div class="group right">
+    <AgentsBadge />
     <LevelBadge />
     <button class="ghost" onclick={() => modes.openSection('settings')} title="Настройки альбома в панели деталей">
       {isSheet(store.view.settings) ? 'Лист' : 'Формат'}

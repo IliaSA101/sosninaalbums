@@ -1,5 +1,119 @@
 export namespace app {
 	
+	export class AgentCall {
+	    at: number;
+	    client: string;
+	    tool: string;
+	    ok: boolean;
+	    ms: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentCall(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.at = source["at"];
+	        this.client = source["client"];
+	        this.tool = source["tool"];
+	        this.ok = source["ok"];
+	        this.ms = source["ms"];
+	    }
+	}
+	export class AgentClient {
+	    name: string;
+	    since: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentClient(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.since = source["since"];
+	    }
+	}
+	export class AgentSetup {
+	    id: string;
+	    title: string;
+	    text: string;
+	    note: string;
+	    file: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentSetup(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.text = source["text"];
+	        this.note = source["note"];
+	        this.file = source["file"];
+	    }
+	}
+	export class AgentsInfo {
+	    status: string;
+	    hint: string;
+	    error: string;
+	    level: number;
+	    portable: boolean;
+	    setups: AgentSetup[];
+	    clients: AgentClient[];
+	    calls: AgentCall[];
+	    today: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentsInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.hint = source["hint"];
+	        this.error = source["error"];
+	        this.level = source["level"];
+	        this.portable = source["portable"];
+	        this.setups = this.convertValues(source["setups"], AgentSetup);
+	        this.clients = this.convertValues(source["clients"], AgentClient);
+	        this.calls = this.convertValues(source["calls"], AgentCall);
+	        this.today = source["today"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AgentsSaved {
+	    canceled: boolean;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentsSaved(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.canceled = source["canceled"];
+	        this.text = source["text"];
+	    }
+	}
 	export class AssocView {
 	    can: boolean;
 	    on: boolean;

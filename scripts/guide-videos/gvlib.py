@@ -8,9 +8,11 @@ motion, privacy); записываются они не CDP-кадрами, а ш
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -24,7 +26,7 @@ for _p in (DEMO, ROOT / "scripts" / "e2e"):  # плоские импорты pil
 from common import Refuse, check_port  # noqa: E402  (scripts/e2e/common.py: порт 34116–34199, не 34115)
 
 W, H = 1280, 760  # окно ролика, CSS px (design §6)
-IDS = ("autobuild", "manual", "variants", "vignette", "cover")  # первая волна (0.30-140-27)
+IDS = ("autobuild", "manual", "variants", "vignette", "cover", "bg-photo", "looks", "export")  # волны 1 (0.30-140-27) и 2
 ID_RX = re.compile(r"^[a-z0-9][a-z0-9-]{2,39}$")  # как fetch.ValidID
 MIN_S, MAX_S = 20.0, 40.0  # длина ролика первой волны, с (решение владельца 0.30-140-27)
 LEAD = 0.3  # с запаса до метки start: кадры страницы при записи идут чуть позже создания страницы
@@ -88,6 +90,39 @@ def default_photos(root: Path = ROOT) -> Path:
         if p.is_dir():
             return p
     raise Refuse("нет набора .testphotos/stock (docs/qa/stock-photos.md); задайте --photos")
+
+
+def big_photo(name: str, root: Path = ROOT) -> Path:
+    """Крупное фото из .testphotos/big (≥ 3000 px): у фото stock ≤ 2000 px, на листе 60×30 см они дают красную метку dpi."""
+    for base in (root, main_root(root)):
+        p = base / ".testphotos" / "big" / name
+        if p.is_file():
+            return p
+    raise Refuse(f"нет .testphotos/big/{name} (набор из scripts, docs/QA.md «Подготовка»)")
+
+
+@contextlib.contextmanager
+def swapped_photo(folder: Path, index: int, src: Path | None, work: Path):
+    """На время одной статьи подменяет index-е (с 0) фото папки стенда на src; после — прежний файл на место
+    (с прежним временем), чтобы остальные статьи снимались на обычном наборе. src None — ничего не меняет."""
+    if src is None:
+        yield
+        return
+    files = sorted(folder.glob("*.jpg"))
+    if not 0 <= index < len(files):
+        raise Refuse(f"в {folder} нет фото №{index + 1} для подмены")
+    if not src.is_file():
+        raise Refuse(f"нет файла подмены {src}")
+    dst = files[index]
+    work.mkdir(parents=True, exist_ok=True)
+    keep = work / f"keep-{dst.name}"
+    shutil.copy2(dst, keep)
+    try:
+        shutil.copyfile(src, dst)
+        yield
+    finally:
+        shutil.copy2(keep, dst)
+        keep.unlink(missing_ok=True)
 
 
 def trim_window(t_page: float, t_start: float, t_end: float) -> dict:

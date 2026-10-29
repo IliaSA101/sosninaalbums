@@ -19,6 +19,7 @@ import { keysUi } from '../hotkeys/keysui.svelte'
 import { guide } from '../guide/guidestate.svelte'
 import { backupsUi } from '../dialogs/backups.svelte'
 import { packsUi } from '../packs/packs.svelte'
+import { agents } from '../agents/agents.svelte'
 import { looks } from '../looks/looks.svelte'
 import { saveLookUi } from '../looks/savelook.svelte'
 import { tplio } from './tplio.svelte'
@@ -151,6 +152,7 @@ const HANDLERS = {
   export: () => edit.idle().then(() => jobs.exportAll()),
   showExport: () => showExportFolder(),
   showData: () => showDataFolder(),
+  agents: () => agents.show(), // 143: окно доступа ИИ-агентов, на всех уровнях
   toggleAssoc: () => assocUi.toggle(), // 112: связь .salbum, пункт меню без клавиши
   tplExport: () => tplio.save(),
   tplImport: () => tplio.load(),

@@ -9,16 +9,18 @@
 # Что собирается (временная копия дерева `git worktree` под .gotmp/qa-kit-work, версия в wails.json и whatsnew.ts):
 #   zip/…-0.25.0-qa-…, …-0.25.1-qa-… — exe с тегом qa (SA_STAND и SA_UPDATE_URL читаются, как у wails dev; связь .salbum не пишется);
 #   zip/…-0.25.0-rel-… — тот же код без тега: «как выпуск» (вопрос о связи .salbum, тур, настоящий адрес обновлений);
-#   setup/ — установщики 0.25.0 и 0.25.1 (scripts/win/installer.sh, нужен makensis; NSISDIR — как у installer.sh);
+#   setup/ — установщики 0.25.0, 0.25.1 и 0.25.2 (scripts/win/installer.sh, нужен makensis; NSISDIR — как у installer.sh);
 #   feed/ — лента: SosninaAlbums-update.json (тестовый ключ, release-sign.mjs --from) + v0.25.1/<установщик>;
 #   feed-bad-byte/, feed-wrong-key/, feed-old-setup/ — испорченные ленты для QA-4; pub.txt — открытый тестовый ключ;
-#   albums/ — .salbum «из новой версии» (формат 99); *.cmd, README.txt, update.md, installer-check.ps1.
+#   albums/ — .salbum «из новой версии» (формат 99); *.cmd, README.txt, update.md, installer-check.ps1 и installer-check-lib.ps1.
 # Закрытые тестовые ключи живут в .gotmp и в набор не попадают; временная копия дерева удаляется всегда.
 # Время: npm ci ≈ 0,5 мин, три сборки exe ≈ 2–3 мин каждая, три установщика ≈ 0,5 мин — всего 8–12 мин.
 set -euo pipefail
 
 # Версии набора: старая (установлена), новая (в ленте), «старее старой» (ловит откат в установщике)
 OLD=0.25.0 NEW=0.25.1 STALE=0.24.9
+# Третья версия — только установщик (код как у NEW): второе обновление при живом посреднике, агенты-exe в win-qa (143 Т1)
+NEWER=0.25.2
 ASSET=SosninaAlbums-update.json
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -52,9 +54,9 @@ if [ $dry = 1 ]; then
   2. $([ $fake = 1 ] || echo "git worktree add --detach $src $ref; npm ci в frontend; ")wails.json и whatsnew.ts — версия $OLD / $NEW
   3. exe qa $OLD, exe qa $NEW$([ $rel = 1 ] && echo ", exe rel $OLD") — scripts/build.sh --tags qa (CGO_ENABLED=0, -trimpath)
   4. zip/ — три архива «Sosnina Albums <версия>-<qa|rel>/SosninaAlbums-<версия>.exe»
-  5. setup/ — установщики $OLD (из exe qa $OLD) и $NEW (из exe qa $NEW); для feed-old-setup — установщик $STALE из exe qa $NEW
+  5. setup/ — установщики $OLD (из exe qa $OLD), $NEW и $NEWER (из exe qa $NEW); для feed-old-setup — установщик $STALE из exe qa $NEW
   6. тестовые ключи → pub.txt; feed/ — release-sign.mjs v$NEW --from … --skip-rebuild --whatsnew …; затем три испорченные ленты
-  7. albums/ — .salbum формата 99 («из новой версии»); *.cmd, README.txt, update.md, installer-check.ps1, kit-sha256.txt
+  7. albums/ — .salbum формата 99 («из новой версии»); *.cmd, README.txt, update.md, installer-check.ps1, installer-check-lib.ps1, kit-sha256.txt
   8. самопроверка лент (подпись, sha256), удаление временной копии и закрытых ключей
 Результат: $out
 EOF
@@ -120,8 +122,11 @@ build_exe() {
   say "exe $1 ($2)"
   if [ $fake = 1 ]; then blob "$3" "exe $1 $2"; return; fi
   set_version "$1"
-  if [ "$2" = qa ]; then bash "$src/scripts/build.sh" --tags qa >&2; else bash "$src/scripts/build.sh" >&2; fi
-  cp -- "$src/build/bin/SosninaAlbums-$1.exe" "$3"
+  # exe со своими тегами лежит под именем с суффиксом (build.sh): SosninaAlbums-<версия>-qa.exe, выпускной вид - без него
+  local built="$src/build/bin/SosninaAlbums-$1.exe"
+  if [ "$2" = qa ]; then bash "$src/scripts/build.sh" --tags qa >&2; built="$src/build/bin/SosninaAlbums-$1-qa.exe"; else bash "$src/scripts/build.sh" >&2; fi
+  [ -f "$built" ] || die "нет $built: сборка не оставила exe"
+  cp -- "$built" "$3"
 }
 
 # mkzip <exe> <версия> <qa|rel> — zip как у выпуска: папка «Sosnina Albums <версия>-<вид>» и exe с версией в имени
@@ -159,6 +164,7 @@ mkzip "$exe_new" "$NEW" qa
 [ $rel = 0 ] || mkzip "$exe_rel" "$OLD" rel
 make_setup "$exe_old" "$OLD" "$out/setup"
 make_setup "$exe_new" "$NEW" "$out/setup"
+make_setup "$exe_new" "$NEWER" "$out/setup"
 make_setup "$exe_new" "$STALE" "$work/stale"
 
 # ---------- лента ----------
@@ -321,6 +327,7 @@ pause
 EOF
 
 cp -- "$root/scripts/win/installer-check.ps1" "$out/installer-check.ps1"
+cp -- "$root/scripts/win/installer-check-lib.ps1" "$out/installer-check-lib.ps1"
 # В дереве ветки winqa/* (без кухни проекта) docs/qa нет: набор тогда без update.md, это не ошибка
 [ ! -f "$root/docs/qa/update.md" ] || cp -- "$root/docs/qa/update.md" "$out/update.md"
 
@@ -358,6 +365,7 @@ cat > "$out/README.txt" <<EOF
   zip/SosninaAlbums-$NEW-qa-windows-x64.zip    то же, версия $NEW (для сверки).
   setup/...-$OLD-...-setup.exe                 установщик $OLD (QA-сборка): ставьте его первым.
   setup/...-$NEW-...-setup.exe                 установщик $NEW: ждёт в ленте как обновление.
+  setup/...-$NEWER-...-setup.exe                 установщик $NEWER (код как у $NEW): только для проверки агентов-exe в CI (143 Т1).
   feed/                                        тестовая лента: $NEW над $OLD, подписана тестовым ключом (pub.txt).
   feed-bad-byte/ feed-wrong-key/ feed-old-setup/   испорченные ленты для QA-4.
   albums/NewerTest-*.salbum                    альбомы "из новой версии" (формат 99) для окна "Альбом из новой версии".
@@ -365,7 +373,8 @@ cat > "$out/README.txt" <<EOF
   start-$OLD.cmd, start-installed.cmd          запуск QA-сборки со стендом qa и лентой (переносная / установленная).
   profile-save.cmd, profile-restore.cmd        отложить и вернуть настоящие данные программы на ноутбуке.
   stand-clean.cmd                              стереть данные стенда qa.
-  installer-check.ps1                          автоматическая проверка установщика (необязательно, см. update.md).
+  installer-check.ps1                          автоматическая проверка установщика (необязательно, см. update.md);
+  installer-check-lib.ps1                      её помощники (держать рядом).
   pub.txt                                      открытый тестовый ключ (читает start-*.cmd).
 
 ПОРЯДОК (около 45 минут; остальное проверяет раннер GitHub Actions)

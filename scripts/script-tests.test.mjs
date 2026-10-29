@@ -19,9 +19,9 @@ test('каждый шаг есть в workflow (ci.yml / release.yml) досло
 test('обратный страж: каждый python unittest и test_*.sh из ci.yml/release.yml есть в списке', () => {
   const have = buildSteps(FULL)
   const text = workflow('ci.yml') + workflow('release.yml')
-  const dirs = new Set([...text.matchAll(/unittest discover -s (scripts\/\w+)/g)].map((m) => m[1]))
-  assert.ok(dirs.size >= 3, 'ожидали win, mac, guide')
-  for (const d of dirs) assert.ok(have.some((s) => s.args.join(' ').includes(`discover -s ${d}`)), `в script-tests нет ${d}`)
+  const dirs = new Set([...text.matchAll(/unittest discover -s (scripts\/[\w-]+)/g)].map((m) => m[1]))
+  assert.ok(dirs.size >= 5, 'ожидали win, mac, guide, guide-videos, e2e')
+  for (const d of dirs) assert.ok(have.some((s) => s.args.at(-1) === d), `в script-tests нет ${d}`)
   const shells = new Set([...text.matchAll(/bash (scripts\/\w+\/test_\w+\.sh)/g)].map((m) => m[1]))
   for (const sh of shells) assert.ok(have.some((s) => s.args.includes(sh)), `в script-tests нет ${sh}`)
   assert.ok(text.includes('node --test "scripts/*.test.mjs"') && have.some((s) => s.cmd === 'node' && s.args[0] === '--test'))
@@ -29,16 +29,16 @@ test('обратный страж: каждый python unittest и test_*.sh и�
 
 test('полный набор: нет пропусков и провалов без запуска, у win — CI=true, у test_deb — без рабочего стола', () => {
   const steps = buildSteps(FULL)
-  assert.equal(steps.length, 7)
+  assert.equal(steps.length, 9)
   for (const s of steps) assert.ok(!s.skip && !s.fail, s.name)
   assert.equal(byName(steps, 'scripts/win').env.CI, 'true')
   assert.deepEqual(byName(steps, 'test_deb').unset, ['DISPLAY', 'WAYLAND_DISPLAY', 'XDG_CURRENT_DESKTOP', 'DESKTOP_SESSION'])
 })
 
-test('нет python: три python-шага пропущены с предупреждением, остальные идут', () => {
+test('нет python: пять python-шагов пропущены с предупреждением, остальные идут', () => {
   const steps = buildSteps({ ...FULL, python: '', hasDocx: false })
   const skipped = steps.filter((s) => s.skip).map((s) => s.name)
-  assert.deepEqual(skipped, ['python scripts/win', 'python scripts/mac', 'python scripts/guide'])
+  assert.deepEqual(skipped, ['python scripts/win', 'python scripts/mac', 'python scripts/guide', 'python scripts/guide-videos', 'python scripts/e2e'])
   assert.ok(!byName(steps, 'scripts/win').fail, 'без python нечего проверять на makensis')
   assert.ok(!byName(steps, 'node --test').skip && !byName(steps, 'test_lib').skip)
 })

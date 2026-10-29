@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -16,6 +18,7 @@ import (
 func TestHostsLateBound(t *testing.T) {
 	a := newApp(t)
 	uh, ah, eh, ph, oh := a.updHost(), a.assocHost(), a.expHost(), a.packsHost(), a.printsHost()
+	gh := a.agentsHost()
 
 	// Подмены после сборки Host.
 	dir := testkit.TempDir(t)
@@ -58,7 +61,8 @@ func TestHostsLateBound(t *testing.T) {
 	uh.Emit("u")
 	eh.Emit("e")
 	ah.Notice("n")
-	if want := []string{"p", "o", "u", "e", "notice"}; !slices.Equal(events, want) {
+	gh.Changed()
+	if want := []string{"p", "o", "u", "e", "notice", "agents:state"}; !slices.Equal(events, want) {
 		t.Errorf("события = %v, ждали %v", events, want)
 	}
 
@@ -78,6 +82,20 @@ func TestHostsLateBound(t *testing.T) {
 	if eh.Editor() != ed {
 		t.Error("exporter Editor не текущий редактор App")
 	}
+	// Служба агентов: папка настроек, путь сокета, лента и вид читаются при вызове.
+	a.photos = []library.Photo{{ID: "late"}}
+	if got := gh.CfgDir(); got != dir {
+		t.Errorf("agents CfgDir = %q, ждали %q", got, dir)
+	}
+	if got := gh.Sock(); got != osx.MCPSock("late-data") {
+		t.Errorf("agents Sock = %q, ждали путь для late-data", got)
+	}
+	if ph := gh.Photos(); len(ph) != 1 || ph[0].ID != "late" {
+		t.Errorf("agents Photos = %v: лента не текущая", ph)
+	}
+	if v, id := gh.View(); id != ed.ID() || len(v.Spreads) != len(ed.View().Spreads) {
+		t.Errorf("agents View: редактор %d, ждали %d", id, ed.ID())
+	}
 	// Новый редактор отличаем числом разворотов: Rev у пустых одинаков, раннее связывание не видно.
 	p2 := model.New()
 	p2.Spreads = []*model.Spread{{ID: "s1"}, {ID: "s2"}, {ID: "s3"}}
@@ -89,5 +107,8 @@ func TestHostsLateBound(t *testing.T) {
 	}
 	if eh.Editor() != ed2 {
 		t.Error("exporter Editor закэширован при сборке Host")
+	}
+	if v, id := gh.View(); id != ed2.ID() || len(v.Spreads) != n2 {
+		t.Errorf("agents View закэширован при сборке Host: редактор %d (ждали %d), разворотов %d (ждали %d)", id, ed2.ID(), len(v.Spreads), n2)
 	}
 }

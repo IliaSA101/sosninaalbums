@@ -86,3 +86,19 @@ func TestClampGridAllInvalid(t *testing.T) {
 		t.Fatalf("повторный зажим изменил сетки: %v %v", bad.Grid, good.Grid)
 	}
 }
+
+// Settings.Page — та же страница, что у Geo обычного листа: разворот и лист 031, нестандартный
+// размер и нули (зажим размеров — дело ClampSettings, не Page).
+func TestSettingsPageMatchesGeo(t *testing.T) {
+	for _, c := range []struct {
+		w, h  float64
+		sheet bool
+	}{{300, 300, false}, {210, 297, true}, {123.5, 77, false}, {0, 0, false}} {
+		p := New()
+		p.Settings.PageW, p.Settings.PageH, p.Settings.Sheet = c.w, c.h, c.sheet
+		pg, g := p.Settings.Page(), p.Geo(nil).Pages[0]
+		if pg.W != g.W || pg.H != g.H {
+			t.Fatalf("%+v: Page %v, Geo %v", c, pg, g)
+		}
+	}
+}

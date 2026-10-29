@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allLink, blobType, busyLine, getAction, hasVideo, metaLine, percent, rowState, secondsLabel, type VideoItem } from './videorow'
+import { allLink, blobType, busyLine, getAction, hasVideo, percent, rowState, secondsLabel, type VideoItem } from './videorow'
 
 // Строка «Ролик» (спека 140, design §4): состояния и тексты — без Svelte и сети.
 const MB = 1048576
@@ -7,27 +7,31 @@ const v = (id: string, o: Partial<VideoItem> = {}): VideoItem => ({ id, version:
 const none = new Set<string>()
 
 describe('rowState', () => {
-  it('нет файла — «Скачать»; скачан — «Смотреть»', () => {
-    expect(rowState('cover', v('cover'), [], none)).toBe('get')
-    expect(rowState('cover', undefined, [], none)).toBe('get') // встроенный список без каталога
-    expect(rowState('cover', v('cover', { ready: true }), [], none)).toBe('ready')
+  it('скачан или нет файла — всегда «Смотреть» (нет файла: окно загрузит его само)', () => {
+    expect(rowState('cover', v('cover'), [], none)).toBe('watch')
+    expect(rowState('cover', undefined, [], none)).toBe('watch') // встроенный список без каталога
+    expect(rowState('cover', v('cover', { ready: true }), [], none)).toBe('watch')
   })
-  it('идёт скачивание этого ролика (одного или в «все ролики») — busy; чужое — нет', () => {
+  it('идёт скачивание этого ролика вне окна (одного или в «все ролики») — busy; чужое — нет', () => {
     expect(rowState('cover', v('cover'), ['cover'], none)).toBe('busy')
     expect(rowState('cover', v('cover'), ['manual', 'cover'], none)).toBe('busy')
-    expect(rowState('cover', v('cover'), ['manual'], none)).toBe('get')
+    expect(rowState('cover', v('cover'), ['manual'], none)).toBe('watch')
   })
-  it('окно не сыграло скачанный ролик — broken; после ошибки скачивания (не скачан) — снова «Скачать»', () => {
+  it('ролик грузится в окне ролика — строка под окном остаётся «Смотреть»; чужое окно её не трогает', () => {
+    expect(rowState('cover', v('cover'), ['cover'], none, 'cover')).toBe('watch')
+    expect(rowState('cover', v('cover'), ['cover'], none, 'manual')).toBe('busy')
+  })
+  it('окно не сыграло скачанный ролик — broken; после ошибки загрузки (не скачан) — снова «Смотреть»', () => {
     expect(rowState('cover', v('cover', { ready: true }), [], new Set(['cover']))).toBe('broken')
-    expect(rowState('cover', v('cover'), [], new Set(['cover']))).toBe('get')
+    expect(rowState('cover', v('cover'), [], new Set(['cover']))).toBe('watch')
   })
-  it('ролик пересняли (ready=false у нового) — строка снова «Скачать»', () => {
-    expect(rowState('cover', v('cover', { version: 2 }), [], none)).toBe('get')
+  it('ролик пересняли (ready=false у нового) — «Смотреть» снова загрузит новый', () => {
+    expect(rowState('cover', v('cover', { version: 2 }), [], none)).toBe('watch')
   })
 })
 
 describe('согласие на сеть', () => {
-  it('без согласия «Скачать» спрашивает, с согласием качает', () => {
+  it('без согласия загрузка спрашивает, с согласием идёт', () => {
     expect(getAction(false)).toBe('ask')
     expect(getAction(true)).toBe('download')
   })
@@ -44,14 +48,10 @@ describe('hasVideo', () => {
 })
 
 describe('тексты', () => {
-  it('секунды и размер: «· 48 с, 512 КБ»; размера нет — только секунды; ничего нет — пусто', () => {
+  it('секунды: «48 с», «1 мин», «1 мин 5 с»', () => {
     expect(secondsLabel(48)).toBe('48 с')
     expect(secondsLabel(60)).toBe('1 мин')
     expect(secondsLabel(65)).toBe('1 мин 5 с')
-    expect(metaLine(48, MB / 2)).toBe('· 48 с, 512 КБ')
-    expect(metaLine(48, 1.5 * MB)).toBe('· 48 с, 1,5 МБ')
-    expect(metaLine(48, 0)).toBe('· 48 с')
-    expect(metaLine(0, 0)).toBe('')
   })
   it('ход: «0,3 из 0,5 МБ»; без размера или чужой ролик — «Скачиваем…»', () => {
     const p = { id: 'cover', done: Math.round(0.3 * MB), total: MB / 2 }

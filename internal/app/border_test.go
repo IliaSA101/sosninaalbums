@@ -267,8 +267,8 @@ func TestMediaFrameRefuses(t *testing.T) {
 		"вложенный":  "/media/f/" + brFrame + "/x" + q,
 		"без px":     url,
 	} {
-		if rec := getMedia(a, path); rec.Code != http.StatusNotFound {
-			t.Errorf("%s: %d, ждали 404", name, rec.Code)
+		if rec := getMedia(a, path); rec.Code != wantRefusal(path) {
+			t.Errorf("%s: %d, ждали %d", name, rec.Code, wantRefusal(path))
 		}
 	}
 	if probed != 1 { // только «без px»: запись та, путь проверен, отказ — у разбора запроса

@@ -129,6 +129,13 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+      # Канал службы агентов (143 Г1) и посредник --mcp (Г4): AF_UNIX, DACL папки, срок записи на Windows.
+      # С -v, чтобы в логе было видно PASS и SKIP каждого теста (пакетный go test в ci.yml молчит о прошедших);
+      # always - независимо от реплея.
+      - name: go test agents и mcpbridge (канал и посредник)
+        if: always()
+        run: go test ./internal/app/agents ./internal/mcpbridge ./internal/osx -count=1 -v
+
   kit:
     name: Набор qa-kit
     needs: plan
@@ -301,6 +308,311 @@ jobs:
         with:
           name: win-qa-${{ matrix.block }}
           path: ${{ runner.temp }}\win-qa-out\
+          if-no-files-found: warn
+          retention-days: 3
+
+  # Служба агентов на настоящем установленном exe (143 Т1, design §4.7, Г8): посредник `--mcp` живёт через два тихих
+  # обновления и удаление, чужой пользователь Windows не подключается к сокету. Независим от блоков scenario:
+  # идёт при каждом прогоне, один прогон собирает все провалы (agents_exe.py), дамп состояния - в артефакте.
+  agents:
+    name: Windows агенты (exe)
+    needs: [plan, kit]
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: qa-kit
+          path: ${{ runner.temp }}\kit
+
+      - name: Сверка набора с заданием kit
+        env:
+          WANT: ${{ needs.kit.outputs.hash }}
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'kit\kit-sha256.txt'
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
+          if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
+
+      # Код выхода 1 - есть провалы пунктов; итоги и дамп состояния пишутся и при провале
+      - name: Агенты на exe (agents_exe.py)
+        timeout-minutes: 20
+        run: |
+          python -I "$env:GITHUB_WORKSPACE\scripts\win\qa\agents_exe.py" --kit (Join-Path $env:RUNNER_TEMP 'kit') --out (Join-Path $env:RUNNER_TEMP 'agents-out')
+          exit $LASTEXITCODE
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'agents-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'agents summary.md missing' }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: agents-exe-qa
+          path: ${{ runner.temp }}\agents-out\
+          if-no-files-found: warn
+          retention-days: 3
+
+  # Образцы наборов библиотеки в exe (144, решение 0.31-144-59): qa-exe 0.25.x с настоящим GitHub, запросы /media/lp/ шлёт
+  # зонд внутри окна WebView2 (library_probe.js, тег qa). Независим от блоков scenario: идёт при каждом прогоне,
+  # один прогон собирает все провалы (library_exe.py), дамп состояния и записи зонда - в артефакте.
+  library:
+    name: Windows образцы наборов (exe)
+    needs: [plan, kit]
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: qa-kit
+          path: ${{ runner.temp }}\kit
+
+      - name: Сверка набора с заданием kit
+        env:
+          WANT: ${{ needs.kit.outputs.hash }}
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'kit\kit-sha256.txt'
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
+          if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
+
+      # Код выхода 1 - есть провалы пунктов; итоги, дамп состояния и записи зонда пишутся и при провале
+      - name: Образцы наборов на exe (library_exe.py)
+        timeout-minutes: 25
+        run: |
+          python -I "$env:GITHUB_WORKSPACE\scripts\win\qa\library_exe.py" --kit (Join-Path $env:RUNNER_TEMP 'kit') --out (Join-Path $env:RUNNER_TEMP 'library-out')
+          exit $LASTEXITCODE
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'library-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'library summary.md missing' }
+
+      # exe лежит в work\exe и в артефакт не нужен: берутся итоги, дамп и записи зонда
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: library-exe-qa
+          path: |
+            ${{ runner.temp }}\library-out\summary.md
+            ${{ runner.temp }}\library-out\state-dump.txt
+            ${{ runner.temp }}\library-out\work\*.jsonl
+            ${{ runner.temp }}\library-out\work\*.js
+          if-no-files-found: warn
+          retention-days: 3
+
+  # Ролики справочника F1 в собранной программе (спека 140, Т7): Linux проверен в Т0, здесь Windows (webm, WebView2) и macOS
+  # (mp4, WKWebView). Тестовый каталог с двумя роликами строит videos-site (ключ одноразовый, тестовый; настоящие ключи не
+  # читаются), раздаёт его сама проверка с 127.0.0.1:34190; программа с тегом qa берёт его через SA_LIBRARY_URL/SA_LIBRARY_KEY.
+  # Зонд внутри окна (videos_probe.js) играет ролик тем же путём, что окно справочника, и сверяет кадр и ход времени.
+  videos-site:
+    name: Каталог роликов (тестовый)
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      # minApp 0.25.1: exe набора qa-kit подписан этой версией, а свежая сборка macOS новее - годится обеим
+      - name: Каталог и ролики (library-testvideos.mjs)
+        run: |
+          mkdir -p .gotmp
+          node scripts/library-pack.mjs --test-key
+          node scripts/library-testsets.mjs --min-app 0.25.1
+          node scripts/library-testvideos.mjs --ids filter:6,export:6 --min-app 0.25.1
+          node scripts/library-testvideos.mjs --print-key > .testphotos/library/site/key.txt
+          ls -l .testphotos/library/site
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: videos-site
+          path: .testphotos/library/site/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+  videos-win:
+    name: Windows ролики F1 (webm)
+    needs: [plan, kit, videos-site]
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: qa-kit
+          path: ${{ runner.temp }}\kit
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: videos-site
+          path: ${{ runner.temp }}\site
+
+      - name: Сверка набора с заданием kit
+        env:
+          WANT: ${{ needs.kit.outputs.hash }}
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'kit\kit-sha256.txt'
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
+          if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
+
+      # Код выхода 1 - есть провалы пунктов; итоги, дамп состояния и записи зонда пишутся и при провале
+      - name: Ролики F1 в exe (videos_exe.py)
+        timeout-minutes: 20
+        run: |
+          python -I "$env:GITHUB_WORKSPACE\scripts\win\qa\videos_exe.py" --kit (Join-Path $env:RUNNER_TEMP 'kit') --site (Join-Path $env:RUNNER_TEMP 'site') --out (Join-Path $env:RUNNER_TEMP 'videos-out')
+          exit $LASTEXITCODE
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'videos-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'videos summary.md missing' }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: videos-win-exe-qa
+          path: |
+            ${{ runner.temp }}\videos-out\summary.md
+            ${{ runner.temp }}\videos-out\state-dump.txt
+            ${{ runner.temp }}\videos-out\work\*.jsonl
+            ${{ runner.temp }}\videos-out\work\*.js
+          if-no-files-found: warn
+          retention-days: 3
+
+  # macOS: .app с тегом qa собирается здесь же (как в release.yml, но arm64 и -tags qa): выпускная сборка тегов не берёт.
+  # Окно WKWebView поднимается в сеансе раннера (как у mac-shots.yml); не поднялось или зонд молчит - в итоге ready=FAIL,
+  # снимок экрана конца каждого запуска (work/*-end.png) и отчёты падений системы - в артефакте.
+  videos-mac:
+    name: macOS ролики F1 (mp4)
+    needs: [plan, videos-site]
+    runs-on: macos-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+          cache: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: Wails CLI (версия из go.mod)
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci
+
+      - name: wails build (тег qa)
+        run: wails build -platform darwin/arm64 -clean -trimpath -tags qa
+
+      # Обратный страж: в qa-сборке зонд и стенд библиотеки обязаны быть - иначе проверялось бы не то
+      - name: Страж тегов QA (зонд и стенд библиотеки на месте)
+        run: |
+          apps=(build/bin/*.app)
+          [ "${#apps[@]}" -eq 1 ] || { echo "::error::Ожидалось одно .app в build/bin, найдено: ${#apps[@]}"; exit 1; }
+          bin=("${apps[0]}"/Contents/MacOS/*)
+          for s in SA_QA_PROBE SA_LIBRARY_URL; do
+            LC_ALL=C grep -aqF -- "$s" "${bin[0]}" || { echo "::error::В qa-сборке нет строки $s - тег qa не действует"; exit 1; }
+          done
+          codesign --force --deep --sign - "${apps[0]}"
+          codesign --verify --deep --strict "${apps[0]}"
+          echo "APP=${apps[0]}" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: videos-site
+          path: ${{ runner.temp }}/site
+
+      # Код выхода 1 - есть провалы пунктов; итоги, дамп состояния, записи зонда и снимки пишутся и при провале
+      - name: Ролики F1 в .app (videos_exe.py)
+        timeout-minutes: 15
+        run: |
+          mkdir -p "$RUNNER_TEMP/videos-out"
+          python3 -I scripts/win/qa/videos_exe.py --app "$APP" --site "$RUNNER_TEMP/site" --out "$RUNNER_TEMP/videos-out"
+
+      - name: Сводка
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/videos-out/summary.md"
+          if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; else echo 'videos summary.md missing' >> "$GITHUB_STEP_SUMMARY"; fi
+
+      # Отчёты падений системы: если окно WKWebView упало или не поднялось, причина будет там
+      - name: Отчёты падений и снимок экрана
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/videos-out/work"
+          screencapture -x "$RUNNER_TEMP/videos-out/work/final-screen.png" || true
+          cp "$HOME"/Library/Logs/DiagnosticReports/sosninaalbums* "$RUNNER_TEMP/videos-out/work/" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: videos-mac-app-qa
+          path: |
+            ${{ runner.temp }}/videos-out/summary.md
+            ${{ runner.temp }}/videos-out/state-dump.txt
+            ${{ runner.temp }}/videos-out/work/*.jsonl
+            ${{ runner.temp }}/videos-out/work/*.js
+            ${{ runner.temp }}/videos-out/work/*.png
+            ${{ runner.temp }}/videos-out/work/sosninaalbums*
           if-no-files-found: warn
           retention-days: 3
 

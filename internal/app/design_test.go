@@ -57,8 +57,8 @@ func TestFontRoute(t *testing.T) {
 		"/media/font/fonts/Montserrat-Regular.ttf", "/media/font/OFL-montserrat.txt",
 		"/media/font/montserrat-regular.ttf", "/media/font/Montserrat-Regular.ttf/x",
 	} {
-		if w := get(bad); w.Code != http.StatusNotFound {
-			t.Errorf("%s: %d, ждали 404", bad, w.Code)
+		if w := get(bad); w.Code != wantRefusal(bad) {
+			t.Errorf("%s: %d, ждали %d", bad, w.Code, wantRefusal(bad))
 		}
 	}
 	if fonts := a.GetState().Fonts; len(fonts) != len(text.Families()) || len(fonts[0].Faces) == 0 {

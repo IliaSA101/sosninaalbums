@@ -323,8 +323,8 @@ func TestMediaOriginalUnknownID(t *testing.T) {
 	reachable = func(string) bool { t.Error("чужой ID: проверка тома"); return false }
 	readColor = func(string) (imgfile.Color, string) { t.Error("чужой ID: чтение цвета"); return "", "" }
 	for _, id := range []string{"", "0123456789abcdef", "../a.jpg", "a/b", "%2Fetc%2Fpasswd", strings.TrimPrefix(path, "/"), "..%2F..%2Fetc%2Fpasswd"} {
-		if rec := origReq(a, http.MethodGet, "/media/o/"+id); rec.Code != http.StatusNotFound {
-			t.Errorf("ID %q: код %d, ждали 404", id, rec.Code)
+		if rec := origReq(a, http.MethodGet, "/media/o/"+id); rec.Code != wantRefusal("/media/o/"+id) {
+			t.Errorf("ID %q: код %d, ждали %d", id, rec.Code, wantRefusal("/media/o/"+id))
 		}
 	}
 }

@@ -5,22 +5,21 @@
   import { GUIDE_VIDEOS } from '../guidetext/videos'
   import VideoWindow from './VideoWindow.svelte'
   import { videos } from './videos.svelte'
-  import { allLink, BROKEN_TEXT, busyLine, hasVideo, metaLine, percent, rowState, secondsLabel } from './videorow'
+  import { allLink, BROKEN_TEXT, busyLine, hasVideo, percent, rowState, secondsLabel } from './videorow'
 
-  // Строка «Ролик» карточки F1 (спека 140, design §4): скачать · ход · смотреть · не открылся (+ скачать заново). Образец вида — строки
-  // «Где», «Клавиши»; вопрос о сети и ход — как у «Скачать» набора. Статья без ролика — строки нет (0.30-140-15).
+  // Строка «Ролик» карточки F1 (спека 140, design §4): «▶ Смотреть» (первый раз грузит в окне ролика, 0.30-140-31) · ход вне окна · не открылся (+ скачать заново). Образец вида — строки
+  // «Где», «Клавиши»; вопрос о сети и ход — как у загрузки набора. Статья без ролика — строки нет (0.30-140-15).
   let { id, title }: { id: string; title: string } = $props()
 
   const item = $derived(videos.items.get(id))
   const known = $derived(hasVideo(id, GUIDE_VIDEOS, videos.items))
-  const kind = $derived(rowState(id, item, videos.busy, videos.failed))
+  const kind = $derived(rowState(id, item, videos.busy, videos.failed, videos.loading))
   const seconds = $derived(item?.seconds || GUIDE_VIDEOS[id]?.seconds || 0)
-  const meta = $derived(metaLine(seconds, item?.size ?? 0))
   const all = $derived(allLink([...videos.items.values()]))
   const pct = $derived(percent(videos.progress, id))
 
   let watch = $state<HTMLButtonElement>()
-  // Esc закрыл окно ролика: фокус — на «Смотреть» (окно под ним забирает его себе позже, поэтому после двух тактов)
+  // Esc, крестик или «Отменить» закрыли окно ролика (идёт загрузка — она отменяется): фокус — на «Смотреть» (окно под ним забирает его себе позже, поэтому после двух тактов)
   async function closeWindow() {
     videos.stop()
     await tick()
@@ -33,10 +32,10 @@
   <div class="row">
     <b>Ролик</b>
     <div class="line">
-      {#if kind === 'get'}
+      {#if kind === 'watch'}
         <span class="what">
-          <button class="link" onclick={() => videos.get([id])}>Скачать</button>
-          {#if meta}<span class="muted">{meta}</span>{/if}
+          <button class="watch" bind:this={watch} onclick={() => videos.watch(id)}>▶ Смотреть</button>
+          {#if seconds > 0}<span class="muted">· {secondsLabel(seconds)}</span>{/if}
           {#if all}<button class="link all" onclick={() => videos.get(all.ids)}>{all.label}</button>{/if}
         </span>
       {:else if kind === 'busy'}
@@ -45,11 +44,6 @@
           <button class="link" disabled={videos.cancelling} onclick={() => videos.cancel()}>Отменить</button>
         </span>
         <progress max="100" value={pct ?? undefined} aria-label="Ход скачивания ролика"></progress>
-      {:else if kind === 'ready'}
-        <span class="what">
-          <button class="watch" bind:this={watch} onclick={() => videos.play(id)}>▶ Смотреть</button>
-          {#if seconds > 0}<span class="muted">· {secondsLabel(seconds)}</span>{/if}
-        </span>
       {:else}
         <span class="what">
           <span>{BROKEN_TEXT}</span>

@@ -23,6 +23,8 @@ class Videos {
   playing = $state<string | null>(null) // id в окне ролика
   consent = $state<string[] | null>(null) // вопрос «Обратиться к GitHub?»: что скачать после «Разрешить»
   consentStart = $state(false)
+  loading = $state<string | null>(null) // ролик, который грузится в окне ролика (ход и «Отменить» — там, 0.30-140-31)
+  private consentWin: string | null = null // для какого ролика открыть окно после «Разрешить»
   private checking = false // между щелчком и началом хода идёт чтение согласия
   private seq = 0
 
@@ -48,8 +50,15 @@ class Videos {
     return () => off?.()
   }
 
-  // «Скачать» / «все ролики»: нет согласия — сначала вопрос (то же, что у «Наборов»), иначе сразу ход.
-  async get(ids: string[]) {
+  // «▶ Смотреть»: скачан — окно сразу, без сети; нет — загрузка в самом окне (с вопросом о сети, если согласия нет).
+  async watch(id: string) {
+    if (this.items.get(id)?.ready) return this.play(id)
+    await this.get([id], id)
+  }
+
+  // «все ролики» / «Скачать заново» / первая «Смотреть»: нет согласия — сначала вопрос (то же, что у «Наборов»), иначе сразу ход.
+  // win — ролик, для которого после загрузки играет окно ролика (открывается вместе с ходом).
+  async get(ids: string[], win: string | null = null) {
     if (this.busy.length || this.checking || ids.length === 0) return
     this.checking = true
     try {
@@ -57,12 +66,13 @@ class Videos {
       if (getAction(packsUi.net.net.allowed) === 'ask') {
         this.consentStart = false
         this.consent = ids
+        this.consentWin = win
         return
       }
     } finally {
       this.checking = false
     }
-    await this.run(ids)
+    await this.run(ids, win)
   }
 
   dismissConsent() {
@@ -72,9 +82,10 @@ class Videos {
   // «Разрешить и скачать»: согласие и флажок — в config.json у Go, затем то, что нажали.
   async confirmConsent() {
     const ids = this.consent
+    const win = this.consentWin
     if (!ids || this.busy.length) return
     this.consent = null
-    this.checking = true // пока согласие пишется, «Скачать» вопрос второй раз не открывает
+    this.checking = true // пока согласие пишется, «Смотреть» вопрос второй раз не открывает
     try {
       packsUi.net.take((await Api.SetLibraryNet(true, this.consentStart)) as unknown as LibraryNet)
     } catch (e) {
@@ -82,10 +93,14 @@ class Videos {
     } finally {
       this.checking = false
     }
-    await this.run(ids)
+    await this.run(ids, win)
   }
 
-  private async run(ids: string[]) {
+  private async run(ids: string[], win: string | null) {
+    if (win) {
+      this.loading = win
+      this.playing = win
+    }
     this.busy = ids
     this.progress = null
     this.cancelling = false
@@ -96,6 +111,7 @@ class Videos {
       this.seq++ // запоздавший ответ load() не затрёт итог
       for (const i of list) this.items.set(i.id, i)
     } catch (e) {
+      if (win && this.playing === win) this.playing = null // ошибка сети или отмена: окно закрывается, ошибка — тостом
       // «Отменить» — своё действие, тост не нужен; отзыв согласия в «Наборах» — тоже (там тост отзыва уже сказал главное);
       // Wails не передаёт список при reject — читаем заново
       if (!this.cancelling && packsUi.net.revokes === revokes) store.notify(capFirst(errText(e)), isGone(e) ? 'info' : 'error')
@@ -104,6 +120,7 @@ class Videos {
       this.busy = []
       this.progress = null
       this.cancelling = false
+      this.loading = null
     }
   }
 
@@ -122,6 +139,7 @@ class Videos {
   reset() {
     this.consent = null
     this.playing = null
+    this.loading = null // загрузка идёт дальше, итог — в строке
     this.failed.clear() // сбой окна мог быть случайным: при следующем открытии «Смотреть» снова доступно
   }
 
@@ -130,7 +148,9 @@ class Videos {
     this.playing = id
   }
 
+  // Esc, крестик или «Отменить» в окне: грузится — загрузка отменяется (неполный файл Go удаляет), окно закрывается.
   stop() {
+    if (this.loading && this.loading === this.playing) void this.cancel()
     this.playing = null
   }
 

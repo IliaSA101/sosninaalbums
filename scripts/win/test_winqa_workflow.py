@@ -52,10 +52,15 @@ class WinQaWorkflow(unittest.TestCase):
 
     def test_jobs_and_needs(self):
         jobs = self.doc["jobs"]
-        self.assertEqual(set(jobs), {"plan", "replay", "kit", "scenario", "report"})
+        self.assertEqual(set(jobs), {"plan", "replay", "kit", "scenario", "agents", "library", "videos-site", "videos-win", "videos-mac", "report"})
         self.assertEqual(jobs["kit"]["needs"], "plan")
         self.assertEqual(set(jobs["scenario"]["needs"]), {"plan", "kit"})
         self.assertEqual(set(jobs["report"]["needs"]), {"plan", "kit", "scenario"})
+        self.assertEqual(set(jobs["agents"]["needs"]), {"plan", "kit"})
+        self.assertEqual(set(jobs["library"]["needs"]), {"plan", "kit"})
+        self.assertEqual(jobs["videos-site"]["needs"], "plan")
+        self.assertEqual(set(jobs["videos-win"]["needs"]), {"plan", "kit", "videos-site"})
+        self.assertEqual(set(jobs["videos-mac"]["needs"]), {"plan", "videos-site"})
         self.assertIn("always()", jobs["report"]["if"])
 
     def test_scenario_is_windows_powershell_matrix(self):
@@ -91,6 +96,61 @@ class WinQaWorkflow(unittest.TestCase):
             if "run" in s:
                 self.assertTrue(s["run"].isascii(), s.get("name"))
 
+    def test_agents_job_windows_powershell_ascii_and_artifact(self):
+        # агенты-exe (143 Т1): тот же раннер и PowerShell 5.1; артефакт не под win-qa-*, иначе qa_report.py примет его за блок
+        ag = self.doc["jobs"]["agents"]
+        self.assertIn("needs.plan.outputs.runner", ag["runs-on"])
+        self.assertEqual(ag["defaults"]["run"]["shell"], "powershell")
+        for s in steps(ag):
+            if "run" in s:
+                self.assertTrue(s["run"].isascii(), s.get("name"))
+        runs = " ".join(s.get("run", "") for s in steps(ag))
+        self.assertIn("agents_exe.py", runs)
+        names = [s["with"]["name"] for s in steps(ag) if s.get("uses", "").startswith("actions/upload-artifact@")]
+        self.assertEqual(names, ["agents-exe-qa"])
+
+    def test_library_job_windows_powershell_ascii_and_artifact(self):
+        # образцы наборов в exe (144): тот же раннер и PowerShell 5.1; артефакт не под win-qa-*; шаг короче задания
+        lib = self.doc["jobs"]["library"]
+        self.assertIn("needs.plan.outputs.runner", lib["runs-on"])
+        self.assertEqual(lib["defaults"]["run"]["shell"], "powershell")
+        for s in steps(lib):
+            if "run" in s:
+                self.assertTrue(s["run"].isascii(), s.get("name"))
+        run = [s for s in steps(lib) if "library_exe.py" in s.get("run", "")]
+        self.assertEqual(len(run), 1)
+        self.assertLessEqual(run[0]["timeout-minutes"], lib["timeout-minutes"] - 5)
+        names = [s["with"]["name"] for s in steps(lib) if s.get("uses", "").startswith("actions/upload-artifact@")]
+        self.assertEqual(names, ["library-exe-qa"])
+
+    def test_videos_jobs_win_ascii_mac_builds_qa_and_guards(self):
+        # ролики F1 (140 Т7): Windows - как library; macOS - своя сборка с тегом qa и обратный страж; артефакты не под win-qa-*
+        win = self.doc["jobs"]["videos-win"]
+        self.assertIn("needs.plan.outputs.runner", win["runs-on"])
+        self.assertEqual(win["defaults"]["run"]["shell"], "powershell")
+        for s in steps(win):
+            if "run" in s:
+                self.assertTrue(s["run"].isascii(), s.get("name"))
+        run = [s for s in steps(win) if "videos_exe.py" in s.get("run", "")]
+        self.assertEqual(len(run), 1)
+        self.assertLessEqual(run[0]["timeout-minutes"], win["timeout-minutes"] - 5)
+        mac = self.doc["jobs"]["videos-mac"]
+        self.assertEqual(mac["runs-on"], "macos-latest")
+        runs = [s.get("run", "") for s in steps(mac)]
+        builds = [r for r in runs if "wails build" in r]
+        self.assertEqual(len(builds), 1)
+        self.assertRegex(builds[0], r"-tags qa\b")
+        guard = [r for r in runs if "SA_QA_PROBE SA_LIBRARY_URL" in r]
+        self.assertEqual(len(guard), 1)
+        self.assertIn("|| {", guard[0])  # отсутствие строки в бинарнике - провал, обратно релизному стражу
+        mrun = [s for s in steps(mac) if "videos_exe.py" in s.get("run", "")]
+        self.assertEqual(len(mrun), 1)
+        self.assertLessEqual(mrun[0]["timeout-minutes"], mac["timeout-minutes"] - 5)
+        names = [s["with"]["name"] for j in (win, mac) for s in steps(j) if s.get("uses", "").startswith("actions/upload-artifact@")]
+        self.assertEqual(names, ["videos-win-exe-qa", "videos-mac-app-qa"])
+        site = self.doc["jobs"]["videos-site"]
+        self.assertIn("library-testvideos.mjs", " ".join(s.get("run", "") for s in steps(site)))
+
     def test_scenario_step_timeout_below_job(self):
         # шаг сценария должен кончиться раньше задания, чтобы сводка и выгрузка артефактов успели (сторож 118)
         sc = self.doc["jobs"]["scenario"]
@@ -125,6 +185,36 @@ class ClickModes(unittest.TestCase):
                             found += 1
                             self.assertIn(mode, {"click", "dbl", "right"}, "%s:%d" % (n, no))
         self.assertGreater(found, 5)
+
+
+RELEASE = os.path.join(ROOT, ".github", "workflows", "release.yml")
+
+
+@unittest.skipUnless(os.path.isfile(RELEASE), "нет .github/workflows/release.yml")
+class ReleaseNoQaTags(unittest.TestCase):
+    """Выпуск собирается без тегов qa и dev (144, 0.31-144-59): зонд win-qa и стенд библиотеки в бинарник не попадают."""
+
+    def setUp(self):
+        with open(RELEASE, encoding="utf-8") as f:
+            self.text = f.read()
+
+    def test_builds_have_no_qa_or_dev_tags(self):
+        builds = [ln for ln in self.text.splitlines() if re.search(r"\b(wails build|build\.sh|build\.ps1)\b", ln) and "run:" in ln]
+        self.assertGreaterEqual(len(builds), 3)  # windows, macos, linux
+        for ln in builds:
+            for m in re.finditer(r"-{1,2}tags[=\s]+[\"']?([\w,+ ]+)", ln):
+                tags = re.split(r"[,\s+]+", m.group(1).strip())
+                self.assertFalse({"qa", "dev"} & set(tags), ln)
+            self.assertNotRegex(ln, r"--tags")
+        for bad in ("wails build -tags=qa", "wails build -tags qa,webkit2_41", 'wails build -tags "dev"', "wails build -tags=webkit2_41,qa"):
+            m = re.search(r"-{1,2}tags[=\s]+[\"']?([\w,+ ]+)", bad)
+            self.assertTrue({"qa", "dev"} & set(re.split(r"[,\s+]+", m.group(1).strip())), bad)  # сам разбор ловит такие формы
+        self.assertTrue(all(g in self.text for g in ("нет бинарника build/bin/sosninaalbums.exe", "нет бинарника build/bin/sosninaalbums\"")))
+
+    def test_every_build_is_followed_by_tag_guard(self):
+        # после каждой сборки программы - шаг, ищущий SA_QA_PROBE и SA_LIBRARY_URL в бинарнике
+        self.assertEqual(self.text.count("Страж тегов QA"), self.text.count("wails build -"))
+        self.assertEqual(self.text.count("SA_QA_PROBE SA_LIBRARY_URL"), self.text.count("Страж тегов QA"))
 
 
 class PublishExclude(unittest.TestCase):

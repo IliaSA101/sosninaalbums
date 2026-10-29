@@ -7,6 +7,7 @@ import { ALIGN_OPS, ALIGN_TO, alignBlock, alignToBlock, type AlignTo } from '../
 import type { Zone } from '../../editor/places/groupsel'
 import { ALL_LEVELS, LEVEL_TITLE, type FeatureId, type Level } from '../../base/prefs/levels'
 import { recentName } from '../dialogs/recent'
+import { AGENTS_MENU } from '../agents/agentstext'
 import type { RecentProject } from '../../base/core/types'
 import type { IconName } from '../../base/ui/Icon.svelte'
 import { ACTS, GROUP_ICON } from '../../editor/photomenu/photoacts'
@@ -250,6 +251,8 @@ function fileSpecs(c: MenuCtx): Spec[][] {
       ...(c.assocCan
         ? [{ id: 'assoc', label: 'Открывать .salbum этой программой', cmd: 'toggleAssoc' as const, checked: !!c.assocOn }]
         : []),
+      // 143: доступ ИИ-агентов (MCP), окно — shell/agents; без feature: на всех уровнях. После связи .salbum: 112 держит свой пункт сразу за папкой данных
+      { id: 'agents', label: AGENTS_MENU, cmd: 'agents' },
     ],
     [
       { id: 'addFolder', label: 'Добавить папку с фото…', cmd: 'addFolder' },

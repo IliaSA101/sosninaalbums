@@ -40,6 +40,8 @@ type Config struct {
 	RecentDecor map[string][]string `json:"recentDecor,omitempty"`
 	// LibraryNet — согласие на сеть библиотеки и удалённые наборы (067 Ф3, libnet.go).
 	LibraryNet *LibraryNet `json:"libraryNet,omitempty"`
+	// Agents — доступ ИИ-агентов к альбому (143, agents.go): включение и уровень.
+	Agents *Agents `json:"agents,omitempty"`
 	// Hotkeys — свои горячие клавиши (074): id команды → её сочетания, только отличия от
 	// стандартных (keymap.Overrides). Правила и пределы — internal/keymap, здесь не толкуются.
 	Hotkeys map[string][]string `json:"hotkeys,omitempty"`

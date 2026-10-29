@@ -13,6 +13,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
 	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 )
@@ -39,6 +40,7 @@ var dtoPairs = []dtoPair{
 	pairOf[PrintSaved, ownprint.Saved](),
 	pairOf[PrintImport, ownprint.Import](),
 	pairOf[PrintShare, ownprint.Share](),
+	pairOf[AgentSetup, agents.Setup](), // AgentCall и AgentClient — время в unix мс: пары нет, конвертеры в TestAgentTypesConvert
 }
 
 // sameShape — типы в паре согласованы: те же, либо пара из списка, либо срезы согласованных.

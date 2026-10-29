@@ -354,8 +354,8 @@ func TestMediaLook(t *testing.T) {
 		"/media/look/" + hex + "/", "/media/look/" + hex + "x", "/media/look/../" + hex, "/media/look/my:" + hex, "/media/look/%2e%2e%2f" + hex,
 		"/media/look/" + strings.Repeat("a", 5000),
 	} {
-		if c := getLook(a, http.MethodGet, path+good); c != 404 {
-			t.Errorf("%s: %d, ждали 404", path[:min(len(path), 60)], c)
+		if c := getLook(a, http.MethodGet, path+good); c != wantRefusal(path) {
+			t.Errorf("%s: %d, ждали %d", path[:min(len(path), 60)], c, wantRefusal(path))
 		}
 	}
 	if c := getLook(a, http.MethodPost, base+good); c != 404 {

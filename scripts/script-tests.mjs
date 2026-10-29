@@ -1,5 +1,5 @@
 // Тесты скриптов одним списком — тем же, что гоняет CI: `node scripts/script-tests.mjs [--public]`.
-// node --test скриптов, release-check, python unittest (win, mac, guide), test_lib.sh, test_deb.sh.
+// node --test скриптов, release-check, python unittest (win, mac, guide, guide-videos, e2e), test_lib.sh, test_deb.sh.
 // --public: сначала публичное дерево (без scripts/publish-exclude.txt, public-tree.mjs) в .gotmp/public-tree и тесты на нём,
 // как их видит CI main: 0.25.0 — test_qakit ждал docs/qa, которого в публичном дереве нет.
 // Выход: код первого упавшего шага (0 — все зелёные; пропуск без инструмента — WARN, не провал, кроме NSIS: CI его требует).
@@ -73,6 +73,9 @@ export function buildSteps(ctx) {
   const guide = pyStep('python scripts/guide', 'scripts/guide', 'python -I -m unittest discover -s scripts/guide')
   if (py && !ctx.hasDocx) guide.skip = 'нет python-docx (pip install -r scripts/guide/requirements.txt): scripts/guide не запущен'
   steps.push(guide)
+  // guide-videos: stdlib, чистые части съёмки роликов F1 (docx не нужен)
+  steps.push(pyStep('python scripts/guide-videos', 'scripts/guide-videos', 'python -I -m unittest discover -s scripts/guide-videos'))
+  steps.push(pyStep('python scripts/e2e', 'scripts/e2e', 'python -I -m unittest discover -s scripts/e2e'))
   // test_deb.sh в CI идёт на раннере без рабочего стола: xdg-mime при DISPLAY смотрит не туда (0.25.0)
   const deb = { name: 'scripts/linux/test_deb.sh', cmd: 'bash', args: ['scripts/linux/test_deb.sh'], unset: NO_DESKTOP, ci: ['release.yml', 'bash scripts/linux/test_deb.sh'] }
   if (ctx.platform === 'win32') deb.skip = 'test_deb.sh: на Windows нет dpkg-deb, пропуск'

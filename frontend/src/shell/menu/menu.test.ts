@@ -62,6 +62,7 @@ describe('buildMenu', () => {
       'tplExport',
       'tplImport',
       'showData',
+      'agents',
       'addFolder',
       'relink',
       'export',

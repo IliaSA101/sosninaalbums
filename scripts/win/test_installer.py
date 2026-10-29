@@ -103,8 +103,10 @@ class TestScript(unittest.TestCase):
 
     def test_retry_button_name(self):
         # кнопка системного MessageBox называется «Повтор», не «Повторить»
-        wait = re.search(r'MessageBox MB_RETRYCANCEL[^\n]*', self.nsi).group(0)
-        self.assertIn("«Повтор»", wait)
+        waits = re.findall(r'MessageBox MB_RETRYCANCEL[^\n]*', self.nsi)
+        self.assertEqual(len(waits), 2, waits)  # установщик и деинсталлятор
+        for wait in waits:
+            self.assertIn("«Повтор»", wait)
         self.assertNotIn("«Повторить»", self.nsi)
 
     def test_silent_wait_gives_code_5(self):
@@ -116,6 +118,67 @@ class TestScript(unittest.TestCase):
         self.assertIn("/SD IDCANCEL IDRETRY retry", wait.group(0))
         after = self.nsi[wait.end():]
         self.assertRegex(after[:60], r"\s*SetErrorLevel 5\s+Quit")
+
+    def func(self, name):
+        i = self.nsi.index("Function %s\n" % name)
+        return self.nsi[i:self.nsi.index("FunctionEnd", i)]
+
+    def test_wait_unlocked_only_mutex_means_open(self):
+        # 0.31-143-32: программа открыта — только по замку Wails; занятый exe без замка (живой посредник --mcp)
+        # не ведёт в «busy» (60 с и код 5), а даёт 5 с и выход в замену
+        wait = self.func("WaitUnlocked")
+        self.assertIn("OpenMutexW", wait)
+        after_open = wait[wait.index('FileOpen $R6'):wait.index("  busy:")]
+        self.assertNotIn("Goto busy", after_open)
+        self.assertNotRegex(after_open, r"\b(MessageBox|Quit)\b")  # ни окна в тихом режиме, ни ложного кода 5
+        self.assertIn("IntOp $R9 $R9 + 1", after_open)
+        self.assertRegex(after_open, r"\$\{If\} \$R9 >= 10\s+Goto done")
+        self.assertRegex(after_open, r"Sleep 500\s+Goto loop")  # до 5 с ждём: программа дописывает выход
+        self.assertIn("Goto busy", wait[:wait.index("FileOpen")])  # замок по-прежнему ведёт в ожидание и вопрос
+
+    def test_replace_busy_old_renamed_with_tick(self):
+        # занятый .old (образ живого посредника) уходит в .old-<тики>, а не валит замену кодом 6
+        rep = self.func("ReplaceExe")
+        mask = rep.index('Delete "$INSTDIR\\${EXE}.old*"')
+        tick = rep.index("GetTickCount")
+        ren = rep.index('Rename "$INSTDIR\\${EXE}.old" "$INSTDIR\\${EXE}.old-$R2"')
+        mv = rep.index('Rename "$INSTDIR\\${EXE}" "$INSTDIR\\${EXE}.old"')
+        self.assertTrue(mask < tick < ren < mv)
+        self.assertIn("IfFileExists", rep[mask:tick])
+        self.assertIn("Push $R2", rep)
+        self.assertIn("Pop $R2", rep)
+        # в конце установки хвосты тоже стираются маской
+        sec = self.nsi[self.nsi.index('Section "main"'):self.nsi.index('Section "Uninstall"')]
+        self.assertIn('Delete "$INSTDIR\\${EXE}.old*"', sec)
+
+    def test_uninstall_busy_exe_asks_retry(self):
+        # занятый exe или .old* (живой посредник, в том числе после обновления): «Повтор» как в WaitUnlocked;
+        # «Отмена»/тихо - файл остаётся, остальное удаляется
+        un = self.nsi[self.nsi.index('Section "Uninstall"'):]
+        top = un.index("delexe:")
+        last = un.index('Delete "$INSTDIR\\uninstall.exe"')
+        loop = un[top:last]
+        ask = re.search(r"MessageBox MB_RETRYCANCEL[^\n]*", un).group(0)
+        self.assertIn("/SD IDCANCEL IDRETRY delexe", ask)
+        self.assertIn("«Повтор»", ask)
+        self.assertIn("Claude Desktop", ask)
+        self.assertIn(ask, loop)
+        # цикл стирает и exe, и .old*, и проверяет оба: иначе занятый .old навсегда останется в папке
+        self.assertRegex(loop, r'Delete "\$INSTDIR\\\$\{EXE\}"')
+        self.assertRegex(loop, r'Delete "\$INSTDIR\\\$\{EXE\}\.old\*"')
+        self.assertRegex(loop, r'IfFileExists "\$INSTDIR\\\$\{EXE\}" ')
+        self.assertRegex(loop, r'FindFirst \$R3 \$R4 "\$INSTDIR\\\$\{EXE\}\.old\*"')
+        self.assertLess(loop.index("FindFirst"), loop.index("MessageBox"))
+        self.assertLess(loop.index('{EXE}.old*"'), loop.index("FindFirst"))
+        # вопрос не прерывает удаление: Quit/Abort в деинсталляторе нет, uninstall.exe и реестр - после него
+        self.assertNotRegex(un, r"\b(Quit|Abort)\b")
+        self.assertLess(last, un.index("DeleteRegKey HKCU"))
+
+    def test_no_delete_on_reboot(self):
+        # отложенное удаление требует прав администратора, установщик ставит без них
+        code = "\n".join(ln for ln in self.nsi.splitlines() if not ln.lstrip().startswith(";"))
+        self.assertNotIn("REBOOTOK", code)
+        self.assertNotIn("MOVEFILE_DELAY_UNTIL_REBOOT", code)
 
     def test_wizard_bmp(self):
         # картинки мастера: 2x (200 % и выше) и по одной точно под высоту контрола на 100/125/150/175 %

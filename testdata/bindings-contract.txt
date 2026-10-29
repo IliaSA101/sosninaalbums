@@ -9,6 +9,7 @@ method AddQRSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResu
 method AddSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResult>
 method AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
 method AddVignette(arg1:number):Promise<model.View>
+method AgentsInfo():Promise<APP.AgentsInfo>
 method AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>
 method AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<boolean>
 method ApplyBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>
@@ -40,6 +41,7 @@ method CheckPrintProfile(arg1:APP.PrintEdit):Promise<APP.PrintEditCheck>
 method CheckUpdate():Promise<APP.UpdateInfo>
 method ChooseFiles():Promise<APP.LooseResult>
 method ChooseFolder():Promise<model.View>
+method ClearAgentsLog():Promise<APP.AgentsInfo>
 method ClearAlbumBg():Promise<model.View>
 method ClearBackdrop(arg1:string,arg2:string):Promise<model.View>
 method ClearCoverGuide():Promise<model.View>
@@ -194,6 +196,7 @@ method RestoreBackup(arg1:string):Promise<model.View>
 method RestoreHotkeys(arg1:Record<string, Array<string>>):Promise<keymap.View>
 method RevealGuideVideo(arg1:string):Promise<void>
 method RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>
+method SaveClaudeExtension():Promise<APP.AgentsSaved>
 method SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<void>
 method SaveLook(arg1:model.SaveLookOpts):Promise<APP.DecorItem>
 method SavePrintProfile(arg1:APP.PrintEdit,arg2:boolean):Promise<APP.PrintSaved>
@@ -202,6 +205,8 @@ method SaveProjectAs():Promise<model.View>
 method SaveSpreadTpl(arg1:string,arg2:string,arg3:string,arg4:string,arg5:boolean,arg6:boolean):Promise<APP.DecorItem>
 method SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>
 method ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>
+method SetAgents(arg1:boolean):Promise<APP.AgentsInfo>
+method SetAgentsLevel(arg1:number):Promise<APP.AgentsInfo>
 method SetAlbumBg(arg1:string,arg2:boolean):Promise<model.View>
 method SetAlbumBgFade(arg1:number,arg2:string):Promise<model.View>
 method SetAlbumBgToAll(arg1:string,arg2:boolean):Promise<model.View>
@@ -289,6 +294,34 @@ method UpdateLibrary():Promise<APP.LibraryUpdate>
 method VaryLayouts(arg1:Array<string>,arg2:number,arg3:Array<string>):Promise<model.View>
 method VignetteChoices(arg1:string,arg2:number,arg3:number,arg4:string):Promise<Array<model.VigChoice>>
 method WhereUsed(arg1:Array<string>):Promise<Array<model.UsedAt>>
+type APP.AgentCall
+  at: number
+  client: string
+  tool: string
+  ok: boolean
+  ms: number
+type APP.AgentClient
+  name: string
+  since: number
+type APP.AgentSetup
+  id: string
+  title: string
+  text: string
+  note: string
+  file: boolean
+type APP.AgentsInfo
+  status: string
+  hint: string
+  error: string
+  level: number
+  portable: boolean
+  setups: AgentSetup[]
+  clients: AgentClient[]
+  calls: AgentCall[]
+  today: number
+type APP.AgentsSaved
+  canceled: boolean
+  text: string
 type APP.AssocView
   can: boolean
   on: boolean

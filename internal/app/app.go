@@ -17,6 +17,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
 	"github.com/IliaSA101/sosninaalbums/internal/app/assoc"
 	"github.com/IliaSA101/sosninaalbums/internal/app/colorpick"
@@ -30,6 +31,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/keymap"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/mcpbridge"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -185,6 +187,13 @@ type App struct {
 	libp *libpacks.Service
 	// guidev — служба роликов справочника F1 (internal/app/guidevideo; фасад — guide.go, спека 140).
 	guidev *guidevideo.Service
+	// agents — служба доступа ИИ-агентов (internal/app/agents; фасад — agents.go, спека 143). agentsMu —
+	// включение, выключение и запуск при старте по одному; agentsPub — частота событий журнала;
+	// agentsExe — путь программы для текстов настройки (подменяется в тестах).
+	agents    *agents.Service
+	agentsMu  sync.Mutex
+	agentsPub agentsPub
+	agentsExe func() (string, error)
 	// demoF — файл примера рядом с программой (demofile.go), ищется лениво один раз за сеанс.
 	demoF    *demoFile
 	demoOnce sync.Once
@@ -277,6 +286,8 @@ func NewApp() *App {
 	a.libp = libpacks.New(a.packsHost())
 	a.guidev = guidevideo.New(a.guideHost())
 	a.ownp = ownprint.New(a.printsHost())
+	a.agentsExe = os.Executable
+	a.agents = agents.New(a.agentsHost(), agents.Options{OnCall: a.agentsCalled})
 	return a
 }
 
@@ -331,6 +342,7 @@ func (a *App) startup(ctx context.Context) {
 	a.logLaunchArg(arg, path)
 	a.rescan()
 	a.syncAssoc(fromFile) // связь .salbum (112): в фоне, окно не ждёт
+	a.startAgents()       // доступ агентов (143), если включён: в фоне, после загрузки альбома
 
 	wr.OnFileDrop(ctx, func(x, y int, ps []string) { a.dropPaths(ps) })
 }
@@ -349,6 +361,7 @@ func (a *App) shutdown(ctx context.Context) {
 func (a *App) stopBackground() {
 	a.stopped.Store(true)
 	a.stopCancel()
+	a.stopAgents() // до flushSave: сокет закрыт, рендер агента выход не держит
 	a.mu.Lock()
 	if a.saveTimer != nil {
 		a.saveTimer.Stop()
@@ -414,93 +427,6 @@ func (a *App) editHost() edit.Host {
 		InfosOrRefs: a.infosOrRefs, Templates: a.templateList}
 }
 
-// domReady — окно открыто: размер под экран и проверка библиотеки при запуске (067 Ф3).
-func (a *App) domReady(ctx context.Context) {
-	defer guard("domReady")
-	a.fitScreen(ctx)
-	a.goBG(a.placeDemo) // файл примера — раньше проверки при запуске, замок она не теряет
-	a.libp.ScheduleCheck()
-	a.upd.Schedule()
-}
-
-// Постоянный минимум окна (логические px); на малом экране его уменьшает minSize.
-const (
-	minWinW = 1200
-	minWinH = 640
-)
-
-// minSize — минимум окна под экран sw×sh (логические px, 089-D16): Wails умножает минимум
-// на масштаб, и при 125 % на 1366×768 постоянный 1200×640 шире и выше экрана — окно
-// не сжать до экрана. Неизвестный размер экрана — постоянный минимум.
-func minSize(sw, sh int) (w, h int) {
-	if sw <= 0 || sh <= 0 {
-		return minWinW, minWinH
-	}
-	return max(1, min(minWinW, sw-40)), max(1, min(minWinH, sh-120))
-}
-
-// fitScreen: если обычный (не развёрнутый) размер окна больше экрана —
-// уменьшаем его, иначе после «Свернуть в окно» окно выглядит развёрнутым
-// и его не за что взять, чтобы перетащить на другой монитор.
-// Минимум ставим раньше: WindowSetSize не даёт окну стать меньше минимума.
-func (a *App) fitScreen(ctx context.Context) {
-	defer guard("fitScreen")
-	screens, err := wr.ScreenGetAll(ctx)
-	if err != nil {
-		return
-	}
-	for _, s := range screens {
-		if !s.IsCurrent {
-			continue
-		}
-		mw, mh := minSize(s.Size.Width, s.Size.Height)
-		wr.WindowSetMinSize(ctx, mw, mh)
-		w, h := wr.WindowGetSize(ctx)
-		maxW, maxH := s.Size.Width-80, s.Size.Height-120
-		if w > maxW || h > maxH {
-			wasMax := wr.WindowIsMaximised(ctx)
-			if wasMax {
-				wr.WindowUnmaximise(ctx)
-			}
-			wr.WindowSetSize(ctx, min(w, maxW), min(h, maxH))
-			wr.WindowCenter(ctx)
-			if wasMax {
-				wr.WindowMaximise(ctx)
-			}
-		}
-	}
-}
-
-// Стабильный идентификатор приложения для блокировки второго экземпляра. Один во всех
-// версиях: иначе 0.6 и 0.7 запустятся вместе и поделят config.json и черновик
-// (межпроцессного замка нет сознательно, спека 019 §C). Сторож — TestInstanceIDStable.
-const instanceID = "6f1c2b7e-3a4d-4e58-9b0a-5d2e8c7f1a93"
-
-// instanceKey — замок второго экземпляра: у стенда QA свой, чтобы 2–3 копии wails dev
-// открылись рядом (папки данных у них тоже свои, см. dataDirs).
-func instanceKey(stand string) string {
-	if stand == "" {
-		return instanceID
-	}
-	return instanceID + "-stand-" + stand
-}
-
-// dataDirs — папка настроек (config.json, templates.json, Библиотека, черновик, log.txt) и кэша
-// миниатюр; name — osx.DataName.
-//
-// Только абсолютные (osx.ConfigDir/CacheDir): без HOME, XDG_* или APPDATA/LOCALAPPDATA Join с
-// пустой базой дал бы путь от текущей папки процесса. "" — папки нет
-// (настройки не пишутся, миниатюры отключены), как у guideCacheDir и update.Dir.
-func dataDirs(name string) (cfg, thumbs string) {
-	if c := osx.ConfigDir(); c != "" {
-		cfg = filepath.Join(c, name)
-	}
-	if k := osx.CacheDir(); k != "" {
-		thumbs = filepath.Join(k, name, "thumbs")
-	}
-	return cfg, thumbs
-}
-
 // openCache — кэш миниатюр в папке dir; nil — кэша нет (dir пуст или не открылся): медиа-запросы
 // миниатюр тогда отвечают 404, остальное работает.
 func (a *App) openCache(dir string) *library.Cache {
@@ -538,6 +464,11 @@ func Run(assets fs.FS, wailsCfg, icon []byte) error {
 	stand, err := osx.Stand()
 	if err != nil {
 		return err
+	}
+	// Посредник агентов (143): до памяти, App, замка экземпляра и log.txt — stdout занят
+	// протоколом, окно не нужно.
+	if mcpbridge.Want(os.Args) {
+		os.Exit(mcpbridge.Run(os.Stdin, os.Stdout, os.Stderr, mcpbridge.SockPaths(osx.DataName(stand))))
 	}
 	applyMemoryLimit()
 	app := NewApp()

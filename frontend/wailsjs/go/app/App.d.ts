@@ -31,6 +31,8 @@ export function AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
 
 export function AddVignette(arg1:number):Promise<model.View>;
 
+export function AgentsInfo():Promise<app.AgentsInfo>;
+
 export function AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>;
 
 export function AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<boolean>;
@@ -92,6 +94,8 @@ export function CheckUpdate():Promise<app.UpdateInfo>;
 export function ChooseFiles():Promise<app.LooseResult>;
 
 export function ChooseFolder():Promise<model.View>;
+
+export function ClearAgentsLog():Promise<app.AgentsInfo>;
 
 export function ClearAlbumBg():Promise<model.View>;
 
@@ -401,6 +405,8 @@ export function RevealGuideVideo(arg1:string):Promise<void>;
 
 export function RotateGroup(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number):Promise<model.View>;
 
+export function SaveClaudeExtension():Promise<app.AgentsSaved>;
+
 export function SaveGridTemplate(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SaveLook(arg1:model.SaveLookOpts):Promise<app.DecorItem>;
@@ -416,6 +422,10 @@ export function SaveSpreadTpl(arg1:string,arg2:string,arg3:string,arg4:string,ar
 export function SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>;
 
 export function ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>;
+
+export function SetAgents(arg1:boolean):Promise<app.AgentsInfo>;
+
+export function SetAgentsLevel(arg1:number):Promise<app.AgentsInfo>;
 
 export function SetAlbumBg(arg1:string,arg2:boolean):Promise<model.View>;
 

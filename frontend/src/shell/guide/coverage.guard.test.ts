@@ -228,6 +228,7 @@ const WINDOWS: Record<string, string> = {
   '/src/shell/hotkeys/KeysDialog.svelte': 'hotkeys',
   '/src/shell/guide/Guide.svelte': 'guide',
   '/src/shell/guide/VideoWindow.svelte': 'нет: окно ролика статьи F1 — подокно справочника, описано в статье guide',
+  '/src/shell/agents/AgentsDialog.svelte': 'agents',
   '/src/shell/looks/LooksDialog.svelte': 'looks',
   '/src/shell/looks/SaveLookDialog.svelte': 'looks-save',
   '/src/shell/packs/NetConsent.svelte': 'нет: вопрос подтверждения «Обратиться к GitHub?» — общий для «Наборов» и роликов F1',

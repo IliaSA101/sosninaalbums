@@ -17,20 +17,28 @@ export interface GuideVideoProgress {
   total: number
 }
 
-// get — можно скачать; busy — идёт скачивание; ready — скачан; broken — окно не смогло его сыграть.
-export type RowState = 'get' | 'busy' | 'ready' | 'broken'
+// watch — «▶ Смотреть» (скачан или будет загружен в окне ролика, 0.30-140-31); busy — идёт скачивание вне окна
+// («все ролики», «Скачать заново», справочник закрывали и открыли); broken — окно не смогло сыграть скачанный файл.
+export type RowState = 'watch' | 'busy' | 'broken'
 
 // Известные программе ролики: встроенный список ∪ кэш каталога (id статьи → секунды).
 export const hasVideo = (id: string, builtin: Readonly<Record<string, unknown>>, items: ReadonlyMap<string, VideoItem>): boolean =>
   id in builtin || items.has(id)
 
-export function rowState(id: string, item: VideoItem | undefined, busy: readonly string[], failed: ReadonlySet<string>): RowState {
+// loading — ролик, который сейчас грузится в окне ролика: ход виден там, строка остаётся «▶ Смотреть» (под окном).
+export function rowState(
+  id: string,
+  item: VideoItem | undefined,
+  busy: readonly string[],
+  failed: ReadonlySet<string>,
+  loading: string | null = null,
+): RowState {
   if (failed.has(id) && item?.ready) return 'broken'
-  if (busy.includes(id)) return 'busy'
-  return item?.ready ? 'ready' : 'get'
+  if (busy.includes(id) && loading !== id) return 'busy'
+  return 'watch'
 }
 
-// «Скачать» без согласия на сеть сначала задаёт вопрос «Обратиться к GitHub?».
+// Загрузка без согласия на сеть сначала задаёт вопрос «Обратиться к GitHub?».
 export const getAction = (allowed: boolean): 'download' | 'ask' => (allowed ? 'download' : 'ask')
 
 // «48 с», «1 мин 5 с».
@@ -43,12 +51,6 @@ export function secondsLabel(s: number): string {
 
 // МБ в десятых, как в окне «Наборы» (1024×1024): «0,5».
 const mb = (n: number): string => (n / 1048576).toFixed(1).replace('.', ',')
-
-// «· 48 с, 0,5 МБ»; размера нет (каталога ещё не было) — только секунды; нет и их — пусто.
-export function metaLine(seconds: number, size: number): string {
-  const parts = [seconds > 0 ? secondsLabel(seconds) : '', size > 0 ? sizeLabel(size) : ''].filter(Boolean)
-  return parts.length ? `· ${parts.join(', ')}` : ''
-}
 
 // «Скачиваем… 0,3 из 0,5 МБ»; размер неизвестен или ход чужого ролика — без чисел.
 export function busyLine(p: GuideVideoProgress | null, id: string): string {

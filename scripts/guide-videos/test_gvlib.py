@@ -10,11 +10,14 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import gv  # noqa: E402
 import gvlib  # noqa: E402
 from gvlib import Refuse  # noqa: E402
 
@@ -32,9 +35,10 @@ class IdsPortTest(unittest.TestCase):
     def test_all_and_list(self):
         self.assertEqual(gvlib.check_ids("all"), list(gvlib.IDS))
         self.assertEqual(gvlib.check_ids("cover, autobuild,cover"), ["cover", "autobuild"])
+        self.assertEqual(gvlib.check_ids("bg-photo,export"), ["bg-photo", "export"])  # вторая волна
 
     def test_bad_ids(self):
-        for spec in ("", " , ", "export", "autobuild,nope"):
+        for spec in ("", " , ", "settings", "autobuild,nope"):
             with self.assertRaises(Refuse, msg=spec):
                 gvlib.check_ids(spec)
 
@@ -162,6 +166,72 @@ class MergeRunTest(TmpCase):
             {"size": 3, "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "url": "u"},
         )
         self.assertNotIn("url", gvlib.file_info(f))
+
+
+class SwapPhotoTest(TmpCase):
+    def test_swap_and_restore(self):
+        d = self.tmp()
+        for i in range(3):
+            (d / f"IMG_{i}.jpg").write_bytes(b"orig%d" % i)
+        src = d / "big.bin"
+        src.write_bytes(b"BIG")
+        with gvlib.swapped_photo(d, 1, src, d / "keep"):
+            self.assertEqual((d / "IMG_1.jpg").read_bytes(), b"BIG")
+            self.assertEqual((d / "IMG_0.jpg").read_bytes(), b"orig0")
+        self.assertEqual((d / "IMG_1.jpg").read_bytes(), b"orig1")
+        self.assertEqual(list((d / "keep").iterdir()), [])  # копия убрана
+
+    def test_restore_on_error(self):
+        d = self.tmp()
+        (d / "IMG_0.jpg").write_bytes(b"orig")
+        src = d / "big.bin"
+        src.write_bytes(b"BIG")
+        with self.assertRaises(RuntimeError):
+            with gvlib.swapped_photo(d, 0, src, d / "keep"):
+                raise RuntimeError("провал сцены")
+        self.assertEqual((d / "IMG_0.jpg").read_bytes(), b"orig")
+
+    def test_none_and_bad(self):
+        d = self.tmp()
+        (d / "IMG_0.jpg").write_bytes(b"orig")
+        with gvlib.swapped_photo(d, 0, None, d / "keep"):
+            pass
+        self.assertEqual((d / "IMG_0.jpg").read_bytes(), b"orig")
+        src = d / "big.bin"
+        src.write_bytes(b"BIG")
+        with self.assertRaises(Refuse):  # номера нет в папке
+            with gvlib.swapped_photo(d, 5, src, d / "keep"):
+                pass
+        with self.assertRaises(Refuse):  # файла подмены нет
+            with gvlib.swapped_photo(d, 0, d / "nope.bin", d / "keep"):
+                pass
+
+
+class ArticleSwapTest(TmpCase):
+    """Путь gv.py: у статьи без SWAP_PHOTO (почти все) подмены нет и падения нет; с SWAP_PHOTO фото меняется и возвращается."""
+
+    def test_no_swap_photo(self):
+        d = self.tmp()
+        (d / "IMG_0.jpg").write_bytes(b"orig")
+        art = types.SimpleNamespace(ID="autobuild")  # константы SWAP_PHOTO нет
+        with gv.article_swap(art, d, d / "keep"):
+            self.assertEqual((d / "IMG_0.jpg").read_bytes(), b"orig")
+        self.assertEqual((d / "IMG_0.jpg").read_bytes(), b"orig")
+        self.assertFalse((d / "keep").exists())
+
+    def test_swap_photo(self):
+        d = self.tmp()
+        (d / "IMG_0.jpg").write_bytes(b"orig0")
+        (d / "IMG_1.jpg").write_bytes(b"orig1")
+        big = d / "big.bin"
+        big.write_bytes(b"BIG")
+        art = types.SimpleNamespace(SWAP_PHOTO=(1, "wide.jpg"))
+        with mock.patch.object(gvlib, "big_photo", return_value=big) as bp:
+            with gv.article_swap(art, d, d / "keep"):
+                self.assertEqual((d / "IMG_1.jpg").read_bytes(), b"BIG")
+                self.assertEqual((d / "IMG_0.jpg").read_bytes(), b"orig0")
+        bp.assert_called_once_with("wide.jpg")
+        self.assertEqual((d / "IMG_1.jpg").read_bytes(), b"orig1")
 
 
 class HashTest(unittest.TestCase):

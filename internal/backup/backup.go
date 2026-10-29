@@ -24,6 +24,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -92,9 +93,7 @@ func DefaultRoot(name string) string {
 		base = xdgDataHome()
 	}
 	if base == "" {
-		if c, err := os.UserCacheDir(); err == nil && filepath.IsAbs(c) { // относительный — от текущей папки
-			base = c
-		}
+		base = osx.CacheDir() // "" при ошибке или относительном пути — общая функция папки данных
 	}
 	if base == "" {
 		return ""

@@ -12,6 +12,7 @@
 #   scripts/build.sh --tags qa  — свои теги сборки (только здесь, у .ps1 двойника нет): exe набора QA (scripts/win/qa-kit.sh) читает
 #                                 SA_STAND и SA_UPDATE_URL, как wails dev. Тег dev для wails build не годится: Wails сам ставит
 #                                 production, и его app_dev.go с app_production.go вместе не собираются. Выпуск (CI) тегов не передаёт.
+#                                 Имя файла со своими тегами получает суффикс: build/bin/SosninaAlbums-<версия>-qa.exe (теги через «+»).
 # ПРАВЯТСЯ ВМЕСТЕ с build.ps1: версия из wails.json, -clean -trimpath, проверка на личные пути в бинарнике.
 # Выпускной exe собирает CI на windows-latest (docs/RELEASE.md); exe отсюда — быстрая проверка и сверка сборки двух машин,
 # не выпуск: тулчейн тот же (go.mod), но загрузчик WebView2 и метаданные сборки могут отличаться от раннера.
@@ -37,6 +38,7 @@ done
 [ $standard = 0 ] || [ $deb = 1 ] || [ $installer = 1 ] || { echo '--standard — вместе с --installer или --deb' >&2; exit 2; }
 [ $deb = 0 ] || [ $native = 1 ] || { echo '--deb только вместе с --native' >&2; exit 2; }
 [ $installer = 0 ] || [ $native = 0 ] || { echo '--installer — установщик Windows, без --native' >&2; exit 2; }
+[ -z "$tags" ] || { [ $installer = 0 ] && [ $deb = 0 ]; } || { echo '--tags не сочетается с --installer и --deb: установщик и пакет — выпускные, без тегов qa и dev' >&2; exit 2; }
 [ $deb = 0 ] || [ "$(uname -s)" = Linux ] || { echo '--deb собирается только на Linux' >&2; exit 2; }
 # makensis нужен в конце; не тратить минуты сборки, чтобы упасть на последнем шаге
 [ $installer = 0 ] || command -v makensis >/dev/null || { echo 'для --installer нужен makensis (Ubuntu: sudo apt install nsis)' >&2; exit 1; }
@@ -56,6 +58,9 @@ fi
 
 ver=$(node -p "require('./wails.json').info.productVersion || ''")
 [ -n "$ver" ] || { echo 'нет info.productVersion в wails.json' >&2; exit 1; }
+# Сборка со своими тегами (qa) получает суффикс в имени (SosninaAlbums-<версия>-qa.exe): её нельзя принять за выпускную
+suffix=''
+[ -z "$tags" ] || suffix="-$(printf '%s' "$tags" | tr ',' '+')"
 command -v wails >/dev/null || { echo 'wails не найден (папка инструментов проекта, scripts/env.sh)' >&2; exit 1; }
 
 # Дерево после сборки — как до неё (сверка сборки двух машин идёт из чистого дерева):
@@ -71,7 +76,7 @@ if [ $native = 1 ]; then
   all_tags=${wails_tags:+$wails_tags${tags:+,}}$tags
   wails build -clean -trimpath -skipbindings ${all_tags:+-tags "$all_tags"}
   os=$(go env GOOS)
-  out="$bin/SosninaAlbums-$ver-$os"
+  out="$bin/SosninaAlbums-$ver-$os$suffix"
   if [ "$os" = darwin ]; then
     rm -rf "$out.app" && mv "$bin/sosninaalbums.app" "$out.app" && out="$out.app/Contents/MacOS/sosninaalbums"
   else
@@ -80,7 +85,7 @@ if [ $native = 1 ]; then
 else
   # CGO_ENABLED=0 явно: так же обязан собирать CI (release.yml), иначе установщик не сойдётся с пересборкой release-sign.mjs
   CGO_ENABLED=0 wails build -platform windows/amd64 -clean -trimpath -skipbindings ${tags:+-tags "$tags"}
-  out="$bin/SosninaAlbums-$ver.exe"
+  out="$bin/SosninaAlbums-$ver$suffix.exe"
   mv -f "$bin/sosninaalbums.exe" "$out"
 fi
 

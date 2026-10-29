@@ -185,6 +185,18 @@ jobs:
           CGO_ENABLED: "0"
         run: wails build -clean -trimpath
 
+      # Выпуск собирается без тегов qa и dev: зонд win-qa (SA_QA_PROBE) и стенд библиотеки (SA_LIBRARY_URL) в бинарнике — провал
+      - name: Страж тегов QA (нет зонда и стенда библиотеки)
+        shell: bash
+        run: |
+          [ -f build/bin/sosninaalbums.exe ] || { echo "::error::нет бинарника build/bin/sosninaalbums.exe"; exit 1; }
+          for s in SA_QA_PROBE SA_LIBRARY_URL; do
+            if LC_ALL=C grep -aqF -- "$s" build/bin/sosninaalbums.exe; then
+              echo "::error::В выпускном exe найдена строка '$s' — собрано с тегом qa или dev"
+              exit 1
+            fi
+          done
+
       - name: Имя файла с версией и sha256
         id: pack
         env:
@@ -238,6 +250,16 @@ jobs:
 
       - name: wails build
         run: wails build -platform darwin/universal -clean -trimpath
+
+      - name: Страж тегов QA (нет зонда и стенда библиотеки)
+        run: |
+          [ -f build/bin/sosninaalbums.app/Contents/MacOS/sosninaalbums ] || { echo "::error::нет бинарника build/bin/sosninaalbums.app/Contents/MacOS/sosninaalbums"; exit 1; }
+          for s in SA_QA_PROBE SA_LIBRARY_URL; do
+            if LC_ALL=C grep -aqF -- "$s" build/bin/sosninaalbums.app/Contents/MacOS/sosninaalbums; then
+              echo "::error::В выпускной программе найдена строка '$s' — собрано с тегом qa или dev"
+              exit 1
+            fi
+          done
 
       - name: Подпись ad-hoc, проверка архитектур, zip программы
         id: pack
@@ -341,6 +363,16 @@ jobs:
       # Биндинги в git и сверены контрактом: не пересоздаём (как scripts/build.sh --native)
       - name: wails build
         run: wails build -clean -trimpath -skipbindings -tags webkit2_41
+
+      - name: Страж тегов QA (нет зонда и стенда библиотеки)
+        run: |
+          [ -f build/bin/sosninaalbums ] || { echo "::error::нет бинарника build/bin/sosninaalbums"; exit 1; }
+          for s in SA_QA_PROBE SA_LIBRARY_URL; do
+            if LC_ALL=C grep -aqF -- "$s" build/bin/sosninaalbums; then
+              echo "::error::В выпускном бинарнике найдена строка '$s' — собрано с тегом qa или dev"
+              exit 1
+            fi
+          done
 
       - name: Страж glibc (не выше 2.35 — Ubuntu 22.04)
         # Через bash: код берётся из метки, а режим 100644 у scripts/linux/*.sh в метке уже не исправить

@@ -2,6 +2,7 @@
 # запись в frontend/src/shell/guidetext/renamed.ts (страж ids.guard.test.ts). Отметки «Изучил» живут по этим id.
 add-photos
 adjust
+agents
 align
 all-spreads
 auto-gray

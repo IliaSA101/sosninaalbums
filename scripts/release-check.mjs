@@ -293,8 +293,9 @@ export function checkInstaller(root, yml) {
   const jobs = parseJobs(yml)
   if (!('win-check' in jobs)) errors.push('release.yml: нет задания «win-check» (проверка установщика на windows-latest)')
   else if (!jobs['win-check'].includes('pack')) errors.push('release.yml: «win-check» не ждёт «pack» (установщик собирается там)')
-  for (const f of ['installer.sh', 'installer-check.ps1']) {
-    if (!yml.includes(f)) errors.push(`release.yml: не вызывается scripts/win/${f}`)
+  // installer-check-lib.ps1 — помощники проверки, подключаются из неё же: в release.yml их нет, нужен только файл
+  for (const f of ['installer.sh', 'installer-check.ps1', 'installer-check-lib.ps1']) {
+    if (f !== 'installer-check-lib.ps1' && !yml.includes(f)) errors.push(`release.yml: не вызывается scripts/win/${f}`)
     if (!fs.existsSync(path.join(root, 'scripts/win', f))) errors.push(`scripts/win/${f}: нет файла`)
   }
   const need = (rel, needle, what) => {

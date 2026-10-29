@@ -1,6 +1,6 @@
 """Ролики справочника F1 (спека 140, Т6): запись сценариев статей на стенде и кодирование.
 
-    python3 scripts/guide-videos/gv.py all --port 34117 [--stand v]          запись всех пяти статей + encode.sh
+    python3 scripts/guide-videos/gv.py all --port 34117 [--stand v]          запись всех статей + encode.sh
     python3 scripts/guide-videos/gv.py autobuild,cover --port 34117 --shots   снимки на метках (отладка сценария)
 
 Запуск — Python из venv e2e (Playwright). Стенд поднимает оркестратор; на порт владельца 34115 скрипт не ходит.
@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib
 import json
 import shutil
@@ -66,6 +67,15 @@ def finish(res: dict, out: Path, art_id: str, encode: bool) -> dict:
     return res
 
 
+def article_swap(art, folder: Path, keep: Path):
+    """Подмена фото на время статьи: SWAP_PHOTO = (номер фото с 0, имя в .testphotos/big). Нет константы — ничего не меняет
+    (так у всех статей, кроме bg-photo)."""
+    swap = getattr(art, "SWAP_PHOTO", None)
+    if swap is None:
+        return contextlib.nullcontext()
+    return gvlib.swapped_photo(folder, swap[0], gvlib.big_photo(swap[1]), keep)
+
+
 def main(argv: list[str]) -> int:
     a = parse_args(argv)
     ids = gvlib.check_ids(a.ids)
@@ -87,10 +97,11 @@ def main(argv: list[str]) -> int:
     Stand = gvrec.make_stand_class()
     with Stand(a.port, work / "browser", prof, init_scripts=(cursor,)) as st:
         for art_id in ids:
-            art = importlib.import_module(art_id)
+            art = importlib.import_module(art_id.replace("-", "_"))  # bg-photo → bg_photo.py
             print(f"gv: {art_id}…", flush=True)
             try:
-                res = gvrec.run_article(st, art, work, folder, record=not a.no_record, shots=a.shots, warm=not a.no_warm)
+                with article_swap(art, folder, work / "keep"):
+                    res = gvrec.run_article(st, art, work, folder, record=not a.no_record, shots=a.shots, warm=not a.no_warm)
             except pilot.SceneFail as e:
                 failed[art_id] = str(e)
                 print(f"gv: {art_id}: ПРОВАЛ — {e}", file=sys.stderr)

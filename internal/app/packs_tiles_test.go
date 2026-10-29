@@ -289,6 +289,15 @@ func TestDecorCatalogTilesPanic(t *testing.T) {
 	}
 }
 
+// wantRefusal — код отказа /media по адресу: 404, а при «/» или «/index.html» в конце пути — 400 (см. media: Wails подменяет
+// 404 на такой адрес index.html приложения).
+func wantRefusal(url string) int {
+	if p := strings.SplitN(url, "?", 2)[0]; strings.HasSuffix(p, "/") || strings.HasSuffix(p, "/index.html") {
+		return http.StatusBadRequest
+	}
+	return http.StatusNotFound
+}
+
 // Раздача /media/lp/ через общий обработчик: годная клетка, хвосты, методы; общий разбор и сеть
 // не задеты.
 func TestMediaLP(t *testing.T) {
@@ -312,12 +321,18 @@ func TestMediaLP(t *testing.T) {
 		t.Fatalf("годная клетка: %d %v %v", w.Code, w.Header(), err)
 	}
 	for _, url := range []string{
-		"/media/lp/", "/media/lp/x", "/media/lp/ivory", "/media/lp/ivory/bg", "/media/lp/ivory/bg/2", "/media/lp/ivory/bg/-1",
+		"/media/lp/x", "/media/lp/ivory", "/media/lp/ivory/bg", "/media/lp/ivory/bg/2", "/media/lp/ivory/bg/-1",
 		"/media/lp/ivory/bg/01", "/media/lp/%2e%2e/bg/0", "/media/lp/ivory%2Fbg%2F0%2F1", "/media/lp/ivory/Bg/0", "/media/lp/ivory/bg/0/1",
 		"/media/lp/nope/bg/0", "/media/lp/ivory/sticker/0", "/media/lp/t/x",
 	} {
 		if w := do("GET", url); w.Code != 404 {
 			t.Errorf("GET %s: %d", url, w.Code)
+		}
+	}
+	// «/» в конце — 400, а не 404 (см. media): ответ 404 Wails подменил бы index.html
+	for _, url := range []string{"/media/lp/", "/media/lp/ivory/bg/0/", "/media/", "/media/t/x/", "/media/lp//"} {
+		if w := do("GET", url); w.Code != 400 {
+			t.Errorf("GET %s: %d, ожидалось 400", url, w.Code)
 		}
 	}
 	if w := do("POST", "/media/lp/ivory/bg/0"); w.Code != 405 || w.Header().Get("Allow") != "GET, HEAD" {

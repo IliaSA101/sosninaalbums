@@ -134,6 +134,13 @@ func (c *Client) download(ctx context.Context, e Entry, progress func(done int64
 			err = &SlowError{e.Title, limit}
 		}
 	}()
+	// Отмена пользователем (отзыв согласия) могла обогнать закрытие соединения: сервер успел
+	// ответить пустым или коротким телом — это отмена, а не «скачалось с ошибкой».
+	defer func() {
+		if err != nil && errors.Is(err, ErrBroken) && errors.Is(context.Cause(ctx), context.Canceled) {
+			err = ErrCancelled
+		}
+	}()
 	// Застой считается и на заголовках: после них таймер сбрасывает каждое чтение.
 	stall := time.AfterFunc(c.stall, func() { cancel(errStall) })
 	defer stall.Stop()

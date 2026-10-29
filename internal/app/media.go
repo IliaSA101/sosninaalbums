@@ -37,6 +37,13 @@ func (a *App) media(next http.Handler) http.Handler {
 			return
 		}
 		defer guard("media")
+		// Адрес с «/» или «/index.html» в конце — не данные: ассет-сервер Wails (isRuntimeInjectionMatch, регистр
+		// важен) превращает любой ответ 404 на такой путь в свою страницу «index.html not found» (200), и наш 404
+		// до окна не дойдёт. Статус 400 он пропускает как есть.
+		if strings.HasSuffix(r.URL.Path, "/") || strings.HasSuffix(r.URL.Path, "/index.html") {
+			http.Error(w, "неверный адрес", http.StatusBadRequest)
+			return
+		}
 		if name, ok := strings.CutPrefix(r.URL.Path, "/media/font/"); ok {
 			serveFont(w, r, name)
 			return

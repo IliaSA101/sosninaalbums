@@ -261,8 +261,8 @@ func TestMediaTpl(t *testing.T) {
 		"/media/tpl/sa:tpl-нет?px=256&r=1", "/media/tpl/sa:cream-gradient?px=256&r=1", "/media/tpl/0123456789abcdef?px=256&r=1",
 		"/media/tpl/../lib/t/x?px=256&r=1", "/media/tpl/?px=256&r=1", "/media/tpl/sa:tpl-wave/x?px=256&r=1",
 	} {
-		if rec := getTpl(a, "GET", u); rec.Code != http.StatusNotFound {
-			t.Errorf("%s: %d", u, rec.Code)
+		if rec := getTpl(a, "GET", u); rec.Code != wantRefusal(u) {
+			t.Errorf("%s: %d, ждали %d", u, rec.Code, wantRefusal(u))
 		}
 	}
 	if rec := getTpl(a, "POST", "/media/tpl/sa:tpl-wave?px=256&r=1"); rec.Code != http.StatusNotFound {

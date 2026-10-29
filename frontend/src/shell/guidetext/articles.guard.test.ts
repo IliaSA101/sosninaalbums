@@ -43,13 +43,13 @@ const flat = (s: string): string => s.replace(/\s*▸\s*/g, '▸')
 // Текст как его видит пользователь с самым длинным набором функций: все куски {can} на месте.
 const shown = (s: string | undefined): string => articleText(s ?? '', () => true)
 
-// «Где» повторяет путь из строки «Меню»: карточка уже печатает его из menu.
+// «Где» и «Как» повторяют путь из строки «Меню»: карточка уже печатает его из menu.
 function menuDupes(a: Article): string[] {
-  const w = flat(shown(a.where))
-  return (a.menu ?? [])
-    .map((m) => menuPath(m))
-    .filter((p): p is string => !!p && w.includes(flat(p)))
-    .map((p) => `${a.id}: «Где» повторяет «Меню» (${p})`)
+  const paths = (a.menu ?? []).map((m) => menuPath(m)).filter((p): p is string => !!p)
+  return (['where', 'how'] as const).flatMap((f) => {
+    const t = flat(shown(a[f]))
+    return paths.filter((p) => t.includes(flat(p))).map((p) => `${a.id}: «${f === 'where' ? 'Где' : 'Как'}» повторяет «Меню» (${p})`)
+  })
 }
 
 // Голые клавиши, ссылки «(статья «…»)», пустые и длинные абзацы, длина статьи.
@@ -141,6 +141,10 @@ describe('самопроверка стража: подмена роняет', (
     expect(only({ menu: ['export'], where: 'Меню «Файл ▸ Экспорт…» рядом.' })).toContain('повторяет «Меню»')
     expect(only({ menu: ['export'], where: 'Меню «Файл▸Экспорт…».' })).toContain('повторяет «Меню»')
     expect(only({ menu: ['export'], where: 'Кнопка в шапке.' })).toBe('')
+  })
+  it('«Как» с путём меню (141): тоже дубль', () => {
+    expect(only({ menu: ['export'], how: 'Нажмите; «Файл ▸ Экспорт…».' })).toBe('export: «Как» повторяет «Меню» (Файл ▸ Экспорт…)')
+    expect(only({ menu: ['export'], how: 'Нажмите кнопку.' })).toBe('')
   })
   it('голая клавиша; клавиша в {key:} не считается', () => {
     expect(only({ where: 'Кнопка; I.' })).toContain('голая клавиша')

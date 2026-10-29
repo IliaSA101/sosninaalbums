@@ -22,6 +22,10 @@ type Geo struct {
 	Layflat bool          // место может идти через шов
 }
 
+// Page — страница по настройкам (мм): та же, что Pages[0] у Geo обычного листа. Для кода, у
+// которого есть только Settings (вид альбома у агентов), — вместо чтения PageW мимо Geo.
+func (s Settings) Page() layout.Rect { return layout.Rect{W: s.PageW, H: s.PageH} }
+
 // Geo — геометрия листа s; nil — обычный разворот (для обходов «по разворотам»).
 func (p *Project) Geo(s *Spread) Geo {
 	st := p.Settings
@@ -31,7 +35,8 @@ func (p *Project) Geo(s *Spread) Geo {
 		return Geo{W: w, H: h, Mid: w / 2, Margin: st.Margin, Gap: st.Gap, Layflat: true,
 			Pages: []layout.Rect{{X: 0, Y: 0, W: cg.X[3], H: h}, {X: cg.X[4], Y: 0, W: w - cg.X[4], H: h}}}
 	}
-	w, h := st.PageW, st.PageH
+	pg := st.Page()
+	w, h := pg.W, pg.H
 	if st.Sheet {
 		// Лист 031 — одна страница во весь лист, шва нет (решение 62).
 		return Geo{W: w, H: h, Margin: st.Margin, Gap: st.Gap, Layflat: true, Pages: []layout.Rect{{W: w, H: h}}}

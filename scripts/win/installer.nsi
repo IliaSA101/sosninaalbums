@@ -184,11 +184,14 @@ Function .onInit
   ${EndIf}
 FunctionEnd
 
-; Ждём, пока программа закроется: замок Wails (любая копия, в том числе из zip) и сам exe —
-; запущенный exe Windows переписать не даёт. Тихое обновление ждёт до 60 с (программа сохраняет
-; альбом и выходит), обычная установка сразу спрашивает.
+; Ждём, пока программа закроется: «открыта» — только замок Wails (любая копия, в том числе из zip).
+; Занятый exe без замка — это посредник ИИ-клиента (SosninaAlbums.exe --mcp, 0.31-143-32): он живёт, пока
+; открыт клиент, и закрывать его мы не вправе. Образ запущенного exe Windows переименовать даёт, поэтому
+; ждём не дольше 5 с (программа дописывает выход) и идём в ReplaceExe. Тихое обновление ждёт программу
+; до 60 с (она сохраняет альбом и выходит), обычная установка сразу спрашивает.
 Function WaitUnlocked
   StrCpy $R5 0
+  StrCpy $R9 0
   ; Мастер после «Обновить» в переносной копии стартует, пока программа ещё выходит: ждём 5 с
   StrCpy $R8 10
   IfSilent 0 +2
@@ -206,6 +209,13 @@ Function WaitUnlocked
       FileClose $R6
       Goto done
     ${EndIf}
+    ; замка нет, exe занят: дописывающая программа или посредник — 5 с, затем замена переименованием
+    IntOp $R9 $R9 + 1
+    ${If} $R9 >= 10
+      Goto done
+    ${EndIf}
+    Sleep 500
+    Goto loop
   busy:
     IntOp $R5 $R5 + 1
     ${If} $R5 < $R8
@@ -217,6 +227,7 @@ Function WaitUnlocked
     Quit
   retry:
     StrCpy $R5 0
+    StrCpy $R9 0
     Goto loop
   done:
 FunctionEnd
@@ -224,10 +235,18 @@ FunctionEnd
 ; Замена exe: старый уходит в .old, новый (.new) встаёт на его место. Занятый антивирусом файл
 ; повторяем 5 с; не вышло — откат (.old возвращается), код 6, Abort: реестр, ярлыки и версия
 ; не тронуты, .onInstFailed откроет прежнюю программу.
+; .old прошлого обновления мог остаться образом живого посредника (0.31-143-32): удалить его нельзя,
+; а переименовать можно — уходит в .old-<тики>; свободные .old* стираются маской, занятые остаются до следующей установки.
 Function ReplaceExe
   Push $R0
   Push $R1
-  Delete "$INSTDIR\${EXE}.old"
+  Push $R2
+  Delete "$INSTDIR\${EXE}.old*"
+  IfFileExists "$INSTDIR\${EXE}.old" 0 oldfree
+    System::Call 'kernel32::GetTickCount64() l .R2'
+    ClearErrors
+    Rename "$INSTDIR\${EXE}.old" "$INSTDIR\${EXE}.old-$R2"
+  oldfree:
   StrCpy $R1 0
   StrCpy $R0 0
   ; шаг 1: старый exe -> .old (первой установки нет — шаг пропускаем)
@@ -279,6 +298,7 @@ Function ReplaceExe
     MessageBox MB_OK|MB_ICONSTOP "Не удалось заменить программу: файл занят (возможно, антивирусом). Прежняя версия осталась на месте. Повторите установку." /SD IDOK
     Abort
   done:
+  Pop $R2
   Pop $R1
   Pop $R0
 FunctionEnd
@@ -350,7 +370,7 @@ Section "main"
     WriteRegStr HKCU "Software\Classes\${PROGID}\shell\open\command" "" '"$INSTDIR\${EXE}" "%1"'
   ${EndIf}
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
-  Delete "$INSTDIR\${EXE}.old"
+  Delete "$INSTDIR\${EXE}.old*"
 
   ${If} $Relaunch == 1
     Exec '"$INSTDIR\${EXE}"'
@@ -363,9 +383,26 @@ Section "Uninstall"
   ; Настройки, шаблоны, библиотека, миниатюры и копии остаются; скачанные обновления — мусор
   ; Единственное RMDir /r — по постоянному пути папки данных, не по $INSTDIR
   RMDir /r "$LOCALAPPDATA\SosninaAlbums\Updates"
-  Delete "$INSTDIR\${EXE}"
-  Delete "$INSTDIR\${EXE}.new"
-  Delete "$INSTDIR\${EXE}.old"
+  ; exe или .old* заняты (живой посредник ИИ-клиента, в том числе после обновления: его образ лежит в .old):
+  ; спрашиваем «Повтор», как WaitUnlocked. «Отмена» и тихий режим — файл остаётся, остальное удаляется.
+  ; Delete /REBOOTOK не годится: отложенное удаление требует прав администратора, а программа ставится без них (0.31-143-32)
+  delexe:
+    ClearErrors
+    Delete "$INSTDIR\${EXE}"
+    Delete "$INSTDIR\${EXE}.new"
+    Delete "$INSTDIR\${EXE}.old*"
+    StrCpy $R2 0
+    IfFileExists "$INSTDIR\${EXE}" 0 +2
+      StrCpy $R2 1
+    FindFirst $R3 $R4 "$INSTDIR\${EXE}.old*"
+    FindClose $R3
+    ${If} $R4 != ""
+      StrCpy $R2 1
+    ${EndIf}
+    ${If} $R2 == 1
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Закройте Sosnina Albums, Claude Desktop и другие программы ИИ-агентов, затем нажмите «Повтор»." /SD IDCANCEL IDRETRY delexe
+    ${EndIf}
+  ; удаление остального — после цикла
   Delete "$INSTDIR\uninstall.exe"
   ; Пример (только стандартная редакция): маской по префиксу — деинсталлятор компактной собирается без DEMO_SRC,
   ; а v2 примера не оставит сиротой v1. RMDir без /r: чужое в data\ не трогаем; оба до RMDir "$INSTDIR"

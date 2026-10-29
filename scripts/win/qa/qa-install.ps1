@@ -297,12 +297,12 @@ if (-not (Test-Installed)) { Skip-Blocked @('В5', 'В6', 'В7', 'В8', 'В9', '
 
     # ---------- Г6-Г7: сбой замены exe (код 6) ----------
     Invoke-QaItem 'Г6' -Budget 300 {
-        $old = $P.Exe + '.old'
-        New-Item -ItemType Directory -Force -Path $old | Out-Null
-        Write-Utf8 (Join-Path $old 'x') 'x'
+        # Занятый .old установщик больше не считает сбоем (уходит в .old-<тики>, 0.31-143-32); код 6 даёт exe,
+        # который нельзя переименовать (открыт без FileShare.Delete): замка Wails нет, ждёт 5 с и 5 с повторяет
         $t = [Diagnostics.Stopwatch]::StartNew()
-        Step-Qa 'тихая установка 0.25.1 при занятой папке .exe.old'
-        $code = Invoke-Setup $setup1 '/S'
+        Step-Qa 'тихая установка 0.25.1 при exe, который нельзя переименовать'
+        $lockExe = [System.IO.File]::Open($P.Exe, 'Open', 'Read', 'Read')
+        try { $code = Invoke-Setup $setup1 '/S' } finally { $lockExe.Dispose() }
         $sec = $t.Elapsed.TotalSeconds
         $verOk = (Get-Reg $P.KUninst 'DisplayVersion') -ceq '0.25.0'
         $noNew = -not (Test-Path -LiteralPath ($P.Exe + '.new'))
@@ -312,12 +312,14 @@ if (-not (Test-Installed)) { Skip-Blocked @('В5', 'В6', 'В7', 'В8', 'В9', '
         Stop-Installed
         $ok = ($code -eq 6) -and $verOk -and $noNew -and (Test-Path -LiteralPath $P.Lnk) -and $ran -and ($sec -ge 3) -and ($sec -le 40)
         $st = 'fail'; if ($ok) { $st = 'ok' }
-        Add-QaResult -Id 'Г6' -Status $st -Detail ("код $code (ждём 6), {0:N1} с (около 5), версия 0.25.0: $verOk, нет .exe.new: $noNew, из Пуска запускается 0.25.0: $ran" -f $sec) -Sec $sec
+        Add-QaResult -Id 'Г6' -Status $st -Detail ("код $code (ждём 6), {0:N1} с (около 10), версия 0.25.0: $verOk, нет .exe.new: $noNew, из Пуска запускается 0.25.0: $ran" -f $sec) -Sec $sec
     }
     Invoke-QaItem 'Г7' {
-        Remove-Item -LiteralPath ($P.Exe + '.old') -Recurse -Force -ErrorAction SilentlyContinue
-        $st = 'fail'; if (-not (Test-Path -LiteralPath ($P.Exe + '.old'))) { $st = 'ok' }
-        Add-QaResult -Id 'Г7' -Status $st -Detail 'подставленная папка .exe.old удалена'
+        # После сбоя замены рядом с exe не должно остаться ни .old*, ни .new (маска: .old-<тики> имя не знает)
+        $left = @(Get-ChildItem -LiteralPath (Split-Path $P.Exe) -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'SosninaAlbums.exe.old*' -or $_.Name -like 'SosninaAlbums.exe.new*' })
+        $st = 'fail'; if ($left.Count -eq 0) { $st = 'ok' }
+        $left | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        Add-QaResult -Id 'Г7' -Status $st -Detail ('остатков .old*/.new нет: {0}; {1}' -f ($left.Count -eq 0), (($left | ForEach-Object { $_.Name }) -join ', '))
     }
 
     # ---------- Ж1-Ж4: удаление через мастер ----------

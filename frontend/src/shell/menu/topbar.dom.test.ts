@@ -4,7 +4,10 @@ import { cleanup, fireEvent, render } from '@testing-library/svelte'
 
 // Подпись формата в шапке (123 QA): страница из px — 303,95 × 202,95 мм — без float-хвостов, с запятой.
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
-vi.mock('../../../wailsjs/go/app/App', () => ({ RecentProjects: vi.fn(async () => []) }))
+vi.mock('../../../wailsjs/go/app/App', () => ({
+  RecentProjects: vi.fn(async () => []),
+  AgentsInfo: vi.fn(async () => ({ status: 'off' })),
+}))
 
 const { default: TopBar } = await import('./TopBar.svelte')
 const { store } = await import('../../base/core/store.svelte')

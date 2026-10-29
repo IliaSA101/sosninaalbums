@@ -43,7 +43,7 @@ class QaKitFake(unittest.TestCase):
 
     def test_layout(self):
         names = ["README.txt", "pub.txt", "run-feed.cmd", "start-0.25.0.cmd", "start-installed.cmd",
-                 "installer-check.ps1", "kit-sha256.txt", "zip/SosninaAlbums-0.25.0-rel-windows-x64.zip",
+                 "installer-check.ps1", "installer-check-lib.ps1", "kit-sha256.txt", "zip/SosninaAlbums-0.25.0-rel-windows-x64.zip",
                  "setup/SosninaAlbums-0.25.0-windows-x64-setup.exe", "setup/" + SETUP]
         # update.md кладётся из docs/qa, а в публичном дереве и ветке winqa/* его нет (qa-kit.sh это допускает)
         if os.path.isfile(UPDATE):

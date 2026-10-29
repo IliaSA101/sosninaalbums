@@ -59,6 +59,7 @@ const FILES = {
   'docs/install/guide.md': 'В папке `SosninaAlbums-<версия>.exe`.\n',
   'scripts/win/installer.sh': '#!/bin/sh\n',
   'scripts/win/installer-check.ps1': '# x\n',
+  'scripts/win/installer-check-lib.ps1': '# x\n',
   LICENSE,
   'NOTICE.md': NOTICE,
   'docs/specs/1.2/051-one.md': '# 051\n',
@@ -282,6 +283,9 @@ test('установщик: win-check, вызовы скриптов и имя e
     assert.deepEqual(checkInstaller(root, nopack), ['release.yml: «win-check» не ждёт «pack» (установщик собирается там)'])
     // скрипты не вызываются
     assert.deepEqual(checkInstaller(root, YML.replace('installer-check.ps1', 'other.ps1')), ['release.yml: не вызывается scripts/win/installer-check.ps1'])
+    // помощники проверки — отдельный файл: без него installer-check.ps1 не запустится
+    fs.rmSync(path.join(root, 'scripts/win/installer-check-lib.ps1'))
+    assert.deepEqual(checkInstaller(root, YML), ['scripts/win/installer-check-lib.ps1: нет файла'])
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

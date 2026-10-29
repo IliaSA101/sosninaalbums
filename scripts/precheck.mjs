@@ -180,6 +180,13 @@ if (part !== 'fe' && goFiles.length) {
   if (built.some((f) => f.endsWith('_test.go'))) {
     step('стражи Go', () => res(run('go', ['test', '-count=1', '-run', '^TestNo', './internal/testkit'])))
   }
+  // Стражи album, сканирующие всё internal/ (TestPageWReaders, TestNoExportedGlobals): -short берёт album,
+  // только если правили album (29.10: чтение PageW в app/agents прошло precheck и упало в CI)
+  if (goFiles.some((f) => f.startsWith('internal/') && !f.startsWith('internal/album/'))) {
+    step('стражи album', () =>
+      res(run('go', ['test', '-count=1', '-run', '^(TestPageWReaders|TestNoExportedGlobals)$', './internal/album'])),
+    )
+  }
   if (goFiles.some((f) => isTree(path.posix.dirname(f)))) {
     step('покрытие дерева album', () => {
       const baseJson = path.join(root, 'testdata', GO_BASELINE)
@@ -219,7 +226,16 @@ if (part !== 'fe' && goFiles.length) {
     // Линтеры «на функцию» (funlen, gocognit) ставят замечание на заголовок: выросло тело старой функции —
     // --new-from-rev его отфильтрует, поэтому второй прогон без фильтра по тем же пакетам
     const perFunc = heavy('--enable-only', 'gocognit,funlen')
-    return res({ code: fresh.code || perFunc.code, out: [fresh.out, perFunc.out].filter((o) => o.trim()).join('\n') })
+    // Да владельца 29.10 (очередь п. 6): файлы //go:build windows на Linux и macOS не линтятся — промах (unused
+    // у метода, звавшегося только из файла linux) доходил до CI на Windows; второй прогон — под GOOS=windows
+    const win =
+      process.platform === 'win32'
+        ? { code: 0, out: '' }
+        : run('node', ['scripts/heavy.mjs', exe, 'run', '--allow-parallel-runners', `--new-from-rev=${base}`, ...pkgs], {
+            env: { ...env, GOOS: 'windows' },
+          })
+    const outs = [fresh.out, perFunc.out, win.code ? `GOOS=windows:\n${win.out}` : '']
+    return res({ code: fresh.code || perFunc.code || win.code, out: outs.filter((o) => o.trim()).join('\n') })
   })
 }
 
