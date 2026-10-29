@@ -1,0 +1,120 @@
+:root {
+  --bg: #262628;
+  --panel: #2c2c2f;
+  --panel2: #202022;
+  --line: #3a3a3e;
+  --text: #e8e8ea;
+  --muted: #9a9aa0;
+  --accent: #f5d90a;
+  /* Цветовые метки фото (спека 004): полоса на миниатюре; other — незнакомый текст метки */
+  --lbl-red: #e5484d;
+  --lbl-yellow: #f5d90a;
+  --lbl-green: #46a758;
+  --lbl-blue: #3e63dd;
+  --lbl-purple: #8e4ec6;
+  --lbl-other: #8b8d98;
+  /* Цвета групп команд на карте клавиатуры (074, окно «Горячие клавиши»); other — группа, которой здесь не знают */
+  --grp-album: #4a78c2;
+  --grp-view: #3a9a8c;
+  --grp-canvas: #8a6fd1;
+  --grp-spreads: #c9803a;
+  --grp-photos: #4ba3c7;
+  --grp-marks: #d1b43a;
+  --grp-text: #c25f9c;
+  --grp-grid: #7ea64a;
+  --grp-decor: #b0605a;
+  --grp-backdrop: #8b8d98;
+  --grp-other: #8b8d98;
+  /* Скорость и характер «переезда» фото при смене раскладки */
+  --move: 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 14px;
+  user-select: none;
+}
+
+body.dragging,
+body.dragging * {
+  cursor: grabbing !important;
+}
+
+button {
+  font: inherit;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: #3a3a3e;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+button:hover:not(:disabled) {
+  background: #48484d;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+button.ghost {
+  background: transparent;
+}
+button.ghost:hover:not(:disabled) {
+  background: #3a3a3e;
+}
+button.accent,
+button.primary {
+  background: var(--accent);
+  color: #1e1e1e;
+  font-weight: 600;
+}
+button.accent:hover:not(:disabled),
+button.primary:hover:not(:disabled) {
+  background: #ffe53a;
+}
+
+select,
+input[type='number'] {
+  font: inherit;
+  height: 30px;
+  background: #3a3a3e;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 8px;
+}
+
+input[type='range'] {
+  accent-color: var(--accent);
+  width: 110px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #4a4a50;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

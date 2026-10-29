@@ -1,0 +1,97 @@
+package view
+
+import (
+	"strings"
+
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
+)
+
+// lay — действующая раскладка разворота «Авто», её место в ряду и листание страниц.
+// Только чтение p и кэша layout — можно звать из воркеров.
+func lay(p *model.Project, s *model.Spread) Laid {
+	cur, _, ok := p.Layout(s)
+	if !ok {
+		return Laid{done: true}
+	}
+	asp, prm := p.LayoutIn(s.Photos)
+	// 17+ фото: ряд — до порции с текущей раскладкой, more — его можно досчитать.
+	row, i, more := model.AutoRow(asp, prm, cur.Key)
+	// Счётчик — по ряду «Авто» и «Другим вариантам» за ним (решение 0.11 №36), как листание.
+	extra := model.ExtraRow(asp, prm)
+	if i < 0 {
+		if j := model.IndexOf(extra, cur.Key); j >= 0 {
+			i = len(row) + j
+		}
+	}
+	l := Laid{cur: cur, variant: i, variants: len(row) + len(extra), more: more, ok: true, done: true,
+		foldHidden: model.ExtraFoldHidden(asp, prm)}
+	// Ряды с перестановкой считаются, только если текущая раскладка из них.
+	if l.variant < 0 && layout.IsRearranged(cur.Key) {
+		if rr, _ := layout.CachedRearranged(asp, prm, model.VariantLimit); model.IndexOf(rr, cur.Key) >= 0 {
+			l.variant, l.variants, l.more, l.rearranged = model.IndexOf(rr, cur.Key), len(rr), false, true
+		}
+	}
+	if !layout.IsPaged(cur.Key) {
+		return l
+	}
+	l.pages = make([]model.PageView, 2)
+	for side := range 2 {
+		pv := model.PageView{Variant: -1}
+		for _, r := range cur.Rects {
+			if (r.X < prm.PageW) == (side == 0) {
+				pv.Photos++
+			}
+		}
+		if in, ok := layout.CachedPagesInOrder(cur.Key, asp, prm, side, model.VariantLimit); ok {
+			pv.Variant, pv.Variants = model.IndexOf(in, cur.Key), len(in)
+			if pv.Variant < 0 && PagePermuted(cur.Key, side) {
+				if _, rr, _, _ := layout.CachedPages(cur.Key, asp, prm, side, model.VariantLimit); model.IndexOf(rr, cur.Key) >= 0 {
+					pv.Variant, pv.Variants, pv.Rearranged = model.IndexOf(rr, cur.Key), len(rr), true
+				}
+			}
+		}
+		l.pages[side] = pv
+	}
+	return l
+}
+
+// PagePermuted — фото страницы в ключе P[…|…] стоят не в порядке ленты.
+func PagePermuted(key string, side int) bool {
+	parts := strings.SplitN(strings.TrimSuffix(strings.TrimPrefix(key, "P["), "]"), "|", 2)
+	return len(parts) == 2 && layout.IsRearranged(parts[side])
+}
+
+// Laid — раскладочная часть вида разворота «Авто», посчитанная заранее.
+// done = false — не считалась (сетка, пусто, паника): spreadView посчитает сам.
+type Laid struct {
+	cur                        layout.Result
+	variant, variants          int
+	more, rearranged, ok, done bool
+	foldHidden                 int
+	pages                      []model.PageView
+}
+
+// layWorker — счёт разворота в воркере; тест подменяет его, чтобы имитировать панику.
+var layWorker = lay
+
+// layAll — lay для разворотов «Авто» с фото, параллельно. Только чтение p (вызов под e.mu).
+func layAll(p *model.Project, spreads []*model.Spread) []Laid {
+	ls := make([]Laid, len(spreads))
+	if !model.ParallelLayouts() {
+		return ls
+	}
+	var jobs []int
+	for i, s := range spreads {
+		if len(s.Grid) == 0 && len(s.Photos) > 0 {
+			jobs = append(jobs, i)
+		}
+	}
+	var pl model.PanicLog
+	model.Each(len(jobs), func(j int) {
+		s := spreads[jobs[j]]
+		pl.Safely(s.ID, func() { ls[jobs[j]] = layWorker(p, s) })
+	})
+	pl.Summary()
+	return ls
+}
