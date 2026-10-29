@@ -1,0 +1,118 @@
+{
+  "albumBg": "ada021bb4a112acb",
+  "sheets": [
+    {
+      "id": "cover",
+      "photos": [
+        "00000000000000a1-2"
+      ],
+      "places": [
+        {
+          "photo": "00000000000000a1-2"
+        }
+      ],
+      "backdrops": [
+        {
+          "photo": "00000000000000d1"
+        }
+      ],
+      "stickers": []
+    },
+    {
+      "id": "000000000001",
+      "photos": [
+        "00000000000000a1",
+        "00000000000000b1"
+      ],
+      "places": [],
+      "backdrops": [
+        {
+          "photo": "ada021bb4a112acb",
+          "album": true
+        }
+      ],
+      "stickers": [
+        {
+          "photo": "071d573ee900db21"
+        }
+      ]
+    },
+    {
+      "id": "000000000002",
+      "photos": [
+        "00000000000000a1-3"
+      ],
+      "places": [],
+      "backdrops": [
+        {
+          "photo": "00000000000000a1"
+        }
+      ],
+      "stickers": []
+    },
+    {
+      "id": "000000000003",
+      "photos": [
+        "00000000000000c1-2"
+      ],
+      "places": [
+        {
+          "photo": "00000000000000c1-2",
+          "border": {
+            "photo": "071d573ee900db21"
+          }
+        },
+        {
+          "photo": "",
+          "border": {
+            "photo": "071d573ee900db21"
+          }
+        }
+      ],
+      "backdrops": [
+        {
+          "photo": "ada021bb4a112acb",
+          "album": true
+        }
+      ],
+      "stickers": []
+    }
+  ],
+  "files": [
+    {
+      "id": "00000000000000a1",
+      "uses": 4,
+      "places": 3
+    },
+    {
+      "id": "00000000000000b1",
+      "uses": 1,
+      "places": 1
+    },
+    {
+      "id": "00000000000000c1",
+      "uses": 1,
+      "places": 1
+    },
+    {
+      "id": "00000000000000d1",
+      "uses": 1,
+      "places": 0
+    },
+    {
+      "id": "ada021bb4a112acb",
+      "uses": 1,
+      "places": 0
+    },
+    {
+      "id": "071d573ee900db21",
+      "uses": 3,
+      "places": 0
+    },
+    {
+      "id": "00000000000000ff",
+      "uses": 0,
+      "places": 0
+    }
+  ]
+}
