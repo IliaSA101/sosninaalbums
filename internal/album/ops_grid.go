@@ -1,0 +1,333 @@
+package album
+
+import (
+	"errors"
+	"math"
+	"slices"
+
+	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/names"
+	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/album/view"
+)
+
+// Обёртки области grid (023 Ш4): тело ≤ 3 операторов, сама правка — в пакете grid
+// над *Project. «Договор» у каждой — что проверяется здесь до правки; остальное
+// (неизвестный разворот, пределы мест, NaN в местах) проверяет операция внутри
+// change/try, поэтому откат и холостая правка получаются даром.
+
+// SetGrid. Договор: до правки ничего (неизвестный разворот — холостая).
+func (e *Editor) SetGrid(spreadID string, on bool) model.View {
+	return e.change(func(p *model.Project) { grid.SetGrid(p, spreadID, on) })
+}
+
+// BackToAuto — «Вернуть авто» со своим кадром (098 §3.2): keep — фото держат кадр мест, key — ключ
+// из галереи ("" — сохранённый или лучшая). Договор: до правки ничего; свой кадр и раскладка —
+// одна правка (один шаг отмены), всё уже так — холостая; ошибка — только отказ settle (откат без шага).
+func (e *Editor) BackToAuto(spreadID, key string, keep bool) (model.View, error) {
+	return e.try("", func(p *model.Project) error { grid.BackToAuto(p, spreadID, key, keep); return nil })
+}
+
+// CropsToKeep — N для галочки «Сохранить кадр правленых фото: N» (098 §2 п. 3). Договор: только
+// чтение под замком.
+func (e *Editor) CropsToKeep(spreadID string) (n int) {
+	e.read(func(p *model.Project) { n = grid.CropsToKeep(p, spreadID) })
+	return n
+}
+
+// AddPlace. Договор: до правки ничего; лимит мест — ошибка try, откат без шага; чужая
+// форма — прямоугольник внутри; ShapeRounded — скругление RoundedPct.
+func (e *Editor) AddPlace(spreadID string, page int, shape string) (model.View, error) {
+	return e.try("", func(p *model.Project) error { return grid.AddPlace(p, spreadID, page, shape) })
+}
+
+// SetPlaces. Договор: у «Авто» merge сбрасывается до правки (закрепление не должно
+// влипнуть в чужую серию); чтение — под замком.
+func (e *Editor) SetPlaces(spreadID string, boxes []model.PlaceBox, merge string) model.View {
+	e.read(func(p *model.Project) {
+		if grid.GridIsAuto(p, spreadID) {
+			merge = ""
+		}
+	})
+	return e.apply(model.GridMerge(merge), func(p *model.Project) { grid.SetPlaces(p, spreadID, boxes) })
+}
+
+// DeletePlaces. Договор: до правки ничего (у «Авто» и без мест — холостая).
+func (e *Editor) DeletePlaces(spreadID string, ids []string) model.View {
+	return e.change(func(p *model.Project) { grid.DeletePlaces(p, spreadID, ids) })
+}
+
+// SetPlaceFit. Договор: до правки ничего; режим вне ""/FitContain — холостая внутри.
+func (e *Editor) SetPlaceFit(spreadID string, ids []string, fit string) model.View {
+	return e.change(func(p *model.Project) { grid.SetPlaceFit(p, spreadID, ids, fit) })
+}
+
+// SetPlaceShape. Договор: до правки ничего; форма вне ""/ShapeOval/ShapeRounded — холостая внутри.
+func (e *Editor) SetPlaceShape(spreadID string, ids []string, shape string) model.View {
+	return e.change(func(p *model.Project) { grid.SetPlaceShape(p, spreadID, ids, shape) })
+}
+
+// SetPlaceRound. Договор: NaN/Inf — холостая до правки (текущий View); предел — внутри.
+func (e *Editor) SetPlaceRound(spreadID string, ids []string, round float64) model.View {
+	if math.IsNaN(round) || math.IsInf(round, 0) {
+		return e.View()
+	}
+	return e.change(func(p *model.Project) { grid.SetPlaceRound(p, spreadID, ids, round) })
+}
+
+// ApplyBorder — рамочка src местам ids листа (079 §8; ids — ссылки мест или фото); пустой src —
+// снять. Один шаг: и закрепление «Авто», и запись своей картинки; та же рамочка — холостая.
+// Договор: до правки ничего; вид, ключ своей и лист проверяет тело (ошибка — откат без шага).
+func (e *Editor) ApplyBorder(spreadID string, ids []string, src model.BorderSrc) (model.View, error) {
+	v, _, err := e.ApplyBorderStep(spreadID, ids, src)
+	return v, err
+}
+
+// ApplyBorderStep — ApplyBorder и была ли правка (шаг отмены): плитка идёт в недавние только при
+// ней (079 §8), как у ReplaceSticker. Договор: как у ApplyBorder.
+func (e *Editor) ApplyBorderStep(spreadID string, ids []string, src model.BorderSrc) (v model.View, changed bool, err error) {
+	rev := -1
+	v, err = e.try("", func(p *model.Project) error {
+		rev = e.rev
+		return grid.ApplyBorder(p, spreadID, ids, src)
+	})
+	return v, err == nil && v.Rev != rev, err
+}
+
+// BorderPath — путь картинки записи id для /media/f (079-22, 079-35): только запись, на которую
+// ссылается рамочка места листа или обложки, и только с путём (своя без файла — false). Обычное
+// фото альбома, фон, стикер и чужой ID — false. Своя — файл из «Рамочек» (salbum.FramePath, 079-40).
+func (e *Editor) BorderPath(id string) (path string, ok bool) {
+	e.read(func(p *model.Project) {
+		if p.OnBorder(id) {
+			path = salbum.FramePath(p.Photos[id])
+		}
+	})
+	return path, path != ""
+}
+
+// BorderIDs — записи под рамочками мест листов и обложки, отсортированы, без повторов: /media/f сверяет
+// с ними ID из адреса и дальше идёт с ID альбома, а не из запроса (079-40).
+// Договор: только чтение под замком.
+func (e *Editor) BorderIDs() (ids []string) {
+	e.read(func(p *model.Project) {
+		for _, s := range p.Sheets() {
+			ids = append(ids, s.BorderPhotos()...)
+		}
+	})
+	slices.Sort(ids)
+	return slices.Compact(ids)
+}
+
+// borderMerge — ключ слияния серии ползунка или палитры рамочки в один шаг отмены.
+func borderMerge(session string) string {
+	if !model.ValidSession(session) {
+		return ""
+	}
+	return "border:" + session
+}
+
+// SetBorder — цвета, толщина или размер рамочек мест ids (079 §8); nil и 0 — поле не менять.
+// Договор: толщина и размер — конечные числа (иначе холостая до правки); зажим — ClampBorder в теле.
+func (e *Editor) SetBorder(spreadID string, ids []string, pt model.BorderPatch, merge string) model.View {
+	if !allFinite(pt.Width, pt.Scale) {
+		return e.View()
+	}
+	return e.apply(borderMerge(merge), func(p *model.Project) { grid.SetBorder(p, spreadID, ids, pt) })
+}
+
+// ArrangePlaces. Договор: до правки ничего; неизвестный op — холостая, слишком
+// мелкое деление и лимит мест — ошибка try.
+func (e *Editor) ArrangePlaces(spreadID, op string, ids []string) (model.View, error) {
+	return e.try("", func(p *model.Project) error { return grid.ArrangePlaces(p, spreadID, op, ids) })
+}
+
+// MirrorGrid. Договор: до правки ничего; симметрия, нет мест, чужая область — холостая внутри.
+func (e *Editor) MirrorGrid(spreadID, scope string) model.View {
+	return e.change(func(p *model.Project) { grid.MirrorGrid(p, spreadID, scope) })
+}
+
+// PlacePhotos. Договор: до правки ничего; неизвестное место и пустой список — холостая.
+// named — фото, получившие имя из названия файла тем же шагом (060).
+func (e *Editor) PlacePhotos(spreadID, placeID string, photos []model.PhotoInfo) (v model.View, left int, named []string, err error) {
+	return e.namedTry(photos, func(p *model.Project) (int, error) { return grid.PlacePhotos(p, spreadID, placeID, photos) })
+}
+
+// namedTry — gridTry с автоименами (060): тело и имена новых фото (names.WithAuto) — один шаг
+// отмены; при отказе правки (и в settle) left = 0, named = nil. Имена не влезли в запас
+// знаков — та же правка без них (overBudget).
+func (e *Editor) namedTry(photos []model.PhotoInfo, fn func(p *model.Project) (int, error)) (v model.View, left int, named []string, err error) {
+	if v, left, named, err = e.namedOnce(photos, true, fn); overBudget(err, named) {
+		v, left, named, err = e.namedOnce(photos, false, fn)
+	}
+	if err != nil {
+		named = nil
+	}
+	return v, left, named, err
+}
+
+// namedOnce — одна попытка namedTry; auto = false — без автоимён. named и при отказе — имена,
+// розданные до отказа settle: по ним namedTry решает о повторе.
+func (e *Editor) namedOnce(photos []model.PhotoInfo, auto bool, fn func(p *model.Project) (int, error)) (v model.View, left int, named []string, err error) {
+	v, left, err = e.gridTry(func(p *model.Project) (n int, err error) {
+		if !auto {
+			return fn(p)
+		}
+		named, err = names.WithAuto(p, photos, func() (err error) { n, err = fn(p); return err })
+		return n, err
+	})
+	return v, left, named, err
+}
+
+// overBudget — отказ правки из-за автоимён: они раздавались, а итог вышел за запас знаков.
+// Имена — удобство, фото кладут намеренно: правка повторяется без имён (0.14 decisions 31).
+func overBudget(err error, named []string) bool {
+	return len(named) > 0 && errors.Is(err, model.ErrTextBudget)
+}
+
+// gridTry — try для операций, что возвращают left (фото, ушедшие в ленту): при
+// отказе правки left = 0.
+func (e *Editor) gridTry(fn func(p *model.Project) (int, error)) (v model.View, left int, err error) {
+	v, err = e.try("", func(p *model.Project) (err error) {
+		left, err = fn(p)
+		return err
+	})
+	if err != nil {
+		left = 0
+	}
+	return v, left, err
+}
+
+// FillPlaces. Договор: до правки ничего; фото из альбома и с фонов пропускаются внутри.
+// named — как у PlacePhotos (060).
+func (e *Editor) FillPlaces(photos []model.PhotoInfo, fromSpread string) (v model.View, left int, named []string) {
+	v, left, named, _ = e.namedTry(photos, func(p *model.Project) (int, error) { return grid.FillPlaces(p, photos, fromSpread), nil })
+	return v, left, named
+}
+
+// ApplyGrid. Договор: доли зажимаются до правки (NaN или пусто — отказ без шага
+// отмены и rev, View текущий).
+func (e *Editor) ApplyGrid(spreadID, scope, tplScope string, frac []model.Box) (model.View, int, error) {
+	frac, err := model.ClampBoxesStrict(frac)
+	if err != nil {
+		return e.View(), 0, err
+	}
+	return e.gridTry(func(p *model.Project) (int, error) { return grid.ApplyGrid(p, spreadID, scope, tplScope, frac) })
+}
+
+// CopyGrid. Договор: до правки ничего; область, цели и мест нет — ошибка try.
+func (e *Editor) CopyGrid(src, from string, targets []model.GridTarget, design, mirror bool) (model.View, int, error) {
+	return e.gridTry(func(p *model.Project) (int, error) {
+		plan, err := grid.CopyGrid(p, src, from, targets, design, mirror)
+		return plan.Left, err
+	})
+}
+
+// PlanCopyGrid. Договор: под замком только копия проекта — сухой прогон по всему
+// альбому не держит View и автосохранение; снимка, события и rev нет.
+func (e *Editor) PlanCopyGrid(src, from string, targets []model.GridTarget, design, mirror bool) (plan model.GridPlan) {
+	var c *model.Project
+	e.read(func(p *model.Project) { c = p.Clone() })
+	return grid.PlanCopyGrid(c, src, from, targets, design, mirror)
+}
+
+// CopyDecor (049 Ф2). Договор: до правки ничего; область и цели — ошибка try; все цели с тем
+// же оформлением — холостая (без шага).
+func (e *Editor) CopyDecor(src, from string, targets []model.GridTarget, texts, mirror bool) (model.View, error) {
+	return e.try("", func(p *model.Project) error {
+		_, err := grid.CopyDecor(p, src, from, targets, texts, mirror)
+		return err
+	})
+}
+
+// PlanCopyDecor. Договор: как PlanCopyGrid — сухой прогон на копии, снятой под замком.
+func (e *Editor) PlanCopyDecor(src, from string, targets []model.GridTarget, texts, mirror bool) model.GridPlan {
+	var c *model.Project
+	e.read(func(p *model.Project) { c = p.Clone() })
+	return grid.PlanCopyDecor(c, src, from, targets, texts, mirror)
+}
+
+// DuplicateGrid. Договор: count < 1 — холостая до правки (текущий View).
+func (e *Editor) DuplicateGrid(src string, count int, design bool) (model.View, error) {
+	if count < 1 {
+		return e.View(), nil
+	}
+	return e.try("", func(p *model.Project) error { return grid.DuplicateGrid(p, src, count, design) })
+}
+
+// SetPlaceAngle. Договор: NaN/Inf угла — холостая до правки (текущий View).
+func (e *Editor) SetPlaceAngle(spreadID, ref string, deg float64) model.View {
+	if math.IsNaN(deg) || math.IsInf(deg, 0) {
+		return e.View()
+	}
+	return e.change(func(p *model.Project) { grid.SetPlaceAngle(p, spreadID, ref, deg) })
+}
+
+// PlaceBoxes. Договор: только чтение под замком; область и разворот проверяет grid.
+func (e *Editor) PlaceBoxes(spreadID, scope string) (boxes []model.Box, tplScope string, err error) {
+	e.read(func(p *model.Project) { boxes, tplScope, err = grid.PlaceBoxes(p, spreadID, scope) })
+	return boxes, tplScope, err
+}
+
+// ApplySpreadTpl (067). Договор: до правки ничего; места и оформление — одна правка (один шаг
+// отмены), отказ — откат без шага; область уже такая — холостая. missing — ключей библиотеки
+// без файла на этом ПК (слои пропущены).
+func (e *Editor) ApplySpreadTpl(spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (v model.View, plan model.GridPlan, missing int, err error) {
+	v, err = e.try("", func(p *model.Project) (err error) {
+		plan, missing, err = grid.ApplySpreadTpl(p, spreadID, scope, t, libs)
+		return err
+	})
+	if err != nil {
+		plan, missing = model.GridPlan{}, 0
+	}
+	return v, plan, missing, err
+}
+
+// PlanSpreadTpl. Договор: как PlanCopyGrid — сухой прогон на копии, снятой под замком.
+func (e *Editor) PlanSpreadTpl(spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (model.GridPlan, error) {
+	var c *model.Project
+	e.read(func(p *model.Project) { c = p.Clone() })
+	return grid.PlanSpreadTpl(c, spreadID, scope, t, libs)
+}
+
+// SpreadTplOf. Договор: только чтение под замком («Авто» закрепляется на копии); код ссылки
+// клиента (LookHost.Private) в шаблон не идёт.
+func (e *Editor) SpreadTplOf(spreadID, scope string, places, texts bool) (t model.SpreadTpl, err error) {
+	e.read(func(p *model.Project) {
+		t, err = grid.SpreadTplOfSkip(p, spreadID, scope, places, texts, e.privateLib())
+	})
+	return t, err
+}
+
+// PreviewTpl — плитка шаблона без Editor (067, design §2): временный проект с одним листом, на
+// который шаблон встаёт тем же ApplySpreadTpl и конвейером settle, что и в альбоме (плитка =
+// результат). Pages = 2 — разворот wmm×hmm; Pages = 1 — левая страница wmm×hmm (правая пуста:
+// плитка — AreaOf(left)). Вид — печатный (без заглушек полей).
+func PreviewTpl(t model.SpreadTpl, wmm, hmm float64, libs map[string]model.PhotoInfo) (*model.Project, model.View, error) {
+	p := model.New()
+	pw, scope := wmm, model.ScopeLeft
+	if t.Pages == 2 {
+		pw, scope = wmm/2, model.ScopeSpread
+	}
+	p.Settings.PageW, p.Settings.PageH = pw, hmm
+	p.Settings = model.ClampSettings(p.Settings)
+	s := &model.Spread{ID: model.NewID(), Photos: []string{}}
+	p.Spreads = []*model.Spread{s}
+	before := p.Clone()
+	_, _, err := grid.ApplySpreadTpl(p, s.ID, scope, t, libs)
+	if err == nil {
+		err = settle(p, before, false)
+	}
+	if err != nil {
+		return nil, model.View{}, err
+	}
+	return p, view.BuildView(p, view.State{Print: true}), nil
+}
+
+// GridChoices. Договор: снимок входа под замком (GridInput), layout считается вне него.
+func (e *Editor) GridChoices(spreadID string, n int, scope string, tpls []model.Template) model.GridChoices {
+	var in grid.GridSource
+	e.read(func(p *model.Project) { in = grid.GridInput(p, spreadID, n, scope) })
+	return grid.GridChoicesOf(in, scope, tpls)
+}
