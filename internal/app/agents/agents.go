@@ -1,0 +1,326 @@
+package agents
+
+import (
+	"context"
+	"log"
+	"net"
+	"reflect"
+	"sync"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
+	"github.com/IliaSA101/sosninaalbums/internal/peercred"
+	"github.com/IliaSA101/sosninaalbums/internal/prefs"
+)
+
+// Состояния службы (State).
+const (
+	StateOff   = "off"
+	StateOn    = "on"
+	StateError = "error"
+)
+
+// Пределы канала (design §2). Срок записи, KeepAlive и прочие — поля Options: тесты ставят малые.
+const (
+	maxLine      = 1 << 20 // строка запроса агента, байт
+	maxConns     = 16      // одновременных подключений
+	writeTimeout = 15 * time.Second
+	keepAlive    = 30 * time.Second
+	initTimeout  = 10 * time.Second // от подключения до initialize
+	closeWait    = time.Second      // сколько Close ждёт горутины
+)
+
+// Host — что службе нужно от App. Все поля обязательны (New паникует с именем пустого, как
+// updater.New). Редактора здесь нет и не будет: служба только читает (design §5); список полей —
+// замок TestHostFields, новое поле — правка теста и ревью безопасности. Поля чтения — копии или
+// снимки: ничего из них не правит проект и не пишет на диск.
+type Host struct {
+	CfgDir  func() string // папка config.json
+	Version func() string // версия программы
+	Sock    func() string // путь сокета (osx.MCPSock); "" — папки данных нет
+	Changed func()        // сменилось состояние или список подключённых (App шлёт agents:state)
+
+	View         func() (v model.View, edID uint64)                  // последний отданный окну вид или Editor.View(); edID 0 — альбома нет
+	Photos       func() []library.Photo                              // фото ленты, копия под замком App
+	Marks        func() map[string]model.MarkView                    // свои отметки и подборки фото
+	Status       func() (missing []string, unread map[string]string) // пропавшие и нечитаемые фото
+	Decor        func(kind string) (DecorCatalogLite, error)         // каталог оформления: bg, sticker, frame, spread, look, template
+	Packs        func() (PacksLite, error)                           // наборы библиотеки, без сети
+	Prints       func() []printprof.Info                             // профили типографий
+	Recent       func() []prefs.RecentProject                        // «Последние» альбомы
+	FontsMissing func(used []model.FontUse) []string                 // названия своих гарнитур альбома, которых нет на этом компьютере
+	// Preview — фото photoID, уменьшенное до px по длинной стороне: JPEG не больше maxJPEG (EncodePreview);
+	// источник — как у /media/p (CheckLocalPath, том, пропавшее). Файл недоступен — ErrUnavailable.
+	// Служба перекодирует ответ сама (метаданные в нём не нужны и не пройдут), ответ больше px — отказ,
+	// после срока ctx — отбрасывается. Ошибки — без путей и имён файлов в тексте: `bare` чистит PathError,
+	// но не fmt.Errorf("… %s", path), а текст идёт в log.txt (TestAgentsLogClean, Г5).
+	Preview func(ctx context.Context, photoID string, px int) ([]byte, error)
+	// Render — разворот spreadID (id из вида; model.CoverID — обложка) шириной не больше px: JPEG вида печати,
+	// недоступные фото — пустые места. Тяжёлое: службе нужен ctx, а App не держит под a.mu ни рендер, ни
+	// чтение файлов (design §5); рендеры службы идут по одному. Ошибки render пишут имя файла фото
+	// (render.go, rotated.go) — Host заменяет их на безымянные (имена фото в log.txt не нужны).
+	Render func(ctx context.Context, spreadID string, px int) ([]byte, error)
+
+	// Ступень 3 (149, hostedit.go): правки альбома. Поля необязательны — пока их нет (все nil), инструментов
+	// правки в списке нет; частично заполненный набор считается пустым (canEdit). Фасад сверяет ключ и rev
+	// под замком Editor; ctx вызова проверяется там же — после срока правка не записывается.
+	Perm      func(tool string) (mode, blocked string)                     // разрешение инструмента (150): allow | ask | deny; blocked: "" | "elevated"; nil — всё allow
+	PermLevel func(tool string) (mode, blocked string, level int)          // то же + уровень доступа из одного чтения config.json; nil — служба зовёт Perm и читает уровень сама
+	Scanning  func() (active bool)                                         // лента ещё читает папки (get_album.scan)
+	Busy      func(ctx context.Context) bool                               // ждёт, пока человек занят, до конца ctx; true — всё ещё занят
+	Backup    func(key string) error                                       // резервная копия до первой правки в альбоме; nil — есть или копировать нечего
+	Ask       func(ctx context.Context, q AskReq) (AskRes, error)          // вопрос в окне; ждёт итога, ctx — жизнь подключения
+	Auto      func(ctx context.Context, in AutoReq) (AutoRes, error)       // сборка в конец альбома, один шаг отмены
+	Vary      func(ctx context.Context, in VaryReq) (AlbumRef, int, error) // раскладки; int — сколько разворотов изменилось
+	Show      func(key, spreadID string) (n int, err error)                // перевести окно к развороту; n — номер с 1, 0 — обложка
+	Undo      func(ctx context.Context, ref AlbumRef) (AlbumRef, error)    // отмена своей последней правки при совпавшей ревизии
+
+	// Ступень 3б (151, hostedit34.go). Поля необязательны: Sheet включает get_contact_sheet, правящие
+	// инструменты 0.34 — только все семь вместе (canEdit34).
+	// Sheet — лист-сетка из миниатюр: JPEG (служба перекодирует его сама, как Preview) и состояние каждой
+	// клетки CellOK | CellPending | CellBroken. Срок — ctx вызова; фасад читает миниатюры классом прогрева.
+	Sheet    func(ctx context.Context, in SheetReq) (jpeg []byte, cells []string, err error)
+	Families func(ids []string) []string // семейство раскладки листов (variety.Family), по одному на ID; "" — нет
+	Mark     func(ctx context.Context, in MarkReq) (MarkRes, error)
+	Cover    func(ctx context.Context, in CoverReq) (CoverRes, error)
+	Bg       func(ctx context.Context, in BgReq) (BgRes, error)
+	Stickers func(ctx context.Context, in StickerReq) (StickerRes, error)
+	Print    func(ctx context.Context, in PrintReq) (PrintRes, error)
+
+	// ExportState — ход последней выгрузки альбома edID (152, get_album.export); у другого альбома — idle.
+	// nil — поля export в get_album нет.
+	ExportState func(edID uint64) ExportStatus
+
+	// ExportHold — выгрузка держит инструмент tool (create_album, open_album): альбом под окнами выгрузки не
+	// создаётся и не открывается. Проверяется раньше «человек занят», иначе вместо «идёт выгрузка» агент ждёт
+	// BusyWait и слышит «человек правит альбом». nil — не проверяется.
+	ExportHold func(tool string) bool
+}
+
+// Options — пределы канала; нулевое значение — рабочее.
+type Options struct {
+	WriteTimeout time.Duration // срок одной записи в подключение (15 с)
+	KeepAlive    time.Duration // пинг клиента (30 с)
+	InitTimeout  time.Duration // до initialize (10 с)
+	CloseWait    time.Duration // ожидание горутин в Close (1 с)
+	MaxConns     int           // подключений (16)
+	MaxCalls     int           // одновременных вызовов инструментов (4)
+	CallTimeout  time.Duration // срок одного вызова (10 с)
+	// OnCall — вызов агента записан в журнал (today — вызовов за сегодня); App шлёт agents:call.
+	// Зовётся из горутины обработчика, не под замками службы.
+	OnCall func(c Call, today int)
+	// Peer — сверка собеседника подключения (148): true — учётная запись ОС та же, что у программы.
+	// По умолчанию peercred.Same; тесты подменяют (глобальной переменной нет — гонок в -race тоже).
+	Peer func(net.Conn) (bool, error)
+	// Сроки правок (149 design §2.6); нулевые — рабочие. Тесты ставят миллисекунды и свои часы.
+	AskWait     time.Duration    // сколько вызов ждёт ответ человека, затем pending (10 с)
+	AskLife     time.Duration    // сколько итог вопроса ждёт await_answer (120 с)
+	Cooldown    time.Duration    // пауза после отказа (30 с)
+	Mute        time.Duration    // тишина после второго отказа подряд (5 мин)
+	BusyWait    time.Duration    // сколько правка ждёт, пока человек занят (2 с)
+	AutoTimeout time.Duration    // срок вызова autobuild (30 с)
+	ScanSlack   time.Duration    // запас срока autobuild после ожидания ленты (5 с)
+	Rate        int              // правок в минуту (20)
+	Now         func() time.Time // часы счёта отказов и темпа; по умолчанию time.Now
+	// OnDenied — первый errDenied по инструменту за запуск программы (150, 0.34-150-24); App шлёт agents:denied.
+	// Зовётся из горутины обработчика, не под замками службы.
+	OnDenied func(client, tool, title string)
+	// Setup — доработка сервера до первого подключения: тесты и таблица инструментов (Г2).
+	Setup func(*mcp.Server)
+}
+
+func (o Options) withDefaults() Options {
+	def := func(v *time.Duration, d time.Duration) {
+		if *v <= 0 {
+			*v = d
+		}
+	}
+	def(&o.WriteTimeout, writeTimeout)
+	def(&o.KeepAlive, keepAlive)
+	def(&o.InitTimeout, initTimeout)
+	def(&o.CloseWait, closeWait)
+	def(&o.CallTimeout, callTimeout)
+	def(&o.AskWait, askWait)
+	def(&o.AskLife, askLife)
+	def(&o.Cooldown, askCooldown)
+	def(&o.Mute, askMute)
+	def(&o.BusyWait, busyWait)
+	def(&o.AutoTimeout, autoTimeout)
+	def(&o.ScanSlack, scanSlack)
+	if o.Rate <= 0 {
+		o.Rate = editRate
+	}
+	if o.Now == nil {
+		o.Now = time.Now
+	}
+	if o.Peer == nil {
+		o.Peer = peercred.Same
+	}
+	if o.MaxCalls <= 0 {
+		o.MaxCalls = maxCalls
+	}
+	if o.MaxConns <= 0 {
+		o.MaxConns = maxConns
+	}
+	return o
+}
+
+// Service — служба агентов: слушает сокет ОС и ведёт сессии MCP. Пока не Start — ничего не
+// делает и на диске не трогает. Wails и App ей недоступны: всё через Host.
+type Service struct {
+	h    Host
+	o    Options
+	life sync.Mutex // весь Start и весь Close: между закрытием и открытием сокета других нет
+	mu   sync.Mutex // поля ниже
+	run  *run       // нет — выключено
+	st   string
+	err  string
+	jr   journal    // журнал вызовов (journal.go)
+	ed   *editState // правки: место, темп, вопросы, записи отмены (edit.go)
+
+	specsOnce sync.Once  // таблица инструментов по этому Host (perms.go)
+	specs     []toolSpec // после specsOnce
+}
+
+// optionalHost — поля Host ступени 3: пустые допустимы (правок тогда нет).
+var optionalHost = map[string]bool{"Perm": true, "PermLevel": true, "Scanning": true, "Busy": true, "Backup": true, "Ask": true,
+	"Auto": true, "Vary": true, "Show": true, "Undo": true,
+	"Sheet": true, "Families": true, "Mark": true, "Cover": true, "Bg": true, "Stickers": true, "Print": true, "ExportState": true, "ExportHold": true}
+
+// New собирает службу; пустое поле Host — паника с его именем.
+func New(h Host, o Options) *Service {
+	v := reflect.ValueOf(h)
+	for i := range v.NumField() {
+		if optionalHost[v.Type().Field(i).Name] {
+			continue
+		}
+		if v.Field(i).IsNil() {
+			panic("agents.New: не задано поле Host." + v.Type().Field(i).Name)
+		}
+	}
+	o = o.withDefaults()
+	return &Service{h: h, o: o, st: StateOff, ed: newEditState(o)}
+}
+
+// StartIfOn — запуск программы: открывает доступ, если он включён в config.json. Выключен или
+// папки данных нет — не делает ничего (на диске тоже).
+func (s *Service) StartIfOn() error {
+	dir := s.h.CfgDir()
+	if dir == "" || !prefs.AgentsOf(dir).On {
+		return nil
+	}
+	return s.Start()
+}
+
+// Start открывает сокет (design §2 «Запуск»). Уже открыт — nil. Отказ — State «error» с причиной
+// словами; On в config.json служба не пишет (это делает фасад по итогу Start).
+func (s *Service) Start() error {
+	s.life.Lock()
+	err := s.start()
+	s.life.Unlock()
+	s.changed()
+	return err
+}
+
+func (s *Service) start() error {
+	s.mu.Lock()
+	running := s.run != nil
+	s.mu.Unlock()
+	if running {
+		return nil
+	}
+	// Решение «ОС не умеет называть собеседника» — здесь, пробой на своей паре, а не по ответу
+	// на чужом подключении (0.32-148-11); результат у peercred.Same, строка в журнал — в admitted.
+	_ = peercred.Probe()
+	ln, err := s.open()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err != nil {
+		s.st, s.err = StateError, err.Error()
+		return err
+	}
+	s.run, s.st, s.err = s.newRun(ln), StateOn, ""
+	return nil
+}
+
+// Close закрывает доступ: слушатель (файл сокета исчезает), все подключения; горутины ждёт не
+// дольше CloseWait — рендер или запись клиенту, который не читает, выход не держат.
+func (s *Service) Close() {
+	s.life.Lock()
+	s.mu.Lock()
+	r := s.run
+	s.run, s.st, s.err = nil, StateOff, ""
+	s.mu.Unlock()
+	if r != nil {
+		r.close()
+	}
+	s.life.Unlock()
+	s.changed()
+}
+
+// fail — цикл приёма умер от паники: служба больше не слушает, состояние «error».
+func (s *Service) fail(r *run) {
+	s.mu.Lock()
+	if s.run == r {
+		s.run, s.st, s.err = nil, StateError, errOpen.Error()
+	}
+	s.mu.Unlock()
+	go func() { // close ждёт и саму эту горутину
+		defer guardPanic("fail")
+		r.close()
+		s.changed()
+	}()
+}
+
+// State — состояние и причина отказа (для «error»).
+func (s *Service) State() (state, errText string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st, s.err
+}
+
+// Client — подключённый клиент: clientInfo.name из initialize и время.
+type Client struct {
+	Name  string
+	Since time.Time
+}
+
+// Clients — подключённые сейчас (прошедшие initialize), в порядке подключения.
+func (s *Service) Clients() []Client {
+	s.mu.Lock()
+	r := s.run
+	s.mu.Unlock()
+	if r == nil {
+		return []Client{}
+	}
+	return r.clients()
+}
+
+// changed сообщает App; паника обратного вызова не должна ронять ни службу, ни SDK.
+func (s *Service) changed() {
+	defer guardPanic("changed")
+	s.h.Changed()
+}
+
+// newRun запускает приём подключений на слушателе.
+func (s *Service) newRun(ln net.Listener) *run {
+	ctx, cancel := context.WithCancel(context.Background())
+	r := &run{s: s, o: s.o, ln: ln, ctx: ctx, cancel: cancel,
+		conns: map[net.Conn]struct{}{}, seen: map[*mcp.ServerSession]Client{}, gone: map[*mcp.ServerSession]struct{}{}}
+	r.srv = mcp.NewServer(&mcp.Implementation{Name: "sosnina-albums", Version: s.h.Version()},
+		&mcp.ServerOptions{KeepAlive: s.o.KeepAlive})
+	registerTools(newToolEnv(s, r))
+	if s.o.Setup != nil {
+		s.o.Setup(r.srv)
+	}
+	r.srv.AddReceivingMiddleware(unknownTool)
+	r.srv.AddReceivingMiddleware(r.noteClient) // последним: внешний слой ловит и панику чужих слоёв
+	r.wg.Add(1)
+	go r.serve()
+	log.Printf("agents: доступ открыт")
+	return r
+}
