@@ -1,0 +1,721 @@
+# Проверка Windows-exe на раннере (спека 118, docs/specs/0.25/118-win-qa-ci/design.md): набор qa-kit.sh на ubuntu, затем сценарии
+# на windows-2025 (установщик, окна, снимки, ролики) и сводка report. Запуск только по ветке winqa/<имя> (её строит
+# scripts/winqa-push.mjs: коммит-сирота без кухни проекта) или руками (workflow_dispatch). Секретов и прав записи нет;
+# pull_request не включён: чужие PR не должны запускать задания Windows. Скрипты — из того же коммита, что и этот файл.
+# В run-блоках заданий Windows только ASCII: Windows PowerShell 5.1 читает файл без BOM как ANSI.
+name: "Windows: проверка exe (update.md)"
+
+on:
+  push:
+    branches: ["winqa/**"]
+  workflow_dispatch:
+    inputs:
+      blocks:
+        description: "Блоки сценариев"
+        type: choice
+        default: all
+        options:
+          [
+            all,
+            probe,
+            install,
+            update,
+            open,
+            "probe,install",
+            "install,update",
+            "update,open",
+          ]
+      video:
+        description: "Ролики на отрезках пунктов (5 кадров/с)"
+        type: boolean
+        default: true
+      dpi:
+        description: "Масштабы экрана для снимков мастера"
+        type: choice
+        default: "125,150,175"
+        options: ["125,150,175", "150", "125,150,175,200", "none"]
+      runner:
+        description: "Раннер Windows"
+        type: choice
+        default: windows-2025
+        options: [windows-2025, windows-11-arm]
+      sabotage:
+        description: "Проверка самой проверки: вместо feed — feed-bad-byte (действует с блоком update)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: win-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Входы
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      blocks_json: ${{ steps.plan.outputs.blocks_json }}
+      blocks_csv: ${{ steps.plan.outputs.blocks_csv }}
+      video: ${{ steps.plan.outputs.video }}
+      dpi: ${{ steps.plan.outputs.dpi }}
+      runner: ${{ steps.plan.outputs.runner }}
+      sabotage: ${{ steps.plan.outputs.sabotage }}
+    steps:
+      # При push по ветке winqa/** входов нет — берутся значения по умолчанию
+      - name: Проверка входов
+        id: plan
+        env:
+          BLOCKS: ${{ inputs.blocks }}
+          VIDEO: ${{ inputs.video }}
+          DPI: ${{ inputs.dpi }}
+          RUNNER_IN: ${{ inputs.runner }}
+          SABOTAGE: ${{ inputs.sabotage }}
+        run: |
+          blocks="${BLOCKS:-all}"
+          [ "$blocks" = all ] && blocks="probe,install,update,open"
+          IFS=, read -ra list <<< "$blocks"
+          for b in "${list[@]}"; do
+            [[ "$b" =~ ^(probe|install|update|open)$ ]] || { echo "::error::Неизвестный блок '$b'"; exit 1; }
+          done
+          dpi="${DPI:-125,150,175}"
+          [[ "$dpi" =~ ^(none|[0-9]{3}(,[0-9]{3})*)$ ]] || { echo "::error::dpi: '$dpi'"; exit 1; }
+          runner="${RUNNER_IN:-windows-2025}"
+          [[ "$runner" =~ ^windows-(11-arm|2025)$ ]] || { echo "::error::Раннер '$runner'"; exit 1; }
+          {
+            echo "blocks_json=$(printf '%s\n' "${list[@]}" | jq -R . | jq -sc .)"
+            echo "blocks_csv=$blocks"
+            echo "video=${VIDEO:-true}"
+            echo "dpi=$dpi"
+            echo "runner=$runner"
+            echo "sabotage=${SABOTAGE:-false}"
+          } >> "$GITHUB_OUTPUT"
+
+  # Эталон реплея Windows (спека 110, Т2; docs/RELEASE.md §6, п. 1а): ci.yml гоняет Windows только на main,
+  # а сверить replay.json.gz нужно до publish-main. Не зависит от блоков, идёт при каждом прогоне.
+  replay:
+    name: Реплей Windows
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      - name: go test Replay
+        run: go test ./internal/album -run Replay -count=1 -v
+
+      # Расхождение: задание остаётся красным, но новый эталон Windows выгружается артефактом -
+      # его скачивают `gh run download -n replay-windows`, сверяют с прежним и коммитят в dev (RELEASE §6, п. 1а).
+      - name: go test Replay -update
+        if: failure()
+        run: go test ./internal/album -run '^TestEditorReplay$' -count=1 -update
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: replay-windows
+          path: internal/album/testdata/replay.json.gz
+          retention-days: 3
+          if-no-files-found: error
+
+      # Канал службы агентов (143 Г1) и посредник --mcp (Г4): AF_UNIX, DACL папки, срок записи на Windows.
+      # С -v, чтобы в логе было видно PASS и SKIP каждого теста (пакетный go test в ci.yml молчит о прошедших);
+      # always - независимо от реплея.
+      - name: go test agents и mcpbridge (канал и посредник)
+        if: always()
+        run: go test ./internal/app/agents ./internal/mcpbridge ./internal/osx ./internal/peercred -count=1 -v
+
+      # 148: проверка чужой учётной записи (internal/peercred) по-настоящему. Node - версия как в ci.yml: разбор вывода
+      # go test делает scripts/peer-foreign.mjs (пропуск и отсутствие PASS - провал). Шаги ниже - always: независимо от прежних.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: always()
+        with:
+          node-version: "24.11.1"
+
+      # Папка mcp по дескриптору (148-6, 148-11): подтесты с точкой соединения пропускаются, если mklink /J не удалась, -
+      # в CI это провал (иначе подмена предка осталась бы непроверенной). Шаблон подтеста ASCII (\x{...} = "вместо"), run-блоки ASCII.
+      - name: mcp - дескриптор папки agents (TestSocketDACL, TestSocketDACLHandle)
+        if: always()
+        run: node scripts/peer-foreign.mjs '^(TestSocketDACL|TestSocketDACLHandle)$' TestSocketDACL TestSocketDACLHandle --pkg=./internal/app/agents
+
+      - name: mcp - дескриптор папки mcpbridge (TestSockDirHeldWindows, TestBridgeHoldsDirDuringPeerWindows)
+        if: always()
+        run: node scripts/peer-foreign.mjs 'TestSockDirHandleWindows|TestSockDirHeldWindows|TestBridgeHoldsDirDuringPeerWindows|TestSockDirWindows/\x{0432}\x{043c}\x{0435}\x{0441}\x{0442}\x{043e}' TestSockDirHandleWindows TestSockDirHeldWindows TestBridgeHoldsDirDuringPeerWindows TestSockDirWindows --pkg=./internal/mcpbridge
+
+      # Локальный qapeer: пароль случайный до 14 знаков (длиннее - вопрос Y/N у net user; образец agents_exe.py), в журнале скрыт.
+      - name: peercred - создать пользователя qapeer
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $b = New-Object byte[] 5
+          [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+          $pw = 'Aa1!' + (($b | ForEach-Object { $_.ToString('x2') }) -join '')
+          Write-Output "::add-mask::$pw"
+          New-LocalUser -Name qapeer -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -AccountNeverExpires -PasswordNeverExpires | Out-Null
+          # group Users by SID (the name depends on the OS language): without it the account cannot log on
+          if (-not (Get-LocalGroupMember -SID S-1-5-32-545 | Where-Object { $_.Name -like '*\qapeer' })) { Add-LocalGroupMember -SID S-1-5-32-545 -Member qapeer }
+          Add-Content -Path $env:GITHUB_ENV -Value 'SA_PEER_FOREIGN=cred', 'SA_PEER_USER=qapeer', "SA_PEER_PASS=$pw"
+
+      - name: peercred - чужая учётная запись (TestForeignClient, TestForeignServer)
+        if: always()
+        run: node scripts/peer-foreign.mjs TestForeign TestForeignClient TestForeignServer
+
+      # Г-в и Г-б (design §5): процесс от администратора (раннер) и помощник с урезанным токеном (runas /trustlevel:0x20000);
+      # в журнале - итог по шагам (getpeerpid, openprocess, token) и errno запроса PID. Г-в подтверждена (29.10): пропуск и
+      # отсутствие PASS - провал, без --allow-skip. TestListenerHandoffWindows - гипотеза аудита 148-11 (PID фиксируется при listen).
+      - name: peercred - администратор, передача сокета, проба (TestElevatedServerWindows)
+        if: always()
+        run: node scripts/peer-foreign.mjs 'TestPeerPIDQuery|TestElevatedServerWindows|TestListenerHandoffWindows|TestSelfProbeReal' TestPeerPIDQuery TestElevatedServerWindows TestListenerHandoffWindows TestSelfProbeReal
+
+      - name: peercred - удалить qapeer и профиль
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bad = $false
+          # profile first (while the account exists); it unloads not at once after the helper exits: up to 5 tries
+          for ($i = 1; $i -le 5; $i++) {
+            Get-CimInstance Win32_UserProfile | Where-Object { $_.LocalPath -like 'C:\Users\qapeer*' } | Remove-CimInstance -ErrorAction SilentlyContinue
+            if (-not (Test-Path 'C:\Users\qapeer*')) { break }
+            Start-Sleep -Seconds 2
+          }
+          if (Test-Path 'C:\Users\qapeer*') { Write-Output 'profile qapeer was not removed'; $bad = $true }
+          if (Get-LocalUser -Name qapeer -ErrorAction SilentlyContinue) { Remove-LocalUser -Name qapeer }
+          if (Get-LocalUser -Name qapeer -ErrorAction SilentlyContinue) { Write-Output 'user qapeer was not removed'; $bad = $true }
+          if ($bad) { exit 1 }
+
+  kit:
+    name: Набор qa-kit
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: wails
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+
+      - name: makensis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis
+
+      # Тот же набор, что едет на ноутбук: три exe (qa и rel), установщики 0.25.0 и 0.25.1, ленты, альбомы, qa-albums.exe
+      - name: Набор (qa-kit.sh)
+        run: bash scripts/win/qa-kit.sh --out .gotmp/qa-kit-0.25
+
+      - name: Хеш набора
+        id: hash
+        run: echo "hash=$(sha256sum .gotmp/qa-kit-0.25/kit-sha256.txt | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: qa-kit
+          path: .gotmp/qa-kit-0.25/
+          include-hidden-files: true
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+  scenario:
+    name: Windows ${{ matrix.block }}
+    needs: [plan, kit]
+    if: ${{ needs.plan.outputs.blocks_json != '[]' }}
+    strategy:
+      # блоки независимы: сбой одного не отменяет остальные
+      fail-fast: false
+      matrix:
+        block: ${{ fromJSON(needs.plan.outputs.blocks_json) }}
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        # Windows PowerShell 5.1: в нём есть UIAutomationClient (в pwsh 7 его нет)
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      # Сломанные помощники: сценарий бессмыслен, поэтому провал роняет задание
+      - name: Тесты помощников (test_winqa.ps1)
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          & "$env:GITHUB_WORKSPACE\scripts\win\qa\test_winqa.ps1"
+          exit $LASTEXITCODE
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: qa-kit
+          path: ${{ runner.temp }}\kit
+
+      - name: Сверка набора с заданием kit
+        env:
+          WANT: ${{ needs.kit.outputs.hash }}
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'kit\kit-sha256.txt'
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
+          if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
+
+      # ffmpeg BtbN: закреплённый выпуск и sha256 (сверяется до распаковки). Старые выпуски BtbN удаляет - тогда choco
+      - name: ffmpeg
+        if: ${{ needs.plan.outputs.video == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCH: ${{ runner.arch }}
+        run: |
+          $tag = 'autobuild-2026-10-27-18-38'
+          if ($env:ARCH -eq 'ARM64') {
+            $name = 'ffmpeg-N-128121-g86444dd368-winarm64-gpl.zip'
+            $sha = '15e6c469c4c4790e58a43354e22d9de632f8918bcd9e88269fc8ebcb49b35818'
+          } else {
+            $name = 'ffmpeg-N-128121-g86444dd368-win64-gpl.zip'
+            $sha = '1eb70a550388567bc2abbb2d164814f722f36a034fd927dcdfb217bc7e94930c'
+          }
+          $dir = Join-Path $env:RUNNER_TEMP 'ffmpeg'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $ff = $null
+          $ErrorActionPreference = 'Continue'
+          gh release download $tag -R BtbN/FFmpeg-Builds -p $name -D $dir --clobber
+          $zip = Join-Path $dir $name
+          if ((Test-Path -LiteralPath $zip) -and ((Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant() -eq $sha)) {
+            tar -xf $zip -C $dir
+            $ff = Join-Path $dir ([IO.Path]::GetFileNameWithoutExtension($name) + '\bin\ffmpeg.exe')
+          } else {
+            Write-Host "::warning::ffmpeg BtbN download or sha256 failed - installing via choco"
+          }
+          if (-not $ff -or -not (Test-Path -LiteralPath $ff)) {
+            choco install ffmpeg -y --no-progress
+            $ff = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
+          }
+          if (-not $ff) { throw 'ffmpeg not installed' }
+          $ver = & $ff -version
+          if ($LASTEXITCODE -ne 0) { throw "ffmpeg -version exit $LASTEXITCODE" }
+          $ver[0]
+          "WIN_FFMPEG=$ff" | Out-File -FilePath $env:GITHUB_ENV -Encoding ascii -Append
+
+      # Сценарий всегда выходит с кодом 0: провал пункта - строка в results.jsonl, красит прогон задание report
+      - name: Сценарий (run.ps1)
+        # меньше срока задания (40 мин) с запасом на сводку и выгрузку артефактов; сторож run.ps1 снимает завис раньше
+        timeout-minutes: 33
+        env:
+          BLOCK: ${{ matrix.block }}
+          VIDEO: ${{ needs.plan.outputs.video }}
+          DPI: ${{ needs.plan.outputs.dpi }}
+          SABOTAGE: ${{ needs.plan.outputs.sabotage }}
+          RUNNER_LABEL: ${{ needs.plan.outputs.runner }}
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          $a = @{
+            Block = $env:BLOCK
+            Kit = (Join-Path $env:RUNNER_TEMP 'kit')
+            OutDir = (Join-Path $env:RUNNER_TEMP 'win-qa-out')
+            Video = ($env:VIDEO -eq 'true')
+            Dpi = $env:DPI
+            Sabotage = ($env:SABOTAGE -eq 'true')
+            Runner = $env:RUNNER_LABEL
+          }
+          & "$env:GITHUB_WORKSPACE\scripts\win\qa\run.ps1" @a
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'win-qa-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'summary.md missing' }
+
+      # log.txt программы (rel пишет в профиль APPDATA): по нему видно, дошла ли правка и второй запуск до программы
+      - name: Журнал программы (open)
+        if: ${{ always() && matrix.block == 'open' }}
+        run: |
+          $src = Join-Path $env:APPDATA 'SosninaAlbums\log.txt'
+          $dst = Join-Path $env:RUNNER_TEMP 'win-qa-out\logs'
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $dst 'app-log.txt') -Force }
+          else { Write-Host 'log.txt not found' }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: win-qa-${{ matrix.block }}
+          path: ${{ runner.temp }}\win-qa-out\
+          if-no-files-found: warn
+          retention-days: 3
+
+  # Служба агентов на настоящем установленном exe (143 Т1, design §4.7, Г8): посредник `--mcp` живёт через два тихих
+  # обновления и удаление, чужой пользователь Windows не подключается к сокету. Независим от блоков scenario:
+  # идёт при каждом прогоне, один прогон собирает все провалы (agents_exe.py), дамп состояния - в артефакте.
+  agents:
+    name: Windows агенты (exe)
+    needs: [plan, kit]
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: qa-kit
+          path: ${{ runner.temp }}\kit
+
+      - name: Сверка набора с заданием kit
+        env:
+          WANT: ${{ needs.kit.outputs.hash }}
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'kit\kit-sha256.txt'
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
+          if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
+
+      # Код выхода 1 - есть провалы пунктов; итоги и дамп состояния пишутся и при провале
+      - name: Агенты на exe (agents_exe.py)
+        timeout-minutes: 20
+        run: |
+          python -I "$env:GITHUB_WORKSPACE\scripts\win\qa\agents_exe.py" --kit (Join-Path $env:RUNNER_TEMP 'kit') --out (Join-Path $env:RUNNER_TEMP 'agents-out')
+          exit $LASTEXITCODE
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'agents-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'agents summary.md missing' }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: agents-exe-qa
+          path: ${{ runner.temp }}\agents-out\
+          if-no-files-found: warn
+          retention-days: 3
+
+  # Образцы наборов библиотеки в exe (144, решение 0.31-144-59): qa-exe 0.25.x с настоящим GitHub, запросы /media/lp/ шлёт
+  # зонд внутри окна WebView2 (library_probe.js, тег qa). Независим от блоков scenario: идёт при каждом прогоне,
+  # один прогон собирает все провалы (library_exe.py), дамп состояния и записи зонда - в артефакте.
+  library:
+    name: Windows образцы наборов (exe)
+    needs: [plan, kit]
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: qa-kit
+          path: ${{ runner.temp }}\kit
+
+      - name: Сверка набора с заданием kit
+        env:
+          WANT: ${{ needs.kit.outputs.hash }}
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'kit\kit-sha256.txt'
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
+          if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
+
+      # Код выхода 1 - есть провалы пунктов; итоги, дамп состояния и записи зонда пишутся и при провале
+      - name: Образцы наборов на exe (library_exe.py)
+        timeout-minutes: 25
+        run: |
+          python -I "$env:GITHUB_WORKSPACE\scripts\win\qa\library_exe.py" --kit (Join-Path $env:RUNNER_TEMP 'kit') --out (Join-Path $env:RUNNER_TEMP 'library-out')
+          exit $LASTEXITCODE
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'library-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'library summary.md missing' }
+
+      # exe лежит в work\exe и в артефакт не нужен: берутся итоги, дамп и записи зонда
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: library-exe-qa
+          path: |
+            ${{ runner.temp }}\library-out\summary.md
+            ${{ runner.temp }}\library-out\state-dump.txt
+            ${{ runner.temp }}\library-out\work\*.jsonl
+            ${{ runner.temp }}\library-out\work\*.js
+          if-no-files-found: warn
+          retention-days: 3
+
+  # Ролики справочника F1 в собранной программе (спека 140, Т7): Linux проверен в Т0, здесь Windows (webm, WebView2) и macOS
+  # (mp4, WKWebView). Тестовый каталог с двумя роликами строит videos-site (ключ одноразовый, тестовый; настоящие ключи не
+  # читаются), раздаёт его сама проверка с 127.0.0.1:34190; программа с тегом qa берёт его через SA_LIBRARY_URL/SA_LIBRARY_KEY.
+  # Зонд внутри окна (videos_probe.js) играет ролик тем же путём, что окно справочника, и сверяет кадр и ход времени.
+  videos-site:
+    name: Каталог роликов (тестовый)
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      # minApp 0.25.1: exe набора qa-kit подписан этой версией, а свежая сборка macOS новее - годится обеим
+      - name: Каталог и ролики (library-testvideos.mjs)
+        run: |
+          mkdir -p .gotmp
+          node scripts/library-pack.mjs --test-key
+          node scripts/library-testsets.mjs --min-app 0.25.1
+          node scripts/library-testvideos.mjs --ids filter:6,export:6 --min-app 0.25.1
+          node scripts/library-testvideos.mjs --print-key > .testphotos/library/site/key.txt
+          ls -l .testphotos/library/site
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: videos-site
+          path: .testphotos/library/site/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+  videos-win:
+    name: Windows ролики F1 (webm)
+    needs: [plan, kit, videos-site]
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: qa-kit
+          path: ${{ runner.temp }}\kit
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: videos-site
+          path: ${{ runner.temp }}\site
+
+      - name: Сверка набора с заданием kit
+        env:
+          WANT: ${{ needs.kit.outputs.hash }}
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'kit\kit-sha256.txt'
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
+          if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
+
+      # Код выхода 1 - есть провалы пунктов; итоги, дамп состояния и записи зонда пишутся и при провале
+      - name: Ролики F1 в exe (videos_exe.py)
+        timeout-minutes: 20
+        run: |
+          python -I "$env:GITHUB_WORKSPACE\scripts\win\qa\videos_exe.py" --kit (Join-Path $env:RUNNER_TEMP 'kit') --site (Join-Path $env:RUNNER_TEMP 'site') --out (Join-Path $env:RUNNER_TEMP 'videos-out')
+          exit $LASTEXITCODE
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'videos-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'videos summary.md missing' }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: videos-win-exe-qa
+          path: |
+            ${{ runner.temp }}\videos-out\summary.md
+            ${{ runner.temp }}\videos-out\state-dump.txt
+            ${{ runner.temp }}\videos-out\work\*.jsonl
+            ${{ runner.temp }}\videos-out\work\*.js
+          if-no-files-found: warn
+          retention-days: 3
+
+  # macOS: .app с тегом qa собирается здесь же (как в release.yml, но arm64 и -tags qa): выпускная сборка тегов не берёт.
+  # Окно WKWebView поднимается в сеансе раннера (как у mac-shots.yml); не поднялось или зонд молчит - в итоге ready=FAIL,
+  # снимок экрана конца каждого запуска (work/*-end.png) и отчёты падений системы - в артефакте.
+  videos-mac:
+    name: macOS ролики F1 (mp4)
+    needs: [plan, videos-site]
+    runs-on: macos-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+          cache: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+
+      - name: Wails CLI (версия из go.mod)
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci
+
+      - name: wails build (тег qa)
+        run: wails build -platform darwin/arm64 -clean -trimpath -tags qa
+
+      # Обратный страж: в qa-сборке зонд и стенд библиотеки обязаны быть - иначе проверялось бы не то
+      - name: Страж тегов QA (зонд и стенд библиотеки на месте)
+        run: |
+          apps=(build/bin/*.app)
+          [ "${#apps[@]}" -eq 1 ] || { echo "::error::Ожидалось одно .app в build/bin, найдено: ${#apps[@]}"; exit 1; }
+          bin=("${apps[0]}"/Contents/MacOS/*)
+          for s in SA_QA_PROBE SA_LIBRARY_URL; do
+            LC_ALL=C grep -aqF -- "$s" "${bin[0]}" || { echo "::error::В qa-сборке нет строки $s - тег qa не действует"; exit 1; }
+          done
+          codesign --force --deep --sign - "${apps[0]}"
+          codesign --verify --deep --strict "${apps[0]}"
+          echo "APP=${apps[0]}" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: videos-site
+          path: ${{ runner.temp }}/site
+
+      # Код выхода 1 - есть провалы пунктов; итоги, дамп состояния, записи зонда и снимки пишутся и при провале
+      - name: Ролики F1 в .app (videos_exe.py)
+        timeout-minutes: 15
+        run: |
+          mkdir -p "$RUNNER_TEMP/videos-out"
+          python3 -I scripts/win/qa/videos_exe.py --app "$APP" --site "$RUNNER_TEMP/site" --out "$RUNNER_TEMP/videos-out"
+
+      - name: Сводка
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/videos-out/summary.md"
+          if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; else echo 'videos summary.md missing' >> "$GITHUB_STEP_SUMMARY"; fi
+
+      # Отчёты падений системы: если окно WKWebView упало или не поднялось, причина будет там
+      - name: Отчёты падений и снимок экрана
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/videos-out/work"
+          screencapture -x "$RUNNER_TEMP/videos-out/work/final-screen.png" || true
+          cp "$HOME"/Library/Logs/DiagnosticReports/sosninaalbums* "$RUNNER_TEMP/videos-out/work/" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: videos-mac-app-qa
+          path: |
+            ${{ runner.temp }}/videos-out/summary.md
+            ${{ runner.temp }}/videos-out/state-dump.txt
+            ${{ runner.temp }}/videos-out/work/*.jsonl
+            ${{ runner.temp }}/videos-out/work/*.js
+            ${{ runner.temp }}/videos-out/work/*.png
+            ${{ runner.temp }}/videos-out/work/sosninaalbums*
+          if-no-files-found: warn
+          retention-days: 3
+
+  report:
+    name: Сводка прогона
+    needs: [plan, kit, scenario]
+    if: ${{ always() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: win-qa-*
+          path: ${{ runner.temp }}/in
+
+      # Список пунктов — из docs/qa/update.md, а в ветке winqa/* его нет — тогда из scripts/win/qa-items.txt
+      - name: Сводка (qa_report.py)
+        env:
+          BLOCKS: ${{ needs.plan.outputs.blocks_csv }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/in" "$RUNNER_TEMP/report"
+          upd=()
+          if [ -f docs/qa/update.md ]; then upd=(--update docs/qa/update.md); fi
+          set +e
+          python3 -I scripts/win/qa_report.py "${upd[@]}" --blocks "$BLOCKS" --in "$RUNNER_TEMP/in" --out "$RUNNER_TEMP/report"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          { echo; cat "$RUNNER_TEMP/report/eyes.md"; } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: win-qa-report
+          path: ${{ runner.temp }}/report/
+          if-no-files-found: warn
+          retention-days: 3
