@@ -1,0 +1,66 @@
+#!/bin/sh
+# Pre-push: что уходит на GitHub (владелец 2026-10-24; решение 2026-10-10: в истории dev личные почты и внутренние доки).
+# Подключение — то же, что у pre-commit: git config core.hooksPath scripts/git-hooks (абсолютный путь работает так же).
+# Ловит любой push, в том числе из скрипта, `bash -c`, eval, xargs — то, чего хук push-guard (разбор команды) может не увидеть.
+#   открытый репозиторий (origin): refs/heads/main (только из локального main: `dev:main` выложил бы историю dev),
+#     метки refs/tags/v* и refs/tags/api/albums/v* (под своим именем), временные ветки проверок refs/heads/winqa/*
+#     (их пересоздают принудительно и удаляют — это жизненный цикл ветки); остальное, включая удаление main и меток, — отказ;
+#   приватный sosninaalbums-dev (remote private): любые ссылки, но без удаления;
+#   оснастка sosninaalbums-ops: только refs/heads/main;
+#   адреса не на github.com (локальные копии, тесты скриптов) — не наш случай, пропуск.
+# Адрес сверяется по URL, а не по имени remote: имя можно перенаправить на открытый репозиторий.
+# Обойти --no-verify нельзя только на словах: push-guard такую команду отклоняет, правила проекта это запрещают.
+url=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+case "$url" in
+  *github.com*iliasa101/sosninaalbums-dev*) kind=private ;;
+  *github.com*iliasa101/sosninaalbums-ops*) kind=ops ;;
+  *github.com*) kind=public ;;
+  *) exit 0 ;;
+esac
+
+bad=""
+while read -r local_ref local_sha remote_ref _; do
+  [ -z "$remote_ref" ] && continue
+  # Удаление: локальная сторона — нули (40 или 64 знака, sha256).
+  case "$local_sha" in *[!0]*) del=no ;; *) del=yes ;; esac
+  case "$kind" in
+    private)
+      [ "$del" = yes ] && bad="$bad\n  $remote_ref — удаление в sosninaalbums-dev запрещено"
+      ;;
+    ops)
+      [ "$remote_ref" = refs/heads/main ] || bad="$bad\n  $remote_ref — в sosninaalbums-ops только main"
+      ;;
+    public)
+      case "$remote_ref" in
+        refs/heads/winqa/*) ;;
+        refs/heads/main)
+          if [ "$del" = yes ]; then bad="$bad\n  $remote_ref — удалять main нельзя"
+          # dev:main опубликовал бы всю историю dev под именем main — main берётся только из локального main (publish-main).
+          elif [ "$local_ref" != refs/heads/main ]; then bad="$bad\n  $local_ref -> $remote_ref — в main идёт только локальный main"; fi
+          ;;
+        # api/albums/v* — метки вложенного модуля контракта: go get ищет версию по префиксу папки (владелец 29.10, 0.32)
+        refs/tags/v*|refs/tags/api/albums/v*)
+          if [ "$del" = yes ]; then bad="$bad\n  $remote_ref — удалять метки версий нельзя"
+          elif [ "$local_ref" != "$remote_ref" ]; then bad="$bad\n  $local_ref -> $remote_ref — метка идёт под своим именем"; fi
+          ;;
+        *) bad="$bad\n  $remote_ref — не публикуется" ;;
+      esac
+      ;;
+  esac
+done
+
+if [ -n "$bad" ]; then
+  {
+    echo "pre-push: push в $2 отклонён:"
+    printf '%b\n' "$bad"
+    echo "В открытый репозиторий (origin) уходят только:"
+    echo "  - main: сначала node scripts/publish-main.mjs <коммит dev> -m \"Sosnina Albums X.Y.Z\" (один коммит версии без внутренних"
+    echo "    доков), затем git push origin main;"
+    echo "  - метки версий: git push origin vX.Y.Z (модуль контракта — api/albums/vX.Y.Z);"
+    echo "  - временные ветки проверок: node scripts/winqa-push.mjs <имя> --push (ветки winqa/*)."
+    echo "Полная история (dev) — только в приватный sosninaalbums-dev: git push private <ветка> (remote private)."
+    echo "Публикация — с «да» владельца; обход (--no-verify) запрещён правилами проекта."
+  } >&2
+  exit 1
+fi
+exit 0
