@@ -1,6 +1,12 @@
 package layers
 
-import "github.com/IliaSA101/sosninaalbums/internal/album/model"
+import (
+	"errors"
+	"slices"
+
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/layout"
+)
 
 // Стикеры (спека 048 Ф2, design §1, §3): добавление, замена, рамка, зеркало, прозрачность,
 // цвета. Слой стека между местами и текстами (model/order.go); пропорцию своего рисунка держит
@@ -11,6 +17,46 @@ import "github.com/IliaSA101/sosninaalbums/internal/album/model"
 // ErrSticker, ключ своего — ErrLibKey, больше MaxStickers — ErrStickers; неизвестный лист —
 // холостая.
 func AddSticker(p *model.Project, spreadID string, page int, id string, src model.StickerSrc) error {
+	return AddStickerAt(p, spreadID, page, id, src, AnchorCenter, FracM)
+}
+
+// Якоря и доли ширины стикера агента (151, 0.34-151-9). Центр и ¼ — прежний щелчок по плитке.
+const (
+	AnchorCenter      = "center"
+	AnchorTopLeft     = "top-left"
+	AnchorTopRight    = "top-right"
+	AnchorBottomLeft  = "bottom-left"
+	AnchorBottomRight = "bottom-right"
+
+	FracS = 1.0 / 6 // s
+	FracM = 0.25    // m
+	FracL = 1.0 / 3 // l
+)
+
+// ErrAnchor — неизвестное место или размер стикера.
+var ErrAnchor = errors.New("стикер не поставлен: неизвестное место или размер")
+
+// SizeFrac — доля ширины страницы по размеру s | m | l ("" — m).
+func SizeFrac(size string) (float64, bool) {
+	switch size {
+	case "s":
+		return FracS, true
+	case "m", "":
+		return FracM, true
+	case "l":
+		return FracL, true
+	}
+	return 0, false
+}
+
+// AddStickerAt — AddSticker с якорем и долей ширины страницы frac (не выше ½ высоты): центр или
+// угол страницы, угол — на расстоянии max(Settings.Safe, Margin) от края (стикер остаётся на
+// странице). AddSticker — тот же ход с центром и ¼. Неизвестный якорь или доля — ErrAnchor;
+// неизвестный лист и стикер, не прошедший ClampSticker, — холостая (проверяет вызывающий).
+func AddStickerAt(p *model.Project, spreadID string, page int, id string, src model.StickerSrc, anchor string, frac float64) error {
+	if !okFrac(frac) || !slices.Contains([]string{AnchorCenter, AnchorTopLeft, AnchorTopRight, AnchorBottomLeft, AnchorBottomRight}, anchor) {
+		return ErrAnchor
+	}
 	st, err := fromSrc(p, src)
 	if err != nil {
 		return err
@@ -24,16 +70,40 @@ func AddSticker(p *model.Project, spreadID string, page int, id string, src mode
 	}
 	pg := p.Geo(s).Page(page)
 	a := p.StartAspect(st)
-	w := pg.W / 4
+	w := pg.W * frac
 	if w/a > pg.H/2 {
 		w = pg.H / 2 * a
 	}
-	st.ID, st.W, st.H = id, w, w/a
-	st.X, st.Y = pg.X+(pg.W-w)/2, pg.Y+(pg.H-st.H)/2
+	h := w / a
+	st.ID, st.W, st.H = id, w, h
+	st.X, st.Y = anchorXY(pg, w, h, anchor, max(p.Settings.Safe, p.Settings.Margin))
 	if c := p.ClampSticker(s, st); c != nil {
 		s.Stickers = append(s.Stickers, c)
 	}
 	return nil
+}
+
+// okFrac — доля ширины страницы осмысленна (NaN не проходит).
+func okFrac(f float64) bool { return f > 0 && f <= 1 }
+
+// anchorXY — угол рамки w × h в странице pg по якорю; отступ inset от краёв не больше, чем
+// остаётся свободного места (рамка не выходит за страницу).
+func anchorXY(pg layout.Rect, w, h float64, anchor string, inset float64) (x, y float64) {
+	x, y = pg.X+(pg.W-w)/2, pg.Y+(pg.H-h)/2
+	ix, iy := min(inset, max(0, (pg.W-w)/2)), min(inset, max(0, (pg.H-h)/2))
+	switch anchor {
+	case AnchorTopLeft, AnchorBottomLeft:
+		x = pg.X + ix
+	case AnchorTopRight, AnchorBottomRight:
+		x = pg.X + pg.W - ix - w
+	}
+	switch anchor {
+	case AnchorTopLeft, AnchorTopRight:
+		y = pg.Y + iy
+	case AnchorBottomLeft, AnchorBottomRight:
+		y = pg.Y + pg.H - iy - h
+	}
+	return x, y
 }
 
 // ReplaceSticker — тело Editor.ReplaceSticker («Заменить…»): другой рисунок или своё фото;

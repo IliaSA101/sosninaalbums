@@ -64,10 +64,19 @@ func TestEditorReplay(t *testing.T) {
 // Исключение 149: AutoBuildIf, VaryLayoutsIf, UndoIfRev — те же AutoBuild, VaryLayouts и Undo с
 // условием (rev, срок); тело и шаг отмены те же, что у шагов реплея, условие проверяет
 // expect_test.go. Шаги в эталон — вместе с обновлением эталона Windows (его пишет CI).
+// Исключение 151: SetMarksIf, CreateCoverLookIf, CoverPhotoIf, ApplyBackgroundToIf, AddStickersIf,
+// ApplyPrintIf, SetSettingsIf — те же SetMarks, CreateCoverLook, ApplyBackgroundTo, AddSticker,
+// ApplyPrint и SetSettings с условием (CoverPhotoIf и AddStickersIf — новые тела над теми же
+// coverPhoto и AddStickerAt: coverPhotoOnce и layers.AddStickers; их проверяют if_cover_test.go и if_bg_test.go); Families — чтение
+// без правки проекта (TestEditorFamilies).
+// Исключение 150: MarkUnsaved — только флаг dirty, проект, rev и отмена не меняются
+// (TestMarkUnsaved); шага в эталоне нет.
 func TestEditorReplayMethods(t *testing.T) {
 	r, _ := replayRun(t)
 	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true,
-		"AutoBuildIf": true, "VaryLayoutsIf": true, "UndoIfRev": true}
+		"AutoBuildIf": true, "VaryLayoutsIf": true, "UndoIfRev": true,
+		"SetMarksIf": true, "CreateCoverLookIf": true, "CoverPhotoIf": true, "ApplyBackgroundToIf": true,
+		"AddStickersIf": true, "ApplyPrintIf": true, "SetSettingsIf": true, "Families": true, "MarkUnsaved": true}
 	for _, s := range r.steps {
 		seen[strings.SplitN(s.Step, ":", 2)[0]] = true
 	}

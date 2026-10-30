@@ -37,6 +37,11 @@ func (e *Editor) SetSettingsLook(s model.Settings, look *model.AlbumTpl) (v mode
 // определяются до fn (нетронутость — на прежнем формате), вписываются после settle: Rescale
 // растянул бы их по осям.
 func (e *Editor) formatLook(c *model.AlbumTpl, auto bool, fn func(p *model.Project) error) (model.View, error) {
+	return e.formatLookIf(c, auto, nil, fn)
+}
+
+// formatLookIf — formatLook со сверкой x под замком (nil — без неё; 151).
+func (e *Editor) formatLookIf(c *model.AlbumTpl, auto bool, x *Expect, fn func(p *model.Project) error) (model.View, error) {
 	var fit []lookFit
 	return e.editWith("", false, func(p *model.Project) error {
 		if auto && slices.ContainsFunc(p.Spreads, func(sp *model.Spread) bool { return sp.LookStep > 0 }) {
@@ -44,7 +49,7 @@ func (e *Editor) formatLook(c *model.AlbumTpl, auto bool, fn func(p *model.Proje
 		}
 		fit = lookFits(p, c)
 		return fn(p)
-	}, nil, editOpts{after: func(p *model.Project) {
+	}, nil, editOpts{expect: x, after: func(p *model.Project) {
 		for _, f := range fit {
 			if _, sp := p.Find(f.id); sp != nil {
 				grid.LookPlacesRefit(p, sp, f.step)

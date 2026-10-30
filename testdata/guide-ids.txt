@@ -4,6 +4,7 @@ add-photos
 adjust
 agents
 agents-edit
+agents-perms
 align
 all-spreads
 auto-gray

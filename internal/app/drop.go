@@ -5,10 +5,12 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
+	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 )
 
 // dropStat — os.Lstat перетаскивания: ссылка не проходится до проверки всей её цепочки
@@ -30,8 +32,9 @@ func (a *App) dropPaths(ps []string) {
 		fail(looseTooMany(len(ps)))
 		return
 	}
-	var bad []error    // отказы CheckLocalPath
-	var files []string // брошенные файлы: уходят одним добавлением
+	var bad []error      // отказы CheckLocalPath
+	var files []string   // брошенные файлы: уходят одним добавлением
+	var parents []string // родители добавленных папок: места съёмок агента (agentplaces_app.go)
 	for _, p := range ps {
 		if err := paths.CheckLocalPath(p); err != nil {
 			bad = append(bad, err)
@@ -60,6 +63,10 @@ func (a *App) dropPaths(ps []string) {
 		}
 		a.changed(v)
 		a.folderAdded(p, r)
+		parents = append(parents, filepath.Dir(p))
+	}
+	if len(parents) > 0 {
+		a.pushPlaces(prefs.PlaceParent, parents...)
 	}
 	switch n := len(bad); {
 	case n == 1:

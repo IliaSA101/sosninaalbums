@@ -24,7 +24,7 @@ import (
 func TestAgentsHostEditFilled(t *testing.T) {
 	a := newApp(t)
 	h := a.agentsHost()
-	fields := map[string]bool{"EditState": h.EditState != nil, "Scanning": h.Scanning != nil, "Busy": h.Busy != nil,
+	fields := map[string]bool{"Perm": h.Perm != nil, "Scanning": h.Scanning != nil, "Busy": h.Busy != nil,
 		"Backup": h.Backup != nil, "Ask": h.Ask != nil, "Auto": h.Auto != nil, "Vary": h.Vary != nil,
 		"Show": h.Show != nil, "Undo": h.Undo != nil}
 	for name, ok := range fields {
@@ -100,7 +100,7 @@ func newEdRig(t *testing.T) *edRig {
 		r.mu2.Unlock()
 	}
 	r.a.backups = backup.New(filepath.Join(testkit.TempDir(t), "backups")) // копия перед первой правкой
-	r.a.SetAgentsEdit(true)
+	setAgentsEdit(r.a, true)
 	r.start(t)
 	return r
 }

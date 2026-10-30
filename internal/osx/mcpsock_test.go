@@ -45,3 +45,23 @@ func TestMCPSock(t *testing.T) {
 		t.Errorf("пустое имя: %q", got)
 	}
 }
+
+// TestUseRoamingDirForTest: подмена папки настроек для стенда агентов действует до конца подтеста и
+// после него возвращает прежнюю (на Windows среда известную папку не меняет).
+func TestUseRoamingDirForTest(t *testing.T) {
+	before := MCPSock("sa")
+	dir := testkit.TempDir(t)
+	t.Run("подмена", func(t *testing.T) {
+		UseRoamingDirForTest(t, dir)
+		if got, want := MCPSock("sa"), filepath.Join(dir, "sa", "mcp", "sock"); got != want {
+			t.Errorf("MCPSock = %q, ждали %q", got, want)
+		}
+		UseRoamingDirForTest(t, "") // пустая папка настроек: службы нет, как без подмены
+		if got := MCPSock("sa"); got != "" {
+			t.Errorf("пустая папка: %q", got)
+		}
+	})
+	if got := MCPSock("sa"); got != before {
+		t.Errorf("после теста: %q, ждали прежний %q", got, before)
+	}
+}

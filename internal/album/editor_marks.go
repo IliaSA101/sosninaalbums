@@ -88,12 +88,22 @@ func (e *Editor) commitSide(delta []MarkChange, bins *BinsSwap) model.View {
 // SetMarks ставит свои отметки фото (ID, путь, отметки из файла). Холостая по полю: своего нет,
 // а цель равна отметке из файла. Сверх MaxMarks записей — ошибка, отметки прежние.
 func (e *Editor) SetMarks(photos []model.PhotoInfo, patch model.MarkPatch) (model.View, error) {
+	v, _, err := e.setMarks(photos, patch, nil)
+	return v, err
+}
+
+// setMarks — тело SetMarks и SetMarksIf: x (nil — без сверки) проверяется под e.mu до записи.
+// n — длина дельты: сколько фото получили другую отметку.
+func (e *Editor) setMarks(photos []model.PhotoInfo, patch model.MarkPatch, x *Expect) (model.View, int, error) {
 	photos = feedPhotos(photos)
 	patch = model.CleanPatch(patch)
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if err := x.check(e); err != nil {
+		return e.view(), 0, err
+	}
 	if e.shut("отметки") {
-		return e.view(), nil
+		return e.view(), 0, nil
 	}
 	label := patch.Label
 	if label != nil && patch.Toggle && *label != "" && len(photos) > 0 &&
@@ -120,9 +130,9 @@ func (e *Editor) SetMarks(photos []model.PhotoInfo, patch model.MarkPatch) (mode
 	}
 	delta := e.diffMarks(next)
 	if err := e.marksFit(delta); err != nil {
-		return e.view(), err
+		return e.view(), 0, err
 	}
-	return e.commitSide(delta, nil), nil
+	return e.commitSide(delta, nil), len(delta), nil
 }
 
 // MaxCompareRest — сколько «остальных» кадров бывает у «Лучшего» (окно сравнения 138: 2–4 кадра).

@@ -99,9 +99,11 @@ func pathExists(p string) bool {
 	return err == nil
 }
 
-// accessOn — в config.json agents.on == true. Файл читается здесь, только чтение: не prefs
-// (она писала бы и тянет всю программу). Путь локальный, размер проверяется до чтения, файл не
-// обычный, битый, усечённый, пустой или больше предела — «выключено».
+// accessOn — в config.json agents.on == true и start_program не запрещён (agentPerms.tools, 150).
+// Файл читается здесь, только чтение: не prefs (она писала бы и тянет всю программу). Путь локальный,
+// размер проверяется до чтения, файл не обычный, битый, усечённый, пустой или больше предела —
+// «выключено». «Запретить» у start_program посредник не показывает вовсе (0.34-150-2): программа
+// закрыта, ответить отказом словами некому; незнакомое значение — тоже запрет, как в prefs.clean().
 func (d *startDeps) accessOn() bool {
 	dir := d.cfgDir()
 	if dir == "" || d.dataName == "" {
@@ -128,8 +130,19 @@ func (d *startDeps) accessOn() bool {
 		Agents *struct {
 			On bool `json:"on"`
 		} `json:"agents"`
+		AgentPerms *struct {
+			Tools map[string]any `json:"tools"`
+		} `json:"agentPerms"`
 	}
-	return json.Unmarshal(b, &c) == nil && c.Agents != nil && c.Agents.On
+	if json.Unmarshal(b, &c) != nil || c.Agents == nil || !c.Agents.On {
+		return false
+	}
+	if c.AgentPerms != nil {
+		if v, ok := c.AgentPerms.Tools[startTool]; ok && v != "allow" {
+			return false
+		}
+	}
+	return true
 }
 
 // startOffered — инструмент start_program есть в списке: запуск включён, программа не отвечает по

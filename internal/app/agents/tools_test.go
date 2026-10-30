@@ -18,7 +18,9 @@ import (
 // editTools — инструменты правок 0.33 (без start_program — он у посредника); значение — в описании
 // должна быть пометка «Ctrl+Z» (у вопроса-продолжения и «показать» её нет).
 var editTools = map[string]bool{"create_album": true, "add_folder": true, "await_answer": false, "autobuild": true,
-	"vary_layouts": true, "show_spread": false, "undo_last_edit": true}
+	"vary_layouts": true, "show_spread": false, "undo_last_edit": true,
+	// 0.34 (151): все правящие, разрушающего нет.
+	"set_marks": true, "set_cover_photo": true, "set_background": true, "add_sticker": true, "apply_print": true}
 
 var updateTools = flag.Bool("update-tools", false, "перезаписать testdata/mcp-tools.json")
 
@@ -32,8 +34,8 @@ func TestToolsContract(t *testing.T) {
 	}
 	tools := res.Tools
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
-	if len(tools) != 11+len(editTools) {
-		t.Fatalf("инструментов %d, ждали %d", len(tools), 11+len(editTools))
+	if len(tools) != 12+len(editTools) { // 11 чтения 0.31 + get_contact_sheet (151)
+		t.Fatalf("инструментов %d, ждали %d", len(tools), 12+len(editTools))
 	}
 	for _, tl := range tools {
 		a := tl.Annotations

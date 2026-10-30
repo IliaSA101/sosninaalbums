@@ -22,9 +22,9 @@ func ApplyTo(p *model.Project, targets []model.GridTarget, src model.BgSource) (
 	return plan.Spreads, err
 }
 
-// PlanTo — тело Editor.PlanBackgroundTo над копией проекта c (её снимает обёртка под замком):
-// сколько листов изменится и сколько фото фона уйдёт. Ошибка — пустой план и та же ошибка,
-// что даст ApplyTo.
+// PlanTo — ApplyTo с полным планом: сколько листов изменилось и сколько фото фона ушло. Тело
+// Editor.PlanBackgroundTo зовёт его над копией проекта c (её снимает обёртка под замком);
+// ApplyToAgent с replace — над самим проектом. Ошибка — пустой план и та же ошибка, что у ApplyTo.
 func PlanTo(c *model.Project, targets []model.GridTarget, src model.BgSource) (model.BgPlan, error) {
 	return applyTo(c, targets, src)
 }
@@ -33,12 +33,41 @@ func PlanTo(c *model.Project, targets []model.GridTarget, src model.BgSource) (m
 // Лист с несколькими целями считается один раз; фото, поставленное и снятое той же правкой
 // (левая, затем весь лист), в число ушедших не входит — сравниваются начало и конец.
 func applyTo(p *model.Project, targets []model.GridTarget, src model.BgSource) (model.BgPlan, error) {
+	plan, _, err := applyKeep(p, targets, src, false)
+	return plan, err
+}
+
+// Outcome — итог ApplyToAgent: Changed — листов изменено; Skipped — ID листов, где фон области —
+// фото клиента (без replace не тронуты); Replaced — фото фона заменено (только при replace).
+type Outcome struct {
+	Changed  int
+	Skipped  []string
+	Replaced int
+}
+
+// ApplyToAgent — тело Editor.ApplyBackgroundToIf (151, 0.34-151-19). С replace — как ApplyTo с
+// планом (PlanTo): заменённые фото фона в Replaced. Без replace цель, которая сняла бы фото
+// клиента (фото фона без ключа библиотеки; фоны наборов и свои заменяются), не применяется — её
+// лист возвращается в состояние до цели, ID листа идёт в Skipped (по разу, в порядке целей);
+// Replaced остаётся 0. Прогон один и на самом проекте: откат цели — восстановление её листа,
+// копия проекта не нужна; ошибка откатывает всю правку (try), итог при ней пуст.
+func ApplyToAgent(p *model.Project, targets []model.GridTarget, src model.BgSource, replace bool) (Outcome, error) {
+	if replace {
+		plan, err := PlanTo(p, targets, src)
+		return Outcome{Changed: plan.Spreads, Replaced: plan.Photos}, err
+	}
+	plan, skipped, err := applyKeep(p, targets, src, true)
+	return Outcome{Changed: plan.Spreads, Skipped: skipped}, err
+}
+
+// applyKeep — тело applyTo и ApplyToAgent; keep — цели, снимающие фото клиента, пропускаются.
+func applyKeep(p *model.Project, targets []model.GridTarget, src model.BgSource, keep bool) (model.BgPlan, []string, error) {
 	var plan model.BgPlan
 	if len(targets) > 3*model.MaxSpreads {
-		return plan, errTargets
+		return plan, nil, errTargets
 	}
 	if (src.Pattern == nil) == (src.Photo.ID == "") {
-		return plan, model.ErrPattern
+		return plan, nil, model.ErrPattern
 	}
 	byID := make(map[string]*model.Spread, len(p.Spreads))
 	for _, s := range p.Spreads {
@@ -46,26 +75,29 @@ func applyTo(p *model.Project, targets []model.GridTarget, src model.BgSource) (
 	}
 	before := map[*model.Spread]bgState{}
 	var order []*model.Spread
+	var skipped []string
 	for _, t := range targets {
 		if !model.ValidScope(t.Scope) { // корешка у разворотов нет; проверка до Find — отказ не зависит от ID
-			return plan, model.ErrScope
+			return plan, nil, model.ErrScope
 		}
 		s := byID[t.Spread]
 		if s == nil {
 			continue
 		}
+		was := stateOf(s)
+		if err := applyOne(p, s, t.Scope, src); err != nil {
+			return model.BgPlan{}, nil, err
+		}
+		if keep && was.dropsClient(p, stateOf(s)) {
+			was.restore(s)
+			if !slices.Contains(skipped, s.ID) {
+				skipped = append(skipped, s.ID)
+			}
+			continue
+		}
 		if _, ok := before[s]; !ok {
-			before[s] = stateOf(s)
+			before[s] = was
 			order = append(order, s)
-		}
-		var err error
-		if src.Pattern != nil {
-			err = ApplyPattern(p, s.ID, t.Scope, *src.Pattern, src.Color)
-		} else {
-			err = ApplyBackdrop(p, s.ID, t.Scope, src.Photo)
-		}
-		if err != nil {
-			return model.BgPlan{}, err
 		}
 	}
 	for _, s := range order {
@@ -79,7 +111,15 @@ func applyTo(p *model.Project, targets []model.GridTarget, src model.BgSource) (
 			}
 		}
 	}
-	return plan, nil
+	return plan, skipped, nil
+}
+
+// applyOne — одна цель: узор src.Pattern с цветом или фото src.Photo на области scope листа s.
+func applyOne(p *model.Project, s *model.Spread, scope string, src model.BgSource) error {
+	if src.Pattern != nil {
+		return ApplyPattern(p, s.ID, scope, *src.Pattern, src.Color)
+	}
+	return ApplyBackdrop(p, s.ID, scope, src.Photo)
 }
 
 // bgState — фон листа для сравнения: узоры, цвет страниц и фото фона (копии — правка их не
@@ -123,4 +163,22 @@ func sameBackdrop(a, b *model.Backdrop) bool {
 	ca, cb := *a, *b
 	ca.Frame, cb.Frame = nil, nil
 	return ca == cb
+}
+
+// restore возвращает листу s фон из состояния a (откат цели, ApplyToAgent). Копии a уже свои.
+func (a bgState) restore(s *model.Spread) {
+	s.Pat, s.PatL, s.PatR = a.pat[0], a.pat[1], a.pat[2]
+	s.BgPhoto, s.BgPhotoL, s.BgPhotoR, s.BgPhotoS = a.ph[0], a.ph[1], a.ph[2], a.ph[3]
+	s.BgL, s.BgR = a.bgL, a.bgR
+}
+
+// dropsClient — переход a → b снял или заменил фото клиента: фото фона без ключа библиотеки
+// (запись Photos без Lib; записи нет — тоже клиентское, осторожнее).
+func (a bgState) dropsClient(p *model.Project, b bgState) bool {
+	for i, was := range a.ph {
+		if was != nil && p.Photos[was.Photo].Lib == "" && (b.ph[i] == nil || b.ph[i].Photo != was.Photo) {
+			return true
+		}
+	}
+	return false
 }

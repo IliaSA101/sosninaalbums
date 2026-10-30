@@ -38,6 +38,44 @@ export namespace app {
 	        this.since = source["since"];
 	    }
 	}
+	export class AgentPerm {
+	    tool: string;
+	    title: string;
+	    group: string;
+	    mode: string;
+	    can: string[];
+	    why: string;
+	    note: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentPerm(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tool = source["tool"];
+	        this.title = source["title"];
+	        this.group = source["group"];
+	        this.mode = source["mode"];
+	        this.can = source["can"];
+	        this.why = source["why"];
+	        this.note = source["note"];
+	    }
+	}
+	export class AgentPlace {
+	    dir: string;
+	    chosen: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentPlace(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dir = source["dir"];
+	        this.chosen = source["chosen"];
+	    }
+	}
 	export class AgentSetup {
 	    id: string;
 	    title: string;
@@ -71,6 +109,8 @@ export namespace app {
 	    edit: boolean;
 	    editBlocked: string;
 	    asksMuted: boolean;
+	    perms: AgentPerm[];
+	    places: AgentPlace[];
 	
 	    static createFrom(source: any = {}) {
 	        return new AgentsInfo(source);
@@ -90,6 +130,8 @@ export namespace app {
 	        this.edit = source["edit"];
 	        this.editBlocked = source["editBlocked"];
 	        this.asksMuted = source["asksMuted"];
+	        this.perms = this.convertValues(source["perms"], AgentPerm);
+	        this.places = this.convertValues(source["places"], AgentPlace);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -112,19 +112,57 @@ func (a *App) agentBusy(ctx context.Context) bool {
 	return false
 }
 
-// agentEditState — флажок «Разрешить агентам менять альбом» и причина, по которой его нельзя
-// включить: процесс от администратора правок не принимает.
+// agentEditState — правки ещё возможны: не все обратимые правки, папка и альбом «Запретить» (150), и
+// причина, по которой нельзя: процесс от администратора правок не принимает. Решение по каждому
+// инструменту — agentPerm; здесь общий вход для вопросов и «между вопросом и записью».
 func (a *App) agentEditState() (allowed bool, blocked string) {
 	if b := a.editBlocked(); b != "" {
 		return false, b
 	}
-	return prefs.AgentsOf(a.cfgDir).Edit, ""
+	return a.editGroupOn(), ""
 }
 
-// agentCheckOn — флажок правок ещё включён: между входом (gate) и записью правка ждала ленту и
-// «занят», человек мог его снять. Звать перед самой записью.
-func (a *App) agentCheckOn() error {
-	if on, _ := a.agentEditState(); !on {
+// editGroupOn — группа правок не вся «Запретить» (AgentsInfo.Edit, design §6): не зеркало
+// agents.edit, которое true только при всех включённых правках, — иначе окно согласия
+// повторялось бы на каждой строке таблицы.
+func (a *App) editGroupOn() bool {
+	p := prefs.LoadAgentPerms(a.cfgDir)
+	for _, tool := range prefs.AgentToolNames() {
+		switch prefs.AgentToolClass(tool) {
+		case prefs.ClassEdit, prefs.ClassFolder, prefs.ClassAlbum:
+			if p.Tools[tool] != prefs.PermDeny {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// agentPerm — Host.Perm: разрешение инструмента из config.json на этот вызов (читается каждый раз) и
+// причина «blocked». Инструмента нет в записи — умолчание для нового (AgentPerms.NewMode).
+func (a *App) agentPerm(tool string) (mode, blocked string) {
+	mode, blocked, _ = a.agentPermLevel(tool)
+	return mode, blocked
+}
+
+// agentPermLevel — Host.PermLevel: agentPerm и уровень доступа из одного чтения config.json.
+func (a *App) agentPermLevel(tool string) (mode, blocked string, level int) {
+	cfg := prefs.LoadConfig(a.cfgDir)
+	level = prefs.AgentsLevelOf(cfg)
+	p := prefs.AgentPermsOf(cfg)
+	mode = p.Mode(tool)
+	if mode == "" {
+		mode = p.NewMode(prefs.AgentToolClass(tool) == prefs.ClassRead)
+	}
+	return mode, a.editBlocked(), level
+}
+
+// agentCheckTool — разрешение самого инструмента перечитывается перед записью: пока правка ждала
+// ленту, человек мог поставить ему «Запретить» (спека 150). Вызов без вопроса («Всегда») при смене
+// на «Спрашивать» тоже отказ: asked — вопрос по этому вызову уже задан и «да» получено.
+func (a *App) agentCheckTool(tool string, asked bool) error {
+	mode, b := a.agentPerm(tool)
+	if b != "" || mode == prefs.PermDeny || mode == prefs.PermAsk && !asked {
 		return errAgentOff
 	}
 	return nil
@@ -254,7 +292,7 @@ func (a *App) agentVary(ctx context.Context, key string, rev int, spreads []stri
 	if err != nil {
 		return 0, 0, err
 	}
-	if err := a.agentCheckOn(); err != nil {
+	if err := a.agentCheckTool(toolVary, true); err != nil {
 		return 0, 0, err
 	}
 	before := ed.View()
@@ -311,7 +349,7 @@ func (a *App) agentUndo(ctx context.Context, key string, rev int) (rev2 int, err
 	if err != nil {
 		return 0, err
 	}
-	if err := a.agentCheckOn(); err != nil {
+	if err := a.agentCheckTool(toolUndo, true); err != nil {
 		return 0, err
 	}
 	before := sourcesOf(ed)

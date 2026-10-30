@@ -49,6 +49,11 @@ func agentToastClient(name string) string {
 	return name
 }
 
+// agentsDenied — Options.OnDenied: первый отказ «Запретить» по инструменту за запуск → тост «Настроить».
+func (a *App) agentsDenied(client, tool, title string) {
+	a.agentDenied(AgentDenied{Client: agentToastClient(client), Tool: tool, Title: title})
+}
+
 // agentsScanning — Host.Scanning: лента ещё читает папки.
 func (a *App) agentsScanning() bool {
 	a.mu.Lock()
@@ -59,7 +64,8 @@ func (a *App) agentsScanning() bool {
 // agentsEditHost заполняет замыкания правок Host: пока заполнены не все, служба инструментов
 // правки не регистрирует (Host.canEdit).
 func (a *App) agentsEditHost(h *agents.Host) {
-	h.EditState = a.agentEditState
+	h.Perm = a.agentPerm
+	h.PermLevel = a.agentPermLevel
 	h.Scanning = a.agentsScanning
 	h.Busy = a.agentBusy
 	h.Backup = func(key string) error { return agentHostErr(a.agentBackup(key)) }
@@ -78,10 +84,11 @@ func (a *App) agentsEditHost(h *agents.Host) {
 func (a *App) agentsAuto(ctx context.Context, in agents.AutoReq) (agents.AutoRes, error) {
 	r, err := a.agentAuto(ctx, agentAutoReq{Key: in.Key, Rev: in.Rev, Spreads: in.Spreads, PerAuto: in.PerAuto,
 		PerMin: in.PerMin, PerMax: in.PerMax, Series: in.Series, Similar: in.Similar, Variant: in.Variant,
-		Variety: in.Variety, Families: in.Families, Photos: in.Photos, ScanWaitMs: in.ScanWaitMs})
+		Variety: in.Variety, Families: in.Families, Photos: in.Photos, ScanWaitMs: in.ScanWaitMs, Asked: in.Asked})
 	if err != nil {
 		return agents.AutoRes{}, agentHostErr(err)
 	}
+	a.agentDraftStep(in.Key, in.Rev, r.Rev)
 	if r.Added > 0 {
 		a.agentEdited(AgentEdited{Client: agentToastClient(in.Client), Text: fmt.Sprintf("Собрано разворотов: %d", r.Added),
 			Rev: r.Rev, Go: r.Go})
@@ -96,6 +103,7 @@ func (a *App) agentsVary(ctx context.Context, in agents.VaryReq) (agents.AlbumRe
 	if err != nil {
 		return agents.AlbumRef{}, 0, agentHostErr(err)
 	}
+	a.agentDraftStep(in.Key, in.Rev, rev)
 	if changed > 0 {
 		a.agentEdited(AgentEdited{Client: agentToastClient(in.Client), Text: fmt.Sprintf("Раскладки изменены: %d", changed), Rev: rev})
 	}
@@ -108,6 +116,7 @@ func (a *App) agentsUndo(ctx context.Context, ref agents.AlbumRef) (agents.Album
 	if err != nil {
 		return agents.AlbumRef{}, agentHostErr(err)
 	}
+	a.agentDraftStep(ref.Key, ref.Rev, rev)
 	return agents.AlbumRef{Key: ref.Key, Rev: rev}, nil
 }
 

@@ -181,11 +181,8 @@ func (pc *photoCtx) keep(p library.Photo, in photosIn, back map[string]bool) boo
 	return true
 }
 
-func (c *call) listPhotos(in photosIn) (photosOut, error) {
-	pc, err := c.photoCtx()
-	if err != nil {
-		return photosOut{}, err
-	}
+// selected — выборка list_photos: фильтры и порядок. Лист-сетка берёт ту же (get_contact_sheet).
+func (pc *photoCtx) selected(in photosIn) []library.Photo {
 	back := map[string]bool{}
 	for _, id := range pc.v.BackdropUsed {
 		back[model.BaseID(id)] = true
@@ -203,7 +200,16 @@ func (c *call) listPhotos(in photosIn) (photosOut, error) {
 			}
 		}
 	}
-	sortPhotos(list, in.Order == "name" && c.names())
+	sortPhotos(list, in.Order == "name" && pc.c.names())
+	return list
+}
+
+func (c *call) listPhotos(in photosIn) (photosOut, error) {
+	pc, err := c.photoCtx()
+	if err != nil {
+		return photosOut{}, err
+	}
+	list := pc.selected(in)
 	out := photosOut{meta: c.metaOf(pc.v, pc.ed), Total: len(list), Offset: in.Offset, Items: []photoItem{}}
 	lim := defLimit(in.Limit, 100)
 	for i := in.Offset; i < len(list) && len(out.Items) < lim; i++ {

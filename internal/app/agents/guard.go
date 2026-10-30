@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 )
 
 // Пределы вызова инструмента (design §3).
@@ -36,6 +38,9 @@ type toolSpec struct {
 	auto   bool // автосборка: срок вызова AutoTimeout
 	backup bool // до тела — резервная копия (Host.Backup)
 	danger bool // DestructiveHint: заменяет открытый альбом
+
+	// perm — класс разрешения (prefs.Class*, 150); "" — служебный (await_answer), вне разрешений.
+	perm string
 }
 
 // toolEnv — общее для инструментов одного запуска службы: сервер, место под вызовы, сроки.
@@ -45,6 +50,8 @@ type toolEnv struct {
 	srv *mcp.Server
 	ctx context.Context // жизнь запуска службы: вопросы агента живут дольше вызова
 	sem chan struct{}   // занятые места вызовов
+	// specs — таблица инструментов: reg пополняет её (Service.Specs собирает на отдельном сервере).
+	specs []toolSpec
 	// render — место под один рендер разворота: они тяжёлые и идут по одному (design §6).
 	render chan struct{}
 }
@@ -56,20 +63,26 @@ func newToolEnv(s *Service, r *run) *toolEnv {
 
 // call — что видит тело инструмента: контекст с сроком, уровень доступа на этот вызов и служба.
 type call struct {
-	ctx   context.Context
-	s     *Service
-	env   *toolEnv
-	level int
-	spec  toolSpec
-	sess  *mcp.ServerSession   // подключение вызова; запись отмены и жетон вопроса привязаны к нему
-	rel   func()               // место правки (edit.go); берёт тот, кто его занял
-	keep  bool                 // место правки передано вопросу: отпустит он
-	cats  map[string]*decorCat // каталоги оформления, прочитанные в этом вызове
+	ctx     context.Context
+	s       *Service
+	env     *toolEnv
+	level   int
+	spec    toolSpec
+	mode    string               // разрешение на этот вызов: prefs.PermAllow | PermAsk (deny отсечён в serve)
+	blocked string               // "elevated" — процесс от администратора
+	extra   time.Duration        // добавка к сроку вызова: ожидание ответа человека на вопрос о правке
+	editReq AskReq               // данные вопроса о правке из входа (regEdit)
+	verdict string               // итог для журнала: noteYes | noteQuiet
+	sess    *mcp.ServerSession   // подключение вызова; запись отмены и жетон вопроса привязаны к нему
+	rel     func()               // место правки (edit.go); берёт тот, кто его занял
+	keep    bool                 // место правки передано вопросу: отпустит он
+	cats    map[string]*decorCat // каталоги оформления, прочитанные в этом вызове
 }
 
 // reg регистрирует инструмент низкоуровневым AddTool: типизированный mcp.AddTool отдавал бы агенту
 // текст любой ошибки как есть (в нём бывают пути), здесь наружу идут только agentErr.
 func reg[In, Out any](e *toolEnv, spec toolSpec, tweak func(props map[string]*jsonschema.Schema), run func(*call, In) (Out, error)) {
+	e.specs = append(e.specs, spec)
 	in, err := jsonschema.For[In](nil)
 	if err != nil {
 		panic("agents: схема входа " + spec.name + ": " + err.Error())
@@ -169,14 +182,36 @@ func (e *toolEnv) serve(ctx context.Context, spec toolSpec, schema *jsonschema.S
 			return errResult(errCallBusy), nil
 		}
 	}
-	lv := e.s.level()
+	c := &call{s: e.s, env: e, spec: spec, sess: so.sess}
+	// Разрешение — до уровня и тела, из настроек на каждый вызов (150). «Запретить» не доходит ни до
+	// Host, ни до вопроса; в счёт отказов человека не идёт.
+	// Разрешение и уровень — из одного чтения config.json (PermLevel).
+	mode, blocked, lv := e.s.permLevel(spec)
+	if mode == prefs.PermDeny {
+		if !spec.await {
+			<-e.sem
+		}
+		if so.note != nil {
+			*so.note = noteDenied
+		}
+		return errResult(c.deny()), nil
+	}
+	c.mode, c.blocked = mode, blocked
+	lv = e.s.levelOr(lv)
 	if lv < spec.minLevel {
 		if !spec.await {
 			<-e.sem
 		}
 		return errResult(errNoImages), nil
 	}
-	val, err := e.invoke(ctx, &call{s: e.s, env: e, level: lv, spec: spec, sess: so.sess}, spec, raw, exec)
+	c.level = lv
+	if mode == prefs.PermAsk && (spec.edit || spec.view) && !spec.ask {
+		c.extra = e.s.o.AskWait // вопрос о правке ждёт человека в пределах вызова
+	}
+	val, err := e.invoke(ctx, c, spec, raw, exec)
+	if err == nil && c.verdict != "" && so.note != nil {
+		*so.note = c.verdict
+	}
 	if err != nil {
 		ae, orig := toAgent(err)
 		if so.note != nil {
@@ -196,7 +231,7 @@ func (e *toolEnv) serve(ctx context.Context, spec toolSpec, schema *jsonschema.S
 // invoke (место уже занято в serve) исполняет тело в своей горутине: место освобождается по её концу, а не по сроку — агент
 // получает «время вышло», но пятый вызов не стартует, пока висит четвёртый (design §2).
 func (e *toolEnv) invoke(ctx context.Context, c *call, spec toolSpec, raw json.RawMessage, exec func(*call, json.RawMessage) (any, error)) (any, error) {
-	cctx, cancel := context.WithTimeout(ctx, e.s.budget(spec))
+	cctx, cancel := context.WithTimeout(ctx, e.s.budget(spec)+c.extra)
 	c.ctx = cctx
 	type result struct {
 		v   any
@@ -277,4 +312,13 @@ func (s *Service) budget(spec toolSpec) time.Duration {
 }
 
 // level — уровень доступа на этот вызов (смена в окне действует сразу).
+// levelOr — lv, а если уровень не пришёл с разрешением (lv < 0: нет PermLevel или инструмент вне
+// разрешений) — читается отдельно.
+func (s *Service) levelOr(lv int) int {
+	if lv < 0 {
+		return s.level()
+	}
+	return lv
+}
+
 func (s *Service) level() int { return levelOf(s.h.CfgDir()) }

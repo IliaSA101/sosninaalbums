@@ -66,6 +66,9 @@ type AgentsInfo struct {
 	Edit        bool   `json:"edit"`
 	EditBlocked string `json:"editBlocked"` // "" | elevated (программа запущена от администратора)
 	AsksMuted   bool   `json:"asksMuted"`
+	// Разрешения (150): строки по инструментам и места съёмок. Perms заполняет фасад Т3.
+	Perms  []AgentPerm  `json:"perms"`  // не nil
+	Places []AgentPlace `json:"places"` // не nil; новые первыми
 }
 
 // AgentsSaved — итог SaveClaudeExtension (как TplSave, 086).
@@ -126,15 +129,6 @@ func (a *App) SetAgentsLevel(level int) AgentsInfo {
 	return a.agentsInfo()
 }
 
-// SetAgentsEdit разрешает или запрещает агентам менять альбом (149). Флажок читается на каждый
-// вызов агента, от уровня доступа не зависит; по умолчанию выключен.
-func (a *App) SetAgentsEdit(on bool) AgentsInfo {
-	defer guard("SetAgentsEdit")
-	prefs.UpdateAgents(a.cfgDir, func(c *prefs.Agents) { c.Edit = on })
-	a.agentsChanged()
-	return a.agentsInfo()
-}
-
 // ClearAgentsLog очищает журнал вызовов; счётчик «за сегодня» остаётся.
 func (a *App) ClearAgentsLog() AgentsInfo {
 	defer guard("ClearAgentsLog")
@@ -156,9 +150,9 @@ func (a *App) agentsInfo() AgentsInfo {
 		hint = agents.XDGHint(runtime.GOOS, os.Getenv("XDG_CONFIG_HOME"), userHome())
 	}
 	cfg := prefs.AgentsOf(a.cfgDir)
-	info := AgentsInfo{Status: st, Hint: hint, Error: errText, Level: cfg.Level, Edit: cfg.Edit, EditBlocked: a.editBlocked(), AsksMuted: a.agents != nil && a.agents.AsksMuted(),
+	info := AgentsInfo{Status: st, Hint: hint, Error: errText, Level: cfg.Level, Edit: a.editGroupOn(), EditBlocked: a.editBlocked(), AsksMuted: a.agents != nil && a.agents.AsksMuted(),
 		Portable: runtime.GOOS == "windows" && update.ModeOf(runtime.GOOS, exe) == update.ModeSetup,
-		Setups:   setups, Clients: []AgentClient{}, Calls: []AgentCall{}}
+		Setups:   setups, Clients: []AgentClient{}, Calls: []AgentCall{}, Perms: a.agentPermRows(), Places: a.agentPlaces()}
 	for _, c := range a.agents.Clients() {
 		info.Clients = append(info.Clients, AgentClient{Name: c.Name, Since: c.Since.UnixMilli()})
 	}

@@ -23,6 +23,9 @@
 //     (NeedUID, SaveUID); мимо change, без шага отмены и dirty;
 //   - editor_expect.go — правка «если всё ещё то же» для агентов (149): Expect (rev и срок вызова)
 //     сверяется под e.mu в editWith; AutoBuildIf, VaryLayoutsIf, UndoIfRev; ErrLate, ErrRevChanged;
+//   - editor_expect_more.go — остальные правки агента (151): SetMarksIf, CreateCoverLookIf, CoverPhotoIf,
+//     ApplyBackgroundToIf (пропуск фото клиента), AddStickersIf, ApplyPrintIf, SetSettingsIf и чтение
+//     Families; тела — приватные с x *Expect в прежних файлах (setMarks, createCoverLook, setSettings…);
 //   - editor_bins.go — подборки фото (083): список в Editor, членство в отметках; шаг «рядом с
 //     проектом», как у отметок (commitSide), projRev не трогает;
 //   - LoadBase и Restore (резервные копии, спека 019; проект проходит own), черновик

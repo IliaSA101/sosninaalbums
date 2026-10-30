@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -42,6 +43,9 @@ type Config struct {
 	LibraryNet *LibraryNet `json:"libraryNet,omitempty"`
 	// Agents — доступ ИИ-агентов к альбому (143, agents.go): включение и уровень.
 	Agents *Agents `json:"agents,omitempty"`
+	// AgentPerms — разрешения агентов по инструментам и места съёмок (0.34/150, agentperms.go):
+	// ключ верхнего уровня, 0.33 его не знает и сохраняет.
+	AgentPerms *AgentPerms `json:"agentPerms,omitempty"`
 	// Hotkeys — свои горячие клавиши (074): id команды → её сочетания, только отличия от
 	// стандартных (keymap.Overrides). Правила и пределы — internal/keymap, здесь не толкуются.
 	Hotkeys map[string][]string `json:"hotkeys,omitempty"`
@@ -104,6 +108,12 @@ func LoadConfig(dir string) Config {
 // не должен читаться целиком (Keymap() зовёт LoadConfig на каждом GetState).
 const maxConfigSize = 1 << 20
 
+// configReads — сколько раз читался config.json (loadConfig): тесты фасада проверяют «одно чтение на вызов».
+var configReads atomic.Int64
+
+// ConfigReads — число чтений config.json с начала запуска; только для тестов.
+func ConfigReads() int64 { return configReads.Load() }
+
 // readConfigFile читает config.json не больше maxConfigSize; больше — как отсутствующий.
 // Пустой путь — настройки в памяти (memCfg).
 func readConfigFile(path string) ([]byte, error) {
@@ -128,6 +138,7 @@ func readConfigFile(path string) ([]byte, error) {
 var errConfigTooBig = errors.New("config.json больше предела")
 
 func loadConfig(dir string) Config {
+	configReads.Add(1)
 	var c Config
 	if data, err := readConfigFile(ConfigPath(dir)); err == nil {
 		// Битый конфиг — как отсутствующий: просто откроется черновик.

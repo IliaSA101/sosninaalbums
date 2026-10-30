@@ -78,7 +78,7 @@ func TestAskFrozenWhileDialog(t *testing.T) {
 // Флажок выключен: до окна — off без окна; после окна, до окна ОС и после окна ОС — off без правки.
 func TestAskFlagOff(t *testing.T) {
 	r := newAskRig(t)
-	r.a.SetAgentsEdit(false)
+	setAgentsEdit(r.a, false)
 	c := r.ask(r.addReq())
 	c.wait(t)
 	if c.res.Why != agents.WhyOff || c.err != nil || len(r.evOf("agents:ask")) != 0 || r.fronted() != 0 {
@@ -86,10 +86,10 @@ func TestAskFlagOff(t *testing.T) {
 	}
 
 	// Выключили, пока вопрос висел: «Выбрать папку…» → off, окно ОС не открывается.
-	r.a.SetAgentsEdit(true)
+	setAgentsEdit(r.a, true)
 	c = r.ask(r.addReq())
 	id := r.asked(t, 1).ID
-	r.a.SetAgentsEdit(false)
+	setAgentsEdit(r.a, false)
 	if _, err := r.a.AnswerAgent(id, true); err != nil {
 		t.Fatal(err)
 	}
@@ -99,14 +99,14 @@ func TestAskFlagOff(t *testing.T) {
 	}
 
 	// Выключили, пока открыто окно ОС: выбор не применяется.
-	r.a.SetAgentsEdit(true)
+	setAgentsEdit(r.a, true)
 	release := r.holdDialog()
 	defer release()
 	c = r.ask(r.addReq())
 	id = r.asked(t, 2).ID
 	ans := r.answerAsync(id, true)
 	r.dialogOpen(t)
-	r.a.SetAgentsEdit(false)
+	setAgentsEdit(r.a, false)
 	release()
 	ans.wait(t)
 	c.wait(t)
@@ -144,7 +144,7 @@ func TestAskKindMismatch(t *testing.T) {
 
 	c = r.ask(r.addReq())
 	id = r.asked(t, 2).ID
-	if _, err := r.a.AgentAnswerCreate(id); !errors.Is(err, errAskClosed) {
+	if _, err := r.a.AgentAnswerCreate(id, false); !errors.Is(err, errAskClosed) {
 		t.Fatalf("create-ответ на add: %v", err)
 	}
 	if r.state() != askAsked || len(r.titles) != 0 || r.rev() != before {
@@ -326,7 +326,7 @@ func TestAskStaleID(t *testing.T) {
 				t.Errorf("AnswerAgent(%.5q, %v) без вопроса: %v", id, yes, err)
 			}
 		}
-		if _, err := r.a.AgentAnswerCreate(id); !errors.Is(err, errAskClosed) {
+		if _, err := r.a.AgentAnswerCreate(id, false); !errors.Is(err, errAskClosed) {
 			t.Errorf("AgentAnswerCreate(%.5q) без вопроса: %v", id, err)
 		}
 	}
@@ -428,5 +428,34 @@ func TestAskShutdown(t *testing.T) {
 	c.wait(t)
 	if c.res.Why != agents.WhyClosed || len(r.evOf("agents:ask")) != 1 {
 		t.Errorf("вопрос при выходе: %+v", c.res)
+	}
+}
+
+// Итог отдан ждущему вызову — следующий вопрос уже можно задать: запись вопроса снимается до
+// отправки итога, а не после события askdone (иначе агент, получив ответ, ловил ErrAskBusy).
+func TestAskNextAfterDone(t *testing.T) {
+	r := newAskRig(t)
+	tokens := make(chan struct{}, 3)
+	rec := r.a.emit
+	r.a.emit = func(name string, data ...any) {
+		rec(name, data...)
+		if name == "agents:askdone" {
+			<-tokens // закрытие вопроса застряло на событии окна
+		}
+	}
+	t.Cleanup(func() { close(tokens) })
+	for i := 1; i <= 3; i++ {
+		c := r.ask(r.addReq())
+		id := r.asked(t, i).ID
+		go func() { _, _ = r.a.AnswerAgent(id, false) }()
+		c.wait(t)
+		if c.err != nil || c.res.Why != agents.WhyDeclined {
+			t.Fatalf("вопрос %d: %+v, %v", i, c.res, c.err)
+		}
+		if r.state() != askAny {
+			t.Fatalf("вопрос %d: итог отдан, а запись вопроса жива (состояние %v)", i, r.state())
+		}
+		tokens <- struct{}{}
+		waitUntil(t, "askdone", func() bool { return len(r.evOf("agents:askdone")) >= i })
 	}
 }

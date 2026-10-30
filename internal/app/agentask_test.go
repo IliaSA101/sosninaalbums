@@ -24,6 +24,48 @@ func jsonTags(typ reflect.Type) []string {
 	return out
 }
 
+// setAgentsEdit — флажок agents.edit 0.33 для тестов (метод App удалён в 150): запись в config.json
+// и agents:state, как делала правка настроек. Включённый флажок даёт столбец «0.33, правки вкл.».
+func setAgentsEdit(a *App, on bool) AgentsInfo {
+	prefs.UpdateAgents(a.cfgDir, func(c *prefs.Agents) { c.Edit = on })
+	a.agentsChanged()
+	return a.agentsInfo()
+}
+
+// AgentsInfo.Edit — «группа правок не вся «Запретить»» (design §6), а не строгое зеркало флажка:
+// иначе согласие в таблице повторялось бы на каждой строке.
+func TestAgentsInfoEditMixed(t *testing.T) {
+	a := newApp(t)
+	if a.AgentsInfo().Edit {
+		t.Fatal("новая установка: все правки запрещены, Edit должен быть false")
+	}
+	// Одна строка «Всегда», остальные «Запретить»: зеркало agents.edit остаётся false, Edit — true.
+	a.SetAgentPerm("autobuild", prefs.PermAllow)
+	if prefs.AgentsOf(a.cfgDir).Edit || !a.AgentsInfo().Edit {
+		t.Fatalf("одна строка: зеркало %v, Edit %v", prefs.AgentsOf(a.cfgDir).Edit, a.AgentsInfo().Edit)
+	}
+	a.SetAgentPerm("autobuild", prefs.PermDeny)
+	if a.AgentsInfo().Edit {
+		t.Fatal("снова всё запрещено: Edit должен быть false")
+	}
+	a.SetAgentPerm("vary_layouts", prefs.PermAsk)
+	if !a.AgentsInfo().Edit {
+		t.Error("vary_layouts «Спрашивать»: Edit должен быть true")
+	}
+	// Папка и альбом — часть группы (классы F, A).
+	a.SetAgentPerm("vary_layouts", prefs.PermDeny)
+	a.SetAgentPerm("add_folder", prefs.PermAllow)
+	if !a.AgentsInfo().Edit {
+		t.Error("add_folder «Всегда»: Edit должен быть true")
+	}
+	// Чтение группу не включает.
+	a.SetAgentPerm("add_folder", prefs.PermDeny)
+	a.SetAgentPerm("get_album", prefs.PermAsk)
+	if a.AgentsInfo().Edit {
+		t.Error("чтение не относится к группе правок")
+	}
+}
+
 func TestSetAgentsEdit(t *testing.T) {
 	a, events := pubApp(t)
 	dir := a.cfgDir
@@ -35,7 +77,7 @@ func TestSetAgentsEdit(t *testing.T) {
 	}
 	// Включение сохраняется в config.json, не трогает уровень и доступ, чужие ключи целы.
 	a.SetAgentsLevel(3)
-	if info := a.SetAgentsEdit(true); !info.Edit || info.Level != 3 || info.Status != "off" {
+	if info := setAgentsEdit(a, true); !info.Edit || info.Level != 3 || info.Status != "off" {
 		t.Fatalf("включено: %+v", info)
 	}
 	if got := prefs.AgentsOf(dir); got != (prefs.Agents{Edit: true, Level: 3}) {
@@ -45,7 +87,7 @@ func TestSetAgentsEdit(t *testing.T) {
 		t.Fatalf("config.json: %s", raw)
 	}
 	// Повтор холостой: тот же итог. Смена уровня флажок не снимает.
-	if !a.SetAgentsEdit(true).Edit || !a.SetAgentsLevel(1).Edit {
+	if !setAgentsEdit(a, true).Edit || !a.SetAgentsLevel(1).Edit {
 		t.Fatal("флажок потерян")
 	}
 	// Перезапуск программы: второй App на той же папке видит флажок.
@@ -56,7 +98,7 @@ func TestSetAgentsEdit(t *testing.T) {
 	}
 	// Выключение: флажок снят, уровень цел; все окна получили agents:state.
 	n := len(events())
-	if info := a.SetAgentsEdit(false); info.Edit || info.Level != 1 {
+	if info := setAgentsEdit(a, false); info.Edit || info.Level != 1 {
 		t.Fatalf("выключено: %+v", info)
 	}
 	if got := names(events()[n:]); !slices.Equal(got, []string{"agents:state"}) {
@@ -79,9 +121,10 @@ func TestSetAgentsEdit(t *testing.T) {
 // Теги и порядок полей — контракт с frontend/wailsjs; имена событий — с events.md.
 func TestAgentEditContract(t *testing.T) {
 	for typ, want := range map[reflect.Type][]string{
-		reflect.TypeFor[AgentAsk]():     {"id", "kind", "title", "lines", "hint", "ok"},
+		reflect.TypeFor[AgentAsk]():     {"id", "kind", "title", "lines", "hint", "ok", "path", "link", "alt", "tool", "why"},
 		reflect.TypeFor[AgentAskDone](): {"id", "why"},
-		reflect.TypeFor[AgentEdited]():  {"client", "text", "rev", "go"},
+		reflect.TypeFor[AgentEdited]():  {"client", "text", "rev", "go", "prev", "quiet", "path"},
+		reflect.TypeFor[AgentDenied]():  {"client", "tool", "title"},
 		reflect.TypeFor[AgentShow]():    {"spread"},
 	} {
 		if got := jsonTags(typ); !slices.Equal(got, want) {
@@ -100,8 +143,9 @@ func TestAgentEditContract(t *testing.T) {
 	a.agentAskDone(AgentAskDone{ID: "i", Why: "declined"})
 	a.agentEdited(AgentEdited{Client: "К", Text: "Собрано разворотов: 24", Rev: 5, Go: "s1"})
 	a.agentShown(AgentShow{Spread: "s8"})
+	a.agentDenied(AgentDenied{Client: "К", Tool: "create_album", Title: "Создать альбом"})
 	evs := events()
-	want := []string{"agents:ask", "agents:askdone", "agents:edited", "agents:show"}
+	want := []string{"agents:ask", "agents:askdone", "agents:edited", "agents:show", "agents:denied"}
 	if got := names(evs); !slices.Equal(got, want) {
 		t.Fatalf("события %v, ждали %v", got, want)
 	}
@@ -110,7 +154,7 @@ func TestAgentEditContract(t *testing.T) {
 	}
 	// Нулевые значения уходят в JSON целиком: интерфейс видит lines и go, а не пропажу ключа.
 	b, _ := json.Marshal(AgentEdited{})
-	if string(b) != `{"client":"","text":"","rev":0,"go":""}` {
+	if string(b) != `{"client":"","text":"","rev":0,"go":"","prev":false,"quiet":false,"path":""}` {
 		t.Errorf("пустое agents:edited: %s", b)
 	}
 }
@@ -126,7 +170,7 @@ func TestAgentEditNoAsk(t *testing.T) {
 				t.Errorf("AnswerAgent(%.5q, %v): err = %v", id, yes, err)
 			}
 		}
-		if st, err := a.AgentAnswerCreate(id); !errors.Is(err, errAskClosed) || st.Photos == nil && st.Version == "" {
+		if st, err := a.AgentAnswerCreate(id, false); !errors.Is(err, errAskClosed) || st.Photos == nil && st.Version == "" {
 			t.Errorf("AgentAnswerCreate(%.5q): %v", id, err)
 		}
 	}

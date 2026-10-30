@@ -407,6 +407,14 @@ func (e *Editor) WriteCopy(path string) error {
 	return salbum.Write(e.p, path, "", e.side())
 }
 
+// MarkUnsaved ставит отметку «не сохранено» без правки: ни шага отмены, ни rev. Нужна альбому,
+// открытому из копии с несохранёнными правками: в файле его нет, закрытие должно спросить.
+func (e *Editor) MarkUnsaved() {
+	e.mu.Lock()
+	e.dirty = true
+	e.mu.Unlock()
+}
+
 // Ref — сохранённые в проекте сведения о фото; копия без общих указателей (PhotoRef.Copy).
 func (e *Editor) Ref(id string) (r model.PhotoRef, ok bool) {
 	e.read(func(p *model.Project) {

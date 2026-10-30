@@ -58,6 +58,7 @@ type askRec struct {
 	req     agents.AskReq
 	ed      *album.Editor // add: редактор, чей ключ и ревизию агент назвал
 	dir     string        // подсказка агента, годная для окна ОС ("" — нет)
+	path    string        // 150: настоящий путь показанной подсказки; "" — вопрос без пути
 	state   askState
 	closing bool            // выход начался: выбор не применять
 	timer   *time.Timer     // срок asked
@@ -75,6 +76,8 @@ type askMachine struct {
 	pickDir  func(title, def string) (string, error) // окно ОС «Выбрать папку»
 	rules    func() *folderRules                     // правила выбранной папки (тесты — мягкие)
 	elevated func() bool                             // процесс от администратора; тесты: раннер Windows сам администратор
+	draft    agentDraft                              // 150: альбом, созданный агентом и не тронутый человеком
+	prev     string                                  // 150: файл для «Открыть прежний» после тихого нового альбома
 }
 
 // askMachines — машины по *App (App не растёт полем: фасад живёт в новых файлах).
@@ -135,27 +138,49 @@ func (a *App) askOpen(req agents.AskReq) (rec *askRec, res agents.AskRes, err er
 	if a.stopped.Load() {
 		return nil, agents.AskRes{Why: agents.WhyClosed}, nil
 	}
-	if on, _ := a.agentEditState(); !on {
-		return nil, agents.AskRes{Why: agents.WhyOff}, nil
-	}
-	if req.Kind != agents.AskCreate && req.Kind != agents.AskAdd {
+	if req.Kind != agents.AskCreate && req.Kind != agents.AskAdd && req.Kind != agents.AskEdit {
 		return nil, res, errors.New("неизвестный вид вопроса")
+	}
+	if !a.askAllowedTool(askToolOf(req)) {
+		return nil, agents.AskRes{Why: agents.WhyOff}, nil
 	}
 	ed, err := a.askTarget(req)
 	if err != nil {
 		return nil, res, err
 	}
-	dir, label := agentHintShown(a.askM().rules(), req.Hint)
-	body, ok := askText(req.Kind, req.Client, a.askAlbumName(ed), a.askDocOf(ed))
-	if !ok {
-		return nil, res, errors.New("нет текста вопроса")
+	var plan folderPlan
+	var body askBody
+	if req.Kind == agents.AskEdit { // правка и показ: окна ОС и папки нет
+		if body, err = a.editAskText(req, ed); err != nil {
+			return nil, res, err
+		}
+	} else {
+		always := a.askMode(req.Kind) == prefs.PermAllow
+		plan = a.planFolder(req, ed, always)
+		if req.Always && plan.quiet() {
+			qres, why, qerr := a.quietApply(req, ed, plan)
+			if why == "" {
+				return nil, qres, qerr
+			}
+			if plan.why = why; why == quietAsk {
+				plan.why = ""
+			}
+		}
+		ok := false
+		body, ok = askText(req.Kind, req.Client, a.askAlbumName(ed), a.askDocOf(ed))
+		if plan.path != "" {
+			body, ok = askTextPath(req.Kind, req.Client, a.askAlbumName(ed), a.askDocOf(ed), plan.label)
+		}
+		if !ok {
+			return nil, res, errors.New("нет текста вопроса")
+		}
 	}
 	id, err := newAskID()
 	if err != nil {
 		return nil, res, err
 	}
 	m := a.askM()
-	rec = &askRec{id: id, kind: req.Kind, req: req, ed: ed, dir: dir, out: make(chan askOutcome, 1)}
+	rec = &askRec{id: id, kind: req.Kind, req: req, ed: ed, dir: plan.dir, path: plan.path, out: make(chan askOutcome, 1)}
 	m.mu.Lock()
 	if m.cur != nil {
 		m.mu.Unlock()
@@ -167,13 +192,19 @@ func (a *App) askOpen(req agents.AskReq) (rec *askRec, res agents.AskRes, err er
 		a.askFinishIf(rec, askAsked, askOutcome{res: agents.AskRes{Why: agents.WhyTimeout}}, agents.WhyTimeout)
 	})
 	m.mu.Unlock()
-	a.agentAsked(AgentAsk{ID: id, Kind: req.Kind, Title: body.Title, Lines: body.Lines, Hint: label, OK: body.OK})
+	ask := AgentAsk{ID: id, Kind: req.Kind, Title: body.Title, Lines: body.Lines, Hint: plan.label, OK: body.OK,
+		Path: plan.path, Link: plan.link, Tool: askToolOf(req), Why: plan.why}
+	if plan.path != "" {
+		ask.Alt = askAlt
+	}
+	a.agentAsked(ask)
 	m.front()
 	return rec, res, nil
 }
 
-// askTarget — add: открытый альбом того же ключа и ревизии, что видел агент; create: текущий
-// альбом (для текста о его судьбе). Ошибки — те, что служба скажет агенту.
+// askTarget — add: открытый альбом того же ключа и ревизии, что видел агент; edit: альбом того же ключа
+// (ревизию службы сверяет сама, до вопроса и после «да»; у show_spread её нет); create: текущий альбом
+// (для текста о его судьбе). Ошибки — те, что служба скажет агенту.
 func (a *App) askTarget(req agents.AskReq) (*album.Editor, error) {
 	if req.Kind == agents.AskCreate {
 		return a.editor(), nil
@@ -181,6 +212,9 @@ func (a *App) askTarget(req agents.AskReq) (*album.Editor, error) {
 	ed, err := a.agentEditor(req.Key)
 	if err != nil {
 		return nil, agentHostErr(err)
+	}
+	if req.Kind == agents.AskEdit {
+		return ed, nil
 	}
 	if ed.View().Rev != req.Rev {
 		return nil, agents.ErrAlbumEdited
@@ -203,6 +237,8 @@ func (a *App) askDocOf(ed *album.Editor) askDoc {
 	}
 	v := ed.View()
 	switch {
+	case v.Path != "" && v.Dirty:
+		return askDocDirty
 	case v.Path != "":
 		return askDocSaved
 	case len(v.Spreads) == 0 && len(v.Folders) == 0 && v.Cover == nil:
@@ -239,14 +275,13 @@ func (a *App) askFinishIf(rec *askRec, from askState, o askOutcome, why string) 
 	if rec.timer != nil {
 		rec.timer.Stop()
 	}
-	m.mu.Unlock()
-	rec.out <- o
-	a.agentAskDone(AgentAskDone{ID: rec.id, Why: why})
-	m.mu.Lock()
+	// Запись снимается до итога: получив его, агент может сразу спросить снова, а не поймать ErrAskBusy.
 	if m.cur == rec {
 		m.cur = nil
 	}
 	m.mu.Unlock()
+	rec.out <- o
+	a.agentAskDone(AgentAskDone{ID: rec.id, Why: why})
 	return true
 }
 
@@ -256,7 +291,7 @@ func (a *App) askFinishIf(rec *askRec, from askState, o askOutcome, why string) 
 // вызовом (отказ, флажок выключен). Id чужой, вопрос закрыт или вид «да» не совпал — errAskClosed,
 // вопрос остаётся как был.
 func (a *App) askClaim(id, kind string, yes bool) (*askRec, error) {
-	on, _ := a.agentEditState() // флажок мог выключиться, пока вопрос висел; диск — вне замка
+	on := a.askAllowed(kind) // разрешение могли снять, пока вопрос висел; диск — вне замка
 	m := a.askM()
 	m.mu.Lock()
 	rec := m.cur
@@ -280,9 +315,25 @@ func (a *App) askClaim(id, kind string, yes bool) (*askRec, error) {
 	return rec, nil
 }
 
-// askPick открывает окно ОС; false — выбора нет и вопрос уже закрыт (отмена окна — declined).
-func (a *App) askPick(rec *askRec) (dir string, ok bool) {
+// askPick — выбор папки для применения. Вопрос с показанным путём и без «Выбрать другую…» применяет
+// этот путь (повтор правила, сверка настоящего пути: подмена — too_wide); иначе открывает окно ОС
+// (other — в родителе показанного пути). false — выбора нет и вопрос уже закрыт (отмена окна — declined).
+func (a *App) askPick(rec *askRec, other bool) (dir string, ok bool) {
+	if rec.path != "" && !other {
+		if !a.askBegin(rec) {
+			return "", false
+		}
+		_, resolved, err := a.askM().rules().resolve(rec.path)
+		if err != nil || a.askM().rules().key(resolved) != a.askM().rules().key(rec.path) {
+			a.askReject(rec, errFolderTooWide)
+			return "", false
+		}
+		return resolved, true
+	}
 	def := rec.dir
+	if other && rec.path != "" {
+		def = filepath.Dir(rec.path)
+	}
 	if def == "" {
 		def = a.dialogDir(prefs.DirPhotos)
 	}

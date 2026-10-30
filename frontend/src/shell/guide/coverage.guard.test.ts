@@ -229,6 +229,7 @@ const WINDOWS: Record<string, string> = {
   '/src/shell/guide/Guide.svelte': 'guide',
   '/src/shell/guide/VideoWindow.svelte': 'нет: окно ролика статьи F1 — подокно справочника, описано в статье guide',
   '/src/shell/agents/AgentsDialog.svelte': 'agents',
+  '/src/shell/agents/AgentsPerms.svelte': 'нет: блок «Разрешения» окна «ИИ-агенты» и его вопрос-согласие — часть статьи agents',
   '/src/shell/agents/AgentAskDialog.svelte':
     'нет: вопрос подтверждения — агент просит создать альбом или добавить папку, описан в статье agents-edit',
   '/src/shell/share/ShareDialog.svelte': 'share-link',

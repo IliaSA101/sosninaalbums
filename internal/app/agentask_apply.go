@@ -47,13 +47,16 @@ func (a *App) askApplyCreate(rec *askRec, dir string) (created bool) {
 		return false
 	}
 	// Застрявший черновик startNew разблокирует сам и откажет, если не вышло (draft_locked) — копию
-	// без разблокировки писать некуда, поэтому разблокировка здесь, до копии.
-	if cur := a.editor(); a.askDocOf(cur) == askDocDraft && a.unlockDraft() {
-		if name, err := a.agentPinned(cur); err != nil || name == "" {
-			a.askFail(rec, agents.ErrBackup)
-			return false
-		}
+	// без разблокировки писать некуда, поэтому разблокировка здесь, до копии. Свой файл с несохранёнными
+	// правками тоже закрепляется копией, а не переписывается (design §6).
+	cur := a.editor()
+	doc := a.askDocOf(cur)
+	lv, err := a.pinLeaving(cur)
+	if err != nil {
+		a.askFail(rec, agents.ErrBackup)
+		return false
 	}
+	defer lv.release()
 	next := blankEditor("album")
 	a.startNew(next)
 	if a.editor() != next {
@@ -61,7 +64,15 @@ func (a *App) askApplyCreate(rec *askRec, dir string) (created bool) {
 		a.askFinish(rec, askOutcome{res: agents.AskRes{Why: why}}, why)
 		return false
 	}
-	a.askAddFolder(rec, next, dir)
+	v, ok := a.askAddFolder(rec, next, dir)
+	if ok {
+		a.draftSet(next, v.Rev) // черновик агента: пока меняют только агенты, он тихо заменяется
+	}
+	if doc == askDocDirty {
+		a.setPrev(lv.prev) // правки уехали в копию: «Открыть прежний» её откроет
+	} else {
+		a.setPrev("")
+	}
 	return true
 }
 
@@ -72,7 +83,7 @@ func (a *App) askCheckPicked(rec *askRec, dir string) bool {
 		a.askReject(rec, err)
 		return false
 	}
-	if on, _ := a.agentEditState(); !on {
+	if !a.askAllowed(rec.kind) {
 		a.askFinish(rec, askOutcome{res: agents.AskRes{Why: agents.WhyOff}}, agents.WhyOff)
 		return false
 	}

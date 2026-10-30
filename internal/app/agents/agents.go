@@ -68,7 +68,8 @@ type Host struct {
 	// Ступень 3 (149, hostedit.go): правки альбома. Поля необязательны — пока их нет (все nil), инструментов
 	// правки в списке нет; частично заполненный набор считается пустым (canEdit). Фасад сверяет ключ и rev
 	// под замком Editor; ctx вызова проверяется там же — после срока правка не записывается.
-	EditState func() (allowed bool, blocked string)                        // флажок edit; blocked: "" | "elevated"
+	Perm      func(tool string) (mode, blocked string)                     // разрешение инструмента (150): allow | ask | deny; blocked: "" | "elevated"; nil — всё allow
+	PermLevel func(tool string) (mode, blocked string, level int)          // то же + уровень доступа из одного чтения config.json; nil — служба зовёт Perm и читает уровень сама
 	Scanning  func() (active bool)                                         // лента ещё читает папки (get_album.scan)
 	Busy      func(ctx context.Context) bool                               // ждёт, пока человек занят, до конца ctx; true — всё ещё занят
 	Backup    func(key string) error                                       // резервная копия до первой правки в альбоме; nil — есть или копировать нечего
@@ -77,6 +78,18 @@ type Host struct {
 	Vary      func(ctx context.Context, in VaryReq) (AlbumRef, int, error) // раскладки; int — сколько разворотов изменилось
 	Show      func(key, spreadID string) (n int, err error)                // перевести окно к развороту; n — номер с 1, 0 — обложка
 	Undo      func(ctx context.Context, ref AlbumRef) (AlbumRef, error)    // отмена своей последней правки при совпавшей ревизии
+
+	// Ступень 3б (151, hostedit34.go). Поля необязательны: Sheet включает get_contact_sheet, правящие
+	// инструменты 0.34 — только все семь вместе (canEdit34).
+	// Sheet — лист-сетка из миниатюр: JPEG (служба перекодирует его сама, как Preview) и состояние каждой
+	// клетки CellOK | CellPending | CellBroken. Срок — ctx вызова; фасад читает миниатюры классом прогрева.
+	Sheet    func(ctx context.Context, in SheetReq) (jpeg []byte, cells []string, err error)
+	Families func(ids []string) []string // семейство раскладки листов (variety.Family), по одному на ID; "" — нет
+	Mark     func(ctx context.Context, in MarkReq) (MarkRes, error)
+	Cover    func(ctx context.Context, in CoverReq) (CoverRes, error)
+	Bg       func(ctx context.Context, in BgReq) (BgRes, error)
+	Stickers func(ctx context.Context, in StickerReq) (StickerRes, error)
+	Print    func(ctx context.Context, in PrintReq) (PrintRes, error)
 }
 
 // Options — пределы канала; нулевое значение — рабочее.
@@ -104,6 +117,9 @@ type Options struct {
 	ScanSlack   time.Duration    // запас срока autobuild после ожидания ленты (5 с)
 	Rate        int              // правок в минуту (20)
 	Now         func() time.Time // часы счёта отказов и темпа; по умолчанию time.Now
+	// OnDenied — первый errDenied по инструменту за запуск программы (150, 0.34-150-24); App шлёт agents:denied.
+	// Зовётся из горутины обработчика, не под замками службы.
+	OnDenied func(client, tool, title string)
 	// Setup — доработка сервера до первого подключения: тесты и таблица инструментов (Г2).
 	Setup func(*mcp.Server)
 }
@@ -156,11 +172,15 @@ type Service struct {
 	err  string
 	jr   journal    // журнал вызовов (journal.go)
 	ed   *editState // правки: место, темп, вопросы, записи отмены (edit.go)
+
+	specsOnce sync.Once  // таблица инструментов по этому Host (perms.go)
+	specs     []toolSpec // после specsOnce
 }
 
 // optionalHost — поля Host ступени 3: пустые допустимы (правок тогда нет).
-var optionalHost = map[string]bool{"EditState": true, "Scanning": true, "Busy": true, "Backup": true, "Ask": true,
-	"Auto": true, "Vary": true, "Show": true, "Undo": true}
+var optionalHost = map[string]bool{"Perm": true, "PermLevel": true, "Scanning": true, "Busy": true, "Backup": true, "Ask": true,
+	"Auto": true, "Vary": true, "Show": true, "Undo": true,
+	"Sheet": true, "Families": true, "Mark": true, "Cover": true, "Bg": true, "Stickers": true, "Print": true}
 
 // New собирает службу; пустое поле Host — паника с его именем.
 func New(h Host, o Options) *Service {

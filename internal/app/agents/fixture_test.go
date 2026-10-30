@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -207,7 +208,12 @@ func (f *fixture) readHost(cfg, sock string, changed func()) Host {
 			defer f.mu.Unlock()
 			return f.packs, f.packsErr
 		},
-		Prints: func() []printprof.Info { read(); return f.prints },
+		Prints: func() []printprof.Info {
+			read()
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			return slices.Clone(f.prints)
+		},
 		Recent: func() []prefs.RecentProject { read(); return f.recent },
 		FontsMissing: func(used []model.FontUse) []string {
 			read()

@@ -25,13 +25,17 @@ func (a Agents) clean() Agents {
 }
 
 // AgentsOf — настройки доступа агентов из config.json (нет — выключено, уровень 1).
-func AgentsOf(dir string) Agents {
-	c := LoadConfig(dir)
+func AgentsOf(dir string) Agents { return agentsIn(LoadConfig(dir)) }
+
+func agentsIn(c Config) Agents {
 	if c.Agents == nil {
 		return Agents{Level: AgentsMinLevel}
 	}
 	return c.Agents.clean()
 }
+
+// AgentsLevelOf — уровень доступа из уже прочитанного config.json (тот же зажим, что у AgentsOf).
+func AgentsLevelOf(c Config) int { return agentsIn(c).Level }
 
 // UpdateAgents — правка настроек доступа под замком config.json; итог после чистки. Всё по
 // умолчанию (выключено, уровень 1) — ключа в файле нет.

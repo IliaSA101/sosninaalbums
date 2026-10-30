@@ -302,9 +302,9 @@ type editsOut struct {
 // list_print_profiles (в нём бывает имя своего профиля).
 func (c *call) coverPreset(p string) string {
 	if !c.names() {
-		for id, n := range c.hiddenPrints() {
+		for id := range c.hiddenPrints() {
 			if p == id || strings.HasPrefix(p, id+"-") {
-				return ownPrintID(n)
+				return ownPrintID(id)
 			}
 		}
 	}
@@ -413,7 +413,7 @@ func (c *call) editInfo(out *albumOut, found int) {
 	}
 	out.Scan = &scanOut{Active: c.s.h.Scanning(), Found: found}
 	out.Edits = &editsOut{}
-	switch allowed, blocked := c.s.h.EditState(); {
+	switch allowed, blocked := c.s.editAllowed(); {
 	case blocked == "elevated":
 		out.Edits.Blocked = "elevated"
 	case !allowed:

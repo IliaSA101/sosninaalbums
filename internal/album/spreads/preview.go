@@ -61,3 +61,18 @@ func describeOne(r layout.Result, prm layout.Params) model.Choice {
 	return model.Choice{Key: r.Key, Rects: r.Rects, Family: string(variety.TileFamily(f, r.Rects, prm)),
 		FormName: forms.Name(f), Twin: -1, Crop: cropPct(r.Crop)}
 }
+
+// FamilyOf — семейство плитки действующей раскладки разворота s (TileFamily, как в галерее и
+// фильтре 065) для чтения агентом (151). Сетка (ручные места), виньетка, лист без фото и
+// раскладка, которой нет, — "". Проект не меняется.
+func FamilyOf(p *model.Project, s *model.Spread) string {
+	if s == nil || len(s.Grid) > 0 || s.IsVignette() || len(s.Photos) == 0 {
+		return ""
+	}
+	r, _, ok := p.Layout(s)
+	if !ok {
+		return ""
+	}
+	_, prm := p.LayoutIn(s.Photos)
+	return string(variety.TileFamily(forms.Of(r.Key, r.Rects, prm), r.Rects, prm))
+}

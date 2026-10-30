@@ -50,19 +50,29 @@ func (a *App) NewProject(product string) State {
 // startNew — общий путь «Новый» (альбом и лист 031): прежний проект сохраняется, черновик
 // убирается, редактор ed становится текущим.
 func (a *App) startNew(ed *album.Editor) State {
+	st, _ := a.startNewIf(nil, ed)
+	return st
+}
+
+// startNewIf — startNew, но при from != nil уход разрешён, только пока текущий — from: сверка под
+// saveMu, в одном шаге со сменой (иначе человек, открывший другой альбом за время пробы агента,
+// был бы уведён без вопроса). Не совпало — changed, ничего не тронуто.
+func (a *App) startNewIf(from, ed *album.Editor) (st State, changed bool) {
 	// Застрявший сломанный черновик не удаляем: сначала пробуем убрать его в .bad.
 	// Не вышло — оставляем всё как есть, иначе новый проект пошёл бы поверх нечитаемого черновика.
 	if !a.unlockDraft() {
 		a.notice("Не удалось сохранить прежний черновик отдельно, новый проект не создан. Закройте программы, держащие файл «черновик" + projectExt + "», и повторите.")
-		return a.GetState()
+		return a.GetState(), false
 	}
 	// Запись прежнего — в retire: после разблокировки правки пустого альбома попадут в черновик и
 	// его копию (removeDraft).
-	a.retire(ed, nil)
+	if !a.retireIf(from, ed, nil) {
+		return a.GetState(), true
+	}
 	a.removeDraft()
 	a.updateConfig(func(c *prefs.Config) { c.LastProject = "" })
 	a.rescan()
-	return a.emitState()
+	return a.emitState(), false
 }
 
 func (a *App) OpenProject() (State, error) {
@@ -274,24 +284,36 @@ func (a *App) flushSave() {
 // записи прежнего, до смены (копия черновика перед openBackup). Всё под saveMu: две смены подряд
 // не разминутся (вторая закроет и запишет next, а не снова прежний), автосохранение — между ними.
 // Закрытый Editor текущим не остаётся: смена — в defer, и паника записи её не отменит.
-func (a *App) retire(next *album.Editor, between func()) {
+func (a *App) retire(next *album.Editor, between func()) { a.retireIf(nil, next, between) }
+
+// retireIf — retire, который при from != nil ничего не делает (false), если текущий уже не from.
+func (a *App) retireIf(from, next *album.Editor, between func()) bool {
 	a.saveMu.Lock()
 	defer a.saveMu.Unlock()
+	if from != nil && a.editor() != from {
+		return false
+	}
 	defer a.setEditor(next) // до Unlock: автосохранение после смены пишет уже next
 	if ed := a.editor(); ed != nil {
 		ed.Close()
 	}
 	a.save()
+	if ed := a.editor(); ed != nil {
+		if f := a.onRetire.Load(); f != nil {
+			(*f)(ed) // копия правок человека, дошедших до Close (agentquiet_pin.go)
+		}
+	}
 	if between != nil {
 		between()
 	}
+	return true
 }
 
 // save пишет проект или черновик; вызывать под saveMu.
 func (a *App) save() {
 	defer guard("автосохранение")
 	ed := a.editor()
-	if ed == nil {
+	if ed == nil || ed == a.holdSave.Load() {
 		return
 	}
 	var err error
@@ -333,7 +355,12 @@ func (a *App) loadConfig() prefs.Config { return prefs.LoadConfig(a.cfgDir) }
 
 func (a *App) updateConfig(fn func(c *prefs.Config)) { prefs.UpdateConfig(a.cfgDir, fn) }
 
-func (a *App) rememberDir(kind, dir string) { prefs.RememberDir(a.cfgDir, kind, dir) }
+func (a *App) rememberDir(kind, dir string) {
+	if kind == prefs.DirPhotos {
+		a.seedPlaces() // засев мест из прежней последней папки — до того, как её перепишут (agentplaces_app.go)
+	}
+	prefs.RememberDir(a.cfgDir, kind, dir)
+}
 
 func (a *App) dialogDir(kind string) string { return prefs.DialogDir(a.cfgDir, kind) }
 

@@ -31,7 +31,9 @@ export function AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
 
 export function AddVignette(arg1:number):Promise<model.View>;
 
-export function AgentAnswerCreate(arg1:string):Promise<app.State>;
+export function AgentAnswerCreate(arg1:string,arg2:boolean):Promise<app.State>;
+
+export function AgentOpenPrev():Promise<app.State>;
 
 export function AgentsBusy(arg1:boolean):Promise<void>;
 
@@ -44,6 +46,8 @@ export function AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:str
 export function AllowAgentAsks():Promise<void>;
 
 export function AnswerAgent(arg1:string,arg2:boolean):Promise<model.View>;
+
+export function AnswerAgentOther(arg1:string):Promise<model.View>;
 
 export function ApplyBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
@@ -100,6 +104,8 @@ export function CheckFolders(arg1:boolean):Promise<void>;
 export function CheckPrintProfile(arg1:app.PrintEdit):Promise<app.PrintEditCheck>;
 
 export function CheckUpdate():Promise<app.UpdateInfo>;
+
+export function ChooseAgentPlace():Promise<app.AgentsInfo>;
 
 export function ChooseFiles():Promise<app.LooseResult>;
 
@@ -204,6 +210,8 @@ export function FitFaces(arg1:string,arg2:string,arg3:string):Promise<app.FacesR
 export function FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
 export function FlipSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>;
+
+export function ForgetAgentPlaces():Promise<app.AgentsInfo>;
 
 export function ForgetColor(arg1:string):Promise<Array<string>>;
 
@@ -435,9 +443,11 @@ export function SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>;
 
 export function ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>;
 
-export function SetAgents(arg1:boolean):Promise<app.AgentsInfo>;
+export function SetAgentPerm(arg1:string,arg2:string):Promise<app.AgentsInfo>;
 
-export function SetAgentsEdit(arg1:boolean):Promise<app.AgentsInfo>;
+export function SetAgentPermGroup(arg1:string,arg2:string):Promise<app.AgentsInfo>;
+
+export function SetAgents(arg1:boolean):Promise<app.AgentsInfo>;
 
 export function SetAgentsLevel(arg1:number):Promise<app.AgentsInfo>;
 

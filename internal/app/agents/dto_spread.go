@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -24,6 +25,7 @@ type spreadItem struct {
 	Name     string    `json:"name,omitempty"`
 	Kind     string    `json:"kind" jsonschema:"spread или vignette"`
 	Layout   string    `json:"layout" jsonschema:"ключ раскладки; grid — свободные места"`
+	Family   string    `json:"family,omitempty" jsonschema:"семейство раскладки: dense, hero, air, bleed, strip, figure; пусто — нет (свободные места, виньетка, пустой лист)"`
 	Photos   int       `json:"photos"`
 	Places   int       `json:"places"`
 	Empty    int       `json:"empty" jsonschema:"пустых мест"`
@@ -79,6 +81,13 @@ func (c *call) listSpreads(in pagingIn) (spreadsOut, error) {
 	out := spreadsOut{meta: c.metaOf(v, ed), Total: len(v.Spreads), Offset: in.Offset, Items: []spreadItem{}}
 	for i := in.Offset; i < len(v.Spreads) && len(out.Items) < lim; i++ {
 		out.Items = append(out.Items, spreadItemOf(c, i+1, v.Spreads[i]))
+	}
+	ids := make([]string, len(out.Items))
+	for i := range out.Items {
+		ids[i] = v.Spreads[in.Offset+i].ID
+	}
+	for i, f := range c.families(ids) {
+		out.Items[i].Family = f
 	}
 	return out, nil
 }
@@ -207,6 +216,7 @@ type spreadOut struct {
 	ID          string          `json:"id"`
 	Name        string          `json:"name,omitempty"`
 	Kind        string          `json:"kind"`
+	Family      string          `json:"family,omitempty" jsonschema:"семейство раскладки: dense, hero, air, bleed, strip, figure; пусто — нет"`
 	W           float64         `json:"w"`
 	H           float64         `json:"h"`
 	Mid         float64         `json:"mid" jsonschema:"сгиб, мм от левого края; 0 — нет"`
@@ -234,6 +244,8 @@ func (c *call) getSpread(ref string) (spreadOut, error) {
 		Stickers: []stickerOut{}, Backgrounds: []backgroundOut{}}
 	if n == 0 {
 		out.Kind = "cover"
+	} else if f := c.families([]string{sv.ID}); len(f) == 1 {
+		out.Family = f[0]
 	}
 	for i, id := range sv.Photos {
 		f := frameOut{Photo: cleanID(id), File: c.text(photoName(byID, id), maxFile)}
@@ -320,4 +332,20 @@ func photoMap(ps []library.Photo) map[string]library.Photo {
 		m[p.ID] = p
 	}
 	return m
+}
+
+// families — семейство раскладки листов (Host.Families); "" — нет. Ответ чужого замыкания
+// сверяется по длине и по списку семейств, лишнее отбрасывается.
+func (c *call) families(ids []string) []string {
+	out := make([]string, len(ids))
+	if c.s.h.Families == nil || len(ids) == 0 {
+		return out
+	}
+	got := c.s.h.Families(ids)
+	for i := range out {
+		if i < len(got) && slices.Contains(families, got[i]) {
+			out[i] = got[i]
+		}
+	}
+	return out
 }

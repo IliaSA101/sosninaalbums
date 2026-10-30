@@ -98,11 +98,23 @@ type printsOut struct {
 	Items []printOut `json:"items"`
 }
 
-// ownPrintID — id профиля типографии, которого агент на уровне 1 видеть не должен.
-func ownPrintID(n int) string { return "own-" + strconv.Itoa(n) }
+// ownPrintID — маска id профиля типографии, которого агент на уровне 1 видеть не должен. Не номер по
+// порядку списка (он «уезжает» при удалении типографии между чтением и apply_print), а короткий
+// хэш id с солью процесса: тот же профиль — та же маска, настоящий id по ней не восстановить.
+func ownPrintID(id string) string {
+	sum := sha256.Sum256(append(append([]byte{}, keySalt[:]...), "print\x00"+id...))
+	return "own-" + hex.EncodeToString(sum[:4])
+}
+
+// ownFormatName — маска имени формата скрытого профиля: хэш с солью от id профиля и имени, а не номер.
+func ownFormatName(profileID, name string) string {
+	sum := sha256.Sum256(append(append([]byte{}, keySalt[:]...), "format\x00"+profileID+"\x00"+name...))
+	return "Формат " + hex.EncodeToString(sum[:3])
+}
 
 // hiddenPrints — профили, чьи id и названия на уровне 1 скрыты: все, кроме встроенных (свой
-// назвал человек, профиль из набора-файла — его автор). Значение — номер по порядку списка.
+// назвал человек, профиль из набора-файла — его автор). Значение — номер по порядку списка, только
+// для подписи «Свой профиль N»: ключом он не служит (ownPrintID).
 func (c *call) hiddenPrints() map[string]int {
 	out := map[string]int{}
 	for _, p := range c.s.h.Prints() {
@@ -120,14 +132,14 @@ func (c *call) listPrints() (printsOut, error) {
 		o := printOut{ID: cleanID(p.ID), Name: cleanLine(p.Name, maxFile), Source: cleanID(p.Source), Export: p.HasExport, Formats: []formatOut{}}
 		n, hide := hidden[p.ID]
 		if hide && !c.names() {
-			o.ID, o.Name = ownPrintID(n), "Свой профиль "+strconv.Itoa(n)
+			o.ID, o.Name = ownPrintID(p.ID), "Свой профиль "+strconv.Itoa(n)
 		} else {
 			hide = false
 		}
-		for i, f := range p.Formats {
+		for _, f := range p.Formats {
 			fo := formatOut{Name: cleanLine(f.Name, maxFile), W: f.PageW, H: f.PageH}
 			if hide {
-				fo.Name = "Формат " + strconv.Itoa(i+1)
+				fo.Name = ownFormatName(p.ID, f.Name)
 			}
 			o.Formats = append(o.Formats, fo)
 		}

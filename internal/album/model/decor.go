@@ -179,9 +179,9 @@ const (
 )
 
 var (
-	ErrStickers  = fmt.Errorf("на развороте не может быть больше %d стикеров", MaxStickers)
-	ErrSticker   = errors.New("стикер не поставлен: неверный рисунок")
-	errStickerTo = fmt.Errorf("в альбоме не может быть больше %d стикеров", MaxTotalStickers)
+	ErrStickers      = fmt.Errorf("на развороте не может быть больше %d стикеров", MaxStickers)
+	ErrSticker       = errors.New("стикер не поставлен: неверный рисунок")
+	ErrStickersTotal = fmt.Errorf("в альбоме не может быть больше %d стикеров", MaxTotalStickers)
 )
 
 // Art — процедурный стикер: параметры генератора decor/gen (как Pattern, без масштаба и
@@ -419,7 +419,7 @@ func (p *Project) checkStickers(before *Project) error {
 		}
 	}
 	if n := p.stickerCount(); n > MaxTotalStickers && n > before.stickerCount() {
-		return errStickerTo
+		return ErrStickersTotal
 	}
 	return nil
 }

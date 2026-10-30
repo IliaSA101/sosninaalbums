@@ -26,6 +26,7 @@ const (
 	askDocSaved askDoc = iota // есть файл, несохранённого нет: сохранится в свой файл
 	askDocDraft               // несохранённый черновик: уйдёт в резервные копии
 	askDocEmpty               // пустой альбом: закроется
+	askDocDirty               // есть файл и несохранённые правки: уйдут копией, файл не переписывается
 )
 
 const (
@@ -74,11 +75,42 @@ func askText(kind, client, album string, doc askDoc) (askBody, bool) {
 	return askBody{}, false
 }
 
+// askAlt — подпись кнопки «Выбрать другую…» вопроса с показанным путём.
+const askAlt = "Выбрать другую…"
+
+// askTextPath — вопрос с показанным настоящим путём (150, design §5.1): заголовок называет папку,
+// кнопки «Добавить» / «Создать»; сам путь рисует интерфейс сразу за первым абзацем. label — последний
+// элемент пути; с плохими знаками имени в заголовке нет (чужой текст не должен подменить заголовок).
+func askTextPath(kind, client, album string, doc askDoc, label string) (askBody, bool) {
+	who := clientQuoted(client)
+	name := ""
+	if !paths.BadRunes(label) && label != "" {
+		name = " «" + shortName(label) + "»"
+	}
+	switch kind {
+	case askKindCreate:
+		return askBody{
+			Title: "Создать альбом из папки" + name + "?",
+			Lines: []string{who + " просит создать новый альбом из папки:", docLine(album, doc), askWho},
+			OK:    "Создать",
+		}, true
+	case askKindAdd:
+		return askBody{
+			Title: "Добавить папку" + name + "?",
+			Lines: []string{who + " просит добавить в открытый альбом «" + shortName(album) + "» папку:", askWho},
+			OK:    "Добавить",
+		}, true
+	}
+	return askBody{}, false
+}
+
 // docLine — что станет с открытым альбомом.
 func docLine(album string, doc askDoc) string {
 	switch doc {
 	case askDocSaved:
 		return "Открытый «" + shortName(album) + "» сохранится в свой файл."
+	case askDocDirty:
+		return "Несохранённые правки «" + shortName(album) + "» сохранятся копией."
 	case askDocDraft:
 		if shortName(album) == askNoName {
 			return "Несохранённый черновик уйдёт в резервные копии."

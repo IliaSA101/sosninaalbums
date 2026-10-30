@@ -55,7 +55,7 @@ func newAskRig(t *testing.T) *askRig {
 		r.evs = append(r.evs, pubEvent{name, d})
 	}
 	a.backups = backup.New(filepath.Join(testkit.TempDir(t), "backups"))
-	a.SetAgentsEdit(true)
+	setAgentsEdit(a, true)
 	r.other = filepath.Join(testkit.TempDir(t), "Вторая съёмка")
 	if err := os.Mkdir(r.other, 0o755); err != nil {
 		t.Fatal(err)

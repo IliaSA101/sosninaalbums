@@ -16,12 +16,16 @@ vi.mock('../../../wailsjs/runtime/runtime', () => ({
 const api = vi.hoisted(() => ({
   AnswerAgent: vi.fn(),
   AgentAnswerCreate: vi.fn(),
+  AnswerAgentOther: vi.fn(),
+  AgentsInfo: vi.fn(),
   AgentsBusy: vi.fn(),
 }))
 vi.mock('../../../wailsjs/go/app/App', () => api)
 
 const { default: AgentAskDialog } = await import('./AgentAskDialog.svelte')
 const { agentAsk, ARM_MS } = await import('./agentask.svelte')
+const { agents } = await import('./agents.svelte')
+const { emptyInfo } = await import('./agents')
 const { store } = await import('../../base/core/store.svelte')
 const { edit } = await import('../../editor/text/edit.svelte')
 const { modalStack } = await import('../../base/modal/modalstack.svelte')
@@ -33,6 +37,11 @@ const ask = (o: Partial<AgentAsk> = {}): AgentAsk => ({
   lines: ['Claude Code просит создать новый альбом.', 'Открытый «Альбом Петровых» сохранится в свой файл.'],
   hint: 'Петровы',
   ok: 'Выбрать папку…',
+  path: '',
+  link: false,
+  alt: '',
+  tool: '',
+  why: '',
   ...o,
 })
 const state = (rev = 7) => ({ view: { rev, folders: [], spreads: [], settings: {} }, photos: [] })
@@ -234,7 +243,7 @@ describe('AgentAskDialog: ответы', () => {
     await fireEvent.click(okBtn())
     await vi.waitFor(() => expect(dialog()).toBeNull())
     expect(order).toEqual(['idle', 'create'])
-    expect(api.AgentAnswerCreate).toHaveBeenCalledExactlyOnceWith('a1')
+    expect(api.AgentAnswerCreate).toHaveBeenCalledExactlyOnceWith('a1', false)
     expect(api.AnswerAgent).not.toHaveBeenCalled()
     expect(store.view.rev).toBe(7)
     idle.mockRestore()
@@ -258,7 +267,7 @@ describe('AgentAskDialog: ответы', () => {
     arm()
     await fireEvent.click(okBtn())
     await vi.waitFor(() => expect(dialog()).toBeNull())
-    expect(api.AgentAnswerCreate).toHaveBeenCalledExactlyOnceWith('a1')
+    expect(api.AgentAnswerCreate).toHaveBeenCalledExactlyOnceWith('a1', false)
     expect(store.currentId).toBe('s3')
     expect(store.view.rev).toBe(3)
     expect([...store.selected]).toEqual(['p1'])
@@ -353,5 +362,212 @@ describe('AgentAskDialog: agents:askdone', () => {
     emit('agents:askdone', { id: 'a1', why: 'closed' })
     flushSync()
     expect(dialog()).toBeNull()
+  })
+})
+
+// 150: вопрос с настоящим путём, «Выбрать другую…», вид edit, причина «Всегда, а тихо нельзя» и ссылки на окно разрешений.
+describe('AgentAskDialog: путь, «Выбрать другую…» и ссылки (150)', () => {
+  const PATH = 'D:\\Фото\\2026\\Петровы — свадьба 12.09'
+  const folder = (o: Partial<AgentAsk> = {}) =>
+    ask({
+      kind: 'add',
+      title: 'Добавить папку «Петровы»?',
+      lines: ['Claude Code просит добавить папку.', 'Агент называет себя сам: если вы ничего не просили — «Отмена».'],
+      hint: 'Петровы',
+      ok: 'Добавить',
+      path: PATH,
+      alt: 'Выбрать другую…',
+      tool: 'add_folder',
+      ...o,
+    })
+  const link = (name: string | RegExp) => screen.getByRole('button', { name })
+  const btns = () => [...screen.getByRole('dialog').querySelectorAll('.actions button')].map((b) => b.textContent)
+
+  beforeEach(() => {
+    api.AnswerAgentOther.mockReset()
+    api.AnswerAgentOther.mockResolvedValue({ rev: 8, folders: [], spreads: [], settings: {} })
+    api.AgentsInfo.mockReset()
+    api.AgentsInfo.mockResolvedValue({})
+    agents.close()
+    agents.info = emptyInfo()
+  })
+  afterEach(() => agents.close())
+
+  it('полный путь — в <bdi> текстом, сразу после первой строки; строки «Агент предлагает папку» при пути нет', () => {
+    shown(folder({ path: '<b>D:\\Фото</b>' }))
+    const d = screen.getByRole('dialog')
+    const b = d.querySelector('bdi[data-path]')
+    expect(b?.textContent).toBe('<b>D:\\Фото</b>')
+    expect(b?.querySelector('b')).toBeNull()
+    expect(screen.queryByText(/Агент предлагает папку/)).toBeNull()
+    const ps = [...d.querySelectorAll('p')].map((p) => p.textContent?.trim())
+    expect(ps[0]).toBe('Claude Code просит добавить папку.')
+    expect(ps[1]).toBe('<b>D:\\Фото</b>')
+  })
+
+  it('подсказка шла через ссылку — рядом «(по ссылке)»; без ссылки подписи нет', () => {
+    shown(folder({ link: true }))
+    expect(screen.getByText('(по ссылке)')).toBeTruthy()
+    cleanup()
+    agentAsk.close()
+    shown(folder({ link: false }))
+    expect(screen.queryByText('(по ссылке)')).toBeNull()
+  })
+
+  it('кнопки: «Отмена» · «Выбрать другую…» · «Добавить»; без alt — две', () => {
+    shown(folder())
+    expect(btns()).toEqual(['Отмена', 'Выбрать другую…', 'Добавить'])
+    cleanup()
+    agentAsk.close()
+    shown(folder({ alt: '' }))
+    expect(btns()).toEqual(['Отмена', 'Добавить'])
+  })
+
+  it('первые 600 мс «Выбрать другую…» не срабатывает (aria-disabled), потом живая', async () => {
+    shown(folder())
+    expect(link('Выбрать другую…').getAttribute('aria-disabled')).toBe('true')
+    await fireEvent.click(link('Выбрать другую…'))
+    expect(api.AnswerAgentOther).not.toHaveBeenCalled()
+    arm()
+    expect(link('Выбрать другую…').getAttribute('aria-disabled')).toBe('false')
+  })
+
+  it('add: «Выбрать другую…» → AnswerAgentOther(id), окно закрыто; AnswerAgent не зовётся', async () => {
+    shown(folder())
+    arm()
+    await fireEvent.click(link('Выбрать другую…'))
+    await vi.waitFor(() => expect(dialog()).toBeNull())
+    expect(api.AnswerAgentOther).toHaveBeenCalledExactlyOnceWith('a1')
+    expect(api.AnswerAgent).not.toHaveBeenCalled()
+  })
+
+  it('create: «Выбрать другую…» → AgentAnswerCreate(id, true); «Создать» — второй аргумент false', async () => {
+    shown(folder({ kind: 'create', ok: 'Создать' }))
+    arm()
+    await fireEvent.click(link('Выбрать другую…'))
+    await vi.waitFor(() => expect(dialog()).toBeNull())
+    expect(api.AgentAnswerCreate).toHaveBeenCalledExactlyOnceWith('a1', true)
+    api.AgentAnswerCreate.mockClear()
+    cleanup()
+    shown(folder({ kind: 'create', ok: 'Создать', id: 'a2' }))
+    arm()
+    await fireEvent.click(link('Создать'))
+    await vi.waitFor(() => expect(dialog()).toBeNull())
+    expect(api.AgentAnswerCreate).toHaveBeenCalledExactlyOnceWith('a2', false)
+  })
+
+  it('пока идёт «Выбрать другую…»: повторный щелчок и «Отмена» в Go не уходят', async () => {
+    let finish: (v: unknown) => void = () => {}
+    api.AnswerAgentOther.mockReturnValue(new Promise((r) => (finish = r)))
+    shown(folder())
+    arm()
+    await fireEvent.click(link('Выбрать другую…'))
+    await fireEvent.click(link('Выбрать другую…'))
+    await fireEvent.click(cancelBtn())
+    expect(api.AnswerAgentOther).toHaveBeenCalledTimes(1)
+    expect(api.AnswerAgent).not.toHaveBeenCalled()
+    finish({ rev: 8, folders: [], spreads: [], settings: {} })
+    await vi.waitFor(() => expect(dialog()).toBeNull())
+  })
+
+  it('пробел на «Выбрать другую…» — обычное нажатие кнопки; Enter — «Отмена»', async () => {
+    shown(folder())
+    arm()
+    link('Выбрать другую…').focus()
+    const sp = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+    link('Выбрать другую…').dispatchEvent(sp)
+    expect(sp.defaultPrevented).toBe(false)
+    expect(api.AnswerAgent).not.toHaveBeenCalled()
+    await fireEvent.keyDown(document.activeElement as Element, { key: 'Enter' })
+    expect(api.AnswerAgent).toHaveBeenCalledExactlyOnceWith('a1', false)
+  })
+
+  it('вид edit: заголовок и кнопка из Go, пути нет; «Собрать» → AnswerAgent(id, true)', async () => {
+    const e = ask({
+      kind: 'edit',
+      title: 'Собрать развороты из 96 свободных фото в конец альбома?',
+      lines: ['Claude Code просит собрать развороты. Ctrl+Z отменит одним шагом.'],
+      hint: '',
+      ok: 'Собрать',
+      tool: 'autobuild',
+    })
+    shown(e)
+    expect(dialog()?.getAttribute('aria-label')).toBe(e.title)
+    expect(screen.getByRole('dialog').querySelector('bdi')).toBeNull()
+    expect(btns()).toEqual(['Отмена', 'Собрать'])
+    arm()
+    await fireEvent.click(link('Собрать'))
+    await vi.waitFor(() => expect(dialog()).toBeNull())
+    expect(api.AnswerAgent).toHaveBeenCalledExactlyOnceWith('a1', true)
+    expect(api.AgentAnswerCreate).not.toHaveBeenCalled()
+  })
+
+  it('«Спрашивать»: ссылка «Не спрашивать — Файл ▸ ИИ-агенты (MCP)… ▸ Разрешения» открывает окно на строке инструмента; вопрос остаётся', async () => {
+    shown(folder())
+    await fireEvent.click(link('Не спрашивать — Файл ▸ ИИ-агенты (MCP)… ▸ Разрешения'))
+    await vi.waitFor(() => expect(agents.flash).toBe('tool:add_folder'))
+    expect(agents.open).toBe(true)
+    expect(api.AnswerAgent).not.toHaveBeenCalled()
+    expect(dialog()).not.toBeNull()
+  })
+
+  it('вопрос 149 без инструмента: ни ссылки, ни причины', () => {
+    shown(ask())
+    expect(screen.queryByRole('button', { name: /Не спрашивать/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Добавить место/ })).toBeNull()
+  })
+
+  it('why = place: вместо «Не спрашивать» — причина с местами (до двух путей) и ссылка к строке мест', async () => {
+    agents.info = {
+      ...emptyInfo(),
+      places: [
+        { dir: 'D:\\Фото\\2026', chosen: true },
+        { dir: 'E:\\Съёмки', chosen: false },
+        { dir: 'F:\\Ещё', chosen: false },
+      ],
+    }
+    shown(folder({ why: 'place' }))
+    const d = screen.getByRole('dialog')
+    expect(d.textContent?.replace(/\s+/g, ' ')).toContain('Без вопроса — только в ваших папках со съёмками: D:\\Фото\\2026, E:\\Съёмки.')
+    expect(d.textContent).not.toContain('F:\\Ещё')
+    expect(screen.queryByRole('button', { name: /Не спрашивать/ })).toBeNull()
+    await fireEvent.click(link('Добавить место — Файл ▸ ИИ-агенты (MCP)… ▸ Разрешения'))
+    await vi.waitFor(() => expect(agents.flash).toBe('places'))
+    expect(agents.open).toBe(true)
+  })
+
+  it('why = place, мест нет: «не выбраны»', () => {
+    shown(folder({ why: 'place' }))
+    expect(screen.getByRole('dialog').textContent?.replace(/\s+/g, ' ')).toContain(
+      'Без вопроса — только в ваших папках со съёмками: не выбраны.',
+    )
+  })
+
+  it.each([
+    ['remote', 'Папка не на этом компьютере'],
+    ['big', 'Больше 5000 фото или очень большая папка'],
+    ['cloud', 'Часть файлов ещё в облаке'],
+    ['shots', 'Папка снимков экрана'],
+    ['link', 'Путь идёт через ссылку на другую папку'],
+    ['rate', 'Агент уже добавил 3 папки за 10 минут'],
+    ['draft', 'Открытый альбом вы правили — заменить его без вас нельзя'],
+  ])('why = %s: своя строка причины, ссылок нет', (why, text) => {
+    shown(folder({ why }))
+    expect(screen.getByText(text)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Не спрашивать|Добавить место/ })).toBeNull()
+  })
+
+  it('why = bad: предупреждение про негодную папку, ссылок нет; кнопки 149', () => {
+    shown(ask({ kind: 'add', why: 'bad', tool: 'add_folder', hint: '', ok: 'Выбрать папку…' }))
+    expect(
+      screen.getByText('Агент предложил папку, которую программа не берёт без вас (системную, скрытую или слишком широкую).'),
+    ).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Не спрашивать/ })).toBeNull()
+    expect(btns()).toEqual(['Отмена', 'Выбрать папку…'])
+  })
+
+  it('незнакомый код причины: показываем «Не спрашивать», а не пустоту', () => {
+    shown(folder({ why: 'нечто-новое' }))
+    expect(link(/Не спрашивать/)).toBeTruthy()
   })
 })

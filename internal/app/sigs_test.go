@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -191,6 +192,7 @@ func TestAutoSimilarFromLibrary(t *testing.T) {
 // TestPrepareSigsPanic: паника декодера на битых файлах (t2, t5) гасится в воркере — программа жива,
 // ход доходит до конца, битые запомнены с Ok = false и больше не пробуются, соседи посчитаны.
 func TestPrepareSigsPanic(t *testing.T) {
+	logs := captureLog(t) // стек паники уходит в буфер, а не в вывод тестов
 	var calls atomic.Int32
 	a, ids, got := sigApp(t, 10, func(p library.Photo) (imgsig.Sig, error) {
 		calls.Add(1)
@@ -211,6 +213,9 @@ func TestPrepareSigsPanic(t *testing.T) {
 	}
 	if st := a.PrepareSigs(ids); st != (SigState{10, 10}) || calls.Load() != 10 {
 		t.Fatalf("второй вызов: %+v, подписей %d", st, calls.Load())
+	}
+	if n := strings.Count(logs.String(), "ПАНИКА при подписи кадра"); n != 2 {
+		t.Fatalf("паник в журнале %d, ждали 2: %q", n, logs.String())
 	}
 }
 

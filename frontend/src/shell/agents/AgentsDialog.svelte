@@ -1,11 +1,11 @@
 <script lang="ts">
   import Modal from '../../base/modal/Modal.svelte'
   import { agents } from './agents.svelte'
-  import AgentsEdits from './AgentsEdits.svelte'
+  import AgentsPerms from './AgentsPerms.svelte'
   import { callLine, hasNames, hasPics } from './agents'
+  import { KEY_SEE } from './agentperms'
   import {
     AGENTS_TITLE,
-    ASK_EDIT,
     ASK_NAMES,
     ASK_ON,
     ASK_PICS,
@@ -41,8 +41,15 @@
   // Тексты клиентов, имена агентов и журнал — чужой/недоверенный текст: только как текст (не {@html}).
   $effect(() => agents.watch())
 
-  const ASKS = { on: ASK_ON, names: ASK_NAMES, pics: ASK_PICS, edit: ASK_EDIT }
-  const ask = $derived(agents.ask ? ASKS[agents.ask] : null)
+  const ASKS = { on: ASK_ON, names: ASK_NAMES, pics: ASK_PICS }
+  // Согласие на разрешения ('perm') рисует AgentsPerms: в нём места съёмок и своя логика.
+  const ask = $derived(agents.ask && agents.ask !== 'perm' ? ASKS[agents.ask] : null)
+
+  // Окно открыли «на блоке чтения» (кнопка «Спрашивать» у чтения): прокрутить к «Что видит агент» — подсветка стоит на нём.
+  let see = $state<HTMLElement>()
+  $effect(() => {
+    if (agents.flash === KEY_SEE) see?.scrollIntoView?.({ block: 'nearest' })
+  })
   const info = $derived(agents.info)
   const names = $derived(agents.names)
 
@@ -87,7 +94,7 @@
         {/if}
 
         {#if agents.on}
-          <h3>{SEE_TITLE}</h3>
+          <h3 bind:this={see} class:flash={agents.flash === KEY_SEE}>{SEE_TITLE}</h3>
           <p class="note">{SEE_BASE}</p>
           <label class="chk">
             <input
@@ -108,7 +115,7 @@
             {SEE_PICS}
           </label>
 
-          <AgentsEdits />
+          <AgentsPerms />
 
           <!-- Настройка клиентов нужна один раз: свёрнута, чтобы журнал был виден без прокрутки (образец — «Дополнительно» в автосборке).
                Предупреждение (путь к программе устарел) разворачивает её сразу: оно про подключение -->
@@ -165,6 +172,10 @@
   </Modal>
 {/if}
 
+{#if agents.open}
+  <AgentsPerms consent />
+{/if}
+
 {#if agents.open && ask}
   <!-- Вопрос перед включением доступа или уровня: «Отмена» слева, действие справа -->
   <Modal title={ask.title} onclose={() => agents.dismiss()} wide>
@@ -198,6 +209,12 @@
     margin: 12px 0 6px;
     font-size: 13px;
     font-weight: 600;
+  }
+  /* Подсветка блока, к которому привели (owner-ux §2.7) */
+  .flash {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: 4px;
   }
   p {
     margin: 0 0 10px;

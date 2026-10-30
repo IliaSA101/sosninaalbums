@@ -7,7 +7,7 @@ import { Nav } from './nav.svelte'
 import { jobs } from './jobs.svelte'
 import { AutoRun } from '../auto/autorun.svelte'
 import { SpreadOps } from './spreadops.svelte'
-import { Toasts, coverLookToast, stepToast, undoToast, type Toast } from './toasts.svelte'
+import { Toasts, coverLookToast, stepToast, undoToast, type HoldOpts, type Toast } from './toasts.svelte'
 import type { MarkMap, PickResult } from './hooks'
 import { pickCurrent } from './undo'
 import { deepFreeze } from './viewdelta'
@@ -221,6 +221,11 @@ class Store extends Nav {
     this.toasts.notify(text, kind, action, ms)
   }
 
+  // Тост правки агента без вопроса: до фокуса окна и ещё несколько секунд (toasts.svelte.ts, hold).
+  hold(text: string, o?: HoldOpts) {
+    this.toasts.hold(text, o)
+  }
+
   // Все правки идут сюда: Go возвращает новое состояние альбома.
   async run(p: Promise<unknown>): Promise<boolean> {
     try {
@@ -275,7 +280,10 @@ class Store extends Nav {
   private settle() {
     const v = this.view
     // «Вернуть» отменяет последнюю правку: после любой другой смены ревизии он уже не про то.
-    if (this.toast?.rev !== undefined && v.rev !== this.toast.rev) this.toast = null
+    // Тост «до фокуса» (150) не гасим: человек мог не видеть его — теряем только «Вернуть», текст и прочие кнопки остаются.
+    const t = this.toast
+    if (t?.rev !== undefined && v.rev !== t.rev)
+      this.toast = t.hold ? { ...t, rev: undefined, action: t.action?.undo ? undefined : t.action } : null
     const sp = v.spreads
     // Обложку удалили (или Undo её убрал) — возвращаемся на разворот; остались одни обложки — стоим на ней.
     if (this.onCover && !this.cover) this.onCover = false

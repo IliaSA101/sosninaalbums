@@ -18,7 +18,10 @@ const api = vi.hoisted(() => ({
   SetAgentsLevel: vi.fn(),
   ClearAgentsLog: vi.fn(),
   SaveClaudeExtension: vi.fn(),
-  SetAgentsEdit: vi.fn(),
+  SetAgentPerm: vi.fn(),
+  SetAgentPermGroup: vi.fn(),
+  ForgetAgentPlaces: vi.fn(),
+  ChooseAgentPlace: vi.fn(),
   AllowAgentAsks: vi.fn(),
 }))
 vi.mock('../../../wailsjs/go/app/App', () => api)
@@ -27,8 +30,6 @@ const { default: AgentsDialog } = await import('./AgentsDialog.svelte')
 const { agents } = await import('./agents.svelte')
 const { emptyInfo, normInfo } = await import('./agents')
 const { store } = await import('../../base/core/store.svelte')
-const { keymap } = await import('../../base/keys/keymap.svelte')
-const { setMacForTest } = await import('../../base/core/platform')
 
 const setup = (id: string, o: object = {}) => ({ id, title: `Клиент ${id}`, text: `команда-${id}`, note: '', file: false, ...o })
 const infoOn = (o: object = {}) => normInfo({ status: 'on', level: 1, setups: [setup('a')], ...o })
@@ -41,7 +42,10 @@ const spies = {
   setLevel: api.SetAgentsLevel,
   clearLog: api.ClearAgentsLog,
   saveExtension: api.SaveClaudeExtension,
-  setEdit: api.SetAgentsEdit,
+  setPerm: api.SetAgentPerm,
+  setGroup: api.SetAgentPermGroup,
+  forget: api.ForgetAgentPlaces,
+  choosePlace: api.ChooseAgentPlace,
   allowAsks: api.AllowAgentAsks,
 }
 const notify = vi.spyOn(store, 'notify')
@@ -388,98 +392,8 @@ describe('подключённые и журнал', () => {
   })
 })
 
-describe('правки агентов (149)', () => {
-  const edit = () => screen.getByLabelText('Разрешить агентам менять альбом') as HTMLInputElement
+describe('вопросы агентов и журнал', () => {
   const call = (o: object = {}) => ({ at: Date.now(), client: 'Claude Code', tool: 'Сводка альбома', ok: true, ms: 4, ...o })
-
-  it('блок «Правки» виден при включённом доступе, флажок снят; при выключенном доступе блока нет', async () => {
-    await open(infoOn())
-    expect(screen.getByRole('heading', { name: 'Правки' })).toBeTruthy()
-    expect(edit().checked).toBe(false)
-    expect(edit().disabled).toBe(false)
-    cleanup()
-    agents.close()
-    await open()
-    expect(screen.queryByLabelText('Разрешить агентам менять альбом')).toBeNull()
-  })
-
-  it('флажок не зависит от уровня чтения: на уровнях 1, 2 и 3 он такой же', async () => {
-    for (const level of [1, 2, 3]) {
-      await open(infoOn({ level }))
-      expect(edit().disabled).toBe(false)
-      cleanup()
-      agents.close()
-    }
-  })
-
-  it('щелчок → вопрос по тексту §10, вид флажка прежний, SetAgentsEdit не зовут', async () => {
-    // Клавиша отмены в тексте — из реестра: у владельца (Windows, Linux) это дословно «Ctrl+Z»
-    setMacForTest(false)
-    keymap.apply({ commands: [{ id: 'undo', keys: ['Mod+KeyZ'] }] } as never)
-    await open(infoOn())
-    await fireEvent.click(edit())
-    expect(edit().checked).toBe(false)
-    expect(screen.getByText('Разрешить агентам ИИ менять альбом?')).toBeTruthy()
-    expect(
-      screen.getByText(
-        'Агент сможет создавать альбомы, собирать развороты и менять раскладки. Каждая правка — один шаг Ctrl+Z; перед первой правкой — резервная копия. Агент может предложить папку — программа откроет выбор папки, решаете вы.',
-      ),
-    ).toBeTruthy()
-    expect(spies.setEdit).not.toHaveBeenCalled()
-    setMacForTest(null)
-  })
-
-  it('вопрос: «Отмена» слева, «Разрешить» справа; «Отмена» ничего не зовёт', async () => {
-    await open(infoOn())
-    await fireEvent.click(edit())
-    const ask = btn('Разрешить').parentElement!
-    expect([...ask.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Отмена', 'Разрешить'])
-    await fireEvent.click(btn('Отмена'))
-    expect(screen.queryByText('Разрешить агентам ИИ менять альбом?')).toBeNull()
-    expect(spies.setEdit).not.toHaveBeenCalled()
-  })
-
-  it('«Разрешить» → SetAgentsEdit(true), флажок включён по ответу Go', async () => {
-    spies.setEdit.mockResolvedValue(infoOn({ edit: true }))
-    await open(infoOn())
-    await fireEvent.click(edit())
-    await fireEvent.click(btn('Разрешить'))
-    expect(spies.setEdit).toHaveBeenCalledExactlyOnceWith(true)
-    await waitFor(() => expect(edit().checked).toBe(true))
-  })
-
-  it('снятие — сразу, без вопроса: SetAgentsEdit(false)', async () => {
-    spies.setEdit.mockResolvedValue(infoOn({ edit: false }))
-    await open(infoOn({ edit: true }))
-    expect(edit().checked).toBe(true)
-    await fireEvent.click(edit())
-    expect(screen.queryByText('Разрешить агентам ИИ менять альбом?')).toBeNull()
-    expect(spies.setEdit).toHaveBeenCalledExactlyOnceWith(false)
-    await waitFor(() => expect(edit().checked).toBe(false))
-  })
-
-  it('Go не включил (ошибка) — тост, флажок остаётся снятым', async () => {
-    spies.setEdit.mockRejectedValue(new Error('не удалось записать настройку'))
-    await open(infoOn())
-    await fireEvent.click(edit())
-    await fireEvent.click(btn('Разрешить'))
-    await waitFor(() => expect(notify).toHaveBeenCalledWith('Не удалось записать настройку', 'error'))
-    expect(edit().checked).toBe(false)
-  })
-
-  it('от администратора: флажок серый (disabled), рядом причина и что делать; щелчок ничего не открывает', async () => {
-    await open(infoOn({ editBlocked: 'elevated' }))
-    expect(edit().disabled).toBe(true)
-    expect(screen.getByText('Программа запущена от администратора — запустите её обычным способом')).toBeTruthy()
-    await fireEvent.click(edit())
-    expect(screen.queryByText('Разрешить агентам ИИ менять альбом?')).toBeNull()
-    expect(spies.setEdit).not.toHaveBeenCalled()
-  })
-
-  it('не от администратора — подписи причины нет', async () => {
-    await open(infoOn())
-    expect(screen.queryByText(/запущена от администратора/)).toBeNull()
-  })
 
   it('«Разрешить вопросы» только при asksMuted: AllowAgentAsks, затем состояние перечитано', async () => {
     await open(infoOn())

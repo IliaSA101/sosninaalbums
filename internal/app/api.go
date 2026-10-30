@@ -68,11 +68,7 @@ func (a *App) ChooseFolder() (model.View, error) {
 	if dir == "" {
 		return a.out(a.editor().View()), nil
 	}
-	v, err := a.AddFolderPath(dir)
-	if err == nil {
-		a.rememberDir(prefs.DirPhotos, filepath.Dir(dir)) // соседняя съёмка обычно лежит рядом
-	}
-	return v, err
+	return a.addChosenFolder(dir) // папка в проект, последняя папка окна и места съёмок агента
 }
 
 // AddFolderPath: недопустимый путь — ошибка (отклонённый промис), проект не меняется.

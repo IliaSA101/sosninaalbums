@@ -51,8 +51,10 @@ func (a *App) agentsHost() agents.Host {
 		FontsMissing: agentsFontsMissing,
 		Preview:      a.agentsPreview,
 		Render:       a.agentsRender,
+		Sheet:        a.agentsSheet, // 151: лист-сетка; правки 0.34 и Families — agentsEdit34Host (Host.canEdit34)
 	}
 	a.agentsEditHost(&h)
+	a.agentsEdit34Host(&h)
 	return h
 }
 

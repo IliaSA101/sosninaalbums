@@ -347,6 +347,20 @@ func (a *App) PlanSaveLook(o model.SaveLookOpts) (r LookPlanSave, err error) {
 	return r, nil
 }
 
+// coverLookLibs — запись макета альбома и файлы фонов его обложки; хранилище недоступно — оформление
+// встанет без «своих» файлов. Общая для CreateCoverLook и set_cover_photo агента.
+func (a *App) coverLookLibs(ed *album.Editor) (cur *model.LookRef, libs map[string]model.PhotoInfo) {
+	cur = ed.Look()
+	if cur != nil {
+		if s, serr := a.decorStore(); serr == nil {
+			if t := a.lookHost().Find(*cur); t != nil {
+				libs = a.lookLibs(s, *t)
+			}
+		}
+	}
+	return cur, libs
+}
+
 // CreateCoverLook — «Создать обложку» (плитка, бросок фото): как CreateCover, но у альбома по макету
 // оформление макета встаёт той же правкой и тем же шагом отмены (131 G5). Макета нет у альбома, нет
 // на этом ПК или у него нет обложки — обычная обложка, Styled = false. «Без оформления» — Undo и
@@ -362,16 +376,7 @@ func (a *App) CreateCoverLook(preset, photoID string) (r CoverResult, err error)
 		}
 		ph = &infos[0]
 	}
-	// Файлы фонов обложки макета; хранилище недоступно — оформление встанет без «своих» файлов.
-	cur := ed.Look()
-	var libs map[string]model.PhotoInfo
-	if cur != nil {
-		if s, serr := a.decorStore(); serr == nil {
-			if t := a.lookHost().Find(*cur); t != nil {
-				libs = a.lookLibs(s, *t)
-			}
-		}
-	}
+	cur, libs := a.coverLookLibs(ed)
 	// cur — запись, по которой собраны libs: сменился макет между чтением и правкой — ErrLookChanged.
 	v, rec, err := ed.CreateCoverLook(preset, ph, libs, cur)
 	if r.View, err = a.changedOrErr(v, err); err != nil {

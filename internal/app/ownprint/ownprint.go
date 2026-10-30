@@ -165,19 +165,7 @@ func (s *Service) Apply(id string) (model.View, error) {
 	if !ok || len(pr.Formats) == 0 {
 		return s.h.View(), ErrRejected
 	}
-	f := pr.Formats[0]
-	st := s.h.Snapshot().Settings
-	st.PageW, st.PageH = f.Page[0], f.Page[1]
-	if pr.Page.DPI != 0 {
-		st.DPI = pr.Page.DPI
-	}
-	st.Layflat = st.Layflat || pr.Page.Layflat
-	if v := f.SafeIn(pr); v != 0 {
-		st.Safe = v
-	}
-	if v := f.BleedIn(pr); v != 0 {
-		st.Bleed = v
-	}
+	st := PrintSettings(pr, pr.Formats[0], s.h.Snapshot().Settings)
 	preset := pr.Default
 	if preset == "" && len(pr.Products) > 0 {
 		preset = pr.Products[0].ID
@@ -190,6 +178,25 @@ func (s *Service) Apply(id string) (model.View, error) {
 		return v, err
 	}
 	return s.h.Changed(v), nil
+}
+
+// PrintSettings — настройки альбома cur после кнопки формата f типографии pr (поля — как
+// presetFields на фронте): размер, dpi, layflat, зона, обрез; поля, промежуток и цвет остаются.
+// Чистая: общая для «Сохранить с применением» и агента (apply_print, 151), без шага отмены.
+func PrintSettings(pr printprof.Profile, f printprof.PageFormat, cur model.Settings) model.Settings {
+	st := cur
+	st.PageW, st.PageH = f.Page[0], f.Page[1]
+	if pr.Page.DPI != 0 {
+		st.DPI = pr.Page.DPI
+	}
+	st.Layflat = st.Layflat || pr.Page.Layflat
+	if v := f.SafeIn(pr); v != 0 {
+		st.Safe = v
+	}
+	if v := f.BleedIn(pr); v != 0 {
+		st.Bleed = v
+	}
+	return st
 }
 
 // taken — id занят: профилем реестра, своей, ждущей перезагрузки, или файлом хранилища,

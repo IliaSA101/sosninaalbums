@@ -26,7 +26,10 @@ import (
 // фото ставится фоном лицевой (бросок на плитку «Обложка») тем же шагом отмены. Обложка уже
 // есть, проект-лист 031, неизвестный пресет — ошибка без правки.
 func (e *Editor) CreateCover(preset string, ph *model.PhotoInfo) (model.View, error) {
-	return e.try("", func(p *model.Project) error { return createCover(p, preset, ph, nil) })
+	return e.try("", func(p *model.Project) error {
+		_, err := createCover(p, preset, ph, nil)
+		return err
+	})
 }
 
 // DeleteCover снимает обложку одним шагом отмены; нет обложки — холостая правка.
@@ -41,7 +44,12 @@ func (e *Editor) ApplyCoverPreset(id string) (model.View, error) {
 // (как SetSettings), обложка по шаблону прежнего формата идёт за страницей, затем берёт числа
 // изделия preset. Неизвестное изделие — ошибка без правки; тот же формат и то же изделие — холостая.
 func (e *Editor) ApplyPrint(s model.Settings, preset string) (model.View, error) {
-	return e.formatLook(nil, true, func(p *model.Project) error {
+	return e.applyPrint(s, preset, nil)
+}
+
+// applyPrint — тело ApplyPrint и ApplyPrintIf (x nil — без сверки).
+func (e *Editor) applyPrint(s model.Settings, preset string, x *Expect) (model.View, error) {
+	return e.formatLookIf(nil, true, x, func(p *model.Project) error {
 		old := p.Settings
 		spreads.SetSettings(p, s)
 		return cover.ApplyPrint(p, old, preset)

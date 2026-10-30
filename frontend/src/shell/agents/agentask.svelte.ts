@@ -78,13 +78,26 @@ class AgentAskState {
   // «Выбрать папку…»: create — новый альбом через замену проекта (набранный текст досылается до вызова), add — папка в открытый.
   // Отказ диалога папки, негодная папка, выключенный флажок и занятый черновик Go помечает State.cancelled: replaceState тогда
   // вид и выделение не трогает, как у «Файл ▸ Открыть» (files.go OpenProject) — окно просто закрывается.
+  // «Выбрать другую…» (150): окно ОС в родителе показанного пути; итог и закрытие те же.
+  async other() {
+    const a = this.cur
+    if (!a || this.choosing || !this.armed) return
+    await this.pick(a, () =>
+      a.kind === 'create' ? newDoc.replace(() => bridge.answerCreate(a.id, true)) : store.run(bridge.answerOther(a.id)),
+    )
+  }
+
   async accept() {
     const a = this.cur
     if (!a || this.choosing || !this.armed) return
+    // create — новый альбом из выбранной (или показанной) папки, add и edit — в открытый альбом.
+    await this.pick(a, () => (a.kind === 'create' ? newDoc.replace(() => bridge.answerCreate(a.id)) : store.run(bridge.answer(a.id, true))))
+  }
+
+  private async pick(a: AgentAsk, go: () => Promise<unknown>) {
     this.choosing = true
     try {
-      if (a.kind === 'create') await newDoc.replace(() => bridge.answerCreate(a.id))
-      else await store.run(bridge.answer(a.id, true))
+      await go()
     } catch (e) {
       store.notify(capFirst(errText(e)), 'error')
     } finally {

@@ -10,6 +10,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 )
 
 // Инструменты правок 0.33 (149 design §1). start_program — у посредника (internal/mcpbridge).
@@ -28,16 +29,18 @@ const (
 var families = []string{"dense", "hero", "air", "bleed", "strip", "figure"}
 
 func registerEditTools(e *toolEnv) {
-	regEdit(e, toolSpec{name: "create_album", title: "Создать альбом", edit: true, ask: true, danger: true,
-		desc: "Создать новый альбом из папки с фотографиями. Программа спросит человека в своём окне и откроет выбор папки; " +
-			"путь агент не передаёт и не получает. folder_hint (необязательно) — лишь подсказка, где открыть выбор. " +
+	regEdit(e, toolSpec{name: "create_album", perm: prefs.ClassAlbum, title: "Создать альбом", edit: true, ask: true, danger: true,
+		desc: "Создать новый альбом из папки с фотографиями. Если человек разрешил «Всегда», папка из folder_hint добавляется " +
+			"без вопроса в пределах правил программы; иначе программа спросит его в своём окне и откроет выбор папки. " +
+			"Путь агент не передаёт и не получает. folder_hint (необязательно) — лишь подсказка, где открыть выбор. " +
 			"Открытый альбом сохранится в свой файл. Создание нельзя отменить через undo_last_edit." + askNote + editNote},
 		hintProps, func(createIn) *AlbumRef { return nil }, false,
 		func(c *call, in createIn) (askOut, error) { return c.createAlbum(in) })
 
-	regEdit(e, toolSpec{name: "add_folder", title: "Добавить папку", edit: true, ask: true,
-		desc: "Добавить в открытый альбом папку с фотографиями. Программа спросит человека и откроет выбор папки; " +
-			"путь агент не передаёт и не получает. folder_hint — подсказка, где открыть выбор." + askNote + editNote},
+	regEdit(e, toolSpec{name: "add_folder", perm: prefs.ClassFolder, title: "Добавить папку", edit: true, ask: true,
+		desc: "Добавить в открытый альбом папку с фотографиями. Если человек разрешил «Всегда», папка из folder_hint добавляется " +
+			"без вопроса в пределах правил программы; иначе программа спросит его и откроет выбор папки. " +
+			"Путь агент не передаёт и не получает. folder_hint — подсказка, где открыть выбор." + askNote + editNote},
 		hintProps, func(in addFolderIn) *AlbumRef { return &in.Album }, true,
 		func(c *call, in addFolderIn) (askOut, error) { return c.addFolder(in) })
 
@@ -49,7 +52,7 @@ func registerEditTools(e *toolEnv) {
 		},
 		func(c *call, in awaitIn) (askOut, error) { return c.awaitAnswer(in) })
 
-	regEdit(e, toolSpec{name: "autobuild", title: "Автосборка", edit: true, auto: true, backup: true,
+	regEdit(e, toolSpec{name: "autobuild", perm: prefs.ClassEdit, title: "Автосборка", edit: true, auto: true, backup: true,
 		desc: "Собрать развороты в конец альбома из свободных фото (не в альбоме, не на фоне, не отклонённые; фильтр и выделение " +
 			"ленты не учитываются) с умолчаниями окна «Автосборка»: «Авто», серии, «Обычное», все семейства. Входы необязательны: " +
 			"spreads, perSpread, series, similar, variant, variety (0…2), families, photos (только эти фото из свободных). " +
@@ -57,20 +60,20 @@ func registerEditTools(e *toolEnv) {
 		autoProps, func(in autoIn) *AlbumRef { return &in.Album }, true,
 		func(c *call, in autoIn) (autobuildOut, error) { return c.autobuild(in) })
 
-	regEdit(e, toolSpec{name: "vary_layouts", title: "Другие раскладки", edit: true, backup: true,
+	regEdit(e, toolSpec{name: "vary_layouts", perm: prefs.ClassEdit, title: "Другие раскладки", edit: true, backup: true,
 		desc: "Подобрать другие раскладки выбранным разворотам (номер с 1 или id из list_spreads). families: dense — плотнее, " +
 			"air — больше воздуха, ещё hero, bleed, strip, figure; без families — любые. variety 1 или 2 (по умолчанию 1)." + editNote},
 		varyProps, func(in varyIn) *AlbumRef { return &in.Album }, true,
 		func(c *call, in varyIn) (varyOut, error) { return c.varyLayouts(in) })
 
-	regEdit(e, toolSpec{name: "show_spread", title: "Показать разворот", view: true,
+	regEdit(e, toolSpec{name: "show_spread", perm: prefs.ClassShow, title: "Показать разворот", view: true,
 		desc: "Перевести программу к развороту (номер с 1, \"cover\" или id): человек увидит его. Альбом не меняется, шага отмены нет."},
 		func(p map[string]*jsonschema.Schema) {
 			spreadProp(p, "номер разворота с 1, \"cover\" (обложка) или id из list_spreads")
 		}, func(in showIn) *AlbumRef { return &AlbumRef{Key: in.Album.Key} }, false,
 		func(c *call, in showIn) (showOut, error) { return c.showSpread(in) })
 
-	regEdit(e, toolSpec{name: "undo_last_edit", title: "Отменить свою правку", edit: true,
+	regEdit(e, toolSpec{name: "undo_last_edit", perm: prefs.ClassEdit, title: "Отменить свою правку", edit: true,
 		desc: "Отменить последнюю правку, которую сделал этот агент (autobuild, vary_layouts, add_folder), если после неё альбом " +
 			"не менялся. Только одна правка: второй вызов подряд — отказ. Создание альбома не отменяется." + editNote},
 		nil, func(in undoIn) *AlbumRef { return &in.Album }, false,
@@ -250,7 +253,7 @@ func (c *call) addFolder(in addFolderIn) (askOut, error) {
 
 func (c *call) autobuild(in autoIn) (autobuildOut, error) {
 	req := AutoReq{Key: in.Album.Key, Rev: in.Album.Rev, Client: askClient(c.client()), Spreads: in.Spreads, PerAuto: true, Series: true,
-		Similar: in.Similar, Variant: max(in.Variant, 1), Variety: 1, Families: dedupe(in.Families), Photos: dedupe(in.Photos)}
+		Similar: in.Similar, Variant: max(in.Variant, 1), Variety: 1, Families: dedupe(in.Families), Photos: dedupe(in.Photos), Asked: c.mode == prefs.PermAsk}
 	if in.Series != nil {
 		req.Series = *in.Series
 	}
@@ -284,9 +287,12 @@ func (c *call) spreadIDs(refs []spreadRef, cover bool) ([]string, error) {
 	}
 	ids := make([]string, 0, len(refs))
 	for _, r := range refs {
+		if !cover && isCoverRef(string(r)) {
+			return nil, errCoverNotTarget(c.spec.name)
+		}
 		sv, n, ok := findSpread(v, string(r))
 		if !ok || n == 0 && !cover {
-			return nil, errNoSpread
+			return nil, noSpreadFor(cover)
 		}
 		ids = append(ids, sv.ID)
 	}
@@ -326,7 +332,9 @@ func (c *call) undoLast(in undoIn) (undoOut, error) {
 	switch {
 	case ok && rec.created && rec.key == "":
 		return undoOut{}, errCreateNoUndo
-	case !ok || rec.key != in.Album.Key || rec.rev != in.Album.Rev:
+	case !ok: // своих правок у подключения нет (запись живёт в соединении): альбом мог и не меняться
+		return undoOut{}, errUndoNoOwn
+	case rec.key != in.Album.Key || rec.rev != in.Album.Rev:
 		return undoOut{}, errUndoNotOwn
 	}
 	if v, _ := c.s.h.View(); v.Rev != rec.rev { // после правки агента альбом менялся

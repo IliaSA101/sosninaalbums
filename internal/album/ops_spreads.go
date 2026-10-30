@@ -128,15 +128,20 @@ func (e *Editor) MoveSpread(id string, to int) model.View {
 // обложка по шаблону Фотосферы переходит на шаблон нового формата тем же шагом (047, cover.FollowFormat).
 // Договор: нет — размеры и цвет зажимает операция.
 func (e *Editor) SetSettings(s model.Settings) (v model.View) {
+	v, _ = e.setSettings(s, nil)
+	return v
+}
+
+// setSettings — тело SetSettings и SetSettingsIf (x nil — без сверки).
+func (e *Editor) setSettings(s model.Settings, x *Expect) (v model.View, err error) {
 	t0 := time.Now()
 	defer func() { slow(t0, "настройки: %d разворотов", len(v.Spreads)) }()
-	v, _ = e.formatLook(nil, true, func(p *model.Project) error {
+	return e.formatLookIf(nil, true, x, func(p *model.Project) error {
 		old := p.Settings
 		spreads.SetSettings(p, s)
 		cover.FollowFormat(p, old)
 		return nil
 	})
-	return v
 }
 
 // SetSettingsToAll — SetSettings и снятие своего цвета страниц у всех разворотов (115): тот же

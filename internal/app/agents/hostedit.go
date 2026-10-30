@@ -9,6 +9,7 @@ package agents
 const (
 	AskCreate = "create" // «Создать альбом по просьбе агента?»
 	AskAdd    = "add"    // «Добавить папку по просьбе агента?»
+	AskEdit   = "edit"   // «Спрашивать» у обратимой правки или показа (150): вопрос из шаблона Go по входу, окна ОС нет
 )
 
 // Итоги вопроса (AskRes.Why): чем кончился вопрос, когда окно было показано.
@@ -34,11 +35,24 @@ type AlbumRef struct {
 // AskReq — вопрос человеку в окне программы. Текст вопроса фасад берёт из своих шаблонов:
 // своего текста агент не вносит.
 type AskReq struct {
-	Kind   string // AskCreate | AskAdd
+	Kind   string // AskCreate | AskAdd | AskEdit
 	Client string // имя клиента, очищено; "" — неизвестный клиент
 	Hint   string // folder_hint как прислал агент (≤ 4096 байт): подсказка окну выбора, не путь для применения
-	Key    string // AskAdd: ключ альбома, куда просят добавить
-	Rev    int    // AskAdd: ревизия, которую видел агент
+	Key    string // AskAdd, AskEdit: ключ альбома, куда просят
+	Rev    int    // AskAdd, AskEdit: ревизия, которую видел агент
+	// Always — у человека «Всегда» (150): фасад решает, можно ли без вопроса (design §4.1). Можно — AskRes{Why: WhyQuiet}
+	// без окна; нельзя — обычный вопрос (служба вернёт тихий слот, увидев итог не WhyQuiet).
+	Always bool
+	// AskEdit: инструмент и числа входа для шаблона вопроса (Tool — имя MCP). Текст агента сюда не идёт.
+	Tool     string
+	Spreads  []string // ID разворотов входа (vary_layouts, show_spread, set_background, add_sticker)
+	Families []string // семейства раскладок входа
+	Build    int      // autobuild: сколько разворотов просит агент; 0 — по умолчанию окна
+	Photos   []string // ID фото входа автосборки: фасад считает по ним фактически свободные (Count — число агента)
+	Count    int      // сколько фото (autobuild, set_marks, set_cover_photo) или стикеров; 0 — не названо (все свободные)
+	Variety  int      // vary_layouts: 1…2
+	Item     string   // set_background, apply_print: id фона или типографии (фасад называет по каталогу)
+	Format   string   // apply_print: имя формата
 }
 
 // AskRes — итог вопроса. Why — одно из Why*; при WhyAnswered остальные поля заполнены.
@@ -67,6 +81,7 @@ type AutoReq struct {
 	Families   []string // пусто — «Все»
 	Photos     []string // ID из list_photos; пусто — все свободные
 	ScanWaitMs int      // сколько ждать конец чтения ленты, мс; 0 — не ждать
+	Asked      bool     // вызов шёл при «Спрашивать» (вопрос задан); при «Всегда» смена на «Спрашивать» в ожидании — отказ
 }
 
 // AutoRes — итог автосборки.
@@ -113,6 +128,6 @@ func AlbumKey(ed uint64) string { return albumKey(ed) }
 
 // canEdit — Host умеет правки: заполнены все замыкания ступени 3. Иначе инструментов правки нет.
 func (h Host) canEdit() bool {
-	return h.EditState != nil && h.Scanning != nil && h.Busy != nil && h.Backup != nil && h.Ask != nil &&
+	return h.Perm != nil && h.Scanning != nil && h.Busy != nil && h.Backup != nil && h.Ask != nil &&
 		h.Auto != nil && h.Vary != nil && h.Show != nil && h.Undo != nil
 }

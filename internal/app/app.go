@@ -153,6 +153,14 @@ type App struct {
 	// его не пишем, не переносим и не удаляем, чтобы новая версия смогла его открыть.
 	draftNewer atomic.Bool
 	rename     func(from, to string) error // os.Rename; подменяется в тестах
+	// holdSave — альбом, который save() не пишет в его файл: уходит несохранённым, а его правки
+	// закреплены копией (agentquiet_pin.go); файл человека молча не переписываем.
+	holdSave atomic.Pointer[album.Editor]
+	// leaveMu — один уход от альбома за раз (pinLeaving…release): holdSave и onRetire у ухода один.
+	leaveMu sync.Mutex
+	// onRetire — зовёт retire после Close прежнего (под saveMu): дозакрепить правки человека, успевшие
+	// между копией и Close.
+	onRetire atomic.Pointer[func(*album.Editor)]
 
 	saveTimer *time.Timer
 	// saveMu сериализует автосохранение и даёт stopBackground дождаться уже идущей записи.
@@ -295,7 +303,7 @@ func NewApp() *App {
 	a.guidev = guidevideo.New(a.guideHost())
 	a.ownp = ownprint.New(a.printsHost())
 	a.agentsExe = os.Executable
-	a.agents = agents.New(a.agentsHost(), agents.Options{OnCall: a.agentsCalled})
+	a.agents = agents.New(a.agentsHost(), agents.Options{OnCall: a.agentsCalled, OnDenied: a.agentsDenied})
 	return a
 }
 
@@ -318,6 +326,7 @@ func (a *App) startup(ctx context.Context) {
 			log.Printf("папка настроек: %v", paths.NoPath(err)) // без неё лог и конфиг не пишутся, но программа работает
 		}
 		setupLog(filepath.Join(a.cfgDir, "log.txt"))
+		sweepPinTemps(a.cfgDir) // остатки копий ухода после падения процесса
 	}
 	log.Printf("запуск, версия %s", appVersion(wailsJSON))
 	a.flushLaunchLog()                              // строки разбора аргументов, накопленные до открытия log.txt

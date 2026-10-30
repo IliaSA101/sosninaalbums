@@ -44,7 +44,7 @@ func userDirsIn(home, cfg string, known []string) []string {
 	}
 	if home != "" && filepath.IsAbs(home) {
 		if cfg != "" {
-			for _, p := range readXDGDirs(filepath.Join(cfg, "user-dirs.dirs"), home) {
+			for _, p := range readXDGDirs(filepath.Join(cfg, "user-dirs.dirs"), home, xdgKeys) {
 				add(p)
 			}
 		}
@@ -56,7 +56,7 @@ func userDirsIn(home, cfg string, known []string) []string {
 }
 
 // readXDGDirs — пути из файла user-dirs.dirs; нет файла, он не читается или больше предела — пусто.
-func readXDGDirs(file, home string) []string {
+func readXDGDirs(file, home string, keys []string) []string {
 	f, err := os.Open(file) //nolint:gosec // G304: файл настроек пользователя в его папке настроек
 	if err != nil {
 		return nil
@@ -66,17 +66,20 @@ func readXDGDirs(file, home string) []string {
 	if err != nil || len(data) > maxUserDirsFile {
 		return nil
 	}
-	return parseXDGDirs(data, home)
+	return parseXDGDirs(data, home, keys...)
 }
 
 // parseXDGDirs — значения XDG_DOCUMENTS_DIR, XDG_DESKTOP_DIR, XDG_DOWNLOAD_DIR: строки вида
 // KEY="$HOME/Папка" (комментарии и прочие ключи пропускаются). Допустимо только «$HOME» в начале
 // или абсолютный путь; всё остальное (подстановки, относительные пути, пустое) — пропуск.
-func parseXDGDirs(data []byte, home string) []string {
+func parseXDGDirs(data []byte, home string, keys ...string) []string {
+	if len(keys) == 0 {
+		keys = xdgKeys // PicturesDir просит свой ключ XDG_PICTURES_DIR
+	}
 	var out []string
 	for line := range bytes.SplitSeq(data, []byte("\n")) {
 		key, val, ok := strings.Cut(strings.TrimSpace(string(line)), "=")
-		if !ok || !slices.Contains(xdgKeys, strings.TrimSpace(key)) {
+		if !ok || !slices.Contains(keys, strings.TrimSpace(key)) {
 			continue
 		}
 		val = strings.TrimSpace(val)

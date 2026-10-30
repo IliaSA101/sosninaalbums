@@ -71,17 +71,18 @@ const albumName = "Альбом Лисицыных"
 // (пропавшее), альбом сохранён и записан в «Последние». Служба не включена.
 func newAgRig(t *testing.T) *agRig {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows: папка сокета — известная папка системы, подменить её средой нельзя")
-	}
 	xdg := shortTemp(t) // до newApp: удаляется после остановки фона
 	t.Setenv("XDG_CONFIG_HOME", xdg)
-	t.Setenv("HOME", xdg) // Mac: ~/Library/Application Support
+	t.Setenv("HOME", xdg)            // Mac: ~/Library/Application Support
+	osx.UseRoamingDirForTest(t, xdg) // Windows: известная папка от среды не зависит
 	a := newApp(t)
 	a.data = "sa"
 	sock := osx.MCPSock(a.data)
-	if sock == "" || len(sock) > 100 {
-		t.Skipf("папка настроек не подменяется средой: %q", sock)
+	if sock == "" {
+		t.Fatal("MCPSock пуст после подмены папки настроек") // подмена обязана работать на каждой ОС
+	}
+	if len(sock) > 100 {
+		t.Skipf("путь сокета длиннее предела sun_path: %q", sock)
 	}
 	r := &agRig{a: a, sock: sock, cfg: filepath.Dir(filepath.Dir(sock))}
 	if err := os.MkdirAll(r.cfg, 0o755); err != nil {

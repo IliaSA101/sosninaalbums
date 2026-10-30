@@ -5,6 +5,7 @@
   import { thumbUrl } from '../core/media'
   import Icon from '../ui/Icon.svelte'
   import { Z_TOAST } from '../modal/modalstack.svelte'
+  import { toastParts } from '../core/toasts.svelte'
 
   const ids = $derived(drag.payload?.kind === 'photos' ? drag.payload.ids : [])
 </script>
@@ -27,7 +28,9 @@
 
 {#if store.toast}
   <div class="toast" style:z-index={Z_TOAST} class:error={store.toast.kind === 'error'}>
-    <span>{store.toast.text}</span>
+    <span
+      >{#each toastParts(store.toast.text, store.toast.paths) as p, i (i)}{#if p.path}<bdi>{p.t}</bdi>{:else}{p.t}{/if}{/each}</span
+    >
     {#if store.toast.action}
       {@const a = store.toast.action}
       <button

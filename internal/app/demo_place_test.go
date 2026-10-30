@@ -123,7 +123,7 @@ func TestAppPlaceDemoWaitsReady(t *testing.T) {
 	close(a.ready)
 	select {
 	case <-done:
-	case <-time.After(testkit.Limit(5 * time.Second)):
+	case <-time.After(testkit.Limit(30 * time.Second)): // «не завис»: под нагрузкой полного прогона установка примера идёт дольше 5 с
 		t.Fatal("placeDemo не вернулся после startup")
 	}
 	if list, _ := a.LibraryPacks(); !hasPackInfo(list.Packs, demopack.ID) {

@@ -9,13 +9,15 @@ method AddQRSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResu
 method AddSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResult>
 method AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
 method AddVignette(arg1:number):Promise<model.View>
-method AgentAnswerCreate(arg1:string):Promise<APP.State>
+method AgentAnswerCreate(arg1:string,arg2:boolean):Promise<APP.State>
+method AgentOpenPrev():Promise<APP.State>
 method AgentsBusy(arg1:boolean):Promise<void>
 method AgentsInfo():Promise<APP.AgentsInfo>
 method AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>
 method AlignOverlap(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<boolean>
 method AllowAgentAsks():Promise<void>
 method AnswerAgent(arg1:string,arg2:boolean):Promise<model.View>
+method AnswerAgentOther(arg1:string):Promise<model.View>
 method ApplyBackground(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method ApplyBackgroundTo(arg1:Array<model.GridTarget>,arg2:string):Promise<APP.BgResult>
 method ApplyBorder(arg1:string,arg2:Array<string>,arg3:string):Promise<model.View>
@@ -44,6 +46,7 @@ method CancelUpdate():Promise<void>
 method CheckFolders(arg1:boolean):Promise<void>
 method CheckPrintProfile(arg1:APP.PrintEdit):Promise<APP.PrintEditCheck>
 method CheckUpdate():Promise<APP.UpdateInfo>
+method ChooseAgentPlace():Promise<APP.AgentsInfo>
 method ChooseFiles():Promise<APP.LooseResult>
 method ChooseFolder():Promise<model.View>
 method ClearAgentsLog():Promise<APP.AgentsInfo>
@@ -96,6 +99,7 @@ method FitBackdrop(arg1:string,arg2:string):Promise<model.View>
 method FitFaces(arg1:string,arg2:string,arg3:string):Promise<APP.FacesResult>
 method FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method FlipSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method ForgetAgentPlaces():Promise<APP.AgentsInfo>
 method ForgetColor(arg1:string):Promise<Array<string>>
 method ForgetFileNames(arg1:Array<string>):Promise<model.View>
 method ForgetRecent(arg1:string):Promise<Array<prefs.RecentProject>>
@@ -211,8 +215,9 @@ method SaveProjectAs():Promise<model.View>
 method SaveSpreadTpl(arg1:string,arg2:string,arg3:string,arg4:string,arg5:boolean,arg6:boolean):Promise<APP.DecorItem>
 method SaveVignetteTemplate(arg1:string,arg2:string):Promise<void>
 method ScaleGroupAxes(arg1:string,arg2:Array<string>,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number):Promise<model.View>
+method SetAgentPerm(arg1:string,arg2:string):Promise<APP.AgentsInfo>
+method SetAgentPermGroup(arg1:string,arg2:string):Promise<APP.AgentsInfo>
 method SetAgents(arg1:boolean):Promise<APP.AgentsInfo>
-method SetAgentsEdit(arg1:boolean):Promise<APP.AgentsInfo>
 method SetAgentsLevel(arg1:number):Promise<APP.AgentsInfo>
 method SetAlbumBg(arg1:string,arg2:boolean):Promise<model.View>
 method SetAlbumBgFade(arg1:number,arg2:string):Promise<model.View>
@@ -320,6 +325,17 @@ type APP.AgentCall
 type APP.AgentClient
   name: string
   since: number
+type APP.AgentPerm
+  tool: string
+  title: string
+  group: string
+  mode: string
+  can: string[]
+  why: string
+  note: string
+type APP.AgentPlace
+  dir: string
+  chosen: boolean
 type APP.AgentSetup
   id: string
   title: string
@@ -339,6 +355,8 @@ type APP.AgentsInfo
   edit: boolean
   editBlocked: string
   asksMuted: boolean
+  perms: AgentPerm[]
+  places: AgentPlace[]
 type APP.AgentsSaved
   canceled: boolean
   text: string

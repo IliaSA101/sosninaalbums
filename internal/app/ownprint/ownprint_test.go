@@ -418,3 +418,96 @@ func TestIDNURLEdges(t *testing.T) {
 		t.Errorf("перевод: %q %q", out, why)
 	}
 }
+
+// findButton — кнопка формата в ряду типографии из model.PagePresets (то, что рисует окно «Настройки»).
+func findButton(t *testing.T, group, label string) model.PagePreset {
+	t.Helper()
+	for _, b := range model.PagePresets() {
+		if b.Group == group && b.Label == label {
+			return b
+		}
+	}
+	t.Fatalf("нет кнопки %q в ряду %q", label, group)
+	return model.PagePreset{}
+}
+
+// checkFormat: настройки после кнопки формата f типографии pr при прежних cur — поля, промежуток и
+// цвет остаются, размер, dpi, layflat, зона и обрез — по формату и по кнопке из model.PagePresets.
+func checkFormat(t *testing.T, pr printprof.Profile, f printprof.PageFormat, cur model.Settings) {
+	t.Helper()
+	st := PrintSettings(pr, f, cur)
+	if st.PageW != f.Page[0] || st.PageH != f.Page[1] || st.Margin != cur.Margin || st.Gap != cur.Gap || st.Bg != cur.Bg {
+		t.Fatalf("%s %s: страница %v×%v, поля %v, промежуток %v, цвет %q", pr.ID, f.Name, st.PageW, st.PageH, st.Margin, st.Gap, st.Bg)
+	}
+	if pr.Page.DPI != 0 && st.DPI != pr.Page.DPI || pr.Page.DPI == 0 && st.DPI != cur.DPI {
+		t.Fatalf("%s %s: dpi %d", pr.ID, f.Name, st.DPI)
+	}
+	if st.Layflat != (cur.Layflat || pr.Page.Layflat) {
+		t.Fatalf("%s %s: layflat %v", pr.ID, f.Name, st.Layflat)
+	}
+	// Зона и обрез: значение формата (своё или общее страницы), иначе остаётся прежнее.
+	wantSafe, wantBleed := cur.Safe, cur.Bleed
+	if v := f.SafeIn(pr); v != 0 {
+		wantSafe = v
+	}
+	if v := f.BleedIn(pr); v != 0 {
+		wantBleed = v
+	}
+	if st.Safe != wantSafe || st.Bleed != wantBleed {
+		t.Fatalf("%s %s: зона %v (ждали %v), обрез %v (ждали %v)", pr.ID, f.Name, st.Safe, wantSafe, st.Bleed, wantBleed)
+	}
+	// Кнопка в окне «Настройки» — та же запись model.PagePresets, правило presetFields.
+	btn := findButton(t, pr.Name, f.Name)
+	want := cur
+	want.PageW, want.PageH = btn.W, btn.H
+	if btn.DPI != 0 {
+		want.DPI = btn.DPI
+	}
+	if btn.Layflat {
+		want.Layflat = true
+	}
+	if btn.Safe != 0 {
+		want.Safe = btn.Safe
+	}
+	if btn.Bleed != 0 {
+		want.Bleed = btn.Bleed
+	}
+	if st != want {
+		t.Fatalf("%s %s: PrintSettings %+v, кнопка (presetFields) даёт %+v", pr.ID, f.Name, st, want)
+	}
+}
+
+// TestPrintSettingsApplyParity: настройки, которые «Сохранить с применением» передаёт альбому,
+// равны PrintSettings первого формата (одна функция для окна и агента, 151); поля, промежуток и цвет
+// остаются; поля кнопки — как presetFields на фронте. Все встроенные типографии и все форматы.
+func TestPrintSettingsApplyParity(t *testing.T) {
+	r, _ := newRig(t)
+	cur := model.New().Settings
+	cur.Margin, cur.Gap, cur.Bg, cur.DPI, cur.Layflat, cur.Safe, cur.Bleed = 7, 2.5, "#112233", 150, false, 3, 1
+	h := r.host()
+	var got model.Settings
+	h.Snapshot = func() *model.Project { p := model.New(); p.Settings = cur; return p }
+	h.SetSettings = func(st model.Settings) model.View { got = st; return model.View{} }
+	h.ApplyPrint = func(st model.Settings, _ string) (model.View, error) { got = st; return model.View{}, nil }
+	s := New(h)
+	s.Reload()
+	n := 0
+	for _, pr := range printprof.Current().Profiles() {
+		if len(pr.Formats) == 0 {
+			continue
+		}
+		n++
+		if _, err := s.Apply(pr.ID); err != nil {
+			t.Fatalf("%s: %v", pr.ID, err)
+		}
+		if want := PrintSettings(pr, pr.Formats[0], cur); got != want {
+			t.Fatalf("%s: Apply передал %+v, PrintSettings даёт %+v", pr.ID, got, want)
+		}
+		for _, f := range pr.Formats {
+			checkFormat(t, pr, f, cur)
+		}
+	}
+	if n == 0 {
+		t.Fatal("в реестре нет типографий с форматами")
+	}
+}

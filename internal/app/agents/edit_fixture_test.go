@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 )
 
 // Подставные замыкания правок (149): по умолчанию безобидны, тесты подменяют нужные до старта службы.
@@ -36,18 +37,21 @@ func (c *fakeClock) Add(d time.Duration) {
 
 // editFake — Host правок над fixture. Счётчики n* — сколько раз служба дошла до замыкания.
 type editFake struct {
-	f *fixture
+	f      *fixture
+	fake34 // правки 0.34 (edit_run34_test.go)
 
-	mu       sync.Mutex
-	allowed  bool
-	blocked  string
-	scanning bool
-	lastAuto AutoReq
-	lastVary VaryReq
-	lastAsk  AskReq
-	lastShow string
-	lastUndo AlbumRef
-	backups  []string
+	mu        sync.Mutex
+	allowed   bool
+	blocked   string
+	perms     map[string]string // явные режимы инструментов (perm)
+	scanning  bool
+	lastAuto  AutoReq
+	lastVary  VaryReq
+	lastAsk   AskReq
+	lastShow  string
+	lastUndo  AlbumRef
+	backups   []string
+	lastSheet SheetReq
 
 	busy   func(ctx context.Context) bool
 	backup func(key string) error
@@ -56,6 +60,11 @@ type editFake struct {
 	vary   func(ctx context.Context, in VaryReq) (AlbumRef, int, error)
 	show   func(key, id string) (int, error)
 	undo   func(ctx context.Context, ref AlbumRef) (AlbumRef, error)
+	sheet  func(ctx context.Context, in SheetReq) ([]byte, []string, error)
+
+	nPerm   atomic.Int32                            // вызовов Host.Perm
+	permLvl func(tool string) (string, string, int) // Host.PermLevel; nil — не задан
+	nSheet  atomic.Int32                            // вызовов Host.Sheet (чтение; в writes не входит)
 
 	nBusy, nBackup, nAsk, nAuto, nVary, nShow, nUndo atomic.Int32
 }
@@ -64,7 +73,35 @@ func newEditFake(f *fixture) *editFake { return &editFake{f: f, allowed: true} }
 
 // writes — сколько раз служба дошла до замыканий, которые что-то меняют.
 func (e *editFake) writes() int32 {
-	return e.nBackup.Load() + e.nAsk.Load() + e.nAuto.Load() + e.nVary.Load() + e.nShow.Load() + e.nUndo.Load()
+	return e.nBackup.Load() + e.nAsk.Load() + e.nAuto.Load() + e.nVary.Load() + e.nShow.Load() + e.nUndo.Load() + e.writes34()
+}
+
+// perm — Host.Perm над подставными настройками: явный режим инструмента (setPerm), иначе чтение, запуск и
+// показ разрешены, а правки, папка и альбом — по allowed («флажок» прежних тестов).
+func (e *editFake) perm(tool string) (string, string) {
+	e.nPerm.Add(1)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if m, ok := e.perms[tool]; ok {
+		return m, e.blocked
+	}
+	switch prefs.AgentToolClass(tool) {
+	case prefs.ClassEdit, prefs.ClassFolder, prefs.ClassAlbum:
+		if !e.allowed {
+			return prefs.PermDeny, e.blocked
+		}
+	}
+	return prefs.PermAllow, e.blocked
+}
+
+// setPerm ставит режим одному инструменту; потом PermsChanged службы, если вопрос мог висеть.
+func (e *editFake) setPerm(tool, mode string) {
+	e.mu.Lock()
+	if e.perms == nil {
+		e.perms = map[string]string{}
+	}
+	e.perms[tool] = mode
+	e.mu.Unlock()
 }
 
 func (e *editFake) setFlag(allowed bool, blocked string) {
@@ -95,10 +132,13 @@ func (f *fixture) refArgs() map[string]any {
 
 // install заполняет поля правок в Host.
 func (e *editFake) install(h *Host) {
-	h.EditState = func() (bool, string) {
-		e.mu.Lock()
-		defer e.mu.Unlock()
-		return e.allowed, e.blocked
+	h.Perm = e.perm
+	h.PermLevel = func(tool string) (string, string, int) { // setup тестов выполняется после install: поле читаем в вызове
+		if e.permLvl != nil {
+			return e.permLvl(tool)
+		}
+		m, b := e.perm(tool)
+		return m, b, -1 // уровень службе читать самой
 	}
 	h.Scanning = func() bool {
 		e.mu.Lock()
@@ -129,6 +169,9 @@ func (e *editFake) install(h *Host) {
 		e.mu.Unlock()
 		if e.ask != nil {
 			return e.ask(ctx, q)
+		}
+		if q.Kind == AskEdit { // «да» на вопрос о правке сам альбом не меняет: правит тело вызова
+			return AskRes{Why: WhyAnswered}, nil
 		}
 		return AskRes{Why: WhyAnswered, Album: e.f.bump(), Folder: 1, Scanning: true}, nil
 	}
@@ -178,6 +221,7 @@ func (e *editFake) install(h *Host) {
 		}
 		return e.f.bump(), nil
 	}
+	e.install34(h)
 }
 
 // editRig — запущенная служба с Host правок; setup подменяет замыкания до старта.

@@ -46,8 +46,12 @@ export function AddVignette(arg1) {
   return window['go']['app']['App']['AddVignette'](arg1);
 }
 
-export function AgentAnswerCreate(arg1) {
-  return window['go']['app']['App']['AgentAnswerCreate'](arg1);
+export function AgentAnswerCreate(arg1, arg2) {
+  return window['go']['app']['App']['AgentAnswerCreate'](arg1, arg2);
+}
+
+export function AgentOpenPrev() {
+  return window['go']['app']['App']['AgentOpenPrev']();
 }
 
 export function AgentsBusy(arg1) {
@@ -72,6 +76,10 @@ export function AllowAgentAsks() {
 
 export function AnswerAgent(arg1, arg2) {
   return window['go']['app']['App']['AnswerAgent'](arg1, arg2);
+}
+
+export function AnswerAgentOther(arg1) {
+  return window['go']['app']['App']['AnswerAgentOther'](arg1);
 }
 
 export function ApplyBackground(arg1, arg2, arg3) {
@@ -184,6 +192,10 @@ export function CheckPrintProfile(arg1) {
 
 export function CheckUpdate() {
   return window['go']['app']['App']['CheckUpdate']();
+}
+
+export function ChooseAgentPlace() {
+  return window['go']['app']['App']['ChooseAgentPlace']();
 }
 
 export function ChooseFiles() {
@@ -392,6 +404,10 @@ export function FlipBackdrop(arg1, arg2, arg3) {
 
 export function FlipSticker(arg1, arg2, arg3) {
   return window['go']['app']['App']['FlipSticker'](arg1, arg2, arg3);
+}
+
+export function ForgetAgentPlaces() {
+  return window['go']['app']['App']['ForgetAgentPlaces']();
 }
 
 export function ForgetColor(arg1) {
@@ -854,12 +870,16 @@ export function ScaleGroupAxes(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['app']['App']['ScaleGroupAxes'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
-export function SetAgents(arg1) {
-  return window['go']['app']['App']['SetAgents'](arg1);
+export function SetAgentPerm(arg1, arg2) {
+  return window['go']['app']['App']['SetAgentPerm'](arg1, arg2);
 }
 
-export function SetAgentsEdit(arg1) {
-  return window['go']['app']['App']['SetAgentsEdit'](arg1);
+export function SetAgentPermGroup(arg1, arg2) {
+  return window['go']['app']['App']['SetAgentPermGroup'](arg1, arg2);
+}
+
+export function SetAgents(arg1) {
+  return window['go']['app']['App']['SetAgents'](arg1);
 }
 
 export function SetAgentsLevel(arg1) {

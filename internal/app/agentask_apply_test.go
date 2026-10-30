@@ -17,20 +17,38 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
-// strictRules — правила с запретами Linux/macOS (как в таблице agentpath_test.go) без диска.
-func strictRules() *folderRules { return unixRules("linux", diskOK) }
+// strictRules — правила с запретами ОС (как в таблице agentpath_test.go) без диска: Linux/macOS —
+// Unix-пути, Windows — буквы диска и AppData.
+func strictRules() *folderRules {
+	if runtime.GOOS == "windows" {
+		return winRules(diskOK)
+	}
+	return unixRules("linux", diskOK)
+}
+
+// strictWide и strictOurs — пути, которые strictRules отказывает видом too_wide и ours.
+func strictWide() string {
+	if runtime.GOOS == "windows" {
+		return `C:\Windows\Секрет`
+	}
+	return "/etc/Секрет"
+}
+
+func strictOurs() string {
+	if runtime.GOOS == "windows" {
+		return `C:\Users\u\AppData\Local\Секрет`
+	}
+	return "/home/u/.config/Секрет"
+}
 
 // Папка не прошла правило: too_wide или ours, тост человеку, правки нет; текст агенту без пути.
 func TestAskFolderRejected(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("правила Unix; таблица Windows — TestAgentFolderRules")
-	}
 	r := newAskRig(t)
 	r.a.askM().rules = strictRules
 	rev := r.rev()
 	for i, c := range []struct{ dir, why string }{
-		{"/etc/Секрет", agents.WhyTooWide},
-		{"/home/u/.config/Секрет", agents.WhyOurs},
+		{strictWide(), agents.WhyTooWide},
+		{strictOurs(), agents.WhyOurs},
 	} {
 		r.mu.Lock()
 		r.picked = c.dir
@@ -89,9 +107,9 @@ func TestAgentFolderNoEcho(t *testing.T) {
 	leaks("agents:askdone", r.done(t, 1))
 	leaks("журнал", r.a.AgentsInfo())
 
-	if runtime.GOOS != "windows" { // отказ по правилу: тост и ошибка без пути
+	{ // отказ по правилу: тост и ошибка без пути
 		r.a.askM().rules = strictRules
-		r.picked = "/etc/" + secret
+		r.picked = filepath.Join(filepath.Dir(strictWide()), secret)
 		c = r.ask(r.addReq())
 		if _, err := r.a.AnswerAgent(r.asked(t, 2).ID, true); err != nil {
 			t.Fatal(err)
@@ -124,7 +142,7 @@ func TestCreateAlbumFlow(t *testing.T) {
 		!strings.Contains(ev.Lines[1], "сохранится в свой файл") {
 		t.Errorf("agents:ask: %+v", ev)
 	}
-	st, err := a.AgentAnswerCreate(ev.ID)
+	st, err := a.AgentAnswerCreate(ev.ID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +178,7 @@ func TestCreateAlbumDraftLocked(t *testing.T) {
 	rev := r.rev()
 	c := r.ask(r.createReq())
 	id := r.asked(t, 1).ID
-	if _, err := a.AgentAnswerCreate(id); err != nil {
+	if _, err := a.AgentAnswerCreate(id, false); err != nil {
 		t.Fatal(err)
 	}
 	c.wait(t)
@@ -187,7 +205,7 @@ func TestCreateThenBuildRev(t *testing.T) {
 	}
 	oldKey, oldRev := r.key(), r.rev()
 	c := r.ask(r.createReq())
-	if _, err := a.AgentAnswerCreate(r.asked(t, 1).ID); err != nil {
+	if _, err := a.AgentAnswerCreate(r.asked(t, 1).ID, false); err != nil {
 		t.Fatal(err)
 	}
 	c.wait(t)
@@ -220,7 +238,7 @@ func TestCreateNoUndo(t *testing.T) {
 	prev := a.editor()
 	oldKey, oldRev := r.key(), r.rev()
 	c := r.ask(r.createReq())
-	if _, err := a.AgentAnswerCreate(r.asked(t, 1).ID); err != nil {
+	if _, err := a.AgentAnswerCreate(r.asked(t, 1).ID, false); err != nil {
 		t.Fatal(err)
 	}
 	c.wait(t)

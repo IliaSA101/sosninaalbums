@@ -135,3 +135,10 @@ func (s *sched) releaser(p prio) func() {
 		})
 	}
 }
+
+// FileBgCtx — миниатюра ленты классом прогрева (151, 0.34-151-22): лист-сетка агента не должен вставать
+// перед запросами окна человека. Место — как у Warm (не больше bgMax, только пока окно не ждёт), поэтому
+// на занятой ленте холодная клетка может не успеть к сроку ctx: ctx.Err() без обёртки, генерации нет.
+func (c *Cache) FileBgCtx(ctx context.Context, p Photo) (string, error) {
+	return c.get(ctx, p, false, bg)
+}

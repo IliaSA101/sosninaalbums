@@ -36,9 +36,25 @@ export interface AgentsInfo {
   clients: AgentClient[]
   calls: AgentCall[] // новые первыми, ≤ 50
   today: number
-  edit: boolean // агентам разрешено менять альбом (149)
+  edit: boolean // группа правок не вся «Запретить» (150): первое включение спрашивает согласие 149
   editBlocked: '' | 'elevated' // правки нельзя включить: программа от администратора
   asksMuted: boolean // вопросы агентов отключены после трёх отказов подряд
+  perms: AgentPerm[] // разрешения по инструментам (150); порядок — как в окне
+  places: AgentPlace[] // места съёмок: где «Всегда» у папки берёт без вопроса
+}
+// Строка разрешений (150, design §6). group: read | edit | other (запуск и показ — вне группового щелчка).
+export interface AgentPerm {
+  tool: string // имя MCP
+  title: string
+  group: string
+  mode: string // allow | ask | deny
+  can: string[] // допустимые значения
+  why: string // почему «Спрашивать» нет в can; показывается по нажатию
+  note: string // подпись под названием
+}
+export interface AgentPlace {
+  dir: string
+  chosen: boolean // выбрана человеком («Папка со съёмками…»); иначе родитель папки, добавленной им
 }
 export interface AgentsSaved {
   canceled: boolean
@@ -51,11 +67,16 @@ export type AgentCallEvent = AgentCall & { today: number }
 // Тексты вопроса и тостов целиком из Go: агент своих слов не вносит.
 export interface AgentAsk {
   id: string
-  kind: 'create' | 'add'
+  kind: 'create' | 'add' | 'edit'
   title: string
   lines: string[]
   hint: string // имя папки-подсказки агента; "" — нет
-  ok: string // подпись действия: «Выбрать папку…»
+  ok: string // подпись действия: «Выбрать папку…», «Добавить», «Создать», «Собрать»
+  path: string // настоящий путь папки (150), только окну; "" — вопрос 149 без пути
+  link: boolean // подсказка шла через ссылку на другую папку
+  alt: string // подпись «Выбрать другую…»; "" — кнопки нет
+  tool: string // ссылка «Не спрашивать» ведёт к строке этого инструмента
+  why: string // «Всегда», а тихо нельзя: place | remote | big | cloud | shots | link | rate | draft | bad; "" — «Спрашивать»
 }
 export type AgentAskWhy = 'answered' | 'declined' | 'timeout' | 'gone' | 'closed' | 'off' | 'too_wide' | 'ours'
 export interface AgentAskDone {
@@ -67,6 +88,15 @@ export interface AgentEdited {
   text: string
   rev: number
   go: string // ID разворота для перехода; "" — без перехода
+  prev?: boolean // у тоста «Открыть прежний» после тихого нового альбома (150)
+  quiet?: boolean // правка без вопроса («Всегда»): тост держится до фокуса окна
+  path?: string // полный путь тихой папки, только окну
+}
+// Событие agents:denied (150): первый отказ «Запретить» по инструменту за запуск программы.
+export interface AgentDenied {
+  client: string
+  tool: string
+  title: string
 }
 export interface AgentShow {
   spread: string
@@ -87,6 +117,8 @@ export const emptyInfo = (): AgentsInfo => ({
   edit: false,
   editBlocked: '',
   asksMuted: false,
+  perms: [],
+  places: [],
 })
 
 // Ответ Go с пропусками (null вместо списка) приводим к форме: шаблон не должен проверять каждое поле.
@@ -104,6 +136,8 @@ export function normInfo(i: AgentsInfoRaw | null | undefined): AgentsInfo {
     setups: i.setups ?? [],
     clients: i.clients ?? [],
     calls: i.calls ?? [],
+    perms: i.perms ?? [],
+    places: i.places ?? [],
   }
 }
 
@@ -144,10 +178,15 @@ export interface AgentsBridge {
   setLevel(level: number): Promise<AgentsInfo>
   clearLog(): Promise<AgentsInfo>
   saveExtension(): Promise<AgentsSaved>
-  setEdit(on: boolean): Promise<AgentsInfo>
+  setPerm(tool: string, mode: string): Promise<AgentsInfo> // mode вне can Go не принимает
+  setPermGroup(group: string, mode: string): Promise<AgentsInfo> // read | edit
+  forgetPlaces(): Promise<AgentsInfo>
+  choosePlace(): Promise<AgentsInfo> // окно ОС «Папка со съёмками»; отмена — без изменений
+  openPrev(): Promise<unknown> // State: «Открыть прежний» из тоста тихого нового альбома
   allowAsks(): Promise<void>
   answer(id: string, yes: boolean): Promise<unknown> // View: «Выбрать папку…» у add, отказ любого вида
-  answerCreate(id: string): Promise<unknown> // State: «Выбрать папку…» у create
+  answerCreate(id: string, other?: boolean): Promise<unknown> // State: «Выбрать папку…» у create; other — «Выбрать другую…»
+  answerOther(id: string): Promise<unknown> // View: «Выбрать другую…» у add
   busy(on: boolean): Promise<void> // человек занят: правка агента подождёт (agentbusy.ts)
 }
 
@@ -157,9 +196,14 @@ export const bridge: AgentsBridge = {
   setLevel: (n) => Api.SetAgentsLevel(n).then(normInfo),
   clearLog: () => Api.ClearAgentsLog().then(normInfo),
   saveExtension: () => Api.SaveClaudeExtension(),
-  setEdit: (on) => Api.SetAgentsEdit(on).then(normInfo),
+  setPerm: (tool, mode) => Api.SetAgentPerm(tool, mode).then(normInfo),
+  setPermGroup: (group, mode) => Api.SetAgentPermGroup(group, mode).then(normInfo),
+  forgetPlaces: () => Api.ForgetAgentPlaces().then(normInfo),
+  choosePlace: () => Api.ChooseAgentPlace().then(normInfo),
+  openPrev: () => Api.AgentOpenPrev(),
   allowAsks: () => Api.AllowAgentAsks(),
   answer: (id, yes) => Api.AnswerAgent(id, yes),
-  answerCreate: (id) => Api.AgentAnswerCreate(id),
+  answerCreate: (id, other = false) => Api.AgentAnswerCreate(id, other),
+  answerOther: (id) => Api.AnswerAgentOther(id),
   busy: (on) => Api.AgentsBusy(on),
 }

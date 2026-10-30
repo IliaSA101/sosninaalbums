@@ -79,14 +79,20 @@ func applyLookCoverStep(p *model.Project, ref *model.LookRef, t model.AlbumTpl, 
 // Макета нет на этом ПК или у него нет обложки — обычная CreateCover. Кнопка «Без оформления» —
 // Undo и CreateCover. Одна правка, отказ — без шага.
 func (e *Editor) CreateCoverLook(preset string, ph *model.PhotoInfo, libs map[string]model.PhotoInfo, want *model.LookRef) (model.View, *model.LookRef, error) {
-	var look *model.LookRef
-	v, err := e.try("", func(p *model.Project) (err error) {
-		look = nil
+	v, look, _, err := e.createCoverLook(preset, ph, libs, want, nil)
+	return v, look, err
+}
+
+// createCoverLook — тело CreateCoverLook и CreateCoverLookIf (x nil — без сверки). place — куда
+// встало фото: CoverPlaceSeat | CoverPlaceBackground ("" — фото нет или отказ).
+func (e *Editor) createCoverLook(preset string, ph *model.PhotoInfo, libs map[string]model.PhotoInfo, want *model.LookRef, x *Expect) (v model.View, look *model.LookRef, place string, err error) {
+	v, err = e.editWith("", false, func(p *model.Project) (err error) {
+		look, place = nil, ""
 		// Точная запись, не SameLook: libs собраны по ней, и обновлённый набор — уже другие файлы.
 		if (p.Look == nil) != (want == nil) || (want != nil && *p.Look != *want) {
 			return ErrLookChanged
 		}
-		return createCover(p, preset, ph, func() (err error) {
+		place, err = createCover(p, preset, ph, func() (err error) {
 			if l := e.findLook(p.Look); l != nil && l.Cover != nil {
 				var res grid.CoverRes
 				res, err = grid.ApplyLookCover(p, l.Cover, libs)
@@ -97,35 +103,92 @@ func (e *Editor) CreateCoverLook(preset string, ph *model.PhotoInfo, libs map[st
 			}
 			return err
 		})
-	})
+		return err
+	}, nil, editOpts{expect: x})
 	if err != nil {
-		look = nil
+		look, place = nil, ""
 	}
-	return v, look, err
+	return v, look, place, err
 }
 
 // createCover — тело CreateCover и CreateCoverLook: обложка, затем (если задано) оформление
 // макетом, затем фото броска: после макета — в первое пустое место лицевой (145 Ч2), иначе фоном
 // лицевой. Копия фону не нужна (098-3): фон фото с места не снимает — запрос копии ставит само
-// фото, а не запись «-new».
-func createCover(p *model.Project, preset string, ph *model.PhotoInfo, style func() error) error {
+// фото, а не запись «-new». place — куда встало фото.
+func createCover(p *model.Project, preset string, ph *model.PhotoInfo, style func() error) (string, error) {
 	err := cover.Create(p, preset)
 	if err == nil && style != nil {
 		err = style()
 	}
 	if err != nil || ph == nil {
-		return err
+		return "", err
 	}
-	// Своё из библиотеки, уже стоящее в месте разворота, в место не идёт: PlacePhotos снял бы его
-	// с разворота (копией оно не ставится — ID записи и есть ключ библиотеки); встаёт фоном, как в 0.28.
-	if style != nil && (ph.Lib == "" || !p.Placed(model.ReqBase(ph.ID))) {
-		if seat := frontSeat(p); seat != nil {
-			return seatCopy(p, seat, *ph)
+	return coverPhoto(p, ph, style != nil, false)
+}
+
+// Куда встало фото обложки (CoverPhotoIf, CreateCoverLookIf).
+const (
+	CoverPlaceSeat       = "seat"       // место лицевой
+	CoverPlaceBackground = "background" // фон лицевой
+)
+
+// coverPhoto — фото ph на лицевую обложки: в первое пустое место (seats — места ищутся, у броска
+// это только после макета), иначе фоном. Свое из библиотеки, уже стоящее в месте разворота, в
+// место не идёт: PlacePhotos снял бы его с разворота (копией оно не ставится — ID записи и есть
+// ключ библиотеки); встаёт фоном, как в 0.28. replace — только у агента (151, 0.34-151-16): пустых
+// мест нет — кадр заменяется в наибольшем (копией, прежний кадр уходит в ленту); мест нет совсем —
+// фоном лицевой, а в раскладке wrap — фото через корешок (иначе ScopeRight сняло бы его, и задняя
+// с корешком опустели бы).
+func coverPhoto(p *model.Project, ph *model.PhotoInfo, seats, replace bool) (string, error) {
+	if seats && (ph.Lib == "" || !p.Placed(model.ReqBase(ph.ID))) {
+		seat := frontSeat(p)
+		if seat == nil && replace {
+			seat = frontSeatAny(p)
+		}
+		if seat != nil {
+			return CoverPlaceSeat, seatCopy(p, seat, *ph)
 		}
 	}
 	in := *ph
 	in.ID = model.ReqBase(in.ID)
-	return backdrop.SetBackdrop(p, model.CoverID, model.ScopeRight, in)
+	return CoverPlaceBackground, backdrop.SetBackdrop(p, model.CoverID, frontScope(p, replace), in)
+}
+
+// coverPhotoOnce — тело CoverPhotoIf: тот же файл уже на лицевой — холостая (place — где он стоит),
+// иначе coverPhoto с заменой. Обложки нет — cover.ErrNone.
+func coverPhotoOnce(p *model.Project, ph *model.PhotoInfo) (string, error) {
+	if p.Cover == nil || p.Cover.Sheet == nil {
+		return "", cover.ErrNone
+	}
+	if place := onFront(p, ph); place != "" {
+		return place, nil
+	}
+	return coverPhoto(p, ph, true, true)
+}
+
+// frontScope — область фона лицевой: у агента в wrap — весь лист (одно фото через корешок);
+// у броска человека и в прочих раскладках — правая сторонка.
+func frontScope(p *model.Project, agent bool) string {
+	if agent && p.Cover != nil && p.Cover.Layout == model.CoverWrap {
+		return model.ScopeSpread
+	}
+	return model.ScopeRight
+}
+
+// onFront — фото ph (по файлу, BaseID) уже на лицевой: в каком-нибудь месте или на фоне её
+// области. place — где; нет — "".
+func onFront(p *model.Project, ph *model.PhotoInfo) string {
+	base := model.FileOf(ph.ID)
+	s := p.Cover.Sheet
+	for _, pl := range p.CoverSeats() {
+		if pl.Photo != "" && model.BaseID(pl.Photo) == base && grid.InArea(p, s, pl.X, pl.W, model.ScopeRight) {
+			return CoverPlaceSeat
+		}
+	}
+	if b := *s.Slot(frontScope(p, true)); b != nil && model.BaseID(b.Photo) == base {
+		return CoverPlaceBackground
+	}
+	return ""
 }
 
 // frontSeat — первое пустое место лицевой по model.CoverSeats (задняя и корешок не годятся:
@@ -138,6 +201,18 @@ func frontSeat(p *model.Project) *model.Place {
 		}
 	}
 	return nil
+}
+
+// frontSeatAny — наибольшее место лицевой по площади (при равенстве — первое), занятое или нет:
+// кадр обложки, когда пустых мест нет (151). Мест нет — nil.
+func frontSeatAny(p *model.Project) *model.Place {
+	var best *model.Place
+	for _, pl := range p.CoverSeats() {
+		if grid.InArea(p, p.Cover.Sheet, pl.X, pl.W, model.ScopeRight) && (best == nil || pl.W*pl.H > best.W*best.H) {
+			best = pl
+		}
+	}
+	return best
 }
 
 // seatCopy — фото ph в место pl обложки. Фото, уже стоящее в альбоме, встаёт копией (098-2,

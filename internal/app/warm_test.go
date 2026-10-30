@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -206,12 +207,16 @@ func TestGetStateWarmOutsideLock(t *testing.T) {
 // TestWarmEmitPanic: паника отправки события хода (воркеры раскладки) не роняет программу —
 // GetState отдаёт альбом целиком.
 func TestWarmEmitPanic(t *testing.T) {
+	logs := captureLog(t) // стек паники уходит в буфер, а не в вывод тестов
 	coldLayouts(t)
 	a, _ := progressApp(t, func() { panic("сбой окна") })
 	a.ed.Store(mustEditor(t, warmProject(4, 7, 5), ""))
 	setWarmTimes(t, 0, 0)
 	if st := a.GetState(); len(st.View.Spreads) != 5 {
 		t.Fatalf("GetState после паники хода: %d разворотов", len(st.View.Spreads))
+	}
+	if !strings.Contains(logs.String(), "ПАНИКА в событии хода открытия") {
+		t.Fatalf("паника не записана в журнал: %q", logs.String())
 	}
 }
 

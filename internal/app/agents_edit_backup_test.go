@@ -61,6 +61,7 @@ func TestAgentBackupFirstEdit(t *testing.T) {
 	}
 	// Том недоступен.
 	a.backups = backup.New(root)
+	a.bg.Wait() // фоновая проверка пропавших (после автосборки) читает reachable — не подменять под ней
 	old := reachable
 	reachable = func(string) bool { return false }
 	err := a.agentBackup(key)

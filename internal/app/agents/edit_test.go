@@ -33,6 +33,12 @@ func editCalls(fx *fixture) []struct {
 		{"autobuild", a},
 		{"vary_layouts", map[string]any{"album": fx.refArgs(), "spreads": []any{1}}},
 		{"undo_last_edit", a},
+		// 0.34 (151): тела — Т4, вход и ворота общие.
+		{"set_marks", map[string]any{"album": fx.refArgs(), "ids": []any{idB}, "flag": "pick"}},
+		{"set_cover_photo", map[string]any{"album": fx.refArgs(), "photo": idB}},
+		{"set_background", map[string]any{"album": fx.refArgs(), "item": "sa:plain", "spreads": []any{1}}},
+		{"add_sticker", map[string]any{"album": fx.refArgs(), "stickers": []any{map[string]any{"spread": 1, "item": "sa:star"}}}},
+		{"apply_print", map[string]any{"album": fx.refArgs(), "profile": "b1"}},
 	}
 }
 
@@ -282,7 +288,7 @@ func TestEditLateNoApply(t *testing.T) {
 		}
 		return ok
 	})
-	failText(t, tcall(t, cs, "undo_last_edit", map[string]any{"album": r.fx.refArgs()}), errUndoNotOwn)
+	failText(t, tcall(t, cs, "undo_last_edit", map[string]any{"album": r.fx.refArgs()}), errUndoNoOwn) // правка не применена: записи нет
 	if c, _ := r.svc.Calls(); len(c) == 0 || c[len(c)-1].Note != "поздно" || !c[len(c)-1].Edit {
 		t.Fatalf("журнал: %+v", c)
 	}
@@ -363,8 +369,8 @@ func TestUndoLastOwn(t *testing.T) {
 	r, cs := editRig(t, Options{}, nil)
 	other := client(t, r.sock, "другой")
 	a := okReply(t, tcall(t, cs, "autobuild", map[string]any{"album": r.fx.refArgs()})).Data["album"].(map[string]any)
-	failText(t, tcall(t, other, "undo_last_edit", map[string]any{"album": a}), errUndoNotOwn) // чужая
-	r.fx.bump()                                                                               // человек правил после агента
+	failText(t, tcall(t, other, "undo_last_edit", map[string]any{"album": a}), errUndoNoOwn) // чужая: у того подключения правок нет
+	r.fx.bump()                                                                              // человек правил после агента
 	failText(t, tcall(t, cs, "undo_last_edit", map[string]any{"album": a}), errUndoNotOwn)
 	if r.fx.edit.nUndo.Load() != 0 {
 		t.Fatal("Host.Undo вызван для не своей правки")
@@ -463,9 +469,10 @@ func TestVaryLayoutsArgs(t *testing.T) {
 	if got := r.fx.edit.gotVary(); strings.Join(got.Spreads, ",") != "sp1,sp2" || got.Variety != 1 || len(got.Families) != 1 || got.Client != "Claude Code" {
 		t.Fatalf("Host.Vary получил %+v", got)
 	}
-	for _, bad := range []any{"cover", 9, "нет"} {
-		failText(t, tcall(t, cs, "vary_layouts", map[string]any{"album": r.fx.refArgs(), "spreads": []any{1, bad}}), errNoSpread)
+	for _, bad := range []any{9, "нет"} {
+		failText(t, tcall(t, cs, "vary_layouts", map[string]any{"album": r.fx.refArgs(), "spreads": []any{1, bad}}), errNoSpreadFlat)
 	}
+	failText(t, tcall(t, cs, "vary_layouts", map[string]any{"album": r.fx.refArgs(), "spreads": []any{1, "cover"}}), errCoverNotTarget("vary_layouts"))
 	for _, bad := range []map[string]any{{"spreads": []any{}}, {"variety": 3}, {"variety": 0}, {"families": []string{"x"}}} {
 		args := map[string]any{"album": r.fx.refArgs(), "spreads": []any{1}}
 		for k, v := range bad {

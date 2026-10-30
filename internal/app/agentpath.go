@@ -127,6 +127,12 @@ func (r *folderRules) judge(p string) error {
 	if r.windows && len(p) == 3 || !r.windows && p == "/" {
 		return errFolderTooWide // корень тома
 	}
+	return r.judgeBelowRoot(p)
+}
+
+// judgeBelowRoot — judge без проверки «корень тома»: явное место съёмок (agentplaces.go) может быть
+// корнем несистемного тома, остальное правило то же.
+func (r *folderRules) judgeBelowRoot(p string) error {
 	for _, o := range r.ours {
 		if r.inside(p, o) {
 			return errFolderOurs
@@ -192,6 +198,10 @@ func diskProbe(p string) (string, error) {
 	}
 	resolved, err := filepath.EvalSymlinks(p)
 	if err != nil {
+		return "", err
+	}
+	// subst-диск и отображённая папка — не ссылки: настоящий путь даёт только ОС (аудит 0.34, М4).
+	if resolved, err = osx.RealPath(resolved); err != nil {
 		return "", err
 	}
 	if st, err := library.StatLocal(resolved); err != nil || !st.IsDir() {

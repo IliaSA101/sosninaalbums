@@ -34,10 +34,15 @@ func TestHostFields(t *testing.T) {
 		"FontsMissing func([]model.FontUse) []string",
 		"Preview func(context.Context, string, int) ([]uint8, error)", "Render func(context.Context, string, int) ([]uint8, error)",
 		// Ступень 3 (149): правки; всё — числа, строки и срезы строк (TestHostTypesScalar).
-		"EditState func() (bool, string)", "Scanning func() bool", "Busy func(context.Context) bool", "Backup func(string) error",
+		"Perm func(string) (string, string)", "PermLevel func(string) (string, string, int)", "Scanning func() bool", "Busy func(context.Context) bool", "Backup func(string) error",
 		"Ask func(context.Context, agents.AskReq) (agents.AskRes, error)", "Auto func(context.Context, agents.AutoReq) (agents.AutoRes, error)",
 		"Vary func(context.Context, agents.VaryReq) (agents.AlbumRef, int, error)", "Show func(string, string) (int, error)",
 		"Undo func(context.Context, agents.AlbumRef) (agents.AlbumRef, error)",
+		// Ступень 3б (151): лист-сетка, семейство и правки 0.34; то же правило типов.
+		"Sheet func(context.Context, agents.SheetReq) ([]uint8, []string, error)", "Families func([]string) []string",
+		"Mark func(context.Context, agents.MarkReq) (agents.MarkRes, error)", "Cover func(context.Context, agents.CoverReq) (agents.CoverRes, error)",
+		"Bg func(context.Context, agents.BgReq) (agents.BgRes, error)", "Stickers func(context.Context, agents.StickerReq) (agents.StickerRes, error)",
+		"Print func(context.Context, agents.PrintReq) (agents.PrintRes, error)",
 	}
 	rt := reflect.TypeOf(Host{})
 	var got []string
@@ -73,7 +78,8 @@ func TestHostTypesScalar(t *testing.T) {
 			t.Errorf("%s: недопустимый вид %v", path, rt)
 		}
 	}
-	for _, v := range []any{AskReq{}, AskRes{}, AutoReq{}, AutoRes{}, VaryReq{}, AlbumRef{}} {
+	for _, v := range []any{AskReq{}, AskRes{}, AutoReq{}, AutoRes{}, VaryReq{}, AlbumRef{},
+		SheetReq{}, MarkReq{}, MarkRes{}, CoverReq{}, CoverRes{}, BgReq{}, BgRes{}, StickerReq{}, StickerRes{}, PrintReq{}, PrintRes{}} {
 		rt := reflect.TypeOf(v)
 		check(rt.Name(), rt)
 	}
@@ -184,7 +190,7 @@ func TestLevelGates(t *testing.T) {
 		}
 		if lv == 1 {
 			wantAll(t, all, "Свой стикер 1", "Свой фон 1", "Свой фон 2", "Мой макет 1", "Мой шаблон 1", "Набор из файла 1",
-				"Набор из файла 2", "Свой профиль 1", "Свой профиль 2", "own-2", "Альбом")
+				"Набор из файла 2", "Свой профиль 1", "Свой профиль 2", ownPrintID("own1"), "Альбом")
 		}
 		wantPreviewGate(t, cs, lv)
 	}

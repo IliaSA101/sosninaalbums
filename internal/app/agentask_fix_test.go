@@ -24,7 +24,7 @@ func TestCreateDraftNoStoreRefused(t *testing.T) {
 		a.backups = store
 		prev, rev := a.editor(), r.rev()
 		c := r.ask(r.createReq())
-		st, err := a.AgentAnswerCreate(r.asked(t, 1).ID)
+		st, err := a.AgentAnswerCreate(r.asked(t, 1).ID, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,7 +46,7 @@ func TestCreateDraftCopyPinned(t *testing.T) {
 	r := newAskRig(t)
 	a := r.a
 	c := r.ask(r.createReq())
-	st, err := a.AgentAnswerCreate(r.asked(t, 1).ID)
+	st, err := a.AgentAnswerCreate(r.asked(t, 1).ID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,16 +72,12 @@ func TestAgentAnswerCreateCancelled(t *testing.T) {
 	cases := map[string]func(r *askRig){
 		"окно отменено": func(r *askRig) { r.picked = "" },
 		"папка негодна": func(r *askRig) {
-			if runtime.GOOS == "windows" {
-				r.picked = `C:\Windows`
-			} else {
-				r.picked = "/etc/Секрет"
-			}
+			r.picked = strictWide()
 			r.a.askM().rules = strictRules
 		},
 		"флажок выключен": func(r *askRig) {
 			r.a.askM().pickDir = func(string, string) (string, error) {
-				r.a.SetAgentsEdit(false) // снят, пока открыто окно ОС
+				setAgentsEdit(r.a, false) // снят, пока открыто окно ОС
 				return r.other, nil
 			}
 		},
@@ -95,7 +91,7 @@ func TestAgentAnswerCreateCancelled(t *testing.T) {
 		setup(r)
 		prev := r.a.editor()
 		c := r.ask(r.createReq())
-		st, err := r.a.AgentAnswerCreate(r.asked(t, 1).ID)
+		st, err := r.a.AgentAnswerCreate(r.asked(t, 1).ID, false)
 		c.wait(t)
 		if err != nil || !st.Cancelled {
 			t.Errorf("%s: err=%v cancelled=%v", name, err, st.Cancelled)
@@ -108,6 +104,7 @@ func TestAgentAnswerCreateCancelled(t *testing.T) {
 
 // Подсказка проверяется теми же правилами, что и выбранная папка: папка данных и папка миниатюр отброшены.
 func TestHintUsesAskRules(t *testing.T) {
+	noHiddenAttrs(t) // правило скрытых проверено отдельно; TempDir Windows лежит под скрытой AppData
 	r := newAskRig(t)
 	a := r.a
 	_, thumbs := dataDirs(a.data)
@@ -140,14 +137,14 @@ func TestHintUsesAskRules(t *testing.T) {
 
 // Имя добавленной папки с RLO в тост не попадает: вместо него «папка».
 func TestAgentFolderToastBadRunes(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("имя с RLO на Windows недопустимо")
-	}
 	r := newAskRig(t)
 	a := r.a
 	bad := filepath.Join(testkit.TempDir(t), "a\u202Eb")
 	if err := os.Mkdir(bad, 0o755); err != nil {
-		t.Fatal(err)
+		if runtime.GOOS != "windows" {
+			t.Fatal("ФС не приняла имя с RLO:", err)
+		}
+		t.Skip("ФС не приняла имя с RLO:", err) // Windows: зависит от тома
 	}
 	if _, _, err := a.editor().AddFolder(bad); err != nil {
 		t.Skip("редактор не принял папку с RLO:", err)
@@ -165,7 +162,7 @@ func TestAgentFlagOffAfterWait(t *testing.T) {
 	r := newEditRig(t, 6)
 	a := r.a
 	rev, key := r.rev(), r.key()
-	prefsOff := func() { a.SetAgentsEdit(false) }
+	prefsOff := func() { setAgentsEdit(a, false) }
 	prefsOff()
 	if _, err := a.agentAuto(context.Background(), r.req()); !errors.Is(err, errAgentOff) {
 		t.Errorf("agentAuto: %v", err)

@@ -16,3 +16,16 @@ func MCPSock(name string) string {
 	}
 	return filepath.Join(base, name, "mcp", "sock")
 }
+
+// UseRoamingDirForTest ставит dir вместо папки настроек на время теста (стенд службы агентов:
+// на Windows известная папка не зависит от среды, подменить её HOME или XDG нельзя). Не для
+// t.Parallel: подмена общая на процесс. В программе не вызывается.
+func UseRoamingDirForTest(t interface {
+	Helper()
+	Cleanup(func())
+}, dir string) {
+	t.Helper()
+	prev := roamingDirFn
+	roamingDirFn = func() string { return dir }
+	t.Cleanup(func() { roamingDirFn = prev })
+}

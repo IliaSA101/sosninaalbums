@@ -30,6 +30,7 @@ type agentAutoReq struct {
 	Families         []string
 	Photos           []string // пусто — все свободные фото ленты; иначе они же, отфильтрованные тем же правилом
 	ScanWaitMs       int      // сколько ждать конца чтения ленты, мс; 0 — не ждать
+	Asked            bool     // вызов шёл при «Спрашивать»: вопрос уже задан
 }
 
 // agentAutoRes — итог автосборки.
@@ -58,7 +59,7 @@ func (a *App) agentAuto(ctx context.Context, in agentAutoReq) (res agentAutoRes,
 	if err := a.agentWaitScan(ctx, time.Duration(in.ScanWaitMs)*time.Millisecond); err != nil {
 		return res, err
 	}
-	if err := a.agentCheckOn(); err != nil { // флажок могли снять, пока ждали ленту
+	if err := a.agentCheckTool(toolAutobuild, in.Asked); err != nil { // инструмент могли запретить, пока ждали ленту
 		return res, err
 	}
 	before := ed.View()
