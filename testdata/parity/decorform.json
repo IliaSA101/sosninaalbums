@@ -1,0 +1,1405 @@
+{
+  "about": "Вид и стиль стикера набора: formOf/styleOf в internal/decor/browse.go и копия formOf в internal/devtools/packprep/form.go (133, design §5). Первые 144 — предметы пилота (вид по папке рецепта), далее края. Свои стикеры не размечаются — отдельно, не в векторе.",
+  "cases": [
+    {
+      "name": "Обручальные кольца",
+      "w": 928,
+      "h": 591,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-01.png"
+    },
+    {
+      "name": "Букет",
+      "w": 984,
+      "h": 1019,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-02.png"
+    },
+    {
+      "name": "Бокалы",
+      "w": 736,
+      "h": 785,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-03.png"
+    },
+    {
+      "name": "Голуби",
+      "w": 1307,
+      "h": 832,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-04.png"
+    },
+    {
+      "name": "Сердце",
+      "w": 594,
+      "h": 563,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-05.png"
+    },
+    {
+      "name": "Торт",
+      "w": 676,
+      "h": 792,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-06.png"
+    },
+    {
+      "name": "Конверт с печатью",
+      "w": 836,
+      "h": 573,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-07.png"
+    },
+    {
+      "name": "Лента",
+      "w": 1410,
+      "h": 430,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-08.png"
+    },
+    {
+      "name": "Калла",
+      "w": 512,
+      "h": 879,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-09.png"
+    },
+    {
+      "name": "Лавровый венок",
+      "w": 972,
+      "h": 889,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-10.png"
+    },
+    {
+      "name": "Бант",
+      "w": 787,
+      "h": 865,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-11.png"
+    },
+    {
+      "name": "Звезда",
+      "w": 627,
+      "h": 597,
+      "form": "",
+      "style": "",
+      "note": "wedding-navy-watercolor/stickers/nb2-12.png"
+    },
+    {
+      "name": "Уголок цветочный сверху слева",
+      "w": 821,
+      "h": 754,
+      "form": "corner",
+      "style": "",
+      "note": "wedding-navy-watercolor/corners/ns-corner-flowers-tl.png"
+    },
+    {
+      "name": "Уголок цветочный сверху справа",
+      "w": 761,
+      "h": 761,
+      "form": "corner",
+      "style": "",
+      "note": "wedding-navy-watercolor/corners/ns-corner-flowers-tr.png"
+    },
+    {
+      "name": "Уголок цветочный снизу слева",
+      "w": 768,
+      "h": 770,
+      "form": "corner",
+      "style": "",
+      "note": "wedding-navy-watercolor/corners/ns-corner-flowers-bl.png"
+    },
+    {
+      "name": "Уголок цветочный снизу справа",
+      "w": 819,
+      "h": 761,
+      "form": "corner",
+      "style": "",
+      "note": "wedding-navy-watercolor/corners/ns-corner-flowers-br.png"
+    },
+    {
+      "name": "Разделитель цветок 1",
+      "w": 1660,
+      "h": 168,
+      "form": "divider",
+      "style": "",
+      "note": "wedding-navy-watercolor/dividers/ns-div-flower-01.png"
+    },
+    {
+      "name": "Разделитель цветок 3",
+      "w": 1655,
+      "h": 113,
+      "form": "divider",
+      "style": "",
+      "note": "wedding-navy-watercolor/dividers/ns-div-flower-03.png"
+    },
+    {
+      "name": "Разделитель пышный 1",
+      "w": 1871,
+      "h": 203,
+      "form": "divider",
+      "style": "",
+      "note": "wedding-navy-watercolor/dividers/ns-div-lush-01.png"
+    },
+    {
+      "name": "Разделитель пышный 3",
+      "w": 1876,
+      "h": 226,
+      "form": "divider",
+      "style": "",
+      "note": "wedding-navy-watercolor/dividers/ns-div-lush-03.png"
+    },
+    {
+      "name": "Значки: Колокольчик",
+      "w": 1258,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-01.png"
+    },
+    {
+      "name": "Значки: Стопка книг",
+      "w": 1576,
+      "h": 1512,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-02.png"
+    },
+    {
+      "name": "Значки: Раскрытая книга",
+      "w": 1576,
+      "h": 1234,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-03.png"
+    },
+    {
+      "name": "Значки: Цветные карандаши",
+      "w": 1500,
+      "h": 1572,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-04.png"
+    },
+    {
+      "name": "Значки: Стакан с карандашами",
+      "w": 1097,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-05.png"
+    },
+    {
+      "name": "Значки: Перьевая ручка",
+      "w": 1574,
+      "h": 1523,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-06.png"
+    },
+    {
+      "name": "Значки: Ластик",
+      "w": 1574,
+      "h": 1129,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-07.png"
+    },
+    {
+      "name": "Значки: Точилка",
+      "w": 1570,
+      "h": 1386,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-08.png"
+    },
+    {
+      "name": "Значки: Линейка",
+      "w": 1358,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-09.png"
+    },
+    {
+      "name": "Значки: Угольник",
+      "w": 1573,
+      "h": 1549,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-10.png"
+    },
+    {
+      "name": "Значки: Транспортир",
+      "w": 1574,
+      "h": 887,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-11.png"
+    },
+    {
+      "name": "Значки: Циркуль",
+      "w": 797,
+      "h": 1579,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-12.png"
+    },
+    {
+      "name": "Значки: Глобус",
+      "w": 1225,
+      "h": 1578,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-13.png"
+    },
+    {
+      "name": "Значки: Рюкзак",
+      "w": 1471,
+      "h": 1576,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-14.png"
+    },
+    {
+      "name": "Значки: Пенал",
+      "w": 1576,
+      "h": 705,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-15.png"
+    },
+    {
+      "name": "Значки: Блокнот",
+      "w": 1272,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-16.png"
+    },
+    {
+      "name": "Значки: Доска",
+      "w": 1574,
+      "h": 1185,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-17.png"
+    },
+    {
+      "name": "Значки: Будильник",
+      "w": 1420,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-18.png"
+    },
+    {
+      "name": "Значки: Кленовый лист",
+      "w": 1273,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-19.png"
+    },
+    {
+      "name": "Значки: Красный кленовый лист",
+      "w": 1270,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-20.png"
+    },
+    {
+      "name": "Значки: Дубовый лист",
+      "w": 834,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-21.png"
+    },
+    {
+      "name": "Значки: Жёлудь",
+      "w": 1037,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-22.png"
+    },
+    {
+      "name": "Значки: Осенний букет",
+      "w": 1321,
+      "h": 1578,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-23.png"
+    },
+    {
+      "name": "Значки: Цветок астры",
+      "w": 1572,
+      "h": 1332,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-24.png"
+    },
+    {
+      "name": "Значки: Шапочка выпускника",
+      "w": 1576,
+      "h": 1016,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-25.png"
+    },
+    {
+      "name": "Значки: Диплом",
+      "w": 1572,
+      "h": 1151,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-26.png"
+    },
+    {
+      "name": "Значки: Звезда",
+      "w": 1572,
+      "h": 1492,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-27.png"
+    },
+    {
+      "name": "Значки: Микроскоп",
+      "w": 1053,
+      "h": 1576,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-28.png"
+    },
+    {
+      "name": "Значки: Лупа",
+      "w": 862,
+      "h": 1572,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-29.png"
+    },
+    {
+      "name": "Значки: Палитра с кистью",
+      "w": 1425,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-30.png"
+    },
+    {
+      "name": "Значки: Бумажный самолётик",
+      "w": 1574,
+      "h": 1058,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-31.png"
+    },
+    {
+      "name": "Значки: Лампочка",
+      "w": 964,
+      "h": 1570,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-32.png"
+    },
+    {
+      "name": "Значки: Бант",
+      "w": 1573,
+      "h": 1322,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-33.png"
+    },
+    {
+      "name": "Значки: Медаль",
+      "w": 1035,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-34.png"
+    },
+    {
+      "name": "Значки: Кубок",
+      "w": 1384,
+      "h": 1574,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-35.png"
+    },
+    {
+      "name": "Значки: Парта",
+      "w": 1574,
+      "h": 1485,
+      "form": "",
+      "style": "Значки",
+      "note": "school-autumn/stickers/z-36.png"
+    },
+    {
+      "name": "Рисунки: Колокольчик",
+      "w": 712,
+      "h": 874,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-01.png"
+    },
+    {
+      "name": "Рисунки: Стопка книг",
+      "w": 952,
+      "h": 638,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-02.png"
+    },
+    {
+      "name": "Рисунки: Стакан с карандашами",
+      "w": 528,
+      "h": 862,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-03.png"
+    },
+    {
+      "name": "Рисунки: Глобус",
+      "w": 729,
+      "h": 947,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-04.png"
+    },
+    {
+      "name": "Рисунки: Рюкзак",
+      "w": 837,
+      "h": 977,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-05.png"
+    },
+    {
+      "name": "Рисунки: Тетрадь с ручкой",
+      "w": 994,
+      "h": 763,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-06.png"
+    },
+    {
+      "name": "Рисунки: Угольник и транспортир",
+      "w": 870,
+      "h": 670,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-07.png"
+    },
+    {
+      "name": "Рисунки: Осенние листья",
+      "w": 972,
+      "h": 760,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-08.png"
+    },
+    {
+      "name": "Рисунки: Букет астр",
+      "w": 767,
+      "h": 911,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-09.png"
+    },
+    {
+      "name": "Рисунки: Шапочка с дипломом",
+      "w": 999,
+      "h": 758,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-10.png"
+    },
+    {
+      "name": "Рисунки: Доска",
+      "w": 1030,
+      "h": 729,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-11.png"
+    },
+    {
+      "name": "Рисунки: Будильник",
+      "w": 597,
+      "h": 819,
+      "form": "",
+      "style": "Рисунки",
+      "note": "school-autumn/stickers/r-12.png"
+    },
+    {
+      "name": "Уголок листья пышный сверху слева",
+      "w": 837,
+      "h": 874,
+      "form": "corner",
+      "style": "",
+      "note": "school-autumn/corners/c-leaves-lush-tl.png"
+    },
+    {
+      "name": "Уголок листья пышный сверху справа",
+      "w": 845,
+      "h": 875,
+      "form": "corner",
+      "style": "",
+      "note": "school-autumn/corners/c-leaves-lush-tr.png"
+    },
+    {
+      "name": "Уголок листья пышный снизу слева",
+      "w": 808,
+      "h": 899,
+      "form": "corner",
+      "style": "",
+      "note": "school-autumn/corners/c-leaves-lush-bl.png"
+    },
+    {
+      "name": "Уголок листья пышный снизу справа",
+      "w": 844,
+      "h": 904,
+      "form": "corner",
+      "style": "",
+      "note": "school-autumn/corners/c-leaves-lush-br.png"
+    },
+    {
+      "name": "Уголок принадлежности сверху слева",
+      "w": 880,
+      "h": 917,
+      "form": "corner",
+      "style": "",
+      "note": "school-autumn/corners/c-supplies-tl.png"
+    },
+    {
+      "name": "Уголок принадлежности сверху справа",
+      "w": 931,
+      "h": 891,
+      "form": "corner",
+      "style": "",
+      "note": "school-autumn/corners/c-supplies-tr.png"
+    },
+    {
+      "name": "Уголок принадлежности снизу слева",
+      "w": 861,
+      "h": 875,
+      "form": "corner",
+      "style": "",
+      "note": "school-autumn/corners/c-supplies-bl.png"
+    },
+    {
+      "name": "Уголок принадлежности снизу справа",
+      "w": 858,
+      "h": 875,
+      "form": "corner",
+      "style": "",
+      "note": "school-autumn/corners/c-supplies-br.png"
+    },
+    {
+      "name": "Разделитель: яблоко",
+      "w": 1745,
+      "h": 192,
+      "form": "divider",
+      "style": "",
+      "note": "school-autumn/dividers/d-four-02.png"
+    },
+    {
+      "name": "Разделитель: листья",
+      "w": 1746,
+      "h": 188,
+      "form": "divider",
+      "style": "",
+      "note": "school-autumn/dividers/d-four-03.png"
+    },
+    {
+      "name": "Разделитель: золотая веточка с листом",
+      "w": 1750,
+      "h": 200,
+      "form": "divider",
+      "style": "",
+      "note": "school-autumn/dividers/d-wavy-05.png"
+    },
+    {
+      "name": "Разделитель: синий карандаш",
+      "w": 1694,
+      "h": 75,
+      "form": "divider",
+      "style": "",
+      "note": "school-autumn/dividers/d-arrows-01.png"
+    },
+    {
+      "name": "Разделитель: звезда со стрелками",
+      "w": 1676,
+      "h": 215,
+      "form": "divider",
+      "style": "",
+      "note": "school-autumn/dividers/d-arrows-05.png"
+    },
+    {
+      "name": "Разделитель: ветка с клёнами",
+      "w": 1495,
+      "h": 286,
+      "form": "divider",
+      "style": "",
+      "note": "school-autumn/dividers/d-pencils-05.png"
+    },
+    {
+      "name": "Рисунки: Пирамидка",
+      "w": 1343,
+      "h": 1572,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-01.png"
+    },
+    {
+      "name": "Рисунки: Мяч",
+      "w": 1566,
+      "h": 1566,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-03.png"
+    },
+    {
+      "name": "Рисунки: Машинка",
+      "w": 1574,
+      "h": 938,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-04.png"
+    },
+    {
+      "name": "Рисунки: Лошадка-качалка",
+      "w": 1574,
+      "h": 1466,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-05.png"
+    },
+    {
+      "name": "Рисунки: Юла",
+      "w": 1188,
+      "h": 1570,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-06.png"
+    },
+    {
+      "name": "Рисунки: Кукла",
+      "w": 1331,
+      "h": 1572,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-07.png"
+    },
+    {
+      "name": "Рисунки: Паровозик",
+      "w": 1570,
+      "h": 1169,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-08.png"
+    },
+    {
+      "name": "Рисунки: Кораблик",
+      "w": 1570,
+      "h": 1441,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-09.png"
+    },
+    {
+      "name": "Рисунки: Барабан",
+      "w": 1394,
+      "h": 1572,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-10.png"
+    },
+    {
+      "name": "Рисунки: Воздушный змей",
+      "w": 736,
+      "h": 1578,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-11.png"
+    },
+    {
+      "name": "Рисунки: Уточка",
+      "w": 1568,
+      "h": 1320,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-12.png"
+    },
+    {
+      "name": "Рисунки: Воздушные шары",
+      "w": 1133,
+      "h": 1576,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-15.png"
+    },
+    {
+      "name": "Рисунки: Робот",
+      "w": 1450,
+      "h": 1572,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-17.png"
+    },
+    {
+      "name": "Рисунки: Зайчик",
+      "w": 1085,
+      "h": 1572,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-19.png"
+    },
+    {
+      "name": "Рисунки: Щенок",
+      "w": 1572,
+      "h": 1438,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-20.png"
+    },
+    {
+      "name": "Рисунки: Ведёрко с лопаткой",
+      "w": 1216,
+      "h": 1572,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-23.png"
+    },
+    {
+      "name": "Рисунки: Лисёнок",
+      "w": 1104,
+      "h": 1570,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-24.png"
+    },
+    {
+      "name": "Рисунки: Белка",
+      "w": 1574,
+      "h": 1257,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-25.png"
+    },
+    {
+      "name": "Рисунки: Ёжик",
+      "w": 1568,
+      "h": 1253,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-26.png"
+    },
+    {
+      "name": "Рисунки: Сова",
+      "w": 1305,
+      "h": 1568,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-27.png"
+    },
+    {
+      "name": "Рисунки: Мороженое",
+      "w": 801,
+      "h": 1574,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-29.png"
+    },
+    {
+      "name": "Рисунки: Лев",
+      "w": 1266,
+      "h": 1572,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-31.png"
+    },
+    {
+      "name": "Рисунки: Ромашка",
+      "w": 1564,
+      "h": 1551,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-32.png"
+    },
+    {
+      "name": "Рисунки: Улитка",
+      "w": 1564,
+      "h": 1379,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-34.png"
+    },
+    {
+      "name": "Рисунки: Бабочка",
+      "w": 1572,
+      "h": 1257,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-35.png"
+    },
+    {
+      "name": "Рисунки: Тюльпан",
+      "w": 777,
+      "h": 1572,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-37.png"
+    },
+    {
+      "name": "Рисунки: Солнце",
+      "w": 1570,
+      "h": 1509,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-40.png"
+    },
+    {
+      "name": "Рисунки: Корона",
+      "w": 1570,
+      "h": 923,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-41.png"
+    },
+    {
+      "name": "Рисунки: Месяц",
+      "w": 1372,
+      "h": 1564,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-42.png"
+    },
+    {
+      "name": "Рисунки: Радуга",
+      "w": 1576,
+      "h": 958,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-43.png"
+    },
+    {
+      "name": "Рисунки: Облако",
+      "w": 1570,
+      "h": 941,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-44.png"
+    },
+    {
+      "name": "Рисунки: Птичка",
+      "w": 1564,
+      "h": 1493,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-45.png"
+    },
+    {
+      "name": "Рисунки: Яблоко",
+      "w": 1361,
+      "h": 1564,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-50.png"
+    },
+    {
+      "name": "Рисунки: Рюкзак",
+      "w": 1342,
+      "h": 1569,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-54.png"
+    },
+    {
+      "name": "Рисунки: Сердце",
+      "w": 1562,
+      "h": 1341,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-59.png"
+    },
+    {
+      "name": "Рисунки: Звезда",
+      "w": 1094,
+      "h": 1571,
+      "form": "",
+      "style": "Рисунки",
+      "note": "kindergarten-pastel/stickers/rc-60.png"
+    },
+    {
+      "name": "Акварель: Мишка",
+      "w": 694,
+      "h": 902,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-01.png"
+    },
+    {
+      "name": "Акварель: Пирамидка",
+      "w": 650,
+      "h": 859,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-02.png"
+    },
+    {
+      "name": "Акварель: Деревянные кубики",
+      "w": 887,
+      "h": 791,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-03.png"
+    },
+    {
+      "name": "Акварель: Мяч",
+      "w": 765,
+      "h": 764,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-04.png"
+    },
+    {
+      "name": "Акварель: Воздушные шары",
+      "w": 1020,
+      "h": 1059,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-05.png"
+    },
+    {
+      "name": "Акварель: Радуга",
+      "w": 1106,
+      "h": 699,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-06.png"
+    },
+    {
+      "name": "Акварель: Солнце",
+      "w": 914,
+      "h": 894,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-07.png"
+    },
+    {
+      "name": "Акварель: Машинка",
+      "w": 1071,
+      "h": 649,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-08.png"
+    },
+    {
+      "name": "Акварель: Лошадка-качалка",
+      "w": 946,
+      "h": 872,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-09.png"
+    },
+    {
+      "name": "Акварель: Зайчик с морковкой",
+      "w": 597,
+      "h": 975,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-10.png"
+    },
+    {
+      "name": "Акварель: Воздушный змей",
+      "w": 726,
+      "h": 974,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-11.png"
+    },
+    {
+      "name": "Акварель: Коробка мелков",
+      "w": 793,
+      "h": 763,
+      "form": "",
+      "style": "Акварель",
+      "note": "kindergarten-pastel/stickers/nb2-12.png"
+    },
+    {
+      "name": "Уголок игрушки сверху слева",
+      "w": 763,
+      "h": 694,
+      "form": "corner",
+      "style": "",
+      "note": "kindergarten-pastel/corners/kg-co-toys-tl.png"
+    },
+    {
+      "name": "Уголок игрушки сверху справа",
+      "w": 745,
+      "h": 738,
+      "form": "corner",
+      "style": "",
+      "note": "kindergarten-pastel/corners/kg-co-toys-tr.png"
+    },
+    {
+      "name": "Уголок игрушки снизу слева",
+      "w": 780,
+      "h": 821,
+      "form": "corner",
+      "style": "",
+      "note": "kindergarten-pastel/corners/kg-co-toys-bl.png"
+    },
+    {
+      "name": "Уголок игрушки снизу справа",
+      "w": 740,
+      "h": 821,
+      "form": "corner",
+      "style": "",
+      "note": "kindergarten-pastel/corners/kg-co-toys-br.png"
+    },
+    {
+      "name": "Уголок контур сверху слева",
+      "w": 779,
+      "h": 783,
+      "form": "corner",
+      "style": "",
+      "note": "kindergarten-pastel/corners/kg-co-contour-tl.png"
+    },
+    {
+      "name": "Уголок контур сверху справа",
+      "w": 752,
+      "h": 806,
+      "form": "corner",
+      "style": "",
+      "note": "kindergarten-pastel/corners/kg-co-contour-tr.png"
+    },
+    {
+      "name": "Уголок контур снизу слева",
+      "w": 803,
+      "h": 780,
+      "form": "corner",
+      "style": "",
+      "note": "kindergarten-pastel/corners/kg-co-contour-bl.png"
+    },
+    {
+      "name": "Уголок контур снизу справа",
+      "w": 780,
+      "h": 882,
+      "form": "corner",
+      "style": "",
+      "note": "kindergarten-pastel/corners/kg-co-contour-br.png"
+    },
+    {
+      "name": "Гирлянда флажков, пастель",
+      "w": 1838,
+      "h": 315,
+      "form": "divider",
+      "style": "",
+      "note": "kindergarten-pastel/dividers/kg-div-pastel-01.png"
+    },
+    {
+      "name": "Радуга на линии",
+      "w": 1839,
+      "h": 214,
+      "form": "divider",
+      "style": "",
+      "note": "kindergarten-pastel/dividers/kg-div-pastel-02.png"
+    },
+    {
+      "name": "Паровозик, пастель",
+      "w": 1338,
+      "h": 250,
+      "form": "divider",
+      "style": "",
+      "note": "kindergarten-pastel/dividers/kg-div-pastel-07.png"
+    },
+    {
+      "name": "Гирлянда флажков, яркая",
+      "w": 1808,
+      "h": 129,
+      "form": "divider",
+      "style": "",
+      "note": "kindergarten-pastel/dividers/kg-div-bright-01.png"
+    },
+    {
+      "name": "Гирлянда сердечек",
+      "w": 1803,
+      "h": 57,
+      "form": "divider",
+      "style": "",
+      "note": "kindergarten-pastel/dividers/kg-div-bright-03.png"
+    },
+    {
+      "name": "Радуга и сердечки",
+      "w": 1758,
+      "h": 182,
+      "form": "divider",
+      "style": "",
+      "note": "kindergarten-pastel/dividers/kg-div-bright-07.png"
+    },
+    {
+      "name": "Золотой уголок",
+      "w": 800,
+      "h": 800,
+      "form": "corner",
+      "style": "",
+      "note": "слово в середине"
+    },
+    {
+      "name": "Уголки для фото",
+      "w": 0,
+      "h": 0,
+      "form": "corner",
+      "style": "",
+      "note": "уголк…"
+    },
+    {
+      "name": "Уголок-рамка",
+      "w": 500,
+      "h": 500,
+      "form": "corner",
+      "style": "",
+      "note": "дефис — граница слова"
+    },
+    {
+      "name": "УГОЛОК",
+      "w": 0,
+      "h": 0,
+      "form": "corner",
+      "style": "",
+      "note": "регистр"
+    },
+    {
+      "name": "уголок",
+      "w": 0,
+      "h": 0,
+      "form": "corner",
+      "style": "",
+      "note": ""
+    },
+    {
+      "name": "Треугольник",
+      "w": 0,
+      "h": 0,
+      "form": "",
+      "style": "",
+      "note": "не слово «уголок»"
+    },
+    {
+      "name": "Угловой узор",
+      "w": 0,
+      "h": 0,
+      "form": "",
+      "style": "",
+      "note": ""
+    },
+    {
+      "name": "Уголёк",
+      "w": 0,
+      "h": 0,
+      "form": "",
+      "style": "",
+      "note": "ё — другое слово"
+    },
+    {
+      "name": "Угольник",
+      "w": 0,
+      "h": 0,
+      "form": "",
+      "style": "",
+      "note": ""
+    },
+    {
+      "name": "Уголок2",
+      "w": 0,
+      "h": 0,
+      "form": "corner",
+      "style": "",
+      "note": "цифра — не буква, слово кончилось"
+    },
+    {
+      "name": "Гирлянда из роз",
+      "w": 2800,
+      "h": 700,
+      "form": "divider",
+      "style": "",
+      "note": "ровно 4:1"
+    },
+    {
+      "name": "Гирлянда из роз",
+      "w": 700,
+      "h": 2800,
+      "form": "divider",
+      "style": "",
+      "note": "ровно 1:4"
+    },
+    {
+      "name": "Гирлянда из роз",
+      "w": 2799,
+      "h": 700,
+      "form": "",
+      "style": "",
+      "note": "чуть меньше 4:1"
+    },
+    {
+      "name": "Гирлянда из роз",
+      "w": 700,
+      "h": 2799,
+      "form": "",
+      "style": "",
+      "note": "чуть меньше 1:4"
+    },
+    {
+      "name": "Лента-баннер",
+      "w": 0,
+      "h": 0,
+      "form": "",
+      "style": "",
+      "note": "размер неизвестен (встроенный)"
+    },
+    {
+      "name": "Лента",
+      "w": 0,
+      "h": 4000,
+      "form": "",
+      "style": "",
+      "note": "ширина 0 — не разделитель"
+    },
+    {
+      "name": "Лента",
+      "w": 4000,
+      "h": 0,
+      "form": "",
+      "style": "",
+      "note": "высота 0 — не разделитель"
+    },
+    {
+      "name": "Разделитель: яблоко",
+      "w": 2400,
+      "h": 300,
+      "form": "divider",
+      "style": "",
+      "note": "разделитель — стиль не берётся"
+    },
+    {
+      "name": "Уголок: листья",
+      "w": 600,
+      "h": 600,
+      "form": "corner",
+      "style": "",
+      "note": "уголок — стиль не берётся"
+    },
+    {
+      "name": "Значки: Колокольчик",
+      "w": 800,
+      "h": 800,
+      "form": "",
+      "style": "Значки",
+      "note": ""
+    },
+    {
+      "name": "Рисунки: Рюкзак",
+      "w": 800,
+      "h": 800,
+      "form": "",
+      "style": "Рисунки",
+      "note": ""
+    },
+    {
+      "name": "Ab: x",
+      "w": 100,
+      "h": 100,
+      "form": "",
+      "style": "Ab",
+      "note": "X ровно 2 руны"
+    },
+    {
+      "name": "A: x",
+      "w": 100,
+      "h": 100,
+      "form": "",
+      "style": "",
+      "note": "X из 1 руны"
+    },
+    {
+      "name": "Двадцать знаков стиля: x",
+      "w": 100,
+      "h": 100,
+      "form": "",
+      "style": "",
+      "note": "X из 21 руны"
+    },
+    {
+      "name": "Двадцать знаков стил: x",
+      "w": 100,
+      "h": 100,
+      "form": "",
+      "style": "Двадцать знаков стил",
+      "note": "X ровно 20 рун"
+    },
+    {
+      "name": "Набор 2: Ёж",
+      "w": 100,
+      "h": 100,
+      "form": "",
+      "style": "",
+      "note": "цифра в X — не стиль"
+    },
+    {
+      "name": "Значки:Колокольчик",
+      "w": 100,
+      "h": 100,
+      "form": "",
+      "style": "",
+      "note": "нет пробела после двоеточия"
+    },
+    {
+      "name": "Значки: ",
+      "w": 100,
+      "h": 100,
+      "form": "",
+      "style": "",
+      "note": "пусто после двоеточия"
+    },
+    {
+      "name": "Значки",
+      "w": 100,
+      "h": 100,
+      "form": "",
+      "style": "",
+      "note": "нет двоеточия"
+    },
+    {
+      "name": "Мазок: тонкий: длинный",
+      "w": 100,
+      "h": 100,
+      "form": "",
+      "style": "Мазок",
+      "note": "первое двоеточие"
+    },
+    {
+      "name": "",
+      "w": 0,
+      "h": 0,
+      "form": "",
+      "style": "",
+      "note": "пустое имя"
+    }
+  ]
+}
