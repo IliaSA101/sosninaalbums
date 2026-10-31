@@ -1,0 +1,38 @@
+{
+  "v": 1,
+  "pages": 1,
+  "ratio": 1,
+  "places": [
+    {
+      "x": 0.15,
+      "y": 0.12,
+      "w": 0.7,
+      "h": 0.7
+    }
+  ],
+  "page": [
+    {
+      "color": "#fffdf8",
+      "pat": {
+        "kind": "dots",
+        "inks": [
+          "#d4b26a"
+        ],
+        "preset": "sa:gold-dots"
+      }
+    }
+  ],
+  "stickers": [
+    {
+      "ax": 0,
+      "ay": 1,
+      "dx": 0,
+      "dy": -0.08,
+      "w": 0.15,
+      "h": 0.1,
+      "art": {
+        "kind": "rings"
+      }
+    }
+  ]
+}
