@@ -6,6 +6,9 @@ package app
 // agentask.go. Список Perms в AgentsInfo — по строкам таблицы службы.
 
 import (
+	"slices"
+
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 )
 
@@ -20,10 +23,26 @@ type AgentPerm struct {
 	Note  string   `json:"note"`  // пояснение под строкой
 }
 
+// Состояния места в AgentPlacesLive (design 153 §4.5); "" — всё в порядке или не успели узнать.
+const (
+	placeNoDisk   = agentplaces.StateNoDisk   // диск места сейчас не подключён
+	placeNoFolder = agentplaces.StateNoFolder // диск есть, папки на нём нет
+	placeHere     = agentplaces.StateHere     // место без привязки, а по его пути сейчас диск: можно привязать
+)
+
 // AgentPlace — место съёмок: «Всегда» у папки берёт без вопроса только внутри мест.
 type AgentPlace struct {
-	Dir    string `json:"dir"`
+	Key    string `json:"key"`    // ключ для ForgetAgentPlace / BindAgentPlace (12 hex), не зависит от буквы диска
+	Dir    string `json:"dir"`    // сохранённый путь; у привязанного в AgentPlacesLive — текущий
+	Label  string `json:"label"`  // метка диска, к которому привязано; "" — без метки или не привязано
 	Chosen bool   `json:"chosen"` // «Папка со съёмками…»; иначе — родитель добавленной папки
+	Bound  bool   `json:"bound"`  // привязано к диску по номеру (на macOS не бывает)
+	// Узкое место (только из родителя): над годом правила не пустили выше, новый год спросит снова;
+	// NarrowRoot — выше года только корень диска («Диск E: целиком — Папка со съёмками…»).
+	Narrow     bool   `json:"narrow"`
+	NarrowRoot bool   `json:"narrowRoot"`
+	State      string `json:"state"` // placeNoDisk | placeNoFolder | placeHere; только AgentPlacesLive
+	Here       string `json:"here"`  // метка диска по пути непривязанного места (State = placeHere); может быть пустой
 }
 
 // Группы SetAgentPermGroup.
@@ -39,6 +58,8 @@ const startToolName, startToolTitle = "start_program", "Запустить пр�
 const (
 	permWhyRead  = "Чтение не спрашивает: на одну просьбу агент читает десятки раз. Можно разрешить или запретить."
 	permWhyStart = "Запуск нужен, когда программа закрыта, — спросить негде. Можно разрешить или запретить."
+	permWhyExp   = "Выгрузка спрашивает всегда: папку и перезапись файлов подтверждаете вы. Можно запретить."
+	permWhyOpen  = "Открытие альбома спрашивает всегда: какой файл открыть, подтверждаете вы. Можно запретить."
 	permNoteImg  = "Без «+ картинки» отвечает отказом"
 	permNoteDir  = "Без вопроса — в местах съёмок"
 )
@@ -64,6 +85,11 @@ func (a *App) agentPermRows() []AgentPerm {
 			r.Why = permWhyStart
 		case prefs.ClassFolder, prefs.ClassAlbum:
 			r.Note = permNoteDir
+		case prefs.ClassAskOnly:
+			r.Why = permWhyExp // «Всегда» нет: щелчок по «Всегда» объясняет почему (agents.svelte.ts pickTool, allowMissing)
+			if name == "open_album" {
+				r.Why = permWhyOpen
+			}
 		}
 		rows = append(rows, r)
 	}
@@ -85,9 +111,9 @@ func permGroupOf(class string) string {
 	return "other"
 }
 
-// agentPlaces — места для AgentsInfo; не nil. Ключа agentPerms ещё нет (переход с 0.33) — показывается
-// предпросмотр засева, файл не трогается: запись случится при первом решении (seedPlaces).
-func (a *App) agentPlaces() []AgentPlace {
+// savedPlaces — места из config.json. Ключа agentPerms ещё нет (переход с 0.33) — предпросмотр
+// засева, файл не трогается: запись случится при первом решении (seedPlaces).
+func (a *App) savedPlaces() []prefs.Place {
 	cfg := a.loadConfig()
 	places := prefs.AgentPermsOf(cfg).Places
 	if cfg.AgentPerms == nil {
@@ -95,12 +121,27 @@ func (a *App) agentPlaces() []AgentPlace {
 			places = []prefs.Place{seed}
 		}
 	}
+	return places
+}
+
+// placeDTOs — места как их видит окно по config.json: диска не трогаем.
+func (a *App) placeDTOs(places []prefs.Place) []AgentPlace {
 	out := make([]AgentPlace, 0, len(places))
+	env := a.placeEnv()
 	for _, p := range places {
-		out = append(out, AgentPlace{Dir: p.Dir, Chosen: p.How == prefs.PlaceChosen})
+		narrow, root := env.NarrowOf(p)
+		dto := AgentPlace{Key: prefs.PlaceKey(p), Dir: p.Dir, Chosen: p.How == prefs.PlaceChosen, Bound: p.Vol != nil, Narrow: narrow, NarrowRoot: root}
+		if p.Vol != nil {
+			dto.Label = p.Vol.Label
+		}
+		out = append(out, dto)
 	}
 	return out
 }
+
+// agentPlaces — места для AgentsInfo; не nil. Без проб дисков: agents:state идёт на каждое событие
+// окна, а спящий диск не должен просыпаться от него (диски — AgentPlacesLive по раскрытию списка).
+func (a *App) agentPlaces() []AgentPlace { return a.placeDTOs(a.savedPlaces()) }
 
 // SetAgentPerm ставит разрешение одному инструменту. Режим вне допустимых (PermCan) и чужое
 // имя — без изменений: решает Go, интерфейс только показывает.
@@ -155,4 +196,45 @@ func (a *App) ForgetAgentPlaces() AgentsInfo {
 	prefs.ForgetPlaces(a.cfgDir)
 	a.agentsChanged()
 	return a.agentsInfo()
+}
+
+// ForgetAgentPlace — ✕ у места в списке: убрать одно по ключу AgentPlace.Key. Нет такого (убрано в
+// другом окне) — без записи. Ключ не зависит от буквы диска, поэтому работает и после её смены.
+func (a *App) ForgetAgentPlace(key string) AgentsInfo {
+	defer guard("ForgetAgentPlace")
+	a.seedPlaces()
+	if slices.ContainsFunc(prefs.LoadAgentPerms(a.cfgDir).Places, func(p prefs.Place) bool { return prefs.PlaceKey(p) == key }) {
+		prefs.UpdateAgentPerms(a.cfgDir, func(p *prefs.AgentPerms) { p.ForgetPlace(key) })
+		a.agentsChanged()
+	}
+	return a.agentsInfo()
+}
+
+// BindAgentPlace — ссылка «Привязать к диску» у места без привязки: место запоминает диск, который
+// сейчас по его пути (admit + номер тома под пределом). Узнать диск не удалось — место прежнее и
+// ошибка; привязанного или чужого ключа касание холостое. Путь окно не присылает — только ключ.
+func (a *App) BindAgentPlace(key string) (info AgentsInfo, err error) {
+	defer guardErr("BindAgentPlace", &err)
+	a.seedPlaces()
+	places := prefs.LoadAgentPerms(a.cfgDir).Places
+	i := slices.IndexFunc(places, func(p prefs.Place) bool { return prefs.PlaceKey(p) == key })
+	if i < 0 || places[i].Vol != nil {
+		return a.agentsInfo(), nil
+	}
+	pl := places[i]
+	env := a.placeEnv()
+	dir, err := env.Admit(pl.Dir, pl.How)
+	if err != nil {
+		return a.agentsInfo(), err
+	}
+	if env.Rules.Key(dir) != env.Rules.Key(pl.Dir) {
+		return a.agentsInfo(), agentplaces.ErrPlaceBad // по пути теперь другая папка (ссылка): не то место, что человек видит
+	}
+	vol := env.VolOfDir(dir)
+	if vol == nil {
+		return a.agentsInfo(), agentplaces.ErrVolUnknown
+	}
+	prefs.UpdateAgentPerms(a.cfgDir, func(p *prefs.AgentPerms) { p.BindPlaces(map[string]prefs.PlaceVol{key: *vol}) })
+	a.agentsChanged()
+	return a.agentsInfo(), nil
 }

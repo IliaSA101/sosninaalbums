@@ -7,6 +7,7 @@ package album
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -270,6 +271,42 @@ func TestEditorSealBadTag(t *testing.T) {
 	dir := testkit.TempDir(t)
 	path := filepath.Join(dir, "a.salbum")
 	_, uid := newAlbum(t, path)
+	checkBadTags(t, dir, path, uid)
+}
+
+// Печать из одних цифр (шанс ≈ 1 к 1800): верхний регистр её не меняет, и «негодный» вариант
+// становился годной печатью — тест падал случайно (0.35 rc, CI). Отпечаток подобран перебором.
+func TestEditorSealBadTagDigitsOnly(t *testing.T) {
+	dir := testkit.TempDir(t)
+	path := filepath.Join(dir, "a.salbum")
+	var uid string
+	for i := 0; ; i++ {
+		uid = fmt.Sprintf("%032x", i)
+		if tag := model.UIDTag(uid, path); strings.ToUpper(tag) == tag {
+			break
+		}
+	}
+	p := model.New()
+	p.UID = uid
+	p.SetUIDAt(model.UIDTag(uid, path))
+	if err := salbum.Save(p, path); err != nil {
+		t.Fatal(err)
+	}
+	checkBadTags(t, dir, path, uid)
+}
+
+// upperTag — печать в верхнем регистре; у печати из одних цифр регистра нет, тогда первый знак
+// заменяется буквой верхнего регистра: вариант гарантированно негодный и не равен годной.
+func upperTag(good string) string {
+	if up := strings.ToUpper(good); up != good {
+		return up
+	}
+	return "G" + good[1:]
+}
+
+// checkBadTags — негодные и чужие печати в файле path альбома с отпечатком uid и годной печатью.
+func checkBadTags(t *testing.T, dir, path, uid string) {
+	t.Helper()
 	p := &model.Project{UID: uid}
 	good := model.UIDTag(p.UID, path)
 	if fileTag(t, path) != good || !model.GoodUIDTag(good) {
@@ -280,7 +317,7 @@ func TestEditorSealBadTag(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, bad := range []string{
-		strings.ToUpper(good), good[:15], good + "0", strings.Repeat("g", 16), "", `\"},\"x\":\"`,
+		upperTag(good), good[:15], good + "0", strings.Repeat("g", 16), "", `\"},\"x\":\"`,
 		model.UIDTag(model.NewUID(), path), model.UIDTag(p.UID, filepath.Join(dir, "b.salbum")),
 	} {
 		if err := os.WriteFile(path, []byte(strings.Replace(string(data), good, bad, 1)), 0o644); err != nil {
@@ -290,7 +327,7 @@ func TestEditorSealBadTag(t *testing.T) {
 	}
 	q := model.New()
 	q.UID = uid
-	q.SetUIDAt(strings.ToUpper(good))
+	q.SetUIDAt(upperTag(good))
 	n, err := NewEditor(q, path)
 	if err != nil {
 		t.Fatal(err)

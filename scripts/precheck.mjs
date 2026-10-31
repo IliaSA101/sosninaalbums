@@ -1,7 +1,8 @@
 // Быстрая предпроверка для исполнителей перед отчётом: `node scripts/precheck.mjs [--base <rev>]`.
 // Ловит то, что иначе падает только на полном check.ps1 у оркестратора: gofmt, vet по всему модулю, golangci-lint
 // (только новое), go test -short изменённых пакетов, покрытие дерева album (при правке internal/album/**) против эталона,
-// prettier, eslint, svelte-check, vitest related + стражи (тесты со сканом дерева), язык комментариев, размер файлов, лимит файлов в папке. Полный go test и test-baseline
+// prettier, eslint, svelte-check, vitest related + стражи (тесты со сканом дерева), язык комментариев, размер файлов, лимит файлов в папке,
+// повтор добавленных тестов с горутинами и временем (repeat-tests.mjs: ≈ 3 с на тест, до 60 с). Полный go test и test-baseline
 // остаются шагом оркестратора (check.ps1 без -short: эталоны и большие наборы там).
 // go test -short — с кэшем go (теги как в check.sh); Go и фронт идут параллельно (фронт — дочерний процесс --part fe).
 // Пределы размера и папок — scripts/limits.mjs (один источник с check.ps1, pre-commit и хуком file-size).
@@ -14,6 +15,7 @@ import { withGoCaches } from './goenv.mjs'
 import { checkFolders, checkSizes } from './limits.mjs'
 import { collect as collectAdded, violations as langViolations } from './comment-lang.mjs'
 import { NO_DESKTOP, affectedScriptTests } from './script-tests.mjs'
+import { parseDurations, planRepeats, repeatLine, runPattern, selectRiskyTests } from './repeat-tests.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(root)
@@ -117,6 +119,7 @@ const step = (name, fn) => {
   const t = Date.now()
   const r = fn()
   const time = `${((Date.now() - t) / 1000).toFixed(1)}s`
+  const title = r.line ?? `${name} (${time})` // r.line — своя строка итога вместо «имя (время)»
   if (r.ok && r.warn) {
     console.log(`WARN ${name} (${time})`)
     r.warn
@@ -124,9 +127,9 @@ const step = (name, fn) => {
       .filter((l) => l.trim())
       .slice(-30)
       .forEach((l) => console.log(`     ${l}`))
-  } else if (r.ok) console.log(`OK   ${name} (${time})`)
+  } else if (r.ok) console.log(`OK   ${title}`)
   else {
-    console.log(`FAIL ${name} (${time})`)
+    console.log(`FAIL ${title}`)
     r.out
       .split('\n')
       .filter((l) => l.trim())
@@ -136,6 +139,43 @@ const step = (name, fn) => {
   }
 }
 const res = (r, emptyOut = false) => ({ ok: r.code === 0 && !(emptyOut && r.out.trim()), out: r.out })
+
+// Повтор новых тестов с горутинами и временем: один прогон с -v (время тестов), затем -count=N -shuffle=on без -race.
+// Модуль api/albums не берём: он мал и без горутин в тестах. Data race ловит go-race в CI.
+function repeatNewTests(testFiles) {
+  const read = (f) => (fs.existsSync(path.join(root, f)) ? fs.readFileSync(path.join(root, f), 'utf8') : null)
+  const baseTests = (dir) => {
+    const spec = `:(glob)${dir === '.' ? '' : `${dir}/`}*_test.go`
+    return new Set([...git('grep', '-h', '-E', '^func Test', base, '--', spec).out.matchAll(/^func (Test\w*)\(/gm)].map((m) => m[1]))
+  }
+  const groups = selectRiskyTests(testFiles, read, baseTests)
+  const dirs = Object.keys(groups)
+  const k = dirs.reduce((n, d) => n + groups[d].length, 0)
+  if (!k) {
+    console.log('SKIP повтор новых тестов: нет добавленных тестов с go func, sync., time., t.Parallel')
+    return
+  }
+  step('повтор новых тестов', () => {
+    const t = Date.now()
+    const pkg = (d) => (d === '.' ? '.' : `./${d}`)
+    // Больше трёх пакетов — через очередь, как go test -short выше
+    const exec = (args) => (dirs.length > 3 ? run('node', ['scripts/heavy.mjs', 'go', ...args]) : run('go', args))
+    const seconds = {}
+    for (const d of dirs) {
+      const r = exec(['test', '-short', '-count=1', '-v', '-run', runPattern(groups[d]), pkg(d)])
+      if (r.code !== 0) return { ok: false, out: r.out }
+      seconds[d] = Object.values(parseDurations(r.out)).reduce((a, b) => a + b, 0)
+    }
+    const counts = planRepeats(groups, seconds)
+    const outs = []
+    for (const d of dirs) {
+      const args = ['test', '-short', `-count=${counts[d]}`, '-shuffle=on', '-timeout', '120s', '-run', runPattern(groups[d]), pkg(d)]
+      const r = exec(args)
+      if (r.code !== 0) outs.push(`${pkg(d)} (-count=${counts[d]}):\n${r.out}`)
+    }
+    return { ok: outs.length === 0, out: outs.join('\n'), line: repeatLine(k, counts, (Date.now() - t) / 1000) }
+  })
+}
 
 // ---- Go ----
 // 146 (да владельца 2026-10-29): модуль контракта api/albums — свой go.mod. Его пакеты корневой go test
@@ -186,6 +226,9 @@ if (part !== 'fe' && goFiles.length) {
     if (fresh.length) parts.push(exec(['test', '-short', '-count=1', ...fresh], fresh.length))
     return res({ code: parts.find((r) => r.code !== 0)?.code ?? 0, out: parts.map((r) => r.out).join('\n') })
   })
+  // Новые тесты с go func / sync. / time. / t.Parallel (в теле или в тестируемом файле) — повторно: один прогон
+  // не ловит нестабильность (0.35/155: TestDecodeFailCachedOnce прошёл precheck и упал в CI)
+  repeatNewTests(built.filter((f) => f.endsWith('_test.go')))
   // Стражи Go: тесты internal/testkit, читающие всё дерево (t.TempDir, своя ссылка на бинарь), — go test -short
   // изменённых пакетов их не берёт, а ломаются они от любого *_test.go (25.10: три t.TempDir прошли precheck
   // трёх агентов и упали только в check --go; «да» владельца 25.10)

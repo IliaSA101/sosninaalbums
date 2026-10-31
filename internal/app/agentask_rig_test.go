@@ -8,14 +8,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
-	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -33,12 +31,6 @@ type askRig struct {
 	hold    chan struct{} // не nil — окно ОС ждёт закрытия канала
 	opened  chan struct{} // окно ОС открылось
 	other   string        // вторая папка съёмки (годная к добавлению)
-}
-
-// permissiveRules — правила без запретов: тестовые папки лежат под TMPDIR (в точечной .gotmp и в
-// домашней), настоящие правила их отвергли бы. Таблицы правил — в agentpath_test.go.
-func permissiveRules() *folderRules {
-	return &folderRules{windows: runtime.GOOS == "windows", fold: paths.Fold, timeout: time.Second, disk: diskOK}
 }
 
 func newAskRig(t *testing.T) *askRig {

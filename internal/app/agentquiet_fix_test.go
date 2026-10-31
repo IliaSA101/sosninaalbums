@@ -15,6 +15,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -41,7 +42,7 @@ func TestQuietCreateAlbumSwitchedDuringProbe(t *testing.T) {
 	r.a.draftSet(first, first.View().Rev) // черновик агента: тихо заменяется
 	rules, once := r.a.askM().rules, sync.Once{}
 	reached, proceed := make(chan struct{}), make(chan struct{})
-	r.a.askM().rules = func() *folderRules { // из quietApply (после плана): ждём, пока человек откроет другой альбом
+	r.a.askM().rules = func() *agentplaces.Rules { // из quietApply (после плана): ждём, пока человек откроет другой альбом
 		if calledFrom("quietApply") {
 			once.Do(func() { close(reached); <-proceed })
 		}
@@ -285,5 +286,25 @@ func TestAgentOpenPrevCopyIsDirty(t *testing.T) {
 	}
 	if v := r.a.editor().View(); v.Path != "" || !v.Dirty {
 		t.Errorf("копия открыта: path %q, dirty %v; ждали без пути и «не сохранено»", v.Path, v.Dirty)
+	}
+}
+
+// Правил нет (Default вернул nil: предел пробы) к моменту применения — тихо нельзя, обычный вопрос
+// с причиной «link», без паники на Timeout/Key; правка не сделана.
+func TestQuietApplyNilRules(t *testing.T) {
+	r := newQuietRig(t)
+	rules := r.a.askM().rules
+	r.a.askM().rules = func() *agentplaces.Rules {
+		if calledFrom("quietApply") {
+			return nil
+		}
+		return rules()
+	}
+	c := r.ask(r.addQuiet(r.shoot))
+	if ev := r.refuse(t, c, 1); ev.Why != whyLink {
+		t.Errorf("вопрос при пустых правилах: %+v", ev)
+	}
+	if len(r.folders()) != 1 {
+		t.Errorf("папка добавлена без правил: %v", r.folders())
 	}
 }

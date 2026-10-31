@@ -69,9 +69,6 @@ func TestDemoFilePathsByOS(t *testing.T) {
 
 // TestDemoFileMacSymlink — запуск Mac через ссылку: папка ищется у настоящего exe.
 func TestDemoFileMacSymlink(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("ссылки без прав на Windows")
-	}
 	root, err := filepath.EvalSymlinks(testkit.TempDir(t))
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +83,7 @@ func TestDemoFileMacSymlink(t *testing.T) {
 	}
 	link := filepath.Join(root, "sa-link")
 	if err := os.Symlink(exe, link); err != nil {
-		t.Fatal(err)
+		t.Skipf("ссылку не создать: %v", err)
 	}
 	if got := demoExe("darwin", link); got != exe {
 		t.Errorf("darwin: %q, ждали %q", got, exe)
@@ -97,8 +94,9 @@ func TestDemoFileMacSymlink(t *testing.T) {
 	if got := demoExe("darwin", filepath.Join(root, "нет")); got != filepath.Join(root, "нет") {
 		t.Errorf("нет файла: путь как был, получили %q", got)
 	}
-	want := filepath.Join(root, "Sa.app", "Contents", "Resources", demoF)
-	if got := demoPaths("darwin", demoExe("darwin", link)); !slices.Contains(got, want) {
+	// Пути Mac — строки с «/»: на Windows их даёт ToSlash (демо-путь Mac режется только по «/»).
+	want := filepath.ToSlash(filepath.Join(root, "Sa.app", "Contents", "Resources", demoF))
+	if got := demoPaths("darwin", filepath.ToSlash(demoExe("darwin", link))); !slices.Contains(got, want) {
 		t.Errorf("Resources не найден: %q", got)
 	}
 }
@@ -130,12 +128,9 @@ func TestDemoFileHas(t *testing.T) {
 		}
 	})
 	t.Run("ссылка пропускается", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("ссылки без прав на Windows")
-		}
 		link := filepath.Join(testkit.TempDir(t), "l.zip")
 		if err := os.Symlink(good, link); err != nil {
-			t.Fatal(err)
+			t.Skipf("ссылку не создать: %v", err)
 		}
 		if demoAt(data, link).Has() {
 			t.Error("ссылка принята")

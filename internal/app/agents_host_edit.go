@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -97,17 +98,17 @@ func (a *App) agentsAuto(ctx context.Context, in agents.AutoReq) (agents.AutoRes
 		PlanFrom: r.PlanFrom, PlanTo: r.PlanTo, Similar: r.Similar, First: r.First, Go: r.Go}, nil
 }
 
-// agentsVary — Host.Vary: раскладки; changed == 0 — альбом не менялся, тоста нет.
-func (a *App) agentsVary(ctx context.Context, in agents.VaryReq) (agents.AlbumRef, int, error) {
-	rev, changed, err := a.agentVary(ctx, in.Key, in.Rev, in.Spreads, in.Variety, in.Families)
+// agentsVary — Host.Vary: раскладки; Changed == 0 — альбом не менялся, тоста нет.
+func (a *App) agentsVary(ctx context.Context, in agents.VaryReq) (agents.VaryRes, error) {
+	res, err := a.agentVary(ctx, in.Key, in.Rev, in.Spreads, in.Variety, in.Families)
 	if err != nil {
-		return agents.AlbumRef{}, 0, agentHostErr(err)
+		return agents.VaryRes{}, agentHostErr(err)
 	}
-	a.agentDraftStep(in.Key, in.Rev, rev)
-	if changed > 0 {
-		a.agentEdited(AgentEdited{Client: agentToastClient(in.Client), Text: fmt.Sprintf("Раскладки изменены: %d", changed), Rev: rev})
+	a.agentDraftStep(in.Key, in.Rev, res.Album.Rev)
+	if res.Changed > 0 {
+		a.agentEdited(AgentEdited{Client: agentToastClient(in.Client), Text: fmt.Sprintf("Раскладки изменены: %d", res.Changed), Rev: res.Album.Rev})
 	}
-	return agents.AlbumRef{Key: in.Key, Rev: rev}, changed, nil
+	return res, nil
 }
 
 // agentsUndo — Host.Undo: отмена своей правки; тоста agents:edited нет (человек видит view).
@@ -144,7 +145,7 @@ func (a *App) agentFolderEdited(client string, res agents.AskRes) {
 	}
 	// Имя папки задаёт не человек: управляющие и двунаправленные знаки (RLO) в тосте подменили бы
 	// текст, поэтому с такими знаками вместо имени — слово «папка».
-	name := hintLabel(folders[res.Folder-1])
+	name := agentplaces.HintLabel(folders[res.Folder-1])
 	if paths.BadRunes(name) {
 		name = "папка"
 	}

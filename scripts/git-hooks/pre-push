@@ -4,7 +4,7 @@
 # Ловит любой push, в том числе из скрипта, `bash -c`, eval, xargs — то, чего хук push-guard (разбор команды) может не увидеть.
 #   открытый репозиторий (origin): refs/heads/main (только из локального main: `dev:main` выложил бы историю dev),
 #     метки refs/tags/v* и refs/tags/api/albums/v* (под своим именем), временные ветки проверок refs/heads/winqa/*
-#     (их пересоздают принудительно и удаляют — это жизненный цикл ветки); остальное, включая удаление main и меток, — отказ;
+#     (только коммит-сирота без родителей; их пересоздают принудительно и удаляют — это жизненный цикл ветки); остальное, включая удаление main и меток, — отказ;
 #   приватный sosninaalbums-dev (remote private): любые ссылки, но без удаления;
 #   оснастка sosninaalbums-ops: только refs/heads/main;
 #   адреса не на github.com (локальные копии, тесты скриптов) — не наш случай, пропуск.
@@ -32,7 +32,13 @@ while read -r local_ref local_sha remote_ref _; do
       ;;
     public)
       case "$remote_ref" in
-        refs/heads/winqa/*) ;;
+        # В winqa/* — только коммит-сирота winqa-push.mjs (без родителей, без внутренних доков): `dev:winqa/x` выложил бы
+        # всю историю dev (владелец 30.10, 0.34-B5). Неизвестный коммит (rev-list не прочёл) — тоже отказ.
+        refs/heads/winqa/*)
+          if [ "$del" = no ] && [ "$(git rev-list --parents -n 1 "$local_sha" 2>/dev/null | wc -w)" -ne 1 ]; then
+            bad="$bad\n  $local_ref -> $remote_ref — в winqa/* только коммит-сирота из winqa-push.mjs (у этого есть история)"
+          fi
+          ;;
         refs/heads/main)
           if [ "$del" = yes ]; then bad="$bad\n  $remote_ref — удалять main нельзя"
           # dev:main опубликовал бы всю историю dev под именем main — main берётся только из локального main (publish-main).

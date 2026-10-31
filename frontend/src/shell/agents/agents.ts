@@ -2,6 +2,7 @@
 // Что и кому видно, пределы и уровни решает Go; здесь только форма данных и строки журнала.
 
 import * as Api from '../../../wailsjs/go/app/App'
+import type { app } from '../../../wailsjs/go/models'
 import { EDIT_MARK } from './agentstext'
 
 export type AgentsStatus = 'off' | 'on' | 'error'
@@ -41,6 +42,7 @@ export interface AgentsInfo {
   asksMuted: boolean // вопросы агентов отключены после трёх отказов подряд
   perms: AgentPerm[] // разрешения по инструментам (150); порядок — как в окне
   places: AgentPlace[] // места съёмок: где «Всегда» у папки берёт без вопроса
+  lifted: AgentPlaceLift[] // места 0.34, поднятые до корня архива: заметка в окне висит до «Понятно» (153)
 }
 // Строка разрешений (150, design §6). group: read | edit | other (запуск и показ — вне группового щелчка).
 export interface AgentPerm {
@@ -53,8 +55,19 @@ export interface AgentPerm {
   note: string // подпись под названием
 }
 export interface AgentPlace {
+  key: string // непрозрачный ключ из Go: по нему убирают и привязывают
   dir: string
+  label: string // метка диска, серым справа; "" — без метки
   chosen: boolean // выбрана человеком («Папка со съёмками…»); иначе родитель папки, добавленной им
+  bound: boolean // привязано к диску (153); на macOS всегда false
+  narrow: boolean // место узкое (год): новый год спросит снова
+  narrowRoot: boolean // узкое место лежит на корне диска (E:\2026)
+  state: string // только из AgentPlacesLive: nodisk | nofolder | here (непривязанное, диск на месте) | ""
+  here: string // только из AgentPlacesLive: метка диска, который сейчас по пути непривязанного места
+}
+export interface AgentPlaceLift {
+  from: string
+  to: string
 }
 export interface AgentsSaved {
   canceled: boolean
@@ -67,7 +80,7 @@ export type AgentCallEvent = AgentCall & { today: number }
 // Тексты вопроса и тостов целиком из Go: агент своих слов не вносит.
 export interface AgentAsk {
   id: string
-  kind: 'create' | 'add' | 'edit'
+  kind: 'create' | 'add' | 'edit' | 'export' | 'open'
   title: string
   lines: string[]
   hint: string // имя папки-подсказки агента; "" — нет
@@ -75,7 +88,9 @@ export interface AgentAsk {
   path: string // настоящий путь папки (150), только окну; "" — вопрос 149 без пути
   link: boolean // подсказка шла через ссылку на другую папку
   alt: string // подпись «Выбрать другую…»; "" — кнопки нет
-  tool: string // ссылка «Не спрашивать» ведёт к строке этого инструмента
+  tool: string // ссылка «Не спрашивать» ведёт к строке этого инструмента; у export и open пуст — у «только с вопросом» «Всегда» нет
+  files?: number // export: сколько файлов запишет выгрузка (текст уже в lines)
+  create?: boolean // export: папка будет создана (текст уже в lines; флаг — для вида пути)
   why: string // «Всегда», а тихо нельзя: place | remote | big | cloud | shots | link | rate | draft | bad; "" — «Спрашивать»
 }
 export type AgentAskWhy = 'answered' | 'declined' | 'timeout' | 'gone' | 'closed' | 'off' | 'too_wide' | 'ours'
@@ -98,6 +113,11 @@ export interface AgentDenied {
   tool: string
   title: string
 }
+// Событие agents:placesLifted (153): места 0.34 подняты при запуске; тост-указатель на заметку в окне.
+export interface AgentPlacesLifted {
+  from: string[]
+  to: string[]
+}
 export interface AgentShow {
   spread: string
 }
@@ -119,6 +139,7 @@ export const emptyInfo = (): AgentsInfo => ({
   asksMuted: false,
   perms: [],
   places: [],
+  lifted: [],
 })
 
 // Ответ Go с пропусками (null вместо списка) приводим к форме: шаблон не должен проверять каждое поле.
@@ -138,6 +159,7 @@ export function normInfo(i: AgentsInfoRaw | null | undefined): AgentsInfo {
     calls: i.calls ?? [],
     perms: i.perms ?? [],
     places: i.places ?? [],
+    lifted: i.lifted ?? [],
   }
 }
 
@@ -181,12 +203,18 @@ export interface AgentsBridge {
   setPerm(tool: string, mode: string): Promise<AgentsInfo> // mode вне can Go не принимает
   setPermGroup(group: string, mode: string): Promise<AgentsInfo> // read | edit
   forgetPlaces(): Promise<AgentsInfo>
+  forgetPlace(key: string): Promise<AgentsInfo> // ✕ у места в списке
+  bindPlace(key: string): Promise<AgentsInfo> // «Привязать к диску»; не узнали диск — отказ с текстом Go
+  placesLive(): Promise<AgentPlace[]> // по раскрытию списка: состояние дисков и папок (Go опрашивает их только здесь)
+  dismissLifted(): Promise<AgentsInfo> // «Понятно» в заметке о подъёме мест
   choosePlace(): Promise<AgentsInfo> // окно ОС «Папка со съёмками»; отмена — без изменений
   openPrev(): Promise<unknown> // State: «Открыть прежний» из тоста тихого нового альбома
   allowAsks(): Promise<void>
   answer(id: string, yes: boolean): Promise<unknown> // View: «Выбрать папку…» у add, отказ любого вида
   answerCreate(id: string, other?: boolean): Promise<unknown> // State: «Выбрать папку…» у create; other — «Выбрать другую…»
   answerOther(id: string): Promise<unknown> // View: «Выбрать другую…» у add
+  answerExport(id: string, other?: boolean): Promise<app.ExportStarted> // «Выгрузить» / «Выбрать папку…»; other — «Выбрать другую…» (152)
+  answerOpen(id: string, other?: boolean): Promise<unknown> // State: «Открыть» / «Выбрать файл…»; other — «Выбрать другой…» (152)
   busy(on: boolean): Promise<void> // человек занят: правка агента подождёт (agentbusy.ts)
 }
 
@@ -199,11 +227,17 @@ export const bridge: AgentsBridge = {
   setPerm: (tool, mode) => Api.SetAgentPerm(tool, mode).then(normInfo),
   setPermGroup: (group, mode) => Api.SetAgentPermGroup(group, mode).then(normInfo),
   forgetPlaces: () => Api.ForgetAgentPlaces().then(normInfo),
+  forgetPlace: (key) => Api.ForgetAgentPlace(key).then(normInfo),
+  bindPlace: (key) => Api.BindAgentPlace(key).then(normInfo),
+  placesLive: () => Api.AgentPlacesLive().then((l) => l ?? []),
+  dismissLifted: () => Api.DismissPlacesLifted().then(normInfo),
   choosePlace: () => Api.ChooseAgentPlace().then(normInfo),
   openPrev: () => Api.AgentOpenPrev(),
   allowAsks: () => Api.AllowAgentAsks(),
   answer: (id, yes) => Api.AnswerAgent(id, yes),
   answerCreate: (id, other = false) => Api.AgentAnswerCreate(id, other),
   answerOther: (id) => Api.AnswerAgentOther(id),
+  answerExport: (id, other = false) => Api.AgentAnswerExport(id, other),
+  answerOpen: (id, other = false) => Api.AgentAnswerOpen(id, other),
   busy: (on) => Api.AgentsBusy(on),
 }

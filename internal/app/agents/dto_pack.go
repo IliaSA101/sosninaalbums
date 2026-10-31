@@ -171,11 +171,17 @@ func (c *call) listAlbums() (recentsOut, error) {
 		if len(out.Items) == maxRecent {
 			break
 		}
-		sum := sha256.Sum256(append(append([]byte{}, keySalt[:]...), paths.Fold(filepath.Clean(r.Path))...)) // с солью процесса: ключ не проверяет догадку о пути
-		out.Items = append(out.Items, recentOut{Key: hex.EncodeToString(sum[:6]), Name: c.text(recentName(r), maxFile),
+		out.Items = append(out.Items, recentOut{Key: RecentKey(r.Path), Name: c.text(recentName(r), maxFile),
 			Modified: r.Modified, Exists: r.Exists, Open: ed != 0 && v.Path != "" && paths.SamePath(v.Path, r.Path)})
 	}
 	return out, nil
+}
+
+// RecentKey — ключ «Последнего» для агента: с солью процесса, чтобы ключ не проверял догадку о пути. Фасад по
+// нему же находит путь среди недавних (open_album).
+func RecentKey(path string) string {
+	sum := sha256.Sum256(append(append([]byte{}, keySalt[:]...), paths.Fold(filepath.Clean(path))...))
+	return hex.EncodeToString(sum[:6])
 }
 
 // recentName — имя «Последнего»: заданное или по файлу.

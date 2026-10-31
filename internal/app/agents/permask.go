@@ -33,6 +33,7 @@ func editAskReq(tool string, in any) AskReq {
 		r.Count = 1
 	case bgIn:
 		r.Spreads, r.Item = refStrings(v.Spreads), v.Item
+		r.AlbumBg, r.Replace, r.Scope = v.To == "album", v.Replace, v.Scope
 	case addStickerIn:
 		r.Count = len(v.Stickers)
 		for _, st := range v.Stickers {
@@ -73,7 +74,7 @@ func (c *call) askEdit(ref *AlbumRef, needRev bool) error {
 		for i, r := range req.Spreads {
 			refs[i] = spreadRef(r)
 		}
-		ids, err := c.spreadIDs(refs, c.spec.view)
+		ids, err := c.spreadIDs(refs, c.spec.view || c.spec.coverOK)
 		if err != nil {
 			return err
 		}

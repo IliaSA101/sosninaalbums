@@ -66,14 +66,33 @@ type BgReq struct {
 	Spreads []string
 	Scope   string // spread | left | right
 	Replace bool   // заменять и фото клиента на фоне
+	// Album — фон альбома (154): Spreads — листы согласия (ID), где можно снять фото клиента (с Replace);
+	// Scope не передаётся. Pages — на каждую страницу (служба берёт текущую, когда агент не сказал).
+	Album bool
+	Pages bool
 }
 
 // BgRes — итог set_background. Skipped — ID листов, где фон области — фото клиента (без Replace).
+// Фон альбома (154): Cleared — ID листов со снятым своим фоном; Hidden — ID листов, где человек скрыл
+// фон альбома («Не показывать здесь»), он там не виден; AlbumBg — фон альбома сменился.
 type BgRes struct {
 	Album    AlbumRef
 	Changed  int
 	Skipped  []string
 	Replaced bool
+	Cleared  []string
+	Hidden   []string
+	AlbumBg  bool
+}
+
+// VaryRes — итог vary_layouts (154): Spreads — ID листов запроса; Before и After — семейство каждого
+// до и после ("" — нет); пусто, если человек правил альбом сразу после (пара недостоверна).
+type VaryRes struct {
+	Album   AlbumRef
+	Changed int
+	Spreads []string
+	Before  []string
+	After   []string
 }
 
 // StickerReq — пачка стикеров (add_sticker): параллельные срезы одной длины, по элементу на стикер.

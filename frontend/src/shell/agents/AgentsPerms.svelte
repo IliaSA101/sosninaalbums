@@ -2,10 +2,26 @@
   import { tick } from 'svelte'
   import Modal from '../../base/modal/Modal.svelte'
   import Seg from '../../base/tpl/Seg.svelte'
+  import AgentsPlaces from './AgentsPlaces.svelte'
   import { agents } from './agents.svelte'
-  import { FOLDER_TOOLS, KEY_PLACES, commonMode, groupCan, isMode, noteShown, placesShown, rowKey, rowsOf, segItems } from './agentperms'
+  import {
+    FOLDER_TOOLS,
+    allowMissing,
+    askOnly,
+    KEY_LIFTED,
+    KEY_PLACES,
+    commonMode,
+    groupCan,
+    isMode,
+    noteShown,
+    placesShown,
+    rowKey,
+    rowsOf,
+    segItems,
+  } from './agentperms'
   import {
     ASK_EDIT,
+    ASK_ONLY_NOTE,
     ASK_FOLDER,
     CANCEL_LABEL,
     EDIT_ELEVATED,
@@ -20,6 +36,7 @@
     PLACES_FORGET,
     PLACES_HEAD,
     PLACES_NONE,
+    placesList,
     PLACE_CHOOSE,
     READ_WHY_TAIL,
     placesMore,
@@ -50,7 +67,7 @@
     const p = info.perms.find((x) => rowKey(x.tool) === key)
     if (p) open[p.group === 'read' ? 'read' : 'edit'] = true
     else if (key === KEY_PLACES) open.edit = true
-    else return
+    else if (key !== KEY_LIFTED) return
     void tick().then(() => {
       for (const el of root?.querySelectorAll<HTMLElement>('[data-row]') ?? [])
         if (el.dataset.row === key) el.scrollIntoView?.({ block: 'nearest' })
@@ -91,6 +108,7 @@
     <h3>{PERMS_TITLE}</h3>
     <p class="note">{PERMS_NOTE}</p>
     {#if blocked}<p class="note" role="note">{EDIT_ELEVATED}</p>{/if}
+    <AgentsPlaces part="note" />
     {#each groups as g (g.id)}
       {@const off = blocked && g.id === 'edit'}
       {@const common = commonMode(g.rows)}
@@ -112,24 +130,30 @@
             <div class="t">
               {p.title}
               {#if noteShown(p)}<small>{p.note}</small>{/if}
+              {#if askOnly(p)}<small>{ASK_ONLY_NOTE}</small>{/if}
               {#if agents.whyFor[p.tool] && p.why}<small class="why">{p.why}{p.group === 'read' ? READ_WHY_TAIL : ''}</small>{/if}
             </div>
             <Seg
-              items={segItems(p.can, off && p.group === 'edit')}
+              items={segItems(p.can, off && p.group === 'edit', allowMissing(p))}
               value={isMode(p.mode) ? p.mode : undefined}
               onpick={(m) => agents.pickTool(p.tool, m)}
               label={p.title}
             />
           </div>
         {/each}
-        {#if g.id === 'edit' && quietOn}
+        {#if g.id === 'edit' && (quietOn || info.lifted.length > 0)}
           <div class="places-row" data-row={KEY_PLACES} class:flash={agents.flash === KEY_PLACES}>
             {#if pl.shown.length > 0}{PLACES_HEAD}{:else}{PLACES_NONE}{/if}{@render places('')}
             {#if info.places.length > 0}
               ·
               <button class="link" disabled={agents.busy} onclick={() => agents.forgetPlaces()}>{PLACES_FORGET}</button>
+              ·
+              <button class="link" aria-expanded={agents.placesOpen} onclick={() => agents.togglePlaces()}>
+                {placesList(info.places.length, agents.placesOpen)}
+              </button>
             {/if}
           </div>
+          <AgentsPlaces part="list" />
         {/if}
       </details>
     {/each}

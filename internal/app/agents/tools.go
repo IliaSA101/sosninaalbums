@@ -62,6 +62,7 @@ func registerTools(e *toolEnv) {
 
 	if e.s.h.canEdit() { // ступень 3 (149): без замыканий правок инструментов правки нет
 		registerEditTools(e)
+		registerWriteTools(e) // 152: открытие альбома по просьбе агента (класс Q)
 	}
 	registerTools2(e) // ступень 3б (151): лист-сетка, если есть Host.Sheet, и правки 0.34, если есть все семь замыканий
 }

@@ -16,7 +16,8 @@
   } from './agentstext'
 
   // Вопрос агента «Создать альбом по просьбе агента?» / «Добавить папку…» (149; 150: полный путь, «Выбрать другую…», вид edit,
-  // причина «Всегда, а тихо нельзя» и ссылка на строку разрешений). Устроен как AutoAskDialog и NewerAskDialog:
+  // причина «Всегда, а тихо нельзя» и ссылка на строку разрешений; 152: виды export и open — у них Tool пуст, ссылки «Не спрашивать»
+  // нет, а папка, которой ещё нет, рисуется пунктиром: слова «Папка будет создана» приходят строкой из Go). Устроен как AutoAskDialog и NewerAskDialog:
   // «Отмена» слева и в фокусе, действие справа. Отличие одно: первые 600 мс кнопки `aria-disabled` — вопрос пришёл не от щелчка
   // человека (149-25). Тексты — из Go (абзацы lines только текстом, без {@html}); имя папки-подсказки — в <bdi>: чужой текст
   // не должен перевернуть соседние слова.
@@ -41,7 +42,7 @@
 {#snippet target()}
   {#if a?.path}
     <p class="ask">
-      <bdi class="path" data-path>{a.path}</bdi>{#if a.link}
+      <bdi class="path" class:new={a.create} data-path>{a.path}</bdi>{#if a.link}
         <span class="note">{ASK_LINK}</span>{/if}
     </p>
   {:else if a?.hint}
@@ -115,6 +116,11 @@
     font-size: 13px;
     overflow-wrap: anywhere;
     user-select: text;
+  }
+  /* Папка будет создана выгрузкой: пунктир вместо сплошной плашки */
+  .path.new {
+    outline: 1px dashed var(--muted);
+    outline-offset: -1px;
   }
   .link {
     all: unset;

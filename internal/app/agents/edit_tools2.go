@@ -49,20 +49,25 @@ func registerTools2(e *toolEnv) {
 		func(in setCoverIn) *AlbumRef { return &in.Album }, true,
 		func(c *call, in setCoverIn) (setCoverOut, error) { return c.setCoverPhoto(in) })
 
-	regEdit(e, toolSpec{name: "set_background", perm: prefs.ClassEdit, title: "Фон на развороты", edit: true, backup: true,
+	regEditPre(e, toolSpec{name: "set_background", perm: prefs.ClassEdit, title: "Фон на развороты и альбом", edit: true, backup: true,
 		desc: "Поставить фон из каталога (item — id из list_decor kind=bg) на развороты: номера с 1 или id, одним шагом отмены. scope: spread — " +
 			"весь разворот (по умолчанию), left или right — страница. Листы, где фон — фото клиента, пропускаются (skipped): спросите человека и " +
-			"повторите с replace: true, только если он согласен. Обложка не цель. Порядок работы: формат (apply_print) → сборка → обложка → фон и стикеры." + editNote},
+			"повторите с replace: true, только если он согласен. Обложка не цель. Порядок работы: формат (apply_print) → сборка → обложка → фон и стикеры. " +
+			"to: album — фоном альбома: на всех разворотах без своего фона, и на новых тоже; pages — на каждую страницу. Свои фоны из каталога " +
+			"снимаются (cleared), листы с фото клиента пропускаются (skipped), hidden — где человек скрыл фон альбома. Назовите человеку номера " +
+			"cleared и skipped. Снять фото клиента — replace и spreads: только номера из skipped, на которые человек согласился. " +
+			"Обложки фон альбома не касается." + editNote},
 		bgProps, func(in bgIn) *AlbumRef { return &in.Album }, true,
-		func(c *call, in bgIn) (bgOut, error) { return c.setBackground(in) })
+		bgPre, func(c *call, in bgIn) (bgOut, error) { return c.setBackground(in) })
 
-	regEdit(e, toolSpec{name: "add_sticker", perm: prefs.ClassEdit, title: "Стикеры на развороты", edit: true, backup: true,
+	regEditPre(e, toolSpec{name: "add_sticker", perm: prefs.ClassEdit, title: "Стикеры на развороты и обложку", edit: true, backup: true,
 		desc: "Добавить стикеры из каталога (item — id из list_decor kind=sticker) на развороты, до 12 за вызов одним шагом отмены. " +
-			"spread — номер с 1 или id (обложка не цель), page: left | right (по умолчанию right), place: center или угол страницы в безопасной зоне " +
+			"spread — номер с 1, id или \"cover\"; у обложки page right — лицевая (по умолчанию), left — задняя; место и размер — от безопасной зоны " +
+			"сторонки. page: left | right (по умолчанию right), place: center или угол страницы в безопасной зоне " +
 			"(по умолчанию center), size: s, m, l — ⅙, ¼, ⅓ ширины страницы (по умолчанию m). Нет места на листе или в альбоме — отказ всей пачки. " +
-			"Точнее стикеры двигает человек." + editNote},
+			"Точнее стикеры двигает человек." + editNote, coverOK: true},
 		stickerProps, func(in addStickerIn) *AlbumRef { return &in.Album }, true,
-		func(c *call, in addStickerIn) (addStickerOut, error) { return c.addSticker(in) })
+		coverPre, func(c *call, in addStickerIn) (addStickerOut, error) { return c.addSticker(in) })
 
 	regEdit(e, toolSpec{name: "apply_print", perm: prefs.ClassEdit, title: "Формат типографии", edit: true, backup: true,
 		desc: "Сменить формат типографии, как кнопка формата в «Настройках альбома»: страница, dpi, склейка, зона и обрез; поля, промежуток и цвет " +
@@ -115,8 +120,10 @@ type setCoverOut struct {
 type bgIn struct {
 	Album   AlbumRef    `json:"album"`
 	Item    string      `json:"item" jsonschema:"id фона из list_decor kind=bg"`
-	Spreads []spreadRef `json:"spreads" jsonschema:"развороты: номер с 1 или id"`
-	Scope   string      `json:"scope,omitempty" jsonschema:"spread — весь разворот (по умолчанию), left или right — страница"`
+	To      string      `json:"to,omitempty" jsonschema:"spreads — на названные развороты (по умолчанию), album — фоном альбома"`
+	Spreads []spreadRef `json:"spreads,omitempty" jsonschema:"to spreads: развороты (номер с 1 или id); to album: только с replace — номера из skipped, на которые согласился человек"`
+	Scope   string      `json:"scope,omitempty" jsonschema:"spread — весь разворот (по умолчанию), left или right — страница; с to album не передают"`
+	Pages   *bool       `json:"pages,omitempty" jsonschema:"только с to album: true — на каждую страницу, false — на весь разворот (по умолчанию — как у нынешнего фона альбома)"`
 	Replace bool        `json:"replace,omitempty" jsonschema:"заменять и фото клиента на фоне — только с согласия человека"`
 }
 
@@ -125,6 +132,8 @@ func bgProps(p map[string]*jsonschema.Schema) {
 	p["spreads"].MinItems, p["spreads"].MaxItems = ptr(1), ptr(model.MaxSpreads)
 	p["spreads"].Items = &jsonschema.Schema{Types: []string{"string", "integer"}, MaxLength: ptr(maxID)}
 	p["scope"].Enum = scopeWords
+	p["to"].Enum = enum("spreads", "album")
+	p["pages"] = &jsonschema.Schema{Type: "boolean", Description: p["pages"].Description}
 }
 
 type bgOut struct {
@@ -132,6 +141,9 @@ type bgOut struct {
 	Changed  int      `json:"changed" jsonschema:"листов изменено; 0 — правки нет"`
 	Skipped  []int    `json:"skipped,omitempty" jsonschema:"номера листов, где фон — фото клиента: пропущены"`
 	Replaced bool     `json:"replaced,omitempty" jsonschema:"фото фона заменено (только с replace)"`
+	Cleared  []int    `json:"cleared,omitempty" jsonschema:"to album: номера листов, где снят свой фон из каталога (или, с согласием, фото клиента)"`
+	Hidden   []int    `json:"hidden,omitempty" jsonschema:"to album: номера листов, где человек скрыл фон альбома: он там не виден"`
+	AlbumBg  bool     `json:"albumBg,omitempty" jsonschema:"to album: фон альбома сменился (false — тот же, сняты только свои фоны)"`
 }
 
 // stickerPut — один стикер пачки add_sticker.

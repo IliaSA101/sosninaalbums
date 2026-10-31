@@ -12,17 +12,19 @@ import (
 // AgentAsk — событие agents:ask: агент просит человека о действии, текст целиком из шаблонов Go.
 type AgentAsk struct {
 	ID    string   `json:"id"`    // 16 байт crypto/rand, hex
-	Kind  string   `json:"kind"`  // create | add | edit (150: обратимая правка и показ при «Спрашивать»)
+	Kind  string   `json:"kind"`  // create | add | edit (150: обратимая правка и показ при «Спрашивать») | open | export (152)
 	Title string   `json:"title"` // «Создать альбом по просьбе агента?»
 	Lines []string `json:"lines"` // абзацы: кто просит, что станет с открытым альбомом
 	Hint  string   `json:"hint"`  // последний элемент годной подсказки ≤ 60 знаков; "" — нет
 	OK    string   `json:"ok"`    // подпись кнопки справа: «Выбрать папку…»
 	// 150: вопрос с полным путём. Path — настоящий путь после ссылок, только окну программы;
 	// "" — вопрос 149 без пути.
-	Path string `json:"path"`
-	Link bool   `json:"link"` // подсказка шла через ссылку: «(по ссылке)»
-	Alt  string `json:"alt"`  // подпись «Выбрать другую…»; "" — кнопки нет
-	Tool string `json:"tool"` // ссылка «Не спрашивать — …» открывает окно на строке этого инструмента
+	Path   string `json:"path"`
+	Link   bool   `json:"link"`   // подсказка шла через ссылку: «(по ссылке)»
+	Alt    string `json:"alt"`    // подпись «Выбрать другую…»; "" — кнопки нет
+	Tool   string `json:"tool"`   // ссылка «Не спрашивать — …» открывает окно на строке этого инструмента
+	Files  int    `json:"files"`  // export: сколько файлов запишет выгрузка
+	Create bool   `json:"create"` // export: папка вопроса ещё не существует и будет создана
 	// Why — «Всегда», а тихо нельзя: place | remote | big | cloud | shots | link | rate | draft;
 	// "" — «Спрашивать». Тексты — во фронте (agentstext.ts), агенту причина не сообщается.
 	Why string `json:"why"`
@@ -41,7 +43,8 @@ type AgentEdited struct {
 	Rev    int    `json:"rev"`    // ревизия после правки: «Вернуть» только при совпадении
 	Go     string `json:"go"`     // ID разворота для перехода; "" — без перехода
 	// 150: Prev — у тоста «Открыть прежний» (AgentOpenPrev) после тихого нового альбома;
-	// Quiet — правка без вопроса («Всегда»); Path — полный путь тихой папки, только окну.
+	// Quiet — держать тост до фокуса окна (человек мог не видеть действия): правка без вопроса («Всегда») и
+	// открытие альбома, где вопрос был (152, оно не «без вопроса»); Path — полный путь тихой папки, только окну.
 	Prev  bool   `json:"prev"`
 	Quiet bool   `json:"quiet"`
 	Path  string `json:"path"`

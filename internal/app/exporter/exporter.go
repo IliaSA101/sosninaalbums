@@ -48,8 +48,9 @@ type Host struct {
 	ColorReport func(p *model.Project) (conv, other map[string]int)
 	Ask         func(msg string) (bool, error)     // вопрос «Да / Нет»: (да, ошибка окна)
 	PickDir     func(title string) (string, error) // окно выбора папки; "" — отмена
-	// RememberDir запоминает папку выгрузки для следующего окна (prefs.DirExport остаётся в App).
-	RememberDir func(dir string)
+	// RememberDir запоминает папку выгрузки для следующего окна (prefs.DirExport остаётся в App) и,
+	// если root не пуст, корень выгрузок (prefs.DirExportRoot, 152-15): от него агент предлагает папку.
+	RememberDir func(dir, root string)
 	OpenURL     func(url string) // адрес в браузере
 	ShowDir     func(dir string) // папка в проводнике
 	// LiftMemory снимает наш предел памяти на время выгрузки; restore возвращает его (общий с Run).
@@ -63,6 +64,7 @@ type Service struct {
 	busy   bool               // выгрузка идёт: флаг до диалога папки, второй вызов не пройдёт
 	cancel context.CancelFunc // «Остановить»; nil — фона нет
 	dir    string             // папка последней выгрузки: её открывает Show
+	last   ExportState        // ход последней выгрузки (state.go)
 }
 
 // New собирает службу; пустое поле Host — паника с его именем (как edit.New и colorpick.New).

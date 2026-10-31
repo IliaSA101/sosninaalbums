@@ -7,6 +7,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Канал на месте ролика не вешает обработчик (Lstat: не обычный файл).
@@ -22,12 +24,11 @@ func TestServeFIFO(t *testing.T) {
 	}
 	done := make(chan int, 1)
 	go func() { done <- l.get("GET", "cover", nil).Code }()
-	select {
-	case code := <-done:
-		if code != 404 {
-			t.Errorf("канал: %d", code)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("обработчик завис на канале")
+	code, ok := testkit.WaitCh(t, done, testkit.Limit(10*time.Second), "обработчик завис на канале", nil)
+	if !ok {
+		t.FailNow()
+	}
+	if code != 404 {
+		t.Errorf("канал: %d", code)
 	}
 }

@@ -129,8 +129,12 @@ func (e *editState) forgetSession(ss *mcp.ServerSession) {
 	}
 	e.mu.Lock()
 	delete(e.recs, ss)
+	set := e.asks[ss]
 	delete(e.asks, ss)
 	e.mu.Unlock()
+	for p := range set { // присмотр мог не успеть: вопрос закрытого подключения не должен остаться висеть
+		p.cancel()
+	}
 }
 
 // gate — общий вход правящих инструментов (serveEdit), после схемы и места чтения: флажок →
@@ -166,6 +170,9 @@ func (c *call) gate(ref *AlbumRef, needRev bool) (release func(), err error) {
 			return nil, errAlbumEdited
 		}
 	}
+	if h.ExportHold != nil && sp.ask && ref == nil && h.ExportHold(sp.name) { // create_album, open_album: выгрузка идёт
+		return nil, errExporting
+	}
 	bctx, cancel := context.WithTimeout(c.ctx, s.o.BusyWait)
 	busy := h.Busy(bctx)
 	cancel()
@@ -192,9 +199,21 @@ func (c *call) gate(ref *AlbumRef, needRev bool) (release func(), err error) {
 // (nil — альбома нет); needRev — сверять ревизию агента с текущей.
 func regEdit[In, Out any](e *toolEnv, spec toolSpec, tweak func(props map[string]*jsonschema.Schema), ref func(In) *AlbumRef, needRev bool,
 	run func(*call, In) (Out, error)) {
+	regEditPre(e, spec, tweak, ref, needRev, nil, run)
+}
+
+// regEditPre — regEdit с разбором до gate: pre видит вход раньше места правки, темпа и «идёт выгрузка»; ошибка —
+// ответ агенту, done — готовый ответ без тела. У процесса от администратора pre пропускается: отказ скажет gate.
+func regEditPre[In, Out any](e *toolEnv, spec toolSpec, tweak func(props map[string]*jsonschema.Schema), ref func(In) *AlbumRef, needRev bool,
+	pre func(*call, In) (Out, bool, error), run func(*call, In) (Out, error)) {
 	reg(e, spec, tweak, func(c *call, in In) (Out, error) {
 		var zero Out
 		c.editReq = editAskReq(spec.name, in)
+		if pre != nil && c.blocked != "elevated" {
+			if out, done, err := pre(c, in); err != nil || done {
+				return out, err
+			}
+		}
 		rel, err := c.gate(ref(in), needRev)
 		if err != nil {
 			return zero, err
@@ -230,8 +249,10 @@ func noteOf(spec toolSpec, ae *agentErr) string {
 		return "без ответа"
 	case errEditRate:
 		return "лимит" // человек не занят: программа ограничила темп правок
-	case errEditBusy, errUserBusy, errAskBusy:
+	case errEditBusy, errUserBusy, errAskBusy, errProgBusy, errExporting:
 		return "занят"
+	case errStopped:
+		return "остановлено"
 	case errBackup:
 		return "копия"
 	case errLate:

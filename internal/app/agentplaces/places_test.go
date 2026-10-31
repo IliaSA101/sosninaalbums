@@ -1,4 +1,4 @@
-package app
+package agentplaces
 
 // Правила мест съёмок (150, design §4.2): строковые таблицы на любой ОС и дисковая проверка при
 // пополнении. App-сторона (источники, засев, окно) — agentplaces_app_test.go.
@@ -16,15 +16,15 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
-func unixEnv(goos string) *placeEnv {
-	e := &placeEnv{rules: unixRules(goos, diskOK), system: "C:"}
-	e.cloud = cloudRoots(goos, e.rules.homes[0], func(string) string { return "" })
+func unixEnv(goos string) *Env {
+	e := &Env{Rules: unixRules(goos, diskOK), System: "C:"}
+	e.Cloud = CloudRoots(goos, e.Rules.homes[0], func(string) string { return "" })
 	return e
 }
 
-func winEnv() *placeEnv {
+func winEnv() *Env {
 	env := map[string]string{"OneDrive": `C:\Users\u\OneDrive`, "OneDriveCommercial": `E:\Облако`}
-	return &placeEnv{rules: winRules(diskOK), system: "C:", cloud: cloudRoots("windows", `C:\Users\u`, func(k string) string { return env[k] })}
+	return &Env{Rules: winRules(diskOK), System: "C:", Cloud: CloudRoots("windows", `C:\Users\u`, func(k string) string { return env[k] })}
 }
 
 // Место из родителя (строгие правила): путь из пользовательских и широких папок — не место.
@@ -36,7 +36,7 @@ func TestPlaceNotFromUserDirs(t *testing.T) {
 	}
 	groups := []struct {
 		name  string
-		env   *placeEnv
+		env   *Env
 		cases []c
 	}{
 		{"linux", unixEnv("linux"), []c{
@@ -73,14 +73,14 @@ func TestPlaceNotFromUserDirs(t *testing.T) {
 	}
 	for _, g := range groups {
 		for _, c := range g.cases {
-			err := g.env.static(c.p, prefs.PlaceParent)
+			err := g.env.Static(c.p, prefs.PlaceParent)
 			if (err != nil) != c.bad {
 				t.Errorf("%s %q: err = %v, плохое = %v", g.name, c.p, err, c.bad)
 			}
 		}
 	}
 	// Способ не из двух — не место; пустое окружение (правил нет) — fail-closed.
-	if unixEnv("linux").static("/data/Фото", "agent") == nil || (*placeEnv)(nil).static("/data/Фото", prefs.PlaceParent) == nil {
+	if unixEnv("linux").Static("/data/Фото", "agent") == nil || (*Env)(nil).Static("/data/Фото", prefs.PlaceParent) == nil {
 		t.Error("чужой способ и отсутствие правил должны отказывать")
 	}
 }
@@ -93,7 +93,7 @@ func TestPlaceExplicit(t *testing.T) {
 		bad bool
 	}
 	for name, g := range map[string]struct {
-		env   *placeEnv
+		env   *Env
 		cases []c
 	}{
 		"linux": {unixEnv("linux"), []c{
@@ -110,7 +110,7 @@ func TestPlaceExplicit(t *testing.T) {
 		}},
 	} {
 		for _, c := range g.cases {
-			err := g.env.static(c.p, prefs.PlaceChosen)
+			err := g.env.Static(c.p, prefs.PlaceChosen)
 			if (err != nil) != c.bad {
 				t.Errorf("%s %q: err = %v, плохое = %v", name, c.p, err, c.bad)
 			}
@@ -135,19 +135,17 @@ func TestUnixMountShape(t *testing.T) {
 }
 
 // fakeDisk подменяет st_dev и таблицу монтирования: устройство — по длиннейшей точке. Корень "/" —
-// общий для всех путей (на Windows тома нет, как и у devOf); точки — пути ОС.
-func fakeDisk(t *testing.T, points ...string) (devCalls *atomic.Int32) {
+// общий для всех путей (на Windows тома нет, как и у DevOf); точки — пути ОС.
+func fakeDisk(t *testing.T, e *Env, points ...string) (devCalls *atomic.Int32) {
 	t.Helper()
-	oldDev, oldMounts := placeDev, placeMounts
-	t.Cleanup(func() { placeDev, placeMounts = oldDev, oldMounts })
 	devCalls = new(atomic.Int32)
 	// Корень — том временных папок: на Windows «/» не путь тома (правила чистят «X:\…», с «/» паника).
 	root := "/"
 	if runtime.GOOS == "windows" {
 		root = filepath.VolumeName(os.TempDir()) + `\`
 	}
-	placeMounts = func() ([]string, error) { return append([]string{root}, points...), nil }
-	placeDev = func(p string) (uint64, bool) {
+	e.Mounts = func() ([]string, error) { return append([]string{root}, points...), nil }
+	e.Dev = func(p string) (uint64, bool) {
 		devCalls.Add(1)
 		best, id := -1, uint64(0)
 		for i, m := range append([]string{root}, points...) {
@@ -162,8 +160,8 @@ func fakeDisk(t *testing.T, points ...string) (devCalls *atomic.Int32) {
 }
 
 // realEnv — правила без запретов (тестовые папки лежат под TMPDIR) поверх настоящего диска.
-func realEnv() *placeEnv {
-	return &placeEnv{rules: &folderRules{windows: runtime.GOOS == "windows", fold: unixRules("linux", diskOK).fold, timeout: time.Second, disk: diskProbe}, system: "C:"}
+func realEnv() *Env {
+	return &Env{Rules: New(Opts{Windows: runtime.GOOS == "windows", Fold: func(s string) string { return s }, Timeout: time.Second}), System: "C:"}
 }
 
 func realDir(t *testing.T, elems ...string) string {
@@ -191,8 +189,8 @@ func TestPlaceDiskRules(t *testing.T) {
 		}
 	}
 	data := filepath.Dir(base)
-	fakeDisk(t, vol, filepath.Join(data, "nas"))
 	e := realEnv()
+	fakeDisk(t, e, vol, filepath.Join(data, "nas"))
 
 	for _, c := range []struct {
 		name, dir, how string
@@ -207,7 +205,7 @@ func TestPlaceDiskRules(t *testing.T) {
 		{"явное: корень тома", vol, prefs.PlaceChosen, true},
 		{"явное: предок точки монтирования", filepath.Dir(data), prefs.PlaceChosen, true},
 	} {
-		got, err := e.admit(c.dir, c.how)
+		got, err := e.Admit(c.dir, c.how)
 		if (err == nil) != c.ok {
 			t.Errorf("%s: err = %v, годно = %v", c.name, err, c.ok)
 		}
@@ -220,12 +218,12 @@ func TestPlaceDiskRules(t *testing.T) {
 	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.admit(file, prefs.PlaceParent); err == nil {
+	if _, err := e.Admit(file, prefs.PlaceParent); err == nil {
 		t.Error("файл принят как место")
 	}
 	// Таблица монтирования не читается — нельзя (а не «монтирований нет»).
-	placeMounts = func() ([]string, error) { return nil, os.ErrPermission }
-	if _, err := e.admit(base, prefs.PlaceParent); err == nil {
+	e.Mounts = func() ([]string, error) { return nil, os.ErrPermission }
+	if _, err := e.Admit(base, prefs.PlaceParent); err == nil {
 		t.Error("ошибка mountinfo: ждали отказ")
 	}
 }
@@ -237,101 +235,21 @@ func TestPlaceSymlinks(t *testing.T) {
 	if err := os.Symlink(real1, link); err != nil {
 		t.Skip(err)
 	}
-	fakeDisk(t)
 	e := realEnv()
-	got, err := e.admit(link, prefs.PlaceParent)
+	fakeDisk(t, e)
+	got, err := e.Admit(link, prefs.PlaceParent)
 	if err != nil || got != real1 {
 		t.Errorf("ссылка на обычную папку: %q, %v; ждали настоящий путь %q", got, err, real1)
 	}
 	// Ссылка, ведущая в запрещённое правилом 149: настоящий путь проверяется ещё раз.
-	e.rules.trees = []string{real1}
-	if _, err := e.admit(link, prefs.PlaceParent); err == nil {
+	e.Rules.trees = []string{real1}
+	if _, err := e.Admit(link, prefs.PlaceParent); err == nil {
 		t.Error("ссылка в системное дерево принята")
 	}
-	if !hasLinkPart(link) || hasLinkPart(real1) {
-		t.Errorf("hasLinkPart: ссылка %v, обычная %v", hasLinkPart(link), hasLinkPart(real1))
+	if !HasLinkPart(link) || HasLinkPart(real1) {
+		t.Errorf("HasLinkPart: ссылка %v, обычная %v", HasLinkPart(link), HasLinkPart(real1))
 	}
-	if !hasLinkPart(filepath.Join(link, "нет")) {
+	if !HasLinkPart(filepath.Join(link, "нет")) {
 		t.Error("нечитаемое звено должно считаться ссылкой")
-	}
-}
-
-// Чтение мест диск не трогает: подменённый stat не вызывается; пополнение зовёт его под within, а
-// зависший диск не вешает пополнение дольше предела.
-func TestPlaceDiskOnPushOnly(t *testing.T) {
-	a := newApp(t)
-	a.emit = func(string, ...any) {}
-	dir := realDir(t, "Съёмки")
-	devCalls := fakeDisk(t)
-	e := realEnv()
-	a.askM().rules = func() *folderRules { return e.rules }
-
-	prefs.AddPlace(a.cfgDir, prefs.Place{Dir: dir, How: prefs.PlaceChosen})
-	if n := devCalls.Load(); n != 0 {
-		t.Fatalf("AddPlace (хранение) обратился к диску %d раз", n)
-	}
-	for range 3 {
-		if got := a.usablePlaces(); len(got) != 1 || got[0].Dir != dir {
-			t.Fatalf("usablePlaces = %v", got)
-		}
-	}
-	if n := devCalls.Load(); n != 0 {
-		t.Fatalf("чтение мест обратилось к диску %d раз", n)
-	}
-
-	a.pushPlaces(prefs.PlaceParent, filepath.Join(dir, "Свадьба"))
-	if devCalls.Load() != 0 {
-		t.Error("несуществующая папка не должна доходить до st_dev")
-	}
-	sub := realDir(t, "Съёмки", "Свадьба")
-	a.pushPlaces(prefs.PlaceParent, sub)
-	if devCalls.Load() == 0 {
-		t.Error("пополнение не проверило устройство")
-	}
-
-	// Зависший st_dev: пополнение уходит по пределу, места не меняются.
-	release := make(chan struct{})
-	t.Cleanup(func() { close(release) })
-	placeDev = func(string) (uint64, bool) { <-release; return 0, true }
-	e.rules.timeout = 50 * time.Millisecond
-	before := prefs.LoadAgentPerms(a.cfgDir).Places
-	start := time.Now()
-	a.pushPlaces(prefs.PlaceParent, realDir(t, "Другая", "Свадьба"))
-	if d := time.Since(start); d > testkit.Limit(2*time.Second) {
-		t.Errorf("зависший диск держал пополнение %v", d)
-	}
-	if got := prefs.LoadAgentPerms(a.cfgDir).Places; len(got) != len(before) {
-		t.Errorf("зависшая проба изменила места: %v → %v", before, got)
-	}
-}
-
-// Места, ставшие негодными после смены правил, при чтении пропускаются (без диска).
-func TestPlaceUsableDropsBad(t *testing.T) {
-	a := newApp(t)
-	a.emit = func(string, ...any) {}
-	// prefs хранит только пути своей ОС (filepath.IsAbs): на Windows те же случаи — Windows-правилами.
-	e := unixEnv("linux")
-	dirs := [4]string{"/data/Фото", "/home/u/Работа", "/home/u/Pictures", "/etc"}
-	if runtime.GOOS == "windows" {
-		e = winEnv()
-		dirs = [4]string{`D:\Фото`, `C:\Users\u\Работа`, `C:\Users\u\Pictures`, `C:\Windows`}
-	}
-	a.askM().rules = func() *folderRules { return e.rules }
-	for _, p := range []prefs.Place{
-		{Dir: dirs[0], How: prefs.PlaceParent},
-		{Dir: dirs[1], How: prefs.PlaceParent}, // прямая подпапка домашней
-		{Dir: dirs[2], How: prefs.PlaceChosen}, // явное — можно
-		{Dir: dirs[3], How: prefs.PlaceChosen},
-	} {
-		prefs.AddPlace(a.cfgDir, p)
-	}
-	got := a.usablePlaces()
-	if len(got) != 2 || got[0].Dir != dirs[2] || got[0].How != prefs.PlaceChosen || got[1].Dir != dirs[0] {
-		t.Errorf("usablePlaces = %v", got)
-	}
-	// Правил нет (fail-closed) — мест нет.
-	a.askM().rules = func() *folderRules { return nil }
-	if got := a.usablePlaces(); len(got) != 0 {
-		t.Errorf("без правил: %v", got)
 	}
 }

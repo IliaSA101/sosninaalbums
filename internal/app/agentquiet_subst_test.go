@@ -7,6 +7,7 @@ package app
 import (
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 )
 
@@ -52,7 +53,7 @@ func TestQuietSubstDrive(t *testing.T) {
 		t.Run(c.hint, func(t *testing.T) {
 			a := newApp(t)
 			rules := winRules(disk)
-			a.askM().rules = func() *folderRules { return rules }
+			a.askM().rules = func() *agentplaces.Rules { return rules }
 			p := a.planFolder(agents.AskReq{Kind: agents.AskAdd, Hint: c.hint, Always: true}, nil, true)
 			if p.why != c.why || (p.path != "") != c.hasPath || p.quiet() {
 				t.Fatalf("план: %+v, ждали why=%q, путь=%v", p, c.why, c.hasPath)
@@ -62,19 +63,8 @@ func TestQuietSubstDrive(t *testing.T) {
 	// Без «Всегда» причина не считается, но настоящий путь — тот же, что вернул диск.
 	a := newApp(t)
 	rules := winRules(disk)
-	a.askM().rules = func() *folderRules { return rules }
+	a.askM().rules = func() *agentplaces.Rules { return rules }
 	if p := a.planFolder(agents.AskReq{Kind: agents.AskAdd, Hint: `X:\Съёмки\Петровы`}, nil, false); p.path != `D:\Съёмки\Петровы` || !p.link || p.why != "" {
 		t.Errorf("при «Спрашивать»: %+v", p)
-	}
-}
-
-// winVolume: буква, UNC и пути без тома.
-func TestWinVolume(t *testing.T) {
-	for in, want := range map[string]string{
-		`C:\x`: `C:`, `d:`: `d:`, `\\srv\share\x`: `\\srv\share`, `\\srv\share`: `\\srv\share`, `\\srv`: "", `/x`: "", "": "", `x`: "",
-	} {
-		if got := winVolume(in); got != want {
-			t.Errorf("winVolume(%q) = %q, ждали %q", in, got, want)
-		}
 	}
 }

@@ -157,7 +157,8 @@ func TestAgentsEditCircleViaService(t *testing.T) {
 	// vary без листов: менять нечего, rev прежний, события нет (служба пустой список отвергает
 	// раньше, поэтому — через Host напрямую).
 	h := r.a.agentsHost()
-	out, changed, err := h.Vary(context.Background(), agents.VaryReq{Key: ref["key"].(string), Rev: v.Rev, Variety: 1})
+	vr, err := h.Vary(context.Background(), agents.VaryReq{Key: ref["key"].(string), Rev: v.Rev, Variety: 1})
+	out, changed := vr.Album, vr.Changed
 	if err != nil || changed != 0 || out.Rev != v.Rev || len(r.of("agents:edited")) != 1 {
 		t.Fatalf("vary без листов: %+v %d %v, событий %d", out, changed, err, len(r.of("agents:edited")))
 	}
@@ -208,7 +209,7 @@ func TestAgentsHostEditErrors(t *testing.T) {
 	if _, err := h.Auto(ctx, agents.AutoReq{Key: r.key(), Rev: r.rev() + 5, PerAuto: true}); !errors.Is(err, agents.ErrAlbumEdited) {
 		t.Errorf("Auto чужая ревизия: %v", err)
 	}
-	if _, _, err := h.Vary(ctx, agents.VaryReq{Key: "чужой", Rev: r.rev(), Variety: 1}); !errors.Is(err, agents.ErrAlbumChanged) {
+	if _, err := h.Vary(ctx, agents.VaryReq{Key: "чужой", Rev: r.rev(), Variety: 1}); !errors.Is(err, agents.ErrAlbumChanged) {
 		t.Errorf("Vary чужой ключ: %v", err)
 	}
 	if _, err := h.Show(r.key(), "нет-такого"); !errors.Is(err, agents.ErrNoSpread) {

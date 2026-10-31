@@ -33,7 +33,13 @@ export function AddVignette(arg1:number):Promise<model.View>;
 
 export function AgentAnswerCreate(arg1:string,arg2:boolean):Promise<app.State>;
 
+export function AgentAnswerExport(arg1:string,arg2:boolean):Promise<app.ExportStarted>;
+
+export function AgentAnswerOpen(arg1:string,arg2:boolean):Promise<app.State>;
+
 export function AgentOpenPrev():Promise<app.State>;
+
+export function AgentPlacesLive():Promise<Array<app.AgentPlace>>;
 
 export function AgentsBusy(arg1:boolean):Promise<void>;
 
@@ -86,6 +92,8 @@ export function AutoSimilar(arg1:Array<string>,arg2:model.AutoOpts):Promise<Arra
 export function BackToAuto(arg1:string,arg2:string,arg3:boolean):Promise<model.View>;
 
 export function Backups():Promise<Array<app.BackupInfo>>;
+
+export function BindAgentPlace(arg1:string):Promise<app.AgentsInfo>;
 
 export function CancelCollect():Promise<void>;
 
@@ -177,6 +185,8 @@ export function DeleteSpreads(arg1:Array<string>):Promise<model.View>;
 
 export function DeleteText(arg1:string):Promise<model.View>;
 
+export function DismissPlacesLifted():Promise<app.AgentsInfo>;
+
 export function DownloadAllLibrary():Promise<app.LibraryUpdate>;
 
 export function DownloadGuideVideos(arg1:Array<string>):Promise<Array<app.GuideVideo>>;
@@ -210,6 +220,8 @@ export function FitFaces(arg1:string,arg2:string,arg3:string):Promise<app.FacesR
 export function FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>;
 
 export function FlipSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>;
+
+export function ForgetAgentPlace(arg1:string):Promise<app.AgentsInfo>;
 
 export function ForgetAgentPlaces():Promise<app.AgentsInfo>;
 

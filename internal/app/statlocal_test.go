@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/library"
@@ -24,9 +23,6 @@ func netLink(t *testing.T, dir, target string, net bool) string {
 // netLinkNamed — netLink с именем ссылки: папке и набору нужны свои имена (расширение .zip).
 func netLinkNamed(t *testing.T, dir, name, target string, net bool) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("н/п: ссылки на Windows требуют прав; логика StatLocal общая")
-	}
 	link := filepath.Join(dir, name)
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("ссылку не создать: %v", err)

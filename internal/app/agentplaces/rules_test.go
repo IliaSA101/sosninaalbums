@@ -1,4 +1,4 @@
-package app
+package agentplaces
 
 import (
 	"errors"
@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -23,33 +24,29 @@ func diskNever(t *testing.T) func(string) (string, error) {
 	}
 }
 
-func unixRules(goos string, disk func(string) (string, error)) *folderRules {
+func unixRules(goos string, disk func(string) (string, error)) *Rules {
 	home := "/home/u"
 	if goos == "darwin" {
 		home = "/Users/u"
 	}
-	r := &folderRules{
-		fold: func(s string) string { return s }, homes: []string{home}, timeout: time.Second, disk: disk,
-		whole: []string{home + "/Документы", home + "/Рабочий стол", home + "/Загрузки"},
-		ours:  []string{home + "/.config", home + "/.cache"},
-	}
-	r.trees, r.allow, r.exact, r.elems = osLists(goos, home, func(string) string { return "" })
-	return r
+	return New(Opts{
+		Fold: func(s string) string { return s }, Homes: []string{home}, Timeout: time.Second, Disk: disk,
+		Whole: []string{home + "/Документы", home + "/Рабочий стол", home + "/Загрузки"},
+		Ours:  []string{home + "/.config", home + "/.cache"}, Lists: goos,
+	})
 }
 
-func winRules(disk func(string) (string, error)) *folderRules {
+func winRules(disk func(string) (string, error)) *Rules {
 	env := map[string]string{
 		"SystemRoot": `C:\Windows`, "ProgramFiles": `C:\Program Files`, "ProgramFiles(x86)": `C:\Program Files (x86)`,
 		"ProgramData": `C:\ProgramData`, "AppData": `C:\Users\u\AppData\Roaming`, "LocalAppData": `C:\Users\u\AppData\Local`,
 	}
 	home := `C:\Users\u`
-	r := &folderRules{
-		windows: true, fold: strings.ToLower, homes: []string{home}, timeout: time.Second, disk: disk,
-		whole: []string{home + `\Documents`, home + `\Desktop`, home + `\Downloads`},
-		ours:  []string{env["AppData"], env["LocalAppData"]},
-	}
-	r.trees, r.allow, r.exact, r.elems = osLists("windows", home, func(k string) string { return env[k] })
-	return r
+	return New(Opts{
+		Windows: true, Fold: strings.ToLower, Homes: []string{home}, Timeout: time.Second, Disk: disk,
+		Whole: []string{home + `\Documents`, home + `\Desktop`, home + `\Downloads`},
+		Ours:  []string{env["AppData"], env["LocalAppData"]}, Lists: "windows", Env: func(k string) string { return env[k] },
+	})
 }
 
 // Правило папки (К2): запрещённое — отказ нужного вида, разрешённое — проходит. Windows-случаи
@@ -59,10 +56,10 @@ func TestAgentFolderRules(t *testing.T) {
 		p    string
 		want error // nil — проходит
 	}
-	wide, ours := errFolderTooWide, errFolderOurs
+	wide, ours := ErrTooWide, ErrOurs
 	groups := []struct {
 		name  string
-		rules *folderRules
+		rules *Rules
 		cases []c
 	}{
 		{"linux", unixRules("linux", diskOK), []c{
@@ -99,12 +96,12 @@ func TestAgentFolderRules(t *testing.T) {
 	}
 	for _, g := range groups {
 		for _, k := range g.cases {
-			err := g.rules.folder(k.p)
+			err := g.rules.Folder(k.p)
 			if !errors.Is(err, k.want) || (k.want == nil) != (err == nil) {
 				t.Errorf("%s %q: %v, ждали %v", g.name, k.p, err, k.want)
 			}
-			dir, ok := g.rules.hint(k.p)
-			if ok != (k.want == nil) || ok && dir != g.rules.clean(k.p) {
+			dir, ok := g.rules.Hint(k.p)
+			if ok != (k.want == nil) || ok && dir != g.rules.Clean(k.p) {
 				t.Errorf("%s %q: подсказка %q ok=%v, ждали ok=%v", g.name, k.p, dir, ok, k.want == nil)
 			}
 			if err != nil && strings.Contains(err.Error(), k.p) {
@@ -125,18 +122,18 @@ func TestFolderHintNotTrusted(t *testing.T) {
 	winBad := append([]string{`C:\a\` + strings.Repeat("b", 4097), "C:\\Фото\\a\u2028b", `\\?\UNC\h\s`, `\??\C:\x`}, bad...)
 	for _, c := range []struct {
 		name  string
-		rules *folderRules
+		rules *Rules
 		list  []string
 	}{
 		{"unix", unixRules("linux", diskNever(t)), bad},
 		{"windows", winRules(diskNever(t)), winBad},
 	} {
 		for _, s := range c.list {
-			if _, ok := c.rules.hint(s); ok {
+			if _, ok := c.rules.Hint(s); ok {
 				t.Errorf("%s %.40q: подсказка принята", c.name, s)
 			}
-			if err := c.rules.folder(s); !errors.Is(err, errFolderTooWide) {
-				t.Errorf("%s %.40q: %v, ждали errFolderTooWide", c.name, s, err)
+			if err := c.rules.Folder(s); !errors.Is(err, ErrTooWide) {
+				t.Errorf("%s %.40q: %v, ждали ErrTooWide", c.name, s, err)
 			}
 		}
 	}
@@ -144,7 +141,7 @@ func TestFolderHintNotTrusted(t *testing.T) {
 	long := "/data/" + strings.Repeat("a", 4096-len("/data/"))
 	reached := false
 	r := unixRules("linux", func(p string) (string, error) { reached = true; return p, nil })
-	if _, ok := r.hint(long); !ok || !reached {
+	if _, ok := r.Hint(long); !ok || !reached {
 		t.Errorf("4096 байт: ok=%v диск=%v", ok, reached)
 	}
 }
@@ -156,10 +153,10 @@ func TestFolderHintHang(t *testing.T) {
 	r := unixRules("linux", func(p string) (string, error) { <-release; return p, nil })
 	r.timeout = 50 * time.Millisecond
 	start := time.Now()
-	if err := r.folder("/media/u/disk/2026"); !errors.Is(err, errFolderTooWide) {
+	if err := r.Folder("/media/u/disk/2026"); !errors.Is(err, ErrTooWide) {
 		t.Fatalf("висящий диск: %v, ждали отказ", err)
 	}
-	if _, ok := r.hint("/media/u/disk/2026"); ok {
+	if _, ok := r.Hint("/media/u/disk/2026"); ok {
 		t.Fatal("подсказка принята при висящем диске")
 	}
 	if d := time.Since(start); d > testkit.Limit(2*time.Second) {
@@ -167,7 +164,7 @@ func TestFolderHintHang(t *testing.T) {
 	}
 	// Паника диска — тоже отказ, а не падение программы.
 	r.disk = func(string) (string, error) { panic("диск") }
-	if err := r.folder("/media/u/disk/2026"); err == nil {
+	if err := r.Folder("/media/u/disk/2026"); err == nil {
 		t.Fatal("паника диска не дала отказ")
 	}
 }
@@ -175,9 +172,6 @@ func TestFolderHintHang(t *testing.T) {
 // Ссылка, ведущая в корень или домашнюю, отказывает по настоящему пути (шаг 2 + повтор шага 1),
 // обычная ссылка и обычная папка проходят; файл вместо папки и несуществующая — отказ.
 func TestFolderHintSymlink(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("символические ссылки Windows требуют прав; правило путей то же")
-	}
 	base, err := filepath.EvalSymlinks(testkit.TempDir(t))
 	if err != nil {
 		t.Fatal(err)
@@ -196,15 +190,15 @@ func TestFolderHintSymlink(t *testing.T) {
 	link := func(name, target string) string {
 		p := filepath.Join(base, "work", name)
 		if err := os.Symlink(target, p); err != nil {
-			t.Fatal(err)
+			t.Skipf("ссылку не создать: %v", err) // Windows без прав на ссылки
 		}
 		return p
 	}
-	toRoot, toHome, toShoot, toFile := link("toRoot", "/"), link("toHome", home), link("toShoot", shoot), link("toFile", file)
-	r := &folderRules{
-		fold: func(s string) string { return s }, homes: []string{home}, timeout: time.Second, disk: diskProbe,
-	}
-	r.trees, r.allow, r.exact, r.elems = osLists("linux", home, func(string) string { return "" })
+	// Корень — том временной папки: на Windows «/» не путь тома, а правила — ОС процесса.
+	root := filepath.VolumeName(base) + string(filepath.Separator)
+	toRoot, toHome, toShoot, toFile := link("toRoot", root), link("toHome", home), link("toShoot", shoot), link("toFile", file)
+	// Среда пуста: системные папки Windows — по умолчанию, а не настоящий LocalAppData с временной папкой.
+	r := New(Opts{Windows: runtime.GOOS == "windows", Fold: paths.Fold, Homes: []string{home}, Timeout: time.Second, Lists: runtime.GOOS})
 	for _, c := range []struct {
 		p  string
 		ok bool
@@ -212,11 +206,11 @@ func TestFolderHintSymlink(t *testing.T) {
 		{toRoot, false}, {toHome, false}, {toShoot, true}, {shoot, true},
 		{toFile, false}, {file, false}, {filepath.Join(base, "work", "нет"), false},
 	} {
-		err := r.folder(c.p)
+		err := r.Folder(c.p)
 		if (err == nil) != c.ok {
 			t.Errorf("%s: %v, ok должно быть %v", filepath.Base(c.p), err, c.ok)
 		}
-		if _, ok := r.hint(c.p); ok != c.ok {
+		if _, ok := r.Hint(c.p); ok != c.ok {
 			t.Errorf("%s: подсказка ok=%v, ждали %v", filepath.Base(c.p), ok, c.ok)
 		}
 	}
@@ -228,13 +222,13 @@ func TestAgentFolderDefaults(t *testing.T) {
 	if err != nil || !filepath.IsAbs(home) {
 		t.Skip("домашней папки нет")
 	}
-	if err := defaultFolderRules().folder(home); err == nil {
+	if err := Default().Folder(home); err == nil {
 		t.Error("домашняя папка принята")
 	}
-	if err := defaultFolderRules().folder(string(filepath.Separator)); err == nil && runtime.GOOS != "windows" {
+	if err := Default().Folder(string(filepath.Separator)); err == nil && runtime.GOOS != "windows" {
 		t.Error("корень принят")
 	}
-	if _, ok := defaultFolderRules().hint("relative"); ok {
+	if _, ok := Default().Hint("relative"); ok {
 		t.Error("относительный путь принят")
 	}
 }
@@ -267,7 +261,7 @@ func TestAskHintDisplay(t *testing.T) {
 	if got := lastElem("/home/u/secret/Свадьба", false); strings.Contains(got, "secret") {
 		t.Errorf("родитель в подсказке: %q", got)
 	}
-	if dir, label := agentHintShown(defaultFolderRules(), "relative/x"); dir != "" || label != "" {
+	if dir, label := HintShown(Default(), "relative/x"); dir != "" || label != "" {
 		t.Errorf("негодная подсказка: %q %q", dir, label)
 	}
 }

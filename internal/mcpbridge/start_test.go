@@ -283,14 +283,14 @@ func TestStartProgramAccessOffShapes(t *testing.T) {
 		}
 	})
 	t.Run("ссылка вместо файла", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("ссылки на Windows требуют прав")
-		}
 		fx := newStartFx(t)
 		p := filepath.Join(fx.root, "cfg", fx.data, "config.json")
 		target := filepath.Join(fx.root, "real.json")
-		if err := os.Rename(p, target); err != nil || os.Symlink(target, p) != nil {
-			t.Fatal("не подготовили ссылку")
+		if err := os.Rename(p, target); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, p); err != nil {
+			t.Skipf("ссылку не создать: %v", err)
 		}
 		if h := fx.bridge(); len(toolNames(t, h)) != 1 {
 			t.Error("config.json по ссылке принят")
@@ -309,7 +309,7 @@ func TestStartProgramElevated(t *testing.T) {
 // не зовёт подставную.
 func TestStartProgramRoot(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("на Windows права — токен процесса, проверка в winqa")
+		t.Skip("euid — Unix; на Windows: osx.TestElevated (ci.yml)")
 	}
 	if got, want := osx.Elevated(), os.Geteuid() == 0; got != want {
 		t.Errorf("osx.Elevated = %v, euid == 0: %v", got, want)

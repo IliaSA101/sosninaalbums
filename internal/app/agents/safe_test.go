@@ -36,13 +36,15 @@ func TestHostFields(t *testing.T) {
 		// Ступень 3 (149): правки; всё — числа, строки и срезы строк (TestHostTypesScalar).
 		"Perm func(string) (string, string)", "PermLevel func(string) (string, string, int)", "Scanning func() bool", "Busy func(context.Context) bool", "Backup func(string) error",
 		"Ask func(context.Context, agents.AskReq) (agents.AskRes, error)", "Auto func(context.Context, agents.AutoReq) (agents.AutoRes, error)",
-		"Vary func(context.Context, agents.VaryReq) (agents.AlbumRef, int, error)", "Show func(string, string) (int, error)",
+		"Vary func(context.Context, agents.VaryReq) (agents.VaryRes, error)", "Show func(string, string) (int, error)",
 		"Undo func(context.Context, agents.AlbumRef) (agents.AlbumRef, error)",
 		// Ступень 3б (151): лист-сетка, семейство и правки 0.34; то же правило типов.
 		"Sheet func(context.Context, agents.SheetReq) ([]uint8, []string, error)", "Families func([]string) []string",
 		"Mark func(context.Context, agents.MarkReq) (agents.MarkRes, error)", "Cover func(context.Context, agents.CoverReq) (agents.CoverRes, error)",
 		"Bg func(context.Context, agents.BgReq) (agents.BgRes, error)", "Stickers func(context.Context, agents.StickerReq) (agents.StickerRes, error)",
 		"Print func(context.Context, agents.PrintReq) (agents.PrintRes, error)",
+		// 152: ход выгрузки для get_album.
+		"ExportState func(uint64) agents.ExportStatus", "ExportHold func(string) bool", // ExportHold: имя инструмента → bool, путей нет
 	}
 	rt := reflect.TypeOf(Host{})
 	var got []string
@@ -78,8 +80,8 @@ func TestHostTypesScalar(t *testing.T) {
 			t.Errorf("%s: недопустимый вид %v", path, rt)
 		}
 	}
-	for _, v := range []any{AskReq{}, AskRes{}, AutoReq{}, AutoRes{}, VaryReq{}, AlbumRef{},
-		SheetReq{}, MarkReq{}, MarkRes{}, CoverReq{}, CoverRes{}, BgReq{}, BgRes{}, StickerReq{}, StickerRes{}, PrintReq{}, PrintRes{}} {
+	for _, v := range []any{AskReq{}, AskRes{}, AutoReq{}, AutoRes{}, VaryReq{}, VaryRes{}, AlbumRef{},
+		SheetReq{}, MarkReq{}, MarkRes{}, CoverReq{}, CoverRes{}, BgReq{}, BgRes{}, StickerReq{}, StickerRes{}, PrintReq{}, PrintRes{}, ExportStatus{}} {
 		rt := reflect.TypeOf(v)
 		check(rt.Name(), rt)
 	}

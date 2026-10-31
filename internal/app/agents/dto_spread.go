@@ -341,7 +341,12 @@ func (c *call) families(ids []string) []string {
 	if c.s.h.Families == nil || len(ids) == 0 {
 		return out
 	}
-	got := c.s.h.Families(ids)
+	return cleanFamilies(c.s.h.Families(ids), len(ids))
+}
+
+// cleanFamilies — ответ замыкания Host по шести словам семейств: n значений, чужое слово и нехватка — "".
+func cleanFamilies(got []string, n int) []string {
+	out := make([]string, n)
 	for i := range out {
 		if i < len(got) && slices.Contains(families, got[i]) {
 			out[i] = got[i]

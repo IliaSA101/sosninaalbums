@@ -10,11 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
+	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -27,8 +30,17 @@ var openDirDialog = wr.OpenDirectoryDialog
 // seedMu держит засев одним: два потока, увидевшие «ключа нет», засеяли бы дважды.
 var seedMu sync.Mutex
 
+// Подмена в тестах: таблица монтирования, st_dev и номер тома — диск машины. placeEnv() кладёт их
+// в agentplaces.Env в вызывающей горутине: пережившая предел проба не читает переменные позже.
+var (
+	placeMounts  = osx.MountPoints
+	placeDev     = agentplaces.DevOf
+	placeVolOf   = osx.VolumeOf
+	placeVolPath = osx.VolumePath
+)
+
 // placeEnv — правила мест этой машины поверх правил выбранной папки (askM().rules — в тестах мягкие).
-func (a *App) placeEnv() *placeEnv {
+func (a *App) placeEnv() *agentplaces.Env {
 	r := a.askM().rules()
 	if r == nil {
 		return nil // fail-closed: правил нет — места не пополняются и не читаются
@@ -41,7 +53,10 @@ func (a *App) placeEnv() *placeEnv {
 	if system == "" {
 		system = "C:"
 	}
-	return &placeEnv{rules: r, cloud: cloudRoots(runtime.GOOS, home, os.Getenv), system: system}
+	return &agentplaces.Env{
+		Rules: r, Cloud: agentplaces.CloudRoots(runtime.GOOS, home, os.Getenv), System: system,
+		Vol: placeVolOf, VolPath: placeVolPath, Dev: placeDev, Mounts: placeMounts,
+	}
 }
 
 // usablePlaces — места из config.json, прошедшие строковые правила сейчас (место, ставшее негодным
@@ -54,7 +69,9 @@ func (a *App) usablePlaces() []prefs.Place {
 	env := a.placeEnv()
 	var out []prefs.Place
 	for _, p := range places {
-		if env.static(p.Dir, p.How) == nil {
+		// У места с диском Dir — путь на момент привязки, буква могла смениться: строковые правила
+		// для него применяет placeWhy к текущему пути (volPlaceSelf).
+		if p.Vol != nil || env.Static(p.Dir, p.How) == nil {
 			out = append(out, p)
 		}
 	}
@@ -69,7 +86,7 @@ func (a *App) seedCandidate(cfg prefs.Config) prefs.Place {
 	if last == "" {
 		return prefs.Place{}
 	}
-	dir, err := a.placeEnv().admit(last, prefs.PlaceParent)
+	dir, _, _, err := a.placeEnv().Lift(last)
 	if err != nil {
 		return prefs.Place{}
 	}
@@ -96,13 +113,14 @@ func (a *App) seedPlaces() {
 	})
 }
 
-// pushPlaces ставит наверх списка родителей (how = parent) или саму папку (chosen) — те, что прошли
-// admit; одна запись на все. Не прошло — места не меняются, добавление папки идёт как обычно.
+// pushPlaces ставит наверх списка родителей (how = parent, поднятых до корня архива — lift) или саму
+// папку (chosen) — те, что прошли admit; одна запись на все. Места внутри других убираются
+// (PushPlace). Не прошло или список не меняется — записи нет, добавление папки идёт как обычно.
 func (a *App) pushPlaces(how string, dirs ...string) {
 	a.seedPlaces()
 	env := a.placeEnv()
 	var add []prefs.Place
-	seen := map[string]bool{}
+	seen, placed := map[string]bool{}, map[string]bool{}
 	for _, d := range dirs {
 		if len(add) == prefs.MaxPlaces {
 			break // дальше всё равно не влезло бы в список
@@ -112,32 +130,47 @@ func (a *App) pushPlaces(how string, dirs ...string) {
 			continue
 		}
 		seen[k] = true
-		if dir, err := env.admit(d, how); err == nil {
-			add = append(add, prefs.Place{Dir: dir, How: how})
+		var dir string
+		var err error
+		if how == prefs.PlaceParent {
+			dir, _, _, err = env.Lift(d)
+		} else {
+			dir, err = env.Admit(d, how)
 		}
+		if err != nil || placed[paths.DirKey(dir)] {
+			continue // не прошло, или соседний родитель поднялся в то же место
+		}
+		placed[paths.DirKey(dir)] = true
+		// Диск пишет это действие человека (design 153 §4.4); не узнали — место по пути, как в 0.34.
+		add = append(add, prefs.Place{Dir: dir, How: how, Vol: env.VolOfDir(dir)})
 	}
-	if len(add) == 0 || placesOnTop(prefs.LoadAgentPerms(a.cfgDir).Places, add) {
+	cur := prefs.LoadAgentPerms(a.cfgDir).Places
+	if len(add) == 0 {
 		return
 	}
-	prefs.UpdateAgentPerms(a.cfgDir, func(p *prefs.AgentPerms) {
-		for i := len(add) - 1; i >= 0; i-- { // первая брошенная — наверху
-			p.Places = prefs.PushPlace(p.Places, add[i])
-		}
-	})
+	binds := env.BindInside(cur, add)
+	if sameOrder(cur, pushAll(cur, binds, add)) {
+		return
+	}
+	prefs.UpdateAgentPerms(a.cfgDir, func(p *prefs.AgentPerms) { p.Places = pushAll(p.Places, binds, add) })
 	a.agentsChanged()
 }
 
-// placesOnTop — add уже стоит в начале списка в том же порядке и с тем же способом: писать нечего.
-func placesOnTop(list, add []prefs.Place) bool {
-	if len(list) < len(add) {
-		return false
+// pushAll — add поверх list, первое из add — наверху; места без диска, оказавшиеся на диске новых
+// (binds, см. BindInside), сначала получают его. list не меняется.
+func pushAll(list []prefs.Place, binds map[string]prefs.PlaceVol, add []prefs.Place) []prefs.Place {
+	tmp := prefs.AgentPerms{Places: list}
+	tmp.BindPlaces(binds)
+	list = tmp.Places
+	for i := len(add) - 1; i >= 0; i-- {
+		list = prefs.PushPlace(list, add[i])
 	}
-	for i, p := range add {
-		if paths.DirKey(list[i].Dir) != paths.DirKey(p.Dir) || list[i].How != p.How {
-			return false
-		}
-	}
-	return true
+	return list
+}
+
+// sameOrder — списки мест одинаковы (диск или путь, способ — по порядку): писать нечего.
+func sameOrder(a, b []prefs.Place) bool {
+	return slices.EqualFunc(a, b, func(x, y prefs.Place) bool { return x.How == y.How && x.Key() == y.Key() })
 }
 
 // addChosenFolder — «Добавить папку…» после окна ОС: папка в проект, запомнить родителя для следующего
@@ -173,7 +206,7 @@ func isDirLocal(p string) bool {
 	if paths.CheckLocalPath(p) != nil {
 		return false
 	}
-	ok, done := within(osx.ProbeTimeout, func() bool {
+	ok, done := appkit.Within(osx.ProbeTimeout, func() bool {
 		st, err := library.StatLocal(p)
 		return err == nil && st.IsDir()
 	})
@@ -192,11 +225,15 @@ func (a *App) ChooseAgentPlace() (info AgentsInfo, err error) {
 	if dir == "" {
 		return a.agentsInfo(), nil
 	}
-	place, err := a.placeEnv().admit(dir, prefs.PlaceChosen)
+	env := a.placeEnv()
+	place, err := env.Admit(dir, prefs.PlaceChosen)
 	if err != nil {
 		return a.agentsInfo(), err
 	}
-	prefs.AddPlace(a.cfgDir, prefs.Place{Dir: place, How: prefs.PlaceChosen})
+	// Диск пишет это действие человека; другой диск по тому же пути — новое место, не перепривязка.
+	np := prefs.Place{Dir: place, How: prefs.PlaceChosen, Vol: env.VolOfDir(place)}
+	binds := env.BindInside(prefs.LoadAgentPerms(a.cfgDir).Places, []prefs.Place{np})
+	prefs.UpdateAgentPerms(a.cfgDir, func(p *prefs.AgentPerms) { p.Places = pushAll(p.Places, binds, []prefs.Place{np}) })
 	a.agentsChanged()
 	return a.agentsInfo(), nil
 }

@@ -13,13 +13,17 @@ import {
   type AgentCallEvent,
   type AgentDenied,
   type AgentEdited,
+  type AgentPlace,
   type AgentSetup,
   type AgentShow,
   type AgentsInfo,
 } from './agents'
-import { agentDenied, agentEdited, agentShow } from './agentedited'
+import { agentDenied, agentEdited, agentLifted, agentShow } from './agentedited'
 import {
+  KEY_LIFTED,
+  KEY_PLACES,
   KEY_SEE,
+  allowMissing,
   askMissing,
   consentFor,
   groupAskMissing,
@@ -50,6 +54,10 @@ class AgentsUi {
   // Подсвеченная строка (rowKey / KEY_PLACES / KEY_SEE) и причина «Спрашивать» нет: tool или 'group:read'.
   flash = $state('')
   whyFor = $state<Record<string, true>>({})
+  // Список мест (153): раскрыт ли и живое состояние дисков от AgentPlacesLive (null — ещё не пришло; диски без раскрытия не опрашиваются).
+  placesOpen = $state(false)
+  placesNow = $state<AgentPlace[] | null>(null)
+  private liveSeq = 0
   private flashTimer = 0
   private watchers = 0
   private offEvents: (() => void) | null = null
@@ -104,6 +112,8 @@ class AgentsUi {
       EventsOn('agents:edited', (e: AgentEdited) => agentEdited(e)),
       EventsOn('agents:show', (s: AgentShow) => agentShow(s)),
       EventsOn('agents:denied', (d: AgentDenied) => agentDenied(d, (tool) => void this.show(rowKey(tool)))),
+      // Места 0.34 подняты при запуске (153): тост-указатель; сама заметка живёт в info.lifted до «Понятно».
+      EventsOn('agents:placesLifted', () => agentLifted(() => void this.show(KEY_LIFTED))),
     ]
     return () => {
       off.forEach((f) => f?.())
@@ -135,6 +145,7 @@ class AgentsUi {
     this.ask = null
     this.pending = null
     this.whyFor = {}
+    this.closePlaces()
     await this.load()
     if (focus) this.highlight(focus)
   }
@@ -143,6 +154,7 @@ class AgentsUi {
     this.open = false
     this.ask = null
     this.pending = null
+    this.closePlaces()
     clearTimeout(this.flashTimer)
     this.flash = ''
   }
@@ -204,6 +216,7 @@ class AgentsUi {
     const p = this.info.perms.find((x) => x.tool === tool)
     if (!p || this.busy) return
     if (mode === 'ask' && askMissing(p)) return this.explain(tool, p.group === 'read')
+    if (mode === 'allow' && allowMissing(p)) return this.explain(tool, false) // выгрузка, открытие: «Всегда» нет — причина
     if (p.mode !== mode) this.change({ kind: 'tool', tool, mode })
   }
   pickGroup(group: PermGroup, mode: Mode) {
@@ -217,11 +230,57 @@ class AgentsUi {
     if (read) this.highlight(KEY_SEE)
   }
 
-  choosePlace() {
-    return this.call(() => bridge.choosePlace())
+  async choosePlace() {
+    await this.call(() => bridge.choosePlace())
+    await this.refreshPlaces()
   }
-  forgetPlaces() {
-    return this.call(() => bridge.forgetPlaces())
+  async forgetPlaces() {
+    await this.call(() => bridge.forgetPlaces())
+    await this.refreshPlaces()
+  }
+
+  // Список мест (153). Диски опрашиваются только при раскрытии и пока список открыт; свёрнутый список забывает ответ.
+  private closePlaces() {
+    this.placesOpen = false
+    this.placesNow = null
+    this.liveSeq++
+  }
+  async togglePlaces() {
+    if (this.placesOpen) return this.closePlaces()
+    this.placesOpen = true
+    await this.loadLive()
+  }
+  // «Настроить» в заметке о подъёме: раскрыть список и подсветить строку мест (окно раскроет «Правки» и прокрутит).
+  async seePlaces() {
+    this.highlight(KEY_PLACES)
+    if (!this.placesOpen) this.placesOpen = true
+    await this.loadLive()
+  }
+  private async loadLive() {
+    const seq = ++this.liveSeq
+    try {
+      const l = await bridge.placesLive()
+      if (seq === this.liveSeq) this.placesNow = l
+    } catch (e) {
+      store.notify(capFirst(errText(e)), 'error')
+    }
+  }
+  // После правки мест: пустой список сворачиваем, открытый — опрашиваем заново.
+  private async refreshPlaces() {
+    if (!this.placesOpen) return
+    if (this.info.places.length === 0) return this.closePlaces()
+    await this.loadLive()
+  }
+  async forgetPlace(key: string) {
+    await this.call(() => bridge.forgetPlace(key))
+    await this.refreshPlaces()
+  }
+  async bindPlace(key: string) {
+    await this.call(() => bridge.bindPlace(key))
+    await this.refreshPlaces()
+  }
+  dismissLifted() {
+    return this.call(() => bridge.dismissLifted())
   }
 
   // «Разрешить вопросы» после третьего отказа подряд: Go снимает тишину и шлёт новое состояние.

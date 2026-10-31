@@ -3,7 +3,7 @@ import { undoAction, undoToast, type ToastAction } from '../../base/core/toasts.
 import { capFirst, errText } from '../../base/words/errtext'
 import { newDoc } from '../newdoc/newdoc.svelte'
 import { bridge, type AgentDenied, type AgentEdited, type AgentShow } from './agents'
-import { OPEN_PREV_LABEL, SETUP_LABEL, deniedText } from './agentstext'
+import { LIFT_SEE, LIFT_TOAST, OPEN_PREV_LABEL, SETUP_LABEL, deniedText } from './agentstext'
 
 // Тосты правок агента (149-30, design §4; 150, design §7.3). Текст приходит из Go («Собрано разворотов: 24»), здесь — имя клиента,
 // «Вернуть» (механизм undoToast: только при той же ревизии) и переход к развороту или обложке (go = "cover", 151).
@@ -128,4 +128,10 @@ export function agentDenied(d: AgentDenied, setup: (tool: string) => void) {
 // Агент просит показать лист: альбом не меняется, холст переходит к нему.
 export function agentShow(s: AgentShow) {
   goWhen(s.spread)
+}
+
+// Места 0.34 подняты до корня архива при запуске (153, design §2.4): тост-указатель на заметку в окне «ИИ-агенты»; один на все места.
+// Заметка остаётся до «Понятно», так что пропущенный тост ничего не теряет.
+export function agentLifted(see: () => void) {
+  store.notify(LIFT_TOAST, 'info', { label: LIFT_SEE, run: see })
 }

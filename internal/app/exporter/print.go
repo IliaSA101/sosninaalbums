@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
@@ -40,8 +41,24 @@ func (s *Service) OpenPrintSite(id string) {
 // printshop.DefaultKind отмечает пункт Default, с которого окно открывается (123 §1.5).
 // Проект не меняется.
 func (s *Service) PrintPlans(last string) []printshop.Plan {
-	p, _ := s.h.Editor().SnapshotSide()
-	return printshop.Plans(p, s.h.Editor().Path(), last)
+	return s.PrintPlansFor(s.h.Editor(), last)
+}
+
+// PrintPlansFor — PrintPlans альбома ed (а не текущего): агент спрашивает про альбом вопроса.
+func (s *Service) PrintPlansFor(ed *album.Editor, last string) []printshop.Plan {
+	p, _ := ed.SnapshotSide()
+	return printshop.Plans(p, ed.Path(), last)
+}
+
+// DefaultPrint — типография, на которой окно «Экспорт» открылось бы для ed без запомненного
+// выбора (Kind; "" — обычная выгрузка): агент не назвал print — выгрузка как у человека.
+func (s *Service) DefaultPrint(ed *album.Editor) string {
+	for _, pl := range s.PrintPlansFor(ed, "") {
+		if pl.Default {
+			return pl.Kind
+		}
+	}
+	return ""
 }
 
 // printJob — режим «для типографии» (047, 081): её профиль и план — папка книги и памятка.

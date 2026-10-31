@@ -36,27 +36,28 @@ func (s *Service) runExport(ctx context.Context, cancel context.CancelFunc, j ex
 	ended := false
 	defer func() {
 		if !ended {
-			s.end()
+			s.endAs(StateFailed, errAborted)
 		}
 	}()
 	defer cancel()
 	restoreMem := s.h.LiftMemory()
 	defer restoreMem() // при панике; обычно — до export:done ниже
 	start := time.Now()
-	done, total := 0, len(j.pl.Jobs)
-	if j.pl.Cover != nil {
-		total++
-	}
+	done, total := 0, planTotal(j.pl)
 	err := export.RunPlan(ctx, j.spreads, j.pl, j.opt, j.dir, j.stale, func(d, t int) {
 		done, total = d, t
+		s.progress(d, t)
 		s.h.Emit("export:progress", d, t)
 	})
 	msg, note, memo, stopped := "", "", []string(nil), false
+	state, agentErr := StateDone, "" // для агента: ошибка записи без пути (в msg он есть)
 	switch {
 	case errors.Is(err, context.Canceled):
+		state = StateStopped
 		note, stopped = fmt.Sprintf("Экспорт остановлен: готово %d из %d. Уже выгруженные файлы остались в папке.", done, total), true
 		log.Printf("экспорт: остановлен, готово %d из %d", done, total)
 	case err != nil:
+		state, agentErr = StateFailed, errWrite
 		msg = err.Error()
 		log.Printf("экспорт: %v", paths.NoPath(err))
 	default:
@@ -70,15 +71,35 @@ func (s *Service) runExport(ctx context.Context, cancel context.CancelFunc, j ex
 	// Предел и флаг — до события: окно по export:done снова даёт «Экспорт», и повтор сразу не должен
 	// получить «экспорт уже идёт» или застать снятый предел.
 	restoreMem()
-	s.end()
+	s.progress(done, total)
+	s.endAs(state, agentErr)
 	ended = true
 	s.h.Emit("export:done", j.dir, msg, note, memo, stopped)
 }
 
-// end снимает флаг экспорта и его отмену.
-func (s *Service) end() {
+// Тексты ошибок для агента: без пути (ExportState.Error).
+const (
+	errWrite   = "не удалось записать файлы выгрузки"
+	errAborted = "выгрузка прервана"
+)
+
+// planTotal — единиц хода плана: задания разворотов и обложка (как считает export.RunPlan).
+func planTotal(pl export.Plan) int {
+	n := len(pl.Jobs)
+	if pl.Cover != nil {
+		n++
+	}
+	return n
+}
+
+// endAs снимает флаг экспорта и его отмену и закрывает ход для агента: состояние state, текст
+// ошибки errText (без пути). Ход не «идёт» — ничего не меняется.
+func (s *Service) endAs(state, errText string) {
 	s.mu.Lock()
 	s.busy, s.cancel = false, nil
+	if s.last.State == StateRunning {
+		s.last.State, s.last.Error = state, errText
+	}
 	s.mu.Unlock()
 }
 

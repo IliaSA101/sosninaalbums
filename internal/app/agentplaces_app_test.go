@@ -8,17 +8,21 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // placeApp — App без окна, правила мест — без запретов (тестовые папки лежат под TMPDIR), диск
 // подменён; считает события agents:state (каждое пополнение мест — одно).
-func placeApp(t *testing.T) (a *App, states func() int, e *placeEnv) {
+func placeApp(t *testing.T) (a *App, states func() int, e *agentplaces.Env) {
 	t.Helper()
 	a = newApp(t)
 	var mu sync.Mutex
@@ -32,7 +36,7 @@ func placeApp(t *testing.T) (a *App, states func() int, e *placeEnv) {
 	}
 	fakeDisk(t)
 	e = realEnv()
-	a.askM().rules = func() *folderRules { return e.rules }
+	a.askM().rules = func() *agentplaces.Rules { return e.Rules }
 	return a, func() int { mu.Lock(); defer mu.Unlock(); return n }, e
 }
 
@@ -119,7 +123,7 @@ func TestPlacePushedByHuman(t *testing.T) {
 
 	// Родитель не прошёл правила: папка добавилась, места прежние.
 	d4, q4 := mkFolder(t, "Г")
-	e.rules.trees = []string{q4}
+	e.Rules = realRules(func(o *agentplaces.Opts) { o.Trees = []string{q4} })
 	a.dropPaths([]string{d4})
 	waitScan(t, a)
 	if got := placeDirs(t, a); len(got) != 3 {
@@ -163,8 +167,8 @@ func TestPlaceNotFromAgentAnswer(t *testing.T) {
 	r := newAskRig(t)
 	a := r.a
 	fakeDisk(t)
-	rules := realEnv().rules
-	a.askM().rules = func() *folderRules { return rules }
+	rules := realEnv().Rules
+	a.askM().rules = func() *agentplaces.Rules { return rules }
 
 	// Добавить: выбранная в окне ОС папка попала в альбом, lastDirs.photos записан, мест нет.
 	c := r.ask(r.addReq())
@@ -257,7 +261,7 @@ func TestPlaceSeed(t *testing.T) {
 	// Негодная последняя папка: ключ создаётся, мест нет, и следующая последняя папка не засеется.
 	b, _, e2 := placeApp(t)
 	_, bad := mkFolder(t, "Съёмка")
-	e2.rules.trees = []string{bad}
+	e2.Rules = realRules(func(o *agentplaces.Opts) { o.Trees = []string{bad} })
 	prefs.RememberDir(b.cfgDir, prefs.DirPhotos, bad)
 	b.SetAgentPerm("autobuild", prefs.PermAllow)
 	_, good := mkFolder(t, "Съёмка")
@@ -320,7 +324,7 @@ func TestPlaceSeedPreview(t *testing.T) {
 	// Негодная последняя папка (вне разрешённых деревьев): пусто, файл не тронут.
 	b, _, e2 := placeApp(t)
 	_, bad := mkFolder(t, "Съёмка")
-	e2.rules.trees = []string{bad}
+	e2.Rules = realRules(func(o *agentplaces.Opts) { o.Trees = []string{bad} })
 	prefs.RememberDir(b.cfgDir, prefs.DirPhotos, bad)
 	bb := cfgBytes(b)
 	if got := shown(b); len(got) != 0 {
@@ -440,10 +444,10 @@ func TestChooseAgentPlaceStart(t *testing.T) {
 
 	// Негодная папка (системное дерево) — ошибка, места те же. Ошибка окна ОС — тоже.
 	bad := realDir(t, "Системное")
-	e.rules.trees = []string{bad}
+	e.Rules = realRules(func(o *agentplaces.Opts) { o.Trees = []string{bad} })
 	pick = bad
 	before := placeDirs(t, a)
-	if _, err := a.ChooseAgentPlace(); !errors.Is(err, errPlaceBad) {
+	if _, err := a.ChooseAgentPlace(); !errors.Is(err, agentplaces.ErrPlaceBad) {
 		t.Errorf("негодная папка: err = %v", err)
 	}
 	pick, pickErr = "", errors.New("окно не открылось")
@@ -452,5 +456,85 @@ func TestChooseAgentPlaceStart(t *testing.T) {
 	}
 	if got := placeDirs(t, a); len(got) != len(before) {
 		t.Errorf("места изменились: %v → %v", before, got)
+	}
+}
+
+// Чтение мест диск не трогает: подменённый stat не вызывается; пополнение зовёт его под within, а
+// зависший диск не вешает пополнение дольше предела.
+func TestPlaceDiskOnPushOnly(t *testing.T) {
+	a := newApp(t)
+	a.emit = func(string, ...any) {}
+	dir := realDir(t, "Съёмки")
+	devCalls := fakeDisk(t)
+	e := realEnv()
+	a.askM().rules = func() *agentplaces.Rules { return e.Rules }
+
+	prefs.AddPlace(a.cfgDir, prefs.Place{Dir: dir, How: prefs.PlaceChosen})
+	if n := devCalls.Load(); n != 0 {
+		t.Fatalf("AddPlace (хранение) обратился к диску %d раз", n)
+	}
+	for range 3 {
+		if got := a.usablePlaces(); len(got) != 1 || got[0].Dir != dir {
+			t.Fatalf("usablePlaces = %v", got)
+		}
+	}
+	if n := devCalls.Load(); n != 0 {
+		t.Fatalf("чтение мест обратилось к диску %d раз", n)
+	}
+
+	a.pushPlaces(prefs.PlaceParent, filepath.Join(dir, "Свадьба"))
+	if devCalls.Load() != 0 {
+		t.Error("несуществующая папка не должна доходить до st_dev")
+	}
+	sub := realDir(t, "Съёмки", "Свадьба")
+	a.pushPlaces(prefs.PlaceParent, sub)
+	if devCalls.Load() == 0 {
+		t.Error("пополнение не проверило устройство")
+	}
+
+	// Зависший st_dev: пополнение уходит по пределу, места не меняются.
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	placeDev = func(string) (uint64, bool) { <-release; return 0, true }
+	e.Rules = realRules(func(o *agentplaces.Opts) { o.Timeout = 50 * time.Millisecond })
+	before := prefs.LoadAgentPerms(a.cfgDir).Places
+	start := time.Now()
+	a.pushPlaces(prefs.PlaceParent, realDir(t, "Другая", "Свадьба"))
+	if d := time.Since(start); d > testkit.Limit(2*time.Second) {
+		t.Errorf("зависший диск держал пополнение %v", d)
+	}
+	if got := prefs.LoadAgentPerms(a.cfgDir).Places; len(got) != len(before) {
+		t.Errorf("зависшая проба изменила места: %v → %v", before, got)
+	}
+}
+
+// Места, ставшие негодными после смены правил, при чтении пропускаются (без диска).
+func TestPlaceUsableDropsBad(t *testing.T) {
+	a := newApp(t)
+	a.emit = func(string, ...any) {}
+	// prefs хранит только пути своей ОС (filepath.IsAbs): на Windows те же случаи — Windows-правилами.
+	rules := unixRules("linux", diskOK)
+	dirs := [4]string{"/data/Фото", "/home/u/Работа", "/home/u/Pictures", "/etc"}
+	if runtime.GOOS == "windows" {
+		rules = winRules(diskOK)
+		dirs = [4]string{`D:\Фото`, `C:\Users\u\Работа`, `C:\Users\u\Pictures`, `C:\Windows`}
+	}
+	a.askM().rules = func() *agentplaces.Rules { return rules }
+	for _, p := range []prefs.Place{
+		{Dir: dirs[0], How: prefs.PlaceParent},
+		{Dir: dirs[1], How: prefs.PlaceParent}, // прямая подпапка домашней
+		{Dir: dirs[2], How: prefs.PlaceChosen}, // явное — можно
+		{Dir: dirs[3], How: prefs.PlaceChosen},
+	} {
+		prefs.AddPlace(a.cfgDir, p)
+	}
+	got := a.usablePlaces()
+	if len(got) != 2 || got[0].Dir != dirs[2] || got[0].How != prefs.PlaceChosen || got[1].Dir != dirs[0] {
+		t.Errorf("usablePlaces = %v", got)
+	}
+	// Правил нет (fail-closed) — мест нет.
+	a.askM().rules = func() *agentplaces.Rules { return nil }
+	if got := a.usablePlaces(); len(got) != 0 {
+		t.Errorf("без правил: %v", got)
 	}
 }

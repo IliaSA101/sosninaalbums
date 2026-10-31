@@ -36,16 +36,12 @@ func TestUndoTextNoOwnVsChanged(t *testing.T) {
 // «нет такого разворота — … «cover» …»; неизвестный номер — прежний текст.
 func TestCoverNotTargetTexts(t *testing.T) {
 	r, cs := editRig(t, Options{}, nil)
-	for _, spread := range []string{"cover", "Cover", " COVER "} { // регистр и пробелы, как у findSpread
-		failText(t, tcall(t, cs, "add_sticker", args34(r, map[string]any{"stickers": []any{map[string]any{"spread": spread, "item": "sa:star"}}})), errCoverNotTarget("add_sticker"))
-	}
+	// add_sticker: с 154 обложка — цель (TestStickerCoverRef), здесь её нет.
 	cases := []struct {
 		tool string
 		args map[string]any
 		want string
 	}{
-		{"add_sticker", map[string]any{"stickers": []any{map[string]any{"spread": "cover", "item": "sa:star"}}},
-			"на обложку стикеры не ставятся — номер разворота с 1 или id из list_spreads"},
 		{"set_background", map[string]any{"item": "sa:plain", "spreads": []any{"cover"}},
 			"на обложку фон этим инструментом не ставится — номер разворота с 1 или id из list_spreads"},
 		{"vary_layouts", map[string]any{"spreads": []any{"cover"}},

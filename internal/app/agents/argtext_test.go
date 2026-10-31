@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -33,6 +34,7 @@ func TestBadArgsRussian(t *testing.T) {
 		{"list_photos", map[string]any{"filter": "все"}, []string{"«filter»", "«used»", "«marked»"}},
 		{"list_decor", map[string]any{"kind": "foo"}, []string{"«kind»", "«sticker»"}},
 		{"list_decor", map[string]any{}, []string{"нет обязательного поля «kind»"}},
+		{"export_album", map[string]any{"album": map[string]any{"key": "k", "rev": 1}, "quality": 50}, []string{"«quality»", "«100»", "«95»", "«80»"}},
 	} {
 		r := tcall(t, cs, c.name, c.args)
 		if !r.IsError || !strings.HasPrefix(r.Text, "неверные аргументы вызова: ") {
@@ -78,5 +80,29 @@ func TestExplainArgsEdges(t *testing.T) {
 	}
 	if got := explainArgs(&jsonschema.Schema{}, map[string]any{"a": 1.0}); !strings.Contains(got, "нет аргументов") {
 		t.Errorf("схема без полей: %q", got)
+	}
+}
+
+// TestExplainEnumNumbers: перечисление чисел в схеме (int: quality 100/95/80) называется числами,
+// а не «?», допустимое число (float64 из JSON) нарушением не считается; строки не сломаны.
+func TestExplainEnumNumbers(t *testing.T) {
+	num := &jsonschema.Schema{Type: "integer", Enum: []any{100, 95, 80}}
+	if got := explainValue(num, 50.0); got != "допустимые значения: «100», «95», «80»" {
+		t.Errorf("числа: %q", got)
+	}
+	for _, ok := range []any{100.0, 95.0, 80.0} {
+		if got := explainValue(num, ok); got != "" {
+			t.Errorf("%v допустимо, а сказано %q", ok, got)
+		}
+	}
+	str := &jsonschema.Schema{Type: "string", Enum: []any{"a", "b"}}
+	if got := explainValue(str, "c"); got != "допустимые значения: «a», «b»" {
+		t.Errorf("строки: %q", got)
+	}
+	if explainValue(str, "a") != "" {
+		t.Error("допустимая строка")
+	}
+	if fmtAny(struct{}{}) != "?" || fmtAny(int64(7)) != "7" || fmtAny(json.Number("2.5")) != "2.5" {
+		t.Error("fmtAny")
 	}
 }

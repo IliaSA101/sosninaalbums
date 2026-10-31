@@ -12,15 +12,19 @@ if [ -n "$bad" ]; then
 fi
 
 # Крупные бинарники (> 2 МБ) — почти наверняка случайность. Исключение — файл примера темы (стандартная редакция)
-# (internal/demopack/*.zip, до 20 МиБ; владелец 28.10, решения 0.30-142-31, -33).
+# (internal/demopack/*.zip, до 20 МиБ; владелец 28.10, решения 0.30-142-31, -33) и эталоны тестов
+# (testdata/test-baseline*.json, текст до 4 МиБ: покрытие по блокам Go и UI растёт с кодом; владелец 31.10, 0.35/155 Т5).
 big=$(git diff --cached --name-only --diff-filter=ACMR | while read -r f; do
   [ -f "$f" ] || continue
   lim=2097152
-  case "$f" in internal/demopack/*.zip) lim=20971520 ;; esac
+  case "$f" in
+    internal/demopack/*.zip) lim=20971520 ;;
+    testdata/test-baseline*.json) lim=4194304 ;;
+  esac
   [ "$(wc -c < "$f")" -gt "$lim" ] && echo "$f"
 done)
 if [ -n "$big" ]; then
-  echo "pre-commit: файлы больше 2 МБ (internal/demopack/*.zip — больше 20 МиБ):" >&2
+  echo "pre-commit: файлы больше 2 МБ (internal/demopack/*.zip — больше 20 МиБ, testdata/test-baseline*.json — больше 4 МиБ):" >&2
   echo "$big" | sed 's/^/  /' >&2
   exit 1
 fi

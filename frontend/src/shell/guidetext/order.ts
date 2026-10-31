@@ -28,7 +28,9 @@ export const GUIDE_ORDER: Record<GroupId, readonly string[]> = {
     'library-packs',
     'agents',
     'agents-perms',
+    'agents-places',
     'agents-edit',
+    'agents-export',
     'updates',
   ],
   photos: [

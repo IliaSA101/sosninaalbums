@@ -23,8 +23,9 @@ const (
 // mountinfoFile — путь файла; тест подменяет (нет файла — ошибка).
 var mountinfoFile = "/proc/self/mountinfo"
 
-// mount — строка mountinfo: точка монтирования и тип ФС (у FUSE — с подтипом: «fuse.sshfs»).
-type mount struct{ point, fstype string }
+// mount — строка mountinfo: точка монтирования, тип ФС (у FUSE — с подтипом: «fuse.sshfs»), корень
+// поддерева внутри ФС (не «/» у bind-монтирования и подтома btrfs) и источник («/dev/sdb1»).
+type mount struct{ point, fstype, root, source string }
 
 // localFS — типы, которые считаем локальными (design 150 §4.4). fuseblk — FUSE поверх блочного
 // устройства (ntfs-3g, exfat-fuse); прочие fuse.* (sshfs, rclone, gvfs) — сетевые.
@@ -43,7 +44,11 @@ func parseMountinfo(r io.Reader) ([]mount, error) {
 		if sep < 6 || sep+1 >= len(f) {
 			continue
 		}
-		out = append(out, mount{point: unescapeMount(f[4]), fstype: f[sep+1]})
+		m := mount{point: unescapeMount(f[4]), fstype: f[sep+1], root: unescapeMount(f[3])}
+		if sep+2 < len(f) {
+			m.source = unescapeMount(f[sep+2])
+		}
+		out = append(out, m)
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
@@ -104,14 +109,20 @@ func MountPoints() ([]string, error) {
 // fsTypeOf — тип ФС точки монтирования с длиннейшим префиксом path; при равных точках (том
 // смонтирован поверх другого) побеждает последняя строка. Нет точки — ok = false.
 func fsTypeOf(ms []mount, path string) (fstype string, ok bool) {
-	best := -1
+	m, ok := mountOf(ms, path)
+	return m.fstype, ok
+}
+
+// mountOf — строка с длиннейшей точкой-префиксом path; при равных побеждает последняя.
+func mountOf(ms []mount, path string) (best mount, ok bool) {
+	n := -1
 	for _, m := range ms {
-		if !hasMountPrefix(path, m.point) || len(m.point) < best {
+		if !hasMountPrefix(path, m.point) || len(m.point) < n {
 			continue
 		}
-		best, fstype, ok = len(m.point), m.fstype, true
+		n, best, ok = len(m.point), m, true
 	}
-	return fstype, ok
+	return best, ok
 }
 
 // hasMountPrefix — path совпадает с точкой или лежит внутри (граница по «/»: «/a/b» не в «/a/bc»).

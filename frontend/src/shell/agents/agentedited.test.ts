@@ -316,6 +316,28 @@ describe('тост «до фокуса» (150)', () => {
     expect(api.Undo).not.toHaveBeenCalled()
   })
 
+  // open_album (152): Go шлёт Rev -1 (открытие не правка текущего альбома и не отменяется), Quiet и Prev — как у тихого нового альбома.
+  const OPENED = 'Открыт альбом «Свадьба Ивановы»'
+  it('открытие альбома (Rev -1, prev): тост агента «Клиент · Открыт альбом…» с «Открыть прежний», без «Вернуть»', async () => {
+    agentEdited(edited({ text: OPENED, rev: -1, quiet: true, prev: true }))
+    expect(store.toast?.text).toBe(`Claude Code · ${OPENED}`)
+    expect(store.toast?.action?.label).toBe('Открыть прежний')
+    expect(store.toast?.rev).toBeUndefined()
+    expect(store.toast?.hold).toBeTruthy()
+    store.toast?.action?.run()
+    await vi.advanceTimersByTimeAsync(50)
+    expect(api.AgentOpenPrev).toHaveBeenCalledTimes(1)
+    expect(api.Undo).not.toHaveBeenCalled()
+  })
+
+  it('открытие без прежнего файла (prev=false): тост без действий, «Вернуть» нет, текущая ревизия не затронута', () => {
+    agentEdited(edited({ text: OPENED, rev: -1, quiet: true }))
+    expect(store.toast?.text).toBe(`Claude Code · ${OPENED}`)
+    expect(store.toast?.action).toBeUndefined()
+    expect(store.toast?.rev).toBeUndefined()
+    expect(store.view.rev).toBe(5)
+  })
+
   it('«Открыть прежний» не вышло — тост с ошибкой словами Go', async () => {
     api.AgentOpenPrev.mockRejectedValue(new Error('файл не найден'))
     agentEdited(quiet({ prev: true }))

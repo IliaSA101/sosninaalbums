@@ -64,6 +64,13 @@
             "object"
           ]
         },
+        "files": {
+          "description": "только export_album: сколько файлов запишет выгрузка",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
         "folder": {
           "additionalProperties": false,
           "properties": {
@@ -83,6 +90,13 @@
           "type": [
             "null",
             "object"
+          ]
+        },
+        "opened": {
+          "description": "только open_album: true — альбом открыт, false — он уже был открыт",
+          "type": [
+            "null",
+            "boolean"
           ]
         },
         "pending": {
@@ -121,6 +135,13 @@
             "null",
             "object"
           ]
+        },
+        "started": {
+          "description": "только export_album: true — выгрузка начата; ход смотрите в get_album, поле export",
+          "type": [
+            "null",
+            "boolean"
+          ]
         }
       },
       "type": "object"
@@ -134,7 +155,7 @@
       "openWorldHint": false,
       "readOnlyHint": false
     },
-    "description": "Добавить стикеры из каталога (item — id из list_decor kind=sticker) на развороты, до 12 за вызов одним шагом отмены. spread — номер с 1 или id (обложка не цель), page: left | right (по умолчанию right), place: center или угол страницы в безопасной зоне (по умолчанию center), size: s, m, l — ⅙, ¼, ⅓ ширины страницы (по умолчанию m). Нет места на листе или в альбоме — отказ всей пачки. Точнее стикеры двигает человек. Правка видна в программе, Ctrl+Z её отменяет.",
+    "description": "Добавить стикеры из каталога (item — id из list_decor kind=sticker) на развороты, до 12 за вызов одним шагом отмены. spread — номер с 1, id или \"cover\"; у обложки page right — лицевая (по умолчанию), left — задняя; место и размер — от безопасной зоны сторонки. page: left | right (по умолчанию right), place: center или угол страницы в безопасной зоне (по умолчанию center), size: s, m, l — ⅙, ¼, ⅓ ширины страницы (по умолчанию m). Нет места на листе или в альбоме — отказ всей пачки. Точнее стикеры двигает человек. Правка видна в программе, Ctrl+Z её отменяет.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -268,7 +289,7 @@
       ],
       "type": "object"
     },
-    "title": "Стикеры на развороты"
+    "title": "Стикеры на развороты и обложку"
   },
   {
     "annotations": {
@@ -624,6 +645,13 @@
             "object"
           ]
         },
+        "files": {
+          "description": "только export_album: сколько файлов запишет выгрузка",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
         "folder": {
           "additionalProperties": false,
           "properties": {
@@ -643,6 +671,13 @@
           "type": [
             "null",
             "object"
+          ]
+        },
+        "opened": {
+          "description": "только open_album: true — альбом открыт, false — он уже был открыт",
+          "type": [
+            "null",
+            "boolean"
           ]
         },
         "pending": {
@@ -680,6 +715,13 @@
           "type": [
             "null",
             "object"
+          ]
+        },
+        "started": {
+          "description": "только export_album: true — выгрузка начата; ход смотрите в get_album, поле export",
+          "type": [
+            "null",
+            "boolean"
           ]
         }
       },
@@ -731,6 +773,13 @@
             "object"
           ]
         },
+        "files": {
+          "description": "только export_album: сколько файлов запишет выгрузка",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
         "folder": {
           "additionalProperties": false,
           "properties": {
@@ -750,6 +799,13 @@
           "type": [
             "null",
             "object"
+          ]
+        },
+        "opened": {
+          "description": "только open_album: true — альбом открыт, false — он уже был открыт",
+          "type": [
+            "null",
+            "boolean"
           ]
         },
         "pending": {
@@ -788,11 +844,204 @@
             "null",
             "object"
           ]
+        },
+        "started": {
+          "description": "только export_album: true — выгрузка начата; ход смотрите в get_album, поле export",
+          "type": [
+            "null",
+            "boolean"
+          ]
         }
       },
       "type": "object"
     },
     "title": "Создать альбом"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Выгрузить открытый альбом в JPEG, как окно «Файл ▸ Экспорт…»: range (как в окне: «3-5, 8», «л», «п»; пусто — все), pages, cover, cover_only, quality (100, 95 или 80), dpi (72…1200; пусто — dpi альбома), print (id из list_print_profiles для типографии, «plain» — обычная выгрузка; пусто — как открывается окно). folder_hint — только имя папки («Петровы») или подсказка пути: программа сама покажет человеку полный путь и спросит его в своём окне; путь агент не получает. Программа всегда спрашивает (отдельного «Всегда» нет), перезапись прежних файлов человек видит в вопросе. Ответ: выгрузка начата и сколько файлов; ход — get_album, поле export. Выгрузка не отменяется через undo_last_edit. Человек отвечает в окне программы; если он не ответил за несколько секунд, придёт pending с жетоном: попросите человека ответить в окне и вызовите await_answer. Отказ — не повторять без его просьбы в чате.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": "object"
+        },
+        "cover": {
+          "description": "выгрузить и обложку",
+          "type": "boolean"
+        },
+        "cover_only": {
+          "description": "только обложка",
+          "type": "boolean"
+        },
+        "dpi": {
+          "description": "разрешение 72…1200 (по умолчанию dpi альбома)",
+          "maximum": 1200,
+          "minimum": 72,
+          "type": "integer"
+        },
+        "folder_hint": {
+          "description": "имя папки выгрузки («Петровы») или подсказка, где её искать (путь не используется как есть)",
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "pages": {
+          "description": "по страницам: левая и правая отдельными файлами",
+          "type": "boolean"
+        },
+        "print": {
+          "description": "id типографии из list_print_profiles или plain (обычная выгрузка); пусто — как открывается окно",
+          "maxLength": 64,
+          "type": "string"
+        },
+        "quality": {
+          "description": "качество JPEG: 100, 95 или 80 (по умолчанию 95)",
+          "enum": [
+            100,
+            95,
+            80
+          ],
+          "type": "integer"
+        },
+        "range": {
+          "description": "диапазон как в окне экспорта: «3-5, 8», «л» (левая), «п» (правая); пусто — все развороты",
+          "maxLength": 256,
+          "type": "string"
+        }
+      },
+      "required": [
+        "album"
+      ],
+      "type": "object"
+    },
+    "name": "export_album",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "files": {
+          "description": "только export_album: сколько файлов запишет выгрузка",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "folder": {
+          "additionalProperties": false,
+          "properties": {
+            "merged": {
+              "description": "папка уже была в альбоме: правки нет",
+              "type": "boolean"
+            },
+            "n": {
+              "description": "номер папки в альбоме с 1",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "n",
+            "merged"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "opened": {
+          "description": "только open_album: true — альбом открыт, false — он уже был открыт",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "pending": {
+          "additionalProperties": false,
+          "properties": {
+            "ask": {
+              "description": "жетон вопроса: передайте в await_answer",
+              "type": "string"
+            },
+            "text": {
+              "description": "что сказать человеку",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ask",
+            "text"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "scan": {
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "description": "программа ещё читает фото папки",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "active"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "started": {
+          "description": "только export_album: true — выгрузка начата; ход смотрите в get_album, поле export",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "title": "Выгрузить в JPEG"
   },
   {
     "annotations": {
@@ -930,6 +1179,34 @@
           },
           "required": [
             "allowed"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "export": {
+          "additionalProperties": false,
+          "properties": {
+            "done": {
+              "type": "integer"
+            },
+            "error": {
+              "description": "что не удалось, без пути",
+              "type": "string"
+            },
+            "state": {
+              "description": "idle — выгрузок не было, running, done, stopped (остановлена), failed",
+              "type": "string"
+            },
+            "total": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "state",
+            "done",
+            "total"
           ],
           "type": [
             "null",
@@ -2924,12 +3201,146 @@
   },
   {
     "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Открыть сохранённый альбом из последних по просьбе человека: ключ album из list_albums или name_hint — как человек его назвал («Ивановы»); можно без обоих. Путь агент не передаёт и не получает. Программа всегда спрашивает человека в своём окне (показывает найденный альбом или открывает выбор файла) и сама не сообщает, нашла ли подсказку; имя сверяется буква в букву — не нашёлся, возьмите ключ из list_albums. Уже открытый альбом по ключу album возвращается без вопроса (opened: false); по name_hint вопрос задаётся всегда. Открытый сейчас альбом сохранится, прежний вернёт кнопка «Открыть прежний» в тосте. Открытие не отменяется через undo_last_edit. Человек отвечает в окне программы; если он не ответил за несколько секунд, придёт pending с жетоном: попросите человека ответить в окне и вызовите await_answer. Отказ — не повторять без его просьбы в чате.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "description": "ключ альбома из list_albums (только из последних)",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "name_hint": {
+          "description": "как человек назвал альбом, до 60 знаков: «Ивановы», «свадьба Петровых»; вместо album",
+          "maxLength": 60,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "open_album",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "description": "ключ альбома из get_album; меняется при открытии другого альбома",
+              "type": "string"
+            },
+            "rev": {
+              "description": "ревизия альбома из get_album; растёт с каждой правкой",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "key",
+            "rev"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "files": {
+          "description": "только export_album: сколько файлов запишет выгрузка",
+          "type": [
+            "null",
+            "integer"
+          ]
+        },
+        "folder": {
+          "additionalProperties": false,
+          "properties": {
+            "merged": {
+              "description": "папка уже была в альбоме: правки нет",
+              "type": "boolean"
+            },
+            "n": {
+              "description": "номер папки в альбоме с 1",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "n",
+            "merged"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "opened": {
+          "description": "только open_album: true — альбом открыт, false — он уже был открыт",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        },
+        "pending": {
+          "additionalProperties": false,
+          "properties": {
+            "ask": {
+              "description": "жетон вопроса: передайте в await_answer",
+              "type": "string"
+            },
+            "text": {
+              "description": "что сказать человеку",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ask",
+            "text"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "scan": {
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "description": "программа ещё читает фото папки",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "active"
+          ],
+          "type": [
+            "null",
+            "object"
+          ]
+        },
+        "started": {
+          "description": "только export_album: true — выгрузка начата; ход смотрите в get_album, поле export",
+          "type": [
+            "null",
+            "boolean"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "title": "Открыть альбом"
+  },
+  {
+    "annotations": {
       "destructiveHint": false,
       "idempotentHint": false,
       "openWorldHint": false,
       "readOnlyHint": false
     },
-    "description": "Поставить фон из каталога (item — id из list_decor kind=bg) на развороты: номера с 1 или id, одним шагом отмены. scope: spread — весь разворот (по умолчанию), left или right — страница. Листы, где фон — фото клиента, пропускаются (skipped): спросите человека и повторите с replace: true, только если он согласен. Обложка не цель. Порядок работы: формат (apply_print) → сборка → обложка → фон и стикеры. Правка видна в программе, Ctrl+Z её отменяет.",
+    "description": "Поставить фон из каталога (item — id из list_decor kind=bg) на развороты: номера с 1 или id, одним шагом отмены. scope: spread — весь разворот (по умолчанию), left или right — страница. Листы, где фон — фото клиента, пропускаются (skipped): спросите человека и повторите с replace: true, только если он согласен. Обложка не цель. Порядок работы: формат (apply_print) → сборка → обложка → фон и стикеры. to: album — фоном альбома: на всех разворотах без своего фона, и на новых тоже; pages — на каждую страницу. Свои фоны из каталога снимаются (cleared), листы с фото клиента пропускаются (skipped), hidden — где человек скрыл фон альбома. Назовите человеку номера cleared и skipped. Снять фото клиента — replace и spreads: только номера из skipped, на которые человек согласился. Обложки фон альбома не касается. Правка видна в программе, Ctrl+Z её отменяет.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -2957,12 +3368,16 @@
           "minLength": 1,
           "type": "string"
         },
+        "pages": {
+          "description": "только с to album: true — на каждую страницу, false — на весь разворот (по умолчанию — как у нынешнего фона альбома)",
+          "type": "boolean"
+        },
         "replace": {
           "description": "заменять и фото клиента на фоне — только с согласия человека",
           "type": "boolean"
         },
         "scope": {
-          "description": "spread — весь разворот (по умолчанию), left или right — страница",
+          "description": "spread — весь разворот (по умолчанию), left или right — страница; с to album не передают",
           "enum": [
             "spread",
             "left",
@@ -2971,7 +3386,7 @@
           "type": "string"
         },
         "spreads": {
-          "description": "развороты: номер с 1 или id",
+          "description": "to spreads: развороты (номер с 1 или id); to album: только с replace — номера из skipped, на которые согласился человек",
           "items": {
             "maxLength": 64,
             "type": [
@@ -2985,12 +3400,19 @@
             "null",
             "array"
           ]
+        },
+        "to": {
+          "description": "spreads — на названные развороты (по умолчанию), album — фоном альбома",
+          "enum": [
+            "spreads",
+            "album"
+          ],
+          "type": "string"
         }
       },
       "required": [
         "album",
-        "item",
-        "spreads"
+        "item"
       ],
       "type": "object"
     },
@@ -3017,9 +3439,33 @@
           ],
           "type": "object"
         },
+        "albumBg": {
+          "description": "to album: фон альбома сменился (false — тот же, сняты только свои фоны)",
+          "type": "boolean"
+        },
         "changed": {
           "description": "листов изменено; 0 — правки нет",
           "type": "integer"
+        },
+        "cleared": {
+          "description": "to album: номера листов, где снят свой фон из каталога (или, с согласием, фото клиента)",
+          "items": {
+            "type": "integer"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "hidden": {
+          "description": "to album: номера листов, где человек скрыл фон альбома: он там не виден",
+          "items": {
+            "type": "integer"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
         },
         "replaced": {
           "description": "фото фона заменено (только с replace)",
@@ -3042,7 +3488,7 @@
       ],
       "type": "object"
     },
-    "title": "Фон на развороты"
+    "title": "Фон на развороты и альбом"
   },
   {
     "annotations": {
@@ -3320,7 +3766,7 @@
       "openWorldHint": false,
       "readOnlyHint": false
     },
-    "description": "Отменить последнюю правку, которую сделал этот агент (autobuild, vary_layouts, add_folder), если после неё альбом не менялся. Только одна правка: второй вызов подряд — отказ. Создание альбома не отменяется. Правка видна в программе, Ctrl+Z её отменяет.",
+    "description": "Отменить последнюю правку этого агента (любую, в том числе фон альбома), если после неё альбом не менялся. Только одна правка: второй вызов подряд — отказ. Создание альбома не отменяется. Правка видна в программе, Ctrl+Z её отменяет.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -3386,7 +3832,7 @@
       "openWorldHint": false,
       "readOnlyHint": false
     },
-    "description": "Подобрать другие раскладки выбранным разворотам (номер с 1 или id из list_spreads). families: dense — плотнее, air — больше воздуха, ещё hero, bleed, strip, figure; без families — любые. variety 1 или 2 (по умолчанию 1). Правка видна в программе, Ctrl+Z её отменяет.",
+    "description": "Подобрать другие раскладки выбранным разворотам (номер с 1 или id из list_spreads). families: dense — плотнее, air — больше воздуха, ещё hero, bleed, strip, figure; без families — любые. variety 1 или 2 (по умолчанию 1). В ответе families — семейство каждого листа до и после (before, after); нет поля — альбом правили сразу после, перечитайте list_spreads. Правка видна в программе, Ctrl+Z её отменяет.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -3479,6 +3925,36 @@
         "changed": {
           "description": "разворотов изменено; 0 — менять нечего, правки нет",
           "type": "integer"
+        },
+        "families": {
+          "description": "семейство каждого листа запроса до и после; нет поля — альбом правили сразу после, перечитайте list_spreads",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "after": {
+                "description": "семейство после",
+                "type": "string"
+              },
+              "before": {
+                "description": "семейство до: dense, hero, air, bleed, strip, figure или пусто",
+                "type": "string"
+              },
+              "spread": {
+                "description": "номер листа с 1 по виду до вызова",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "spread",
+              "before",
+              "after"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
         }
       },
       "required": [

@@ -16,7 +16,7 @@ import (
 // (winqa, TestSocketDACL).
 func TestBridgeRefusesOpenDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("права папки Unix; Windows — владелец и DACL, winqa")
+		t.Skip("права папки Unix; на Windows: TestSockDirWindows и TestSockDirHandleWindows (владелец и DACL)")
 	}
 	cases := map[string]func(t *testing.T, dir, sock string) string{
 		"0755": func(t *testing.T, dir, sock string) string {

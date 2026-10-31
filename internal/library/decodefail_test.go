@@ -126,3 +126,21 @@ func TestDecodeFailTransientNotCached(t *testing.T) {
 		t.Fatalf("декодов %d, ждали 3: временная ошибка не должна запоминаться", n.Load())
 	}
 }
+
+// Неудачу записали между проверкой failed в get и своей генерацией (чужая уже кончилась): generateOwn
+// видит её под замком и не декодирует второй раз. Детерминированно, без гонки горутин.
+func TestDecodeFailSeenByGenerateOwn(t *testing.T) {
+	dir := testkit.TempDir(t)
+	c, n := tailCache(t, dir, 2, 1)
+	p := cutJPEG(t, dir, "a.jpg", 400, 300, 900)
+	key, err := cacheKey(p, imgfile.ColorNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &DecodeError{Why: "файл повреждён: тест", err: errors.New("unexpected EOF")}
+	c.noteFail(key, want)
+	retry, err := c.generateOwn(context.Background(), key, p, false, now)
+	if retry || err != error(want) || n.Load() != 0 {
+		t.Fatalf("retry %v, ошибка %v, декодов %d: ждали запомненную ошибку без декода", retry, err, n.Load())
+	}
+}

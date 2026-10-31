@@ -26,7 +26,7 @@ func fakeHost(t *testing.T, ed func() *album.Editor) (h Host, urls *[]string, sh
 		ColorReport: func(*model.Project) (map[string]int, map[string]int) { return nil, nil },
 		Ask:         func(string) (bool, error) { t.Error("вопрос до отказа"); return false, nil },
 		PickDir:     func(string) (string, error) { t.Error("выбор папки до отказа"); return "", nil },
-		RememberDir: func(string) {},
+		RememberDir: func(string, string) {},
 		OpenURL:     func(u string) { *urls = append(*urls, u) },
 		ShowDir:     func(d string) { *shown = append(*shown, d) },
 		LiftMemory:  func() func() { return func() {} },

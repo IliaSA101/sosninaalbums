@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -49,7 +50,7 @@ func countQuiet(root string) quietTally {
 	until := time.Now().Add(quietTimeout)
 	// Подмены читаем до горутины: зависшая порция переживает предел, а тест восстановит их раньше.
 	h := quietHooks{dev: placeDev, remote: quietRemote, pause: quietPause, cloud: quietCloud}
-	t, ok := within(quietTimeout, func() quietTally { return walkQuiet(root, &stop, until, h) })
+	t, ok := appkit.Within(quietTimeout, func() quietTally { return walkQuiet(root, &stop, until, h) })
 	stop.Store(true) // зависшая порция доживает в горутине и выйдет, не читая дальше
 	if !ok {
 		return quietTally{big: true}

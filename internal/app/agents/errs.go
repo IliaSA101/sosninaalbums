@@ -63,6 +63,19 @@ var (
 	errBadFolder     = newAgentErr("folder_hint длиннее 4096 байт или не UTF-8")
 )
 
+// Ошибки выгрузки и открытия (152). Без путей и имён файлов.
+var (
+	errProgBusy   = newAgentErr("программа занята выгрузкой по ссылке — повторите через несколько секунд")
+	errStopped    = newAgentErr("человек остановил действие в окне программы — не повторяйте без его новой просьбы в чате")
+	errNoRecent   = newAgentErr("такого альбома нет в последних — ключ берите из list_albums или вызовите open_album без ключа")
+	errOpenGone   = newAgentErr("файла этого альбома нет на месте — вызовите open_album без ключа, человек выберет файл сам")
+	errOpenRemote = newAgentErr("этот альбом лежит не на этом компьютере — вызовите open_album без ключа, человек выберет файл сам")
+	errOpenFailed = newAgentErr("альбом не открылся (файл повреждён, чужой или недоступен) — причину видит человек в программе")
+	errExporting  = newAgentErr("идёт выгрузка альбома — повторите, когда она закончится")
+	errBadExport  = newAgentErr("неверные настройки выгрузки: диапазон, качество, dpi или типография не подходят")
+	errOpenNewer  = newAgentErr("альбом сохранён более новой версией программы — открыть его нельзя, человек видит окно с подробностями")
+)
+
 // Ошибки ступени 3б (151, design §1.8). Тексты без путей и без данных альбома.
 var (
 	errNoCover      = newAgentErr("у этого альбома нет обложки")
@@ -96,8 +109,6 @@ func toAgent(err error) (out *agentErr, orig error) {
 // разворота — … «cover»…», который предлагал бы только что отвергнутое. Слова — по смыслу инструмента.
 func errCoverNotTarget(tool string) *agentErr {
 	switch tool {
-	case "add_sticker":
-		return newAgentErr("на обложку стикеры не ставятся — номер разворота с 1 или id из list_spreads")
 	case "set_background":
 		return newAgentErr("на обложку фон этим инструментом не ставится — номер разворота с 1 или id из list_spreads")
 	case "vary_layouts":

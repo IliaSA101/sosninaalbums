@@ -50,8 +50,20 @@ export function AgentAnswerCreate(arg1, arg2) {
   return window['go']['app']['App']['AgentAnswerCreate'](arg1, arg2);
 }
 
+export function AgentAnswerExport(arg1, arg2) {
+  return window['go']['app']['App']['AgentAnswerExport'](arg1, arg2);
+}
+
+export function AgentAnswerOpen(arg1, arg2) {
+  return window['go']['app']['App']['AgentAnswerOpen'](arg1, arg2);
+}
+
 export function AgentOpenPrev() {
   return window['go']['app']['App']['AgentOpenPrev']();
+}
+
+export function AgentPlacesLive() {
+  return window['go']['app']['App']['AgentPlacesLive']();
 }
 
 export function AgentsBusy(arg1) {
@@ -156,6 +168,10 @@ export function BackToAuto(arg1, arg2, arg3) {
 
 export function Backups() {
   return window['go']['app']['App']['Backups']();
+}
+
+export function BindAgentPlace(arg1) {
+  return window['go']['app']['App']['BindAgentPlace'](arg1);
 }
 
 export function CancelCollect() {
@@ -338,6 +354,10 @@ export function DeleteText(arg1) {
   return window['go']['app']['App']['DeleteText'](arg1);
 }
 
+export function DismissPlacesLifted() {
+  return window['go']['app']['App']['DismissPlacesLifted']();
+}
+
 export function DownloadAllLibrary() {
   return window['go']['app']['App']['DownloadAllLibrary']();
 }
@@ -404,6 +424,10 @@ export function FlipBackdrop(arg1, arg2, arg3) {
 
 export function FlipSticker(arg1, arg2, arg3) {
   return window['go']['app']['App']['FlipSticker'](arg1, arg2, arg3);
+}
+
+export function ForgetAgentPlace(arg1) {
+  return window['go']['app']['App']['ForgetAgentPlace'](arg1);
 }
 
 export function ForgetAgentPlaces() {

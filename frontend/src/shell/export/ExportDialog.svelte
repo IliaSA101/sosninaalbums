@@ -152,7 +152,7 @@
     const printPlan = plan // план этого запуска — для окна «Готово» (заголовок, сайт, папка)
     await edit.idle() // набранное в тексте должно попасть в файл
     savePrefs(prefs) // выбор, который Go отметил при открытии, станет «последним выбором» для следующего раза
-    jobs.exportPrint = printPlan
+    jobs.exportPending = printPlan // в окно «Готово» перейдёт в export:done
     // Окно остаётся: при успехе в нём пойдёт ход (jobs.exporting), при отказе Go — прежние настройки.
     await jobs.runExport(buildOptions(scope, current, text, sheet ? { ...prefs, pages: false } : prefs, hasCover, store.onCover, printPlan))
     busy = false

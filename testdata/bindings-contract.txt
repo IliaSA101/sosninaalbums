@@ -10,7 +10,10 @@ method AddSticker(arg1:string,arg2:number,arg3:string):Promise<APP.StickerResult
 method AddText(arg1:string,arg2:number,arg3:string):Promise<model.View>
 method AddVignette(arg1:number):Promise<model.View>
 method AgentAnswerCreate(arg1:string,arg2:boolean):Promise<APP.State>
+method AgentAnswerExport(arg1:string,arg2:boolean):Promise<APP.ExportStarted>
+method AgentAnswerOpen(arg1:string,arg2:boolean):Promise<APP.State>
 method AgentOpenPrev():Promise<APP.State>
+method AgentPlacesLive():Promise<Array<APP.AgentPlace>>
 method AgentsBusy(arg1:boolean):Promise<void>
 method AgentsInfo():Promise<APP.AgentsInfo>
 method AlignItems(arg1:string,arg2:Array<string>,arg3:string,arg4:string):Promise<model.View>
@@ -37,6 +40,7 @@ method AutoPreview(arg1:Array<string>,arg2:number,arg3:model.AutoOpts):Promise<m
 method AutoSimilar(arg1:Array<string>,arg2:model.AutoOpts):Promise<Array<model.SimilarDrop>>
 method BackToAuto(arg1:string,arg2:string,arg3:boolean):Promise<model.View>
 method Backups():Promise<Array<APP.BackupInfo>>
+method BindAgentPlace(arg1:string):Promise<APP.AgentsInfo>
 method CancelCollect():Promise<void>
 method CancelExport():Promise<void>
 method CancelGuideVideos():Promise<void>
@@ -82,6 +86,7 @@ method DeleteSelection(arg1:string,arg2:Array<string>,arg3:Array<string>,arg4:Ar
 method DeleteSpread(arg1:string):Promise<model.View>
 method DeleteSpreads(arg1:Array<string>):Promise<model.View>
 method DeleteText(arg1:string):Promise<model.View>
+method DismissPlacesLifted():Promise<APP.AgentsInfo>
 method DownloadAllLibrary():Promise<APP.LibraryUpdate>
 method DownloadGuideVideos(arg1:Array<string>):Promise<Array<APP.GuideVideo>>
 method DownloadLibraryPack(arg1:string):Promise<APP.LibraryUpdate>
@@ -99,6 +104,7 @@ method FitBackdrop(arg1:string,arg2:string):Promise<model.View>
 method FitFaces(arg1:string,arg2:string,arg3:string):Promise<APP.FacesResult>
 method FlipBackdrop(arg1:string,arg2:string,arg3:string):Promise<model.View>
 method FlipSticker(arg1:string,arg2:string,arg3:string):Promise<model.View>
+method ForgetAgentPlace(arg1:string):Promise<APP.AgentsInfo>
 method ForgetAgentPlaces():Promise<APP.AgentsInfo>
 method ForgetColor(arg1:string):Promise<Array<string>>
 method ForgetFileNames(arg1:Array<string>):Promise<model.View>
@@ -334,8 +340,18 @@ type APP.AgentPerm
   why: string
   note: string
 type APP.AgentPlace
+  key: string
   dir: string
+  label: string
   chosen: boolean
+  bound: boolean
+  narrow: boolean
+  narrowRoot: boolean
+  state: string
+  here: string
+type APP.AgentPlaceLift
+  from: string
+  to: string
 type APP.AgentSetup
   id: string
   title: string
@@ -357,6 +373,7 @@ type APP.AgentsInfo
   asksMuted: boolean
   perms: AgentPerm[]
   places: AgentPlace[]
+  lifted: AgentPlaceLift[]
 type APP.AgentsSaved
   canceled: boolean
   text: string
@@ -469,6 +486,10 @@ type APP.ExportOptions
   cover: boolean
   coverOnly: boolean
   print: string
+type APP.ExportStarted
+  started: boolean
+  files: number
+  print?: printshop.Plan
 type APP.FacesResult
   view: model.View
   report: model.FaceReport

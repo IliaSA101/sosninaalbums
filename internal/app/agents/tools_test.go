@@ -20,7 +20,11 @@ import (
 var editTools = map[string]bool{"create_album": true, "add_folder": true, "await_answer": false, "autobuild": true,
 	"vary_layouts": true, "show_spread": false, "undo_last_edit": true,
 	// 0.34 (151): все правящие, разрушающего нет.
-	"set_marks": true, "set_cover_photo": true, "set_background": true, "add_sticker": true, "apply_print": true}
+	"set_marks": true, "set_cover_photo": true, "set_background": true, "add_sticker": true, "apply_print": true,
+	// 0.35 (152): открытие альбома — заменяет открытый, но не отменяется Ctrl+Z.
+	"open_album": false,
+	// 0.35 (152): выгрузка — может заменить файлы выгрузки в папке, Ctrl+Z её не отменяет.
+	"export_album": false}
 
 var updateTools = flag.Bool("update-tools", false, "перезаписать testdata/mcp-tools.json")
 
@@ -40,9 +44,9 @@ func TestToolsContract(t *testing.T) {
 	for _, tl := range tools {
 		a := tl.Annotations
 		if _, edit := editTools[tl.Name]; edit {
-			// Правящие: подсказки явно (0.33-149-5), разрушающий — только create_album; описание — про Ctrl+Z.
+			// Правящие: подсказки явно (0.33-149-5), разрушающие — create_album и open_album (заменяют открытый альбом), export_album (заменяет прежние файлы выгрузки); описание — про Ctrl+Z.
 			if a == nil || a.ReadOnlyHint || a.OpenWorldHint == nil || *a.OpenWorldHint || a.DestructiveHint == nil ||
-				*a.DestructiveHint != (tl.Name == "create_album") {
+				*a.DestructiveHint != (tl.Name == "create_album" || tl.Name == "open_album" || tl.Name == "export_album") {
 				t.Errorf("%s: подсказки правящего инструмента: %+v", tl.Name, a)
 			}
 			if tl.Title == "" || tl.OutputSchema == nil || editTools[tl.Name] && !strings.Contains(tl.Description, "Ctrl+Z") {

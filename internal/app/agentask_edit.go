@@ -61,6 +61,7 @@ func (a *App) editAskText(req agents.AskReq, ed *album.Editor) (askBody, error) 
 			return askBody{}, err
 		}
 		e.Item = name
+		a.askBgFacts(&e, req, ed, v)
 	case toolPrint:
 		pr, ok := printprof.Current().ByID(req.Item)
 		if !ok || len(pr.Formats) == 0 {

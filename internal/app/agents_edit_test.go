@@ -184,10 +184,11 @@ func TestEditOneUndoStep(t *testing.T) {
 		ids = append(ids, sv.ID)
 	}
 	rev := r.rev()
-	rev2, changed, err := a.agentVary(ctx, r.key(), rev, ids, 2, nil)
+	vr, err := a.agentVary(ctx, r.key(), rev, ids, 2, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	rev2, changed := vr.Album.Rev, vr.Changed
 	if changed == 0 {
 		t.Skip("на этом наборе фото раскладки не сменились") // не провал: счёт зависит от набора
 	}
@@ -221,7 +222,7 @@ func TestAgentEditStaleAndLate(t *testing.T) {
 		}
 	}
 	// rev старше на один: человек успел поправить альбом.
-	if _, _, err := a.agentVary(ctx, r.key(), rev-1, []string{sp}, 1, nil); !errors.Is(err, errAgentAlbumEdited) {
+	if _, err := a.agentVary(ctx, r.key(), rev-1, []string{sp}, 1, nil); !errors.Is(err, errAgentAlbumEdited) {
 		t.Fatalf("vary: %v", err)
 	}
 	if _, err := a.agentUndo(ctx, r.key(), rev-1); !errors.Is(err, errAgentAlbumEdited) {
@@ -236,7 +237,7 @@ func TestAgentEditStaleAndLate(t *testing.T) {
 	// Чужой ключ, пустой ключ, ключ прежнего альбома.
 	old := r.key()
 	for _, k := range []string{"", "k0", "kx"} {
-		if _, _, err := a.agentVary(ctx, k, rev, []string{sp}, 1, nil); !errors.Is(err, errAgentAlbumChanged) {
+		if _, err := a.agentVary(ctx, k, rev, []string{sp}, 1, nil); !errors.Is(err, errAgentAlbumChanged) {
 			t.Fatalf("ключ %q: %v", k, err)
 		}
 	}
@@ -249,7 +250,7 @@ func TestAgentEditStaleAndLate(t *testing.T) {
 	// Срок вышел: правка не применяется, хотя rev и ключ верны.
 	dead, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, _, err := a.agentVary(dead, r.key(), rev, []string{sp}, 2, nil); !errors.Is(err, errAgentLate) {
+	if _, err := a.agentVary(dead, r.key(), rev, []string{sp}, 2, nil); !errors.Is(err, errAgentLate) {
 		t.Fatalf("vary после срока: %v", err)
 	}
 	if _, err := a.agentUndo(dead, r.key(), rev); !errors.Is(err, errAgentLate) {

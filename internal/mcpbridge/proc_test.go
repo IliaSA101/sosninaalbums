@@ -19,12 +19,21 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
-func skipNoUnix(t *testing.T) {
+// skipNoUnix — подпроцессные проверки с HOME только на Unix; replace называет, что проверяет то же
+// на Windows (или «н/п» с причиной, если замены нет).
+func skipNoUnix(t *testing.T, replace string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("подпроцессные проверки с HOME — Unix; Windows гоняет winqa")
+		t.Skip("подпроцессные проверки с HOME — Unix; на Windows: " + replace)
 	}
 }
+
+const (
+	// Живой exe --mcp на Windows гоняют winqa и тест службы агентов.
+	replLive = "agents.TestBridgeStdoutClean и scripts/win/qa/agents_exe.py (живой exe --mcp)"
+	// Окружения у посредника на Windows нет: папка данных — известная папка системы.
+	replNone = "н/п: папка данных Windows — известная папка, не окружение"
+)
 
 // tsEnv — окружение, которое передаёт дочернему серверу TS SDK (getDefaultEnvironment) на
 // Unix: ни XDG_CONFIG_HOME, ни SA_STAND. Плюс переключатель тестового режима.
@@ -204,7 +213,7 @@ func (p *sdkProgram) stop() {
 // go-sdk через mcp.CommandTransport, программа — go-sdk на сокете. Заглушка → запуск программы
 // без перезапуска клиента (list_changed, повтор initialize) → закрытие программы → запуск снова.
 func TestBridgeE2E(t *testing.T) {
-	skipNoUnix(t)
+	skipNoUnix(t, replLive)
 	home := shortDirFor(t, homeCfgRel+"/mcp/sock")
 	sock := homeSock(t, home)
 
@@ -283,7 +292,7 @@ func TestBridgeE2E(t *testing.T) {
 // и SA_STAND; и с чужим XDG_CONFIG_HOME у посредника, тогда как программа пишет в ~/.config:
 // посредник находит сокет по списку путей (design §4.1).
 func TestBridgeMinimalEnv(t *testing.T) {
-	skipNoUnix(t)
+	skipNoUnix(t, replNone)
 	for name, extra := range map[string][]string{
 		"как у TS SDK":          nil,
 		"XDG_CONFIG_HOME чужой": {"XDG_CONFIG_HOME=/nonexistent-sa-xdg"},
@@ -308,7 +317,7 @@ func TestBridgeMinimalEnv(t *testing.T) {
 // TestBridgeCwdClean: ни дома, ни папки настроек, пустая текущая папка — пути от текущей папки
 // не бывает: в ней ничего не создаётся, ответ — «не найдена папка данных».
 func TestBridgeCwdClean(t *testing.T) {
-	skipNoUnix(t)
+	skipNoUnix(t, replNone)
 	dir := testkit.TempDir(t)
 	pr := startProc(t, []string{"PATH=" + os.Getenv("PATH"), asBridgeEnv + "=1"}, dir)
 	pr.send(initLine)
@@ -328,7 +337,7 @@ func TestBridgeCwdClean(t *testing.T) {
 // TestBridgeStdoutClean: что бы ни пришло в stdin (мусор, нули, огромная строка, обрыв в конце),
 // каждая строка stdout — объект JSON-RPC 2.0; тексты ошибок о причинах — без путей; stderr отдельно.
 func TestBridgeStdoutClean(t *testing.T) {
-	skipNoUnix(t)
+	skipNoUnix(t, replLive)
 	home := shortDirFor(t, homeCfgRel+"/mcp/sock")
 	pr := startProc(t, tsEnv(home), testkit.TempDir(t))
 	in := []string{

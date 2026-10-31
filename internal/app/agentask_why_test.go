@@ -299,7 +299,7 @@ func TestQuietNoStrikeResetApp(t *testing.T) {
 	quietRemote, quietShots = func(string) bool { return false }, func() []string { return nil }
 	t.Cleanup(func() { quietRemote, quietShots = oldRemote, oldShots })
 	m := a.askM()
-	m.rules = func() *folderRules { x := permissiveRules(); x.disk = diskProbe; return x }
+	m.rules = permissiveOnDisk
 	m.front = func() {}
 	place := realPath(t, filepath.Join(testkit.TempDir(t), "Архив"))
 	shoot := filepath.Join(place, "Петровы")

@@ -91,6 +91,39 @@ func SetAlbumBgAll(p *model.Project, src model.BgSource, pages bool) error {
 	return nil
 }
 
+// SetAlbumBgAgent — тело Editor.SetAlbumBgIf (154, 0.35-154-2): фон альбома для агента. Образец —
+// «На: Все развороты» и ApplyToAgent, а не вопрос 115: у листа со своим фоном каталога (узор,
+// фото набора) свой фон снимается без вопроса вместе с «Не показывать здесь» — как «Как в
+// альбоме»; лист с фото клиента на фоне (запись Photos без Lib) без согласия не трогается —
+// его ID в Skipped. consent — ID листов, где человек разрешил снять и фото клиента (их число —
+// Replaced). «Скрыт» без своего фона и обложка остаются. Ошибка источника — до снятия, ничего
+// не тронуто. Changed тело не считает: вид листа сравнивает фасад (фон альбома виден на каждом).
+func SetAlbumBgAgent(p *model.Project, src model.BgSource, pages bool, consent []string) (Outcome, error) {
+	var out Outcome
+	if err := SetAlbumBg(p, src, pages); err != nil {
+		return out, err
+	}
+	for _, s := range p.Spreads {
+		if !ownBg(s) {
+			continue
+		}
+		k := 0
+		for _, b := range s.Backdrops() {
+			if p.Photos[b.Photo].Lib == "" {
+				k++
+			}
+		}
+		if k > 0 && !slices.Contains(consent, s.ID) {
+			out.Skipped = append(out.Skipped, s.ID)
+			continue
+		}
+		out.Replaced += k
+		out.Cleared = append(out.Cleared, s.ID)
+		toAlbum(s)
+	}
+	return out, nil
+}
+
 // AllToAlbum — часть SetAlbumBgAll (115): у каждого разворота со своим фоном снимает
 // его вместе с «Не показывать здесь». «Скрыт» без своего фона остаётся (q115-5), обложка —
 // вне p.Spreads. Фона альбома нет — холостая.

@@ -89,7 +89,9 @@ jobs:
         shell: bash
         env:
           SA_TEST_SLOW: "2.5"
-        run: node scripts/test-baseline.mjs --check --go --go-json "$RUNNER_TEMP/go-test.json"
+        # 155 (да владельца 30.10.2026): --skips — тест, тихо переставший выполняться на Windows, = провал
+        # (список go-skips пишет Т5 по json CI; пока его нет — заметка). Linux — без сторожа: json там только при провале.
+        run: node scripts/test-baseline.mjs --check --go --skips --go-json "$RUNNER_TEMP/go-test.json"
 
       # 146 (да владельца 2026-10-29): модуль контракта api/albums — свой go.mod, корневые шаги его не видят
       - name: api/albums (gofmt, vet, test)
@@ -234,11 +236,9 @@ jobs:
         run: go test -short . ./internal/...
 
   # Детектор гонок (-race, cgo/gcc есть на раннере): только push в winqa/** (тот же коммит, что уйдёт в main), не main и не PR.
-  # Пока не блокирует: continue-on-error на уровне задания - красный прогон виден, но общий итог не краснит.
-  # Снять continue-on-error после 3 зелёных прогонов подряд (решение владельца 28.10, В5).
+  # Блокирует с 0.35 (В5 28.10: снять после 3 зелёных подряд - было 8; разбор процесса 31.10, С2).
   go-race:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/winqa/') }}
-    continue-on-error: true
     timeout-minutes: 40
     runs-on: ubuntu-24.04
     steps:

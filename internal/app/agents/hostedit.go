@@ -9,6 +9,8 @@ package agents
 const (
 	AskCreate = "create" // «Создать альбом по просьбе агента?»
 	AskAdd    = "add"    // «Добавить папку по просьбе агента?»
+	AskExport = "export" // «Выгрузить альбом по просьбе агента?» (0.35/152)
+	AskOpen   = "open"   // «Открыть альбом по просьбе агента?» (0.35/152)
 	AskEdit   = "edit"   // «Спрашивать» у обратимой правки или показа (150): вопрос из шаблона Go по входу, окна ОС нет
 )
 
@@ -23,6 +25,7 @@ const (
 	WhyTooWide     = "too_wide"     // выбранная папка не годится (корень, домашняя, системная)
 	WhyOurs        = "ours"         // выбрана папка самой программы
 	WhyDraftLocked = "draft_locked" // прежний черновик занят — альбом не создан
+	WhyStopped     = "stopped"      // человек остановил действие после «да» (отмена окна ОС, 152): в счёт отказов не идёт
 )
 
 // AlbumRef — ключ альбома и его ревизия. Key — AlbumKey(номер Editor): по нему фасад сверяет
@@ -35,10 +38,10 @@ type AlbumRef struct {
 // AskReq — вопрос человеку в окне программы. Текст вопроса фасад берёт из своих шаблонов:
 // своего текста агент не вносит.
 type AskReq struct {
-	Kind   string // AskCreate | AskAdd | AskEdit
+	Kind   string // AskCreate | AskAdd | AskEdit | AskOpen | AskExport
 	Client string // имя клиента, очищено; "" — неизвестный клиент
-	Hint   string // folder_hint как прислал агент (≤ 4096 байт): подсказка окну выбора, не путь для применения
-	Key    string // AskAdd, AskEdit: ключ альбома, куда просят
+	Hint   string // folder_hint как прислал агент (≤ 4096 байт): подсказка окну выбора, не путь для применения; AskOpen: name_hint, нашедший Key
+	Key    string // AskAdd, AskEdit: ключ альбома, куда просят; AskOpen: ключ недавнего из list_albums ("" — окно выбора файла)
 	Rev    int    // AskAdd, AskEdit: ревизия, которую видел агент
 	// Always — у человека «Всегда» (150): фасад решает, можно ли без вопроса (design §4.1). Можно — AskRes{Why: WhyQuiet}
 	// без окна; нельзя — обычный вопрос (служба вернёт тихий слот, увидев итог не WhyQuiet).
@@ -53,6 +56,19 @@ type AskReq struct {
 	Variety  int      // vary_layouts: 1…2
 	Item     string   // set_background, apply_print: id фона или типографии (фасад называет по каталогу)
 	Format   string   // apply_print: имя формата
+	AlbumBg  bool     // set_background: to album (154); Spreads — листы согласия
+	Replace  bool     // set_background: replace
+	Scope    string   // set_background: spread | left | right ("" — spread)
+	// AskExport: окно «Экспорт» из входа агента (Key, Rev — альбом; Hint — folder_hint). Print: "" — как окно
+	// открывается, "plain" — обычная выгрузка, иначе id типографии из list_print_profiles (маска уровня 1
+	// служба уже сняла).
+	Range     string
+	Pages     bool
+	Cover     bool
+	CoverOnly bool
+	Quality   int // 100 | 95 | 80; 0 — 95
+	DPI       int // 72…1200; 0 — dpi альбома
+	Print     string
 }
 
 // AskRes — итог вопроса. Why — одно из Why*; при WhyAnswered остальные поля заполнены.
@@ -62,6 +78,16 @@ type AskRes struct {
 	Folder   int      // номер папки в альбоме с 1
 	Merged   bool     // папка уже была в альбоме: шага отмены нет
 	Scanning bool     // лента ещё читает папку
+	Files    int      // AskExport: сколько файлов выгрузка пишет
+}
+
+// ExportStatus — ход последней выгрузки для get_album.export: State idle | running | done | stopped | failed.
+// Error без пути (Host чистит). Только скаляры (TestHostTypesScalar).
+type ExportStatus struct {
+	State string
+	Done  int
+	Total int
+	Error string
 }
 
 // AutoReq — автосборка в конец альбома; умолчания окна «Автосборка» (0.33-149-30) служба уже
@@ -120,7 +146,17 @@ var (
 	ErrUndoNotOwn   error = errUndoNotOwn   // после правки агента альбом менялся
 	ErrBackup       error = errBackup       // резервная копия не сделана
 	ErrNoEdits      error = errNoEdits      // правки агентам выключены (флажок сняли, пока правка ждала)
+	ErrBusy         error = errProgBusy     // программа занята выгрузкой по ссылке (152); выгрузка в JPEG — ErrExporting
+	ErrOpenRemote   error = errOpenRemote   // альбом не на этом компьютере (UNC): агенту не открывать
+	ErrOpenFailed   error = errOpenFailed   // файл не открылся (битый, чужой, недоступный)
+	ErrOpenNewer    error = errOpenNewer    // файл новее программы
+	ErrNoRecent     error = errNoRecent     // ключа нет среди недавних
+	ErrExporting    error = errExporting    // идёт выгрузка: альбомы не создаются и не открываются
 )
+
+// ExportFail — отказ проверок выгрузки текстом окна «Экспорт»: Host отдаёт его агенту как есть, поэтому
+// текст обязан быть без пути и имён файлов (TestExportCheckErrorsNoPath).
+func ExportFail(text string) error { return newAgentErr(text) }
 
 // AlbumKey — ключ альбома по номеру Editor (0 — альбома нет, ключ пуст): фасад сверяет с ним
 // AlbumRef.Key агента.

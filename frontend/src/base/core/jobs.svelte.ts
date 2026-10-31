@@ -37,7 +37,8 @@ class Jobs {
   // Памятка после выгрузки для типографии (047, 081): не null — открыто окно «Готово для …» (shell/export/PrintDone).
   exportMemo = $state<string[] | null>(null)
   exportNote = $state('') // сводка Go о пересчёте цвета к той же памятке
-  exportPrint = $state<PrintPlan | null>(null) // план типографии в момент запуска выгрузки: заголовок, сайт и папка окна «Готово»
+  exportPrint = $state<PrintPlan | null>(null) // план открытого окна «Готово»: заголовок, сайт и папка; ставит только export:done
+  exportPending = $state<PrintPlan | null>(null) // план запущенной выгрузки: в окно «Готово» переходит в export:done, чтобы не менять открытое окно
   exportStopping = $state(false) // «Остановить» нажато, export:done ещё не пришёл (073)
   private exportDone = 0 // сколько раз пришло export:done: событие может обогнать ответ Export
   // Сбор в папку (069): ход копирования (не null — идёт) и окно «Собрать проект в папку» (shell/collect).
@@ -66,9 +67,12 @@ class Jobs {
       this.exporting = null
       this.exportStopping = false
       this.exportOpen = false
+      const plan = this.exportPending
+      this.exportPending = null
       if (err) this.host?.notify('Экспорт не удался: ' + errText(err), 'error')
       else if (stopped) this.host?.notify(exportStoppedText(note), 'error')
       else if (memo?.length) {
+        this.exportPrint = plan
         this.exportMemo = memo
         this.exportNote = note ?? ''
       } else
@@ -143,6 +147,22 @@ class Jobs {
     }
   }
 
+  // Счётчик export:done для agentExport: берётся до ответа Go, чтобы мгновенная выгрузка не оставила висящий ход.
+  get exportMark(): number {
+    return this.exportDone
+  }
+
+  // Выгрузка по просьбе агента (152): окно Go уже спросило человека и запустило её. Запоминаем план типографии для окна «Готово»
+  // (меню делает это в ExportDialog) и ставим заглушку хода, как runExport. mark — exportMark до вызова AgentAnswerExport.
+  // План ждёт в exportPending (открытое «Готово» прошлой выгрузки не меняется); export:done уже пришёл — окно открыто им, план в него.
+  agentExport(r: { started: boolean; print?: PrintPlan | null }, mark: number) {
+    if (!r.started) return
+    if (this.exportDone === mark) {
+      this.exportPending = r.print ?? null
+      this.exporting = this.exporting ?? { done: 0, total: 0 }
+    } else this.exportPrint = r.print ?? null
+  }
+
   // true — экспорт пошёл; false — отказ (диалог папки закрыт, вопрос «Нет») или ошибка: окно остаётся открытым.
   async runExport(opt: ExportOpts): Promise<boolean> {
     const seen = this.exportDone
@@ -151,8 +171,10 @@ class Jobs {
       // total неизвестен (диапазон, «по страницам»): считает Go, первое export:progress его пришлёт.
       // Мгновенная выгрузка: export:done мог прийти раньше ответа — ход уже не рисуем.
       if (started && this.exportDone === seen) this.exporting = this.exporting ?? { done: 0, total: 0 }
+      if (!started && this.exportDone === seen) this.exportPending = null
       return started
     } catch (e) {
+      if (this.exportDone === seen) this.exportPending = null
       this.host?.notify(errText(e), 'error')
       return false
     }

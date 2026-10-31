@@ -21,7 +21,7 @@ func TestExporterNewPanics(t *testing.T) {
 		ColorReport: func(*model.Project) (map[string]int, map[string]int) { return nil, nil },
 		Ask:         func(string) (bool, error) { return false, nil },
 		PickDir:     func(string) (string, error) { return "", nil },
-		RememberDir: func(string) {},
+		RememberDir: func(string, string) {},
 		OpenURL:     func(string) {},
 		ShowDir:     func(string) {},
 		LiftMemory:  func() func() { return func() {} },
@@ -37,7 +37,7 @@ func TestExporterFreshState(t *testing.T) {
 		Emit: func(string, ...any) {}, GoBG: func(func()) bool { return false }, StopCtx: context.Background,
 		ColorReport: func(*model.Project) (map[string]int, map[string]int) { return nil, nil },
 		Ask:         func(string) (bool, error) { return false, nil }, PickDir: func(string) (string, error) { return "", nil },
-		RememberDir: func(string) {}, OpenURL: func(string) {}, ShowDir: func(d string) { shown = append(shown, d) },
+		RememberDir: func(string, string) {}, OpenURL: func(string) {}, ShowDir: func(d string) { shown = append(shown, d) },
 		LiftMemory: func() func() { return func() {} },
 	}
 	s := New(h)

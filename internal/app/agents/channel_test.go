@@ -13,7 +13,7 @@ import (
 // TestSocketPerms: папка mcp, созданная с чужими правами, приводится к 0700, сокет — 0600.
 func TestSocketPerms(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("права Windows (DACL) проверяет winqa TestSocketDACL")
+		t.Skip("права Unix; на Windows: TestSocketDACL (win-qa.yml)")
 	}
 	r := newRig(t, Options{}, "")
 	dir := filepath.Dir(r.sock)
@@ -35,7 +35,7 @@ func TestSocketPerms(t *testing.T) {
 // TestSocketPermsLink: ссылка на месте mcp — отказ, Chmod по ней не идёт, цель не тронута.
 func TestSocketPermsLink(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("права Windows (DACL) проверяет winqa TestSocketDACL")
+		t.Skip("права Unix; на Windows: TestSocketDACL (win-qa.yml)")
 	}
 	r := newRig(t, Options{}, "")
 	base := filepath.Dir(filepath.Dir(r.sock))

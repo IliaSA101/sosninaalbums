@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Stop, accept, ensureNodeModules, mergeBothSides } from './accept.mjs'
+import { appendEntry, journalFile, readJournal } from './accept-log.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const gotmp = path.join(here, '..', '.gotmp')
@@ -271,4 +272,53 @@ test('CLI: итог одной строкой, код 1 при СТОП', () => 
   }
   assert.equal(code, 1)
   assert.match(stdout, /^СТОП: worktree не найден/)
+})
+
+// Журнал приёмов (С1, 0.35): <git-common-dir>/sa-accept.jsonl, счёт «приёмов с Go после последнего winqa».
+test('журнал: приём с Go и без — записи, пакеты, счёт растёт; winqa сбрасывает, rc-winqa нет; вне дерева', () => {
+  const s = setup()
+  const file = journalFile(s.root)
+  assert.equal(path.resolve(file), path.resolve(s.root, '.git', 'sa-accept.jsonl'))
+  const msgs = []
+  const take = (name, files) => {
+    const w = s.wt(name)
+    for (const [f, t] of files) commit(w, f, t, name)
+    msgs.length = 0
+    accept(name, name, { cwd: s.root, env: s.env, log: (m) => msgs.push(m) })
+    return msgs.find((m) => m.startsWith('приёмов с Go')) ?? msgs.join('|')
+  }
+  assert.equal(take('g1', [['internal/layout/x.go', 'package layout\n'], ['internal/app/edit/y.go', 'package edit\n'], ['doc.md', 'd\n']]), 'приёмов с Go после последнего winqa: 1 (winqa в журнале нет)')
+  assert.equal(take('d1', [['docs/only.md', 'd\n']]), 'приёмов с Go после последнего winqa: 1 (winqa в журнале нет)')
+  assert.equal(take('g2', [['go.mod', 'module x\n']]), 'приёмов с Go после последнего winqa: 2 (winqa в журнале нет)')
+  const e = readJournal(file)
+  assert.equal(e.length, 3)
+  assert.deepEqual(e.map((x) => [x.branch, x.go]), [['g1', true], ['d1', false], ['g2', true]])
+  assert.deepEqual(e[0].packages, ['internal/app/edit', 'internal/layout'])
+  assert.deepEqual(e[1].packages, [])
+  assert.deepEqual(e[2].packages, ['go.mod'])
+  assert.match(e[0].from, /^[0-9a-f]{12}$/)
+  assert.equal(e[0].to, e[1].from, 'диапазоны приёмов смыкаются')
+  assert.ok(fs.existsSync(file) && !fs.existsSync(path.join(s.root, 'sa-accept.jsonl')), 'журнал в .git, а не в дереве')
+  // не-rc winqa обнуляет счёт; rc — нет
+  appendEntry(file, { winqa: '143-g1', dev: 'abc' })
+  assert.equal(take('g3', [['internal/a/z.go', 'package a\n']]), 'приёмов с Go после последнего winqa: 1 (winqa/143-g1)')
+  appendEntry(file, { winqa: 'rc-1', dev: 'abc' })
+  assert.equal(take('g4', [['internal/a/w.go', 'package a\n']]), 'приёмов с Go после последнего winqa: 2 (winqa/143-g1)')
+})
+
+test('журнал: повреждённый файл не срывает приём, на месте журнала каталог — предупреждение, приём влит', () => {
+  const s = setup()
+  fs.writeFileSync(journalFile(s.root), '{"branch":\n\u0000\u0000мусор\n[1,2]\n')
+  const w = s.wt('j1')
+  commit(w, 'internal/a/a.go', 'package a\n', 'j1')
+  const msgs = []
+  assert.match(accept('j1', 'j1', { cwd: s.root, env: s.env, log: (m) => msgs.push(m) }), /^принято j1/)
+  assert.ok(msgs.includes('приёмов с Go после последнего winqa: 1 (winqa в журнале нет)'), msgs.join('|'))
+  const s2 = setup()
+  fs.mkdirSync(journalFile(s2.root))
+  const w2 = s2.wt('j2')
+  commit(w2, 'a.go', 'package a\n', 'j2')
+  const m2 = []
+  assert.match(accept('j2', 'j2', { cwd: s2.root, env: s2.env, log: (m) => m2.push(m) }), /^принято j2/)
+  assert.ok(m2.some((m) => m.startsWith('журнал приёмов не записан')), m2.join('|'))
 })

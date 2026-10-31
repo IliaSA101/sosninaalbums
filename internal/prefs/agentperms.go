@@ -32,6 +32,8 @@ const (
 	ClassEdit   = "E" // обратимая правка
 	ClassFolder = "F" // add_folder
 	ClassAlbum  = "A" // create_album
+	// ClassAskOnly — export_album, open_album: только с вопросом человеку, «Всегда» нет (0.35/152).
+	ClassAskOnly = "Q"
 )
 
 // Как место попало в список.
@@ -52,13 +54,27 @@ const (
 type Place struct {
 	Dir string `json:"dir"`
 	How string `json:"how"` // PlaceChosen | PlaceParent
+	// Vol — диск места (0.35/153): сверяется в тихой проверке по номеру, не по букве; nil — место по
+	// пути, как в 0.34 (0.34 поле читает и при записи теряет).
+	Vol *PlaceVol `json:"vol,omitempty"`
+}
+
+// PlaceLift — место 0.34, поднятое до корня архива при обновлении (0.35/153): заметка в окне
+// «ИИ-агенты» живёт, пока человек не нажмёт «Понятно».
+type PlaceLift struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // AgentPerms — ключ agentPerms: Edit — значение agents.edit, которое 0.34 записала последним.
 type AgentPerms struct {
 	Tools  map[string]string `json:"tools,omitempty"`
 	Places []Place           `json:"places,omitempty"`
-	Edit   bool              `json:"edit"`
+	Lifted []PlaceLift       `json:"lifted,omitempty"` // новые первыми, ≤ MaxPlaces
+	// LiftDone — проход подъёма мест 0.34 выполнен (0.35/153): места 0.35 без диска (Mac, тома без
+	// номера) подниматься не должны. Ставится первой записью ключа и самим проходом; 0.34 поле теряет.
+	LiftDone bool `json:"liftDone,omitempty"`
+	Edit     bool `json:"edit"`
 }
 
 // toolClass — инструменты этой версии (design §1). Новее — класс не знаем, решает служба.
@@ -70,6 +86,7 @@ var toolClass = map[string]string{
 	"autobuild": ClassEdit, "vary_layouts": ClassEdit, "undo_last_edit": ClassEdit, "set_marks": ClassEdit,
 	"set_cover_photo": ClassEdit, "set_background": ClassEdit, "add_sticker": ClassEdit, "apply_print": ClassEdit,
 	"add_folder": ClassFolder, "create_album": ClassAlbum,
+	"export_album": ClassAskOnly, "open_album": ClassAskOnly,
 }
 
 // Пять правок, которыми управлял флажок 0.33 (design §2 «Откат»): остальные 0.33 не знает.
@@ -91,10 +108,14 @@ func AgentToolNames() []string {
 	return names
 }
 
-// PermCan — допустимые значения: у чтения и start_program «Спрашивать» нет (0.34-150-3).
+// PermCan — допустимые значения: у чтения и start_program «Спрашивать» нет (0.34-150-3), у
+// «только с вопросом» нет «Всегда» (0.35-152-2).
 func PermCan(tool string) []string {
-	if c := toolClass[tool]; c == ClassRead || c == ClassStart {
+	switch toolClass[tool] {
+	case ClassRead, ClassStart:
 		return []string{PermAllow, PermDeny}
+	case ClassAskOnly:
+		return []string{PermAsk, PermDeny}
 	}
 	return []string{PermAllow, PermAsk, PermDeny}
 }
@@ -106,65 +127,145 @@ func validToolName(k string) bool {
 	return k != "" && len(k) <= maxToolName && strings.Trim(k, "abcdefghijklmnopqrstuvwxyz_") == ""
 }
 
-// cleanMode: значение не из трёх — «Запретить»; «Спрашивать» там, где его нет, — тоже.
+// cleanMode: значение вне допустимых (PermCan) — «Запретить»; исключение — «Всегда» у «только с
+// вопросом» (человек правил config.json и хотел разрешить): это «Спрашивать», а не молчаливый запуск.
 func cleanMode(tool, v string) string {
-	switch v {
-	case PermAllow:
+	if slices.Contains(PermCan(tool), v) {
 		return v
-	case PermAsk:
-		if slices.Contains(PermCan(tool), v) {
-			return v
-		}
+	}
+	if v == PermAllow && toolClass[tool] == ClassAskOnly {
+		return PermAsk
 	}
 	return PermDeny
 }
 
-// cleanPlace — путь абсолютный (строка, без диска), ≤ 1 КБ, годный UTF-8 без управляющих знаков.
+// cleanDir — путь абсолютный (строка, без диска), ≤ 1 КБ, годный UTF-8 без управляющих знаков.
+func cleanDir(dir string) (string, bool) {
+	if dir == "" || len(dir) > maxPlaceBytes || !utf8.ValidString(dir) || !filepath.IsAbs(dir) {
+		return "", false
+	}
+	for _, r := range dir {
+		if r < 0x20 || r == 0x7f {
+			return "", false
+		}
+	}
+	dir = filepath.Clean(dir)
+	return dir, len(dir) <= maxPlaceBytes
+}
+
+// cleanPlace — способ из двух и годный путь (cleanDir); негодная привязка к диску теряется (cleanVol).
 func cleanPlace(p Place) (Place, bool) {
 	if p.How != PlaceChosen && p.How != PlaceParent {
 		return Place{}, false
 	}
-	if p.Dir == "" || len(p.Dir) > maxPlaceBytes || !utf8.ValidString(p.Dir) || !filepath.IsAbs(p.Dir) {
-		return Place{}, false
-	}
-	for _, r := range p.Dir {
-		if r < 0x20 || r == 0x7f {
-			return Place{}, false
-		}
-	}
-	p.Dir = filepath.Clean(p.Dir)
-	return p, len(p.Dir) <= maxPlaceBytes
+	dir, ok := cleanDir(p.Dir)
+	p.Dir = dir
+	p.Vol = cleanVol(p.Vol)
+	return p, ok
 }
 
-// PushPlace ставит место наверх без повторов (по paths.DirKey), список режется до MaxPlaces.
-// Негодное строение — список без изменений. Уже стоявшее «chosen» остаётся таким: человек
-// выбрал его явно, а правила «parent» строже. Результат — новый срез.
-func PushPlace(list []Place, p Place) []Place {
-	out := make([]Place, 0, MaxPlaces)
-	if np, ok := cleanPlace(p); ok {
-		for _, v := range list {
-			if v.How == PlaceChosen && paths.DirKey(v.Dir) == paths.DirKey(np.Dir) {
-				np.How = PlaceChosen
+// cleanLifts — годные пары (оба пути — cleanDir, From ≠ To) без повторов по From; первые — новее.
+func cleanLifts(list []PlaceLift) []PlaceLift {
+	var out []PlaceLift
+	seen := map[string]bool{}
+	for _, v := range list {
+		from, ok1 := cleanDir(v.From)
+		to, ok2 := cleanDir(v.To)
+		if !ok1 || !ok2 || paths.DirKey(from) == paths.DirKey(to) || seen[paths.DirKey(from)] {
+			continue
+		}
+		seen[paths.DirKey(from)] = true
+		if out = append(out, PlaceLift{From: from, To: to}); len(out) == MaxPlaces {
+			break
+		}
+	}
+	return out
+}
+
+// normalizePlaces — места без повторов (по Place.Key; при повторе «chosen» побеждает «parent», остаётся первая
+// позиция) и без внутренних (design 153 §2.3: место внутри другого, в том числе «chosen» внутри
+// «parent»); предел limit — после чистки. Негодное строение выбрасывается. Результат — новый срез.
+func normalizePlaces(list []Place, limit int) []Place {
+	out := make([]Place, 0, min(len(list), 2*MaxPlaces))
+	at := make(map[string]int, len(out))
+	for _, v := range list {
+		v, ok := cleanPlace(v)
+		if !ok {
+			continue
+		}
+		k := v.Key()
+		if i, dup := at[k]; dup {
+			if v.How == PlaceChosen {
+				out[i].How = PlaceChosen
+			}
+			continue
+		}
+		if len(out) == 2*MaxPlaces {
+			break // чужой файл не раздувает работу: после чистки всё равно останется не больше MaxPlaces
+		}
+		at[k] = len(out)
+		out = append(out, v)
+	}
+	kept := out[:0:0]
+	for i, v := range out {
+		inner := false
+		for j, w := range out {
+			if i != j && PlaceInside(v, w) {
+				inner = true
 				break
 			}
 		}
-		out = append(out, np)
+		if !inner {
+			kept = append(kept, v)
+		}
 	}
-	return appendPlaces(out, list)
+	return kept[:min(len(kept), limit)]
 }
+
+// PushPlace ставит место наверх без повторов (по Place.Key), убирает места внутри других, список
+// режется до MaxPlaces. Негодное строение — список без изменений. Уже стоявшее «chosen» остаётся
+// таким: человек выбрал его явно, а правила «parent» строже. Результат — новый срез.
+func PushPlace(list []Place, p Place) []Place {
+	if np, ok := cleanPlace(p); ok {
+		return normalizePlaces(append([]Place{np}, list...), MaxPlaces)
+	}
+	return normalizePlaces(list, MaxPlaces)
+}
+
+// LiftPlaces переносит места «parent» по moves (ключ — paths.DirKey(From)) в To, сливает повторы,
+// убирает внутренние и дописывает пары в Lifted. Возвращает перенесённые пары (нет такого места под
+// замком — не в счёте). Нечего менять — ни места, ни Lifted не трогаются.
+func (p *AgentPerms) LiftPlaces(moves map[string]PlaceLift) []PlaceLift {
+	var done []PlaceLift
+	list := slices.Clone(p.Places)
+	for i, v := range list {
+		if m, ok := moves[paths.DirKey(v.Dir)]; ok && v.How == PlaceParent && v.Vol == nil { // привязанное не поднимаем: путь внутри тома остался бы прежним
+			done = append(done, m)
+			list[i].Dir = m.To
+		}
+	}
+	p.Places = normalizePlaces(list, MaxPlaces)
+	if len(done) > 0 {
+		p.Lifted = cleanLifts(append(slices.Clone(done), p.Lifted...))
+	}
+	return done
+}
+
+// DropInnerPlaces — список без мест внутри других (для проверки «писать нечего» до записи).
+func DropInnerPlaces(list []Place) []Place { return normalizePlaces(list, MaxPlaces) }
 
 // appendPlaces дописывает годные места из list без повторов, пока не наберётся MaxPlaces.
 func appendPlaces(out, list []Place) []Place {
 	seen := make(map[string]bool, len(out)+len(list))
 	for _, v := range out {
-		seen[paths.DirKey(v.Dir)] = true
+		seen[v.Key()] = true
 	}
 	for _, v := range list {
 		if len(out) == MaxPlaces {
 			break
 		}
-		if v, ok := cleanPlace(v); ok && !seen[paths.DirKey(v.Dir)] {
-			seen[paths.DirKey(v.Dir)] = true
+		if v, ok := cleanPlace(v); ok && !seen[v.Key()] {
+			seen[v.Key()] = true
 			out = append(out, v)
 		}
 	}
@@ -203,13 +304,15 @@ func (p AgentPerms) clean() AgentPerms {
 	} else {
 		p.Places = nil
 	}
+	p.Lifted = cleanLifts(p.Lifted)
 	return p
 }
 
 // newToolMode — инструмент, которого нет в tools (новее записи): чтение и показ — «Всегда»,
-// запуск тоже; правка — «Спрашивать», а если все записанные правки «Запретить» — «Запретить».
+// запуск тоже; правка и «только с вопросом» — «Спрашивать», а если все записанные правки
+// «Запретить» — «Запретить». «Только с вопросом» в счёт правок не входит (0.35-152-11).
 func newToolMode(class string, tools map[string]string) string {
-	if !isEditClass(class) {
+	if !isEditClass(class) && class != ClassAskOnly {
 		return PermAllow
 	}
 	for k, v := range tools {
@@ -226,10 +329,12 @@ func column(flag bool) map[string]string {
 	t := make(map[string]string, len(toolClass))
 	for k, c := range toolClass {
 		switch {
-		case !isEditClass(c):
+		case !isEditClass(c) && c != ClassAskOnly:
 			t[k] = PermAllow
 		case !flag:
 			t[k] = PermDeny
+		case c == ClassAskOnly:
+			t[k] = PermAsk
 		case c == ClassEdit:
 			t[k] = PermAllow
 		default:
@@ -267,11 +372,12 @@ func AgentPermsOf(c Config) AgentPerms {
 	return p
 }
 
-// rollback — флажок 0.33 сменился: выключен — правки, папка и альбом «Запретить»; включён — только
-// пять правок, которыми он управлял (0.34-150-33). Прочее — как записано.
+// rollback — флажок 0.33 сменился: выключен — правки, папка, альбом и «только с вопросом»
+// «Запретить»; включён — только пять правок, которыми он управлял (0.34-150-33), «только с
+// вопросом» не трогает. Прочее — как записано.
 func rollback(tools map[string]string, flag bool) {
 	for k, class := range toolClass {
-		if !flag && isEditClass(class) {
+		if !flag && (isEditClass(class) || class == ClassAskOnly) {
 			tools[k] = PermDeny
 		}
 	}
@@ -332,6 +438,9 @@ func UpdateAgentPermsErr(dir string, fn func(p *AgentPerms)) (AgentPerms, error)
 	var out AgentPerms
 	err := UpdateConfigErr(dir, func(c *Config) {
 		p := AgentPermsOf(*c)
+		if c.AgentPerms == nil {
+			p.LiftDone = true // ключа нет — мест 0.34 нет, поднимать будет нечего (fn может снять: тест 0.34)
+		}
 		fn(&p)
 		out = p.clean()
 		out.Edit = out.mirrorEdit()
@@ -358,7 +467,7 @@ func AddPlace(dir string, p Place) AgentPerms {
 	return UpdateAgentPerms(dir, func(v *AgentPerms) { v.Places = PushPlace(v.Places, p) })
 }
 
-// ForgetPlaces — «Забыть места»: список пуст, разрешения инструментов целы.
+// ForgetPlaces — «Забыть места»: список пуст (заметка о подъёме тоже), разрешения инструментов целы.
 func ForgetPlaces(dir string) AgentPerms {
-	return UpdateAgentPerms(dir, func(v *AgentPerms) { v.Places = nil })
+	return UpdateAgentPerms(dir, func(v *AgentPerms) { v.Places, v.Lifted = nil, nil })
 }

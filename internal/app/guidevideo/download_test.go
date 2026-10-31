@@ -396,10 +396,8 @@ func TestDownloadBusy(t *testing.T) {
 	})
 	done := make(chan error, 1)
 	go func() { _, err := l.svc.Download([]string{"aaa"}); done <- err }()
-	select {
-	case <-started:
-	case <-time.After(10 * time.Second):
-		t.Fatal("первая загрузка не дошла до файла")
+	if _, ok := testkit.WaitCh(t, started, testkit.Limit(10*time.Second), "первая загрузка не дошла до файла", nil); !ok {
+		t.FailNow()
 	}
 	before := l.hits.Load()
 	items, err := l.svc.Download([]string{"bbb"})
@@ -433,20 +431,17 @@ func TestConsentRevokeCancelsVideo(t *testing.T) {
 	})
 	res := make(chan error, 1)
 	go func() { _, err := l.svc.Download([]string{"cover"}); res <- err }()
-	select {
-	case <-started:
-	case <-time.After(10 * time.Second):
-		t.Fatal("загрузка не дошла до файла")
+	if _, ok := testkit.WaitCh(t, started, testkit.Limit(10*time.Second), "загрузка не дошла до файла", nil); !ok {
+		t.FailNow()
 	}
 	l.allowed.Store(false) // SetLibraryNet(false): запись согласия, затем Cancel
 	l.svc.Cancel()
-	select {
-	case err := <-res:
-		if !errors.Is(err, ErrCancelled) || err.Error() != "скачивание ролика отменено" {
-			t.Fatalf("ошибка: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("загрузка не отменилась")
+	err, ok := testkit.WaitCh(t, res, testkit.Limit(10*time.Second), "загрузка не отменилась", nil)
+	if !ok {
+		t.FailNow()
+	}
+	if !errors.Is(err, ErrCancelled) || err.Error() != "скачивание ролика отменено" {
+		t.Fatalf("ошибка: %v", err)
 	}
 	if got := l.listDir(); len(got) != 0 {
 		t.Errorf("в папке %v", got)

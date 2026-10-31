@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -71,6 +72,41 @@ func TestRememberDir(t *testing.T) {
 	RememberDir(dir, DirExport, d2) // после битого файла запись снова работает
 	if LoadConfig(dir).LastDirs[DirExport] != d2 {
 		t.Error("запись после битого конфига не прошла")
+	}
+}
+
+// Корень выгрузок (0.35/152-15): свой ключ lastDirs, не мешает папке окна экспорта и чужим ключам;
+// круг запись → чтение; конфиг до 0.35 (ключа нет) отдаёт последнюю папку экспорта; нелокальный
+// корень не пишется; пустой конфиг — "".
+func TestRememberExportRoot(t *testing.T) {
+	dir := testkit.TempDir(t)
+	if got := ExportRoot(LoadConfig(dir)); got != "" {
+		t.Fatalf("пустой конфиг: корень %q", got)
+	}
+	exp, root, other := filepath.Clean(testkit.TempDir(t)), filepath.Clean(testkit.TempDir(t)), filepath.Clean(testkit.TempDir(t))
+	// Конфиг 0.34: есть папка окна и незнакомый ключ, корня нет.
+	raw := `{"lastDirs": {"export": ` + strconv.Quote(exp) + `, "future": ` + strconv.Quote(other) + `}}`
+	if err := os.WriteFile(ConfigPath(dir), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := ExportRoot(LoadConfig(dir)); got != exp {
+		t.Fatalf("корня нет — последняя папка экспорта: %q, ждали %q", got, exp)
+	}
+	RememberDir(dir, DirExportRoot, root)
+	c := LoadConfig(dir)
+	if ExportRoot(c) != root || c.LastDirs[DirExport] != exp || c.LastDirs["future"] != other || len(c.LastDirs) != 3 {
+		t.Fatalf("после записи корня: %+v", c.LastDirs)
+	}
+	// Папка окна меняется отдельно, корень остаётся; нелокальный корень не затирает годный.
+	RememberDir(dir, DirExport, other)
+	RememberDir(dir, DirExportRoot, `\\server\share\x`)
+	RememberDir(dir, DirExportRoot, "")
+	c = LoadConfig(dir)
+	if ExportRoot(c) != root || c.LastDirs[DirExport] != other {
+		t.Fatalf("корень и папка окна независимы: %+v", c.LastDirs)
+	}
+	if DirExportRoot != "exportRoot" {
+		t.Fatalf("ключ в config.json: %q", DirExportRoot)
 	}
 }
 

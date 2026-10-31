@@ -106,6 +106,10 @@ linters:
         - pattern: ^prefs\.(Update|Remember|Push|Drop|Forget|Mark|Set|Import|Merge|Clean|PickDir).*$
           pkg: ^github\.com/IliaSA101/sosninaalbums/internal/prefs$
           msg: "143: служба агентов не меняет настройки"
+        # 155 (да владельца 30.10.2026): мягкие правила папок (Opts) собирают только тесты; продукт — agentplaces.Default.
+        - pattern: ^agentplaces\.New$
+          pkg: ^github\.com/IliaSA101/sosninaalbums/internal/app/agentplaces$
+          msg: "155: правила папок агента в продукте — только agentplaces.Default"
     # Границы пакетов (docs/ARCHITECTURE.md «Слои»): у каждого пакета internal/* белый список
     # того, что он вправе импортировать; всё остальное из internal — нарушение. Новый пакет
     # сначала вносится сюда. Имя правила — то, что увидит автор в сообщении линтера.
@@ -303,6 +307,22 @@ linters:
             - github.com/google/jsonschema-go/jsonschema$
             - golang.org/x/image/draw$
             - golang.org/x/sys/windows$
+        # 155 (да владельца 30.10.2026, адаптация правил): правила папок и мест агента — строки, диск и config.json
+        # только на чтение (запись и запуск закрыты forbidigo 143/149); без Editor, без Wails, без App и без служб.
+        "app/agentplaces: appkit, osx, paths, prefs, library, norm":
+          files:
+            - "**/internal/app/agentplaces/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/agentplaces$
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/library$
+            - github.com/IliaSA101/sosninaalbums/internal/osx$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+            - github.com/IliaSA101/sosninaalbums/internal/prefs$
+            - golang.org/x/text/unicode/norm$
         # 143 Г4: посредник --mcp — тот же принцип: только stdlib, osx, paths.
         "mcpbridge: osx, paths":
           files:
@@ -1003,26 +1023,30 @@ linters:
       - path: (^internal/osx/userdirs\.go$|_test\.go$)
         linters: [forbidigo]
         text: "п5: папка данных"
-      # 143: запрет записи — только для службы агентов и посредника; сокет и права папки пишут channel.go и perm_*.go
-      - path-except: ^internal/(app/agents|mcpbridge)/
+      # 143: запрет записи — служба агентов, правила папок агента (155) и посредник; сокет и права папки — channel.go и perm_*.go
+      - path-except: ^internal/(app/agents|app/agentplaces|mcpbridge)/
         linters: [forbidigo]
         text: "143: служба агентов"
       - path: ^internal/app/agents/(channel|perm_[a-z]+)\.go$
         linters: [forbidigo]
         text: "143: служба агентов и посредник не пишут файлы"
-      - path: ^internal/(app/agents|mcpbridge)/.*_test\.go$
+      - path: ^internal/(app/agents|app/agentplaces|mcpbridge)/.*_test\.go$
         linters: [forbidigo]
         text: "143: служба агентов"
-      # 149 В13: запрет запуска программ — для службы агентов и посредника; запуск программы — launch_*.go посредника
-      - path-except: ^internal/(app/agents|mcpbridge)/
+      # 149 В13: запрет запуска программ — служба агентов, правила папок агента (155) и посредник; запуск — launch_*.go посредника
+      - path-except: ^internal/(app/agents|app/agentplaces|mcpbridge)/
         linters: [forbidigo]
         text: "149: служба агентов"
       - path: ^internal/mcpbridge/launch_[a-z_]+\.go$
         linters: [forbidigo]
         text: "149: служба агентов"
-      - path: ^internal/(app/agents|mcpbridge)/.*_test\.go$
+      - path: ^internal/(app/agents|app/agentplaces|mcpbridge)/.*_test\.go$
         linters: [forbidigo]
         text: "149: служба агентов"
+      # 155: agentplaces.New — только тесты
+      - path: _test\.go
+        linters: [forbidigo]
+        text: "155: правила папок агента"
 formatters:
   enable:
     - gofmt

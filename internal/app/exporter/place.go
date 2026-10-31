@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -11,8 +12,8 @@ import (
 // outsideAlbum — выбранная папка выгрузки dir вне папок фото альбома (121): внутри — вопрос «выгрузить
 // рядом?». Возвращает папку выгрузки out, mk — путь, если её надо создать после всех вопросов (как
 // папку книги), ok = false — «Нет» или отказ (ничего не пишем; при отказе err — текст для тоста).
-func (s *Service) outsideAlbum(dir string) (out, mk string, ok bool, err error) {
-	folders, _ := s.h.Editor().Sources() // отдельные файлы (097) не проверяем: сканер их папку не обходит
+func (s *Service) outsideAlbum(ed *album.Editor, dir string) (out, mk string, ok bool, err error) {
+	folders, _ := ed.Sources() // отдельные файлы (097) не проверяем: сканер их папку не обходит
 	root, in := export.AlbumFolderOf(dir, folders, paths.Linked)
 	if !in {
 		return dir, "", true, nil

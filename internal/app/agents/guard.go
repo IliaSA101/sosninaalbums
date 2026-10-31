@@ -31,13 +31,15 @@ type toolSpec struct {
 	slow     bool // рендер: срок вдвое длиннее (design §6: 20 с вместо 10)
 
 	// Ступень 3 (149, edit.go).
-	edit   bool // правит альбом: путь serveEdit, аннотации «не только чтение», ✎ в журнале
-	view   bool // меняет вид окна, а не альбом (show_spread): место, темп и «человек занят» — без флажка и копии
-	await  bool // продолжение вопроса (await_answer): ни семафора чтения, ни места правки
-	ask    bool // вопрос человеку: срок вызова AskWait + CallTimeout
-	auto   bool // автосборка: срок вызова AutoTimeout
-	backup bool // до тела — резервная копия (Host.Backup)
-	danger bool // DestructiveHint: заменяет открытый альбом
+	edit bool // правит альбом: путь serveEdit, аннотации «не только чтение», ✎ в журнале
+	view bool // меняет вид окна, а не альбом (show_spread): место, темп и «человек занят» — без флажка и копии
+	// coverOK — обложка («cover») годится целью правки (add_sticker, 154): вопрос «Спрашивать» не отвергает ссылку.
+	coverOK bool
+	await   bool // продолжение вопроса (await_answer): ни семафора чтения, ни места правки
+	ask     bool // вопрос человеку: срок вызова AskWait + CallTimeout
+	auto    bool // автосборка: срок вызова AutoTimeout
+	backup  bool // до тела — резервная копия (Host.Backup)
+	danger  bool // DestructiveHint: заменяет открытый альбом
 
 	// perm — класс разрешения (prefs.Class*, 150); "" — служебный (await_answer), вне разрешений.
 	perm string

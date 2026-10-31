@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -42,7 +43,7 @@ func TestQuietOneDrivePlaceholder(t *testing.T) {
 }
 
 // Папка OneDrive: Go 1.23+ может отдавать ей ModeIrregular (облачная точка повторной обработки).
-// Тест пишет итог Lstat в лог (для design §4.1 п. 3) и проверяет следствие: ссылка в пути — hasLinkPart
+// Тест пишет итог Lstat в лог (для design §4.1 п. 3) и проверяет следствие: ссылка в пути — agentplaces.HasLinkPart
 // (вопрос link), обычная папка — нет.
 func TestQuietOneDriveIrregular(t *testing.T) {
 	od := os.Getenv("OneDrive")
@@ -59,7 +60,7 @@ func TestQuietOneDriveIrregular(t *testing.T) {
 	if _, err := os.Lstat(inside); err != nil {
 		t.Skipf("в OneDrive нет Pictures: %v", err)
 	}
-	if got := hasLinkPart(inside); got != link {
-		t.Errorf("hasLinkPart(OneDrive\\Pictures)=%v при ссылке в корне OneDrive=%v", got, link)
+	if got := agentplaces.HasLinkPart(inside); got != link {
+		t.Errorf("agentplaces.HasLinkPart(OneDrive\\Pictures)=%v при ссылке в корне OneDrive=%v", got, link)
 	}
 }

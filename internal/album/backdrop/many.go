@@ -33,41 +33,47 @@ func PlanTo(c *model.Project, targets []model.GridTarget, src model.BgSource) (m
 // Лист с несколькими целями считается один раз; фото, поставленное и снятое той же правкой
 // (левая, затем весь лист), в число ушедших не входит — сравниваются начало и конец.
 func applyTo(p *model.Project, targets []model.GridTarget, src model.BgSource) (model.BgPlan, error) {
-	plan, _, err := applyKeep(p, targets, src, false)
+	plan, _, _, err := applyKeep(p, targets, src, false)
 	return plan, err
 }
 
 // Outcome — итог ApplyToAgent: Changed — листов изменено; Skipped — ID листов, где фон области —
-// фото клиента (без replace не тронуты); Replaced — фото фона заменено (только при replace).
+// фото клиента (без replace не тронуты); Replaced — заменено фото клиента на фоне (только при replace;
+// фото фона из каталога и наборов не в счёт: человек соглашается на фото клиента).
+// Cleared — ID листов, с которых SetAlbumBgAgent снял свой фон (по порядку листов); у
+// ApplyToAgent пусто.
 type Outcome struct {
 	Changed  int
 	Skipped  []string
 	Replaced int
+	Cleared  []string
 }
 
 // ApplyToAgent — тело Editor.ApplyBackgroundToIf (151, 0.34-151-19). С replace — как ApplyTo с
-// планом (PlanTo): заменённые фото фона в Replaced. Без replace цель, которая сняла бы фото
+// планом (PlanTo): заменённые фото клиента на фоне — в Replaced. Без replace цель, которая сняла бы фото
 // клиента (фото фона без ключа библиотеки; фоны наборов и свои заменяются), не применяется — её
 // лист возвращается в состояние до цели, ID листа идёт в Skipped (по разу, в порядке целей);
 // Replaced остаётся 0. Прогон один и на самом проекте: откат цели — восстановление её листа,
 // копия проекта не нужна; ошибка откатывает всю правку (try), итог при ней пуст.
 func ApplyToAgent(p *model.Project, targets []model.GridTarget, src model.BgSource, replace bool) (Outcome, error) {
 	if replace {
-		plan, err := PlanTo(p, targets, src)
-		return Outcome{Changed: plan.Spreads, Replaced: plan.Photos}, err
+		plan, _, client, err := applyKeep(p, targets, src, false)
+		return Outcome{Changed: plan.Spreads, Replaced: client}, err
 	}
-	plan, skipped, err := applyKeep(p, targets, src, true)
+	plan, skipped, _, err := applyKeep(p, targets, src, true)
 	return Outcome{Changed: plan.Spreads, Skipped: skipped}, err
 }
 
 // applyKeep — тело applyTo и ApplyToAgent; keep — цели, снимающие фото клиента, пропускаются.
-func applyKeep(p *model.Project, targets []model.GridTarget, src model.BgSource, keep bool) (model.BgPlan, []string, error) {
+// Четвёртый результат — сколько фото клиента (без ключа библиотеки) ушло с листов.
+func applyKeep(p *model.Project, targets []model.GridTarget, src model.BgSource, keep bool) (model.BgPlan, []string, int, error) {
 	var plan model.BgPlan
+	client := 0
 	if len(targets) > 3*model.MaxSpreads {
-		return plan, nil, errTargets
+		return plan, nil, 0, errTargets
 	}
 	if (src.Pattern == nil) == (src.Photo.ID == "") {
-		return plan, nil, model.ErrPattern
+		return plan, nil, 0, model.ErrPattern
 	}
 	byID := make(map[string]*model.Spread, len(p.Spreads))
 	for _, s := range p.Spreads {
@@ -78,7 +84,7 @@ func applyKeep(p *model.Project, targets []model.GridTarget, src model.BgSource,
 	var skipped []string
 	for _, t := range targets {
 		if !model.ValidScope(t.Scope) { // корешка у разворотов нет; проверка до Find — отказ не зависит от ID
-			return plan, nil, model.ErrScope
+			return plan, nil, 0, model.ErrScope
 		}
 		s := byID[t.Spread]
 		if s == nil {
@@ -86,7 +92,7 @@ func applyKeep(p *model.Project, targets []model.GridTarget, src model.BgSource,
 		}
 		was := stateOf(s)
 		if err := applyOne(p, s, t.Scope, src); err != nil {
-			return model.BgPlan{}, nil, err
+			return model.BgPlan{}, nil, 0, err
 		}
 		if keep && was.dropsClient(p, stateOf(s)) {
 			was.restore(s)
@@ -105,13 +111,11 @@ func applyKeep(p *model.Project, targets []model.GridTarget, src model.BgSource,
 		if !was.equal(now) {
 			plan.Spreads++
 		}
-		for i, b := range was.ph {
-			if b != nil && (now.ph[i] == nil || now.ph[i].Photo != b.Photo) {
-				plan.Photos++
-			}
-		}
+		all, cl := was.goneFrom(p, now)
+		plan.Photos += all
+		client += cl
 	}
-	return plan, skipped, nil
+	return plan, skipped, client, nil
 }
 
 // applyOne — одна цель: узор src.Pattern с цветом или фото src.Photo на области scope листа s.
@@ -170,6 +174,19 @@ func (a bgState) restore(s *model.Spread) {
 	s.Pat, s.PatL, s.PatR = a.pat[0], a.pat[1], a.pat[2]
 	s.BgPhoto, s.BgPhotoL, s.BgPhotoR, s.BgPhotoS = a.ph[0], a.ph[1], a.ph[2], a.ph[3]
 	s.BgL, s.BgR = a.bgL, a.bgR
+}
+
+// goneFrom — сколько фото фона ушло при переходе a → b и сколько из них клиентских (без ключа библиотеки).
+func (a bgState) goneFrom(p *model.Project, b bgState) (all, client int) {
+	for i, was := range a.ph {
+		if was != nil && (b.ph[i] == nil || b.ph[i].Photo != was.Photo) {
+			all++
+			if p.Photos[was.Photo].Lib == "" {
+				client++
+			}
+		}
+	}
+	return all, client
 }
 
 // dropsClient — переход a → b снял или заменил фото клиента: фото фона без ключа библиотеки

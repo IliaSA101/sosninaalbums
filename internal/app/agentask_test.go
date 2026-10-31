@@ -66,7 +66,7 @@ func TestAgentsInfoEditMixed(t *testing.T) {
 	}
 }
 
-func TestSetAgentsEdit(t *testing.T) {
+func TestAgentsInfoEdit(t *testing.T) {
 	a, events := pubApp(t)
 	dir := a.cfgDir
 	if info := a.AgentsInfo(); info.Edit || info.EditBlocked != "" || info.AsksMuted {
@@ -121,7 +121,7 @@ func TestSetAgentsEdit(t *testing.T) {
 // Теги и порядок полей — контракт с frontend/wailsjs; имена событий — с events.md.
 func TestAgentEditContract(t *testing.T) {
 	for typ, want := range map[reflect.Type][]string{
-		reflect.TypeFor[AgentAsk]():     {"id", "kind", "title", "lines", "hint", "ok", "path", "link", "alt", "tool", "why"},
+		reflect.TypeFor[AgentAsk]():     {"id", "kind", "title", "lines", "hint", "ok", "path", "link", "alt", "tool", "files", "create", "why"},
 		reflect.TypeFor[AgentAskDone](): {"id", "why"},
 		reflect.TypeFor[AgentEdited]():  {"client", "text", "rev", "go", "prev", "quiet", "path"},
 		reflect.TypeFor[AgentDenied]():  {"client", "tool", "title"},

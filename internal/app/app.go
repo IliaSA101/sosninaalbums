@@ -65,8 +65,14 @@ type App struct {
 	// ed подменяется при «Новый»/«Открыть», а читается из обработчиков /media,
 	// автосохранения и методов UI одновременно — поэтому только через editor().
 	ed atomic.Pointer[album.Editor]
+	// placesLive — кэш показа мест агента с дисками (agentplaces_live.go, 153).
+	placesLive placesLiveCache
 	// clip — буфер «Копировать и вставить» (099, clip.go): снимок привязан к Editor.
 	clip clipBuf
+	// askMach и agentEdSt — машина вопросов и состояние правок агента (askM, agentEd, 155 М3);
+	// создаются лениво при первом обращении, умирают вместе с App.
+	askMach   atomic.Pointer[askMachine]
+	agentEdSt atomic.Pointer[agentEdit]
 	// markups — кэш превью PSD разметок обложки и разворотов (markup.go), по записи на вид.
 	markups [2]markupCache
 

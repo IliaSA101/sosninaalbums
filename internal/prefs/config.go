@@ -26,7 +26,11 @@ const (
 	DirPhotos  = "photos"  // «Добавить папку»: родитель последней добавленной
 	DirLoose   = "loose"   // «Добавить фото» (097): папка первого выбранного файла
 	DirExport  = "export"
-	DirCollect = "collect" // «Собрать проект в папку» (069): выбранная папка, не папка альбома в ней
+	// DirExportRoot — корень выгрузок (0.35/152-15): куда человек выгружал в прошлый раз, а у папки
+	// «на клиента» — её родитель. От него агент предлагает папку выгрузки; DirExport остаётся
+	// стартовой папкой окна ОС.
+	DirExportRoot = "exportRoot"
+	DirCollect    = "collect" // «Собрать проект в папку» (069): выбранная папка, не папка альбома в ней
 )
 
 // Config — маленький JSON настроек программы (config.json в папке данных).
@@ -202,6 +206,15 @@ func RememberDir(dir, kind, d string) {
 		}
 		c.LastDirs[kind] = d
 	})
+}
+
+// ExportRoot — корень выгрузок: lastDirs.exportRoot, а у конфига до 0.35 (ключа ещё нет) — последняя
+// папка окна экспорта. Путь как записан: годность места проверяет вызывающий.
+func ExportRoot(c Config) string {
+	if r := c.LastDirs[DirExportRoot]; r != "" {
+		return r
+	}
+	return c.LastDirs[DirExport]
 }
 
 // DialogDir — DefaultDirectory для диалога вида kind ("" — пусть решает система).

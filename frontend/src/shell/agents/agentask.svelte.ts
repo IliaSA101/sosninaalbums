@@ -1,4 +1,5 @@
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
+import { jobs } from '../../base/core/jobs.svelte'
 import { store } from '../../base/core/store.svelte'
 import { capFirst, errText } from '../../base/words/errtext'
 import { newDoc } from '../newdoc/newdoc.svelte'
@@ -9,7 +10,7 @@ import { ASK_TIMEOUT } from './agentstext'
 // по холсту, попавший в только что поднявшееся окно, не должны ответить за него (149-25, аудит В11).
 export const ARM_MS = 600
 
-// Вопрос агента «Создать альбом…» / «Добавить папку…» (149, design §3). Логика (один вопрос за раз, сроки, счёт отказов,
+// Вопрос агента «Создать альбом…» / «Добавить папку…» / «Выгрузить альбом…» / «Открыть альбом…» (149, design §3; 152). Логика (один вопрос за раз, сроки, счёт отказов,
 // выбор папки) — в Go; здесь окно: показать, принять ответ, закрыть по agents:askdone. Образец — newerask.svelte.ts.
 class AgentAskState {
   cur = $state<AgentAsk | null>(null)
@@ -75,23 +76,40 @@ class AgentAskState {
     }
   }
 
-  // «Выбрать папку…»: create — новый альбом через замену проекта (набранный текст досылается до вызова), add — папка в открытый.
-  // Отказ диалога папки, негодная папка, выключенный флажок и занятый черновик Go помечает State.cancelled: replaceState тогда
-  // вид и выделение не трогает, как у «Файл ▸ Открыть» (files.go OpenProject) — окно просто закрывается.
+  // «Выбрать папку…»: create — новый альбом через замену проекта (набранный текст досылается до вызова), add — папка в открытый,
+  // export — выгрузка (152: после ответа Go ход и план типографии ставит jobs.agentExport), open — открытие через замену проекта
+  // (как «Файл ▸ Открыть»). Отказ диалога папки, негодная папка, выключенный флажок и занятый черновик Go помечает State.cancelled:
+  // replaceState тогда вид и выделение не трогает, как у «Файл ▸ Открыть» (files.go OpenProject) — окно просто закрывается.
   // «Выбрать другую…» (150): окно ОС в родителе показанного пути; итог и закрытие те же.
   async other() {
     const a = this.cur
     if (!a || this.choosing || !this.armed) return
-    await this.pick(a, () =>
-      a.kind === 'create' ? newDoc.replace(() => bridge.answerCreate(a.id, true)) : store.run(bridge.answerOther(a.id)),
-    )
+    await this.pick(a, () => this.run(a, true))
   }
 
   async accept() {
     const a = this.cur
     if (!a || this.choosing || !this.armed) return
-    // create — новый альбом из выбранной (или показанной) папки, add и edit — в открытый альбом.
-    await this.pick(a, () => (a.kind === 'create' ? newDoc.replace(() => bridge.answerCreate(a.id)) : store.run(bridge.answer(a.id, true))))
+    await this.pick(a, () => this.run(a, false))
+  }
+
+  // Вид вопроса решает, чем отвечать: create и open меняют проект (newDoc.replace), export запускает выгрузку, add и edit — View.
+  private run(a: AgentAsk, other: boolean): Promise<unknown> {
+    switch (a.kind) {
+      case 'create':
+        return newDoc.replace(() => bridge.answerCreate(a.id, other))
+      case 'open':
+        return newDoc.replace(() => bridge.answerOpen(a.id, other))
+      case 'export':
+        return this.exportRun(a, other)
+      default:
+        return store.run(other ? bridge.answerOther(a.id) : bridge.answer(a.id, true))
+    }
+  }
+
+  private async exportRun(a: AgentAsk, other: boolean) {
+    const mark = jobs.exportMark
+    jobs.agentExport(await bridge.answerExport(a.id, other), mark)
   }
 
   private async pick(a: AgentAsk, go: () => Promise<unknown>) {

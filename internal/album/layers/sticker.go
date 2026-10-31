@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
@@ -36,6 +37,9 @@ const (
 // ErrAnchor — неизвестное место или размер стикера.
 var ErrAnchor = errors.New("стикер не поставлен: неизвестное место или размер")
 
+// ErrNoSide — на этой сторонке обложки нет безопасной зоны (или она меньше мельчайшего стикера).
+var ErrNoSide = errors.New("на этой сторонке обложки нет места")
+
 // SizeFrac — доля ширины страницы по размеру s | m | l ("" — m).
 func SizeFrac(size string) (float64, bool) {
 	switch size {
@@ -54,6 +58,16 @@ func SizeFrac(size string) (float64, bool) {
 // странице). AddSticker — тот же ход с центром и ¼. Неизвестный якорь или доля — ErrAnchor;
 // неизвестный лист и стикер, не прошедший ClampSticker, — холостая (проверяет вызывающий).
 func AddStickerAt(p *model.Project, spreadID string, page int, id string, src model.StickerSrc, anchor string, frac float64) error {
+	return addStickerIn(p, spreadID, page, nil, id, src, anchor, frac)
+}
+
+// addStickerIn — тело AddStickerAt и пачки агента на обложку. Размер и центр — всегда от страницы
+// листа (у обложки — сторонка с заворотом и расставом), как у щелчка человека: агентский center + m
+// равен щелчку. zone nil — углы от страницы с отступом max(Safe, Margin) (разворот). zone — безопасная
+// зона сторонки обложки (CoverSide.Box): углы от неё без отступа (Box уже безопасная), а рамка,
+// вышедшая за зону, сдвигается внутрь; шире или выше зоны — уменьшается до неё (пропорция та же).
+// Зона уже MinSticker после уменьшения — ErrNoSide: ClampSticker вернул бы рамку за зону.
+func addStickerIn(p *model.Project, spreadID string, page int, zone *layout.Rect, id string, src model.StickerSrc, anchor string, frac float64) error {
 	if !okFrac(frac) || !slices.Contains([]string{AnchorCenter, AnchorTopLeft, AnchorTopRight, AnchorBottomLeft, AnchorBottomRight}, anchor) {
 		return ErrAnchor
 	}
@@ -75,8 +89,24 @@ func AddStickerAt(p *model.Project, spreadID string, page int, id string, src mo
 		w = pg.H / 2 * a
 	}
 	h := w / a
+	if zone == nil {
+		st.X, st.Y = anchorXY(pg, w, h, anchor, max(p.Settings.Safe, p.Settings.Margin))
+	} else {
+		if k := min(zone.W/w, zone.H/h, 1); k < 1 {
+			w, h = w*k, h*k
+		}
+		if w < model.MinSticker || h < model.MinSticker {
+			return ErrNoSide
+		}
+		if anchor == AnchorCenter {
+			st.X, st.Y = anchorXY(pg, w, h, anchor, 0)
+		} else {
+			st.X, st.Y = anchorXY(*zone, w, h, anchor, 0)
+		}
+		st.X = geom.ClampF(st.X, zone.X, zone.X+zone.W-w)
+		st.Y = geom.ClampF(st.Y, zone.Y, zone.Y+zone.H-h)
+	}
 	st.ID, st.W, st.H = id, w, h
-	st.X, st.Y = anchorXY(pg, w, h, anchor, max(p.Settings.Safe, p.Settings.Margin))
 	if c := p.ClampSticker(s, st); c != nil {
 		s.Stickers = append(s.Stickers, c)
 	}

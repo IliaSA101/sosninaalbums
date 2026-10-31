@@ -12,6 +12,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -79,7 +80,7 @@ func (a *App) askApplyCreate(rec *askRec, dir string) (created bool) {
 // askCheckPicked — выбранная папка годится и флажок правок ещё включён; иначе вопрос закрыт
 // (too_wide / ours с тостом человеку, off) и false.
 func (a *App) askCheckPicked(rec *askRec, dir string) bool {
-	if err := a.askM().rules().folder(dir); err != nil {
+	if err := a.askM().rules().Folder(dir); err != nil {
 		a.askReject(rec, err)
 		return false
 	}
@@ -93,7 +94,7 @@ func (a *App) askCheckPicked(rec *askRec, dir string) bool {
 // askReject — папка не подошла: тост человеку, агенту только причина без пути.
 func (a *App) askReject(rec *askRec, err error) {
 	why := agents.WhyTooWide
-	if errors.Is(err, errFolderOurs) {
+	if errors.Is(err, agentplaces.ErrOurs) {
 		why = agents.WhyOurs
 	}
 	a.notice(askFolderReject)
@@ -110,7 +111,7 @@ func (a *App) askAddFolder(rec *askRec, ed *album.Editor, dir string) (model.Vie
 	v, r, err := ed.AddFolder(dir)
 	if err != nil {
 		log.Printf("папка по просьбе агента не добавлена: %v", paths.NoPath(err))
-		a.askReject(rec, errFolderTooWide)
+		a.askReject(rec, agentplaces.ErrTooWide)
 		return model.View{}, false
 	}
 	if a.editor() != ed { // альбом сменился: Editor закрыт, правка отклонена молча

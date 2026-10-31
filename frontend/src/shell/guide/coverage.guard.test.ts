@@ -231,7 +231,7 @@ const WINDOWS: Record<string, string> = {
   '/src/shell/agents/AgentsDialog.svelte': 'agents',
   '/src/shell/agents/AgentsPerms.svelte': 'нет: блок «Разрешения» окна «ИИ-агенты» и его вопрос-согласие — часть статьи agents',
   '/src/shell/agents/AgentAskDialog.svelte':
-    'нет: вопрос подтверждения — агент просит создать альбом или добавить папку, описан в статье agents-edit',
+    'нет: вопрос подтверждения — агент просит создать альбом, добавить папку, выгрузить или открыть, описан в статьях agents-edit и agents-export',
   '/src/shell/share/ShareDialog.svelte': 'share-link',
   '/src/shell/looks/LooksDialog.svelte': 'looks',
   '/src/shell/looks/SaveLookDialog.svelte': 'looks-save',

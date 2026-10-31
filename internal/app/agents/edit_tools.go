@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -62,7 +63,8 @@ func registerEditTools(e *toolEnv) {
 
 	regEdit(e, toolSpec{name: "vary_layouts", perm: prefs.ClassEdit, title: "Другие раскладки", edit: true, backup: true,
 		desc: "Подобрать другие раскладки выбранным разворотам (номер с 1 или id из list_spreads). families: dense — плотнее, " +
-			"air — больше воздуха, ещё hero, bleed, strip, figure; без families — любые. variety 1 или 2 (по умолчанию 1)." + editNote},
+			"air — больше воздуха, ещё hero, bleed, strip, figure; без families — любые. variety 1 или 2 (по умолчанию 1). " +
+			"В ответе families — семейство каждого листа до и после (before, after); нет поля — альбом правили сразу после, перечитайте list_spreads." + editNote},
 		varyProps, func(in varyIn) *AlbumRef { return &in.Album }, true,
 		func(c *call, in varyIn) (varyOut, error) { return c.varyLayouts(in) })
 
@@ -74,7 +76,7 @@ func registerEditTools(e *toolEnv) {
 		func(c *call, in showIn) (showOut, error) { return c.showSpread(in) })
 
 	regEdit(e, toolSpec{name: "undo_last_edit", perm: prefs.ClassEdit, title: "Отменить свою правку", edit: true,
-		desc: "Отменить последнюю правку, которую сделал этот агент (autobuild, vary_layouts, add_folder), если после неё альбом " +
+		desc: "Отменить последнюю правку этого агента (любую, в том числе фон альбома), если после неё альбом " +
 			"не менялся. Только одна правка: второй вызов подряд — отказ. Создание альбома не отменяется." + editNote},
 		nil, func(in undoIn) *AlbumRef { return &in.Album }, false,
 		func(c *call, in undoIn) (undoOut, error) { return c.undoLast(in) })
@@ -170,6 +172,15 @@ type autobuildOut struct {
 type varyOut struct {
 	Album   AlbumRef `json:"album" jsonschema:"новая ревизия"`
 	Changed int      `json:"changed" jsonschema:"разворотов изменено; 0 — менять нечего, правки нет"`
+	// Families — было/стало семейства раскладки по листам запроса; нет — альбом правили сразу после.
+	Families []varyFam `json:"families,omitempty" jsonschema:"семейство каждого листа запроса до и после; нет поля — альбом правили сразу после, перечитайте list_spreads"`
+}
+
+// varyFam — семейство раскладки одного листа: до и после ("" — у листа нет семейства).
+type varyFam struct {
+	Spread int    `json:"spread" jsonschema:"номер листа с 1 по виду до вызова"`
+	Before string `json:"before" jsonschema:"семейство до: dense, hero, air, bleed, strip, figure или пусто"`
+	After  string `json:"after" jsonschema:"семейство после"`
 }
 
 type showOut struct {
@@ -292,7 +303,7 @@ func (c *call) spreadIDs(refs []spreadRef, cover bool) ([]string, error) {
 		}
 		sv, n, ok := findSpread(v, string(r))
 		if !ok || n == 0 && !cover {
-			return nil, noSpreadFor(cover)
+			return nil, noSpreadFor(cover && !c.spec.coverOK) // у стикера «cover» годится, но текст прежний
 		}
 		ids = append(ids, sv.ID)
 	}
@@ -304,15 +315,27 @@ func (c *call) varyLayouts(in varyIn) (varyOut, error) {
 	if err != nil {
 		return varyOut{}, err
 	}
+	v, _ := c.s.h.View() // номера листов — по виду до вызова
 	req := VaryReq{Key: in.Album.Key, Rev: in.Album.Rev, Client: askClient(c.client()), Spreads: ids, Variety: max(in.Variety, 1), Families: dedupe(in.Families)}
-	ref, changed, err := c.s.h.Vary(c.ctx, req)
+	res, err := c.s.h.Vary(c.ctx, req)
 	if err != nil {
 		return varyOut{}, c.hostErr(err)
 	}
-	if changed > 0 {
-		c.s.ed.setRec(c.sess, editRec{key: ref.Key, rev: ref.Rev})
+	if res.Changed > 0 {
+		c.s.ed.setRec(c.sess, editRec{key: res.Album.Key, rev: res.Album.Rev})
 	}
-	return varyOut{Album: ref, Changed: changed}, nil
+	out := varyOut{Album: res.Album, Changed: res.Changed}
+	n := len(res.Spreads)
+	if n == 0 || len(res.Before) != n || len(res.After) != n { // человек успел поправить или Host не отдал пару
+		return out, nil
+	}
+	before, after := cleanFamilies(res.Before, n), cleanFamilies(res.After, n)
+	for i, id := range res.Spreads {
+		if k := slices.IndexFunc(v.Spreads, func(s model.SpreadView) bool { return s.ID == id }); k >= 0 {
+			out.Families = append(out.Families, varyFam{Spread: k + 1, Before: before[i], After: after[i]})
+		}
+	}
+	return out, nil
 }
 
 func (c *call) showSpread(in showIn) (showOut, error) {

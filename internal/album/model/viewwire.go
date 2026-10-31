@@ -7,7 +7,7 @@ import (
 
 // Дельта вида (075): по мосту Wails идёт не весь вид (1,2 МБ на 200 разворотах), а шапка и
 // изменённые развороты. Номера цепочки ведёт App (internal/app/wire.go), здесь — форма и
-// сравнение. Контракт с фронтом — docs/specs/0.19/075-polish/design.md §1.3, сверка —
+// сравнение. Контракт с фронтом — docs/specs/archive/0.19/075-polish/design.md §1.3, сверка —
 // testdata/parity/viewdelta.json.
 
 // MarshalJSON — полный вид (Base == 0) как есть; дельта — spreads только изменённые, order

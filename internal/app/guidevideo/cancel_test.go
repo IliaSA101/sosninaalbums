@@ -2,9 +2,12 @@ package guidevideo
 
 import (
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Cancel, пришедший после входа в Download, но до begin (гонка 0.31-tails-5), отменяет начинающуюся
@@ -14,6 +17,9 @@ func TestCancelBeforeBeginCancelsStart(t *testing.T) {
 	l.webm("cover", 1, 3000)
 	entered, gate := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
+	state := func() string {
+		return fmt.Sprintf("сверок согласия %d, сеть %d", calls.Load(), l.hits.Load())
+	}
 	l.host.Allowed = func() bool {
 		if calls.Add(1) == 1 { // первая сверка — сразу после входа в Download, до begin
 			close(entered)
@@ -24,20 +30,17 @@ func TestCancelBeforeBeginCancelsStart(t *testing.T) {
 	l.rebuild()
 	res := make(chan error, 1)
 	go func() { _, err := l.svc.Download([]string{"cover"}); res <- err }()
-	select {
-	case <-entered:
-	case <-time.After(10 * time.Second):
-		t.Fatal("Download не дошёл до сверки согласия")
+	if _, ok := testkit.WaitCh(t, entered, testkit.Limit(10*time.Second), "Download не дошёл до сверки согласия", state); !ok {
+		t.FailNow()
 	}
 	l.svc.Cancel() // загрузка уже вошла, begin ещё нет
 	close(gate)
-	select {
-	case err := <-res:
-		if !errors.Is(err, ErrCancelled) {
-			t.Fatalf("ошибка: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("Download завис")
+	err, ok := testkit.WaitCh(t, res, testkit.Limit(10*time.Second), "Download завис", state)
+	if !ok {
+		t.FailNow()
+	}
+	if !errors.Is(err, ErrCancelled) {
+		t.Fatalf("ошибка: %v", err)
 	}
 	if l.hits.Load() != 0 || len(l.listDir()) != 0 {
 		t.Errorf("сеть %d, в папке %v", l.hits.Load(), l.listDir())
@@ -62,6 +65,9 @@ func TestCancelBeforeBeginTwoCalls(t *testing.T) {
 	l.webm("cover", 1, 3000)
 	entered, gate := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
+	state := func() string {
+		return fmt.Sprintf("сверок согласия %d, сеть %d", calls.Load(), l.hits.Load())
+	}
 	l.host.Allowed = func() bool {
 		if calls.Add(1) == 1 {
 			close(entered)
@@ -72,29 +78,24 @@ func TestCancelBeforeBeginTwoCalls(t *testing.T) {
 	l.rebuild()
 	res := make(chan error, 2)
 	go func() { _, err := l.svc.Download([]string{"cover"}); res <- err }()
-	select {
-	case <-entered:
-	case <-time.After(10 * time.Second):
-		t.Fatal("Download не дошёл до сверки согласия")
+	if _, ok := testkit.WaitCh(t, entered, testkit.Limit(10*time.Second), "Download не дошёл до сверки согласия", state); !ok {
+		t.FailNow()
 	}
 	go func() { _, err := l.svc.Download([]string{"cover"}); res <- err }()
-	select {
-	case err := <-res:
-		if err != nil {
-			t.Fatalf("вторая: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("вторая загрузка зависла")
+	err, ok := testkit.WaitCh(t, res, testkit.Limit(10*time.Second), "вторая загрузка зависла", state)
+	if !ok {
+		t.FailNow()
+	}
+	if err != nil {
+		t.Fatalf("вторая: %v", err)
 	}
 	l.svc.Cancel()
 	close(gate)
-	select {
-	case err := <-res:
-		if !errors.Is(err, ErrCancelled) {
-			t.Fatalf("первая: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("первая загрузка зависла")
+	if err, ok = testkit.WaitCh(t, res, testkit.Limit(10*time.Second), "первая загрузка зависла", state); !ok {
+		t.FailNow()
+	}
+	if !errors.Is(err, ErrCancelled) {
+		t.Fatalf("первая: %v", err)
 	}
 	l.svc.netMu.Lock()
 	n := len(l.svc.starting)

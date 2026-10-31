@@ -44,7 +44,7 @@ func newQuietRig(t *testing.T) *quietRig {
 	quietRemote, quietShots = func(string) bool { return false }, func() []string { return nil }
 	noHiddenAttrs(t) // Windows: TempDir под скрытой AppData, иначе любая подсказка — «bad»
 	t.Cleanup(func() { quietRemote, quietShots, quietCloud = oldRemote, oldShots, oldCloud })
-	r.a.askM().rules = func() *folderRules { x := permissiveRules(); x.disk = diskProbe; return x }
+	r.a.askM().rules = permissiveOnDisk
 	r.place = realPath(t, filepath.Join(testkit.TempDir(t), "Архив"))
 	r.shoot = filepath.Join(r.place, "Петровы")
 	if err := os.Mkdir(r.shoot, 0o755); err != nil {
@@ -219,7 +219,7 @@ func TestQuietLinkedRoot(t *testing.T) {
 		t.Skip("ссылки недоступны:", err)
 	}
 	// Диск «не разрешил» ссылку (как junction на Windows, который EvalSymlinks не раскрывает): корень-ссылка — не тихо.
-	r.a.askM().rules = func() *folderRules { x := permissiveRules(); x.disk = diskOK; return x }
+	r.a.askM().rules = permissiveRules
 	c := r.ask(r.addQuiet(link))
 	if ev := r.refuse(t, c, 1); ev.Why != whyLink {
 		t.Errorf("корень-ссылка: %+v", ev)

@@ -12,7 +12,9 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
+	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 )
@@ -85,6 +87,9 @@ func (a *App) agentDraftStep(key string, before, after int) {
 // why != "" — тихо нельзя (разрешение «Спрашивать», правило или альбом изменились за время пробы):
 // задавать обычный вопрос с этой причиной. Разрешение и правило перечитываются здесь, перед записью.
 func (a *App) quietApply(req agents.AskReq, ed *album.Editor, plan folderPlan) (res agents.AskRes, why string, err error) {
+	if req.Kind == agents.AskCreate && a.openBusy() { // выгрузка идёт (окна или фон): тихо новый альбом не создаём (0.35-152-17, -27)
+		return res, "", agents.ErrExporting
+	}
 	mode, blocked := a.agentPerm(askTool(req.Kind))
 	if blocked != "" || mode == prefs.PermDeny {
 		return agents.AskRes{Why: agents.WhyOff}, "", nil
@@ -92,11 +97,14 @@ func (a *App) quietApply(req agents.AskReq, ed *album.Editor, plan folderPlan) (
 	if mode != prefs.PermAllow {
 		return res, quietAsk, nil // стало «Спрашивать»: обычный вопрос без причины
 	}
-	r := a.askM().rules()
-	_, resolved, rerr := r.resolve(plan.path)
-	linked, done := within(r.timeout, func() bool { return hasLinkPart(resolved) })
-	if rerr != nil || r.key(resolved) != r.key(plan.path) || !done || linked {
+	r := a.askM().rules() // один раз: Default бывает nil (предел пробы), второй вызов мог бы вернуть другое
+	_, resolved, rerr := r.Resolve(plan.path)
+	if rerr != nil { // в том числе правил нет (nil): Timeout и Key ниже на nil не зовём
 		return res, whyLink, nil // подмена между пробой и применением
+	}
+	linked, done := appkit.Within(r.Timeout(), func() bool { return agentplaces.HasLinkPart(resolved) })
+	if r.Key(resolved) != r.Key(plan.path) || !done || linked {
+		return res, whyLink, nil
 	}
 	if req.Kind == agents.AskCreate {
 		return a.quietCreate(req, ed, resolved)

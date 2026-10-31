@@ -58,10 +58,15 @@ func (a *App) expHost() exporter.Host {
 		ColorReport: func(p *model.Project) (map[string]int, map[string]int) { return a.colorReport(p) },
 		Ask:         func(msg string) (bool, error) { return askYes(a, msg) },
 		PickDir:     func(title string) (string, error) { return pickExportDir(a, title) },
-		RememberDir: func(dir string) { a.rememberDir(prefs.DirExport, dir) },
-		OpenURL:     func(u string) { openURL(a, u) },
-		ShowDir:     showDir,
-		LiftMemory:  liftMemoryLimit,
+		RememberDir: func(dir, root string) {
+			a.rememberDir(prefs.DirExport, dir)
+			if root != "" { // «рядом» (121) корень не меняет
+				a.rememberDir(prefs.DirExportRoot, root)
+			}
+		},
+		OpenURL:    func(u string) { openURL(a, u) },
+		ShowDir:    showDir,
+		LiftMemory: liftMemoryLimit,
 	}
 }
 

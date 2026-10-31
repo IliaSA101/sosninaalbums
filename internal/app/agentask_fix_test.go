@@ -9,10 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
+	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -108,18 +111,19 @@ func TestHintUsesAskRules(t *testing.T) {
 	r := newAskRig(t)
 	a := r.a
 	_, thumbs := dataDirs(a.data)
-	rules := permissiveRules()
-	rules.ours = []string{a.cfgDir, filepath.Join(testkit.TempDir(t), "thumbs")}
+	o := permissiveOpts()
+	o.Ours = []string{a.cfgDir, filepath.Join(testkit.TempDir(t), "thumbs")}
 	if thumbs != "" {
-		rules.ours = append(rules.ours, thumbs)
+		o.Ours = append(o.Ours, thumbs)
 	}
-	a.askM().rules = func() *folderRules { return rules }
+	rules := agentplaces.New(o)
+	a.askM().rules = func() *agentplaces.Rules { return rules }
 	good := filepath.Join(testkit.TempDir(t), "Свадьба")
 	if err := os.Mkdir(good, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for i, c := range []struct{ hint, label string }{
-		{good, "Свадьба"}, {filepath.Join(a.cfgDir, "x"), ""}, {rules.ours[1], ""},
+		{good, "Свадьба"}, {filepath.Join(a.cfgDir, "x"), ""}, {o.Ours[1], ""},
 	} {
 		req := r.addReq()
 		req.Hint = c.hint
@@ -167,7 +171,7 @@ func TestAgentFlagOffAfterWait(t *testing.T) {
 	if _, err := a.agentAuto(context.Background(), r.req()); !errors.Is(err, errAgentOff) {
 		t.Errorf("agentAuto: %v", err)
 	}
-	if _, _, err := a.agentVary(context.Background(), key, rev, nil, 1, nil); !errors.Is(err, errAgentOff) {
+	if _, err := a.agentVary(context.Background(), key, rev, nil, 1, nil); !errors.Is(err, errAgentOff) {
 		t.Errorf("agentVary: %v", err)
 	}
 	if _, err := a.agentUndo(context.Background(), key, rev); !errors.Is(err, errAgentOff) {
@@ -178,5 +182,50 @@ func TestAgentFlagOffAfterWait(t *testing.T) {
 	}
 	if got := agentHostErr(errAgentOff); !errors.Is(got, agents.ErrNoEdits) {
 		t.Errorf("перевод ошибки: %v", got)
+	}
+}
+
+// Выбор показанной папки берёт правила один раз: Default бывает nil, второй вызов не должен
+// паниковать. Первый вызов — правила, остальные из askPick — nil: ответ «да» всё равно проходит;
+// с nil с самого начала — too_wide, папки нет.
+func TestAskPickRulesOnce(t *testing.T) {
+	for _, nilAlways := range []bool{false, true} {
+		r := newQuietRig(t)
+		r.setMode(toolAddFolder, prefs.PermAsk)
+		rules, n := r.a.askM().rules, 0
+		var mu sync.Mutex
+		r.a.askM().rules = func() *agentplaces.Rules {
+			if !calledFrom("askPick") {
+				return rules()
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			n++
+			if nilAlways {
+				return nil
+			}
+			return rules()
+		}
+		q := r.addReq()
+		q.Hint = r.shoot
+		c := r.ask(q)
+		ev := r.asked(t, 1)
+		if _, err := r.a.AnswerAgent(ev.ID, true); err != nil {
+			t.Fatal(err)
+		}
+		c.wait(t)
+		mu.Lock()
+		calls := n
+		mu.Unlock()
+		if calls != 1 {
+			t.Errorf("nil=%v: правила спрошены %d раз, ждали 1", nilAlways, calls)
+		}
+		if nilAlways {
+			if c.res.Why != agents.WhyTooWide || len(r.folders()) != 1 {
+				t.Errorf("без правил: %+v, %v, папки %v", c.res, c.err, r.folders())
+			}
+		} else if c.res.Why != agents.WhyAnswered || !contains(r.folders(), r.shoot) {
+			t.Errorf("с правилами: %+v, %v, папки %v", c.res, c.err, r.folders())
+		}
 	}
 }

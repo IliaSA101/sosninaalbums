@@ -47,6 +47,8 @@ func TestAgentPermsMethods(t *testing.T) {
 		want := prefs.PermAllow
 		if c := prefs.AgentToolClass(k); c == prefs.ClassEdit || c == prefs.ClassFolder || c == prefs.ClassAlbum {
 			want = prefs.PermAsk
+		} else if c == prefs.ClassAskOnly {
+			want = prefs.PermDeny // группа «Правки» Q не трогает, свежий столбец — «Запретить»
 		}
 		if p.Tools[k] != want {
 			t.Errorf("группа: %s = %q, ждали %q", k, p.Tools[k], want)
@@ -67,7 +69,7 @@ func TestAgentPermsMethods(t *testing.T) {
 	prefs.AddPlace(dir, prefs.Place{Dir: place, How: prefs.PlaceChosen})
 	prefs.AddPlace(dir, prefs.Place{Dir: filepath.Join(dir, "2026"), How: prefs.PlaceParent})
 	places := a.AgentsInfo().Places
-	if len(places) != 2 || places[1] != (AgentPlace{Dir: place, Chosen: true}) || places[0].Chosen {
+	if len(places) != 2 || places[1] != (AgentPlace{Key: prefs.PlaceKey(prefs.Place{Dir: place, How: prefs.PlaceChosen}), Dir: place, Chosen: true}) || places[0].Chosen {
 		t.Fatalf("места: %+v", places)
 	}
 	info = a.ForgetAgentPlaces()
@@ -82,7 +84,7 @@ func TestAgentPermsMethods(t *testing.T) {
 	b, _ := json.Marshal(a.AgentsInfo())
 	var m map[string]any
 	_ = json.Unmarshal(b, &m)
-	for _, k := range []string{"perms", "places"} {
+	for _, k := range []string{"perms", "places", "lifted"} {
 		if v, ok := m[k].([]any); !ok || v == nil {
 			t.Errorf("в AgentsInfo нет списка %q: %s", k, b)
 		}
@@ -94,7 +96,7 @@ func TestAgentPermTypes(t *testing.T) {
 	if got := jsonTags(reflect.TypeFor[AgentPerm]()); !slices.Equal(got, []string{"tool", "title", "group", "mode", "can", "why", "note"}) {
 		t.Errorf("AgentPerm: %v", got)
 	}
-	if got := jsonTags(reflect.TypeFor[AgentPlace]()); !slices.Equal(got, []string{"dir", "chosen"}) {
+	if got := jsonTags(reflect.TypeFor[AgentPlace]()); !slices.Equal(got, []string{"key", "dir", "label", "chosen", "bound", "narrow", "narrowRoot", "state", "here"}) {
 		t.Errorf("AgentPlace: %v", got)
 	}
 }
@@ -120,5 +122,26 @@ func TestAgentPermNoOpen(t *testing.T) {
 	}
 	if len(prefs.LoadAgentPerms(a.cfgDir).Places) != 0 {
 		t.Error("заглушка добавила место")
+	}
+}
+
+// TestAgentPermWhyAskOnly: у выгрузки и открытия альбома («Всегда» нет) пояснение под строкой есть, у правок
+// с «Всегда» и у остальных классов прежнее: чтение и запуск — своё, правка — пусто.
+func TestAgentPermWhyAskOnly(t *testing.T) {
+	a, _ := pubApp(t)
+	got := map[string]AgentPerm{}
+	for _, p := range a.AgentsInfo().Perms {
+		got[p.Tool] = p
+	}
+	for tool, why := range map[string]string{"export_album": permWhyExp, "open_album": permWhyOpen} {
+		if p, ok := got[tool]; !ok || p.Why != why || !strings.Contains(p.Why, "Можно запретить") {
+			t.Errorf("%s: %+v", tool, p)
+		}
+	}
+	if permWhyExp == permWhyOpen || !strings.Contains(permWhyExp, "папк") || !strings.Contains(permWhyOpen, "файл") {
+		t.Error("тексты выгрузки (папка) и открытия (файл) смешаны")
+	}
+	if got["autobuild"].Why != "" || got["get_album"].Why != permWhyRead || got[startToolName].Why != permWhyStart {
+		t.Errorf("прочие пояснения изменились: %q %q %q", got["autobuild"].Why, got["get_album"].Why, got[startToolName].Why)
 	}
 }

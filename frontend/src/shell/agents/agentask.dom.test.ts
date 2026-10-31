@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
 import { flushSync } from 'svelte'
-import type { AgentAsk } from './agents'
+import type { AgentAsk, AgentPlace } from './agents'
 
 // Вопрос агента (149): 600 мс `aria-disabled`, фокус на «Отмена», Enter и пробел — отказ, подсказка в <bdi>,
 // «Выбрать папку…» (create) → edit.idle() → AgentAnswerCreate, agents:askdone закрывает окно. Go подменён.
@@ -29,6 +29,18 @@ const { emptyInfo } = await import('./agents')
 const { store } = await import('../../base/core/store.svelte')
 const { edit } = await import('../../editor/text/edit.svelte')
 const { modalStack } = await import('../../base/modal/modalstack.svelte')
+
+const place = (dir: string, chosen = false): AgentPlace => ({
+  key: dir,
+  dir,
+  label: '',
+  chosen,
+  bound: false,
+  narrow: false,
+  narrowRoot: false,
+  state: '',
+  here: '',
+})
 
 const ask = (o: Partial<AgentAsk> = {}): AgentAsk => ({
   id: 'a1',
@@ -520,11 +532,7 @@ describe('AgentAskDialog: путь, «Выбрать другую…» и ссы
   it('why = place: вместо «Не спрашивать» — причина с местами (до двух путей) и ссылка к строке мест', async () => {
     agents.info = {
       ...emptyInfo(),
-      places: [
-        { dir: 'D:\\Фото\\2026', chosen: true },
-        { dir: 'E:\\Съёмки', chosen: false },
-        { dir: 'F:\\Ещё', chosen: false },
-      ],
+      places: [place('D:\\Фото\\2026', true), place('E:\\Съёмки'), place('F:\\Ещё')],
     }
     shown(folder({ why: 'place' }))
     const d = screen.getByRole('dialog')
@@ -551,6 +559,8 @@ describe('AgentAskDialog: путь, «Выбрать другую…» и ссы
     ['link', 'Путь идёт через ссылку на другую папку'],
     ['rate', 'Агент уже добавил 3 папки за 10 минут'],
     ['draft', 'Открытый альбом вы правили — заменить его без вас нельзя'],
+    ['disk', 'Это другой диск, не тот, что у места'],
+    ['vol', 'Не удалось узнать диск'],
   ])('why = %s: своя строка причины, ссылок нет', (why, text) => {
     shown(folder({ why }))
     expect(screen.getByText(text)).toBeTruthy()

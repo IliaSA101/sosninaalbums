@@ -4,6 +4,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Присмотр за подключением один на подключение, а не на вопрос: после сотни вопросов подряд число
@@ -54,5 +56,22 @@ func TestFinishAskReleasesBeforeDone(t *testing.T) {
 		if len(r.svc.ed.slot) != 0 {
 			t.Fatalf("%s: место правки занято в момент готового итога", why)
 		}
+	}
+}
+
+// TestAfterAskForgottenSession: «да» пришло уже после закрытия подключения (присмотр снят) — запись отмены не
+// пишется, иначе она остаётся навсегда; живое подключение запись получает.
+func TestAfterAskForgottenSession(t *testing.T) {
+	e := newEditState(Options{}.withDefaults())
+	live, gone := &mcp.ServerSession{}, &mcp.ServerSession{}
+	pl, pg := &pend{sess: live, kind: AskCreate}, &pend{sess: gone, kind: AskCreate}
+	e.asks[live] = map[*pend]struct{}{pl: {}} // gone: присмотр уже снят закрытием
+	e.afterAsk(pl, AskRes{})
+	e.afterAsk(pg, AskRes{})
+	if _, ok := e.getRec(gone); ok {
+		t.Error("запись закрытого подключения осталась")
+	}
+	if r, ok := e.getRec(live); !ok || !r.created {
+		t.Errorf("живое подключение: %+v %v", r, ok)
 	}
 }

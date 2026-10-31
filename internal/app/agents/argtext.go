@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"encoding/json"
 	"math"
 	"slices"
 	"strconv"
@@ -78,7 +79,7 @@ func explainValue(s *jsonschema.Schema, v any) string {
 		}
 		return "нужно " + strings.Join(names, " или ") + ", пришло: " + kindRu(v)
 	}
-	if len(s.Enum) > 0 && !slices.ContainsFunc(s.Enum, func(e any) bool { return e == v }) {
+	if len(s.Enum) > 0 && !slices.ContainsFunc(s.Enum, func(e any) bool { return sameEnum(e, v) }) {
 		vals := make([]string, len(s.Enum))
 		for i, e := range s.Enum {
 			vals[i] = "«" + fmtAny(e) + "»"
@@ -140,13 +141,43 @@ func explainNumber(s *jsonschema.Schema, x float64) string {
 func num(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
 
 func fmtAny(e any) string {
-	switch x := e.(type) {
-	case string:
-		return x
-	case float64:
-		return num(x)
+	if s, ok := e.(string); ok {
+		return s
+	}
+	if f, ok := asNum(e); ok {
+		return num(f)
 	}
 	return "?"
+}
+
+// asNum приводит число из схемы (int в перечислении, float64 из разобранного JSON) к float64.
+func asNum(e any) (float64, bool) {
+	switch x := e.(type) {
+	case float64:
+		return x, true
+	case float32:
+		return float64(x), true
+	case int:
+		return float64(x), true
+	case int32:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case json.Number:
+		f, err := x.Float64()
+		return f, err == nil
+	}
+	return 0, false
+}
+
+// sameEnum — значение входа равно члену перечисления; числа сравниваются по величине, а не по типу
+// (в схеме 100 — int, во входе — float64).
+func sameEnum(e, v any) bool {
+	if a, ok := asNum(e); ok {
+		b, ok := asNum(v)
+		return ok && a == b
+	}
+	return e == v
 }
 
 // isType — подходит ли значение JSON под тип схемы (целое — число без дробной части).

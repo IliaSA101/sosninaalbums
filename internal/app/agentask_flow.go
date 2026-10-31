@@ -12,6 +12,7 @@ import (
 	"errors"
 	"log"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -54,11 +56,12 @@ type askOutcome struct {
 // askRec — открытый вопрос.
 type askRec struct {
 	id      string
-	kind    string // askKindCreate | askKindAdd
+	kind    string // askKindCreate | askKindAdd | askKindEdit | askKindOpen | askKindExport
 	req     agents.AskReq
 	ed      *album.Editor // add: редактор, чей ключ и ревизию агент назвал
 	dir     string        // подсказка агента, годная для окна ОС ("" — нет)
 	path    string        // 150: настоящий путь показанной подсказки; "" — вопрос без пути
+	exp     *exportAsk    // export: настройки и показанная папка (agentexport.go)
 	state   askState
 	closing bool            // выход начался: выбор не применять
 	timer   *time.Timer     // срок asked
@@ -74,19 +77,17 @@ type askMachine struct {
 	exitWait time.Duration
 	front    func()                                  // окно программы вперёд
 	pickDir  func(title, def string) (string, error) // окно ОС «Выбрать папку»
-	rules    func() *folderRules                     // правила выбранной папки (тесты — мягкие)
+	rules    func() *agentplaces.Rules               // правила выбранной папки (тесты — мягкие)
 	elevated func() bool                             // процесс от администратора; тесты: раннер Windows сам администратор
 	draft    agentDraft                              // 150: альбом, созданный агентом и не тронутый человеком
 	prev     string                                  // 150: файл для «Открыть прежний» после тихого нового альбома
+	doneEmit chan struct{}                           // закрыт, когда agents:askdone последнего итога ушёл в окно (nil — итогов не было)
 }
 
-// askMachines — машины по *App (App не растёт полем: фасад живёт в новых файлах).
-var askMachines sync.Map // *App → *askMachine
-
-// askM — машина вопросов этого App.
+// askM — машина вопросов этого App (поле askMach, лениво: и у &App{} в тестах).
 func (a *App) askM() *askMachine {
-	if v, ok := askMachines.Load(a); ok {
-		return v.(*askMachine)
+	if m := a.askMach.Load(); m != nil {
+		return m
 	}
 	m := &askMachine{life: askLifeDefault, exitWait: askExitWaitDefault, elevated: osx.Elevated}
 	m.front = func() {
@@ -101,12 +102,12 @@ func (a *App) askM() *askMachine {
 		}
 		return wr.OpenDirectoryDialog(a.ctx, wr.OpenDialogOptions{Title: title, DefaultDirectory: def})
 	}
-	m.rules = func() *folderRules {
+	m.rules = func() *agentplaces.Rules {
 		_, thumbs := dataDirs(a.data)
-		return defaultFolderRules(a.cfgDir, thumbs)
+		return agentplaces.Default(a.cfgDir, thumbs)
 	}
-	v, _ := askMachines.LoadOrStore(a, m)
-	return v.(*askMachine)
+	a.askMach.CompareAndSwap(nil, m)
+	return a.askMach.Load()
 }
 
 // agentAsk — Host.Ask: вопрос человеку в окне программы. Ждёт итог или конец ctx (ctx отменён —
@@ -138,11 +139,20 @@ func (a *App) askOpen(req agents.AskReq) (rec *askRec, res agents.AskRes, err er
 	if a.stopped.Load() {
 		return nil, agents.AskRes{Why: agents.WhyClosed}, nil
 	}
-	if req.Kind != agents.AskCreate && req.Kind != agents.AskAdd && req.Kind != agents.AskEdit {
+	if req.Kind != agents.AskCreate && req.Kind != agents.AskAdd && req.Kind != agents.AskEdit && req.Kind != agents.AskOpen && req.Kind != agents.AskExport {
 		return nil, res, errors.New("неизвестный вид вопроса")
 	}
 	if !a.askAllowedTool(askToolOf(req)) {
 		return nil, agents.AskRes{Why: agents.WhyOff}, nil
+	}
+	if req.Kind == agents.AskOpen { // 152: ключ или выбор файла, своё применение — agentopen.go
+		return a.askOpenAlbum(req)
+	}
+	if req.Kind == agents.AskExport { // 152: выгрузка с полным путём, применение — agentexport.go
+		return a.askExportAlbum(req)
+	}
+	if req.Kind == agents.AskCreate && a.openBusy() { // выгрузка идёт (окна или фон): картина не меняется (0.35-152-27)
+		return nil, res, agents.ErrExporting
 	}
 	ed, err := a.askTarget(req)
 	if err != nil {
@@ -174,28 +184,68 @@ func (a *App) askOpen(req agents.AskReq) (rec *askRec, res agents.AskRes, err er
 		if !ok {
 			return nil, res, errors.New("нет текста вопроса")
 		}
+		if plan.note != "" {
+			body.Lines = append(slices.Clone(body.Lines), plan.note) // «Место … — на диске …»
+		}
 	}
+	return a.askPost(req, ed, plan, body)
+}
+
+// askPost заводит запись вопроса и показывает окно. Один вопрос за раз: занято — ErrAskBusy.
+func (a *App) askPost(req agents.AskReq, ed *album.Editor, plan folderPlan, body askBody) (rec *askRec, res agents.AskRes, err error) {
+	return a.askPostWith(req, ed, plan, body, nil)
+}
+
+// askPostWith — askPost с данными выгрузки (nil у прочих видов): они лежат в записи вопроса до щелчка, а в событие
+// идут число файлов и «папка будет создана». Путь с чужими файлами показан, но «Выбрать другую…» нет.
+func (a *App) askPostWith(req agents.AskReq, ed *album.Editor, plan folderPlan, body askBody, ex *exportAsk) (rec *askRec, res agents.AskRes, err error) {
 	id, err := newAskID()
 	if err != nil {
 		return nil, res, err
 	}
 	m := a.askM()
-	rec = &askRec{id: id, kind: req.Kind, req: req, ed: ed, dir: plan.dir, path: plan.path, out: make(chan askOutcome, 1)}
+	rec = &askRec{id: id, kind: req.Kind, req: req, ed: ed, dir: plan.dir, path: plan.path, exp: ex, out: make(chan askOutcome, 1)}
 	m.mu.Lock()
 	if m.cur != nil {
 		m.mu.Unlock()
 		return nil, res, agents.ErrAskBusy
 	}
 	m.cur = rec
+	prevDone := m.doneEmit // askdone прежнего вопроса, который ещё может быть в пути
 	rec.timer = time.AfterFunc(m.life, func() {
 		defer guard("срок вопроса агента")
 		a.askFinishIf(rec, askAsked, askOutcome{res: agents.AskRes{Why: agents.WhyTimeout}}, agents.WhyTimeout)
 	})
 	m.mu.Unlock()
+	tool := askToolOf(req)
+	if req.Kind == agents.AskOpen || req.Kind == agents.AskExport {
+		tool = "" // у выгрузки и открытия ссылки «Не спрашивать» нет (0.35-152-21)
+	}
 	ask := AgentAsk{ID: id, Kind: req.Kind, Title: body.Title, Lines: body.Lines, Hint: plan.label, OK: body.OK,
-		Path: plan.path, Link: plan.link, Tool: askToolOf(req), Why: plan.why}
+		Path: plan.path, Link: plan.link, Tool: tool, Why: plan.why}
 	if plan.path != "" {
 		ask.Alt = askAlt
+		if req.Kind == agents.AskOpen {
+			ask.Alt = askAltOpen
+		}
+	}
+	if ex != nil {
+		ask.Files, ask.Create = ex.files, ex.plan.create
+		if !ex.plan.approved() {
+			ask.Alt = "" // выбор один — окно ОС («Выбрать папку…»)
+		}
+	}
+	// agents:ask не обгоняет agents:askdone прежнего вопроса: окно иначе проигнорирует чужой askdone
+	// и потеряет тост «не дождался ответа». Ждём только событие, не итог агента.
+	if prevDone != nil {
+		var stop <-chan struct{} // у &App{} в тестах stopCtx нет
+		if a.stopCtx != nil {
+			stop = a.stopCtx.Done()
+		}
+		select {
+		case <-prevDone:
+		case <-stop:
+		}
 	}
 	a.agentAsked(ask)
 	m.front()
@@ -279,8 +329,11 @@ func (a *App) askFinishIf(rec *askRec, from askState, o askOutcome, why string) 
 	if m.cur == rec {
 		m.cur = nil
 	}
+	emitted := make(chan struct{})
+	m.doneEmit = emitted
 	m.mu.Unlock()
-	rec.out <- o
+	defer close(emitted) // следующий agents:ask уходит только после askdone (askPostWith)
+	rec.out <- o         // итог не ждёт события: зависшая отправка в окно не держит агента
 	a.agentAskDone(AgentAskDone{ID: rec.id, Why: why})
 	return true
 }
@@ -323,9 +376,10 @@ func (a *App) askPick(rec *askRec, other bool) (dir string, ok bool) {
 		if !a.askBegin(rec) {
 			return "", false
 		}
-		_, resolved, err := a.askM().rules().resolve(rec.path)
-		if err != nil || a.askM().rules().key(resolved) != a.askM().rules().key(rec.path) {
-			a.askReject(rec, errFolderTooWide)
+		r := a.askM().rules() // один раз: Default бывает nil, Resolve на nil отказывает
+		_, resolved, err := r.Resolve(rec.path)
+		if err != nil || r.Key(resolved) != r.Key(rec.path) {
+			a.askReject(rec, agentplaces.ErrTooWide)
 			return "", false
 		}
 		return resolved, true

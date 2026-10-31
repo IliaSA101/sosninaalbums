@@ -42,6 +42,7 @@ beforeEach(async () => {
   jobs.exportStopping = false
   jobs.exportMemo = null
   jobs.exportPrint = null
+  jobs.exportPending = null
 })
 
 describe('ход экспорта в окне', () => {

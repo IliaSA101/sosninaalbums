@@ -4,11 +4,14 @@
 // снять ссылку frontend/node_modules → удалить worktree и ветку. Перед precheck ссылку node_modules ставим сами (агенты
 // снимают её перед отчётом, без неё precheck фронта падает). Итог — одна строка («принято …» или «СТОП: …»).
 // Ничего не пушит. Без оболочки: только execFileSync с массивом аргументов (Windows-пути тоже).
+// После приёма пишет строку в журнал <git-common-dir>/sa-accept.jsonl (accept-log.mjs) и печатает счёт «приёмов с Go после
+// последнего winqa» (С1, 0.35): winqa-push.mjs по нему останавливает rc.
 // ACCEPT_PRECHECK — путь к .mjs вместо scripts/precheck.mjs копии (подмена в тестах).
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { appendEntry, goPackages, journalFile, readJournal, sinceWinqa } from './accept-log.mjs'
 
 export class Stop extends Error {}
 
@@ -131,6 +134,21 @@ export function ensureNodeModules(root, wt) {
   return true
 }
 
+/** Запись приёма в журнал и счёт приёмов с Go; сбой журнала не отменяет уже влитое — только предупреждение. */
+function journal(root, branch, from, log) {
+  try {
+    const to = gitIn(root, ['rev-parse', 'dev']).out.trim()
+    const files = lines(gitIn(root, ['diff', '--name-only', `${from}..${to}`]).out)
+    const packages = goPackages(files)
+    const file = journalFile(root)
+    appendEntry(file, { branch, from: from.slice(0, 12), to: to.slice(0, 12), packages, go: packages.length > 0 })
+    const { count, winqa } = sinceWinqa(readJournal(file))
+    log(`приёмов с Go после последнего winqa: ${count}${winqa ? ` (winqa/${winqa})` : ' (winqa в журнале нет)'}`)
+  } catch (e) {
+    log(`журнал приёмов не записан: ${String(e.message).split('\n')[0]}`)
+  }
+}
+
 const plural = (n) => {
   const m = n % 100
   const d = n % 10
@@ -180,6 +198,7 @@ export function accept(wtArg, branch, { cwd = process.cwd(), env = process.env, 
   if (rm.code !== 0) throw new Stop(`влито, но worktree не удалён: ${rm.out.trim()}`)
   const bd = gitIn(root, ['branch', '-d', branch])
   if (bd.code !== 0) throw new Stop(`влито, но ветка не удалена: ${bd.out.trim()}`)
+  journal(root, branch, devHash, log)
   const last = gitIn(root, ['log', '--oneline', '-1']).out.trim()
   return `принято ${branch}: ${n} ${plural(n)}, ${last}`
 }

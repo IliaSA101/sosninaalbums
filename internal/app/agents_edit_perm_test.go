@@ -75,13 +75,14 @@ func TestVaryUndoDeniedTool(t *testing.T) {
 	}
 	// Запрещена автосборка — vary и undo идут.
 	denyTool(a, toolAutobuild)
-	rev, _, err := a.agentVary(context.Background(), r.key(), v.Rev, ids, 2, nil)
+	vr, err := a.agentVary(context.Background(), r.key(), v.Rev, ids, 2, nil)
 	if err != nil {
 		t.Fatalf("vary при запрете autobuild: %v", err)
 	}
+	rev := vr.Album.Rev
 	// Запрещён vary — отказ, rev прежний.
 	denyTool(a, toolVary)
-	if _, _, err := a.agentVary(context.Background(), r.key(), rev, ids, 2, nil); !errors.Is(err, errAgentOff) || r.rev() != rev {
+	if _, err := a.agentVary(context.Background(), r.key(), rev, ids, 2, nil); !errors.Is(err, errAgentOff) || r.rev() != rev {
 		t.Fatalf("vary при запрете vary: %v, rev %d→%d", err, rev, r.rev())
 	}
 	// Запрещён undo — отказ, правка не отменена.

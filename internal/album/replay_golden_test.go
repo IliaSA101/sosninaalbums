@@ -69,6 +69,8 @@ func TestEditorReplay(t *testing.T) {
 // ApplyPrint и SetSettings с условием (CoverPhotoIf и AddStickersIf — новые тела над теми же
 // coverPhoto и AddStickerAt: coverPhotoOnce и layers.AddStickers; их проверяют if_cover_test.go и if_bg_test.go); Families — чтение
 // без правки проекта (TestEditorFamilies).
+// Исключение 154: SetAlbumBgIf — тело backdrop.SetAlbumBgAgent над теми же SetAlbumBg и toAlbum, что
+// SetAlbumBgToAll (if_albumbg_test.go); стикеры на обложку — тот же AddStickersIf.
 // Исключение 150: MarkUnsaved — только флаг dirty, проект, rev и отмена не меняются
 // (TestMarkUnsaved); шага в эталоне нет.
 func TestEditorReplayMethods(t *testing.T) {
@@ -76,7 +78,8 @@ func TestEditorReplayMethods(t *testing.T) {
 	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true,
 		"AutoBuildIf": true, "VaryLayoutsIf": true, "UndoIfRev": true,
 		"SetMarksIf": true, "CreateCoverLookIf": true, "CoverPhotoIf": true, "ApplyBackgroundToIf": true,
-		"AddStickersIf": true, "ApplyPrintIf": true, "SetSettingsIf": true, "Families": true, "MarkUnsaved": true}
+		"AddStickersIf": true, "ApplyPrintIf": true, "SetSettingsIf": true, "Families": true, "MarkUnsaved": true,
+		"SetAlbumBgIf": true}
 	for _, s := range r.steps {
 		seen[strings.SplitN(s.Step, ":", 2)[0]] = true
 	}

@@ -54,6 +54,8 @@ func (a *App) agentsHost() agents.Host {
 		Sheet:        a.agentsSheet, // 151: лист-сетка; правки 0.34 и Families — agentsEdit34Host (Host.canEdit34)
 	}
 	a.agentsEditHost(&h)
+	h.ExportState = a.agentExportState // 152: ход выгрузки в get_album
+	h.ExportHold = a.agentExportHold   // 152: create_album и open_album при выгрузке — «идёт выгрузка»
 	a.agentsEdit34Host(&h)
 	return h
 }

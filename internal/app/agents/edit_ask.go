@@ -67,6 +67,11 @@ type askOut struct {
 	Folder  *folderRes  `json:"folder,omitempty"`
 	Scan    *scanRes    `json:"scan,omitempty"`
 	Pending *pendingOut `json:"pending,omitempty"`
+	// Opened — ответ open_album: true — альбом открыт по просьбе, false — он уже был открыт (вопроса не было).
+	Opened *bool `json:"opened,omitempty" jsonschema:"только open_album: true — альбом открыт, false — он уже был открыт"`
+	// Started, Files — ответ export_album: выгрузка начата, сколько файлов она запишет. Пути нет; ход — get_album.export.
+	Started *bool `json:"started,omitempty" jsonschema:"только export_album: true — выгрузка начата; ход смотрите в get_album, поле export"`
+	Files   *int  `json:"files,omitempty" jsonschema:"только export_album: сколько файлов запишет выгрузка"`
 }
 
 // admit — можно ли задавать вопрос: пауза после отказа, тишина, третья ступень.
@@ -277,6 +282,7 @@ func (s *Service) finishAsk(a askRun, res AskRes, err error, closing bool) {
 	case WhyQuiet: // успех без вопроса: ни yes() (агент обнулял бы ступени тихими вызовами), ни strike()
 	case WhyDeclined, WhyTimeout, WhyGone, WhyTooWide, WhyOurs:
 		forever = s.ed.strike()
+	case WhyStopped: // «да» уже было, человек передумал на окне ОС: ни yes(), ни strike()
 	}
 	if err == nil && why != WhyAnswered && why != WhyQuiet {
 		err = askWhyErr(why)
@@ -299,10 +305,16 @@ func (s *Service) finishAsk(a askRun, res AskRes, err error, closing bool) {
 func (e *editState) afterAsk(p *pend, res AskRes) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if _, watched := e.asks[p.sess][p]; p.sess != nil && !watched {
+		return // подключение уже закрыто (forgetSession, ss.Wait): запись осталась бы навсегда
+	}
 	switch {
 	case p.kind == AskEdit: // правку запишет и отметит сама правка
 	case p.kind == AskCreate:
 		e.recs[p.sess] = editRec{created: true}
+	case p.kind == AskExport: // выгрузка альбом не меняет: запись отмены прежней правки не трогаем
+	case p.kind == AskOpen: // открытие не отменяется: undo_last_edit — «не правка агента»
+		e.recs[p.sess] = editRec{spent: true}
 	case !res.Merged && res.Album.Key != "":
 		e.recs[p.sess] = editRec{key: res.Album.Key, rev: res.Album.Rev}
 	}
@@ -327,6 +339,8 @@ func askWhyErr(why string) error {
 		return errFolderOurs
 	case WhyDraftLocked:
 		return errDraftLocked
+	case WhyStopped:
+		return errStopped
 	}
 	log.Printf("agents: вопрос закончился неизвестным итогом")
 	return errInternal
@@ -365,6 +379,14 @@ func (c *call) askResult(p *pend) (askOut, error) {
 		c.verdict = noteQuiet
 	case WhyAnswered:
 		c.verdict = noteYes
+	}
+	if p.kind == AskExport { // у выгрузки нет папки и ленты, а путь агенту не сообщается
+		started, files := true, res.Files
+		return askOut{Album: &res.Album, Started: &started, Files: &files}, nil
+	}
+	if p.kind == AskOpen { // у открытия нет папки и ленты
+		opened := true
+		return askOut{Album: &res.Album, Opened: &opened}, nil
 	}
 	out := askOut{Album: &res.Album, Folder: &folderRes{N: res.Folder, Merged: res.Merged}, Scan: &scanRes{Active: res.Scanning}}
 	return out, nil

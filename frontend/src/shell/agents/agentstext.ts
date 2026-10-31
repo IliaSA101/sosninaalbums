@@ -67,6 +67,8 @@ export const PERMS_NOTE = 'Когда агент может пользовать
 export const GROUP_READ = 'Только чтение'
 export const GROUP_EDIT = 'Правки'
 export const GROUP_MIXED = 'разные'
+// Строки «только с вопросом» (152, класс Q): выгрузка и открытие; «Всегда» серое, под названием — почему.
+export const ASK_ONLY_NOTE = 'Спрашивает всегда'
 export const GROUP_OTHER_NOTE = 'Не меняют альбом — групповой выбор их не трогает'
 export const MODE_LABELS = { allow: 'Всегда', ask: 'Спрашивать', deny: 'Запретить' } as const
 // К причине «Спрашивать» нет у чтения: ограничить его можно уровнем.
@@ -76,6 +78,23 @@ export const PLACES_NONE = 'Без вопроса — нигде: выберит
 export const PLACE_CHOOSE = 'Папка со съёмками…'
 export const PLACES_FORGET = 'Забыть места'
 export const placesMore = (n: number): string => ` и ещё ${n}`
+
+// Список мест (153, design §3). Образец — «Последние альбомы» стартового окна: путь, серым справа метка диска, ✕ «Убрать из списка».
+export const placesList = (n: number, open: boolean): string => `Список (${n}) ${open ? '▾' : '▸'}`
+export const PLACE_FORGET_ONE = 'Убрать из списка'
+export const placeForgetLabel = (dir: string): string => `Убрать ${dir} из списка`
+export const placeNoDisk = (label: string): string => (label ? `Диска «${label}» нет` : 'Диска нет')
+export const PLACE_NOFOLDER = 'Папка не найдена'
+export const placeNarrow = (name: string): string => `Новый год спросит снова. ${name} целиком — «${PLACE_CHOOSE}»`
+export const placeNarrowRoot = (drive: string): string => `${drive ? `Диск ${drive}` : 'Диск'} целиком — «${PLACE_CHOOSE}»`
+export const PLACE_UNBOUND = 'не привязано к диску'
+export const placeBind = (here: string): string => (here ? `Привязать к диску «${here}»` : 'Привязать к этому диску')
+// Заметка о подъёме мест 0.34 до корня архива (153, 0.35-153-16): висит до «Понятно».
+export const liftNote = (to: string, from: string[]): string =>
+  `Агент теперь берёт папки без вопроса из ${to} (раньше — из ${from.join(', ')})`
+export const LIFT_OK = 'Понятно'
+export const LIFT_TOAST = 'Места съёмок для агента расширены'
+export const LIFT_SEE = 'Посмотреть'
 
 export const SETUP_TITLE = 'Как подключить'
 export const SETUP_NOTE = 'В каждом клиенте запускается сама программа с ключом --mcp. Секретов в настройке нет.'
@@ -112,6 +131,8 @@ export const ASK_WHY: Record<string, string> = {
   link: 'Путь идёт через ссылку на другую папку',
   rate: 'Агент уже добавил 3 папки за 10 минут',
   draft: 'Открытый альбом вы правили — заменить его без вас нельзя',
+  disk: 'Это другой диск, не тот, что у места',
+  vol: 'Не удалось узнать диск',
 }
 export const ASK_PLACE_WHY = 'Без вопроса — только в ваших папках со съёмками:'
 export const PLACES_NONE_SHORT = 'не выбраны'

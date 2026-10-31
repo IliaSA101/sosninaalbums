@@ -13,13 +13,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // strictRules — правила с запретами ОС (как в таблице agentpath_test.go) без диска: Linux/macOS —
 // Unix-пути, Windows — буквы диска и AppData.
-func strictRules() *folderRules {
+func strictRules() *agentplaces.Rules {
 	if runtime.GOOS == "windows" {
 		return winRules(diskOK)
 	}

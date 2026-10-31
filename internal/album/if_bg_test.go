@@ -154,15 +154,21 @@ func TestBackgroundSkipPhoto(t *testing.T) {
 		t.Fatalf("все пропущены: %+v, rev %d, %v", out, v.Rev, err)
 	}
 	s.same(t, e, "все пропущены")
-	// С replace: фото клиента уходят, Skipped пуст, Replaced — снятые фото фона.
+	// С replace: фото клиента уходят, Skipped пуст, Replaced — снятые фото клиента (фото набора в счёт не идут).
 	e2, ids2 := ifSkipEd(t)
 	ts2 := append(ifTargets("left", ids2[0], ids2[4]), ifTargets("spread", ids2[1], ids2[2], ids2[3])...)
 	_, out, err = e2.ApplyBackgroundToIf(ts2, ifDots("dots"), true, album.Expect{Rev: edtest.Rev(e2)})
-	if err != nil || out.Changed != 5 || out.Replaced != 4 || len(out.Skipped) != 0 {
+	if err != nil || out.Changed != 5 || out.Replaced != 2 || len(out.Skipped) != 0 {
 		t.Fatalf("replace: %+v, %v", out, err)
 	}
 	if sp := edtest.P(e2).Spreads; sp[0].BgPhotoL != nil || sp[3].BgPhotoR != nil {
 		t.Fatal("с replace фото клиента осталось")
+	}
+	// Только фото набора и пустой лист: с replace фон ставится, но заменённых фото клиента нет.
+	e3, ids3 := ifSkipEd(t)
+	_, out, err = e3.ApplyBackgroundToIf(append(ifTargets("spread", ids3[1], ids3[2]), ifTargets("left", ids3[4])...), ifDots("dots"), true, album.Expect{Rev: edtest.Rev(e3)})
+	if err != nil || out.Changed != 3 || out.Replaced != 0 || len(out.Skipped) != 0 {
+		t.Fatalf("replace без фото клиента: %+v, %v", out, err)
 	}
 }
 
@@ -288,7 +294,6 @@ func TestAddStickersIfRefuse(t *testing.T) {
 		want error
 	}{
 		"нет листа": {[]album.StickerPut{ok, bad(func(p *album.StickerPut) { p.Spread = "нет" })}, album.ErrNoSheet},
-		"обложка":   {[]album.StickerPut{bad(func(p *album.StickerPut) { p.Spread = model.CoverID })}, album.ErrNoSheet},
 		"якорь":     {[]album.StickerPut{ok, bad(func(p *album.StickerPut) { p.Anchor = "левее" })}, layers.ErrAnchor},
 		"размер":    {[]album.StickerPut{bad(func(p *album.StickerPut) { p.Size = "xl" })}, layers.ErrAnchor},
 		"рисунок":   {[]album.StickerPut{bad(func(p *album.StickerPut) { p.Src = model.StickerSrc{Art: &model.Art{Kind: "Не Ключ!"}} })}, model.ErrSticker},

@@ -2,7 +2,7 @@
 
 Обзор службы — [agents.md](agents.md); разрешения, места съёмок и тихий путь папки — [agents-perms.md](agents-perms.md). Спеки — `docs/specs/0.33/149-mcp-edit.md` (+ `149-mcp-edit/design.md`, решения 0.33-149-\*), `docs/specs/0.34/151-mcp-tools-2.md` (+ `151-mcp-tools-2/design.md`, решения 0.34-151-\*). QA — `docs/qa/agents.md` (149), `docs/qa/agents-034.md` (150, 151).
 
-Два слоя: **служба** (`internal/app/agents`) решает, пускать ли вызов и что сказать агенту; **фасад** (`internal/app/agents_edit*.go`, `agentask*.go`, `agentpath*.go`, `agentquiet*.go`) правит через `Editor`. Граница — замыкания `Host`; `Editor` служба не видит.
+Два слоя: **служба** (`internal/app/agents`) решает, пускать ли вызов и что сказать агенту; **фасад** (`internal/app/agents_edit*.go`, `agentask*.go`, `agentquiet*.go`; правила папок и мест — пакет `internal/app/agentplaces`) правит через `Editor`. Граница — замыкания `Host`; `Editor` служба не видит.
 
 ## Путь правящего вызова
 
@@ -50,7 +50,7 @@
 
 ## Правила папки
 
-`agentpath.go` (+ списки ОС в `agentpath_lists.go`): **одни правила** к подсказке `folder_hint`, к папке, которую выбрал человек, и (с дополнениями) к местам съёмок. Шаг 1 — строка без диска (≤ 4096 байт, UTF-8, плохие знаки, `CheckLocalPath`, корень, домашняя и её предки, «Документы/Рабочий стол/Загрузки» целиком, системные деревья, скрытые элементы, папки данных и кэша); шаг 2 — диск в своей горутине с пределом 1,5 с (`diskProbe`: `Reachable`, `Lstat`, каталог, `EvalSymlinks`, `osx.RealPath` — на Windows раскрывает subst-диск и отображённую папку) и повтор шага 1 для настоящего пути: ссылка `/Volumes/Macintosh HD` или Wine `z:` в корень не проведёт. На Windows (150) подсказка с элементом на «.» под домашней или скрытым/системным элементом ниже корня тома — негодна (`hiddenHint`).
+`internal/app/agentplaces` (`rules.go`, списки ОС в `lists.go`; продукт берёт правила только через `agentplaces.Default`, `New` — тесты): **одни правила** к подсказке `folder_hint`, к папке, которую выбрал человек, и (с дополнениями) к местам съёмок. Шаг 1 — строка без диска (≤ 4096 байт, UTF-8, плохие знаки, `CheckLocalPath`, корень, домашняя и её предки, «Документы/Рабочий стол/Загрузки» целиком, системные деревья, скрытые элементы, папки данных и кэша); шаг 2 — диск в своей горутине с пределом 1,5 с (`diskProbe` в `rules.go`: `Reachable`, `Lstat`, каталог, `EvalSymlinks`, `osx.RealPath` — на Windows раскрывает subst-диск и отображённую папку) и повтор шага 1 для настоящего пути: ссылка `/Volumes/Macintosh HD` или Wine `z:` в корень не проведёт. На Windows (150) подсказка с элементом на «.» под домашней или скрытым/системным элементом ниже корня тома — негодна (`Rules.HiddenHint`).
 
 - Подсказка не прошла — вопрос 149 без пути: окно ОС откроется в обычной папке (`dialogDir`), в вопросе строка «Агент предложил папку, которую программа не берёт без вас…»; причину агенту не сообщают (иначе по ответам можно щупать файловую систему).
 - Годная подсказка — в вопросе полный настоящий путь (150) и последний элемент ≤ 60 рун (`AgentAsk.Hint`); интерфейс кладёт их в `<bdi>`.
@@ -121,8 +121,17 @@
 | `internal/app/agentask.go`, `agentask_edit.go`                      | типы событий, ответы окна, вопрос о правке                                                                                      |
 | `internal/app/agentask_flow.go`, `agentask_apply.go`                | машина вопроса asked → choosing → done; применение выбора папки                                                                 |
 | `internal/app/agentasktext.go`, `agentasktext_edit.go`              | шаблоны текста вопроса, имя клиента                                                                                             |
-| `internal/app/agentpath.go`, `agentpath_lists.go`                   | правила папки и списки ОС                                                                                                       |
-| `internal/app/agents_perms.go`, `agentplaces*.go`, `agentquiet*.go` | 150: строки окна, места съёмок, тихий путь — [agents-perms.md](agents-perms.md)                                                 |
+| `internal/app/agentplaces/` (`rules.go`, `lists.go`)                | правила папки и списки ОС                                                                                                       |
+| `internal/app/agents_perms.go`, `agentplaces*.go`, `agentplaces/`, `agentquiet*.go` | 150: строки окна, места съёмок, тихий путь — [agents-perms.md](agents-perms.md)                                                 |
 | `frontend/src/shell/agents`                                         | `AgentAskDialog`, `AgentsPerms`, `agentask.svelte.ts`, `agentbusy.ts`, `agentedited.ts`, `agentperms.ts`                        |
 
 Посредник и `start_program` — `internal/mcpbridge` (`launch*.go`, `start.go`); правящих инструментов у него нет.
+
+## Выгрузка и открытие по просьбе агента (0.35/152)
+
+Класс разрешений Q («только с вопросом»): `export_album`, `open_album`, строки «Спрашивать · Запретить», «Всегда» нет ни в окне, ни в config.json (`permLevel` читает `allow` как «Спрашивать»). Тела — `agents/write_tools.go`, фасад — `app/agentopen.go`, `app/agentexport.go` (вопрос, `AgentAnswerExport`), `agentexport_plan.go` (папка), `agentasktext_export.go` (тексты).
+
+- `export_album`: вход как окно «Экспорт» (диапазон, страницы, обложка, качество 100/95/80, dpi 72–1200, `print`: id, `plain` или пусто — как открывается окно, `folder_hint`: имя или подсказка пути). Проверки без окна — `exporter.Service.Check`; вопрос хранит редактор и ревизию, после щелчка `ExportWith(Job{Ed, Rev, Pick})` — та же выгрузка, что в меню. Агенту путь не приходит: «начато, N файлов», ход — `get_album.export`.
+- Папка: `Rules.JudgeWrite` (`agentplaces/rules.go`) — не системные деревья, не скрытые (`.ssh` и на Windows), не папки программы, не UNC, не корень системного тома и не домашняя целиком; настоящий путь после ссылок, смена тома — нельзя. Предложение: подсказка-путь, иначе корень выгрузок (`lastDirs.exportRoot`) и имя; путь в папке фото альбома заменяется соседней (121). Повтор правила при щелчке — `Rules.ExportPick`.
+- Итоги: «Отмена», ✕, Esc, срок первого вопроса — отказ (счёт 149); всё после щелчка («нет» в предупреждении, отмена окна ОС) — `WhyStopped`, без счёта. Пока окна выгрузки открыты, `create_album` (вопрос и тихий) — «идёт выгрузка».
+- `open_album`: ключ из `list_albums` или `name_hint`, всегда вопрос; `undo_last_edit` его не отменяет, возврат — «Открыть прежний».

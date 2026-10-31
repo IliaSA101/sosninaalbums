@@ -196,6 +196,12 @@ func (c *Cache) generateOwn(ctx context.Context, key, src string, preview bool, 
 		c.mu.Unlock()
 		return true, nil
 	}
+	// Неудачу могли записать между проверкой failed в get и этим местом (чужая генерация уже
+	// кончилась и снялась с inflight): под замком видно и то и другое, второй декод не нужен.
+	if de := c.bad[key]; de != nil {
+		c.mu.Unlock()
+		return false, de
+	}
 	ch := make(chan struct{})
 	c.inflight[key] = ch
 	split := cl == now && !preview && !c.closed

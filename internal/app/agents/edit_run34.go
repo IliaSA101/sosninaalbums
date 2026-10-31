@@ -104,10 +104,54 @@ func (c *call) decorID(kind, id string) (string, error) {
 	return id, nil
 }
 
+// bgArgs — проверки входа set_background, общие для pre (до вопроса человеку) и тела: to, pages, scope, replace,
+// spreads и «cover» в листах. Каталога и вида не касается: item и номера сверяет тело.
+func bgArgs(in bgIn) error {
+	switch in.To {
+	case "", "spreads":
+		if in.Pages != nil {
+			return badArgs("pages передают только с to: album")
+		}
+		if len(in.Spreads) == 0 {
+			return badArgs("spreads: назовите хотя бы один разворот")
+		}
+		if !slices.Contains([]string{"", "spread", "left", "right"}, in.Scope) {
+			return badArgs("scope: spread, left или right")
+		}
+	case "album":
+		switch {
+		case in.Scope != "":
+			return badArgs("с to: album scope не передают")
+		case in.Replace && len(in.Spreads) == 0:
+			return badArgs("с to: album и replace назовите в spreads номера из skipped, на которые согласился человек")
+		case !in.Replace && len(in.Spreads) > 0:
+			return badArgs("с to: album spreads передают только с replace: номера из skipped, на которые согласился человек")
+		}
+	default:
+		return badArgs("to: spreads или album")
+	}
+	if slices.ContainsFunc(in.Spreads, func(r spreadRef) bool { return isCoverRef(string(r)) }) {
+		return errCoverNotTarget("set_background")
+	}
+	return nil
+}
+
+// bgPre — разбор set_background до вопроса и места правки: человеку не показывают вопрос, на который агент
+// всё равно получит «неверные аргументы».
+func bgPre(_ *call, in bgIn) (bgOut, bool, error) {
+	return bgOut{}, false, bgArgs(in)
+}
+
 func (c *call) setBackground(in bgIn) (bgOut, error) {
 	item, err := c.decorID("bg", in.Item)
 	if err != nil {
 		return bgOut{}, err
+	}
+	if err := bgArgs(in); err != nil { // и тот же разбор в pre; здесь — для процесса от администратора и прямого вызова
+		return bgOut{}, err
+	}
+	if in.To == "album" {
+		return c.setAlbumBackground(item, in)
 	}
 	ids, err := c.spreadIDs(in.Spreads, false)
 	if err != nil {
@@ -117,9 +161,6 @@ func (c *call) setBackground(in bgIn) (bgOut, error) {
 	if scope == "" {
 		scope = "spread"
 	}
-	if !slices.Contains([]string{"spread", "left", "right"}, scope) {
-		return bgOut{}, badArgs("scope: spread, left или right")
-	}
 	v, _ := c.s.h.View()
 	res, err := c.s.h.Bg(c.ctx, BgReq{Key: in.Album.Key, Rev: in.Album.Rev, Client: askClient(c.client()), Item: item,
 		Spreads: ids, Scope: scope, Replace: in.Replace})
@@ -127,13 +168,68 @@ func (c *call) setBackground(in bgIn) (bgOut, error) {
 		return bgOut{}, c.hostErr(err)
 	}
 	c.remember(res.Album, res.Changed > 0)
-	out := bgOut{Album: res.Album, Changed: res.Changed, Replaced: res.Replaced}
-	for _, id := range res.Skipped { // ID листов → номера с 1
+	out := bgOut{Album: res.Album, Changed: res.Changed, Replaced: res.Replaced, Skipped: spreadNums(v, res.Skipped)}
+	return out, nil
+}
+
+// spreadNums — ID листов → номера с 1 по виду v; чужие ID пропускаются.
+func spreadNums(v model.View, ids []string) (nums []int) {
+	for _, id := range ids {
 		if i := slices.IndexFunc(v.Spreads, func(s model.SpreadView) bool { return s.ID == id }); i >= 0 {
-			out.Skipped = append(out.Skipped, i+1)
+			nums = append(nums, i+1)
 		}
 	}
-	return out, nil
+	return nums
+}
+
+// setAlbumBackground — set_background с to: album (154, design §1.1): фон альбома. Проверки входа (bgArgs)
+// уже сделаны. spreads здесь — листы согласия на снятие фото клиента (только с replace).
+func (c *call) setAlbumBackground(item string, in bgIn) (bgOut, error) {
+	consent, err := c.spreadIDs(in.Spreads, false)
+	if err != nil {
+		return bgOut{}, err
+	}
+	v, _ := c.s.h.View() // вид до правки: порядок листов фон не меняет, ревизию уже сверил gate
+	pages := v.AlbumBg != nil && v.AlbumBg.Pages
+	if in.Pages != nil {
+		pages = *in.Pages
+	}
+	res, err := c.s.h.Bg(c.ctx, BgReq{Key: in.Album.Key, Rev: in.Album.Rev, Client: askClient(c.client()), Item: item,
+		Spreads: consent, Replace: in.Replace, Album: true, Pages: pages})
+	if err != nil {
+		return bgOut{}, c.hostErr(err)
+	}
+	c.remember(res.Album, res.Album.Rev != in.Album.Rev) // фон альбома — шаг и без разворотов
+	return bgOut{Album: res.Album, Changed: res.Changed, Replaced: res.Replaced, AlbumBg: res.AlbumBg,
+		Skipped: spreadNums(v, res.Skipped), Cleared: spreadNums(v, res.Cleared), Hidden: spreadNums(v, res.Hidden)}, nil
+}
+
+// coverPre — разбор add_sticker до вопроса и места правки: «cover» без обложки (или у альбома-листа) — errNoCover
+// сразу, а не «нет такого разворота» из spreadIDs.
+func coverPre(c *call, in addStickerIn) (addStickerOut, bool, error) {
+	return addStickerOut{}, false, c.coverCheck(stickerRefs(in))
+}
+
+// stickerRefs — ссылки на развороты из стикеров входа.
+func stickerRefs(in addStickerIn) []string {
+	refs := make([]string, len(in.Stickers))
+	for i, s := range in.Stickers {
+		refs[i] = string(s.Spread)
+	}
+	return refs
+}
+
+// coverCheck — общая проверка обложки (154, design §2): среди ссылок есть «cover», а обложки нет
+// или альбом — лист, значит errNoCover. Альбома нет — не её дело (скажет gate).
+func (c *call) coverCheck(refs []string) error {
+	if !slices.ContainsFunc(refs, isCoverRef) {
+		return nil
+	}
+	v, ed := c.s.h.View()
+	if ed != 0 && (v.Cover == nil || v.Settings.Sheet) {
+		return errNoCover
+	}
+	return nil
 }
 
 func (c *call) addSticker(in addStickerIn) (addStickerOut, error) {
@@ -144,13 +240,13 @@ func (c *call) addSticker(in addStickerIn) (addStickerOut, error) {
 	if ed == 0 {
 		return addStickerOut{}, errNoAlbum
 	}
+	if err := c.coverCheck(stickerRefs(in)); err != nil { // обложку могли убрать, пока правка ждала ответа
+		return addStickerOut{}, err
+	}
 	req := StickerReq{Key: in.Album.Key, Rev: in.Album.Rev, Client: askClient(c.client())}
 	for _, s := range in.Stickers {
-		if isCoverRef(string(s.Spread)) {
-			return addStickerOut{}, errCoverNotTarget(c.spec.name)
-		}
-		sv, n, ok := findSpread(v, string(s.Spread))
-		if !ok || n == 0 {
+		sv, _, ok := findSpread(v, string(s.Spread))
+		if !ok {
 			return addStickerOut{}, errNoSpreadFlat
 		}
 		item, err := c.decorID("sticker", s.Item)

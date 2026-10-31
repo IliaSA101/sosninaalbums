@@ -8,14 +8,15 @@
 
 Класс инструмента — `prefs.toolClass` (`internal/prefs/agentperms.go`); от него зависят допустимые значения (`PermCan`), группа окна и умолчания.
 
-| Класс      | Инструменты                                                                                                                   | Значения    | Группа окна |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------- |
-| `R` чтение | 12 инструментов чтения, в том числе `get_contact_sheet`                                                                       | allow, deny | `read`      |
-| `P` запуск | `start_program` (у посредника)                                                                                                | allow, deny | `other`     |
-| `V` показ  | `show_spread`                                                                                                                 | все три     | `other`     |
-| `E` правка | `autobuild`, `vary_layouts`, `undo_last_edit`, `set_marks`, `set_cover_photo`, `set_background`, `add_sticker`, `apply_print` | все три     | `edit`      |
-| `F` папка  | `add_folder`                                                                                                                  | все три     | `edit`      |
-| `A` альбом | `create_album`                                                                                                                | все три     | `edit`      |
+| Класс      | Инструменты                                                                                                                   | Значения    | Группа окна      |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------- |
+| `R` чтение | 12 инструментов чтения, в том числе `get_contact_sheet`                                                                       | allow, deny | `read`           |
+| `P` запуск | `start_program` (у посредника)                                                                                                | allow, deny | `other`          |
+| `V` показ  | `show_spread`                                                                                                                 | все три     | `other`          |
+| `E` правка | `autobuild`, `vary_layouts`, `undo_last_edit`, `set_marks`, `set_cover_photo`, `set_background`, `add_sticker`, `apply_print` | все три     | `edit`           |
+| `F` папка  | `add_folder`                                                                                                                  | все три     | `edit`           |
+| `A` альбом | `create_album`                                                                                                                | все три     | `edit`           |
+| `Q` вопрос | `export_album`, `open_album` (0.35/152)                                                                                       | ask, deny   | `edit`, «прочие» |
 
 `await_answer` вне разрешений (служебный: ждёт ответа на уже заданный вопрос). «Спрашивать» у чтения и запуска нет (0.34-150-3): на одну просьбу агент читает десятки раз, а при закрытой программе спросить негде. В окне пункт не серый — нажатие показывает причину (`AgentPerm.why`) и подсвечивает «Что видит агент» (0.34-150-23). Групповой щелчок `edit` не трогает запуск и показ; значение, недопустимое строке, ей не ставится.
 
@@ -50,7 +51,7 @@
 
 ## Места съёмок
 
-Правила — `internal/app/agentplaces.go` (строки и диск), источники и окно — `agentplaces_app.go`; prefs проверяет только строение (0.34-150-30). Агент мест не видит и не меняет.
+Правила — пакет `internal/app/agentplaces` (строки и диск; продукт — `agentplaces.Default`), источники и окно — `agentplaces_app.go`; prefs проверяет только строение (0.34-150-30). Агент мест не видит и не меняет.
 
 **Источники — только действия, начатые человеком** (0.34-150-16):
 
@@ -67,7 +68,7 @@
 При «Всегда» у `add_folder` / `create_album` служба и фасад решают, можно ли без вопроса; нельзя — вопрос одним щелчком с причиной.
 
 1. **Служба** (`ask`, `edit_ask.go`): `admit` — во время паузы после отказов вопросов нет, а значит и тишины; затем тихий слот `takeQuiet`: ≤ 3 тихих папок и альбомов за 10 минут на программу. Слот взят — `AskReq.Always = true`.
-2. **Фасад, план** (`planFolder`, `agentquiet.go`). Настоящий путь подсказки даёт проба диска `diskProbe` (`agentpath.go`): `EvalSymlinks`, затем `osx.RealPath` — на Windows `GetFinalPathNameByHandleW` раскрывает subst-диск и отображённую папку до исходного тома (это не ссылки ФС, `EvalSymlinks` их не видит); все правила, в том числе скрытого элемента и домашней, смотрят на настоящий путь, а не на введённый `X:\.ssh`. правило папки 149 и `hiddenHint` — для всех режимов (негодная подсказка — вопрос 149 без пути, `whyBad`). Пустая подсказка при «Всегда» — `place`. Затем `quietWhy` по порядку, первая причина — в `AgentAsk.why`:
+2. **Фасад, план** (`planFolder`, `agentquiet.go`). Настоящий путь подсказки даёт проба диска `diskProbe` (`agentplaces/rules.go`): `EvalSymlinks`, затем `osx.RealPath` — на Windows `GetFinalPathNameByHandleW` раскрывает subst-диск и отображённую папку до исходного тома (это не ссылки ФС, `EvalSymlinks` их не видит); все правила, в том числе скрытого элемента и домашней, смотрят на настоящий путь, а не на введённый `X:\.ssh`. правило папки 149 и `Rules.HiddenHint` — для всех режимов (негодная подсказка — вопрос 149 без пути, `whyBad`). Пустая подсказка при «Всегда» — `place`. Затем `quietWhy` по порядку, первая причина — в `AgentAsk.why`:
 
 | Код      | Проверка                                                                                                                                                                                                  |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -112,7 +113,7 @@
 | `internal/app/agents/permask.go`                                             | вопрос о правке при «Спрашивать»                                                    |
 | `internal/app/agents_perms.go`                                               | `AgentPerm`, `AgentPlace`, `SetAgentPerm`, `SetAgentPermGroup`, `ForgetAgentPlaces` |
 | `internal/app/agents_edit.go`                                                | `agentPerm`, `agentPermLevel`, `editGroupOn`, `agentCheckTool`                      |
-| `internal/app/agentplaces.go`, `agentplaces_app.go`                          | правила мест, источники, засев, `ChooseAgentPlace`                                  |
+| `internal/app/agentplaces/`, `agentplaces_app.go`                            | правила мест, источники, засев, `ChooseAgentPlace`                                  |
 | `internal/app/agentquiet.go`, `agentquiet_count.go`, `agentquiet_cloud_*.go` | план и причины тихого пути, подсчёт папки, облачные заглушки                        |
 | `internal/app/agentquiet_apply.go`, `agentquiet_pin.go`                      | тихое применение, черновик агента, «Открыть прежний», закреплённая копия            |
 | `internal/osx` (`Remote`, `Hidden`, `MountPoints`)                           | проба тома и атрибутов                                                              |

@@ -11,8 +11,11 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/spreads"
 )
 
-// ErrNoSheet — лист стикера не найден (или это обложка: стикеры на обложку агенту — 0.35).
+// ErrNoSheet — лист стикера не найден.
 var ErrNoSheet = layers.ErrNoSheet
+
+// ErrNoSide — на сторонке обложки нет места для стикера (AddStickersIf).
+var ErrNoSide = layers.ErrNoSide
 
 // ErrAnchor — неизвестное место или размер стикера (AddStickersIf).
 var ErrAnchor = layers.ErrAnchor
@@ -62,11 +65,29 @@ func (e *Editor) ApplyBackgroundToIf(targets []model.GridTarget, src model.BgSou
 	return v, out, err
 }
 
+// SetAlbumBgIf — фон альбома для агента одним шагом со сверкой x (154, 0.35-154-2, тело —
+// backdrop.SetAlbumBgAgent): фон src (узор или фото каталога), pages — на каждую страницу; свои
+// фоны каталога на листах снимаются, листы с фото клиента остаются (BgOutcome.Skipped), если их
+// нет в consent. Cleared — листы со снятым своим фоном. В «Недавние» не пишется (решает
+// вызывающий). Тот же фон и снимать нечего — холостая (проект равен, шага нет). Ошибка источника
+// (model.ErrPattern, model.ErrLibKey) — ничего не применено.
+func (e *Editor) SetAlbumBgIf(src model.BgSource, pages bool, consent []string, x Expect) (model.View, BgOutcome, error) {
+	var out BgOutcome
+	v, err := e.editWith("", false, func(p *model.Project) (err error) {
+		out, err = backdrop.SetAlbumBgAgent(p, src, pages, consent)
+		return err
+	}, nil, editOpts{expect: &x})
+	if err != nil {
+		out = BgOutcome{}
+	}
+	return v, out, err
+}
+
 // StickerPut — один стикер пачки AddStickersIf (описание — layers.StickerPut).
 type StickerPut = layers.StickerPut
 
 // AddStickersIf — пачка стикеров агента одним шагом со сверкой x (design §1.5, тело —
-// layers.AddStickers): пачка целиком или никак, ошибки — ErrNoSheet, layers.ErrAnchor,
+// layers.AddStickers): пачка целиком или никак, ошибки — ErrNoSheet, ErrNoSide, layers.ErrAnchor,
 // model.ErrStickers, model.ErrStickersTotal, model.ErrSticker. Пустая пачка — холостая.
 // ids — новые стикеры в порядке puts.
 func (e *Editor) AddStickersIf(puts []StickerPut, x Expect) (v model.View, ids []string, err error) {
@@ -91,14 +112,17 @@ func (e *Editor) SetSettingsIf(s model.Settings, x Expect) (model.View, error) {
 }
 
 // Families — семейство раскладки (spreads.FamilyOf) каждого листа из ids, в их порядке;
-// неизвестный ID, сетка, виньетка и лист без фото — "". Чтение под замком, проект не меняется.
-func (e *Editor) Families(ids []string) []string {
-	out := make([]string, len(ids))
+// неизвестный ID, сетка, виньетка и лист без фото — "". rev — ревизия проекта, взятая под тем же
+// замком, что и чтение: пара «было/стало» у vary_layouts достоверна без гонки с правкой человека
+// (154, design §3). Чтение, проект не меняется.
+func (e *Editor) Families(ids []string) (fams []string, rev int) {
+	fams = make([]string, len(ids))
 	e.read(func(p *model.Project) {
 		for i, id := range ids {
 			_, s := p.Find(id)
-			out[i] = spreads.FamilyOf(p, s)
+			fams[i] = spreads.FamilyOf(p, s)
 		}
+		rev = e.rev
 	})
-	return out
+	return fams, rev
 }

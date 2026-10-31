@@ -13,7 +13,8 @@ import (
 func (a *App) domReady(ctx context.Context) {
 	defer guard("domReady")
 	a.fitScreen(ctx)
-	a.goBG(a.placeDemo) // файл примера — раньше проверки при запуске, замок она не теряет
+	a.goBG(a.placeDemo)        // файл примера — раньше проверки при запуске, замок она не теряет
+	a.goBG(a.liftLegacyPlaces) // места 0.34 — до корня архива (153); диск в фоне
 	a.libp.ScheduleCheck()
 	a.upd.Schedule()
 	a.qaProbe(ctx) // зонд win-qa: только exe набора QA (тег qa) со стендом

@@ -4,6 +4,7 @@ package app
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -458,4 +459,80 @@ func TestAskNextAfterDone(t *testing.T) {
 		tokens <- struct{}{}
 		waitUntil(t, "askdone", func() bool { return len(r.evOf("agents:askdone")) >= i })
 	}
+}
+
+// Порядок событий: agents:ask следующего вопроса не обгоняет agents:askdone прежнего, даже если агент,
+// получив итог, спрашивает снова сразу, а отправка askdone в окно медленная. Иначе окно нового
+// вопроса игнорирует чужой askdone и тост «не дождался ответа» (timeout) теряется.
+func TestAskDoneBeforeNextAsk(t *testing.T) {
+	for _, tc := range []string{"timeout", "answered"} {
+		t.Run(tc, func(t *testing.T) {
+			r := newAskRig(t)
+			r.shortLife(tc == "timeout")
+			rec := r.a.emit
+			r.a.emit = func(name string, data ...any) {
+				if name == "agents:askdone" {
+					time.Sleep(20 * time.Millisecond) // медленное окно: без порядка ask(a2) ушёл бы первым
+				}
+				rec(name, data...)
+			}
+			first := make(chan agents.AskRes, 1)
+			second := make(chan *askCall, 1)
+			go func() { // агент: получил итог — сразу новый вопрос
+				res, _ := r.a.agentAsk(t.Context(), r.createReq())
+				first <- res
+				second <- r.ask(r.createReq())
+			}()
+			id1 := r.asked(t, 1).ID
+			want := agents.WhyTimeout
+			if tc == "answered" {
+				want = agents.WhyDeclined
+				if _, err := r.a.AnswerAgent(id1, false); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if res := <-first; res.Why != want {
+				t.Fatalf("итог первого: %+v, ждали %s", res, want)
+			}
+			c2 := <-second
+			id2 := r.asked(t, 2).ID
+			wantLog := []string{"ask:" + id1, "askdone:" + id1, "ask:" + id2}
+			if tc == "timeout" { // второй вопрос тоже истёк
+				c2.wait(t)
+				r.done(t, 2)
+				wantLog = append(wantLog, "askdone:"+id2)
+			} else {
+				t.Cleanup(func() { r.a.closeAgentAsk(); c2.wait(t) })
+			}
+			if got := r.askLog(); !slices.Equal(got, wantLog) {
+				t.Fatalf("порядок событий %v, ждали %v", got, wantLog)
+			}
+		})
+	}
+}
+
+// shortLife — срок вопроса 30 мс (on), чтобы он истёк сам.
+func (r *askRig) shortLife(on bool) {
+	if !on {
+		return
+	}
+	m := r.a.askM()
+	m.mu.Lock()
+	m.life = 30 * time.Millisecond
+	m.mu.Unlock()
+}
+
+// askLog — журнал событий вопросов в порядке отправки: «ask:<id>», «askdone:<id>».
+func (r *askRig) askLog() (out []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.evs {
+		switch v := e.data.(type) {
+		case AgentAsk:
+			out = append(out, "ask:"+v.ID)
+		case AgentAskDone:
+			out = append(out, "askdone:"+v.ID)
+		}
+	}
+	return out
 }

@@ -64,16 +64,13 @@ type agentEdit struct {
 	backed map[string]bool
 }
 
-// agentEdits — состояние по App (App не растёт полем: фасад живёт в новых файлах).
-var agentEdits sync.Map // *App → *agentEdit
-
-// agentEd — состояние правок агента этого App.
+// agentEd — состояние правок агента этого App (поле agentEdSt, лениво: и у &App{} в тестах).
 func (a *App) agentEd() *agentEdit {
-	if v, ok := agentEdits.Load(a); ok {
-		return v.(*agentEdit)
+	if s := a.agentEdSt.Load(); s != nil {
+		return s
 	}
-	v, _ := agentEdits.LoadOrStore(a, &agentEdit{opts: defaultAgentEditOpts(), backed: map[string]bool{}})
-	return v.(*agentEdit)
+	a.agentEdSt.CompareAndSwap(nil, &agentEdit{opts: defaultAgentEditOpts(), backed: map[string]bool{}})
+	return a.agentEdSt.Load()
 }
 
 // AgentsBusy — интерфейс сообщает, что человек занят (перенос, набор текста, задача, окна
@@ -284,20 +281,26 @@ func (a *App) agentSaved(ed *album.Editor) (file, bkey string, err error) {
 }
 
 // agentVary — «Разнообразить раскладки» для листов spreads (ID): variety 1…2, families — фильтр
-// (пусто — все). Один шаг отмены; changed — у скольких листов сменился ключ раскладки (0 — менять
-// нечего: rev прежний, шага нет).
-func (a *App) agentVary(ctx context.Context, key string, rev int, spreads []string, variety int, families []string) (rev2, changed int, err error) {
+// (пусто — все). Один шаг отмены; Changed — у скольких листов сменился ключ раскладки (0 — менять
+// нечего: rev прежний, шага нет). Before и After — семейство каждого листа до и после (154): ревизия
+// берётся под тем же замком, что и чтение; чужая правка между чтением и вызовом — ErrAlbumEdited, а
+// сразу после вызова — пара пустая.
+func (a *App) agentVary(ctx context.Context, key string, rev int, spreads []string, variety int, families []string) (res agents.VaryRes, err error) {
 	defer guardErr("agentVary", &err)
 	ed, err := a.agentEditor(key)
 	if err != nil {
-		return 0, 0, err
+		return res, err
 	}
 	if err := a.agentCheckTool(toolVary, true); err != nil {
-		return 0, 0, err
+		return res, err
 	}
 	before := ed.View()
 	if before.Rev != rev {
-		return 0, 0, errAgentAlbumEdited
+		return res, errAgentAlbumEdited
+	}
+	was, r0 := ed.Families(spreads)
+	if r0 != rev {
+		return res, errAgentAlbumEdited
 	}
 	old := make(map[string]string, len(before.Spreads))
 	for _, sv := range before.Spreads {
@@ -308,15 +311,27 @@ func (a *App) agentVary(ctx context.Context, key string, rev int, spreads []stri
 	v, err := ed.VaryLayoutsIf(spreads, model.Variety(max(variety, 1)).Clamp(), model.ClampFamilies(families), infos,
 		album.Expect{Rev: rev, Ctx: ctx})
 	if err != nil {
-		return 0, 0, agentErr(err)
+		return res, agentErr(err)
 	}
 	for _, sv := range v.Spreads {
 		if l, ok := old[sv.ID]; ok && l != sv.Layout && slices.Contains(spreads, sv.ID) {
-			changed++
+			res.Changed++
 		}
 	}
+	res.Album = agents.AlbumRef{Key: key, Rev: v.Rev}
+	now, r1 := ed.Families(spreads)
+	res.Spreads, res.Before, res.After = varyPair(spreads, was, now, r1, v.Rev)
 	a.changed(v)
-	return v.Rev, changed, nil
+	return res, nil
+}
+
+// varyPair — пара «до/после» семейств: честна, только если семейства «после» прочитаны на ревизии самой правки
+// (r1 == rev); иначе человек успел поправить, и пары нет.
+func varyPair(spreads, was, now []string, r1, rev int) (sp, before, after []string) {
+	if r1 != rev {
+		return nil, nil, nil
+	}
+	return spreads, was, now
 }
 
 // agentShow — проверка ключа и листа, затем agents:show: холст переходит, альбом не меняется.

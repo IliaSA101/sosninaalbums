@@ -6,143 +6,82 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
-	"github.com/IliaSA101/sosninaalbums/internal/export/printshop"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
-	"github.com/IliaSA101/sosninaalbums/internal/render"
-	"github.com/IliaSA101/sosninaalbums/internal/text"
 )
+
+// Job — выгрузка по заданию: альбом, ревизия, настройки и откуда брать папку. Нужна агенту (152):
+// вопрос показан для одного альбома и одной ревизии, а выгрузка идёт после щелчка.
+type Job struct {
+	// Ed — редактор выгрузки: снимок, типография, проверка 121 и план берутся из него и нигде
+	// не из Host.Editor. nil — текущий (Export).
+	Ed *album.Editor
+	// Rev — View.Rev, показанный в вопросе; снимок с другим — ErrAlbumEdited, выгрузки нет.
+	// −1 — без сверки.
+	Rev int
+	Opt Options
+	// Name — имя книги типографии (черновик без файла, имя от агента); пусто — по файлу Ed.
+	Name string
+	// Pick — папка выгрузки; nil — окно выбора папки (Host.PickDir). create — папки ещё нет:
+	// создаётся один последний уровень после всех вопросов; hits — свои файлы, о замене которых
+	// вопрос уже предупредил: тот же набор — ReplaceQuestion не задаётся; nil — вопрос как в меню.
+	Pick func(title string) (dir string, create bool, hits []string, err error)
+	// Recheck — повторная сверка папки после последнего окна, прямо перед созданием папок и записью: dir —
+	// папка выгрузки (книги). Ошибка — выгрузки нет, ничего не создано. nil — без сверки.
+	Recheck func(dir string) error
+}
 
 // Export собирает развороты по настройкам окна экспорта: спрашивает папку и пишет в фоне.
 // Ход работы приходит событиями export:progress и export:done; остановка — CancelExport.
-func (s *Service) Export(o Options) (bool, error) {
+func (s *Service) Export(o Options) (bool, error) { return s.ExportWith(Job{Rev: -1, Opt: o}) }
+
+// ExportWith — Export по заданию j. Host.Editor зовётся только при j.Ed == nil и после того, как
+// флаг busy поднят.
+func (s *Service) ExportWith(j Job) (bool, error) {
 	// Флаг ставим до диалога: пока он открыт, второй вызов (из браузера) не пройдёт.
-	s.mu.Lock()
-	if s.busy {
-		s.mu.Unlock()
+	if !s.acquire() {
 		return false, fmt.Errorf("экспорт уже идёт")
 	}
-	s.busy = true
-	s.mu.Unlock()
 	started := false
 	defer func() {
 		if !started {
-			s.mu.Lock()
-			s.busy = false
-			s.mu.Unlock()
+			s.release()
 		}
 	}()
+	if j.Ed == nil {
+		j.Ed = s.h.Editor()
+	}
+	pick := j.Pick
+	if pick == nil {
+		pick = func(title string) (string, bool, []string, error) {
+			d, err := s.h.PickDir(title)
+			return d, false, nil, err
+		}
+	}
 
 	// Всё, что может отказать, — до диалога папки и удаления прежних файлов: иначе отказ пришёл бы после потерь.
-	gen := text.Gen() // до снимка: смена шрифтов между ними не проскочит (export.PinFonts)
-	p, v := s.h.Editor().Snapshot()
-	var pj *printJob // режим «для типографии» (047, 081): папка книги, имена и памятка
-	if o.Print != "" {
-		prof, ok := printshop.ProfileOf(o.Print)
-		if !ok {
-			return false, errors.New("неизвестная типография")
-		}
-		var err error
-		if pj, err = printOptions(p, s.h.Editor().Path(), &o, prof); err != nil {
-			return false, err
-		}
-	}
-	o.Quality, o.DPI = export.ClampOptions(o.Quality, o.DPI, p.Settings.DPI)
-	n := len(v.Spreads)
-	// Обложка (032): нет её или проект-лист — флаги игнорируются; «только обложка» включает обложку.
-	cover := export.NewCoverJob(p, v, o.DPI, o.Quality)
-	if p.Settings.Sheet || (!o.Cover && !o.CoverOnly) {
-		cover = nil
-	}
-	o.Cover, o.CoverOnly = cover != nil, o.CoverOnly && cover != nil
-	if n == 0 && cover == nil {
-		return false, fmt.Errorf("в альбоме нечего экспортировать")
-	}
-	o.Pages = o.Pages && !p.Settings.Sheet // у листа 031 «отдельными страницами» нет: один файл на лист
-	g := p.Geo(nil)                        // холст — половина листа (032 §7): у разворота страница, у листа 031 — W/2
-	opt := render.Options{PageW: g.W / 2, PageH: g.H, DPI: o.DPI, Quality: o.Quality}
-	if pj != nil { // формат типографии с px: файл разворота строго по цели (123 §5), обложка не подгоняется
-		opt.FitW, opt.FitH = pj.plan.FitW, pj.plan.FitH
-	}
-	var pl export.Plan // «только обложка»: пустой план, не Full — хвосты разворотов не удаляются
-	if !o.CoverOnly {
-		units, err := exportUnits(o.Range, n, p.Settings.Sheet)
-		if err != nil {
-			return false, err
-		}
-		pl = export.NewPlan(units, n, o.Pages)
-		if err := export.CheckCanvases(opt, o.Pages); err != nil {
-			return false, err
-		}
-	}
-	if cover != nil {
-		if err := export.CheckCanvas(cover.Opt); err != nil {
-			return false, err
-		}
-		pl = pl.WithCover(cover)
-	}
-	if pj != nil { // имена типографии (1-01.jpg у Фабрики) — и в записи, и в разборе папки
-		pl = pl.WithPrefix(pj.prof.Prefix)
-	}
-	sel := pl.SelectedPhotos(v, opt.PageW)
-	if err := export.MissingPhotos(p, sel, s.h.Exists); err != nil {
+	pr, err := s.prepare(j.Ed, j.Opt, j.Name, j.Rev)
+	if err != nil {
 		return false, err
 	}
-	if err := pl.MissingBorderFiles(v, opt.PageW, s.h.Exists); err != nil {
+	pj, pl := pr.pj, pr.pl
+	drafts, conv, ok, err := s.warnBeforeDir(pr) // «нет» не должно стоить выбора папки
+	if !ok || err != nil {
 		return false, err
-	}
-	// Профили проверяем тоже до диалога папки: ответ «нет» не должен стоить выбора папки.
-	conv, other := s.h.ColorReport(export.PickPhotos(p, sel))
-	if text := export.ColorWarning(other); text != "" {
-		if ok, err := s.h.Ask(text); !ok {
-			return false, err
-		}
-	}
-	// Пустые развороты — тоже до папки, по тому же доводу (спека 013).
-	// Лист только с фоном альбома считается пустым, но белым он не выйдет (0.23-g3g4 G4-4);
-	// обложку фон альбома не красит (098-10) — одна пустая обложка остаётся «белой».
-	// Лист и обложка только с заготовками — не здесь, а в вопросе о заготовках после папки (0.28-131-19).
-	drafts := export.DraftSummaryFor(v, &pl, opt.PageW)
-	blank, blankCover := drafts.TakeBlank(export.BlankSpreads(v, &pl), cover != nil && export.BlankCover(v))
-	white := (p.Settings.Bg == "" || p.Settings.Bg == "#ffffff") && (p.AlbumBg == nil || len(blank) == 0)
-	if text := export.BlankWarningCover(blank, blankCover, white); text != "" {
-		if ok, err := s.h.Ask(text); !ok {
-			return false, err
-		}
-	}
-	// Пустые поля подписей (030) и имена без фото (071) — тоже до папки: в печати они пусты. Только листы плана.
-	if text := export.FieldsWarning(export.PlanFields(v, &pl)); text != "" {
-		if ok, err := s.h.Ask(text); !ok {
-			return false, err
-		}
-	}
-	// Своих шрифтов нет на этом компьютере (082) — тоже до папки: текст выйдет шрифтом Montserrat.
-	if text := export.FontsWarning(export.PlanFonts(v, &pl)); text != "" {
-		if ok, err := s.h.Ask(text); !ok {
-			return false, err
-		}
-	}
-	if text := coverQuestion(pj, cover, v); text != "" {
-		if ok, err := s.h.Ask(text); !ok {
-			return false, err
-		}
 	}
 	title := "Куда выгрузить"
 	if pj != nil {
 		title = "Куда выгрузить — папка книги будет внутри"
 	}
-	dir, err := s.h.PickDir(title)
-	if err != nil || dir == "" {
+	ch, ok, err := s.chooseDir(j, pick, title)
+	if !ok || err != nil {
 		return false, err
 	}
-	dir, mkOut, ok, err := s.outsideAlbum(dir) // 121: в папке фото альбома — вопрос «выгрузить рядом?»
-	if !ok || err != nil {
-		return false, err // «Нет» — err == nil: ничего не пишем и не создаём
-	}
-	s.h.RememberDir(dir)                 // с этого места dir — уже соседняя
-	dir, mkBook, err := bookDir(pj, dir) // дальше dir — папка книги; mkBook — создать её
+	dir, mkBook, err := bookDir(pj, ch.dir) // дальше dir — папка книги; mkBook — создать её
 	if err != nil {
 		return false, err
 	}
@@ -152,65 +91,120 @@ func (s *Service) Export(o Options) (bool, error) {
 			return false, err
 		}
 	}
-
-	var ours, foreign []export.DirFile
-	if mkOut == "" && mkBook == "" { // новых папок ещё нет: читать нечего
-		if ours, foreign, err = export.PlanDirPrefix(dir, pl.Prefix); err != nil {
-			return false, fmt.Errorf("не удалось прочитать папку экспорта: %w", err)
-		}
+	// Новых папок ещё нет — читать нечего.
+	stale, ok, err := s.confirmDir(pr, dir, ch.mkOut != "" || mkBook != "" || ch.mkPick != "", mkBook, ch.hits)
+	if !ok || err != nil {
+		return false, err
 	}
-	ours, foreign = export.AddCoverFile(pl, dir, ours, foreign) // 00.jpg (1-00.jpg): наш заменяется, чужой — отказ
-	if foreign = export.HitFiles(pl, foreign); len(foreign) > 0 {
-		return false, fmt.Errorf("В папке есть файлы с номерами разворотов (или %s) не из Sosnina Albums (%d шт., например %s). Выберите другую папку или уберите их.", pl.CoverName(), len(foreign), foreign[0].Name) //nolint:revive,staticcheck // текст уходит пользователю тостом как есть
-	}
-	var stale []string
-	if hit := export.HitFiles(pl, ours); len(hit) > 0 {
-		if ok, err := s.h.Ask(export.ReplaceQuestion(pl, hit)); !ok {
+	if j.Recheck != nil {
+		if err := j.Recheck(dir); err != nil {
 			return false, err
 		}
-		stale = export.StaleNames(hit, pl.Names(n)) // удалятся после записи новых
 	}
-	if pj != nil && cover == nil && mkBook == "" { // свой старый 00.jpg: загрузчик взял бы прежнюю обложку
-		stale = append(stale, printshop.OldCover(dir, pj.prof.CoverName())...)
+	if err := makeDirs(ch.mkPick, ch.mkOut, mkBook); err != nil {
+		return false, err
 	}
-	if pj != nil && mkBook == "" {
-		if text := extraQuestion(pj.prof, dir, pl.Names(n)); text != "" {
-			if ok, err := s.h.Ask(text); !ok {
-				return false, err
-			}
-		}
-	}
-	if mkOut != "" { // соседняя папка выгрузки (121): раньше папки книги внутри неё
-		if err := os.Mkdir(mkOut, 0o755); err != nil {
-			log.Printf("экспорт: папка выгрузки: %v", paths.NoPath(err))
-			return false, fmt.Errorf("не удалось создать папку выгрузки: %w", err)
-		}
-	}
-	if mkBook != "" { // после всех вопросов: «нет» не оставляет пустой папки
-		if err := os.Mkdir(mkBook, 0o755); err != nil {
-			log.Printf("экспорт: папка книги: %v", paths.NoPath(err))
-			return false, fmt.Errorf("не удалось создать папку книги: %w", err)
-		}
-	}
+	// Запоминаем после всех отказов и созданных папок: «нет» в окне корень не меняет.
+	s.h.RememberDir(ch.dir, ch.root)
 	var memo []string // памятка окна «Готово» типографии; nil — обычный тост
 	if pj != nil {
 		memo = pj.plan.Memo
 	}
-
-	spreads := export.FromView(p, v)
-	export.PinFonts(spreads, gen)
-	j := exportJob{spreads: spreads, pl: pl, opt: opt, dir: dir, stale: stale, conv: conv, memo: memo}
-	ctx, cancel := context.WithCancel(s.h.StopCtx())
+	spreads := export.FromView(pr.p, pr.v)
+	export.PinFonts(spreads, pr.gen)
+	rj := exportJob{spreads: spreads, pl: pl, opt: pr.opt, dir: dir, stale: stale, conv: conv, memo: memo}
 	started = true
-	s.mu.Lock()
-	s.dir, s.cancel = dir, cancel
-	s.mu.Unlock()
-	if !s.h.GoBG(func() { s.runExport(ctx, cancel, j) }) {
-		cancel()
-		s.end() // фон закрыт: выгрузки не будет, флаг не оставляем
-		return false, nil
+	return s.launch(j.Ed.ID(), pl, rj), nil
+}
+
+// chosen — выбранная папка выгрузки: dir (после «рядом» 121 — соседняя), корень выгрузок для
+// RememberDir ("" — не менять), новые папки (mkPick — выбранная человеком, mkOut — соседняя) и
+// набор своих файлов, о замене которых уже предупредил вопрос.
+type chosen struct {
+	dir, root     string
+	mkPick, mkOut string
+	hits          []string
+}
+
+// chooseDir спрашивает папку (pick), сверяет её с папками фото альбома (121: вопрос «выгрузить
+// рядом?») и решает, какие папки создать после вопросов. ok = false — отказ или «нет».
+func (s *Service) chooseDir(j Job, pick func(string) (string, bool, []string, error), title string) (ch chosen, ok bool, err error) {
+	picked, create, hits, err := pick(title)
+	if err != nil || picked == "" {
+		return chosen{}, false, err
 	}
-	return true, nil
+	dir, mkOut, ok, err := s.outsideAlbum(j.Ed, picked)
+	if !ok || err != nil {
+		return chosen{}, false, err // «Нет» — err == nil: ничего не пишем и не создаём
+	}
+	ch = chosen{dir: dir, mkOut: mkOut, hits: hits}
+	// Новая папка человека создаётся, только если «рядом» не увело в соседнюю: фото добавили между
+	// вопросом и щелчком — тогда создаётся одна соседняя (mkOut), пустой папки среди фото нет.
+	if create && dir == picked {
+		ch.mkPick = dir
+	}
+	if dir == picked { // «рядом» (121) корень выгрузок не меняет
+		ch.root = exportRoot(dir, ch.mkPick != "", albumName(j.Ed, j.Name))
+	}
+	return ch, true, nil
+}
+
+// launch запускает запись в фоне (флаг busy уже поднят): ход агента — «идёт» для альбома id. Фон
+// закрыт (программа выходит) — выгрузки не будет, флаг не оставляем.
+func (s *Service) launch(id uint64, pl export.Plan, rj exportJob) bool {
+	ctx, cancel := context.WithCancel(s.h.StopCtx())
+	s.mu.Lock()
+	s.dir, s.cancel = rj.dir, cancel
+	s.last = ExportState{AlbumID: id, State: StateRunning, Total: planTotal(pl)}
+	s.mu.Unlock()
+	if !s.h.GoBG(func() { s.runExport(ctx, cancel, rj) }) {
+		cancel()
+		s.endAs(StateStopped, "")
+		return false
+	}
+	return true
+}
+
+// acquire поднимает флаг «выгрузка идёт»; false — уже идёт.
+func (s *Service) acquire() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.busy {
+		return false
+	}
+	s.busy = true
+	return true
+}
+
+// release снимает флаг, если выгрузка не дошла до фона.
+func (s *Service) release() {
+	s.mu.Lock()
+	s.busy = false
+	s.mu.Unlock()
+}
+
+// makeDirs создаёт новые папки после всех вопросов, внешняя раньше внутренней: выбранная человеком,
+// соседняя (121), книги. Появившаяся с момента вопроса — ошибка, а не запись в неразобранную папку.
+func makeDirs(mkPick, mkOut, mkBook string) error {
+	for _, mk := range []struct{ path, what string }{{mkPick, "папку"}, {mkOut, "папку выгрузки"}, {mkBook, "папку книги"}} {
+		if mk.path == "" {
+			continue
+		}
+		if err := os.Mkdir(mk.path, 0o755); err != nil {
+			log.Printf("экспорт: не создана папка (%s): %v", mk.what, paths.NoPath(err))
+			return fmt.Errorf("не удалось создать %s: %w", mk.what, err)
+		}
+	}
+	return nil
+}
+
+// exportRoot — корень выгрузок после выгрузки в dir (152-15): папка, созданная выгрузкой (created)
+// или названная как альбом, — «на альбом», корнем будет её родитель; иначе корень — сама папка.
+func exportRoot(dir string, created bool, album string) string {
+	if created || album != "" && strings.EqualFold(filepath.Base(dir), album) {
+		return filepath.Dir(dir)
+	}
+	return dir
 }
 
 // exportUnits — цели диапазона окна экспорта; "" — nil (все развороты). У листа 031 «л»/«п» — ошибка.

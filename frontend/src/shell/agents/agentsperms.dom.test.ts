@@ -2,6 +2,7 @@
 import { tick } from 'svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte'
+import type { AgentPlace } from './agents'
 
 // Блок «Разрешения» окна «ИИ-агенты» (150): строки, группы, согласия с местами, «Спрашивать» у чтения, окно на строке.
 // Биндинги wailsjs подменены; решения — в Go, здесь только вызовы.
@@ -115,7 +116,18 @@ const permRows = (m: Record<string, string> = {}) => [
   },
   { tool: 'show_spread', title: 'Показать разворот', group: 'other', mode: 'allow', can: ['allow', 'ask', 'deny'], why: '', note: '' },
 ]
-const place = (dir: string, chosen = false) => ({ dir, chosen })
+const place = (dir: string, chosen = false, o: Partial<AgentPlace> = {}): AgentPlace => ({
+  key: dir,
+  dir,
+  label: '',
+  chosen,
+  bound: true,
+  narrow: false,
+  narrowRoot: false,
+  state: '',
+  here: '',
+  ...o,
+})
 const rowOf = (tool: string) => document.querySelector<HTMLElement>(`[data-row="tool:${tool}"]`) as HTMLElement
 const inRow = (tool: string, name: string) => within(rowOf(tool)).getByRole('button', { name })
 const groupSeg = (name: string) => screen.getByRole('group', { name })
@@ -285,6 +297,13 @@ describe('разрешения агентов (150)', () => {
     expect([...placesRow().querySelectorAll('bdi')].map((b) => b.textContent)).toEqual(['D:\\Фото', 'D:\\Фото\\2026'])
     await fireEvent.click(within(placesRow()).getByRole('button', { name: 'Забыть места' }))
     expect(spies.forget).toHaveBeenCalledTimes(1)
+  })
+
+  it('в строке мест — «Список (N) ▸» со счётом всех мест (не только показанных двух); список свёрнут, диски не опрашиваются', async () => {
+    const places = [place('D:\\Фото', true), place('D:\\Фото\\2026'), place('E:\\Архив'), place('F:\\Старое')]
+    await open(withPerms({ edit: true, places }, { add_folder: 'allow' }))
+    expect(within(placesRow()).getByRole('button', { name: 'Список (4) ▸' }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('list', { name: 'Места съёмок' })).toBeNull()
   })
 
   it('мест нет: «Без вопроса — нигде…», «Забыть места» нет; нет «Всегда» у папок — строки мест нет', async () => {
@@ -465,5 +484,71 @@ describe('согласие на правки при смешанных стро�
     expect(screen.queryByText(ASK_EDIT_TITLE)).toBeNull()
     expect(spies.setPerm).toHaveBeenLastCalledWith('vary_layouts', 'allow')
     expect(spies.setPerm).toHaveBeenCalledTimes(2)
+  })
+})
+
+// Строки «только с вопросом» (152, класс Q): Go отдаёт их в группе other с can = [ask, deny].
+describe('строки выгрузки и открытия: только с вопросом (152)', () => {
+  const q = (tool: string, title: string, mode = 'ask') => ({ tool, title, group: 'other', mode, can: ['ask', 'deny'], why: '', note: '' })
+  const withQ = (mode = 'ask') =>
+    infoOn({
+      edit: true,
+      perms: [...permRows({ create_album: 'ask' }), q('export_album', 'Выгрузить в JPEG', mode), q('open_album', 'Открыть альбом', mode)],
+    })
+
+  it('две строки среди «не меняют альбом»: «Всегда» серое, «Спрашивать» отмечено, пояснение «Спрашивает всегда»', async () => {
+    await open(withQ())
+    for (const t of ['export_album', 'open_album']) {
+      const names = [...rowOf(t).querySelectorAll('button')].map((b) => b.textContent)
+      expect(names).toEqual(['Всегда', 'Спрашивать', 'Запретить'])
+      expect(inRow(t, 'Всегда').getAttribute('aria-disabled')).toBe('true')
+      expect(pressed(inRow(t, 'Спрашивать'))).toBe(true)
+      expect(within(rowOf(t)).getByText('Спрашивает всегда')).toBeTruthy()
+    }
+    expect(screen.getByText('Не меняют альбом — групповой выбор их не трогает')).toBeTruthy()
+    expect(within(rowOf('create_album')).queryByText('Спрашивает всегда')).toBeNull()
+  })
+
+  it('щелчок по серому «Всегда» — ничего не уходит в Go; «Запретить» → SetAgentPerm(tool, deny)', async () => {
+    spies.setPerm.mockResolvedValue(withQ('deny'))
+    await open(withQ())
+    await fireEvent.click(inRow('export_album', 'Всегда'))
+    expect(spies.setPerm).not.toHaveBeenCalled()
+    await fireEvent.click(inRow('export_album', 'Запретить'))
+    expect(spies.setPerm).toHaveBeenCalledExactlyOnceWith('export_album', 'deny')
+  })
+
+  it('с why от Go «Всегда» не серое: щелчок значения не меняет, под строкой — пояснение; «Запретить» работает', async () => {
+    const WHY = 'Выгрузка и открытие альбома спрашивают всегда: папку и файл подтверждаете вы. Можно запретить.'
+    const info = withQ()
+    info.perms = info.perms.map((p) => (p.can.length === 2 ? { ...p, why: WHY } : p))
+    spies.setPerm.mockResolvedValue(info)
+    await open(info)
+    const b = inRow('export_album', 'Всегда')
+    expect(b.getAttribute('aria-disabled')).not.toBe('true')
+    expect(within(rowOf('export_album')).queryByText(WHY)).toBeNull()
+    await fireEvent.click(b)
+    expect(spies.setPerm).not.toHaveBeenCalled()
+    expect(within(rowOf('export_album')).getByText(WHY)).toBeTruthy()
+    expect(within(rowOf('open_album')).queryByText(WHY)).toBeNull()
+    expect(pressed(inRow('export_album', 'Спрашивать'))).toBe(true)
+    // обычная строка: «Всегда» работает как прежде
+    await fireEvent.click(inRow('create_album', 'Всегда'))
+    expect(spies.setPerm).toHaveBeenCalledTimes(0) // папка — сначала согласие
+    expect(screen.getByText('Добавлять папки по просьбе агента без вопроса?')).toBeTruthy()
+  })
+
+  it('повторный щелчок по уже выбранному «Спрашивать» — без вызова Go', async () => {
+    await open(withQ())
+    await fireEvent.click(inRow('open_album', 'Спрашивать'))
+    expect(spies.setPerm).not.toHaveBeenCalled()
+  })
+
+  it('групповой щелчок «Правки ▸ Запретить» Q-строк не касается', async () => {
+    spies.setGroup.mockResolvedValue(withQ())
+    await open(withQ())
+    await fireEvent.click(inGroup('Правки', 'Запретить'))
+    expect(spies.setGroup).toHaveBeenCalledExactlyOnceWith('edit', 'deny')
+    expect(pressed(inRow('export_album', 'Спрашивать'))).toBe(true)
   })
 })

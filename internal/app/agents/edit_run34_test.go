@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
 )
 
@@ -253,7 +254,12 @@ func TestAgentStickerArgs(t *testing.T) {
 		t.Fatalf("ответ: %s", rep.Raw)
 	}
 	n := r.fx.edit.nStk.Load()
-	failText(t, tcall(t, cs, "add_sticker", args34(r, map[string]any{"stickers": []any{st(map[string]any{"spread": "cover", "item": "sa:star"})}})), errCoverNotTarget("add_sticker"))
+	// «cover» с 154 — цель: пачка идёт в Host с ID обложки.
+	okReply(t, tcall(t, cs, "add_sticker", args34(r, map[string]any{"stickers": []any{st(map[string]any{"spread": "cover", "item": "sa:star"})}})))
+	if g := r.fx.edit.got34().lastStk; !slices.Equal(g.Spreads, []string{model.CoverID}) || r.fx.edit.nStk.Load() != n+1 {
+		t.Fatalf("StickerReq на обложку: %+v", g)
+	}
+	n = r.fx.edit.nStk.Load()
 	failText(t, tcall(t, cs, "add_sticker", args34(r, map[string]any{"stickers": []any{st(map[string]any{"spread": 1, "item": "sa:star"}), st(map[string]any{"spread": 77, "item": "sa:star"})}})), errNoSpreadFlat)
 	many := make([]any, MaxStickers+1)
 	for i := range many {

@@ -69,6 +69,8 @@ type AgentsInfo struct {
 	// Разрешения (150): строки по инструментам и места съёмок. Perms заполняет фасад Т3.
 	Perms  []AgentPerm  `json:"perms"`  // не nil
 	Places []AgentPlace `json:"places"` // не nil; новые первыми
+	// Lifted — места 0.34, поднятые до корня архива при обновлении: заметка до «Понятно» (0.35/153).
+	Lifted []AgentPlaceLift `json:"lifted"` // не nil
 }
 
 // AgentsSaved — итог SaveClaudeExtension (как TplSave, 086).
@@ -152,7 +154,7 @@ func (a *App) agentsInfo() AgentsInfo {
 	cfg := prefs.AgentsOf(a.cfgDir)
 	info := AgentsInfo{Status: st, Hint: hint, Error: errText, Level: cfg.Level, Edit: a.editGroupOn(), EditBlocked: a.editBlocked(), AsksMuted: a.agents != nil && a.agents.AsksMuted(),
 		Portable: runtime.GOOS == "windows" && update.ModeOf(runtime.GOOS, exe) == update.ModeSetup,
-		Setups:   setups, Clients: []AgentClient{}, Calls: []AgentCall{}, Perms: a.agentPermRows(), Places: a.agentPlaces()}
+		Setups:   setups, Clients: []AgentClient{}, Calls: []AgentCall{}, Perms: a.agentPermRows(), Places: a.agentPlaces(), Lifted: a.agentLifted()}
 	for _, c := range a.agents.Clients() {
 		info.Clients = append(info.Clients, AgentClient{Name: c.Name, Since: c.Since.UnixMilli()})
 	}

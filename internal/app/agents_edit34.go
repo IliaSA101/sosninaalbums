@@ -43,7 +43,8 @@ func (a *App) agentFamilies(ids []string) []string {
 	if ed == nil {
 		return nil
 	}
-	return ed.Families(ids)
+	fams, _ := ed.Families(ids) // ревизия нужна agentVary, этому чтению — нет
+	return fams
 }
 
 // agentStart — начало правки: редактор по ключу агента и разрешение самого инструмента (не «хоть
@@ -171,6 +172,9 @@ func (a *App) agentsBg(ctx context.Context, in agents.BgReq) (res agents.BgRes, 
 	if err != nil {
 		return res, agentHostErr(err)
 	}
+	if in.Album {
+		return a.agentsAlbumBg(ctx, ed, in)
+	}
 	prev := ed.View()
 	targets := make([]model.GridTarget, len(in.Spreads))
 	for i, id := range in.Spreads {
@@ -244,7 +248,8 @@ func (a *App) agentsStickers(ctx context.Context, in agents.StickerReq) (res age
 	switch {
 	case errors.Is(err, album.ErrNoSheet):
 		return res, agents.ErrNoSpread
-	case errors.Is(err, model.ErrStickers), errors.Is(err, model.ErrStickersTotal), errors.Is(err, model.ErrSticker):
+	case errors.Is(err, model.ErrStickers), errors.Is(err, model.ErrStickersTotal), errors.Is(err, model.ErrSticker),
+		errors.Is(err, album.ErrNoSide): // нет места на сторонке обложки — как «нет места на листе»
 		return res, agents.ErrStickerLimit
 	case err != nil:
 		return res, agentHostErr(agentErr(err))

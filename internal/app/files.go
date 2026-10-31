@@ -376,16 +376,31 @@ func (a *App) rememberRecent(path string) {
 // есть в config.recent: интерфейс не может открыть произвольный файл. Нет файла —
 // ошибка, запись остаётся (её убирает ForgetRecent).
 func (a *App) OpenRecent(path string) (State, error) {
-	if prefs.RecentIndex(a.loadConfig().Recent, path) < 0 {
-		return a.GetState(), fmt.Errorf("альбома нет в списке последних")
-	}
-	if err := paths.CheckLocalPath(path); err != nil {
+	if err := a.recentCheck(path); err != nil {
 		return a.GetState(), err
 	}
-	if !strings.HasSuffix(strings.ToLower(path), projectExt) {
-		return a.GetState(), fmt.Errorf("это не альбом (%s)", projectExt)
-	}
 	return a.openPath(path)
+}
+
+// Отказы recentCheck: агент по ним различает «нет в последних» и «не альбом» (agentopen.go).
+var (
+	errNotRecent = errors.New("альбома нет в списке последних")
+	errNotAlbum  = fmt.Errorf("это не альбом (%s)", projectExt)
+)
+
+// recentCheck — путь можно открыть из «Последних»: он есть в config.recent, локальный и с суффиксом
+// альбома. Общая проверка меню (OpenRecent) и open_album агента.
+func (a *App) recentCheck(path string) error {
+	if prefs.RecentIndex(a.loadConfig().Recent, path) < 0 {
+		return errNotRecent
+	}
+	if err := paths.CheckLocalPath(path); err != nil {
+		return err
+	}
+	if !strings.HasSuffix(strings.ToLower(path), projectExt) {
+		return errNotAlbum
+	}
+	return nil
 }
 
 // ForgetRecent убирает альбом из списка последних (сам файл не трогает).

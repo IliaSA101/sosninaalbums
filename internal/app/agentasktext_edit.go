@@ -43,6 +43,12 @@ type editAsk struct {
 	Item     string   // фон или типография по каталогу; "" — неизвестно или не годится для показа
 	Format   string   // формат типографии
 	Sheet    bool     // альбом-лист: «лист» вместо «разворот»
+	// set_background (154): фон альбома или замена фото фона; числа фасад считает по виду, а не со слов агента.
+	AlbumBg    bool
+	OwnCat     []int // фон альбома: листы, с которых уйдёт свой фон каталога (листы согласия — только если он там есть)
+	KeepClient []int // фон альбома: листы с фото клиента вне согласия — остаются
+	TakeClient []int // фон альбома: листы согласия с фото клиента
+	Photos     int   // фото фона, которые уйдут: на листах согласия (фон альбома) или по плану (фон на набор); 0 — строки нет
 }
 
 // familyNames — подписи семейств раскладок (variety.Family), те же, что FAMILIES в variants.ts.
@@ -61,6 +67,7 @@ func editAskBody(e editAsk) (askBody, bool) {
 	n := max(e.Count, 0)
 	undo := true // правка альбома даёт один шаг Ctrl+Z
 	var title, ok, more string
+	var extra []string
 	switch e.Tool {
 	case toolAutobuild:
 		title, ok = "Собрать "+e.buildWhat()+" из "+freePhotos(n)+" в конец альбома?", "Собрать"
@@ -81,7 +88,12 @@ func editAskBody(e editAsk) (askBody, bool) {
 	case toolCover:
 		title, ok = "Поставить другое фото на обложку?", "Поставить"
 	case toolBg:
-		title, ok = "Поставить "+e.itemOr("выбранный фон")+" "+e.onSpreads()+"?", "Поставить фон"
+		ok = "Поставить фон"
+		if e.AlbumBg {
+			title, more, extra = "Поставить "+e.itemOr("выбранный фон")+" фоном альбома?", e.albumBgMore(), e.albumBgLines()
+		} else if title = "Поставить " + e.itemOr("выбранный фон") + " " + e.onSpreads() + "?"; e.Photos > 0 {
+			more = "Фото фона заменятся: " + strconv.Itoa(e.Photos)
+		}
 	case toolSticker:
 		title, ok = "Добавить "+stickers(n)+" "+e.onSpreads()+"?", "Добавить"
 	case toolPrint:
@@ -94,10 +106,44 @@ func editAskBody(e editAsk) (askBody, bool) {
 	if more != "" {
 		lines = append(lines, more)
 	}
+	lines = append(lines, extra...)
 	if undo {
 		lines = append(lines, askUndoLine)
 	}
 	return askBody{Title: title, Lines: append(lines, askWho), OK: ok}, true
+}
+
+// albumBgMore — «Он ляжет на все развороты без своего фона.»
+func (e editAsk) albumBgMore() string {
+	if e.Sheet {
+		return "Он ляжет на все листы без своего фона."
+	}
+	return "Он ляжет на все развороты без своего фона."
+}
+
+// albumBgLines — что фон альбома сделает со своими фонами листов (числа — по виду, 154 design §1.4);
+// строки без листов не пишутся.
+func (e editAsk) albumBgLines() (lines []string) {
+	fromOne, fromMany, on := "разворота", "разворотов", "разворотах"
+	if e.Sheet {
+		fromOne, fromMany, on = "листа", "листов", "листах"
+	}
+	from := func(n int) string { // «с разворота 2» / «с разворотов 2, 5»
+		if n == 1 {
+			return fromOne
+		}
+		return fromMany
+	}
+	if len(e.OwnCat) > 0 {
+		lines = append(lines, "Свои фоны из каталога уйдут с "+from(len(e.OwnCat))+": "+numsText(e.OwnCat))
+	}
+	if len(e.KeepClient) > 0 {
+		lines = append(lines, "Фото клиента на фоне останутся на "+on+": "+numsText(e.KeepClient))
+	}
+	if len(e.TakeClient) > 0 {
+		lines = append(lines, "Фото фона уйдут с "+from(len(e.TakeClient))+" "+numsText(e.TakeClient)+": "+strconv.Itoa(e.Photos)+" фото")
+	}
+	return lines
 }
 
 // buildWhat — «3 разворота» / «развороты» (число не названо); у листа — «листы».

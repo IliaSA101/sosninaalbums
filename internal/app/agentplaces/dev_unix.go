@@ -1,15 +1,15 @@
 //go:build !windows
 
-package app
+package agentplaces
 
 import (
 	"os"
 	"syscall"
 )
 
-// devOf — номер устройства папки (st_dev): у корня тома он другой, чем у родителя. Lstat: путь
+// DevOf — номер устройства папки (st_dev): у корня тома он другой, чем у родителя. Lstat: путь
 // уже без ссылок. Не узнали — ok = false (место не берём).
-func devOf(p string) (dev uint64, ok bool) {
+func DevOf(p string) (dev uint64, ok bool) {
 	st, err := os.Lstat(p)
 	if err != nil {
 		return 0, false

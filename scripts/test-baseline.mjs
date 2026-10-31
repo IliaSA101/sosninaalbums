@@ -12,6 +12,11 @@
 // Опции: --go / --ui — только своя часть (по умолчанию обе);
 //   --go-json <файл>  готовый вывод go test -json (check.ps1 берёт из шага go test), иначе прогоняем сами;
 //   --ui-json <файл>  готовый вывод `vitest run --reporter=json` (из шага vitest), иначе прогоняем сами.
+//   --skips  (155, да владельца 30.10) список пропущенных Go-тестов — ключ <GO_KEY>-skips рядом с разделом покрытия
+//            (внутри раздела нельзя: check() обходит его ключи как пакеты). --write --skips --go-json <json CI>
+//            пишет только список, покрытие не трогает; --write без флага список не трогает. --check --skips:
+//            ключа нет — заметка, есть — новый пропуск = провал, ушедший из списка — заметка. Без флага
+//            (check.sh/check.ps1 на машине разработчика) пропуски не сверяем: среда иная, чем у раннера CI.
 //
 // Провал: сумма по имени уменьшилась (с учётом переноса теста в другой пакет/файл под тем же именем),
 // либо покрытие пакета упало больше чем на 0,5 п. п. Рост и новые пакеты — ок. Эталон обновляется только
@@ -114,14 +119,16 @@ function parseGo(file) {
     }
   }
   const failedTests = []
+  const skipped = []
   for (const [key, act] of result) {
     const [p, name] = key.split('\0')
     const g = get(p)
     g.names[name] = (g.names[name] ?? 0) + 1
     if (act === 'fail') failedTests.push({ pkg: p, name, out: outputs.get(key) ?? [] })
+    if (act === 'skip') skipped.push(`${p} ${name}`)
   }
   for (const g of Object.values(pkgs)) g.names = sortObj(g.names)
-  return { pkgs, failedTests, failedPkgs, bad }
+  return { pkgs, failedTests, failedPkgs, bad, skipped: [...new Set(skipped)].sort() }
 }
 
 function sortObj(o) {
@@ -173,6 +180,7 @@ function goMeasure() {
   if (parsed.failedPkgs.size || parsed.failedTests.length) {
     fail(`go test failed - baseline not compared:\n${summary(parsed).join('\n')}`)
   }
+  goSkips = parsed.skipped
   const cur = {}
   const treeNames = {}
   for (const p of Object.keys(parsed.pkgs).sort()) {
@@ -306,6 +314,29 @@ if (mode === 'run-go') {
   process.exit(0)
 }
 
+// Список пропусков (155): своя запись и своя сверка, покрытие и фронт не трогаем
+const SKIPS_KEY = `${GO_KEY}-skips`
+let goSkips = null
+if (flag('--skips') && mode === 'write') {
+  const file = opt('--go-json')
+  if (!file) fail('--write --skips needs --go-json <go test -json of CI>')
+  const parsed = parseGo(file)
+  if (parsed.failedPkgs.size || parsed.failedTests.length) {
+    fail(`go test failed - skips not written:\n${summary(parsed).join('\n')}`)
+  }
+  fs.writeFileSync(goTarget, JSON.stringify({ ...readJson(goTarget), [SKIPS_KEY]: parsed.skipped }, null, 1) + '\n')
+  console.log(`test-baseline ${SKIPS_KEY} written: ${parsed.skipped.length} skipped`)
+  process.exit(0)
+}
+function checkSkips(errors, notes) {
+  const base = readJson(goTarget)[SKIPS_KEY]
+  if (!base) return notes.push(`skips list ${SKIPS_KEY} not written - not compared`)
+  const was = new Set(base)
+  for (const t of goSkips) if (!was.has(t)) errors.push(`new skip (test silently stopped running): ${t}`)
+  const now = new Set(goSkips)
+  for (const t of base) if (!now.has(t)) notes.push(`skip gone (test runs now): ${t}`)
+}
+
 const cur = {}
 if (doGo) cur.go = goMeasure()
 if (doUi) cur.ui = uiMeasure()
@@ -332,6 +363,7 @@ if (mode === 'print') {
   if (!fs.existsSync(target)) fail('testdata/test-baseline.json not found - run: node scripts/test-baseline.mjs --write')
   // Go сверяем с разделом своей ОС (GO_KEY в GO_BASELINE), фронт — общий
   const { errors, notes } = check({ go: readJson(goTarget)[GO_KEY], ui: readJson(target).ui }, cur)
+  if (flag('--skips') && goSkips) checkSkips(errors, notes)
   if (errors.length) {
     console.error('test baseline broken (tests must not weaken; update only via --write with owner approval):')
     for (const e of errors) console.error('  ' + e)

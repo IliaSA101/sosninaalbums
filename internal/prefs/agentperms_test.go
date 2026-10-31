@@ -78,7 +78,7 @@ func TestAgentsToolsMigrate(t *testing.T) {
 	}
 	for _, k := range AgentToolNames() {
 		want := PermAllow
-		if isEditClass(AgentToolClass(k)) {
+		if c := AgentToolClass(k); isEditClass(c) || c == ClassAskOnly { // Q без флажка — «Запретить»
 			want = PermDeny
 		}
 		if fresh.Tools[k] != want {
@@ -148,11 +148,11 @@ func TestAgentsToolsClean(t *testing.T) {
 	}
 	long := filepath.Join(root, strings.Repeat("д", 600)) // > 1 КБ в байтах
 	places := []Place{
-		{root, PlaceChosen}, {root, PlaceParent}, {strings.ToUpper(root), PlaceParent},
-		{"относительный/путь", PlaceChosen}, {"", PlaceChosen}, {long, PlaceChosen},
-		{filepath.Join(root, "x"), "other"}, {filepath.Join(root, "y"), ""},
-		{filepath.Join(root, "bad\x00nul"), PlaceChosen}, {filepath.Join(root, "bad\xffutf"), PlaceChosen},
-		{filepath.Join(root, "tab\there"), PlaceChosen}, {root + string(filepath.Separator), PlaceParent},
+		{Dir: root, How: PlaceChosen}, {Dir: root, How: PlaceParent}, {Dir: strings.ToUpper(root), How: PlaceParent},
+		{Dir: "относительный/путь", How: PlaceChosen}, {Dir: "", How: PlaceChosen}, {Dir: long, How: PlaceChosen},
+		{Dir: filepath.Join(root, "x"), How: "other"}, {Dir: filepath.Join(root, "y"), How: ""},
+		{Dir: filepath.Join(root, "bad\x00nul"), How: PlaceChosen}, {Dir: filepath.Join(root, "bad\xffutf"), How: PlaceChosen},
+		{Dir: filepath.Join(root, "tab\there"), How: PlaceChosen}, {Dir: root + string(filepath.Separator), How: PlaceParent},
 	}
 	got := AgentPerms{Tools: tools, Places: places}.clean()
 	wantModes(t, "чистка", got, map[string]string{
@@ -170,7 +170,7 @@ func TestAgentsToolsClean(t *testing.T) {
 	if runtime.GOOS == "linux" {
 		wantPlaces = 2
 	}
-	if len(got.Places) != wantPlaces || got.Places[0] != (Place{root, PlaceChosen}) {
+	if len(got.Places) != wantPlaces || got.Places[0] != (Place{Dir: root, How: PlaceChosen}) {
 		t.Fatalf("места: %+v", got.Places)
 	}
 	if _, err := os.Stat(root); err == nil {
@@ -180,7 +180,7 @@ func TestAgentsToolsClean(t *testing.T) {
 	// Больше 10 мест — первые 10; чужих имён не больше 32 сверх известных, результат стабилен.
 	many := make([]Place, 0, 40)
 	for i := range 40 {
-		many = append(many, Place{filepath.Join(dir, fmt.Sprintf("m%02d", i)), PlaceParent})
+		many = append(many, Place{Dir: filepath.Join(dir, fmt.Sprintf("m%02d", i)), How: PlaceParent})
 	}
 	big := map[string]string{}
 	for i := range 200 {
@@ -196,7 +196,7 @@ func TestAgentsToolsClean(t *testing.T) {
 		t.Fatalf("пусто: %+v", e)
 	}
 	// Чистка копирует: правка результата не трогает источник.
-	src := AgentPerms{Tools: map[string]string{"autobuild": PermAllow}, Places: []Place{{root, PlaceChosen}}}
+	src := AgentPerms{Tools: map[string]string{"autobuild": PermAllow}, Places: []Place{{Dir: root, How: PlaceChosen}}}
 	cp := src.clean()
 	cp.Tools["autobuild"] = PermDeny
 	cp.Places[0].How = PlaceParent
@@ -288,7 +288,7 @@ func rt033Same(t *testing.T) {
 		p.Tools["autobuild"], p.Tools["vary_layouts"], p.Tools["undo_last_edit"] = PermAllow, PermAllow, PermAllow
 		p.Tools["add_folder"], p.Tools["create_album"] = PermAsk, PermAsk
 		p.Tools["set_marks"] = PermDeny
-		p.Places = []Place{{filepath.Join(dir, "Фото"), PlaceChosen}}
+		p.Places = []Place{{Dir: filepath.Join(dir, "Фото"), How: PlaceChosen}}
 	})
 	RememberDir(dir, DirPhotos, dir)
 	write033(t, dir, true) // 0.33 пишет то же значение флажка
@@ -301,7 +301,7 @@ func rt033Same(t *testing.T) {
 // чтение, места и start_program целы. Включили обратно до записи 0.34 — права как были.
 func rt033Off(t *testing.T) {
 	dir := testkit.TempDir(t)
-	place := Place{filepath.Join(dir, "Фото"), PlaceParent}
+	place := Place{Dir: filepath.Join(dir, "Фото"), How: PlaceParent}
 	saved := UpdateAgentPerms(dir, func(p *AgentPerms) {
 		for _, k := range []string{"autobuild", "vary_layouts", "undo_last_edit", "set_marks"} {
 			p.Tools[k] = PermAllow
@@ -427,21 +427,21 @@ func TestPlacesPush(t *testing.T) {
 	dir := testkit.TempDir(t)
 	at := func(n int) string { return filepath.Join(dir, fmt.Sprintf("p%02d", n)) }
 
-	if got := PushPlace(nil, Place{"", PlaceChosen}); len(got) != 0 {
+	if got := PushPlace(nil, Place{Dir: "", How: PlaceChosen}); len(got) != 0 {
 		t.Fatalf("пустое место: %+v", got)
 	}
 	var list []Place
 	for i := range 12 {
-		list = PushPlace(list, Place{at(i), PlaceParent})
+		list = PushPlace(list, Place{Dir: at(i), How: PlaceParent})
 	}
 	if len(list) != MaxPlaces || list[0].Dir != at(11) || list[MaxPlaces-1].Dir != at(2) {
 		t.Fatalf("после 12: %d, первое %q, последнее %q", len(list), list[0].Dir, list[len(list)-1].Dir)
 	}
 	// Повтор уходит наверх без дубля; «chosen» после «parent» остаётся «chosen».
-	list = PushPlace(list, Place{at(5), PlaceChosen})
-	list = PushPlace(list, Place{at(7), PlaceParent})
-	list = PushPlace(list, Place{at(5) + string(filepath.Separator), PlaceParent})
-	if len(list) != MaxPlaces || list[0] != (Place{at(5), PlaceChosen}) || list[1].Dir != at(7) {
+	list = PushPlace(list, Place{Dir: at(5), How: PlaceChosen})
+	list = PushPlace(list, Place{Dir: at(7), How: PlaceParent})
+	list = PushPlace(list, Place{Dir: at(5) + string(filepath.Separator), How: PlaceParent})
+	if len(list) != MaxPlaces || list[0] != (Place{Dir: at(5), How: PlaceChosen}) || list[1].Dir != at(7) {
 		t.Fatalf("повторы: %+v", list)
 	}
 	n := 0
@@ -454,8 +454,8 @@ func TestPlacesPush(t *testing.T) {
 		t.Fatalf("дубль места: %+v", list)
 	}
 	// Источник не меняется.
-	src := []Place{{at(1), PlaceParent}}
-	_ = PushPlace(src, Place{at(2), PlaceParent})
+	src := []Place{{Dir: at(1), How: PlaceParent}}
+	_ = PushPlace(src, Place{Dir: at(2), How: PlaceParent})
 	if len(src) != 1 || src[0].Dir != at(1) {
 		t.Fatal("PushPlace изменил источник")
 	}
@@ -463,15 +463,15 @@ func TestPlacesPush(t *testing.T) {
 	// Через файл: круг Save→Load, права инструментов целы, негодное — без записи.
 	UpdateAgentPerms(dir, func(p *AgentPerms) { p.Tools["get_photo"] = PermDeny })
 	for i := range 3 {
-		AddPlace(dir, Place{at(i), PlaceParent})
+		AddPlace(dir, Place{Dir: at(i), How: PlaceParent})
 	}
 	p := LoadAgentPerms(dir)
 	if len(p.Places) != 3 || p.Places[0].Dir != at(2) || p.Tools["get_photo"] != PermDeny {
 		t.Fatalf("после AddPlace: %+v", p)
 	}
 	before, _ := os.ReadFile(ConfigPath(dir))
-	AddPlace(dir, Place{"relative", PlaceChosen})
-	AddPlace(dir, Place{at(9), "zzz"})
+	AddPlace(dir, Place{Dir: "relative", How: PlaceChosen})
+	AddPlace(dir, Place{Dir: at(9), How: "zzz"})
 	if after, _ := os.ReadFile(ConfigPath(dir)); string(after) != string(before) {
 		t.Fatalf("негодное место записано:\n%s", after)
 	}
@@ -488,7 +488,7 @@ func TestPlacesPush(t *testing.T) {
 	// Размер: 10 мест по 1 КБ — config.json далеко от 64 КБ посредника.
 	var fat []Place
 	for i := range 20 {
-		fat = PushPlace(fat, Place{filepath.Join(dir, strings.Repeat("я", 500), fmt.Sprint(i)), PlaceParent})
+		fat = PushPlace(fat, Place{Dir: filepath.Join(dir, strings.Repeat("я", 500), fmt.Sprint(i)), How: PlaceParent})
 	}
 	UpdateAgentPerms(dir, func(p *AgentPerms) { p.Places = fat })
 	if st, err := os.Stat(ConfigPath(dir)); err != nil || st.Size() > 32<<10 {

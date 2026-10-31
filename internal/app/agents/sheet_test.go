@@ -490,7 +490,7 @@ func TestContactSheetHostOptional(t *testing.T) {
 		t.Errorf("без правок 149 ждали 11 чтения и лист, получили %d: %v", len(got), got)
 	}
 	got = toolNames(t, func(h *Host) { h.Sheet = nil })
-	if got["get_contact_sheet"] || !got["autobuild"] || got["set_marks"] || len(got) != 18 {
+	if got["get_contact_sheet"] || !got["autobuild"] || got["set_marks"] || len(got) != 20 {
 		t.Errorf("без Sheet: %d инструментов: %v", len(got), got)
 	}
 	for name, drop := range map[string]func(*Host){"Families": func(h *Host) { h.Families = nil }, "Mark": func(h *Host) { h.Mark = nil },
@@ -507,7 +507,7 @@ func TestContactSheetHostOptional(t *testing.T) {
 		}
 	}
 	h := newFixture().host("", "", func() {})
-	if !h.canEdit34() || len(toolNames(t, func(*Host) {})) != 24 {
-		t.Fatal("полный набор не даёт 24 инструмента")
+	if !h.canEdit34() || len(toolNames(t, func(*Host) {})) != 26 {
+		t.Fatal("полный набор не даёт 26 инструментов")
 	}
 }

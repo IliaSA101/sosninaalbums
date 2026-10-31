@@ -291,7 +291,7 @@ func TestEditorFamilies(t *testing.T) {
 	v := e.View()
 	ids := []string{v.Spreads[0].ID, v.Spreads[1].ID, empty, "нет-такого", ""}
 	s := take(e)
-	got := e.Families(ids)
+	got, _ := e.Families(ids)
 	if len(got) != len(ids) || got[0] == "" || got[1] == "" || got[2] != "" || got[3] != "" || got[4] != "" {
 		t.Fatalf("семейства %q", got)
 	}
@@ -301,16 +301,49 @@ func TestEditorFamilies(t *testing.T) {
 			t.Fatalf("лист %d: семейство %q, плитка галереи %q", i, got[i], want)
 		}
 	}
-	if again := e.Families(ids); !reflect.DeepEqual(again, got) {
+	if again, _ := e.Families(ids); !reflect.DeepEqual(again, got) {
 		t.Fatalf("повтор дал другое: %q и %q", again, got)
 	}
 	s.same(t, e, "чтение Families")
-	if n := len(e.Families(nil)); n != 0 {
-		t.Fatalf("пустой запрос: %d", n)
+	if f, _ := e.Families(nil); len(f) != 0 {
+		t.Fatalf("пустой запрос: %d", len(f))
 	}
 	// Ручные места: сетка не имеет семейства.
 	edtest.FreezeAt(t, e, 0)
-	if g := e.Families(ids[:1]); g[0] != "" {
+	if g, _ := e.Families(ids[:1]); g[0] != "" {
 		t.Fatalf("сетка: %q", g)
+	}
+}
+
+// TestEditorFamiliesRev: ревизия берётся под тем же замком, что и чтение, — совпадает с rev вида;
+// чтение её не двигает, правка и отмена двигают (по ней agentVary узнаёт, что человек успел
+// поправить альбом между «до» и «после»). Несколько листов сразу; пустой запрос тоже отдаёт rev.
+func TestEditorFamiliesRev(t *testing.T) {
+	e := edtest.Open(t, model.New(), "")
+	edtest.NewSpread(e, -1, edtest.Photos("a", "b", "c"))
+	edtest.NewSpread(e, -1, edtest.Photos("d", "f"))
+	v := e.View()
+	ids := []string{v.Spreads[0].ID, v.Spreads[1].ID}
+	fams, r0 := e.Families(ids)
+	if r0 != v.Rev || r0 != edtest.Rev(e) || len(fams) != 2 {
+		t.Fatalf("rev %d, вид %d, семейства %q", r0, v.Rev, fams)
+	}
+	if _, r := e.Families(nil); r != r0 {
+		t.Fatalf("пустой запрос: rev %d, ждали %d", r, r0)
+	}
+	if _, r := e.Families(ids); r != r0 {
+		t.Fatalf("чтение сдвинуло rev: %d → %d", r0, r)
+	}
+	e.SetNoAlbumBg(ids[0], true)
+	if _, r1 := e.Families(ids); r1 != r0+1 {
+		t.Fatalf("после правки rev %d, ждали %d", r1, r0+1)
+	}
+	e.SetNoAlbumBg(ids[0], true) // холостая: ни шага, ни rev
+	if _, r := e.Families(ids); r != r0+1 {
+		t.Fatalf("холостая сдвинула rev: %d", r)
+	}
+	e.Undo()
+	if _, r2 := e.Families(ids); r2 != r0+2 {
+		t.Fatalf("после отмены rev %d, ждали %d (отмена растёт, не откатывает)", r2, r0+2)
 	}
 }

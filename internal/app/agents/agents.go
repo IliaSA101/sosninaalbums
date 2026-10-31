@@ -68,16 +68,16 @@ type Host struct {
 	// Ступень 3 (149, hostedit.go): правки альбома. Поля необязательны — пока их нет (все nil), инструментов
 	// правки в списке нет; частично заполненный набор считается пустым (canEdit). Фасад сверяет ключ и rev
 	// под замком Editor; ctx вызова проверяется там же — после срока правка не записывается.
-	Perm      func(tool string) (mode, blocked string)                     // разрешение инструмента (150): allow | ask | deny; blocked: "" | "elevated"; nil — всё allow
-	PermLevel func(tool string) (mode, blocked string, level int)          // то же + уровень доступа из одного чтения config.json; nil — служба зовёт Perm и читает уровень сама
-	Scanning  func() (active bool)                                         // лента ещё читает папки (get_album.scan)
-	Busy      func(ctx context.Context) bool                               // ждёт, пока человек занят, до конца ctx; true — всё ещё занят
-	Backup    func(key string) error                                       // резервная копия до первой правки в альбоме; nil — есть или копировать нечего
-	Ask       func(ctx context.Context, q AskReq) (AskRes, error)          // вопрос в окне; ждёт итога, ctx — жизнь подключения
-	Auto      func(ctx context.Context, in AutoReq) (AutoRes, error)       // сборка в конец альбома, один шаг отмены
-	Vary      func(ctx context.Context, in VaryReq) (AlbumRef, int, error) // раскладки; int — сколько разворотов изменилось
-	Show      func(key, spreadID string) (n int, err error)                // перевести окно к развороту; n — номер с 1, 0 — обложка
-	Undo      func(ctx context.Context, ref AlbumRef) (AlbumRef, error)    // отмена своей последней правки при совпавшей ревизии
+	Perm      func(tool string) (mode, blocked string)                  // разрешение инструмента (150): allow | ask | deny; blocked: "" | "elevated"; nil — всё allow
+	PermLevel func(tool string) (mode, blocked string, level int)       // то же + уровень доступа из одного чтения config.json; nil — служба зовёт Perm и читает уровень сама
+	Scanning  func() (active bool)                                      // лента ещё читает папки (get_album.scan)
+	Busy      func(ctx context.Context) bool                            // ждёт, пока человек занят, до конца ctx; true — всё ещё занят
+	Backup    func(key string) error                                    // резервная копия до первой правки в альбоме; nil — есть или копировать нечего
+	Ask       func(ctx context.Context, q AskReq) (AskRes, error)       // вопрос в окне; ждёт итога, ctx — жизнь подключения
+	Auto      func(ctx context.Context, in AutoReq) (AutoRes, error)    // сборка в конец альбома, один шаг отмены
+	Vary      func(ctx context.Context, in VaryReq) (VaryRes, error)    // раскладки; Changed — сколько разворотов изменилось
+	Show      func(key, spreadID string) (n int, err error)             // перевести окно к развороту; n — номер с 1, 0 — обложка
+	Undo      func(ctx context.Context, ref AlbumRef) (AlbumRef, error) // отмена своей последней правки при совпавшей ревизии
 
 	// Ступень 3б (151, hostedit34.go). Поля необязательны: Sheet включает get_contact_sheet, правящие
 	// инструменты 0.34 — только все семь вместе (canEdit34).
@@ -90,6 +90,15 @@ type Host struct {
 	Bg       func(ctx context.Context, in BgReq) (BgRes, error)
 	Stickers func(ctx context.Context, in StickerReq) (StickerRes, error)
 	Print    func(ctx context.Context, in PrintReq) (PrintRes, error)
+
+	// ExportState — ход последней выгрузки альбома edID (152, get_album.export); у другого альбома — idle.
+	// nil — поля export в get_album нет.
+	ExportState func(edID uint64) ExportStatus
+
+	// ExportHold — выгрузка держит инструмент tool (create_album, open_album): альбом под окнами выгрузки не
+	// создаётся и не открывается. Проверяется раньше «человек занят», иначе вместо «идёт выгрузка» агент ждёт
+	// BusyWait и слышит «человек правит альбом». nil — не проверяется.
+	ExportHold func(tool string) bool
 }
 
 // Options — пределы канала; нулевое значение — рабочее.
@@ -180,7 +189,7 @@ type Service struct {
 // optionalHost — поля Host ступени 3: пустые допустимы (правок тогда нет).
 var optionalHost = map[string]bool{"Perm": true, "PermLevel": true, "Scanning": true, "Busy": true, "Backup": true, "Ask": true,
 	"Auto": true, "Vary": true, "Show": true, "Undo": true,
-	"Sheet": true, "Families": true, "Mark": true, "Cover": true, "Bg": true, "Stickers": true, "Print": true}
+	"Sheet": true, "Families": true, "Mark": true, "Cover": true, "Bg": true, "Stickers": true, "Print": true, "ExportState": true, "ExportHold": true}
 
 // New собирает службу; пустое поле Host — паника с его именем.
 func New(h Host, o Options) *Service {

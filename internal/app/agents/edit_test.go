@@ -257,6 +257,55 @@ func TestEditUserBusy(t *testing.T) {
 	okReply(t, tcall(t, cs, "autobuild", map[string]any{"album": r.fx.refArgs()}))
 }
 
+// TestEditExportBeforeBusy: выгрузка идёт, и человек «занят» окном — create_album и open_album сразу отвечают
+// «идёт выгрузка», не ждут BusyWait и не доходят до Busy; прочие правки и инструменты без выгрузки — как раньше.
+func TestEditExportBeforeBusy(t *testing.T) {
+	var hold atomic.Bool
+	hold.Store(true)
+	r, cs := editRig(t, Options{BusyWait: time.Hour}, func(e *editFake) {
+		e.hold = func(tool string) bool { return hold.Load() && tool != "autobuild" }
+		e.busy = func(ctx context.Context) bool { <-ctx.Done(); return true }
+	})
+	start := time.Now()
+	failText(t, tcall(t, cs, "create_album", nil), errExporting)
+	failText(t, tcall(t, cs, "open_album", map[string]any{"name_hint": "Петровы"}), errExporting)
+	if d := time.Since(start); d > testkit.Limit(5*time.Second) {
+		t.Fatalf("ждали Busy: %v", d)
+	}
+	if r.fx.edit.nBusy.Load() != 0 || r.fx.edit.nAsk.Load() != 0 {
+		t.Fatalf("Busy %d, вопросов %d", r.fx.edit.nBusy.Load(), r.fx.edit.nAsk.Load())
+	}
+	failText(t, tcall(t, cs, "create_album", nil), errExporting) // место не застряло
+	hold.Store(false)
+	r.svc.o.BusyWait = 20 * time.Millisecond
+	failText(t, tcall(t, cs, "create_album", nil), errUserBusy) // выгрузки нет — прежний ответ
+}
+
+// TestOpenAlbumExportArgsFirst: при выгрузке ошибки аргументов и «уже открыт» (opened: false) приходят раньше
+// «идёт выгрузка»; вопрос про другой альбом — «идёт выгрузка» (0.35-152-26).
+func TestOpenAlbumExportArgsFirst(t *testing.T) {
+	r, cs := editRig(t, Options{BusyWait: time.Hour}, func(e *editFake) {
+		e.hold = func(string) bool { return true }
+		e.busy = func(ctx context.Context) bool { <-ctx.Done(); return true }
+	})
+	r.fx.mu.Lock()
+	r.fx.view.Path = r.fx.recent[0].Path
+	r.fx.mu.Unlock()
+	res := okReply(t, tcall(t, cs, "open_album", map[string]any{"album": RecentKey(r.fx.recent[0].Path)}))
+	if res.Data["opened"] != false {
+		t.Errorf("открытый при выгрузке: %v", res.Data)
+	}
+	failText(t, tcall(t, cs, "open_album", map[string]any{"album": "ffffffffffff"}), errNoRecent)
+	failText(t, tcall(t, cs, "open_album", map[string]any{"album": RecentKey(r.fx.recent[1].Path)}), errOpenGone)
+	if rep := tcall(t, cs, "open_album", map[string]any{"album": "k", "name_hint": "Иванов"}); !rep.IsError || rep.Text == errExporting.Error() {
+		t.Errorf("album с name_hint при выгрузке: %q", rep.Text)
+	}
+	failText(t, tcall(t, cs, "open_album", map[string]any{"name_hint": "Петровы"}), errExporting)
+	if r.fx.edit.nBusy.Load() != 0 || r.fx.edit.nAsk.Load() != 0 {
+		t.Fatalf("Busy %d, вопросов %d", r.fx.edit.nBusy.Load(), r.fx.edit.nAsk.Load())
+	}
+}
+
 // TestEditLateNoApply (служебная часть): срок вызова вышел — агент получает «время вышло», а Host
 // видит отменённый контекст (проверка под замком Editor — у фасада); правка не записывается и
 // отмены на неё нет; журнал помечает «поздно».
@@ -381,7 +430,7 @@ func TestUndoLastOwn(t *testing.T) {
 		t.Fatalf("Undo получил %+v, ответ %v", r.fx.edit.gotUndo(), got)
 	}
 	// Правка «менять нечего» (0 разворотов) шага не ставит: отменять нечего.
-	r.fx.edit.vary = func(context.Context, VaryReq) (AlbumRef, int, error) { return r.fx.ref(), 0, nil }
+	r.fx.edit.vary = func(context.Context, VaryReq) (VaryRes, error) { return VaryRes{Album: r.fx.ref()}, nil }
 	z := okReply(t, tcall(t, cs, "vary_layouts", map[string]any{"album": r.fx.refArgs(), "spreads": []any{1}})).Data
 	if z["changed"].(float64) != 0 {
 		t.Fatalf("changed: %v", z)

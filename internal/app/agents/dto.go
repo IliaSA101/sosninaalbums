@@ -284,6 +284,16 @@ type albumOut struct {
 	FontsMissing []string      `json:"fontsMissing,omitempty"`
 	Scan         *scanOut      `json:"scan,omitempty"`
 	Edits        *editsOut     `json:"edits,omitempty"`
+	Export       *exportOut    `json:"export,omitempty"`
+}
+
+// exportOut — ход последней выгрузки этого альбома (152): idle | running | done | stopped | failed.
+// Пути в error нет; выгрузка начата по просьбе агента или человеком — не различается.
+type exportOut struct {
+	State string `json:"state" jsonschema:"idle — выгрузок не было, running, done, stopped (остановлена), failed"`
+	Done  int    `json:"done"`
+	Total int    `json:"total"`
+	Error string `json:"error,omitempty" jsonschema:"что не удалось, без пути"`
 }
 
 // scanOut — чтение папок: пока active, фото в ленте ещё прибавляются (149).
@@ -394,6 +404,10 @@ func (c *call) getAlbum() (albumOut, error) {
 		}
 	}
 	c.editInfo(&out, len(photos))
+	if h := c.s.h.ExportState; h != nil {
+		st := h(ed)
+		out.Export = &exportOut{State: cleanID(st.State), Done: st.Done, Total: st.Total, Error: cleanLine(st.Error, maxFile)}
+	}
 	if len(v.AlbumFonts) > 0 {
 		miss := c.s.h.FontsMissing(v.AlbumFonts)
 		out.Counts.FontsMissing = len(miss)

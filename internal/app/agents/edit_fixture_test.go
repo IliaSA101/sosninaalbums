@@ -52,12 +52,15 @@ type editFake struct {
 	lastUndo  AlbumRef
 	backups   []string
 	lastSheet SheetReq
+	export    ExportStatus // Host.ExportState; State "" — idle
+	exportEd  uint64       // у какого альбома ход выгрузки; 0 — у любого
 
 	busy   func(ctx context.Context) bool
+	hold   func(tool string) bool // Host.ExportHold; nil — выгрузки нет
 	backup func(key string) error
 	ask    func(ctx context.Context, q AskReq) (AskRes, error)
 	auto   func(ctx context.Context, in AutoReq) (AutoRes, error)
-	vary   func(ctx context.Context, in VaryReq) (AlbumRef, int, error)
+	vary   func(ctx context.Context, in VaryReq) (VaryRes, error)
 	show   func(key, id string) (int, error)
 	undo   func(ctx context.Context, ref AlbumRef) (AlbumRef, error)
 	sheet  func(ctx context.Context, in SheetReq) ([]byte, []string, error)
@@ -86,7 +89,7 @@ func (e *editFake) perm(tool string) (string, string) {
 		return m, e.blocked
 	}
 	switch prefs.AgentToolClass(tool) {
-	case prefs.ClassEdit, prefs.ClassFolder, prefs.ClassAlbum:
+	case prefs.ClassEdit, prefs.ClassFolder, prefs.ClassAlbum, prefs.ClassAskOnly: // Q без правок — «Запретить» (0.35-152-11)
 		if !e.allowed {
 			return prefs.PermDeny, e.blocked
 		}
@@ -152,6 +155,7 @@ func (e *editFake) install(h *Host) {
 		}
 		return false
 	}
+	h.ExportHold = func(tool string) bool { return e.hold != nil && e.hold(tool) }
 	h.Backup = func(key string) error {
 		e.nBackup.Add(1)
 		e.mu.Lock()
@@ -185,7 +189,7 @@ func (e *editFake) install(h *Host) {
 		}
 		return AutoRes{Album: e.f.bump(), Added: 3, Photos: 12, PlanFrom: 2, PlanTo: 4, First: 3}, nil
 	}
-	h.Vary = func(ctx context.Context, in VaryReq) (AlbumRef, int, error) {
+	h.Vary = func(ctx context.Context, in VaryReq) (VaryRes, error) {
 		e.nVary.Add(1)
 		e.mu.Lock()
 		e.lastVary = in
@@ -193,7 +197,7 @@ func (e *editFake) install(h *Host) {
 		if e.vary != nil {
 			return e.vary(ctx, in)
 		}
-		return e.f.bump(), len(in.Spreads), nil
+		return VaryRes{Album: e.f.bump(), Changed: len(in.Spreads)}, nil
 	}
 	h.Show = func(key, id string) (int, error) {
 		e.nShow.Add(1)
@@ -220,6 +224,14 @@ func (e *editFake) install(h *Host) {
 			return AlbumRef{}, ErrAlbumEdited
 		}
 		return e.f.bump(), nil
+	}
+	h.ExportState = func(ed uint64) ExportStatus {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if e.export.State == "" || e.exportEd != 0 && e.exportEd != ed {
+			return ExportStatus{State: "idle"}
+		}
+		return e.export
 	}
 	e.install34(h)
 }

@@ -1,12 +1,13 @@
 //go:build windows
 
-package app
+package agentplaces
 
 import (
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -24,17 +25,17 @@ func TestQuietJunction(t *testing.T) {
 	if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, filepath.Dir(target)).CombinedOutput(); err != nil {
 		t.Skipf("mklink /J не удалось: %v: %s", err, out)
 	}
-	e := &placeEnv{rules: permissiveRules(), system: "C:"}
+	e := &Env{Rules: New(Opts{Windows: true, Timeout: time.Second, Disk: diskOK}), System: "C:"}
 	viaLink := filepath.Join(link, "Фото") // junction в середине
 	for name, dir := range map[string]string{"конец": link, "середина": viaLink} {
-		if !hasLinkPart(dir) {
+		if !HasLinkPart(dir) {
 			t.Errorf("%s: junction не найден", name)
 		}
-		if _, err := e.admit(dir, prefs.PlaceParent); err == nil {
+		if _, err := e.Admit(dir, prefs.PlaceParent); err == nil {
 			t.Errorf("%s: место через junction принято", name)
 		}
 	}
-	if hasLinkPart(target) {
+	if HasLinkPart(target) {
 		t.Error("обычная папка считается ссылкой")
 	}
 }
