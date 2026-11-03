@@ -1,8 +1,9 @@
 // Состояние крупного просмотра плитки (133 U2): какая плитка открыта и список соседей на момент открытия.
 // Рисует DecorPeek; сам просмотр ничего не правит — «Поставить» зовёт decor.pick, как щелчок по плитке.
+// Класс общий (163): у окна «Макеты альбома» свой экземпляр, singleton peek — у окон оформления.
 import { neighbor } from './peekaddr'
 
-class DecorPeekState {
+export class PeekState {
   id = $state('') // открытая плитка; '' — просмотра нет
   ids = $state.raw<string[]>([]) // видимые плитки на момент открытия: отбор и тема потом не листаются под рукой
 
@@ -20,4 +21,4 @@ class DecorPeekState {
   }
 }
 
-export const peek = new DecorPeekState()
+export const peek = new PeekState()

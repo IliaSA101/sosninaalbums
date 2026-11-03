@@ -109,7 +109,7 @@ func (e *collectEnv) run(t *testing.T, all bool) (dir, msg, note string, stopped
 	}
 	d, ok := testkit.WaitCh(t, e.done, testkit.Limit(30*time.Second), "сбор не закончился", func() string {
 		return fmt.Sprintf("collecting=%v; stopped=%v, stopCtx.Err=%v; DecodeBudget: занято %d пикс., ждут %d",
-			e.busy(), e.a.stopped.Load(), e.a.stopCtx.Err(), imgfile.DecodeBudget.Used(), imgfile.DecodeBudget.Waiting())
+			e.busy(), e.a.stopped.Load(), e.a.stopCtx.Err(), imgfile.DecodeBudget().Used(), imgfile.DecodeBudget().Waiting())
 	})
 	if !ok {
 		t.Fatal("сбор не закончился (стеки горутин — в логе выше)")

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { portal } from '../../base/ui/portal'
+  import { portal } from '../../base/popup/portal'
   import { tick } from 'svelte'
-  import { placePopover, type Placed } from '../../base/ui/popover'
+  import { placePopover, type Placed } from '../../base/popup/popover'
   import Icon from '../../base/ui/Icon.svelte'
   import Modal from '../../base/modal/Modal.svelte'
   import { store } from '../../base/core/store.svelte'

@@ -348,6 +348,19 @@ func TestShareSecretsNotLogged(t *testing.T) {
 	}
 }
 
+// keptTrash — kp-link (ссылка наружу; без прав на ссылки её нет) и kp-file (файл): уборка их не трогает.
+func keptTrash(t *testing.T, root, outside string) (survivors []string) {
+	t.Helper()
+	link, file := filepath.Join(root, "kp-link"), filepath.Join(root, "kp-file")
+	if os.Symlink(outside, link) == nil {
+		survivors = append(survivors, link)
+	}
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return append(survivors, file)
+}
+
 // С5: нет папки кэша — отказ; уборка трогает только up-* старше суток и не идёт по ссылкам.
 func TestShareTempCleanup(t *testing.T) {
 	r := newRig(t)
@@ -384,6 +397,8 @@ func TestShareTempCleanup(t *testing.T) {
 		return p
 	}
 	oldDir, newDir, foreign := mk("up-old", 48*time.Hour), mk("up-new", time.Hour), mk("other", 48*time.Hour)
+	keptOld, keptNew := mk("kp-old", 48*time.Hour), mk("kp-new", time.Hour) // страницы «Продолжить» прошлой сессии: без срока
+	survivors := keptTrash(t, root, outside)
 	link := filepath.Join(root, "up-link")
 	linkOK := os.Symlink(outside, link) == nil // нет прав на ссылки (Windows): проверяем остальное
 	file := filepath.Join(root, "up-file")
@@ -399,7 +414,10 @@ func TestShareTempCleanup(t *testing.T) {
 	if !gone(oldDir) {
 		t.Error("старая up-* не удалена")
 	}
-	keep := []string{newDir, foreign, file, filepath.Join(outside, "f.txt")}
+	if !gone(keptOld) || !gone(keptNew) {
+		t.Error("kp-* прошлой сессии не удалена")
+	}
+	keep := append([]string{newDir, foreign, file, filepath.Join(outside, "f.txt")}, survivors...)
 	if linkOK {
 		keep = append(keep, link)
 	}
@@ -411,8 +429,10 @@ func TestShareTempCleanup(t *testing.T) {
 	// Выгрузка: папка хода внутри share (0700) убирается в конце, чужое не тронуто.
 	r.svc.h.CacheDir = func() string { return r.cache }
 	r.must(Options{Days: 30})
-	if gone(newDir) || linkOK && gone(link) {
-		t.Error("выгрузка тронула чужое")
+	for _, p := range keep {
+		if gone(p) {
+			t.Errorf("выгрузка тронула чужое: %s", filepath.Base(p))
+		}
 	}
 	if st, err := os.Stat(root); err != nil || runtime.GOOS != "windows" && st.Mode().Perm() != 0o700 {
 		t.Errorf("папка share: %v %v", st, err)

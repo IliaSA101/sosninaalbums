@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import Icon from '../../base/ui/Icon.svelte'
-  import Popover from '../../base/ui/Popover.svelte'
+  import Popover from '../../base/popup/Popover.svelte'
   import { gallery } from '../gallery/gallery.svelte'
 
   // «⋯» в конце строки панели: группы, которым не хватило места (спека 024). Ушедшие группы рисует вызывающий.

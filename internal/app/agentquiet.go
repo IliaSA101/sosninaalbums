@@ -37,6 +37,8 @@ var (
 	quietHidden = osx.Hidden
 	quietShots  = agentplaces.ScreenshotDirs
 	quietLink   = agentplaces.HasLinkPart
+	// quietVirtual — путь на виртуальном облачном диске (osx.VirtualCloud через agentplaces).
+	quietVirtual = agentplaces.VirtualCloud
 )
 
 // Инструменты по виду вопроса: ключи разрешений и ссылка «Не спрашивать» в окне.
@@ -124,6 +126,15 @@ func (a *App) quietWhy(r *agentplaces.Rules, req agents.AskReq, cleaned, resolve
 		return whyShots, ""
 	case quietRemote(resolved):
 		return whyRemote, ""
+	}
+	// Виртуальный облачный диск (Google Drive, Яндекс.Диск, pCloud, Box на Windows): признаков заглушек его файлов нет,
+	// тихо — никогда (160). Сведения о томе мёртвого диска висят — под сроком, не уложились: «медленно».
+	virt := quietVirtual
+	switch isVirt, done := appkit.Within(r.Timeout(), func() bool { return virt(resolved) }); {
+	case !done:
+		return whyBig, ""
+	case isVirt:
+		return whyCloud, ""
 	}
 	switch t := countQuiet(resolved); {
 	case t.remote:

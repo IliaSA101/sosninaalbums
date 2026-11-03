@@ -7,6 +7,7 @@ import {
   cellW,
   centerScroll,
   chipW,
+  cutIn,
   cutState,
   cutTip,
   glueText,
@@ -38,6 +39,27 @@ describe('chipW', () => {
   })
   it('cellW без прямоугольника — квадрат', () => {
     expect(cellW(undefined)).toBe(H)
+  })
+})
+
+describe('cutIn (158)', () => {
+  it('cutIn: 4 px в каждое фото, узкому — не больше четверти', () => {
+    const table: [number, number][] = [
+      [44, 4],
+      [31, 4],
+      [20, 4],
+      [16, 3],
+      [12, 2],
+      [4, 0],
+      [NaN, 0],
+    ]
+    for (const [w, want] of table) expect(cutIn(w)).toBe(want)
+    for (const w of [4, 5, 8, 12, 16, 20, 44, 120]) {
+      expect(cutIn(w)).toBeLessThanOrEqual(4)
+      expect(cutIn(w)).toBeLessThanOrEqual((w - 4) / 4)
+    }
+    expect(cutIn(Infinity)).toBe(0)
+    expect(cutIn(-10)).toBe(0)
   })
 })
 

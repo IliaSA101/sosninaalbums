@@ -68,7 +68,10 @@ type Service struct {
 
 	mu  sync.Mutex
 	run *runState // идущая выгрузка; nil — нет
-	net bool      // идёт правка или отзыв ссылки (Change, Revoke): выгрузка не стартует
+	// kp — сохранённые страницы оборванной выгрузки (kept.go); closing — Shutdown был: слот не заводится.
+	kp      *kept
+	closing bool
+	net     bool // идёт правка или отзыв ссылки (Change, Revoke): выгрузка не стартует
 	// netPath — путь альбома правки или отзыва; netStop — OnSaved положил на него другой проект:
 	// поздняя запись Change и пометка «нет на сервере» не пишутся (netAlive).
 	netPath string

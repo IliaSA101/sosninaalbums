@@ -89,7 +89,7 @@ func TestMarkupPreview(t *testing.T) {
 	if got := color.NRGBAModel.Convert(img.At(5, 3)).(color.NRGBA); got != c {
 		t.Fatalf("цвет %v, ждали %v", got, c)
 	}
-	if u := imgfile.DecodeBudget.Used(); u != 0 { // тесты пакета не параллельны
+	if u := imgfile.DecodeBudget().Used(); u != 0 { // тесты пакета не параллельны
 		t.Fatalf("бюджет не возвращён: %d", u)
 	}
 	if data, ct, err := MarkupPreview(testkit.PNG(t, dir, "g.png", 4, 4, c)); data != nil || ct != "" || err != nil {

@@ -47,18 +47,19 @@ type AskReq struct {
 	// без окна; нельзя — обычный вопрос (служба вернёт тихий слот, увидев итог не WhyQuiet).
 	Always bool
 	// AskEdit: инструмент и числа входа для шаблона вопроса (Tool — имя MCP). Текст агента сюда не идёт.
-	Tool     string
-	Spreads  []string // ID разворотов входа (vary_layouts, show_spread, set_background, add_sticker)
-	Families []string // семейства раскладок входа
-	Build    int      // autobuild: сколько разворотов просит агент; 0 — по умолчанию окна
-	Photos   []string // ID фото входа автосборки: фасад считает по ним фактически свободные (Count — число агента)
-	Count    int      // сколько фото (autobuild, set_marks, set_cover_photo) или стикеров; 0 — не названо (все свободные)
-	Variety  int      // vary_layouts: 1…2
-	Item     string   // set_background, apply_print: id фона или типографии (фасад называет по каталогу)
-	Format   string   // apply_print: имя формата
-	AlbumBg  bool     // set_background: to album (154); Spreads — листы согласия
-	Replace  bool     // set_background: replace
-	Scope    string   // set_background: spread | left | right ("" — spread)
+	Tool                string
+	Spreads             []string // ID разворотов входа (vary_layouts, show_spread, set_background, add_sticker)
+	Families            []string // семейства раскладок входа
+	Build               int      // autobuild: сколько разворотов просит агент; 0 — по умолчанию окна
+	Photos              []string // ID фото входа автосборки: фасад считает по ним фактически свободные (Count — число агента)
+	Count               int      // сколько фото (autobuild, set_marks, set_cover_photo) или стикеров; 0 — не названо (все свободные)
+	Variety             int      // vary_layouts: 1…2
+	Item                string   // set_background, apply_print: id фона или типографии (фасад называет по каталогу)
+	Format              string   // apply_print: имя формата
+	AlbumBg             bool     // set_background: to album (154); Spreads — листы согласия
+	Replace             bool     // set_background: replace
+	Scope               string   // set_background: spread | left | right ("" — spread)
+	BgPagesSet, BgPages bool     // set_background, to album: агент назвал pages (159) и что именно; указателей через Host нет
 	// AskExport: окно «Экспорт» из входа агента (Key, Rev — альбом; Hint — folder_hint). Print: "" — как окно
 	// открывается, "plain" — обычная выгрузка, иначе id типографии из list_print_profiles (маска уровня 1
 	// служба уже сняла).

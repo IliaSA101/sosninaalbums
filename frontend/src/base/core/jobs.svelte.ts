@@ -34,14 +34,14 @@ class Jobs {
   exporting = $state<{ done: number; total: number } | null>(null)
   // Окно «Экспорт» (009 U8) открыто.
   exportOpen = $state(false)
-  // Памятка после выгрузки для типографии (047, 081): не null — открыто окно «Готово для …» (shell/export/PrintDone).
+  // Памятка после выгрузки для типографии (047, 081): не null — открыто окно «Готово для …» (output/export/PrintDone).
   exportMemo = $state<string[] | null>(null)
   exportNote = $state('') // сводка Go о пересчёте цвета к той же памятке
   exportPrint = $state<PrintPlan | null>(null) // план открытого окна «Готово»: заголовок, сайт и папка; ставит только export:done
   exportPending = $state<PrintPlan | null>(null) // план запущенной выгрузки: в окно «Готово» переходит в export:done, чтобы не менять открытое окно
   exportStopping = $state(false) // «Остановить» нажато, export:done ещё не пришёл (073)
   private exportDone = 0 // сколько раз пришло export:done: событие может обогнать ответ Export
-  // Сбор в папку (069): ход копирования (не null — идёт) и окно «Собрать проект в папку» (shell/collect).
+  // Сбор в папку (069): ход копирования (не null — идёт) и окно «Собрать проект в папку» (output/collect).
   collecting = $state<CollectProgress | null>(null)
   collectOpen = $state(false)
   private collectDone = 0 // сколько раз пришло collect:done: событие может обогнать ответ Collect

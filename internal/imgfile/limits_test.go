@@ -22,7 +22,7 @@ func TestOpenOrientedPanicReleasesBudget(t *testing.T) {
 	orig := decodeImage
 	decodeImage = func(io.Reader, ...imaging.DecodeOption) (image.Image, error) { panic("сбой декодера") }
 	t.Cleanup(func() { decodeImage = orig })
-	before := DecodeBudget.Used()
+	before := decodeBudget.Used()
 	func() {
 		defer func() {
 			if recover() == nil {
@@ -31,7 +31,7 @@ func TestOpenOrientedPanicReleasesBudget(t *testing.T) {
 		}()
 		_, _, _ = OpenOriented(p)
 	}()
-	if got := DecodeBudget.Used(); got != before {
+	if got := decodeBudget.Used(); got != before {
 		t.Fatalf("бюджет не возвращён после паники: %d вместо %d", got, before)
 	}
 }
@@ -43,7 +43,7 @@ func TestOpenOrientedErrorReleasesBudget(t *testing.T) {
 	orig := decodeImage
 	decodeImage = func(io.Reader, ...imaging.DecodeOption) (image.Image, error) { return nil, errors.New("битый") }
 	t.Cleanup(func() { decodeImage = orig })
-	before := DecodeBudget.Used()
+	before := decodeBudget.Used()
 	if _, _, err := OpenOriented(p); err == nil {
 		t.Fatal("ждали ошибку декода")
 	}
@@ -54,7 +54,7 @@ func TestOpenOrientedErrorReleasesBudget(t *testing.T) {
 	if _, _, err := OpenOriented(bad); err == nil {
 		t.Fatal("ждали отказ на не-картинке")
 	}
-	if got := DecodeBudget.Used(); got != before {
+	if got := decodeBudget.Used(); got != before {
 		t.Fatalf("бюджет не возвращён: %d вместо %d", got, before)
 	}
 }
@@ -172,19 +172,19 @@ func TestCheckFileDecodeWeight(t *testing.T) {
 			t.Errorf("%s: вес %d, ждали %d (%v)", c.name, n, c.want, err)
 			continue
 		}
-		before := DecodeBudget.Used()
+		before := decodeBudget.Used()
 		img, release, err := OpenOriented(c.path)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		if got := DecodeBudget.Used() - before; got != c.want {
+		if got := decodeBudget.Used() - before; got != c.want {
 			t.Errorf("%s: в бюджете %d, ждали %d", c.name, got, c.want)
 		}
 		release()
 		if b := img.Bounds(); b.Dx()*b.Dy() != w*h {
 			t.Errorf("%s: размер %v", c.name, b)
 		}
-		if got := DecodeBudget.Used(); got != before {
+		if got := decodeBudget.Used(); got != before {
 			t.Errorf("%s: бюджет не возвращён: %d вместо %d", c.name, got, before)
 		}
 	}

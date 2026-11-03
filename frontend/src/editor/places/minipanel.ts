@@ -3,7 +3,7 @@
 import { canFitPhoto, type SelBox } from '../../base/geom/gridedit'
 import { actualAspect } from '../../base/geom/frame'
 import type { IconName } from '../../base/ui/Icon.svelte'
-import type { MenuNode } from '../../base/ui/menulist'
+import type { MenuNode } from '../../base/popup/menulist'
 import type { FeatureId } from '../../base/prefs/levels'
 import { ACTS, actOk, type ActId } from '../photomenu/photoacts'
 import type { Rect, SpreadView } from '../../base/core/types'

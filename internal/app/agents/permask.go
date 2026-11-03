@@ -34,6 +34,9 @@ func editAskReq(tool string, in any) AskReq {
 	case bgIn:
 		r.Spreads, r.Item = refStrings(v.Spreads), v.Item
 		r.AlbumBg, r.Replace, r.Scope = v.To == "album", v.Replace, v.Scope
+		if v.Pages != nil {
+			r.BgPagesSet, r.BgPages = true, *v.Pages
+		}
 	case addStickerIn:
 		r.Count = len(v.Stickers)
 		for _, st := range v.Stickers {

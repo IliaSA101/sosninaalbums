@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -15,7 +16,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
@@ -34,7 +37,31 @@ func buildLibVerify(t *testing.T) lvTool {
 	return buildLibVerifyOf(t, "library-verify.go", "library-verify-sheets.go", "library-verify-looks.go", "library-verify-sprite.go")
 }
 
+// lvBuilt — собранные скрипты на пакет: go build идёт один раз на набор файлов, а не на каждый тест.
+var lvBuilt struct {
+	mu   sync.Mutex
+	dir  string
+	exes map[string]string // набор файлов → путь к exe
+	errs map[string]error
+}
+
+// lvCleanup удаляет общую папку сборок; вызывается из TestMain.
+func lvCleanup() {
+	lvBuilt.mu.Lock()
+	defer lvBuilt.mu.Unlock()
+	if lvBuilt.dir != "" {
+		_ = os.RemoveAll(lvBuilt.dir)
+	}
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	lvCleanup()
+	os.Exit(code)
+}
+
 // buildLibVerifyOf — сборка из файлов scripts/files (сборка для меток 0.26/0.27 — без третьего и четвёртого).
+// Результат общий на пакет: повторный вызов с тем же набором отдаёт готовый exe.
 func buildLibVerifyOf(t *testing.T, files ...string) lvTool {
 	t.Helper()
 	if testkit.Lite() {
@@ -48,7 +75,25 @@ func buildLibVerifyOf(t *testing.T, files ...string) lvTool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := lvTool{exe: filepath.Join(testkit.TempDir(t), "library-verify")}
+	key := strings.Join(files, "|")
+	lvBuilt.mu.Lock()
+	defer lvBuilt.mu.Unlock()
+	if err, ok := lvBuilt.errs[key]; ok {
+		t.Fatalf("сборка (общая): %v", err)
+	}
+	if exe, ok := lvBuilt.exes[key]; ok {
+		return lvTool{exe: exe}
+	}
+	if lvBuilt.dir == "" {
+		d, err := os.MkdirTemp("", "libverify-build*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		lvBuilt.dir = d
+		lvBuilt.exes = map[string]string{}
+		lvBuilt.errs = map[string]error{}
+	}
+	g := lvTool{exe: filepath.Join(lvBuilt.dir, "library-verify"+strconv.Itoa(len(lvBuilt.exes)))}
 	if runtime.GOOS == "windows" {
 		g.exe += ".exe"
 	}
@@ -57,8 +102,10 @@ func buildLibVerifyOf(t *testing.T, files ...string) lvTool {
 		args = append(args, filepath.Join(dir, f))
 	}
 	if b, err := exec.Command(goBin, args...).CombinedOutput(); err != nil {
+		lvBuilt.errs[key] = fmt.Errorf("%w\n%s", err, b)
 		t.Fatalf("сборка: %v\n%s", err, b)
 	}
+	lvBuilt.exes[key] = g.exe
 	return g
 }
 

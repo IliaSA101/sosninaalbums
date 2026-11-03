@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { portal } from '../../base/ui/portal'
+  import { portal } from '../../base/popup/portal'
   import { primaryPress } from '../../base/core/platform'
   import type { SpreadView } from '../../base/core/types'
   import { Api, store } from '../../base/core/store.svelte'

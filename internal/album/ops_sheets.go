@@ -302,6 +302,23 @@ const vigSmallW = 15
 // безопасная зона) со всех сторон, у корешка тоже; полоса подписи — отступ и строки шаблона
 // в стиле листа (реальные метрики шрифта), подпись на фото — без полосы.
 func vigPlan(p *model.Project, s *model.Spread, v model.Vignette) vigsheet.VigPlan {
+	return vigPlanHead(p, s, v, model.VigHeadText, "")
+}
+
+// vigPlanOf — vigPlan с текстом новой шапки head вместо VigHeadText и гарнитурой шага font (шаг
+// макета, 164): по ним замер кегля шапки в ряду, когда шапки на листе ещё нет.
+func vigPlanOf(head, font string) vigsheet.VigPlanner {
+	if head == "" && font == "" {
+		return vigPlan
+	}
+	return func(p *model.Project, s *model.Spread, v model.Vignette) vigsheet.VigPlan {
+		return vigPlanHead(p, s, v, cmp.Or(head, model.VigHeadText), font)
+	}
+}
+
+// vigPlanHead — тело vigPlan: head — текст шапки для замера кегля, font — её гарнитура, если шапки
+// на листе нет ("" — по умолчанию).
+func vigPlanHead(p *model.Project, s *model.Spread, v model.Vignette, head, font string) vigsheet.VigPlan {
 	g := p.Geo(s)
 	m := max(g.Margin, p.Settings.Safe)
 	rs := make([]vignette.Rect, len(g.Pages))
@@ -331,8 +348,10 @@ func vigPlan(p *model.Project, s *model.Spread, v model.Vignette) vigsheet.VigPl
 			st := model.PlainStyle() // гарнитура шапки листа: кегль «по полосе» и её прежний — одной меркой
 			if t := s.VigHead(v.Head); t != nil {
 				st.Font, st.Bold, st.Italic = t.Style.Font, t.Style.Bold, t.Style.Italic
+			} else if font != "" {
+				st.Font = font
 			}
-			out.HeadFit = headFit(*out.Head, st)
+			out.HeadFit = headFitText(*out.Head, st, head)
 		}
 	}
 	return out
@@ -342,10 +361,15 @@ func vigPlan(p *model.Project, s *model.Spread, v model.Vignette) vigsheet.VigPl
 // на две строки), при котором шаблонный текст шапки в стиле st по ширине полосы band
 // влезает в её высоту и не рвёт слова. Не влезает и 12 — 12 (нижний предел кегля шапки).
 func headFit(band layout.Rect, st model.TextStyle) float64 {
-	words := strings.Fields(model.VigHeadText)
+	return headFitText(band, st, model.VigHeadText)
+}
+
+// headFitText — headFit для текста шапки txt.
+func headFitText(band layout.Rect, st model.TextStyle, txt string) float64 {
+	words := strings.Fields(txt)
 	for pt := math.Round(geom.ClampF(band.H/2.6/0.3528, 12, 48)); pt > 12; pt-- {
 		st.Size = pt
-		b := text.Cached(model.VigHeadText, st, band.W)
+		b := text.Cached(txt, st, band.W)
 		var got []string
 		for _, l := range b.Lines {
 			got = append(got, strings.Fields(l.Text)...)

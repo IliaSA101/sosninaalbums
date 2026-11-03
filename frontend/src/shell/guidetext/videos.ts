@@ -8,6 +8,6 @@ export const GUIDE_VIDEOS: Record<string, { seconds: number; hash: string }> = {
   vignette: { seconds: 28, hash: '44db7e7f' },
   cover: { seconds: 33, hash: '094624e9' },
   'bg-photo': { seconds: 26, hash: '9592699e' },
-  looks: { seconds: 21, hash: 'c8ee119c' },
+  looks: { seconds: 21, hash: '511b2a0d' },
   export: { seconds: 30, hash: '896a9ece' },
 }

@@ -231,10 +231,10 @@ func picPaint(ctx context.Context, b BorderDraw, env *borderEnv, k float64, dpi 
 	}
 	return func(c *image.RGBA) error {
 		n := int64(buf.Dx()) * int64(buf.Dy())
-		if err := imgfile.DecodeBudget.AcquireCtx(ctx, n); err != nil {
+		if err := imgfile.DecodeBudget().AcquireCtx(ctx, n); err != nil {
 			return err
 		}
-		defer imgfile.DecodeBudget.Release(n)
+		defer imgfile.DecodeBudget().Release(n)
 		tmp := image.NewRGBA(buf)
 		gen.NineTo(tmp, image.Rect(borderPad, borderPad, borderPad+g.pw, borderPad+g.ph), scaled, g.sl, g.dsl)
 		if sub, ok := c.SubImage(bb).(*image.RGBA); ok {

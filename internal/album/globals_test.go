@@ -218,6 +218,9 @@ func TestStaffCaption(t *testing.T) {
 	}
 	staff := 0
 	for _, tp := range vignette.Catalog(false) {
+		if model.VigStaff(tp.ID) != (tp.TText == model.StaffCaption) {
+			t.Errorf("шаблон %s: VigStaff %v, подпись %q", tp.ID, model.VigStaff(tp.ID), tp.TText)
+		}
 		switch tp.TText {
 		case model.StaffCaption:
 			staff++

@@ -109,6 +109,16 @@ func DefaultVignette() Vignette {
 	return Vignette{Tpl: "head-t-left", Teachers: 1, Pupils: 24, Ratio: VigRatio}
 }
 
+// VigStaff — шаблон tpl «Руководитель…»: смена шаблона приносит подпись предметника StaffCaption.
+// Список сверяет TestStaffCaption.
+func VigStaff(tpl string) bool {
+	switch tpl {
+	case "lead-left", "head-lead-left", "split-lead":
+		return true
+	}
+	return false
+}
+
 // VigGroup — у шаблона tpl есть групповое фото. Каталог живёт в пакете vignette ниже ядра,
 // а предел мест модели (Load) нужен с групповым: список сверяет TestVigGroupTpls.
 func VigGroup(tpl string) bool {

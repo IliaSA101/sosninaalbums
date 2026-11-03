@@ -3,8 +3,7 @@
 import { tick } from 'svelte'
 import { thumbWheelAcc, isThumbWheel } from '../library/thumbzoom'
 import { pinchOn, pinching } from '../../editor/zoom/pinch'
-import type { DecorKind } from '../decor/decor'
-import { setTile, tileOf, tileRange } from './tilesize'
+import { setTile, tileOf, tileRange, type GalleryKind } from './tilesize'
 
 // Плитка под точкой (x, y) и где точка в ней: после смены размера та же плитка встаёт под тот же курсор, как у ленты фото.
 // Курсор в щели между плитками или за краем — null (прокрутка сохранит долю высоты).
@@ -21,7 +20,7 @@ function anchorAt(node: HTMLElement, x: number, y: number): { el: Element; cy: n
 
 // Действие на контейнере плиток. Дельты копятся до кадра; прокрутка держит плитку под курсором,
 // без неё — долю высоты, чтобы протяжка не уносила от просматриваемого места.
-export function tileWheel(node: HTMLElement, kind: DecorKind) {
+export function tileWheel(node: HTMLElement, kind: GalleryKind) {
   let k = kind
   const mk = () => thumbWheelAcc(tileRange(k).lo, tileRange(k).hi)
   let acc = mk()
@@ -57,7 +56,7 @@ export function tileWheel(node: HTMLElement, kind: DecorKind) {
   node.addEventListener('wheel', wheel, { passive: false })
   const unpinch = pinchOn(node, (f, x, y) => order(acc.pushScale(tileOf(k), f), x, y))
   return {
-    update(next: DecorKind) {
+    update(next: GalleryKind) {
       if (next === k) return
       k = next
       // Кадр от прежнего вида взял бы пустой накопитель и сжал размер нового вида.

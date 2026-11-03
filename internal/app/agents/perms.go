@@ -62,7 +62,7 @@ func (s *Service) permLevel(spec toolSpec) (mode, blocked string, level int) {
 	}
 	switch {
 	case mode == prefs.PermAllow && spec.perm == prefs.ClassAskOnly:
-		mode = prefs.PermAsk // «Всегда» у «только с вопросом» не бывает: тихой ветки нет
+		mode = prefs.PermAsk // «Всегда» у «только с вопросом» (Q) не бывает: тихой ветки нет; у открытия (O) бывает
 	case mode == prefs.PermAllow:
 	case mode == prefs.PermAsk && spec.perm != prefs.ClassRead && spec.perm != prefs.ClassStart:
 	default:

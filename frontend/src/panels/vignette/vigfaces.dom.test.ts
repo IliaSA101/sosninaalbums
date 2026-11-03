@@ -8,7 +8,7 @@ vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} })
 vi.mock('../../../wailsjs/go/app/App', () => ({ VignetteChoices: async () => [], CropsToKeep: async () => 0 }))
 const fit = vi.hoisted(() => vi.fn())
 const progress = vi.hoisted(() => ({ fn: null as null | ((d: number, t: number) => void) }))
-vi.mock('./facesapi', () => ({
+vi.mock('../faces/facesapi', () => ({
   fitFaces: fit,
   onFacesProgress: (fn: (d: number, t: number) => void) => {
     progress.fn = fn
@@ -18,7 +18,7 @@ vi.mock('./facesapi', () => ({
 
 const { default: VignettePanel } = await import('./VignettePanel.svelte')
 const { default: AutoAskDialog } = await import('../../shell/ask/AutoAskDialog.svelte')
-const { facesTip } = await import('./vigfaces')
+const { facesTip } = await import('../faces/vigfaces')
 const { gridAct } = await import('../layouts/gridact.svelte')
 const { store } = await import('../../base/core/store.svelte')
 

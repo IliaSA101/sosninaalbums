@@ -105,33 +105,33 @@
 
 ## Карта файлов
 
-| Файл                                                                | Что                                                                                                                             |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `internal/app/agents/guard.go`                                      | `serve`: место чтения, разрешение и уровень, срок вызова                                                                        |
-| `internal/app/agents/edit.go`                                       | `gate`, `regEdit`, место и темп, записи отмены, `noteOf`                                                                        |
-| `internal/app/agents/edit_ask.go`                                   | `pend`, `ask`, `await_answer`, лестница отказов, `AllowAsks`, тихий слот в вопросе                                              |
-| `internal/app/agents/perms.go`, `permask.go`                        | 150: режим вызова, `deny`, тихий слот, `PermsChanged`, вопрос о правке                                                          |
-| `internal/app/agents/edit_tools.go`, `edit_tools2.go`               | входы и схемы инструментов 149 и 151                                                                                            |
-| `internal/app/agents/edit_run34.go`, `sheet.go`                     | тела 151 и лист-сетка                                                                                                           |
-| `internal/app/agents/hostedit.go`, `hostedit34.go`                  | типы запросов Host, публичные ошибки, `canEdit`, `canEdit34`                                                                    |
-| `internal/app/agents/errs.go`                                       | тексты ошибок для агента                                                                                                        |
-| `internal/app/agents_host_edit.go`                                  | замыкания Host 149 и 150, `agentErrTable`, `agents:edited`, `agents:denied`                                                     |
-| `internal/app/agents_edit.go`, `agents_edit_auto.go`                | `AgentsBusy`, `agentEditor`, `agentCheckTool`, `editGroupOn`, `agentBackup`, `agentVary`, `agentShow`, `agentUndo`, `agentAuto` |
-| `internal/app/agents_edit34.go`, `agents_sheet.go`                  | замыкания 151 и сборка листа                                                                                                    |
-| `internal/app/agentask.go`, `agentask_edit.go`                      | типы событий, ответы окна, вопрос о правке                                                                                      |
-| `internal/app/agentask_flow.go`, `agentask_apply.go`                | машина вопроса asked → choosing → done; применение выбора папки                                                                 |
-| `internal/app/agentasktext.go`, `agentasktext_edit.go`              | шаблоны текста вопроса, имя клиента                                                                                             |
-| `internal/app/agentplaces/` (`rules.go`, `lists.go`)                | правила папки и списки ОС                                                                                                       |
+| Файл                                                                                | Что                                                                                                                             |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/app/agents/guard.go`                                                      | `serve`: место чтения, разрешение и уровень, срок вызова                                                                        |
+| `internal/app/agents/edit.go`                                                       | `gate`, `regEdit`, место и темп, записи отмены, `noteOf`                                                                        |
+| `internal/app/agents/edit_ask.go`                                                   | `pend`, `ask`, `await_answer`, лестница отказов, `AllowAsks`, тихий слот в вопросе                                              |
+| `internal/app/agents/perms.go`, `permask.go`                                        | 150: режим вызова, `deny`, тихий слот, `PermsChanged`, вопрос о правке                                                          |
+| `internal/app/agents/edit_tools.go`, `edit_tools2.go`                               | входы и схемы инструментов 149 и 151                                                                                            |
+| `internal/app/agents/edit_run34.go`, `sheet.go`                                     | тела 151 и лист-сетка                                                                                                           |
+| `internal/app/agents/hostedit.go`, `hostedit34.go`                                  | типы запросов Host, публичные ошибки, `canEdit`, `canEdit34`                                                                    |
+| `internal/app/agents/errs.go`                                                       | тексты ошибок для агента                                                                                                        |
+| `internal/app/agents_host_edit.go`                                                  | замыкания Host 149 и 150, `agentErrTable`, `agents:edited`, `agents:denied`                                                     |
+| `internal/app/agents_edit.go`, `agents_edit_auto.go`                                | `AgentsBusy`, `agentEditor`, `agentCheckTool`, `editGroupOn`, `agentBackup`, `agentVary`, `agentShow`, `agentUndo`, `agentAuto` |
+| `internal/app/agents_edit34.go`, `agents_sheet.go`                                  | замыкания 151 и сборка листа                                                                                                    |
+| `internal/app/agentask.go`, `agentask_edit.go`                                      | типы событий, ответы окна, вопрос о правке                                                                                      |
+| `internal/app/agentask_flow.go`, `agentask_apply.go`                                | машина вопроса asked → choosing → done; применение выбора папки                                                                 |
+| `internal/app/agentasktext.go`, `agentasktext_edit.go`                              | шаблоны текста вопроса, имя клиента                                                                                             |
+| `internal/app/agentplaces/` (`rules.go`, `lists.go`)                                | правила папки и списки ОС                                                                                                       |
 | `internal/app/agents_perms.go`, `agentplaces*.go`, `agentplaces/`, `agentquiet*.go` | 150: строки окна, места съёмок, тихий путь — [agents-perms.md](agents-perms.md)                                                 |
-| `frontend/src/shell/agents`                                         | `AgentAskDialog`, `AgentsPerms`, `agentask.svelte.ts`, `agentbusy.ts`, `agentedited.ts`, `agentperms.ts`                        |
+| `frontend/src/shell/agents`                                                         | `AgentAskDialog`, `AgentsPerms`, `agentask.svelte.ts`, `agentbusy.ts`, `agentedited.ts`, `agentperms.ts`                        |
 
 Посредник и `start_program` — `internal/mcpbridge` (`launch*.go`, `start.go`); правящих инструментов у него нет.
 
 ## Выгрузка и открытие по просьбе агента (0.35/152)
 
-Класс разрешений Q («только с вопросом»): `export_album`, `open_album`, строки «Спрашивать · Запретить», «Всегда» нет ни в окне, ни в config.json (`permLevel` читает `allow` как «Спрашивать»). Тела — `agents/write_tools.go`, фасад — `app/agentopen.go`, `app/agentexport.go` (вопрос, `AgentAnswerExport`), `agentexport_plan.go` (папка), `agentasktext_export.go` (тексты).
+Класс разрешений Q («только с вопросом»): `export_album`, строка «Спрашивать · Запретить», «Всегда» нет ни в окне, ни в config.json (`permLevel` читает `allow` как «Спрашивать»). `open_album` — класс O (0.36/160): те же три значения, что у `create_album`, но группа `other` и «Всегда» только по ключу (`quietable` в `agents/edit_ask.go`). Тела — `agents/write_tools.go`, фасад — `app/agentopen.go`, `app/agentexport.go` (вопрос, `AgentAnswerExport`), `agentexport_plan.go` (папка), `agentasktext_export.go` (тексты).
 
 - `export_album`: вход как окно «Экспорт» (диапазон, страницы, обложка, качество 100/95/80, dpi 72–1200, `print`: id, `plain` или пусто — как открывается окно, `folder_hint`: имя или подсказка пути). Проверки без окна — `exporter.Service.Check`; вопрос хранит редактор и ревизию, после щелчка `ExportWith(Job{Ed, Rev, Pick})` — та же выгрузка, что в меню. Агенту путь не приходит: «начато, N файлов», ход — `get_album.export`.
 - Папка: `Rules.JudgeWrite` (`agentplaces/rules.go`) — не системные деревья, не скрытые (`.ssh` и на Windows), не папки программы, не UNC, не корень системного тома и не домашняя целиком; настоящий путь после ссылок, смена тома — нельзя. Предложение: подсказка-путь, иначе корень выгрузок (`lastDirs.exportRoot`) и имя; путь в папке фото альбома заменяется соседней (121). Повтор правила при щелчке — `Rules.ExportPick`.
 - Итоги: «Отмена», ✕, Esc, срок первого вопроса — отказ (счёт 149); всё после щелчка («нет» в предупреждении, отмена окна ОС) — `WhyStopped`, без счёта. Пока окна выгрузки открыты, `create_album` (вопрос и тихий) — «идёт выгрузка».
-- `open_album`: ключ из `list_albums` или `name_hint`, всегда вопрос; `undo_last_edit` его не отменяет, возврат — «Открыть прежний».
+- `open_album`: ключ из `list_albums` или `name_hint`; вопрос, а по ключу при «Всегда» — тихо (Т2 160, пока ветки нет — тоже вопрос); `undo_last_edit` его не отменяет, возврат — «Открыть прежний».

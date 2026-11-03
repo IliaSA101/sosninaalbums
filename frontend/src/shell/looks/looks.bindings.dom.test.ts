@@ -62,7 +62,9 @@ async function opened() {
   await looks.show()
   await tick()
   await fireEvent.click(document.querySelector('button.tile') as HTMLElement)
-  await vi.waitFor(() => expect(btn('Применить').disabled).toBe(false))
+  await vi.waitFor(() => expect(btn('Применить…').disabled).toBe(false)) // крупный просмотр
+  await fireEvent.click(btn('Применить…')) // окно «Применить» с формой
+  await tick()
 }
 
 beforeEach(() => {
@@ -86,6 +88,7 @@ beforeEach(() => {
     cnt: null,
     plan: null,
     addPlan: null,
+    modePlan: null,
     busy: false,
   })
   store.toast = null

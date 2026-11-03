@@ -9,7 +9,7 @@
   import { emptyField } from '../canvas/field'
   import { moveSelected } from '../places/groupgesture'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import { lineLen, svgTextCss } from './fonts'
+  import { lineDx, lineLen, svgTextCss } from './fonts'
   import { colorLive } from '../../base/color/colorlive.svelte'
   import { layerIndex } from '../places/layers'
   import type { TextGestures } from './textgesture.svelte'
@@ -25,7 +25,7 @@
   let { spread, mini = false, tg }: { spread: SpreadView; mini?: boolean; tg: TextGestures } = $props()
 
   // Стиль строки с живым цветом из окна цвета (109); нет показа — как в View.
-  const liveCss = (key: string, st: TextStyle) => svgTextCss(colorLive.style(key, st), store.fonts)
+  const liveCss = (key: string, st: TextStyle, noKern = false) => svgTextCss(colorLive.style(key, st), store.fonts, noKern)
 
   const sw = $derived(spread.w)
   const ph = $derived(spread.h)
@@ -125,8 +125,13 @@
         <!-- Подпись повёрнутого места: Go отдаёт угол рамки и Rot, как у текста (экспорт рисует так же) -->
         <g transform={c.rot ? `rotate(${c.rot} ${c.x} ${c.y})` : undefined}>
           {#each c.lines as l, i (i)}
-            {#if l.text}<text x={l.x} y={l.y} textLength={lineLen(l.w)} lengthAdjust="spacing" style={liveCss(`cap:${c.photo}`, c.style)}
-                >{l.text}</text
+            {#if l.text}{@const dx = lineDx(l)}<text
+                x={l.x}
+                y={l.y}
+                {dx}
+                textLength={lineLen(l.w)}
+                lengthAdjust="spacing"
+                style={liveCss(`cap:${c.photo}`, c.style, dx !== undefined)}>{l.text}</text
               >{/if}
           {/each}
         </g>
@@ -158,8 +163,13 @@
     <svg viewBox="0 0 {sw} {ph}" preserveAspectRatio="none" aria-hidden="true">
       <g transform={s.rot ? 'rotate(' + s.rot + ' ' + s.x + ' ' + s.y + ')' : undefined}>
         {#each s.lines as l, i (i)}
-          {#if l.text}<text x={l.x} y={l.y} textLength={lineLen(l.w)} lengthAdjust="spacing" style={svgTextCss(s.style, store.fonts)}
-              >{l.text}</text
+          {#if l.text}{@const dx = lineDx(l)}<text
+              x={l.x}
+              y={l.y}
+              {dx}
+              textLength={lineLen(l.w)}
+              lengthAdjust="spacing"
+              style={svgTextCss(s.style, store.fonts, dx !== undefined)}>{l.text}</text
             >{/if}
         {/each}
       </g>
@@ -179,8 +189,13 @@
             : 0}) rotate({e.rot} {t.x} {t.y}) translate({t.x} {t.y}) scale({e.scale}) translate({-t.x} {-t.y})"
         >
           {#each t.lines as l, i (i)}
-            {#if l.text}<text x={l.x} y={l.y} textLength={lineLen(l.w)} lengthAdjust="spacing" style={liveCss(`text:${t.id}`, t.style)}
-                >{l.text}</text
+            {#if l.text}{@const dx = lineDx(l)}<text
+                x={l.x}
+                y={l.y}
+                {dx}
+                textLength={lineLen(l.w)}
+                lengthAdjust="spacing"
+                style={liveCss(`text:${t.id}`, t.style, dx !== undefined)}>{l.text}</text
               >{/if}
           {/each}
         </g>

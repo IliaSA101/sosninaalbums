@@ -149,9 +149,10 @@ def probe_script(cfg):
         return f.read() + "\nmain(" + json.dumps(cfg, ensure_ascii=False) + ");\n"
 
 
-def run_probe(exe, env, workdir, name, cfg, timeout, sampler_cls=MemSampler, poll=0.25):
+def run_probe(exe, env, workdir, name, cfg, timeout, sampler_cls=MemSampler, poll=0.25, hook=None):
     """Один запуск exe с зондом; ждёт запись step=done, выход exe или timeout. Результат:
-    {records, done, alive (exe жив к концу), code, peak, started_at, seconds}. На каждой отметке mark в запись кладётся mem."""
+    {records, done, alive (exe жив к концу), code, peak, started_at, seconds}. На каждой отметке mark в запись кладётся mem.
+    hook(новые записи) - сценарию, которому нужно действовать посреди запуска (157: отключить и вернуть букву диска)."""
     os.makedirs(workdir, exist_ok=True)
     js, out = os.path.join(workdir, name + ".js"), os.path.join(workdir, name + ".jsonl")
     ax.write_text(js, probe_script(cfg))
@@ -171,6 +172,8 @@ def run_probe(exe, env, workdir, name, cfg, timeout, sampler_cls=MemSampler, pol
                     r["mem"] = sampler.sample_now()
                 recs.append(r)
                 done = done or r.get("step") == "done"
+            if hook and new:
+                hook(new)
             if not done and proc.poll() is not None:
                 new, offset = read_new(out, offset)
                 recs += new

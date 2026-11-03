@@ -164,11 +164,18 @@ func faceFile(st Style) string {
 // нет или чей файл не читается, — Montserrat того же начертания: никогда не nil,
 // иначе Layout вернул бы пустой блок и текст исчез бы.
 func font(st Style) (*sfnt.Font, string) {
+	sf, file, _ := fontData(st)
+	return sf, file
+}
+
+// fontData — font и данные начертания для кернинга (161): у своего прочитанного шрифта — его
+// faceData, у встроенного и у отката на Montserrat — nil (их пути не трогаются).
+func fontData(st Style) (*sfnt.Font, string, *faceData) {
 	if IsCustomID(st.Font) {
 		if c := usableCustom(st.Font); c != nil {
 			f := c.face(st.Bold, st.Italic)
 			if sf := f.d.parse(c.load); sf != nil {
-				return sf, f.Key + "." + f.Ext
+				return sf, f.Key + "." + f.Ext, f.d
 			}
 		}
 		st.Font = DefaultFont
@@ -176,9 +183,9 @@ func font(st Style) (*sfnt.Font, string) {
 	m, err := loadFonts()
 	file := faceFile(st)
 	if err != nil {
-		return nil, file
+		return nil, file, nil
 	}
-	return m[file], file
+	return m[file], file, nil
 }
 
 // Clamped приводит стиль к допустимому: неизвестная гарнитура — Montserrat,

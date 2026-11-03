@@ -464,8 +464,9 @@ func TestRemovePackLowersBase(t *testing.T) {
 	}
 }
 
-// Окна макетов альбома «Новых» нет (спека 133 «Не входит»): макет свежего набора в New не попадает.
-func TestCatalogNewNotForAlbum(t *testing.T) {
+// У окна макетов «Новые» есть (163, владелец 03.11 — отмена 0.28-133-67): макет свежего набора в New,
+// макет набора, ставшего старым, и свой — нет; строка «Новые» первая.
+func TestCatalogNewForAlbum(t *testing.T) {
 	s, _ := openTemp(t)
 	now := setNow(t, t0)
 	installAt(t, s, now, "aaa", t0, 1)
@@ -477,8 +478,30 @@ func TestCatalogNewNotForAlbum(t *testing.T) {
 		t.Fatalf("фон свежего набора: %v", c.New)
 	}
 	cat := newOf(t, s, KindAlbum)
-	if len(cat.New) != 0 || len(cat.Items) == 0 {
-		t.Errorf("макеты: New %v, плиток %d (макет набора должен быть в каталоге)", cat.New, len(cat.Items))
+	var fresh []string
+	for _, it := range cat.Items {
+		if it.PackID == "layouts" {
+			fresh = append(fresh, it.ID)
+		}
+	}
+	if len(fresh) != 1 || len(cat.New) != 1 || cat.New[0] != fresh[0] {
+		t.Fatalf("макеты: New %v, макет свежего набора %v", cat.New, fresh)
+	}
+	if cat.Themes[0].ID != ThemeNew || cat.Themes[0].Count != 1 {
+		t.Errorf("строка «Новые»: %+v", cat.Themes[0])
+	}
+	// Свой макет и макет набора, ставшего старым, в «Новых» не появляются.
+	other := lookOf(libKey(bg), "")
+	other.Steps[0].Name = "Другой"
+	own, err := s.SaveLook(ThemeMine, "Мой", other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	*now = t0 + 60*day
+	for _, id := range newOf(t, s, KindAlbum).New {
+		if id == own.ID || id == fresh[0] {
+			t.Errorf("в «Новых» %s: свой или устаревший макет", id)
+		}
 	}
 }
 

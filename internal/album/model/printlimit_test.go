@@ -70,6 +70,52 @@ func TestPrintLimitResolve(t *testing.T) {
 	}
 }
 
+// TestNetprintPremiumLimits — «Премиум» твёрдая: 10–60 на всех форматах профиля (сайт 03.11,
+// 162 К7; 18×13 — только в техразмерах, предел общий); мягкая: 10–25 на трёх форматах сайта
+// (15×20, 20×15, 20×20) — на остальных её на сайте нет, тест не узаконивает мягкую 30×30.
+func TestNetprintPremiumLimits(t *testing.T) {
+	var formats []PagePreset // кнопки страницы Нетпринта: Label = формат строки предела
+	for _, pr := range PagePresets() {
+		if pr.Group == CoverGroupNetprint {
+			formats = append(formats, pr)
+		}
+	}
+	if len(formats) != 8 {
+		t.Fatalf("форматов Нетпринта %d, ждали 8", len(formats))
+	}
+	check := func(f PagePreset, product string, lo, hi int) {
+		t.Helper()
+		l, ok := LimitFor(product, f.Label)
+		if !ok || l.Min != lo || l.Max != hi || l.Pages {
+			t.Errorf("%s %s: %+v (%v), ждали %d–%d", product, f.Label, l, ok, lo, hi)
+		}
+		// Края через проект: в пределах — без предупреждения, за ним — с ним.
+		for _, c := range []struct {
+			n    int
+			warn bool
+		}{{lo - 1, true}, {lo, false}, {hi, false}, {hi + 1, true}} {
+			v, ok := LimitOf(limitProject(f.W, f.H, c.n, product))
+			if !ok || v.Min != lo || v.Max != hi || (v.Warn != "") != c.warn {
+				t.Errorf("%s %s, %d разворотов: %+v (%v), предупреждение: ждали %v", product, f.Label, c.n, v, ok, c.warn)
+			}
+		}
+	}
+	for _, f := range formats {
+		check(f, "netprint-premium", 10, 60)
+	}
+	soft := []string{"15×20", "20×15", "20×20"}
+	seen := 0
+	for _, f := range formats {
+		if slices.Contains(soft, f.Label) {
+			check(f, "netprint-soft", 10, 25)
+			seen++
+		}
+	}
+	if seen != len(soft) {
+		t.Errorf("форматов мягкой найдено %d из %d", seen, len(soft))
+	}
+}
+
 // TestPrintLimitFormatRow — строка формата точнее общей: Royal 20×20 — от 10, Royal 30×30 —
 // от 8; Royal на странице Фотосферы — формат не Нетпринта, общая строка.
 func TestPrintLimitFormatRow(t *testing.T) {

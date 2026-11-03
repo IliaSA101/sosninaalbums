@@ -143,10 +143,10 @@ func MarkupPreviewCtx(ctx context.Context, path string) (data []byte, ctype stri
 		return nil, "", ErrNoMarkupImage
 	}
 	px := previewPixels(m.W, m.H)
-	if err := imgfile.DecodeBudget.AcquireCtx(ctx, px); err != nil {
+	if err := imgfile.DecodeBudget().AcquireCtx(ctx, px); err != nil {
 		return nil, "", err
 	}
-	defer imgfile.DecodeBudget.Release(px)
+	defer imgfile.DecodeBudget().Release(px)
 	var buf bytes.Buffer
 	err = withPSD(m.Path, func(r io.ReadSeeker, size int64) error {
 		img, _, err := psd.Preview(r, size, MarkupMaxSide)

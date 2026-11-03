@@ -208,20 +208,21 @@ jobs:
           Get-FileHash -Algorithm SHA256 -LiteralPath $zip | Format-List
           "zip=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding ascii -Append
 
-      # ffmpeg BtbN: закреплённый выпуск и sha256 (сверяется до распаковки). Старые выпуски BtbN удаляет - тогда choco
+      # ffmpeg BtbN: закреплённый выпуск и sha256 (сверяется до распаковки). Старые выпуски BtbN удаляет - тогда choco. Берём выпуск конца месяца: дневные BtbN удаляет через ≈ 2 недели
       - name: ffmpeg
         if: ${{ inputs.video }}
         env:
           GH_TOKEN: ${{ github.token }}
           ARCH: ${{ runner.arch }}
         run: |
-          $tag = 'autobuild-2026-10-27-18-38'
+          # month-end build: BtbN deletes daily builds in ~2 weeks, keeps last-day-of-month ones long
+          $tag = 'autobuild-2026-10-31-12-59'
           if ($env:ARCH -eq 'ARM64') {
-            $name = 'ffmpeg-N-128121-g86444dd368-winarm64-gpl.zip'
-            $sha = '15e6c469c4c4790e58a43354e22d9de632f8918bcd9e88269fc8ebcb49b35818'
+            $name = 'ffmpeg-N-128227-g4811625b5f-winarm64-gpl.zip'
+            $sha = '7d2bc069f7eda052fac7d4d9ff40eabda5d9fd8b6105d479129547ad3b822919'
           } else {
-            $name = 'ffmpeg-N-128121-g86444dd368-win64-gpl.zip'
-            $sha = '1eb70a550388567bc2abbb2d164814f722f36a034fd927dcdfb217bc7e94930c'
+            $name = 'ffmpeg-N-128227-g4811625b5f-win64-gpl.zip'
+            $sha = '3a5cdb3b83dd1b62b29d946d3655a14d787e5e81d947ad68202a1a400095d2f8'
           }
           $dir = Join-Path $env:RUNNER_TEMP 'ffmpeg'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null

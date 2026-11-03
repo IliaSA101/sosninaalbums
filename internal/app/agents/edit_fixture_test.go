@@ -89,7 +89,7 @@ func (e *editFake) perm(tool string) (string, string) {
 		return m, e.blocked
 	}
 	switch prefs.AgentToolClass(tool) {
-	case prefs.ClassEdit, prefs.ClassFolder, prefs.ClassAlbum, prefs.ClassAskOnly: // Q без правок — «Запретить» (0.35-152-11)
+	case prefs.ClassEdit, prefs.ClassFolder, prefs.ClassAlbum, prefs.ClassAskOnly, prefs.ClassOpen: // Q и O без правок — «Запретить» (0.35-152-11)
 		if !e.allowed {
 			return prefs.PermDeny, e.blocked
 		}

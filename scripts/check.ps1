@@ -156,6 +156,9 @@ if ($runGo) {
     Step 'go vet' { go vet . ./internal/... }
     # e2e-тест L1 (тег e2ebig) иначе не собирает никто: при правке App он тихо перестал бы компилироваться (ревью 0.21, владелец 2026-10-20)
     Step 'go vet e2ebig' { go vet -tags e2ebig ./internal/app }
+    # Швы стенда (тег qa: зонд, SA_QA_VOLDELAY) иначе не собирает никто; 157, да владельца 03.11
+    Step 'go vet qa' { go vet -tags qa ./internal/osx ./internal/app }
+    Step 'go test qa' { go test -count=1 -tags qa -run 'QaProbe|VolDelay' ./internal/osx ./internal/app }
     # golangci-lint ставится через go install — лежит в GOPATH\bin, которого может не быть в PATH
     $gcl = Get-Command golangci-lint -ErrorAction SilentlyContinue
     $gclPath = if ($gcl) { $gcl.Source } else { Join-Path (go env GOPATH) 'bin\golangci-lint.exe' }

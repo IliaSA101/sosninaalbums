@@ -57,6 +57,18 @@ describe('макеты альбома (131)', () => {
       '/media/look/0123456789abcdef?v=1&i=0&px=256&r=1&bg=0&f=1',
     )
   })
+  it('lookUrl: ph (163) — в конце адреса; 0, нет, мусор и дробное метки не дают', () => {
+    expect(lookUrl('0123456789abcdef', { i: 1, px: 2048, r: 2, ph: 42 })).toBe(
+      '/media/look/0123456789abcdef?v=1&i=1&px=2048&r=2&bg=0&ph=42',
+    )
+    expect(lookUrl('0123456789abcdef', { i: 0, px: 256, r: 1, front: true, ph: 7 })).toBe(
+      '/media/look/0123456789abcdef?v=1&i=0&px=256&r=1&bg=0&f=1&ph=7',
+    )
+    for (const bad of [0, -1, 1.5, NaN, Infinity, 2 ** 53])
+      expect(lookUrl('0123456789abcdef', { i: 1, px: 256, r: 1, ph: bad }), String(bad)).toBe(
+        '/media/look/0123456789abcdef?v=1&i=1&px=256&r=1&bg=0',
+      )
+  })
   it('lookUrl: не ключ (не 16 строчных hex) — адреса нет; мусор в числах не попадает в адрес', () => {
     for (const bad of ['', 'a/../b?x', '0123456789ABCDEF', '0123456789abcde', '0123456789abcdef0', 'my:0123456789abcdef'])
       expect(lookUrl(bad, { i: 1, px: 256, r: 1 }), bad).toBe('')

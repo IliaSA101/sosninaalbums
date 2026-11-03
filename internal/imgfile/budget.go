@@ -24,8 +24,12 @@ func NewBudget(limit int64) *Budget {
 	return &Budget{limit: limit, wake: make(chan struct{})}
 }
 
-// DecodeBudget общий для всей программы.
-var DecodeBudget = NewBudget(DecodeBudgetPixels)
+// decodeBudget общий для всей программы. Неэкспортный: переменную нельзя подменить
+// из другого пакета, наружу — только указатель через DecodeBudget().
+var decodeBudget = NewBudget(DecodeBudgetPixels)
+
+// DecodeBudget — общий бюджет декода (миниатюры и экспорт); сам бюджет не заменить.
+func DecodeBudget() *Budget { return decodeBudget }
 
 // Acquire блокируется, пока n не поместится в бюджет (или пока не освободится всё).
 func (b *Budget) Acquire(n int64) {

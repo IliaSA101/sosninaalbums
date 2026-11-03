@@ -39,9 +39,9 @@ describe('обработчики клавиш мимо реестра', () => {
   const ALLOWED: Record<string, string> = {
     '/src/App.svelte': 'диспетчер: единственное место командных клавиш',
     '/src/base/modal/Modal.svelte': 'окно: Esc закрывает, фокус не уходит под окно',
-    '/src/base/ui/Popover.svelte': 'Esc закрывает всплывающее окно',
+    '/src/base/popup/Popover.svelte': 'Esc закрывает всплывающее окно',
     '/src/base/color/ColorPicker.svelte': 'Esc закрывает палитру и отменяет пипетку',
-    '/src/base/ui/MenuList.svelte': 'навигация и Esc общего списка меню (меню фото, «⋯» панели)',
+    '/src/base/popup/MenuList.svelte': 'навигация и Esc общего списка меню (меню фото, «⋯» панели)',
     '/src/base/drag/drag.svelte.ts': 'Esc отменяет перенос',
     '/src/editor/backdrop/BackdropEditor.svelte': 'Esc отменяет жест рамки фона',
     '/src/editor/canvas/Marquee.svelte': 'Esc отменяет рамку выделения',
@@ -60,7 +60,8 @@ describe('обработчики клавиш мимо реестра', () => {
     '/src/editor/tilt/StraightenLayer.svelte': 'Esc режима «Выпрямить»',
     '/src/editor/tilt/TiltDial.svelte': '←/→ и Shift у дуги наклона (owner-ux §2.4)',
     '/src/editor/zoom/ZoomBadge.svelte': 'Esc закрывает бегунок масштаба',
-    '/src/panels/decorbrowse/DecorPeek.svelte': 'Esc, ← →, Enter и команды лупы окна просмотра плитки (133); остальное идёт диспетчеру',
+    '/src/panels/decorbrowse/PeekShell.svelte':
+      'Esc окна просмотра плитки (133, 163); ← →, Enter и команды лупы — свои у DecorPeek через onkey; остальное идёт диспетчеру',
     '/src/panels/layouts/MirrorMenu.svelte': 'навигация и Esc меню',
     '/src/panels/names/NamesDialog.svelte': 'Ctrl+Enter «Вставить» в окне имён',
     '/src/shell/guide/spotstate.svelte.ts': 'Esc гасит подсветку места',

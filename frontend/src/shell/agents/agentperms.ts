@@ -17,6 +17,12 @@ export const askOnly = (p: AgentPerm): boolean => p.can.includes('ask') && !p.ca
 // У такой строки «Всегда» не серое, а объясняет (как «Спрашивать» у чтения): щелчок значения не меняет, под строкой — why от Go.
 // Без why (старый ответ Go) кнопка остаётся серой.
 export const allowMissing = (p: AgentPerm): boolean => askOnly(p) && !!p.why
+// До 160 Т5 (0.37): без согласия ASK_OPEN «Всегда» не предлагается. Go (класс O) значение допускает и может его хранить,
+// но тихого открытия в 0.36 нет, а окна согласия и строки мест (Т5) тоже: пункт скрыт, сохранённое «Всегда» показано как «Спрашивать».
+export const ALWAYS_HIDDEN: readonly string[] = ['open_album']
+export const alwaysHidden = (p: AgentPerm): boolean => ALWAYS_HIDDEN.includes(p.tool) && p.can.includes('allow')
+// Значение строки для сегмента: скрытое «Всегда» выглядит как «Спрашивать» (Go в config.json его не трогает).
+export const shownMode = (p: AgentPerm): string => (alwaysHidden(p) && p.mode === 'allow' ? 'ask' : p.mode)
 // Сколько путей мест показывать в строке, остальные — «и ещё N».
 export const PLACES_SHOWN = 2
 
@@ -42,9 +48,9 @@ export const askMissing = (p: AgentPerm): boolean => !p.can.includes('ask')
 export const groupAskMissing = (rows: readonly AgentPerm[]): boolean => rows.length > 0 && rows.every(askMissing)
 
 // Пункты сегмента: серый — значение, которого Go не принимает (кроме «Спрашивать»: оно живое и объясняет;
-// и «Всегда» у строки «только с вопросом» при allowWhy).
-export function segItems(can: readonly string[], off: boolean, allowWhy = false): SegItem<Mode>[] {
-  return MODES.map((id) => ({
+// и «Всегда» у строки «только с вопросом» при allowWhy). hideAllow — «Всегда» нет вовсе (alwaysHidden).
+export function segItems(can: readonly string[], off: boolean, allowWhy = false, hideAllow = false): SegItem<Mode>[] {
+  return MODES.filter((id) => !(hideAllow && id === 'allow')).map((id) => ({
     id,
     label: MODE_LABELS[id],
     off: off || (id !== 'ask' && !(id === 'allow' && allowWhy) && !can.includes(id)),

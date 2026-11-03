@@ -147,7 +147,11 @@ func TestShareDropMidUpload(t *testing.T) {
 	// «третий PUT и далее» оборванной могла оказаться любая, а её соседа отмена выгрузки отрезала на
 	// лету, до сохранения (CI go-race: на сервере 1 страница вместо 2). Страницы 3+ обрываются, но
 	// только когда 1 и 2 уже сохранены; их самих не трогаем.
+	accepted := &pageSet{}
 	r.setFault(func(q *http.Request) *albumstest.Fault {
+		if isPut(q) && pageNo(q) < 3 {
+			accepted.add(pageNo(q))
+		}
 		if !isPut(q) || pageNo(q) < 3 {
 			return nil
 		}
@@ -177,18 +181,16 @@ func TestShareDropMidUpload(t *testing.T) {
 	}
 	id, ok := r.rec()
 	l := r.state().Link
-	if !ok || l == nil || l.State != "incomplete" || l.URL != "" || r.srv.Fake.Published(id) != nil || r.tempLeft() != 0 {
-		t.Fatalf("после обрыва: запись %v %+v", ok, l)
+	if !ok || l == nil || l.State != "incomplete" || l.URL != "" || r.srv.Fake.Published(id) != nil || r.tempLeft() != 0 || r.keptLeft() != 1 {
+		t.Fatalf("после обрыва: запись %v %+v, kp-* %d", ok, l, r.keptLeft())
 	}
-	have := r.srv.Fake.Puts()
-	if have != 2 {
-		t.Fatalf("на сервере %d страниц, ждали 2", have)
+	if have := r.srv.Fake.Puts(); have != 2 || len(accepted.list()) != 2 {
+		t.Fatalf("на сервере %d страниц, ждали 2 (%v)", have, accepted.list())
 	}
-	r.setFault(nil)
+	settle(r)
+	c := watchPages(r)
 	r.must(Options{})
-	if got := r.srv.Fake.Puts() - have; got != 6-have {
-		t.Errorf("догружено %d страниц, ждали %d", got, 6-have)
-	}
+	wantResumed(t, 6, c, accepted)
 	if id2, _ := r.rec(); id2 != id || r.state().Link.State != "ok" {
 		t.Error("ссылка не та или не опубликована")
 	}
@@ -222,8 +224,8 @@ func TestSharePagesLimit(t *testing.T) {
 	if stopped || !strings.Contains(msg, "В альбоме 6 страниц, сервис принимает не больше 4") {
 		t.Fatalf("итог: %q stopped=%v", msg, stopped)
 	}
-	if reqs.n != 0 || r.srv.Fake.Albums() != 0 || r.srv.Fake.Puts() != 0 || r.tempLeft() != 0 {
-		t.Errorf("запросов %d, альбомов %d, страниц %d, папок %d", reqs.n, r.srv.Fake.Albums(), r.srv.Fake.Puts(), r.tempLeft())
+	if reqs.n != 0 || r.srv.Fake.Albums() != 0 || r.srv.Fake.Puts() != 0 || r.tempLeft() != 0 || r.keptLeft() != 0 { // отказ до рендера: сохранять нечего
+		t.Errorf("запросов %d, альбомов %d, страниц %d, папок %d+%d", reqs.n, r.srv.Fake.Albums(), r.srv.Fake.Puts(), r.tempLeft(), r.keptLeft())
 	}
 	if _, ok := r.rec(); ok {
 		t.Error("запись о ссылке создана до проверки предела")

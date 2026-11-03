@@ -1,6 +1,6 @@
 // Состояние мини-панели, вынесенное из MiniPanel.svelte: «насквозь» при модификаторе и список «⋯» (спека 108).
 import { throughNext, type Mods, type ThroughEv } from './minipanel'
-import type { Box } from '../../base/ui/popover'
+import type { Box } from '../../base/popup/popover'
 
 // Модификатор зажат — панель полупрозрачна и не ловит мышь (QA 0.14.1 №1). Признак не копим по keydown/keyup: каждое
 // событие указателя несёт настоящее состояние модификаторов (throughNext), а новое положение панели его пересчитывает.

@@ -103,6 +103,7 @@ func (a *App) beginCheck(full bool) bool {
 
 // checkFolders — тело проверки; отдаёт длительность обхода.
 func (a *App) checkFolders(full bool) time.Duration {
+	a.kickMissing() // том недостающих фото мог вернуться: проба без ожидания (157)
 	src := a.sources()
 	live, _ := splitLive(src.Folders) // недоступный том не обходим: ждали бы таймаута SMB
 	liveFiles, _ := splitLive(src.Files)

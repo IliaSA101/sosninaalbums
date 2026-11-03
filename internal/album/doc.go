@@ -31,7 +31,7 @@
 //   - LoadBase и Restore (резервные копии, спека 019; проект проходит own), черновик
 //     (WriteDraft) — в конце editor.go;
 //   - inside.go — доступ тестов к состоянию Editor (internal/inside, обёртки — internal/edtest);
-//   - ops_grid.go — места сетки (grid), готовые развороты и плитка шаблона PreviewTpl (067),
+//   - ops_grid.go — места сетки (grid), готовые развороты и плитка шаблона PreviewTpl (067) и PreviewTplWith (163), занятые файлы UsedFiles,
 //     рамочки мест ApplyBorder/SetBorder и путь картинки BorderPath (079); ops_design.go — кадр,
 //     тон и прозрачность фото, тексты, подписи (design), поля подписей: переменные, имена, стиль
 //     листа (names, 030), окно «Имена» — PreviewNames и PasteNames (043);

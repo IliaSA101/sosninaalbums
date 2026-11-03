@@ -124,8 +124,8 @@ func (s *Store) Catalog(kind string, recent []string, w, h float64) (Catalog, er
 	}
 	packs := s.packItems(kind)
 	var fresh map[string]bool
-	// «Новые» — не у окна макетов (131, 0.28-133-67); часы — один вызов на каталог и только при наборах.
-	if len(s.packs) > 0 && kind != KindAlbum {
+	// «Новые» есть и у макетов (163, владелец 03.11: отмена 0.28-133-67); часы — один вызов на каталог и только при наборах.
+	if len(s.packs) > 0 {
 		fresh = s.freshPacks(nowMs())
 	}
 	s.mu.RUnlock()

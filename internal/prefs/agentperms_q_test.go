@@ -9,29 +9,30 @@ import (
 
 var askOnlyTools = []string{"export_album", "open_album"}
 
-// TestPermAskOnlyClass: класс Q (0.35-152-2/-11) — «Всегда» нет ни в PermCan, ни после чистки;
-// свежий столбец и столбец «0.33, правки вкл.» — «Запретить» / «Спрашивать».
+// TestPermAskOnlyClass: класс Q (0.35-152-2/-11) — «Всегда» нет ни в PermCan, ни после чистки; свежий столбец и
+// столбец «0.33, правки вкл.» — «Запретить» / «Спрашивать» (то же у открытия, класс O — agentperms_open_test.go).
 func TestPermAskOnlyClass(t *testing.T) {
-	if isEditClass(ClassAskOnly) {
-		t.Fatal("Q не входит в классы правок")
+	if isEditClass(ClassAskOnly) || isEditClass(ClassOpen) {
+		t.Fatal("Q и O не входят в классы правок")
 	}
 	for _, k := range askOnlyTools {
-		if AgentToolClass(k) != ClassAskOnly {
-			t.Fatalf("%s: класс %q", k, AgentToolClass(k))
-		}
-		if got := PermCan(k); !slices.Equal(got, []string{PermAsk, PermDeny}) {
-			t.Errorf("%s: PermCan %v", k, got)
-		}
 		if got := column(false)[k]; got != PermDeny {
 			t.Errorf("%s: column(false) %q", k, got)
 		}
 		if got := column(true)[k]; got != PermAsk {
 			t.Errorf("%s: column(true) %q", k, got)
 		}
-		for v, want := range map[string]string{PermAllow: PermAsk, PermAsk: PermAsk, PermDeny: PermDeny, "": PermDeny, "мусор": PermDeny, "ALLOW": PermDeny} {
-			if got := cleanMode(k, v); got != want {
-				t.Errorf("%s: cleanMode(%q) = %q, ждали %q", k, v, got, want)
-			}
+	}
+	const k = "export_album"
+	if AgentToolClass(k) != ClassAskOnly {
+		t.Fatalf("%s: класс %q", k, AgentToolClass(k))
+	}
+	if got := PermCan(k); !slices.Equal(got, []string{PermAsk, PermDeny}) {
+		t.Errorf("%s: PermCan %v", k, got)
+	}
+	for v, want := range map[string]string{PermAllow: PermAsk, PermAsk: PermAsk, PermDeny: PermDeny, "": PermDeny, "мусор": PermDeny, "ALLOW": PermDeny} {
+		if got := cleanMode(k, v); got != want {
+			t.Errorf("%s: cleanMode(%q) = %q, ждали %q", k, v, got, want)
 		}
 	}
 	// Чужое имя и чтение: прежнее правило.
@@ -52,7 +53,7 @@ func TestPermAskOnlyClass(t *testing.T) {
 	dir := testkit.TempDir(t)
 	writeRaw(t, dir, `{"agentPerms":{"tools":{"export_album":"allow","open_album":"allow"}}}`)
 	got := LoadAgentPerms(dir)
-	wantModes(t, "allow в файле", got, map[string]string{"export_album": PermAsk, "open_album": PermAsk})
+	wantModes(t, "allow в файле", got, map[string]string{"export_album": PermAsk, "open_album": PermAllow}) // у открытия (O) «Всегда» есть
 	if got = UpdateAgentPerms(dir, func(*AgentPerms) {}); got.Tools["export_album"] != PermAsk {
 		t.Errorf("после записи: %q", got.Tools["export_album"])
 	}

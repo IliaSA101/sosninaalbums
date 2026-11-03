@@ -130,7 +130,7 @@ func (s *Store) lookRaw(id string) (model.AlbumTpl, []byte, error) {
 	return t, data, nil
 }
 
-// lookMeta дописывает к плитке макета сведения карточки (design §9: steps, from, vig, cover); false —
+// lookMeta дописывает к плитке макета сведения карточки (design §9: steps, from, vig, cover; style — 163); false —
 // файл не разбирается (новее программы, битый) — плитки нет.
 func (s *Store) lookMeta(it *Item) bool {
 	info, hit := s.look.get(it.ID)
@@ -144,7 +144,7 @@ func (s *Store) lookMeta(it *Item) bool {
 			s.look.put(it.ID, info)
 		}
 	}
-	it.Steps, it.From, it.Vig, it.Cover = info.card.Steps, info.card.From, info.card.Vig, info.card.Cover
+	it.Steps, it.From, it.Vig, it.Cover, it.Style = info.card.Steps, info.card.From, info.card.Vig, info.card.Cover, info.card.Style
 	return info.ok
 }
 
@@ -262,7 +262,7 @@ func (s *Store) SaveLook(theme, name string, t model.AlbumTpl) (Item, error) {
 	card := model.CardOf(c)
 	s.look.put(key, lookInfo{ok: true, card: card})
 	s.saveLogged()
-	it.Steps, it.From, it.Vig, it.Cover = card.Steps, card.From, card.Vig, card.Cover
+	it.Steps, it.From, it.Vig, it.Cover, it.Style = card.Steps, card.From, card.Vig, card.Cover, card.Style
 	return it, nil
 }
 

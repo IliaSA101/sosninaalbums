@@ -273,11 +273,16 @@ func encodeTile(img image.Image) ([]byte, error) {
 
 // tplImage — картинка плитки шириной q.px (drawTpl без кодирования: плитка обложки склеивает две).
 func tplImage(t model.SpreadTpl, q tplQuery, libs map[string]model.PhotoInfo) (image.Image, error) {
+	return tplImageWith(t, q, libs, nil)
+}
+
+// tplImageWith — tplImage с фото на местах (макеты, 163): photos садятся в пустые места листа.
+func tplImageWith(t model.SpreadTpl, q tplQuery, libs map[string]model.PhotoInfo, photos []model.PhotoInfo) (image.Image, error) {
 	wmm, hmm := tplSideMM*q.r, float64(tplSideMM)
 	if q.r < 1 {
 		wmm, hmm = tplSideMM, tplSideMM/q.r
 	}
-	p, v, err := album.PreviewTpl(t, wmm, hmm, libs)
+	p, v, err := album.PreviewTplWith(t, wmm, hmm, libs, photos)
 	if err != nil {
 		return nil, err
 	}

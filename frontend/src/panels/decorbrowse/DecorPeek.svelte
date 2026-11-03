@@ -1,22 +1,21 @@
 <script lang="ts">
-  import { tick, untrack } from 'svelte'
+  import { untrack } from 'svelte'
   import type { BackdropScope, SpreadView } from '../../base/core/types'
   import { eventChord } from '../../base/keys/chord'
   import { keymap } from '../../base/keys/keymap.svelte'
   import { isMac, primaryPress } from '../../base/core/platform'
-  import { modalStack, Z_MODAL } from '../../base/modal/modalstack.svelte'
   import { cancelOnUnmount } from '../../base/ui/imgcancel'
-  import Icon from '../../base/ui/Icon.svelte'
   import { PreviewLoupe } from '../../editor/photo/loupe.svelte'
   import { ZOOM_STEP } from '../../editor/zoom/zoom'
   import { decor } from '../decor/decor.svelte'
   import { peek } from './peek.svelte'
+  import PeekShell from './PeekShell.svelte'
   import { BUILTIN_PACK } from './browse'
   import { peekCaption, peekGuess, peekHint, peekSrc, thumbSrc } from './peekaddr'
 
   // Крупный просмотр плитки окон оформления (133 U2), образец — PhotoPreview: вписано, шашечка, лупа, подпись, ✕.
   // Открывает правый щелчок по плитке. ← → — соседние плитки, Enter или «Поставить» — как щелчок по плитке, Esc, ✕, фон — назад.
-  // Окно в modalStack: окно оформления под ним молчит (его Esc и фокус), клавиши программы тоже.
+  // Оболочка (PeekShell, общая с окном макетов) держит окно в modalStack: окно оформления под ним молчит, клавиши программы тоже.
   let { sp, scope, hold, dpr }: { sp: SpreadView; scope: BackdropScope; hold: number; dpr: number } = $props()
 
   const kind = $derived(decor.cur?.kind ?? 'bg')
@@ -29,9 +28,7 @@
   const setId = $derived(it?.pack && it.packId && it.packId !== BUILTIN_PACK ? it.packId : '')
   const checker = $derived(!!it && (kind === 'sticker' || (kind === 'frame' && it.own)))
 
-  let box = $state<HTMLElement>()
   let back = $state<HTMLElement>()
-  let me = $state(0)
   let nat = $state({ w: 0, h: 0 }) // размер крупной картинки, px
   let ready = $state(false) // крупная загрузилась: миниатюра под ней убирается (у стикера иначе просвечивает)
   let failed = $state(false) // крупная не загрузилась: остаётся миниатюра, лупы нет, без тоста
@@ -44,7 +41,7 @@
   const loupe = new PreviewLoupe(() => ({ size: nat, guess, off: !zoomOn, max: 1 }))
   const at = $derived(loupe.at)
   const mod = isMac() ? '⌘' : 'Ctrl'
-  const hint = $derived(keymap.text(peekHint(mod, zoomOn, replace)))
+  const hintText = $derived(keymap.text(peekHint(mod, zoomOn, replace)))
 
   // Прежняя плитка размер и сбой не передаёт дальше.
   $effect.pre(() => {
@@ -66,33 +63,12 @@
   $effect(() => {
     if (peek.id && !it) peek.close()
   })
-  // Закрыли окно оформления — просмотр уходит вместе с ним, запись из стека снимает очистка эффекта ниже.
+  // Закрыли окно оформления — просмотр уходит вместе с ним.
   $effect(() => () => peek.close())
-  $effect(() => {
-    if (box) box.focus()
-  })
   $effect(() => (back ? loupe.bind(back) : undefined))
-  const open = $derived(!!it)
-  $effect(() => {
-    if (!open) return
-    const id = untrack(() => modalStack.push(true))
-    me = id
-    return () => {
-      modalStack.remove(id)
-    }
-  })
 
-  // Назад к плитке: она в виду и в фокусе (после tick: окно оформления, снова верхнее, сначала берёт фокус себе).
-  async function leave() {
-    const id = peek.id
-    peek.close()
-    await tick()
-    const el = Array.from(document.querySelectorAll<HTMLElement>('[data-decor-id]')).find((e) => e.dataset.decorId === id)
-    el?.scrollIntoView?.({ block: 'nearest' })
-    el?.focus()
-  }
   // Весь набор: окно оформления встаёт на «Все» с отбором по этому набору, просмотр закрывается, плитка в фокусе
-  function showSet() {
+  function showSet(leave: () => Promise<void>) {
     if (!setId) return
     decor.showPack(setId)
     void leave()
@@ -115,9 +91,9 @@
   }
   const arrow = (e: KeyboardEvent) =>
     (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
-  // Своя клавиша окна: Esc, ← →, Enter и команды лупы; остальное идёт диспетчеру (отмена). Возвращает действие или null.
+  // Своя клавиша окна: ← →, Enter и команды лупы (Esc и поля ввода — в PeekShell); остальное идёт диспетчеру (отмена).
+  // Возвращает действие или null.
   function action(e: KeyboardEvent): (() => void) | null {
-    if (e.key === 'Escape') return () => void leave()
     if (arrow(e)) return () => peek.step(e.key === 'ArrowRight' ? 1 : -1, (id) => byId.has(id))
     // На «Поставить» и ✕ Enter — их собственный щелчок; автоповтор Enter (с пункта меню, из поля) не ставит и не закрывает окно
     if (e.key === 'Enter') return e.target instanceof HTMLButtonElement ? null : () => !e.repeat && put()
@@ -126,31 +102,8 @@
     const cmd = chord ? OWN.find((c) => keymap.keys(c).includes(chord)) : undefined
     return cmd ? () => loupeKey(cmd, e.repeat) : null
   }
-  function onKey(e: KeyboardEvent) {
-    if (!it) return
-    // Фокус ушёл из окна (Shift+Tab к плитке под ним): клавиша не доходит до плитки, фокус возвращается, как у Modal
-    if (box && !box.contains(document.activeElement)) {
-      e.preventDefault()
-      e.stopPropagation()
-      box.focus()
-      return
-    }
-    const run = action(e)
-    if (!run) return
-    e.preventDefault()
-    e.stopPropagation()
-    run()
-  }
-
-  // Правый щелчок в окне просмотра: закрывает его здесь же. Закрытие по pointerdown правой кнопкой роняло бы
-  // contextmenu, что приходит после отпускания, на плитку под курсором, и просмотр открылся бы заново на другой.
-  function onMenu(e: MouseEvent) {
-    e.preventDefault()
-    void leave()
-  }
-
   // Нажатие в окне: по кадру — жест лупы, по пустому месту вокруг — назад.
-  function stageDown(e: PointerEvent) {
+  function stageDown(e: PointerEvent, leave: () => Promise<void>) {
     if (primaryPress(e) && e.target === e.currentTarget) void leave()
     else if ((e.target as Element).closest('.frame')) loupe.down(e)
   }
@@ -161,26 +114,16 @@
   }
 </script>
 
-<svelte:window onkeydowncapture={onKey} />
-
 {#if it}
-  <div
-    class="back"
-    style:z-index={Z_MODAL + Math.max(modalStack.depth(me), 0)}
-    role="presentation"
-    bind:this={back}
-    onpointerdown={(e) => primaryPress(e) && e.target === e.currentTarget && leave()}
-    oncontextmenu={onMenu}
-    data-chrome
-  >
-    <div class="box" role="dialog" aria-modal="true" aria-label="Крупный просмотр" tabindex="-1" bind:this={box}>
+  <PeekShell tileId={it.id} onclose={() => peek.close()} onkey={action} bind:back>
+    {#snippet view(leave)}
       <div
         class="view"
         role="presentation"
         bind:this={loupe.stage}
         bind:clientWidth={loupe.box.w}
         bind:clientHeight={loupe.box.h}
-        onpointerdown={stageDown}
+        onpointerdown={(e) => stageDown(e, leave)}
         onpointermove={(e) => loupe.move(e)}
         onpointerup={(e) => loupe.up(e)}
         onpointercancel={() => loupe.cancel()}
@@ -215,35 +158,19 @@
           {/if}
         </div>
       </div>
-      <div class="cap">
-        <span class="name">{peekCaption(it, list.indexOf(it.id) + 1, list.length)}</span>
-        {#if setId}
-          <button class="ghost" title="Показать весь набор «{it.pack}»" onclick={showSet}>Показать весь набор</button>
-        {/if}
-        <button class="primary" disabled={decor.busy} onclick={put}>{replace ? 'Заменить' : 'Поставить'}</button>
-        <button class="x" onclick={leave} title="Закрыть (Esc)" aria-label="Закрыть"><Icon name="x" size={14} /></button>
-      </div>
-      <div class="hint">{hint}</div>
-    </div>
-  </div>
+    {/snippet}
+    {#snippet caption()}{peekCaption(it, list.indexOf(it.id) + 1, list.length)}{/snippet}
+    {#snippet actions(leave)}
+      {#if setId}
+        <button class="ghost" title="Показать весь набор «{it.pack}»" onclick={() => showSet(leave)}>Показать весь набор</button>
+      {/if}
+      <button class="primary" disabled={decor.busy} onclick={put}>{replace ? 'Заменить' : 'Поставить'}</button>
+    {/snippet}
+    {#snippet hint()}{hintText}{/snippet}
+  </PeekShell>
 {/if}
 
 <style>
-  .back {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    background: rgba(0, 0, 0, 0.82);
-  }
-  .box {
-    position: relative;
-    display: grid;
-    grid-template-rows: 1fr 36px auto;
-    width: 94vw;
-    height: 94vh;
-    outline: none;
-  }
   .view {
     position: relative;
     min-height: 0;
@@ -285,35 +212,5 @@
   /* Крупная ещё грузится: невидима, миниатюра на месте */
   .ph.wait {
     visibility: hidden;
-  }
-  .cap {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    height: 36px;
-    color: var(--muted);
-    font-size: 13px;
-  }
-  .cap .name {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .hint {
-    color: var(--muted);
-    font-size: 12px;
-    padding-bottom: 2px;
-  }
-  .x {
-    flex: none;
-    width: 26px;
-    height: 26px;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    background: transparent;
-    color: var(--text);
   }
 </style>

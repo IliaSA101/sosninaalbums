@@ -32,6 +32,7 @@
         maxW={store.view.textMaxW}
         text={editText(c)}
         style={colorLive.style(`cap:${c.photo}`, c.style)}
+        lines={c.lines}
         {sw}
         {ph}
         {k}
@@ -74,6 +75,7 @@
         maxW={store.view.textMaxW}
         text={editText(t)}
         style={colorLive.style(`text:${t.id}`, t.style)}
+        lines={t.lines}
         {sw}
         {ph}
         {k}

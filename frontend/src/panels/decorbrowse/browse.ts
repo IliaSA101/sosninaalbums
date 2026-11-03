@@ -2,6 +2,8 @@
 // Вид и стиль размечает Go (DecorItem.form / style), здесь только отбор и числа слева. Чистое, под тест.
 import type { SideItem } from '../../base/tpl/SideList.svelte'
 import { sideItems, themeItems, type DecorCatalog, type DecorItem } from '../decor/decor'
+import type { DecorGet } from './decorget'
+import type { GalleryKind } from './tilesize'
 
 export type FormSel = '' | 'sticker' | 'corner' | 'divider'
 // Выбор в ряду отбора; '' — «Все». Помнится до конца сеанса (DecorUi.filters), варианта в списке может уже не быть — тогда в показе «Все».
@@ -27,6 +29,8 @@ const FORM_LABELS: readonly Opt[] = [
   { id: 'divider', label: 'Разделители' },
 ]
 const STYLE_MIN = 3 // стиль — от трёх предметов: чужие приставки «X: Y» ряд не раздувают
+// Макетов в наборе мало (3–10), и стиль задаёт автор набора, а не приставка в имени: хватает двух (163)
+export const styleMin = (kind?: GalleryKind): number => (kind === 'album' ? 2 : STYLE_MIN)
 const STYLE_MAX = 6 // стилей больше — шесть самых крупных, остальные видны в «Все»
 
 const formOf = (it: Pick<BrowseItem, 'form'>): string => it.form ?? 'sticker'
@@ -61,9 +65,9 @@ export function formOpts(list: readonly BrowseItem[]): Opt[] {
   return found.length > 1 ? [...found] : []
 }
 
-// Стили от трёх предметов; больше шести — шесть самых многочисленных (ничья — порядок каталога), показ — в порядке каталога
+// Стили от трёх предметов (min; у макетов двух); больше шести — шесть самых многочисленных (ничья — порядок каталога), показ — в порядке каталога
 // (order — весь каталог, как у packOpts: в «Недавних» кнопки не прыгают).
-export function styleOpts(list: readonly BrowseItem[], order: readonly BrowseItem[] = list): Opt[] {
+export function styleOpts(list: readonly BrowseItem[], order: readonly BrowseItem[] = list, min = STYLE_MIN): Opt[] {
   const rank = new Map<string, number>()
   order.forEach((it, i) => {
     if (it.style && !it.form && !rank.has(it.style)) rank.set(it.style, i)
@@ -71,7 +75,7 @@ export function styleOpts(list: readonly BrowseItem[], order: readonly BrowseIte
   const n = new Map<string, number>()
   for (const it of list) if (it.style && !it.form) n.set(it.style, (n.get(it.style) ?? 0) + 1)
   const at = (s: string) => rank.get(s) ?? Infinity
-  const big = [...n.entries()].filter(([, c]) => c >= STYLE_MIN)
+  const big = [...n.entries()].filter(([, c]) => c >= min)
   const top = new Set(
     [...big]
       .sort((a, b) => b[1] - a[1] || at(a[0]) - at(b[0]))
@@ -98,14 +102,21 @@ export interface Browsed<T> {
 
 // Конвейер. Варианты каждого шага — из того, что осталось после предыдущего. Свои (без packId, form, style) скрыты при выбранном
 // наборе, стиле, «Уголках» и «Разделителях»; «Стикеры» их показывают. keep (стоящая плитка: «Заменить…», фон области) видна всегда.
-export function browse<T extends BrowseItem>(list: readonly T[], order: readonly BrowseItem[], f: BrowseSel, keep = ''): Browsed<T> {
+// kind album (163): ряда «Вид» нет (у макетов нет стикеров, уголков и разделителей), стиль — от двух предметов.
+export function browse<T extends BrowseItem>(
+  list: readonly T[],
+  order: readonly BrowseItem[],
+  f: BrowseSel,
+  keep = '',
+  kind?: GalleryKind,
+): Browsed<T> {
   const packs = packOpts(list, order)
   const pack = active(f.pack, packs)
   const a = pack ? list.filter((i) => i.packId === pack) : list
-  const forms = formOpts(a)
+  const forms = kind === 'album' ? [] : formOpts(a)
   const form = active(f.form, forms) as FormSel
   const b = form ? a.filter((i) => formOf(i) === form) : a
-  const styles = styleOpts(b, order)
+  const styles = styleOpts(b, order, styleMin(kind))
   const style = active(f.style, styles)
   const c = style ? b.filter((i) => i.style === style) : b
   const shown = new Set<BrowseItem>(c)
@@ -115,15 +126,17 @@ export function browse<T extends BrowseItem>(list: readonly T[], order: readonly
 
 // Числа слева: сколько плиток будет видно после щелчка по строке — тем же конвейером (и «Куда» у «Разворотов» — extra).
 // Go считает по всем, поэтому «Недавние 3» при двух видимых плитках без этого.
+// cat — и каталог окон оформления, и каталог макетов (kind 'album': тот же конвейер без «Вида», стиль от двух).
 export function sideCounts(
-  cat: DecorCatalog | null,
+  cat: (Pick<DecorCatalog, 'themes' | 'items' | 'recent'> & { new?: string[]; get?: DecorGet[]; kind?: string }) | null,
   f: BrowseSel,
-  o: { extra?: (list: DecorItem[]) => DecorItem[]; keep?: string } = {},
+  o: { extra?: (list: DecorItem[]) => DecorItem[]; keep?: string; kind?: GalleryKind } = {},
 ): SideItem<string>[] {
   const order = cat?.items ?? []
+  const kind = o.kind ?? (cat?.kind === 'album' ? 'album' : undefined)
   return sideItems(cat).map((t) => {
     const list = themeItems(cat, t.id)
-    return { ...t, count: browse(o.extra ? o.extra(list) : list, order, f, o.keep).items.length }
+    return { ...t, count: browse(o.extra ? o.extra(list) : list, order, f, o.keep, kind).items.length }
   })
 }
 

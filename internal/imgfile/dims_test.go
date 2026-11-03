@@ -274,19 +274,19 @@ func TestBudgetAcquireCtxRace(t *testing.T) {
 // после освобождения тот же файл открывается.
 func TestOpenOrientedCtxCancel(t *testing.T) {
 	p := testkit.JPEG(t, testkit.TempDir(t), "a.jpg", 20, 20)
-	DecodeBudget.Acquire(DecodeBudgetPixels)
+	decodeBudget.Acquire(DecodeBudgetPixels)
 	held := true
 	defer func() {
 		if held {
-			DecodeBudget.Release(DecodeBudgetPixels)
+			decodeBudget.Release(DecodeBudgetPixels)
 		}
 	}()
-	before := DecodeBudget.Used()
+	before := decodeBudget.Used()
 	ctx, cancel := context.WithCancel(context.Background())
 	// Отмена — когда открытие уже стоит в очереди за бюджетом; бюджет держим до конца проверки, так
 	// что OpenOrientedCtx, не заметивший отмену, не вернётся совсем (бюджет ожидания ловит это).
 	go func() {
-		for deadline := time.Now().Add(testkit.Limit(5 * time.Second)); DecodeBudget.Waiting() < 1 && time.Now().Before(deadline); {
+		for deadline := time.Now().Add(testkit.Limit(5 * time.Second)); decodeBudget.Waiting() < 1 && time.Now().Before(deadline); {
 			time.Sleep(time.Millisecond)
 		}
 		cancel()
@@ -298,10 +298,10 @@ func TestOpenOrientedCtxCancel(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("ждали Canceled: %v", err)
 	}
-	if got := DecodeBudget.Used(); got != before {
+	if got := decodeBudget.Used(); got != before {
 		t.Fatalf("бюджет тронут: %d вместо %d", got, before)
 	}
-	DecodeBudget.Release(DecodeBudgetPixels)
+	decodeBudget.Release(DecodeBudgetPixels)
 	held = false
 	img, release, err := OpenOrientedCtx(context.Background(), p)
 	if err != nil {
@@ -317,8 +317,8 @@ func TestOpenOrientedCtxCancel(t *testing.T) {
 	if _, _, err := OpenOrientedCtx(dead, p); !errors.Is(err, context.Canceled) {
 		t.Fatalf("отменённый ctx: %v", err)
 	}
-	if DecodeBudget.Used() != 0 {
-		t.Fatalf("Used %d", DecodeBudget.Used())
+	if decodeBudget.Used() != 0 {
+		t.Fatalf("Used %d", decodeBudget.Used())
 	}
 }
 

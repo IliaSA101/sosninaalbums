@@ -5,6 +5,7 @@ package app
 import (
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -180,6 +181,82 @@ func TestAgentAlbumBgPages(t *testing.T) {
 	if v := r.a.editor().View(); v.Rev == rev || v.AlbumBg == nil || v.AlbumBg.Pages {
 		t.Fatalf("альбом-лист без разворотов: rev %d→%d, фон %+v", rev, v.Rev, v.AlbumBg)
 	}
+}
+
+// askBgAlbum — set_background to album в режиме «Спрашивать»: строки вопроса и фон альбома после «Да».
+// Расхождение текста с применённым — ошибка теста, не Fatalf: вызов агента ждёт ответа, без него тест завис бы.
+func askBgAlbum(t *testing.T, r *edRig, args map[string]any) (lines []string, applied *model.AlbumBgView) {
+	t.Helper()
+	c := r.async(t, "set_background", args)
+	ask := r.asked(t, 1)
+	if _, err := r.a.AnswerAgent(ask.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if res := c.wait(t); res.IsError {
+		t.Fatalf("правка: %s", agText(res))
+	}
+	return ask.Lines, r.a.editor().View().AlbumBg
+}
+
+// bgAskCase — один случай таблицы: фон альбома mode, pages агента arg (nil — не назван).
+func bgAskCase(t *testing.T, mode string, arg *bool) {
+	const spreadsText, pagesText = "Он ляжет на все развороты без своего фона.",
+		"Он ляжет на каждую страницу всех разворотов без своего фона."
+	r := newEdRig(t)
+	r.a.SetAgentPermGroup("edit", prefs.PermAsk)
+	a, b := r.bgPair(t)
+	if mode != "нет" {
+		if _, err := r.a.SetAlbumBg(a, mode == "каждая страница"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantPages := mode == "каждая страница" && arg == nil || arg != nil && *arg
+	want := spreadsText
+	if wantPages {
+		want = pagesText
+	}
+	args := map[string]any{"item": b, "to": "album"}
+	if arg != nil {
+		args["pages"] = *arg
+	}
+	lines, bg := askBgAlbum(t, r, args)
+	if !slices.Contains(lines, want) {
+		t.Errorf("вопрос %q, ждали строку %q", lines, want)
+	}
+	if bg == nil || bg.Pages != wantPages {
+		t.Errorf("применено %+v, текст вопроса обещал pages=%v", bg, wantPages)
+	}
+}
+
+// TestAlbumBgAskPages: вопрос о фоне альбома называет то же, что применит правка. Таблица 3×3: фон альбома
+// (нет, «Весь разворот», «Каждая страница») × pages агента (нет, false, true); у альбома-листа страниц нет —
+// «на все листы» и Pages=false при любом pages.
+func TestAlbumBgAskPages(t *testing.T) {
+	yes, no := true, false
+	for _, mode := range []string{"нет", "весь разворот", "каждая страница"} {
+		for _, arg := range []*bool{nil, &no, &yes} {
+			name := mode + "/нет"
+			if arg != nil {
+				name = mode + "/" + strconv.FormatBool(*arg)
+			}
+			t.Run(name, func(t *testing.T) { bgAskCase(t, mode, arg) })
+		}
+	}
+	t.Run("альбом-лист", func(t *testing.T) {
+		r := newEdRig(t)
+		r.a.SetAgentPermGroup("edit", prefs.PermAsk)
+		a, _ := r.bgPair(t)
+		sheet := model.New()
+		sheet.Settings.Sheet, sheet.Settings.PageW, sheet.Settings.PageH = true, 204, 304
+		r.a.ed.Store(mustEditor(t, sheet, ""))
+		lines, bg := askBgAlbum(t, r, map[string]any{"item": a, "to": "album", "pages": true})
+		if !slices.Contains(lines, "Он ляжет на все листы без своего фона.") {
+			t.Errorf("вопрос %q, ждали «на все листы»", lines)
+		}
+		if bg == nil || bg.Pages {
+			t.Errorf("альбом-лист: %+v, ждали Pages=false", bg)
+		}
+	})
 }
 
 // TestAgentStickersNoCover: «cover» без обложки и у альбома-листа — один отказ errNoCover, в «Всегда» и «Спрашивать»;

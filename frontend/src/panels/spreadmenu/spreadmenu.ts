@@ -1,5 +1,5 @@
-// Пункты меню правого щелчка по группе ленты. Место у курсора — общий placeAtPoint (base/ui/menulist.ts).
-import type { MenuNode } from '../../base/ui/menulist'
+// Пункты меню правого щелчка по группе ленты. Место у курсора — общий placeAtPoint (base/popup/menulist.ts).
+import type { MenuNode } from '../../base/popup/menulist'
 import type { IconName } from '../../base/ui/Icon.svelte'
 
 // Пункт виньетки (031) в меню правого щелчка: обычный лист → «Сделать виньеткой», виньетка → «Обычный разворот»

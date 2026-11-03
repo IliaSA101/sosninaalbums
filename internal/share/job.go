@@ -24,6 +24,9 @@ type Job struct {
 	Pages  int    // страниц книги
 	Bytes  int64  // оценка размера страниц
 	Scene  string // хэш сцены (SceneHash) этого снимка
+	// Fonts — поколение своих шрифтов (text.Gen) этого снимка: в SceneHash его нет, а сохранённые
+	// страницы «Продолжить» от другого поколения устарели (159).
+	Fonts uint64
 
 	Spreads []render.Spread
 	Cover   *export.CoverJob

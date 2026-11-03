@@ -23,7 +23,7 @@ import (
 // exportCloudRoots — шов тестов: корни облачных папок этой машины.
 var exportCloudRoots = func() []string {
 	home, _ := os.UserHomeDir()
-	return agentplaces.CloudRoots(runtime.GOOS, home, os.Getenv)
+	return agentplaces.CloudRootsLive(runtime.GOOS, home, os.Getenv)
 }
 
 // exportPlan — что показано в вопросе о папке и что получит ExportWith.

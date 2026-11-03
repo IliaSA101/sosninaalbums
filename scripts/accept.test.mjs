@@ -1,11 +1,11 @@
 // Приём ветки агента: временный репозиторий в .gotmp (правило проекта: временные файлы — не в ОС-темпе), precheck подменён.
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Stop, accept, ensureNodeModules, mergeBothSides } from './accept.mjs'
+import { Stop, accept, ensureNodeModules, freeIndexLock, mergeBothSides } from './accept.mjs'
 import { appendEntry, journalFile, readJournal } from './accept-log.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -321,4 +321,155 @@ test('журнал: повреждённый файл не срывает при
   const m2 = []
   assert.match(accept('j2', 'j2', { cwd: s2.root, env: s2.env, log: (m) => m2.push(m) }), /^принято j2/)
   assert.ok(m2.some((m) => m.startsWith('журнал приёмов не записан')), m2.join('|'))
+})
+
+// Зависший index.lock (04.11): пустой lock упавшего git в копии агента и в основной копии срывал rebase и ff.
+const gitPath = (cwd, name) => git(cwd, 'rev-parse', '--path-format=absolute', '--git-path', name)
+const makeLock = (cwd, ageSec) => {
+  const f = gitPath(cwd, 'index.lock')
+  fs.writeFileSync(f, '')
+  const t = new Date(Date.now() - ageSec * 1000)
+  fs.utimesSync(f, t, t)
+  return f
+}
+const fastLocks = { wait: 400, poll: 100 }
+
+test('index.lock старше 60 с без держателя снимается в копии и в основной копии, приём проходит', () => {
+  const s = setup()
+  const w = s.wt('l1')
+  commit(w, 'l.txt', 'l\n', 'l1')
+  const l1 = makeLock(w, 120)
+  const l2 = makeLock(s.root, 300)
+  assert.notEqual(l1, l2, 'у worktree свой index.lock')
+  const msgs = []
+  assert.match(accept('l1', 'l1', { cwd: s.root, env: s.env, log: (m) => msgs.push(m), locks: fastLocks }), /^принято l1: 1 коммит, /)
+  assert.ok(msgs.some((m) => /^снят зависший index\.lock \(копия, возраст 1\d\d с\)$/.test(m)), msgs.join('|'))
+  assert.ok(msgs.some((m) => /^снят зависший index\.lock \(основная копия, возраст 30\d с\)$/.test(m)), msgs.join('|'))
+  assert.ok(!fs.existsSync(l2))
+})
+
+test('свежий index.lock — ждём и Stop с понятным текстом, lock не тронут, ветка не влита', () => {
+  const s = setup()
+  const w = s.wt('l2')
+  commit(w, 'l.txt', 'l\n', 'l2')
+  const devHead = git(s.root, 'rev-parse', 'dev')
+  const f = makeLock(w, 5)
+  const t0 = Date.now()
+  const msg = stopMsg(() => accept('l2', 'l2', { cwd: s.root, env: s.env, locks: fastLocks }))
+  assert.match(msg, /копия: index\.lock .* моложе 60 с/)
+  assert.ok(Date.now() - t0 >= 350, 'подождал')
+  assert.ok(fs.existsSync(f))
+  assert.equal(git(s.root, 'rev-parse', 'dev'), devHead)
+  // ожидание задаётся и через env (CLI)
+  const msg2 = stopMsg(() => accept('l2', 'l2', { cwd: s.root, env: { ...s.env, ACCEPT_LOCK_WAIT_MS: '0' } }))
+  assert.match(msg2, /index\.lock/)
+})
+
+test('свежий lock исчезает во время ожидания — продолжаем без снятия и без Stop', () => {
+  const s = setup()
+  const f = makeLock(s.root, 5)
+  // удаляем lock из дочернего процесса, пока freeIndexLock спит
+  const rm = spawn(process.execPath, ['-e', `setTimeout(()=>require('fs').rmSync(${JSON.stringify(f)},{force:true}),250)`], { stdio: 'ignore' })
+  const msgs = []
+  freeIndexLock(s.root, 'основная копия', { ...fastLocks, wait: 3000, log: (m) => msgs.push(m) })
+  rm.kill()
+  assert.deepEqual(msgs, [])
+  assert.ok(!fs.existsSync(f))
+})
+
+test('старый lock, который держит процесс (fuser), не снимается', { skip: process.platform === 'win32' || !!spawnSync('fuser', ['-V']).error ? 'нет fuser' : false }, () => {
+  const s = setup()
+  const f = makeLock(s.root, 300)
+  const holder = spawn('sh', ['-c', 'exec sleep 30 < "$0"', f], { stdio: 'ignore' })
+  try {
+    // дать sh открыть файл
+    for (let i = 0; i < 100 && spawnSync('fuser', [f]).status !== 0; i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50)
+    assert.match(stopMsg(() => freeIndexLock(s.root, 'основная копия', fastLocks)), /держит процесс/)
+    assert.ok(fs.existsSync(f))
+  } finally {
+    holder.kill()
+  }
+})
+
+test('precheck получает GIT_OPTIONAL_LOCKS=0', () => {
+  const s = setup()
+  const w = s.wt('l3')
+  commit(w, 'l.txt', 'l\n', 'l3')
+  const stub = path.join(s.dir, 'precheck-env.mjs')
+  fs.writeFileSync(stub, `import fs from 'node:fs'\nfs.writeFileSync(${JSON.stringify(path.join(s.dir, 'locks.txt'))}, String(process.env.GIT_OPTIONAL_LOCKS))\n`)
+  const env = { ...s.env, ACCEPT_PRECHECK: stub }
+  delete env.GIT_OPTIONAL_LOCKS
+  accept('l3', 'l3', { cwd: s.root, env })
+  assert.equal(fs.readFileSync(path.join(s.dir, 'locks.txt'), 'utf8'), '0')
+})
+
+// dev ушёл вперёд за время precheck (04.11): ff падал, приём приходилось повторять руками.
+/** Заглушка: считает запуски в файле-счётчике; при первом запуске коммитит `file` в основную копию (dev). */
+function countingStub(s, file) {
+  const stub = path.join(s.dir, 'precheck-count.mjs')
+  const count = path.join(s.dir, 'count.txt')
+  fs.writeFileSync(
+    stub,
+    `import fs from 'node:fs'
+import path from 'node:path'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
+const count = ${JSON.stringify(count)}
+const n = (fs.existsSync(count) ? fs.readFileSync(count, 'utf8').split('\\n').filter(Boolean).length : 0) + 1
+fs.appendFileSync(count, process.argv.slice(2).join(' ') + '\\n')
+if (n === 1) {
+  const root = ${JSON.stringify(s.root)}
+  fs.mkdirSync(path.dirname(path.join(root, ${JSON.stringify(file)})), { recursive: true })
+  fs.writeFileSync(path.join(root, ${JSON.stringify(file)}), 'новое\\n')
+  execFileSync('git', ['add', '-A'], { cwd: root })
+  execFileSync('git', ['commit', '-q', '-m', 'коммит в dev во время precheck'], { cwd: root })
+}
+`,
+  )
+  return { env: { ...s.env, ACCEPT_PRECHECK: stub }, calls: () => fs.readFileSync(count, 'utf8').split('\n').filter(Boolean) }
+}
+
+test('dev ушёл вперёд коммитом в docs — rebase заново, второго precheck нет', () => {
+  const s = setup()
+  const w = s.wt('d1')
+  commit(w, 'b.txt', 'b\n', 'd1')
+  const before = git(s.root, 'rev-parse', 'dev')
+  const c = countingStub(s, 'docs/notes/x.md')
+  const msgs = []
+  assert.match(accept('d1', 'd1', { cwd: s.root, env: c.env, log: (m) => msgs.push(m) }), /^принято d1: 1 коммит, /)
+  assert.deepEqual(c.calls(), [`--base ${before}`], 'precheck один раз')
+  assert.ok(msgs.includes('dev ушёл вперёд (1 коммит, только docs) — rebase заново'), msgs.join('|'))
+  assert.equal(git(s.root, 'log', '--format=%s', '-2'), 'd1\nкоммит в dev во время precheck')
+  assert.ok(fs.existsSync(path.join(s.root, 'docs/notes/x.md')) && fs.existsSync(path.join(s.root, 'b.txt')))
+  assert.equal(git(s.root, 'branch', '--list', 'd1'), '')
+  assert.ok(!fs.existsSync(w))
+})
+
+test('dev ушёл вперёд коммитом в код — второй precheck с новой базой', () => {
+  const s = setup()
+  const w = s.wt('d2')
+  commit(w, 'b.txt', 'b\n', 'd2')
+  const before = git(s.root, 'rev-parse', 'dev')
+  const c = countingStub(s, 'internal/x/x.go')
+  const msgs = []
+  assert.match(accept('d2', 'd2', { cwd: s.root, env: c.env, log: (m) => msgs.push(m) }), /^принято d2: 1 коммит, /)
+  const calls = c.calls()
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0], `--base ${before}`)
+  assert.equal(calls[1], `--base ${git(s.root, 'rev-parse', 'HEAD~1')}`, 'вторая база — новый dev')
+  assert.ok(msgs.includes('dev ушёл вперёд (1 коммит) — precheck заново'), msgs.join('|'))
+  assert.equal(git(s.root, 'log', '--format=%s', '-2'), 'd2\nкоммит в dev во время precheck')
+})
+
+test('ff не прошёл, а dev не менялся — Stop без повторов', () => {
+  const s = setup()
+  const w = s.wt('d3')
+  commit(w, 'b.txt', 'b\n', 'd3')
+  // иная причина отказа ff: ref dev занят чужим lock
+  const refLock = `${gitPath(s.root, 'refs/heads/dev')}.lock`
+  fs.writeFileSync(refLock, '')
+  const msg = stopMsg(() => accept('d3', 'd3', { cwd: s.root, env: s.env }))
+  assert.match(msg, /ff-merge не прошёл: /)
+  assert.ok(!/снова и снова/.test(msg))
+  assert.ok(fs.existsSync(w))
+  fs.rmSync(refLock)
 })

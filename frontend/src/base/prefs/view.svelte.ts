@@ -19,9 +19,9 @@ export const THUMB_MIN = 70
 export const THUMB_MAX = 220
 export const THUMB_DEF = 110
 
-// Размер плиток окон оформления (133): по одному числу на вид окна. Пределы и умолчания знает
+// Размер плиток окон оформления (133) и «Макетов альбома» (163): по одному числу на вид окна. Пределы и умолчания знает
 // panels/decorbrowse/tilesize.ts; здесь только память — целые px, мусор не загружается.
-export const DECOR_TILE_KEYS = ['bg', 'sticker', 'frame', 'spread'] as const
+export const DECOR_TILE_KEYS = ['bg', 'sticker', 'frame', 'spread', 'album'] as const
 export type DecorTileKey = (typeof DECOR_TILE_KEYS)[number]
 export type DecorTiles = Partial<Record<DecorTileKey, number>>
 

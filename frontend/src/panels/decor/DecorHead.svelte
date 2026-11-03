@@ -12,7 +12,7 @@
   import { spreadSave } from './tplsave.svelte'
   import { frameWhereItems } from './frames'
   import { ADD_OWN, NOUN, READ_ONLY_HINT, ownKind, uploadHint } from './decor'
-  import { setTile, tileOf, tileRange } from '../decorbrowse/tilesize'
+  import TileSize from '../decorbrowse/TileSize.svelte'
 
   // Шапка окна «Фоны»: «Куда» (рамочка / фон альбома / область листа), размер миниатюр (133), «Наборы…», «Сохранить разворот…», QR и «Добавить своё…» (100-1).
   // Область (where, scope) и признак «фон альбома» считает окно: они нужны и плиткам.
@@ -25,7 +25,6 @@
   const noun = $derived(NOUN[c.kind])
   const albumPlaces = $derived(albumWhere(isSheet(store.view.settings), unitOf(store.view.settings).all))
   const frameWhere = $derived(frameWhereItems(decor.frameSel().length))
-  const range = $derived(tileRange(c.kind))
 </script>
 
 <div class="bar">
@@ -49,18 +48,7 @@
     <Seg items={where} value={scope} onpick={(s) => decor.setScope(s)} label="Куда поставить {noun}" />
   {/if}
   <span class="grow"></span>
-  <!-- 133: ползунок и слова — те же, что у ленты фото (053); Ctrl+колесо над плитками делает то же -->
-  <input
-    class="size"
-    type="range"
-    min={range.lo}
-    max={range.hi}
-    value={tileOf(c.kind)}
-    oninput={(e) => setTile(c.kind, Number(e.currentTarget.value))}
-    title="Размер миниатюр"
-    aria-label="Размер миниатюр"
-    onchange={(e) => e.currentTarget.blur()}
-  />
+  <TileSize kind={c.kind} />
   <!-- 067 Ф2: те же наборы во всех трёх окнах; окно «Наборы» открывается поверх -->
   <button class="ghost" title="Наборы библиотеки: добавить из файла, удалить" onclick={() => packsUi.show()}>Наборы…</button>
   {#if spreads}
@@ -101,8 +89,5 @@
   }
   .grow {
     flex: 1;
-  }
-  .size {
-    width: 72px;
   }
 </style>

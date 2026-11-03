@@ -20,6 +20,8 @@ const (
 	MaxLookFile = 512 << 10
 	// MaxLookSteps — шагов в макете: окно «Сохранить альбом как макет» сливает одинаковые до 24.
 	MaxLookSteps = 24
+	// MaxLookStyleRunes — длина стиля макета («Акварель») в знаках: подпись ряда «Стиль» окна 163.
+	MaxLookStyleRunes = 40
 )
 
 // Роли шага (0.27-131-3): один раз, по кругу (блок), виньетка 031.
@@ -40,6 +42,7 @@ var (
 // AlbumTpl — макет: обложка и серия. Имя и тема — в записи библиотеки, не в файле.
 type AlbumTpl struct {
 	V     int        `json:"v"`
+	Style string     `json:"style,omitempty"` // стиль для отбора в окне (163): строка набора, ClampLook зажимает
 	Cover *CoverTpl  `json:"cover,omitempty"`
 	Steps []LookStep `json:"steps"` // 1…MaxLookSteps
 }
@@ -67,6 +70,11 @@ type LookVig struct {
 	Teachers int    `json:"teachers"`
 	Pupils   int    `json:"pupils"`
 	Ratio    string `json:"ratio,omitempty"`
+	// Style — оформление нового листа (164): гарнитура и цвет подписей и шапки, подпись учителя;
+	// кегль — по формату (программа). nil — как в 0.35. Не путать со Style макета (AlbumTpl).
+	Style *VigStyle `json:"style,omitempty"`
+	// HText — текст новой надписи-шапки вместо VigHeadText; поля {…} разрешены, Vars не трогает.
+	HText string `json:"htext,omitempty"`
 }
 
 // LookKey — ключ макета: my: + 8 байт sha256 байтов файла (как у картинок, 0.27-131-6). Ключ от
@@ -80,6 +88,7 @@ func LookKey(data []byte) string {
 // каждого (память на мусорном входе — по числу шагов), а версии шаблонов — до их разбора.
 type lookFile struct {
 	V     int               `json:"v"`
+	Style string            `json:"style,omitempty"`
 	Cover json.RawMessage   `json:"cover,omitempty"`
 	Steps []json.RawMessage `json:"steps"`
 }
@@ -112,7 +121,7 @@ func ParseLook(data []byte) (AlbumTpl, error) {
 	if len(f.Steps) > MaxLookSteps {
 		return AlbumTpl{}, ErrLookSteps
 	}
-	t := AlbumTpl{V: f.V, Steps: make([]LookStep, len(f.Steps))}
+	t := AlbumTpl{V: f.V, Style: f.Style, Steps: make([]LookStep, len(f.Steps))}
 	if len(f.Cover) > 0 {
 		var side struct {
 			Back  *verHead `json:"back"`
@@ -154,7 +163,7 @@ func ClampLook(t AlbumTpl) (AlbumTpl, bool) {
 	if t.V != LookV {
 		return AlbumTpl{}, false
 	}
-	c := AlbumTpl{V: LookV, Cover: clampCoverTpl(t.Cover), Steps: []LookStep{}}
+	c := AlbumTpl{V: LookV, Style: CleanLookStyle(t.Style), Cover: clampCoverTpl(t.Cover), Steps: []LookStep{}}
 	for _, st := range t.Steps {
 		if len(c.Steps) == MaxLookSteps {
 			break
@@ -169,6 +178,10 @@ func ClampLook(t AlbumTpl) (AlbumTpl, bool) {
 	}
 	return c, true
 }
+
+// CleanLookStyle — стиль макета: одна строка без управляющих и bidi-знаков, без пробелов по краям,
+// не больше MaxLookStyleRunes знаков (строка из чужого файла набора, в окне идёт текстом).
+func CleanLookStyle(s string) string { return cleanLine(s, MaxLookStyleRunes) }
 
 // clampLookStep — шаг: роль, имя, шаблон, виньетка. false — ставить нечего.
 func clampLookStep(st LookStep) (LookStep, bool) {
@@ -199,7 +212,8 @@ func clampLookVig(v LookVig) *LookVig {
 	if over := VigPlaces(cv) - MaxPlaces; over > 0 {
 		cv.Pupils = max(0, cv.Pupils-over)
 	}
-	return &LookVig{Tpl: cv.Tpl, Teachers: cv.Teachers, Pupils: cv.Pupils, Ratio: cv.Ratio}
+	return &LookVig{Tpl: cv.Tpl, Teachers: cv.Teachers, Pupils: cv.Pupils, Ratio: cv.Ratio,
+		Style: clampLookVigStyle(v.Style), HText: cleanLookHead(v.HText)}
 }
 
 // oneRepeatBlock — повтор только у первого сплошного блока: «по кругу» — один блок (design §2).
@@ -468,12 +482,13 @@ type LookCard struct {
 	From  int
 	Vig   bool
 	Cover bool
+	Style string // стиль из файла макета (163), "" — не задан
 }
 
 // CardOf — плитка макета: n по умолчанию — все шаги по разу (Series(t, len(Steps))).
 func CardOf(t AlbumTpl) LookCard {
 	ids := Series(t, len(t.Steps))
-	c := LookCard{Steps: len(ids), From: seriesPlaces(t, ids), Vig: VigStep(t) >= 0, Cover: t.Cover != nil}
+	c := LookCard{Steps: len(ids), From: seriesPlaces(t, ids), Vig: VigStep(t) >= 0, Cover: t.Cover != nil, Style: t.Style}
 	if t.Cover != nil {
 		for _, side := range []*SpreadTpl{t.Cover.Back, t.Cover.Front} {
 			if side != nil {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type DecorCatalog, type DecorItem } from '../decor/decor'
 import { tplSideItems } from '../decor/spreadtpl'
-import { BUILTIN_PACK, NO_SEL, browse, formOpts, packOpts, sideCounts, styleOpts, tileLabel, type BrowseSel } from './browse'
+import { BUILTIN_PACK, NO_SEL, browse, formOpts, packOpts, sideCounts, styleMin, styleOpts, tileLabel, type BrowseSel } from './browse'
 
 // 133-9: отбор набор → вид → стиль, пропавший выбор, стоящая плитка, свои, стили, подпись без приставки, числа слева.
 const it_ = (id: string, over: Partial<DecorItem> = {}): DecorItem => ({
@@ -238,4 +238,49 @@ describe('числа слева', () => {
   })
 
   it('нет каталога — пусто', () => expect(sideCounts(null, NO_SEL)).toEqual([]))
+})
+
+// 163: окно «Макеты альбома» — тот же конвейер, но без «Вида» и со стилем от двух предметов.
+describe('kind album (163)', () => {
+  const look = (id: string, packId: string, style: string, over: Partial<DecorItem> = {}) =>
+    pk(id, packId, packId, { name: id, style, ...over })
+  const LOOKS: DecorItem[] = [
+    look('a1', 'wed', 'Акварель'),
+    look('a2', 'wed', 'Акварель'),
+    look('m1', 'wed', 'Минимал'),
+    look('m2', 'park', 'Минимал'),
+    look('o1', 'park', 'Одинокий'),
+    look('f1', 'park', '', { form: 'corner' }), // «вид» у макета не бывает: игнорируется
+  ]
+
+  it('styleMin: у макетов 2, у остальных 3', () => {
+    expect(styleMin('album')).toBe(2)
+    for (const k of ['bg', 'sticker', 'frame', 'spread', undefined] as const) expect(styleMin(k)).toBe(3)
+  })
+  it('стиль виден от двух предметов, «Вида» нет даже при разных form', () => {
+    const b = browse(LOOKS, LOOKS, NO_SEL, '', 'album')
+    expect(b.styles.map((o) => o.id)).toEqual(['Акварель', 'Минимал'])
+    expect(b.forms).toEqual([])
+    expect(b.items).toHaveLength(LOOKS.length)
+    expect(browse(LOOKS, LOOKS, NO_SEL).styles).toEqual([]) // без kind — прежний порог 3
+  })
+  it('выбранный form у album в отбор не идёт', () => {
+    const b = browse(LOOKS, LOOKS, sel({ form: 'corner' }), '', 'album')
+    expect(b.sel.form).toBe('')
+    expect(b.items).toHaveLength(LOOKS.length)
+  })
+  it('стиль и набор отбирают как у стикеров', () => {
+    expect(ids(browse(LOOKS, LOOKS, sel({ style: 'Минимал' }), '', 'album').items)).toEqual(['m1', 'm2'])
+    // в наборе «park» стиль «Минимал» один — вариантов выбирать не из чего, ряд стилей пуст и выбор не действует
+    const park = browse(LOOKS, LOOKS, sel({ pack: 'park', style: 'Минимал' }), '', 'album')
+    expect(park.styles).toEqual([])
+    expect(ids(park.items)).toEqual(['m2', 'o1', 'f1'])
+  })
+  it('sideCounts: kind каталога album или явный', () => {
+    const cat = { kind: 'album', themes: [{ id: 'all', name: 'Все', count: 6 }], items: LOOKS, recent: [] }
+    expect(sideCounts(cat, sel({ style: 'Акварель' }))[0].count).toBe(2)
+    expect(sideCounts({ ...cat, kind: undefined }, sel({ style: 'Акварель' }), { kind: 'album' })[0].count).toBe(2)
+    // без album стиль скрыт (2 < 3), выбор «Акварель» не действует — все плитки
+    expect(sideCounts({ ...cat, kind: 'bg' }, sel({ style: 'Акварель' }))[0].count).toBe(6)
+  })
 })

@@ -17,6 +17,11 @@ import (
 func (a *App) askBgFacts(e *editAsk, req agents.AskReq, ed *album.Editor, v model.View) {
 	if req.AlbumBg {
 		e.AlbumBg = true
+		var in *bool
+		if req.BgPagesSet {
+			in = &req.BgPages
+		}
+		e.Pages = !v.Settings.Sheet && agents.AlbumBgPages(v.AlbumBg, in) // то же решение, что у правки
 		for i, sv := range v.Spreads {
 			own, client := ownBgOf(sv)
 			switch {

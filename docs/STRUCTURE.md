@@ -10,19 +10,21 @@
 
 | Группа    | Области                                                                                                                                                                                     | Что                                                                      |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `base/`   | `core`, `prefs`, `ui`, `modal`, `tpl`, `drag`, `geom`, `groupgeom`, `types`, `words`, `keys`, `color`, `auto`                                                                               | низ: состояние и уровни, общие виджеты, перенос, зеркала Go-геометрии    |
+| `base/`   | `core`, `prefs`, `ui`, `popup`, `modal`, `tpl`, `drag`, `geom`, `groupgeom`, `types`, `words`, `keys`, `color`, `auto`                                                                               | низ: состояние и уровни, общие виджеты, перенос, зеркала Go-геометрии    |
 | `editor/` | `canvas`, `spread`, `zoom`, `places`, `photo`, `photomenu`, `text`, `captions`, `backdrop`, `pattern`, `sticker`, `inspector`, `photoprops`, `cover`, `markup`, `clip`, `border`, `eyedrop` | холст, объекты на нём и карточка выделенного                             |
-| `panels/` | `library`, `folders`, `marks`, `timeline`, `spreadmenu`, `layouts`, `gallery`, `details`, `names`, `cover`, `markup`, `vignette`, `decor`, `decorbrowse`, `albumbg`, `bins`                 | панели вокруг холста: фото, отметки, лента, раскладки, детали альбома    |
-| `shell/`  | `menu`, `dialogs`, `packs`, `looks`, `printprof`, `ask`, `export`, `collect`, `boot`, `newdoc`, `guide`, `guidetext`, `hotkeys`, `autobuild`, `autoalbum`, `tour`, `agents`, `update`       | оболочка: меню и клавиши, окна, экспорт, новое изделие (альбом или лист) |
+| `panels/` | `library`, `folders`, `marks`, `timeline`, `spreadmenu`, `layouts`, `gallery`, `details`, `names`, `cover`, `markup`, `vignette`, `faces`, `decor`, `decorbrowse`, `albumbg`, `bins`                 | панели вокруг холста: фото, отметки, лента, раскладки, детали альбома    |
+| `shell/`  | `menu`, `dialogs`, `packs`, `looks`, `ask`, `boot`, `newdoc`, `guide`, `guidetext`, `hotkeys`, `autobuild`, `autoalbum`, `tour`, `agents`, `update`       | оболочка: меню и клавиши, окна, новое изделие (альбом или лист) |
+| `output/` | `export`, `collect`, `share`, `printprof` | выдача результата: выгрузка, сборка в папку, ссылка, профили типографий (0.36, 162 Р1) |
 
 ## Карты областей (подробно: что в каждой папке)
 
 Таблицы областей вынесены по группам дословно (было — один файл в 55 КБ); новая область дописывается в файл своей группы.
 
-- [base/](structure/base.md) — `core`, `prefs`, `ui`, `modal`, `tpl`, `drag`, `keys`, `geom`, `groupgeom`, `types`, `words`, `auto`, `color` (окно выбора цвета, 109).
+- [base/](structure/base.md) — `core`, `prefs`, `ui`, `popup`, `modal`, `tpl`, `drag`, `keys`, `geom`, `groupgeom`, `types`, `words`, `auto`, `color` (окно выбора цвета, 109).
 - [editor/](structure/editor.md) — холст и объекты на нём; здесь же разрез `editor/markup` (0.15).
 - [panels/](structure/panels.md) — панели вокруг холста; здесь же разрезы 0.13 (`folders`, `gallery`, `tpl`, `ask`).
-- [shell/](structure/shell.md) — меню, окна, экспорт, тур, справочник.
+- [shell/](structure/shell.md) — меню, окна, тур, справочник.
+- [output/](structure/output.md) — выгрузка, сборка в папку, ссылка, профили типографий (0.36).
 - [Go](structure/go.md) — пакеты `internal/*`, ограничение Wails, контракт биндингов.
 
 В корне `src/` — `App.svelte`, `main.ts`, `style.css`, `vite-env.d.ts`, `assets/`. Итого 205 файлов: 200 переезжают, 5 стоят.
@@ -36,10 +38,10 @@
 3. Go-корень (`osx`, `prefs`, `export`) — в 0.6.0 по «Порядку шагов». `internal/geom`, `internal/paths` и прочие будущие пакеты — целиком по области, когда в неё приходит задача: первый коммит задачи — перенос.
 4. Фронт — разом, одним агентом (`sa-exec`), скриптом по `structure-map.json`, затем `check.ps1 -Ui`. Без открытых веток во `frontend/src`.
 5. Пределы — `scripts/limits.mjs` (один источник для `check.ps1`, pre-commit, `precheck` и хука `file-size`). Go — пакет по смыслу, счётчика файлов нет; файл: предупреждение 600, провал 800 строк; тест 1200. Фронт — область ≤ 20 файлов кода без тестов; .ts 600 строк / 30 КБ; .svelte предупреждение 400, провал 600; тест 900. Подпапок у любой папки ≤ 20. Исключения — `scripts/folder-exceptions.txt`.
-6. `geom/` не импортирует состояние (`*.svelte.ts`) — сейчас так. Пределы (`max-lines` 600, функция 80 строк, сложность 15; долги — списками с «долг:») и границы областей (`geom/`, `groupgeom/`, чистые `marks/`, `zoom/`, `ui/`) проверяет eslint: `frontend/eslint.config.js`.
+6. `geom/` не импортирует состояние (`*.svelte.ts`) — сейчас так. Пределы (`max-lines` 600, функция 80 строк, сложность 15; долги — списками с «долг:») и границы областей (`geom/`, `groupgeom/`, чистые `marks/`, `zoom/`, `ui/`, `popup/`) проверяет eslint: `frontend/eslint.config.js`.
 7. На любом уровне кода — не больше 20 папок (решение владельца 2026-10-09). Считаются папки, где на любой глубине есть код (`.go`/`.ts`/`.svelte`/`.js`/`.mjs`/`.ps1`), без `wailsjs`, `testdata`, `node_modules`, `dist`; `docs/` — не код. Проверяют `CheckFolders` и pre-commit (алгоритм — `022-structure/groups.md` §2).
 8. Фронт — ровно `frontend/src/<группа>/<область>/файлы`: файл кода прямо в группе и папка глубже области запрещены. В корне `src/` — только `App.svelte`, `main.ts`, `style.css`, `vite-env.d.ts`, `assets/` и группы. В группе 3–10 областей; порог п. 5 (≤ 20 файлов) — на область. Новая область — в группу по смыслу; не подходит ни одна или в группе была бы 11-я — новая группа (решает владелец). Имя области уникально во всём `src/`: в доках и промптах — `<область>/файл` без группы, полный путь — только в командах.
-9. `base/` не импортирует `editor/`, `panels/`, `shell/`; долг `store`, `prefs`, `drag`, `dropact` снят (2026-10-10): основа зовёт верх через хуки (`core/hooks.ts`, `prefs.narrowed`, `drag.onStart`, `dropHooks`), верх подключает себя в `shell/boot/wire.ts` (`wire()` в `main.ts`; тестам, которым нужен верх, — в начале файла). Остался долг `FixedTip`, `geom/textbox`, `groupgeom/group*` → `text/textedit`; новых не добавлять.
+9. `base/` не импортирует `editor/`, `panels/`, `shell/`, `output/`; долг `store`, `prefs`, `drag`, `dropact` снят (2026-10-10): основа зовёт верх через хуки (`core/hooks.ts`, `prefs.narrowed`, `drag.onStart`, `dropHooks`), верх подключает себя в `shell/boot/wire.ts` (`wire()` в `main.ts`; тестам, которым нужен верх, — в начале файла). Остался долг `FixedTip`, `geom/textbox`, `groupgeom/group*` → `text/textedit`; новых не добавлять.
 10. После переноса — пути в комментариях, CLAUDE.md, `ARCHITECTURE.md`, незакрытых спеках; закрытые спеки и `docs/history` не трогать.
 11. Спеки — `docs/specs/<версия>/NNN-имя.md` и `NNN-имя/` (папки версий: `0.1-0.3`, `0.4-0.5`, `0.6`, `0.7`, `0.8`); в `docs/specs` остаются `README.md` и `_template.md`. Правило «≤ 20 папок на уровне» действует и для `docs` (решение владельца 2026-10-09).
 

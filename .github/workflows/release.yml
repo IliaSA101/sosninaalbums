@@ -190,7 +190,7 @@ jobs:
         shell: bash
         run: |
           [ -f build/bin/sosninaalbums.exe ] || { echo "::error::нет бинарника build/bin/sosninaalbums.exe"; exit 1; }
-          for s in SA_QA_PROBE SA_LIBRARY_URL; do
+          for s in SA_QA_PROBE SA_QA_VOLDELAY SA_LIBRARY_URL; do
             if LC_ALL=C grep -aqF -- "$s" build/bin/sosninaalbums.exe; then
               echo "::error::В выпускном exe найдена строка '$s' — собрано с тегом qa или dev"
               exit 1
@@ -254,7 +254,7 @@ jobs:
       - name: Страж тегов QA (нет зонда и стенда библиотеки)
         run: |
           [ -f build/bin/sosninaalbums.app/Contents/MacOS/sosninaalbums ] || { echo "::error::нет бинарника build/bin/sosninaalbums.app/Contents/MacOS/sosninaalbums"; exit 1; }
-          for s in SA_QA_PROBE SA_LIBRARY_URL; do
+          for s in SA_QA_PROBE SA_QA_VOLDELAY SA_LIBRARY_URL; do
             if LC_ALL=C grep -aqF -- "$s" build/bin/sosninaalbums.app/Contents/MacOS/sosninaalbums; then
               echo "::error::В выпускной программе найдена строка '$s' — собрано с тегом qa или dev"
               exit 1
@@ -367,7 +367,7 @@ jobs:
       - name: Страж тегов QA (нет зонда и стенда библиотеки)
         run: |
           [ -f build/bin/sosninaalbums ] || { echo "::error::нет бинарника build/bin/sosninaalbums"; exit 1; }
-          for s in SA_QA_PROBE SA_LIBRARY_URL; do
+          for s in SA_QA_PROBE SA_QA_VOLDELAY SA_LIBRARY_URL; do
             if LC_ALL=C grep -aqF -- "$s" build/bin/sosninaalbums; then
               echo "::error::В выпускном бинарнике найдена строка '$s' — собрано с тегом qa или dev"
               exit 1

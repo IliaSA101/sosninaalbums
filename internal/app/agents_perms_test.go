@@ -47,8 +47,8 @@ func TestAgentPermsMethods(t *testing.T) {
 		want := prefs.PermAllow
 		if c := prefs.AgentToolClass(k); c == prefs.ClassEdit || c == prefs.ClassFolder || c == prefs.ClassAlbum {
 			want = prefs.PermAsk
-		} else if c == prefs.ClassAskOnly {
-			want = prefs.PermDeny // группа «Правки» Q не трогает, свежий столбец — «Запретить»
+		} else if c == prefs.ClassAskOnly || c == prefs.ClassOpen {
+			want = prefs.PermDeny // группа «Правки» Q и O не трогает, свежий столбец — «Запретить»
 		}
 		if p.Tools[k] != want {
 			t.Errorf("группа: %s = %q, ждали %q", k, p.Tools[k], want)
@@ -125,21 +125,19 @@ func TestAgentPermNoOpen(t *testing.T) {
 	}
 }
 
-// TestAgentPermWhyAskOnly: у выгрузки и открытия альбома («Всегда» нет) пояснение под строкой есть, у правок
-// с «Всегда» и у остальных классов прежнее: чтение и запуск — своё, правка — пусто.
+// TestAgentPermWhyAskOnly: у выгрузки («Всегда» нет) пояснение под строкой есть; у открытия (класс O, «Всегда» есть) —
+// пояснения нет, есть заметка о местах; у правок с «Всегда» и у остальных классов прежнее: чтение и запуск — своё, правка — пусто.
 func TestAgentPermWhyAskOnly(t *testing.T) {
 	a, _ := pubApp(t)
 	got := map[string]AgentPerm{}
 	for _, p := range a.AgentsInfo().Perms {
 		got[p.Tool] = p
 	}
-	for tool, why := range map[string]string{"export_album": permWhyExp, "open_album": permWhyOpen} {
-		if p, ok := got[tool]; !ok || p.Why != why || !strings.Contains(p.Why, "Можно запретить") {
-			t.Errorf("%s: %+v", tool, p)
-		}
+	if p := got["export_album"]; p.Why != permWhyExp || !strings.Contains(p.Why, "Можно запретить") || p.Note != "" || !slices.Equal(p.Can, []string{prefs.PermAsk, prefs.PermDeny}) {
+		t.Errorf("export_album: %+v", p)
 	}
-	if permWhyExp == permWhyOpen || !strings.Contains(permWhyExp, "папк") || !strings.Contains(permWhyOpen, "файл") {
-		t.Error("тексты выгрузки (папка) и открытия (файл) смешаны")
+	if p := got["open_album"]; p.Why != "" || p.Note != permNoteOpen || p.Group != "other" || !slices.Equal(p.Can, []string{prefs.PermAllow, prefs.PermAsk, prefs.PermDeny}) {
+		t.Errorf("open_album: %+v", p)
 	}
 	if got["autobuild"].Why != "" || got["get_album"].Why != permWhyRead || got[startToolName].Why != permWhyStart {
 		t.Errorf("прочие пояснения изменились: %q %q %q", got["autobuild"].Why, got["get_album"].Why, got[startToolName].Why)

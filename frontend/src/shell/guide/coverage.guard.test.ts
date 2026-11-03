@@ -216,14 +216,14 @@ const WINDOWS: Record<string, string> = {
   '/src/shell/ask/NewerAskDialog.svelte': 'нет: вопрос подтверждения — файл новее программы',
   '/src/shell/autoalbum/RebuildAskDialog.svelte': 'нет: вопрос подтверждения пересборки альбома',
   '/src/shell/autobuild/AutoBuildDialog.svelte': 'autobuild',
-  '/src/shell/collect/CollectDialog.svelte': 'collect',
+  '/src/output/collect/CollectDialog.svelte': 'collect',
   '/src/shell/dialogs/AboutDialog.svelte': 'нет: окно «О программе» — версия, автор, лицензия, а не функция редактора',
   '/src/shell/dialogs/BackupsDialog.svelte': 'backups',
   '/src/shell/dialogs/LevelsDialog.svelte': 'levels',
   '/src/shell/dialogs/OpenProgress.svelte': 'нет: ход загрузки альбома, без действий',
   '/src/shell/dialogs/StartDialog.svelte': 'start-window',
-  '/src/shell/export/ExportDialog.svelte': 'export',
-  '/src/shell/export/PrintDone.svelte': 'нет: итог выгрузки для типографии — следствие экспорта, описан в fsfera',
+  '/src/output/export/ExportDialog.svelte': 'export',
+  '/src/output/export/PrintDone.svelte': 'нет: итог выгрузки для типографии — следствие экспорта, описан в fsfera',
   '/src/shell/hotkeys/KeyAsk.svelte': 'нет: вопрос подтверждения при занятой клавише, подокно окна «Горячие клавиши»',
   '/src/shell/hotkeys/KeysDialog.svelte': 'hotkeys',
   '/src/shell/guide/Guide.svelte': 'guide',
@@ -232,12 +232,13 @@ const WINDOWS: Record<string, string> = {
   '/src/shell/agents/AgentsPerms.svelte': 'нет: блок «Разрешения» окна «ИИ-агенты» и его вопрос-согласие — часть статьи agents',
   '/src/shell/agents/AgentAskDialog.svelte':
     'нет: вопрос подтверждения — агент просит создать альбом, добавить папку, выгрузить или открыть, описан в статьях agents-edit и agents-export',
-  '/src/shell/share/ShareDialog.svelte': 'share-link',
+  '/src/output/share/ShareDialog.svelte': 'share-link',
   '/src/shell/looks/LooksDialog.svelte': 'looks',
+  '/src/shell/looks/LookApply.svelte': 'нет: окно «Применить макет» поверх крупного просмотра макета — часть статьи looks',
   '/src/shell/looks/SaveLookDialog.svelte': 'looks-save',
   '/src/shell/packs/NetConsent.svelte': 'нет: вопрос подтверждения «Обратиться к GitHub?» — общий для «Наборов» и роликов F1',
   '/src/shell/packs/PacksDialog.svelte': 'library-packs',
-  '/src/shell/printprof/PrintProfileDialog.svelte': 'print-profile',
+  '/src/output/printprof/PrintProfileDialog.svelte': 'print-profile',
 }
 const PENDING_WINDOWS: Exceptions = {}
 

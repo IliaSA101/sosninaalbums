@@ -29,11 +29,11 @@ func TestRenderCtxCancelWaitingBudget(t *testing.T) {
 	}}
 	opt := Options{PageW: 100, PageH: 60, DPI: 100}
 
-	imgfile.DecodeBudget.Acquire(imgfile.DecodeBudgetPixels)
+	imgfile.DecodeBudget().Acquire(imgfile.DecodeBudgetPixels)
 	held := true
 	defer func() {
 		if held {
-			imgfile.DecodeBudget.Release(imgfile.DecodeBudgetPixels)
+			imgfile.DecodeBudget().Release(imgfile.DecodeBudgetPixels)
 		}
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -41,7 +41,7 @@ func TestRenderCtxCancelWaitingBudget(t *testing.T) {
 	// Отмена — когда кто-то уже встал в очередь за бюджетом; бюджет держим до конца проверки, так
 	// что RenderCtx, не заметивший отмену, не вернётся совсем (бюджет ожидания ловит это).
 	go func() {
-		for deadline := time.Now().Add(testkit.Limit(5 * time.Second)); imgfile.DecodeBudget.Waiting() < 1 && time.Now().Before(deadline); {
+		for deadline := time.Now().Add(testkit.Limit(5 * time.Second)); imgfile.DecodeBudget().Waiting() < 1 && time.Now().Before(deadline); {
 			time.Sleep(time.Millisecond)
 		}
 		cancel()
@@ -62,10 +62,10 @@ func TestRenderCtxCancelWaitingBudget(t *testing.T) {
 		t.Errorf("отмена обёрнута: %v", err)
 	}
 
-	imgfile.DecodeBudget.Release(imgfile.DecodeBudgetPixels)
+	imgfile.DecodeBudget().Release(imgfile.DecodeBudgetPixels)
 	held = false
-	if imgfile.DecodeBudget.Used() != 0 {
-		t.Fatalf("бюджет не пуст: %d", imgfile.DecodeBudget.Used())
+	if imgfile.DecodeBudget().Used() != 0 {
+		t.Fatalf("бюджет не пуст: %d", imgfile.DecodeBudget().Used())
 	}
 	// Холостая правка: без отмены RenderCtx = Render, холст тот же.
 	want, err := Render(s, opt)
@@ -86,8 +86,8 @@ func TestRenderCtxCancelWaitingBudget(t *testing.T) {
 	if _, err := RenderCtx(dead, Spread{}, opt); !errors.Is(err, context.Canceled) {
 		t.Fatalf("пустой лист, отменённый ctx: %v", err)
 	}
-	if imgfile.DecodeBudget.Used() != 0 {
-		t.Fatalf("бюджет не пуст после отмен: %d", imgfile.DecodeBudget.Used())
+	if imgfile.DecodeBudget().Used() != 0 {
+		t.Fatalf("бюджет не пуст после отмен: %d", imgfile.DecodeBudget().Used())
 	}
 }
 
@@ -127,12 +127,12 @@ func TestBorderBufferCancel(t *testing.T) {
 	if err != nil || paint == nil {
 		t.Fatalf("подготовка: %v", err)
 	}
-	imgfile.DecodeBudget.Acquire(imgfile.DecodeBudgetPixels)
+	imgfile.DecodeBudget().Acquire(imgfile.DecodeBudgetPixels)
 	held := true
 	release := func() {
 		if held {
 			held = false
-			imgfile.DecodeBudget.Release(imgfile.DecodeBudgetPixels)
+			imgfile.DecodeBudget().Release(imgfile.DecodeBudgetPixels)
 		}
 	}
 	defer release()
@@ -154,7 +154,7 @@ func TestBorderBufferCancel(t *testing.T) {
 		}
 	}
 	release()
-	if used := imgfile.DecodeBudget.Used(); used != 0 {
+	if used := imgfile.DecodeBudget().Used(); used != 0 {
 		t.Fatalf("бюджет не пуст: %d", used)
 	}
 }

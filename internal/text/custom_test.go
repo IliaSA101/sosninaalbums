@@ -101,7 +101,8 @@ func sameBox(a, b Box) bool {
 		return false
 	}
 	for i := range a.Lines {
-		if a.Lines[i] != b.Lines[i] {
+		x, y := a.Lines[i], b.Lines[i]
+		if x.Text != y.Text || x.X != y.X || x.Y != y.Y || x.W != y.W { // DX — у своих шрифтов, у встроенных нет
 			return false
 		}
 	}
@@ -159,6 +160,20 @@ func TestClampedKeepsCustomID(t *testing.T) {
 	}
 }
 
+// pixDiff — сколько байтов растров различаются и на сколько уровней различие наибольшее.
+func pixDiff(a, b *image.RGBA) (n, worst int) {
+	if len(a.Pix) != len(b.Pix) {
+		return len(a.Pix), 255
+	}
+	for i := range a.Pix {
+		if d := int(a.Pix[i]) - int(b.Pix[i]); d != 0 {
+			n++
+			worst = max(worst, d, -d)
+		}
+	}
+	return n, worst
+}
+
 func TestCustomLayoutMatchesDraw(t *testing.T) {
 	cff := fixture(t, "sa-test-cff.otf")
 	r, rb := face(t, "Lobster-Regular.ttf", false, false)
@@ -211,8 +226,10 @@ func TestCustomLayoutMatchesDraw(t *testing.T) {
 		ib := image.NewRGBA(image.Rect(0, 0, 300, 200))
 		Draw(ia, a, c.custom, 1, 1, 0, 100)
 		Draw(ib, b, c.builtin, 1, 1, 0, 100)
-		if !bytes.Equal(ia.Pix, ib.Pix) {
-			t.Errorf("%s: отрисовка не как у встроенного", c.custom.Font)
+		// знаки своего шрифта стоят по DX с округлением до 0,0001 мм (161): отличие — не более
+		// двух уровней яркости на редких пикселях, не сдвиг глифа
+		if n, worst := pixDiff(ia, ib); worst > 2 || n > len(ia.Pix)/500 {
+			t.Errorf("%s: отрисовка не как у встроенного: %d байтов, до %d уровней", c.custom.Font, n, worst)
 		}
 	}
 }

@@ -12,6 +12,11 @@ export const PAD = 4 // отступ группы
 export const chipW = (a: number) => Math.round((H - 2 * B) * (a > 0 && Number.isFinite(a) ? a : 1)) + 2 * B
 export const cellW = (r: Rect | undefined) => chipW(r ? r.w / r.h : 1)
 
+// Насколько зона разреза заходит в фото (158): не больше четверти внутренней ширины, чтобы половина фото
+// оставалась для Ctrl+щелчка «группа в выделение».
+export const CUT_IN = 4
+export const cutIn = (w: number) => (Number.isFinite(w) ? Math.min(CUT_IN, Math.max(0, Math.floor((w - 2 * B) / 4))) : 0)
+
 // Точная ширина группы для content-visibility: прокрутка к далёкой группе попадает в неё.
 // Пустые места сетки (спека 007) идут в группе после фото.
 export const emptyPlaces = (sp: SpreadView): PlaceView[] => (sp.places ?? []).filter((p) => !p.photo)

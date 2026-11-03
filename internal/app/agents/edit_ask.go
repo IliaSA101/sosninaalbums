@@ -168,7 +168,7 @@ func (c *call) ask(req AskReq) (askOut, error) {
 	// замком службы и просим фасад решить, можно ли без вопроса (design §3).
 	var stamp time.Time
 	quiet := false
-	if c.mode == prefs.PermAllow {
+	if c.mode == prefs.PermAllow && quietable(req) {
 		if stamp, quiet = s.ed.takeQuiet(); quiet {
 			req.Always = true
 		}
@@ -183,6 +183,13 @@ func (c *call) ask(req AskReq) (askOut, error) {
 	c.env.r.wg.Add(1)
 	go s.runAsk(actx, askRun{r: c.env.r, runCtx: c.env.ctx, p: p, req: req, release: c.rel, quiet: quiet, stamp: stamp})
 	return c.waitAsk(p, true)
+}
+
+// quietable — вопрос может кончиться тишиной (берёт тихий слот). Открытие — только по ключу из list_albums:
+// «назван словами» (Hint, служба ставит и Key) и «ничего не названо» всегда спрашивают и слот не тратят,
+// иначе молчаливый итог выдал бы агенту, нашлось ли имя (0.36-160-2).
+func quietable(req AskReq) bool {
+	return req.Kind != AskOpen || (req.Key != "" && req.Hint == "")
 }
 
 // watchAsk берёт вопрос p под присмотр подключения ss: когда оно закроется, вопрос отменяется

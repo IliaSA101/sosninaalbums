@@ -37,7 +37,7 @@ func (s *Service) runShare(ctx context.Context, cancel context.CancelFunc, run *
 		return err
 	}()
 	restore()
-	removeDir(j.dir)
+	s.settle(j, err) // успех — всё убрать; обрыв — страницы в kp-* для «Продолжить» (159)
 	switch {
 	case errors.Is(err, albums.ErrToken):
 		s.tokenLost(j.origin) // записи shares.json целы; ход остановлен как при «Остановить»
@@ -76,17 +76,17 @@ func (s *Service) execute(ctx context.Context, j *job) (note string, err error) 
 	if j.Pages > lim.Pages {
 		return "", fail(fmt.Sprintf("В альбоме %d страниц, сервис принимает не больше %d", j.Pages, lim.Pages))
 	}
-	pages, err := export.RunWeb(ctx, j.Spreads, j.Cover, j.Spec, j.dir, func(d, t int) { s.progress("pages", d, t, 0, 0) })
-	if err != nil {
-		logFail("страницы", err)
-		return "", err
-	}
 	gen := strings.TrimSpace("Sosnina Albums " + strings.TrimSpace(s.h.Version))
-	m, err := share.BuildManifest(ctx, j.dir, pages, j.Cover != nil, j.Spec, j.title, gen, lim)
+	m, ok, err := s.reuse(ctx, j, gen, lim) // «Продолжить» без правок: страницы из сохранённой папки (159)
 	if err != nil {
-		logFail("манифест", err)
 		return "", err
 	}
+	if !ok {
+		if m, err = s.prepare(ctx, j, gen, lim); err != nil {
+			return "", err
+		}
+	}
+	pages := j.pages
 	cur, missing, err := s.open(ctx, c, j, m)
 	if err != nil {
 		return "", err
@@ -123,6 +123,22 @@ func (s *Service) execute(ctx context.Context, j *job) (note string, err error) 
 		return "Ссылка готова, но записать её в программе не удалось: " + perr.Error() + ". Она показана в окне до выхода из программы — скопируйте её сейчас.", nil
 	}
 	return "", nil
+}
+
+// prepare рисует страницы в j.dir и собирает манифест; готовое ложится в j.pages и j.man (для keep).
+func (s *Service) prepare(ctx context.Context, j *job, gen string, lim albums.Limits) (*albums.Manifest, error) {
+	pages, err := export.RunWeb(ctx, j.Spreads, j.Cover, j.Spec, j.dir, func(d, t int) { s.progress("pages", d, t, 0, 0) })
+	if err != nil {
+		logFail("страницы", err)
+		return nil, err
+	}
+	m, err := share.BuildManifest(ctx, j.dir, pages, j.Cover != nil, j.Spec, j.title, gen, lim)
+	if err != nil {
+		logFail("манифест", err)
+		return nil, err
+	}
+	j.pages, j.man = pages, m
+	return m, nil
 }
 
 // open создаёт альбом на сервисе или присылает новую редакцию прежнего (ссылка та же). Запись с id

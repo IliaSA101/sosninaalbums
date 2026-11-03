@@ -9,7 +9,7 @@
   import { flipCss, photoCss, thumbBox } from '../../base/geom/frame'
   import { outlineOf } from '../../base/geom/shape'
   import type { SpreadView } from '../../base/core/types'
-  import { B, cellW, chipW, cutState, cutTip, emptyPlaces, isBlank } from './timeline'
+  import { B, cellW, chipW, cutIn, cutState, cutTip, emptyPlaces, isBlank } from './timeline'
   import { HOLD_MS, asSheet, sheetThumbW, visibleChips } from './chips'
   import { cutClick, cutKey as cutPress } from './stripact'
   import { cutKey } from './cutkey.svelte'
@@ -123,6 +123,8 @@
           <!-- Разрез перед этим фото: Ctrl+щелчок или Enter (094 §1); без Ctrl зона мышь не ловит. У ручного — через вопрос (103) -->
           <button
             class="cut"
+            style:--in-l="{cutIn(cellW(sp.rects[j - 1]))}px"
+            style:--in-r="{cutIn(cellW(sp.rects[j]))}px"
             aria-label="Разрезать {unit.one} {i + 1} перед фото {j + 1}"
             onpointerdown={stop}
             use:tipped={{ text: cutKey.held ? cutTip(isMac(), cutState(sp, j, unit).ask) : '' }}
@@ -261,15 +263,16 @@
     right: -4.5px;
   }
   /* Зона разреза (094 §1): белые рамки двух соседних миниатюр и зазор между ними — [-6, 0) от внутреннего края
-     рамки, на сами фото не заходит. Мышь ловит только при зажатом Ctrl (.timeline.cutting), иначе щелчок по краю
+     рамки, плюс по cutIn внутрь каждого фото (--in-l слева, --in-r справа; запасное 0px обязательно: без
+     переменной calc недействителен). Заходит в фото — промах Ctrl+щелчком выделял группу (158). Мышь ловит только при зажатом Ctrl (.timeline.cutting), иначе щелчок по краю
      выделяет фото, протяжка тянет его. Курсор — ножницы 24×24 (CSP: img-src data:). */
   .cut {
     all: unset;
     position: absolute;
-    top: -4px;
-    bottom: -4px;
-    left: -6px;
-    width: 6px;
+    top: -6px;
+    bottom: -6px;
+    left: calc(-6px - var(--in-l, 0px));
+    width: calc(6px + var(--in-l, 0px) + var(--in-r, 0px));
     pointer-events: none;
     cursor:
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke-linecap='round'%3E%3Cg stroke='%23111' stroke-width='4'%3E%3Ccircle cx='6' cy='7' r='3'/%3E%3Ccircle cx='6' cy='17' r='3'/%3E%3Cpath d='M8.5 8.5L20 18M8.5 15.5L20 6'/%3E%3C/g%3E%3Cg stroke='%23fff' stroke-width='2'%3E%3Ccircle cx='6' cy='7' r='3'/%3E%3Ccircle cx='6' cy='17' r='3'/%3E%3Cpath d='M8.5 8.5L20 18M8.5 15.5L20 6'/%3E%3C/g%3E%3C/svg%3E")
@@ -277,13 +280,13 @@
       pointer;
     z-index: 2;
   }
-  /* Пунктир — по середине зазора [-4, -2) */
+  /* Пунктир — по середине зазора [-4, -2), высота прежние 48 (вид 094 не меняется) */
   .cut::before {
     content: '';
     position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 2px;
+    top: 2px;
+    bottom: 2px;
+    left: calc(2px + var(--in-l, 0px));
     border-left: 2px dashed var(--accent);
     opacity: 0;
     transition: opacity 0.1s;

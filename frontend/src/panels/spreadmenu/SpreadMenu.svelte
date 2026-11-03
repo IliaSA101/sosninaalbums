@@ -1,6 +1,6 @@
 <script lang="ts">
-  import MenuList from '../../base/ui/MenuList.svelte'
-  import type { MenuNode } from '../../base/ui/menulist'
+  import MenuList from '../../base/popup/MenuList.svelte'
+  import type { MenuNode } from '../../base/popup/menulist'
   import { spreadMenu } from './spreadmenu'
   import { modClick } from '../timeline/timeline'
   import { isMac } from '../../base/core/platform'

@@ -2,6 +2,7 @@ package album
 
 import (
 	"errors"
+	"maps"
 	"math"
 	"slices"
 
@@ -305,6 +306,14 @@ func (e *Editor) SpreadTplOf(spreadID, scope string, places, texts bool) (t mode
 // результат). Pages = 2 — разворот wmm×hmm; Pages = 1 — левая страница wmm×hmm (правая пуста:
 // плитка — AreaOf(left)). Вид — печатный (без заглушек полей).
 func PreviewTpl(t model.SpreadTpl, wmm, hmm float64, libs map[string]model.PhotoInfo) (*model.Project, model.View, error) {
+	return PreviewTplWith(t, wmm, hmm, libs, nil)
+}
+
+// PreviewTplWith — PreviewTpl с фото на местах (163, окно макетов): после шаблона photos садятся
+// в пустые места тем же grid.FillPlaces («Заполнить места», порядок model.FillSeats); лишние фото
+// остаются за листом. Фото, которых мало, по кругу не повторяются: повтор вызывающий даёт копиями
+// с ID «<ID>-n» (098) — FillPlaces различает фото по ID. nil и пусто — прежний PreviewTpl.
+func PreviewTplWith(t model.SpreadTpl, wmm, hmm float64, libs map[string]model.PhotoInfo, photos []model.PhotoInfo) (*model.Project, model.View, error) {
 	p := model.New()
 	pw, scope := wmm, model.ScopeLeft
 	if t.Pages == 2 {
@@ -316,6 +325,9 @@ func PreviewTpl(t model.SpreadTpl, wmm, hmm float64, libs map[string]model.Photo
 	p.Spreads = []*model.Spread{s}
 	before := p.Clone()
 	_, _, err := grid.ApplySpreadTpl(p, s.ID, scope, t, libs)
+	if err == nil && len(photos) > 0 {
+		grid.FillPlaces(p, photos, s.ID) // не встало — за листом, не ошибка
+	}
 	if err == nil {
 		err = settle(p, before, false)
 	}
@@ -323,6 +335,18 @@ func PreviewTpl(t model.SpreadTpl, wmm, hmm float64, libs map[string]model.Photo
 		return nil, model.View{}, err
 	}
 	return p, view.BuildView(p, view.State{Print: true}), nil
+}
+
+// UsedFiles — файлы, занятые в альбоме, без построения вида (163, окно макетов): placed — ID файлов
+// (BaseID) всех мест листов с обложкой по возрастанию, onBg — фото на фонах, в стикерах и рамочках
+// и на фоне альбома. То же, что agentFree выводит из View (Spreads[].Photos, Cover.Sheet,
+// BackdropUsed), но обходом листов под одним замком. Только чтение: rev, отмена и dirty не меняются.
+func (e *Editor) UsedFiles() (placed []string, onBg map[string]bool) {
+	e.read(func(p *model.Project) {
+		placed = slices.Sorted(maps.Keys(p.PlacedFiles()))
+		onBg = p.OnDecor()
+	})
+	return placed, onBg
 }
 
 // GridChoices. Договор: снимок входа под замком (GridInput), layout считается вне него.

@@ -23,7 +23,7 @@ func cancelWhenWaiting(t *testing.T, cancel context.CancelFunc) {
 	t.Cleanup(func() { close(stop) })
 	go func() {
 		deadline := time.Now().Add(testkit.Limit(10 * time.Second))
-		for imgfile.DecodeBudget.Waiting() < 1 && time.Now().Before(deadline) {
+		for imgfile.DecodeBudget().Waiting() < 1 && time.Now().Before(deadline) {
 			select {
 			case <-stop:
 				return
@@ -138,11 +138,11 @@ func TestExportStopWhileWaitingBudget(t *testing.T) {
 	opt := render.Options{PageW: 100, PageH: 60, DPI: 100, Quality: 90}
 	out := filepath.Join(dir, "out")
 
-	imgfile.DecodeBudget.Acquire(imgfile.DecodeBudgetPixels)
+	imgfile.DecodeBudget().Acquire(imgfile.DecodeBudgetPixels)
 	held := true
 	defer func() {
 		if held {
-			imgfile.DecodeBudget.Release(imgfile.DecodeBudgetPixels)
+			imgfile.DecodeBudget().Release(imgfile.DecodeBudgetPixels)
 		}
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -190,7 +190,7 @@ func TestExportStopWhileWaitingBudget(t *testing.T) {
 	}
 
 	// После освобождения бюджета тот же план проходит целиком.
-	imgfile.DecodeBudget.Release(imgfile.DecodeBudgetPixels)
+	imgfile.DecodeBudget().Release(imgfile.DecodeBudgetPixels)
 	held = false
 	out3 := filepath.Join(dir, "out3")
 	if err := RunJobs(context.Background(), spreads, jobs, opt, out3, func(int, int) {}); err != nil {
@@ -201,7 +201,7 @@ func TestExportStopWhileWaitingBudget(t *testing.T) {
 			t.Errorf("нет %s: %v", n, err)
 		}
 	}
-	if imgfile.DecodeBudget.Used() != 0 {
-		t.Errorf("бюджет не пуст: %d", imgfile.DecodeBudget.Used())
+	if imgfile.DecodeBudget().Used() != 0 {
+		t.Errorf("бюджет не пуст: %d", imgfile.DecodeBudget().Used())
 	}
 }

@@ -552,3 +552,42 @@ describe('строки выгрузки и открытия: только с в�
     expect(pressed(inRow('export_album', 'Спрашивать'))).toBe(true)
   })
 })
+
+// Класс O (160): Go отдаёт у открытия три значения, но «Всегда» без окна согласия (Т5, 0.37) не предлагается.
+describe('строка открытия: «Всегда» скрыто до 160 Т5', () => {
+  const o = (mode: string) => ({
+    tool: 'open_album',
+    title: 'Открыть альбом',
+    group: 'other',
+    mode,
+    can: ['allow', 'ask', 'deny'],
+    why: '',
+    note: '',
+  })
+  const withO = (mode = 'ask') => infoOn({ edit: true, perms: [...permRows({ create_album: 'ask' }), o(mode)] })
+
+  it('остаются «Спрашивать» и «Запретить»; у соседней папки «Всегда» на месте', async () => {
+    await open(withO())
+    const names = [...rowOf('open_album').querySelectorAll('button')].map((b) => b.textContent)
+    expect(names).toEqual(['Спрашивать', 'Запретить'])
+    expect(pressed(inRow('open_album', 'Спрашивать'))).toBe(true)
+    expect(within(rowOf('create_album')).getByRole('button', { name: 'Всегда' })).toBeTruthy()
+  })
+
+  it('сохранённое «Всегда» выглядит как «Спрашивать»; щелчок по нему пишет ask в Go, «Запретить» — deny', async () => {
+    spies.setPerm.mockResolvedValue(withO('ask'))
+    await open(withO('allow'))
+    expect(pressed(inRow('open_album', 'Спрашивать'))).toBe(true)
+    expect(pressed(inRow('open_album', 'Запретить'))).toBe(false)
+    await fireEvent.click(inRow('open_album', 'Спрашивать'))
+    expect(spies.setPerm).toHaveBeenCalledExactlyOnceWith('open_album', 'ask')
+    await fireEvent.click(inRow('open_album', 'Запретить'))
+    expect(spies.setPerm).toHaveBeenLastCalledWith('open_album', 'deny')
+  })
+
+  it('«Спрашивать» при уже сохранённом «Спрашивать» — без вызова Go', async () => {
+    await open(withO('ask'))
+    await fireEvent.click(inRow('open_album', 'Спрашивать'))
+    expect(spies.setPerm).not.toHaveBeenCalled()
+  })
+})

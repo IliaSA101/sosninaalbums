@@ -2,6 +2,9 @@ package sharer
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -154,13 +157,7 @@ func TestShareUpdateSameLink(t *testing.T) {
 func TestShareResume(t *testing.T) {
 	r := newRig(t)
 	r.connect()
-	var puts atomic.Int32
-	r.setFault(func(q *http.Request) *albumstest.Fault {
-		if isPut(q) && puts.Add(1) > 2 {
-			return &albumstest.Fault{Status: http.StatusRequestEntityTooLarge}
-		}
-		return nil
-	})
+	a := cutAfter(r, 2)
 	msg, stopped := r.run(Options{Days: 30})
 	if msg == "" || stopped {
 		t.Fatalf("ждали ошибку: %q %v", msg, stopped)
@@ -170,21 +167,23 @@ func TestShareResume(t *testing.T) {
 		t.Fatalf("после обрыва: %+v", v.Link)
 	}
 	id, _ := r.rec()
-	if r.srv.Fake.Published(id) != nil || r.tempLeft() != 0 {
-		t.Error("опубликовано при обрыве или осталась временная папка")
+	if r.srv.Fake.Published(id) != nil || r.tempLeft() != 0 || r.keptLeft() != 1 {
+		t.Error("опубликовано при обрыве, осталась up-* или страницы не сохранены для «Продолжить»")
 	}
-	have := r.srv.Fake.Puts()
-	r.setFault(nil)
+	settle(r)
+	rendered := r.renders()
+	c := watchPages(r)
 	r.must(Options{})
-	if got := r.srv.Fake.Puts() - have; got != 6-have {
-		t.Errorf("догружено %d страниц, ждали %d", got, 6-have)
+	wantResumed(t, 6, c, a)
+	if r.renders() != rendered || r.keptLeft() != 0 {
+		t.Errorf("«Продолжить» рисовало заново (%d → %d) или слот остался (%d)", rendered, r.renders(), r.keptLeft())
 	}
 	if id2, _ := r.rec(); id2 != id || r.state().Link.State != "ok" {
 		t.Error("ссылка не та или не опубликована")
 	}
 }
 
-// Остановка: публикации нет, временная папка удалена, запись incomplete.
+// Остановка: публикации нет, up-* удалена, страницы сохранены для «Продолжить» (kp-*, 0700), запись incomplete.
 func TestShareStop(t *testing.T) {
 	r := newRig(t)
 	r.connect()
@@ -201,8 +200,11 @@ func TestShareStop(t *testing.T) {
 		t.Fatalf("итог: %q stopped=%v", msg, stopped)
 	}
 	id, ok := r.rec()
-	if !ok || r.srv.Fake.Published(id) != nil || r.tempLeft() != 0 || r.state().Link.State != "incomplete" {
-		t.Errorf("после остановки: запись %v, временных %d", ok, r.tempLeft())
+	if !ok || r.srv.Fake.Published(id) != nil || r.tempLeft() != 0 || r.keptLeft() != 1 || r.state().Link.State != "incomplete" {
+		t.Fatalf("после остановки: запись %v, up-* %d, kp-* %d", ok, r.tempLeft(), r.keptLeft())
+	}
+	if st, err := os.Stat(filepath.Join(r.cache, "share", r.keptDirs()[0])); err != nil || runtime.GOOS != "windows" && st.Mode().Perm() != 0o700 {
+		t.Errorf("права сохранённой папки: %v %v", st, err)
 	}
 	if r.svc.Busy() {
 		t.Error("флаг выгрузки не снят")

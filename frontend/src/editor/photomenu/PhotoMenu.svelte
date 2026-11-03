@@ -19,15 +19,15 @@
   import { setBackdrop } from '../backdrop/backdropact'
   import { coverLabel, coverScopes } from '../cover/cover'
   import { isCover, isSheet } from '../../base/geom/sheet'
-  import MenuList from '../../base/ui/MenuList.svelte'
-  import type { MenuNode } from '../../base/ui/menulist'
+  import MenuList from '../../base/popup/MenuList.svelte'
+  import type { MenuNode } from '../../base/popup/menulist'
   import type { BackdropScope } from '../../base/core/types'
   import type { Pt } from '../clip/clip'
   import { goUse } from '../photoprops/gouse.svelte'
   import { UseList } from '../photoprops/uselist.svelte'
   import { elsewhere, lineAt, USE_ROW, useRows } from '../photoprops/usemenu'
   import { untrack } from 'svelte'
-  import { vigFaces } from '../../panels/vignette/vigfaces.svelte'
+  import { vigFaces } from '../../panels/faces/vigfaces.svelte'
 
   const sheet = $derived(isSheet(store.view.settings))
   // На обложке (032) фон ставят в области её раскладки, названия — сторонки; в листе (031) — только «Весь лист».
@@ -36,7 +36,7 @@
   const label = (sc: BackdropScope) => (cover ? coverLabel(store.cover, sc) : scopeLabel(sc, sheet))
 
   // Меню правого щелчка по фото (спека 008, 108): своё, работает и в браузере. Дерево пунктов — photomenu/photomenu.ts,
-  // список с подменю сбоку и клавишами — base/ui/MenuList. Esc и щелчок мимо закрывают.
+  // список с подменю сбоку и клавишами — base/popup/MenuList. Esc и щелчок мимо закрывают.
   // Выделены одни стикеры (048) — меню стикера: «Копировать», «Вставить», «Заменить…», «Зеркало», «Слой», «Удалить».
   // Одни надписи (099) — своё меню по его образцу; пустой лист (099) — только «Вставить».
   // Одиночная надпись выделена через edit.sel, а не placesel.texts: считается, лишь когда ни мест, ни стикеров.

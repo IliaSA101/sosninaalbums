@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { portal } from '../../base/ui/portal'
+  import { portal } from '../../base/popup/portal'
   import { tip, tipped } from '../../base/ui/tip.svelte'
   import Icon from '../../base/ui/Icon.svelte'
   import { PLACE_ADD_ITEMS } from './placeadd'

@@ -6,14 +6,14 @@ import { shapeKey } from '../../base/geom/shape'
 import { allGray } from '../../base/geom/tone'
 import type { FeatureId } from '../../base/prefs/levels'
 import type { BackdropScope, FrameView, SpreadView } from '../../base/core/types'
-import type { MenuNode } from '../../base/ui/menulist'
+import type { MenuNode } from '../../base/popup/menulist'
 import { isVignette } from '../../panels/vignette/vignette'
 import { borderNeedsRelink } from '../border/borderstate'
 import { revealLabel } from '../../base/core/platform'
 import { LAYER_OPS } from '../places/minipanel'
 import { ACTS, actOk, GROUP_ICON, GROUP_LABEL, type ActId, type GroupId } from './photoacts'
 
-// Пункт меню фото — общий узел списка (base/ui/menulist.ts).
+// Пункт меню фото — общий узел списка (base/popup/menulist.ts).
 export type MenuItem = MenuNode
 // Идентификатор действия пункта: ActId; у пунктов подменю («Слой», «На фон») действие несёт параметр arg.
 export type MenuId = ActId

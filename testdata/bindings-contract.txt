@@ -1665,6 +1665,7 @@ type text.Line
   x: number
   y: number
   w: number
+  dx?: number[]
 type text.Style
   font: string
   size: number

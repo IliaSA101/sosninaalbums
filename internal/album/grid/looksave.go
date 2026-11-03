@@ -73,7 +73,9 @@ func lookStepOf(c *model.Project, s *model.Spread, o model.SaveLookOpts, skip fu
 	if places {
 		c.Freeze(s)
 	}
-	tpl, err := spreadTplOf(c, s.ID, model.ScopeSpread, tplSnap{places: places, texts: o.Drafts, asDrafts: o.Drafts, skip: skip, frozen: true})
+	// Надписи листа-виньетки в шаг не идут: шаг ставится на обе страницы (vigPage зеркалит), и
+	// надпись встала бы дважды; шапка и подписи — Style и HText шага.
+	tpl, err := spreadTplOf(c, s.ID, model.ScopeSpread, tplSnap{places: places, texts: o.Drafts && !vig, asDrafts: o.Drafts, skip: skip, frozen: true})
 	switch {
 	case err == nil:
 	case vig:
@@ -83,7 +85,7 @@ func lookStepOf(c *model.Project, s *model.Spread, o model.SaveLookOpts, skip fu
 	}
 	st := model.LookStep{Tpl: tpl}
 	if vig {
-		st.Role, st.Vig = model.RoleVignette, &model.LookVig{Tpl: s.Vig.Tpl, Teachers: s.Vig.Teachers, Pupils: s.Vig.Pupils, Ratio: s.Vig.Ratio}
+		st.Role, st.Vig = model.RoleVignette, lookVigOf(c, s, o)
 	}
 	return st, true
 }
@@ -147,4 +149,48 @@ func zonePlaces(c *model.Project, side *coverSide) ([]model.Box, []model.TplBord
 		boxes[i].Border = nil // в памяти шаблона рамочек у коробок нет: они в Borders
 	}
 	return boxes, borders
+}
+
+// lookVigOf — шаг-виньетка из листа s: параметры листа и оформление (164): гарнитура и цвет подписей
+// и шапки, подпись учителя; текст шапки — при o.Drafts, если он не шаблонный. Что равно умолчанию
+// программы, в шаг не идёт (шаг простого листа — как в 0.35). Vars и имена людей не берутся.
+func lookVigOf(c *model.Project, s *model.Spread, o model.SaveLookOpts) *model.LookVig {
+	v := &model.LookVig{Tpl: s.Vig.Tpl, Teachers: s.Vig.Teachers, Pupils: s.Vig.Pupils, Ratio: s.Vig.Ratio}
+	var st model.VigStyle
+	if s.Caps != nil {
+		def := model.VigCaps(c.Geo(s).H).Style
+		if f := fontColorOf(s.Caps.Style, def); f != (model.TextStyle{}) {
+			st.Caps = &model.SheetCaps{Style: f}
+		}
+	}
+	if h := s.VigHead(s.Vig.Head); h != nil {
+		if f := fontColorOf(h.Style, model.PlainStyle()); f != (model.TextStyle{}) {
+			st.Head = &f
+		}
+		if o.Drafts && h.Text != model.VigHeadText {
+			v.HText = h.Text
+		}
+	}
+	def := model.TeacherCaption // подпись учителя, которую приносит шаблон сам
+	if model.VigStaff(s.Vig.Tpl) {
+		def = model.StaffCaption
+	}
+	if s.Vig.TText != def {
+		st.TText = s.Vig.TText
+	}
+	if st.Caps != nil || st.Head != nil || st.TText != "" {
+		v.Style = &st
+	}
+	return v
+}
+
+// fontColorOf — гарнитура и цвет стиля st, отличные от умолчания def; равное — пусто.
+func fontColorOf(st, def model.TextStyle) (out model.TextStyle) {
+	if st.Font != def.Font {
+		out.Font = st.Font
+	}
+	if st.Color != def.Color {
+		out.Color = st.Color
+	}
+	return out
 }

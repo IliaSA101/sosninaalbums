@@ -438,7 +438,7 @@ func TestMediaLookFast(t *testing.T) {
 			t.Fatal(i)
 		}
 		worst = max(worst, testkit.Fastest(3, func() {
-			if _, err := drawLook(tp, tplQuery{px: 256, r: 1.5}, nil); err != nil {
+			if _, err := drawLook(tp, tplQuery{px: 256, r: 1.5}, nil, nil, false); err != nil {
 				t.Fatal(err)
 			}
 		}))
@@ -451,7 +451,7 @@ func TestMediaLookFast(t *testing.T) {
 
 // Разбор запроса плитки макета: принятое — в пределах белого списка.
 func FuzzMediaLookQuery(f *testing.F) {
-	for _, s := range []string{"v=1&i=0&px=256&r=2&bg=0", "i=24&px=64&r=0.2&bg=1", "i=1&px=1024&r=5", "i=1&px=1&r=1e400", "i=%zz", "v=99999&i=1&px=256&r=1", "i=0&px=256&r=0.5&f=1", "i=1&px=256&r=1&f=1", ""} {
+	for _, s := range []string{"v=1&i=0&px=256&r=2&bg=0", "i=24&px=64&r=0.2&bg=1", "i=1&px=1024&r=5", "i=1&px=2048&r=5&ph=9007199254740991", "i=1&px=256&r=1&ph=0", "i=1&px=1&r=1e400", "i=%zz", "v=99999&i=1&px=256&r=1", "i=0&px=256&r=0.5&f=1", "i=1&px=256&r=1&f=1", ""} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, raw string) {
@@ -459,7 +459,7 @@ func FuzzMediaLookQuery(f *testing.F) {
 		if ok && q.front && q.i != 0 {
 			t.Fatalf("%q: f=1 только у обложки: %+v", raw, q)
 		}
-		if ok && (q.i < 0 || q.i > model.MaxLookSteps || q.px < tplMinPx || q.px > tplMaxPx || !(q.r >= tplMinR && q.r <= tplMaxR)) {
+		if ok && (q.i < 0 || q.i > model.MaxLookSteps || q.px < tplMinPx || q.px > lookPhotoPx || q.px > tplMaxPx && q.ph == 0 || !(q.r >= tplMinR && q.r <= tplMaxR)) {
 			t.Fatalf("%q: %+v", raw, q)
 		}
 	})

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { store } from '../../base/core/store.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
-  import MenuList from '../../base/ui/MenuList.svelte'
-  import type { MenuNode } from '../../base/ui/menulist'
+  import MenuList from '../../base/popup/MenuList.svelte'
+  import type { MenuNode } from '../../base/popup/menulist'
   import { keymap } from '../../base/keys/keymap.svelte'
   import { copyNames, reveal } from '../../editor/photo/fileact'
   import { photoui } from '../../editor/photo/photoui.svelte'

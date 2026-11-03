@@ -36,7 +36,7 @@ func TestGoBGAfterCloseBackground(t *testing.T) {
 		if a.goBG(func() { started.Add(1) }) {
 			t.Fatal("goBG после closeBackground запустил задачу")
 		}
-		a.checkMissing(1, map[string]string{"a": "/нет/a.jpg"}, false) // отказ откатывает счётчик
+		a.checkMissing(1, map[string]string{"a": "/нет/a.jpg"}, false, false) // отказ откатывает счётчик
 		if n := a.missPending.Load(); n != 0 {
 			t.Fatalf("missPending после отказа goBG: %d", n)
 		}

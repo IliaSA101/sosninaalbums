@@ -4,7 +4,7 @@
   import { drag } from '../../base/drag/drag.svelte'
   import { modes } from '../../base/prefs/view.svelte'
   import Icon from '../../base/ui/Icon.svelte'
-  import Popover from '../../base/ui/Popover.svelte'
+  import Popover from '../../base/popup/Popover.svelte'
   import { gallery } from '../gallery/gallery.svelte'
   import { remove, setFor } from './binact'
   import { BinMenuState, NEW } from './binstate.svelte'

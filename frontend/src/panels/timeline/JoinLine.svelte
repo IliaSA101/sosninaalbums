@@ -72,10 +72,22 @@
   /* Простой щелчок не клеит (094 §1): подсветка и курсор-рука — только при зажатом Ctrl или с клавиатуры. */
   .join.armed {
     cursor: pointer;
+    z-index: 1; /* над группами: полоса 24 px заходит в их отступы (158) */
   }
   .join.armed:hover::before,
   .join:focus-visible::before {
     background: var(--accent);
+  }
+  /* Под Ctrl черта ловит 24 px: отступы соседних групп тоже (158); при переносе — прежние 14, бросок в край группы не отнимаем. */
+  .join.armed::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    left: -5px;
+    right: -5px;
+  }
+  :global(.dragging) .join::after {
+    display: none;
   }
   /* Без «Разреза и склейки» черта не нажимается: тихая, подсветки нет. */
   .join.still {

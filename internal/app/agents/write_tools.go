@@ -33,12 +33,13 @@ func registerWriteTools(e *toolEnv) {
 		exportProps, func(in exportIn) *AlbumRef { return &in.Album }, true,
 		func(c *call, in exportIn) (askOut, error) { return c.exportAlbum(in) })
 
-	regEditPre(e, toolSpec{name: "open_album", perm: prefs.ClassAskOnly, title: "Открыть альбом", edit: true, ask: true, danger: true,
+	regEditPre(e, toolSpec{name: "open_album", perm: prefs.ClassOpen, title: "Открыть альбом", edit: true, ask: true, danger: true,
 		desc: "Открыть сохранённый альбом из последних по просьбе человека: ключ album из list_albums или name_hint — как человек его " +
-			"назвал («Ивановы»); можно без обоих. Путь агент не передаёт и не получает. Программа всегда спрашивает человека в своём окне " +
+			"назвал («Ивановы»); можно без обоих. Путь агент не передаёт и не получает. Программа спрашивает человека в своём окне " +
 			"(показывает найденный альбом или открывает выбор файла) и сама не сообщает, нашла ли подсказку; имя сверяется буква в " +
-			"букву — не нашёлся, возьмите ключ из list_albums. Уже открытый альбом по ключу album возвращается без вопроса " +
-			"(opened: false); по name_hint вопрос задаётся всегда. Открытый сейчас альбом сохранится, прежний вернёт кнопка «Открыть прежний» в тосте. " +
+			"букву — не нашёлся, возьмите ключ из list_albums. По ключу из list_albums при «Всегда» альбом может открыться без вопроса " +
+			"(если все его фото лежат в местах съёмок человека); по name_hint вопрос задаётся всегда. Уже открытый альбом по ключу album " +
+			"возвращается без вопроса (opened: false). Открытый сейчас альбом сохранится, прежний вернёт кнопка «Открыть прежний» в тосте. " +
 			"Открытие не отменяется через undo_last_edit." + askNote},
 		openProps, func(openIn) *AlbumRef { return nil }, false, (*call).openPre,
 		func(c *call, in openIn) (askOut, error) { return c.openAlbum(in) })

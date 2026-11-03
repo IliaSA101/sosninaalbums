@@ -53,7 +53,7 @@ func TestMarkupPreviewLargeJPEG(t *testing.T) {
 			t.Fatal(err)
 		}
 		checkFit(t, img.Bounds(), c.w, c.h)
-		if u := imgfile.DecodeBudget.Used(); u != 0 { // тесты пакета не параллельны
+		if u := imgfile.DecodeBudget().Used(); u != 0 { // тесты пакета не параллельны
 			t.Fatalf("%s: бюджет не возвращён: %d", c.name, u)
 		}
 	}
@@ -161,7 +161,7 @@ func TestMarkupPreviewBroken(t *testing.T) {
 	if _, _, err := MarkupPreview(huge); err == nil {
 		t.Fatal("900 Мп принят")
 	}
-	if u := imgfile.DecodeBudget.Used(); u != 0 {
+	if u := imgfile.DecodeBudget().Used(); u != 0 {
 		t.Fatalf("бюджет не возвращён: %d", u)
 	}
 }
@@ -182,11 +182,11 @@ func TestMarkupPreview16BitBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	busy := imgfile.DecodeBudgetPixels - w*h
-	imgfile.DecodeBudget.Acquire(busy)
+	imgfile.DecodeBudget().Acquire(busy)
 	held := true
 	t.Cleanup(func() {
 		if held {
-			imgfile.DecodeBudget.Release(busy)
+			imgfile.DecodeBudget().Release(busy)
 		}
 	})
 	if _, _, err := MarkupPreviewCtx(context.Background(), p8); err != nil {
@@ -197,15 +197,15 @@ func TestMarkupPreview16BitBudget(t *testing.T) {
 	if _, _, err := MarkupPreviewCtx(ctx, p16); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("16 бит при свободных W×H: ждали ожидание до отмены, получено %v", err)
 	}
-	if u := imgfile.DecodeBudget.Used(); u != busy {
+	if u := imgfile.DecodeBudget().Used(); u != busy {
 		t.Fatalf("бюджет %d, ждали %d", u, busy)
 	}
-	imgfile.DecodeBudget.Release(busy)
+	imgfile.DecodeBudget().Release(busy)
 	held = false
 	if data, ct, err := MarkupPreview(p16); err != nil || len(data) == 0 || ct != "image/png" {
 		t.Fatalf("16 бит при свободном бюджете: %v %q", err, ct)
 	}
-	if u := imgfile.DecodeBudget.Used(); u != 0 {
+	if u := imgfile.DecodeBudget().Used(); u != 0 {
 		t.Fatalf("бюджет не возвращён: %d", u)
 	}
 }
@@ -224,7 +224,7 @@ func TestMarkupPreviewReleasesBeforeEncode(t *testing.T) {
 		{"png с прозрачностью", "image/png", testkit.PNG(t, dir, "a.png", MarkupMaxSide+10, 20, color.NRGBA{R: 9, A: 100})},
 	} {
 		used, calls := int64(-1), 0
-		beforeEncode = func() { used, calls = imgfile.DecodeBudget.Used(), calls+1 }
+		beforeEncode = func() { used, calls = imgfile.DecodeBudget().Used(), calls+1 }
 		_, ct, err := MarkupPreview(c.path)
 		if err != nil || ct != c.ctype || calls != 1 {
 			t.Fatalf("%s: %v %q, вызовов %d", c.name, err, ct, calls)
@@ -232,7 +232,7 @@ func TestMarkupPreviewReleasesBeforeEncode(t *testing.T) {
 		if used != 0 {
 			t.Fatalf("%s: при кодировании бюджет занят: %d", c.name, used)
 		}
-		if u := imgfile.DecodeBudget.Used(); u != 0 {
+		if u := imgfile.DecodeBudget().Used(); u != 0 {
 			t.Fatalf("%s: бюджет после: %d", c.name, u)
 		}
 	}

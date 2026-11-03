@@ -25,8 +25,8 @@ type AgentAsk struct {
 	Tool   string `json:"tool"`   // ссылка «Не спрашивать — …» открывает окно на строке этого инструмента
 	Files  int    `json:"files"`  // export: сколько файлов запишет выгрузка
 	Create bool   `json:"create"` // export: папка вопроса ещё не существует и будет создана
-	// Why — «Всегда», а тихо нельзя: place | remote | big | cloud | shots | link | rate | draft;
-	// "" — «Спрашивать». Тексты — во фронте (agentstext.ts), агенту причина не сообщается.
+	// Why — «Всегда», а тихо нельзя: place | remote | big | cloud | shots | link | rate | draft |
+	// hint | pick (открытие, 160); "" — «Спрашивать». Тексты — во фронте (agentstext.ts), агенту причина не сообщается.
 	Why string `json:"why"`
 }
 

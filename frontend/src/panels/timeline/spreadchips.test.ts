@@ -131,7 +131,7 @@ describe('зона разреза у ручного разворота (103)', (
   })
 })
 
-// Разметка: без Ctrl зона мышь не ловит, с Ctrl (класс .cutting у ленты) — ловит; 6 px без захода на фото.
+// Разметка: без Ctrl зона мышь не ловит, с Ctrl (класс .cutting у ленты) — ловит; зазор 6 px и по cutIn в каждое фото.
 const src = import.meta.glob(['/src/panels/timeline/SpreadChips.svelte', '/src/panels/timeline/Timeline.svelte'], {
   query: '?raw',
   import: 'default',
@@ -150,11 +150,16 @@ describe('подключение зоны разреза', () => {
     expect(chips).toContain("{#if j > 0 && sp.kind !== 'vignette' && cuts}")
     expect(chips).toContain('cutState(sp, j, unit).ask')
   })
-  it('зона 6 px слева от рамки, мышь — только при .cutting', () => {
+  it('зона: зазор и по cutIn в фото, мышь — только при .cutting', () => {
     const cut = rule('.cut')
-    expect(cut).toContain('left: -6px;')
-    expect(cut).toContain('width: 6px;')
+    expect(cut).toContain('top: -6px;')
+    expect(cut).toContain('left: calc(-6px - var(--in-l, 0px));')
+    expect(cut).toContain('width: calc(6px + var(--in-l, 0px) + var(--in-r, 0px));')
     expect(cut).toContain('pointer-events: none;')
+    const dash = rule('.cut::before')
+    expect(dash).toContain('top: 2px;')
+    expect(dash).toContain('bottom: 2px;')
+    expect(dash).toContain('left: calc(2px + var(--in-l, 0px));')
     expect(rule(':global(.timeline.cutting) .cut')).toContain('pointer-events: auto;')
   })
   it('лента ставит .cutting по зажатому Ctrl', () => {

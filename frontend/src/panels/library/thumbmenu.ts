@@ -2,7 +2,7 @@
 // со строками вхождений (общие с меню холста — editor/photoprops/usemenu). Чистая логика; состояние — thumbmenustate.svelte.ts,
 // разметка — ThumbMenu.svelte (на MenuList).
 import type { FeatureId } from '../../base/prefs/levels'
-import type { MenuNode } from '../../base/ui/menulist'
+import type { MenuNode } from '../../base/popup/menulist'
 import type { UseSrc } from '../../base/words/whereuse'
 import { compareItem, fileGroup, previewItem, similarItem, type HintFn } from '../../editor/photomenu/photomenu'
 import { MAX_CELLS } from '../compare/compareset'

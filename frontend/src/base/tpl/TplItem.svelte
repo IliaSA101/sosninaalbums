@@ -5,11 +5,13 @@
   // Плитка в ряду шаблонов (TplRow): карточка (children) и под ней одна строка: имя своего шаблона (обрезается «…»)
   // и note через « · » (tone подсвечивает «мелко» и «не влезет»). Обе части обрезаются «…» внутри плитки, полное — в title;
   // узкой карточке с подписью дан свой минимум ширины (noted / lone). ✎ и × при наведении —
-  // только если заданы onrename и ondelete.
+  // только если заданы onrename и ondelete. stack (163) — подпись в два этажа: имя целиком (переносится, не режется «…»),
+  // ниже пометка; ширину подписи задаёт карточка.
   let {
     name,
     note,
     tone,
+    stack = false,
     onrename,
     ondelete,
     renameLabel = 'Переименовать шаблон',
@@ -20,6 +22,7 @@
     name?: string
     note?: string
     tone?: 'small' | 'over'
+    stack?: boolean // имя и пометка двумя строками (плитки макетов)
     onrename?: () => void
     ondelete?: () => void
     renameLabel?: string // aria-label ✎; окно фонов (048) пишет «фон» вместо «шаблон»
@@ -33,7 +36,13 @@
   const full = $derived([name, note].filter(Boolean).join(' · ') || undefined)
 </script>
 
-<div class="item" class:named={name !== undefined} class:noted={hasName && !!note} class:lone={!hasName && !!note}>
+<div
+  class="item"
+  class:named={!stack && name !== undefined}
+  class:noted={!stack && hasName && !!note}
+  class:lone={!stack && !hasName && !!note}
+  class:stack
+>
   {@render children()}
   {#if onrename && ondelete}
     <div class="tools">
@@ -41,7 +50,10 @@
       <button type="button" onclick={ondelete} title={deleteTitle} aria-label={deleteLabel}><Icon name="x" size={12} /></button>
     </div>
   {/if}
-  {#if name !== undefined || note}
+  {#if stack}
+    {#if hasName}<div class="sname" title={full}>{name}</div>{/if}
+    {#if note}<div class="snote {tone ?? ''}" title={hasName ? undefined : full}>{note}</div>{/if}
+  {:else if name !== undefined || note}
     <div class="line1" title={full}>
       {#if hasName}<span class="name">{name}</span>{/if}
       {#if hasName && note}<span class="dot">·</span>{/if}
@@ -64,6 +76,29 @@
   }
   .item.lone {
     min-width: 64px; /* встроенная плитка: «23 мм · мелко» не выходит за плитку целиком */
+  }
+  /* Двухэтажная подпись (stack): имя переносится по словам и не режется, под ним пометка; ширина — карточки */
+  .sname,
+  .snote {
+    width: 0;
+    min-width: 100%;
+    line-height: 13px;
+  }
+  .sname {
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  .snote {
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .snote.small {
+    color: var(--accent);
+  }
+  .snote.over {
+    color: #e0806f;
   }
   .tools {
     position: absolute;

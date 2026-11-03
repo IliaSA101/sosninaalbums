@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/api/albums"
+	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/share"
 )
@@ -31,6 +33,8 @@ type job struct {
 	base          *prefs.ShareRecord // продолжаем эту запись (та же ссылка); nil — новая ссылка
 	dir           string             // временная папка страниц
 	run           *runState          // флаг этой выгрузки: сверка записи с OnSaved
+	pages         []export.WebPage   // готовые страницы и их манифест (первой подготовки): для keep (159)
+	man           *albums.Manifest
 }
 
 // Share — «Выгрузить» / «Обновить по ссылке» / «Продолжить» (design §3.3): проверки и вопросы
@@ -267,6 +271,7 @@ func (s *Service) OnSaved(path string, newProject bool) {
 	if cancel != nil {
 		cancel()
 	}
+	s.dropKeptFor(path) // страницы прежнего проекта не годятся новому (159)
 	if err := s.drop(path); err != nil {
 		log.Printf("выгрузка: запись пути не сброшена при сохранении: %v", err)
 	}
@@ -302,7 +307,7 @@ func removeDir(dir string) {
 }
 
 // CleanTemp при запуске программы убирает оставшиеся от прошлых выгрузок папки <cache>/share/up-*
-// старше суток. Идёт по Lstat: ссылки и обычные файлы не трогаются, чужие имена тоже (разбор С5).
+// старше суток и все kp-* (страницы «Продолжить» живут до конца сессии, 159). Идёт по Lstat: ссылки и обычные файлы не трогаются, чужие имена тоже (разбор С5).
 // cache — папка кэша программы; пустая или не абсолютная — ничего.
 func CleanTemp(cache string, now time.Time) {
 	if cache == "" || !filepath.IsAbs(cache) {
@@ -314,12 +319,16 @@ func CleanTemp(cache string, now time.Time) {
 		return
 	}
 	for _, e := range list {
-		if !strings.HasPrefix(e.Name(), tempPrefix) {
+		up, kp := strings.HasPrefix(e.Name(), tempPrefix), strings.HasPrefix(e.Name(), keptPrefix)
+		if !up && !kp {
 			continue
 		}
 		p := filepath.Join(root, e.Name())
 		st, err := os.Lstat(p)
-		if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 || now.Sub(st.ModTime()) < tempKeep {
+		if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		if up && now.Sub(st.ModTime()) < tempKeep { // kp-* — сохранённые страницы прошлой сессии: без срока (159)
 			continue
 		}
 		if err := os.RemoveAll(p); err != nil {

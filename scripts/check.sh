@@ -145,6 +145,9 @@ if [ $run_go = 1 ]; then
   step 'go vet' go vet . ./internal/...
   # e2e-тест L1 (тег e2ebig) иначе не собирает никто. -tags в команде заменяет теги из GOFLAGS — webkit2_41 повторяем.
   step 'go vet e2ebig' go vet -tags "e2ebig${wails_tags:+,$wails_tags}" ./internal/app
+  # Швы стенда (тег qa: зонд, SA_QA_VOLDELAY) иначе не собирает никто; 157, да владельца 03.11.
+  step 'go vet qa' go vet -tags "qa${wails_tags:+,$wails_tags}" ./internal/osx ./internal/app
+  step 'go test qa' go test -count=1 -tags "qa${wails_tags:+,$wails_tags}" -run 'QaProbe|VolDelay' ./internal/osx ./internal/app
   if [ "$(go env GOOS)" != windows ]; then
     # Файлы *_windows.go (пути, диски, проводник) на Linux не компилируются вовсе — проверяем их сборку под Windows.
     step 'go vet windows' env GOOS=windows GOFLAGS= go vet . ./internal/...

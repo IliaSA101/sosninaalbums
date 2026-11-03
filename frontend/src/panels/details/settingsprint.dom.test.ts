@@ -18,9 +18,9 @@ vi.mock('../../../wailsjs/go/app/App', async (orig) => {
 import type { PrintSource } from '../../base/core/types'
 const { default: SettingsForm } = await import('./SettingsForm.svelte')
 const { store } = await import('../../base/core/store.svelte')
-const { printList } = await import('../../shell/printprof/printlist.svelte')
-const { printEdit } = await import('../../shell/printprof/printedit.svelte')
-const { NEW_VALUE } = await import('../../shell/printprof/printwords')
+const { printList } = await import('../../output/printprof/printlist.svelte')
+const { printEdit } = await import('../../output/printprof/printedit.svelte')
+const { NEW_VALUE } = await import('../../output/printprof/printwords')
 
 const info = (id: string, name: string, source: PrintSource) => ({ id, name, source, version: 1, hasExport: true, formats: [] })
 const tick = () => new Promise((r) => setTimeout(r, 0))

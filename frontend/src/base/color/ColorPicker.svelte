@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { portal } from '../ui/portal'
+  import { portal } from '../popup/portal'
   import { onDestroy } from 'svelte'
   import { store } from '../core/store.svelte'
-  import { placePopover, type Placed } from '../ui/popover'
+  import { placePopover, type Placed } from '../popup/popover'
   import ColorEye from './ColorEye.svelte'
   import ColorInherit from './ColorInherit.svelte'
   import ColorSets, { type PhotoColors } from './ColorSets.svelte'

@@ -6,7 +6,7 @@
   import { menuCtx } from './menuctx'
   import { buildMenu, hasIcons, hasMarks, type MenuId, type MenuItem } from './menu'
   import Icon from '../../base/ui/Icon.svelte'
-  import { placeMenu, placeSubmenuFit, type Box } from '../../base/ui/popover'
+  import { placeMenu, placeSubmenuFit, type Box } from '../../base/popup/popover'
 
   // Своя строка меню (не системная, спека 010): щелчок открывает, наведение переключает соседнее меню,
   // Esc и щелчок мимо закрывают, ← → ↑ ↓ Enter работают. Пункты и серые — menu/menu.ts.

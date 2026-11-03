@@ -279,12 +279,12 @@ func TestDecodeWeightICC(t *testing.T) {
 			t.Errorf("%s: вес %d, ждали %d (%v)", c.name, n, c.want, err)
 			continue
 		}
-		before := DecodeBudget.Used()
+		before := decodeBudget.Used()
 		_, release, err := OpenOriented(p)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		if got := DecodeBudget.Used() - before; got != c.want {
+		if got := decodeBudget.Used() - before; got != c.want {
 			t.Errorf("%s: в бюджете %d, ждали %d", c.name, got, c.want)
 		}
 		release()
@@ -345,12 +345,12 @@ func decodeWeightPNGWebP(t *testing.T, dir string) {
 			t.Errorf("%s: вес %d, ждали %d (%v)", c.name, n, c.want, err)
 			continue
 		}
-		before := DecodeBudget.Used()
+		before := decodeBudget.Used()
 		_, release, err := OpenOriented(c.path)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		if got := DecodeBudget.Used() - before; got != c.want {
+		if got := decodeBudget.Used() - before; got != c.want {
 			t.Errorf("%s: в бюджете %d, ждали %d", c.name, got, c.want)
 		}
 		release()

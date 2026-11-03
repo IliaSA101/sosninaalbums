@@ -72,8 +72,10 @@ func (s *Service) Change(c Change) (View, error) {
 				return View{}, err
 			}
 		}
-		pw := c.Password
-		p.Password, p.RevokeSessions = &pw, true
+		if c.Password != rec.Password { // тот же пароль: ничего не шлём, входы клиента не сбрасываем (159)
+			pw := c.Password
+			p.Password, p.RevokeSessions = &pw, true
+		}
 	}
 	if p.ExpiresAt == nil && p.Password == nil {
 		return s.State()
@@ -132,6 +134,7 @@ func (s *Service) Revoke() (View, error) {
 	if err := cl.Delete(ctx, rec.ID); err != nil && !errors.Is(err, albums.ErrGone) {
 		return View{}, s.afterNet("отзыв ссылки", path, uid, origin, err)
 	}
+	s.dropKeptFor(path) // ссылки нет — «Продолжить» нечего досылать, фото клиента не держим (159)
 	if err := s.drop(path); err != nil {
 		v, _ := s.State()
 		return v, fail("Ссылка отозвана, но запись о ней убрать не удалось: " + err.Error())

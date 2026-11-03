@@ -54,7 +54,7 @@ func (a *App) placeEnv() *agentplaces.Env {
 		system = "C:"
 	}
 	return &agentplaces.Env{
-		Rules: r, Cloud: agentplaces.CloudRoots(runtime.GOOS, home, os.Getenv), System: system,
+		Rules: r, Cloud: agentplaces.CloudRootsLive(runtime.GOOS, home, os.Getenv), System: system,
 		Vol: placeVolOf, VolPath: placeVolPath, Dev: placeDev, Mounts: placeMounts,
 	}
 }

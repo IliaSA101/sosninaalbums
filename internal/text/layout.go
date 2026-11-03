@@ -3,6 +3,7 @@ package text
 import (
 	"container/list"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"unicode"
@@ -25,11 +26,15 @@ const (
 
 // Line — одна строка: текст без хвостовых пробелов, X и Y (базовая линия)
 // относительно левого верхнего угла блока, W — ширина строки, мм.
+//
+// DX — сдвиги кернинга в мм перед каждой кодовой точкой Text (DX[0] = 0), только у строк
+// своих шрифтов (161): экран и JPEG ставят знаки по одной таблице. Нет — кернит сам рисующий.
 type Line struct {
-	Text string  `json:"text"`
-	X    float64 `json:"x"`
-	Y    float64 `json:"y"`
-	W    float64 `json:"w"`
+	Text string    `json:"text"`
+	X    float64   `json:"x"`
+	Y    float64   `json:"y"`
+	W    float64   `json:"w"`
+	DX   []float64 `json:"dx,omitempty"`
 }
 
 // Box — результат переноса: размеры блока и строки. Size — кегль в мм.
@@ -66,11 +71,36 @@ func CleanText(s string) string {
 }
 
 // para — абзац в виде глифов: x[i] — начало знака i с учётом кернинга
-// (в единицах шрифта ×64), adv[i] — его ширина.
+// (в единицах шрифта ×64), adv[i] — его ширина. custom — абзац своего шрифта: его строки несут DX.
 type para struct {
-	r   []rune
-	x   []fixed.Int26_6
-	adv []fixed.Int26_6
+	r      []rune
+	x      []fixed.Int26_6
+	adv    []fixed.Int26_6
+	custom bool
+}
+
+// line — строка из знаков [a,e): у абзаца своего шрифта с DX.
+func (p *para) line(a, e int, mm func(fixed.Int26_6) float64) Line {
+	l := Line{Text: string(p.r[a:e]), W: mm(p.width(a, e))}
+	if p.custom && e > a {
+		l.DX = p.kernDX(a, e, mm)
+	}
+	return l
+}
+
+// kernDX — сдвиги кернинга знаков [a,e) в мм (перед знаком, у первого — 0). Копятся целыми
+// десятитысячными мм от начала строки: ошибка округления не растёт с длиной строки.
+func (p *para) kernDX(a, e int, mm func(fixed.Int26_6) float64) []float64 {
+	dx := make([]float64, e-a)
+	var sum fixed.Int26_6
+	var prev int64
+	for i := a + 1; i < e; i++ {
+		sum += p.x[i] - p.x[i-1] - p.adv[i-1]
+		ticks := int64(math.Round(mm(sum) * 1e4))
+		dx[i-a] = float64(ticks-prev) / 1e4
+		prev = ticks
+	}
+	return dx
 }
 
 // width — ширина знаков [a,b) в единицах шрифта ×64.
@@ -102,21 +132,22 @@ func measure(sf, fb *sfnt.Font, s string) *para {
 func Layout(s string, st Style, w float64) Box {
 	st = st.Clamped()
 	if c := usableCustom(st.Font); c != nil {
-		sf, _ := font(st)
+		sf, _, d := fontData(st)
 		fb, _ := fallback(st)
 		var box Box
-		if guarded(func() { box = layoutWith(s, st, w, sf, fb) }) {
+		if guarded(func() { box = layoutWith(s, st, w, sf, fb, d) }) {
 			return box
 		}
 		c.markBroken("перенос строк") // дальше — Montserrat, как у пропавшего шрифта
 	}
 	sf, _ := font(st)
 	fb, _ := fallback(st)
-	return layoutWith(s, st, w, sf, fb)
+	return layoutWith(s, st, w, sf, fb, nil)
 }
 
 // layoutWith — Layout заданным шрифтом sf и запасным fb (может быть nil); st уже Clamped.
-func layoutWith(s string, st Style, w float64, sf, fb *sfnt.Font) Box {
+// d — данные своего начертания (кернинг GPOS, строки с DX); nil — встроенный шрифт.
+func layoutWith(s string, st Style, w float64, sf, fb *sfnt.Font, d *faceData) Box {
 	size := st.Size * 25.4 / 72
 	box := Box{W: w, Size: size}
 	if sf == nil || !(w > 0) || math.IsInf(w, 0) {
@@ -137,7 +168,13 @@ func layoutWith(s string, st Style, w float64, sf, fb *sfnt.Font) Box {
 		paras = paras[:n-1]
 	}
 	for _, par := range paras {
-		box.Lines = append(box.Lines, wrap(measure(sf, fb, par), mm, w)...)
+		var p *para
+		if d != nil {
+			p = measureCustom(sf, fb, d, par)
+		} else {
+			p = measure(sf, fb, par)
+		}
+		box.Lines = append(box.Lines, wrap(p, mm, w)...)
 	}
 	n := len(box.Lines)
 	for i := range box.Lines {
@@ -167,7 +204,7 @@ func wrap(p *para, mm func(fixed.Int26_6) float64, w float64) []Line {
 		for e > a && p.r[e-1] == ' ' {
 			e--
 		}
-		lines = append(lines, Line{Text: string(p.r[a:e]), W: mm(p.width(a, e))})
+		lines = append(lines, p.line(a, e, mm))
 	}
 	fits := func(a, b int) bool { return mm(p.width(a, b)) <= w+eps }
 	ls, le := 0, 0 // текущая строка [ls,le): le — конец последнего слова
@@ -240,7 +277,7 @@ var cache = struct {
 
 // Cached — Layout с LRU-кэшем на cacheSize записей. Ширина округляется до 0.01 мм
 // и считается по округлённой, чтобы результат не зависел от того, кто спросил первым.
-// Возвращает копию строк.
+// Возвращает копию строк вместе с DX.
 func Cached(s string, st Style, w float64) Box {
 	st = st.Clamped()
 	if math.IsNaN(w) || math.IsInf(w, 0) {
@@ -252,7 +289,7 @@ func Cached(s string, st Style, w float64) Box {
 		cache.lru.MoveToFront(e)
 		b := e.Value.(*cacheEntry).box
 		cache.Unlock()
-		b.Lines = append([]Line(nil), b.Lines...)
+		b.Lines = cloneLines(b.Lines)
 		return b
 	}
 	cache.Unlock()
@@ -267,6 +304,15 @@ func Cached(s string, st Style, w float64) Box {
 		}
 	}
 	cache.Unlock()
-	b.Lines = append([]Line(nil), b.Lines...)
+	b.Lines = cloneLines(b.Lines)
 	return b
+}
+
+// cloneLines — копия строк вместе с DX: вызывающие сдвигают X и Y, кэш не должен делить срезы.
+func cloneLines(ls []Line) []Line {
+	out := slices.Clone(ls)
+	for i := range out {
+		out[i].DX = slices.Clone(out[i].DX)
+	}
+	return out
 }

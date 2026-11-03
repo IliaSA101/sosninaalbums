@@ -1,25 +1,28 @@
-// Состояние окна «Макеты альбома» (131 U1). Окно показывает макет справа и ничего не ставит, пока не нажато «Применить»
-// (0.27-131-12). Плитка, тема и число разворотов живут в экземпляре до конца сеанса: «Файл ▸ Макеты альбома…» открывает их снова.
+// Состояние окна «Макеты альбома» (131 U1, 163 U3). Щелчок по плитке открывает крупный просмотр (peek), макет ставит только
+// «Применить» в окне поверх просмотра (0.27-131-12, 163-2, 163-4). Плитка, тема и число разворотов живут в экземпляре до
+// конца сеанса: «Файл ▸ Макеты альбома…» открывает их снова.
 // Серию, числа и план считает Go (lookApi); окно хранит выбор и ответы. Три счётчика запросов — каталог, карточка, числа:
 // ответ с устаревшим номером отбрасывается, и пересчёт чисел (sync) не отменяет идущую загрузку карточки.
 import { store } from '../../base/core/store.svelte'
 import { errText } from '../../base/words/errtext'
 import { modes } from '../../base/prefs/view.svelte'
-import { ALL, cleanName, firstTheme } from '../../panels/decor/decor'
+import { ALL, cleanName, firstTheme, freshSource } from '../../panels/decor/decor'
+import { NO_SEL, type BrowseSel } from '../../panels/decorbrowse/browse'
+import { PeekState } from '../../panels/decorbrowse/peek.svelte'
 import type { GetItem } from '../../panels/decorbrowse/decorget'
 import { getApi } from '../../panels/decorbrowse/getapi'
 import { lookApi } from './lookapi'
 import { COVER_ID } from '../../base/geom/sheet'
 import { putQuestion, putToast } from '../../panels/decor/spreadtpl'
-import { applyToast, clampSpreads, defaultSpreads, effMode, moveStep, needsAsk, strip, tileStep, type FullMode } from './looks'
+import { applyToast, applyWarn, clampSpreads, defaultSpreads, effMode, lookPh, moveStep, strip, tileStep, type FullMode } from './looks'
 import type { LookCatalog, LookCount, LookInfo, LookItem, LookMode, LookOpts, LookPlan } from './looktypes'
 
-// rename / hide — ✎ и × у своих макетов (как в «Развороты»); apply — вопрос о замене своего; step — вопрос «Поставить на…»
-// (spread/step запоминаются: шаг ставится на тот лист, о котором спросили).
+// rename / hide — ✎ и × у своих макетов (как в «Развороты»); form — окно «Применить макет «…»» поверх просмотра (163-4 а);
+// step — вопрос «Поставить на…» (spread/step запоминаются: шаг ставится на тот лист, о котором спросили).
 export type LooksAsk =
   | { kind: 'rename'; id: string }
   | { kind: 'hide'; id: string; name: string }
-  | { kind: 'apply'; plan: LookPlan; o: LookOpts } // o — запрос, о котором спросили: ставится именно он (plan.spreads — число Go после постановки, не «сколько добавить»)
+  | { kind: 'form' }
   | { kind: 'step'; id: string; spread: string; step: number; text: string }
   | { kind: 'get'; tile: GetItem } // 144: «Скачать набор?» перед скачиванием образца макета
 
@@ -27,6 +30,8 @@ class LooksUi {
   open = $state(false)
   cat = $state<LookCatalog | null>(null)
   theme = $state('')
+  // 163: отбор «Набор · Стиль» помнится до конца сеанса, как у окон оформления (варианта в теме может не быть — тогда «Все»)
+  filters = $state<BrowseSel>({ ...NO_SEL })
   loading = $state(false)
   demoOffer = $state(false) // каталог пуст, а в «Можно скачать» есть пример (142): пустое окно ведёт к нему
   sel = $state('') // id выбранной плитки; '' — не выбрана
@@ -38,6 +43,8 @@ class LooksUi {
   cnt = $state<LookCount | null>(null)
   plan = $state<LookPlan | null>(null) // PlanLook(series): full и prev для окна
   addPlan = $state<LookPlan | null>(null) // PlanLook(add, addN): места добавляемых разворотов
+  modePlan = $state<LookPlan | null>(null) // PlanLook выбранного режима: из него строка предупреждения в окне «Применить»
+  readonly peek = new PeekState() // крупный просмотр: открытая плитка (163)
   busy = $state(false)
   ask = $state<LooksAsk | null>(null)
   name = $state('') // поле имени в ✎ — отдельно от ask: bind:value отпускает поле позже окна
@@ -48,6 +55,11 @@ class LooksUi {
   opened = 0 // номер открытия окна: скачанный макет узнаёт по нему, что окно закрывали (144)
   // 073-1: названия поставленных за сеанс наборов; окно встаёт на тему первого из них один раз при открытии.
   private fresh = new Set<string>()
+
+  // 163 U4: метка «на фото ленты» для адресов плиток и просмотра; читает store, поэтому $derived её отслеживает
+  get ph(): number {
+    return lookPh(store.view.rev, store.photos.length, store.view.marksRev)
+  }
 
   get item(): LookItem | undefined {
     return this.cat?.items.find((i) => i.id === this.sel)
@@ -66,9 +78,13 @@ class LooksUi {
   get shownPlaces(): number | null {
     return (this.mode === 'add' ? this.addPlan?.places : this.cnt?.places) ?? null
   }
-  // Карточка и план пришли: только тогда «Применить» живая (между сменой плитки и ответом Go держится старое).
+  // Карточка и планы пришли: только тогда «Применить» живая (между сменой плитки и ответом Go держится старое).
   get ready(): boolean {
-    return !!this.sel && !!this.info && !!this.plan
+    return !!this.sel && !!this.info && !!this.plan && !!this.modePlan
+  }
+  // Предупреждение окна «Применить» по плану выбранного режима; null — предупреждать не о чем (163-27)
+  get warn(): string | null {
+    return this.modePlan ? applyWarn(this.modePlan) : null
   }
 
   // Сколько фото возьмёт подбор: выделенные, иначе свободные ленты (как у «Автосборки», без тоста).
@@ -95,6 +111,7 @@ class LooksUi {
   close() {
     this.open = false
     this.ask = null
+    this.peek.close()
     this.reqCat++ // запоздавшие ответы окну не нужны
     this.reqInfo++
     this.reqCnt++
@@ -123,6 +140,7 @@ class LooksUi {
       if (my !== this.reqCat) return
       this.cat = cat
       this.theme = firstTheme(cat, this.theme, fresh)
+      if (freshSource(cat, fresh)) this.filters = { ...NO_SEL } // прыжок к свежему набору: старый отбор его не прячет
       this.demoOffer = cat.items.length === 0 ? await this.offered() : false
       if (my !== this.reqCat) return
     } catch (e) {
@@ -148,7 +166,29 @@ class LooksUi {
     this.theme = id
   }
 
-  // Щелчок по плитке показывает макет справа. Повторный щелчок по выбранной — ничего.
+  setFilter<K extends keyof BrowseSel>(key: K, value: BrowseSel[K]) {
+    this.filters = { ...this.filters, [key]: value }
+  }
+
+  // Щелчок, правый щелчок, Enter на плитке: крупный просмотр. ids — плитки на момент открытия.
+  openPeek(ids: readonly string[], id: string): Promise<void> {
+    this.peek.open(ids, id)
+    return this.choose(id)
+  }
+
+  // «Применить…» в просмотре: окно с формой поверх. Карточка не пришла или идёт другая работа — ничего (Enter не копит окна).
+  askForm() {
+    if (!this.ready || this.busy) return
+    this.ask = { kind: 'form' }
+  }
+
+  // «Показать весь набор»: тема «Все» с отбором по набору, как у стикеров; просмотр закрывает вызывающий.
+  showPack(packId: string) {
+    this.theme = ALL
+    this.filters = { ...NO_SEL, pack: packId }
+  }
+
+  // Макет становится выбранным: карточка и числа грузятся. Повтор для выбранной — ничего.
   // Ответы прежнего макета снимаются сразу: до ответа Go «Применить» серая.
   async choose(id: string) {
     if (id === this.sel) return
@@ -158,11 +198,13 @@ class LooksUi {
   }
 
   private clear() {
-    this.info = this.cnt = this.plan = this.addPlan = null
+    this.info = this.cnt = this.plan = this.addPlan = this.modePlan = null
   }
 
   private drop() {
     this.sel = ''
+    this.peek.close() // макет пропал при открытом просмотре: просмотр и «Применить» закрываются
+    if (this.ask?.kind === 'form') this.ask = null
     this.clear()
     this.spreads = 0
     this.addN = 1
@@ -205,12 +247,14 @@ class LooksUi {
     try {
       const [cnt, plan] = await Promise.all([lookApi.count(id, n, this.photos()), lookApi.plan(id, { mode: 'series', spreads: n })])
       if (my !== this.reqCnt) return
-      // В собранном альбоме с «Добавить» места считает план добавления (число — addN), а не серия
+      // В собранном альбоме с «Добавить» места считает план добавления (число — addN), а не серия; «Фоны» — свой план
       const add = plan.full && this.pick === 'add' ? await lookApi.plan(id, { mode: 'add', spreads: this.addN }) : null
+      const bg = plan.full && this.pick === 'bg' ? await lookApi.plan(id, { mode: 'bg', spreads: n }) : null
       if (my !== this.reqCnt) return
       this.cnt = cnt
       this.plan = plan
       this.addPlan = add
+      this.modePlan = add ?? bg ?? plan
     } catch (e) {
       if (my === this.reqCnt) store.notify(errText(e), 'error')
     }
@@ -252,12 +296,13 @@ class LooksUi {
     if (!this.open || rev === this.rev) return
     this.rev = rev
     if (!this.sel) return
-    this.cnt = this.plan = this.addPlan = null
+    this.cnt = this.plan = this.addPlan = this.modePlan = null
     void this.recount()
   }
 
-  // «Применить»: свежий PlanLook выбранного режима (не тот, что показан в окне); вопрос (U2) — только если заменится своё.
-  // Без вопроса — ставим сразу. Плитка сменилась, пока ждали план, — выходим.
+  // «Применить» в окне: свежий PlanLook выбранного режима (не тот, что показан в окне). Предупреждение изменилось (альбом
+  // правили, пока окно было открыто) — окно показывает новый текст и ждёт второго нажатия (163-27); иначе ставим сразу.
+  // Плитка сменилась, пока ждали план, — выходим.
   async apply() {
     if (!this.ready || this.busy) return
     const id = this.sel
@@ -266,26 +311,11 @@ class LooksUi {
     try {
       const p = await lookApi.plan(id, o)
       if (id !== this.sel || !this.open) return
-      if (needsAsk(p)) {
-        this.ask = { kind: 'apply', plan: p, o }
+      if (applyWarn(p) !== this.warn) {
+        this.modePlan = p
         return
       }
       await this.doApply(id, o)
-    } catch (e) {
-      store.notify(errText(e), 'error')
-    } finally {
-      this.busy = false
-    }
-  }
-
-  // Ответ «Применить» на вопрос.
-  async confirm() {
-    if (this.ask?.kind !== 'apply' || !this.sel || this.busy) return
-    const o = this.ask.o
-    this.ask = null
-    this.busy = true
-    try {
-      await this.doApply(this.sel, o)
     } catch (e) {
       store.notify(errText(e), 'error')
     } finally {
@@ -416,13 +446,13 @@ class LooksUi {
     this.ask = { kind: 'get', tile }
   }
 
-  // 144: макет скачанного набора — каталог перечитан, тема карточки, карточка выбрана и показана справа. Ничего не применяет:
-  // «Применить» — кнопкой формы (0.27-131-12). Каталога с этим макетом нет (скрыт, набор без него) — молча.
+  // 144: макет скачанного набора — каталог перечитан, тема карточки, карточка выбрана и открыта крупно. Ничего не применяет:
+  // «Применить…» — кнопкой просмотра (0.27-131-12). Каталога с этим макетом нет (скрыт, набор без него) — молча.
   async showGot(item: Pick<LookItem, 'id' | 'theme'>) {
     await this.refresh()
     if (!this.open || !this.cat?.items.some((i) => i.id === item.id)) return
     this.theme = this.cat.themes.some((t) => t.id === item.theme) ? item.theme : ALL
-    await this.choose(item.id)
+    await this.openPeek([item.id], item.id)
   }
 
   // «Сохранить» / «Убрать»: вопрос закрывается сразу, каталог перечитывается после успеха. Отмены нет (библиотека, не альбом).

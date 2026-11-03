@@ -56,12 +56,13 @@ func (a *App) refreshMissingWith(quiet bool) {
 	gen := a.missGen
 	a.missRefs = refs
 	a.mu.Unlock()
-	a.checkMissing(gen, refs, quiet)
+	a.checkMissing(gen, refs, quiet, true)
 }
 
 // checkMissing — фоновая проверка фото refs (ID → путь) поколения gen. Итог сливается с уже
 // известным списком (mergeMissing). quiet — событие только при смене списка (после правки, сверка).
-func (a *App) checkMissing(gen int, refs map[string]string, quiet bool) {
+// full — полный пересчёт: его применённый итог закрывает снимки ожившего тома (drive:back, 157).
+func (a *App) checkMissing(gen int, refs map[string]string, quiet, full bool) {
 	a.missPending.Add(1)
 	if !a.goBG(func() {
 		defer a.missPending.Add(-1)
@@ -80,9 +81,16 @@ func (a *App) checkMissing(gen int, refs map[string]string, quiet bool) {
 		if !same {
 			a.missing = ids // новый срез: прежний уже мог уйти в GetState или в событие
 		}
+		var back []driveBack
+		if full {
+			back = a.takeBack(gen, refs, ids)
+		}
 		a.mu.Unlock()
 		if !quiet || !same {
 			a.emit("missing", ids)
+		}
+		for _, b := range back { // всегда после missing того же пересчёта
+			a.emit("drive:back", b)
 		}
 	}) {
 		a.missPending.Add(-1) // фон закрыт: проверка не началась
@@ -141,7 +149,7 @@ func (a *App) syncMissing(rev int) {
 	refs := a.snapRefs(ed)
 	gen, fresh := a.dropMissing(refs)
 	if fresh != nil {
-		a.checkMissing(gen, fresh, true)
+		a.checkMissing(gen, fresh, true, false)
 	}
 }
 

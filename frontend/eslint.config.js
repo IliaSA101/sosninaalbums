@@ -79,6 +79,15 @@ const boundaries = [
     }),
   },
   {
+    // 162 (да владельца 03.11, адаптация правил): popup/ — всплывающие слои (Popover, MenuList, portal);
+    // как ui/, плюс значок ui/Icon. Подсказка остаётся в ui/: её зовут значки ui/.
+    files: ['src/base/popup/**/*.{ts,svelte}'],
+    rules: restrict({
+      regex: '^\\.\\./(?!core/types$|ui/Icon\\.svelte$)',
+      message: 'popup/ — всплывающие слои: из основы только core/types и ui/Icon; данные и действия — пропсами.',
+    }),
+  },
+  {
     // Хвост: FixedTip читает drag и timeline/tipLeft — убрать при правке
     files: ['src/base/ui/FixedTip.svelte'],
     rules: restrict({
@@ -90,10 +99,12 @@ const boundaries = [
     // Основа не зовёт верхние группы (решение владельца 2026-10-09). geom, groupgeom и ui закрыты блоками выше
     // строже; здесь — остальная основа. Блоки с одним правилом не сливаются (действует последний), поэтому
     // файлы наборов не пересекаются. Долга нет (2026-10-10): верх подключается к основе хуками в shell/boot/wire.ts.
+    // 162 (да владельца 03.11, адаптация правил): output/ — верхняя группа, как editor/panels/shell.
     files: ['src/base/{core,prefs,drag,types,words}/**/*.{ts,svelte}'],
     rules: restrict({
-      regex: '^(\\.\\./){2,}(editor|panels|shell)/',
-      message: 'base/ не импортирует editor/, panels/, shell/: зависимость вверх — передайте данные или колбэк (docs/STRUCTURE.md).',
+      regex: '^(\\.\\./){2,}(editor|panels|shell|output)/',
+      message:
+        'base/ не импортирует editor/, panels/, shell/, output/: зависимость вверх — передайте данные или колбэк (docs/STRUCTURE.md).',
     }),
   },
 ]

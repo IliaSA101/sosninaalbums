@@ -178,17 +178,36 @@ const COLOR_RE = /^#[0-9a-fA-F]{6}$/
 export const safeColor = (c: string, fallback = '#000000') => (COLOR_RE.test(c) ? c : fallback)
 
 // Длина строки для SVG `textLength` (082-9): ширина из Go, чтобы центр и края совпали с выгрузкой для любого шрифта
-// (кернинг кириллицы у своих файлов Go не читает, §7.1). Нет ширины (старый ответ Go, пустая строка) — как раньше.
+// (кернинг своих файлов Go считает сам, 161, — см. lineDx). Нет ширины (старый ответ Go, пустая строка) — как раньше.
 export const lineLen = (w: number | undefined): number | undefined => (w !== undefined && Number.isFinite(w) && w > 0 ? w : undefined)
 
-// style="" строки SVG-текста: размер в единицах viewBox (мм разворота).
-export function svgTextCss(st: TextStyle, fonts: FontFamily[]): string {
+// Кернинг своих шрифтов (161): Go считает GPOS сам и кладёт сдвиги в Line.dx, экран ставит их атрибутом dx.
+// Запасной флаг (decisions 161-15): false — все строки как в 0.35 (кернит браузер), выключается одной правкой.
+export const KERN_DX = true
+
+// Число кодовых точек: SVG-список dx идёт по ним, а не по UTF-16 (суррогатная пара — один знак).
+const codePoints = (s: string): number => [...s].length
+
+// Атрибут dx строки SVG. Нет dx (встроенный шрифт), пустой, флаг выключен, длина не равна числу кодовых точек
+// или не число — undefined: строка рисуется как раньше, с кернингом браузера (сдвиг не на тот знак хуже, чем без него).
+export function lineDx(l: { text: string; dx?: number[] }, on = KERN_DX): string | undefined {
+  const dx = l.dx
+  if (!on || !dx?.length || dx.length !== codePoints(l.text) || !dx.every(Number.isFinite)) return undefined
+  return dx.join(' ')
+}
+
+// Кернинг браузера поверх dx дал бы двойной сдвиг: выключаем его и фичу kern (последним в style — перекрывает TEXT_RENDER_CSS).
+export const NO_KERN_CSS = `font-kerning:none;font-feature-settings:${FEATURE_SETTINGS}, "kern" 0`
+
+// style="" строки SVG-текста: размер в единицах viewBox (мм разворота). noKern — у строки есть dx (lineDx).
+export function svgTextCss(st: TextStyle, fonts: FontFamily[], noKern = false): string {
   const f = fontCss(st, fonts)
-  return `font-family:${f.family};font-weight:${f.weight};font-style:${f.style};font-size:${ptToMm(st.size)}px;fill:${safeColor(st.color)};${TEXT_RENDER_CSS}`
+  const base = `font-family:${f.family};font-weight:${f.weight};font-style:${f.style};font-size:${ptToMm(st.size)}px;fill:${safeColor(st.color)};${TEXT_RENDER_CSS}`
+  return noKern ? `${base};${NO_KERN_CSS}` : base
 }
 
 // style="" редактора на странице: те же шрифт, кегль (px = мм × pxPerMm), цвет и выравнивание,
-// межстрочный 1.2 — как в Go (internal/text).
+// межстрочный 1.2 — как в Go (internal/text); первая база выравнивается по Go отступами редактора (156, baseline.ts).
 export function editorCss(st: TextStyle, fonts: FontFamily[], pxPerMm: number): string {
   const f = fontCss(st, fonts)
   const align = st.align === 'left' || st.align === 'right' ? st.align : 'center'

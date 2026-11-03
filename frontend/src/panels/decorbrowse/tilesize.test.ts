@@ -8,6 +8,13 @@ describe('пределы и умолчания (133 §7)', () => {
     expect(tileRange('bg')).toEqual({ lo: 96, hi: 220 })
     expect(tileRange('spread')).toEqual({ lo: 128, hi: 220 })
   })
+  it('макеты (163): 128…220, умолчание 168, как у «Разворотов»', () => {
+    expect(tileRange('album')).toEqual({ lo: 128, hi: 220 })
+    expect(tileDefault('album')).toBe(168)
+    expect(tileValue(150, 'album')).toBe(150)
+    expect(tileValue(127, 'album')).toBe(168)
+    expect(tileValue(221, 'album')).toBe(168)
+  })
   it('умолчание: стикеры и рамочки 120, фоны и развороты 168', () => {
     expect(['sticker', 'frame', 'bg', 'spread'].map((k) => tileDefault(k as never))).toEqual([120, 120, 168, 168])
   })
@@ -25,6 +32,7 @@ describe('loadDecorTile', () => {
   it('берёт только известные виды и целые положительные', () => {
     expect(loadDecorTile({ sticker: 150, bg: 1.5, frame: 'x', spread: -3, other: 200, __proto__: { bg: 9 } })).toEqual({ sticker: 150 })
     expect(loadDecorTile(JSON.parse('{"__proto__":{"bg":200}}'))).toEqual({})
+    expect(loadDecorTile({ album: 150, spread: 140 })).toEqual({ album: 150, spread: 140 }) // 163: память размера макетов
     expect(loadDecorTile(null)).toEqual({})
     expect(loadDecorTile('x')).toEqual({})
     expect(loadDecorTile(7)).toEqual({})

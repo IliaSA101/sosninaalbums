@@ -151,6 +151,7 @@ type lookSlot struct {
 	step int
 	sp   *model.Spread
 	old  *model.Spread // разворот другого вида на этой позиции: новый встаёт перед ним, старый уходит
+	made bool          // разворот создан этой постановкой (lookInsert): оформление шага-виньетки встаёт на него всегда
 }
 
 // applyLookSeries — режим series: пустые развороты уходят, макетные сопоставляются шагам новой
@@ -188,7 +189,7 @@ func applyLookSeries(p *model.Project, plan *model.LookPlan, ref *model.LookRef,
 		}
 		var gp model.GridPlan
 		var gone []string
-		if gp, gone, err = lookPut(p, f.sp, t.Steps[f.step], f.step+1, libs); err == nil {
+		if gp, gone, err = lookPut(p, f.sp, t.Steps[f.step], f.step+1, f.made, libs); err == nil {
 			plan.Left += gp.Left
 		}
 		lookTally(plan, missing, gone, f.sp)
@@ -223,11 +224,12 @@ func orDefault(v, def int) int {
 }
 
 // lookPut — шаг st на разворот sp: у виньетки сначала её настройка, затем оформление шага.
-// left — фото, ушедшие в ленту; gone — ключи библиотеки без файла (по тому, что реально встало).
-func lookPut(p *model.Project, sp *model.Spread, st model.LookStep, n int, libs map[string]model.PhotoInfo) (plan model.GridPlan, gone []string, err error) {
+// made — разворот создан этой постановкой. left — фото, ушедшие в ленту; gone — ключи библиотеки без
+// файла (по тому, что реально встало).
+func lookPut(p *model.Project, sp *model.Spread, st model.LookStep, n int, made bool, libs map[string]model.PhotoInfo) (plan model.GridPlan, gone []string, err error) {
 	left := 0
 	if st.Role == model.RoleVignette {
-		left, err = lookVignette(p, sp, st)
+		left, err = lookVignette(p, sp, st, made)
 	}
 	if err == nil {
 		plan, gone, err = grid.PutLookStep(p, sp.ID, st, n, libs)
@@ -327,7 +329,7 @@ func lookInsert(p *model.Project, fin []lookSlot, t model.AlbumTpl) (err error) 
 			err = spreads.NewSpread(p, at, nil)
 		}
 		if err == nil {
-			fin[j].sp = p.Spreads[at]
+			fin[j].sp, fin[j].made = p.Spreads[at], true
 		}
 	}
 	return err
@@ -355,18 +357,42 @@ func lookAt(p *model.Project, fin []lookSlot, j int) int {
 
 // lookVignette — настройка листа 031 по шагу vignette до оформления: параметры SetVignette;
 // форма, подпись учителя и шапка листа остаются своими. Те же параметры и места по плану — ничего,
-// сдвинутые места — «Вернуть авто». left — фото, ушедшие в ленту.
-func lookVignette(p *model.Project, s *model.Spread, st model.LookStep) (int, error) {
+// сдвинутые места — «Вернуть авто». Оформление шага (стиль, текст шапки, 164) встаёт, только когда лист
+// новый (made) или шаблон меняется: на том же листе правки фотографа не затираются. left — фото,
+// ушедшие в ленту.
+func lookVignette(p *model.Project, s *model.Spread, st model.LookStep, made bool) (int, error) {
 	v := lookVig(st)
+	own := lookOwn(st, made)
 	if s.IsVignette() {
 		cur := *s.Vig
 		v.TText, v.Shape, v.Round, v.Head = cur.TText, cur.Shape, cur.Round, cur.Head
-		if v.Same(cur) {
+		if v.Same(cur) && (!made || own == nil) {
 			if vigsheet.Untouched(p, s, vigPlan) {
 				return 0, nil
 			}
 			return vigsheet.ResetVignette(p, s.ID, vigPlan)
 		}
 	}
-	return vigsheet.SetVignette(p, s.ID, v, vigPlan, nil, tplText)
+	plan := vigsheet.VigPlanner(vigPlan)
+	if own != nil {
+		plan = vigPlanOf(own.HeadText, lookHeadFont(own))
+	}
+	return vigsheet.SetVignette(p, s.ID, v, plan, own, tplText)
+}
+
+// lookHeadFont — гарнитура шапки из оформления шага ("" — не задана).
+func lookHeadFont(own *vigsheet.OwnTpl) string {
+	if own.Style == nil || own.Style.Head == nil {
+		return ""
+	}
+	return own.Style.Head.Font
+}
+
+// lookOwn — оформление шага-виньетки для SetVignette (без Shape: шаблон каталога); nil — в шаге
+// ни стиля, ни текста шапки (как в 0.35).
+func lookOwn(st model.LookStep, made bool) *vigsheet.OwnTpl {
+	if st.Vig == nil || st.Vig.Style == nil && st.Vig.HText == "" {
+		return nil
+	}
+	return &vigsheet.OwnTpl{Style: st.Vig.Style, HeadText: st.Vig.HText, New: made}
 }

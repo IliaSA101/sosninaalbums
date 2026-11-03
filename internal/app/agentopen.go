@@ -1,7 +1,7 @@
 package app
 
 // Открытие альбома по просьбе агента (152, design §4): ключ из list_albums или выбор файла в окне ОС,
-// всегда с вопросом (класс Q, тихого открытия нет — 0.35-152-6). Путь агент не получает и не присылает:
+// с вопросом (класс O, «Всегда» — тихо по ключу, 160; пока тихая ветка не готова, вопрос задаётся всегда). Путь агент не получает и не присылает:
 // ключ служба находит среди недавних, фасад — тем же ключом (agents.RecentKey) и теми же проверками, что
 // «Файл ▸ Последние» (recentCheck). Прежний альбом уходит в свой файл или закреплённую копию (pinLeaving,
 // как при create_album); «Открыть прежний» в тосте возвращает его.
@@ -22,6 +22,12 @@ import (
 
 // askKindOpen — вид вопроса «Открыть альбом» (AgentAsk.Kind).
 const askKindOpen = "open"
+
+// Причины вопроса «Открыть альбом» при «Всегда» (AgentAsk.Why, 0.36-160): тихо нельзя по самому вызову.
+const (
+	whyHint = "hint" // альбом найден по словам агента (name_hint): тихо только по ключу, слот не берётся
+	whyPick = "pick" // агент не назвал альбом: выбор файла, ссылка «Не спрашивать» бесполезна
+)
 
 const (
 	askAltOpen    = "Выбрать другой…" // кнопка вопроса с показанным альбомом: окно ОС вместо него
@@ -76,7 +82,7 @@ func (a *App) askOpenAlbum(req agents.AskReq) (rec *askRec, res agents.AskRes, e
 		Lines: []string{who + " просит открыть сохранённый альбом. Файл выберете вы.", doc, askWho},
 		OK:    askOKOpenPick,
 	}
-	var plan folderPlan
+	plan := folderPlan{why: openCallWhy(req, a.askMode(agents.AskOpen))}
 	if req.Key != "" {
 		path, ok := a.recentPath(req.Key)
 		if !ok {
@@ -97,6 +103,20 @@ func (a *App) askOpenAlbum(req agents.AskReq) (rec *askRec, res agents.AskRes, e
 		body = askBody{Title: title + "?", Lines: append(lines, doc, askWho), OK: askOKOpen}
 	}
 	return a.askPost(req, cur, plan, body)
+}
+
+// openCallWhy — причина «не тихо» по самому вызову: «Спрашивать» — ""; при «Всегда» name_hint (служба ставит и Key, и Hint,
+// когда нашла альбом) — hint, ни ключа, ни найденного альбома — pick. Ключ без Hint — ""; дальше решает проверка путей.
+func openCallWhy(req agents.AskReq, mode string) string {
+	switch {
+	case mode != prefs.PermAllow:
+		return ""
+	case req.Hint != "":
+		return whyHint
+	case req.Key == "":
+		return whyPick
+	}
+	return ""
 }
 
 // openName — название альбома по файлу для вопроса и тоста; с плохими знаками пусто (чужой текст не должен

@@ -153,6 +153,15 @@ jobs:
         if: always()
         run: node scripts/peer-foreign.mjs 'TestSockDirHandleWindows|TestSockDirHeldWindows|TestBridgeHoldsDirDuringPeerWindows|TestSockDirWindows/\x{0432}\x{043c}\x{0435}\x{0441}\x{0442}\x{043e}' TestSockDirHandleWindows TestSockDirHeldWindows TestBridgeHoldsDirDuringPeerWindows TestSockDirWindows --pkg=./internal/mcpbridge
 
+      # 160 Т3: облачные папки по реестру (osx.CloudRoots). Тест пишет поддельные SyncRootManager (HKLM, раннер - администратор)
+      # и закреплённый CLSID (HKCU) и чистит их за собой; без SA_REG_WRITE=1 он пропускается, а пропуск и отсутствие PASS
+      # здесь - провал (peer-foreign.mjs без --allow-skip). Шаблон и run-блок ASCII.
+      - name: osx - облака по реестру (TestCloudRootsWindowsReg)
+        if: always()
+        env:
+          SA_REG_WRITE: "1"
+        run: node scripts/peer-foreign.mjs '^TestCloudRootsWindowsReg$' TestCloudRootsWindowsReg --pkg=./internal/osx
+
       # Локальный qapeer: пароль случайный до 14 знаков (длиннее - вопрос Y/N у net user; образец agents_exe.py), в журнале скрыт.
       - name: peercred - создать пользователя qapeer
         if: always()
@@ -286,20 +295,21 @@ jobs:
           $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
           if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
 
-      # ffmpeg BtbN: закреплённый выпуск и sha256 (сверяется до распаковки). Старые выпуски BtbN удаляет - тогда choco
+      # ffmpeg BtbN: закреплённый выпуск и sha256 (сверяется до распаковки). Старые выпуски BtbN удаляет - тогда choco. Берём выпуск конца месяца: дневные BtbN удаляет через ≈ 2 недели
       - name: ffmpeg
         if: ${{ needs.plan.outputs.video == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           ARCH: ${{ runner.arch }}
         run: |
-          $tag = 'autobuild-2026-10-27-18-38'
+          # month-end build: BtbN deletes daily builds in ~2 weeks, keeps last-day-of-month ones long
+          $tag = 'autobuild-2026-10-31-12-59'
           if ($env:ARCH -eq 'ARM64') {
-            $name = 'ffmpeg-N-128121-g86444dd368-winarm64-gpl.zip'
-            $sha = '15e6c469c4c4790e58a43354e22d9de632f8918bcd9e88269fc8ebcb49b35818'
+            $name = 'ffmpeg-N-128227-g4811625b5f-winarm64-gpl.zip'
+            $sha = '7d2bc069f7eda052fac7d4d9ff40eabda5d9fd8b6105d479129547ad3b822919'
           } else {
-            $name = 'ffmpeg-N-128121-g86444dd368-win64-gpl.zip'
-            $sha = '1eb70a550388567bc2abbb2d164814f722f36a034fd927dcdfb217bc7e94930c'
+            $name = 'ffmpeg-N-128227-g4811625b5f-win64-gpl.zip'
+            $sha = '3a5cdb3b83dd1b62b29d946d3655a14d787e5e81d947ad68202a1a400095d2f8'
           }
           $dir = Join-Path $env:RUNNER_TEMP 'ffmpeg'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -480,6 +490,63 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
+  # Диск снова доступен в exe (157, design §3): qa-exe с швом задержки диска (SA_QA_VOLDELAY) и настоящими subst/SMB раннера.
+  # Четыре независимых блока (В1, В2, В2б, В3) - свои запуски exe; зонд внутри окна WebView2 (volume_probe.js, тег qa) видит
+  # события missing и drive:back, полосу и тост. Один прогон собирает все провалы (volume_exe.py), дамп состояния и записи зонда - в артефакте.
+  volume:
+    name: Windows диск снова доступен (exe)
+    needs: [plan, kit]
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: qa-kit
+          path: ${{ runner.temp }}\kit
+
+      - name: Сверка набора с заданием kit
+        env:
+          WANT: ${{ needs.kit.outputs.hash }}
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'kit\kit-sha256.txt'
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f).Hash.ToLowerInvariant()
+          if ($h -ne $env:WANT) { throw "kit-sha256.txt: $h, expected $env:WANT" }
+
+      # Код выхода 1 - есть провалы пунктов; итоги, дамп состояния и записи зонда пишутся и при провале
+      - name: Диск снова доступен на exe (volume_exe.py)
+        timeout-minutes: 25
+        run: |
+          python -I "$env:GITHUB_WORKSPACE\scripts\win\qa\volume_exe.py" --kit (Join-Path $env:RUNNER_TEMP 'kit') --out (Join-Path $env:RUNNER_TEMP 'volume-out')
+          exit $LASTEXITCODE
+
+      - name: Сводка
+        if: always()
+        run: |
+          $f = Join-Path $env:RUNNER_TEMP 'volume-out\summary.md'
+          if (Test-Path -LiteralPath $f) { Get-Content -LiteralPath $f -Raw -Encoding UTF8 | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+          else { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value 'volume summary.md missing' }
+
+      # exe лежит в work\exe и в артефакт не нужен: берутся итоги, дамп и записи зонда
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: volume-exe-qa
+          path: |
+            ${{ runner.temp }}\volume-out\summary.md
+            ${{ runner.temp }}\volume-out\state-dump.txt
+            ${{ runner.temp }}\volume-out\work\*.jsonl
+            ${{ runner.temp }}\volume-out\work\*.js
+          if-no-files-found: warn
+          retention-days: 3
+
   # Ролики справочника F1 в собранной программе (спека 140, Т7): Linux проверен в Т0, здесь Windows (webm, WebView2) и macOS
   # (mp4, WKWebView). Тестовый каталог с двумя роликами строит videos-site (ключ одноразовый, тестовый; настоящие ключи не
   # читаются), раздаёт его сама проверка с 127.0.0.1:34190; программа с тегом qa берёт его через SA_LIBRARY_URL/SA_LIBRARY_KEY.
@@ -623,13 +690,13 @@ jobs:
       - name: wails build (тег qa)
         run: wails build -platform darwin/arm64 -clean -trimpath -tags qa
 
-      # Обратный страж: в qa-сборке зонд и стенд библиотеки обязаны быть - иначе проверялось бы не то
+      # Обратный страж: в qa-сборке зонд, задержка тома (157) и стенд библиотеки обязаны быть - иначе проверялось бы не то
       - name: Страж тегов QA (зонд и стенд библиотеки на месте)
         run: |
           apps=(build/bin/*.app)
           [ "${#apps[@]}" -eq 1 ] || { echo "::error::Ожидалось одно .app в build/bin, найдено: ${#apps[@]}"; exit 1; }
           bin=("${apps[0]}"/Contents/MacOS/*)
-          for s in SA_QA_PROBE SA_LIBRARY_URL; do
+          for s in SA_QA_PROBE SA_QA_VOLDELAY SA_LIBRARY_URL; do
             LC_ALL=C grep -aqF -- "$s" "${bin[0]}" || { echo "::error::В qa-сборке нет строки $s - тег qa не действует"; exit 1; }
           done
           codesign --force --deep --sign - "${apps[0]}"
@@ -678,7 +745,7 @@ jobs:
 
   report:
     name: Сводка прогона
-    needs: [plan, kit, scenario]
+    needs: [plan, kit, scenario, volume]
     if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10

@@ -58,7 +58,7 @@ func TestMarkupWebPIsBig(t *testing.T) {
 			t.Fatalf("%s: превью малого файла: %d байт, %v", filepath.Base(file), len(data), err)
 		}
 	}
-	if u := imgfile.DecodeBudget.Used(); u != 0 {
+	if u := imgfile.DecodeBudget().Used(); u != 0 {
 		t.Fatalf("бюджет не возвращён: %d", u)
 	}
 }

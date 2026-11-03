@@ -154,6 +154,9 @@ export function relinkSummary(r: RelinkCounts): string {
   return parts.join(', ')
 }
 
+// Тост «диск снова ответил» (157): текст лежит в base/words (его зовёт store), здесь — рядом с текстами полосы.
+export { driveBackText } from '../../base/words/driveback'
+
 // Свои шрифты альбома (View.albumFonts, 082), которых нет в списке этого компьютера. Скрытый × остаётся в списке —
 // он на месте, полосы не вызывает. albumFonts ещё нет (старый Go) — пусто.
 export function missingFonts(albumFonts: readonly FontUse[] | null | undefined, fonts: readonly Pick<FontFamily, 'id'>[]): FontUse[] {

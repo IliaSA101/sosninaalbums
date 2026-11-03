@@ -74,7 +74,7 @@ func lookAddAt(p *model.Project, plan *model.LookPlan, t model.AlbumTpl, n, at, 
 		if mark {
 			num = st + 1
 		}
-		gp, gone, err := lookPut(p, sp, t.Steps[st], num, libs)
+		gp, gone, err := lookPut(p, sp, t.Steps[st], num, true, libs)
 		if err != nil {
 			return err
 		}

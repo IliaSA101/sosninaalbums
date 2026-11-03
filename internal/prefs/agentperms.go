@@ -32,8 +32,11 @@ const (
 	ClassEdit   = "E" // обратимая правка
 	ClassFolder = "F" // add_folder
 	ClassAlbum  = "A" // create_album
-	// ClassAskOnly — export_album, open_album: только с вопросом человеку, «Всегда» нет (0.35/152).
+	// ClassAskOnly — export_album: только с вопросом человеку, «Всегда» нет (0.35/152).
 	ClassAskOnly = "Q"
+	// ClassOpen — open_album: как Q, но «Всегда» есть (0.36/160): тихо только по ключу и внутри мест. Групповой
+	// «Правки» строку не трогает (группа other), в счёт правок не входит.
+	ClassOpen = "O"
 )
 
 // Как место попало в список.
@@ -86,7 +89,7 @@ var toolClass = map[string]string{
 	"autobuild": ClassEdit, "vary_layouts": ClassEdit, "undo_last_edit": ClassEdit, "set_marks": ClassEdit,
 	"set_cover_photo": ClassEdit, "set_background": ClassEdit, "add_sticker": ClassEdit, "apply_print": ClassEdit,
 	"add_folder": ClassFolder, "create_album": ClassAlbum,
-	"export_album": ClassAskOnly, "open_album": ClassAskOnly,
+	"export_album": ClassAskOnly, "open_album": ClassOpen,
 }
 
 // Пять правок, которыми управлял флажок 0.33 (design §2 «Откат»): остальные 0.33 не знает.
@@ -121,6 +124,9 @@ func PermCan(tool string) []string {
 }
 
 func isEditClass(c string) bool { return c == ClassEdit || c == ClassFolder || c == ClassAlbum }
+
+// isAskClass — инструмент, который спрашивает человека (Q и O): в счёт правок не входит, умолчания и откат 0.33 у них общие.
+func isAskClass(c string) bool { return c == ClassAskOnly || c == ClassOpen }
 
 // validToolName — [a-z_]{1,64}.
 func validToolName(k string) bool {
@@ -312,7 +318,7 @@ func (p AgentPerms) clean() AgentPerms {
 // запуск тоже; правка и «только с вопросом» — «Спрашивать», а если все записанные правки
 // «Запретить» — «Запретить». «Только с вопросом» в счёт правок не входит (0.35-152-11).
 func newToolMode(class string, tools map[string]string) string {
-	if !isEditClass(class) && class != ClassAskOnly {
+	if !isEditClass(class) && !isAskClass(class) {
 		return PermAllow
 	}
 	for k, v := range tools {
@@ -329,11 +335,11 @@ func column(flag bool) map[string]string {
 	t := make(map[string]string, len(toolClass))
 	for k, c := range toolClass {
 		switch {
-		case !isEditClass(c) && c != ClassAskOnly:
+		case !isEditClass(c) && !isAskClass(c):
 			t[k] = PermAllow
 		case !flag:
 			t[k] = PermDeny
-		case c == ClassAskOnly:
+		case isAskClass(c):
 			t[k] = PermAsk
 		case c == ClassEdit:
 			t[k] = PermAllow
@@ -377,7 +383,7 @@ func AgentPermsOf(c Config) AgentPerms {
 // вопросом» не трогает. Прочее — как записано.
 func rollback(tools map[string]string, flag bool) {
 	for k, class := range toolClass {
-		if !flag && (isEditClass(class) || class == ClassAskOnly) {
+		if !flag && (isEditClass(class) || isAskClass(class)) {
 			tools[k] = PermDeny
 		}
 	}

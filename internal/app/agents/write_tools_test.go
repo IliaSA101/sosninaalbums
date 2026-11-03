@@ -198,7 +198,7 @@ func TestOpenAlbumDeniedAndStopped(t *testing.T) {
 	if n := r.fx.edit.nAsk.Load(); n != 0 {
 		t.Fatalf("запрет дошёл до Host: %d", n)
 	}
-	r.fx.edit.setPerm("open_album", prefs.PermAllow) // «Всегда» читается как «Спрашивать»
+	r.fx.edit.setPerm("open_album", prefs.PermAllow) // «Всегда»: вызов без ключа (pick) всё равно спрашивает
 
 	r.fx.edit.ask = answerFixed(AskRes{Why: WhyStopped})
 	failText(t, tcall(t, cs, "open_album", nil), errStopped)

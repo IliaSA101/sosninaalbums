@@ -189,11 +189,8 @@ func (c *call) setAlbumBackground(item string, in bgIn) (bgOut, error) {
 	if err != nil {
 		return bgOut{}, err
 	}
-	v, _ := c.s.h.View() // вид до правки: порядок листов фон не меняет, ревизию уже сверил gate
-	pages := v.AlbumBg != nil && v.AlbumBg.Pages
-	if in.Pages != nil {
-		pages = *in.Pages
-	}
+	v, _ := c.s.h.View()                                            // вид до правки: порядок листов фон не меняет, ревизию уже сверил gate
+	pages := !v.Settings.Sheet && AlbumBgPages(v.AlbumBg, in.Pages) // у листов страниц нет
 	res, err := c.s.h.Bg(c.ctx, BgReq{Key: in.Album.Key, Rev: in.Album.Rev, Client: askClient(c.client()), Item: item,
 		Spreads: consent, Replace: in.Replace, Album: true, Pages: pages})
 	if err != nil {
@@ -202,6 +199,16 @@ func (c *call) setAlbumBackground(item string, in bgIn) (bgOut, error) {
 	c.remember(res.Album, res.Album.Rev != in.Album.Rev) // фон альбома — шаг и без разворотов
 	return bgOut{Album: res.Album, Changed: res.Changed, Replaced: res.Replaced, AlbumBg: res.AlbumBg,
 		Skipped: spreadNums(v, res.Skipped), Cleared: spreadNums(v, res.Cleared), Hidden: spreadNums(v, res.Hidden)}, nil
+}
+
+// AlbumBgPages — ляжет ли фон альбома на каждую страницу: pages назван — он, иначе как у нынешнего
+// фона альбома (нет фона — на весь разворот). Одно решение для вопроса человеку и для правки (159):
+// иначе текст вопроса расходился бы с тем, что применено. Альбом-лист (страниц нет) решает вызывающий.
+func AlbumBgPages(bg *model.AlbumBgView, in *bool) bool {
+	if in != nil {
+		return *in
+	}
+	return bg != nil && bg.Pages
 }
 
 // coverPre — разбор add_sticker до вопроса и места правки: «cover» без обложки (или у альбома-листа) — errNoCover

@@ -10,8 +10,8 @@
   import { tplLabel } from './vigown'
   import { vigOwn } from './vigown.svelte'
   import { vigDialog } from './vigsession.svelte'
-  import { vigFaces } from './vigfaces.svelte'
-  import { facesLabel, facesTip } from './vigfaces'
+  import { vigFaces } from '../faces/vigfaces.svelte'
+  import { facesLabel, facesTip } from '../faces/vigfaces'
   import { choiceOf, formOf } from './vignette'
   import { VIG_SORT_TITLE } from './vigmenu'
 

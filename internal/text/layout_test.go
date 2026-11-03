@@ -1,6 +1,7 @@
 package text
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math"
 	"strings"
@@ -192,5 +193,87 @@ func TestLayoutTrailingNewline(t *testing.T) {
 	// кэш и прямой расчёт согласованы
 	if a, b := Cached("Сава и Вася\n", st, 200).H, h("Сава и Вася"); a != b {
 		t.Errorf("Cached H %.3f, нужно %.3f", a, b)
+	}
+}
+
+// sfntTables читает hhea, OS/2 и head прямо из байтов файла, без sfnt: проверка
+// не зависит от разбора, которым пользуется Layout.
+func sfntTables(t *testing.T, b []byte) (hheaAsc, hheaDesc, winAsc, winDesc, upem float64) {
+	t.Helper()
+	be := binary.BigEndian
+	if len(b) < 12 {
+		t.Fatal("файл шрифта короче заголовка")
+	}
+	tab := map[string][]byte{}
+	for i, n := 0, int(be.Uint16(b[4:])); i < n; i++ {
+		r := b[12+16*i:]
+		off, ln := int(be.Uint32(r[8:])), int(be.Uint32(r[12:]))
+		tab[string(r[:4])] = b[off : off+ln]
+	}
+	head, hhea, os2 := tab["head"], tab["hhea"], tab["OS/2"]
+	if head == nil || hhea == nil || os2 == nil {
+		t.Fatal("в шрифте нет head, hhea или OS/2")
+	}
+	return float64(int16(be.Uint16(hhea[4:]))), -float64(int16(be.Uint16(hhea[6:]))),
+		float64(be.Uint16(os2[74:])), float64(be.Uint16(os2[76:])), float64(be.Uint16(head[18:]))
+}
+
+// Модель печати: первая база на hhea ascent, шаг 1,2 кегля, H = asc + desc +
+// (n−1)·шаг. На ней держится редактор (156): он ставит строки по этим числам,
+// так что смена модели сдвинет печать готовых альбомов.
+func TestLayoutBaselineModel(t *testing.T) {
+	sizeMM := 80 * 25.4 / 72
+	for _, id := range []string{"badscript", "pacifico", "montserrat", "neucha"} {
+		asc, desc, winAsc := hheaMM(t, id, sizeMM)
+		if id == "neucha" && math.Abs(winAsc-asc) < 1 {
+			t.Fatalf("neucha: win (%.2f мм) и hhea (%.2f мм) неразличимы, проверка вырождена", winAsc, asc)
+		}
+		if id == "badscript" && math.Abs(asc-37.37) > 0.01 {
+			t.Errorf("badscript: asc %.3f мм, в спеке 37,37", asc)
+		}
+		st := Style{Font: id, Size: 80, Color: "#222222", Align: "left"}
+		for _, n := range []int{1, 3} {
+			// строки разделены \n, ширина с запасом: переносов нет
+			box := Layout(strings.Repeat("Аб\n", n-1)+"Аб", st, 400)
+			if len(box.Lines) != n {
+				t.Fatalf("%s n=%d: строк %d", id, n, len(box.Lines))
+			}
+			checkModel(t, fmt.Sprintf("%s n=%d", id, n), box, asc, desc, 1.2*sizeMM)
+		}
+	}
+}
+
+// hheaMM — hhea ascent и descent обычного начертания id и win ascent, мм при кегле sizeMM.
+func hheaMM(t *testing.T, id string, sizeMM float64) (asc, desc, winAsc float64) {
+	t.Helper()
+	fam := builtinFamily(id)
+	if fam == nil {
+		t.Fatalf("%s: нет среди встроенных", id)
+	}
+	var file string
+	for _, fc := range fam.Faces {
+		if !fc.Bold && !fc.Italic {
+			file = fc.File
+		}
+	}
+	raw, ok := FontFile(file)
+	if !ok {
+		t.Fatalf("%s: файла %q нет", id, file)
+	}
+	ha, hd, wa, _, upem := sfntTables(t, raw)
+	return ha / upem * sizeMM, hd / upem * sizeMM, wa / upem * sizeMM
+}
+
+// checkModel — строки box стоят на asc + i·step, высота = asc + desc + (n−1)·step.
+func checkModel(t *testing.T, label string, box Box, asc, desc, step float64) {
+	t.Helper()
+	const tol = 1e-6
+	for i, l := range box.Lines {
+		if want := asc + float64(i)*step; math.Abs(l.Y-want) > tol {
+			t.Errorf("%s строка %d: Y %.6f, нужно %.6f (hhea)", label, i, l.Y, want)
+		}
+	}
+	if want := asc + desc + float64(len(box.Lines)-1)*step; math.Abs(box.H-want) > tol {
+		t.Errorf("%s: H %.6f, нужно %.6f", label, box.H, want)
 	}
 }

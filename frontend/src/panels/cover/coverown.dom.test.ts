@@ -16,7 +16,7 @@ vi.mock('../../../wailsjs/go/app/App', async (orig) => {
 })
 const { default: InspectorCover } = await import('./InspectorCover.svelte')
 const { store } = await import('../../base/core/store.svelte')
-const { printList } = await import('../../shell/printprof/printlist.svelte')
+const { printList } = await import('../../output/printprof/printlist.svelte')
 
 afterEach(() => {
   cleanup()

@@ -361,7 +361,7 @@ func TestRenderBorderShrinksBig(t *testing.T) {
 	if want := renderPat(t, mk(small)); !samePix(got, want) {
 		t.Error("4200 px: лист не как с копией 4096 px")
 	}
-	if n := imgfile.DecodeBudget.Used(); n != 0 {
+	if n := imgfile.DecodeBudget().Used(); n != 0 {
 		t.Errorf("бюджет декода после листа: %d", n)
 	}
 }
@@ -378,7 +378,7 @@ func TestBorderBufBudget(t *testing.T) {
 	if err != nil || paint == nil {
 		t.Fatalf("121 Мп: %v, рисунок %v", err, paint != nil)
 	}
-	if n := imgfile.DecodeBudget.Used(); n != 0 {
+	if n := imgfile.DecodeBudget().Used(); n != 0 {
 		t.Fatalf("подготовка держит бюджет: %d", n)
 	}
 
@@ -386,7 +386,7 @@ func TestBorderBufBudget(t *testing.T) {
 	if err != nil || paint == nil {
 		t.Fatalf("малая: %v", err)
 	}
-	imgfile.DecodeBudget.Acquire(imgfile.DecodeBudgetPixels)
+	imgfile.DecodeBudget().Acquire(imgfile.DecodeBudgetPixels)
 	done := make(chan error, 1)
 	go func() { done <- paint(image.NewRGBA(canvas)) }()
 	select {
@@ -394,11 +394,11 @@ func TestBorderBufBudget(t *testing.T) {
 		t.Error("буфер поворота строится, когда бюджет занят целиком")
 	case <-time.After(50 * time.Millisecond):
 	}
-	imgfile.DecodeBudget.Release(imgfile.DecodeBudgetPixels)
+	imgfile.DecodeBudget().Release(imgfile.DecodeBudgetPixels)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if n := imgfile.DecodeBudget.Used(); n != 0 {
+	if n := imgfile.DecodeBudget().Used(); n != 0 {
 		t.Errorf("бюджет после укладки: %d", n)
 	}
 }

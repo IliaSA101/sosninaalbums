@@ -87,6 +87,16 @@ describe('MiniPanel: столбец (108)', () => {
     expect(panel().querySelectorAll('.sep')).toHaveLength(5)
   })
 
+  it('Shift зажат — столбец насквозь, корзина не ловит щелчок (владелец 2026-10-23, owner-ux §1 п. 5)', () => {
+    up(true, [['p1', 'a.jpg']])
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', shiftKey: true }))
+    flushSync()
+    expect(panel().classList.contains('through')).toBe(true)
+    panel().dispatchEvent(new PointerEvent('pointermove', { bubbles: true }))
+    flushSync()
+    expect(panel().classList.contains('through')).toBe(false)
+  })
+
   it('высота столбца в DOM совпадает с colHeight', () => {
     up(true, [['p1', 'a.jpg']])
     expect(panel().style.height).toBe(`${colHeight(8, 5)}px`)

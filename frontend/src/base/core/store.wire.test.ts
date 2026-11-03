@@ -224,3 +224,19 @@ describe('событие saved', () => {
     expect(store.view.spreads[0]).toBe(a)
   })
 })
+
+describe('событие drive:back (157)', () => {
+  it('показывает info-тост «Диск E: снова доступен — найдено N фото»', async () => {
+    const store = await load()
+    handlers['drive:back']({ drive: 'E', photos: 120 })
+    expect(store.toast?.kind).toBe('info')
+    expect(store.toast?.text).toBe('Диск E: снова доступен — найдено 120 фото')
+  })
+
+  it('два диска — по тосту на каждый, последний виден', async () => {
+    const store = await load()
+    handlers['drive:back']({ drive: 'E', photos: 2 })
+    handlers['drive:back']({ drive: 'G', photos: 1 })
+    expect(store.toast?.text).toBe('Диск G: снова доступен — найдено 1 фото')
+  })
+})

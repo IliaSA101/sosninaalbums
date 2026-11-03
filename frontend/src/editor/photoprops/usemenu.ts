@@ -1,6 +1,6 @@
 // Подменю вхождений фото (спека 106, 108): общее для меню ленты («Где стоит ▸») и меню холста («Где ещё стоит ▸»).
 // Чистая логика: строки подменю по ответу Api.WhereUsed и вхождение по щелчку; загрузка — uselist.svelte.ts.
-import type { MenuNode } from '../../base/ui/menulist'
+import type { MenuNode } from '../../base/popup/menulist'
 import { lineText, useLines, type UseLine, type UseSrc } from '../../base/words/whereuse'
 
 export const USES_MENU_MAX = 10 // строк в подменю; дальше серое «и ещё N»

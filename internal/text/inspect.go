@@ -181,6 +181,12 @@ func inspect(b []byte) (info FaceInfo, err error) {
 	if !trialDraw(sf) || expired(deadline) {
 		return FaceInfo{}, ErrFontBroken
 	}
+	// Отказ GPOS файл не отклоняет (кернинг — не повод терять гарнитуру, 161-13), а время
+	// разбора и запроса идёт в тот же срок импорта.
+	_ = trialKern(sf, tabs.bytes(b, "GPOS"))
+	if expired(deadline) {
+		return FaceInfo{}, ErrFontBroken
+	}
 	return info, nil
 }
 
@@ -348,6 +354,33 @@ func styleBits(os2, head []byte) (bold, italic, restricted bool) {
 	return bold, italic, restricted
 }
 
+// trialKern — пробный путь кернинга GPOS (161-13): разбор таблицы и запрос по trialText для
+// скриптов cyrl и latn, как это сделает первая раскладка. Ошибка — GPOS в работе не будет, но
+// файл годен. Переменная — для тестов.
+var trialKern = func(sf *sfnt.Font, gpos []byte) error {
+	if gpos == nil {
+		return nil
+	}
+	t, err := parseGPOS(gpos, int(sf.UnitsPerEm()))
+	if err != nil || t == nil {
+		return err
+	}
+	var buf sfnt.Buffer
+	var gs []sfnt.GlyphIndex
+	for _, r := range trialText {
+		if g, err := sf.GlyphIndex(&buf, r); err == nil && g != 0 {
+			gs = append(gs, g)
+		}
+	}
+	out := make([]int32, len(gs))
+	for _, script := range []string{"cyrl", "latn"} {
+		if err := t.gaps(gposTag(script), gs, out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // trialDraw — пробный путь «замер → растр» строкой trialText (082-21): обход
 // глифов не ловит контур, тяжёлый именно при растеризации. Переменная — для тестов.
 var trialDraw = func(sf *sfnt.Font) (ok bool) {
@@ -358,7 +391,7 @@ var trialDraw = func(sf *sfnt.Font) (ok bool) {
 	}()
 	fb, _ := font(Style{Font: DefaultFont})
 	st := Style{Font: DefaultFont, Size: 14, Color: "#000000", Align: "left"}
-	box := layoutWith(trialText, st, 200, sf, fb)
-	drawWith(image.NewRGBA(image.Rect(0, 0, 64, 64)), box, st, 0, 0, 0, 72, sf, fb)
+	box := layoutWith(trialText, st, 200, sf, fb, nil)
+	drawWith(image.NewRGBA(image.Rect(0, 0, 64, 64)), box, st, 0, 0, 0, 72, sf, fb, nil)
 	return true
 }

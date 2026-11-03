@@ -11,7 +11,7 @@ import (
 // Ход export_album с обработчиком — export_tools_test.go.
 func TestExportAllowStillAsks(t *testing.T) {
 	r := newRig(t, Options{}, "")
-	for _, name := range []string{"export_album", "open_album"} {
+	for _, name := range []string{"export_album"} {
 		sp := toolSpec{name: name, perm: prefs.ClassAskOnly}
 		for _, c := range []struct{ set, want string }{
 			{prefs.PermAllow, prefs.PermAsk},
@@ -32,19 +32,16 @@ func TestExportAllowStillAsks(t *testing.T) {
 	}
 }
 
-// TestExportAllowStillAsksHandler: с «Всегда» в config.json обработчик export_album и open_album всё равно
-// задаёт вопрос (Host.Ask вызван, AskReq.Always нет) — тихой ветки у класса «только с вопросом» нет.
+// TestExportAllowStillAsksHandler: с «Всегда» в config.json обработчик export_album всё равно задаёт вопрос
+// (Host.Ask вызван, AskReq.Always нет) — тихой ветки у класса «только с вопросом» нет. Открытие (класс O) — perms_open_test.go.
 func TestExportAllowStillAsksHandler(t *testing.T) {
 	r, cs := editRig(t, Options{}, func(e *editFake) {
 		e.ask = answerFixed(AskRes{Why: WhyAnswered, Album: AlbumRef{Key: "k", Rev: 1}, Files: 3})
 	})
-	for _, name := range []string{"export_album", "open_album"} {
+	for _, name := range []string{"export_album"} {
 		r.fx.edit.setPerm(name, prefs.PermAllow)
 		before := r.fx.edit.nAsk.Load()
 		args := exportArgs(r, nil)
-		if name == "open_album" {
-			args = map[string]any{}
-		}
 		tcall(t, cs, name, args)
 		if got := r.fx.edit.nAsk.Load() - before; got != 1 {
 			t.Errorf("%s с allow: вопросов %d, ждали 1", name, got)

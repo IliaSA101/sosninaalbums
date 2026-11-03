@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
-	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
@@ -34,7 +33,10 @@ type VigPlan struct {
 	HeadFit float64
 	PupilW  float64
 	// HeadStyle — стиль новой шапки (своего шаблона, 038); nil — по высоте полосы (headStyle).
+	// Кегль 0 (шаг макета, 164) — кегль по полосе плана, из HeadStyle берутся гарнитура и цвет.
 	HeadStyle *model.TextStyle
+	// HeadText — текст новой шапки (шаг макета, 164); "" — VigHeadText.
+	HeadText string
 }
 
 // TplText — подпись учителя каталожного шаблона по ID (vignette.Tpl.TText; "" — своей нет).
@@ -83,7 +85,7 @@ func SetVignette(p *model.Project, spreadID string, v model.Vignette, plan VigPl
 	if model.VigPlaces(v) > model.MaxPlaces {
 		return 0, errVigLimit()
 	}
-	fresh := !s.IsVignette() || s.Vig.Tpl != v.Tpl
+	fresh := !s.IsVignette() || s.Vig.Tpl != v.Tpl || own != nil && own.New
 	var was *VigPlan // план прежнего шаблона — кегль шапки по его полосе (один Build)
 	if fresh && s.IsVignette() && s.VigHead(s.Vig.Head) != nil {
 		w := plan(p, s, *s.Vig)
@@ -91,25 +93,19 @@ func SetVignette(p *model.Project, spreadID string, v model.Vignette, plan VigPl
 	}
 	if fresh && tplText != nil { // до своего шаблона: его подпись (если есть) важнее
 		tt := ""
-		if own == nil {
+		if own == nil || own.Shape == nil { // каталог: шаг макета без Shape несёт только оформление
 			tt = tplText(v.Tpl)
 		}
 		v.TText = SwapTText(v.TText, tt)
 	}
 	p.Freeze(s)
 	var headSt *model.TextStyle
-	if fresh && own != nil && own.Style != nil {
-		if c := own.Style.Caps; c != nil {
-			cc := *c
-			s.Caps = &cc
+	headText := ""
+	if fresh && own != nil {
+		headText = own.HeadText
+		if own.Style != nil {
+			headSt = applyOwnStyle(p, s, &v, own.Style)
 		}
-		if own.Style.TText != "" {
-			v.TText = own.Style.TText
-		}
-		if own.Style.Shape != "" || own.Style.Round != 0 {
-			v.Shape, v.Round = own.Style.Shape, own.Style.Round
-		}
-		headSt = own.Style.Head
 	}
 	reshape := fresh || s.Vig.Shape != v.Shape || s.Vig.Round != v.Round
 	if s.Caps == nil {
@@ -125,29 +121,23 @@ func SetVignette(p *model.Project, spreadID string, v model.Vignette, plan VigPl
 	} else if s.Vars == nil {
 		s.Vars = inheritVars(p, s)
 	}
+	byPlan := headSt != nil && headSt.Size == 0 // шаг макета (164): гарнитура и цвет, кегль — по полосе плана
 	if h := s.VigHead(v.Head); h != nil && headSt != nil {
-		h.Style = *headSt
+		h.Style = restyleHead(h.Style, *headSt)
 	}
 	pl := plan(p, s, v)
-	pl.HeadStyle = headSt
-	dropHead(s, &v, pl, fresh)
-	if h := s.VigHead(v.Head); h != nil && was != nil && headSt == nil {
+	pl.HeadStyle, pl.HeadText = headSt, headText
+	dropHead(s, &v, pl, fresh, headText)
+	h := s.VigHead(v.Head)
+	if h != nil && was != nil && (headSt == nil || byPlan) {
 		refitHead(h, *was, pl)
 	}
+	// Шапка шаблонная: текст шага вместо неё — на новом листе или пока поля шапки пусты; вписанные
+	// фотографом поля (Vars) шапку «Заголовок · Год» держат, смена шаблона их не прячет.
+	if h != nil && headText != "" && h.Text == model.VigHeadText && (own.New || s.Vars == nil || *s.Vars == (model.Vars{})) {
+		h.Text = headText
+	}
 	return placeVignette(p, s, v, pl, true, reshape)
-}
-
-// dropHead — смена шаблона (fresh) на шаблон без шапки (у плана pl её нет) снимает шапку листа,
-// если её текст шаблонный (решение №44 0.10: «убрать насовсем — шаблон без шапки»), и v.Head;
-// правленая пользователем остаётся. Поля шапки (Vars) не трогаются.
-func dropHead(s *model.Spread, v *model.Vignette, pl VigPlan, fresh bool) {
-	if !fresh || pl.Head != nil {
-		return
-	}
-	if h := s.VigHead(v.Head); h != nil && h.Text == model.VigHeadText {
-		s.Texts = slices.DeleteFunc(s.Texts, func(t *model.TextBlock) bool { return t == h })
-		v.Head = ""
-	}
 }
 
 // SwapTText — подпись учителя при смене шаблона (049 §3.1): шаблон со своей подписью tpl
@@ -161,26 +151,6 @@ func SwapTText(cur, tpl string) string {
 		return model.TeacherCaption
 	}
 	return cur
-}
-
-// refitHead — кегль шапки h при смене шаблона (049 §3.2): кегль «по полосе» прежнего плана
-// was встаёт по полосе нового cur; свой только уменьшается — до кегля новой полосы, если она
-// мельче прежней (на такой же полосе свой кегль влезал, решение №177). Прежней полосы нет —
-// свой не больше кегля новой. Гарнитура, цвет, выравнивание и текст — прежние.
-func refitHead(h *model.TextBlock, was, cur VigPlan) {
-	if cur.Head == nil {
-		return
-	}
-	size, old := headStyle(*cur.Head, cur.HeadCell, cur.HeadFit).Size, math.Inf(1)
-	if was.Head != nil {
-		old = headStyle(*was.Head, was.HeadCell, was.HeadFit).Size
-	}
-	switch {
-	case h.Style.Size == old:
-		h.Style.Size = size
-	case size < old:
-		h.Style.Size = min(h.Style.Size, size)
-	}
 }
 
 // SetupVignette — «Применить» окна «Настроить виньетку» (031 dialog §5): поля шапки листа
@@ -344,7 +314,7 @@ func placeVignette(p *model.Project, s *model.Spread, v model.Vignette, plan Vig
 	s.Photos = model.GridPhotos(s)
 	if plan.Head != nil && (head != nil || mkHead) {
 		if head == nil {
-			head = &model.TextBlock{ID: model.NewID(), Text: model.VigHeadText, Style: plan.headStyleOr()}
+			head = &model.TextBlock{ID: model.NewID(), Text: cmp.Or(plan.HeadText, model.VigHeadText), Style: plan.headStyleOr()}
 			s.Texts = append(s.Texts, head)
 		}
 		putHead(head, *plan.Head)
@@ -375,37 +345,6 @@ func vigShape(pl *model.Place, old model.Place, keep bool, v model.Vignette) {
 	case pl.Role != model.RoleGroup:
 		pl.Shape, pl.Round = v.Shape, v.Round
 	}
-}
-
-// headStyleOr — стиль новой шапки: шаблона, иначе по высоте полосы.
-func (pl VigPlan) headStyleOr() model.TextStyle {
-	if pl.HeadStyle != nil {
-		return *pl.HeadStyle
-	}
-	return headStyle(*pl.Head, pl.HeadCell, pl.HeadFit)
-}
-
-// headStyle — стиль новой шапки: шрифт по умолчанию, по центру, кегль от высоты полосы band
-// (две строки в полосе), 12…48 пт. Шапка в ряду (cell, 049 §3.2) высокая и узкая: кегль — fit,
-// замер ядра (VigPlan.HeadFit); без замера (0) — ещё и не больше ширины/9.
-func headStyle(band layout.Rect, cell bool, fit float64) model.TextStyle {
-	mm := band.H / 2.6
-	if cell {
-		mm = min(mm, band.W/9)
-	}
-	st := model.PlainStyle()
-	st.Size = math.Round(geom.ClampF(mm/0.3528, 12, 48))
-	if cell && fit > 0 {
-		st.Size = fit
-	}
-	return model.ClampStyle(st)
-}
-
-// putHead ставит рамку шапки в полосу band (угол и ширина полосы); текст и стиль не
-// трогаются (031 §5, шаг 6). Кегль новой шапки — от высоты полосы (две строки), поэтому
-// текст полосу и заполняет; правленый текст «Применить» не сдвигает.
-func putHead(t *model.TextBlock, band layout.Rect) {
-	t.X, t.Y, t.W, t.Auto = geom.Round2(band.X), geom.Round2(band.Y), geom.Round2(band.W), false
 }
 
 // Relay — пересборка нетронутых виньеток при смене настроек листа или стиля подписей

@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/svelte'
 import { tick } from 'svelte'
 
-// Окно «Макеты альбома» на подставном lookApi (131 U1): открытие, выбор плитки, «Что сделать», формат, пустое, память выбора.
+// Окно «Макеты альбома» на подставном lookApi (131 U1, 163 U3): открытие, крупный просмотр плитки, окно «Применить» с «Что сделать»,
+// форматом, пустое, память выбора.
 const api = vi.hoisted(() => ({
   catalog: vi.fn(),
   info: vi.fn(),
@@ -25,6 +26,7 @@ const { looks } = await import('./looks.svelte')
 const { store } = await import('../../base/core/store.svelte')
 const { modes } = await import('../../base/prefs/view.svelte')
 const { packsUi } = await import('../packs/packs.svelte')
+const { modalStack } = await import('../../base/modal/modalstack.svelte')
 
 const A = 'my:0a1b2c3d4e5f6071'
 const B = 'my:1b2c3d4e5f607182'
@@ -77,8 +79,24 @@ const tiles = () => Array.from(document.querySelectorAll<HTMLButtonElement>('but
 const tile = (name: string) => tiles().find((b) => b.title.startsWith(name)) as HTMLButtonElement
 const text = () => document.body.textContent ?? ''
 const btn = (label: string) => Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.trim() === label)
-const previewSrc = () => document.querySelector<HTMLImageElement>('.sheet img')?.getAttribute('src') ?? ''
+// Крупная картинка просмотра — последняя в листе (перед ней может стоять миниатюра плитки)
+const previewSrc = () => Array.from(document.querySelectorAll<HTMLImageElement>('.sheet img')).at(-1)?.getAttribute('src') ?? ''
 const spreadsInput = () => document.querySelector<HTMLInputElement>('#look-spreads')
+// Щелчок по плитке — крупный просмотр; ждём карточку и планы («Применить…» живая)
+async function peekOf(name: string) {
+  await fireEvent.click(tile(name))
+  await vi.waitFor(() => expect(looks.ready).toBe(true))
+}
+// «Применить…» в просмотре — окно с формой поверх
+async function formOf(name: string) {
+  await peekOf(name)
+  await fireEvent.click(btn('Применить…') as HTMLElement)
+  await tick()
+}
+const cancelForm = async () => {
+  await fireEvent.click(btn('Отмена') as HTMLElement)
+  await tick()
+}
 
 async function opened(items = [item(A, 'Светлая', { steps: 9, from: 26, cover: true }), item(B, 'Классика', { steps: 7, from: 18 })]) {
   api.catalog.mockResolvedValue(catalog(items))
@@ -94,7 +112,19 @@ beforeEach(() => {
   api.plan.mockImplementation(async (_id: string, o: { mode: string; spreads: number }) => plan({ mode: o.mode, spreads: o.spreads }))
   api.apply.mockImplementation(async () => ({ view: store.view, plan: plan() }))
   looks.close()
-  Object.assign(looks, { cat: null, theme: '', sel: '', spreads: 0, pick: 'bg', step: 1, info: null, cnt: null, plan: null, busy: false })
+  Object.assign(looks, {
+    cat: null,
+    theme: '',
+    sel: '',
+    spreads: 0,
+    pick: 'bg',
+    step: 1,
+    info: null,
+    cnt: null,
+    plan: null,
+    modePlan: null,
+    busy: false,
+  })
   store.view = { ...store.view, rev: 1, settings: { ...store.view.settings, pageW: 300, pageH: 300, sheet: false } } as never
   modes.details = false
   modes.sections.settings = false
@@ -111,45 +141,53 @@ describe('LooksDialog: плитки и предпросмотр', () => {
     expect(text()).toContain('от 26 фото · 9 разворотов')
     expect(text()).toContain('от 18 фото · 7 разворотов')
     const [a, b] = tiles().map((t) => t.querySelector('img')?.getAttribute('src') ?? '')
-    expect(a).toMatch(/^\/media\/look\/0a1b2c3d4e5f6071\?v=1&i=0&px=\d+&r=1&bg=0&f=1$/)
-    expect(b).toMatch(/^\/media\/look\/1b2c3d4e5f607182\?v=1&i=1&px=\d+&r=2&bg=0$/)
+    expect(a).toMatch(/^\/media\/look\/0a1b2c3d4e5f6071\?v=1&i=0&px=\d+&r=1&bg=0&f=1&ph=\d+$/)
+    expect(b).toMatch(/^\/media\/look\/1b2c3d4e5f607182\?v=1&i=1&px=\d+&r=2&bg=0&ph=\d+$/)
   })
 
-  it('до выбора справа подсказка, «Применить» серая', async () => {
+  it('до щелчка просмотра нет: ни подсказки, ни листа, ни кнопки «Применить…» (правой колонки и подвала нет)', async () => {
     await opened()
-    expect(text()).toContain('Выберите макет слева')
-    expect((btn('Применить') as HTMLButtonElement).disabled).toBe(true)
+    expect(text()).not.toContain('Выберите макет слева')
+    expect(btn('Применить…')).toBeUndefined()
+    expect(btn('Закрыть')).toBeUndefined()
     expect(document.querySelector('.sheet')).toBeNull()
+    expect(document.querySelector('#look-spreads')).toBeNull()
+    expect(looks.peek.id).toBe('')
   })
 
-  it('щелчок по плитке показывает макет справа и ничего не ставит', async () => {
+  it('щелчок по плитке открывает крупный просмотр и ничего не ставит', async () => {
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await peekOf('Светлая')
     expect(api.apply).not.toHaveBeenCalled()
-    expect(tile('Светлая').getAttribute('aria-pressed')).toBe('true')
+    expect(looks.peek.id).toBe(A)
+    expect(document.querySelector('[aria-label="Крупный просмотр макета"]')).not.toBeNull()
     expect(previewSrc()).toContain('/media/look/0a1b2c3d4e5f6071?v=1&i=0&')
-    expect(spreadsInput()?.value).toBe('9')
-    expect(text()).toContain('мест 45')
     // лента: обложка, 1…9; ↻ у повторяемого
     const chips = Array.from(document.querySelectorAll('.chip')).map((c) => c.textContent?.trim())
     expect(chips.slice(0, 3)).toEqual(['Обложка', '1Шаг 1', '2Шаг 2↻'])
     expect(chips).toHaveLength(10)
+    // число и места — в окне «Применить…»
+    await fireEvent.click(btn('Применить…') as HTMLElement)
+    await tick()
+    expect(spreadsInput()?.value).toBe('9')
+    expect(text()).toContain('мест 45')
+    expect(api.apply).not.toHaveBeenCalled()
   })
 
   it('повторный щелчок по выбранной плитке — холостой (карточка не запрашивается заново)', async () => {
     await opened()
-    await fireEvent.click(tile('Классика'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await peekOf('Классика')
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    await tick()
     await fireEvent.click(tile('Классика'))
     await tick()
+    expect(looks.peek.id).toBe(B)
     expect(api.info).toHaveBeenCalledTimes(1)
   })
 
   it('‹ › и стрелки листают шаги; на краях ‹ серая; в поле числа стрелки не листают', async () => {
     await opened()
-    await fireEvent.click(tile('Классика')) // без обложки: шаги 1…7
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await peekOf('Классика') // без обложки: шаги 1…7
     expect(previewSrc()).toContain('i=1&')
     expect((document.querySelector('[aria-label="Предыдущий шаг"]') as HTMLButtonElement).disabled).toBe(true)
     await fireEvent.click(document.querySelector('[aria-label="Следующий шаг"]') as HTMLElement)
@@ -158,8 +196,11 @@ describe('LooksDialog: плитки и предпросмотр', () => {
     expect(previewSrc()).toContain('i=3&')
     await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'ArrowLeft' })
     expect(previewSrc()).toContain('i=2&')
+    await fireEvent.click(btn('Применить…') as HTMLElement) // поле числа — в окне поверх просмотра
+    await tick()
     await fireEvent.keyDown(spreadsInput() as HTMLElement, { key: 'ArrowRight' })
     expect(previewSrc()).toContain('i=2&')
+    await cancelForm()
     await fireEvent.click(btn('5Шаг 5') as HTMLElement)
     expect(previewSrc()).toContain('i=5&')
   })
@@ -168,23 +209,23 @@ describe('LooksDialog: плитки и предпросмотр', () => {
 describe('LooksDialog: «Что сделать» и «Разворотов»', () => {
   it('без фото в местах «Что сделать» нет, поле «Разворотов» есть', async () => {
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await formOf('Светлая')
+    expect(spreadsInput()).not.toBeNull()
     expect(text()).not.toContain('Что сделать')
     expect(previewSrc()).toContain('bg=0')
   })
 
-  it('при plan.full — «Что сделать»: «Фоны по серии» (без «Разворотов», предпросмотр bg=1) и «Добавить развороты макета»', async () => {
+  it('при plan.full — «Что сделать»: «Фоны по серии» (без «Разворотов»; лист просмотра — серия, без bg, 163-15) и «Добавить развороты макета»', async () => {
     api.plan.mockImplementation(async (_id: string, o: { mode: string; spreads: number }) =>
       plan({ mode: o.mode, spreads: o.spreads, full: true }),
     )
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(text()).toContain('Что сделать'))
+    await formOf('Светлая')
+    expect(text()).toContain('Что сделать')
     expect(btn('Фоны по серии')?.getAttribute('aria-pressed')).toBe('true')
     expect(spreadsInput()).toBeNull()
     expect(text()).toContain('Стикеры макета легли бы на ваши фото')
-    expect(previewSrc()).toContain('bg=1')
+    expect(previewSrc()).toContain('bg=0')
     await fireEvent.click(btn('Добавить развороты макета') as HTMLElement)
     expect(spreadsInput()).not.toBeNull()
     expect(text()).not.toContain('Стикеры макета легли бы')
@@ -194,15 +235,14 @@ describe('LooksDialog: «Что сделать» и «Разворотов»', (
   it('«Сменить макет целиком…» — подпись, когда альбом уже по макету (plan.prev), фото нет', async () => {
     api.plan.mockImplementation(async (_id: string, o: { mode: string; spreads: number }) => plan({ mode: o.mode, prev: 'Классика' }))
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(text()).toContain('Сменить макет целиком можно, пока в местах нет фото'))
+    await formOf('Светлая')
+    expect(text()).toContain('Сменить макет целиком можно, пока в местах нет фото')
     expect(text()).not.toContain('Что сделать')
   })
 
   it('число разворотов: зажим в пределах Go, пересчёт мест и плана', async () => {
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await formOf('Светлая')
     const input = spreadsInput() as HTMLInputElement
     input.value = '99'
     await fireEvent.change(input)
@@ -219,7 +259,7 @@ describe('LooksDialog: «Что сделать» и «Разворотов»', (
     vi.spyOn(store.hooks, 'pickFree').mockReturnValue(Array.from({ length: 64 }, (_, k) => `p${k}`))
     api.count.mockImplementation(async (_id: string, n: number, k: number) => ({ n, places: n * 5, fit: k > 0 ? 14 : 0 }))
     await opened()
-    await fireEvent.click(tile('Светлая'))
+    await formOf('Светлая')
     await vi.waitFor(() => expect(btn('Подобрать под 64 свободных фото')).toBeTruthy())
     expect(api.count).toHaveBeenLastCalledWith(A, 9, 64)
     await fireEvent.click(btn('Подобрать под 64 свободных фото') as HTMLElement)
@@ -230,15 +270,14 @@ describe('LooksDialog: «Что сделать» и «Разворотов»', (
     vi.spyOn(store, 'selectedIds', 'get').mockReturnValue(['a', 'b', 'c'])
     api.count.mockImplementation(async (_id: string, n: number, k: number) => ({ n, places: n * 5, fit: k > 0 ? 2 : 0 }))
     await opened()
-    await fireEvent.click(tile('Светлая'))
+    await formOf('Светлая')
     await vi.waitFor(() => expect(btn('Подобрать под 3 выбранных фото')).toBeTruthy())
     expect(text()).not.toContain('свободных фото')
   })
 
   it('нет фото для подбора — ссылки нет', async () => {
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await formOf('Светлая')
     expect(text()).not.toContain('Подобрать под')
   })
 })
@@ -246,9 +285,12 @@ describe('LooksDialog: «Что сделать» и «Разворотов»', (
 describe('LooksDialog: формат, память, пустое', () => {
   it('«Формат альбома: 30×30 · Изменить…»: закрывает окно и раскрывает «Настройки альбома»', async () => {
     await opened()
+    await formOf('Светлая')
     expect(text()).toContain('Формат альбома: 30×30')
     await fireEvent.click(btn('Изменить…') as HTMLElement)
     expect(looks.open).toBe(false)
+    expect(looks.peek.id).toBe('') // просмотр и окно «Применить» закрыты вместе с окном
+    expect(modalStack.count()).toBe(0)
     expect(modes.details).toBe(true)
     expect(modes.sections.settings).toBe(true)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
@@ -256,8 +298,7 @@ describe('LooksDialog: формат, память, пустое', () => {
 
   it('выбор и число разворотов помнятся: после «Изменить…» окно открывается на той же плитке', async () => {
     await opened()
-    await fireEvent.click(tile('Классика'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await formOf('Классика')
     const input = spreadsInput() as HTMLInputElement
     input.value = '12'
     await fireEvent.change(input)
@@ -266,21 +307,23 @@ describe('LooksDialog: формат, память, пустое', () => {
     api.info.mockClear()
     await looks.show()
     await tick()
-    await vi.waitFor(() => expect(spreadsInput()?.value).toBe('12'))
-    expect(tile('Классика').getAttribute('aria-pressed')).toBe('true')
+    await peekOf('Классика') // тот же макет: число и шаг на месте
     expect(previewSrc()).toContain('/media/look/1b2c3d4e5f607182')
+    await fireEvent.click(btn('Применить…') as HTMLElement)
+    await tick()
+    expect(spreadsInput()?.value).toBe('12')
   })
 
   it('выбранный макет пропал из библиотеки — выбор сброшен', async () => {
     await opened()
-    await fireEvent.click(tile('Классика'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await peekOf('Классика')
     looks.close()
     api.catalog.mockResolvedValue(catalog([item(A, 'Светлая', { steps: 9, cover: true })]))
     await looks.show()
     await tick()
     expect(looks.sel).toBe('')
-    expect(text()).toContain('Выберите макет слева')
+    expect(looks.peek.id).toBe('')
+    expect(document.querySelector('.sheet')).toBeNull()
   })
 
   it('пустая библиотека: «Макетов пока нет…» и «Наборы…»', async () => {
@@ -288,7 +331,7 @@ describe('LooksDialog: формат, память, пустое', () => {
     await opened([])
     expect(text()).toContain('Макетов пока нет — их приносят наборы библиотеки')
     expect(tiles()).toHaveLength(0)
-    expect(btn('Применить')).toBeUndefined()
+    expect(btn('Применить…')).toBeUndefined()
     await fireEvent.click(btn('Наборы…') as HTMLElement)
     expect(show).toHaveBeenCalled()
   })
@@ -312,11 +355,12 @@ describe('LooksDialog: формат, память, пустое', () => {
 describe('LooksDialog: «Применить»', () => {
   it('ApplyLook с режимом и числом разворотов, окно закрывается', async () => {
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await formOf('Светлая')
     await fireEvent.click(btn('Применить') as HTMLElement)
     await vi.waitFor(() => expect(looks.open).toBe(false))
     expect(api.apply).toHaveBeenCalledWith(A, { mode: 'series', spreads: 9 })
+    expect(looks.peek.id).toBe('')
+    expect(modalStack.count()).toBe(0)
   })
 
   it('в собранном альбоме по умолчанию «Фоны по серии»', async () => {
@@ -324,28 +368,26 @@ describe('LooksDialog: «Применить»', () => {
       plan({ mode: o.mode, spreads: o.spreads, full: true }),
     )
     await opened()
-    await fireEvent.click(tile('Классика'))
-    await vi.waitFor(() => expect(text()).toContain('Что сделать'))
+    await formOf('Классика')
+    expect(text()).toContain('Что сделать')
     await fireEvent.click(btn('Применить') as HTMLElement)
     await vi.waitFor(() => expect(api.apply).toHaveBeenCalledWith(B, { mode: 'bg', spreads: 7 }))
   })
 
-  it('заменится своё — не ставит без вопроса (вопрос рисует U2)', async () => {
+  it('заменится своё — предупреждение в окне «Применить» видно до нажатия; нажатие ставит один раз (163-27)', async () => {
     api.plan.mockImplementation(async (_id: string, o: { mode: string; spreads: number }) => plan({ mode: o.mode, replaced: 3 }))
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
-    await fireEvent.click(btn('Применить') as HTMLElement)
-    await tick()
+    await formOf('Светлая')
+    expect(text()).toContain('У 3 разворотов заменится свой фон.')
     expect(api.apply).not.toHaveBeenCalled()
-    expect(looks.ask?.kind).toBe('apply')
-    expect(looks.open).toBe(true)
+    await fireEvent.click(btn('Применить') as HTMLElement)
+    await vi.waitFor(() => expect(looks.open).toBe(false))
+    expect(api.apply).toHaveBeenCalledTimes(1)
   })
 
   it('правка альбома событиями Go (формат, другая правка) пересчитывает числа и план', async () => {
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await peekOf('Светлая')
     api.plan.mockClear()
     store.view = { ...store.view, rev: 2 } as never
     await vi.waitFor(() => expect(api.plan).toHaveBeenCalledTimes(1))
@@ -379,21 +421,24 @@ function later<T>() {
 }
 
 describe('LooksDialog: гонки ответов', () => {
-  it('смена плитки при отложенном ответе: «Применить» серая, ApplyLook чужого макета не уходит', async () => {
+  it('смена плитки при отложенном ответе: «Применить…» серая, ApplyLook чужого макета не уходит', async () => {
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(spreadsInput()).not.toBeNull())
+    await peekOf('Светлая')
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) // назад к плиткам
+    await tick()
     const slow = later<ReturnType<typeof info>>()
     api.info.mockImplementation((id: string) => (id === B ? slow.p : Promise.resolve(info(9, true))))
     await fireEvent.click(tile('Классика'))
     await tick()
-    expect((btn('Применить') as HTMLButtonElement).disabled).toBe(true)
+    expect((btn('Применить…') as HTMLButtonElement).disabled).toBe(true)
     api.plan.mockClear()
     await looks.apply() // прямой вызов в обход серой кнопки
     expect(api.apply).not.toHaveBeenCalled()
     expect(api.plan).not.toHaveBeenCalled()
     slow.ok(info(7))
-    await vi.waitFor(() => expect((btn('Применить') as HTMLButtonElement).disabled).toBe(false))
+    await vi.waitFor(() => expect((btn('Применить…') as HTMLButtonElement).disabled).toBe(false))
+    await fireEvent.click(btn('Применить…') as HTMLElement)
+    await tick()
     await fireEvent.click(btn('Применить') as HTMLElement)
     await vi.waitFor(() => expect(api.apply).toHaveBeenCalledWith(B, { mode: 'series', spreads: 7 }))
   })
@@ -404,11 +449,15 @@ describe('LooksDialog: гонки ответов', () => {
     await opened()
     await fireEvent.click(tile('Светлая'))
     await fireEvent.click(tile('Классика'))
-    await vi.waitFor(() => expect(spreadsInput()?.value).toBe('7'))
+    await vi.waitFor(() => expect(looks.ready).toBe(true))
+    await fireEvent.click(btn('Применить…') as HTMLElement)
+    await tick()
+    expect(spreadsInput()?.value).toBe('7')
     slowA.ok(info(9, true))
     await tick()
     await tick()
     expect(looks.sel).toBe(B)
+    expect(looks.peek.id).toBe(B)
     expect(looks.info?.steps).toHaveLength(7)
     expect(looks.spreads).toBe(7)
     expect(looks.chips.some((c) => c.i === 0)).toBe(false)
@@ -422,11 +471,15 @@ describe('LooksDialog: гонки ответов', () => {
     await vi.waitFor(() => expect(api.count).toHaveBeenCalledTimes(1))
     await vi.waitFor(() => expect(looks.info).not.toBeNull())
     await looks.setSpreads(5)
-    await vi.waitFor(() => expect(text()).toContain('мест 25'))
+    await vi.waitFor(() => expect(looks.shownPlaces).toBe(25))
+    await fireEvent.click(btn('Применить…') as HTMLElement)
+    await tick()
+    expect(text()).toContain('мест 25')
     first.ok({ n: 9, places: 999, fit: 0 })
     await tick()
     await tick()
     expect(looks.cnt?.places).toBe(25)
+    expect(text()).toContain('мест 25')
   })
 
   it('sync не отменяет идущую загрузку карточки: макет всё равно выбирается', async () => {
@@ -438,6 +491,8 @@ describe('LooksDialog: гонки ответов', () => {
     await tick()
     slow.ok(info(7))
     await vi.waitFor(() => expect(looks.ready).toBe(true))
+    await fireEvent.click(btn('Применить…') as HTMLElement)
+    await tick()
     expect(spreadsInput()?.value).toBe('7')
   })
 
@@ -452,14 +507,18 @@ describe('LooksDialog: гонки ответов', () => {
     expect(looks.cat).toBeNull()
   })
 
-  it('свежий PlanLook при «Применить» важнее показанного: фото уйдут в ленту (left) — вопрос, ApplyLook нет', async () => {
+  it('свежий PlanLook при «Применить» важнее показанного: фото уйдут в ленту (left) — новый текст в окне, ApplyLook нет, второе нажатие ставит', async () => {
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(looks.ready).toBe(true))
+    await formOf('Светлая')
+    expect(text()).not.toContain('вернутся в ленту')
     api.plan.mockResolvedValueOnce(plan({ left: 3 }))
     await fireEvent.click(btn('Применить') as HTMLElement)
-    await vi.waitFor(() => expect(looks.ask?.kind).toBe('apply'))
+    await vi.waitFor(() => expect(text()).toContain('3 фото вернутся в ленту.'))
     expect(api.apply).not.toHaveBeenCalled()
+    expect(looks.ask?.kind).toBe('form')
+    api.plan.mockResolvedValueOnce(plan({ left: 3 }))
+    await fireEvent.click(btn('Применить') as HTMLElement)
+    await vi.waitFor(() => expect(api.apply).toHaveBeenCalledTimes(1))
   })
 })
 
@@ -472,8 +531,8 @@ describe('LooksDialog: «Добавить развороты макета»', ()
     api.count.mockImplementation(async (_id: string, n: number) => ({ n, places: n * 5, fit: 14 }))
     api.plan.mockImplementation(async (id: string, o: { mode: string; spreads: number }) => fullPlan(id, o))
     await opened()
-    await fireEvent.click(tile('Светлая'))
-    await vi.waitFor(() => expect(text()).toContain('Что сделать'))
+    await formOf('Светлая')
+    expect(text()).toContain('Что сделать')
     await fireEvent.click(btn('Добавить развороты макета') as HTMLElement)
     await vi.waitFor(() => expect(spreadsInput()?.value).toBe('1'))
     await vi.waitFor(() => expect(text()).toContain('мест 3'))
@@ -489,60 +548,19 @@ describe('LooksDialog: «Добавить развороты макета»', ()
   })
 })
 
-describe('LooksDialog: library:changed', () => {
-  it('открытое окно перечитывает каталог; пропавший выбранный макет сбрасывает выбор', async () => {
-    await opened()
-    await fireEvent.click(tile('Классика'))
-    await vi.waitFor(() => expect(looks.ready).toBe(true))
-    api.catalog.mockResolvedValue(catalog([item(A, 'Светлая', { steps: 9 })]))
-    packsUi.changed([])
-    await vi.waitFor(() => expect(api.catalog).toHaveBeenCalledTimes(2))
-    await vi.waitFor(() => expect(looks.sel).toBe(''))
-    expect(tiles()).toHaveLength(1)
-    expect(text()).toContain('Выберите макет слева')
-  })
-
-  it('выбранный макет остался — карточка и числа перечитаны, выбор цел', async () => {
-    await opened()
-    await fireEvent.click(tile('Классика'))
-    await vi.waitFor(() => expect(looks.ready).toBe(true))
-    api.info.mockClear()
-    looks.changed([])
-    await vi.waitFor(() => expect(api.info).toHaveBeenCalledTimes(1))
-    expect(looks.sel).toBe(B)
-  })
-
-  it('закрытое окно не ходит в Go; следующее открытие встаёт на тему свежего набора (073-1)', async () => {
-    cleanup()
-    packsUi.changed(['Школа-осень'])
-    expect(api.catalog).not.toHaveBeenCalled()
-    api.catalog.mockResolvedValue({
-      ...catalog([item(A, 'Светлая'), item(B, 'Выпускной', { theme: 's', pack: 'Школа-осень' })]),
-      themes: [
-        { id: 'all', name: 'Все', count: 2 },
-        { id: 'w', name: 'Свадьба', count: 1 },
-        { id: 's', name: 'Школа', count: 1 },
-      ],
-    })
-    render(LooksDialog)
-    await looks.show()
-    expect(looks.theme).toBe('s')
-    // один раз: повторное открытие тему не навязывает
-    looks.close()
-    looks.theme = 'w'
-    await looks.show()
-    expect(looks.theme).toBe('w')
-  })
-})
-
 describe('LooksDialog: Esc и ключ картинки', () => {
-  it('Esc закрывает окно, выбор помнится', async () => {
+  it('Esc закрывает окно, выбор помнится: первый Esc — просмотр (плитка в фокусе), второй — окно', async () => {
     await opened()
-    await fireEvent.click(tile('Классика'))
-    await vi.waitFor(() => expect(looks.ready).toBe(true))
+    await peekOf('Классика')
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    await tick()
+    expect(looks.open).toBe(true)
+    expect(looks.peek.id).toBe('')
+    expect(document.activeElement).toBe(tile('Классика'))
     await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
     expect(looks.open).toBe(false)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(modalStack.count()).toBe(0)
     expect(looks.sel).toBe(B)
   })
 

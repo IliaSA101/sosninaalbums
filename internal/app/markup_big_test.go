@@ -142,11 +142,11 @@ func TestServeGuideBudgetCancel(t *testing.T) {
 	if _, err := a.setSpreadGuide(testkit.JPEG(t, testkit.TempDir(t), "big.jpg", 5000, 3000)); err != nil {
 		t.Fatal(err)
 	}
-	imgfile.DecodeBudget.Acquire(imgfile.DecodeBudgetPixels)
+	imgfile.DecodeBudget().Acquire(imgfile.DecodeBudgetPixels)
 	held := true
 	t.Cleanup(func() {
 		if held {
-			imgfile.DecodeBudget.Release(imgfile.DecodeBudgetPixels)
+			imgfile.DecodeBudget().Release(imgfile.DecodeBudgetPixels)
 		}
 	})
 	limit := testkit.Limit(2 * time.Second)
@@ -174,7 +174,7 @@ func TestServeGuideBudgetCancel(t *testing.T) {
 	defer stop()
 	first := make(chan int, 1)
 	go func() { first <- serve(live) }()
-	for deadline := time.Now().Add(limit); built.Load() < 2 || imgfile.DecodeBudget.Waiting() < 1; {
+	for deadline := time.Now().Add(limit); built.Load() < 2 || imgfile.DecodeBudget().Waiting() < 1; {
 		if time.Now().After(deadline) {
 			t.Fatal("первый запрос не встал в очередь бюджета")
 		}
@@ -200,12 +200,12 @@ func TestServeGuideBudgetCancel(t *testing.T) {
 		t.Fatalf("закрытые запросы попали в журнал: %q", s)
 	}
 
-	imgfile.DecodeBudget.Release(imgfile.DecodeBudgetPixels)
+	imgfile.DecodeBudget().Release(imgfile.DecodeBudgetPixels)
 	held = false
 	if code := serve(context.Background()); code != http.StatusOK || built.Load() != 3 {
 		t.Fatalf("после освобождения бюджета: %d, построений %d", code, built.Load())
 	}
-	if u := imgfile.DecodeBudget.Used(); u != 0 {
+	if u := imgfile.DecodeBudget().Used(); u != 0 {
 		t.Fatalf("бюджет не возвращён: %d", u)
 	}
 }

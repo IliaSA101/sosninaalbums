@@ -3,7 +3,9 @@ package text
 import (
 	"image"
 	"math"
+	"unicode/utf8"
 
+	xfont "golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
 )
@@ -17,9 +19,9 @@ import (
 func Draw(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int) {
 	st = st.Clamped()
 	if c := usableCustom(st.Font); c != nil {
-		sf, _ := font(st)
+		sf, _, d := fontData(st)
 		fb, _ := fallback(st)
-		if guarded(func() { drawWith(dst, b, st, x0, y0, deg, dpi, sf, fb) }) {
+		if guarded(func() { drawWith(dst, b, st, x0, y0, deg, dpi, sf, fb, d) }) {
 			return
 		}
 		// Уже нарисованные глифы остаются: после Inspect (все глифы и пробная
@@ -28,11 +30,12 @@ func Draw(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int) {
 	}
 	sf, _ := font(st)
 	fb, _ := fallback(st)
-	drawWith(dst, b, st, x0, y0, deg, dpi, sf, fb)
+	drawWith(dst, b, st, x0, y0, deg, dpi, sf, fb, nil)
 }
 
 // drawWith — Draw заданным шрифтом sf и запасным fb (может быть nil); st уже Clamped.
-func drawWith(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int, sf, fb *sfnt.Font) {
+// d — данные своего начертания: знаки ставятся по Line.DX (161), nil — встроенный шрифт.
+func drawWith(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int, sf, fb *sfnt.Font, d *faceData) {
 	if dpi <= 0 || len(b.Lines) == 0 || math.IsNaN(x0+y0) || math.IsInf(x0+y0, 0) {
 		return
 	}
@@ -59,6 +62,15 @@ func drawWith(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int, sf
 			continue
 		}
 		bx, by := ox+l.X*pxmm, oy+l.Y*pxmm
+		if d != nil {
+			gl, xs := placeCustom(main, alt, d, l, unit, pxmm, ppemPx)
+			for i, g := range gl {
+				if segs, err := g.src.f.LoadGlyph(g.src.b, g.g, ppem, nil); err == nil {
+					p.glyph(segs, bx+xs[i], by)
+				}
+			}
+			continue
+		}
 		walkGlyphs(main, alt, l.Text, unit, func(_ rune, src glyphSrc, g sfnt.GlyphIndex, pos, _ fixed.Int26_6) {
 			// контур — в px кегля, позиция — в единицах основного шрифта
 			if segs, err := src.f.LoadGlyph(src.b, g, ppem, nil); err == nil {
@@ -66,4 +78,53 @@ func drawWith(dst *image.RGBA, b Box, st Style, x0, y0, deg float64, dpi int, sf
 			}
 		})
 	}
+}
+
+// placedGlyph — глиф строки и шрифт, из которого он взят.
+type placedGlyph struct {
+	src glyphSrc
+	g   sfnt.GlyphIndex
+}
+
+// glyphXs — x каждого знака от начала строки в px: ширины adv (px) предыдущих знаков плюс сумма
+// DX до знака включительно (мм → px). adv — по одному на кодовую точку Text, DX не короче adv.
+func glyphXs(l Line, adv []float64, pxPerMM float64) []float64 {
+	xs := make([]float64, len(adv))
+	var pos, kern float64
+	for i, a := range adv {
+		kern += l.DX[i]
+		xs[i] = pos + kern*pxPerMM
+		pos += a
+	}
+	return xs
+}
+
+// placeCustom — глифы строки своего шрифта и их x (px) от начала строки. Строка из Layout несёт
+// DX — ставим по нему, как экран. Бокс собран мимо Layout (DX нет или не сходится по длине) —
+// кернинг считается по самой строке (161-2: запасной путь).
+func placeCustom(main, alt glyphSrc, d *faceData, l Line, unit fixed.Int26_6, pxmm, ppemPx float64) ([]placedGlyph, []float64) {
+	upem := float64(main.f.UnitsPerEm())
+	px := func(f fixed.Int26_6) float64 { return float64(f) / 64 / upem * ppemPx }
+	var gl []placedGlyph
+	var adv []float64
+	for _, r := range l.Text {
+		src, g, ok := pickGlyph(main, alt, r)
+		if !ok {
+			continue
+		}
+		a, err := src.f.GlyphAdvance(src.b, g, unit, xfont.HintingNone)
+		if err != nil {
+			continue
+		}
+		gl, adv = append(gl, placedGlyph{src, g}), append(adv, px(a))
+	}
+	if n := utf8.RuneCountInString(l.Text); len(l.DX) == n && len(gl) == n {
+		return gl, glyphXs(l, adv, pxmm)
+	}
+	p := measureCustom(main.f, alt.f, d, l.Text)
+	xs := make([]float64, len(p.x))
+	for i, x := range p.x {
+		xs[i] = px(x)
+	}
+	return gl[:min(len(gl), len(xs))], xs
 }

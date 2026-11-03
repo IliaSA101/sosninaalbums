@@ -13,9 +13,14 @@ import (
 
 // OwnTpl — свой шаблон, выбранный для листа: Shape встаёт в Vignette.Own; Style — оформление,
 // которое шаблон приносит при смене шаблона (nil — копия с листа, оформление не приносится).
+// Шаг макета (164) — без Shape (шаблон каталога): Style с кеглем 0 даёт гарнитуру и цвет,
+// кегль и поля — по формату; HeadText — текст новой шапки; New — лист создан макетом только
+// что, оформление встаёт и при том же шаблоне.
 type OwnTpl struct {
-	Shape *model.VigShape
-	Style *model.VigStyle
+	Shape    *model.VigShape
+	Style    *model.VigStyle
+	HeadText string
+	New      bool
 }
 
 // vigError — ошибка с готовым текстом тоста (с заглавной буквы, как model.NoPlacesError).

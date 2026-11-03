@@ -208,7 +208,7 @@ func TestShareSavedDuringQuestions(t *testing.T) {
 	if ok || err == nil || !strings.Contains(err.Error(), "сохранён заново") {
 		t.Fatalf("Share: %v %v", ok, err)
 	}
-	if h.n != 0 || r.svc.Busy() || r.tempLeft() != 0 {
+	if h.n != 0 || r.svc.Busy() || r.tempLeft() != 0 || r.keptLeft() != 0 {
 		t.Errorf("запросов %d, busy=%v, папок %d", h.n, r.svc.Busy(), r.tempLeft())
 	}
 	if _, ok := r.rec(); ok {

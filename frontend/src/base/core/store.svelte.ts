@@ -17,6 +17,7 @@ import { mergeSnapshot, noEvents } from './startstate'
 import { movedFrom, movedText, type Moved } from './strip'
 import { prefs } from '../prefs/prefs.svelte'
 import { COVER_ID } from '../geom/sheet'
+import { driveBackText } from '../words/driveback'
 import type {
   AssocView,
   Family,
@@ -147,6 +148,8 @@ class Store extends Nav {
       this.seen.missing = true
       this.setMissing(ids ?? [])
     })
+    // 157: диск ожил позже срока, фото нашлись; полоса уже ушла вместе с событием missing
+    EventsOn('drive:back', (d: { drive: string; photos: number }) => this.notify(driveBackText(d.drive, d.photos), 'info'))
     // 117: полная замена, не слияние; после смены добавлений Go шлёт заново
     EventsOn('unread', (m: Record<string, string> | null) => {
       this.unreadSeen = true

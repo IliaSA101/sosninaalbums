@@ -110,4 +110,14 @@ describe('подключение черты', () => {
     expect(join).toContain('.join.armed:hover::before')
     expect(join).not.toMatch(/\n {2}\.join:hover::before/)
   })
+  it('широкая полоса склейки — ::after только под Ctrl и не при переносе', () => {
+    const rule = (sel: string) => join.match(new RegExp(`\\n {2}${sel.replace(/[.():]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? ''
+    const after = rule('.join.armed::after')
+    expect(after).toContain('left: -5px;')
+    expect(after).toContain('right: -5px;')
+    expect(rule('.join.armed')).toContain('z-index: 1;')
+    expect(rule(':global(.dragging) .join::after')).toContain('display: none;')
+    // flex-ширина черты прежняя: лента не растёт
+    expect(rule('.join')).toContain('width: 14px;')
+  })
 })

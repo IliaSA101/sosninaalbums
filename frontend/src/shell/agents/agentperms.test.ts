@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AgentPerm, AgentPlace } from './agents'
 import {
   allowMissing,
+  alwaysHidden,
   askMissing,
   askOnly,
   commonMode,
@@ -16,6 +17,7 @@ import {
   rowKey,
   rowsOf,
   segItems,
+  shownMode,
   targets,
   type PermChange,
 } from './agentperms'
@@ -337,5 +339,33 @@ describe('askOnly: строки «только с вопросом»', () => {
     const all = [...rows(), ...qrows]
     expect(consentFor(all, false, tool('export_album', 'ask'))).toEqual({ edit: false, folder: false })
     expect(consentFor(all, false, tool('open_album', 'deny'))).toEqual({ edit: false, folder: false })
+  })
+})
+
+// Класс O (160): Go допускает «Всегда» у открытия, но без согласия ASK_OPEN (Т5, 0.37) пункт не предлагается.
+describe('alwaysHidden: «Всегда» у открытия скрыто до 160 Т5', () => {
+  const open = (mode: string, can = ['allow', 'ask', 'deny']) => P('open_album', 'other', mode, can)
+
+  it('скрыто у open_album, когда Go допускает «Всегда»; у прочих строк и у старого ответа Go (can без allow) — нет', () => {
+    expect(alwaysHidden(open('ask'))).toBe(true)
+    expect(alwaysHidden(open('ask', ['ask', 'deny']))).toBe(false)
+    expect(alwaysHidden(P('add_folder', 'edit', 'ask'))).toBe(false)
+    expect(alwaysHidden(P('export_album', 'other', 'ask'))).toBe(false)
+  })
+
+  it('shownMode: сохранённое «Всегда» показано как «Спрашивать», остальное как есть', () => {
+    expect(shownMode(open('allow'))).toBe('ask')
+    expect(shownMode(open('ask'))).toBe('ask')
+    expect(shownMode(open('deny'))).toBe('deny')
+    expect(shownMode(P('add_folder', 'edit', 'allow'))).toBe('allow')
+    expect(shownMode(open('allow', ['ask', 'deny']))).toBe('allow') // старый ответ Go: ничего не подменяем
+  })
+
+  it('segItems с hideAllow: двух пунктов «Спрашивать · Запретить», без «Всегда»; по умолчанию три', () => {
+    expect(segItems(open('ask').can, false, false, true).map((i) => [i.id, !!i.off])).toEqual([
+      ['ask', false],
+      ['deny', false],
+    ])
+    expect(segItems(open('ask').can, false).map((i) => i.id)).toEqual(['allow', 'ask', 'deny'])
   })
 })

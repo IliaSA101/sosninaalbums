@@ -108,7 +108,7 @@ func (e *exportEnv) exportBusy() bool {
 func (e *exportEnv) stuckState() string {
 	busy, hasCancel := e.a.exp.Busy()
 	return fmt.Sprintf("готово %d; exporting=%v, есть отмена=%v; stopped=%v, stopCtx.Err=%v; DecodeBudget: занято %d пикс., ждут %d",
-		e.steps.Load(), busy, hasCancel, e.a.stopped.Load(), e.a.stopCtx.Err(), imgfile.DecodeBudget.Used(), imgfile.DecodeBudget.Waiting())
+		e.steps.Load(), busy, hasCancel, e.a.stopped.Load(), e.a.stopCtx.Err(), imgfile.DecodeBudget().Used(), imgfile.DecodeBudget().Waiting())
 }
 
 // names — файлы папки экспорта, как их видит пользователь. «Призраков» не считаем: на Windows

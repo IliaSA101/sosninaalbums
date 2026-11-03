@@ -73,13 +73,15 @@ func TestEditorReplay(t *testing.T) {
 // SetAlbumBgToAll (if_albumbg_test.go); стикеры на обложку — тот же AddStickersIf.
 // Исключение 150: MarkUnsaved — только флаг dirty, проект, rev и отмена не меняются
 // (TestMarkUnsaved); шага в эталоне нет.
+// Исключение 163: UsedFiles — чтение занятых файлов без вида (TestUsedFilesMatchesView); проекта,
+// rev и отмены не касается, шага в эталоне нет (эталон Windows пишет CI).
 func TestEditorReplayMethods(t *testing.T) {
 	r, _ := replayRun(t)
 	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true,
 		"AutoBuildIf": true, "VaryLayoutsIf": true, "UndoIfRev": true,
 		"SetMarksIf": true, "CreateCoverLookIf": true, "CoverPhotoIf": true, "ApplyBackgroundToIf": true,
 		"AddStickersIf": true, "ApplyPrintIf": true, "SetSettingsIf": true, "Families": true, "MarkUnsaved": true,
-		"SetAlbumBgIf": true}
+		"SetAlbumBgIf": true, "UsedFiles": true}
 	for _, s := range r.steps {
 		seen[strings.SplitN(s.Step, ":", 2)[0]] = true
 	}

@@ -3,7 +3,7 @@
   import { modes } from '../../base/prefs/view.svelte'
   import { errText } from '../../base/words/errtext'
   import Icon from '../../base/ui/Icon.svelte'
-  import Popover from '../../base/ui/Popover.svelte'
+  import Popover from '../../base/popup/Popover.svelte'
   import { gallery } from '../gallery/gallery.svelte'
   import { inFeedText } from './folders'
   import { folderfilter } from './folderfilter.svelte'

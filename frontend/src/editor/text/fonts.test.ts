@@ -22,6 +22,7 @@ import {
   moveActive,
   styleSupport,
   svgTextCss,
+  NO_KERN_CSS,
 } from './fonts'
 import type { FontFamily } from '../../base/core/types'
 import * as api from './fontapi'
@@ -520,5 +521,22 @@ describe('svgTextCss / editorCss', () => {
   })
   it('шрифт не из таблицы — запасной', () => {
     expect(svgTextCss({ ...st, font: 'evil' }, fonts)).toContain('font-family:"SA Montserrat", sans-serif')
+  })
+  // 161: у своих шрифтов Go сам считает кернинг и шлёт dx — браузер свой кернинг выключает, иначе сдвиг дважды.
+  it('noKern: font-kerning:none и "kern" 0 последними в style', () => {
+    const css = svgTextCss(st, fonts, true)
+    expect(css).toContain('font-kerning:none')
+    expect(css).toContain('"kern" 0')
+    expect(css.endsWith(NO_KERN_CSS)).toBe(true)
+    expect(css.startsWith(svgTextCss(st, fonts))).toBe(true) // остальное — то же, что без noKern
+  })
+  it('без noKern (встроенные шрифты и параметр не передан) — вывод прежний, кернинг браузера не трогаем', () => {
+    const was =
+      'font-family:"SA Montserrat", sans-serif;font-weight:400;font-style:normal;font-size:25.4px;fill:#112233;' +
+      'font-synthesis:none;font-variant-ligatures:none;font-feature-settings:"liga" 0, "clig" 0, "calt" 0;white-space:pre'
+    expect(svgTextCss(st, fonts)).toBe(was)
+    expect(svgTextCss(st, fonts, false)).toBe(was)
+    expect(was).not.toContain('kerning')
+    expect(was).not.toContain('"kern"')
   })
 })

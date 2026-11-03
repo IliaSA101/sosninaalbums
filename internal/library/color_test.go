@@ -68,12 +68,12 @@ func TestOpenOrientedConvertsAdobe(t *testing.T) {
 	}
 	for _, c := range cases {
 		p := solidJPEG(t, dir, "a.jpg", 40, 30, src, c.segs...)
-		before := imgfile.DecodeBudget.Used()
+		before := imgfile.DecodeBudget().Used()
 		img, release, err := imgfile.OpenOriented(p)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		if got := imgfile.DecodeBudget.Used() - before; got != c.cost {
+		if got := imgfile.DecodeBudget().Used() - before; got != c.cost {
 			t.Errorf("%s: бюджет %d, ждали %d", c.name, got, c.cost)
 		}
 		r, g, b, _ := img.At(20, 15).RGBA()
@@ -82,8 +82,8 @@ func TestOpenOrientedConvertsAdobe(t *testing.T) {
 			t.Errorf("%s: пиксель %v, ждали %v ± 3", c.name, got, c.want)
 		}
 		release()
-		if imgfile.DecodeBudget.Used() != before {
-			t.Errorf("%s: бюджет не возвращён: %d", c.name, imgfile.DecodeBudget.Used()-before)
+		if imgfile.DecodeBudget().Used() != before {
+			t.Errorf("%s: бюджет не возвращён: %d", c.name, imgfile.DecodeBudget().Used()-before)
 		}
 	}
 }

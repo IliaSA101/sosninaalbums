@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { portal } from '../../base/ui/portal'
+  import { portal } from '../../base/popup/portal'
   import type { LayoutScope } from '../../base/core/types'
   import { tip, tipped } from '../../base/ui/tip.svelte'
   import Icon, { type IconName } from '../../base/ui/Icon.svelte'

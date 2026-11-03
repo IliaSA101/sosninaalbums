@@ -106,4 +106,16 @@ describe('зона разреза в ленте (Ctrl, 094 §1)', () => {
     unmount()
     expect(cutKey.held).toBe(false)
   })
+
+  it('зона разреза берёт --in-l от фото слева и --in-r от своего (158)', async () => {
+    const r = (w: number) => ({ x: 0, y: 0, w, h: 100 })
+    store.view = {
+      ...store.view,
+      spreads: [{ ...sp('a', ['a1', 'a2', 'a3']), rects: [r(100), r(100), r(30)] }, sp('b', ['b1'])],
+    } as never
+    const { container } = await mount()
+    const [c2, c3] = Array.from(cuts(container))
+    expect([c2.style.getPropertyValue('--in-l'), c2.style.getPropertyValue('--in-r')]).toEqual(['4px', '4px'])
+    expect([c3.style.getPropertyValue('--in-l'), c3.style.getPropertyValue('--in-r')]).toEqual(['4px', '3px'])
+  })
 })

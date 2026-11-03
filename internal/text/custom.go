@@ -77,6 +77,11 @@ type faceData struct {
 	ok       atomic.Bool // разбор удался: без once sf можно читать только после этого признака
 	broken   atomic.Bool
 	logged   atomic.Bool
+	// kern — кернинг GPOS (nil: фичи kern нет — кернит sfnt, как до 161); пишется под once.
+	kern *gposTable
+	// kernOff — GPOS у начертания признан негодным (разбор, паника, бюджет шагов): без кернинга
+	// до конца сеанса. Свой флаг, не logged: отказ кернинга не повод считать шрифт сломанным.
+	kernOff atomic.Bool
 }
 
 // parse разбирает файл при первом обращении; ошибка или паника — начертание сломано.
@@ -94,6 +99,9 @@ func (d *faceData) parse(load func(string) ([]byte, error)) *sfnt.Font {
 		if err == nil {
 			d.sf, _ = sfnt.Parse(b)
 			d.ok.Store(d.sf != nil)
+			if d.sf != nil {
+				d.parseKern(b)
+			}
 		}
 	})
 	if d.sf == nil {
@@ -103,6 +111,34 @@ func (d *faceData) parse(load func(string) ([]byte, error)) *sfnt.Font {
 		return nil
 	}
 	return d.sf
+}
+
+// parseKern разбирает GPOS файла b: отказ — кернинга GPOS нет (kernOff), шрифт цел (161-3).
+func (d *faceData) parseKern(b []byte) {
+	tabs, err := readTables(b)
+	if err != nil {
+		return // каталог таблиц sfnt уже принял; GPOS без каталога — как «таблицы нет»
+	}
+	gpos := tabs.bytes(b, "GPOS")
+	if gpos == nil {
+		return
+	}
+	t, err := parseGPOS(gpos, int(d.sf.UnitsPerEm()))
+	if err != nil {
+		d.disableKern(err)
+		return
+	}
+	d.kern = t
+}
+
+// disableKern выключает кернинг GPOS начертания: строка в журнал и поколение +1 ровно раз,
+// чтобы кэш не отдал строки, посчитанные с кернингом. Причина — текст ошибки (runtime error
+// без путей и имён файлов); сам шрифт рисуется своим файлом, без кернинга.
+func (d *faceData) disableKern(why error) {
+	if d.kernOff.CompareAndSwap(false, true) {
+		customGen.Add(1)
+		log.Printf("свой шрифт %s.%s: кернинг GPOS не прочитан (%v) — без кернинга", d.key, d.ext, why)
+	}
 }
 
 // markBroken — начертание больше не рисуется (Montserrat вместо всей гарнитуры);

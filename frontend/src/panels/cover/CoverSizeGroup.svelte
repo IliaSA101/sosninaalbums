@@ -3,7 +3,7 @@
   import CardGroup from '../../editor/inspector/CardGroup.svelte'
   import { sizeSum } from '../../editor/inspector/groupsum'
   import MarkupBlock from '../markup/MarkupBlock.svelte'
-  import { printList } from '../../shell/printprof/printlist.svelte'
+  import { printList } from '../../output/printprof/printlist.svelte'
   import { coverAct } from './coveract.svelte'
   import CoverPx from './CoverPx.svelte'
   import {

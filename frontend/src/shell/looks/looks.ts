@@ -13,11 +13,36 @@ export const EMPTY_DEMO = 'Макетов пока нет — пример св�
 export const MORE_LOOKS = 'Ещё макеты — в наборах библиотеки'
 export const EMPTY_THEME = 'В этой теме пока пусто'
 export const EMPTY_MINE = 'Здесь появятся ваши макеты'
-export const PICK_HINT = 'Выберите макет слева'
 export const SWAP_NOTE = 'Сменить макет целиком можно, пока в местах нет фото'
 export const BG_NOTE = 'Стикеры макета легли бы на ваши фото — их ставит «Поставить на разворот»'
 export const hideText = (name: string): string => `Макет «${name}» будет убран из библиотеки. Альбомы, где он уже стоит, не изменятся.`
 export const COVER_CHIP = 'Обложка'
+// 163: строка над плитками в альбоме без фото (образец — OWN_TIP_STICKER) и вторая строка подсказки плитки
+export const NO_PHOTOS_TIP = 'Добавьте фото в ленту — макеты покажутся на них'
+export const LOOK_PEEK_TIP = 'Щелчок или правый щелчок — крупно'
+export const SAVE_LOOK_TIP = 'Сохранить развороты альбома как макет в библиотеку'
+// 163 U3: крупный просмотр — строка клавиш, окно «Применить»
+export const PEEK_HINT = '← → — шаги · Enter — применить · Esc — назад'
+export const applyTitle = (name: string): string => `Применить макет «${name}»`
+
+// 163 U4: метка ph у /media/look — «лист на фото ленты». Go сам решает, чьи фото ставить, метка только сбивает кэш WebView:
+// меняется с правкой альбома (rev: занятые фото), числом фото в ленте и отметками (marksRev: отклонённые). Всегда > 0 (в пустом
+// альбоме тоже: ответ — JPEG с серыми местами), ≤ 16 цифр (предел Go 2⁵³−1): rev берётся по модулю 10⁹.
+const whole = (v: number): number => (Number.isFinite(v) && v > 0 ? Math.trunc(v) : 0)
+export const lookPh = (rev: number, photos: number, marksRev: number): number =>
+  ((whole(rev) % 1e9) * 1000 + Math.min(whole(photos), 999)) * 1000 + (whole(marksRev) % 1000) + 1
+// Потолок кадра крупного просмотра: с ph Go отдаёт до 2048 точек (меньше 1024 без ph не поднималось)
+export const PEEK_PX_MAX = 2048
+
+// Подпись просмотра: «Имя · набор «…» · от 14 фото · 5 разворотов»; своё — «свой» вместо набора.
+export function lookCaption(it: Pick<LookItem, 'name' | 'own' | 'pack' | 'from' | 'steps'>): string {
+  const src = it.own ? 'свой' : it.pack ? `набор «${it.pack}»` : ''
+  return [it.name, src, cardNote(it)].filter(Boolean).join(' · ')
+}
+
+// Подсказка плитки: «Имя · набор «…»» (у своих набора нет) и как открыть крупно.
+export const lookTileTitle = (it: Pick<LookItem, 'name' | 'pack'>): string =>
+  `${it.pack ? `${it.name} · набор «${it.pack}»` : it.name}\n${LOOK_PEEK_TIP}`
 
 // Ключ картинки в /media/look: 16 hex после префикса записи (`my:<hex>`); не похоже на ключ — '' (картинку не просим).
 export function lookKey(id: string): string {
@@ -85,13 +110,12 @@ export const needsAsk = (p: Pick<LookPlan, 'touched' | 'replaced' | 'left'>): bo
 
 // ---------- «Применить»: вопрос и тосты (U2) ----------
 
-export const ASK_TITLE = 'Применить макет?'
 // Заголовок вопроса «Поставить на…»: как «Поставить разворот?» 067; у обложки — «Поставить обложку?»
 export const stepAskTitle = (cover: boolean): string => (cover ? 'Поставить обложку?' : 'Поставить разворот?')
 
-// Вопрос перед «Применить» (design §4, образец — putQuestion 067): тронутые развороты, свой фон, фото в ленту.
-// Развороты, где макет поставит фон, становятся оформленными (якоря 107) — «Весь альбом заново» их не пересоберёт. null — ставить сразу.
-export function applyQuestion(
+// Предупреждение в окне «Применить» (163-27, образец — putQuestion 067): тронутые развороты, свой фон, фото в ленту.
+// Развороты, где макет поставит фон, становятся оформленными (якоря 107) — «Весь альбом заново» их не пересоберёт. null — предупреждать не о чем.
+export function applyWarn(
   p: Pick<LookPlan, 'touched' | 'replaced' | 'left' | 'anchors' | 'coverTouched' | 'coverReplaced'>,
 ): string | null {
   const parts: string[] = []
@@ -121,7 +145,13 @@ export function applyQuestion(
     ])
     parts.push(`${n} ${f} не пересоберёт`)
   }
-  return `${parts.join('. ')}. Применить?`
+  return `${parts.join('. ')}.`
+}
+
+// Тот же текст с вопросом в конце (вариант б 163-4 снят — оставлен ради проверок слов).
+export const applyQuestion = (p: Parameters<typeof applyWarn>[0]): string | null => {
+  const w = applyWarn(p)
+  return w && `${w} Применить?`
 }
 
 // Тост после «Применить»: «Макет «…»: 9 разворотов, 46 мест». «Добавить» и «Фоны» называют своё. Версия не выросла —

@@ -24,6 +24,7 @@ import {
   KEY_PLACES,
   KEY_SEE,
   allowMissing,
+  alwaysHidden,
   askMissing,
   consentFor,
   groupAskMissing,
@@ -217,6 +218,7 @@ class AgentsUi {
     if (!p || this.busy) return
     if (mode === 'ask' && askMissing(p)) return this.explain(tool, p.group === 'read')
     if (mode === 'allow' && allowMissing(p)) return this.explain(tool, false) // выгрузка, открытие: «Всегда» нет — причина
+    if (mode === 'allow' && alwaysHidden(p)) return // открытие до 160 Т5: «Всегда» не предлагается
     if (p.mode !== mode) this.change({ kind: 'tool', tool, mode })
   }
   pickGroup(group: PermGroup, mode: Mode) {

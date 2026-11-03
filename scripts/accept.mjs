@@ -7,6 +7,10 @@
 // После приёма пишет строку в журнал <git-common-dir>/sa-accept.jsonl (accept-log.mjs) и печатает счёт «приёмов с Go после
 // последнего winqa» (С1, 0.35): winqa-push.mjs по нему останавливает rc.
 // ACCEPT_PRECHECK — путь к .mjs вместо scripts/precheck.mjs копии (подмена в тестах).
+// Устойчивость (04.11): всем git — GIT_OPTIONAL_LOCKS=0 (status не берёт index.lock); зависший пустой index.lock копии и
+// основной копии старше 60 с без держателя снимается (иначе rebase/ff падают); если dev ушёл вперёд за время precheck —
+// rebase заново (до 2 раз), precheck повторяется, только если сменились не одни docs/**.
+// ACCEPT_LOCK_WAIT_MS — сколько ждать «живой» lock (по умолчанию 30000), ACCEPT_LOCK_AGE_S — порог возраста (60).
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -17,6 +21,10 @@ export class Stop extends Error {}
 
 const DECISIONS = /^docs\/specs\/[^/]+\/decisions\.md$/
 const MAX_STEPS = 100
+const MAX_RETRY = 2 // повторов rebase, если dev ушёл вперёд за время precheck
+const LOCK_AGE_S = 60
+const LOCK_WAIT_MS = 30000
+const LOCK_POLL_MS = 1000
 
 /** Запуск без оболочки: {code, out} (out = stdout+stderr). */
 function sh(cmd, args, cwd, env = process.env) {
@@ -28,7 +36,8 @@ function sh(cmd, args, cwd, env = process.env) {
   }
 }
 
-const gitIn = (cwd, args, env) => sh('git', ['-c', 'core.quotepath=off', ...args], cwd, env)
+// GIT_OPTIONAL_LOCKS=0: фоновые git status (IDE, хуки) и наши проверки не берут index.lock и не мешают rebase/ff
+const gitIn = (cwd, args, env = process.env) => sh('git', ['-c', 'core.quotepath=off', ...args], cwd, { ...env, GIT_OPTIONAL_LOCKS: '0' })
 const lines = (s) => s.split('\n').map((l) => l.trim()).filter(Boolean)
 
 /**
@@ -70,6 +79,42 @@ function ensureClean(cwd, what, untracked) {
   if (r.code !== 0) throw new Stop(`${what}: git status: ${r.out.trim()}`)
   const l = lines(r.out)
   if (l.length) throw new Stop(`${what}: есть незакоммиченное (${l.length}): ${l.slice(0, 5).join('; ')}`)
+}
+
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+
+/** Держит ли файл какой-то процесс: fuser (Linux/mac) код 0 — держит; нет fuser (Windows) — считаем свободным. */
+function heldByProcess(file) {
+  if (process.platform === 'win32') return false
+  const r = sh('fuser', [file], process.cwd())
+  return r.code === 0
+}
+
+/**
+ * Зависший index.lock в копии `cwd`: путь из `git rev-parse --git-path` (у worktree он в <common>/worktrees/<имя>/).
+ * Старше `age` с и никем не держится → снимаем (пустой lock после упавшего git никто не уберёт, а rebase/ff на нём падают).
+ * Моложе или держится — ждём до `wait` мс (вдруг живой git закончит), потом Stop.
+ */
+export function freeIndexLock(cwd, what, { log = () => {}, age = LOCK_AGE_S, wait = LOCK_WAIT_MS, poll = LOCK_POLL_MS } = {}) {
+  const r = gitIn(cwd, ['rev-parse', '--path-format=absolute', '--git-path', 'index.lock'])
+  if (r.code !== 0) throw new Stop(`${what}: git rev-parse --git-path: ${r.out.trim()}`)
+  const file = r.out.trim()
+  const deadline = Date.now() + wait
+  for (;;) {
+    const st = fs.statSync(file, { throwIfNoEntry: false })
+    if (!st) return
+    const sec = Math.max(0, Math.round((Date.now() - st.mtimeMs) / 1000))
+    const held = heldByProcess(file)
+    if (sec > age && !held) {
+      fs.rmSync(file, { force: true })
+      log(`снят зависший index.lock (${what}, возраст ${sec} с)`)
+      return
+    }
+    if (Date.now() >= deadline) {
+      throw new Stop(`${what}: index.lock ${file} ${held ? 'держит процесс' : `моложе ${age} с (${sec} с)`} — git там ещё работает; подождать и повторить приём`)
+    }
+    sleep(Math.max(1, Math.min(poll, deadline - Date.now())))
+  }
 }
 
 /** Корень основной копии — родитель общего .git (из любого worktree тоже). */
@@ -156,12 +201,24 @@ const plural = (n) => {
 }
 
 /** Приём ветки; возвращает итоговую строку, при остановке бросает Stop. */
-export function accept(wtArg, branch, { cwd = process.cwd(), env = process.env, log = () => {} } = {}) {
+export function accept(wtArg, branch, { cwd = process.cwd(), env = process.env, log = () => {}, locks = {} } = {}) {
   if (!wtArg || !branch) throw new Stop('использование: node scripts/accept.mjs <worktree> <ветка>')
   if (branch === 'dev') throw new Stop('ветка dev не принимается')
+  env = { ...env, GIT_OPTIONAL_LOCKS: '0' } // тот же env и у дочернего precheck
+  const lk = {
+    age: Number(env.ACCEPT_LOCK_AGE_S) || LOCK_AGE_S,
+    wait: env.ACCEPT_LOCK_WAIT_MS !== undefined && env.ACCEPT_LOCK_WAIT_MS !== '' ? Number(env.ACCEPT_LOCK_WAIT_MS) : LOCK_WAIT_MS,
+    poll: LOCK_POLL_MS,
+    ...locks,
+    log,
+  }
   const root = mainRoot(cwd)
   const wt = resolveWorktree(root, wtArg)
   if (path.resolve(wt) === path.resolve(root)) throw new Stop('worktree — это основная копия')
+  const freeLocks = () => {
+    freeIndexLock(wt, 'копия', lk)
+    freeIndexLock(root, 'основная копия', lk)
+  }
 
   const cur = gitIn(root, ['rev-parse', '--abbrev-ref', 'HEAD']).out.trim()
   if (cur !== 'dev') throw new Stop(`основная копия на «${cur}», а не на dev`)
@@ -170,23 +227,45 @@ export function accept(wtArg, branch, { cwd = process.cwd(), env = process.env, 
   if (wb !== branch) throw new Stop(`в копии ветка «${wb}», а не «${branch}»`)
   ensureClean(wt, 'копия', true)
 
+  freeLocks()
   rebaseOnDev(wt, env)
 
-  const devHash = gitIn(root, ['rev-parse', 'dev']).out.trim()
+  let devHash = gitIn(root, ['rev-parse', 'dev']).out.trim()
   const pre = env.ACCEPT_PRECHECK || path.join(wt, 'scripts', 'precheck.mjs')
   if (ensureNodeModules(root, wt)) log('frontend/node_modules: поставлена ссылка на основную копию')
-  log('precheck…')
-  const p = sh(process.execPath, [pre, '--base', devHash], wt, env)
-  if (p.code !== 0) {
-    const tail = p.out.trim().split('\n').slice(-40).join('\n')
-    throw new Stop(`precheck провален (код ${p.code}), ветка не влита; копия ${wt}\n${tail}`)
+  const precheck = () => {
+    log('precheck…')
+    const p = sh(process.execPath, [pre, '--base', devHash], wt, env)
+    if (p.code !== 0) {
+      const tail = p.out.trim().split('\n').slice(-40).join('\n')
+      throw new Stop(`precheck провален (код ${p.code}), ветка не влита; копия ${wt}\n${tail}`)
+    }
+    // precheck мог оставить мусор, но не правки: копия снова должна быть чистой
+    ensureClean(wt, 'копия после precheck', true)
   }
-  // precheck мог оставить мусор, но не правки: копия снова должна быть чистой
-  ensureClean(wt, 'копия после precheck', true)
+  precheck()
 
-  const n = Number(gitIn(root, ['rev-list', '--count', `dev..${branch}`]).out.trim()) || 0
-  const m = gitIn(root, ['merge', '--ff-only', '-q', branch])
-  if (m.code !== 0) throw new Stop(`ff-merge не прошёл (dev ушёл вперёд?): ${m.out.trim()}; повторить приём`)
+  let n = 0
+  for (let retry = 0; ; retry++) {
+    freeLocks()
+    n = Number(gitIn(root, ['rev-list', '--count', `dev..${branch}`]).out.trim()) || 0
+    const m = gitIn(root, ['merge', '--ff-only', '-q', branch])
+    if (m.code === 0) break
+    // ff не прошёл: чаще всего dev ушёл вперёд, пока шёл precheck (~2 мин)
+    const now = gitIn(root, ['rev-parse', 'dev']).out.trim()
+    if (now === devHash || retry >= MAX_RETRY) {
+      throw new Stop(`ff-merge не прошёл${now === devHash ? '' : ' (dev уходит вперёд снова и снова)'}: ${m.out.trim()}; повторить приём`)
+    }
+    const files = lines(gitIn(root, ['diff', '--name-only', `${devHash}..${now}`]).out)
+    const k = Number(gitIn(root, ['rev-list', '--count', `${devHash}..${now}`]).out.trim()) || 0
+    const docsOnly = files.length > 0 && files.every((f) => f.startsWith('docs/'))
+    log(`dev ушёл вперёд (${k} ${plural(k)}${docsOnly ? ', только docs' : ''}) — ${docsOnly ? 'rebase заново' : 'precheck заново'}`)
+    ensureClean(wt, 'копия', true)
+    freeLocks()
+    rebaseOnDev(wt, env)
+    devHash = now
+    if (!docsOnly) precheck()
+  }
 
   // frontend/node_modules в копии — ссылка на основное дерево: убрать саму ссылку, не цель
   const link = path.join(wt, 'frontend', 'node_modules')

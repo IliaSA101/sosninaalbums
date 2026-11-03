@@ -23,12 +23,15 @@ export const spreadGuideUrl = (rev: number) => `/media/spread-guide?r=${Math.tru
 
 // Макеты альбома (131): шаг i (0 — обложка, 1…24), ширина px, пропорция картинки r, bg — только фон шага («Фоны по серии»),
 // front — только лицевая сторона обложки (плитка карточки; r — пропорция стороны, только при i = 0).
+// ph (163) — метка показа макета на фото ленты (число > 0): Go сам решает, чьи фото ставить, метка только сбивает кэш WebView
+// при смене ленты, правки и отметок; без неё (0, нет) — серые места, PNG. Только с ph Go пускает px больше 1024 (до 2048).
 // Ключ — ровно 16 строчных hex файла макета, иначе адреса нет; Go пускает только ключи из библиотеки, остальное — 404. Свой счётчик версий: ?v=1.
 const LOOK_V = 1
-export function lookUrl(key: string, o: { i: number; px: number; r: number; bg?: boolean; front?: boolean }): string {
+export function lookUrl(key: string, o: { i: number; px: number; r: number; bg?: boolean; front?: boolean; ph?: number }): string {
   if (!/^[0-9a-f]{16}$/.test(key)) return '' // не ключ — картинку не просим (Go ответил бы 404)
   const r = Math.round(o.r * 10000) / 10000 || 1
-  return `/media/look/${encodeURIComponent(key)}?v=${LOOK_V}&i=${Math.trunc(o.i) || 0}&px=${Math.trunc(o.px) || 0}&r=${r}&bg=${o.bg ? 1 : 0}${o.front ? '&f=1' : ''}`
+  const ph = o.ph !== undefined && Number.isSafeInteger(o.ph) && o.ph > 0 ? `&ph=${o.ph}` : ''
+  return `/media/look/${encodeURIComponent(key)}?v=${LOOK_V}&i=${Math.trunc(o.i) || 0}&px=${Math.trunc(o.px) || 0}&r=${r}&bg=${o.bg ? 1 : 0}${o.front ? '&f=1' : ''}${ph}`
 }
 
 // Разворот на 17+ фото (027): превью 2048 для каждой ячейки съедает память WebView2, поэтому

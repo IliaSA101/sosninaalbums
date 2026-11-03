@@ -97,10 +97,14 @@ type App struct {
 	missGen     int
 	missPending atomic.Int32
 	missRefs    map[string]string
-	missSyncMu  sync.Mutex
-	missEd      weak.Pointer[album.Editor]
-	missRev     int
-	exists      func(path string) bool // файл фото на месте; подменяется в тестах
+	// missBack — недостающие фото тома, ожившего при поздней пробе (157, volumeback.go): буква тома →
+	// снимок; число для drive:back считает полный пересчёт; под mu. backOff снимает подписку osx (startup → shutdown).
+	missBack   map[string]*backSnap
+	backOff    func()
+	missSyncMu sync.Mutex
+	missEd     weak.Pointer[album.Editor]
+	missRev    int
+	exists     func(path string) bool // файл фото на месте; подменяется в тестах
 	// snapRefs — ID → путь фото редактора; подменяется в тестах (порядок снимков).
 	snapRefs func(ed *album.Editor) map[string]string
 
@@ -337,7 +341,7 @@ func (a *App) startup(ctx context.Context) {
 	log.Printf("запуск, версия %s", appVersion(wailsJSON))
 	a.flushLaunchLog()                              // строки разбора аргументов, накопленные до открытия log.txt
 	salbum.SetAppVersion(appVersion(wailsJSON))     // до первого Load и записи: поле app в файле (098)
-	sharer.CleanTemp(a.shareCacheDir(), time.Now()) // остатки прошлых выгрузок по ссылке старше суток
+	sharer.CleanTemp(a.shareCacheDir(), time.Now()) // up-* старше суток и все kp-* без срока (159)
 	a.upd.Startup()                                 // итог прошлого запуска установщика — до первого UpdateInfo
 	a.loadTemplates()
 	a.startBackups()
@@ -356,6 +360,7 @@ func (a *App) startup(ctx context.Context) {
 	fromFile := a.argFile != "" // двойной щелчок по альбому: вопрос о связи в этот раз не нужен
 	arg := a.argFile
 	a.mu.Unlock()
+	a.backOff = osx.OnVolumeBack(a.volumeBack) // диск ожил после «мёртвого» (157): до первого пересчёта недостающих
 	path, notice := a.startEditor(a.loadStartup(a.loadConfig().LastProject))
 	a.rememberRecent(path)
 	notice = joinLaunchNotice(notice, launchPlace())
@@ -372,6 +377,10 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	a.shr.Shutdown() // сохранённые страницы «Продолжить» (фото клиента) — до остановки фона (159)
+	if a.backOff != nil {
+		a.backOff()
+	}
 	// Сначала барьер, потом запись: правка между ними иначе не попала бы на диск.
 	a.stopBackground()
 	a.flushSave()

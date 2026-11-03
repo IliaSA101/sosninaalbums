@@ -12,8 +12,8 @@ vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} })
 vi.mock('../../../wailsjs/go/app/App', () => ({}))
 
 const { COMMANDS } = await import('./commands')
-const { share } = await import('../share/share.svelte')
-const { StubShare, stubView } = await import('../share/sharestub')
+const { share } = await import('../../output/share/share.svelte')
+const { StubShare, stubView } = await import('../../output/share/sharestub')
 const { store } = await import('../../base/core/store.svelte')
 
 const stub = () => share.bridge as InstanceType<typeof StubShare>

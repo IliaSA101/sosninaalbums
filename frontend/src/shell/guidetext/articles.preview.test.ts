@@ -5,7 +5,7 @@ import { ARTICLES } from './articles'
 import { articleText } from './articletext'
 import { menuPath } from '../guide/show'
 import { ACTS } from '../../editor/photomenu/photoacts'
-import { NEW_ITEM, WINDOW_TITLE } from '../printprof/printwords'
+import { NEW_ITEM, WINDOW_TITLE } from '../../output/printprof/printwords'
 
 // Статьи F1 про «Во весь экран» (режим F) и «Крупный просмотр фото» (окно, 128-11, Т9).
 afterEach(() => dropCatalog())
@@ -91,6 +91,21 @@ describe('статьи про макеты альбома (131 U2)', () => {
     expect(art('looks-step').what).toContain('«Поставить на разворот N»')
     expect(art('looks-step').where).toContain('«Разворот макета «…»»')
     expect(art('looks-format').what).toContain('20×30 и 40×30')
+  })
+  it('163 U5: крупный просмотр, «на ваших фото», окно «Применить», отбор, оговорка про свободные и выбранные фото', () => {
+    const a = art('looks')
+    for (const w of [
+      '«Размер миниатюр»',
+      '«Набор» и «Стиль»',
+      '«Новые»',
+      'на ваших фото',
+      'открывает макет крупно',
+      'окно «Применить макет»',
+      '«Подобрать под N выбранных фото»',
+    ])
+      expect(a.where, w).toContain(w)
+    expect(a.how).toContain('на свободных фото ленты')
+    expect(a.how).toContain('«Подобрать под N» считает именно выделенные')
   })
   it('Отмена в статье — клавиша из реестра, снята — без скобок', () => {
     useCatalog()

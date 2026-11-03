@@ -7,6 +7,7 @@
   import {
     FOLDER_TOOLS,
     allowMissing,
+    alwaysHidden,
     askOnly,
     KEY_LIFTED,
     KEY_PLACES,
@@ -18,6 +19,7 @@
     rowKey,
     rowsOf,
     segItems,
+    shownMode,
   } from './agentperms'
   import {
     ASK_EDIT,
@@ -125,17 +127,18 @@
           <p class="note why">{g.rows[0]?.why}{g.id === 'read' ? READ_WHY_TAIL : ''}</p>
         {/if}
         {#each [...g.rows, ...g.extra] as p, i (p.tool)}
+          {@const shown = shownMode(p)}
           {#if g.extra.length > 0 && i === g.rows.length}<p class="note other">{GROUP_OTHER_NOTE}</p>{/if}
           <div class="row" data-row={rowKey(p.tool)} class:flash={agents.flash === rowKey(p.tool)}>
             <div class="t">
               {p.title}
               {#if noteShown(p)}<small>{p.note}</small>{/if}
-              {#if askOnly(p)}<small>{ASK_ONLY_NOTE}</small>{/if}
+              {#if askOnly(p) || alwaysHidden(p)}<small>{ASK_ONLY_NOTE}</small>{/if}
               {#if agents.whyFor[p.tool] && p.why}<small class="why">{p.why}{p.group === 'read' ? READ_WHY_TAIL : ''}</small>{/if}
             </div>
             <Seg
-              items={segItems(p.can, off && p.group === 'edit', allowMissing(p))}
-              value={isMode(p.mode) ? p.mode : undefined}
+              items={segItems(p.can, off && p.group === 'edit', allowMissing(p), alwaysHidden(p))}
+              value={isMode(shown) ? shown : undefined}
               onpick={(m) => agents.pickTool(p.tool, m)}
               label={p.title}
             />

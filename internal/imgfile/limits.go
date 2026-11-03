@@ -126,14 +126,14 @@ func OpenOrientedCtx(ctx context.Context, path string) (img image.Image, release
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := DecodeBudget.AcquireCtx(ctx, n); err != nil {
+	if err := decodeBudget.AcquireCtx(ctx, n); err != nil {
 		return nil, nil, err
 	}
 	done := false
 	defer func() {
 		// Ошибка или паника декодера: место возвращается, паника идёт дальше.
 		if !done {
-			DecodeBudget.Release(n)
+			decodeBudget.Release(n)
 		}
 	}()
 	f, err := OpenRegular(path)
@@ -162,7 +162,7 @@ func OpenOrientedCtx(ctx context.Context, path string) (img image.Image, release
 		img = h2.xf.ToSRGB(img)
 	}
 	done = true
-	return img, func() { DecodeBudget.Release(n) }, nil
+	return img, func() { decodeBudget.Release(n) }, nil
 }
 
 // decodeImage — сам декод; в тестах подменяется, чтобы имитировать панику.

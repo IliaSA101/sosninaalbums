@@ -125,7 +125,19 @@ beforeEach(() => {
   go.LibraryPacks.mockResolvedValue({ packs: [], net: { allowed: true }, busy: false, readOnly: false })
   go.PackItem.mockResolvedValue(item(C, 'Осень', 'school'))
   looks.close()
-  Object.assign(looks, { cat: null, theme: '', sel: '', spreads: 0, pick: 'bg', step: 1, info: null, cnt: null, plan: null, busy: false })
+  Object.assign(looks, {
+    cat: null,
+    theme: '',
+    sel: '',
+    spreads: 0,
+    pick: 'bg',
+    step: 1,
+    info: null,
+    cnt: null,
+    plan: null,
+    modePlan: null,
+    busy: false,
+  })
   packsUi.close()
   packsUi.net.updating = false
   packsUi.net.progress = null
@@ -160,15 +172,43 @@ describe('«Макеты альбома»: «Можно скачать» (144)',
     fireEvent.click(getTile()!)
     await tick()
     expect(text()).toContain('Скачать набор?')
-    expect(text()).toContain('В наборе «Школа — осень» 7 разворотов — 12,0 МБ. Макет откроется в этом окне.')
+    expect(text()).toContain('В наборе «Школа — осень» 7 разворотов — 12,0 МБ. Макет откроется крупно.')
     expect(btn('Отмена')).toBeTruthy()
     fireEvent.click(btn('Скачать и показать')!)
     await vi.waitFor(() => expect(looks.sel).toBe(C))
+    expect(looks.peek.id).toBe(C) // макет открыт крупно (163 U3), а не применён
     expect(go.DownloadLibraryPack).toHaveBeenCalledWith('school')
     expect(go.PackItem).toHaveBeenCalledWith('album', 'school', SRC)
     expect(api.info).toHaveBeenCalledWith(C)
     expect(api.apply).not.toHaveBeenCalled()
     expect(toast()?.text).toBe('Набор «Школа — осень» скачан')
+  })
+
+  it('163-26: подсказка строки «Можно скачать» — «покажет выбранное», не «поставит»; вопрос — «Макет откроется крупно.»', async () => {
+    await opened()
+    const row = Array.from(document.querySelectorAll<HTMLElement>('.vseg button')).find((b) => b.textContent?.includes('Можно скачать'))!
+    expect(row.title).toBe('Образцы из наборов, которых ещё нет в библиотеке: щелчок скачает набор и покажет выбранное')
+    await theme('Можно скачать')
+    fireEvent.click(getTile()!)
+    await tick()
+    expect(text()).toContain('Макет откроется крупно.')
+    expect(text()).not.toContain('в этом окне')
+  })
+
+  it('после скачивания открыт крупный просмотр скачанного макета, а не окно «Применить»', async () => {
+    go.DownloadLibraryPack.mockImplementation(async () => {
+      api.catalog.mockResolvedValue(catalog([item(A, 'Светлая', 'w'), item(C, 'Осень', 'school')], { get: [] }))
+      return picked()
+    })
+    await opened()
+    await theme('Можно скачать')
+    fireEvent.click(getTile()!)
+    await tick()
+    fireEvent.click(btn('Скачать и показать')!)
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Крупный просмотр макета"]')).not.toBeNull())
+    expect(looks.ask).toBeNull()
+    expect(btn('Применить…')).toBeTruthy()
+    expect(document.querySelector('[role="dialog"][aria-label^="Применить макет"]')).toBeNull()
   })
 
   it('«Отмена» в вопросе: ничего не скачивается', async () => {

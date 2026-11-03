@@ -10,7 +10,7 @@
   import { clearVignette, makeVignette } from '../../panels/vignette/vigact'
   import { VIG_CLEAR, VIG_SAVE, vigMore } from '../../panels/vignette/vigmenu'
   import { vigOwn } from '../../panels/vignette/vigown.svelte'
-  import type { MenuNode } from '../../base/ui/menulist'
+  import type { MenuNode } from '../../base/popup/menulist'
   import Icon from '../../base/ui/Icon.svelte'
   import CardGroup from './CardGroup.svelte'
   import SpreadBgGroup from './SpreadBgGroup.svelte'

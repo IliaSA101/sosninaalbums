@@ -9,7 +9,7 @@ import { stickerById } from '../../editor/sticker/sticker'
 import { coverLabel, coverScopes } from '../../editor/cover/cover'
 import type { SegItem } from '../../base/tpl/Seg.svelte'
 import type { SideItem } from '../../base/tpl/SideList.svelte'
-import { GET, GET_SIDE_TIP, getItems, type DecorGet } from '../decorbrowse/decorget'
+import { GET, GET_SIDE_TIP, GET_SIDE_TIP_LOOK, getItems, type DecorGet } from '../decorbrowse/decorget'
 
 export type DecorKind = 'bg' | 'sticker' | 'spread' | 'frame'
 
@@ -116,8 +116,12 @@ export const SIDE_TIPS: Readonly<Record<string, string>> = {
   [GET]: GET_SIDE_TIP,
 }
 
-export const sideItems = (cat: Pick<DecorCatalog, 'themes'> | null): SideItem<string>[] =>
-  (cat?.themes ?? []).map((t) => ({ id: t.id, label: t.name, count: t.count, title: SIDE_TIPS[t.id] }))
+// Подсказка строки: «Можно скачать» у макетов (kind album) говорит «покажет», а не «поставит» (163-26)
+export const sideTip = (id: string, kind?: string): string | undefined =>
+  id === GET && kind === 'album' ? GET_SIDE_TIP_LOOK : SIDE_TIPS[id]
+
+export const sideItems = (cat: (Pick<DecorCatalog, 'themes'> & { kind?: string }) | null): SideItem<string>[] =>
+  (cat?.themes ?? []).map((t) => ({ id: t.id, label: t.name, count: t.count, title: sideTip(t.id, cat?.kind) }))
 
 // Плитки темы. «Недавние» — в порядке поставленных (новые первыми), «Новые» — в порядке каталога (новый набор выше),
 // «Все» — каталог целиком.

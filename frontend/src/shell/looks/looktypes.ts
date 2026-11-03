@@ -18,6 +18,7 @@ export interface LookCatalog {
   themes: DecorTheme[]
   items: LookItem[]
   recent: string[]
+  new?: string[] // 163: «Новые» — макеты наборов за 30 дней (id); у старого Go поля нет
   get?: DecorGet[] // 144: плитки «Можно скачать» (образцы макетов нескачанных наборов); у старого Go поля нет
   invite?: boolean // 144: списка наборов ещё не было — в конце «Все» приглашение «⤓ Ещё из интернета»
   readOnly: boolean

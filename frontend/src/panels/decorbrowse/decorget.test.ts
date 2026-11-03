@@ -7,6 +7,7 @@ vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} })
 const {
   ASK_TITLE,
   GET,
+  GET_SIDE_TIP_LOOK,
   askOk,
   getItems,
   getName,
@@ -149,9 +150,9 @@ describe('вопрос «Скачать набор?»', () => {
     )
   })
 
-  it('макет: «Макет откроется в этом окне», кнопка «Скачать и показать»', () => {
+  it('макет: «Макет откроется крупно», кнопка «Скачать и показать»', () => {
     expect(getQuestion(tile({ bg: 0, sticker: 0, frame: 0, spread: 1 }), 'album')).toBe(
-      'В наборе «Школа — осень» 1 разворот — 38,0 МБ. Макет откроется в этом окне.',
+      'В наборе «Школа — осень» 1 разворот — 38,0 МБ. Макет откроется крупно.',
     )
     expect(askOk('album')).toBe('Скачать и показать')
     expect(askOk('bg')).toBe('Скачать и поставить')
@@ -228,6 +229,14 @@ describe('выборка «Можно скачать» в темах', () => {
     expect(SIDE_TIPS[GET]).toBe('Образцы из наборов, которых ещё нет в библиотеке: щелчок скачает набор и поставит выбранное')
     const side = sideItems(cat())
     expect(side.at(-1)).toMatchObject({ id: GET, label: 'Можно скачать', count: 2, title: SIDE_TIPS[GET] })
+  })
+
+  it('у макетов (kind album) подсказка «Можно скачать» — «покажет», не «поставит» (163-26)', () => {
+    const side = sideItems({ ...cat(), kind: 'album' })
+    expect(side.at(-1)?.title).toBe(GET_SIDE_TIP_LOOK)
+    expect(GET_SIDE_TIP_LOOK).toBe('Образцы из наборов, которых ещё нет в библиотеке: щелчок скачает набор и покажет выбранное')
+    expect(sideItems(cat()).at(-1)?.title).toBe(SIDE_TIPS[GET]) // у окон оформления прежняя
+    expect(sideItems({ ...cat(), kind: 'album' })[0].title).toBe(SIDE_TIPS.all) // прочие строки по виду не меняются
   })
 
   it('число у строки считает тот же отбор «Набор»: выбран другой набор — плиток нет', () => {

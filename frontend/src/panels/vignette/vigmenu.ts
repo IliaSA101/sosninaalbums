@@ -1,6 +1,6 @@
 // Меню «⋯» группы «Виньетка» карточки листа (спека 124 U5): два редких действия ушли из тела группы. Слова и подсказки
 // прежние (были кнопками панели). Чистая часть без Go; действия по id — в InspectorSpread.
-import type { MenuNode } from '../../base/ui/menulist'
+import type { MenuNode } from '../../base/popup/menulist'
 
 export const VIG_SAVE = 'vig-save'
 export const VIG_CLEAR = 'vig-clear'

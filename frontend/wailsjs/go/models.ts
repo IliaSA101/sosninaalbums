@@ -5480,6 +5480,7 @@ export namespace text {
 	    x: number;
 	    y: number;
 	    w: number;
+	    dx?: number[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Line(source);
@@ -5491,6 +5492,7 @@ export namespace text {
 	        this.x = source["x"];
 	        this.y = source["y"];
 	        this.w = source["w"];
+	        this.dx = source["dx"];
 	    }
 	}
 	export class Style {

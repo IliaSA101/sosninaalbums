@@ -419,6 +419,8 @@ func FuzzParseLook(f *testing.F) {
 	f.Add(seed)
 	f.Add([]byte(`{"v":1,"steps":[{"role":"repeat","tpl":{"v":1,"pages":1,"ratio":0.2,"page":[{}],"places":[{"x":0,"y":0,"w":1,"h":1}]}}]}`))
 	f.Add([]byte(`{"v":1,"steps":[{"role":"vignette","vig":{"tpl":"my:x","teachers":-1,"pupils":1e9},"tpl":{"v":1,"pages":2,"page":[{},{}]}}]}`))
+	f.Add([]byte(`{"v":1,"style":" Ак\u0000ва\u202eрель ` + strings.Repeat("я", 60) + `","steps":[{"tpl":{"v":1,"pages":1,"ratio":0.2,"page":[{}],"places":[{"x":0,"y":0,"w":1,"h":1}]}}]}`))
+	f.Add([]byte(`{"v":1,"steps":[{"role":"vignette","vig":{"tpl":"split-g","teachers":6,"htext":"Шапка\n\n\n\nx","style":{"head":{"font":"my:0123456789abcdef","color":"#fff","size":-1},"caps":{"style":{"font":"nunito","size":1e308},"pad":-5},"ttext":"{Имя}","shape":"oval"}},"tpl":{"v":1,"pages":2,"page":[{},{}]}}]}`))
 	f.Add([]byte(`{"v":2}`))
 	f.Add([]byte(`{"v":1,"steps":[` + strings.Repeat(`{},`, 30) + `{}]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -433,6 +435,8 @@ func FuzzParseLook(f *testing.F) {
 // checkLook — свойства принятого макета: круг записи, пределы шагов, серии и мест.
 func checkLook(t *testing.T, lt AlbumTpl) {
 	t.Helper()
+	checkLookStyle(t, lt)
+	checkLookVigStyle(t, lt)
 	{
 		b, err := json.Marshal(lt)
 		if err != nil {

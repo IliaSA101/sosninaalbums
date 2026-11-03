@@ -93,7 +93,7 @@ func TestDimsOfWebPTooBig(t *testing.T) {
 
 func TestOpenOrientedWebP(t *testing.T) {
 	dir := testkit.TempDir(t)
-	before := DecodeBudget.Used()
+	before := decodeBudget.Used()
 	for _, c := range webpSamples(t) {
 		// Формат определяется по содержимому: WebP под .jpg и .png декодируется как есть.
 		for _, ext := range []string{".jpg", ".png"} {
@@ -111,7 +111,7 @@ func TestOpenOrientedWebP(t *testing.T) {
 			release()
 		}
 	}
-	if got := DecodeBudget.Used(); got != before {
+	if got := decodeBudget.Used(); got != before {
 		t.Fatalf("бюджет не возвращён: %d вместо %d", got, before)
 	}
 	// Огромный по заголовку WebP не доходит до декода и бюджета.
@@ -122,7 +122,7 @@ func TestOpenOrientedWebP(t *testing.T) {
 	if _, _, err := OpenOriented(big); !errors.Is(err, ErrTooBig) {
 		t.Fatalf("огромный WebP: %v", err)
 	}
-	if got := DecodeBudget.Used(); got != before {
+	if got := decodeBudget.Used(); got != before {
 		t.Fatalf("бюджет тронут отказом: %d вместо %d", got, before)
 	}
 }

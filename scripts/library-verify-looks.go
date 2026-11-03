@@ -8,7 +8,9 @@
 //     поставит альбом); у шага-страницы место не уходит через сгиб (область — страница);
 //   - пропорция: меньше 80 % мест шага, где кадр 3:2 / 2:3 режется ≤ 15 % (на эталоне Ratio шага) —
 //     WARN (решение 0.27-131-24), не провал; места-фигуры и шаги-виньетки не считаются;
-//   - набор с макетами — id `<имя>-layouts` и minApp не ниже 0.28.0 (правило выпуска, 0.28-131-24).
+//   - набор с макетами — id `<имя>-layouts` и minApp не ниже 0.28.0 (правило выпуска, 0.28-131-24);
+//   - шаг-виньетка (164): без Texts и Drafts (надпись встала бы на обе страницы) в любом наборе; со
+//     style или htext — minApp не ниже 0.36.0 (0.28–0.35 поля пропускают и ставят лист без оформления).
 package main
 
 import (
@@ -28,6 +30,8 @@ const (
 	lookKind   = "album"
 	lookSuffix = "-layouts"
 	lookMinApp = "0.28.0"
+	// lookVigMinApp — первая версия, понимающая style и htext шага-виньетки (164).
+	lookVigMinApp = "0.36.0"
 )
 
 // checkLooks — все макеты набора; каждый независим, паника одного не прерывает остальных.
@@ -95,6 +99,7 @@ func (v *verifier) checkLook(it decor.Item) {
 		v.guard(label, func() {
 			tpl := st.Tpl
 			if st.Role == model.RoleVignette {
+				v.checkLookVig(label, st)
 				// Места виньетки строит лист 031; от шага — только оформление (фон, стикеры).
 				if tpl.Pages != 1 && tpl.Pages != 2 {
 					tpl.Pages = 2
@@ -108,6 +113,19 @@ func (v *verifier) checkLook(it decor.Item) {
 			v.lookTpl(slug(it.Name), label, tpl)
 			v.lookAspect(label, tpl)
 		})
+	}
+}
+
+// checkLookVig — правила шага-виньетки (164): надписей нет (шаг ставится на обе страницы листа, vigPage
+// зеркалит, надпись встала бы дважды — шапка и подписи идут через htext и style); style и htext —
+// только в наборе с minApp не ниже lookVigMinApp. Оба провала независимы.
+func (v *verifier) checkLookVig(label string, st model.LookStep) {
+	if n := len(st.Tpl.Texts) + len(st.Tpl.Drafts); n > 0 {
+		v.failf("%s: у шага-виньетки надписей %d (texts %d, drafts %d): они встанут на обе страницы, шапку и подписи задают htext и style",
+			label, n, len(st.Tpl.Texts), len(st.Tpl.Drafts))
+	}
+	if st.Vig != nil && (st.Vig.Style != nil || st.Vig.HText != "") && verNum(v.minApp) < verNum(lookVigMinApp) {
+		v.failf("%s: шаг-виньетка со style или htext, а minApp %s ниже %s", label, v.minApp, lookVigMinApp)
 	}
 }
 

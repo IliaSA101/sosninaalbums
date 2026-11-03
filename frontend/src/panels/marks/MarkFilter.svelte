@@ -4,7 +4,7 @@
   import { gallery } from '../gallery/gallery.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import Icon from '../../base/ui/Icon.svelte'
-  import Popover from '../../base/ui/Popover.svelte'
+  import Popover from '../../base/popup/Popover.svelte'
   import { libfilter } from './libfilter.svelte'
   import { LIB_SORTS } from '../library/sortphotos'
   import { filterLabel, LABEL_VIEW } from './markbar'

@@ -11,7 +11,7 @@
   import { unitOf } from '../../base/geom/sheet'
   import { keymap } from '../../base/keys/keymap.svelte'
   import Icon from '../../base/ui/Icon.svelte'
-  import Popover from '../../base/ui/Popover.svelte'
+  import Popover from '../../base/popup/Popover.svelte'
   import { uploadFontsNoPick } from '../../editor/text/fontupload'
   import { purgeMissing } from './purge'
   import { relinkFolder } from './relink'

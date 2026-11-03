@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { portal } from '../../base/ui/portal'
+  import { portal } from '../../base/popup/portal'
   import { token, type Field } from './fields'
 
   // Меню «Вставить поле ▾» (030): поля листа (`fields`, от Go), `{Фамилия}`… Кнопка и пункты не забирают фокус

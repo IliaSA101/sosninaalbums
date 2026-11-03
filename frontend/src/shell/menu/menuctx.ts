@@ -14,7 +14,7 @@ import { anyVaries, varyTargets } from '../../panels/gallery/variants'
 import { canMakeVignette, isVignette } from '../../panels/vignette/vignette'
 import { isCover, isSheet, unitOf } from '../../base/geom/sheet'
 import { splitMissing } from '../../panels/library/missing'
-import { share } from '../share/share.svelte'
+import { share } from '../../output/share/share.svelte'
 import { buildMenu, enabledCmds, type MenuCtx } from './menu'
 import { spreadCmds, type SpreadCmds } from './spreadcmds'
 

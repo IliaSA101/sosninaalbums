@@ -21,7 +21,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(root)
 const gotmp = path.join(root, '.gotmp') // антивирус: exe go только сюда (как в check.ps1)
 fs.mkdirSync(gotmp, { recursive: true })
-const env = withGoCaches({ ...process.env, GOTMPDIR: gotmp, SA_TEST_SHORT: '1' }, root) // SA_TEST_SHORT: цепочки состояний по 50 шагов
+const env = withGoCaches({ ...process.env, GOTMPDIR: gotmp, SA_TEST_SHORT: '1', GIT_OPTIONAL_LOCKS: '0' }, root) // SA_TEST_SHORT: цепочки состояний по 50 шагов
 // Теги сборки, как в check.sh (scripts/env.sh): иначе ключ кэша go test другой и результаты precheck и check.sh не делятся.
 // Для internal/... тег ничего не меняет, но ключ у go test включает его.
 if (process.platform === 'linux' && !(env.GOFLAGS || '').includes('webkit2_41')) {
@@ -213,6 +213,13 @@ if (part !== 'fe' && goFiles.length) {
   step('gofmt', () => res(run('gofmt', ['-l', ...goFiles]), true))
   // vet по всему модулю (2–4 с): ловит чужие вызовы и тесты после смены сигнатуры, а не только изменённые пакеты
   step('go vet', () => res(run('go', ['vet', ...MODULE_PKGS])))
+  // Швы стенда (тег qa: зонд, SA_QA_VOLDELAY) — только при правке osx или app: иначе их не собирает никто (157, да владельца 03.11)
+  if (goFiles.some((f) => f.startsWith('internal/osx/') || f.startsWith('internal/app/'))) {
+    step('go vet qa', () => res(run('go', ['vet', '-tags', 'qa', './internal/osx', './internal/app'])))
+    step('go test qa', () =>
+      res(run('go', ['test', '-count=1', '-tags', 'qa', '-run', 'QaProbe|VolDelay', './internal/osx', './internal/app'])),
+    )
+  }
   step('go test -short', () => {
     if (!pkgs.length) return res({ code: 0, out: '' })
     // Без -count=1: нетронутые пакеты берутся из кэша go test (повторный precheck не гоняет их заново).

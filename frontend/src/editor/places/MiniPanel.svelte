@@ -25,7 +25,7 @@
   } from './minipanel'
   import { arcWhereOf, colHeightOf, placeMini } from './minicol'
   import { measureMini, panelOutside, sameOrg, type Org } from './miniview'
-  import { portal } from '../../base/ui/portal'
+  import { portal } from '../../base/popup/portal'
   import { MoreList, Through } from './ministate.svelte'
   import { miniSpot } from './minispot.svelte'
   import { canvas } from '../canvas/canvas.svelte'
@@ -35,8 +35,8 @@
   import { onMount } from 'svelte'
   import { isTextField } from '../../shell/menu/keys'
   import Icon from '../../base/ui/Icon.svelte'
-  import MenuList from '../../base/ui/MenuList.svelte'
-  import type { MenuNode } from '../../base/ui/menulist'
+  import MenuList from '../../base/popup/MenuList.svelte'
+  import type { MenuNode } from '../../base/popup/menulist'
 
   // Мини-панель выделенного (спека 009, 108): столбец значков сбоку от фото (владелец 2026-10-23, owner-ux §1) — справа,
   // иначе слева, иначе внутри у правого края (minicol.ts); не помещается — прежняя полоса: под рамкой (и под её подписью,

@@ -52,12 +52,13 @@ class WinQaWorkflow(unittest.TestCase):
 
     def test_jobs_and_needs(self):
         jobs = self.doc["jobs"]
-        self.assertEqual(set(jobs), {"plan", "replay", "kit", "scenario", "agents", "library", "videos-site", "videos-win", "videos-mac", "report"})
+        self.assertEqual(set(jobs), {"plan", "replay", "kit", "scenario", "agents", "library", "volume", "videos-site", "videos-win", "videos-mac", "report"})
         self.assertEqual(jobs["kit"]["needs"], "plan")
         self.assertEqual(set(jobs["scenario"]["needs"]), {"plan", "kit"})
-        self.assertEqual(set(jobs["report"]["needs"]), {"plan", "kit", "scenario"})
+        self.assertEqual(set(jobs["report"]["needs"]), {"plan", "kit", "scenario", "volume"})
         self.assertEqual(set(jobs["agents"]["needs"]), {"plan", "kit"})
         self.assertEqual(set(jobs["library"]["needs"]), {"plan", "kit"})
+        self.assertEqual(set(jobs["volume"]["needs"]), {"plan", "kit"})
         self.assertEqual(jobs["videos-site"]["needs"], "plan")
         self.assertEqual(set(jobs["videos-win"]["needs"]), {"plan", "kit", "videos-site"})
         self.assertEqual(set(jobs["videos-mac"]["needs"]), {"plan", "videos-site"})
@@ -123,6 +124,20 @@ class WinQaWorkflow(unittest.TestCase):
         names = [s["with"]["name"] for s in steps(lib) if s.get("uses", "").startswith("actions/upload-artifact@")]
         self.assertEqual(names, ["library-exe-qa"])
 
+    def test_volume_job_windows_powershell_ascii_and_artifact(self):
+        # диск снова доступен в exe (157): тот же раннер и PowerShell 5.1; артефакт не под win-qa-*; шаг короче задания
+        vol = self.doc["jobs"]["volume"]
+        self.assertIn("needs.plan.outputs.runner", vol["runs-on"])
+        self.assertEqual(vol["defaults"]["run"]["shell"], "powershell")
+        for s in steps(vol):
+            if "run" in s:
+                self.assertTrue(s["run"].isascii(), s.get("name"))
+        run = [s for s in steps(vol) if "volume_exe.py" in s.get("run", "")]
+        self.assertEqual(len(run), 1)
+        self.assertLessEqual(run[0]["timeout-minutes"], vol["timeout-minutes"] - 5)
+        names = [s["with"]["name"] for s in steps(vol) if s.get("uses", "").startswith("actions/upload-artifact@")]
+        self.assertEqual(names, ["volume-exe-qa"])
+
     def test_videos_jobs_win_ascii_mac_builds_qa_and_guards(self):
         # ролики F1 (140 Т7): Windows - как library; macOS - своя сборка с тегом qa и обратный страж; артефакты не под win-qa-*
         win = self.doc["jobs"]["videos-win"]
@@ -140,7 +155,7 @@ class WinQaWorkflow(unittest.TestCase):
         builds = [r for r in runs if "wails build" in r]
         self.assertEqual(len(builds), 1)
         self.assertRegex(builds[0], r"-tags qa\b")
-        guard = [r for r in runs if "SA_QA_PROBE SA_LIBRARY_URL" in r]
+        guard = [r for r in runs if "SA_QA_PROBE SA_QA_VOLDELAY SA_LIBRARY_URL" in r]
         self.assertEqual(len(guard), 1)
         self.assertIn("|| {", guard[0])  # отсутствие строки в бинарнике - провал, обратно релизному стражу
         mrun = [s for s in steps(mac) if "videos_exe.py" in s.get("run", "")]
@@ -198,6 +213,23 @@ class WinQaWorkflow(unittest.TestCase):
         names = [s.get("name", "") for s in rp]
         self.assertLess(max(names.index(n) for n in found), names.index("peercred - создать пользователя qapeer"))
         self.assertTrue(any(s.get("uses", "").startswith("actions/setup-node@") for s in rp[: names.index(list(found)[0])]))  # node до разбора
+
+    def test_replay_registry_step(self):
+        # 160 Т3: TestCloudRootsWindowsReg пишет в реестр только при SA_REG_WRITE=1; пропуск и отсутствие PASS - провал
+        rp = steps(self.doc["jobs"]["replay"])
+        found = [s for s in rp if "TestCloudRootsWindowsReg" in s.get("run", "")]
+        self.assertEqual(len(found), 1)
+        s = found[0]
+        self.assertEqual(s["env"]["SA_REG_WRITE"], "1")
+        self.assertEqual(s["if"], "always()")
+        self.assertTrue(s["run"].isascii())
+        self.assertIn("peer-foreign.mjs", s["run"])
+        self.assertIn("--pkg=./internal/osx", s["run"])
+        self.assertNotIn("--allow-skip", s["run"])
+        self.assertRegex(s["run"], r"'[^']*\bTestCloudRootsWindowsReg\b[^']*' TestCloudRootsWindowsReg\b")  # в шаблоне -run и в обязательных
+        names = [x.get("name", "") for x in rp]
+        self.assertTrue(any(x.get("uses", "").startswith("actions/setup-node@") for x in rp[: rp.index(s)]))  # node до разбора
+        self.assertLess(rp.index(s), names.index("peercred - создать пользователя qapeer"))
 
     def test_scenario_step_timeout_below_job(self):
         # шаг сценария должен кончиться раньше задания, чтобы сводка и выгрузка артефактов успели (сторож 118)
@@ -290,9 +322,9 @@ class ReleaseNoQaTags(unittest.TestCase):
         self.assertTrue(all(g in self.text for g in ("нет бинарника build/bin/sosninaalbums.exe", "нет бинарника build/bin/sosninaalbums\"")))
 
     def test_every_build_is_followed_by_tag_guard(self):
-        # после каждой сборки программы - шаг, ищущий SA_QA_PROBE и SA_LIBRARY_URL в бинарнике
+        # после каждой сборки программы - шаг, ищущий строки qa-сборки в бинарнике (SA_QA_VOLDELAY - 157)
         self.assertEqual(self.text.count("Страж тегов QA"), self.text.count("wails build -"))
-        self.assertEqual(self.text.count("SA_QA_PROBE SA_LIBRARY_URL"), self.text.count("Страж тегов QA"))
+        self.assertEqual(self.text.count("SA_QA_PROBE SA_QA_VOLDELAY SA_LIBRARY_URL"), self.text.count("Страж тегов QA"))
 
 
 class PublishExclude(unittest.TestCase):

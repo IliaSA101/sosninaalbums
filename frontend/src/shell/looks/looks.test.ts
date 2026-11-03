@@ -10,7 +10,9 @@ import {
   fitText,
   formatText,
   lookKey,
+  lookPh,
   lookRatio,
+  PEEK_PX_MAX,
   tileRatio,
   moveStep,
   needsAsk,
@@ -245,5 +247,28 @@ describe('looks: вопрос «Применить» и тосты (U2)', () => 
     expect(stepWhy(0, false, false, true)).toBe('В альбоме нет обложки: её оформление встанет при «Создать обложку»')
     expect(stepWhy(2, true, true, true)).toBe('На обложку встаёт шаг «Обложка»: выберите его в ленте шагов')
     expect(stepWhy(2, true, true, false)).toBe('У этого макета нет оформления обложки')
+  })
+})
+
+describe('метка ph у /media/look (163 U4)', () => {
+  it('формула design §4: (rev × 1000 + min(фото, 999)) × 1000 + marksRev mod 1000 + 1', () => {
+    expect(lookPh(5, 60, 2)).toBe((5 * 1000 + 60) * 1000 + 2 + 1)
+    expect(lookPh(5, 1500, 1002)).toBe((5 * 1000 + 999) * 1000 + 2 + 1)
+  })
+  it('всегда > 0, даже в пустом альбоме и с мусором; метка меняется с каждой из трёх частей', () => {
+    expect(lookPh(0, 0, 0)).toBe(1)
+    expect(lookPh(NaN, -3, Infinity)).toBe(1)
+    const base = lookPh(3, 10, 1)
+    expect(new Set([base, lookPh(4, 10, 1), lookPh(3, 11, 1), lookPh(3, 10, 2)]).size).toBe(4)
+  })
+  it('не выходит за 16 цифр и 2⁵³−1 (предел Go), как бы ни выросла правка', () => {
+    for (const rev of [999_999_999, 1e12, Number.MAX_SAFE_INTEGER]) {
+      const v = lookPh(rev, 999, 999)
+      expect(Number.isSafeInteger(v), String(rev)).toBe(true)
+      expect(String(v).length).toBeLessThanOrEqual(16)
+    }
+  })
+  it('потолок кадра просмотра — 2048 (предел Go с ph)', () => {
+    expect(PEEK_PX_MAX).toBe(2048)
   })
 })

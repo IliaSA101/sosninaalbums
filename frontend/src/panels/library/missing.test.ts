@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   albumPhotos,
+  driveBackText,
   driveLabel,
   fileCount,
   fontsKey,
@@ -51,6 +52,12 @@ describe('missing', () => {
     expect(driveLabel({ from: '', to: '', found: 0, total: 0 })).toBe('')
     expect(driveLabel({ from: 'E', to: 'F', found: 0, total: 4 })).toBe('')
     expect(driveLabel(null)).toBe('')
+  })
+
+  it('driveBackText: тост «Диск E: снова доступен — найдено N фото»', () => {
+    expect(driveBackText('E', 120)).toBe('Диск E: снова доступен — найдено 120 фото')
+    expect(driveBackText('Q', 1)).toBe('Диск Q: снова доступен — найдено 1 фото')
+    expect(driveBackText('R', 5)).toBe('Диск R: снова доступен — найдено 5 фото')
   })
 
   it('итоговый тост', () => {

@@ -78,7 +78,7 @@ func TestAgentsToolsMigrate(t *testing.T) {
 	}
 	for _, k := range AgentToolNames() {
 		want := PermAllow
-		if c := AgentToolClass(k); isEditClass(c) || c == ClassAskOnly { // Q без флажка — «Запретить»
+		if c := AgentToolClass(k); isEditClass(c) || isAskClass(c) { // Q и O без флажка — «Запретить»
 			want = PermDeny
 		}
 		if fresh.Tools[k] != want {
