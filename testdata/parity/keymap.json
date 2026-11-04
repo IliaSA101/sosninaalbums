@@ -1,0 +1,2085 @@
+{
+  "view": {
+    "commands": [
+      {
+        "id": "new",
+        "label": "Новый альбом",
+        "short": "Новый",
+        "group": "album",
+        "scope": "app",
+        "defaults": [
+          "Mod+KeyN"
+        ],
+        "keys": [
+          "Mod+KeyN"
+        ],
+        "custom": false
+      },
+      {
+        "id": "newSheet",
+        "label": "Новый проект: виньетка-лист…",
+        "short": "Лист",
+        "group": "album",
+        "scope": "app",
+        "feature": "vignette",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "open",
+        "label": "Открыть альбом…",
+        "short": "Открыть",
+        "group": "album",
+        "scope": "app",
+        "defaults": [
+          "Mod+KeyO"
+        ],
+        "keys": [
+          "Mod+KeyO"
+        ],
+        "custom": false
+      },
+      {
+        "id": "save",
+        "label": "Сохранить",
+        "short": "Сохранить",
+        "group": "album",
+        "scope": "app",
+        "defaults": [
+          "Mod+KeyS"
+        ],
+        "keys": [
+          "Mod+KeyS"
+        ],
+        "custom": false
+      },
+      {
+        "id": "saveAs",
+        "label": "Сохранить как…",
+        "short": "Сохр. как",
+        "group": "album",
+        "scope": "app",
+        "defaults": [
+          "Mod+Shift+KeyS"
+        ],
+        "keys": [
+          "Mod+Shift+KeyS"
+        ],
+        "custom": false
+      },
+      {
+        "id": "collect",
+        "label": "Собрать проект в папку…",
+        "short": "Собрать",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "backups",
+        "label": "Резервные копии…",
+        "short": "Копии",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "packs",
+        "label": "Наборы библиотеки…",
+        "short": "Наборы",
+        "group": "album",
+        "scope": "app",
+        "feature": "decor",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "looks",
+        "label": "Макеты альбома…",
+        "short": "Макеты",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "saveLook",
+        "label": "Сохранить альбом как макет…",
+        "short": "Как макет",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "tplExport",
+        "label": "Сохранить мои шаблоны в файл…",
+        "short": "Сохр. шабл",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "tplImport",
+        "label": "Загрузить шаблоны из файла…",
+        "short": "Загр. шабл",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "showData",
+        "label": "Открыть папку данных",
+        "short": "К данным",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "toggleAssoc",
+        "label": "Открывать .salbum этой программой",
+        "short": "Связь",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "agents",
+        "label": "ИИ-агенты (MCP)…",
+        "short": "Агенты",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "addFolder",
+        "label": "Добавить папку с фото…",
+        "short": "Папка фото",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "relink",
+        "label": "Найти пропавшие фото…",
+        "short": "Пропавшие",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "export",
+        "label": "Экспорт…",
+        "short": "Экспорт",
+        "group": "album",
+        "scope": "app",
+        "defaults": [
+          "Mod+KeyE"
+        ],
+        "keys": [
+          "Mod+KeyE"
+        ],
+        "custom": false
+      },
+      {
+        "id": "showExport",
+        "label": "Открыть папку экспорта",
+        "short": "К экспорту",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "settings",
+        "label": "Настройки альбома…",
+        "short": "Настройки",
+        "group": "album",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "undo",
+        "label": "Отменить",
+        "short": "Отменить",
+        "group": "album",
+        "scope": "app",
+        "defaults": [
+          "Mod+KeyZ"
+        ],
+        "repeat": true,
+        "dialogs": true,
+        "keys": [
+          "Mod+KeyZ"
+        ],
+        "custom": false
+      },
+      {
+        "id": "redo",
+        "label": "Повторить",
+        "short": "Повторить",
+        "group": "album",
+        "scope": "app",
+        "defaults": [
+          "Mod+KeyY",
+          "Mod+Shift+KeyZ"
+        ],
+        "repeat": true,
+        "dialogs": true,
+        "keys": [
+          "Mod+KeyY",
+          "Mod+Shift+KeyZ"
+        ],
+        "custom": false
+      },
+      {
+        "id": "toggleBig",
+        "label": "Во весь экран",
+        "short": "Весь экран",
+        "group": "view",
+        "scope": "app",
+        "feature": "timeline",
+        "defaults": [
+          "KeyF"
+        ],
+        "keys": [
+          "KeyF"
+        ],
+        "custom": false
+      },
+      {
+        "id": "photoPreview",
+        "label": "Крупный просмотр фото",
+        "short": "Крупно",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "KeyZ"
+        ],
+        "keys": [
+          "KeyZ"
+        ],
+        "custom": false
+      },
+      {
+        "id": "photoCompare",
+        "label": "Сравнить фото",
+        "short": "Сравнить",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "KeyC"
+        ],
+        "keys": [
+          "KeyC"
+        ],
+        "custom": false
+      },
+      {
+        "id": "photoSimilar",
+        "label": "Похожие к этому",
+        "short": "Похожие",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "Shift+KeyC"
+        ],
+        "keys": [
+          "Shift+KeyC"
+        ],
+        "custom": false
+      },
+      {
+        "id": "toggleDetails",
+        "label": "Панель деталей",
+        "short": "Детали",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "KeyI"
+        ],
+        "keys": [
+          "KeyI"
+        ],
+        "custom": false
+      },
+      {
+        "id": "toggleSafe",
+        "label": "Безопасная зона",
+        "short": "Зона",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "KeyG"
+        ],
+        "keys": [
+          "KeyG"
+        ],
+        "custom": false
+      },
+      {
+        "id": "toggleMarkup",
+        "label": "Разметка типографии",
+        "short": "Разметка",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "toggleRulers",
+        "label": "Линейки",
+        "short": "Линейки",
+        "group": "view",
+        "scope": "app",
+        "feature": "rulers",
+        "defaults": [
+          "Mod+KeyR"
+        ],
+        "keys": [
+          "Mod+KeyR"
+        ],
+        "custom": false
+      },
+      {
+        "id": "toggleSnap",
+        "label": "Привязка",
+        "short": "Привязка",
+        "group": "view",
+        "scope": "app",
+        "feature": "manual",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "toggleFaceGuide",
+        "label": "Силуэт под лицо",
+        "short": "Силуэт",
+        "group": "view",
+        "scope": "app",
+        "feature": "vignette",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "allSpreads",
+        "label": "Все развороты",
+        "short": "Все разв.",
+        "group": "view",
+        "scope": "app",
+        "feature": "allSpreads",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "compareLevels",
+        "label": "Уровни и функции…",
+        "short": "Уровни",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "levelSimple",
+        "label": "Уровень: Простой",
+        "short": "Простой",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "levelStandard",
+        "label": "Уровень: Стандартный",
+        "short": "Стандарт",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "levelFull",
+        "label": "Уровень: Полный",
+        "short": "Полный",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "levelCustom",
+        "label": "Уровень: Свой",
+        "short": "Свой",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "startWindow",
+        "label": "Стартовое окно",
+        "short": "Старт",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "whatsNew",
+        "label": "Что нового",
+        "short": "Новое",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "about",
+        "label": "О программе",
+        "short": "О прогр.",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "guide",
+        "label": "Справочник функций",
+        "short": "Справка",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "F1"
+        ],
+        "fixed": true,
+        "keys": [
+          "F1"
+        ],
+        "custom": false
+      },
+      {
+        "id": "tour",
+        "label": "Первые шаги",
+        "short": "Шаги",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "videos",
+        "label": "Видео о программе",
+        "short": "Видео",
+        "group": "view",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "help",
+        "label": "Горячие клавиши…",
+        "short": "Клавиши",
+        "group": "view",
+        "scope": "app",
+        "defaults": [
+          "Shift+Slash",
+          "Shift+Digit7"
+        ],
+        "keys": [
+          "Shift+Slash",
+          "Shift+Digit7"
+        ],
+        "custom": false
+      },
+      {
+        "id": "fitZoom",
+        "label": "Вписать разворот в окно",
+        "short": "Вписать",
+        "group": "canvas",
+        "scope": "app",
+        "defaults": [
+          "Digit0",
+          "Mod+Digit0"
+        ],
+        "keys": [
+          "Digit0",
+          "Mod+Digit0"
+        ],
+        "custom": false
+      },
+      {
+        "id": "zoomIn",
+        "label": "Увеличить",
+        "short": "Увеличить",
+        "group": "canvas",
+        "scope": "app",
+        "feature": "zoom",
+        "defaults": [
+          "Mod+Equal",
+          "Mod+Shift+Equal"
+        ],
+        "repeat": true,
+        "keys": [
+          "Mod+Equal",
+          "Mod+Shift+Equal"
+        ],
+        "custom": false
+      },
+      {
+        "id": "zoomOut",
+        "label": "Уменьшить",
+        "short": "Уменьшить",
+        "group": "canvas",
+        "scope": "app",
+        "feature": "zoom",
+        "defaults": [
+          "Mod+Minus"
+        ],
+        "repeat": true,
+        "keys": [
+          "Mod+Minus"
+        ],
+        "custom": false
+      },
+      {
+        "id": "spaceDown",
+        "label": "Пробел: коротко — раскладка, зажат + мышь — двигать",
+        "short": "Пробел",
+        "hint": "Shift+Пробел коротко — предыдущая раскладка",
+        "group": "canvas",
+        "scope": "app",
+        "defaults": [
+          "Space",
+          "Shift+Space"
+        ],
+        "fixed": true,
+        "keys": [
+          "Space",
+          "Shift+Space"
+        ],
+        "custom": false
+      },
+      {
+        "id": "prevSpread",
+        "label": "Предыдущий разворот",
+        "short": "Назад",
+        "group": "spreads",
+        "scope": "app",
+        "defaults": [
+          "ArrowLeft"
+        ],
+        "fixed": true,
+        "repeat": true,
+        "keys": [
+          "ArrowLeft"
+        ],
+        "custom": false
+      },
+      {
+        "id": "nextSpread",
+        "label": "Следующий разворот",
+        "short": "Вперёд",
+        "group": "spreads",
+        "scope": "app",
+        "defaults": [
+          "ArrowRight"
+        ],
+        "fixed": true,
+        "repeat": true,
+        "keys": [
+          "ArrowRight"
+        ],
+        "custom": false
+      },
+      {
+        "id": "closeGallery",
+        "label": "Закрыть галерею раскладок",
+        "short": "Закрыть",
+        "group": "spreads",
+        "scope": "app",
+        "defaults": [
+          "Escape"
+        ],
+        "fixed": true,
+        "keys": [
+          "Escape"
+        ],
+        "custom": false
+      },
+      {
+        "id": "varyLayouts",
+        "label": "Разнообразить раскладки",
+        "short": "Разнообр.",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "variants",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "makeVignette",
+        "label": "Сделать разворот виньеткой",
+        "short": "Виньетка",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "vignette",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "vigSetup",
+        "label": "Настроить виньетку…",
+        "short": "Виньетка…",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "vignette",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "sortVignette",
+        "label": "Сортировать учеников по фамилии",
+        "short": "По фамилии",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "vignette",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "clearVignette",
+        "label": "Обычный разворот (снять виньетку)",
+        "short": "Обычный",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "vignette",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "renameSpread",
+        "label": "Название разворота…",
+        "short": "Название",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "names",
+        "defaults": [
+          "F2"
+        ],
+        "keys": [
+          "F2"
+        ],
+        "custom": false
+      },
+      {
+        "id": "insertSpread",
+        "label": "Вставить разворот после текущего",
+        "short": "Вставить",
+        "group": "spreads",
+        "scope": "app",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "splitSpread",
+        "label": "Разрезать разворот перед выделенным фото",
+        "short": "Разрезать",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "timeline",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "joinSpread",
+        "label": "Склеить разворот со следующим",
+        "short": "Склеить",
+        "group": "spreads",
+        "scope": "app",
+        "feature": "timeline",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "selectSpread",
+        "label": "Выделить всё на развороте",
+        "short": "Выделить",
+        "hint": "Все фото, места и тексты разворота",
+        "group": "photos",
+        "scope": "canvas",
+        "feature": "groupSelect",
+        "defaults": [
+          "Mod+KeyA"
+        ],
+        "keys": [
+          "Mod+KeyA"
+        ],
+        "custom": false
+      },
+      {
+        "id": "selectAll",
+        "label": "Выделить все фото в ленте",
+        "short": "Все фото",
+        "group": "photos",
+        "scope": "library",
+        "defaults": [
+          "Mod+KeyA"
+        ],
+        "keys": [
+          "Mod+KeyA"
+        ],
+        "custom": false
+      },
+      {
+        "id": "findPhotos",
+        "label": "Найти фото по имени",
+        "short": "Найти",
+        "group": "photos",
+        "scope": "app",
+        "defaults": [
+          "Mod+KeyF"
+        ],
+        "keys": [
+          "Mod+KeyF"
+        ],
+        "custom": false
+      },
+      {
+        "id": "clearSelection",
+        "label": "Снять выделение",
+        "short": "Снять",
+        "group": "photos",
+        "scope": "app",
+        "defaults": [
+          "Escape"
+        ],
+        "fixed": true,
+        "keys": [
+          "Escape"
+        ],
+        "custom": false
+      },
+      {
+        "id": "removeCell",
+        "label": "Удалить выбранное",
+        "short": "Удалить",
+        "hint": "Фото — в ленту (в ручной раскладке место остаётся, второй раз — убрать место); блок текста — удалить; группа — все сразу. Из библиотеки не удаляет",
+        "group": "photos",
+        "scope": "canvas",
+        "defaults": [
+          "Delete",
+          "Backspace"
+        ],
+        "keys": [
+          "Delete",
+          "Backspace"
+        ],
+        "custom": false
+      },
+      {
+        "id": "cutItems",
+        "label": "Вырезать",
+        "short": "Вырезать",
+        "group": "photos",
+        "scope": "canvas",
+        "feature": "clipboard",
+        "defaults": [
+          "Mod+KeyX"
+        ],
+        "keys": [
+          "Mod+KeyX"
+        ],
+        "custom": false
+      },
+      {
+        "id": "copyItems",
+        "label": "Копировать",
+        "short": "Копировать",
+        "hint": "Фото, места, надписи и стикеры; вставка — на любом листе",
+        "group": "photos",
+        "scope": "canvas",
+        "feature": "clipboard",
+        "defaults": [
+          "Mod+KeyC"
+        ],
+        "keys": [
+          "Mod+KeyC"
+        ],
+        "custom": false
+      },
+      {
+        "id": "pasteItems",
+        "label": "Вставить",
+        "short": "Вставить",
+        "group": "photos",
+        "scope": "canvas",
+        "feature": "clipboard",
+        "defaults": [
+          "Mod+KeyV"
+        ],
+        "keys": [
+          "Mod+KeyV"
+        ],
+        "custom": false
+      },
+      {
+        "id": "duplicateItems",
+        "label": "Дублировать",
+        "short": "Дубль",
+        "group": "photos",
+        "scope": "canvas",
+        "feature": "clipboard",
+        "defaults": [
+          "Mod+KeyD"
+        ],
+        "keys": [
+          "Mod+KeyD"
+        ],
+        "custom": false
+      },
+      {
+        "id": "addSelected",
+        "label": "Выделенные фото — на разворот",
+        "short": "На разв.",
+        "group": "photos",
+        "scope": "app",
+        "defaults": [
+          "Enter"
+        ],
+        "keys": [
+          "Enter"
+        ],
+        "custom": false
+      },
+      {
+        "id": "flipH",
+        "label": "Зеркало по горизонтали",
+        "short": "Зерк. ↔",
+        "group": "photos",
+        "scope": "app",
+        "feature": "flip",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "flipV",
+        "label": "Зеркало по вертикали",
+        "short": "Зерк. ↕",
+        "group": "photos",
+        "scope": "app",
+        "feature": "flip",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "gray",
+        "label": "Ч/б или цвет",
+        "short": "Ч/б",
+        "group": "photos",
+        "scope": "app",
+        "feature": "adjust",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "turnCw",
+        "label": "Повернуть ↻ 90°",
+        "short": "↻ 90°",
+        "group": "photos",
+        "scope": "app",
+        "feature": "turn",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "turnCcw",
+        "label": "Повернуть ↺ 90°",
+        "short": "↺ 90°",
+        "group": "photos",
+        "scope": "app",
+        "feature": "turn",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "straighten",
+        "label": "Выпрямить по линии",
+        "short": "Выпрямить",
+        "group": "photos",
+        "scope": "app",
+        "feature": "tilt",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "markRating0",
+        "label": "Звёзды: убрать",
+        "short": "Без звёзд",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit0"
+        ],
+        "keys": [
+          "Digit0"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markRating1",
+        "label": "Звёзды: 1",
+        "short": "1 звезда",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit1"
+        ],
+        "keys": [
+          "Digit1"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markRating2",
+        "label": "Звёзды: 2",
+        "short": "2 звезды",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit2"
+        ],
+        "keys": [
+          "Digit2"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markRating3",
+        "label": "Звёзды: 3",
+        "short": "3 звезды",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit3"
+        ],
+        "keys": [
+          "Digit3"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markRating4",
+        "label": "Звёзды: 4",
+        "short": "4 звезды",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit4"
+        ],
+        "keys": [
+          "Digit4"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markRating5",
+        "label": "Звёзды: 5",
+        "short": "5 звёзд",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit5"
+        ],
+        "keys": [
+          "Digit5"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markUp",
+        "label": "Звёзд больше",
+        "short": "Звёзды +",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "BracketRight"
+        ],
+        "keys": [
+          "BracketRight"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markDown",
+        "label": "Звёзд меньше",
+        "short": "Звёзды −",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "BracketLeft"
+        ],
+        "keys": [
+          "BracketLeft"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markRed",
+        "label": "Метка: красная",
+        "short": "Красная",
+        "hint": "Повтор у всех выделенных — снять",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit6"
+        ],
+        "keys": [
+          "Digit6"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markYellow",
+        "label": "Метка: жёлтая",
+        "short": "Жёлтая",
+        "hint": "Повтор у всех выделенных — снять",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit7"
+        ],
+        "keys": [
+          "Digit7"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markGreen",
+        "label": "Метка: зелёная",
+        "short": "Зелёная",
+        "hint": "Повтор у всех выделенных — снять",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit8"
+        ],
+        "keys": [
+          "Digit8"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markBlue",
+        "label": "Метка: синяя",
+        "short": "Синяя",
+        "hint": "Повтор у всех выделенных — снять",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "Digit9"
+        ],
+        "keys": [
+          "Digit9"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markPick",
+        "label": "Флажок «отобрано»",
+        "short": "Отобрано",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "KeyP"
+        ],
+        "keys": [
+          "KeyP"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markReject",
+        "label": "Флажок «отклонено»",
+        "short": "Отклонено",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "KeyX"
+        ],
+        "keys": [
+          "KeyX"
+        ],
+        "custom": false
+      },
+      {
+        "id": "markUnflag",
+        "label": "Снять флажок",
+        "short": "Без флажка",
+        "group": "marks",
+        "scope": "library",
+        "feature": "marks",
+        "defaults": [
+          "KeyU"
+        ],
+        "keys": [
+          "KeyU"
+        ],
+        "custom": false
+      },
+      {
+        "id": "binToggle",
+        "label": "Подборка: добавить или убрать выделенные",
+        "short": "Подборка",
+        "hint": "В показанную подборку, иначе — в последнюю, куда добавляли; повтор у всех выделенных — убрать",
+        "group": "bins",
+        "scope": "library",
+        "feature": "bins",
+        "defaults": [
+          "KeyB"
+        ],
+        "keys": [
+          "KeyB"
+        ],
+        "custom": false
+      },
+      {
+        "id": "binNew",
+        "label": "Новая подборка из выделенных…",
+        "short": "Новая",
+        "group": "bins",
+        "scope": "library",
+        "feature": "bins",
+        "defaults": [
+          "Shift+KeyB"
+        ],
+        "keys": [
+          "Shift+KeyB"
+        ],
+        "custom": false
+      },
+      {
+        "id": "binRemove",
+        "label": "Убрать выделенные из подборки",
+        "short": "Из подб.",
+        "hint": "Когда лента показывает подборку. С диска и из альбома ничего не удаляется",
+        "group": "bins",
+        "scope": "library",
+        "feature": "bins",
+        "defaults": [
+          "Delete",
+          "Backspace"
+        ],
+        "keys": [
+          "Delete",
+          "Backspace"
+        ],
+        "custom": false
+      },
+      {
+        "id": "binAll",
+        "label": "Показать все фото (без подборки)",
+        "short": "Все фото",
+        "group": "bins",
+        "scope": "library",
+        "feature": "bins",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "addText",
+        "label": "Добавить текст",
+        "short": "Текст",
+        "group": "text",
+        "scope": "app",
+        "feature": "text",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "pasteNames",
+        "label": "Имена из списка…",
+        "short": "Имена",
+        "group": "text",
+        "scope": "app",
+        "feature": "captions",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "nudgePlace",
+        "label": "Сдвиг выделенного на 1 мм (Shift — 10 мм)",
+        "short": "Сдвиг",
+        "group": "grid",
+        "scope": "app",
+        "defaults": [
+          "ArrowLeft",
+          "ArrowRight",
+          "ArrowUp",
+          "ArrowDown",
+          "Shift+ArrowLeft",
+          "Shift+ArrowRight",
+          "Shift+ArrowUp",
+          "Shift+ArrowDown"
+        ],
+        "fixed": true,
+        "repeat": true,
+        "keys": [
+          "ArrowLeft",
+          "ArrowRight",
+          "ArrowUp",
+          "ArrowDown",
+          "Shift+ArrowLeft",
+          "Shift+ArrowRight",
+          "Shift+ArrowUp",
+          "Shift+ArrowDown"
+        ],
+        "custom": false
+      },
+      {
+        "id": "layerFront",
+        "label": "Слой: на передний план",
+        "short": "Передний",
+        "group": "grid",
+        "scope": "app",
+        "feature": "layers",
+        "defaults": [
+          "Mod+Shift+BracketRight"
+        ],
+        "keys": [
+          "Mod+Shift+BracketRight"
+        ],
+        "custom": false
+      },
+      {
+        "id": "layerUp",
+        "label": "Слой: выше",
+        "short": "Выше",
+        "group": "grid",
+        "scope": "app",
+        "feature": "layers",
+        "defaults": [
+          "Mod+BracketRight"
+        ],
+        "repeat": true,
+        "keys": [
+          "Mod+BracketRight"
+        ],
+        "custom": false
+      },
+      {
+        "id": "layerDown",
+        "label": "Слой: ниже",
+        "short": "Ниже",
+        "group": "grid",
+        "scope": "app",
+        "feature": "layers",
+        "defaults": [
+          "Mod+BracketLeft"
+        ],
+        "repeat": true,
+        "keys": [
+          "Mod+BracketLeft"
+        ],
+        "custom": false
+      },
+      {
+        "id": "layerBack",
+        "label": "Слой: на задний план",
+        "short": "Задний",
+        "group": "grid",
+        "scope": "app",
+        "feature": "layers",
+        "defaults": [
+          "Mod+Shift+BracketLeft"
+        ],
+        "keys": [
+          "Mod+Shift+BracketLeft"
+        ],
+        "custom": false
+      },
+      {
+        "id": "alignLeft",
+        "label": "Выровнять: по левому краю",
+        "short": "Влево",
+        "group": "grid",
+        "scope": "app",
+        "feature": "align",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "alignHcenter",
+        "label": "Выровнять: по центру по горизонтали",
+        "short": "Центр ↔",
+        "group": "grid",
+        "scope": "app",
+        "feature": "align",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "alignRight",
+        "label": "Выровнять: по правому краю",
+        "short": "Вправо",
+        "group": "grid",
+        "scope": "app",
+        "feature": "align",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "alignTop",
+        "label": "Выровнять: по верхнему краю",
+        "short": "Вверх",
+        "group": "grid",
+        "scope": "app",
+        "feature": "align",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "alignVcenter",
+        "label": "Выровнять: по центру по вертикали",
+        "short": "Центр ↕",
+        "group": "grid",
+        "scope": "app",
+        "feature": "align",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "alignBottom",
+        "label": "Выровнять: по нижнему краю",
+        "short": "Вниз",
+        "group": "grid",
+        "scope": "app",
+        "feature": "align",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "alignDistH",
+        "label": "Распределить по горизонтали",
+        "short": "Распр. ↔",
+        "group": "grid",
+        "scope": "app",
+        "feature": "align",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "alignDistV",
+        "label": "Распределить по вертикали",
+        "short": "Распр. ↕",
+        "group": "grid",
+        "scope": "app",
+        "feature": "align",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "bgGallery",
+        "label": "Галерея фонов…",
+        "short": "Фоны",
+        "group": "decor",
+        "scope": "app",
+        "feature": "decor",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "borderGallery",
+        "label": "Рамочки…",
+        "short": "Рамочки",
+        "group": "decor",
+        "scope": "app",
+        "feature": "border",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "addSticker",
+        "label": "Добавить стикер…",
+        "short": "Стикер",
+        "group": "decor",
+        "scope": "app",
+        "feature": "decor",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "copyDecor",
+        "label": "Копировать оформление…",
+        "short": "Оформление",
+        "group": "decor",
+        "scope": "app",
+        "feature": "decor",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "spreadTpl",
+        "label": "Готовые развороты…",
+        "short": "Готовые",
+        "group": "decor",
+        "scope": "app",
+        "feature": "decor",
+        "defaults": [],
+        "keys": [],
+        "custom": false
+      },
+      {
+        "id": "bgNudge",
+        "label": "Сдвиг рамки фона (Shift — 10 мм)",
+        "short": "Сдвиг",
+        "group": "backdrop",
+        "scope": "bg",
+        "feature": "bgPhoto",
+        "defaults": [
+          "ArrowLeft",
+          "ArrowRight",
+          "ArrowUp",
+          "ArrowDown",
+          "Shift+ArrowLeft",
+          "Shift+ArrowRight",
+          "Shift+ArrowUp",
+          "Shift+ArrowDown"
+        ],
+        "fixed": true,
+        "repeat": true,
+        "keys": [
+          "ArrowLeft",
+          "ArrowRight",
+          "ArrowUp",
+          "ArrowDown",
+          "Shift+ArrowLeft",
+          "Shift+ArrowRight",
+          "Shift+ArrowUp",
+          "Shift+ArrowDown"
+        ],
+        "custom": false
+      },
+      {
+        "id": "bgRemove",
+        "label": "Убрать фото фона",
+        "short": "Убрать",
+        "hint": "И выйти из режима фона",
+        "group": "backdrop",
+        "scope": "bg",
+        "feature": "bgPhoto",
+        "defaults": [
+          "Delete",
+          "Backspace"
+        ],
+        "keys": [
+          "Delete",
+          "Backspace"
+        ],
+        "custom": false
+      },
+      {
+        "id": "bgExit",
+        "label": "Выйти из режима фона",
+        "short": "Выйти",
+        "hint": "Во время жеста — отменить жест",
+        "group": "backdrop",
+        "scope": "bg",
+        "feature": "bgPhoto",
+        "defaults": [
+          "Escape"
+        ],
+        "fixed": true,
+        "keys": [
+          "Escape"
+        ],
+        "custom": false
+      }
+    ],
+    "groups": [
+      {
+        "id": "album",
+        "title": "Альбом"
+      },
+      {
+        "id": "view",
+        "title": "Вид"
+      },
+      {
+        "id": "canvas",
+        "title": "Холст"
+      },
+      {
+        "id": "spreads",
+        "title": "Развороты и раскладки"
+      },
+      {
+        "id": "photos",
+        "title": "Фото"
+      },
+      {
+        "id": "marks",
+        "title": "Отметки фото"
+      },
+      {
+        "id": "bins",
+        "title": "Подборки фото"
+      },
+      {
+        "id": "text",
+        "title": "Текст"
+      },
+      {
+        "id": "grid",
+        "title": "Ручная раскладка"
+      },
+      {
+        "id": "decor",
+        "title": "Оформление"
+      },
+      {
+        "id": "backdrop",
+        "title": "Режим фона"
+      }
+    ],
+    "scopes": [
+      {
+        "id": "bg",
+        "title": "В режиме фона",
+        "rank": 3
+      },
+      {
+        "id": "canvas",
+        "title": "На холсте и в ленте разворотов",
+        "rank": 2
+      },
+      {
+        "id": "library",
+        "title": "В ленте фото",
+        "rank": 2
+      },
+      {
+        "id": "app",
+        "title": "Везде",
+        "rank": 1
+      }
+    ],
+    "locked": [
+      {
+        "chord": "Alt+F4",
+        "reason": "системная клавиша Windows"
+      },
+      {
+        "chord": "Alt+Tab",
+        "reason": "системная клавиша Windows"
+      },
+      {
+        "chord": "Alt+Space",
+        "reason": "системная клавиша Windows"
+      },
+      {
+        "chord": "Alt+Escape",
+        "reason": "системная клавиша Windows"
+      },
+      {
+        "chord": "Mod+Escape",
+        "reason": "системная клавиша Windows"
+      },
+      {
+        "chord": "Mod+Alt+Delete",
+        "reason": "системная клавиша Windows"
+      },
+      {
+        "chord": "Mod+Shift+Escape",
+        "reason": "системная клавиша Windows"
+      },
+      {
+        "chord": "Mod+Tab",
+        "reason": "системная клавиша Windows"
+      },
+      {
+        "chord": "Mod+Shift+Tab",
+        "reason": "системная клавиша Windows"
+      },
+      {
+        "chord": "Mod+KeyQ",
+        "reason": "системная клавиша macOS"
+      },
+      {
+        "chord": "Mod+KeyH",
+        "reason": "системная клавиша macOS"
+      },
+      {
+        "chord": "Mod+KeyM",
+        "reason": "системная клавиша macOS"
+      },
+      {
+        "chord": "Mod+KeyW",
+        "reason": "системная клавиша macOS"
+      },
+      {
+        "chord": "Mod+Space",
+        "reason": "системная клавиша macOS"
+      },
+      {
+        "chord": "Mod+Alt+Escape",
+        "reason": "системная клавиша macOS"
+      },
+      {
+        "chord": "Mod+Backquote",
+        "reason": "системная клавиша macOS"
+      },
+      {
+        "chord": "Escape",
+        "anyMods": true,
+        "reason": "Esc — отмена и закрытие окон"
+      },
+      {
+        "chord": "Tab",
+        "anyMods": true,
+        "reason": "Tab — переход между полями"
+      },
+      {
+        "chord": "Space",
+        "anyMods": true,
+        "reason": "Пробел — листание раскладок и перемещение разворота"
+      },
+      {
+        "chord": "F1",
+        "anyMods": true,
+        "reason": "F1 — справочник функций"
+      },
+      {
+        "chord": "Mod+Alt",
+        "prefix": true,
+        "reason": "Ctrl+Alt на части раскладок Windows — это AltGr (буквы), выберите другое"
+      },
+      {
+        "chord": "ArrowLeft",
+        "reason": "стрелки листают развороты и двигают выделенное"
+      },
+      {
+        "chord": "ArrowRight",
+        "reason": "стрелки листают развороты и двигают выделенное"
+      },
+      {
+        "chord": "ArrowUp",
+        "reason": "стрелки листают развороты и двигают выделенное"
+      },
+      {
+        "chord": "ArrowDown",
+        "reason": "стрелки листают развороты и двигают выделенное"
+      },
+      {
+        "chord": "Shift+ArrowLeft",
+        "reason": "стрелки листают развороты и двигают выделенное"
+      },
+      {
+        "chord": "Shift+ArrowRight",
+        "reason": "стрелки листают развороты и двигают выделенное"
+      },
+      {
+        "chord": "Shift+ArrowUp",
+        "reason": "стрелки листают развороты и двигают выделенное"
+      },
+      {
+        "chord": "Shift+ArrowDown",
+        "reason": "стрелки листают развороты и двигают выделенное"
+      }
+    ],
+    "custom": {},
+    "changed": 0
+  },
+  "codes": [
+    "KeyA",
+    "KeyB",
+    "KeyC",
+    "KeyD",
+    "KeyE",
+    "KeyF",
+    "KeyG",
+    "KeyH",
+    "KeyI",
+    "KeyJ",
+    "KeyK",
+    "KeyL",
+    "KeyM",
+    "KeyN",
+    "KeyO",
+    "KeyP",
+    "KeyQ",
+    "KeyR",
+    "KeyS",
+    "KeyT",
+    "KeyU",
+    "KeyV",
+    "KeyW",
+    "KeyX",
+    "KeyY",
+    "KeyZ",
+    "Digit0",
+    "Digit1",
+    "Digit2",
+    "Digit3",
+    "Digit4",
+    "Digit5",
+    "Digit6",
+    "Digit7",
+    "Digit8",
+    "Digit9",
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+    "Minus",
+    "Equal",
+    "BracketLeft",
+    "BracketRight",
+    "Backslash",
+    "Semicolon",
+    "Quote",
+    "Comma",
+    "Period",
+    "Slash",
+    "Backquote",
+    "IntlBackslash",
+    "Space",
+    "Enter",
+    "Tab",
+    "Escape",
+    "Backspace",
+    "Delete",
+    "Insert",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown"
+  ],
+  "chords": {
+    "valid": [
+      {
+        "in": "KeyZ",
+        "out": "KeyZ"
+      },
+      {
+        "in": "Mod+KeyZ",
+        "out": "Mod+KeyZ"
+      },
+      {
+        "in": "Shift+Mod+KeyZ",
+        "out": "Mod+Shift+KeyZ"
+      },
+      {
+        "in": "Shift+Alt+Mod+Digit1",
+        "out": "Mod+Alt+Shift+Digit1"
+      },
+      {
+        "in": "Alt+Shift+F12",
+        "out": "Alt+Shift+F12"
+      },
+      {
+        "in": "Mod+Shift+BracketRight",
+        "out": "Mod+Shift+BracketRight"
+      },
+      {
+        "in": "IntlBackslash",
+        "out": "IntlBackslash"
+      },
+      {
+        "in": "Shift+Slash",
+        "out": "Shift+Slash"
+      },
+      {
+        "in": "Delete",
+        "out": "Delete"
+      },
+      {
+        "in": "Mod+Alt+Shift+BracketRight",
+        "out": "Mod+Alt+Shift+BracketRight"
+      }
+    ],
+    "invalid": [
+      "",
+      "Mod",
+      "Mod+",
+      "+KeyZ",
+      "Mod++KeyZ",
+      "Mod+Mod+KeyZ",
+      "Ctrl+KeyZ",
+      "Cmd+KeyZ",
+      "Meta+KeyZ",
+      "keyz",
+      "KeyZ+Mod",
+      "Mod+KeyZ+KeyX",
+      "Numpad1",
+      "NumpadAdd",
+      "F13",
+      "AudioVolumeUp",
+      " Mod+KeyZ",
+      "Mod+KeyZ ",
+      "mod+KeyZ",
+      "Mod+Alt+Shift+Mod+KeyZ",
+      "Shift+Shift+Shift+Shift+Shift+KeyZ"
+    ]
+  },
+  "events": [
+    {
+      "key": "я",
+      "code": "KeyZ",
+      "ctrl": true,
+      "chord": "Mod+KeyZ"
+    },
+    {
+      "key": "z",
+      "code": "KeyZ",
+      "ctrl": true,
+      "mac": true,
+      "chord": null
+    },
+    {
+      "key": "z",
+      "code": "KeyZ",
+      "meta": true,
+      "mac": true,
+      "chord": "Mod+KeyZ"
+    },
+    {
+      "key": "z",
+      "code": "KeyZ",
+      "meta": true,
+      "chord": null
+    },
+    {
+      "key": "Z",
+      "code": "KeyZ",
+      "ctrl": true,
+      "shift": true,
+      "chord": "Mod+Shift+KeyZ"
+    },
+    {
+      "key": "я",
+      "code": "",
+      "chord": "KeyZ"
+    },
+    {
+      "key": "х",
+      "code": "",
+      "chord": "BracketLeft"
+    },
+    {
+      "key": "ж",
+      "code": "",
+      "chord": "Semicolon"
+    },
+    {
+      "key": "z",
+      "code": "KeyW",
+      "chord": "KeyZ"
+    },
+    {
+      "key": "\u0026",
+      "code": "Digit1",
+      "chord": "Digit1"
+    },
+    {
+      "key": "1",
+      "code": "Numpad1",
+      "chord": "Digit1"
+    },
+    {
+      "key": "ArrowLeft",
+      "code": "Numpad4",
+      "chord": "ArrowLeft"
+    },
+    {
+      "key": "+",
+      "code": "NumpadAdd",
+      "ctrl": true,
+      "chord": "Mod+Equal"
+    },
+    {
+      "key": "-",
+      "code": "NumpadSubtract",
+      "ctrl": true,
+      "chord": "Mod+Minus"
+    },
+    {
+      "key": "Enter",
+      "code": "NumpadEnter",
+      "chord": "Enter"
+    },
+    {
+      "key": ",",
+      "code": "NumpadDecimal",
+      "chord": "Period"
+    },
+    {
+      "key": "*",
+      "code": "NumpadMultiply",
+      "chord": null
+    },
+    {
+      "key": "?",
+      "code": "Slash",
+      "shift": true,
+      "chord": "Shift+Slash"
+    },
+    {
+      "key": "?",
+      "code": "Digit7",
+      "shift": true,
+      "chord": "Shift+Digit7"
+    },
+    {
+      "key": "Ω",
+      "code": "KeyZ",
+      "alt": true,
+      "mac": true,
+      "chord": "Alt+KeyZ"
+    },
+    {
+      "key": "Control",
+      "code": "ControlLeft",
+      "ctrl": true,
+      "chord": null
+    },
+    {
+      "key": "Shift",
+      "code": "ShiftLeft",
+      "shift": true,
+      "chord": null
+    },
+    {
+      "key": "AltGraph",
+      "code": "AltRight",
+      "ctrl": true,
+      "alt": true,
+      "chord": null
+    },
+    {
+      "key": "F5",
+      "code": "F5",
+      "chord": "F5"
+    },
+    {
+      "key": "Delete",
+      "code": "Delete",
+      "chord": "Delete"
+    },
+    {
+      "key": "AudioVolumeUp",
+      "code": "AudioVolumeUp",
+      "chord": null
+    },
+    {
+      "key": "\\",
+      "code": "IntlBackslash",
+      "chord": "IntlBackslash"
+    },
+    {
+      "key": " ",
+      "code": "Space",
+      "shift": true,
+      "chord": "Shift+Space"
+    },
+    {
+      "key": "Unidentified",
+      "code": "",
+      "chord": null
+    }
+  ]
+}
