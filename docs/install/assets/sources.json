@@ -1,0 +1,468 @@
+{
+  "_about": "Откуда снимки в raw/ (спека 029, design §4.1): прогон, раннер, macOS, язык, рамка обрезки crop [x0, y0, x1, y1] в пикселях исходного снимка и правило выносок. Выноски считаются по target.rect из shots.json и полосам кнопок окна, не на глаз. Основной путь — macOS 15: на 26 те же окна и надписи, но текст с переносами по слогам.",
+  "mac-03-gatekeeper": {
+    "from": "mac-shots прогон 38525272343, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/03-gatekeeper.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-05-open-anyway": {
+    "from": "mac-shots прогон 38525272343, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/05-open-anyway.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-06-confirm": {
+    "from": "mac-shots прогон 38525272343, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/06-confirm.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-07-terminal-xattr": {
+    "from": "mac-shots прогон 38525272343, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/07-terminal-xattr.png",
+    "screen": [
+      585,
+      371
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-02-app-window": {
+    "from": "mac-shots прогон 38525272343, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/02-app-window.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-04-privacy": {
+    "from": "mac-shots прогон 38525272343, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/04-privacy.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-04-privacy-26": {
+    "from": "mac-shots прогон 38525272343, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/04-privacy.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-05-open-anyway-26": {
+    "from": "mac-shots прогон 38525272343, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/05-open-anyway.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-04a-apple-menu": {
+    "from": "mac-shots прогон 38525272343, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/04a-apple-menu.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-03-gatekeeper-26": {
+    "from": "mac-shots прогон 38525272343, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/03-gatekeeper.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-04a-apple-menu-26": {
+    "from": "mac-shots прогон 38525272343, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/04a-apple-menu.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-06-confirm-26": {
+    "from": "mac-shots прогон 38525272343, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/06-confirm.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-07-terminal-xattr-26": {
+    "from": "mac-shots прогон 38525272343, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/07-terminal-xattr.png",
+    "screen": [
+      877,
+      499
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-02-app-window-26": {
+    "from": "mac-shots прогон 38525272343, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/02-app-window.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-03-gatekeeper-14": {
+    "from": "mac-shots прогон 38525272343, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/03-gatekeeper.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-04a-apple-menu-14": {
+    "from": "mac-shots прогон 38525272343, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/04a-apple-menu.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-04-privacy-14": {
+    "from": "mac-shots прогон 38525272343, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/04-privacy.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-07-terminal-xattr-14": {
+    "from": "mac-shots прогон 38525272343, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/07-terminal-xattr.png",
+    "screen": [
+      585,
+      371
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-02-app-window-14": {
+    "from": "mac-shots прогон 38525272343, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/02-app-window.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-10-context-menu-14": {
+    "from": "mac-shots прогон 38525272343, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/10-context-menu.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-11-open-dialog-14": {
+    "from": "mac-shots прогон 38525272343, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/11-open-dialog.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "win-04-smartscreen": {
+    "from": "win-shots прогон 38538798248, windows-2025",
+    "windows": "Windows Server 2025 Datacenter 26100.33438 (оформление Windows 11; на windows-11-arm окна не было: стол застрял на первой настройке системы)",
+    "lang": "en (Edge ru)",
+    "shot": "png/win-04-smartscreen.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (UIA/OCR прогона): рамка, стрелка и подпись — annotate.py targets; подписи по-русски с английской кнопкой (решение 116)"
+  },
+  "win-05-smartscreen-more": {
+    "from": "win-shots прогон 38538798248, windows-2025",
+    "windows": "Windows Server 2025 Datacenter 26100.33438 (оформление Windows 11; на windows-11-arm окна не было: стол застрял на первой настройке системы)",
+    "lang": "en (Edge ru)",
+    "shot": "png/win-05-smartscreen-more.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "crop": [
+      694,
+      251,
+      1227,
+      750
+    ],
+    "rule": "цель — target.rect из shots.json (UIA/OCR прогона): рамка, стрелка и подпись — annotate.py targets; подписи по-русски с английской кнопкой (решение 116); крупный план окна SmartScreen на сером поле: слева, сверху, справа, снизу 60, 40, 60, 130 px (место под подпись)"
+  },
+  "win-07-unblock": {
+    "from": "win-shots прогон 38538798248, windows-2025",
+    "windows": "Windows Server 2025 Datacenter 26100.33438 (оформление Windows 11; на windows-11-arm окна не было: стол застрял на первой настройке системы)",
+    "lang": "en",
+    "shot": "png/win-07-unblock.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "crop": [
+      888,
+      414,
+      1294,
+      979
+    ],
+    "rule": "цель — target.rect из shots.json (UIA/OCR прогона): рамка, стрелка и подпись — annotate.py targets; подписи по-русски с английской кнопкой (решение 116); крупный план окна «Свойства» на сером поле 40, 40, 230, 110 px (подпись справа не ложится на окно); вторая цель «ОК» — по снимку, не из прогона"
+  },
+  "video": {
+    "mac-{14,15,26}-unzip.mp4, mac-{14,15,26}-start.mp4, mac-{14,15,26}-damaged.mp4": "overlay.py по записи mac-shots (guide_video), три главы на версию (решение 132, спека 039): unzip — глава 1, start и damaged — как в 0.10",
+    "windows-{unzip,start,fromzip,unblock}.mp4": "overlay.py по записи win-shots, раннер windows-2025, главы 1–4 (спека 039); windows.mp4 удалён — его заменил windows-start.mp4",
+    "where": "docs/install/video/, бюджет файл ≤ 8 МБ, папка ≤ 30 МБ (решение 113)"
+  },
+  "mac-01-zip-downloads": {
+    "from": "mac-shots прогон 039, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/mac-01-zip-downloads.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-01-zip-folder": {
+    "from": "mac-shots прогон 039, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/mac-01-zip-folder.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-01-drag-applications": {
+    "from": "mac-shots прогон 039, macos-15",
+    "macos": "15.7.9",
+    "lang": "ru",
+    "shot": "png/mac-01-drag-applications.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-01-zip-downloads-26": {
+    "from": "mac-shots прогон 039, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/mac-01-zip-downloads.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-01-zip-folder-26": {
+    "from": "mac-shots прогон 039, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/mac-01-zip-folder.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-01-drag-applications-26": {
+    "from": "mac-shots прогон 039, macos-26",
+    "macos": "26.6.2",
+    "lang": "ru",
+    "shot": "png/mac-01-drag-applications.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-01-zip-downloads-14": {
+    "from": "mac-shots прогон 039, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/mac-01-zip-downloads.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-01-zip-folder-14": {
+    "from": "mac-shots прогон 039, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/mac-01-zip-folder.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "mac-01-drag-applications-14": {
+    "from": "mac-shots прогон 039, macos-14",
+    "macos": "14.8.9",
+    "lang": "ru",
+    "shot": "png/mac-01-drag-applications.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "rule": "цель — target.rect из shots.json (AX/OCR прогона): рамка, стрелка и подпись — annotate.py targets"
+  },
+  "win-08-zip-downloads": {
+    "from": "win-shots прогон 039, windows-2025",
+    "windows": "Windows Server 2025 Datacenter 26100.33438 (оформление Windows 11)",
+    "lang": "en",
+    "shot": "png/win-08-zip-downloads.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "crop": [
+      300,
+      170,
+      1640,
+      870
+    ],
+    "rule": "цель — target.rect из shots.json (UIA/OCR прогона), пересчитан в рамку обрезки: рамка, стрелка и подпись — annotate.py targets; подписи по-русски с английской кнопкой (решение 116)"
+  },
+  "win-09-zip-extract-all": {
+    "from": "win-shots прогон 039, windows-2025",
+    "windows": "Windows Server 2025 Datacenter 26100.33438 (оформление Windows 11)",
+    "lang": "en",
+    "shot": "png/win-09-zip-extract-all.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "crop": [
+      300,
+      170,
+      1640,
+      870
+    ],
+    "rule": "цель — target.rect из shots.json (UIA/OCR прогона), пересчитан в рамку обрезки: рамка, стрелка и подпись — annotate.py targets; подписи по-русски с английской кнопкой (решение 116)"
+  },
+  "win-10-extract-dialog": {
+    "from": "win-shots прогон 039, windows-2025",
+    "windows": "Windows Server 2025 Datacenter 26100.33438 (оформление Windows 11)",
+    "lang": "en",
+    "shot": "png/win-10-extract-dialog.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "crop": [
+      300,
+      170,
+      1640,
+      870
+    ],
+    "rule": "цель — target.rect из shots.json (UIA/OCR прогона), пересчитан в рамку обрезки: рамка, стрелка и подпись — annotate.py targets; подписи по-русски с английской кнопкой (решение 116)"
+  },
+  "win-11-extracted": {
+    "from": "win-shots прогон 039, windows-2025",
+    "windows": "Windows Server 2025 Datacenter 26100.33438 (оформление Windows 11)",
+    "lang": "en",
+    "shot": "png/win-11-extracted.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "crop": [
+      300,
+      170,
+      1640,
+      870
+    ],
+    "rule": "цель — target.rect из shots.json (UIA/OCR прогона), пересчитан в рамку обрезки: рамка, стрелка и подпись — annotate.py targets; подписи по-русски с английской кнопкой (решение 116)"
+  },
+  "win-12-run-from-zip": {
+    "from": "win-shots прогон 039, windows-2025",
+    "windows": "Windows Server 2025 Datacenter 26100.33438 (оформление Windows 11)",
+    "lang": "en",
+    "shot": "png/win-12-run-from-zip.png",
+    "screen": [
+      1920,
+      1080
+    ],
+    "crop": [
+      300,
+      170,
+      1640,
+      870
+    ],
+    "rule": "цель — target.rect из shots.json (UIA/OCR прогона), пересчитан в рамку обрезки: рамка, стрелка и подпись — annotate.py targets; подписи по-русски с английской кнопкой (решение 116)"
+  }
+}
