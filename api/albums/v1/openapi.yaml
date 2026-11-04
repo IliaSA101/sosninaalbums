@@ -1,0 +1,310 @@
+openapi: 3.1.0
+info:
+  title: Sosnina Albums — сервис листалок
+  version: v1
+  description: |
+    Контракт /v1: программа выгружает страницы альбома, сервис хранит их и отдаёт клиенту по ссылке.
+    Источник истины для программы (Go-клиент api/albums) и для любой реализации сервиса.
+    Тест TestOpenAPISync сверяет поля схем с тегами json типов, а operationId — с методами клиента.
+
+    Правила, которые схема выразить не может:
+    - Токен — `Authorization: Bearer <токен>`, 16…512 печатных ASCII знаков без пробелов. Без токена и с чужим —
+      401 везде, кроме health.
+    - Чужой, несуществующий, истёкший и отозванный альбом отвечают одинаково: 404 not_found.
+    - `id` — 22…64 знака `[A-Za-z0-9_-]`, первый не «-»; сервис выдаёт id не короче 128 бит случайности.
+    - `pages` идут по порядку книги, n = 1…K подряд, K чётное. С обложкой (`book.cover`) первая страница
+      `front`, последняя `back`, остальные `page`; без неё все `page`. Белая страница (`blank`) — без файла.
+    - `file` в запросе пуст: имена файлов даёт сервис и пишет их в manifest.json.
+    - Пароль не встречается ни в одном ответе API и в manifest.json; страницы альбома с паролем без входа —
+      401/403; после `revoke_sessions` прежний вход не работает.
+    - Страницы клиента сервис отдаёт с `Content-Type: image/*` и `X-Content-Type-Options: nosniff`.
+    - Страница: сигнатура JPEG/WebP и хэш проверяются на PUT; несовпадение — 400 bad_page или 409 hash_mismatch (какой из
+      двух при пустом, чужом или нечитаемом теле — решает сервис), больше `limits.page_bytes` — 413.
+    - Число страниц ≤ `limits.pages` (по умолчанию 300).
+    - Смена пароля (`PATCH {password}`) сама запомненные входы не сбрасывает: чтобы прежние входы перестали
+      работать, шлют `revoke_sessions: true` вместе с паролем или отдельным PATCH.
+
+    Соглашения вне /v1 (просмотр клиентом; их проверяет Conformance):
+    - `GET /a/{id}/` — страница альбома, 200; `/a/{id}/manifest.json` — манифест; файлы страниц лежат под
+      именами из поля `file` манифеста (имя выбирает сервис).
+    - Неопубликованный, истёкший, удалённый и несуществующий альбом отвечает 404 на всех адресах `/a/{id}/…`,
+      в том числе на manifest.json (неопубликованное не раскрывается).
+    - Вход: `POST /a/{id}/login` (форма, поле `password`). Верный пароль — Set-Cookie с входом. Неверный — любой
+      ответ, после которого доступа нет: cookie не выдаётся или не открывает ни одного адреса `/a/{id}/…`
+      (страница, manifest.json, файлы страниц).
+    - Страница `/a/{id}/` отдаётся с `Referrer-Policy: no-referrer` (id в адресе — ключ доступа). При https cookie
+      входа — `Secure` и `HttpOnly`.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: https://albums.example.org
+    description: адрес сервиса задаёт фотограф при подключении
+security:
+  - bearer: []
+paths:
+  /v1/health:
+    get:
+      operationId: Health
+      summary: Доступность, версия API и пределы; без токена
+      security: []
+      responses:
+        "200":
+          description: сервис работает
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /v1/albums:
+    get:
+      operationId: List
+      summary: Свои альбомы
+      responses:
+        "200":
+          description: список
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlbumList" }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: Create
+      summary: Создать альбом; ссылка не работает до publish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRequest" }
+      responses:
+        "201":
+          description: создан
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Created" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /v1/albums/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+    put:
+      operationId: Update
+      summary: Новая редакция манифеста; прежняя видна клиенту до publish, ссылка та же
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRequest" }
+      responses:
+        "200":
+          description: принято
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Updated" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: Patch
+      summary: Срок, пароль ("" — снять), сброс запомненных входов
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Patch" }
+      responses:
+        "200":
+          description: альбом после правки
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Album" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: Delete
+      summary: Удалить альбом сразу
+      responses:
+        "204": { description: удалён }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/albums/{id}/pages/{n}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - name: n
+        in: path
+        required: true
+        description: номер страницы 1…K без знака и ведущих нулей
+        schema: { type: integer, minimum: 1 }
+    put:
+      operationId: PutPage
+      summary: Байты страницы; Content-Type = type из манифеста; повтор безопасен
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: { type: string, format: binary }
+          image/webp:
+            schema: { type: string, format: binary }
+      responses:
+        "204": { description: принята }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /v1/albums/{id}/publish:
+    parameters:
+      - $ref: "#/components/parameters/id"
+    post:
+      operationId: Publish
+      summary: Опубликовать текущую редакцию; не все страницы — 409 pages_missing
+      responses:
+        "200":
+          description: опубликован
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Published" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, minLength: 22, maxLength: 64, pattern: "^[A-Za-z0-9_][A-Za-z0-9_-]*$" }
+  responses:
+    Error:
+      description: "{\"error\": {\"code\", \"message\"}}; 429 с Retry-After (секунды)"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+  schemas:
+    Manifest:
+      type: object
+      required: [schema, generator, title, book, pages]
+      properties:
+        schema: { type: integer, const: 1 }
+        generator: { type: string, minLength: 1, maxLength: 100 }
+        title: { type: string, minLength: 1, maxLength: 200, description: "текст, не HTML; ≤ 800 байт, без управляющих и невидимых знаков" }
+        book: { $ref: "#/components/schemas/Book" }
+        pages:
+          type: array
+          minItems: 2
+          description: "не больше limits.pages (по умолчанию 300)"
+          items: { $ref: "#/components/schemas/Page" }
+    Book:
+      type: object
+      required: [cover, page_mm]
+      properties:
+        cover: { type: boolean }
+        page_mm: { $ref: "#/components/schemas/Size" }
+    Size:
+      type: object
+      required: [w, h]
+      properties:
+        w: { type: number, minimum: 10, maximum: 2000 }
+        h: { type: number, minimum: 10, maximum: 2000 }
+    Page:
+      type: object
+      required: [n, role]
+      properties:
+        n: { type: integer, minimum: 1 }
+        role: { type: string, enum: [front, back, page] }
+        blank: { type: boolean }
+        file: { type: string, maxLength: 0, description: "на входе пуст; имя файла даёт сервис в manifest.json" }
+        type: { type: string, enum: [image/jpeg, image/webp] }
+        sha256: { type: string, minLength: 64, maxLength: 64, pattern: "^[0-9a-f]{64}$" }
+        bytes: { type: integer, format: int64, minimum: 1 }
+        w: { type: integer, minimum: 1, maximum: 20000 }
+        h: { type: integer, minimum: 1, maximum: 20000 }
+    Limits:
+      type: object
+      required: [page_bytes, pages, album_bytes, title_len, max_days]
+      properties:
+        page_bytes: { type: integer, format: int64 }
+        pages: { type: integer }
+        album_bytes: { type: integer, format: int64 }
+        title_len: { type: integer, maximum: 200 }
+        max_days: { type: integer }
+    Health:
+      type: object
+      required: [api, limits]
+      properties:
+        api: { type: string, const: v1 }
+        limits: { $ref: "#/components/schemas/Limits" }
+    CreateRequest:
+      type: object
+      required: [manifest, expires_at]
+      properties:
+        manifest: { $ref: "#/components/schemas/Manifest" }
+        expires_at: { type: string, format: date-time, description: "в будущем; сервис зажимает к max_days и возвращает итоговый" }
+        password: { type: string, maxLength: 64, description: "пусто или 4…64 знака, ≤ 256 байт, без управляющих; необязателен" }
+    UpdateRequest:
+      type: object
+      required: [manifest]
+      properties:
+        manifest: { $ref: "#/components/schemas/Manifest" }
+    Patch:
+      type: object
+      properties:
+        expires_at: { type: string, format: date-time }
+        password: { type: string, maxLength: 64, description: '"" — снять пароль; иначе 4…64 знака; сам по себе входы не сбрасывает (нужен revoke_sessions)' }
+        revoke_sessions: { type: boolean }
+    Created:
+      type: object
+      required: [id, url, expires_at, missing]
+      properties:
+        id: { type: string, minLength: 22, maxLength: 64, pattern: "^[A-Za-z0-9_][A-Za-z0-9_-]*$" }
+        url: { type: string, maxLength: 500 }
+        expires_at: { type: string, format: date-time }
+        missing: { type: array, items: { type: integer, minimum: 1 }, description: "номера n небелых страниц, чьих картинок у сервиса нет" }
+    Updated:
+      type: object
+      required: [missing]
+      properties:
+        missing: { type: array, items: { type: integer, minimum: 1 } }
+    Published:
+      type: object
+      required: [url, expires_at]
+      properties:
+        url: { type: string, maxLength: 500 }
+        expires_at: { type: string, format: date-time }
+    Album:
+      type: object
+      required: [id, url, title, expires_at, has_password, published, pages]
+      properties:
+        id: { type: string, minLength: 22, maxLength: 64, pattern: "^[A-Za-z0-9_][A-Za-z0-9_-]*$" }
+        url: { type: string, maxLength: 500 }
+        title: { type: string, maxLength: 200 }
+        expires_at: { type: string, format: date-time }
+        has_password: { type: boolean }
+        published: { type: boolean }
+        pages: { type: integer, minimum: 0 }
+    AlbumList:
+      type: object
+      required: [albums]
+      properties:
+        albums: { type: array, items: { $ref: "#/components/schemas/Album" } }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: bad_manifest 400, bad_page 400, unauthorized 401, not_found 404, hash_mismatch 409, pages_missing 409, too_large 413, rate_limited 429, internal 500
+          enum: [bad_manifest, bad_page, unauthorized, not_found, hash_mismatch, pages_missing, too_large, rate_limited, internal]
+        message: { type: string, description: "для журнала разработчика; программа показывает свои слова по code" }
+        missing: { type: array, items: { type: integer, minimum: 1 }, description: "только у 409 pages_missing" }
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/Error" }
