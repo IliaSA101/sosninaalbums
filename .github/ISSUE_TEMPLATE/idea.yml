@@ -1,0 +1,25 @@
+name: Предложение
+description: Что добавить или улучшить
+labels: [предложение]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Что нужно
+      description: Опишите задачу, которую хочется решить.
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: Как сейчас
+      description: Как вы делаете это сегодня и что неудобно.
+    validations:
+      required: false
+  - type: textarea
+    id: example
+    attributes:
+      label: Пример или ссылка
+      description: Скриншот, ссылка на похожую программу. Личные фото и пути не прикладывайте.
+    validations:
+      required: false
