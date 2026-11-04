@@ -1,0 +1,100 @@
+{
+  "version": 11,
+  "product": "album",
+  "folders": [],
+  "settings": {
+    "pageW": 281,
+    "pageH": 284,
+    "margin": 8,
+    "gap": 3,
+    "layflat": true,
+    "foldAny": false,
+    "dpi": 300,
+    "bg": "",
+    "safe": 10,
+    "bleed": 2
+  },
+  "spreads": [
+    {
+      "id": "5e1f0a2b3c41",
+      "photos": []
+    },
+    {
+      "id": "5e1f0a2b3c42",
+      "photos": []
+    }
+  ],
+  "photos": {},
+  "cover": {
+    "sheet": {
+      "id": "cover",
+      "photos": null
+    },
+    "spec": {
+      "preset": "fsfera-thin",
+      "w": 286,
+      "h": 286,
+      "wrap": 20,
+      "steps": [
+        {
+          "upto": 5,
+          "mm": 6
+        },
+        {
+          "upto": 9,
+          "mm": 8
+        },
+        {
+          "upto": 13,
+          "mm": 10
+        },
+        {
+          "upto": 17,
+          "mm": 12
+        },
+        {
+          "upto": 22,
+          "mm": 14
+        },
+        {
+          "upto": 26,
+          "mm": 16
+        },
+        {
+          "upto": 30,
+          "mm": 18
+        },
+        {
+          "upto": 34,
+          "mm": 20
+        },
+        {
+          "upto": 38,
+          "mm": 22
+        },
+        {
+          "upto": 42,
+          "mm": 24
+        },
+        {
+          "upto": 47,
+          "mm": 26
+        },
+        {
+          "upto": 52,
+          "mm": 28
+        },
+        {
+          "upto": 57,
+          "mm": 30
+        }
+      ],
+      "safe": 8,
+      "spineSafe": 12
+    },
+    "guide": "Разметка/Cover_thin_30x30_1-5.psd",
+    "guideAbs": "D:\\Шаблоны\\Cover_thin_30x30_1-5.psd"
+  },
+  "spreadGuide": "Разметка/spread_30x30.psd",
+  "spreadGuideAbs": "D:\\Шаблоны\\spread_30x30.psd"
+}
