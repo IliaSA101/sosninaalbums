@@ -1,0 +1,11 @@
+# Что не публикуется в main на GitHub (владелец 2026-10-10): рабочая кухня проекта —
+# планы, спеки, журналы развилок, история циклов, сценарии QA, исследования.
+# Строка — путь от корня; с «/» на конце — вся папка. Читает scripts/publish-main.mjs.
+docs/BACKLOG.md
+docs/backlog/
+docs/QA.md
+docs/specs/
+docs/history/
+docs/qa/
+docs/research/
+docs/structure-map.json
