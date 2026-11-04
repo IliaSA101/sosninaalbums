@@ -1,0 +1,208 @@
+{
+  "version": 17,
+  "app": "0.23.0",
+  "product": "album",
+  "folders": [
+    {
+      "path": "Март",
+      "abs": "{{DIR}}/Март"
+    }
+  ],
+  "settings": {
+    "pageW": 300,
+    "pageH": 300,
+    "margin": 12,
+    "gap": 3,
+    "layflat": true,
+    "foldAny": false,
+    "dpi": 300,
+    "bg": "",
+    "safe": 8
+  },
+  "spreads": [
+    {
+      "id": "5e1f0a2b3c41",
+      "photos": [
+        "1a2b3c4d5e6f7a8b",
+        "2b3c4d5e6f7a8b9c"
+      ],
+      "grid": [
+        {
+          "id": "c0ffee000001",
+          "x": 20,
+          "y": 20,
+          "w": 80,
+          "h": 60,
+          "photo": "1a2b3c4d5e6f7a8b"
+        },
+        {
+          "id": "c0ffee000002",
+          "x": 120,
+          "y": 20,
+          "w": 80,
+          "h": 60,
+          "photo": "2b3c4d5e6f7a8b9c"
+        }
+      ]
+    },
+    {
+      "id": "5e1f0a2b3c42",
+      "photos": [
+        "1a2b3c4d5e6f7a8b-2"
+      ],
+      "grid": [
+        {
+          "id": "c0ffee000003",
+          "x": 20,
+          "y": 20,
+          "w": 80,
+          "h": 60,
+          "photo": "1a2b3c4d5e6f7a8b-2"
+        }
+      ],
+      "noAlbumBg": true
+    }
+  ],
+  "photos": {
+    "1a2b3c4d5e6f7a8b": {
+      "path": "Март/a.jpg",
+      "w": 3000,
+      "h": 2000,
+      "size": 1000,
+      "frame": {
+        "s": 2,
+        "x": 0.25,
+        "y": -0.5
+      },
+      "abs": "{{DIR}}/Март/a.jpg"
+    },
+    "1a2b3c4d5e6f7a8b-2": {
+      "path": "Март/a.jpg",
+      "w": 3000,
+      "h": 2000,
+      "size": 1000,
+      "frame": {
+        "s": 3,
+        "x": 0.25,
+        "y": -0.5
+      },
+      "asp": 1.5,
+      "abs": "{{DIR}}/Март/a.jpg"
+    },
+    "1a2b3c4d5e6f7a8b-3": {
+      "path": "Март/a.jpg",
+      "w": 3000,
+      "h": 2000,
+      "size": 1000,
+      "frame": {
+        "s": 1.25,
+        "x": 0.25,
+        "y": -0.5
+      },
+      "asp": 0.8,
+      "abs": "{{DIR}}/Март/a.jpg"
+    },
+    "2b3c4d5e6f7a8b9c": {
+      "path": "Март/b.jpg",
+      "w": 3000,
+      "h": 2000,
+      "size": 1000,
+      "abs": "{{DIR}}/Март/b.jpg"
+    },
+    "303ec63916c23ebb": {
+      "path": "",
+      "w": 1200,
+      "h": 800,
+      "lib": "my:0123456789abcdef"
+    }
+  },
+  "cover": {
+    "sheet": {
+      "id": "cover",
+      "photos": [
+        "1a2b3c4d5e6f7a8b-3"
+      ],
+      "grid": [
+        {
+          "id": "c0ffee000004",
+          "x": 320,
+          "y": 20,
+          "w": 80,
+          "h": 60,
+          "photo": "1a2b3c4d5e6f7a8b-3"
+        }
+      ]
+    },
+    "spec": {
+      "preset": "fsfera-thin",
+      "wrap": 20,
+      "steps": [
+        {
+          "upto": 5,
+          "mm": 6
+        },
+        {
+          "upto": 9,
+          "mm": 8
+        },
+        {
+          "upto": 13,
+          "mm": 10
+        },
+        {
+          "upto": 17,
+          "mm": 12
+        },
+        {
+          "upto": 22,
+          "mm": 14
+        },
+        {
+          "upto": 26,
+          "mm": 16
+        },
+        {
+          "upto": 30,
+          "mm": 18
+        },
+        {
+          "upto": 34,
+          "mm": 20
+        },
+        {
+          "upto": 38,
+          "mm": 22
+        },
+        {
+          "upto": 42,
+          "mm": 24
+        },
+        {
+          "upto": 47,
+          "mm": 26
+        },
+        {
+          "upto": 52,
+          "mm": 28
+        },
+        {
+          "upto": 57,
+          "mm": 30
+        }
+      ],
+      "safe": 8,
+      "spineSafe": 12
+    }
+  },
+  "albumBg": {
+    "pages": true,
+    "photo": "303ec63916c23ebb",
+    "frame": {
+      "s": 1.5,
+      "x": 0.5,
+      "y": 0
+    },
+    "flipH": true,
+    "fade": 0.4
+  }
+}
