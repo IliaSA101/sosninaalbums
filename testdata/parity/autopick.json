@@ -1,0 +1,315 @@
+{
+  "pick": [
+    {
+      "name": "пусто",
+      "photos": [],
+      "own": {},
+      "placed": [],
+      "backdrop": [],
+      "want": [],
+      "skipped": 0
+    },
+    {
+      "name": "все свободны, порядок ленты",
+      "photos": [
+        {
+          "id": "c"
+        },
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        }
+      ],
+      "own": {},
+      "placed": [],
+      "backdrop": [],
+      "want": [
+        "c",
+        "a",
+        "b"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "в альбоме не берём",
+      "photos": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        },
+        {
+          "id": "c"
+        }
+      ],
+      "own": {},
+      "placed": [
+        "b"
+      ],
+      "backdrop": [],
+      "want": [
+        "a",
+        "c"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "копия на месте занимает файл",
+      "photos": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        }
+      ],
+      "own": {},
+      "placed": [
+        "a-2"
+      ],
+      "backdrop": [],
+      "want": [
+        "b"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "фон не берём",
+      "photos": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        }
+      ],
+      "own": {},
+      "placed": [],
+      "backdrop": [
+        "a"
+      ],
+      "want": [
+        "b"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "отклонено в файле",
+      "photos": [
+        {
+          "id": "a",
+          "xmp": {
+            "flag": -1
+          }
+        },
+        {
+          "id": "b",
+          "xmp": {
+            "flag": 1
+          }
+        },
+        {
+          "id": "c",
+          "xmp": {
+            "flag": 0
+          }
+        }
+      ],
+      "own": {},
+      "placed": [],
+      "backdrop": [],
+      "want": [
+        "b",
+        "c"
+      ],
+      "skipped": 1
+    },
+    {
+      "name": "своя отметка главнее файла: вернули",
+      "photos": [
+        {
+          "id": "a",
+          "xmp": {
+            "flag": -1
+          }
+        }
+      ],
+      "own": {
+        "a": {
+          "flag": 0
+        }
+      },
+      "placed": [],
+      "backdrop": [],
+      "want": [
+        "a"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "своя отметка главнее файла: отклонили",
+      "photos": [
+        {
+          "id": "a",
+          "xmp": {
+            "flag": 1
+          }
+        },
+        {
+          "id": "b"
+        }
+      ],
+      "own": {
+        "a": {
+          "flag": -1
+        },
+        "b": {
+          "rating": 3
+        }
+      },
+      "placed": [],
+      "backdrop": [],
+      "want": [
+        "b"
+      ],
+      "skipped": 1
+    },
+    {
+      "name": "отклонённое и в альбоме не считается пропущенным",
+      "photos": [
+        {
+          "id": "a",
+          "xmp": {
+            "flag": -1
+          }
+        },
+        {
+          "id": "b"
+        }
+      ],
+      "own": {},
+      "placed": [
+        "a"
+      ],
+      "backdrop": [],
+      "want": [
+        "b"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "всё занято",
+      "photos": [
+        {
+          "id": "a"
+        },
+        {
+          "id": "b"
+        }
+      ],
+      "own": {},
+      "placed": [
+        "a",
+        "b-3"
+      ],
+      "backdrop": [],
+      "want": [],
+      "skipped": 0
+    }
+  ],
+  "spreads": [
+    {
+      "photos": 0,
+      "range": null,
+      "want": 1
+    },
+    {
+      "photos": 1,
+      "range": null,
+      "want": 1
+    },
+    {
+      "photos": 2,
+      "range": null,
+      "want": 1
+    },
+    {
+      "photos": 3,
+      "range": null,
+      "want": 1
+    },
+    {
+      "photos": 5,
+      "range": null,
+      "want": 1
+    },
+    {
+      "photos": 6,
+      "range": null,
+      "want": 2
+    },
+    {
+      "photos": 7,
+      "range": null,
+      "want": 2
+    },
+    {
+      "photos": 10,
+      "range": null,
+      "want": 3
+    },
+    {
+      "photos": 24,
+      "range": null,
+      "want": 6
+    },
+    {
+      "photos": 100,
+      "range": null,
+      "want": 25
+    },
+    {
+      "photos": 24,
+      "range": [
+        2,
+        4
+      ],
+      "want": 8
+    },
+    {
+      "photos": 10,
+      "range": [
+        3,
+        6
+      ],
+      "want": 2
+    },
+    {
+      "photos": 10,
+      "range": [
+        1,
+        1
+      ],
+      "want": 10
+    },
+    {
+      "photos": 7,
+      "range": [
+        1,
+        4
+      ],
+      "want": 3
+    },
+    {
+      "photos": 3,
+      "range": [
+        8,
+        8
+      ],
+      "want": 1
+    }
+  ]
+}
