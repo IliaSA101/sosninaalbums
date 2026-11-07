@@ -1,0 +1,74 @@
+[
+  {
+    "file": "fsfera/00.jpg",
+    "w": 5409,
+    "h": 2906,
+    "dpi": 300,
+    "rgba": "a1caf1a14421ca2a84d94632177d95c44267190715f0775a0d88e6024ce049bc",
+    "dqt": "28d506d794713d12460be674da01ebd14fe2262038e902c081a6946578ac98d3",
+    "quant": [
+      369,
+      558
+    ]
+  },
+  {
+    "file": "fsfera/01.jpg",
+    "w": 4748,
+    "h": 2398,
+    "dpi": 300,
+    "rgba": "391f3772974abecc467996de04fc366a2af9c3168f1207ca85fa8e6cdca6cb6b",
+    "dqt": "28d506d794713d12460be674da01ebd14fe2262038e902c081a6946578ac98d3",
+    "quant": [
+      369,
+      558
+    ]
+  },
+  {
+    "file": "fsfera/02.jpg",
+    "w": 4748,
+    "h": 2398,
+    "dpi": 300,
+    "rgba": "d9e3b98363958503c30171920fc81ba319c63a3c93cf53267746e38d64aca2fb",
+    "dqt": "28d506d794713d12460be674da01ebd14fe2262038e902c081a6946578ac98d3",
+    "quant": [
+      369,
+      558
+    ]
+  },
+  {
+    "file": "fabrika/1-00.jpg",
+    "w": 5362,
+    "h": 2835,
+    "dpi": 300,
+    "rgba": "c3b34a26b931c5489196fa6ad01fc16f83e3c7fb993233a3dce7c94076ccd839",
+    "dqt": "0aceb3569c50251a20964b8c090dce4848d59f2696d172e7ce8db2407fc9bc29",
+    "quant": [
+      64,
+      64
+    ]
+  },
+  {
+    "file": "fabrika/1-01.jpg",
+    "w": 4724,
+    "h": 2398,
+    "dpi": 300,
+    "rgba": "cf7ef7f61e3662f77ac5018ad2c804e870ad977468545713230e7abe22bbeb8d",
+    "dqt": "0aceb3569c50251a20964b8c090dce4848d59f2696d172e7ce8db2407fc9bc29",
+    "quant": [
+      64,
+      64
+    ]
+  },
+  {
+    "file": "fabrika/1-02.jpg",
+    "w": 4724,
+    "h": 2398,
+    "dpi": 300,
+    "rgba": "68539c302556dfbb6305c1452182ec512647a5df652ef06795673b31454ebf5a",
+    "dqt": "0aceb3569c50251a20964b8c090dce4848d59f2696d172e7ce8db2407fc9bc29",
+    "quant": [
+      64,
+      64
+    ]
+  }
+]
