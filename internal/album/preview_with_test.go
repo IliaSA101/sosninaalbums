@@ -10,16 +10,17 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // previewTpl — страница с n местами в два ряда; фон — цвет.
-func previewTpl(n int) model.SpreadTpl {
+func previewTpl(n int) looktpl.SpreadTpl {
 	boxes := make([]model.Box, n)
 	for i := range boxes {
 		boxes[i] = model.Box{X: 0.05 + 0.3*float64(i%3), Y: 0.05 + 0.3*float64(i/3), W: 0.25, H: 0.25}
 	}
-	return model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 281.0 / 284, W: 281, H: 284,
-		Page: []model.TplBg{{Color: "#faf0e6"}}, Places: boxes}
+	return looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 281.0 / 284, W: 281, H: 284,
+		Page: []looktpl.TplBg{{Color: "#faf0e6"}}, Places: boxes}
 }
 
 // previewPhotos — k фото; ID — 12 знаков hex, как у файлов ленты.
@@ -65,7 +66,7 @@ func TestPreviewTplWithPhotos(t *testing.T) {
 	t.Run("повтор", previewRepeat)
 	t.Run("nil и пусто", func(t *testing.T) { previewSameAsPlain(t, tpl) })
 	t.Run("ошибка шаблона", func(t *testing.T) {
-		if _, _, err := album.PreviewTplWith(model.SpreadTpl{}, 300, 200, nil, previewPhotos(2)); err == nil {
+		if _, _, err := album.PreviewTplWith(looktpl.SpreadTpl{}, 300, 200, nil, previewPhotos(2)); err == nil {
 			t.Error("пустой шаблон принят")
 		}
 	})
@@ -81,7 +82,7 @@ func requireAllSeated(t *testing.T, v model.View) {
 	}
 }
 
-func previewInOrder(t *testing.T, tpl model.SpreadTpl) {
+func previewInOrder(t *testing.T, tpl looktpl.SpreadTpl) {
 	ph := previewPhotos(4)
 	p, v, err := album.PreviewTplWith(tpl, 300, 200, nil, ph)
 	if err != nil {
@@ -111,7 +112,7 @@ func previewInOrder(t *testing.T, tpl model.SpreadTpl) {
 	}
 }
 
-func previewExtra(t *testing.T, tpl model.SpreadTpl) {
+func previewExtra(t *testing.T, tpl looktpl.SpreadTpl) {
 	ph := previewPhotos(9)
 	p, _, err := album.PreviewTplWith(tpl, 300, 200, nil, ph)
 	if err != nil {
@@ -126,7 +127,7 @@ func previewExtra(t *testing.T, tpl model.SpreadTpl) {
 	}
 }
 
-func previewFewer(t *testing.T, tpl model.SpreadTpl) {
+func previewFewer(t *testing.T, tpl looktpl.SpreadTpl) {
 	p, _, err := album.PreviewTplWith(tpl, 300, 200, nil, previewPhotos(2))
 	if err != nil {
 		t.Fatal(err)
@@ -162,7 +163,7 @@ func previewRepeat(t *testing.T) {
 }
 
 // previewSameAsPlain — nil и пустой список дают то же, что PreviewTpl, побайтно.
-func previewSameAsPlain(t *testing.T, tpl model.SpreadTpl) {
+func previewSameAsPlain(t *testing.T, tpl looktpl.SpreadTpl) {
 	p0, v0, err := album.PreviewTpl(tpl, 300, 200, nil)
 	if err != nil {
 		t.Fatal(err)

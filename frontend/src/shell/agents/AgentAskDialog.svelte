@@ -8,11 +8,12 @@
     ASK_HINT,
     ASK_LINK,
     ASK_NEVER_LINK,
+    ASK_OPEN_PLACES,
     ASK_PLACE_LINK,
     ASK_PLACE_WHY,
-    ASK_WHY,
     CANCEL_LABEL,
     PLACES_NONE_SHORT,
+    askWhyText,
   } from './agentstext'
 
   // Вопрос агента «Создать альбом по просьбе агента?» / «Добавить папку…» (149; 150: полный путь, «Выбрать другую…», вид edit,
@@ -23,6 +24,7 @@
   // не должен перевернуть соседние слова.
   const a = $derived(agentAsk.cur)
   const armed = $derived(agentAsk.armed)
+  const whyText = $derived(a?.why ? askWhyText(a.kind, a.why) : '')
 
   $effect(() => agentAsk.watch())
 
@@ -69,13 +71,15 @@
     {#if a.why === 'bad'}
       <p class="ask warn">{ASK_BAD_HINT}</p>
     {:else if a.why === 'place'}
+      <!-- У открытия причина говорит об альбоме, а места — отдельной строкой; у папки места и есть причина -->
+      {#if a.kind === 'open'}<p class="ask note">{whyText}</p>{/if}
       <p class="ask note">
-        {ASK_PLACE_WHY}
+        {a.kind === 'open' ? ASK_OPEN_PLACES : ASK_PLACE_WHY}
         {#each placeDirs as d, i (d)}{i > 0 ? ', ' : ' '}<bdi class="path">{d}</bdi>{:else}{PLACES_NONE_SHORT}{/each}.
         <button class="link" onclick={() => void agents.show(KEY_PLACES)}>{ASK_PLACE_LINK}</button>
       </p>
-    {:else if a.why && ASK_WHY[a.why]}
-      <p class="ask note">{ASK_WHY[a.why]}</p>
+    {:else if whyText}
+      <p class="ask note">{whyText}</p>
     {:else if a.tool}
       <p class="ask note"><button class="link" onclick={() => void agents.show(rowKey(a.tool))}>{ASK_NEVER_LINK}</button></p>
     {/if}
@@ -125,7 +129,7 @@
   .link {
     all: unset;
     cursor: pointer;
-    color: var(--muted);
+    color: var(--link);
     font-size: 12px;
     text-decoration: underline dotted;
     text-underline-offset: 3px;

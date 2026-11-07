@@ -27,6 +27,7 @@ type PhotoAbout struct {
 const (
 	noteNoShot  = "Нет данных о съёмке"
 	noteMissing = "Файл не найден"
+	noteCloud   = "Файл только в облаке"
 	aboutMax    = 512 // записей кэша; в сессии смотрят десятки фото — сброс целиком не мешает
 )
 
@@ -105,6 +106,10 @@ func (a *App) PhotoAbout(id string) (out PhotoAbout, err error) {
 		return out, nil
 	}
 	ab, rerr := a.aboutOf(path)
+	if errors.Is(rerr, library.ErrCloudOnly) { // не скачиваем ради сведений инспектора
+		out.Note = noteCloud
+		return out, nil
+	}
 	if rerr != nil {
 		a.about.logOnce(id, rerr)
 		out.Note = noteMissing
@@ -129,6 +134,9 @@ func (a *App) aboutOf(path string) (library.About, error) {
 	k := aboutKey{path: path, size: st.Size(), mod: st.ModTime().UnixNano()}
 	if v, ok := a.about.get(k); ok {
 		return v, nil
+	}
+	if cloudStub(path) { // заглушка облака: чтение заголовка скачало бы файл; готовое в кэше выше уже отдано
+		return library.About{}, library.ErrCloudOnly
 	}
 	v, err := readAbout(path)
 	if err != nil {

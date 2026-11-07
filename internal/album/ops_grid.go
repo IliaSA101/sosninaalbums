@@ -8,6 +8,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/names"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/album/view"
@@ -274,7 +275,7 @@ func (e *Editor) PlaceBoxes(spreadID, scope string) (boxes []model.Box, tplScope
 // ApplySpreadTpl (067). Договор: до правки ничего; места и оформление — одна правка (один шаг
 // отмены), отказ — откат без шага; область уже такая — холостая. missing — ключей библиотеки
 // без файла на этом ПК (слои пропущены).
-func (e *Editor) ApplySpreadTpl(spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (v model.View, plan model.GridPlan, missing int, err error) {
+func (e *Editor) ApplySpreadTpl(spreadID, scope string, t looktpl.SpreadTpl, libs map[string]model.PhotoInfo) (v model.View, plan model.GridPlan, missing int, err error) {
 	v, err = e.try("", func(p *model.Project) (err error) {
 		plan, missing, err = grid.ApplySpreadTpl(p, spreadID, scope, t, libs)
 		return err
@@ -286,7 +287,7 @@ func (e *Editor) ApplySpreadTpl(spreadID, scope string, t model.SpreadTpl, libs 
 }
 
 // PlanSpreadTpl. Договор: как PlanCopyGrid — сухой прогон на копии, снятой под замком.
-func (e *Editor) PlanSpreadTpl(spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (model.GridPlan, error) {
+func (e *Editor) PlanSpreadTpl(spreadID, scope string, t looktpl.SpreadTpl, libs map[string]model.PhotoInfo) (model.GridPlan, error) {
 	var c *model.Project
 	e.read(func(p *model.Project) { c = p.Clone() })
 	return grid.PlanSpreadTpl(c, spreadID, scope, t, libs)
@@ -294,7 +295,7 @@ func (e *Editor) PlanSpreadTpl(spreadID, scope string, t model.SpreadTpl, libs m
 
 // SpreadTplOf. Договор: только чтение под замком («Авто» закрепляется на копии); код ссылки
 // клиента (LookHost.Private) в шаблон не идёт.
-func (e *Editor) SpreadTplOf(spreadID, scope string, places, texts bool) (t model.SpreadTpl, err error) {
+func (e *Editor) SpreadTplOf(spreadID, scope string, places, texts bool) (t looktpl.SpreadTpl, err error) {
 	e.read(func(p *model.Project) {
 		t, err = grid.SpreadTplOfSkip(p, spreadID, scope, places, texts, e.privateLib())
 	})
@@ -305,7 +306,7 @@ func (e *Editor) SpreadTplOf(spreadID, scope string, places, texts bool) (t mode
 // который шаблон встаёт тем же ApplySpreadTpl и конвейером settle, что и в альбоме (плитка =
 // результат). Pages = 2 — разворот wmm×hmm; Pages = 1 — левая страница wmm×hmm (правая пуста:
 // плитка — AreaOf(left)). Вид — печатный (без заглушек полей).
-func PreviewTpl(t model.SpreadTpl, wmm, hmm float64, libs map[string]model.PhotoInfo) (*model.Project, model.View, error) {
+func PreviewTpl(t looktpl.SpreadTpl, wmm, hmm float64, libs map[string]model.PhotoInfo) (*model.Project, model.View, error) {
 	return PreviewTplWith(t, wmm, hmm, libs, nil)
 }
 
@@ -313,7 +314,7 @@ func PreviewTpl(t model.SpreadTpl, wmm, hmm float64, libs map[string]model.Photo
 // в пустые места тем же grid.FillPlaces («Заполнить места», порядок model.FillSeats); лишние фото
 // остаются за листом. Фото, которых мало, по кругу не повторяются: повтор вызывающий даёт копиями
 // с ID «<ID>-n» (098) — FillPlaces различает фото по ID. nil и пусто — прежний PreviewTpl.
-func PreviewTplWith(t model.SpreadTpl, wmm, hmm float64, libs map[string]model.PhotoInfo, photos []model.PhotoInfo) (*model.Project, model.View, error) {
+func PreviewTplWith(t looktpl.SpreadTpl, wmm, hmm float64, libs map[string]model.PhotoInfo, photos []model.PhotoInfo) (*model.Project, model.View, error) {
 	p := model.New()
 	pw, scope := wmm, model.ScopeLeft
 	if t.Pages == 2 {

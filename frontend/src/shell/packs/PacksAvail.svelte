@@ -95,7 +95,7 @@
   .link {
     all: unset;
     cursor: pointer;
-    color: var(--muted);
+    color: var(--link);
     font-size: 12px;
     text-decoration: underline dotted;
     text-underline-offset: 3px;

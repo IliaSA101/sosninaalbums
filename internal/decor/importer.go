@@ -50,7 +50,7 @@ func (s *Store) Import(kind, theme string, files []string) (ImportResult, error)
 	if _, ok := kindDirs[kind]; !ok || kind == KindSpread || kind == KindPrint || kind == KindAlbum { // шаблон разворота — SaveSpreadTpl, типография — SavePrint, макет — SaveLook
 		return res, ErrKind
 	}
-	if !isTheme(theme) {
+	if !ownTheme(theme) {
 		theme = ThemeMine
 	}
 	s.ioMu.Lock()

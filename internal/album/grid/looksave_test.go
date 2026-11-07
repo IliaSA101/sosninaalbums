@@ -13,6 +13,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
@@ -41,7 +42,7 @@ func TestAlbumTplOfSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tpl.Steps) != 2 || tpl.V != model.LookV || tpl.Cover != nil {
+	if len(tpl.Steps) != 2 || tpl.V != looktpl.LookV || tpl.Cover != nil {
 		t.Fatalf("макет: шагов %d, V %d, обложка %v", len(tpl.Steps), tpl.V, tpl.Cover)
 	}
 	a, b := tpl.Steps[0].Tpl, tpl.Steps[1].Tpl
@@ -54,7 +55,7 @@ func TestAlbumTplOfSnapshot(t *testing.T) {
 	if len(a.Stickers) != 3 || len(a.Drafts) != 1 || len(a.Texts) != 0 || a.Drafts[0].Text != "Наша свадьба" {
 		t.Errorf("оформление s1: стикеров %d, заготовок %d, надписей %d", len(a.Stickers), len(a.Drafts), len(a.Texts))
 	}
-	own := slices.IndexFunc(a.Stickers, func(it model.TplItem) bool { return it.Lib == kSt })
+	own := slices.IndexFunc(a.Stickers, func(it looktpl.TplItem) bool { return it.Lib == kSt })
 	if own < 0 {
 		t.Error("свой стикер из библиотеки не снят")
 	}
@@ -114,7 +115,7 @@ func TestAlbumTplOfRepeatMerge(t *testing.T) {
 	for i, st := range tpl.Steps {
 		roles[i] = st.Role
 	}
-	if !slices.Equal(roles, []string{"", model.RoleRepeat, model.RoleRepeat}) { // s3 = s4: слиты в один
+	if !slices.Equal(roles, []string{"", looktpl.RoleRepeat, looktpl.RoleRepeat}) { // s3 = s4: слиты в один
 		t.Fatalf("роли после слияния: %q", roles)
 	}
 	// Тот же выбор с пустой серединой: пустой s5 пропускается, позиции — по выбранным id.
@@ -122,7 +123,7 @@ func TestAlbumTplOfRepeatMerge(t *testing.T) {
 	o = saveOpts("s1", "s5", "s2")
 	o.RepFrom, o.RepTo = 3, 3
 	tpl, err = e.AlbumTplOf(o)
-	if err != nil || len(tpl.Steps) != 2 || tpl.Steps[0].Role != "" || tpl.Steps[1].Role != model.RoleRepeat {
+	if err != nil || len(tpl.Steps) != 2 || tpl.Steps[0].Role != "" || tpl.Steps[1].Role != looktpl.RoleRepeat {
 		t.Errorf("пустой разворот: %v, %+v", err, tpl.Steps)
 	}
 	// Без повторяемых одинаковые развороты остаются шагами: автор выбрал серию из них.
@@ -132,7 +133,7 @@ func TestAlbumTplOfRepeatMerge(t *testing.T) {
 	}
 	// Диапазон за краями зажимается; перевёрнутый — повторяемых нет.
 	o.RepFrom, o.RepTo = -5, 99
-	if tpl, err = e.AlbumTplOf(o); err != nil || len(tpl.Steps) != 1 || tpl.Steps[0].Role != model.RoleRepeat {
+	if tpl, err = e.AlbumTplOf(o); err != nil || len(tpl.Steps) != 1 || tpl.Steps[0].Role != looktpl.RoleRepeat {
 		t.Errorf("диапазон шире выбора: %v, %+v", err, tpl.Steps)
 	}
 }
@@ -186,7 +187,7 @@ func TestAlbumTplOfLimit24(t *testing.T) {
 	if _, err := e.AlbumTplOf(model.SaveLookOpts{Ids: all[:24]}); err != nil {
 		t.Errorf("24 разных: %v", err)
 	}
-	if _, err := e.AlbumTplOf(model.SaveLookOpts{Ids: all}); !errors.Is(err, model.ErrLookMany) || !strings.Contains(err.Error(), "Не больше 24 разных разворотов") {
+	if _, err := e.AlbumTplOf(model.SaveLookOpts{Ids: all}); !errors.Is(err, looktpl.ErrLookMany) || !strings.Contains(err.Error(), "Не больше 24 разных разворотов") {
 		t.Errorf("25 разных: %v", err)
 	}
 	same := slices.Concat(all[:1], all[:1]) // тот же разворот дважды — id повторён
@@ -210,15 +211,15 @@ func TestAlbumTplOfVignette(t *testing.T) {
 	}
 	st := tpl.Steps[1]
 	v := edtest.P(e).Spreads[1].Vig
-	if st.Role != model.RoleVignette || st.Vig == nil || st.Vig.Tpl != v.Tpl || st.Vig.Pupils != v.Pupils || len(st.Tpl.Places) != 0 {
+	if st.Role != looktpl.RoleVignette || st.Vig == nil || st.Vig.Tpl != v.Tpl || st.Vig.Pupils != v.Pupils || len(st.Tpl.Places) != 0 {
 		t.Errorf("шаг виньетки: %+v", st)
 	}
 	o.RepFrom, o.RepTo = 1, 3
-	if _, err := e.AlbumTplOf(o); !errors.Is(err, model.ErrLookVigRep) {
+	if _, err := e.AlbumTplOf(o); !errors.Is(err, looktpl.ErrLookVigRep) {
 		t.Errorf("виньетка среди повторяемых: %v", err)
 	}
 	o.RepFrom, o.RepTo = 2, 3 // виньетка на краю: сама «один раз», повторяемый — s2
-	if tpl, err = e.AlbumTplOf(o); err != nil || len(tpl.Steps) != 3 || tpl.Steps[1].Role != model.RoleVignette || tpl.Steps[2].Role != model.RoleRepeat {
+	if tpl, err = e.AlbumTplOf(o); err != nil || len(tpl.Steps) != 3 || tpl.Steps[1].Role != looktpl.RoleVignette || tpl.Steps[2].Role != looktpl.RoleRepeat {
 		t.Errorf("виньетка на краю: %v, %+v", err, tpl.Steps)
 	}
 	// Одна виньетка — не макет: нужен хотя бы один шаг-не-виньетка.
@@ -309,7 +310,7 @@ func TestAlbumTplOfAutoSameAsSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := tpl.Steps[0].Tpl; model.TplKey(got) != model.TplKey(want) || len(got.Places) != 2 {
+	if got := tpl.Steps[0].Tpl; looktpl.TplKey(got) != looktpl.TplKey(want) || len(got.Places) != 2 {
 		t.Errorf("макет %+v, снимок %+v", got, want)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -32,10 +33,10 @@ func vsStyle() *model.VigStyle {
 }
 
 // vsLook — макет: обычный шаг и «Наши воспитатели» (split-g, 6 учителей); style и htext — в шаге.
-func vsLook(style *model.VigStyle, htext string) model.AlbumTpl {
+func vsLook(style *model.VigStyle, htext string) looktpl.AlbumTpl {
 	vig := lkVig("Воспитатели", 0)
-	vig.Vig = &model.LookVig{Tpl: "split-g", Teachers: 6, Pupils: 0, Ratio: "3:4", Style: style, HText: htext}
-	return model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "Титул", "#ffffff", 1), vig}}
+	vig.Vig = &looktpl.LookVig{Tpl: "split-g", Teachers: 6, Pupils: 0, Ratio: "3:4", Style: style, HText: htext}
+	return looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "Титул", "#ffffff", 1), vig}}
 }
 
 // vsEditor — редактор с форматом w×h мм.

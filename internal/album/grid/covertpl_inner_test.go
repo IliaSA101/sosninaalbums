@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // tplParts на листе обложки: шаблон страницы встаёт на безопасную зону сторонки, шаблон разворота
@@ -14,8 +15,8 @@ func TestTplPartsCover(t *testing.T) {
 	pr, _ := model.CoverPresetOf(model.CoverDefault)
 	p.Cover = &model.Cover{Spec: pr.Spec, Sheet: &model.Spread{ID: model.CoverID}}
 	s := p.Cover.Sheet
-	one := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}}}
-	two := model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Page: []model.TplBg{{}, {}}}
+	one := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}}}
+	two := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Page: []looktpl.TplBg{{}, {}}}
 	parts, err := tplParts(p, s, model.ScopeLeft, one)
 	zone, ok := coverSideOf(p, model.ScopeLeft)
 	if err != nil || !ok || len(parts) != 1 || parts[0].a != zone.box {

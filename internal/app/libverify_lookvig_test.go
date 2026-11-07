@@ -5,35 +5,36 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Шаг-виньетка в library-verify (164 G1): надписи — провал на любом наборе; style и htext — только при
 // minApp не ниже 0.36.0. Провалы независимы и собираются за один прогон.
 
 // lvVigStep — шаг-виньетка split-g с оформлением из vig (nil — как в 0.35).
-func lvVigStep(bg string, vig *model.LookVig) model.LookStep {
+func lvVigStep(bg string, vig *looktpl.LookVig) looktpl.LookStep {
 	st := lvStep(2, 2, bg)
-	st.Role, st.Vig = model.RoleVignette, vig
+	st.Role, st.Vig = looktpl.RoleVignette, vig
 	return st
 }
 
 func TestLibraryVerifyLookVig(t *testing.T) {
 	g := buildLibVerify(t)
 	files, bg, _ := lvGood(t)
-	base := &model.LookVig{Tpl: "split-g", Teachers: 6, Ratio: "3:4"}
+	base := &looktpl.LookVig{Tpl: "split-g", Teachers: 6, Ratio: "3:4"}
 	styled := *base
 	styled.Style, styled.HText = &model.VigStyle{TText: "{Фамилия}"}, "Наши воспитатели"
 	onlyHead := *base
 	onlyHead.HText = "Наш класс"
-	text := model.TplText{Anchor: model.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "Надпись", Style: model.PlainStyle()}
+	text := looktpl.TplText{Anchor: looktpl.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "Надпись", Style: model.PlainStyle()}
 	withText, withDraft := lvVigStep(bg, base), lvVigStep(bg, base)
-	withText.Tpl.Texts = []model.TplText{text}
-	withDraft.Tpl.Drafts = []model.TplText{text}
-	set := func(minApp string, steps ...model.LookStep) string {
+	withText.Tpl.Texts = []looktpl.TplText{text}
+	withDraft.Tpl.Drafts = []looktpl.TplText{text}
+	set := func(minApp string, steps ...looktpl.LookStep) string {
 		t.Helper()
-		return patchManifest(t, packZip(t, "kids-layouts", 1, files[0], lvLook(t, "v", nil, append([]model.LookStep{lvStep(2, 2, bg)}, steps...)...)), map[string]any{"minApp": minApp})
+		return patchManifest(t, packZip(t, "kids-layouts", 1, files[0], lvLook(t, "v", nil, append([]looktpl.LookStep{lvStep(2, 2, bg)}, steps...)...)), map[string]any{"minApp": minApp})
 	}
-	run := func(minApp string, steps ...model.LookStep) (string, int) {
+	run := func(minApp string, steps ...looktpl.LookStep) (string, int) {
 		t.Helper()
 		return g.run(t, "-app", "0.36.0", set(minApp, steps...))
 	}

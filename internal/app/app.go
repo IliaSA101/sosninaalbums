@@ -23,8 +23,10 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/app/colorpick"
 	"github.com/IliaSA101/sosninaalbums/internal/app/edit"
 	"github.com/IliaSA101/sosninaalbums/internal/app/exporter"
+	"github.com/IliaSA101/sosninaalbums/internal/app/facefit"
 	"github.com/IliaSA101/sosninaalbums/internal/app/guidevideo"
 	"github.com/IliaSA101/sosninaalbums/internal/app/libpacks"
+	"github.com/IliaSA101/sosninaalbums/internal/app/looks"
 	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 	"github.com/IliaSA101/sosninaalbums/internal/app/sharer"
 	"github.com/IliaSA101/sosninaalbums/internal/app/updater"
@@ -73,8 +75,8 @@ type App struct {
 	// создаются лениво при первом обращении, умирают вместе с App.
 	askMach   atomic.Pointer[askMachine]
 	agentEdSt atomic.Pointer[agentEdit]
-	// markups — кэш превью PSD разметок обложки и разворотов (markup.go), по записи на вид.
-	markups [2]markupCache
+	// markups — кэш превью PSD разметок обложки и разворотов (ownprint/markup.go), по записи на вид.
+	markups ownprint.Markups
 
 	mu     sync.Mutex
 	photos []library.Photo
@@ -113,6 +115,9 @@ type App struct {
 	// badThumb — фото, чей оригинал не декодируется: ID → причина (миниатюра не вышла); входит в
 	// State.Unread и событие `unread`; под mu.
 	badThumb map[string]string
+	// cloud — фото, чей файл лежит в облаке заглушкой без готовой копии: ID → причина (cloudonly.go); входит в
+	// State.Unread и событие `unread`. В отличие от unread не привязана к отдельным файлам src; под mu.
+	cloud map[string]string
 	// oursSeen — ключи файлов выгрузки программы прошлого законченного чтения папок (121, ours.go); под mu.
 	oursSeen map[string]bool
 
@@ -123,6 +128,7 @@ type App struct {
 	rescanMu   sync.Mutex
 	scanner    *library.Scanner
 	scanCancel context.CancelFunc
+	fresh      freshFiles // только что добавленные отдельные фото: их заглушку облака читает сканирование (loosefresh.go)
 	scanGen    int
 	scan       library.ScanProgress
 	// scanning — чтение папок поколения scanGen ещё не закончило Scan (под mu); пока оно идёт,
@@ -226,8 +232,10 @@ type App struct {
 	// токен сервиса: один Store на процесс (контракт secret.System).
 	shr     *sharer.Service
 	secrets secret.Store
-	// faceSt — подгон по лицам (faces.go, спека 130): занятость, кэш точек, память сессии.
-	faceSt faceState
+	// faceFit — подгон по лицам (facefit, спека 130): занятость, кэш точек, память сессии.
+	faceFit *facefit.Fitter
+	// looks — макеты альбома (internal/app/looks, спека 131/163): без своей памяти, всё читает у App.
+	looks *looks.Service
 	// upd — служба обновления программы (internal/app/updater; фасад — update.go, спека 111).
 	upd *updater.Service
 	// assoc — открытие .salbum двойным щелчком и файл новее программы (internal/app/assoc; фасад —
@@ -301,9 +309,11 @@ func NewApp() *App {
 			wr.EventsEmit(a.ctx, name, data...)
 		}
 	}
+	a.looks = looks.New(a.looksHost()) // до setEditor: редактору нужна библиотека макетов
 	a.setEditor(blankEditor(""))
 	a.Methods = edit.New(a.editHost())
 	a.colorPick = colorpick.New(a.colorHost())
+	a.faceFit = facefit.New(a.faceHost())
 	a.upd = updater.New(a.updHost())
 	a.assoc = assoc.New(a.assocHost())
 	a.exp = exporter.New(a.expHost())

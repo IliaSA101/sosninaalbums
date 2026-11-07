@@ -2,13 +2,13 @@ package collect
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -127,7 +127,8 @@ func Save(q *model.Project, side model.Side, path string, pl Plan) error {
 	}
 	lost := 0
 	for _, r := range lp.Photos {
-		if st, err := os.Stat(r.Path); r.Path == "" || err != nil || !st.Mode().IsRegular() {
+		// Свежая копия в папке OneDrive могла стать заглушкой — она на месте (RegularOrCloud).
+		if st, err := library.StatLocal(r.Path); r.Path == "" || err != nil || !imgfile.RegularOrCloud(r.Path, st) {
 			lost++
 		}
 	}

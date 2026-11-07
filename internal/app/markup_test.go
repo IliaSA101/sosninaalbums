@@ -20,6 +20,7 @@ import (
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -30,12 +31,12 @@ import (
 func countPreview(t *testing.T) *atomic.Int32 {
 	t.Helper()
 	var n atomic.Int32
-	old := markupPreview
-	markupPreview = func(ctx context.Context, path string) ([]byte, string, error) {
+	old := ownprint.MarkupPreview
+	ownprint.MarkupPreview = func(ctx context.Context, path string) ([]byte, string, error) {
 		n.Add(1)
 		return library.MarkupPreviewCtx(ctx, path)
 	}
-	t.Cleanup(func() { markupPreview = old })
+	t.Cleanup(func() { ownprint.MarkupPreview = old })
 	return &n
 }
 
@@ -165,11 +166,11 @@ func TestServeGuideNoImageLog(t *testing.T) {
 	if out := logWithoutSlow(buf.String()); out != "" {
 		t.Fatalf("PSD без сведённого попал в журнал: %q", out)
 	}
-	old := markupPreview
-	markupPreview = func(context.Context, string) ([]byte, string, error) {
+	old := ownprint.MarkupPreview
+	ownprint.MarkupPreview = func(context.Context, string) ([]byte, string, error) {
 		return nil, "", errors.New("сбой разбора")
 	}
-	t.Cleanup(func() { markupPreview = old })
+	t.Cleanup(func() { ownprint.MarkupPreview = old })
 	full := testkit.PSD(t, dir, "full.psd", testkit.PSDSpec{W: 8, H: 8, C: color.NRGBA{A: 255}})
 	if _, err := a.setSpreadGuide(full); err != nil {
 		t.Fatal(err)
@@ -197,15 +198,15 @@ func TestSetGuideResetsPreviewError(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	fail := true
 	var built atomic.Int32
-	old := markupPreview
-	markupPreview = func(ctx context.Context, path string) ([]byte, string, error) {
+	old := ownprint.MarkupPreview
+	ownprint.MarkupPreview = func(ctx context.Context, path string) ([]byte, string, error) {
 		built.Add(1)
 		if fail {
 			return nil, "", errors.New("сбой чтения")
 		}
 		return library.MarkupPreviewCtx(ctx, path)
 	}
-	t.Cleanup(func() { markupPreview = old })
+	t.Cleanup(func() { ownprint.MarkupPreview = old })
 	dir := testkit.TempDir(t)
 	sp := testkit.PSD(t, dir, "s.psd", testkit.PSDSpec{W: 8, H: 8, C: color.NRGBA{A: 255}})
 	cv := testkit.PSD(t, dir, "c.psd", testkit.PSDSpec{W: 8, H: 8, C: color.NRGBA{A: 255}})
@@ -307,51 +308,32 @@ func TestPickSpreadGuide(t *testing.T) {
 	}
 }
 
-// reset во время идущего построения: результат уже начатого построения отдаётся ждущему, но не
-// запоминается (путь поменяли — старое превью не должно встать в кэш); следующий get строит заново
-// и уже запоминает.
-func TestMarkupCacheResetDuringBuild(t *testing.T) {
-	path := filepath.Join(testkit.TempDir(t), "m.bin")
-	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+// TestServeGuideUnreachableVolume — том не отвечает: обе раздачи разметки — 404 без чтения файла и без
+// построения превью. Проверка тома — в корне (osx службе ownprint недоступен), её не должно потерять.
+func TestServeGuideUnreachableVolume(t *testing.T) {
+	a, _ := spreadsApp(t, []string{"a"})
+	h := a.media(http.NotFoundHandler())
+	dir := testkit.TempDir(t)
+	// Малый PNG без проверки тома ушёл бы файлом (200), PSD — через превью Go.
+	if _, err := a.setCoverGuide(testkit.PNG(t, dir, "c.png", 8, 4, color.NRGBA{R: 200, A: 255})); err != nil {
 		t.Fatal(err)
 	}
-	var built atomic.Int32
-	started, gate := make(chan struct{}, 4), make(chan struct{})
-	old := markupPreview
-	t.Cleanup(func() { markupPreview = old })
-	markupPreview = func(context.Context, string) ([]byte, string, error) {
-		n := built.Add(1)
-		started <- struct{}{}
-		if n == 1 {
-			<-gate // первое построение держим, пока не сделан reset
+	if _, err := a.setSpreadGuide(testkit.PSD(t, dir, "s.psd", testkit.PSDSpec{W: 8, H: 8, C: color.NRGBA{A: 255}})); err != nil {
+		t.Fatal(err)
+	}
+	oldR, oldP := reachable, ownprint.MarkupPreview
+	t.Cleanup(func() { reachable, ownprint.MarkupPreview = oldR, oldP })
+	reachable = func(string) bool { return false }
+	ownprint.MarkupPreview = func(context.Context, string) ([]byte, string, error) {
+		t.Error("том не отвечает: построено превью")
+		return nil, "", nil
+	}
+	for _, u := range []string{"/media/cover-guide", "/media/spread-guide"} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, u, nil))
+		if w.Code != http.StatusNotFound || w.Body.Len() > 20 {
+			t.Fatalf("%s при недоступном томе: %d, %d байт", u, w.Code, w.Body.Len())
 		}
-		return []byte{byte(n)}, "image/png", nil
-	}
-	var c markupCache
-	got := make(chan []byte, 1)
-	go func() {
-		d, _, _ := c.get(context.Background(), path)
-		got <- d
-	}()
-	<-started
-	c.reset()
-	close(gate)
-	if d := <-got; len(d) != 1 || d[0] != 1 {
-		t.Fatalf("ждущий получил %v", d)
-	}
-	c.mu.Lock()
-	cached := c.data != nil || c.key != (markupKey{})
-	c.mu.Unlock()
-	if cached {
-		t.Fatal("результат построения, начатого до reset, запомнен")
-	}
-	for range 2 { // второй get — уже из кэша, без третьего построения
-		if d, _, err := c.get(context.Background(), path); err != nil || len(d) != 1 || d[0] != 2 {
-			t.Fatalf("после reset: %v %v", d, err)
-		}
-	}
-	if n := built.Load(); n != 2 {
-		t.Fatalf("построений %d, ждали 2", n)
 	}
 }
 

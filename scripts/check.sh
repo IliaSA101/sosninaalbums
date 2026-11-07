@@ -34,6 +34,8 @@ cd "$root" || exit 1
 . "$root/scripts/env.sh"
 # Тег webkit2_41 нужен Go-пакетам, которые тянут окно Wails (main, internal/app): без него cgo ищет WebKitGTK 4.0.
 [ -n "$wails_tags" ] && export GOFLAGS="${GOFLAGS:+$GOFLAGS }-tags=$wails_tags"
+# macOS: без FMA, как go-mac в CI и выпуск (162 п. 5, да владельца 03.11, адаптация правил) — иначе эталоны раскладки на arm64 расходятся.
+if [ "$(uname -s)" = Darwin ]; then export GOFLAGS="${GOFLAGS:+$GOFLAGS }-gcflags=all=-d=fmahash=qn"; fi
 
 # SA_CHECK_COLOR: дочерний прогон пишет в файл, но цвет нужен — родитель сидит в терминале.
 if [ -t 1 ] || [ -n "${SA_CHECK_COLOR:-}" ]; then red=$'\e[31m' green=$'\e[32m' yellow=$'\e[33m' off=$'\e[0m'; else red='' green='' yellow='' off=''; fi

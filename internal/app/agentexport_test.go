@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/app/exporter"
@@ -74,42 +75,6 @@ func TestExportCheckErrorsNoPath(t *testing.T) {
 	}
 }
 
-// TestExportQuestionLines: заголовок и строки вопроса — путь, создание, соседняя папка, облако, сеть, «заменится»,
-// чужие файлы (тогда «Выбрать папку…» и без «Выбрать другую…»); имя папки с плохими знаками в заголовок не идёт.
-func TestExportQuestionLines(t *testing.T) {
-	sum := []string{"Развороты 1–24 и обложка · 300 dpi · качество 95 · 25 файлов", "Обычная выгрузка"}
-	in := func(p exportPlan) askBody {
-		return exportAskText(exportAskIn{Client: "Claude Code", Album: "Петровы", Lines: sum, Plan: p})
-	}
-	b := in(exportPlan{shown: "/v/Петровы", create: true, nextTo: true, net: true, cloud: true, ours: []string{"01.jpg", "02.jpg"}})
-	all := strings.Join(b.Lines, "\n")
-	for _, want := range []string{"Клиент «Claude Code» просит выгрузить альбом «Петровы» в JPEG:", sum[0], "Папка будет создана.",
-		"Рядом с папкой фото альбома", "Сетевой диск.", "синхронизируется с облаком", "уже есть выгрузка (2 файла) — заменится", askWho} {
-		if !strings.Contains(all, want) {
-			t.Errorf("нет строки %q в %q", want, all)
-		}
-	}
-	if b.Title != "Выгрузить альбом в папку «Петровы»?" || b.OK != askOKExport {
-		t.Errorf("заголовок %q, кнопка %q", b.Title, b.OK)
-	}
-	f := in(exportPlan{shown: "/v/Петровы", foreign: true})
-	if f.OK != askOKExportPick || !strings.Contains(strings.Join(f.Lines, "\n"), "Сюда выгрузить нельзя") {
-		t.Errorf("чужие файлы: %+v", f)
-	}
-	n := in(exportPlan{})
-	if n.Title != "Выгрузить альбом по просьбе агента?" || n.OK != askOKExportPick || !strings.Contains(strings.Join(n.Lines, "\n"), "Папку выберете вы") {
-		t.Errorf("без пути: %+v", n)
-	}
-	if bad := in(exportPlan{shown: "/v/a\u202eb"}); strings.Contains(bad.Title, "a") {
-		t.Errorf("плохое имя в заголовке: %q", bad.Title)
-	}
-	for n, w := range map[int]string{1: "файл", 2: "файла", 5: "файлов", 11: "файлов", 21: "файл", 112: "файлов"} {
-		if filesWord(n) != w {
-			t.Errorf("filesWord(%d) = %q", n, filesWord(n))
-		}
-	}
-}
-
 // TestAgentQuietWhileExportRunning: пока выгрузка идёт (окна открыты или уже фон), тихое и вопросное создание и
 // открытие альбома — «идёт выгрузка» сразу, без вопроса человеку (0.35-152-27).
 func TestAgentQuietWhileExportRunning(t *testing.T) {
@@ -145,7 +110,7 @@ func TestExportAskNoNeverLink(t *testing.T) {
 	// Полный ход: askExportAlbum с альбомом из разворотов — событие без Tool, с Files и «Выбрать другую…».
 	full := newExportRig(t, 3)
 	c, ev := full.question(t, full.req("Петровы"))
-	if ev.Kind != "export" || ev.Tool != "" || ev.Files < 3 || ev.Alt != askAlt || ev.OK != askOKExport {
+	if ev.Kind != "export" || ev.Tool != "" || ev.Files < 3 || ev.Alt != agentasktext.Alt || ev.OK != agentasktext.OKExport {
 		t.Errorf("полный ход: %+v", ev)
 	}
 	full.decline(t, c, ev)
@@ -159,7 +124,7 @@ func TestExportAskNoNeverLink(t *testing.T) {
 
 	r := newAskRig(t)
 	rec, _, err := r.a.askPostWith(agents.AskReq{Kind: agents.AskExport, Client: "Claude Code"}, r.a.editor(), folderPlan{},
-		askBody{Title: "t", OK: askOKExportPick}, &exportAsk{files: 3})
+		agentasktext.Body{Title: "t", OK: agentasktext.OKExportPick}, &exportAsk{files: 3})
 	if err != nil || rec == nil {
 		t.Fatalf("askPostWith: %v", err)
 	}

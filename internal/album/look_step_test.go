@@ -7,6 +7,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // «Поставить на разворот N» (131 design §4, G4b): шаг на текущий лист целиком, как плитка 067.
@@ -90,14 +91,14 @@ func TestApplyLookStepRefused(t *testing.T) {
 	for _, c := range []struct {
 		id   string
 		step int
-		tpl  model.AlbumTpl
+		tpl  looktpl.AlbumTpl
 		want error
 	}{
 		{sid, 0, lookA(), album.ErrLookCover},
 		{model.CoverID, 1, lookA(), album.ErrLookCover},
 		{sid, 9, lookA(), album.ErrLookStep},
 		{sid, -1, lookA(), album.ErrLookStep},
-		{sid, 1, model.AlbumTpl{}, model.ErrTplEmpty},
+		{sid, 1, looktpl.AlbumTpl{}, looktpl.ErrTplEmpty},
 	} {
 		if _, _, _, err := e.ApplyLookStep(c.id, c.step, lkRefA, c.tpl, nil); !errors.Is(err, c.want) {
 			t.Errorf("шаг %d: %v, ждали %v", c.step, err, c.want)

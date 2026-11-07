@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
-	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/gen"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
@@ -379,7 +379,7 @@ func (v *verifier) tplTile(it decor.Item) image.Image {
 }
 
 // tileOf — плитка готового шаблона t (страница 30×30); name — для сообщения об ошибке.
-func (v *verifier) tileOf(name string, t model.SpreadTpl) image.Image {
+func (v *verifier) tileOf(name string, t looktpl.SpreadTpl) image.Image {
 	libs, _ := v.libsOf(t)
 	sz := pageSizes[1]
 	p, view, err := album.PreviewTpl(t, sz.w*float64(max(t.Pages, 1)), sz.h, libs)

@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
+	"github.com/IliaSA101/sosninaalbums/internal/app/looks"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -83,13 +85,13 @@ func setFeed(a *App, list []library.Photo) {
 }
 
 // photoLook — макет: обложка (задняя 1 место, лицевая 2), два шага по 2 места на развороте.
-func photoLook() model.AlbumTpl {
+func photoLook() looktpl.AlbumTpl {
 	l := testLook("#ffffff")
 	one := []model.Box{{X: 0.2, Y: 0.2, W: 0.6, H: 0.6}}
 	two := []model.Box{{X: 0.05, Y: 0.2, W: 0.4, H: 0.6}, {X: 0.55, Y: 0.2, W: 0.4, H: 0.6}}
-	back := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: one, Page: []model.TplBg{{Color: "#ffffff"}}}
-	front := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: two, Page: []model.TplBg{{Color: "#ffffff"}}}
-	l.Cover = &model.CoverTpl{Bg: &model.TplBg{Color: "#ffffff"}, Back: &back, Front: &front}
+	back := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: one, Page: []looktpl.TplBg{{Color: "#ffffff"}}}
+	front := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: two, Page: []looktpl.TplBg{{Color: "#ffffff"}}}
+	l.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#ffffff"}, Back: &back, Front: &front}
 	l.Steps = l.Steps[:2]
 	l.Steps[1].Role = ""
 	return l
@@ -138,45 +140,6 @@ var (
 	stepXs  = []float64{0.25, 0.75}         // два места на развороте
 	coverXs = []float64{0.25, 0.625, 0.875} // обложка: задняя 1, лицевая 2 (середины мест)
 )
-
-func TestParseLookQueryPh(t *testing.T) {
-	const base = "i=1&px=256&r=1"
-	for _, c := range []struct {
-		raw string
-		ph  uint64
-		px  int
-	}{
-		{base + "&ph=1", 1, 256},
-		{base + "&ph=0", 0, 256},
-		{base + "&ph=9007199254740991", 1<<53 - 1, 256},
-		{base + "&ph=0000000000000007", 7, 256}, // 16 цифр
-		{"i=0&px=2048&r=2&ph=5", 5, 2048},
-		{"ph=5&r=2&px=1500&i=3", 5, 1500}, // порядок не важен: px проверяется после разбора всех
-		{base, 0, 256},
-	} {
-		q, ok := parseLookQuery(c.raw)
-		if !ok || q.ph != c.ph || q.px != c.px {
-			t.Errorf("%s: %+v %v", c.raw, q, ok)
-		}
-	}
-	for _, raw := range []string{
-		base + "&ph=", base + "&ph=-1", base + "&ph=+1", base + "&ph=1.5", base + "&ph=1e3", base + "&ph=0x10", base + "&ph=abc",
-		base + "&ph=1_0", base + "&ph=%20", base + "&ph=1&ph=2", base + "&ph=1&ph=1",
-		base + "&ph=9007199254740992",              // 2⁵³
-		base + "&ph=00000000000000007",             // 17 цифр
-		base + "&ph=12345678901234567890",          // больше 2⁵³
-		base + "&ph=18446744073709551616",          // больше uint64
-		"i=1&px=2048&r=1",                          // 2048 без ph
-		"i=1&px=1025&r=1&ph=0",                     // ph=0 — прежний предел 1024
-		"i=1&px=2049&r=1&ph=1",                     // выше 2048 нельзя и с ph
-		"i=1&px=63&r=1&ph=1",                       // ниже предела
-		base + "&ph=1&bg=2", base + "&ph=1&path=x", // остальные параметры не ослаблены
-	} {
-		if q, ok := parseLookQuery(raw); ok {
-			t.Errorf("%s: принято %+v", raw, q)
-		}
-	}
-}
 
 // Места листа — свободные фото ленты по порядку: лицевая обложки с начала, задняя — после неё, шаги
 // дальше по кругу; ответ JPEG; альбом не меняется; повтор из кэша; смена ленты — новая картинка.
@@ -255,7 +218,7 @@ func phFrame(t *testing.T, a *App, base string) {
 		{"px=2048&r=0.2", 409, 2045}, {"px=2048&r=5", 2048, 410}, {"px=2048&r=1", 2048, 2048}, {"px=1500&r=1.5", 1500, 1000},
 	} {
 		b := lookJPEG(t, a, base+"?v=1&i=1&ph=3&"+c.q).Bounds()
-		if b.Dx() > lookPhotoPx || b.Dy() > lookPhotoPx || b.Dx() < c.w-1 || b.Dy() < c.h-2 {
+		if b.Dx() > looks.PhotoPx || b.Dy() > looks.PhotoPx || b.Dx() < c.w-1 || b.Dy() < c.h-2 {
 			t.Errorf("%s: %v, ждали ≈ %d×%d", c.q, b, c.w, c.h)
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -64,7 +65,7 @@ func libKey(b []byte) string {
 	return "my:" + hex.EncodeToString(s[:8])
 }
 
-func tplJSON(t *testing.T, tpl model.SpreadTpl) []byte {
+func tplJSON(t *testing.T, tpl looktpl.SpreadTpl) []byte {
 	t.Helper()
 	b, err := json.Marshal(tpl)
 	if err != nil {
@@ -113,8 +114,8 @@ func noTmpAnywhere(t *testing.T, cfg string) {
 func TestInstallPack(t *testing.T) {
 	s, cfg := openTemp(t)
 	bg, st := renderPNG(t, 40, 30), renderPNG(t, 16, 16)
-	tpl := model.SpreadTpl{V: 1, Pages: 1, Places: []model.Box{{X: .1, Y: .1, W: .8, H: .8}},
-		Page: []model.TplBg{{Lib: libKey(bg)}}, Stickers: []model.TplItem{{W: .2, H: .2, Lib: libKey(st)}}}
+	tpl := looktpl.SpreadTpl{V: 1, Pages: 1, Places: []model.Box{{X: .1, Y: .1, W: .8, H: .8}},
+		Page: []looktpl.TplBg{{Lib: libKey(bg)}}, Stickers: []looktpl.TplItem{{W: .2, H: .2, Lib: libKey(st)}}}
 	m, src := testPack("ivory", 3, pit{"bg/one.png", bg}, pit{"stickers/dot.png", st}, pit{"spreads/hero.json", tplJSON(t, tpl)})
 	info := install(t, s, m, src, nil)
 	if info.ID != "ivory" || info.Version != 3 || info.Bg != 1 || info.Sticker != 1 || info.Spread != 1 || !info.Removable ||
@@ -157,7 +158,7 @@ func TestInstallPack(t *testing.T) {
 			t.Errorf("%s: наборы %+v", when, ps)
 		}
 		s.mu.RLock()
-		_, tplOK := s.files[KindSpread][model.TplKey(mustTpl(t, tplJSON(t, tpl)))]
+		_, tplOK := s.files[KindSpread][looktpl.TplKey(mustTpl(t, tplJSON(t, tpl)))]
 		s.mu.RUnlock()
 		if !tplOK {
 			t.Errorf("%s: шаблон набора не в индексе", when)
@@ -176,9 +177,9 @@ func TestInstallPack(t *testing.T) {
 	noTmpAnywhere(t, cfg)
 }
 
-func mustTpl(t *testing.T, b []byte) model.SpreadTpl {
+func mustTpl(t *testing.T, b []byte) looktpl.SpreadTpl {
 	t.Helper()
-	tpl, err := model.ParseSpreadTpl(b)
+	tpl, err := looktpl.ParseSpreadTpl(b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,8 +235,8 @@ func TestPackStageSkips(t *testing.T) {
 	good := renderPNG(t, 44, 30)
 	jpeg := mustRead(t, testkit.JPEG(t, dir, "a.jpg", 20, 10))
 	huge := mustRead(t, testkit.HugeJPEG(t, dir, "h.jpg", 12000, 9000))
-	tpl := func(mut func(*model.SpreadTpl)) []byte {
-		v := model.SpreadTpl{V: 1, Pages: 1, Places: []model.Box{{X: .1, Y: .1, W: .5, H: .5}}, Page: []model.TplBg{{}}}
+	tpl := func(mut func(*looktpl.SpreadTpl)) []byte {
+		v := looktpl.SpreadTpl{V: 1, Pages: 1, Places: []model.Box{{X: .1, Y: .1, W: .5, H: .5}}, Page: []looktpl.TplBg{{}}}
 		mut(&v)
 		return tplJSON(t, v)
 	}
@@ -246,15 +247,15 @@ func TestPackStageSkips(t *testing.T) {
 		{"bg/huge.jpg", huge},
 		{"stickers/long.png", renderPNG(t, 4097, 8)},
 		{"bg/again.png", good},
-		{"spreads/new-art.json", tpl(func(v *model.SpreadTpl) {
-			v.Stickers = []model.TplItem{{W: .2, H: .2, Art: &model.Art{Kind: "zzz-future"}}}
+		{"spreads/new-art.json", tpl(func(v *looktpl.SpreadTpl) {
+			v.Stickers = []looktpl.TplItem{{W: .2, H: .2, Art: &model.Art{Kind: "zzz-future"}}}
 		})},
-		{"spreads/new-pat.json", tpl(func(v *model.SpreadTpl) { v.Page[0].Pat = &model.Pattern{Kind: "zzz-future"} })},
-		{"spreads/foreign.json", tpl(func(v *model.SpreadTpl) { v.Page[0].Lib = "my:0123456789abcdef" })},
-		{"spreads/wrongkind.json", tpl(func(v *model.SpreadTpl) { v.Stickers = []model.TplItem{{W: .2, H: .2, Lib: libKey(good)}} })},
+		{"spreads/new-pat.json", tpl(func(v *looktpl.SpreadTpl) { v.Page[0].Pat = &model.Pattern{Kind: "zzz-future"} })},
+		{"spreads/foreign.json", tpl(func(v *looktpl.SpreadTpl) { v.Page[0].Lib = "my:0123456789abcdef" })},
+		{"spreads/wrongkind.json", tpl(func(v *looktpl.SpreadTpl) { v.Stickers = []looktpl.TplItem{{W: .2, H: .2, Lib: libKey(good)}} })},
 		{"spreads/v2.json", []byte(`{"v":2,"pages":1,"page":[{}]}`)},
 		{"spreads/junk.json", []byte(`{не json`)},
-		{"spreads/ok.json", tpl(func(v *model.SpreadTpl) { v.Page[0].Lib = libKey(good) })},
+		{"spreads/ok.json", tpl(func(v *looktpl.SpreadTpl) { v.Page[0].Lib = libKey(good) })},
 		{"stickers/ok.png", renderPNG(t, 4096, 8)},
 	}
 	m, src := testPack("skips", 1, items...)
@@ -377,7 +378,7 @@ func TestRemovePackGC(t *testing.T) {
 	dir := testkit.TempDir(t)
 	a, b, c, d, e := renderPNG(t, 61, 30), renderPNG(t, 62, 30), renderPNG(t, 63, 30), renderPNG(t, 64, 30), renderPNG(t, 65, 30)
 	m, src := testPack("ivory", 1, pit{"bg/a.png", a}, pit{"bg/b.png", b}, pit{"bg/c.png", c}, pit{"bg/d.png", d}, pit{"bg/e.png", e},
-		pit{"spreads/t.json", tplJSON(t, model.SpreadTpl{V: 1, Pages: 1, Page: []model.TplBg{{Lib: libKey(a)}}})})
+		pit{"spreads/t.json", tplJSON(t, looktpl.SpreadTpl{V: 1, Pages: 1, Page: []looktpl.TplBg{{Lib: libKey(a)}}})})
 	install(t, s, m, src, nil)
 	m2, src2 := testPack("other", 1, pit{"bg/b.png", b})
 	install(t, s, m2, src2, nil)

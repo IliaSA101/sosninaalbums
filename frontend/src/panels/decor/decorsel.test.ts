@@ -57,8 +57,8 @@ describe('выборки', () => {
     for (const id of ['basic', MINE, 'brand', '', 'newish']) expect(isSelection(id)).toBe(false)
   })
 
-  it('noOwn: выборки и «Фирменные» — куда своё не кладётся', () => {
-    for (const id of [ALL, RECENT, NEW, 'brand']) expect(noOwn(id)).toBe(true)
+  it('noOwn: выборки, «Фирменные» и «Прежние макеты» — куда своё не кладётся', () => {
+    for (const id of [ALL, RECENT, NEW, 'brand', 'legacy']) expect(noOwn(id)).toBe(true)
     for (const id of ['basic', MINE, 'wedding']) expect(noOwn(id)).toBe(false)
   })
 

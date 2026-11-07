@@ -174,7 +174,7 @@ func relink(p *model.Project, moves map[string]string) []model.PathPair {
 		ref.Path, ref.Alt = np, ""
 		// Файл на месте, но другой длины (перепривязали «по W×H»): размеры — из заголовка.
 		if size, ok := fileSize(np); ok {
-			refresh(&ref, size)
+			refresh(osDisk{}, &ref, size)
 		}
 		p.Photos[id] = ref
 		p.SetFile(id, ref)

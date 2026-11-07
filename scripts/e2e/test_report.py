@@ -267,12 +267,13 @@ class GuardTest(TmpCase):
         self.assertIn(".gotmp", common.E2E_OUT.parts)
 
     def test_empty_env_refused_not_cwd(self):
-        with mock.patch.dict(os.environ, {"APPDATA": ""}):
+        # ветка Windows задана явно: на Linux config_root идёт через XDG_CONFIG_HOME (test_regress)
+        with mock.patch.object(common.sys, "platform", "win32"), mock.patch.dict(os.environ, {"APPDATA": ""}):
             with self.assertRaises(Refuse):
                 common.config_root()
             with self.assertRaises(Refuse):
                 common.stand_dir("e2e")
-        with mock.patch.dict(os.environ, {"APPDATA": "C:/Users/x/AppData/Roaming"}):
+        with mock.patch.object(common.sys, "platform", "win32"), mock.patch.dict(os.environ, {"APPDATA": "C:/Users/x/AppData/Roaming"}):
             self.assertEqual(common.stand_dir("E2E").name, "SosninaAlbums-stand-e2e")
 
     def test_photo_dirs(self):

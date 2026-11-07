@@ -72,16 +72,6 @@ func RelPath(base, path string) (string, bool) {
 // (paths.ErrDevice) — недостающее, как после Load. Без диска: Load уже стучался
 // к файлам, второй обход тысяч фото открытие только замедлит. Отметки — из p.Loaded().
 func Check(p *model.Project) error {
-	for _, dir := range p.Folders {
-		if err := checkPair("папка", dir, ""); err != nil {
-			return err
-		}
-	}
-	for dir, alt := range p.FolderAlt {
-		if err := checkPair("папка", dir, alt); err != nil {
-			return err
-		}
-	}
 	if err := checkLoose(p); err != nil {
 		return err
 	}
@@ -89,28 +79,59 @@ func Check(p *model.Project) error {
 		if r.Lib != "" && !model.ValidLibKey(r.Lib) {
 			return fmt.Errorf("фото в проекте: недопустимый ключ библиотеки %s", paths.LogQ(r.Lib))
 		}
+	}
+	return EachPath(p, func(what, path, alt string) error {
+		if what == WhatPhoto && alt == "" && errors.Is(paths.CheckLocalPath(path), paths.ErrDevice) {
+			return nil // недостающее с устройством в пути (как его оставляет Load): к файлу не обращаются
+		}
+		return checkPair(what, path, alt)
+	})
+}
+
+// Названия строк EachPath (what): они же идут в текст ошибки Check.
+const (
+	WhatPhoto  = "фото"
+	WhatFolder = "папка"
+)
+
+// EachPath — обход всех пар путей модели (основной и запасной; запасной "" — нет): папки, FolderAlt, отдельные
+// фото, фото (кроме своих из библиотеки без пути), отметки, разметки обложки и разворотов. Один перечень
+// на Check и на тихое открытие (160): «все строки в местах» и «правильность путей» не расходятся. fn вернул
+// ошибку — обход прерван ею; пределы отдельных добавлений проверяет Check через checkLoose.
+func EachPath(p *model.Project, fn func(what, path, alt string) error) error {
+	for _, dir := range p.Folders {
+		if err := fn(WhatFolder, dir, ""); err != nil {
+			return err
+		}
+	}
+	for dir, alt := range p.FolderAlt {
+		if err := fn(WhatFolder, dir, alt); err != nil {
+			return err
+		}
+	}
+	if err := eachLoosePath(p, fn); err != nil {
+		return err
+	}
+	for _, r := range p.Photos {
 		if r.Lib != "" && r.Path == "" && r.Alt == "" {
 			continue // своё, которого нет в библиотеке этого компьютера
 		}
-		if r.Alt == "" && errors.Is(paths.CheckLocalPath(r.Path), paths.ErrDevice) {
-			continue // недостающее с устройством в пути (как его оставляет Load): к файлу не обращаются
-		}
-		if err := checkPair("фото", r.Path, r.Alt); err != nil {
+		if err := fn(WhatPhoto, r.Path, r.Alt); err != nil {
 			return err
 		}
 	}
 	for _, m := range p.Loaded().Marks {
-		if err := checkPair("отметка", m.Path, m.Alt()); err != nil {
+		if err := fn("отметка", m.Path, m.Alt()); err != nil {
 			return err
 		}
 	}
 	if p.Cover != nil && p.Cover.Guide != "" {
-		if err := checkPair("разметка обложки", p.Cover.Guide, p.Cover.GuideAlt); err != nil {
+		if err := fn("разметка обложки", p.Cover.Guide, p.Cover.GuideAlt); err != nil {
 			return err
 		}
 	}
 	if p.SpreadGuide != "" {
-		return checkPair("разметка разворотов", p.SpreadGuide, p.SpreadGuideAlt)
+		return fn("разметка разворотов", p.SpreadGuide, p.SpreadGuideAlt)
 	}
 	return nil
 }

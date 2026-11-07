@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // «Фоны по серии» (131 design §4, режим bg): на лист встаёт только фон шага — цвет, узор, фото
@@ -20,12 +21,12 @@ type BgRes struct {
 // ApplyLookBg ставит на лист s фон шага tpl. Повтор того же — холостая правка (проект не
 // меняется). Шаг без фона снимает фон листа: лист «идёт по серии». Лист 031 берёт страницу
 // шага (vigPage). Шаг уже зажат ClampLook, поэтому отказа нет: негодный шаг или область — холостая правка. Свои из библиотеки — из libs; ключа нет — слой пропускается и попадает в Missing.
-func ApplyLookBg(p *model.Project, s *model.Spread, tpl model.SpreadTpl, libs map[string]model.PhotoInfo) BgRes {
+func ApplyLookBg(p *model.Project, s *model.Spread, tpl looktpl.SpreadTpl, libs map[string]model.PhotoInfo) BgRes {
 	return lookBg(p, s, tpl, libs, false)
 }
 
 // LookBgSame — фон листа s уже тот, что даёт шаг tpl (сверка без записи, проект не меняется).
-func LookBgSame(p *model.Project, s *model.Spread, tpl model.SpreadTpl, libs map[string]model.PhotoInfo) bool {
+func LookBgSame(p *model.Project, s *model.Spread, tpl looktpl.SpreadTpl, libs map[string]model.PhotoInfo) bool {
 	return !lookBg(p, s, tpl, libs, true).Changed
 }
 
@@ -33,7 +34,7 @@ func LookBgSame(p *model.Project, s *model.Spread, tpl model.SpreadTpl, libs map
 // узор, фото сторон; корешок и места не трогаются; фото корешка уходит, если фон — фото всего
 // листа). Replaced — свой фон обложки (цвет, узор, фото из съёмки или фото корешка) изменился.
 // Обложки нет или макет фона не задаёт — холостая правка.
-func ApplyLookCoverBg(p *model.Project, c *model.CoverTpl, libs map[string]model.PhotoInfo) BgRes {
+func ApplyLookCoverBg(p *model.Project, c *looktpl.CoverTpl, libs map[string]model.PhotoInfo) BgRes {
 	if p.Cover == nil || p.Cover.Sheet == nil || !c.HasBg() {
 		return BgRes{}
 	}
@@ -42,7 +43,7 @@ func ApplyLookCoverBg(p *model.Project, c *model.CoverTpl, libs map[string]model
 
 // LookCoverBgSame — фон обложки уже тот, что даёт c (сверка без записи; обложки нет или фона у
 // макета нет — true).
-func LookCoverBgSame(p *model.Project, c *model.CoverTpl, libs map[string]model.PhotoInfo) bool {
+func LookCoverBgSame(p *model.Project, c *looktpl.CoverTpl, libs map[string]model.PhotoInfo) bool {
 	return p.Cover == nil || p.Cover.Sheet == nil || !c.HasBg() || !lookBg(p, p.Cover.Sheet, c.SheetBgTpl(), libs, true).Changed
 }
 
@@ -53,11 +54,11 @@ func HasBg(s *model.Spread) bool {
 }
 
 // lookBg — тело ApplyLookBg и LookBgSame; dry — без записи (и без записей Photos).
-func lookBg(p *model.Project, s *model.Spread, tpl model.SpreadTpl, libs map[string]model.PhotoInfo, dry bool) (res BgRes) {
+func lookBg(p *model.Project, s *model.Spread, tpl looktpl.SpreadTpl, libs map[string]model.PhotoInfo, dry bool) (res BgRes) {
 	if s.IsVignette() {
 		tpl = vigPage(tpl)
 	}
-	t, _ := model.ClampSpreadTpl(tpl) // шаг без мест и фона тоже ставится: лист получает «без фона»
+	t, _ := looktpl.ClampSpreadTpl(tpl) // шаг без мест и фона тоже ставится: лист получает «без фона»
 	scope := model.ScopeSpread
 	parts, err := tplParts(p, s, scope, t)
 	if t.Pages == 0 || err != nil {

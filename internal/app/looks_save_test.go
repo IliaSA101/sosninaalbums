@@ -13,6 +13,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 )
 
@@ -117,7 +118,7 @@ func TestSaveLookRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tpl, err := s.Look(it.ID); err != nil || len(tpl.Steps) != 3 || tpl.Steps[1].Role != model.RoleRepeat {
+	if tpl, err := s.Look(it.ID); err != nil || len(tpl.Steps) != 3 || tpl.Steps[1].Role != looktpl.RoleRepeat {
 		t.Fatalf("макет из библиотеки: %v", err)
 	}
 	// Тот же макет во второй раз — «уже есть», копии нет.

@@ -9,23 +9,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentask"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 )
 
 // В choosing срок стоит: окно ОС держится дольше AskLife, итог — «да», а не timeout.
 func TestAskChoosingState(t *testing.T) {
 	r := newAskRig(t)
-	r.a.askM().life = 60 * time.Millisecond
+	newAskQ(r.a, 60*time.Millisecond, 300*time.Millisecond)
 	release := r.holdDialog()
 	defer release()
 	c := r.ask(r.addReq())
 	id := r.asked(t, 1).ID
-	if r.state() != askAsked {
+	if r.state() != agentask.Asked {
 		t.Fatalf("состояние %v, ждали asked", r.state())
 	}
 	ans := r.answerAsync(id, true)
 	r.dialogOpen(t)
-	waitUntil(t, "choosing", func() bool { return r.state() == askChoosing })
+	waitUntil(t, "choosing", func() bool { return r.state() == agentask.Choosing })
 	time.Sleep(250 * time.Millisecond) // в четыре раза дольше срока
 	if !c.pending(0) || len(r.evOf("agents:askdone")) != 0 {
 		t.Fatalf("срок прервал выбор папки: %+v %v", c.res, r.evOf("agents:askdone"))
@@ -57,7 +58,7 @@ func TestAskFrozenWhileDialog(t *testing.T) {
 	id := r.asked(t, 1).ID
 	ans := r.answerAsync(id, true)
 	r.dialogOpen(t)
-	waitUntil(t, "choosing", func() bool { return r.state() == askChoosing })
+	waitUntil(t, "choosing", func() bool { return r.state() == agentask.Choosing })
 	c.cancel()
 	if !c.pending(150 * time.Millisecond) {
 		t.Fatalf("gone прервал выбор: %+v", c.res)
@@ -132,7 +133,7 @@ func TestAskKindMismatch(t *testing.T) {
 	if _, err := r.a.AnswerAgent(id, true); !errors.Is(err, errAskClosed) {
 		t.Fatalf("add-ответ на create: %v", err)
 	}
-	if r.state() != askAsked || len(r.titles) != 0 {
+	if r.state() != agentask.Asked || len(r.titles) != 0 {
 		t.Fatalf("вопрос тронут: %v, окон ОС %d", r.state(), len(r.titles))
 	}
 	if _, err := r.a.AnswerAgent(id, false); err != nil {
@@ -148,7 +149,7 @@ func TestAskKindMismatch(t *testing.T) {
 	if _, err := r.a.AgentAnswerCreate(id, false); !errors.Is(err, errAskClosed) {
 		t.Fatalf("create-ответ на add: %v", err)
 	}
-	if r.state() != askAsked || len(r.titles) != 0 || r.rev() != before {
+	if r.state() != agentask.Asked || len(r.titles) != 0 || r.rev() != before {
 		t.Fatalf("вопрос или альбом тронуты: %v", r.state())
 	}
 	if _, err := r.a.AnswerAgent(id, false); err != nil {
@@ -236,7 +237,7 @@ func TestAskDenied(t *testing.T) {
 // Срок asked вышел: timeout, окно закрыто, поздний ответ — «вопрос закрыт».
 func TestAskTimeout(t *testing.T) {
 	r := newAskRig(t)
-	r.a.askM().life = 30 * time.Millisecond
+	newAskQ(r.a, 30*time.Millisecond, 300*time.Millisecond)
 	c := r.ask(r.addReq())
 	id := r.asked(t, 1).ID
 	c.wait(t)
@@ -249,7 +250,7 @@ func TestAskTimeout(t *testing.T) {
 	if _, err := r.a.AnswerAgent(id, true); !errors.Is(err, errAskClosed) {
 		t.Errorf("поздний ответ: %v", err)
 	}
-	if len(r.titles) != 0 || r.state() != askAny {
+	if len(r.titles) != 0 || r.state() != agentask.Any {
 		t.Errorf("окно ОС %d, состояние %v", len(r.titles), r.state())
 	}
 }
@@ -280,7 +281,7 @@ func TestAskBusy(t *testing.T) {
 	if _, err := r.a.agentAsk(t.Context(), req); !errors.Is(err, agents.ErrAlbumChanged) {
 		t.Errorf("не тот ключ: %v", err)
 	}
-	if r.state() != askAny || len(r.evOf("agents:ask")) != 1 {
+	if r.state() != agentask.Any || len(r.evOf("agents:ask")) != 1 {
 		t.Error("отказанный вопрос оставил следы")
 	}
 
@@ -338,7 +339,7 @@ func TestAskStaleID(t *testing.T) {
 			t.Errorf("чужой id %.8q: %v", bad, err)
 		}
 	}
-	if r.state() != askAsked || len(r.titles) != 0 {
+	if r.state() != agentask.Asked || len(r.titles) != 0 {
 		t.Fatal("чужой id тронул вопрос")
 	}
 	if len(id) != 32 || id == strings.Repeat("0", 32) {
@@ -376,14 +377,14 @@ func TestAskShutdown(t *testing.T) {
 
 	// choosing: выход ждёт возврата окна ОС; выбор не применяется.
 	r2 := newAskRig(t)
-	r2.a.askM().exitWait = 5 * time.Second
+	newAskQ(r2.a, time.Minute, 5*time.Second)
 	release := r2.holdDialog()
 	defer release()
 	c = r2.ask(r2.addReq())
 	id = r2.asked(t, 1).ID
 	ans := r2.answerAsync(id, true)
 	r2.dialogOpen(t)
-	waitUntil(t, "choosing", func() bool { return r2.state() == askChoosing })
+	waitUntil(t, "choosing", func() bool { return r2.state() == agentask.Choosing })
 	exited := make(chan struct{})
 	go func() { r2.a.stopAgents(); close(exited) }()
 	select {
@@ -410,7 +411,7 @@ func TestAskShutdown(t *testing.T) {
 	id = r3.asked(t, 1).ID
 	ans = r3.answerAsync(id, true)
 	r3.dialogOpen(t)
-	waitUntil(t, "choosing", func() bool { return r3.state() == askChoosing })
+	waitUntil(t, "choosing", func() bool { return r3.state() == agentask.Choosing })
 	start := time.Now()
 	r3.a.stopAgents()
 	if time.Since(start) < 250*time.Millisecond {
@@ -453,7 +454,7 @@ func TestAskNextAfterDone(t *testing.T) {
 		if c.err != nil || c.res.Why != agents.WhyDeclined {
 			t.Fatalf("вопрос %d: %+v, %v", i, c.res, c.err)
 		}
-		if r.state() != askAny {
+		if r.state() != agentask.Any {
 			t.Fatalf("вопрос %d: итог отдан, а запись вопроса жива (состояние %v)", i, r.state())
 		}
 		tokens <- struct{}{}
@@ -516,10 +517,7 @@ func (r *askRig) shortLife(on bool) {
 	if !on {
 		return
 	}
-	m := r.a.askM()
-	m.mu.Lock()
-	m.life = 30 * time.Millisecond
-	m.mu.Unlock()
+	newAskQ(r.a, 30*time.Millisecond, 300*time.Millisecond)
 }
 
 // askLog — журнал событий вопросов в порядке отправки: «ask:<id>», «askdone:<id>».

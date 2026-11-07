@@ -4,7 +4,12 @@ import { cleanup, fireEvent, render } from '@testing-library/svelte'
 import type { PrintPlan } from '../../base/core/types'
 
 // Выбор в «Печати» при открытии окна (123 А2): первый ответ Go с Plan.default ставит пункт, дальше решает фотограф.
-const api = vi.hoisted(() => ({ PrintPlans: vi.fn(), Export: vi.fn(), MissingNames: vi.fn(async () => ({})) }))
+const api = vi.hoisted(() => ({
+  PrintPlans: vi.fn(),
+  Export: vi.fn(),
+  MissingNames: vi.fn(async () => ({})),
+  ExportSize: vi.fn(async () => ({ summary: '', per: [] })),
+}))
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ EventsOn: () => () => {} }))
 vi.mock('../../../wailsjs/go/app/App', () => api)
 

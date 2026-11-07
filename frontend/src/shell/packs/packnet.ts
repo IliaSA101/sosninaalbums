@@ -1,7 +1,7 @@
 // Сеть окна «Наборы библиотеки» (067 Ф3): типы ответов Go, вопрос согласия и тексты хода и итогов.
 // Название набора в ходе — недоверенный текст из подписанного каталога: только как текст.
 import { errText, capFirst } from '../../base/words/errtext'
-import { WHY_MAX, skippedLabel, type LibraryNet, type LibraryOffer, type PackSkip } from './packs'
+import { WHY_MAX, appSkipLabel, skippedLabel, splitAppSkips, type LibraryNet, type LibraryOffer, type PackSkip } from './packs'
 import { sizeLabel } from '../dialogs/backups'
 
 // Ответы Go (app.LibraryUpdate) и события (library:progress, library:start); LibraryNet, LibraryOffer — в packs.ts.
@@ -134,18 +134,22 @@ function updatedHead(r: LibraryUpdate): string {
 // Дальше: пропущенное, не скачавшееся, «можно скачать: N — ниже» и (только «Скачать все») «появились новые».
 export function updateText(r: LibraryUpdate, ctx: UpdateCtx = { open: true, noNet: false }): string {
   const installed = r.added + r.updated > 0
-  const skipped = skippedLabel(r.skipped)
+  // Пропуски по версии программы — одной частью без повтора причины; прочие — как были
+  const app = splitAppSkips(r.skipped)
+  const byApp = appSkipLabel(app.count, app.need)
+  const skipped = skippedLabel(app.rest)
   const failed = failedLabel(r.failed)
   const avail = r.available ?? 0
   const where = ctx.open ? 'ниже' : 'список в окне «Наборы»'
   const fresh = ctx.kind === 'all' && (r.fresh ?? 0) > 0 ? `появились новые: ${r.fresh} — список обновлён` : ''
   // Новичок: наборов из сети нет, список только что получен
   if (!installed && !failed && avail > 0 && ctx.noNet) {
-    return [`Список наборов получен: можно скачать ${avail} — ${where}`, skipped, fresh].filter(Boolean).join('; ')
+    return [`Список наборов получен: можно скачать ${avail} — ${where}`, byApp, skipped, fresh].filter(Boolean).join('; ')
   }
-  const head = installed ? updatedHead(r) : failed ? '' : FRESH_TEXT
+  // «Всё уже свежее» рядом с пропуском по версии противоречит — начало тогда с него
+  const head = installed ? updatedHead(r) : failed || byApp ? '' : FRESH_TEXT
   const more = avail > 0 ? `можно скачать: ${avail} — ${where}` : ''
-  return capFirst([head, skipped, failed, more, fresh].filter(Boolean).join('; '))
+  return capFirst([head, byApp, skipped, failed, more, fresh].filter(Boolean).join('; '))
 }
 
 // Итог «Скачать» в строке: встал нажатый набор — «скачан» (+ дополнения), иначе «не поставлен: причина» от Go.

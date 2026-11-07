@@ -1,5 +1,5 @@
 // Package model — данные альбома и их инварианты (023): Project, Spread, места, тексты,
-// фоны, отметки, типы View для интерфейса, пределы и зажим, данные шаблонов сеток.
+// фоны, отметки, типы View для интерфейса, пределы и зажим, данные шаблонов сеток (шаблоны разворота и макеты — looktpl).
 //
 // Правят модель только через Editor (ядро internal/album): здесь функции и методы, которые
 // зовут ядро, области и Load (salbum). Экспортные имена, нужные только им (Normalize, KeepLayouts,
@@ -10,8 +10,7 @@
 //
 // Карта: project.go (Project, Spread, Settings, PhotoRef, Normalize, KeepLayouts, тип
 // изделия), places.go (Place, сетка, мост к internal/geom), gridsync.go (SyncGrid, Freeze/Unfreeze, EmptyGridDupes — согласование мест и Photos), backdrop.go (Backdrop), decor.go
-// (узор фона Pattern, его слоты и зажим, ключ своего из библиотеки 048), spreadtpl.go (шаблон готового
-// разворота 067: SpreadTpl, якоря, зажим, разбор, ключ),
+// (узор фона Pattern, его слоты и зажим, ключ своего из библиотеки 048), шаблоны разворота 067 и макеты альбома 131 — подпакет looktpl (spreadtpl.go, look*.go),
 // text.go (кадр, рамки текстов, ширина «по тексту», кегль подписи, PhotoRef.Copy; имя на фото 030, 043: PhotoRef.Name, PersonFromFile и вольное PersonFromFileLoose, NameView), looksname.go (LooksLikeName — имя из названия файла при броске 060 и стоп-список), fillseats.go (порядок мест «Заполнить места»: CoverSeats, FillSeats, FillCounts, 132), seatname.go (табличка места 071: NameAt, PlaceOf, жильцы мест Occupant, ClampSeat), order.go (стек
 // слоёв), marks.go (типы отметок), bins.go (подборки фото 083: Bin, Side — отметки и подборки рядом с проектом, зажим и имена), fonts.go (свои шрифты 082: FontRef, UsedFonts, SyncFonts, ClampFonts), loose.go (отдельные фото 097: LooseAdd, вид, FoldSources — источники не пересекаются), tone.go (ч/б и тон фото 068: Tone, ClampTone, строка CSS), viewtypes.go (View, выбор сеток, PathPair, план окна «Имена» 043), viewsheet.go (виды элементов листа: PlaceView, BorderView, FrameView, фоны, тексты, подписи), viewwire.go (дельта вида 075: Wire, SameView, MarshalJSON),
 // templates.go (шаблоны сеток), limits.go (пределы и ошибки; параллельный счёт раскладок), clamp.go (зажимы сетки, кадра, цвета, строк и фона), clamptext.go (запас текста проекта: ClampDesign, spendTexts, textBudget, CheckTotals, clampCaption), fields.go (поля подписей 030:
@@ -24,4 +23,8 @@
 // ClampAsp, KeepCrops), albumbg.go (фон альбома 098: AlbumBg, ClampAlbumBg, AlbumBgOn), clip.go (буфер «Копировать и вставить» 099: Clip,
 // ClipSel, ClipInfo, PasteReq, PasteOut), marginnote.go (MarginNote — предупреждение к «Поле» и «Обрез» 100), autorow.go (ряды «Авто»:
 // RowLen, AutoRow, MoreRow, ExtraRow, IndexOf — вынесены из project.go).
+//
+// Шаблоны разворота и макеты альбома (SpreadTpl, AlbumTpl, ParseLook…) — подпакет looktpl: он
+// зависит от model, model о нём не знает. Здесь остались MaxLookSteps (его держит Spread.LookStep)
+// и SaveLookOpts (тип биндингов Wails).
 package model

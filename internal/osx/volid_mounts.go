@@ -12,8 +12,9 @@ import (
 	"strings"
 )
 
-// volDirs — каталоги устройств: dev (источники монтирования), by-uuid и by-label (симлинки на них).
-type volDirs struct{ dev, uuid, label string }
+// volDirs — каталоги устройств: dev (источники монтирования), by-uuid и by-label (симлинки на них),
+// sys — корень sysfs (пусто: цепочку подчинённых не читаем).
+type volDirs struct{ dev, uuid, label, sys string }
 
 // volFromMounts — том абсолютного пути по таблице: самая длинная точка-префикс, источник
 // «/dev/…» → настоящее устройство → UUID. Нет UUID (tmpfs, overlay, ZFS, сеть) — errNoVolID.
@@ -47,13 +48,14 @@ func volFromMounts(ms []mount, p string, d volDirs) (Vol, error) {
 // /dev/dm-0). Сетевые и виртуальные источники («srv:/export», «tmpfs», «pool/ds») — не годны.
 // Источник пишет тот, кто монтирует: fuse подставит «/dev/sdb1» в fsname, поэтому тип ФС — только
 // локальный (localFS, без fuse.*), а петля /dev/loop* — отказ: образ с UUID жертвы монтирует любой
-// пользователь через udisks (М1, 0.35-155).
+// пользователь через udisks (М1, 0.35-155). Образ LUKS через udisks даёт /dev/dm-N поверх петли, и
+// по имени она не видна, поэтому цепочку подчинённых (sysfs slaves: dm над dm, md) читаем до петли.
 func (d volDirs) device(m mount) (string, bool) {
 	if !slices.Contains(localFS, m.fstype) || !strings.HasPrefix(m.source, d.dev+"/") {
 		return "", false
 	}
 	dev, err := filepath.EvalSymlinks(m.source)
-	if err != nil || isLoopDev(dev) {
+	if err != nil || isLoopDev(dev) || d.onLoop(path.Base(filepath.ToSlash(dev))) {
 		return "", false
 	}
 	return dev, true

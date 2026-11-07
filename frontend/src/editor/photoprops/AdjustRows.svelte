@@ -2,6 +2,7 @@
   import { Api, store } from '../../base/core/store.svelte'
   import { adjlive } from '../photo/adjlive.svelte'
   import { MAX_TONE, toneCss } from '../../base/geom/tone'
+  import Seg, { type SegItem } from '../../base/tpl/Seg.svelte'
   import TiltRow from './TiltRow.svelte'
   import { clampRow, needsGray, pendingGate, toneArgs, toneOf, withRow, type ToneRow } from './adjustrows'
 
@@ -15,6 +16,11 @@
   const base = $derived(toneOf(fv))
   const live = $derived(adjlive.of(id))
   const cur = $derived({ ...base, ...live })
+  type Gray = 'color' | 'gray'
+  const GRAY_ITEMS: SegItem<Gray>[] = [
+    { id: 'color', label: 'Цвет', title: 'Цветное фото' },
+    { id: 'gray', label: 'Ч/б', title: 'Чёрно-белое фото' },
+  ]
   const ROWS: { row: ToneRow; label: string }[] = [
     { row: 'bright', label: 'Яркость' },
     { row: 'contrast', label: 'Контраст' },
@@ -50,10 +56,7 @@
 </script>
 
 <div class="adj" data-guide="adjust">
-  <div class="seg" role="group" aria-label="Цвет фото">
-    <button class:on={!cur.gray} aria-pressed={!cur.gray} title="Цветное фото" onclick={() => setGray(false)}>Цвет</button>
-    <button class:on={cur.gray} aria-pressed={cur.gray} title="Чёрно-белое фото" onclick={() => setGray(true)}>Ч/б</button>
-  </div>
+  <Seg look="card" label="Цвет фото" items={GRAY_ITEMS} value={cur.gray ? 'gray' : 'color'} onpick={(g) => setGray(g === 'gray')} />
   {#each ROWS as { row, label } (row)}
     <TiltRow
       tilt={base[row]}
@@ -78,27 +81,5 @@
 <style>
   .adj {
     margin-top: 10px;
-  }
-  .seg {
-    display: flex;
-    border-radius: 5px;
-    overflow: hidden;
-    gap: 1px;
-  }
-  .seg button {
-    flex: 1;
-    height: 26px;
-    padding: 0 6px;
-    font-size: 12px;
-    border-radius: 0;
-    background: #38383c;
-    color: #cfcfd4;
-  }
-  .seg button.on {
-    background: var(--accent);
-    color: #1e1e1e;
-  }
-  .seg button.on:hover {
-    background: #ffe53a;
   }
 </style>

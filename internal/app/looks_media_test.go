@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
+	"github.com/IliaSA101/sosninaalbums/internal/app/looks"
 )
 
 // Плитка обложки макета (G6a): две стороны рядом, фон по CoverPageBg, места в зоне стороны,
@@ -18,20 +20,20 @@ import (
 
 // coverLook — макет с обложкой: задняя красная, лицевая синяя (свои цвета), фон листа зелёный;
 // на лицевой — угловое место и (sticker) звезда по центру.
-func coverLook(sticker bool) model.AlbumTpl {
+func coverLook(sticker bool) looktpl.AlbumTpl {
 	l := testLook("#00ff00")
 	place := []model.Box{{X: 0.02, Y: 0.02, W: 0.1, H: 0.1}}
-	back := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: place, Page: []model.TplBg{{Color: "#ff0000"}}}
-	front := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: place, Page: []model.TplBg{{Color: "#0000ff"}}}
+	back := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: place, Page: []looktpl.TplBg{{Color: "#ff0000"}}}
+	front := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: place, Page: []looktpl.TplBg{{Color: "#0000ff"}}}
 	if sticker {
-		front.Stickers = []model.TplItem{{Art: &model.Art{Kind: "star"}, W: 0.4, H: 0.4}}
-		front.Drafts = []model.TplText{{Text: "[Имена]", W: 0.5, Style: model.TextStyle{Size: 20}}}
+		front.Stickers = []looktpl.TplItem{{Art: &model.Art{Kind: "star"}, W: 0.4, H: 0.4}}
+		front.Drafts = []looktpl.TplText{{Text: "[Имена]", W: 0.5, Style: model.TextStyle{Size: 20}}}
 	}
-	l.Cover = &model.CoverTpl{Bg: &model.TplBg{Color: "#00ff00"}, Back: &back, Front: &front}
+	l.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#00ff00"}, Back: &back, Front: &front}
 	return l
 }
 
-func saveCoverLook(t *testing.T, a *App, name string, l model.AlbumTpl) string {
+func saveCoverLook(t *testing.T, a *App, name string, l looktpl.AlbumTpl) string {
 	t.Helper()
 	s, err := a.decorStore()
 	if err != nil {
@@ -142,9 +144,9 @@ func TestMediaLookCoverDecor(t *testing.T) {
 // Шаблоны плитки несут всё оформление стороны, а не только места; общий помощник — тот же, что у library-verify.
 func TestLookCoverTilesContent(t *testing.T) {
 	l := coverLook(true)
-	l.Cover.Front.Borders = []model.TplBorder{{I: 0, Kind: "line"}}
-	l.Cover.Front.Texts = []model.TplText{{Text: "Свадьба", W: 0.5}}
-	tp, ok := lookTile(l, 0, false, false, 1.5)
+	l.Cover.Front.Borders = []looktpl.TplBorder{{I: 0, Kind: "line"}}
+	l.Cover.Front.Texts = []looktpl.TplText{{Text: "Свадьба", W: 0.5}}
+	tp, ok := looks.Tile(l, 0, false, false, 1.5)
 	if !ok || len(tp) != 2 {
 		t.Fatalf("%v %d", ok, len(tp))
 	}
@@ -156,7 +158,7 @@ func TestLookCoverTilesContent(t *testing.T) {
 		t.Errorf("фон сторон — их цвета: %v %v", tp[0].Page[0], f.Page[0])
 	}
 	// bg: оформление сторон снято, цвета остались.
-	bgT, _ := lookTile(l, 0, true, true, 0.75)
+	bgT, _ := looks.Tile(l, 0, true, true, 0.75)
 	g := bgT[0]
 	if len(g.Places)+len(g.Borders)+len(g.Drafts)+len(g.Texts)+len(g.Stickers) != 0 || g.Page[0].Color != "#0000ff" {
 		t.Errorf("bg лицевой: %+v", g)
@@ -166,10 +168,10 @@ func TestLookCoverTilesContent(t *testing.T) {
 		t.Errorf("макет изменён: %+v", l.Cover.Front.Places)
 	}
 	// Ключи библиотеки — по обеим сторонам.
-	l.Cover.Back.Stickers = []model.TplItem{{Lib: "my:00000000000000aa", W: 0.2, H: 0.2}}
+	l.Cover.Back.Stickers = []looktpl.TplItem{{Lib: "my:00000000000000aa", W: 0.2, H: 0.2}}
 	l.Cover.Front.Page[0].Lib = "my:00000000000000bb"
-	tp, _ = lookTile(l, 0, false, false, 1.5)
-	if keys := lookKeys(tp); len(keys) != 2 {
+	tp, _ = looks.Tile(l, 0, false, false, 1.5)
+	if keys := newApp(t).looks.TileKeys(tp); len(keys) != 2 {
 		t.Errorf("ключи: %v", keys)
 	}
 }

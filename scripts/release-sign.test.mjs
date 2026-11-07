@@ -22,6 +22,7 @@ import {
   SignError,
   parseBmpMtime,
   buildBody,
+  checkDraftAssets,
   cleanNote,
   keyFromSeed,
   loadKey,
@@ -269,6 +270,7 @@ function release(over = {}) {
   const deps = {
     gh: (args) => {
       calls.push(args)
+      if (args[1] === 'view') return Buffer.from((over.assets ?? Object.keys(draft)).join('\n') + '\n') // ассеты черновика
       if (args[1] === 'download') for (const [n, data] of Object.entries(draft)) fs.writeFileSync(path.join(args[args.indexOf('-D') + 1], n), data)
       return Buffer.alloc(0)
     },
@@ -295,8 +297,9 @@ test('выпуск: скачивает, сверяет хеш, подписыв�
   assert.equal(path.basename(out.file), ASSET)
   const gh = r.calls.filter((c) => c[0] !== 'git' && c[0] !== 'rebuild')
   assert.deepEqual(gh[0].slice(0, 5), ['release', 'download', TAG, '-p', '*-windows-x64-setup.exe'])
-  assert.deepEqual(gh[1], ['release', 'upload', TAG, out.file, '--clobber']) // повторная подпись черновика
-  assert.equal(gh.length, 2)
+  assert.deepEqual(gh[2], ['release', 'upload', TAG, out.file, '--clobber']) // повторная подпись черновика
+  assert.deepEqual(gh[1], ['release', 'view', TAG, '--json', 'assets', '--jq', '.assets[].name']) // состав черновика — до загрузки
+  assert.equal(gh.length, 3)
   assert.deepEqual(r.calls.filter((c) => c[0] === 'rebuild'), [['rebuild', TAG, '0.25.1']], 'установщик пересобран ровно раз, до подписи')
   assert.ok(r.calls.some((c) => c[0] === 'git' && c[2] === `${TAG}:frontend/src/shell/dialogs/whatsnew.ts`))
   const parsed = openEnvelope(fs.readFileSync(out.file, 'utf8'), publicRaw(KEY))
@@ -341,6 +344,27 @@ test('выпуск: отказы — нет SHA256SUMS.txt, хеш не сошё
   r = release({ setup: Buffer.alloc(1000, 1) }) // меньше 1 МБ: программа такой файл не примет
   throwsSign(() => signRelease(r.opts, r.deps), /размер установщика/)
   noUpload(r)
+})
+
+test('checkDraftAssets: сходится, повторная подпись, лишние и недостающие — отказ с перечнем', () => {
+  const sums = parseSums(`${'a'.repeat(64)}  a.zip\n${'b'.repeat(64)}  b.exe\n`)
+  checkDraftAssets(sums, ['a.zip', 'b.exe', 'SHA256SUMS.txt']) // update.json ещё нет
+  checkDraftAssets(sums, ['a.zip', 'b.exe', 'SHA256SUMS.txt', ASSET]) // повторная подпись
+  throwsSign(() => checkDraftAssets(sums, ['a.zip', 'b.exe', 'SHA256SUMS.txt', 'old.pdf', 'old2.pdf']), /лишние.*old\.pdf, old2\.pdf(?!.*недостающие)/)
+  throwsSign(() => checkDraftAssets(sums, ['a.zip', 'SHA256SUMS.txt']), /недостающие.*b\.exe(?!.*лишние)/)
+  throwsSign(() => checkDraftAssets(sums, ['a.zip', 'b.exe', 'x.txt']), /лишние.*x\.txt.*недостающие.*SHA256SUMS\.txt/)
+  throwsSign(() => checkDraftAssets(sums, []), /недостающие.*SHA256SUMS\.txt, a\.zip, b\.exe/)
+  throwsSign(() => checkDraftAssets(sums, ['a.zip', 'b.exe', 'SHA256SUMS.txt', 'A.ZIP']), /лишние.*A\.ZIP/) // регистр имени важен
+  checkDraftAssets(new Map(), ['SHA256SUMS.txt']) // пустые суммы: только он сам
+})
+
+test('выпуск: лишний ассет в черновике (pdf старого прогона) — отказ до пересборки и загрузки', () => {
+  const r = release({ assets: [setupName('0.25.1'), 'SHA256SUMS.txt', 'SosninaAlbums-0.25.1-install-guide-ru.pdf'] })
+  throwsSign(() => signRelease(r.opts, r.deps), /лишние.*install-guide-ru\.pdf.*ничего не подписано/)
+  assert.ok(!r.calls.some((c) => c[1] === 'upload' || c[0] === 'rebuild'), 'ни пересборки, ни загрузки')
+  // --dry тоже сверяет: «почти настоящий» прогон не обходит сверку
+  const d = release({ assets: [setupName('0.25.1'), 'x.pdf'], opts: { dry: true } })
+  throwsSign(() => signRelease(d.opts, d.deps), /лишние.*x\.pdf/)
 })
 
 test('выпуск: QA-режим --from не загружает и не требует ключ в keys.go', () => {

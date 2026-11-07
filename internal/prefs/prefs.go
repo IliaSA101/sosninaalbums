@@ -1,11 +1,11 @@
 package prefs
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -153,7 +153,7 @@ func RecentIndex(list []string, path string) int {
 	return slices.IndexFunc(list, func(p string) bool { return paths.FoldEqual(p, path) })
 }
 
-// RecentView строит строки списка: имя без расширения, наличие и время правки из os.Stat.
+// RecentView строит строки списка: имя без расширения, наличие и время правки из library.StatLocal.
 // config.json могут править руками: нелокальные строки пропускаем (UNC — Stat по SMB
 // при каждом открытии меню), список режем до maxRecent.
 func RecentView(list []string) []RecentProject {
@@ -171,7 +171,7 @@ func RecentView(list []string) []RecentProject {
 			out = append(out, r)
 			continue
 		}
-		if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() {
+		if st, err := library.StatLocal(p); err == nil && library.RegularOrCloud(p, st) { // альбом-заглушка OneDrive — на месте
 			r.Exists, r.Modified = true, st.ModTime().UnixMilli()
 		}
 		out = append(out, r)

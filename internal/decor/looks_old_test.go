@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -25,7 +25,7 @@ func TestDecorOldReaderKeepsAlbum(t *testing.T) {
 	look := lookBytes(t, lookOf(libKey(bg), ""), `"auto":{"rule":"x"}`)
 	m, src := testPack("wedding-layouts", 1, pit{"bg/a.png", bg}, pit{"looks/main.json", look})
 	install(t, s, m, src, nil)
-	packKey := model.LookKey(look)
+	packKey := looktpl.LookKey(look)
 
 	root := filepath.Join(cfg, RootName)
 	packRegPath := filepath.Join(root, packsDir, "wedding-layouts.json")

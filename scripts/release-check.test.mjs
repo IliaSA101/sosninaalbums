@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { NOTICE_MUST, changelogSection, checkAll, checkInstaller, checkLicense, checkNeeds, checkReadmeFeatures, checkReadmeMedia, parseJobs, workflowExec } from './release-check.mjs'
+import { FMA_GOFLAGS, NOTICE_MUST, changelogSection, checkAll, checkFmaFlags, checkInstaller, checkLicense, checkNeeds, checkReadmeFeatures, checkReadmeMedia, parseJobs, workflowExec } from './release-check.mjs'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -21,6 +21,11 @@ jobs:
     needs: prepare
   macos:
     needs: prepare
+    steps:
+      - name: wails build
+        env:
+          GOFLAGS: ${FMA_GOFLAGS}
+        run: wails build
   pack:
     needs: [prepare, windows, macos]
     steps:
@@ -29,6 +34,8 @@ jobs:
     needs:
       - prepare
       - pack
+    env:
+      GOFLAGS: ${FMA_GOFLAGS}
     steps:
       - run: go test ./internal/layout -run '^TestGoldenFirst(16)?$' -count=1
   win-check:
@@ -37,6 +44,18 @@ jobs:
       - run: pwsh scripts/win/installer-check.ps1 -Setup a -Next b -Version 1.2.0
   release:
     needs: [prepare, pack, mac-check, win-check]
+`
+
+const CI_YML = `name: CI
+jobs:
+  go-linux:
+    runs-on: ubuntu-24.04
+  go-mac:
+    runs-on: macos-15
+    env:
+      GOFLAGS: ${FMA_GOFLAGS}
+    steps:
+      - run: go test -short ./internal/...
 `
 
 const ID_A = 'aaaaaaaa-1111-2222-3333-444444444444'
@@ -55,6 +74,7 @@ const FILES = {
   'frontend/src/shell/dialogs/whatsnew.ts': "export const WHATS_NEW_VERSION = '1.2.0'\nexport const WHATS_NEW: readonly string[] = [\n  'раз',\n]\n",
   'CHANGELOG.md': '# История\n\n## 1.2.0 — 2026-01-01\n\n### Добавлено\n\n- Новое (051)\n- Ещё (052)\n\n## 1.1.0 — 2025-12-01\n\n- Старое\n',
   '.github/workflows/release.yml': YML,
+  '.github/workflows/ci.yml': CI_YML,
   '.github/release-notes.md': 'Скачайте `SosninaAlbums-{{VERSION}}-windows-x64-setup.exe`. Без установки: `SosninaAlbums-{{VERSION}}.exe` в zip.\n',
   'docs/install/guide.md': 'В папке `SosninaAlbums-<версия>.exe`.\n',
   'scripts/win/installer.sh': '#!/bin/sh\n',
@@ -158,6 +178,10 @@ test('parseJobs: строка, список в скобках, блочный с
     'win-check': ['prepare', 'pack'],
     release: ['prepare', 'pack', 'mac-check', 'win-check'],
   })
+  // хвост-комментарий у `jobs:` и у ключей заданий (162): результат прежний
+  const want = parseJobs(YML)
+  assert.deepEqual(parseJobs(YML.replace(/^jobs:[ \t]*$/m, 'jobs: # задания')), want)
+  assert.deepEqual(parseJobs(YML.replace(/^( {2}[A-Za-z0-9_-]+):[ \t]*$/gm, '$1: # задание')), want)
 })
 
 test('arm64: тест из release.yml должен существовать, эталон — быть непустым', () => {
@@ -310,4 +334,36 @@ test('«Возможности» в README: пункт текущей верси
   assert.ok(m('## Возможности\n\n- Старое (1.1): раз.\n\n## Сборка\n- Новое (1.2)\n').some((e) => /нет пункта с «\(1\.2\)»/.test(e)))
   assert.ok(m('## Сборка\n').some((e) => /нет раздела/.test(e)))
   assert.deepEqual(checkReadmeFeatures('/nonexistent-root', '1.2.0'), ['README.md: нет файла'])
+})
+
+test('ключ FMA: GOFLAGS go-mac, wails build и mac-check совпадают (162)', () => {
+  const rel = FILES['.github/workflows/release.yml']
+  assert.deepEqual(checkFmaFlags(CI_YML, rel), [])
+  assert.deepEqual(run({}, '1.2.0').errors, [])
+  // расхождение значения в одном месте
+  const other = rel.replace(`GOFLAGS: ${FMA_GOFLAGS}\n        run`, 'GOFLAGS: -gcflags=all=-N\n        run')
+  assert.notEqual(other, rel)
+  assert.deepEqual(checkFmaFlags(CI_YML, other), [`release.yml: в задании «macos» GOFLAGS «-gcflags=all=-N», ждали «${FMA_GOFLAGS}» (162)`])
+  // ключ без all= или громкий режим — не наш
+  assert.equal(checkFmaFlags(CI_YML.replace('all=-d=fmahash=qn', '-d=fmahash=qn'), rel).length, 1)
+  assert.equal(checkFmaFlags(CI_YML.replace('fmahash=qn', 'fmahash=n'), rel).length, 1)
+  // нет ключа совсем: go-mac и mac-check
+  assert.deepEqual(checkFmaFlags(CI_YML.replace(`      GOFLAGS: ${FMA_GOFLAGS}\n`, ''), rel.replace(`    env:\n      GOFLAGS: ${FMA_GOFLAGS}\n`, '')), [
+    'ci.yml: в задании «go-mac» GOFLAGS должен быть один, найдено 0',
+    'release.yml: в задании «mac-check» GOFLAGS должен быть один, найдено 0',
+  ])
+  // два ключа в одном задании
+  assert.equal(checkFmaFlags(CI_YML.replace('    steps:', `      GOFLAGS: ${FMA_GOFLAGS}\n    steps:`), rel).length, 1)
+  // нет задания или файла
+  assert.deepEqual(checkFmaFlags(null, rel), [`ci.yml: нет задания «go-mac» (ключ FMA ${FMA_GOFLAGS})`])
+  assert.equal(checkFmaFlags(CI_YML, 'jobs:\n  x:\n    runs-on: y\n').length, 2)
+  // строка-комментарий с GOFLAGS не считается
+  assert.deepEqual(checkFmaFlags(CI_YML.replace('    steps:', '    # GOFLAGS: другое\n    steps:'), rel), [])
+  // хвост-комментарий у ключей `jobs:` и задания не прячет задание
+  assert.deepEqual(checkFmaFlags(CI_YML.replace(/^jobs:[ \t]*$/m, 'jobs: # задания'), rel.replace(/^jobs:[ \t]*$/m, 'jobs:  # задания')), [])
+  assert.deepEqual(checkFmaFlags(CI_YML.replace(/^ {2}go-mac:[ \t]*$/m, '  go-mac: # macOS arm64'), rel.replace(/^ {2}macos:[ \t]*$/m, '  macos: # сборка')), [])
+  assert.equal(checkFmaFlags(CI_YML.replace(/^ {2}go-mac:[ \t]*$/m, '  go-mac: # macOS').replace(`      GOFLAGS: ${FMA_GOFLAGS}\n`, ''), rel).length, 1)
+  // checkAll видит расхождение
+  assert.ok(run({ '.github/workflows/ci.yml': CI_YML.replace(FMA_GOFLAGS, '-gcflags=all=-N') }, '1.2.0').errors.some((e) => /GOFLAGS/.test(e)))
+  assert.ok(run({ '.github/workflows/ci.yml': null }, '1.2.0').errors.some((e) => /ci\.yml: нет задания «go-mac»/.test(e)))
 })

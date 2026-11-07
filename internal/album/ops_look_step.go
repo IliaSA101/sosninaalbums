@@ -6,6 +6,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Шаг макета на один лист и новый разворот по серии (131 design §4, G4b): «Поставить на разворот
@@ -32,7 +33,7 @@ var (
 // сторонок по LookBoxes в безопасной зоне, фото по порядку, лишние — в ленту; корешок не
 // трогается); обложки нет — холостая, у макета нет обложки — ErrLookStep; шаг на обложку и шаг 0
 // на разворот — ErrLookCover.
-func (e *Editor) ApplyLookStep(spreadID string, step int, ref model.LookRef, t model.AlbumTpl, libs map[string]model.PhotoInfo) (v model.View, plan model.GridPlan, missing int, err error) {
+func (e *Editor) ApplyLookStep(spreadID string, step int, ref model.LookRef, t looktpl.AlbumTpl, libs map[string]model.PhotoInfo) (v model.View, plan model.GridPlan, missing int, err error) {
 	r, c, err := checkStep(ref, t)
 	if err != nil {
 		return e.View(), plan, 0, err
@@ -49,7 +50,7 @@ func (e *Editor) ApplyLookStep(spreadID string, step int, ref model.LookRef, t m
 
 // PlanLookStep — сухой прогон ApplyLookStep той же функцией на копии (вопрос до правки: фото в
 // ленту, заменятся стикеры и надписи).
-func (e *Editor) PlanLookStep(spreadID string, step int, ref model.LookRef, t model.AlbumTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, err error) {
+func (e *Editor) PlanLookStep(spreadID string, step int, ref model.LookRef, t looktpl.AlbumTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, err error) {
 	r, c, err := checkStep(ref, t)
 	if err != nil {
 		return plan, err
@@ -65,16 +66,16 @@ func (e *Editor) PlanLookStep(spreadID string, step int, ref model.LookRef, t mo
 }
 
 // checkStep — зажим входа ApplyLookStep: ссылка (пустая или негодная — nil: обычная плитка) и макет.
-func checkStep(ref model.LookRef, t model.AlbumTpl) (*model.LookRef, model.AlbumTpl, error) {
-	c, ok := model.ClampLook(t)
+func checkStep(ref model.LookRef, t looktpl.AlbumTpl) (*model.LookRef, looktpl.AlbumTpl, error) {
+	c, ok := looktpl.ClampLook(t)
 	if !ok {
-		return nil, model.AlbumTpl{}, model.ErrTplEmpty
+		return nil, looktpl.AlbumTpl{}, looktpl.ErrTplEmpty
 	}
 	return model.ClampLookRef(&ref), c, nil
 }
 
 // applyLookStep — тело ApplyLookStep и PlanLookStep.
-func applyLookStep(p *model.Project, spreadID string, step int, ref *model.LookRef, t model.AlbumTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, missing int, err error) {
+func applyLookStep(p *model.Project, spreadID string, step int, ref *model.LookRef, t looktpl.AlbumTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, missing int, err error) {
 	if (spreadID == model.CoverID) != (step == 0) {
 		return plan, 0, ErrLookCover
 	}
@@ -105,10 +106,10 @@ func applyLookStep(p *model.Project, spreadID string, step int, ref *model.LookR
 // находит App): пустой разворот перед хвостом серии (в конец, если хвоста нет) и следующий
 // повторяемый шаг, одной правкой («Разворот макета» в меню «+»). Альбом без макета — ErrNoLook;
 // предел MaxSpreads и отказ постановки — ошибка без шага.
-func (e *Editor) NewLookSpread(t model.AlbumTpl, libs map[string]model.PhotoInfo) (model.View, error) {
-	c, ok := model.ClampLook(t)
+func (e *Editor) NewLookSpread(t looktpl.AlbumTpl, libs map[string]model.PhotoInfo) (model.View, error) {
+	c, ok := looktpl.ClampLook(t)
 	if !ok {
-		return e.View(), model.ErrTplEmpty
+		return e.View(), looktpl.ErrTplEmpty
 	}
 	return e.try("", func(p *model.Project) error {
 		if p.Look == nil {

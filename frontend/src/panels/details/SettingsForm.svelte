@@ -12,6 +12,7 @@
   import type { PagePreset, PagePxView, Settings } from '../../base/core/types'
   import Seg from '../../base/tpl/Seg.svelte'
   import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { ALBUM_WHITE } from '../../base/color/palette'
   import ColorReset from '../../base/color/ColorReset.svelte'
   import { colorLive } from '../../base/color/colorlive.svelte'
   import { SHEET_PRESETS, cmText, isSheet, newSheetSize, unitOf } from '../../base/geom/sheet'
@@ -78,7 +79,7 @@
   // Один вызов — один шаг отмены; живое применение забило бы историю пересчётами.
   // 115: цвет альбома сменился, а у разворотов есть свой цвет — сначала вопрос (правки ещё нет); × оставляет черновик формы.
   let own = $state<{ ask: OwnAsk; n: Settings; count: number } | null>(null)
-  const colorKey = (c: string | undefined) => (c || '#ffffff').toLowerCase()
+  const colorKey = (c: string | undefined) => (c || ALBUM_WHITE).toLowerCase()
   async function apply() {
     await pxAsk.settled() // ввод px ещё у Go — страница в форме должна успеть обновиться
     const n = norm(s)
@@ -216,7 +217,7 @@
     <!-- 135: крестик — исходный цвет (пустой bg) в тот же черновик; гаснет, когда цвет уже исходный -->
     <span class="color">
       <ColorPicker
-        value={s.bg || '#ffffff'}
+        value={s.bg || ALBUM_WHITE}
         sheet={store.spread?.id}
         label={sheet ? 'Цвет листов' : 'Цвет страниц альбома'}
         onpick={(c) => (s.bg = c)}
@@ -227,7 +228,7 @@
         title={BG_RESET_TIP}
         disabled={!s.bg}
         onclick={() => (s.bg = '')}
-        onhover={(on) => (on ? colorLive.set(['album'], '#ffffff') : colorLive.clear())}
+        onhover={(on) => (on ? colorLive.set(['album'], ALBUM_WHITE) : colorLive.clear())}
       />
     </span>
   </label>

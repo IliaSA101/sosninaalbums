@@ -38,7 +38,8 @@ func (pl *Plan) AddFonts(fonts map[string][]FontSrc, missing int, dir string, st
 	pl.MissingFonts = missing
 	nm := names{used: map[string]bool{}, onDisk: map[string]fs.DirEntry{}}
 	if dir != "" {
-		if ents, err := os.ReadDir(filepath.Join(dir, DirFonts)); err == nil {
+		nm.dir = filepath.Join(dir, DirFonts)
+		if ents, err := os.ReadDir(nm.dir); err == nil {
 			for _, e := range ents {
 				nm.onDisk[nameKey(e.Name())] = e
 			}

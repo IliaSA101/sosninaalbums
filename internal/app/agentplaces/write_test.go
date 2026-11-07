@@ -18,10 +18,11 @@ import (
 )
 
 // realTemp — временная папка настоящим путём: правило папки отдаёт путь после ссылок и подмены тома, а на Windows
-// TempDir раннера в 8.3 (RUNNER~1) — сравнивать «показанное» с «созданным» можно только в одной форме.
+// TempDir раннера в 8.3 (RUNNER~1) — сравнивать «показанное» с «созданным» можно только в одной форме. На macOS
+// UserTemp кладёт её в $HOME: TempDir там в /private/var — системном дереве, которое правило отвергает (162-7).
 func realTemp(t *testing.T) string {
 	t.Helper()
-	p, err := filepath.EvalSymlinks(testkit.TempDir(t))
+	p, err := filepath.EvalSymlinks(testkit.UserTemp(t))
 	if err == nil {
 		p, err = osx.RealPath(p)
 	}

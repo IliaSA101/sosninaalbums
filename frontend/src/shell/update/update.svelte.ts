@@ -2,17 +2,7 @@ import { store } from '../../base/core/store.svelte'
 import { capFirst, errText } from '../../base/words/errtext'
 import { STAND_LINK_TEXT } from '../dialogs/about.svelte'
 import { NO_UPDATE, UpdateGo, type UpdateInfo, type UpdateProgress } from './updateapi'
-import {
-  PAGE_LABEL,
-  WHATS_NEW_LABEL,
-  failedText,
-  justText,
-  offerToast,
-  readyToast,
-  retryAct,
-  startedText,
-  type UpdateAct,
-} from './updatetext'
+import { PAGE_LABEL, WHATS_NEW_LABEL, failedText, justText, offerToast, readyToast, startedText, type UpdateAct } from './updatetext'
 
 // Что нужно обновлению от верха программы (хук ставит UpdateWatch; тесту хватает пустого).
 export interface UpdateHost {
@@ -25,7 +15,6 @@ export class UpdateUi {
   info = $state<UpdateInfo>({ ...NO_UPDATE })
   notesOpen = $state(false) // раскрыт «Что нового ▸»
   cancelling = $state(false) // «Отменить» нажата, ждём конца скачивания
-  retry = $state<UpdateAct | undefined>(undefined) // что повторяет «Повторить» после ошибки; не задано — по данным Go
   host: UpdateHost = { whatsNew: () => {} }
   private req = 0
   private dl = false // наш DownloadUpdate ещё не вернулся
@@ -36,11 +25,8 @@ export class UpdateUi {
   take(next: UpdateInfo) {
     const was = this.info.phase
     this.info = { ...NO_UPDATE, ...next }
-    if (next.phase === 'error') {
-      // Go присылает ошибку со строчной буквы (как errText).
-      this.info.error = capFirst(this.info.error)
-      this.retry = this.retryFor(was)
-    } else this.retry = undefined
+    // Go присылает ошибку со строчной буквы (как errText).
+    if (next.phase === 'error') this.info.error = capFirst(this.info.error)
     if (next.phase !== 'downloading') this.cancelling = false
     if (next.phase !== 'available') this.notesOpen = false
     if (next.phase === 'ready' && was !== 'ready' && next.mode !== 'page') {
@@ -111,19 +97,9 @@ export class UpdateUi {
     }
   }
 
-  // Что не удалось, то и повторяем: ошибка во время скачивания — скачать, во время проверки — проверить.
-  // Иначе (ошибка пришла событием, прежней фазы не знаем) — по данным Go: version от старого предложения не различает.
-  private retryFor(was: UpdateInfo['phase']): UpdateAct {
-    if (this.info.mode === 'page') return 'check'
-    if (was === 'downloading' || this.dl) return 'download'
-    if (was === 'checking') return 'check'
-    return retryAct(this.info)
-  }
-
-  private fail(e: unknown) {
-    const was = this.info.phase
-    this.info = { ...this.info, phase: 'error', error: capFirst(errText(e)) }
-    this.retry = this.retryFor(was)
+  // Сбой самого вызова (Go не ответил снимком): признак «что не удалось» ставим так же, как ставит Go.
+  private fail(e: unknown, of: 'check' | 'download') {
+    this.info = { ...this.info, phase: 'error', error: capFirst(errText(e)), errorOf: of }
   }
 
   private async refresh() {
@@ -138,11 +114,11 @@ export class UpdateUi {
   async check() {
     const ph = this.info.phase
     if (ph === 'checking' || ph === 'downloading') return
-    this.info = { ...this.info, phase: 'checking', error: '' }
+    this.info = { ...this.info, phase: 'checking', error: '', errorOf: '' }
     try {
       this.take(await UpdateGo.CheckUpdate())
     } catch (e) {
-      this.fail(e)
+      this.fail(e, 'check')
     }
   }
 
@@ -151,12 +127,12 @@ export class UpdateUi {
     if (this.dl) return
     this.dl = true
     this.cancelling = false
-    this.info = { ...this.info, phase: 'downloading', done: 0, total: 0, error: '' }
+    this.info = { ...this.info, phase: 'downloading', done: 0, total: 0, error: '', errorOf: '' }
     try {
       this.take(await UpdateGo.DownloadUpdate())
     } catch (e) {
       // Отмена ошибкой не приходит: Go отвечает снимком прежнего предложения (take выше).
-      this.fail(e)
+      this.fail(e, 'download')
     } finally {
       this.dl = false
       this.cancelling = false

@@ -239,21 +239,8 @@ func (a *App) keepAlbumFonts(af albumFonts) {
 // названия добавленных и «<ключ>.<ext>» новых файлов. Только сама папка (не ссылка), её файлы без
 // вложенных, ≤ 64 (fontlib).
 func (a *App) albumFolderFonts(p *model.Project, path string) (names, faces []string) {
-	want := map[string]bool{}
-	for _, id := range p.UsedFonts() {
-		if !text.Available(id) {
-			want[id] = true
-		}
-	}
-	s := a.fontLib.Load()
-	if len(want) == 0 || s == nil {
-		return nil, nil
-	}
-	dir := filepath.Join(filepath.Dir(path), collect.DirFonts)
-	if paths.CheckLocalPath(dir) != nil || !reachable(dir) {
-		return nil, nil
-	}
-	if st, err := os.Lstat(dir); err != nil || !st.IsDir() {
+	want, dir, s := a.folderFontsWant(p, path)
+	if len(want) == 0 {
 		return nil, nil
 	}
 	r, err := s.ImportFolder(dir, want)
@@ -273,6 +260,37 @@ func (a *App) albumFolderFonts(p *model.Project, path string) (names, faces []st
 		names[i] = f.Name
 	}
 	return names, r.Faces
+}
+
+// folderFontsWant — пропавшие гарнитуры альбома p, чьи файлы могут лежать в папке «Шрифты» рядом с path:
+// сами гарнитуры, папка и библиотека. Пусто — шрифты не нужны или папки нет (не папка, ссылка, не локальная,
+// том не отвечает). Диск — только Lstat папки; в библиотеку ничего не пишет.
+func (a *App) folderFontsWant(p *model.Project, path string) (want map[string]bool, dir string, s *fontlib.Store) {
+	want = map[string]bool{}
+	for _, id := range p.UsedFonts() {
+		if !text.Available(id) {
+			want[id] = true
+		}
+	}
+	s = a.fontLib.Load()
+	if len(want) == 0 || s == nil {
+		return nil, "", nil
+	}
+	dir = filepath.Join(filepath.Dir(path), collect.DirFonts)
+	if paths.CheckLocalPath(dir) != nil || !reachable(dir) {
+		return nil, "", nil
+	}
+	if st, err := os.Lstat(dir); err != nil || !st.IsDir() {
+		return nil, "", nil
+	}
+	return want, dir, s
+}
+
+// needFolderFonts — альбому нужны шрифты из его папки (их ставят только с согласия человека, 160): режим
+// «только узнать» albumFolderFonts, библиотека не меняется.
+func (a *App) needFolderFonts(p *model.Project, path string) bool {
+	want, _, _ := a.folderFontsWant(p, path)
+	return len(want) > 0
 }
 
 // fontsAddedText — тост об шрифтах папки альбома; больше трёх названий — «и ещё N».

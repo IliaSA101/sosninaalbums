@@ -122,6 +122,7 @@ const place = (dir: string, chosen = false, o: Partial<AgentPlace> = {}): AgentP
   label: '',
   chosen,
   bound: true,
+  bindable: true,
   narrow: false,
   narrowRoot: false,
   state: '',
@@ -241,13 +242,13 @@ describe('разрешения агентов (150)', () => {
     expect(spies.setGroup).toHaveBeenCalledExactlyOnceWith('edit', 'allow')
   })
 
-  it('группа «Правки»: «Спрашивать» — вызов группы один; «Запустить программу» и «Показать разворот» подписаны как не меняющие альбом', async () => {
+  it('группа «Правки»: «Спрашивать» — вызов группы один; «Запустить программу» и «Показать разворот» подписаны, что групповой выбор их не трогает', async () => {
     spies.setGroup.mockResolvedValue(withPerms({ edit: true }))
     await open(withPerms({ edit: true }, ALL))
     await fireEvent.click(inGroup('Правки', 'Спрашивать'))
     expect(spies.setGroup).toHaveBeenCalledExactlyOnceWith('edit', 'ask')
     expect(spies.setPerm).not.toHaveBeenCalled()
-    expect(screen.getByText('Не меняют альбом — групповой выбор их не трогает')).toBeTruthy()
+    expect(screen.getByText('Групповой выбор их не трогает')).toBeTruthy()
   })
 
   it('«Всегда» у папки при включённых правках → вопрос только про папки: заголовок, три абзаца, два пути из мест, «Отмена» слева', async () => {
@@ -487,25 +488,24 @@ describe('согласие на правки при смешанных стро�
   })
 })
 
-// Строки «только с вопросом» (152, класс Q): Go отдаёт их в группе other с can = [ask, deny].
-describe('строки выгрузки и открытия: только с вопросом (152)', () => {
+// Строка «только с вопросом» (152, класс Q): Go отдаёт выгрузку в группе other с can = [ask, deny].
+describe('строка выгрузки: только с вопросом (152)', () => {
   const q = (tool: string, title: string, mode = 'ask') => ({ tool, title, group: 'other', mode, can: ['ask', 'deny'], why: '', note: '' })
   const withQ = (mode = 'ask') =>
     infoOn({
       edit: true,
-      perms: [...permRows({ create_album: 'ask' }), q('export_album', 'Выгрузить в JPEG', mode), q('open_album', 'Открыть альбом', mode)],
+      perms: [...permRows({ create_album: 'ask' }), q('export_album', 'Выгрузить в JPEG', mode)],
     })
 
-  it('две строки среди «не меняют альбом»: «Всегда» серое, «Спрашивать» отмечено, пояснение «Спрашивает всегда»', async () => {
+  it('строка среди «не меняют альбом»: «Всегда» серое, «Спрашивать» отмечено, пояснение «Спрашивает всегда»', async () => {
     await open(withQ())
-    for (const t of ['export_album', 'open_album']) {
-      const names = [...rowOf(t).querySelectorAll('button')].map((b) => b.textContent)
-      expect(names).toEqual(['Всегда', 'Спрашивать', 'Запретить'])
-      expect(inRow(t, 'Всегда').getAttribute('aria-disabled')).toBe('true')
-      expect(pressed(inRow(t, 'Спрашивать'))).toBe(true)
-      expect(within(rowOf(t)).getByText('Спрашивает всегда')).toBeTruthy()
-    }
-    expect(screen.getByText('Не меняют альбом — групповой выбор их не трогает')).toBeTruthy()
+    const t = 'export_album'
+    const names = [...rowOf(t).querySelectorAll('button')].map((b) => b.textContent)
+    expect(names).toEqual(['Всегда', 'Спрашивать', 'Запретить'])
+    expect(inRow(t, 'Всегда').getAttribute('aria-disabled')).toBe('true')
+    expect(pressed(inRow(t, 'Спрашивать'))).toBe(true)
+    expect(within(rowOf(t)).getByText('Спрашивает всегда')).toBeTruthy()
+    expect(screen.getByText('Групповой выбор их не трогает')).toBeTruthy()
     expect(within(rowOf('create_album')).queryByText('Спрашивает всегда')).toBeNull()
   })
 
@@ -519,7 +519,7 @@ describe('строки выгрузки и открытия: только с в�
   })
 
   it('с why от Go «Всегда» не серое: щелчок значения не меняет, под строкой — пояснение; «Запретить» работает', async () => {
-    const WHY = 'Выгрузка и открытие альбома спрашивают всегда: папку и файл подтверждаете вы. Можно запретить.'
+    const WHY = 'Выгрузка спрашивает всегда: папку и перезапись файлов подтверждаете вы. Можно запретить.'
     const info = withQ()
     info.perms = info.perms.map((p) => (p.can.length === 2 ? { ...p, why: WHY } : p))
     spies.setPerm.mockResolvedValue(info)
@@ -530,7 +530,6 @@ describe('строки выгрузки и открытия: только с в�
     await fireEvent.click(b)
     expect(spies.setPerm).not.toHaveBeenCalled()
     expect(within(rowOf('export_album')).getByText(WHY)).toBeTruthy()
-    expect(within(rowOf('open_album')).queryByText(WHY)).toBeNull()
     expect(pressed(inRow('export_album', 'Спрашивать'))).toBe(true)
     // обычная строка: «Всегда» работает как прежде
     await fireEvent.click(inRow('create_album', 'Всегда'))
@@ -540,7 +539,7 @@ describe('строки выгрузки и открытия: только с в�
 
   it('повторный щелчок по уже выбранному «Спрашивать» — без вызова Go', async () => {
     await open(withQ())
-    await fireEvent.click(inRow('open_album', 'Спрашивать'))
+    await fireEvent.click(inRow('export_album', 'Спрашивать'))
     expect(spies.setPerm).not.toHaveBeenCalled()
   })
 
@@ -550,44 +549,5 @@ describe('строки выгрузки и открытия: только с в�
     await fireEvent.click(inGroup('Правки', 'Запретить'))
     expect(spies.setGroup).toHaveBeenCalledExactlyOnceWith('edit', 'deny')
     expect(pressed(inRow('export_album', 'Спрашивать'))).toBe(true)
-  })
-})
-
-// Класс O (160): Go отдаёт у открытия три значения, но «Всегда» без окна согласия (Т5, 0.37) не предлагается.
-describe('строка открытия: «Всегда» скрыто до 160 Т5', () => {
-  const o = (mode: string) => ({
-    tool: 'open_album',
-    title: 'Открыть альбом',
-    group: 'other',
-    mode,
-    can: ['allow', 'ask', 'deny'],
-    why: '',
-    note: '',
-  })
-  const withO = (mode = 'ask') => infoOn({ edit: true, perms: [...permRows({ create_album: 'ask' }), o(mode)] })
-
-  it('остаются «Спрашивать» и «Запретить»; у соседней папки «Всегда» на месте', async () => {
-    await open(withO())
-    const names = [...rowOf('open_album').querySelectorAll('button')].map((b) => b.textContent)
-    expect(names).toEqual(['Спрашивать', 'Запретить'])
-    expect(pressed(inRow('open_album', 'Спрашивать'))).toBe(true)
-    expect(within(rowOf('create_album')).getByRole('button', { name: 'Всегда' })).toBeTruthy()
-  })
-
-  it('сохранённое «Всегда» выглядит как «Спрашивать»; щелчок по нему пишет ask в Go, «Запретить» — deny', async () => {
-    spies.setPerm.mockResolvedValue(withO('ask'))
-    await open(withO('allow'))
-    expect(pressed(inRow('open_album', 'Спрашивать'))).toBe(true)
-    expect(pressed(inRow('open_album', 'Запретить'))).toBe(false)
-    await fireEvent.click(inRow('open_album', 'Спрашивать'))
-    expect(spies.setPerm).toHaveBeenCalledExactlyOnceWith('open_album', 'ask')
-    await fireEvent.click(inRow('open_album', 'Запретить'))
-    expect(spies.setPerm).toHaveBeenLastCalledWith('open_album', 'deny')
-  })
-
-  it('«Спрашивать» при уже сохранённом «Спрашивать» — без вызова Go', async () => {
-    await open(withO('ask'))
-    await fireEvent.click(inRow('open_album', 'Спрашивать'))
-    expect(spies.setPerm).not.toHaveBeenCalled()
   })
 })

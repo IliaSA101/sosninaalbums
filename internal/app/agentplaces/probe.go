@@ -31,7 +31,7 @@ type ProbeRes struct {
 }
 
 // Probe — состояние места p по диску (вызов под Within). Привязанное: текущий путь по номеру тома —
-// нет тома (ErrVolGone) → StateNoDisk; не смогли узнать (нет номера, macOS) → без состояния.
+// нет тома (ErrVolGone) → StateNoDisk; не смогли узнать (нет номера, загрузочный том macOS) → без состояния.
 // Непривязанное: папка по сохранённому пути, диск по ней — для ссылки «Привязать».
 func Probe(p prefs.Place, volOf func(string) (osx.Vol, error), volPath func(id, rel string) (string, string, error)) ProbeRes {
 	var res ProbeRes

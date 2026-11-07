@@ -3,12 +3,13 @@ package album
 import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // AlbumTplOf — «Сохранить альбом как макет…» (131 design §8): макет из разворотов o.Ids и обложки.
 // Договор: только чтение под замком — проект, rev и отмена не меняются («Авто» закрепляется на
 // копии). Отказ — ошибка без макета (пустой выбор, чужой id, больше MaxLookSteps разных шагов).
-func (e *Editor) AlbumTplOf(o model.SaveLookOpts) (t model.AlbumTpl, err error) {
+func (e *Editor) AlbumTplOf(o model.SaveLookOpts) (t looktpl.AlbumTpl, err error) {
 	e.read(func(p *model.Project) { t, err = grid.AlbumTplOf(p, o, e.privateLib()) })
 	return t, err
 }

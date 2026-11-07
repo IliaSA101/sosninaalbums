@@ -37,6 +37,7 @@ var (
 	placeDev     = agentplaces.DevOf
 	placeVolOf   = osx.VolumeOf
 	placeVolPath = osx.VolumePath
+	placeCanBind = osx.CanBind // 160: можно ли привязать место к диску (macOS — только /Volumes)
 )
 
 // placeEnv — правила мест этой машины поверх правил выбранной папки (askM().rules — в тестах мягкие).

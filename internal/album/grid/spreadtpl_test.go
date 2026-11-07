@@ -10,6 +10,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Готовые развороты (спека 067, design §2, §9): снять → поставить, якоря, места, план, плитка.
@@ -223,10 +224,10 @@ func TestApplySpreadTpl(t *testing.T) {
 		edtest.Gp(300, 12, 60, 60, "d"), edtest.Gp(380, 12, 60, 60, "f")}, []string{"g", "h", "i"})
 	putStickers(e, "s1", plate(20, 200, 40, 20, 0), plate(320, 200, 40, 20, 0))
 	edtest.AddText(t, e, "s1", 0)
-	tp := model.SpreadTpl{V: model.TplV, Pages: 2, Page: []model.TplBg{{Color: "#101010"}, {Color: "#202020"}},
+	tp := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Page: []looktpl.TplBg{{Color: "#101010"}, {Color: "#202020"}},
 		Places:   []model.Box{{X: 0.05, Y: 0.1, W: 0.4, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.2, H: 0.3}, {X: 0.55, Y: 0.5, W: 0.2, H: 0.3}},
-		Stickers: []model.TplItem{{Anchor: model.Anchor{AX: 1, AY: 1, DX: -0.1, DY: -0.1}, W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}}},
-		Texts:    []model.TplText{{Anchor: model.Anchor{AY: -1, DY: 0.05}, W: 0.5, Text: "Заголовок", Style: model.PlainStyle()}},
+		Stickers: []looktpl.TplItem{{Anchor: looktpl.Anchor{AX: 1, AY: 1, DX: -0.1, DY: -0.1}, W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}}},
+		Texts:    []looktpl.TplText{{Anchor: looktpl.Anchor{AY: -1, DY: 0.05}, W: 0.5, Text: "Заголовок", Style: model.PlainStyle()}},
 	}
 	_, plan, _, err := e.ApplySpreadTpl("s1", model.ScopeSpread, tp, nil)
 	if err != nil {
@@ -248,7 +249,7 @@ func TestApplySpreadTpl(t *testing.T) {
 	}
 
 	// Страница на левую «Авто»: закрепляется, правая страница — как закрепила раскладка.
-	page := model.SpreadTpl{V: model.TplV, Pages: 1, Page: []model.TplBg{{}}, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}}}
+	page := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Page: []looktpl.TplBg{{}}, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}}}
 	_, plan, _, err = e.ApplySpreadTpl("s2", model.ScopeLeft, page, nil)
 	if err != nil || plan.Frozen != 1 {
 		t.Fatalf("«Авто»: %+v, %v", plan, err)
@@ -304,30 +305,30 @@ func TestSpreadTplEmpty(t *testing.T) {
 		}
 	}
 	undo, rev := edtest.UndoLen(e), edtest.Rev(e)
-	if _, _, _, err := e.ApplySpreadTpl("s1", model.ScopeSpread, model.SpreadTpl{}, nil); !errors.Is(err, model.ErrTplEmpty) {
+	if _, _, _, err := e.ApplySpreadTpl("s1", model.ScopeSpread, looktpl.SpreadTpl{}, nil); !errors.Is(err, looktpl.ErrTplEmpty) {
 		t.Errorf("пустой шаблон: %v", err)
 	}
-	ok := model.SpreadTpl{V: model.TplV, Pages: 1, Page: []model.TplBg{{Color: "#ffffff"}}}
+	ok := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Page: []looktpl.TplBg{{Color: "#ffffff"}}}
 	if _, _, _, err := e.ApplySpreadTpl("нет такого", model.ScopeSpread, ok, nil); err != nil {
 		t.Errorf("неизвестный разворот: %v", err)
 	}
 	if edtest.UndoLen(e) != undo || edtest.Rev(e) != rev {
 		t.Fatal("отказ или холостая дали шаг")
 	}
-	if _, _, err := album.PreviewTpl(model.SpreadTpl{}, 300, 300, nil); !errors.Is(err, model.ErrTplEmpty) {
+	if _, _, err := album.PreviewTpl(looktpl.SpreadTpl{}, 300, 300, nil); !errors.Is(err, looktpl.ErrTplEmpty) {
 		t.Errorf("плитка пустого шаблона: %v", err)
 	}
 }
 
 // BenchmarkApplySpreadTpl — плитка шаблона со всем (места, стикеры, надпись): путь превью и правки.
 func BenchmarkApplySpreadTpl(b *testing.B) {
-	tp := model.SpreadTpl{V: model.TplV, Pages: 2, W: 600, H: 300, Page: []model.TplBg{{Color: "#ffffff", Pat: &model.Pattern{Kind: "dots"}}, {}}}
+	tp := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, W: 600, H: 300, Page: []looktpl.TplBg{{Color: "#ffffff", Pat: &model.Pattern{Kind: "dots"}}, {}}}
 	for i := range 32 {
 		f := float64(i%8) / 8
 		tp.Places = append(tp.Places, model.Box{X: f, Y: float64(i/8) / 4, W: 0.1, H: 0.2})
-		tp.Stickers = append(tp.Stickers, model.TplItem{Anchor: model.Anchor{AX: int8(i%3 - 1), DX: f / 4}, W: 0.05, H: 0.05, Art: &model.Art{Kind: "star"}})
+		tp.Stickers = append(tp.Stickers, looktpl.TplItem{Anchor: looktpl.Anchor{AX: int8(i%3 - 1), DX: f / 4}, W: 0.05, H: 0.05, Art: &model.Art{Kind: "star"}})
 	}
-	tp.Texts = []model.TplText{{W: 0.5, Text: "Наша свадьба", Style: model.PlainStyle()}}
+	tp.Texts = []looktpl.TplText{{W: 0.5, Text: "Наша свадьба", Style: model.PlainStyle()}}
 	for b.Loop() {
 		if _, _, err := album.PreviewTpl(tp, 600, 300, nil); err != nil {
 			b.Fatal(err)

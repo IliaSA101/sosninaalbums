@@ -7,7 +7,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -62,35 +61,41 @@ var errMarkupExt = errors.New("файл разметки — только PSD, J
 // MarkupFile — проверка файла-разметки при выборе и для вида: локальный путь без «..», обычный
 // файл, PSD/JPEG/PNG по расширению и заголовку, пределы размера. PSD читается без данных
 // изображения (заголовок и ресурсы), JPEG/PNG — как свой фон (BackdropFile).
-func MarkupFile(path string) (MarkupInfo, error) {
+//
+// Тихий путь (вид, /media, превью): заглушку облака не скачивает, а отказывает ErrCloudOnly — до любого чтения.
+func MarkupFile(path string) (MarkupInfo, error) { return markupFile(path, false) }
+
+// MarkupFileExplicit — MarkupFile для явного выбора файла разметки: заглушку облака читает со скачиванием
+// (явное действие над одним файлом, 160-M1), как BackdropFile.
+func MarkupFileExplicit(path string) (MarkupInfo, error) { return markupFile(path, true) }
+
+func markupFile(path string, cloudOK bool) (MarkupInfo, error) {
 	if strings.EqualFold(filepath.Ext(path), ".psb") {
 		return MarkupInfo{}, ErrPSB
 	}
-	path, size, err := PlainFile(path, ".jpg", ".jpeg", ".png", ".psd")
+	path, st, err := plainStat(path, ".jpg", ".jpeg", ".png", ".psd")
 	if errors.Is(err, ErrExt) {
 		return MarkupInfo{}, errMarkupExt
 	}
 	if err != nil {
 		return MarkupInfo{}, err
 	}
-	m := MarkupInfo{Path: path, Size: size}
-	if st, err := os.Stat(path); err == nil {
-		m.Mod = st.ModTime().UnixNano()
-	}
+	m := MarkupInfo{Path: path, Size: st.Size(), Mod: st.ModTime().UnixNano()}
 	if !m.IsPSD() {
+		// Заголовок первым: он же второй рубеж облака (тихий путь отказывает до чтения данных).
+		ph, _, err := readHeadOf(path, cloudOK)
+		if err != nil {
+			return MarkupInfo{}, err
+		}
 		d, err := imgfile.FileDims(path, 0) // размер и формат по заголовку, предел MaxPixels
 		if err != nil {
 			return MarkupInfo{}, err
 		}
 		m.Format = d.Format
-		ph, err := ReadInfo(path)
-		if err != nil {
-			return MarkupInfo{}, err
-		}
 		m.W, m.H, m.Image = ph.W, ph.H, true
 		return m, nil
 	}
-	err = withPSD(path, func(r io.ReadSeeker, size int64) error {
+	err = withPSD(path, cloudOK, func(r io.ReadSeeker, size int64) error {
 		in, err := psd.ReadInfo(r, size)
 		m.Size, m.W, m.H, m.DPI, m.Guides, m.Image, m.Note = size, in.W, in.H, in.DPI, in.Guides, in.Image, in.Note
 		return err
@@ -103,7 +108,7 @@ func MarkupFile(path string) (MarkupInfo, error) {
 
 // withPSD открывает обычный файл и отдаёт его с размером по дескриптору (не по пути: файл могли
 // подменить между проверкой и чтением).
-func withPSD(path string, fn func(r io.ReadSeeker, size int64) error) error {
+func withPSD(path string, cloudOK bool, fn func(r io.ReadSeeker, size int64) error) error {
 	f, err := imgfile.OpenRegular(path)
 	if err != nil {
 		return err
@@ -112,6 +117,9 @@ func withPSD(path string, fn func(r io.ReadSeeker, size int64) error) error {
 	st, err := f.Stat()
 	if err != nil {
 		return err
+	}
+	if !cloudOK && dehydrated(st) { // тихий путь не скачивает заглушку облака
+		return cloudOnlyError()
 	}
 	return fn(f, st.Size())
 }
@@ -148,7 +156,7 @@ func MarkupPreviewCtx(ctx context.Context, path string) (data []byte, ctype stri
 	}
 	defer imgfile.DecodeBudget().Release(px)
 	var buf bytes.Buffer
-	err = withPSD(m.Path, func(r io.ReadSeeker, size int64) error {
+	err = withPSD(m.Path, false, func(r io.ReadSeeker, size int64) error {
 		img, _, err := psd.Preview(r, size, MarkupMaxSide)
 		if err != nil {
 			return err

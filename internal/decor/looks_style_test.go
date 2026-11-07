@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // style из файла макета (163): в плитку идёт зажатым — длина и управляющие знаки; нет поля — "";
@@ -38,7 +38,7 @@ func TestLookStyleField(t *testing.T) {
 		}
 	}
 	slices.Sort(got)
-	want := []string{"", "Акварель", strings.Repeat("Ж", model.MaxLookStyleRunes), "Мусор  Текст"}
+	want := []string{"", "Акварель", strings.Repeat("Ж", looktpl.MaxLookStyleRunes), "Мусор  Текст"}
 	slices.Sort(want)
 	if !slices.Equal(got, want) {
 		t.Fatalf("styles %q, ждали %q", got, want)

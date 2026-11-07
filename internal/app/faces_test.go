@@ -18,13 +18,13 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/facefit"
 	"github.com/IliaSA101/sosninaalbums/internal/faces"
-	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
-// Подгон по лицам в App (спека 130, G4): детектор подменён полем faceSt.detect, фото — настоящие
+// Подгон по лицам в App (спека 130, G4): детектор подменён полем faceFit.Detect, фото — настоящие
 // маленькие JPEG, читаются через кэш превью, как в работе. Лицо i-го фото задаёт правило rule:
 // по умолчанию размер 0,18…0,25 кадра (i%8), ровно по центру, глаза на 0,38 высоты рамки.
 
@@ -72,7 +72,7 @@ func newFacesEnv(t *testing.T, n int) *facesEnv {
 			e.mu.Unlock()
 		}
 	}
-	e.a.faceSt.detect = func(img image.Image) []faces.Face {
+	e.a.faceFit.Detect = func(img image.Image) []faces.Face {
 		e.calls.Add(1)
 		b := img.Bounds()
 		i := max(b.Dx(), b.Dy()) - 200
@@ -225,7 +225,7 @@ func TestAppFitFacesProgress(t *testing.T) {
 func TestAppFitFacesBusy(t *testing.T) {
 	e := newFacesEnv(t, 6)
 	entered, release := make(chan struct{}, 64), make(chan struct{})
-	e.a.faceSt.detect = func(img image.Image) []faces.Face {
+	e.a.faceFit.Detect = func(img image.Image) []faces.Face {
 		entered <- struct{}{}
 		<-release
 		return defaultFace(0)
@@ -243,8 +243,8 @@ func TestAppFitFacesBusy(t *testing.T) {
 		t.FailNow()
 	}
 	rev := e.rev()
-	if _, err := e.a.FitFaces(e.sid, "", ""); err != errFacesBusy {
-		t.Fatalf("второй вызов: %v, ждали %v", err, errFacesBusy)
+	if _, err := e.a.FitFaces(e.sid, "", ""); err != facefit.ErrBusy {
+		t.Fatalf("второй вызов: %v, ждали %v", err, facefit.ErrBusy)
 	}
 	if e.rev() != rev {
 		t.Fatal("второй вызов изменил проект")
@@ -279,7 +279,7 @@ func TestAppFitFacesExportGuard(t *testing.T) {
 	rev := e.rev()
 	_, err := e.a.FitFaces(e.sid, "", "")
 	close(gate)
-	if err != errFacesExport || e.calls.Load() != 0 || e.rev() != rev {
+	if err != facefit.ErrExport || e.calls.Load() != 0 || e.rev() != rev {
 		t.Fatalf("во время экспорта: ошибка %v, поисков %d, rev %d → %d", err, e.calls.Load(), rev, e.rev())
 	}
 	if _, ok := testkit.WaitCh(t, exported, testkit.Limit(10*time.Second), "экспорт не закончился", nil); !ok {
@@ -294,10 +294,10 @@ func TestAppFitFacesExportGuard(t *testing.T) {
 func TestAppFitFacesErrors(t *testing.T) {
 	e := newFacesEnv(t, 3)
 	rev := e.rev()
-	if _, err := e.a.FitFaces("нет-такого", "", ""); err != errFacesSheet {
+	if _, err := e.a.FitFaces("нет-такого", "", ""); err != facefit.ErrSheet {
 		t.Errorf("чужой лист: %v", err)
 	}
-	if _, err := e.a.FitFaces(e.sid, "", "всё"); err != errFacesMode {
+	if _, err := e.a.FitFaces(e.sid, "", "всё"); err != facefit.ErrMode {
 		t.Errorf("режим: %v", err)
 	}
 	if e.calls.Load() != 0 || e.rev() != rev {
@@ -312,7 +312,7 @@ func TestAppFitFacesModelBroken(t *testing.T) {
 	log.SetOutput(&buf)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	e := newFacesEnv(t, 3)
-	e.a.faceSt.ready = func() error {
+	e.a.faceFit.Ready = func() error {
 		return fmt.Errorf("faces: модель не загрузилась: %w", errors.New("битые веса"))
 	}
 	rev := e.rev()
@@ -328,10 +328,10 @@ func TestAppFitFacesModelBroken(t *testing.T) {
 	if n := strings.Count(buf.String(), "модель не загрузилась"); n != 1 {
 		t.Fatalf("в журнале %d записей, ждали 1: %q", n, buf.String())
 	}
-	if e.a.faceSt.busy.Load() {
+	if e.a.faceFit.Busy() {
 		t.Fatal("после ошибки поиск остался занятым")
 	}
-	e.a.faceSt.ready = nil // настоящая модель исправна: подгон идёт
+	e.a.faceFit.Ready = nil // настоящая модель исправна: подгон идёт
 	e.fit(t, "", "")
 }
 
@@ -377,9 +377,8 @@ func TestAppFitFacesKeepsManual(t *testing.T) {
 func TestAppFitFacesEmptyFitted(t *testing.T) {
 	e := newFacesEnv(t, 25)
 	e.fit(t, "", "")
-	e.a.faceSt.mu.Lock()
-	e.a.faceSt.fitted, e.a.faceSt.norm = map[string]model.Frame{}, map[string]geom.FaceNorm{}
-	e.a.faceSt.mu.Unlock()
+	e.a.faceFit.ForgetFitted()
+	e.a.faceFit.ForgetNorm()
 	rev := e.rev()
 	res := e.fit(t, "", "")
 	wantReport(t, res.Report, 25, 0)
@@ -387,9 +386,7 @@ func TestAppFitFacesEmptyFitted(t *testing.T) {
 		t.Fatalf("кадры по норме после перезапуска: правка, rev %d → %d", rev, e.rev())
 	}
 	e.a.SetFrame(e.ids[5], 2.5, 0.5, 0.5)
-	e.a.faceSt.mu.Lock()
-	e.a.faceSt.fitted = map[string]model.Frame{}
-	e.a.faceSt.mu.Unlock()
+	e.a.faceFit.ForgetFitted()
 	if res := e.fit(t, "", ""); !res.Report.Asked || res.Report.Manual != 1 {
 		t.Fatalf("правленый кадр при пустой памяти: %+v", res.Report)
 	}
@@ -411,9 +408,7 @@ func TestAppFitFacesByRef(t *testing.T) {
 	if e.rev() != rev+1 {
 		t.Fatalf("rev %d → %d", rev, e.rev())
 	}
-	e.a.faceSt.mu.Lock()
-	n, ok := e.a.faceSt.norm[e.sid]
-	e.a.faceSt.mu.Unlock()
+	n, ok := e.a.faceFit.SavedNorm(e.sid)
 	if !ok || math.Abs(n.Size-0.25) > 0.005 {
 		t.Fatalf("норма листа %+v (есть=%v), ждали размер 0,25 от образца", n, ok)
 	}
@@ -427,13 +422,13 @@ func TestAppFitFacesByRef(t *testing.T) {
 
 	// Другой альбом начинает память заново.
 	other := newFacesEnv(t, 3)
-	norm, fitted := e.a.faceSt.memory(other.ed, other.sid)
+	norm, fitted := e.a.faceFit.Memory(other.ed, other.sid)
 	if norm != nil || len(fitted) != 0 {
 		t.Fatalf("память чужого альбома: норма %v, кадров %d", norm, len(fitted))
 	}
 }
 
-// TestAppFitFacesRefErrors: образец без лица, с несколькими, «Целиком», без файла, чужое место —
+// TestAppFitFacesRefErrors: образец без лица, с несколькими, «Целиком», без файла, только в облаке, чужое место —
 // ошибка с текстом из model.RefErrText, проект и норма листа не тронуты.
 func TestAppFitFacesRefErrors(t *testing.T) {
 	e := newFacesEnv(t, 25)
@@ -450,8 +445,12 @@ func TestAppFitFacesRefErrors(t *testing.T) {
 	if err := os.Remove(e.files[5]); err != nil {
 		t.Fatal(err)
 	}
+	oldCloud := cloudStub // фото 7 в облаке без копии: скачивать нельзя, причина — «только в облаке»
+	t.Cleanup(func() { cloudStub = oldCloud })
+	cloudStub = func(path string) bool { return path == e.files[7] }
 	cases := []struct{ name, ref, code string }{
 		{"без лица", e.placeOf(t, 3), model.RefNoFace},
+		{"только в облаке", e.placeOf(t, 7), model.RefCloud},
 		{"несколько лиц", e.placeOf(t, 4), model.RefMany},
 		{"нет файла", e.placeOf(t, 5), model.RefNoFile},
 		{"целиком", e.placeOf(t, 6), model.RefContain},
@@ -466,9 +465,7 @@ func TestAppFitFacesRefErrors(t *testing.T) {
 		if e.rev() != rev {
 			t.Errorf("%s: проект изменён, rev %d → %d", c.name, rev, e.rev())
 		}
-		e.a.faceSt.mu.Lock()
-		_, has := e.a.faceSt.norm[e.sid]
-		e.a.faceSt.mu.Unlock()
+		_, has := e.a.faceFit.SavedNorm(e.sid)
 		if has {
 			t.Errorf("%s: норма листа обновлена при ошибке образца", c.name)
 		}
@@ -535,15 +532,13 @@ func TestAppFitFacesSwitchedAlbum(t *testing.T) {
 	e.a.ed.Store(blankEditor(""))
 	close(release)
 	o, ok := testkit.WaitCh(t, done, testkit.Limit(10*time.Second), "вызов не закончился", nil)
-	if !ok || o.err != errFacesMoved {
-		t.Fatalf("ошибка %v, ждали %v", o.err, errFacesMoved)
+	if !ok || o.err != facefit.ErrMoved {
+		t.Fatalf("ошибка %v, ждали %v", o.err, facefit.ErrMoved)
 	}
 	if e.rev() != rev {
 		t.Fatal("прежний проект изменён")
 	}
-	e.a.faceSt.mu.Lock()
-	n := len(e.a.faceSt.fitted)
-	e.a.faceSt.mu.Unlock()
+	n := e.a.faceFit.FittedLen()
 	if n != 0 {
 		t.Fatalf("в памяти %d кадров от несостоявшегося подгона", n)
 	}
@@ -554,7 +549,7 @@ func TestAppFitFacesSwitchedAlbum(t *testing.T) {
 func TestAppFitFacesCache(t *testing.T) {
 	e := newFacesEnv(t, 25)
 	e.fit(t, "", "")
-	if got, size := e.calls.Load(), e.a.faceSt.cache.size(); got != 25 || size != 25 {
+	if got, size := e.calls.Load(), e.a.faceFit.CacheLen(); got != 25 || size != 25 {
 		t.Fatalf("после первого прохода: поисков %d, в кэше %d", got, size)
 	}
 	e.fit(t, "", "all")
@@ -604,7 +599,7 @@ func TestAppFitFacesCache(t *testing.T) {
 
 // TestAppFitFacesBadFiles: пустой, обрезанный, мусорный, с раздутым заголовком (900 Мп) и
 // пропавший файлы — «нет фото» без паники, остальные подогнаны; фото ленты с относительным путём
-// не читается вовсе (второй рубеж paths.CheckLocalPath в faceJob, хотя файл рядом и читался бы).
+// не читается вовсе (второй рубеж paths.CheckLocalPath в Fitter.Job, хотя файл рядом и читался бы).
 func TestAppFitFacesBadFiles(t *testing.T) {
 	e := newFacesEnv(t, 8)
 	good, err := os.ReadFile(e.files[7])
@@ -668,7 +663,7 @@ func TestAppFitFacesDetectorPanic(t *testing.T) {
 // без паники (градиент не лицо).
 func TestAppFitFacesRealDetector(t *testing.T) {
 	e := newFacesEnv(t, 2)
-	e.a.faceSt.detect = nil
+	e.a.faceFit.Detect = nil
 	rev := e.rev()
 	res := e.fit(t, "", "")
 	if res.Report.NoFace != 2 || len(res.Report.Check) != 2 || e.rev() != rev {
@@ -685,9 +680,7 @@ func TestAppFitFacesRefAsked(t *testing.T) {
 	e.a.SetFrame(e.ids[7], 1, 0, 0) // образец без кадра: его лицо 0,25 кадра
 	ref, rev := e.placeOf(t, 7), e.rev()
 	norm := func() (float64, bool) {
-		e.a.faceSt.mu.Lock()
-		defer e.a.faceSt.mu.Unlock()
-		n, ok := e.a.faceSt.norm[e.sid]
+		n, ok := e.a.faceFit.SavedNorm(e.sid)
 		return n.Size, ok
 	}
 	if res := e.fit(t, ref, ""); !res.Report.Asked || e.rev() != rev {

@@ -12,6 +12,8 @@
 // Опции: --go / --ui — только своя часть (по умолчанию обе);
 //   --go-json <файл>  готовый вывод go test -json (check.ps1 берёт из шага go test), иначе прогоняем сами;
 //   --ui-json <файл>  готовый вывод `vitest run --reporter=json` (из шага vitest), иначе прогоняем сами.
+//   --timeout <сек>   (0.37, да владельца 04.11) -timeout шага go test в CI: --check предупреждает о пакете дольше
+//                     половины срока — запас таймаута не должен прятать рост пакета (резать или ускорять).
 //   --skips  (155, да владельца 30.10) список пропущенных Go-тестов — ключ <GO_KEY>-skips рядом с разделом покрытия
 //            (внутри раздела нельзя: check() обходит его ключи как пакеты). --write --skips --go-json <json CI>
 //            пишет только список, покрытие не трогает; --write без флага список не трогает. --check --skips:
@@ -93,6 +95,7 @@ function parseGo(file) {
   const result = new Map() // пакет\0тест -> pass|fail|skip
   const outputs = new Map() // пакет\0тест -> строки вывода
   const failedPkgs = new Map() // пакет -> строки вывода пакета
+  const elapsed = {} // пакет -> секунды прогона (итоговое событие пакета)
   const get = (p) => (pkgs[p] ??= { cover: 0, names: {} })
   let bad = 0
   for (const line of text.split('\n')) {
@@ -117,6 +120,9 @@ function parseGo(file) {
     } else if (!ev.Test && ev.Action === 'fail') {
       failedPkgs.set(p, outputs.get(key) ?? [])
     }
+    if (!ev.Test && (ev.Action === 'pass' || ev.Action === 'fail') && typeof ev.Elapsed === 'number') {
+      elapsed[p] = ev.Elapsed
+    }
   }
   const failedTests = []
   const skipped = []
@@ -128,7 +134,7 @@ function parseGo(file) {
     if (act === 'skip') skipped.push(`${p} ${name}`)
   }
   for (const g of Object.values(pkgs)) g.names = sortObj(g.names)
-  return { pkgs, failedTests, failedPkgs, bad, skipped: [...new Set(skipped)].sort() }
+  return { pkgs, failedTests, failedPkgs, bad, elapsed, skipped: [...new Set(skipped)].sort() }
 }
 
 function sortObj(o) {
@@ -181,6 +187,7 @@ function goMeasure() {
     fail(`go test failed - baseline not compared:\n${summary(parsed).join('\n')}`)
   }
   goSkips = parsed.skipped
+  goElapsed = parsed.elapsed
   const cur = {}
   const treeNames = {}
   for (const p of Object.keys(parsed.pkgs).sort()) {
@@ -317,6 +324,17 @@ if (mode === 'run-go') {
 // Список пропусков (155): своя запись и своя сверка, покрытие и фронт не трогаем
 const SKIPS_KEY = `${GO_KEY}-skips`
 let goSkips = null
+let goElapsed = null
+// Пакет дольше половины -timeout: предупреждение, не провал (в CI — аннотация ::warning, видна в сводке прогона)
+function warnSlow() {
+  const limit = Number(opt('--timeout'))
+  if (!goElapsed || !(limit > 0)) return
+  for (const [p, sec] of Object.entries(goElapsed).sort(([, a], [, b]) => b - a)) {
+    if (sec <= limit / 2) continue
+    const msg = `slow package ${p}: ${Math.round(sec)}s > 50% of -timeout ${limit}s - split or speed it up`
+    console.log(process.env.GITHUB_ACTIONS ? `::warning title=go test time::${msg}` : `  warning: ${msg}`)
+  }
+}
 if (flag('--skips') && mode === 'write') {
   const file = opt('--go-json')
   if (!file) fail('--write --skips needs --go-json <go test -json of CI>')
@@ -364,6 +382,7 @@ if (mode === 'print') {
   // Go сверяем с разделом своей ОС (GO_KEY в GO_BASELINE), фронт — общий
   const { errors, notes } = check({ go: readJson(goTarget)[GO_KEY], ui: readJson(target).ui }, cur)
   if (flag('--skips') && goSkips) checkSkips(errors, notes)
+  warnSlow()
   if (errors.length) {
     console.error('test baseline broken (tests must not weaken; update only via --write with owner approval):')
     for (const e of errors) console.error('  ' + e)

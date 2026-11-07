@@ -57,9 +57,7 @@ func TestAppFaceGuide(t *testing.T) {
 
 	// «Остальные — как это лицо»: норма образца, на всех местах листа сразу.
 	e.fit(t, e.placeOf(t, 7), "")
-	e.a.faceSt.mu.Lock()
-	n := e.a.faceSt.norm[e.sid]
-	e.a.faceSt.mu.Unlock()
+	n, _ := e.a.faceFit.SavedNorm(e.sid)
 	if n == geom.DefaultFaceNorm || n.Size <= 0 {
 		t.Fatalf("норма листа после образца %+v", n)
 	}
@@ -79,10 +77,10 @@ func TestAppFaceGuide(t *testing.T) {
 
 	// Память другого альбома не отдаётся: для него нормы нет.
 	other := newFacesEnv(t, 3)
-	if got := e.a.faceSt.normOf(other.ed, e.sid); got != nil {
+	if got := e.a.faceFit.NormOf(other.ed, e.sid); got != nil {
 		t.Fatalf("норма чужого альбома: %+v", got)
 	}
-	if got := e.a.faceSt.normOf(e.ed, e.sid); got == nil || *got != n {
+	if got := e.a.faceFit.NormOf(e.ed, e.sid); got == nil || *got != n {
 		t.Fatalf("норма своего альбома: %v, ждали %+v", got, n)
 	}
 	// Другой альбом открыт в App: его лист снова на начальной норме.

@@ -21,6 +21,7 @@
   import { layerIndex } from '../places/layers'
   import { hasSeam, isCover } from '../../base/geom/sheet'
   import { pageBg } from '../../base/color/colorlive.svelte'
+  import { ALBUM_WHITE } from '../../base/color/palette'
   import { pickUnder } from '../canvas/pickunder.svelte'
   import CoverDrop from '../cover/CoverDrop.svelte'
   import CoverGuides from '../cover/CoverGuides.svelte'
@@ -58,7 +59,7 @@
   const preview = $derived(!mini && gallery.preview?.spread === spread.id)
   const rects: RotRect[] = $derived(preview && gallery.preview ? gallery.preview.rects : spread.rects)
   // Цвета страниц (левая, правая) считает Go: страница → альбом → белый. Живой показ окна цвета (109) главнее.
-  const bg = $derived(pageBg(spread.id, spread.bg ?? ['#ffffff', '#ffffff'], spread.bgSet ?? ['', '']))
+  const bg = $derived(pageBg(spread.id, spread.bg ?? [ALBUM_WHITE, ALBUM_WHITE], spread.bgSet ?? ['', '']))
   // Страница, с которой работают (группа в полосе или галерея страницы): вторая притемняется.
   const focus = $derived.by(() => {
     if (!seam || cover || mini || drag.active || store.spread?.id !== spread.id) return null

@@ -7,6 +7,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -35,7 +36,7 @@ func fileExists(path string) bool {
 		return false
 	}
 	st, err := library.StatLocal(path)
-	return err == nil && st.Mode().IsRegular()
+	return err == nil && imgfile.RegularOrCloud(path, st) // облачная заглушка OneDrive — файл на месте
 }
 
 // refreshMissing — полный пересчёт недостающих (открытие, rescan) в фоне: os.Stat тысяч фото
@@ -68,6 +69,7 @@ func (a *App) checkMissing(gen int, refs map[string]string, quiet, full bool) {
 		defer a.missPending.Add(-1)
 		defer guard("missing")
 		gone := library.MissingOf(refs, func(p string) string { return p }, a.exists)
+		cloud, cloudChecked := a.cloudScan(refs, gone) // заглушки без копии: «не читается», а не битая плитка
 		a.emitMu.Lock()
 		defer a.emitMu.Unlock()
 		a.mu.Lock()
@@ -85,9 +87,17 @@ func (a *App) checkMissing(gen int, refs map[string]string, quiet, full bool) {
 		if full {
 			back = a.takeBack(gen, refs, ids)
 		}
+		var unread map[string]string
+		cloudChanged := a.applyCloudLocked(cloud, cloudChecked)
+		if cloudChanged {
+			unread = a.unreadAllLocked()
+		}
 		a.mu.Unlock()
 		if !quiet || !same {
 			a.emit("missing", ids)
+		}
+		if cloudChanged {
+			a.emit("unread", unread)
 		}
 		for _, b := range back { // всегда после missing того же пересчёта
 			a.emit("drive:back", b)
@@ -184,9 +194,17 @@ func (a *App) dropMissing(refs map[string]string) (gen int, fresh map[string]str
 	if !same {
 		a.missing = kept // новый срез: прежний уже мог уйти в GetState или в событие
 	}
+	var unread map[string]string
+	cloudChanged := a.pruneCloudLocked(refs) // убранное из альбома фото не держит запись «в облаке»
+	if cloudChanged {
+		unread = a.unreadAllLocked()
+	}
 	a.mu.Unlock()
 	if !same {
 		a.emit("missing", kept)
+	}
+	if cloudChanged {
+		a.emit("unread", unread)
 	}
 	return gen, fresh
 }

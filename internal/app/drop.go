@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -72,7 +73,7 @@ func (a *App) dropPaths(ps []string) {
 	case n == 1:
 		fail(bad[0])
 	case n > 1:
-		log.Printf("перетаскивание: %d %s отклонено", n, plural(n, "путь", "пути", "путей"))
+		log.Printf("перетаскивание: %d %s отклонено", n, agentasktext.Plural(n, "путь", "пути", "путей"))
 		a.emit("notice", fmt.Sprintf(`Не добавлено путей: %d — поддерживаются только локальные пути вида C:\папка`, n))
 	}
 	a.dropFiles(files)

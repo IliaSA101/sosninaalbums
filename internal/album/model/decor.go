@@ -141,15 +141,15 @@ func foldPatterns(s *Spread) {
 	s.PatL, s.PatR = nil, nil
 }
 
-// libKeyPrefix — ключ своего элемента библиотеки: "my:" + 16 hex (8 байт sha256 исходника).
-const libKeyPrefix = "my:"
+// LibKeyPrefix — ключ своего элемента библиотеки: "my:" + 16 hex (8 байт sha256 исходника).
+const LibKeyPrefix = "my:"
 
 // ValidLibKey — грамматика ключа PhotoRef.Lib: ^my:[0-9a-f]{16}$.
 func ValidLibKey(key string) bool {
-	if len(key) != len(libKeyPrefix)+16 || key[:len(libKeyPrefix)] != libKeyPrefix {
+	if len(key) != len(LibKeyPrefix)+16 || key[:len(LibKeyPrefix)] != LibKeyPrefix {
 		return false
 	}
-	for i := len(libKeyPrefix); i < len(key); i++ {
+	for i := len(LibKeyPrefix); i < len(key); i++ {
 		c := key[i]
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return false

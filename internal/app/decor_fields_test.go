@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -23,8 +24,8 @@ func TestDecorCatalogFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tpl := model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.8}}, Page: []model.TplBg{{Color: "#ffffff"}, {Color: "#ffffff"}}}
-	if _, err := store.SaveLook("mine", "Свой макет", model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{{Tpl: tpl}}}); err != nil {
+	tpl := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.8}}, Page: []looktpl.TplBg{{Color: "#ffffff"}, {Color: "#ffffff"}}}
+	if _, err := store.SaveLook("mine", "Свой макет", looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{{Tpl: tpl}}}); err != nil {
 		t.Fatal(err)
 	}
 	seen := map[string]bool{}

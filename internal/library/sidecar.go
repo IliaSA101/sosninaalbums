@@ -42,6 +42,7 @@ const maxSidecars = 100_000
 type sidecar struct {
 	path      string
 	size, mod int64
+	cloud     bool // данные в облаке: не читается (imgfile.Dehydrated); сменился — память не берётся
 }
 
 // sideSet — сайдкары, найденные обходом: путь в нижнем регистре → файл.
@@ -69,7 +70,7 @@ func (ss *sideSet) add(p string, d fs.DirEntry) {
 
 // put запоминает сайдкар со сведениями info (общее для листинга папки и отдельного файла).
 func (ss *sideSet) put(p string, info fs.FileInfo) {
-	ss.m[sideKey(p)] = sidecar{path: p, size: info.Size(), mod: info.ModTime().UnixNano()}
+	ss.m[sideKey(p)] = sidecar{path: p, size: info.Size(), mod: info.ModTime().UnixNano(), cloud: imgfile.Dehydrated(info)}
 }
 
 // sideKey — ключ фото и сайдкара для sidecarFor: папка — paths.Fold (на Linux сайдкар из
@@ -108,7 +109,10 @@ func sideKind(photo, side string) string {
 // Битый XMP не делает фото нечитаемым: отметок нет, строка в log.txt (через xl).
 // retry — сайдкар не открылся или не дочитался (диск, блокировка): результат не запоминать.
 func readScan(f scanFile, xl *xmpLog) (ph Photo, retry bool, err error) {
-	ph, packet, err := readHead(f.path)
+	if f.cloud { // не открываем: чтение скачало бы файл; результат не запоминается — после скачивания прочтётся
+		return ph, true, cloudOnlyError()
+	}
+	ph, packet, err := readHeadOf(f.path, f.cloudOK)
 	if err != nil {
 		return ph, false, err
 	}
@@ -120,7 +124,7 @@ func readScan(f scanFile, xl *xmpLog) (ph Photo, retry bool, err error) {
 			xl.printf("XMP в файле %q: %v", paths.LogExt(ph.Name), perr)
 		}
 	}
-	if f.side.path != "" {
+	if f.side.path != "" && !f.side.cloud { // сайдкар-заглушка не читается, как и фото (см. выше)
 		sm, sf, serr := readSidecar(f.side)
 		if serr != nil {
 			var pe *fs.PathError

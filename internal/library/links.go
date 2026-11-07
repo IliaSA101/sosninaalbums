@@ -5,8 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"sync/atomic"
 
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
@@ -18,7 +16,7 @@ import (
 // открыла бы сетевую шару (запрос SMB с NTLM-хешем пользователя).
 
 // ErrLinkNotLocal — какое-то звено цепочки ссылок ведёт за пределы локального диска (или цепочка
-// длиннее maxLinkHops).
+// длиннее paths.MaxLinkHops).
 var ErrLinkNotLocal = errors.New("ссылка ведёт за пределы локального диска")
 
 // readLinkHook — подмена чтения сырой цели ссылки (SetReadLink); nil — os.Readlink.
@@ -39,10 +37,7 @@ func SetReadLink(rl func(p string) (string, error)) (restore func()) {
 	return func() { readLinkHook.Store(old) }
 }
 
-// maxLinkHops — длиннее цепочка ссылок не бывает у своих файлов; дальше — отказ.
-const maxLinkHops = 8
-
-// LinkTarget — цель ссылки p и сведения о ней: каждое звено цепочки (до maxLinkHops) проверяется
+// LinkTarget — цель ссылки p и сведения о ней: каждое звено цепочки (до paths.MaxLinkHops) проверяется
 // по сырой записи (linkLocal), затем EvalSymlinks и CheckLocalPath итога, и только потом Stat.
 // Не ссылка — сам p (другие точки повторной обработки Readlink не читает — решает Stat).
 // Ошибка — ErrLinkNotLocal или ошибка диска (битая ссылка).
@@ -57,31 +52,15 @@ func LinkTarget(p string) (string, fs.FileInfo, error) {
 	if paths.CheckLocalPath(target) != nil {
 		return "", nil, ErrLinkNotLocal
 	}
-	st, err := os.Stat(target)
+	st, err := os.Stat(target) //nolint:gosec // G703: target прошёл linkLocal по цепочке и CheckLocalPath выше — локальный путь после ссылок
 	if err != nil {
 		return "", nil, err
 	}
 	return target, st, nil
 }
 
-// linkLocal — у ссылки p каждая цель цепочки локальна (localTarget, как при обходе папок).
-// Цель проверяется по записи в ссылке, на диск по ней не ходим, пока она не проверена.
-func linkLocal(p string) bool {
-	for range maxLinkHops {
-		raw, err := readLink(p)
-		if err != nil {
-			return true // не ссылка: конец цепочки, дальше решают EvalSymlinks и Stat
-		}
-		if !localTarget(filepath.Dir(p), raw) {
-			return false
-		}
-		if !filepath.IsAbs(raw) {
-			raw = filepath.Join(filepath.Dir(p), raw)
-		}
-		p = raw
-	}
-	return false
-}
+// linkLocal — у ссылки p каждая цель цепочки локальна (paths.LinkChainLocal, как при обходе папок).
+func linkLocal(p string) bool { return paths.LinkChainLocal(p, readLink) }
 
 // statLink — сведения о файле, на который указывает ссылка p (LinkTarget); ok = false для папок,
 // битых ссылок и ссылок, хоть одно звено которых нелокально (UNC, `\\?\`, устройство).
@@ -93,34 +72,30 @@ func statLink(p string) (fs.FileInfo, bool) {
 	return st, true
 }
 
-// localTarget — цель ссылки лежит на локальном диске: абсолютная (и всё с корнем или двоеточием
-// на Windows) проходит paths.CheckLocalPath; относительная — без устройств в элементах
-// (paths.DeviceElem) и только из папки на локальном диске.
-func localTarget(dir, target string) bool {
-	if target == "" || strings.ContainsRune(target, 0) {
-		return false
-	}
-	if filepath.IsAbs(target) || runtime.GOOS == "windows" && (paths.IsSep(target[0]) || strings.ContainsRune(target, ':')) {
-		return paths.CheckLocalPath(target) == nil
-	}
-	for _, el := range strings.FieldsFunc(target, paths.IsSepRune) {
-		if paths.DeviceElem(el) {
-			return false
-		}
-	}
-	return runtime.GOOS != "windows" || paths.CheckLocalPath(dir) == nil
-}
+// localTarget — цель ссылки лежит на локальном диске (paths.LinkTargetLocal).
+func localTarget(dir, target string) bool { return paths.LinkTargetLocal(dir, target) }
 
 // StatLocal — os.Stat без хода по нелокальной ссылке (101, техдолг 0.22): Lstat; ссылка или
 // точка повторной обработки — LinkTarget (каждое звено локально, до Stat цели) и сведения цели;
-// иначе — сведения самого файла. Ошибка — ErrLinkNotLocal или ошибка диска.
+// иначе — сведения самого файла. Путь сначала проходит paths.CheckLocalPath (пустой, относительный, UNC, устройство —
+// отказ с ошибкой paths, её узнаёт paths.NoPath). Ошибка — ErrLinkNotLocal или ошибка диска.
 func StatLocal(p string) (fs.FileInfo, error) {
-	st, err := os.Lstat(p)
+	st, err := lstatLocal(p) // проверка CheckLocalPath — внутри
 	if err != nil || st.Mode()&(fs.ModeSymlink|fs.ModeIrregular) == 0 {
 		return st, err
 	}
 	_, st, err = LinkTarget(p)
 	return st, err
+}
+
+// lstatLocal — os.Lstat пути после paths.CheckLocalPath (проверка здесь же: подавление G703 прикрывает только
+// проверенный путь, а не любого вызывающего). Единственное место с nolint: Lstat не идёт по ссылке, цель ссылки
+// проходит LinkTarget. Ошибка проверки — как у StatLocal (её узнаёт paths.NoPath).
+func lstatLocal(p string) (fs.FileInfo, error) {
+	if err := paths.CheckLocalPath(p); err != nil {
+		return nil, err
+	}
+	return os.Lstat(p) //nolint:gosec // G703: путь прошёл CheckLocalPath строкой выше; Lstat не идёт по ссылке
 }
 
 // openLocalHook — только для тестов: зовётся между проверкой и открытием в OpenLocal (подмена файла).
@@ -131,10 +106,10 @@ var ErrFileChanged = errors.New("файл сменился во время от�
 
 // OpenLocal — открыть для чтения обычный файл по пути от пользователя (аудит 123 №8): та же
 // проверка, что StatLocal, затем открывается проверенная цель (у ссылки — цель LinkTarget, а не
-// сама ссылка, которую успели бы перенаправить на \\host), без ожидания на канале
-// (imgfile.OpenRegular), и os.SameFile сверяет открытое с проверенным. Сведения — открытого файла.
+// сама ссылка, которую успели бы перенаправить на \\host), без ожидания на канале и на Windows без хода по
+// ссылке в последнем звене (imgfile.OpenNoReparse), и os.SameFile сверяет открытое с проверенным. Сведения — открытого файла.
 func OpenLocal(p string) (*os.File, fs.FileInfo, error) {
-	st, err := os.Lstat(p)
+	st, err := lstatLocal(p) // проверка CheckLocalPath — внутри
 	if err != nil {
 		return nil, nil, err
 	}
@@ -144,7 +119,9 @@ func OpenLocal(p string) (*os.File, fs.FileInfo, error) {
 			return nil, nil, err
 		}
 	}
-	if !st.Mode().IsRegular() {
+	// На Windows облачная заглушка (OneDrive «только в сети») для Go — ModeIrregular: окончательно решает дескриптор
+	// (imgfile.OpenNoReparse принимает только заглушку, точку соединения и прочее отклоняет).
+	if !imgfile.MaybeRegular(st.Mode()) {
 		return nil, nil, errors.New("не обычный файл")
 	}
 	// На Windows Lstat/Stat обычного файла номер файла не читают: SameFile дочитал бы его лениво
@@ -153,7 +130,7 @@ func OpenLocal(p string) (*os.File, fs.FileInfo, error) {
 	if openLocalHook != nil {
 		openLocalHook(target)
 	}
-	f, err := imgfile.OpenRegular(target)
+	f, err := imgfile.OpenNoReparse(target)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -164,3 +141,7 @@ func OpenLocal(p string) (*os.File, fs.FileInfo, error) {
 	}
 	return f, got, nil
 }
+
+// RegularOrCloud — запись p со сведениями st — обычный файл или облачная заглушка OneDrive (imgfile.RegularOrCloud);
+// для пакетов, которым imgfile недоступен по depguard (prefs).
+func RegularOrCloud(p string, st fs.FileInfo) bool { return imgfile.RegularOrCloud(p, st) }

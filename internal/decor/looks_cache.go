@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Кэш разобранных макетов для Look (G6a, 0.28-131-210): LookHost.Find читает и разбирает файл до
@@ -23,7 +23,7 @@ type lookCacheEnt struct {
 	key, path string
 	size      int64
 	mod       time.Time
-	tpl       model.AlbumTpl // не меняется после put: наружу уходит только копия (cloneLook)
+	tpl       looktpl.AlbumTpl // не меняется после put: наружу уходит только копия (cloneLook)
 }
 
 // parsedLooks — LRU разобранных макетов; под своим замком, Store.mu не берёт.
@@ -35,17 +35,17 @@ type parsedLooks struct {
 }
 
 // get — разбор по ключу, если файл тот же (путь, размер, время правки); иначе запись снимается.
-func (c *parsedLooks) get(key, path string, st os.FileInfo) (model.AlbumTpl, bool) {
+func (c *parsedLooks) get(key, path string, st os.FileInfo) (looktpl.AlbumTpl, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	el, ok := c.m[key]
 	if !ok {
-		return model.AlbumTpl{}, false
+		return looktpl.AlbumTpl{}, false
 	}
 	e := el.Value.(*lookCacheEnt)
 	if e.path != path || e.size != st.Size() || !e.mod.Equal(st.ModTime()) {
 		c.remove(el)
-		return model.AlbumTpl{}, false
+		return looktpl.AlbumTpl{}, false
 	}
 	c.ll.MoveToFront(el)
 	return e.tpl, true
@@ -53,7 +53,7 @@ func (c *parsedLooks) get(key, path string, st os.FileInfo) (model.AlbumTpl, boo
 
 // put запоминает разбор; st снят до чтения файла — подмена между статом и чтением даст другой стат
 // при следующем попадании. Дерево t отдаёт вызывающий, больше им не пользуясь.
-func (c *parsedLooks) put(key, path string, st os.FileInfo, t model.AlbumTpl) {
+func (c *parsedLooks) put(key, path string, st os.FileInfo, t looktpl.AlbumTpl) {
 	if st.Size() > lookCacheBytes {
 		return
 	}
@@ -88,7 +88,7 @@ func (c *parsedLooks) remove(el *list.Element) {
 
 // cloneLook — глубокая копия макета: кэш не отдаёт общие срезы и указатели (Find правит зажимом,
 // плитка — шаблонами шагов).
-func cloneLook(t model.AlbumTpl) model.AlbumTpl {
+func cloneLook(t looktpl.AlbumTpl) looktpl.AlbumTpl {
 	v := reflect.ValueOf(&t).Elem()
 	deepCopy(v)
 	return t

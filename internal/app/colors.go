@@ -44,6 +44,7 @@ func (a *App) colorHost() colorpick.Host {
 	return colorpick.Host{
 		Editor: a.editor,
 		Photo:  a.mediaPhoto,
+		Copy:   a.colorCopy,
 		Cache:  func() *library.Cache { return a.cache },
 		Ctx:    func() context.Context { return a.stopCtx },
 		// Через переменную пакета: тесты подменяют reachable.

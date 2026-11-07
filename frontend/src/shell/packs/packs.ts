@@ -146,6 +146,42 @@ export function sortPacks(list: readonly PackInfo[]): PackInfo[] {
 // Кроме встроенных наборов нет: подсказка вместо пустого места.
 export const onlyBuiltin = (list: readonly PackInfo[]): boolean => list.every((p) => p.origin === 'builtin')
 
+// Пропуски «нужна версия Sosnina Albums X или новее» (текст от Go: libpacks/pick.go, whyApp) отделяем от прочих:
+// причина у них общая, повторять её на каждый набор незачем. Разбор строки — только здесь.
+const NEEDS_APP = /^нужна версия Sosnina Albums (\d+(?:\.\d+)*) или новее$/
+export function splitAppSkips(skipped: readonly PackSkip[] | null | undefined): { count: number; need: string; rest: PackSkip[] } {
+  const rest: PackSkip[] = []
+  let count = 0
+  let need = ''
+  for (const s of skipped ?? []) {
+    const v = NEEDS_APP.exec(s.why)?.[1]
+    if (!v) {
+      rest.push(s)
+      continue
+    }
+    count++
+    if (!need || cmpVersion(v, need) > 0) need = v // разные X: берём наибольшую — с ней встанут все
+  }
+  return { count, need, rest }
+}
+
+// Сравнение «0.37.0» и «0.9»: по числам через точку; недостающая часть — 0.
+function cmpVersion(a: string, b: string): number {
+  const x = a.split('.').map(Number)
+  const y = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0)
+    if (d !== 0) return d
+  }
+  return 0
+}
+
+// «для версии 0.37.0 и новее: 3 набора — обновите программу»; таких пропусков нет — пусто.
+export function appSkipLabel(count: number, need: string): string {
+  if (count <= 0) return ''
+  return `для версии ${need} и новее: ${count} ${plural(count, ['набор', 'набора', 'наборов'])} — обновите программу`
+}
+
 // Пропущенные предметы архива: «пропущено: 2 (имя — причина; …)».
 export function skippedLabel(skipped: readonly PackSkip[] | null | undefined): string {
   const n = skipped?.length ?? 0

@@ -6,6 +6,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // replayLook — макет альбома (131 G4a): сухой прогон и отказ на собранном альбоме, затем серия на
@@ -41,7 +42,7 @@ func replayLook(r *replay) {
 
 // replayLookFull — макет на собранном альбоме (G4b): серией он не ставится, «Фоны по серии» и
 // «Добавить», шаг на лист и разворот по серии, смена формата с макетом и без.
-func replayLookFull(r *replay, a, b model.AlbumTpl) {
+func replayLookFull(r *replay, a, b looktpl.AlbumTpl) {
 	e := r.e
 	if _, err := e.PlanLook(lkRefA, a, nil, model.LookOpts{Mode: model.LookSeries, Spreads: 3}, nil); err != nil {
 		r.t.Fatal(err)
@@ -70,7 +71,7 @@ func replayLookFull(r *replay, a, b model.AlbumTpl) {
 	st.PageW = 300
 	r.do("SetSettingsLook:обратно", e.SetSettingsLook(st, nil))
 	// Библиотека макетов (G6a): поиск и «есть на ПК» подключены — Found в виде, SetSettings сам вписывает макет.
-	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *model.AlbumTpl { return &b }, Has: func(model.LookRef) bool { return true }})
+	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *looktpl.AlbumTpl { return &b }, Has: func(model.LookRef) bool { return true }})
 	r.read("SetLookHost", e.View().Look)
 	r.read("Look", e.Look())
 	r.read("IsSheet", e.IsSheet())
@@ -86,7 +87,7 @@ func replayLookFull(r *replay, a, b model.AlbumTpl) {
 			r.t.Fatal(err)
 		}
 		if host {
-			pe.SetLookHost(album.LookHost{Find: func(model.LookRef) *model.AlbumTpl { return &b }})
+			pe.SetLookHost(album.LookHost{Find: func(model.LookRef) *looktpl.AlbumTpl { return &b }})
 		}
 		return pe.SetSettings(st).Spreads[0].Places
 	}

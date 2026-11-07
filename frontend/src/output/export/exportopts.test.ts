@@ -3,11 +3,9 @@ import {
   DEFAULT_PREFS,
   buildOptions,
   coverAvailable,
-  estimateBytes,
   exportDoneText,
   exportWarnings,
   limitWarn,
-  formatSize,
   hasFix,
   activePlan,
   printHint,
@@ -22,40 +20,8 @@ import {
   coverFile,
   filePrefix,
   savePrefs,
-  sizeSummary,
 } from './exportopts'
 import type { PrintPlan } from '../../base/core/types'
-
-const album = { pageW: 300, pageH: 300, dpi: 300 }
-const MB = 1024 * 1024
-
-describe('estimateBytes', () => {
-  it('разворот 2×300 мм, 300 dpi, 95 — пиксели × 0,45', () => {
-    // 3543 px страница: 7086 × 3543
-    expect(estimateBytes(album, 300, 95, false)).toBeCloseTo(7086 * 3543 * 0.45, 0)
-  })
-  it('страница вдвое меньше разворота', () => {
-    expect(estimateBytes(album, 300, 95, true)).toBeCloseTo(estimateBytes(album, 300, 95, false) / 2, -3)
-  })
-  it('dpi 0 берёт из альбома', () => {
-    expect(estimateBytes(album, 0, 80, false)).toBe(estimateBytes(album, 300, 80, false))
-    expect(estimateBytes({ ...album, dpi: 150 }, 0, 80, false)).toBe(estimateBytes(album, 150, 80, false))
-  })
-  it('качество монотонно, dpi квадратично', () => {
-    const q = ([100, 95, 80] as const).map((v) => estimateBytes(album, 300, v, false))
-    expect(q[0]).toBeGreaterThan(q[1])
-    expect(q[1]).toBeGreaterThan(q[2])
-    expect(estimateBytes(album, 150, 95, false) / estimateBytes(album, 300, 95, false)).toBeCloseTo(0.25, 2)
-  })
-})
-
-describe('formatSize', () => {
-  it('десятые до 10 МБ, потом целые', () => {
-    expect(formatSize(2.5 * MB)).toBe('≈ 2,5 МБ')
-    expect(formatSize(24.6 * MB)).toBe('≈ 25 МБ')
-    expect(formatSize(1000)).toBe('< 0,1 МБ')
-  })
-})
 
 describe('coverAvailable', () => {
   it('нужна обложка и не лист-виньетка', () => {
@@ -233,35 +199,6 @@ describe('предел разворотов в окне (085)', () => {
   })
 })
 
-describe('итог по объёму', () => {
-  const one = estimateBytes(album, 300, 95, false)
-  const base = { scope: 'all' as const, spreads: 4, units: null, cover: false, only: false }
-  it('«Все» — на разворот и всего', () => {
-    expect(sizeSummary(album, 300, 95, false, 'разворот', base)).toBe(`${formatSize(one)} на разворот, всего ${formatSize(4 * one)}`)
-  })
-  it('обложка — как один разворот', () => {
-    expect(sizeSummary(album, 300, 95, false, 'разворот', { ...base, cover: true })).toContain(`всего ${formatSize(5 * one)}`)
-    expect(sizeSummary(album, 300, 95, false, 'разворот', { ...base, cover: true, only: true })).toBe(`${formatSize(one)} на разворот`)
-  })
-  it('«Текущий» без обложки — один файл, без «всего»', () => {
-    expect(sizeSummary(album, 300, 95, false, 'разворот', { ...base, scope: 'current' })).toBe(`${formatSize(one)} на разворот`)
-  })
-  it('диапазон: разворот целиком и страница', () => {
-    const units: [number, 0 | 1 | 2][] = [
-      [3, 0],
-      [7, 2],
-    ]
-    const r = sizeSummary(album, 300, 95, false, 'разворот', { ...base, scope: 'range', units })
-    expect(r).toContain(`всего ${formatSize(1.5 * one)}`)
-  })
-  it('неверный диапазон — без итога', () => {
-    expect(sizeSummary(album, 300, 95, false, 'разворот', { ...base, scope: 'range' })).toBe(`${formatSize(one)} на разворот`)
-  })
-  it('по страницам — размер страницы', () => {
-    expect(sizeSummary(album, 300, 95, true, 'страницу', base)).toBe(`${formatSize(one / 2)} на страницу, всего ${formatSize(4 * one)}`)
-  })
-})
-
 const plan = (o: Partial<PrintPlan> = {}): PrintPlan => ({
   kind: 'fsfera',
   title: 'Для Фотосферы Pro',
@@ -309,11 +246,6 @@ describe('для типографии: Фотосфера Pro (047), Фабри�
   })
   it('без плана — print пусто, как обычная выгрузка', () => {
     expect(buildOptions('all', 1, '', p, true).print).toBe('')
-  })
-  it('sizeSummary: все развороты и обложка при 300 dpi, как ни выбрано в окне', () => {
-    const one = estimateBytes(album, 300, 95, false)
-    const w = { scope: 'current' as const, spreads: 4, units: null, cover: true, only: true, print: true }
-    expect(sizeSummary(album, 150, 95, true, 'разворот', w)).toBe(`${formatSize(one)} на разворот, всего ${formatSize(5 * one)}`)
   })
   it('printQuality: у плана со своим качеством оно, иначе выбор окна', () => {
     expect(printQuality(fab, 80)).toBe(100)

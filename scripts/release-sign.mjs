@@ -14,7 +14,8 @@
 // пересобирается из метки здесь же (release-rebuild.mjs) и обязан совпасть с черновиком побайтно — иначе отказ, ничего
 // не подписано (аккаунт GitHub и CI не единственное доверенное звено); 4) «Что нового» — WHATS_NEW из whatsnew.ts метки,
 // WHATS_NEW_VERSION обязан быть X.Y.Z; 5) body, подпись, самопроверка открытым ключом, проверка, что ключ есть в
-// internal/update/keys.go (иначе программы файл отвергнут), gh release upload.
+// internal/update/keys.go (иначе программы файл отвергнут), gh release upload. Перед пересборкой имена ассетов черновика
+// сверяются со строками SHA256SUMS.txt (+ он сам и update.json): лишний ассет старого прогона — отказ.
 // --dry — всё, кроме загрузки; --from и --whatsnew тоже ничего не загружают. --skip-rebuild (без пересборки) принимается
 // только вместе с --from: это QA на заготовленных файлах; настоящая подпись без пересборки невозможна.
 //
@@ -160,6 +161,23 @@ export function parseSums(text) {
   return out
 }
 
+/**
+ * Сверка ассетов черновика (release.yml: `gh release upload --clobber` заменяет только одноимённые, ассет старого прогона
+ * мог остаться): имена = строки SHA256SUMS.txt + он сам + update.json. Лишнее и недостающее — отказ с перечнем.
+ * update.json в черновике может быть (повторная подпись) или ещё нет (ставится после этой сверки) — оба случая верны.
+ */
+export function checkDraftAssets(sums, assets) {
+  const want = new Set([...sums.keys(), 'SHA256SUMS.txt', ASSET])
+  const have = new Set(assets)
+  const extra = [...have].filter((n) => !want.has(n)).sort()
+  const missing = [...want].filter((n) => !have.has(n) && n !== ASSET).sort()
+  if (extra.length === 0 && missing.length === 0) return
+  const parts = []
+  if (extra.length) parts.push(`лишние (нет в SHA256SUMS.txt): ${extra.join(', ')}`)
+  if (missing.length) parts.push(`недостающие (есть в SHA256SUMS.txt): ${missing.join(', ')}`)
+  throw new SignError(`ассеты черновика не сходятся с SHA256SUMS.txt — ${parts.join('; ')}. Удалите лишнее (gh release delete-asset) или перезапустите Release; ничего не подписано`)
+}
+
 // ---- body и конверт ----
 
 /**
@@ -302,6 +320,12 @@ export function signRelease(opts, deps) {
   const hash = sha256(data)
   if (!sums.has(name)) throw new SignError(`в SHA256SUMS.txt нет строки для ${name}`)
   if (sums.get(name) !== hash) throw new SignError(`sha256 ${name} не равен строке SHA256SUMS.txt: файл подменён или повреждён`)
+
+  // состав черновика сверяем до долгой пересборки; QA-режим --from черновика не имеет
+  if (!opts.from) {
+    const names = deps.gh(['release', 'view', opts.tag, '--json', 'assets', '--jq', '.assets[].name']).toString().split(/\r?\n/).filter((n) => n !== '')
+    checkDraftAssets(sums, names)
+  }
 
   if (!opts.skipRebuild) {
     // независимая сверка: установщик собран здесь из метки, а не взят на веру у CI (design §5.4, §10)

@@ -487,3 +487,50 @@ func TestInfoLoose(t *testing.T) {
 		t.Fatalf("сводка: фото %d, лишних %d, отдельных %d", in.Photos, in.Extra, in.Loose)
 	}
 }
+
+// same (аудит 160-M1 №3): обычный файл того же размера и времени — тот же; другой размер, сдвиг времени больше
+// допуска, папка и канал — нет. Облачная заглушка (Windows) — в cloud_windows_test.go.
+func TestSame(t *testing.T) {
+	dir := testkit.TempDir(t)
+	f := filepath.Join(dir, "a.jpg")
+	put(t, f, "12345")
+	st, err := os.Stat(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := func(name string) fs.DirEntry {
+		t.Helper()
+		ents, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range ents {
+			if e.Name() == name {
+				return e
+			}
+		}
+		t.Fatalf("нет записи %s", name)
+		return nil
+	}
+	if !same(dir, entry("a.jpg"), st) {
+		t.Error("тот же файл не узнан")
+	}
+	other := filepath.Join(dir, "b.jpg")
+	put(t, other, "123456")
+	if same(dir, entry("b.jpg"), st) {
+		t.Error("другой размер признан тем же")
+	}
+	old := st.ModTime().Add(-time.Hour)
+	if err := os.Chtimes(f, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if same(dir, entry("a.jpg"), st) {
+		t.Error("время изменения отличается на час, а файл признан тем же")
+	}
+	if err := os.Mkdir(filepath.Join(dir, "d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if same(dir, entry("d"), st) {
+		t.Error("папка признана файлом")
+	}
+}

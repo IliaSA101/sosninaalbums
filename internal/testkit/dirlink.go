@@ -22,6 +22,20 @@ func DirLink(t testing.TB, target, link string) string {
 	return link
 }
 
+// Junction — именно точка соединения link на папку target (`mklink /J`), а не символьная ссылка: DirLink на раннере
+// с правами администратора создаёт symlink, а точка соединения — другой тип точки повторной обработки (ModeIrregular
+// у Go). Не Windows или не вышло — t.Skip с причиной.
+func Junction(t testing.TB, target, link string) string {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		t.Skip("точки соединения — только Windows")
+	}
+	if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil { //nolint:gosec // пути теста
+		t.Skipf("mklink /J не удалась: %v: %s", err, out)
+	}
+	return link
+}
+
 // MissingDrive — корень свободной буквы диска («Q:\»): том, которого нет, — как отключённый
 // внешний диск. Не Windows или все буквы заняты — t.Skip.
 func MissingDrive(t testing.TB) string {

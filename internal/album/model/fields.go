@@ -58,10 +58,10 @@ const (
 // ClampVars — поля шапки из файла или интерфейса: одна строка, ≤ MaxVarRunes; все пусты — nil.
 func ClampVars(v Vars) *Vars {
 	c := Vars{
-		Title:    cleanLine(v.Title, MaxVarRunes),
-		Subtitle: cleanLine(v.Subtitle, MaxVarRunes),
-		Year:     cleanLine(v.Year, MaxVarRunes),
-		Lead:     cleanLine(v.Lead, MaxVarRunes),
+		Title:    CleanLine(v.Title, MaxVarRunes),
+		Subtitle: CleanLine(v.Subtitle, MaxVarRunes),
+		Year:     CleanLine(v.Year, MaxVarRunes),
+		Lead:     CleanLine(v.Lead, MaxVarRunes),
 	}
 	if c == (Vars{}) {
 		return nil
@@ -73,10 +73,10 @@ func ClampVars(v Vars) *Vars {
 // предмет); пусто — nil.
 func ClampPerson(p Person) *Person {
 	c := Person{
-		Last:    cleanLine(p.Last, MaxPersonRunes),
-		First:   cleanLine(p.First, MaxPersonRunes),
-		Middle:  cleanLine(p.Middle, MaxPersonRunes),
-		Subject: cleanLine(p.Subject, MaxPersonRunes),
+		Last:    CleanLine(p.Last, MaxPersonRunes),
+		First:   CleanLine(p.First, MaxPersonRunes),
+		Middle:  CleanLine(p.Middle, MaxPersonRunes),
+		Subject: CleanLine(p.Subject, MaxPersonRunes),
 	}
 	if c == (Person{}) {
 		return nil

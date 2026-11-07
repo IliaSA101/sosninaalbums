@@ -10,6 +10,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 )
 
@@ -131,7 +132,7 @@ func TestPlanSaveLookMatchesSave(t *testing.T) {
 	// Граница явно: именно 24 → 24 шага, 25 → отказ ErrLookMany.
 	p24, _ := a.PlanSaveLook(model.SaveLookOpts{Ids: all[:24]})
 	p25, _ := a.PlanSaveLook(model.SaveLookOpts{Ids: all})
-	if !p24.Ok || p24.Steps != 24 || p25.Ok || p25.Reason != model.ErrLookMany.Error() {
+	if !p24.Ok || p24.Steps != 24 || p25.Ok || p25.Reason != looktpl.ErrLookMany.Error() {
 		t.Errorf("граница: 24 → %+v, 25 → %+v", p24, p25)
 	}
 }
@@ -145,7 +146,7 @@ func TestPlanSaveLookMerge(t *testing.T) {
 	}
 	// Без повторяемых те же 25 одинаковых остаются 25 шагами — отказ.
 	plan, _ = a.PlanSaveLook(model.SaveLookOpts{Ids: all})
-	if plan.Ok || plan.Reason != model.ErrLookMany.Error() {
+	if plan.Ok || plan.Reason != looktpl.ErrLookMany.Error() {
 		t.Errorf("25 одинаковых без повторяемых: %+v", plan)
 	}
 	// Первый и последний стоят отдельно, середина (одинаковая) слита: 1 + 1 + 1.

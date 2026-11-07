@@ -88,7 +88,7 @@ func (p *Project) SyncFonts() {
 	for _, id := range used {
 		ref := old[id]
 		if name, ok := text.CustomName(id); ok {
-			ref.Name = cleanLine(name, MaxFontNameRunes)
+			ref.Name = CleanLine(name, MaxFontNameRunes)
 		}
 		p.Fonts[id] = ref
 	}
@@ -108,7 +108,7 @@ func ClampFonts(in map[string]FontRef, used []string) map[string]FontRef {
 		if out == nil {
 			out = map[string]FontRef{}
 		}
-		out[id] = FontRef{Name: cleanLine(r.Name, MaxFontNameRunes)}
+		out[id] = FontRef{Name: CleanLine(r.Name, MaxFontNameRunes)}
 	}
 	return out
 }

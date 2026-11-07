@@ -3,6 +3,7 @@
   import type { SpreadView } from '../../base/core/types'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { ALBUM_WHITE } from '../../base/color/palette'
   import ColorReset from '../../base/color/ColorReset.svelte'
   import { colorLive } from '../../base/color/colorlive.svelte'
   import InspectorBackdrop from '../backdrop/InspectorBackdrop.svelte'
@@ -68,7 +69,7 @@
   // 115 Г2: свой узор и фото фона сняты, «Не показывать здесь» тоже — одна правка без вопроса (вернуть — Ctrl+Z)
   const toAlbum = () => store.run(Api.SpreadBgToAlbum(sp.id))
   // 115 В: строка «Как в альбоме» в окнах цвета — цвет альбома и «своего цвета нет» (у «всего разворота» — ни на одной странице)
-  const albumHex = $derived(store.view.settings.bg || '#ffffff')
+  const albumHex = $derived(store.view.settings.bg || ALBUM_WHITE)
   // ColorPicker зовёт onpick один раз на выбор — один шаг undo. Цвет '' снимает свой цвет.
   // Показ держится до ответа Go (colorLive.commit): старый фон не мелькает.
   const pick = (scope: 'spread' | 'left' | 'right', color: string) =>
@@ -183,7 +184,7 @@
     gap: 4px;
     margin-top: 8px;
     font-size: 12px;
-    color: var(--muted);
+    color: var(--link);
     cursor: pointer;
   }
   .link:hover:not(:disabled) {

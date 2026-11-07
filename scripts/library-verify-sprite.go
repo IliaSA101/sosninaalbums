@@ -29,7 +29,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/pack"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
@@ -254,24 +254,24 @@ func (v *verifier) spriteCell(arc *pack.Archive, s spriteItem, k spriteKind) ima
 	case "bg", "sticker", "frame":
 		return v.imageCell(data, s, k)
 	case "spread":
-		t, err := model.ParseSpreadTpl(data)
+		t, err := looktpl.ParseSpreadTpl(data)
 		if err != nil {
 			v.failf("шаблон не читается: %v", err)
 			return nil
 		}
 		return v.tplCell(s.item.Name, t, k)
 	}
-	l, err := model.ParseLook(data)
+	l, err := looktpl.ParseLook(data)
 	if err != nil {
 		v.failf("макет не читается: %v", err)
 		return nil
 	}
-	var t model.SpreadTpl
+	var t looktpl.SpreadTpl
 	switch {
 	case l.Cover != nil && l.Cover.Front != nil:
 		t = l.Cover.SideTpl(1, 1) // лицо обложки, как строит плитка программы
 	case len(l.Steps) > 0:
-		t = lookFit(l.Steps[model.Series(l, len(l.Steps))[0]].Tpl)
+		t = lookFit(l.Steps[looktpl.Series(l, len(l.Steps))[0]].Tpl)
 	default:
 		v.failf("в макете нечего показывать")
 		return nil
@@ -280,7 +280,7 @@ func (v *verifier) spriteCell(arc *pack.Archive, s spriteItem, k spriteKind) ima
 }
 
 // tplCell — плитка шаблона страницей 30×30 (tileOf, как лист -preview), вписанная в клетку.
-func (v *verifier) tplCell(name string, t model.SpreadTpl, k spriteKind) image.Image {
+func (v *verifier) tplCell(name string, t looktpl.SpreadTpl, k spriteKind) image.Image {
 	tile := v.tileOf(name, t)
 	if tile == nil {
 		v.failf("плитка «%s» не строится", name)

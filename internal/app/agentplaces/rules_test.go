@@ -172,7 +172,7 @@ func TestFolderHintHang(t *testing.T) {
 // Ссылка, ведущая в корень или домашнюю, отказывает по настоящему пути (шаг 2 + повтор шага 1),
 // обычная ссылка и обычная папка проходят; файл вместо папки и несуществующая — отказ.
 func TestFolderHintSymlink(t *testing.T) {
-	base, err := filepath.EvalSymlinks(testkit.TempDir(t))
+	base, err := filepath.EvalSymlinks(testkit.UserTemp(t)) // macOS: TempDir в /private/var — системное дерево (162-7)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,5 +263,26 @@ func TestAskHintDisplay(t *testing.T) {
 	}
 	if dir, label := HintShown(Default(), "relative/x"); dir != "" || label != "" {
 		t.Errorf("негодная подсказка: %q %q", dir, label)
+	}
+}
+
+// WithTimeout: копия с пределом не больше d — длиннее не делает, исходные правила не меняет, nil остаётся nil.
+func TestRulesWithTimeout(t *testing.T) {
+	r := New(Opts{Windows: runtime.GOOS == "windows", Timeout: time.Second, Disk: diskOK})
+	for _, c := range []struct{ d, want time.Duration }{
+		{200 * time.Millisecond, 200 * time.Millisecond}, // подрезано
+		{time.Minute, time.Second},                       // длиннее исходного — прежний предел
+		{0, 0},                                           // срок вышел — проба сразу по таймауту
+	} {
+		got := r.WithTimeout(c.d)
+		if got == r || got.Timeout() != c.want {
+			t.Errorf("d=%v: предел %v (копия: %v), ждали %v", c.d, got.Timeout(), got != r, c.want)
+		}
+	}
+	if r.Timeout() != time.Second {
+		t.Errorf("исходные правила изменены: %v", r.Timeout())
+	}
+	if (*Rules)(nil).WithTimeout(time.Second) != nil {
+		t.Error("nil-правила стали непустыми")
 	}
 }

@@ -553,11 +553,3 @@ func TestMissingQuestion(t *testing.T) {
 		}
 	}
 }
-
-func TestPlural(t *testing.T) {
-	for n, want := range map[int]string{0: "файлов", 1: "файл", 2: "файла", 4: "файла", 5: "файлов", 11: "файлов", 14: "файлов", 21: "файл", 22: "файла", 111: "файлов", 312: "файлов", -1: "файл"} {
-		if got := plural(n, "файл", "файла", "файлов"); got != want {
-			t.Errorf("%d: %q, ждали %q", n, got, want)
-		}
-	}
-}

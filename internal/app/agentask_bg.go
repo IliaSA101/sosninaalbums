@@ -9,12 +9,13 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 )
 
 // askBgFacts дополняет вопрос set_background: для фона альбома — где свои фоны каталога, где фото клиента,
 // где согласие; для фона на набор с replace — сколько фото фона заменится (PlanBackgroundTo, как bgAskText человека).
-func (a *App) askBgFacts(e *editAsk, req agents.AskReq, ed *album.Editor, v model.View) {
+func (a *App) askBgFacts(e *agentasktext.EditAsk, req agents.AskReq, ed *album.Editor, v model.View) {
 	if req.AlbumBg {
 		e.AlbumBg = true
 		var in *bool

@@ -12,6 +12,8 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentask"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -24,12 +26,12 @@ func (a *App) askApplyAdd(rec *askRec, dir string) (model.View, bool) {
 	if !a.askCheckPicked(rec, dir) {
 		return model.View{}, false
 	}
-	ed, err := a.agentEditor(rec.req.Key)
-	if err == nil && ed != rec.ed { // тот же альбом, что при вопросе
+	ed, err := a.agentEditor(rec.Payload.req.Key)
+	if err == nil && ed != rec.Payload.ed { // тот же альбом, что при вопросе
 		err = errAgentAlbumChanged
 	}
 	if err == nil {
-		err = a.agentBackup(rec.req.Key)
+		err = a.agentBackup(rec.Payload.req.Key)
 	}
 	if err != nil {
 		a.askFail(rec, agentHostErr(err))
@@ -62,14 +64,14 @@ func (a *App) askApplyCreate(rec *askRec, dir string) (created bool) {
 	a.startNew(next)
 	if a.editor() != next {
 		why := agents.WhyDraftLocked
-		a.askFinish(rec, askOutcome{res: agents.AskRes{Why: why}}, why)
+		a.askFinish(rec, agentask.Outcome{Res: agents.AskRes{Why: why}}, why)
 		return false
 	}
 	v, ok := a.askAddFolder(rec, next, dir)
 	if ok {
 		a.draftSet(next, v.Rev) // черновик агента: пока меняют только агенты, он тихо заменяется
 	}
-	if doc == askDocDirty {
+	if doc == agentasktext.DocDirty {
 		a.setPrev(lv.prev) // правки уехали в копию: «Открыть прежний» её откроет
 	} else {
 		a.setPrev("")
@@ -84,8 +86,8 @@ func (a *App) askCheckPicked(rec *askRec, dir string) bool {
 		a.askReject(rec, err)
 		return false
 	}
-	if !a.askAllowed(rec.kind) {
-		a.askFinish(rec, askOutcome{res: agents.AskRes{Why: agents.WhyOff}}, agents.WhyOff)
+	if !a.askAllowed(rec.Kind) {
+		a.askFinish(rec, agentask.Outcome{Res: agents.AskRes{Why: agents.WhyOff}}, agents.WhyOff)
 		return false
 	}
 	return true
@@ -97,13 +99,13 @@ func (a *App) askReject(rec *askRec, err error) {
 	if errors.Is(err, agentplaces.ErrOurs) {
 		why = agents.WhyOurs
 	}
-	a.notice(askFolderReject)
-	a.askFinish(rec, askOutcome{res: agents.AskRes{Why: why}}, why)
+	a.notice(agentasktext.FolderReject)
+	a.askFinish(rec, agentask.Outcome{Res: agents.AskRes{Why: why}}, why)
 }
 
 // askFail закрывает вопрос ошибкой для агента; окну — gone (вопрос закончился без «да»).
 func (a *App) askFail(rec *askRec, err error) {
-	a.askFinish(rec, askOutcome{err: err}, agents.WhyGone)
+	a.askFinish(rec, agentask.Outcome{Err: err}, agents.WhyGone)
 }
 
 // askAddFolder добавляет папку в ed одним шагом отмены, перечитывает ленту и отдаёт итог агенту.
@@ -135,7 +137,7 @@ func (a *App) askAddFolder(rec *askRec, ed *album.Editor, dir string) (model.Vie
 		Merged:   merged,
 		Scanning: scanning,
 	}
-	a.askFinish(rec, askOutcome{res: res}, agents.WhyAnswered)
+	a.askFinish(rec, agentask.Outcome{Res: res}, agents.WhyAnswered)
 	return v, true
 }
 

@@ -78,16 +78,18 @@ describe('updateView: текст и кнопки по фазе (design §3.1)', 
     expect(v.pageLink).toBe(true)
   })
 
-  it('error: явно заданное «что повторять» важнее данных Go (версия осталась от прежнего предложения)', () => {
-    const i = info({ phase: 'error', version: '0.25.1', error: 'нет связи' })
-    expect(updateView(i).btns[0].act).toBe('download')
-    expect(updateView(i, 'check').btns).toEqual([{ act: 'check', label: 'Повторить' }])
+  it('error: «Повторить» берётся из errorOf Go, а не из версии прежнего предложения', () => {
+    const stale = { phase: 'error', version: '0.25.1', error: 'нет связи' } as const
+    expect(updateView(info({ ...stale, errorOf: 'check' })).btns[0].act).toBe('check')
+    expect(updateView(info({ ...stale, errorOf: 'download' })).btns[0].act).toBe('download')
   })
 
-  it('«Повторить»: ошибка скачивания (есть версия) — снова скачать, иначе проверить; на странице-режиме — проверить', () => {
-    expect(retryAct(info({ phase: 'error', version: '0.25.1' }))).toBe('download')
-    expect(retryAct(info({ phase: 'error', version: '' }))).toBe('check')
-    expect(retryAct(info({ phase: 'error', version: '0.25.1', mode: 'page' }))).toBe('check')
+  it('«Повторить»: скачивание и установка (Go забыл файл, Fetch сверит) — снова скачать; проверка, пусто и режим «страница» — проверить', () => {
+    expect(retryAct(info({ phase: 'error', errorOf: 'download' }))).toBe('download')
+    expect(retryAct(info({ phase: 'error', errorOf: 'install' }))).toBe('download')
+    expect(retryAct(info({ phase: 'error', errorOf: 'check', version: '0.25.1' }))).toBe('check')
+    expect(retryAct(info({ phase: 'error', errorOf: '', version: '0.25.1' }))).toBe('check')
+    expect(retryAct(info({ phase: 'error', errorOf: 'download', mode: 'page' }))).toBe('check')
   })
 
   it('setup: подсказка «Поставьте установщиком…» в любой фазе; в install и page её нет', () => {

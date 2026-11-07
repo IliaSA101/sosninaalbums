@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -75,11 +76,11 @@ func summarizeSkips(skipped []skipKey) string {
 	for i, k := range kinds {
 		if i == maxSkippedKinds {
 			rest := len(kinds) - i
-			parts = append(parts, fmt.Sprintf("и ещё %d %s", rest, plural(rest, "вид", "вида", "видов")))
+			parts = append(parts, fmt.Sprintf("и ещё %d %s", rest, agentasktext.Plural(rest, "вид", "вида", "видов")))
 			break
 		}
 		n := count[k]
-		word := plural(n, "файл", "файла", "файлов")
+		word := agentasktext.Plural(n, "файл", "файла", "файлов")
 		part := fmt.Sprintf("%d %s %s", n, word, k.ext)
 		if k.ext == "" {
 			part = fmt.Sprintf("%d %s без расширения", n, word)

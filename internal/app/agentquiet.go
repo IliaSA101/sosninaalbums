@@ -6,8 +6,10 @@ package app
 
 import (
 	"strings"
+	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
@@ -102,13 +104,21 @@ func (a *App) planFolder(req agents.AskReq, cur *album.Editor, always bool) fold
 	p.dir, p.label, p.path = cleaned, agentplaces.HintLabel(resolved), resolved // имя — настоящее, не из подсказки-ссылки
 	p.link = r.Key(cleaned) != r.Key(resolved)
 	if always {
-		p.why, p.note = a.quietWhy(r, req, cleaned, resolved, cur)
+		p.why, p.note = a.quietWhy(r, req, cleaned, resolved, cur, nil)
 	}
 	return p
 }
 
+// quietLimit — срок обхода папки: у открытия — предел правил (его подрезает план под остаток срока), у папки агента — свой.
+func quietLimit(r *agentplaces.Rules, req agents.AskReq) time.Duration {
+	if req.Kind == agents.AskOpen {
+		return r.Timeout()
+	}
+	return quietTimeout
+}
+
 // quietWhy — первая причина «не тихо» по design §4.1 п. 1, 3–8 ("" — можно) и строка к ней (note).
-func (a *App) quietWhy(r *agentplaces.Rules, req agents.AskReq, cleaned, resolved string, cur *album.Editor) (why, note string) {
+func (a *App) quietWhy(r *agentplaces.Rules, req agents.AskReq, cleaned, resolved string, cur *album.Editor, photos *int) (why, note string) {
 	// Лимит — последним (ревью): настоящая причина (место, ссылка…) важнее исчерпанного бюджета.
 	isLink := quietLink // подмену читаем до горутины: она может пережить предел
 	linked, done := appkit.Within(r.Timeout(), func() bool { return isLink(resolved) })
@@ -136,15 +146,21 @@ func (a *App) quietWhy(r *agentplaces.Rules, req agents.AskReq, cleaned, resolve
 	case isVirt:
 		return whyCloud, ""
 	}
-	switch t := countQuiet(resolved); {
-	case t.remote:
+	t := countQuietCap(resolved, req.Kind != agents.AskOpen, min(quietTimeout, quietLimit(r, req)))
+	if photos != nil {
+		*photos += t.Photos
+	}
+	switch {
+	case t.Remote:
 		return whyRemote, ""
-	case t.cloud:
+	case t.Cloud:
 		return whyCloud, ""
-	case t.over():
+	case t.Link:
+		return whyLink, ""
+	case t.OverCap(req.Kind != agents.AskOpen):
 		return whyBig, ""
 	}
-	if req.Kind == agents.AskCreate && a.askDocOf(cur) == askDocDraft && !a.draftUntouched(cur) {
+	if req.Kind == agents.AskCreate && a.askDocOf(cur) == agentasktext.DocDraft && !a.draftUntouched(cur) {
 		return whyDraft, ""
 	}
 	if !req.Always {

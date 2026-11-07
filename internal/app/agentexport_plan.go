@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
 	"github.com/IliaSA101/sosninaalbums/internal/app/exporter"
@@ -41,7 +42,13 @@ type exportPlan struct {
 }
 
 // approved — путь показан и годится: «Выгрузить» пишет в него без окна ОС.
-func (p exportPlan) approved() bool { return p.shown != "" && !p.foreign }
+func (p exportPlan) approved() bool { return p.dir().Approved() }
+
+// dir — итог разбора для текста вопроса (agentasktext.ExportText).
+func (p exportPlan) dir() agentasktext.ExportDir {
+	return agentasktext.ExportDir{Shown: p.shown, Create: p.create, NextTo: p.nextTo, Net: p.net, Cloud: p.cloud,
+		Foreign: p.foreign, Ours: len(p.ours)}
+}
 
 // exportNames — имена выгрузки: job — имя книги от агента для exporter (Job.Name), dir — имя папки в корне
 // выгрузок ("" — нет: черновик без подсказки), bad — подсказка-имя негодна.

@@ -375,7 +375,7 @@ func TestServeFontCustom(t *testing.T) {
 // другом компьютере) и папка «Шрифты» с файлами files (имя → встроенное начертание).
 func collectedAlbum(t *testing.T, ids []string, files map[string]string) string {
 	t.Helper()
-	dir := testkit.TempDir(t)
+	dir := testkit.UserTemp(t)
 	p := model.New()
 	for i, id := range ids {
 		p.Spreads = append(p.Spreads, &model.Spread{ID: "s" + string(rune('1'+i)),

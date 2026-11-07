@@ -62,7 +62,7 @@ const LAYOUT_MIN_APP = [0, 28, 0] // шаблон с borders/drafts: 0.27 их �
 const ALBUM_MIN_APP = [0, 28, 0] // макеты альбома (.json, вид album) умеют только версии с 0.28.0 (131)
 const ALBUM_ID_SUFFIX = '-layouts' // макеты приносят только дополнения <id>-layouts (0.28-131-24)
 const ALBUM_MAX_STEPS = 24 // как model.MaxLookSteps: больше программа макет не берёт
-const ALBUM_MIN_RATIO = 0.2 // как minTplRatio, maxTplRatio в model/spreadtpl.go
+const ALBUM_MIN_RATIO = 0.2 // как minTplRatio, maxTplRatio в model/looktpl/spreadtpl.go
 const ALBUM_MAX_RATIO = 5
 const NEEDS_MIN_APP = [0, 27, 0] // 0.26 поле needs не знает и дополнение без донора поставит (0.27-129-12)
 export const MAX_ZIP = 70 << 20 // бюджет набора (0.27-129-13): 70 МБ за 15 мин — от 0,62 Мбит/с
@@ -265,7 +265,7 @@ function checkRaster(it, data) {
   if (it.kind === 'sticker' && Math.max(info.w, info.h) > STICKER_MAX_SIDE) throw new Error(`${it.file}: сторона стикера ${info.w}×${info.h} больше ${STICKER_MAX_SIDE}`)
 }
 
-/** Файл макета альбома: JSON-объект v 1 и steps 1…24 (полный разбор строго — в программе, model.ParseLook). */
+/** Файл макета альбома: JSON-объект v 1 и steps 1…24 (полный разбор строго — в программе, looktpl.ParseLook). */
 export function checkAlbumFile(name, data) {
   let v
   try {

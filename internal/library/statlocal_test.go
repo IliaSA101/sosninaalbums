@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -42,4 +43,35 @@ func TestStatLocal(t *testing.T) {
 	if _, err := StatLocal(filepath.Join(dir, "нет.jpg")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("нет файла: %v", err)
 	}
+}
+
+// StatLocal и OpenLocal сами проверяют путь (аудит 160-M1 №6): пустой, относительный и сетевой отказывают до Lstat,
+// ошибку узнаёт paths.NoPath; локальный абсолютный проходит.
+func TestLocalPathChecked(t *testing.T) {
+	a := testkit.JPEG(t, testkit.TempDir(t), "a.jpg", 20, 10)
+	unc := `\\127.0.0.1\nosuchshare\x.jpg`
+	if runtime.GOOS != "windows" {
+		unc = "//nosuchhost/x.jpg"
+	}
+	// Пустой путь CheckLocalPath отвергает простой ошибкой, остальные — ErrNotLocal (её узнаёт paths.NoPath).
+	for _, bad := range []string{"", "a.jpg", "../a.jpg", unc} {
+		_, serr := StatLocal(bad)
+		f, _, oerr := OpenLocal(bad)
+		if f != nil {
+			_ = f.Close()
+		}
+		for name, err := range map[string]error{"StatLocal": serr, "OpenLocal": oerr} {
+			if err == nil || errors.Is(err, os.ErrNotExist) || bad != "" && !errors.Is(err, paths.ErrNotLocal) {
+				t.Errorf("%s(%q): %v, ждали отказ проверки пути (paths.ErrNotLocal)", name, bad, err)
+			}
+		}
+	}
+	if _, err := StatLocal(a); err != nil {
+		t.Errorf("StatLocal локального: %v", err)
+	}
+	f, _, err := OpenLocal(a)
+	if err != nil {
+		t.Fatalf("OpenLocal локального: %v", err)
+	}
+	_ = f.Close()
 }

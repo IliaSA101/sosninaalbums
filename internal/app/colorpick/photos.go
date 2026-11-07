@@ -5,6 +5,7 @@ package colorpick
 import (
 	"container/list"
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -12,6 +13,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/colorspace"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -112,11 +114,10 @@ func (p *Picker) PhotoColors(spreadID string) ([]string, error) {
 	ctx := p.h.Ctx()
 	var pts []colorspace.Lab
 	for _, id := range colorPhotoIDs(sv) {
-		ph, ok, gone := p.h.Photo(id)
-		if !ok || gone {
+		file, err := p.copyOf(ctx, cache, id, false, false)
+		if errors.Is(err, ErrNoPhoto) || errors.Is(err, library.ErrCloudOnly) { // облако без копии: причину знает App
 			continue
 		}
-		file, err := cache.FileCtx(ctx, ph, false)
 		if err != nil {
 			p.h.Rare(p.colors.miss.Add(1), "цвета фото: миниатюра: %v", paths.NoPath(err))
 			continue

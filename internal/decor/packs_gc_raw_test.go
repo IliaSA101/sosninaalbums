@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -177,7 +178,7 @@ func TestRemovePackIgnoresOwnRegistryUnknown(t *testing.T) {
 func TestRemovePackKeepsTplBordersLib(t *testing.T) {
 	fx := newRawFixture(t)
 	box := []model.Box{{X: .1, Y: .1, W: .8, H: .8}}
-	it, err := fx.s.SaveSpreadTpl("mine", "Рамочка", model.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []model.TplBg{{Color: "#aabbcc"}}})
+	it, err := fx.s.SaveSpreadTpl("mine", "Рамочка", looktpl.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []looktpl.TplBg{{Color: "#aabbcc"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,12 +321,12 @@ func TestRemovePackSymlinkKeepsAll(t *testing.T) {
 func TestRemovePackUnreadTplKeepsAll(t *testing.T) {
 	fx := newRawFixture(t)
 	box := []model.Box{{X: .1, Y: .1, W: .8, H: .8}}
-	it, err := fx.s.SaveSpreadTpl("mine", "Большой", model.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []model.TplBg{{Color: "#aabbcc"}}})
+	it, err := fx.s.SaveSpreadTpl("mine", "Большой", looktpl.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []looktpl.TplBg{{Color: "#aabbcc"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	path := fx.s.files[KindSpread][it.ID]
-	if err := os.WriteFile(path, bytes.Repeat([]byte(" "), model.MaxTplFile+1), 0o644); err != nil {
+	if err := os.WriteFile(path, bytes.Repeat([]byte(" "), looktpl.MaxTplFile+1), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Open(fx.cfg).SpreadTpl(it.ID); err != ErrNotFound {
@@ -334,7 +335,7 @@ func TestRemovePackUnreadTplKeepsAll(t *testing.T) {
 	fx.allKept(t, "велик")
 	// Не обычный файл на месте шаблона — тоже «не прочитан».
 	fx = reinstall(t, fx)
-	it, err = fx.s.SaveSpreadTpl("mine", "Папка", model.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []model.TplBg{{Color: "#aabbcd"}}})
+	it, err = fx.s.SaveSpreadTpl("mine", "Папка", looktpl.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []looktpl.TplBg{{Color: "#aabbcd"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +353,7 @@ func TestRemovePackUnreadTplKeepsAll(t *testing.T) {
 func TestRemovePackErasedTplDoesNotHold(t *testing.T) {
 	fx := newRawFixture(t)
 	box := []model.Box{{X: .1, Y: .1, W: .8, H: .8}}
-	it, err := fx.s.SaveSpreadTpl("mine", "Стёртый", model.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []model.TplBg{{Color: "#aabbce"}}})
+	it, err := fx.s.SaveSpreadTpl("mine", "Стёртый", looktpl.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []looktpl.TplBg{{Color: "#aabbce"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

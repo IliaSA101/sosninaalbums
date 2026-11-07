@@ -8,7 +8,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/layout/plan"
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Корпус спеки 041 (design §6): геометрии, наборы «серии» / «все горизонтальные» / «смесь»,
@@ -482,16 +482,6 @@ func goldenLines(albums []corpusAlbum) []string {
 	return out
 }
 
-// goldenArch пропускает эталон вне amd64 (решение 0.11 №70): эталоны пакета сняты на amd64 и на
-// arm64 не подтверждены. SA_GOLDEN_ANYARCH=1 включает их на любой архитектуре — так их гоняет
-// наблюдение на arm64 в release.yml; подтвердится — пропуск снять, как у first.sha.
-func goldenArch(t *testing.T) {
-	t.Helper()
-	if runtime.GOARCH != "amd64" && os.Getenv("SA_GOLDEN_ANYARCH") != "1" {
-		t.Skip("эталон снят на amd64 (SA_GOLDEN_ANYARCH=1 — гонять и здесь)")
-	}
-}
-
 func TestGoldenVariety(t *testing.T) { checkGoldenVariety(t, goldenPath, goldenLines(corpus())) }
 
 // TestGoldenVarietyWide — выбор на layflat-альбомах корпуса при «только широкие» (064).
@@ -501,7 +491,7 @@ func TestGoldenVarietyWide(t *testing.T) {
 
 func checkGoldenVariety(t *testing.T, path string, got []string) {
 	t.Helper()
-	goldenArch(t)
+	testkit.RequireNoFMA(t)
 	if *updateGolden || os.Getenv("SA_GOLDEN_UPDATE") == "1" {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)

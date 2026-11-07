@@ -30,7 +30,7 @@ type openRig struct {
 
 func newOpenRig(t *testing.T) *openRig {
 	t.Helper()
-	r := &openRig{askRig: newAskRig(t), dir: testkit.TempDir(t)}
+	r := &openRig{askRig: newAskRig(t), dir: testkit.UserTemp(t)}
 	r.prev = filepath.Join(r.dir, "Прежний.salbum")
 	r.target = filepath.Join(r.dir, "Ивановы.salbum")
 	for _, p := range []string{r.target, r.prev} { // последний открыт
@@ -168,7 +168,7 @@ func TestAgentAnswerOpen(t *testing.T) {
 	if d := r.done(t, 2); d.Why != agents.WhyStopped {
 		t.Errorf("agents:askdone: %+v", d)
 	}
-	if m := a.askM(); m.cur != nil {
+	if _, open := a.askQ().Cur(); open {
 		t.Error("вопрос остался открытым")
 	}
 }
@@ -251,10 +251,11 @@ func TestAgentOpenNewer(t *testing.T) {
 	}
 	m := a.askM()
 	m.mu.Lock()
-	cur, pv := m.cur, m.prev
+	pv := m.prev
 	m.mu.Unlock()
-	if a.editor() != prev || pv != "" || cur != nil || len(r.evOf("agents:edited")) != 0 {
-		t.Errorf("альбом тронут: тот же %v, прежний %q, вопрос %v, тостов %d", a.editor() == prev, pv, cur != nil, len(r.evOf("agents:edited")))
+	_, cur := a.askQ().Cur()
+	if a.editor() != prev || pv != "" || cur || len(r.evOf("agents:edited")) != 0 {
+		t.Errorf("альбом тронут: тот же %v, прежний %q, вопрос %v, тостов %d", a.editor() == prev, pv, cur, len(r.evOf("agents:edited")))
 	}
 }
 

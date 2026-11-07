@@ -7,26 +7,27 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
-// bigLook — зажатый макет больше model.MaxLookFile: шаги с предельными надписями (64 × 1000 рун).
-func bigLook(t *testing.T) model.AlbumTpl {
+// bigLook — зажатый макет больше looktpl.MaxLookFile: шаги с предельными надписями (64 × 1000 рун).
+func bigLook(t *testing.T) looktpl.AlbumTpl {
 	t.Helper()
-	var texts []model.TplText
+	var texts []looktpl.TplText
 	for range model.MaxTexts {
-		texts = append(texts, model.TplText{W: 0.5, Text: strings.Repeat("Ы", model.MaxTextRunes), Style: model.TextStyle{Size: 20, Color: "#222222", Align: "left"}})
+		texts = append(texts, looktpl.TplText{W: 0.5, Text: strings.Repeat("Ы", model.MaxTextRunes), Style: model.TextStyle{Size: 20, Color: "#222222", Align: "left"}})
 	}
-	tpl := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{Color: "#ffffff"}}, Texts: texts}
-	var l model.AlbumTpl
-	l.V = model.LookV
+	tpl := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{Color: "#ffffff"}}, Texts: texts}
+	var l looktpl.AlbumTpl
+	l.V = looktpl.LookV
 	for range 12 {
-		l.Steps = append(l.Steps, model.LookStep{Tpl: tpl})
+		l.Steps = append(l.Steps, looktpl.LookStep{Tpl: tpl})
 	}
-	c, ok := model.ClampLook(l)
+	c, ok := looktpl.ClampLook(l)
 	if !ok {
 		t.Fatal("макет не зажался")
 	}
-	if data, err := json.Marshal(c); err != nil || len(data) <= model.MaxLookFile {
+	if data, err := json.Marshal(c); err != nil || len(data) <= looktpl.MaxLookFile {
 		t.Fatalf("макет не больше предела: %d байт, %v", len(data), err)
 	}
 	return c
@@ -42,8 +43,8 @@ func TestCheckLookMatchesSave(t *testing.T) {
 	if cerr == nil || serr == nil || cerr.Error() != serr.Error() || !strings.Contains(cerr.Error(), "макет больше 512 КБ") {
 		t.Fatalf("больше предела: CheckLook %v, SaveLook %v", cerr, serr)
 	}
-	for name, bad := range map[string]model.AlbumTpl{"пусто": {V: model.LookV}, "версия": {V: 2, Steps: big.Steps}} {
-		if _, err := CheckLook(bad); !errors.Is(err, model.ErrTplEmpty) {
+	for name, bad := range map[string]looktpl.AlbumTpl{"пусто": {V: looktpl.LookV}, "версия": {V: 2, Steps: big.Steps}} {
+		if _, err := CheckLook(bad); !errors.Is(err, looktpl.ErrTplEmpty) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}

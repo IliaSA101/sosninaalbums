@@ -77,8 +77,8 @@ export const MINE = 'mine'
 
 // Выборка — не тема предметов, а отбор: «Все», «Недавние», «Новые» (themeItems ведёт их особо).
 export const isSelection = (id: string): boolean => id === ALL || id === RECENT || id === NEW || id === GET
-// Куда своё не кладётся: выборки и «Фирменные» (зеркало Go isTheme); импорт и сохранение уходят в «Мои».
-export const noOwn = (id: string): boolean => isSelection(id) || id === 'brand'
+// Куда своё не кладётся: выборки, «Фирменные» и «Прежние макеты» (зеркало Go ownTheme); импорт и сохранение уходят в «Мои».
+export const noOwn = (id: string): boolean => isSelection(id) || id === 'brand' || id === 'legacy'
 
 type SourceCat = Pick<DecorCatalog, 'themes' | 'items'> & { new?: string[] }
 

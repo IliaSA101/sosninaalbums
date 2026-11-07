@@ -28,9 +28,9 @@ const (
 	MaxBg       = 60 << 20  // фон; меньше своего (200 МБ): набор готовят заранее
 	MaxSticker  = 30 << 20  // стикер
 	MaxFrame    = 30 << 20  // рамочка-картинка (079)
-	MaxSpread   = 256 << 10 // шаблон разворота (= model.MaxTplFile)
+	MaxSpread   = 256 << 10 // шаблон разворота (= looktpl.MaxTplFile)
 	MaxPrint    = 64 << 10  // профиль типографии (= printprof.MaxSize)
-	MaxLook     = 512 << 10 // макет альбома (= model.MaxLookFile)
+	MaxLook     = 512 << 10 // макет альбома (= looktpl.MaxLookFile)
 	// ManifestName — манифест в корне архива.
 	ManifestName = "manifest.json"
 )

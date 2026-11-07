@@ -394,6 +394,10 @@ export function Export(arg1) {
   return window['go']['app']['App']['Export'](arg1);
 }
 
+export function ExportSize(arg1) {
+  return window['go']['app']['App']['ExportSize'](arg1);
+}
+
 export function ExportTemplates() {
   return window['go']['app']['App']['ExportTemplates']();
 }

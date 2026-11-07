@@ -7,6 +7,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/app/exporter"
+	"github.com/IliaSA101/sosninaalbums/internal/export"
 	"github.com/IliaSA101/sosninaalbums/internal/export/printshop"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
@@ -30,6 +31,30 @@ func (a *App) Export(o ExportOptions) (bool, error) {
 		return false, errors.New("Сейчас идёт выгрузка по ссылке — дождитесь её конца") //nolint:revive,staticcheck // текст уходит пользователю тостом как есть
 	}
 	return a.exp.Export(exporter.Options(o))
+}
+
+// ExportSizeIn, ExportSizeQ и ExportSizeOut — вход и ответ оценки объёма (0.37, перенос из интерфейса).
+// Типы объявлены здесь (определённые от export.*): `export` — ключевое слово TS, пространство models.ts
+// `export` не собирается (как у ExportOptions). Ответ — свой struct: вложенный срез тоже должен быть app.*.
+type (
+	ExportSizeIn  export.SizeIn
+	ExportSizeQ   export.SizeQ
+	ExportSizeOut struct {
+		Summary string        `json:"summary"` // «≈ X на разворот, всего ≈ Y»
+		Per     []ExportSizeQ `json:"per"`     // объём файла по каждому качеству
+	}
+)
+
+// ExportSize — оценка объёма для окна экспорта. Настройки альбома и число разворотов берутся из проекта;
+// проект не меняется.
+func (a *App) ExportSize(in ExportSizeIn) ExportSizeOut {
+	s, n := a.editor().SizeBasis()
+	r := export.SizeSummary(s, n, export.SizeIn(in))
+	out := ExportSizeOut{Summary: r.Summary, Per: make([]ExportSizeQ, len(r.Per))}
+	for i, q := range r.Per {
+		out.Per[i] = ExportSizeQ(q)
+	}
+	return out
 }
 
 // CancelExport — «Остановить»: текущий разворот прерывается (не дописывается), следующие не пишутся, прежние

@@ -9,21 +9,22 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Готовые развороты (067): отмена, холостой повтор, области, виньетка, пропавшие файлы.
 
 // pageTpl — страница: место слева сверху, звезда в левом верхнем углу под углом, свой стикер
 // из библиотеки снизу, надпись у левого края; цвет и своё фото фона.
-func pageTpl() model.SpreadTpl {
-	return model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 281.0 / 284, W: 281, H: 284,
-		Page:   []model.TplBg{{Color: "#faf0e6", Lib: kBg, Fade: 0.2}},
+func pageTpl() looktpl.SpreadTpl {
+	return looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 281.0 / 284, W: 281, H: 284,
+		Page:   []looktpl.TplBg{{Color: "#faf0e6", Lib: kBg, Fade: 0.2}},
 		Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.4}, {X: 0.5, Y: 0.55, W: 0.4, H: 0.35}},
-		Stickers: []model.TplItem{
-			{Anchor: model.Anchor{AX: -1, AY: -1, DX: 0.08, DY: 0.08}, W: 0.1, H: 0.1, Rot: 20, Art: &model.Art{Kind: "star"}},
-			{Anchor: model.Anchor{AX: 0, AY: 1, DY: -0.05}, W: 0.2, H: 0.1, Lib: kSt},
+		Stickers: []looktpl.TplItem{
+			{Anchor: looktpl.Anchor{AX: -1, AY: -1, DX: 0.08, DY: 0.08}, W: 0.1, H: 0.1, Rot: 20, Art: &model.Art{Kind: "star"}},
+			{Anchor: looktpl.Anchor{AX: 0, AY: 1, DY: -0.05}, W: 0.2, H: 0.1, Lib: kSt},
 		},
-		Texts: []model.TplText{{Anchor: model.Anchor{AX: -1, AY: 0, DX: 0.2}, W: 0.3, Text: "Глава 1", Style: model.PlainStyle()}},
+		Texts: []looktpl.TplText{{Anchor: looktpl.Anchor{AX: -1, AY: 0, DX: 0.2}, W: 0.3, Text: "Глава 1", Style: model.PlainStyle()}},
 	}
 }
 
@@ -66,7 +67,7 @@ func TestApplySpreadTplNoop(t *testing.T) {
 	decor.Places = nil
 	for _, c := range []struct {
 		name, sp, scope string
-		tp              model.SpreadTpl
+		tp              looktpl.SpreadTpl
 	}{
 		{"разворот на пустой", "s3", model.ScopeSpread, full},
 		{"страница на разворот", "s4", model.ScopeSpread, pageTpl()},
@@ -128,7 +129,7 @@ func TestApplySpreadTplScope(t *testing.T) {
 	full, _ := e.SpreadTplOf("s1", model.ScopeSpread, true, true)
 	for _, c := range []struct {
 		sp, scope string
-		tp        model.SpreadTpl
+		tp        looktpl.SpreadTpl
 		want      error
 	}{
 		{"s2", model.ScopeLeft, full, grid.ErrTplScope},
@@ -257,13 +258,13 @@ func TestSpreadTplWhole(t *testing.T) {
 // мест) и с 40 стикерами (80 > 64) — отказ всей правки без шага; на одну страницу — встаёт.
 func TestApplySpreadTplLimits(t *testing.T) {
 	e := tplEd(t)
-	many := model.SpreadTpl{V: model.TplV, Pages: 1, Page: []model.TplBg{{}}}
+	many := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Page: []looktpl.TplBg{{}}}
 	for i := range 40 {
 		many.Places = append(many.Places, model.Box{X: float64(i%8) / 8, Y: float64(i/8) / 5, W: 0.1, H: 0.1})
 	}
-	stickers := model.SpreadTpl{V: model.TplV, Pages: 1, Page: []model.TplBg{{}}}
+	stickers := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Page: []looktpl.TplBg{{}}}
 	for i := range 40 {
-		stickers.Stickers = append(stickers.Stickers, model.TplItem{Anchor: model.Anchor{DX: float64(i) / 100}, W: 0.05, H: 0.05, Art: &model.Art{Kind: "star"}})
+		stickers.Stickers = append(stickers.Stickers, looktpl.TplItem{Anchor: looktpl.Anchor{DX: float64(i) / 100}, W: 0.05, H: 0.05, Art: &model.Art{Kind: "star"}})
 	}
 	before, undo := model.Marshal(edtest.P(e)), edtest.UndoLen(e)
 	if _, _, _, err := e.ApplySpreadTpl("s3", model.ScopeSpread, many, nil); err == nil || err.Error() != model.ErrTooManyPlaces().Error() {
@@ -284,9 +285,9 @@ func TestApplySpreadTplLimits(t *testing.T) {
 // листа той же ширины; места пустые (плашки рисует экспорт), вид строится.
 func TestPreviewTpl(t *testing.T) {
 	two := pageTpl()
-	two.Pages, two.Page = 2, []model.TplBg{{Color: "#111111"}, {Color: "#222222"}}
+	two.Pages, two.Page = 2, []looktpl.TplBg{{Color: "#111111"}, {Color: "#222222"}}
 	for _, c := range []struct {
-		tp         model.SpreadTpl
+		tp         looktpl.SpreadTpl
 		pageW      float64
 		places     int
 		bgL, bgR   string

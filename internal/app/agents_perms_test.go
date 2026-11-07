@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 )
 
@@ -69,7 +70,7 @@ func TestAgentPermsMethods(t *testing.T) {
 	prefs.AddPlace(dir, prefs.Place{Dir: place, How: prefs.PlaceChosen})
 	prefs.AddPlace(dir, prefs.Place{Dir: filepath.Join(dir, "2026"), How: prefs.PlaceParent})
 	places := a.AgentsInfo().Places
-	if len(places) != 2 || places[1] != (AgentPlace{Key: prefs.PlaceKey(prefs.Place{Dir: place, How: prefs.PlaceChosen}), Dir: place, Chosen: true}) || places[0].Chosen {
+	if len(places) != 2 || places[1] != (AgentPlace{Key: prefs.PlaceKey(prefs.Place{Dir: place, How: prefs.PlaceChosen}), Dir: place, Chosen: true, Bindable: osx.CanBind(place)}) || places[0].Chosen {
 		t.Fatalf("места: %+v", places)
 	}
 	info = a.ForgetAgentPlaces()
@@ -96,7 +97,7 @@ func TestAgentPermTypes(t *testing.T) {
 	if got := jsonTags(reflect.TypeFor[AgentPerm]()); !slices.Equal(got, []string{"tool", "title", "group", "mode", "can", "why", "note"}) {
 		t.Errorf("AgentPerm: %v", got)
 	}
-	if got := jsonTags(reflect.TypeFor[AgentPlace]()); !slices.Equal(got, []string{"key", "dir", "label", "chosen", "bound", "narrow", "narrowRoot", "state", "here"}) {
+	if got := jsonTags(reflect.TypeFor[AgentPlace]()); !slices.Equal(got, []string{"key", "dir", "label", "chosen", "bound", "bindable", "narrow", "narrowRoot", "state", "here"}) {
 		t.Errorf("AgentPlace: %v", got)
 	}
 }

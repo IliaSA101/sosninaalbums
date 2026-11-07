@@ -101,11 +101,12 @@ func (a *App) sheetCell(ctx context.Context, id string, box int) sheetCell {
 	if inStrip && paths.CheckLocalPath(sp.Path) != nil {
 		return sheetCell{state: contactsheet.Broken}
 	}
-	p, ok, gone := a.mediaPhoto(id)
+	p, ok, gone, cloud := a.mediaPhotoCloud(id)
 	if !ok || gone || paths.CheckLocalPath(p.Path) != nil {
 		return sheetCell{state: contactsheet.Broken}
 	}
-	file, err := a.cache.FileBgCtx(ctx, p)
+	// Фото в облаке: готовая копия любого размера (клетка и так уменьшается), без неё — «×» и запись «в облаке».
+	file, err := a.photoCopy(id, p, cloud, false, true, func() (string, error) { return a.cache.FileBgCtx(ctx, p) })
 	if err != nil {
 		return sheetFail(ctx)
 	}

@@ -2,7 +2,7 @@ package osx
 
 // VolumeOf — «какой это диск» для привязки места агента (153, design §4.2): стабильный номер тома,
 // не буква и не точка монтирования. Буква меняется при пересадке флешки, номер — нет. Системные
-// вызовы по ОС: volid_windows.go, volid_linux.go (+ volid_mounts.go), volid_other.go.
+// вызовы по ОС: volid_windows.go, volid_linux.go (+ volid_mounts.go), volid_darwin.go (+ volid_mac.go, cgo), volid_other.go.
 
 import (
 	"errors"

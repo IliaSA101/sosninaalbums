@@ -24,7 +24,6 @@ import {
   KEY_PLACES,
   KEY_SEE,
   allowMissing,
-  alwaysHidden,
   askMissing,
   consentFor,
   groupAskMissing,
@@ -39,7 +38,7 @@ import { BusyPing, userBusy } from './agentbusy'
 import { COPIED, COPY_FAIL } from './agentstext'
 
 // Вопрос перед включением доступа, уровня или правок: 'on' — «Разрешить агентам ИИ читать альбом?», 'names' и 'pics' — уровни 2 и 3,
-// 'perm' — согласие на правки и «Всегда» у папки (150): какое именно, считает consent по отложенному изменению.
+// 'perm' — согласие на правки и «Всегда» у папки или открытия (150, 160): какое именно, считает consent по отложенному изменению.
 export type AgentsAsk = 'on' | 'names' | 'pics' | 'perm'
 const FLASH_MS = 1600 // сколько подсвечена строка, к которой открыли окно
 
@@ -76,7 +75,7 @@ class AgentsUi {
   }
   // Какие согласия нужны отложенному изменению.
   get consent(): Consent {
-    return this.pending ? consentFor(this.info.perms, this.info.edit, this.pending) : { edit: false, folder: false }
+    return this.pending ? consentFor(this.info.perms, this.info.edit, this.pending) : { edit: false, folder: false, open: false }
   }
 
   // Подписка на события Go; окно и значок считают её вместе — события слушаются, пока жив хоть один.
@@ -202,10 +201,10 @@ class AgentsUi {
     return this.call(() => (ch.kind === 'tool' ? bridge.setPerm(ch.tool, ch.mode) : bridge.setPermGroup(ch.group, ch.mode)))
   }
 
-  // Разрешения (150): выход правок из «Запретить» и «Всегда» у папки спрашивают согласие, остальное — сразу.
+  // Разрешения (150): выход правок из «Запретить» и «Всегда» у папки или открытия спрашивают согласие, остальное — сразу.
   private change(ch: PermChange) {
     const c = consentFor(this.info.perms, this.info.edit, ch)
-    if (c.edit || c.folder) {
+    if (c.edit || c.folder || c.open) {
       this.pending = ch
       this.ask = 'perm'
     } else void this.apply(ch)
@@ -217,8 +216,7 @@ class AgentsUi {
     const p = this.info.perms.find((x) => x.tool === tool)
     if (!p || this.busy) return
     if (mode === 'ask' && askMissing(p)) return this.explain(tool, p.group === 'read')
-    if (mode === 'allow' && allowMissing(p)) return this.explain(tool, false) // выгрузка, открытие: «Всегда» нет — причина
-    if (mode === 'allow' && alwaysHidden(p)) return // открытие до 160 Т5: «Всегда» не предлагается
+    if (mode === 'allow' && allowMissing(p)) return this.explain(tool, false) // выгрузка: «Всегда» нет — причина
     if (p.mode !== mode) this.change({ kind: 'tool', tool, mode })
   }
   pickGroup(group: PermGroup, mode: Mode) {

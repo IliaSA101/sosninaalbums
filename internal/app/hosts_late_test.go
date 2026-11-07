@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"slices"
 	"testing"
 	"time"
@@ -110,5 +111,87 @@ func TestHostsLateBound(t *testing.T) {
 	}
 	if v, id := gh.View(); id != ed2.ID() || len(v.Spreads) != n2 {
 		t.Errorf("agents View закэширован при сборке Host: редактор %d (ждали %d), разворотов %d (ждали %d)", id, ed2.ID(), len(v.Spreads), n2)
+	}
+}
+
+// TestFaceHostLateBound — то же для подгона по лицам: редактор, родитель поиска и событие читаются
+// при вызове, а не при сборке Host (отдельно от общего сторожа — предел сложности).
+func TestFaceHostLateBound(t *testing.T) {
+	a := newApp(t)
+	fh := a.faceHost()
+
+	var events []string
+	a.emit = func(name string, _ ...any) { events = append(events, name) }
+	oldCtx := a.stopCtx
+	defer func() { a.stopCtx = oldCtx }()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	a.stopCtx = canceled
+	ed := mustEditor(t, model.New(), "")
+	a.ed.Store(ed)
+
+	if fh.Editor() != ed {
+		t.Error("faces Editor не текущий редактор App")
+	}
+	if fh.Ctx() != canceled || fh.Ctx().Err() == nil {
+		t.Error("faces Ctx не читает подменённый a.stopCtx")
+	}
+	fh.Emit("f")
+	if !slices.Equal(events, []string{"f"}) {
+		t.Errorf("faces Emit: события %v, ждали [f] (подменённый a.emit)", events)
+	}
+	if fh.ExportBusy() {
+		t.Error("faces ExportBusy: экспорта нет, а занятость есть")
+	}
+	// Новый редактор: Host не должен держать прежний.
+	p2 := model.New()
+	p2.Spreads = []*model.Spread{{ID: "s1"}}
+	ed2 := mustEditor(t, p2, "")
+	a.ed.Store(ed2)
+	if fh.Editor() != ed2 {
+		t.Error("faces Editor закэширован при сборке Host")
+	}
+}
+
+// TestLooksHostLateBound — то же для макетов альбома: редактор, папка настроек, кэш превью и лента
+// читаются при вызове, а не при сборке Host (NewApp собирает службу до startup, который их ставит).
+func TestLooksHostLateBound(t *testing.T) {
+	a := newApp(t)
+	lh := a.looksHost()
+
+	dir := testkit.TempDir(t)
+	a.cfgDir = dir
+	ed := mustEditor(t, model.New(), "")
+	a.ed.Store(ed)
+	a.photos = []library.Photo{{ID: "late"}}
+	cache, err := library.NewCache(testkit.TempDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.cache = cache
+
+	if got := lh.CfgDir(); got != dir {
+		t.Errorf("looks CfgDir = %q, ждали %q", got, dir)
+	}
+	if lh.Editor() != ed {
+		t.Error("looks Editor не текущий редактор App")
+	}
+	if lh.Cache() != cache {
+		t.Error("looks Cache закэширован при сборке Host (был nil)")
+	}
+	if f := lh.Feed(); len(f) != 1 || f[0].ID != "late" {
+		t.Errorf("looks Feed = %v: лента не текущая", f)
+	}
+	before := a.mediaSt.cancelled.Load()
+	lh.Cancelled()
+	if a.mediaSt.cancelled.Load() != before+1 {
+		t.Error("looks Cancelled не считает снятый запрос App")
+	}
+	p2 := model.New()
+	p2.Spreads = []*model.Spread{{ID: "s1"}}
+	ed2 := mustEditor(t, p2, "")
+	a.ed.Store(ed2)
+	if lh.Editor() != ed2 {
+		t.Error("looks Editor закэширован при сборке Host")
 	}
 }

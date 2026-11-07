@@ -12,6 +12,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -692,12 +693,12 @@ func TestSeatNamesInvariant(t *testing.T) {
 func lookOp(t *testing.T, e *album.Editor, r *rand.Rand) int {
 	t.Helper()
 	box := func(x float64) model.Box { return model.Box{X: x, Y: 0.1, W: 0.4, H: 0.8} }
-	step := func(role, name string, places ...model.Box) model.LookStep {
-		return model.LookStep{Role: role, Name: name, Tpl: model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Places: places,
-			Page: []model.TplBg{{Color: "#fff0f0"}, {Color: "#f0f0ff"}}}}
+	step := func(role, name string, places ...model.Box) looktpl.LookStep {
+		return looktpl.LookStep{Role: role, Name: name, Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Places: places,
+			Page: []looktpl.TplBg{{Color: "#fff0f0"}, {Color: "#f0f0ff"}}}}
 	}
-	tpl := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{step("", "Начало", box(0.05)),
-		step(model.RoleRepeat, "", box(0.05), box(0.55)), step("", "Конец", box(0.3))}}
+	tpl := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{step("", "Начало", box(0.05)),
+		step(looktpl.RoleRepeat, "", box(0.05), box(0.55)), step("", "Конец", box(0.3))}}
 	ref := model.LookRef{Key: "my:0123456789abcdef", Name: "Тест"}
 	rev, data := edtest.Rev(e), model.Marshal(edtest.P(e))
 	o := model.LookOpts{Spreads: 2 + r.IntN(5)}

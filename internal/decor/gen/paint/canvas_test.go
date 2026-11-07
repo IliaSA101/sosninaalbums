@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"golang.org/x/image/math/f64"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // TestCanvasAff3 — путь стикера идёт через m: зеркало и поворот переносят фигуру; круги и
@@ -70,8 +72,51 @@ func TestGenStrips(t *testing.T) {
 	if bytes.Equal(one.Pix, make([]byte, len(one.Pix))) {
 		t.Fatal("холст пуст — тест ничего не проверяет")
 	}
-	if !bytes.Equal(one.Pix, many.Pix) {
-		t.Error("полосы ≠ одна маска")
+	if testkit.SIMDPath {
+		if !bytes.Equal(one.Pix, many.Pix) { // свойство пути SIMD точное
+			t.Error("полосы ≠ одна маска")
+		}
+		return
+	}
+	// Чистый Go в x/image/vector округляет накопление иначе (класс B, 162): допуск ниже ловит и шов (3200 байт),
+	// и потерю покрытия, но не 1 уровень в единицах байтов.
+	if n, d := stripsDiff(one.Pix, many.Pix); d > stripsMaxLevel || n > len(one.Pix)/stripsMaxShare {
+		t.Errorf("полосы ≠ одна маска: %d байт из %d расходятся, наибольшая разница %d", n, len(one.Pix), d)
+	}
+}
+
+const (
+	stripsMaxLevel = 1     // допуск чистого Go: один уровень яркости
+	stripsMaxShare = 10000 // не больше 1/10000 байтов (0,01 %)
+)
+
+// stripsDiff — число различающихся байтов и наибольшая разница уровней двух буферов одной длины.
+func stripsDiff(a, b []byte) (n, maxd int) {
+	for i := range a {
+		if d := int(a[i]) - int(b[i]); d != 0 {
+			n++
+			maxd = max(maxd, d, -d)
+		}
+	}
+	return n, maxd
+}
+
+// stripsDiff считает расхождения, и допуск не пропускает шов: 3200 байт — провал, единицы байтов на уровень — нет.
+func TestStripsDiff(t *testing.T) {
+	a := make([]byte, 1_536_000)
+	b := bytes.Clone(a)
+	if n, d := stripsDiff(a, b); n != 0 || d != 0 {
+		t.Errorf("равные: %d %d", n, d)
+	}
+	b[5], b[9] = 1, 2
+	if n, d := stripsDiff(a, b); n != 2 || d != 2 {
+		t.Errorf("два байта: %d %d", n, d)
+	}
+	for i := range 3200 {
+		b[i*100] = 1
+	}
+	if n, _ := stripsDiff(a, b); n <= len(a)/stripsMaxShare {
+		t.Errorf("шов в %d байт попал в допуск (%d)", n, len(a)/stripsMaxShare)
 	}
 }
 

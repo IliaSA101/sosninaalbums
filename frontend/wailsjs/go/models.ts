@@ -68,6 +68,7 @@ export namespace app {
 	    label: string;
 	    chosen: boolean;
 	    bound: boolean;
+	    bindable: boolean;
 	    narrow: boolean;
 	    narrowRoot: boolean;
 	    state: string;
@@ -84,6 +85,7 @@ export namespace app {
 	        this.label = source["label"];
 	        this.chosen = source["chosen"];
 	        this.bound = source["bound"];
+	        this.bindable = source["bindable"];
 	        this.narrow = source["narrow"];
 	        this.narrowRoot = source["narrowRoot"];
 	        this.state = source["state"];
@@ -655,6 +657,81 @@ export namespace app {
 	        this.print = source["print"];
 	    }
 	}
+	export class ExportSizeIn {
+	    scope: string;
+	    dpi: number;
+	    quality: number;
+	    pages: boolean;
+	    units: number[];
+	    badRange: boolean;
+	    cover: boolean;
+	    only: boolean;
+	    print: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportSizeIn(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
+	        this.dpi = source["dpi"];
+	        this.quality = source["quality"];
+	        this.pages = source["pages"];
+	        this.units = source["units"];
+	        this.badRange = source["badRange"];
+	        this.cover = source["cover"];
+	        this.only = source["only"];
+	        this.print = source["print"];
+	    }
+	}
+	export class ExportSizeQ {
+	    quality: number;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportSizeQ(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.quality = source["quality"];
+	        this.text = source["text"];
+	    }
+	}
+	export class ExportSizeOut {
+	    summary: string;
+	    per: ExportSizeQ[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportSizeOut(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.summary = source["summary"];
+	        this.per = this.convertValues(source["per"], ExportSizeQ);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ExportStarted {
 	    started: boolean;
 	    files: number;

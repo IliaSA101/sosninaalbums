@@ -241,20 +241,24 @@ func (e *toolEnv) invoke(ctx context.Context, c *call, spec toolSpec, raw json.R
 	}
 	ch := make(chan result, 1)
 	go func() {
-		defer func() {
-			if !spec.await {
-				<-e.sem
-			}
+		var res result
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					logPanic("tool body", p)
+					res = result{err: errInternal}
+				}
+			}()
+			v, err := exec(c, raw)
+			res = result{v, err}
 		}()
-		defer cancel()
-		defer func() {
-			if p := recover(); p != nil {
-				logPanic("tool body", p)
-				ch <- result{err: errInternal}
-			}
-		}()
-		v, err := exec(c, raw)
-		ch <- result{v, err}
+		// Место — до отправки итога: клиент получает ответ и сразу шлёт следующий вызов, а место,
+		// освобождённое после ответа, давало живому агенту ложное «занято» (при MaxCalls=1 — всегда в гонке).
+		if !spec.await {
+			<-e.sem
+		}
+		ch <- res
+		cancel() // после итога: иначе invoke увидит конец контекста раньше результата
 	}()
 	select {
 	case r := <-ch:

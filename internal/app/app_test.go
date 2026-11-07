@@ -304,6 +304,19 @@ func TestRotateLog(t *testing.T) {
 	}
 }
 
+// TestRotateLogNotLocalDir: log.txt — свой файл программы, ротация не требует «локального» пути (папка данных на UNC —
+// перенаправленный %APPDATA%): путь, который CheckLocalPath отверг бы (относительный), всё равно ротируется.
+func TestRotateLogNotLocalDir(t *testing.T) {
+	t.Chdir(testkit.TempDir(t))
+	if err := os.WriteFile("log.txt", make([]byte, 100), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rotateLog("log.txt", 50)
+	if _, err := os.Stat("log.old.txt"); err != nil {
+		t.Fatal("лог с нелокальным путём не ротируется:", err)
+	}
+}
+
 // newApp — App для теста: к очистке теста фоновая работа (сканирование, прогрев, чистка кэша,
 // автосохранение) остановлена и дождана, а папки теста удаляются уже после этого —
 // иначе горутина программы ещё пишет в удаляемую папку или держит её открытой (Windows:

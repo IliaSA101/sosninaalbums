@@ -14,7 +14,9 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum/collect"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/export/printshop"
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -216,7 +218,7 @@ func replaceAlbumQuestion(path string) (string, error) {
 		return "", nil
 	case err != nil:
 		return "", paths.NoPath(err)
-	case !st.Mode().IsRegular():
+	case !imgfile.RegularOrCloud(path, st):
 		return "", fmt.Errorf("на месте «%s» — папка или ссылка: выберите другую папку", filepath.Base(path))
 	}
 	return fmt.Sprintf("В папке уже есть «%s» (изменён %s). Заменить? Прежний уйдёт в резервные копии.",
@@ -258,7 +260,7 @@ func (a *App) runCollect(ctx context.Context, cancel context.CancelFunc, j colle
 		log.Printf("сбор: %v", paths.NoPath(err))
 	} else {
 		files, size, _ := planTotals(j.pl)
-		log.Printf("сбор: %d %s (%s) за %v", files, plural(files, "файл", "файла", "файлов"),
+		log.Printf("сбор: %d %s (%s) за %v", files, agentasktext.Plural(files, "файл", "файла", "файлов"),
 			collect.SizeText(size), time.Since(start).Round(time.Second))
 	}
 	// Флаг — до события: окно по collect:done снова даёт «Собрать…», и повтор сразу не должен
@@ -351,9 +353,9 @@ func collectOutcome(pl collect.Plan, copied int, err error, copyFailed bool) (ms
 	case err != nil:
 		return paths.NoPath(err).Error(), "", false
 	}
-	note = fmt.Sprintf("Проект собран: %d %s, %s", files, plural(files, "файл", "файла", "файлов"), collect.SizeText(size))
+	note = fmt.Sprintf("Проект собран: %d %s, %s", files, agentasktext.Plural(files, "файл", "файла", "файлов"), collect.SizeText(size))
 	if skipped > 0 {
-		note += fmt.Sprintf(" (%d уже %s в папке)", skipped, plural(skipped, "был", "были", "были"))
+		note += fmt.Sprintf(" (%d уже %s в папке)", skipped, agentasktext.Plural(skipped, "был", "были", "были"))
 	}
 	var tail []string
 	if n := pl.Info().Missing; n > 0 { // по файлам: копии одного файла — одно фото
@@ -375,7 +377,7 @@ func missingQuestion(photos, guides int) string {
 		what = append(what, fmt.Sprintf("%d фото", photos))
 	}
 	if guides > 0 {
-		what = append(what, fmt.Sprintf("%d %s типографии", guides, plural(guides, "разметка", "разметки", "разметок")))
+		what = append(what, fmt.Sprintf("%d %s типографии", guides, agentasktext.Plural(guides, "разметка", "разметки", "разметок")))
 	}
 	switch {
 	case len(what) == 0:
@@ -386,21 +388,4 @@ func missingQuestion(photos, guides int) string {
 		return "1 разметка типографии не найдена — в папку она не попадёт, в собранном альбоме останется со старым путём. Собрать без неё?"
 	}
 	return strings.Join(what, " и ") + " не найдены — в папку они не попадут, в собранном альбоме останутся со старым путём. Собрать без них?"
-}
-
-// plural — форма слова при числе n: 1 файл, 2 файла, 5 файлов (11–14 — «много»).
-func plural(n int, one, few, many string) string {
-	n %= 100
-	if n < 0 {
-		n = -n
-	}
-	switch {
-	case n >= 11 && n <= 14:
-		return many
-	case n%10 == 1:
-		return one
-	case n%10 >= 2 && n%10 <= 4:
-		return few
-	}
-	return many
 }

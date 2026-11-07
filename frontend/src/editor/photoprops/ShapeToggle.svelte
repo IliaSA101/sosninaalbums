@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Seg, { type SegItem } from '../../base/tpl/Seg.svelte'
+  import type { ShapeKey } from '../../base/geom/shape'
   import { placesel } from '../places/placesel.svelte'
   import TiltRow from './TiltRow.svelte'
   import { SHAPE_BTNS, SHAPE_ROW, pressedOf } from './shapetoggle'
@@ -7,18 +9,13 @@
   // выделенных; у «Авто» ▢ и ◯ закрепляют разворот). Под строкой у некруглых — «Скругление, %» (строка «Наклон, °»
   // с другими пределами): предпросмотр на ходу, SetPlaceRound — на отпускании. У круга строки нет.
   const n = $derived(placesel.selected.length)
+  const ITEMS: SegItem<ShapeKey>[] = SHAPE_BTNS.map((b) => ({ id: b.key, label: b.glyph, title: b.title, aria: b.title }))
+  const pressed = $derived(SHAPE_BTNS.filter((b) => pressedOf(b.key, placesel)).map((b) => b.key))
 </script>
 
 <div class="row" data-guide="shape-toggle">
   <span class="cap">{SHAPE_ROW}</span>
-  <div class="seg" role="group" aria-label="Форма места">
-    {#each SHAPE_BTNS as b (b.key)}
-      {@const on = pressedOf(b.key, placesel)}
-      <button class:on disabled={n === 0} aria-pressed={on} aria-label={b.title} title={b.title} onclick={() => placesel.setShape(b.key)}
-        >{b.glyph}</button
-      >
-    {/each}
-  </div>
+  <Seg look="card" grow big label="Форма места" items={ITEMS} values={pressed} off={n === 0} onpick={(k) => placesel.setShape(k)} />
 </div>
 {#if placesel.hasRound}
   <TiltRow
@@ -50,28 +47,5 @@
   .cap {
     flex: none;
     color: #cfcfd4;
-  }
-  .seg {
-    flex: 1;
-    display: flex;
-    border-radius: 5px;
-    overflow: hidden;
-  }
-  .seg button {
-    flex: 1;
-    height: 26px;
-    padding: 0 6px;
-    font-size: 14px;
-    line-height: 1;
-    border-radius: 0;
-    background: #38383c;
-    color: #cfcfd4;
-  }
-  .seg button.on {
-    background: var(--accent);
-    color: #1e1e1e;
-  }
-  .seg button.on:hover:not(:disabled) {
-    background: #ffe53a;
   }
 </style>

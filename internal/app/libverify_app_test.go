@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -125,7 +126,7 @@ func TestLibraryVerifyTitleClash(t *testing.T) {
 // lvAspectTpl — файл шаблона разворота с заданными местами и без стикеров (фон из набора).
 func lvAspectTpl(t *testing.T, name, bg string, places []model.Box) pfile {
 	t.Helper()
-	tpl := model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Places: places, Page: []model.TplBg{{Lib: bg}, {Lib: bg}}}
+	tpl := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Places: places, Page: []looktpl.TplBg{{Lib: bg}, {Lib: bg}}}
 	data, err := json.Marshal(tpl)
 	if err != nil {
 		t.Fatal(err)

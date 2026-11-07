@@ -12,6 +12,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -70,7 +71,7 @@ func lkBgColors(e *album.Editor) []string {
 }
 
 // lkPlanned — PlanLook и ApplyLook с одними параметрами дают один план; PlanLook ничего не меняет.
-func lkPlanned(t *testing.T, e *album.Editor, ref model.LookRef, tpl model.AlbumTpl, prev album.LookFinder, o model.LookOpts) model.LookPlan {
+func lkPlanned(t *testing.T, e *album.Editor, ref model.LookRef, tpl looktpl.AlbumTpl, prev album.LookFinder, o model.LookOpts) model.LookPlan {
 	t.Helper()
 	rev, data := e.View().Rev, lkJSON(e)
 	want, err := e.PlanLook(ref, tpl, prev, o, nil)
@@ -163,7 +164,7 @@ func TestApplyLookAddCases(t *testing.T) {
 		}
 	})
 	t.Run("нет повтора", func(t *testing.T) {
-		tpl := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "А", "#111111", 1), lkStep("", "Б", "#222222", 2), lkVig("Класс", 3)}}
+		tpl := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "А", "#111111", 1), lkStep("", "Б", "#222222", 2), lkVig("Класс", 3)}}
 		e := edtest.GridEd(t, []*model.Place{edtest.Gp(10, 10, 100, 60, "a")})
 		lkPlanned(t, e, lkRefA, tpl, nil, model.LookOpts{Mode: model.LookAdd, Spreads: 2})
 		if got := lkSteps(lkRows(e)); !slices.Equal(got, []int{0, 2, 2}) {
@@ -248,7 +249,7 @@ func TestApplyLookBgKeepsAll(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, a := lookB(), lookA()
-	b.Cover = &model.CoverTpl{Bg: &model.TplBg{Color: "#334455"}}
+	b.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#334455"}}
 	keep, json0, undo := lkNoBg(e), lkJSON(e), edtest.UndoLen(e)
 
 	o := model.LookOpts{Mode: model.LookBg}
@@ -327,8 +328,8 @@ func TestApplyLookBgSaveLoad(t *testing.T) {
 // Фоны по серии: собранный альбом без разворотов и без фото на фоне, нет шага vignette — виньетка
 // не трогается, обложки в модели нет — пропуск.
 func TestApplyLookBgEdges(t *testing.T) {
-	noVig := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "А", "#111111", 1), lkStep(model.RoleRepeat, "", "#222222", 1)}}
-	noVig.Cover = &model.CoverTpl{Bg: &model.TplBg{Color: "#334455"}}
+	noVig := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "А", "#111111", 1), lkStep(looktpl.RoleRepeat, "", "#222222", 1)}}
+	noVig.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#334455"}}
 	e := lkBuilt(t, 2)
 	before := lkBgColors(e)
 	plan := lkPlanned(t, e, lkRefB, noVig, nil, model.LookOpts{Mode: model.LookBg})
@@ -356,7 +357,7 @@ func TestApplyLookBgEdges(t *testing.T) {
 		}
 	}
 	// Голый разворот, которому шаг не даёт фона, якорем не становится.
-	plain := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "А", "", 1)}}
+	plain := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "А", "", 1)}}
 	e = lkBuilt(t, 2)
 	if _, err := e.NewSpread(-1, edtest.Photos("bare1")); err != nil {
 		t.Fatal(err)
@@ -365,7 +366,7 @@ func TestApplyLookBgEdges(t *testing.T) {
 		t.Fatalf("якорей %d, ждали 0", plan.Anchors)
 	}
 	// Пустой макет и макет без ключа — отказ.
-	if _, _, err := e.ApplyLook(lkRefB, model.AlbumTpl{}, nil, model.LookOpts{Mode: model.LookBg}, nil); !errors.Is(err, model.ErrTplEmpty) {
+	if _, _, err := e.ApplyLook(lkRefB, looktpl.AlbumTpl{}, nil, model.LookOpts{Mode: model.LookBg}, nil); !errors.Is(err, looktpl.ErrTplEmpty) {
 		t.Fatalf("пустой макет: %v", err)
 	}
 }
@@ -396,7 +397,7 @@ func TestNewLookSpread(t *testing.T) {
 	if _, err := e2.NewLookSpread(lookA(), nil); !errors.Is(err, album.ErrNoLook) || e2.View().Rev != rev || edtest.UndoLen(e2) != undo || lkJSON(e2) != data {
 		t.Fatalf("нет макета: %v", err)
 	}
-	if _, err := e2.NewLookSpread(model.AlbumTpl{}, nil); !errors.Is(err, model.ErrTplEmpty) {
+	if _, err := e2.NewLookSpread(looktpl.AlbumTpl{}, nil); !errors.Is(err, looktpl.ErrTplEmpty) {
 		t.Fatalf("пустой макет: %v", err)
 	}
 	// Предел.
@@ -425,9 +426,9 @@ func TestNewLookSpread(t *testing.T) {
 // Стоимость: «Фоны по серии», «Добавить» и смена формата с макетом на 120 разворотах × 5 фото.
 func TestApplyLookFullFast(t *testing.T) {
 	testkit.CostTest(t)
-	steps := []model.LookStep{lkStep("", "Начало", "#ffffff", 5), lkStep(model.RoleRepeat, "", "#eeeeee", 5), lkStep("", "Конец", "#dddddd", 5)}
-	tpl := model.AlbumTpl{V: model.LookV, Steps: steps}
-	other := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "Начало", "#111111", 5), lkStep(model.RoleRepeat, "", "#222222", 5)}}
+	steps := []looktpl.LookStep{lkStep("", "Начало", "#ffffff", 5), lkStep(looktpl.RoleRepeat, "", "#eeeeee", 5), lkStep("", "Конец", "#dddddd", 5)}
+	tpl := looktpl.AlbumTpl{V: looktpl.LookV, Steps: steps}
+	other := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "Начало", "#111111", 5), lkStep(looktpl.RoleRepeat, "", "#222222", 5)}}
 	ids := make([]string, 600)
 	for i := range ids {
 		ids[i] = "p" + string(rune('a'+i/26/26%26)) + string(rune('a'+i/26%26)) + string(rune('a'+i%26))
@@ -463,12 +464,12 @@ func timed(best time.Duration, fn func()) time.Duration {
 
 // lkOverflow — макет, чей повторяемый шаг-страница с MaxTexts заготовок на развороте даёт вдвое
 // больше (зеркало): постановка этого шага отказывает.
-func lkOverflow() model.AlbumTpl {
-	st := model.LookStep{Role: model.RoleRepeat, Tpl: model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: lkPlaces(1), Page: []model.TplBg{{Color: "#ffffff"}}}}
+func lkOverflow() looktpl.AlbumTpl {
+	st := looktpl.LookStep{Role: looktpl.RoleRepeat, Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: lkPlaces(1), Page: []looktpl.TplBg{{Color: "#ffffff"}}}}
 	for range model.MaxTexts {
-		st.Tpl.Drafts = append(st.Tpl.Drafts, model.TplText{W: 0.2, Text: "[Имя]", Style: model.PlainStyle()})
+		st.Tpl.Drafts = append(st.Tpl.Drafts, looktpl.TplText{W: 0.2, Text: "[Имя]", Style: model.PlainStyle()})
 	}
-	return model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "Титул", "#ffffff", 1), st}}
+	return looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "Титул", "#ffffff", 1), st}}
 }
 
 // Отказ постановки шага в «Добавить», «Поставить на разворот» и «Разворот макета»: альбом прежний,
@@ -494,8 +495,8 @@ func TestApplyLookFullStepRefused(t *testing.T) {
 func TestApplyLookBgLibPhoto(t *testing.T) {
 	const key = "my:00000000000000aa"
 	tpl := lookB()
-	tpl.Steps[2].Tpl.Whole = &model.TplBg{Lib: key, Fade: 0.2}
-	tpl.Cover = &model.CoverTpl{Bg: &model.TplBg{Lib: key}}
+	tpl.Steps[2].Tpl.Whole = &looktpl.TplBg{Lib: key, Fade: 0.2}
+	tpl.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Lib: key}}
 	e := lkBuilt(t, 2)
 	if _, err := e.CreateCover("", nil); err != nil {
 		t.Fatal(err)
@@ -524,7 +525,7 @@ func TestApplyLookBgLibPhoto(t *testing.T) {
 func TestSwitchLookFinderInvalid(t *testing.T) {
 	e := lkEditor(t)
 	lkApply(t, e, lkRefA, lookA(), nil, 9)
-	empty := func(model.LookRef) *model.AlbumTpl { return &model.AlbumTpl{} }
+	empty := func(model.LookRef) *looktpl.AlbumTpl { return &looktpl.AlbumTpl{} }
 	plan, err := e.PlanLook(lkRefB, lookB(), empty, model.LookOpts{Spreads: 6}, nil)
 	if err != nil || plan.Touched != 9 {
 		t.Fatalf("тронутых %d, ждали 9 (%v)", plan.Touched, err)
@@ -541,15 +542,15 @@ func lkCoverEd(t *testing.T, ph *model.PhotoInfo) *album.Editor {
 	return e
 }
 
-func lkCoverLook(base model.AlbumTpl, bg model.TplBg) model.AlbumTpl {
-	base.Cover = &model.CoverTpl{Bg: &bg}
+func lkCoverLook(base looktpl.AlbumTpl, bg looktpl.TplBg) looktpl.AlbumTpl {
+	base.Cover = &looktpl.CoverTpl{Bg: &bg}
 	return base
 }
 
 // «Фоны по серии» и свой фон обложки: цвет, фото из съёмки и фото корешка при фото всего листа
 // считаются в Replaced (вопрос сценария 6); фон прежнего макета «своим» не считается.
 func TestApplyLookBgCoverOwn(t *testing.T) {
-	a, bg := lookA(), model.TplBg{Color: "#334455"}
+	a, bg := lookA(), looktpl.TplBg{Color: "#334455"}
 	b := lkCoverLook(lookB(), bg)
 	o := model.LookOpts{Mode: model.LookBg}
 	t.Run("свой цвет", func(t *testing.T) {
@@ -578,7 +579,7 @@ func TestApplyLookBgCoverOwn(t *testing.T) {
 	t.Run("фон прежнего макета", func(t *testing.T) {
 		e := lkCoverEd(t, nil)
 		lkPlanned(t, e, lkRefB, b, lkPrev(a), o)
-		next := lkCoverLook(lookA(), model.TplBg{Color: "#556677"})
+		next := lkCoverLook(lookA(), looktpl.TplBg{Color: "#556677"})
 		if plan := lkPlanned(t, e, lkRefA, next, lkPrev(b), o); plan.Replaced != 0 || !plan.Cover {
 			t.Fatalf("фон прежнего макета посчитан своим: %+v", plan)
 		}
@@ -596,7 +597,7 @@ func TestApplyLookBgCoverOwn(t *testing.T) {
 			t.Fatal("фото корешка не встало — тест ничего не проверяет")
 		}
 		libs := map[string]model.PhotoInfo{key: {ID: model.LibPhotoID(key), Path: edtest.Abs("lib.jpg"), W: 300, H: 200, Lib: key}}
-		photo := lkCoverLook(lookB(), model.TplBg{Lib: key})
+		photo := lkCoverLook(lookB(), looktpl.TplBg{Lib: key})
 		_, plan, err := e.ApplyLook(lkRefB, photo, lkPrev(a), o, libs)
 		if err != nil || plan.Replaced != 1 {
 			t.Fatalf("план: %+v, %v", plan, err)
@@ -635,16 +636,16 @@ func TestNewLookSpreadChanged(t *testing.T) {
 	e := lkBuilt(t, 2)
 	json0, undo, rev := lkJSON(e), edtest.UndoLen(e), e.View().Rev
 	b := lookB()
-	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *model.AlbumTpl { return &b }})
+	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *looktpl.AlbumTpl { return &b }})
 	if _, err := e.NewLookSpread(lookA(), nil); !errors.Is(err, album.ErrLookChanged) || lkJSON(e) != json0 || edtest.UndoLen(e) != undo || e.View().Rev != rev {
 		t.Fatalf("макет сменился: %v", err)
 	}
 	a := lookA()
-	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *model.AlbumTpl { return &a }})
+	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *looktpl.AlbumTpl { return &a }})
 	if _, err := e.NewLookSpread(lookA(), nil); err != nil {
 		t.Fatalf("тот же макет: %v", err)
 	}
-	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *model.AlbumTpl { return nil }}) // макета в реестре нет — как без библиотеки
+	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *looktpl.AlbumTpl { return nil }}) // макета в реестре нет — как без библиотеки
 	if _, err := e.NewLookSpread(lookA(), nil); err != nil {
 		t.Fatalf("макета в реестре нет: %v", err)
 	}
@@ -674,7 +675,7 @@ func TestLookHostFormat(t *testing.T) {
 	want, bare, host, all := mk(), mk(), mk(), mk()
 	want.SetSettingsLook(ns, &a)
 	bare.SetSettings(ns)
-	find := func(model.LookRef) *model.AlbumTpl { return &a }
+	find := func(model.LookRef) *looktpl.AlbumTpl { return &a }
 	host.SetLookHost(album.LookHost{Find: find})
 	host.SetSettings(ns)
 	all.SetLookHost(album.LookHost{Find: find})
@@ -698,7 +699,7 @@ func TestLookHostFormat(t *testing.T) {
 func lkForeignHost(e *album.Editor) {
 	a, b := lookA(), lookB()
 	e.SetLookHost(album.LookHost{
-		Find: func(r model.LookRef) *model.AlbumTpl {
+		Find: func(r model.LookRef) *looktpl.AlbumTpl {
 			if r.Key == lkKeyA {
 				return &a
 			}

@@ -82,6 +82,7 @@ type photoCtx struct {
 	marks   map[string]model.MarkView
 	missing map[string]bool
 	unread  map[string]bool
+	cloud   map[string]bool // из unread: файл только в облаке (library.WhyCloudOnly), не повреждён
 	used    map[string]bool
 	folders folderIndex
 }
@@ -98,9 +99,12 @@ func (c *call) photoCtx() (*photoCtx, error) {
 	for _, id := range miss {
 		pc.missing[model.BaseID(id)] = true
 	}
-	pc.unread = map[string]bool{}
-	for id := range unread {
+	pc.unread, pc.cloud = map[string]bool{}, map[string]bool{}
+	for id, why := range unread {
 		pc.unread[model.BaseID(id)] = true
+		if why == library.WhyCloudOnly {
+			pc.cloud[model.BaseID(id)] = true
+		}
 	}
 	return pc, nil
 }

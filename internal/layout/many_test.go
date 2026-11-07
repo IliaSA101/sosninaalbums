@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -287,9 +286,7 @@ func TestGoldenMany(t *testing.T) {
 	if testkit.Race {
 		t.Skip("чистый счёт в одной горутине: под -race проверяет обычный прогон")
 	}
-	if runtime.GOARCH != "amd64" {
-		t.Skip("эталон снят на amd64")
-	}
+	testkit.RequireNoFMA(t)
 	checkGolden(t, goldenManyPath, goldenMany(false))
 	checkGolden(t, goldenManyWidePath, goldenMany(true)) // «только широкие» (064)
 }

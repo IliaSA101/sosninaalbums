@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -24,6 +25,9 @@ type quietRig struct {
 	*askRig
 	place, shoot string
 }
+
+// countQuiet — подсчёт папки агента с подменами App (сам обход проверяет пакет agentplaces).
+func countQuiet(root string) agentplaces.QuietTally { return countQuietCap(root, true, quietTimeout) }
 
 func realPath(t *testing.T, p string) string {
 	t.Helper()
@@ -271,7 +275,7 @@ func TestQuietCount(t *testing.T) {
 		{"пусто", r.mkdir(t, "пусто"), false},
 	}
 	for _, c := range cases {
-		if got := countQuiet(c.dir); got.over() != c.over || got.cloud {
+		if got := countQuiet(c.dir); got.Over() != c.over || got.Cloud {
 			t.Errorf("%s: %+v, ждали over=%v", c.name, got, c.over)
 		}
 	}
@@ -292,7 +296,7 @@ func TestQuietCount(t *testing.T) {
 	t.Cleanup(func() { quietPause, quietTimeout = oldPause, oldTO })
 	start := time.Now()
 	got := countQuiet(r.shoot)
-	if !got.over() || time.Since(start) > testkit.Limit(3*time.Second) {
+	if !got.Over() || time.Since(start) > testkit.Limit(3*time.Second) {
 		t.Errorf("зависший диск: %+v за %v", got, time.Since(start))
 	}
 	close(release)
@@ -307,7 +311,7 @@ func TestQuietPlaceholder(t *testing.T) {
 	if ev := r.refuse(t, c, 1); ev.Why != whyCloud {
 		t.Errorf("заглушка: %+v", ev)
 	}
-	if got := countQuiet(r.shoot); got.cloud || got.photos != 2 {
+	if got := countQuiet(r.shoot); got.Cloud || got.Photos != 2 {
 		t.Errorf("обычная папка: %+v", got)
 	}
 }

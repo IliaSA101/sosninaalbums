@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -18,15 +19,15 @@ import (
 
 // lvStep — шаг-разворот (pages 2) или страница (pages 1) с фоном bg и местами в долях области;
 // ratio — эталон отношения сторон области, при котором нарисованы места.
-func lvStep(pages int, ratio float64, bg string, places ...model.Box) model.LookStep {
-	page := []model.TplBg{{Lib: bg}, {Lib: bg}}[:pages]
-	return model.LookStep{Tpl: model.SpreadTpl{V: model.TplV, Pages: pages, Ratio: ratio, Places: places, Page: page}}
+func lvStep(pages int, ratio float64, bg string, places ...model.Box) looktpl.LookStep {
+	page := []looktpl.TplBg{{Lib: bg}, {Lib: bg}}[:pages]
+	return looktpl.LookStep{Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: pages, Ratio: ratio, Places: places, Page: page}}
 }
 
 // lvLook — файл макета альбома для набора.
-func lvLook(t *testing.T, name string, cover *model.CoverTpl, steps ...model.LookStep) pfile {
+func lvLook(t *testing.T, name string, cover *looktpl.CoverTpl, steps ...looktpl.LookStep) pfile {
 	t.Helper()
-	data, err := json.Marshal(model.AlbumTpl{V: model.LookV, Cover: cover, Steps: steps})
+	data, err := json.Marshal(looktpl.AlbumTpl{V: looktpl.LookV, Cover: cover, Steps: steps})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,29 +56,29 @@ func TestVerifyLookAspectWarn(t *testing.T) {
 	oval.Shape = model.ShapeOval
 	good := lvStep(2, 2, bg, portrait, landscape)
 	vig := lvStep(2, 2, bg)
-	vig.Role, vig.Vig = model.RoleVignette, &model.LookVig{Tpl: model.DefaultVignette().Tpl, Teachers: 1, Pupils: 24}
+	vig.Role, vig.Vig = looktpl.RoleVignette, &looktpl.LookVig{Tpl: model.DefaultVignette().Tpl, Teachers: 1, Pupils: 24}
 
 	cases := []struct {
 		name  string
-		steps []model.LookStep
+		steps []looktpl.LookStep
 		warn  string // "" — предупреждения нет
 	}{
-		{"all-square", []model.LookStep{lvStep(2, 2, bg, square, square)}, "шаг 1: 2 из 2 мест не 3:2 / 2:3"},
-		{"second-step", []model.LookStep{good, lvStep(2, 2, bg, portrait, square, square)}, "шаг 2: 2 из 3 мест не 3:2 / 2:3 (подходят 33%"},
-		{"portrait-landscape", []model.LookStep{good}, ""},
-		{"edge-15", []model.LookStep{lvStep(2, 2, bg, edge, portrait)}, ""},
-		{"four-of-five", []model.LookStep{lvStep(2, 2, bg, portrait, landscape, slightly, edge, square)}, ""}, // ровно 80 %
-		{"three-of-four", []model.LookStep{lvStep(2, 2, bg, portrait, landscape, slightly, square)}, "шаг 1: 1 из 4 мест"},
-		{"oval-only", []model.LookStep{good, lvStep(2, 2, bg, oval, oval)}, ""}, // фигуры по замыслу автора не считаются
-		{"empty-places", []model.LookStep{good, lvStep(2, 2, bg)}, ""},
+		{"all-square", []looktpl.LookStep{lvStep(2, 2, bg, square, square)}, "шаг 1: 2 из 2 мест не 3:2 / 2:3"},
+		{"second-step", []looktpl.LookStep{good, lvStep(2, 2, bg, portrait, square, square)}, "шаг 2: 2 из 3 мест не 3:2 / 2:3 (подходят 33%"},
+		{"portrait-landscape", []looktpl.LookStep{good}, ""},
+		{"edge-15", []looktpl.LookStep{lvStep(2, 2, bg, edge, portrait)}, ""},
+		{"four-of-five", []looktpl.LookStep{lvStep(2, 2, bg, portrait, landscape, slightly, edge, square)}, ""}, // ровно 80 %
+		{"three-of-four", []looktpl.LookStep{lvStep(2, 2, bg, portrait, landscape, slightly, square)}, "шаг 1: 1 из 4 мест"},
+		{"oval-only", []looktpl.LookStep{good, lvStep(2, 2, bg, oval, oval)}, ""}, // фигуры по замыслу автора не считаются
+		{"empty-places", []looktpl.LookStep{good, lvStep(2, 2, bg)}, ""},
 		// Эталон Ratio: на Ratio 3 место 0,25×0,5 — 3:2, и LookBoxes сохраняет пропорцию на любой странице.
-		{"ratio-3", []model.LookStep{lvStep(2, 3, bg, model.Box{X: 0.1, Y: 0.2, W: 0.25, H: 0.5})}, ""},
-		{"ratio-3-not-fit", []model.LookStep{lvStep(2, 3, bg, model.Box{X: 0.1, Y: 0.2, W: 0.15, H: 0.5})}, "шаг 1: 1 из 1 мест не 3:2 / 2:3"}, // 0,9
-		{"page-step", []model.LookStep{lvStep(1, 1, bg, model.Box{X: 0.1, Y: 0.2, W: 0.75, H: 0.5})}, ""},                                      // 1,5
-		{"page-step-square", []model.LookStep{lvStep(1, 1, bg, model.Box{X: 0.1, Y: 0.1, W: 0.5, H: 0.5})}, "шаг 1: 1 из 1 мест не 3:2 / 2:3"},
+		{"ratio-3", []looktpl.LookStep{lvStep(2, 3, bg, model.Box{X: 0.1, Y: 0.2, W: 0.25, H: 0.5})}, ""},
+		{"ratio-3-not-fit", []looktpl.LookStep{lvStep(2, 3, bg, model.Box{X: 0.1, Y: 0.2, W: 0.15, H: 0.5})}, "шаг 1: 1 из 1 мест не 3:2 / 2:3"}, // 0,9
+		{"page-step", []looktpl.LookStep{lvStep(1, 1, bg, model.Box{X: 0.1, Y: 0.2, W: 0.75, H: 0.5})}, ""},                                      // 1,5
+		{"page-step-square", []looktpl.LookStep{lvStep(1, 1, bg, model.Box{X: 0.1, Y: 0.1, W: 0.5, H: 0.5})}, "шаг 1: 1 из 1 мест не 3:2 / 2:3"},
 		// Без ratio зажим ставит 1 (как программа): место 0,6×0,4 — 3:2 на эталоне 1 и 3:1 на 2.
-		{"no-ratio", []model.LookStep{lvStep(2, 0, bg, model.Box{X: 0.2, Y: 0.3, W: 0.6, H: 0.4})}, ""},
-		{"vignette-not-counted", []model.LookStep{good, vig}, ""}, // оформление виньетки без мест
+		{"no-ratio", []looktpl.LookStep{lvStep(2, 0, bg, model.Box{X: 0.2, Y: 0.3, W: 0.6, H: 0.4})}, ""},
+		{"vignette-not-counted", []looktpl.LookStep{good, vig}, ""}, // оформление виньетки без мест
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -112,12 +113,12 @@ func TestLibraryVerifyLooks(t *testing.T) {
 	g := buildLibVerify(t)
 	files, bg, st := lvGood(t)
 	bgFile, stFile := files[0], files[1]
-	two := []model.Box{{X: 0.11, Y: 0.08, W: 0.28, H: 0.84}, {X: 0.6, Y: 0.08, W: 0.3, H: 0.4}}                                                        // 2:3 и 3:2 при Ratio 2
-	front := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.2, Y: 0.2, W: 0.6, H: 0.4}}, Page: []model.TplBg{{Lib: bg}}} // 1,5
-	cover := &model.CoverTpl{Bg: &model.TplBg{Lib: bg}, Front: &front}
-	sticker := model.TplItem{W: 0.2, H: 0.2, Lib: st}
+	two := []model.Box{{X: 0.11, Y: 0.08, W: 0.28, H: 0.84}, {X: 0.6, Y: 0.08, W: 0.3, H: 0.4}}                                                              // 2:3 и 3:2 при Ratio 2
+	front := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.2, Y: 0.2, W: 0.6, H: 0.4}}, Page: []looktpl.TplBg{{Lib: bg}}} // 1,5
+	cover := &looktpl.CoverTpl{Bg: &looktpl.TplBg{Lib: bg}, Front: &front}
+	sticker := looktpl.TplItem{W: 0.2, H: 0.2, Lib: st}
 	withSticker := lvStep(2, 2, bg, two...)
-	withSticker.Tpl.Stickers = []model.TplItem{sticker}
+	withSticker.Tpl.Stickers = []looktpl.TplItem{sticker}
 
 	text, code := g.run(t, "-app", "0.28.0", lvLayouts(t, "wedding-layouts", bgFile, stFile, lvLook(t, "ok", cover, lvStep(2, 2, bg, two...), withSticker)))
 	if code != 0 || !strings.Contains(text, "шагов 2, сторон обложки 1, фон обложки true") || strings.Contains(text, "WARN") {
@@ -127,8 +128,8 @@ func TestLibraryVerifyLooks(t *testing.T) {
 	low := lvBg(t, 1200, 900, 0xc0) // 76 dpi
 	lowKey := lvKey(low)
 	outside := withSticker
-	outside.Tpl.Stickers = []model.TplItem{{Anchor: model.Anchor{AX: -1, AY: -1}, W: 0.2, H: 0.2, Lib: st}} // центр в углу листа
-	badCover := &model.CoverTpl{Front: &model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.2, Y: 0.2, W: 0.6, H: 0.4}}, Page: []model.TplBg{{Lib: lowKey}}}}
+	outside.Tpl.Stickers = []looktpl.TplItem{{Anchor: looktpl.Anchor{AX: -1, AY: -1}, W: 0.2, H: 0.2, Lib: st}} // центр в углу листа
+	badCover := &looktpl.CoverTpl{Front: &looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.2, Y: 0.2, W: 0.6, H: 0.4}}, Page: []looktpl.TplBg{{Lib: lowKey}}}}
 	out := testkit.TempDir(t)
 	bad := lvLayouts(t, "wedding-layouts", bgFile, stFile, pfile{name: "bg/low.jpg", kind: "bg", data: low},
 		lvLook(t, "a", badCover, lvStep(2, 2, lowKey, two...)), lvLook(t, "b", nil, outside, lvStep(2, 2, bg, two...)))
@@ -219,9 +220,9 @@ func TestLibraryVerifyLookSheet(t *testing.T) {
 	g := buildLibVerify(t)
 	files, bg, _ := lvGood(t)
 	two := []model.Box{{X: 0.11, Y: 0.08, W: 0.28, H: 0.84}, {X: 0.6, Y: 0.08, W: 0.3, H: 0.4}}
-	front := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.2, Y: 0.2, W: 0.6, H: 0.4}}, Page: []model.TplBg{{Lib: bg}}}
-	cover := &model.CoverTpl{Bg: &model.TplBg{Lib: bg}, Front: &front}
-	steps := []model.LookStep{lvStep(2, 2, bg, two...), lvStep(2, 2, bg, two...)}
+	front := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.2, Y: 0.2, W: 0.6, H: 0.4}}, Page: []looktpl.TplBg{{Lib: bg}}}
+	cover := &looktpl.CoverTpl{Bg: &looktpl.TplBg{Lib: bg}, Front: &front}
+	steps := []looktpl.LookStep{lvStep(2, 2, bg, two...), lvStep(2, 2, bg, two...)}
 	with := previewWidth(t, g, lvLayouts(t, "wedding-layouts", files[0], lvLook(t, "a", cover, steps...)))
 	without := previewWidth(t, g, lvLayouts(t, "wedding-layouts", files[0], lvLook(t, "a", nil, steps...)))
 	if d := with - without; d < 2*200 || d > 2*(200+8) {
@@ -241,8 +242,8 @@ func TestLibraryVerifyLookSheetTiles(t *testing.T) {
 	fa, a := tone("a", 0x40) // фон обложки
 	fb, b := tone("b", 0x90) // шаг 1
 	fc, c := tone("c", 0xe0) // шаг 2
-	front := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.4, Y: 0.4, W: 0.2, H: 0.2}}, Page: []model.TplBg{{}}}
-	cover := &model.CoverTpl{Bg: &model.TplBg{Lib: a}, Front: &front}
+	front := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.4, Y: 0.4, W: 0.2, H: 0.2}}, Page: []looktpl.TplBg{{}}}
+	cover := &looktpl.CoverTpl{Bg: &looktpl.TplBg{Lib: a}, Front: &front}
 	narrow := lvStep(2, 1, b, model.Box{X: 0.05, Y: 0.05, W: 0.9, H: 0.9}) // Ratio 1 на развороте: композиция в середине, по бокам фон
 	corner := lvStep(2, 2, c, model.Box{X: 0.4, Y: 0.4, W: 0.2, H: 0.2})
 	img := previewImage(t, g, lvLayouts(t, "wedding-layouts", fa, fb, fc, lvLook(t, "a", cover, narrow, corner)))

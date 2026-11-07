@@ -206,7 +206,8 @@ func sameBytes(bak string, data []byte) (bakState, error) {
 	if err != nil {
 		return bakOther, err
 	}
-	if !st.Mode().IsRegular() || st.Size() != int64(len(data)) {
+	// Копия в папке OneDrive могла выгрузиться (заглушка) — всё равно «своя»: иначе при каждой записи старой версии рождалась бы « 2».
+	if !library.RegularOrCloud(bak, st) || st.Size() != int64(len(data)) {
 		return bakOther, nil
 	}
 	got, err := ReadLimited(bak)

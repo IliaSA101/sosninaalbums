@@ -119,6 +119,7 @@ class Stand:
         self._pw = self._browser = self.ctx = self.page = self.cdp = None
         self._busy_since: float | None = None  # начало текущего вызова в страницу (для сторожа)
         self.hang_s = 180.0
+        self.on_hang: Callable[[], None] | None = None  # перед выходом по зависанию: например, погасить свой стенд
 
     # ---- жизненный цикл ----
 
@@ -145,8 +146,16 @@ class Stand:
             time.sleep(5)
             b = self._busy_since
             if b is not None and time.monotonic() - b > self.hang_s:
-                print(f"e2e: страница не отвечает {self.hang_s:g} с — прогон прерван", flush=True)
-                os._exit(2)
+                self._hung()
+
+    def _hung(self) -> None:
+        print(f"e2e: страница не отвечает {self.hang_s:g} с — прогон прерван", flush=True)
+        if self.on_hang is not None:
+            try:
+                self.on_hang()  # стенд и xvfb не должны пережить выход
+            except Exception as e:  # noqa: BLE001 — выход всё равно нужен
+                print(f"e2e: стенд не погашен: {e}", flush=True)
+        os._exit(2)
 
     def __exit__(self, *_exc) -> None:
         self.close()

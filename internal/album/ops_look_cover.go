@@ -5,6 +5,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Обложка по макету альбома (131 design §5, G5): серия и «Создать обложку» ставят оформление
@@ -14,7 +15,7 @@ import (
 // ничего (обложка не создаётся). Фон, который поставил прежний макет prev, «своим» не считается
 // (Replaced); свои места, надписи и стикеры сторонок, которые заменятся, а обложка не от prev, —
 // тронутое (Touched, решение 136). Итог — в plan (Cover), ключи без файла — в missing.
-func lookCover(p *model.Project, plan *model.LookPlan, missing map[string]bool, t model.AlbumTpl, prev *model.AlbumTpl, libs map[string]model.PhotoInfo) error {
+func lookCover(p *model.Project, plan *model.LookPlan, missing map[string]bool, t looktpl.AlbumTpl, prev *looktpl.AlbumTpl, libs map[string]model.PhotoInfo) error {
 	if t.Cover == nil || p.Cover == nil || p.Cover.Sheet == nil {
 		return nil
 	}
@@ -44,7 +45,7 @@ func lookCover(p *model.Project, plan *model.LookPlan, missing map[string]bool, 
 }
 
 // lookCoverIs — обложка проекта p уже такая, как её ставит c (сверка на копии: проект не меняется).
-func lookCoverIs(p *model.Project, c *model.CoverTpl, libs map[string]model.PhotoInfo) bool {
+func lookCoverIs(p *model.Project, c *looktpl.CoverTpl, libs map[string]model.PhotoInfo) bool {
 	res, err := grid.ApplyLookCover(p.Clone(), c, libs)
 	return err == nil && !res.Changed
 }
@@ -53,7 +54,7 @@ func lookCoverIs(p *model.Project, c *model.CoverTpl, libs map[string]model.Phot
 // Обложки нет — холостая; у макета нет оформления обложки — ErrLookStep. Макет ref становится
 // макетом альбома, если у альбома макета ещё нет (как у шага на лист). В плане — фото в ленту,
 // заменённые надписи и стикеры сторонок.
-func applyLookCoverStep(p *model.Project, ref *model.LookRef, t model.AlbumTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, missing int, err error) {
+func applyLookCoverStep(p *model.Project, ref *model.LookRef, t looktpl.AlbumTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, missing int, err error) {
 	if t.Cover == nil {
 		return plan, 0, ErrLookStep
 	}

@@ -4,6 +4,7 @@
   import type { PatternSpec, PatternView, SpreadView } from '../../base/core/types'
   import { isCover, ownBg } from '../../base/geom/sheet'
   import ColorPicker from '../../base/color/ColorPicker.svelte'
+  import { ALBUM_WHITE } from '../../base/color/palette'
   import { colorLive } from '../../base/color/colorlive.svelte'
   import { coverLabels } from '../cover/cover'
   import { SCOPE_LABEL } from '../backdrop/backdrop'
@@ -54,7 +55,7 @@
   // Плитка каталога, из которой поставлен узор (PatternView.preset от Go, запасной — по цветам): имя и светлая подложка миниатюры — как на плитке окна «Фоны».
   const preset = (p: PatternView) => presetOfView(p, decor.bgItems)
   const nameOf = (p: PatternView) => (p.known ? (preset(p)?.name ?? p.name) : PATTERN_NEWER)
-  const pageBg = (p: PatternView) => preset(p)?.color || sp.bg[p.scope === 'right' ? 1 : 0] || '#fff'
+  const pageBg = (p: PatternView) => preset(p)?.color || sp.bg[p.scope === 'right' ? 1 : 0] || ALBUM_WHITE
 
   // Уход с листа: просмотр не остаётся на чужом. Зависит от id листа (строка), а не от объекта sp.
   const sheetId = $derived(sp.id)

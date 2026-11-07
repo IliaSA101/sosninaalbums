@@ -14,13 +14,14 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/gen"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // tplN — свой шаблон-страница с n местами и цветом: разные n — разные ключи.
-func tplN(n int) model.SpreadTpl {
-	t := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{Color: "#ffeedd"}}}
+func tplN(n int) looktpl.SpreadTpl {
+	t := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{Color: "#ffeedd"}}}
 	for i := range n {
 		t.Places = append(t.Places, model.Box{X: 0.1, Y: float64(i) / float64(n+1), W: 0.5, H: 0.5 / float64(n+1)})
 	}
@@ -91,11 +92,11 @@ func checkBuiltin(t *testing.T, p spreadPreset) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var raw model.SpreadTpl
+	var raw looktpl.SpreadTpl
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("%s: %v", p.id, err)
 	}
-	got, err := model.ParseSpreadTpl(data)
+	got, err := looktpl.ParseSpreadTpl(data)
 	if err != nil {
 		t.Fatalf("%s: %v", p.id, err)
 	}
@@ -120,11 +121,11 @@ func checkBuiltin(t *testing.T, p spreadPreset) {
 	}
 }
 
-func ptrBg(b *model.TplBg) []model.TplBg {
+func ptrBg(b *looktpl.TplBg) []looktpl.TplBg {
 	if b == nil {
 		return nil
 	}
-	return []model.TplBg{*b}
+	return []looktpl.TplBg{*b}
 }
 
 // TestDecorSpreadKind — свой шаблон: файл Развороты/<hex>.json и запись реестра, плитка с
@@ -147,7 +148,7 @@ func TestDecorSpreadKind(t *testing.T) {
 		keys = append(keys, it.ID)
 	}
 	// Ключ — от канонического JSON: тот же шаблон тем же ключом.
-	if keys[0] != model.TplKey(mustClamp(t, tplN(1))) {
+	if keys[0] != looktpl.TplKey(mustClamp(t, tplN(1))) {
 		t.Fatalf("ключ %s", keys[0])
 	}
 	path := filepath.Join(cfg, RootName, "Развороты", strings.TrimPrefix(keys[1], "my:")+".json")
@@ -155,7 +156,7 @@ func TestDecorSpreadKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := model.ParseSpreadTpl(data); err != nil || !reflect.DeepEqual(got, mustClamp(t, tplN(2))) {
+	if got, err := looktpl.ParseSpreadTpl(data); err != nil || !reflect.DeepEqual(got, mustClamp(t, tplN(2))) {
 		t.Fatalf("файл: %+v, %v", got, err)
 	}
 	if _, ok := s.Find(keys[0]); ok {
@@ -213,9 +214,9 @@ func reopenSpreads(t *testing.T, cfg string, keys []string) {
 	}
 }
 
-func mustClamp(t *testing.T, tp model.SpreadTpl) model.SpreadTpl {
+func mustClamp(t *testing.T, tp looktpl.SpreadTpl) looktpl.SpreadTpl {
 	t.Helper()
-	c, ok := model.ClampSpreadTpl(tp)
+	c, ok := looktpl.ClampSpreadTpl(tp)
 	if !ok {
 		t.Fatal("шаблон не прошёл зажим")
 	}
@@ -230,8 +231,8 @@ func TestDecorSpreadRefuse(t *testing.T) {
 	if _, err := s.SaveSpreadTpl("mine", "  ", tplN(1)); !errors.Is(err, ErrName) {
 		t.Fatalf("пустое имя: %v", err)
 	}
-	empty := model.SpreadTpl{V: model.TplV, Pages: 1, Page: []model.TplBg{{}}}
-	if _, err := s.SaveSpreadTpl("mine", "x", empty); !errors.Is(err, model.ErrTplEmpty) {
+	empty := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Page: []looktpl.TplBg{{}}}
+	if _, err := s.SaveSpreadTpl("mine", "x", empty); !errors.Is(err, looktpl.ErrTplEmpty) {
 		t.Fatalf("пустой шаблон: %v", err)
 	}
 	if _, err := s.Import(KindSpread, "mine", []string{"x.json"}); !errors.Is(err, ErrKind) {
@@ -284,7 +285,7 @@ func TestDecorSpreadRefuse(t *testing.T) {
 	if len(own) != 1 || own[0].ID != "my:00000000000000a1" || own[0].Places != 2 {
 		t.Fatalf("свои %+v", own)
 	}
-	if _, err := s.SpreadTpl("my:00000000000000a3"); !errors.Is(err, model.ErrTplNewer) {
+	if _, err := s.SpreadTpl("my:00000000000000a3"); !errors.Is(err, looktpl.ErrTplNewer) {
 		t.Fatalf("новый файл: %v", err)
 	}
 	if _, ok := s.files[KindBg]["my:00000000000000a5"]; ok {

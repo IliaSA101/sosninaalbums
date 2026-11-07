@@ -59,7 +59,8 @@ export interface AgentPlace {
   dir: string
   label: string // метка диска, серым справа; "" — без метки
   chosen: boolean // выбрана человеком («Папка со съёмками…»); иначе родитель папки, добавленной им
-  bound: boolean // привязано к диску (153); на macOS всегда false
+  bound: boolean // привязано к диску (153)
+  bindable: boolean // место можно привязать к диску (160): решает Go; на macOS — только /Volumes/<том>, загрузочный том — нет
   narrow: boolean // место узкое (год): новый год спросит снова
   narrowRoot: boolean // узкое место лежит на корне диска (E:\2026)
   state: string // только из AgentPlacesLive: nodisk | nofolder | here (непривязанное, диск на месте) | ""
@@ -88,10 +89,10 @@ export interface AgentAsk {
   path: string // настоящий путь папки (150), только окну; "" — вопрос 149 без пути
   link: boolean // подсказка шла через ссылку на другую папку
   alt: string // подпись «Выбрать другую…»; "" — кнопки нет
-  tool: string // ссылка «Не спрашивать» ведёт к строке этого инструмента; у export и open пуст — у «только с вопросом» «Всегда» нет
+  tool: string // ссылка «Не спрашивать» ведёт к строке этого инструмента; у export пуст — у «только с вопросом» «Всегда» нет; у open — open_album только при «Спрашивать» и ключе без name_hint (иначе «Всегда» вопрос не уберёт)
   files?: number // export: сколько файлов запишет выгрузка (текст уже в lines)
   create?: boolean // export: папка будет создана (текст уже в lines; флаг — для вида пути)
-  why: string // «Всегда», а тихо нельзя: place | remote | big | cloud | shots | link | rate | draft | bad; "" — «Спрашивать»
+  why: string // «Всегда», а тихо нельзя: place | remote | big | cloud | shots | link | rate | draft | disk | vol | bad, у open ещё hint | pick | file | stub | gone | fonts; "" — «Спрашивать»
 }
 export type AgentAskWhy = 'answered' | 'declined' | 'timeout' | 'gone' | 'closed' | 'off' | 'too_wide' | 'ours'
 export interface AgentAskDone {

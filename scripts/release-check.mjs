@@ -144,13 +144,13 @@ export function parseJobs(yml) {
   let inJobs = false
   let inNeedsBlock = false
   for (const line of yml.split('\n')) {
-    if (/^jobs:\s*$/.test(line)) {
+    if (/^jobs:\s*(#.*)?$/.test(line)) {
       inJobs = true
       continue
     }
     if (!inJobs) continue
     if (/^\S/.test(line) && !/^#/.test(line)) break // следующий верхний ключ
-    const job = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line)
+    const job = /^ {2}([A-Za-z0-9_-]+):\s*(#.*)?$/.exec(line)
     if (job) {
       cur = job[1]
       jobs[cur] = []
@@ -219,6 +219,58 @@ export function checkArm64(root, yml) {
     const files = fs.existsSync(g) ? fs.readdirSync(g).filter((f) => f.endsWith('.sha')) : []
     if (files.length === 0) errors.push(`${d}/testdata/golden: нет эталонов *.sha для проверки на arm64`)
     for (const f of files) if (fs.statSync(path.join(g, f)).size === 0) errors.push(`${d}/testdata/golden/${f}: пустой эталон`)
+  }
+  return errors
+}
+
+// ---- ключ FMA на Mac (162, Д3) ----
+
+export const FMA_GOFLAGS = '-gcflags=all=-d=fmahash=qn'
+
+// Текст каждого задания workflow по ключам верхнего уровня `jobs:` (два пробела).
+function jobTexts(yml) {
+  const out = {}
+  let cur = null
+  let inJobs = false
+  for (const line of yml.split('\n')) {
+    if (/^jobs:\s*(#.*)?$/.test(line)) {
+      inJobs = true
+      continue
+    }
+    if (!inJobs) continue
+    if (/^\S/.test(line) && !/^#/.test(line)) break
+    const job = /^ {2}([A-Za-z0-9_-]+):\s*(#.*)?$/.exec(line)
+    if (job) {
+      cur = job[1]
+      out[cur] = ''
+    } else if (cur) out[cur] += line + '\n'
+  }
+  return out
+}
+
+// Строки GOFLAGS (ключ env, не комментарий) в тексте задания; кавычки вокруг значения снимаются.
+function goflagsOf(text) {
+  return [...text.matchAll(/^\s*GOFLAGS:\s*(.*?)\s*$/gm)].map((m) => m[1].replace(/^(["'])(.*)\1$/, '$2'))
+}
+
+// Страж совпадения ключа FMA: go-mac (ci.yml), «Сборка macOS» (macos, шаг wails build) и «Проверка Mac» (mac-check) в
+// release.yml несут один и тот же GOFLAGS. Расхождение даёт сборку выпуска, которая считает не так, как эталоны go-mac.
+export function checkFmaFlags(ci, rel) {
+  const errors = []
+  const want = [
+    ['ci.yml', 'go-mac', ci],
+    ['release.yml', 'macos', rel],
+    ['release.yml', 'mac-check', rel],
+  ]
+  for (const [file, job, yml] of want) {
+    const text = yml === null ? undefined : jobTexts(yml)[job]
+    if (text === undefined) {
+      errors.push(`${file}: нет задания «${job}» (ключ FMA ${FMA_GOFLAGS})`)
+      continue
+    }
+    const flags = goflagsOf(text)
+    if (flags.length !== 1) errors.push(`${file}: в задании «${job}» GOFLAGS должен быть один, найдено ${flags.length}`)
+    else if (flags[0] !== FMA_GOFLAGS) errors.push(`${file}: в задании «${job}» GOFLAGS «${flags[0]}», ждали «${FMA_GOFLAGS}» (162)`)
   }
   return errors
 }
@@ -355,6 +407,7 @@ export function checkAll(root, version) {
   const yml = read(root, '.github/workflows/release.yml')
   if (yml === null) errors.push('.github/workflows/release.yml: нет файла')
   else errors.push(...checkNeeds(yml), ...checkArm64(root, yml), ...checkInstaller(root, yml))
+  errors.push(...checkFmaFlags(read(root, '.github/workflows/ci.yml'), yml))
   return { version, errors }
 }
 

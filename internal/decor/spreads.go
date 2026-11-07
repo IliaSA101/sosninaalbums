@@ -12,12 +12,13 @@ import (
 	"sync"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
 // Готовые развороты в библиотеке (067, design §3): вид spread, файл Развороты/<16 hex>.json —
-// канонический JSON шаблона (ключ — model.TplKey), встроенные — spreads/*.json в сборке.
+// канонический JSON шаблона (ключ — looktpl.TplKey), встроенные — spreads/*.json в сборке.
 // Шаблон — не картинка: Find его не ищет, плитку рисует App по /media/tpl.
 
 // TplPath — плитки шаблонов: /media/tpl/<sa:tpl-… | 16 hex>?v=&px=&r= (рисует App: decor не
@@ -48,19 +49,19 @@ var spreadPresets = []spreadPreset{
 
 // builtinTpl — шаблон встроенного разворота: разбирается из сборки на каждый вызов (копия —
 // правка вызывающего не портит встроенный; файл в сотни байт).
-func builtinTpl(id string) (model.SpreadTpl, bool) {
+func builtinTpl(id string) (looktpl.SpreadTpl, bool) {
 	for _, p := range spreadPresets {
 		if p.id != id {
 			continue
 		}
 		data, err := spreadFS.ReadFile("spreads/" + p.file + ".json")
 		if err != nil {
-			return model.SpreadTpl{}, false
+			return looktpl.SpreadTpl{}, false
 		}
-		t, err := model.ParseSpreadTpl(data)
+		t, err := looktpl.ParseSpreadTpl(data)
 		return t, err == nil
 	}
-	return model.SpreadTpl{}, false
+	return looktpl.SpreadTpl{}, false
 }
 
 // spreadBuiltins — плитки встроенных разворотов (у других видов — пусто). Битый файл сборки —
@@ -79,7 +80,7 @@ func spreadBuiltins(kind string) []Item {
 }
 
 // tplItem — сведения шаблона на плитке: страниц, мест, пропорция области.
-func tplItem(it Item, t model.SpreadTpl) Item {
+func tplItem(it Item, t looktpl.SpreadTpl) Item {
 	it.Pages, it.Places, it.Aspect = t.Pages, len(t.Places), t.Ratio
 	return it
 }
@@ -187,8 +188,8 @@ func (s *Store) warmTpl(keys []string) {
 }
 
 // SpreadTpl — шаблон по ID плитки: встроенный или файл из индекса папки Развороты/ (свой и
-// из набора; путь — от ключа, не от интерфейса). Файл новее программы — model.ErrTplNewer.
-func (s *Store) SpreadTpl(id string) (model.SpreadTpl, error) {
+// из набора; путь — от ключа, не от интерфейса). Файл новее программы — looktpl.ErrTplNewer.
+func (s *Store) SpreadTpl(id string) (looktpl.SpreadTpl, error) {
 	t, _, err := s.spreadTplRaw(id)
 	if errors.Is(err, errTplUnread) {
 		err = ErrNotFound
@@ -198,35 +199,35 @@ func (s *Store) SpreadTpl(id string) (model.SpreadTpl, error) {
 
 // spreadTplRaw — SpreadTpl и сырые байты файла (для сборки мусора: ссылки читаются и там, где разбор
 // не знает поля — borders[].lib 0.28 — или отказал, ErrTplNewer, битый). У встроенного байт нет.
-func (s *Store) spreadTplRaw(id string) (model.SpreadTpl, []byte, error) {
+func (s *Store) spreadTplRaw(id string) (looktpl.SpreadTpl, []byte, error) {
 	if strings.HasPrefix(id, presetPrefix) {
 		if t, ok := builtinTpl(id); ok {
 			return t, nil, nil
 		}
-		return model.SpreadTpl{}, nil, ErrNotFound
+		return looktpl.SpreadTpl{}, nil, ErrNotFound
 	}
 	if !model.ValidLibKey(id) {
-		return model.SpreadTpl{}, nil, ErrNotFound
+		return looktpl.SpreadTpl{}, nil, ErrNotFound
 	}
 	s.mu.RLock()
 	path, ok := s.files[KindSpread][id]
 	s.mu.RUnlock()
 	if !ok {
-		return model.SpreadTpl{}, nil, ErrNotFound
+		return looktpl.SpreadTpl{}, nil, ErrNotFound
 	}
-	data, err := readCapped(path, model.MaxTplFile)
+	data, err := readCapped(path, looktpl.MaxTplFile)
 	if errors.Is(err, os.ErrNotExist) { // стёрт между индексом и чтением — шаблона нет
-		return model.SpreadTpl{}, nil, ErrNotFound
+		return looktpl.SpreadTpl{}, nil, ErrNotFound
 	}
 	if err != nil {
-		return model.SpreadTpl{}, nil, errTplUnread
+		return looktpl.SpreadTpl{}, nil, errTplUnread
 	}
-	t, err := model.ParseSpreadTpl(data)
-	if errors.Is(err, model.ErrTplNewer) {
-		return model.SpreadTpl{}, data, err
+	t, err := looktpl.ParseSpreadTpl(data)
+	if errors.Is(err, looktpl.ErrTplNewer) {
+		return looktpl.SpreadTpl{}, data, err
 	}
 	if err != nil {
-		return model.SpreadTpl{}, data, errTplBroken
+		return looktpl.SpreadTpl{}, data, errTplBroken
 	}
 	return t, data, nil
 }
@@ -234,21 +235,21 @@ func (s *Store) spreadTplRaw(id string) (model.SpreadTpl, []byte, error) {
 // SaveSpreadTpl — «Сохранить разворот…»: шаблон в Развороты/<ключ>.json и запись реестра в
 // тему theme (выборки и неизвестная — «Мои»). Тот же шаблон второй раз — «уже есть»; скрытый
 // возвращается с новым именем и темой и встаёт первым, как новый.
-func (s *Store) SaveSpreadTpl(theme, name string, t model.SpreadTpl) (Item, error) {
+func (s *Store) SaveSpreadTpl(theme, name string, t looktpl.SpreadTpl) (Item, error) {
 	if name = cleanName(name); name == "" {
 		return Item{}, ErrName
 	}
-	if !isTheme(theme) {
+	if !ownTheme(theme) {
 		theme = ThemeMine
 	}
-	c, ok := model.ClampSpreadTpl(t)
+	c, ok := looktpl.ClampSpreadTpl(t)
 	if !ok {
-		return Item{}, model.ErrTplEmpty
+		return Item{}, looktpl.ErrTplEmpty
 	}
 	data, err := json.Marshal(c)
-	key := model.TplKey(c)
+	key := looktpl.TplKey(c)
 	if err != nil || key == "" {
-		return Item{}, model.ErrTplEmpty
+		return Item{}, looktpl.ErrTplEmpty
 	}
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()

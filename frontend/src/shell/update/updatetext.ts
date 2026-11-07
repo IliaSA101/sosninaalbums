@@ -29,8 +29,11 @@ export const SETUP_HINT = 'Поставьте установщиком — да�
 export const WHATS_NEW_LABEL = 'Что нового'
 export const RESTART_LABEL = 'Перезапустить'
 
-// Повтор после ошибки: есть предложенная версия (ошибка скачивания) — снова скачиваем, иначе снова проверяем.
-export const retryAct = (i: UpdateInfo): UpdateAct => (i.version && i.mode !== 'page' ? 'download' : 'check')
+// Повтор после ошибки — по признаку Go (errorOf: что не удалось). Скачивание и установка (Go забыл файл; повтор
+// скачивает: Fetch сверит файл и при порче скачает заново) — снова скачиваем; проверка, неизвестное и режим
+// «страница» — снова проверяем.
+export const retryAct = (i: Pick<UpdateInfo, 'mode' | 'errorOf'>): UpdateAct =>
+  i.mode !== 'page' && (i.errorOf === 'download' || i.errorOf === 'install') ? 'download' : 'check'
 
 const check = (disabled = false): UpdateBtn => ({ act: 'check', label: CHECK_LABEL, disabled })
 
@@ -53,8 +56,7 @@ function readyLine(i: UpdateInfo): string {
 }
 
 // Блок «Обновления» в «О программе»: что показать по фазе и режиму.
-// retry — что не удалось (знает update.svelte.ts); не задано — по данным Go.
-export function updateView(i: UpdateInfo, retry?: UpdateAct): UpdateView {
+export function updateView(i: UpdateInfo): UpdateView {
   const v: UpdateView = {
     line: '',
     btns: [check()],
@@ -95,7 +97,7 @@ export function updateView(i: UpdateInfo, retry?: UpdateAct): UpdateView {
       break
     case 'error': {
       v.line = i.error
-      v.btns = [{ act: retry ?? retryAct(i), label: 'Повторить' }]
+      v.btns = [{ act: retryAct(i), label: 'Повторить' }]
       v.pageLink = true
       break
     }

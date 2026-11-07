@@ -135,7 +135,7 @@ const maxMarkDirs = 1000
 // Подборки записи — только из known (подборки файла после ClampBins): чужие ID отбрасываются,
 // запись, где ничего не осталось, считается пустой.
 // loose — отдельные фото проекта (097): их отметки при обрезке «внутри», как у фото папок.
-func decodeMarks(list []fileMark, base string, folders, loose []string, known map[string]bool) map[string]model.Mark {
+func decodeMarks(d Disk, list []fileMark, base string, folders, loose []string, known map[string]bool) map[string]model.Mark {
 	out := map[string]model.Mark{}
 	var bad, dup, empty int
 	// Своя программа больше maxMarks не пишет: длиннее — чужой файл, хвост не разбираем.
@@ -144,11 +144,11 @@ func decodeMarks(list []fileMark, base string, folders, loose []string, known ma
 	}
 	dirs := map[string]bool{}
 	hasDir := func(path string) bool {
-		d := filepath.Dir(path)
-		ok, seen := dirs[d]
+		dir := filepath.Dir(path)
+		ok, seen := dirs[dir]
 		if !seen && len(dirs) < maxMarkDirs {
-			ok = isDir(d)
-			dirs[d] = ok
+			ok = isDirOn(d, dir)
+			dirs[dir] = ok
 		}
 		return ok
 	}

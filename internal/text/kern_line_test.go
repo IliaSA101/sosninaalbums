@@ -193,7 +193,7 @@ func TestDrawUsesLineDX(t *testing.T) {
 	if d == nil {
 		t.Fatal("нет данных начертания")
 	}
-	p := measureCustom(sf, nil, d, l.Text)
+	p, _ := measureCustom(sf, nil, d, l.Text)
 	const pxmm = 10.0
 	var buf sfnt.Buffer
 	unit := fixed.Int26_6(sf.UnitsPerEm()) << 6

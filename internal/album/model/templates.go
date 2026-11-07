@@ -313,7 +313,7 @@ func clampVigGeo(in []Box, g VigGeo) ([]Box, VigGeo, bool) {
 			break
 		}
 		b.Rot = 0 // BuildOwn угла не знает: под углом зажим держал бы внутри только центр
-		if !finiteBox(b) {
+		if !FiniteBox(b) {
 			continue
 		}
 		r := RolePupil
@@ -374,7 +374,7 @@ func ClampBoxes(in []Box) []Box {
 		if len(out) >= MaxPlaces {
 			break
 		}
-		if !finiteBox(b) {
+		if !FiniteBox(b) {
 			continue
 		}
 		b.W = geom.ClampF(b.W, MinBoxFrac, 1)
@@ -392,7 +392,8 @@ func ClampBoxes(in []Box) []Box {
 	return out
 }
 
-func finiteBox(b Box) bool {
+// FiniteBox — все числа рамки конечны; экспорт — для looktpl (рамочки мест шаблона разворота).
+func FiniteBox(b Box) bool {
 	for _, v := range [...]float64{b.X, b.Y, b.W, b.H, b.Rot} {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			return false

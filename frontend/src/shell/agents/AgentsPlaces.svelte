@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { isMac } from '../../base/core/platform'
   import { agents } from './agents.svelte'
   import { KEY_LIFTED, liftGroups, placeRows } from './agentperms'
   import { LIFT_OK, PLACE_FORGET_ONE, SETUP_LABEL, liftNote, placeForgetLabel } from './agentstext'
@@ -9,7 +8,7 @@
   let { part }: { part: 'note' | 'list' } = $props()
 
   const info = $derived(agents.info)
-  const rows = $derived(placeRows(info.places, agents.placesNow, isMac()))
+  const rows = $derived(placeRows(info.places, agents.placesNow))
   const lifts = $derived(liftGroups(info.lifted))
 </script>
 
@@ -125,7 +124,7 @@
   .link {
     all: unset;
     cursor: pointer;
-    color: var(--muted);
+    color: var(--link);
     font-size: 12px;
     text-decoration: underline dotted;
     text-underline-offset: 3px;

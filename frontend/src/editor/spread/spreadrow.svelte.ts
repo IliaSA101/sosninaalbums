@@ -6,6 +6,7 @@ import { bgmode } from '../backdrop/bgmode.svelte'
 import { previewUrl, warmable } from '../../base/core/media'
 import { store } from '../../base/core/store.svelte'
 import { drag } from '../../base/drag/drag.svelte'
+import { isGone } from '../../panels/library/missing'
 import { IDLE, dur, easeOut, jumpFrom, movePos, nearSlot, rowMax, rowWheel, rubber, snapTarget, stepTarget } from './spreadrow'
 
 const THRESHOLD = 5 // px: меньше — это щелчок по соседу, не перетаскивание
@@ -296,11 +297,12 @@ class SpreadRow {
   }
 
   // Прогрев превью соседей ±1: при шаге они уже в кэше WebView2 (сами соседи рисуют миниатюры). Развороты на 17+ фото не греем (027).
+  // Пропавшие и нечитаемые (в т.ч. «только в облаке») не греем: у них заглушка, запрос дал бы 404 (160-M1).
   private warm() {
     if (typeof Image === 'undefined') return
     for (const d of [-1, 1]) {
       const ids = store.sheets[store.sheetIndex + d]?.photos ?? []
-      if (warmable(ids.length)) for (const id of ids) new Image().src = previewUrl(id)
+      if (warmable(ids.length)) for (const id of ids) if (!isGone(id, store.missing, store.unread)) new Image().src = previewUrl(id)
     }
   }
 }

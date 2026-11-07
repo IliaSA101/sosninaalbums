@@ -38,7 +38,7 @@ func OpenRegular(path string) (*os.File, error) {
 		_ = f.Close()
 		return nil, err
 	}
-	if !st.Mode().IsRegular() {
+	if !regularOpened(f, st) { // на Windows обычным считается и облачная заглушка (OneDrive «только в сети»)
 		_ = f.Close()
 		return nil, errors.New("не обычный файл")
 	}

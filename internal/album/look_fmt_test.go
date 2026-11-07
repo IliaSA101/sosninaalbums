@@ -8,6 +8,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // «Заполнить места» не меняется (0.27-131-10, 131 G4b): фото подряд во все пустые места, в том
@@ -106,7 +107,7 @@ func lkFormat(t *testing.T, pw float64) *album.Editor {
 	return e
 }
 
-func lkResize(e *album.Editor, pw float64, look *model.AlbumTpl) {
+func lkResize(e *album.Editor, pw float64, look *looktpl.AlbumTpl) {
 	edtest.Mu(e).Lock()
 	s := edtest.P(e).Settings
 	edtest.Mu(e).Unlock()
@@ -171,8 +172,8 @@ func TestLookPlacesResizeEdges(t *testing.T) {
 	if e.View().Rev != rev || lkJSON(e) != data {
 		t.Fatal("тот же формат: правка должна быть холостой")
 	}
-	short := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "Один", "#ffffff", 1)}}
-	for _, look := range []*model.AlbumTpl{nil, {}, &short} {
+	short := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "Один", "#ffffff", 1)}}
+	for _, look := range []*looktpl.AlbumTpl{nil, {}, &short} {
 		x, ref := lkFormat(t, 300), lkFormat(t, 300)
 		lkResize(x, 200, look)
 		lkResize(ref, 200, nil)

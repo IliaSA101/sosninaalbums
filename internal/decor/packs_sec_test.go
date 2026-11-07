@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -133,18 +134,18 @@ func TestRemovePackKeepsTplLibs(t *testing.T) {
 	m, src := testPack("ivory", 1, pit{"bg/a.png", a}, pit{"bg/b.png", b}, pit{"bg/c.png", c}, pit{"bg/d.png", d}, pit{"stickers/s.png", st})
 	install(t, s, m, src, nil)
 	box := []model.Box{{X: .1, Y: .1, W: .8, H: .8}}
-	if _, err := s.SaveSpreadTpl("mine", "Свой", model.SpreadTpl{V: 1, Pages: 1, Places: box,
-		Page: []model.TplBg{{Lib: libKey(a)}}, Stickers: []model.TplItem{{W: .2, H: .2, Lib: libKey(st)}}}); err != nil {
+	if _, err := s.SaveSpreadTpl("mine", "Свой", looktpl.SpreadTpl{V: 1, Pages: 1, Places: box,
+		Page: []looktpl.TplBg{{Lib: libKey(a)}}, Stickers: []looktpl.TplItem{{W: .2, H: .2, Lib: libKey(st)}}}); err != nil {
 		t.Fatal(err)
 	}
-	hid, err := s.SaveSpreadTpl("mine", "Скрытый", model.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []model.TplBg{{Lib: libKey(c)}}})
+	hid, err := s.SaveSpreadTpl("mine", "Скрытый", looktpl.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []looktpl.TplBg{{Lib: libKey(c)}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Hide(KindSpread, hid.ID); err != nil {
 		t.Fatal(err)
 	}
-	mo, so := testPack("other", 1, pit{"spreads/t.json", tplJSON(t, model.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []model.TplBg{{Lib: libKey(b)}}})})
+	mo, so := testPack("other", 1, pit{"spreads/t.json", tplJSON(t, looktpl.SpreadTpl{V: 1, Pages: 1, Places: box, Page: []looktpl.TplBg{{Lib: libKey(b)}}})})
 	install(t, s, mo, so, nil)
 	plan, err := s.PlanRemovePack("ivory", nil)
 	if err != nil || plan.Files != 1 || plan.Kept != 4 || plan.Bytes != int64(len(d)) {

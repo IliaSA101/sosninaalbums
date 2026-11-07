@@ -1,49 +1,25 @@
 <script lang="ts">
+  import Seg, { type SegItem } from '../../base/tpl/Seg.svelte'
   import { placesel } from '../places/placesel.svelte'
 
   // «Целиком / С обрезкой» выделенного (спека 008): подсвечено, только если так у всех выделенных.
-  // У «Авто» «Целиком» закрепляет разворот (gridAct.placeEdit).
+  // У «Авто» «Целиком» закрепляет разворот (gridAct.placeEdit). Ничего не выделено — сегмент серый.
   const n = $derived(placesel.selected.length)
+  type Fit = 'contain' | 'cover'
+  const ITEMS: SegItem<Fit>[] = [
+    { id: 'contain', label: 'Целиком', title: 'Вписать фото в место целиком, без обрезки' },
+    { id: 'cover', label: 'С обрезкой', title: 'Заполнять место с обрезкой' },
+  ]
+  // Нажаты оба сразу не бывают; ни один — смешанное выделение.
+  const pressed = $derived<Fit[]>(placesel.allContain ? ['contain'] : placesel.allCover ? ['cover'] : [])
 </script>
 
-<div class="seg" role="group" aria-label="Фото в месте" data-guide="fit-toggle">
-  <button
-    class:on={placesel.allContain}
-    disabled={n === 0}
-    aria-pressed={placesel.allContain}
-    onclick={() => placesel.setFit(true)}
-    title="Вписать фото в место целиком, без обрезки">Целиком</button
-  >
-  <button
-    class:on={placesel.allCover}
-    disabled={n === 0}
-    aria-pressed={placesel.allCover}
-    onclick={() => placesel.setFit(false)}
-    title="Заполнять место с обрезкой">С обрезкой</button
-  >
+<div class="fit" data-guide="fit-toggle">
+  <Seg look="card" label="Фото в месте" items={ITEMS} values={pressed} off={n === 0} onpick={(f) => placesel.setFit(f === 'contain')} />
 </div>
 
 <style>
-  .seg {
-    display: flex;
+  .fit {
     margin-top: 10px;
-    border-radius: 5px;
-    overflow: hidden;
-  }
-  .seg button {
-    flex: 1;
-    height: 26px;
-    padding: 0 6px;
-    font-size: 12px;
-    border-radius: 0;
-    background: #38383c;
-    color: #cfcfd4;
-  }
-  .seg button.on {
-    background: var(--accent);
-    color: #1e1e1e;
-  }
-  .seg button.on:hover:not(:disabled) {
-    background: #ffe53a;
   }
 </style>

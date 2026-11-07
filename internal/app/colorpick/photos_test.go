@@ -214,6 +214,28 @@ func TestSpreadPhotoColorsMissingPhoto(t *testing.T) {
 	}
 }
 
+// Фото в облаке без копии (Host.Copy → ErrCloudOnly) пропускается без строки журнала: причину знает App,
+// а «миниатюра: …» на каждый показ окна засоряла бы log.txt.
+func TestSpreadPhotoColorsCloudOnlySilent(t *testing.T) {
+	a := colorApp(t, map[string]color.RGBA{"a": cRed, "b": cBlue}, nil)
+	var rare atomic.Int64
+	a.h.Rare = func(int64, string, ...any) { rare.Add(1) }
+	a.h.Copy = func(ctx context.Context, id string, preview, anySize bool) (string, error) {
+		if id == "b" {
+			return "", library.ErrCloudOnly
+		}
+		ph, _, _ := a.photo(id)
+		return a.cache.FileCtx(ctx, ph, preview)
+	}
+	got, err := a.PhotoColors("s1")
+	if err != nil || len(got) != 1 || !hasColors(t, got, cRed) {
+		t.Fatalf("одно в облаке: %v %v", got, err)
+	}
+	if n := rare.Load(); n != 0 {
+		t.Errorf("строк журнала %d, ждали 0", n)
+	}
+}
+
 // Чужой ID, пустой, обложка без обложки — ошибка по-русски без паники.
 func TestSpreadPhotoColorsUnknownSpread(t *testing.T) {
 	a := colorApp(t, map[string]color.RGBA{"a": cRed}, nil)

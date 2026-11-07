@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/looks"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -87,7 +88,7 @@ func TestLookPhotosFreeFirst(t *testing.T) {
 	rev, undo := ed.View().Rev, ed.View().CanUndo
 
 	// 0 — свободно; 1 в альбоме; 2 на фоне; 3 и 4 отклонены; 5…7 свободны.
-	got := photoIDs(a.lookPhotos(ed))
+	got := photoIDs(a.looks.Candidates(ed))
 	if want := r.ids(0, 5, 6, 7); !slices.Equal(got, want) {
 		t.Errorf("свободные: %v, ждали %v", got, want)
 	}
@@ -109,7 +110,7 @@ func TestLookPhotosFreeFirst(t *testing.T) {
 	if _, err := full.SetMarks([]model.PhotoInfo{ph(4)}, model.MarkPatch{Flag: ptr(-1)}); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := photoIDs(a.lookPhotos(full)), r.ids(0, 1, 2, 5, 6, 7); !slices.Equal(got, want) {
+	if got, want := photoIDs(a.looks.Candidates(full)), r.ids(0, 1, 2, 5, 6, 7); !slices.Equal(got, want) {
 		t.Errorf("всё занято: %v, ждали %v", got, want)
 	}
 
@@ -117,7 +118,7 @@ func TestLookPhotosFreeFirst(t *testing.T) {
 	a.mu.Lock()
 	a.photos = nil
 	a.mu.Unlock()
-	if got := a.lookPhotos(ed); len(got) != 0 {
+	if got := a.looks.Candidates(ed); len(got) != 0 {
 		t.Errorf("ленты нет: %v", got)
 	}
 	// Лента больше предела: первые 256 по порядку.
@@ -128,71 +129,9 @@ func TestLookPhotosFreeFirst(t *testing.T) {
 	a.mu.Lock()
 	a.photos = big
 	a.mu.Unlock()
-	got = photoIDs(a.lookPhotos(ed))
-	if len(got) != lookMaxPhotos || got[0] != big[0].ID || got[lookMaxPhotos-1] != big[lookMaxPhotos-1].ID {
+	got = photoIDs(a.looks.Candidates(ed))
+	if len(got) != looks.MaxPhotos || got[0] != big[0].ID || got[looks.MaxPhotos-1] != big[looks.MaxPhotos-1].ID {
 		t.Errorf("предел: %d фото, первое %v", len(got), got[:1])
-	}
-}
-
-// lookOfsTpl — макет: обложка (лицевая 2 места, задняя 3), шаги: 4 места, виньетка (места листа
-// строит виньетка, 5 мест шаблона не считаются), страница с 3 местами, повтор 2, финал 1.
-func lookOfsTpl() model.AlbumTpl {
-	tpl := func(pages, n int) model.SpreadTpl {
-		return model.SpreadTpl{V: model.TplV, Pages: pages, Ratio: 1, Places: make([]model.Box, n)}
-	}
-	return model.AlbumTpl{
-		V: model.LookV,
-		Cover: &model.CoverTpl{
-			Front: &model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: make([]model.Box, 2)},
-			Back:  &model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: make([]model.Box, 3)},
-		},
-		Steps: []model.LookStep{
-			{Tpl: tpl(2, 4)},
-			{Role: model.RoleVignette, Tpl: tpl(2, 5), Vig: &model.LookVig{Tpl: "x", Teachers: 1, Pupils: 3}},
-			{Tpl: tpl(1, 3)},
-			{Role: model.RoleRepeat, Tpl: tpl(2, 2)},
-			{Tpl: tpl(2, 1)},
-		},
-	}
-}
-
-// Сдвиг шага: лицевая обложки с 0, задняя после неё, шаги — после мест предыдущих; виньетка
-// даёт 0 мест; у страницы места одной страницы (не ×2 LookPlaces); шаг-повтор считается один раз.
-func TestLookStepOffsets(t *testing.T) {
-	l := lookOfsTpl()
-	if got := lookBackShift(l.Cover); got != 2 {
-		t.Errorf("задняя после лицевой: сдвиг %d, ждали 2", got)
-	}
-	for i, want := range map[int]int{
-		0:  0,      // обложка: лицевая с начала
-		1:  2 + 3,  // после обеих сторон обложки
-		2:  5 + 4,  // после шага 1
-		3:  9 + 0,  // после виньетки: она ничего не заняла
-		4:  9 + 3,  // после страницы: 3, а не 6
-		5:  12 + 2, // после повтора
-		99: 14 + 1, // за последним шагом — сумма всех
-		-3: 0,      // мусорный индекс
-	} {
-		if got := lookOffset(l, i); got != want {
-			t.Errorf("шаг %d: сдвиг %d, ждали %d", i, got, want)
-		}
-	}
-	if got, want := lookSeats(l.Steps[2]), model.LookPlaces(l, 2)/2; got != want {
-		t.Errorf("страница: %d мест, LookPlaces/2 = %d", got, want)
-	}
-	if lookSeats(l.Steps[1]) != 0 {
-		t.Error("виньетка рисует места шаблона")
-	}
-	// Без обложки: шаги от нуля. Без шагов и пустой макет — 0, без паники.
-	l.Cover = nil
-	if got := lookOffset(l, 2); got != 4 {
-		t.Errorf("без обложки: %d, ждали 4", got)
-	}
-	if lookBackShift(nil) != 0 || lookOffset(model.AlbumTpl{}, 5) != 0 {
-		t.Error("пустой макет")
-	}
-	if got := lookBackShift(&model.CoverTpl{Back: &model.SpreadTpl{Places: make([]model.Box, 4)}}); got != 0 {
-		t.Errorf("лицевой нет: задняя с 0, получили %d", got)
 	}
 }
 
@@ -203,7 +142,7 @@ func TestLookFilesRound(t *testing.T) {
 	a, ctx := r.a, context.Background()
 	id := func(k, n int) string { return model.CopyID(r.photos[k].ID, n) }
 
-	got, err := a.lookFiles(ctx, r.photos, 1, 7, false)
+	got, err := a.looks.Files(ctx, r.photos, 1, 7, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,22 +160,22 @@ func TestLookFilesRound(t *testing.T) {
 	if !slices.Equal(ids, want) {
 		t.Errorf("по кругу от 1: %v, ждали %v", ids, want)
 	}
-	if mod, err := a.lookFiles(ctx, r.photos, 1+3*5, 3, false); err != nil || photoIDs2(mod) != photoIDs2(got[:3]) {
+	if mod, err := a.looks.Files(ctx, r.photos, 1+3*5, 3, false); err != nil || photoIDs2(mod) != photoIDs2(got[:3]) {
 		t.Errorf("сдвиг по модулю: %v %v", mod, err)
 	}
-	if neg, err := a.lookFiles(ctx, r.photos, -2, 1, false); err != nil || len(neg) != 1 || neg[0].ID != id(1, 1) {
+	if neg, err := a.looks.Files(ctx, r.photos, -2, 1, false); err != nil || len(neg) != 1 || neg[0].ID != id(1, 1) {
 		t.Errorf("отрицательный сдвиг: %v %v", neg, err)
 	}
-	if none, err := a.lookFiles(ctx, r.photos, 0, 0, false); err != nil || len(none) != 0 {
+	if none, err := a.looks.Files(ctx, r.photos, 0, 0, false); err != nil || len(none) != 0 {
 		t.Errorf("мест нет: %v %v", none, err)
 	}
-	if none, err := a.lookFiles(ctx, nil, 0, 5, false); err != nil || len(none) != 0 {
+	if none, err := a.looks.Files(ctx, nil, 0, 5, false); err != nil || len(none) != 0 {
 		t.Errorf("кандидатов нет: %v %v", none, err)
 	}
 
 	// Превью 2048 и миниатюра — разные файлы одного фото.
-	thumb, _ := a.lookFiles(ctx, r.photos[:1], 0, 1, false)
-	prev, _ := a.lookFiles(ctx, r.photos[:1], 0, 1, true)
+	thumb, _ := a.looks.Files(ctx, r.photos[:1], 0, 1, false)
+	prev, _ := a.looks.Files(ctx, r.photos[:1], 0, 1, true)
 	if len(thumb) != 1 || len(prev) != 1 || thumb[0].Path == prev[0].Path {
 		t.Errorf("big: миниатюра %v и превью %v должны различаться", thumb, prev)
 	}
@@ -246,7 +185,7 @@ func TestLookFilesRound(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Превью 2048 фото 1 ещё не готовилось, поэтому берём big: копии из кэша не спасут.
-	skip, err := a.lookFiles(ctx, r.photos, 0, 3, true)
+	skip, err := a.looks.Files(ctx, r.photos, 0, 3, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,11 +194,11 @@ func TestLookFilesRound(t *testing.T) {
 	}
 	// Все недоступны: пусто, не зависание.
 	gone := []library.Photo{{ID: "ffffffffffffffff", W: 3, H: 2}, {ID: "eeeeeeeeeeeeeeee", W: 3, H: 2}}
-	if none, err := a.lookFiles(ctx, gone, 0, 50, false); err != nil || len(none) != 0 {
+	if none, err := a.looks.Files(ctx, gone, 0, 50, false); err != nil || len(none) != 0 {
 		t.Errorf("фото нет в реестре: %v %v", none, err)
 	}
 	// Одно фото на много мест: копии до 99, дальше места серые.
-	many, err := a.lookFiles(ctx, r.photos[:1], 0, 150, false)
+	many, err := a.looks.Files(ctx, r.photos[:1], 0, 150, false)
 	if err != nil || len(many) != model.MaxCopy || many[model.MaxCopy-1].ID != id(0, model.MaxCopy) {
 		t.Errorf("копий %d, последняя %v, %v", len(many), many[len(many)-1].ID, err)
 	}
@@ -280,7 +219,7 @@ func TestLookFilesCanceled(t *testing.T) {
 	a := r.a
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	got, err := a.lookFiles(ctx, r.photos, 0, 4, true)
+	got, err := a.looks.Files(ctx, r.photos, 0, 4, true)
 	if !errors.Is(err, context.Canceled) || got != nil {
 		t.Errorf("снят до начала: %v %v", got, err)
 	}
@@ -299,19 +238,19 @@ func TestLookFilesCanceled(t *testing.T) {
 		}
 		return true
 	}
-	got, err = a.lookFiles(ctx2, r.photos, 0, 4, false)
+	got, err = a.looks.Files(ctx2, r.photos, 0, 4, false)
 	if !errors.Is(err, context.Canceled) || got != nil {
 		t.Errorf("снят посреди обхода: %d фото, %v", len(got), err)
 	}
 
 	// Копия уже в кэше и отдаётся несмотря на снятый запрос — ответа всё равно нет.
-	if _, err := a.lookFiles(context.Background(), r.photos[:1], 0, 1, false); err != nil {
+	if _, err := a.looks.Files(context.Background(), r.photos[:1], 0, 1, false); err != nil {
 		t.Fatal(err)
 	}
 	ctx3, cancel3 := context.WithCancel(context.Background())
 	defer cancel3()
 	reachable = func(string) bool { cancel3(); return true }
-	if got, err = a.lookFiles(ctx3, r.photos[:1], 0, 1, false); !errors.Is(err, context.Canceled) || got != nil {
+	if got, err = a.looks.Files(ctx3, r.photos[:1], 0, 1, false); !errors.Is(err, context.Canceled) || got != nil {
 		t.Errorf("снят при готовой копии: %v %v", got, err)
 	}
 }
@@ -338,7 +277,7 @@ func TestLookFilesOrient6(t *testing.T) {
 		t.Fatalf("ReadInfo с тегом 6: %d×%d, ждали 400×600", p.W, p.H)
 	}
 	for _, big := range []bool{false, true} {
-		got, err := r.a.lookFiles(context.Background(), r.photos, 0, 2, big)
+		got, err := r.a.looks.Files(context.Background(), r.photos, 0, 2, big)
 		if err != nil || len(got) != 2 {
 			t.Fatalf("big=%v: %v %v", big, got, err)
 		}

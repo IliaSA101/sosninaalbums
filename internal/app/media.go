@@ -27,7 +27,7 @@ var readColor = imgfile.ReadColor
 // media отдаёт миниатюры: /media/t/<id> и /media/p/<id>; рамочки-картинки — /media/f/<id>
 // (serveFramePic); оригинал фото как есть — /media/o/<id> (serveOriginal); шрифты — /media/font/<файл>;
 // библиотека фонов — /media/gen/*, /media/lib/* (serveDecor), плитки разворотов — /media/tpl/*
-// (serveTpl), макетов — /media/look/* (serveLook); разметки — /media/cover-guide и
+// (looks.Service.ServeTpl), макетов — /media/look/* (looks.Service.Serve); разметки — /media/cover-guide и
 // /media/spread-guide (serveMarkup); ролики справочника F1 — /media/guide-video/<id> (serveGuideVideo, 140); клетки образцов наборов —
 // /media/lp/<набор>/<вид>/<i> (serveLibPreview, 144).
 func (a *App) media(next http.Handler) http.Handler {
@@ -56,7 +56,7 @@ func (a *App) media(next http.Handler) http.Handler {
 		if a.serveGuideVideo(w, r) || a.serveMarkup(w, r) {
 			return
 		}
-		if a.serveDecor(w, r) || a.serveTpl(w, r) || a.serveLook(w, r) {
+		if a.serveDecor(w, r) || a.looks.ServeTpl(w, r) || a.looks.Serve(w, r) {
 			return
 		}
 		// До общего разбора /media/<t|p>/<id>: иначе «f» ушло бы в миниатюру.
@@ -73,7 +73,7 @@ func (a *App) media(next http.Handler) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		p, ok, gone := a.mediaPhoto(parts[1])
+		p, ok, gone, cloud := a.mediaPhotoCloud(parts[1])
 		if gone {
 			http.NotFound(w, r) // пропавшее и прежнего альбома — не промах, в журнал не пишем
 			return
@@ -84,7 +84,11 @@ func (a *App) media(next http.Handler) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		a.serveThumb(w, r, p, parts[0] == "p")
+		if cloud { // заглушка облака: отдаём только готовую копию, оригинал не открываем
+			a.serveCloudThumb(w, r, p, parts[1], parts[0] == "p")
+			return
+		}
+		a.serveThumb(w, r, p, parts[1], parts[0] == "p")
 	})
 }
 
@@ -92,7 +96,18 @@ func (a *App) media(next http.Handler) http.Handler {
 // сейчас не открыта. gone — файла нет (или том не отвечает, и у фото ленты тоже): диск не трогаем;
 // и фото прежнего реестра, которого нет в альбоме (запрос плитки прежнего альбома после смены).
 // Копия (098) — тот же файл: реестр и кэш — по ID файла, миниатюра и превью общие у семьи.
+//
+// Фоновые и массовые вызовы (оригинал, агент, контактный лист, поиск лиц, макеты) заглушку облака не
+// читают: для них фото проекта в облаке — не ok, как отсутствующее (160-M1, доправка 5).
 func (a *App) mediaPhoto(id string) (p library.Photo, ok, gone bool) {
+	p, ok, gone, cloud := a.mediaPhotoCloud(id)
+	return p, ok && !cloud, gone
+}
+
+// mediaPhotoCloud — mediaPhoto, которая заглушку облака у фото проекта называет (cloud = true, ok = true): заголовок
+// такого фото не читается (readColor скачал бы файл), в Photo только ID, Path и Name — без цвета и размеров.
+// Вызывающий вправе отдать лишь готовую копию из кэша (Cache.Cached).
+func (a *App) mediaPhotoCloud(id string) (p library.Photo, ok, gone, cloud bool) {
 	a.mu.Lock()
 	p, ok = a.byID[model.BaseID(id)]
 	_, gone = slices.BinarySearch(a.missing, id) // missingOf отдаёт по порядку
@@ -101,23 +116,28 @@ func (a *App) mediaPhoto(id string) (p library.Photo, ok, gone bool) {
 	if ok {
 		// Фото ленты из папки недоступного тома (088-4): плитка сразу серая, обработчик не ждёт SMB.
 		if !reachable(p.Path) {
-			return p, false, true
+			return p, false, true, false
 		}
-		return p, true, false
+		return p, true, false, false
 	}
 	if gone {
 		// Не читаем, иначе обработчик ждёт таймаута SMB.
-		return p, false, true
+		return p, false, true, false
 	}
 	ref, found := a.editor().Ref(id)
 	if !found && old {
-		return p, false, true
+		return p, false, true, false
 	}
 	if !found || paths.CheckLocalPath(ref.Path) != nil || !reachable(ref.Path) {
-		return p, false, false
+		return p, false, false, false
 	}
-	col, prof := readColor(ref.Path) // от цвета зависит ключ кэша и пересчёт
-	return library.Photo{ID: model.BaseID(id), Path: ref.Path, Name: filepath.Base(ref.Path), Color: col, Profile: prof}, true, false
+	p = library.Photo{ID: model.BaseID(id), Path: ref.Path, Name: filepath.Base(ref.Path)}
+	// Сведения без чтения данных: заглушку облака не открываем (цвет по заголовку скачал бы файл).
+	if cloudStub(ref.Path) {
+		return p, true, false, true
+	}
+	p.Color, p.Profile = readColor(ref.Path) // от цвета зависит ключ кэша и пересчёт
+	return p, true, false, false
 }
 
 // mediaState — снятые запросы миниатюр и прежний реестр фото (090 G2).
@@ -160,19 +180,30 @@ func (a *App) mediaCancelled() int64 {
 // serveThumb отдаёт файл миниатюры (или превью) из кэша; пропавший файл — 404 без записи в журнал.
 // Запрос, снятый клиентом, ответа не получает и в журнал не пишется: начатая генерация остаётся в
 // кэше, ждавший место — не генерирует (090-D4).
-func (a *App) serveThumb(w http.ResponseWriter, r *http.Request, p library.Photo, preview bool) {
+func (a *App) serveThumb(w http.ResponseWriter, r *http.Request, p library.Photo, id string, preview bool) {
 	ctx := r.Context()
 	file, err := a.cache.FileCtx(ctx, p, preview)
+	exact := true // копия того размера, что просили
 	var de *library.DecodeError
 	if errors.As(err, &de) { // оригинал не декодируется: причину запоминаем даже у снятого запроса
 		a.noteBadThumb(p.ID, de.Why)
+	}
+	cloudOnly := errors.Is(err, library.ErrCloudOnly) // стал заглушкой облака после сканирования: не скачиваем
+	if cloudOnly {
+		if f, ex, ok := a.cache.CachedAny(p, preview); ok { // для показа годится копия другого размера
+			file, exact, err, cloudOnly = f, ex, nil, false
+		} else {
+			a.noteCloud(id)
+		}
 	}
 	if ctx.Err() != nil { // и когда генерация успела доделаться: отвечать некому
 		a.mediaSt.cancelled.Add(1)
 		return
 	}
 	if err != nil {
-		if de != nil { // причина уйдёт в окно событием unread; в журнал — раз в сотню, без пути
+		if cloudOnly {
+			logRare(a.mediaMiss.Add(1), "превью: фото только в облаке, копии нет")
+		} else if de != nil { // причина уйдёт в окно событием unread; в журнал — раз в сотню, без пути
 			logRare(a.mediaMiss.Add(1), "превью: файл не декодируется: %s", library.ShortWhy(de.Why))
 		} else if !errors.Is(err, fs.ErrNotExist) { // файл пропал — не сбой, хватит 404
 			logRare(a.mediaMiss.Add(1), "превью: %v", paths.NoPath(err))
@@ -181,14 +212,41 @@ func (a *App) serveThumb(w http.ResponseWriter, r *http.Request, p library.Photo
 		return
 	}
 	a.clearBadThumb(p.ID) // файл перезаписан и читается: «повреждён» снимается
+	a.clearCloud(id)      // копия есть (файл скачали или построена раньше): «в облаке» снимается
+	a.serveCacheFile(w, r, file, exact)
+}
+
+// serveCacheFile отдаёт готовую копию из кэша миниатюр. exact = false — копия другого размера, чем просили (заглушка
+// облака: остался только один): она не кэшируется навсегда, иначе после скачивания файла окно держало бы мелкую картинку.
+func (a *App) serveCacheFile(w http.ResponseWriter, r *http.Request, file string, exact bool) {
 	// Тип задаём сами: копия бывает PNG (прозрачные картинки), а реестровый тип Windows ненадёжен.
 	ct := "image/jpeg"
 	if strings.EqualFold(filepath.Ext(file), ".png") {
 		ct = "image/png"
 	}
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Cache-Control", "max-age=31536000, immutable")
+	if exact {
+		w.Header().Set("Cache-Control", "max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "no-cache")
+	}
 	http.ServeFile(w, r, file) //nolint:gosec // file — путь из кэша миниатюр по ID из реестра, не из запроса
+}
+
+// serveCloudThumb — /media/t|p для фото проекта, лежащего в облаке: готовая копия из кэша (запрошенного размера, иначе
+// другого — Trim первым убирает превью) отдаётся без чтения оригинала, иначе 404 без скачивания. Скачать файл может
+// только явное действие (экспорт, сбор). id — из запроса (у копии фото «X-2», как ключ в missing и Unread). В журнал —
+// раз в сотню, без пути.
+func (a *App) serveCloudThumb(w http.ResponseWriter, r *http.Request, p library.Photo, id string, preview bool) {
+	file, exact, ok := a.cache.CachedAny(p, preview)
+	if !ok {
+		logRare(a.mediaMiss.Add(1), "media: фото только в облаке, копии нет")
+		a.noteCloud(id) // сверка файлов могла не успеть: плитка станет «не читается» и перестанет просить
+		http.NotFound(w, r)
+		return
+	}
+	a.clearCloud(id)
+	a.serveCacheFile(w, r, file, exact)
 }
 
 // serveFramePic — накладка и маска рамочки-картинки места (079 design §5, 079-22, 079-35). ID —

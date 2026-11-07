@@ -7,16 +7,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Эталон генератора (design §11): ключи и виды Gen на 12 наборах × 4 геометрии (30×30, 30×20, без
 // layflat, лист) — sha256 отсортированных «ключ вид». Ловит любую смену генераторов, Of и полов.
 // Оценки Q не в хэше: они плавающие, их сверяют TestFormsInvariants и TestQualityMatchesScoreTerms.
-// amd64: ничьи — в квантах, но эталон снят на amd64 (на arm64 — наблюдение).
+// Эталон снят без слияния FMA (testkit.RequireNoFMA): на arm64 нужен GOFLAGS из 162.
 // Layflat-геометрии forms.sha — «только широкие» (прежнее правило форм совпало с ним на корпусе:
 // эталон не менялся, 064); «любые фото» — forms-any.sha: формы пускают через сгиб и узкие кадры.
 var updateGolden = flag.Bool("update", false, "перезаписать testdata/golden/forms*.sha")
@@ -71,9 +72,7 @@ func TestGoldenFormsAny(t *testing.T) { checkGoldenForms(t, goldenAnyPath, golde
 
 func checkGoldenForms(t *testing.T, path string, got []string) {
 	t.Helper()
-	if runtime.GOARCH != "amd64" && os.Getenv("SA_GOLDEN_ANYARCH") != "1" {
-		t.Skip("эталон снят на amd64 (SA_GOLDEN_ANYARCH=1 — гонять и здесь)")
-	}
+	testkit.RequireNoFMA(t)
 	if *updateGolden || os.Getenv("SA_GOLDEN_UPDATE") == "1" {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte'
 import { flushSync } from 'svelte'
-import type { AgentAsk } from './agents'
+import type { AgentAsk, AgentPlace } from './agents'
 
 // Вопросы выгрузки и открытия (152): виды export и open. Остальное поведение окна (600 мс, Esc, askdone) — в agentask.dom.test.ts. Go подменён.
 const ev = vi.hoisted(() => ({ on: new Map<string, (d: unknown) => void>() }))
@@ -26,6 +26,8 @@ const { agentAsk, ARM_MS } = await import('./agentask.svelte')
 const { store } = await import('../../base/core/store.svelte')
 const { jobs } = await import('../../base/core/jobs.svelte')
 const { edit } = await import('../../editor/text/edit.svelte')
+const { agents } = await import('./agents.svelte')
+const { emptyInfo } = await import('./agents')
 
 const ask = (o: Partial<AgentAsk> = {}): AgentAsk => ({
   id: 'a1',
@@ -70,7 +72,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-// Выгрузка и открытие по просьбе агента (152): виды export и open. Tool пуст — «Не спрашивать» нет; строки приходят из Go.
+// Выгрузка и открытие по просьбе агента (152): виды export и open. У выгрузки Tool пуст — «Не спрашивать» нет; строки приходят из Go.
 describe('AgentAskDialog: выгрузка и открытие (152)', () => {
   const DIR = 'D:\\Фото\\Выгрузки\\Петровы'
   const exp = (o: Partial<AgentAsk> = {}) =>
@@ -230,7 +232,6 @@ describe('AgentAskDialog: выгрузка и открытие (152)', () => {
     const idle = vi.spyOn(edit, 'idle').mockResolvedValue(undefined)
     shown(opn())
     expect(btns()).toEqual(['Отмена', 'Выбрать другой…', 'Открыть'])
-    expect(screen.queryByText(/Не спрашивать/)).toBeNull()
     arm()
     await fireEvent.click(screen.getByRole('button', { name: 'Открыть' }))
     await vi.waitFor(() => expect(dialog()).toBeNull())
@@ -275,5 +276,114 @@ describe('AgentAskDialog: выгрузка и открытие (152)', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Открыть' }))
     await vi.waitFor(() => expect(dialog()).toBeNull())
     expect(store.toast?.kind).toBe('error')
+  })
+})
+
+// Причины вопроса «Открыть альбом» при «Всегда» (160): тексты открытия поверх общих, «Не спрашивать» — по Tool от Go.
+describe('AgentAskDialog: «Открыть альбом» — причины и ссылка (160)', () => {
+  const opn = (o: Partial<AgentAsk> = {}) =>
+    ask({
+      id: 'o2',
+      kind: 'open',
+      title: 'Открыть альбом «Свадьба Ивановы»?',
+      lines: ['Claude Code просит открыть альбом.'],
+      ok: 'Открыть',
+      path: 'D:\\Альбомы\\Свадьба Ивановы.salbum',
+      alt: 'Выбрать другой…',
+      ...o,
+    })
+  const place = (dir: string): AgentPlace => ({
+    key: dir,
+    dir,
+    label: '',
+    chosen: true,
+    bound: true,
+    bindable: true,
+    narrow: false,
+    narrowRoot: false,
+    state: '',
+    here: '',
+  })
+  const text = () => screen.getByRole('dialog').textContent?.replace(/\s+/g, ' ') ?? ''
+  const never = () => screen.queryByRole('button', { name: /Не спрашивать/ })
+  const btns = () => [...screen.getByRole('dialog').querySelectorAll('.actions button')].map((b) => b.textContent)
+  afterEach(() => {
+    agents.info = emptyInfo()
+    agents.close()
+  })
+
+  it('Go поставил Tool = open_album (ключ из списка, «Спрашивать»): «Не спрашивать» ведёт к строке «Открыть альбом», вопрос остаётся', async () => {
+    shown(opn({ tool: 'open_album' }))
+    expect(never()).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: /Не спрашивать/ }))
+    await vi.waitFor(() => expect(agents.flash).toBe('tool:open_album'))
+    expect(agents.open).toBe(true)
+    expect(api.AnswerAgent).not.toHaveBeenCalled()
+    expect(dialog()).not.toBeNull()
+  })
+
+  it.each([
+    ['hint', 'Альбом найден по словам агента — проверьте, тот ли'],
+    ['file', 'Файл альбома программа без вас не открывает (ярлык, копия или новая версия программы)'],
+    ['stub', 'Файл альбома ещё не скачан из облака'],
+    ['gone', 'Части фото альбома нет на месте — диск не подключён или папку перенесли'],
+    ['fonts', 'Альбому нужны шрифты из его папки — их ставят только с вашего согласия'],
+    ['big', 'Альбом большой или диск отвечает медленно — быстро проверить не удалось'],
+    ['cloud', 'Фото на облачном диске — программа не знает, скачаны ли они'],
+    ['remote', 'Одна из папок альбома не на этом компьютере'],
+    ['link', 'Одна из папок альбома идёт через ссылку'],
+    ['shots', 'Одна из папок альбома — папка снимков экрана'],
+    ['rate', 'Агент уже сделал 3 действия без вопроса за 10 минут'],
+    ['draft', 'Открытый альбом вы правили — заменить его без вас нельзя'],
+    ['disk', 'Это другой диск, не тот, что у места'],
+    ['vol', 'Не удалось узнать диск'],
+  ])('why = %s: своя строка причины, ссылок нет, кнопки прежние', (why, line) => {
+    shown(opn({ why }))
+    expect(screen.getByText(line)).toBeTruthy()
+    expect(never()).toBeNull()
+    expect(btns()).toEqual(['Отмена', 'Выбрать другой…', 'Открыть'])
+  })
+
+  it('why = pick: агент не назвал альбом — «Выбрать файл…», причина, ссылки «Не спрашивать» нет', () => {
+    shown(opn({ why: 'pick', path: '', ok: 'Выбрать файл…', alt: '' }))
+    expect(screen.getByText('Агент не назвал альбом — выберите файл сами')).toBeTruthy()
+    expect(never()).toBeNull()
+    expect(btns()).toEqual(['Отмена', 'Выбрать файл…'])
+  })
+
+  it('why = place: причина про альбом, ниже «Ваши папки: …» (до двух путей) и ссылка к строке мест', async () => {
+    agents.info = { ...emptyInfo(), places: [place('D:\\Фото'), place('E:\\Съёмки'), place('F:\\Ещё')] }
+    shown(opn({ why: 'place' }))
+    expect(screen.getByText('Часть фото альбома — вне ваших папок со съёмками')).toBeTruthy()
+    expect(text()).toContain('Ваши папки: D:\\Фото, E:\\Съёмки.')
+    expect(text()).not.toContain('F:\\Ещё')
+    expect(text()).not.toContain('Без вопроса — только в ваших папках')
+    expect(never()).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: /Добавить место/ }))
+    await vi.waitFor(() => expect(agents.flash).toBe('places'))
+  })
+
+  it('why = place, мест нет: «Ваши папки: не выбраны.»', () => {
+    shown(opn({ why: 'place' }))
+    expect(text()).toContain('Ваши папки: не выбраны.')
+  })
+
+  it('незнакомый код причины у открытия: показываем «Не спрашивать», а не пустоту', () => {
+    shown(opn({ why: 'нечто-новое', tool: 'open_album' }))
+    expect(never()).toBeTruthy()
+  })
+
+  it('Tool пуст — окно ссылку не выдумывает: без ключа (выбор файла) и по name_hint «Всегда» вопрос не убрало бы', () => {
+    shown(opn({ path: '', ok: 'Выбрать файл…', alt: '', why: '', tool: '' }))
+    expect(never()).toBeNull()
+    cleanup()
+    agentAsk.close()
+    shown(opn({ hint: 'Иванова', lines: ['Claude Code просит открыть альбом.', 'Агент назвал: «Иванова»'], why: '', tool: '' }))
+    expect(never()).toBeNull()
+  })
+
+  it('выгрузка без причины: ссылки «Не спрашивать» по-прежнему нет', () => {
+    shown(ask({ id: 'e2', kind: 'export', title: 'Выгрузить?', ok: 'Выгрузить', path: 'D:\\Фото', alt: 'Выбрать другую…' }))
+    expect(never()).toBeNull()
   })
 })

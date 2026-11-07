@@ -7,6 +7,7 @@ import (
 	"image/color"
 	_ "image/jpeg" // регистрация декодеров (миниатюры, превью)
 	_ "image/png"  // то же
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -84,6 +85,7 @@ func isImage(name string) bool {
 
 // ReadInfo читает заголовок фото: размеры с учётом поворота EXIF, размер файла, цвет.
 // Нужен проекту, когда файл на диске сменился (пересохранили, повернули); отметки XMP не читает.
+// Тихий путь: заглушку облака (OneDrive «только в сети») не скачивает, а отказывает ErrCloudOnly.
 func ReadInfo(path string) (Photo, error) { return readInfo(path) }
 
 func readInfo(path string) (Photo, error) {
@@ -92,15 +94,41 @@ func readInfo(path string) (Photo, error) {
 }
 
 // readHead — readInfo и сырой пакет XMP из заголовка JPEG (разбирает его только сканер).
-func readHead(path string) (Photo, []byte, error) {
+func readHead(path string) (Photo, []byte, error) { return readHeadOf(path, false) }
+
+// dehydrated — шов: файл по сведениям st в облаке (imgfile.Dehydrated); тест подменяет его на любой ОС.
+var dehydrated = imgfile.Dehydrated
+
+// readHeadOf — readHead; cloudOK — выгруженный в облако файл читается (скачивается): явное действие над конкретным фото.
+func readHeadOf(path string, cloudOK bool) (Photo, []byte, error) {
 	f, err := imgfile.OpenRegular(path)
 	if err != nil {
 		return Photo{}, nil, err
 	}
 	defer f.Close() //nolint:errcheck // чтение: ошибка закрытия ничего не теряет
+	return readHeadFrom(f, path, cloudOK)
+}
+
+// ReadInfoLocal — ReadInfo через OpenLocal: открывается проверенная цель (у ссылки — локальная), SameFile
+// сверяет открытое с проверенным. Тихие пути агента (160) читают заголовок так, без второго обращения по пути.
+func ReadInfoLocal(path string) (Photo, error) {
+	f, _, err := OpenLocal(path)
+	if err != nil {
+		return Photo{}, err
+	}
+	defer f.Close() //nolint:errcheck // чтение: ошибка закрытия ничего не теряет
+	ph, _, err := readHeadFrom(f, path, false)
+	return ph, err
+}
+
+// readHeadFrom — заголовок уже открытого файла f (путь path — только для ID и имени).
+func readHeadFrom(f *os.File, path string, cloudOK bool) (Photo, []byte, error) {
 	st, err := f.Stat()
 	if err != nil {
 		return Photo{}, nil, err
+	}
+	if !cloudOK && dehydrated(st) { // второй рубеж после сканера: ReadInfo и тихие пути тоже не скачивают файл
+		return Photo{}, nil, cloudOnlyError()
 	}
 	// Одни ворота с декодом оригинала: что лента приняла, то миниатюра и экспорт прочтут.
 	dims, err := imgfile.DimsOf(f, imgfile.MaxPixels)

@@ -5,9 +5,8 @@
   import AgentsPlaces from './AgentsPlaces.svelte'
   import { agents } from './agents.svelte'
   import {
-    FOLDER_TOOLS,
+    PLACE_TOOLS,
     allowMissing,
-    alwaysHidden,
     askOnly,
     KEY_LIFTED,
     KEY_PLACES,
@@ -19,12 +18,12 @@
     rowKey,
     rowsOf,
     segItems,
-    shownMode,
   } from './agentperms'
   import {
     ASK_EDIT,
     ASK_ONLY_NOTE,
     ASK_FOLDER,
+    ASK_OPEN,
     CANCEL_LABEL,
     EDIT_ELEVATED,
     GROUP_EDIT,
@@ -55,7 +54,7 @@
     { id: 'read' as const, title: GROUP_READ, rows: rowsOf(info.perms, 'read'), extra: [] },
     { id: 'edit' as const, title: GROUP_EDIT, rows: rowsOf(info.perms, 'edit'), extra: rowsOf(info.perms, 'other') },
   ])
-  const quietOn = $derived(info.perms.some((p) => FOLDER_TOOLS.includes(p.tool) && p.mode === 'allow'))
+  const quietOn = $derived(info.perms.some((p) => PLACE_TOOLS.includes(p.tool) && p.mode === 'allow'))
   const pl = $derived(placesShown(info.places))
 
   // Состояние группы своё, не `open={…}`: Svelte переписал бы атрибут при каждом событии Go и захлопнул бы раскрытое человеком.
@@ -92,16 +91,23 @@
   {#if agents.ask === 'perm'}
     {@const c = agents.consent}
     <!-- Согласие: «Отмена» слева, «Разрешить» справа. Оба абзаца сразу — когда группа правок уходит из «Запретить» в «Всегда» -->
-    <Modal title={c.edit ? ASK_EDIT.title : ASK_FOLDER.title} onclose={() => agents.dismiss()} wide>
+    <Modal title={c.edit ? ASK_EDIT.title : c.folder ? ASK_FOLDER.title : ASK_OPEN.title} onclose={() => agents.dismiss()} wide>
       {#if c.edit}<p class="body">{ASK_EDIT.text}</p>{/if}
       {#if c.folder}
         <p class="body">{ASK_FOLDER.lead}</p>
         <p class="body places">{ASK_FOLDER.placesHead}{@render places(ASK_FOLDER.placesNone)}{ASK_FOLDER.placesTail}</p>
         <p class="body">{ASK_FOLDER.cloud}</p>
       {/if}
+      {#if c.open}
+        <p class="body">{ASK_OPEN.lead}</p>
+        <p class="body places">{ASK_OPEN.placesHead}{@render places(ASK_OPEN.placesNone)}{ASK_OPEN.placesTail}</p>
+        <p class="body">{ASK_OPEN.cloud}</p>
+      {/if}
       <div class="actions">
         <button class="ghost" onclick={() => agents.dismiss()}>{CANCEL_LABEL}</button>
-        <button class="primary" data-autofocus onclick={() => agents.confirm()}>{ASK_FOLDER.ok}</button>
+        <button class="primary" data-autofocus onclick={() => agents.confirm()}
+          >{c.edit ? ASK_EDIT.ok : c.folder ? ASK_FOLDER.ok : ASK_OPEN.ok}</button
+        >
       </div>
     </Modal>
   {/if}
@@ -127,18 +133,17 @@
           <p class="note why">{g.rows[0]?.why}{g.id === 'read' ? READ_WHY_TAIL : ''}</p>
         {/if}
         {#each [...g.rows, ...g.extra] as p, i (p.tool)}
-          {@const shown = shownMode(p)}
           {#if g.extra.length > 0 && i === g.rows.length}<p class="note other">{GROUP_OTHER_NOTE}</p>{/if}
           <div class="row" data-row={rowKey(p.tool)} class:flash={agents.flash === rowKey(p.tool)}>
             <div class="t">
               {p.title}
               {#if noteShown(p)}<small>{p.note}</small>{/if}
-              {#if askOnly(p) || alwaysHidden(p)}<small>{ASK_ONLY_NOTE}</small>{/if}
+              {#if askOnly(p)}<small>{ASK_ONLY_NOTE}</small>{/if}
               {#if agents.whyFor[p.tool] && p.why}<small class="why">{p.why}{p.group === 'read' ? READ_WHY_TAIL : ''}</small>{/if}
             </div>
             <Seg
-              items={segItems(p.can, off && p.group === 'edit', allowMissing(p), alwaysHidden(p))}
-              value={isMode(shown) ? shown : undefined}
+              items={segItems(p.can, off && p.group === 'edit', allowMissing(p))}
+              value={isMode(p.mode) ? p.mode : undefined}
               onpick={(m) => agents.pickTool(p.tool, m)}
               label={p.title}
             />
@@ -296,7 +301,7 @@
   .link {
     all: unset;
     cursor: pointer;
-    color: var(--muted);
+    color: var(--link);
     font-size: 12px;
     text-decoration: underline dotted;
     text-underline-offset: 3px;

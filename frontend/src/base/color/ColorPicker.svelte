@@ -11,7 +11,7 @@
   import { colorWords } from './colorwords'
   import { eyedrop } from './eyedrop.svelte'
   import { mycolors } from './mycolorlist.svelte'
-  import { HEX_PREFIX, hexError, loadTab, normalizeHex, PHOTO_TAB, saveTab, SETS } from './palette'
+  import { ALBUM_WHITE, HEX_PREFIX, hexError, loadTab, normalizeHex, PHOTO_TAB, saveTab, SETS } from './palette'
 
   // Своя палитра вместо системного выбора цвета (109, вариант 1): образец-кнопка и окно в пределах окна программы.
   // onpick зовётся один раз на выбор (образец, «Свои», HEX по Enter / уходу из поля, пипетка, отпускание поля оттенка) —
@@ -279,7 +279,7 @@
       inheritOn={inherit?.on}
     />
     {#if inherit && oninherit}
-      <ColorInherit hex={normalizeHex(inherit.hex) ?? '#ffffff'} on={inherit.on} onpick={inheritPick} onpreview={preview} />
+      <ColorInherit hex={normalizeHex(inherit.hex) ?? ALBUM_WHITE} on={inherit.on} onpick={inheritPick} onpreview={preview} />
     {/if}
     <MyColors
       list={mycolors.list}

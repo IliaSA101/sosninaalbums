@@ -59,6 +59,10 @@ linters:
         - pattern: ^model\.(SetMarksLimit|SetParallelLayouts)$
           pkg: ^github\.com/IliaSA101/sosninaalbums/internal/album/model$
           msg: "023: крючок теста — только в _test.go"
+        # Разрез markup (0.37, да владельца 2026-11-04): подмена построения превью разметки — только в тестах
+        - pattern: ^ownprint\.MarkupPreview$
+          pkg: ^github\.com/IliaSA101/sosninaalbums/internal/app/ownprint$
+          msg: "markup: крючок теста — только в _test.go"
         # 067: в сеть ходят только разрешённые клиенты — decor/fetch (наборы: белый список хостов, пределы, подпись)
         # и клиент сервиса листалок api/albums (146, да владельца 2026-10-29); сервер /media — не клиент
         - pattern: ^http\.(Get|Head|Post|PostForm|NewRequest|NewRequestWithContext|DefaultClient|DefaultTransport|Client|Transport)$
@@ -285,6 +289,46 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/library$
             - github.com/IliaSA101/sosninaalbums/internal/paths$
             - golang.org/x/net/idna$
+        # Разрез internal/app (0.37, да владельца 2026-11-04): подгон по лицам за малым Host — альбом, лица, раскладка
+        # и чтение картинок; без App, edit и Wails.
+        "app/facefit: альбом, лица, раскладка, картинки":
+          files:
+            - "**/internal/app/facefit/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model$
+            - github.com/IliaSA101/sosninaalbums/internal/app/appkit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/facefit$
+            - github.com/IliaSA101/sosninaalbums/internal/faces$
+            - github.com/IliaSA101/sosninaalbums/internal/geom$
+            - github.com/IliaSA101/sosninaalbums/internal/imgfile$
+            - github.com/IliaSA101/sosninaalbums/internal/layout$
+            - github.com/IliaSA101/sosninaalbums/internal/library$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+        # Макеты альбома (131, 163; разрез 0.37, да владельца 2026-11-04): за малым Host — чтение библиотеки,
+        # редактор и файлы превью (плитки — export/render/imaging); без App.
+        "app/looks: библиотека, редактор, превью":
+          files:
+            - "**/internal/app/looks/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/album$
+            - github.com/IliaSA101/sosninaalbums/internal/album/model$
+            # шаблоны разворота и макеты — часть модели в подпакете (разрез model, да владельца 2026-11-04)
+            - github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl$
+            - github.com/IliaSA101/sosninaalbums/internal/app/edit$
+            - github.com/IliaSA101/sosninaalbums/internal/app/looks$
+            - github.com/IliaSA101/sosninaalbums/internal/decor$
+            - github.com/IliaSA101/sosninaalbums/internal/export$
+            - github.com/IliaSA101/sosninaalbums/internal/library$
+            - github.com/IliaSA101/sosninaalbums/internal/prefs$
+            - github.com/IliaSA101/sosninaalbums/internal/render$
+            - github.com/disintegration/imaging$
         # 143 (да владельца 2026-10-29, очередь п. 7; design §12): служба агентов только читает альбом — без
         # редактора (кроме типов model), без internal/app/edit и без Wails.
         "app/agents: model, printprof, layout, library, paths, prefs, osx, mcp":
@@ -323,6 +367,28 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/paths$
             - github.com/IliaSA101/sosninaalbums/internal/prefs$
             - golang.org/x/text/unicode/norm$
+        # 162 (да владельца 03.11, адаптация правил): тексты вопросов агента — чистые строки; без Editor, Wails, App и служб.
+        "app/agentasktext: agents, paths":
+          files:
+            - "**/internal/app/agentasktext/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/agentasktext$
+            - github.com/IliaSA101/sosninaalbums/internal/app/agents$
+            - github.com/IliaSA101/sosninaalbums/internal/paths$
+        # 162 (да владельца 03.11, адаптация правил): машина вопросов агента — состояние и сроки; разрешения,
+        # окна ОС и Editor — в app (нагрузка P), сюда не заходят.
+        "app/agentask: agents":
+          files:
+            - "**/internal/app/agentask/**"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/IliaSA101/sosninaalbums/internal/app/agentask$
+            - github.com/IliaSA101/sosninaalbums/internal/app/agents$
         # 143 Г4: посредник --mcp — тот же принцип: только stdlib, osx, paths.
         "mcpbridge: osx, paths":
           files:
@@ -565,7 +631,8 @@ linters:
             - github.com/IliaSA101/sosninaalbums/internal/testkit
             - github.com/IliaSA101/sosninaalbums/internal/layout
             - github.com/IliaSA101/sosninaalbums/internal/text
-        "imgfile: только colorspace":
+        # paths — для проверки пути внутри imgfile.OpenNoReparse (защита в глубину, 160-Т2-21; «да» владельца 04.11).
+        "imgfile: только colorspace, paths":
           files:
             - "**/internal/imgfile/**"
           list-mode: strict
@@ -576,6 +643,7 @@ linters:
             - golang.org/x/image
             - github.com/disintegration/imaging
             - github.com/IliaSA101/sosninaalbums/internal/colorspace
+            - github.com/IliaSA101/sosninaalbums/internal/paths
         "render: только colorspace, geom, imgfile, layout, text":
           files:
             - "**/internal/render/**"
@@ -1003,6 +1071,10 @@ linters:
       - path: _test\.go
         linters: [forbidigo]
         text: "крючок теста"
+      # markup: объявление и вызов крючка — в самом файле раздачи
+      - path: ^internal/app/ownprint/markup\.go$
+        linters: [forbidigo]
+        text: "markup: крючок теста"
       # 067: разрешённые клиенты; тесты ходят в свой httptest-сервер. Клиент сервиса листалок (146, С10) — только запросы /v1
       # (client.go), соединение (transport.go) и проверка сервера на контракт (albumstest/); остальной модуль api/albums — под правилом.
       - path: (internal/decor/fetch/|api/albums/(client|transport)\.go$|api/albums/albumstest/|_test\.go)

@@ -293,6 +293,6 @@ func TestParseManifestAlbum(t *testing.T) {
 		t.Fatalf("предметы %+v, пропуски %+v", m.Items, m.Skipped)
 	}
 	if KindLimit(KindAlbum) != 512<<10 {
-		t.Error("предел макета не равен model.MaxLookFile")
+		t.Error("предел макета не равен looktpl.MaxLookFile")
 	}
 }

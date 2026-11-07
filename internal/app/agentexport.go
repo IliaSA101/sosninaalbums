@@ -11,6 +11,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentask"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/app/exporter"
@@ -124,7 +126,7 @@ func (a *App) askExportAlbum(req agents.AskReq) (rec *askRec, res agents.AskRes,
 		return nil, res, agents.ErrAlbumEdited
 	}
 	plan := a.planExport(a.askM().rules(), ed, sm, req.Hint, nm)
-	body := exportAskText(exportAskIn{Client: req.Client, Album: a.askAlbumName(ed), Lines: sm.Lines, Plan: plan})
+	body := agentasktext.ExportText(agentasktext.ExportIn{Client: req.Client, Album: a.askAlbumName(ed), Lines: sm.Lines, Dir: plan.dir()})
 	ex := &exportAsk{o: o, name: nm.job, files: sm.Files, print: sm.Print, plan: plan, sum: sm}
 	fp := folderPlan{path: plan.shown}
 	if plan.badHint {
@@ -136,7 +138,7 @@ func (a *App) askExportAlbum(req agents.AskReq) (rec *askRec, res agents.AskRes,
 // exportPickFn — Job.Pick для щелчка: показанная папка (после повтора правила) или окно ОС. Повтор ловит подмену
 // между вопросом и щелчком: ссылка, другой том, папка стала файлом.
 func (a *App) exportPickFn(rec *askRec, other bool, got *exportPicked) func(title string) (string, bool, []string, error) {
-	ex := rec.exp
+	ex := rec.Payload.exp
 	return func(title string) (string, bool, []string, error) {
 		if ex.plan.approved() && !other {
 			w, err := a.askM().rules().ExportPick(ex.plan.pick)
@@ -150,7 +152,7 @@ func (a *App) exportPickFn(rec *askRec, other bool, got *exportPicked) func(titl
 			*got = exportPicked{w: w, set: true}
 			return w.Path(), w.Create(), hits, nil
 		}
-		dir, err := pickExportDir(a, title+" — просит "+clientName(rec.req.Client))
+		dir, err := pickExportDir(a, title+" — просит "+agentasktext.ClientName(rec.Payload.req.Client))
 		return dir, false, nil, err
 	}
 }
@@ -159,7 +161,7 @@ func (a *App) exportPickFn(rec *askRec, other bool, got *exportPicked) func(titl
 // судится ещё раз (подмена ссылкой за время вопросов, 0.35-152-25), в существующей не должно быть чужих файлов
 // с номерами. Расхождение — errExportMoved. dir — папка выгрузки (книги), got — что дал выбор.
 func (a *App) exportRecheck(rec *askRec, got *exportPicked) func(dir string) error {
-	ex := rec.exp
+	ex := rec.Payload.exp
 	return func(dir string) error {
 		if !got.set {
 			return nil
@@ -186,27 +188,27 @@ func (a *App) AgentAnswerExport(id string, other bool) (st ExportStarted, err er
 	if err != nil || rec == nil {
 		return st, err
 	}
-	defer close(rec.idle)
-	if !a.askBegin(rec) {
+	defer a.askQ().Release(rec)
+	if !a.askQ().Begin(rec) {
 		return st, nil
 	}
 	if a.shr.Busy() {
 		a.askFail(rec, agents.ErrBusy)
 		return st, errShareBusy
 	}
-	if cur, cerr := a.agentEditor(rec.req.Key); cerr != nil || cur != rec.ed {
+	if cur, cerr := a.agentEditor(rec.Payload.req.Key); cerr != nil || cur != rec.Payload.ed {
 		a.notice("Открыт другой альбом — выгрузка не начата. Агент спросит снова.")
 		a.askFail(rec, agents.ErrAlbumChanged)
 		return st, nil
 	}
-	ex := rec.exp
+	ex := rec.Payload.exp
 	var got exportPicked
-	started, err := a.exp.ExportWith(exporter.Job{Ed: rec.ed, Rev: rec.req.Rev, Opt: ex.o, Name: ex.name,
+	started, err := a.exp.ExportWith(exporter.Job{Ed: rec.Payload.ed, Rev: rec.Payload.req.Rev, Opt: ex.o, Name: ex.name,
 		Pick: a.exportPickFn(rec, other, &got), Recheck: a.exportRecheck(rec, &got)})
 	switch {
 	case errors.Is(err, errExportMoved): // агенту — как «папка не подошла», без пути; человеку — своя фраза
 		a.notice("Папка выгрузки изменилась — выгрузка не начата. Выберите папку снова.")
-		a.askFinish(rec, askOutcome{res: agents.AskRes{Why: agents.WhyTooWide}}, agents.WhyTooWide)
+		a.askFinish(rec, agentask.Outcome{Res: agents.AskRes{Why: agents.WhyTooWide}}, agents.WhyTooWide)
 		return st, nil
 	case errors.Is(err, exporter.ErrAlbumEdited):
 		a.notice("Альбом изменился, пока вы отвечали — выгрузка не начата. Агент спросит снова.")
@@ -218,13 +220,13 @@ func (a *App) AgentAnswerExport(id string, other bool) (st ExportStarted, err er
 		return st, err
 	case !started: // «нет» в предупреждении, отмена окна ОС: человек принял просьбу и остановил её — не отказ
 		why := agents.WhyStopped
-		a.askFinish(rec, askOutcome{res: agents.AskRes{Why: why}}, why)
+		a.askFinish(rec, agentask.Outcome{Res: agents.AskRes{Why: why}}, why)
 		return st, nil
 	}
 	res := agents.AskRes{Why: agents.WhyAnswered, Files: ex.files,
-		Album: agents.AlbumRef{Key: a.askKey(rec.ed), Rev: rec.ed.View().Rev}}
-	a.askFinish(rec, askOutcome{res: res}, agents.WhyAnswered)
-	return ExportStarted{Started: true, Files: ex.files, Print: a.exportPlanOf(rec.ed, ex.print)}, nil
+		Album: agents.AlbumRef{Key: a.askKey(rec.Payload.ed), Rev: rec.Payload.ed.View().Rev}}
+	a.askFinish(rec, agentask.Outcome{Res: res}, agents.WhyAnswered)
+	return ExportStarted{Started: true, Files: ex.files, Print: a.exportPlanOf(rec.Payload.ed, ex.print)}, nil
 }
 
 // exportPlanOf — план типографии kind для окна «Готово для …»; "" — обычная выгрузка.

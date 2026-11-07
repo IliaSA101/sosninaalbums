@@ -126,7 +126,7 @@ func ClampBoxesStrict(frac []Box) ([]Box, error) {
 		return nil, ErrNoPlaces
 	}
 	frac = frac[:min(len(frac), MaxPlaces)]
-	if !slices.ContainsFunc(frac, func(f Box) bool { return !finiteBox(f) }) {
+	if !slices.ContainsFunc(frac, func(f Box) bool { return !FiniteBox(f) }) {
 		return ClampBoxes(frac), nil
 	}
 	return nil, errBadBoxes
@@ -260,14 +260,14 @@ func CleanText(s string, maxRunes int) string {
 
 // CleanName — название разворота: одна строка без управляющих и bidi-знаков,
 // без пробелов по краям, не больше maxNameRunes знаков.
-func CleanName(s string) string { return cleanLine(s, MaxNameRunes) }
+func CleanName(s string) string { return CleanLine(s, MaxNameRunes) }
 
 // oneLine — переводы строк и Tab в пробел. Один на пакет: сборка Replacer дороже самой замены,
-// а cleanLine зовётся на каждое имя (1000 строк таблицы в окне «Имена» — 3000 раз, 043).
+// а CleanLine зовётся на каждое имя (1000 строк таблицы в окне «Имена» — 3000 раз, 043).
 var oneLine = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\t", " ", "\u2028", " ", "\u2029", " ")
 
-// cleanLine — то же правило со своим пределом n (переменные и имена 030).
-func cleanLine(s string, n int) string {
+// CleanLine — то же правило со своим пределом n (переменные и имена 030).
+func CleanLine(s string, n int) string {
 	s = oneLine.Replace(s)
 	s = strings.TrimSpace(text.CleanText(s))
 	if utf8.RuneCountInString(s) > n {
@@ -340,3 +340,6 @@ func (p *Project) ClampBackdrop(s *Spread, b *Backdrop, scope string) *Backdrop 
 	c.X, c.Y = geom.Round2(c.X), geom.Round2(c.Y)
 	return &c
 }
+
+// finite — число без NaN и бесконечности (точки вставки буфера, clip.go).
+func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }

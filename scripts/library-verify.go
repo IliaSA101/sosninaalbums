@@ -56,6 +56,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/pack"
 	"github.com/IliaSA101/sosninaalbums/internal/export"
@@ -105,6 +106,7 @@ type verifier struct {
 	// Последний поставленный набор: макетов альбома в манифесте и его minApp (проверяет lookCheck).
 	albums int
 	minApp string
+	setFit bool // в наборе макетов есть шаг с Fit: действует правило корешка (library-verify-looks.go)
 }
 
 // lookCheck — проверка макетов альбома набора (library-verify-looks.go, вид album с 0.28); без этого
@@ -406,7 +408,7 @@ func (v *verifier) verifyPack(path string) {
 }
 
 // libsOf — картинки библиотеки шаблона и число ключей, которых на этом ПК нет.
-func (v *verifier) libsOf(t model.SpreadTpl) (libs map[string]model.PhotoInfo, missing int) {
+func (v *verifier) libsOf(t looktpl.SpreadTpl) (libs map[string]model.PhotoInfo, missing int) {
 	libs = map[string]model.PhotoInfo{}
 	for _, key := range tplKeys(t) {
 		if _, have := libs[key]; have {
@@ -424,7 +426,7 @@ func (v *verifier) libsOf(t model.SpreadTpl) (libs map[string]model.PhotoInfo, m
 
 // tplKeys — ключи библиотеки в шаблоне: фоны страниц, фон разворота, стикеры и рамочки мест
 // (borders, 131) — как app.tplKeys и decor.tplLibs.
-func tplKeys(t model.SpreadTpl) []string {
+func tplKeys(t looktpl.SpreadTpl) []string {
 	var keys []string
 	bgs := slices.Clone(t.Page)
 	if t.Whole != nil {
@@ -494,7 +496,7 @@ const (
 func cropOf(a, p float64) float64 { return 1 - min(a, p)/max(a, p) }
 
 // checkAspect — предупреждение о пропорции мест на 30×30; места-фигуры (овал) по замыслу автора не считаются.
-func (v *verifier) checkAspect(t model.SpreadTpl, sv model.SpreadView) {
+func (v *verifier) checkAspect(t looktpl.SpreadTpl, sv model.SpreadView) {
 	n, ok := 0, 0
 	for i, pl := range sv.Places {
 		if i >= len(t.Places) || t.Places[i].Shape != "" || pl.W <= 0 || pl.H <= 0 {
@@ -511,15 +513,15 @@ func (v *verifier) checkAspect(t model.SpreadTpl, sv model.SpreadView) {
 	}
 }
 
-func derefBg(b *model.TplBg) model.TplBg {
+func derefBg(b *looktpl.TplBg) looktpl.TplBg {
 	if b == nil {
-		return model.TplBg{}
+		return looktpl.TplBg{}
 	}
 	return *b
 }
 
 // checkView — проверки одного листа; true, если был провал.
-func (v *verifier) checkView(name string, t model.SpreadTpl, sv model.SpreadView, minDPI, bgs int) bool {
+func (v *verifier) checkView(name string, t looktpl.SpreadTpl, sv model.SpreadView, minDPI, bgs int) bool {
 	before := len(v.fails)
 	if sv.LowDPI != 0 {
 		v.failf("%s: LowDPI %d (порог %d dpi)", name, sv.LowDPI, minDPI)
@@ -563,7 +565,7 @@ func slug(s string) string {
 }
 
 // snapshot — снимок шаблона при провале.
-func (v *verifier) snapshot(t model.SpreadTpl, p *model.Project, view model.View, path string) {
+func (v *verifier) snapshot(t looktpl.SpreadTpl, p *model.Project, view model.View, path string) {
 	img, err := tplImage(t, p, view, 600)
 	if err == nil {
 		err = imaging.Save(img, path)
@@ -576,7 +578,7 @@ func (v *verifier) snapshot(t model.SpreadTpl, p *model.Project, view model.View
 }
 
 // tplImage — плитка шаблона шириной px тем же путём, что окно «Развороты» (TplScene → Render).
-func tplImage(t model.SpreadTpl, p *model.Project, view model.View, px int) (image.Image, error) {
+func tplImage(t looktpl.SpreadTpl, p *model.Project, view model.View, px int) (image.Image, error) {
 	sc, ok := export.TplScene(p, view)
 	if !ok {
 		return nil, errors.New("нет сцены")

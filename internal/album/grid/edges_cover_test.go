@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
@@ -23,8 +24,8 @@ func twoSpreads(t *testing.T) *model.Project {
 }
 
 // tileStep — шаг макета с одним местом на два листа-страницы.
-func tileStep() model.LookStep {
-	return model.LookStep{Name: "Глава", Tpl: model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Page: []model.TplBg{{}, {}},
+func tileStep() looktpl.LookStep {
+	return looktpl.LookStep{Name: "Глава", Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Page: []looktpl.TplBg{{}, {}},
 		Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.3}}}}
 }
 
@@ -53,7 +54,7 @@ func TestLookGeomRefusals(t *testing.T) {
 	s := p.Spreads[0]
 	s.Grid = []*model.Place{{ID: "0a0000000001", X: 10, Y: 10, W: 50, H: 50}}
 	before := string(model.Marshal(p))
-	bad := model.LookStep{Tpl: model.SpreadTpl{Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.3}}}} // V не тот: зажим отказывает
+	bad := looktpl.LookStep{Tpl: looktpl.SpreadTpl{Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.3}}}} // V не тот: зажим отказывает
 	if _, ok := lookGeom(p, s, bad); ok {
 		t.Error("шаблон не прошёл зажим, а места есть")
 	}
@@ -90,7 +91,7 @@ func TestPutLookTileVignetteEmpty(t *testing.T) {
 	s := p.Spreads[0]
 	s.Kind, s.Vig = model.KindVignette, &model.Vignette{}
 	before := string(model.Marshal(p))
-	empty := model.LookStep{Name: "Пусто"} // V не TplV: lookTpl отказывает
+	empty := looktpl.LookStep{Name: "Пусто"} // V не TplV: lookTpl отказывает
 	plan, missing, err := PutLookTile(p, s.ID, empty, 1, nil)
 	if err != nil || missing != nil || plan != (model.GridPlan{}) {
 		t.Fatalf("лист 031: %+v %v %v", plan, missing, err)

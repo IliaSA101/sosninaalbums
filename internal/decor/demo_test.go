@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Пример темы (142 design §3): происхождение, «Новые», ссылки на макеты, DemoOnly.
@@ -214,7 +214,7 @@ func TestLookRefPrefersDonor(t *testing.T) {
 			donor()
 			installDemo(t, s, pit{"looks/main.json", v1})
 		}
-		ref, ok := s.LookRefOf(model.LookKey(v1))
+		ref, ok := s.LookRefOf(looktpl.LookKey(v1))
 		if !ok || ref.Pack != "wedding-layouts" || ref.Item != "looks/main.json" || ref.Name == "" {
 			t.Errorf("demoFirst=%v: %+v %v", demoFirst, ref, ok)
 		}
@@ -227,7 +227,7 @@ func TestLookRefDemoOnly(t *testing.T) {
 	s, _ := openTemp(t)
 	s.SetDemo(demoID, []string{"wedding-layouts"})
 	v1 := lookBytes(t, lookOf("", ""), "")
-	key := model.LookKey(v1)
+	key := looktpl.LookKey(v1)
 	installDemo(t, s, pit{"looks/main.json", v1})
 	ref, ok := s.LookRefOf(key)
 	if !ok || ref.Pack != demoID || ref.Item != "looks/main.json" {
@@ -251,11 +251,11 @@ func TestLookRefSurvivesLayoutsV2(t *testing.T) {
 	s.SetDemo(demoID, []string{"wedding-layouts", "other-layouts"})
 	v1 := lookBytes(t, lookOf("", ""), "")
 	installDemo(t, s, pit{"looks/main.json", v1})
-	ref, ok := s.LookRefOf(model.LookKey(v1))
+	ref, ok := s.LookRefOf(looktpl.LookKey(v1))
 	if !ok || ref.Pack != demoID {
 		t.Fatalf("%+v %v", ref, ok)
 	}
-	if k, ok := s.LookKeyOf(ref); !ok || k != model.LookKey(v1) {
+	if k, ok := s.LookKeyOf(ref); !ok || k != looktpl.LookKey(v1) {
 		t.Fatalf("пока пример стоит: %q %v", k, ok)
 	}
 	// Пример ушёл, доноров нет — макета нет.
@@ -271,10 +271,10 @@ func TestLookRefSurvivesLayoutsV2(t *testing.T) {
 	v2 := lookBytes(t, l2, "")
 	m, src := testPack("wedding-layouts", 2, pit{"looks/main.json", v2})
 	install(t, s, m, src, nil)
-	if k, ok := s.LookKeyOf(ref); !ok || k != model.LookKey(v2) || !s.HasLook(ref) {
+	if k, ok := s.LookKeyOf(ref); !ok || k != looktpl.LookKey(v2) || !s.HasLook(ref) {
 		t.Errorf("после ухода примера: %q %v", k, ok)
 	}
-	if k, ok := s.LookByItem(demoID, "looks/main.json"); !ok || k != model.LookKey(v2) {
+	if k, ok := s.LookByItem(demoID, "looks/main.json"); !ok || k != looktpl.LookKey(v2) {
 		t.Errorf("LookByItem: %q %v", k, ok)
 	}
 	// Края: другой путь, пустой и мусорный путь, не пример, набор не из related.
@@ -291,7 +291,7 @@ func TestLookRefSurvivesLayoutsV2(t *testing.T) {
 	fifth := lookBytes(t, lookOf("", ""), `"z":3`)
 	m4, src4 := testPack("other-layouts", 1, pit{"looks/third.json", fifth})
 	install(t, s, m4, src4, nil)
-	if k, ok := s.LookByItem(demoID, "looks/third.json"); !ok || k != model.LookKey(fifth) {
+	if k, ok := s.LookByItem(demoID, "looks/third.json"); !ok || k != looktpl.LookKey(fifth) {
 		t.Errorf("второй донор: %q %v", k, ok)
 	}
 	// Без SetDemo псевдонима нет.

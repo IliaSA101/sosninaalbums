@@ -11,6 +11,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -41,37 +42,37 @@ func lkPlaces(n int) []model.Box {
 }
 
 // lkStep — шаг-разворот (Pages 2, ratio 2 — страницы квадратные): n мест и цвет страниц.
-func lkStep(role, name, color string, n int) model.LookStep {
-	return model.LookStep{Role: role, Name: name, Tpl: model.SpreadTpl{
-		V: model.TplV, Pages: 2, Ratio: 2, Places: lkPlaces(n), Page: []model.TplBg{{Color: color}, {Color: color}}}}
+func lkStep(role, name, color string, n int) looktpl.LookStep {
+	return looktpl.LookStep{Role: role, Name: name, Tpl: looktpl.SpreadTpl{
+		V: looktpl.TplV, Pages: 2, Ratio: 2, Places: lkPlaces(n), Page: []looktpl.TplBg{{Color: color}, {Color: color}}}}
 }
 
 // lkDraft добавляет шагу заготовку надписи.
-func lkDraft(st model.LookStep) model.LookStep {
-	st.Tpl.Drafts = []model.TplText{{Anchor: model.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}
+func lkDraft(st looktpl.LookStep) looktpl.LookStep {
+	st.Tpl.Drafts = []looktpl.TplText{{Anchor: looktpl.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}
 	return st
 }
 
-func lkVig(name string, pupils int) model.LookStep {
-	return model.LookStep{Role: model.RoleVignette, Name: name,
-		Tpl: model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{Color: "#f5f0e8"}}},
-		Vig: &model.LookVig{Tpl: "head-t-left", Teachers: 1, Pupils: pupils, Ratio: "3:4"}}
+func lkVig(name string, pupils int) looktpl.LookStep {
+	return looktpl.LookStep{Role: looktpl.RoleVignette, Name: name,
+		Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{Color: "#f5f0e8"}}},
+		Vig: &looktpl.LookVig{Tpl: "head-t-left", Teachers: 1, Pupils: pupils, Ratio: "3:4"}}
 }
 
 // lookA: 0 титул (заготовка), 1 виньетка, 2 сборы, 3–4 повтор, 5 финал, 6 виньетка, 7 конец.
 // Series(A, 9): 0 1 2 | 3 4 3 | 5 6 7 — шаги 1 2 3 4 5 4 6 7 8.
-func lookA() model.AlbumTpl {
-	return model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{
+func lookA() looktpl.AlbumTpl {
+	return looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{
 		lkDraft(lkStep("", "Титул", "#ffffff", 1)), lkVig("Класс", 4), lkStep("", "Сборы", "#fff0f0", 2),
-		lkStep(model.RoleRepeat, "", "#f0fff0", 1), lkStep(model.RoleRepeat, "", "#f0f0ff", 3),
+		lkStep(looktpl.RoleRepeat, "", "#f0fff0", 1), lkStep(looktpl.RoleRepeat, "", "#f0f0ff", 3),
 		lkStep("", "Финал", "#eeeeee", 2), lkVig("Учителя", 6), lkStep("", "Конец", "#dddddd", 1),
 	}}
 }
 
 // lookB: 0 титул, 1 виньетка, 2 повтор, 3 финал. Series(B, 6): 0 1 | 2 2 2 | 3.
-func lookB() model.AlbumTpl {
-	return model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{
-		lkStep("", "Начало", "#ffeedd", 2), lkVig("Класс", 8), lkStep(model.RoleRepeat, "", "#ddeeff", 4), lkStep("", "Финал", "#ccbbaa", 1),
+func lookB() looktpl.AlbumTpl {
+	return looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{
+		lkStep("", "Начало", "#ffeedd", 2), lkVig("Класс", 8), lkStep(looktpl.RoleRepeat, "", "#ddeeff", 4), lkStep("", "Финал", "#ccbbaa", 1),
 	}}
 }
 
@@ -80,7 +81,7 @@ func lkEditor(t *testing.T) *album.Editor {
 	return edtest.Open(t, model.New(), "")
 }
 
-func lkApply(t *testing.T, e *album.Editor, ref model.LookRef, tpl model.AlbumTpl, find album.LookFinder, n int) model.LookPlan {
+func lkApply(t *testing.T, e *album.Editor, ref model.LookRef, tpl looktpl.AlbumTpl, find album.LookFinder, n int) model.LookPlan {
 	t.Helper()
 	_, plan, err := e.ApplyLook(ref, tpl, find, model.LookOpts{Spreads: n}, nil)
 	if err != nil {
@@ -290,7 +291,7 @@ func TestApplyLookRefusedNoStep(t *testing.T) {
 		}
 	})
 	rev, undo, data := e.View().Rev, edtest.UndoLen(e), lkJSON(e)
-	check := func(name string, ref model.LookRef, tpl model.AlbumTpl, n int) {
+	check := func(name string, ref model.LookRef, tpl looktpl.AlbumTpl, n int) {
 		t.Helper()
 		v, plan, err := e.ApplyLook(ref, tpl, nil, model.LookOpts{Spreads: n}, nil)
 		if err == nil {
@@ -303,8 +304,8 @@ func TestApplyLookRefusedNoStep(t *testing.T) {
 	check("предел MaxSpreads", lkRefA, lookA(), 9)
 	check("без ключа", model.LookRef{Name: "x"}, lookA(), 9)
 	check("плохой ключ", model.LookRef{Key: "my:XYZ"}, lookA(), 9)
-	check("пустой макет", lkRefA, model.AlbumTpl{V: model.LookV}, 9)
-	check("макет новее", lkRefA, model.AlbumTpl{V: model.LookV + 1, Steps: lookA().Steps}, 9)
+	check("пустой макет", lkRefA, looktpl.AlbumTpl{V: looktpl.LookV}, 9)
+	check("макет новее", lkRefA, looktpl.AlbumTpl{V: looktpl.LookV + 1, Steps: lookA().Steps}, 9)
 	if _, err := e.PlanLook(lkRefA, lookA(), nil, model.LookOpts{Spreads: 9}, nil); err == nil {
 		t.Fatal("PlanLook должен отказать там же, где ApplyLook")
 	}
@@ -394,8 +395,8 @@ func TestApplyLookSaveLoad(t *testing.T) {
 // Стоимость: серия в 120 разворотов — новая и повтор (со сверкой пробного).
 func TestApplyLookSeriesFast(t *testing.T) {
 	testkit.CostTest(t)
-	steps := []model.LookStep{lkStep("", "Начало", "#ffffff", 5), lkStep(model.RoleRepeat, "", "#eeeeee", 5), lkStep("", "Конец", "#dddddd", 5)}
-	tpl := model.AlbumTpl{V: model.LookV, Steps: steps}
+	steps := []looktpl.LookStep{lkStep("", "Начало", "#ffffff", 5), lkStep(looktpl.RoleRepeat, "", "#eeeeee", 5), lkStep("", "Конец", "#dddddd", 5)}
+	tpl := looktpl.AlbumTpl{V: looktpl.LookV, Steps: steps}
 	fresh := testkit.Fastest(3, func() {
 		e := lkEditor(t)
 		lkApply(t, e, lkRefA, tpl, nil, 120)
@@ -423,7 +424,7 @@ func TestApplyLookKeepsComposition(t *testing.T) {
 		p := edtest.P(e)
 		s := p.Spreads[2] // «Сборы»: два места, нарисованы на области 2:1
 		area := 2 * f.w / f.h
-		want := model.LookBoxes(lookA().Steps[2].Tpl, area)
+		want := looktpl.LookBoxes(lookA().Steps[2].Tpl, area)
 		if len(s.Grid) != 2 {
 			t.Fatalf("мест %d", len(s.Grid))
 		}

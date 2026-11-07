@@ -142,7 +142,14 @@ func TestAwaitAnswerNoSem(t *testing.T) {
 	tok := okReply(t, tcall(t, cs, "create_album", nil)).Data["pending"].(map[string]any)["ask"]
 	hold.Store(true)
 	busy := bgCall(cs, "get_album", nil) // единственное место чтения
-	<-entered
+	// Без срока тут висели 30 минут: get_album, вернувшийся раньше hook (ложное «занято»), не даёт entered.
+	select {
+	case <-entered:
+	case r := <-busy:
+		t.Fatalf("get_album вернулся, не дойдя до hook: %q", r.Text)
+	case <-time.After(testkit.Limit(10 * time.Second)):
+		t.Fatal("get_album не дошёл до hook")
+	}
 	failText(t, tcall(t, cs, "get_photo", map[string]any{"id": idA}), errCallBusy)
 	if aw := tcall(t, cs, "await_answer", map[string]any{"ask": tok}); aw.IsError || aw.Data["pending"] == nil {
 		t.Fatalf("await_answer при занятом месте чтения: %q", aw.Text)

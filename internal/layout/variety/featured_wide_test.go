@@ -186,7 +186,7 @@ func wideGoldenLines() []string {
 }
 
 func TestGoldenFeaturedWide(t *testing.T) {
-	goldenArch(t)
+	testkit.RequireNoFMA(t)
 	got := wideGoldenLines()
 	if *updateGolden || os.Getenv("SA_GOLDEN_UPDATE") == "1" {
 		if err := os.MkdirAll(filepath.Dir(wideGoldenPath), 0o755); err != nil {

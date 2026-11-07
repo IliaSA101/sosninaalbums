@@ -4,6 +4,8 @@ const store = vi.hoisted(() => ({
   current: 0,
   navAt: 0,
   navSeq: 0,
+  missing: [] as string[],
+  unread: {} as Record<string, string>,
   view: { spreads: [] as { id: string; photos: string[] }[] },
   go: (_i: number) => {},
   // Ряд идёт по листам (обложка 032 + развороты); без обложки лист = разворот.
@@ -219,6 +221,33 @@ describe('SpreadRow', () => {
     expect(row.grab({ clientX: 0, clientY: 0, target: peer } as unknown as PointerEvent)).toBe(true)
     expect(row.moving).toBe(false)
     expect(Number.isInteger(row.pos)).toBe(true)
+  })
+
+  it('прогрев соседей: пропавшие и нечитаемые фото пропускаются, обычные греются', () => {
+    const srcs: string[] = []
+    vi.stubGlobal(
+      'Image',
+      class {
+        set src(v: string) {
+          srcs.push(v)
+        }
+      },
+    )
+    store.view = {
+      ...store.view,
+      spreads: store.view.spreads.map((s, i) => (i === 2 ? { ...s, photos: ['ok', 'gone', 'cloud'] } : s)),
+    }
+    store.missing = ['gone']
+    store.unread = { cloud: 'файл только в облаке' }
+    try {
+      store.go(1)
+      ride()
+      expect(srcs).toHaveLength(1)
+      expect(srcs[0]).toContain('/media/p/ok')
+    } finally {
+      store.missing = []
+      store.unread = {}
+    }
   })
 
   it('near и подсветка: округляет, на слоте n — atNew', () => {

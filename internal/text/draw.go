@@ -121,7 +121,7 @@ func placeCustom(main, alt glyphSrc, d *faceData, l Line, unit fixed.Int26_6, px
 	if n := utf8.RuneCountInString(l.Text); len(l.DX) == n && len(gl) == n {
 		return gl, glyphXs(l, adv, pxmm)
 	}
-	p := measureCustom(main.f, alt.f, d, l.Text)
+	p, _ := measureCustom(main.f, alt.f, d, l.Text) // одна строка: пересчитывать нечего
 	xs := make([]float64, len(p.x))
 	for i, x := range p.x {
 		xs[i] = px(x)

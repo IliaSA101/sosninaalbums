@@ -451,7 +451,7 @@ func featGoldenLines() []string {
 }
 
 func TestGoldenFeatured(t *testing.T) {
-	goldenArch(t)
+	testkit.RequireNoFMA(t)
 	got := featGoldenLines()
 	if *updateGolden || os.Getenv("SA_GOLDEN_UPDATE") == "1" {
 		if err := os.MkdirAll(filepath.Dir(featGoldenPath), 0o755); err != nil {

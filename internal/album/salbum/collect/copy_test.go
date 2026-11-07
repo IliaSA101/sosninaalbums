@@ -352,3 +352,27 @@ func TestCollectProgress(t *testing.T) {
 		t.Fatalf("повтор: %d, %v, %+v", n, err, calls)
 	}
 }
+
+// Источник подменили после плана папкой (OpenLocal, 160-M1): ошибка вместо копирования, временного и файла под
+// именем нет, остальной сбор не продолжается.
+func TestCollectSourceBecameDir(t *testing.T) {
+	sc := newScene(t)
+	dir := filepath.Join(sc.root, "Флешка", "Иванов")
+	pl := mustPlan(t, sc, dir)
+	x := filepath.Join(sc.root, "Прочее", "x.jpg")
+	if err := os.Remove(x); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(x, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Copy(context.Background(), dir, &pl, nil); err == nil {
+		t.Fatal("папка на месте фото скопирована без ошибки")
+	}
+	if left := tmpLeft(t, dir); len(left) != 0 {
+		t.Fatalf("остались временные: %v", left)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Фото", "Прочие", "x.jpg")); err == nil {
+		t.Fatal("папка скопирована как файл")
+	}
+}

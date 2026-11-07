@@ -61,7 +61,7 @@ func ClampBorder(p *Project, b *Border) *Border {
 		if _, ok := p.Photos[b.Photo]; !ok {
 			return nil
 		}
-		return &Border{Photo: b.Photo, Scale: clampBorderScale(b.Scale), Cut: gen.ClampCut(b.Cut), Open: b.Open}
+		return &Border{Photo: b.Photo, Scale: ClampBorderScale(b.Scale), Cut: gen.ClampCut(b.Cut), Open: b.Open}
 	}
 	if !gen.ValidKind(b.Kind) {
 		return nil
@@ -73,7 +73,8 @@ func ClampBorder(p *Project, b *Border) *Border {
 	return out
 }
 
-func clampBorderScale(v float64) float64 {
+// ClampBorderScale зажимает масштаб рамки; экспорт — для looktpl (рамочки мест шаблона разворота).
+func ClampBorderScale(v float64) float64 {
 	if !(v > 0) || math.IsInf(v, 1) {
 		return 0
 	}

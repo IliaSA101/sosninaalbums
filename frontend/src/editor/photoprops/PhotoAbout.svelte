@@ -66,7 +66,7 @@
   .link {
     all: unset;
     cursor: pointer;
-    color: inherit;
+    color: var(--link);
     text-decoration: underline dotted;
     text-underline-offset: 3px;
   }

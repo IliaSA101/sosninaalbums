@@ -12,19 +12,21 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/app/looks"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // testLook — макет: титул, повторяемый шаг, финал и обложка; в каждом шаге два места.
-func testLook(color string) model.AlbumTpl {
-	tpl := model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Places: []model.Box{{X: 0.05, Y: 0.1, W: 0.4, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.4, H: 0.8}},
-		Page: []model.TplBg{{Color: color}, {Color: color}}}
-	side := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.2, Y: 0.2, W: 0.6, H: 0.6}}, Page: []model.TplBg{{Color: color}}}
-	return model.AlbumTpl{V: model.LookV,
-		Cover: &model.CoverTpl{Bg: &model.TplBg{Color: color}, Front: &side},
-		Steps: []model.LookStep{{Name: "Титул", Tpl: tpl}, {Role: model.RoleRepeat, Tpl: tpl}, {Name: "Финал", Tpl: tpl}}}
+func testLook(color string) looktpl.AlbumTpl {
+	tpl := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Places: []model.Box{{X: 0.05, Y: 0.1, W: 0.4, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.4, H: 0.8}},
+		Page: []looktpl.TplBg{{Color: color}, {Color: color}}}
+	side := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: []model.Box{{X: 0.2, Y: 0.2, W: 0.6, H: 0.6}}, Page: []looktpl.TplBg{{Color: color}}}
+	return looktpl.AlbumTpl{V: looktpl.LookV,
+		Cover: &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: color}, Front: &side},
+		Steps: []looktpl.LookStep{{Name: "Титул", Tpl: tpl}, {Role: looktpl.RoleRepeat, Tpl: tpl}, {Name: "Финал", Tpl: tpl}}}
 }
 
 // lookApp — App с библиотекой и пустым альбомом из трёх разворотов, подключённым к библиотеке макетов.
@@ -374,71 +376,17 @@ func TestMediaLook(t *testing.T) {
 	}
 }
 
-func TestLookTile(t *testing.T) {
-	l := testLook("#ffffff")
-	l.Steps = append(l.Steps, model.LookStep{Role: model.RoleVignette, Tpl: l.Steps[0].Tpl, Vig: &model.LookVig{Tpl: "classic", Teachers: 1, Pupils: 4}})
-	l.Steps[0].Tpl.Texts = []model.TplText{{Text: "Привет", W: 0.5}}
-	one := func(i int, bg, front bool, r float64) (model.SpreadTpl, bool) {
-		t.Helper()
-		tp, ok := lookTile(l, i, bg, front, r)
-		if ok && len(tp) != 1 {
-			t.Fatalf("шаг %d: шаблонов %d, ждали 1", i, len(tp))
-		}
-		if !ok {
-			return model.SpreadTpl{}, false
-		}
-		return tp[0], true
-	}
-	if tp, ok := one(1, true, false, 1.5); !ok || len(tp.Places) != 0 || len(tp.Texts) != 0 || tp.Page[0].Color != "#ffffff" {
-		t.Errorf("bg: %+v", tp)
-	}
-	if tp, ok := one(1, false, false, 1); !ok || len(tp.Places) != 2 || len(tp.Texts) != 1 || tp.Places[0].Y == l.Steps[0].Tpl.Places[0].Y {
-		t.Errorf("места по LookBoxes для r=1: %+v", tp.Places) // композиция Ratio 2 в квадрате ниже
-	}
-	if tp, ok := one(4, false, false, 1.5); !ok || len(tp.Places) != 0 {
-		t.Errorf("виньетка: %+v", tp)
-	}
-	// Обложка: две стороны рядом (задней у testLook нет — пустая страница с фоном листа).
-	cv, ok := lookTile(l, 0, false, false, 1.5)
-	if !ok || len(cv) != 2 || len(cv[0].Places) != 0 || len(cv[1].Places) != 1 || cv[0].Page[0].Color != "#ffffff" || cv[1].Pages != 1 {
-		t.Fatalf("обложка: %+v", cv)
-	}
-	// Места лицевой — в её зоне (вся сторона, отношение r/2 = 0,75): Ratio 1 вписывается по высоте, по центру.
-	if want := model.LookBoxes(*l.Cover.Front, 0.75); !reflect.DeepEqual(cv[1].Places, want) {
-		t.Errorf("места лицевой: %v, ждали %v", cv[1].Places, want)
-	}
-	if fr, ok := lookTile(l, 0, false, true, 0.75); !ok || len(fr) != 1 || !reflect.DeepEqual(fr[0].Places, cv[1].Places) {
-		t.Errorf("f=1 (r — отношение стороны) совпадает с правой частью листа: %+v", fr)
-	}
-	if bgT, ok := lookTile(l, 0, true, false, 1.5); !ok || len(bgT) != 1 || bgT[0].Pages != 2 || len(bgT[0].Places) != 0 {
-		t.Errorf("фон листа обложки — один разворот: %+v", bgT)
-	}
-	if bgF, ok := lookTile(l, 0, true, true, 0.75); !ok || len(bgF) != 1 || bgF[0].Pages != 1 || len(bgF[0].Places) != 0 {
-		t.Errorf("фон лицевой — одна страница без мест: %+v", bgF)
-	}
-	for _, i := range []int{-1, 5, 25} {
-		if _, ok := lookTile(l, i, false, false, 1); ok {
-			t.Errorf("шаг %d", i)
-		}
-	}
-	l.Cover = nil
-	for _, front := range []bool{false, true} {
-		if _, ok := lookTile(l, 0, false, front, 1); ok {
-			t.Error("обложки нет")
-		}
-	}
-}
-
 func TestMediaLookFast(t *testing.T) {
+	a := newApp(t)
 	l := testLook("#336699")
 	var worst time.Duration
 	for i := range 4 {
-		tp, ok := lookTile(l, i, false, false, 1.5)
+		tp, ok := looks.Tile(l, i, false, false, 1.5)
 		if !ok {
 			t.Fatal(i)
 		}
 		worst = max(worst, testkit.Fastest(3, func() {
-			if _, err := drawLook(tp, tplQuery{px: 256, r: 1.5}, nil, nil, false); err != nil {
+			if _, err := a.looks.Draw(tp, 256, 1.5, nil, nil, false); err != nil {
 				t.Fatal(err)
 			}
 		}))
@@ -447,22 +395,6 @@ func TestMediaLookFast(t *testing.T) {
 	if limit := testkit.Limit(30 * time.Millisecond); worst > limit {
 		t.Errorf("плитка %v, предел %v", worst, limit)
 	}
-}
-
-// Разбор запроса плитки макета: принятое — в пределах белого списка.
-func FuzzMediaLookQuery(f *testing.F) {
-	for _, s := range []string{"v=1&i=0&px=256&r=2&bg=0", "i=24&px=64&r=0.2&bg=1", "i=1&px=1024&r=5", "i=1&px=2048&r=5&ph=9007199254740991", "i=1&px=256&r=1&ph=0", "i=1&px=1&r=1e400", "i=%zz", "v=99999&i=1&px=256&r=1", "i=0&px=256&r=0.5&f=1", "i=1&px=256&r=1&f=1", ""} {
-		f.Add(s)
-	}
-	f.Fuzz(func(t *testing.T, raw string) {
-		q, ok := parseLookQuery(raw)
-		if ok && q.front && q.i != 0 {
-			t.Fatalf("%q: f=1 только у обложки: %+v", raw, q)
-		}
-		if ok && (q.i < 0 || q.i > model.MaxLookSteps || q.px < tplMinPx || q.px > lookPhotoPx || q.px > tplMaxPx && q.ph == 0 || !(q.r >= tplMinR && q.r <= tplMaxR)) {
-			t.Fatalf("%q: %+v", raw, q)
-		}
-	})
 }
 
 // Ссылка альбома на макет находится по ключу и по записи набора; чужое и мусор — нет.
@@ -525,7 +457,7 @@ func TestOpenedAlbumKnowsLooks(t *testing.T) {
 func TestLookInfoNoRepeatVignette(t *testing.T) {
 	a := lookApp(t)
 	l := testLook("#ffffff")
-	l.Steps = []model.LookStep{l.Steps[0], {Role: model.RoleVignette, Tpl: l.Steps[0].Tpl, Vig: &model.LookVig{Tpl: "classic", Teachers: 1, Pupils: 4}}, l.Steps[2]}
+	l.Steps = []looktpl.LookStep{l.Steps[0], {Role: looktpl.RoleVignette, Tpl: l.Steps[0].Tpl, Vig: &looktpl.LookVig{Tpl: "classic", Teachers: 1, Pupils: 4}}, l.Steps[2]}
 	s, _ := a.decorStore()
 	it, err := s.SaveLook("mine", "Класс", l)
 	if err != nil {
@@ -542,7 +474,7 @@ func TestLookInfoNoRepeatVignette(t *testing.T) {
 		t.Fatalf("разворот: %+v", info.Steps[0])
 	}
 	page := l
-	page.Steps = []model.LookStep{l.Steps[0], l.Steps[2]}
+	page.Steps = []looktpl.LookStep{l.Steps[0], l.Steps[2]}
 	page.Steps[0].Tpl.Pages, page.Steps[0].Tpl.Page = 1, page.Steps[0].Tpl.Page[:1]
 	it, err = s.SaveLook("mine", "Страницы", page)
 	if err != nil {
@@ -585,7 +517,7 @@ func TestLookRecentAndPrevLibs(t *testing.T) {
 		t.Fatal(err)
 	}
 	t2, _ := s.Look(other)
-	if libs := a.lookLibsPrev(s, t2); libs[bg].Path == "" {
+	if libs := a.looks.LibsPrev(s, t2); libs[bg].Path == "" {
 		t.Fatalf("файл фона прежнего макета не в libs: %v", libs)
 	}
 }

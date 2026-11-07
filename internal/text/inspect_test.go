@@ -363,6 +363,15 @@ func FuzzInspect(f *testing.F) {
 	}
 	f.Add(fixture(f, "sa-test-cff.otf"))
 	f.Add(fixture(f, "sa-test-symbol.otf"))
+	// Lora с порченным GPOS (161-30в): без этих затравок фаззер почти не доходит до разбора GPOS
+	// внутри Inspect — мусор в начале файла отсекается раньше, на каталоге таблиц.
+	lora := builtinBytes(f, "Lora-Regular.ttf")
+	for _, g := range []*gposImage{
+		refuseBase(), extFar(), bombFeatures(8).build(), bombRaw(70).build(),
+		evilFmt1(2, 4).build(), evilFmt2(2, 4).build(), limAll("").build(),
+	} {
+		f.Add(withTables(f, lora, map[string][]byte{"GPOS": g.b}))
+	}
 	f.Add([]byte("ttcf\x00\x01\x00\x00\x00\x00\x00\x00"))
 	f.Add([]byte("OTTO\x00\x01\x00\x00\x00\x00\x00\x00"))
 	f.Fuzz(func(t *testing.T, b []byte) {

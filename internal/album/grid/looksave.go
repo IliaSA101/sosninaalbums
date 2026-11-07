@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // «Сохранить альбом как макет…» (131 design §8): снимок разворотов и обложки в AlbumTpl. Проект
@@ -24,24 +25,24 @@ var (
 // (параметры листа, оформление — без мест). Разворот, с которого нечего снять, в серию не идёт.
 // Имена глав в макет не входят (данные клиента, как текст надписей). Ids пуст, больше MaxSpreads,
 // не из альбома или с повтором — ошибка до сборки; после слияния больше MaxLookSteps шагов —
-// model.ErrLookMany. Свои стикеры, для которых skip(ключ) верно (код ссылки клиента), в макет не идут.
+// looktpl.ErrLookMany. Свои стикеры, для которых skip(ключ) верно (код ссылки клиента), в макет не идут.
 // Только чтение: «Авто» закрепляется на копии, одной на весь вызов.
-func AlbumTplOf(p *model.Project, o model.SaveLookOpts, skip func(lib string) bool) (model.AlbumTpl, error) {
+func AlbumTplOf(p *model.Project, o model.SaveLookOpts, skip func(lib string) bool) (looktpl.AlbumTpl, error) {
 	if len(o.Ids) == 0 {
-		return model.AlbumTpl{}, ErrLookNoSpreads
+		return looktpl.AlbumTpl{}, ErrLookNoSpreads
 	}
 	if len(o.Ids) > model.MaxSpreads {
-		return model.AlbumTpl{}, ErrLookIDs
+		return looktpl.AlbumTpl{}, ErrLookIDs
 	}
 	seen := make(map[string]bool, len(o.Ids))
 	for _, id := range o.Ids {
 		if _, s := p.Find(id); s == nil || seen[id] {
-			return model.AlbumTpl{}, ErrLookIDs
+			return looktpl.AlbumTpl{}, ErrLookIDs
 		}
 		seen[id] = true
 	}
 	c := p.Clone() // «Авто» закрепляется здесь один раз, а не копией проекта на каждый разворот
-	var steps []model.LookStep
+	var steps []looktpl.LookStep
 	var rep []bool
 	for i, id := range o.Ids {
 		_, s := c.Find(id)
@@ -50,13 +51,13 @@ func AlbumTplOf(p *model.Project, o model.SaveLookOpts, skip func(lib string) bo
 			steps, rep = append(steps, st), append(rep, pos >= o.RepFrom && pos <= o.RepTo)
 		}
 	}
-	merged, err := model.MergeLookSteps(steps, rep)
+	merged, err := looktpl.MergeLookSteps(steps, rep)
 	if err != nil {
-		return model.AlbumTpl{}, err
+		return looktpl.AlbumTpl{}, err
 	}
-	t := model.AlbumTpl{V: model.LookV, Steps: merged}
-	if _, ok := model.ClampLook(t); !ok {
-		return model.AlbumTpl{}, ErrLookNothing
+	t := looktpl.AlbumTpl{V: looktpl.LookV, Steps: merged}
+	if _, ok := looktpl.ClampLook(t); !ok {
+		return looktpl.AlbumTpl{}, ErrLookNothing
 	}
 	if o.Cover {
 		t.Cover = coverTplOf(c, o, skip)
@@ -67,7 +68,7 @@ func AlbumTplOf(p *model.Project, o model.SaveLookOpts, skip func(lib string) bo
 // lookStepOf — шаг макета из разворота s проекта-копии c; false — снять нечего (SpreadTplOfAs
 // отказывает только пустому: id проверены, обложки среди них нет). Лист-виньетка: параметры листа и
 // оформление страницы, мест нет (их строит лист).
-func lookStepOf(c *model.Project, s *model.Spread, o model.SaveLookOpts, skip func(string) bool) (model.LookStep, bool) {
+func lookStepOf(c *model.Project, s *model.Spread, o model.SaveLookOpts, skip func(string) bool) (looktpl.LookStep, bool) {
 	vig := s.IsVignette()
 	places := o.Places && !vig
 	if places {
@@ -79,32 +80,32 @@ func lookStepOf(c *model.Project, s *model.Spread, o model.SaveLookOpts, skip fu
 	switch {
 	case err == nil:
 	case vig:
-		tpl = model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}}} // у виньетки оформление может быть пустым
+		tpl = looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}}} // у виньетки оформление может быть пустым
 	default:
-		return model.LookStep{}, false
+		return looktpl.LookStep{}, false
 	}
-	st := model.LookStep{Tpl: tpl}
+	st := looktpl.LookStep{Tpl: tpl}
 	if vig {
-		st.Role, st.Vig = model.RoleVignette, lookVigOf(c, s, o)
+		st.Role, st.Vig = looktpl.RoleVignette, lookVigOf(c, s, o)
 	}
 	return st, true
 }
 
 // coverTplOf — оформление обложки: фон всего листа (узор и фото из библиотеки), задняя и лицевая
 // сторонки страницами на безопасную зону (127; доли зоны, как их ставит ApplyLookCover). Фон — как
-// его ставит model.CoverPageBg: есть узор или фото листа — они в Bg, а страница стороны несёт только
+// его ставит looktpl.CoverPageBg: есть узор или фото листа — они в Bg, а страница стороны несёт только
 // цвет; иначе узор и фото сторон (только из библиотеки) — в страницах. Корешок не входит. Обложки или оформления нет — nil.
-func coverTplOf(c *model.Project, o model.SaveLookOpts, skip func(string) bool) *model.CoverTpl {
+func coverTplOf(c *model.Project, o model.SaveLookOpts, skip func(string) bool) *looktpl.CoverTpl {
 	if c.Cover == nil || c.Cover.Sheet == nil {
 		return nil
 	}
 	s := c.Cover.Sheet
-	out := &model.CoverTpl{}
-	own := [2]model.TplBg{{Color: s.BgL}, {Color: s.BgR}} // сторона при узоре или фото листа даёт только цвет
+	out := &looktpl.CoverTpl{}
+	own := [2]looktpl.TplBg{{Color: s.BgL}, {Color: s.BgR}} // сторона при узоре или фото листа даёт только цвет
 	if bg := bgOf(c, "", s.Pat, s.BgPhoto); bg.Pat != nil || bg.Lib != "" {
 		out.Bg = &bg
 	} else { // узора и фото листа нет — узор и фото сторон ставятся на их страницы (CoverPageBg)
-		own = [2]model.TplBg{bgOf(c, s.BgL, s.PatL, s.BgPhotoL), bgOf(c, s.BgR, s.PatR, s.BgPhotoR)}
+		own = [2]looktpl.TplBg{bgOf(c, s.BgL, s.PatL, s.BgPhotoL), bgOf(c, s.BgR, s.PatR, s.BgPhotoR)}
 	}
 	out.Back = coverSideTplOf(c, model.ScopeLeft, own[0], o, skip)
 	out.Front = coverSideTplOf(c, model.ScopeRight, own[1], o, skip)
@@ -116,18 +117,18 @@ func coverTplOf(c *model.Project, o model.SaveLookOpts, skip func(string) bool) 
 
 // coverSideTplOf — сторонка scope обложки страницей-шаблоном на её зону; nil — сторонки нет или с
 // неё нечего снять.
-func coverSideTplOf(c *model.Project, scope string, own model.TplBg, o model.SaveLookOpts, skip func(string) bool) *model.SpreadTpl {
+func coverSideTplOf(c *model.Project, scope string, own looktpl.TplBg, o model.SaveLookOpts, skip func(string) bool) *looktpl.SpreadTpl {
 	side, ok := coverSideOf(c, scope)
 	if !ok {
 		return nil
 	}
 	z := side.box
-	t := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: z.W / z.H, W: z.W, H: z.H, Page: []model.TplBg{own}}
+	t := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: z.W / z.H, W: z.W, H: z.H, Page: []looktpl.TplBg{own}}
 	if o.Places {
 		t.Places, t.Borders = zonePlaces(c, side)
 	}
 	tplLayers(c, side.s, scope, z, &t, tplSnap{texts: o.Drafts, asDrafts: o.Drafts, skip: skip})
-	cl, ok := model.ClampSpreadTpl(t)
+	cl, ok := looktpl.ClampSpreadTpl(t)
 	if !ok {
 		return nil
 	}
@@ -135,7 +136,7 @@ func coverSideTplOf(c *model.Project, scope string, own model.TplBg, o model.Sav
 }
 
 // zonePlaces — места сторонки в долях её зоны (целиком в зоне, как держит holdInZone) и их рамочки.
-func zonePlaces(c *model.Project, side *coverSide) ([]model.Box, []model.TplBorder) {
+func zonePlaces(c *model.Project, side *coverSide) ([]model.Box, []looktpl.TplBorder) {
 	z := side.box
 	boxes := make([]model.Box, 0, len(side.places))
 	for _, pl := range side.places {
@@ -154,8 +155,8 @@ func zonePlaces(c *model.Project, side *coverSide) ([]model.Box, []model.TplBord
 // lookVigOf — шаг-виньетка из листа s: параметры листа и оформление (164): гарнитура и цвет подписей
 // и шапки, подпись учителя; текст шапки — при o.Drafts, если он не шаблонный. Что равно умолчанию
 // программы, в шаг не идёт (шаг простого листа — как в 0.35). Vars и имена людей не берутся.
-func lookVigOf(c *model.Project, s *model.Spread, o model.SaveLookOpts) *model.LookVig {
-	v := &model.LookVig{Tpl: s.Vig.Tpl, Teachers: s.Vig.Teachers, Pupils: s.Vig.Pupils, Ratio: s.Vig.Ratio}
+func lookVigOf(c *model.Project, s *model.Spread, o model.SaveLookOpts) *looktpl.LookVig {
+	v := &looktpl.LookVig{Tpl: s.Vig.Tpl, Teachers: s.Vig.Teachers, Pupils: s.Vig.Pupils, Ratio: s.Vig.Ratio}
 	var st model.VigStyle
 	if s.Caps != nil {
 		def := model.VigCaps(c.Geo(s).H).Style

@@ -46,7 +46,12 @@ func (a *App) serveOriginal(w http.ResponseWriter, r *http.Request, id string) {
 		http.Error(w, "метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
-	p, ok, gone := a.mediaPhoto(id)
+	p, ok, gone, cloud := a.mediaPhotoCloud(id)
+	if cloud { // оригинал в облаке: отдать его значило бы скачать; окно остаётся на превью
+		logRare(a.mediaMiss.Add(1), "media: оригинал только в облаке")
+		http.NotFound(w, r)
+		return
+	}
 	if gone || !ok {
 		if !gone { // пропавшее и прежнего альбома — не промах, в журнал не пишем
 			logRare(a.mediaMiss.Add(1), "media: оригинал не найден")

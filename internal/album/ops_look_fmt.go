@@ -7,20 +7,21 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/cover"
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/spreads"
 )
 
 // lookFit — макетный разворот, чьи места вписываются заново при смене формата.
 type lookFit struct {
 	id   string
-	step model.LookStep
+	step looktpl.LookStep
 }
 
 // SetSettingsLook — SetSettings для альбома с макетом look (Project.Look; nil — макета нет на
 // этом ПК, места тянутся как всегда): нетронутые места макетных разворотов (совпадают со шагом на
 // прежнем формате) вписываются по LookBoxes нового формата (0.27-131-23), тронутые и «Фоны по
 // серии» тянет grid.Rescale. Одна правка, один шаг отмены. Договор: как у SetSettings.
-func (e *Editor) SetSettingsLook(s model.Settings, look *model.AlbumTpl) (v model.View) {
+func (e *Editor) SetSettingsLook(s model.Settings, look *looktpl.AlbumTpl) (v model.View) {
 	t0 := time.Now()
 	defer func() { slow(t0, "настройки: %d разворотов", len(v.Spreads)) }()
 	v, _ = e.formatLook(clampLookPtr(look), false, func(p *model.Project) error {
@@ -36,12 +37,12 @@ func (e *Editor) SetSettingsLook(s model.Settings, look *model.AlbumTpl) (v mode
 // явно; nil — его ищет поиск Editor (SetLookHost) по фактическому Project.Look, под замком. Места
 // определяются до fn (нетронутость — на прежнем формате), вписываются после settle: Rescale
 // растянул бы их по осям.
-func (e *Editor) formatLook(c *model.AlbumTpl, auto bool, fn func(p *model.Project) error) (model.View, error) {
+func (e *Editor) formatLook(c *looktpl.AlbumTpl, auto bool, fn func(p *model.Project) error) (model.View, error) {
 	return e.formatLookIf(c, auto, nil, fn)
 }
 
 // formatLookIf — formatLook со сверкой x под замком (nil — без неё; 151).
-func (e *Editor) formatLookIf(c *model.AlbumTpl, auto bool, x *Expect, fn func(p *model.Project) error) (model.View, error) {
+func (e *Editor) formatLookIf(c *looktpl.AlbumTpl, auto bool, x *Expect, fn func(p *model.Project) error) (model.View, error) {
 	var fit []lookFit
 	return e.editWith("", false, func(p *model.Project) error {
 		if auto && slices.ContainsFunc(p.Spreads, func(sp *model.Spread) bool { return sp.LookStep > 0 }) {
@@ -59,11 +60,11 @@ func (e *Editor) formatLookIf(c *model.AlbumTpl, auto bool, x *Expect, fn func(p
 }
 
 // clampLookPtr — макет, зажатый ClampLook; nil и негодный дают nil.
-func clampLookPtr(look *model.AlbumTpl) *model.AlbumTpl {
+func clampLookPtr(look *looktpl.AlbumTpl) *looktpl.AlbumTpl {
 	if look == nil {
 		return nil
 	}
-	if ct, ok := model.ClampLook(*look); ok {
+	if ct, ok := looktpl.ClampLook(*look); ok {
 		return &ct
 	}
 	return nil
@@ -84,7 +85,7 @@ type LookHost struct {
 func (e *Editor) SetLookHost(h LookHost) { e.lookHost.Store(&h) }
 
 // findLook — макет записи r (зажатый); nil — записи, поиска или макета нет.
-func (e *Editor) findLook(r *model.LookRef) *model.AlbumTpl {
+func (e *Editor) findLook(r *model.LookRef) *looktpl.AlbumTpl {
 	h := e.lookHost.Load()
 	if r == nil || h == nil || h.Find == nil {
 		return nil
@@ -110,7 +111,7 @@ func (e *Editor) Look() (r *model.LookRef) {
 }
 
 // lookFits — развороты макета c, чьи места ещё те, что поставил шаг на нынешнем формате p.
-func lookFits(p *model.Project, c *model.AlbumTpl) (out []lookFit) {
+func lookFits(p *model.Project, c *looktpl.AlbumTpl) (out []lookFit) {
 	if c == nil || p.Look == nil {
 		return nil
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Круг «сохранить альбом как макет» → «поставить на обложку другого альбома» (131 G6b + G5): AlbumTplOf
@@ -25,7 +26,7 @@ func cleanCover(t *testing.T) *cv {
 }
 
 // coverMacro — макет из обложки src (развороту для шага задаётся цвет: серия не пуста).
-func coverMacro(t *testing.T, src *cv) model.AlbumTpl {
+func coverMacro(t *testing.T, src *cv) looktpl.AlbumTpl {
 	t.Helper()
 	first := ids(src.e)[0]
 	src.e.SetBackground(first, model.ScopeLeft, "#abcdef")
@@ -40,7 +41,7 @@ func coverMacro(t *testing.T, src *cv) model.AlbumTpl {
 
 // roundCover ставит обложку макета tpl на чистую обложку и сверяет с src: места ±0,01 мм, цвета,
 // узоры листа и сторон, число стикеров и заготовок; повтор — холостая правка (rev, проект).
-func roundCover(t *testing.T, src *cv, tpl model.AlbumTpl) *cv {
+func roundCover(t *testing.T, src *cv, tpl looktpl.AlbumTpl) *cv {
 	t.Helper()
 	dst := cleanCover(t)
 	if _, _, _, err := dst.e.ApplyLookStep(model.CoverID, 0, lkSaveRef, tpl, nil); err != nil {
@@ -148,7 +149,7 @@ func TestAlbumTplOfCoverRoundNoBg(t *testing.T) {
 	src.fill(model.ScopeRight, "v3")
 	edtest.Change(src.e, func(p *model.Project) { p.Cover.Sheet.Texts = nil })
 	tpl := coverMacro(t, src)
-	if tpl.Cover.Bg != nil || tpl.Cover.Back.Page[0] != (model.TplBg{}) || tpl.Cover.Front.Page[0] != (model.TplBg{}) {
+	if tpl.Cover.Bg != nil || tpl.Cover.Back.Page[0] != (looktpl.TplBg{}) || tpl.Cover.Front.Page[0] != (looktpl.TplBg{}) {
 		t.Fatalf("фон появился: %+v", tpl.Cover)
 	}
 	roundCover(t, src, tpl)
@@ -169,7 +170,7 @@ func TestAlbumTplOfCoverSidePhoto(t *testing.T) {
 	if tpl.Cover.Bg != nil || tpl.Cover.Front.Page[0].Lib != kBg {
 		t.Fatalf("фото фона лицевой: Bg %+v, Front %+v", tpl.Cover.Bg, tpl.Cover.Front.Page)
 	}
-	if tpl.Cover.Back != nil && tpl.Cover.Back.Page[0] != (model.TplBg{}) {
+	if tpl.Cover.Back != nil && tpl.Cover.Back.Page[0] != (looktpl.TplBg{}) {
 		t.Errorf("кадр съёмки задней попал в макет: %+v", tpl.Cover.Back.Page)
 	}
 	whole := fsfera(t)

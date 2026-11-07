@@ -5,6 +5,7 @@
   import ColorPicker from '../../base/color/ColorPicker.svelte'
   import { colorLive } from '../../base/color/colorlive.svelte'
   import Icon from '../../base/ui/Icon.svelte'
+  import Seg, { type SegItem } from '../../base/tpl/Seg.svelte'
   import { LIB_MISSING_TEXT } from '../../panels/library/missing'
   import { decor } from '../../panels/decor/decor.svelte'
   import { tileSrc } from '../../panels/decor/decor'
@@ -35,6 +36,10 @@
     if (st && !st.gen) void decor.ensureStickers()
   })
 
+  const FLIPS: SegItem<'h' | 'v'>[] = [
+    { id: 'h', label: '↔', title: 'Отразить по горизонтали', icon: 'flip-h' },
+    { id: 'v', label: '↕', title: 'Отразить по вертикали', icon: 'flip-v' },
+  ]
   const val = (e: Event) => +(e.currentTarget as HTMLInputElement).value
   const key = $derived(st ? stKey(sid, st.id) : '')
 
@@ -123,13 +128,15 @@
   </div>
 
   <div class="lbl2">Зеркало</div>
-  <div class="seg" role="group" aria-label="Зеркало">
-    <button class:on={st.flipH} aria-pressed={st.flipH} title="Отразить по горизонтали" onclick={() => sticker.flip('h')}
-      ><Icon name="flip-h" size={14} />↔</button
-    >
-    <button class:on={st.flipV} aria-pressed={st.flipV} title="Отразить по вертикали" onclick={() => sticker.flip('v')}
-      ><Icon name="flip-v" size={14} />↕</button
-    >
+  <div class="wrap">
+    <Seg
+      look="card"
+      label="Зеркало"
+      items={FLIPS}
+      values={[...(st.flipH ? ['h' as const] : []), ...(st.flipV ? ['v' as const] : [])]}
+      iconSize={14}
+      onpick={(a) => sticker.flip(a)}
+    />
   </div>
 
   <button class="wide" title="Другой стикер на это место: центр, ширина и поворот остаются" onclick={replace}>Заменить…</button>
@@ -228,32 +235,8 @@
     font-size: 12px;
     color: var(--muted);
   }
-  .seg {
-    display: flex;
+  .wrap {
     margin-top: 4px;
-    border-radius: 5px;
-    overflow: hidden;
-    gap: 1px;
-  }
-  .seg button {
-    flex: 1;
-    height: 26px;
-    padding: 0 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    font-size: 12px;
-    border-radius: 0;
-    background: #38383c;
-    color: #cfcfd4;
-  }
-  .seg button.on {
-    background: var(--accent);
-    color: #1e1e1e;
-  }
-  .seg button.on:hover {
-    background: #ffe53a;
   }
   .wide {
     margin-top: 10px;

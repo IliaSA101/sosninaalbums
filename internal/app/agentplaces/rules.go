@@ -69,6 +69,16 @@ func (r *Rules) refusal() error {
 	return ErrPlaceBad
 }
 
+// WithTimeout — копия правил с пределом пробы не больше d (план открытия подрезает пробы под остаток срока).
+func (r *Rules) WithTimeout(d time.Duration) *Rules {
+	if r == nil {
+		return nil
+	}
+	c := *r
+	c.timeout = min(c.timeout, d)
+	return &c
+}
+
 // Timeout — предел одной дисковой пробы.
 func (r *Rules) Timeout() time.Duration { return r.timeout }
 

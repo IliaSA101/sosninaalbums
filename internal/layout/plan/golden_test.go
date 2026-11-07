@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -58,18 +57,14 @@ const (
 // узкий свой × без серий и с сериями. -update — только при осознанной смене плана.
 // Layflat-геометрии — «любые фото» (прежний план бит-в-бит, 064).
 func TestGoldenPlan051(t *testing.T) {
-	if runtime.GOARCH != "amd64" {
-		t.Skip("эталон снят на amd64")
-	}
+	testkit.RequireNoFMA(t)
 	checkGolden(t, goldenPlan051Path, plan051Groups(goldenGeoms))
 }
 
 // TestGoldenPlan051Wide — тот же корпус при «только широкие» (064): окна плана не считают ряд
 // на разворот с фото на сгибе вне правила. Геометрия без layflat — та же, что в plan051.sha.
 func TestGoldenPlan051Wide(t *testing.T) {
-	if runtime.GOARCH != "amd64" {
-		t.Skip("эталон снят на amd64")
-	}
+	testkit.RequireNoFMA(t)
 	geoms := slices.Clone(goldenGeoms)
 	for i := range geoms {
 		geoms[i].FoldAny = false
@@ -139,9 +134,7 @@ func TestGoldenPlan600(t *testing.T) {
 	if testkit.Race {
 		t.Skip("чистый счёт в одной горутине: под -race проверяет обычный прогон")
 	}
-	if runtime.GOARCH != "amd64" {
-		t.Skip("эталон снят на amd64")
-	}
+	testkit.RequireNoFMA(t)
 	res := make([][]goldenGroup, 2)
 	var wg sync.WaitGroup
 	for g := range res {

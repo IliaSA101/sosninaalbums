@@ -3,6 +3,7 @@
   import { Api, store } from '../../base/core/store.svelte'
   import { jobs } from '../../base/core/jobs.svelte'
   import type { PrintKind, PrintPlan } from '../../base/core/types'
+  import type { app } from '../../../wailsjs/go/models'
   import { edit } from '../../editor/text/edit.svelte'
   import { fileCount } from '../../panels/library/missing'
   import { parseExportRange, rangeSummary } from './exportrange'
@@ -26,7 +27,6 @@
     coverFile,
     filePrefix,
     savePrefs,
-    sizeSummary,
     type ExportPrefs,
     type ExportScope,
   } from './exportopts'
@@ -114,18 +114,40 @@
   const dpiNow = $derived(fs ? PRINT_DPI : prefs.dpi > 0 ? prefs.dpi : album)
   // Качество: у типографии со своим (Фабрика — 100) выбор окна серый и показывает его.
   const qualityNow = $derived(printQuality(plan, prefs.quality))
-  const unit = $derived(sheet ? 'лист' : pagesNow ? 'страницу' : 'разворот')
-  // Итог по выбранному объёму (U22) и предупреждения из данных альбома (U8).
-  const summary = $derived(
-    sizeSummary(settings, dpiNow, qualityNow, pagesNow, unit, {
+  // Итог по выбранному объёму (U22) считает Go (0.37): от окна — только выбор и страницы целей диапазона
+  // (0 разворот, 1 левая, 2 правая); слово «лист/страницу/разворот» и число разворотов Go знает сам.
+  const sizeKey = $derived(
+    JSON.stringify({
       scope: scopeNow,
-      spreads: spreads.length,
-      units: parsed.error ? null : parsed.units,
+      dpi: dpiNow,
+      quality: qualityNow,
+      pages: pagesNow,
+      units: scopeNow === 'range' && !parsed.error ? parsed.units.map(([, p]) => p) : [],
+      badRange: scopeNow === 'range' && !!parsed.error, // вне диапазона Go поле не читает: ввод не гонит запросы
       cover: hasCover && (fs || prefs.cover || only),
       only,
       print: fs,
     }),
   )
+  // До ответа держим прежний текст (окно не мигает пустым); запоздавший ответ отсекает номер запроса.
+  let size = $state<app.ExportSizeOut | null>(null)
+  let sizeReq = 0
+  $effect(() => {
+    const key = sizeKey
+    void store.view.rev // правка альбома меняет и размер листа, и число разворотов
+    const my = ++sizeReq // и при закрытом окне: запоздавший ответ отсекается
+    if (!jobs.exportOpen) {
+      size = null // следующее открытие не показывает цифры прошлого, пока нет нового ответа
+      return
+    }
+    Api.ExportSize(JSON.parse(key))
+      .then((r) => {
+        if (!planStale(my, sizeReq)) size = r
+      })
+      .catch(() => {}) // без ответа остаётся прежний текст
+  })
+  const summary = $derived(size?.summary ?? '')
+  // Предупреждения из данных альбома (U8).
   // Пропавшие — по файлам: копии одного файла — одно фото (098).
   const warn = $derived(exportWarnings(store.view, fileCount(store.missing)))
   const limit = $derived(limitWarn(store.view, fs))
@@ -253,16 +275,16 @@
 
       <ExportQuality
         {prefs}
-        {settings}
+        {album}
         {dpiNow}
-        {pagesNow}
         {fs}
         {qualityNow}
+        per={size?.per ?? []}
         qualityLocked={(plan?.quality ?? 0) > 0}
         {setPrefs}
         {setDpi}
       />
-      <p class="hint size">{summary}.</p>
+      <p class="hint size">{summary ? `${summary}.` : ''}</p>
       {#if limit}<p class="warn">{limit}.</p>{/if}
       {#if warn}<p class="warn">{warn}.</p>{/if}
 
@@ -317,6 +339,7 @@
     margin: -6px 0 12px 78px;
   }
   p.hint.size {
+    min-height: 1lh; /* пока ответа Go нет, строка держит место */
     margin: -4px 0 0;
   }
   p.warn {

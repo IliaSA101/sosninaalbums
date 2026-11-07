@@ -4,7 +4,7 @@
 
   // Блок «Обновления» в «О программе» (111). Образцы: ход — «Наборы библиотеки», кнопки и ссылки — само окно «О программе».
   // «Что нового» — строки из подписанного файла выпуска: только текстом, не {@html}.
-  const v = $derived(updateView(updateUi.info, updateUi.retry))
+  const v = $derived(updateView(updateUi.info))
   const disabled = (d?: boolean) => d || updateUi.cancelling
 </script>
 
@@ -104,7 +104,7 @@
   .link {
     all: unset;
     cursor: pointer;
-    color: var(--muted);
+    color: var(--link);
     font-size: 12px;
     text-decoration: underline dotted;
     text-underline-offset: 3px;

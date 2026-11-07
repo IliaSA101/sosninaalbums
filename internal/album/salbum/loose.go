@@ -27,7 +27,7 @@ const maxAt = 253402300799
 // 2·MaxLooseFiles файлов не разбирается (stat на каждый файл); битая запись (путь, устройство,
 // не JPEG/PNG) пропускается со строкой в лог без путей: добавления не держат вёрстку, отказ
 // открыть альбом хуже (decisions 097-4). Пределы и повторы — FoldSources после.
-func loadLoose(p *model.Project, list []FileLoose, base string, v1 bool) {
+func loadLoose(d Disk, p *model.Project, list []FileLoose, base string, v1 bool) {
 	var over, bad, devs int
 	if len(list) > 2*model.MaxLooseAdds {
 		over, list = len(list)-2*model.MaxLooseAdds, list[:2*model.MaxLooseAdds]
@@ -46,7 +46,7 @@ func loadLoose(p *model.Project, list []FileLoose, base string, v1 bool) {
 				continue
 			}
 			budget--
-			f, err := looseFile(ff, base, v1)
+			f, err := looseFile(d, ff, base, v1)
 			switch {
 			case errors.Is(err, paths.ErrDevice):
 				devs++
@@ -73,7 +73,7 @@ func clampAt(at float64) int64 {
 
 // looseFile — файл добавления: пара путей по правилам папок (candidates); основного нет, а
 // запасной есть — запасной; нет нигде — основной и Alt (encode пишет его обратно).
-func looseFile(ff FileFolder, base string, v1 bool) (model.LooseFile, error) {
+func looseFile(d Disk, ff FileFolder, base string, v1 bool) (model.LooseFile, error) {
 	path, alt, err := candidates(ff.Path, ff.Abs, base, v1)
 	if err != nil {
 		return model.LooseFile{}, err
@@ -81,8 +81,8 @@ func looseFile(ff FileFolder, base string, v1 bool) (model.LooseFile, error) {
 	if !library.IsImage(path) {
 		return model.LooseFile{}, fmt.Errorf("не фото")
 	}
-	if alt != "" && !isFile(path) {
-		if isFile(alt) && library.IsImage(alt) {
+	if alt != "" && !isFileOn(d, path) {
+		if isFileOn(d, alt) && library.IsImage(alt) {
 			return model.LooseFile{Path: alt}, nil
 		}
 		return model.LooseFile{Path: path, Alt: alt}, nil
@@ -111,19 +111,25 @@ func encodeLoose(list []model.LooseAdd, enc pathEnc) []FileLoose {
 	return out
 }
 
-// checkLoose — пути и пределы отдельных фото для Check: копия из резервной (Restore) не протащит
-// сетевой путь мимо Load.
+// eachLoosePath — пары путей отдельных фото для EachPath; пределы — checkLoose (Check).
+func eachLoosePath(p *model.Project, fn func(what, path, alt string) error) error {
+	for _, a := range p.Loose {
+		for _, f := range a.Files {
+			if err := fn("отдельное фото", f.Path, f.Alt); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkLoose — пределы отдельных фото для Check: копия из резервной (Restore) не протащит лишнего мимо Load.
 func checkLoose(p *model.Project) error {
 	if len(p.Loose) > model.MaxLooseAdds {
 		return fmt.Errorf("отдельных добавлений в проекте больше %d", model.MaxLooseAdds)
 	}
 	n := 0
 	for _, a := range p.Loose {
-		for _, f := range a.Files {
-			if err := checkPair("отдельное фото", f.Path, f.Alt); err != nil {
-				return err
-			}
-		}
 		n += len(a.Files)
 	}
 	if n > model.MaxLooseFiles {
@@ -132,8 +138,5 @@ func checkLoose(p *model.Project) error {
 	return nil
 }
 
-// isFile — обычный файл на отвечающем томе (как fileSize).
-func isFile(path string) bool {
-	_, ok := fileSize(path)
-	return ok
-}
+// isFile — обычный файл на отвечающем томе настоящего диска (как fileSize).
+func isFile(path string) bool { return isFileOn(osDisk{}, path) }

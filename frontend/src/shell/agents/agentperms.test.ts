@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { AgentPerm, AgentPlace } from './agents'
 import {
   allowMissing,
-  alwaysHidden,
   askMissing,
   askOnly,
   commonMode,
@@ -12,12 +11,12 @@ import {
   liftGroups,
   isMode,
   noteShown,
+  PLACE_TOOLS,
   placeRows,
   placesShown,
   rowKey,
   rowsOf,
   segItems,
-  shownMode,
   targets,
   type PermChange,
 } from './agentperms'
@@ -28,6 +27,7 @@ const mkPlace = (dir: string, o: Partial<AgentPlace> = {}): AgentPlace => ({
   label: '',
   chosen: false,
   bound: true,
+  bindable: true,
   narrow: false,
   narrowRoot: false,
   state: '',
@@ -129,56 +129,64 @@ describe('targets: что меняет щелчок', () => {
 
 describe('consentFor: какие согласия нужны', () => {
   it('правки целиком «Запретить» → любой выход из него просит согласие 149', () => {
-    expect(consentFor(rows(), false, tool('autobuild', 'ask'))).toEqual({ edit: true, folder: false })
-    expect(consentFor(rows(), false, tool('autobuild', 'allow'))).toEqual({ edit: true, folder: false })
-    expect(consentFor(rows(), false, group('edit', 'ask'))).toEqual({ edit: true, folder: false })
+    expect(consentFor(rows(), false, tool('autobuild', 'ask'))).toEqual({ edit: true, folder: false, open: false })
+    expect(consentFor(rows(), false, tool('autobuild', 'allow'))).toEqual({ edit: true, folder: false, open: false })
+    expect(consentFor(rows(), false, group('edit', 'ask'))).toEqual({ edit: true, folder: false, open: false })
   })
 
   it('«Всегда» у папки или альбома просит согласие с местами; при выключенных правках — оба сразу', () => {
-    expect(consentFor(rows(), false, tool('add_folder', 'allow'))).toEqual({ edit: true, folder: true })
-    expect(consentFor(rows(), false, group('edit', 'allow'))).toEqual({ edit: true, folder: true })
-    expect(consentFor(rows(), true, tool('add_folder', 'allow'))).toEqual({ edit: false, folder: true })
-    expect(consentFor(rows(), true, tool('create_album', 'allow'))).toEqual({ edit: false, folder: true })
-    expect(consentFor(rows({ add_folder: 'ask' }), true, tool('add_folder', 'allow'))).toEqual({ edit: false, folder: true })
+    expect(consentFor(rows(), false, tool('add_folder', 'allow'))).toEqual({ edit: true, folder: true, open: false })
+    expect(consentFor(rows(), false, group('edit', 'allow'))).toEqual({ edit: true, folder: true, open: false })
+    expect(consentFor(rows(), true, tool('add_folder', 'allow'))).toEqual({ edit: false, folder: true, open: false })
+    expect(consentFor(rows(), true, tool('create_album', 'allow'))).toEqual({ edit: false, folder: true, open: false })
+    expect(consentFor(rows({ add_folder: 'ask' }), true, tool('add_folder', 'allow'))).toEqual({ edit: false, folder: true, open: false })
   })
 
   it('правки уже включены: «Спрашивать» у папки и «Всегда» у автосборки — без вопросов', () => {
-    expect(consentFor(rows(), true, tool('add_folder', 'ask'))).toEqual({ edit: false, folder: false })
-    expect(consentFor(rows(), true, tool('autobuild', 'allow'))).toEqual({ edit: false, folder: false })
+    expect(consentFor(rows(), true, tool('add_folder', 'ask'))).toEqual({ edit: false, folder: false, open: false })
+    expect(consentFor(rows(), true, tool('autobuild', 'allow'))).toEqual({ edit: false, folder: false, open: false })
   })
 
   it('снятие и повторное значение — без вопросов', () => {
-    expect(consentFor(rows({ add_folder: 'allow' }), true, tool('add_folder', 'deny'))).toEqual({ edit: false, folder: false })
-    expect(consentFor(rows({ add_folder: 'allow' }), true, tool('add_folder', 'allow'))).toEqual({ edit: false, folder: false })
-    expect(consentFor(rows(), false, tool('autobuild', 'deny'))).toEqual({ edit: false, folder: false }) // «Запретить» у «Запретить»
+    expect(consentFor(rows({ add_folder: 'allow' }), true, tool('add_folder', 'deny'))).toEqual({ edit: false, folder: false, open: false })
+    expect(consentFor(rows({ add_folder: 'allow' }), true, tool('add_folder', 'allow'))).toEqual({
+      edit: false,
+      folder: false,
+      open: false,
+    })
+    expect(consentFor(rows(), false, tool('autobuild', 'deny'))).toEqual({ edit: false, folder: false, open: false }) // «Запретить» у «Запретить»
     expect(consentFor(rows({ add_folder: 'allow', create_album: 'allow', autobuild: 'allow' }), true, group('edit', 'deny'))).toEqual({
       edit: false,
       folder: false,
+      open: false,
     })
   })
 
   it('чтение согласий не просит ни в каком значении; группа «Всегда» при уже «Всегда» папках — тоже', () => {
-    expect(consentFor(rows(), false, group('read', 'deny'))).toEqual({ edit: false, folder: false })
-    expect(consentFor(rows(), false, group('read', 'allow'))).toEqual({ edit: false, folder: false })
+    expect(consentFor(rows(), false, group('read', 'deny'))).toEqual({ edit: false, folder: false, open: false })
+    expect(consentFor(rows(), false, group('read', 'allow'))).toEqual({ edit: false, folder: false, open: false })
     expect(consentFor(rows({ add_folder: 'allow', create_album: 'allow', autobuild: 'allow' }), true, group('edit', 'allow'))).toEqual({
       edit: false,
       folder: false,
+      open: false,
     })
   })
 
   it('«Запустить программу» и «Показать разворот» согласий не просят и не считаются правкой', () => {
-    expect(consentFor(rows(), false, tool('show_spread', 'ask'))).toEqual({ edit: false, folder: false })
-    expect(consentFor(rows(), false, tool('start_program', 'deny'))).toEqual({ edit: false, folder: false })
+    expect(consentFor(rows(), false, tool('show_spread', 'ask'))).toEqual({ edit: false, folder: false, open: false })
+    expect(consentFor(rows(), false, tool('start_program', 'deny'))).toEqual({ edit: false, folder: false, open: false })
   })
 
   it('часть группы «Всегда», часть «Спрашивать» → «Всегда» у всей группы просит согласие с местами только за недостающие', () => {
     expect(consentFor(rows({ add_folder: 'allow', create_album: 'ask', autobuild: 'ask' }), true, group('edit', 'allow'))).toEqual({
       edit: false,
       folder: true,
+      open: false,
     })
     expect(consentFor(rows({ add_folder: 'allow', create_album: 'allow', autobuild: 'ask' }), true, group('edit', 'allow'))).toEqual({
       edit: false,
       folder: false,
+      open: false,
     })
   })
 })
@@ -208,7 +216,7 @@ describe('noteShown: подпись у папки и альбома', () => {
 describe('placeRows: строки списка мест (153)', () => {
   it('сохранённое: путь и серая метка; ссылки «Привязать» до ответа AgentPlacesLive нет', () => {
     const saved = [mkPlace('D:\\Фото', { label: 'Фото-архив' }), mkPlace('E:\\Клиент', { bound: false })]
-    expect(placeRows(saved, null, false)).toEqual([
+    expect(placeRows(saved, null)).toEqual([
       { key: 'D:\\Фото', dir: 'D:\\Фото', right: 'Фото-архив', dim: false, hints: [], bind: '' },
       { key: 'E:\\Клиент', dir: 'E:\\Клиент', right: '', dim: false, hints: ['не привязано к диску'], bind: '' },
     ])
@@ -220,16 +228,16 @@ describe('placeRows: строки списка мест (153)', () => {
       mkPlace('G:\\Клиент', { key: 'k1', label: 'Фото-архив' }),
       mkPlace('F:\\Съёмки', { key: 'k2', bound: false, state: 'here', here: 'Карта' }),
     ]
-    const r = placeRows(saved, live, false)
+    const r = placeRows(saved, live)
     expect(r[0]).toMatchObject({ dir: 'G:\\Клиент', right: 'Фото-архив', hints: [], bind: '' })
     expect(r[1]).toMatchObject({ hints: ['не привязано к диску'], bind: 'Привязать к диску «Карта»' })
     live[1].here = ''
-    expect(placeRows(saved, live, false)[1].bind).toBe('Привязать к этому диску')
+    expect(placeRows(saved, live)[1].bind).toBe('Привязать к этому диску')
   })
 
   it('state пуст (диск по пути не определён): ссылки привязки нет, строка не бледная', () => {
     const saved = [mkPlace('F:\\Съёмки', { key: 'k2', bound: false })]
-    const r = placeRows(saved, [mkPlace('F:\\Съёмки', { key: 'k2', bound: false, here: 'Карта' })], false)[0]
+    const r = placeRows(saved, [mkPlace('F:\\Съёмки', { key: 'k2', bound: false, here: 'Карта' })])[0]
     expect(r).toMatchObject({ dim: false, bind: '', hints: ['не привязано к диску'] })
   })
 
@@ -239,37 +247,47 @@ describe('placeRows: строки списка мест (153)', () => {
       mkPlace('E:\\A', { key: 'a', bound: false, state: 'nodisk', label: 'Фото-архив' }),
       mkPlace('E:\\B', { key: 'b', bound: false, state: 'nofolder' }),
     ]
-    const r = placeRows(saved, live, false)
+    const r = placeRows(saved, live)
     expect(r[0]).toMatchObject({ right: 'Диска «Фото-архив» нет', dim: true, bind: '' })
     expect(r[1]).toMatchObject({ right: 'Папка не найдена', dim: true, bind: '' })
-    expect(
-      placeRows([mkPlace('E:\\A', { key: 'a', state: 'nodisk' })], [mkPlace('E:\\A', { key: 'a', state: 'nodisk' })], false)[0].right,
-    ).toBe('Диска нет')
+    expect(placeRows([mkPlace('E:\\A', { key: 'a', state: 'nodisk' })], [mkPlace('E:\\A', { key: 'a', state: 'nodisk' })])[0].right).toBe(
+      'Диска нет',
+    )
   })
 
   it('узкое место: подсказка с именем папки над ним; на корне диска — «Диск E: целиком»; на Linux без буквы — «Диск целиком»', () => {
-    const r = placeRows([mkPlace('/home/u/Изображения/2026', { narrow: true }), mkPlace('D:\\Фото\\2026', { narrow: true })], null, false)
+    const r = placeRows([mkPlace('/home/u/Изображения/2026', { narrow: true }), mkPlace('D:\\Фото\\2026', { narrow: true })], null)
     expect(r[0].hints).toEqual(['Новый год спросит снова. Изображения целиком — «Папка со съёмками…»'])
     expect(r[1].hints).toEqual(['Новый год спросит снова. Фото целиком — «Папка со съёмками…»'])
     const root = placeRows(
       [mkPlace('E:\\2026', { narrow: true, narrowRoot: true }), mkPlace('/2026', { narrow: true, narrowRoot: true })],
       null,
-      false,
     )
     expect(root[0].hints).toEqual(['Диск E: целиком — «Папка со съёмками…»'])
     expect(root[1].hints).toEqual(['Диск целиком — «Папка со съёмками…»'])
   })
 
-  it('macOS: привязки нет — ни «не привязано», ни ссылки', () => {
-    const saved = [mkPlace('/Volumes/A/Фото', { key: 'a', bound: false })]
-    expect(placeRows(saved, [mkPlace('/Volumes/A/Фото', { key: 'a', bound: false, state: 'here', here: 'A' })], true)[0]).toMatchObject({
+  it('bindable решает Go: macOS без привязки (загрузочный том) — ни «не привязано», ни ссылки; внешний том — как на Windows', () => {
+    const boot = [mkPlace('/Users/u/Фото', { key: 'a', bound: false, bindable: false })]
+    expect(
+      placeRows(boot, [mkPlace('/Users/u/Фото', { key: 'a', bound: false, bindable: false, state: 'here', here: 'A' })])[0],
+    ).toMatchObject({
       hints: [],
       bind: '',
     })
+    const card = [mkPlace('/Volumes/A/Фото', { key: 'b', bound: false })]
+    const live = [mkPlace('/Volumes/A/Фото', { key: 'b', bound: false, state: 'here', here: 'A' })]
+    expect(placeRows(card, live)[0]).toMatchObject({ hints: ['не привязано к диску'], bind: 'Привязать к диску «A»' })
+  })
+
+  it('bindable живого ответа главнее сохранённого (путь сменил том); привязанное место подсказок не имеет', () => {
+    const saved = [mkPlace('/Volumes/A/Фото', { key: 'b', bound: false })]
+    expect(placeRows(saved, [mkPlace('/Volumes/A/Фото', { key: 'b', bound: false, bindable: false })])[0].hints).toEqual([])
+    expect(placeRows([mkPlace('/Volumes/A/Фото', { key: 'b', bound: true })], null)[0].hints).toEqual([])
   })
 
   it('место, которого нет в живом ответе (добавлено после него), показывается по сохранённому', () => {
-    const r = placeRows([mkPlace('D:\\Новое', { key: 'n' })], [mkPlace('D:\\Старое', { key: 'o' })], false)
+    const r = placeRows([mkPlace('D:\\Новое', { key: 'n' })], [mkPlace('D:\\Старое', { key: 'o' })])
     expect(r.map((x) => x.dir)).toEqual(['D:\\Новое'])
   })
 })
@@ -291,7 +309,7 @@ describe('liftGroups: заметка о подъёме мест', () => {
   })
 })
 
-// Класс Q (152): выгрузка и открытие — can = [ask, deny], «Всегда» нет.
+// Класс Q (152): выгрузка — can = [ask, deny], «Всегда» нет (open_album с таким can — ответ Go 0.35, до класса O).
 describe('askOnly: строки «только с вопросом»', () => {
   const Q = ['ask', 'deny']
   const qrows = [P('export_album', 'other', 'ask', Q), P('open_album', 'other', 'deny', Q)]
@@ -337,35 +355,53 @@ describe('askOnly: строки «только с вопросом»', () => {
 
   it('consentFor: «Спрашивать»/«Запретить» у Q согласий не требует', () => {
     const all = [...rows(), ...qrows]
-    expect(consentFor(all, false, tool('export_album', 'ask'))).toEqual({ edit: false, folder: false })
-    expect(consentFor(all, false, tool('open_album', 'deny'))).toEqual({ edit: false, folder: false })
+    expect(consentFor(all, false, tool('export_album', 'ask'))).toEqual({ edit: false, folder: false, open: false })
+    expect(consentFor(all, false, tool('open_album', 'deny'))).toEqual({ edit: false, folder: false, open: false })
   })
 })
 
-// Класс O (160): Go допускает «Всегда» у открытия, но без согласия ASK_OPEN (Т5, 0.37) пункт не предлагается.
-describe('alwaysHidden: «Всегда» у открытия скрыто до 160 Т5', () => {
+// Класс O (160): открытие альбома — «Всегда» есть, группа other, своё согласие ASK_OPEN.
+describe('открытие альбома: класс O', () => {
   const open = (mode: string, can = ['allow', 'ask', 'deny']) => P('open_album', 'other', mode, can)
+  const all = (mode = 'ask') => [...rows(), open(mode)]
 
-  it('скрыто у open_album, когда Go допускает «Всегда»; у прочих строк и у старого ответа Go (can без allow) — нет', () => {
-    expect(alwaysHidden(open('ask'))).toBe(true)
-    expect(alwaysHidden(open('ask', ['ask', 'deny']))).toBe(false)
-    expect(alwaysHidden(P('add_folder', 'edit', 'ask'))).toBe(false)
-    expect(alwaysHidden(P('export_album', 'other', 'ask'))).toBe(false)
-  })
-
-  it('shownMode: сохранённое «Всегда» показано как «Спрашивать», остальное как есть', () => {
-    expect(shownMode(open('allow'))).toBe('ask')
-    expect(shownMode(open('ask'))).toBe('ask')
-    expect(shownMode(open('deny'))).toBe('deny')
-    expect(shownMode(P('add_folder', 'edit', 'allow'))).toBe('allow')
-    expect(shownMode(open('allow', ['ask', 'deny']))).toBe('allow') // старый ответ Go: ничего не подменяем
-  })
-
-  it('segItems с hideAllow: двух пунктов «Спрашивать · Запретить», без «Всегда»; по умолчанию три', () => {
-    expect(segItems(open('ask').can, false, false, true).map((i) => [i.id, !!i.off])).toEqual([
+  it('askOnly нет: «Всегда» живое, не серое', () => {
+    expect(askOnly(open('ask'))).toBe(false)
+    expect(allowMissing(open('ask'))).toBe(false)
+    expect(segItems(open('ask').can, false).map((i) => [i.id, !!i.off])).toEqual([
+      ['allow', false],
       ['ask', false],
       ['deny', false],
     ])
-    expect(segItems(open('ask').can, false).map((i) => i.id)).toEqual(['allow', 'ask', 'deny'])
+  })
+
+  it('consentFor.open: «Всегда» из «Спрашивать» и «Запретить» просит согласие; повтор, «Спрашивать», «Запретить» — нет', () => {
+    expect(consentFor(all('ask'), true, tool('open_album', 'allow'))).toEqual({ edit: false, folder: false, open: true })
+    expect(consentFor(all('deny'), true, tool('open_album', 'allow'))).toEqual({ edit: false, folder: false, open: true })
+    expect(consentFor(all('allow'), true, tool('open_album', 'allow'))).toEqual({ edit: false, folder: false, open: false })
+    expect(consentFor(all('allow'), true, tool('open_album', 'ask'))).toEqual({ edit: false, folder: false, open: false })
+    expect(consentFor(all('ask'), true, tool('open_album', 'deny'))).toEqual({ edit: false, folder: false, open: false })
+  })
+
+  it('открытие правкой не считается: при выключенных правках согласие 149 не нужно, а у папки открытие согласия не добавляет', () => {
+    expect(consentFor(all('ask'), false, tool('open_album', 'allow'))).toEqual({ edit: false, folder: false, open: true })
+    expect(consentFor(all('ask'), false, tool('add_folder', 'allow'))).toEqual({ edit: true, folder: true, open: false })
+  })
+
+  it('групповой щелчок «Правки» строку открытия не трогает и согласия за неё не просит', () => {
+    expect(targets(all('ask'), group('edit', 'allow')).map((r) => r.tool)).not.toContain('open_album')
+    expect(targets(all('ask'), group('edit', 'deny')).map((r) => r.tool)).not.toContain('open_album')
+    expect(consentFor(all('ask'), true, group('edit', 'allow')).open).toBe(false)
+  })
+
+  it('подпись «Без вопроса — альбомы с фото в местах» — только при «Всегда», как у папки', () => {
+    const n = (mode: string): AgentPerm => ({ ...open(mode), note: 'Подпись' })
+    expect(noteShown(n('allow'))).toBe(true)
+    expect(noteShown(n('ask'))).toBe(false)
+    expect(noteShown(n('deny'))).toBe(false)
+  })
+
+  it('PLACE_TOOLS — папка, альбом и открытие', () => {
+    expect([...PLACE_TOOLS]).toEqual(['add_folder', 'create_album', 'open_album'])
   })
 })

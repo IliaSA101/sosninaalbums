@@ -77,3 +77,37 @@ func TestOpenLocal(t *testing.T) {
 		t.Errorf("нелокальная ссылка: %v, ждали ErrLinkNotLocal", err)
 	}
 }
+
+// TestOpenLocalSwapToLink (160 Т2, М1): между проверкой и открытием файл подменили ссылкой. На Windows ссылка не
+// разворачивается (FILE_FLAG_OPEN_REPARSE_POINT) и отклоняется по дескриптору, на Unix открытый файл другой —
+// os.SameFile. В обоих случаях содержимое цели ссылки не читается.
+func TestOpenLocalSwapToLink(t *testing.T) {
+	dir := testkit.TempDir(t)
+	a, other := filepath.Join(dir, "a.bin"), filepath.Join(dir, "other.bin")
+	for p, data := range map[string]string{a: "проверенный", other: "подменённый"} {
+		if err := os.WriteFile(p, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	probe := filepath.Join(dir, "probe.bin")
+	if err := os.Symlink(other, probe); err != nil {
+		if os.Getenv("CI") != "" || runtime.GOOS != "windows" {
+			t.Fatalf("ссылку создать нельзя: %v", err)
+		}
+		t.Skipf("ссылку не создать: %v", err) // Windows без прав
+	}
+	openLocalHook = func(p string) {
+		if err := os.Remove(p); err != nil {
+			t.Error(err)
+		} else if err := os.Symlink(other, p); err != nil {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(func() { openLocalHook = nil })
+	f, _, err := OpenLocal(a)
+	if err == nil {
+		b, _ := io.ReadAll(f)
+		_ = f.Close()
+		t.Fatalf("подменённая ссылкой открылась: %q", b)
+	}
+}

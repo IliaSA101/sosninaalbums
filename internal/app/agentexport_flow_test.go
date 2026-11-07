@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentask"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/app/exporter"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -22,7 +24,7 @@ func TestAgentExportFullFlow(t *testing.T) {
 	r := newExportRig(t, 3)
 	want := filepath.Join(r.root, "Петровы")
 	c, ev := r.question(t, r.req("Петровы"))
-	if ev.Kind != "export" || ev.Path != want || !ev.Create || ev.Tool != "" || ev.OK != askOKExport || ev.Alt != askAlt || ev.Files < 3 {
+	if ev.Kind != "export" || ev.Path != want || !ev.Create || ev.Tool != "" || ev.OK != agentasktext.OKExport || ev.Alt != agentasktext.Alt || ev.Files < 3 {
 		t.Fatalf("вопрос: %+v", ev)
 	}
 	if _, err := os.Stat(want); err == nil {
@@ -119,7 +121,7 @@ func TestAgentExportAlbumSwitched(t *testing.T) {
 	if r.a.exp.Last().State != exporter.StateIdle {
 		t.Errorf("выгрузка началась: %+v", r.a.exp.Last())
 	}
-	if r.state() != askAny {
+	if r.state() != agentask.Any {
 		t.Error("вопрос остался открытым")
 	}
 }
@@ -166,7 +168,7 @@ func TestAgentExportForeignRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, ev := r.question(t, r.req("Петровы"))
-	if ev.OK != askOKExportPick || ev.Alt != "" || !strings.Contains(strings.Join(ev.Lines, "\n"), "Сюда выгрузить нельзя") {
+	if ev.OK != agentasktext.OKExportPick || ev.Alt != "" || !strings.Contains(strings.Join(ev.Lines, "\n"), "Сюда выгрузить нельзя") {
 		t.Fatalf("вопрос: %+v", ev)
 	}
 	if ev.Path != dir {

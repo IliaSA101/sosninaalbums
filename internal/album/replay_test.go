@@ -27,6 +27,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -73,8 +74,29 @@ type replay struct {
 // ID подборок (083, «b» + 8 hex) тоже случайные — заменяются так же.
 var replayID = regexp.MustCompile(`"(?:[0-9a-f]{12}|b[0-9a-f]{8})"`)
 
-func newReplay(t *testing.T) *replay {
+// replayDir — папка альбома сценария. Вымышленный диск Q: лежит в корне, а salbum пишет путь
+// относительным («../../Q/…» плюс abs) только при подъёме не выше maxUp = 2 уровней (эталон снят при
+// ровно двух); глубже — абсолютным и без abs, и байты Save другие. Временная папка macOS (/var/folders/…/T/…)
+// и Linux с глубоким TMPDIR глубже двух уровней — тогда папка альбома идёт в /tmp, где подъём
+// ровно два уровня. На Windows тома разные (Q: и диск temp): путь всегда абсолютный.
+func replayDir(t *testing.T) string {
 	dir := testkit.TempDir(t)
+	if runtime.GOOS == "windows" {
+		return dir
+	}
+	if rel, ok := salbum.RelPath(dir, qPath()); ok && rel == "../../Q" {
+		return dir
+	}
+	shallow, err := os.MkdirTemp("/tmp", "sa-replay-*")
+	if err != nil {
+		t.Fatalf("папка альбома реплея: %v", err)
+	}
+	t.Cleanup(func() { testkit.RemoveAll(t, shallow) })
+	return shallow
+}
+
+func newReplay(t *testing.T) *replay {
+	dir := replayDir(t)
 	return &replay{t: t, e: edtest.Open(t, model.New(), ""), dir: dir, file: filepath.Join(dir, "album.salbum"),
 		ids: map[string]string{}, revs: map[int]int{}}
 }
@@ -115,6 +137,7 @@ func (r *replay) edit(name string, v model.View, out any, err error) {
 	r.v = v
 	r.views = append(r.views, v)
 	v.Path = strings.Replace(v.Path, r.file, "<album>", 1)
+	v.Path = strings.Replace(v.Path, r.dir, "<dir>", 1) // после SaveAs (146) альбом лежит в другом файле папки
 	if _, ok := r.revs[v.MarksRev]; !ok {
 		r.revs[v.MarksRev] = len(r.revs)
 	}
@@ -314,6 +337,8 @@ func replayScenario(t *testing.T) *replay {
 	replayLook(r)
 	// 146: отпечаток проекта — последним.
 	replayIdent(r)
+	// 162 М4: правки «если всё ещё то же» — последними.
+	replayIf(r)
 	return r
 }
 

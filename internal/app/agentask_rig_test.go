@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentask"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -54,7 +55,7 @@ func newAskRig(t *testing.T) *askRig {
 	}
 	r.picked = r.other
 	m := a.askM()
-	m.life, m.exitWait = time.Minute, 300*time.Millisecond
+	newAskQ(a, time.Minute, 300*time.Millisecond)
 	m.rules = permissiveRules
 	m.front = func() { r.mu.Lock(); r.fronts++; r.mu.Unlock() }
 	m.pickDir = func(title, def string) (string, error) {
@@ -175,14 +176,18 @@ func (r *askRig) dialogOpen(t *testing.T) {
 }
 
 // state — состояние текущего вопроса (-1 — вопроса нет).
-func (r *askRig) state() askState {
-	m := r.a.askM()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.cur == nil {
-		return askAny
+func (r *askRig) state() agentask.State {
+	st, _ := r.a.askQ().Cur()
+	return st
+}
+
+// newAskQ пересоздаёт машину вопросов с другими сроками (сроки задаёт только конструктор); зовут до
+// первого вопроса: открытый вопрос потерялся бы вместе со старой машиной.
+func newAskQ(a *App, life, exitWait time.Duration) {
+	if _, open := a.askQ().Cur(); open {
+		panic("newAskQ: вопрос уже открыт, пересоздавать машину нельзя")
 	}
-	return m.cur.state
+	a.askM().q.Store(a.newAskQ(life, exitWait))
 }
 
 func waitUntil(t *testing.T, what string, ok func() bool) {

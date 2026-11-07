@@ -167,13 +167,25 @@ func layoutWith(s string, st Style, w float64, sf, fb *sfnt.Font, d *faceData) B
 	if n := len(paras); n > 1 && paras[n-1] == "" {
 		paras = paras[:n-1]
 	}
-	for _, par := range paras {
-		var p *para
+	measured := make([]*para, len(paras))
+	refused := false
+	for i, par := range paras {
 		if d != nil {
-			p = measureCustom(sf, fb, d, par)
+			var r bool
+			measured[i], r = measureCustom(sf, fb, d, par)
+			refused = refused || r
 		} else {
-			p = measure(sf, fb, par)
+			measured[i] = measure(sf, fb, par)
 		}
+	}
+	if refused {
+		// Отказ GPOS посреди блока: кернинг у начертания уже выключен, а абзацы до отказа
+		// посчитаны с ним. Считаем все заново (теперь без кернинга), чтобы блок был одного режима.
+		for i, par := range paras {
+			measured[i], _ = measureCustom(sf, fb, d, par)
+		}
+	}
+	for _, p := range measured {
 		box.Lines = append(box.Lines, wrap(p, mm, w)...)
 	}
 	n := len(box.Lines)

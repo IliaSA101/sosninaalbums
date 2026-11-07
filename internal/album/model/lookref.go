@@ -7,8 +7,7 @@ import (
 )
 
 // Ссылка альбома на макет, предел номера шага и их зажим (131 design §2, §3): Load и каждая
-// правка (FixLook). Сам макет (AlbumTpl, шаги, серия) и предел MaxLookSteps (Spread.LookStep —
-// 1…MaxLookSteps) — look.go.
+// правка (FixLook). Сам макет (AlbumTpl, шаги, серия) — looktpl/look.go; предел MaxLookSteps — ниже.
 
 // LookRef — макет, по которому оформлен альбом (Project.Look, design §3): ключ файла макета
 // my:<16 hex> (sha256 байтов), имя для тоста и окна (≤ MaxNameRunes) и где его искать после
@@ -30,6 +29,10 @@ func SameLook(a, b *LookRef) bool {
 	}
 	return a.Key == b.Key || a.Pack != "" && a.Item != "" && a.Pack == b.Pack && a.Item == b.Item
 }
+
+// MaxLookSteps — шагов в макете: окно «Сохранить альбом как макет» сливает одинаковые до 24.
+// Здесь, а не в looktpl: его держит и Spread.LookStep (FixLook).
+const MaxLookSteps = 24
 
 // maxLookItem — предел пути записи в манифесте, байт (имя предмета набора — до 194).
 const maxLookItem = 200

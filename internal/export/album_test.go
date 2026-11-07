@@ -17,6 +17,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 	"github.com/IliaSA101/sosninaalbums/internal/render"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
@@ -450,11 +451,11 @@ func TestExportStickers(t *testing.T) {
 // (стикер «под местами» ниже, остальные выше), повёрнутое — описанным прямоугольником; лист без
 // мест — без плашек; пустой вид — false. Экспорт альбома плашек не получает (эталоны — golden_test).
 func TestTplScenePlaceholders(t *testing.T) {
-	tp := model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Page: []model.TplBg{{Color: "#ffeedd"}, {}},
+	tp := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Page: []looktpl.TplBg{{Color: "#ffeedd"}, {}},
 		Places: []model.Box{{X: 0.05, Y: 0.1, W: 0.4, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.4, H: 0.4, Rot: 30}},
-		Stickers: []model.TplItem{
+		Stickers: []looktpl.TplItem{
 			{W: 0.9, H: 0.5, Under: true, Art: &model.Art{Kind: "plate"}},
-			{Anchor: model.Anchor{AX: 1, AY: 1, DX: -0.1, DY: -0.1}, W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}},
+			{Anchor: looktpl.Anchor{AX: 1, AY: 1, DX: -0.1, DY: -0.1}, W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}},
 		}}
 	p, v, err := album.PreviewTpl(tp, 400, 200, nil)
 	if err != nil {

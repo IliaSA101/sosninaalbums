@@ -37,10 +37,16 @@ func refCols(asp []float64, p layout.Params, K int) [][]float64 {
 	return cols
 }
 
-// refPlanDP — прежний planDP без изменений.
+// refPlanDP — прежний planDP; штраф группы считается заранее, как у продукта (pen[k] в planDPCap): записанный
+// в срез, он не сливается с pv+cols-pen в FMA (на arm64 слитое FMSUBD давало другие биты и другой план).
 func refPlanDP(cols [][]float64, n, N, K int) [][2]int {
 	avg := float64(n) / float64(N)
 	inf := math.Inf(-1)
+	pen := make([]float64, K+1)
+	for k := 1; k <= K; k++ {
+		d := float64(k) - avg
+		pen[k] = planLambda * d * d
+	}
 	prev, cur := make([]float64, n+1), make([]float64, n+1)
 	for j := range prev {
 		prev[j] = inf
@@ -58,8 +64,7 @@ func refPlanDP(cols [][]float64, n, N, K int) [][2]int {
 				if math.IsInf(pv, -1) {
 					continue
 				}
-				d := float64(k) - avg
-				if v := pv + cols[k][j-k] - planLambda*d*d; v > cur[j] {
+				if v := pv + cols[k][j-k] - pen[k]; v > cur[j] {
 					cur[j], from[at] = v, uint8(k)
 				}
 			}

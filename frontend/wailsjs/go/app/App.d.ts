@@ -205,6 +205,8 @@ export function DuplicateItems(arg1:string,arg2:model.ClipSel):Promise<app.Paste
 
 export function Export(arg1:app.ExportOptions):Promise<boolean>;
 
+export function ExportSize(arg1:app.ExportSizeIn):Promise<app.ExportSizeOut>;
+
 export function ExportTemplates():Promise<app.TplSave>;
 
 export function FaceGuide(arg1:string,arg2:string):Promise<model.FaceGuide>;

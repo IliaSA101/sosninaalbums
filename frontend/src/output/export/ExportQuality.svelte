@@ -1,34 +1,34 @@
 <script lang="ts">
-  import type { View } from '../../base/core/types'
+  import type { app } from '../../../wailsjs/go/models'
   import ExportGroup from './ExportGroup.svelte'
-  import { DPI_PRESETS, QUALITIES, estimateBytes, formatSize, type ExportPrefs } from './exportopts'
+  import { DPI_PRESETS, QUALITIES, type ExportPrefs } from './exportopts'
 
   // Разделы «Качество» и «Dpi» окна «Экспорт» (вынесено из ExportDialog, 075-11).
-  // dpiNow — выбранное dpi в числе (в режиме печати 300); qualityNow — качество в числе (у плана со своим качеством — оно);
+  // dpiNow — выбранное dpi в числе (в режиме печати 300); album — dpi альбома; qualityNow — качество в числе (у плана со своим — оно);
+  // per — объём файла по качествам из ответа Go (пусто, пока ответа нет);
   // qualityLocked — качество задаёт типография (серое, 081); setPrefs/setDpi сохраняют выбор в localStorage.
   let {
     prefs,
-    settings,
+    album,
     dpiNow,
-    pagesNow,
     fs,
     qualityNow,
+    per,
     qualityLocked,
     setPrefs,
     setDpi,
   }: {
     prefs: ExportPrefs
-    settings: View['settings']
+    album: number
     dpiNow: number
-    pagesNow: boolean
     fs: boolean
     qualityNow: number
+    per: app.ExportSizeQ[]
     qualityLocked: boolean
     setPrefs: (p: Partial<ExportPrefs>) => void
     setDpi: (v: number) => void
   } = $props()
 
-  const album = $derived(settings.dpi)
   const albumIsPreset = $derived(DPI_PRESETS.some((d) => d.v === album))
 </script>
 
@@ -44,7 +44,7 @@
     >
       <b>{q.v}</b>
       <span>{q.label}</span>
-      <small>{formatSize(estimateBytes(settings, dpiNow, q.v, pagesNow))}</small>
+      <small>{per.find((x) => x.quality === q.v)?.text ?? '\u00a0'}</small>
     </button>
   {/each}
 </ExportGroup>

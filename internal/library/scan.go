@@ -73,6 +73,8 @@ type scanFile struct {
 	size, mod int64   // size < 0: размер неизвестен, в память не смотрим и не пишем
 	side      sidecar // .xmp рядом; пустой — нет
 	loose     bool    // отдельный файл (Sources.Files, 097): выбран явно, метка выгрузки его не скрывает
+	cloudOK   bool    // читается, даже если в облаке (скачивается): только отдельный файл из Sources.Explicit
+	cloud     bool    // данные в облаке (imgfile.Dehydrated): заголовок не читается, чтобы не скачать папку
 }
 
 const (
@@ -145,7 +147,8 @@ func (s *Scanner) prepare(files []scanFile) *scanRun {
 	defer s.mu.Unlock()
 	for i, f := range files {
 		e, ok := s.memo[f.key]
-		if !ok || f.size < 0 || e.size != f.size || e.mod != f.mod || e.side != f.side {
+		if !ok || f.size < 0 || f.cloud || e.size != f.size || e.mod != f.mod || e.side != f.side {
+			// Выгруженное в облако фото — не из памяти: иначе оно осталось бы в ленте, а прогрев миниатюр скачал бы его.
 			r.unk = append(r.unk, i)
 			continue
 		}
@@ -171,7 +174,10 @@ func okState(f scanFile, ph Photo) uint8 {
 }
 
 // Sources — источники ленты: папки (с подпапками) и отдельные файлы (097).
-type Sources struct{ Folders, Files []string }
+// Explicit — файлы из Files, только что добавленные пользователем: лишь их заглушку облака (OneDrive «только
+// в сети») сканирование читает, то есть скачивает. Остальные отдельные файлы ведут себя как файлы папки:
+// «не читается» с причиной, без чтения. Не сохраняется нигде: это признак одного запуска чтения.
+type Sources struct{ Folders, Files, Explicit []string }
 
 // Scan находит фото в папках (с подпапками) и отдельных файлах и читает их заголовки.
 // Файлы, которые не удалось прочитать, попадают в skipped с причиной (Why).
@@ -349,7 +355,7 @@ func (s *Scanner) walk(ctx context.Context, src Sources, tick func(found int)) (
 			if err := ctxDue(ctx, visited); err != nil {
 				return err
 			}
-			if d.Type().IsRegular() && isSidecar(d.Name()) {
+			if isSidecar(d.Name()) && regularEntry(p, d) {
 				w.sides.add(p, d)
 				return nil
 			}
@@ -364,11 +370,15 @@ func (s *Scanner) walk(ctx context.Context, src Sources, tick func(found int)) (
 			return nil, err
 		}
 	}
+	explicit := make(map[string]bool, len(src.Explicit))
+	for _, p := range src.Explicit {
+		explicit[paths.Fold(p)] = true
+	}
 	for i, p := range src.Files {
 		if err := ctxDue(ctx, i+1); err != nil {
 			return nil, err
 		}
-		w.addLoose(p)
+		w.addLoose(p, explicit[paths.Fold(p)])
 	}
 	files := w.files
 	if len(w.sides.m) > 0 {
@@ -391,23 +401,26 @@ type scanWalk struct {
 
 // addImage берёт файл-фото, если он ещё не встречался; info == nil — из d.Info().
 func (w *scanWalk) addImage(p string, d fs.DirEntry, info fs.FileInfo) {
-	w.add(p, d.Name(), info, func() fs.FileInfo { i, _ := d.Info(); return i }, false)
+	w.add(p, d.Name(), info, func() fs.FileInfo { i, _ := d.Info(); return i }, false, false)
 }
 
 // add — общее тело addImage и addLoose; load отдаёт сведения о файле, когда info == nil.
-func (w *scanWalk) add(p, name string, info fs.FileInfo, load func() fs.FileInfo, loose bool) {
+func (w *scanWalk) add(p, name string, info fs.FileInfo, load func() fs.FileInfo, loose, cloudOK bool) {
 	key := paths.Fold(p)
 	if !isImage(name) || w.seen[key] {
 		return
 	}
 	w.seen[key] = true
 	// ToLower ключа: на Windows и macOS он уже в нижнем регистре — без новой строки.
-	f := scanFile{path: p, key: key, low: strings.ToLower(key), size: -1, loose: loose}
+	f := scanFile{path: p, key: key, low: strings.ToLower(key), size: -1, loose: loose, cloudOK: cloudOK}
 	if info == nil {
 		info = load()
 	}
 	if info != nil {
 		f.size, f.mod = info.Size(), info.ModTime().UnixNano()
+		// Скачивание — явное действие над файлом: только что добавленное отдельное фото (097) читается и скачивается;
+		// то же фото при любом другом чтении (пересканирование, открытие проекта) — заглушка, как в папке.
+		f.cloud = !cloudOK && dehydrated(info)
 	}
 	w.files = append(w.files, f)
 	if now := time.Now(); now.Sub(w.last) >= w.every {

@@ -187,12 +187,15 @@ func agentsFontsMissing(used []model.FontUse) []string {
 }
 
 // agentsImageErr приводит ошибку получения картинки к тому, что можно вернуть службе: отмена —
-// как есть, нет файла или он не читается — ErrUnavailable, прочее — безымянный текст.
+// как есть, нет файла или он не читается — ErrUnavailable, файл только в облаке — ErrCloudOnly (причина
+// отдельно, чтобы агент не искал пропавший файл), прочее — безымянный текст.
 func agentsImageErr(ctx context.Context, err error) error {
 	var de *library.DecodeError
 	switch {
 	case ctx.Err() != nil:
 		return ctx.Err()
+	case errors.Is(err, library.ErrCloudOnly):
+		return agents.ErrCloudOnly
 	case errors.Is(err, fs.ErrNotExist), errors.As(err, &de):
 		return agents.ErrUnavailable
 	}
@@ -201,7 +204,8 @@ func agentsImageErr(ctx context.Context, err error) error {
 
 // agentsPreview — фото id, уменьшенное до px: источник тот же, что у /media/p (mediaPhoto:
 // CheckLocalPath, проверка тома, пропавшие), копия из кэша превью читается через imgfile (предел
-// размера и бюджет памяти до декода). Диск без a.mu.
+// размера и бюджет памяти до декода). Диск без a.mu. Фото в облаке (заглушка OneDrive) не открывается: берётся
+// готовая копия любого размера, а без неё — agents.ErrCloudOnly (160-M1, хвост).
 func (a *App) agentsPreview(ctx context.Context, id string, px int) ([]byte, error) {
 	if a.cache == nil {
 		return nil, errAgentsImage
@@ -215,11 +219,11 @@ func (a *App) agentsPreview(ctx context.Context, id string, px int) ([]byte, err
 	if inStrip && paths.CheckLocalPath(sp.Path) != nil {
 		return nil, agents.ErrUnavailable
 	}
-	p, ok, gone := a.mediaPhoto(id)
+	p, ok, gone, cloud := a.mediaPhotoCloud(id)
 	if !ok || gone {
 		return nil, agents.ErrUnavailable
 	}
-	file, err := a.cache.FileCtx(ctx, p, true)
+	file, err := a.photoCopy(id, p, cloud, true, true, func() (string, error) { return a.cache.FileCtx(ctx, p, true) })
 	if err != nil {
 		return nil, agentsImageErr(ctx, err)
 	}

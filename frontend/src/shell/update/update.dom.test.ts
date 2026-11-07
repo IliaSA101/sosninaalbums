@@ -15,12 +15,14 @@ vi.mock('../../../wailsjs/go/app/App', () => go)
 
 const { UpdateUi } = await import('./update.svelte')
 const { NO_UPDATE } = await import('./updateapi')
+const { updateView } = await import('./updatetext')
 const { store } = await import('../../base/core/store.svelte')
 
 import type { UpdateInfo } from './updateapi'
 const win = (p: Partial<UpdateInfo>): UpdateInfo => ({ ...NO_UPDATE, mode: 'install', ...p })
 const tick = () => new Promise((r) => setTimeout(r, 0))
 const toast = () => store.toast
+const again = () => updateView(ui.info).btns[0].act // что повторит «Повторить»
 
 let ui: InstanceType<typeof UpdateUi>
 let whatsNew: ReturnType<typeof vi.fn<() => void>>
@@ -165,37 +167,40 @@ describe('ошибки из Go и «Повторить»', () => {
   })
 
   it('ошибка проверки при старой версии от прежнего предложения → «Повторить» проверяет', async () => {
-    go.CheckUpdate.mockResolvedValue(win({ phase: 'error', version: '0.25.1', error: 'нет связи' }))
+    go.CheckUpdate.mockResolvedValue(win({ phase: 'error', version: '0.25.1', errorOf: 'check', error: 'нет связи' }))
     ui.changed(win({ phase: 'available', version: '0.25.1' }))
     await ui.check()
     expect(ui.info.phase).toBe('error')
-    expect(ui.retry).toBe('check')
+    expect(again()).toBe('check')
   })
 
   it('ошибка скачивания → «Повторить» скачивает; ответ-ошибка и reject одинаково', async () => {
     ui.changed(win({ phase: 'available', version: '0.25.1' }))
-    go.DownloadUpdate.mockResolvedValue(win({ phase: 'error', version: '0.25.1', error: 'обрыв' }))
+    go.DownloadUpdate.mockResolvedValue(win({ phase: 'error', version: '0.25.1', errorOf: 'download', error: 'обрыв' }))
     await ui.download()
-    expect(ui.retry).toBe('download')
+    expect(again()).toBe('download')
     go.DownloadUpdate.mockRejectedValue('сеть пропала')
     await ui.download()
     expect(ui.info.error).toBe('Сеть пропала')
-    expect(ui.retry).toBe('download')
+    expect(ui.info.errorOf).toBe('download')
+    expect(again()).toBe('download')
   })
 
-  it('reject проверки → check; успешный ответ сбрасывает; page-режим всегда check; событие без прежней фазы — по данным Go', async () => {
+  it('reject проверки → check; успешный ответ сбрасывает; page-режим всегда check; событие — по errorOf Go', async () => {
     go.CheckUpdate.mockRejectedValue('нет связи')
     await ui.check()
-    expect(ui.retry).toBe('check')
+    expect(ui.info.errorOf).toBe('check')
+    expect(again()).toBe('check')
     go.CheckUpdate.mockResolvedValue(win({ phase: 'latest' }))
     await ui.check()
-    expect(ui.retry).toBeUndefined()
-    ui.changed(win({ phase: 'downloading', mode: 'page', version: '0.25.1' }))
-    ui.changed(win({ phase: 'error', mode: 'page', version: '0.25.1', error: 'x' }))
-    expect(ui.retry).toBe('check')
+    expect(ui.info.errorOf).toBe('')
+    ui.changed(win({ phase: 'error', mode: 'page', version: '0.25.1', errorOf: 'download', error: 'x' }))
+    expect(again()).toBe('check')
     ui.changed(win({ phase: 'idle' }))
-    ui.changed(win({ phase: 'error', version: '0.25.1', error: 'x' }))
-    expect(ui.retry).toBe('download')
+    ui.changed(win({ phase: 'error', version: '0.25.1', errorOf: 'download', error: 'x' }))
+    expect(again()).toBe('download')
+    ui.changed(win({ phase: 'error', version: '0.25.1', errorOf: 'install', error: 'x' }))
+    expect(again()).toBe('download')
   })
 })
 

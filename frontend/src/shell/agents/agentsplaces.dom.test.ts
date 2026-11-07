@@ -35,6 +35,7 @@ const place = (dir: string, o: Partial<AgentPlace> = {}): AgentPlace => ({
   label: '',
   chosen: false,
   bound: true,
+  bindable: true,
   narrow: false,
   narrowRoot: false,
   state: '',
@@ -183,14 +184,34 @@ describe('список мест (153)', () => {
     expect(items()).toHaveLength(1)
   })
 
-  it('macOS: привязки нет — ни «не привязано», ни ссылки', async () => {
+  it('bindable: false (загрузочный том macOS) — ни «не привязано», ни ссылки, даже если Go видит том на месте', async () => {
+    setMacForTest(true)
+    const a = place('/Users/u/Фото', { bound: false, bindable: false })
+    api.AgentPlacesLive.mockResolvedValue([{ ...a, state: 'here', here: 'Macintosh HD' }])
+    await open(infoWith({ places: [a] }))
+    await fireEvent.click(toggle(1))
+    await waitFor(() => expect(api.AgentPlacesLive).toHaveBeenCalled())
+    expect(items()[0].textContent).not.toContain('не привязано')
+    expect(screen.queryByRole('button', { name: /Привязать/ })).toBeNull()
+  })
+
+  it('bindable: true на macOS (внешний том) — как на Windows: «не привязано к диску» и «Привязать…»; решает Go, а не система окна', async () => {
     setMacForTest(true)
     const a = place('/Volumes/A/Фото', { bound: false })
     api.AgentPlacesLive.mockResolvedValue([{ ...a, state: 'here', here: 'A' }])
     await open(infoWith({ places: [a] }))
     await fireEvent.click(toggle(1))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Привязать к диску «A»' })).toBeTruthy())
+    expect(items()[0].textContent).toContain('не привязано к диску')
+  })
+
+  it('bindable в живом ответе главнее сохранённого: том стал загрузочным — привязки нет', async () => {
+    const a = place('/Volumes/A/Фото', { bound: false })
+    api.AgentPlacesLive.mockResolvedValue([{ ...a, bindable: false, state: 'here', here: 'A' }])
+    await open(infoWith({ places: [a] }))
+    await fireEvent.click(toggle(1))
     await waitFor(() => expect(api.AgentPlacesLive).toHaveBeenCalled())
-    expect(items()[0].textContent).not.toContain('не привязано')
+    await waitFor(() => expect(items()[0].textContent).not.toContain('не привязано'))
     expect(screen.queryByRole('button', { name: /Привязать/ })).toBeNull()
   })
 

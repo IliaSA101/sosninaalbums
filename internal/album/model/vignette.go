@@ -151,7 +151,7 @@ func ClampVignette(v Vignette) Vignette {
 	v.Pupils = max(0, min(v.Pupils, MaxPupils))
 	v.Ratio = clampRatio(v.Ratio)
 	v.Shape, v.Round = ClampShape(v.Shape, v.Round)
-	v.Tpl = cleanLine(v.Tpl, maxTplID)
+	v.Tpl = CleanLine(v.Tpl, maxTplID)
 	v.TText = CleanText(v.TText, MaxCaptionRunes)
 	if strings.TrimSpace(v.TText) == "" {
 		v.TText = ""

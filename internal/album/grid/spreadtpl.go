@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/geom"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
@@ -21,12 +22,13 @@ type tplPart struct {
 	scope  string
 	a      layout.Rect
 	mirror bool
+	fit    *pageFit // подгонка по страницам (Fit = "page"): a — страница, предметы по кадру
 }
 
 // tplParts — куда встаёт шаблон t на области scope листа s. Шаблон разворота — только на весь
 // разворот из двух страниц (ErrTplScope); страница на весь разворот — левая как есть, правая
 // зеркально; лист 031 — одна область. Неизвестная область — ErrScope.
-func tplParts(p *model.Project, s *model.Spread, scope string, t model.SpreadTpl) ([]tplPart, error) {
+func tplParts(p *model.Project, s *model.Spread, scope string, t looktpl.SpreadTpl) ([]tplPart, error) {
 	a, ok := pageArea(p, s, scope)
 	if !ok || !model.ValidScope(scope) {
 		return nil, model.ErrScope
@@ -38,6 +40,9 @@ func tplParts(p *model.Project, s *model.Spread, scope string, t model.SpreadTpl
 	switch {
 	case t.Pages == 2 && (scope != model.ScopeSpread || !two):
 		return nil, ErrTplScope
+	case t.Pages == 2 && t.ByPage():
+		r, _ := p.AreaOf(s, model.ScopeRight)
+		return fitParts(t, l, r), nil
 	case t.Pages == 1 && scope == model.ScopeSpread && two:
 		r, _ := p.AreaOf(s, model.ScopeRight)
 		return []tplPart{{scope: model.ScopeLeft, a: l}, {scope: model.ScopeRight, a: r, mirror: true}}, nil
@@ -52,14 +57,14 @@ func tplParts(p *model.Project, s *model.Spread, scope string, t model.SpreadTpl
 // из библиотеки берутся из libs (ключ → сведения о файле на этом ПК); ключа нет — слой пропускается, missing — сколько таких ключей. Область уже такая
 // же — холостая правка (повтор не даёт шага). Обложка — ErrScope; неизвестный разворот —
 // холостая; пустой шаблон — ErrTplEmpty.
-func ApplySpreadTpl(p *model.Project, spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, missing int, err error) {
+func ApplySpreadTpl(p *model.Project, spreadID, scope string, t looktpl.SpreadTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, missing int, err error) {
 	plan, gone, err := applySpreadTpl(p, spreadID, scope, t, libs)
 	return plan, len(gone), err
 }
 
 // applySpreadTpl — тело ApplySpreadTpl; gone — ключи библиотеки без файла на этом ПК (макет
 // альбома 131 считает их по всей серии без повторов).
-func applySpreadTpl(p *model.Project, spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, gone map[string]bool, err error) {
+func applySpreadTpl(p *model.Project, spreadID, scope string, t looktpl.SpreadTpl, libs map[string]model.PhotoInfo) (plan model.GridPlan, gone map[string]bool, err error) {
 	if spreadID == model.CoverID {
 		return plan, nil, model.ErrScope
 	}
@@ -67,9 +72,9 @@ func applySpreadTpl(p *model.Project, spreadID, scope string, t model.SpreadTpl,
 	if s == nil {
 		return plan, nil, nil
 	}
-	t, ok := model.ClampSpreadTpl(t)
+	t, ok := looktpl.ClampSpreadTpl(t)
 	if !ok {
-		return plan, nil, model.ErrTplEmpty
+		return plan, nil, looktpl.ErrTplEmpty
 	}
 	parts, err := tplParts(p, s, scope, t)
 	if err != nil {
@@ -108,7 +113,7 @@ func applySpreadTpl(p *model.Project, spreadID, scope string, t model.SpreadTpl,
 // PlanSpreadTpl — сухой прогон ApplySpreadTpl на копии проекта c (её делает обёртка под
 // замком): вопрос до правки (фото в ленту, заменятся стикеры и надписи). Ошибка — та же, что
 // даст правка.
-func PlanSpreadTpl(c *model.Project, spreadID, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo) (model.GridPlan, error) {
+func PlanSpreadTpl(c *model.Project, spreadID, scope string, t looktpl.SpreadTpl, libs map[string]model.PhotoInfo) (model.GridPlan, error) {
 	plan, _, err := ApplySpreadTpl(c, spreadID, scope, t, libs)
 	if err != nil {
 		return model.GridPlan{}, err
@@ -119,7 +124,10 @@ func PlanSpreadTpl(c *model.Project, spreadID, scope string, t model.SpreadTpl, 
 // tplBoxes — места шаблона в мм частей области (зеркальная часть — mirrorFrac). Области и
 // вид шаблона уже проверил tplParts, а мест не бывает только на листе 031: отказа FracBoxes
 // здесь нет.
-func tplBoxes(p *model.Project, s *model.Spread, parts []tplPart, t model.SpreadTpl) []model.Box {
+func tplBoxes(p *model.Project, s *model.Spread, parts []tplPart, t looktpl.SpreadTpl) []model.Box {
+	if fitted(parts) {
+		return fitBoxes(t, parts)
+	}
 	tpl := model.TplPage
 	if t.Pages == 2 {
 		tpl = model.TplSpread
@@ -187,7 +195,7 @@ func (r *tplRes) photo(key string) string {
 }
 
 // bg — фото фона шаблона рамкой по области a (как «На фон» 048); нет ключа или файла — nil.
-func (r *tplRes) bg(b model.TplBg, a layout.Rect) *model.Backdrop {
+func (r *tplRes) bg(b looktpl.TplBg, a layout.Rect) *model.Backdrop {
 	if b.Lib == "" {
 		return nil
 	}
@@ -202,7 +210,7 @@ func (r *tplRes) bg(b model.TplBg, a layout.Rect) *model.Backdrop {
 
 // bgDesign — фон шаблона в мм области scope: цвет, узор, фото фона (srcDesign с x0 области:
 // putDesign его не сдвигает). Стикеров и надписей нет.
-func (r *tplRes) bgDesign(t model.SpreadTpl, scope string, parts []tplPart) srcDesign {
+func (r *tplRes) bgDesign(t looktpl.SpreadTpl, scope string, parts []tplPart) srcDesign {
 	p, s := r.p, r.s
 	a := p.BdArea(s, scope)
 	sd := srcDesign{x0: a.X}
@@ -230,11 +238,14 @@ func (r *tplRes) bgDesign(t model.SpreadTpl, scope string, parts []tplPart) srcD
 
 // design — оформление шаблона в мм области scope (bgDesign плюс стикеры и надписи) и виды
 // слоёв seq для decorOrder: стикеры «под местами» — до места, остальные и надписи — после.
-func (r *tplRes) design(t model.SpreadTpl, scope string, parts []tplPart) (srcDesign, []string) {
+func (r *tplRes) design(t looktpl.SpreadTpl, scope string, parts []tplPart) (srcDesign, []string) {
 	sd := r.bgDesign(t, scope, parts)
 	var under, above []*model.Sticker
 	for _, pt := range parts {
 		for _, it := range t.Stickers {
+			if !pt.owns(it.Anchor, looktpl.StretchArt(it.Art)) {
+				continue
+			}
 			st := r.sticker(it, pt)
 			switch {
 			case st == nil:
@@ -250,9 +261,14 @@ func (r *tplRes) design(t model.SpreadTpl, scope string, parts []tplPart) (srcDe
 	k := tplScale(t)
 	for _, pt := range parts {
 		for _, tx := range t.Texts {
-			sd.texts = append(sd.texts, r.text(tx, pt, k))
+			if pt.owns(tx.Anchor, false) {
+				sd.texts = append(sd.texts, r.text(tx, pt, k))
+			}
 		}
 		for _, tx := range t.Drafts {
+			if !pt.owns(tx.Anchor, false) {
+				continue
+			}
 			d := r.text(tx, pt, k)
 			d.Draft = true
 			sd.texts = append(sd.texts, d)
@@ -266,7 +282,7 @@ func (r *tplRes) design(t model.SpreadTpl, scope string, parts []tplPart) (srcDe
 }
 
 // tplScale — S шаблона в мм (кегль надписей × S'/S); мм не записаны — 0 (кегль как есть).
-func tplScale(t model.SpreadTpl) float64 {
+func tplScale(t looktpl.SpreadTpl) float64 {
 	if t.W > 0 && t.H > 0 {
 		return min(t.W, t.H)
 	}
@@ -275,7 +291,7 @@ func tplScale(t model.SpreadTpl) float64 {
 
 // anchorPoint — центр предмета по якорю в области a: сдвиг в долях S = min(W, H) области, у
 // растяжимого (stretch) — в долях ширины и высоты области, как и его размер.
-func anchorPoint(a layout.Rect, an model.Anchor, stretch bool) (float64, float64) {
+func anchorPoint(a layout.Rect, an looktpl.Anchor, stretch bool) (float64, float64) {
 	sx, sy := min(a.W, a.H), min(a.W, a.H)
 	if stretch {
 		sx, sy = a.W, a.H
@@ -286,22 +302,18 @@ func anchorPoint(a layout.Rect, an model.Anchor, stretch bool) (float64, float64
 // sticker — стикер шаблона в части pt: размер по S (растяжимый — по осям области), центр по
 // якорю, у зеркальной части — отражён (центр, FlipH, −Rot). Рамка сразу зажата и подогнана
 // под пропорцию, как её оставит конвейер. Нет файла своего — nil.
-func (r *tplRes) sticker(it model.TplItem, pt tplPart) *model.Sticker {
+func (r *tplRes) sticker(it looktpl.TplItem, pt tplPart) *model.Sticker {
 	st := &model.Sticker{Rot: it.Rot, FlipH: it.FlipH, FlipV: it.FlipV, Fade: it.Fade}
 	if it.Art != nil {
 		st.Art = &model.Art{Kind: it.Art.Kind, Inks: slices.Clone(it.Art.Inks), Seed: it.Art.Seed}
 	} else if st.Photo = r.photo(it.Lib); st.Photo == "" {
 		return nil
 	}
-	a, s := pt.a, min(pt.a.W, pt.a.H)
-	w, h := it.W*s, it.H*s
-	stretch := model.StretchArt(it.Art)
-	if stretch {
-		w, h = it.W*a.W, it.H*a.H
-	}
-	cx, cy := anchorPoint(a, it.Anchor, stretch)
+	stretch := looktpl.StretchArt(it.Art)
+	w, h := pt.size(it.W, it.H, stretch)
+	cx, cy := pt.center(it.Anchor, stretch)
 	if pt.mirror {
-		cx, st.FlipH, st.Rot = 2*a.X+a.W-cx, !st.FlipH, geom.NormDeg(-st.Rot)
+		cx, st.FlipH, st.Rot = 2*pt.a.X+pt.a.W-cx, !st.FlipH, geom.NormDeg(-st.Rot)
 	}
 	st.X, st.Y, st.W, st.H = cx-w/2, cy-h/2, w, h
 	c := r.p.ClampSticker(r.s, st)
@@ -314,8 +326,8 @@ func (r *tplRes) sticker(it model.TplItem, pt tplPart) *model.Sticker {
 // text — надпись шаблона в части pt: ширина и кегль × S'/S (k = S шаблона; 0 — как есть),
 // «по тексту» — сразу своя ширина, центр по якорю (зеркала у надписей нет — сдвиг), рамка
 // внутри листа (как FitTexts).
-func (r *tplRes) text(tx model.TplText, pt tplPart, k float64) model.TextBlock {
-	s := min(pt.a.W, pt.a.H)
+func (r *tplRes) text(tx looktpl.TplText, pt tplPart, k float64) model.TextBlock {
+	s := pt.scale()
 	st := tx.Style
 	if k > 0 {
 		st.Size = model.Round1(st.Size * s / k) // шаг кегля 0,1, как у ручки размера
@@ -327,7 +339,7 @@ func (r *tplRes) text(tx model.TplText, pt tplPart, k float64) model.TextBlock {
 	} else {
 		t.W = geom.Round2(geom.ClampF(t.W, model.MinTextW, g.W))
 	}
-	cx, cy := anchorPoint(pt.a, tx.Anchor, false)
+	cx, cy := pt.center(tx.Anchor, false)
 	dx, dy := geom.Rotate(t.Rot, t.W/2, model.BoxOf(&t).H/2)
 	t.X, t.Y = geom.Round2(cx-dx), geom.Round2(cy-dy)
 	t.X, t.Y = model.BoxOf(&t).FitIn(g.W, g.H)

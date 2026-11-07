@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -13,7 +14,8 @@ import (
 // окно: локальный путь — до любого обращения к диску (UNC иначе вешал бы сетевым запросом), потом
 // имя без устройства, расширение, обычный файл; ссылка — только с локальной целью (statLink).
 // Всё мимо — файл молча пропускается: его нет в ленте, а проект сам его не теряет.
-func (w *scanWalk) addLoose(p string) {
+// explicit — файл только что добавлен (Sources.Explicit): заглушка облака читается.
+func (w *scanWalk) addLoose(p string, explicit bool) {
 	name := filepath.Base(p)
 	if paths.CheckLocalPath(p) != nil || paths.DeviceElem(name) || !isImage(name) {
 		return
@@ -30,7 +32,7 @@ func (w *scanWalk) addLoose(p string) {
 	} else if !info.Mode().IsRegular() {
 		return
 	}
-	w.add(p, name, info, nil, true)
+	w.add(p, name, info, nil, true, explicit)
 	w.looseSidecar(p)
 }
 
@@ -42,7 +44,7 @@ func (w *scanWalk) looseSidecar(p string) {
 		if len(w.sides.m) >= maxSidecars {
 			return
 		}
-		if info, err := os.Lstat(sp); err == nil && info.Mode().IsRegular() {
+		if info, err := os.Lstat(sp); err == nil && imgfile.RegularOrCloud(sp, info) {
 			w.sides.put(sp, info)
 		}
 	}

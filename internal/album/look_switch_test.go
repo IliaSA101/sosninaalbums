@@ -9,13 +9,14 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Режим, смена макета по позициям и вопрос о тронутых (131 design §4, G4a).
 
 // lkPrev — поиск, всегда отдающий t (прежний макет альбома).
-func lkPrev(t model.AlbumTpl) album.LookFinder {
-	return func(model.LookRef) *model.AlbumTpl { return &t }
+func lkPrev(t looktpl.AlbumTpl) album.LookFinder {
+	return func(model.LookRef) *looktpl.AlbumTpl { return &t }
 }
 
 // lkWithBg — редактор с одним пустым разворотом, на фон которого ставится картинка.
@@ -167,7 +168,7 @@ func TestSwitchLookByPosition(t *testing.T) {
 	}
 	// Виньетка на месте обычного шага — разворот заменяется (вид другой), ID новый.
 	edtest.Change(e, func(p *model.Project) { p.Look = &model.LookRef{Key: lkKeyB, Name: "Свежий"} })
-	swap := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkVig("Класс", 3), lkStep(model.RoleRepeat, "", "#abcdef", 2), lkStep("", "Конец", "#fedcba", 1)}}
+	swap := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkVig("Класс", 3), lkStep(looktpl.RoleRepeat, "", "#abcdef", 2), lkStep("", "Конец", "#fedcba", 1)}}
 	before := lkRows(e)
 	lkApply(t, e, lkRefA, swap, lkPrev(lookB()), 5)
 	rows = lkRows(e)
@@ -275,7 +276,7 @@ func TestSwitchLookAsksTouched(t *testing.T) {
 func TestPlanLookMatchesApply(t *testing.T) {
 	type stage struct {
 		ref  model.LookRef
-		tpl  model.AlbumTpl
+		tpl  looktpl.AlbumTpl
 		prev album.LookFinder
 		n    int
 	}
@@ -316,11 +317,11 @@ func TestPlanLookMatchesApply(t *testing.T) {
 // Ключи библиотеки без файла на этом ПК считаются один раз на макет; слой пропускается.
 func TestApplyLookMissingLibs(t *testing.T) {
 	st := lkStep("", "Рамка", "#ffffff", 1)
-	st.Tpl.Stickers = []model.TplItem{{Anchor: model.Anchor{AX: 1, AY: -1}, W: 0.1, H: 0.1, Lib: "my:00000000000000aa"}}
+	st.Tpl.Stickers = []looktpl.TplItem{{Anchor: looktpl.Anchor{AX: 1, AY: -1}, W: 0.1, H: 0.1, Lib: "my:00000000000000aa"}}
 	st.Tpl.Page[0].Lib = "my:00000000000000bb"
-	st.Tpl.Whole = &model.TplBg{Lib: "my:00000000000000dd"}
-	st.Tpl.Borders = []model.TplBorder{{I: 0, Lib: "my:00000000000000ee", Scale: 1}}
-	tpl := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{st, lkStep(model.RoleRepeat, "", "#eeeeee", 1)}}
+	st.Tpl.Whole = &looktpl.TplBg{Lib: "my:00000000000000dd"}
+	st.Tpl.Borders = []looktpl.TplBorder{{I: 0, Lib: "my:00000000000000ee", Scale: 1}}
+	tpl := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{st, lkStep(looktpl.RoleRepeat, "", "#eeeeee", 1)}}
 	tpl.Steps[1].Tpl.Stickers = st.Tpl.Stickers
 	e := lkEditor(t)
 	plan := lkApply(t, e, lkRefA, tpl, nil, 5)
@@ -367,7 +368,7 @@ func TestApplyLookFullEntry(t *testing.T) {
 func TestSwitchLookPrevMismatch(t *testing.T) {
 	e := lkEditor(t)
 	lkApply(t, e, lkRefA, lookA(), nil, 9)
-	wrong := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkVig("Класс", 4), lkStep(model.RoleRepeat, "", "#f0fff0", 1)}}
+	wrong := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkVig("Класс", 4), lkStep(looktpl.RoleRepeat, "", "#f0fff0", 1)}}
 	plan, err := e.PlanLook(lkRefB, lookB(), lkPrev(wrong), model.LookOpts{Spreads: 6}, nil)
 	if err != nil || plan.Touched != 9 {
 		t.Fatalf("тронутых %d, ждали 9: %v", plan.Touched, err)
@@ -377,11 +378,11 @@ func TestSwitchLookPrevMismatch(t *testing.T) {
 // Шаг-страница с MaxTexts заготовок на развороте даёт вдвое больше (зеркало): отказ постановки,
 // альбом прежний, шага отмены нет.
 func TestApplyLookStepErrorRolledBack(t *testing.T) {
-	st := model.LookStep{Name: "Глава", Tpl: model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: lkPlaces(1), Page: []model.TplBg{{Color: "#ffffff"}}}}
+	st := looktpl.LookStep{Name: "Глава", Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: lkPlaces(1), Page: []looktpl.TplBg{{Color: "#ffffff"}}}}
 	for range model.MaxTexts {
-		st.Tpl.Drafts = append(st.Tpl.Drafts, model.TplText{W: 0.2, Text: "[Имя]", Style: model.PlainStyle()})
+		st.Tpl.Drafts = append(st.Tpl.Drafts, looktpl.TplText{W: 0.2, Text: "[Имя]", Style: model.PlainStyle()})
 	}
-	tpl := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "Титул", "#ffffff", 1), st}}
+	tpl := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "Титул", "#ffffff", 1), st}}
 	e := lkEditor(t)
 	rev, undo, data := e.View().Rev, edtest.UndoLen(e), lkJSON(e)
 	if _, _, err := e.ApplyLook(lkRefA, tpl, nil, model.LookOpts{Spreads: 2}, nil); err == nil || e.View().Rev != rev || edtest.UndoLen(e) != undo || lkJSON(e) != data {
@@ -393,10 +394,10 @@ func TestApplyLookStepErrorRolledBack(t *testing.T) {
 // страницы и узор всего разворота переходят на лист.
 func TestApplyLookVignettePages2(t *testing.T) {
 	vig := lkVig("Класс", 4)
-	vig.Tpl = model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Places: lkPlaces(1),
-		Page:  []model.TplBg{{Color: "#112233"}, {Color: "#445566"}},
-		Whole: &model.TplBg{Pat: &model.Pattern{Kind: "dots"}, Lib: "my:00000000000000cc", Fade: 0.3}}
-	tpl := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "Титул", "#ffffff", 1), vig}}
+	vig.Tpl = looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Places: lkPlaces(1),
+		Page:  []looktpl.TplBg{{Color: "#112233"}, {Color: "#445566"}},
+		Whole: &looktpl.TplBg{Pat: &model.Pattern{Kind: "dots"}, Lib: "my:00000000000000cc", Fade: 0.3}}
+	tpl := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "Титул", "#ffffff", 1), vig}}
 	e := lkEditor(t)
 	plan := lkApply(t, e, lkRefA, tpl, nil, 2)
 	if s := edtest.P(e).Spreads[1]; !s.IsVignette() || s.BgL != "#112233" || len(s.Grid) != 5 || plan.Missing != 1 {
@@ -408,15 +409,15 @@ func TestApplyLookVignettePages2(t *testing.T) {
 // ПК (с именем главы). Номер шага остаётся (FixLook держит имя и надписи), повтор — холостой:
 // rev, число и ID разворотов прежние (0.28-131-80).
 func TestApplyLookBareStepsNoop(t *testing.T) {
-	onlyText := model.LookStep{Name: "Титул", Tpl: model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Page: []model.TplBg{{}, {}},
-		Drafts: []model.TplText{{W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}}}
+	onlyText := looktpl.LookStep{Name: "Титул", Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Page: []looktpl.TplBg{{}, {}},
+		Drafts: []looktpl.TplText{{W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}}}
 	noName := onlyText
 	noName.Name = ""
-	lost := model.LookStep{Name: "Рамка", Tpl: model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Page: []model.TplBg{{}, {}},
-		Stickers: []model.TplItem{{Anchor: model.Anchor{AX: 1, AY: -1}, W: 0.1, H: 0.1, Lib: "my:00000000000000aa"}}}}
-	for name, tpl := range map[string]model.AlbumTpl{
-		"одни надписи":     {V: model.LookV, Steps: []model.LookStep{onlyText, noName}},
-		"стикер без файла": {V: model.LookV, Steps: []model.LookStep{lost, lkStep(model.RoleRepeat, "", "#eeeeee", 1)}},
+	lost := looktpl.LookStep{Name: "Рамка", Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Page: []looktpl.TplBg{{}, {}},
+		Stickers: []looktpl.TplItem{{Anchor: looktpl.Anchor{AX: 1, AY: -1}, W: 0.1, H: 0.1, Lib: "my:00000000000000aa"}}}}
+	for name, tpl := range map[string]looktpl.AlbumTpl{
+		"одни надписи":     {V: looktpl.LookV, Steps: []looktpl.LookStep{onlyText, noName}},
+		"стикер без файла": {V: looktpl.LookV, Steps: []looktpl.LookStep{lost, lkStep(looktpl.RoleRepeat, "", "#eeeeee", 1)}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := lkEditor(t)
@@ -438,11 +439,11 @@ func TestApplyLookBareStepsNoop(t *testing.T) {
 // Сухой прогон проходит тот же хвост конвейера (settle), что и правка: отказ, который даёт только
 // он (общий запас знаков проекта), виден до «Применить» — вопрос не обещает невозможного.
 func TestPlanLookRefusalFromSettle(t *testing.T) {
-	step := lkStep(model.RoleRepeat, "", "#ffffff", 1)
+	step := lkStep(looktpl.RoleRepeat, "", "#ffffff", 1)
 	for range model.MaxTexts { // 64 заготовки на каждом из 200 разворотов — больше общего запаса
-		step.Tpl.Drafts = append(step.Tpl.Drafts, model.TplText{W: 0.2, Text: "[Имя]", Style: model.PlainStyle()})
+		step.Tpl.Drafts = append(step.Tpl.Drafts, looktpl.TplText{W: 0.2, Text: "[Имя]", Style: model.PlainStyle()})
 	}
-	tpl := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "Титул", "#ffffff", 1), step}}
+	tpl := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "Титул", "#ffffff", 1), step}}
 	e := lkEditor(t)
 	o := model.LookOpts{Spreads: model.MaxSpreads}
 	rev, data := e.View().Rev, lkJSON(e)
@@ -461,7 +462,7 @@ func lkTouchedNoPlaces(t *testing.T) {
 	t.Helper()
 	// Шаг прежнего макета без мест (одни цвета): места, расставленные фотографом, повтор шага не
 	// трогает — но замена макета их унесёт, значит, разворот тронут (место на шаге без мест).
-	noPlaces := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "Фон", "#fff0f0", 0), lkStep(model.RoleRepeat, "", "#f0f0ff", 0)}}
+	noPlaces := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "Фон", "#fff0f0", 0), lkStep(looktpl.RoleRepeat, "", "#f0f0ff", 0)}}
 	t.Run("свои места на шаге без мест", func(t *testing.T) {
 		e := lkEditor(t)
 		lkApply(t, e, lkRefA, noPlaces, nil, 4)
@@ -489,7 +490,7 @@ func lkTouchedNoPlaces(t *testing.T) {
 		if len(edtest.P(e).Spreads[0].Grid) == 0 {
 			t.Fatal("у титула A есть место")
 		}
-		bare := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{lkStep("", "Фон", "#fff0f0", 0), lkStep("", "Конец", "#fff0f0", 0)}}
+		bare := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{lkStep("", "Фон", "#fff0f0", 0), lkStep("", "Конец", "#fff0f0", 0)}}
 		// Табличка имени (071) на месте титула: разворот тронут до замены и уходит вместе с местом.
 		edtest.Change(e, func(p *model.Project) {
 			p.Spreads[0].Grid[0].Person = model.Person{Last: "Иванов", First: "Аня"}

@@ -6,13 +6,14 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // ApplyLookCover (131 §5): пустые и негодные входы — холостая правка, не паника; места сторонки
 // в безопасной зоне ± 0,01 мм; шаблон разворота (Pages 2) на сторонку не встаёт.
 func TestApplyLookCoverGrid(t *testing.T) {
 	c := fsfera(t)
-	apply := func(ct *model.CoverTpl) (res grid.CoverRes) {
+	apply := func(ct *looktpl.CoverTpl) (res grid.CoverRes) {
 		t.Helper()
 		_, err := edtest.Try(c.e, "", func(p *model.Project) (err error) {
 			res, err = grid.ApplyLookCover(p, ct, nil)
@@ -24,8 +25,8 @@ func TestApplyLookCoverGrid(t *testing.T) {
 		return res
 	}
 	rev := edtest.Rev(c.e)
-	two := &model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.8}}, Page: []model.TplBg{{}, {}}}
-	for name, ct := range map[string]*model.CoverTpl{"nil": nil, "пустой": {}, "Pages 2": {Front: two}, "без мест и фона": {Back: &model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}}}}} {
+	two := &looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.8}}, Page: []looktpl.TplBg{{}, {}}}
+	for name, ct := range map[string]*looktpl.CoverTpl{"nil": nil, "пустой": {}, "Pages 2": {Front: two}, "без мест и фона": {Back: &looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}}}}} {
 		if r := apply(ct); r.Changed || r.Left != 0 {
 			t.Fatalf("%s: %+v", name, r)
 		}
@@ -33,14 +34,14 @@ func TestApplyLookCoverGrid(t *testing.T) {
 	if edtest.Rev(c.e) != rev {
 		t.Fatal("негодные входы изменили проект")
 	}
-	side := &model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}},
+	side := &looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}},
 		Places: []model.Box{{X: 0, Y: 0, W: 0.5, H: 1}, {X: 0.5, Y: 0, W: 0.5, H: 1}, {X: 0.25, Y: 0.25, W: 0.5, H: 0.5}}}
-	if r := apply(&model.CoverTpl{Front: side}); !r.Changed {
+	if r := apply(&looktpl.CoverTpl{Front: side}); !r.Changed {
 		t.Fatalf("первый раз: %+v", r)
 	}
 	z := c.box(model.ScopeRight)
 	got := c.places(model.ScopeRight)
-	boxes := model.LookBoxes(*side, z.W/z.H)
+	boxes := looktpl.LookBoxes(*side, z.W/z.H)
 	if len(got) != 3 {
 		t.Fatalf("мест %d", len(got))
 	}
@@ -50,7 +51,7 @@ func TestApplyLookCoverGrid(t *testing.T) {
 			t.Fatalf("место %d вне зоны: %+v, зона %+v", i, pl, z)
 		}
 	}
-	if r := apply(&model.CoverTpl{Front: side}); r.Changed {
+	if r := apply(&looktpl.CoverTpl{Front: side}); r.Changed {
 		t.Fatal("повтор должен быть холостым")
 	}
 }
@@ -58,7 +59,7 @@ func TestApplyLookCoverGrid(t *testing.T) {
 // Обложки нет — ничего не создаётся.
 func TestApplyLookCoverNoCover(t *testing.T) {
 	p := model.New()
-	res, err := grid.ApplyLookCover(p, &model.CoverTpl{Bg: &model.TplBg{Color: "#112233"}}, nil)
+	res, err := grid.ApplyLookCover(p, &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#112233"}}, nil)
 	if err != nil || res.Changed || p.Cover != nil {
 		t.Fatalf("%+v %v %v", res, err, p.Cover)
 	}
@@ -67,9 +68,9 @@ func TestApplyLookCoverNoCover(t *testing.T) {
 // Шаблон страницы на обычный разворот при существующей обложке встаёт по странице, а не по
 // безопасной зоне сторонки: места те же, что в альбоме без обложки.
 func TestApplySpreadTplPageIgnoresCover(t *testing.T) {
-	tpl := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}},
+	tpl := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}},
 		Places:   []model.Box{{X: 0.1, Y: 0.1, W: 0.4, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.35, H: 0.8}},
-		Stickers: []model.TplItem{{Anchor: model.Anchor{AX: 1, AY: 1}, W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}}}}
+		Stickers: []looktpl.TplItem{{Anchor: looktpl.Anchor{AX: 1, AY: 1}, W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}}}}
 	placed := func(c *cv) [][4]float64 {
 		t.Helper()
 		id := edtest.P(c.e).Spreads[0].ID
@@ -104,8 +105,8 @@ func TestApplySpreadTplPageIgnoresCover(t *testing.T) {
 func TestApplyLookCoverWholePhotoRepeat(t *testing.T) {
 	const key = "my:00000000000000ee"
 	libs := map[string]model.PhotoInfo{key: {ID: model.LibPhotoID(key), Path: edtest.Abs("w.jpg"), W: 300, H: 200, Lib: key}}
-	side := &model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}}, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}}}
-	ct := &model.CoverTpl{Bg: &model.TplBg{Lib: key}, Front: side}
+	side := &looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}}, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}}}
+	ct := &looktpl.CoverTpl{Bg: &looktpl.TplBg{Lib: key}, Front: side}
 	c := fsfera(t)
 	apply := func() (res grid.CoverRes) {
 		t.Helper()
@@ -141,19 +142,19 @@ func TestApplyLookCoverOwnCount(t *testing.T) {
 			s.Grid = nil
 		})
 	}
-	draft := []model.TplText{{Anchor: model.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}
-	star := []model.TplItem{{W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}}}
-	run := func(c *cv, side model.SpreadTpl) grid.CoverRes {
+	draft := []looktpl.TplText{{Anchor: looktpl.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}
+	star := []looktpl.TplItem{{W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}}}
+	run := func(c *cv, side looktpl.SpreadTpl) grid.CoverRes {
 		var res grid.CoverRes
 		if _, err := edtest.Try(c.e, "", func(p *model.Project) (err error) {
-			res, err = grid.ApplyLookCover(p, &model.CoverTpl{Front: &side}, nil)
+			res, err = grid.ApplyLookCover(p, &looktpl.CoverTpl{Front: &side}, nil)
 			return err
 		}); err != nil {
 			t.Fatal(err)
 		}
 		return res
 	}
-	base := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}}}
+	base := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}}}
 	c := fsfera(t)
 	own(c, true, true)
 	withText := base
@@ -194,7 +195,7 @@ func TestApplyLookCoverOwnCount(t *testing.T) {
 func TestLookCoverBgWithoutBg(t *testing.T) {
 	c := fsfera(t)
 	edtest.Change(c.e, func(p *model.Project) { p.Cover.Sheet.BgL, p.Cover.Sheet.BgR = "#abcdef", "#fedcba" })
-	ct := &model.CoverTpl{Front: &model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}},
+	ct := &looktpl.CoverTpl{Front: &looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}},
 		Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.5, H: 0.5}}}}
 	p := edtest.P(c.e)
 	if r := grid.ApplyLookCoverBg(p, ct, nil); r.Changed || p.Cover.Sheet.BgL != "#abcdef" || p.Cover.Sheet.BgR != "#fedcba" {
@@ -203,7 +204,7 @@ func TestLookCoverBgWithoutBg(t *testing.T) {
 	if !grid.LookCoverBgSame(p, ct, nil) {
 		t.Fatal("макет без фона: фон «тот же»")
 	}
-	if grid.LookCoverBgSame(p, &model.CoverTpl{Bg: &model.TplBg{Color: "#000000"}}, nil) {
+	if grid.LookCoverBgSame(p, &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#000000"}}, nil) {
 		t.Fatal("другой фон: не тот же")
 	}
 }
@@ -211,10 +212,10 @@ func TestLookCoverBgWithoutBg(t *testing.T) {
 // CoverExtras: нет макета или обложки — нет и «своего»; сторона без шаблона не сверяется.
 func TestCoverExtrasEdges(t *testing.T) {
 	p := edtest.P(fsfera(t).e)
-	if grid.CoverExtras(p, nil) || grid.CoverExtras(model.New(), &model.CoverTpl{}) {
+	if grid.CoverExtras(p, nil) || grid.CoverExtras(model.New(), &looktpl.CoverTpl{}) {
 		t.Fatal("нет макета или обложки — «своего» нет")
 	}
-	if grid.CoverExtras(p, &model.CoverTpl{Bg: &model.TplBg{Color: "#112233"}}) {
+	if grid.CoverExtras(p, &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#112233"}}) {
 		t.Fatal("сторон в макете нет — сверять нечего")
 	}
 }

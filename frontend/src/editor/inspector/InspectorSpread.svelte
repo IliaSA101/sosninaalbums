@@ -12,6 +12,7 @@
   import { vigOwn } from '../../panels/vignette/vigown.svelte'
   import type { MenuNode } from '../../base/popup/menulist'
   import Icon from '../../base/ui/Icon.svelte'
+  import Seg, { type SegItem } from '../../base/tpl/Seg.svelte'
   import CardGroup from './CardGroup.svelte'
   import SpreadBgGroup from './SpreadBgGroup.svelte'
   import SpreadCapsGroup from './SpreadCapsGroup.svelte'
@@ -22,9 +23,22 @@
   // head=false — заголовок рисует сама карточка (docked, cardTitle): сворачиваемая шапка.
   let { head = true }: { head?: boolean } = $props()
   const sp = $derived(store.spread)
+  type Mode = 'auto' | 'manual'
   // Виньетка (031, решение 80): вместо «Авто / Ручная» — группа «Виньетка» с шаблонами и числами.
   const vsp = $derived(isVignette(sp) ? sp : null)
   const unit = $derived(unitOf(store.view.settings))
+  // Ручной лист без фото не закрепить (Go: Freeze без раскладки — холостая правка), поэтому пункт серый с причиной (QA 04.11).
+  // Уже ручной лист (места без фото) пункт не теряет — он нажат.
+  const modeItems = $derived<SegItem<Mode>[]>([
+    { id: 'auto', label: 'Авто', title: 'Фото раскладываются автоматически' },
+    {
+      id: 'manual',
+      label: 'Ручная',
+      ...(sp && !sp.grid && sp.photos.length === 0
+        ? { off: true, title: `Сначала положите фото на ${unit.one}` }
+        : { title: 'Сделать ручной: раскладка перестаёт меняться сама, места можно править' }),
+    },
+  ])
   // Обложка (032): своя карточка сверху, названия и «Авто / Ручная» нет.
   const cover = $derived(isCover(sp))
 
@@ -94,19 +108,14 @@
     <!-- Подписи листа (030): общий стиль и шаблон «к каждому фото» -->
     <SpreadCapsGroup {sp} />
     {#if prefs.can('manual') && !vsp}
-      <div class="seg" role="group" aria-label="Раскладка {unit.one}а" data-guide="mode-toggle">
-        <button
-          class:on={!sp.grid}
-          aria-pressed={!sp.grid}
-          onclick={() => sp.grid && gridAct.backToAuto(sp.id)}
-          title="Фото раскладываются автоматически">Авто</button
-        >
-        <button
-          class:on={sp.grid}
-          aria-pressed={sp.grid}
-          onclick={() => !sp.grid && gridAct.setGrid(true)}
-          title="Сделать ручной: раскладка перестаёт меняться сама, места можно править">Ручная</button
-        >
+      <div class="mode" data-guide="mode-toggle">
+        <Seg
+          look="card"
+          label="Раскладка {unit.one}а"
+          items={modeItems}
+          value={sp.grid ? 'manual' : 'auto'}
+          onpick={(m) => (m === 'auto' ? sp.grid && gridAct.backToAuto(sp.id) : !sp.grid && gridAct.setGrid(true))}
+        />
       </div>
     {/if}
     {#if vigable}
@@ -151,23 +160,7 @@
     font-size: 12px;
     border-color: var(--line);
   }
-  .seg {
-    display: flex;
+  .mode {
     margin-top: 10px;
-    border-radius: 5px;
-    overflow: hidden;
-  }
-  .seg button {
-    flex: 1;
-    height: 26px;
-    padding: 0 6px;
-    font-size: 12px;
-    border-radius: 0;
-    background: #38383c;
-    color: #cfcfd4;
-  }
-  .seg button.on {
-    background: var(--accent);
-    color: #1e1e1e;
   }
 </style>

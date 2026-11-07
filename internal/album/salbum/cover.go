@@ -27,7 +27,7 @@ type FileCover struct {
 // раскладка — «на лицевой», цвет плашки — #rrggbb или нет, путь разметки — по правилам фото.
 // Дальше лист проходит общие шаги Load вместе с разворотами (обходы по Sheets).
 // В проекте-листе (Settings.Sheet, 031) обложки нет: она снимается со строкой в log.txt.
-func fixCover(p *model.Project, fc *FileCover, base string, v1 bool) {
+func fixCover(d Disk, p *model.Project, fc *FileCover, base string, v1 bool) {
 	if fc != nil && p.Settings.Sheet {
 		log.Print("обложка в проекте-листе снята: у листа обложки нет")
 		fc = nil
@@ -46,15 +46,15 @@ func fixCover(p *model.Project, fc *FileCover, base string, v1 bool) {
 		c.Layout = model.CoverFront
 	}
 	c.SpineBg = model.BgColor(c.SpineBg)
-	c.Guide, c.GuideAlt = loadGuide("обложка", c.Guide, fc.GuideAbs, base, v1)
+	c.Guide, c.GuideAlt = loadGuide(d, "обложка", c.Guide, fc.GuideAbs, base, v1)
 	p.Cover = &c
 }
 
 // fixCoverAndGuide — обложка (fixCover) и путь разметки разворотов (066): обе разметки
 // читаются по одним правилам (loadGuide).
-func fixCoverAndGuide(p *model.Project, f *FileProject, base string, v1 bool) {
-	fixCover(p, f.Cover, base, v1)
-	p.SpreadGuide, p.SpreadGuideAlt = loadGuide("развороты", f.SpreadGuide, f.SpreadGuideAbs, base, v1)
+func fixCoverAndGuide(d Disk, p *model.Project, f *FileProject, base string, v1 bool) {
+	fixCover(d, p, f.Cover, base, v1)
+	p.SpreadGuide, p.SpreadGuideAlt = loadGuide(d, "развороты", f.SpreadGuide, f.SpreadGuideAbs, base, v1)
 }
 
 // GuideExt — разметка типографии — PSD (066), JPEG или PNG; иное сбор в папку (069) не копирует.
@@ -71,7 +71,7 @@ func GuideExt(path string) bool {
 // есть — запасной; нет нигде — основной, а запасной едет в alt (Cover.GuideAlt), как у фото.
 // Недопустимый путь или расширение — "" и строка в log.txt без пути: разметка только
 // подложка, её выбирают заново, а открыть альбом важнее. what — чья разметка, для log.txt.
-func loadGuide(what, path, abs, base string, v1 bool) (guide, alt string) {
+func loadGuide(d Disk, what, path, abs, base string, v1 bool) (guide, alt string) {
 	if path == "" {
 		return "", ""
 	}
@@ -83,10 +83,10 @@ func loadGuide(what, path, abs, base string, v1 bool) (guide, alt string) {
 	if alt == "" || !GuideExt(alt) {
 		return primary, ""
 	}
-	if _, ok := fileSize(primary); ok {
+	if _, ok := fileSizeOn(d, primary); ok {
 		return primary, ""
 	}
-	if _, ok := fileSize(alt); ok {
+	if _, ok := fileSizeOn(d, alt); ok {
 		return alt, ""
 	}
 	return primary, alt

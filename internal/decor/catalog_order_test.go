@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -113,18 +114,18 @@ func TestCatalogOrderPacksFirst(t *testing.T) {
 		steppedClock(t, 10)
 		box := []model.Box{{X: .1, Y: .1, W: .8, H: .8}}
 		tpl := func(c string) []byte {
-			return tplJSON(t, model.SpreadTpl{V: 1, Pages: 1, Ratio: 1, Places: box, Page: []model.TplBg{{Color: c}}})
+			return tplJSON(t, looktpl.SpreadTpl{V: 1, Pages: 1, Ratio: 1, Places: box, Page: []looktpl.TplBg{{Color: c}}})
 		}
 		t1, t2 := tpl("#eeeeee"), tpl("#dddddd")
 		m1, s1 := testPack("old", 1, pit{"spreads/a.json", t1})
 		install(t, s, m1, s1, nil)
 		m2, s2 := testPack("new", 1, pit{"spreads/b.json", t2})
 		install(t, s, m2, s2, nil)
-		own, err := s.SaveSpreadTpl("mine", "Свой", model.SpreadTpl{V: 1, Pages: 1, Ratio: 1, Places: box, Page: []model.TplBg{{Color: "#cccccc"}}})
+		own, err := s.SaveSpreadTpl("mine", "Свой", looktpl.SpreadTpl{V: 1, Pages: 1, Ratio: 1, Places: box, Page: []looktpl.TplBg{{Color: "#cccccc"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		k1, k2 := model.TplKey(mustTpl(t, t1)), model.TplKey(mustTpl(t, t2))
+		k1, k2 := looktpl.TplKey(mustTpl(t, t1)), looktpl.TplKey(mustTpl(t, t2))
 		want := []string{"new:" + k2, "old:" + k1, "sa", ":" + own.ID}
 		if got := catOrder(t, s, KindSpread); !slices.Equal(got, want) {
 			t.Errorf("порядок:\n%v\nждали\n%v", got, want)
@@ -137,7 +138,7 @@ func TestItemPackIDPeek(t *testing.T) {
 	dir := testkit.TempDir(t)
 	ring := pngBytes(t, ringImage(120, 160, 24, 32, 24, 32))
 	box := []model.Box{{X: .1, Y: .1, W: .8, H: .8}}
-	tplB := tplJSON(t, model.SpreadTpl{V: 1, Pages: 1, Ratio: 1, Places: box, Page: []model.TplBg{{Color: "#eeeeee"}}})
+	tplB := tplJSON(t, looktpl.SpreadTpl{V: 1, Pages: 1, Ratio: 1, Places: box, Page: []looktpl.TplBg{{Color: "#eeeeee"}}})
 	bg, st := renderPNG(t, 40, 30), renderPNG(t, 16, 16)
 	packLook := lookOf("", "") // макет набора отличается от своего именем шага — ключи разные
 	packLook.Steps[0].Name = "Из набора"
@@ -154,7 +155,7 @@ func TestItemPackIDPeek(t *testing.T) {
 		}
 		own[kind] = res.Added[0]
 	}
-	tpl, err := s.SaveSpreadTpl("mine", "Свой", model.SpreadTpl{V: 1, Pages: 1, Ratio: 1, Places: box, Page: []model.TplBg{{Color: "#cccccc"}}})
+	tpl, err := s.SaveSpreadTpl("mine", "Свой", looktpl.SpreadTpl{V: 1, Pages: 1, Ratio: 1, Places: box, Page: []looktpl.TplBg{{Color: "#cccccc"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +166,7 @@ func TestItemPackIDPeek(t *testing.T) {
 		t.Fatal(err)
 	}
 	own[KindAlbum] = ownLook
-	packKey := map[string]string{KindBg: libKey(bg), KindSticker: libKey(st), KindFrame: libKey(ring), KindSpread: model.TplKey(mustTpl(t, tplB)), KindAlbum: model.LookKey(lookB)}
+	packKey := map[string]string{KindBg: libKey(bg), KindSticker: libKey(st), KindFrame: libKey(ring), KindSpread: looktpl.TplKey(mustTpl(t, tplB)), KindAlbum: looktpl.LookKey(lookB)}
 
 	checkOwners(t, s, "после установки", own, packKey)
 	checkOwners(t, Open(cfg), "после перезапуска", own, packKey)

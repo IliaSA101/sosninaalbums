@@ -41,7 +41,8 @@ func TestPermGroupSkipsOpen(t *testing.T) {
 }
 
 // TestOpenCallWhy: при «Всегда» вопрос открытия несёт причину по самому вызову — слова агента (hint), ни ключа, ни найденного
-// альбома (pick); ключ без слов и любой вызов при «Спрашивать» — без причины (дальше решает проверка путей, 160 Т2).
+// альбома (pick); ключ без слов, но без тихого слота (Always не выдан) — rate, а при «Спрашивать» любой вызов — без причины.
+// Тихий исход по ключу — в agentopen_quiet_test.go.
 func TestOpenCallWhy(t *testing.T) {
 	r := newOpenRig(t)
 	key := r.req(r.target)
@@ -53,7 +54,7 @@ func TestOpenCallWhy(t *testing.T) {
 		req  agents.AskReq
 		want string
 	}{
-		{"ключ", prefs.PermAllow, key, ""},
+		{"ключ без слота", prefs.PermAllow, key, whyRate},
 		{"слова", prefs.PermAllow, hinted, whyHint},
 		{"ничего", prefs.PermAllow, agents.AskReq{Kind: agents.AskOpen, Client: "Claude Code"}, whyPick},
 		{"ключ, спрашивать", prefs.PermAsk, key, ""},

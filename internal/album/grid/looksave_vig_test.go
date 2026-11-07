@@ -7,6 +7,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // «Сохранить как макет» и лист-виньетка (164 G1): оформление листа — в Style и HText шага, надписи
@@ -14,7 +15,7 @@ import (
 
 // vigSaved — альбом tplEd с виньеткой вторым разворотом; настроен — гарнитуры, цвет, подпись
 // учителя, шапка, поля шапки, имя на месте и лишняя надпись листа.
-func vigSaved(t *testing.T, styled bool) (model.AlbumTpl, model.SaveLookOpts) {
+func vigSaved(t *testing.T, styled bool) (looktpl.AlbumTpl, model.SaveLookOpts) {
 	t.Helper()
 	e := tplEd(t)
 	if _, err := e.AddVignette(1); err != nil {
@@ -71,7 +72,7 @@ func TestSaveLookKeepsVigCaps(t *testing.T) {
 			t.Errorf("в файле макета %q: %s", bad, data)
 		}
 	}
-	back, err := model.ParseLook(data)
+	back, err := looktpl.ParseLook(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +87,7 @@ func TestSaveLookKeepsVigCaps(t *testing.T) {
 }
 
 // vigSavedNoDrafts — как vigSaved(styled), но без заготовок.
-func vigSavedNoDrafts(t *testing.T) (model.AlbumTpl, model.SaveLookOpts) {
+func vigSavedNoDrafts(t *testing.T) (looktpl.AlbumTpl, model.SaveLookOpts) {
 	t.Helper()
 	e := tplEd(t)
 	if _, err := e.AddVignette(1); err != nil {

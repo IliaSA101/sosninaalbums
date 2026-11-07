@@ -92,7 +92,7 @@
   .link {
     all: unset;
     cursor: pointer;
-    color: var(--muted);
+    color: var(--link);
     text-decoration: underline dotted;
     text-underline-offset: 3px;
   }

@@ -12,7 +12,7 @@ import (
 )
 
 // Sheet рисует лист (разворот или обложку) spreadID видом печати шириной не больше px: картинки —
-// из превью кэша миниатюр, через Host.Photo (проверка пути и тома), недоступные места пусты.
+// из превью кэша миниатюр, через Host.Copy (проверка пути и тома, облако без скачивания), недоступные места пусты.
 // Ждёт слот рендера вместе с пипеткой; срок и отмена — ctx вызывающего. Нет листа — ErrNoSheet.
 // Альбом не меняется.
 func (pk *Picker) Sheet(ctx context.Context, spreadID string, px int) (*image.RGBA, error) {
@@ -32,7 +32,7 @@ func (pk *Picker) Sheet(ctx context.Context, spreadID string, px int) (*image.RG
 			scene = cs
 		}
 	}
-	pk.pickPreviews(ctx, p.Photos, &scene)
+	pk.scenePreviews(ctx, p.Photos, &scene, true) // кадр на просмотр: годится любой размер копии
 	return render.RenderCtx(ctx, scene, render.Options{PageW: sv.W / 2, PageH: sv.H, DPI: sheetDPI(px, sv.W, sv.H)})
 }
 

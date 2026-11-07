@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Ссылки макетов альбома и сборка мусора (аудит 131 G3): экранированный ключ, ключи полей новее
@@ -44,7 +44,7 @@ func stageWhys(t *testing.T, s *Store, id string, items ...pit) []string {
 // другая версия программы); Store открывается заново.
 func ownLookFile(t *testing.T, cfg string, data []byte) (*Store, string) {
 	t.Helper()
-	key := model.LookKey(data)
+	key := looktpl.LookKey(data)
 	p := filepath.Join(cfg, RootName, kindDirs[KindAlbum], strings.TrimPrefix(key, libPrefix)+".json")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestLookEscapedKey(t *testing.T) {
 	if len(rawLibKeys(data)) != 0 {
 		t.Fatalf("сырой поиск видит ключ: %v", rawLibKeys(data))
 	}
-	if l, err := model.ParseLook(data); err != nil || len(lookLibs(l)) == 0 {
+	if l, err := looktpl.ParseLook(data); err != nil || len(lookLibs(l)) == 0 {
 		t.Fatalf("разбор не видит ключ: %v", err)
 	}
 	want := []string{"looks/esc.json: макет альбома не читается"}
@@ -98,7 +98,7 @@ func TestLookUnreadKeepsAll(t *testing.T) {
 	s, cfg := openTemp(t)
 	bg := renderPNG(t, 45, 30)
 	put(t, s, "donor", pit{"bg/d.png", bg})
-	data := lookBytes(t, lookOf("", ""), `"pad":"`+strings.Repeat("x", model.MaxLookFile)+`"`)
+	data := lookBytes(t, lookOf("", ""), `"pad":"`+strings.Repeat("x", looktpl.MaxLookFile)+`"`)
 	s2, _ := ownLookFile(t, cfg, data)
 	if res, err := s2.RemovePack("donor", nil); err != nil || res.Files != 0 || res.Kept != 1 {
 		t.Fatalf("удаление донора: %v %+v", err, res)
@@ -140,7 +140,7 @@ func TestRemovePackLookKeep(t *testing.T) {
 	bg := renderPNG(t, 47, 30)
 	data := lookBytes(t, lookOf(libKey(bg), ""), "")
 	put(t, s, "solo-layouts", pit{"bg/s.png", bg}, pit{"looks/s.json", data})
-	look := model.LookKey(data)
+	look := looktpl.LookKey(data)
 	keep := func(k string) bool { return k == look }
 	plan, err := s.PlanRemovePack("solo-layouts", keep)
 	if err != nil || plan.Files != 0 || plan.Kept != 2 {
@@ -165,7 +165,7 @@ func TestRemovePackLookRefsAndSurvivor(t *testing.T) {
 		_, cfg := openTemp(t)
 		bg := renderPNG(t, 48, 30)
 		data := lookBytes(t, lookOf(libKey(bg), ""), "")
-		look := model.LookKey(data)
+		look := looktpl.LookKey(data)
 		reg := `{"version":1,"items":[{"key":"my:00000000000000f1","kind":"future","x":"` + look + `"}]}`
 		if err := os.MkdirAll(filepath.Join(cfg, RootName), 0o755); err != nil {
 			t.Fatal(err)

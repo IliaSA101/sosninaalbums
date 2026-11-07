@@ -96,6 +96,7 @@ method DropPhotos(arg1:string,arg2:string,arg3:Array<string>,arg4:number,arg5:st
 method DuplicateGrid(arg1:string,arg2:number,arg3:boolean):Promise<model.View>
 method DuplicateItems(arg1:string,arg2:model.ClipSel):Promise<APP.PasteResult>
 method Export(arg1:APP.ExportOptions):Promise<boolean>
+method ExportSize(arg1:APP.ExportSizeIn):Promise<APP.ExportSizeOut>
 method ExportTemplates():Promise<APP.TplSave>
 method FaceGuide(arg1:string,arg2:string):Promise<model.FaceGuide>
 method FetchPackPreviews():Promise<void>
@@ -345,6 +346,7 @@ type APP.AgentPlace
   label: string
   chosen: boolean
   bound: boolean
+  bindable: boolean
   narrow: boolean
   narrowRoot: boolean
   state: string
@@ -486,6 +488,22 @@ type APP.ExportOptions
   cover: boolean
   coverOnly: boolean
   print: string
+type APP.ExportSizeIn
+  scope: string
+  dpi: number
+  quality: number
+  pages: boolean
+  units: number[]
+  badRange: boolean
+  cover: boolean
+  only: boolean
+  print: boolean
+type APP.ExportSizeOut
+  summary: string
+  per: ExportSizeQ[]
+type APP.ExportSizeQ
+  quality: number
+  text: string
 type APP.ExportStarted
   started: boolean
   files: number

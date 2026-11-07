@@ -2,6 +2,7 @@
   import { store } from '../../base/core/store.svelte'
   import Modal from '../../base/modal/Modal.svelte'
   import Popover from '../../base/popup/Popover.svelte'
+  import Seg, { type SegItem } from '../../base/tpl/Seg.svelte'
   import { sheetIn } from '../../base/geom/sheet'
   import { unitWords } from '../../editor/captions/unitword'
   import { vigDialog } from '../vignette/vigsession.svelte'
@@ -24,6 +25,11 @@
   const cols = $derived(columnsLine(plan))
   const left = $derived(plan ? leftList(plan) : { items: [], more: 0 })
   const hint = $derived(namesUi.from === 'list' ? vigHint(plan) : '')
+
+  const FROM_ITEMS: SegItem<'list' | 'files'>[] = [
+    { id: 'list', label: 'Список' },
+    { id: 'files', label: 'Имена файлов', title: 'Имя берётся из названия фото' },
+  ]
 
   let helpOpen = $state(false)
   let helpBtn = $state<HTMLButtonElement>()
@@ -60,16 +66,8 @@
 {#if namesUi.open && sp}
   <Modal title="Имена" onclose={close} wide undo>
     <div class="body" bind:this={bodyEl}>
-      <div class="seg" role="group" aria-label="Откуда имена">
-        <button class:on={namesUi.from === 'list'} aria-pressed={namesUi.from === 'list'} onclick={() => (namesUi.from = 'list')}
-          >Список</button
-        >
-        <button
-          class:on={namesUi.from === 'files'}
-          aria-pressed={namesUi.from === 'files'}
-          onclick={() => (namesUi.from = 'files')}
-          title="Имя берётся из названия фото">Имена файлов</button
-        >
+      <div class="from">
+        <Seg label="Откуда имена" items={FROM_ITEMS} value={namesUi.from} onpick={(f) => (namesUi.from = f)} />
       </div>
 
       {#if namesUi.from === 'list'}
@@ -235,25 +233,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .seg {
-    display: flex;
-    gap: 1px;
+  .from {
     align-self: flex-start;
-    padding: 2px;
-    background: #1b1b1d;
-    border-radius: 7px;
-  }
-  .seg button {
-    height: 24px;
-    padding: 0 12px;
-    font-size: 12px;
-    background: transparent;
-    border-radius: 5px;
-  }
-  .seg button.on {
-    background: var(--accent);
-    color: #1e1e1e;
-    font-weight: 600;
   }
   textarea {
     box-sizing: border-box;

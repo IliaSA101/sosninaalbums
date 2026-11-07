@@ -5,6 +5,7 @@ package app
 import (
 	"runtime"
 	"testing"
+	"time"
 	"weak"
 )
 
@@ -31,9 +32,35 @@ func TestAskMachinePerApp(t *testing.T) {
 	if !apps[0].agentEd().busyNow() || apps[1].agentEd().busyNow() {
 		t.Fatal("занятость просочилась в другой App")
 	}
-	apps[0].askM().life++
-	if apps[0].askM().life == apps[1].askM().life {
-		t.Fatal("срок вопроса общий")
+}
+
+// Машины вопросов у разных App — разные: сравнение попарно по умолчанию, без newAskQ (он подменил бы
+// машину и скрыл общую).
+func TestAskMachinePerAppDistinct(t *testing.T) {
+	apps := []*App{NewApp(), NewApp(), {}, {}}
+	qs := make([]any, len(apps))
+	for i, a := range apps {
+		q := a.askQ()
+		if q == nil {
+			t.Fatalf("App %d: нет машины вопросов", i)
+		}
+		if a.askQ() != q {
+			t.Fatalf("App %d: повторный askQ дал другую машину", i)
+		}
+		qs[i] = q
+	}
+	for i := range qs {
+		for j := i + 1; j < len(qs); j++ {
+			if qs[i] == qs[j] {
+				t.Fatalf("App %d и %d делят машину вопросов", i, j)
+			}
+		}
+	}
+	// после подмены в одном App остальные не затронуты
+	before := apps[1].askQ()
+	newAskQ(apps[0], time.Second, time.Second)
+	if apps[0].askQ() == qs[0] || apps[1].askQ() != before {
+		t.Fatal("подмена машины задела другой App")
 	}
 }
 

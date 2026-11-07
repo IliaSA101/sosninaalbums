@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -195,14 +196,14 @@ func lvFrame(t *testing.T, o lvFrameOpts) []byte {
 // якоря стикера (0 — центр в углу листа: часть стикера вне).
 func lvTpl(t *testing.T, pages int, bg, st string, anchor float64) pfile {
 	places := []model.Box{{X: 0.1, Y: 0.1, W: 0.35, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.35, H: 0.8}}
-	page := []model.TplBg{{Lib: bg}, {Lib: bg}}
+	page := []looktpl.TplBg{{Lib: bg}, {Lib: bg}}
 	ratio := 2.0
 	if pages == 1 {
 		places, page, ratio = places[:1], page[:1], 0.67
 	}
-	tpl := model.SpreadTpl{V: model.TplV, Pages: pages, Ratio: ratio, Places: places, Page: page}
+	tpl := looktpl.SpreadTpl{V: looktpl.TplV, Pages: pages, Ratio: ratio, Places: places, Page: page}
 	if st != "" {
-		tpl.Stickers = []model.TplItem{{Anchor: model.Anchor{AX: -1, AY: -1, DX: anchor, DY: anchor}, W: 0.2, H: 0.2, Lib: st}}
+		tpl.Stickers = []looktpl.TplItem{{Anchor: looktpl.Anchor{AX: -1, AY: -1, DX: anchor, DY: anchor}, W: 0.2, H: 0.2, Lib: st}}
 	}
 	data, err := json.Marshal(tpl)
 	if err != nil {
@@ -431,7 +432,7 @@ func (e lvEnv) pull(t *testing.T) {
 		t.Fatal(err)
 	}
 	mine := func(name string, tpl pfile) {
-		var tp model.SpreadTpl
+		var tp looktpl.SpreadTpl
 		if err := json.Unmarshal(tpl.data, &tp); err != nil {
 			t.Fatal(err)
 		}
@@ -460,7 +461,7 @@ func (e lvEnv) pull(t *testing.T) {
 	}
 	for _, f := range m {
 		data, _ := os.ReadFile(f)
-		if _, err := model.ParseSpreadTpl(data); err != nil {
+		if _, err := looktpl.ParseSpreadTpl(data); err != nil {
 			t.Errorf("забранный шаблон %s не читается: %v", filepath.Base(f), err)
 		}
 	}

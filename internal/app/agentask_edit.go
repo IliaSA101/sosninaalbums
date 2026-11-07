@@ -5,7 +5,6 @@ package app
 // WhyAnswered, а ключ, ревизию и разрешение служба сверяет заново и правку делает сама.
 
 import (
-	"crypto/subtle"
 	"errors"
 	"slices"
 	"sort"
@@ -14,6 +13,8 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentask"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -21,6 +22,20 @@ import (
 
 // askKindEdit — вид вопроса о правке (AgentAsk.Kind).
 const askKindEdit = "edit"
+
+// Инструменты MCP, которым фасад задаёт вопрос о правке (у add_folder и create_album свои виды); имена
+// и тексты вопросов — в agentasktext.
+const (
+	toolAutobuild = agentasktext.ToolAutobuild
+	toolVary      = agentasktext.ToolVary
+	toolShow      = agentasktext.ToolShow
+	toolUndo      = agentasktext.ToolUndo
+	toolMarks     = agentasktext.ToolMarks
+	toolCover     = agentasktext.ToolCover
+	toolBg        = agentasktext.ToolBg
+	toolSticker   = agentasktext.ToolSticker
+	toolPrint     = agentasktext.ToolPrint
+)
 
 // askToolOf — инструмент MCP вопроса: у правки его назвала служба, у папки и альбома он по виду.
 func askToolOf(req agents.AskReq) string {
@@ -39,9 +54,9 @@ func (a *App) askAllowedTool(tool string) bool {
 
 // editAskText — заголовок, абзацы и кнопка вопроса о правке по запросу службы. Название фона или
 // типографии, которых нет в каталоге, — ошибка до окна.
-func (a *App) editAskText(req agents.AskReq, ed *album.Editor) (askBody, error) {
+func (a *App) editAskText(req agents.AskReq, ed *album.Editor) (agentasktext.Body, error) {
 	v := ed.View()
-	e := editAsk{Client: req.Client, Tool: req.Tool, Count: req.Count, Sheet: v.Settings.Sheet}
+	e := agentasktext.EditAsk{Client: req.Client, Tool: req.Tool, Count: req.Count, Sheet: v.Settings.Sheet}
 	e.Places = askPlaces(v, req.Spreads)
 	if req.Tool == toolAutobuild {
 		// Число из входа агента (дубли, уже уложенные фото) вопрос не называет: считаем свободные сами,
@@ -50,7 +65,7 @@ func (a *App) editAskText(req agents.AskReq, ed *album.Editor) (askBody, error) 
 		e.Build = max(req.Build, 0)
 	}
 	for _, f := range req.Families {
-		if n, ok := familyNames[f]; ok && !slices.Contains(e.Families, n) {
+		if n, ok := agentasktext.FamilyName(f); ok && !slices.Contains(e.Families, n) {
 			e.Families = append(e.Families, n)
 		}
 	}
@@ -58,31 +73,31 @@ func (a *App) editAskText(req agents.AskReq, ed *album.Editor) (askBody, error) 
 	case toolBg:
 		name, err := a.askBgName(req.Item)
 		if err != nil {
-			return askBody{}, err
+			return agentasktext.Body{}, err
 		}
 		e.Item = name
 		a.askBgFacts(&e, req, ed, v)
 	case toolPrint:
 		pr, ok := printprof.Current().ByID(req.Item)
 		if !ok || len(pr.Formats) == 0 {
-			return askBody{}, agents.ErrNoProfile
+			return agentasktext.Body{}, agents.ErrNoProfile
 		}
 		fi := 0
 		if req.Format != "" {
 			if fi = slices.IndexFunc(pr.Formats, func(f printprof.PageFormat) bool { return f.Name == req.Format }); fi < 0 {
-				return askBody{}, agents.ErrNoProfile
+				return agentasktext.Body{}, agents.ErrNoProfile
 			}
 		}
-		e.Item, e.Format = catalogName(pr.Name), catalogName(pr.Formats[fi].Name)
+		e.Item, e.Format = agentasktext.CatalogName(pr.Name), agentasktext.CatalogName(pr.Formats[fi].Name)
 	}
-	body, ok := editAskBody(e)
+	body, ok := agentasktext.EditBody(e)
 	if !ok {
-		return askBody{}, errors.New("нет текста вопроса")
+		return agentasktext.Body{}, errors.New("нет текста вопроса")
 	}
 	return body, nil
 }
 
-// askPlaces — номера разворотов с 1 по ID вида (как видит человек), по возрастанию; обложка — askCoverWord.
+// askPlaces — номера разворотов с 1 по ID вида (как видит человек), по возрастанию; обложка — agentasktext.CoverWord.
 // ID, которого уже нет, пропускается: служба сверит ревизию и без нас.
 func askPlaces(v model.View, ids []string) []string {
 	var nums []int
@@ -99,7 +114,7 @@ func askPlaces(v model.View, ids []string) []string {
 	sort.Ints(nums)
 	var out []string
 	if cover {
-		out = append(out, askCoverWord)
+		out = append(out, agentasktext.CoverWord)
 	}
 	for _, n := range nums {
 		out = append(out, strconv.Itoa(n))
@@ -118,38 +133,30 @@ func (a *App) askBgName(id string) (string, error) {
 	if i < 0 {
 		return "", agents.ErrNoDecor
 	}
-	return catalogName(cat.Items[i].Name), nil
+	return agentasktext.CatalogName(cat.Items[i].Name), nil
 }
 
 // askKindOf — вид открытого вопроса с этим id; false — вопроса нет, он закрыт или id чужой.
 func (a *App) askKindOf(id string) (string, bool) {
-	m := a.askM()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	rec := m.cur
-	if rec == nil || rec.state != askAsked || subtle.ConstantTimeCompare([]byte(id), []byte(rec.id)) != 1 {
+	rec, ok := a.askQ().Peek(id, "")
+	if !ok {
 		return "", false
 	}
-	return rec.kind, true
+	return rec.Kind, true
 }
 
 // answerEdit — «да» на вопрос о правке: итог WhyAnswered ждущему вызову (запретили инструмент, пока
 // вопрос висел, — WhyOff). Закрыт или чужой — errAskClosed. Правку делает служба, не фасад.
 func (a *App) answerEdit(id string) (model.View, error) {
-	m := a.askM()
-	m.mu.Lock()
-	rec := m.cur
-	if rec == nil || rec.kind != askKindEdit || rec.state != askAsked || subtle.ConstantTimeCompare([]byte(id), []byte(rec.id)) != 1 {
-		m.mu.Unlock()
+	rec, ok := a.askQ().Peek(id, askKindEdit)
+	if !ok {
 		return a.askView(), errAskClosed
 	}
-	tool := rec.req.Tool
-	m.mu.Unlock()
 	res := agents.AskRes{Why: agents.WhyAnswered}
-	if !a.askAllowedTool(tool) {
+	if !a.askAllowedTool(rec.Payload.req.Tool) {
 		res.Why = agents.WhyOff
 	}
-	if !a.askFinishIf(rec, askAsked, askOutcome{res: res}, res.Why) {
+	if !a.askQ().FinishIf(rec, agentask.Asked, agentask.Outcome{Res: res}, res.Why) {
 		return a.askView(), errAskClosed
 	}
 	return a.askView(), nil

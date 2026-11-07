@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Шапка в ряду у шага макета (164): кегль «по полосе» меряется текстом и гарнитурой шага, а не
@@ -41,16 +42,16 @@ func TestApplyLookVigCellHeadSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	step := model.LookStep{Role: model.RoleVignette, Tpl: model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}}},
-		Vig: &model.LookVig{Tpl: "t-left-cell", Teachers: 1, Pupils: 40, Ratio: "3:4", HText: "Наши воспитатели",
+	step := looktpl.LookStep{Role: looktpl.RoleVignette, Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}}},
+		Vig: &looktpl.LookVig{Tpl: "t-left-cell", Teachers: 1, Pupils: 40, Ratio: "3:4", HText: "Наши воспитатели",
 			Style: &model.VigStyle{Head: &model.TextStyle{Font: "ptserif"}}}}
-	reg := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{{Tpl: model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2,
-		Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.8}}, Page: []model.TplBg{{}, {}}}}, step}}
+	reg := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{{Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2,
+		Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.8}}, Page: []looktpl.TplBg{{}, {}}}}, step}}
 	// Сначала лист без шапки (g-top): шапку шаг создаёт заново, с гарнитурой и текстом шага.
 	first := reg
-	first.Steps = []model.LookStep{reg.Steps[0], step}
-	first.Steps[1].Vig = &model.LookVig{Tpl: "g-top", Teachers: 1, Pupils: 10, Ratio: "3:4"}
-	for i, t0 := range []model.AlbumTpl{first, reg} {
+	first.Steps = []looktpl.LookStep{reg.Steps[0], step}
+	first.Steps[1].Vig = &looktpl.LookVig{Tpl: "g-top", Teachers: 1, Pupils: 10, Ratio: "3:4"}
+	for i, t0 := range []looktpl.AlbumTpl{first, reg} {
 		ref := model.LookRef{Key: []string{"my:0123456789abcdef", "my:fedcba9876543210"}[i], Name: "x"}
 		if _, _, err := e.ApplyLook(ref, t0, nil, model.LookOpts{Spreads: 2}, nil); err != nil {
 			t.Fatal(err)

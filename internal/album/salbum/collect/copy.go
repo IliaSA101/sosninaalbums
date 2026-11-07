@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -210,14 +211,15 @@ func copyOne(ctx context.Context, dir string, it Item, onBytes func(int64)) (rel
 	if !reachable(it.Src) {
 		return "", fmt.Errorf("диск с файлом «%s» не отвечает", name)
 	}
-	in, err := os.Open(it.Src)
+	// OpenLocal: цель ссылки проверена, облачная заглушка OneDrive открывается и скачивается (явное действие
+	// над фото, 160-M1), а подмена на канал или устройство отклоняется. Обычность файла проверила она же.
+	in, st, err := library.OpenLocal(it.Src)
 	if err != nil {
 		return "", fmt.Errorf("не открылся файл «%s»: %w", name, paths.NoPath(err))
 	}
 	rd := &ctxReader{ctx: ctx, r: in, on: onBytes}
 	defer rd.release(in)
-	st, err := in.Stat()
-	if err != nil || !st.Mode().IsRegular() || st.Size() != it.Size {
+	if st.Size() != it.Size {
 		return "", fmt.Errorf("файл «%s» изменился во время сбора", name)
 	}
 	tmp := final + "." + strconv.Itoa(os.Getpid()) + tmpSuffix

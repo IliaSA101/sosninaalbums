@@ -11,6 +11,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -401,10 +402,11 @@ func TestAskTextBgAlbumOwn(t *testing.T) {
 		t.Fatalf("узор и фото на листе 1: %+v, %v", b.Lines, err)
 	}
 	// Альбом-лист: «листа/листов».
-	body := editAsk{Client: "Claude Code", Tool: toolBg, AlbumBg: true, Sheet: true, OwnCat: []int{3, 7}, TakeClient: []int{5}, Photos: 2}.albumBgLines()
-	want := []string{"Свои фоны из каталога уйдут с листов: 3, 7", "Фото фона уйдут с листа 5: 2 фото"}
-	if !slices.Equal(body, want) {
-		t.Fatalf("альбом-лист: %q, ждали %q", body, want)
+	sheet, _ := agentasktext.EditBody(agentasktext.EditAsk{Client: "Claude Code", Tool: toolBg, AlbumBg: true, Sheet: true, OwnCat: []int{3, 7}, TakeClient: []int{5}, Photos: 2})
+	for _, want := range []string{"Свои фоны из каталога уйдут с листов: 3, 7", "Фото фона уйдут с листа 5: 2 фото"} {
+		if !slices.Contains(sheet.Lines, want) {
+			t.Fatalf("альбом-лист: %q, ждали строку %q", sheet.Lines, want)
+		}
 	}
 }
 
@@ -436,22 +438,6 @@ func TestAskTextBgReplace(t *testing.T) {
 	} {
 		if b, err := r.a.editAskText(req, ed); err != nil || slices.ContainsFunc(b.Lines, func(l string) bool { return strings.Contains(l, "Фото фона заменятся") }) {
 			t.Errorf("%s: %+v, %v", name, b.Lines, err)
-		}
-	}
-}
-
-// TestNumsText: диапазоны от трёх подряд, больше двенадцати — «и ещё N».
-func TestNumsText(t *testing.T) {
-	long := make([]int, 20)
-	for i := range long {
-		long[i] = i*2 + 2
-	}
-	for _, c := range []struct {
-		in   []int
-		want string
-	}{{nil, ""}, {[]int{7, 3, 18}, "3, 7, 18"}, {[]int{3, 5, 6, 7, 8}, "3, 5-8"}, {[]int{1, 2}, "1, 2"}, {long, "2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, и ещё 8"}} {
-		if got := numsText(c.in); got != c.want {
-			t.Errorf("%v: %q, ждали %q", c.in, got, c.want)
 		}
 	}
 }

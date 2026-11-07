@@ -115,7 +115,8 @@ func (a *App) readFolders(ctx context.Context, gen int, src library.Sources, kep
 	deadKept := photosUnder(kept, dead, deadFiles)
 	show, decided := !quiet, !quiet
 	var fin library.ScanProgress
-	photos, skipped, err := a.scanner.Scan(ctx, library.Sources{Folders: live, Files: liveFiles}, func(ph []library.Photo, cur library.ScanProgress, final bool) {
+	explicit := a.fresh.of(liveFiles) // 160-M1: скачивать заглушку облака можно только им
+	photos, skipped, err := a.scanner.Scan(ctx, library.Sources{Folders: live, Files: liveFiles, Explicit: explicit}, func(ph []library.Photo, cur library.ScanProgress, final bool) {
 		if final {
 			fin = cur
 		}
@@ -133,8 +134,9 @@ func (a *App) readFolders(ctx context.Context, gen int, src library.Sources, kep
 		}
 	})
 	if err != nil {
-		return // отменено: уже идёт новое сканирование
+		return // отменено: уже идёт новое сканирование, свежие файлы остаются свежими
 	}
+	a.fresh.done(explicit)
 	log.Print(scanLogLine(src, len(photos), fin, len(skipped)))
 	album.LogMem("чтение папок")
 	if n := len(dead) + len(deadFiles); n > 0 {

@@ -1,6 +1,9 @@
 package grid
 
-import "github.com/IliaSA101/sosninaalbums/internal/album/model"
+import (
+	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
+)
 
 // Смена формата альбома с макетом (131 design §2, 0.27-131-23): нетронутые места макетных
 // разворотов вписываются заново по LookBoxes нового формата, а не тянутся Rescale по осям.
@@ -8,7 +11,7 @@ import "github.com/IliaSA101/sosninaalbums/internal/album/model"
 // lookGeom — места шага st на листе s в мм листа при текущем формате, как их ставит
 // PutLookStep (до зажима). false — у листа нечего сверять: лист 031 (места строит виньетка) или
 // шаг без мест.
-func lookGeom(p *model.Project, s *model.Spread, st model.LookStep) ([]model.Box, bool) {
+func lookGeom(p *model.Project, s *model.Spread, st looktpl.LookStep) ([]model.Box, bool) {
 	if s.IsVignette() || len(st.Tpl.Places) == 0 {
 		return nil, false
 	}
@@ -33,7 +36,7 @@ func placeOf(p *model.Project, s *model.Spread, b model.Box) model.Place {
 // LookPlacesAre — места листа s такие, какие поставил бы шаг st на текущем формате проекта:
 // геометрия, поворот, форма, нет «Вписать». Рамочки не сверяются (им нужны файлы библиотеки), фото
 // в местах не мешают. Нет мест у шага или лист 031 — false.
-func LookPlacesAre(p *model.Project, s *model.Spread, st model.LookStep) bool {
+func LookPlacesAre(p *model.Project, s *model.Spread, st looktpl.LookStep) bool {
 	boxes, ok := lookGeom(p, s, st)
 	if !ok || len(boxes) != len(s.Grid) {
 		return false
@@ -50,7 +53,7 @@ func LookPlacesAre(p *model.Project, s *model.Spread, st model.LookStep) bool {
 
 // LookPlacesRefit вписывает места листа s по шагу st на текущем формате: меняется только
 // геометрия, ID, фото и рамочки мест остаются. Число мест не то — ничего.
-func LookPlacesRefit(p *model.Project, s *model.Spread, st model.LookStep) {
+func LookPlacesRefit(p *model.Project, s *model.Spread, st looktpl.LookStep) {
 	boxes, ok := lookGeom(p, s, st)
 	if !ok || len(boxes) != len(s.Grid) {
 		return

@@ -10,6 +10,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -17,19 +18,19 @@ import (
 // Обложка по макету альбома (131 design §5, G5): серия, шаг 0 ApplyLookStep, CreateCoverLook.
 
 // lkSide — сторона обложки макета: n мест в ряд (доли зоны), цвет страницы (пусто — фон листа).
-func lkSide(n int, color string) *model.SpreadTpl {
+func lkSide(n int, color string) *looktpl.SpreadTpl {
 	places := make([]model.Box, n)
 	for i := range n {
 		w := 0.9 / float64(n)
 		places[i] = lkBox(0.05+w*float64(i), 0.2, w*0.9, 0.6)
 	}
-	return &model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Places: places, Page: []model.TplBg{{Color: color}}}
+	return &looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Places: places, Page: []looktpl.TplBg{{Color: color}}}
 }
 
 // lkCoverTpl — макет lookB с обложкой: фон листа, на задней 2 места, на лицевой 3 и свой цвет.
-func lkCoverTpl() model.AlbumTpl {
+func lkCoverTpl() looktpl.AlbumTpl {
 	t := lookB()
-	t.Cover = &model.CoverTpl{Bg: &model.TplBg{Color: "#334455"}, Back: lkSide(2, ""), Front: lkSide(3, "#998877")}
+	t.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#334455"}, Back: lkSide(2, ""), Front: lkSide(3, "#998877")}
 	return t
 }
 
@@ -153,10 +154,10 @@ func lkCoverJSON(e *album.Editor) string {
 }
 
 // lkCoverFull — обложка макета с предметами: звезда и заготовка на лицевой, узор листа.
-func lkCoverFull() model.AlbumTpl {
+func lkCoverFull() looktpl.AlbumTpl {
 	t := lkCoverTpl()
-	t.Cover.Front.Stickers = []model.TplItem{{Anchor: model.Anchor{AX: 1, AY: 1, DX: -0.05, DY: -0.05}, W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}}}
-	t.Cover.Front.Drafts = []model.TplText{{Anchor: model.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}
+	t.Cover.Front.Stickers = []looktpl.TplItem{{Anchor: looktpl.Anchor{AX: 1, AY: 1, DX: -0.05, DY: -0.05}, W: 0.1, H: 0.1, Art: &model.Art{Kind: "star"}}}
+	t.Cover.Front.Drafts = []looktpl.TplText{{Anchor: looktpl.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}
 	t.Cover.Bg.Pat = &model.Pattern{Kind: "dots"}
 	return t
 }
@@ -346,7 +347,7 @@ func TestCreateCoverWithLook(t *testing.T) {
 // CreateCoverLook без оформления: макета у альбома нет, не найден, нет обложки у макета, поиск не подключён —
 // обычная обложка, styled = false.
 func TestCreateCoverWithLookNone(t *testing.T) {
-	notFound := func(model.LookRef) *model.AlbumTpl { return nil }
+	notFound := func(model.LookRef) *looktpl.AlbumTpl { return nil }
 	cases := map[string]func(*testing.T) (*album.Editor, album.LookFinder){
 		"макета нет у альбома": func(t *testing.T) (*album.Editor, album.LookFinder) { return lkEditor(t), lkPrev(lkCoverFull()) },
 		"макет не найден": func(t *testing.T) (*album.Editor, album.LookFinder) {
@@ -449,7 +450,7 @@ func TestApplyLookCoverLibMissing(t *testing.T) {
 	const key = "my:00000000000000bb"
 	tpl := lkCoverFull()
 	tpl.Cover.Bg.Lib = key
-	tpl.Cover.Front.Stickers = append(tpl.Cover.Front.Stickers, model.TplItem{W: 0.1, H: 0.1, Lib: key})
+	tpl.Cover.Front.Stickers = append(tpl.Cover.Front.Stickers, looktpl.TplItem{W: 0.1, H: 0.1, Lib: key})
 	e := lkCoverEditor(t)
 	plan, err := e.PlanLook(lkRefB, tpl, nil, model.LookOpts{Spreads: 6}, nil)
 	if err != nil || plan.Missing != 1 || !plan.Cover {
@@ -484,12 +485,12 @@ func lkNoTrace(t *testing.T, e *album.Editor, name string, call func() error) er
 func TestApplyLookFinderNil(t *testing.T) {
 	e := lkEditor(t)
 	lkApply(t, e, lkRefA, lookA(), nil, 9)
-	gone := func(model.LookRef) *model.AlbumTpl { return nil }
+	gone := func(model.LookRef) *looktpl.AlbumTpl { return nil }
 	plan, err := e.PlanLook(lkRefB, lookB(), gone, model.LookOpts{Spreads: 6}, nil)
 	if err != nil || plan.Touched != 9 {
 		t.Fatalf("тронутых %d, ждали 9 (%v)", plan.Touched, err)
 	}
-	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *model.AlbumTpl { return &model.AlbumTpl{} }})
+	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *looktpl.AlbumTpl { return &looktpl.AlbumTpl{} }})
 	if _, styled, err := e.CreateCoverLook("", nil, nil, e.Look()); err != nil || styled != nil || len(edtest.P(e).Cover.Sheet.Grid) != 0 {
 		t.Fatalf("пустой макет: styled %v, %v", styled != nil, err)
 	}
@@ -499,7 +500,7 @@ func TestApplyLookFinderNil(t *testing.T) {
 func TestApplyLookCoverBgLib(t *testing.T) {
 	const key = "my:00000000000000cc"
 	tpl := lkCoverTpl()
-	tpl.Cover.Bg = &model.TplBg{Lib: key}
+	tpl.Cover.Bg = &looktpl.TplBg{Lib: key}
 	e := lkCoverEditor(t)
 	if _, _, miss, err := e.ApplyLookStep(model.CoverID, 0, lkRefB, tpl, nil); err != nil || miss != 1 || edtest.P(e).Cover.Sheet.BgPhoto != nil {
 		t.Fatalf("без файла: %d %v", miss, err)
@@ -605,17 +606,17 @@ func TestApplyLookCoverNoZone(t *testing.T) {
 }
 
 // lkHost подключает к редактору поиск макета: любая запись находит tpl.
-func lkHost(e *album.Editor, tpl model.AlbumTpl) {
-	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *model.AlbumTpl { return &tpl }})
+func lkHost(e *album.Editor, tpl looktpl.AlbumTpl) {
+	e.SetLookHost(album.LookHost{Find: func(model.LookRef) *looktpl.AlbumTpl { return &tpl }})
 }
 
 // lkCheckSides — места обеих сторонок равны LookBoxes макета в безопасной зоне ± 0,01 мм.
-func lkCheckSides(t *testing.T, e *album.Editor, tpl model.AlbumTpl) {
+func lkCheckSides(t *testing.T, e *album.Editor, tpl looktpl.AlbumTpl) {
 	t.Helper()
-	for scope, side := range map[string]*model.SpreadTpl{model.ScopeLeft: tpl.Cover.Back, model.ScopeRight: tpl.Cover.Front} {
+	for scope, side := range map[string]*looktpl.SpreadTpl{model.ScopeLeft: tpl.Cover.Back, model.ScopeRight: tpl.Cover.Front} {
 		x, y, w, h := lkZone(e, scope)
 		got := lkSidePlaces(e, scope)
-		boxes := model.LookBoxes(*side, w/h)
+		boxes := looktpl.LookBoxes(*side, w/h)
 		if len(got) != len(boxes) {
 			t.Fatalf("%s: мест %d, ждали %d", scope, len(got), len(boxes))
 		}
@@ -659,7 +660,7 @@ func TestApplyLookStepCoverPlanReplaced(t *testing.T) {
 // Фон обложки в Replaced — только поставленный не прежним макетом: сдвинутое место фон «своим» не делает.
 func TestApplyLookCoverOwnBgOnly(t *testing.T) {
 	a, b := lkCoverTpl(), lkCoverTpl()
-	b.Cover.Bg = &model.TplBg{Color: "#112233"}
+	b.Cover.Bg = &looktpl.TplBg{Color: "#112233"}
 	e := lkCoverEditor(t)
 	lkApply(t, e, lkRefA, a, nil, 6)
 	edtest.Change(e, func(p *model.Project) { lkSidePlaces(e, model.ScopeRight)[0].X += 7 })
@@ -697,8 +698,8 @@ func TestApplyLookCoverTouched(t *testing.T) {
 // Только фон листа различается — обложка меняется (plan.Cover), цвета сторон идут за новым фоном.
 func TestApplyLookCoverBgOnlyDiff(t *testing.T) {
 	a, b := lookB(), lookB()
-	a.Cover = &model.CoverTpl{Bg: &model.TplBg{Color: "#334455"}}
-	b.Cover = &model.CoverTpl{Bg: &model.TplBg{Color: "#445566"}}
+	a.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#334455"}}
+	b.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#445566"}}
 	e := lkCoverEditor(t)
 	lkApply(t, e, lkRefA, a, nil, 6)
 	plan, err := e.PlanLook(lkRefB, b, lkPrev(a), model.LookOpts{Spreads: 6}, nil)
@@ -739,8 +740,8 @@ func TestApplyLookCoverSideWithoutPlaces(t *testing.T) {
 func TestApplyLookCoverLayerOrder(t *testing.T) {
 	tpl := lkCoverFull()
 	tpl.Cover.Back = nil
-	under := model.TplItem{W: 0.2, H: 0.2, Under: true, Art: &model.Art{Kind: "star"}}
-	tpl.Cover.Front.Stickers = append([]model.TplItem{under}, tpl.Cover.Front.Stickers...)
+	under := looktpl.TplItem{W: 0.2, H: 0.2, Under: true, Art: &model.Art{Kind: "star"}}
+	tpl.Cover.Front.Stickers = append([]looktpl.TplItem{under}, tpl.Cover.Front.Stickers...)
 	e := lkCoverEditor(t)
 	if _, _, _, err := e.ApplyLookStep(model.CoverID, 0, lkRefB, tpl, nil); err != nil {
 		t.Fatal(err)
@@ -795,7 +796,7 @@ func TestApplyLookCoverSideBgLib(t *testing.T) {
 	const key = "my:00000000000000dd"
 	libs := map[string]model.PhotoInfo{key: {ID: model.LibPhotoID(key), Path: edtest.Abs("s.jpg"), W: 300, H: 200, Lib: key}}
 	tpl := lkCoverTpl()
-	tpl.Cover.Front.Page[0] = model.TplBg{Color: "#998877", Lib: key}
+	tpl.Cover.Front.Page[0] = looktpl.TplBg{Color: "#998877", Lib: key}
 	e := lkCoverEditor(t)
 	_, _, miss, err := e.ApplyLookStep(model.CoverID, 0, lkRefB, tpl, nil)
 	if err != nil || miss != 1 || edtest.P(e).Cover.Sheet.BgPhotoR != nil {
@@ -840,10 +841,10 @@ func TestApplyLookCoverSeriesGrows(t *testing.T) {
 }
 
 // lkSideTexts — лицевая шаблона: места и (если draft) заготовка.
-func lkSideTexts(places int, draft bool) *model.SpreadTpl {
+func lkSideTexts(places int, draft bool) *looktpl.SpreadTpl {
 	t := lkSide(places, "")
 	if draft {
-		t.Drafts = []model.TplText{{Anchor: model.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}
+		t.Drafts = []looktpl.TplText{{Anchor: looktpl.Anchor{AY: 1, DY: -0.1}, W: 0.5, Text: "[Имена]", Style: model.PlainStyle()}}
 	}
 	return t
 }
@@ -923,8 +924,8 @@ func TestApplyLookCoverPrevWithoutBg(t *testing.T) {
 func TestCreateCoverLookStyled(t *testing.T) {
 	const key = "my:00000000000000ff"
 	nothing := lkCoverTpl()
-	nothing.Cover = &model.CoverTpl{Front: &model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{}},
-		Stickers: []model.TplItem{{W: 0.1, H: 0.1, Lib: key}}}} // картинки нет на ПК — предмета нет
+	nothing.Cover = &looktpl.CoverTpl{Front: &looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{}},
+		Stickers: []looktpl.TplItem{{W: 0.1, H: 0.1, Lib: key}}}} // картинки нет на ПК — предмета нет
 	e := lkEditor(t)
 	lkApply(t, e, lkRefB, nothing, nil, 6)
 	lkHost(e, nothing)

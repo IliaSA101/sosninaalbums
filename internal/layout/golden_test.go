@@ -41,9 +41,7 @@ func formatGolden(gs []goldenGroup) string {
 // ускорения; перезапись — go test ./internal/layout -run Golden -update (или SA_GOLDEN_UPDATE=1).
 func TestGoldenLayouts(t *testing.T) {
 	// На arm64 компилятор вправе сливать x*y+z в FMA — биты оценок другие.
-	if runtime.GOARCH != "amd64" {
-		t.Skip("эталон снят на amd64")
-	}
+	testkit.RequireNoFMA(t)
 	checkGolden(t, goldenPath, goldenCorpus(false))
 }
 
@@ -52,9 +50,7 @@ const goldenWidePath = "testdata/golden/layouts-wide.sha"
 // TestGoldenLayoutsWide — корпус layouts.sha на layflat-геометриях при «только широкие»
 // (064): прежний файл доказывает «любые» = старое, этот — новое правило.
 func TestGoldenLayoutsWide(t *testing.T) {
-	if runtime.GOARCH != "amd64" {
-		t.Skip("эталон снят на amd64")
-	}
+	testkit.RequireNoFMA(t)
 	checkGolden(t, goldenWidePath, goldenCorpus(true))
 }
 
@@ -78,9 +74,7 @@ func TestGoldenLegacy(t *testing.T) {
 	if testkit.Race {
 		t.Skip("чистый счёт в одной горутине: под -race проверяет обычный прогон")
 	}
-	if runtime.GOARCH != "amd64" {
-		t.Skip("эталон снят на amd64")
-	}
+	testkit.RequireNoFMA(t)
 	var got []goldenGroup
 	for g, p := range goldenGeoms {
 		for n := 1; n <= goldenMaxN; n++ {

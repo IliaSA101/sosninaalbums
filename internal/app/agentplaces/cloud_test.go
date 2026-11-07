@@ -75,6 +75,21 @@ func TestCloudRootsLive(t *testing.T) {
 	}
 }
 
+// TestVirtualCloudSeam: VirtualCloud отдаёт ответ шва osVirtualCloud вместе с путём (на любой ОС; настоящая
+// проба — internal/osx).
+func TestVirtualCloudSeam(t *testing.T) {
+	old := osVirtualCloud
+	t.Cleanup(func() { osVirtualCloud = old })
+	var got []string
+	osVirtualCloud = func(p string) bool { got = append(got, p); return p == "G:/Мой диск" }
+	if !VirtualCloud("G:/Мой диск") || VirtualCloud("D:/Фото") {
+		t.Error("ответ шва не передан как есть")
+	}
+	if len(got) != 2 || got[0] != "G:/Мой диск" || got[1] != "D:/Фото" {
+		t.Errorf("пути в шов: %q", got)
+	}
+}
+
 // TestPlaceNotFromDropbox: корень Dropbox из настроек и его прямая подпапка — не место из родителя, подпапка второго
 // уровня — место (как у OneDrive).
 func TestPlaceNotFromDropbox(t *testing.T) {

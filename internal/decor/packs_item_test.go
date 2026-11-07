@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Поиск предмета только что скачанного набора (спека 144 Г3): packEntry.Src и Store.PackItem.
@@ -34,7 +35,7 @@ func newItemPack(t *testing.T) *itemPack {
 	s, cfg := openTemp(t)
 	p := &itemPack{s: s, cfg: cfg, bg1: renderPNG(t, 40, 30), bg2: renderPNG(t, 41, 30), st: renderPNG(t, 16, 16)}
 	tpl := func(w float64) []byte {
-		return tplJSON(t, model.SpreadTpl{V: 1, Pages: 1, Places: []model.Box{{X: .1, Y: .1, W: w, H: .8}}, Page: []model.TplBg{{Lib: libKey(p.bg1)}}})
+		return tplJSON(t, looktpl.SpreadTpl{V: 1, Pages: 1, Places: []model.Box{{X: .1, Y: .1, W: w, H: .8}}, Page: []looktpl.TplBg{{Lib: libKey(p.bg1)}}})
 	}
 	p.tpl1, p.tpl2 = tpl(.8), tpl(.7)
 	p.lk = lookBytes(t, lookOf(libKey(p.bg1), ""), `"auto":{"rule":"x"}`)
@@ -106,7 +107,7 @@ func TestPackItemSpreadBySrc(t *testing.T) {
 func TestPackItemLook(t *testing.T) {
 	p := newItemPack(t)
 	it, err := p.s.PackItem("ivory", KindAlbum, srcOf(p.lk), 300, 300)
-	if err != nil || it.ID != model.LookKey(p.lk) || it.URL != LookURL(it.ID) || it.Steps == 0 || it.PackID != "ivory" {
+	if err != nil || it.ID != looktpl.LookKey(p.lk) || it.URL != LookURL(it.ID) || it.Steps == 0 || it.PackID != "ivory" {
 		t.Errorf("макет: %+v %v", it, err)
 	}
 }

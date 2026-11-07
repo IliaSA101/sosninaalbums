@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // TestPackLimits: пределы содержимого набора (packMax*, версии шаблона и макета, шагов макета) равны блоку limits
@@ -30,7 +31,7 @@ func TestPackLimits(t *testing.T) {
 	}
 	for name, v := range map[string][2]int64{
 		"bgMaxPixels": {file.Limits.BgMaxPixels, packMaxBgPixels}, "maxSide": {file.Limits.MaxSide, packMaxSide},
-		"tplV": {file.Limits.TplV, model.TplV}, "lookV": {file.Limits.LookV, model.LookV},
+		"tplV": {file.Limits.TplV, looktpl.TplV}, "lookV": {file.Limits.LookV, looktpl.LookV},
 		"maxLookSteps": {file.Limits.MaxLookSteps, model.MaxLookSteps},
 	} {
 		if v[0] != v[1] {

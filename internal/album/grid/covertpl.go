@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/layout"
 )
 
@@ -26,7 +27,7 @@ type CoverRes struct {
 
 // coverSideTplZone — безопасная зона сторонки scope обложки s для шаблона страницы t; false — это
 // не сторонка обложки (или шаблон не страницы, или зоны нет): tplParts берёт область листа.
-func coverSideTplZone(p *model.Project, s *model.Spread, scope string, t model.SpreadTpl) (layout.Rect, bool) {
+func coverSideTplZone(p *model.Project, s *model.Spread, scope string, t looktpl.SpreadTpl) (layout.Rect, bool) {
 	if c, ok := coverSideOf(p, scope); ok && t.Pages == 1 && p.IsCover(s) {
 		return c.box, true
 	}
@@ -39,7 +40,7 @@ func coverSideTplZone(p *model.Project, s *model.Spread, scope string, t model.S
 // не меняет. Обложки нет или c пуст — холостая правка. Повтор того же — холостая (Changed =
 // false). Свои из библиотеки — из libs; ключа нет — слой пропускается, ключ в Missing. Отказ
 // (стикеров или мест больше предела) — ошибка, вызывающий откатывает правку целиком (Editor.try).
-func ApplyLookCover(p *model.Project, c *model.CoverTpl, libs map[string]model.PhotoInfo) (res CoverRes, err error) {
+func ApplyLookCover(p *model.Project, c *looktpl.CoverTpl, libs map[string]model.PhotoInfo) (res CoverRes, err error) {
 	if c == nil || p.Cover == nil || p.Cover.Sheet == nil {
 		return res, nil
 	}
@@ -49,7 +50,7 @@ func ApplyLookCover(p *model.Project, c *model.CoverTpl, libs map[string]model.P
 	for _, k := range bg.Missing {
 		gone[k] = true
 	}
-	for i, side := range []*model.SpreadTpl{c.Back, c.Front} {
+	for i, side := range []*looktpl.SpreadTpl{c.Back, c.Front} {
 		if side == nil {
 			continue
 		}
@@ -83,14 +84,14 @@ type sideRes struct {
 // applyCoverSide ставит шаблон страницы t на сторонку scope обложки: места по LookBoxes в зоне
 // (рамочки шаблона — на места), стикеры и надписи; фон не трогается (его ставит ApplyLookCover).
 // Зоны нет или шаблон негоден — ничего. gone пополняется ключами без файла.
-func applyCoverSide(p *model.Project, scope string, t model.SpreadTpl, libs map[string]model.PhotoInfo, gone map[string]bool) (res sideRes, err error) {
+func applyCoverSide(p *model.Project, scope string, t looktpl.SpreadTpl, libs map[string]model.PhotoInfo, gone map[string]bool) (res sideRes, err error) {
 	s := p.Cover.Sheet
 	c, ok := coverSideOf(p, scope)
-	t, valid := model.ClampSpreadTpl(t)
+	t, valid := looktpl.ClampSpreadTpl(t)
 	if !ok || !valid || t.Pages != 1 {
 		return res, nil
 	}
-	t.Page = []model.TplBg{{}}           // фон стороны уже поставлен ApplyLookCoverBg: ключи его картинок здесь не считаются
+	t.Page = []looktpl.TplBg{{}}         // фон стороны уже поставлен ApplyLookCoverBg: ключи его картинок здесь не считаются
 	parts, _ := tplParts(p, s, scope, t) // зона и Pages = 1 проверены выше: отказа области нет
 	r := &tplRes{p: p, s: s, libs: libs, gone: gone}
 	sd, seq := r.design(t, scope, parts)
@@ -103,7 +104,7 @@ func applyCoverSide(p *model.Project, scope string, t model.SpreadTpl, libs map[
 	places := len(t.Places) > 0
 	if places {
 		r.borders(&t)
-		boxes = c.boxes(model.LookBoxes(t, c.box.W/c.box.H))
+		boxes = c.boxes(looktpl.LookBoxes(t, c.box.W/c.box.H))
 	}
 	moved := places && !c.sameAt(boxes) // места встают заново; те же остаются со своими ID
 	if !moved && sameDecor(p, s, scope, sd, o) {
@@ -146,12 +147,12 @@ func (c *coverSide) sameAt(boxes []model.Box) bool {
 // мест нет, надписи там, где у него нет надписей и заготовок. Повтор c этого не заменит, а другой
 // макет заменит: сверка «обложка от c» (lookCoverIs) без этого их не видит, как grid.LookUntouched
 // у разворотов. Корешок не входит. Обложки нет — false.
-func CoverExtras(p *model.Project, c *model.CoverTpl) bool {
+func CoverExtras(p *model.Project, c *looktpl.CoverTpl) bool {
 	if c == nil || p.Cover == nil || p.Cover.Sheet == nil {
 		return false
 	}
 	s := p.Cover.Sheet
-	for i, side := range []*model.SpreadTpl{c.Back, c.Front} {
+	for i, side := range []*looktpl.SpreadTpl{c.Back, c.Front} {
 		scope := model.ScopeLeft
 		if i == 1 {
 			scope = model.ScopeRight

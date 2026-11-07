@@ -237,7 +237,7 @@ func TestDecodeUNCBase(t *testing.T) {
 func TestDecodePanicIsError(t *testing.T) {
 	orig := decodeImpl
 	t.Cleanup(func() { decodeImpl = orig })
-	decodeImpl = func([]byte, string) (*model.Project, error) { panic("сбой разбора") }
+	decodeImpl = func([]byte, string, Disk) (*model.Project, error) { panic("сбой разбора") }
 
 	p, err := Decode([]byte(`{"version":2}`), testkit.TempDir(t))
 	if p != nil || err == nil || !strings.Contains(err.Error(), "файл проекта повреждён") {

@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/backup"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -38,7 +39,7 @@ func (a *App) pinLeaving(cur *album.Editor) (*leaving, error) {
 		})
 	}
 	switch a.askDocOf(cur) {
-	case askDocSaved, askDocDirty:
+	case agentasktext.DocSaved, agentasktext.DocDirty:
 		if !cur.View().Dirty {
 			lv.prev = cur.Path()
 			return lv, nil
@@ -66,7 +67,7 @@ func (a *App) pinLeaving(cur *album.Editor) (*leaving, error) {
 			}
 		}
 		a.onRetire.Store(&fix)
-	case askDocDraft:
+	case agentasktext.DocDraft:
 		if !a.unlockDraft() {
 			return lv, nil // startNew откажет сам (draft_locked)
 		}

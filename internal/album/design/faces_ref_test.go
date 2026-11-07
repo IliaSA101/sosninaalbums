@@ -119,6 +119,10 @@ func TestFitFacesRefErrors(t *testing.T) {
 			h[3].Missing, h[3].Box = true, layout.Rect{}
 			return h[3].Place
 		}},
+		{"файл только в облаке", model.RefCloud, func(_ *album.Editor, _ string, h []model.FaceHit) string {
+			h[3].Missing, h[3].Cloud, h[3].Box = true, true, layout.Rect{}
+			return h[3].Place
+		}},
 		{"«Целиком»", model.RefContain, func(e *album.Editor, sid string, h []model.FaceHit) string {
 			e.SetPlaceFit(sid, []string{h[3].Place}, model.FitContain)
 			return h[3].Place

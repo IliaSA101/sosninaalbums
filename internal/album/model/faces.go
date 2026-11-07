@@ -23,6 +23,9 @@ type FaceHit struct {
 	Many bool
 	// Missing — файла нет или он не читается: лица искать негде.
 	Missing bool
+	// Cloud — причина Missing: файл лежит только в облаке (OneDrive), готовой копии нет, скачивать не стали.
+	// Не в JSON: поле нужно только тексту ошибки образца, а запись FaceHit входит в эталоны реплея Editor.
+	Cloud bool `json:"-"`
 }
 
 // Коды ошибки образца «Остальные — как это лицо» (FaceReport.RefErr): правки нет.
@@ -32,6 +35,7 @@ const (
 	RefMany    = "many"    // на фото несколько лиц
 	RefContain = "contain" // фото стоит «Целиком»: кадра нет
 	RefNoFile  = "nofile"  // файла нет
+	RefCloud   = "cloud"   // файл только в облаке, копии нет
 	RefChanged = "changed" // фото или поворот изменили во время поиска
 )
 
@@ -48,6 +52,8 @@ func RefErrText(code string) string {
 		return "Фото стоит «Целиком» — кадра нет"
 	case RefNoFile:
 		return "Нет файла этого фото"
+	case RefCloud:
+		return "Файл этого фото только в облаке — в OneDrive выберите «Всегда хранить на этом устройстве»"
 	case RefChanged:
 		return "Фото изменили во время поиска"
 	}

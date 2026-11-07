@@ -100,15 +100,18 @@ type glyphItem struct {
 // начертания d. Кернинг GPOS — внутри отрезка подряд идущих знаков основного шрифта одного
 // скрипта; отрезок рвут знак запасного шрифта, знак без глифа и смена скрипта (браузер
 // шейпит по отрезкам шрифта и скрипта). Между знаками запасного шрифта — sfnt.Kern, как раньше.
-// Отказ GPOS: кернинг у начертания выключается (один раз, в журнал), абзац считается заново.
-func measureCustom(sf, fb *sfnt.Font, d *faceData, s string) *para {
+// Отказ GPOS: кернинг у начертания выключается (один раз, в журнал), абзац считается заново,
+// refused=true. Вызывающий с несколькими абзацами обязан пересчитать и прежние (161-30а):
+// они посчитаны с кернингом, который теперь выключен.
+func measureCustom(sf, fb *sfnt.Font, d *faceData, s string) (p *para, refused bool) {
 	mode, t := d.kernState()
 	p, err := measureKerned(sf, fb, mode, t, s)
 	if err != nil {
 		d.disableKern(err)
 		p, _ = measureKerned(sf, fb, kernNone, nil, s)
+		return p, true
 	}
-	return p
+	return p, false
 }
 
 func measureKerned(sf, fb *sfnt.Font, mode kernMode, t *gposTable, s string) (*para, error) {

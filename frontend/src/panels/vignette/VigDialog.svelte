@@ -11,7 +11,7 @@
   import { vigOwn } from './vigown.svelte'
   import { ownLabel } from './vigown'
   import { FORMS, FORM_FILTERS, curKey, pickTile, vigTiles, type Tile } from './vigform'
-  import Seg from '../../base/tpl/Seg.svelte'
+  import Seg, { type SegItem } from '../../base/tpl/Seg.svelte'
   import { activeFamily, familiesIn, type VigFamilyFilter } from '../../base/tpl/tplfilter'
   import { PREVIEW_RESERVE, VAR_FIELDS, VAR_MAX, leftLine, placesLine, previewBox, resetWarning, stripMax } from './vigdialog'
   import { MAX_PUPILS, MAX_TEACHERS, RATIOS, clampCount, isVignette, portraitText } from './vignette'
@@ -60,6 +60,7 @@
     untrack(() => ses?.fixTpl())
   })
 
+  const RATIO_ITEMS: SegItem<(typeof RATIOS)[number]>[] = RATIOS.map((r) => ({ id: r, label: r }))
   const close = () => vigDialog.close()
   async function apply() {
     if (await ses?.apply()) close()
@@ -167,13 +168,7 @@
           </div>
           <div class="row">
             Портрет
-            <div class="seg" role="group" aria-label="Пропорция портрета">
-              {#each RATIOS as r (r)}
-                <button type="button" class:on={s.form.ratio === r} aria-pressed={s.form.ratio === r} onclick={() => (s.form.ratio = r)}
-                  >{r}</button
-                >
-              {/each}
-            </div>
+            <Seg grow label="Пропорция портрета" items={RATIO_ITEMS} value={s.form.ratio} onpick={(r) => (s.form.ratio = r)} />
           </div>
           <label class="col">
             Подпись учителя
@@ -303,29 +298,6 @@
     color: var(--text);
     border: 1px solid var(--line);
     border-radius: 6px;
-  }
-  .seg {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    gap: 1px;
-    padding: 2px;
-    background: #1b1b1d;
-    border-radius: 7px;
-  }
-  .seg button {
-    flex: 1 1 0;
-    height: 24px;
-    min-width: 0;
-    padding: 0 6px;
-    font-size: 12px;
-    background: transparent;
-    border-radius: 5px;
-  }
-  .seg button.on {
-    background: var(--accent);
-    color: #1e1e1e;
-    font-weight: 600;
   }
   .sect {
     margin-top: 6px;

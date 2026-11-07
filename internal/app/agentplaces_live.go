@@ -58,11 +58,12 @@ func (a *App) AgentPlacesLive() []AgentPlace {
 	if env == nil {
 		return base
 	}
-	volOf, volPath := env.VolFn(), env.VolPathFn() // до Within: подмену не читаем в пережившей предел горутине
+	volOf, volPath, canBind := env.VolFn(), env.VolPathFn(), placeCanBind // до Within: подмену не читаем в пережившей предел горутине
 	list, ok := appkit.Within(placeLiveWithin, func() []AgentPlace {
 		out := append([]AgentPlace(nil), base...)
 		for i, p := range places {
 			probePlace(&out[i], p, volOf, volPath)
+			out[i].Bindable = canBind(out[i].Dir) // путь мог смениться по номеру диска
 		}
 		return out
 	})

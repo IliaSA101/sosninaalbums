@@ -21,6 +21,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -391,7 +392,7 @@ func regular(kind, path string, stat func(string) (fs.FileInfo, error)) (fs.File
 	if err == nil && st.Mode()&(fs.ModeSymlink|fs.ModeIrregular) != 0 {
 		st, err = library.StatLocal(path)
 	}
-	if err != nil || !st.Mode().IsRegular() {
+	if err != nil || !imgfile.RegularOrCloud(path, st) { // заглушка OneDrive копируется, как обычное фото
 		return nil, false
 	}
 	return st, true
@@ -427,7 +428,8 @@ func nameDir(pl *Plan, group []src, dir string, stat func(string) (fs.FileInfo, 
 	dest := group[0].dest
 	nm := names{used: map[string]bool{}, onDisk: map[string]fs.DirEntry{}}
 	if dir != "" {
-		if ents, err := os.ReadDir(filepath.Join(dir, filepath.FromSlash(dest))); err == nil {
+		nm.dir = filepath.Join(dir, filepath.FromSlash(dest))
+		if ents, err := os.ReadDir(nm.dir); err == nil {
 			for _, e := range ents {
 				nm.onDisk[nameKey(e.Name())] = e
 			}
@@ -473,10 +475,11 @@ func nameDir(pl *Plan, group []src, dir string, stat func(string) (fs.FileInfo, 
 }
 
 // names — имена одного каталога назначения: занятые планом (used) и лежащие на диске (onDisk);
-// ключи — в нижнем регистре.
+// ключи — в нижнем регистре. dir — сам каталог (для тега облачной заглушки по пути записи).
 type names struct {
 	used   map[string]bool
 	onDisk map[string]fs.DirEntry
+	dir    string
 }
 
 // free — имя свободно (ok) или на диске под ним уже тот же файл (ok и skip).
@@ -488,7 +491,8 @@ func (nm names) free(name string, st fs.FileInfo) (ok, skip bool) {
 	if !there {
 		return true, false
 	}
-	return same(e, st), same(e, st)
+	ok = same(nm.dir, e, st)
+	return ok, ok
 }
 
 // pick — первое годное из «имя.ext», «имя (2).ext» … «имя (maxDup).ext»; занимает его.
@@ -518,20 +522,21 @@ type sideSrc struct {
 // «имя.xmp»; long — первый вид.
 func sidecar(photo string, stat func(string) (fs.FileInfo, error)) (s sideSrc, long, ok bool) {
 	for i, cand := range []string{photo + ".xmp", strings.TrimSuffix(photo, filepath.Ext(photo)) + ".xmp"} {
-		if st, err := stat(cand); err == nil && st.Mode().IsRegular() {
+		if st, err := stat(cand); err == nil && imgfile.RegularOrCloud(cand, st) {
 			return sideSrc{path: cand, st: st}, i == 0, true
 		}
 	}
 	return sideSrc{}, false, false
 }
 
-// same — на диске обычный файл того же размера и времени изменения (±2 с).
-func same(e fs.DirEntry, st fs.FileInfo) bool {
-	if !e.Type().IsRegular() {
+// same — на диске обычный файл (или облачная заглушка: прежняя копия в папке OneDrive могла выгрузиться) того же
+// размера и времени изменения (±2 с); dir — каталог записи e.
+func same(dir string, e fs.DirEntry, st fs.FileInfo) bool {
+	if !e.Type().IsRegular() && e.Type() != fs.ModeIrregular {
 		return false
 	}
 	fi, err := e.Info()
-	if err != nil || fi.Size() != st.Size() {
+	if err != nil || !imgfile.RegularOrCloud(filepath.Join(dir, e.Name()), fi) || fi.Size() != st.Size() {
 		return false
 	}
 	d := fi.ModTime().Sub(st.ModTime())

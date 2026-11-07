@@ -1,7 +1,8 @@
 package model
 
-// Постановка макета альбома (131 design §4): параметры, режимы и итог сухого прогона. Типы в
-// model: они уходят в биндинги Wails (App.ApplyLook, App.PlanLook).
+// Постановка макета альбома (131 design §4): параметры, режимы и итог сухого прогона, параметры
+// «Сохранить альбом как макет» (SaveLookOpts). Типы в model: они уходят в биндинги Wails
+// (методы ApplyLook, PlanLook, SaveLook, PlanSaveLook).
 
 // Режимы постановки макета: серия (новый или пробный альбом), добавить развороты и фоны по
 // серии (собранный альбом, G4b).
@@ -39,4 +40,18 @@ type LookPlan struct {
 	Left          int    `json:"left"`    // фото уйдут в ленту
 	Prev          string `json:"prev"`    // имя прежнего макета альбома
 	Missing       int    `json:"missing"` // предметов макета без файла на этом ПК
+}
+
+// SaveLookOpts — параметры SaveLook. Ids — развороты в порядке альбома без обложки; RepFrom/RepTo —
+// позиции повторяемых среди Ids с 1 (RepFrom > RepTo — повторяемых нет); Places — «Места для фото»,
+// Drafts — «Надписи — заготовками», Cover — «Обложка». Theme и Name — запись библиотеки.
+type SaveLookOpts struct {
+	Theme   string   `json:"theme"`
+	Name    string   `json:"name"`
+	Ids     []string `json:"ids"`
+	RepFrom int      `json:"repFrom"`
+	RepTo   int      `json:"repTo"`
+	Places  bool     `json:"places"`
+	Drafts  bool     `json:"drafts"`
+	Cover   bool     `json:"cover"`
 }

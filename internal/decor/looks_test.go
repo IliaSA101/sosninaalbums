@@ -11,23 +11,24 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Макеты альбома в библиотеке и наборах (спека 131, design §7).
 
 // lookOf — макет: титул, повтор, финал; фон страниц — bg, стикер — st (пусто — без них).
-func lookOf(bg, st string) model.AlbumTpl {
-	page := []model.TplBg{{Color: "#ffffff", Lib: bg}, {Color: "#ffffff"}}
-	tpl := model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.8}}, Page: page}
+func lookOf(bg, st string) looktpl.AlbumTpl {
+	page := []looktpl.TplBg{{Color: "#ffffff", Lib: bg}, {Color: "#ffffff"}}
+	tpl := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.3, H: 0.8}}, Page: page}
 	if st != "" {
-		tpl.Stickers = []model.TplItem{{W: 0.1, H: 0.1, Lib: st}}
+		tpl.Stickers = []looktpl.TplItem{{W: 0.1, H: 0.1, Lib: st}}
 	}
-	return model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{
-		{Name: "Титул", Tpl: tpl}, {Role: model.RoleRepeat, Tpl: tpl}, {Name: "Финал", Tpl: tpl},
+	return looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{
+		{Name: "Титул", Tpl: tpl}, {Role: looktpl.RoleRepeat, Tpl: tpl}, {Name: "Финал", Tpl: tpl},
 	}}
 }
 
-func lookBytes(t *testing.T, l model.AlbumTpl, extra string) []byte {
+func lookBytes(t *testing.T, l looktpl.AlbumTpl, extra string) []byte {
 	t.Helper()
 	b, err := json.Marshal(l)
 	if err != nil {
@@ -61,7 +62,7 @@ func TestDecorAlbumKind(t *testing.T) {
 		t.Errorf("Import макета: %v", err)
 	}
 	l := lookOf("", "")
-	l.Steps = append(l.Steps, model.LookStep{Role: model.RoleVignette, Tpl: l.Steps[0].Tpl, Vig: &model.LookVig{Tpl: "head-t-left", Teachers: 1, Pupils: 24}})
+	l.Steps = append(l.Steps, looktpl.LookStep{Role: looktpl.RoleVignette, Tpl: l.Steps[0].Tpl, Vig: &looktpl.LookVig{Tpl: "head-t-left", Teachers: 1, Pupils: 24}})
 	it, err := s.SaveLook("wedding", "  Свадьба  ", l)
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +74,7 @@ func TestDecorAlbumKind(t *testing.T) {
 	if _, err := s.SaveLook("wedding", "Ещё раз", l); !errors.Is(err, errHave) {
 		t.Errorf("повтор: %v", err)
 	}
-	for name, bad := range map[string]model.AlbumTpl{"пусто": {V: model.LookV}, "версия": {V: 2, Steps: l.Steps}} {
+	for name, bad := range map[string]looktpl.AlbumTpl{"пусто": {V: looktpl.LookV}, "версия": {V: 2, Steps: l.Steps}} {
 		if _, err := s.SaveLook("mine", name, bad); err == nil {
 			t.Errorf("%s: сохранён", name)
 		}
@@ -84,8 +85,8 @@ func TestDecorAlbumKind(t *testing.T) {
 	// Файл — Макеты/<hex>.json, ключ — sha256 байтов; после перезапуска плитка та же, Look читается.
 	path := filepath.Join(cfg, RootName, "Макеты", strings.TrimPrefix(it.ID, "my:")+".json")
 	data, err := os.ReadFile(path)
-	if err != nil || model.LookKey(data) != it.ID {
-		t.Fatalf("файл макета: %v, ключ %s ≠ %s", err, model.LookKey(data), it.ID)
+	if err != nil || looktpl.LookKey(data) != it.ID {
+		t.Fatalf("файл макета: %v, ключ %s ≠ %s", err, looktpl.LookKey(data), it.ID)
 	}
 	s2 := Open(cfg)
 	if got, ok := findItem(t, s2, KindAlbum, it.ID); !ok || got != want {
@@ -116,7 +117,7 @@ func TestDecorAlbumKind(t *testing.T) {
 
 // Битый, пустой, огромный файл и файл новее программы под ключом — без плитки и без паники.
 func TestDecorAlbumBrokenFile(t *testing.T) {
-	for name, body := range map[string]string{"битый": "{", "новее": `{"v":2,"steps":[]}`, "пусто": "", "огромный": strings.Repeat(" ", model.MaxLookFile+1)} {
+	for name, body := range map[string]string{"битый": "{", "новее": `{"v":2,"steps":[]}`, "пусто": "", "огромный": strings.Repeat(" ", looktpl.MaxLookFile+1)} {
 		_, cfg3 := openTemp(t)
 		key := "my:00000000000000a1"
 		p := filepath.Join(cfg3, RootName, "Макеты", "00000000000000a1.json")
@@ -151,7 +152,7 @@ func TestPackAlbumItem(t *testing.T) {
 	if info.Bg != 1 || info.Bytes != int64(len(bg)+len(v1)) {
 		t.Errorf("строка набора %+v", info)
 	}
-	key1 := model.LookKey(v1)
+	key1 := looktpl.LookKey(v1)
 	if got, ok := s.LookByItem("wedding-layouts", "looks/main.json"); !ok || got != key1 {
 		t.Fatalf("LookByItem: %s %v, ждали %s", got, ok, key1)
 	}
@@ -185,7 +186,7 @@ func TestPackAlbumItem(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.Close()
-	key2 := model.LookKey(v2)
+	key2 := looktpl.LookKey(v2)
 	s2 := Open(cfg)
 	if got, ok := s2.LookByItem("wedding-layouts", "looks/main.json"); !ok || got != key2 {
 		t.Errorf("после обновления: %s %v", got, ok)
@@ -213,7 +214,7 @@ func TestCheckLookLibs(t *testing.T) {
 	unknownPat := lookOf("", "")
 	unknownPat.Steps[2].Tpl.Page[1].Pat = &model.Pattern{Kind: "future-pattern"}
 	coverBg := lookOf("", "")
-	coverBg.Cover = &model.CoverTpl{Bg: &model.TplBg{Lib: "my:00000000000000ff"}}
+	coverBg.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Lib: "my:00000000000000ff"}}
 	m, src := testPack("set-layouts", 1,
 		pit{"bg/own.png", own},
 		pit{"stickers/st.png", stk},
@@ -314,7 +315,7 @@ func lookDonor(t *testing.T) (*Store, string, string) {
 	put(t, s, "donor", pit{"bg/d.png", bg})
 	data := lookBytes(t, lookOf(libKey(bg), ""), "")
 	put(t, s, "donor-layouts", pit{"looks/main.json", data})
-	return s, libKey(bg), model.LookKey(data)
+	return s, libKey(bg), looktpl.LookKey(data)
 }
 
 // Свой макет держит картинку набора; макет, оставленный keep (нужен открытому альбому), — тоже.
@@ -342,11 +343,11 @@ func TestRemovePackOwnLookAndKeep(t *testing.T) {
 // Контракт 0.27-131-30: ключи картинок файла макета — строки как есть, сырой разбор находит ровно их.
 func TestLookFileKeysRaw(t *testing.T) {
 	l := lookOf("my:00000000000000b1", "my:00000000000000b2")
-	front := model.SpreadTpl{V: model.TplV, Pages: 1, Page: []model.TplBg{{Lib: "my:00000000000000b3"}}}
-	l.Cover = &model.CoverTpl{Bg: &model.TplBg{Lib: "my:00000000000000b4"}, Front: &front}
+	front := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Page: []looktpl.TplBg{{Lib: "my:00000000000000b3"}}}
+	l.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Lib: "my:00000000000000b4"}, Front: &front}
 	l.Steps[1].Name = `Глава "my:" и \ кавычки`
 	// Рамочка места (borders[].lib, G1) — тоже ключ картинки (0.28-131-27 п. 3).
-	l.Steps[2].Tpl.Borders = []model.TplBorder{{I: 0, Lib: "my:00000000000000b5"}}
+	l.Steps[2].Tpl.Borders = []looktpl.TplBorder{{I: 0, Lib: "my:00000000000000b5"}}
 	s, cfg := openTemp(t)
 	it, err := s.SaveLook("mine", "Ключи", l)
 	if err != nil {
@@ -356,7 +357,7 @@ func TestLookFileKeysRaw(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := model.ParseLook(data)
+	parsed, err := looktpl.ParseLook(data)
 	if err != nil {
 		t.Fatal(err)
 	}

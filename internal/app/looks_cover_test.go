@@ -6,6 +6,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -143,7 +144,7 @@ func TestCreateCoverLookLibBg(t *testing.T) {
 	a.setEditor(mustEditor(t, p, ""))
 	bg := importBg(t, a, testkit.JPEG(t, testkit.TempDir(t), "Фон.jpg", 60, 40))[0]
 	look := testLook("#ffffff")
-	look.Cover.Bg = &model.TplBg{Lib: bg}
+	look.Cover.Bg = &looktpl.TplBg{Lib: bg}
 	s, err := a.decorStore()
 	if err != nil {
 		t.Fatal(err)

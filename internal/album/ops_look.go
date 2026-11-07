@@ -6,6 +6,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/spreads"
 	"github.com/IliaSA101/sosninaalbums/internal/album/vigsheet"
 )
@@ -24,14 +25,14 @@ var errLookRef = errors.New("у макета нет ключа")
 // LookFinder — находит макет по записи альбома (Project.Look): реестр библиотеки, у App. nil или
 // nil в ответе — макета нет на этом ПК, все его развороты считаются тронутыми. Зовётся под замком
 // Editor по фактической записи проекта: макет не отстаёт от правки (0.28-131-81).
-type LookFinder func(model.LookRef) *model.AlbumTpl
+type LookFinder func(model.LookRef) *looktpl.AlbumTpl
 
 // ApplyLook ставит макет t на альбом одной правкой (один шаг отмены, отказ — откат без шага,
 // повтор того же — холостая правка). ref — запись макета (ключ my:, имя, набор), find — поиск
 // макета, которым оформлен альбом сейчас, libs — свои из библиотеки для обоих макетов. Договор: ref и t зажимаются
 // здесь; пустой макет — ErrTplEmpty; предел MaxSpreads и отказ конвейера — ошибка без правки;
 // режим собранного альбома — LookOpts.Mode (G4b), иначе игнорируется.
-func (e *Editor) ApplyLook(ref model.LookRef, t model.AlbumTpl, find LookFinder, o model.LookOpts, libs map[string]model.PhotoInfo) (v model.View, plan model.LookPlan, err error) {
+func (e *Editor) ApplyLook(ref model.LookRef, t looktpl.AlbumTpl, find LookFinder, o model.LookOpts, libs map[string]model.PhotoInfo) (v model.View, plan model.LookPlan, err error) {
 	r, c, err := checkLook(ref, t)
 	if err != nil {
 		return e.View(), plan, err
@@ -49,7 +50,7 @@ func (e *Editor) ApplyLook(ref model.LookRef, t model.AlbumTpl, find LookFinder,
 // PlanLook — сухой прогон ApplyLook той же функцией на копии (вопрос до правки): под замком
 // только снимок, rev, отмена и события не трогаются. У собранного альбома без выбора режима
 // ответ — Full = true без чисел (ошибки нет): окно показывает «Что сделать».
-func (e *Editor) PlanLook(ref model.LookRef, t model.AlbumTpl, find LookFinder, o model.LookOpts, libs map[string]model.PhotoInfo) (model.LookPlan, error) {
+func (e *Editor) PlanLook(ref model.LookRef, t looktpl.AlbumTpl, find LookFinder, o model.LookOpts, libs map[string]model.PhotoInfo) (model.LookPlan, error) {
 	r, c, err := checkLook(ref, t)
 	if err != nil {
 		return model.LookPlan{}, err
@@ -82,21 +83,21 @@ func (e *Editor) dryRun(fn func(cp *model.Project) error) error {
 }
 
 // checkLook — зажим входа: ссылка (ключ по ValidLibKey) и макет.
-func checkLook(ref model.LookRef, t model.AlbumTpl) (*model.LookRef, model.AlbumTpl, error) {
+func checkLook(ref model.LookRef, t looktpl.AlbumTpl) (*model.LookRef, looktpl.AlbumTpl, error) {
 	r := model.ClampLookRef(&ref)
 	if r == nil {
-		return nil, model.AlbumTpl{}, errLookRef
+		return nil, looktpl.AlbumTpl{}, errLookRef
 	}
-	c, ok := model.ClampLook(t)
+	c, ok := looktpl.ClampLook(t)
 	if !ok {
-		return nil, model.AlbumTpl{}, model.ErrTplEmpty
+		return nil, looktpl.AlbumTpl{}, looktpl.ErrTplEmpty
 	}
 	return r, c, nil
 }
 
 // prevLook — макет, которым оформлен проект p сейчас: тот же, что ref (ключ или запись набора — набор
 // мог обновиться), — новый макет t, иначе поиск find по записи проекта (негодный ответ — nil).
-func prevLook(p *model.Project, ref *model.LookRef, t model.AlbumTpl, find LookFinder) *model.AlbumTpl {
+func prevLook(p *model.Project, ref *model.LookRef, t looktpl.AlbumTpl, find LookFinder) *looktpl.AlbumTpl {
 	switch {
 	case p.Look == nil:
 		return nil
@@ -109,7 +110,7 @@ func prevLook(p *model.Project, ref *model.LookRef, t model.AlbumTpl, find LookF
 	if f == nil {
 		return nil
 	}
-	if c, ok := model.ClampLook(*f); ok {
+	if c, ok := looktpl.ClampLook(*f); ok {
 		return &c
 	}
 	return nil
@@ -117,7 +118,7 @@ func prevLook(p *model.Project, ref *model.LookRef, t model.AlbumTpl, find LookF
 
 // applyLook — тело ApplyLook и PlanLook над проектом p. Режим: фото из съёмки в альбоме —
 // собранный (applyLookFull), иначе серия.
-func applyLook(p *model.Project, ref *model.LookRef, t model.AlbumTpl, find LookFinder, o model.LookOpts, libs map[string]model.PhotoInfo) (model.LookPlan, error) {
+func applyLook(p *model.Project, ref *model.LookRef, t looktpl.AlbumTpl, find LookFinder, o model.LookOpts, libs map[string]model.PhotoInfo) (model.LookPlan, error) {
 	plan := model.LookPlan{Full: lookBuilt(p)}
 	if p.Look != nil {
 		plan.Prev = p.Look.Name
@@ -156,7 +157,7 @@ type lookSlot struct {
 
 // applyLookSeries — режим series: пустые развороты уходят, макетные сопоставляются шагам новой
 // серии по позициям, лишние удаляются, недостающие создаются, затем каждый получает свой шаг.
-func applyLookSeries(p *model.Project, plan *model.LookPlan, ref *model.LookRef, t model.AlbumTpl, prev *model.AlbumTpl, o model.LookOpts, libs map[string]model.PhotoInfo) error {
+func applyLookSeries(p *model.Project, plan *model.LookPlan, ref *model.LookRef, t looktpl.AlbumTpl, prev *looktpl.AlbumTpl, o model.LookOpts, libs map[string]model.PhotoInfo) error {
 	plan.Mode = model.LookSeries
 	// Обложка есть — её оформление макета (нет — не создаётся, design §5). Первой, до смены числа
 	// разворотов: конвейер правки (cover.Reflow) сдвинет содержимое обложки по новому корешку, и
@@ -166,7 +167,7 @@ func applyLookSeries(p *model.Project, plan *model.LookPlan, ref *model.LookRef,
 		return err
 	}
 	spreads.DropEmpty(p)
-	idx := model.Series(t, orDefault(o.Spreads, len(t.Steps)))
+	idx := looktpl.Series(t, orDefault(o.Spreads, len(t.Steps)))
 	var macro []*model.Spread
 	for _, s := range p.Spreads {
 		if s.LookStep > 0 {
@@ -226,9 +227,9 @@ func orDefault(v, def int) int {
 // lookPut — шаг st на разворот sp: у виньетки сначала её настройка, затем оформление шага.
 // made — разворот создан этой постановкой. left — фото, ушедшие в ленту; gone — ключи библиотеки без
 // файла (по тому, что реально встало).
-func lookPut(p *model.Project, sp *model.Spread, st model.LookStep, n int, made bool, libs map[string]model.PhotoInfo) (plan model.GridPlan, gone []string, err error) {
+func lookPut(p *model.Project, sp *model.Spread, st looktpl.LookStep, n int, made bool, libs map[string]model.PhotoInfo) (plan model.GridPlan, gone []string, err error) {
 	left := 0
-	if st.Role == model.RoleVignette {
+	if st.Role == looktpl.RoleVignette {
 		left, err = lookVignette(p, sp, st, made)
 	}
 	if err == nil {
@@ -241,7 +242,7 @@ func lookPut(p *model.Project, sp *model.Spread, st model.LookStep, n int, made 
 // lookTouched — сколько макетных разворотов тронуто: повтор прежнего шага на них не холостой,
 // есть имена, чужие надписи, настроенная виньетка. Прежнего макета нет или в нём нет шага —
 // все тронуты. Сверка идёт на копии: проект p не меняется.
-func lookTouched(p *model.Project, macro []*model.Spread, prev *model.AlbumTpl, libs map[string]model.PhotoInfo) int {
+func lookTouched(p *model.Project, macro []*model.Spread, prev *looktpl.AlbumTpl, libs map[string]model.PhotoInfo) int {
 	var c *model.Project
 	if prev != nil {
 		c = p.Clone()
@@ -257,9 +258,9 @@ func lookTouched(p *model.Project, macro []*model.Spread, prev *model.AlbumTpl, 
 
 // lookUntouched — разворот копии c нетронут относительно шага st: вид (виньетка или обычный)
 // и параметры виньетки те же, места виньетки по плану, остальное — grid.LookUntouched.
-func lookUntouched(c *model.Project, id string, st model.LookStep, n int, libs map[string]model.PhotoInfo) bool {
+func lookUntouched(c *model.Project, id string, st looktpl.LookStep, n int, libs map[string]model.PhotoInfo) bool {
 	_, s := c.Find(id)
-	if s.IsVignette() != (st.Role == model.RoleVignette) {
+	if s.IsVignette() != (st.Role == looktpl.RoleVignette) {
 		return false
 	}
 	if s.IsVignette() {
@@ -274,7 +275,7 @@ func lookUntouched(c *model.Project, id string, st model.LookStep, n int, libs m
 }
 
 // lookVig — параметры виньетки шага-виньетки (st.Vig не nil), зажатые как у «Применить» (пропорция по умолчанию).
-func lookVig(st model.LookStep) model.Vignette {
+func lookVig(st looktpl.LookStep) model.Vignette {
 	v := st.Vig // у шага-виньетки после ClampLook он есть
 	return model.ClampVignette(model.Vignette{Tpl: v.Tpl, Teachers: v.Teachers, Pupils: v.Pupils, Ratio: v.Ratio})
 }
@@ -283,8 +284,8 @@ func lookVig(st model.LookStep) model.Vignette {
 // конец — с хвоста, середина (повторяемые) — по порядку; лишние середины (с её конца) идут в drop.
 // Разворот другого вида (виньетка вместо обычного и наоборот) заменяется: sp = nil, old — прежний.
 // Позиции без разворота — sp = nil.
-func lookSlots(macro []*model.Spread, t model.AlbumTpl, idx []int) (fin []lookSlot, drop []string) {
-	a, _, c := model.LookBlockSizes(t)
+func lookSlots(macro []*model.Spread, t looktpl.AlbumTpl, idx []int) (fin []lookSlot, drop []string) {
+	a, _, c := looktpl.LookBlockSizes(t)
 	m, k := len(idx), len(macro)
 	head := min(a, k)
 	tail := min(c, k-head)
@@ -307,7 +308,7 @@ func lookSlots(macro []*model.Spread, t model.AlbumTpl, idx []int) (fin []lookSl
 		drop = append(drop, s.ID)
 	}
 	for j, f := range fin {
-		if f.sp != nil && f.sp.IsVignette() != (t.Steps[f.step].Role == model.RoleVignette) {
+		if f.sp != nil && f.sp.IsVignette() != (t.Steps[f.step].Role == looktpl.RoleVignette) {
 			fin[j].sp, fin[j].old = nil, f.sp
 		}
 	}
@@ -317,13 +318,13 @@ func lookSlots(macro []*model.Spread, t model.AlbumTpl, idx []int) (fin []lookSl
 // lookInsert — создаёт недостающие развороты: перед ближайшим следующим по серии (перед хвостом
 // post), нет такого — следом за предыдущим, серии ещё нет — в конец альбома. Виньетка — через
 // AddVignette, обычный — NewSpread.
-func lookInsert(p *model.Project, fin []lookSlot, t model.AlbumTpl) (err error) {
+func lookInsert(p *model.Project, fin []lookSlot, t looktpl.AlbumTpl) (err error) {
 	for j := 0; j < len(fin) && err == nil; j++ {
 		if fin[j].sp != nil {
 			continue
 		}
 		at := lookAt(p, fin, j)
-		if t.Steps[fin[j].step].Role == model.RoleVignette {
+		if t.Steps[fin[j].step].Role == looktpl.RoleVignette {
 			err = vigsheet.AddVignette(p, at, vigPlan)
 		} else {
 			err = spreads.NewSpread(p, at, nil)
@@ -360,7 +361,7 @@ func lookAt(p *model.Project, fin []lookSlot, j int) int {
 // сдвинутые места — «Вернуть авто». Оформление шага (стиль, текст шапки, 164) встаёт, только когда лист
 // новый (made) или шаблон меняется: на том же листе правки фотографа не затираются. left — фото,
 // ушедшие в ленту.
-func lookVignette(p *model.Project, s *model.Spread, st model.LookStep, made bool) (int, error) {
+func lookVignette(p *model.Project, s *model.Spread, st looktpl.LookStep, made bool) (int, error) {
 	v := lookVig(st)
 	own := lookOwn(st, made)
 	if s.IsVignette() {
@@ -390,7 +391,7 @@ func lookHeadFont(own *vigsheet.OwnTpl) string {
 
 // lookOwn — оформление шага-виньетки для SetVignette (без Shape: шаблон каталога); nil — в шаге
 // ни стиля, ни текста шапки (как в 0.35).
-func lookOwn(st model.LookStep, made bool) *vigsheet.OwnTpl {
+func lookOwn(st looktpl.LookStep, made bool) *vigsheet.OwnTpl {
 	if st.Vig == nil || st.Vig.Style == nil && st.Vig.HText == "" {
 		return nil
 	}

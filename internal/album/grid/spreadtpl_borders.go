@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Рамочки мест шаблона разворота (131, design §1): TplBorder ↔ Place.Border.
@@ -12,7 +13,7 @@ import (
 // входит в сверку «места те же», иначе повтор не холостой. t — зажатая копия (ClampSpreadTpl
 // даёт срезу свой массив). Картинка записывается в Photos здесь же, до ClampPlace (К1-12);
 // файла на этом ПК нет — место без рамочки, ключ уходит в tplRes.gone (missing).
-func (r *tplRes) borders(t *model.SpreadTpl) {
+func (r *tplRes) borders(t *looktpl.SpreadTpl) {
 	for _, tb := range t.Borders {
 		if tb.I < 0 || tb.I >= len(t.Places) {
 			continue
@@ -23,7 +24,7 @@ func (r *tplRes) borders(t *model.SpreadTpl) {
 
 // border — рамочка шаблона, зажатая как в проекте (ClampBorder: повтор постановки сравнивает
 // готовые значения); nil — картинки нет на этом ПК.
-func (r *tplRes) border(tb model.TplBorder) *model.Border {
+func (r *tplRes) border(tb looktpl.TplBorder) *model.Border {
 	if tb.Lib != "" {
 		id := r.photo(tb.Lib)
 		if id == "" {
@@ -37,17 +38,17 @@ func (r *tplRes) border(tb model.TplBorder) *model.Border {
 // bordersOf — рамочки мест boxes (долей области, порядок = Places шаблона): встроенная как
 // есть, картинка — только своя из библиотеки (ключ Lib; запись без ключа — снимок съёмки, в
 // шаблон не идёт, как кадр у фона, решение 6). Отметка плитки Preset едет с рамочкой.
-func bordersOf(p *model.Project, boxes []model.Box) []model.TplBorder {
-	var out []model.TplBorder
+func bordersOf(p *model.Project, boxes []model.Box) []looktpl.TplBorder {
+	var out []looktpl.TplBorder
 	for i, b := range boxes {
 		bd := b.Border
 		switch {
 		case bd == nil:
 		case bd.Kind != "":
-			out = append(out, model.TplBorder{I: i, Kind: bd.Kind, Inks: slices.Clone(bd.Inks), Width: bd.Width, Preset: bd.Preset})
+			out = append(out, looktpl.TplBorder{I: i, Kind: bd.Kind, Inks: slices.Clone(bd.Inks), Width: bd.Width, Preset: bd.Preset})
 		default:
 			if key := p.Photos[bd.Photo].Lib; key != "" {
-				out = append(out, model.TplBorder{I: i, Lib: key, Scale: bd.Scale, Cut: bd.Cut, Open: bd.Open})
+				out = append(out, looktpl.TplBorder{I: i, Lib: key, Scale: bd.Scale, Cut: bd.Cut, Open: bd.Open})
 			}
 		}
 	}

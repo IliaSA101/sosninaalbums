@@ -59,13 +59,17 @@ func (a *App) publishUnread(gen int, src library.Sources, skipped []library.Skip
 	a.emit("unread", all)
 }
 
-// unreadAllLocked — причины чтения (a.unread) и миниатюр (a.badThumb) одной картой для State и
+// unreadAllLocked — причины чтения (a.unread), облака (a.cloud) и миниатюр (a.badThumb) одной картой для State и
 // события `unread`; причина чтения сильнее. Всегда новая карта (может уйти в событие). Под a.mu.
 func (a *App) unreadAllLocked() map[string]string {
-	if len(a.badThumb) == 0 {
+	if len(a.badThumb) == 0 && len(a.cloud) == 0 {
 		return maps.Clone(a.unread)
 	}
 	out := maps.Clone(a.badThumb)
+	if out == nil {
+		out = make(map[string]string, len(a.cloud)+len(a.unread))
+	}
+	maps.Copy(out, a.cloud)
 	maps.Copy(out, a.unread)
 	return out
 }

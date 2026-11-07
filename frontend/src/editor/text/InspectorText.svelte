@@ -7,6 +7,7 @@
   import ColorPicker from '../../base/color/ColorPicker.svelte'
   import { colorLive } from '../../base/color/colorlive.svelte'
   import Icon from '../../base/ui/Icon.svelte'
+  import Seg, { type SegItem } from '../../base/tpl/Seg.svelte'
   import { prefs } from '../../base/prefs/prefs.svelte'
   import SnapToggle from '../photoprops/SnapToggle.svelte'
   import LayerRow from '../inspector/LayerRow.svelte'
@@ -28,15 +29,35 @@
   const blk = $derived(edit.text)
   const sup = $derived(st ? styleSupport(st.font, store.fonts) : { bold: false, italic: false })
 
-  const ALIGNS = [
-    { v: 'left', title: 'По левому краю', d: 'M4 6h16M4 10h10M4 14h16M4 18h10' },
-    { v: 'center', title: 'По центру', d: 'M4 6h16M7 10h10M4 14h16M7 18h10' },
-    { v: 'right', title: 'По правому краю', d: 'M4 6h16M10 10h10M4 14h16M10 18h10' },
-  ] as const
-
   // Кнопки не забирают фокус у редактора: курсор остаётся в тексте.
   const keepFocus = (e: MouseEvent) => e.preventDefault()
+
+  type Align = 'left' | 'center' | 'right'
+  const ALIGNS: SegItem<Align>[] = [
+    { id: 'left', label: 'По левому краю', title: 'По левому краю', aria: 'По левому краю' },
+    { id: 'center', label: 'По центру', title: 'По центру', aria: 'По центру' },
+    { id: 'right', label: 'По правому краю', title: 'По правому краю', aria: 'По правому краю' },
+  ]
+  const ALIGN_PATH: Record<Align, string> = {
+    left: 'M4 6h16M4 10h10M4 14h16M4 18h10',
+    center: 'M4 6h16M7 10h10M4 14h16M7 18h10',
+    right: 'M4 6h16M10 10h10M4 14h16M10 18h10',
+  }
+  // Ж и К: нет начертания у шрифта — пункт серый (aria-disabled, подсказка остаётся).
+  const STYLES = $derived<SegItem<'b' | 'i'>[]>([
+    { id: 'b', label: 'Ж', aria: 'Жирный', title: sup.bold ? 'Жирный' : 'У этого шрифта нет жирного начертания', off: !sup.bold },
+    { id: 'i', label: 'К', aria: 'Курсив', title: sup.italic ? 'Курсив' : 'У этого шрифта нет курсива', off: !sup.italic },
+  ])
+  const styleOn = $derived<('b' | 'i')[]>([...(st?.bold ? ['b' as const] : []), ...(st?.italic ? ['i' as const] : [])])
+  const toggleStyle = (k: 'b' | 'i') => edit.setStyle(k === 'b' ? { bold: !st?.bold } : { italic: !st?.italic })
 </script>
+
+{#snippet alignMark(it: SegItem<Align>)}
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+    ><path d={ALIGN_PATH[it.id]} /></svg
+  >
+{/snippet}
+{#snippet styleMark(it: SegItem<'b' | 'i'>)}<span class={it.id}>{it.label}</span>{/snippet}
 
 {#if st}
   {#if head}<div class="head">{cap ? 'Подпись' : 'Текст'}</div>{/if}
@@ -82,45 +103,18 @@
   </div>
 
   <div class="row">
-    <div class="seg">
-      {#each ALIGNS as a (a.v)}
-        <button
-          class="sq"
-          class:on={st.align === a.v}
-          title={a.title}
-          aria-label={a.title}
-          aria-pressed={st.align === a.v}
-          onmousedown={keepFocus}
-          onclick={() => edit.setStyle({ align: a.v })}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-            ><path d={a.d} /></svg
-          >
-        </button>
-      {/each}
-    </div>
-    <div class="seg">
-      <button
-        class="sq b"
-        class:on={st.bold}
-        disabled={!sup.bold}
-        title={sup.bold ? 'Жирный' : 'У этого шрифта нет жирного начертания'}
-        aria-label="Жирный"
-        aria-pressed={!!st.bold}
-        onmousedown={keepFocus}
-        onclick={() => edit.setStyle({ bold: !st.bold })}>Ж</button
-      >
-      <button
-        class="sq i"
-        class:on={st.italic}
-        disabled={!sup.italic}
-        title={sup.italic ? 'Курсив' : 'У этого шрифта нет курсива'}
-        aria-label="Курсив"
-        aria-pressed={!!st.italic}
-        onmousedown={keepFocus}
-        onclick={() => edit.setStyle({ italic: !st.italic })}>К</button
-      >
-    </div>
+    <Seg
+      look="card"
+      grow
+      big
+      keepFocus
+      label="Выравнивание"
+      items={ALIGNS}
+      value={st.align}
+      onpick={(v) => edit.setStyle({ align: v })}
+      item={alignMark}
+    />
+    <Seg look="card" grow big keepFocus label="Начертание" items={STYLES} values={styleOn} onpick={toggleStyle} item={styleMark} />
   </div>
 
   {#if blk}
@@ -199,10 +193,7 @@
     text-align: right;
     font-size: 12px;
   }
-  .seg {
-    display: flex;
-    gap: 1px;
-  }
+  /* Кнопки «−» и «+» у кегля. */
   .sq {
     flex: none;
     width: 26px;
@@ -214,13 +205,6 @@
     color: #cfcfd4;
     border-radius: 4px;
     font-size: 14px;
-  }
-  .sq.on {
-    background: var(--accent);
-    color: #1e1e1e;
-  }
-  .sq.on:hover:not(:disabled) {
-    background: #ffe53a;
   }
   .b {
     font-weight: 700;

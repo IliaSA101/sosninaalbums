@@ -15,6 +15,8 @@ import (
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentask"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -75,14 +77,16 @@ func (a *App) askOpenAlbum(req agents.AskReq) (rec *askRec, res agents.AskRes, e
 		return nil, res, agents.ErrExporting // как у create_album: «идёт выгрузка» (0.35-152-25)
 	}
 	cur := a.editor()
-	who := clientQuoted(req.Client)
-	doc := docLine(a.askAlbumName(cur), a.askDocOf(cur))
-	body := askBody{
+	who := agentasktext.ClientQuoted(req.Client)
+	doc := agentasktext.DocLine(a.askAlbumName(cur), a.askDocOf(cur))
+	body := agentasktext.Body{
 		Title: "Открыть альбом по просьбе агента?",
-		Lines: []string{who + " просит открыть сохранённый альбом. Файл выберете вы.", doc, askWho},
+		Lines: []string{who + " просит открыть сохранённый альбом. Файл выберете вы.", doc, agentasktext.Who},
 		OK:    askOKOpenPick,
 	}
-	plan := folderPlan{why: openCallWhy(req, a.askMode(agents.AskOpen))}
+	mode := a.askMode(agents.AskOpen)
+	plan := folderPlan{why: openCallWhy(req, mode)}
+	note := ""
 	if req.Key != "" {
 		path, ok := a.recentPath(req.Key)
 		if !ok {
@@ -92,15 +96,32 @@ func (a *App) askOpenAlbum(req agents.AskReq) (rec *askRec, res agents.AskRes, e
 			return nil, res, openCheckErr(err)
 		}
 		plan.path = path
+		if mode == prefs.PermAllow && plan.why == "" { // 160: «Всегда» и ключ — тихо, если проверки пройдены
+			op := a.openPlan(req, cur, path)
+			plan.why, note = op.why, op.note
+			if op.why == "" {
+				qres, why, qerr := a.openQuiet(req, op)
+				if why == "" {
+					return nil, qres, qerr
+				}
+				if plan.why = why; why == quietAsk {
+					plan.why = ""
+				}
+			}
+		}
 		title := "Открыть альбом"
 		if name := openName(path); name != "" {
 			title += " «" + name + "»"
 		}
 		lines := []string{who + " просит открыть альбом:"}
-		if h := strings.TrimSpace(req.Hint); h != "" && !paths.BadRunes(h) && utf8.RuneCountInString(h) <= askNameMax {
+		if h := strings.TrimSpace(req.Hint); h != "" && !paths.BadRunes(h) && utf8.RuneCountInString(h) <= agentasktext.NameMax {
 			lines = append(lines, "Агент назвал: «"+h+"»") // человек сверяет, того ли нашла программа
 		}
-		body = askBody{Title: title + "?", Lines: append(lines, doc, askWho), OK: askOKOpen}
+		lines = append(lines, doc, agentasktext.Who)
+		if note != "" && plan.why == whyDisk {
+			lines = append(lines, note) // «Место … — на диске …», как у папки
+		}
+		body = agentasktext.Body{Title: title + "?", Lines: lines, OK: askOKOpen}
 	}
 	return a.askPost(req, cur, plan, body)
 }
@@ -119,6 +140,16 @@ func openCallWhy(req agents.AskReq, mode string) string {
 	return ""
 }
 
+// openAskTool — Tool вопроса открытия (ссылка «Не спрашивать»): только при «Спрашивать», с ключом и без name_hint —
+// «Всегда» сделает такой вопрос тихим. Выбор файла (нет ключа), name_hint и режим «Всегда» (вопрос уже не тихий
+// по причине Why) ссылки не имеют: она ничего бы не изменила.
+func openAskTool(req agents.AskReq, mode string) string {
+	if mode != prefs.PermAllow && req.Key != "" && req.Hint == "" {
+		return toolOpenAlbum
+	}
+	return ""
+}
+
 // openName — название альбома по файлу для вопроса и тоста; с плохими знаками пусто (чужой текст не должен
 // подменить заголовок).
 func openName(path string) string {
@@ -126,7 +157,7 @@ func openName(path string) string {
 	if name == "" || name == "." || paths.BadRunes(name) {
 		return ""
 	}
-	return shortName(name)
+	return agentasktext.ShortName(name)
 }
 
 // AgentAnswerOpen — «Открыть» / «Выбрать файл…» в вопросе «Открыть альбом»: показанный альбом
@@ -138,7 +169,7 @@ func (a *App) AgentAnswerOpen(id string, other bool) (st State, err error) {
 	if err != nil || rec == nil {
 		return a.cancelledState(), err
 	}
-	defer close(rec.idle)
+	defer a.askQ().Release(rec)
 	path, ok := a.openPick(rec, other)
 	if !ok {
 		return a.cancelledState(), nil
@@ -149,22 +180,22 @@ func (a *App) AgentAnswerOpen(id string, other bool) (st State, err error) {
 // openPick — какой файл открывать. Показанный альбом проверяется заново (его могли убрать из последних);
 // иначе окно ОС «Открыть» в папке альбомов. Отмена окна — «человек остановил», без счёта отказов.
 func (a *App) openPick(rec *askRec, other bool) (path string, ok bool) {
-	if rec.path != "" && !other {
-		if !a.askBegin(rec) {
+	if rec.Payload.path != "" && !other {
+		if !a.askQ().Begin(rec) {
 			return "", false
 		}
-		if err := a.recentCheck(rec.path); err != nil {
+		if err := a.recentCheck(rec.Payload.path); err != nil {
 			a.askFail(rec, openCheckErr(err))
 			return "", false
 		}
-		return rec.path, true
+		return rec.Payload.path, true
 	}
 	def := a.dialogDir(prefs.DirProject)
-	if other && rec.path != "" {
-		def = filepath.Dir(rec.path)
+	if other && rec.Payload.path != "" {
+		def = filepath.Dir(rec.Payload.path)
 	}
 	path, err := openFileDialog(a.ctx, wr.OpenDialogOptions{
-		Title:            "Открыть альбом — просит " + clientName(rec.req.Client),
+		Title:            "Открыть альбом — просит " + agentasktext.ClientName(rec.Payload.req.Client),
 		DefaultDirectory: def,
 		Filters:          []wr.FileFilter{{DisplayName: "Альбом (*" + projectExt + ")", Pattern: "*" + projectExt}},
 	})
@@ -173,10 +204,10 @@ func (a *App) openPick(rec *askRec, other bool) (path string, ok bool) {
 	}
 	if err != nil || path == "" {
 		why := agents.WhyStopped
-		a.askFinish(rec, askOutcome{res: agents.AskRes{Why: why}}, why)
+		a.askFinish(rec, agentask.Outcome{Res: agents.AskRes{Why: why}}, why)
 		return "", false
 	}
-	if !a.askBegin(rec) {
+	if !a.askQ().Begin(rec) {
 		return "", false
 	}
 	return path, true
@@ -186,8 +217,8 @@ func (a *App) openPick(rec *askRec, other bool) (path string, ok bool) {
 // программы — окно «Альбом из новой версии»; агенту в обоих случаях отказ без пути. Прежний альбом
 // закрепляется (pinLeaving), «Открыть прежний» — в тосте.
 func (a *App) openApply(rec *askRec, path string) (State, error) {
-	if !a.askAllowed(rec.kind) { // разрешение сняли, пока вопрос висел
-		a.askFinish(rec, askOutcome{res: agents.AskRes{Why: agents.WhyOff}}, agents.WhyOff)
+	if !a.askAllowed(rec.Kind) { // разрешение сняли, пока вопрос висел
+		a.askFinish(rec, agentask.Outcome{Res: agents.AskRes{Why: agents.WhyOff}}, agents.WhyOff)
 		return a.cancelledState(), nil
 	}
 	if a.openBusy() {
@@ -195,7 +226,7 @@ func (a *App) openApply(rec *askRec, path string) (State, error) {
 		return a.cancelledState(), nil
 	}
 	cur := a.editor()
-	if cur != rec.ed { // человек открыл другой альбом, пока шёл вопрос: текст о судьбе прежнего устарел
+	if cur != rec.Payload.ed { // человек открыл другой альбом, пока шёл вопрос: текст о судьбе прежнего устарел
 		a.askFail(rec, agents.ErrAlbumChanged)
 		return a.cancelledState(), nil
 	}
@@ -222,12 +253,12 @@ func (a *App) openApply(rec *askRec, path string) (State, error) {
 	a.setPrev(prev)
 	ed := a.editor()
 	res := agents.AskRes{Why: agents.WhyAnswered, Album: agents.AlbumRef{Key: a.askKey(ed), Rev: ed.View().Rev}}
-	a.askFinish(rec, askOutcome{res: res}, agents.WhyAnswered)
+	a.askFinish(rec, agentask.Outcome{Res: res}, agents.WhyAnswered)
 	text := "Открыт альбом"
 	if name := openName(path); name != "" {
 		text += " «" + name + "»"
 	}
 	// Rev -1: «Вернуть» не предлагается, открытие не отменяется Ctrl+Z; вернуть прежний — «Открыть прежний».
-	a.agentEdited(AgentEdited{Client: agentToastClient(rec.req.Client), Text: text, Rev: -1, Prev: prev != "", Quiet: true})
+	a.agentEdited(AgentEdited{Client: agentToastClient(rec.Payload.req.Client), Text: text, Rev: -1, Prev: prev != "", Quiet: true})
 	return st, nil
 }

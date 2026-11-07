@@ -235,7 +235,7 @@ func (s *Store) load() {
 			continue
 		}
 		seen[e.Kind+"\x00"+e.Key] = true
-		if !isTheme(e.Theme) {
+		if !ownTheme(e.Theme) {
 			e.Theme = ThemeMine
 		}
 		if e.Name = cleanName(e.Name); e.Name == "" {

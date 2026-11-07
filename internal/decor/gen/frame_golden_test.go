@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"testing"
@@ -99,9 +98,7 @@ func rotMatrix(x, y, k, deg float64) f64.Aff3 {
 // тоже провал (выпущенный вид не удаляют).
 func TestFrameGolden(t *testing.T) {
 	update := *updateGolden || os.Getenv("SA_GOLDEN_UPDATE") == "1"
-	if runtime.GOARCH != "amd64" && os.Getenv("SA_GOLDEN_ANYARCH") != "1" && !update {
-		t.Skip("эталон снят на amd64")
-	}
+	requireSIMDGolden(t, update)
 	got := frameGolden(t, os.Getenv("SA_GEN_DUMP"))
 	if update {
 		data, _ := json.MarshalIndent(got, "", "  ")

@@ -124,6 +124,13 @@ func (e *Editor) MoveSpread(id string, to int) model.View {
 	return e.change(func(p *model.Project) { spreads.MoveSpread(p, id, to) })
 }
 
+// SizeBasis — настройки альбома и число разворотов для оценки объёма выгрузки (0.37): только чтение под
+// замком, без копии проекта (окно экспорта спрашивает на каждое изменение выбора).
+func (e *Editor) SizeBasis() (s model.Settings, spreads int) {
+	e.read(func(p *model.Project) { s, spreads = p.Settings, len(p.Spreads) })
+	return s, spreads
+}
+
 // SetSettings: смена формата страницы сдвигает тексты пропорционально (design.Rescale в Editor.edit);
 // обложка по шаблону Фотосферы переходит на шаблон нового формата тем же шагом (047, cover.FollowFormat).
 // Договор: нет — размеры и цвет зажимает операция.

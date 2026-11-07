@@ -16,6 +16,12 @@ import (
 // рамочка-картинка без файла убираются: render на пропавшем пути бросает весь холст, а пипетка
 // не должна падать из-за одного файла.
 func (p *Picker) pickPreviews(ctx context.Context, refs map[string]model.PhotoRef, es *render.Spread) {
+	p.scenePreviews(ctx, refs, es, false)
+}
+
+// scenePreviews — pickPreviews; anySize: у фото в облаке годится копия другого размера. Нужно кадру, который не
+// кэшируется и не запоминается по ключу (Sheet — лист для агента): пипетка берёт строго превью.
+func (p *Picker) scenePreviews(ctx context.Context, refs map[string]model.PhotoRef, es *render.Spread, anySize bool) {
 	byPath := make(map[string]string, len(refs)) // путь оригинала → ID фото
 	for id, r := range refs {
 		if old, ok := byPath[r.Path]; !ok || id < old {
@@ -30,9 +36,7 @@ func (p *Picker) pickPreviews(ctx context.Context, refs map[string]model.PhotoRe
 		}
 		file := ""
 		if id, ok := byPath[path]; ok && cache != nil {
-			if ph, ok, gone := p.h.Photo(id); ok && !gone {
-				file, _ = cache.FileCtx(ctx, ph, true) // ошибка — файл пропал или не читается
-			}
+			file, _ = p.copyOf(ctx, cache, id, true, anySize) // ошибка — файл пропал, не читается или только в облаке
 		}
 		if file == "" {
 			p.h.Rare(p.pick.skipped.Add(1), "пипетка: картинка не открылась, в кадре её нет")

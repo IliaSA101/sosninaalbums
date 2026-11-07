@@ -13,9 +13,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -181,7 +181,7 @@ func TestApplySpreadTplMissing(t *testing.T) {
 	s := a.decorLib.Load()
 	mk := func(lib string) string {
 		t.Helper()
-		tp := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{Color: "#eeeeee", Lib: lib}},
+		tp := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{Color: "#eeeeee", Lib: lib}},
 			Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}}}
 		it, err := s.SaveSpreadTpl("mine", "С фоном", tp)
 		if err != nil {
@@ -273,41 +273,6 @@ func TestMediaTpl(t *testing.T) {
 	}
 }
 
-// Плитка 256 px рисуется быстро (design §3: гипотеза ≤ 30 мс; кэш в обход — drawTpl).
-func TestMediaTplFast(t *testing.T) {
-	s := decor.Open(testkit.TempDir(t))
-	var worst time.Duration
-	for _, id := range []string{"sa:tpl-ivory-hero", "sa:tpl-stars", "sa:tpl-watercolor"} {
-		tp, err := s.SpreadTpl(id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		d := testkit.Fastest(3, func() {
-			if _, err := drawTpl(tp, tplQuery{px: 256, r: 1.5}, nil); err != nil {
-				t.Fatal(err)
-			}
-		})
-		worst = max(worst, d)
-	}
-	testkit.CostTest(t)
-	if limit := testkit.Limit(30 * time.Millisecond); worst > limit {
-		t.Errorf("плитка %v, предел %v", worst, limit)
-	}
-}
-
-// Разбор запроса плитки: принятое — в пределах; лишнее и повторы — отказ.
-func FuzzMediaTplQuery(f *testing.F) {
-	for _, s := range []string{"v=1&px=256&r=2", "px=64&r=0.2", "px=1024&r=5", "px=256&r=1e400", "px=256&r=-0", "px=%zz", "v=99999&px=256&r=1"} {
-		f.Add(s)
-	}
-	f.Fuzz(func(t *testing.T, raw string) {
-		q, ok := parseTplQuery(raw)
-		if ok && (q.px < tplMinPx || q.px > tplMaxPx || !(q.r >= tplMinR && q.r <= tplMaxR)) {
-			t.Fatalf("%q: %+v", raw, q)
-		}
-	})
-}
-
 // Стык 067 G2 и G3 (порядок 133): шаблон разворота из набора — в каталоге выше встроенных и
 // своих, с плиткой /media/tpl, страницами и местами; ставится одним шагом отмены; встроенных в окне
 // «Наборы» — 12; удаление набора убирает плитку и возможность поставить.
@@ -316,8 +281,8 @@ func TestPackSpreadTpl(t *testing.T) {
 	if _, err := a.AddPackPath(d1Zip(t)); err != nil {
 		t.Fatal(err)
 	}
-	own, err := a.decorLib.Load().SaveSpreadTpl("mine", "Свой", model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1,
-		Page: []model.TplBg{{Color: "#eeeeee"}}, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}}})
+	own, err := a.decorLib.Load().SaveSpreadTpl("mine", "Свой", looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1,
+		Page: []looktpl.TplBg{{Color: "#eeeeee"}}, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,20 +336,5 @@ func TestPackSpreadTpl(t *testing.T) {
 	rev = a.editor().View().Rev
 	if r, err := a.ApplySpreadTpl("s1", "spread", pk.ID); err == nil || r.View.Rev != rev {
 		t.Errorf("шаблон удалённого набора встал: %v", err)
-	}
-}
-
-// TestTplKeysBorders — ключи шаблона для App.tplLibs: фоны, стикеры и рамочки-картинки
-// (131 G1); встроенная рамочка ключа не даёт.
-func TestTplKeysBorders(t *testing.T) {
-	tp := model.SpreadTpl{Page: []model.TplBg{{Lib: "my:00000000000000b1"}}, Whole: &model.TplBg{Lib: "my:00000000000000b2"},
-		Stickers: []model.TplItem{{Lib: "my:00000000000000c1"}, {}},
-		Borders:  []model.TplBorder{{I: 0, Kind: "line"}, {I: 1, Lib: "my:00000000000000d1"}}}
-	want := []string{"my:00000000000000b2", "my:00000000000000b1", "my:00000000000000c1", "my:00000000000000d1"}
-	if got := tplKeys(tp); !slices.Equal(got, want) {
-		t.Errorf("ключи %v, ждали %v", got, want)
-	}
-	if got := tplKeys(model.SpreadTpl{}); len(got) != 0 {
-		t.Errorf("пустой шаблон: %v", got)
 	}
 }

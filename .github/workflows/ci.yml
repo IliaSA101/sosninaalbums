@@ -18,7 +18,8 @@ concurrency:
 
 jobs:
   check:
-    timeout-minutes: 30
+    # 40 мин (0.37, 04.11): иначе срок задачи срезал бы запас -timeout 20m у go test (до него ~4 мин, после ~6)
+    timeout-minutes: 40
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,6 +57,8 @@ jobs:
           args: . ./internal/...
 
       # SA_TEST_SLOW: пороги времени (testkit.Limit) с запасом на общий раннер.
+      # -timeout 20m (0.37, да владельца 04.11): internal/app на Windows-раннере шёл 50-77 % от 10 мин по умолчанию,
+      # просадка раннера давала ложный провал; рост пакета ловит сверка ниже (--timeout 1200: пакет > 50 % - warning).
       # -cover -json кладёт прогон в go-test.json: по нему сверка с эталоном Windows (раздел go в
       # testdata/test-baseline.json) ниже, артефакт - материал для --write. shell: bash - pwsh не умеет такой redirect
       # с кодом возврата go. go-test.json в консоль не идёт, поэтому имена упавших пакетов и тестов печатаем здесь же.
@@ -68,7 +71,7 @@ jobs:
           SA_REG_WRITE: "1"
         run: |
           status=0
-          go test -cover -json . ./internal/... > "$RUNNER_TEMP/go-test.json" || status=$?
+          go test -timeout 20m -cover -json . ./internal/... > "$RUNNER_TEMP/go-test.json" || status=$?
           if [ "$status" -ne 0 ]; then
             echo "go test завершился с кодом $status; упавшие:"
             grep -E '"Action":"fail"' "$RUNNER_TEMP/go-test.json" || true
@@ -94,7 +97,7 @@ jobs:
           SA_TEST_SLOW: "2.5"
         # 155 (да владельца 30.10.2026): --skips — тест, тихо переставший выполняться на Windows, = провал
         # (список go-skips пишет Т5 по json CI; пока его нет — заметка). Linux — без сторожа: json там только при провале.
-        run: node scripts/test-baseline.mjs --check --go --skips --go-json "$RUNNER_TEMP/go-test.json"
+        run: node scripts/test-baseline.mjs --check --go --skips --go-json "$RUNNER_TEMP/go-test.json" --timeout 1200
 
       # 146 (да владельца 2026-10-29): модуль контракта api/albums — свой go.mod, корневые шаги его не видят
       - name: api/albums (gofmt, vet, test)
@@ -174,6 +177,13 @@ jobs:
         # PACKPREP_CHROME: настоящий тест вырезов SVG (devtools/svgcut) в Chrome раннера, без него — пропуск (ревью 129, «да» владельца 25.10)
         run: PACKPREP_CHROME="$(command -v google-chrome)" go test -cover -json . ./internal/... > "$RUNNER_TEMP/go-test.json"
 
+      # 162, класс B: x/image/vector без ассемблера (путь arm64 и Mac) даёт рисунок с отличием на 1 уровень; тег noasm
+      # проверяет на Linux допуск TestGenStrips и пропуск пиксельных эталонов decor/gen. В выпуск этот тег не идёт
+      - name: go test -tags noasm (чистый Go в x/image/vector)
+        env:
+          SA_TEST_SLOW: "2.5"
+        run: go test -short -tags noasm ./internal/decor/... ./internal/render/... ./internal/text/... ./internal/export/...
+
       # 148: настоящая чужая учётная запись (sudo -n -u nobody без пароля на раннере). Пропуск в CI - провал, и без
       # `--- PASS` обоих тестов тоже (при "no tests to run" go test выходит с 0): разбор - scripts/peer-foreign.mjs
       - name: peercred, чужая учётная запись (nobody)
@@ -184,7 +194,7 @@ jobs:
       # и после провала go test: test-baseline печатает упавшие тесты с хвостом вывода (24.10 - провал без единой строки)
       - name: сверка с эталоном go-linux
         if: ${{ !cancelled() }}
-        run: node scripts/test-baseline.mjs --check --go --go-json "$RUNNER_TEMP/go-test.json"
+        run: node scripts/test-baseline.mjs --check --go --go-json "$RUNNER_TEMP/go-test.json" --timeout 600
 
       # Плавающий тест: json остаётся для разбора (gh run download <id> -n go-test-linux)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -200,7 +210,12 @@ jobs:
   # dist/gitkeep из репозитория, cgo на macOS включён по умолчанию. Эталона покрытия для macOS нет - только провал/успех.
   go-mac:
     timeout-minutes: 30
-    runs-on: macos-latest
+    # macos-15, не latest: образ в блокирующем задании не должен смениться без нас (162, Д3)
+    runs-on: macos-15
+    # 162, Д3: arm64 вправе сливать x*y±z (FMA), эталоны сняты без слияния; страж testkit.RequireNoFMA требует ключ.
+    # Строка одна с release.yml (wails build, mac-check) - scripts/release-check.mjs, checkFmaFlags
+    env:
+      GOFLAGS: -gcflags=all=-d=fmahash=qn
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -228,15 +243,46 @@ jobs:
           SA_PEER_FOREIGN: sudo
         run: node scripts/peer-foreign.mjs TestForeign TestForeignClient TestForeignServer
 
-      # -short: быстрый уровень (testkit.Lite); SA_TEST_SLOW - пороги времени с запасом на общий раннер.
-      # Пока не блокирует (continue-on-error): на arm64 macOS расходятся эталоны пикселей и float (replay, golden export,
-      # paint, plan, grid) - список и план в decisions.md 0.31-143-79; убрать флаг, когда появится эталон macOS.
-      - name: go test -short
+      # 162, Д3: эталоны и среда, ради которых введён ключ FMA, - каждый обязан быть PASS, а не SKIP: -short молчит о
+      # пропуске, и забытый ключ или пропуск по архитектуре выглядели бы зелёными. Шаг обязательный (снято после трёх чистых прогонов, 162 Т5)
+      - name: эталоны Mac - PASS, не SKIP (FMA, класс B, среда)
+        id: macgold
         if: ${{ !cancelled() }}
-        continue-on-error: true
+        env:
+          SA_TEST_SLOW: "2.5"
+        run: |
+          tests="TestRequireNoFMA TestGoldenExport TestGridChoicesSpreadSame TestPlanDPBound TestGenStrips TestGoldenLayouts TestGoldenLayoutsWide TestGoldenShapes TestGoldenScatter TestGoldenPlan051 TestGoldenPlan051Wide TestGoldenVariety TestGoldenForms TestFolderHintSymlink TestAgentExportHintDisk TestWriteDirNewNameValid TestUserTempDarwin TestEditorReplay"
+          set -o pipefail
+          go test -short -count=1 -v -run "^($(echo "$tests" | tr ' ' '|'))\$" ./internal/testkit ./internal/export ./internal/album/grid ./internal/layout ./internal/layout/plan ./internal/layout/variety ./internal/layout/forms ./internal/decor/gen/paint ./internal/app/agentplaces ./internal/album 2>&1 | tee "$RUNNER_TEMP/mac-golden.log"
+          bad=0
+          for t in $tests; do
+            grep -q -- "--- PASS: $t " "$RUNNER_TEMP/mac-golden.log" || { echo "::error::$t не PASS (пропуск или провал)"; bad=1; }
+          done
+          exit $bad
+
+      # -short: быстрый уровень (testkit.Lite); SA_TEST_SLOW - пороги времени с запасом на общий раннер.
+      # Шаг обязательный (снято после трёх чистых прогонов, 162 Т5): ключ FMA, класс B эталонов, среда теста и эталон
+      # реплея (162, Д3, Т3-Т4) сняли известные провалы.
+      - name: go test -short
+        id: macshort
+        if: ${{ !cancelled() }}
         env:
           SA_TEST_SLOW: "2.5"
         run: go test -short . ./internal/...
+
+      # Срабатывает при провале обязательных macgold/macshort (по outcome), чтобы выложить новые эталоны: эталон macOS, перезаписанный -update на раннере, выгружается
+      # артефактом `replay-darwin` (`gh run download -n replay-darwin`, сверить и закоммитить в dev; RELEASE §6, п. 1а).
+      - name: go test Replay -update
+        if: ${{ !cancelled() && (steps.macgold.outcome == 'failure' || steps.macshort.outcome == 'failure') }}
+        run: go test ./internal/album -run '^TestEditorReplay$' -count=1 -update
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && (steps.macgold.outcome == 'failure' || steps.macshort.outcome == 'failure') }}
+        with:
+          name: replay-darwin
+          path: internal/album/testdata/replay-darwin.json.gz
+          retention-days: 3
+          if-no-files-found: error
 
   # Детектор гонок (-race, cgo/gcc есть на раннере): только push в winqa/** (тот же коммит, что уйдёт в main), не main и не PR.
   # Блокирует с 0.35 (В5 28.10: снять после 3 зелёных подряд - было 8; разбор процесса 31.10, С2).
@@ -407,3 +453,82 @@ jobs:
 
       - name: тесты lib.sh
         run: bash scripts/mac/test_lib.sh
+
+  # e2e-регресс (166, S4; да владельца 04.11): найденные сценарии в Chromium (Playwright) против настоящего Go-стенда
+  # (scripts/e2e/regress.py --up: git archive HEAD -> vite build + go build -tags dev,webkit2_41 -> xvfb-run). Идёт параллельно
+  # остальным задачам, как go-linux. Порт 34117 - из диапазона 34116-34199, 34115 охраняет скрипт.
+  e2e-regress:
+    # Только push (main, winqa/**): в pull_request не идёт, как go-race
+    if: ${{ github.event_name == 'push' }}
+    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Версия Go - как в go-linux; кэш модулей и сборки по go.sum из setup-go ускоряет go build стенда
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.10"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.11.1"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      # GTK и WebKitGTK - cgo-зависимости dev-сборки Wails (тег webkit2_41); xvfb-run (xvfb + xauth) - окно стенда без дисплея
+      - name: системные пакеты (GTK, WebKitGTK, xvfb)
+        run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y libgtk-3-dev libwebkit2gtk-4.1-dev xvfb xauth
+
+      - name: зависимости e2e (по хешам)
+        run: python -m pip install --require-hashes -r scripts/e2e/requirements.txt
+
+      # Chromium нужной версии Playwright и его системные библиотеки
+      - name: Chromium для Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: npm ci
+        working-directory: frontend
+        run: npm ci
+
+      # SA_TEST_SLOW: ожидания и пороги времени с запасом на общий раннер; автоповторов у регресса нет
+      - name: e2e-регресс
+        env:
+          SA_TEST_SLOW: "2.5"
+        run: python -I scripts/e2e/regress.py --up --port 34117
+
+      # Итог в сводку прогона - и при зелёном, и при провале
+      - name: отчёт в сводку
+        if: ${{ !cancelled() }}
+        run: |
+          for f in .gotmp/e2e/regress/*/report.md; do
+            [ -f "$f" ] && cat "$f" >> "$GITHUB_STEP_SUMMARY"
+          done
+          true
+
+      # Папка .gotmp скрытая: include-hidden-files обязателен. Берём только отчёт, снимки, DOM, консоль и логи
+      # (bin, src, dist, data, home - сотни МБ и не нужны); данные синтетические
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: e2e-regress
+          path: |
+            .gotmp/e2e/regress/*/report.md
+            .gotmp/e2e/regress/*/report.json
+            .gotmp/e2e/regress/*/stand.log
+            .gotmp/e2e/regress/*/stand-tail.txt
+            .gotmp/e2e/regress/*/console.txt
+            .gotmp/e2e/regress/*/vite.log
+            .gotmp/e2e/regress/*/gobuild.log
+            .gotmp/e2e/regress/*/shots
+            .gotmp/e2e/regress/*/dom
+            .gotmp/e2e/regress/*/home/config/*/log.txt
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: warn

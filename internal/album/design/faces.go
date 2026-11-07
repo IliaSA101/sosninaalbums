@@ -43,6 +43,8 @@ func NormFrom(p *model.Project, pl *model.Place, h model.FaceHit) (geom.FaceNorm
 	switch {
 	case pl.Fit == model.FitContain:
 		return geom.FaceNorm{}, model.RefContain
+	case h.Missing && h.Cloud:
+		return geom.FaceNorm{}, model.RefCloud
 	case h.Missing:
 		return geom.FaceNorm{}, model.RefNoFile
 	}

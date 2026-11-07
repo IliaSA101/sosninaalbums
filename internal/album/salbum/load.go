@@ -95,6 +95,12 @@ func ReadLimited(path string) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close() //nolint:errcheck // чтение: ошибка закрытия ничего не теряет
+	return ReadLimitedFrom(f)
+}
+
+// ReadLimitedFrom читает открытый файл проекта (160: тихое открытие читает файл один раз из уже проверенного
+// дескриптора) не больше model.MaxFileSize; размер из Stat и предел на чтении — оба.
+func ReadLimitedFrom(f *os.File) ([]byte, error) {
 	if st, err := f.Stat(); err == nil && st.Size() > model.MaxFileSize {
 		return nil, fmt.Errorf("файл проекта слишком большой (больше %d МБ)", model.MaxFileSize>>20)
 	}
@@ -119,13 +125,25 @@ var decodeImpl = decodeFile
 
 // Decode разбирает файл под recover: паника на странном входе — ошибка «файл повреждён»,
 // а не падение при каждом запуске (черновик читается на старте, и он же не уходит сам).
-func Decode(data []byte, base string) (p *model.Project, err error) {
+func Decode(data []byte, base string) (*model.Project, error) {
+	return DecodeDisk(data, base, osDisk{})
+}
+
+// DecodeDry — разбор без обращений к диску (160): файлов и ссылок нет, библиотека пуста; пути те же, что
+// выберет полный разбор, пока основной путь на месте, — запасной остаётся в Alt. Размеры не перечитываются.
+// Годится, чтобы узнать, какие пути в файле, до проверки мест; EachPath(p) — перечень строк.
+func DecodeDry(data []byte, base string) (*model.Project, error) {
+	return DecodeDisk(data, base, noDisk{})
+}
+
+// DecodeDisk — Decode с подменяемым диском: OSDisk, Bounded (только проверенные пути) или сухой.
+func DecodeDisk(data []byte, base string, d Disk) (p *model.Project, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			p, err = nil, fmt.Errorf("файл проекта повреждён: %v", r)
 		}
 	}()
-	return decodeImpl(data, base)
+	return decodeImpl(data, base, d)
 }
 
 // errTooMany — отказ открыть альбом из n разворотов (058 №18): файл 0.13 мог держать до 1000,
@@ -167,7 +185,7 @@ func fileHead(p *model.Project, f *FileProject) {
 // ID по путям, лимиты, миграция старой версии. base — папка файла.
 // Порядок шагов сетки (design 007 §2): nil и объединение мест с Photos — до
 // всего, что трогает места; починка мест — последней, по зажатой геометрии.
-func decodeFile(data []byte, base string) (*model.Project, error) {
+func decodeFile(data []byte, base string, d Disk) (*model.Project, error) {
 	if err := checkHead(data); err != nil {
 		return nil, err
 	}
@@ -188,11 +206,11 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 		}
 	}
 	v1 := p.From() < 2
-	if err := loadSources(p, &f, base, v1); err != nil {
+	if err := loadSources(d, p, &f, base, v1); err != nil {
 		return nil, err
 	}
-	fixCoverAndGuide(p, &f, base, v1)
-	if err := loadPhotos(p, f.Photos, base, v1); err != nil {
+	fixCoverAndGuide(d, p, &f, base, v1)
+	if err := loadPhotos(d, p, f.Photos, base, v1); err != nil {
 		return nil, err
 	}
 	dropNilPlaces(p) // до FixLook в loadAlbumWide: место null не держит шаг у листа, который иначе пуст
@@ -227,7 +245,7 @@ func decodeFile(data []byte, base string) (*model.Project, error) {
 	p.FitStickers()
 	p.LoadOrder()
 	bins := decodeBins(f.Bins)
-	p.SetLoaded(model.Side{Marks: decodeMarks(f.Marks, base, p.Folders, p.LooseFiles(), model.BinSet(bins)), Bins: bins})
+	p.SetLoaded(model.Side{Marks: decodeMarks(d, f.Marks, base, p.Folders, p.LooseFiles(), model.BinSet(bins)), Bins: bins})
 	return p, nil
 }
 
@@ -260,12 +278,12 @@ func checkHead(data []byte) error {
 
 // loadSources — папки и отдельные фото из файла. Источники не пересекаются (093-4): любая версия,
 // и файл, поправленный руками.
-func loadSources(p *model.Project, f *FileProject, base string, v1 bool) error {
-	if err := loadFolders(p, f.Folders, base, v1); err != nil {
+func loadSources(d Disk, p *model.Project, f *FileProject, base string, v1 bool) error {
+	if err := loadFolders(d, p, f.Folders, base, v1); err != nil {
 		return err
 	}
-	loadLoose(p, f.Loose, base, v1)
-	if merged, _ := p.FoldSources(paths.Linked); merged > 0 {
+	loadLoose(d, p, f.Loose, base, v1)
+	if merged, _ := p.FoldSources(d.linked); merged > 0 {
 		log.Printf("папки проекта: вложенных слито %d", merged)
 	}
 	return nil
@@ -275,7 +293,7 @@ func loadSources(p *model.Project, f *FileProject, base string, v1 bool) error {
 // недостающее, как ненайденный файл: путь остаётся, к файлу не обращаемся. Записи с теми же
 // путями и размерами (копии одного файла, 098) разбираются один раз: stat не множится на
 // сетевом томе.
-func loadPhotos(p *model.Project, list map[string]FilePhoto, base string, v1 bool) error {
+func loadPhotos(d Disk, p *model.Project, list map[string]FilePhoto, base string, v1 bool) error {
 	devs := 0
 	type fileKey struct {
 		path, abs string
@@ -289,7 +307,7 @@ func loadPhotos(p *model.Project, list map[string]FilePhoto, base string, v1 boo
 	seen := map[fileKey]resolved{}
 	for id, fp := range list {
 		if fp.Lib != "" { // своё из библиотеки: путь — от искателя (lib.go)
-			if ref, ok := resolveLib(fp); ok {
+			if ref, ok := resolveLib(d, fp); ok {
 				p.Photos[id] = ref
 			}
 			continue
@@ -297,7 +315,7 @@ func loadPhotos(p *model.Project, list map[string]FilePhoto, base string, v1 boo
 		key := fileKey{fp.Path, fp.Abs, fp.Size, fp.W, fp.H}
 		r, ok := seen[key]
 		if !ok {
-			r.ref, r.err = resolvePhoto(fp, base, v1)
+			r.ref, r.err = resolvePhoto(d, fp, base, v1)
 			seen[key] = r
 		}
 		ref, err := fp.PhotoRef, r.err
@@ -352,7 +370,7 @@ func capRawGrid(f *FileProject) {
 
 // loadFolders — папки из файла. Сверх MaxFolders хвост отбрасывается: своя программа больше не
 // пишет (AddFolder), а чужой файл с сотнями тысяч папок не держит открытие на stat каждой.
-func loadFolders(p *model.Project, list []FileFolder, base string, v1 bool) error {
+func loadFolders(d Disk, p *model.Project, list []FileFolder, base string, v1 bool) error {
 	var over int
 	if len(list) > 2*model.MaxFolders { // с повторами: хвост сырого списка не разбираем
 		over, list = len(list)-2*model.MaxFolders, list[:2*model.MaxFolders]
@@ -370,8 +388,8 @@ func loadFolders(p *model.Project, list []FileFolder, base string, v1 bool) erro
 		if err != nil {
 			return fmt.Errorf("папка в проекте: %w", err)
 		}
-		if alt != "" && !isDir(dir) {
-			if isDir(alt) {
+		if alt != "" && !isDirOn(d, dir) {
+			if isDirOn(d, alt) {
 				dir = alt
 			} else if !seen[dir] && len(p.Folders) < model.MaxFolders {
 				// Нигде нет: запасной путь едет дальше, иначе следующая запись его потеряет.

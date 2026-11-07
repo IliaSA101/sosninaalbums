@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // TestCheckTplLibsFrame — шаблон с рамочкой-картинкой (131 G1): ссылка на рамочку этого набора
@@ -14,16 +15,16 @@ func TestCheckTplLibsFrame(t *testing.T) {
 	s, _ := openTemp(t)
 	ring := pngBytes(t, ringImage(120, 160, 24, 32, 24, 32))
 	good := renderPNG(t, 44, 30)
-	tpl := func(b model.TplBorder) []byte {
-		return tplJSON(t, model.SpreadTpl{V: 1, Pages: 1, Page: []model.TplBg{{}}, Places: []model.Box{{X: .1, Y: .1, W: .5, H: .5}},
-			Borders: []model.TplBorder{b}})
+	tpl := func(b looktpl.TplBorder) []byte {
+		return tplJSON(t, looktpl.SpreadTpl{V: 1, Pages: 1, Page: []looktpl.TplBg{{}}, Places: []model.Box{{X: .1, Y: .1, W: .5, H: .5}},
+			Borders: []looktpl.TplBorder{b}})
 	}
 	m, src := testPack("rama-tpl", 1, pit{"frames/ring.png", ring}, pit{"bg/good.png", good},
-		pit{"spreads/ok.json", tpl(model.TplBorder{Lib: libKey(ring), Scale: 1.2})},
-		pit{"spreads/foreign.json", tpl(model.TplBorder{Lib: "my:0123456789abcdef"})},
-		pit{"spreads/wrongkind.json", tpl(model.TplBorder{Lib: libKey(good)})},
-		pit{"spreads/future.json", tpl(model.TplBorder{Kind: "zzz-future"})},
-		pit{"spreads/builtin.json", tpl(model.TplBorder{Kind: "line"})})
+		pit{"spreads/ok.json", tpl(looktpl.TplBorder{Lib: libKey(ring), Scale: 1.2})},
+		pit{"spreads/foreign.json", tpl(looktpl.TplBorder{Lib: "my:0123456789abcdef"})},
+		pit{"spreads/wrongkind.json", tpl(looktpl.TplBorder{Lib: libKey(good)})},
+		pit{"spreads/future.json", tpl(looktpl.TplBorder{Kind: "zzz-future"})},
+		pit{"spreads/builtin.json", tpl(looktpl.TplBorder{Kind: "line"})})
 	st, err := s.StagePack(m, src, OriginFile, "")
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +43,7 @@ func TestCheckTplLibsFrame(t *testing.T) {
 	if _, err := s.InstallPack(st, nil); err != nil {
 		t.Fatal(err)
 	}
-	ok := model.TplKey(mustTpl(t, tpl(model.TplBorder{Lib: libKey(ring), Scale: 1.2})))
+	ok := looktpl.TplKey(mustTpl(t, tpl(looktpl.TplBorder{Lib: libKey(ring), Scale: 1.2})))
 	if info := s.tplLookup(ok); !info.ok || !slices.Contains(info.libs, libRef{KindFrame, libKey(ring)}) {
 		t.Errorf("ссылка шаблона на рамочку не попала в libs (сборка мусора её не увидит): %+v", info.libs)
 	}

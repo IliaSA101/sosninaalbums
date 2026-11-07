@@ -23,12 +23,15 @@ const (
 	// ThemeBrand — фирменные стикеры программы (спека 116): тема только встроенных, свои и наборы
 	// в неё не кладутся (isTheme).
 	ThemeBrand = "brand"
+	// ThemeLegacy — «Прежние макеты» (0.36-164 п. 13, 0.37-164): прежние файлы макетов, оставшиеся
+	// в наборе v2 рядом с новыми; кладёт в неё только манифест набора (свои — ownTheme).
+	ThemeLegacy = "legacy"
 )
 
 var themeList = []struct{ id, name string }{
 	{ThemeRecent, "Недавние"}, {ThemeAll, "Все"}, {"basic", "Универсальные"}, {"wedding", "Свадьба"},
 	{"kids", "Дети"}, {"kindergarten", "Детский сад"}, {"school", "Школа"}, {"grad", "Выпускной"},
-	{"holiday", "Праздник"}, {ThemeBrand, "Фирменные"}, {ThemeMine, "Мои"},
+	{"holiday", "Праздник"}, {ThemeLegacy, "Прежние макеты"}, {ThemeBrand, "Фирменные"}, {ThemeMine, "Мои"},
 }
 
 // isTheme — тема, в которой может лежать элемент (не выборка).
@@ -38,6 +41,10 @@ func isTheme(id string) bool {
 	}
 	return slices.ContainsFunc(themeList, func(t struct{ id, name string }) bool { return t.id == id })
 }
+
+// ownTheme — тема, в которую можно положить своё (импорт, сохранение разворота и макета, реестр
+// своих): как isTheme, но без «Прежних макетов» — их кладёт только манифест набора (packTheme).
+func ownTheme(id string) bool { return id != ThemeLegacy && isTheme(id) }
 
 // MaxRecent — недавних в каталоге (решение №98).
 const MaxRecent = 12

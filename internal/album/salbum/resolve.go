@@ -7,7 +7,6 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
-	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/osx"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
@@ -71,13 +70,13 @@ func candidates(path, abs, base string, v1 bool) (primary, alt string, err error
 // resolvePhoto выбирает путь фото: основной, если он на месте и байты совпали
 // (или размер неизвестен); затем запасной; затем основной с другим размером
 // (размеры обновляются). Нигде нет — основной, запасной хранится в Alt.
-func resolvePhoto(fp FilePhoto, base string, v1 bool) (model.PhotoRef, error) {
-	ref, err := resolvePaths(fp, base, v1)
+func resolvePhoto(d Disk, fp FilePhoto, base string, v1 bool) (model.PhotoRef, error) {
+	ref, err := resolvePaths(d, fp, base, v1)
 	switch {
 	case err == nil:
-		fixDims(&ref, fp.Size <= 0)
+		fixDims(d, &ref, fp.Size <= 0)
 	case errors.Is(err, paths.ErrDevice):
-		fixDims(&ref, false) // без чтения файла: открыть путь — обратиться к устройству
+		fixDims(d, &ref, false) // без чтения файла: открыть путь — обратиться к устройству
 	}
 	return ref, err
 }
@@ -89,13 +88,13 @@ const maxAspect = 100
 // fixDims: размеры из .salbum — чужие данные. Без размера файла в записи (unverified), больше
 // MaxPixels или с нелепой пропорцией они перечитываются из заголовка файла;
 // если файла нет или он не читается — обнуляются (нулевые размеры раскладка терпит).
-func fixDims(ref *model.PhotoRef, unverified bool) {
+func fixDims(d Disk, ref *model.PhotoRef, unverified bool) {
 	w, h := int64(ref.W), int64(ref.H)
 	sane := w > 0 && h > 0 && w*h <= imgfile.MaxPixels && w <= maxAspect*h && h <= maxAspect*w
 	if sane && !unverified {
 		return
 	}
-	if rw, rh, ok := probeDims(ref.Path); ok {
+	if rw, rh, ok := probeDimsOn(d, ref.Path); ok {
 		ref.W, ref.H = rw, rh
 		return
 	}
@@ -104,7 +103,7 @@ func fixDims(ref *model.PhotoRef, unverified bool) {
 	}
 }
 
-func resolvePaths(fp FilePhoto, base string, v1 bool) (model.PhotoRef, error) {
+func resolvePaths(d Disk, fp FilePhoto, base string, v1 bool) (model.PhotoRef, error) {
 	ref := fp.PhotoRef
 	ref.Alt = "" // alt в файл не пишется; если он там есть, это не наше
 	ref.W, ref.H, ref.Size = max(ref.W, 0), max(ref.H, 0), max(ref.Size, 0)
@@ -117,20 +116,20 @@ func resolvePaths(fp FilePhoto, base string, v1 bool) (model.PhotoRef, error) {
 		return ref, err
 	}
 	ref.Path = primary
-	size, ok := fileSize(primary)
+	size, ok := fileSizeOn(d, primary)
 	if ok && (ref.Size == 0 || size == ref.Size) {
 		ref.Size = size
 		return ref, nil
 	}
 	if alt != "" {
-		if asize, aok := fileSize(alt); aok {
+		if asize, aok := fileSizeOn(d, alt); aok {
 			ref.Path = alt
-			refresh(&ref, asize)
+			refresh(d, &ref, asize)
 			return ref, nil
 		}
 	}
 	if ok {
-		refresh(&ref, size)
+		refresh(d, &ref, size)
 		return ref, nil
 	}
 	ref.Alt = alt
@@ -139,51 +138,26 @@ func resolvePaths(fp FilePhoto, base string, v1 bool) (model.PhotoRef, error) {
 
 // refresh: файл на месте, но другой длины — фото пересохранили; размеры в
 // пикселях читаются из заголовка заново.
-func refresh(ref *model.PhotoRef, size int64) {
+func refresh(d Disk, ref *model.PhotoRef, size int64) {
 	if ref.Size != 0 && ref.Size != size {
-		if w, h, ok := probeDims(ref.Path); ok {
+		if w, h, ok := probeDimsOn(d, ref.Path); ok {
 			ref.W, ref.H = w, h
 		}
 	}
 	ref.Size = size
 }
 
-// probeDims читает размеры из заголовка с учётом поворота EXIF: пересохранённое
-// фото могли и повернуть, а пропорции нужны раскладке точные.
-func probeDims(path string) (w, h int, ok bool) {
-	if path == "" || paths.CheckLocalPath(path) != nil || !reachable(path) {
-		return 0, 0, false
-	}
-	ph, err := library.ReadInfo(path)
-	if err != nil {
-		return 0, 0, false
-	}
-	return ph.W, ph.H, true
-}
+// probeDims — probeDimsOn на настоящем диске (RelinkLib и прочее вне разбора файла).
+func probeDims(path string) (w, h int, ok bool) { return probeDimsOn(osDisk{}, path) }
 
 // reachable — отвечает ли том пути (osx.Reachable); подменяется в тестах. Мёртвый сетевой том
 // для Load — то же, что «файла нет»: пути и Alt остаются, размеры не обнуляются, а окно не ждёт
 // таймаута SMB на каждом фото.
 var reachable = osx.Reachable
 
-// fileSize — размер обычного файла path; ссылка — только с локальной целью (library.StatLocal:
-// по ссылке на сетевую шару Load не ходит).
-func fileSize(path string) (int64, bool) {
-	if !reachable(path) {
-		return 0, false
-	}
-	st, err := library.StatLocal(path)
-	if err != nil || !st.Mode().IsRegular() {
-		return 0, false
-	}
-	return st.Size(), true
-}
+// fileSize — размер обычного файла path на настоящем диске (fileSizeOn): ссылка — только с
+// локальной целью, по ссылке на сетевую шару Load не ходит.
+func fileSize(path string) (int64, bool) { return fileSizeOn(osDisk{}, path) }
 
-// isDir — path — папка (ссылка — как fileSize).
-func isDir(path string) bool {
-	if !reachable(path) {
-		return false
-	}
-	st, err := library.StatLocal(path)
-	return err == nil && st.IsDir()
-}
+// isDir — path — папка на настоящем диске (ссылка — как fileSize).
+func isDir(path string) bool { return isDirOn(osDisk{}, path) }

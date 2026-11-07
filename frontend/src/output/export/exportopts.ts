@@ -1,14 +1,13 @@
-// Настройки окна экспорта (спека 009 U8, design §6.4): сборка ExportOptions, оценка размера файла,
-// последний выбор в localStorage (свойство программы, не проекта — как view.svelte.ts).
-import type { ExportOpts, PrintKind, PrintPlan, Settings, View } from '../../base/core/types'
-import type { ExportUnit } from './exportrange'
-import { newSheetSize, type SheetSettings } from '../../base/geom/sheet'
+// Настройки окна экспорта (спека 009 U8, design §6.4): сборка ExportOptions, последний выбор в localStorage
+// (свойство программы, не проекта — как view.svelte.ts). Оценка объёма выгрузки — в Go (App.ExportSize, 0.37).
+import type { ExportOpts, PrintKind, PrintPlan, View } from '../../base/core/types'
 
 // Тип лежит в основе (store.runExport), здесь — для окна и тестов.
 export type { ExportOpts }
 export { exportDoneText } from '../../base/words/errtext'
 
 export type Quality = 100 | 95 | 80
+// Держать в паре с sizeQualities в internal/export/size.go: Go присылает подписи размера по этим же числам.
 export const QUALITIES: { v: Quality; label: string }[] = [
   { v: 100, label: 'максимум' },
   { v: 95, label: 'печать' },
@@ -33,29 +32,8 @@ export type ExportScope = 'all' | 'current' | 'range'
 
 export const DEFAULT_PREFS: ExportPrefs = { quality: 95, dpi: 0, pages: false, cover: true, coverOnly: false, print: '' }
 
-// Байт на пиксель по качеству. ГИПОТЕЗА по типичным JPEG фотокамер: сверить на настоящих фото при QA.
-const BYTES_PER_PX: Record<Quality, number> = { 100: 0.9, 95: 0.45, 80: 0.2 }
-
 // Выгрузка для типографии всегда 300 dpi (Go принудительно ставит то же).
 export const PRINT_DPI = 300
-
-const px = (mm: number, dpi: number) => Math.round((mm / 25.4) * dpi)
-
-// Примерный размер одного файла: разворот (или страница при pages) по числу пикселей.
-export function estimateBytes(s: SheetSettings & Pick<Settings, 'dpi'>, dpi: number, quality: Quality, pages: boolean): number {
-  const d = dpi > 0 ? dpi : s.dpi
-  const sh = newSheetSize(s)
-  // Лист без шва — один файл; у разворота «по страницам» — половина.
-  const w = sh.mid > 0 ? (pages ? 1 : 2) * px(sh.mid, d) : px(sh.w, d)
-  return w * px(sh.h, d) * (BYTES_PER_PX[quality] ?? BYTES_PER_PX[95])
-}
-
-// «≈ 25 МБ»: до 10 МБ — один знак.
-export function formatSize(bytes: number): string {
-  const mb = bytes / (1024 * 1024)
-  if (mb < 0.1) return '< 0,1 МБ'
-  return `≈ ${mb < 10 ? mb.toFixed(1).replace('.', ',') : Math.round(mb)} МБ`
-}
 
 // Строка «Перед выгрузкой: …» (035 U8): только то, что есть; нечего сказать — пусто (строки в окне нет).
 // Заготовки макета (131) — в печать не идут, как и пустые места; вопрос перед выгрузкой задаёт Go той же строкой.
@@ -73,44 +51,6 @@ export function exportWarnings(v: Pick<View, 'emptyPlaces' | 'lowDPI'> & Partial
 // в режиме печати (любой типографии) пределы проверяет Go в плане (красный список), второй строки не нужно.
 export function limitWarn(v: Pick<View, 'pageLimit'>, printOn: boolean): string {
   return printOn ? '' : (v.pageLimit?.warn ?? '')
-}
-
-// Что попадёт в выгрузку — для итога по объёму (035 U22). Обложка считается как один разворот.
-export interface SizeScope {
-  scope: ExportScope
-  spreads: number // всего разворотов (для «Все»)
-  units: ExportUnit[] | null // разобранный диапазон; null — ввод неверен
-  cover: boolean // обложка уйдёт в выгрузку (в том числе «только обложка»)
-  only: boolean // только обложка
-  print?: boolean // для типографии (047, 081): все развороты, 300 dpi, разворотами; обложка — как в cover
-}
-
-// «≈ X на разворот, всего ≈ Y»; «всего» — если файлов больше одного, неверный диапазон — без итога.
-export function sizeSummary(
-  s: SheetSettings & Pick<Settings, 'dpi'>,
-  dpi: number,
-  quality: Quality,
-  pages: boolean,
-  unit: string,
-  w: SizeScope,
-): string {
-  if (w.print) {
-    dpi = PRINT_DPI
-    pages = false
-    w = { ...w, scope: 'all', only: false }
-  }
-  const one = estimateBytes(s, dpi, quality, pages)
-  const spread = estimateBytes(s, dpi, quality, false)
-  const page = estimateBytes(s, dpi, quality, true)
-  let total: number | null = w.cover ? spread : 0
-  if (!w.only) {
-    if (w.scope === 'all') total += w.spreads * spread
-    else if (w.scope === 'current') total += spread
-    else if (w.units) total += w.units.reduce((sum, [, p]) => sum + (p === 0 ? spread : page), 0)
-    else total = null
-  }
-  const head = `${formatSize(one)} на ${unit}`
-  return total !== null && total > one ? `${head}, всего ${formatSize(total)}` : head
 }
 
 // Пункты обложки показываются, если она есть и проект не лист-виньетка (Go в этих случаях флаги игнорирует).

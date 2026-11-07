@@ -7,6 +7,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Набор обновился (131 design §3 «Поиск макета»): у макета новый ключ, а набор и запись
@@ -89,8 +90,8 @@ func TestLookPackUpdateAdd(t *testing.T) {
 func TestLookPackUpdateBg(t *testing.T) {
 	// Макет без виньетки: развороты-виньетки шага не получают и держат прежний номер, но только у того
 	// же макета (иначе номера снимаются). find нет: прежний макет — тот же, что новый.
-	noVig := model.AlbumTpl{V: model.LookV, Steps: []model.LookStep{
-		lkStep("", "Титул", "#ffffff", 1), lkStep(model.RoleRepeat, "", "#f0fff0", 1), lkStep("", "Конец", "#dddddd", 1),
+	noVig := looktpl.AlbumTpl{V: looktpl.LookV, Steps: []looktpl.LookStep{
+		lkStep("", "Титул", "#ffffff", 1), lkStep(looktpl.RoleRepeat, "", "#f0fff0", 1), lkStep("", "Конец", "#dddddd", 1),
 	}}
 	run := func(second model.LookRef) ([]int, *model.LookRef, model.LookPlan) {
 		e := lkBuilt(t, 3)
@@ -218,7 +219,7 @@ func TestLookFoundByPackItem(t *testing.T) {
 	e := lkBuilt(t, 3)
 	lkSetLook(e, lkPackV1)
 	e.SetLookHost(album.LookHost{
-		Find: func(r model.LookRef) *model.AlbumTpl {
+		Find: func(r model.LookRef) *looktpl.AlbumTpl {
 			if match(r) {
 				t := lookA()
 				return &t

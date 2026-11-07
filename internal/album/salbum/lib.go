@@ -58,11 +58,9 @@ func FramePath(ref model.PhotoRef) string {
 // Путь искателя проверяется, как путь из файла: дальше он идёт в Check, рендер и /media.
 func findLib(find LibFinder, key string) string {
 	if find == nil {
-		if fp := libFinder.Load(); fp != nil {
-			find = *fp
-		}
+		find = osDisk{}.lib
 	}
-	if find == nil || !model.ValidLibKey(key) {
+	if !model.ValidLibKey(key) {
 		return ""
 	}
 	path, ok := find(key)
@@ -76,15 +74,15 @@ func findLib(find LibFinder, key string) string {
 // библиотеке на каждом компьютере свой, а чужой путь в файле — не наш). Ключ не по
 // грамматике — ok = false, запись выбрасывается (фон с ней снимет зажим). Нет файла —
 // путь пуст: фото пропало, размеры из файла держат пропорцию и dpi.
-func resolveLib(fp FilePhoto) (model.PhotoRef, bool) {
+func resolveLib(d Disk, fp FilePhoto) (model.PhotoRef, bool) {
 	if !model.ValidLibKey(fp.Lib) {
 		return model.PhotoRef{}, false
 	}
 	ref := fp.PhotoRef
 	ref.Alt = ""
 	ref.W, ref.H, ref.Size = max(ref.W, 0), max(ref.H, 0), max(ref.Size, 0)
-	ref.Path = findLib(nil, ref.Lib)
-	fixDims(&ref, false)
+	ref.Path = findLib(d.lib, ref.Lib)
+	fixDims(d, &ref, false)
 	return ref, true
 }
 

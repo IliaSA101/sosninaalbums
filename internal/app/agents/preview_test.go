@@ -21,6 +21,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -368,6 +369,39 @@ func TestPreviewUnavailable(t *testing.T) {
 	if res.IsError || jsonOf(t, res)["unavailable"].(float64) != 2 {
 		t.Fatalf("ждали unavailable=2: %q", textOf(res))
 	}
+}
+
+// TestPreviewCloudOnly: фото только в облаке (160-M1, хвост) — агент получает причину, а не «файл недоступен»:
+// и когда App уже знает (запись в Status с library.WhyCloudOnly; Host не зван), и когда Host.Preview отвечает
+// ErrCloudOnly (запись ещё не появилась). Лист с таким фото не обрушивается: клетка помечена unreadable.
+func TestPreviewCloudOnly(t *testing.T) {
+	const want = "только в облаке"
+	t.Run("запись в Status", func(t *testing.T) {
+		r, cs, k := previewRig(t, 3, Options{})
+		r.fx.mu.Lock()
+		r.fx.unread[idB] = library.WhyCloudOnly
+		r.fx.mu.Unlock()
+		before := k.n.Load()
+		res := tcall(t, cs, "get_photo_preview", map[string]any{"id": idB})
+		if !res.IsError || !strings.Contains(res.Text, want) || strings.Contains(res.Text, "недоступен") {
+			t.Errorf("облако: %+v", res)
+		}
+		if k.n.Load() != before {
+			t.Error("Host.Preview вызван для фото в облаке")
+		}
+		// Повреждённое остаётся «недоступно»: причина облака не затирает остальные.
+		if res := tcall(t, cs, "get_photo_preview", map[string]any{"id": idD}); !res.IsError || strings.Contains(res.Text, want) {
+			t.Errorf("повреждённое фото: %+v", res)
+		}
+	})
+	t.Run("Host отвечает ErrCloudOnly", func(t *testing.T) {
+		_, cs, k := previewRig(t, 3, Options{})
+		k.respond = func() ([]byte, error) { return nil, fmt.Errorf("%w: /home/user/ZQ2dir/x.jpg", ErrCloudOnly) }
+		res := tcall(t, cs, "get_photo_preview", map[string]any{"id": idA})
+		if !res.IsError || !strings.Contains(res.Text, want) || strings.Contains(res.Text, "/home") || strings.Contains(res.Text, "ZQ2dir") {
+			t.Errorf("облако от Host: %+v", res)
+		}
+	})
 }
 
 // TestPreviewJPEG: в выходе EncodePreview только SOI, DQT, SOF0, DHT, SOS (APP0 допустим); источники —

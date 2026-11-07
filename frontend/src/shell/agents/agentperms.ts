@@ -10,19 +10,17 @@ export type PermGroup = 'read' | 'edit'
 export const MODES: readonly Mode[] = ['allow', 'ask', 'deny']
 // Инструменты, у которых «Всегда» значит «папку без вопроса»: нужно согласие с местами (design §7.2).
 export const FOLDER_TOOLS: readonly string[] = ['add_folder', 'create_album']
-// Подпись «Без вопроса — в местах съёмок» у папки и альбома нужна только при «Всегда» (design §7.1): при «Спрашивать» и «Запретить» она врёт.
-export const noteShown = (p: AgentPerm): boolean => !!p.note && (p.mode === 'allow' || !FOLDER_TOOLS.includes(p.tool))
-// Строка «только с вопросом» (152, класс Q: выгрузка, открытие): «Спрашивать» и «Запретить», «Всегда» нет вовсе — и в окне серое, и пояснение.
+// Открытие (160, класс O): «Всегда» — альбом, все фото которого в местах; свое согласие ASK_OPEN, но места те же.
+export const OPEN_TOOL = 'open_album'
+// Строки, которым нужны места: подпись под ними, строка мест в окне.
+export const PLACE_TOOLS: readonly string[] = [...FOLDER_TOOLS, OPEN_TOOL]
+// Подпись «Без вопроса — в местах съёмок» у папки, альбома и открытия нужна только при «Всегда» (design §7.1): при «Спрашивать» и «Запретить» она врёт.
+export const noteShown = (p: AgentPerm): boolean => !!p.note && (p.mode === 'allow' || !PLACE_TOOLS.includes(p.tool))
+// Строка «только с вопросом» (152, класс Q: выгрузка): «Спрашивать» и «Запретить», «Всегда» нет вовсе — и в окне серое, и пояснение.
 export const askOnly = (p: AgentPerm): boolean => p.can.includes('ask') && !p.can.includes('allow')
 // У такой строки «Всегда» не серое, а объясняет (как «Спрашивать» у чтения): щелчок значения не меняет, под строкой — why от Go.
 // Без why (старый ответ Go) кнопка остаётся серой.
 export const allowMissing = (p: AgentPerm): boolean => askOnly(p) && !!p.why
-// До 160 Т5 (0.37): без согласия ASK_OPEN «Всегда» не предлагается. Go (класс O) значение допускает и может его хранить,
-// но тихого открытия в 0.36 нет, а окна согласия и строки мест (Т5) тоже: пункт скрыт, сохранённое «Всегда» показано как «Спрашивать».
-export const ALWAYS_HIDDEN: readonly string[] = ['open_album']
-export const alwaysHidden = (p: AgentPerm): boolean => ALWAYS_HIDDEN.includes(p.tool) && p.can.includes('allow')
-// Значение строки для сегмента: скрытое «Всегда» выглядит как «Спрашивать» (Go в config.json его не трогает).
-export const shownMode = (p: AgentPerm): string => (alwaysHidden(p) && p.mode === 'allow' ? 'ask' : p.mode)
 // Сколько путей мест показывать в строке, остальные — «и ещё N».
 export const PLACES_SHOWN = 2
 
@@ -30,6 +28,7 @@ export type PermChange = { kind: 'tool'; tool: string; mode: Mode } | { kind: 'g
 export interface Consent {
   edit: boolean // первый выход правок из «Запретить»: ASK_EDIT
   folder: boolean // «Всегда» у папки или альбома: ASK_FOLDER
+  open: boolean // «Всегда» у открытия альбома: ASK_OPEN (160)
 }
 
 export const isMode = (m: string): m is Mode => m === 'allow' || m === 'ask' || m === 'deny'
@@ -48,9 +47,9 @@ export const askMissing = (p: AgentPerm): boolean => !p.can.includes('ask')
 export const groupAskMissing = (rows: readonly AgentPerm[]): boolean => rows.length > 0 && rows.every(askMissing)
 
 // Пункты сегмента: серый — значение, которого Go не принимает (кроме «Спрашивать»: оно живое и объясняет;
-// и «Всегда» у строки «только с вопросом» при allowWhy). hideAllow — «Всегда» нет вовсе (alwaysHidden).
-export function segItems(can: readonly string[], off: boolean, allowWhy = false, hideAllow = false): SegItem<Mode>[] {
-  return MODES.filter((id) => !(hideAllow && id === 'allow')).map((id) => ({
+// и «Всегда» у строки «только с вопросом» при allowWhy).
+export function segItems(can: readonly string[], off: boolean, allowWhy = false): SegItem<Mode>[] {
+  return MODES.map((id) => ({
     id,
     label: MODE_LABELS[id],
     off: off || (id !== 'ask' && !(id === 'allow' && allowWhy) && !can.includes(id)),
@@ -70,7 +69,8 @@ export function consentFor(perms: readonly AgentPerm[], editOn: boolean, ch: Per
   const rows = targets(perms, ch)
   const edit = !editOn && ch.mode !== 'deny' && rows.some((r) => r.group === 'edit' && r.mode === 'deny')
   const folder = ch.mode === 'allow' && rows.some((r) => FOLDER_TOOLS.includes(r.tool) && r.mode !== 'allow')
-  return { edit, folder }
+  const open = ch.mode === 'allow' && rows.some((r) => r.tool === OPEN_TOOL && r.mode !== 'allow')
+  return { edit, folder, open }
 }
 
 // Места в строке: первые PLACES_SHOWN и сколько осталось.
@@ -100,15 +100,16 @@ const parentName = (dir: string): string => parts(dir).slice(0, -1).pop() ?? ''
 const driveOf = (dir: string): string => /^[A-Za-z]:/.exec(dir)?.[0] ?? ''
 
 // Строки списка: сохранённое из AgentsInfo, а когда пришёл AgentPlacesLive — живое поверх него (по ключу). Убранное в Go
-// пропадает из info.places, значит и из списка, даже если live устарел. mac — привязки нет вовсе (0.36): ни слов, ни ссылки.
-export function placeRows(places: readonly AgentPlace[], live: readonly AgentPlace[] | null, mac: boolean): PlaceRow[] {
+// пропадает из info.places, значит и из списка, даже если live устарел. Привязку место имеет не везде (AgentPlace.bindable от Go:
+// Windows, Linux, внешний том на macOS): без неё ни слов «не привязано», ни ссылки.
+export function placeRows(places: readonly AgentPlace[], live: readonly AgentPlace[] | null): PlaceRow[] {
   return places.map((saved) => {
     const l = live?.find((x) => x.key === saved.key)
     const p = l ?? saved
     const hints: string[] = []
     if (p.narrowRoot) hints.push(placeNarrowRoot(driveOf(p.dir)))
     else if (p.narrow) hints.push(placeNarrow(parentName(p.dir)))
-    const unbound = !mac && !p.bound
+    const unbound = p.bindable && !p.bound
     if (unbound) hints.push(PLACE_UNBOUND)
     // Ссылка — только когда диск по пути известен Go: до ответа AgentPlacesLive «этот диск» мог бы оказаться чужим.
     const bind = unbound && l?.state === 'here' ? placeBind(p.here) : ''

@@ -34,10 +34,10 @@ func TestQuietOneDrivePlaceholder(t *testing.T) {
 	if err := syscall.SetFileAttributes(p, syscall.FILE_ATTRIBUTE_NORMAL|0x1000); err != nil { // OFFLINE
 		t.Skipf("атрибут OFFLINE не поставить: %v", err)
 	}
-	if got := countQuiet(cloud); !got.cloud {
+	if got := countQuiet(cloud); !got.Cloud {
 		t.Errorf("заглушка не замечена: %+v", got)
 	}
-	if got := countQuiet(plain); got.cloud || got.photos != 1 {
+	if got := countQuiet(plain); got.Cloud || got.Photos != 1 {
 		t.Errorf("обычная папка: %+v", got)
 	}
 }

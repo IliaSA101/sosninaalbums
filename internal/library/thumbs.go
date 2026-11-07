@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -145,19 +146,30 @@ func (c *Cache) get(ctx context.Context, p Photo, preview bool, cl prio) (string
 				return "", err
 			}
 		default:
-			retry, err := c.generateOwn(ctx, key, p.Path, preview, cl)
-			if err != nil {
-				return "", err
-			}
+			f, retry, err := c.generateNew(ctx, key, p, preview, cl)
 			if retry {
 				continue
 			}
-			if f, ok := c.find(key, preview, isPNG); ok {
-				return f, nil
-			}
-			return "", noCopyErr(p)
+			return f, err
 		}
 	}
+}
+
+// generateNew — копии нет и никто её не делает: своя генерация. retry — место заняли другие, вернуться в цикл get.
+// Фото, ставшее заглушкой облака уже после сканирования, не открывается (скачивание): копия под другим классом цвета
+// или ErrCloudOnly.
+func (c *Cache) generateNew(ctx context.Context, key string, p Photo, preview bool, cl prio) (f string, retry bool, err error) {
+	if f, stub, err := c.stubCopy(p, preview); stub {
+		return f, false, err
+	}
+	retry, err = c.generateOwn(ctx, key, p.Path, preview, cl)
+	if err != nil || retry {
+		return "", retry, err
+	}
+	if f, ok := c.find(key, preview, isPNGPath(p.Path)); ok {
+		return f, false, nil
+	}
+	return "", false, noCopyErr(p)
 }
 
 // noCopyErr — ошибка «копии нет»; в тексте имя файла без пути (073-7).
@@ -318,6 +330,11 @@ func cacheKey(path string, col imgfile.Color) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return keyFrom(path, st, col), nil
+}
+
+// keyFrom — cacheKey по уже полученным сведениям st файла path (Cached перебирает цвета с одним Stat).
+func keyFrom(path string, st fs.FileInfo, col imgfile.Color) string {
 	s := fmt.Sprintf("%s|%d|%d", path, st.Size(), st.ModTime().UnixNano())
 	switch col {
 	case imgfile.ColorAdobe:
@@ -329,7 +346,7 @@ func cacheKey(path string, col imgfile.Color) (string, error) {
 		s += "|png1"
 	}
 	sum := sha1.Sum([]byte(s)) //nolint:gosec // ключ кэша, не криптография
-	return hex.EncodeToString(sum[:10]), nil
+	return hex.EncodeToString(sum[:10])
 }
 
 // generate декодирует оригинал и пишет копии; картинка с прозрачностью пишется PNG (альфа

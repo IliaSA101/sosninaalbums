@@ -36,7 +36,10 @@ type AgentPlace struct {
 	Dir    string `json:"dir"`    // сохранённый путь; у привязанного в AgentPlacesLive — текущий
 	Label  string `json:"label"`  // метка диска, к которому привязано; "" — без метки или не привязано
 	Chosen bool   `json:"chosen"` // «Папка со съёмками…»; иначе — родитель добавленной папки
-	Bound  bool   `json:"bound"`  // привязано к диску по номеру (на macOS не бывает)
+	Bound  bool   `json:"bound"`  // привязано к диску по номеру
+	// Bindable — у места может быть привязка к диску (Windows, Linux — всегда; macOS — под /Volumes/<X>):
+	// решает Go, интерфейс ОС не угадывает; «Привязать…» — при bindable && !bound (160).
+	Bindable bool `json:"bindable"`
 	// Узкое место (только из родителя): над годом правила не пустили выше, новый год спросит снова;
 	// NarrowRoot — выше года только корень диска («Диск E: целиком — Папка со съёмками…»).
 	Narrow     bool   `json:"narrow"`
@@ -131,7 +134,7 @@ func (a *App) placeDTOs(places []prefs.Place) []AgentPlace {
 	env := a.placeEnv()
 	for _, p := range places {
 		narrow, root := env.NarrowOf(p)
-		dto := AgentPlace{Key: prefs.PlaceKey(p), Dir: p.Dir, Chosen: p.How == prefs.PlaceChosen, Bound: p.Vol != nil, Narrow: narrow, NarrowRoot: root}
+		dto := AgentPlace{Key: prefs.PlaceKey(p), Dir: p.Dir, Chosen: p.How == prefs.PlaceChosen, Bound: p.Vol != nil, Bindable: placeCanBind(p.Dir), Narrow: narrow, NarrowRoot: root}
 		if p.Vol != nil {
 			dto.Label = p.Vol.Label
 		}

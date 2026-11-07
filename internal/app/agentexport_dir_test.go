@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 )
@@ -161,12 +162,12 @@ func TestAgentExportDraftName(t *testing.T) {
 		t.Errorf("черновик + имя: %+v", ev)
 	}
 	ev := r.peek(t, r.req(""))
-	if ev.Path != "" || ev.OK != askOKExportPick || ev.Alt != "" || ev.Why != "" {
+	if ev.Path != "" || ev.OK != agentasktext.OKExportPick || ev.Alt != "" || ev.Why != "" {
 		t.Errorf("черновик без подсказки: %+v", ev)
 	}
 	for _, bad := range []string{"CON", "Петровы.", "a<b", "a\u202eb", "..\\x", "a\x00b"} {
 		ev := r.peek(t, r.req(bad))
-		if ev.Path != "" || ev.OK != askOKExportPick || ev.Why != whyBad {
+		if ev.Path != "" || ev.OK != agentasktext.OKExportPick || ev.Why != whyBad {
 			t.Errorf("негодная подсказка %q: %+v", bad, ev)
 		}
 	}
@@ -198,7 +199,7 @@ func TestAgentExportInPhotoFolder(t *testing.T) {
 	want := filepath.Join(filepath.Dir(r.src), filepath.Base(r.src)+" — выгрузка")
 	c, ev := r.question(t, r.req(inside))
 	if ev.Path == inside || strings.HasPrefix(ev.Path, r.src+string(filepath.Separator)) || filepath.Dir(ev.Path) != filepath.Dir(r.src) ||
-		!ev.Create || ev.OK != askOKExport || !strings.Contains(strings.Join(ev.Lines, "\n"), "Рядом с папкой фото альбома") {
+		!ev.Create || ev.OK != agentasktext.OKExport || !strings.Contains(strings.Join(ev.Lines, "\n"), "Рядом с папкой фото альбома") {
 		t.Fatalf("вопрос: %+v, ждали соседнюю вроде %q", ev, want)
 	}
 	if _, err := r.a.AgentAnswerExport(ev.ID, false); err != nil {

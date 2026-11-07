@@ -3,11 +3,12 @@ package layout
 import (
 	"fmt"
 	"math"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // «Разброс» (спека 105): корень Z и лист n. Грамматика, геометрия, эталон scatter.sha.
@@ -332,9 +333,7 @@ const goldenScatterPath = "testdata/golden/scatter.sha"
 // goldenAspects (и лист): Rects и оценки побитово. После выпуска 0.24 — никогда не
 // перезаписывать: ключи в файлах v18.
 func TestGoldenScatter(t *testing.T) {
-	if runtime.GOARCH != "amd64" {
-		t.Skip("эталон снят на amd64")
-	}
+	testkit.RequireNoFMA(t)
 	var got []goldenGroup
 	built, total := 0, 0
 	for g, p := range append(slices.Clone(goldenGeoms), grammarSheet) {

@@ -32,6 +32,9 @@ const (
 	volDriveFixed     = 3
 )
 
+// volidCgo — номер тома macOS читает cgo-вариант (volid_darwin.go); тест-страж CI проверяет его на macOS.
+const volidCgo = false
+
 func isAbsVol(p string) bool { return filepath.IsAbs(p) }
 
 // volRoot — корень тома пути («E:\» или папка-точка монтирования с «\» в конце).

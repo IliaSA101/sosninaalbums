@@ -13,14 +13,15 @@ import (
 	"sync"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Макеты альбома в библиотеке (спека 131, design §7): вид album, файл Макеты/<16 hex>.json — байты
-// как пришли из набора (ключ — model.LookKey, sha256 байтов: поле новее программы его не меняет),
+// как пришли из набора (ключ — looktpl.LookKey, sha256 байтов: поле новее программы его не меняет),
 // свои — канонический JSON в момент сохранения. Встроенных нет: макеты приносят наборы.
 //
 // Контракт со сборкой мусора 0.27 (0.27-131-30): ключи картинок в файле — обычные строки
-// "my:<16 hex>"; файл ≤ model.MaxLookFile. Ссылки макетов держит сырой разбор Макеты/*.json
+// "my:<16 hex>"; файл ≤ looktpl.MaxLookFile. Ссылки макетов держит сырой разбор Макеты/*.json
 // (packs_gc_raw.go) — то же правило, что у 0.27, без отдельного списка в реестре.
 
 // LookPath — плитки макетов: /media/look/<16 hex>?v=&i=&px=&r=&bg= (рисует App, G6).
@@ -47,7 +48,7 @@ type lookCache struct {
 
 type lookInfo struct {
 	ok   bool
-	card model.LookCard
+	card looktpl.LookCard
 }
 
 func (c *lookCache) get(key string) (lookInfo, bool) {
@@ -67,18 +68,18 @@ func (c *lookCache) put(key string, info lookInfo) {
 }
 
 // Look — макет по ключу плитки (свой или из набора; путь — из индекса Макеты/, не от интерфейса).
-// Нет файла — ErrNotFound, файл новее программы — model.ErrLookNewer (и ErrLookSteps), битый —
+// Нет файла — ErrNotFound, файл новее программы — looktpl.ErrLookNewer (и ErrLookSteps), битый —
 // ошибка «испорчен». Разбор берётся из кэша (looks_cache.go), если файл не менялся; результат —
 // всегда своя копия, вызывающий вправе её править.
-func (s *Store) Look(id string) (model.AlbumTpl, error) {
+func (s *Store) Look(id string) (looktpl.AlbumTpl, error) {
 	if !model.ValidLibKey(id) {
-		return model.AlbumTpl{}, ErrNotFound
+		return looktpl.AlbumTpl{}, ErrNotFound
 	}
 	s.mu.RLock()
 	path, ok := s.files[KindAlbum][id]
 	s.mu.RUnlock()
 	if !ok {
-		return model.AlbumTpl{}, ErrNotFound
+		return looktpl.AlbumTpl{}, ErrNotFound
 	}
 	st, serr := os.Stat(path) // до чтения: подмена файла после стата даст другой стат при следующем попадании
 	if serr != nil || !st.Mode().IsRegular() {
@@ -101,31 +102,31 @@ func (s *Store) Look(id string) (model.AlbumTpl, error) {
 }
 
 // lookRaw — макет и сырые байты файла.
-func (s *Store) lookRaw(id string) (model.AlbumTpl, []byte, error) {
+func (s *Store) lookRaw(id string) (looktpl.AlbumTpl, []byte, error) {
 	if !model.ValidLibKey(id) {
-		return model.AlbumTpl{}, nil, ErrNotFound
+		return looktpl.AlbumTpl{}, nil, ErrNotFound
 	}
 	s.mu.RLock()
 	path, ok := s.files[KindAlbum][id]
 	s.mu.RUnlock()
 	if !ok {
-		return model.AlbumTpl{}, nil, ErrNotFound
+		return looktpl.AlbumTpl{}, nil, ErrNotFound
 	}
-	data, err := readCapped(path, model.MaxLookFile)
+	data, err := readCapped(path, looktpl.MaxLookFile)
 	if errors.Is(err, os.ErrNotExist) {
-		return model.AlbumTpl{}, nil, ErrNotFound
+		return looktpl.AlbumTpl{}, nil, ErrNotFound
 	}
 	if err != nil {
-		return model.AlbumTpl{}, nil, errLookUnread
+		return looktpl.AlbumTpl{}, nil, errLookUnread
 	}
-	t, err := model.ParseLook(data)
+	t, err := looktpl.ParseLook(data)
 	switch {
-	case errors.Is(err, model.ErrLookNewer), errors.Is(err, model.ErrLookSteps):
-		return model.AlbumTpl{}, data, err
+	case errors.Is(err, looktpl.ErrLookNewer), errors.Is(err, looktpl.ErrLookSteps):
+		return looktpl.AlbumTpl{}, data, err
 	case err != nil:
-		return model.AlbumTpl{}, data, errLookBroken
+		return looktpl.AlbumTpl{}, data, errLookBroken
 	case !lookKnown(t):
-		return model.AlbumTpl{}, data, model.ErrLookNewer // узор или рисунок новее программы
+		return looktpl.AlbumTpl{}, data, looktpl.ErrLookNewer // узор или рисунок новее программы
 	}
 	return t, data, nil
 }
@@ -138,7 +139,7 @@ func (s *Store) lookMeta(it *Item) bool {
 		t, _, err := s.lookRaw(it.ID)
 		info = lookInfo{ok: err == nil}
 		if err == nil {
-			info.card = model.CardOf(t)
+			info.card = looktpl.CardOf(t)
 		}
 		if !errors.Is(err, ErrNotFound) && !errors.Is(err, errLookUnread) { // не прочитался — не запоминать
 			s.look.put(it.ID, info)
@@ -187,23 +188,23 @@ func (s *Store) lookIn(r *packReg, item string) (string, bool) {
 
 // CheckLook — макет t, каким SaveLook положил бы его в библиотеку (зажатый), или та же ошибка, что
 // у записи: пустой после зажима или файл больше предела. Ничего не пишет и хранилища не касается.
-func CheckLook(t model.AlbumTpl) (model.AlbumTpl, error) {
+func CheckLook(t looktpl.AlbumTpl) (looktpl.AlbumTpl, error) {
 	c, _, err := packLook(t)
 	return c, err
 }
 
 // packLook — зажатый макет и его канонический JSON; общая часть CheckLook и SaveLook.
-func packLook(t model.AlbumTpl) (model.AlbumTpl, []byte, error) {
-	c, ok := model.ClampLook(t)
+func packLook(t looktpl.AlbumTpl) (looktpl.AlbumTpl, []byte, error) {
+	c, ok := looktpl.ClampLook(t)
 	if !ok {
-		return c, nil, model.ErrTplEmpty
+		return c, nil, looktpl.ErrTplEmpty
 	}
 	data, err := json.Marshal(c)
 	if err != nil {
-		return c, nil, model.ErrTplEmpty
+		return c, nil, looktpl.ErrTplEmpty
 	}
-	if len(data) > model.MaxLookFile {
-		return c, nil, fmt.Errorf("макет больше %d КБ — уберите часть разворотов", model.MaxLookFile>>10)
+	if len(data) > looktpl.MaxLookFile {
+		return c, nil, fmt.Errorf("макет больше %d КБ — уберите часть разворотов", looktpl.MaxLookFile>>10)
 	}
 	return c, data, nil
 }
@@ -211,18 +212,18 @@ func packLook(t model.AlbumTpl) (model.AlbumTpl, []byte, error) {
 // SaveLook — свой макет («Сохранить альбом как макет…», G6): канонический JSON зажатого макета в
 // Макеты/<ключ>.json и запись реестра в тему theme (выборки и неизвестная — «Мои»). Тот же макет второй
 // раз — «уже есть»; скрытый возвращается с новым именем и темой.
-func (s *Store) SaveLook(theme, name string, t model.AlbumTpl) (Item, error) {
+func (s *Store) SaveLook(theme, name string, t looktpl.AlbumTpl) (Item, error) {
 	if name = cleanName(name); name == "" {
 		return Item{}, ErrName
 	}
-	if !isTheme(theme) {
+	if !ownTheme(theme) {
 		theme = ThemeMine
 	}
 	c, data, err := packLook(t)
 	if err != nil {
 		return Item{}, err
 	}
-	key := model.LookKey(data)
+	key := looktpl.LookKey(data)
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()
 	if s.ReadOnly() {
@@ -259,7 +260,7 @@ func (s *Store) SaveLook(theme, name string, t model.AlbumTpl) (Item, error) {
 	e.Theme, e.Name, e.Ext, e.Bytes, e.Hidden, e.Added = theme, name, "json", int64(len(data)), false, nowMs()
 	it := e.item()
 	s.mu.Unlock()
-	card := model.CardOf(c)
+	card := looktpl.CardOf(c)
 	s.look.put(key, lookInfo{ok: true, card: card})
 	s.saveLogged()
 	it.Steps, it.From, it.Vig, it.Cover, it.Style = card.Steps, card.From, card.Vig, card.Cover, card.Style
@@ -278,19 +279,19 @@ func stageLook(i int, it PackItem, src PackSource) (si stagedItem, why string, e
 	if !ValidItemPath(it.File) {
 		return si, "недопустимое имя записи макета", nil
 	}
-	buf := limitBuffer{max: model.MaxLookFile}
+	buf := limitBuffer{max: looktpl.MaxLookFile}
 	if err := src.Extract(i, &buf); err != nil {
 		if errors.Is(err, errLookBuf) {
-			return si, fmt.Sprintf("макет больше %d КБ", model.MaxLookFile>>10), nil
+			return si, fmt.Sprintf("макет больше %d КБ", looktpl.MaxLookFile>>10), nil
 		}
 		return si, "", err
 	}
 	data := buf.Bytes()
-	t, err := model.ParseLook(data)
+	t, err := looktpl.ParseLook(data)
 	switch {
-	case errors.Is(err, model.ErrLookNewer), err == nil && !lookKnown(t):
+	case errors.Is(err, looktpl.ErrLookNewer), err == nil && !lookKnown(t):
 		return si, "макет из новой версии программы", nil
-	case errors.Is(err, model.ErrLookSteps):
+	case errors.Is(err, looktpl.ErrLookSteps):
 		return si, fmt.Sprintf("в макете больше %d разворотов", model.MaxLookSteps), nil
 	case err != nil:
 		return si, "макет альбома не читается", nil
@@ -299,7 +300,7 @@ func stageLook(i int, it PackItem, src PackSource) (si stagedItem, why string, e
 	if !ok {
 		return si, "макет альбома не читается", nil
 	}
-	si.key, si.ext, si.tpl, si.libs, si.bytes, si.item = model.LookKey(data), "json", bytes.Clone(data), libs, int64(len(data)), it.File
+	si.key, si.ext, si.tpl, si.libs, si.bytes, si.item = looktpl.LookKey(data), "json", bytes.Clone(data), libs, int64(len(data)), it.File
 	return si, "", nil
 }
 
@@ -307,7 +308,7 @@ func stageLook(i int, it PackItem, src PackSource) (si stagedItem, why string, e
 // поиску (записан экранированием \u…): сборка мусора 0.27 держит картинки только по сырым байтам,
 // такой макет потерял бы фон. Ключи из сырых байт, которых нет в разборе (поле новее программы),
 // тоже проверяются — вид у них неизвестен (libRef.kind ""): иначе чужой ключ держал бы файлы вечно.
-func lookStageLibs(t model.AlbumTpl, data []byte) ([]libRef, bool) {
+func lookStageLibs(t looktpl.AlbumTpl, data []byte) ([]libRef, bool) {
 	libs := lookLibs(t)
 	raw := rawLibKeys(data)
 	inRaw, parsed := make(map[string]bool, len(raw)), map[string]bool{}
@@ -342,13 +343,13 @@ func (b *limitBuffer) Write(p []byte) (int, error) {
 }
 
 // lookTpls — шаблоны макета: шаги и стороны обложки (фон обложки — отдельно, lookLibs).
-func lookTpls(t model.AlbumTpl) []model.SpreadTpl {
-	out := make([]model.SpreadTpl, 0, len(t.Steps)+2)
+func lookTpls(t looktpl.AlbumTpl) []looktpl.SpreadTpl {
+	out := make([]looktpl.SpreadTpl, 0, len(t.Steps)+2)
 	for _, st := range t.Steps {
 		out = append(out, st.Tpl)
 	}
 	if t.Cover != nil {
-		for _, side := range []*model.SpreadTpl{t.Cover.Back, t.Cover.Front} {
+		for _, side := range []*looktpl.SpreadTpl{t.Cover.Back, t.Cover.Front} {
 			if side != nil {
 				out = append(out, *side)
 			}
@@ -359,7 +360,7 @@ func lookTpls(t model.AlbumTpl) []model.SpreadTpl {
 
 // lookLibs — картинки библиотеки, на которые ссылается макет: всё, что знает tplLibs у шагов и
 // сторон обложки, и фон обложки.
-func lookLibs(t model.AlbumTpl) []libRef {
+func lookLibs(t looktpl.AlbumTpl) []libRef {
 	var out []libRef
 	for _, tpl := range lookTpls(t) {
 		out = append(out, tplLibs(tpl)...)
@@ -371,14 +372,14 @@ func lookLibs(t model.AlbumTpl) []libRef {
 }
 
 // lookKnown — все узоры и рисунки макета знакомы этой версии (иначе пропуск: шаг встал бы без них).
-func lookKnown(t model.AlbumTpl) bool {
+func lookKnown(t looktpl.AlbumTpl) bool {
 	for _, tpl := range lookTpls(t) {
 		if !tplKnown(tpl) {
 			return false
 		}
 	}
 	if t.Cover != nil && t.Cover.Bg != nil {
-		return tplKnown(model.SpreadTpl{Page: []model.TplBg{*t.Cover.Bg}})
+		return tplKnown(looktpl.SpreadTpl{Page: []looktpl.TplBg{*t.Cover.Bg}})
 	}
 	return true
 }
@@ -421,14 +422,14 @@ func (s *Store) lookRefs(refs, drop map[string]bool) bool {
 		if drop[filepath.Clean(path)] {
 			continue
 		}
-		data, err := readCapped(path, model.MaxLookFile)
+		data, err := readCapped(path, looktpl.MaxLookFile)
 		if errors.Is(err, os.ErrNotExist) {
 			continue // стёрт между индексом и чтением: держать нечего
 		}
 		if err != nil {
 			return false
 		}
-		if t, err := model.ParseLook(data); err == nil {
+		if t, err := looktpl.ParseLook(data); err == nil {
 			for _, ref := range lookLibs(t) {
 				refs[ref.key] = true
 			}

@@ -184,10 +184,11 @@
     font-size: 12px;
     line-height: 1.35;
   }
-  /* Ссылка — как «Готовые развороты» у пустого листа: серая, подчёркнутая */
+  /* Ссылка — как «Готовые развороты» у пустого листа: цвета ссылки, подчёркнутая */
   .link {
     all: unset;
     cursor: pointer;
+    color: var(--link);
     text-decoration: underline;
   }
   .link:hover {

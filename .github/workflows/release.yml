@@ -223,7 +223,8 @@ jobs:
     name: Сборка macOS universal
     needs: prepare
     timeout-minutes: 40
-    runs-on: macos-latest
+    # macos-15, не latest: образ в блокирующем задании не должен смениться без нас (162, Д3)
+    runs-on: macos-15
     outputs:
       sums: ${{ steps.pack.outputs.sums }}
     steps:
@@ -248,8 +249,22 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # 162, Д3: GOFLAGS выключает слияние x*y±z (FMA) на arm64, чтобы раскладки Mac совпадали с Windows. wails 2.x
+      # -gcflags сам не задаёт и наследует окружение. Строка одна с ci.yml (go-mac) и mac-check - checkFmaFlags
       - name: wails build
+        env:
+          GOFLAGS: -gcflags=all=-d=fmahash=qn
         run: wails build -platform darwin/universal -clean -trimpath
+
+      # Ключ дошёл до компилятора: в сборочной информации arm64-части его видно; иначе выпуск встанет до выгрузки
+      - name: Страж FMA (fmahash в сборке arm64)
+        run: |
+          bin=build/bin/sosninaalbums.app/Contents/MacOS/sosninaalbums
+          [ -f "$bin" ] || { echo "::error::нет бинарника $bin"; exit 1; }
+          thin="$RUNNER_TEMP/sa-arm64"
+          lipo "$bin" -thin arm64 -output "$thin"
+          info="$(go version -m "$thin")"
+          printf '%s\n' "$info" | grep -F -- '-gcflags=all=-d=fmahash=qn' || { echo "::error::В сборке arm64 нет -gcflags=all=-d=fmahash=qn: GOFLAGS не дошёл до компилятора (162)"; printf '%s\n' "$info" | grep -F -- '-gcflags' || true; exit 1; }
 
       - name: Страж тегов QA (нет зонда и стенда библиотеки)
         run: |
@@ -416,7 +431,10 @@ jobs:
     name: Проверка Mac
     needs: [prepare, pack]
     timeout-minutes: 25
-    runs-on: macos-latest
+    runs-on: macos-15
+    # 162, Д3: эталоны ниже сняты без слияния FMA (testkit.RequireNoFMA); строка одна с ci.yml и шагом сборки - checkFmaFlags
+    env:
+      GOFLAGS: -gcflags=all=-d=fmahash=qn
     steps:
       # Скрипты — из коммита метки: того же, что собрал zip
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -457,16 +475,10 @@ jobs:
       - name: Эталон раскладок на arm64
         run: go test ./internal/layout -run '^TestGoldenFirst(16)?$' -count=1 -v
 
-      # Эталон featured и ничьи на arm64 (решение 0.11 №70): первый прогон — наблюдение, провал не
-      # блокирует выпуск и виден в журнале предупреждением; подтвердится — сделать блокирующим
-      - name: Эталон featured на arm64 (наблюдение)
-        continue-on-error: true
+      # Эталон featured и ничьи на arm64 (решение 0.11 №70): блокирующий с 0.37 (162, Д3 - ключ FMA снял расхождение)
+      - name: Эталон featured на arm64
         timeout-minutes: 5
-        env:
-          SA_GOLDEN_ANYARCH: "1"
-        run: |
-          go test ./internal/layout ./internal/layout/forms ./internal/layout/plan ./internal/layout/variety -run '^(TestGoldenFeatured|TestFeaturedTiesNoise|TestGridTopTies|TestGoldenShapes|TestGoldenForms|TestGoldenPlan051|TestGoldenPlan600|TestGoldenVariety|TestGoldenFeaturedWide)$' -count=1 -timeout 3m -v ||
-            { echo "::warning::Эталон featured на arm64 разошёлся (наблюдение, решение 0.11 №70)"; exit 1; }
+        run: go test ./internal/layout ./internal/layout/forms ./internal/layout/plan ./internal/layout/variety -run '^(TestGoldenFeatured|TestFeaturedTiesNoise|TestGridTopTies|TestGoldenShapes|TestGoldenForms|TestGoldenPlan051|TestGoldenPlan600|TestGoldenVariety|TestGoldenFeaturedWide)$' -count=1 -timeout 3m -v
 
       # Провал валит задание, а с ним и «Черновик релиза»
       - name: Проверка запуска (smoke.sh)
@@ -1089,6 +1101,28 @@ jobs:
             gh release delete-asset "$TAG" SosninaAlbums-update.json -y || true
             resign=true
             gh release upload "$TAG" "${files[@]}" --clobber
+            # --clobber меняет только одноимённые: ассет прошлого прогона, которого нет в этом (pdf инструкции при сбое
+            # LibreOffice, снятый вариант), остался бы в черновике и ушёл бы в публикацию. Лишнее удаляем
+            want="$(printf '%s\n' "${files[@]##*/}")"
+            have="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+            # GitHub мог переписать имя ассета при загрузке (пробелы, спецсимволы): тогда «лишним» окажется свежий файл.
+            # Каждое ожидаемое имя обязано быть в списке, иначе отказ до удаления
+            missing=""
+            while IFS= read -r name; do
+              [ -n "$name" ] || continue
+              grep -qxF -- "$name" <<< "$have" || missing="$missing $name"
+            done <<< "$want"
+            if [ -n "$missing" ]; then
+              echo "::error::После загрузки в черновике нет ассетов:$missing — GitHub мог переименовать файл; лишнее не удаляем"
+              exit 1
+            fi
+            while IFS= read -r asset; do
+              [ -n "$asset" ] || continue
+              grep -qxF -- "$asset" <<< "$want" && continue
+              echo "::warning::Из черновика удалён ассет прошлого прогона: $asset"
+              # </dev/null: gh не должен читать stdin цикла
+              gh release delete-asset "$TAG" "$asset" -y </dev/null
+            done <<< "$have"
           else
             gh release create "$TAG" --draft --verify-tag --title "$title" --notes-file dist/notes.md "${files[@]}"
           fi

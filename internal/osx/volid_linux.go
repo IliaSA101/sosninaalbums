@@ -7,7 +7,10 @@ import (
 	"strings"
 )
 
-var sysVolDirs = volDirs{dev: "/dev", uuid: "/dev/disk/by-uuid", label: "/dev/disk/by-label"}
+var sysVolDirs = volDirs{dev: "/dev", uuid: "/dev/disk/by-uuid", label: "/dev/disk/by-label", sys: "/sys"}
+
+// volidCgo — номер тома macOS читает cgo-вариант (volid_darwin.go); тест-страж CI проверяет его на macOS.
+const volidCgo = false
 
 func isAbsVol(p string) bool { return strings.HasPrefix(p, "/") }
 

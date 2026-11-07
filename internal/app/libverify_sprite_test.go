@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -417,8 +418,8 @@ func (e spEnv) run(t *testing.T, args ...string) (string, int) {
 func TestLibraryVerifySprite(t *testing.T) {
 	files, bg, _ := lvGood(t)
 	// Макет альбома: шаг-разворот и обложка с лицом — клетка берёт лицо обложки.
-	front := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 0.67, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}}, Page: []model.TplBg{{Lib: bg}}}
-	look := lvLook(t, "main", &model.CoverTpl{Front: &front}, lvStep(2, 2, bg, model.Box{X: 0.1, Y: 0.1, W: 0.35, H: 0.8}))
+	front := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 0.67, Places: []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}}, Page: []looktpl.TplBg{{Lib: bg}}}
+	look := lvLook(t, "main", &looktpl.CoverTpl{Front: &front}, lvStep(2, 2, bg, model.Box{X: 0.1, Y: 0.1, W: 0.35, H: 0.8}))
 	e := spEnv{g: buildLibVerify(t), files: files, look: look, all: append(append([]pfile{}, files...), look)}
 	t.Run("лист из zip: все виды, baseline, items = sha256[:16], клетки — байты архива", e.sheet)
 	t.Run("отбор по умолчанию — первые по манифесту: 8 фонов, 12 стикеров", e.caps)

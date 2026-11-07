@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
@@ -85,7 +86,7 @@ func TestLookCacheHitAndStat(t *testing.T) {
 	}
 }
 
-func mustMarshalLook(t *testing.T, l model.AlbumTpl) []byte {
+func mustMarshalLook(t *testing.T, l looktpl.AlbumTpl) []byte {
 	t.Helper()
 	return lookBytes(t, l, "")
 }
@@ -98,7 +99,7 @@ func TestLookCacheAfterPackUpdateAndSave(t *testing.T) {
 	v1 := lookBytes(t, lookOf(libKey(bg), ""), "")
 	m, src := testPack("wedding-layouts", 1, pit{"bg/a.png", bg}, pit{"looks/main.json", v1})
 	install(t, s, m, src, nil)
-	key1 := model.LookKey(v1)
+	key1 := looktpl.LookKey(v1)
 	if l, err := s.Look(key1); err != nil || l.Steps[0].Name != "Титул" {
 		t.Fatalf("v1: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestLookCacheAfterPackUpdateAndSave(t *testing.T) {
 	if _, err := s.Look(key1); !errors.Is(err, ErrNotFound) {
 		t.Errorf("прежний ключ после обновления: %v", err)
 	}
-	if l, err := s.Look(model.LookKey(v2)); err != nil || l.Steps[0].Name != "Начало" {
+	if l, err := s.Look(looktpl.LookKey(v2)); err != nil || l.Steps[0].Name != "Начало" {
 		t.Errorf("новый ключ: %v %+v", err, l)
 	}
 	// Скрытие и переименование файл не трогают — альбомы с макетом не ломаются, Look тот же.
@@ -140,7 +141,7 @@ func TestLookCacheAfterPackUpdateAndSave(t *testing.T) {
 func TestLookCacheCopyIsolated(t *testing.T) {
 	s, _ := openTemp(t)
 	l := lookOf("", "")
-	l.Cover = &model.CoverTpl{Bg: &model.TplBg{Color: "#112233"}, Back: &l.Steps[0].Tpl}
+	l.Cover = &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#112233"}, Back: &l.Steps[0].Tpl}
 	it, err := s.SaveLook("mine", "Копия", l)
 	if err != nil {
 		t.Fatal(err)
@@ -274,7 +275,7 @@ func disjoint(t *testing.T, path string, a, b reflect.Value) {
 }
 
 func TestCloneLookDeep(t *testing.T) {
-	var src model.AlbumTpl
+	var src looktpl.AlbumTpl
 	fillAll(reflect.ValueOf(&src).Elem(), 0)
 	got := cloneLook(src)
 	if !reflect.DeepEqual(src, got) {
@@ -282,11 +283,11 @@ func TestCloneLookDeep(t *testing.T) {
 	}
 	disjoint(t, "AlbumTpl", reflect.ValueOf(src), reflect.ValueOf(got))
 	// Пустое и nil сохраняются как есть.
-	e := cloneLook(model.AlbumTpl{Steps: []model.LookStep{}})
+	e := cloneLook(looktpl.AlbumTpl{Steps: []looktpl.LookStep{}})
 	if e.Steps == nil || len(e.Steps) != 0 || e.Cover != nil {
 		t.Errorf("пустой макет: %+v", e)
 	}
-	if n := cloneLook(model.AlbumTpl{}); n.Steps != nil {
+	if n := cloneLook(looktpl.AlbumTpl{}); n.Steps != nil {
 		t.Errorf("nil-срез стал непустым: %+v", n)
 	}
 }
@@ -318,7 +319,7 @@ func TestLookCacheBound(t *testing.T) {
 	}
 	// Файл больше предела суммы кэш не берёт.
 	big := parsedLooks{}
-	big.put("k", "p", fakeInfo{size: lookCacheBytes + 1}, model.AlbumTpl{})
+	big.put("k", "p", fakeInfo{size: lookCacheBytes + 1}, looktpl.AlbumTpl{})
 	if len(big.m) != 0 {
 		t.Error("файл больше предела суммы попал в кэш")
 	}
@@ -328,7 +329,7 @@ func TestLookCacheBound(t *testing.T) {
 func TestLookCachePathChange(t *testing.T) {
 	var c parsedLooks
 	fi := fakeInfo{size: 10}
-	c.put("k", "a.json", fi, model.AlbumTpl{V: model.LookV})
+	c.put("k", "a.json", fi, looktpl.AlbumTpl{V: looktpl.LookV})
 	if _, ok := c.get("k", "a.json", fi); !ok {
 		t.Fatal("тот же путь — промах")
 	}
@@ -400,11 +401,11 @@ func benchLook(b *testing.B) (*Store, string) {
 	b.Helper()
 	s := Open(testkit.TempDir(b))
 	l := lookOf("", "st")
-	steps := make([]model.LookStep, 0, model.MaxLookSteps)
+	steps := make([]looktpl.LookStep, 0, model.MaxLookSteps)
 	for i := range model.MaxLookSteps {
 		st := l.Steps[0]
 		st.Name = "Шаг" + strings.Repeat("я", i)
-		st.Tpl.Texts = []model.TplText{{Text: strings.Repeat("Текст ", 20)}}
+		st.Tpl.Texts = []looktpl.TplText{{Text: strings.Repeat("Текст ", 20)}}
 		steps = append(steps, st)
 	}
 	l.Steps = steps

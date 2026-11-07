@@ -4,6 +4,7 @@ import (
 	"log"
 	"path/filepath"
 
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 )
 
@@ -20,7 +21,7 @@ type ExportsSkipped struct {
 // вернувшийся том показал бы тост второй раз. Устаревшее поколение молчит и память не трогает.
 func (a *App) publishOurs(gen int, ours, dead []string) {
 	if len(ours) > 0 {
-		log.Printf("  выгрузка программы: %d %s — не в ленте", len(ours), plural(len(ours), "файл", "файла", "файлов"))
+		log.Printf("  выгрузка программы: %d %s — не в ленте", len(ours), agentasktext.Plural(len(ours), "файл", "файла", "файлов"))
 	}
 	a.emitMu.Lock()
 	defer a.emitMu.Unlock()

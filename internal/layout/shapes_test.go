@@ -3,12 +3,13 @@ package layout
 import (
 	"fmt"
 	"math"
-	"runtime"
 	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Грамматика и геометрия ключей 051 (c0-grammar.md): таблица, формы, эталон shapes.sha, фазз.
@@ -360,9 +361,7 @@ const goldenShapesPath = "testdata/golden/shapes.sha"
 // (и лист): Rects и оценки побитово. -update — только при осознанной смене геометрии 051
 // (после выпуска 0.13 — никогда: ключи в файлах v9).
 func TestGoldenShapes(t *testing.T) {
-	if runtime.GOARCH != "amd64" {
-		t.Skip("эталон снят на amd64")
-	}
+	testkit.RequireNoFMA(t)
 	var got []goldenGroup
 	for g, p := range append(slices.Clone(goldenGeoms), grammarSheet) {
 		for n := 2; n <= 10; n++ {

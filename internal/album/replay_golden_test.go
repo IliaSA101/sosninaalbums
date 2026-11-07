@@ -44,10 +44,14 @@ func replayRun(t *testing.T) (*replay, []byte) {
 	return r, buf.Bytes()
 }
 
-// replayGolden — эталон своей ОС: пути Windows (`Q:\…`) и прочих (`/Q/…`) в записи разные.
+// replayGolden — эталон своей ОС: пути Windows (`Q:\…`) и прочих (`/Q/…`) в записи разные; на macOS
+// регистр путей не различается (paths.Fold), ID фото от свёрнутых путей другие, чем на Linux (162).
 func replayGolden() string {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		return filepath.Join("testdata", "replay.json.gz")
+	case "darwin":
+		return filepath.Join("testdata", "replay-darwin.json.gz")
 	}
 	return filepath.Join("testdata", "replay-unix.json.gz")
 }
@@ -61,34 +65,35 @@ func TestEditorReplay(t *testing.T) {
 // каждом шаге-правке) и ID (номер Editor в процессе, 087-3: зависит от порядка тестов, в эталон
 // не годится; проверка — TestEditorViewSrc), Close (после него реплей правок не идёт; проверка —
 // TestEditorClose): новый метод без шага — провал. Не зависит от эталона и ОС.
-// Исключение 149: AutoBuildIf, VaryLayoutsIf, UndoIfRev — те же AutoBuild, VaryLayouts и Undo с
-// условием (rev, срок); тело и шаг отмены те же, что у шагов реплея, условие проверяет
-// expect_test.go. Шаги в эталон — вместе с обновлением эталона Windows (его пишет CI).
-// Исключение 151: SetMarksIf, CreateCoverLookIf, CoverPhotoIf, ApplyBackgroundToIf, AddStickersIf,
-// ApplyPrintIf, SetSettingsIf — те же SetMarks, CreateCoverLook, ApplyBackgroundTo, AddSticker,
-// ApplyPrint и SetSettings с условием (CoverPhotoIf и AddStickersIf — новые тела над теми же
-// coverPhoto и AddStickerAt: coverPhotoOnce и layers.AddStickers; их проверяют if_cover_test.go и if_bg_test.go); Families — чтение
-// без правки проекта (TestEditorFamilies).
-// Исключение 154: SetAlbumBgIf — тело backdrop.SetAlbumBgAgent над теми же SetAlbumBg и toAlbum, что
-// SetAlbumBgToAll (if_albumbg_test.go); стикеры на обложку — тот же AddStickersIf.
+// У каждого …If шаги X:да и X:нет, у AutoBuildIf ещё :поздно (162 М4, replay_if_test.go); Families
+// — шаг-чтение там же.
 // Исключение 150: MarkUnsaved — только флаг dirty, проект, rev и отмена не меняются
 // (TestMarkUnsaved); шага в эталоне нет.
 // Исключение 163: UsedFiles — чтение занятых файлов без вида (TestUsedFilesMatchesView); проекта,
-// rev и отмены не касается, шага в эталоне нет (эталон Windows пишет CI).
+// rev и отмены не касается, шага в эталоне нет.
+// Исключение 0.37: SizeBasis — чтение настроек и числа разворотов для оценки объёма выгрузки
+// (TestSizeBasis); проекта, rev и отмены не касается, шага в эталоне нет (эталон пишет CI).
 func TestEditorReplayMethods(t *testing.T) {
 	r, _ := replayRun(t)
-	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true,
-		"AutoBuildIf": true, "VaryLayoutsIf": true, "UndoIfRev": true,
-		"SetMarksIf": true, "CreateCoverLookIf": true, "CoverPhotoIf": true, "ApplyBackgroundToIf": true,
-		"AddStickersIf": true, "ApplyPrintIf": true, "SetSettingsIf": true, "Families": true, "MarkUnsaved": true,
-		"SetAlbumBgIf": true, "UsedFiles": true}
+	seen := map[string]bool{"View": true, "Save": true, "ID": true, "Close": true, "MarkUnsaved": true, "UsedFiles": true, "SizeBasis": true}
+	steps := map[string]bool{}
 	for _, s := range r.steps {
 		seen[strings.SplitN(s.Step, ":", 2)[0]] = true
+		steps[s.Step] = true
 	}
 	typ := reflect.TypeFor[*album.Editor]()
 	for i := range typ.NumMethod() {
-		if name := typ.Method(i).Name; !seen[name] {
+		name := typ.Method(i).Name
+		if !seen[name] {
 			t.Errorf("метод %s без шага в реплее", name)
+		}
+		// правка с условием: успех и отказ сверки — два шага (162 М4)
+		if strings.HasSuffix(name, "If") || name == "UndoIfRev" {
+			for _, suf := range []string{":да", ":нет"} {
+				if !steps[name+suf] {
+					t.Errorf("метод %s без шага %s%s", name, name, suf)
+				}
+			}
 		}
 	}
 }

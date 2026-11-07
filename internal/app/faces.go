@@ -1,24 +1,15 @@
 package app
 
 import (
-	"errors"
-	"fmt"
-	"image"
-	"log"
-	"maps"
-	"sync"
-	"sync/atomic"
-	"weak"
+	"context"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
-	"github.com/IliaSA101/sosninaalbums/internal/faces"
-	"github.com/IliaSA101/sosninaalbums/internal/geom"
+	"github.com/IliaSA101/sosninaalbums/internal/app/facefit"
+	"github.com/IliaSA101/sosninaalbums/internal/library"
 )
 
-// Подгон кадров по лицам (спека 130, design §6): снимок мест листа → поиск лиц в фоне (кэш
-// точек, ход faces:progress) → одна правка Editor.FitFaces → вид. Тонкий фасад без службы
-// (0.27-130-9): расчёт и отчёт — в design.FitFaces, детектор — в internal/faces.
+// Подгон кадров по лицам (спека 130) и силуэт под лицо: тонкие обёртки над internal/app/facefit.
+// Здесь только то, что принадлежит App: guardEdit для биндингов и Host службы.
 
 // FacesResult — ответ FitFaces: вид после правки (при Report.Asked правки нет — вид прежний) и отчёт.
 type FacesResult struct {
@@ -26,143 +17,44 @@ type FacesResult struct {
 	Report model.FaceReport `json:"report"`
 }
 
-// Тексты уходят пользователю тостом как есть (с заглавной, как ownprint.ErrDup).
-var (
-	errFacesBusy   = errors.New("Уже ищу лица")                                //nolint:staticcheck // текст тоста
-	errFacesExport = errors.New("Идёт экспорт: подгоните по лицам после него") //nolint:staticcheck // текст тоста
-	errFacesMode   = errors.New("неизвестный режим подгона")
-	errFacesSheet  = errors.New("Нет такого разворота")                //nolint:staticcheck // текст тоста
-	errFacesMoved  = errors.New("Альбом сменился во время поиска лиц") //nolint:staticcheck // текст тоста
-)
-
-// faceState — состояние подгона по лицам у App.
-type faceState struct {
-	// busy — поиск идёт: второй вызов отвечает ошибкой, а не встаёт в очередь.
-	busy  atomic.Bool
-	cache faceCache
-	miss  atomic.Int64 // не прочитанные фото — для редкой строки журнала
-	// detect — детектор; nil — faces.Detect (тесты подставляют свой).
-	detect func(image.Image) []faces.Face
-	// ready — проверка модели; nil — faces.Ready (тесты подставляют сломанную). readyLogged — сбой
-	// модели записан в журнал: строка одна на процесс, ответ пользователю — на каждый вызов.
-	ready       func() error
-	readyLogged atomic.Bool
-
-	// Память сессии под mu: кадры, что поставил подгон (фото → кадр: они не «правленые»), и норма
-	// каждого листа после «Остальные — как это лицо» (0.27-130-17). Принадлежат одному альбому:
-	// открытие другого начинает их заново. После перезапуска пусты: окно спросит там, где лицо
-	// мимо нормы.
-	mu     sync.Mutex
-	owner  weak.Pointer[album.Editor]
-	fitted map[string]model.Frame
-	norm   map[string]geom.FaceNorm
-}
-
-// modelReady — модель лиц загружена: первый вызов её разбирает (≈ 0,5 мс, дёшево), сбой — одна
-// строка в журнал и понятная ошибка вместо молчаливого «нет фото» на каждом месте.
-func (a *App) modelReady() error {
-	ready := a.faceSt.ready
-	if ready == nil {
-		ready = faces.Ready
-	}
-	err := ready()
-	if err == nil {
-		return nil
-	}
-	if a.faceSt.readyLogged.CompareAndSwap(false, true) {
-		log.Printf("лица: %v", err)
-	}
-	cause := errors.Unwrap(err)
-	if cause == nil {
-		cause = err
-	}
-	return fmt.Errorf("Поиск лиц недоступен: %w", cause) //nolint:staticcheck // текст тоста
-}
-
-// ownLocked сбрасывает память, если альбом другой. Под mu.
-func (s *faceState) ownLocked(ed *album.Editor) {
-	if s.owner.Value() == ed && s.fitted != nil {
-		return
-	}
-	s.owner, s.fitted, s.norm = weak.Make(ed), map[string]model.Frame{}, map[string]geom.FaceNorm{}
-}
-
-// memory — копии памяти листа для правки: Editor только читает их под своим замком, а карты
-// продолжают жить у App.
-func (s *faceState) memory(ed *album.Editor, spreadID string) (norm *geom.FaceNorm, fitted map[string]model.Frame) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.ownLocked(ed)
-	if n, ok := s.norm[spreadID]; ok {
-		norm = &n
-	}
-	return norm, maps.Clone(s.fitted)
-}
-
-// normOf — норма листа из памяти (после «Остальные — как это лицо») или nil; без копии кадров.
-// Память чужого альбома не трогается и не сбрасывается: для него нормы нет.
-func (s *faceState) normOf(ed *album.Editor, spreadID string) *geom.FaceNorm {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.owner.Value() != ed || s.norm == nil {
-		return nil
-	}
-	if n, ok := s.norm[spreadID]; ok {
-		return &n
-	}
-	return nil
-}
-
-// remember запоминает итог поставленной правки: кадры фото и, если шло «как это лицо», норму листа.
-func (s *faceState) remember(ed *album.Editor, spreadID string, set map[string]model.Frame, byRef bool, n geom.FaceNorm) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.ownLocked(ed)
-	maps.Copy(s.fitted, set)
-	if byRef {
-		s.norm[spreadID] = n
-	}
-}
-
 // FitFaces — «Подогнать по лицам» на листе spreadID (виньетка): кадры фото ставятся по лицам,
 // одна правка — один шаг отмены. ref — место-образец «Остальные — как это лицо» ("" — норма листа
 // из памяти или начальная 0,35 / 0,32). mode: "" — спросить про правленые кадры (Report.Asked,
 // правки нет), "keep" — оставить их, "all" — подогнать и их. Ход — событие faces:progress
 // (done, total). Ошибки: уже ищу, идёт экспорт, модель лиц не загрузилась, нет листа, образец
-// негоден (правки нет).
+// негоден (правки нет). Тело — facefit.Fitter.Fit.
 func (a *App) FitFaces(spreadID, ref, mode string) (res FacesResult, err error) {
 	defer a.guardEdit("FitFaces", &res.View, &err)
-	if mode != "" && mode != "keep" && mode != "all" {
-		return res, errFacesMode
-	}
-	if running, _ := a.exp.Busy(); running { // подгон занимает ядра, экспорт тоже
-		return res, errFacesExport
-	}
-	if !a.faceSt.busy.CompareAndSwap(false, true) {
-		return res, errFacesBusy
-	}
-	defer a.faceSt.busy.Store(false)
-	if err := a.modelReady(); err != nil {
+	v, rep, err := a.faceFit.Fit(spreadID, ref, mode)
+	if err != nil {
 		return res, err
 	}
+	return FacesResult{View: v, Report: rep}, nil
+}
 
-	ed := a.editor()
-	hits, ok := ed.FaceSlots(spreadID) // снимок до поиска: правка во время него — «изменили»
-	if !ok {
-		return res, errFacesSheet
+// FaceGuide — силуэт под лицо для места с фото photoID на листе spreadID (silhouette.md): окно
+// места и контур в мм, норма — листа из памяти («Остальные — как это лицо») или начальная. Лица
+// не ищет и проект не правит: чтение, не шаг отмены. On = false без ошибки — силуэта нет (лист
+// не виньетка, места нет, групповое, «Целиком»); это украшение, а не команда. Тело — facefit.Fitter.Guide.
+func (a *App) FaceGuide(spreadID, photoID string) model.FaceGuide {
+	return a.faceFit.Guide(spreadID, photoID)
+}
+
+// faceHost — что подгону по лицам нужно от App. Всё, что тесты подменяют после NewApp (emit,
+// stopCtx), читается в момент вызова, а не при сборке.
+func (a *App) faceHost() facefit.Host {
+	return facefit.Host{
+		Editor: a.editor,
+		Photo:  a.mediaPhotoCloud,
+		// Превью своего размера: поиск лиц — расчёт с памятью, чужой размер не годится (160-M1).
+		Copy: func(ctx context.Context, id string, p library.Photo, cloud bool) (string, error) {
+			return a.photoCopyCtx(ctx, id, p, cloud, true, false)
+		},
+		Ctx:        func() context.Context { return a.stopCtx },
+		Go:         a.goBG,
+		ExportBusy: func() bool { running, _ := a.exp.Busy(); return running },
+		Emit:       func(name string, args ...any) { a.emit(name, args...) },
+		Changed:    a.changed,
+		Rare:       logRare,
 	}
-	if err := a.findFaces(ed, hits); err != nil {
-		return res, err
-	}
-	norm, fitted := a.faceSt.memory(ed, spreadID)
-	v, rep, used := ed.FitFaces(spreadID, hits, ref, mode, norm, fitted)
-	if rep.RefErr != "" { // образец негоден: правки нет, норма листа прежняя
-		return res, errors.New(model.RefErrText(rep.RefErr))
-	}
-	if !rep.Asked { // спросили — ничего не поставлено: отмена окна не должна менять норму
-		a.faceSt.remember(ed, spreadID, rep.Set, ref != "", used)
-	}
-	res.Report = rep
-	res.View = a.changed(v)
-	return res, nil
 }

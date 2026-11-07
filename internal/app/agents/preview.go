@@ -29,6 +29,10 @@ const (
 // агент получает понятный отказ без пути, а не «внутреннюю ошибку».
 var ErrUnavailable = errors.New("agents: файл недоступен")
 
+// ErrCloudOnly — Host отвечает ею, когда файл фото лежит только в облаке (OneDrive «только в сети») и готовой копии
+// нет: скачивать его нельзя. Агент получает причину, а не «файл недоступен».
+var ErrCloudOnly = errors.New("agents: файл только в облаке")
+
 // ErrNoSpread — Host.Render не нашёл разворот: альбом сменился между разбором входа и рендером.
 var ErrNoSpread = errors.New("agents: нет такого разворота")
 
@@ -71,6 +75,9 @@ func (c *call) getPhotoPreview(in previewIn) (previewOut, error) {
 	p, ok := pc.byID[id]
 	if !ok && !pc.missing[id] {
 		return previewOut{}, errNoPhoto
+	}
+	if pc.cloud[id] && !pc.missing[id] { // до Host: файл не открывается, причина названа
+		return previewOut{}, errPhotoCloud
 	}
 	if pc.status(id) != "ok" {
 		return previewOut{}, errPhotoGone
@@ -150,6 +157,8 @@ func (c *call) image(fits func(w, h int) bool, fetch func() ([]byte, error)) (b 
 		return nil, 0, 0, errTimeout
 	case errors.Is(err, ErrUnavailable):
 		return nil, 0, 0, errPhotoGone
+	case errors.Is(err, ErrCloudOnly):
+		return nil, 0, 0, errPhotoCloud
 	case errors.Is(err, ErrNoSpread):
 		return nil, 0, 0, errNoSpread
 	case err != nil:

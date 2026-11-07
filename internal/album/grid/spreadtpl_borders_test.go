@@ -8,6 +8,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/grid"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Рамочки мест и заготовки в шаблоне разворота (131 G1, design §1): постановка, повтор, снятие.
@@ -23,15 +24,15 @@ func frameLibs() map[string]model.PhotoInfo {
 
 // borderTpl — разворот из трёх мест: встроенная рамочка на первом, картинка на третьем,
 // второе без рамочки; надпись и две заготовки.
-func borderTpl() model.SpreadTpl {
-	return model.SpreadTpl{V: model.TplV, Pages: 2, Page: []model.TplBg{{Color: "#101010"}, {Color: "#202020"}},
+func borderTpl() looktpl.SpreadTpl {
+	return looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Page: []looktpl.TplBg{{Color: "#101010"}, {Color: "#202020"}},
 		Places: []model.Box{{X: 0.05, Y: 0.1, W: 0.4, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.2, H: 0.3}, {X: 0.55, Y: 0.5, W: 0.2, H: 0.3}},
-		Borders: []model.TplBorder{
+		Borders: []looktpl.TplBorder{
 			{I: 0, Kind: "line", Inks: []string{"#112233"}, Width: 2.5},
 			{I: 2, Lib: kFr, Scale: 1.5, Cut: [4]float64{0.1, 0.2, 0.1, 0.2}, Open: true},
 		},
-		Texts:  []model.TplText{{Anchor: model.Anchor{AY: -1, DY: 0.05}, W: 0.5, Text: "Наша свадьба", Style: model.PlainStyle()}},
-		Drafts: []model.TplText{{Anchor: model.Anchor{AY: 1, DY: -0.05}, W: 0.4, Text: "[Имена молодожёнов]", Style: model.PlainStyle()}, {Anchor: model.Anchor{AX: 1, AY: 1, DX: -0.05, DY: -0.05}, W: 0.2, Text: "[Дата]", Style: model.PlainStyle()}},
+		Texts:  []looktpl.TplText{{Anchor: looktpl.Anchor{AY: -1, DY: 0.05}, W: 0.5, Text: "Наша свадьба", Style: model.PlainStyle()}},
+		Drafts: []looktpl.TplText{{Anchor: looktpl.Anchor{AY: 1, DY: -0.05}, W: 0.4, Text: "[Имена молодожёнов]", Style: model.PlainStyle()}, {Anchor: looktpl.Anchor{AX: 1, AY: 1, DX: -0.05, DY: -0.05}, W: 0.2, Text: "[Дата]", Style: model.PlainStyle()}},
 	}
 }
 
@@ -107,7 +108,7 @@ func TestApplySpreadTplBordersNoop(t *testing.T) {
 func TestApplySpreadTplBordersMissing(t *testing.T) {
 	e := tplEd(t)
 	tp := borderTpl()
-	tp.Borders = append(tp.Borders, model.TplBorder{I: 1, Lib: kFr})
+	tp.Borders = append(tp.Borders, looktpl.TplBorder{I: 1, Lib: kFr})
 	_, _, missing, err := e.ApplySpreadTpl("s3", model.ScopeSpread, tp, tplLibs())
 	if err != nil || missing != 1 {
 		t.Fatalf("missing %d, %v", missing, err)
@@ -129,9 +130,9 @@ func TestApplySpreadTplBordersMissing(t *testing.T) {
 // у каждого места свой указатель (079-23); на «Авто» места закрепляются, рамочки встают.
 func TestApplySpreadTplBordersPage(t *testing.T) {
 	e := tplEd(t)
-	page := model.SpreadTpl{V: model.TplV, Pages: 1, Page: []model.TplBg{{}},
+	page := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Page: []looktpl.TplBg{{}},
 		Places:  []model.Box{{X: 0.1, Y: 0.1, W: 0.8, H: 0.8}},
-		Borders: []model.TplBorder{{I: 0, Kind: "line"}}}
+		Borders: []looktpl.TplBorder{{I: 0, Kind: "line"}}}
 	if _, _, _, err := e.ApplySpreadTpl("s3", model.ScopeSpread, page, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -186,8 +187,8 @@ func TestApplySpreadTplDrafts(t *testing.T) {
 	}
 
 	// Только заготовки: свои надписи цели заменяются (s1 держит «Наша свадьба»).
-	only := model.SpreadTpl{V: model.TplV, Pages: 2, Page: []model.TplBg{{}, {}},
-		Drafts: []model.TplText{{W: 0.4, Text: "[Имена]", Style: model.PlainStyle()}}}
+	only := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Page: []looktpl.TplBg{{}, {}},
+		Drafts: []looktpl.TplText{{W: 0.4, Text: "[Имена]", Style: model.PlainStyle()}}}
 	_, plan, _, err := e.ApplySpreadTpl("s1", model.ScopeSpread, only, nil)
 	if err != nil || plan.Texts != 1 {
 		t.Fatalf("план %+v, %v", plan, err)
@@ -196,7 +197,7 @@ func TestApplySpreadTplDrafts(t *testing.T) {
 		t.Fatalf("s1: %s", jsonOf(t, got))
 	}
 	// Шаблон без надписей и заготовок надписей цели не трогает.
-	pageOnly := model.SpreadTpl{V: model.TplV, Pages: 2, Page: []model.TplBg{{Color: "#abcdef"}, {}}}
+	pageOnly := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Page: []looktpl.TplBg{{Color: "#abcdef"}, {}}}
 	if _, _, _, err := e.ApplySpreadTpl("s1", model.ScopeSpread, pageOnly, nil); err != nil || len(sheetOf(e, "s1").Texts) != 1 {
 		t.Fatalf("надписи тронуты: %v", err)
 	}
@@ -249,7 +250,7 @@ func TestSpreadTplOfDrafts(t *testing.T) {
 		t.Fatal(err)
 	}
 	again, err := e.SpreadTplOf("s4", model.ScopeSpread, true, true)
-	if err != nil || model.TplKey(again) != model.TplKey(tp) {
+	if err != nil || looktpl.TplKey(again) != looktpl.TplKey(tp) {
 		t.Fatalf("круг изменил шаблон: %v\n%s\n%s", err, jsonOf(t, tp), jsonOf(t, again))
 	}
 
@@ -332,7 +333,7 @@ func TestSpreadTplOfOwnPresetNoop(t *testing.T) {
 	// Снимок без отметки (рамочка сменилась правкой) — другой шаблон: один шаг, отмена возвращает.
 	e.SetBorder("s3", []string{sheetOf(e, "s3").Grid[0].ID}, model.BorderPatch{Width: 5}, "")
 	plain, err := e.SpreadTplOf("s3", model.ScopeSpread, true, true)
-	if err != nil || plain.Borders[0].Preset != "" || model.TplKey(plain) == model.TplKey(tp) {
+	if err != nil || plain.Borders[0].Preset != "" || looktpl.TplKey(plain) == looktpl.TplKey(tp) {
 		t.Fatalf("правка толщины должна снять отметку: %v\n%s", err, jsonOf(t, plain.Borders))
 	}
 	// Круг Save → Load.

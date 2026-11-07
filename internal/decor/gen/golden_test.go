@@ -11,10 +11,11 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"testing"
+
+	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
 
 // Эталон генераторов (решение №90): выпущенный узор не меняется — хэш пикселей на двух
@@ -83,14 +84,26 @@ func renderGolden(kind string, px int) *image.RGBA {
 	return img
 }
 
+// requireSIMDGolden — эталоны пикселей этого пакета снимает только путь SIMD x/image/vector (acc_amd64.s): чистый Go
+// (arm64, тег noasm) даёт рисунок с отличием на 1 уровень в отдельных байтах (класс B, 162) — там тест пропускается,
+// а обновление эталона отказывает, чтобы чужой путь не записал свои байты. Слияние FMA на пути SIMD (amd64 v3)
+// меняет биты координат, поэтому страж ключа остаётся.
+func requireSIMDGolden(t *testing.T, update bool) {
+	t.Helper()
+	if !testkit.SIMDPath {
+		if update {
+			t.Fatal("эталон обновляется только на пути SIMD (amd64 без тега noasm): чистый Go даёт другие байты (класс B, 162)")
+		}
+		t.Skip("эталон пикселей — путь SIMD x/image/vector (класс B, 162)")
+	}
+	testkit.RequireNoFMA(t)
+}
+
 // TestGenGolden — каждый узор сборки совпадает с эталоном побитово на обоих размерах; ключ
 // эталона без генератора — тоже провал (выпущенный генератор не удаляют).
 func TestGenGolden(t *testing.T) {
 	update := *updateGolden || os.Getenv("SA_GOLDEN_UPDATE") == "1"
-	// На arm64 компилятор вправе сливать x*y+z в FMA — последние биты координат другие.
-	if runtime.GOARCH != "amd64" && os.Getenv("SA_GOLDEN_ANYARCH") != "1" && !update {
-		t.Skip("эталон снят на amd64")
-	}
+	requireSIMDGolden(t, update)
 	want := loadGolden(t, update)
 	dump := os.Getenv("SA_GEN_DUMP")
 	got := map[string][2]string{}

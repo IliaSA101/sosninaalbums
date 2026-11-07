@@ -399,7 +399,7 @@ func TestPickFormNeighbors(t *testing.T) {
 // TestVarietyLessLinesSame: строки «Меньше» эталона variety.sha — ровно лучшие раскладки layout
 // (Cached[0]), как до 051: смена выбора форм их не трогает (decisions 0.13 №14).
 func TestVarietyLessLinesSame(t *testing.T) {
-	goldenArch(t)
+	testkit.RequireNoFMA(t)
 	data, err := os.ReadFile(goldenPath)
 	if err != nil {
 		t.Fatal(err)

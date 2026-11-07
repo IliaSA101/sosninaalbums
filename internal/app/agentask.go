@@ -7,6 +7,7 @@ package app
 
 import (
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 )
 
 // AgentAsk — событие agents:ask: агент просит человека о действии, текст целиком из шаблонов Go.
@@ -89,11 +90,11 @@ func (a *App) AnswerAgentOther(id string) (v model.View, err error) {
 
 // answerAdd — ответ на вопрос «Добавить папку»: yes — «Добавить»/«Выбрать папку…», other — окно ОС.
 func (a *App) answerAdd(id string, yes, other bool) (model.View, error) {
-	rec, err := a.askClaim(id, askKindAdd, yes)
+	rec, err := a.askClaim(id, agentasktext.KindAdd, yes)
 	if err != nil || rec == nil {
 		return a.askView(), err
 	}
-	defer close(rec.idle)
+	defer a.askQ().Release(rec)
 	dir, ok := a.askPick(rec, other)
 	if !ok {
 		return a.askView(), nil
@@ -109,11 +110,11 @@ func (a *App) answerAdd(id string, yes, other bool) (model.View, error) {
 // зовёт внутри newDoc.replace; отказ идёт через AnswerAgent(id, false).
 func (a *App) AgentAnswerCreate(id string, other bool) (st State, err error) {
 	defer guardErr("AgentAnswerCreate", &err)
-	rec, err := a.askClaim(id, askKindCreate, true)
+	rec, err := a.askClaim(id, agentasktext.KindCreate, true)
 	if err != nil || rec == nil {
 		return a.cancelledState(), err
 	}
-	defer close(rec.idle)
+	defer a.askQ().Release(rec)
 	dir, ok := a.askPick(rec, other)
 	if !ok {
 		return a.cancelledState(), nil

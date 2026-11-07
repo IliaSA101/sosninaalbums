@@ -15,6 +15,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model/printprof"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/app/ownprint"
 	"github.com/IliaSA101/sosninaalbums/internal/decor"
@@ -197,9 +198,9 @@ func (a *App) agentsBg(ctx context.Context, in agents.BgReq) (res agents.BgRes, 
 				break
 			}
 		}
-		unit := plural(out.Changed, "разворот", "разворота", "разворотов")
+		unit := agentasktext.Plural(out.Changed, "разворот", "разворота", "разворотов")
 		if v.Settings.Sheet {
-			unit = plural(out.Changed, "лист", "листа", "листов")
+			unit = agentasktext.Plural(out.Changed, "лист", "листа", "листов")
 		}
 		a.changed(v)
 		a.agentEdited(AgentEdited{Client: agentToastClient(in.Client), Text: fmt.Sprintf("Фон поставлен на %d %s", out.Changed, unit),

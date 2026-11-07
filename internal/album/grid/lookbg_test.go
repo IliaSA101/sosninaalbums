@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // ApplyLookBg: негодный шаг (страниц не 1|2) и неизвестная область — холостая правка, не паника;
@@ -12,18 +13,18 @@ func TestApplyLookBgInvalidStep(t *testing.T) {
 	p := model.New()
 	p.Spreads = append(p.Spreads, &model.Spread{ID: "s1", Photos: []string{}})
 	s := p.Spreads[0]
-	bad := model.SpreadTpl{V: model.TplV, Pages: 3, Ratio: 1, Page: []model.TplBg{{Color: "#ffffff"}}}
+	bad := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 3, Ratio: 1, Page: []looktpl.TplBg{{Color: "#ffffff"}}}
 	if r := ApplyLookBg(p, s, bad, nil); r.Changed || s.BgL != "" {
 		t.Fatalf("негодный шаг: %+v, фон %q", r, s.BgL)
 	}
-	good := model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{Color: "#112233"}}}
+	good := looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{Color: "#112233"}}}
 	if r := ApplyLookBg(p, s, good, nil); !r.Changed || r.Replaced || s.BgL != "#112233" || s.BgR != "#112233" {
 		t.Fatalf("первый раз: %+v, фон %q/%q", r, s.BgL, s.BgR)
 	}
 	if r := ApplyLookBg(p, s, good, nil); r.Changed || !LookBgSame(p, s, good, nil) {
 		t.Fatalf("повтор: %+v", r)
 	}
-	if r := ApplyLookCoverBg(p, &model.CoverTpl{Bg: &model.TplBg{Color: "#445566"}}, nil); r.Changed {
+	if r := ApplyLookCoverBg(p, &looktpl.CoverTpl{Bg: &looktpl.TplBg{Color: "#445566"}}, nil); r.Changed {
 		t.Fatal("обложки нет — холостая")
 	}
 }
@@ -33,11 +34,11 @@ func TestApplyLookBgInvalidStep(t *testing.T) {
 func TestPutLookTileEdges(t *testing.T) {
 	p := model.New()
 	p.Spreads = append(p.Spreads, &model.Spread{ID: "s1", Photos: []string{}})
-	st := model.LookStep{Tpl: model.SpreadTpl{V: model.TplV, Pages: 1, Ratio: 1, Page: []model.TplBg{{Color: "#112233"}}}}
+	st := looktpl.LookStep{Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 1, Ratio: 1, Page: []looktpl.TplBg{{Color: "#112233"}}}}
 	if _, _, err := PutLookTile(p, "нет", st, 1, nil); err != nil {
 		t.Fatalf("неизвестный лист: %v", err)
 	}
-	if _, _, err := PutLookTile(p, "s1", model.LookStep{}, 1, nil); err == nil {
+	if _, _, err := PutLookTile(p, "s1", looktpl.LookStep{}, 1, nil); err == nil {
 		t.Fatal("пустой шаг на обычном листе должен отказать")
 	}
 	if _, _, err := PutLookTile(p, "s1", st, 2, nil); err != nil || p.Spreads[0].LookStep != 2 {
@@ -51,9 +52,9 @@ func TestLookPlacesAreTouched(t *testing.T) {
 	p := model.New()
 	p.Spreads = append(p.Spreads, &model.Spread{ID: "s1", Photos: []string{}})
 	s := p.Spreads[0]
-	st := model.LookStep{Tpl: model.SpreadTpl{V: model.TplV, Pages: 2, Ratio: 2,
+	st := looktpl.LookStep{Tpl: looktpl.SpreadTpl{V: looktpl.TplV, Pages: 2, Ratio: 2,
 		Places: []model.Box{{X: 0.05, Y: 0.1, W: 0.4, H: 0.8}, {X: 0.55, Y: 0.1, W: 0.4, H: 0.8}},
-		Page:   []model.TplBg{{Color: "#ffffff"}, {Color: "#ffffff"}}}}
+		Page:   []looktpl.TplBg{{Color: "#ffffff"}, {Color: "#ffffff"}}}}
 	if _, _, err := PutLookStep(p, "s1", st, 1, nil); err != nil || len(s.Grid) != 2 || !LookPlacesAre(p, s, st) {
 		t.Fatalf("после шага места должны совпасть: %v, мест %d", err, len(s.Grid))
 	}

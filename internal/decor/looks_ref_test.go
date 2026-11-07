@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Ссылки альбома на макеты (looks_ref.go) и обход deepCopy по видам значений.
@@ -41,7 +42,7 @@ func TestLookRefPack(t *testing.T) {
 	v1 := lookBytes(t, lookOf("", ""), "")
 	m, src := testPack("wedding-layouts", 1, pit{"looks/main.json", v1})
 	install(t, s, m, src, nil)
-	key1 := model.LookKey(v1)
+	key1 := looktpl.LookKey(v1)
 	ref, ok := s.LookRefOf(key1)
 	if !ok || ref.Key != key1 || ref.Pack != "wedding-layouts" || ref.Item != "looks/main.json" || ref.Name != "looks/main.json" {
 		t.Fatalf("LookRefOf набора: %+v %v", ref, ok)
@@ -58,7 +59,7 @@ func TestLookRefPack(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.Close()
-	key2 := model.LookKey(v2)
+	key2 := looktpl.LookKey(v2)
 	if key2 == key1 {
 		t.Fatal("ключ не сменился")
 	}
@@ -130,8 +131,8 @@ func TestDeepCopyKinds(t *testing.T) {
 func TestParsedLooksPutDrop(t *testing.T) {
 	var c parsedLooks
 	c.drop("нет") // пустой кэш: не паникует
-	c.put("a", "p", fakeInfo{size: 100}, model.AlbumTpl{})
-	c.put("a", "p", fakeInfo{size: 40}, model.AlbumTpl{})
+	c.put("a", "p", fakeInfo{size: 100}, looktpl.AlbumTpl{})
+	c.put("a", "p", fakeInfo{size: 40}, looktpl.AlbumTpl{})
 	if len(c.m) != 1 || c.bytes != 40 || c.ll.Len() != 1 {
 		t.Fatalf("повтор ключа: %d записей, %d байт", len(c.m), c.bytes)
 	}
@@ -145,7 +146,7 @@ func TestParsedLooksPutDrop(t *testing.T) {
 	}
 	third := int64(lookCacheBytes/3 + 1)
 	for _, k := range []string{"x", "y", "z"} {
-		c.put(k, "p", fakeInfo{size: third}, model.AlbumTpl{})
+		c.put(k, "p", fakeInfo{size: third}, looktpl.AlbumTpl{})
 	}
 	if _, ok := c.m["x"]; ok || len(c.m) != 2 || c.bytes != 2*third {
 		t.Errorf("вытеснение по сумме: %d записей, %d байт", len(c.m), c.bytes)

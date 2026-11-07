@@ -152,7 +152,15 @@ def count_photos(dirs: list[Path]) -> int:
 
 
 def config_root() -> Path:
-    """os.UserConfigDir: %AppData% в Windows. Без переменной — отказ, а не «текущая папка»."""
+    """os.UserConfigDir: %AppData% в Windows, XDG_CONFIG_HOME или HOME/.config в Linux. Без переменной — отказ, а не «текущая папка»."""
+    if sys.platform.startswith("linux"):
+        xdg = os.environ.get("XDG_CONFIG_HOME", "").strip()
+        if xdg:
+            return Path(xdg)
+        home = os.environ.get("HOME", "").strip()
+        if not home:
+            raise Refuse("нет XDG_CONFIG_HOME и HOME: папку данных стенда не найти")
+        return Path(home) / ".config"
     ad = os.environ.get("APPDATA", "").strip()
     if not ad:
         raise Refuse("нет переменной APPDATA: папку данных стенда не найти")

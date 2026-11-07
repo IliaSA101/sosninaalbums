@@ -136,6 +136,7 @@ describe('UpdateBlock: кнопки зовут Go', () => {
       phase: 'error',
       mode: 'install',
       version: '0.25.1',
+      errorOf: 'download',
       error: 'Обновление не прошло проверку — скачайте установщик со страницы выпуска',
     })
     render(UpdateBlock)
@@ -171,7 +172,14 @@ describe('UpdateBlock: кнопки зовут Go', () => {
   it('«Повторить» после ошибки проверки зовёт CheckUpdate, после ошибки скачивания — DownloadUpdate', async () => {
     render(UpdateBlock)
     set({ phase: 'available', version: '0.25.1' })
-    go.CheckUpdate.mockResolvedValueOnce({ ...NO_UPDATE, phase: 'error', mode: 'install', version: '0.25.1', error: 'нет связи' })
+    go.CheckUpdate.mockResolvedValueOnce({
+      ...NO_UPDATE,
+      phase: 'error',
+      mode: 'install',
+      version: '0.25.1',
+      errorOf: 'check',
+      error: 'нет связи',
+    })
     await fireEvent.click(btn('Проверить обновления'))
     await tick()
     expect(screen.getByRole('status').textContent).toBe('Нет связи')
@@ -179,7 +187,14 @@ describe('UpdateBlock: кнопки зовут Go', () => {
     expect(go.CheckUpdate).toHaveBeenCalledTimes(2)
     expect(go.DownloadUpdate).not.toHaveBeenCalled()
     set({ phase: 'available', version: '0.25.1' })
-    go.DownloadUpdate.mockResolvedValueOnce({ ...NO_UPDATE, phase: 'error', mode: 'install', version: '0.25.1', error: 'обрыв' })
+    go.DownloadUpdate.mockResolvedValueOnce({
+      ...NO_UPDATE,
+      phase: 'error',
+      mode: 'install',
+      version: '0.25.1',
+      errorOf: 'download',
+      error: 'обрыв',
+    })
     await fireEvent.click(btn('Обновить'))
     await tick()
     await fireEvent.click(btn('Повторить'))

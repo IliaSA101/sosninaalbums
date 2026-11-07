@@ -12,6 +12,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/app/agentasktext"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agentplaces"
 	"github.com/IliaSA101/sosninaalbums/internal/app/agents"
 	"github.com/IliaSA101/sosninaalbums/internal/app/appkit"
@@ -137,7 +138,7 @@ func (a *App) quietCreate(req agents.AskReq, cur *album.Editor, resolved string)
 	if a.editor() != cur { // пока шла проба папки, человек открыл другой альбом
 		return res, "", agents.ErrAlbumChanged
 	}
-	if a.askDocOf(cur) == askDocDraft && !a.draftUntouched(cur) {
+	if a.askDocOf(cur) == agentasktext.DocDraft && !a.draftUntouched(cur) {
 		return res, whyDraft, nil
 	}
 	lv, perr := a.pinLeaving(cur)

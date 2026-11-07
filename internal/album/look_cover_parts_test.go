@@ -7,6 +7,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 )
 
 // Доля обложки в плане (0.28-131-174): CoverTouched / CoverReplaced входят в Touched / Replaced
@@ -24,7 +25,7 @@ func TestLookPlanCoverParts(t *testing.T) {
 	// Тронуты только развороты (обложки в альбоме нет): CoverTouched не выставлен.
 	e = lkEditor(t)
 	lkApply(t, e, lkRefA, lookA(), nil, 9)
-	gone := func(model.LookRef) *model.AlbumTpl { return nil }
+	gone := func(model.LookRef) *looktpl.AlbumTpl { return nil }
 	if plan, err = e.PlanLook(lkRefB, lookB(), gone, o, nil); err != nil || plan.Touched != 9 || plan.CoverTouched || plan.CoverReplaced {
 		t.Fatalf("развороты без обложки: %+v %v", plan, err)
 	}

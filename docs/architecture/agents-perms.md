@@ -78,7 +78,7 @@
 | `shots`  | внутри папки снимков экрана                                                                                                                                                                               |
 | `remote` | том не локальный (`osx.Remote`: список разрешённых ФС, mountinfo; Windows — сетевой диск) или внутри смонтирован сетевой том                                                                              |
 | `cloud`  | облачные заглушки (Windows — атрибуты OneDrive и подобных, macOS — iCloud)                                                                                                                                |
-| `big`    | больше 5000 фото, 20 000 записей, 500 папок или подсчёт не уложился в 1,5 с (`agentquiet_count.go`)                                                                                                       |
+| `big`    | больше 5000 фото, 20 000 записей, 500 папок или подсчёт не уложился в 1,5 с (`agentplaces/quiet_count.go`)                                                                                                |
 | `draft`  | `create_album`, а открытый черновик правил человек (`agentDraft`: ревизия ушла от последней правки агента)                                                                                                |
 | `rate`   | слот службы не выдан (четвёртая тихая за 10 минут)                                                                                                                                                        |
 
@@ -107,16 +107,16 @@
 
 ## Карта файлов
 
-| Файл                                                                         | Что                                                                                 |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `internal/prefs/agentperms.go`                                               | классы, `PermCan`, чистка, миграция, откат, зеркало, `PushPlace`                    |
-| `internal/app/agents/perms.go`                                               | `permLevel`, `deny`, `editAllowed`, тихий слот, `PermsChanged`, `Tools`             |
-| `internal/app/agents/permask.go`                                             | вопрос о правке при «Спрашивать»                                                    |
-| `internal/app/agents_perms.go`                                               | `AgentPerm`, `AgentPlace`, `SetAgentPerm`, `SetAgentPermGroup`, `ForgetAgentPlaces` |
-| `internal/app/agents_edit.go`                                                | `agentPerm`, `agentPermLevel`, `editGroupOn`, `agentCheckTool`                      |
-| `internal/app/agentplaces/`, `agentplaces_app.go`                            | правила мест, источники, засев, `ChooseAgentPlace`                                  |
-| `internal/app/agentquiet.go`, `agentquiet_count.go`, `agentquiet_cloud_*.go` | план и причины тихого пути, подсчёт папки, облачные заглушки                        |
-| `internal/app/agentquiet_apply.go`, `agentquiet_pin.go`                      | тихое применение, черновик агента, «Открыть прежний», закреплённая копия            |
-| `internal/osx` (`Remote`, `Hidden`, `MountPoints`)                           | проба тома и атрибутов                                                              |
-| `internal/mcpbridge/start.go`                                                | `start_program` прячется при «Запретить»                                            |
-| `frontend/src/shell/agents/AgentsPerms.svelte`, `agentperms.ts`              | окно «Разрешения», согласия                                                         |
+| Файл                                                                         | Что                                                                                        |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `internal/prefs/agentperms.go`                                               | классы, `PermCan`, чистка, миграция, откат, зеркало, `PushPlace`                           |
+| `internal/app/agents/perms.go`                                               | `permLevel`, `deny`, `editAllowed`, тихий слот, `PermsChanged`, `Tools`                    |
+| `internal/app/agents/permask.go`                                             | вопрос о правке при «Спрашивать»                                                           |
+| `internal/app/agents_perms.go`                                               | `AgentPerm`, `AgentPlace`, `SetAgentPerm`, `SetAgentPermGroup`, `ForgetAgentPlaces`        |
+| `internal/app/agents_edit.go`                                                | `agentPerm`, `agentPermLevel`, `editGroupOn`, `agentCheckTool`                             |
+| `internal/app/agentplaces/`, `agentplaces_app.go`                            | правила мест, источники, засев, `ChooseAgentPlace`, подсчёт тихой папки (`quiet_count.go`) |
+| `internal/app/agentquiet.go`, `agentquiet_count.go`, `agentquiet_cloud_*.go` | план и причины тихого пути, подмены подсчёта (`agentplaces.QuietHooks`), облачные заглушки |
+| `internal/app/agentquiet_apply.go`, `agentquiet_pin.go`                      | тихое применение, черновик агента, «Открыть прежний», закреплённая копия                   |
+| `internal/osx` (`Remote`, `Hidden`, `MountPoints`)                           | проба тома и атрибутов                                                                     |
+| `internal/mcpbridge/start.go`                                                | `start_program` прячется при «Запретить»                                                   |
+| `frontend/src/shell/agents/AgentsPerms.svelte`, `agentperms.ts`              | окно «Разрешения», согласия                                                                |

@@ -1,6 +1,6 @@
 package app
 
-// Вопрос о правке при «Спрашивать» (150, design §5.2): шаблоны текста, полнота по таблице инструментов,
+// Вопрос о правке при «Спрашивать» (150, design §5.2): тексты — в agentasktext, здесь
 // фасад на настоящем App (машина вопроса и служба с сокетом).
 
 import (
@@ -17,96 +17,6 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
-
-// TestEditAskText: текст по входу каждого инструмента — числа, номера, названия; пустые и предельные числа.
-func TestEditAskText(t *testing.T) {
-	cases := []struct {
-		name  string
-		in    editAsk
-		title string
-		ok    string
-		undo  bool // строка «Ctrl+Z отменит одним шагом.»
-	}{
-		{"autobuild", editAsk{Tool: toolAutobuild, Count: 96}, "Собрать развороты из 96 свободных фото в конец альбома?", "Собрать", true},
-		{"autobuild без числа", editAsk{Tool: toolAutobuild}, "Собрать развороты из всех свободных фото в конец альбома?", "Собрать", true},
-		{"autobuild с числом разворотов", editAsk{Tool: toolAutobuild, Count: 96, Build: 3}, "Собрать 3 разворота из 96 свободных фото в конец альбома?", "Собрать", true},
-		{"autobuild 5 разворотов", editAsk{Tool: toolAutobuild, Count: 96, Build: 5}, "Собрать 5 разворотов из 96 свободных фото в конец альбома?", "Собрать", true},
-		{"autobuild 1 разворот", editAsk{Tool: toolAutobuild, Count: 1, Build: 1}, "Собрать 1 разворот из 1 свободного фото в конец альбома?", "Собрать", true},
-		{"autobuild 1", editAsk{Tool: toolAutobuild, Count: 1}, "Собрать развороты из 1 свободного фото в конец альбома?", "Собрать", true},
-		{"autobuild 21", editAsk{Tool: toolAutobuild, Count: 21}, "Собрать развороты из 21 свободного фото в конец альбома?", "Собрать", true},
-		{"autobuild 11", editAsk{Tool: toolAutobuild, Count: 11}, "Собрать развороты из 11 свободных фото в конец альбома?", "Собрать", true},
-		{"autobuild отрицательное", editAsk{Tool: toolAutobuild, Count: -5}, "Собрать развороты из всех свободных фото в конец альбома?", "Собрать", true},
-		{"autobuild предел", editAsk{Tool: toolAutobuild, Count: 1 << 30}, "Собрать развороты из 1073741824 свободных фото в конец альбома?", "Собрать", true},
-		{"vary", editAsk{Tool: toolVary, Places: []string{"8"}, Families: []string{"Плотно"}}, "Другие раскладки на развороте 8 — «Плотно»?", "Изменить раскладки", true},
-		{"vary несколько", editAsk{Tool: toolVary, Places: []string{"3", "8", "12"}}, "Другие раскладки на разворотах 3, 8, 12?", "Изменить раскладки", true},
-		{"vary много", editAsk{Tool: toolVary, Places: []string{"1", "2", "3", "4", "5", "6", "7"}}, "Другие раскладки на 7 разворотах?", "Изменить раскладки", true},
-		{"vary лист", editAsk{Tool: toolVary, Places: []string{"2"}, Sheet: true}, "Другие раскладки на листе 2?", "Изменить раскладки", true},
-		{"vary пусто", editAsk{Tool: toolVary}, "Другие раскладки на выбранных разворотах?", "Изменить раскладки", true},
-		{"show", editAsk{Tool: toolShow, Places: []string{"8"}}, "Показать разворот 8?", "Показать", false},
-		{"show обложка", editAsk{Tool: toolShow, Places: []string{askCoverWord}}, "Показать обложку?", "Показать", false},
-		{"undo", editAsk{Tool: toolUndo}, "Отменить последнюю правку агента?", "Отменить правку", false},
-		{"marks", editAsk{Tool: toolMarks, Count: 12}, "Изменить отметки у 12 фото?", "Изменить отметки", true},
-		{"marks 0", editAsk{Tool: toolMarks}, "Изменить отметки у выбранных фото?", "Изменить отметки", true},
-		{"cover", editAsk{Tool: toolCover, Count: 1}, "Поставить другое фото на обложку?", "Поставить", true},
-		{"bg", editAsk{Tool: toolBg, Item: "Цветы", Places: []string{"3", "5"}}, "Поставить фон «Цветы» на разворотах 3, 5?", "Поставить фон", true},
-		{"bg без названия", editAsk{Tool: toolBg, Places: []string{askCoverWord, "2"}}, "Поставить выбранный фон на обложке и развороте 2?", "Поставить фон", true},
-		{"sticker", editAsk{Tool: toolSticker, Count: 3, Places: []string{"2", "5"}}, "Добавить 3 стикера на разворотах 2, 5?", "Добавить", true},
-		{"sticker 12", editAsk{Tool: toolSticker, Count: 12, Places: []string{"1"}}, "Добавить 12 стикеров на развороте 1?", "Добавить", true},
-		{"sticker 0", editAsk{Tool: toolSticker}, "Добавить стикеры на выбранных разворотах?", "Добавить", true},
-		{"print", editAsk{Tool: toolPrint, Item: "Фабрика", Format: "30×20"}, "Поставить формат «Фабрика 30×20»?", "Применить формат", true},
-		{"print без названия", editAsk{Tool: toolPrint}, "Поставить формат выбранной типографии?", "Применить формат", true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			c.in.Client = "Claude Code"
-			b, ok := editAskBody(c.in)
-			if !ok || b.Title != c.title || b.OK != c.ok {
-				t.Fatalf("заголовок %q (%v), кнопка %q; ждали %q, %q", b.Title, ok, b.OK, c.title, c.ok)
-			}
-			if len(b.Lines) < 2 || !strings.HasPrefix(b.Lines[0], "Клиент «Claude Code»") || b.Lines[len(b.Lines)-1] != askWho {
-				t.Errorf("абзацы: %q", b.Lines)
-			}
-			if has := strings.Contains(strings.Join(b.Lines, "\n"), askUndoLine); has != c.undo {
-				t.Errorf("строка про Ctrl+Z: есть %v, ждали %v", has, c.undo)
-			}
-		})
-	}
-	// Клиент с плохим именем — «Неизвестный клиент», своё слово агента в окно не идёт.
-	b, _ := editAskBody(editAsk{Tool: toolShow, Client: "Sosnina Albums"})
-	if !strings.HasPrefix(b.Lines[0], "Неизвестный клиент") {
-		t.Errorf("подделка под программу: %q", b.Lines[0])
-	}
-	if _, ok := editAskBody(editAsk{Tool: "сам_придумал"}); ok {
-		t.Error("шаблон для неизвестного инструмента")
-	}
-}
-
-// TestEditAskAllTools: у каждого инструмента, у которого возможно «Спрашивать» (правка E и показ V),
-// есть шаблон; шаблон не берёт чужих (папка, альбом, чтение).
-func TestEditAskAllTools(t *testing.T) {
-	have := map[string]bool{}
-	for _, tool := range editAskTools() {
-		have[tool] = true
-		if _, ok := editAskBody(editAsk{Tool: tool}); !ok {
-			t.Errorf("%s: шаблон перечислен, но текста нет", tool)
-		}
-	}
-	for _, tool := range prefs.AgentToolNames() {
-		c := prefs.AgentToolClass(tool)
-		asks := c == prefs.ClassEdit || c == prefs.ClassShow // F и A спрашивают своими видами (add, create)
-		if asks && !have[tool] {
-			t.Errorf("%s (класс %s): «Спрашивать» возможно, шаблона вопроса нет", tool, c)
-		}
-		if !asks && have[tool] {
-			t.Errorf("%s (класс %s): шаблон есть, а вопроса о правке не бывает", tool, c)
-		}
-		if asks {
-			if _, ok := editAskBody(editAsk{Tool: tool}); !ok {
-				t.Errorf("%s: нет текста", tool)
-			}
-		}
-	}
-}
 
 // TestEditAskResolve: числа и названия фасад берёт из альбома и каталогов; текст агента не доходит.
 func TestEditAskResolve(t *testing.T) {
@@ -360,8 +270,7 @@ func TestEditAskFlow(t *testing.T) {
 	}
 }
 
-// TestEditAskFlowMachine: вопрос о правке на машине фасада без службы — итоги «да», срок, закрытие
-// программы, чужой альбом, запрет.
+// TestEditAskFlowMachine: вопрос о правке на машине фасада без службы — итоги «да», закрытие программы, gone.
 func TestEditAskFlowMachine(t *testing.T) {
 	r := newAskRig(t)
 	r.a.SetAgentPermGroup("edit", prefs.PermAsk)
@@ -397,17 +306,31 @@ func TestEditAskFlowMachine(t *testing.T) {
 	if c.res.Why != agents.WhyGone {
 		t.Fatalf("gone: %+v", c.res)
 	}
-	// Срок вопроса.
-	r.a.askM().life = 20 * time.Millisecond
-	c = r.ask(req(toolShow))
+}
+
+// TestEditAskFlowTimeout: срок вопроса о правке — своя машина с коротким сроком (сроки задаёт конструктор,
+// пересоздавать машину посреди вопросов нельзя).
+func TestEditAskFlowTimeout(t *testing.T) {
+	r := newAskRig(t)
+	newAskQ(r.a, 20*time.Millisecond, 300*time.Millisecond)
+	r.a.SetAgentPermGroup("edit", prefs.PermAsk)
+	c := r.ask(agents.AskReq{Kind: agents.AskEdit, Client: "Claude Code", Tool: toolShow, Key: r.key(), Rev: r.rev(), Count: 5})
 	c.wait(t)
 	if c.res.Why != agents.WhyTimeout {
 		t.Fatalf("срок: %+v", c.res)
 	}
-	r.a.askM().life = time.Minute
+}
+
+// TestEditAskFlowDeny: вопрос о правке — запрет за время вопроса и до него, чужой альбом, нет шаблона, отказ.
+func TestEditAskFlowDeny(t *testing.T) {
+	r := newAskRig(t)
+	r.a.SetAgentPermGroup("edit", prefs.PermAsk)
+	req := func(tool string) agents.AskReq {
+		return agents.AskReq{Kind: agents.AskEdit, Client: "Claude Code", Tool: tool, Key: r.key(), Rev: r.rev(), Count: 5}
+	}
 	// Инструмент запретили, пока вопрос висел: «да» → off.
-	c = r.ask(req(toolMarks))
-	ask = r.asked(t, 5)
+	c := r.ask(req(toolMarks))
+	ask := r.asked(t, 1)
 	r.a.SetAgentPerm(toolMarks, prefs.PermDeny)
 	if _, err := r.a.AnswerAgent(ask.ID, true); err != nil {
 		t.Fatal(err)

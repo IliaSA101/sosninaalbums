@@ -11,6 +11,7 @@ import (
 
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/imgfile"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
 	"github.com/IliaSA101/sosninaalbums/internal/prefs"
@@ -128,11 +129,31 @@ func (a *App) addLoose(ps []string) (r LooseResult, err error) {
 	r.Batch, r.Added, r.InFolder, r.Folder, r.Dup, r.Over = got.Batch, got.Added, got.InFolder, got.Folder, got.Dup, got.Over
 	r.View = a.changed(v)
 	if r.Added > 0 {
-		a.rescan()
+		// До rescan: добавление — явное действие, его чтение может скачать заглушку облака. Только принятые
+		// правкой: повтор (Dup) уже был в проекте, его заглушку читать по этому добавлению нельзя. Альбом мог
+		// смениться, пока шла правка (retire закрыл ed): тогда набор и чтение — не наши, новый альбом читает сам.
+		if a.fresh.add(addedPaths(v, got.Batch), func() bool { return a.editor() == ed }) {
+			a.rescan()
+		}
 	}
 	log.Printf("отдельные фото: добавлено %d, в папке альбома %d, повторов %d, сверх предела %d, не фото %d, нелокальных %d",
 		r.Added, r.InFolder, r.Dup, r.Over, r.Skipped, r.Bad)
 	return r, nil
+}
+
+// addedPaths — пути добавления batch в виде v (то, что AddLoose действительно приняло).
+func addedPaths(v model.View, batch string) []string {
+	for _, l := range v.Loose {
+		if l.ID != batch {
+			continue
+		}
+		out := make([]string, len(l.Files))
+		for i, f := range l.Files {
+			out[i] = f.Path
+		}
+		return out
+	}
+	return nil
 }
 
 type looseKind int
@@ -162,7 +183,7 @@ func looseVerdict(p string) looseKind {
 			return looseSkipped
 		}
 	}
-	if !st.Mode().IsRegular() {
+	if !imgfile.MaybeRegular(st.Mode()) { // Windows: облачная заглушка — ModeIrregular, дескриптор решит при чтении
 		return looseSkipped
 	}
 	return looseOK

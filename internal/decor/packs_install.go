@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/decor/gen"
 	"github.com/IliaSA101/sosninaalbums/internal/library"
 	"github.com/IliaSA101/sosninaalbums/internal/paths"
@@ -311,8 +311,8 @@ func stageTpl(i int, src PackSource) (si stagedItem, why string, err error) {
 	if err := src.Extract(i, &buf); err != nil {
 		return si, "", err
 	}
-	t, err := model.ParseSpreadTpl(buf.Bytes())
-	if errors.Is(err, model.ErrTplNewer) || err == nil && !tplKnown(t) {
+	t, err := looktpl.ParseSpreadTpl(buf.Bytes())
+	if errors.Is(err, looktpl.ErrTplNewer) || err == nil && !tplKnown(t) {
 		return si, "шаблон из новой версии программы", nil
 	}
 	if err != nil {
@@ -322,7 +322,7 @@ func stageTpl(i int, src PackSource) (si stagedItem, why string, err error) {
 	if err != nil {
 		return si, "шаблон разворота не читается", nil
 	}
-	si.key, si.ext, si.tpl, si.libs, si.bytes = model.TplKey(t), "json", data, tplLibs(t), int64(len(data))
+	si.key, si.ext, si.tpl, si.libs, si.bytes = looktpl.TplKey(t), "json", data, tplLibs(t), int64(len(data))
 	sum := sha256.Sum256(buf.Bytes()) // байты записи: Extract уже сверил их с sha256 манифеста
 	si.src = hex.EncodeToString(sum[:8])
 	return si, "", nil
@@ -332,7 +332,7 @@ func stageTpl(i int, src PackSource) (si stagedItem, why string, err error) {
 type capBuffer struct{ bytes.Buffer }
 
 func (b *capBuffer) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > model.MaxTplFile+1 {
+	if b.Len()+len(p) > looktpl.MaxTplFile+1 {
 		return 0, errors.New("шаблон разворота больше предела")
 	}
 	return b.Buffer.Write(p)
@@ -340,7 +340,7 @@ func (b *capBuffer) Write(p []byte) (int, error) {
 
 // tplKnown — все узоры, рисунки и встроенные рамочки шаблона знакомы этой версии (зажим
 // незнакомый ключ оставляет).
-func tplKnown(t model.SpreadTpl) bool {
+func tplKnown(t looktpl.SpreadTpl) bool {
 	bgs := slices.Clone(t.Page)
 	if t.Whole != nil {
 		bgs = append(bgs, *t.Whole)
@@ -364,7 +364,7 @@ func tplKnown(t model.SpreadTpl) bool {
 }
 
 // tplLibs — картинки библиотеки, на которые ссылается шаблон.
-func tplLibs(t model.SpreadTpl) []libRef {
+func tplLibs(t looktpl.SpreadTpl) []libRef {
 	var out []libRef
 	bgs := slices.Clone(t.Page)
 	if t.Whole != nil {

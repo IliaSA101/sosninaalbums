@@ -12,6 +12,7 @@ import (
 	"github.com/IliaSA101/sosninaalbums/internal/album"
 	"github.com/IliaSA101/sosninaalbums/internal/album/internal/edtest"
 	"github.com/IliaSA101/sosninaalbums/internal/album/model"
+	"github.com/IliaSA101/sosninaalbums/internal/album/model/looktpl"
 	"github.com/IliaSA101/sosninaalbums/internal/album/salbum"
 	"github.com/IliaSA101/sosninaalbums/internal/testkit"
 )
@@ -188,7 +189,7 @@ func TestCreateCoverLookNoPlacesBg(t *testing.T) {
 		"макет не найден на ПК": func(t *testing.T) (*album.Editor, bool) {
 			e := lkEditor(t)
 			lkApply(t, e, lkRefB, lkCoverFull(), nil, 6)
-			e.SetLookHost(album.LookHost{Find: func(model.LookRef) *model.AlbumTpl { return nil }})
+			e.SetLookHost(album.LookHost{Find: func(model.LookRef) *looktpl.AlbumTpl { return nil }})
 			return e, false
 		},
 	}
